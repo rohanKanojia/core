@@ -19,21 +19,19 @@
 #ifndef INCLUDED_SFX2_SOURCE_INC_ALIENWARN_HXX
 #define INCLUDED_SFX2_SOURCE_INC_ALIENWARN_HXX
 
-#include <vcl/button.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
 
-class SfxAlienWarningDialog : public MessageDialog
+class SfxAlienWarningDialog : public weld::MessageDialogController
 {
 private:
-    VclPtr<PushButton>             m_pKeepCurrentBtn;
-    VclPtr<PushButton>             m_pUseDefaultFormatBtn;
-    VclPtr<CheckBox>               m_pWarningOnBox;
+    std::unique_ptr<weld::Button> m_xKeepCurrentBtn;
+    std::unique_ptr<weld::Button> m_xUseDefaultFormatBtn;
+    std::unique_ptr<weld::CheckButton> m_xWarningOnBox;
 
 public:
-    SfxAlienWarningDialog(vcl::Window* pParent, const OUString& _rFormatName,
+    SfxAlienWarningDialog(weld::Window* pParent, const OUString& _rFormatName,
                           const OUString& _rDefaultExtension, bool rDefaultIsAlien);
-    virtual ~SfxAlienWarningDialog();
-    virtual void dispose() override;
+    virtual ~SfxAlienWarningDialog() override;
 };
 
 #endif // INCLUDED_SFX2_SOURCE_INC_ALIENWARN_HXX

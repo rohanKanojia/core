@@ -21,6 +21,10 @@ $(eval $(call gb_Library_Library,dnd))
 
 $(eval $(call gb_Library_set_componentfile,dnd,dtrans/util/dnd))
 
+$(eval $(call gb_Library_use_externals,dnd, \
+    boost_headers \
+))
+
 $(eval $(call gb_Library_use_sdk_api,dnd))
 
 $(eval $(call gb_Library_use_libraries,dnd,\
@@ -28,7 +32,6 @@ $(eval $(call gb_Library_use_libraries,dnd,\
 	cppu \
 	cppuhelper \
 	sal \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_system_win32_libs,dnd,\

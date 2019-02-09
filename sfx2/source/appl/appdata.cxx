@@ -22,30 +22,28 @@
 #include <tools/config.hxx>
 #include <svl/stritem.hxx>
 
-#include <osl/mutex.hxx>
-
 #include <vcl/menu.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/wrkwin.hxx>
 #include <comphelper/processfactory.hxx>
 
 #include <sfx2/viewfrm.hxx>
-#include "appdata.hxx"
+#include <appdata.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/event.hxx>
-#include "sfxtypes.hxx"
+#include <sfxpicklist.hxx>
+#include <sfxtypes.hxx>
 #include <sfx2/doctempl.hxx>
-#include "arrdecl.hxx"
+#include <arrdecl.hxx>
 #include <sfx2/docfac.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/sidebar/Theme.hxx>
-#include "app.hrc"
-#include <sfx2/sfxresid.hxx>
-#include "objshimp.hxx"
+#include <sfx2/unoctitm.hxx>
+#include <objshimp.hxx>
 #include "imestatuswindow.hxx"
-#include "appbaslib.hxx"
+#include <appbaslib.hxx>
 #include <childwinimpl.hxx>
+#include <svl/svdde.hxx>
 
 #include <basic/basicmanagerrepository.hxx>
 #include <basic/basmgr.hxx>
@@ -82,31 +80,19 @@ void SfxBasicManagerCreationListener::onBasicManagerCreated( const Reference< XM
         m_rAppData.OnApplicationBasicManagerCreated( _rBasicManager );
 }
 
-SfxAppData_Impl::SfxAppData_Impl( SfxApplication* )
-    : pDdeService( nullptr )
-    , pDocTopics( nullptr )
-    , pTriggerTopic(nullptr)
-    , pDdeService2(nullptr)
-    , pFactArr(nullptr)
-    , pTopFrames( new SfxFrameArr_Impl )
+SfxAppData_Impl::SfxAppData_Impl()
+    : pFactArr(nullptr)
     , pMatcher( nullptr )
-#if HAVE_FEATURE_SCRIPTING
-    , pBasicResMgr( nullptr )
-#endif
-    , pSvtResMgr( nullptr )
     , m_pToolsErrorHdl(nullptr)
     , m_pSoErrorHdl(nullptr)
 #if HAVE_FEATURE_SCRIPTING
     , m_pSbxErrorHdl(nullptr)
 #endif
-    , pAppDispatch(nullptr)
     , pTemplates( nullptr )
     , pPool(nullptr)
     , pProgress(nullptr)
     , nDocModalMode(0)
-    , nAutoTabPageId(0)
     , nRescheduleLocks(0)
-    , nInReschedule(0)
     , m_xImeStatusWindow(new sfx2::appl::ImeStatusWindow(comphelper::getProcessComponentContext()))
     , pTbxCtrlFac(nullptr)
     , pStbCtrlFac(nullptr)
@@ -118,8 +104,6 @@ SfxAppData_Impl::SfxAppData_Impl( SfxApplication* )
     , pViewFrame( nullptr )
     , pSlotPool( nullptr )
     , pAppDispat( nullptr )
-    , pInterfaces( nullptr )
-    , nInterfaces( 0 )
     , bDowning( true )
     , bInQuit( false )
 
@@ -132,12 +116,11 @@ SfxAppData_Impl::SfxAppData_Impl( SfxApplication* )
 SfxAppData_Impl::~SfxAppData_Impl()
 {
     DeInitDDE();
-    delete pTopFrames;
-    delete pBasicManager;
+    pBasicManager.reset();
 
 #if HAVE_FEATURE_SCRIPTING
     BasicManagerRepository::revokeCreationListener( *pBasMgrListener );
-    delete pBasMgrListener;
+    pBasMgrListener.reset();
 #endif
 }
 

@@ -13,10 +13,7 @@ $(eval $(call gb_UnpackedTarball_set_tarball,libfreehand,$(FREEHAND_TARBALL)))
 
 $(eval $(call gb_UnpackedTarball_set_patchlevel,libfreehand,0))
 
-# Was already fixed upstream: d9b10697f3984e51d3870e049b99488d94ee735e
-$(eval $(call gb_UnpackedTarball_add_patches,libfreehand,\
-    external/libfreehand/replace_transform_class_with_struct.patch \
-))
+$(eval $(call gb_UnpackedTarball_update_autoconf_configs,libfreehand))
 
 ifeq ($(COM_IS_CLANG),TRUE)
 ifneq ($(filter -fsanitize=%,$(CC)),)

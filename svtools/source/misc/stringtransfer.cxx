@@ -19,6 +19,7 @@
 
 #include <sal/config.h>
 
+#include <rtl/ref.hxx>
 #include <sot/exchange.hxx>
 #include <svtools/stringtransfer.hxx>
 
@@ -62,8 +63,7 @@ namespace svt
 
     void OStringTransfer::CopyString( const OUString& _rContent, vcl::Window* _pWindow )
     {
-        OStringTransferable* pTransferable = new OStringTransferable( _rContent );
-        Reference< XTransferable > xTransfer = pTransferable;
+        rtl::Reference<OStringTransferable> pTransferable = new OStringTransferable( _rContent );
         pTransferable->CopyToClipboard( _pWindow );
     }
 
@@ -74,12 +74,9 @@ namespace svt
 
         // check for a string format
         const DataFlavorExVector& rFormats = aClipboardData.GetDataFlavorExVector();
-        for (   DataFlavorExVector::const_iterator aSearch = rFormats.begin();
-                aSearch != rFormats.end();
-                ++aSearch
-            )
+        for (auto const& format : rFormats)
         {
-            if (SotClipboardFormatId::STRING == aSearch->mnSotId)
+            if (SotClipboardFormatId::STRING == format.mnSotId)
             {
                 OUString sContent;
                 bool bSuccess = aClipboardData.GetString( SotClipboardFormatId::STRING, sContent );
@@ -94,8 +91,7 @@ namespace svt
 
     void OStringTransfer::StartStringDrag( const OUString& _rContent, vcl::Window* _pWindow, sal_Int8 _nDragSourceActions )
     {
-        OStringTransferable* pTransferable = new OStringTransferable( _rContent );
-        Reference< XTransferable > xTransfer = pTransferable;
+        rtl::Reference<OStringTransferable> pTransferable = new OStringTransferable( _rContent );
         pTransferable->StartDrag(_pWindow, _nDragSourceActions);
     }
 

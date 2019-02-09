@@ -30,15 +30,13 @@ namespace dmapper
 {
 
 struct FontTable_Impl;
-struct FontEntry
+struct FontEntry : public virtual SvRefBase
 {
-    typedef std::shared_ptr<FontEntry> Pointer_t;
+    typedef tools::SvRef<FontEntry> Pointer_t;
 
     OUString        sFontName;
-    sal_Int16       nPitchRequest;
     sal_Int32       nTextEncoding;
     FontEntry() :
-        nPitchRequest( 0 ),
         nTextEncoding( RTL_TEXTENCODING_DONTKNOW )
         {}
 };
@@ -50,7 +48,7 @@ class FontTable : public LoggedProperties, public LoggedTable
 
  public:
     FontTable();
-    virtual ~FontTable();
+    virtual ~FontTable() override;
 
     sal_uInt32          size();
     const FontEntry::Pointer_t  getFontEntry(sal_uInt32 nIndex);
@@ -83,17 +81,17 @@ class FontTable : public LoggedProperties, public LoggedTable
     virtual void lcl_endShape( ) override;
 
 };
-typedef std::shared_ptr< FontTable >          FontTablePtr;
+typedef tools::SvRef< FontTable >          FontTablePtr;
 
 class EmbeddedFontHandler : public LoggedProperties
 {
 public:
     EmbeddedFontHandler( const OUString& fontName, const char* style );
-    virtual ~EmbeddedFontHandler();
+    virtual ~EmbeddedFontHandler() override;
 private:
     virtual void lcl_attribute( Id name, Value& val ) override;
     virtual void lcl_sprm( Sprm& rSprm ) override;
-    OUString fontName;
+    OUString const fontName;
     const char* const style;
     OUString id;
     OUString fontKey;

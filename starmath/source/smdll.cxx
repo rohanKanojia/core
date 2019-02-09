@@ -25,11 +25,10 @@
 #include <svx/zoomsliderctrl.hxx>
 #include <sfx2/docfac.hxx>
 #include <svx/lboxctrl.hxx>
-#include <sfx2/docfile.hxx>
-#include <sfx2/docfilt.hxx>
 #include <sfx2/app.hxx>
 
 #include <smdll.hxx>
+#include <smmod.hxx>
 #include <document.hxx>
 #include <view.hxx>
 
@@ -45,18 +44,18 @@ namespace
     {
     public:
         SmDLL();
-        ~SmDLL();
     };
 
     SmDLL::SmDLL()
     {
-        SmModule** ppShlPtr = reinterpret_cast<SmModule**>(GetAppData(SHL_SM));
-        if ( *ppShlPtr )
+        if ( SfxApplication::GetModule(SfxToolsModule::Math) )    // Module already active
             return;
 
         SfxObjectFactory& rFactory = SmDocShell::Factory();
-        SmModule *pModule = new SmModule( &rFactory );
-        *ppShlPtr = pModule;
+
+        auto pUniqueModule = std::make_unique<SmModule>(&rFactory);
+        SmModule* pModule = pUniqueModule.get();
+        SfxApplication::SetModule(SfxToolsModule::Math, std::move(pUniqueModule));
 
         rFactory.SetDocumentServiceName( "com.sun.star.formula.FormulaProperties" );
 
@@ -64,7 +63,7 @@ namespace
         SmDocShell::RegisterInterface(pModule);
         SmViewShell::RegisterInterface(pModule);
 
-        SmViewShell::RegisterFactory(1);
+        SmViewShell::RegisterFactory(SFX_INTERFACE_SFXAPP);
 
         SvxZoomStatusBarControl::RegisterControl(SID_ATTR_ZOOM, pModule);
         SvxZoomSliderControl::RegisterControl(SID_ATTR_ZOOMSLIDER, pModule);
@@ -75,17 +74,6 @@ namespace
 
         SmCmdBoxWrapper::RegisterChildWindow(true);
         SmElementsDockingWindowWrapper::RegisterChildWindow(true);
-    }
-
-    SmDLL::~SmDLL()
-    {
-#if 0
-        // the SdModule must be destroyed
-        SmModule** ppShlPtr = (SmModule**) GetAppData(SHL_SM);
-        delete (*ppShlPtr);
-        (*ppShlPtr) = NULL;
-        *GetAppData(SHL_SM) = 0;
-#endif
     }
 
     struct theSmDLLInstance : public rtl::Static<SmDLL, theSmDLLInstance> {};

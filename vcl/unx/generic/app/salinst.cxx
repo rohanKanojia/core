@@ -31,11 +31,12 @@
 #include <unx/salframe.h>
 #include <unx/genprn.h>
 #include <unx/sm.hxx>
+#include <unx/i18n_im.hxx>
+#include <unx/helper.hxx>
 
 #include <vcl/inputtypes.hxx>
-#include <vcl/helper.hxx>
 
-#include "salwtype.hxx"
+#include <salwtype.hxx>
 #include <sal/macros.h>
 
 // plugin factory function
@@ -53,7 +54,7 @@ extern "C"
         if( ! ( pNoXInitThreads && *pNoXInitThreads ) )
             XInitThreads();
 
-        X11SalInstance* pInstance = new X11SalInstance( new SalYieldMutex() );
+        X11SalInstance* pInstance = new X11SalInstance( std::make_unique<SalYieldMutex>() );
 
         // initialize SalData
         X11SalData *pSalData = new X11SalData( SAL_DATA_UNX, pInstance );
@@ -65,13 +66,12 @@ extern "C"
     }
 }
 
-X11SalInstance::X11SalInstance(SalYieldMutex* pMutex)
-    : SalGenericInstance(pMutex)
+X11SalInstance::X11SalInstance(std::unique_ptr<SalYieldMutex> pMutex)
+    : SalGenericInstance(std::move(pMutex))
     , mpXLib(nullptr)
 {
     ImplSVData* pSVData = ImplGetSVData();
-    delete pSVData->maAppData.mpToolkitName;
-    pSVData->maAppData.mpToolkitName = new OUString("x11");
+    pSVData->maAppData.mxToolkitName = OUString("x11");
 }
 
 X11SalInstance::~X11SalInstance()
@@ -82,7 +82,12 @@ X11SalInstance::~X11SalInstance()
     // dispose SalDisplay list from SalData
     // would be done in a static destructor else which is
     // a little late
-    GetGenericData()->Dispose();
+    GetGenericUnixSalData()->Dispose();
+}
+
+SalX11Display* X11SalInstance::CreateDisplay() const
+{
+    return new SalX11Display( mpXLib->GetDisplay() );
 }
 
 // AnyInput from sv/mow/source/app/svapp.cxx
@@ -94,7 +99,7 @@ struct PredicateReturn
 };
 
 extern "C" {
-Bool ImplPredicateEvent( Display *, XEvent *pEvent, char *pData )
+static Bool ImplPredicateEvent( Display *, XEvent *pEvent, char *pData )
 {
     PredicateReturn *pPre = reinterpret_cast<PredicateReturn *>(pData);
 
@@ -135,13 +140,14 @@ Bool ImplPredicateEvent( Display *, XEvent *pEvent, char *pData )
 
 bool X11SalInstance::AnyInput(VclInputFlags nType)
 {
-    SalGenericData *pData = GetGenericData();
+    GenericUnixSalData *pData = GetGenericUnixSalData();
     Display *pDisplay  = vcl_sal::getSalDisplay(pData)->GetDisplay();
     bool bRet = false;
 
     if( (nType & VclInputFlags::TIMER) && (mpXLib && mpXLib->CheckTimeout(false)) )
         bRet = true;
-    else if (XPending(pDisplay) )
+
+    if( !bRet && XPending(pDisplay) )
     {
         PredicateReturn aInput;
         XEvent          aEvent;
@@ -160,20 +166,15 @@ bool X11SalInstance::AnyInput(VclInputFlags nType)
     return bRet;
 }
 
-SalYieldResult X11SalInstance::DoYield(bool bWait, bool bHandleAllCurrentEvents, sal_uLong const nReleased)
+bool X11SalInstance::DoYield(bool bWait, bool bHandleAllCurrentEvents)
 {
-    (void) nReleased;
-    assert(nReleased == 0); // not implemented
     return mpXLib->Yield( bWait, bHandleAllCurrentEvents );
 }
 
-void* X11SalInstance::GetConnectionIdentifier( ConnectionIdentifierType& rReturnedType,
-                                               int& rReturnedBytes )
+OUString X11SalInstance::GetConnectionIdentifier()
 {
     static const char* pDisplay = getenv( "DISPLAY" );
-    rReturnedType   = AsciiCString;
-    rReturnedBytes  = pDisplay ? strlen( pDisplay )+1 : 1;
-    return pDisplay ? const_cast<char *>(pDisplay) : const_cast<char *>("");
+    return pDisplay ? OUString::createFromAscii(pDisplay) : OUString();
 }
 
 SalFrame *X11SalInstance::CreateFrame( SalFrame *pParent, SalFrameStyleFlags nSalFrameStyle )
@@ -195,7 +196,17 @@ void X11SalInstance::DestroyFrame( SalFrame* pFrame )
     delete pFrame;
 }
 
-extern "C" { static void SAL_CALL thisModule() {} }
+void X11SalInstance::AfterAppInit()
+{
+    assert( mpXLib->GetDisplay() );
+    assert( mpXLib->GetInputMethod() );
+
+    SalX11Display *pSalDisplay = CreateDisplay();
+    mpXLib->GetInputMethod()->CreateMethod( mpXLib->GetDisplay() );
+    pSalDisplay->SetupInput();
+}
+
+extern "C" { static void thisModule() {} }
 
 void X11SalInstance::AddToRecentDocumentList(const OUString& rFileUrl, const OUString& rMimeType, const OUString& rDocumentService)
 {
@@ -213,11 +224,9 @@ void X11SalInstance::AddToRecentDocumentList(const OUString& rFileUrl, const OUS
 
 void X11SalInstance::PostPrintersChanged()
 {
-    SalDisplay* pDisp = vcl_sal::getSalDisplay(GetGenericData());
-    const std::list< SalFrame* >& rList = pDisp->getFrames();
-    for( std::list< SalFrame* >::const_iterator it = rList.begin();
-         it != rList.end(); ++it )
-        pDisp->SendInternalEvent( *it, nullptr, SALEVENT_PRINTERCHANGED );
+    SalDisplay* pDisp = vcl_sal::getSalDisplay(GetGenericUnixSalData());
+    for (auto pSalFrame : pDisp->getFrames() )
+        pDisp->PostEvent( pSalFrame, nullptr, SalEvent::PrinterChanged );
 }
 
 GenPspGraphics *X11SalInstance::CreatePrintGraphics()

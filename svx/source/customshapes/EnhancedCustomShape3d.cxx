@@ -34,7 +34,6 @@
 #include <svx/svdopath.hxx>
 #include <svx/svdogrp.hxx>
 #include <svx/svdpage.hxx>
-#include <svx/polysc3d.hxx>
 #include <svx/svddef.hxx>
 #include <svx/svx3ditems.hxx>
 #include <svx/extrud3d.hxx>
@@ -42,6 +41,7 @@
 #include <vcl/svapp.hxx>
 #include <svx/xlnclit.hxx>
 #include <svx/sdasitm.hxx>
+#include <svx/scene3d.hxx>
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/drawing/Position3D.hpp>
 #include <com/sun/star/drawing/Direction3D.hpp>
@@ -57,7 +57,6 @@
 #include <svx/xlntrit.hxx>
 #include <svx/xfltrit.hxx>
 
-#define ITEMVALUE(ItemSet,Id,Cast)  (static_cast<const Cast&>((ItemSet).Get(Id))).GetValue()
 using namespace com::sun::star;
 using namespace com::sun::star::uno;
 
@@ -83,8 +82,8 @@ void GetRotateAngle( const SdrCustomShapeGeometryItem& rItem, double& rAngleX, d
         rAngleX = 0.0;
         rAngleY = 0.0;
     }
-    rAngleX *= F_PI180;
-    rAngleY *= F_PI180;
+    rAngleX = basegfx::deg2rad(rAngleX);
+    rAngleY = basegfx::deg2rad(rAngleY);
 }
 
 void GetSkew( const SdrCustomShapeGeometryItem& rItem, double& rSkewAmount, double& rSkewAngle )
@@ -96,7 +95,7 @@ void GetSkew( const SdrCustomShapeGeometryItem& rItem, double& rSkewAmount, doub
         rSkewAmount = 50;
         rSkewAngle = -135;
     }
-    rSkewAngle *= F_PI180;
+    rSkewAngle = basegfx::deg2rad(rSkewAngle);
 }
 
 void GetExtrusionDepth( const SdrCustomShapeGeometryItem& rItem, const double* pMap, double& rBackwardDepth, double& rForwardDepth )
@@ -122,14 +121,12 @@ void GetExtrusionDepth( const SdrCustomShapeGeometryItem& rItem, const double* p
     }
 }
 
-double GetDouble( const SdrCustomShapeGeometryItem& rItem, const OUString& rPropertyName, double fDefault, const double* pMap )
+double GetDouble( const SdrCustomShapeGeometryItem& rItem, const OUString& rPropertyName, double fDefault )
 {
     double fRetValue = fDefault;
     const Any* pAny = rItem.GetPropertyValueByName( "Extrusion", rPropertyName );
     if ( pAny )
         *pAny >>= fRetValue;
-    if ( pMap )
-        fRetValue *= *pMap;
     return fRetValue;
 }
 
@@ -178,17 +175,18 @@ drawing::Direction3D GetDirection3D( const SdrCustomShapeGeometryItem& rItem, co
 
 }
 
-EnhancedCustomShape3d::Transformation2D::Transformation2D( const SdrObject* pCustomShape, const Rectangle& /*rBoundRect*/, const double *pM )
-    : aCenter( pCustomShape->GetSnapRect().Center() )
+EnhancedCustomShape3d::Transformation2D::Transformation2D(
+    const SdrObjCustomShape& rSdrObjCustomShape,
+    const double *pM)
+:   aCenter(rSdrObjCustomShape.GetSnapRect().Center())
     , eProjectionMode( drawing::ProjectionMode_PARALLEL )
     , fSkewAngle(0.0)
     , fSkew(0.0)
-    , fZScreen(0.0)
     , fOriginX(0.0)
     , fOriginY(0.0)
     , pMap( pM )
 {
-    const SdrCustomShapeGeometryItem& rGeometryItem = static_cast<const SdrCustomShapeGeometryItem&>(pCustomShape->GetMergedItem( SDRATTR_CUSTOMSHAPE_GEOMETRY ));
+    const SdrCustomShapeGeometryItem& rGeometryItem(rSdrObjCustomShape.GetMergedItem( SDRATTR_CUSTOMSHAPE_GEOMETRY ));
     const Any* pAny = rGeometryItem.GetPropertyValueByName( "Extrusion", "ProjectionMode" );
     if ( pAny )
         *pAny >>= eProjectionMode;
@@ -198,8 +196,8 @@ EnhancedCustomShape3d::Transformation2D::Transformation2D( const SdrObject* pCus
     else
     {
         GetOrigin( rGeometryItem, fOriginX, fOriginY );
-        fOriginX = fOriginX * pCustomShape->GetLogicRect().GetWidth();
-        fOriginY = fOriginY * pCustomShape->GetLogicRect().GetHeight();
+        fOriginX = fOriginX * rSdrObjCustomShape.GetLogicRect().GetWidth();
+        fOriginY = fOriginY * rSdrObjCustomShape.GetLogicRect().GetHeight();
 
         drawing::Position3D aViewPointDefault( 3472, -3472, 25000 );
         drawing::Position3D aViewPoint( GetPosition3D( rGeometryItem, "ViewPoint", aViewPointDefault, pMap ) );
@@ -214,7 +212,7 @@ basegfx::B3DPolygon EnhancedCustomShape3d::Transformation2D::ApplySkewSettings( 
     basegfx::B3DPolygon aRetval;
 
     sal_uInt32 j;
-    for ( j = 0L; j < rPoly3D.count(); j++ )
+    for ( j = 0; j < rPoly3D.count(); j++ )
     {
         const basegfx::B3DPoint aPoint(rPoly3D.getB3DPoint(j));
         double fDepth(-( aPoint.getZ() * fSkew ) / 100.0);
@@ -232,16 +230,16 @@ Point EnhancedCustomShape3d::Transformation2D::Transform2D( const basegfx::B3DPo
     Point aPoint2D;
     if ( eProjectionMode == drawing::ProjectionMode_PARALLEL )
     {
-        aPoint2D.X() = (sal_Int32)rPoint3D.getX();
-        aPoint2D.Y() = (sal_Int32)rPoint3D.getY();
+        aPoint2D.setX( static_cast<sal_Int32>(rPoint3D.getX()) );
+        aPoint2D.setY( static_cast<sal_Int32>(rPoint3D.getY()) );
     }
     else
     {
         double fX = rPoint3D.getX() - fOriginX;
         double fY = rPoint3D.getY() - fOriginY;
-        double f = ( fZScreen - fViewPoint.getZ() ) / ( rPoint3D.getZ() - fViewPoint.getZ() );
-        aPoint2D.X() = (sal_Int32)(( fX - fViewPoint.getX() ) * f + fViewPoint.getX() + fOriginX );
-        aPoint2D.Y() = (sal_Int32)(( fY - fViewPoint.getY() ) * f + fViewPoint.getY() + fOriginY );
+        double f = ( - fViewPoint.getZ() ) / ( rPoint3D.getZ() - fViewPoint.getZ() );
+        aPoint2D.setX( static_cast<sal_Int32>(( fX - fViewPoint.getX() ) * f + fViewPoint.getX() + fOriginX ) );
+        aPoint2D.setY( static_cast<sal_Int32>(( fY - fViewPoint.getY() ) * f + fViewPoint.getY() + fOriginY ) );
     }
     aPoint2D.Move( aCenter.X(), aCenter.Y() );
     return aPoint2D;
@@ -252,51 +250,49 @@ bool EnhancedCustomShape3d::Transformation2D::IsParallel() const
     return eProjectionMode == css::drawing::ProjectionMode_PARALLEL;
 }
 
-SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, const SdrObject* pCustomShape )
+SdrObject* EnhancedCustomShape3d::Create3DObject(
+    const SdrObject* pShape2d,
+    const SdrObjCustomShape& rSdrObjCustomShape)
 {
-    SdrObject*  pRet = nullptr;
-    SdrModel*   pModel = pCustomShape->GetModel();
-    const SdrCustomShapeGeometryItem& rGeometryItem = static_cast<const SdrCustomShapeGeometryItem&>(pCustomShape->GetMergedItem( SDRATTR_CUSTOMSHAPE_GEOMETRY ));
+    SdrObject* pRet(nullptr);
+    const SdrCustomShapeGeometryItem& rGeometryItem(rSdrObjCustomShape.GetMergedItem(SDRATTR_CUSTOMSHAPE_GEOMETRY));
+    double fMap(1.0), *pMap = nullptr;
+    Fraction aFraction( rSdrObjCustomShape.getSdrModelFromSdrObject().GetScaleFraction() );
 
-    double      fMap, *pMap = nullptr;
-    if ( pModel )
+    if ( aFraction.GetNumerator() != 1 || aFraction.GetDenominator() != 1 )
     {
-        fMap = 1.0;
-        Fraction aFraction( pModel->GetScaleFraction() );
-        if ( ( aFraction.GetNumerator() ) != 1 || ( aFraction.GetDenominator() != 1 ) )
-        {
-            fMap *= aFraction.GetNumerator();
-            fMap /= aFraction.GetDenominator();
-            pMap = &fMap;
-        }
-        if ( pModel->GetScaleUnit() != MAP_100TH_MM )
-        {
-            DBG_ASSERT( pModel->GetScaleUnit() == MAP_TWIP, "EnhancedCustomShape3d::Current MapMode is Unsupported" );
-            fMap *= 1440.0 / 2540.0;
-            pMap = &fMap;
-        }
+        fMap *= double(aFraction);
+        pMap = &fMap;
     }
+
+    if ( rSdrObjCustomShape.getSdrModelFromSdrObject().GetScaleUnit() != MapUnit::Map100thMM )
+    {
+        DBG_ASSERT( rSdrObjCustomShape.getSdrModelFromSdrObject().GetScaleUnit() == MapUnit::MapTwip, "EnhancedCustomShape3d::Current MapMode is Unsupported" );
+        fMap *= 1440.0 / 2540.0;
+        pMap = &fMap;
+    }
+
     if ( GetBool( rGeometryItem, "Extrusion", false ) )
     {
-        bool bIsMirroredX = static_cast<const SdrObjCustomShape*>(pCustomShape)->IsMirroredX();
-        bool bIsMirroredY = static_cast<const SdrObjCustomShape*>(pCustomShape)->IsMirroredY();
-        Rectangle aSnapRect( pCustomShape->GetLogicRect() );
-        long nObjectRotation = pCustomShape->GetRotateAngle();
+        bool bIsMirroredX(rSdrObjCustomShape.IsMirroredX());
+        bool bIsMirroredY(rSdrObjCustomShape.IsMirroredY());
+        tools::Rectangle aSnapRect(rSdrObjCustomShape.GetLogicRect());
+        long nObjectRotation(rSdrObjCustomShape.GetRotateAngle());
         if ( nObjectRotation )
         {
             double a = ( 36000 - nObjectRotation ) * nPi180;
             long dx = aSnapRect.Right() - aSnapRect.Left();
             long dy = aSnapRect.Bottom()- aSnapRect.Top();
             Point aP( aSnapRect.TopLeft() );
-            RotatePoint( aP, pCustomShape->GetSnapRect().Center(), sin( a ), cos( a ) );
-            aSnapRect.Left() = aP.X();
-            aSnapRect.Top() = aP.Y();
-            aSnapRect.Right() = aSnapRect.Left() + dx;
-            aSnapRect.Bottom() = aSnapRect.Top() + dy;
+            RotatePoint( aP, rSdrObjCustomShape.GetSnapRect().Center(), sin( a ), cos( a ) );
+            aSnapRect.SetLeft( aP.X() );
+            aSnapRect.SetTop( aP.Y() );
+            aSnapRect.SetRight( aSnapRect.Left() + dx );
+            aSnapRect.SetBottom( aSnapRect.Top() + dy );
         }
         Point aCenter( aSnapRect.Center() );
 
-        SfxItemSet aSet( pCustomShape->GetMergedItemSet() );
+        SfxItemSet aSet( rSdrObjCustomShape.GetMergedItemSet() );
 
         //SJ: vertical writing is not required, by removing this item no outliner is created
         aSet.ClearItem( SDRATTR_TEXTDIRECTION );
@@ -320,13 +316,13 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
         const Any* pAny = rGeometryItem.GetPropertyValueByName( "Extrusion", "ProjectionMode" );
         if ( pAny )
             *pAny >>= eProjectionMode;
-        ProjectionType eProjectionType( eProjectionMode == drawing::ProjectionMode_PARALLEL ? PR_PARALLEL : PR_PERSPECTIVE );
+        ProjectionType eProjectionType( eProjectionMode == drawing::ProjectionMode_PARALLEL ? ProjectionType::Parallel : ProjectionType::Perspective );
         // pShape2d Convert in scenes which include 3D Objects
         E3dDefaultAttributes a3DDefaultAttr;
         a3DDefaultAttr.SetDefaultLatheCharacterMode( true );
         a3DDefaultAttr.SetDefaultExtrudeCharacterMode( true );
 
-        E3dScene* pScene = new E3dPolyScene( a3DDefaultAttr );
+        E3dScene* pScene = new E3dScene(rSdrObjCustomShape.getSdrModelFromSdrObject());
 
         bool bSceneHasObjects ( false );
         bool bUseTwoFillStyles( false );
@@ -334,7 +330,7 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
         drawing::ShadeMode eShadeMode( GetShadeMode( rGeometryItem, drawing::ShadeMode_FLAT ) );
         bool bUseExtrusionColor = GetBool( rGeometryItem, "Color", false );
 
-        drawing::FillStyle eFillStyle( ITEMVALUE( aSet, XATTR_FILLSTYLE, XFillStyleItem ) );
+        drawing::FillStyle eFillStyle( aSet.Get(XATTR_FILLSTYLE).GetValue() );
         pScene->GetProperties().SetObjectItem( Svx3DShadeModeItem( 0 ) );
         aSet.Put( makeSvx3DPercentDiagonalItem( 0 ) );
         aSet.Put( Svx3DTextureModeItem( 1 ) );
@@ -367,20 +363,20 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
             }
         }
 
-        Rectangle aBoundRect2d;
-        SdrObjListIter aIter( *pShape2d, IM_DEEPNOGROUPS );
+        tools::Rectangle aBoundRect2d;
+        SdrObjListIter aIter( *pShape2d, SdrIterMode::DeepNoGroups );
         const bool bMultipleSubObjects(aIter.Count() > 1);
 
         while( aIter.IsMore() )
         {
             const SdrObject* pNext = aIter.Next();
-            bool bIsPlaceholderObject = (static_cast<const XFillStyleItem&>(pNext->GetMergedItem( XATTR_FILLSTYLE )).GetValue() == drawing::FillStyle_NONE )
-                                        && (static_cast<const XLineStyleItem&>(pNext->GetMergedItem( XATTR_LINESTYLE )).GetValue() == drawing::LineStyle_NONE );
+            bool bIsPlaceholderObject = (pNext->GetMergedItem( XATTR_FILLSTYLE ).GetValue() == drawing::FillStyle_NONE )
+                                        && (pNext->GetMergedItem( XATTR_LINESTYLE ).GetValue() == drawing::LineStyle_NONE );
             basegfx::B2DPolyPolygon aPolyPoly;
             SfxItemSet aLocalSet(aSet);
             drawing::FillStyle aLocalFillStyle(eFillStyle);
 
-            if ( dynamic_cast<const SdrPathObj*>( pNext) !=  nullptr )
+            if ( auto pPathObj = dynamic_cast<const SdrPathObj*>(pNext) )
             {
                 const SfxItemSet& rSet = pNext->GetMergedItemSet();
                 bool bNeedToConvertToContour(false);
@@ -391,7 +387,7 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
                 // invisible (all this 'hidden' logic should be migrated to primitives).
                 if(!bMultipleSubObjects)
                 {
-                    const drawing::FillStyle eStyle(static_cast<const XFillStyleItem&>(rSet.Get(XATTR_FILLSTYLE)).GetValue());
+                    const drawing::FillStyle eStyle(rSet.Get(XATTR_FILLSTYLE).GetValue());
 
                     if(drawing::FillStyle_NONE == eStyle)
                     {
@@ -438,9 +434,9 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
                                 // switch from line to fill, copy line attr to fill attr (color, transparence)
                                 aLocalSet.Put(XLineWidthItem(0));
                                 aLocalSet.Put(XLineStyleItem(drawing::LineStyle_NONE));
-                                aLocalSet.Put(XFillColorItem(OUString(), static_cast<const XLineColorItem&>(aLocalSet.Get(XATTR_LINECOLOR)).GetColorValue()));
+                                aLocalSet.Put(XFillColorItem(OUString(), aLocalSet.Get(XATTR_LINECOLOR).GetColorValue()));
                                 aLocalSet.Put(XFillStyleItem(drawing::FillStyle_SOLID));
-                                aLocalSet.Put(XFillTransparenceItem(static_cast<const XLineTransparenceItem&>(aLocalSet.Get(XATTR_LINETRANSPARENCE)).GetValue()));
+                                aLocalSet.Put(XFillTransparenceItem(aLocalSet.Get(XATTR_LINETRANSPARENCE).GetValue()));
                                 aLocalFillStyle = drawing::FillStyle_SOLID;
                             }
                         }
@@ -456,7 +452,7 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
                 }
                 else
                 {
-                    aPolyPoly = static_cast<const SdrPathObj*>(pNext)->GetPathPoly();
+                    aPolyPoly = pPathObj->GetPathPoly();
                 }
             }
             else
@@ -472,27 +468,32 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
             {
                 if(aPolyPoly.areControlPointsUsed())
                 {
-                    aPolyPoly = basegfx::tools::adaptiveSubdivideByAngle(aPolyPoly);
+                    aPolyPoly = basegfx::utils::adaptiveSubdivideByAngle(aPolyPoly);
                 }
 
-                const basegfx::B2DRange aTempRange(basegfx::tools::getRange(aPolyPoly));
-                const Rectangle aBoundRect(basegfx::fround(aTempRange.getMinX()), basegfx::fround(aTempRange.getMinY()), basegfx::fround(aTempRange.getMaxX()), basegfx::fround(aTempRange.getMaxY()));
+                const basegfx::B2DRange aTempRange(basegfx::utils::getRange(aPolyPoly));
+                const tools::Rectangle aBoundRect(basegfx::fround(aTempRange.getMinX()), basegfx::fround(aTempRange.getMinY()), basegfx::fround(aTempRange.getMaxX()), basegfx::fround(aTempRange.getMaxY()));
                 aBoundRect2d.Union( aBoundRect );
 
                 // #i122777# depth 0 is okay for planes when using double-sided
-                E3dCompoundObject* p3DObj = new E3dExtrudeObj( a3DDefaultAttr, aPolyPoly, bUseTwoFillStyles ? 0 : fDepth );
+                E3dCompoundObject* p3DObj = new E3dExtrudeObj(
+                    rSdrObjCustomShape.getSdrModelFromSdrObject(),
+                    a3DDefaultAttr,
+                    aPolyPoly,
+                    bUseTwoFillStyles ? 0 : fDepth );
 
                 p3DObj->NbcSetLayer( pShape2d->GetLayer() );
                 p3DObj->SetMergedItemSet( aLocalSet );
+
                 if ( bIsPlaceholderObject )
                     aPlaceholderObjectList.push_back( p3DObj );
                 else if ( bUseTwoFillStyles )
                 {
                     BitmapEx aFillBmp;
-                    bool bFillBmpTile = static_cast<const XFillBmpTileItem&>(p3DObj->GetMergedItem( XATTR_FILLBMP_TILE )).GetValue();
+                    bool bFillBmpTile = p3DObj->GetMergedItem( XATTR_FILLBMP_TILE ).GetValue();
                     if ( bFillBmpTile )
                     {
-                        const XFillBitmapItem& rBmpItm = static_cast<const XFillBitmapItem&>(p3DObj->GetMergedItem(XATTR_FILLBITMAP));
+                        const XFillBitmapItem& rBmpItm = p3DObj->GetMergedItem(XATTR_FILLBITMAP);
                         aFillBmp = rBmpItm.GetGraphicObject().GetGraphic().GetBitmapEx();
 
                         // #i122777# old adaption of FillStyle bitmap size to 5-times the original size; this is not needed
@@ -500,48 +501,56 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
                         // from regular 3D objects for some time, also needs to be removed from CustomShapes
 
                         //Size aLogicalSize = aFillBmp.GetPrefSize();
-                        //if ( aFillBmp.GetPrefMapMode() == MAP_PIXEL )
-                        //  aLogicalSize = Application::GetDefaultDevice()->PixelToLogic( aLogicalSize, MAP_100TH_MM );
+                        //if ( aFillBmp.GetPrefMapMode() == MapUnit::MapPixel )
+                        //  aLogicalSize = Application::GetDefaultDevice()->PixelToLogic( aLogicalSize, MapUnit::Map100thMM );
                         //else
-                        //  aLogicalSize = OutputDevice::LogicToLogic( aLogicalSize, aFillBmp.GetPrefMapMode(), MAP_100TH_MM );
+                        //  aLogicalSize = OutputDevice::LogicToLogic( aLogicalSize, aFillBmp.GetPrefMapMode(), MapUnit::Map100thMM );
                         //aLogicalSize.Width()  *= 5;           ;//             :-(     nice scaling, look at engine3d/obj3d.cxx
                         //aLogicalSize.Height() *= 5;
                         //aFillBmp.SetPrefSize( aLogicalSize );
-                        //aFillBmp.SetPrefMapMode( MAP_100TH_MM );
+                        //aFillBmp.SetPrefMapMode( MapUnit::Map100thMM );
                         //p3DObj->SetMergedItem(XFillBitmapItem(String(), Graphic(aFillBmp)));
                     }
                     else
                     {
                         if ( aSnapRect != aBoundRect && aSnapRect.GetWidth() > 0 && aSnapRect.GetHeight() > 0)
                         {
-                            const XFillBitmapItem& rBmpItm = static_cast<const XFillBitmapItem&>(p3DObj->GetMergedItem(XATTR_FILLBITMAP));
+                            const XFillBitmapItem& rBmpItm = p3DObj->GetMergedItem(XATTR_FILLBITMAP);
                             aFillBmp = rBmpItm.GetGraphicObject().GetGraphic().GetBitmapEx();
                             Size aBmpSize( aFillBmp.GetSizePixel() );
-                            double fXScale = (double)aBoundRect.GetWidth() / (double)aSnapRect.GetWidth();
-                            double fYScale = (double)aBoundRect.GetHeight() / (double)aSnapRect.GetHeight();
+                            double fXScale = static_cast<double>(aBoundRect.GetWidth()) / static_cast<double>(aSnapRect.GetWidth());
+                            double fYScale = static_cast<double>(aBoundRect.GetHeight()) / static_cast<double>(aSnapRect.GetHeight());
 
-                            Point aPt( (sal_Int32)( (double)( aBoundRect.Left() - aSnapRect.Left() )* (double)aBmpSize.Width() / (double)aSnapRect.GetWidth() ),
-                                                (sal_Int32)( (double)( aBoundRect.Top() - aSnapRect.Top() ) * (double)aBmpSize.Height() / (double)aSnapRect.GetHeight() ) );
-                            Size aSize( (sal_Int32)( aBmpSize.Width() * fXScale ),
-                                                    (sal_Int32)( aBmpSize.Height() * fYScale ) );
-                            Rectangle aCropRect( aPt, aSize );
+                            Point aPt( static_cast<sal_Int32>( static_cast<double>( aBoundRect.Left() - aSnapRect.Left() )* static_cast<double>(aBmpSize.Width()) / static_cast<double>(aSnapRect.GetWidth()) ),
+                                                static_cast<sal_Int32>( static_cast<double>( aBoundRect.Top() - aSnapRect.Top() ) * static_cast<double>(aBmpSize.Height()) / static_cast<double>(aSnapRect.GetHeight()) ) );
+                            Size aSize( static_cast<sal_Int32>( aBmpSize.Width() * fXScale ),
+                                                    static_cast<sal_Int32>( aBmpSize.Height() * fYScale ) );
+                            tools::Rectangle aCropRect( aPt, aSize );
                             aFillBmp.Crop( aCropRect );
                             p3DObj->SetMergedItem(XFillBitmapItem(OUString(), Graphic(aFillBmp)));
                         }
                     }
-                    pScene->Insert3DObj( p3DObj );
-                    p3DObj = new E3dExtrudeObj( a3DDefaultAttr, aPolyPoly, fDepth );
+                    pScene->InsertObject( p3DObj );
+                    p3DObj = new E3dExtrudeObj(
+                        rSdrObjCustomShape.getSdrModelFromSdrObject(),
+                        a3DDefaultAttr,
+                        aPolyPoly,
+                        fDepth);
                     p3DObj->NbcSetLayer( pShape2d->GetLayer() );
                     p3DObj->SetMergedItemSet( aLocalSet );
                     if ( bUseExtrusionColor )
-                        p3DObj->SetMergedItem( XFillColorItem( "", static_cast<const XSecondaryFillColorItem&>(pCustomShape->GetMergedItem( XATTR_SECONDARYFILLCOLOR )).GetColorValue() ) );
+                        p3DObj->SetMergedItem( XFillColorItem( "", rSdrObjCustomShape.GetMergedItem( XATTR_SECONDARYFILLCOLOR ).GetColorValue() ) );
                     p3DObj->SetMergedItem( XFillStyleItem( drawing::FillStyle_SOLID ) );
                     p3DObj->SetMergedItem( Svx3DCloseFrontItem( false ) );
                     p3DObj->SetMergedItem( Svx3DCloseBackItem( false ) );
-                    pScene->Insert3DObj( p3DObj );
+                    pScene->InsertObject( p3DObj );
 
                     // #i122777# depth 0 is okay for planes when using double-sided
-                    p3DObj = new E3dExtrudeObj( a3DDefaultAttr, aPolyPoly, 0 );
+                    p3DObj = new E3dExtrudeObj(
+                        rSdrObjCustomShape.getSdrModelFromSdrObject(),
+                        a3DDefaultAttr,
+                        aPolyPoly,
+                        0);
 
                     p3DObj->NbcSetLayer( pShape2d->GetLayer() );
                     p3DObj->SetMergedItemSet( aLocalSet );
@@ -557,13 +566,13 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
                 }
                 else if ( aLocalFillStyle == drawing::FillStyle_NONE )
                 {
-                    const XLineColorItem& rLineColor = static_cast<const XLineColorItem&>(p3DObj->GetMergedItem( XATTR_LINECOLOR ));
+                    const XLineColorItem& rLineColor = p3DObj->GetMergedItem( XATTR_LINECOLOR );
                     p3DObj->SetMergedItem( XFillColorItem( "", rLineColor.GetColorValue() ) );
                     p3DObj->SetMergedItem( makeSvx3DDoubleSidedItem( true ) );
                     p3DObj->SetMergedItem( Svx3DCloseFrontItem( false ) );
                     p3DObj->SetMergedItem( Svx3DCloseBackItem( false ) );
                 }
-                pScene->Insert3DObj( p3DObj );
+                pScene->InsertObject( p3DObj );
                 bSceneHasObjects = true;
             }
         }
@@ -586,7 +595,7 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
             rCamera.SetViewWindow( -fW / 2, - fH / 2, fW, fH);
             basegfx::B3DPoint aLookAt( 0.0, 0.0, 0.0 );
             basegfx::B3DPoint aCamPos( 0.0, 0.0, 100.0 );
-            rCamera.SetDefaults( basegfx::B3DPoint( 0.0, 0.0, 100.0 ), aLookAt, 100.0 );
+            rCamera.SetDefaults( basegfx::B3DPoint( 0.0, 0.0, 100.0 ), aLookAt );
             rCamera.SetPosAndLookAt( aCamPos, aLookAt );
             rCamera.SetFocalLength( 1.0 );
             rCamera.SetProjection( eProjectionType );
@@ -603,7 +612,7 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
 
             double fXRotate, fYRotate;
             GetRotateAngle( rGeometryItem, fXRotate, fYRotate );
-            double fZRotate = static_cast<const SdrObjCustomShape*>(pCustomShape)->GetObjectRotation() * F_PI180;
+            double fZRotate(basegfx::deg2rad(rSdrObjCustomShape.GetObjectRotation()));
             if ( fZRotate != 0.0 )
                 aNewTransform.rotate( 0.0, 0.0, fZRotate );
             if ( bIsMirroredX )
@@ -614,7 +623,7 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
                 aNewTransform.rotate( 0.0, -fYRotate, 0.0 );
             if( fXRotate != 0.0 )
                 aNewTransform.rotate( -fXRotate, 0.0, 0.0 );
-            if ( eProjectionType == PR_PARALLEL )
+            if ( eProjectionType == ProjectionType::Parallel )
             {
                 double fSkew, fAlpha;
                 GetSkew( rGeometryItem, fSkew, fAlpha );
@@ -653,14 +662,14 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
 
             // light
 
-            double fAmbientIntensity = GetDouble( rGeometryItem, "Brightness", 22178.0 / 655.36, nullptr ) / 100.0;
+            double fAmbientIntensity = GetDouble( rGeometryItem, "Brightness", 22178.0 / 655.36 ) / 100.0;
 
             drawing::Direction3D aFirstLightDirectionDefault( 50000, 0, 10000 );
             drawing::Direction3D aFirstLightDirection( GetDirection3D( rGeometryItem, "FirstLightDirection", aFirstLightDirectionDefault ) );
             if ( aFirstLightDirection.DirectionZ == 0.0 )
                 aFirstLightDirection.DirectionZ = 1.0;
 
-            double fLightIntensity = GetDouble( rGeometryItem, "FirstLightLevel", 43712.0 / 655.36, nullptr ) / 100.0;
+            double fLightIntensity = GetDouble( rGeometryItem, "FirstLightLevel", 43712.0 / 655.36 ) / 100.0;
 
             /* sal_Bool bFirstLightHarsh = */ GetBool( rGeometryItem, "FirstLightHarsh", false );
 
@@ -669,18 +678,18 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
             if ( aSecondLightDirection.DirectionZ == 0.0 )
                 aSecondLightDirection.DirectionZ = -1;
 
-            double fLight2Intensity = GetDouble( rGeometryItem, "SecondLightLevel", 43712.0 / 655.36, nullptr ) / 100.0;
+            double fLight2Intensity = GetDouble( rGeometryItem, "SecondLightLevel", 43712.0 / 655.36 ) / 100.0;
 
             /* sal_Bool bLight2Harsh = */ GetBool( rGeometryItem, "SecondLightHarsh", false );
             /* sal_Bool bLightFace = */ GetBool( rGeometryItem, "LightFace", false );
 
-            sal_uInt16 nAmbientColor = (sal_uInt16)( fAmbientIntensity * 255.0 );
+            sal_uInt16 nAmbientColor = static_cast<sal_uInt16>( fAmbientIntensity * 255.0 );
             if ( nAmbientColor > 255 )
                 nAmbientColor = 255;
-            Color aGlobalAmbientColor( (sal_uInt8)nAmbientColor, (sal_uInt8)nAmbientColor, (sal_uInt8)nAmbientColor );
+            Color aGlobalAmbientColor( static_cast<sal_uInt8>(nAmbientColor), static_cast<sal_uInt8>(nAmbientColor), static_cast<sal_uInt8>(nAmbientColor) );
             pScene->GetProperties().SetObjectItem( makeSvx3DAmbientcolorItem( aGlobalAmbientColor ) );
 
-            sal_uInt8 nSpotLight1 = (sal_uInt8)( fLightIntensity * 255.0 );
+            sal_uInt8 nSpotLight1 = static_cast<sal_uInt8>( fLightIntensity * 255.0 );
             basegfx::B3DVector aSpotLight1( aFirstLightDirection.DirectionX, - ( aFirstLightDirection.DirectionY ), -( aFirstLightDirection.DirectionZ ) );
             aSpotLight1.normalize();
             pScene->GetProperties().SetObjectItem( makeSvx3DLightOnOff1Item( true ) );
@@ -688,7 +697,7 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
             pScene->GetProperties().SetObjectItem( makeSvx3DLightcolor1Item( aAmbientSpot1Color ) );
             pScene->GetProperties().SetObjectItem( makeSvx3DLightDirection1Item( aSpotLight1 ) );
 
-            sal_uInt8 nSpotLight2 = (sal_uInt8)( fLight2Intensity * 255.0 );
+            sal_uInt8 nSpotLight2 = static_cast<sal_uInt8>( fLight2Intensity * 255.0 );
             basegfx::B3DVector aSpotLight2( aSecondLightDirection.DirectionX, -aSecondLightDirection.DirectionY, -aSecondLightDirection.DirectionZ );
             aSpotLight2.normalize();
             pScene->GetProperties().SetObjectItem( makeSvx3DLightOnOff2Item( true ) );
@@ -703,7 +712,7 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
                 pScene->GetProperties().SetObjectItem( makeSvx3DLightcolor3Item( aAmbientSpot3Color ) );
                 pScene->GetProperties().SetObjectItem( makeSvx3DLightDirection3Item( aSpotLight3 ) );
 
-            double fSpecular = GetDouble( rGeometryItem, "Specularity", 0, nullptr ) / 100;
+            double fSpecular = GetDouble( rGeometryItem, "Specularity", 0 ) / 100;
             bool bMetal = GetBool( rGeometryItem, "Metal", false );
 
             Color aSpecularCol( 225,225,225 );
@@ -712,35 +721,48 @@ SdrObject* EnhancedCustomShape3d::Create3DObject( const SdrObject* pShape2d, con
                 aSpecularCol = Color( 200, 200, 200 );
                 fSpecular += 0.15;
             }
-            sal_Int32 nIntensity = (sal_Int32)fSpecular * 100;
+            sal_Int32 nIntensity = static_cast<sal_Int32>(fSpecular) * 100;
             if ( nIntensity > 100 )
                 nIntensity = 100;
             else if ( nIntensity < 0 )
                 nIntensity = 0;
             nIntensity = 100 - nIntensity;
             pScene->GetProperties().SetObjectItem( makeSvx3DMaterialSpecularItem( aSpecularCol ) );
-            pScene->GetProperties().SetObjectItem( makeSvx3DMaterialSpecularIntensityItem( (sal_uInt16)nIntensity ) );
+            pScene->GetProperties().SetObjectItem( makeSvx3DMaterialSpecularIntensityItem( static_cast<sal_uInt16>(nIntensity) ) );
 
-            pScene->SetLogicRect( CalculateNewSnapRect( pCustomShape, aSnapRect, aBoundRect2d, pMap ) );
+            pScene->SetLogicRect(
+                CalculateNewSnapRect(
+                    rSdrObjCustomShape,
+                    aSnapRect,
+                    aBoundRect2d,
+                    pMap));
 
             // removing placeholder objects
-            std::vector< E3dCompoundObject* >::iterator aObjectListIter( aPlaceholderObjectList.begin() );
-            std::vector< E3dCompoundObject* >::const_iterator aEnd( aPlaceholderObjectList.end() );
-            while ( aObjectListIter != aEnd )
+            for (E3dCompoundObject* pTemp : aPlaceholderObjectList)
             {
-                pScene->Remove3DObj( *aObjectListIter );
-                delete *aObjectListIter++;
+                pScene->RemoveObject( pTemp->GetOrdNum() );
+                // always use SdrObject::Free(...) for SdrObjects (!)
+                SdrObject* pTemp2(pTemp);
+                SdrObject::Free(pTemp2);
             }
         }
         else
-            delete pScene;
+        {
+            // always use SdrObject::Free(...) for SdrObjects (!)
+            SdrObject* pTemp(pScene);
+            SdrObject::Free(pTemp);
+        }
     }
     return pRet;
 }
 
-Rectangle EnhancedCustomShape3d::CalculateNewSnapRect( const SdrObject* pCustomShape, const Rectangle& rSnapRect, const Rectangle& rBoundRect, const double* pMap )
+tools::Rectangle EnhancedCustomShape3d::CalculateNewSnapRect(
+    const SdrObjCustomShape& rSdrObjCustomShape,
+    const tools::Rectangle& rSnapRect,
+    const tools::Rectangle& rBoundRect,
+    const double* pMap)
 {
-    const SdrCustomShapeGeometryItem& rGeometryItem = static_cast<const SdrCustomShapeGeometryItem&>(pCustomShape->GetMergedItem( SDRATTR_CUSTOMSHAPE_GEOMETRY ));
+    const SdrCustomShapeGeometryItem& rGeometryItem(rSdrObjCustomShape.GetMergedItem( SDRATTR_CUSTOMSHAPE_GEOMETRY ));
     const Point aCenter( rSnapRect.Center() );
     double fExtrusionBackward, fExtrusionForward;
     GetExtrusionDepth( rGeometryItem, pMap, fExtrusionBackward, fExtrusionForward );
@@ -750,14 +772,14 @@ Rectangle EnhancedCustomShape3d::CalculateNewSnapRect( const SdrObject* pCustomS
     basegfx::B3DPolygon aBoundVolume;
     const tools::Polygon aPolygon( rBoundRect );
 
-    for ( i = 0L; i < 4L; i++ )
+    for ( i = 0; i < 4; i++ )
     {
-        aBoundVolume.append(basegfx::B3DPoint(aPolygon[ (sal_uInt16)i ].X() - aCenter.X(), aPolygon[ (sal_uInt16)i ].Y() - aCenter.Y(), fExtrusionForward));
+        aBoundVolume.append(basegfx::B3DPoint(aPolygon[ static_cast<sal_uInt16>(i) ].X() - aCenter.X(), aPolygon[ static_cast<sal_uInt16>(i) ].Y() - aCenter.Y(), fExtrusionForward));
     }
 
-    for ( i = 0L; i < 4L; i++ )
+    for ( i = 0; i < 4; i++ )
     {
-        aBoundVolume.append(basegfx::B3DPoint(aPolygon[ (sal_uInt16)i ].X() - aCenter.X(), aPolygon[ (sal_uInt16)i ].Y() - aCenter.Y(), fExtrusionBackward));
+        aBoundVolume.append(basegfx::B3DPoint(aPolygon[ static_cast<sal_uInt16>(i) ].X() - aCenter.X(), aPolygon[ static_cast<sal_uInt16>(i) ].Y() - aCenter.Y(), fExtrusionBackward));
     }
 
     drawing::Direction3D aRotationCenterDefault( 0, 0, 0 ); // default seems to be wrong, a fractional size of shape has to be used!!
@@ -765,16 +787,16 @@ Rectangle EnhancedCustomShape3d::CalculateNewSnapRect( const SdrObject* pCustomS
 
     double fXRotate, fYRotate;
     GetRotateAngle( rGeometryItem, fXRotate, fYRotate );
-    double fZRotate = - static_cast<const SdrObjCustomShape*>(pCustomShape)->GetObjectRotation() * F_PI180;
+    double fZRotate(basegfx::deg2rad(rSdrObjCustomShape.GetObjectRotation()));
 
     // rotating bound volume
     basegfx::B3DHomMatrix aMatrix;
     aMatrix.translate(-aRotationCenter.DirectionX, -aRotationCenter.DirectionY, -aRotationCenter.DirectionZ);
     if ( fZRotate != 0.0 )
         aMatrix.rotate( 0.0, 0.0, fZRotate );
-    if ( static_cast<const SdrObjCustomShape*>(pCustomShape)->IsMirroredX() )
+    if (rSdrObjCustomShape.IsMirroredX())
         aMatrix.scale( -1.0, 1, 1 );
-    if ( static_cast<const SdrObjCustomShape*>(pCustomShape)->IsMirroredY() )
+    if (rSdrObjCustomShape.IsMirroredY())
         aMatrix.scale( 1, -1.0, 1 );
     if( fYRotate != 0.0 )
         aMatrix.rotate( 0.0, fYRotate, 0.0 );
@@ -783,13 +805,16 @@ Rectangle EnhancedCustomShape3d::CalculateNewSnapRect( const SdrObject* pCustomS
     aMatrix.translate(aRotationCenter.DirectionX, aRotationCenter.DirectionY, aRotationCenter.DirectionZ);
     aBoundVolume.transform(aMatrix);
 
-    Transformation2D aTransformation2D( pCustomShape, rSnapRect, pMap );
+    Transformation2D aTransformation2D(
+        rSdrObjCustomShape,
+        pMap);
+
     if ( aTransformation2D.IsParallel() )
         aBoundVolume = aTransformation2D.ApplySkewSettings( aBoundVolume );
 
     tools::Polygon aTransformed( 8 );
-    for ( i = 0L; i < 8L; i++ )
-        aTransformed[ (sal_uInt16)i ] = aTransformation2D.Transform2D( aBoundVolume.getB3DPoint( i ) );
+    for ( i = 0; i < 8; i++ )
+        aTransformed[ static_cast<sal_uInt16>(i) ] = aTransformation2D.Transform2D( aBoundVolume.getB3DPoint( i ) );
 
     return aTransformed.GetBoundRect();
 }

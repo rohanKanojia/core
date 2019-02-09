@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svgcharacternode.hxx>
-#include <svgio/svgreader/svgstyleattributes.hxx>
+#include <svgcharacternode.hxx>
+#include <svgstyleattributes.hxx>
 #include <drawinglayer/attribute/fontattribute.hxx>
 #include <drawinglayer/primitive2d/textprimitive2d.hxx>
 #include <drawinglayer/primitive2d/textlayoutdevice.hxx>
@@ -41,7 +41,7 @@ namespace svgio
         {
         }
 
-        void SvgTextPositions::parseTextPositionAttributes(const OUString& /*rTokenName*/, SVGToken aSVGToken, const OUString& aContent)
+        void SvgTextPositions::parseTextPositionAttributes(SVGToken aSVGToken, const OUString& aContent)
         {
             // parse own
             switch(aSVGToken)
@@ -236,9 +236,10 @@ namespace svgio
             if(nLength)
             {
                 // prepare FontAttribute
-                OUString aFontFamily = rSvgStyleAttributes.getFontFamily().empty() ?
+                const SvgStringVector& rFontFamilyVector = rSvgStyleAttributes.getFontFamily();
+                OUString aFontFamily = rFontFamilyVector.empty() ?
                     OUString("Times New Roman") :
-                    rSvgStyleAttributes.getFontFamily()[0];
+                    rFontFamilyVector[0];
 
                 // #i122324# if the FontFamily name ends on ' embedded' it is probably a re-import
                 // of a SVG export with font embedding. Remove this to make font matching work. This
@@ -250,25 +251,19 @@ namespace svgio
                 }
 
                 const ::FontWeight nFontWeight(getVclFontWeight(rSvgStyleAttributes.getFontWeight()));
-                bool bSymbol(false);
-                bool bVertical(false);
                 bool bItalic(FontStyle_italic == rSvgStyleAttributes.getFontStyle() || FontStyle_oblique == rSvgStyleAttributes.getFontStyle());
-                bool bMonospaced(false);
-                bool bOutline(false);
-                bool bRTL(false);
-                bool bBiDiStrong(false);
 
                 const drawinglayer::attribute::FontAttribute aFontAttribute(
                     aFontFamily,
                     OUString(),
                     nFontWeight,
-                    bSymbol,
-                    bVertical,
+                    false/*bSymbol*/,
+                    false/*bVertical*/,
                     bItalic,
-                    bMonospaced,
-                    bOutline,
-                    bRTL,
-                    bBiDiStrong);
+                    false/*bMonospaced*/,
+                    false/*bOutline*/,
+                    false/*bRTL*/,
+                    false/*bBiDiStrong*/);
 
                 // prepare FontSizeNumber
                 double fFontWidth(rSvgStyleAttributes.getFontSizeNumber().solve(*this));
@@ -471,7 +466,7 @@ namespace svgio
                         false,
                         TextDecoration_line_through == aDeco ? drawinglayer::primitive2d::TEXT_STRIKEOUT_SINGLE : drawinglayer::primitive2d::TEXT_STRIKEOUT_NONE,
                         false,
-                        drawinglayer::primitive2d::TEXT_EMPHASISMARK_NONE,
+                        drawinglayer::primitive2d::TEXT_FONT_EMPHASIS_MARK_NONE,
                         true,
                         false,
                         drawinglayer::primitive2d::TEXT_RELIEF_NONE,
@@ -508,36 +503,36 @@ namespace svgio
                     rSvgTextPosition,
                     rSvgStyleAttributes));
 
-            if(xRef.is() && (Visibility_visible == rSvgStyleAttributes.getVisibility()))
+            if(!(xRef.is() && (Visibility_visible == rSvgStyleAttributes.getVisibility())))
+                return;
+
+            if(!rSvgTextPosition.isRotated())
             {
-                if(!rSvgTextPosition.isRotated())
+                rTarget.push_back(xRef);
+            }
+            else
+            {
+                // need to apply rotations to each character as given
+                const drawinglayer::primitive2d::TextSimplePortionPrimitive2D* pCandidate =
+                    dynamic_cast< const drawinglayer::primitive2d::TextSimplePortionPrimitive2D* >(xRef.get());
+
+                if(pCandidate)
                 {
-                    rTarget.push_back(xRef);
+                    const localTextBreakupHelper alocalTextBreakupHelper(*pCandidate, rSvgTextPosition);
+                    const drawinglayer::primitive2d::Primitive2DContainer& aResult(
+                        alocalTextBreakupHelper.getResult());
+
+                    if(!aResult.empty())
+                    {
+                        rTarget.append(aResult);
+                    }
+
+                    // also consume for the implied single space
+                    rSvgTextPosition.consumeRotation();
                 }
                 else
                 {
-                    // need to apply rotations to each character as given
-                    const drawinglayer::primitive2d::TextSimplePortionPrimitive2D* pCandidate =
-                        dynamic_cast< const drawinglayer::primitive2d::TextSimplePortionPrimitive2D* >(xRef.get());
-
-                    if(pCandidate)
-                    {
-                        const localTextBreakupHelper alocalTextBreakupHelper(*pCandidate, rSvgTextPosition);
-                        const drawinglayer::primitive2d::Primitive2DContainer aResult(
-                            alocalTextBreakupHelper.getResult());
-
-                        if(!aResult.empty())
-                        {
-                            rTarget.append(aResult);
-                        }
-
-                        // also consume for the implied single space
-                        rSvgTextPosition.consumeRotation();
-                    }
-                    else
-                    {
-                        OSL_ENSURE(false, "Used primitive is not a text primitive (!)");
-                    }
+                    OSL_ENSURE(false, "Used primitive is not a text primitive (!)");
                 }
             }
         }
@@ -609,11 +604,9 @@ namespace svgio
             // but it seems to be degrees. Convert here to radians
             if(!maRotate.empty())
             {
-                const double fFactor(F_PI / 180.0);
-
-                for(size_t a(0); a < maRotate.size(); a++)
+                for (double& f : maRotate)
                 {
-                    maRotate[a] *= fFactor;
+                    f = basegfx::deg2rad(f);
                 }
             }
 

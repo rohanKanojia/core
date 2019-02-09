@@ -119,14 +119,12 @@ public:
 
 class ScDPGroupTableData : public ScDPTableData
 {
-    typedef std::unordered_set< OUString, OUStringHash, ::std::equal_to< OUString > > StringHashSet;
-
     std::shared_ptr<ScDPTableData> pSourceData;
     long                    nSourceCount;
     ScDPGroupDimensionVec   aGroups;
-    ScDPNumGroupDimension*  pNumGroups;     // array[nSourceCount]
-    ScDocument*             pDoc;
-    StringHashSet           aGroupNames;
+    std::unique_ptr<ScDPNumGroupDimension[]>
+                            pNumGroups;     // array[nSourceCount]
+    ScDocument* const       pDoc;
 
     void FillGroupValues(std::vector<SCROW>& rItems, const std::vector<long>& rDims);
     virtual long                GetSourceDim( long nDim ) override;
@@ -139,9 +137,9 @@ class ScDPGroupTableData : public ScDPTableData
 public:
                 // takes ownership of pSource
                 ScDPGroupTableData( const std::shared_ptr<ScDPTableData>& pSource, ScDocument* pDocument );
-    virtual     ~ScDPGroupTableData();
+    virtual     ~ScDPGroupTableData() override;
 
-    std::shared_ptr<ScDPTableData> GetSourceTableData() { return pSourceData;}
+    const std::shared_ptr<ScDPTableData>& GetSourceTableData() const { return pSourceData;}
 
     void        AddGroupDimension( const ScDPGroupDimension& rGroup );
     void        SetNumGroupDimension( long nIndex, const ScDPNumGroupDimension& rGroup );
@@ -156,7 +154,7 @@ public:
     virtual OUString                getDimensionName(long nColumn) override;
     virtual bool                    getIsDataLayoutDimension(long nColumn) override;
     virtual bool                    IsDateDimension(long nDim) override;
-    virtual sal_uLong               GetNumberFormat(long nDim) override;
+    virtual sal_uInt32              GetNumberFormat(long nDim) override;
     virtual void                    DisposeData() override;
     virtual void                    SetEmptyFlags( bool bIgnoreEmptyRows, bool bRepeatIfEmpty ) override;
 
@@ -179,8 +177,8 @@ public:
     virtual bool                    HasCommonElement( const ScDPItemData& rFirstData, long nFirstIndex,
                                                       const ScDPItemData& rSecondData, long nSecondIndex ) const override;
 
-#if DEBUG_PIVOT_TABLE
-    virtual void Dump() const;
+#if DUMP_PIVOT_TABLE
+    virtual void Dump() const override;
 #endif
 };
 

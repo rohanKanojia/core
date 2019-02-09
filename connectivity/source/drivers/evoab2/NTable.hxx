@@ -31,25 +31,24 @@ namespace connectivity
 
         class OEvoabTable : public OEvoabTable_TYPEDEF
         {
-            ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XDatabaseMetaData > m_xMetaData;
             OEvoabConnection* m_pConnection;
 
         public:
             OEvoabTable(    sdbcx::OCollection* _pTables,
                     OEvoabConnection* _pConnection,
-                    const OUString& _Name,
-                    const OUString& _Type,
-                    const OUString& _Description = OUString(),
-                    const OUString& _SchemaName = OUString(),
-                    const OUString& _CatalogName = OUString()
+                    const OUString& Name,
+                    const OUString& Type,
+                    const OUString& Description,
+                    const OUString& SchemaName,
+                    const OUString& CatalogName
                 );
 
             OEvoabConnection* getConnection() { return m_pConnection;}
 
             virtual void refreshColumns() override;
 
-            OUString getTableName() const { return m_Name; }
-            OUString getSchema() const { return m_SchemaName; }
+            OUString const & getTableName() const { return m_Name; }
+            OUString const & getSchema() const { return m_SchemaName; }
         };
     }
 }

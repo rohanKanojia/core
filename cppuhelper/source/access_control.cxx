@@ -24,16 +24,15 @@
 #include <com/sun/star/security/RuntimePermission.hpp>
 #include <com/sun/star/io/FilePermission.hpp>
 #include <com/sun/star/connection/SocketPermission.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 using namespace ::osl;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 
-using rtl::OUString;
-
 namespace
 {
-    inline OUString str_ac_singleton()
+    OUString str_ac_singleton()
     {
         return OUString("/singletons/com.sun.star.security.theAccessController");
     }
@@ -71,7 +70,7 @@ AccessControl::AccessControl( AccessControl const & ac )
 
 namespace {
 
-#ifdef SAL_W32
+#ifdef _WIN32
 #pragma pack(push, 8)
 #endif
     // binary comp. to all Permission structs
@@ -80,11 +79,11 @@ namespace {
         rtl_uString * m_str1;
         rtl_uString * m_str2;
     };
-#ifdef SAL_W32
+#ifdef _WIN32
 #pragma pack(pop)
 #endif
 
-inline void checkPermission(
+void checkPermission(
     Reference< security::XAccessController > const & xController,
     Type const & type, rtl_uString * str1, rtl_uString * str2 )
 {

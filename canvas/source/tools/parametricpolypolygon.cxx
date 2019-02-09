@@ -26,8 +26,8 @@
 #include <basegfx/point/b2dpoint.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/range/b2drectangle.hxx>
-#include <basegfx/tools/canvastools.hxx>
-#include <basegfx/tools/tools.hxx>
+#include <basegfx/utils/canvastools.hxx>
+#include <basegfx/utils/tools.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <rtl/math.hxx>
 
@@ -40,12 +40,9 @@ namespace canvas
 {
     uno::Sequence<OUString> ParametricPolyPolygon::getAvailableServiceNames()
     {
-        uno::Sequence<OUString> aRet(3);
-        aRet[0] = "LinearGradient";
-        aRet[1] = "EllipticalGradient";
-        aRet[2] = "RectangularGradient";
-
-        return aRet;
+        return {"LinearGradient",
+                "EllipticalGradient",
+                "RectangularGradient"};
     }
 
     ParametricPolyPolygon* ParametricPolyPolygon::create(
@@ -70,7 +67,7 @@ namespace canvas
         for( sal_Int32 i=0; i<rArgs.getLength(); ++i )
         {
             beans::PropertyValue aProp;
-            if( (rArgs[i] >>= aProp) )
+            if( rArgs[i] >>= aProp )
             {
                 if ( aProp.Name == "Colors" )
                 {
@@ -139,7 +136,7 @@ namespace canvas
         // the colors
         return new ParametricPolyPolygon(
             rDevice,
-            ::basegfx::tools::createPolygonFromCircle(
+            ::basegfx::utils::createPolygonFromCircle(
                 ::basegfx::B2DPoint(0,0), 1 ),
             GradientType::Elliptical,
             colors, stops, fAspectRatio );
@@ -154,7 +151,7 @@ namespace canvas
         // the colors
         return new ParametricPolyPolygon(
             rDevice,
-            ::basegfx::tools::createPolygonFromRect(
+            ::basegfx::utils::createPolygonFromRect(
                 ::basegfx::B2DRectangle( -1, -1, 1, 1 ) ),
             GradientType::Rectangular,
             colors, stops, fAspectRatio );
@@ -167,31 +164,25 @@ namespace canvas
         mxDevice.clear();
     }
 
-    uno::Reference< rendering::XPolyPolygon2D > SAL_CALL ParametricPolyPolygon::getOutline( double /*t*/ ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
+    uno::Reference< rendering::XPolyPolygon2D > SAL_CALL ParametricPolyPolygon::getOutline( double /*t*/ )
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
         // TODO(F1): outline NYI
         return uno::Reference< rendering::XPolyPolygon2D >();
     }
 
-    uno::Sequence< double > SAL_CALL ParametricPolyPolygon::getColor( double /*t*/ ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
+    uno::Sequence< double > SAL_CALL ParametricPolyPolygon::getColor( double /*t*/ )
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
         // TODO(F1): color NYI
         return uno::Sequence< double >();
     }
 
-    uno::Sequence< double > SAL_CALL ParametricPolyPolygon::getPointColor( const geometry::RealPoint2D& /*point*/ ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
+    uno::Sequence< double > SAL_CALL ParametricPolyPolygon::getPointColor( const geometry::RealPoint2D& /*point*/ )
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
         // TODO(F1): point color NYI
         return uno::Sequence< double >();
     }
 
-    uno::Reference< rendering::XColorSpace > SAL_CALL ParametricPolyPolygon::getColorSpace() throw (uno::RuntimeException, std::exception)
+    uno::Reference< rendering::XColorSpace > SAL_CALL ParametricPolyPolygon::getColorSpace()
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -199,21 +190,19 @@ namespace canvas
     }
 
 
-    OUString SAL_CALL ParametricPolyPolygon::getImplementationName(  ) throw (uno::RuntimeException, std::exception)
+    OUString SAL_CALL ParametricPolyPolygon::getImplementationName(  )
     {
         return OUString( "Canvas::ParametricPolyPolygon" );
     }
 
-    sal_Bool SAL_CALL ParametricPolyPolygon::supportsService( const OUString& ServiceName ) throw (uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL ParametricPolyPolygon::supportsService( const OUString& ServiceName )
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    uno::Sequence< OUString > SAL_CALL ParametricPolyPolygon::getSupportedServiceNames(  ) throw (uno::RuntimeException, std::exception)
+    uno::Sequence< OUString > SAL_CALL ParametricPolyPolygon::getSupportedServiceNames(  )
     {
-        uno::Sequence< OUString > aRet { "com.sun.star.rendering.ParametricPolyPolygon" };
-
-        return aRet;
+        return { "com.sun.star.rendering.ParametricPolyPolygon" };
     }
 
     ParametricPolyPolygon::~ParametricPolyPolygon()

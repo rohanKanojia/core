@@ -21,9 +21,11 @@
 
 #include "dlgprov.hxx"
 
-#include <sfx2/sfx.hrc>
+#include <sfx2/strings.hrc>
 #include <sfx2/app.hxx>
-#include <vcl/layout.hxx>
+#include <sfx2/sfxresid.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 #include <tools/diagnose_ex.h>
 
 #include <com/sun/star/awt/XControl.hpp>
@@ -38,6 +40,7 @@
 #include <com/sun/star/script/provider/XScriptProviderSupplier.hpp>
 #include <com/sun/star/script/vba/XVBACompatibility.hpp>
 #include <com/sun/star/lang/NoSuchMethodException.hpp>
+#include <com/sun/star/lang/ServiceNotRegisteredException.hpp>
 #include <com/sun/star/reflection/XIdlMethod.hpp>
 #include <com/sun/star/beans/MethodConcept.hpp>
 #include <com/sun/star/beans/XMaterialHolder.hpp>
@@ -78,7 +81,7 @@ namespace dlgprov
     Reference< awt::XControl > m_xControl;
         Reference< XInterface > m_xHandler;
     Reference< beans::XIntrospectionAccess > m_xIntrospectionAccess;
-    bool m_bDialogProviderMode;
+    bool const m_bDialogProviderMode;
 
         virtual void firing_impl( const script::ScriptEvent& aScriptEvent, uno::Any* pRet ) override;
 
@@ -96,7 +99,7 @@ namespace dlgprov
     {
         protected:
         OUString msDialogCodeName;
-        OUString msDialogLibName;
+        OUString const msDialogLibName;
         Reference<  script::XScriptListener > mxListener;
         virtual void firing_impl( const script::ScriptEvent& aScriptEvent, uno::Any* pRet ) override;
         public:
@@ -123,7 +126,7 @@ namespace dlgprov
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("scripting");
             }
         }
 
@@ -141,7 +144,7 @@ namespace dlgprov
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("scripting");
             }
         }
     }
@@ -156,12 +159,12 @@ namespace dlgprov
         // key listeners by protocol when ScriptType = 'Script'
         // otherwise key is the ScriptType e.g. StarBasic
         if ( rxRTLListener.is() ) // set up handler for RTL_BASIC
-            listernersForTypes[ OUString("StarBasic") ] = rxRTLListener;
+            listenersForTypes[ OUString("StarBasic") ] = rxRTLListener;
         else
-            listernersForTypes[ OUString("StarBasic") ] = new DialogLegacyScriptListenerImpl( rxContext, rxModel );
+            listenersForTypes[ OUString("StarBasic") ] = new DialogLegacyScriptListenerImpl( rxContext, rxModel );
         // handler for Script & OUString("vnd.sun.star.UNO:")
-        listernersForTypes[ OUString("vnd.sun.star.UNO") ] = new DialogUnoScriptListenerImpl( rxContext, rxModel, rxControl, rxHandler, rxIntrospect, bProviderMode );
-        listernersForTypes[ OUString("vnd.sun.star.script") ] = new DialogSFScriptListenerImpl( rxContext, rxModel );
+        listenersForTypes[ OUString("vnd.sun.star.UNO") ] = new DialogUnoScriptListenerImpl( rxContext, rxModel, rxControl, rxHandler, rxIntrospect, bProviderMode );
+        listenersForTypes[ OUString("vnd.sun.star.script") ] = new DialogSFScriptListenerImpl( rxContext, rxModel );
 
         // determine the VBA compatibility mode from the Basic library container
         try
@@ -175,7 +178,7 @@ namespace dlgprov
         {
         }
         if ( mbUseFakeVBAEvents )
-            listernersForTypes[ OUString("VBAInterop") ] = new DialogVBAScriptListenerImpl( rxContext, rxControl, rxModel, sDialogLibName );
+            listenersForTypes[ OUString("VBAInterop") ] = new DialogVBAScriptListenerImpl( rxContext, rxControl, rxModel, sDialogLibName );
     }
 
 
@@ -184,15 +187,15 @@ namespace dlgprov
     }
 
 
-    Reference< script::XScriptListener >
-    DialogEventsAttacherImpl::getScriptListenerForKey( const OUString& sKey ) throw ( RuntimeException )
+    Reference< script::XScriptListener > const &
+    DialogEventsAttacherImpl::getScriptListenerForKey( const OUString& sKey )
     {
-        ListenerHash::iterator it = listernersForTypes.find( sKey );
-        if ( it == listernersForTypes.end() )
+        ListenerHash::iterator it = listenersForTypes.find( sKey );
+        if ( it == listenersForTypes.end() )
             throw RuntimeException(); // more text info here please
         return it->second;
     }
-    Reference< XScriptEventsSupplier > DialogEventsAttacherImpl::getFakeVbaEventsSupplier( const Reference< XControl >& xControl, OUString& sControlName )
+    Reference< XScriptEventsSupplier > DialogEventsAttacherImpl::getFakeVbaEventsSupplier( const Reference< XControl >& xControl, OUString const & sControlName )
     {
         Reference< XScriptEventsSupplier > xEventsSupplier;
         Reference< XMultiComponentFactory > xSMgr( m_xContext->getServiceManager() );
@@ -251,7 +254,7 @@ namespace dlgprov
                     }
                     catch ( const Exception& )
                     {
-                        DBG_UNHANDLED_EXCEPTION();
+                        DBG_UNHANDLED_EXCEPTION("scripting");
                     }
 
                     try
@@ -259,14 +262,14 @@ namespace dlgprov
                         // if we had no success, try to attach to the control
                         if ( !bSuccess )
                         {
-                            Reference< XEventListener > xListener_ = m_xEventAttacher->attachSingleEventListener(
+                            m_xEventAttacher->attachSingleEventListener(
                                 xControl, xAllListener, Helper, aDesc.ListenerType,
                                 aDesc.AddListenerParam, aDesc.EventMethod );
                         }
                     }
                     catch ( const Exception& )
                     {
-                        DBG_UNHANDLED_EXCEPTION();
+                        DBG_UNHANDLED_EXCEPTION("scripting");
                     }
                 }
             }
@@ -325,8 +328,6 @@ namespace dlgprov
     void SAL_CALL DialogEventsAttacherImpl::attachEvents( const Sequence< Reference< XInterface > >& Objects,
         const css::uno::Reference<css::script::XScriptListener>&,
         const Any& Helper )
-        throw (IllegalArgumentException, IntrospectionException, CannotCreateAdapterException,
-               ServiceNotRegisteredException, RuntimeException, std::exception)
     {
         // get EventAttacher
         {
@@ -335,19 +336,14 @@ namespace dlgprov
             if ( !m_xEventAttacher.is() )
             {
                 Reference< XMultiComponentFactory > xSMgr( m_xContext->getServiceManager() );
-                if ( xSMgr.is() )
-                {
-                    m_xEventAttacher.set( xSMgr->createInstanceWithContext(
-                        "com.sun.star.script.EventAttacher", m_xContext ), UNO_QUERY );
-
-                    if ( !m_xEventAttacher.is() )
-                        throw ServiceNotRegisteredException();
-                }
-                else
-                {
+                if ( !xSMgr.is() )
                     throw RuntimeException();
-                }
 
+                m_xEventAttacher.set( xSMgr->createInstanceWithContext(
+                    "com.sun.star.script.EventAttacher", m_xContext ), UNO_QUERY );
+
+                if ( !m_xEventAttacher.is() )
+                    throw ServiceNotRegisteredException();
             }
         }
         OUString sDialogCodeName;
@@ -408,7 +404,7 @@ namespace dlgprov
     // XEventListener
 
 
-    void DialogAllListenerImpl::disposing(const EventObject& ) throw ( RuntimeException, std::exception )
+    void DialogAllListenerImpl::disposing(const EventObject& )
     {
     }
 
@@ -416,7 +412,7 @@ namespace dlgprov
     // XAllListener
 
 
-    void DialogAllListenerImpl::firing( const AllEventObject& Event ) throw ( RuntimeException, std::exception )
+    void DialogAllListenerImpl::firing( const AllEventObject& Event )
     {
         //::osl::MutexGuard aGuard( getMutex() );
 
@@ -425,7 +421,6 @@ namespace dlgprov
 
 
     Any DialogAllListenerImpl::approveFiring( const AllEventObject& Event )
-        throw ( reflection::InvocationTargetException, RuntimeException, std::exception )
     {
         //::osl::MutexGuard aGuard( getMutex() );
 
@@ -508,7 +503,7 @@ namespace dlgprov
         }
         catch ( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("scripting");
         }
     }
 
@@ -536,9 +531,7 @@ namespace dlgprov
 
     void DialogUnoScriptListenerImpl::firing_impl( const ScriptEvent& aScriptEvent, Any* pRet )
     {
-        static const char sUnoURLScheme[] = "vnd.sun.star.UNO:";
-
-        OUString aMethodName = aScriptEvent.ScriptCode.copy( strlen(sUnoURLScheme) );
+        OUString aMethodName = aScriptEvent.ScriptCode.copy( strlen("vnd.sun.star.UNO:") );
 
         const Any* pArguments = aScriptEvent.Arguments.getConstArray();
         Any aEventObject = pArguments[0];
@@ -571,7 +564,7 @@ namespace dlgprov
         {
             try
             {
-                // Methode ansprechen
+                // call method
                 const Reference< XIdlMethod >& rxMethod = m_xIntrospectionAccess->
                     getMethod( aMethodName, MethodConcept::ALL - MethodConcept::DANGEROUS );
 
@@ -609,7 +602,7 @@ namespace dlgprov
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("scripting");
             }
         }
 
@@ -620,24 +613,21 @@ namespace dlgprov
         }
         else
         {
-            ResMgr* pResMgr = SfxApplication::GetSfxResManager();
-            if( pResMgr )
-            {
-                OUString aRes( ResId(STR_ERRUNOEVENTBINDUNG, *pResMgr) );
-                OUString aQuoteChar( "\""  );
+            OUString aRes(SfxResId(STR_ERRUNOEVENTBINDUNG));
+            OUString aQuoteChar( "\"" );
 
-                OUString aOURes = aRes;
-                sal_Int32 nIndex = aOURes.indexOf( '%' );
+            sal_Int32 nIndex = aRes.indexOf( '%' );
 
-                OUString aOUFinal;
-                aOUFinal += aOURes.copy( 0, nIndex );
-                aOUFinal += aQuoteChar;
-                aOUFinal += aMethodName;
-                aOUFinal += aQuoteChar;
-                aOUFinal += aOURes.copy( nIndex + 2 );
+            OUString aOUFinal;
+            aOUFinal += aRes.copy( 0, nIndex );
+            aOUFinal += aQuoteChar;
+            aOUFinal += aMethodName;
+            aOUFinal += aQuoteChar;
+            aOUFinal += aRes.copy( nIndex + 2 );
 
-                ScopedVclPtrInstance<MessageDialog>::Create(nullptr, aOUFinal)->Execute();
-            }
+            std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(nullptr,
+                                                      VclMessageType::Warning, VclButtonsType::Ok, aOUFinal));
+            xBox->run();
         }
     }
 
@@ -645,7 +635,7 @@ namespace dlgprov
     // XEventListener
 
 
-    void DialogScriptListenerImpl::disposing(const EventObject& ) throw ( RuntimeException, std::exception )
+    void DialogScriptListenerImpl::disposing(const EventObject& )
     {
     }
 
@@ -653,7 +643,7 @@ namespace dlgprov
     // XScriptListener
 
 
-    void DialogScriptListenerImpl::firing( const ScriptEvent& aScriptEvent ) throw ( RuntimeException, std::exception )
+    void DialogScriptListenerImpl::firing( const ScriptEvent& aScriptEvent )
     {
         //::osl::MutexGuard aGuard( getMutex() );
 
@@ -662,7 +652,6 @@ namespace dlgprov
 
 
     Any DialogScriptListenerImpl::approveFiring( const ScriptEvent& aScriptEvent )
-        throw ( reflection::InvocationTargetException, RuntimeException, std::exception )
     {
         //::osl::MutexGuard aGuard( getMutex() );
 

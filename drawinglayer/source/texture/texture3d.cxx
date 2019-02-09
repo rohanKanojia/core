@@ -17,10 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <algorithm>
+
 #include <drawinglayer/texture/texture3d.hxx>
 #include <vcl/bitmapaccess.hxx>
 #include <drawinglayer/primitive3d/hatchtextureprimitive3d.hxx>
-
+#include <sal/log.hxx>
 
 namespace drawinglayer
 {
@@ -64,9 +68,7 @@ namespace drawinglayer
             const BitmapEx& rBitmapEx,
             const basegfx::B2DRange& rRange)
         :   maBitmapEx(rBitmapEx),
-            mpReadBitmap(nullptr),
             maTransparence(),
-            mpReadTransparence(nullptr),
             maTopLeft(rRange.getMinimum()),
             maSize(rRange.getRange()),
             mfMulX(0.0),
@@ -75,8 +77,7 @@ namespace drawinglayer
             mbIsTransparent(maBitmapEx.IsTransparent())
         {
             // #121194# Todo: use alpha channel, too (for 3d)
-            mpReadBitmap = maBitmapEx.GetBitmap().AcquireReadAccess();
-            OSL_ENSURE(mpReadBitmap, "GeoTexSvxBitmapEx: Got no read access to Bitmap (!)");
+            maBitmap = maBitmapEx.GetBitmap();
 
             if(mbIsTransparent)
             {
@@ -90,11 +91,17 @@ namespace drawinglayer
                     maTransparence = rBitmapEx.GetMask();
                 }
 
-                mpReadTransparence = maTransparence.AcquireReadAccess();
+                mpReadTransparence = Bitmap::ScopedReadAccess(maTransparence);
             }
 
-            mfMulX = (double)mpReadBitmap->Width() / maSize.getX();
-            mfMulY = (double)mpReadBitmap->Height() / maSize.getY();
+            if (!!maBitmap)
+                mpReadBitmap = Bitmap::ScopedReadAccess(maBitmap);
+            SAL_WARN_IF(!mpReadBitmap, "drawinglayer", "GeoTexSvxBitmapEx: Got no read access to Bitmap");
+            if (mpReadBitmap)
+            {
+                mfMulX = static_cast<double>(mpReadBitmap->Width()) / maSize.getX();
+                mfMulY = static_cast<double>(mpReadBitmap->Height()) / maSize.getY();
+            }
 
             if(maSize.getX() <= 1.0)
             {
@@ -109,30 +116,28 @@ namespace drawinglayer
 
         GeoTexSvxBitmapEx::~GeoTexSvxBitmapEx()
         {
-            delete mpReadTransparence;
-            delete mpReadBitmap;
         }
 
-        sal_uInt8 GeoTexSvxBitmapEx::impGetTransparence(sal_Int32& rX, sal_Int32& rY) const
+        sal_uInt8 GeoTexSvxBitmapEx::impGetTransparence(sal_Int32 rX, sal_Int32 rY) const
         {
             switch(maBitmapEx.GetTransparentType())
             {
-                case TRANSPARENT_NONE:
+                case TransparentType::NONE:
                 {
                     break;
                 }
-                case TRANSPARENT_COLOR:
+                case TransparentType::Color:
                 {
                     const BitmapColor aBitmapColor(mpReadBitmap->GetColor(rY, rX));
 
-                    if(maBitmapEx.GetTransparentColor() == aBitmapColor.operator Color())
+                    if(maBitmapEx.GetTransparentColor() == aBitmapColor.GetColor())
                     {
                         return 255;
                     }
 
                     break;
                 }
-                case TRANSPARENT_BITMAP:
+                case TransparentType::Bitmap:
                 {
                     OSL_ENSURE(mpReadTransparence, "OOps, transparence type Bitmap, but no read access created in the constructor (?)");
                     const BitmapColor aBitmapColor(mpReadTransparence->GetPixel(rY, rX));
@@ -159,13 +164,13 @@ namespace drawinglayer
         {
             if(mpReadBitmap)
             {
-                rX = (sal_Int32)((rUV.getX() - maTopLeft.getX()) * mfMulX);
+                rX = static_cast<sal_Int32>((rUV.getX() - maTopLeft.getX()) * mfMulX);
 
-                if(rX >= 0L && rX < mpReadBitmap->Width())
+                if(rX >= 0 && rX < mpReadBitmap->Width())
                 {
-                    rY = (sal_Int32)((rUV.getY() - maTopLeft.getY()) * mfMulY);
+                    rY = static_cast<sal_Int32>((rUV.getY() - maTopLeft.getY()) * mfMulY);
 
-                    return (rY >= 0L && rY < mpReadBitmap->Height());
+                    return (rY >= 0 && rY < mpReadBitmap->Height());
                 }
             }
 
@@ -181,9 +186,9 @@ namespace drawinglayer
                 const double fConvertColor(1.0 / 255.0);
                 const BitmapColor aBMCol(mpReadBitmap->GetColor(nY, nX));
                 const basegfx::BColor aBSource(
-                    (double)aBMCol.GetRed() * fConvertColor,
-                    (double)aBMCol.GetGreen() * fConvertColor,
-                    (double)aBMCol.GetBlue() * fConvertColor);
+                    static_cast<double>(aBMCol.GetRed()) * fConvertColor,
+                    static_cast<double>(aBMCol.GetGreen()) * fConvertColor,
+                    static_cast<double>(aBMCol.GetBlue()) * fConvertColor);
 
                 rBColor = aBSource;
 
@@ -192,7 +197,7 @@ namespace drawinglayer
                     // when we have a transparence, make use of it
                     const sal_uInt8 aLuminance(impGetTransparence(nX, nY));
 
-                    rfOpacity = ((double)(0xff - aLuminance) * (1.0 / 255.0));
+                    rfOpacity = (static_cast<double>(0xff - aLuminance) * (1.0 / 255.0));
                 }
                 else
                 {
@@ -215,7 +220,7 @@ namespace drawinglayer
                 {
                     // this texture has an alpha part, use it
                     const sal_uInt8 aLuminance(impGetTransparence(nX, nY));
-                    const double fNewOpacity((double)(0xff - aLuminance) * (1.0 / 255.0));
+                    const double fNewOpacity(static_cast<double>(0xff - aLuminance) * (1.0 / 255.0));
 
                     rfOpacity = 1.0 - ((1.0 - fNewOpacity) * (1.0 - rfOpacity));
                 }
@@ -225,7 +230,7 @@ namespace drawinglayer
                     const BitmapColor aBMCol(mpReadBitmap->GetColor(nY, nX));
                     const Color aColor(aBMCol.GetRed(), aBMCol.GetGreen(), aBMCol.GetBlue());
 
-                    rfOpacity = ((double)(0xff - aColor.GetLuminance()) * (1.0 / 255.0));
+                    rfOpacity = (static_cast<double>(0xff - aColor.GetLuminance()) * (1.0 / 255.0));
                 }
             }
             else
@@ -287,8 +292,8 @@ namespace drawinglayer
             double fOffsetX,
             double fOffsetY)
         :   GeoTexSvxBitmapEx(rBitmapEx, rRange),
-            mfOffsetX(basegfx::clamp(fOffsetX, 0.0, 1.0)),
-            mfOffsetY(basegfx::clamp(fOffsetY, 0.0, 1.0)),
+            mfOffsetX(std::clamp(fOffsetX, 0.0, 1.0)),
+            mfOffsetY(std::clamp(fOffsetY, 0.0, 1.0)),
             mbUseOffsetX(!basegfx::fTools::equalZero(mfOffsetX)),
             mbUseOffsetY(!mbUseOffsetX && !basegfx::fTools::equalZero(mfOffsetY))
         {
@@ -320,46 +325,40 @@ namespace drawinglayer
         GeoTexSvxMultiHatch::GeoTexSvxMultiHatch(
             const primitive3d::HatchTexturePrimitive3D& rPrimitive,
             double fLogicPixelSize)
-        :   mfLogicPixelSize(fLogicPixelSize),
-            mp0(nullptr),
-            mp1(nullptr),
-            mp2(nullptr)
+        :   mfLogicPixelSize(fLogicPixelSize)
         {
             const attribute::FillHatchAttribute& rHatch(rPrimitive.getHatch());
             const basegfx::B2DRange aOutlineRange(0.0, 0.0, rPrimitive.getTextureSize().getX(), rPrimitive.getTextureSize().getY());
             const double fAngleA(rHatch.getAngle());
             maColor = rHatch.getColor();
             mbFillBackground = rHatch.isFillBackground();
-            mp0 = new GeoTexSvxHatch(
+            mp0.reset( new GeoTexSvxHatch(
                 aOutlineRange,
                 aOutlineRange,
                 rHatch.getDistance(),
-                fAngleA);
+                fAngleA) );
 
-            if(attribute::HATCHSTYLE_DOUBLE == rHatch.getStyle() || attribute::HATCHSTYLE_TRIPLE == rHatch.getStyle())
+            if(attribute::HatchStyle::Double == rHatch.getStyle() || attribute::HatchStyle::Triple == rHatch.getStyle())
             {
-                mp1 = new GeoTexSvxHatch(
+                mp1.reset( new GeoTexSvxHatch(
                     aOutlineRange,
                     aOutlineRange,
                     rHatch.getDistance(),
-                    fAngleA + F_PI2);
+                    fAngleA + F_PI2) );
             }
 
-            if(attribute::HATCHSTYLE_TRIPLE == rHatch.getStyle())
+            if(attribute::HatchStyle::Triple == rHatch.getStyle())
             {
-                mp2 = new GeoTexSvxHatch(
+                mp2.reset( new GeoTexSvxHatch(
                     aOutlineRange,
                     aOutlineRange,
                     rHatch.getDistance(),
-                    fAngleA + F_PI4);
+                    fAngleA + F_PI4) );
             }
         }
 
         GeoTexSvxMultiHatch::~GeoTexSvxMultiHatch()
         {
-            delete mp0;
-            delete mp1;
-            delete mp2;
         }
 
         bool GeoTexSvxMultiHatch::impIsOnHatch(const basegfx::B2DPoint& rUV) const

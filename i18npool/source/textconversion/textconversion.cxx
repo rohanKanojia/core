@@ -23,11 +23,11 @@
 
 using namespace com::sun::star::uno;
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 #ifndef DISABLE_DYNLOADING
 
-extern "C" { static void SAL_CALL thisModule() {} }
+extern "C" { static void thisModule() {} }
 
 #endif
 
@@ -59,7 +59,7 @@ static void* nullFunc()
     return nullptr;
 }
 
-oslGenericFunction SAL_CALL
+oslGenericFunction
 TextConversionService::getFunctionBySymbol(const sal_Char* func)
 {
     if (hModule)
@@ -71,24 +71,24 @@ TextConversionService::getFunctionBySymbol(const sal_Char* func)
 #endif
 
 OUString SAL_CALL
-TextConversionService::getImplementationName() throw( RuntimeException, std::exception )
+TextConversionService::getImplementationName()
 {
     return OUString::createFromAscii(implementationName);
 }
 
 sal_Bool SAL_CALL
-TextConversionService::supportsService(const OUString& rServiceName) throw( RuntimeException, std::exception )
+TextConversionService::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 Sequence< OUString > SAL_CALL
-TextConversionService::getSupportedServiceNames() throw( RuntimeException, std::exception )
+TextConversionService::getSupportedServiceNames()
 {
     Sequence< OUString > aRet { OUString::createFromAscii(implementationName) };
     return aRet;
 }
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

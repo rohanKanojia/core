@@ -18,41 +18,32 @@
  */
 
 
-#include "xmlemitter.hxx"
-#include "genericelements.hxx"
-#include "pdfiprocessor.hxx"
-#include "pdfihelper.hxx"
+#include <xmlemitter.hxx>
+#include <genericelements.hxx>
+#include <pdfiprocessor.hxx>
+#include <pdfihelper.hxx>
 #include "style.hxx"
 
 
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
 #include <basegfx/range/b2drange.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 namespace pdfi
 {
 
-ElementFactory::~ElementFactory()
-{
-}
-
 Element::~Element()
 {
-    while( !Children.empty() )
-    {
-        Element* pCurr( Children.front() );
-        delete pCurr;
-        Children.pop_front();
-    }
 }
 
 void Element::applyToChildren( ElementTreeVisitor& rVisitor )
 {
-    for( std::list< Element* >::iterator it = Children.begin(); it != Children.end(); ++it )
+    for( auto it = Children.begin(); it != Children.end(); ++it )
         (*it)->visitedBy( rVisitor, it );
 }
 
-void Element::setParent( std::list<Element*>::iterator& el, Element* pNewParent )
+void Element::setParent( std::list<std::unique_ptr<Element>>::iterator const & el, Element* pNewParent )
 {
     if( pNewParent )
     {
@@ -94,41 +85,40 @@ void Element::updateGeometryWith( const Element* pMergeFrom )
 #include <typeinfo>
 void Element::emitStructure( int nLevel)
 {
-    OSL_TRACE( "%*s<%s %p> (%.1f,%.1f)+(%.1fx%.1f)\n",
-               nLevel, "", typeid( *this ).name(), this,
-               x, y, w, h );
-    for( std::list< Element* >::iterator it = Children.begin(); it != Children.end(); ++it )
-        (*it)->emitStructure(nLevel+1 );
-    OSL_TRACE( "%*s</%s>", nLevel, "", typeid( *this ).name() );
+    SAL_INFO( "sdext", std::string(nLevel, ' ') << "<" << typeid( *this ).name() << " " << this << "> ("
+                << std::setprecision(1) << x << "," << y << ")+(" << w << "x" << h << ")" );
+    for (auto const& child : Children)
+        child->emitStructure(nLevel+1);
+    SAL_INFO( "sdext", std::string(nLevel, ' ') << "</" << typeid( *this ).name() << ">"  );
 }
 #endif
 
-void ListElement::visitedBy( ElementTreeVisitor& visitor, const std::list< Element* >::const_iterator& )
+void ListElement::visitedBy( ElementTreeVisitor& visitor, const std::list< std::unique_ptr<Element> >::const_iterator& )
 {
     // this is only an inner node
     applyToChildren(visitor);
 }
 
 void HyperlinkElement::visitedBy( ElementTreeVisitor&                          rVisitor,
-                                  const std::list< Element* >::const_iterator& rParentIt )
+                                  const std::list< std::unique_ptr<Element> >::const_iterator& rParentIt )
 {
     rVisitor.visit(*this,rParentIt);
 }
 
 void TextElement::visitedBy( ElementTreeVisitor&                          rVisitor,
-                             const std::list< Element* >::const_iterator& rParentIt )
+                             const std::list< std::unique_ptr<Element> >::const_iterator& rParentIt )
 {
     rVisitor.visit(*this,rParentIt);
 }
 
 void FrameElement::visitedBy( ElementTreeVisitor&                          rVisitor,
-                              const std::list< Element* >::const_iterator& rParentIt )
+                              const std::list< std::unique_ptr<Element> >::const_iterator& rParentIt )
 {
     rVisitor.visit(*this,rParentIt);
 }
 
 void ImageElement::visitedBy( ElementTreeVisitor&                          rVisitor,
-                              const std::list< Element* >::const_iterator& rParentIt)
+                              const std::list< std::unique_ptr<Element> >::const_iterator& rParentIt)
 {
     rVisitor.visit( *this, rParentIt);
 }
@@ -147,9 +137,9 @@ void PolyPolyElement::updateGeometry()
 {
     basegfx::B2DRange aRange;
     if( PolyPoly.areControlPointsUsed() )
-        aRange = basegfx::tools::getRange( basegfx::tools::adaptiveSubdivideByAngle( PolyPoly ) );
+        aRange = basegfx::utils::getRange( basegfx::utils::adaptiveSubdivideByAngle( PolyPoly ) );
     else
-        aRange = basegfx::tools::getRange( PolyPoly );
+        aRange = basegfx::utils::getRange( PolyPoly );
     x = aRange.getMinX();
     y = aRange.getMinY();
     w = aRange.getWidth();
@@ -161,7 +151,7 @@ void PolyPolyElement::updateGeometry()
 }
 
 void PolyPolyElement::visitedBy( ElementTreeVisitor&                          rVisitor,
-                                 const std::list< Element* >::const_iterator& rParentIt)
+                                 const std::list< std::unique_ptr<Element> >::const_iterator& rParentIt)
 {
     rVisitor.visit( *this, rParentIt);
 }
@@ -169,43 +159,43 @@ void PolyPolyElement::visitedBy( ElementTreeVisitor&                          rV
 #if OSL_DEBUG_LEVEL > 0
 void PolyPolyElement::emitStructure( int nLevel)
 {
-    OSL_TRACE( "%*s<%s %p>", nLevel, "", typeid( *this ).name(), this  );
-    OSL_TRACE( "path=" );
+    SAL_WARN( "sdext", std::string(nLevel, ' ') << "<" << typeid( *this ).name() << " " << this << ">" );
+    SAL_WARN( "sdext", "path=" );
     int nPoly = PolyPoly.count();
     for( int i = 0; i < nPoly; i++ )
     {
+        OUStringBuffer buff;
         basegfx::B2DPolygon aPoly = PolyPoly.getB2DPolygon( i );
         int nPoints = aPoly.count();
         for( int n = 0; n < nPoints; n++ )
         {
             basegfx::B2DPoint aPoint = aPoly.getB2DPoint( n );
-            OSL_TRACE( " (%g,%g)", aPoint.getX(), aPoint.getY() );
+            buff.append( " (").append(aPoint.getX()).append(",").append(aPoint.getY()).append(")");
         }
-        OSL_TRACE( "\n" );
+        SAL_WARN( "sdext", "    " << buff.makeStringAndClear() );
     }
-    for( std::list< Element* >::iterator it = Children.begin(); it != Children.end(); ++it )
-        (*it)->emitStructure( nLevel+1 );
-    OSL_TRACE( "%*s</%s>", nLevel, "", typeid( *this ).name() );
+    for (auto const& child : Children)
+        child->emitStructure( nLevel+1 );
+    SAL_WARN( "sdext", std::string(nLevel, ' ') << "</" << typeid( *this ).name() << ">");
 }
 #endif
 
 void ParagraphElement::visitedBy( ElementTreeVisitor&                          rVisitor,
-                                  const std::list< Element* >::const_iterator& rParentIt )
+                                  const std::list< std::unique_ptr<Element> >::const_iterator& rParentIt )
 {
     rVisitor.visit(*this,rParentIt);
 }
 
-bool ParagraphElement::isSingleLined( PDFIProcessor& rProc ) const
+bool ParagraphElement::isSingleLined( PDFIProcessor const & rProc ) const
 {
-    std::list< Element* >::const_iterator it = Children.begin();
     TextElement* pText = nullptr, *pLastText = nullptr;
-    while( it != Children.end() )
+    for( auto& rxChild : Children )
     {
         // a paragraph containing subparagraphs cannot be single lined
-        if( dynamic_cast< ParagraphElement* >(*it) != nullptr )
+        if( dynamic_cast< ParagraphElement* >(rxChild.get()) != nullptr )
             return false;
 
-        pText = dynamic_cast< TextElement* >(*it);
+        pText = dynamic_cast< TextElement* >(rxChild.get());
         if( pText )
         {
             const FontAttributes& rFont = rProc.getFont( pText->FontId );
@@ -220,7 +210,6 @@ bool ParagraphElement::isSingleLined( PDFIProcessor& rProc ) const
             else
                 pLastText = pText;
         }
-        ++it;
     }
 
     // a paragraph without a single text is not considered single lined
@@ -230,9 +219,9 @@ bool ParagraphElement::isSingleLined( PDFIProcessor& rProc ) const
 double ParagraphElement::getLineHeight( PDFIProcessor& rProc ) const
 {
     double line_h = 0;
-    for( std::list< Element* >::const_iterator it = Children.begin(); it != Children.end(); ++it )
+    for( auto& rxChild : Children )
     {
-        ParagraphElement* pPara = dynamic_cast< ParagraphElement* >(*it);
+        ParagraphElement* pPara = dynamic_cast< ParagraphElement* >(rxChild.get());
         TextElement* pText = nullptr;
         if( pPara )
         {
@@ -240,7 +229,7 @@ double ParagraphElement::getLineHeight( PDFIProcessor& rProc ) const
             if( lh > line_h )
                 line_h = lh;
         }
-        else if( (pText = dynamic_cast< TextElement* >( *it )) != nullptr )
+        else if( (pText = dynamic_cast< TextElement* >( rxChild.get() )) != nullptr )
         {
             const FontAttributes& rFont = rProc.getFont( pText->FontId );
             double lh = pText->h;
@@ -256,68 +245,35 @@ double ParagraphElement::getLineHeight( PDFIProcessor& rProc ) const
 TextElement* ParagraphElement::getFirstTextChild() const
 {
     TextElement* pText = nullptr;
-    for( std::list< Element* >::const_iterator it = Children.begin();
-         it != Children.end() && ! pText; ++it )
-    {
-        pText = dynamic_cast<TextElement*>(*it);
-    }
+    auto it = std::find_if(Children.begin(), Children.end(),
+        [](const std::unique_ptr<Element>& rxElem) { return dynamic_cast<TextElement*>(rxElem.get()) != nullptr; });
+    if (it != Children.end())
+        pText = dynamic_cast<TextElement*>(it->get());
     return pText;
 }
 
 PageElement::~PageElement()
 {
-    delete HeaderElement;
-    delete FooterElement;
 }
 
 void PageElement::visitedBy( ElementTreeVisitor&                          rVisitor,
-                             const std::list< Element* >::const_iterator& rParentIt )
+                             const std::list< std::unique_ptr<Element> >::const_iterator& rParentIt )
 {
      rVisitor.visit(*this, rParentIt);
 }
 
-void PageElement::updateParagraphGeometry( Element* pEle )
+bool PageElement::resolveHyperlink( const std::list<std::unique_ptr<Element>>::iterator& link_it, std::list<std::unique_ptr<Element>>& rElements )
 {
-    // update geometry of children
-    for( std::list< Element* >::iterator it = pEle->Children.begin();
-         it != pEle->Children.end(); ++it )
-    {
-        updateParagraphGeometry( *it );
-    }
-    // if this is a paragraph itself, then update according to children geometry
-    if( dynamic_cast<ParagraphElement*>(pEle) )
-    {
-        for( std::list< Element* >::iterator it = pEle->Children.begin();
-             it != pEle->Children.end(); ++it )
-        {
-            Element* pChild = nullptr;
-            TextElement* pText = dynamic_cast<TextElement*>(*it);
-            if( pText )
-                pChild = pText;
-            else
-            {
-                ParagraphElement* pPara = dynamic_cast<ParagraphElement*>(*it);
-                if( pPara )
-                    pChild = pPara;
-            }
-            if( pChild )
-                pEle->updateGeometryWith( pChild );
-        }
-    }
-}
-
-bool PageElement::resolveHyperlink( std::list<Element*>::iterator link_it, std::list<Element*>& rElements )
-{
-    HyperlinkElement* pLink = dynamic_cast<HyperlinkElement*>(*link_it);
+    HyperlinkElement* pLink = dynamic_cast<HyperlinkElement*>(link_it->get());
     if( ! pLink ) // sanity check
         return false;
 
-    for( std::list<Element*>::iterator it = rElements.begin(); it != rElements.end(); ++it )
+    for( auto it = rElements.begin(); it != rElements.end(); ++it )
     {
         if( (*it)->x >= pLink->x && (*it)->x + (*it)->w <= pLink->x + pLink->w &&
             (*it)->y >= pLink->y && (*it)->y + (*it)->h <= pLink->y + pLink->h )
         {
-            TextElement* pText = dynamic_cast<TextElement*>(*it);
+            TextElement* pText = dynamic_cast<TextElement*>(it->get());
             if( pText )
             {
                 if( pLink->Children.empty() )
@@ -327,7 +283,7 @@ bool PageElement::resolveHyperlink( std::list<Element*>::iterator link_it, std::
                     pLink->Parent = (*it)->Parent;
                 }
                 // move text element into hyperlink
-                std::list<Element*>::iterator next = it;
+                auto next = it;
                 ++next;
                 Element::setParent( it, pLink );
                 it = next;
@@ -337,13 +293,13 @@ bool PageElement::resolveHyperlink( std::list<Element*>::iterator link_it, std::
             // a link can contain multiple text elements or a single frame
             if( ! pLink->Children.empty() )
                 continue;
-            if( dynamic_cast<ParagraphElement*>(*it)  )
+            if( dynamic_cast<ParagraphElement*>(it->get())  )
             {
                 if( resolveHyperlink( link_it, (*it)->Children ) )
                     break;
                 continue;
             }
-            FrameElement* pFrame = dynamic_cast<FrameElement*>(*it);
+            FrameElement* pFrame = dynamic_cast<FrameElement*>(it->get());
             if( pFrame )
             {
                 // insert the hyperlink before the frame
@@ -364,26 +320,25 @@ void PageElement::resolveHyperlinks()
     {
         if( ! resolveHyperlink( Hyperlinks.Children.begin(), Children ) )
         {
-            delete Hyperlinks.Children.front();
             Hyperlinks.Children.pop_front();
         }
     }
 }
 
-void PageElement::resolveFontStyles( PDFIProcessor& rProc )
+void PageElement::resolveFontStyles( PDFIProcessor const & rProc )
 {
     resolveUnderlines(rProc);
 }
 
-void PageElement::resolveUnderlines( PDFIProcessor& rProc )
+void PageElement::resolveUnderlines( PDFIProcessor const & rProc )
 {
     // FIXME: currently the algorithm used is quadratic
     // this could be solved by some sorting beforehand
 
-    std::list< Element* >::iterator poly_it = Children.begin();
+    auto poly_it = Children.begin();
     while( poly_it != Children.end() )
     {
-        PolyPolyElement* pPoly = dynamic_cast< PolyPolyElement* >(*poly_it);
+        PolyPolyElement* pPoly = dynamic_cast< PolyPolyElement* >(poly_it->get());
         if( ! pPoly || ! pPoly->Children.empty() )
         {
             ++poly_it;
@@ -420,10 +375,9 @@ void PageElement::resolveUnderlines( PDFIProcessor& rProc )
             u_y = r_x; r_x = l_x; l_x = u_y;
         }
         u_y = aPoly.getB2DPoint(0).getY();
-        for( std::list< Element*>::iterator it = Children.begin();
-             it != Children.end(); ++it )
+        for( auto& rxChild : Children )
         {
-            Element* pEle = *it;
+            Element* pEle = rxChild.get();
             if( pEle->y <= u_y && pEle->y + pEle->h*1.1 >= u_y )
             {
                 // first: is the element underlined completely ?
@@ -457,10 +411,9 @@ void PageElement::resolveUnderlines( PDFIProcessor& rProc )
         }
         if( bRemovePoly )
         {
-            std::list< Element* >::iterator next_it = poly_it;
+            auto next_it = poly_it;
             ++next_it;
             Children.erase( poly_it );
-            delete pPoly;
             poly_it = next_it;
         }
         else
@@ -473,7 +426,7 @@ DocumentElement::~DocumentElement()
 }
 
 void DocumentElement::visitedBy( ElementTreeVisitor&                          rVisitor,
-                                 const std::list< Element* >::const_iterator& rParentIt)
+                                 const std::list< std::unique_ptr<Element> >::const_iterator& rParentIt)
 {
     rVisitor.visit(*this, rParentIt);
 }

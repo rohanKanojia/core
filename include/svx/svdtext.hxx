@@ -23,6 +23,7 @@
 #include <sal/types.h>
 #include <svx/svxdllapi.h>
 #include <tools/weakbase.hxx>
+#include <memory>
 
 
 class OutlinerParaObject;
@@ -30,6 +31,7 @@ class SdrOutliner;
 class SdrTextObj;
 class SdrModel;
 class SfxItemSet;
+enum class OutlinerMode;
 
 namespace sdr { namespace properties {
     class TextProperties;
@@ -39,16 +41,15 @@ namespace sdr { namespace properties {
 */
 
 class SfxStyleSheet;
-class SVX_DLLPUBLIC SdrText : public tools::WeakBase< SdrText >
+class SVX_DLLPUBLIC SdrText : public virtual tools::WeakBase
 {
 public:
-    SdrText( SdrTextObj& rObject, OutlinerParaObject* pOutlinerParaObject = nullptr );
-    virtual ~SdrText();
+    explicit SdrText( SdrTextObj& rObject );
+    virtual ~SdrText() override;
 
-    virtual void SetModel(SdrModel* pNewModel);
-    void ForceOutlinerParaObject( sal_uInt16 nOutlMode );
+    void ForceOutlinerParaObject( OutlinerMode nOutlMode );
 
-    virtual void SetOutlinerParaObject( OutlinerParaObject* pTextObject );
+    virtual void SetOutlinerParaObject( std::unique_ptr<OutlinerParaObject> pTextObject );
     OutlinerParaObject* GetOutlinerParaObject() const;
 
     void CheckPortionInfo( SdrOutliner& rOutliner );
@@ -58,11 +59,14 @@ public:
     // return a text-specific ItemSet
     virtual const SfxItemSet& GetItemSet() const;
 
-    SdrModel* GetModel() const { return mpModel; }
+    // This class does not need an own SdrModel reference - always
+    // has the SdrTextObj working with so can use SdrModel::getSdrModelFromSdrObject()
     SdrTextObj& GetObject() const { return mrObject; }
 
     /** returns the current OutlinerParaObject and removes it from this instance */
-    OutlinerParaObject* RemoveOutlinerParaObject();
+    std::unique_ptr<OutlinerParaObject> RemoveOutlinerParaObject();
+
+    void dumpAsXml(struct _xmlTextWriter * pWriter) const;
 
 protected:
     virtual const SfxItemSet& GetObjectItemSet();
@@ -70,9 +74,8 @@ protected:
     virtual SfxStyleSheet* GetStyleSheet() const;
 
 private:
-    OutlinerParaObject* mpOutlinerParaObject;
+    std::unique_ptr<OutlinerParaObject> mpOutlinerParaObject;
     SdrTextObj& mrObject;
-    SdrModel* mpModel;
     bool mbPortionInfoChecked;
 };
 

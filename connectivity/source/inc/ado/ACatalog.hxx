@@ -20,7 +20,7 @@
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_ADO_ACATALOG_HXX
 
 #include <connectivity/sdbcx/VCatalog.hxx>
-#include "ado/Awrapadox.hxx"
+#include <ado/Awrapadox.hxx>
 
 namespace connectivity
 {
@@ -34,17 +34,17 @@ namespace connectivity
             OConnection*    m_pConnection;
 
         public:
-            virtual void refreshTables();
-            virtual void refreshViews() ;
-            virtual void refreshGroups();
-            virtual void refreshUsers() ;
+            virtual void refreshTables() override;
+            virtual void refreshViews() override;
+            virtual void refreshGroups() override;
+            virtual void refreshUsers() override;
 
         public:
             OCatalog(_ADOCatalog* _pCatalog,OConnection* _pCon);
-            ~OCatalog();
+            ~OCatalog() override;
 
             OConnection*        getConnection()     const { return m_pConnection;   }
-            sdbcx::OCollection* getPrivateTables()  const { return m_pTables;       }
+            sdbcx::OCollection* getPrivateTables()  const { return m_pTables.get(); }
             WpADOCatalog        getCatalog()        const { return m_aCatalog;      }
         };
     }

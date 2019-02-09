@@ -21,20 +21,17 @@
 #define INCLUDED_BASEGFX_PIXEL_BPIXEL_HXX
 
 #include <sal/types.h>
-#include <basegfx/numeric/ftools.hxx>
 #include <basegfx/color/bcolor.hxx>
 #include <basegfx/basegfxdllapi.h>
 
 namespace basegfx
 {
-    class BASEGFX_DLLPUBLIC BPixel
+    class BPixel final
     {
-    protected:
         union
         {
             struct
             {
-                // bitfield
                 unsigned                                mnR : 8;        // red intensity
                 unsigned                                mnG : 8;        // green intensity
                 unsigned                                mnB : 8;        // blue intensity
@@ -43,7 +40,6 @@ namespace basegfx
 
             struct
             {
-                // bitfield
                 unsigned                                mnValue : 32;   // all values
             } maCombinedRGBO;
         } maPixelUnion;
@@ -51,7 +47,7 @@ namespace basegfx
     public:
         BPixel()
         {
-            maPixelUnion.maCombinedRGBO.mnValue = 0L;
+            maPixelUnion.maCombinedRGBO.mnValue = 0;
         }
 
         // use explicit here to make sure everyone knows what he is doing. Values range from
@@ -72,22 +68,6 @@ namespace basegfx
             maPixelUnion.maRGBO.mnG = sal_uInt8((rColor.getGreen() * 255.0) + 0.5);
             maPixelUnion.maRGBO.mnB = sal_uInt8((rColor.getBlue() * 255.0) + 0.5);
             maPixelUnion.maRGBO.mnO = nOpacity;
-        }
-
-        // copy constructor
-        BPixel(const BPixel& rPixel)
-        {
-            maPixelUnion.maCombinedRGBO.mnValue = rPixel.maPixelUnion.maCombinedRGBO.mnValue;
-        }
-
-        ~BPixel()
-        {}
-
-        // assignment operator
-        BPixel& operator=( const BPixel& rPixel )
-        {
-            maPixelUnion.maCombinedRGBO.mnValue = rPixel.maPixelUnion.maCombinedRGBO.mnValue;
-            return *this;
         }
 
         // data access read

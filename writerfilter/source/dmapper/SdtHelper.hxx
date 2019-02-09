@@ -12,12 +12,10 @@
 
 #include <vector>
 
-#include <boost/optional.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
 
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <rtl/ustrbuf.hxx>
-
-#include <DomainMapper_Impl.hxx>
+#include <tools/ref.hxx>
 
 namespace com
 {
@@ -38,6 +36,7 @@ namespace writerfilter
 {
 namespace dmapper
 {
+class DomainMapper_Impl;
 
 /**
  * Helper to create form controls from w:sdt tokens.
@@ -45,7 +44,7 @@ namespace dmapper
  * w:sdt tokens can't be imported as form fields, as w:sdt supports
  * e.g. date picking as well.
  */
-class SdtHelper
+class SdtHelper final : public virtual SvRefBase
 {
     DomainMapper_Impl& m_rDM_Impl;
 
@@ -67,11 +66,10 @@ class SdtHelper
     bool m_bOutsideAParagraph;
 
     /// Create and append the drawing::XControlShape, containing the various models.
-    void createControlShape(css::awt::Size aSize, css::uno::Reference<css::awt::XControlModel> const&);
-    void createControlShape(css::awt::Size aSize, css::uno::Reference<css::awt::XControlModel> const&, const css::uno::Sequence<css::beans::PropertyValue>& rGrabBag);
+    void createControlShape(css::awt::Size aSize, css::uno::Reference<css::awt::XControlModel> const& xControlModel, const css::uno::Sequence<css::beans::PropertyValue>& rGrabBag);
 public:
-    SdtHelper(DomainMapper_Impl& rDM_Impl);
-    virtual ~SdtHelper();
+    explicit SdtHelper(DomainMapper_Impl& rDM_Impl);
+    ~SdtHelper() override;
 
     std::vector<OUString>& getDropDownItems()
     {
@@ -89,6 +87,10 @@ public:
     {
         return m_sDateFormat;
     }
+
+    /// Decides if we have enough information to create a date control.
+    bool validateDateFormat();
+
     OUStringBuffer& getLocale()
     {
         return m_sLocale;
@@ -112,7 +114,7 @@ public:
     /// Create drop-down control from w:sdt's w:dropDownList.
     void createDropDownControl();
     /// Create date control from w:sdt's w:date.
-    void createDateControl(OUString& rContentText, const css::beans::PropertyValue& rCharFormat);
+    void createDateControl(OUString const& rContentText, const css::beans::PropertyValue& rCharFormat);
 
     void appendToInteropGrabBag(const css::beans::PropertyValue& rValue);
     css::uno::Sequence<css::beans::PropertyValue> getInteropGrabBagAndClear();

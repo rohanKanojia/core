@@ -37,7 +37,8 @@
 #include <dispatch/oxt_handler.hxx>
 #include <dispatch/popupmenudispatcher.hxx>
 #include <dispatch/servicehandler.hxx>
-#include <services/dispatchhelper.hxx>
+#include <dispatch/dispatchdisabler.hxx>
+#include <framework/dispatchhelper.hxx>
 #include <recording/dispatchrecorder.hxx>
 #include <recording/dispatchrecordersupplier.hxx>
 #include <services/uriabbreviation.hxx>
@@ -48,16 +49,19 @@
 #include <uielement/langselectionmenucontroller.hxx>
 #include <uielement/macrosmenucontroller.hxx>
 #include <uielement/newmenucontroller.hxx>
+#include <uielement/toolbarmodemenucontroller.hxx>
 #include <uielement/toolbarsmenucontroller.hxx>
 
 COMPONENTGETFACTORY ( fwl,
-                        IFFACTORY( ::framework::MediaTypeDetectionHelper        )
-                        IFFACTORY( ::framework::MailToDispatcher                        ) else
+                        IFFACTORY( ::framework::MediaTypeDetectionHelper                )
+                        IFFACTORY( ::framework::MailToDispatcher                        )   else
                         IFFACTORY( ::framework::ServiceHandler                          )   else
                         IFFACTORY( ::framework::PopupMenuDispatcher                     )   else
                         IFFACTORY( ::framework::DispatchHelper                          )   else
+                        IFFACTORY( ::framework::DispatchDisabler                        )   else
                         IFFACTORY( ::framework::DispatchRecorder                        )   else
                         IFFACTORY( ::framework::DispatchRecorderSupplier                )   else
+                        IFFACTORY( ::framework::ToolbarModeMenuController               )   else
                         IFFACTORY( ::framework::ToolbarsMenuController                  )   else
                         IFFACTORY( ::framework::FontMenuController                      )   else
                         IFFACTORY( ::framework::MacrosMenuController                    )   else

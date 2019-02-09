@@ -26,7 +26,7 @@
 #include <com/sun/star/uno/RuntimeException.hpp>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <cppuhelper/basemutex.hxx>
-#include <cppuhelper/compbase4.hxx>
+#include <cppuhelper/compbase.hxx>
 #include <rtl/ref.hxx>
 #include <sal/types.h>
 
@@ -44,7 +44,7 @@ namespace unoidl {
 
 namespace cppuhelper {
 
-typedef cppu::WeakComponentImplHelper4<
+typedef cppu::WeakComponentImplHelper<
     css::lang::XServiceInfo, css::container::XHierarchicalNameAccess,
     css::container::XSet, css::reflection::XTypeDescriptionEnumerationAccess >
 TypeManager_Base;
@@ -56,94 +56,75 @@ public:
     using TypeManager_Base::acquire;
     using TypeManager_Base::release;
 
-    void init(rtl::OUString const & rdbUris);
+    void init(OUString const & rdbUris);
 
-    css::uno::Any find(rtl::OUString const & name);
+    css::uno::Any find(OUString const & name);
 
     css::uno::Reference< css::reflection::XTypeDescription > resolve(
-        rtl::OUString const & name);
+        OUString const & name);
 
 private:
-    virtual ~TypeManager() throw ();
+    virtual ~TypeManager() throw () override;
 
     virtual void SAL_CALL disposing() override;
 
-    virtual rtl::OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
 
-    virtual sal_Bool SAL_CALL supportsService(rtl::OUString const & ServiceName)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override;
 
-    virtual css::uno::Sequence< rtl::OUString > SAL_CALL
-    getSupportedServiceNames() throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL
+    getSupportedServiceNames() override;
 
     virtual css::uno::Any SAL_CALL getByHierarchicalName(
-        rtl::OUString const & aName)
-        throw (
-            css::container::NoSuchElementException, css::uno::RuntimeException, std::exception) override;
+        OUString const & aName) override;
 
-    virtual sal_Bool SAL_CALL hasByHierarchicalName(rtl::OUString const & aName)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL hasByHierarchicalName(OUString const & aName) override;
 
-    virtual css::uno::Type SAL_CALL getElementType()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Type SAL_CALL getElementType() override;
 
-    virtual sal_Bool SAL_CALL hasElements() throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL hasElements() override;
 
     virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL
-    createEnumeration() throw (css::uno::RuntimeException, std::exception) override;
+    createEnumeration() override;
 
-    virtual sal_Bool SAL_CALL has(css::uno::Any const & aElement)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL has(css::uno::Any const & aElement) override;
 
-    virtual void SAL_CALL insert(css::uno::Any const & aElement)
-        throw (
-            css::lang::IllegalArgumentException,
-            css::container::ElementExistException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL insert(css::uno::Any const & aElement) override;
 
-    virtual void SAL_CALL remove(css::uno::Any const & aElement)
-        throw (
-            css::lang::IllegalArgumentException,
-            css::container::NoSuchElementException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL remove(css::uno::Any const & aElement) override;
 
     virtual css::uno::Reference< css::reflection::XTypeDescriptionEnumeration >
     SAL_CALL createTypeDescriptionEnumeration(
-        rtl::OUString const & moduleName,
+        OUString const & moduleName,
         css::uno::Sequence< css::uno::TypeClass > const & types,
-        css::reflection::TypeDescriptionSearchDepth depth)
-        throw (
-            css::reflection::NoSuchTypeNameException,
-            css::reflection::InvalidTypeNameException,
-            css::uno::RuntimeException, std::exception) override;
+        css::reflection::TypeDescriptionSearchDepth depth) override;
 
-    void readRdbs(rtl::OUString const & uris);
+    void readRdbDirectory(OUString const & uri, bool optional);
 
-    void readRdbDirectory(rtl::OUString const & uri, bool optional);
+    void readRdbFile(OUString const & uri, bool optional);
 
-    void readRdbFile(rtl::OUString const & uri, bool optional);
-
-    css::uno::Any getSequenceType(rtl::OUString const & name);
+    css::uno::Any getSequenceType(OUString const & name);
 
     css::uno::Any getInstantiatedStruct(
-        rtl::OUString const & name, sal_Int32 separator);
+        OUString const & name, sal_Int32 separator);
 
     css::uno::Any getInterfaceMember(
-        rtl::OUString const & name, sal_Int32 separator);
+        OUString const & name, sal_Int32 separator);
 
     css::uno::Any getNamed(
-        rtl::OUString const & name,
+        OUString const & name,
         rtl::Reference< unoidl::Entity > const & entity);
 
     static css::uno::Any getEnumMember(
         rtl::Reference< unoidl::EnumTypeEntity > const & entity,
-        rtl::OUString const & member);
+        OUString const & member);
 
     static css::uno::Any getConstant(
-        rtl::OUString const & constantGroupName,
+        OUString const & constantGroupName,
         rtl::Reference< unoidl::ConstantGroupEntity > const & entity,
-        rtl::OUString const & member);
+        OUString const & member);
 
-    rtl::Reference< unoidl::Entity > findEntity(rtl::OUString const & name);
+    rtl::Reference< unoidl::Entity > findEntity(OUString const & name);
 
     rtl::Reference< unoidl::Manager > manager_;
 };

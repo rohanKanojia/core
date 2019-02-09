@@ -17,18 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <sfx2/dispatch.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
 
-#include "uiitems.hxx"
-#include "global.hxx"
-#include "document.hxx"
-#include "scresid.hxx"
-#include "sc.hrc"
-#include "reffact.hxx"
+#include <uiitems.hxx>
+#include <global.hxx>
+#include <document.hxx>
+#include <scresid.hxx>
+#include <sc.hrc>
+#include <strings.hrc>
+#include <reffact.hxx>
 
-#include "tabopdlg.hxx"
+#include <tabopdlg.hxx>
 
 //  class ScTabOpDlg
 
@@ -223,11 +224,13 @@ void ScTabOpDlg::RaiseError( ScTabOpErr eError )
             break;
     }
 
-    ScopedVclPtrInstance<MessageDialog>::Create(this, *pMsg, VCL_MESSAGE_ERROR, VCL_BUTTONS_OK_CANCEL)->Execute();
+    std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                              VclMessageType::Error, VclButtonsType::OkCancel, *pMsg));
+    xBox->run();
     pEd->GrabFocus();
 }
 
-static bool lcl_Parse( const OUString& rString, ScDocument* pDoc, SCTAB nCurTab,
+static bool lcl_Parse( const OUString& rString, const ScDocument* pDoc, SCTAB nCurTab,
                 ScRefAddress& rStart, ScRefAddress& rEnd )
 {
     bool bRet = false;
@@ -244,7 +247,7 @@ static bool lcl_Parse( const OUString& rString, ScDocument* pDoc, SCTAB nCurTab,
 
 // Handler:
 
-IMPL_LINK_TYPED( ScTabOpDlg, BtnHdl, Button*, pBtn, void )
+IMPL_LINK( ScTabOpDlg, BtnHdl, Button*, pBtn, void )
 {
     if (pBtn == m_pBtnOk)
     {
@@ -304,7 +307,7 @@ IMPL_LINK_TYPED( ScTabOpDlg, BtnHdl, Button*, pBtn, void )
         }
 
         if (nError)
-            RaiseError( (ScTabOpErr) nError );
+            RaiseError( static_cast<ScTabOpErr>(nError) );
         else
         {
             ScTabOpParam aOutParam(theFormulaCell, theFormulaEnd, theRowCell, theColCell, eMode);
@@ -322,7 +325,7 @@ IMPL_LINK_TYPED( ScTabOpDlg, BtnHdl, Button*, pBtn, void )
         Close();
 }
 
-IMPL_LINK_TYPED( ScTabOpDlg, GetFocusHdl, Control&, rCtrl, void )
+IMPL_LINK( ScTabOpDlg, GetFocusHdl, Control&, rCtrl, void )
 {
     if( (&rCtrl == static_cast<Control*>(m_pEdFormulaRange)) || (&rCtrl == static_cast<Control*>(m_pRBFormulaRange)) )
         pEdActive = m_pEdFormulaRange;
@@ -337,7 +340,7 @@ IMPL_LINK_TYPED( ScTabOpDlg, GetFocusHdl, Control&, rCtrl, void )
         pEdActive->SetSelection( Selection( 0, SELECTION_MAX ) );
 }
 
-IMPL_LINK_NOARG_TYPED(ScTabOpDlg, LoseFocusHdl, Control&, void)
+IMPL_LINK_NOARG(ScTabOpDlg, LoseFocusHdl, Control&, void)
 {
     bDlgLostFocus = !IsActive();
 }

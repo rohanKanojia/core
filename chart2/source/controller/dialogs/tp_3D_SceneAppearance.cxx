@@ -18,11 +18,12 @@
  */
 
 #include "tp_3D_SceneAppearance.hxx"
-#include "ChartModelHelper.hxx"
-#include "ThreeDHelper.hxx"
-#include "macros.hxx"
-#include <rtl/math.hxx>
+#include <ChartModelHelper.hxx>
+#include <ThreeDHelper.hxx>
+#include <ControllerLockGuard.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/drawing/ShadeMode.hpp>
+#include <tools/diagnose_ex.h>
 
 using namespace ::com::sun::star;
 
@@ -44,7 +45,7 @@ struct lcl_ModelProperties
     {}
 };
 
-lcl_ModelProperties lcl_getPropertiesFromModel( uno::Reference< frame::XModel > & xModel )
+lcl_ModelProperties lcl_getPropertiesFromModel( uno::Reference< frame::XModel > const & xModel )
 {
     lcl_ModelProperties aProps;
     try
@@ -55,24 +56,24 @@ lcl_ModelProperties lcl_getPropertiesFromModel( uno::Reference< frame::XModel > 
         ::chart::ThreeDHelper::getRoundedEdgesAndObjectLines( xDiagram, aProps.m_nRoundedEdges, aProps.m_nObjectLines );
         aProps.m_eScheme = ::chart::ThreeDHelper::detectScheme( xDiagram );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
     return aProps;
 }
 
-void lcl_setShadeModeAtModel( uno::Reference< frame::XModel > & xModel, drawing::ShadeMode aShadeMode )
+void lcl_setShadeModeAtModel( uno::Reference< frame::XModel > const & xModel, drawing::ShadeMode aShadeMode )
 {
     try
     {
         uno::Reference< beans::XPropertySet > xDiaProp(
             ::chart::ChartModelHelper::findDiagram( xModel ), uno::UNO_QUERY_THROW );
-        xDiaProp->setPropertyValue( "D3DSceneShadeMode" , uno::makeAny( aShadeMode ));
+        xDiaProp->setPropertyValue( "D3DSceneShadeMode" , uno::Any( aShadeMode ));
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
@@ -291,7 +292,7 @@ void ThreeD_SceneAppearance_TabPage::updateScheme()
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ThreeD_SceneAppearance_TabPage, SelectSchemeHdl, ListBox&, void)
+IMPL_LINK_NOARG(ThreeD_SceneAppearance_TabPage, SelectSchemeHdl, ListBox&, void)
 {
     if( !m_bUpdateOtherControls )
         return;
@@ -302,9 +303,9 @@ IMPL_LINK_NOARG_TYPED(ThreeD_SceneAppearance_TabPage, SelectSchemeHdl, ListBox&,
 
         uno::Reference< chart2::XDiagram > xDiagram( ::chart::ChartModelHelper::findDiagram( m_xChartModel ) );
 
-        if( m_pLB_Scheme->GetSelectEntryPos() == POS_3DSCHEME_REALISTIC )
+        if( m_pLB_Scheme->GetSelectedEntryPos() == POS_3DSCHEME_REALISTIC )
             ThreeDHelper::setScheme( xDiagram, ThreeDLookScheme_Realistic );
-        else if( m_pLB_Scheme->GetSelectEntryPos() == POS_3DSCHEME_SIMPLE )
+        else if( m_pLB_Scheme->GetSelectedEntryPos() == POS_3DSCHEME_SIMPLE )
             ThreeDHelper::setScheme( xDiagram, ThreeDLookScheme_Simple );
         else
         {
@@ -316,7 +317,7 @@ IMPL_LINK_NOARG_TYPED(ThreeD_SceneAppearance_TabPage, SelectSchemeHdl, ListBox&,
     initControlsFromModel();
 }
 
-IMPL_LINK_NOARG_TYPED(ThreeD_SceneAppearance_TabPage, SelectShading, CheckBox&, void)
+IMPL_LINK_NOARG(ThreeD_SceneAppearance_TabPage, SelectShading, CheckBox&, void)
 {
     if( !m_bUpdateOtherControls )
         return;
@@ -325,7 +326,7 @@ IMPL_LINK_NOARG_TYPED(ThreeD_SceneAppearance_TabPage, SelectShading, CheckBox&, 
     applyShadeModeToModel();
     updateScheme();
 }
-IMPL_LINK_TYPED( ThreeD_SceneAppearance_TabPage, SelectRoundedEdgeOrObjectLines, CheckBox&, rCheckBox, void )
+IMPL_LINK( ThreeD_SceneAppearance_TabPage, SelectRoundedEdgeOrObjectLines, CheckBox&, rCheckBox, void )
 {
     if( !m_bUpdateOtherControls )
         return;

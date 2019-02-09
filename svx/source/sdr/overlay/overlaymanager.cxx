@@ -52,10 +52,10 @@ namespace sdr
 
                 if(pProcessor)
                 {
-                    for(OverlayObjectVector::const_iterator aIter(maOverlayObjects.begin()); aIter != maOverlayObjects.end(); ++aIter)
+                    for(const auto& rpOverlayObject : maOverlayObjects)
                     {
-                        OSL_ENSURE(*aIter, "Corrupted OverlayObject List (!)");
-                        const OverlayObject& rCandidate = **aIter;
+                        OSL_ENSURE(rpOverlayObject, "Corrupted OverlayObject List (!)");
+                        const OverlayObject& rCandidate = *rpOverlayObject;
 
                         if(rCandidate.isVisible())
                         {
@@ -94,10 +94,10 @@ namespace sdr
 
             if(nSize)
             {
-                for(OverlayObjectVector::iterator aIter(maOverlayObjects.begin()); aIter != maOverlayObjects.end(); ++aIter)
+                for(const auto& rpOverlayObject : maOverlayObjects)
                 {
-                    OSL_ENSURE(*aIter, "Corrupted OverlayObject List (!)");
-                    OverlayObject& rCandidate = **aIter;
+                    OSL_ENSURE(rpOverlayObject, "Corrupted OverlayObject List (!)");
+                    OverlayObject& rCandidate = *rpOverlayObject;
                     rCandidate.stripeDefinitionHasChanged();
                 }
             }
@@ -118,8 +118,8 @@ namespace sdr
         :   Scheduler(),
             mrOutputDevice(rOutputDevice),
             maOverlayObjects(),
-            maStripeColorA(Color(COL_BLACK)),
-            maStripeColorB(Color(COL_WHITE)),
+            maStripeColorA(COL_BLACK),
+            maStripeColorB(COL_WHITE),
             mnStripeLengthPixel(5),
             maDrawinglayerOpt(),
             maViewTransformation(),
@@ -144,7 +144,7 @@ namespace sdr
             return rtl::Reference<OverlayManager>(new OverlayManager(rOutputDevice));
         }
 
-        const drawinglayer::geometry::ViewInformation2D OverlayManager::getCurrentViewInformation2D() const
+        drawinglayer::geometry::ViewInformation2D const & OverlayManager::getCurrentViewInformation2D() const
         {
             if(getOutputDevice().GetViewTransformation() != maViewTransformation)
             {
@@ -223,10 +223,10 @@ namespace sdr
 
             if(nSize)
             {
-                for(OverlayObjectVector::iterator aIter(maOverlayObjects.begin()); aIter != maOverlayObjects.end(); ++aIter)
+                for(const auto& rpOverlayObject : maOverlayObjects)
                 {
-                    OSL_ENSURE(*aIter, "Corrupted OverlayObject List (!)");
-                    OverlayObject& rCandidate = **aIter;
+                    OSL_ENSURE(rpOverlayObject, "Corrupted OverlayObject List (!)");
+                    OverlayObject& rCandidate = *rpOverlayObject;
                     impApplyRemoveActions(rCandidate);
                 }
 
@@ -237,19 +237,19 @@ namespace sdr
 
         void OverlayManager::completeRedraw(const vcl::Region& rRegion, OutputDevice* pPreRenderDevice) const
         {
-            if(!rRegion.IsEmpty() && maOverlayObjects.size())
+            if(!rRegion.IsEmpty() && !maOverlayObjects.empty())
             {
                 // check for changed MapModes. That may influence the
                 // logical size of pixel based OverlayObjects (like BitmapHandles)
                 //ImpCheckMapModeChange();
 
                 // paint members
-                const Rectangle aRegionBoundRect(rRegion.GetBoundRect());
+                const tools::Rectangle aRegionBoundRect(rRegion.GetBoundRect());
                 const basegfx::B2DRange aRegionRange(
                     aRegionBoundRect.Left(), aRegionBoundRect.Top(),
                     aRegionBoundRect.Right(), aRegionBoundRect.Bottom());
 
-                OutputDevice& rTarget = (pPreRenderDevice) ? *pPreRenderDevice : getOutputDevice();
+                OutputDevice& rTarget = pPreRenderDevice ? *pPreRenderDevice : getOutputDevice();
                 ImpDrawMembers(aRegionRange, rTarget);
             }
         }
@@ -257,11 +257,6 @@ namespace sdr
         void OverlayManager::flush()
         {
             // default has nothing to do
-        }
-
-        void OverlayManager::restoreBackground(const vcl::Region& /*rRegion*/) const
-        {
-            // unbuffered versions do nothing here
         }
 
         void OverlayManager::add(OverlayObject& rOverlayObject)
@@ -301,11 +296,11 @@ namespace sdr
                 {
                     // assume AA needs one pixel more and invalidate one pixel more
                     const double fDiscreteOne(getDiscreteOne());
-                    const Rectangle aInvalidateRectangle(
-                        (sal_Int32)floor(rRange.getMinX() - fDiscreteOne),
-                        (sal_Int32)floor(rRange.getMinY() - fDiscreteOne),
-                        (sal_Int32)ceil(rRange.getMaxX() + fDiscreteOne),
-                        (sal_Int32)ceil(rRange.getMaxY() + fDiscreteOne));
+                    const tools::Rectangle aInvalidateRectangle(
+                        static_cast<sal_Int32>(floor(rRange.getMinX() - fDiscreteOne)),
+                        static_cast<sal_Int32>(floor(rRange.getMinY() - fDiscreteOne)),
+                        static_cast<sal_Int32>(ceil(rRange.getMaxX() + fDiscreteOne)),
+                        static_cast<sal_Int32>(ceil(rRange.getMaxY() + fDiscreteOne)));
 
                     // simply invalidate
                     static_cast<vcl::Window&>(getOutputDevice()).Invalidate(aInvalidateRectangle, InvalidateFlags::NoErase);
@@ -314,9 +309,9 @@ namespace sdr
                 {
                     // #i77674# transform to rectangle. Use floor/ceil to get all covered
                     // discrete pixels, see #i75163# and OverlayManagerBuffered::invalidateRange
-                    const Rectangle aInvalidateRectangle(
-                        (sal_Int32)floor(rRange.getMinX()), (sal_Int32)floor(rRange.getMinY()),
-                        (sal_Int32)ceil(rRange.getMaxX()), (sal_Int32)ceil(rRange.getMaxY()));
+                    const tools::Rectangle aInvalidateRectangle(
+                        static_cast<sal_Int32>(floor(rRange.getMinX())), static_cast<sal_Int32>(floor(rRange.getMinY())),
+                        static_cast<sal_Int32>(ceil(rRange.getMaxX())), static_cast<sal_Int32>(ceil(rRange.getMaxY())));
 
                     // simply invalidate
                     static_cast<vcl::Window&>(getOutputDevice()).Invalidate(aInvalidateRectangle, InvalidateFlags::NoErase);

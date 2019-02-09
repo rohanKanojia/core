@@ -19,10 +19,12 @@
 #ifndef INCLUDED_SC_INC_DPCACHE_HXX
 #define INCLUDED_SC_INC_DPCACHE_HXX
 
-#include "global.hxx"
-#include "dpnumgroupinfo.hxx"
+#include "address.hxx"
 #include "calcmacros.hxx"
-#include <tools/date.hxx>
+#include "dpitemdata.hxx"
+#include "dpnumgroupinfo.hxx"
+#include "scdllapi.h"
+#include "types.hxx"
 
 #include <mdds/flat_segment_tree.hpp>
 
@@ -33,8 +35,10 @@
 
 struct ScQueryParam;
 class ScDPObject;
-class ScDPItemData;
-struct ScDPNumGroupInfo;
+class ScDocument;
+class SvNumberFormatter;
+
+enum class SvNumFormatType : sal_Int16;
 
 /**
  * This class represents the cached data part of the datapilot cache table
@@ -42,9 +46,9 @@ struct ScDPNumGroupInfo;
  */
 class SC_DLLPUBLIC ScDPCache
 {
-    typedef std::unordered_set<OUString, OUStringHash> StringSetType;
-
 public:
+    typedef std::unordered_set<OUString> StringSetType;
+    typedef mdds::flat_segment_tree<SCROW, bool> EmptyRowsType;
     typedef std::vector<ScDPItemData> ScDPItemDataVec;
     typedef std::set<ScDPObject*> ScDPObjectSet;
     typedef std::vector<SCROW> IndexArrayType;
@@ -80,7 +84,7 @@ public:
          */
         IndexArrayType maData;
 
-        sal_uLong mnNumFormat;
+        sal_uInt32 mnNumFormat;
 
         Field();
         Field(const Field&) = delete;
@@ -98,7 +102,7 @@ public:
         virtual bool first() = 0;
         virtual bool next() = 0;
         virtual void finish() = 0;
-        virtual void getValue(long nCol, ScDPItemData& rData, short& rNumType) const = 0;
+        virtual void getValue(long nCol, ScDPItemData& rData, SvNumFormatType& rNumType) const = 0;
         virtual ~DBConnector() {}
     };
 
@@ -117,28 +121,35 @@ private:
 
     FieldsType maFields;
     GroupFieldsType maGroupFields;
-    mutable StringSetType maStringPool;
+    std::vector<StringSetType> maStringPools; // one for each field.
 
     std::vector<OUString> maLabelNames; // Stores dimension names and the data layout dimension name at position 0.
-    mdds::flat_segment_tree<SCROW, bool> maEmptyRows;
+    EmptyRowsType maEmptyRows;
     SCROW mnDataSize;
     SCROW mnRowCount;
 
     bool mbDisposing;
 
 public:
-    const OUString* InternString(const OUString& rStr) const;
+    rtl_uString* InternString( size_t nDim, const OUString& rStr );
     void AddReference(ScDPObject* pObj) const;
     void RemoveReference(ScDPObject* pObj) const;
     const ScDPObjectSet& GetAllReferences() const;
 
     SCROW GetIdByItemData(long nDim, const ScDPItemData& rItem) const;
-    OUString GetFormattedString(long nDim, const ScDPItemData& rItem) const;
+
+    static sal_uInt32 GetLocaleIndependentFormat( SvNumberFormatter& rFormatter, sal_uInt32 nNumFormat );
+    static OUString GetLocaleIndependentFormattedNumberString( double fValue );
+    static OUString GetLocaleIndependentFormattedString( double fValue, SvNumberFormatter& rFormatter, sal_uInt32 nNumFormat );
+    OUString GetFormattedString(long nDim, const ScDPItemData& rItem, bool bLocaleIndependent) const;
+    SvNumberFormatter* GetNumberFormatter() const;
+
     long AppendGroupField();
     void ResetGroupItems(long nDim, const ScDPNumGroupInfo& rNumInfo, sal_Int32 nGroupType);
     SCROW SetGroupItem(long nDim, const ScDPItemData& rData);
     void GetGroupDimMemberIds(long nDim, std::vector<SCROW>& rIds) const;
     void ClearGroupFields();
+    void ClearAllFields();
     const ScDPNumGroupInfo* GetNumGroupInfo(long nDim) const;
 
     /**
@@ -152,10 +163,9 @@ public:
     sal_Int32 GetGroupType(long nDim) const;
 
     SCCOL GetDimensionIndex(const OUString& sName) const;
-    sal_uLong GetNumberFormat( long nDim ) const;
+    sal_uInt32 GetNumberFormat( long nDim ) const;
     bool  IsDateDimension( long nDim ) const ;
     long GetDimMemberCount(long nDim) const;
-    static SCROW GetOrder( long nDim, SCROW nIndex );
 
     const IndexArrayType* GetFieldIndexArray( size_t nDim ) const;
     const ScDPItemDataVec& GetDimMemberValues( SCCOL nDim ) const;
@@ -192,7 +202,7 @@ public:
     ScDPCache(ScDocument* pDoc);
     ~ScDPCache();
 
-#if DEBUG_PIVOT_TABLE
+#if DUMP_PIVOT_TABLE
     void Dump() const;
 #endif
 

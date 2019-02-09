@@ -17,25 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dbregister.hxx"
+#include <dbregister.hxx>
 #include "dbregistersettings.hxx"
 #include "connpooloptions.hxx"
 #include <svl/filenotation.hxx>
-#include "helpid.hrc"
+#include <helpids.h>
 #include <svtools/editbrowsebox.hxx>
-#include "svtools/treelistentry.hxx"
-#include <cuires.hrc>
+#include <vcl/treelistentry.hxx>
+#include <strings.hrc>
+#include <bitmaps.hlst>
 #include <vcl/field.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
 #include <svl/eitem.hxx>
-#include <comphelper/processfactory.hxx>
 #include <com/sun/star/uno/Exception.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/ui/dialogs/XFilterManager.hpp>
 #include <com/sun/star/ui/dialogs/ExecutableDialogResults.hpp>
-#include <vcl/msgbox.hxx>
-#include <svtools/svtabbx.hxx>
+#include <vcl/svtabbx.hxx>
 #include <svl/itemset.hxx>
 #include "doclinkdialog.hxx"
 #include <unotools/localfilehelper.hxx>
@@ -101,8 +100,6 @@ DbRegistrationOptionsPage::DbRegistrationOptionsPage( vcl::Window* pParent, cons
 
     SfxTabPage( pParent, "DbRegisterPage", "cui/ui/dbregisterpage.ui", &rSet ),
 
-    m_aTypeText       ( CUI_RES( RID_SVXSTR_TYPE ) ),
-    m_aPathText       ( CUI_RES( RID_SVXSTR_PATH ) ),
     m_pPathBox        ( nullptr ),
     m_pCurEntry     ( nullptr ),
     m_nOldCount     ( 0 ),
@@ -110,7 +107,7 @@ DbRegistrationOptionsPage::DbRegistrationOptionsPage( vcl::Window* pParent, cons
 {
     get(m_pPathCtrl, "pathctrl");
     Size aControlSize(248, 147);
-    aControlSize = LogicToPixel(aControlSize, MAP_APPFONT);
+    aControlSize = LogicToPixel(aControlSize, MapMode(MapUnit::MapAppFont));
     m_pPathCtrl->set_width_request(aControlSize.Width());
     m_pPathCtrl->set_height_request(aControlSize.Height());
 
@@ -132,25 +129,25 @@ DbRegistrationOptionsPage::DbRegistrationOptionsPage( vcl::Window* pParent, cons
     rBar.SetSelectHdl( LINK( this, DbRegistrationOptionsPage, HeaderSelect_Impl ) );
     rBar.SetEndDragHdl( LINK( this, DbRegistrationOptionsPage, HeaderEndDrag_Impl ) );
     Size aSz;
-    aSz.Width() = TAB_WIDTH1;
-    rBar.InsertItem( ITEMID_TYPE, m_aTypeText,
-                            LogicToPixel( aSz, MapMode( MAP_APPFONT ) ).Width(),
-                            HeaderBarItemBits::LEFT | HeaderBarItemBits::VCENTER | HeaderBarItemBits::CLICKABLE | HeaderBarItemBits::UPARROW );
-    aSz.Width() = TAB_WIDTH2;
-    rBar.InsertItem( ITEMID_PATH, m_aPathText,
-                            LogicToPixel( aSz, MapMode( MAP_APPFONT ) ).Width(),
-                            HeaderBarItemBits::LEFT | HeaderBarItemBits::VCENTER );
+    aSz.setWidth( TAB_WIDTH1 );
+    rBar.InsertItem( ITEMID_TYPE, CuiResId( RID_SVXSTR_TYPE ),
+                            LogicToPixel( aSz, MapMode( MapUnit::MapAppFont ) ).Width(),
+                            HeaderBarItemBits::LEFT | HeaderBarItemBits::CLICKABLE | HeaderBarItemBits::UPARROW );
+    aSz.setWidth( TAB_WIDTH2 );
+    rBar.InsertItem( ITEMID_PATH, CuiResId( RID_SVXSTR_PATH ),
+                            LogicToPixel( aSz, MapMode( MapUnit::MapAppFont ) ).Width(),
+                            HeaderBarItemBits::LEFT );
 
-    static long aTabs[] = {3, 0, TAB_WIDTH1, TAB_WIDTH1 + TAB_WIDTH2 };
+    static long aTabs[] = {0, TAB_WIDTH1, TAB_WIDTH1 + TAB_WIDTH2 };
     Size aHeadSize = rBar.GetSizePixel();
 
     m_pPathBox->SetStyle( m_pPathBox->GetStyle()|nBits );
     m_pPathBox->SetDoubleClickHdl( LINK( this, DbRegistrationOptionsPage, PathBoxDoubleClickHdl ) );
     m_pPathBox->SetSelectHdl( LINK( this, DbRegistrationOptionsPage, PathSelect_Impl ) );
-    m_pPathBox->SetSelectionMode( SINGLE_SELECTION );
+    m_pPathBox->SetSelectionMode( SelectionMode::Single );
     m_pPathBox->SetPosSizePixel( Point( 0, aHeadSize.Height() ),
                                Size( aBoxSize.Width(), aBoxSize.Height() - aHeadSize.Height() ) );
-    m_pPathBox->SvSimpleTable::SetTabs( aTabs );
+    m_pPathBox->SvSimpleTable::SetTabs( SAL_N_ELEMENTS(aTabs), aTabs );
     m_pPathBox->SetHighlightRange();
 
     m_pPathBox->SetHelpId( HID_DBPATH_CTL_PATH );
@@ -178,10 +175,10 @@ void DbRegistrationOptionsPage::dispose()
 }
 
 
-VclPtr<SfxTabPage> DbRegistrationOptionsPage::Create( vcl::Window* pParent,
+VclPtr<SfxTabPage> DbRegistrationOptionsPage::Create( TabPageParent pParent,
                                     const SfxItemSet* rAttrSet )
 {
-    return VclPtr<DbRegistrationOptionsPage>::Create( pParent, *rAttrSet );
+    return VclPtr<DbRegistrationOptionsPage>::Create( pParent.pParent, *rAttrSet );
 }
 
 
@@ -204,7 +201,7 @@ bool DbRegistrationOptionsPage::FillItemSet( SfxItemSet* rCoreSet )
     }
     if ( m_nOldCount != aRegistrations.size() || m_bModified )
     {
-        rCoreSet->Put(DatabaseMapItem( SID_SB_DB_REGISTER, aRegistrations ), SID_SB_DB_REGISTER);
+        rCoreSet->Put(DatabaseMapItem( SID_SB_DB_REGISTER, aRegistrations ));
         bModified = true;
     }
 
@@ -223,24 +220,22 @@ void DbRegistrationOptionsPage::Reset( const SfxItemSet* rSet )
 
     const DatabaseRegistrations& rRegistrations = pRegistrations->getRegistrations();
     m_nOldCount = rRegistrations.size();
-    DatabaseRegistrations::const_iterator aIter = rRegistrations.begin();
-    DatabaseRegistrations::const_iterator aEnd = rRegistrations.end();
-    for ( ; aIter != aEnd; ++aIter )
+    for (auto const& elem : rRegistrations)
     {
-        OFileNotation aTransformer( aIter->second.sLocation );
-        insertNewEntry( aIter->first, aTransformer.get( OFileNotation::N_SYSTEM ), aIter->second.bReadOnly );
+        OFileNotation aTransformer( elem.second.sLocation );
+        insertNewEntry( elem.first, aTransformer.get( OFileNotation::N_SYSTEM ), elem.second.bReadOnly );
     }
 
     OUString aUserData = GetUserData();
     if ( !aUserData.isEmpty() )
     {
         HeaderBar &rBar = m_pPathBox->GetTheHeaderBar();
-
+        sal_Int32 nIdx {0};
         // restore column width
-        rBar.SetItemSize( ITEMID_TYPE, aUserData.getToken(0, ';').toInt32() );
+        rBar.SetItemSize( ITEMID_TYPE, aUserData.getToken(0, ';', nIdx).toInt32() );
         HeaderEndDrag_Impl( &rBar );
         // restore sort direction
-        bool bUp = aUserData.getToken(1, ';').toInt32() != 0;
+        bool bUp = aUserData.getToken(0, ';', nIdx).toInt32() != 0;
         HeaderBarItemBits nBits = rBar.GetItemBits(ITEMID_TYPE);
 
         if ( bUp )
@@ -269,31 +264,33 @@ void DbRegistrationOptionsPage::FillUserData()
     SetUserData( aUserData );
 }
 
-IMPL_LINK_NOARG_TYPED(DbRegistrationOptionsPage, DeleteHdl, Button*, void)
+IMPL_LINK_NOARG(DbRegistrationOptionsPage, DeleteHdl, Button*, void)
 {
     SvTreeListEntry* pEntry = m_pPathBox->FirstSelected();
     if ( pEntry )
     {
-        ScopedVclPtrInstance< MessageDialog > aQuery(this, CUI_RES(RID_SVXSTR_QUERY_DELETE_CONFIRM), VCL_MESSAGE_QUESTION, VCL_BUTTONS_YES_NO);
-        if ( aQuery->Execute() == RET_YES )
+        std::unique_ptr<weld::MessageDialog> xQuery(Application::CreateMessageDialog(GetFrameWeld(),
+                                                    VclMessageType::Question, VclButtonsType::YesNo, CuiResId(RID_SVXSTR_QUERY_DELETE_CONFIRM)));
+        if (xQuery->run() == RET_YES)
             m_pPathBox->GetModel()->Remove(pEntry);
     }
 }
 
-IMPL_LINK_NOARG_TYPED(DbRegistrationOptionsPage, NewHdl, Button*, void)
+IMPL_LINK_NOARG(DbRegistrationOptionsPage, NewHdl, Button*, void)
 {
-    OUString sNewName,sNewLocation;
-    openLinkDialog(sNewName,sNewLocation);
+    openLinkDialog(OUString(),OUString());
 }
 
-IMPL_LINK_NOARG_TYPED(DbRegistrationOptionsPage, PathBoxDoubleClickHdl, SvTreeListBox*, bool)
+IMPL_LINK_NOARG(DbRegistrationOptionsPage, PathBoxDoubleClickHdl, SvTreeListBox*, bool)
 {
     EditHdl(nullptr);
-    return false;
+    // Signal more to be done, i.e. when entry removed/inserted via
+    // openLinkDialog().
+    return true;
 }
 
 
-IMPL_LINK_NOARG_TYPED(DbRegistrationOptionsPage, EditHdl, Button*, void)
+IMPL_LINK_NOARG(DbRegistrationOptionsPage, EditHdl, Button*, void)
 {
     SvTreeListEntry* pEntry = m_pPathBox->GetCurEntry();
     if ( !pEntry )
@@ -310,7 +307,7 @@ IMPL_LINK_NOARG_TYPED(DbRegistrationOptionsPage, EditHdl, Button*, void)
 }
 
 
-IMPL_LINK_TYPED( DbRegistrationOptionsPage, HeaderSelect_Impl, HeaderBar*, pBar, void )
+IMPL_LINK( DbRegistrationOptionsPage, HeaderSelect_Impl, HeaderBar*, pBar, void )
 {
     assert(pBar);
 
@@ -339,7 +336,7 @@ IMPL_LINK_TYPED( DbRegistrationOptionsPage, HeaderSelect_Impl, HeaderBar*, pBar,
 }
 
 
-IMPL_LINK_TYPED( DbRegistrationOptionsPage, HeaderEndDrag_Impl, HeaderBar*, pBar, void )
+IMPL_LINK( DbRegistrationOptionsPage, HeaderEndDrag_Impl, HeaderBar*, pBar, void )
 {
     assert(pBar);
 
@@ -362,15 +359,15 @@ IMPL_LINK_TYPED( DbRegistrationOptionsPage, HeaderEndDrag_Impl, HeaderBar*, pBar
         for ( sal_uInt16 i = 1; i <= nTabs; ++i )
         {
             long _nWidth = pBar->GetItemSize(i);
-            aSz.Width() =  _nWidth + nTmpSz;
+            aSz.setWidth(  _nWidth + nTmpSz );
             nTmpSz += _nWidth;
-            m_pPathBox->SetTab( i, PixelToLogic( aSz, MapMode(MAP_APPFONT) ).Width() );
+            m_pPathBox->SetTab( i, PixelToLogic( aSz, MapMode(MapUnit::MapAppFont) ).Width() );
         }
     }
 }
 
 
-IMPL_LINK_NOARG_TYPED(DbRegistrationOptionsPage, PathSelect_Impl, SvTreeListBox*, void)
+IMPL_LINK_NOARG(DbRegistrationOptionsPage, PathSelect_Impl, SvTreeListBox*, void)
 {
     SvTreeListEntry* pEntry = m_pPathBox->FirstSelected();
 
@@ -387,14 +384,12 @@ IMPL_LINK_NOARG_TYPED(DbRegistrationOptionsPage, PathSelect_Impl, SvTreeListBox*
 
 void DbRegistrationOptionsPage::insertNewEntry( const OUString& _sName,const OUString& _sLocation, const bool _bReadOnly )
 {
-    OUString aStr( _sName );
-    aStr += "\t";
-    aStr += _sLocation;
+    OUString aStr = _sName + "\t" + _sLocation;
 
     SvTreeListEntry* pEntry = nullptr;
     if ( _bReadOnly )
     {
-        Image aLocked( CUI_RES( RID_SVXBMP_LOCK ) );
+        Image aLocked(StockImage::Yes, RID_SVXBMP_LOCK);
         pEntry = m_pPathBox->InsertEntry( aStr, aLocked, aLocked );
     }
     else
@@ -406,7 +401,7 @@ void DbRegistrationOptionsPage::insertNewEntry( const OUString& _sName,const OUS
 }
 
 
-void DbRegistrationOptionsPage::openLinkDialog(const OUString& _sOldName,const OUString& _sOldLocation,SvTreeListEntry* _pEntry)
+void DbRegistrationOptionsPage::openLinkDialog(const OUString& _sOldName,const OUString& _sOldLocation,SvTreeListEntry const * _pEntry)
 {
     ScopedVclPtrInstance< ODocumentLinkDialog > aDlg(this,_pEntry == nullptr);
 
@@ -430,7 +425,7 @@ void DbRegistrationOptionsPage::openLinkDialog(const OUString& _sOldName,const O
     }
 }
 
-IMPL_LINK_TYPED( DbRegistrationOptionsPage, NameValidator, const OUString&, _rName, bool )
+IMPL_LINK( DbRegistrationOptionsPage, NameValidator, const OUString&, _rName, bool )
 {
     sal_uLong nCount = m_pPathBox->GetEntryCount();
     for ( sal_uLong i = 0; i < nCount; ++i )
@@ -443,6 +438,5 @@ IMPL_LINK_TYPED( DbRegistrationOptionsPage, NameValidator, const OUString&, _rNa
 }
 
 }
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

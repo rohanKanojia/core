@@ -28,7 +28,7 @@ namespace vcl { class Window; }
 class SwShadowCursor
 {
     VclPtr<vcl::Window> pWin;
-    Color aCol;
+    Color const aCol;
     Point aOldPt;
     long nOldHeight;
     sal_uInt16 nOldMode;
@@ -45,7 +45,7 @@ public:
 
     void Paint();
 
-    Rectangle GetRect() const;
+    tools::Rectangle GetRect() const;
 };
 
 #endif

@@ -22,8 +22,6 @@
 
 #include <sal/config.h>
 
-#include <map>
-
 #include "propertyimport.hxx"
 #include "controlelement.hxx"
 #include "valueproperties.hxx"
@@ -35,8 +33,11 @@
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/form/XGridColumnFactory.hpp>
-#include <com/sun/star/script/XEventAttacherManager.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
 #include <osl/diagnose.h>
+
+#include <map>
+#include <vector>
 
 class XMLTextStyleContext;
 namespace xmloff
@@ -51,12 +52,10 @@ namespace xmloff
     */
     class OElementNameMap : public OControlElement
     {
-    protected:
         typedef std::map<OUString, ElementType> MapString2Element;
         static MapString2Element    s_sElementTranslations;
 
-    protected:
-        OElementNameMap() { }
+        OElementNameMap() = delete;
 
     public:
         static ElementType getElementType(const OUString& _rName);
@@ -111,13 +110,13 @@ namespace xmloff
             sal_uInt16 _nPrefix, const OUString& _rName,
             const css::uno::Reference< css::container::XNameContainer >& _rxParentContainer
         );
-        virtual ~OElementImport();
+        virtual ~OElementImport() override;
 
     protected:
         // SvXMLImportContext overridables
         virtual void StartElement(
             const css::uno::Reference< css::xml::sax::XAttributeList >& _rxAttrList) override;
-        virtual SvXMLImportContext* CreateChildContext(
+        virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 _nPrefix, const OUString& _rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList >& _rxAttrList) override;
         virtual void    EndElement() override;
@@ -142,7 +141,7 @@ namespace xmloff
     protected:
         /** can be used to handle properties where the attribute default and the property default differ.
             <p>In such case, if the property had the attribute default upon writing, nothing is read, so upon reading,
-            the property is still at it's own default (which is not the attribute default).<p/>
+            the property is still at its own default (which is not the attribute default).<p/>
             <p>This method, if told the attribute and the property, and the (implied) attribute default, sets the
             property value as if the attribute was encountered.</p>
             @see encounteredAttribute
@@ -277,6 +276,7 @@ namespace xmloff
     //= OImagePositionImport
     class OImagePositionImport : public OControlImport
     {
+        css::uno::Reference<css::graphic::XGraphic> m_xGraphic;
         sal_Int16   m_nImagePosition;
         sal_Int16   m_nImageAlign;
         bool    m_bHaveImagePosition;
@@ -303,14 +303,12 @@ namespace xmloff
     //= OReferredControlImport
     class OReferredControlImport : public OControlImport
     {
-    protected:
         OUString m_sReferringControls;   // the list of ids of controls referring to the one being imported
 
     public:
         OReferredControlImport(
             OFormLayerXMLImport_Impl& _rImport, IEventAttacherManager& _rEventManager, sal_uInt16 _nPrefix, const OUString& _rName,
-            const css::uno::Reference< css::container::XNameContainer >& _rxParentContainer,
-            OControlElement::ElementType _eType
+            const css::uno::Reference< css::container::XNameContainer >& _rxParentContainer
         );
 
         // SvXMLImportContext overridables
@@ -443,7 +441,7 @@ namespace xmloff
         // SvXMLImportContext overridables
         virtual void StartElement(
             const css::uno::Reference< css::xml::sax::XAttributeList >& _rxAttrList) override;
-        virtual SvXMLImportContext* CreateChildContext(
+        virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 _nPrefix, const OUString& _rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList >& _rxAttrList) override;
         virtual void    EndElement() override;
@@ -463,23 +461,23 @@ namespace xmloff
         friend class OComboItemImport;
 
     protected:
-        css::uno::Sequence< OUString >
+        std::vector<OUString >
                         m_aListSource;
-        css::uno::Sequence< OUString >
+        std::vector< OUString >
                         m_aValueList;
 
-        css::uno::Sequence< sal_Int16 >
+        std::vector< sal_Int16 >
                         m_aSelectedSeq;
-        css::uno::Sequence< sal_Int16 >
+        std::vector< sal_Int16 >
                         m_aDefaultSelectedSeq;
 
-        OUString m_sCellListSource;      /// the cell range which acts as list source for the control
+        OUString        m_sCellListSource;      /// the cell range which acts as list source for the control
 
         sal_Int32       m_nEmptyListItems;      /// number of empty list items encountered during reading
         sal_Int32       m_nEmptyValueItems;     /// number of empty value items encountered during reading
 
-        bool        m_bEncounteredLSAttrib;
-        bool        m_bLinkWithIndexes;     /** <TRUE/> if and only if we should use a cell value binding
+        bool            m_bEncounteredLSAttrib;
+        bool            m_bLinkWithIndexes;     /** <TRUE/> if and only if we should use a cell value binding
                                                     which exchanges the selection index (instead of the selection text
                                                 */
 
@@ -493,7 +491,7 @@ namespace xmloff
         // SvXMLImportContext overridables
         virtual void StartElement(
             const css::uno::Reference< css::xml::sax::XAttributeList >& _rxAttrList) override;
-        virtual SvXMLImportContext* CreateChildContext(
+        virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 _nPrefix, const OUString& _rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList >& _rxAttrList) override;
         virtual void    EndElement() override;
@@ -516,7 +514,7 @@ namespace xmloff
         void implSelectCurrentItem();
         void implDefaultSelectCurrentItem();
     };
-    typedef tools::SvRef<OListAndComboImport> OListAndComboImportRef;
+    typedef rtl::Reference<OListAndComboImport> OListAndComboImportRef;
 
     //= OListOptionImport
     /** helper class for importing a single &lt;form:option&gt; element.
@@ -574,15 +572,15 @@ namespace xmloff
         }
 
         // SvXMLImportContext overridables
-        virtual SvXMLImportContext* CreateChildContext(
+        virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 _nPrefix, const OUString& _rLocalName,
-            const css::uno::Reference< css::xml::sax::XAttributeList >& _rxAttrList) SAL_OVERRIDE;
-        virtual void EndElement() SAL_OVERRIDE;
+            const css::uno::Reference< css::xml::sax::XAttributeList >& _rxAttrList) override;
+        virtual void EndElement() override;
 
     protected:
         // OElementImport overridables
         virtual css::uno::Reference< css::beans::XPropertySet >
-                        createElement() SAL_OVERRIDE;
+                        createElement() override;
 
         // create the child context for the given control type
         virtual SvXMLImportContext* implCreateControlWrapper(
@@ -610,13 +608,12 @@ namespace xmloff
     protected:
         // OElementImport overridables
         virtual css::uno::Reference< css::beans::XPropertySet >
-                        createElement() SAL_OVERRIDE;
+                        createElement() override;
     };
 
     //= OColumnWrapperImport
     class OColumnWrapperImport : public SvXMLImportContext
     {
-    protected:
         css::uno::Reference< css::xml::sax::XAttributeList >
                                 m_xOwnAttributes;
         css::uno::Reference< css::container::XNameContainer >
@@ -629,12 +626,12 @@ namespace xmloff
                 const css::uno::Reference< css::container::XNameContainer >& _rxParentContainer);
 
         // SvXMLImportContext overridables
-        virtual SvXMLImportContext* CreateChildContext(
+        virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 _nPrefix, const OUString& _rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList >& _rxAttrList) override;
         virtual void StartElement(
             const css::uno::Reference< css::xml::sax::XAttributeList >& _rxAttrList) override;
-    protected:
+    private:
         OControlImport* implCreateChildContext(
             sal_uInt16 _nPrefix, const OUString& _rLocalName,
             OControlElement::ElementType _eType);
@@ -670,9 +667,9 @@ namespace xmloff
             const css::uno::Reference< css::container::XNameContainer >& _rxParentContainer
         );
 
-    protected:
+    private:
         // SvXMLImportContext overridables
-        virtual SvXMLImportContext* CreateChildContext(
+        virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 _nPrefix, const OUString& _rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList >& _rxAttrList) override;
         virtual void    StartElement(
@@ -709,7 +706,7 @@ namespace xmloff
 
     //= OContainerImport
     template <class BASE>
-    inline SvXMLImportContext* OContainerImport< BASE >::CreateChildContext(
+    inline SvXMLImportContextRef OContainerImport< BASE >::CreateChildContext(
         sal_uInt16 _nPrefix, const OUString& _rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList >& _rxAttrList)
     {

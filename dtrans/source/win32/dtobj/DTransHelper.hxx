@@ -20,14 +20,12 @@
 #ifndef INCLUDED_DTRANS_SOURCE_WIN32_DTOBJ_DTRANSHELPER_HXX
 #define INCLUDED_DTRANS_SOURCE_WIN32_DTOBJ_DTRANSHELPER_HXX
 
-#if defined _MSC_VER
-#pragma warning(push,1)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
-#include "WinClip.hxx"
+#include <objidl.h>
+#include <WinClip.hxx>
 
 #define AUTO_INIT                 TRUE
 
@@ -48,37 +46,37 @@ public:
 
 public:
     CStgTransferHelper(
-        sal_Bool bAutoInit = sal_False,
-        HGLOBAL  hGlob = NULL,
-        sal_Bool bDelStgOnRelease = sal_False );
+        bool bAutoInit = false,
+        HGLOBAL  hGlob = nullptr,
+        bool bDelStgOnRelease = false );
 
     ~CStgTransferHelper( );
 
-    void SAL_CALL write( const void* lpData, ULONG cb, ULONG* cbWritten = NULL );
-    void SAL_CALL read( LPVOID pv, ULONG cb, ULONG* pcbRead = NULL );
+    void write( const void* lpData, ULONG cb, ULONG* cbWritten = nullptr );
+    void read( LPVOID pv, ULONG cb, ULONG* pcbRead = nullptr );
 
-    HGLOBAL SAL_CALL getHGlobal( ) const;
-    void    SAL_CALL getIStream( LPSTREAM* ppStream );
+    HGLOBAL getHGlobal( ) const;
+    void    getIStream( LPSTREAM* ppStream );
 
-    void SAL_CALL init(
+    void init(
         SIZE_T newSize,
         sal_uInt32 uiFlags = GHND,
-        sal_Bool bDelStgOnRelease = sal_False );
+        bool bDelStgOnRelease = false );
 
-    void SAL_CALL init(
+    void init(
         HGLOBAL hGlob,
-        sal_Bool bDelStgOnRelease = sal_False );
+        bool bDelStgOnRelease = false );
 
     // returns the size of the managed memory
-    sal_uInt32 SAL_CALL memSize( CLIPFORMAT cf = CF_INVALID ) const;
+    sal_uInt32 memSize( CLIPFORMAT cf = CF_INVALID ) const;
 
     // free the global memory and necessary
     // release the internal stream pointer
-    void SAL_CALL cleanup( );
+    void cleanup( );
 
 private:
     LPSTREAM m_lpStream;
-    sal_Bool m_bDelStgOnRelease;
+    bool m_bDelStgOnRelease;
 
 private:
     CStgTransferHelper( const CStgTransferHelper& );
@@ -98,7 +96,7 @@ public:
     explicit CRawHGlobalPtr( HGLOBAL hGlob ) :
         m_hGlob( hGlob ),
         m_bIsLocked( FALSE ),
-        m_pGlobMem( NULL )
+        m_pGlobMem( nullptr )
     {
     }
 
@@ -107,7 +105,7 @@ public:
     explicit CRawHGlobalPtr( const CStgTransferHelper& theHGlobalHelper ) :
         m_hGlob( theHGlobalHelper.getHGlobal( ) ),
         m_bIsLocked( FALSE ),
-        m_pGlobMem( NULL )
+        m_pGlobMem( nullptr )
     {
     }
 
@@ -124,10 +122,10 @@ public:
 
     BOOL Lock( )
     {
-        if ( !m_bIsLocked && ( NULL != m_hGlob ) )
+        if ( !m_bIsLocked && ( nullptr != m_hGlob ) )
         {
             m_pGlobMem = GlobalLock( m_hGlob );
-            m_bIsLocked = ( NULL != m_pGlobMem );
+            m_bIsLocked = ( nullptr != m_pGlobMem );
         }
 
         return m_bIsLocked;
@@ -140,7 +138,7 @@ public:
     {
         GlobalUnlock( m_hGlob );
         m_bIsLocked = FALSE;
-        m_pGlobMem = NULL;
+        m_pGlobMem = nullptr;
 
         return ( NO_ERROR == GetLastError( ) );
     }

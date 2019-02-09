@@ -19,38 +19,37 @@
 
 #include <transliteration_Ignore.hxx>
 #include <transliteration_OneToOne.hxx>
+#include <rtl/ref.hxx>
 
 using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
-OUString SAL_CALL
-ignoreSize_ja_JP::folding( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, Sequence< sal_Int32 >& offset )
-  throw(RuntimeException, std::exception)
+OUString
+ignoreSize_ja_JP::foldingImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, Sequence< sal_Int32 >& offset, bool useOffset )
 {
-    Reference< smallToLarge_ja_JP > t1(new smallToLarge_ja_JP);
-    return t1->transliterate(inStr, startPos, nCount, offset);
+    rtl::Reference< smallToLarge_ja_JP > t1(new smallToLarge_ja_JP);
+    return t1->transliterateImpl(inStr, startPos, nCount, offset, useOffset);
 }
 
 
 Sequence< OUString > SAL_CALL
 ignoreSize_ja_JP::transliterateRange( const OUString& str1, const OUString& str2 )
-  throw(RuntimeException, std::exception)
 {
-    Reference< smallToLarge_ja_JP > t1(new smallToLarge_ja_JP);
-    Reference< largeToSmall_ja_JP > t2(new largeToSmall_ja_JP);
+    rtl::Reference< smallToLarge_ja_JP > t1(new smallToLarge_ja_JP);
+    rtl::Reference< largeToSmall_ja_JP > t2(new largeToSmall_ja_JP);
 
-    return transliteration_Ignore::transliterateRange(str1, str2, *t1.get(), *t2.get());
+    return transliteration_Ignore::transliterateRange(str1, str2, *t1, *t2);
 }
 
 sal_Unicode SAL_CALL
-ignoreSize_ja_JP::transliterateChar2Char( sal_Unicode inChar) throw(RuntimeException, MultipleCharsOutputException, std::exception)
+ignoreSize_ja_JP::transliterateChar2Char( sal_Unicode inChar)
 {
-    Reference< smallToLarge_ja_JP > t1(new smallToLarge_ja_JP);
+    rtl::Reference< smallToLarge_ja_JP > t1(new smallToLarge_ja_JP);
     return t1->transliterateChar2Char(inChar);
 }
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

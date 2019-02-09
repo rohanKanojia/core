@@ -19,48 +19,42 @@
 #ifndef INCLUDED_I18NPOOL_INC_TRANSLITERATION_NUMERIC_HXX
 #define INCLUDED_I18NPOOL_INC_TRANSLITERATION_NUMERIC_HXX
 
-#include <transliteration_commonclass.hxx>
+#include "transliteration_commonclass.hxx"
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 class transliteration_Numeric : public transliteration_commonclass {
 public:
-        virtual OUString SAL_CALL
-        transliterate( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset )
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual OUString
+        transliterateImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset, bool useOffset ) override;
 
         virtual sal_Unicode SAL_CALL
-        transliterateChar2Char( sal_Unicode inChar)
-            throw(css::i18n::MultipleCharsOutputException,
-                css::uno::RuntimeException, std::exception) override;
+        transliterateChar2Char( sal_Unicode inChar) override;
 
         // Methods which are shared.
-        virtual sal_Int16 SAL_CALL getType(  ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual sal_Int16 SAL_CALL getType(  ) override;
 
-        virtual OUString SAL_CALL
-        folding( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset )
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual OUString
+        foldingImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset, bool useOffset ) override;
 
         virtual sal_Bool SAL_CALL
-        equals( const OUString& str1, sal_Int32 pos1, sal_Int32 nCount1, sal_Int32& nMatch1, const OUString& str2, sal_Int32 pos2, sal_Int32 nCount2, sal_Int32& nMatch2 )
-            throw(css::uno::RuntimeException, std::exception) override;
+        equals( const OUString& str1, sal_Int32 pos1, sal_Int32 nCount1, sal_Int32& nMatch1, const OUString& str2, sal_Int32 pos2, sal_Int32 nCount2, sal_Int32& nMatch2 ) override;
 
         virtual css::uno::Sequence< OUString > SAL_CALL
-        transliterateRange( const OUString& str1, const OUString& str2 )
-            throw(css::uno::RuntimeException, std::exception) override;
+        transliterateRange( const OUString& str1, const OUString& str2 ) override;
 protected:
         sal_Int16 nNativeNumberMode;
         sal_Int16 tableSize;
         const sal_Unicode* table;
         bool recycleSymbol;
 private:
-        OUString SAL_CALL
+        /// @throws css::uno::RuntimeException
+        OUString
         transliterateBullet( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount,
-                             css::uno::Sequence< sal_Int32 >& offset )
-            throw(css::uno::RuntimeException);
+                             css::uno::Sequence< sal_Int32 >& offset, bool useOffset );
 };
 
-} } } }
+}
 
 #endif // INCLUDED_I18NPOOL_INC_TRANSLITERATION_NUMERIC_HXX
 

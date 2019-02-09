@@ -23,7 +23,7 @@
 #include <com/sun/star/beans/StringPair.hpp>
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
-#include "svl/inettype.hxx"
+#include <svl/inettype.hxx>
 #include "asyncfilepicker.hxx"
 #include "OfficeControlAccess.hxx"
 #include "fpsmartcontent.hxx"
@@ -35,23 +35,28 @@ class SvtFileView;
 class SvtFileDialogFilter_Impl;
 
 
-#define SFXWB_INSERT            ( 0x04000000L | WB_OPEN )
-#define SFXWB_PASSWORD          WB_PASSWORD
-#define SFXWB_READONLY          WB_READONLY
-#define SFXWB_PATHDIALOG        WB_PATH
-#define SFXWB_CLASSPATH         ( 0x08000000L | SFXWB_PATHDIALOG )
-#define SFXWB_MULTISELECTION    0x20000000L     // activate Multiselection
-#define SFXWB_NOREMOTE          0x40000000L
-
-#define SFX_EXTRA_AUTOEXTENSION     0x00000001L
-#define SFX_EXTRA_FILTEROPTIONS     0x00000002L
-#define SFX_EXTRA_SHOWVERSIONS      0x00000004L
-#define SFX_EXTRA_INSERTASLINK      0x00000008L
-#define SFX_EXTRA_SHOWPREVIEW       0x00000010L
-#define SFX_EXTRA_TEMPLATES         0x00000020L
-#define SFX_EXTRA_PLAYBUTTON        0x00000040L
-#define SFX_EXTRA_SELECTION         0x00000080L
-#define SFX_EXTRA_IMAGE_TEMPLATE    0x00000100L
+enum class PickerFlags {
+    NONE              = 0x000000,
+    AutoExtension     = 0x000001,
+    FilterOptions     = 0x000002,
+    ShowVersions      = 0x000004,
+    InsertAsLink      = 0x000008,
+    ShowPreview       = 0x000010,
+    Templates         = 0x000020,
+    PlayButton        = 0x000040,
+    Selection         = 0x000080,
+    ImageTemplate     = 0x000100,
+    PathDialog        = 0x000200,
+    Open              = 0x000400,
+    SaveAs            = 0x000800,
+    Password          = 0x001000,
+    ReadOnly          = 0x002000,
+    MultiSelection    = 0x004000,
+    ImageAnchor       = 0x008000,
+};
+namespace o3tl {
+    template<> struct typed_flags<PickerFlags> : is_typed_flags<PickerFlags, 0x00ffff> {};
+}
 
 #define FILEDIALOG_FILTER_ALL   "*.*"
 

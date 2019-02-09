@@ -20,17 +20,16 @@
 #ifndef INCLUDED_SW_INC_NDARR_HXX
 #define INCLUDED_SW_INC_NDARR_HXX
 
+#include <sal/config.h>
+
+#include <limits>
 #include <vector>
 #include <memory>
 
-#include <com/sun/star/embed/XEmbeddedObject.hpp>
-
-#include <svtools/embedhlp.hxx>
-
-#include <bparr.hxx>
-#include <ndtyp.hxx>
+#include "bparr.hxx"
+#include "ndtyp.hxx"
+#include <rtl/ustring.hxx>
 #include <o3tl/sorted_vector.hxx>
-#include <ring.hxx>
 
 class Graphic;
 class GraphicObject;
@@ -40,12 +39,10 @@ class SwContentNode;
 class SwDoc;
 class SwGrfFormatColl;
 class SwGrfNode;
-class SwHistory;
 class SwNode;
 class SwNodeIndex;
 class SwNodeRange;
 class SwOLENode;
-class SwOutlineNodes;
 class SwPaM;
 class SwSectionData;
 class SwSectionFormat;
@@ -57,7 +54,6 @@ class SwTableFormat;
 class SwTableLine;
 class SwTableLineFormat;
 class SwTableNode;
-class SwTableToTextSaves;
 class SwTextFormatColl;
 class SwTextNode;
 class SwUndoTableToText;
@@ -65,6 +61,7 @@ class SwUndoTextToTable;
 struct SwPosition;
 
 namespace sw { class DocumentContentOperationsManager; }
+namespace svt { class EmbeddedObjectRef; }
 
 // class SwNodes
 
@@ -80,10 +77,15 @@ struct CompareSwOutlineNodes
 class SwOutlineNodes : public o3tl::sorted_vector<SwNode*, CompareSwOutlineNodes>
 {
 public:
-    bool Seek_Entry(SwNode* rP, sal_uInt16* pnPos) const;
+    static constexpr auto npos = std::numeric_limits<size_type>::max();
+
+    bool Seek_Entry(SwNode* rP, size_type* pnPos) const;
 };
 
-class SW_DLLPUBLIC SwNodes
+struct SwTableToTextSave;
+using SwTableToTextSaves = std::vector<std::unique_ptr<SwTableToTextSave>>;
+
+class SW_DLLPUBLIC SwNodes final
     : private BigPtrArray
 {
     friend class SwDoc;
@@ -103,40 +105,38 @@ class SW_DLLPUBLIC SwNodes
     SwDoc* m_pMyDoc;                      ///< This Doc contains the nodes-array.
 
     SwNode *m_pEndOfPostIts, *m_pEndOfInserts,  ///< These are the fixed ranges.
-           *m_pEndOfAutotext, *m_pEndOfRedlines,
-           *m_pEndOfContent;
+           *m_pEndOfAutotext, *m_pEndOfRedlines;
+    std::unique_ptr<SwNode> m_pEndOfContent;
 
-    mutable SwOutlineNodes* m_pOutlineNodes;        ///< Array of all outline nodes.
+    mutable std::unique_ptr<SwOutlineNodes> m_pOutlineNodes;        ///< Array of all outline nodes.
 
     bool m_bInNodesDel : 1;           /**< In Case of recursive calling.
                                            Do not update Num/Outline. */
     bool m_bInDelUpdOutline : 1;         ///< Flag for updating of Outline.
-    bool m_bInDelUpdNum : 1;          ///< Flag for updating of Outline.
 
     // Actions on the nodes.
     static void SectionUpDown( const SwNodeIndex & aStart, const SwNodeIndex & aEnd );
     void DelNodes( const SwNodeIndex& rStart, sal_uLong nCnt = 1 );
 
-    void ChgNode( SwNodeIndex& rDelPos, sal_uLong nSize,
+    void ChgNode( SwNodeIndex const & rDelPos, sal_uLong nSize,
                   SwNodeIndex& rInsPos, bool bNewFrames );
 
     void UpdateOutlineIdx( const SwNode& );   ///< Update all OutlineNodes starting from Node.
 
-    void _CopyNodes( const SwNodeRange&, const SwNodeIndex&,
-                    bool bNewFrames = true, bool bTableInsDummyNode = false ) const;
-    void _DelDummyNodes( const SwNodeRange& rRg );
+    void CopyNodes( const SwNodeRange&, const SwNodeIndex&,
+                    bool bNewFrames, bool bTableInsDummyNode = false ) const;
+    void DelDummyNodes( const SwNodeRange& rRg );
 
     SwNodes(SwNodes const&) = delete;
     SwNodes& operator=(SwNodes const&) = delete;
 
-protected:
     SwNodes( SwDoc* pDoc );
 
 public:
     ~SwNodes();
 
-    typedef ::std::vector<SwNodeRange> NodeRanges_t;
-    typedef ::std::vector<NodeRanges_t> TableRanges_t;
+    typedef std::vector<SwNodeRange> NodeRanges_t;
+    typedef std::vector<NodeRanges_t> TableRanges_t;
 
     SwNodePtr operator[]( sal_uLong n ) const; // defined in node.hxx
 
@@ -145,9 +145,9 @@ public:
     {
         ForEach( 0, BigPtrArray::Count(), fnForEach, pArgs );
     }
-    void ForEach( sal_uLong nStt, sal_uLong nEnd, FnForEach_SwNodes fnForEach, void* pArgs = nullptr );
+    void ForEach( sal_uLong nStt, sal_uLong nEnd, FnForEach_SwNodes fnForEach, void* pArgs );
     void ForEach( const SwNodeIndex& rStart, const SwNodeIndex& rEnd,
-                    FnForEach_SwNodes fnForEach, void* pArgs = nullptr );
+                    FnForEach_SwNodes fnForEach, void* pArgs );
 
     /// A still empty section.
     SwNode& GetEndOfPostIts() const     { return *m_pEndOfPostIts; }
@@ -170,13 +170,13 @@ public:
     static sal_uInt16 GetSectionLevel(const SwNodeIndex &rIndex);
     void Delete(const SwNodeIndex &rPos, sal_uLong nNodes = 1);
 
-    bool _MoveNodes( const SwNodeRange&, SwNodes& rNodes, const SwNodeIndex&,
+    bool MoveNodes( const SwNodeRange&, SwNodes& rNodes, const SwNodeIndex&,
                 bool bNewFrames = true );
     void MoveRange( SwPaM&, SwPosition&, SwNodes& rNodes );
 
-    void _Copy( const SwNodeRange& rRg, const SwNodeIndex& rInsPos,
+    void Copy_( const SwNodeRange& rRg, const SwNodeIndex& rInsPos,
                 bool bNewFrames = true ) const
-        {   _CopyNodes( rRg, rInsPos, bNewFrames ); }
+        {   CopyNodes( rRg, rInsPos, bNewFrames ); }
 
     void SectionUp( SwNodeRange *);
     void SectionDown( SwNodeRange *pRange, SwStartNodeType = SwNormalStartNode );
@@ -204,7 +204,8 @@ public:
 
     /// Implementations of "Make...Node" are in the given .cxx-files.
     SwTextNode *MakeTextNode( const SwNodeIndex & rWhere,
-                            SwTextFormatColl *pColl ); ///< in ndtxt.cxx
+                            SwTextFormatColl *pColl,
+                            bool bNewFrames = true); ///< in ndtxt.cxx
     SwStartNode* MakeTextSection( const SwNodeIndex & rWhere,
                             SwStartNodeType eSttNdTyp,
                             SwTextFormatColl *pColl );
@@ -214,8 +215,7 @@ public:
                             const OUString& rFltName,
                             const Graphic* pGraphic,
                             SwGrfFormatColl *pColl,
-                            SwAttrSet* pAutoAttr = nullptr,
-                            bool bDelayed = false );    ///< in ndgrf.cxx
+                            SwAttrSet const * pAutoAttr = nullptr );    ///< in ndgrf.cxx
 
     static SwGrfNode *MakeGrfNode( const SwNodeIndex & rWhere,
                             const GraphicObject& rGrfObj,
@@ -228,7 +228,7 @@ public:
                             const OUString &rName,
                             sal_Int64 nAspect,
                             SwGrfFormatColl *pColl,
-                            SwAttrSet* pAutoAttr ); ///< in ndole.cxx
+                            SwAttrSet const * pAutoAttr ); ///< in ndole.cxx
 
     /// Array of all OutlineNodes.
     const SwOutlineNodes& GetOutLineNds() const { return *m_pOutlineNodes;}
@@ -246,9 +246,9 @@ public:
 
     static SwTableNode* InsertTable( const SwNodeIndex& rNdIdx,
                         sal_uInt16 nBoxes, SwTextFormatColl* pContentTextColl,
-                        sal_uInt16 nLines = 0, sal_uInt16 nRepeat = 0,
-                        SwTextFormatColl* pHeadlineTextColl = nullptr,
-                        const SwAttrSet * pAttrSet = nullptr);
+                        sal_uInt16 nLines, sal_uInt16 nRepeat,
+                        SwTextFormatColl* pHeadlineTextColl,
+                        const SwAttrSet * pAttrSet);
 
     /// Create balanced table from selected range.
     SwTableNode* TextToTable( const SwNodeRange& rRange, sal_Unicode cCh,
@@ -256,21 +256,19 @@ public:
                                 SwTableLineFormat* pLineFormat,
                                 SwTableBoxFormat* pBoxFormat,
                                 SwTextFormatColl* pTextColl,
-                                SwUndoTextToTable* pUndo = nullptr );
+                                SwUndoTextToTable* pUndo );
 
-    static SwNodeRange * ExpandRangeForTableBox(const SwNodeRange & rRange);
+    std::unique_ptr<SwNodeRange> ExpandRangeForTableBox(const SwNodeRange & rRange);
 
     /// create a table from a vector of NodeRanges - API support
     SwTableNode* TextToTable( const TableRanges_t& rTableNodes,
                                 SwTableFormat* pTableFormat,
                                 SwTableLineFormat* pLineFormat,
-                                SwTableBoxFormat* pBoxFormat,
-                                SwTextFormatColl* pTextColl
-                                /*, SwUndo... pUndo*/ );
+                                SwTableBoxFormat* pBoxFormat );
 
     /// Create regular text from what was table.
     bool TableToText( const SwNodeRange& rRange, sal_Unicode cCh,
-                        SwUndoTableToText* = nullptr );
+                        SwUndoTableToText* );
     /// Is in untbl.cxx and may called only by Undo-object.
     SwTableNode* UndoTableToText( sal_uLong nStt, sal_uLong nEnd,
                         const SwTableToTextSaves& rSavedData );
@@ -292,7 +290,7 @@ public:
                                 bool bCalcNewSize = false );
     /// Two Tables that are following one another are merged.
     bool MergeTable( const SwNodeIndex& rPos, bool bWithPrev = true,
-                    sal_uInt16 nMode = 0, SwHistory* pHistory = nullptr );
+                    sal_uInt16 nMode = 0 );
 
     /// Insert a new SwSection.
     SwSectionNode* InsertTextSection(SwNodeIndex const& rNdIdx,
@@ -312,14 +310,13 @@ public:
      with that before rFrameIdx and pEnd at the back.
      If no valid node is found, return 0. rFrameIdx points to the node with frames. **/
     SwNode* FindPrvNxtFrameNode( SwNodeIndex& rFrameIdx,
-                                const SwNode* pEnd = nullptr ) const;
+                                const SwNode* pEnd ) const;
 
     SwNode * DocumentSectionStartNode(SwNode * pNode) const;
     SwNode * DocumentSectionEndNode(SwNode * pNode) const;
 
     /**
      * Dumps the entire nodes structure to the given destination (file nodes.xml in the current directory by default)
-     * @since 3.5
      */
     void dumpAsXml( xmlTextWriterPtr pWriter ) const;
 };

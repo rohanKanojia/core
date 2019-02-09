@@ -22,24 +22,9 @@
 
 #include <svtools/svtdllapi.h>
 #include <vcl/scrbar.hxx>
-#include <o3tl/typed_flags_set.hxx>
 #include <vcl/vclptr.hxx>
 
 class DataChangedEvent;
-
-enum class ScrollableWindowFlags
-{
-    THUMBDRAGGING = 1,
-    VCENTER       = 2,
-    HCENTER       = 4,
-    DEFAULT       = THUMBDRAGGING | VCENTER | HCENTER,
-};
-
-namespace o3tl
-{
-    template<> struct typed_flags<ScrollableWindowFlags> : is_typed_flags<ScrollableWindowFlags, 0x07> {};
-}
-
 
 class SVT_DLLPUBLIC ScrollableWindow: public vcl::Window
 {
@@ -52,19 +37,14 @@ private:
     VclPtr<ScrollBar>    aVScroll;      // the scrollbars
     VclPtr<ScrollBar>    aHScroll;
     VclPtr<ScrollBarBox> aCornerWin;    // window in the bottom right corner
-    bool            bScrolling:1,       // user controlled scrolling
-                    bHandleDragging:1,  // scroll window while dragging
-                    bHCenter:1,
-                    bVCenter:1;
+    bool            bScrolling:1;       // user controlled scrolling
 
-    SVT_DLLPRIVATE void         ImpInitialize( ScrollableWindowFlags nFlags );
-    DECL_DLLPRIVATE_LINK_TYPED( ScrollHdl, ScrollBar *, void );
-    DECL_DLLPRIVATE_LINK_TYPED( EndScrollHdl, ScrollBar *, void );
+    DECL_DLLPRIVATE_LINK( ScrollHdl, ScrollBar *, void );
+    DECL_DLLPRIVATE_LINK( EndScrollHdl, ScrollBar *, void );
 
 public:
-                    ScrollableWindow( vcl::Window* pParent,
-                                      ScrollableWindowFlags = ScrollableWindowFlags::DEFAULT );
-    virtual         ~ScrollableWindow();
+                    ScrollableWindow( vcl::Window* pParent );
+    virtual         ~ScrollableWindow() override;
     virtual void    dispose() override;
 
     virtual void    Resize() override;

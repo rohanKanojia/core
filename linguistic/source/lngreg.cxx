@@ -22,7 +22,7 @@
 
 #include <com/sun/star/registry/XRegistryKey.hpp>
 
-#include <lngreg.hxx>
+#include "lngreg.hxx"
 
 using namespace com::sun::star::lang;
 
@@ -31,38 +31,33 @@ using namespace com::sun::star::registry;
 extern "C"
 {
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL lng_component_getFactory(
-    const sal_Char * pImplName, void * pServiceManager, void * pRegistryKey )
+SAL_DLLPUBLIC_EXPORT void * lng_component_getFactory(
+    const sal_Char * pImplName, void * pServiceManager, void * /*pRegistryKey*/ )
 {
     void * pRet =
         LngSvcMgr_getFactory(
             pImplName,
-            static_cast< XMultiServiceFactory * >( pServiceManager ),
-            pRegistryKey );
+            static_cast< XMultiServiceFactory * >( pServiceManager ) );
 
     if(!pRet)
         pRet = LinguProps_getFactory(
             pImplName,
-            static_cast< XMultiServiceFactory * >( pServiceManager ),
-            pRegistryKey );
+            static_cast< XMultiServiceFactory * >( pServiceManager ) );
 
     if(!pRet)
         pRet =  DicList_getFactory(
             pImplName,
-            static_cast< XMultiServiceFactory * >( pServiceManager ),
-            pRegistryKey );
+            static_cast< XMultiServiceFactory * >( pServiceManager ) );
 
     if(!pRet)
         pRet =  ConvDicList_getFactory(
             pImplName,
-            static_cast< XMultiServiceFactory * >( pServiceManager ),
-            pRegistryKey );
+            static_cast< XMultiServiceFactory * >( pServiceManager ) );
 
     if(!pRet)
         pRet =  GrammarCheckingIterator_getFactory(
             pImplName,
-            static_cast< XMultiServiceFactory * >( pServiceManager ),
-            pRegistryKey );
+            static_cast< XMultiServiceFactory * >( pServiceManager ) );
     return pRet;
 }
 }

@@ -19,6 +19,8 @@
 
 #include "htmlattr.hxx"
 #include "htmlex.hxx"
+#include <sdresid.hxx>
+#include <strings.hrc>
 #include <vcl/decoview.hxx>
 #include <vcl/builderfactory.hxx>
 
@@ -27,26 +29,17 @@ SdHtmlAttrPreview::SdHtmlAttrPreview(vcl::Window* pParent, WinBits nStyle)
 {
 }
 
-VCL_BUILDER_DECL_FACTORY(SdHtmlAttrPreview)
-{
-    WinBits nWinStyle = 0;
-
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nWinStyle |= WB_BORDER;
-
-    rRet = VclPtr<SdHtmlAttrPreview>::Create(pParent, nWinStyle);
-}
+VCL_BUILDER_FACTORY_CONSTRUCTOR(SdHtmlAttrPreview, 0)
 
 SdHtmlAttrPreview::~SdHtmlAttrPreview()
 {
 }
 
-void SdHtmlAttrPreview::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void SdHtmlAttrPreview::Paint(vcl::RenderContext& rRenderContext, const ::tools::Rectangle& rRect)
 {
     DecorationView aDecoView(&rRenderContext);
 
-    Rectangle aTextRect;
+    ::tools::Rectangle aTextRect;
     aTextRect.SetSize(GetOutputSize());
 
     rRenderContext.SetLineColor(m_aBackColor);
@@ -55,26 +48,26 @@ void SdHtmlAttrPreview::Paint(vcl::RenderContext& rRenderContext, const Rectangl
     rRenderContext.SetFillColor();
 
     int nHeight = (aTextRect.Bottom() - aTextRect.Top()) >> 2;
-    aTextRect.Bottom() =  nHeight + aTextRect.Top();
+    aTextRect.SetBottom(  nHeight + aTextRect.Top() );
 
     rRenderContext.SetTextColor(m_aTextColor);
-    rRenderContext.DrawText(aTextRect, SD_RESSTR(STR_HTMLATTR_TEXT), DrawTextFlags::Center | DrawTextFlags::VCenter);
+    rRenderContext.DrawText(aTextRect, SdResId(STR_HTMLATTR_TEXT), DrawTextFlags::Center | DrawTextFlags::VCenter);
 
     aTextRect.Move(0,nHeight);
     rRenderContext.SetTextColor(m_aLinkColor);
-    rRenderContext.DrawText(aTextRect, SD_RESSTR(STR_HTMLATTR_LINK), DrawTextFlags::Center | DrawTextFlags::VCenter);
+    rRenderContext.DrawText(aTextRect, SdResId(STR_HTMLATTR_LINK), DrawTextFlags::Center | DrawTextFlags::VCenter);
 
     aTextRect.Move(0,nHeight);
     rRenderContext.SetTextColor(m_aALinkColor);
-    rRenderContext.DrawText(aTextRect, SD_RESSTR(STR_HTMLATTR_ALINK), DrawTextFlags::Center | DrawTextFlags::VCenter);
+    rRenderContext.DrawText(aTextRect, SdResId(STR_HTMLATTR_ALINK), DrawTextFlags::Center | DrawTextFlags::VCenter);
 
     aTextRect.Move(0,nHeight);
     rRenderContext.SetTextColor(m_aVLinkColor);
-    rRenderContext.DrawText(aTextRect, SD_RESSTR(STR_HTMLATTR_VLINK), DrawTextFlags::Center | DrawTextFlags::VCenter);
+    rRenderContext.DrawText(aTextRect, SdResId(STR_HTMLATTR_VLINK), DrawTextFlags::Center | DrawTextFlags::VCenter);
 }
 
-void SdHtmlAttrPreview::SetColors(Color& aBack, Color& aText, Color& aLink,
-                                  Color& aVLink, Color& aALink)
+void SdHtmlAttrPreview::SetColors(Color const & aBack, Color const & aText, Color const & aLink,
+                                  Color const & aVLink, Color const & aALink)
 {
     m_aBackColor = aBack;
     m_aTextColor = aText;

@@ -17,17 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/ppt/animationspersist.hxx"
+#include <oox/ppt/animationspersist.hxx>
 
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/text/XText.hpp>
 #include <com/sun/star/presentation/ParagraphTarget.hpp>
 #include <com/sun/star/presentation/ShapeAnimationSubType.hpp>
 
-#include "oox/drawingml/shape.hxx"
+#include <oox/drawingml/shape.hxx>
+#include <oox/helper/attributelist.hxx>
 #include <oox/helper/addtosequence.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::presentation;
@@ -103,7 +107,7 @@ namespace oox { namespace ppt {
                     SAL_INFO("oox.ppt", "OOX: TODO what to do with more than one" );
                     break;
                 }
-                rTarget = makeAny( aParaTarget );
+                rTarget <<= aParaTarget;
             }
             break;
         }
@@ -127,7 +131,7 @@ namespace oox { namespace ppt {
             SAL_INFO("oox.ppt", "OOX: TODO sldTgt" );
             break;
         case XML_sndTgt:
-            aTarget = makeAny(msValue);
+            aTarget <<= msValue;
             break;
         case XML_spTgt:
         {
@@ -138,8 +142,14 @@ namespace oox { namespace ppt {
                 sShapeName = maShapeTarget.msSubShapeId;
 
             Any rTarget;
-            ::oox::drawingml::ShapePtr pShape = pSlide->getShape(sShapeName);
-            SAL_WARN_IF( !pShape, "oox.ppt", "failed to locate Shape");
+            ::oox::drawingml::ShapePtr pShape = pSlide->getShape( sShapeName );
+            SAL_WARN_IF( !pShape, "oox.ppt", "failed to locate Shape" );
+
+            if( !pShape && maShapeTarget.mnType == XML_dgm )
+            {
+                pShape = pSlide->getShape( msValue );
+            }
+
             if( pShape )
             {
                 Reference< XShape > xShape( pShape->getXShape() );
@@ -177,10 +187,9 @@ namespace oox { namespace ppt {
     Any AnimationCondition::convertList(const SlidePersistPtr & pSlide, const AnimationConditionList & l)
     {
         Any aAny;
-        for( AnimationConditionList::const_iterator iter = l.begin();
-             iter != l.end(); ++iter)
+        for (auto const& elem : l)
         {
-            aAny = addToSequence( aAny, iter->convert(pSlide) );
+            aAny = addToSequence( aAny, elem.convert(pSlide) );
         }
         return aAny;
     }

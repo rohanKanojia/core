@@ -22,10 +22,9 @@
 
 #include <com/sun/star/i18n/XForbiddenCharacters.hpp>
 #include <com/sun/star/linguistic2/XSupportedLocales.hpp>
-#include <rtl/ref.hxx>
-
 #include <cppuhelper/implbase.hxx>
 #include <editeng/editengdllapi.h>
+#include <memory>
 
 class SvxForbiddenCharactersTable;
 
@@ -37,21 +36,21 @@ protected:
     /** this virtual function is called if the forbidden characters are changed */
     virtual void onChange();
 
-    rtl::Reference<SvxForbiddenCharactersTable> mxForbiddenChars;
+    std::shared_ptr<SvxForbiddenCharactersTable> mxForbiddenChars;
 
 public:
-    SvxUnoForbiddenCharsTable(rtl::Reference<SvxForbiddenCharactersTable> xForbiddenChars);
-    virtual ~SvxUnoForbiddenCharsTable();
+    SvxUnoForbiddenCharsTable(std::shared_ptr<SvxForbiddenCharactersTable> const & xForbiddenChars);
+    virtual ~SvxUnoForbiddenCharsTable() override;
 
     // XForbiddenCharacters
-    virtual css::i18n::ForbiddenCharacters SAL_CALL getForbiddenCharacters( const css::lang::Locale& rLocale ) throw(css::container::NoSuchElementException, css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasForbiddenCharacters( const css::lang::Locale& rLocale ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setForbiddenCharacters( const css::lang::Locale& rLocale, const css::i18n::ForbiddenCharacters& rForbiddenCharacters ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeForbiddenCharacters( const css::lang::Locale& rLocale ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::i18n::ForbiddenCharacters SAL_CALL getForbiddenCharacters( const css::lang::Locale& rLocale ) override;
+    virtual sal_Bool SAL_CALL hasForbiddenCharacters( const css::lang::Locale& rLocale ) override;
+    virtual void SAL_CALL setForbiddenCharacters( const css::lang::Locale& rLocale, const css::i18n::ForbiddenCharacters& rForbiddenCharacters ) override;
+    virtual void SAL_CALL removeForbiddenCharacters( const css::lang::Locale& rLocale ) override;
 
     // XSupportedLocales
-    virtual css::uno::Sequence< css::lang::Locale > SAL_CALL getLocales(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasLocale( const css::lang::Locale& aLocale ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence< css::lang::Locale > SAL_CALL getLocales(  ) override;
+    virtual sal_Bool SAL_CALL hasLocale( const css::lang::Locale& aLocale ) override;
 };
 
 #endif // INCLUDED_EDITENG_UNOFORBIDDENCHARSTABLE_HXX

@@ -18,7 +18,6 @@
  */
 
 #include <com/sun/star/ui/dialogs/XSLTFilterDialog.hpp>
-#include <comphelper/processfactory.hxx>
 #include <svx/svdlayer.hxx>
 #include <svx/svxids.hrc>
 #include <sfx2/msgpool.hxx>
@@ -26,7 +25,6 @@
 #include <svx/hlnkitem.hxx>
 #include <editeng/eeitem.hxx>
 #include <editeng/flditem.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/dispatch.hxx>
 #include <svx/svdorect.hxx>
@@ -39,29 +37,28 @@
 #include <unotools/useroptions.hxx>
 #include <tools/diagnose_ex.h>
 
-#include "app.hrc"
-#include "strings.hrc"
-#include "res_bmp.hrc"
-#include "glob.hrc"
-#include "Outliner.hxx"
-#include "Window.hxx"
-#include "sdmod.hxx"
-#include "sdattr.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "sdresid.hxx"
-#include "sdpage.hxx"
-#include "DrawViewShell.hxx"
-#include "drawview.hxx"
-#include "unmodpg.hxx"
-#include "undolayer.hxx"
-#include "ViewShellBase.hxx"
-#include "FormShellManager.hxx"
-#include "LayerTabBar.hxx"
-#include "sdabstdlg.hxx"
-#include "SlideSorterViewShell.hxx"
-#include "SlideSorter.hxx"
-#include "controller/SlideSorterController.hxx"
+#include <app.hrc>
+#include <strings.hrc>
+
+#include <Outliner.hxx>
+#include <Window.hxx>
+#include <sdmod.hxx>
+#include <sdattr.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <unokywds.hxx>
+#include <sdpage.hxx>
+#include <DrawViewShell.hxx>
+#include <drawview.hxx>
+#include <unmodpg.hxx>
+#include <undolayer.hxx>
+#include <ViewShellBase.hxx>
+#include <FormShellManager.hxx>
+#include <LayerTabBar.hxx>
+#include <sdabstdlg.hxx>
+#include <SlideSorterViewShell.hxx>
+#include <SlideSorter.hxx>
+#include <controller/SlideSorterController.hxx>
 
 namespace sd {
 
@@ -74,38 +71,38 @@ bool DrawViewShell::RenameSlide( sal_uInt16 nPageId, const OUString & rName  )
     SdPage* pPageToRename = nullptr;
     PageKind ePageKind = GetPageKind();
 
-    if( GetEditMode() == EM_PAGE )
+    if( GetEditMode() == EditMode::Page )
     {
-        pPageToRename = GetDoc()->GetSdPage( nPageId - 1, ePageKind );
+        pPageToRename = GetDoc()->GetSdPage( maTabControl->GetPagePos(nPageId), ePageKind );
 
         // Undo
         SdPage* pUndoPage = pPageToRename;
         SdrLayerAdmin &  rLayerAdmin = GetDoc()->GetLayerAdmin();
-        sal_uInt8 nBackground = rLayerAdmin.GetLayerID( SD_RESSTR(STR_LAYER_BCKGRND), false );
-        sal_uInt8 nBgObj = rLayerAdmin.GetLayerID( SD_RESSTR(STR_LAYER_BCKGRNDOBJ), false );
-        SetOfByte aVisibleLayers = mpActualPage->TRG_GetMasterPageVisibleLayers();
+        SdrLayerID nBackground = rLayerAdmin.GetLayerID(sUNO_LayerName_background);
+        SdrLayerID nBgObj = rLayerAdmin.GetLayerID(sUNO_LayerName_background_objects);
+        SdrLayerIDSet aVisibleLayers = mpActualPage->TRG_GetMasterPageVisibleLayers();
 
-        ::svl::IUndoManager* pManager = GetDoc()->GetDocSh()->GetUndoManager();
-        ModifyPageUndoAction* pAction = new ModifyPageUndoAction(
-            GetDoc(), pUndoPage, rName, pUndoPage->GetAutoLayout(),
-            aVisibleLayers.IsSet( nBackground ),
-            aVisibleLayers.IsSet( nBgObj ));
-        pManager->AddUndoAction( pAction );
+        SfxUndoManager* pManager = GetDoc()->GetDocSh()->GetUndoManager();
+        pManager->AddUndoAction(
+            std::make_unique<ModifyPageUndoAction>(
+                GetDoc(), pUndoPage, rName, pUndoPage->GetAutoLayout(),
+                aVisibleLayers.IsSet( nBackground ),
+                aVisibleLayers.IsSet( nBgObj )));
 
         // rename
         pPageToRename->SetName( rName );
 
-        if( ePageKind == PK_STANDARD )
+        if( ePageKind == PageKind::Standard )
         {
             // also rename notes-page
-            SdPage* pNotesPage = GetDoc()->GetSdPage( nPageId - 1, PK_NOTES );
+            SdPage* pNotesPage = GetDoc()->GetSdPage( maTabControl->GetPagePos(nPageId), PageKind::Notes );
             pNotesPage->SetName( rName );
         }
     }
     else
     {
         // rename MasterPage -> rename LayoutTemplate
-        pPageToRename = GetDoc()->GetMasterSdPage( nPageId - 1, ePageKind );
+        pPageToRename = GetDoc()->GetMasterSdPage( maTabControl->GetPagePos(nPageId), ePageKind );
         GetDoc()->RenameLayoutTemplate( pPageToRename->GetLayoutName(), rName );
     }
 
@@ -131,19 +128,19 @@ bool DrawViewShell::RenameSlide( sal_uInt16 nPageId, const OUString & rName  )
         if (pSlideSorterViewShell != nullptr)
         {
             pSlideSorterViewShell->GetSlideSorter().GetController().PageNameHasChanged(
-                nPageId-1, rName);
+                maTabControl->GetPagePos(nPageId), rName);
         }
     }
 
     return bSuccess;
 }
 
-IMPL_LINK_TYPED( DrawViewShell, RenameSlideHdl, AbstractSvxNameDialog&, rDialog, bool )
+IMPL_LINK( DrawViewShell, RenameSlideHdl, AbstractSvxNameDialog&, rDialog, bool )
 {
     OUString aNewName;
     rDialog.GetName( aNewName );
 
-    SdPage* pCurrentPage = GetDoc()->GetSdPage( maTabControl->GetCurPageId() - 1, GetPageKind() );
+    SdPage* pCurrentPage = GetDoc()->GetSdPage( maTabControl->GetCurPagePos(), GetPageKind() );
 
     return pCurrentPage && ( aNewName == pCurrentPage->GetName() || GetDocSh()->IsNewPageNameValid( aNewName ) );
 }
@@ -171,7 +168,7 @@ void DrawViewShell::ModifyLayer (
         for( nPos = 0; nPos < nPageCount; nPos++ )
         {
             sal_uInt16 nId = GetLayerTabControl()->GetPageId( nPos );
-            if (GetLayerTabControl()->GetPageText(nId).equals(pLayer->GetName()))
+            if (GetLayerTabControl()->GetLayerName(nId) == pLayer->GetName())
             {
                 nCurPage = nId;
                 break;
@@ -189,13 +186,24 @@ void DrawViewShell::ModifyLayer (
 
         GetLayerTabControl()->SetPageText(nCurPage, rLayerName);
 
-        TabBarPageBits nBits = 0;
+        // Set page bits for modified tab name display
+
+        TabBarPageBits nBits = TabBarPageBits::NONE;
 
         if (!bIsVisible)
         {
-            // invisible layers are presented different
-            nBits = TPB_SPECIAL;
+            nBits = TabBarPageBits::Blue;
         }
+        if (bIsLocked)
+        {
+            nBits |= TabBarPageBits::Italic;
+        }
+        if (!bIsPrintable)
+        {
+            nBits |= TabBarPageBits::Underline;
+        }
+
+        // Save the bits
 
         GetLayerTabControl()->SetPageBits(nCurPage, nBits);
 

@@ -45,7 +45,7 @@ public class _XServiceInfo extends MultiMethodTest {
         boolean result = true;
         log.println("testing getImplementationName() ... ");
 
-        log.println("The ImplementationName ist "+oObj.getImplementationName());
+        log.println("The ImplementationName is "+oObj.getImplementationName());
         result=true;
 
         tRes.tested("getImplementationName()", result);
@@ -74,7 +74,7 @@ public class _XServiceInfo extends MultiMethodTest {
     /**
     * Gets one of the service names returned by
     * <code>getSupportedServiceNames</code> method and
-    * calls the <code>supportsService</code> methos with this
+    * calls the <code>supportsService</code> method with this
     * name. <p>
     * Has <b>OK</b> status if <code>true</code> value is
     * returned.

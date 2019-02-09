@@ -31,13 +31,9 @@ $(eval $(call gb_CppunitTest_use_libraries,vcl_fontcharmap, \
 	tk \
 	unotest \
 	vcl \
-	$(gb_UWINAPI) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,vcl_fontcharmap,\
-	udkapi \
-	offapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,vcl_fontcharmap))
 
 $(eval $(call gb_CppunitTest_use_ure,vcl_fontcharmap))
 $(eval $(call gb_CppunitTest_use_vcl,vcl_fontcharmap))

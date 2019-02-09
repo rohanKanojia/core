@@ -20,15 +20,16 @@
 #define INCLUDED_XMLOFF_XMLCHARCONTEXT_HXX
 
 #include <xmloff/dllapi.h>
-#include <com/sun/star/uno/Reference.h>
 #include <xmloff/xmlictxt.hxx>
+
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Reference; } } } }
 
 class XMLOFF_DLLPUBLIC XMLCharContext : public SvXMLImportContext
 {
     XMLCharContext(const XMLCharContext&) = delete;
     void operator =(const XMLCharContext&) = delete;
+    sal_Int16 const   m_nControl;
 protected:
-    sal_Int16   m_nControl;
     sal_uInt16  m_nCount;
     sal_Unicode m_c;
 public:
@@ -48,7 +49,7 @@ public:
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList,
             sal_Int16 nControl );
 
-    virtual ~XMLCharContext();
+    virtual ~XMLCharContext() override;
 
     // EndElement is called before a context will be destructed, but
     // after a elements context has been parsed. It may be used for actions

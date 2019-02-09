@@ -19,7 +19,7 @@
 
 /* Information:
  * This class implements a mechanism to lock a users installation directory,
- * which is necessesary because instances of staroffice could be running on
+ * which is necessary because instances of staroffice could be running on
  * different hosts while using the same directory thus causing data
  * inconsistency.
  * When an existing lock is detected, the user will be asked whether he wants
@@ -41,27 +41,27 @@
 
 #include "dp_misc_api.hxx"
 
-#define LOCKFILE_GROUP    OString( "Lockdata" )
-#define LOCKFILE_USERKEY  OString( "User" )
-#define LOCKFILE_HOSTKEY  OString( "Host" )
-#define LOCKFILE_STAMPKEY OString( "Stamp" )
-#define LOCKFILE_TIMEKEY  OString( "Time" )
-#define LOCKFILE_IPCKEY   OString( "IPCServer" )
+#define LOCKFILE_GROUP    "Lockdata"
+#define LOCKFILE_USERKEY  "User"
+#define LOCKFILE_HOSTKEY  "Host"
+#define LOCKFILE_STAMPKEY "Stamp"
+#define LOCKFILE_TIMEKEY  "Time"
+#define LOCKFILE_IPCKEY   "IPCServer"
 
 namespace desktop {
 
     class Lockfile;
-    bool Lockfile_execWarning( Lockfile * that );
+    bool Lockfile_execWarning( Lockfile const * that );
 
     class DESKTOP_DEPLOYMENTMISC_DLLPUBLIC Lockfile
     {
     public:
 
-        // contructs a new lockfile onject
+        // constructs a new lockfile onject
         Lockfile( bool bIPCserver = true );
 
         // separating GUI code:
-        typedef bool (* fpExecWarning)( Lockfile * that );
+        typedef bool (* fpExecWarning)( Lockfile const * that );
 
         // checks the lockfile, asks user when lockfile is
         // found (iff gui) and returns false when we may not continue
@@ -83,7 +83,7 @@ namespace desktop {
         // access to data in file
         void syncToFile() const;
         bool isStale() const;
-        friend bool Lockfile_execWarning( Lockfile * that );
+        friend bool Lockfile_execWarning( Lockfile const * that );
 
     };
 

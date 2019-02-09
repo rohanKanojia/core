@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.4"/>
+<interface domain="dba">
+  <requires lib="gtk+" version="3.18"/>
   <requires lib="LibreOffice" version="1.0"/>
   <object class="GtkDialog" id="IndexDesignDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Indexes</property>
+    <property name="title" translatable="yes" context="indexdesigndialog|IndexDesignDialog">Indexes</property>
     <property name="resizable">False</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
@@ -21,7 +21,6 @@
             <child>
               <object class="GtkButton" id="close">
                 <property name="label">gtk-close</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -36,7 +35,6 @@
             <child>
               <object class="GtkButton" id="help">
                 <property name="label">gtk-help</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -77,7 +75,7 @@
                         <property name="can_focus">False</property>
                         <property name="valign">start</property>
                         <property name="action_name">.index:createNew</property>
-                        <property name="label" translatable="yes">New Index</property>
+                        <property name="label" translatable="yes" context="indexdesigndialog|ID_INDEX_NEW">New Index</property>
                         <property name="use_underline">True</property>
                         <property name="icon_name">dbaccess/res/sc036.png</property>
                       </object>
@@ -92,7 +90,7 @@
                         <property name="can_focus">False</property>
                         <property name="valign">start</property>
                         <property name="action_name">.index:dropCurrent</property>
-                        <property name="label" translatable="yes">Delete Current Index</property>
+                        <property name="label" translatable="yes" context="indexdesigndialog|ID_INDEX_DROP">Delete Current Index</property>
                         <property name="use_underline">True</property>
                         <property name="icon_name">dbaccess/res/sc037.png</property>
                       </object>
@@ -107,7 +105,7 @@
                         <property name="can_focus">False</property>
                         <property name="valign">start</property>
                         <property name="action_name">.index:renameCurrent</property>
-                        <property name="label" translatable="yes">Rename Current Index</property>
+                        <property name="label" translatable="yes" context="indexdesigndialog|ID_INDEX_RENAME">Rename Current Index</property>
                         <property name="use_underline">True</property>
                         <property name="icon_name">dbaccess/res/sc038.png</property>
                       </object>
@@ -122,7 +120,7 @@
                         <property name="can_focus">False</property>
                         <property name="valign">start</property>
                         <property name="action_name">.index:saveCurrent</property>
-                        <property name="label" translatable="yes">Save Current Index</property>
+                        <property name="label" translatable="yes" context="indexdesigndialog|ID_INDEX_SAVE">Save Current Index</property>
                         <property name="use_underline">True</property>
                         <property name="icon_name">dbaccess/res/sc039.png</property>
                       </object>
@@ -137,7 +135,7 @@
                         <property name="can_focus">False</property>
                         <property name="valign">start</property>
                         <property name="action_name">.index:resetCurrent</property>
-                        <property name="label" translatable="yes">Reset Current Index</property>
+                        <property name="label" translatable="yes" context="indexdesigndialog|ID_INDEX_RESET">Reset Current Index</property>
                         <property name="use_underline">True</property>
                         <property name="icon_name">dbaccess/res/sc040.png</property>
                       </object>
@@ -273,7 +271,7 @@
                                 <property name="can_focus">False</property>
                                 <property name="halign">start</property>
                                 <property name="xalign">0</property>
-                                <property name="label" translatable="yes">Index identifier:</property>
+                                <property name="label" translatable="yes" context="indexdesigndialog|DESC_LABEL">Index identifier:</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -294,8 +292,7 @@
                             </child>
                             <child>
                               <object class="GtkCheckButton" id="UNIQUE">
-                                <property name="label" translatable="yes">_Unique</property>
-                                <property name="use_action_appearance">False</property>
+                                <property name="label" translatable="yes" context="indexdesigndialog|UNIQUE">_Unique</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
@@ -316,7 +313,7 @@
                                 <property name="can_focus">False</property>
                                 <property name="halign">start</property>
                                 <property name="xalign">0</property>
-                                <property name="label" translatable="yes">Fields:</property>
+                                <property name="label" translatable="yes" context="indexdesigndialog|FIELDS_LABEL">Fields:</property>
                                 <property name="use_underline">True</property>
                               </object>
                               <packing>
@@ -349,7 +346,7 @@
                       <object class="GtkLabel" id="INDEX_DETAILS">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Index Details</property>
+                        <property name="label" translatable="yes" context="indexdesigndialog|INDEX_DETAILS">Index Details</property>
                         <attributes>
                           <attribute name="weight" value="bold"/>
                         </attributes>
@@ -378,8 +375,8 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">close</action-widget>
-      <action-widget response="0">help</action-widget>
+      <action-widget response="-7">close</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
   </object>
 </interface>

@@ -20,34 +20,31 @@
 #define INCLUDED_SC_SOURCE_UI_VBA_VBANAMES_HXX
 
 #include <ooo/vba/excel/XNames.hpp>
-#include <ooo/vba/XCollection.hpp>
-#include <com/sun/star/container/XEnumerationAccess.hpp>
-#include <com/sun/star/sheet/XNamedRanges.hpp>
 #include <vbahelper/vbacollectionimpl.hxx>
 
+namespace com { namespace sun { namespace star { namespace sheet { class XNamedRanges; } } } }
+
 class ScDocument;
-class ScDocShell;
 
 typedef CollTestImplHelper< ov::excel::XNames > ScVbaNames_BASE;
 
-class ScVbaNames : public ScVbaNames_BASE
+class ScVbaNames final : public ScVbaNames_BASE
 {
     css::uno::Reference< css::frame::XModel > mxModel;
     css::uno::Reference< css::sheet::XNamedRanges > mxNames;
 
-protected:
-    css::uno::Reference< css::frame::XModel >  getModel() { return mxModel; }
+    const css::uno::Reference< css::frame::XModel >&  getModel() { return mxModel; }
 
 public:
     ScVbaNames( const css::uno::Reference< ov::XHelperInterface >& xParent,  const css::uno::Reference< css::uno::XComponentContext >& xContext, const css::uno::Reference< css::sheet::XNamedRanges >& xNames , const css::uno::Reference< css::frame::XModel >& xModel );
 
     ScDocument* getScDocument();
 
-    virtual ~ScVbaNames();
+    virtual ~ScVbaNames() override;
 
     // XEnumerationAccess
-    virtual css::uno::Type SAL_CALL getElementType() throw (css::uno::RuntimeException) override;
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() throw (css::uno::RuntimeException) override;
+    virtual css::uno::Type SAL_CALL getElementType() override;
+    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
 
     // Methods
     virtual css::uno::Any SAL_CALL Add( const css::uno::Any& aName ,
@@ -60,9 +57,7 @@ public:
                     const css::uno::Any& aRefersToLocal,
                     const css::uno::Any& aCategoryLocal,
                     const css::uno::Any& aRefersToR1C1,
-                    const css::uno::Any& aRefersToR1C1Local )
-        throw (css::uno::RuntimeException,
-               std::exception) override;
+                    const css::uno::Any& aRefersToR1C1Local ) override;
 
     virtual css::uno::Any createCollectionObject( const css::uno::Any& aSource ) override;
 

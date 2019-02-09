@@ -20,15 +20,15 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_XML_XMLBODYI_HXX
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLBODYI_HXX
 
-#include <xmloff/xmlictxt.hxx>
-#include <xmloff/xmlimp.hxx>
-#include "xmlimprt.hxx"
+#include "importcontext.hxx"
 
-#include "tabprotection.hxx"
+#include <tabprotection.hxx>
+
+namespace sax_fastparser { class FastAttributeList; }
 
 class ScXMLChangeTrackingImportHelper;
 
-class ScXMLBodyContext : public SvXMLImportContext
+class ScXMLBodyContext : public ScXMLImportContext
 {
     OUString   sPassword;
     ScPasswordHash  meHash1;
@@ -37,19 +37,21 @@ class ScXMLBodyContext : public SvXMLImportContext
     bool            bHadCalculationSettings;
 
     ScXMLChangeTrackingImportHelper*    pChangeTrackingImportHelper;
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
 
 public:
-    ScXMLBodyContext( ScXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList );
-    virtual ~ScXMLBodyContext();
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                                    const OUString& rLocalName,
-                                                    const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
-    virtual void EndElement() override;
-    virtual void Characters( const OUString& rChars ) override;
+    ScXMLBodyContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList );
+
+    virtual ~ScXMLBodyContext() override;
+
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL
+        createFastChildContext( sal_Int32 nElement,
+        const css::uno::Reference<css::xml::sax::XFastAttributeList>& xAttrList ) override;
+
+    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+
+    virtual void SAL_CALL characters(const OUString & aChars) override;
 };
 
 #endif

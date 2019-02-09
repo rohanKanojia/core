@@ -36,11 +36,11 @@ namespace drawinglayer
     {
         void TextDecoratedPortionPrimitive2D::impCreateGeometryContent(
             std::vector< Primitive2DReference >& rTarget,
-            basegfx::tools::B2DHomMatrixBufferedOnDemandDecompose& rDecTrans,
+            basegfx::utils::B2DHomMatrixBufferedOnDemandDecompose const & rDecTrans,
             const OUString& rText,
             sal_Int32 nTextPosition,
             sal_Int32 nTextLength,
-            const ::std::vector< double >& rDXArray,
+            const std::vector< double >& rDXArray,
             const attribute::FontAttribute& rFontAttribute) const
         {
             // create the SimpleTextPrimitive needed in any case
@@ -154,19 +154,20 @@ namespace drawinglayer
             // TODO: Handle Font Emphasis Above/Below
         }
 
-        Primitive2DContainer TextDecoratedPortionPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& /*rViewInformation*/) const
+        void TextDecoratedPortionPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& /*rViewInformation*/) const
         {
             if(getWordLineMode())
             {
                 // support for single word mode; split to single word primitives
                 // using TextBreakupHelper
                 const TextBreakupHelper aTextBreakupHelper(*this);
-                const Primitive2DContainer aBroken(aTextBreakupHelper.getResult(BreakupUnit_word));
+                const Primitive2DContainer& aBroken(aTextBreakupHelper.getResult(BreakupUnit::Word));
 
                 if(!aBroken.empty())
                 {
                     // was indeed split to several words, use as result
-                    return aBroken;
+                    rContainer.insert(rContainer.end(), aBroken.begin(), aBroken.end());
+                    return;
                 }
                 else
                 {
@@ -175,7 +176,7 @@ namespace drawinglayer
                 }
             }
             std::vector< Primitive2DReference > aNewPrimitives;
-            basegfx::tools::B2DHomMatrixBufferedOnDemandDecompose aDecTrans(getTextTransform());
+            basegfx::utils::B2DHomMatrixBufferedOnDemandDecompose aDecTrans(getTextTransform());
             Primitive2DContainer aRetval;
 
             // create basic geometry such as SimpleTextPrimitive, Overline, Underline,
@@ -227,19 +228,19 @@ namespace drawinglayer
                         // is constant, relative to font size, rotated with the text and has a
                         // constant color.
                         // shadow parameter values
-                        static double fFactor(1.0 / 24.0);
+                        static const double fFactor(1.0 / 24.0);
                         const double fTextShadowOffset(aDecTrans.getScale().getY() * fFactor);
                         static basegfx::BColor aShadowColor(0.3, 0.3, 0.3);
 
                         // preapare shadow transform matrix
-                        const basegfx::B2DHomMatrix aShadowTransform(basegfx::tools::createTranslateB2DHomMatrix(
+                        const basegfx::B2DHomMatrix aShadowTransform(basegfx::utils::createTranslateB2DHomMatrix(
                             fTextShadowOffset, fTextShadowOffset));
 
                         // create shadow primitive
-                        aShadow = Primitive2DReference(new ShadowPrimitive2D(
+                        aShadow = new ShadowPrimitive2D(
                             aShadowTransform,
                             aShadowColor,
-                            aRetval));
+                            aRetval);
                     }
 
                     if(bHasTextRelief)
@@ -248,28 +249,28 @@ namespace drawinglayer
                         // be view-dependent
                         const basegfx::BColor aBBlack(0.0, 0.0, 0.0);
                         const bool bDefaultTextColor(aBBlack == getFontColor());
-                        TextEffectStyle2D aTextEffectStyle2D(TEXTEFFECTSTYLE2D_RELIEF_EMBOSSED);
+                        TextEffectStyle2D aTextEffectStyle2D(TextEffectStyle2D::ReliefEmbossed);
 
                         if(bDefaultTextColor)
                         {
                             if(TEXT_RELIEF_ENGRAVED == getTextRelief())
                             {
-                                aTextEffectStyle2D = TEXTEFFECTSTYLE2D_RELIEF_ENGRAVED_DEFAULT;
+                                aTextEffectStyle2D = TextEffectStyle2D::ReliefEngravedDefault;
                             }
                             else
                             {
-                                aTextEffectStyle2D = TEXTEFFECTSTYLE2D_RELIEF_EMBOSSED_DEFAULT;
+                                aTextEffectStyle2D = TextEffectStyle2D::ReliefEmbossedDefault;
                             }
                         }
                         else
                         {
                             if(TEXT_RELIEF_ENGRAVED == getTextRelief())
                             {
-                                aTextEffectStyle2D = TEXTEFFECTSTYLE2D_RELIEF_ENGRAVED;
+                                aTextEffectStyle2D = TextEffectStyle2D::ReliefEngraved;
                             }
                             else
                             {
-                                aTextEffectStyle2D = TEXTEFFECTSTYLE2D_RELIEF_EMBOSSED;
+                                aTextEffectStyle2D = TextEffectStyle2D::ReliefEmbossed;
                             }
                         }
 
@@ -288,7 +289,7 @@ namespace drawinglayer
                             aRetval,
                             aDecTrans.getTranslate(),
                             aDecTrans.getRotate(),
-                            TEXTEFFECTSTYLE2D_OUTLINE));
+                            TextEffectStyle2D::Outline));
                         aRetval = Primitive2DContainer { aNewTextEffect };
                     }
 
@@ -296,14 +297,12 @@ namespace drawinglayer
                     {
                         // put shadow in front if there is one to paint timely before
                         // but placed behind content
-                        const Primitive2DContainer aContent(aRetval);
-                        aRetval = Primitive2DContainer { aShadow };
-                        aRetval.append(aContent);
+                        aRetval.insert(aRetval.begin(), aShadow);
                     }
                 }
             }
 
-            return aRetval;
+            rContainer.insert(rContainer.end(), aRetval.begin(), aRetval.end());
         }
 
         TextDecoratedPortionPrimitive2D::TextDecoratedPortionPrimitive2D(
@@ -312,7 +311,7 @@ namespace drawinglayer
             const OUString& rText,
             sal_Int32 nTextPosition,
             sal_Int32 nTextLength,
-            const ::std::vector< double >& rDXArray,
+            const std::vector< double >& rDXArray,
             const attribute::FontAttribute& rFontAttribute,
             const css::lang::Locale& rLocale,
             const basegfx::BColor& rFontColor,
@@ -347,16 +346,6 @@ namespace drawinglayer
         {
         }
 
-        bool TextDecoratedPortionPrimitive2D::decoratedIsNeeded() const
-        {
-            return (TEXT_LINE_NONE != getFontOverline()
-                 || TEXT_LINE_NONE != getFontUnderline()
-                 || TEXT_STRIKEOUT_NONE != getTextStrikeout()
-                 || TEXT_EMPHASISMARK_NONE != getTextEmphasisMark()
-                 || TEXT_RELIEF_NONE != getTextRelief()
-                 || getShadow());
-        }
-
         bool TextDecoratedPortionPrimitive2D::operator==(const BasePrimitive2D& rPrimitive) const
         {
             if(TextSimplePortionPrimitive2D::operator==(rPrimitive))
@@ -385,7 +374,14 @@ namespace drawinglayer
         // inking area, so add them if needed
         basegfx::B2DRange TextDecoratedPortionPrimitive2D::getB2DRange(const geometry::ViewInformation2D& rViewInformation) const
         {
-            if(decoratedIsNeeded())
+            // check if this needs to be a TextDecoratedPortionPrimitive2D or
+            // if a TextSimplePortionPrimitive2D would be sufficient
+            if (TEXT_LINE_NONE != getFontOverline()
+                 || TEXT_LINE_NONE != getFontUnderline()
+                 || TEXT_STRIKEOUT_NONE != getTextStrikeout()
+                 || TEXT_FONT_EMPHASIS_MARK_NONE != getTextEmphasisMark()
+                 || TEXT_RELIEF_NONE != getTextRelief()
+                 || getShadow())
             {
                 // decoration is used, fallback to BufferedDecompositionPrimitive2D::getB2DRange which uses
                 // the own local decomposition for computation and thus creates all necessary

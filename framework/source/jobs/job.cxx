@@ -22,15 +22,17 @@
 #include <services.h>
 
 #include <com/sun/star/frame/Desktop.hpp>
+#include <com/sun/star/frame/TerminationVetoException.hpp>
 #include <com/sun/star/task/XJob.hpp>
 #include <com/sun/star/task/XAsyncJob.hpp>
+#include <com/sun/star/util/CloseVetoException.hpp>
 #include <com/sun/star/util/XCloseBroadcaster.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
 
-#include <comphelper/processfactory.hxx>
 #include <comphelper/sequence.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <vcl/svapp.hxx>
 
 namespace framework{
@@ -90,9 +92,9 @@ Job::Job( /*IN*/ const css::uno::Reference< css::uno::XComponentContext >& xCont
 }
 
 /**
-    @short  superflous!
+    @short  superfluous!
     @descr  Releasing of memory and reference must be done inside die() call.
-            Otherwhise it's a bug.
+            Otherwise it's a bug.
 */
 Job::~Job()
 {
@@ -173,14 +175,14 @@ void Job::execute( /*IN*/ const css::uno::Sequence< css::beans::NamedValue >& lD
     css::uno::Sequence< css::beans::NamedValue > lJobArgs = impl_generateJobArgs(lDynamicArgs);
 
     // It's necessary to hold us self alive!
-    // Otherwhise we might die by ref count ...
+    // Otherwise we might die by ref count ...
     css::uno::Reference< css::task::XJobListener > xThis(static_cast< ::cppu::OWeakObject* >(this), css::uno::UNO_QUERY);
 
     try
     {
         // create the job
         // We must check for the supported interface on demand!
-        // But we preferr the synchronous one ...
+        // But we prefer the synchronous one ...
         m_xJob = m_xContext->getServiceManager()->createInstanceWithContext(m_aJobCfg.getService(), m_xContext);
         xSJob.set(m_xJob, css::uno::UNO_QUERY);
         if (!xSJob.is())
@@ -214,22 +216,22 @@ void Job::execute( /*IN*/ const css::uno::Sequence< css::beans::NamedValue >& lD
     #if OSL_DEBUG_LEVEL > 0
     catch(const css::uno::Exception& ex)
     {
-        SAL_INFO("fwk", "Job::execute(): Got exception during job execution. Original Message was: \"" << ex.Message << "\"");
+        SAL_INFO("fwk", "Job::execute(): Got exception during job execution. Original Message was: \"" << ex << "\"");
     }
     #else
     catch(const css::uno::Exception&)
         {}
     #endif
 
-    // deinitialize the environment and mark this job as finished ...
+    // deinitialize the environment and mark this job as finished...
     // but don't overwrite any information about STOPPED or might DISPOSED jobs!
     impl_stopListening();
     if (m_eRunState == E_RUNNING)
         m_eRunState = E_STOPPED_OR_FINISHED;
 
-    // If we got a close request from our frame or model ...
-    // but we disagreed wit that by throwing a veto exception...
-    // and got the ownership ...
+    // If we got a close request from our frame or model...
+    // but we disagreed with that by throwing a veto exception...
+    // and got the ownership...
     // we have to close the resource frame or model now -
     // and to disable ourself!
     if (m_bPendingCloseFrame)
@@ -240,7 +242,7 @@ void Job::execute( /*IN*/ const css::uno::Sequence< css::beans::NamedValue >& lD
         {
             try
             {
-                xClose->close(sal_True);
+                xClose->close(true);
             }
             catch(const css::util::CloseVetoException&) {}
         }
@@ -254,7 +256,7 @@ void Job::execute( /*IN*/ const css::uno::Sequence< css::beans::NamedValue >& lD
         {
             try
             {
-                xClose->close(sal_True);
+                xClose->close(true);
             }
             catch(const css::util::CloseVetoException&) {}
         }
@@ -272,7 +274,7 @@ void Job::execute( /*IN*/ const css::uno::Sequence< css::beans::NamedValue >& lD
     @descr  It doesn't matter if this request is called from inside or
             from outside. We release our internal structures and stop
             every activity. After doing so - this instance will not be
-            useable any longer! Of course we try to handle further requests
+            usable any longer! Of course we try to handle further requests
             carefully. Maybe someone else holds a reference to us ...
 */
 void Job::die()
@@ -619,7 +621,7 @@ void Job::impl_stopListening()
                 its results
 */
 void SAL_CALL Job::jobFinished( /*IN*/ const css::uno::Reference< css::task::XAsyncJob >& xJob    ,
-                                /*IN*/ const css::uno::Any&                               aResult ) throw(css::uno::RuntimeException, std::exception)
+                                /*IN*/ const css::uno::Any&                               aResult )
 {
     SolarMutexGuard g;
 
@@ -657,18 +659,17 @@ void SAL_CALL Job::jobFinished( /*IN*/ const css::uno::Reference< css::task::XAs
     @throw  TerminateVetoException
                 if our internal wrapped job is still running.
  */
-void SAL_CALL Job::queryTermination( /*IN*/ const css::lang::EventObject& ) throw(css::frame::TerminationVetoException,
-                                                                                         css::uno::RuntimeException, std::exception          )
+void SAL_CALL Job::queryTermination( /*IN*/ const css::lang::EventObject& )
 {
     SolarMutexGuard g;
 
-    // Otherwhise try to close() it
+    // Otherwise try to close() it
     css::uno::Reference< css::util::XCloseable > xClose(m_xJob, css::uno::UNO_QUERY);
     if (xClose.is())
     {
         try
         {
-            xClose->close(sal_False);
+            xClose->close(false);
             m_eRunState = E_STOPPED_OR_FINISHED;
         }
         catch(const css::util::CloseVetoException&) {}
@@ -685,16 +686,16 @@ void SAL_CALL Job::queryTermination( /*IN*/ const css::lang::EventObject& ) thro
     @short  inform us about office termination
     @descr  Instead of the method queryTermination(), here is no chance to disagree with that.
             We have to accept it and cancel all current processes inside.
-            It can occur only, if job was not already started if queryTermination() was called here ..
-            Then we had not throwed a veto exception. But now we must agree with this situation and break
-            all our internal processes. Its not a good idea to mark this instance as non startable any longer
+            It can occur only, if job was not already started if queryTermination() was called here.
+            Then we had not thrown a veto exception. But now we must agree with this situation and break
+            all our internal processes. It's not a good idea to mark this instance as non startable any longer
             inside queryTermination() if no job was running too. Because that would disable this job and may
-            the office does not really shutdownm, because another listener has thrown the suitable exception.
+            the office does not really shutdown, because another listener has thrown the suitable exception.
 
     @param  aEvent
                 describes the broadcaster and must be the desktop instance
  */
-void SAL_CALL Job::notifyTermination( /*IN*/ const css::lang::EventObject& ) throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL Job::notifyTermination( /*IN*/ const css::lang::EventObject& )
 {
     die();
     // Do nothing else here. Our internal resources was released ...
@@ -719,8 +720,7 @@ void SAL_CALL Job::notifyTermination( /*IN*/ const css::lang::EventObject& ) thr
                 if our internal wrapped job is still running.
  */
 void SAL_CALL Job::queryClosing( const css::lang::EventObject& aEvent         ,
-                                       sal_Bool                bGetsOwnership ) throw(css::util::CloseVetoException,
-                                                                                      css::uno::RuntimeException, std::exception   )
+                                       sal_Bool                bGetsOwnership )
 {
     SolarMutexGuard g;
 
@@ -775,7 +775,7 @@ void SAL_CALL Job::queryClosing( const css::lang::EventObject& aEvent         ,
 
     // No veto ...
     // But don't call die() here or free our internal member.
-    // This must be done inside notifyClosing() only. Otherwhise the
+    // This must be done inside notifyClosing() only. Otherwise the
     // might stopped job has no chance to return its results or
     // call us back. We must give him the chance to finish it's work successfully.
 }
@@ -788,7 +788,7 @@ void SAL_CALL Job::queryClosing( const css::lang::EventObject& aEvent         ,
     @param  aEvent
             describes the broadcaster and must be the frame or model instance we know
  */
-void SAL_CALL Job::notifyClosing( const css::lang::EventObject& ) throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL Job::notifyClosing( const css::lang::EventObject& )
 {
     die();
     // Do nothing else here. Our internal resources was released ...
@@ -802,7 +802,7 @@ void SAL_CALL Job::notifyClosing( const css::lang::EventObject& ) throw(css::uno
     @param      aEvent
                 describe the broadcaster
 */
-void SAL_CALL Job::disposing( const css::lang::EventObject& aEvent ) throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL Job::disposing( const css::lang::EventObject& aEvent )
 {
     /* SAFE { */
     SolarMutexClearableGuard aWriteLock;

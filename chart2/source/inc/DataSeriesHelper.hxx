@@ -19,18 +19,23 @@
 #ifndef INCLUDED_CHART2_SOURCE_INC_DATASERIESHELPER_HXX
 #define INCLUDED_CHART2_SOURCE_INC_DATASERIESHELPER_HXX
 
-#include <com/sun/star/chart2/data/XDataSequence.hpp>
-#include <com/sun/star/chart2/data/XDataSource.hpp>
-#include <com/sun/star/chart2/XDataSeries.hpp>
-#include <com/sun/star/chart2/XDiagram.hpp>
-#include <com/sun/star/chart2/XCoordinateSystem.hpp>
-#include <com/sun/star/chart2/XChartType.hpp>
-
 #include "StackMode.hxx"
 #include "charttoolsdllapi.hxx"
+#include <com/sun/star/uno/Reference.h>
+#include <rtl/ustring.hxx>
 
-#include <functional>
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XChartType; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XCoordinateSystem; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XDataSeries; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XDiagram; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { namespace data { class XDataSequence; } } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { namespace data { class XDataSource; } } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { namespace data { class XLabeledDataSequence; } } } } }
+namespace com { namespace sun { namespace star { namespace uno { class Any; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <class E> class Sequence; } } } }
 
 namespace chart
 {
@@ -57,7 +62,7 @@ OOO_DLLPUBLIC_CHARTTOOLS css::uno::Reference< css::chart2::data::XLabeledDataSeq
                            bool bMatchPrefix = false );
 
 /** Retrieves all data sequences in the given data source that match the given
-    role.
+    role prefix.
 
     @param aSource
         The data source containing all data sequences to be searched through.
@@ -65,11 +70,10 @@ OOO_DLLPUBLIC_CHARTTOOLS css::uno::Reference< css::chart2::data::XLabeledDataSeq
     @param aRole
         The role that is to be filtered out.
 */
-OOO_DLLPUBLIC_CHARTTOOLS ::std::vector<
+OOO_DLLPUBLIC_CHARTTOOLS std::vector<
   css::uno::Reference< css::chart2::data::XLabeledDataSequence > >
     getAllDataSequencesByRole( const css::uno::Sequence< css::uno::Reference< css::chart2::data::XLabeledDataSequence > > & aDataSequences,
-                               const OUString& aRole,
-                               bool bMatchPrefix = false );
+                               const OUString& aRole );
 
 OOO_DLLPUBLIC_CHARTTOOLS
 std::vector<css::uno::Reference<css::chart2::data::XLabeledDataSequence> >
@@ -149,10 +153,6 @@ OOO_DLLPUBLIC_CHARTTOOLS bool hasAttributedDataPointDifferentValue(
     const css::uno::Reference< css::chart2::XDataSeries >& xSeries,
     const OUString& rPropertyName,
     const css::uno::Any& rPropertyValue );
-
-OOO_DLLPUBLIC_CHARTTOOLS bool areAllSeriesAttachedToSameAxis(
-        const css::uno::Reference< css::chart2::XChartType >& xChartType,
-        sal_Int32 & rOutAxisIndex );
 
 OOO_DLLPUBLIC_CHARTTOOLS bool hasUnhiddenData( const css::uno::Reference<
         css::chart2::XDataSeries >& xSeries );

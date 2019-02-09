@@ -41,6 +41,7 @@ class PresenterTextCaret
 {
 public:
     PresenterTextCaret (
+        css::uno::Reference<css::uno::XComponentContext> const& xContext,
         const ::std::function<css::awt::Rectangle (const sal_Int32,const sal_Int32)>&
             rCharacterBoundsAccess,
         const ::std::function<void (const css::awt::Rectangle&)>&
@@ -66,9 +67,10 @@ public:
     void SetCaretMotionBroadcaster (
         const ::std::function<void (sal_Int32,sal_Int32,sal_Int32,sal_Int32)>& rBroadcaster);
 
-    css::awt::Rectangle GetBounds() const;
+    const css::awt::Rectangle& GetBounds() const;
 
 private:
+    css::uno::Reference<css::uno::XComponentContext> const& m_xContext;
     sal_Int32 mnParagraphIndex;
     sal_Int32 mnCharacterIndex;
     sal_Int32 mnCaretBlinkTaskId;
@@ -109,7 +111,7 @@ public:
     void SetCharacterOffset (const sal_Int32 nCharacterOffset);
     sal_Int32 GetCharacterCount() const;
     sal_Unicode GetCharacter (const sal_Int32 nGlobalCharacterIndex) const;
-    OUString GetText() const;
+    const OUString& GetText() const;
     css::accessibility::TextSegment GetTextSegment (
         const sal_Int32 nOffset,
         const sal_Int32 nGlobalCharacterIndex,
@@ -152,17 +154,17 @@ private:
     {
     public:
         Cell (const sal_Int32 nCharacterIndex, const sal_Int32 nCharacterCount, const double nCellWidth);
-        sal_Int32 mnCharacterIndex;
-        sal_Int32 mnCharacterCount;
-        double mnCellWidth;
+        sal_Int32 const mnCharacterIndex;
+        sal_Int32 const mnCharacterCount;
+        double const mnCellWidth;
     };
 
     class Line
     {
     public:
         Line (const sal_Int32 nLineStartCharacterIndex, const sal_Int32 nLineEndCharacterIndex);
-        sal_Int32 mnLineStartCharacterIndex;
-        sal_Int32 mnLineEndCharacterIndex;
+        sal_Int32 const mnLineStartCharacterIndex;
+        sal_Int32 const mnLineEndCharacterIndex;
         sal_Int32 mnLineStartCellIndex;
         sal_Int32 mnLineEndCellIndex;
         css::uno::Reference<css::rendering::XTextLayout> mxLayoutedLine;
@@ -175,7 +177,6 @@ private:
             const PresenterTheme::SharedFontDescriptor& rpFont,
             const sal_Int8 nTextDirection);
         void ProvideCellBoxes();
-        bool IsEmpty() const;
     };
 
     css::uno::Reference<css::i18n::XBreakIterator> mxBreakIterator;
@@ -191,7 +192,6 @@ private:
     double mnAscent;
     double mnDescent;
     double mnLineHeight;
-    css::style::ParagraphAdjust meAdjust;
     sal_Int8 mnWritingMode;
     /// The index of the first character in this paragraph with respect to
     /// the whole text.
@@ -247,14 +247,13 @@ public:
 
     void Paint (const css::awt::Rectangle& rUpdateBox);
 
-    SharedPresenterTextCaret GetCaret() const;
+    const SharedPresenterTextCaret& GetCaret() const;
 
     sal_Int32 GetParagraphCount() const;
     SharedPresenterTextParagraph GetParagraph (const sal_Int32 nParagraphIndex) const;
 
 private:
     css::uno::Reference<css::rendering::XCanvas> mxCanvas;
-    bool mbDoOuput;
     css::uno::Reference<css::i18n::XBreakIterator> mxBreakIterator;
     css::uno::Reference<css::i18n::XScriptTypeDetector> mxScriptTypeDetector;
     css::geometry::RealPoint2D maLocation;
@@ -265,7 +264,6 @@ private:
     double mnLeftOffset;
     double mnTopOffset;
     bool mbIsFormatPending;
-    sal_Int32 mnCharacterCount;
     ::std::function<void ()> maTextChangeBroadcaster;
 
     void RequestFormat();

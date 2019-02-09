@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fusearch.hxx"
+#include <fusearch.hxx>
 
 #include <sfx2/viewfrm.hxx>
 
@@ -25,31 +25,31 @@
 #include <svl/srchitem.hxx>
 #include <svx/srchdlg.hxx>
 #include <sfx2/bindings.hxx>
-#include "fupoor.hxx"
-#include "Window.hxx"
-#include "drawdoc.hxx"
-#include "app.hrc"
-#include "sdmod.hxx"
-#include "View.hxx"
-#include "Outliner.hxx"
-#include "DrawViewShell.hxx"
-#include "OutlineViewShell.hxx"
-#include "ViewShellBase.hxx"
+#include <fupoor.hxx>
+#include <Window.hxx>
+#include <drawdoc.hxx>
+#include <app.hrc>
+#include <sdmod.hxx>
+#include <View.hxx>
+#include <Outliner.hxx>
+#include <DrawDocShell.hxx>
+#include <DrawViewShell.hxx>
+#include <OutlineViewShell.hxx>
+#include <ViewShellBase.hxx>
 
 class SfxRequest;
 
 namespace sd {
 
-static sal_uInt16 SidArraySpell[] = {
+static const sal_uInt16 SidArraySpell[] = {
             SID_DRAWINGMODE,
-            SID_SLIDE_MASTER_MODE,
             SID_OUTLINE_MODE,
             SID_SLIDE_SORTER_MODE,
             SID_NOTES_MODE,
-            SID_NOTES_MASTER_MODE,
             SID_HANDOUT_MASTER_MODE,
+            SID_SLIDE_MASTER_MODE,
+            SID_NOTES_MASTER_MODE,
             0 };
-
 
 FuSearch::FuSearch (
     ViewShell* pViewSh,
@@ -77,7 +77,7 @@ void FuSearch::DoExecute( SfxRequest& )
     if ( dynamic_cast< const DrawViewShell *>( mpViewShell ) !=  nullptr )
     {
         bOwnOutliner = true;
-        pSdOutliner = new ::sd::Outliner( mpDoc, OUTLINERMODE_TEXTOBJECT );
+        pSdOutliner = new SdOutliner( mpDoc, OutlinerMode::TextObject );
     }
     else if ( dynamic_cast< const OutlineViewShell *>( mpViewShell ) !=  nullptr )
     {
@@ -115,7 +115,7 @@ void FuSearch::SearchAndReplace( const SvxSearchItem* pSearchItem )
             pSdOutliner->EndSpelling();
 
             bOwnOutliner = true;
-            pSdOutliner = new ::sd::Outliner( mpDoc, OUTLINERMODE_TEXTOBJECT );
+            pSdOutliner = new SdOutliner( mpDoc, OutlinerMode::TextObject );
             pSdOutliner->PrepareSpelling();
         }
         else if ( pSdOutliner && dynamic_cast< const OutlineViewShell *>( pViewShell ) !=  nullptr && bOwnOutliner )

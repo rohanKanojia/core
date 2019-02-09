@@ -23,8 +23,8 @@
 #include <rtl/ustring.hxx>
 #include <rtl/string.hxx>
 #include <vector>
-#include <list>
-#include "dp_backenddb.hxx"
+#include <deque>
+#include <dp_backenddb.hxx>
 
 namespace com { namespace sun { namespace star {
         namespace uno {
@@ -75,8 +75,8 @@ public:
     {
         Data(): javaTypeLibrary(false) {};
 
-        ::std::list< OUString> implementationNames;
-        ::std::vector< ::std::pair< OUString, OUString> >singletons;
+        std::deque< OUString> implementationNames;
+        std::vector< std::pair< OUString, OUString> >singletons;
             // map from singleton names to implementation names
         bool javaTypeLibrary;
     };

@@ -46,14 +46,13 @@ public:
                            sal_uInt16 nPrfx,
                            const OUString& rLName,
                            const css::uno::Reference<css::xforms::XModel2> & xModel );
-    virtual ~XFormsInstanceContext();
 
     // implement SvXMLImportContext & TokenContext methods:
     // We override CreateChildContext, because we want to read
     // arbitrary DOM elements. For the attributes, we use the
     // TokenContext mechanism.
 
-    virtual SvXMLImportContext* CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList >& xAttrList ) override;

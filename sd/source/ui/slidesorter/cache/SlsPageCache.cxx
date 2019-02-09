@@ -20,8 +20,8 @@
 #include <tools/gen.hxx>
 #include "SlsGenericPageCache.hxx"
 #include "SlsRequestFactory.hxx"
-#include "cache/SlsPageCache.hxx"
-#include "model/SlideSorterModel.hxx"
+#include <cache/SlsPageCache.hxx>
+#include <model/SlideSorterModel.hxx>
 
 using namespace ::com::sun::star;
 
@@ -52,14 +52,14 @@ void PageCache::ChangeSize (
     mpImplementation->ChangePreviewSize(rPreviewSize, bDoSuperSampling);
 }
 
-Bitmap PageCache::GetPreviewBitmap (
+BitmapEx PageCache::GetPreviewBitmap (
     const CacheKey aKey,
     const bool bResize)
 {
     return mpImplementation->GetPreviewBitmap(aKey, bResize);
 }
 
-Bitmap PageCache::GetMarkedPreviewBitmap (
+BitmapEx PageCache::GetMarkedPreviewBitmap (
     const CacheKey aKey)
 {
     return mpImplementation->GetMarkedPreviewBitmap(aKey);
@@ -67,14 +67,14 @@ Bitmap PageCache::GetMarkedPreviewBitmap (
 
 void PageCache::SetMarkedPreviewBitmap (
     const CacheKey aKey,
-    const Bitmap& rMarkedBitmap)
+    const BitmapEx& rMarkedBitmap)
 {
     mpImplementation->SetMarkedPreviewBitmap(aKey, rMarkedBitmap);
 }
 
 void PageCache::RequestPreviewBitmap (const CacheKey aKey)
 {
-    return mpImplementation->RequestPreviewBitmap(aKey);
+    return mpImplementation->RequestPreviewBitmap(aKey, true);
 }
 
 void PageCache::InvalidatePreviewBitmap (

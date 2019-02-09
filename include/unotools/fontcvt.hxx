@@ -22,24 +22,17 @@
 
 #include <unotools/unotoolsdllapi.h>
 #include <rtl/ustring.hxx>
-#include <tools/solar.h>
 #include <o3tl/typed_flags_set.hxx>
 
 
 enum class FontToSubsFontFlags
 {
     IMPORT                   = 0x01,
-    EXPORT                   = 0x02,
-    ONLYOLDSOSYMBOLFONTS     = 0x04,
+    EXPORT                   = 0x02
 };
-namespace o3tl
-{
-    template<> struct typed_flags<FontToSubsFontFlags> : is_typed_flags<FontToSubsFontFlags, 0x07> {};
-}
 
 typedef void* FontToSubsFontConverter;
 UNOTOOLS_DLLPUBLIC FontToSubsFontConverter     CreateFontToSubsFontConverter( const OUString& rFontName, FontToSubsFontFlags nFlags );
-UNOTOOLS_DLLPUBLIC void                        DestroyFontToSubsFontConverter( FontToSubsFontConverter hConverter );
 UNOTOOLS_DLLPUBLIC sal_Unicode                 ConvertFontToSubsFontChar( FontToSubsFontConverter hConverter, sal_Unicode c );
 UNOTOOLS_DLLPUBLIC OUString                    GetFontToSubsFontName( FontToSubsFontConverter hConverter );
 
@@ -57,7 +50,7 @@ public:
 };
 
 
-// The converter will allow somewhat dubious mappings to the the windows symbols fonts,
+// The converter will allow somewhat dubious mappings to the windows symbols fonts,
 // that are nevertheless recognizably similar. Even in this mode there will be characters that fail.
 // The users of this might want to make a distinction between failed characters
 // which were inside and those outside the unicode private area.

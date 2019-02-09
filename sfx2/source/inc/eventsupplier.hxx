@@ -27,13 +27,11 @@
 #include <com/sun/star/document/XEventBroadcaster.hpp>
 #include <com/sun/star/document/XDocumentEventListener.hpp>
 #include <com/sun/star/document/XEventsSupplier.hpp>
-#include <com/sun/star/frame/XGlobalEventBroadcaster.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/task/XJobExecutor.hpp>
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/uno/Type.hxx>
 #include <cppuhelper/implbase.hxx>
-#include <comphelper/sequenceashashmap.hxx>
 #include <sfx2/sfxuno.hxx>
 
 #include <cppuhelper/interfacecontainer.hxx>
@@ -59,40 +57,35 @@ class SfxEvents_Impl : public ::cppu::WeakImplHelper< css::container::XNameRepla
 
 public:
                                 SfxEvents_Impl( SfxObjectShell* pShell,
-                                                css::uno::Reference< css::document::XEventBroadcaster > xBroadcaster );
-                               virtual ~SfxEvents_Impl();
+                                                css::uno::Reference< css::document::XEventBroadcaster > const & xBroadcaster );
+                               virtual ~SfxEvents_Impl() override;
 
     //  --- XNameReplace ---
-    virtual void SAL_CALL       replaceByName( const OUString & aName, const css::uno::Any & aElement )
-                                    throw( css::lang::IllegalArgumentException, css::container::NoSuchElementException,
-                                           css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL       replaceByName( const OUString & aName, const css::uno::Any & aElement ) override;
 
     //  --- XNameAccess ( parent of XNameReplace ) ---
-    virtual css::uno::Any SAL_CALL        getByName( const OUString& aName )
-                                    throw( css::container::NoSuchElementException, css::lang::WrappedTargetException,
-                                           css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getElementNames() throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL   hasByName( const OUString& aName ) throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Any SAL_CALL        getByName( const OUString& aName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getElementNames() override;
+    virtual sal_Bool SAL_CALL   hasByName( const OUString& aName ) override;
 
     //  --- XElementAccess ( parent of XNameAccess ) ---
-    virtual css::uno::Type SAL_CALL    getElementType() throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL   hasElements() throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Type SAL_CALL    getElementType() override;
+    virtual sal_Bool SAL_CALL   hasElements() override;
 
     // --- ::document::XEventListener ---
-    virtual void SAL_CALL       notifyEvent( const css::document::EventObject& aEvent )
-                                    throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL       notifyEvent( const css::document::EventObject& aEvent ) override;
 
     // --- ::lang::XEventListener ---
-    virtual void SAL_CALL       disposing( const css::lang::EventObject& Source )
-                                    throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL       disposing( const css::lang::EventObject& Source ) override;
 
-    static SvxMacro*            ConvertToMacro( const css::uno::Any& rElement, SfxObjectShell* pDoc, bool bNormalizeMacro );
+    // convert and normalize
+    static std::unique_ptr<SvxMacro>  ConvertToMacro( const css::uno::Any& rElement, SfxObjectShell* pDoc );
     static void                 NormalizeMacro( const css::uno::Any& rIn, css::uno::Any& rOut, SfxObjectShell* pDoc );
     static void                 NormalizeMacro(
                                     const ::comphelper::NamedValueCollection& i_eventDescriptor,
                                     ::comphelper::NamedValueCollection& o_normalizedDescriptor,
                                     SfxObjectShell* i_document );
-    static void Execute( css::uno::Any& aEventData, const css::document::DocumentEvent& aTrigger, SfxObjectShell* pDoc );
+    static void Execute( css::uno::Any const & aEventData, const css::document::DocumentEvent& aTrigger, SfxObjectShell* pDoc );
 };
 
 #endif

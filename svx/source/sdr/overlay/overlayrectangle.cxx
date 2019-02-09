@@ -37,7 +37,7 @@ namespace sdr
         {
             const basegfx::B2DRange aHatchRange(getBasePosition(), maSecondPosition);
             basegfx::BColor aColor(getBaseColor().getBColor());
-            static double fChange(0.1); // just small optical change, do not make it annoying
+            static const double fChange(0.1); // just small optical change, do not make it annoying
 
             if(mbOverlayState)
             {
@@ -54,10 +54,10 @@ namespace sdr
                 new drawinglayer::primitive2d::OverlayRectanglePrimitive(
                     aHatchRange,
                     aColor,
-                    getTransparence(),
-                    getDiscreteGrow(),
-                    getDiscreteShrink(),
-                    getRotation()));
+                    mfTransparence,
+                    mfDiscreteGrow,
+                    mfDiscreteShrink,
+                    mfRotation));
 
             return drawinglayer::primitive2d::Primitive2DContainer { aReference };
         }
@@ -70,7 +70,6 @@ namespace sdr
             double fDiscreteGrow,
             double fDiscreteShrink,
             double fRotation,
-            sal_uInt64 nBlinkTime,
             bool bAnimate)
         :   OverlayObjectWithBasePosition(rBasePosition, rHatchColor),
             maSecondPosition(rSecondPosition),
@@ -78,7 +77,7 @@ namespace sdr
             mfDiscreteGrow(fDiscreteGrow),
             mfDiscreteShrink(fDiscreteShrink),
             mfRotation(fRotation),
-            mnBlinkTime(impCheckBlinkTimeValueRange(nBlinkTime)),
+            mnBlinkTime(impCheckBlinkTimeValueRange(500)),
             mbOverlayState(false)
         {
             if(Application::GetSettings().GetStyleSettings().GetHighContrastMode())
@@ -109,7 +108,7 @@ namespace sdr
                 }
 
                 // re-insert me as event
-                getOverlayManager()->InsertEvent(this);
+                getOverlayManager()->InsertEvent(*this);
 
                 // register change (after change)
                 objectChange();

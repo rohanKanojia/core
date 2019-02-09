@@ -21,7 +21,7 @@ Autocomplete
 BackColor
 BackColorTransparency
 BackGraphicLocation
-BackGraphicURL
+BackGraphic
 Background
 BackgroundColor
 BasicLibraries
@@ -158,6 +158,7 @@ ExternalLinks
 ExtrapolateBackward
 ExtrapolateForward
 FileFormat
+FillBackground
 FillBitmapMode
 FillBitmapName
 FillBitmapPositionOffsetX
@@ -165,11 +166,12 @@ FillBitmapPositionOffsetY
 FillBitmapRectanglePoint
 FillBitmapSizeX
 FillBitmapSizeY
-FillBitmapURL
+FillBitmap
 FillColor
 FillGradient
 FillGradientName
 FillHatch
+FillHatchName
 FillStyle
 FillTransparence
 FillTransparenceGradient
@@ -201,13 +203,15 @@ GapwidthSequence
 GenerateVbaEvents
 Geometry3D
 GradientName
+HatchName
 Graphic
+GraphicBitmap
 GraphicColorMode
 GraphicCrop
 GraphicSize
-GraphicURL
 GridColor
 GroupInfo
+GroupName
 HScroll
 Handles
 HasAutoShowInfo
@@ -243,7 +247,6 @@ IgnoreBlankCells
 IgnoreCase
 IgnoreLeadingSpaces
 ImagePosition
-ImageURL
 IncludeHiddenCells
 InputMessage
 InputTitle
@@ -262,7 +265,6 @@ IsLoaded
 IsNumbering
 IsOutlineSymbolsSet
 IsPlaceholderDependent
-IsPostRotateAngle
 IsSharedFormula
 IsStartOfNewPage
 IsTextWrapped
@@ -278,6 +280,7 @@ LabelBorderWidth
 LabelPlacement
 LabelPosition
 LabelSeparator
+CustomLabelFields
 LayoutInfo
 LeftBorder
 LeftBorderDistance
@@ -387,6 +390,7 @@ RangeXMaximum
 RangeXMinimum
 RangeYMaximum
 RangeYMinimum
+ReadOnly
 RefAngle
 RefR
 RefX
@@ -527,6 +531,7 @@ TopMargin
 TotalsRow
 Transformation
 TransitionDirection
+TransitionDuration
 TransitionFadeColor
 TransitionSubtype
 TransitionType

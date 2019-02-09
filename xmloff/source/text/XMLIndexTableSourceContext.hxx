@@ -35,10 +35,6 @@ namespace com { namespace sun { namespace star {
  */
 class XMLIndexTableSourceContext : public XMLIndexSourceBaseContext
 {
-    const OUString sCreateFromLabels;
-    const OUString sLabelCategory;
-    const OUString sLabelDisplayType;
-
     OUString sSequence;
     sal_Int16 nDisplayFormat;
 
@@ -55,7 +51,7 @@ public:
         const OUString& rLocalName,
         css::uno::Reference<css::beans::XPropertySet> & rPropSet);
 
-    virtual ~XMLIndexTableSourceContext();
+    virtual ~XMLIndexTableSourceContext() override;
 
 protected:
 
@@ -65,7 +61,7 @@ protected:
 
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext* CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList ) override;

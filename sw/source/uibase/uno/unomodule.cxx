@@ -19,41 +19,31 @@
 
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/frame/DispatchResultState.hpp>
+#include <com/sun/star/frame/Desktop.hpp>
 
-#include "swmodule.hxx"
-#include "swdll.hxx"
-#include "unofreg.hxx"
+#include <swmodule.hxx>
+#include <swdll.hxx>
+#include <unofreg.hxx>
 #include "unomodule.hxx"
 #include <cppuhelper/supportsservice.hxx>
+#include <comphelper/processfactory.hxx>
 #include <sfx2/objface.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/request.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 
 using namespace css;
 
-OUString SAL_CALL SwUnoModule_getImplementationName() throw()
-{
-    return OUString( "com.sun.star.comp.Writer.WriterModule" );
-}
-
-uno::Sequence< OUString > SAL_CALL SwUnoModule_getSupportedServiceNames() throw()
-{
-    uno::Sequence<OUString> aSeq { "com.sun.star.text.ModuleDispatcher" };
-    return aSeq;
-}
-
-uno::Reference< uno::XInterface > SAL_CALL SwUnoModule_createInstance(
-                const uno::Reference< lang::XMultiServiceFactory > &  )
-    throw (css::uno::Exception)
+extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+com_sun_star_comp_Writer_WriterModule_get_implementation(uno::XComponentContext* /*pCtx*/,
+                                                         uno::Sequence<uno::Any> const& /*rSeq*/)
 {
     SolarMutexGuard aGuard;
-    return uno::Reference< uno::XInterface >( dynamic_cast< frame::XDispatch * >(new SwUnoModule), uno::UNO_QUERY );
+    return cppu::acquire(new SwUnoModule);
 }
 
     // XNotifyingDispatch
-void SAL_CALL SwUnoModule::dispatchWithNotification( const util::URL& aURL, const uno::Sequence< beans::PropertyValue >& aArgs, const uno::Reference< frame::XDispatchResultListener >& xListener ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL SwUnoModule::dispatchWithNotification( const util::URL& aURL, const uno::Sequence< beans::PropertyValue >& aArgs, const uno::Reference< frame::XDispatchResultListener >& xListener )
 {
     // there is no guarantee, that we are holded alive during this method!
     // May the outside dispatch container will be updated by a CONTEXT_CHANGED
@@ -70,6 +60,14 @@ void SAL_CALL SwUnoModule::dispatchWithNotification( const util::URL& aURL, cons
     else
     {
         SfxRequest aReq( pSlot, aArgs, SfxCallMode::SYNCHRON, SW_MOD()->GetPool() );
+        SfxAllItemSet aInternalSet( SfxGetpApp()->GetPool() );
+
+        css::uno::Reference<css::frame::XDesktop2> xDesktop = css::frame::Desktop::create(::comphelper::getProcessComponentContext());
+        css::uno::Reference<css::frame::XFrame> xCurrentFrame = xDesktop->getCurrentFrame();
+        if (xCurrentFrame.is()) // an empty set is no problem ... but an empty frame reference can be a problem !
+            aInternalSet.Put(SfxUnoFrameItem(SID_FILLFRAME, xCurrentFrame));
+
+        aReq.SetInternalArgs_Impl(aInternalSet);
         const SfxPoolItem* pResult = SW_MOD()->ExecuteSlot( aReq );
         if ( pResult )
             aState = frame::DispatchResultState::SUCCESS;
@@ -86,7 +84,7 @@ void SAL_CALL SwUnoModule::dispatchWithNotification( const util::URL& aURL, cons
 }
 
     // XDispatch
-void SAL_CALL SwUnoModule::dispatch( const util::URL& aURL, const uno::Sequence< beans::PropertyValue >& aArgs ) throw( uno::RuntimeException, std::exception )
+void SAL_CALL SwUnoModule::dispatch( const util::URL& aURL, const uno::Sequence< beans::PropertyValue >& aArgs )
 {
     dispatchWithNotification(aURL, aArgs, uno::Reference< frame::XDispatchResultListener >());
 }
@@ -94,18 +92,17 @@ void SAL_CALL SwUnoModule::dispatch( const util::URL& aURL, const uno::Sequence<
 void SAL_CALL SwUnoModule::addStatusListener(
     const uno::Reference< frame::XStatusListener > & /*xControl*/,
     const util::URL& /*aURL*/)
-    throw( uno::RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL SwUnoModule::removeStatusListener(
     const uno::Reference< frame::XStatusListener > & /*xControl*/,
-    const util::URL& /*aURL*/) throw( uno::RuntimeException, std::exception )
+    const util::URL& /*aURL*/)
 {
 }
 
 uno::Sequence< uno::Reference< frame::XDispatch > > SAL_CALL SwUnoModule::queryDispatches(
-    const uno::Sequence< frame::DispatchDescriptor >& seqDescripts ) throw( uno::RuntimeException, std::exception )
+    const uno::Sequence< frame::DispatchDescriptor >& seqDescripts )
 {
     sal_Int32 nCount = seqDescripts.getLength();
     uno::Sequence< uno::Reference< frame::XDispatch > > lDispatcher( nCount );
@@ -123,7 +120,7 @@ uno::Sequence< uno::Reference< frame::XDispatch > > SAL_CALL SwUnoModule::queryD
 // XDispatchProvider
 uno::Reference< frame::XDispatch > SAL_CALL SwUnoModule::queryDispatch(
     const util::URL& aURL, const OUString& /*sTargetFrameName*/,
-    sal_Int32 /*eSearchFlags*/    ) throw( uno::RuntimeException, std::exception )
+    sal_Int32 /*eSearchFlags*/    )
 {
     uno::Reference< frame::XDispatch > xReturn;
 
@@ -137,19 +134,20 @@ uno::Reference< frame::XDispatch > SAL_CALL SwUnoModule::queryDispatch(
 }
 
 // XServiceInfo
-OUString SAL_CALL SwUnoModule::getImplementationName(  ) throw(uno::RuntimeException, std::exception)
+OUString SAL_CALL SwUnoModule::getImplementationName(  )
 {
-    return SwUnoModule_getImplementationName();
+    return OUString( "com.sun.star.comp.Writer.WriterModule" );
 }
 
-sal_Bool SAL_CALL SwUnoModule::supportsService( const OUString& sServiceName ) throw(uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL SwUnoModule::supportsService( const OUString& sServiceName )
 {
     return cppu::supportsService(this, sServiceName);
 }
 
-uno::Sequence< OUString > SAL_CALL SwUnoModule::getSupportedServiceNames(  ) throw(uno::RuntimeException, std::exception)
+uno::Sequence< OUString > SAL_CALL SwUnoModule::getSupportedServiceNames(  )
 {
-    return SwUnoModule_getSupportedServiceNames();
+    uno::Sequence<OUString> aSeq { "com.sun.star.text.ModuleDispatcher" };
+    return aSeq;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

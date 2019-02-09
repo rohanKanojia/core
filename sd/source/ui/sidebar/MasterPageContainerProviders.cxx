@@ -19,19 +19,19 @@
 
 #include "MasterPageContainerProviders.hxx"
 
-#include "DrawDocShell.hxx"
-#include "drawdoc.hxx"
-#include "PreviewRenderer.hxx"
-#include <comphelper/processfactory.hxx>
+#include <DrawDocShell.hxx>
+#include <drawdoc.hxx>
+#include <sdpage.hxx>
+#include <PreviewRenderer.hxx>
+#include <svl/eitem.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/sfxsids.hrc>
 #include <sfx2/thumbnailview.hxx>
-#include <unotools/ucbstreamhelper.hxx>
 #include <vcl/image.hxx>
-#include <vcl/pngread.hxx>
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/embed/StorageFactory.hpp>
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -57,8 +57,7 @@ Image PagePreviewProvider::operator () (
         // object.
         aPreview = rRenderer.RenderPage(
             pPage,
-            nWidth,
-            OUString());
+            nWidth);
     }
 
     return aPreview;
@@ -82,15 +81,10 @@ TemplatePreviewProvider::TemplatePreviewProvider (const OUString& rsURL)
 }
 
 Image TemplatePreviewProvider::operator() (
-    int nWidth,
-    SdPage* pPage,
-    ::sd::PreviewRenderer& rRenderer)
+    int,
+    SdPage*,
+    ::sd::PreviewRenderer&)
 {
-    // Unused parameters.
-    (void)nWidth;
-    (void)pPage;
-    (void)rRenderer;
-
     return Image(ThumbnailView::readThumbnail(msURL));
 }
 
@@ -112,11 +106,8 @@ TemplatePageObjectProvider::TemplatePageObjectProvider (const OUString& rsURL)
 {
 }
 
-SdPage* TemplatePageObjectProvider::operator() (SdDrawDocument* pContainerDocument)
+SdPage* TemplatePageObjectProvider::operator() (SdDrawDocument*)
 {
-    // Unused parameters.
-    (void)pContainerDocument;
-
     SdPage* pPage = nullptr;
 
     mxDocumentShell = nullptr;
@@ -130,7 +121,7 @@ SdPage* TemplatePageObjectProvider::operator() (SdDrawDocument* pContainerDocume
             SdDrawDocument* pDocument = pDocumentShell->GetDoc();
             if (pDocument != nullptr)
             {
-                pPage = pDocument->GetMasterSdPage(0, PK_STANDARD);
+                pPage = pDocument->GetMasterSdPage(0, PageKind::Standard);
                 // In order to make the newly loaded master page deletable
                 // when copied into documents it is marked as no "precious".
                 // When it is modified then it is marked as "precious".
@@ -141,7 +132,7 @@ SdPage* TemplatePageObjectProvider::operator() (SdDrawDocument* pContainerDocume
     }
     catch (const uno::RuntimeException&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("sd");
         pPage = nullptr;
     }
 
@@ -151,10 +142,10 @@ SdPage* TemplatePageObjectProvider::operator() (SdDrawDocument* pContainerDocume
 ::sd::DrawDocShell* TemplatePageObjectProvider::LoadDocument (const OUString& sFileName)
 {
     SfxApplication* pSfxApp = SfxGetpApp();
-    SfxItemSet* pSet = new SfxAllItemSet (pSfxApp->GetPool());
+    std::unique_ptr<SfxItemSet> pSet(new SfxAllItemSet (pSfxApp->GetPool()));
     pSet->Put (SfxBoolItem (SID_TEMPLATE, true));
     pSet->Put (SfxBoolItem (SID_PREVIEW, true));
-    if (pSfxApp->LoadTemplate (mxDocumentShell, sFileName, pSet))
+    if (pSfxApp->LoadTemplate (mxDocumentShell, sFileName, std::move(pSet)))
     {
         mxDocumentShell = nullptr;
     }
@@ -178,15 +169,14 @@ SdPage* DefaultPageObjectProvider::operator () (SdDrawDocument* pContainerDocume
     SdPage* pLocalMasterPage = nullptr;
     if (pContainerDocument != nullptr)
     {
-        sal_Int32 nIndex (0);
-        SdPage* pLocalSlide = pContainerDocument->GetSdPage((sal_uInt16)nIndex, PK_STANDARD);
+        SdPage* pLocalSlide = pContainerDocument->GetSdPage(0, PageKind::Standard);
         if (pLocalSlide!=nullptr && pLocalSlide->TRG_HasMasterPage())
             pLocalMasterPage = dynamic_cast<SdPage*>(&pLocalSlide->TRG_GetMasterPage());
     }
 
     if (pLocalMasterPage == nullptr)
     {
-        DBG_ASSERT(false, "can not create master page for slide");
+        SAL_WARN( "sd", "can not create master page for slide");
     }
 
     return pLocalMasterPage;
@@ -204,10 +194,8 @@ ExistingPageProvider::ExistingPageProvider (SdPage* pPage)
 {
 }
 
-SdPage* ExistingPageProvider::operator() (SdDrawDocument* pDocument)
+SdPage* ExistingPageProvider::operator() (SdDrawDocument*)
 {
-    (void)pDocument; // Unused parameter.
-
     return mpPage;
 }
 

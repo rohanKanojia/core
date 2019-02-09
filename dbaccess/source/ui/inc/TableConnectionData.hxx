@@ -45,14 +45,11 @@ namespace dbaui
 
         void    Init();
 
-        virtual OConnectionLineDataRef CreateLineDataObj();
-
         OTableConnectionData& operator=( const OTableConnectionData& rConnData );
     public:
         OTableConnectionData();
         OTableConnectionData( const TTableWindowData::value_type& _pReferencingTable,
-                              const TTableWindowData::value_type& _pReferencedTable,
-                              const OUString& rConnName = OUString() );
+                              const TTableWindowData::value_type& _pReferencedTable );
         OTableConnectionData( const OTableConnectionData& rConnData );
         virtual ~OTableConnectionData();
 
@@ -88,10 +85,8 @@ namespace dbaui
         const TTableWindowData::value_type& getReferencingTable() const { return m_pReferencingTable; }
         const TTableWindowData::value_type& getReferencedTable()  const { return m_pReferencedTable;  }
 
-        inline void setReferencingTable(const TTableWindowData::value_type& _pTable) { m_pReferencingTable = _pTable; }
-        inline void setReferencedTable(const TTableWindowData::value_type& _pTable)  { m_pReferencedTable  = _pTable; }
-
-        const OUString& GetConnName() const { return m_aConnName; }
+        void setReferencingTable(const TTableWindowData::value_type& _pTable) { m_pReferencingTable = _pTable; }
+        void setReferencedTable(const TTableWindowData::value_type& _pTable)  { m_pReferencedTable  = _pTable; }
 
         /** Update create a new connection
 
@@ -100,7 +95,7 @@ namespace dbaui
         virtual bool Update(){ return true; }
     };
 
-    typedef ::std::vector< ::std::shared_ptr<OTableConnectionData> >  TTableConnectionData;
+    typedef std::vector< std::shared_ptr<OTableConnectionData> >  TTableConnectionData;
 
 }
 #endif

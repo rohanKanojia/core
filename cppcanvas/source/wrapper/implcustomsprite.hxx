@@ -23,8 +23,8 @@
 #include <sal/types.h>
 #include <cppcanvas/canvas.hxx>
 #include <cppcanvas/customsprite.hxx>
-#include <implsprite.hxx>
-#include <implspritecanvas.hxx>
+#include "implsprite.hxx"
+#include "implspritecanvas.hxx"
 
 namespace cppcanvas
 {
@@ -39,7 +39,7 @@ namespace cppcanvas
                               const css::uno::Reference<
                                       css::rendering::XCustomSprite >&                    rSprite,
                               const ImplSpriteCanvas::TransformationArbiterSharedPtr&     rTransformArbiter );
-            virtual ~ImplCustomSprite();
+            virtual ~ImplCustomSprite() override;
 
             virtual CanvasSharedPtr getContentCanvas() const override;
 

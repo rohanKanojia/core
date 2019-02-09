@@ -17,14 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fmexch.hxx"
+#include <fmexch.hxx>
 
 #include <sot/storage.hxx>
 #include <svl/itempool.hxx>
 
 #include <sot/formats.hxx>
-#include <svtools/treelistbox.hxx>
-#include "svtools/treelistentry.hxx"
+#include <vcl/treelistbox.hxx>
+#include <vcl/treelistentry.hxx>
+#include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
 
 
@@ -66,14 +67,14 @@ namespace svxform
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("svx");
             }
             m_bClipboardOwner = false;
         }
     }
 
 
-    void SAL_CALL OLocalExchange::lostOwnership( const Reference< clipboard::XClipboard >& _rxClipboard, const Reference< XTransferable >& _rxTrans ) throw(RuntimeException, std::exception)
+    void SAL_CALL OLocalExchange::lostOwnership( const Reference< clipboard::XClipboard >& _rxClipboard, const Reference< XTransferable >& _rxTrans )
     {
         TransferableHelper::implCallOwnLostOwnership( _rxClipboard, _rxTrans );
         m_bClipboardOwner = false;
@@ -98,13 +99,8 @@ namespace svxform
 
     bool OLocalExchange::hasFormat( const DataFlavorExVector& _rFormats, SotClipboardFormatId _nFormatId )
     {
-        DataFlavorExVector::const_iterator aSearch;
-
-        for ( aSearch = _rFormats.begin(); aSearch != _rFormats.end(); ++aSearch )
-            if ( aSearch->mnSotId == _nFormatId )
-                break;
-
-        return aSearch != _rFormats.end();
+        return std::any_of(_rFormats.begin(), _rFormats.end(),
+            [&_nFormatId](const DataFlavorEx& rFormat) { return rFormat.mnSotId == _nFormatId; });
     }
 
 
@@ -210,7 +206,7 @@ namespace svxform
     }
 
 
-    void OControlTransferData::buildPathFormat(SvTreeListBox* pTreeBox, SvTreeListEntry* pRoot)
+    void OControlTransferData::buildPathFormat(SvTreeListBox const * pTreeBox, SvTreeListEntry const * pRoot)
     {
         m_aControlPaths.realloc(0);
 
@@ -220,14 +216,10 @@ namespace svxform
 
         m_aControlPaths.realloc(nEntryCount);
         css::uno::Sequence<sal_uInt32>* pAllPaths = m_aControlPaths.getArray();
-        for (   ListBoxEntrySet::const_iterator loop = m_aSelectedEntries.begin();
-                loop != m_aSelectedEntries.end();
-                ++loop, ++pAllPaths
-            )
+        for (SvTreeListEntry* pCurrentEntry : m_aSelectedEntries)
         {
-            // erst mal sammeln wir den Pfad in einem Array ein
+            // first we collect the path in an array
             ::std::vector< sal_uInt32 > aCurrentPath;
-            SvTreeListEntry* pCurrentEntry = *loop;
 
             SvTreeListEntry* pLoop = pCurrentEntry;
             while (pLoop != pRoot)
@@ -235,10 +227,11 @@ namespace svxform
                 aCurrentPath.push_back(pLoop->GetChildListPos());
                 pLoop = pTreeBox->GetParent(pLoop);
                 DBG_ASSERT((pLoop != nullptr) || (pRoot == nullptr), "OControlTransferData::buildPathFormat: invalid root or entry !");
-                    // pLoop == NULL heisst, dass ich am oberen Ende angelangt bin, dann sollte das Ganze abbrechen, was nur bei pRoot == NULL der Fall sein wird
+                    // pLoop == NULL means that I am at the top end, then the whole
+                    // thing should abort, which will only be the case with pRoot == NULL
             }
 
-            // dann koennen wir ihn in die css::uno::Sequence uebertragen
+            // then we can transfer it into css::uno::Sequence
             Sequence<sal_uInt32>& rCurrentPath = *pAllPaths;
             sal_Int32 nDepth = aCurrentPath.size();
 
@@ -247,11 +240,12 @@ namespace svxform
             sal_Int32 j,k;
             for (j = nDepth - 1, k = 0; k<nDepth; --j, ++k)
                 pSeq[j] = aCurrentPath[k];
+            ++pAllPaths;
         }
     }
 
 
-    void OControlTransferData::buildListFromPath(SvTreeListBox* pTreeBox, SvTreeListEntry* pRoot)
+    void OControlTransferData::buildListFromPath(SvTreeListBox const * pTreeBox, SvTreeListEntry* pRoot)
     {
         ListBoxEntrySet aEmpty;
         m_aSelectedEntries.swap( aEmpty );
@@ -287,12 +281,12 @@ namespace svxform
             aCompleteInfo.getArray()[ 0 ] <<= m_xFormsRoot;
             aCompleteInfo.getArray()[ 1 ] <<= m_aControlPaths;
 
-            SetAny( makeAny( aCompleteInfo ), _rFlavor );
+            SetAny( makeAny( aCompleteInfo ) );
         }
         else if ( getHiddenControlModelsFormatId() == nFormatId )
         {
             // just need to transfer the models
-            SetAny( makeAny( m_aHiddenControlModels ), _rFlavor );
+            SetAny( makeAny( m_aHiddenControlModels ) );
         }
         else
             return OLocalExchange::GetData(_rFlavor, rDestDoc);
@@ -316,36 +310,27 @@ namespace svxform
 
     SotClipboardFormatId OControlExchange::getControlPathFormatId()
     {
-        static SotClipboardFormatId s_nFormat = static_cast<SotClipboardFormatId>(-1);
-        if (static_cast<SotClipboardFormatId>(-1) == s_nFormat)
-        {
-            s_nFormat = SotExchange::RegisterFormatName("application/x-openoffice;windows_formatname=\"svxform.ControlPathExchange\"");
-            DBG_ASSERT(static_cast<SotClipboardFormatId>(-1) != s_nFormat, "OControlExchange::getControlPathFormatId: bad exchange id!");
-        }
+        static SotClipboardFormatId s_nFormat =
+            SotExchange::RegisterFormatName("application/x-openoffice;windows_formatname=\"svxform.ControlPathExchange\"");
+        DBG_ASSERT(static_cast<SotClipboardFormatId>(-1) != s_nFormat, "OControlExchange::getControlPathFormatId: bad exchange id!");
         return s_nFormat;
     }
 
 
     SotClipboardFormatId OControlExchange::getHiddenControlModelsFormatId()
     {
-        static SotClipboardFormatId s_nFormat = static_cast<SotClipboardFormatId>(-1);
-        if (static_cast<SotClipboardFormatId>(-1) == s_nFormat)
-        {
-            s_nFormat = SotExchange::RegisterFormatName("application/x-openoffice;windows_formatname=\"svxform.HiddenControlModelsExchange\"");
-            DBG_ASSERT(static_cast<SotClipboardFormatId>(-1) != s_nFormat, "OControlExchange::getHiddenControlModelsFormatId: bad exchange id!");
-        }
+        static SotClipboardFormatId s_nFormat =
+            SotExchange::RegisterFormatName("application/x-openoffice;windows_formatname=\"svxform.HiddenControlModelsExchange\"");
+        DBG_ASSERT(static_cast<SotClipboardFormatId>(-1) != s_nFormat, "OControlExchange::getHiddenControlModelsFormatId: bad exchange id!");
         return s_nFormat;
     }
 
 
     SotClipboardFormatId OControlExchange::getFieldExchangeFormatId()
     {
-        static SotClipboardFormatId s_nFormat = static_cast<SotClipboardFormatId>(-1);
-        if (static_cast<SotClipboardFormatId>(-1) == s_nFormat)
-        {
-            s_nFormat = SotExchange::RegisterFormatName("application/x-openoffice;windows_formatname=\"svxform.FieldNameExchange\"");
-            DBG_ASSERT(static_cast<SotClipboardFormatId>(-1) != s_nFormat, "OControlExchange::getFieldExchangeFormatId: bad exchange id!");
-        }
+        static SotClipboardFormatId s_nFormat =
+            SotExchange::RegisterFormatName("application/x-openoffice;windows_formatname=\"svxform.FieldNameExchange\"");
+        DBG_ASSERT(static_cast<SotClipboardFormatId>(-1) != s_nFormat, "OControlExchange::getFieldExchangeFormatId: bad exchange id!");
         return s_nFormat;
     }
 
@@ -359,7 +344,6 @@ namespace svxform
 
     OLocalExchangeHelper::OLocalExchangeHelper(vcl::Window* _pDragSource)
         :m_pDragSource(_pDragSource)
-        ,m_pTransferable(nullptr)
     {
     }
 
@@ -372,36 +356,34 @@ namespace svxform
 
     void OLocalExchangeHelper::startDrag( sal_Int8 nDragSourceActions )
     {
-        DBG_ASSERT(m_pTransferable, "OLocalExchangeHelper::startDrag: not prepared!");
-        m_pTransferable->startDrag( m_pDragSource, nDragSourceActions, OLocalExchange::GrantAccess() );
+        DBG_ASSERT(m_xTransferable.is(), "OLocalExchangeHelper::startDrag: not prepared!");
+        m_xTransferable->startDrag( m_pDragSource, nDragSourceActions, OLocalExchange::GrantAccess() );
     }
 
 
     void OLocalExchangeHelper::copyToClipboard( ) const
     {
-        DBG_ASSERT( m_pTransferable, "OLocalExchangeHelper::copyToClipboard: not prepared!" );
-        m_pTransferable->copyToClipboard( m_pDragSource, OLocalExchange::GrantAccess() );
+        DBG_ASSERT( m_xTransferable.is(), "OLocalExchangeHelper::copyToClipboard: not prepared!" );
+        m_xTransferable->copyToClipboard( m_pDragSource, OLocalExchange::GrantAccess() );
     }
 
 
     void OLocalExchangeHelper::implReset()
     {
-        if (m_pTransferable)
+        if (m_xTransferable.is())
         {
-            m_pTransferable->setClipboardListener( Link<OLocalExchange&,void>() );
-            m_pTransferable->release();
-            m_pTransferable = nullptr;
+            m_xTransferable->setClipboardListener( Link<OLocalExchange&,void>() );
+            m_xTransferable.clear();
         }
     }
 
 
     void OLocalExchangeHelper::prepareDrag( )
     {
-        DBG_ASSERT(!m_pTransferable || !m_pTransferable->isDragging(), "OLocalExchangeHelper::prepareDrag: recursive DnD?");
+        DBG_ASSERT(!m_xTransferable.is() || !m_xTransferable->isDragging(), "OLocalExchangeHelper::prepareDrag: recursive DnD?");
 
         implReset();
-        m_pTransferable = createExchange();
-        m_pTransferable->acquire();
+        m_xTransferable = createExchange();
     }
 
 

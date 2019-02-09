@@ -16,17 +16,17 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "SectionView.hxx"
-#include "DesignView.hxx"
+#include <SectionView.hxx>
+#include <DesignView.hxx>
 #include <RptPage.hxx>
 #include <RptObject.hxx>
 #include <RptDef.hxx>
 #include <svx/svxids.hrc>
 #include <svx/svddrgmt.hxx>
 #include <vcl/scrbar.hxx>
-#include "ReportSection.hxx"
-#include "ReportWindow.hxx"
-#include "uistrings.hrc"
+#include <ReportSection.hxx>
+#include <ReportWindow.hxx>
+#include <strings.hxx>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
 
@@ -34,9 +34,11 @@ namespace rptui
 {
     using namespace ::com::sun::star;
 
-
-OSectionView::OSectionView( SdrModel* pModel, OReportSection* _pSectionWindow, OReportWindow* pEditor )
-    :SdrView( pModel, _pSectionWindow )
+OSectionView::OSectionView(
+    SdrModel& rSdrModel,
+    OReportSection* _pSectionWindow,
+    OReportWindow* pEditor)
+:   SdrView(rSdrModel, _pSectionWindow)
     ,m_pReportWindow( pEditor )
     ,m_pSectionWindow(_pSectionWindow)
 {
@@ -67,13 +69,13 @@ void OSectionView::MarkListHasChanged()
 }
 
 
-void OSectionView::MakeVisible( const Rectangle& rRect, vcl::Window& rWin )
+void OSectionView::MakeVisible( const tools::Rectangle& rRect, vcl::Window& rWin )
 {
     // visible area
     MapMode aMap( rWin.GetMapMode() );
     const Point aOrg( aMap.GetOrigin() );
     const Size aVisSize( rWin.GetOutputSize() );
-    const Rectangle aVisRect( Point(-aOrg.X(),-aOrg.Y()), aVisSize );
+    const tools::Rectangle aVisRect( Point(-aOrg.X(),-aOrg.Y()), aVisSize );
 
     // check, if rectangle is inside visible area
     if ( !aVisRect.IsInside( rRect ) )
@@ -132,9 +134,9 @@ void OSectionView::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
         const SdrObject* pObj = pSdrHint->GetObject();
         const SdrHintKind eKind = pSdrHint->GetKind();
         // check for change of selected object
-        if(HINT_OBJCHG == eKind && pObj && IsObjMarked(const_cast<SdrObject*>(pObj)))
+        if(SdrHintKind::ObjectChange == eKind && pObj && IsObjMarked(pObj))
             AdjustMarkHdl();
-        else if ( eKind == HINT_OBJREMOVED )
+        else if ( eKind == SdrHintKind::ObjectRemoved )
             ObjectRemovedInAliveMode(pObj);
     }
 }
@@ -174,7 +176,7 @@ void OSectionView::SetMarkedToLayer( SdrLayerID _nLayerNo )
             SdrObject* pObj = rMark.GetMark(i)->GetMarkedSdrObj();
             if ( dynamic_cast< const OCustomShape *>( pObj ) !=  nullptr )
             {
-                AddUndo( new SdrUndoObjectLayerChange( *pObj, pObj->GetLayer(), _nLayerNo) );
+                AddUndo( std::make_unique<SdrUndoObjectLayerChange>( *pObj, pObj->GetLayer(), _nLayerNo) );
                 pObj->SetLayer( _nLayerNo );
                 OObjectBase& rBaseObj = dynamic_cast<OObjectBase&>(*pObj);
                 try
@@ -183,7 +185,7 @@ void OSectionView::SetMarkedToLayer( SdrLayerID _nLayerNo )
                 }
                 catch(const uno::Exception&)
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    DBG_UNHANDLED_EXCEPTION("reportdesign");
                 }
             }
         }
@@ -229,23 +231,20 @@ bool OSectionView::IsDragResize() const
 }
 
 
-short OSectionView::GetLayerIdOfMarkedObjects() const
+SdrLayerID OSectionView::GetLayerIdOfMarkedObjects() const
 {
-    short nRet = SHRT_MAX;
+    SdrLayerID nRet = SDRLAYER_NOTFOUND;
     const SdrMarkList &rMrkList = GetMarkedObjectList();
     for ( size_t i = 0; i < rMrkList.GetMarkCount(); ++i )
     {
         const SdrObject *pObj = rMrkList.GetMark( i )->GetMarkedSdrObj();
-        if ( nRet == SHRT_MAX )
+        if ( nRet == SDRLAYER_NOTFOUND )
             nRet = pObj->GetLayer();
         else if ( nRet != pObj->GetLayer() )
         {
-            nRet = -1;
             break;
         }
     }
-    if ( nRet == SHRT_MAX )
-        nRet = -1;
     return nRet;
 }
 

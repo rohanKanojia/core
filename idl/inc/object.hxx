@@ -20,8 +20,8 @@
 #ifndef INCLUDED_IDL_INC_OBJECT_HXX
 #define INCLUDED_IDL_INC_OBJECT_HXX
 
-#include <types.hxx>
-#include <slot.hxx>
+#include "types.hxx"
+#include "slot.hxx"
 #include <vector>
 
 class SvMetaClass;
@@ -43,7 +43,7 @@ public:
     void            SetClass( SvMetaClass * pClass )
                     { xClass = pClass; }
     SvMetaClass *   GetClass() const
-                    { return xClass; }
+                    { return xClass.get(); }
 };
 
 
@@ -59,12 +59,12 @@ private:
 
     static void             WriteSlotStubs( const OString& rShellName,
                                         SvSlotElementList & rSlotList,
-                                        ByteStringList & rList,
+                                        std::vector<OString> & rList,
                                         SvStream & rOutStm );
     static sal_uInt16       WriteSlotParamArray( SvIdlDataBase & rBase,
                                             SvSlotElementList & rSlotList,
                                             SvStream & rOutStm );
-    static sal_uInt16       WriteSlots( const OString& rShellName, sal_uInt16 nCount,
+    static sal_uInt16       WriteSlots( const OString& rShellName,
                                     SvSlotElementList & rSlotList,
                                     SvIdlDataBase & rBase,
                                     SvStream & rOutStm );

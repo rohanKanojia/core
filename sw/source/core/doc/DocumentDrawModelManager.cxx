@@ -29,7 +29,8 @@
 #include <wrtsh.hxx>
 #include <swtypes.hxx>
 #include <ndtxt.hxx>
-#include <swhints.hxx>
+#include <svl/hint.hxx>
+#include <svx/svdundo.hxx>
 #include <viewsh.hxx>
 #include <view.hxx>
 #include <drawdoc.hxx>
@@ -43,20 +44,18 @@
 #include <svx/svdpage.hxx>
 #include <svx/svdpagv.hxx>
 #include <svx/svdotext.hxx>
-#include <svl/smplhint.hxx>
 #include <svl/srchitem.hxx>
 #include <tools/link.hxx>
 #include <unotools/configmgr.hxx>
+#include <sal/log.hxx>
 
 class SdrOutliner;
-class XSpellChecker1;
 
 namespace sw
 {
 
 DocumentDrawModelManager::DocumentDrawModelManager(SwDoc& i_rSwdoc)
     : m_rDoc(i_rSwdoc)
-    , mpDrawModel(nullptr)
     , mnHeaven(0)
     , mnHell(0)
     , mnControls(0)
@@ -76,39 +75,12 @@ void DocumentDrawModelManager::InitDrawModel()
     if ( mpDrawModel )
         ReleaseDrawModel();
 
-//UUUU
-//  // Setup DrawPool and EditEnginePool. Ownership is ours and only gets passed
-//  // to the Drawing.
-//  // The pools are destroyed in the ReleaseDrawModel.
-//  // for loading the drawing items. This must be loaded without RefCounts!
-//  SfxItemPool *pSdrPool = new SdrItemPool( &GetAttrPool() );
-//  // change DefaultItems for the SdrEdgeObj distance items to TWIPS.
-//  if(pSdrPool)
-//  {
-//      const long nDefEdgeDist = ((500 * 72) / 127); // 1/100th mm in twips
-//      pSdrPool->SetPoolDefaultItem(SdrEdgeNode1HorzDistItem(nDefEdgeDist));
-//      pSdrPool->SetPoolDefaultItem(SdrEdgeNode1VertDistItem(nDefEdgeDist));
-//      pSdrPool->SetPoolDefaultItem(SdrEdgeNode2HorzDistItem(nDefEdgeDist));
-//      pSdrPool->SetPoolDefaultItem(SdrEdgeNode2VertDistItem(nDefEdgeDist));
-//
-//      // #i33700#
-//      // Set shadow distance defaults as PoolDefaultItems. Details see bug.
-//      pSdrPool->SetPoolDefaultItem(makeSdrShadowXDistItem((300 * 72) / 127));
-//      pSdrPool->SetPoolDefaultItem(makeSdrShadowYDistItem((300 * 72) / 127));
-//  }
-//  SfxItemPool *pEEgPool = EditEngine::CreatePool( false );
-//  pSdrPool->SetSecondaryPool( pEEgPool );
-//   if ( !GetAttrPool().GetFrozenIdRanges () )
-//      GetAttrPool().FreezeIdRanges();
-//  else
-//      pSdrPool->FreezeIdRanges();
-
     // set FontHeight pool defaults without changing static SdrEngineDefaults
     m_rDoc.GetAttrPool().SetPoolDefaultItem(SvxFontHeightItem( 240, 100, EE_CHAR_FONTHEIGHT ));
 
     SAL_INFO( "sw.doc", "before create DrawDocument" );
     // The document owns the SwDrawModel. We always have two layers and one page.
-    mpDrawModel = new SwDrawModel( &m_rDoc );
+    mpDrawModel.reset( new SwDrawModel( &m_rDoc ) );
 
     mpDrawModel->EnableUndo( m_rDoc.GetIDocumentUndoRedo().DoesUndo() );
 
@@ -121,6 +93,7 @@ void DocumentDrawModelManager::InitDrawModel()
 
     sLayerNm = "Controls";
     mnControls = mpDrawModel->GetLayerAdmin().NewLayer( sLayerNm )->GetID();
+    mpDrawModel->GetLayerAdmin().SetControlLayerName(sLayerNm);
 
     // add invisible layers corresponding to the visible ones.
     {
@@ -138,7 +111,7 @@ void DocumentDrawModelManager::InitDrawModel()
     mpDrawModel->InsertPage( pMasterPage );
     SAL_INFO( "sw.doc", "after create DrawDocument" );
     SdrOutliner& rOutliner = mpDrawModel->GetDrawOutliner();
-    if (!utl::ConfigManager::IsAvoidConfig())
+    if (!utl::ConfigManager::IsFuzzing())
     {
         SAL_INFO( "sw.doc", "before create Spellchecker/Hyphenator" );
         css::uno::Reference< css::linguistic2::XSpellChecker1 > xSpell = ::GetSpellChecker();
@@ -159,7 +132,7 @@ void DocumentDrawModelManager::InitDrawModel()
     if ( pRefDev )
         mpDrawModel->SetRefDevice( pRefDev );
 
-    mpDrawModel->SetNotifyUndoActionHdl( LINK( &m_rDoc, SwDoc, AddDrawUndo ));
+    mpDrawModel->SetNotifyUndoActionHdl( std::bind( &SwDoc::AddDrawUndo, &m_rDoc, std::placeholders::_1 ));
     SwViewShell* const pSh = m_rDoc.getIDocumentLayoutAccess().GetCurrentViewShell();
     if ( pSh )
     {
@@ -174,7 +147,7 @@ void DocumentDrawModelManager::InitDrawModel()
                 // mpDrawModel->InsertPage( pDrawPage );
                 SdrPage* pDrawPage = pMasterPage;
                 pRoot->SetDrawPage( pDrawPage );
-                pDrawPage->SetSize( pRoot->Frame().SSize() );
+                pDrawPage->SetSize( pRoot->getFrameArea().SSize() );
             }
         }
     }
@@ -183,40 +156,24 @@ void DocumentDrawModelManager::InitDrawModel()
 
 void DocumentDrawModelManager::ReleaseDrawModel()
 {
-    if ( mpDrawModel )
-    {
-        // !! Also maintain the code in the sw3io for inserting documents!!
-
-        delete mpDrawModel; mpDrawModel = nullptr;
-//UUUU
-//      SfxItemPool *pSdrPool = GetAttrPool().GetSecondaryPool();
-//
-//      OSL_ENSURE( pSdrPool, "missing pool" );
-//      SfxItemPool *pEEgPool = pSdrPool->GetSecondaryPool();
-//      OSL_ENSURE( !pEEgPool->GetSecondaryPool(), "I don't accept additional pools");
-//      pSdrPool->Delete();                 // First have the items destroyed,
-//                                          // then destroy the chain!
-//      GetAttrPool().SetSecondaryPool( 0 );    // This one's a must!
-//      pSdrPool->SetSecondaryPool( 0 );    // That one's safer
-//      SfxItemPool::Free(pSdrPool);
-//      SfxItemPool::Free(pEEgPool);
-    }
+    // !! Also maintain the code in the sw3io for inserting documents!!
+    mpDrawModel.reset();
 }
 
 
 const SwDrawModel* DocumentDrawModelManager::GetDrawModel() const
 {
-    return mpDrawModel;
+    return mpDrawModel.get();
 }
 
 SwDrawModel* DocumentDrawModelManager::GetDrawModel()
 {
-    return mpDrawModel;
+    return mpDrawModel.get();
 }
 
-SwDrawModel* DocumentDrawModelManager::_MakeDrawModel()
+SwDrawModel* DocumentDrawModelManager::MakeDrawModel_()
 {
-    OSL_ENSURE( !mpDrawModel, "_MakeDrawModel: Why?" );
+    OSL_ENSURE( !mpDrawModel, "MakeDrawModel_: Why?" );
     InitDrawModel();
     SwViewShell* const pSh = m_rDoc.getIDocumentLayoutAccess().GetCurrentViewShell();
     if ( pSh )
@@ -227,16 +184,16 @@ SwDrawModel* DocumentDrawModelManager::_MakeDrawModel()
         // Broadcast, so that the FormShell can be connected to the DrawView
         if( m_rDoc.GetDocShell() )
         {
-            SfxSimpleHint aHint( SW_BROADCAST_DRAWVIEWS_CREATED );
+            SfxHint aHint( SfxHintId::SwDrawViewsCreated );
             m_rDoc.GetDocShell()->Broadcast( aHint );
         }
     }
-    return mpDrawModel;
+    return mpDrawModel.get();
 }
 
 SwDrawModel* DocumentDrawModelManager::GetOrCreateDrawModel()
 {
-    return GetDrawModel() ? GetDrawModel() : _MakeDrawModel();
+    return GetDrawModel() ? GetDrawModel() : MakeDrawModel_();
 }
 
 SdrLayerID DocumentDrawModelManager::GetHeavenId() const
@@ -282,7 +239,7 @@ void DocumentDrawModelManager::NotifyInvisibleLayers( SdrPageView& _rSdrPageView
     _rSdrPageView.SetLayerVisible( sLayerNm, false );
 }
 
-bool DocumentDrawModelManager::IsVisibleLayerId( const SdrLayerID& _nLayerId ) const
+bool DocumentDrawModelManager::IsVisibleLayerId( SdrLayerID _nLayerId ) const
 {
     bool bRetVal;
 
@@ -307,7 +264,7 @@ bool DocumentDrawModelManager::IsVisibleLayerId( const SdrLayerID& _nLayerId ) c
     return bRetVal;
 }
 
-SdrLayerID DocumentDrawModelManager::GetInvisibleLayerIdByVisibleOne( const SdrLayerID& _nVisibleLayerId )
+SdrLayerID DocumentDrawModelManager::GetInvisibleLayerIdByVisibleOne( SdrLayerID _nVisibleLayerId )
 {
     SdrLayerID nInvisibleLayerId;
 
@@ -348,7 +305,7 @@ bool DocumentDrawModelManager::Search(const SwPaM& rPaM, const SvxSearchItem& rS
         // Filter for at-paragraph anchored draw frames.
         const SwFrameFormat& rFrameFormat = pPosFlyFrame->GetFormat();
         const SwFormatAnchor& rAnchor = rFrameFormat.GetAnchor();
-        if (rAnchor.GetAnchorId() != FLY_AT_PARA || rFrameFormat.Which() != RES_DRAWFRMFMT)
+        if (rAnchor.GetAnchorId() != RndStdIds::FLY_AT_PARA || rFrameFormat.Which() != RES_DRAWFRMFMT)
             continue;
 
         // Does the shape have matching text?
@@ -394,7 +351,7 @@ bool DocumentDrawModelManager::Search(const SwPaM& rPaM, const SvxSearchItem& rS
 
 void DocumentDrawModelManager::DrawNotifyUndoHdl()
 {
-    mpDrawModel->SetNotifyUndoActionHdl( Link<SdrUndoAction*,void>() );
+    mpDrawModel->SetNotifyUndoActionHdl( nullptr );
 }
 
 }

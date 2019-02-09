@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svgtoken.hxx>
+#include <svgtoken.hxx>
 #include <unordered_map>
 
 namespace svgio
@@ -167,7 +167,7 @@ namespace svgio
 
         SVGToken StrToSVGToken(const OUString& rStr, bool bCaseIndependent)
         {
-            typedef std::unordered_map< OUString, SVGToken, OUStringHash > SVGTokenMapper;
+            typedef std::unordered_map< OUString, SVGToken > SVGTokenMapper;
             typedef std::pair< OUString, SVGToken > SVGTokenValueType;
             static SVGTokenMapper aSVGTokenMapperList;
 
@@ -324,12 +324,12 @@ namespace svgio
 
                     if(aCaseLindependentSVGTokenMapperList.empty())
                     {
-                        for(SVGTokenMapper::const_iterator aCurrent(aSVGTokenMapperList.begin()); aCurrent != aSVGTokenMapperList.end(); ++aCurrent)
+                        for(const auto& rCurrent : aSVGTokenMapperList)
                         {
                             aCaseLindependentSVGTokenMapperList.insert(
                                 SVGTokenValueType(
-                                    aCurrent->first.toAsciiLowerCase(),
-                                    aCurrent->second));
+                                    rCurrent.first.toAsciiLowerCase(),
+                                    rCurrent.second));
                         }
                     }
 

@@ -21,7 +21,7 @@
 #define INCLUDED_SVTOOLS_BRWHEAD_HXX
 
 #include <svtools/svtdllapi.h>
-#include <svtools/headbar.hxx>
+#include <vcl/headbar.hxx>
 
 class BrowseBox;
 
@@ -31,11 +31,10 @@ class SVT_DLLPUBLIC BrowserHeader: public HeaderBar
     VclPtr<BrowseBox>   _pBrowseBox;
 
 public:
-    virtual             ~BrowserHeader();
+    virtual             ~BrowserHeader() override;
     virtual void        dispose() override;
 protected:
     virtual void        Command( const CommandEvent& rCEvt ) override;
-    virtual void        Select() override;
     virtual void        EndDrag() override;
 
 public:

@@ -23,15 +23,6 @@
 #include "scanner.hxx"
 #include <basic/sbdef.hxx>
 
-#if defined( SHARED )
-#define SbiTokenSHAREDTMPUNDEF
-#undef SHARED
-#endif
-
-#if defined( EXPLICIT )
-#undef EXPLICIT
-#endif
-
 // The tokenizer is stand-alone, i. e. he can be used from everywhere.
 // A BASIC-instance is necessary for error messages. Without BASIC the
 // errors are only counted. The BASIC is also necessary when an advanced
@@ -88,7 +79,7 @@ enum SbiToken {
     FIRSTEXTRA,
     NUMBER=FIRSTEXTRA, FIXSTRING, SYMBOL, CDECL_, BYVAL, BYREF,
     OUTPUT, RANDOM, APPEND, BINARY, ACCESS,
-    LOCK, READ, PRESERVE, BASE, ANY, LIB, OPTIONAL_,
+    LOCK, READ, PRESERVE, BASE, ANY, LIB, OPTIONAL_, PTRSAFE,
     BASIC_EXPLICIT, COMPATIBLE, CLASSMODULE, PARAMARRAY, WITHEVENTS,
 
     // from here there are JavaScript-tokens (same enum so that same type)
@@ -109,45 +100,20 @@ enum SbiToken {
     , VBASUPPORT
 };
 
-#ifdef SbiTokenSHAREDTMPUNDEF
-#define SHARED
-#undef SbiTokenSHAREDTMPUNDEF
-#endif
-
-// #i109076
-class TokenLabelInfo
-{
-    bool* m_pTokenCanBeLabelTab;
-
-public:
-    TokenLabelInfo();
-    TokenLabelInfo( const TokenLabelInfo& rInfo )
-        : m_pTokenCanBeLabelTab( nullptr )
-            { (void)rInfo; }
-    ~TokenLabelInfo();
-
-    bool canTokenBeLabel( SbiToken eTok )
-        { return m_pTokenCanBeLabelTab[eTok]; }
-};
-
 class SbiTokenizer : public SbiScanner {
-    TokenLabelInfo  m_aTokenLabelInfo;
-
 protected:
     SbiToken eCurTok;
     SbiToken ePush;
     sal_uInt16  nPLine, nPCol1, nPCol2; // pushback location
     bool bEof;
     bool bEos;
-    bool bKeywords;                 // true, if keywords are parsed
     bool bAs;                       // last keyword was AS
     bool bErrorIsSymbol;            // Handle Error token as Symbol, not keyword
 public:
     SbiTokenizer( const OUString&, StarBASIC* = nullptr );
-   ~SbiTokenizer();
 
-    inline bool IsEof()             { return bEof; }
-    inline bool IsEos()             { return bEos; }
+    bool IsEof()             { return bEof; }
+    bool IsEos()             { return bEos; }
 
     void  Push( SbiToken );
     const OUString& Symbol( SbiToken );   // reconversion
@@ -156,10 +122,9 @@ public:
     SbiToken Next();                    // read a token
     bool MayBeLabel( bool= false );
 
-    void Error( SbError c ) { GenError( c ); }
-    void Error( SbError, SbiToken );
-    void Error( SbError, const char* );
-    void Error( SbError, const OUString &);
+    void Error( ErrCode c ) { GenError( c ); }
+    void Error( ErrCode, SbiToken );
+    void Error( ErrCode, const OUString &);
 
     static bool IsEoln( SbiToken t )
         { return t == EOS || t == EOLN || t == REM; }

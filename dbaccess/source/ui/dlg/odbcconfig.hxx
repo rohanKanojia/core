@@ -20,7 +20,7 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_UI_DLG_ODBCCONFIG_HXX
 #define INCLUDED_DBACCESS_SOURCE_UI_DLG_ODBCCONFIG_HXX
 
-#include "commontypes.hxx"
+#include <commontypes.hxx>
 
 #if defined(_WIN32) || (defined (UNX) && !defined(ANDROID) && !defined(IOS))
 #define HAVE_ODBC_SUPPORT
@@ -34,13 +34,14 @@
 #include <osl/module.h>
 
 #include <memory>
+#include <set>
 
 namespace dbaui
 {
 
 // OOdbcEnumeration
 struct OdbcTypesImpl;
-class OOdbcEnumeration
+class OOdbcEnumeration final
 {
     oslModule        m_pOdbcLib;     // the library handle
     OUString         m_sLibPath;     // the path to the library
@@ -53,7 +54,7 @@ class OOdbcEnumeration
     oslGenericFunction  m_pDataSources;
 
 #endif
-    OdbcTypesImpl*  m_pImpl;
+    std::unique_ptr<OdbcTypesImpl>  m_pImpl;
         // needed because we can't have a member of type SQLHANDLE: this would require us to include the respective
         // ODBC file, which would lead to a lot of conflicts with other includes
 
@@ -68,9 +69,9 @@ public:
 #endif
     const OUString& getLibraryName() const { return m_sLibPath; }
 
-    void        getDatasourceNames(StringBag& _rNames);
+    void        getDatasourceNames(std::set<OUString>& _rNames);
 
-protected:
+private:
     oslGenericFunction  loadSymbol(const sal_Char* _pFunctionName);
 
     /// load the lib
@@ -88,7 +89,7 @@ protected:
 class ProcessTerminationWait;
 class OOdbcManagement
 {
-    ::std::unique_ptr< ProcessTerminationWait >   m_pProcessWait;
+    std::unique_ptr< ProcessTerminationWait >   m_pProcessWait;
     Link<void*,void>                              m_aAsyncFinishCallback;
 
 public:

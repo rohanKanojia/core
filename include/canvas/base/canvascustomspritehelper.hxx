@@ -106,9 +106,6 @@ namespace canvas
         /// Calc sprite update area from given raw sprite bounds
         ::basegfx::B2DRange getUpdateArea( const ::basegfx::B2DRange& rUntransformedSpriteBounds ) const;
 
-        /// Calc update area for unclipped sprite content
-        ::basegfx::B2DRange getFullSpriteRect() const;
-
         /** Returns true, if sprite content bitmap is fully opaque.
 
             This does not take clipping or transformation into
@@ -118,22 +115,7 @@ namespace canvas
         bool isContentFullyOpaque() const { return mbIsContentFullyOpaque; }
 
         /// Returns true, if transformation has changed since last transformUpdated() call
-        bool hasAlphaChanged() const { return mbAlphaDirty; }
-
-        /// Returns true, if transformation has changed since last transformUpdated() call
-        bool hasPositionChanged() const { return mbPositionDirty; }
-
-        /// Returns true, if transformation has changed since last transformUpdated() call
         bool hasTransformChanged() const { return mbTransformDirty; }
-
-        /// Returns true, if transformation has changed since last transformUpdated() call
-        bool hasClipChanged() const { return mbClipDirty; }
-
-        /// Returns true, if transformation has changed since last transformUpdated() call
-        bool hasPrioChanged() const { return mbPrioDirty; }
-
-        /// Returns true, if transformation has changed since last transformUpdated() call
-        bool hasVisibilityChanged() const { return mbVisibilityDirty; }
 
         /// Retrieve current alpha value
         double getAlpha() const { return mfAlpha; }
@@ -148,22 +130,6 @@ namespace canvas
         bool isActive() const { return mbActive; }
 
     protected:
-        /** Notifies that caller is again in sync with current alpha
-
-            const, but modifies state visible to derived
-            classes. beware of passing this information to the
-            outside!
-         */
-        void alphaUpdated() const { mbAlphaDirty=false; }
-
-        /** Notifies that caller is again in sync with current position
-
-            const, but modifies state visible to derived
-            classes. beware of passing this information to the
-            outside!
-         */
-        void positionUpdated() const { mbPositionDirty=false; }
-
         /** Notifies that caller is again in sync with current transformation
 
             const, but modifies state visible to derived
@@ -171,30 +137,6 @@ namespace canvas
             outside!
          */
         void transformUpdated() const { mbTransformDirty=false; }
-
-        /** Notifies that caller is again in sync with current clip
-
-            const, but modifies state visible to derived
-            classes. beware of passing this information to the
-            outside!
-         */
-        void clipUpdated() const { mbClipDirty=false; }
-
-        /** Notifies that caller is again in sync with current priority
-
-            const, but modifies state visible to derived
-            classes. beware of passing this information to the
-            outside!
-         */
-        void prioUpdated() const { mbPrioDirty=false; }
-
-        /** Notifies that caller is again in sync with current visibility
-
-            const, but modifies state visible to derived
-            classes. beware of passing this information to the
-            outside!
-         */
-        void visibilityUpdated() const { mbVisibilityDirty=false; }
 
     private:
         CanvasCustomSpriteHelper( const CanvasCustomSpriteHelper& ) = delete;
@@ -261,23 +203,8 @@ namespace canvas
          */
         mutable bool                                        mbIsContentFullyOpaque;
 
-        /// True, iff mfAlpha has changed
-        mutable bool                                        mbAlphaDirty;
-
-        /// True, iff maPosition has changed
-        mutable bool                                        mbPositionDirty;
-
         /// True, iff maTransform has changed
         mutable bool                                        mbTransformDirty;
-
-        /// True, iff mxClipPoly has changed
-        mutable bool                                        mbClipDirty;
-
-        /// True, iff mnPriority has changed
-        mutable bool                                        mbPrioDirty;
-
-        /// True, iff mbActive has changed
-        mutable bool                                        mbVisibilityDirty;
     };
 }
 

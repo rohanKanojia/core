@@ -20,11 +20,11 @@
 // include files
 
 #include <sal/types.h>
-#include "cppunit/TestAssert.h"
-#include "cppunit/TestFixture.h"
-#include "cppunit/extensions/HelperMacros.h"
-#include "cppunit/plugin/TestPlugIn.h"
-#include <osl_Mutex_Const.h>
+#include <cppunit/TestAssert.h>
+#include <cppunit/TestFixture.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
+#include "osl_Mutex_Const.h"
 
 using namespace osl;
 
@@ -32,14 +32,11 @@ using namespace osl;
 */
 namespace ThreadHelper
 {
-    void thread_sleep_tenth_sec(sal_uInt32 _nTenthSec)
+    static void thread_sleep_tenth_sec(sal_uInt32 _nTenthSec)
     {
-        TimeValue nTV;
-        nTV.Seconds = _nTenthSec/10;
-        nTV.Nanosec = ( (_nTenthSec%10 ) * 100000000 );
-        osl_waitThread(&nTV);
+        osl::Thread::wait(std::chrono::milliseconds(_nTenthSec * 100));
     }
-    void thread_sleep( sal_uInt32 _nSec )
+    static void thread_sleep( sal_uInt32 _nSec )
     {
         /// print statement in thread process must use fflush() to force display.
         // t_print("# wait %d seconds. ", _nSec );
@@ -67,7 +64,7 @@ class IncreaseThread : public Thread
 public:
     explicit IncreaseThread( struct resource *pData ): pResource( pData ) { }
 
-    virtual ~IncreaseThread( )
+    virtual ~IncreaseThread( ) override
     {
         CPPUNIT_ASSERT_MESSAGE( "#IncreaseThread does not shutdown properly.\n", !isRunning( ) );
     }
@@ -95,7 +92,7 @@ class DecreaseThread : public Thread
 public:
     explicit DecreaseThread( struct resource *pData ): pResource( pData ) { }
 
-    virtual ~DecreaseThread( )
+    virtual ~DecreaseThread( ) override
     {
         CPPUNIT_ASSERT_MESSAGE( "#DecreaseThread does not shutdown properly.\n", !isRunning( ) );
     }
@@ -132,7 +129,7 @@ public:
     //get the struct pointer to write data to buffer
     explicit PutThread( struct chain* pData ): pChain( pData ) { }
 
-    virtual ~PutThread( )
+    virtual ~PutThread( ) override
     {
         CPPUNIT_ASSERT_MESSAGE( "#PutThread does not shutdown properly.\n", !isRunning( ) );
     }
@@ -170,7 +167,7 @@ public:
     //get the Mutex pointer to operate
     explicit HoldThread( Mutex* pMutex ): pMyMutex( pMutex ) { }
 
-    virtual ~HoldThread( )
+    virtual ~HoldThread( ) override
     {
         CPPUNIT_ASSERT_MESSAGE( "#HoldThread does not shutdown properly.\n", !isRunning( ) );
     }
@@ -192,7 +189,7 @@ public:
     //get the Mutex pointer to operate
     explicit WaitThread( Mutex* pMutex ): pMyMutex( pMutex ) { }
 
-    virtual ~WaitThread( )
+    virtual ~WaitThread( ) override
     {
         CPPUNIT_ASSERT_MESSAGE( "#WaitThread does not shutdown properly.\n", !isRunning( ) );
     }
@@ -216,7 +213,7 @@ public:
     //get the Mutex pointer to operate
     GlobalMutexThread( ){ }
 
-    virtual ~GlobalMutexThread( )
+    virtual ~GlobalMutexThread( ) override
     {
         CPPUNIT_ASSERT_MESSAGE( "#GlobalMutexThread does not shutdown properly.\n", !isRunning( ) );
     }
@@ -354,7 +351,9 @@ namespace osl_Mutex
             bool bRes2 = myThread.isRunning( );
             myThread.join( );
 
-            CPPUNIT_ASSERT_MESSAGE( "Mutex acquire", bRes && bRes1 && !bRes2 );
+            CPPUNIT_ASSERT_MESSAGE( "Mutex acquire", bRes );
+            CPPUNIT_ASSERT_MESSAGE( "Mutex acquire", bRes1 );
+            CPPUNIT_ASSERT_MESSAGE( "Mutex acquire", !bRes2 );
         }
 
         //in the same thread, acquire twice should success
@@ -369,7 +368,9 @@ namespace osl_Mutex
 
             aMutex.release();
 
-            CPPUNIT_ASSERT_MESSAGE("Mutex acquire", bRes && bRes1 && bRes2);
+            CPPUNIT_ASSERT_MESSAGE("Mutex acquire", bRes);
+            CPPUNIT_ASSERT_MESSAGE("Mutex acquire", bRes1);
+            CPPUNIT_ASSERT_MESSAGE("Mutex acquire", bRes2);
 
         }
 
@@ -408,7 +409,8 @@ namespace osl_Mutex
             if (bRes2)
                 aMutex.release();
 
-        CPPUNIT_ASSERT_MESSAGE("Try to acquire Mutex", !bRes1 && bRes2);
+        CPPUNIT_ASSERT_MESSAGE("Try to acquire Mutex", !bRes1);
+        CPPUNIT_ASSERT_MESSAGE("Try to acquire Mutex", bRes2);
         }
 
         CPPUNIT_TEST_SUITE(tryToAcquire);
@@ -444,7 +446,11 @@ namespace osl_Mutex
                 aMutex.release( );
 
             CPPUNIT_ASSERT_MESSAGE( "release Mutex: try to acquire before and after the mutex has been released",
-                !bRes1 && bRes2 && bRunning );
+                !bRes1 );
+            CPPUNIT_ASSERT_MESSAGE( "release Mutex: try to acquire before and after the mutex has been released",
+                bRes2 );
+            CPPUNIT_ASSERT_MESSAGE( "release Mutex: try to acquire before and after the mutex has been released",
+                bRunning );
 
         }
 
@@ -482,7 +488,8 @@ namespace osl_Mutex
             // after release mutex, myThread stops blocking and will terminate immediately
             bool bRes2 = myThread.isRunning();
 
-            CPPUNIT_ASSERT_MESSAGE("Global Mutex works", bRes1 && !bRes2);
+            CPPUNIT_ASSERT_MESSAGE("Global Mutex works", bRes1);
+            CPPUNIT_ASSERT_MESSAGE("Global Mutex works", !bRes2);
         }
 
         void getGlobalMutex_002( )
@@ -523,7 +530,7 @@ public:
     //get the Mutex pointer to operate
     explicit GuardThread( Mutex* pMutex ): pMyMutex( pMutex ) { }
 
-    virtual ~GuardThread( )
+    virtual ~GuardThread( ) override
     {
         CPPUNIT_ASSERT_MESSAGE( "#GuardThread does not shutdown properly.\n", !isRunning( ) );
     }
@@ -559,7 +566,11 @@ namespace osl_Guard
             bool bRes2 = aMutex.tryToAcquire();
 
             CPPUNIT_ASSERT_MESSAGE("GuardThread constructor",
-                !bRes && bRes1 && bRes2);
+                !bRes);
+            CPPUNIT_ASSERT_MESSAGE("GuardThread constructor",
+                bRes1);
+            CPPUNIT_ASSERT_MESSAGE("GuardThread constructor",
+                bRes2);
         }
 
         void ctor_002( )
@@ -604,7 +615,7 @@ public:
     //get the Mutex pointer to operate
     explicit ClearGuardThread( Mutex* pMutex ): pMyMutex( pMutex ) {}
 
-    virtual ~ClearGuardThread( )
+    virtual ~ClearGuardThread( ) override
     {
         CPPUNIT_ASSERT_MESSAGE( "#ClearGuardThread does not shutdown properly.\n", !isRunning( ) );
     }
@@ -640,7 +651,7 @@ namespace osl_ClearableGuard
             /// it will return sal_False if the aMutex has not been Guarded.
             bool bRes = aMutex.release( );
 
-            CPPUNIT_ASSERT_MESSAGE("ClearableMutexGuard constructor, test the acquire operation when initilized.",
+            CPPUNIT_ASSERT_MESSAGE("ClearableMutexGuard constructor, test the acquire operation when initialized.",
                 bRes);
         }
 
@@ -654,7 +665,7 @@ namespace osl_ClearableGuard
             /// it will return sal_False if the aMutex has not been Guarded.
             bool bRes = aMutex.release( );
 
-            CPPUNIT_ASSERT_MESSAGE("ClearableMutexGuard constructor, test the acquire operation when initilized, we use reference constructor this time.",
+            CPPUNIT_ASSERT_MESSAGE("ClearableMutexGuard constructor, test the acquire operation when initialized, we use reference constructor this time.",
                 bRes);
         }
 
@@ -694,7 +705,9 @@ namespace osl_ClearableGuard
             myThread.join();
 
             CPPUNIT_ASSERT_MESSAGE("ClearableGuard method: clear",
-                nSec < 7 && nSec > 1);
+                nSec < 7);
+            CPPUNIT_ASSERT_MESSAGE("ClearableGuard method: clear",
+                nSec > 1);
         }
 
         void clear_002( )
@@ -718,7 +731,9 @@ namespace osl_ClearableGuard
             bool bRes1 = myThread.isRunning( );
 
             CPPUNIT_ASSERT_MESSAGE( "ClearableGuard method: clear, control the HoldThread's running status!",
-                bRes && !bRes1 );
+                bRes );
+            CPPUNIT_ASSERT_MESSAGE( "ClearableGuard method: clear, control the HoldThread's running status!",
+                !bRes1 );
         }
 
         CPPUNIT_TEST_SUITE( clear );
@@ -741,7 +756,7 @@ public:
     //get the Mutex pointer to operate
     explicit ResetGuardThread( Mutex* pMutex ): pMyMutex( pMutex ) {}
 
-    virtual ~ResetGuardThread( )
+    virtual ~ResetGuardThread( ) override
     {
         CPPUNIT_ASSERT_MESSAGE( "#ResetGuardThread does not shutdown properly.\n", !isRunning( ) );
     }
@@ -774,7 +789,7 @@ namespace osl_ResettableGuard
             /// it will return sal_False if the aMutex has not been Guarded.
             bool bRes = aMutex.release( );
 
-            CPPUNIT_ASSERT_MESSAGE("ResettableMutexGuard constructor, test the acquire operation when initilized.",
+            CPPUNIT_ASSERT_MESSAGE("ResettableMutexGuard constructor, test the acquire operation when initialized.",
                 bRes);
         }
 
@@ -788,7 +803,7 @@ namespace osl_ResettableGuard
             /// it will return sal_False if the aMutex has not been Guarded.
             bool bRes = aMutex.release( );
 
-            CPPUNIT_ASSERT_MESSAGE( "ResettableMutexGuard constructor, test the acquire operation when initilized, we use reference constructor this time.",
+            CPPUNIT_ASSERT_MESSAGE( "ResettableMutexGuard constructor, test the acquire operation when initialized, we use reference constructor this time.",
                 bRes);
         }
 
@@ -819,7 +834,9 @@ namespace osl_ResettableGuard
             myThread.join( );
 
             CPPUNIT_ASSERT_MESSAGE( "ResettableMutexGuard method: reset",
-                bRes && bRes1 );
+                bRes );
+            CPPUNIT_ASSERT_MESSAGE( "ResettableMutexGuard method: reset",
+                bRes1 );
         }
 
 #ifdef LINUX
@@ -837,7 +854,9 @@ namespace osl_ResettableGuard
             bool bRes1 = aMutex.release( );
 
             CPPUNIT_ASSERT_MESSAGE( "ResettableMutexGuard method: reset, release after clear and reset, on Solaris, the mutex can be release without acquire, so it can not passed on (SOLARIS), but not the reason for reset_002",
-                !bRes && bRes1 );
+                !bRes );
+            CPPUNIT_ASSERT_MESSAGE( "ResettableMutexGuard method: reset, release after clear and reset, on Solaris, the mutex can be release without acquire, so it can not passed on (SOLARIS), but not the reason for reset_002",
+                bRes1 );
         }
 #endif
 
@@ -852,8 +871,6 @@ namespace osl_ResettableGuard
 CPPUNIT_TEST_SUITE_REGISTRATION(osl_ResettableGuard::ctor);
 CPPUNIT_TEST_SUITE_REGISTRATION(osl_ResettableGuard::reset);
 } // namespace osl_ResettableGuard
-
-CPPUNIT_PLUGIN_IMPLEMENT();
 
 // The following sets variables for GNU EMACS
 // Local Variables:

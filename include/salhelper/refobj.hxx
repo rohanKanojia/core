@@ -20,10 +20,11 @@
 #ifndef INCLUDED_SALHELPER_REFOBJ_HXX
 #define INCLUDED_SALHELPER_REFOBJ_HXX
 
-#include <sal/types.h>
-#include <rtl/alloc.h>
-#include <osl/diagnose.h>
-#include <osl/interlck.h>
+#include <cassert>
+
+#include "sal/types.h"
+#include "rtl/alloc.h"
+#include "osl/interlck.h"
 
 namespace salhelper
 {
@@ -62,7 +63,7 @@ public:
 public:
     /** Construction.
      */
-    inline ReferenceObject() : m_nReferenceCount(0)
+    ReferenceObject() : m_nReferenceCount(0)
     {}
 
 
@@ -85,7 +86,7 @@ protected:
      */
     virtual ~ReferenceObject()
     {
-        OSL_ASSERT(m_nReferenceCount == 0);
+        assert(m_nReferenceCount == 0);
     }
 };
 

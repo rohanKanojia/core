@@ -17,14 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "formdispatchinterceptor.hxx"
+#include <formdispatchinterceptor.hxx>
 
 namespace svxform
 {
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::uno::UNO_QUERY;
-    using ::com::sun::star::uno::Exception;
     using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Sequence;
     using ::com::sun::star::frame::XDispatchProviderInterception;
@@ -72,7 +70,7 @@ namespace svxform
     }
 
 
-    Reference< XDispatch > SAL_CALL DispatchInterceptionMultiplexer::queryDispatch( const URL& aURL, const OUString& aTargetFrameName, sal_Int32 nSearchFlags ) throw(RuntimeException, std::exception)
+    Reference< XDispatch > SAL_CALL DispatchInterceptionMultiplexer::queryDispatch( const URL& aURL, const OUString& aTargetFrameName, sal_Int32 nSearchFlags )
     {
         ::osl::MutexGuard aGuard( *m_pMutex );
         Reference< XDispatch> xResult;
@@ -89,7 +87,7 @@ namespace svxform
 
 
     Sequence< Reference< XDispatch > > SAL_CALL
-    DispatchInterceptionMultiplexer::queryDispatches( const Sequence< DispatchDescriptor >& aDescripts ) throw(RuntimeException, std::exception)
+    DispatchInterceptionMultiplexer::queryDispatches( const Sequence< DispatchDescriptor >& aDescripts )
     {
         ::osl::MutexGuard aGuard( *m_pMutex );
         Sequence< Reference< XDispatch> > aReturn(aDescripts.getLength());
@@ -103,35 +101,35 @@ namespace svxform
     }
 
 
-    Reference< XDispatchProvider > SAL_CALL DispatchInterceptionMultiplexer::getSlaveDispatchProvider(  ) throw(RuntimeException, std::exception)
+    Reference< XDispatchProvider > SAL_CALL DispatchInterceptionMultiplexer::getSlaveDispatchProvider(  )
     {
         ::osl::MutexGuard aGuard( *m_pMutex );
         return m_xSlaveDispatcher;
     }
 
 
-    void SAL_CALL DispatchInterceptionMultiplexer::setSlaveDispatchProvider(const Reference< XDispatchProvider>& xNewDispatchProvider) throw( RuntimeException, std::exception )
+    void SAL_CALL DispatchInterceptionMultiplexer::setSlaveDispatchProvider(const Reference< XDispatchProvider>& xNewDispatchProvider)
     {
         ::osl::MutexGuard aGuard( *m_pMutex );
         m_xSlaveDispatcher = xNewDispatchProvider;
     }
 
 
-    Reference< XDispatchProvider> SAL_CALL DispatchInterceptionMultiplexer::getMasterDispatchProvider() throw( RuntimeException, std::exception )
+    Reference< XDispatchProvider> SAL_CALL DispatchInterceptionMultiplexer::getMasterDispatchProvider()
     {
         ::osl::MutexGuard aGuard( *m_pMutex );
         return m_xMasterDispatcher;
     }
 
 
-    void SAL_CALL DispatchInterceptionMultiplexer::setMasterDispatchProvider(const Reference< XDispatchProvider>& xNewSupplier) throw( RuntimeException, std::exception )
+    void SAL_CALL DispatchInterceptionMultiplexer::setMasterDispatchProvider(const Reference< XDispatchProvider>& xNewSupplier)
     {
         ::osl::MutexGuard aGuard( *m_pMutex );
         m_xMasterDispatcher = xNewSupplier;
     }
 
 
-    void SAL_CALL DispatchInterceptionMultiplexer::disposing(const EventObject& Source) throw( RuntimeException, std::exception )
+    void SAL_CALL DispatchInterceptionMultiplexer::disposing(const EventObject& Source)
     {
         if (m_bListening)
         {

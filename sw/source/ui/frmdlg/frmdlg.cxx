@@ -33,8 +33,8 @@
 #include <column.hxx>
 #include <macassgn.hxx>
 
-#include <frmui.hrc>
 #include <globals.hrc>
+#include <strings.hrc>
 #include <svx/svxids.hrc>
 #include <svx/flagsdef.hxx>
 #include <svx/svxdlg.hxx>
@@ -44,73 +44,56 @@
 #include <svx/xflgrit.hxx>
 
 // the dialog's carrier
-SwFrameDlg::SwFrameDlg( SfxViewFrame*       pViewFrame,
-                    vcl::Window*        pParent,
-                    const SfxItemSet&   rCoreSet,
-                    bool                bNewFrame,
-                    const OUString&     sResType,
-                    bool                bFormat,
-                    const OString&      sDefPage,
-                    const OUString*     pStr)
+SwFrameDlg::SwFrameDlg(SfxViewFrame const * pViewFrame,
+                       weld::Window*        pParent,
+                       const SfxItemSet&   rCoreSet,
+                       bool                bNewFrame,
+                       const OUString&     sResType,
+                       bool                bFormat,
+                       const OString&      sDefPage,
+                       const OUString*     pStr)
 
-    : SfxTabDialog(pParent, sResType,
-        "modules/swriter/ui/" + sResType.toAsciiLowerCase() + ".ui",
-        &rCoreSet, pStr != nullptr)
+    : SfxTabDialogController(pParent, "modules/swriter/ui/" + sResType.toAsciiLowerCase() + ".ui",
+                             sResType.toUtf8(), &rCoreSet, pStr != nullptr)
     , m_bFormat(bFormat)
     , m_bNew(bNewFrame)
     , m_rSet(rCoreSet)
     , m_sDlgType(sResType)
     , m_pWrtShell(static_cast<SwView*>(pViewFrame->GetViewShell())->GetWrtShellPtr())
-    , m_nStdId(0)
-    , m_nAddId(0)
-    , m_nWrapId(0)
-    , m_nUrlId(0)
-    , m_nPictureId(0)
-    , m_nCropId(0)
-    , m_nColumnId(0)
-    //, m_nBackgroundId(0)
-    , m_nAreaId(0)
-    , m_nTransparenceId(0)
-    , m_nMacroId(0)
-    , m_nBorderId(0)
 {
     sal_uInt16 nHtmlMode = ::GetHtmlMode(m_pWrtShell->GetView().GetDocShell());
-    m_bHTMLMode = (nHtmlMode & HTMLMODE_ON) != 0;
+    bool bHTMLMode = (nHtmlMode & HTMLMODE_ON) != 0;
 
     // example font for both example TabPages
 
-    if(pStr)
+    if (pStr)
     {
-        SetText(GetText() + SW_RESSTR(STR_COLL_HEADER) + *pStr + ")");
+        m_xDialog->set_title(m_xDialog->get_title() + SwResId(STR_FRMUI_COLL_HEADER) + *pStr + ")");
     }
 
-    m_nStdId = AddTabPage("type",  SwFramePage::Create, nullptr);
-    m_nAddId = AddTabPage("options",  SwFrameAddPage::Create, nullptr);
-    m_nWrapId = AddTabPage("wrap", SwWrapTabPage::Create, nullptr);
-    m_nUrlId = AddTabPage("hyperlink",  SwFrameURLPage::Create, nullptr);
+    AddTabPage("type",  SwFramePage::Create, nullptr);
+    AddTabPage("options",  SwFrameAddPage::Create, nullptr);
+    AddTabPage("wrap", SwWrapTabPage::Create, nullptr);
+    AddTabPage("hyperlink",  SwFrameURLPage::Create, nullptr);
     if (m_sDlgType == "PictureDialog")
     {
-        m_nPictureId = AddTabPage("picture", SwGrfExtPage::Create, nullptr);
-        m_nCropId = AddTabPage("crop", RID_SVXPAGE_GRFCROP);
+        AddTabPage("picture", SwGrfExtPage::Create, nullptr);
+        AddTabPage("crop", RID_SVXPAGE_GRFCROP);
     }
     if (m_sDlgType == "FrameDialog")
     {
-        m_nColumnId = AddTabPage("columns", SwColumnPage::Create, nullptr);
+        AddTabPage("columns", SwColumnPage::Create, nullptr);
     }
     SfxAbstractDialogFactory* pFact = SfxAbstractDialogFactory::Create();
-    OSL_ENSURE(pFact, "Dialog creation failed!");
 
-    //UUUU remove?
-    // m_nBackgroundId = AddTabPage("background", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_BACKGROUND ), 0);
+    // add Area and Transparence TabPages
+    AddTabPage("area", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_AREA ), pFact->GetTabPageRangesFunc( RID_SVXPAGE_AREA ));
+    AddTabPage("transparence", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_TRANSPARENCE ), pFact->GetTabPageRangesFunc( RID_SVXPAGE_TRANSPARENCE ) );
 
-    //UUUU add Area and Transparence TabPages
-    m_nAreaId = AddTabPage("area", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_AREA ), pFact->GetTabPageRangesFunc( RID_SVXPAGE_AREA ));
-    m_nTransparenceId = AddTabPage("transparence", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_TRANSPARENCE ), pFact->GetTabPageRangesFunc( RID_SVXPAGE_TRANSPARENCE ) );
+    AddTabPage("macro", pFact->GetTabPageCreatorFunc(RID_SVXPAGE_MACROASSIGN), nullptr);
+    AddTabPage("borders", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_BORDER ), nullptr);
 
-    m_nMacroId = AddTabPage("macro", pFact->GetTabPageCreatorFunc(RID_SVXPAGE_MACROASSIGN), nullptr);
-    m_nBorderId = AddTabPage("borders", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_BORDER ), nullptr);
-
-    if(m_bHTMLMode)
+    if(bHTMLMode)
     {
         if (m_sDlgType == "FrameDialog" || m_sDlgType == "ObjectDialog")
         {
@@ -123,7 +106,7 @@ SwFrameDlg::SwFrameDlg( SfxViewFrame*       pViewFrame,
             RemoveTabPage("crop");
         if( m_sDlgType != "FrameDialog" )
         {
-            //UUUU RemoveTabPage("background");
+            // RemoveTabPage("background");
             RemoveTabPage("area");
             RemoveTabPage("transparence");
         }
@@ -140,38 +123,37 @@ SwFrameDlg::~SwFrameDlg()
 {
 }
 
-void SwFrameDlg::PageCreated( sal_uInt16 nId, SfxTabPage &rPage )
+void SwFrameDlg::PageCreated(const OString& rId, SfxTabPage &rPage)
 {
     SfxAllItemSet aSet(*(GetInputSetImpl()->GetPool()));
-    if (nId == m_nStdId)
+    if (rId == "type")
     {
         static_cast<SwFramePage&>(rPage).SetNewFrame(m_bNew);
         static_cast<SwFramePage&>(rPage).SetFormatUsed(m_bFormat);
         static_cast<SwFramePage&>(rPage).SetFrameType(m_sDlgType);
     }
-    else if (nId == m_nAddId)
+    else if (rId == "options")
     {
         static_cast<SwFrameAddPage&>(rPage).SetFormatUsed(m_bFormat);
         static_cast<SwFrameAddPage&>(rPage).SetFrameType(m_sDlgType);
         static_cast<SwFrameAddPage&>(rPage).SetNewFrame(m_bNew);
         static_cast<SwFrameAddPage&>(rPage).SetShell(m_pWrtShell);
     }
-    else if (nId == m_nWrapId)
+    else if (rId == "wrap")
     {
         static_cast<SwWrapTabPage&>(rPage).SetNewFrame(m_bNew);
         static_cast<SwWrapTabPage&>(rPage).SetFormatUsed(m_bFormat, false);
         static_cast<SwWrapTabPage&>(rPage).SetShell(m_pWrtShell);
     }
-    else if (nId == m_nColumnId)
+    else if (rId == "columns")
     {
         static_cast<SwColumnPage&>(rPage).SetFrameMode(true);
         static_cast<SwColumnPage&>(rPage).SetFormatUsed(m_bFormat);
 
-        const SwFormatFrameSize& rSize = static_cast<const SwFormatFrameSize&>(
-                                            m_rSet.Get( RES_FRM_SIZE ));
+        const SwFormatFrameSize& rSize = m_rSet.Get( RES_FRM_SIZE );
         static_cast<SwColumnPage&>(rPage).SetPageWidth( rSize.GetWidth() );
     }
-    else if (nId == m_nMacroId)
+    else if (rId == "macro")
     {
         SfxAllItemSet aNewSet(*aSet.GetPool());
         aNewSet.Put( SwMacroAssignDlg::AddEvents(
@@ -180,32 +162,22 @@ void SwFrameDlg::PageCreated( sal_uInt16 nId, SfxTabPage &rPage )
             rPage.SetFrame( m_pWrtShell->GetView().GetViewFrame()->GetFrame().GetFrameInterface() );
         rPage.PageCreated(aNewSet);
     }
-    //UUUU
-    //else if (nId == m_nBackgroundId && m_sDlgType == "FrameDialog")
-    //{
-    //    sal_Int32 nFlagType = SVX_SHOW_SELECTOR;
-    //    if (!m_bHTMLMode)
-    //        nFlagType |= SVX_ENABLE_TRANSPARENCY;
-    //    aSet.Put (SfxUInt32Item(SID_FLAG_TYPE, nFlagType));
-    //
-    //    rPage.PageCreated(aSet);
-    //}
-    else if (nId == m_nBorderId)
+    else if (rId == "borders")
     {
         aSet.Put (SfxUInt16Item(SID_SWMODE_TYPE,static_cast<sal_uInt16>(SwBorderModes::FRAME)));
         rPage.PageCreated(aSet);
     }
-    //UUUU inits for Area and Transparency TabPages
+    // inits for Area and Transparency TabPages
     // The selection attribute lists (XPropertyList derivates, e.g. XColorList for
     // the color table) need to be added as items (e.g. SvxColorListItem) to make
     // these pages find the needed attributes for fill style suggestions.
     // These are set in preparation to trigger this dialog (FN_FORMAT_FRAME_DLG and
     // FN_DRAW_WRAP_DLG), but could also be directly added from the DrawModel.
-    else if (nId == m_nAreaId)
+    else if (rId == "area")
     {
         SfxItemSet aNew(*GetInputSetImpl()->GetPool(),
-                        SID_COLOR_TABLE, SID_BITMAP_LIST,
-                        SID_OFFER_IMPORT, SID_OFFER_IMPORT, 0, 0);
+                        svl::Items<SID_COLOR_TABLE, SID_PATTERN_LIST,
+                        SID_OFFER_IMPORT, SID_OFFER_IMPORT>{});
 
         aNew.Put(m_rSet);
 
@@ -214,7 +186,7 @@ void SwFrameDlg::PageCreated( sal_uInt16 nId, SfxTabPage &rPage )
 
         rPage.PageCreated(aNew);
     }
-    else if (nId == m_nTransparenceId)
+    else if (rId == "transparence")
     {
         rPage.PageCreated(m_rSet);
     }

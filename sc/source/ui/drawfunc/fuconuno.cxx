@@ -17,46 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuconuno.hxx"
-#include "tabvwsh.hxx"
-#include "sc.hrc"
-#include "drawview.hxx"
+#include <fuconuno.hxx>
+#include <tabvwsh.hxx>
+#include <sc.hrc>
+#include <drawview.hxx>
 
-/*************************************************************************
-|*
-|* Konstruktor
-|*
-\************************************************************************/
-
-FuConstUnoControl::FuConstUnoControl(ScTabViewShell* pViewSh, vcl::Window* pWin, ScDrawView* pViewP,
-                   SdrModel* pDoc, SfxRequest& rReq)
-    : FuConstruct(pViewSh, pWin, pViewP, pDoc, rReq)
-    , nInventor(0)
+FuConstUnoControl::FuConstUnoControl(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawView* pViewP,
+                                     SdrModel* pDoc, const SfxRequest& rReq)
+    : FuConstruct(rViewSh, pWin, pViewP, pDoc, rReq)
+    , nInventor(SdrInventor::Unknown)
     , nIdentifier(0)
 {
     const SfxUInt32Item* pInventorItem = rReq.GetArg<SfxUInt32Item>(SID_FM_CONTROL_INVENTOR);
     const SfxUInt16Item* pIdentifierItem = rReq.GetArg<SfxUInt16Item>(SID_FM_CONTROL_IDENTIFIER);
     if( pInventorItem )
-        nInventor = pInventorItem->GetValue();
+        nInventor = static_cast<SdrInventor>(pInventorItem->GetValue());
     if( pIdentifierItem )
         nIdentifier = pIdentifierItem->GetValue();
 }
 
-/*************************************************************************
-|*
-|* Destruktor
-|*
-\************************************************************************/
-
 FuConstUnoControl::~FuConstUnoControl()
 {
 }
-
-/*************************************************************************
-|*
-|* MouseButtonDown-event
-|*
-\************************************************************************/
 
 bool FuConstUnoControl::MouseButtonDown(const MouseEvent& rMEvt)
 {
@@ -68,36 +50,12 @@ bool FuConstUnoControl::MouseButtonDown(const MouseEvent& rMEvt)
     if ( rMEvt.IsLeft() && !pView->IsAction() )
     {
         Point aPnt( pWindow->PixelToLogic( rMEvt.GetPosPixel() ) );
-        // Hack  to align object to nearest grid position where object
-        // would be anchored ( if it were cell anchored )
-        // Get grid offset for current position ( note: aPnt is
-        // also adjusted )
-        Point aGridOff = CurrentGridSyncOffsetAndPos( aPnt );
-
         pWindow->CaptureMouse();
         pView->BegCreateObj(aPnt);
-        pView->GetCreateObj()->SetGridOffset( aGridOff );
         bReturn = true;
     }
     return bReturn;
 }
-
-/*************************************************************************
-|*
-|* MouseMove-event
-|*
-\************************************************************************/
-
-bool FuConstUnoControl::MouseMove(const MouseEvent& rMEvt)
-{
-    return FuConstruct::MouseMove(rMEvt);
-}
-
-/*************************************************************************
-|*
-|* MouseButtonUp-event
-|*
-\************************************************************************/
 
 bool FuConstUnoControl::MouseButtonUp(const MouseEvent& rMEvt)
 {
@@ -108,31 +66,11 @@ bool FuConstUnoControl::MouseButtonUp(const MouseEvent& rMEvt)
 
     if ( pView->IsCreateObj() && rMEvt.IsLeft() )
     {
-        pView->EndCreateObj(SDRCREATE_FORCEEND);
+        pView->EndCreateObj(SdrCreateCmd::ForceEnd);
         bReturn = true;
     }
     return (FuConstruct::MouseButtonUp(rMEvt) || bReturn);
 }
-
-/*************************************************************************
-|*
-|* Tastaturereignisse bearbeiten
-|*
-|* Wird ein KeyEvent bearbeitet, so ist der Return-Wert sal_True, andernfalls
-|* FALSE.
-|*
-\************************************************************************/
-
-bool FuConstUnoControl::KeyInput(const KeyEvent& rKEvt)
-{
-    return FuConstruct::KeyInput(rKEvt);
-}
-
-/*************************************************************************
-|*
-|* Function aktivieren
-|*
-\************************************************************************/
 
 void FuConstUnoControl::Activate()
 {
@@ -140,7 +78,7 @@ void FuConstUnoControl::Activate()
 
     aNewPointer = Pointer( PointerStyle::DrawRect );
     aOldPointer = pWindow->GetPointer();
-    pViewShell->SetActivePointer( aNewPointer );
+    rViewShell.SetActivePointer( aNewPointer );
 
     SdrLayer* pLayer = pView->GetModel()->GetLayerAdmin().GetLayerPerID(SC_LAYER_CONTROLS);
     if (pLayer)
@@ -148,12 +86,6 @@ void FuConstUnoControl::Activate()
 
     FuConstruct::Activate();
 }
-
-/*************************************************************************
-|*
-|* Function deaktivieren
-|*
-\************************************************************************/
 
 void FuConstUnoControl::Deactivate()
 {
@@ -163,17 +95,18 @@ void FuConstUnoControl::Deactivate()
     if (pLayer)
         pView->SetActiveLayer( pLayer->GetName() );
 
-    pViewShell->SetActivePointer( aOldPointer );
+    rViewShell.SetActivePointer( aOldPointer );
 }
 
 // Create default drawing objects via keyboard
-SdrObject* FuConstUnoControl::CreateDefaultObject(const sal_uInt16 /* nID */, const Rectangle& rRectangle)
+SdrObjectUniquePtr FuConstUnoControl::CreateDefaultObject(const sal_uInt16 /* nID */, const tools::Rectangle& rRectangle)
 {
     // case SID_FM_CREATE_CONTROL:
 
-    SdrObject* pObj = SdrObjFactory::MakeNewObject(
-        pView->GetCurrentObjInventor(), pView->GetCurrentObjIdentifier(),
-        nullptr, pDrDoc);
+    SdrObjectUniquePtr pObj(SdrObjFactory::MakeNewObject(
+        *pDrDoc,
+        pView->GetCurrentObjInventor(),
+        pView->GetCurrentObjIdentifier()));
 
     if(pObj)
     {

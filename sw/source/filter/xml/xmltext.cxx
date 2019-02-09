@@ -31,9 +31,8 @@ class SwXMLBodyContentContext_Impl : public SvXMLImportContext
 public:
 
     SwXMLBodyContentContext_Impl( SwXMLImport& rImport, const OUString& rLName );
-    virtual ~SwXMLBodyContentContext_Impl();
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 nPrefix, const OUString& rLocalName,
             const Reference< xml::sax::XAttributeList > & xAttrList ) override;
 
@@ -48,11 +47,7 @@ SwXMLBodyContentContext_Impl::SwXMLBodyContentContext_Impl( SwXMLImport& rImport
 {
 }
 
-SwXMLBodyContentContext_Impl::~SwXMLBodyContentContext_Impl()
-{
-}
-
-SvXMLImportContext *SwXMLBodyContentContext_Impl::CreateChildContext(
+SvXMLImportContextRef SwXMLBodyContentContext_Impl::CreateChildContext(
         sal_uInt16 nPrefix, const OUString& rLocalName,
         const Reference< xml::sax::XAttributeList > & xAttrList )
 {
@@ -60,7 +55,7 @@ SvXMLImportContext *SwXMLBodyContentContext_Impl::CreateChildContext(
 
     pContext = GetSwImport().GetTextImport()->CreateTextChildContext(
             GetImport(), nPrefix, rLocalName, xAttrList,
-               XML_TEXT_TYPE_BODY );
+               XMLTextType::Body );
     if( !pContext )
         pContext = new SvXMLImportContext( GetImport(), nPrefix, rLocalName );
 

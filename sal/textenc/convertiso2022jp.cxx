@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "rtl/textcvt.h"
-#include "sal/types.h"
+#include <rtl/textcvt.h>
+#include <sal/types.h>
 
 #include "converter.hxx"
 #include "convertiso2022jp.hxx"
@@ -112,7 +112,7 @@ sal_Size ImplConvertIso2022JpToUnicode(void const * pData,
                 eState = IMPL_ISO_2022_JP_TO_UNICODE_STATE_ESC;
             else if (nChar < 0x80)
                 if (pDestBufPtr != pDestBufEnd)
-                    *pDestBufPtr++ = (sal_Unicode) nChar;
+                    *pDestBufPtr++ = static_cast<sal_Unicode>(nChar);
                 else
                     goto no_output;
             else
@@ -138,7 +138,7 @@ sal_Size ImplConvertIso2022JpToUnicode(void const * pData,
                         nChar = 0xAF; // MACRON
                         break;
                     }
-                    *pDestBufPtr++ = (sal_Unicode) nChar;
+                    *pDestBufPtr++ = static_cast<sal_Unicode>(nChar);
                 }
                 else
                     goto no_output;
@@ -176,7 +176,7 @@ sal_Size ImplConvertIso2022JpToUnicode(void const * pData,
                 if (nUnicode != 0)
                     if (pDestBufPtr != pDestBufEnd)
                     {
-                        *pDestBufPtr++ = (sal_Unicode) nUnicode;
+                        *pDestBufPtr++ = static_cast<sal_Unicode>(nUnicode);
                         eState = IMPL_ISO_2022_JP_TO_UNICODE_STATE_0208;
                     }
                     else
@@ -261,17 +261,17 @@ sal_Size ImplConvertIso2022JpToUnicode(void const * pData,
 
     no_output:
         --pSrcBuf;
-        nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+        nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
         break;
     }
 
     if (eState > IMPL_ISO_2022_JP_TO_UNICODE_STATE_0208
         && (nInfo & (RTL_TEXTTOUNICODE_INFO_ERROR
-                         | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL))
+                         | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL))
                == 0)
     {
         if ((nFlags & RTL_TEXTTOUNICODE_FLAGS_FLUSH) == 0)
-            nInfo |= RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL;
+            nInfo |= RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL;
         else
             switch (sal::detail::textenc::handleBadInputTextToUnicodeConversion(
                         false, true, 0, nFlags, &pDestBufPtr, pDestBufEnd,
@@ -283,7 +283,7 @@ sal_Size ImplConvertIso2022JpToUnicode(void const * pData,
                 break;
 
             case sal::detail::textenc::BAD_INPUT_NO_OUTPUT:
-                nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+                nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
                 break;
             }
     }
@@ -360,7 +360,7 @@ sal_Size ImplConvertUnicodeToIso2022Jp(void const * pData,
         {
             if (ImplIsHighSurrogate(nChar))
             {
-                nHighSurrogate = (sal_Unicode) nChar;
+                nHighSurrogate = static_cast<sal_Unicode>(nChar);
                 continue;
             }
         }

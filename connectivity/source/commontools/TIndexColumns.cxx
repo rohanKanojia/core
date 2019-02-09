@@ -23,10 +23,9 @@
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/sdbc/DataType.hpp>
 #include <com/sun/star/sdbc/ColumnValue.hpp>
-#include <comphelper/property.hxx>
 #include <connectivity/TIndex.hxx>
 #include <connectivity/TTableHelper.hxx>
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 
 using namespace connectivity;
 using namespace connectivity::sdbcx;
@@ -38,7 +37,7 @@ using namespace ::com::sun::star::lang;
 
 OIndexColumns::OIndexColumns(   OIndexHelper* _pIndex,
                         ::osl::Mutex& _rMutex,
-                        const ::std::vector< OUString> &_rVector)
+                        const std::vector< OUString> &_rVector)
             : connectivity::sdbcx::OCollection(*_pIndex,true,_rMutex,_rVector)
             ,m_pIndex(_pIndex)
 {
@@ -48,23 +47,22 @@ sdbcx::ObjectType OIndexColumns::createObject(const OUString& _rName)
 {
     ::dbtools::OPropertyMap& rPropMap = OMetaConnection::getPropMap();
     OUString aCatalog, aSchema, aTable;
-    ::com::sun::star::uno::Any Catalog(m_pIndex->getTable()->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_CATALOGNAME)));
+    css::uno::Any Catalog(m_pIndex->getTable()->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_CATALOGNAME)));
     Catalog >>= aCatalog;
     m_pIndex->getTable()->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_SCHEMANAME)) >>= aSchema;
     m_pIndex->getTable()->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_NAME))       >>= aTable;
 
     Reference< XResultSet > xResult = m_pIndex->getTable()->getConnection()->getMetaData()->getIndexInfo(
-        Catalog, aSchema, aTable, sal_False, sal_False);
+        Catalog, aSchema, aTable, false, false);
 
     bool bAsc = true;
     if ( xResult.is() )
     {
         Reference< XRow > xRow(xResult,UNO_QUERY);
-        OUString aD("D");
         while( xResult->next() )
         {
             if(xRow->getString(9) == _rName)
-                bAsc = xRow->getString(10) != aD;
+                bAsc = xRow->getString(10) != "D";
         }
     }
 
@@ -94,7 +92,7 @@ sdbcx::ObjectType OIndexColumns::createObject(const OUString& _rName)
                                                       nSize,
                                                       nDec,
                                                       nDataType,
-                                                      false,false,false,true,
+                                                      true,
                                                       aCatalog, aSchema, aTable);
                 xRet = pRet;
                 break;
@@ -110,7 +108,7 @@ Reference< XPropertySet > OIndexColumns::createDescriptor()
     return new OIndexColumn(true);
 }
 
-void OIndexColumns::impl_refresh() throw(RuntimeException)
+void OIndexColumns::impl_refresh()
 {
     m_pIndex->refreshColumns();
 }

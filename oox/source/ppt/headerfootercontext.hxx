@@ -20,8 +20,8 @@
 #ifndef INCLUDED_OOX_SOURCE_PPT_HEADERFOOTERCONTEXT_HXX
 #define INCLUDED_OOX_SOURCE_PPT_HEADERFOOTERCONTEXT_HXX
 
-#include "oox/ppt/headerfooter.hxx"
-#include "oox/core/fragmenthandler2.hxx"
+#include <oox/ppt/headerfooter.hxx>
+#include <oox/core/fragmenthandler2.hxx>
 
 namespace oox { namespace ppt {
 
@@ -29,10 +29,10 @@ namespace oox { namespace ppt {
     class HeaderFooterContext : public ::oox::core::FragmentHandler2
     {
     public:
-        HeaderFooterContext( ::oox::core::FragmentHandler2& rParent,
+        HeaderFooterContext( ::oox::core::FragmentHandler2 const & rParent,
             const AttributeList& rAttribs, HeaderFooter& rHeaderFooter );
 
-        virtual ~HeaderFooterContext( );
+        virtual ~HeaderFooterContext( ) override;
     };
 
 } }

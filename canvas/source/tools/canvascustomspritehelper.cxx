@@ -25,7 +25,7 @@
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <rtl/math.hxx>
 #include <tools/diagnose_ex.h>
 
@@ -59,7 +59,7 @@ namespace canvas
             // clip which is about to be set, expressed as a
             // b2drectangle
             const ::basegfx::B2DRectangle& rClipBounds(
-                ::basegfx::tools::getRange( aClipPath ) );
+                ::basegfx::utils::getRange( aClipPath ) );
 
             const ::basegfx::B2DRectangle aBounds( 0.0, 0.0,
                                                    maSize.getX(),
@@ -89,7 +89,7 @@ namespace canvas
                 // new clip could be a single rectangle - check
                 // that now:
                 const bool bNewClipIsRect(
-                    ::basegfx::tools::isRectangle( aClipPath.getB2DPolygon(0) ) );
+                    ::basegfx::utils::isRectangle( aClipPath.getB2DPolygon(0) ) );
 
                 // both new and old clip are truly rectangles
                 // - can now take the optimized path
@@ -107,8 +107,7 @@ namespace canvas
                 {
                     // aClipBoundsB = maCurrClipBounds, i.e. last
                     // clip, intersected with sprite area
-                    typedef ::std::vector< ::basegfx::B2DRectangle > VectorOfRects;
-                    VectorOfRects aClipDifferences;
+                    std::vector< ::basegfx::B2DRectangle > aClipDifferences;
 
                     // get all rectangles covered by exactly one
                     // of the polygons (aka XOR)
@@ -155,12 +154,7 @@ namespace canvas
         mbActive(false),
         mbIsCurrClipRectangle(true),
         mbIsContentFullyOpaque( false ),
-        mbAlphaDirty( true ),
-        mbPositionDirty( true ),
-        mbTransformDirty( true ),
-        mbClipDirty( true ),
-        mbPrioDirty( true ),
-        mbVisibilityDirty( true )
+        mbTransformDirty( true )
     {
     }
 
@@ -171,11 +165,11 @@ namespace canvas
                           "CanvasCustomSpriteHelper::init(): Invalid owning sprite canvas" );
 
         mpSpriteCanvas = rOwningSpriteCanvas;
-        maSize.setX( ::std::max( 1.0,
+        maSize.setX( std::max( 1.0,
                                  ceil( rSpriteSize.Width ) ) ); // round up to nearest int,
                                                                  // enforce sprite to have at
                                                                  // least (1,1) pixel size
-        maSize.setY( ::std::max( 1.0,
+        maSize.setY( std::max( 1.0,
                                  ceil( rSpriteSize.Height ) ) );
     }
 
@@ -239,8 +233,6 @@ namespace canvas
                                               maPosition,
                                               getUpdateArea() );
             }
-
-            mbAlphaDirty = true;
         }
     }
 
@@ -264,7 +256,10 @@ namespace canvas
 
         if( aPoint != maPosition )
         {
-            const ::basegfx::B2DRectangle&  rBounds( getFullSpriteRect() );
+            const ::basegfx::B2DRectangle&  rBounds
+                = getUpdateArea( ::basegfx::B2DRectangle( 0.0, 0.0,
+                                                          maSize.getX(),
+                                                          maSize.getY() ) );
 
             if( mbActive )
             {
@@ -275,7 +270,6 @@ namespace canvas
             }
 
             maPosition = aPoint;
-            mbPositionDirty = true;
         }
     }
 
@@ -328,8 +322,6 @@ namespace canvas
                                           maPosition,
                                           getUpdateArea() );
         }
-
-        mbClipDirty = true;
     }
 
     void CanvasCustomSpriteHelper::setPriority( const Sprite::Reference&    rSprite,
@@ -348,8 +340,6 @@ namespace canvas
                                               maPosition,
                                               getUpdateArea() );
             }
-
-            mbPrioDirty = true;
         }
     }
 
@@ -372,8 +362,6 @@ namespace canvas
                                               maPosition,
                                               getUpdateArea() );
             }
-
-            mbVisibilityDirty = true;
         }
     }
 
@@ -396,8 +384,6 @@ namespace canvas
                                               maPosition,
                                               getUpdateArea() );
             }
-
-            mbVisibilityDirty = true;
         }
     }
 
@@ -452,14 +438,6 @@ namespace canvas
             return ::basegfx::B2DRectangle(
                 maPosition + maCurrClipBounds.getMinimum(),
                 maPosition + maCurrClipBounds.getMaximum() );
-    }
-
-    ::basegfx::B2DRange CanvasCustomSpriteHelper::getFullSpriteRect() const
-    {
-        // Internal! Only call with locked object mutex!
-        return getUpdateArea( ::basegfx::B2DRectangle( 0.0, 0.0,
-                                                       maSize.getX(),
-                                                       maSize.getY() ) );
     }
 }
 

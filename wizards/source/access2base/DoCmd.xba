@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
-<script:module xmlns:script="http://openoffice.org/2000/script" script:name="DoCmd" script:language="StarBasic">REM =======================================================================================================================
+<script:module xmlns:script="http://openoffice.org/2000/script" script:name="DoCmd" script:language="StarBasic">
+REM =======================================================================================================================
 REM ===					The Access2Base library is a part of the LibreOffice project.									===
 REM ===					Full documentation is available on http://www.access2base.com									===
 REM =======================================================================================================================
@@ -124,7 +125,7 @@ Dim oDatabase As Object
 	&apos;	Check existence of object and find its exact (case-sensitive) name
 	Select Case pvObjectType
 		Case acForm
-			sObjects = oDatabase.Document.getFormDocuments.ElementNames()
+			sObjects = Application._GetAllHierarchicalNames()
 			lComponent = com.sun.star.sdb.application.DatabaseObject.FORM
 		Case acTable
 			sObjects = oDatabase.Connection.getTables.ElementNames()
@@ -148,7 +149,7 @@ Dim oDatabase As Object
 	
 	Select Case pvObjectType
 		Case acForm
-			Set oController = oDatabase.Document.getFormDocuments.getByName(sObjectName)
+			Set oController = oDatabase.Document.getFormDocuments.getByHierarchicalName(sObjectName)
 			mClose = oController.close()
 		Case acTable, acQuery				&apos;	Not optimal but it works !!
 			Set oController = oDatabase.Document.CurrentController
@@ -181,7 +182,7 @@ Error_NotApplicable:
 End Function	&apos;	(m)Close	V1.1.0
 
 REM -----------------------------------------------------------------------------------------------------------------------
-Public Function CopyObject(ByVal Optional pvDestinationDatabase As Variant _
+Public Function CopyObject(ByVal Optional pvSourceDatabase As Variant _
 							, ByVal Optional pvNewName As Variant _
 							, ByVal Optional pvSourceType As Variant _
 							, ByVal Optional pvSourceName As Variant _
@@ -192,8 +193,10 @@ Const cstThisSub = &quot;CopyObject&quot;
 	Utils._SetCalledSub(cstThisSub)
 	CopyObject = False
 
-	If IsMissing(pvDestinationDatabase) Then pvDestinationDatabase = &quot;&quot;
-	If Not Utils._CheckArgument(pvDestinationDatabase, 1, vbString, &quot;&quot;) Then Goto Exit_Function
+	If IsMissing(pvSourceDatabase) Then pvSourceDatabase = &quot;&quot;
+	If VarType(pvSourceDatabase) &lt;&gt; vbString Then
+		If Not Utils._CheckArgument(pvSourceDatabase, 1, OBJDATABASE) Then Goto Exit_Function
+	End If
 	If IsMissing(pvNewName) Then Call _TraceArguments()
 	If Not Utils._CheckArgument(pvNewName, 2, vbString) Then Goto Exit_Function
 	If IsMissing(pvSourceType) Then Call _TraceArguments()
@@ -202,19 +205,41 @@ Const cstThisSub = &quot;CopyObject&quot;
 	If IsMissing(pvSourceName) Then Call _TraceArguments()
 	If Not Utils._CheckArgument(pvSourceName, 2, vbString) Then Goto Exit_Function
 	
-Dim oSource As Object, oTarget As Object, oDatabase As Object
-Dim oSourceTable As Object, oSourceColumns As Object, oSourceCol As Object, oTargetCol As Object
+Dim oSource As Object, oSourceDatabase As Object, oTarget As Object, oDatabase As Object, bSameDatabase As Boolean
+Dim oSourceTable As Object, oSourceColumns As Object, oSourceCol As Object, oTargetCol As Object, iRDBMS As Integer
 Dim oSourceKeys As Object, oSourceKey As Object, oTargetKey As Object
 Dim i As Integer, j As Integer, sSql As String, vPrimaryKeys() As Variant
+Dim vNameComponents() As Variant, iNames As Integer, sSurround As String
+Dim vInputField As Variant, vFieldBinary() As Variant, vOutputField As Variant
+Dim oInput as Object, oOutput As Object, iNbFields As Integer, vValue As Variant
+Dim vBinary As Variant, lInputSize As Long, lOutputSize As Long
+Dim lInputRecs As Long, lInputMax As Long, vField As Variant, bProgressMeter As Boolean, sFile As String
+
+Const cstMaxBinlength = 2 * 65535
+Const cstChunkSize = 2 * 65535
+Const cstProgressMeterLimit = 100
 
 	Set oDatabase = Application._CurrentDb()
+	bSameDatabase = False
+	If VarType(pvSourceDatabase) = vbString Then
+		If pvSourceDatabase = &quot;&quot; Then
+			Set oSourceDatabase = oDatabase
+			bSameDatabase = True
+		Else
+			Set oSourceDatabase = Application.OpenDatabase(ConvertToUrl(pvSourceDatabase), , , True)
+			If IsNull(oSourceDatabase) Then Goto Exit_Function
+		End If
+	Else
+		Set oSourceDatabase = pvSourceDatabase
+	End If
 	
 	With oDatabase
+		iRDBMS = ._RDBMS
 		If ._DbConnect &lt;&gt; DBCONNECTBASE Then Goto Error_NotApplicable
 		Select Case pvSourceType
 
 			Case acQuery
-				Set oSource = .QueryDefs(pvSourceName, True)
+				Set oSource = oSourceDatabase.QueryDefs(pvSourceName, True)
 				If IsNull(oSource) Then Goto Error_NotFound
 				Set oTarget = .QueryDefs(pvNewName, True)
 				If Not IsNull(oTarget) Then .Connection.getQueries.dropByName(oTarget.Name)		&apos;	a query with same name exists already ... drop it
@@ -227,35 +252,30 @@ Dim i As Integer, j As Integer, sSql As String, vPrimaryKeys() As Variant
 				.Document.store()
 
 			Case acTable
-				Set oSource = .TableDefs(pvSourceName, True)
+				Set oSource = oSourceDatabase.TableDefs(pvSourceName, True)
 				If IsNull(oSource) Then Goto Error_NotFound
 				Set oTarget = .TableDefs(pvNewName, True)
-				If Not IsNull(oTarget) Then .Connection.getTables.dropByName(oTarget.Name)		&apos;	a table with same name exists already ... drop it
+				&apos;	A table with same name exists already ... drop it
+				If Not IsNull(oTarget) Then .Connection.getTables.dropByName(oTarget.Name)
 				&apos;	Copy source table columns
 				Set oSourceTable = oSource.Table
 				Set oTarget = .Connection.getTables.createDataDescriptor
 				oTarget.Description = oSourceTable.Description
-				oTarget.Name = pvNewName
+				vNameComponents = Split(pvNewName, &quot;.&quot;)
+				iNames = UBound(vNameComponents)
+				If iNames &gt;= 2 Then oTarget.CatalogName = vNameComponents(iNames - 2) Else oTarget.CatalogName = &quot;&quot;
+				If iNames &gt;= 1 Then oTarget.SchemaName = vNameComponents(iNames - 1) Else oTarget.SchemaName = &quot;&quot;
+				oTarget.Name = vNameComponents(iNames)
 				oTarget.Type = oSourceTable.Type
 				Set oSourceColumns = oSourceTable.Columns
 				Set oTargetCol = oTarget.Columns.createDataDescriptor
 				For i = 0 To oSourceColumns.getCount() - 1
 					&apos;	Append each individual column to the table descriptor
 					Set oSourceCol = oSourceColumns.getByIndex(i)
-					oTargetCol.Name = oSourceCol.Name
-					oTargetCol.ControlDefault = oSourceCol.ControlDefault
-					oTargetCol.Description = oSourceCol.Description
-					oTargetCol.FormatKey = oSourceCol.FormatKey
-					oTargetCol.HelpText = oSourceCol.HelpText
-					oTargetCol.Hidden = oSourceCol.Hidden
-					oTargetCol.IsCurrency = oSourceCol.IsCurrency
-					oTargetCol.IsNullable = oSourceCol.IsNullable
-					oTargetCol.Precision = oSourceCol.Precision
-					oTargetCol.Scale = oSourceCol.Scale
-					oTargetCol.Type = oSourceCol.Type
-					oTargetCol.TypeName = oSourceCol.TypeName
+					_ConvertDataDescriptor oSourceCol, oSourceDatabase._RDBMS, oTargetCol, oDatabase
 					oTarget.Columns.appendByDescriptor(oTargetCol)
 				Next i
+
 				&apos;	Copy keys
 				Set oSourceKeys = oSourceTable.Keys
 				Set oTargetKey = oTarget.Keys.createDataDescriptor()
@@ -266,28 +286,102 @@ Dim i As Integer, j As Integer, sSql As String, vPrimaryKeys() As Variant
 					oTargetKey.Name = oSourceKey.Name
 					oTargetKey.ReferencedTable = oSourceKey.ReferencedTable
 					oTargetKey.Type = oSourceKey.Type
-&apos;					If oSourceKey.Type = com.sun.star.sdbcx.KeyType.PRIMARY Then vPrimaryKeys = oSourceKey.Columns.getElementNames()
 					oTargetKey.UpdateRule = oSourceKey.UpdateRule
 					Set oTargetCol = oTargetKey.Columns.createDataDescriptor()
  					For j = 0 To oSourceKey.Columns.getCount() - 1
 						Set oSourceCol = oSourceKey.Columns.getByIndex(j)
-						oTargetCol.Name = oSourceCol.Name
-						oTargetCol.Description = oSourceCol.Description
-						oTargetCol.IsCurrency = oSourceCol.IsCurrency
-						oTargetCol.IsNullable = oSourceCol.IsNullable
-						oTargetCol.Precision = oSourceCol.Precision
-						oTargetCol.Scale = oSourceCol.Scale
-						oTargetCol.Type = oSourceCol.Type
-						oTargetCol.TypeName = oSourceCol.TypeName
+						_ConvertDataDescriptor oSourceCol, oSourceDatabase._RDBMS, oTargetCol, oDatabase, True
 						oTargetKey.Columns.appendByDescriptor(oTargetCol)
 					Next j
 					oTarget.Keys.appendByDescriptor(oTargetKey)
 				Next i
 				&apos;	Duplicate table whole design
 				.Connection.getTables.appendByDescriptor(oTarget)
+
 				&apos;	Copy data
-				sSql = &quot;INSERT INTO [&quot; &amp; pvNewName &amp; &quot;] SELECT [&quot; &amp; oSource.Name &amp; &quot;].* FROM [&quot; &amp; oSource.Name &amp; &quot;]&quot;
-				DoCmd.RunSQL(sSql, dbSQLPassthrough)
+				Select Case bSameDatabase
+					Case True
+					&apos;	Build SQL statement to copy data
+						sSurround = Utils._Surround(oSource.Name)
+						sSql = &quot;INSERT INTO &quot; &amp; Utils._Surround(pvNewName) &amp; &quot; SELECT &quot; &amp; sSurround &amp; &quot;.* FROM &quot; &amp; sSurround
+						DoCmd.RunSQL(sSql)
+					Case False
+					&apos;	Copy data row by row and field by field
+					&apos;	As it is slow ... display a progress meter
+						Set oInput = oSourceDatabase.OpenRecordset(oSource.Name, , , dbReadOnly)
+						Set oOutput = .Openrecordset(pvNewName)
+
+						With oInput
+							If Not ( ._BOF And ._EOF ) Then
+								.MoveLast
+								lInputMax = .RecordCount
+								lInputRecs = 0
+								.MoveFirst
+								bProgressMeter = ( lInputMax &gt; cstProgressMeterLimit )
+
+								iNbFields = .Fields().Count - 1
+								vFieldBinary = Array()
+								ReDim vFieldBinary(0 To iNbFields)
+								For i = 0 To iNbFields
+									vFieldBinary(i) = Utils._IsBinaryType(.Fields(i).Column.Type)
+								Next i
+							Else
+								bProgressMeter = False
+							End If
+							If bProgressMeter Then Application.SysCmd acSysCmdInitMeter, pvNewName &amp; &quot; 0 %&quot;, lInputMax
+							Do While Not .EOF()
+								oOutput.RowSet.moveToInsertRow()
+								oOutput._EditMode = dbEditAdd
+								For i = 0 To iNbFields
+									Set vInputField = .Fields(i)
+									Set vOutputField = oOutput.Fields(i)
+									If vFieldBinary(i) Then
+										lInputSize = vInputField.FieldSize
+										If lInputSize &lt;= cstMaxBinlength Then
+											vField =  Utils._getResultSetColumnValue(.RowSet, i + 1, True)
+											Utils._updateResultSetColumnValue(iRDBMS, oOutput.RowSet, i + 1, vField)
+										ElseIf oDatabase._BinaryStream Then
+											&apos;	Typically for SQLite where binary fields are limited
+											If lInputSize &gt; vOutputField._Precision Then
+												TraceError(TRACEWARNING, ERRPRECISION, Utils._CalledSub(), 0, 1, Array(vOutputField._Name, lInputRecs + 1))
+												Utils._updateResultSetColumnValue(iRDBMS, oOutput.RowSet, i + 1, Null)
+											Else
+												sFile = Utils._GetRandomFileName(&quot;BINARY&quot;)
+												vInputField._WriteAll(sFile, &quot;WriteAllBytes&quot;)
+												vOutputField._ReadAll(sFile, &quot;ReadAllBytes&quot;)
+												Kill ConvertToUrl(sFile)
+											End If
+										End If
+									Else
+										vField =  Utils._getResultSetColumnValue(.RowSet, i + 1)
+										If VarType(vField) = vbString Then
+											If Len(vField) &gt; vOutputField._Precision Then
+												TraceError(TRACEWARNING, ERRPRECISION, Utils._CalledSub(), 0, 1, Array(vOutputField._Name, lInputRecs + 1))
+											End If
+										End If
+										&apos;	Update is done anyway, if too long, with truncation
+										Utils._updateResultSetColumnValue(iRDBMS, oOutput.RowSet, i + 1, vField)
+									End If
+								Next i
+
+								If oOutput.RowSet.IsNew And oOutput.RowSet.IsModified Then oOutput.RowSet.insertRow()
+								oOutput._EditMode = dbEditNone
+								lInputRecs = lInputRecs + 1
+								If bProgressMeter Then
+									If lInputRecs Mod (lInputMax / 100) = 0 Then
+										Application.SysCmd acSysCmdUpdateMeter, pvNewName &amp; &quot; &quot; &amp; CStr(CLng(lInputRecs * 100 / lInputMax)) &amp; &quot;%&quot;, lInputRecs
+									End If
+								End If
+								.MoveNext
+							Loop
+						End With
+
+						oOutput.mClose()
+						Set oOutput = Nothing
+						oInput.mClose()
+						Set oInput = Nothing
+						if bProgressMeter Then Application.SysCmd acSysCmdClearStatus
+				End Select
 				
 			Case Else
 		End Select
@@ -296,7 +390,15 @@ Dim i As Integer, j As Integer, sSql As String, vPrimaryKeys() As Variant
 	CopyObject = True
 	
 Exit_Function:
-	Utils._ResetCalledSub(cstThisSub)
+	&apos;	Avoid closing the current database or the database object given as source argument
+	If VarType(pvSourceDatabase) = vbString And Not bSameDatabase Then
+		If Not IsNull(oSourceDatabase) Then oSourceDatabase.mClose()
+	End If
+	Set oSourceDatabase = Nothing
+	If Not IsNull(oOutput) Then oOutput.mClose()
+	Set oOutput = Nothing
+	If Not IsNull(oInput) Then oInput.mClose()
+	Set oInput = Nothing
 	Set oSourceCol = Nothing
 	Set oSourceKey = Nothing
 	Set oSourceKeys = Nothing
@@ -306,6 +408,7 @@ Exit_Function:
 	Set oTargetCol = Nothing
 	Set oTargetKey = Nothing
 	Set oTarget = Nothing
+	Utils._ResetCalledSub(cstThisSub)
 	Exit Function
 Error_NotFound:
 	TraceError(TRACEFATAL, ERROBJECTNOTFOUND, Utils._CalledSub(), 0, , Array(Iif(pvSourceType = acQuery, _GetLabel(&quot;QUERY&quot;), _GetLabel(&quot;TABLE&quot;)), pvSourceName))
@@ -390,26 +493,30 @@ Dim vFindValue As Variant, oFindrecord As Object
 						Case vbDate, vbInteger, vbLong, vbSingle, vbDouble, vbCurrency, vbBigint, vbDecimal
 							bFound = ( .FindWhat = vFindValue )
 						Case vbString
-							Select Case .Match
-								Case acStart
-									If .MatchCase Then
-										bFound = ( Left(.FindWhat, Len(.FindWhat)) = vFindValue )
-									Else
-										bFound = ( UCase(Left(.FindWhat, Len(.FindWhat))) = UCase(vFindValue) )
-									End If
-								Case acAnyWhere
-									If .MatchCase Then
-										bFound = ( InStr(1, vFindValue, .FindWhat, 0) &gt; 0 )
-									Else
-										bFound = ( InStr(vFindValue, .FindWhat) &gt; 0 )
-									End If	
-								Case acEntire
-									If .MatchCase Then
-										bFound = ( .FindWhat = vFindValue )
-									Else
-										bFound = ( UCase(.FindWhat) = UCase(vFindValue) )
-									End If
-							End Select
+							If VarType(vFindValue) = vbString Then
+								Select Case .Match
+									Case acStart
+										If .MatchCase Then
+											bFound = ( Left(.FindWhat, Len(.FindWhat)) = vFindValue )
+										Else
+											bFound = ( UCase(Left(.FindWhat, Len(.FindWhat))) = UCase(vFindValue) )
+										End If
+									Case acAnyWhere
+										If .MatchCase Then
+											bFound = ( InStr(1, vFindValue, .FindWhat, 0) &gt; 0 )
+										Else
+											bFound = ( InStr(vFindValue, .FindWhat) &gt; 0 )
+										End If	
+									Case acEntire
+										If .MatchCase Then
+											bFound = ( .FindWhat = vFindValue )
+										Else
+											bFound = ( UCase(.FindWhat) = UCase(vFindValue) )
+										End If
+								End Select
+							Else
+								bFound = False
+							End If
 					End Select
 					If bFound Then
 						.LastColumn = i
@@ -758,7 +865,7 @@ Public Function GoToRecord(Optional ByVal pvObjectType As Variant _
 							, Optional ByVal pvOffset As Variant _
 			) As Boolean
 
-&apos;Move to record indicated by pvRecord in the object designated by pvObjectType (MUST BE acDataForm)
+&apos;Move to record indicated by pvRecord/pvOffset in the window designated by pvObjectType and pvObjectName
 
 	If _ErrorHandler() Then On Local Error Goto Error_Function
 	GoToRecord = False
@@ -767,9 +874,6 @@ Const cstThisSub = &quot;GoTorecord&quot;
 	Utils._SetCalledSub(cstThisSub)
 	If IsMissing(pvObjectName) Then pvObjectName = &quot;&quot;
 	If IsMissing(pvObjectType) Then pvObjectType = acActiveDataObject
-&apos;	If IsMissing(pvObjectType) Then
-&apos;		If pvObjectName &lt;&gt; &quot;&quot; Then pvObjectType = acDataForm Else pvObjectType = acActiveDataObject
-&apos;	End If
 	If IsMissing(pvRecord) Then pvRecord = acNext
 	If IsMissing(pvOffset) Then pvOffset = 1
 	If Not (Utils._CheckArgument(pvObjectType, 1, Utils._AddNumeric() _
@@ -1039,46 +1143,42 @@ Dim sFilter As String, oForm As Object, oFormsCollection As Object
 		sFilter = &quot;(&quot; &amp; pvFilterName &amp; &quot;) And (&quot; &amp; pvWhereCondition &amp; &quot;)&quot;
 	End If
 	Set oFormsCollection = oOpenForm.DrawPage.Forms
-	If oFormsCollection.hasByName(&quot;MainForm&quot;) Then
-		Set oForm = oFormsCollection.getByName(&quot;MainForm&quot;)
-	ElseIf oFormsCollection.hasByName(&quot;Form&quot;) Then
-		Set oForm = oFormsCollection.getByName(&quot;Form&quot;)
-	ElseIf oFormsCollection.hasByName(ofForm._Name) Then
-		Set oForm = oFormsCollection.getByName(ofForm._Name)
-	Else
-		Goto Trace_Error
-	End If
-	If sFilter &lt;&gt; &quot;&quot; Then
-		oForm.Filter = oDatabase._ReplaceSquareBrackets(sFilter)
-		oForm.ApplyFilter = True
-		oForm.reload()
-	ElseIf oForm.Filter &lt;&gt; &quot;&quot; Then			&apos;	If a filter has been set previously it must be removed
-		oForm.Filter = &quot;&quot;
-		oForm.ApplyFilter = False
-		oForm.reload()
+	If oFormsCollection.getCount() &gt; 0 Then Set oForm = oFormsCollection.getByIndex(0) Else Set oForm = Nothing
+	If Not IsNull(oForm) Then
+		If sFilter &lt;&gt; &quot;&quot; Then
+			oForm.Filter = oDatabase._ReplaceSquareBrackets(sFilter)
+			oForm.ApplyFilter = True
+			oForm.reload()
+		ElseIf oForm.Filter &lt;&gt; &quot;&quot; Then			&apos;	If a filter has been set previously it must be removed
+			oForm.Filter = &quot;&quot;
+			oForm.ApplyFilter = False
+			oForm.reload()
+		End If
 	End If
 	
 &apos;Housekeeping
 	Set ofForm = Application.AllForms(pvFormName)			&apos;	Redone to reinitialize all properties of ofForm now FormName is open
 	With ofForm
-		Select Case pvDataMode
-			Case acFormAdd
-				.AllowAdditions = True
-				.AllowDeletions = False
-				.AllowEdits = False
-			Case acFormEdit
-				.AllowAdditions = True
-				.AllowDeletions = True
-				.AllowEdits = True
-			Case acFormReadOnly
-				.AllowAdditions = False
-				.AllowDeletions = False
-				.AllowEdits = False
-			Case acFormPropertySettings
-		End Select
+		If Not IsNull(.DatabaseForm) Then
+			Select Case pvDataMode
+				Case acFormAdd
+					.AllowAdditions = True
+					.AllowDeletions = False
+					.AllowEdits = False
+				Case acFormEdit
+					.AllowAdditions = True
+					.AllowDeletions = True
+					.AllowEdits = True
+				Case acFormReadOnly
+					.AllowAdditions = False
+					.AllowDeletions = False
+					.AllowEdits = False
+				Case acFormPropertySettings
+			End Select
+		End If
 		.Visible = ( pvWindowMode &lt;&gt; acHidden )
 		._OpenArgs = pvOpenArgs
-		&apos;To avoid AOO 3,4 bug See http://user.services.openoffice.org/en/forum/viewtopic.php?f=13&amp;t=53751
+		&apos;To avoid AOO 3.4 bug See http://user.services.openoffice.org/en/forum/viewtopic.php?f=13&amp;t=53751
 		.Component.CurrentController.ViewSettings.ShowOnlineLayout = True
 	End With
 
@@ -1784,7 +1884,7 @@ Const cstSemiColon = &quot;;&quot;
 					pvObjectType = acSendForm
 					pvObjectName = oWindow._Name
 				End If
-				sDirectory =  _getTempDirectoryURL()
+				sDirectory =  Utils._getTempDirectoryURL()
 				If Right(sDirectory, 1) &lt;&gt; &quot;/&quot; Then sDirectory = sDirectory &amp; &quot;/&quot;
 				If pvOutputFormat = &quot;&quot; Then
 					sOutputFormat = _PromptFormat(Array(&quot;PDF&quot;, &quot;ODT&quot;, &quot;DOC&quot;, &quot;HTML&quot;))			&apos;	Prompt user for format
@@ -1981,6 +2081,89 @@ Dim bFound As Boolean
 End Function		&apos;	_CheckColumnType	V0.9.1
 
 REM -----------------------------------------------------------------------------------------------------------------------
+Sub _ConvertDataDescriptor(	ByRef poSource As Object _
+							, ByVal piSourceRDBMS As Integer _
+							, ByRef poTarget As Object _
+							, ByRef poDatabase As Object _
+							, ByVal Optional pbKey As Boolean _
+							)
+&apos;	Convert source column descriptor to target descriptor
+&apos;	If RDMSs identical, simply move property by property
+&apos;	Otherwise
+&apos;		- Use Type conversion tables (cfr. DataTypes By RDBMS.ods case study)
+&apos;		- Select among synonyms the entry with the lowest Precision at least &gt;= source Precision
+&apos;		- Derive TypeName and Precision values
+
+Dim vTypesReference() As Variant, vTypes() As Variant, vTypeNames() As Variant
+Dim i As Integer, iType As Integer, iTypeAlias As Integer
+Dim iNbTypes As Integer, iBestFit As Integer, lFitPrecision As Long, lPrecision As Long
+
+	On Local Error Goto Error_Sub
+	If IsMissing(pbKey) Then pbKey = False
+
+	poTarget.Name = poSource.Name
+	poTarget.Description = poSource.Description
+	If Not pbKey Then
+		poTarget.ControlDefault = poSource.ControlDefault
+		poTarget.FormatKey = poSource.FormatKey
+		poTarget.HelpText = poSource.HelpText
+		poTarget.Hidden = poSource.Hidden
+	End If
+	poTarget.IsCurrency = poSource.IsCurrency
+	poTarget.IsNullable = poSource.IsNullable
+	poTarget.Scale = poSource.Scale
+	
+	If piSourceRDBMS = poDatabase._RDBMS Or poDatabase._RDBMS = DBMS_UNKNOWN Then
+		poTarget.Type = poSource.Type
+		poTarget.Precision = poSource.Precision
+		poTarget.TypeName = poSource.TypeName
+		Goto Exit_Sub
+	End If
+
+	&apos;	Search DataType compatibility
+	With poDatabase
+		&apos;	Find source datatype entry in Reference array
+		iType = -1
+		For i = 0 To UBound(._ColumnTypesReference)
+			If ._ColumnTypesReference(i) = poSource.Type Then
+				iType = i
+				Exit For
+			End If
+		Next i
+		If iType = -1 Then Goto Error_Compatibility
+		iTypeAlias = ._ColumnTypesAlias(iType)
+		&apos;	Find best choice for the datatype of the target column
+		iNbTypes = UBound(._ColumnTypes)
+		iBestFit = -1
+		lFitPrecision = -2			&apos;	Some POSTGRES datatypes have a precision of -1
+		For i = 0 To iNbTypes
+			If ._ColumnTypes(i) = iTypeAlias Then	&apos;	Minimal fit = correct datatype
+				lPrecision = ._ColumnPrecisions(i)
+				If iBestFit = -1 _
+						Or (iBestFit &gt; -1 And poSource.Precision &gt; 0 And lPrecision &gt;= poSource.Precision And lPrecision &lt; lFitPrecision) _
+						Or (iBestFit &gt; -1 And poSource.Precision = 0 And lPrecision &gt; lFitPrecision) Then	&apos;	First fit or better fit
+					iBestFit = i
+					lFitPrecision = lPrecision
+				End If
+			End If
+		Next i
+		If iBestFit = -1 Then Goto Error_Compatibility
+		poTarget.Type = iTypeAlias
+		poTarget.Precision = lFitPrecision
+		poTarget.TypeName = ._ColumnTypeNames(iBestFit)
+	End With
+
+Exit_Sub:
+	Exit Sub
+Error_Compatibility:
+	TraceError(TRACEFATAL, ERRCOMPATIBILITY, Utils._CalledSub(), 0, 1, poSource.Name)
+	Goto Exit_Sub
+Error_Sub:
+	TraceError(TRACEABORT, Err, &quot;_ConvertDataDescriptor&quot;, Erl)
+	Goto Exit_Sub
+End Sub		&apos;	ConvertDataDescriptor	V1.6.0
+		
+REM -----------------------------------------------------------------------------------------------------------------------
 Private Function _DatabaseForm(psForm As String, psControl As String)
 &apos;Return DatabaseForm element of Form object (based on psForm which is known as a real form name)
 &apos;or of SubForm object (based on psControl which is checked for being a subform)
@@ -2035,27 +2218,6 @@ Dim sCommand As String
 	oResult = oDispatcher.executeDispatch(oDocument, psCommand, sTargetFrameName, 0, oArgs())
 
 End Sub				&apos;	_DispatchCommand	V1.3.0
-
-REM -----------------------------------------------------------------------------------------------------------------------
-Private Function _getTempDirectoryURL()	As String
-&apos;	Return the temporary directory defined in the OO Options (Paths)
-Dim sDirectory As String, oSettings As Object, oPathSettings As Object	
-
-	If _ErrorHandler() Then On Local Error Goto Error_Function
-	
-	_getTempDirectoryURL = &quot;&quot;
-	oPathSettings = createUnoService( &quot;com.sun.star.util.PathSettings&quot; )
-	sDirectory = oPathSettings.GetPropertyValue( &quot;Temp&quot; )
-	
-	_getTempDirectoryURL = sDirectory
-
-Exit_Function:
-	Exit Function
-Error_Function:
-	TraceError(&quot;ERROR&quot;, Err, &quot;_getTempDirectoryURL&quot;, Erl)
-	_getTempDirectoryURL = &quot;&quot;
-	Goto Exit_Function
-End Function	&apos;	_getTempDirectoryURL		V0.8.5
 
 REM -----------------------------------------------------------------------------------------------------------------------
 Public Function _getUpperShortcut(ByVal psShortcut As String, ByVal psLastComponent As String) As String
@@ -2146,15 +2308,9 @@ REM ----------------------------------------------------------------------------
 Private Function _PromptFormat(ByVal pvList As Variant) As String
 &apos;	Return user selection in Format dialog
 
-Dim oDialog As Object, oDialogLib As Object, iOKCancel As Integer, oControl As Object
-	Set oDialogLib = DialogLibraries
-	If oDialogLib.hasByName(&quot;Access2BaseDev&quot;) Then
-		If Not oDialogLib.IsLibraryLoaded(&quot;Access2BaseDev&quot;) Then oDialogLib.loadLibrary(&quot;Access2BaseDev&quot;)
-		Set oDialog = CreateUnoDialog(DialogLibraries.Access2BaseDev.dlgFormat)
-	Else
-		If Not oDialogLib.IsLibraryLoaded(&quot;Access2Base&quot;) Then oDialogLib.loadLibrary(&quot;Access2Base&quot;)
-		Set oDialog = CreateUnoDialog(DialogLibraries.Access2Base.dlgFormat)
-	End If
+Dim oDialog As Object, iOKCancel As Integer, oControl As Object
+
+	Set oDialog = CreateUnoDialog(Utils._GetDialogLib().dlgFormat)
 	oDialog.Title = _GetLabel(&quot;DLGFORMAT_TITLE&quot;)
 
 	Set oControl = oDialog.Model.getByName(&quot;lblFormat&quot;)
@@ -2203,6 +2359,7 @@ Dim oEnum As Object, oDesk As Object, oComp As Object, oFrame As Object, i As In
 Dim bFound As Boolean, bActive As Boolean, sName As String, iType As Integer, sDocumentType As String
 Dim sImplementation As String, vLocation() As Variant
 Dim oWindow As _Window
+Dim vPersistent As Variant, oForm As Object
 
 	If _ErrorHandler() Then On Local Error Goto Error_Function
 
@@ -2250,7 +2407,10 @@ Dim oWindow As _Window
 							iType = acDocument
 							sDocumentType = docWriter
 					End Select
-					If iType = acForm Or iType = acReport Then		&apos;	Identify Form or Report name
+					If iType = acForm Then				&apos;	Identify persistent Form name
+						vPersistent = Split(oComp.StringValue, &quot;/&quot;)
+						sName = _GetHierarchicalName(vPersistent(UBound(vPersistent) - 1))
+					ElseIf iType = acReport Then		&apos;	Identify Report name
 						For i = 0 To UBound(oComp.Args())
 							If oComp.Args(i).Name = &quot;DocumentTitle&quot; Then
 								sName = oComp.Args(i).Value
@@ -2296,7 +2456,7 @@ Dim oWindow As _Window
 				Set oFrame = oComp.Frame
 				iType = acDiagram
 				sName = &quot;&quot;
-			Case &quot;com.sun.star.comp.sfx2.BackingComp&quot;				&apos;	Welcome screen
+			Case &quot;com.sun.star.comp.sfx2.BackingComp&quot;				&apos;		Welcome screen
 				Set oFrame = oComp.Frame
 				iType = acWelcome
 				sName = &quot;&quot;
@@ -2499,4 +2659,5 @@ Dim oShell As Object
 	oShell.execute(sCommand, &quot;&quot; , com.sun.star.system.SystemShellExecuteFlags.DEFAULTS)
 
 End Sub				&apos;	_ShellExecute			V0.8.5
+
 </script:module>

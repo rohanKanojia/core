@@ -21,6 +21,7 @@
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
 #include <vcl/popupmenuwindow.hxx>
+#include <sal/log.hxx>
 
 #include "atkwindow.hxx"
 #include "atkwrapper.hxx"
@@ -37,7 +38,7 @@ static void (* window_real_initialize) (AtkObject *obj, gpointer data) = nullptr
 static void (* window_real_finalize) (GObject *obj) = nullptr;
 
 static void
-init_from_window( AtkObject *accessible, vcl::Window *pWindow )
+init_from_window( AtkObject *accessible, vcl::Window const *pWindow )
 {
     static AtkRole aDefaultRole = ATK_ROLE_INVALID;
 
@@ -72,7 +73,7 @@ init_from_window( AtkObject *accessible, vcl::Window *pWindow )
          */
         case AccessibleRole::WINDOW:
         {
-            sal_uInt16 type = WINDOW_WINDOW;
+            WindowType type = WindowType::WINDOW;
             bool parentIsMenuFloatingWindow = false;
 
             vcl::Window *pParent = pWindow->GetParent();
@@ -81,8 +82,8 @@ init_from_window( AtkObject *accessible, vcl::Window *pWindow )
                 parentIsMenuFloatingWindow = pParent->IsMenuFloatingWindow();
             }
 
-            if( (WINDOW_LISTBOX != type) && (WINDOW_COMBOBOX != type) &&
-                (WINDOW_MENUBARWINDOW != type) && ! parentIsMenuFloatingWindow )
+            if( (WindowType::LISTBOX != type) && (WindowType::COMBOBOX != type) &&
+                (WindowType::MENUBARWINDOW != type) && ! parentIsMenuFloatingWindow )
             {
                 role = ATK_ROLE_WINDOW;
             }
@@ -94,13 +95,13 @@ init_from_window( AtkObject *accessible, vcl::Window *pWindow )
             vcl::Window *pChild = pWindow->GetWindow(GetWindowType::FirstChild);
             if( pChild )
             {
-                if( WINDOW_HELPTEXTWINDOW == pChild->GetType() )
+                if( WindowType::HELPTEXTWINDOW == pChild->GetType() )
                 {
                     role = ATK_ROLE_TOOL_TIP;
                     pChild->SetAccessibleRole( AccessibleRole::LABEL );
                     accessible->name = g_strdup( OUStringToOString( pChild->GetText(), RTL_TEXTENCODING_UTF8 ).getStr() );
                 }
-                else if ( pWindow->GetType() == WINDOW_BORDERWINDOW && pChild->GetType() == WINDOW_FLOATINGWINDOW )
+                else if ( pWindow->GetType() == WindowType::BORDERWINDOW && pChild->GetType() == WindowType::FLOATINGWINDOW )
                 {
                     PopupMenuFloatingWindow* p = dynamic_cast<PopupMenuFloatingWindow*>(pChild);
                     if (p && p->IsPopupMenu() && p->GetMenuStackLevel() == 0)
@@ -121,14 +122,14 @@ init_from_window( AtkObject *accessible, vcl::Window *pWindow )
 
 /*****************************************************************************/
 
-static gint
+static gboolean
 ooo_window_wrapper_clear_focus(gpointer)
 {
     SolarMutexGuard aGuard;
     SAL_WNODEPRECATED_DECLARATIONS_PUSH
     atk_focus_tracker_notify( nullptr );
     SAL_WNODEPRECATED_DECLARATIONS_POP
-    return FALSE;
+    return false;
 }
 
 /*****************************************************************************/
@@ -137,7 +138,7 @@ static gboolean
 ooo_window_wrapper_real_focus_gtk (GtkWidget *, GdkEventFocus *)
 {
     g_idle_add( ooo_window_wrapper_clear_focus, nullptr );
-    return FALSE;
+    return false;
 }
 
 static gboolean ooo_tooltip_map( GtkWidget* pToolTip, gpointer )
@@ -165,7 +166,7 @@ isChildPopupMenu(vcl::Window* pWindow)
     if (!pChild)
         return false;
 
-    if (WINDOW_FLOATINGWINDOW != pChild->GetType())
+    if (WindowType::FLOATINGWINDOW != pChild->GetType())
         return false;
 
     PopupMenuFloatingWindow* p = dynamic_cast<PopupMenuFloatingWindow*>(pChild);
@@ -194,7 +195,7 @@ ooo_window_wrapper_real_initialize(AtkObject *obj, gpointer data)
              * in the wrapper registry when atk traverses the hierarchy up on
              * focus events
              */
-            if( WINDOW_BORDERWINDOW == pWindow->GetType() )
+            if( WindowType::BORDERWINDOW == pWindow->GetType() )
             {
                 if ( isChildPopupMenu(pWindow) )
                 {
@@ -304,7 +305,7 @@ ooo_window_wrapper_get_type()
             nullptr
         } ;
 
-        type = g_type_register_static (parent_type, "OOoWindowAtkObject", &typeInfo, (GTypeFlags)0) ;
+        type = g_type_register_static (parent_type, "OOoWindowAtkObject", &typeInfo, GTypeFlags(0)) ;
     }
 
     return type;

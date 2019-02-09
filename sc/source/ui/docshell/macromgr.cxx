@@ -17,23 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "macromgr.hxx"
-#include "document.hxx"
+#include <macromgr.hxx>
+#include <document.hxx>
 
 #include <basic/basmgr.hxx>
 #include <cppuhelper/implbase.hxx>
-#include <osl/diagnose.h>
 #include <sfx2/objsh.hxx>
-#include "formulacell.hxx"
+#include <formulacell.hxx>
+#include <vector>
 #include <com/sun/star/container/XContainer.hpp>
-
-#include <list>
 
 using namespace ::com::sun::star;
 using ::com::sun::star::uno::RuntimeException;
 using ::com::sun::star::uno::Reference;
-using ::std::list;
-using ::std::for_each;
+using ::std::vector;
 using ::std::pair;
 
 /**
@@ -49,8 +46,8 @@ public:
         ModuleCellMap::iterator itr = maCells.find(rModuleName);
         if (itr == maCells.end())
         {
-            pair<ModuleCellMap::iterator, bool> r = maCells.insert(
-                ModuleCellMap::value_type(rModuleName, list<ScFormulaCell*>()));
+            pair<ModuleCellMap::iterator, bool> r = maCells.emplace(
+                rModuleName, vector<ScFormulaCell*>());
 
             if (!r.second)
                 // insertion failed.
@@ -61,31 +58,34 @@ public:
         itr->second.push_back(pCell);
     }
 
-    void removeCell(ScFormulaCell* pCell)
+    void removeCell(const ScFormulaCell* pCell)
     {
-        ModuleCellMap::iterator itr = maCells.begin(), itrEnd = maCells.end();
-        for (; itr != itrEnd; ++itr)
-            itr->second.remove(pCell);
+        for (auto& rEntry : maCells)
+        {
+            rEntry.second.erase(std::remove(rEntry.second.begin(), rEntry.second.end(), pCell), rEntry.second.end() );
+        }
     }
 
-    void getCellsByModule(const OUString& rModuleName, list<ScFormulaCell*>& rCells)
+    void getCellsByModule(const OUString& rModuleName, vector<ScFormulaCell*>& rCells)
     {
         ModuleCellMap::iterator itr = maCells.find(rModuleName);
         if (itr == maCells.end())
             return;
 
-        list<ScFormulaCell*>& rCellList = itr->second;
+        vector<ScFormulaCell*>& rCellList = itr->second;
 
         // Remove duplicates.
-        rCellList.sort();
-        rCellList.unique();
+        std::sort(rCellList.begin(), rCellList.end());
+        auto last = std::unique(rCellList.begin(), rCellList.end());
+        rCellList.erase(last, rCellList.end());
+
         // exception safe copy
-        list<ScFormulaCell*> temp(rCellList);
+        vector<ScFormulaCell*> temp(rCellList);
         rCells.swap(temp);
     }
 
 private:
-    typedef std::unordered_map<OUString, list<ScFormulaCell*>, OUStringHash> ModuleCellMap;
+    typedef std::unordered_map<OUString, vector<ScFormulaCell*>> ModuleCellMap;
     ModuleCellMap maCells;
 };
 
@@ -107,19 +107,18 @@ class VBAProjectListener : public ContainerListenerHelper
 public:
     explicit VBAProjectListener( ScMacroManager* pMacroMgr ) : mpMacroMgr( pMacroMgr ) {}
     // XEventListener
-    virtual void SAL_CALL disposing( const lang::EventObject& /*Source*/ ) throw(RuntimeException, std::exception) override {}
+    virtual void SAL_CALL disposing( const lang::EventObject& /*Source*/ ) override {}
 
     // XContainerListener
-    virtual void SAL_CALL elementInserted( const container::ContainerEvent& /*Event*/ ) throw(RuntimeException, std::exception) override {}
-    virtual void SAL_CALL elementReplaced( const container::ContainerEvent& Event ) throw(RuntimeException, std::exception) override
+    virtual void SAL_CALL elementInserted( const container::ContainerEvent& /*Event*/ ) override {}
+    virtual void SAL_CALL elementReplaced( const container::ContainerEvent& Event ) override
     {
         OUString sModuleName;
         Event.Accessor >>= sModuleName;
-        OSL_TRACE("VBAProjectListener::elementReplaced(%s)", OUStringToOString( sModuleName, RTL_TEXTENCODING_UTF8 ).getStr() );
         mpMacroMgr->InitUserFuncData();
         mpMacroMgr->BroadcastModuleUpdate(sModuleName);
     }
-    virtual void SAL_CALL elementRemoved( const container::ContainerEvent& /*Event*/ ) throw(RuntimeException, std::exception) override {}
+    virtual void SAL_CALL elementRemoved( const container::ContainerEvent& /*Event*/ ) override {}
 
 };
 
@@ -142,15 +141,12 @@ void ScMacroManager::InitUserFuncData()
         Reference< script::XLibraryContainer > xLibraries( pShell->GetBasicContainer(), uno::UNO_QUERY_THROW );
         xModuleContainer.set( xLibraries->getByName( sProjectName ), uno::UNO_QUERY_THROW );
 
-        if ( xModuleContainer.is() )
-        {
-            // remove old listener ( if there was one )
-            if ( mxContainerListener.is() )
-                xModuleContainer->removeContainerListener( mxContainerListener );
-            // Create listener
-            mxContainerListener = new VBAProjectListener( this );
-            xModuleContainer->addContainerListener( mxContainerListener );
-        }
+        // remove old listener ( if there was one )
+        if ( mxContainerListener.is() )
+            xModuleContainer->removeContainerListener( mxContainerListener );
+        // Create listener
+        mxContainerListener = new VBAProjectListener( this );
+        xModuleContainer->addContainerListener( mxContainerListener );
     }
     catch (const uno::Exception&)
     {
@@ -175,19 +171,17 @@ void ScMacroManager::AddDependentCell(const OUString& aModuleName, ScFormulaCell
     mpDepTracker->addCell(aModuleName, pCell);
 }
 
-void ScMacroManager::RemoveDependentCell(ScFormulaCell* pCell)
+void ScMacroManager::RemoveDependentCell(const ScFormulaCell* pCell)
 {
     mpDepTracker->removeCell(pCell);
 }
 
 void ScMacroManager::BroadcastModuleUpdate(const OUString& aModuleName)
 {
-    list<ScFormulaCell*> aCells;
+    vector<ScFormulaCell*> aCells;
     mpDepTracker->getCellsByModule(aModuleName, aCells);
-    list<ScFormulaCell*>::iterator itr = aCells.begin(), itrEnd = aCells.end();
-    for (; itr != itrEnd; ++itr)
+    for (ScFormulaCell* pCell : aCells)
     {
-        ScFormulaCell* pCell = *itr;
         mpDoc->PutInFormulaTree(pCell); // for F9 recalc
 
         // for recalc on cell value change.  If the cell is not volatile, the

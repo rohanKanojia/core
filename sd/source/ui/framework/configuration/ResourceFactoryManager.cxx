@@ -23,7 +23,9 @@
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/util/URLTransformer.hpp>
+#include <com/sun/star/drawing/framework/XControllerManager.hpp>
 #include <comphelper/processfactory.hxx>
+#include <sal/log.hxx>
 
 #include <algorithm>
 
@@ -50,6 +52,14 @@ ResourceFactoryManager::ResourceFactoryManager (const Reference<XControllerManag
 
 ResourceFactoryManager::~ResourceFactoryManager()
 {
+    for (auto& rXInterfaceResource : maFactoryMap)
+    {
+        Reference<lang::XComponent> xComponent (rXInterfaceResource.second, UNO_QUERY);
+        rXInterfaceResource.second = nullptr;
+        if (xComponent.is())
+            xComponent->dispose();
+    }
+
     Reference<lang::XComponent> xComponent (mxURLTransformer, UNO_QUERY);
     if (xComponent.is())
         xComponent->dispose();
@@ -58,7 +68,6 @@ ResourceFactoryManager::~ResourceFactoryManager()
 void ResourceFactoryManager::AddFactory (
     const OUString& rsURL,
     const Reference<XResourceFactory>& rxFactory)
-        throw (RuntimeException)
 {
     if ( ! rxFactory.is())
         throw lang::IllegalArgumentException();
@@ -70,12 +79,10 @@ void ResourceFactoryManager::AddFactory (
     if (rsURL.indexOf('*') >= 0 || rsURL.indexOf('?') >= 0)
     {
         // The URL is a URL pattern not an single URL.
-        maFactoryPatternList.push_back(FactoryPatternList::value_type(rsURL, rxFactory));
+        maFactoryPatternList.emplace_back(rsURL, rxFactory);
 
 #if defined VERBOSE && VERBOSE>=1
-        OSL_TRACE("ResourceFactoryManager::AddFactory pattern %s %x\n",
-            OUStringToOString(rsURL, RTL_TEXTENCODING_UTF8).getStr(),
-            rxFactory.get());
+        SAL_INFO("sd","ResourceFactoryManager::AddFactory pattern " << rsURL << std::hex << rxFactory.get());
 #endif
     }
     else
@@ -83,16 +90,13 @@ void ResourceFactoryManager::AddFactory (
         maFactoryMap[rsURL] = rxFactory;
 
 #if defined VERBOSE && VERBOSE>=1
-        OSL_TRACE("ResourceFactoryManager::AddFactory fixed %s %x\n",
-            OUStringToOString(rsURL, RTL_TEXTENCODING_UTF8).getStr(),
-            rxFactory.get());
+        SAL_INFO("sd", "ResourceFactoryManager::AddFactory fixed " << rsURL << " 0x" << std::hex << rxFactory.get());
 #endif
     }
 }
 
 void ResourceFactoryManager::RemoveFactoryForURL (
     const OUString& rsURL)
-    throw (RuntimeException)
 {
     if (rsURL.isEmpty())
         throw lang::IllegalArgumentException();
@@ -107,53 +111,43 @@ void ResourceFactoryManager::RemoveFactoryForURL (
     else
     {
         // The URL may be a pattern.  Look that up.
-        FactoryPatternList::iterator iPattern;
-        for (iPattern=maFactoryPatternList.begin();
-             iPattern!=maFactoryPatternList.end();
-             ++iPattern)
+        auto iPattern = std::find_if(maFactoryPatternList.begin(), maFactoryPatternList.end(),
+            [&rsURL](const FactoryPatternList::value_type& rPattern) { return rPattern.first == rsURL; });
+        if (iPattern != maFactoryPatternList.end())
         {
-            if (iPattern->first == rsURL)
-            {
-                // Found the pattern.  Remove it.
-                maFactoryPatternList.erase(iPattern);
-                break;
-            }
+            // Found the pattern.  Remove it.
+            maFactoryPatternList.erase(iPattern);
         }
     }
 }
 
 void ResourceFactoryManager::RemoveFactoryForReference(
     const Reference<XResourceFactory>& rxFactory)
-    throw (RuntimeException)
 {
     ::osl::MutexGuard aGuard (maMutex);
 
     // Collect a list with all keys that map to the given factory.
     ::std::vector<OUString> aKeys;
-    FactoryMap::const_iterator iFactory;
-    for (iFactory=maFactoryMap.begin(); iFactory!=maFactoryMap.end(); ++iFactory)
-        if (iFactory->second == rxFactory)
-            aKeys.push_back(iFactory->first);
+    for (const auto& rFactory : maFactoryMap)
+        if (rFactory.second == rxFactory)
+            aKeys.push_back(rFactory.first);
 
     // Remove the entries whose keys we just have collected.
-    ::std::vector<OUString>::const_iterator iKey;
-    for (iKey=aKeys.begin(); iKey!=aKeys.end();  ++iKey)
-        maFactoryMap.erase(maFactoryMap.find(*iKey));
+    for (const auto& rKey : aKeys)
+        maFactoryMap.erase(rKey);
 
     // Remove the pattern entries whose factories are identical to the given
     // factory.
-    FactoryPatternList::iterator iNewEnd (
+    maFactoryPatternList.erase(
         std::remove_if(
             maFactoryPatternList.begin(),
             maFactoryPatternList.end(),
-            [&] (FactoryPatternList::value_type const& it) { return it.second == rxFactory; }));
-    if (iNewEnd != maFactoryPatternList.end())
-        maFactoryPatternList.erase(iNewEnd, maFactoryPatternList.end());
+            [&] (FactoryPatternList::value_type const& it) { return it.second == rxFactory; }),
+        maFactoryPatternList.end());
 }
 
 Reference<XResourceFactory> ResourceFactoryManager::GetFactory (
     const OUString& rsCompleteURL)
-    throw (RuntimeException)
 {
     OUString sURLBase (rsCompleteURL);
     if (mxURLTransformer.is())
@@ -184,7 +178,6 @@ Reference<XResourceFactory> ResourceFactoryManager::GetFactory (
 }
 
 Reference<XResourceFactory> ResourceFactoryManager::FindFactory (const OUString& rsURLBase)
-    throw (RuntimeException)
 {
     ::osl::MutexGuard aGuard (maMutex);
     FactoryMap::const_iterator iFactory (maFactoryMap.find(rsURLBase));
@@ -193,15 +186,13 @@ Reference<XResourceFactory> ResourceFactoryManager::FindFactory (const OUString&
     else
     {
         // Check the URL patterns.
-        FactoryPatternList::const_iterator iPattern;
-        for (iPattern=maFactoryPatternList.begin();
-             iPattern!=maFactoryPatternList.end();
-             ++iPattern)
-        {
-            WildCard aWildCard (iPattern->first);
-            if (aWildCard.Matches(rsURLBase))
-                return iPattern->second;
-        }
+        auto iPattern = std::find_if(maFactoryPatternList.begin(), maFactoryPatternList.end(),
+            [&rsURLBase](const FactoryPatternList::value_type& rPattern) {
+                WildCard aWildCard (rPattern.first);
+                return aWildCard.Matches(rsURLBase);
+            });
+        if (iPattern != maFactoryPatternList.end())
+            return iPattern->second;
     }
     return nullptr;
 }

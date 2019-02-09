@@ -20,12 +20,13 @@
 #include <com/sun/star/text/XTextDocument.hpp>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/container/XIndexContainer.hpp>
 #include <com/sun/star/document/IndexedPropertyValues.hpp>
 #include <com/sun/star/uno/RuntimeException.hpp>
 #include <com/sun/star/xforms/XFormsSupplier.hpp>
 
+#include <o3tl/any.hxx>
+#include <officecfg/Office/Common.hxx>
 #include <sax/tools/converter.hxx>
 #include <svx/svdmodel.hxx>
 #include <svx/svdpage.hxx>
@@ -46,11 +47,13 @@
 #include <swmodule.hxx>
 #include <docsh.hxx>
 #include <viewsh.hxx>
+#include <rootfrm.hxx>
 #include <docstat.hxx>
 #include <swerror.h>
 #include <unotext.hxx>
-#include <xmltexte.hxx>
-#include <xmlexp.hxx>
+#include "xmltexte.hxx"
+#include "xmlexp.hxx"
+#include "xmlexpit.hxx"
 #include <sfx2/viewsh.hxx>
 #include <comphelper/processfactory.hxx>
 #include <docary.hxx>
@@ -69,7 +72,6 @@
 #include <pausethreadstarting.hxx>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::xml::sax;
 using namespace ::com::sun::star::uno;
@@ -87,23 +89,15 @@ SwXMLExport::SwXMLExport(
     OUString const & implementationName, SvXMLExportFlags nExportFlags)
 :   SvXMLExport( util::MeasureUnit::INCH, rContext, implementationName, XML_TEXT,
         nExportFlags ),
-    pTableItemMapper( nullptr ),
-    pTableLines( nullptr ),
-    bBlock( false ),
-    bShowProgress( true ),
-    bSavedShowChanges( false ),
-    doc( nullptr )
+    m_bBlock( false ),
+    m_bShowProgress( true ),
+    m_bSavedShowChanges( false ),
+    m_pDoc( nullptr )
 {
-    _InitItemExport();
+    InitItemExport();
 }
 
-void SwXMLExport::setBlockMode()
-{
-    bBlock = true;
-
-}
-
-sal_uInt32 SwXMLExport::exportDoc( enum XMLTokenEnum eClass )
+ErrCode SwXMLExport::exportDoc( enum XMLTokenEnum eClass )
 {
     if( !GetModel().is() )
         return ERR_SWG_WRITE_ERROR;
@@ -122,14 +116,18 @@ sal_uInt32 SwXMLExport::exportDoc( enum XMLTokenEnum eClass )
                         sAutoTextMode ) )
             {
                 Any aAny = rInfoSet->getPropertyValue(sAutoTextMode);
-                if( aAny.getValueType() == cppu::UnoType<bool>::get() &&
-                    *static_cast<const sal_Bool*>(aAny.getValue()) )
-                    setBlockMode();
+                if( auto b = o3tl::tryAccess<bool>(aAny) )
+                {
+                    if( *b )
+                        m_bBlock = true;
+                }
             }
         }
     }
 
     SwDoc *pDoc = getDoc();
+    if (!pDoc)
+        return ERR_SWG_WRITE_ERROR;
 
     if( getExportFlags() & (SvXMLExportFlags::FONTDECLS|SvXMLExportFlags::STYLES|
                             SvXMLExportFlags::MASTERSTYLES|SvXMLExportFlags::CONTENT))
@@ -142,7 +140,7 @@ sal_uInt32 SwXMLExport::exportDoc( enum XMLTokenEnum eClass )
                 XML_NAMESPACE_OFFICE_EXT);
         }
 
-        GetTextParagraphExport()->SetBlockMode( bBlock );
+        GetTextParagraphExport()->SetBlockMode( m_bBlock );
 
         const SfxItemPool& rPool = pDoc->GetAttrPool();
         sal_uInt16 aWhichIds[5] = { RES_UNKNOWNATR_CONTAINER,
@@ -184,7 +182,7 @@ sal_uInt32 SwXMLExport::exportDoc( enum XMLTokenEnum eClass )
     if (GetMM100UnitConverter().GetXMLMeasureUnit() != eUnit )
     {
         GetMM100UnitConverter().SetXMLMeasureUnit( eUnit );
-        pTwipUnitConv->SetXMLMeasureUnit( eUnit );
+        m_pTwipUnitConverter->SetXMLMeasureUnit( eUnit );
     }
 
     if( getExportFlags() & SvXMLExportFlags::META)
@@ -193,7 +191,7 @@ sal_uInt32 SwXMLExport::exportDoc( enum XMLTokenEnum eClass )
         // the progress works correctly.
         pDoc->getIDocumentStatistics().UpdateDocStat( false, true );
     }
-    if( bShowProgress )
+    if( m_bShowProgress )
     {
         ProgressBarHelper *pProgress = GetProgressBarHelper();
         if( -1 == pProgress->GetReference() )
@@ -243,25 +241,23 @@ sal_uInt32 SwXMLExport::exportDoc( enum XMLTokenEnum eClass )
     // we don't need it here.
     // else: keep default pClass that we received
 
-    SvXMLGraphicHelper *pGraphicResolver = nullptr;
-    if( !GetGraphicResolver().is() )
+    rtl::Reference<SvXMLGraphicHelper> xGraphicStorageHandler;
+    if (!GetGraphicStorageHandler().is())
     {
-        pGraphicResolver = SvXMLGraphicHelper::Create( GRAPHICHELPER_MODE_WRITE );
-        Reference< XGraphicObjectResolver > xGraphicResolver( pGraphicResolver );
-        SetGraphicResolver( xGraphicResolver );
+        xGraphicStorageHandler = SvXMLGraphicHelper::Create(SvXMLGraphicHelperMode::Write, GetImageFilterName());
+        SetGraphicStorageHandler(xGraphicStorageHandler.get());
     }
 
-    SvXMLEmbeddedObjectHelper *pEmbeddedResolver = nullptr;
+    rtl::Reference<SvXMLEmbeddedObjectHelper> xEmbeddedResolver;
     if( !GetEmbeddedResolver().is() )
     {
         SfxObjectShell *pPersist = pDoc->GetPersist();
         if( pPersist )
         {
-            pEmbeddedResolver = SvXMLEmbeddedObjectHelper::Create(
+            xEmbeddedResolver = SvXMLEmbeddedObjectHelper::Create(
                                             *pPersist,
-                                            EMBEDDEDOBJECTHELPER_MODE_WRITE );
-            Reference< XEmbeddedObjectResolver > xEmbeddedResolver( pEmbeddedResolver );
-            SetEmbeddedResolver( xEmbeddedResolver );
+                                            SvXMLEmbeddedObjectHelperMode::Write );
+            SetEmbeddedResolver( Reference<XEmbeddedObjectResolver>( xEmbeddedResolver.get() ) );
         }
     }
 
@@ -281,37 +277,40 @@ sal_uInt32 SwXMLExport::exportDoc( enum XMLTokenEnum eClass )
                                                                 "ShowChanges" );
         }
     }
-    sal_uInt16 nRedlineMode = 0;
-    bSavedShowChanges = IDocumentRedlineAccess::IsShowChanges( pDoc->getIDocumentRedlineAccess().GetRedlineMode() );
+    RedlineFlags nRedlineFlags = RedlineFlags::NONE;
+    SwRootFrame const*const pLayout(m_pDoc->getIDocumentLayoutAccess().GetCurrentLayout());
+    m_bSavedShowChanges = pLayout == nullptr || !pLayout->IsHideRedlines();
     if( bSaveRedline )
     {
         // now save and switch redline mode
-        nRedlineMode = pDoc->getIDocumentRedlineAccess().GetRedlineMode();
-        pDoc->getIDocumentRedlineAccess().SetRedlineMode(
-                 (RedlineMode_t)(( nRedlineMode & nsRedlineMode_t::REDLINE_SHOW_MASK ) | nsRedlineType_t::REDLINE_INSERT ));
+        nRedlineFlags = pDoc->getIDocumentRedlineAccess().GetRedlineFlags();
+        pDoc->getIDocumentRedlineAccess().SetRedlineFlags(
+                 ( nRedlineFlags & RedlineFlags::ShowMask ) | RedlineFlags::ShowInsert );
     }
 
-    sal_uInt32 nRet = SvXMLExport::exportDoc( eClass );
+    ErrCode nRet = SvXMLExport::exportDoc( eClass );
 
     // now we can restore the redline mode (if we changed it previously)
     if( bSaveRedline )
     {
-      pDoc->getIDocumentRedlineAccess().SetRedlineMode( (RedlineMode_t)(nRedlineMode ));
+      pDoc->getIDocumentRedlineAccess().SetRedlineFlags( nRedlineFlags );
     }
 
-    if( pGraphicResolver )
-        SvXMLGraphicHelper::Destroy( pGraphicResolver );
-    if( pEmbeddedResolver )
-        SvXMLEmbeddedObjectHelper::Destroy( pEmbeddedResolver );
+    if (xGraphicStorageHandler)
+        xGraphicStorageHandler->dispose();
+    xGraphicStorageHandler.clear();
+    if( xEmbeddedResolver )
+        xEmbeddedResolver->dispose();
+    xEmbeddedResolver.clear();
 
-    OSL_ENSURE( !pTableLines, "there are table columns infos left" );
+    OSL_ENSURE( !m_pTableLines, "there are table columns infos left" );
 
     return nRet;
 }
 
 XMLTextParagraphExport* SwXMLExport::CreateTextParagraphExport()
 {
-    return new SwXMLTextParagraphExport( *this, *GetAutoStylePool().get() );
+    return new SwXMLTextParagraphExport(*this, *GetAutoStylePool());
 }
 
 XMLShapeExport* SwXMLExport::CreateShapeExport()
@@ -330,7 +329,7 @@ XMLShapeExport* SwXMLExport::CreateShapeExport()
 SwXMLExport::~SwXMLExport()
 {
     DeleteTableLines();
-    _FinitItemExport();
+    FinitItemExport();
 }
 
 void SwXMLExport::ExportFontDecls_()
@@ -339,62 +338,56 @@ void SwXMLExport::ExportFontDecls_()
     SvXMLExport::ExportFontDecls_();
 }
 
-#define NUM_EXPORTED_VIEW_SETTINGS 11
 void SwXMLExport::GetViewSettings(Sequence<PropertyValue>& aProps)
 {
-    aProps.realloc( NUM_EXPORTED_VIEW_SETTINGS );
+    aProps.realloc(7);
      // Currently exporting 9 properties
     PropertyValue *pValue = aProps.getArray();
-    sal_Int32 nIndex = 0;
 
     Reference < XIndexContainer > xBox = IndexedPropertyValues::create( comphelper::getProcessComponentContext() );
-    pValue[nIndex].Name = "Views";
-    pValue[nIndex++].Value <<= xBox;
+    pValue[0].Name = "Views";
+    pValue[0].Value <<= xBox;
 
     SwDoc *pDoc = getDoc();
-    const Rectangle rRect =
+    const tools::Rectangle rRect =
         pDoc->GetDocShell()->GetVisArea( ASPECT_CONTENT );
-    bool bTwip = pDoc->GetDocShell()->GetMapUnit ( ) == MAP_TWIP;
+    bool bTwip = pDoc->GetDocShell()->GetMapUnit ( ) == MapUnit::MapTwip;
 
    OSL_ENSURE( bTwip, "Map unit for visible area is not in TWIPS!" );
 
-    pValue[nIndex].Name = "ViewAreaTop";
-    pValue[nIndex++].Value <<= bTwip ? convertTwipToMm100 ( rRect.Top() ) : rRect.Top();
+    pValue[1].Name = "ViewAreaTop";
+    pValue[1].Value <<= bTwip ? convertTwipToMm100 ( rRect.Top() ) : rRect.Top();
 
-    pValue[nIndex].Name = "ViewAreaLeft";
-    pValue[nIndex++].Value <<= bTwip ? convertTwipToMm100 ( rRect.Left() ) : rRect.Left();
+    pValue[2].Name = "ViewAreaLeft";
+    pValue[2].Value <<= bTwip ? convertTwipToMm100 ( rRect.Left() ) : rRect.Left();
 
-    pValue[nIndex].Name = "ViewAreaWidth";
-    pValue[nIndex++].Value <<= bTwip ? convertTwipToMm100 ( rRect.GetWidth() ) : rRect.GetWidth();
+    pValue[3].Name = "ViewAreaWidth";
+    pValue[3].Value <<= bTwip ? convertTwipToMm100 ( rRect.GetWidth() ) : rRect.GetWidth();
 
-    pValue[nIndex].Name = "ViewAreaHeight";
-    pValue[nIndex++].Value <<= bTwip ? convertTwipToMm100 ( rRect.GetHeight() ) : rRect.GetHeight();
+    pValue[4].Name = "ViewAreaHeight";
+    pValue[4].Value <<= bTwip ? convertTwipToMm100 ( rRect.GetHeight() ) : rRect.GetHeight();
 
     // "show redline mode" cannot simply be read from the document
     // since it gets changed during execution. If it's in the info
     // XPropertySet, we take it from there.
-    bool bShowRedlineChanges = bSavedShowChanges;
+    bool bShowRedlineChanges = m_bSavedShowChanges;
     Reference<XPropertySet> xInfoSet( getExportInfo() );
     if ( xInfoSet.is() )
     {
         const OUString sShowChanges( "ShowChanges" );
         if( xInfoSet->getPropertySetInfo()->hasPropertyByName( sShowChanges ) )
         {
-            bShowRedlineChanges = *static_cast<sal_Bool const *>(xInfoSet->
-                                   getPropertyValue( sShowChanges ).getValue());
+            bShowRedlineChanges = *o3tl::doAccess<bool>(xInfoSet->
+                                   getPropertyValue( sShowChanges ));
         }
     }
 
-    pValue[nIndex].Name = "ShowRedlineChanges";
-    pValue[nIndex++].Value <<= bShowRedlineChanges;
+    pValue[5].Name = "ShowRedlineChanges";
+    pValue[5].Value <<= bShowRedlineChanges;
 
-    pValue[nIndex].Name = "InBrowseMode";
-    pValue[nIndex++].Value <<= pDoc->getIDocumentSettingAccess().get(DocumentSettingId::BROWSE_MODE);
-
-    if ( nIndex < NUM_EXPORTED_VIEW_SETTINGS )
-        aProps.realloc(nIndex);
+    pValue[6].Name = "InBrowseMode";
+    pValue[6].Value <<= pDoc->getIDocumentSettingAccess().get(DocumentSettingId::BROWSE_MODE);
 }
-#undef NUM_EXPORTED_VIEW_SETTINGS
 
 void SwXMLExport::GetConfigurationSettings( Sequence < PropertyValue >& rProps)
 {
@@ -407,7 +400,7 @@ void SwXMLExport::GetConfigurationSettings( Sequence < PropertyValue >& rProps)
     }
 }
 
-sal_Int32 SwXMLExport::GetDocumentSpecificSettings( ::std::list< SettingsGroup >& _out_rSettings )
+sal_Int32 SwXMLExport::GetDocumentSpecificSettings( std::vector< SettingsGroup >& _out_rSettings )
 {
     // the only doc-specific settings group we know so far are the XForms settings
     uno::Sequence<beans::PropertyValue> aXFormsSettings;
@@ -418,7 +411,7 @@ sal_Int32 SwXMLExport::GetDocumentSpecificSettings( ::std::list< SettingsGroup >
     if ( xXForms.is() )
     {
         getXFormsSettings( xXForms, aXFormsSettings );
-        _out_rSettings.push_back( SettingsGroup( XML_XFORM_MODEL_SETTINGS, aXFormsSettings ) );
+        _out_rSettings.emplace_back( XML_XFORM_MODEL_SETTINGS, aXFormsSettings );
     }
 
     return aXFormsSettings.getLength() + SvXMLExport::GetDocumentSpecificSettings( _out_rSettings );
@@ -431,9 +424,8 @@ void SwXMLExport::SetBodyAttributes()
     if( pDoc->getIDocumentLayoutAccess().GetCurrentViewShell() &&
         pDoc->getIDocumentLayoutAccess().GetCurrentViewShell()->GetPageCount() > 1 )
     {
-        bool bValue = true;
         OUStringBuffer sBuffer;
-        ::sax::Converter::convertBool(sBuffer, bValue);
+        ::sax::Converter::convertBool(sBuffer, true);
         AddAttribute(XML_NAMESPACE_TEXT, XML_USE_SOFT_PAGE_BREAKS,
             sBuffer.makeStringAndClear());
     }
@@ -470,15 +462,13 @@ void SwXMLExport::ExportContent_()
     if (xPropSet.is())
     {
         Any aAny = xPropSet->getPropertyValue( "TwoDigitYear" );
-        aAny <<= (sal_Int16)1930;
+        aAny <<= sal_Int16(1930);
 
         sal_Int16 nYear = 0;
         aAny >>= nYear;
         if (nYear != 1930 )
         {
-            OUStringBuffer sBuffer;
-            ::sax::Converter::convertNumber(sBuffer, nYear);
-            AddAttribute(XML_NAMESPACE_TABLE, XML_NULL_YEAR, sBuffer.makeStringAndClear());
+            AddAttribute(XML_NAMESPACE_TABLE, XML_NULL_YEAR, OUString::number(nYear));
             SvXMLElementExport aCalcSettings(*this, XML_NAMESPACE_TABLE, XML_CALCULATION_SETTINGS, true, true);
         }
     }
@@ -488,8 +478,8 @@ void SwXMLExport::ExportContent_()
     Reference < XTextDocument > xTextDoc( GetModel(), UNO_QUERY );
     Reference < XText > xText = xTextDoc->getText();
 
-    GetTextParagraphExport()->exportFramesBoundToPage( bShowProgress );
-    GetTextParagraphExport()->exportText( xText, bShowProgress );
+    GetTextParagraphExport()->exportFramesBoundToPage( m_bShowProgress );
+    GetTextParagraphExport()->exportText( xText, m_bShowProgress );
 }
 
 namespace
@@ -503,7 +493,6 @@ const Sequence< sal_Int8 > & SwXMLExport::getUnoTunnelId() throw()
 }
 
 sal_Int64 SAL_CALL SwXMLExport::getSomething( const Sequence< sal_Int8 >& rId )
-    throw(RuntimeException, std::exception)
 {
     if( rId.getLength() == 16
         && 0 == memcmp( getUnoTunnelId().getConstArray(),
@@ -516,18 +505,24 @@ sal_Int64 SAL_CALL SwXMLExport::getSomething( const Sequence< sal_Int8 >& rId )
 
 SwDoc* SwXMLExport::getDoc()
 {
-    if( doc != nullptr )
-        return doc;
+    if( m_pDoc != nullptr )
+        return m_pDoc;
     Reference < XTextDocument > xTextDoc( GetModel(), UNO_QUERY );
+    if (!xTextDoc)
+    {
+        SAL_WARN("sw.filter", "Problem of mismatching filter for export.");
+        return nullptr;
+    }
+
     Reference < XText > xText = xTextDoc->getText();
     Reference<XUnoTunnel> xTextTunnel( xText, UNO_QUERY);
     assert( xTextTunnel.is());
     SwXText *pText = reinterpret_cast< SwXText *>(
             sal::static_int_cast< sal_IntPtr >( xTextTunnel->getSomething( SwXText::getUnoTunnelId() )));
     assert( pText != nullptr );
-    doc = pText->GetDoc();
-    assert( doc != nullptr );
-    return doc;
+    m_pDoc = pText->GetDoc();
+    assert( m_pDoc != nullptr );
+    return m_pDoc;
 }
 
 const SwDoc* SwXMLExport::getDoc() const
@@ -535,87 +530,87 @@ const SwDoc* SwXMLExport::getDoc() const
     return const_cast< SwXMLExport* >( this )->getDoc();
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Writer_XMLExporter_get_implementation(css::uno::XComponentContext* context,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new SwXMLExport(context, OUString("com.sun.star.comp.Writer.XMLExporter"),
+    return cppu::acquire(new SwXMLExport(context, "com.sun.star.comp.Writer.XMLExporter",
                 SvXMLExportFlags::ALL));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Writer_XMLStylesExporter_get_implementation(css::uno::XComponentContext* context,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new SwXMLExport(context, OUString("com.sun.star.comp.Writer.XMLStylesExporter"),
+    return cppu::acquire(new SwXMLExport(context, "com.sun.star.comp.Writer.XMLStylesExporter",
                 SvXMLExportFlags::STYLES | SvXMLExportFlags::MASTERSTYLES | SvXMLExportFlags::AUTOSTYLES |
                 SvXMLExportFlags::FONTDECLS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Writer_XMLContentExporter_get_implementation(css::uno::XComponentContext* context,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new SwXMLExport(context, OUString("com.sun.star.comp.Writer.XMLContentExporter"),
+    return cppu::acquire(new SwXMLExport(context, "com.sun.star.comp.Writer.XMLContentExporter",
                 SvXMLExportFlags::SCRIPTS | SvXMLExportFlags::CONTENT | SvXMLExportFlags::AUTOSTYLES |
                 SvXMLExportFlags::FONTDECLS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Writer_XMLMetaExporter_get_implementation(css::uno::XComponentContext* context,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new SwXMLExport(context, OUString("com.sun.star.comp.Writer.XMLMetaExporter"),
+    return cppu::acquire(new SwXMLExport(context, "com.sun.star.comp.Writer.XMLMetaExporter",
                 SvXMLExportFlags::META));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Writer_XMLSettingsExporter_get_implementation(css::uno::XComponentContext* context,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new SwXMLExport(context, OUString("com.sun.star.comp.Writer.XMLSettingsExporter"),
+    return cppu::acquire(new SwXMLExport(context, "com.sun.star.comp.Writer.XMLSettingsExporter",
                 SvXMLExportFlags::SETTINGS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Writer_XMLOasisExporter_get_implementation(css::uno::XComponentContext* context,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new SwXMLExport(context, OUString("com.sun.star.comp.Writer.XMLOasisExporter"),
+    return cppu::acquire(new SwXMLExport(context, "com.sun.star.comp.Writer.XMLOasisExporter",
                 SvXMLExportFlags::ALL | SvXMLExportFlags::OASIS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Writer_XMLOasisStylesExporter_get_implementation(css::uno::XComponentContext* context,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new SwXMLExport(context, OUString("com.sun.star.comp.Writer.XMLOasisStylesExporter"),
+    return cppu::acquire(new SwXMLExport(context, "com.sun.star.comp.Writer.XMLOasisStylesExporter",
                 SvXMLExportFlags::STYLES | SvXMLExportFlags::MASTERSTYLES | SvXMLExportFlags::AUTOSTYLES |
                 SvXMLExportFlags::FONTDECLS | SvXMLExportFlags::OASIS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Writer_XMLOasisContentExporter_get_implementation(css::uno::XComponentContext* context,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new SwXMLExport(context, OUString("com.sun.star.comp.Writer.XMLOasisContentExporter"),
+    return cppu::acquire(new SwXMLExport(context, "com.sun.star.comp.Writer.XMLOasisContentExporter",
                 SvXMLExportFlags::AUTOSTYLES | SvXMLExportFlags::CONTENT | SvXMLExportFlags::SCRIPTS |
                 SvXMLExportFlags::FONTDECLS | SvXMLExportFlags::OASIS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Writer_XMLOasisMetaExporter_get_implementation(css::uno::XComponentContext* context,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new SwXMLExport(context, OUString("com.sun.star.comp.Writer.XMLOasisMetaExporter"),
+    return cppu::acquire(new SwXMLExport(context, "com.sun.star.comp.Writer.XMLOasisMetaExporter",
                 SvXMLExportFlags::META | SvXMLExportFlags::OASIS));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Writer_XMLOasisSettingsExporter_get_implementation(css::uno::XComponentContext* context,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new SwXMLExport(context, OUString("com.sun.star.comp.Writer.XMLOasisSettingsExporter"),
+    return cppu::acquire(new SwXMLExport(context, "com.sun.star.comp.Writer.XMLOasisSettingsExporter",
                 SvXMLExportFlags::SETTINGS | SvXMLExportFlags::OASIS));
 }
 

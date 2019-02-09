@@ -12,9 +12,8 @@
 
 #include <svl/poolitem.hxx>
 #include <unotools/configitem.hxx>
-#include <formula/grammar.hxx>
 #include "scdllapi.h"
-#include "global.hxx"
+#include "types.hxx"
 
 class SC_DLLPUBLIC ScDefaultsOptions
 {
@@ -24,17 +23,14 @@ private:
 
 public:
     ScDefaultsOptions();
-    ScDefaultsOptions( const ScDefaultsOptions& rCpy );
-    ~ScDefaultsOptions();
 
     void SetDefaults();
 
     SCTAB GetInitTabCount() const           { return nInitTabCount; }
     void   SetInitTabCount( SCTAB nTabs) { nInitTabCount = nTabs; }
     void   SetInitTabPrefix(const OUString& aPrefix) { aInitTabPrefix = aPrefix; }
-    OUString GetInitTabPrefix() const { return aInitTabPrefix; }
+    const OUString& GetInitTabPrefix() const { return aInitTabPrefix; }
 
-    ScDefaultsOptions&  operator=  ( const ScDefaultsOptions& rCpy );
     bool                operator== ( const ScDefaultsOptions& rOpt ) const;
 
 };
@@ -44,10 +40,13 @@ public:
 class SC_DLLPUBLIC ScTpDefaultsItem : public SfxPoolItem
 {
 public:
-    ScTpDefaultsItem( sal_uInt16 nWhich,
-                   const ScDefaultsOptions& rOpt );
-    ScTpDefaultsItem( const ScTpDefaultsItem& rItem );
-    virtual ~ScTpDefaultsItem();
+    ScTpDefaultsItem( const ScDefaultsOptions& rOpt );
+    virtual ~ScTpDefaultsItem() override;
+
+    ScTpDefaultsItem(ScTpDefaultsItem const &) = default;
+    ScTpDefaultsItem(ScTpDefaultsItem &&) = default;
+    ScTpDefaultsItem & operator =(ScTpDefaultsItem const &) = delete; // due to SfxPoolItem
+    ScTpDefaultsItem & operator =(ScTpDefaultsItem &&) = delete; // due to SfxPoolItem
 
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
@@ -55,7 +54,7 @@ public:
     const ScDefaultsOptions& GetDefaultsOptions() const { return theOptions; }
 
 private:
-    ScDefaultsOptions theOptions;
+    ScDefaultsOptions const theOptions;
 };
 
 // config item

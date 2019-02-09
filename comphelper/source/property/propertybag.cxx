@@ -18,6 +18,7 @@
  */
 
 #include <comphelper/propertybag.hxx>
+#include <osl/diagnose.h>
 
 #include <com/sun/star/beans/IllegalTypeException.hpp>
 #include <com/sun/star/beans/PropertyExistException.hpp>
@@ -25,6 +26,7 @@
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/beans/NotRemoveableException.hpp>
+#include <com/sun/star/beans/UnknownPropertyException.hpp>
 
 #include <map>
 
@@ -46,7 +48,7 @@ namespace comphelper
 
     namespace PropertyAttribute = ::com::sun::star::beans::PropertyAttribute;
 
-    typedef ::std::map< sal_Int32, Any >    MapInt2Any;
+    typedef std::map< sal_Int32, Any >    MapInt2Any;
     struct PropertyBag_Impl
     {
         PropertyBag_Impl() : m_bAllowEmptyPropertyName(false) { }
@@ -120,10 +122,10 @@ namespace comphelper
 
         // register the property
         OSL_ENSURE( _nAttributes & PropertyAttribute::MAYBEVOID, "PropertyBag::addVoidProperty: this is for default-void properties only!" );
-        registerPropertyNoMember( _rName, _nHandle, _nAttributes | PropertyAttribute::MAYBEVOID, _rType, nullptr );
+        registerPropertyNoMember( _rName, _nHandle, _nAttributes | PropertyAttribute::MAYBEVOID, _rType, css::uno::Any() );
 
         // remember the default
-        m_pImpl->aDefaults.insert( MapInt2Any::value_type( _nHandle, Any() ) );
+        m_pImpl->aDefaults.emplace( _nHandle, Any() );
     }
 
 
@@ -143,10 +145,10 @@ namespace comphelper
 
         // register the property
         registerPropertyNoMember( _rName, _nHandle, _nAttributes, aPropertyType,
-            _rInitialValue.hasValue() ? _rInitialValue.getValue() : nullptr );
+            _rInitialValue );
 
         // remember the default
-        m_pImpl->aDefaults.insert( MapInt2Any::value_type( _nHandle, _rInitialValue ) );
+        m_pImpl->aDefaults.emplace( _nHandle, _rInitialValue );
     }
 
 

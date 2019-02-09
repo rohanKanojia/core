@@ -24,43 +24,37 @@
 #include <framework/addonsoptions.hxx>
 #include <uielement/statusbarmerger.hxx>
 #include <uielement/statusbaritem.hxx>
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
 #include <stdtypes.h>
-#include "services.h"
-#include "general.h"
-#include "properties.h"
+#include <services.h>
+#include <general.h>
+#include <properties.h>
 #include <helper/mischelper.hxx>
-
 #include <com/sun/star/frame/XFrame.hpp>
+#include <com/sun/star/frame/XLayoutManager.hpp>
 #include <com/sun/star/frame/theStatusbarControllerFactory.hpp>
 #include <com/sun/star/ui/ItemStyle.hpp>
 #include <com/sun/star/ui/ItemType.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/awt/Command.hpp>
-#include <com/sun/star/ui/XStatusbarItem.hdl>
+#include <com/sun/star/ui/XStatusbarItem.hpp>
 #include <comphelper/processfactory.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <svtools/statusbarcontroller.hxx>
+#include <tools/debug.hxx>
 
+#include <vcl/commandevent.hxx>
+#include <vcl/event.hxx>
 #include <vcl/status.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/commandinfoprovider.hxx>
 
-#include <functional>
+#include <cassert>
 
 using namespace ::com::sun::star;
-
-// Property names of a menu/menu item ItemDescriptor
-static const char ITEM_DESCRIPTOR_COMMANDURL[]  = "CommandURL";
-static const char ITEM_DESCRIPTOR_HELPURL[]     = "HelpURL";
-static const char ITEM_DESCRIPTOR_OFFSET[]      = "Offset";
-static const char ITEM_DESCRIPTOR_STYLE[]       = "Style";
-static const char ITEM_DESCRIPTOR_WIDTH[]       = "Width";
-static const char ITEM_DESCRIPTOR_TYPE[]        = "Type";
 
 namespace framework
 {
@@ -69,7 +63,7 @@ namespace
 {
 
 template< class MAP >
-struct lcl_UpdateController : public std::unary_function< typename MAP::value_type, void >
+struct lcl_UpdateController
 {
     void operator()( typename MAP::value_type &rElement ) const
     {
@@ -85,7 +79,7 @@ struct lcl_UpdateController : public std::unary_function< typename MAP::value_ty
 };
 
 template< class MAP >
-struct lcl_RemoveController : public std::unary_function< typename MAP::value_type, void >
+struct lcl_RemoveController
 {
     void operator()( typename MAP::value_type &rElement ) const
     {
@@ -100,28 +94,31 @@ struct lcl_RemoveController : public std::unary_function< typename MAP::value_ty
     }
 };
 
-sal_uInt16 impl_convertItemStyleToItemBits( sal_Int16 nStyle )
+StatusBarItemBits impl_convertItemStyleToItemBits( sal_Int16 nStyle )
 {
-    sal_uInt16 nItemBits( 0 );
+    StatusBarItemBits nItemBits( StatusBarItemBits::NONE );
 
     if (( nStyle & css::ui::ItemStyle::ALIGN_RIGHT ) == css::ui::ItemStyle::ALIGN_RIGHT )
-        nItemBits |= SIB_RIGHT;
+        nItemBits |= StatusBarItemBits::Right;
     else if ( nStyle & css::ui::ItemStyle::ALIGN_LEFT )
-        nItemBits |= SIB_LEFT;
+        nItemBits |= StatusBarItemBits::Left;
     else
-        nItemBits |= SIB_CENTER;
+        nItemBits |= StatusBarItemBits::Center;
 
     if (( nStyle & css::ui::ItemStyle::DRAW_FLAT ) == css::ui::ItemStyle::DRAW_FLAT )
-        nItemBits |= SIB_FLAT;
+        nItemBits |= StatusBarItemBits::Flat;
     else if ( nStyle & css::ui::ItemStyle::DRAW_OUT3D )
-        nItemBits |= SIB_OUT;
+        nItemBits |= StatusBarItemBits::Out;
     else
-        nItemBits |= SIB_IN;
+        nItemBits |= StatusBarItemBits::In;
 
     if (( nStyle & css::ui::ItemStyle::AUTO_SIZE ) == css::ui::ItemStyle::AUTO_SIZE )
-        nItemBits |= SIB_AUTOSIZE;
+        nItemBits |= StatusBarItemBits::AutoSize;
     if ( nStyle & css::ui::ItemStyle::OWNER_DRAW )
-        nItemBits |= SIB_USERDRAW;
+        nItemBits |= StatusBarItemBits::UserDraw;
+
+    if ( nStyle & css::ui::ItemStyle::MANDATORY )
+        nItemBits |= StatusBarItemBits::Mandatory;
 
     return nItemBits;
 }
@@ -160,34 +157,29 @@ StatusBar* StatusBarManager::GetStatusBar() const
 }
 
 void StatusBarManager::frameAction( const frame::FrameActionEvent& Action )
-throw ( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard g;
     if ( Action.Action == frame::FrameAction_CONTEXT_CHANGED )
         UpdateControllers();
 }
 
-void SAL_CALL StatusBarManager::disposing( const lang::EventObject& Source ) throw ( uno::RuntimeException, std::exception )
+void SAL_CALL StatusBarManager::disposing( const lang::EventObject& Source )
 {
-    {
-        SolarMutexGuard g;
-        if ( m_bDisposed )
-            return;
-    }
+    SolarMutexGuard g;
+
+    if ( m_bDisposed )
+        return;
 
     RemoveControllers();
 
-    {
-        SolarMutexGuard g;
-        if ( Source.Source == uno::Reference< uno::XInterface >( m_xFrame, uno::UNO_QUERY ))
-            m_xFrame.clear();
+    if ( Source.Source == uno::Reference< uno::XInterface >( m_xFrame, uno::UNO_QUERY ))
+        m_xFrame.clear();
 
-        m_xContext.clear();
-    }
+    m_xContext.clear();
 }
 
 // XComponent
-void SAL_CALL StatusBarManager::dispose() throw( uno::RuntimeException, std::exception )
+void SAL_CALL StatusBarManager::dispose()
 {
     uno::Reference< lang::XComponent > xThis(
         static_cast< OWeakObject* >(this), uno::UNO_QUERY );
@@ -232,7 +224,7 @@ void SAL_CALL StatusBarManager::dispose() throw( uno::RuntimeException, std::exc
     }
 }
 
-void SAL_CALL StatusBarManager::addEventListener( const uno::Reference< lang::XEventListener >& xListener ) throw( uno::RuntimeException, std::exception )
+void SAL_CALL StatusBarManager::addEventListener( const uno::Reference< lang::XEventListener >& xListener )
 {
     SolarMutexGuard g;
 
@@ -243,13 +235,13 @@ void SAL_CALL StatusBarManager::addEventListener( const uno::Reference< lang::XE
     m_aListenerContainer.addInterface( cppu::UnoType<lang::XEventListener>::get(), xListener );
 }
 
-void SAL_CALL StatusBarManager::removeEventListener( const uno::Reference< lang::XEventListener >& xListener ) throw( uno::RuntimeException, std::exception )
+void SAL_CALL StatusBarManager::removeEventListener( const uno::Reference< lang::XEventListener >& xListener )
 {
     m_aListenerContainer.removeInterface( cppu::UnoType<lang::XEventListener>::get(), xListener );
 }
 
 // XUIConfigurationListener
-void SAL_CALL StatusBarManager::elementInserted( const css::ui::ConfigurationEvent& ) throw ( uno::RuntimeException, std::exception )
+void SAL_CALL StatusBarManager::elementInserted( const css::ui::ConfigurationEvent& )
 {
     SolarMutexGuard g;
 
@@ -257,7 +249,7 @@ void SAL_CALL StatusBarManager::elementInserted( const css::ui::ConfigurationEve
         return;
 }
 
-void SAL_CALL StatusBarManager::elementRemoved( const css::ui::ConfigurationEvent& ) throw ( uno::RuntimeException, std::exception )
+void SAL_CALL StatusBarManager::elementRemoved( const css::ui::ConfigurationEvent& )
 {
     SolarMutexGuard g;
 
@@ -265,7 +257,7 @@ void SAL_CALL StatusBarManager::elementRemoved( const css::ui::ConfigurationEven
         return;
 }
 
-void SAL_CALL StatusBarManager::elementReplaced( const css::ui::ConfigurationEvent& ) throw ( uno::RuntimeException, std::exception )
+void SAL_CALL StatusBarManager::elementReplaced( const css::ui::ConfigurationEvent& )
 {
     SolarMutexGuard g;
 
@@ -287,10 +279,8 @@ void StatusBarManager::UpdateControllers()
 
 void StatusBarManager::RemoveControllers()
 {
-    SolarMutexGuard g;
-
-    if ( m_bDisposed )
-        return;
+    DBG_TESTSOLARMUTEX();
+    assert(!m_bDisposed);
 
     std::for_each( m_aControllerMap.begin(),
                    m_aControllerMap.end(),
@@ -313,7 +303,7 @@ void StatusBarManager::CreateControllers()
         uno::Reference< frame::XStatusbarController > xController;
         AddonStatusbarItemData *pItemData = static_cast< AddonStatusbarItemData *>( m_pStatusBar->GetItemData( nId ) );
         uno::Reference< ui::XStatusbarItem > xStatusbarItem(
-            static_cast< cppu::OWeakObject *>( new StatusbarItem( m_pStatusBar, pItemData, nId, aCommandURL ) ),
+            static_cast< cppu::OWeakObject *>( new StatusbarItem( m_pStatusBar, nId, aCommandURL ) ),
             uno::UNO_QUERY );
 
         beans::PropertyValue aPropValue;
@@ -324,7 +314,7 @@ void StatusBarManager::CreateControllers()
         aPropVector.push_back( uno::makeAny( aPropValue ) );
 
         aPropValue.Name     = "ModuleIdentifier";
-        aPropValue.Value    <<= m_aModuleIdentifier;
+        aPropValue.Value    <<= OUString();
         aPropVector.push_back( uno::makeAny( aPropValue ) );
 
         aPropValue.Name     = "Frame";
@@ -333,7 +323,7 @@ void StatusBarManager::CreateControllers()
 
         // TODO remove this
         aPropValue.Name     = "ServiceManager";
-        aPropValue.Value    = uno::makeAny( uno::Reference<lang::XMultiServiceFactory>(m_xContext->getServiceManager(), uno::UNO_QUERY_THROW) );
+        aPropValue.Value    <<= uno::Reference<lang::XMultiServiceFactory>(m_xContext->getServiceManager(), uno::UNO_QUERY_THROW);
         aPropVector.push_back( uno::makeAny( aPropValue ) );
 
         aPropValue.Name     = "ParentWindow";
@@ -353,7 +343,7 @@ void StatusBarManager::CreateControllers()
 
         // 1) UNO Statusbar controllers, registered in Controllers.xcu
         if ( m_xStatusbarControllerFactory.is() &&
-             m_xStatusbarControllerFactory->hasController( aCommandURL, m_aModuleIdentifier ))
+             m_xStatusbarControllerFactory->hasController( aCommandURL, "" ))
         {
             xController.set(m_xStatusbarControllerFactory->createInstanceWithArgumentsAndContext(
                                 aCommandURL, aArgs, m_xContext ),
@@ -384,9 +374,8 @@ void StatusBarManager::CreateControllers()
                 }
             }
 
-            if ( pController )
-                xController.set(static_cast< ::cppu::OWeakObject *>( pController ),
-                                uno::UNO_QUERY );
+            xController.set(static_cast< ::cppu::OWeakObject *>( pController ),
+                            uno::UNO_QUERY );
         }
 
         m_aControllerMap[nId] = xController;
@@ -396,11 +385,7 @@ void StatusBarManager::CreateControllers()
         }
     }
 
-    AddFrameActionListener();
-}
-
-void StatusBarManager::AddFrameActionListener()
-{
+    // add frame action listeners
     if ( !m_bFrameActionRegistered && m_xFrame.is() )
     {
         m_bFrameActionRegistered = true;
@@ -440,27 +425,27 @@ void StatusBarManager::FillStatusBar( const uno::Reference< container::XIndexAcc
             {
                 for ( int i = 0; i < aProp.getLength(); i++ )
                 {
-                    if ( aProp[i].Name == ITEM_DESCRIPTOR_COMMANDURL )
+                    if ( aProp[i].Name == "CommandURL" )
                     {
                         aProp[i].Value >>= aCommandURL;
                     }
-                    else if ( aProp[i].Name == ITEM_DESCRIPTOR_HELPURL )
+                    else if ( aProp[i].Name == "HelpURL" )
                     {
                         aProp[i].Value >>= aHelpURL;
                     }
-                    else if ( aProp[i].Name == ITEM_DESCRIPTOR_STYLE )
+                    else if ( aProp[i].Name == "Style" )
                     {
                         aProp[i].Value >>= nStyle;
                     }
-                    else if ( aProp[i].Name == ITEM_DESCRIPTOR_TYPE )
+                    else if ( aProp[i].Name == "Type" )
                     {
                         aProp[i].Value >>= nType;
                     }
-                    else if ( aProp[i].Name == ITEM_DESCRIPTOR_WIDTH )
+                    else if ( aProp[i].Name == "Width" )
                     {
                         aProp[i].Value >>= nWidth;
                     }
-                    else if ( aProp[i].Name == ITEM_DESCRIPTOR_OFFSET )
+                    else if ( aProp[i].Name == "Offset" )
                     {
                         aProp[i].Value >>= nOffset;
                     }
@@ -468,8 +453,8 @@ void StatusBarManager::FillStatusBar( const uno::Reference< container::XIndexAcc
 
                 if (( nType == css::ui::ItemType::DEFAULT ) && !aCommandURL.isEmpty() )
                 {
-                    OUString aString( vcl::CommandInfoProvider::Instance().GetLabelForCommand(aCommandURL, m_xFrame));
-                    sal_uInt16        nItemBits( impl_convertItemStyleToItemBits( nStyle ));
+                    OUString aString( vcl::CommandInfoProvider::GetLabelForCommand(aCommandURL, ""));
+                    StatusBarItemBits nItemBits( impl_convertItemStyleToItemBits( nStyle ));
 
                     m_pStatusBar->InsertItem( nId, nWidth, nItemBits, nOffset );
                     m_pStatusBar->SetItemCommand( nId, aCommandURL );
@@ -495,7 +480,7 @@ void StatusBarManager::FillStatusBar( const uno::Reference< container::XIndexAcc
         for ( sal_uInt32 i = 0; i < nCount; i++ )
         {
             MergeStatusbarInstruction &rInstruction = aMergeInstructions[i];
-            if ( !StatusbarMerger::IsCorrectContext( rInstruction.aMergeContext, m_aModuleIdentifier ) )
+            if ( !StatusbarMerger::IsCorrectContext( rInstruction.aMergeContext ) )
                 continue;
 
             AddonStatusbarItemContainer aItems;
@@ -507,7 +492,6 @@ void StatusBarManager::FillStatusBar( const uno::Reference< container::XIndexAcc
                 StatusbarMerger::ProcessMergeOperation( m_pStatusBar,
                                                         nRefPos,
                                                         nItemId,
-                                                        m_aModuleIdentifier,
                                                         rInstruction.aMergeCommand,
                                                         rInstruction.aMergeCommandParameter,
                                                         aItems );
@@ -515,9 +499,7 @@ void StatusBarManager::FillStatusBar( const uno::Reference< container::XIndexAcc
             else
             {
                 StatusbarMerger::ProcessMergeFallback( m_pStatusBar,
-                                                       nRefPos,
                                                        nItemId,
-                                                       m_aModuleIdentifier,
                                                        rInstruction.aMergeCommand,
                                                        rInstruction.aMergeCommandParameter,
                                                        aItems );
@@ -599,7 +581,7 @@ void StatusBarManager::Command( const CommandEvent& rEvt )
                 awt::Point aPos;
                 aPos.X = rEvt.GetMousePosPixel().X();
                 aPos.Y = rEvt.GetMousePosPixel().Y();
-                xController->command( aPos, awt::Command::CONTEXTMENU, sal_True, uno::Any() );
+                xController->command( aPos, awt::Command::CONTEXTMENU, true, uno::Any() );
             }
         }
     }
@@ -644,7 +626,7 @@ void StatusBarManager::MouseButtonUp( const MouseEvent& rMEvt )
     MouseButton(rMEvt,&frame::XStatusbarController::mouseButtonUp);
 }
 
-IMPL_LINK_NOARG_TYPED(StatusBarManager, Click, StatusBar*, void)
+IMPL_LINK_NOARG(StatusBarManager, Click, StatusBar*, void)
 {
     SolarMutexGuard g;
 
@@ -665,7 +647,7 @@ IMPL_LINK_NOARG_TYPED(StatusBarManager, Click, StatusBar*, void)
     }
 }
 
-IMPL_LINK_NOARG_TYPED(StatusBarManager, DoubleClick, StatusBar*, void)
+IMPL_LINK_NOARG(StatusBarManager, DoubleClick, StatusBar*, void)
 {
     SolarMutexGuard g;
 

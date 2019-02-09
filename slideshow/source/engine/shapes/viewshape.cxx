@@ -17,12 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
 
 #include <tools/diagnose_ex.h>
 
+#include <algorithm>
 #include <math.h>
 
 #include <rtl/math.hxx>
+#include <sal/log.hxx>
 
 #include <com/sun/star/rendering/XCanvas.hpp>
 #include <com/sun/star/rendering/XIntegerBitmap.hpp>
@@ -30,7 +33,6 @@
 #include <com/sun/star/awt/FontSlant.hpp>
 
 #include <cppuhelper/exc_hlp.hxx>
-#include <comphelper/anytostring.hxx>
 
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/numeric/ftools.hxx>
@@ -42,7 +44,7 @@
 #include <cppcanvas/basegfxfactory.hxx>
 
 #include "viewshape.hxx"
-#include "tools.hxx"
+#include <tools.hxx>
 
 using namespace ::com::sun::star;
 
@@ -141,7 +143,7 @@ namespace slideshow
                     if( rAttr->isCharPostureValid() )
                     {
                         aParms.maFontLetterForm =
-                            rAttr->getCharPosture() == awt::FontSlant_NONE ?
+                            rAttr->getCharPosture() == sal_Int16(awt::FontSlant_NONE) ?
                             rendering::PanoseLetterForm::ANYTHING :
                             rendering::PanoseLetterForm::OBLIQUE_CONTACT;
                     }
@@ -153,7 +155,7 @@ namespace slideshow
                 }
 
                 io_rCacheEntry.mpRenderer = ::cppcanvas::VCLFactory::createRenderer( rDestinationCanvas,
-                                                                                     *rMtf.get(),
+                                                                                     *rMtf,
                                                                                      aParms );
 
                 io_rCacheEntry.mpMtf               = rMtf;
@@ -210,7 +212,7 @@ namespace slideshow
             }
             catch( uno::Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("slideshow");
             }
 #endif
             if( pClip )
@@ -285,7 +287,7 @@ namespace slideshow
                                       const ::basegfx::B2DRectangle&        rOrigBounds,
                                       const ::basegfx::B2DRectangle&        rBounds,
                                       const ::basegfx::B2DRectangle&        rUnitBounds,
-                                      int                                   nUpdateFlags,
+                                      UpdateFlags                           nUpdateFlags,
                                       const ShapeAttributeLayerSharedPtr&   pAttr,
                                       const VectorOfDocTreeNodes&           rSubsets,
                                       double                                nPrio,
@@ -429,17 +431,17 @@ namespace slideshow
             // process flags
             // =============
 
-            bool bRedrawRequired( mbForceUpdate || (nUpdateFlags & FORCE) );
+            bool bRedrawRequired( mbForceUpdate || (nUpdateFlags & UpdateFlags::Force) );
 
-            if( mbForceUpdate || (nUpdateFlags & ALPHA) )
+            if( mbForceUpdate || (nUpdateFlags & UpdateFlags::Alpha) )
             {
                 mpSprite->setAlpha( (pAttr && pAttr->isAlphaValid()) ?
-                                    ::basegfx::clamp(pAttr->getAlpha(),
+                                    std::clamp(pAttr->getAlpha(),
                                                      0.0,
                                                      1.0) :
                                     1.0 );
             }
-            if( mbForceUpdate || (nUpdateFlags & CLIP) )
+            if( mbForceUpdate || (nUpdateFlags & UpdateFlags::Clip) )
             {
                 if( pAttr && pAttr->isClipValid() )
                 {
@@ -468,7 +470,7 @@ namespace slideshow
                 else
                     mpSprite->clip();
             }
-            if( mbForceUpdate || (nUpdateFlags & CONTENT) )
+            if( mbForceUpdate || (nUpdateFlags & UpdateFlags::Content) )
             {
                 bRedrawRequired = true;
 
@@ -503,7 +505,7 @@ namespace slideshow
                                 const GDIMetaFileSharedPtr&         rMtf,
                                 const ::basegfx::B2DRectangle&      rBounds,
                                 const ::basegfx::B2DRectangle&      rUpdateBounds,
-                                int                                 nUpdateFlags,
+                                UpdateFlags                         nUpdateFlags,
                                 const ShapeAttributeLayerSharedPtr& pAttr,
                                 const VectorOfDocTreeNodes&         rSubsets,
                                 bool                                bIsVisible ) const
@@ -522,9 +524,9 @@ namespace slideshow
 
             // since we have no sprite here, _any_ update request
             // translates into a required redraw.
-            bool bRedrawRequired( mbForceUpdate || nUpdateFlags != 0 );
+            bool bRedrawRequired( mbForceUpdate || nUpdateFlags != UpdateFlags::NONE );
 
-            if( (nUpdateFlags & CONTENT) )
+            if( nUpdateFlags & UpdateFlags::Content )
             {
                 // TODO(P1): maybe provide some appearance change methods at
                 // the Renderer interface
@@ -555,7 +557,7 @@ namespace slideshow
             {
                 // setup clip poly
                 if( pAttr->isClipValid() )
-                    aClip.reset( pAttr->getClip() );
+                    aClip = pAttr->getClip();
 
                 // emulate global shape alpha by first rendering into
                 // a temp bitmap, and then to screen (this would have
@@ -683,7 +685,7 @@ namespace slideshow
 
                         aBitmapTransform.invert();
 
-                        const basegfx::B2DHomMatrix aTranslation(basegfx::tools::createTranslateB2DHomMatrix(
+                        const basegfx::B2DHomMatrix aTranslation(basegfx::utils::createTranslateB2DHomMatrix(
                             aTmpRect.getMinX(), aTmpRect.getMinY()));
 
                         aBitmapTransform = aBitmapTransform * aTranslation;
@@ -722,7 +724,7 @@ namespace slideshow
             ENSURE_OR_THROW( mpViewLayer, "ViewShape::ViewShape(): Invalid View" );
         }
 
-        ViewLayerSharedPtr ViewShape::getViewLayer() const
+        const ViewLayerSharedPtr& ViewShape::getViewLayer() const
         {
             return mpViewLayer;
         }
@@ -755,7 +757,7 @@ namespace slideshow
 
                 // not yet in cache - add default-constructed cache
                 // entry, to have something to return
-                maRenderers.push_back( RendererCacheEntry() );
+                maRenderers.emplace_back( );
                 aIter = maRenderers.end()-1;
             }
 
@@ -815,12 +817,10 @@ namespace slideshow
                                        nYBorder );
         }
 
-        bool ViewShape::enterAnimationMode()
+        void ViewShape::enterAnimationMode()
         {
             mbForceUpdate   = true;
             mbAnimationMode = true;
-
-            return true;
         }
 
         void ViewShape::leaveAnimationMode()
@@ -832,13 +832,13 @@ namespace slideshow
 
         bool ViewShape::update( const GDIMetaFileSharedPtr& rMtf,
                                 const RenderArgs&           rArgs,
-                                int                         nUpdateFlags,
+                                UpdateFlags                 nUpdateFlags,
                                 bool                        bIsVisible ) const
         {
             ENSURE_OR_RETURN_FALSE( mpViewLayer->getCanvas(), "ViewShape::update(): Invalid layer canvas" );
 
             // Shall we render to a sprite, or to a plain canvas?
-            if( isBackgroundDetached() )
+            if( mbAnimationMode )
                 return renderSprite( mpViewLayer,
                                      rMtf,
                                      rArgs.maOrigBounds,

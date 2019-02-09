@@ -19,15 +19,22 @@
 
 #include "excelvbahelper.hxx"
 
+#include <basic/basmgr.hxx>
 #include <comphelper/processfactory.hxx>
+#include <vbahelper/vbahelper.hxx>
+#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/sheet/XSheetCellRange.hpp>
 #include <com/sun/star/sheet/GlobalSheetSettings.hpp>
+#include <com/sun/star/sheet/XUnnamedDatabaseRanges.hpp>
+#include <com/sun/star/sheet/XSpreadsheet.hpp>
+#include <com/sun/star/sheet/XDatabaseRange.hpp>
 
-#include "docuno.hxx"
-#include "tabvwsh.hxx"
-#include "transobj.hxx"
-#include "scmod.hxx"
-#include "cellsuno.hxx"
+#include <document.hxx>
+#include <docuno.hxx>
+#include <tabvwsh.hxx>
+#include <transobj.hxx>
+#include <scmod.hxx>
+#include <cellsuno.hxx>
 #include <gridwin.hxx>
 
 #include <com/sun/star/script/vba/VBAEventId.hpp>
@@ -45,7 +52,7 @@ namespace vba {
 namespace excel {
 
 uno::Reference< sheet::XUnnamedDatabaseRanges >
-GetUnnamedDataBaseRanges( ScDocShell* pShell ) throw ( uno::RuntimeException )
+GetUnnamedDataBaseRanges( const ScDocShell* pShell )
 {
     uno::Reference< frame::XModel > xModel;
     if ( pShell )
@@ -58,7 +65,7 @@ GetUnnamedDataBaseRanges( ScDocShell* pShell ) throw ( uno::RuntimeException )
 // returns the XDatabaseRange for the autofilter on sheet (nSheet)
 // also populates sName with the name of range
 uno::Reference< sheet::XDatabaseRange >
-GetAutoFiltRange( ScDocShell* pShell, sal_Int16 nSheet ) throw ( uno::RuntimeException )
+GetAutoFiltRange( const ScDocShell* pShell, sal_Int16 nSheet )
 {
     uno::Reference< sheet::XUnnamedDatabaseRanges > xUnnamedDBRanges( GetUnnamedDataBaseRanges( pShell ), uno::UNO_QUERY_THROW );
     uno::Reference< sheet::XDatabaseRange > xDataBaseRange;
@@ -76,7 +83,7 @@ GetAutoFiltRange( ScDocShell* pShell, sal_Int16 nSheet ) throw ( uno::RuntimeExc
     return xDataBaseRange;
 }
 
-ScDocShell* GetDocShellFromRange( const uno::Reference< uno::XInterface >& xRange ) throw ( uno::RuntimeException )
+ScDocShell* GetDocShellFromRange( const uno::Reference< uno::XInterface >& xRange )
 {
     ScCellRangesBase* pScCellRangesBase = ScCellRangesBase::getImplementation( xRange );
     if ( !pScCellRangesBase )
@@ -87,7 +94,7 @@ ScDocShell* GetDocShellFromRange( const uno::Reference< uno::XInterface >& xRang
 }
 
 uno::Reference< XHelperInterface >
-getUnoSheetModuleObj( const uno::Reference< table::XCellRange >& xRange ) throw ( uno::RuntimeException, std::exception )
+getUnoSheetModuleObj( const uno::Reference< table::XCellRange >& xRange )
 {
     uno::Reference< sheet::XSheetCellRange > xSheetRange( xRange, uno::UNO_QUERY_THROW );
     uno::Reference< sheet::XSpreadsheet > xSheet( xSheetRange->getSpreadsheet(), uno::UNO_SET_THROW );
@@ -108,23 +115,27 @@ class PasteCellsWarningReseter
 {
 private:
     bool bInitialWarningState;
-    static uno::Reference< sheet::XGlobalSheetSettings > getGlobalSheetSettings() throw ( uno::RuntimeException )
+    /// @throws uno::RuntimeException
+    static uno::Reference< sheet::XGlobalSheetSettings > const & getGlobalSheetSettings()
     {
         static uno::Reference< sheet::XGlobalSheetSettings > xProps = sheet::GlobalSheetSettings::create( comphelper::getProcessComponentContext() );
         return xProps;
     }
 
-    static bool getReplaceCellsWarning() throw ( uno::RuntimeException )
+    /// @throws uno::RuntimeException
+    static bool getReplaceCellsWarning()
     {
         return getGlobalSheetSettings()->getReplaceCellsWarning();
     }
 
-    static void setReplaceCellsWarning( bool bState ) throw ( uno::RuntimeException )
+    /// @throws uno::RuntimeException
+    static void setReplaceCellsWarning( bool bState )
     {
         getGlobalSheetSettings()->setReplaceCellsWarning( bState );
     }
 public:
-    PasteCellsWarningReseter() throw ( uno::RuntimeException )
+    /// @throws uno::RuntimeException
+    PasteCellsWarningReseter()
     {
         bInitialWarningState = getReplaceCellsWarning();
         if ( bInitialWarningState )
@@ -160,14 +171,19 @@ void
 implnCopy( const uno::Reference< frame::XModel>& xModel )
 {
     ScTabViewShell* pViewShell = getBestViewShell( xModel );
-    if ( pViewShell )
+    ScDocShell* pDocShell = getDocShell( xModel );
+    if ( pViewShell && pDocShell )
     {
         pViewShell->CopyToClip(nullptr,false,false,true);
 
         // mark the copied transfer object so it is used in ScVbaRange::Insert
-        ScTransferObj* pClipObj = ScTransferObj::GetOwnClipboard( nullptr );
+        uno::Reference<datatransfer::XTransferable2> xTransferable(ScTabViewShell::GetClipData(pViewShell->GetViewData().GetActiveWin()));
+        ScTransferObj* pClipObj = ScTransferObj::GetOwnClipboard(xTransferable);
         if (pClipObj)
+        {
             pClipObj->SetUseInApi( true );
+            pDocShell->SetClipData(xTransferable);
+        }
     }
 }
 
@@ -175,36 +191,41 @@ void
 implnCut( const uno::Reference< frame::XModel>& xModel )
 {
     ScTabViewShell* pViewShell =  getBestViewShell( xModel );
-    if ( pViewShell )
+    ScDocShell* pDocShell = getDocShell( xModel );
+    if ( pViewShell && pDocShell )
     {
         pViewShell->CutToClip();
 
         // mark the copied transfer object so it is used in ScVbaRange::Insert
-        ScTransferObj* pClipObj = ScTransferObj::GetOwnClipboard( nullptr );
+        uno::Reference<datatransfer::XTransferable2> xTransferable(ScTabViewShell::GetClipData(pViewShell->GetViewData().GetActiveWin()));
+        ScTransferObj* pClipObj = ScTransferObj::GetOwnClipboard(xTransferable);
         if (pClipObj)
+        {
             pClipObj->SetUseInApi( true );
+            pDocShell->SetClipData(xTransferable);
+        }
     }
 }
 
 void implnPasteSpecial( const uno::Reference< frame::XModel>& xModel, InsertDeleteFlags nFlags, ScPasteFunc nFunction, bool bSkipEmpty, bool bTranspose)
 {
     PasteCellsWarningReseter resetWarningBox;
-    InsCellCmd eMoveMode = INS_NONE;
 
     ScTabViewShell* pTabViewShell = getBestViewShell( xModel );
-    if ( pTabViewShell )
+    ScDocShell* pDocShell = getDocShell( xModel );
+    if ( pTabViewShell && pDocShell )
     {
         ScViewData& rView = pTabViewShell->GetViewData();
         vcl::Window* pWin = rView.GetActiveWin();
         if (pWin)
         {
-            ScTransferObj* pOwnClip = ScTransferObj::GetOwnClipboard( pWin );
+            const ScTransferObj* pOwnClip = ScTransferObj::GetOwnClipboard(pDocShell->GetClipData());
             ScDocument* pDoc = nullptr;
             if ( pOwnClip )
                 pDoc = pOwnClip->GetDocument();
             pTabViewShell->PasteFromClip( nFlags, pDoc,
                 nFunction, bSkipEmpty, bTranspose, false,
-                eMoveMode, InsertDeleteFlags::NONE, true );
+                INS_NONE, InsertDeleteFlags::NONE, true );
             pTabViewShell->CellContentChanged();
         }
     }
@@ -249,7 +270,7 @@ getViewFrame( const uno::Reference< frame::XModel >& xModel )
 }
 
 uno::Reference< XHelperInterface >
-getUnoSheetModuleObj( const uno::Reference< sheet::XSpreadsheet >& xSheet ) throw ( uno::RuntimeException, std::exception )
+getUnoSheetModuleObj( const uno::Reference< sheet::XSpreadsheet >& xSheet )
 {
     uno::Reference< beans::XPropertySet > xProps( xSheet, uno::UNO_QUERY_THROW );
     OUString sCodeName;
@@ -263,7 +284,7 @@ getUnoSheetModuleObj( const uno::Reference< sheet::XSpreadsheet >& xSheet ) thro
 }
 
 uno::Reference< XHelperInterface >
-getUnoSheetModuleObj( const uno::Reference< sheet::XSheetCellRangeContainer >& xRanges ) throw ( uno::RuntimeException, std::exception )
+getUnoSheetModuleObj( const uno::Reference< sheet::XSheetCellRangeContainer >& xRanges )
 {
     uno::Reference< container::XEnumerationAccess > xEnumAccess( xRanges, uno::UNO_QUERY_THROW );
     uno::Reference< container::XEnumeration > xEnum = xEnumAccess->createEnumeration();
@@ -272,7 +293,7 @@ getUnoSheetModuleObj( const uno::Reference< sheet::XSheetCellRangeContainer >& x
 }
 
 uno::Reference< XHelperInterface >
-getUnoSheetModuleObj( const uno::Reference< table::XCell >& xCell ) throw ( uno::RuntimeException, std::exception )
+getUnoSheetModuleObj( const uno::Reference< table::XCell >& xCell )
 {
     uno::Reference< sheet::XSheetCellRange > xSheetRange( xCell, uno::UNO_QUERY_THROW );
     uno::Reference< sheet::XSpreadsheet > xSheet( xSheetRange->getSpreadsheet(), uno::UNO_SET_THROW );
@@ -280,7 +301,7 @@ getUnoSheetModuleObj( const uno::Reference< table::XCell >& xCell ) throw ( uno:
 }
 
 uno::Reference< XHelperInterface >
-getUnoSheetModuleObj( const uno::Reference< frame::XModel >& xModel, SCTAB nTab ) throw ( uno::RuntimeException, std::exception )
+getUnoSheetModuleObj( const uno::Reference< frame::XModel >& xModel, SCTAB nTab )
 {
     uno::Reference< sheet::XSpreadsheetDocument > xDoc( xModel, uno::UNO_QUERY_THROW );
     uno::Reference< container::XIndexAccess > xSheets( xDoc->getSheets(), uno::UNO_QUERY_THROW );
@@ -302,7 +323,7 @@ void setUpDocumentModules( const uno::Reference< sheet::XSpreadsheetDocument >& 
             document. */
         uno::Reference<script::XLibraryContainer> xLibContainer = pShell->GetBasicContainer();
         uno::Reference<script::vba::XVBACompatibility> xVBACompat( xLibContainer, uno::UNO_QUERY_THROW );
-        xVBACompat->setVBACompatibilityMode( sal_True );
+        xVBACompat->setVBACompatibilityMode( true );
 
         if( xLibContainer.is() )
         {
@@ -336,20 +357,18 @@ void setUpDocumentModules( const uno::Reference< sheet::XSpreadsheetDocument >& 
                     sDocModuleNames.push_back( aName );
                 }
 
-                std::vector<OUString>::iterator it_end = sDocModuleNames.end();
-
-                for ( std::vector<OUString>::iterator it = sDocModuleNames.begin(); it != it_end; ++it )
+                for ( const auto& rName : sDocModuleNames )
                 {
                     script::ModuleInfo sModuleInfo;
 
-                    uno::Any aName= xVBACodeNamedObjectAccess->getByName( *it );
+                    uno::Any aName= xVBACodeNamedObjectAccess->getByName( rName );
                     sModuleInfo.ModuleObject.set( aName, uno::UNO_QUERY );
                     sModuleInfo.ModuleType = script::ModuleType::DOCUMENT;
-                    xVBAModuleInfo->insertModuleInfo( *it, sModuleInfo );
-                    if( xLib->hasByName( *it ) )
-                        xLib->replaceByName( *it, uno::makeAny( OUString( "Option VBASupport 1\n") ) );
+                    xVBAModuleInfo->insertModuleInfo( rName, sModuleInfo );
+                    if( xLib->hasByName( rName ) )
+                        xLib->replaceByName( rName, uno::makeAny( OUString( "Option VBASupport 1\n") ) );
                     else
-                        xLib->insertByName( *it, uno::makeAny( OUString( "Option VBASupport 1\n" ) ) );
+                        xLib->insertByName( rName, uno::makeAny( OUString( "Option VBASupport 1\n" ) ) );
                 }
             }
         }

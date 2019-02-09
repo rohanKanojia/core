@@ -31,9 +31,8 @@ namespace sdr
 {
     namespace contact
     {
-        class ViewObjectContactOfE3d : public ViewObjectContactOfSdrObj
+        class ViewObjectContactOfE3d final : public ViewObjectContactOfSdrObj
         {
-        protected:
             // Primitive3D sequence of the ViewContact. This contains all necessary information
             // for the graphical visualisation and needs to be supported by all VCs which
             // can be visualized.
@@ -52,12 +51,12 @@ namespace sdr
 
         public:
             ViewObjectContactOfE3d(ObjectContact& rObjectContact, ViewContact& rViewContact);
-            virtual ~ViewObjectContactOfE3d();
+            virtual ~ViewObjectContactOfE3d() override;
 
             // access to the local primitive sequence. This will ensure that the list is
             // current in comparing the local list content with a fresh created incarnation
             // This method will not handle included hierarchies or visibility.
-            drawinglayer::primitive3d::Primitive3DContainer getPrimitive3DContainer(const DisplayInfo& rDisplayInfo) const;
+            drawinglayer::primitive3d::Primitive3DContainer const & getPrimitive3DContainer(const DisplayInfo& rDisplayInfo) const;
         };
     } // end of namespace contact
 } // end of namespace sdr

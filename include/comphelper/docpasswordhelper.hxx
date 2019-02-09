@@ -20,13 +20,14 @@
 #ifndef INCLUDED_COMPHELPER_DOCPASSWORDHELPER_HXX
 #define INCLUDED_COMPHELPER_DOCPASSWORDHELPER_HXX
 
-#include <com/sun/star/beans/NamedValue.hpp>
 #include <comphelper/comphelperdllapi.h>
 #include <vector>
 #include <comphelper/docpasswordrequest.hxx>
+#include <comphelper/hash.hxx>
 
 namespace com { namespace sun { namespace star { namespace task { class XInteractionHandler; } } } }
 namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace com { namespace sun { namespace star { namespace beans { struct NamedValue; } } } }
 
 namespace comphelper {
 
@@ -180,6 +181,141 @@ public:
                 const OUString& aString );
 
 
+    /** Convenience function to calculate a salted hash with iterations as
+        specified in https://msdn.microsoft.com/en-us/library/dd920692 for the
+        OOXML sheetProtection and fileSharing elements, or
+        https://msdn.microsoft.com/en-us/library/dd924776 and
+        https://msdn.microsoft.com/en-us/library/dd925430 for Standard and
+        Agile Encryption.
+
+        @param  rPassword
+                UTF-16 encoded string without leading BOM character
+
+        @param  rSaltValue
+                Base64 encoded salt that will be decoded and prepended to password
+                data.
+
+        @param  nSpinCount
+                If >0 the number of repeated iterations.
+
+        @param  eIterCount
+                If Hash::IterCount::APPEND, append iteration count as per
+                https://msdn.microsoft.com/en-us/library/dd920692
+                If Hash::IterCount::PREPEND, prepend iteration count as per
+                https://msdn.microsoft.com/en-us/library/dd924776 and
+                https://msdn.microsoft.com/en-us/library/dd925430
+                If Hash::IterCount::NONE, do not add the iteration count to hash
+                iterations.
+
+        @param  rAlgorithmName
+                One of "SHA-512", "SHA-256", ... as listed for AlgorithmName in
+                https://msdn.microsoft.com/en-us/library/dd920692
+                or "SHA512", "SHA256", ... as listed for HashAlgorithm in
+                https://msdn.microsoft.com/en-us/library/dd925810
+                that have a valid match in comphelper::HashType. If not, an
+                empty sequence is returned. Not all algorithm names are
+                supported.
+
+        @return the raw hash value as sal_Int8 sequence.
+     */
+    static css::uno::Sequence<sal_Int8> GetOoxHashAsSequence(
+            const OUString& rPassword,
+            const OUString& rSaltValue,
+            sal_uInt32 nSpinCount,
+            comphelper::Hash::IterCount eIterCount,
+            const OUString& rAlgorithmName);
+
+
+    /** Convenience function to calculate a salted hash with iterations as
+        specified in https://msdn.microsoft.com/en-us/library/dd920692 for the
+        OOXML sheetProtection and fileSharing elements, or
+        https://msdn.microsoft.com/en-us/library/dd924776 and
+        https://msdn.microsoft.com/en-us/library/dd925430 for Standard and
+        Agile Encryption.
+
+        @param  rPassword
+                UTF-16 encoded string without leading BOM character
+
+        @param  rSaltValue
+                Base64 encoded salt that will be decoded and prepended to password
+                data.
+
+        @param  nSpinCount
+                If >0 the number of repeated iterations.
+
+        @param  eIterCount
+                If Hash::IterCount::APPEND, append iteration count as per
+                https://msdn.microsoft.com/en-us/library/dd920692
+                If Hash::IterCount::PREPEND, prepend iteration count as per
+                https://msdn.microsoft.com/en-us/library/dd924776 and
+                https://msdn.microsoft.com/en-us/library/dd925430
+                If Hash::IterCount::NONE, do not add the iteration count to hash
+                iterations.
+
+        @param  rAlgorithmName
+                One of "SHA-512", "SHA-256", ... as listed for AlgorithmName in
+                https://msdn.microsoft.com/en-us/library/dd920692
+                or "SHA512", "SHA256", ... as listed for HashAlgorithm in
+                https://msdn.microsoft.com/en-us/library/dd925810
+                that have a valid match in comphelper::HashType. If not, an
+                empty sequence is returned. Not all algorithm names are
+                supported.
+
+        @return the base64 encoded string of the hash value, that can be
+                compared against a stored base64 encoded hash value.
+     */
+    static OUString GetOoxHashAsBase64(
+            const OUString& rPassword,
+            const OUString& rSaltValue,
+            sal_uInt32 nSpinCount,
+            comphelper::Hash::IterCount eIterCount,
+            const OUString& rAlgorithmName);
+
+
+    /** Convenience function to calculate a salted hash with iterations as
+        specified in https://msdn.microsoft.com/en-us/library/dd920692 for the
+        OOXML sheetProtection and fileSharing elements, or
+        https://msdn.microsoft.com/en-us/library/dd924776 and
+        https://msdn.microsoft.com/en-us/library/dd925430 for Standard and
+        Agile Encryption.
+
+        @param  rPassword
+                UTF-16 encoded string without leading BOM character
+
+        @param  rSaltValue
+                A raw salt that will be prepended to password data.
+
+        @param  nSpinCount
+                If >0 the number of repeated iterations.
+
+        @param  eIterCount
+                If Hash::IterCount::APPEND, append iteration count as per
+                https://msdn.microsoft.com/en-us/library/dd920692
+                If Hash::IterCount::PREPEND, prepend iteration count as per
+                https://msdn.microsoft.com/en-us/library/dd924776 and
+                https://msdn.microsoft.com/en-us/library/dd925430
+                If Hash::IterCount::NONE, do not add the iteration count to hash
+                iterations.
+
+        @param  rAlgorithmName
+                One of "SHA-512", "SHA-256", ... as listed for AlgorithmName in
+                https://msdn.microsoft.com/en-us/library/dd920692
+                or "SHA512", "SHA256", ... as listed for HashAlgorithm in
+                https://msdn.microsoft.com/en-us/library/dd925810
+                that have a valid match in comphelper::HashType. If not, an
+                empty sequence is returned. Not all algorithm names are
+                supported.
+
+        @return the raw the hash value.
+     */
+    static std::vector<unsigned char> GetOoxHashAsVector(
+            const OUString& rPassword,
+            const std::vector<unsigned char>& rSaltValue,
+            sal_uInt32 nSpinCount,
+            comphelper::Hash::IterCount eIterCount,
+            const OUString& rAlgorithmName);
+
+
     /** This helper function generates a random sequence of bytes of
         requested length.
       */
@@ -265,7 +401,7 @@ public:
         @return
             If not empty, contains the password that has been validated by the
             passed password verifier. If empty, no valid password has been
-            found, or the user has chossen to cancel password input.
+            found, or the user has chosen to cancel password input.
      */
     static css::uno::Sequence< css::beans::NamedValue > requestAndVerifyDocPassword(
                             IDocPasswordVerifier& rVerifier,
@@ -276,6 +412,9 @@ public:
                             DocPasswordRequestType eRequestType,
                             const ::std::vector< OUString >* pDefaultPasswords = nullptr,
                             bool* pbIsDefaultPassword = nullptr );
+
+    static css::uno::Sequence< css::beans::NamedValue > decryptGpgSession(
+        const css::uno::Sequence< css::uno::Sequence< css::beans::NamedValue > >& rGpgProperties);
 
 private:
                         ~DocPasswordHelper();

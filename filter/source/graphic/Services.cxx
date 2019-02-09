@@ -17,36 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "GraphicExportDialog.hxx"
 #include "GraphicExportFilter.hxx"
 #include <comphelper/servicedecl.hxx>
 
 #define GRAPHIC_EXPORT_FILTER_SERVICE "com.sun.star.comp.GraphicExportFilter"
-#define GRAPHIC_EXPORT_DIALOG_SERVICE "com.sun.star.comp.GraphicExportDialog"
 
-comphelper::service_decl::class_<GraphicExportFilter> serviceGraphicExportFilter;
+comphelper::service_decl::class_<GraphicExportFilter> const serviceGraphicExportFilter;
 const comphelper::service_decl::ServiceDecl graphicExportFilter(
     serviceGraphicExportFilter,
     GRAPHIC_EXPORT_FILTER_SERVICE,
     "com.sun.star.document.ExportFilter" );
 
-comphelper::service_decl::class_<GraphicExportDialog> serviceGraphicExportDialog;
-const comphelper::service_decl::ServiceDecl graphicExportDialog(
-    serviceGraphicExportDialog,
-    GRAPHIC_EXPORT_DIALOG_SERVICE,
-    "com.sun.star.ui.dialog.FilterOptionsDialog" );
 
-
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL graphicfilter_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void* graphicfilter_component_getFactory(
     sal_Char const* pImplementationName, void*, void*)
 {
     if ( rtl_str_compare (pImplementationName, GRAPHIC_EXPORT_FILTER_SERVICE) == 0 )
     {
         return comphelper::service_decl::component_getFactoryHelper( pImplementationName, {&graphicExportFilter} );
-    }
-    else if ( rtl_str_compare (pImplementationName, GRAPHIC_EXPORT_DIALOG_SERVICE) == 0 )
-    {
-        return comphelper::service_decl::component_getFactoryHelper( pImplementationName, {&graphicExportDialog} );
     }
     return nullptr;
 }

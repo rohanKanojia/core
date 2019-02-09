@@ -19,14 +19,17 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_INC_RANGESELECTIONHELPER_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_RANGESELECTIONHELPER_HXX
 
-#include <com/sun/star/chart2/XChartDocument.hpp>
-#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/uno/Reference.h>
+#include <com/sun/star/uno/Sequence.h>
+#include <rtl/ustring.hxx>
+
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XChartDocument; } } } }
 
 namespace com { namespace sun { namespace star {
     namespace sheet{
         class XRangeSelection;
         class XRangeSelectionListener;
-        class XCellRangesAccess;
     }
 }}}
 
@@ -43,7 +46,7 @@ public:
     ~RangeSelectionHelper();
 
     bool hasRangeSelection();
-    css::uno::Reference< css::sheet::XRangeSelection > getRangeSelection();
+    css::uno::Reference< css::sheet::XRangeSelection > const & getRangeSelection();
     void raiseRangeSelectionDocument();
     bool chooseRange(
         const OUString & aCurrentRange,

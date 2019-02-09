@@ -47,13 +47,13 @@ protected:
     Point           m_aMDPos;
     css::uno::Reference<css::uno::XInterface> m_xOverlappingObj;
     SdrObject *     m_pOverlappingObj;
-    sal_Int32       m_nOverlappedControlColor;
-    sal_Int32       m_nOldColor;
+    Color           m_nOverlappedControlColor;
+    Color           m_nOldColor;
     bool            m_bSelectionMode;
     bool            m_bUiActive;
     bool            m_bShowPropertyBrowser;
 
-    DECL_LINK_TYPED( ScrollTimeout, Timer *, void );
+    DECL_LINK( ScrollTimeout, Timer *, void );
     void    ForceScroll( const Point& rPos );
     /** checks that no other object is overlapped.
     *
@@ -101,14 +101,14 @@ public:
     * \return <TRUE/> if overlapping, otherwise <FALSE/>
     */
     bool isOverlapping(const MouseEvent& rMEvt);
-    void setOverlappedControlColor(sal_Int32 _nColor);
+    void setOverlappedControlColor(Color _nColor);
     void stopScrollTimer();
 
     /** deactivate all ole object
     */
     void    deactivateOle(bool _bSelect = false);
 
-    inline bool isUiActive() const { return m_bUiActive; }
+    bool isUiActive() const { return m_bUiActive; }
 protected:
     void colorizeOverlappedObject(SdrObject* _pOverlappedObj);
     void unColorizeOverlappedObj();
@@ -124,7 +124,7 @@ class DlgEdFuncInsert : public DlgEdFunc
 {
 public:
     DlgEdFuncInsert( OReportSection* pParent );
-    virtual ~DlgEdFuncInsert();
+    virtual ~DlgEdFuncInsert() override;
 
     virtual bool MouseButtonDown( const MouseEvent& rMEvt ) override;
     virtual bool MouseButtonUp( const MouseEvent& rMEvt ) override;
@@ -139,7 +139,7 @@ class DlgEdFuncSelect : public DlgEdFunc
 {
 public:
     DlgEdFuncSelect( OReportSection* pParent );
-    virtual ~DlgEdFuncSelect();
+    virtual ~DlgEdFuncSelect() override;
 
     virtual bool MouseButtonDown( const MouseEvent& rMEvt ) override;
     virtual bool MouseButtonUp( const MouseEvent& rMEvt ) override;

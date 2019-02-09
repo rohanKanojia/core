@@ -12,19 +12,18 @@
 #include <svl/zforlist.hxx>
 #include <svl/undo.hxx>
 
-#include "formulacell.hxx"
-#include "rangelst.hxx"
-#include "scitems.hxx"
-#include "docsh.hxx"
-#include "document.hxx"
-#include "uiitems.hxx"
-#include "reffact.hxx"
-#include "strload.hxx"
-#include "docfunc.hxx"
-#include "StatisticsDialogs.hrc"
-#include "TableFillingAndNavigationTools.hxx"
-
-#include "MatrixComparisonGenerator.hxx"
+#include <formulacell.hxx>
+#include <rangelst.hxx>
+#include <scitems.hxx>
+#include <docsh.hxx>
+#include <document.hxx>
+#include <uiitems.hxx>
+#include <reffact.hxx>
+#include <docfunc.hxx>
+#include <TableFillingAndNavigationTools.hxx>
+#include <MatrixComparisonGenerator.hxx>
+#include <scresid.hxx>
+#include <strings.hrc>
 
 namespace
 {
@@ -40,8 +39,8 @@ namespace
                 if (j >= i)
                 {
                     aTemplate.setTemplate(aTemplateString);
-                    aTemplate.applyRange("%VAR1%", *aRangeList[i]);
-                    aTemplate.applyRange("%VAR2%", *aRangeList[j]);
+                    aTemplate.applyRange("%VAR1%", aRangeList[i]);
+                    aTemplate.applyRange("%VAR2%", aRangeList[j]);
                     aOutput.writeFormula(aTemplate.getTemplate());
                 }
                 aOutput.nextRow();
@@ -61,7 +60,7 @@ ScMatrixComparisonGenerator::ScMatrixComparisonGenerator(
 ScMatrixComparisonGenerator::~ScMatrixComparisonGenerator()
 {}
 
-sal_Int16 ScMatrixComparisonGenerator::GetUndoNameId()
+const char* ScMatrixComparisonGenerator::GetUndoNameId()
 {
     return STR_CORRELATION_UNDO_NAME;
 }
@@ -74,12 +73,9 @@ ScRange ScMatrixComparisonGenerator::ApplyOutput(ScDocShell* pDocShell)
 
     SCTAB inTab = mInputRange.aStart.Tab();
 
-    ScRangeList aRangeList;
-
-    if (mGroupedBy == BY_COLUMN)
-        aRangeList = MakeColumnRangeList(inTab, mInputRange.aStart, mInputRange.aEnd);
-    else
-        aRangeList = MakeRowRangeList(inTab, mInputRange.aStart, mInputRange.aEnd);
+    ScRangeList aRangeList = (mGroupedBy == BY_COLUMN) ?
+        MakeColumnRangeList(inTab, mInputRange.aStart, mInputRange.aEnd) :
+        MakeRowRangeList(inTab, mInputRange.aStart, mInputRange.aEnd);
 
     // labels
     output.writeString(getLabel());
@@ -91,9 +87,9 @@ ScRange ScMatrixComparisonGenerator::ApplyOutput(ScDocShell* pDocShell)
     for (size_t i = 0; i < aRangeList.size(); i++)
     {
         if (mGroupedBy == BY_COLUMN)
-            aTemplate.setTemplate(SC_STRLOAD(RID_STATISTICS_DLGS, STR_COLUMN_LABEL_TEMPLATE));
+            aTemplate.setTemplate(ScResId(STR_COLUMN_LABEL_TEMPLATE));
         else
-            aTemplate.setTemplate(SC_STRLOAD(RID_STATISTICS_DLGS, STR_ROW_LABEL_TEMPLATE));
+            aTemplate.setTemplate(ScResId(STR_ROW_LABEL_TEMPLATE));
 
         aTemplate.applyNumber(strWildcardNumber, i + 1);
         output.writeString(aTemplate.getTemplate());
@@ -106,9 +102,9 @@ ScRange ScMatrixComparisonGenerator::ApplyOutput(ScDocShell* pDocShell)
     for (size_t i = 0; i < aRangeList.size(); i++)
     {
         if (mGroupedBy == BY_COLUMN)
-            aTemplate.setTemplate(SC_STRLOAD(RID_STATISTICS_DLGS, STR_COLUMN_LABEL_TEMPLATE));
+            aTemplate.setTemplate(ScResId(STR_COLUMN_LABEL_TEMPLATE));
         else
-            aTemplate.setTemplate(SC_STRLOAD(RID_STATISTICS_DLGS, STR_ROW_LABEL_TEMPLATE));
+            aTemplate.setTemplate(ScResId(STR_ROW_LABEL_TEMPLATE));
 
         aTemplate.applyNumber(strWildcardNumber, i + 1);
         output.writeString(aTemplate.getTemplate());

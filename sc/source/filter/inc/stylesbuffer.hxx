@@ -20,10 +20,10 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_STYLESBUFFER_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_STYLESBUFFER_HXX
 
+#include <memory>
 #include <com/sun/star/awt/FontDescriptor.hpp>
 #include <com/sun/star/table/CellHoriJustify.hpp>
 #include <com/sun/star/table/CellOrientation.hpp>
-#include <com/sun/star/table/CellVertJustify2.hpp>
 #include <com/sun/star/table/BorderLine2.hpp>
 #include <com/sun/star/util/CellProtection.hpp>
 #include <oox/drawingml/color.hxx>
@@ -31,19 +31,16 @@
 #include <oox/helper/refmap.hxx>
 #include <oox/helper/refvector.hxx>
 #include "numberformatsbuffer.hxx"
-#include "patattr.hxx"
-#include "stlsheet.hxx"
 #include <editeng/svxenum.hxx>
 #include <editeng/frmdir.hxx>
-#include "attarray.hxx"
-#include <list>
+#include <attarray.hxx>
+#include <vector>
 
-class ScMarkData;
-namespace com { namespace sun { namespace star {
-    namespace awt { struct FontDescrtiptor; }
-} } }
+namespace oox { class SequenceInputStream; }
 
-namespace oox { class PropertySet; }
+namespace oox { class PropertySet;
+                class PropertyMap;
+                class AttributeList; }
 
 namespace oox {
 namespace xls {
@@ -82,9 +79,9 @@ public:
     explicit            ExcelGraphicHelper( const WorkbookHelper& rHelper );
 
     /** Derived classes may implement to resolve a scheme color from the passed XML token identifier. */
-    virtual sal_Int32   getSchemeColor( sal_Int32 nToken ) const override;
+    virtual ::Color     getSchemeColor( sal_Int32 nToken ) const override;
     /** Derived classes may implement to resolve a palette index to an RGB color. */
-    virtual sal_Int32   getPaletteColor( sal_Int32 nPaletteIdx ) const override;
+    virtual ::Color     getPaletteColor( sal_Int32 nPaletteIdx ) const override;
 };
 
 class Color : public ::oox::drawingml::Color
@@ -93,7 +90,7 @@ public:
     /** Sets the color to automatic. */
     void                setAuto();
     /** Sets the color to the passed RGB value. */
-    void                setRgb( sal_Int32 nRgbValue, double fTint = 0.0 );
+    void                setRgb( ::Color nRgbValue, double fTint = 0.0 );
     /** Sets the color to the passed theme index. */
     void                setTheme( sal_Int32 nThemeIdx, double fTint = 0.0 );
     /** Sets the color to the passed palette index. */
@@ -108,7 +105,7 @@ public:
     void                importColorId( SequenceInputStream& rStrm );
 
     /** Returns true, if the color is set to automatic. */
-    inline bool         isAuto() const { return isPlaceHolder(); }
+    bool         isAuto() const { return isPlaceHolder(); }
 };
 
 SequenceInputStream& operator>>( SequenceInputStream& rStrm, Color& orColor );
@@ -126,14 +123,14 @@ public:
     void                importPaletteColor( SequenceInputStream& rStrm );
 
     /** Returns the RGB value of the color with the passed index. */
-    sal_Int32           getColor( sal_Int32 nPaletteIdx ) const;
+    ::Color             getColor( sal_Int32 nPaletteIdx ) const;
 
 private:
     /** Appends the passed color. */
-    void                appendColor( sal_Int32 nRGBValue );
+    void                appendColor( ::Color nRGBValue );
 
 private:
-    ::std::vector< sal_Int32 > maColors;    /// List of RGB values.
+    ::std::vector< ::Color > maColors;    /// List of RGB values.
     size_t              mnAppendIndex;      /// Index to append a new color.
 };
 
@@ -161,13 +158,6 @@ struct FontModel
     void                setBiffWeight( sal_uInt16 nWeight );
     void                setBiffUnderline( sal_uInt16 nUnderline );
     void                setBiffEscapement( sal_uInt16 nEscapement );
-};
-
-/** Enumerates different types of API font property sets. */
-enum FontPropertyType
-{
-    FONT_PROPTYPE_CELL,             /// Font properties in a spreadsheet cell (table::Cell service).
-    FONT_PROPTYPE_TEXT              /// Font properties in a text object (text::Text service).
 };
 
 /** Contains used flags for all API font attributes. */
@@ -205,7 +195,7 @@ struct ApiFontData
     ApiScriptFontName        maAsianFont;        /// Font name for east-asian scripts.
     ApiScriptFontName        maCmplxFont;        /// Font name for complex scripts.
     css::awt::FontDescriptor maDesc;             /// Font descriptor (height in twips, weight in %).
-    sal_Int32                mnColor;            /// Font color.
+    ::Color                  mnColor;            /// Font color.
     sal_Int16                mnEscapement;       /// Escapement style.
     sal_Int8                 mnEscapeHeight;     /// Escapement font height.
     bool                     mbOutline;          /// True = outlined characters.
@@ -244,7 +234,7 @@ public:
 
     /** Returns the font model structure. This function can be called before
         finalizeImport() has been called. */
-    inline const FontModel& getModel() const { return maModel; }
+    const FontModel& getModel() const { return maModel; }
 
     /** Final processing after import of all style settings. */
     void                finalizeImport();
@@ -259,18 +249,16 @@ public:
     void                fillToItemSet( SfxItemSet& rItemSet, bool bEditEngineText, bool bSkipPoolDefs = false ) const;
     /** Writes all font attributes to the passed property map. */
     void                writeToPropertyMap(
-                            PropertyMap& rPropMap,
-                            FontPropertyType ePropType ) const;
+                            PropertyMap& rPropMap ) const;
     /** Writes all font attributes to the passed property set. */
     void                writeToPropertySet(
-                            PropertySet& rPropSet,
-                            FontPropertyType ePropType ) const;
+                            PropertySet& rPropSet ) const;
 
 private:
     FontModel           maModel;
     ApiFontData         maApiData;
     ApiFontUsedFlags    maUsedFlags;
-    bool                mbDxf;
+    bool const          mbDxf;
 };
 
 typedef std::shared_ptr< Font > FontRef;
@@ -329,13 +317,11 @@ public:
     void                finalizeImport();
 
     /** Returns the alignment model structure. */
-    inline const AlignmentModel& getModel() const { return maModel; }
+    const AlignmentModel& getModel() const { return maModel; }
     /** Returns the converted API alignment data struct. */
-    inline const ApiAlignmentData& getApiData() const { return maApiData; }
+    const ApiAlignmentData& getApiData() const { return maApiData; }
 
     void                fillToItemSet( SfxItemSet& rItemSet, bool bSkipPoolDefs = false ) const;
-    /** Writes all alignment attributes to the passed property map. */
-    void                writeToPropertyMap( PropertyMap& rPropMap ) const;
 
 private:
     ::SvxCellHorJustify GetScHorAlign() const;
@@ -381,10 +367,8 @@ public:
     void                finalizeImport();
 
     /** Returns the converted API protection data struct. */
-    inline const ApiProtectionData& getApiData() const { return maApiData; }
+    const ApiProtectionData& getApiData() const { return maApiData; }
 
-    /** Writes all protection attributes to the passed property map. */
-    void                writeToPropertyMap( PropertyMap& rPropMap ) const;
     void                fillToItemSet( SfxItemSet& rItemSet, bool bSkipPoolDefs = false ) const;
 private:
     ProtectionModel     maModel;            /// Protection model data.
@@ -438,8 +422,6 @@ struct ApiBorderData
     bool                hasAnyOuterBorder() const;
 };
 
-bool operator==( const ApiBorderData& rLeft, const ApiBorderData& rRight );
-
 class Border : public WorkbookHelper
 {
 public:
@@ -461,14 +443,9 @@ public:
     void                finalizeImport( bool bRTL );
 
     /** Returns the converted API border data struct. */
-    inline const ApiBorderData& getApiData() const { return maApiData; }
+    const ApiBorderData& getApiData() const { return maApiData; }
 
     void fillToItemSet( SfxItemSet& rItemSet, bool bSkipPoolDefs = false ) const;
-
-    /** Writes all border attributes to the passed property map. */
-    void                writeToPropertyMap( PropertyMap& rPropMap ) const;
-
-    bool                hasBorder() const;
 
 private:
     /** Returns the border line struct specified by the passed XML token identifier. */
@@ -482,7 +459,7 @@ private:
 private:
     BorderModel         maModel;
     ApiBorderData       maApiData;
-    bool                mbDxf;
+    bool const          mbDxf;
 };
 
 typedef std::shared_ptr< Border > BorderRef;
@@ -527,14 +504,12 @@ struct GradientFillModel
 /** Contains API fill attributes. */
 struct ApiSolidFillData
 {
-    sal_Int32           mnColor;            /// Fill color.
+    ::Color             mnColor;            /// Fill color.
     bool                mbTransparent;      /// True = transparent area.
     bool                mbUsed;             /// True = fill data is valid.
 
     explicit            ApiSolidFillData();
 };
-
-bool operator==( const ApiSolidFillData& rLeft, const ApiSolidFillData& rRight );
 
 /** Contains cell fill attributes, either a pattern fill or a gradient fill. */
 class Fill : public WorkbookHelper
@@ -569,12 +544,7 @@ public:
     /** Final processing after import of all style settings. */
     void                finalizeImport();
 
-    /** Returns the converted API fill data struct. */
-    inline const ApiSolidFillData& getApiData() const { return maApiData; }
-
     void                fillToItemSet( SfxItemSet& rItemSet, bool bSkipPoolDefs = false ) const;
-    /** Writes all fill attributes to the passed property map. */
-    void                writeToPropertyMap( PropertyMap& rPropMap ) const;
 
 private:
     typedef std::shared_ptr< PatternFillModel >   PatternModelRef;
@@ -583,7 +553,7 @@ private:
     PatternModelRef     mxPatternModel;
     GradientModelRef    mxGradientModel;
     ApiSolidFillData    maApiData;
-    bool                mbDxf;
+    bool const          mbDxf;
 };
 
 typedef std::shared_ptr< Fill > FillRef;
@@ -622,10 +592,11 @@ class Xf : public WorkbookHelper
 public:
     struct AttrList
     {
-        std::list<ScAttrEntry> maAttrs;
+        std::vector<ScAttrEntry> maAttrs;
         bool mbLatinNumFmtOnly;
+        const ScPatternAttr* mpDefPattern;
 
-        AttrList();
+        AttrList(const ScPatternAttr* pDefPatternAttr);
     };
 
     explicit            Xf( const WorkbookHelper& rHelper );
@@ -644,22 +615,17 @@ public:
     void                finalizeImport();
 
     /** Returns true, if the XF is a cell XF, and false, if it is a style XF. */
-    inline bool         isCellXf() const { return maModel.mbCellXf; }
+    bool         isCellXf() const { return maModel.mbCellXf; }
 
     /** Returns the referred font object. */
     FontRef             getFont() const;
     /** Returns the alignment data of this style. */
-    inline const Alignment& getAlignment() const { return maAlignment; }
+    const Alignment& getAlignment() const { return maAlignment; }
 
     void applyPatternToAttrList(
         AttrList& rAttrs, SCROW nRow1, SCROW nRow2, sal_Int32 nForceScNumFmt );
 
-    /** Writes all formatting attributes to the passed property map. */
-    void                writeToPropertyMap( PropertyMap& rPropMap ) const;
-    /** Writes all formatting attributes to the passed property set. */
-    void                writeToPropertySet( PropertySet& rPropSet ) const;
-
-    void writeToDoc( ScDocumentImport& rDoc, const css::table::CellRangeAddress& rRange );
+    void writeToDoc( ScDocumentImport& rDoc, const ScRange& rRange );
 
     const ::ScPatternAttr& createPattern( bool bSkipPoolDefs = false );
 
@@ -667,7 +633,7 @@ private:
     typedef ::std::unique_ptr< ::ScPatternAttr > ScPatternAttrPtr;
 
     ScPatternAttrPtr    mpPattern;          /// Calc item set.
-    sal_uLong           mnScNumFmt;         /// Calc number format.
+    sal_uInt32          mnScNumFmt;         /// Calc number format.
 
     XfModel             maModel;            /// Cell XF or style XF model data.
     Alignment           maAlignment;        /// Cell alignment data.
@@ -686,11 +652,11 @@ public:
     explicit            Dxf( const WorkbookHelper& rHelper );
 
     /** Creates a new empty font object. */
-    FontRef             createFont( bool bAlwaysNew = true );
+    FontRef const &     createFont( bool bAlwaysNew = true );
     /** Creates a new empty border object. */
-    BorderRef           createBorder( bool bAlwaysNew = true );
+    BorderRef const &   createBorder( bool bAlwaysNew = true );
     /** Creates a new empty fill object. */
-    FillRef             createFill( bool bAlwaysNew = true );
+    FillRef const &     createFill( bool bAlwaysNew = true );
 
     /** Inserts a new number format code. */
     void                importNumFmt( const AttributeList& rAttribs );
@@ -747,15 +713,15 @@ public:
 
     /** Creates the style sheet in the document described by this cell style object. */
     void                createCellStyle();
-    /** Stores tha passed final style name and creates the cell style, if it is
+    /** Stores the passed final style name and creates the cell style, if it is
         user-defined or modified built-in. */
     void                finalizeImport( const OUString& rFinalName );
 
     /** Returns the cell style model structure. */
-    inline const CellStyleModel& getModel() const { return maModel; }
+    const CellStyleModel& getModel() const { return maModel; }
     /** Returns the final style name used in the document. */
-    inline const OUString& getFinalStyleName() const { return maFinalName; }
-    inline ::ScStyleSheet* getStyleSheet() { return mpStyleSheet; }
+    const OUString& getFinalStyleName() const { return maFinalName; }
+    ::ScStyleSheet* getStyleSheet() { return mpStyleSheet; }
 private:
     CellStyleModel      maModel;
     OUString     maFinalName;        /// Final style name used in API.
@@ -789,7 +755,7 @@ public:
 
 private:
     /** Inserts the passed cell style object into the internal maps. */
-    void                insertCellStyle( CellStyleRef xCellStyle );
+    void                insertCellStyle( CellStyleRef const & xCellStyle );
     /** Creates the style sheet described by the passed cell style object. */
     static OUString     createCellStyle( const CellStyleRef& rxCellStyle );
     static ::ScStyleSheet* getCellStyleSheet( const CellStyleRef& rxCellStyle );
@@ -856,7 +822,7 @@ public:
     void                finalizeImport();
 
     /** Returns the palette color with the specified index. */
-    sal_Int32           getPaletteColor( sal_Int32 nIndex ) const;
+    ::Color             getPaletteColor( sal_Int32 nIndex ) const;
     /** Returns the specified font object. */
     FontRef             getFont( sal_Int32 nFontId ) const;
     /** Returns the specified border object. */
@@ -874,9 +840,9 @@ public:
     const FontModel&    getDefaultFontModel() const;
 
     /** Returns true, if the specified borders are equal. */
-    bool                equalBorders( sal_Int32 nBorderId1, sal_Int32 nBorderId2 ) const;
+    static bool         equalBorders( sal_Int32 nBorderId1, sal_Int32 nBorderId2 );
     /** Returns true, if the specified fills are equal. */
-    bool                equalFills( sal_Int32 nFillId1, sal_Int32 nFillId2 ) const;
+    static bool         equalFills( sal_Int32 nFillId1, sal_Int32 nFillId2 );
 
     /** Returns the default style sheet for unused cells. */
     OUString     getDefaultStyleName() const;
@@ -886,24 +852,16 @@ public:
     /** Creates the style sheet described by the DXF with the passed identifier. */
     OUString     createDxfStyle( sal_Int32 nDxfId ) const;
 
-    void                writeFontToItemSet( SfxItemSet& rItemSet, sal_Int32 nFontId, bool bSkipPoolDefs = false ) const;
-    /** Writes the font attributes of the specified font data to the passed property map. */
-    void                writeFontToPropertyMap( PropertyMap& rPropMap, sal_Int32 nFontId ) const;
-    sal_uLong           writeNumFmtToItemSet( SfxItemSet& rItemSet, sal_Int32 nNumFmtId, bool bSkipPoolDefs = false ) const;
+    void                writeFontToItemSet( SfxItemSet& rItemSet, sal_Int32 nFontId, bool bSkipPoolDefs ) const;
+    sal_uInt32          writeNumFmtToItemSet( SfxItemSet& rItemSet, sal_uInt32 nNumFmtId, bool bSkipPoolDefs ) const;
     /** Writes the specified number format to the passed property map. */
-    void                writeNumFmtToPropertyMap( PropertyMap& rPropMap, sal_Int32 nNumFmtId ) const;
-    void                writeBorderToItemSet( SfxItemSet& rItemSet, sal_Int32 nBorderId, bool bSkipPoolDefs = false ) const;
-    /** Writes the border attributes of the specified border data to the passed property map. */
-    void                writeBorderToPropertyMap( PropertyMap& rPropMap, sal_Int32 nBorderId ) const;
+    void                writeBorderToItemSet( SfxItemSet& rItemSet, sal_Int32 nBorderId, bool bSkipPoolDefs ) const;
     /** Writes the fill attributes of the specified fill data to the passed property map. */
-    void                writeFillToItemSet( SfxItemSet& rItemSet, sal_Int32 nFillId, bool bSkipPoolDefs = false ) const;
-    void                writeFillToPropertyMap( PropertyMap& rPropMap, sal_Int32 nFillId ) const;
+    void                writeFillToItemSet( SfxItemSet& rItemSet, sal_Int32 nFillId, bool bSkipPoolDefs ) const;
 
     /** Writes the cell formatting attributes of the specified XF to the passed property set. */
-    void                writeCellXfToPropertySet( PropertySet& rPropSet, sal_Int32 nXfId ) const;
-    void writeCellXfToDoc( ScDocumentImport& rDoc, const css::table::CellRangeAddress& rRange, sal_Int32 nXfId ) const;
+    void                writeCellXfToDoc( ScDocumentImport& rDoc, const ScRange& rRange, sal_Int32 nXfId ) const;
 
-    bool                hasBorder( sal_Int32 nBorderId ) const;
 private:
     typedef RefVector< Font >                           FontVector;
     typedef RefVector< Border >                         BorderVector;

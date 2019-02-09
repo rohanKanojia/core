@@ -20,16 +20,16 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_XECONTENT_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_XECONTENT_HXX
 
-#include "rangelst.hxx"
-#include "xlcontent.hxx"
+#include <memory>
+#include <rangelst.hxx>
 #include "xladdress.hxx"
 #include "xerecord.hxx"
 #include "xeroot.hxx"
 #include "xestring.hxx"
-#include "xeformula.hxx"
 #include "xeextlst.hxx"
+#include "xlformula.hxx"
 
-#include "colorscale.hxx"
+#include <colorscale.hxx>
 
 /* ============================================================================
 Classes to export the big Excel document contents (related to several cells or
@@ -53,7 +53,7 @@ class XclExpSst : public XclExpRecordBase
 {
 public:
     explicit            XclExpSst();
-    virtual             ~XclExpSst();
+    virtual             ~XclExpSst() override;
 
     /** Inserts a new string into the table.
         @return  The index of the string in the SST, used in other records. */
@@ -101,10 +101,10 @@ public:
     /** Constructs the HLINK record from an URL text field. */
     explicit            XclExpHyperlink( const XclExpRoot& rRoot,
                             const SvxURLField& rUrlField, const ScAddress& rScPos );
-    virtual             ~XclExpHyperlink();
+    virtual             ~XclExpHyperlink() override;
 
     /** Returns the cell representation text or 0, if not available. */
-    inline const OUString* GetRepr() const { return m_Repr.isEmpty() ? nullptr : &m_Repr; }
+    const OUString* GetRepr() const { return m_Repr.isEmpty() ? nullptr : &m_Repr; }
 
     virtual void        SaveXml( XclExpXmlStream& rStrm ) override;
 
@@ -125,13 +125,12 @@ private:
 private:
     typedef std::unique_ptr< SvStream > SvStreamPtr;
 
-    ScAddress           maScPos;            /// Position of the hyperlink.
+    ScAddress const     maScPos;            /// Position of the hyperlink.
     OUString            m_Repr;             /// Cell representation text.
     SvStreamPtr         mxVarData;          /// Buffer stream with variable data.
     sal_uInt32          mnFlags;            /// Option flags.
     XclExpStringRef     mxTextMark;         /// Location within m_Repr
     OUString            msTarget;           /// Target URL
-    bool                mbSetDisplay;       /// True if display attribute it written
 };
 
 typedef XclExpRecordList< XclExpHyperlink > XclExpHyperlinkList;
@@ -163,7 +162,6 @@ private:
 
 // Conditional formatting =====================================================
 
-class ScCondFormatEntry;
 class XclExpCFImpl;
 
 /** Represents a CF record that contains one condition of a conditional format. */
@@ -171,7 +169,7 @@ class XclExpCF : public XclExpRecord, protected XclExpRoot
 {
 public:
     explicit            XclExpCF( const XclExpRoot& rRoot, const ScCondFormatEntry& rFormatEntry, sal_Int32 nPriority );
-    virtual             ~XclExpCF();
+    virtual             ~XclExpCF() override;
 
     virtual void        SaveXml( XclExpXmlStream& rStrm ) override;
 
@@ -188,51 +186,49 @@ class XclExpDateFormat : public XclExpRecord, protected XclExpRoot
 {
 public:
     explicit XclExpDateFormat( const XclExpRoot& rRoot, const ScCondDateFormatEntry& rFormatEntry, sal_Int32 nPriority );
-    virtual ~XclExpDateFormat();
+    virtual ~XclExpDateFormat() override;
 
     virtual void SaveXml( XclExpXmlStream& rStrm ) override;
 
 private:
     const ScCondDateFormatEntry& mrFormatEntry;
-    sal_Int32 mnPriority;
+    sal_Int32 const mnPriority;
 };
 
 class XclExpCfvo : public XclExpRecord, protected XclExpRoot
 {
 public:
     explicit XclExpCfvo( const XclExpRoot& rRoot, const ScColorScaleEntry& rFormatEntry, const ScAddress& rPos, bool bFirst = true);
-    virtual ~XclExpCfvo() {}
 
     virtual void SaveXml( XclExpXmlStream& rStrm ) override;
 private:
     const ScColorScaleEntry& mrEntry;
-    ScAddress maSrcPos;
-    bool mbFirst;
+    ScAddress const maSrcPos;
+    bool const mbFirst;
 };
 
 class XclExpColScaleCol : public XclExpRecord, protected XclExpRoot
 {
 public:
     explicit XclExpColScaleCol( const XclExpRoot& rRoot, const Color& rColor);
-    virtual ~XclExpColScaleCol();
+    virtual ~XclExpColScaleCol() override;
 
     virtual void SaveXml( XclExpXmlStream& rStrm ) override;
 private:
     const Color& mrColor;
 };
 
-class ScConditionalFormat;
-
 /** Represents a CONDFMT record that contains all conditions of a conditional format.
     @descr  Contains the conditions which are stored in CF records. */
 class XclExpCondfmt : public XclExpRecord, protected XclExpRoot
 {
 public:
-    explicit            XclExpCondfmt( const XclExpRoot& rRoot, const ScConditionalFormat& rCondFormat, XclExtLstRef xExtLst, sal_Int32& rIndex );
-    virtual             ~XclExpCondfmt();
+    explicit            XclExpCondfmt( const XclExpRoot& rRoot, const ScConditionalFormat& rCondFormat, const XclExtLstRef& xExtLst, sal_Int32& rIndex );
+    virtual             ~XclExpCondfmt() override;
 
     /** Returns true, if this conditional format contains at least one cell range and CF record. */
-    bool                IsValid() const;
+    bool                IsValidForBinary() const;
+    bool                IsValidForXml() const;
 
     /** Writes the CONDFMT record with following CF records, if there is valid data. */
     virtual void        Save( XclExpStream& rStrm ) override;
@@ -262,7 +258,7 @@ private:
 
     XclExpCfvoList maCfvoList;
     XclExpColScaleColList maColList;
-    sal_Int32 mnPriority;
+    sal_Int32 const mnPriority;
 };
 
 class XclExpDataBar : public XclExpRecord, protected XclExpRoot
@@ -277,8 +273,8 @@ private:
     std::unique_ptr<XclExpColScaleCol> mpCol;
 
     const ScDataBarFormat& mrFormat;
-    sal_Int32 mnPriority;
-    OString maGUID;
+    sal_Int32 const mnPriority;
+    OString const maGUID;
 };
 
 class XclExpIconSet : public XclExpRecord, protected XclExpRoot
@@ -292,7 +288,7 @@ private:
 
     XclExpCfvoList maCfvoList;
     const ScIconSetFormat& mrFormat;
-    sal_Int32 mnPriority;
+    sal_Int32 const mnPriority;
 };
 
 /** Contains all conditional formats of a specific sheet. */
@@ -300,7 +296,7 @@ class XclExpCondFormatBuffer : public XclExpRecordBase, protected XclExpRoot
 {
 public:
     /** Constructs CONDFMT and CF records containing the conditional formats of the current sheet. */
-    explicit            XclExpCondFormatBuffer( const XclExpRoot& rRoot, XclExtLstRef xExtLst );
+    explicit            XclExpCondFormatBuffer( const XclExpRoot& rRoot, const XclExtLstRef& xExtLst );
 
     /** Writes all contained CONDFMT records with their CF records. */
     virtual void        Save( XclExpStream& rStrm ) override;
@@ -321,10 +317,10 @@ class XclExpDV : public XclExpRecord, protected XclExpRoot
 {
 public:
     explicit            XclExpDV( const XclExpRoot& rRoot, sal_uLong nScHandle );
-    virtual             ~XclExpDV();
+    virtual             ~XclExpDV() override;
 
     /** Returns the core handle of the validation data. */
-    inline sal_uLong        GetScHandle() const { return mnScHandle; }
+    sal_uLong        GetScHandle() const { return mnScHandle; }
 
     /** Inserts a new cell range into the cell range list. */
     void                InsertCellRange( const ScRange& rPos );
@@ -359,7 +355,7 @@ class XclExpDval : public XclExpRecord, protected XclExpRoot
 {
 public:
     explicit            XclExpDval( const XclExpRoot& rRoot );
-    virtual             ~XclExpDval();
+    virtual             ~XclExpDval() override;
 
     /** Inserts the cell range into the range list of the DV record with the specified handle. */
     void                InsertCellRange( const ScRange& rRange, sal_uLong nScHandle );
@@ -398,14 +394,14 @@ public:
                             const OUString& rUrl,
                             const OUString& rSource,
                             sal_Int32 nRefrSecs );
-    virtual             ~XclExpWebQuery();
+    virtual             ~XclExpWebQuery() override;
 
     /** Writes all needed records for this web query. */
     virtual void        Save( XclExpStream& rStrm ) override;
 
 private:
-    XclExpString        maDestRange;    /// Destination range.
-    XclExpString        maUrl;          /// Source document URL.
+    XclExpString const  maDestRange;    /// Destination range.
+    XclExpString const  maUrl;          /// Source document URL.
     XclExpStringRef     mxQryTables;    /// List of source range names.
     sal_Int16           mnRefresh;      /// Refresh time in minutes.
     bool                mbEntireDoc;    /// true = entire document.

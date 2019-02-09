@@ -32,7 +32,7 @@
 #include "cpp.h"
 
 #if defined(MACOSX) || defined(AIX) || defined(_WIN32)
-#include <_getopt.h>
+#include "_getopt.h"
 #else
 #include <getopt.h>
 #endif
@@ -149,7 +149,7 @@ void
                         case 'w':
                             dp = &optarg[n + 1];
                             n += (int)strlen(dp);
-                            while (isspace(*dp)) dp++;
+                            while (isspace((unsigned char)*dp)) dp++;
 
                             for (i = NINCLUDE - 1; i >= 0; i--)
                             {
@@ -172,8 +172,8 @@ void
                 Cplusplus++;
                 break;
 
-            case 'u':                   /* -undef fuer GCC (dummy) */
-            case 'l':                   /* -lang-c++ fuer GCC (dummy) */
+            case 'u':                   /* -undef for GCC (dummy) */
+            case 'l':                   /* -lang-c++ for GCC (dummy) */
                 break;
 
             default:
@@ -204,6 +204,7 @@ void
             error(FATAL, "Can't open output file %s", argv[optind + 1]);
 
         dup2(fdo, 1);
+        // coverity[leaked_handle] - on purpose
     }
     includelist[NINCLUDE - 1].always = 0;
     includelist[NINCLUDE - 1].file = dp;

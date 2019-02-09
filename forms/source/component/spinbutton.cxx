@@ -19,6 +19,7 @@
 
 #include "spinbutton.hxx"
 #include "scrollbar.hxx"
+#include <comphelper/property.hxx>
 #include <comphelper/streamsection.hxx>
 #include <comphelper/basicio.hxx>
 
@@ -59,7 +60,7 @@ namespace frm
     {
     }
 
-    OUString SAL_CALL OSpinButtonModel::getImplementationName() throw ( RuntimeException, std::exception )
+    OUString SAL_CALL OSpinButtonModel::getImplementationName()
     {
         return OUString( "com.sun.star.comp.forms.OSpinButtonModel" );
     }
@@ -68,7 +69,7 @@ namespace frm
         // OBoundControlModel, our real base class, claims to support the DataAwareControlModel
         // service, which isn't really true for us. We only derive from this class
         // to benefit from the functionality for binding to spreadsheet cells
-    Sequence< OUString > SAL_CALL OSpinButtonModel::getSupportedServiceNames() throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL OSpinButtonModel::getSupportedServiceNames()
     {
         Sequence< OUString > aOwnNames( 2 );
         aOwnNames[ 0 ] = FRM_SUN_COMPONENT_SPINBUTTON;
@@ -84,12 +85,6 @@ namespace frm
     }
 
     IMPLEMENT_DEFAULT_CLONING( OSpinButtonModel )
-
-
-    void SAL_CALL OSpinButtonModel::disposing()
-    {
-        OBoundControlModel::disposing();
-    }
 
 
     void OSpinButtonModel::describeFixedProperties( Sequence< Property >& _rProps ) const
@@ -116,7 +111,7 @@ namespace frm
     }
 
 
-    void OSpinButtonModel::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _rValue ) throw ( Exception, std::exception )
+    void OSpinButtonModel::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _rValue )
     {
         switch ( _nHandle )
         {
@@ -133,7 +128,6 @@ namespace frm
 
     sal_Bool OSpinButtonModel::convertFastPropertyValue(
                 Any& _rConvertedValue, Any& _rOldValue, sal_Int32 _nHandle, const Any& _rValue )
-                throw ( IllegalArgumentException )
     {
         bool bModified( false );
         switch ( _nHandle )
@@ -157,7 +151,7 @@ namespace frm
         switch ( _nHandle )
         {
         case PROPERTY_ID_DEFAULT_SPIN_VALUE:
-            aReturn <<= (sal_Int32)0;
+            aReturn <<= sal_Int32(0);
             break;
 
         default:
@@ -185,18 +179,17 @@ namespace frm
 
     Any OSpinButtonModel::getDefaultForReset() const
     {
-        return makeAny( (sal_Int32)m_nDefaultSpinValue );
+        return makeAny( m_nDefaultSpinValue );
     }
 
 
-    OUString SAL_CALL OSpinButtonModel::getServiceName() throw( RuntimeException, std::exception )
+    OUString SAL_CALL OSpinButtonModel::getServiceName()
     {
         return OUString(FRM_SUN_COMPONENT_SPINBUTTON);
     }
 
 
     void SAL_CALL OSpinButtonModel::write( const Reference< XObjectOutputStream >& _rxOutStream )
-        throw( IOException, RuntimeException, std::exception )
     {
         OBoundControlModel::write( _rxOutStream );
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -212,7 +205,7 @@ namespace frm
     }
 
 
-    void SAL_CALL OSpinButtonModel::read( const Reference< XObjectInputStream>& _rxInStream ) throw( IOException, RuntimeException, std::exception )
+    void SAL_CALL OSpinButtonModel::read( const Reference< XObjectInputStream>& _rxInStream )
     {
         OBoundControlModel::read( _rxInStream );
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -257,7 +250,7 @@ namespace frm
 
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_forms_OSpinButtonModel_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {

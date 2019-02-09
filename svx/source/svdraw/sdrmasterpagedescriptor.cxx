@@ -28,16 +28,9 @@ using namespace com::sun::star;
 
 namespace sdr
 {
-    // ViewContact part
-    sdr::contact::ViewContact* MasterPageDescriptor::CreateObjectSpecificViewContact()
-    {
-        return new sdr::contact::ViewContactOfMasterPageDescriptor(*this);
-    }
-
     MasterPageDescriptor::MasterPageDescriptor(SdrPage& aOwnerPage, SdrPage& aUsedPage)
     :   maOwnerPage(aOwnerPage),
-        maUsedPage(aUsedPage),
-        mpViewContact(nullptr)
+        maUsedPage(aUsedPage)
     {
         // all layers visible
         maVisibleLayers.SetAll();
@@ -51,11 +44,7 @@ namespace sdr
         // de-register at used page
         maUsedPage.RemovePageUser(*this);
 
-        if(mpViewContact)
-        {
-            delete mpViewContact;
-            mpViewContact = nullptr;
-        }
+        mpViewContact.reset();
     }
 
     // ViewContact part
@@ -63,8 +52,8 @@ namespace sdr
     {
         if(!mpViewContact)
         {
-            const_cast< MasterPageDescriptor* >(this)->mpViewContact =
-                const_cast< MasterPageDescriptor* >(this)->CreateObjectSpecificViewContact();
+            mpViewContact.reset(
+                new sdr::contact::ViewContactOfMasterPageDescriptor(*const_cast< MasterPageDescriptor* >(this)) );
         }
 
         return *mpViewContact;
@@ -78,7 +67,7 @@ namespace sdr
         maOwnerPage.TRG_ClearMasterPage();
     }
 
-    void MasterPageDescriptor::SetVisibleLayers(const SetOfByte& rNew)
+    void MasterPageDescriptor::SetVisibleLayers(const SdrLayerIDSet& rNew)
     {
         if(rNew != maVisibleLayers)
         {
@@ -93,7 +82,7 @@ namespace sdr
         const SdrPage* pCorrectPage = &GetOwnerPage();
         const SdrPageProperties* pCorrectProperties = &pCorrectPage->getSdrPageProperties();
 
-        if(drawing::FillStyle_NONE == static_cast<const XFillStyleItem&>(pCorrectProperties->GetItemSet().Get(XATTR_FILLSTYLE)).GetValue())
+        if(drawing::FillStyle_NONE == pCorrectProperties->GetItemSet().Get(XATTR_FILLSTYLE).GetValue())
         {
             pCorrectPage = &GetUsedPage();
             pCorrectProperties = &pCorrectPage->getSdrPageProperties();
@@ -103,7 +92,7 @@ namespace sdr
         {
             // #i110846# Suppress SdrPage FillStyle for MasterPages without StyleSheets,
             // else the PoolDefault (XFILL_COLOR and Blue8) will be used. Normally, all
-            // MasterPages should have a StyleSheet excactly for this reason, but historically
+            // MasterPages should have a StyleSheet exactly for this reason, but historically
             // e.g. the Notes MasterPage has no StyleSheet set (and there maybe others).
             pCorrectProperties = nullptr;
         }

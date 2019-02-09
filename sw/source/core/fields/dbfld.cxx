@@ -18,6 +18,7 @@
  */
 
 #include <float.h>
+#include <o3tl/any.hxx>
 #include <sfx2/app.hxx>
 #include <svl/zforlist.hxx>
 #include <svx/pageitem.hxx>
@@ -44,27 +45,27 @@ using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star;
 
 /// replace database separator by dots for display
-static OUString lcl_DBTrennConv(const OUString& aContent)
+static OUString lcl_DBSeparatorConvert(const OUString& aContent)
 {
-    return aContent.replaceAll(OUString(DB_DELIM), ".");
+    return aContent.replaceAll(OUStringLiteral1(DB_DELIM), ".");
 }
 
 // database field type
 
 SwDBFieldType::SwDBFieldType(SwDoc* pDocPtr, const OUString& rNam, const SwDBData& rDBData ) :
-    SwValueFieldType( pDocPtr, RES_DBFLD ),
-    aDBData(rDBData),
-    sName(rNam),
-    sColumn(rNam),
-    nRefCnt(0)
+    SwValueFieldType( pDocPtr, SwFieldIds::Database ),
+    m_aDBData(rDBData),
+    m_sName(rNam),
+    m_sColumn(rNam),
+    m_nRefCnt(0)
 {
-    if(!aDBData.sDataSource.isEmpty() || !aDBData.sCommand.isEmpty())
+    if(!m_aDBData.sDataSource.isEmpty() || !m_aDBData.sCommand.isEmpty())
     {
-        sName = aDBData.sDataSource
-            + OUString(DB_DELIM)
-            + aDBData.sCommand
-            + OUString(DB_DELIM)
-            + sName;
+        m_sName = m_aDBData.sDataSource
+            + OUStringLiteral1(DB_DELIM)
+            + m_aDBData.sCommand
+            + OUStringLiteral1(DB_DELIM)
+            + m_sName;
     }
 }
 
@@ -74,20 +75,20 @@ SwDBFieldType::~SwDBFieldType()
 
 SwFieldType* SwDBFieldType::Copy() const
 {
-    SwDBFieldType* pTmp = new SwDBFieldType(GetDoc(), sColumn, aDBData);
+    SwDBFieldType* pTmp = new SwDBFieldType(GetDoc(), m_sColumn, m_aDBData);
     return pTmp;
 }
 
 OUString SwDBFieldType::GetName() const
 {
-    return sName;
+    return m_sName;
 }
 
 void SwDBFieldType::ReleaseRef()
 {
-    OSL_ENSURE(nRefCnt > 0, "RefCount < 0!");
+    OSL_ENSURE(m_nRefCnt > 0, "RefCount < 0!");
 
-    if (--nRefCnt <= 0)
+    if (--m_nRefCnt <= 0)
     {
         size_t nPos = GetDoc()->getIDocumentFieldsAccess().GetFieldTypes()->GetPos(this);
 
@@ -99,45 +100,44 @@ void SwDBFieldType::ReleaseRef()
     }
 }
 
-bool SwDBFieldType::QueryValue( uno::Any& rAny, sal_uInt16 nWhichId ) const
+void SwDBFieldType::QueryValue( uno::Any& rAny, sal_uInt16 nWhichId ) const
 {
     switch( nWhichId )
     {
     case FIELD_PROP_PAR1:
-        rAny <<= aDBData.sDataSource;
+        rAny <<= m_aDBData.sDataSource;
         break;
     case FIELD_PROP_PAR2:
-        rAny <<= aDBData.sCommand;
+        rAny <<= m_aDBData.sCommand;
         break;
     case FIELD_PROP_PAR3:
-        rAny <<= sColumn;
+        rAny <<= m_sColumn;
         break;
     case FIELD_PROP_SHORT1:
-        rAny <<= aDBData.nCommandType;
+        rAny <<= m_aDBData.nCommandType;
         break;
     default:
-        OSL_FAIL("illegal property");
+        assert(false);
     }
-    return true;
 }
 
-bool SwDBFieldType::PutValue( const uno::Any& rAny, sal_uInt16 nWhichId )
+void SwDBFieldType::PutValue( const uno::Any& rAny, sal_uInt16 nWhichId )
 {
     switch( nWhichId )
     {
     case FIELD_PROP_PAR1:
-        rAny >>= aDBData.sDataSource;
+        rAny >>= m_aDBData.sDataSource;
         break;
     case FIELD_PROP_PAR2:
-        rAny >>= aDBData.sCommand;
+        rAny >>= m_aDBData.sCommand;
         break;
     case FIELD_PROP_PAR3:
         {
             OUString sTmp;
             rAny >>= sTmp;
-            if( sTmp != sColumn )
+            if( sTmp != m_sColumn )
             {
-                sColumn = sTmp;
+                m_sColumn = sTmp;
                 SwIterator<SwFormatField,SwFieldType> aIter( *this );
                 SwFormatField* pFormatField = aIter.First();
                 while(pFormatField)
@@ -156,22 +156,21 @@ bool SwDBFieldType::PutValue( const uno::Any& rAny, sal_uInt16 nWhichId )
         }
         break;
     case FIELD_PROP_SHORT1:
-        rAny >>= aDBData.nCommandType;
+        rAny >>= m_aDBData.nCommandType;
         break;
     default:
-        OSL_FAIL("illegal property");
+        assert(false);
     }
-    return true;
 }
 
 // database field
 
-SwDBField::SwDBField(SwDBFieldType* pTyp, sal_uLong nFormat)
+SwDBField::SwDBField(SwDBFieldType* pTyp, sal_uInt32 nFormat)
     :   SwValueField(pTyp, nFormat),
-        nSubType(0),
-        bIsInBodyText(true),
-        bValidValue(false),
-        bInitialized(false)
+        m_nSubType(0),
+        m_bIsInBodyText(true),
+        m_bValidValue(false),
+        m_bInitialized(false)
 {
     if (GetTyp())
         static_cast<SwDBFieldType*>(GetTyp())->AddRef();
@@ -188,7 +187,7 @@ void SwDBField::InitContent()
 {
     if (!IsInitialized())
     {
-        aContent = "<" + static_cast<const SwDBFieldType*>(GetTyp())->GetColumnName() + ">";
+        m_aContent = "<" + static_cast<const SwDBFieldType*>(GetTyp())->GetColumnName() + ">";
     }
 }
 
@@ -207,25 +206,25 @@ void SwDBField::InitContent(const OUString& rExpansion)
     SetExpansion( rExpansion );
 }
 
-OUString SwDBField::Expand() const
+OUString SwDBField::ExpandImpl(SwRootFrame const*const) const
 {
     if(0 ==(GetSubType() & nsSwExtendedSubType::SUB_INVISIBLE))
-        return lcl_DBTrennConv(aContent);
+        return lcl_DBSeparatorConvert(m_aContent);
     return OUString();
 }
 
-SwField* SwDBField::Copy() const
+std::unique_ptr<SwField> SwDBField::Copy() const
 {
-    SwDBField *pTmp = new SwDBField(static_cast<SwDBFieldType*>(GetTyp()), GetFormat());
-    pTmp->aContent      = aContent;
-    pTmp->bIsInBodyText  = bIsInBodyText;
-    pTmp->bValidValue   = bValidValue;
-    pTmp->bInitialized  = bInitialized;
-    pTmp->nSubType      = nSubType;
+    std::unique_ptr<SwDBField> pTmp(new SwDBField(static_cast<SwDBFieldType*>(GetTyp()), GetFormat()));
+    pTmp->m_aContent      = m_aContent;
+    pTmp->m_bIsInBodyText  = m_bIsInBodyText;
+    pTmp->m_bValidValue   = m_bValidValue;
+    pTmp->m_bInitialized  = m_bInitialized;
+    pTmp->m_nSubType      = m_nSubType;
     pTmp->SetValue(GetValue());
-    pTmp->sFieldCode = sFieldCode;
+    pTmp->m_sFieldCode = m_sFieldCode;
 
-    return pTmp;
+    return std::unique_ptr<SwField>(pTmp.release());
 }
 
 OUString SwDBField::GetFieldName() const
@@ -236,21 +235,21 @@ OUString SwDBField::GetFieldName() const
 
     if (sContent.getLength() > 1)
     {
-        sContent += OUString(DB_DELIM)
+        sContent += OUStringLiteral1(DB_DELIM)
             + rDBName.getToken(1, DB_DELIM)
-            + OUString(DB_DELIM)
+            + OUStringLiteral1(DB_DELIM)
             + rDBName.getToken(2, DB_DELIM);
     }
-    return lcl_DBTrennConv(sContent);
+    return lcl_DBSeparatorConvert(sContent);
 }
 
 void SwDBField::ChgValue( double d, bool bVal )
 {
-    bValidValue = bVal;
+    m_bValidValue = bVal;
     SetValue(d);
 
-    if( bValidValue )
-        aContent = static_cast<SwValueFieldType*>(GetTyp())->ExpandValue(d, GetFormat(), GetLanguage());
+    if( m_bValidValue )
+        m_aContent = static_cast<SwValueFieldType*>(GetTyp())->ExpandValue(d, GetFormat(), GetLanguage());
 }
 
 SwFieldType* SwDBField::ChgTyp( SwFieldType* pNewType )
@@ -263,7 +262,7 @@ SwFieldType* SwDBField::ChgTyp( SwFieldType* pNewType )
     return pOld;
 }
 
-bool SwDBField::FormatValue( SvNumberFormatter* pDocFormatter, OUString &aString, sal_uInt32 nFormat,
+bool SwDBField::FormatValue( SvNumberFormatter const * pDocFormatter, OUString const &aString, sal_uInt32 nFormat,
                              double &aNumber, sal_Int32 nColumnType, SwDBField *pField )
 {
     bool bValidValue = false;
@@ -274,8 +273,8 @@ bool SwDBField::FormatValue( SvNumberFormatter* pDocFormatter, OUString &aString
             DataType::TIMESTAMP  == nColumnType )
         {
             Date aStandard( 1, 1, 1900 );
-            if( *pDocFormatter->GetNullDate() != aStandard )
-                aNumber += (aStandard - *pDocFormatter->GetNullDate());
+            if( pDocFormatter->GetNullDate() != aStandard )
+                aNumber += (aStandard - pDocFormatter->GetNullDate());
         }
         bValidValue = true;
         if( pField )
@@ -315,7 +314,7 @@ void SwDBField::Evaluate()
     SwDBManager* pMgr = GetDoc()->GetDBManager();
 
     // first delete
-    bValidValue = false;
+    m_bValidValue = false;
     double nValue = DBL_MAX;
     const SwDBData& aTmpData = GetDBData();
 
@@ -328,21 +327,24 @@ void SwDBField::Evaluate()
     OUString aColNm( static_cast<SwDBFieldType*>(GetTyp())->GetColumnName() );
 
     SvNumberFormatter* pDocFormatter = GetDoc()->GetNumberFormatter();
-    pMgr->GetMergeColumnCnt(aColNm, GetLanguage(), aContent, &nValue);
-    if( !( nSubType & nsSwExtendedSubType::SUB_OWN_FMT ) )
-        SetFormat( nFormat = pMgr->GetColumnFormat( aTmpData.sDataSource, aTmpData.sCommand,
-                                        aColNm, pDocFormatter, GetLanguage() ));
+    pMgr->GetMergeColumnCnt(aColNm, GetLanguage(), m_aContent, &nValue);
+    if( !( m_nSubType & nsSwExtendedSubType::SUB_OWN_FMT ) )
+    {
+        nFormat = pMgr->GetColumnFormat( aTmpData.sDataSource, aTmpData.sCommand,
+                                        aColNm, pDocFormatter, GetLanguage() );
+        SetFormat( nFormat );
+    }
 
     sal_Int32 nColumnType = nValue == DBL_MAX
         ? 0
         : pMgr->GetColumnType(aTmpData.sDataSource, aTmpData.sCommand, aColNm);
 
-    bValidValue = FormatValue( pDocFormatter, aContent, nFormat, nValue, nColumnType, this );
+    m_bValidValue = FormatValue( pDocFormatter, m_aContent, nFormat, nValue, nColumnType, this );
 
     if( DBL_MAX != nValue )
-        aContent = static_cast<SwValueFieldType*>(GetTyp())->ExpandValue(nValue, GetFormat(), GetLanguage());
+        m_aContent = static_cast<SwValueFieldType*>(GetTyp())->ExpandValue(nValue, GetFormat(), GetLanguage());
 
-    bInitialized = true;
+    m_bInitialized = true;
 }
 
 /// get name
@@ -353,12 +355,12 @@ OUString SwDBField::GetPar1() const
 
 sal_uInt16 SwDBField::GetSubType() const
 {
-    return nSubType;
+    return m_nSubType;
 }
 
 void SwDBField::SetSubType(sal_uInt16 nType)
 {
-    nSubType = nType;
+    m_nSubType = nType;
 }
 
 bool SwDBField::QueryValue( uno::Any& rAny, sal_uInt16 nWhichId ) const
@@ -372,13 +374,13 @@ bool SwDBField::QueryValue( uno::Any& rAny, sal_uInt16 nWhichId ) const
         rAny <<= 0 == (GetSubType() & nsSwExtendedSubType::SUB_INVISIBLE);
         break;
     case FIELD_PROP_FORMAT:
-        rAny <<= (sal_Int32)GetFormat();
+        rAny <<= static_cast<sal_Int32>(GetFormat());
         break;
     case FIELD_PROP_PAR1:
-        rAny <<= aContent;
+        rAny <<= m_aContent;
         break;
     case FIELD_PROP_PAR2:
-        rAny <<= sFieldCode;
+        rAny <<= m_sFieldCode;
         break;
     default:
         OSL_FAIL("illegal property");
@@ -391,7 +393,7 @@ bool SwDBField::PutValue( const uno::Any& rAny, sal_uInt16 nWhichId )
     switch( nWhichId )
     {
     case FIELD_PROP_BOOL1:
-        if( *static_cast<sal_Bool const *>(rAny.getValue()) )
+        if( *o3tl::doAccess<bool>(rAny) )
             SetSubType(GetSubType()&~nsSwExtendedSubType::SUB_OWN_FMT);
         else
             SetSubType(GetSubType()|nsSwExtendedSubType::SUB_OWN_FMT);
@@ -434,10 +436,10 @@ bool SwDBField::PutValue( const uno::Any& rAny, sal_uInt16 nWhichId )
         }
         break;
     case FIELD_PROP_PAR1:
-        rAny >>= aContent;
+        rAny >>= m_aContent;
         break;
     case FIELD_PROP_PAR2:
-        rAny >>= sFieldCode;
+        rAny >>= m_sFieldCode;
     break;
     default:
         OSL_FAIL("illegal property");
@@ -447,7 +449,7 @@ bool SwDBField::PutValue( const uno::Any& rAny, sal_uInt16 nWhichId )
 
 // base class for all further database fields
 
-SwDBNameInfField::SwDBNameInfField(SwFieldType* pTyp, const SwDBData& rDBData, sal_uLong nFormat) :
+SwDBNameInfField::SwDBNameInfField(SwFieldType* pTyp, const SwDBData& rDBData, sal_uInt32 nFormat) :
     SwField(pTyp, nFormat),
     aDBData(rDBData),
     nSubType(0)
@@ -476,10 +478,10 @@ OUString SwDBNameInfField::GetFieldName() const
     {
         sStr += ":"
             + aDBData.sDataSource
-            + OUString(DB_DELIM)
+            + OUStringLiteral1(DB_DELIM)
             + aDBData.sCommand;
     }
-    return lcl_DBTrennConv(sStr);
+    return lcl_DBSeparatorConvert(sStr);
 }
 
 bool SwDBNameInfField::QueryValue( uno::Any& rAny, sal_uInt16 nWhichId ) const
@@ -499,7 +501,7 @@ bool SwDBNameInfField::QueryValue( uno::Any& rAny, sal_uInt16 nWhichId ) const
         rAny <<= 0 == (GetSubType() & nsSwExtendedSubType::SUB_INVISIBLE);
         break;
     default:
-        OSL_FAIL("illegal property");
+        assert(false);
     }
     return true;
 }
@@ -531,7 +533,7 @@ bool SwDBNameInfField::PutValue( const uno::Any& rAny, sal_uInt16 nWhichId )
     }
     break;
     default:
-        OSL_FAIL("illegal property");
+        assert(false);
     }
     return true;
 }
@@ -549,7 +551,7 @@ void SwDBNameInfField::SetSubType(sal_uInt16 nType)
 // next dataset
 
 SwDBNextSetFieldType::SwDBNextSetFieldType()
-    : SwFieldType( RES_DBNEXTSETFLD )
+    : SwFieldType( SwFieldIds::DbNextSet )
 {
 }
 
@@ -563,26 +565,25 @@ SwFieldType* SwDBNextSetFieldType::Copy() const
 
 SwDBNextSetField::SwDBNextSetField(SwDBNextSetFieldType* pTyp,
                                    const OUString& rCond,
-                                   const OUString& ,
                                    const SwDBData& rDBData) :
     SwDBNameInfField(pTyp, rDBData), aCond(rCond), bCondValid(true)
 {}
 
-OUString SwDBNextSetField::Expand() const
+OUString SwDBNextSetField::ExpandImpl(SwRootFrame const*const) const
 {
     return OUString();
 }
 
-SwField* SwDBNextSetField::Copy() const
+std::unique_ptr<SwField> SwDBNextSetField::Copy() const
 {
-    SwDBNextSetField *pTmp = new SwDBNextSetField(static_cast<SwDBNextSetFieldType*>(GetTyp()),
-                                         aCond, OUString(), GetDBData());
+    std::unique_ptr<SwDBNextSetField> pTmp(new SwDBNextSetField(static_cast<SwDBNextSetFieldType*>(GetTyp()),
+                                         aCond, GetDBData()));
     pTmp->SetSubType(GetSubType());
     pTmp->bCondValid = bCondValid;
-    return pTmp;
+    return std::unique_ptr<SwField>(pTmp.release());
 }
 
-void SwDBNextSetField::Evaluate(SwDoc* pDoc)
+void SwDBNextSetField::Evaluate(SwDoc const * pDoc)
 {
     SwDBManager* pMgr = pDoc->GetDBManager();
     const SwDBData& rData = GetDBData();
@@ -635,7 +636,7 @@ bool SwDBNextSetField::PutValue( const uno::Any& rAny, sal_uInt16 nWhichId )
 // dataset with certain ID
 
 SwDBNumSetFieldType::SwDBNumSetFieldType() :
-    SwFieldType( RES_DBNUMSETFLD )
+    SwFieldType( SwFieldIds::DbNumSet )
 {
 }
 
@@ -655,21 +656,21 @@ SwDBNumSetField::SwDBNumSetField(SwDBNumSetFieldType* pTyp,
     bCondValid(true)
 {}
 
-OUString SwDBNumSetField::Expand() const
+OUString SwDBNumSetField::ExpandImpl(SwRootFrame const*const) const
 {
     return OUString();
 }
 
-SwField* SwDBNumSetField::Copy() const
+std::unique_ptr<SwField> SwDBNumSetField::Copy() const
 {
-    SwDBNumSetField *pTmp = new SwDBNumSetField(static_cast<SwDBNumSetFieldType*>(GetTyp()),
-                                         aCond, aPar2, GetDBData());
+    std::unique_ptr<SwDBNumSetField> pTmp(new SwDBNumSetField(static_cast<SwDBNumSetFieldType*>(GetTyp()),
+                                         aCond, aPar2, GetDBData()));
     pTmp->bCondValid = bCondValid;
     pTmp->SetSubType(GetSubType());
-    return pTmp;
+    return std::unique_ptr<SwField>(pTmp.release());
 }
 
-void SwDBNumSetField::Evaluate(SwDoc* pDoc)
+void SwDBNumSetField::Evaluate(SwDoc const * pDoc)
 {
     SwDBManager* pMgr = pDoc->GetDBManager();
     const SwDBData& aTmpData = GetDBData();
@@ -677,7 +678,7 @@ void SwDBNumSetField::Evaluate(SwDoc* pDoc)
     if( bCondValid && pMgr && pMgr->IsInMerge() &&
                         pMgr->IsDataSourceOpen(aTmpData.sDataSource, aTmpData.sCommand, true))
     {   // condition OK -> adjust current Set
-        pMgr->ToRecordId(std::max((sal_uInt16)aPar2.toInt32(), sal_uInt16(1))-1);
+        pMgr->ToRecordId(std::max(static_cast<sal_uInt16>(aPar2.toInt32()), sal_uInt16(1))-1);
     }
 }
 
@@ -744,12 +745,12 @@ bool    SwDBNumSetField::PutValue( const uno::Any& rAny, sal_uInt16 nWhichId )
 }
 
 SwDBNameFieldType::SwDBNameFieldType(SwDoc* pDocument)
-    : SwFieldType( RES_DBNAMEFLD )
+    : SwFieldType( SwFieldIds::DatabaseName )
 {
     pDoc = pDocument;
 }
 
-OUString SwDBNameFieldType::Expand(sal_uLong ) const
+OUString SwDBNameFieldType::Expand() const
 {
     const SwDBData aData = pDoc->GetDBData();
     return aData.sDataSource + "." + aData.sCommand;
@@ -767,20 +768,20 @@ SwDBNameField::SwDBNameField(SwDBNameFieldType* pTyp, const SwDBData& rDBData)
     : SwDBNameInfField(pTyp, rDBData, 0)
 {}
 
-OUString SwDBNameField::Expand() const
+OUString SwDBNameField::ExpandImpl(SwRootFrame const*const) const
 {
     if(0 ==(GetSubType() & nsSwExtendedSubType::SUB_INVISIBLE))
-        return static_cast<SwDBNameFieldType*>(GetTyp())->Expand(GetFormat());
+        return static_cast<SwDBNameFieldType*>(GetTyp())->Expand();
     return OUString();
 }
 
-SwField* SwDBNameField::Copy() const
+std::unique_ptr<SwField> SwDBNameField::Copy() const
 {
-    SwDBNameField *pTmp = new SwDBNameField(static_cast<SwDBNameFieldType*>(GetTyp()), GetDBData());
+    std::unique_ptr<SwDBNameField> pTmp(new SwDBNameField(static_cast<SwDBNameFieldType*>(GetTyp()), GetDBData()));
     pTmp->ChangeFormat(GetFormat());
     pTmp->SetLanguage(GetLanguage());
     pTmp->SetSubType(GetSubType());
-    return pTmp;
+    return std::unique_ptr<SwField>(pTmp.release());
 }
 
 bool SwDBNameField::QueryValue( uno::Any& rAny, sal_uInt16 nWhichId ) const
@@ -794,7 +795,7 @@ bool SwDBNameField::PutValue( const uno::Any& rAny, sal_uInt16 nWhichId )
 }
 
 SwDBSetNumberFieldType::SwDBSetNumberFieldType()
-    : SwFieldType( RES_DBSETNUMBERFLD )
+    : SwFieldType( SwFieldIds::DbSetNumber )
 {
 }
 
@@ -808,18 +809,18 @@ SwFieldType* SwDBSetNumberFieldType::Copy() const
 
 SwDBSetNumberField::SwDBSetNumberField(SwDBSetNumberFieldType* pTyp,
                                        const SwDBData& rDBData,
-                                       sal_uLong nFormat)
+                                       sal_uInt32 nFormat)
     : SwDBNameInfField(pTyp, rDBData, nFormat), nNumber(0)
 {}
 
-OUString SwDBSetNumberField::Expand() const
+OUString SwDBSetNumberField::ExpandImpl(SwRootFrame const*const) const
 {
     if(0 !=(GetSubType() & nsSwExtendedSubType::SUB_INVISIBLE) || nNumber == 0)
         return OUString();
-    return FormatNumber(nNumber, GetFormat());
+    return FormatNumber(nNumber, static_cast<SvxNumType>(GetFormat()));
 }
 
-void SwDBSetNumberField::Evaluate(SwDoc* pDoc)
+void SwDBSetNumberField::Evaluate(SwDoc const * pDoc)
 {
     SwDBManager* pMgr = pDoc->GetDBManager();
 
@@ -830,14 +831,14 @@ void SwDBSetNumberField::Evaluate(SwDoc* pDoc)
     nNumber = pMgr->GetSelectedRecordId();
 }
 
-SwField* SwDBSetNumberField::Copy() const
+std::unique_ptr<SwField> SwDBSetNumberField::Copy() const
 {
-    SwDBSetNumberField *pTmp =
-        new SwDBSetNumberField(static_cast<SwDBSetNumberFieldType*>(GetTyp()), GetDBData(), GetFormat());
+    std::unique_ptr<SwDBSetNumberField> pTmp(
+        new SwDBSetNumberField(static_cast<SwDBSetNumberFieldType*>(GetTyp()), GetDBData(), GetFormat()));
     pTmp->SetLanguage(GetLanguage());
     pTmp->SetSetNumber(nNumber);
     pTmp->SetSubType(GetSubType());
-    return pTmp;
+    return std::unique_ptr<SwField>(pTmp.release());
 }
 
 bool SwDBSetNumberField::QueryValue( uno::Any& rAny, sal_uInt16 nWhichId ) const
@@ -846,7 +847,7 @@ bool SwDBSetNumberField::QueryValue( uno::Any& rAny, sal_uInt16 nWhichId ) const
     switch( nWhichId )
     {
     case FIELD_PROP_USHORT1:
-        rAny <<= (sal_Int16)GetFormat();
+        rAny <<= static_cast<sal_Int16>(GetFormat());
         break;
     case FIELD_PROP_FORMAT:
         rAny <<= nNumber;
@@ -866,10 +867,8 @@ bool SwDBSetNumberField::PutValue( const uno::Any& rAny, sal_uInt16 nWhichId )
         {
             sal_Int16 nSet = 0;
             rAny >>= nSet;
-            if(nSet < (sal_Int16) SVX_NUMBER_NONE )
+            if(nSet < css::style::NumberingType::NUMBER_NONE )
                 SetFormat(nSet);
-            else {
-            }
         }
         break;
     case FIELD_PROP_FORMAT:

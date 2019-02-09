@@ -46,19 +46,19 @@ void SdrGluePoint::SetReallyAbsolute(bool bOn, const SdrObject& rObj)
 Point SdrGluePoint::GetAbsolutePos(const SdrObject& rObj) const
 {
     if (bReallyAbsolute) return aPos;
-    Rectangle aSnap(rObj.GetSnapRect());
-    Rectangle aBound(rObj.GetSnapRect());
+    tools::Rectangle aSnap(rObj.GetSnapRect());
+    tools::Rectangle aBound(rObj.GetSnapRect());
     Point aPt(aPos);
 
     Point aOfs(aSnap.Center());
     switch (GetHorzAlign()) {
-        case SdrAlign::HORZ_LEFT  : aOfs.X()=aSnap.Left(); break;
-        case SdrAlign::HORZ_RIGHT : aOfs.X()=aSnap.Right(); break;
+        case SdrAlign::HORZ_LEFT  : aOfs.setX(aSnap.Left() ); break;
+        case SdrAlign::HORZ_RIGHT : aOfs.setX(aSnap.Right() ); break;
         default: break;
     }
     switch (GetVertAlign()) {
-        case SdrAlign::VERT_TOP   : aOfs.Y()=aSnap.Top(); break;
-        case SdrAlign::VERT_BOTTOM: aOfs.Y()=aSnap.Bottom(); break;
+        case SdrAlign::VERT_TOP   : aOfs.setY(aSnap.Top() ); break;
+        case SdrAlign::VERT_BOTTOM: aOfs.setY(aSnap.Bottom() ); break;
         default: break;
     }
     if (!bNoPercent) {
@@ -67,20 +67,20 @@ Point SdrGluePoint::GetAbsolutePos(const SdrObject& rObj) const
         long nXDiv=10000;
         long nYDiv=10000;
         if (nXMul!=nXDiv) {
-            aPt.X()*=nXMul;
-            aPt.X()/=nXDiv;
+            aPt.setX( aPt.X() * nXMul );
+            aPt.setX( aPt.X() / nXDiv );
         }
         if (nYMul!=nYDiv) {
-            aPt.Y()*=nYMul;
-            aPt.Y()/=nYDiv;
+            aPt.setY( aPt.Y() * nYMul );
+            aPt.setY( aPt.Y() / nYDiv );
         }
     }
     aPt+=aOfs;
     // Now limit to the BoundRect of the object
-    if (aPt.X()<aBound.Left  ()) aPt.X()=aBound.Left  ();
-    if (aPt.X()>aBound.Right ()) aPt.X()=aBound.Right ();
-    if (aPt.Y()<aBound.Top   ()) aPt.Y()=aBound.Top   ();
-    if (aPt.Y()>aBound.Bottom()) aPt.Y()=aBound.Bottom();
+    if (aPt.X()<aBound.Left  ()) aPt.setX(aBound.Left  () );
+    if (aPt.X()>aBound.Right ()) aPt.setX(aBound.Right () );
+    if (aPt.Y()<aBound.Top   ()) aPt.setY(aBound.Top   () );
+    if (aPt.Y()>aBound.Bottom()) aPt.setY(aBound.Bottom() );
     return aPt;
 }
 
@@ -90,18 +90,18 @@ void SdrGluePoint::SetAbsolutePos(const Point& rNewPos, const SdrObject& rObj)
         aPos=rNewPos;
         return;
     }
-    Rectangle aSnap(rObj.GetSnapRect());
+    tools::Rectangle aSnap(rObj.GetSnapRect());
     Point aPt(rNewPos);
 
     Point aOfs(aSnap.Center());
     switch (GetHorzAlign()) {
-        case SdrAlign::HORZ_LEFT  : aOfs.X()=aSnap.Left(); break;
-        case SdrAlign::HORZ_RIGHT : aOfs.X()=aSnap.Right(); break;
+        case SdrAlign::HORZ_LEFT  : aOfs.setX(aSnap.Left() ); break;
+        case SdrAlign::HORZ_RIGHT : aOfs.setX(aSnap.Right() ); break;
         default: break;
     }
     switch (GetVertAlign()) {
-        case SdrAlign::VERT_TOP   : aOfs.Y()=aSnap.Top(); break;
-        case SdrAlign::VERT_BOTTOM: aOfs.Y()=aSnap.Bottom(); break;
+        case SdrAlign::VERT_TOP   : aOfs.setY(aSnap.Top() ); break;
+        case SdrAlign::VERT_BOTTOM: aOfs.setY(aSnap.Bottom() ); break;
         default: break;
     }
     aPt-=aOfs;
@@ -113,12 +113,12 @@ void SdrGluePoint::SetAbsolutePos(const Point& rNewPos, const SdrObject& rObj)
         long nXDiv=10000;
         long nYDiv=10000;
         if (nXMul!=nXDiv) {
-            aPt.X()*=nXDiv;
-            aPt.X()/=nXMul;
+            aPt.setX( aPt.X() * nXDiv );
+            aPt.setX( aPt.X() / nXMul );
         }
         if (nYMul!=nYDiv) {
-            aPt.Y()*=nYDiv;
-            aPt.Y()/=nYMul;
+            aPt.setY( aPt.Y() * nYDiv );
+            aPt.setY( aPt.Y() / nYMul );
         }
     }
     aPos=aPt;
@@ -149,7 +149,7 @@ long SdrGluePoint::GetAlignAngle() const
 
 void SdrGluePoint::SetAlignAngle(long nAngle)
 {
-    nAngle=NormAngle360(nAngle);
+    nAngle=NormAngle36000(nAngle);
     if (nAngle>=33750 || nAngle<2250) nAlign=SdrAlign::HORZ_RIGHT |SdrAlign::VERT_CENTER;
     else if (nAngle< 6750) nAlign=SdrAlign::HORZ_RIGHT |SdrAlign::VERT_TOP   ;
     else if (nAngle<11250) nAlign=SdrAlign::HORZ_CENTER|SdrAlign::VERT_TOP   ;
@@ -174,7 +174,7 @@ long SdrGluePoint::EscDirToAngle(SdrEscapeDirection nEsc)
 
 SdrEscapeDirection SdrGluePoint::EscAngleToDir(long nAngle)
 {
-    nAngle=NormAngle360(nAngle);
+    nAngle=NormAngle36000(nAngle);
     if (nAngle>=31500 || nAngle<4500)
         return SdrEscapeDirection::RIGHT;
     if (nAngle<13500)
@@ -243,7 +243,7 @@ void SdrGluePoint::Mirror(const Point& rRef1, const Point& rRef2, long nAngle, c
     if (pObj!=nullptr) SetAbsolutePos(aPt,*pObj); else SetPos(aPt);
 }
 
-void SdrGluePoint::Shear(const Point& rRef, long /*nAngle*/, double tn, bool bVShear, const SdrObject* pObj)
+void SdrGluePoint::Shear(const Point& rRef, double tn, bool bVShear, const SdrObject* pObj)
 {
     Point aPt(pObj!=nullptr ? GetAbsolutePos(*pObj) : GetPos());
     ShearPoint(aPt,rRef,tn,bVShear);
@@ -252,46 +252,43 @@ void SdrGluePoint::Shear(const Point& rRef, long /*nAngle*/, double tn, bool bVS
 
 void SdrGluePoint::Invalidate(vcl::Window& rWin, const SdrObject* pObj) const
 {
-    bool bMapMerk=rWin.IsMapModeEnabled();
+    bool bMapMode=rWin.IsMapModeEnabled();
     Point aPt(pObj!=nullptr ? GetAbsolutePos(*pObj) : GetPos());
     aPt=rWin.LogicToPixel(aPt);
     rWin.EnableMapMode(false);
 
     Size aSiz( aGlueHalfSize );
-    Rectangle aRect(aPt.X()-aSiz.Width(),aPt.Y()-aSiz.Height(),
+    tools::Rectangle aRect(aPt.X()-aSiz.Width(),aPt.Y()-aSiz.Height(),
                     aPt.X()+aSiz.Width(),aPt.Y()+aSiz.Height());
 
     // do not erase background, that causes flicker (!)
     rWin.Invalidate(aRect, InvalidateFlags::NoErase);
 
-    rWin.EnableMapMode(bMapMerk);
+    rWin.EnableMapMode(bMapMode);
 }
 
 bool SdrGluePoint::IsHit(const Point& rPnt, const OutputDevice& rOut, const SdrObject* pObj) const
 {
     Point aPt(pObj!=nullptr ? GetAbsolutePos(*pObj) : GetPos());
     Size aSiz=rOut.PixelToLogic(aGlueHalfSize);
-    Rectangle aRect(aPt.X()-aSiz.Width(),aPt.Y()-aSiz.Height(),aPt.X()+aSiz.Width(),aPt.Y()+aSiz.Height());
+    tools::Rectangle aRect(aPt.X()-aSiz.Width(),aPt.Y()-aSiz.Height(),aPt.X()+aSiz.Width(),aPt.Y()+aSiz.Height());
     return aRect.IsInside(rPnt);
 }
 
 
 void SdrGluePointList::Clear()
 {
-    sal_uInt16 nCount=GetCount();
-    for (sal_uInt16 i=0; i<nCount; i++) {
-        delete GetObject(i);
-    }
     aList.clear();
 }
 
-void SdrGluePointList::operator=(const SdrGluePointList& rSrcList)
+SdrGluePointList& SdrGluePointList::operator=(const SdrGluePointList& rSrcList)
 {
     if (GetCount()!=0) Clear();
     sal_uInt16 nCount=rSrcList.GetCount();
     for (sal_uInt16 i=0; i<nCount; i++) {
         Insert(rSrcList[i]);
     }
+    return *this;
 }
 
 // The ID's of the glue points always increase monotonously!
@@ -302,7 +299,7 @@ sal_uInt16 SdrGluePointList::Insert(const SdrGluePoint& rGP)
     sal_uInt16 nId=pGP->GetId();
     sal_uInt16 nCount=GetCount();
     sal_uInt16 nInsPos=nCount;
-    sal_uInt16 nLastId=nCount!=0 ? GetObject(nCount-1)->GetId() : 0;
+    sal_uInt16 nLastId=nCount!=0 ? aList[nCount-1]->GetId() : 0;
     DBG_ASSERT(nLastId>=nCount,"SdrGluePointList::Insert(): nLastId<nCount");
     bool bHole = nLastId>nCount;
     if (nId<=nLastId) {
@@ -311,7 +308,7 @@ sal_uInt16 SdrGluePointList::Insert(const SdrGluePoint& rGP)
         } else {
             bool bBrk = false;
             for (sal_uInt16 nNum=0; nNum<nCount && !bBrk; nNum++) {
-                const SdrGluePoint* pGP2=GetObject(nNum);
+                const auto& pGP2=aList[nNum];
                 sal_uInt16 nTmpId=pGP2->GetId();
                 if (nTmpId==nId) {
                     nId=nLastId+1; // already in use
@@ -325,16 +322,14 @@ sal_uInt16 SdrGluePointList::Insert(const SdrGluePoint& rGP)
         }
         pGP->SetId(nId);
     }
-    aList.insert(aList.begin()+nInsPos, pGP);
+    aList.emplace(aList.begin()+nInsPos, pGP);
     return nInsPos;
 }
 
 void SdrGluePointList::Invalidate(vcl::Window& rWin, const SdrObject* pObj) const
 {
-    sal_uInt16 nCount=GetCount();
-    for (sal_uInt16 nNum=0; nNum<nCount; nNum++) {
-        GetObject(nNum)->Invalidate(rWin,pObj);
-    }
+    for (auto& xGP : aList)
+        xGP->Invalidate(rWin,pObj);
 }
 
 sal_uInt16 SdrGluePointList::FindGluePoint(sal_uInt16 nId) const
@@ -344,7 +339,7 @@ sal_uInt16 SdrGluePointList::FindGluePoint(sal_uInt16 nId) const
     sal_uInt16 nCount=GetCount();
     sal_uInt16 nRet=SDRGLUEPOINT_NOTFOUND;
     for (sal_uInt16 nNum=0; nNum<nCount && nRet==SDRGLUEPOINT_NOTFOUND; nNum++) {
-        const SdrGluePoint* pGP=GetObject(nNum);
+        const auto& pGP=aList[nNum];
         if (pGP->GetId()==nId) nRet=nNum;
     }
     return nRet;
@@ -357,7 +352,7 @@ sal_uInt16 SdrGluePointList::HitTest(const Point& rPnt, const OutputDevice& rOut
     sal_uInt16 nNum = nCount;
     while ((nNum>0) && nRet==SDRGLUEPOINT_NOTFOUND) {
         nNum--;
-        const SdrGluePoint* pGP = GetObject(nNum);
+        const auto& pGP = aList[nNum];
         if (pGP->IsHit(rPnt,rOut,pObj))
             nRet = nNum;
     }
@@ -366,18 +361,14 @@ sal_uInt16 SdrGluePointList::HitTest(const Point& rPnt, const OutputDevice& rOut
 
 void SdrGluePointList::SetReallyAbsolute(bool bOn, const SdrObject& rObj)
 {
-    sal_uInt16 nCount=GetCount();
-    for (sal_uInt16 nNum=0; nNum<nCount; nNum++) {
-        GetObject(nNum)->SetReallyAbsolute(bOn,rObj);
-    }
+    for (auto& xGP : aList)
+        xGP->SetReallyAbsolute(bOn,rObj);
 }
 
 void SdrGluePointList::Rotate(const Point& rRef, long nAngle, double sn, double cs, const SdrObject* pObj)
 {
-    sal_uInt16 nCount=GetCount();
-    for (sal_uInt16 nNum=0; nNum<nCount; nNum++) {
-        GetObject(nNum)->Rotate(rRef,nAngle,sn,cs,pObj);
-    }
+    for (auto& xGP : aList)
+        xGP->Rotate(rRef,nAngle,sn,cs,pObj);
 }
 
 void SdrGluePointList::Mirror(const Point& rRef1, const Point& rRef2, const SdrObject* pObj)
@@ -389,18 +380,14 @@ void SdrGluePointList::Mirror(const Point& rRef1, const Point& rRef2, const SdrO
 
 void SdrGluePointList::Mirror(const Point& rRef1, const Point& rRef2, long nAngle, const SdrObject* pObj)
 {
-    sal_uInt16 nCount=GetCount();
-    for (sal_uInt16 nNum=0; nNum<nCount; nNum++) {
-        GetObject(nNum)->Mirror(rRef1,rRef2,nAngle,pObj);
-    }
+    for (auto& xGP : aList)
+        xGP->Mirror(rRef1,rRef2,nAngle,pObj);
 }
 
-void SdrGluePointList::Shear(const Point& rRef, long nAngle, double tn, bool bVShear, const SdrObject* pObj)
+void SdrGluePointList::Shear(const Point& rRef, double tn, bool bVShear, const SdrObject* pObj)
 {
-    sal_uInt16 nCount=GetCount();
-    for (sal_uInt16 nNum=0; nNum<nCount; nNum++) {
-        GetObject(nNum)->Shear(rRef,nAngle,tn,bVShear,pObj);
-    }
+    for (auto& xGP : aList)
+        xGP->Shear(rRef,tn,bVShear,pObj);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

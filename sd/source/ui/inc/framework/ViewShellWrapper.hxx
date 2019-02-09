@@ -20,19 +20,21 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_FRAMEWORK_VIEWSHELLWRAPPER_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_FRAMEWORK_VIEWSHELLWRAPPER_HXX
 
-#include "MutexOwner.hxx"
+#include <MutexOwner.hxx>
 #include <com/sun/star/drawing/framework/XView.hpp>
 #include <com/sun/star/drawing/framework/XRelocatableResource.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
-#include <com/sun/star/awt/XWindow.hpp>
+#include <com/sun/star/awt/XWindowListener.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
-#include <osl/mutex.hxx>
 #include <cppuhelper/compbase.hxx>
-#include <cppuhelper/implbase.hxx>
 
 #include <memory>
 
-namespace {
+namespace sd { class ViewShell; }
+namespace sd { namespace slidesorter { class SlideSorterViewShell; } }
+namespace com { namespace sun { namespace star { namespace awt { class XWindow; } } } }
+
+namespace sd { namespace framework {
 
 typedef ::cppu::WeakComponentImplHelper    <   css::lang::XUnoTunnel
                                             ,   css::awt::XWindowListener
@@ -40,13 +42,6 @@ typedef ::cppu::WeakComponentImplHelper    <   css::lang::XUnoTunnel
                                             ,   css::drawing::framework::XRelocatableResource
                                             ,   css::drawing::framework::XView
                                             >   ViewShellWrapperInterfaceBase;
-
-} // end of anonymous namespace.
-
-namespace sd { class ViewShell; }
-namespace sd { namespace slidesorter { class SlideSorterViewShell; } }
-
-namespace sd { namespace framework {
 
 /** This class wraps ViewShell objects and makes them look like an XView.
     Most importantly it provides a tunnel to the ViewShell implementation.
@@ -68,13 +63,13 @@ public:
             to the ViewShell object.
     */
     ViewShellWrapper (
-        ::std::shared_ptr<ViewShell> pViewShell,
+        const ::std::shared_ptr<ViewShell>& pViewShell,
         const css::uno::Reference<css::drawing::framework::XResourceId>& rxViewId,
         const css::uno::Reference<css::awt::XWindow>& rxWindow);
-    virtual ~ViewShellWrapper();
+    virtual ~ViewShellWrapper() override;
 
     virtual void SAL_CALL disposing() override;
-    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type & rType ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type & rType ) override;
 
     static const css::uno::Sequence<sal_Int8>& getUnoTunnelId();
 
@@ -82,61 +77,50 @@ public:
         to obtain a pointer to the wrapped ViewShell object for a given
         XView object.
     */
-    ::std::shared_ptr<ViewShell> GetViewShell() { return mpViewShell;}
+    const ::std::shared_ptr<ViewShell>& GetViewShell() { return mpViewShell;}
 
     // XUnoTunnel
 
-    virtual sal_Int64 SAL_CALL getSomething (const css::uno::Sequence<sal_Int8>& rId)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int64 SAL_CALL getSomething (const css::uno::Sequence<sal_Int8>& rId) override;
 
     // XResource
 
     virtual css::uno::Reference<css::drawing::framework::XResourceId>
-        SAL_CALL getResourceId()
-        throw (css::uno::RuntimeException, std::exception) override;
+        SAL_CALL getResourceId() override;
 
-    virtual sal_Bool SAL_CALL isAnchorOnly()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL isAnchorOnly() override;
 
     // XSelectionSupplier
 
-    virtual sal_Bool SAL_CALL select( const css::uno::Any& aSelection ) throw(css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getSelection()
-        throw (css::uno::RuntimeException,
-               std::exception) override;
-    virtual void SAL_CALL addSelectionChangeListener( const css::uno::Reference< css::view::XSelectionChangeListener >& xListener ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeSelectionChangeListener( const css::uno::Reference< css::view::XSelectionChangeListener >& xListener ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL select( const css::uno::Any& aSelection ) override;
+    virtual css::uno::Any SAL_CALL getSelection() override;
+    virtual void SAL_CALL addSelectionChangeListener( const css::uno::Reference< css::view::XSelectionChangeListener >& xListener ) override;
+    virtual void SAL_CALL removeSelectionChangeListener( const css::uno::Reference< css::view::XSelectionChangeListener >& xListener ) override;
 
     // XRelocatableResource
 
     virtual sal_Bool SAL_CALL relocateToAnchor (
         const css::uno::Reference<
-            css::drawing::framework::XResource>& xResource)
-        throw (css::uno::RuntimeException, std::exception) override;
+            css::drawing::framework::XResource>& xResource) override;
 
     // XWindowListener
 
     virtual void SAL_CALL windowResized(
-        const css::awt::WindowEvent& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::awt::WindowEvent& rEvent) override;
 
     virtual void SAL_CALL windowMoved(
-        const css::awt::WindowEvent& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::awt::WindowEvent& rEvent) override;
 
     virtual void SAL_CALL windowShown(
-        const css::lang::EventObject& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& rEvent) override;
 
     virtual void SAL_CALL windowHidden(
-        const css::lang::EventObject& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& rEvent) override;
 
     // XEventListener
 
     virtual void SAL_CALL disposing(
-        const css::lang::EventObject& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& rEvent) override;
 
 private:
     ::std::shared_ptr< ViewShell >                                      mpViewShell;

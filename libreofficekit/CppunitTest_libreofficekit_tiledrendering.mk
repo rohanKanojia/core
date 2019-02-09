@@ -22,7 +22,6 @@ $(eval $(call gb_CppunitTest_use_external,libreofficekit_tiledrendering,boost_he
 # require any normal LO api/libraries.
 $(eval $(call gb_CppunitTest_use_libraries,libreofficekit_tiledrendering, \
 	sal \
-	$(gb_UWINAPI) \
 ))
 
 ifeq ($(OS),LINUX)
@@ -32,6 +31,10 @@ $(eval $(call gb_CppunitTest_add_libs,libreofficekit_tiledrendering,\
     -lpthread \
 ))
 endif
+
+$(eval $(call gb_CppunitTest_use_api,libreofficekit_tiledrendering,\
+    offapi \
+))
 
 $(eval $(call gb_CppunitTest_use_configuration,libreofficekit_tiledrendering))
 

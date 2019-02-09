@@ -20,10 +20,10 @@
 #ifndef INCLUDED_I18NPOOL_INC_INDEXENTRYSUPPLIER_ASIAN_HXX
 #define INCLUDED_I18NPOOL_INC_INDEXENTRYSUPPLIER_ASIAN_HXX
 
-#include <indexentrysupplier_common.hxx>
+#include "indexentrysupplier_common.hxx"
 #include <osl/module.h>
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 
 //  class IndexEntrySupplier_asian
@@ -32,30 +32,26 @@ namespace com { namespace sun { namespace star { namespace i18n {
 class IndexEntrySupplier_asian : public IndexEntrySupplier_Common {
 public:
     IndexEntrySupplier_asian( const css::uno::Reference < css::uno::XComponentContext >& rxContext );
-    virtual ~IndexEntrySupplier_asian();
+    virtual ~IndexEntrySupplier_asian() override;
 
     OUString SAL_CALL getIndexCharacter( const OUString& rIndexEntry,
-            const css::lang::Locale& rLocale, const OUString& rAlgorithm )
-            throw (css::uno::RuntimeException, std::exception) override;
+            const css::lang::Locale& rLocale, const OUString& rAlgorithm ) override;
     OUString SAL_CALL getIndexKey( const OUString& rIndexEntry,
-            const OUString& rPhoneticEntry, const css::lang::Locale& rLocale)
-            throw (css::uno::RuntimeException, std::exception) override;
+            const OUString& rPhoneticEntry, const css::lang::Locale& rLocale) override;
     sal_Int16 SAL_CALL compareIndexEntry(
             const OUString& rIndexEntry1, const OUString& rPhoneticEntry1,
             const css::lang::Locale& rLocale1,
             const OUString& rIndexEntry2, const OUString& rPhoneticEntry2,
-            const css::lang::Locale& rLocale2 )
-            throw (css::uno::RuntimeException, std::exception) override;
+            const css::lang::Locale& rLocale2 ) override;
     OUString SAL_CALL getPhoneticCandidate( const OUString& rIndexEntry,
-            const css::lang::Locale& rLocale )
-            throw (css::uno::RuntimeException, std::exception) override;
+            const css::lang::Locale& rLocale ) override;
 #ifndef DISABLE_DYNLOADING
 private:
     oslModule hModule;
 #endif
 };
 
-} } } }
+}
 #endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

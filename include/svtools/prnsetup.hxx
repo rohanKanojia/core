@@ -21,65 +21,58 @@
 #define INCLUDED_SVTOOLS_PRNSETUP_HXX
 
 #include <svtools/svtdllapi.h>
-
-#include <vcl/dialog.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/button.hxx>
-#include <vcl/group.hxx>
-#include <vcl/lstbox.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/timer.hxx>
-#include <svtools/stdctrl.hxx>
 
 class Printer;
 class QueueInfo;
 
-
-class SVT_DLLPUBLIC PrinterSetupDialog : public ModalDialog
+class SVT_DLLPUBLIC PrinterSetupDialog : public weld::GenericDialogController
 {
 private:
-    VclPtr<ListBox>        m_pLbName;
-    VclPtr<PushButton>     m_pBtnProperties;
-    VclPtr<PushButton>     m_pBtnOptions;
-    VclPtr<FixedText>      m_pFiStatus;
-    VclPtr<FixedText>      m_pFiType;
-    VclPtr<FixedText>      m_pFiLocation;
-    VclPtr<FixedText>      m_pFiComment;
+    std::unique_ptr<weld::ComboBox>        m_xLbName;
+    std::unique_ptr<weld::Button>     m_xBtnProperties;
+    std::unique_ptr<weld::Button>     m_xBtnOptions;
+    std::unique_ptr<weld::Label>      m_xFiStatus;
+    std::unique_ptr<weld::Label>      m_xFiType;
+    std::unique_ptr<weld::Label>      m_xFiLocation;
+    std::unique_ptr<weld::Label>      m_xFiComment;
     AutoTimer              maStatusTimer;
     VclPtr<Printer>        mpPrinter;
     VclPtr<Printer>        mpTempPrinter;
 
     SVT_DLLPRIVATE void         ImplSetInfo();
 
-                    DECL_DLLPRIVATE_LINK_TYPED( ImplPropertiesHdl, Button*, void );
-                    DECL_DLLPRIVATE_LINK_TYPED( ImplChangePrinterHdl, ListBox&, void );
-                    DECL_DLLPRIVATE_LINK_TYPED( ImplStatusHdl, Timer*, void );
+    DECL_DLLPRIVATE_LINK( ImplPropertiesHdl, weld::Button&, void );
+    DECL_DLLPRIVATE_LINK( ImplChangePrinterHdl, weld::ComboBox&, void );
+    DECL_DLLPRIVATE_LINK( ImplGetFocusHdl, weld::Widget&, void );
+    DECL_DLLPRIVATE_LINK( ImplStatusHdl, Timer*, void );
+    DECL_DLLPRIVATE_LINK( ImplDataChangedHdl, VclSimpleEvent&, void);
 
 public:
-                    PrinterSetupDialog( vcl::Window* pWindow );
-    virtual         ~PrinterSetupDialog();
-    virtual void    dispose() override;
+    PrinterSetupDialog(weld::Window* pWindow);
+    virtual         ~PrinterSetupDialog() override;
 
     void            SetPrinter( Printer* pNewPrinter ) { mpPrinter = pNewPrinter; }
     Printer*        GetPrinter() const { return mpPrinter; }
 
-    virtual void    DataChanged( const DataChangedEvent& rDCEvt ) override;
-    virtual bool    Notify( NotifyEvent& rNEvt ) override;
+    virtual short   run() override;
 
-    virtual short   Execute() override;
+    weld::Window*   GetFrameWeld() const { return m_xDialog.get(); }
 
-    void            SetOptionsHdl( const Link<Button*,void>& rLink );
+    void            SetOptionsHdl( const Link<weld::Button&,void>& rLink );
 };
 
 
 #define IMPL_PRINTDLG_STATUS_UPDATE     15000
 
 void ImplFillPrnDlgListBox( const Printer* pPrinter,
-                            ListBox* pBox, PushButton* pPropBtn );
-void ImplFreePrnDlgListBox( ListBox* pBox, bool bClear = true );
-Printer* ImplPrnDlgListBoxSelect( ListBox* pBox, PushButton* pPropBtn,
-                                  Printer* pPrinter, Printer* pTempPrinter );
-Printer* ImplPrnDlgUpdatePrinter( Printer* pPrinter, Printer* pTempPrinter );
-void ImplPrnDlgUpdateQueueInfo( ListBox* pBox, QueueInfo& rInfo );
+                            weld::ComboBox* pBox, weld::Button* pPropBtn );
+void ImplFreePrnDlgListBox( weld::ComboBox* pBox, bool bClear = true );
+Printer* ImplPrnDlgListBoxSelect( weld::ComboBox const * pBox, weld::Button* pPropBtn,
+                                  Printer const * pPrinter, Printer* pTempPrinter );
+Printer* ImplPrnDlgUpdatePrinter( Printer const * pPrinter, Printer* pTempPrinter );
+void ImplPrnDlgUpdateQueueInfo( weld::ComboBox const * pBox, QueueInfo& rInfo );
 OUString ImplPrnDlgGetStatusText( const QueueInfo& rInfo );
 
 #endif // INCLUDED_SVTOOLS_PRNSETUP_HXX

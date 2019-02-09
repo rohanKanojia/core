@@ -22,7 +22,7 @@
 #include <sfx2/tabdlg.hxx>
 #include <svtools/ctrlbox.hxx>
 #include <svtools/simptabl.hxx>
-#include <svtools/treelistentry.hxx>
+#include <vcl/treelistentry.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/toolbox.hxx>
 
@@ -75,29 +75,29 @@ class SvxFontSubstTabPage : public SfxTabPage
 
     OUString                    m_sAutomatic;
 
-    SvtFontSubstConfig*         pConfig;
+    std::unique_ptr<SvtFontSubstConfig> pConfig;
 
     Color           aTextColor;
 
-    SvLBoxButtonData*   pCheckButtonData;
+    std::unique_ptr<SvLBoxButtonData> m_xCheckButtonData;
 
-    DECL_LINK_TYPED(SelectEditHdl, Edit&, void);
-    DECL_LINK_TYPED(SelectComboBoxHdl, ComboBox&, void);
-    DECL_LINK_TYPED(ClickHdl, Button*, void);
-    DECL_LINK_TYPED(TreeListBoxSelectHdl, SvTreeListBox*, void);
-    DECL_LINK_TYPED(NonPropFontsHdl, Button*, void);
-    void SelectHdl(vcl::Window*);
+    DECL_LINK(SelectEditHdl, Edit&, void);
+    DECL_LINK(SelectComboBoxHdl, ComboBox&, void);
+    DECL_LINK(ClickHdl, Button*, void);
+    DECL_LINK(TreeListBoxSelectHdl, SvTreeListBox*, void);
+    DECL_LINK(NonPropFontsHdl, Button*, void);
+    void SelectHdl(vcl::Window const *);
 
     SvTreeListEntry*    CreateEntry(OUString& rFont1, OUString& rFont2);
     void            CheckEnable();
 
 
-    virtual ~SvxFontSubstTabPage();
+    virtual ~SvxFontSubstTabPage() override;
     virtual void dispose() override;
 
 public:
     SvxFontSubstTabPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    static VclPtr<SfxTabPage> Create( vcl::Window* pParent, const SfxItemSet* rAttrSet);
+    static VclPtr<SfxTabPage> Create( TabPageParent pParent, const SfxItemSet* rAttrSet);
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;
 };

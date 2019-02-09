@@ -21,6 +21,11 @@ $(eval $(call gb_Library_Library,pricing))
 
 $(eval $(call gb_Library_set_componentfile,pricing,scaddins/source/pricing/pricing))
 
+$(eval $(call gb_Library_set_include,pricing,\
+    $$(INCLUDE) \
+    -I$(SRCDIR)/scaddins/inc \
+))
+
 $(eval $(call gb_Library_use_external,pricing,boost_headers))
 
 $(eval $(call gb_Library_use_internal_comprehensive_api,pricing,\
@@ -33,17 +38,13 @@ $(eval $(call gb_Library_use_libraries,pricing,\
 	cppu \
 	cppuhelper \
 	sal \
-	tl \
+	utl \
 	i18nlangtag \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,pricing,\
 	scaddins/source/pricing/pricing \
 	scaddins/source/pricing/black_scholes \
 ))
-
-# Runtime dependency for unit-tests
-$(eval $(call gb_Library_use_restarget,pricing,pricing))
 
 # vim: set noet sw=4 ts=4:

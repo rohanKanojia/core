@@ -14,7 +14,7 @@
 #include <xmloff/xmlimp.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/SchXMLSeriesHelper.hxx>
-#include "SchXMLImport.hxx"
+#include <SchXMLImport.hxx>
 
 #include <com/sun/star/chart2/data/XLabeledDataSequence2.hpp>
 #include <com/sun/star/chart2/data/XDataSource.hpp>
@@ -65,7 +65,7 @@ SchXMLPropertyMappingContext::SchXMLPropertyMappingContext( SchXMLImportHelper& 
         SvXMLImport& rImport, const OUString& rLocalName,
         tSchXMLLSequencesPerIndex & rLSequencesPerIndex,
         uno::Reference<
-        chart2::XDataSeries > xSeries ):
+        chart2::XDataSeries > const & xSeries ):
     SvXMLImportContext( rImport, XML_NAMESPACE_LO_EXT, rLocalName ),
     mrImportHelper( rImpHelper ),
     mxDataSeries(xSeries),
@@ -109,10 +109,9 @@ void SchXMLPropertyMappingContext::StartElement(const uno::Reference< xml::sax::
         Reference< chart2::XChartDocument > xChartDoc( GetImport().GetModel(), uno::UNO_QUERY );
         Reference< chart2::data::XLabeledDataSequence2 > xSeq =
             createAndAddSequenceToSeries(aRole, aRange, xChartDoc, mxDataSeries);
-        mrLSequencesPerIndex.insert(
-                tSchXMLLSequencesPerIndex::value_type(
+        mrLSequencesPerIndex.emplace(
                     tSchXMLIndexWithPart( 0, SCH_XML_PART_VALUES),
-                    Reference< chart2::data::XLabeledDataSequence >( xSeq, UNO_QUERY )));
+                    Reference< chart2::data::XLabeledDataSequence >( xSeq, UNO_QUERY ));
     }
 }
 

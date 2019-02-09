@@ -16,12 +16,12 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include <sfx2/sidebar/ResourceDefinitions.hrc>
-#include <sfx2/sidebar/Theme.hxx>
+
+#include <memory>
 #include <sfx2/sidebar/ControlFactory.hxx>
 #include <svx/sidebar/LinePropertyPanelBase.hxx>
-#include <LinePropertyPanel.hrc>
-#include <svx/dialogs.hrc>
+#include <svx/strings.hrc>
+#include <svx/svxids.hrc>
 #include <svx/dialmgr.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/bindings.hxx>
@@ -33,7 +33,6 @@
 #include <svtools/valueset.hxx>
 #include <unotools/pathoptions.hxx>
 #include <unotools/viewoptions.hxx>
-#include <comphelper/processfactory.hxx>
 #include <i18nlangtag/mslangid.hxx>
 #include <svx/xlineit0.hxx>
 #include <svx/xlndsit.hxx>
@@ -46,22 +45,20 @@
 #include <svx/xlnedit.hxx>
 #include <svx/xlncapit.hxx>
 #include <svx/xlinjoit.hxx>
-#include "svx/sidebar/PopupContainer.hxx"
-#include "svx/sidebar/PopupControl.hxx"
+#include <bitmaps.hlst>
 
 using namespace css;
 using namespace css::uno;
-using sfx2::sidebar::Theme;
 
 const char UNO_SELECTWIDTH[] = ".uno:SelectWidth";
 
 namespace
 {
 
-void FillLineEndListBox(ListBox& rListBoxStart, ListBox& rListBoxEnd, const XLineEndList& rList, const Bitmap& rBitmapZero)
+void FillLineEndListBox(ListBox& rListBoxStart, ListBox& rListBoxEnd, const XLineEndList& rList, const BitmapEx& rBitmapZero)
 {
     const sal_uInt32 nCount(rList.Count());
-    const OUString sNone(SVX_RESSTR(RID_SVXSTR_NONE));
+    const OUString sNone(SvxResId(RID_SVXSTR_NONE));
 
     rListBoxStart.SetUpdateMode(false);
     rListBoxEnd.SetUpdateMode(false);
@@ -71,17 +68,17 @@ void FillLineEndListBox(ListBox& rListBoxStart, ListBox& rListBoxEnd, const XLin
 
     for(sal_uInt32 i(0); i < nCount; i++)
     {
-        XLineEndEntry* pEntry = rList.GetLineEnd(i);
-        const Bitmap aBitmap = const_cast< XLineEndList& >(rList).GetUiBitmap(i);
+        const XLineEndEntry* pEntry = rList.GetLineEnd(i);
+        const BitmapEx aBitmap = const_cast< XLineEndList& >(rList).GetUiBitmap(i);
 
         if(!aBitmap.IsEmpty())
         {
-            Bitmap aCopyStart(aBitmap);
-            Bitmap aCopyEnd(aBitmap);
+            BitmapEx aCopyStart(aBitmap);
+            BitmapEx aCopyEnd(aBitmap);
 
             const Size aBmpSize(aCopyStart.GetSizePixel());
-            const Rectangle aCropRectStart(Point(), Size(aBmpSize.Width() / 2, aBmpSize.Height()));
-            const Rectangle aCropRectEnd(Point(aBmpSize.Width() / 2, 0), Size(aBmpSize.Width() / 2, aBmpSize.Height()));
+            const tools::Rectangle aCropRectStart(Point(), Size(aBmpSize.Width() / 2, aBmpSize.Height()));
+            const tools::Rectangle aCropRectEnd(Point(aBmpSize.Width() / 2, 0), Size(aBmpSize.Width() / 2, aBmpSize.Height()));
 
             aCopyStart.Crop(aCropRectStart);
             rListBoxStart.InsertEntry(
@@ -108,8 +105,8 @@ void FillLineEndListBox(ListBox& rListBoxStart, ListBox& rListBoxEnd, const XLin
 
         // take solid line bitmap and crop it to the size of
         // line cap entries
-        Bitmap aCopyZero( rBitmapZero );
-        const Rectangle aCropZero( Point(), aImgSize );
+        BitmapEx aCopyZero( rBitmapZero );
+        const tools::Rectangle aCropZero( Point(), aImgSize );
         aCopyZero.Crop( aCropZero );
 
         // make it 1st item in list
@@ -142,12 +139,12 @@ void FillLineStyleListBox(ListBox& rListBox, const XDashList& rList)
 
     for(sal_uInt32 i(0); i < nCount; i++)
     {
-        XDashEntry* pEntry = rList.GetDash(i);
-        const Bitmap aBitmap = const_cast< XDashList& >(rList).GetUiBitmap(i);
+        const XDashEntry* pEntry = rList.GetDash(i);
+        const BitmapEx & rBitmap = const_cast< XDashList& >(rList).GetUiBitmap(i);
 
-        if(!aBitmap.IsEmpty())
+        if(!rBitmap.IsEmpty())
         {
-            rListBox.InsertEntry(pEntry->GetName(), Image(aBitmap));
+            rListBox.InsertEntry(pEntry->GetName(), Image(rBitmap));
         }
         else
         {
@@ -169,12 +166,12 @@ LinePropertyPanelBase::LinePropertyPanelBase(
     mpStyleItem(),
     mpDashItem(),
     mnTrans(0),
-    meMapUnit(SFX_MAPUNIT_MM),
+    meMapUnit(MapUnit::MapMM),
     mnWidthCoreValue(0),
     mpStartItem(),
     mpEndItem(),
     mxLineWidthPopup(VclPtr<LineWidthPopup>::Create(*this)),
-    maIMGNone(SVX_RES(IMG_NONE_ICON)),
+    maIMGNone(StockImage::Yes, BMP_NONE_ICON),
     mpIMGWidthIcon(),
     mbWidthValuable(true),
     mbArrowSupported(true)
@@ -226,19 +223,18 @@ void LinePropertyPanelBase::dispose()
 void LinePropertyPanelBase::Initialize()
 {
     mpIMGWidthIcon.reset(new Image[8]);
-    mpIMGWidthIcon[0] = Image(SVX_RES(IMG_WIDTH1_ICON));
-    mpIMGWidthIcon[1] = Image(SVX_RES(IMG_WIDTH2_ICON));
-    mpIMGWidthIcon[2] = Image(SVX_RES(IMG_WIDTH3_ICON));
-    mpIMGWidthIcon[3] = Image(SVX_RES(IMG_WIDTH4_ICON));
-    mpIMGWidthIcon[4] = Image(SVX_RES(IMG_WIDTH5_ICON));
-    mpIMGWidthIcon[5] = Image(SVX_RES(IMG_WIDTH6_ICON));
-    mpIMGWidthIcon[6] = Image(SVX_RES(IMG_WIDTH7_ICON));
-    mpIMGWidthIcon[7] = Image(SVX_RES(IMG_WIDTH8_ICON));
+    mpIMGWidthIcon[0] = Image(StockImage::Yes, BMP_WIDTH1_ICON);
+    mpIMGWidthIcon[1] = Image(StockImage::Yes, BMP_WIDTH2_ICON);
+    mpIMGWidthIcon[2] = Image(StockImage::Yes, BMP_WIDTH3_ICON);
+    mpIMGWidthIcon[3] = Image(StockImage::Yes, BMP_WIDTH4_ICON);
+    mpIMGWidthIcon[4] = Image(StockImage::Yes, BMP_WIDTH5_ICON);
+    mpIMGWidthIcon[5] = Image(StockImage::Yes, BMP_WIDTH6_ICON);
+    mpIMGWidthIcon[6] = Image(StockImage::Yes, BMP_WIDTH7_ICON);
+    mpIMGWidthIcon[7] = Image(StockImage::Yes, BMP_WIDTH8_ICON);
 
     FillLineStyleList();
     SelectLineStyle();
     mpLBStyle->SetSelectHdl( LINK( this, LinePropertyPanelBase, ChangeLineStyleHdl ) );
-    mpLBStyle->SetAccessibleName("Style");
     mpLBStyle->AdaptDropDownLineCountToMaximum();
 
     const sal_uInt16 nIdWidth = mpTBWidth->GetItemId(UNO_SELECTWIDTH);
@@ -252,19 +248,15 @@ void LinePropertyPanelBase::Initialize()
     SelectEndStyle(true);
     SelectEndStyle(false);
     mpLBStart->SetSelectHdl( LINK( this, LinePropertyPanelBase, ChangeStartHdl ) );
-    mpLBStart->SetAccessibleName("Beginning Style"); //wj acc
     mpLBStart->AdaptDropDownLineCountToMaximum();
     mpLBEnd->SetSelectHdl( LINK( this, LinePropertyPanelBase, ChangeEndHdl ) );
-    mpLBEnd->SetAccessibleName("Ending Style");  //wj acc
     mpLBEnd->AdaptDropDownLineCountToMaximum();
 
     mpMFTransparent->SetModifyHdl(LINK(this, LinePropertyPanelBase, ChangeTransparentHdl));
 
     mpLBEdgeStyle->SetSelectHdl( LINK( this, LinePropertyPanelBase, ChangeEdgeStyleHdl ) );
-    mpLBEdgeStyle->SetAccessibleName("Corner Style");
 
     mpLBCapStyle->SetSelectHdl( LINK( this, LinePropertyPanelBase, ChangeCapStyleHdl ) );
-    mpLBCapStyle->SetAccessibleName("Cap Style");
 }
 
 void LinePropertyPanelBase::DataChanged(const DataChangedEvent& /*rEvent*/)
@@ -393,14 +385,11 @@ void LinePropertyPanelBase::updateLineStart(bool bDisabled, bool bSetOrDefault,
             mpLBStart->Enable();
     }
 
-    if(bSetOrDefault)
+    if(bSetOrDefault && pItem)
     {
-        if(pItem)
-        {
-            mpStartItem.reset(static_cast<XLineStartItem*>(pItem->Clone()));
-            SelectEndStyle(true);
-            return;
-        }
+        mpStartItem.reset(static_cast<XLineStartItem*>(pItem->Clone()));
+        SelectEndStyle(true);
+        return;
     }
 
     mpStartItem.reset(nullptr);
@@ -420,14 +409,11 @@ void LinePropertyPanelBase::updateLineEnd(bool bDisabled, bool bSetOrDefault,
             mpLBEnd->Enable();
     }
 
-    if(bSetOrDefault)
+    if(bSetOrDefault && pItem)
     {
-        if(pItem)
-        {
-            mpEndItem.reset(static_cast<XLineEndItem*>(pItem->Clone()));
-            SelectEndStyle(false);
-            return;
-        }
+        mpEndItem.reset(static_cast<XLineEndItem*>(pItem->Clone()));
+        SelectEndStyle(false);
+        return;
     }
 
     mpEndItem.reset(nullptr);
@@ -546,9 +532,9 @@ void LinePropertyPanelBase::updateLineCap(bool bDisabled, bool bSetOrDefault,
     mpLBCapStyle->SetNoSelection();
 }
 
-IMPL_LINK_NOARG_TYPED(LinePropertyPanelBase, ChangeLineStyleHdl, ListBox&, void)
+IMPL_LINK_NOARG(LinePropertyPanelBase, ChangeLineStyleHdl, ListBox&, void)
 {
-    const sal_Int32 nPos(mpLBStyle->GetSelectEntryPos());
+    const sal_Int32 nPos(mpLBStyle->GetSelectedEntryPos());
 
     if(LISTBOX_ENTRY_NOTFOUND != nPos && mpLBStyle->IsValueChangedFromSaved())
     {
@@ -566,7 +552,7 @@ IMPL_LINK_NOARG_TYPED(LinePropertyPanelBase, ChangeLineStyleHdl, ListBox&, void)
 
             setLineStyle(aItem);
         }
-        else if (mxLineStyleList.is() && mxLineStyleList->Count() > (long)(nPos - 2))
+        else if (mxLineStyleList.is() && mxLineStyleList->Count() > static_cast<long>(nPos - 2))
         {
             // drawing::LineStyle_DASH
             const XLineStyleItem aItemA(drawing::LineStyle_DASH);
@@ -584,37 +570,37 @@ IMPL_LINK_NOARG_TYPED(LinePropertyPanelBase, ChangeLineStyleHdl, ListBox&, void)
     ActivateControls();
 }
 
-IMPL_LINK_NOARG_TYPED(LinePropertyPanelBase, ChangeStartHdl, ListBox&, void)
+IMPL_LINK_NOARG(LinePropertyPanelBase, ChangeStartHdl, ListBox&, void)
 {
-    sal_Int32  nPos = mpLBStart->GetSelectEntryPos();
+    sal_Int32  nPos = mpLBStart->GetSelectedEntryPos();
     if( nPos != LISTBOX_ENTRY_NOTFOUND && mpLBStart->IsValueChangedFromSaved() )
     {
         std::unique_ptr<XLineStartItem> pItem;
         if( nPos == 0 )
             pItem.reset(new XLineStartItem());
-        else if( mxLineEndList.is() && mxLineEndList->Count() > (long) ( nPos - 1 ) )
-            pItem.reset(new XLineStartItem( mpLBStart->GetSelectEntry(),mxLineEndList->GetLineEnd( nPos - 1 )->GetLineEnd() ));
+        else if( mxLineEndList.is() && mxLineEndList->Count() > static_cast<long>( nPos - 1 ) )
+            pItem.reset(new XLineStartItem( mpLBStart->GetSelectedEntry(),mxLineEndList->GetLineEnd( nPos - 1 )->GetLineEnd() ));
         setLineStartStyle(pItem.get());
     }
 }
 
-IMPL_LINK_NOARG_TYPED(LinePropertyPanelBase, ChangeEndHdl, ListBox&, void)
+IMPL_LINK_NOARG(LinePropertyPanelBase, ChangeEndHdl, ListBox&, void)
 {
-    sal_Int32  nPos = mpLBEnd->GetSelectEntryPos();
+    sal_Int32  nPos = mpLBEnd->GetSelectedEntryPos();
     if( nPos != LISTBOX_ENTRY_NOTFOUND && mpLBEnd->IsValueChangedFromSaved() )
     {
         std::unique_ptr<XLineEndItem> pItem;
         if( nPos == 0 )
             pItem.reset(new XLineEndItem());
-        else if( mxLineEndList.is() && mxLineEndList->Count() > (long) ( nPos - 1 ) )
-            pItem.reset(new XLineEndItem( mpLBEnd->GetSelectEntry(), mxLineEndList->GetLineEnd( nPos - 1 )->GetLineEnd() ));
+        else if( mxLineEndList.is() && mxLineEndList->Count() > static_cast<long>( nPos - 1 ) )
+            pItem.reset(new XLineEndItem( mpLBEnd->GetSelectedEntry(), mxLineEndList->GetLineEnd( nPos - 1 )->GetLineEnd() ));
         setLineEndStyle(pItem.get());
     }
 }
 
-IMPL_LINK_NOARG_TYPED(LinePropertyPanelBase, ChangeEdgeStyleHdl, ListBox&, void)
+IMPL_LINK_NOARG(LinePropertyPanelBase, ChangeEdgeStyleHdl, ListBox&, void)
 {
-    const sal_Int32 nPos(mpLBEdgeStyle->GetSelectEntryPos());
+    const sal_Int32 nPos(mpLBEdgeStyle->GetSelectedEntryPos());
 
     if(LISTBOX_ENTRY_NOTFOUND != nPos && mpLBEdgeStyle->IsValueChangedFromSaved())
     {
@@ -648,9 +634,9 @@ IMPL_LINK_NOARG_TYPED(LinePropertyPanelBase, ChangeEdgeStyleHdl, ListBox&, void)
     }
 }
 
-IMPL_LINK_NOARG_TYPED(LinePropertyPanelBase, ChangeCapStyleHdl, ListBox&, void)
+IMPL_LINK_NOARG(LinePropertyPanelBase, ChangeCapStyleHdl, ListBox&, void)
 {
-    const sal_Int32 nPos(mpLBCapStyle->GetSelectEntryPos());
+    const sal_Int32 nPos(mpLBCapStyle->GetSelectedEntryPos());
 
     if(LISTBOX_ENTRY_NOTFOUND != nPos && mpLBCapStyle->IsValueChangedFromSaved())
     {
@@ -679,7 +665,7 @@ IMPL_LINK_NOARG_TYPED(LinePropertyPanelBase, ChangeCapStyleHdl, ListBox&, void)
     }
 }
 
-IMPL_LINK_TYPED(LinePropertyPanelBase, ToolboxWidthSelectHdl,ToolBox*, pToolBox, void)
+IMPL_LINK(LinePropertyPanelBase, ToolboxWidthSelectHdl,ToolBox*, pToolBox, void)
 {
     if (pToolBox->GetItemCommand(pToolBox->GetCurItemId()) == UNO_SELECTWIDTH)
     {
@@ -688,9 +674,9 @@ IMPL_LINK_TYPED(LinePropertyPanelBase, ToolboxWidthSelectHdl,ToolBox*, pToolBox,
     }
 }
 
-IMPL_LINK_NOARG_TYPED( LinePropertyPanelBase, ChangeTransparentHdl, Edit&, void )
+IMPL_LINK_NOARG( LinePropertyPanelBase, ChangeTransparentHdl, Edit&, void )
 {
-    sal_uInt16 nVal = (sal_uInt16)mpMFTransparent->GetValue();
+    sal_uInt16 nVal = static_cast<sal_uInt16>(mpMFTransparent->GetValue());
     XLineTransparenceItem aItem( nVal );
 
     setLineTransparency(aItem);
@@ -714,24 +700,24 @@ void LinePropertyPanelBase::SetWidthIcon()
         return;
     }
 
-    long nVal = LogicToLogic(mnWidthCoreValue * 10,(MapUnit)meMapUnit , MAP_POINT);
+    long nVal = LogicToLogic(mnWidthCoreValue * 10, meMapUnit, MapUnit::MapPoint);
     const sal_uInt16 nIdWidth = mpTBWidth->GetItemId(UNO_SELECTWIDTH);
 
     if(nVal <= 6)
         mpTBWidth->SetItemImage( nIdWidth, mpIMGWidthIcon[0]);
-    else if(nVal > 6 && nVal <= 9)
+    else if (nVal <= 9)
         mpTBWidth->SetItemImage( nIdWidth, mpIMGWidthIcon[1]);
-    else if(nVal > 9 && nVal <= 12)
+    else if (nVal <= 12)
         mpTBWidth->SetItemImage( nIdWidth, mpIMGWidthIcon[2]);
-    else if(nVal > 12 && nVal <= 19)
+    else if (nVal <= 19)
         mpTBWidth->SetItemImage( nIdWidth, mpIMGWidthIcon[3]);
-    else if(nVal > 19 && nVal <= 26)
+    else if (nVal <= 26)
         mpTBWidth->SetItemImage( nIdWidth, mpIMGWidthIcon[4]);
-    else if(nVal > 26 && nVal <= 37)
+    else if (nVal <= 37)
         mpTBWidth->SetItemImage( nIdWidth, mpIMGWidthIcon[5]);
-    else if(nVal > 37 && nVal <=52)
+    else if (nVal <= 52)
         mpTBWidth->SetItemImage( nIdWidth, mpIMGWidthIcon[6]);
-    else if(nVal > 52)
+    else
         mpTBWidth->SetItemImage( nIdWidth, mpIMGWidthIcon[7]);
 
 }
@@ -748,12 +734,11 @@ void  LinePropertyPanelBase::FillLineEndList()
     if ( pSh && pSh->GetItem( SID_LINEEND_LIST ) )
     {
         mpLBStart->Enable();
-        SvxLineEndListItem aItem( *static_cast<const SvxLineEndListItem*>(pSh->GetItem( SID_LINEEND_LIST ) ) );
-        mxLineEndList = aItem.GetLineEndList();
+        mxLineEndList = pSh->GetItem( SID_LINEEND_LIST )->GetLineEndList();
 
         if (mxLineEndList.is())
         {
-            Bitmap aZeroBitmap;
+            BitmapEx aZeroBitmap;
 
             if (mxLineStyleList.is())
                 aZeroBitmap = mxLineStyleList->GetBitmapForUISolidLine();
@@ -777,8 +762,7 @@ void  LinePropertyPanelBase::FillLineStyleList()
     if ( pSh && pSh->GetItem( SID_DASH_LIST ) )
     {
         mpLBStyle->Enable();
-        SvxDashListItem aItem( *static_cast<const SvxDashListItem*>(pSh->GetItem( SID_DASH_LIST ) ) );
-        mxLineStyleList = aItem.GetDashList();
+        mxLineStyleList = pSh->GetItem( SID_DASH_LIST )->GetDashList();
 
         if (mxLineStyleList.is())
         {
@@ -795,14 +779,14 @@ void  LinePropertyPanelBase::FillLineStyleList()
 
 void LinePropertyPanelBase::SelectLineStyle()
 {
-    if( !mpStyleItem.get() || !mpDashItem.get() )
+    if (!mpStyleItem || !mpDashItem)
     {
         mpLBStyle->SetNoSelection();
         mpLBStyle->Disable();
         return;
     }
 
-    const drawing::LineStyle eXLS(mpStyleItem ? (drawing::LineStyle)mpStyleItem->GetValue() : drawing::LineStyle_NONE);
+    const drawing::LineStyle eXLS(mpStyleItem->GetValue());
     bool bSelected(false);
 
     switch(eXLS)
@@ -814,12 +798,12 @@ void LinePropertyPanelBase::SelectLineStyle()
             bSelected = true;
             break;
         default:
-            if(mpDashItem && mxLineStyleList.is())
+            if(mxLineStyleList.is())
             {
                 const XDash& rDash = mpDashItem->GetDashValue();
-                for(sal_Int32 a(0);!bSelected &&  a < mxLineStyleList->Count(); a++)
+                for(long a(0);!bSelected &&  a < mxLineStyleList->Count(); a++)
                 {
-                    XDashEntry* pEntry = mxLineStyleList->GetDash(a);
+                    const XDashEntry* pEntry = mxLineStyleList->GetDash(a);
                     const XDash& rEntry = pEntry->GetDash();
                     if(rDash == rEntry)
                     {
@@ -843,19 +827,19 @@ void LinePropertyPanelBase::SelectEndStyle(bool bStart)
 
     if(bStart)
     {
-        if( !mpStartItem.get() )
+        if (!mpStartItem)
         {
             mpLBStart->SetNoSelection();
             mpLBStart->Disable();
             return;
         }
 
-        if (mpStartItem && mxLineEndList.is())
+        if (mxLineEndList.is())
         {
             const basegfx::B2DPolyPolygon& rItemPolygon = mpStartItem->GetLineStartValue();
-            for(sal_Int32 a(0);!bSelected &&  a < mxLineEndList->Count(); a++)
+            for(long a(0);!bSelected &&  a < mxLineEndList->Count(); a++)
             {
-                XLineEndEntry* pEntry = mxLineEndList->GetLineEnd(a);
+                const XLineEndEntry* pEntry = mxLineEndList->GetLineEnd(a);
                 const basegfx::B2DPolyPolygon& rEntryPolygon = pEntry->GetLineEnd();
                 if(rItemPolygon == rEntryPolygon)
                 {
@@ -872,19 +856,19 @@ void LinePropertyPanelBase::SelectEndStyle(bool bStart)
     }
     else
     {
-        if( !mpEndItem.get() )
+        if (!mpEndItem)
         {
             mpLBEnd->SetNoSelection();
             mpLBEnd->Disable();
             return;
         }
 
-        if (mpEndItem && mxLineEndList.is())
+        if (mxLineEndList.is())
         {
             const basegfx::B2DPolyPolygon& rItemPolygon = mpEndItem->GetLineEndValue();
-            for(sal_Int32 a(0);!bSelected &&  a < mxLineEndList->Count(); a++)
+            for(long a(0);!bSelected &&  a < mxLineEndList->Count(); a++)
             {
-                XLineEndEntry* pEntry = mxLineEndList->GetLineEnd(a);
+                const XLineEndEntry* pEntry = mxLineEndList->GetLineEnd(a);
                 const basegfx::B2DPolyPolygon& rEntryPolygon = pEntry->GetLineEnd();
                 if(rItemPolygon == rEntryPolygon)
                 {
@@ -903,16 +887,16 @@ void LinePropertyPanelBase::SelectEndStyle(bool bStart)
 
 void LinePropertyPanelBase::ActivateControls()
 {
-    const sal_Int32 nPos(mpLBStyle->GetSelectEntryPos());
+    const sal_Int32 nPos(mpLBStyle->GetSelectedEntryPos());
     bool bLineStyle( nPos != 0 );
 
     mpGridLineProps->Enable( bLineStyle );
     mpBoxArrowProps->Enable( bLineStyle );
-    mpLBStart->Enable( bLineStyle );
-    mpLBEnd->Enable( bLineStyle );
+    mpLBStart->Enable( bLineStyle && mbArrowSupported );
+    mpLBEnd->Enable( bLineStyle && mbArrowSupported );
 }
 
-void LinePropertyPanelBase::setMapUnit(SfxMapUnit eMapUnit)
+void LinePropertyPanelBase::setMapUnit(MapUnit eMapUnit)
 {
     meMapUnit = eMapUnit;
 }
@@ -920,8 +904,7 @@ void LinePropertyPanelBase::setMapUnit(SfxMapUnit eMapUnit)
 void LinePropertyPanelBase::disableArrowHead()
 {
     mbArrowSupported = false;
-    mpLBStart->Hide();
-    mpLBEnd->Hide();
+    ActivateControls();
 }
 
 }} // end of namespace svx::sidebar

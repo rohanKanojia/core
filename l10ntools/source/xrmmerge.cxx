@@ -17,19 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstring>
 
 #include <stdio.h>
 
-#include "common.hxx"
-#include "export.hxx"
-#include "po.hxx"
-#include "xrmlex.hxx"
-#include "xrmmerge.hxx"
-#include "tokens.h"
-#include "helper.hxx"
+#include <common.hxx>
+#include <export.hxx>
+#include <po.hxx>
+#include <xrmlex.hxx>
+#include <xrmmerge.hxx>
+#include <tokens.h>
+#include <helper.hxx>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -40,16 +40,16 @@ using namespace std;
 void yyerror( const char * );
 
 // set of global variables
-bool bMergeMode;
-bool bDisplayName;
-bool bExtensionDescription;
-OString sLanguage;
-OString sInputFileName;
-OString sOutputFile;
-OString sMergeSrc;
-OString sLangAttribute;
-OString sResourceType;
-XRMResParser *pParser = nullptr;
+static bool bMergeMode;
+static bool bDisplayName;
+static bool bExtensionDescription;
+static OString sLanguage;
+static OString sInputFileName;
+static OString sOutputFile;
+static OString sMergeSrc;
+static OString sLangAttribute;
+static OString sResourceType;
+static XRMResParser *pParser = nullptr;
 
 extern "C" {
 // the whole interface to lexer is in this extern "C" section
@@ -79,14 +79,13 @@ extern bool GetOutputFile( int argc, char* argv[])
 
 int InitXrmExport( const char* pFilename)
 {
-    // instanciate Export
+    // instantiate Export
     OString sFilename( pFilename );
 
     if ( bMergeMode )
         pParser = new XRMResMerge( sMergeSrc, sOutputFile, sFilename );
-      else if (!sOutputFile.isEmpty()) {
+    else if (!sOutputFile.isEmpty())
         pParser = new XRMResExport( sOutputFile, sInputFileName );
-    }
 
     return 1;
 }
@@ -167,7 +166,7 @@ void XRMResParser::Execute( int nToken, char * pToken )
                     sGID = sNewGID;
                 }
                 bText = true;
-                sCurrentText = "";
+                sCurrentText = OString();
                 sCurrentOpenTag = rToken;
                 Output( rToken );
             }
@@ -181,8 +180,8 @@ void XRMResParser::Execute( int nToken, char * pToken )
                 Output( sCurrentText );
                 EndOfText( sCurrentOpenTag, sCurrentCloseTag );
                 bText = false;
-                rToken = OString("");
-                sCurrentText  = OString("");
+                rToken = OString();
+                sCurrentText  = OString();
         }
         break;
 
@@ -200,7 +199,7 @@ void XRMResParser::Execute( int nToken, char * pToken )
                 if (bDisplayName) {
                     sGID = OString("dispname");
                     bText = true;
-                    sCurrentText = "";
+                    sCurrentText = OString();
                     sCurrentOpenTag = rToken;
                     Output( rToken );
                 }
@@ -216,8 +215,8 @@ void XRMResParser::Execute( int nToken, char * pToken )
                     Output( sCurrentText );
                     EndOfText( sCurrentOpenTag, sCurrentCloseTag );
                     bText = false;
-                    rToken = OString("");
-                    sCurrentText  = OString("");
+                    rToken = OString();
+                    sCurrentText  = OString();
                 }
         }
         break;
@@ -238,13 +237,13 @@ void XRMResParser::Execute( int nToken, char * pToken )
                     sResourceType = OString ( "description" );
                     sLangAttribute = OString ( "lang" );
                     sCurrentOpenTag = rToken;
-                    sCurrentText  = OString("");
+                    sCurrentText  = OString();
                     Output( rToken );
                     WorkOnDesc( sCurrentOpenTag, sCurrentText );
                     sCurrentCloseTag = rToken;
                     Output( sCurrentText );
-                    rToken = OString("");
-                    sCurrentText  = OString("");
+                    rToken = OString();
+                    sCurrentText  = OString();
                 }
             }
         break;
@@ -370,13 +369,12 @@ XRMResMerge::XRMResMerge(
     const OString &rMergeSource, const OString &rOutputFile,
     const OString &rFilename )
                 : XRMResParser(),
-                pMergeDataFile( nullptr ),
                 sFilename( rFilename )
 {
     if (!rMergeSource.isEmpty() && sLanguage.equalsIgnoreAsciiCase("ALL"))
     {
-        pMergeDataFile = new MergeDataFile(
-            rMergeSource, sInputFileName, false);
+        pMergeDataFile.reset(new MergeDataFile(
+            rMergeSource, sInputFileName, false));
         aLanguages = pMergeDataFile->GetLanguages();
     }
     else
@@ -393,7 +391,6 @@ XRMResMerge::XRMResMerge(
 XRMResMerge::~XRMResMerge()
 {
     pOutputStream.close();
-    delete pMergeDataFile;
 }
 
 void XRMResMerge::WorkOnDesc(
@@ -408,13 +405,11 @@ void XRMResMerge::WorkOnDesc(
             OString sDescFilename = GetAttribute ( rOpenTag, "xlink:href" );
             for( size_t n = 0; n < aLanguages.size(); n++ ){
                 sCur = aLanguages[ n ];
-                OString sContent;
+                OString sText;
                 if ( !sCur.equalsIgnoreAsciiCase("en-US")  &&
-                    ( pEntrys->GetText(
-                        sContent, STRING_TYP_TEXT, sCur, true )) &&
-                    !sContent.isEmpty())
+                    ( pEntrys->GetText( sText, sCur, true )) &&
+                    !sText.isEmpty())
                 {
-                    OString sText( sContent );
                     OString sAdditionalLine( "\n        " );
                     sAdditionalLine += rOpenTag;
                     OString sSearch = sLangAttribute;
@@ -443,7 +438,7 @@ void XRMResMerge::WorkOnDesc(
                     sal_Int32 i = sOutputFile.lastIndexOf('/');
                     if (i == -1) {
                         std::cerr
-                            << "Error: output file " << sOutputFile.getStr()
+                            << "Error: output file " << sOutputFile
                             << " does not contain any /\n";
                         throw false; //TODO
                     }
@@ -451,12 +446,12 @@ void XRMResMerge::WorkOnDesc(
                         sOutputFile.copy(0, i + 1) + sLocDescFilename);
                     ofstream file(sOutputDescFile.getStr());
                     if (file.is_open()) {
-                        file << sText.getStr();
+                        file << sText;
                         file.close();
                     } else {
                         std::cerr
                             << "Error: cannot write "
-                            << sOutputDescFile.getStr() << '\n';
+                            << sOutputDescFile << '\n';
                         throw false; //TODO
                     }
                 }
@@ -470,18 +465,16 @@ void XRMResMerge::WorkOnText(
     const OString &,
     OString & )
 {
-    if ( pMergeDataFile ) {
-        if ( !pResData ) {
-            pResData.reset( new ResData( GetGID(), sFilename ) );
-            pResData->sResTyp = sResourceType;
-        }
+    if ( pMergeDataFile && !pResData ) {
+        pResData.reset( new ResData( GetGID(), sFilename ) );
+        pResData->sResTyp = sResourceType;
     }
 }
 
 void XRMResMerge::Output( const OString& rOutput )
 {
     if (!rOutput.isEmpty())
-        pOutputStream << rOutput.getStr();
+        pOutputStream << rOutput;
 }
 
 void XRMResMerge::EndOfText(
@@ -498,12 +491,11 @@ void XRMResMerge::EndOfText(
                 sCur = aLanguages[ n ];
                 OString sContent;
                 if (!sCur.equalsIgnoreAsciiCase("en-US") &&
-                    ( pEntrys->GetText(
-                        sContent, STRING_TYP_TEXT, sCur, true )) &&
+                    ( pEntrys->GetText( sContent, sCur, true )) &&
                     !sContent.isEmpty() &&
                     helper::isWellFormedXML( sContent ))
                 {
-                    OString sText( sContent );
+                    const OString& sText( sContent );
                     OString sAdditionalLine( "\n        " );
                     sAdditionalLine += rOpenTag;
                     OString sSearch = sLangAttribute;

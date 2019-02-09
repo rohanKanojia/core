@@ -54,7 +54,7 @@ namespace sdr
         drawinglayer::primitive2d::Primitive2DContainer ViewContactOfSdrCaptionObj::createViewIndependentPrimitive2DSequence() const
         {
             drawinglayer::primitive2d::Primitive2DContainer xRetval;
-            const SdrCaptionObj& rCaptionObj(GetCaptionObj());
+            const SdrCaptionObj& rCaptionObj(static_cast<const SdrCaptionObj&>(GetSdrObject()));
             const SfxItemSet& rItemSet = rCaptionObj.GetMergedItemSet();
             const drawinglayer::attribute::SdrLineFillShadowTextAttribute aAttribute(
                 drawinglayer::primitive2d::createNewSdrLineFillShadowTextAttribute(
@@ -63,20 +63,14 @@ namespace sdr
                     false));
 
             // take unrotated snap rect (direct model data) for position and size
-            Rectangle rRectangle = rCaptionObj.GetGeoRect();
-            // Hack for calc, transform position of object according
-            // to current zoom so as objects relative position to grid
-            // appears stable
-            Point aGridOff = rCaptionObj.GetGridOffset();
-            rRectangle += aGridOff;
-
+            const tools::Rectangle aRectangle(rCaptionObj.GetGeoRect());
             const ::basegfx::B2DRange aObjectRange(
-                rRectangle.Left(), rRectangle.Top(),
-                rRectangle.Right(), rRectangle.Bottom());
+                aRectangle.Left(), aRectangle.Top(),
+                aRectangle.Right(), aRectangle.Bottom());
             const GeoStat& rGeoStat(rCaptionObj.GetGeoStat());
 
             // fill object matrix
-            basegfx::B2DHomMatrix aObjectMatrix(basegfx::tools::createScaleShearXRotateTranslateB2DHomMatrix(
+            basegfx::B2DHomMatrix aObjectMatrix(basegfx::utils::createScaleShearXRotateTranslateB2DHomMatrix(
                 aObjectRange.getWidth(), aObjectRange.getHeight(),
                 rGeoStat.nShearAngle ? tan((36000 - rGeoStat.nShearAngle) * F_PI18000) : 0.0,
                 rGeoStat.nRotationAngle ? (36000 - rGeoStat.nRotationAngle) * F_PI18000 : 0.0,
@@ -87,11 +81,8 @@ namespace sdr
             double fCornerRadiusY;
             drawinglayer::primitive2d::calculateRelativeCornerRadius(
                 rCaptionObj.GetEckenradius(), aObjectRange, fCornerRadiusX, fCornerRadiusY);
-            ::basegfx::B2DPolygon aTail = rCaptionObj.getTailPolygon();
-            // Hack for calc, transform position of tail according
-            // to current zoom so as objects relative position to grid
-            // appears stable
-            aTail.transform( basegfx::tools::createTranslateB2DHomMatrix( aGridOff.X(), aGridOff.Y() ) );
+            const basegfx::B2DPolygon aTail(rCaptionObj.getTailPolygon());
+
             // create primitive. Always create one (even if invisible) to let the decomposition
             // of SdrCaptionPrimitive2D create needed invisible elements for HitTest and BoundRect
             const drawinglayer::primitive2d::Primitive2DReference xReference(
@@ -108,10 +99,10 @@ namespace sdr
             {
                 // for SC, the caption object may have a specialized shadow. The usual object shadow is off
                 // and a specialized shadow gets created here (see old paint)
-                const XColorItem& rShadColItem = static_cast<const XColorItem&>(rItemSet.Get(SDRATTR_SHADOWCOLOR));
-                const sal_uInt16 nShadowTransparence((static_cast<const SdrPercentItem&>(rItemSet.Get(SDRATTR_SHADOWTRANSPARENCE))).GetValue());
+                const XColorItem& rShadColItem = rItemSet.Get(SDRATTR_SHADOWCOLOR);
+                const sal_uInt16 nShadowTransparence(rItemSet.Get(SDRATTR_SHADOWTRANSPARENCE).GetValue());
                 const Color aShadowColor(rShadColItem.GetColorValue());
-                const drawing::FillStyle eShadowStyle = (static_cast<const XFillStyleItem&>(rItemSet.Get(XATTR_FILLSTYLE))).GetValue();
+                const drawing::FillStyle eShadowStyle = rItemSet.Get(XATTR_FILLSTYLE).GetValue();
 
                 // Create own ItemSet and modify as needed
                 // Always hide lines for special calc shadow
@@ -121,7 +112,7 @@ namespace sdr
                 if(drawing::FillStyle_HATCH == eShadowStyle)
                 {
                     // #41666# Hatch color is set hard to shadow color
-                    XHatch aHatch = (static_cast<const XFillHatchItem&>(rItemSet.Get(XATTR_FILLHATCH))).GetHatchValue();
+                    XHatch aHatch = rItemSet.Get(XATTR_FILLHATCH).GetHatchValue();
                     aHatch.SetColor(aShadowColor);
                     aSet.Put(XFillHatchItem(OUString(),aHatch));
                 }
@@ -145,8 +136,8 @@ namespace sdr
                 if(!aFill.isDefault() && 1.0 != aFill.getTransparence())
                 {
                     // add shadow offset to object matrix
-                    const sal_uInt32 nXDist((static_cast<const SdrMetricItem&>(rItemSet.Get(SDRATTR_SHADOWXDIST))).GetValue());
-                    const sal_uInt32 nYDist((static_cast<const SdrMetricItem&>(rItemSet.Get(SDRATTR_SHADOWYDIST))).GetValue());
+                    const sal_uInt32 nXDist(rItemSet.Get(SDRATTR_SHADOWXDIST).GetValue());
+                    const sal_uInt32 nYDist(rItemSet.Get(SDRATTR_SHADOWYDIST).GetValue());
 
                     if(nXDist || nYDist)
                     {
@@ -155,7 +146,7 @@ namespace sdr
                         // emulate that shadow is *not* visible behind the object for
                         // transparent object fill for comments in excel
                         basegfx::B2DPolygon aObjectOutline(
-                            basegfx::tools::createPolygonFromRect(
+                            basegfx::utils::createPolygonFromRect(
                                 basegfx::B2DRange(0.0, 0.0, 1.0, 1.0),
                                 fCornerRadiusX,
                                 fCornerRadiusY));
@@ -164,11 +155,11 @@ namespace sdr
                         // create shadow outline
                         basegfx::B2DPolygon aShadowOutline(aObjectOutline);
                         aShadowOutline.transform(
-                            basegfx::tools::createTranslateB2DHomMatrix(nXDist, nYDist));
+                            basegfx::utils::createTranslateB2DHomMatrix(nXDist, nYDist));
 
                         // clip shadow outline against object outline
                         const basegfx::B2DPolyPolygon aClippedShadow(
-                            basegfx::tools::clipPolygonOnPolyPolygon(
+                            basegfx::utils::clipPolygonOnPolyPolygon(
                                 aShadowOutline,
                                 basegfx::B2DPolyPolygon(aObjectOutline),
                                 false, // take the outside

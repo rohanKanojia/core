@@ -19,13 +19,14 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_EDTWIN_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_EDTWIN_HXX
 
+#include <o3tl/deleter.hxx>
 #include <sot/exchange.hxx>
 #include <svx/svdobj.hxx>
 #include <tools/link.hxx>
 #include <vcl/timer.hxx>
 #include <vcl/idle.hxx>
 #include <vcl/window.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <swevent.hxx>
 #include <swtypes.hxx>
 
@@ -44,6 +45,7 @@ struct  SwApplyTemplate;
 struct  QuickHelpData;
 class   SdrDropMarkerOverlay;
 class   SwFrameControlsManager;
+enum class SdrHitKind;
 
 // input window
 
@@ -54,26 +56,15 @@ class   SwFrameControlsManager;
     To translate the pixel positions from the buffer OutputDevice to the real
     pixel positions, use the PixelToLogic methods of this class.
   */
-class SwEditWin: public vcl::Window,
+class SwEditWin final : public vcl::Window,
                 public DropTargetHelper, public DragSourceHelper
 {
-friend void     ScrollMDI(SwViewShell* pVwSh, const SwRect&,
-                          sal_uInt16 nRangeX, sal_uInt16 nRangeY);
-friend bool     IsScrollMDI(SwViewShell* pVwSh, const SwRect&);
-
-friend void     SizeNotify(SwViewShell* pVwSh, const Size &);
-
-friend void     PageNumNotify(  SwViewShell* pVwSh,
-                                sal_uInt16 nPhyNum,
-                                sal_uInt16 nVirtNum,
-                                const OUString& rPg );
-
     static  QuickHelpData* m_pQuickHlpData;
 
     static  long    m_nDDStartPosX, m_nDDStartPosY;
 
-    static  Color   m_aWaterCanTextColor;     // text color; for the watering can
-    static  Color   m_aWaterCanTextBackColor; // text background; for the watering can
+    Color m_aWaterCanTextColor;     // text color; for the watering can
+    Color m_aWaterCanTextBackColor; // text background; for the watering can
 
     /*
      * timer and handler for scrolling on when the mousepointer
@@ -82,8 +73,6 @@ friend void     PageNumNotify(  SwViewShell* pVwSh,
      * regularly.
      */
     AutoTimer       m_aTimer;
-    // timer for overlapping KeyInputs (e.g. for tables)
-    Timer           m_aKeyInputTimer;
     // timer for ANY-KeyInput question without a following KeyInputEvent
     Timer           m_aKeyInputFlushTimer;
 
@@ -92,25 +81,25 @@ friend void     PageNumNotify(  SwViewShell* pVwSh,
     Point           m_aStartPos;
     Point           m_aMovePos;
     Point           m_aRszMvHdlPt;
-    Idle            m_aTemplateIdle;
+    Timer           m_aTemplateTimer;
 
     // type/object where the mouse pointer is
     SwCallMouseEvent m_aSaveCallEvent;
 
-    SwApplyTemplate     *m_pApplyTempl;
-    SwAnchorMarker      *m_pAnchorMarker; // for relocating the anchor
+    std::unique_ptr<SwApplyTemplate>      m_pApplyTempl;
+    std::unique_ptr<SwAnchorMarker>       m_pAnchorMarker; // for relocating the anchor
 
-    SdrDropMarkerOverlay    *m_pUserMarker;
+    std::unique_ptr<SdrDropMarkerOverlay> m_pUserMarker;
     SdrObject               *m_pUserMarkerObj;
-    SwShadowCursor          *m_pShadCursor;
-    Point                   *m_pRowColumnSelectionStart; // save position where table row/column selection has been started
+    std::unique_ptr<SwShadowCursor, o3tl::default_delete<SwShadowCursor>> m_pShadCursor;
+    boost::optional<Point>                m_xRowColumnSelectionStart; // save position where table row/column selection has been started
 
     SwView         &m_rView;
 
-    int             m_aActHitType;    // current mouse pointer
+    SdrHitKind      m_aActHitType;    // current mouse pointer
 
-    SotClipboardFormatId m_nDropFormat;   // format from the last QueryDrop
-    sal_uInt16      m_nDropAction;   // action from the last QueryDrop
+    SotClipboardFormatId m_nDropFormat;  // format from the last QueryDrop
+    sal_uInt8       m_nDropAction;       // action from the last QueryDrop
     SotExchangeDest m_nDropDestination;  // destination from the last QueryDrop
 
     sal_uInt16      m_eBezierMode;
@@ -123,8 +112,6 @@ friend void     PageNumNotify(  SwViewShell* pVwSh,
                     m_bIsInDrag       : 1, // don't execute StartExecuteDrag twice
                     m_bOldIdle        : 1, // to stop to idle
                     m_bOldIdleSet     : 1, // during QeueryDrop
-                    m_bTableInsDelMode  : 1,
-                    m_bTableIsInsMode   : 1,
                     m_bChainMode      : 1, // connect frames
                     m_bWasShdwCursor    : 1, // ShadowCursor was on in MouseButtonDown
                     m_bLockInput      : 1, // lock while calc panel is active
@@ -138,7 +125,7 @@ friend void     PageNumNotify(  SwViewShell* pVwSh,
     sal_uInt16          m_nKS_NUMDOWN_Count; // #i23725#
     sal_uInt16          m_nKS_NUMINDENTINC_Count;
 
-    SwFrameControlsManager *m_pFrameControlsManager;
+    std::unique_ptr<SwFrameControlsManager> m_pFrameControlsManager;
 
     void            LeaveArea(const Point &);
     void            JustifyAreaTimer();
@@ -146,7 +133,7 @@ friend void     PageNumNotify(  SwViewShell* pVwSh,
 
     void            RstMBDownFlags();
 
-    void            ChangeFly( sal_uInt8 nDir, bool bWeb = false );
+    void            ChangeFly( sal_uInt8 nDir, bool bWeb );
     void            ChangeDrawing( sal_uInt8 nDir );
 
     bool            EnterDrawMode(const MouseEvent& rMEvt, const Point& aDocPos);
@@ -162,32 +149,27 @@ friend void     PageNumNotify(  SwViewShell* pVwSh,
 
     /*
      * handler for scrolling on when the mousepointer
-     * stopps outside of EditWin during a drag-operation.
+     * stops outside of EditWin during a drag-operation.
      * The selection is regularly increased towards the mouse
      * position.
      */
-    DECL_LINK_TYPED( TimerHandler, Timer *, void );
+    DECL_LINK( TimerHandler, Timer *, void );
     void            StartDDTimer();
     void            StopDDTimer(SwWrtShell *, const Point &);
-    DECL_LINK_TYPED( DDHandler, Timer *, void );
+    DECL_LINK( DDHandler, Timer *, void );
 
     // timer for ANY-KeyInut question without a following KeyInputEvent
-    DECL_LINK_TYPED( KeyInputFlushHandler, Timer *, void );
-
-    // timer for overlapping KeyInputs (e.g. for tables)
-    DECL_LINK_TYPED( KeyInputTimerHandler, Timer *, void );
+    DECL_LINK( KeyInputFlushHandler, Timer *, void );
 
     // timer for ApplyTemplates via mouse (in disguise Drag&Drop)
-    DECL_LINK_TYPED( TemplateTimerHdl, Idle *, void );
+    DECL_LINK( TemplateTimerHdl, Timer *, void );
 
     void            MoveCursor( SwWrtShell &rSh, const Point& rDocPos,
                                 const bool bOnlyText, bool bLockView );
 
-protected:
-
     virtual void    DataChanged( const DataChangedEvent& ) override;
     virtual void    PrePaint(vcl::RenderContext& rRenderContext) override;
-    virtual void    Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void    Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
 
     virtual void    GetFocus() override;
     virtual void    LoseFocus() override;
@@ -205,15 +187,15 @@ protected:
     virtual OUString GetSurroundingText() const override;
     virtual Selection GetSurroundingTextSelection() const override;
 
-    void    ShowAutoTextCorrectQuickHelp( const OUString& rWord, SvxAutoCorrCfg* pACfg,
+    void    ShowAutoTextCorrectQuickHelp( const OUString& rWord, SvxAutoCorrCfg const * pACfg,
                                 SvxAutoCorrect* pACorr, bool bFromIME = false );
 
     /// Returns true if in header/footer area, or in the header/footer control.
     bool    IsInHeaderFooter( const Point &rDocPt, FrameControlType &rControl ) const;
 
     bool    IsOverHeaderFooterFly( const Point& rDocPos, FrameControlType& rControl, bool& bOverFly, bool& bPageAnchored ) const;
-public:
 
+public:
     virtual void    KeyInput(const KeyEvent &rKEvt) override;
     void            UpdatePointer(const Point &, sal_uInt16 nButtons = 0);
 
@@ -224,8 +206,8 @@ public:
     void            SetObjectSelect( bool bVal )    { m_bObjectSelect = bVal; }
     bool            IsObjectSelect() const          { return m_bObjectSelect; }
 
-    inline SdrObjKind   GetSdrDrawMode() const { return m_eDrawMode; }
-    inline void         SetSdrDrawMode( SdrObjKind eSdrObjectKind ) { m_eDrawMode = eSdrObjectKind; SetObjectSelect( false ); }
+    SdrObjKind   GetSdrDrawMode() const { return m_eDrawMode; }
+    void         SetSdrDrawMode( SdrObjKind eSdrObjectKind ) { m_eDrawMode = eSdrObjectKind; SetObjectSelect( false ); }
     void                StdDrawMode( SdrObjKind eSdrObjectKind, bool bObjSelect );
 
     bool            IsFrameAction() const             { return m_bInsFrame; }
@@ -243,19 +225,15 @@ public:
     static bool     IsInputSequenceCheckingRequired( const OUString &rText, const SwPaM& rCursor );
 
     void             SetApplyTemplate(const SwApplyTemplate &);
-    SwApplyTemplate* GetApplyTemplate() const { return m_pApplyTempl; }
+    SwApplyTemplate* GetApplyTemplate() const { return m_pApplyTempl.get(); }
 
     void            StartExecuteDrag();
     void            DragFinished();
 
-    static Color    GetWaterCanTextColor() { return m_aWaterCanTextColor; }
+    void         SetWaterCanTextColor(const Color& rCol ) { m_aWaterCanTextColor = rCol; }
 
-    static void     SetWaterCanTextColor(const Color& rCol ) { m_aWaterCanTextColor = rCol; }
+    void         SetWaterCanTextBackColor(const Color& rCol ) { m_aWaterCanTextBackColor = rCol; }
 
-    static Color    GetWaterCanTextBackColor()
-                                            { return m_aWaterCanTextBackColor; }
-    static void     SetWaterCanTextBackColor(const Color& rCol )
-                                            { m_aWaterCanTextBackColor = rCol; }
     void            LockKeyInput(bool bSet){m_bLockInput = bSet;}
 
     const SwView &GetView() const { return m_rView; }
@@ -263,11 +241,11 @@ public:
 
     virtual css::uno::Reference< css::accessibility::XAccessible > CreateAccessible() override;
 
-    static inline long GetDDStartPosX() { return m_nDDStartPosX; }
-    static inline long GetDDStartPosY() { return m_nDDStartPosY; }
+    static long GetDDStartPosX() { return m_nDDStartPosX; }
+    static long GetDDStartPosY() { return m_nDDStartPosY; }
 
-    static void _InitStaticData();
-    static void _FinitStaticData();
+    static void InitStaticData();
+    static void FinitStaticData();
 
     //#i3370# remove quick help to prevent saving of autocorrection suggestions
     void StopQuickHelp();
@@ -290,24 +268,31 @@ public:
     SwFrameControlsManager& GetFrameControlsManager();
 
     SwEditWin(vcl::Window *pParent, SwView &);
-    virtual ~SwEditWin();
+    virtual ~SwEditWin() override;
     virtual void dispose() override;
 
     virtual void    Command( const CommandEvent& rCEvt ) override;
 
-    /// @see OutputDevice::LogicInvalidate().
-    void LogicInvalidate(const Rectangle* pRectangle) override;
+    /// @see Window::LogicInvalidate().
+    void LogicInvalidate(const tools::Rectangle* pRectangle) override;
     /// Same as MouseButtonDown(), but coordinates are in logic unit.
-    void LogicMouseButtonDown(const MouseEvent& rMouseEvent);
+    virtual void LogicMouseButtonDown(const MouseEvent& rMouseEvent) override;
     /// Same as MouseButtonUp(), but coordinates are in logic unit.
-    void LogicMouseButtonUp(const MouseEvent& rMouseEvent);
+    virtual void LogicMouseButtonUp(const MouseEvent& rMouseEvent) override;
     /// Same as MouseMove(), but coordinates are in logic unit.
-    void LogicMouseMove(const MouseEvent& rMouseEvent);
+    virtual void LogicMouseMove(const MouseEvent& rMouseEvent) override;
     /// Allows adjusting the point or mark of the selection to a document coordinate.
     void SetCursorTwipPosition(const Point& rPosition, bool bPoint, bool bClearMark);
     /// Allows starting or ending a graphic move or resize action.
     void SetGraphicTwipPosition(bool bStart, const Point& rPosition);
+
+    virtual FactoryFunction GetUITestFactory() const override;
 };
+
+extern bool g_bFrameDrag;
+extern bool g_bDDTimerStarted;
+extern bool g_bFlushCharBuffer;
+extern bool g_bDDINetAttr;
 
 #endif
 

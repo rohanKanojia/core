@@ -24,7 +24,6 @@
 #include <sal/types.h>
 
 #include <osl/thread.hxx>
-#include <osl/time.h>
 
 #include <rtl/instance.hxx>
 #include <rtl/ustring.hxx>
@@ -34,6 +33,9 @@
 #include <cppunit/plugin/TestPlugIn.h>
 
 #ifdef _WIN32
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #else
 #include <unistd.h>
@@ -43,41 +45,11 @@
 #define CONST_TEST_STRING "gregorian"
 
 namespace {
-struct Gregorian : public rtl::StaticWithInit<rtl::OUString, Gregorian> {
-    const rtl::OUString operator () () {
-        return rtl::OUString( CONST_TEST_STRING );
+struct Gregorian : public rtl::StaticWithInit<OUString, Gregorian> {
+    const OUString operator () () {
+        return OUString( CONST_TEST_STRING );
     }
 };
-}
-
-namespace ThreadHelper
-{
-    // typedef enum {
-    //     QUIET=1,
-    //     VERBOSE
-    // } eSleepVerboseMode;
-
-    void thread_sleep_tenth_sec(sal_Int32 _nTenthSec/*, eSleepVerboseMode nVerbose = VERBOSE*/)
-    {
-        // if (nVerbose == VERBOSE)
-        // {
-        //     printf("wait %d tenth seconds. ", _nTenthSec );
-        //     fflush(stdout);
-        // }
-#ifdef _WIN32      //Windows
-        Sleep(_nTenthSec * 100 );
-#endif
-#if ( defined UNX )
-        TimeValue nTV;
-        nTV.Seconds = static_cast<sal_uInt32>( _nTenthSec/10 );
-        nTV.Nanosec = ( (_nTenthSec%10 ) * 100000000 );
-        osl_waitThread(&nTV);
-#endif
-        // if (nVerbose == VERBOSE)
-        // {
-        //     printf("done\n");
-        // }
-    }
 }
 
 /** Simple thread for testing Thread-create.
@@ -85,10 +57,11 @@ namespace ThreadHelper
  */
 class OGetThread : public osl::Thread
 {
+    osl::Mutex m_mutex;
     sal_Int32 m_nOK;
     sal_Int32 m_nFails;
 
-    rtl::OUString m_sConstStr;
+    OUString m_sConstStr;
 public:
     OGetThread()
             :m_nOK(0),
@@ -97,8 +70,8 @@ public:
             m_sConstStr = CONST_TEST_STRING;
         }
 
-    sal_Int32 getOK() { return m_nOK; }
-    sal_Int32 getFails() {return m_nFails;}
+    sal_Int32 getOK() { osl::MutexGuard g(m_mutex); return m_nOK; }
+    sal_Int32 getFails() {osl::MutexGuard g(m_mutex); return m_nFails;}
 
 protected:
 
@@ -108,29 +81,25 @@ protected:
     */
     void SAL_CALL run() override
         {
-            while(schedule())
+            for (int i = 0; i != 5; ++i)
             {
-                rtl::OUString aStr = Gregorian::get();
-                if (aStr.equals(m_sConstStr))
+                OUString aStr = Gregorian::get();
+                if (aStr == m_sConstStr)
                 {
+                    osl::MutexGuard g(m_mutex);
                     m_nOK++;
                 }
                 else
                 {
+                    osl::MutexGuard g(m_mutex);
                     m_nFails++;
                 }
-                ThreadHelper::thread_sleep_tenth_sec(1);
             }
         }
 
 public:
 
-    virtual void SAL_CALL suspend() override
-        {
-            ::osl::Thread::suspend();
-        }
-
-    virtual ~OGetThread()
+    virtual ~OGetThread() override
         {
             if (isRunning())
             {
@@ -151,7 +120,7 @@ namespace rtl_DoubleLocking
 
         void getValue_001()
             {
-                rtl::OUString aStr = Gregorian::get();
+                OUString aStr = Gregorian::get();
 
                 CPPUNIT_ASSERT_MESSAGE(
                     "Gregorian::get() failed, wrong value expected.",
@@ -178,11 +147,6 @@ namespace rtl_DoubleLocking
                 pThread->create();
                 p2Thread->create();
 
-                ThreadHelper::thread_sleep_tenth_sec(5);
-
-                pThread->terminate();
-                p2Thread->terminate();
-
                 pThread->join();
                 p2Thread->join();
 
@@ -203,10 +167,8 @@ namespace rtl_DoubleLocking
                 delete pThread;
                 delete p2Thread;
 
-                CPPUNIT_ASSERT_MESSAGE(
-                    "getValue() failed, wrong value expected.",
-                    nValueOK != 0
-                    );
+                CPPUNIT_ASSERT_EQUAL(sal_Int32(5), nValueOK);
+                CPPUNIT_ASSERT_EQUAL(sal_Int32(5), nValueOK2);
                 CPPUNIT_ASSERT_EQUAL(sal_Int32(0), nValueFails);
                 CPPUNIT_ASSERT_EQUAL(sal_Int32(0), nValueFails2);
             }
@@ -219,9 +181,5 @@ namespace rtl_DoubleLocking
 
     CPPUNIT_TEST_SUITE_REGISTRATION(rtl_DoubleLocking::getValue);
 } // namespace rtl_DoubleLocking
-
-// this macro creates an empty function, which will called by the RegisterAllFunctions()
-// to let the user the possibility to also register some functions by hand.
-CPPUNIT_PLUGIN_IMPLEMENT();
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

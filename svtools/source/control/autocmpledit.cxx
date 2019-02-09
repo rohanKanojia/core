@@ -9,6 +9,7 @@
 
 #include <svtools/autocmpledit.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/event.hxx>
 
 AutocompleteEdit::AutocompleteEdit( vcl::Window* pParent )
     : Edit( pParent )
@@ -28,11 +29,8 @@ void AutocompleteEdit::ClearEntries()
     m_aMatching.clear();
 }
 
-IMPL_LINK_NOARG_TYPED(AutocompleteEdit, AutoCompleteHdl_Impl, Edit&, void)
+IMPL_LINK_NOARG(AutocompleteEdit, AutoCompleteHdl_Impl, Edit&, void)
 {
-    if( GetAutocompleteAction() != AUTOCOMPLETE_KEYINPUT )
-        return;
-
     if( Application::AnyInput( VclInputFlags::KEYBOARD ) )
         return;
 
@@ -42,21 +40,21 @@ IMPL_LINK_NOARG_TYPED(AutocompleteEdit, AutoCompleteHdl_Impl, Edit&, void)
     if( aSelection.Max() != aCurText.getLength() )
         return;
 
-    sal_uInt16 nLen = ( sal_uInt16 )aSelection.Min();
+    sal_uInt16 nLen = static_cast<sal_uInt16>(aSelection.Min());
     aCurText = aCurText.copy( 0, nLen );
-    if( !aCurText.isEmpty() )
-    {
-        if( m_aEntries.size() )
-        {
-            if( Match( aCurText ) )
-            {
-                m_nCurrent = 0;
-                SetText( m_aMatching[0] );
-                sal_uInt16 nNewLen = m_aMatching[0].getLength();
+    if( aCurText.isEmpty() )
+        return;
 
-                Selection aSel( nLen, nNewLen );
-                SetSelection( aSel );
-            }
+    if( !m_aEntries.empty() )
+    {
+        if( Match( aCurText ) )
+        {
+            m_nCurrent = 0;
+            SetText( m_aMatching[0] );
+            sal_uInt16 nNewLen = m_aMatching[0].getLength();
+
+            Selection aSel( nLen, nNewLen );
+            SetSelection( aSel );
         }
     }
 }
@@ -67,11 +65,11 @@ bool AutocompleteEdit::Match( const OUString& rText )
 
     m_aMatching.clear();
 
-    for( std::vector< OUString >::size_type i = 0; i < m_aEntries.size(); ++i )
+    for(const OUString & rEntry : m_aEntries)
     {
-        if( m_aEntries[i].startsWithIgnoreAsciiCase( rText ) )
+        if( rEntry.startsWithIgnoreAsciiCase( rText ) )
         {
-            m_aMatching.push_back( m_aEntries[i] );
+            m_aMatching.push_back( rEntry );
             bRet = true;
         }
     }
@@ -90,9 +88,9 @@ bool AutocompleteEdit::PreNotify( NotifyEvent& rNEvt )
         if( ( aCode == KEY_UP || aCode == KEY_DOWN ) && !rKey.IsMod2() )
         {
             Selection aSelection( GetSelection() );
-            sal_uInt16 nLen = ( sal_uInt16 )aSelection.Min();
+            sal_uInt16 nLen = static_cast<sal_uInt16>(aSelection.Min());
 
-            if( m_aMatching.size() &&
+            if( !m_aMatching.empty() &&
                 ( ( aCode == KEY_DOWN && m_nCurrent + 1 < m_aMatching.size() )
                 || ( aCode == KEY_UP && m_nCurrent > 0 ) ) )
             {

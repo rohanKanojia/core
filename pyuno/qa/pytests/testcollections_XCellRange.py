@@ -14,6 +14,9 @@ from testcollections_base import CollectionsTestBase
 from com.sun.star.beans import PropertyValue
 from com.sun.star.table import CellAddress
 
+# TextTable instance factory
+def getTextTableInstance(doc):
+    return doc.createInstance('com.sun.star.text.TextTable')
 
 # Tests behaviour of objects implementing XCellRange using the new-style
 # collection accessors
@@ -40,6 +43,8 @@ class TestXCellRange(CollectionsTestBase):
         self.assertEqual(0, cell.CellAddress.Row)
         self.assertEqual(0, cell.CellAddress.Column)
 
+        spr.close(True)
+
     # Tests syntax:
     #    cell = cellrange[0,0]       # Access cell by indices
     # For:
@@ -48,10 +53,10 @@ class TestXCellRange(CollectionsTestBase):
     def test_XCellRange_Table_Cell_00(self):
         # Given
         doc = self.createBlankTextDocument()
-        textTable = doc.createInstance('com.sun.star.text.TextTable')
-        textTable.initialize(10, 10)
+        text_table = getTextTableInstance(doc)
+        text_table.initialize(10, 10)
         cursor = doc.Text.createTextCursor()
-        doc.Text.insertTextContent(cursor, textTable, False)
+        doc.Text.insertTextContent(cursor, text_table, False)
         tbl = doc.TextTables.getByIndex(0)
 
         # When
@@ -59,6 +64,8 @@ class TestXCellRange(CollectionsTestBase):
 
         # Then
         self.assertEqual('A1', cell.CellName)
+
+        doc.close(True)
 
     # Tests syntax:
     #    cell = cellrange[0,0]       # Access cell by indices
@@ -78,6 +85,8 @@ class TestXCellRange(CollectionsTestBase):
         self.assertEqual(3, rng.CellAddress.Row)
         self.assertEqual(7, rng.CellAddress.Column)
 
+        spr.close(True)
+
     # Tests syntax:
     #    cell = cellrange[0,0]       # Access cell by indices
     # For:
@@ -86,10 +95,10 @@ class TestXCellRange(CollectionsTestBase):
     def test_XCellRange_Table_Cell_37(self):
         # Given
         doc = self.createBlankTextDocument()
-        textTable = doc.createInstance('com.sun.star.text.TextTable')
-        textTable.initialize(10, 10)
+        text_table = getTextTableInstance(doc)
+        text_table.initialize(10, 10)
         cursor = doc.Text.createTextCursor()
-        doc.Text.insertTextContent(cursor, textTable, False)
+        doc.Text.insertTextContent(cursor, text_table, False)
         tbl = doc.TextTables.getByIndex(0)
 
         # When
@@ -97,6 +106,8 @@ class TestXCellRange(CollectionsTestBase):
 
         # Then
         self.assertEqual('H4', cell.CellName)
+
+        doc.close(True)
 
     # Tests syntax:
     #    rng = cellrange[0,1:2]      # Access cell range by index,slice
@@ -117,6 +128,8 @@ class TestXCellRange(CollectionsTestBase):
         self.assertEqual(0, rng.RangeAddress.EndRow)
         self.assertEqual(2, rng.RangeAddress.EndColumn)
 
+        spr.close(True)
+
     # Tests syntax:
     #    rng = cellrange[0,1:2]      # Access cell range by index,slice
     # For:
@@ -124,10 +137,10 @@ class TestXCellRange(CollectionsTestBase):
     def test_XCellRange_Table_Range_Index_Slice(self):
         # Given
         doc = self.createBlankTextDocument()
-        textTable = doc.createInstance('com.sun.star.text.TextTable')
-        textTable.initialize(10, 10)
+        text_table = getTextTableInstance(doc)
+        text_table.initialize(10, 10)
         cursor = doc.Text.createTextCursor()
-        doc.Text.insertTextContent(cursor, textTable, False)
+        doc.Text.insertTextContent(cursor, text_table, False)
         tbl = doc.TextTables.getByIndex(0)
         doc.lockControllers()
         tbl.DataArray = tuple(tuple(str(100 + y) for y in range(10*x, 10*x + 10)) for x in range(10))
@@ -138,6 +151,8 @@ class TestXCellRange(CollectionsTestBase):
 
         # Then
         self.assertEqual((('101', '102'),), rng.DataArray)
+
+        doc.close(True)
 
     # Tests syntax:
     #    rng = cellrange[1:2,0]      # Access cell range by slice,index
@@ -158,6 +173,8 @@ class TestXCellRange(CollectionsTestBase):
         self.assertEqual(2, rng.RangeAddress.EndRow)
         self.assertEqual(0, rng.RangeAddress.EndColumn)
 
+        spr.close(True)
+
     # Tests syntax:
     #    rng = cellrange[1:2,0]      # Access cell range by index,slice
     # For:
@@ -165,10 +182,10 @@ class TestXCellRange(CollectionsTestBase):
     def test_XCellRange_Table_Range_Slice_Index(self):
         # Given
         doc = self.createBlankTextDocument()
-        textTable = doc.createInstance('com.sun.star.text.TextTable')
-        textTable.initialize(10, 10)
+        text_table = getTextTableInstance(doc)
+        text_table.initialize(10, 10)
         cursor = doc.Text.createTextCursor()
-        doc.Text.insertTextContent(cursor, textTable, False)
+        doc.Text.insertTextContent(cursor, text_table, False)
         tbl = doc.TextTables.getByIndex(0)
         doc.lockControllers()
         tbl.DataArray = tuple(tuple(str(100 + y) for y in range(10*x, 10*x + 10)) for x in range(10))
@@ -179,6 +196,8 @@ class TestXCellRange(CollectionsTestBase):
 
         # Then
         self.assertEqual((('110',), ('120',)), rng.DataArray)
+
+        doc.close(True)
 
     # Tests syntax:
     #    rng = cellrange[0:1,2:3]    # Access cell range by slices
@@ -199,6 +218,8 @@ class TestXCellRange(CollectionsTestBase):
         self.assertEqual(2, rng.RangeAddress.EndRow)
         self.assertEqual(4, rng.RangeAddress.EndColumn)
 
+        spr.close(True)
+
     # Tests syntax:
     #    rng = cellrange[0:1,2:3]    # Access cell range by slices
     # For:
@@ -215,6 +236,8 @@ class TestXCellRange(CollectionsTestBase):
         with self.assertRaises(KeyError):
             rng = sht[1:3, 3:3]
 
+        spr.close(True)
+
     # Tests syntax:
     #    rng = cellrange[0:1,2:3]    # Access cell range by slices
     # For:
@@ -222,10 +245,10 @@ class TestXCellRange(CollectionsTestBase):
     def test_XCellRange_Table_Range_Slices(self):
         # Given
         doc = self.createBlankTextDocument()
-        textTable = doc.createInstance('com.sun.star.text.TextTable')
-        textTable.initialize(10, 10)
+        text_table = getTextTableInstance(doc)
+        text_table.initialize(10, 10)
         cursor = doc.Text.createTextCursor()
-        doc.Text.insertTextContent(cursor, textTable, False)
+        doc.Text.insertTextContent(cursor, text_table, False)
         tbl = doc.TextTables.getByIndex(0)
         doc.lockControllers()
         tbl.DataArray = tuple(tuple(str(100 + y) for y in range(10*x, 10*x + 10)) for x in range(10))
@@ -236,6 +259,8 @@ class TestXCellRange(CollectionsTestBase):
 
         # Then
         self.assertEqual((('113', '114'), ('123', '124')), rng.DataArray)
+
+        doc.close(True)
 
     # Tests syntax:
     #    rng = cellrange['A1:B2']    # Access cell range by descriptor
@@ -256,6 +281,8 @@ class TestXCellRange(CollectionsTestBase):
         self.assertEqual(3, rng.RangeAddress.EndRow)
         self.assertEqual(1, rng.RangeAddress.EndColumn)
 
+        spr.close(True)
+
     # Tests syntax:
     #    rng = cellrange['A1:B2']    # Access cell range by descriptor
     # For:
@@ -263,10 +290,10 @@ class TestXCellRange(CollectionsTestBase):
     def test_XCellRange_Table_Range_Descriptor(self):
         # Given
         doc = self.createBlankTextDocument()
-        textTable = doc.createInstance('com.sun.star.text.TextTable')
-        textTable.initialize(10, 10)
+        text_table = getTextTableInstance(doc)
+        text_table.initialize(10, 10)
         cursor = doc.Text.createTextCursor()
-        doc.Text.insertTextContent(cursor, textTable, False)
+        doc.Text.insertTextContent(cursor, text_table, False)
         tbl = doc.TextTables.getByIndex(0)
         doc.lockControllers()
         tbl.DataArray = tuple(tuple(str(100 + y) for y in range(10*x, 10*x + 10)) for x in range(10))
@@ -277,6 +304,8 @@ class TestXCellRange(CollectionsTestBase):
 
         # Then
         self.assertEqual((('120', '121'), ('130', '131')), rng.DataArray)
+
+        doc.close(True)
 
     # Tests syntax:
     #    rng = cellrange['Name']     # Access cell range by name
@@ -300,6 +329,8 @@ class TestXCellRange(CollectionsTestBase):
         self.assertEqual(9, rng.RangeAddress.EndRow)
         self.assertEqual(5, rng.RangeAddress.EndColumn)
 
+        spr.close(True)
+
     # Tests syntax:
     #    rng = cellrange[0]          # Access cell range by row index
     # For:
@@ -318,6 +349,8 @@ class TestXCellRange(CollectionsTestBase):
         self.assertEqual(0, rng.RangeAddress.StartColumn)
         self.assertEqual(0, rng.RangeAddress.EndRow)
         self.assertEqual(1023, rng.RangeAddress.EndColumn)
+
+        spr.close(True)
 
     # Tests syntax:
     #    rng = cellrange[0,:]        # Access cell range by row index
@@ -338,6 +371,8 @@ class TestXCellRange(CollectionsTestBase):
         self.assertEqual(0, rng.RangeAddress.EndRow)
         self.assertEqual(1023, rng.RangeAddress.EndColumn)
 
+        spr.close(True)
+
     # Tests syntax:
     #    rng = cellrange[:,0]        # Access cell range by column index
     # For:
@@ -356,6 +391,8 @@ class TestXCellRange(CollectionsTestBase):
         self.assertEqual(0, rng.RangeAddress.StartColumn)
         self.assertEqual(1048575, rng.RangeAddress.EndRow)
         self.assertEqual(0, rng.RangeAddress.EndColumn)
+
+        spr.close(True)
 
 
 if __name__ == '__main__':

@@ -25,9 +25,9 @@
 
 #include <vcl/svapp.hxx>
 
-#include "AccTreeEventListener.hxx"
-#include "AccObjectManagerAgent.hxx"
-#include "unomsaaevent.hxx"
+#include <AccTreeEventListener.hxx>
+#include <AccObjectManagerAgent.hxx>
+#include <unomsaaevent.hxx>
 
 using namespace com::sun::star::uno;
 using namespace com::sun::star::accessibility;
@@ -43,7 +43,7 @@ AccTreeEventListener::~AccTreeEventListener()
  *  Uno's event notifier when event is captured
  *  @param AccessibleEventObject    the event object which contains information about event
  */
-void  AccTreeEventListener::notifyEvent( const css::accessibility::AccessibleEventObject& aEvent ) throw (css::uno::RuntimeException)
+void  AccTreeEventListener::notifyEvent( const css::accessibility::AccessibleEventObject& aEvent )
 {
     SolarMutexGuard g;
 

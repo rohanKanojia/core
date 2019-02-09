@@ -20,12 +20,10 @@
 #define INCLUDED_CHART2_SOURCE_VIEW_AXES_VPOLARAXIS_HXX
 
 #include "VAxisBase.hxx"
+#include <memory>
 
 namespace chart
 {
-
-/**
-*/
 
 class PolarPlottingPositionHelper;
 
@@ -40,7 +38,7 @@ public:
 
     virtual bool isAnythingToDraw() override;
 
-    virtual ~VPolarAxis();
+    virtual ~VPolarAxis() override;
 
 protected:
     VPolarAxis( const AxisProperties& rAxisProperties
@@ -48,8 +46,8 @@ protected:
            , sal_Int32 nDimensionIndex, sal_Int32 nDimensionCount );
 
 protected: //member
-    PolarPlottingPositionHelper* m_pPosHelper;
-    ::std::vector< ExplicitIncrementData >   m_aIncrements;
+    std::unique_ptr<PolarPlottingPositionHelper> m_pPosHelper;
+    std::vector< ExplicitIncrementData >   m_aIncrements;
 };
 
 } //namespace chart

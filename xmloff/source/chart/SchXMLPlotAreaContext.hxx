@@ -19,7 +19,7 @@
 #ifndef INCLUDED_XMLOFF_SOURCE_CHART_SCHXMLPLOTAREACONTEXT_HXX
 #define INCLUDED_XMLOFF_SOURCE_CHART_SCHXMLPLOTAREACONTEXT_HXX
 
-#include "SchXMLImport.hxx"
+#include <SchXMLImport.hxx>
 #include "SchXMLChartContext.hxx"
 #include <xmloff/xmlictxt.hxx>
 #include <xmloff/shapeimport.hxx>
@@ -49,28 +49,22 @@ public:
     virtual ~SchXML3DSceneAttributesHelper();
 
     void getCameraDefaultFromDiagram( const css::uno::Reference< css::chart::XDiagram >& xDiagram );
-
-private:
-    SchXML3DSceneAttributesHelper();
 };
 
-class SchXMLPositonAttributesHelper
+class SchXMLPositionAttributesHelper
 {
 public:
-    explicit SchXMLPositonAttributesHelper( SvXMLImport& rImporter );
-    ~SchXMLPositonAttributesHelper();
+    explicit SchXMLPositionAttributesHelper( SvXMLImport& rImporter );
+    ~SchXMLPositionAttributesHelper();
 
     void readPositioningAttribute( sal_uInt16 nPrefix, const OUString& rLocalName, const OUString& rValue );
-    void readAutomaticPositioningProperties( XMLPropStyleContext* pPropStyleContext, const SvXMLStylesContext* pStylesCtxt );
+    void readAutomaticPositioningProperties( XMLPropStyleContext const * pPropStyleContext, const SvXMLStylesContext* pStylesCtxt );
 
     bool hasPosSize() const;
     bool isAutomatic() const;
     css::awt::Rectangle getRectangle() const { return css::awt::Rectangle( m_aPosition.X, m_aPosition.Y, m_aSize.Width, m_aSize.Height );}
 
 private:
-    bool hasSize() const;
-    bool hasPosition() const;
-
     SvXMLImport& m_rImport;
 
     css::awt::Point m_aPosition;
@@ -101,10 +95,10 @@ public:
                            const OUString& aChartTypeServiceName,
                            tSchXMLLSequencesPerIndex & rLSequencesPerIndex,
                            const css::awt::Size & rChartSize );
-    virtual ~SchXMLPlotAreaContext();
+    virtual ~SchXMLPlotAreaContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
-    virtual SvXMLImportContext* CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
@@ -123,8 +117,8 @@ private:
     GlobalSeriesImportInfo m_aGlobalSeriesImportInfo;
 
     SchXML3DSceneAttributesHelper maSceneImportHelper;
-    SchXMLPositonAttributesHelper m_aOuterPositioning;//including axes and axes titles
-    SchXMLPositonAttributesHelper m_aInnerPositioning;//excluding axes and axes titles
+    SchXMLPositionAttributesHelper m_aOuterPositioning;//including axes and axes titles
+    SchXMLPositionAttributesHelper m_aInnerPositioning;//excluding axes and axes titles
     bool mbPercentStacked;
     bool m_bAxisPositionAttributeImported;
     OUString msAutoStyleName;
@@ -134,29 +128,29 @@ private:
     bool & mrColHasLabels;
     bool & mrRowHasLabels;
     css::chart::ChartDataRowSource & mrDataRowSource;
-    OUString maChartTypeServiceName;
+    OUString const maChartTypeServiceName;
 
     tSchXMLLSequencesPerIndex & mrLSequencesPerIndex;
 
     bool mbGlobalChartTypeUsedBySeries;
-    css::awt::Size maChartSize;
+    css::awt::Size const maChartSize;
 };
 
 class SchXMLDataPointContext : public SvXMLImportContext
 {
 private:
-    ::std::list< DataRowPointStyle >& mrStyleList;
+    ::std::vector< DataRowPointStyle >& mrStyleVector;
     css::uno::Reference< css::chart2::XDataSeries > m_xSeries;
     sal_Int32& mrIndex;
-    bool mbSymbolSizeForSeriesIsMissingInFile;
+    bool const mbSymbolSizeForSeriesIsMissingInFile;
 
 public:
     SchXMLDataPointContext(  SvXMLImport& rImport, const OUString& rLocalName,
-                             ::std::list< DataRowPointStyle >& rStyleList,
+                             ::std::vector< DataRowPointStyle >& rStyleVector,
                              const css::uno::Reference< css::chart2::XDataSeries >& xSeries,
                              sal_Int32& rIndex,
                              bool bSymbolSizeForSeriesIsMissingInFile );
-    virtual ~SchXMLDataPointContext();
+    virtual ~SchXMLDataPointContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 };
@@ -168,12 +162,12 @@ public:
             SvXMLImport& rImport
             , sal_uInt16 nPrefix
             , const OUString& rLocalName
-            , SchXMLPositonAttributesHelper& rPositioning );
-    virtual ~SchXMLCoordinateRegionContext();
+            , SchXMLPositionAttributesHelper& rPositioning );
+    virtual ~SchXMLCoordinateRegionContext() override;
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 
 private:
-    SchXMLPositonAttributesHelper& m_rPositioning;
+    SchXMLPositionAttributesHelper& m_rPositioning;
 };
 
 class SchXMLWallFloorContext : public SvXMLImportContext
@@ -188,16 +182,16 @@ public:
 private:
     SchXMLImportHelper& mrImportHelper;
     css::uno::Reference< css::chart::X3DDisplay > mxWallFloorSupplier;
-    ContextType meContextType;
+    ContextType const meContextType;
 
 public:
     SchXMLWallFloorContext( SchXMLImportHelper& rImportHelper,
                             SvXMLImport& rImport,
                             sal_uInt16 nPrefix,
                             const OUString& rLocalName,
-                            css::uno::Reference< css::chart::XDiagram >& xDiagram,
+                            css::uno::Reference< css::chart::XDiagram > const & xDiagram,
                             ContextType eContextType );
-    virtual ~SchXMLWallFloorContext();
+    virtual ~SchXMLWallFloorContext() override;
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 };
 
@@ -214,16 +208,16 @@ public:
 private:
     SchXMLImportHelper& mrImportHelper;
     css::uno::Reference< css::chart::XStatisticDisplay > mxStockPropProvider;
-    ContextType meContextType;
+    ContextType const meContextType;
 
 public:
     SchXMLStockContext( SchXMLImportHelper& rImportHelper,
                         SvXMLImport& rImport,
                         sal_uInt16 nPrefix,
                         const OUString& rLocalName,
-                        css::uno::Reference< css::chart::XDiagram >& xDiagram,
+                        css::uno::Reference< css::chart::XDiagram > const & xDiagram,
                         ContextType eContextType );
-    virtual ~SchXMLStockContext();
+    virtual ~SchXMLStockContext() override;
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 };
 
@@ -242,25 +236,21 @@ public:
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const OUString &rSeriesStyleName,
-        ::std::list< DataRowPointStyle >& rStyleList,
+        ::std::vector< DataRowPointStyle >& rStyleVector,
         const css::uno::Reference< css::chart2::XDataSeries >& xSeries,
         ContextType eContextType,
         tSchXMLLSequencesPerIndex & rLSequencesPerIndex );
 
-    virtual ~SchXMLStatisticsObjectContext();
+    virtual ~SchXMLStatisticsObjectContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
-    virtual SvXMLImportContext* CreateChildContext(
-        sal_uInt16 nPrefix,
-        const OUString& rLocalName,
-        const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 
 private:
     SchXMLImportHelper &                           mrImportHelper;
-    ::std::list< DataRowPointStyle > &             mrStyleList;
+    ::std::vector< DataRowPointStyle > &           mrStyleVector;
     css::uno::Reference< css::chart2::XDataSeries > m_xSeries;
-    ContextType                                    meContextType;
-    OUString maSeriesStyleName;
+    ContextType const                              meContextType;
+    OUString const maSeriesStyleName;
     tSchXMLLSequencesPerIndex& mrLSequencesPerIndex;
 };
 

@@ -20,6 +20,7 @@
 #ifndef INCLUDED_SW_SOURCE_UI_VBA_VBAPALETTE_HXX
 #define INCLUDED_SW_SOURCE_UI_VBA_VBAPALETTE_HXX
 #include <vbahelper/vbahelper.hxx>
+#include <com/sun/star/container/XIndexAccess.hpp>
 
 class VbaPalette
 {
@@ -28,7 +29,7 @@ public:
         VbaPalette();
         // if no palette available e.g. because the document doesn't have a
         // palette defined then a default palette will be returned.
-        css::uno::Reference< css::container::XIndexAccess > getPalette() const { return mxPalette;}
+        const css::uno::Reference< css::container::XIndexAccess >& getPalette() const { return mxPalette;}
 };
 
 #endif

@@ -30,25 +30,25 @@ namespace oox { namespace drawingml {
 class clrMapContext : public oox::core::ContextHandler2
 {
 public:
-    clrMapContext( ::oox::core::ContextHandler2Helper& rParent,
+    clrMapContext( ::oox::core::ContextHandler2Helper const & rParent,
         const ::oox::AttributeList& rAttributes, ClrMap& rClrMap );
 };
 
 class clrSchemeColorContext : private Color, public ColorContext
 {
 public:
-    clrSchemeColorContext( ::oox::core::ContextHandler2Helper& rParent, ClrScheme& rClrScheme, sal_Int32 nColorToken );
-    virtual ~clrSchemeColorContext();
+    clrSchemeColorContext( ::oox::core::ContextHandler2Helper const & rParent, ClrScheme& rClrScheme, sal_Int32 nColorToken );
+    virtual ~clrSchemeColorContext() override;
 
 private:
     ClrScheme&      mrClrScheme;
-    sal_Int32       mnColorToken;
+    sal_Int32 const mnColorToken;
 };
 
 class clrSchemeContext : public oox::core::ContextHandler2
 {
 public:
-    clrSchemeContext( ::oox::core::ContextHandler2Helper& rParent, ClrScheme& rClrScheme );
+    clrSchemeContext( ::oox::core::ContextHandler2Helper const & rParent, ClrScheme& rClrScheme );
     virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 
 private:

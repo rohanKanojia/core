@@ -21,11 +21,12 @@
 #include <unotools/accessiblestatesethelper.hxx>
 #include <com/sun/star/awt/XControl.hpp>
 #include <com/sun/star/awt/XWindow.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <vcl/svapp.hxx>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <toolkit/helper/vclunohelper.hxx>
-#include <toolkit/helper/externallock.hxx>
 #include <vcl/window.hxx>
 
 
@@ -45,7 +46,6 @@ namespace toolkit
 
 
     OAccessibleControlContext::OAccessibleControlContext()
-        : OAccessibleControlContext_Base(new VCLExternalSolarLock)
     {
         // nothing to do here, we have a late ctor
     }
@@ -118,57 +118,53 @@ namespace toolkit
     }
 
 
-    sal_Int32 SAL_CALL OAccessibleControlContext::getAccessibleChildCount(  ) throw (RuntimeException, std::exception)
+    sal_Int32 SAL_CALL OAccessibleControlContext::getAccessibleChildCount(  )
     {
         // we do not have children
         return 0;
     }
 
 
-    Reference< XAccessible > SAL_CALL OAccessibleControlContext::getAccessibleChild( sal_Int32 ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+    Reference< XAccessible > SAL_CALL OAccessibleControlContext::getAccessibleChild( sal_Int32 )
     {
         // we do not have children
         throw IndexOutOfBoundsException();
     }
 
 
-    Reference< XAccessible > SAL_CALL OAccessibleControlContext::getAccessibleParent(  ) throw (RuntimeException, std::exception)
+    Reference< XAccessible > SAL_CALL OAccessibleControlContext::getAccessibleParent(  )
     {
-        OContextEntryGuard aGuard( this );
-        OSL_ENSURE( implGetForeignControlledParent().is(), "OAccessibleControlContext::getAccessibleParent: somebody forgot to set a parent!" );
-            // this parent of us is foreign controlled - somebody has to set it using the OAccessibleImplementationAccess
-            // class, before integrating our instance into an AccessibleDocumentModel
-        return implGetForeignControlledParent();
+        return Reference< XAccessible >();
     }
 
 
-    sal_Int16 SAL_CALL OAccessibleControlContext::getAccessibleRole(  ) throw (RuntimeException, std::exception)
+    sal_Int16 SAL_CALL OAccessibleControlContext::getAccessibleRole(  )
     {
         return AccessibleRole::SHAPE;
     }
 
 
-    OUString SAL_CALL OAccessibleControlContext::getAccessibleDescription(  ) throw (RuntimeException, std::exception)
+    OUString SAL_CALL OAccessibleControlContext::getAccessibleDescription(  )
     {
         OContextEntryGuard aGuard( this );
         return getModelStringProperty( "HelpText" );
     }
 
 
-    OUString SAL_CALL OAccessibleControlContext::getAccessibleName(  ) throw (RuntimeException, std::exception)
+    OUString SAL_CALL OAccessibleControlContext::getAccessibleName(  )
     {
         OContextEntryGuard aGuard( this );
         return getModelStringProperty( "Name" );
     }
 
 
-    Reference< XAccessibleRelationSet > SAL_CALL OAccessibleControlContext::getAccessibleRelationSet(  ) throw (RuntimeException, std::exception)
+    Reference< XAccessibleRelationSet > SAL_CALL OAccessibleControlContext::getAccessibleRelationSet(  )
     {
         return nullptr;
     }
 
 
-    Reference< XAccessibleStateSet > SAL_CALL OAccessibleControlContext::getAccessibleStateSet(  ) throw (RuntimeException, std::exception)
+    Reference< XAccessibleStateSet > SAL_CALL OAccessibleControlContext::getAccessibleStateSet(  )
     {
         ::osl::MutexGuard aGuard( GetMutex() );
             // no OContextEntryGuard here, as we do not want to throw an exception in case we're not alive anymore
@@ -177,7 +173,7 @@ namespace toolkit
         if ( isAlive() )
         {
             // no own states, only the ones which are foreign controlled
-            pStateSet = new ::utl::AccessibleStateSetHelper( implGetForeignControlledStates() );
+            pStateSet = new ::utl::AccessibleStateSetHelper( 0 );
         }
         else
         {   // only the DEFUNC state if we're already disposed
@@ -188,7 +184,7 @@ namespace toolkit
     }
 
 
-    void SAL_CALL OAccessibleControlContext::disposing( const EventObject& _rSource ) throw ( RuntimeException, std::exception )
+    void SAL_CALL OAccessibleControlContext::disposing( const EventObject& _rSource )
     {
         OSL_ENSURE( Reference< XPropertySet >( _rSource.Source, UNO_QUERY ).get() == m_xControlModel.get(),
             "OAccessibleControlContext::disposing: where did this come from?" );
@@ -237,7 +233,7 @@ namespace toolkit
     }
 
 
-    awt::Rectangle OAccessibleControlContext::implGetBounds(  ) throw (RuntimeException)
+    awt::Rectangle OAccessibleControlContext::implGetBounds(  )
     {
         SolarMutexGuard aSolarGuard;
             // want to do some VCL stuff here ...
@@ -276,52 +272,43 @@ namespace toolkit
             if ( pVCLParent )
                 aVCLParentScreenPos = pVCLParent->GetPosPixel();
 
-            // the screen position of the "accessible parent" of the control
-            Reference< XAccessible > xParentAcc( implGetForeignControlledParent() );
-            Reference< XAccessibleComponent > xParentAccComponent;
-            if ( xParentAcc.is() )
-                xParentAccComponent.set(xParentAcc->getAccessibleContext(), css::uno::UNO_QUERY);
-            awt::Point aAccParentScreenPos( 0, 0 );
-            if ( xParentAccComponent.is() )
-                aAccParentScreenPos = xParentAccComponent->getLocationOnScreen();
-
             // now the size of the control
             aBounds = xWindow->getPosSize();
 
             // correct the pos
-            aBounds.X = aWindowRelativePos.X() + aVCLParentScreenPos.X() - aAccParentScreenPos.X;
-            aBounds.Y = aWindowRelativePos.Y() + aVCLParentScreenPos.Y() - aAccParentScreenPos.Y;
+            aBounds.X = aWindowRelativePos.X() + aVCLParentScreenPos.X();
+            aBounds.Y = aWindowRelativePos.Y() + aVCLParentScreenPos.Y();
         }
 
         return aBounds;
     }
 
 
-    Reference< XAccessible > SAL_CALL OAccessibleControlContext::getAccessibleAtPoint( const awt::Point& /* _rPoint */ ) throw (RuntimeException, std::exception)
+    Reference< XAccessible > SAL_CALL OAccessibleControlContext::getAccessibleAtPoint( const awt::Point& /* _rPoint */ )
     {
         // no children at all
         return nullptr;
     }
 
 
-    void SAL_CALL OAccessibleControlContext::grabFocus(  ) throw (RuntimeException, std::exception)
+    void SAL_CALL OAccessibleControlContext::grabFocus(  )
     {
         OSL_FAIL( "OAccessibleControlContext::grabFocus: !isFocusTraversable, but grabFocus!" );
     }
 
 
-    sal_Int32 SAL_CALL OAccessibleControlContext::getForeground(  ) throw (css::uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL OAccessibleControlContext::getForeground(  )
     {
         SolarMutexGuard aSolarGuard;
             // want to do some VCL stuff here ...
         OContextEntryGuard aGuard( this );
 
         VclPtr< vcl::Window > pWindow = implGetWindow();
-        sal_Int32 nColor = 0;
+        Color nColor;
         if ( pWindow )
         {
             if ( pWindow->IsControlForeground() )
-                nColor = pWindow->GetControlForeground().GetColor();
+                nColor = pWindow->GetControlForeground();
             else
             {
                 vcl::Font aFont;
@@ -329,30 +316,30 @@ namespace toolkit
                     aFont = pWindow->GetControlFont();
                 else
                     aFont = pWindow->GetFont();
-                nColor = aFont.GetColor().GetColor();
+                nColor = aFont.GetColor();
             }
         }
-        return nColor;
+        return sal_Int32(nColor);
     }
 
 
-    sal_Int32 SAL_CALL OAccessibleControlContext::getBackground(  ) throw (css::uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL OAccessibleControlContext::getBackground(  )
     {
         SolarMutexGuard aSolarGuard;
             // want to do some VCL stuff here ...
         OContextEntryGuard aGuard( this );
 
         VclPtr< vcl::Window > pWindow = implGetWindow();
-        sal_Int32 nColor = 0;
+        Color nColor;
         if ( pWindow )
         {
             if ( pWindow->IsControlBackground() )
-                nColor = pWindow->GetControlBackground().GetColor();
+                nColor = pWindow->GetControlBackground();
             else
-                nColor = pWindow->GetBackground().GetColor().GetColor();
+                nColor = pWindow->GetBackground().GetColor();
         }
 
-        return nColor;
+        return sal_Int32(nColor);
     }
 
 

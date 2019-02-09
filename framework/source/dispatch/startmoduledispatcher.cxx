@@ -21,32 +21,26 @@
 
 #include <pattern/frame.hxx>
 #include <framework/framelistanalyzer.hxx>
-#include <dispatchcommands.h>
 #include <targets.h>
 #include <services.h>
 #include <general.h>
+#include "isstartmoduledispatch.hxx"
 
 #include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/frame/XController.hpp>
-#include <com/sun/star/frame/CommandGroup.hpp>
 #include <com/sun/star/frame/StartModule.hpp>
 #include <com/sun/star/awt/XTopWindow.hpp>
 #include <com/sun/star/beans/XFastPropertySet.hpp>
-#include <com/sun/star/frame/XModuleManager.hpp>
 
-#include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/window.hxx>
 #include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
 #include <unotools/moduleoptions.hxx>
-#include <comphelper/processfactory.hxx>
 
 namespace framework{
 
 #ifdef fpf
     #error "Who uses \"fpf\" as define. It will overwrite my namespace alias ..."
 #endif
-namespace fpf = ::framework::pattern::frame;
 
 StartModuleDispatcher::StartModuleDispatcher(const css::uno::Reference< css::uno::XComponentContext >&     rxContext)
     : m_xContext         (rxContext                         )
@@ -59,7 +53,6 @@ StartModuleDispatcher::~StartModuleDispatcher()
 
 void SAL_CALL StartModuleDispatcher::dispatch(const css::util::URL&                                  aURL      ,
                                               const css::uno::Sequence< css::beans::PropertyValue >& lArguments)
-    throw(css::uno::RuntimeException, std::exception)
 {
     dispatchWithNotification(aURL, lArguments, css::uno::Reference< css::frame::XDispatchResultListener >());
 }
@@ -67,16 +60,15 @@ void SAL_CALL StartModuleDispatcher::dispatch(const css::util::URL&             
 void SAL_CALL StartModuleDispatcher::dispatchWithNotification(const css::util::URL&                                             aURL      ,
                                                               const css::uno::Sequence< css::beans::PropertyValue >&            /*lArguments*/,
                                                               const css::uno::Reference< css::frame::XDispatchResultListener >& xListener )
-    throw(css::uno::RuntimeException, std::exception)
 {
     ::sal_Int16 nResult = css::frame::DispatchResultState::DONTKNOW;
-    if ( aURL.Complete == CMD_UNO_SHOWSTARTMODULE )
+    if (isStartModuleDispatch(aURL))
     {
         nResult = css::frame::DispatchResultState::FAILURE;
         if (implts_isBackingModePossible ())
         {
-            if (implts_establishBackingMode ())
-                nResult = css::frame::DispatchResultState::SUCCESS;
+            implts_establishBackingMode ();
+            nResult = css::frame::DispatchResultState::SUCCESS;
         }
     }
 
@@ -84,26 +76,22 @@ void SAL_CALL StartModuleDispatcher::dispatchWithNotification(const css::util::U
 }
 
 css::uno::Sequence< ::sal_Int16 > SAL_CALL StartModuleDispatcher::getSupportedCommandGroups()
-    throw(css::uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence< ::sal_Int16 >();
 }
 
 css::uno::Sequence< css::frame::DispatchInformation > SAL_CALL StartModuleDispatcher::getConfigurableDispatchInformation(::sal_Int16 /*nCommandGroup*/)
-    throw(css::uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence< css::frame::DispatchInformation >();
 }
 
 void SAL_CALL StartModuleDispatcher::addStatusListener(const css::uno::Reference< css::frame::XStatusListener >& /*xListener*/,
                                                        const css::util::URL&                                     /*aURL*/     )
-    throw(css::uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL StartModuleDispatcher::removeStatusListener(const css::uno::Reference< css::frame::XStatusListener >& /*xListener*/,
                                                           const css::util::URL&                                     /*aURL*/     )
-    throw(css::uno::RuntimeException, std::exception)
 {
 }
 
@@ -118,7 +106,7 @@ bool StartModuleDispatcher::implts_isBackingModePossible()
     FrameListAnalyzer aCheck(
         xDesktop,
         css::uno::Reference< css::frame::XFrame >(),
-        FrameListAnalyzer::E_HELP | FrameListAnalyzer::E_BACKINGCOMPONENT);
+        FrameAnalyzerFlags::Help | FrameAnalyzerFlags::BackingComponent);
 
     bool  bIsPossible    = false;
 
@@ -131,7 +119,7 @@ bool StartModuleDispatcher::implts_isBackingModePossible()
     return bIsPossible;
 }
 
-bool StartModuleDispatcher::implts_establishBackingMode()
+void StartModuleDispatcher::implts_establishBackingMode()
 {
     css::uno::Reference< css::frame::XDesktop2> xDesktop       = css::frame::Desktop::create( m_xContext );
     css::uno::Reference< css::frame::XFrame > xFrame           = xDesktop->findFrame(SPECIALTARGET_BLANK, 0);
@@ -141,9 +129,7 @@ bool StartModuleDispatcher::implts_establishBackingMode()
     css::uno::Reference< css::awt::XWindow > xComponentWindow(xStartModule, css::uno::UNO_QUERY);
     xFrame->setComponent(xComponentWindow, xStartModule);
     xStartModule->attachFrame(xFrame);
-    xContainerWindow->setVisible(sal_True);
-
-    return true;
+    xContainerWindow->setVisible(true);
 }
 
 void StartModuleDispatcher::implts_notifyResultListener(const css::uno::Reference< css::frame::XDispatchResultListener >& xListener,

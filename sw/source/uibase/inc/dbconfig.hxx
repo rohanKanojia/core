@@ -20,22 +20,22 @@
 #define INCLUDED_SW_SOURCE_UIBASE_INC_DBCONFIG_HXX
 
 #include <unotools/configitem.hxx>
-#include "swdllapi.h"
+#include <swdllapi.h>
 
 struct SwDBData;
 
 class SW_DLLPUBLIC SwDBConfig : public utl::ConfigItem
 {
 private:
-    SAL_DLLPRIVATE const css::uno::Sequence<OUString>& GetPropertyNames();
+    SAL_DLLPRIVATE static const css::uno::Sequence<OUString>& GetPropertyNames();
     virtual void ImplCommit() override;
 
-    SwDBData*       pAdrImpl;
-    SwDBData*       pBibImpl;
+    std::unique_ptr<SwDBData> pAdrImpl;
+    std::unique_ptr<SwDBData> pBibImpl;
 
 public:
     SwDBConfig();
-    virtual ~SwDBConfig();
+    virtual ~SwDBConfig() override;
 
     void                    Load();
     const SwDBData&         GetAddressSource();

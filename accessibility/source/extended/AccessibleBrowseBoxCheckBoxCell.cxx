@@ -17,25 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <accessibility/extended/AccessibleBrowseBoxCheckBoxCell.hxx>
+#include <extended/AccessibleBrowseBoxCheckBoxCell.hxx>
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
-#include <svtools/accessibletableprovider.hxx>
+#include <vcl/accessibletableprovider.hxx>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 
 namespace accessibility
 {
     using namespace com::sun::star::accessibility;
     using namespace com::sun::star::uno;
     using namespace com::sun::star::accessibility::AccessibleEventId;
-    using namespace ::svt;
 
     AccessibleCheckBoxCell::AccessibleCheckBoxCell(const Reference<XAccessible >& _rxParent,
-                                IAccessibleTableProvider& _rBrowseBox,
+                                vcl::IAccessibleTableProvider& _rBrowseBox,
                                 const css::uno::Reference< css::awt::XWindow >& _xFocusWindow,
                                 sal_Int32 _nRowPos,
                                 sal_uInt16 _nColPos
                                 ,const TriState& _eState,
                                 bool _bIsTriState)
-        :AccessibleBrowseBoxCell(_rxParent, _rBrowseBox, _xFocusWindow, _nRowPos, _nColPos, BBTYPE_CHECKBOXCELL)
+        :AccessibleBrowseBoxCell(_rxParent, _rBrowseBox, _xFocusWindow, _nRowPos, _nColPos, vcl::BBTYPE_CHECKBOXCELL)
         ,m_eState(_eState)
         ,m_bIsTriState(_bIsTriState)
     {
@@ -44,8 +44,9 @@ namespace accessibility
 
     IMPLEMENT_FORWARD_XTYPEPROVIDER2( AccessibleCheckBoxCell, AccessibleBrowseBoxCell, AccessibleCheckBoxCell_BASE )
 
-    Reference< XAccessibleContext > SAL_CALL AccessibleCheckBoxCell::getAccessibleContext(  ) throw (RuntimeException, std::exception)
+    Reference< XAccessibleContext > SAL_CALL AccessibleCheckBoxCell::getAccessibleContext(  )
     {
+        osl::MutexGuard aGuard( getMutex() );
         ensureIsAlive();
         return this;
     }
@@ -66,9 +67,9 @@ namespace accessibility
 
     // XAccessibleValue
 
-    Any SAL_CALL AccessibleCheckBoxCell::getCurrentValue(  ) throw (RuntimeException, std::exception)
+    Any SAL_CALL AccessibleCheckBoxCell::getCurrentValue(  )
     {
-        ::osl::MutexGuard aGuard( getOslMutex() );
+        ::osl::MutexGuard aGuard( getMutex() );
 
         sal_Int32 nValue = 0;
         switch( m_eState )
@@ -83,56 +84,56 @@ namespace accessibility
                 nValue = 2;
                 break;
         }
-        return makeAny(nValue);
+        return Any(nValue);
     }
 
-    sal_Bool SAL_CALL AccessibleCheckBoxCell::setCurrentValue( const Any& ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL AccessibleCheckBoxCell::setCurrentValue( const Any& )
     {
         return false;
     }
 
-    Any SAL_CALL AccessibleCheckBoxCell::getMaximumValue(  ) throw (RuntimeException, std::exception)
+    Any SAL_CALL AccessibleCheckBoxCell::getMaximumValue(  )
     {
-        ::osl::MutexGuard aGuard( getOslMutex() );
+        ::osl::MutexGuard aGuard( getMutex() );
 
         Any aValue;
 
         if ( m_bIsTriState )
-            aValue <<= (sal_Int32) 2;
+            aValue <<= sal_Int32(2);
         else
-            aValue <<= (sal_Int32) 1;
+            aValue <<= sal_Int32(1);
 
         return aValue;
     }
 
-    Any SAL_CALL AccessibleCheckBoxCell::getMinimumValue(  ) throw (RuntimeException, std::exception)
+    Any SAL_CALL AccessibleCheckBoxCell::getMinimumValue(  )
     {
         Any aValue;
-        aValue <<= (sal_Int32) 0;
+        aValue <<= sal_Int32(0);
 
         return aValue;
     }
 
     // XAccessibleContext
-    sal_Int32 SAL_CALL AccessibleCheckBoxCell::getAccessibleChildCount(  ) throw (css::uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL AccessibleCheckBoxCell::getAccessibleChildCount(  )
     {
         return 0;
     }
 
-    css::uno::Reference< css::accessibility::XAccessible > SAL_CALL AccessibleCheckBoxCell::getAccessibleChild( sal_Int32 ) throw (css::lang::IndexOutOfBoundsException, css::uno::RuntimeException, std::exception)
+    css::uno::Reference< css::accessibility::XAccessible > SAL_CALL AccessibleCheckBoxCell::getAccessibleChild( sal_Int32 )
     {
         throw css::lang::IndexOutOfBoundsException();
     }
 
-    OUString SAL_CALL AccessibleCheckBoxCell::getImplementationName() throw ( css::uno::RuntimeException, std::exception )
+    OUString SAL_CALL AccessibleCheckBoxCell::getImplementationName()
     {
         return OUString( "com.sun.star.comp.svtools.TableCheckBoxCell" );
     }
 
     sal_Int32 SAL_CALL AccessibleCheckBoxCell::getAccessibleIndexInParent()
-            throw ( css::uno::RuntimeException, std::exception )
     {
-        ::osl::MutexGuard aGuard( getOslMutex() );
+        ::osl::MutexGuard aGuard( getMutex() );
+        ensureIsAlive();
 
         return ( getRowPos() * mpBrowseBox->GetColumnCount() ) + getColumnPos();
     }

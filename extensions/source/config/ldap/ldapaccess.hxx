@@ -20,11 +20,14 @@
 #ifndef INCLUDED_EXTENSIONS_SOURCE_CONFIG_LDAP_LDAPACCESS_HXX
 #define INCLUDED_EXTENSIONS_SOURCE_CONFIG_LDAP_LDAPACCESS_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <map>
 
 #ifdef _WIN32
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <winldap.h>
 #else // !defined WNT
@@ -82,10 +85,11 @@ public:
     LdapConnection() : mConnection(nullptr),mLdapDefinition() {}
     /** Destructor, releases the connection */
     ~LdapConnection() ;
-    /** Make connection to LDAP server */
-    void  connectSimple(const LdapDefinition& aDefinition)
-        throw (ldap::LdapConnectionException,
-                ldap::LdapGenericException);
+    /** Make connection to LDAP server
+        @throws ldap::LdapConnectionException
+        @throws ldap::LdapGenericException
+    */
+    void  connectSimple(const LdapDefinition& aDefinition);
 
     /**
         Gets LdapUserProfile from LDAP repository for specified user
@@ -96,23 +100,19 @@ public:
          @throws css::ldap::LdapGenericException
                   if an LDAP error occurs.
     */
-    void getUserProfile(const OUString& aUser, LdapData * data)
-         throw (lang::IllegalArgumentException,
-                 ldap::LdapConnectionException,
-                 ldap::LdapGenericException);
+    void getUserProfile(const OUString& aUser, LdapData * data);
 
     /** finds DN of user
         @return  DN of User
+        @throws lang::IllegalArgumentException
+        @throws ldap::LdapConnectionException
+        @throws ldap::LdapGenericException
     */
-    OUString findUserDn(const OUString& aUser)
-        throw (lang::IllegalArgumentException,
-                ldap::LdapConnectionException,
-                ldap::LdapGenericException);
+    OUString findUserDn(const OUString& aUser);
 
 private:
-
-    void initConnection()
-         throw (ldap::LdapConnectionException);
+    /// @throws ldap::LdapConnectionException
+    void initConnection();
     void disconnect();
     /**
       Indicates whether the connection is in a valid state.
@@ -120,9 +120,9 @@ private:
       */
     bool isValid() const { return mConnection != nullptr ; }
 
-    void  connectSimple()
-        throw (ldap::LdapConnectionException,
-                ldap::LdapGenericException);
+    /// @throws ldap::LdapConnectionException
+    /// @throws ldap::LdapGenericException
+    void  connectSimple();
 
     /** LDAP connection object */
     LDAP* mConnection ;

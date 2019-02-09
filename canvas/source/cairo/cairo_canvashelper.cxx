@@ -18,6 +18,7 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <algorithm>
 #include <tuple>
@@ -27,9 +28,9 @@
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/polygon/b2dpolypolygon.hxx>
-#include <basegfx/tools/canvastools.hxx>
-#include <basegfx/tools/keystoplerp.hxx>
-#include <basegfx/tools/lerp.hxx>
+#include <basegfx/utils/canvastools.hxx>
+#include <basegfx/utils/keystoplerp.hxx>
+#include <basegfx/utils/lerp.hxx>
 #include <com/sun/star/rendering/ColorComponentTag.hpp>
 #include <com/sun/star/rendering/ColorSpaceType.hpp>
 #include <com/sun/star/rendering/CompositeOperation.hpp>
@@ -48,6 +49,7 @@
 #include <tools/diagnose_ex.h>
 #include <vcl/bitmapex.hxx>
 #include <vcl/bitmapaccess.hxx>
+#include <vcl/BitmapTools.hxx>
 #include <vcl/canvastools.hxx>
 #include <vcl/virdev.hxx>
 
@@ -276,7 +278,7 @@ namespace cairocanvas
             useStates( viewState, renderState, true );
 
             cairo_move_to( mpCairo.get(), aBezierSegment.Px + 0.5, aBezierSegment.Py + 0.5 );
-            // tdf#99165 correction of control poinits not needed here, only hairlines drawn
+            // tdf#99165 correction of control points not needed here, only hairlines drawn
             // (see cairo_set_line_width above)
             cairo_curve_to( mpCairo.get(),
                             aBezierSegment.C1x + 0.5, aBezierSegment.C1y + 0.5,
@@ -328,71 +330,6 @@ namespace cairocanvas
         return ::BitmapEx();
     }
 
-    static sal_uInt8 lcl_GetColor(BitmapColor const& rColor)
-    {
-        sal_uInt8 nTemp(0);
-        if (rColor.IsIndex())
-        {
-            nTemp = rColor.GetIndex();
-        }
-        else
-        {
-            nTemp = rColor.GetBlue();
-            // greyscale expected here, or what would non-grey colors mean?
-            assert(rColor.GetRed() == nTemp && rColor.GetGreen() == nTemp);
-        }
-        return nTemp;
-    }
-
-    static bool readAlpha( BitmapReadAccess* pAlphaReadAcc, long nY, const long nWidth, unsigned char* data, long nOff )
-    {
-        bool bIsAlpha = false;
-        long nX;
-        int nAlpha;
-        Scanline pReadScan;
-
-        nOff += 3;
-
-        switch( pAlphaReadAcc->GetScanlineFormat() )
-        {
-            case BMP_FORMAT_8BIT_TC_MASK:
-                pReadScan = pAlphaReadAcc->GetScanline( nY );
-                for( nX = 0; nX < nWidth; nX++ )
-                {
-                    nAlpha = data[ nOff ] = 255 - ( *pReadScan++ );
-                    if( nAlpha != 255 )
-                        bIsAlpha = true;
-                    nOff += 4;
-                }
-                break;
-            case BMP_FORMAT_8BIT_PAL:
-                pReadScan = pAlphaReadAcc->GetScanline( nY );
-                for( nX = 0; nX < nWidth; nX++ )
-                {
-                    BitmapColor const& rColor(
-                        pAlphaReadAcc->GetPaletteColor(*pReadScan));
-                    pReadScan++;
-                    nAlpha = data[ nOff ] = 255 - lcl_GetColor(rColor);
-                    if( nAlpha != 255 )
-                        bIsAlpha = true;
-                    nOff += 4;
-                }
-                break;
-            default:
-                SAL_INFO( "canvas.cairo", "fallback to GetColor for alpha - slow, format: " << pAlphaReadAcc->GetScanlineFormat() );
-                for( nX = 0; nX < nWidth; nX++ )
-                {
-                    nAlpha = data[ nOff ] = 255 - pAlphaReadAcc->GetColor( nY, nX ).GetIndex();
-                    if( nAlpha != 255 )
-                        bIsAlpha = true;
-                    nOff += 4;
-                }
-        }
-
-        return bIsAlpha;
-    }
-
-
     /** surfaceFromXBitmap Create a surface from XBitmap
      * @param xBitmap bitmap image that will be used for the surface
      * @param rDevice reference to the device into which we want to draw
@@ -427,239 +364,27 @@ namespace cairocanvas
 
             if( !pSurface )
             {
-                AlphaMask aAlpha = aBmpEx.GetAlpha();
-
-                ::BitmapReadAccess* pBitmapReadAcc = aBitmap.AcquireReadAccess();
-                ::BitmapReadAccess* pAlphaReadAcc = nullptr;
-                const long      nWidth = pBitmapReadAcc->Width();
-                const long      nHeight = pBitmapReadAcc->Height();
-                long nX, nY;
-                bool bIsAlpha = false;
-
-                if( aBmpEx.IsTransparent() || aBmpEx.IsAlpha() )
-                    pAlphaReadAcc = aAlpha.AcquireReadAccess();
-
-                data = static_cast<unsigned char*>(malloc( nWidth*nHeight*4 ));
-
-                long nOff = 0;
-                ::Color aColor;
-                unsigned int nAlpha = 255;
-
-                for( nY = 0; nY < nHeight; nY++ )
-                {
-                    ::Scanline pReadScan;
-
-                    switch( pBitmapReadAcc->GetScanlineFormat() )
-                    {
-                    case BMP_FORMAT_8BIT_PAL:
-                        pReadScan = pBitmapReadAcc->GetScanline( nY );
-                        if( pAlphaReadAcc )
-                            if( readAlpha( pAlphaReadAcc, nY, nWidth, data, nOff ) )
-                                bIsAlpha = true;
-
-                        for( nX = 0; nX < nWidth; nX++ )
-                        {
-#ifdef OSL_BIGENDIAN
-                            if( pAlphaReadAcc )
-                                nAlpha = data[ nOff++ ];
-                            else
-                                nAlpha = data[ nOff++ ] = 255;
-#else
-                            if( pAlphaReadAcc )
-                                nAlpha = data[ nOff + 3 ];
-                            else
-                                nAlpha = data[ nOff + 3 ] = 255;
-#endif
-                            aColor = pBitmapReadAcc->GetPaletteColor( *pReadScan++ );
-
-#ifdef OSL_BIGENDIAN
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( aColor.GetRed() ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( aColor.GetGreen() ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( aColor.GetBlue() ) )/255 );
-#else
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( aColor.GetBlue() ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( aColor.GetGreen() ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( aColor.GetRed() ) )/255 );
-                            nOff++;
-#endif
-                        }
-                        break;
-                    case BMP_FORMAT_24BIT_TC_BGR:
-                        pReadScan = pBitmapReadAcc->GetScanline( nY );
-                        if( pAlphaReadAcc )
-                            if( readAlpha( pAlphaReadAcc, nY, nWidth, data, nOff ) )
-                                bIsAlpha = true;
-
-                        for( nX = 0; nX < nWidth; nX++ )
-                        {
-#ifdef OSL_BIGENDIAN
-                            if( pAlphaReadAcc )
-                                nAlpha = data[ nOff ];
-                            else
-                                nAlpha = data[ nOff ] = 255;
-                            data[ nOff + 3 ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-                            data[ nOff + 2 ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-                            data[ nOff + 1 ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-                            nOff += 4;
-#else
-                            if( pAlphaReadAcc )
-                                nAlpha = data[ nOff + 3 ];
-                            else
-                                nAlpha = data[ nOff + 3 ] = 255;
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-                            nOff++;
-#endif
-                        }
-                        break;
-                    case BMP_FORMAT_24BIT_TC_RGB:
-                        pReadScan = pBitmapReadAcc->GetScanline( nY );
-                        if( pAlphaReadAcc )
-                            if( readAlpha( pAlphaReadAcc, nY, nWidth, data, nOff ) )
-                                bIsAlpha = true;
-
-                        for( nX = 0; nX < nWidth; nX++ )
-                        {
-#ifdef OSL_BIGENDIAN
-                            if( pAlphaReadAcc )
-                                nAlpha = data[ nOff++ ];
-                            else
-                                nAlpha = data[ nOff++ ] = 255;
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-#else
-                            if( pAlphaReadAcc )
-                                nAlpha = data[ nOff + 3 ];
-                            else
-                                nAlpha = data[ nOff + 3 ] = 255;
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( pReadScan[ 2 ] ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( pReadScan[ 1 ] ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( pReadScan[ 0 ] ) )/255 );
-                            pReadScan += 3;
-                            nOff++;
-#endif
-                        }
-                        break;
-                    case BMP_FORMAT_32BIT_TC_BGRA:
-                        pReadScan = pBitmapReadAcc->GetScanline( nY );
-                        if( pAlphaReadAcc )
-                            if( readAlpha( pAlphaReadAcc, nY, nWidth, data, nOff ) )
-                                bIsAlpha = true;
-
-                        for( nX = 0; nX < nWidth; nX++ )
-                        {
-#ifdef OSL_BIGENDIAN
-                            if( pAlphaReadAcc )
-                                nAlpha = data[ nOff++ ];
-                            else
-                                nAlpha = data[ nOff++ ] = 255;
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( pReadScan[ 2 ] ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( pReadScan[ 1 ] ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( pReadScan[ 0 ] ) )/255 );
-                            pReadScan += 4;
-#else
-                            if( pAlphaReadAcc )
-                                nAlpha = data[ nOff + 3 ];
-                            else
-                                nAlpha = data[ nOff + 3 ] = 255;
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-                            pReadScan++;
-                            nOff++;
-#endif
-                        }
-                        break;
-                    case BMP_FORMAT_32BIT_TC_RGBA:
-                        pReadScan = pBitmapReadAcc->GetScanline( nY );
-                        if( pAlphaReadAcc )
-                            if( readAlpha( pAlphaReadAcc, nY, nWidth, data, nOff ) )
-                                bIsAlpha = true;
-
-                        for( nX = 0; nX < nWidth; nX++ )
-                        {
-#ifdef OSL_BIGENDIAN
-                            if( pAlphaReadAcc )
-                                nAlpha = data[ nOff ++ ];
-                            else
-                                nAlpha = data[ nOff ++ ] = 255;
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( *pReadScan++ ) )/255 );
-                            pReadScan++;
-#else
-                            if( pAlphaReadAcc )
-                                nAlpha = data[ nOff + 3 ];
-                            else
-                                nAlpha = data[ nOff + 3 ] = 255;
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( pReadScan[ 2 ] ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( pReadScan[ 1 ] ) )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*( pReadScan[ 0 ] ) )/255 );
-                            pReadScan += 4;
-                            nOff++;
-#endif
-                        }
-                        break;
-                    default:
-                        SAL_INFO( "canvas.cairo", "fallback to GetColor - slow, format: " << pBitmapReadAcc->GetScanlineFormat() );
-
-                        if( pAlphaReadAcc )
-                            if( readAlpha( pAlphaReadAcc, nY, nWidth, data, nOff ) )
-                                bIsAlpha = true;
-
-                        for( nX = 0; nX < nWidth; nX++ )
-                        {
-                            aColor = pBitmapReadAcc->GetColor( nY, nX );
-
-                            // cairo need premultiplied color values
-                            // TODO(rodo) handle endianness
-#ifdef OSL_BIGENDIAN
-                            if( pAlphaReadAcc )
-                                nAlpha = data[ nOff++ ];
-                            else
-                                nAlpha = data[ nOff++ ] = 255;
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*aColor.GetRed() )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*aColor.GetGreen() )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*aColor.GetBlue() )/255 );
-#else
-                            if( pAlphaReadAcc )
-                                nAlpha = data[ nOff + 3 ];
-                            else
-                                nAlpha = data[ nOff + 3 ] = 255;
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*aColor.GetBlue() )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*aColor.GetGreen() )/255 );
-                            data[ nOff++ ] = sal::static_int_cast<unsigned char>(( nAlpha*aColor.GetRed() )/255 );
-                            nOff ++;
-#endif
-                        }
-                    }
-                }
-
-                ::Bitmap::ReleaseAccess( pBitmapReadAcc );
-                if( pAlphaReadAcc )
-                    aAlpha.ReleaseAccess( pAlphaReadAcc );
+                long nWidth;
+                long nHeight;
+                vcl::bitmap::CanvasCairoExtractBitmapData(aBmpEx, aBitmap, data, bHasAlpha, nWidth, nHeight);
 
                 SurfaceSharedPtr pImageSurface = rSurfaceProvider->getOutputDevice()->CreateSurface(
                     CairoSurfaceSharedPtr(
                         cairo_image_surface_create_for_data(
                             data,
-                            bIsAlpha ? CAIRO_FORMAT_ARGB32 : CAIRO_FORMAT_RGB24,
+                            bHasAlpha ? CAIRO_FORMAT_ARGB32 : CAIRO_FORMAT_RGB24,
                             nWidth, nHeight, nWidth*4 ),
                         &cairo_surface_destroy) );
                 pSurface = pImageSurface;
 
-                bHasAlpha = bIsAlpha;
-
-                SAL_INFO( "canvas.cairo","image: " << nWidth << " x " << nHeight << " alpha: " << bIsAlpha << " alphaRead " << std::hex << pAlphaReadAcc);
+                SAL_INFO( "canvas.cairo","image: " << nWidth << " x " << nHeight << " alpha: " << bHasAlpha);
             }
         }
 
         return pSurface;
     }
 
-    static void addColorStops( cairo_pattern_t* pPattern, const uno::Sequence< uno::Sequence< double > >& rColors, const uno::Sequence< double >& rStops, bool bReverseStops = false )
+    static void addColorStops( cairo_pattern_t* pPattern, const uno::Sequence< uno::Sequence< double > >& rColors, const uno::Sequence< double >& rStops, bool bReverseStops )
     {
         int i;
 
@@ -685,25 +410,25 @@ namespace cairocanvas
         if( rLeft.getLength() == 3 )
         {
             uno::Sequence<double> aRes(3);
-            aRes[0] = basegfx::tools::lerp(rLeft[0],rRight[0],fAlpha);
-            aRes[1] = basegfx::tools::lerp(rLeft[1],rRight[1],fAlpha);
-            aRes[2] = basegfx::tools::lerp(rLeft[2],rRight[2],fAlpha);
+            aRes[0] = basegfx::utils::lerp(rLeft[0],rRight[0],fAlpha);
+            aRes[1] = basegfx::utils::lerp(rLeft[1],rRight[1],fAlpha);
+            aRes[2] = basegfx::utils::lerp(rLeft[2],rRight[2],fAlpha);
             return aRes;
         }
         else if( rLeft.getLength() == 4 )
         {
             uno::Sequence<double> aRes(4);
-            aRes[0] = basegfx::tools::lerp(rLeft[0],rRight[0],fAlpha);
-            aRes[1] = basegfx::tools::lerp(rLeft[1],rRight[1],fAlpha);
-            aRes[2] = basegfx::tools::lerp(rLeft[2],rRight[2],fAlpha);
-            aRes[3] = basegfx::tools::lerp(rLeft[3],rRight[3],fAlpha);
+            aRes[0] = basegfx::utils::lerp(rLeft[0],rRight[0],fAlpha);
+            aRes[1] = basegfx::utils::lerp(rLeft[1],rRight[1],fAlpha);
+            aRes[2] = basegfx::utils::lerp(rLeft[2],rRight[2],fAlpha);
+            aRes[3] = basegfx::utils::lerp(rLeft[3],rRight[3],fAlpha);
             return aRes;
         }
 
         return uno::Sequence<double>();
     }
 
-    static cairo_pattern_t* patternFromParametricPolyPolygon( ::canvas::ParametricPolyPolygon& rPolygon )
+    static cairo_pattern_t* patternFromParametricPolyPolygon( ::canvas::ParametricPolyPolygon const & rPolygon )
     {
         cairo_pattern_t* pPattern = nullptr;
         const ::canvas::ParametricPolyPolygon::Values aValues = rPolygon.getValues();
@@ -717,7 +442,7 @@ namespace cairocanvas
                 x1 = 1;
                 y1 = 0;
                 pPattern = cairo_pattern_create_linear( x0, y0, x1, y1 );
-                addColorStops( pPattern, aValues.maColors, aValues.maStops );
+                addColorStops( pPattern, aValues.maColors, aValues.maStops, false );
                 break;
 
             case ::canvas::ParametricPolyPolygon::GradientType::Elliptical:
@@ -795,6 +520,12 @@ namespace cairocanvas
 
                             aScaledTextureMatrix.x0 = basegfx::fround( aScaledTextureMatrix.x0 );
                             aScaledTextureMatrix.y0 = basegfx::fround( aScaledTextureMatrix.y0 );
+
+                            double x1, y1, x2, y2;
+                            cairo_path_extents(pCairo, &x1, &y1, &x2, &y2);
+                            aScaledTextureMatrix.x0 -= (x1 * aScaledTextureMatrix.xx);
+                            aScaledTextureMatrix.y0 -= (y1 * aScaledTextureMatrix.yy);
+
                             cairo_pattern_set_matrix( pPattern, &aScaledTextureMatrix );
 
                             cairo_set_source( pCairo, pPattern );
@@ -855,14 +586,14 @@ namespace cairocanvas
                                 // use at least three steps, and at utmost the number of color
                                 // steps
                                 const unsigned int nStepCount(
-                                    ::std::max(
+                                    std::max(
                                         3U,
-                                        ::std::min(
+                                        std::min(
                                             nGradientSize / nStripSize,
                                             128U )) + 1 );
 
                                 const uno::Sequence<double>* pColors=&pPolyImpl->getValues().maColors[0];
-                                basegfx::tools::KeyStopLerp aLerper(pPolyImpl->getValues().maStops);
+                                basegfx::utils::KeyStopLerp aLerper(pPolyImpl->getValues().maStops);
                                 for( unsigned int i=1; i<nStepCount; ++i )
                                 {
                                     const double fT( i/double(nStepCount) );
@@ -938,7 +669,7 @@ namespace cairocanvas
         cairo_set_matrix( pCairo, &aOrigMatrix );
     }
 
-    void doPolyPolygonImplementation( ::basegfx::B2DPolyPolygon aPolyPolygon,
+    void doPolyPolygonImplementation( const ::basegfx::B2DPolyPolygon& aPolyPolygon,
                                       Operation aOperation,
                                       cairo_t* pCairo,
                                       const uno::Sequence< rendering::Texture >* pTextures,
@@ -963,7 +694,7 @@ namespace cairocanvas
 
         for( sal_uInt32 nPolygonIndex = 0; nPolygonIndex < aPolyPolygon.count(); nPolygonIndex++ )
         {
-            ::basegfx::B2DPolygon aPolygon( aPolyPolygon.getB2DPolygon( nPolygonIndex ) );
+            const ::basegfx::B2DPolygon& aPolygon( aPolyPolygon.getB2DPolygon( nPolygonIndex ) );
             const sal_uInt32 nPointCount( aPolygon.count() );
             // to correctly render closed curves, need to output first
             // point twice (so output one additional point)
@@ -973,7 +704,6 @@ namespace cairocanvas
             if( nPointCount > 1)
             {
                 bool bIsBezier = aPolygon.areControlPointsUsed();
-                bool bIsRectangle = ::basegfx::tools::isRectangle( aPolygon );
                 ::basegfx::B2DPoint aA, aB, aP;
 
                 for( sal_uInt32 j=0; j < nExtendedPointCount; j++ )
@@ -984,7 +714,7 @@ namespace cairocanvas
                     nY = aP.getY();
                     cairo_matrix_transform_point( &aOrigMatrix, &nX, &nY );
 
-                    if( ! bIsBezier && (bIsRectangle || aOperation == Clip) )
+                    if (!bIsBezier && aOperation == Clip)
                     {
                         nX = basegfx::fround( nX );
                         nY = basegfx::fround( nY );
@@ -1026,16 +756,18 @@ namespace cairocanvas
 
                             // tdf#99165 if the control points are 'empty', create the mathematical
                             // correct replacement ones to avoid problems with the graphical sub-system
-                            if(basegfx::fTools::equal(nAX, nLastX) && basegfx::fTools::equal(nAY, nLastY))
+                            // tdf#101026 The 1st attempt to create a mathematically correct replacement control
+                            // vector was wrong. Best alternative is one as close as possible which means short.
+                            if (basegfx::fTools::equal(nAX, nLastX) && basegfx::fTools::equal(nAY, nLastY))
                             {
-                                nAX = nLastX + ((nBX - nLastX) * 0.3);
-                                nAY = nLastY + ((nBY - nLastY) * 0.3);
+                                nAX = nLastX + ((nBX - nLastX) * 0.0005);
+                                nAY = nLastY + ((nBY - nLastY) * 0.0005);
                             }
 
                             if(basegfx::fTools::equal(nBX, nX) && basegfx::fTools::equal(nBY, nY))
                             {
-                                nBX = nX + ((nAX - nX) * 0.3);
-                                nBY = nY + ((nAY - nY) * 0.3);
+                                nBX = nX + ((nAX - nX) * 0.0005);
+                                nBY = nY + ((nAY - nY) * 0.0005);
                             }
 
                             cairo_curve_to( pCairo, nAX, nAY, nBX, nBY, nX, nY );
@@ -1087,21 +819,19 @@ namespace cairocanvas
     void CanvasHelper::doPolyPolygonPath( const uno::Reference< rendering::XPolyPolygon2D >& xPolyPolygon,
                         Operation aOperation,
                         bool bNoLineJoin,
-                        const uno::Sequence< rendering::Texture >* pTextures,
-                        cairo_t* pCairo ) const
+                        const uno::Sequence< rendering::Texture >* pTextures ) const
     {
         const ::basegfx::B2DPolyPolygon& rPolyPoly(
             ::basegfx::unotools::b2DPolyPolygonFromXPolyPolygon2D(xPolyPolygon) );
 
-        if( !pCairo )
-            pCairo = mpCairo.get();
+        cairo_t* pCairo = mpCairo.get();
 
-        if(bNoLineJoin && Stroke == aOperation)
+        if(bNoLineJoin && aOperation == Stroke)
         {
             // emulate rendering::PathJoinType::NONE by painting single edges
             for(sal_uInt32 a(0); a < rPolyPoly.count(); a++)
             {
-                const basegfx::B2DPolygon aCandidate(rPolyPoly.getB2DPolygon(a));
+                const basegfx::B2DPolygon& aCandidate(rPolyPoly.getB2DPolygon(a));
                 const sal_uInt32 nPointCount(aCandidate.count());
 
                 if(nPointCount)
@@ -1215,7 +945,7 @@ namespace cairocanvas
             {
                 case rendering::PathJoinType::NONE:
                     bNoLineJoin = true;
-                    // cairo doesn't have join type NONE so we use MITER as it's pretty close
+                    [[fallthrough]]; // cairo doesn't have join type NONE so we use MITER as it's pretty close
                 case rendering::PathJoinType::MITER:
                     cairo_set_line_join( mpCairo.get(), CAIRO_LINE_JOIN_MITER );
                     break;
@@ -1227,13 +957,15 @@ namespace cairocanvas
                     break;
             }
 
-            if( strokeAttributes.DashArray.getLength() > 0 )
+            //tdf#103026 If the w scaling is 0, then all dashes become zero so
+            //cairo will set the cairo_t status to CAIRO_STATUS_INVALID_DASH
+            //and no further drawing will occur
+            if (strokeAttributes.DashArray.getLength() > 0 && w > 0.0)
             {
-                double* pDashArray = new double[ strokeAttributes.DashArray.getLength() ];
-                for( sal_Int32 i=0; i<strokeAttributes.DashArray.getLength(); i++ )
-                    pDashArray[i] = strokeAttributes.DashArray[i] * w;
-                cairo_set_dash( mpCairo.get(), pDashArray, strokeAttributes.DashArray.getLength(), 0 );
-                delete[] pDashArray;
+                auto aDashArray(comphelper::sequenceToContainer<std::vector<double>>(strokeAttributes.DashArray));
+                for (auto& rDash : aDashArray)
+                    rDash *= w;
+                cairo_set_dash(mpCairo.get(), aDashArray.data(), aDashArray.size(), 0);
             }
 
             // TODO(rodo) use LineArray of strokeAttributes
@@ -1354,7 +1086,7 @@ namespace cairocanvas
                                                                                        bool                             bHasAlpha )
     {
         SurfaceSharedPtr pSurface=pInputSurface;
-        uno::Reference< rendering::XCachedPrimitive > rv(nullptr);
+        uno::Reference< rendering::XCachedPrimitive > rv;
         geometry::IntegerSize2D aBitmapSize = rSize;
 
         if( mpCairo )
@@ -1425,7 +1157,7 @@ namespace cairocanvas
                 {
                     SAL_INFO( "canvas.cairo","trying to change surface to rgb");
                     if( mpSurfaceProvider ) {
-                        SurfaceSharedPtr pNewSurface = mpSurfaceProvider->changeSurface( false, false );
+                        SurfaceSharedPtr pNewSurface = mpSurfaceProvider->changeSurface();
 
                         if( pNewSurface )
                             setSurface( pNewSurface, false );
@@ -1601,25 +1333,24 @@ namespace cairocanvas
             uno::Sequence< sal_Int8 >  maComponentTags;
             uno::Sequence< sal_Int32 > maBitCounts;
 
-            virtual ::sal_Int8 SAL_CALL getType(  ) throw (uno::RuntimeException, std::exception) override
+            virtual ::sal_Int8 SAL_CALL getType(  ) override
             {
                 return rendering::ColorSpaceType::RGB;
             }
-            virtual uno::Sequence< ::sal_Int8 > SAL_CALL getComponentTags(  ) throw (uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< ::sal_Int8 > SAL_CALL getComponentTags(  ) override
             {
                 return maComponentTags;
             }
-            virtual ::sal_Int8 SAL_CALL getRenderingIntent(  ) throw (uno::RuntimeException, std::exception) override
+            virtual ::sal_Int8 SAL_CALL getRenderingIntent(  ) override
             {
                 return rendering::RenderingIntent::PERCEPTUAL;
             }
-            virtual uno::Sequence< beans::PropertyValue > SAL_CALL getProperties(  ) throw (uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< beans::PropertyValue > SAL_CALL getProperties(  ) override
             {
                 return uno::Sequence< beans::PropertyValue >();
             }
             virtual uno::Sequence< double > SAL_CALL convertColorSpace( const uno::Sequence< double >& deviceColor,
-                                                                        const uno::Reference< rendering::XColorSpace >& targetColorSpace ) throw (lang::IllegalArgumentException,
-                                                                                                                                                  uno::RuntimeException, std::exception) override
+                                                                        const uno::Reference< rendering::XColorSpace >& targetColorSpace ) override
             {
                 // TODO(P3): if we know anything about target
                 // colorspace, this can be greatly sped up
@@ -1627,17 +1358,17 @@ namespace cairocanvas
                     convertToARGB(deviceColor));
                 return targetColorSpace->convertFromARGB(aIntermediate);
             }
-            virtual uno::Sequence< rendering::RGBColor > SAL_CALL convertToRGB( const uno::Sequence< double >& deviceColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< rendering::RGBColor > SAL_CALL convertToRGB( const uno::Sequence< double >& deviceColor ) override
             {
                 const double*  pIn( deviceColor.getConstArray() );
-                const sal_Size nLen( deviceColor.getLength() );
+                const std::size_t nLen( deviceColor.getLength() );
                 ENSURE_ARG_OR_THROW2(nLen%4==0,
                                      "number of channels no multiple of 4",
                                      static_cast<rendering::XColorSpace*>(this), 0);
 
                 uno::Sequence< rendering::RGBColor > aRes(nLen/4);
                 rendering::RGBColor* pOut( aRes.getArray() );
-                for( sal_Size i=0; i<nLen; i+=4 )
+                for( std::size_t i=0; i<nLen; i+=4 )
                 {
                     const double fAlpha(pIn[3]);
                     if( fAlpha == 0.0 )
@@ -1648,17 +1379,17 @@ namespace cairocanvas
                 }
                 return aRes;
             }
-            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertToARGB( const uno::Sequence< double >& deviceColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertToARGB( const uno::Sequence< double >& deviceColor ) override
             {
                 const double*  pIn( deviceColor.getConstArray() );
-                const sal_Size nLen( deviceColor.getLength() );
+                const std::size_t nLen( deviceColor.getLength() );
                 ENSURE_ARG_OR_THROW2(nLen%4==0,
                                      "number of channels no multiple of 4",
                                      static_cast<rendering::XColorSpace*>(this), 0);
 
                 uno::Sequence< rendering::ARGBColor > aRes(nLen/4);
                 rendering::ARGBColor* pOut( aRes.getArray() );
-                for( sal_Size i=0; i<nLen; i+=4 )
+                for( std::size_t i=0; i<nLen; i+=4 )
                 {
                     const double fAlpha(pIn[3]);
                     if( fAlpha == 0.0 )
@@ -1669,31 +1400,31 @@ namespace cairocanvas
                 }
                 return aRes;
             }
-            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertToPARGB( const uno::Sequence< double >& deviceColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertToPARGB( const uno::Sequence< double >& deviceColor ) override
             {
                 const double*  pIn( deviceColor.getConstArray() );
-                const sal_Size nLen( deviceColor.getLength() );
+                const std::size_t nLen( deviceColor.getLength() );
                 ENSURE_ARG_OR_THROW2(nLen%4==0,
                                      "number of channels no multiple of 4",
                                      static_cast<rendering::XColorSpace*>(this), 0);
 
                 uno::Sequence< rendering::ARGBColor > aRes(nLen/4);
                 rendering::ARGBColor* pOut( aRes.getArray() );
-                for( sal_Size i=0; i<nLen; i+=4 )
+                for( std::size_t i=0; i<nLen; i+=4 )
                 {
                     *pOut++ = rendering::ARGBColor(pIn[3],pIn[2],pIn[1],pIn[1]);
                     pIn += 4;
                 }
                 return aRes;
             }
-            virtual uno::Sequence< double > SAL_CALL convertFromRGB( const uno::Sequence< rendering::RGBColor >& rgbColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< double > SAL_CALL convertFromRGB( const uno::Sequence< rendering::RGBColor >& rgbColor ) override
             {
                 const rendering::RGBColor* pIn( rgbColor.getConstArray() );
-                const sal_Size             nLen( rgbColor.getLength() );
+                const std::size_t             nLen( rgbColor.getLength() );
 
                 uno::Sequence< double > aRes(nLen*4);
                 double* pColors=aRes.getArray();
-                for( sal_Size i=0; i<nLen; ++i )
+                for( std::size_t i=0; i<nLen; ++i )
                 {
                     *pColors++ = pIn->Blue;
                     *pColors++ = pIn->Green;
@@ -1703,14 +1434,14 @@ namespace cairocanvas
                 }
                 return aRes;
             }
-            virtual uno::Sequence< double > SAL_CALL convertFromARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< double > SAL_CALL convertFromARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) override
             {
                 const rendering::ARGBColor* pIn( rgbColor.getConstArray() );
-                const sal_Size              nLen( rgbColor.getLength() );
+                const std::size_t              nLen( rgbColor.getLength() );
 
                 uno::Sequence< double > aRes(nLen*4);
                 double* pColors=aRes.getArray();
-                for( sal_Size i=0; i<nLen; ++i )
+                for( std::size_t i=0; i<nLen; ++i )
                 {
                     *pColors++ = pIn->Alpha*pIn->Blue;
                     *pColors++ = pIn->Alpha*pIn->Green;
@@ -1720,14 +1451,14 @@ namespace cairocanvas
                 }
                 return aRes;
             }
-            virtual uno::Sequence< double > SAL_CALL convertFromPARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< double > SAL_CALL convertFromPARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) override
             {
                 const rendering::ARGBColor* pIn( rgbColor.getConstArray() );
-                const sal_Size              nLen( rgbColor.getLength() );
+                const std::size_t              nLen( rgbColor.getLength() );
 
                 uno::Sequence< double > aRes(nLen*4);
                 double* pColors=aRes.getArray();
-                for( sal_Size i=0; i<nLen; ++i )
+                for( std::size_t i=0; i<nLen; ++i )
                 {
                     *pColors++ = pIn->Blue;
                     *pColors++ = pIn->Green;
@@ -1739,33 +1470,32 @@ namespace cairocanvas
             }
 
             // XIntegerBitmapColorSpace
-            virtual ::sal_Int32 SAL_CALL getBitsPerPixel(  ) throw (uno::RuntimeException, std::exception) override
+            virtual ::sal_Int32 SAL_CALL getBitsPerPixel(  ) override
             {
                 return 32;
             }
-            virtual uno::Sequence< ::sal_Int32 > SAL_CALL getComponentBitCounts(  ) throw (uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< ::sal_Int32 > SAL_CALL getComponentBitCounts(  ) override
             {
                 return maBitCounts;
             }
-            virtual ::sal_Int8 SAL_CALL getEndianness(  ) throw (uno::RuntimeException, std::exception) override
+            virtual ::sal_Int8 SAL_CALL getEndianness(  ) override
             {
                 return util::Endianness::LITTLE;
             }
             virtual uno::Sequence<double> SAL_CALL convertFromIntegerColorSpace( const uno::Sequence< ::sal_Int8 >& deviceColor,
-                                                                                 const uno::Reference< rendering::XColorSpace >& targetColorSpace )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+                                                                                 const uno::Reference< rendering::XColorSpace >& targetColorSpace ) override
             {
                 if( dynamic_cast<CairoColorSpace*>(targetColorSpace.get()) )
                 {
                     const sal_Int8* pIn( deviceColor.getConstArray() );
-                    const sal_Size  nLen( deviceColor.getLength() );
+                    const std::size_t  nLen( deviceColor.getLength() );
                     ENSURE_ARG_OR_THROW2(nLen%4==0,
                                          "number of channels no multiple of 4",
                                          static_cast<rendering::XColorSpace*>(this), 0);
 
                     uno::Sequence<double> aRes(nLen);
                     double* pOut( aRes.getArray() );
-                    for( sal_Size i=0; i<nLen; i+=4 )
+                    for( std::size_t i=0; i<nLen; i+=4 )
                     {
                         *pOut++ = vcl::unotools::toDoubleColor(*pIn++);
                         *pOut++ = vcl::unotools::toDoubleColor(*pIn++);
@@ -1784,8 +1514,7 @@ namespace cairocanvas
                 }
             }
             virtual uno::Sequence< ::sal_Int8 > SAL_CALL convertToIntegerColorSpace( const uno::Sequence< ::sal_Int8 >& deviceColor,
-                                                                                     const uno::Reference< rendering::XIntegerBitmapColorSpace >& targetColorSpace )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+                                                                                     const uno::Reference< rendering::XIntegerBitmapColorSpace >& targetColorSpace ) override
             {
                 if( dynamic_cast<CairoColorSpace*>(targetColorSpace.get()) )
                 {
@@ -1801,20 +1530,19 @@ namespace cairocanvas
                     return targetColorSpace->convertIntegerFromARGB(aIntermediate);
                 }
             }
-            virtual uno::Sequence< rendering::RGBColor > SAL_CALL convertIntegerToRGB( const uno::Sequence< ::sal_Int8 >& deviceColor )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< rendering::RGBColor > SAL_CALL convertIntegerToRGB( const uno::Sequence< ::sal_Int8 >& deviceColor ) override
             {
                 const sal_Int8* pIn( deviceColor.getConstArray() );
-                const sal_Size  nLen( deviceColor.getLength() );
+                const std::size_t  nLen( deviceColor.getLength() );
                 ENSURE_ARG_OR_THROW2(nLen%4==0,
                                      "number of channels no multiple of 4",
                                      static_cast<rendering::XColorSpace*>(this), 0);
 
                 uno::Sequence< rendering::RGBColor > aRes(nLen/4);
                 rendering::RGBColor* pOut( aRes.getArray() );
-                for( sal_Size i=0; i<nLen; i+=4 )
+                for( std::size_t i=0; i<nLen; i+=4 )
                 {
-                    const double fAlpha((sal_uInt8)pIn[3]);
+                    const double fAlpha(static_cast<sal_uInt8>(pIn[3]));
                     if( fAlpha )
                         *pOut++ = rendering::RGBColor(
                             pIn[2]/fAlpha,
@@ -1827,20 +1555,19 @@ namespace cairocanvas
                 return aRes;
             }
 
-            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertIntegerToARGB( const uno::Sequence< ::sal_Int8 >& deviceColor )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertIntegerToARGB( const uno::Sequence< ::sal_Int8 >& deviceColor ) override
             {
                 const sal_Int8* pIn( deviceColor.getConstArray() );
-                const sal_Size  nLen( deviceColor.getLength() );
+                const std::size_t  nLen( deviceColor.getLength() );
                 ENSURE_ARG_OR_THROW2(nLen%4==0,
                                      "number of channels no multiple of 4",
                                      static_cast<rendering::XColorSpace*>(this), 0);
 
                 uno::Sequence< rendering::ARGBColor > aRes(nLen/4);
                 rendering::ARGBColor* pOut( aRes.getArray() );
-                for( sal_Size i=0; i<nLen; i+=4 )
+                for( std::size_t i=0; i<nLen; i+=4 )
                 {
-                    const double fAlpha((sal_uInt8)pIn[3]);
+                    const double fAlpha(static_cast<sal_uInt8>(pIn[3]));
                     if( fAlpha )
                         *pOut++ = rendering::ARGBColor(
                             fAlpha/255.0,
@@ -1853,18 +1580,17 @@ namespace cairocanvas
                 }
                 return aRes;
             }
-            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertIntegerToPARGB( const uno::Sequence< ::sal_Int8 >& deviceColor )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertIntegerToPARGB( const uno::Sequence< ::sal_Int8 >& deviceColor ) override
             {
                 const sal_Int8* pIn( deviceColor.getConstArray() );
-                const sal_Size  nLen( deviceColor.getLength() );
+                const std::size_t  nLen( deviceColor.getLength() );
                 ENSURE_ARG_OR_THROW2(nLen%4==0,
                                      "number of channels no multiple of 4",
                                      static_cast<rendering::XColorSpace*>(this), 0);
 
                 uno::Sequence< rendering::ARGBColor > aRes(nLen/4);
                 rendering::ARGBColor* pOut( aRes.getArray() );
-                for( sal_Size i=0; i<nLen; i+=4 )
+                for( std::size_t i=0; i<nLen; i+=4 )
                 {
                     *pOut++ = rendering::ARGBColor(
                         vcl::unotools::toDoubleColor(pIn[3]),
@@ -1876,15 +1602,14 @@ namespace cairocanvas
                 return aRes;
             }
 
-            virtual uno::Sequence< ::sal_Int8 > SAL_CALL convertIntegerFromRGB( const uno::Sequence< rendering::RGBColor >& rgbColor )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< ::sal_Int8 > SAL_CALL convertIntegerFromRGB( const uno::Sequence< rendering::RGBColor >& rgbColor ) override
             {
                 const rendering::RGBColor* pIn( rgbColor.getConstArray() );
-                const sal_Size             nLen( rgbColor.getLength() );
+                const std::size_t             nLen( rgbColor.getLength() );
 
                 uno::Sequence< sal_Int8 > aRes(nLen*4);
                 sal_Int8* pColors=aRes.getArray();
-                for( sal_Size i=0; i<nLen; ++i )
+                for( std::size_t i=0; i<nLen; ++i )
                 {
                     *pColors++ = vcl::unotools::toByteColor(pIn->Blue);
                     *pColors++ = vcl::unotools::toByteColor(pIn->Green);
@@ -1895,15 +1620,14 @@ namespace cairocanvas
                 return aRes;
             }
 
-            virtual uno::Sequence< ::sal_Int8 > SAL_CALL convertIntegerFromARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< ::sal_Int8 > SAL_CALL convertIntegerFromARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) override
             {
                 const rendering::ARGBColor* pIn( rgbColor.getConstArray() );
-                const sal_Size              nLen( rgbColor.getLength() );
+                const std::size_t              nLen( rgbColor.getLength() );
 
                 uno::Sequence< sal_Int8 > aRes(nLen*4);
                 sal_Int8* pColors=aRes.getArray();
-                for( sal_Size i=0; i<nLen; ++i )
+                for( std::size_t i=0; i<nLen; ++i )
                 {
                     const double fAlpha(pIn->Alpha);
                     *pColors++ = vcl::unotools::toByteColor(fAlpha*pIn->Blue);
@@ -1914,15 +1638,14 @@ namespace cairocanvas
                 }
                 return aRes;
             }
-            virtual uno::Sequence< ::sal_Int8 > SAL_CALL convertIntegerFromPARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< ::sal_Int8 > SAL_CALL convertIntegerFromPARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) override
             {
                 const rendering::ARGBColor* pIn( rgbColor.getConstArray() );
-                const sal_Size              nLen( rgbColor.getLength() );
+                const std::size_t              nLen( rgbColor.getLength() );
 
                 uno::Sequence< sal_Int8 > aRes(nLen*4);
                 sal_Int8* pColors=aRes.getArray();
-                for( sal_Size i=0; i<nLen; ++i )
+                for( std::size_t i=0; i<nLen; ++i )
                 {
                     *pColors++ = vcl::unotools::toByteColor(pIn->Blue);
                     *pColors++ = vcl::unotools::toByteColor(pIn->Green);
@@ -1958,25 +1681,24 @@ namespace cairocanvas
             uno::Sequence< sal_Int8 >  maComponentTags;
             uno::Sequence< sal_Int32 > maBitCounts;
 
-            virtual ::sal_Int8 SAL_CALL getType(  ) throw (uno::RuntimeException, std::exception) override
+            virtual ::sal_Int8 SAL_CALL getType(  ) override
             {
                 return rendering::ColorSpaceType::RGB;
             }
-            virtual uno::Sequence< ::sal_Int8 > SAL_CALL getComponentTags(  ) throw (uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< ::sal_Int8 > SAL_CALL getComponentTags(  ) override
             {
                 return maComponentTags;
             }
-            virtual ::sal_Int8 SAL_CALL getRenderingIntent(  ) throw (uno::RuntimeException, std::exception) override
+            virtual ::sal_Int8 SAL_CALL getRenderingIntent(  ) override
             {
                 return rendering::RenderingIntent::PERCEPTUAL;
             }
-            virtual uno::Sequence< beans::PropertyValue > SAL_CALL getProperties(  ) throw (uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< beans::PropertyValue > SAL_CALL getProperties(  ) override
             {
                 return uno::Sequence< beans::PropertyValue >();
             }
             virtual uno::Sequence< double > SAL_CALL convertColorSpace( const uno::Sequence< double >& deviceColor,
-                                                                        const uno::Reference< rendering::XColorSpace >& targetColorSpace ) throw (lang::IllegalArgumentException,
-                                                                                                                                                  uno::RuntimeException, std::exception) override
+                                                                        const uno::Reference< rendering::XColorSpace >& targetColorSpace ) override
             {
                 // TODO(P3): if we know anything about target
                 // colorspace, this can be greatly sped up
@@ -1984,17 +1706,17 @@ namespace cairocanvas
                     convertToARGB(deviceColor));
                 return targetColorSpace->convertFromARGB(aIntermediate);
             }
-            virtual uno::Sequence< rendering::RGBColor > SAL_CALL convertToRGB( const uno::Sequence< double >& deviceColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< rendering::RGBColor > SAL_CALL convertToRGB( const uno::Sequence< double >& deviceColor ) override
             {
                 const double*  pIn( deviceColor.getConstArray() );
-                const sal_Size nLen( deviceColor.getLength() );
+                const std::size_t nLen( deviceColor.getLength() );
                 ENSURE_ARG_OR_THROW2(nLen%4==0,
                                      "number of channels no multiple of 4",
                                      static_cast<rendering::XColorSpace*>(this), 0);
 
                 uno::Sequence< rendering::RGBColor > aRes(nLen/4);
                 rendering::RGBColor* pOut( aRes.getArray() );
-                for( sal_Size i=0; i<nLen; i+=4 )
+                for( std::size_t i=0; i<nLen; i+=4 )
                 {
                     *pOut++ = rendering::RGBColor(pIn[2], pIn[1], pIn[0]);
                     pIn += 4;
@@ -2004,36 +1726,36 @@ namespace cairocanvas
             uno::Sequence< rendering::ARGBColor > impl_convertToARGB( const uno::Sequence< double >& deviceColor )
             {
                 const double*  pIn( deviceColor.getConstArray() );
-                const sal_Size nLen( deviceColor.getLength() );
+                const std::size_t nLen( deviceColor.getLength() );
                 ENSURE_ARG_OR_THROW2(nLen%4==0,
                                      "number of channels no multiple of 4",
                                      static_cast<rendering::XColorSpace*>(this), 0);
 
                 uno::Sequence< rendering::ARGBColor > aRes(nLen/4);
                 rendering::ARGBColor* pOut( aRes.getArray() );
-                for( sal_Size i=0; i<nLen; i+=4 )
+                for( std::size_t i=0; i<nLen; i+=4 )
                 {
                     *pOut++ = rendering::ARGBColor(1.0, pIn[2], pIn[1], pIn[0]);
                     pIn += 4;
                 }
                 return aRes;
             }
-            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertToARGB( const uno::Sequence< double >& deviceColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertToARGB( const uno::Sequence< double >& deviceColor ) override
             {
                 return impl_convertToARGB( deviceColor );
             }
-            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertToPARGB( const uno::Sequence< double >& deviceColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertToPARGB( const uno::Sequence< double >& deviceColor ) override
             {
                 return impl_convertToARGB( deviceColor );
             }
-            virtual uno::Sequence< double > SAL_CALL convertFromRGB( const uno::Sequence< rendering::RGBColor >& rgbColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< double > SAL_CALL convertFromRGB( const uno::Sequence< rendering::RGBColor >& rgbColor ) override
             {
                 const rendering::RGBColor* pIn( rgbColor.getConstArray() );
-                const sal_Size             nLen( rgbColor.getLength() );
+                const std::size_t             nLen( rgbColor.getLength() );
 
                 uno::Sequence< double > aRes(nLen*4);
                 double* pColors=aRes.getArray();
-                for( sal_Size i=0; i<nLen; ++i )
+                for( std::size_t i=0; i<nLen; ++i )
                 {
                     *pColors++ = pIn->Blue;
                     *pColors++ = pIn->Green;
@@ -2046,11 +1768,11 @@ namespace cairocanvas
             uno::Sequence< double > impl_convertFromARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor )
             {
                 const rendering::ARGBColor* pIn( rgbColor.getConstArray() );
-                const sal_Size              nLen( rgbColor.getLength() );
+                const std::size_t              nLen( rgbColor.getLength() );
 
                 uno::Sequence< double > aRes(nLen*4);
                 double* pColors=aRes.getArray();
-                for( sal_Size i=0; i<nLen; ++i )
+                for( std::size_t i=0; i<nLen; ++i )
                 {
                     *pColors++ = pIn->Blue;
                     *pColors++ = pIn->Green;
@@ -2060,48 +1782,47 @@ namespace cairocanvas
                 }
                 return aRes;
             }
-            virtual uno::Sequence< double > SAL_CALL convertFromARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< double > SAL_CALL convertFromARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) override
             {
                 return impl_convertFromARGB( rgbColor );
             }
-            virtual uno::Sequence< double > SAL_CALL convertFromPARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< double > SAL_CALL convertFromPARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) override
             {
                 return impl_convertFromARGB( rgbColor );
             }
 
             // XIntegerBitmapColorSpace
-            virtual ::sal_Int32 SAL_CALL getBitsPerPixel(  ) throw (uno::RuntimeException, std::exception) override
+            virtual ::sal_Int32 SAL_CALL getBitsPerPixel(  ) override
             {
                 return 32;
             }
-            virtual uno::Sequence< ::sal_Int32 > SAL_CALL getComponentBitCounts(  ) throw (uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< ::sal_Int32 > SAL_CALL getComponentBitCounts(  ) override
             {
                 return maBitCounts;
             }
-            virtual ::sal_Int8 SAL_CALL getEndianness(  ) throw (uno::RuntimeException, std::exception) override
+            virtual ::sal_Int8 SAL_CALL getEndianness(  ) override
             {
                 return util::Endianness::LITTLE;
             }
             virtual uno::Sequence<double> SAL_CALL convertFromIntegerColorSpace( const uno::Sequence< ::sal_Int8 >& deviceColor,
-                                                                                 const uno::Reference< rendering::XColorSpace >& targetColorSpace )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+                                                                                 const uno::Reference< rendering::XColorSpace >& targetColorSpace ) override
             {
                 if( dynamic_cast<CairoColorSpace*>(targetColorSpace.get()) )
                 {
                     const sal_Int8* pIn( deviceColor.getConstArray() );
-                    const sal_Size  nLen( deviceColor.getLength() );
+                    const std::size_t  nLen( deviceColor.getLength() );
                     ENSURE_ARG_OR_THROW2(nLen%4==0,
                                          "number of channels no multiple of 4",
                                          static_cast<rendering::XColorSpace*>(this), 0);
 
                     uno::Sequence<double> aRes(nLen);
                     double* pOut( aRes.getArray() );
-                    for( sal_Size i=0; i<nLen; i+=4 )
+                    for( std::size_t i=0; i<nLen; i+=4 )
                     {
                         *pOut++ = vcl::unotools::toDoubleColor(*pIn++);
                         *pOut++ = vcl::unotools::toDoubleColor(*pIn++);
                         *pOut++ = vcl::unotools::toDoubleColor(*pIn++);
-                        *pOut++ = 1.0; // the value does not matter
+                        *pOut++ = 1.0; pIn++; // the value does not matter
                     }
                     return aRes;
                 }
@@ -2115,8 +1836,7 @@ namespace cairocanvas
                 }
             }
             virtual uno::Sequence< ::sal_Int8 > SAL_CALL convertToIntegerColorSpace( const uno::Sequence< ::sal_Int8 >& deviceColor,
-                                                                                     const uno::Reference< rendering::XIntegerBitmapColorSpace >& targetColorSpace )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+                                                                                     const uno::Reference< rendering::XIntegerBitmapColorSpace >& targetColorSpace ) override
             {
                 if( dynamic_cast<CairoNoAlphaColorSpace*>(targetColorSpace.get()) )
                 {
@@ -2132,18 +1852,17 @@ namespace cairocanvas
                     return targetColorSpace->convertIntegerFromARGB(aIntermediate);
                 }
             }
-            virtual uno::Sequence< rendering::RGBColor > SAL_CALL convertIntegerToRGB( const uno::Sequence< ::sal_Int8 >& deviceColor )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< rendering::RGBColor > SAL_CALL convertIntegerToRGB( const uno::Sequence< ::sal_Int8 >& deviceColor ) override
             {
                 const sal_Int8* pIn( deviceColor.getConstArray() );
-                const sal_Size  nLen( deviceColor.getLength() );
+                const std::size_t  nLen( deviceColor.getLength() );
                 ENSURE_ARG_OR_THROW2(nLen%4==0,
                                      "number of channels no multiple of 4",
                                      static_cast<rendering::XColorSpace*>(this), 0);
 
                 uno::Sequence< rendering::RGBColor > aRes(nLen/4);
                 rendering::RGBColor* pOut( aRes.getArray() );
-                for( sal_Size i=0; i<nLen; i+=4 )
+                for( std::size_t i=0; i<nLen; i+=4 )
                 {
                     *pOut++ = rendering::RGBColor( pIn[2], pIn[1], pIn[0] );
                     pIn += 4;
@@ -2151,27 +1870,25 @@ namespace cairocanvas
                 return aRes;
             }
 
-            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertIntegerToARGB( const uno::Sequence< ::sal_Int8 >& deviceColor )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertIntegerToARGB( const uno::Sequence< ::sal_Int8 >& deviceColor ) override
             {
                 return impl_convertIntegerToARGB( deviceColor );
             }
-            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertIntegerToPARGB( const uno::Sequence< ::sal_Int8 >& deviceColor )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertIntegerToPARGB( const uno::Sequence< ::sal_Int8 >& deviceColor ) override
             {
                 return impl_convertIntegerToARGB( deviceColor );
             }
             uno::Sequence< rendering::ARGBColor > impl_convertIntegerToARGB( const uno::Sequence< ::sal_Int8 >& deviceColor )
             {
                 const sal_Int8* pIn( deviceColor.getConstArray() );
-                const sal_Size  nLen( deviceColor.getLength() );
+                const std::size_t  nLen( deviceColor.getLength() );
                 ENSURE_ARG_OR_THROW2(nLen%4==0,
                                      "number of channels no multiple of 4",
                                      static_cast<rendering::XColorSpace*>(this), 0);
 
                 uno::Sequence< rendering::ARGBColor > aRes(nLen/4);
                 rendering::ARGBColor* pOut( aRes.getArray() );
-                for( sal_Size i=0; i<nLen; i+=4 )
+                for( std::size_t i=0; i<nLen; i+=4 )
                 {
                     *pOut++ = rendering::ARGBColor(
                         1.0,
@@ -2183,15 +1900,14 @@ namespace cairocanvas
                 return aRes;
             }
 
-            virtual uno::Sequence< ::sal_Int8 > SAL_CALL convertIntegerFromRGB( const uno::Sequence< rendering::RGBColor >& rgbColor )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< ::sal_Int8 > SAL_CALL convertIntegerFromRGB( const uno::Sequence< rendering::RGBColor >& rgbColor ) override
             {
                 const rendering::RGBColor* pIn( rgbColor.getConstArray() );
-                const sal_Size             nLen( rgbColor.getLength() );
+                const std::size_t             nLen( rgbColor.getLength() );
 
                 uno::Sequence< sal_Int8 > aRes(nLen*4);
                 sal_Int8* pColors=aRes.getArray();
-                for( sal_Size i=0; i<nLen; ++i )
+                for( std::size_t i=0; i<nLen; ++i )
                 {
                     *pColors++ = vcl::unotools::toByteColor(pIn->Blue);
                     *pColors++ = vcl::unotools::toByteColor(pIn->Green);
@@ -2202,24 +1918,22 @@ namespace cairocanvas
                 return aRes;
             }
 
-            virtual uno::Sequence< ::sal_Int8 > SAL_CALL convertIntegerFromARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< ::sal_Int8 > SAL_CALL convertIntegerFromARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) override
             {
                 return impl_convertIntegerFromARGB( rgbColor );
             }
-            virtual uno::Sequence< ::sal_Int8 > SAL_CALL convertIntegerFromPARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor )
-                throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+            virtual uno::Sequence< ::sal_Int8 > SAL_CALL convertIntegerFromPARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) override
             {
                 return impl_convertIntegerFromARGB( rgbColor );
             }
             uno::Sequence< ::sal_Int8 > impl_convertIntegerFromARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor )
             {
                 const rendering::ARGBColor* pIn( rgbColor.getConstArray() );
-                const sal_Size              nLen( rgbColor.getLength() );
+                const std::size_t              nLen( rgbColor.getLength() );
 
                 uno::Sequence< sal_Int8 > aRes(nLen*4);
                 sal_Int8* pColors=aRes.getArray();
-                for( sal_Size i=0; i<nLen; ++i )
+                for( std::size_t i=0; i<nLen; ++i )
                 {
                     *pColors++ = vcl::unotools::toByteColor(pIn->Blue);
                     *pColors++ = vcl::unotools::toByteColor(pIn->Green);
@@ -2288,7 +2002,7 @@ namespace cairocanvas
         aLayout.PlaneStride = 0;
         aLayout.ColorSpace = mbHaveAlpha ? CairoColorSpaceHolder::get() : CairoNoAlphaColorSpaceHolder::get();
         aLayout.Palette.clear();
-        aLayout.IsMsbFirst = sal_False;
+        aLayout.IsMsbFirst = false;
 
         return aLayout;
     }

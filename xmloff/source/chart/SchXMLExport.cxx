@@ -17,18 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <sax/tools/converter.hxx>
 
 #include <xmloff/xmlprmap.hxx>
 
-#include "SchXMLExport.hxx"
-#include "XMLChartPropertySetMapper.hxx"
+#include <SchXMLExport.hxx>
+#include <XMLChartPropertySetMapper.hxx>
 #include "ColorPropertySet.hxx"
 #include "SchXMLTools.hxx"
 #include "SchXMLEnumConverter.hxx"
-#include "facreg.hxx"
+#include <facreg.hxx>
 
 #include <comphelper/processfactory.hxx>
 #include <tools/globname.hxx>
@@ -43,13 +45,14 @@
 #include <xmloff/xmluconv.hxx>
 #include <xmloff/xmlmetae.hxx>
 #include <xmloff/SchXMLSeriesHelper.hxx>
-#include "xexptran.hxx"
+#include <xexptran.hxx>
 #include <rtl/math.hxx>
-#include <comphelper/extract.hxx>
 
-#include <list>
+#include <vector>
 #include <typeinfo>
 #include <algorithm>
+#include <queue>
+#include <iterator>
 
 #include <com/sun/star/task/XStatusIndicatorSupplier.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
@@ -90,6 +93,7 @@
 #include <com/sun/star/chart2/data/XDataReceiver.hpp>
 #include <com/sun/star/chart2/data/XDataProvider.hpp>
 #include <com/sun/star/chart2/data/XDatabaseDataProvider.hpp>
+#include <com/sun/star/chart2/data/XPivotTableDataProvider.hpp>
 #include <com/sun/star/chart2/data/XRangeXMLConversion.hpp>
 #include <com/sun/star/chart2/data/XTextualDataSequence.hpp>
 #include <com/sun/star/chart2/data/XNumericalDataSequence.hpp>
@@ -103,13 +107,13 @@
 #include <com/sun/star/embed/XVisualObject.hpp>
 #include <com/sun/star/container/XChild.hpp>
 
+#include <tools/diagnose_ex.h>
 #include "MultiPropertySetHandler.hxx"
 #include "PropertyMap.hxx"
 
 using namespace com::sun::star;
 using namespace ::xmloff::token;
 
-using namespace ::com::sun::star;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Any;
@@ -129,14 +133,12 @@ public:
     SchXMLExportHelper_Impl( SvXMLExport& rExport,
                         SvXMLAutoStylePoolP& rASPool );
 
-    virtual ~SchXMLExportHelper_Impl();
-
     SchXMLExportHelper_Impl(const SchXMLExportHelper_Impl&) = delete;
     SchXMLExportHelper_Impl& operator=(const SchXMLExportHelper_Impl&) = delete;
 
     // auto-styles
     /// parse chart and collect all auto-styles used in current pool
-    void collectAutoStyles( css::uno::Reference< css::chart::XChartDocument > rChartDoc );
+    void collectAutoStyles( css::uno::Reference< css::chart::XChartDocument > const & rChartDoc );
 
     /// write the styles collected into the current pool as <style:style> elements
     void exportAutoStyles();
@@ -152,10 +154,10 @@ public:
         which is the outer element of a chart. So these attributes can easily
         be parsed again by the container
      */
-    void exportChart( css::uno::Reference< css::chart::XChartDocument > rChartDoc,
+    void exportChart( css::uno::Reference< css::chart::XChartDocument > const & rChartDoc,
                       bool bIncludeTable );
 
-    rtl::Reference<XMLPropertySetMapper> GetPropertySetMapper() const;
+    const rtl::Reference<XMLPropertySetMapper>& GetPropertySetMapper() const;
 
     void SetChartRangeAddress( const OUString& rAddress )
         { msChartAddress = rAddress; }
@@ -181,7 +183,7 @@ public:
     { return mrAutoStylePool; }
 
     /// if bExportContent is false the auto-styles are collected
-    void parseDocument( css::uno::Reference< css::chart::XChartDocument >& rChartDoc,
+    void parseDocument( css::uno::Reference< css::chart::XChartDocument > const & rChartDoc,
                         bool bExportContent,
                         bool bIncludeTable = false );
     void exportTable();
@@ -249,19 +251,18 @@ public:
     rtl::Reference< XMLPropertySetMapper > mxPropertySetMapper;
     rtl::Reference< XMLChartExportPropertyMapper > mxExpPropMapper;
 
-    OUString msTableName;
+    static constexpr OUStringLiteral gsTableName = "local-table";
     OUStringBuffer msStringBuffer;
     OUString msString;
 
     // members filled by InitRangeSegmentationProperties (retrieved from DataProvider)
-    bool mbHasSeriesLabels;
     bool mbHasCategoryLabels; //if the categories are only automatically generated this will be false
     bool mbRowSourceColumns;
     OUString msChartAddress;
     OUString msTableNumberList;
     css::uno::Sequence< sal_Int32 > maSequenceMapping;
 
-    OUString msCLSID;
+    OUString const msCLSID;
 
     OUString maSrcShellID;
     OUString maDestShellID;
@@ -275,7 +276,7 @@ public:
 namespace
 {
 
-class lcl_MatchesRole : public ::std::unary_function< Reference< chart2::data::XLabeledDataSequence >, bool >
+class lcl_MatchesRole
 {
 public:
     explicit lcl_MatchesRole( const OUString & aRole ) :
@@ -291,11 +292,11 @@ public:
 
         return ( xProp.is() &&
                  (xProp->getPropertyValue( "Role" ) >>= aRole ) &&
-                 m_aRole.equals( aRole ));
+                 m_aRole == aRole );
     }
 
 private:
-    OUString m_aRole;
+    OUString const m_aRole;
 };
 
 template< typename T >
@@ -346,9 +347,9 @@ Reference< chart2::data::XLabeledDataSequence > lcl_getCategories( const Referen
             }
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        SAL_WARN("xmloff.chart", "Exception caught. Type: " << OUString::createFromAscii( typeid( ex ).name()) << ", Message: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("xmloff.chart");
     }
 
     return xResult;
@@ -375,10 +376,9 @@ Sequence< Reference< chart2::data::XLabeledDataSequence > > lcl_getAllSeriesSequ
     {
         Reference< chart2::XDiagram > xDiagram( xChartDoc->getFirstDiagram());
         ::std::vector< Reference< chart2::XDataSeries > > aSeriesVector( SchXMLSeriesHelper::getDataSeriesFromDiagram( xDiagram ));
-        for( ::std::vector< Reference< chart2::XDataSeries > >::const_iterator aSeriesIt( aSeriesVector.begin() )
-            ; aSeriesIt != aSeriesVector.end(); ++aSeriesIt )
+        for( const auto& rSeries : aSeriesVector )
         {
-            Reference< chart2::data::XDataSource > xDataSource( *aSeriesIt, uno::UNO_QUERY );
+            Reference< chart2::data::XDataSource > xDataSource( rSeries, uno::UNO_QUERY );
             if( !xDataSource.is() )
                 continue;
             uno::Sequence< Reference< chart2::data::XLabeledDataSequence > > aDataSequences( xDataSource->getDataSequences() );
@@ -386,7 +386,7 @@ Sequence< Reference< chart2::data::XLabeledDataSequence > > lcl_getAllSeriesSequ
         }
     }
 
-    return comphelper::containerToSequence< Reference< chart2::data::XLabeledDataSequence > >( aContainer );
+    return comphelper::containerToSequence( aContainer );
 }
 
 Reference< chart2::data::XLabeledDataSequence >
@@ -428,7 +428,7 @@ Reference< chart2::data::XDataSource > lcl_pressUsedDataIntoRectangularFormat( c
         aLabeledSeqVector.push_back( xXValues );
 
     //add all other sequences now without x-values
-    lcl_MatchesRole aHasXValues( OUString( "values-x" ) );
+    lcl_MatchesRole aHasXValues( "values-x" );
     for( sal_Int32 nN=0; nN<aSeriesSeqVector.getLength(); nN++ )
     {
         if( !aHasXValues( aSeriesSeqVector[nN] ) )
@@ -449,13 +449,12 @@ bool lcl_isSeriesAttachedToFirstAxis(
     {
         sal_Int32 nAxisIndex = 0;
         Reference< beans::XPropertySet > xProp( xDataSeries, uno::UNO_QUERY_THROW );
-        if( xProp.is() )
-            xProp->getPropertyValue("AttachedAxisIndex") >>= nAxisIndex;
+        xProp->getPropertyValue("AttachedAxisIndex") >>= nAxisIndex;
         bResult = (0==nAxisIndex);
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        SAL_WARN("xmloff.chart", "Exception caught. Type: " << OUString::createFromAscii( typeid( ex ).name()) << ", Message: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("xmloff.chart");
     }
 
     return bResult;
@@ -496,7 +495,7 @@ tLabelAndValueRange lcl_getLabelAndValueRangeByRole(
             aResult.second = lcl_ConvertRange( xValueSeq->getSourceRangeRepresentation(), xDoc );
 
         if( xLabelSeq.is() || xValueSeq.is())
-            rOutSequencesToExport.push_back( SchXMLExportHelper_Impl::tLabelValuesDataPair( xLabelSeq, xValueSeq ));
+            rOutSequencesToExport.emplace_back( xLabelSeq, xValueSeq );
     }
 
     return aResult;
@@ -553,12 +552,11 @@ sal_Int32 lcl_getMaxSequenceLength(
     const SchXMLExportHelper_Impl::tDataSequenceCont & rContainer )
 {
     sal_Int32 nResult = 0;
-    for( SchXMLExportHelper_Impl::tDataSequenceCont::const_iterator aIt( rContainer.begin());
-         aIt != rContainer.end(); ++aIt )
+    for( const auto& rDataSequence : rContainer )
     {
-        if( aIt->second.is())
+        if( rDataSequence.second.is())
         {
-            sal_Int32 nSeqLength = aIt->second->getData().getLength();
+            sal_Int32 nSeqLength = rDataSequence.second->getData().getLength();
             if( nSeqLength > nResult )
                 nResult = nSeqLength;
         }
@@ -633,7 +631,7 @@ uno::Sequence< OUString > lcl_DataSequenceToStringSequence(
             }
             if(!bHasValue)
             {
-                //no double value is countained
+                //no double value is contained
                 //is there any text?
                 uno::Sequence< OUString > aStrings( lcl_DataSequenceToStringSequence( xSeq ) );
                 sal_Int32 nTextCount = aStrings.getLength();
@@ -678,9 +676,7 @@ bool lcl_SequenceHasUnhiddenData( const uno::Reference< chart2::data::XDataSeque
             return true;
         }
     }
-    if( xDataSequence->getData().getLength() )
-        return true;
-    return false;
+    return xDataSequence->getData().getLength();
 }
 
 typedef vector< OUString > tStringVector;
@@ -706,12 +702,10 @@ struct lcl_TableData
 typedef ::std::map< sal_Int32, SchXMLExportHelper_Impl::tLabelValuesDataPair >
     lcl_DataSequenceMap;
 
-struct lcl_SequenceToMapElement :
-    public ::std::unary_function< lcl_DataSequenceMap::mapped_type, lcl_DataSequenceMap::value_type >
+struct lcl_SequenceToMapElement
 {
-    lcl_SequenceToMapElement()
-    {}
-    result_type operator() ( const argument_type & rContent )
+    std::pair<const sal_Int32, SchXMLExportHelper_Impl::tLabelValuesDataPair>
+        operator() (const SchXMLExportHelper_Impl::tLabelValuesDataPair& rContent)
     {
         sal_Int32 nIndex = -1;
         if( rContent.second.is()) //has values
@@ -721,7 +715,7 @@ struct lcl_SequenceToMapElement :
         }
         else if( rContent.first.is()) //has labels
             nIndex = rContent.first->getSourceRangeRepresentation().copy( sizeof("label ")).toInt32();
-        return result_type( nIndex, rContent );
+        return std::make_pair(nIndex, rContent);
     }
 };
 
@@ -735,19 +729,22 @@ void lcl_ReorderInternalSequencesAccordingToTheirRangeName(
 
     rInOutSequences.clear();
     sal_Int32 nIndex = 0;
-    for( lcl_DataSequenceMap::const_iterator aIt = aIndexSequenceMap.begin();
-         aIt != aIndexSequenceMap.end(); ++aIt, ++nIndex )
+    for( const auto& rEntry : aIndexSequenceMap )
     {
-        if( aIt->first < 0 )
-            continue;
-        // fill empty columns
-        for( ; nIndex < aIt->first; ++nIndex )
-            rInOutSequences.push_back(
-                SchXMLExportHelper_Impl::tDataSequenceCont::value_type(
-                    uno::Reference< chart2::data::XDataSequence >(),
-                    uno::Reference< chart2::data::XDataSequence >() ));
-        OSL_ASSERT( nIndex == aIt->first );
-        rInOutSequences.push_back( aIt->second );
+        if( rEntry.first >= 0 )
+        {
+            // fill empty columns
+            rInOutSequences.insert(
+                    rInOutSequences.end(),
+                    rEntry.first - nIndex,
+                    SchXMLExportHelper_Impl::tDataSequenceCont::value_type(
+                        uno::Reference< chart2::data::XDataSequence >(),
+                        uno::Reference< chart2::data::XDataSequence >() ));
+            nIndex = rEntry.first;
+            rInOutSequences.push_back( rEntry.second );
+        }
+
+        ++nIndex;
     }
 }
 
@@ -780,9 +777,6 @@ lcl_TableData lcl_getDataForLocalTable(
 
         //series values and series labels
         SchXMLExportHelper_Impl::tDataSequenceCont::size_type nNumSequences = aSequencesToExport.size();
-        SchXMLExportHelper_Impl::tDataSequenceCont::const_iterator aBegin( aSequencesToExport.begin());
-        SchXMLExportHelper_Impl::tDataSequenceCont::const_iterator aEnd( aSequencesToExport.end());
-        SchXMLExportHelper_Impl::tDataSequenceCont::const_iterator aIt( aBegin );
 
         auto nMaxSequenceLength( lcl_getMaxSequenceLength( aSequencesToExport ));
         if( aSimpleCategories.getLength() > nMaxSequenceLength )
@@ -823,30 +817,30 @@ lcl_TableData lcl_getDataForLocalTable(
         // iterate over all sequences
         size_t nSeqIdx = 0;
         Sequence< Sequence< OUString > > aComplexLabels(nNumSequences);
-        for( ; aIt != aEnd; ++aIt, ++nSeqIdx )
+        for( const auto& rDataSequence : aSequencesToExport )
         {
             OUString aRange;
             Sequence< OUString >& rCurrentComplexLabel = aComplexLabels[nSeqIdx];
-            if( aIt->first.is())
+            if( rDataSequence.first.is())
             {
-                lcl_getLabelStringSequence( rCurrentComplexLabel, aIt->first );
+                lcl_getLabelStringSequence( rCurrentComplexLabel, rDataSequence.first );
                 rLabels[nSeqIdx] = lcl_flattenStringSequence( rCurrentComplexLabel );
-                aRange = aIt->first->getSourceRangeRepresentation();
+                aRange = rDataSequence.first->getSourceRangeRepresentation();
                 if( xRangeConversion.is())
                     aRange = xRangeConversion->convertRangeToXML( aRange );
             }
-            else if( aIt->second.is())
+            else if( rDataSequence.second.is())
             {
                 rCurrentComplexLabel.realloc(1);
                 rLabels[nSeqIdx] = rCurrentComplexLabel[0] = lcl_flattenStringSequence(
-                    aIt->second->generateLabel( chart2::data::LabelOrigin_SHORT_SIDE ));
+                    rDataSequence.second->generateLabel( chart2::data::LabelOrigin_SHORT_SIDE ));
             }
             if( bSeriesFromColumns )
                 aResult.aColumnDescriptions_Ranges.push_back( aRange );
             else
                 aResult.aRowDescriptions_Ranges.push_back( aRange );
 
-            ::std::vector< double > aNumbers( lcl_getAllValuesFromSequence( aIt->second ));
+            ::std::vector< double > aNumbers( lcl_getAllValuesFromSequence( rDataSequence.second ));
             if( bSeriesFromColumns )
             {
                 const sal_Int32 nSize( static_cast< sal_Int32 >( aNumbers.size()));
@@ -856,17 +850,19 @@ lcl_TableData lcl_getDataForLocalTable(
             else
                 aResult.aDataInRows[nSeqIdx] = aNumbers;
 
-            if( aIt->second.is())
+            if( rDataSequence.second.is())
             {
-                aRange =  aIt->second->getSourceRangeRepresentation();
+                aRange =  rDataSequence.second->getSourceRangeRepresentation();
                 if( xRangeConversion.is())
                     aRange = xRangeConversion->convertRangeToXML( aRange );
             }
             aResult.aDataRangeRepresentations.push_back( aRange );
 
             //is column hidden?
-            if( !lcl_SequenceHasUnhiddenData(aIt->first) && !lcl_SequenceHasUnhiddenData(aIt->second) )
+            if( !lcl_SequenceHasUnhiddenData(rDataSequence.first) && !lcl_SequenceHasUnhiddenData(rDataSequence.second) )
                 aResult.aHiddenColumns.push_back(nSeqIdx);
+
+            ++nSeqIdx;
         }
         Sequence< Sequence< Any > >& rComplexAnyLabels = bSeriesFromColumns ? aResult.aComplexColumnDescriptions : aResult.aComplexRowDescriptions;//#i116544#
         rComplexAnyLabels.realloc(aComplexLabels.getLength());
@@ -876,12 +872,12 @@ lcl_TableData lcl_getDataForLocalTable(
             Sequence< Any >& rTarget = rComplexAnyLabels[nN];
             rTarget.realloc( rSource.getLength() );
             for( sal_Int32 i=0; i<rSource.getLength(); i++ )
-                rTarget[i] = uno::makeAny( rSource[i] );
+                rTarget[i] <<= rSource[i];
         }
     }
     catch( const uno::Exception & rEx )
     {
-        SAL_INFO("xmloff.chart", "something went wrong during table data collection: " << rEx.Message);
+        SAL_INFO("xmloff.chart", "something went wrong during table data collection: " << rEx);
     }
 
     return aResult;
@@ -927,8 +923,7 @@ void lcl_exportNumberFormat( const OUString& rPropertyName, const Reference< bea
         }
         catch( const uno::Exception & rEx )
         {
-            OString aBStr(OUStringToOString(rEx.Message, RTL_TEXTENCODING_ASCII_US));
-            SAL_INFO("xmloff.chart", "chart:exporting error bar ranges: " << aBStr );
+            SAL_INFO("xmloff.chart", "chart:exporting error bar ranges: " << rEx );
         }
     }
 
@@ -944,7 +939,7 @@ bool lcl_exportDomainForThisSequence( const Reference< chart2::data::XDataSequen
         OUString aRange( lcl_ConvertRange( rValues->getSourceRangeRepresentation(), xNewDoc ) );
 
         //work around error in OOo 2.0 (problems with multiple series having a domain element)
-        if( rFirstRangeForThisDomainIndex.isEmpty() || !aRange.equals(rFirstRangeForThisDomainIndex) )
+        if( rFirstRangeForThisDomainIndex.isEmpty() || aRange != rFirstRangeForThisDomainIndex )
         {
             rExport.AddAttribute( XML_NAMESPACE_TABLE, XML_CELL_RANGE_ADDRESS, aRange);
             SvXMLElementExport aDomain( rExport, XML_NAMESPACE_CHART, XML_DOMAIN, true, true );
@@ -993,7 +988,7 @@ void SchXMLExportHelper::SetDestinationShellID( const OUString& rShellID )
     m_pImpl->maDestShellID = rShellID;
 }
 
-rtl::Reference< XMLPropertySetMapper > SchXMLExportHelper_Impl::GetPropertySetMapper() const
+const rtl::Reference< XMLPropertySetMapper >& SchXMLExportHelper_Impl::GetPropertySetMapper() const
 {
     return mxPropertySetMapper;
 }
@@ -1007,12 +1002,7 @@ void SchXMLExportHelper_Impl::exportAutoStyles()
         mrExport.exportAutoDataStyles();
 
         // export chart auto styles
-        mrAutoStylePool.exportXML(
-            XML_STYLE_FAMILY_SCH_CHART_ID
-            , mrExport.GetDocHandler(),
-            mrExport.GetMM100UnitConverter(),
-            mrExport.GetNamespaceMap()
-            );
+        mrAutoStylePool.exportXML( XML_STYLE_FAMILY_SCH_CHART_ID );
 
         // export auto styles for additional shapes
         mrExport.GetShapeExport()->exportAutoStyles();
@@ -1028,17 +1018,12 @@ SchXMLExportHelper_Impl::SchXMLExportHelper_Impl(
     SvXMLAutoStylePoolP& rASPool ) :
         mrExport( rExport ),
         mrAutoStylePool( rASPool ),
-        mbHasSeriesLabels( false ),
+        mxPropertySetMapper( new XMLChartPropertySetMapper( true ) ),
+        mxExpPropMapper( new XMLChartExportPropertyMapper( mxPropertySetMapper, rExport ) ),
         mbHasCategoryLabels( false ),
         mbRowSourceColumns( true ),
-        msCLSID( OUString( SvGlobalName( SO3_SCH_CLASSID ).GetHexName()))
+        msCLSID( SvGlobalName( SO3_SCH_CLASSID ).GetHexName() )
 {
-    msTableName = "local-table";
-
-    // create property set mapper
-    mxPropertySetMapper = new XMLChartPropertySetMapper( true);
-    mxExpPropMapper = new XMLChartExportPropertyMapper( mxPropertySetMapper, rExport );
-
     // register chart auto-style family
     mrAutoStylePool.AddFamily(
         XML_STYLE_FAMILY_SCH_CHART_ID,
@@ -1066,16 +1051,12 @@ SchXMLExportHelper_Impl::SchXMLExportHelper_Impl(
         OUString( 'T' ));
 }
 
-SchXMLExportHelper_Impl::~SchXMLExportHelper_Impl()
-{
-}
-
-void SchXMLExportHelper_Impl::collectAutoStyles( Reference< chart::XChartDocument > rChartDoc )
+void SchXMLExportHelper_Impl::collectAutoStyles( Reference< chart::XChartDocument > const & rChartDoc )
 {
     parseDocument( rChartDoc, false );
 }
 
-void SchXMLExportHelper_Impl::exportChart( Reference< chart::XChartDocument > rChartDoc,
+void SchXMLExportHelper_Impl::exportChart( Reference< chart::XChartDocument > const & rChartDoc,
                                       bool bIncludeTable )
 {
     parseDocument( rChartDoc, true, bIncludeTable );
@@ -1106,7 +1087,7 @@ static OUString lcl_GetStringFromNumberSequence( const css::uno::Sequence< sal_I
 }
 
 /// if bExportContent is false the auto-styles are collected
-void SchXMLExportHelper_Impl::parseDocument( Reference< chart::XChartDocument >& rChartDoc,
+void SchXMLExportHelper_Impl::parseDocument( Reference< chart::XChartDocument > const & rChartDoc,
                                         bool bExportContent,
                                         bool bIncludeTable )
 {
@@ -1216,6 +1197,13 @@ void SchXMLExportHelper_Impl::parseDocument( Reference< chart::XChartDocument >&
             }
             mrExport.AddAttribute( XML_NAMESPACE_XLINK, XML_HREF, aDataProviderURL );
             mrExport.AddAttribute( XML_NAMESPACE_XLINK, XML_TYPE, XML_SIMPLE );
+        }
+
+        Reference<chart2::data::XPivotTableDataProvider> xPivotTableDataProvider(xNewDoc->getDataProvider(), uno::UNO_QUERY);
+        if (xPivotTableDataProvider.is() && nCurrentODFVersion > SvtSaveOptions::ODFVER_012)
+        {
+            OUString sPivotTableName = xPivotTableDataProvider->getPivotTableName();
+            mrExport.AddAttribute(XML_NAMESPACE_LO_EXT, XML_DATA_PILOT_SOURCE, sPivotTableName);
         }
 
         OUString sChartType( xDiagram->getDiagramType() );
@@ -1473,7 +1461,7 @@ void SchXMLExportHelper_Impl::parseDocument( Reference< chart::XChartDocument >&
             }
             catch( const uno::Exception & rEx )
             {
-                SAL_INFO("xmloff.chart", "AdditionalShapes not found: " << rEx.Message );
+                SAL_INFO("xmloff.chart", "AdditionalShapes not found: " << rEx );
             }
 
             if( mxAdditionalShapes.is())
@@ -1542,7 +1530,7 @@ static void lcl_exportComplexLabel( const Sequence< uno::Any >& rComplexLabel, S
 void SchXMLExportHelper_Impl::exportTable()
 {
     // table element
-    mrExport.AddAttribute( XML_NAMESPACE_TABLE, XML_NAME, msTableName );
+    mrExport.AddAttribute( XML_NAMESPACE_TABLE, XML_NAME, gsTableName );
 
     try
     {
@@ -1597,10 +1585,9 @@ void SchXMLExportHelper_Impl::exportTable()
         SvXMLElementExport aColumns( mrExport, XML_NAMESPACE_TABLE, XML_TABLE_COLUMNS, true, true );
 
         sal_Int32 nNextIndex = 0;
-        for( size_t nN=0; nN< aData.aHiddenColumns.size(); nN++ )
+        for(sal_Int32 nHiddenIndex : aData.aHiddenColumns)
         {
             //i91578 display of hidden values (copy paste scenario; export hidden flag thus it can be used during migration to locale table upon paste )
-            sal_Int32 nHiddenIndex = aData.aHiddenColumns[nN];
             if( nHiddenIndex > nNextIndex )
             {
                 sal_Int64 nRepeat = static_cast< sal_Int64 >( nHiddenIndex - nNextIndex );
@@ -1643,9 +1630,7 @@ void SchXMLExportHelper_Impl::exportTable()
         const Sequence< Sequence< uno::Any > >& rComplexColumnDescriptions = aData.aComplexColumnDescriptions;
         sal_Int32 nComplexCount = rComplexColumnDescriptions.getLength();
         sal_Int32 nC = 0;
-        for( tStringVector::const_iterator aIt( aData.aColumnDescriptions.begin())
-             ; (aIt != aData.aColumnDescriptions.end())
-             ; ++aIt, nC++ )
+        for( const auto& rDesc : aData.aColumnDescriptions )
         {
             bool bExportString = true;
             if( nC < nComplexCount )
@@ -1672,7 +1657,7 @@ void SchXMLExportHelper_Impl::exportTable()
             }
 
             SvXMLElementExport aCell( mrExport, XML_NAMESPACE_TABLE, XML_TABLE_CELL, true, true );
-            exportText( *aIt );
+            exportText( rDesc );
             if( nC < nComplexCount )
                 lcl_exportComplexLabel( rComplexColumnDescriptions[nC], mrExport );
             if( !bHasOwnData && aColumnDescriptions_RangeIter != aColumnDescriptions_RangeEnd )
@@ -1682,6 +1667,8 @@ void SchXMLExportHelper_Impl::exportTable()
                     SchXMLTools::exportRangeToSomewhere( mrExport, *aColumnDescriptions_RangeIter );
                 ++aColumnDescriptions_RangeIter;
             }
+
+            nC++;
         }
         SAL_WARN_IF( !bHasOwnData && (aColumnDescriptions_RangeIter != aColumnDescriptions_RangeEnd), "xmloff.chart", "bHasOwnData == false && aColumnDescriptions_RangeIter != aColumnDescriptions_RangeEnd" );
     } // closing row and header-rows elements
@@ -1694,9 +1681,7 @@ void SchXMLExportHelper_Impl::exportTable()
         sal_Int32 nComplexCount = rComplexRowDescriptions.getLength();
         sal_Int32 nC = 0;
 
-        for( t2DNumberContainer::const_iterator aRowIt( aData.aDataInRows.begin())
-            ; aRowIt != aData.aDataInRows.end()
-            ; ++aRowIt, ++nC )
+        for( const auto& rRow : aData.aDataInRows )
         {
             SvXMLElementExport aRow( mrExport, XML_NAMESPACE_TABLE, XML_TABLE_ROW, true, true );
 
@@ -1742,8 +1727,8 @@ void SchXMLExportHelper_Impl::exportTable()
             }
 
             //export row values
-            for( t2DNumberContainer::value_type::const_iterator aColIt( aRowIt->begin());
-                 aColIt != aRowIt->end(); ++aColIt )
+            for( t2DNumberContainer::value_type::const_iterator aColIt( rRow.begin());
+                 aColIt != rRow.end(); ++aColIt )
             {
                 ::sax::Converter::convertDouble( msStringBuffer, *aColIt );
                 msString = msStringBuffer.makeStringAndClear();
@@ -1752,7 +1737,7 @@ void SchXMLExportHelper_Impl::exportTable()
                 SvXMLElementExport aCell( mrExport, XML_NAMESPACE_TABLE, XML_TABLE_CELL, true, true );
                 exportText( msString ); // do not convert tabs and lfs
                 if( ( !bHasOwnData && aDataRangeIter != aDataRangeEndIter ) &&
-                    ( mbRowSourceColumns || (aColIt == aRowIt->begin()) ) )
+                    ( mbRowSourceColumns || (aColIt == rRow.begin()) ) )
                 {
                     // remind the original range to allow a correct re-association when copying via clipboard
                     if (!(*aDataRangeIter).isEmpty())
@@ -1760,6 +1745,8 @@ void SchXMLExportHelper_Impl::exportTable()
                     ++aDataRangeIter;
                 }
             }
+
+            ++nC;
         }
     }
 
@@ -1923,8 +1910,7 @@ void SchXMLExportHelper_Impl::exportPlotArea(
             }
             catch( const uno::Exception & rEx )
             {
-                OString aBStr(OUStringToOString(rEx.Message, RTL_TEXTENCODING_ASCII_US));
-                SAL_INFO("xmloff.chart", "chart:exportPlotAreaException caught: " << aBStr);
+                SAL_INFO("xmloff.chart", "chart:exportPlotAreaException caught: " << rEx);
             }
         }
 
@@ -2130,24 +2116,21 @@ void SchXMLExportHelper_Impl::exportDateScale( const Reference< beans::XProperty
         return;
 
     chart::TimeIncrement aIncrement;
-    if( (rAxisProps->getPropertyValue("TimeIncrement") >>= aIncrement) )
+    if( rAxisProps->getPropertyValue("TimeIncrement") >>= aIncrement )
     {
         sal_Int32 nTimeResolution = css::chart::TimeUnit::DAY;
         if( aIncrement.TimeResolution >>= nTimeResolution )
             mrExport.AddAttribute( XML_NAMESPACE_CHART, XML_BASE_TIME_UNIT, lcl_getTimeUnitToken( nTimeResolution ) );
 
-        OUStringBuffer aValue;
         chart::TimeInterval aInterval;
         if( aIncrement.MajorTimeInterval >>= aInterval )
         {
-            ::sax::Converter::convertNumber( aValue, aInterval.Number );
-            mrExport.AddAttribute( XML_NAMESPACE_CHART, XML_MAJOR_INTERVAL_VALUE, aValue.makeStringAndClear() );
+            mrExport.AddAttribute( XML_NAMESPACE_CHART, XML_MAJOR_INTERVAL_VALUE, OUString::number(aInterval.Number) );
             mrExport.AddAttribute( XML_NAMESPACE_CHART, XML_MAJOR_INTERVAL_UNIT, lcl_getTimeUnitToken( aInterval.TimeUnit ) );
         }
         if( aIncrement.MinorTimeInterval >>= aInterval )
         {
-            ::sax::Converter::convertNumber( aValue, aInterval.Number );
-            mrExport.AddAttribute( XML_NAMESPACE_CHART, XML_MINOR_INTERVAL_VALUE, aValue.makeStringAndClear() );
+            mrExport.AddAttribute( XML_NAMESPACE_CHART, XML_MINOR_INTERVAL_VALUE, OUString::number(aInterval.Number) );
             mrExport.AddAttribute( XML_NAMESPACE_CHART, XML_MINOR_INTERVAL_UNIT, lcl_getTimeUnitToken( aInterval.TimeUnit ) );
         }
 
@@ -2245,9 +2228,8 @@ bool lcl_exportAxisType( const Reference< chart2::XAxis >& rChart2Axis, SvXMLExp
 void disableLinkedNumberFormat(
     std::vector<XMLPropertyState>& rPropStates, const rtl::Reference<XMLPropertySetMapper>& rMapper )
 {
-    for (size_t i = 0; i < rPropStates.size(); ++i)
+    for (XMLPropertyState & rState : rPropStates)
     {
-        XMLPropertyState& rState = rPropStates[i];
         if (rState.mnIndex < 0 || rMapper->GetEntryCount() <= rState.mnIndex)
             continue;
 
@@ -2280,7 +2262,7 @@ void SchXMLExportHelper_Impl::exportAxis(
     bool bExportContent )
 {
     std::vector< XMLPropertyState > aPropertyStates;
-    SvXMLElementExport* pAxis = nullptr;
+    std::unique_ptr<SvXMLElementExport> pAxis;
 
     // get property states for autostyles
     if( rAxisProps.is() && mxExpPropMapper.is() )
@@ -2307,7 +2289,7 @@ void SchXMLExportHelper_Impl::exportAxis(
             bExportDateScale = lcl_exportAxisType( rChart2Axis, mrExport );
 
         // open axis element
-        pAxis = new SvXMLElementExport( mrExport, XML_NAMESPACE_CHART, XML_AXIS, true, true );
+        pAxis.reset(new SvXMLElementExport( mrExport, XML_NAMESPACE_CHART, XML_AXIS, true, true ));
     }
     else
     {
@@ -2343,13 +2325,6 @@ void SchXMLExportHelper_Impl::exportAxis(
     // grid
     exportGrid( xMajorGridProps, true, bExportContent );
     exportGrid( xMinorGridProps, false, bExportContent );
-
-    if( pAxis )
-    {
-        //close axis element
-        delete pAxis;
-        pAxis = nullptr;
-    }
 }
 
 void SchXMLExportHelper_Impl::exportAxes(
@@ -2440,7 +2415,6 @@ void SchXMLExportHelper_Impl::exportAxes(
 
     // secondary x axis
 
-    Reference< chart::XSecondAxisTitleSupplier > xSecondTitleSupp( xDiagram, uno::UNO_QUERY );
     xNewAxis = lcl_getAxis( xCooSys, XML_X, false );
     if( xNewAxis.is() )
     {
@@ -2590,7 +2564,7 @@ void SchXMLExportHelper_Impl::exportSeries(
                 Reference< chart2::data::XDataSource > xSource( aSeriesSeq[nSeriesIdx], uno::UNO_QUERY );
                 if( xSource.is())
                 {
-                    SvXMLElementExport* pSeries = nullptr;
+                    std::unique_ptr<SvXMLElementExport> pSeries;
                     Sequence< Reference< chart2::data::XLabeledDataSequence > > aSeqCnt(
                         xSource->getDataSequences());
                     sal_Int32 nMainSequenceIndex = -1;
@@ -2615,7 +2589,7 @@ void SchXMLExportHelper_Impl::exportSeries(
                                 if( xSeqProp.is())
                                     xSeqProp->getPropertyValue("Role") >>= aRole;
                                 // "main" sequence
-                                if( aRole.equals( aLabelRole ))
+                                if( aRole == aLabelRole )
                                 {
                                     xValuesSeq.set( xTempValueSeq );
                                     xLabelSeq.set( aSeqCnt[nSeqIdx]->getLabel());
@@ -2638,7 +2612,7 @@ void SchXMLExportHelper_Impl::exportSeries(
                             }
                             catch( const uno::Exception & rEx )
                             {
-                                SAL_INFO("xmloff.chart", "Series not found or no XPropertySet: " << rEx.Message );
+                                SAL_INFO("xmloff.chart", "Series not found or no XPropertySet: " << rEx );
                                 continue;
                             }
                             if( xPropSet.is())
@@ -2654,7 +2628,7 @@ void SchXMLExportHelper_Impl::exportSeries(
                                 }
                                 catch( const beans::UnknownPropertyException & rEx )
                                 {
-                                    SAL_INFO("xmloff.chart", "Required property not found in DataRowProperties: " << rEx.Message );
+                                    SAL_INFO("xmloff.chart", "Required property not found in DataRowProperties: " << rEx );
                                 }
 
                                 const SvtSaveOptions::ODFDefaultVersion nCurrentODFVersion( SvtSaveOptions().GetODFDefaultVersion() );
@@ -2689,6 +2663,19 @@ void SchXMLExportHelper_Impl::exportSeries(
                                 else
                                     // #i75297# allow empty series, export empty range to have all ranges on import
                                     mrExport.AddAttribute( XML_NAMESPACE_CHART, XML_VALUES_CELL_RANGE_ADDRESS, OUString());
+
+                                const SvtSaveOptions::ODFDefaultVersion nCurrentODFVersion( SvtSaveOptions().GetODFDefaultVersion() );
+                                if( nCurrentODFVersion >= SvtSaveOptions::ODFVER_012 )
+                                {
+                                    if (xPropSet.is())
+                                    {
+                                        Any aAny = xPropSet->getPropertyValue("ShowLegendEntry");
+                                        if (!aAny.get<bool>())
+                                        {
+                                            mrExport.AddAttribute(XML_NAMESPACE_LO_EXT, XML_HIDE_LEGEND, OUString::boolean(true));
+                                        }
+                                    }
+                                }
 
                                 if (xLabelSeq.is())
                                 {
@@ -2732,7 +2719,7 @@ void SchXMLExportHelper_Impl::exportSeries(
                                                            XML_NAMESPACE_CHART, GetXMLToken( eCTToken )));
 
                                 // open series element until end of for loop
-                                pSeries = new SvXMLElementExport( mrExport, XML_NAMESPACE_CHART, XML_SERIES, true, true );
+                                pSeries.reset(new SvXMLElementExport( mrExport, XML_NAMESPACE_CHART, XML_SERIES, true, true ));
                             }
                             else    // autostyles
                             {
@@ -2769,8 +2756,8 @@ void SchXMLExportHelper_Impl::exportSeries(
                                 {
                                     Reference< chart2::data::XDataSequence > xValues( xSequence->getValues() );
                                     if( lcl_exportDomainForThisSequence( xValues, aFirstXDomainRange, mrExport ) )
-                                        m_aDataSequencesToExport.push_back( tLabelValuesDataPair(
-                                            uno::Reference< chart2::data::XDataSequence >(), xValues ));
+                                        m_aDataSequencesToExport.emplace_back(
+                                            uno::Reference< chart2::data::XDataSequence >(), xValues );
                                 }
                                 else if( nSeriesIdx==0 )
                                 {
@@ -2785,8 +2772,8 @@ void SchXMLExportHelper_Impl::exportSeries(
                                 }
                             }
                             if( xYValuesForBubbleChart.is() )
-                                m_aDataSequencesToExport.push_back( tLabelValuesDataPair(
-                                    uno::Reference< chart2::data::XDataSequence >(), xYValuesForBubbleChart ));
+                                m_aDataSequencesToExport.emplace_back(
+                                    uno::Reference< chart2::data::XDataSequence >(), xYValuesForBubbleChart );
                         }
                     }
 
@@ -2810,7 +2797,7 @@ void SchXMLExportHelper_Impl::exportSeries(
                         }
                         catch( const uno::Exception & rEx )
                         {
-                            SAL_INFO("xmloff.chart", "Exception caught during Export of series - optional DataMeanValueProperties not available: " << rEx.Message );
+                            SAL_INFO("xmloff.chart", "Exception caught during Export of series - optional DataMeanValueProperties not available: " << rEx );
                         }
 
                         if( xStatProp.is() )
@@ -2856,7 +2843,7 @@ void SchXMLExportHelper_Impl::exportSeries(
                     }
 
                     // close series element
-                    delete pSeries;
+                    pSeries.reset();
                 }
             }
             aPropertyStates.clear();
@@ -2887,8 +2874,8 @@ void SchXMLExportHelper_Impl::exportPropertyMapping(
                 SvXMLElementExport( mrExport, XML_NAMESPACE_LO_EXT, XML_PROPERTY_MAPPING, true, true );
 
                 // register range for data table export
-                m_aDataSequencesToExport.push_back( tLabelValuesDataPair(
-                            uno::Reference< chart2::data::XDataSequence >(), xValues ));
+                m_aDataSequencesToExport.emplace_back(
+                            uno::Reference< chart2::data::XDataSequence >(), xValues );
             }
         }
     }
@@ -2901,9 +2888,6 @@ void SchXMLExportHelper_Impl::exportRegressionCurve(
 {
     OSL_ASSERT( mxExpPropMapper.is());
 
-    std::vector< XMLPropertyState > aPropertyStates;
-    std::vector< XMLPropertyState > aEquationPropertyStates;
-
     Reference< chart2::XRegressionCurveContainer > xRegressionCurveContainer( xSeries, uno::UNO_QUERY );
     if( xRegressionCurveContainer.is() )
     {
@@ -2915,6 +2899,7 @@ void SchXMLExportHelper_Impl::exportRegressionCurve(
 
         for( pIt = pBeg; pIt != pEnd; pIt++ )
         {
+            std::vector< XMLPropertyState > aEquationPropertyStates;
             Reference< chart2::XRegressionCurve > xRegCurve = *pIt;
             if (!xRegCurve.is())
                 continue;
@@ -2934,7 +2919,7 @@ void SchXMLExportHelper_Impl::exportRegressionCurve(
             OUString aService;
             aService = xServiceName->getServiceName();
 
-            aPropertyStates = mxExpPropMapper->Filter( xProperties );
+            std::vector< XMLPropertyState > aPropertyStates = mxExpPropMapper->Filter( xProperties );
 
             // Add service name (which is regression type)
             sal_Int32 nIndex = GetPropertySetMapper()->FindEntryIndex(XML_SCH_CONTEXT_SPECIAL_REGRESSION_TYPE);
@@ -3058,23 +3043,20 @@ void SchXMLExportHelper_Impl::exportErrorBar( const Reference<beans::XPropertySe
         }
         catch( const beans::UnknownPropertyException & rEx )
         {
-            SAL_INFO("xmloff.chart", "Required property not found in DataRowProperties: " << rEx.Message );
+            SAL_INFO("xmloff.chart", "Required property not found in DataRowProperties: " << rEx );
         }
 
         if( nErrorBarStyle != chart::ErrorBarStyle::NONE && (bNegative || bPositive))
         {
             if( bExportContent && nErrorBarStyle == chart::ErrorBarStyle::FROM_DATA )
             {
-                uno::Reference< chart2::XChartDocument > xNewDoc(mrExport.GetModel(), uno::UNO_QUERY);
-
                 // register data ranges for error bars for export in local table
                 ::std::vector< Reference< chart2::data::XDataSequence > > aErrorBarSequences(
                     lcl_getErrorBarSequences( xErrorBarProp ));
-                for( ::std::vector< Reference< chart2::data::XDataSequence > >::const_iterator aIt(
-                         aErrorBarSequences.begin()); aIt != aErrorBarSequences.end(); ++aIt )
+                for( const auto& rErrorBarSequence : aErrorBarSequences )
                 {
-                    m_aDataSequencesToExport.push_back( tLabelValuesDataPair(
-                        uno::Reference< chart2::data::XDataSequence >(), *aIt ));
+                    m_aDataSequencesToExport.emplace_back(
+                        uno::Reference< chart2::data::XDataSequence >(), rErrorBarSequence );
                 }
             }
 
@@ -3255,7 +3237,7 @@ void SchXMLExportHelper_Impl::exportDataPoints(
     if( xDiagram.is())
         xColorScheme.set( xDiagram->getDefaultColorScheme());
 
-    ::std::list< SchXMLDataPointStruct > aDataPointList;
+    ::std::vector< SchXMLDataPointStruct > aDataPointVector;
 
     sal_Int32 nLastIndex = -1;
     sal_Int32 nCurrIndex = 0;
@@ -3282,7 +3264,7 @@ void SchXMLExportHelper_Impl::exportDataPoints(
                 }
                 catch( const uno::Exception & rEx )
                 {
-                    SAL_INFO("xmloff.chart", "Exception caught during Export of data point: " << rEx.Message );
+                    SAL_INFO("xmloff.chart", "Exception caught during Export of data point: " << rEx );
                 }
             }
             else
@@ -3312,7 +3294,7 @@ void SchXMLExportHelper_Impl::exportDataPoints(
                         SchXMLDataPointStruct aPoint;
                         aPoint.maStyleName = maAutoStyleNameQueue.front();
                         maAutoStyleNameQueue.pop();
-                        aDataPointList.push_back( aPoint );
+                        aDataPointVector.push_back( aPoint );
                     }
                     else
                     {
@@ -3321,7 +3303,7 @@ void SchXMLExportHelper_Impl::exportDataPoints(
                 }
             }
         }
-        SAL_WARN_IF( bExportContent && (static_cast<sal_Int32>(aDataPointList.size()) != nSeriesLength), "xmloff.chart", "not enough data points on content export" );
+        SAL_WARN_IF( bExportContent && (static_cast<sal_Int32>(aDataPointVector.size()) != nSeriesLength), "xmloff.chart", "not enough data points on content export" );
     }
     else
     {
@@ -3339,7 +3321,7 @@ void SchXMLExportHelper_Impl::exportDataPoints(
             {
                 SchXMLDataPointStruct aPoint;
                 aPoint.mnRepeat = nCurrIndex - nLastIndex - 1;
-                aDataPointList.push_back( aPoint );
+                aDataPointVector.push_back( aPoint );
             }
 
             uno::Reference< beans::XPropertySet > xPropSet;
@@ -3351,7 +3333,7 @@ void SchXMLExportHelper_Impl::exportDataPoints(
             }
             catch( const uno::Exception & rEx )
             {
-                SAL_INFO("xmloff.chart", "Exception caught during Export of data point: " << rEx.Message );
+                SAL_INFO("xmloff.chart", "Exception caught during Export of data point: " << rEx );
             }
             if( xPropSet.is())
             {
@@ -3373,7 +3355,7 @@ void SchXMLExportHelper_Impl::exportDataPoints(
                         aPoint.maStyleName = maAutoStyleNameQueue.front();
                         maAutoStyleNameQueue.pop();
 
-                        aDataPointList.push_back( aPoint );
+                        aDataPointVector.push_back( aPoint );
                         nLastIndex = nCurrIndex;
                     }
                     else
@@ -3386,7 +3368,7 @@ void SchXMLExportHelper_Impl::exportDataPoints(
 
             // if we get here the property states are empty
             SchXMLDataPointStruct aPoint;
-            aDataPointList.push_back( aPoint );
+            aDataPointVector.push_back( aPoint );
 
             nLastIndex = nCurrIndex;
         }
@@ -3396,7 +3378,7 @@ void SchXMLExportHelper_Impl::exportDataPoints(
         {
             SchXMLDataPointStruct aPoint;
             aPoint.mnRepeat = nRepeat;
-            aDataPointList.push_back( aPoint );
+            aDataPointVector.push_back( aPoint );
         }
     }
 
@@ -3404,7 +3386,6 @@ void SchXMLExportHelper_Impl::exportDataPoints(
         return;
 
     // write elements (merge equal ones)
-    ::std::list< SchXMLDataPointStruct >::iterator aIter = aDataPointList.begin();
     SchXMLDataPointStruct aPoint;
     SchXMLDataPointStruct aLastPoint;
 
@@ -3412,9 +3393,9 @@ void SchXMLExportHelper_Impl::exportDataPoints(
     // the element is counted in the first iteration
     aLastPoint.mnRepeat = 0;
 
-    for( ; aIter != aDataPointList.end(); ++aIter )
+    for( const auto& rPoint : aDataPointVector )
     {
-        aPoint = (*aIter);
+        aPoint = rPoint;
 
         if( aPoint.maStyleName == aLastPoint.maStyleName )
             aPoint.mnRepeat += aLastPoint.mnRepeat;
@@ -3519,13 +3500,12 @@ void SchXMLExportHelper_Impl::exportText( const OUString& rText )
 
 // class SchXMLExport
 
-SchXMLExport::SchXMLExport(
-    const Reference< uno::XComponentContext >& xContext,
-    OUString const & implementationName, SvXMLExportFlags nExportFlags )
-:   SvXMLExport( util::MeasureUnit::CM, xContext, implementationName,
-        ::xmloff::token::XML_CHART, nExportFlags ),
-    maAutoStylePool( new SchXMLAutoStylePoolP(*this) ),
-    maExportHelper( new SchXMLExportHelper(*this, *maAutoStylePool.get()) )
+SchXMLExport::SchXMLExport(const Reference<uno::XComponentContext>& xContext,
+                           OUString const& implementationName, SvXMLExportFlags nExportFlags)
+    : SvXMLExport(util::MeasureUnit::CM, xContext, implementationName, ::xmloff::token::XML_CHART,
+                  nExportFlags)
+    , maAutoStylePool(new SchXMLAutoStylePoolP(*this))
+    , maExportHelper(new SchXMLExportHelper(*this, *maAutoStylePool))
 {
     if( getDefaultVersion() > SvtSaveOptions::ODFVER_012 )
         GetNamespaceMap_().Add( GetXMLToken(XML_NP_CHART_EXT), GetXMLToken(XML_N_CHART_EXT), XML_NAMESPACE_CHART_EXT);
@@ -3533,15 +3513,9 @@ SchXMLExport::SchXMLExport(
 
 SchXMLExport::~SchXMLExport()
 {
-    // stop progress view
-    if( mxStatusIndicator.is())
-    {
-        mxStatusIndicator->end();
-        mxStatusIndicator->reset();
-    }
 }
 
-sal_uInt32 SchXMLExport::exportDoc( enum ::xmloff::token::XMLTokenEnum eClass )
+ErrCode SchXMLExport::exportDoc( enum ::xmloff::token::XMLTokenEnum eClass )
 {
     maExportHelper->SetSourceShellID(GetSourceShellID());
     maExportHelper->SetDestinationShellID(GetDestinationShellID());
@@ -3551,19 +3525,19 @@ sal_uInt32 SchXMLExport::exportDoc( enum ::xmloff::token::XMLTokenEnum eClass )
     return SvXMLExport::exportDoc( eClass );
 }
 
-void SchXMLExport::ExportStyles_( bool bUsed )
-{
-    SvXMLExport::ExportStyles_( bUsed );
-}
-
 void SchXMLExport::ExportMasterStyles_()
 {
     // not available in chart
     SAL_INFO("xmloff.chart", "Master Style Export requested. Not available for Chart" );
 }
 
-void SchXMLExport::ExportAutoStyles_()
+void SchXMLExport::collectAutoStyles()
 {
+    SvXMLExport::collectAutoStyles();
+
+    if (mbAutoStylesCollected)
+        return;
+
     // there are no styles that require their own autostyles
     if( getExportFlags() & SvXMLExportFlags::CONTENT )
     {
@@ -3571,6 +3545,24 @@ void SchXMLExport::ExportAutoStyles_()
         if( xChartDoc.is())
         {
             maExportHelper->m_pImpl->collectAutoStyles( xChartDoc );
+        }
+        else
+        {
+            SAL_WARN("xmloff.chart", "Couldn't export chart due to wrong XModel (must be XChartDocument)" );
+        }
+    }
+    mbAutoStylesCollected = true;
+}
+
+void SchXMLExport::ExportAutoStyles_()
+{
+    collectAutoStyles();
+
+    if( getExportFlags() & SvXMLExportFlags::CONTENT )
+    {
+        Reference< chart::XChartDocument > xChartDoc( GetModel(), uno::UNO_QUERY );
+        if( xChartDoc.is())
+        {
             maExportHelper->m_pImpl->exportAutoStyles();
         }
         else
@@ -3642,7 +3634,7 @@ void SchXMLExport::ExportContent_()
     }
 }
 
-rtl::Reference< XMLPropertySetMapper > SchXMLExport::GetPropertySetMapper() const
+rtl::Reference< XMLPropertySetMapper > const & SchXMLExport::GetPropertySetMapper() const
 {
     return maExportHelper->m_pImpl->GetPropertySetMapper();
 }
@@ -3675,8 +3667,6 @@ void SchXMLExportHelper_Impl::InitRangeSegmentationProperties( const Reference< 
                         aArgs[i].Value >>= eRowSource;
                         mbRowSourceColumns = ( eRowSource == chart::ChartDataRowSource_COLUMNS );
                     }
-                    else if ( aArgs[i].Name == "FirstCellAsLabel" )
-                        aArgs[i].Value >>= mbHasSeriesLabels;
                     else if ( aArgs[i].Name == "SequenceMapping" )
                         aArgs[i].Value >>= maSequenceMapping;
                     else if ( aArgs[i].Name == "TableNumberList" )
@@ -3684,7 +3674,7 @@ void SchXMLExportHelper_Impl::InitRangeSegmentationProperties( const Reference< 
                 }
 
                 // #i79009# For Writer we have to export a broken version of the
-                // range, where every row number is noe too large, so that older
+                // range, where every row number is not too large, so that older
                 // version can correctly read those files.
                 msChartAddress = (bBrokenRangeAvailable ? sBrokenRange : sCellRange);
                 if( !msChartAddress.isEmpty() )
@@ -3696,42 +3686,42 @@ void SchXMLExportHelper_Impl::InitRangeSegmentationProperties( const Reference< 
                 }
             }
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            SAL_WARN("xmloff.chart", "Exception caught. Type: " << OUString::createFromAscii( typeid( ex ).name()) << ", Message: " << ex.Message);
+            DBG_UNHANDLED_EXCEPTION("xmloff.chart");
         }
 }
 
 // first version: everything goes in one storage
 
-Sequence< OUString > SAL_CALL SchXMLExport_getSupportedServiceNames() throw()
+Sequence< OUString > SchXMLExport_getSupportedServiceNames() throw()
 {
     return Sequence< OUString > { "com.sun.star.comp.Chart.XMLExporter" };
 }
 
-OUString SAL_CALL SchXMLExport_getImplementationName() throw()
+OUString SchXMLExport_getImplementationName() throw()
 {
     return OUString(  "SchXMLExport.Compact"  );
 }
 
-Reference< uno::XInterface > SAL_CALL SchXMLExport_createInstance(const Reference< lang::XMultiServiceFactory > & rSMgr) throw( uno::Exception )
+Reference< uno::XInterface > SchXMLExport_createInstance(const Reference< lang::XMultiServiceFactory > & rSMgr)
 {
     // #103997# removed some flags from EXPORT_ALL
     return static_cast<cppu::OWeakObject*>(new SchXMLExport( comphelper::getComponentContext(rSMgr), SchXMLExport_getImplementationName(), SvXMLExportFlags::ALL ^ ( SvXMLExportFlags::SETTINGS | SvXMLExportFlags::MASTERSTYLES | SvXMLExportFlags::SCRIPTS )));
 }
 
 // Oasis format
-Sequence< OUString > SAL_CALL SchXMLExport_Oasis_getSupportedServiceNames() throw()
+Sequence< OUString > SchXMLExport_Oasis_getSupportedServiceNames() throw()
 {
     return Sequence< OUString > { "com.sun.star.comp.Chart.XMLOasisExporter" };
 }
 
-OUString SAL_CALL SchXMLExport_Oasis_getImplementationName() throw()
+OUString SchXMLExport_Oasis_getImplementationName() throw()
 {
     return OUString(  "SchXMLExport.Oasis.Compact"  );
 }
 
-Reference< uno::XInterface > SAL_CALL SchXMLExport_Oasis_createInstance(const Reference< lang::XMultiServiceFactory > & rSMgr) throw( uno::Exception )
+Reference< uno::XInterface > SchXMLExport_Oasis_createInstance(const Reference< lang::XMultiServiceFactory > & rSMgr)
 {
     // #103997# removed some flags from EXPORT_ALL
     return static_cast<cppu::OWeakObject*>(new SchXMLExport( comphelper::getComponentContext(rSMgr),
@@ -3741,80 +3731,80 @@ Reference< uno::XInterface > SAL_CALL SchXMLExport_Oasis_createInstance(const Re
 
 // multiple storage version: one for content / styles / meta
 
-Sequence< OUString > SAL_CALL SchXMLExport_Styles_getSupportedServiceNames() throw()
+Sequence< OUString > SchXMLExport_Styles_getSupportedServiceNames() throw()
 {
     return Sequence< OUString > { "com.sun.star.comp.Chart.XMLStylesExporter" };
 }
 
-OUString SAL_CALL SchXMLExport_Styles_getImplementationName() throw()
+OUString SchXMLExport_Styles_getImplementationName() throw()
 {
     return OUString(  "SchXMLExport.Styles" );
 }
 
-Reference< uno::XInterface > SAL_CALL SchXMLExport_Styles_createInstance(const Reference< lang::XMultiServiceFactory >& rSMgr) throw( uno::Exception )
+Reference< uno::XInterface > SchXMLExport_Styles_createInstance(const Reference< lang::XMultiServiceFactory >& rSMgr)
 {
     return static_cast<cppu::OWeakObject*>(new SchXMLExport( comphelper::getComponentContext(rSMgr), SchXMLExport_Styles_getImplementationName(), SvXMLExportFlags::STYLES ));
 }
 
 // Oasis format
-Sequence< OUString > SAL_CALL SchXMLExport_Oasis_Styles_getSupportedServiceNames() throw()
+Sequence< OUString > SchXMLExport_Oasis_Styles_getSupportedServiceNames() throw()
 {
     return Sequence< OUString > { "com.sun.star.comp.Chart.XMLOasisStylesExporter" };
 }
 
-OUString SAL_CALL SchXMLExport_Oasis_Styles_getImplementationName() throw()
+OUString SchXMLExport_Oasis_Styles_getImplementationName() throw()
 {
     return OUString( "SchXMLExport.Oasis.Styles" );
 }
 
-Reference< uno::XInterface > SAL_CALL SchXMLExport_Oasis_Styles_createInstance(const Reference< lang::XMultiServiceFactory > & rSMgr) throw( uno::Exception )
+Reference< uno::XInterface > SchXMLExport_Oasis_Styles_createInstance(const Reference< lang::XMultiServiceFactory > & rSMgr)
 {
     return static_cast<cppu::OWeakObject*>(new SchXMLExport( comphelper::getComponentContext(rSMgr), SchXMLExport_Oasis_Styles_getImplementationName(), SvXMLExportFlags::STYLES | SvXMLExportFlags::OASIS ));
 }
 
-Sequence< OUString > SAL_CALL SchXMLExport_Content_getSupportedServiceNames() throw()
+Sequence< OUString > SchXMLExport_Content_getSupportedServiceNames() throw()
 {
     return Sequence< OUString > { "com.sun.star.comp.Chart.XMLContentExporter" };
 }
 
-OUString SAL_CALL SchXMLExport_Content_getImplementationName() throw()
+OUString SchXMLExport_Content_getImplementationName() throw()
 {
     return OUString(  "SchXMLExport.Content" );
 }
 
-Reference< uno::XInterface > SAL_CALL SchXMLExport_Content_createInstance(const Reference< lang::XMultiServiceFactory > & rSMgr) throw( uno::Exception )
+Reference< uno::XInterface > SchXMLExport_Content_createInstance(const Reference< lang::XMultiServiceFactory > & rSMgr)
 {
     return static_cast<cppu::OWeakObject*>(new SchXMLExport( comphelper::getComponentContext(rSMgr), SchXMLExport_Content_getImplementationName(), SvXMLExportFlags::AUTOSTYLES | SvXMLExportFlags::CONTENT | SvXMLExportFlags::FONTDECLS ));
 }
 
 // Oasis format
-Sequence< OUString > SAL_CALL SchXMLExport_Oasis_Content_getSupportedServiceNames() throw()
+Sequence< OUString > SchXMLExport_Oasis_Content_getSupportedServiceNames() throw()
 {
     return Sequence< OUString > { "com.sun.star.comp.Chart.XMLOasisContentExporter" };
 }
 
-OUString SAL_CALL SchXMLExport_Oasis_Content_getImplementationName() throw()
+OUString SchXMLExport_Oasis_Content_getImplementationName() throw()
 {
     return OUString(  "SchXMLExport.Oasis.Content" );
 }
 
-Reference< uno::XInterface > SAL_CALL SchXMLExport_Oasis_Content_createInstance(const Reference< lang::XMultiServiceFactory > & rSMgr) throw( uno::Exception )
+Reference< uno::XInterface > SchXMLExport_Oasis_Content_createInstance(const Reference< lang::XMultiServiceFactory > & rSMgr)
 {
     return static_cast<cppu::OWeakObject*>(new SchXMLExport( comphelper::getComponentContext(rSMgr), SchXMLExport_Oasis_Content_getImplementationName(), SvXMLExportFlags::AUTOSTYLES | SvXMLExportFlags::CONTENT | SvXMLExportFlags::FONTDECLS | SvXMLExportFlags::OASIS ));
 }
 
 // Oasis format
-Sequence< OUString > SAL_CALL SchXMLExport_Oasis_Meta_getSupportedServiceNames() throw()
+Sequence< OUString > SchXMLExport_Oasis_Meta_getSupportedServiceNames() throw()
 {
     return Sequence< OUString > { "com.sun.star.comp.Chart.XMLOasisMetaExporter" };
 }
 
-OUString SAL_CALL SchXMLExport_Oasis_Meta_getImplementationName() throw()
+OUString SchXMLExport_Oasis_Meta_getImplementationName() throw()
 {
     return OUString(  "SchXMLExport.Oasis.Meta" );
 }
 
-Reference< uno::XInterface > SAL_CALL SchXMLExport_Oasis_Meta_createInstance(const Reference< lang::XMultiServiceFactory > & rSMgr) throw( uno::Exception )
+Reference< uno::XInterface > SchXMLExport_Oasis_Meta_createInstance(const Reference< lang::XMultiServiceFactory > & rSMgr)
 {
     return static_cast<cppu::OWeakObject*>(new SchXMLExport( comphelper::getComponentContext(rSMgr), SchXMLExport_Oasis_Meta_getImplementationName(), SvXMLExportFlags::META | SvXMLExportFlags::OASIS  ));
 }

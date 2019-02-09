@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "RDFaExportHelper.hxx"
+#include <RDFaExportHelper.hxx>
 
 #include <xmloff/xmlnmspe.hxx>
 
@@ -37,14 +37,7 @@
 #include <com/sun/star/rdf/XDocumentRepository.hpp>
 
 #include <rtl/ustrbuf.hxx>
-
-#include <boost/iterator_adaptors.hpp>
-#ifndef BOOST_ITERATOR_ADAPTOR_DWA053000_HPP_ // from iterator_adaptors.hpp
-// N.B.: the check for the header guard _of a specific version of boost_
-//       is here so this may work on different versions of boost,
-//       which sadly put the goods in different header files
-#include <boost/iterator/transform_iterator.hpp>
-#endif
+#include <osl/diagnose.h>
 
 #include <functional>
 #include <algorithm>
@@ -95,12 +88,10 @@ getRelativeReference(SvXMLExport const& rExport, OUString const& rURI)
 }
 
 RDFaExportHelper::RDFaExportHelper(SvXMLExport & i_rExport)
-    : m_rExport(i_rExport), m_xRepository(nullptr), m_Counter(0)
+    : m_rExport(i_rExport), m_Counter(0)
 {
     const uno::Reference<rdf::XRepositorySupplier> xRS( m_rExport.GetModel(),
-            uno::UNO_QUERY);
-    OSL_ENSURE(xRS.is(), "AddRDFa: model is no rdf::XRepositorySupplier");
-    if (!xRS.is()) throw uno::RuntimeException();
+            uno::UNO_QUERY_THROW);
     m_xRepository.set(xRS->getRDFRepository(), uno::UNO_QUERY_THROW);
 }
 
@@ -165,17 +156,13 @@ RDFaExportHelper::AddRDFa(
                 xContent->getValue());
         }
 
-        auto aStatementToCURIE = [this](rdf::Statement const& aStatement) {
-            return makeCURIE(&this->m_rExport, aStatement.Predicate);
-        };
+        ::std::vector<OUString> curies;
+        for (rdf::Statement const& rStatement : rStatements)
+        {
+            curies.push_back(makeCURIE(&m_rExport, rStatement.Predicate));
+        }
         OUStringBuffer property;
-        ::comphelper::intersperse(
-            ::boost::make_transform_iterator(
-                rStatements.begin(),
-                aStatementToCURIE),
-            ::boost::make_transform_iterator(
-                rStatements.end(),
-                aStatementToCURIE),
+        ::comphelper::intersperse(curies.begin(), curies.end(),
             ::comphelper::OUStringBufferAppender(property),
             OUString(" "));
 

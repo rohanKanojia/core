@@ -22,15 +22,14 @@
 
 #include <vcl/button.hxx>
 #include <vcl/dialog.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/lstbox.hxx>
 #include <vcl/idle.hxx>
 #include <svx/ctredlin.hxx>
 
-#include "chgtrack.hxx"
 #include "docsh.hxx"
 
 class ScViewData;
+class ScChangeTrack;
+class ScChangeAction;
 
 enum ScConflictAction
 {
@@ -39,15 +38,13 @@ enum ScConflictAction
     SC_CONFLICT_ACTION_KEEP_OTHER
 };
 
-typedef ::std::vector< sal_uLong > ScChangeActionList;
-
 // struct ScConflictsListEntry
 
 struct ScConflictsListEntry
 {
     ScConflictAction    meConflictAction;
-    ScChangeActionList  maSharedActions;
-    ScChangeActionList  maOwnActions;
+    std::vector<sal_uLong>  maSharedActions;
+    std::vector<sal_uLong>  maOwnActions;
 
     bool                HasSharedAction( sal_uLong nSharedAction ) const;
     bool                HasOwnAction( sal_uLong nOwnAction ) const;
@@ -60,7 +57,7 @@ typedef ::std::vector< ScConflictsListEntry > ScConflictsList;
 class ScConflictsListHelper
 {
 private:
-    static void                     Transform_Impl( ScChangeActionList& rActionList, ScChangeActionMergeMap* pMergeMap );
+    static void                     Transform_Impl( std::vector<sal_uLong>& rActionList, ScChangeActionMergeMap* pMergeMap );
 
 public:
     static bool                     HasOwnAction( ScConflictsList& rConflictsList, sal_uLong nOwnAction );
@@ -74,31 +71,31 @@ public:
 
 // class ScConflictsFinder
 
-class ScConflictsFinder
+class ScConflictsFinder final
 {
 private:
-    ScChangeTrack*          mpTrack;
-    sal_uLong                   mnStartShared;
-    sal_uLong                   mnEndShared;
-    sal_uLong                   mnStartOwn;
-    sal_uLong                   mnEndOwn;
+    ScChangeTrack* const    mpTrack;
+    sal_uLong const         mnStartShared;
+    sal_uLong const         mnEndShared;
+    sal_uLong const         mnStartOwn;
+    sal_uLong const         mnEndOwn;
     ScConflictsList&        mrConflictsList;
 
     static bool             DoActionsIntersect( const ScChangeAction* pAction1, const ScChangeAction* pAction2 );
     ScConflictsListEntry*   GetIntersectingEntry( const ScChangeAction* pAction ) const;
-    ScConflictsListEntry*   GetEntry( sal_uLong nSharedAction, const ScChangeActionList& rOwnActions );
+    ScConflictsListEntry&   GetEntry(sal_uLong nSharedAction, const std::vector<sal_uLong>& rOwnActions);
 
 public:
                             ScConflictsFinder( ScChangeTrack* pTrack, sal_uLong nStartShared, sal_uLong nEndShared,
                                 sal_uLong nStartOwn, sal_uLong nEndOwn, ScConflictsList& rConflictsList );
-    virtual                 ~ScConflictsFinder();
+                            ~ScConflictsFinder();
 
     bool                    Find();
 };
 
 // class ScConflictsResolver
 
-class ScConflictsResolver
+class ScConflictsResolver final
 {
 private:
     ScChangeTrack*      mpTrack;
@@ -106,7 +103,7 @@ private:
 
 public:
                         ScConflictsResolver( ScChangeTrack* pTrack, ScConflictsList& rConflictsList );
-    virtual             ~ScConflictsResolver();
+                        ~ScConflictsResolver();
 
     void                HandleAction( ScChangeAction* pAction, bool bIsSharedAction,
                             bool bHandleContentAction, bool bHandleNonContentAction );
@@ -124,18 +121,15 @@ private:
     VclPtr<PushButton>          m_pBtnKeepAllMine;
     VclPtr<PushButton>          m_pBtnKeepAllOthers;
 
-    OUString            maStrTitleConflict;
-    OUString            maStrTitleAuthor;
-    OUString            maStrTitleDate;
-    OUString            maStrUnknownUser;
+    OUString const            maStrTitleConflict;
+    OUString const            maStrUnknownUser;
 
-    ScViewData*         mpViewData;
+    ScViewData* const         mpViewData;
     ScDocument*         mpOwnDoc;
     ScChangeTrack*      mpOwnTrack;
-    ScDocument*         mpSharedDoc;
+    ScDocument* const         mpSharedDoc;
     ScChangeTrack*      mpSharedTrack;
     ScConflictsList&    mrConflictsList;
-    Size                maDialogSize;
 
     Idle                maSelectionIdle;
     bool                mbInSelectHdl;
@@ -145,21 +139,21 @@ private:
     OUString            GetActionString( const ScChangeAction* pAction, ScDocument* pDoc );
     void                HandleListBoxSelection( bool bSelectHandle );
 
-    static void         SetConflictAction( SvTreeListEntry* pRootEntry, ScConflictAction eConflictAction );
+    static void         SetConflictAction( const SvTreeListEntry* pRootEntry, ScConflictAction eConflictAction );
     void                KeepHandler( bool bMine );
     void                KeepAllHandler( bool bMine );
 
-    DECL_LINK_TYPED( SelectHandle, SvTreeListBox*, void );
-    DECL_LINK_TYPED( DeselectHandle, SvTreeListBox*, void );
-    DECL_LINK_TYPED( UpdateSelectionHdl, Idle*, void );
-    DECL_LINK_TYPED( KeepMineHandle, Button*, void );
-    DECL_LINK_TYPED( KeepOtherHandle, Button*, void );
-    DECL_LINK_TYPED( KeepAllMineHandle, Button*, void );
-    DECL_LINK_TYPED( KeepAllOthersHandle, Button*, void );
+    DECL_LINK( SelectHandle, SvTreeListBox*, void );
+    DECL_LINK( DeselectHandle, SvTreeListBox*, void );
+    DECL_LINK( UpdateSelectionHdl, Timer*, void );
+    DECL_LINK( KeepMineHandle, Button*, void );
+    DECL_LINK( KeepOtherHandle, Button*, void );
+    DECL_LINK( KeepAllMineHandle, Button*, void );
+    DECL_LINK( KeepAllOthersHandle, Button*, void );
 
 public:
                         ScConflictsDlg( vcl::Window* pParent, ScViewData* pViewData, ScDocument* pSharedDoc, ScConflictsList& rConflictsList );
-                        virtual ~ScConflictsDlg();
+                        virtual ~ScConflictsDlg() override;
     virtual void        dispose() override;
 
     void                UpdateView();

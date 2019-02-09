@@ -40,6 +40,8 @@
 #include "pq_xcontainer.hxx"
 #include "pq_xbase.hxx"
 
+namespace com { namespace sun { namespace star { namespace sdbc { class XRow; } } } }
+
 namespace pq_sdbc_driver
 {
 
@@ -47,61 +49,54 @@ void alterColumnByDescriptor(
     const OUString & schemaName,
     const OUString & tableName,
     ConnectionSettings *settings,
-    const com::sun::star::uno::Reference< com::sun::star::sdbc::XStatement > &stmt,
-    const com::sun::star::uno::Reference< com::sun::star::beans::XPropertySet > & past,
-    const com::sun::star::uno::Reference< com::sun::star::beans::XPropertySet > & future);
+    const css::uno::Reference< css::sdbc::XStatement > &stmt,
+    const css::uno::Reference< css::beans::XPropertySet > & past,
+    const css::uno::Reference< css::beans::XPropertySet > & future);
 
 OUString columnMetaData2SDBCX(
-    ReflectionBase *pBase, const com::sun::star::uno::Reference< com::sun::star::sdbc::XRow > &xRow );
+    ReflectionBase *pBase, const css::uno::Reference< css::sdbc::XRow > &xRow );
 
-class Columns : public Container
+class Columns final : public Container
 {
     OUString m_schemaName;
     OUString m_tableName;
 
 public: // instances Columns 'exception safe'
-    static com::sun::star::uno::Reference< com::sun::star::container::XNameAccess > create(
-        const ::rtl::Reference< RefCountedMutex > & refMutex,
-        const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+    static css::uno::Reference< css::container::XNameAccess > create(
+        const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+        const css::uno::Reference< css::sdbc::XConnection >  & origin,
         ConnectionSettings *pSettings,
         const OUString &schemaName,
         const OUString &tableName,
         Columns **pColumns);
 
-protected:
+private:
     Columns(
-        const ::rtl::Reference< RefCountedMutex > & refMutex,
-        const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+        const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+        const css::uno::Reference< css::sdbc::XConnection >  & origin,
         ConnectionSettings *pSettings,
         const OUString &schemaName,
         const OUString &tableName);
 
 
-    virtual ~Columns();
+    virtual ~Columns() override;
 
 public: // XAppend
     virtual void SAL_CALL appendByDescriptor(
-        const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& descriptor )
-        throw (::com::sun::star::sdbc::SQLException,
-               ::com::sun::star::container::ElementExistException,
-               ::com::sun::star::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference< css::beans::XPropertySet >& descriptor ) override;
 
 // public: // XDrop
 //     virtual void SAL_CALL dropByName( const OUString& elementName )
-//         throw (::com::sun::star::sdbc::SQLException,
-//                ::com::sun::star::container::NoSuchElementException,
-//                ::com::sun::star::uno::RuntimeException);
-    virtual void SAL_CALL dropByIndex( sal_Int32 index )
-        throw (::com::sun::star::sdbc::SQLException,
-               ::com::sun::star::lang::IndexOutOfBoundsException,
-               ::com::sun::star::uno::RuntimeException, std::exception) override;
+//         throw (css::sdbc::SQLException,
+//                css::container::NoSuchElementException,
+//                css::uno::RuntimeException);
+    virtual void SAL_CALL dropByIndex( sal_Int32 index ) override;
 
 public: // XRefreshable
-    virtual void SAL_CALL refresh(  ) throw (::com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL refresh(  ) override;
 
 public: // XDataDescriptorFactory
-    virtual ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > SAL_CALL createDataDescriptor(  )
-        throw (::com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL createDataDescriptor(  ) override;
 };
 
 
@@ -109,13 +104,12 @@ class ColumnDescriptors : public Container
 {
 public:
     ColumnDescriptors(
-        const ::rtl::Reference< RefCountedMutex > & refMutex,
-        const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+        const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+        const css::uno::Reference< css::sdbc::XConnection >  & origin,
         ConnectionSettings *pSettings );
 
 public: // XDataDescriptorFactory
-    virtual ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > SAL_CALL createDataDescriptor(  )
-        throw (::com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL createDataDescriptor(  ) override;
 };
 
 }

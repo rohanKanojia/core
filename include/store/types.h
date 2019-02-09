@@ -59,14 +59,13 @@ extern "C" {
     @see store_openDirectory()
     @see store_openStream()
  */
-typedef enum
+enum class storeAccessMode
 {
-    store_AccessCreate,
-    store_AccessReadCreate,
-    store_AccessReadWrite,
-    store_AccessReadOnly,
-    store_Access_FORCE_EQUAL_SIZE = SAL_MAX_ENUM
-} storeAccessMode;
+    Create,
+    ReadWrite,
+    ReadOnly,
+    FORCE_EQUAL_SIZE = SAL_MAX_ENUM
+};
 
 
 /** Error Code enumeration.
@@ -120,23 +119,10 @@ typedef struct
      */
     sal_uInt32 m_nAttrib;
 
-    /** Size.
-        @see store_getStreamSize()
-        @see store_setStreamSize()
-     */
-    sal_uInt32 m_nSize;
-
     /** Reserved for internal use.
      */
     sal_uInt32 m_nReserved;
 } storeFindData;
-
-
-/*========================================================================
- *
- * The End.
- *
- *======================================================================*/
 
 #ifdef __cplusplus
 }

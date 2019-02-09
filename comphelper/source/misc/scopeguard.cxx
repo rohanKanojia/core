@@ -20,6 +20,7 @@
 
 #include <comphelper/flagguard.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <com/sun/star/uno/Exception.hpp>
 
 namespace comphelper {
@@ -32,9 +33,7 @@ ScopeGuard::~ScopeGuard()
         m_func();
     }
     catch (css::uno::Exception & exc) {
-        (void) exc; // avoid warning about unused variable
-        OSL_FAIL( OUStringToOString( "UNO exception occurred: " + exc.Message,
-                                     RTL_TEXTENCODING_UTF8 ).getStr() );
+        SAL_WARN( "comphelper", "UNO exception occurred: " << exc );
     }
     catch (...) {
         OSL_FAIL( "unknown exception occurred!" );

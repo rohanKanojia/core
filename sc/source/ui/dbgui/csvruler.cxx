@@ -17,15 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "csvruler.hxx"
-#include "AccessibleCsvControl.hxx"
+#include <csvruler.hxx>
+#include <AccessibleCsvControl.hxx>
 
 #include <optutil.hxx>
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <comphelper/string.hxx>
+#include <vcl/event.hxx>
 #include <vcl/settings.hxx>
-#include "miscuno.hxx"
+#include <vcl/virdev.hxx>
+#include <miscuno.hxx>
 
 using namespace com::sun::star::uno;
 
@@ -34,13 +36,10 @@ using namespace com::sun::star::uno;
 
 static void load_FixedWidthList(ScCsvSplits &rSplits)
 {
-    OUString sSplits;
-    OUString sFixedWidthLists;
-
     Sequence<Any>aValues;
     const Any *pProperties;
     Sequence<OUString> aNames { FIXED_WIDTH_LIST };
-    ScLinkConfigItem aItem( OUString( SEP_PATH ) );
+    ScLinkConfigItem aItem( SEP_PATH );
 
     aValues = aItem.GetProperties( aNames );
     pProperties = aValues.getConstArray();
@@ -48,14 +47,23 @@ static void load_FixedWidthList(ScCsvSplits &rSplits)
     if( pProperties[0].hasValue() )
     {
         rSplits.Clear();
+
+        OUString sFixedWidthLists;
         pProperties[0] >>= sFixedWidthLists;
 
-        sSplits = sFixedWidthLists;
-
-        // String ends with a semi-colon so there is no 'int' after the last one.
-        sal_Int32 n = comphelper::string::getTokenCount(sSplits, ';') - 1;
-        for (sal_Int32 i = 0; i < n; ++i)
-            rSplits.Insert( sSplits.getToken(i, ';').toInt32() );
+        sal_Int32 nIdx {0};
+        for(;;)
+        {
+            const sal_Int32 n {sFixedWidthLists.getToken(0, ';', nIdx).toInt32()};
+            if (nIdx<0)
+            {
+                // String ends with a semi-colon so there
+                // is no useful 'int' after the last one.
+                // This also works in case of empty string
+                break;
+            }
+            rSplits.Insert(n);
+        }
     }
 }
 static void save_FixedWidthList(const ScCsvSplits& rSplits)
@@ -73,7 +81,7 @@ static void save_FixedWidthList(const ScCsvSplits& rSplits)
     Sequence<Any> aValues;
     Any *pProperties;
     Sequence<OUString> aNames { FIXED_WIDTH_LIST };
-    ScLinkConfigItem aItem( OUString( SEP_PATH ) );
+    ScLinkConfigItem aItem( SEP_PATH );
 
     aValues = aItem.GetProperties( aNames );
     pProperties = aValues.getArray();
@@ -118,24 +126,24 @@ void ScCsvRuler::setPosSizePixel(
 
 void ScCsvRuler::ApplyLayout( const ScCsvLayoutData& rOldData )
 {
-    ScCsvDiff nDiff = GetLayoutData().GetDiff( rOldData ) & (CSV_DIFF_HORIZONTAL | CSV_DIFF_RULERCURSOR);
-    if( nDiff == CSV_DIFF_EQUAL ) return;
+    ScCsvDiff nDiff = GetLayoutData().GetDiff( rOldData ) & (ScCsvDiff::HorizontalMask | ScCsvDiff::RulerCursor);
+    if( nDiff == ScCsvDiff::Equal ) return;
 
     DisableRepaint();
-    if( nDiff & CSV_DIFF_HORIZONTAL )
+    if( nDiff & ScCsvDiff::HorizontalMask )
     {
         InitSizeData();
         if( GetRulerCursorPos() >= GetPosCount() )
             MoveCursor( GetPosCount() - 1 );
     }
-    if( nDiff & CSV_DIFF_RULERCURSOR )
+    if( nDiff & ScCsvDiff::RulerCursor )
     {
         ImplInvertCursor( rOldData.mnPosCursor );
         ImplInvertCursor( GetRulerCursorPos() );
     }
     EnableRepaint();
 
-    if( nDiff & CSV_DIFF_POSOFFSET )
+    if( nDiff & ScCsvDiff::PosOffset )
         AccSendVisibleEvent();
 }
 
@@ -145,7 +153,7 @@ void ScCsvRuler::InitColors()
     maBackColor = rSett.GetFaceColor();
     maActiveColor = rSett.GetWindowColor();
     maTextColor = rSett.GetLabelTextColor();
-    maSplitColor = maBackColor.IsDark() ? maTextColor : Color( COL_LIGHTRED );
+    maSplitColor = maBackColor.IsDark() ? maTextColor : COL_LIGHTRED;
     InvalidateGfx();
 }
 
@@ -256,7 +264,7 @@ sal_Int32 ScCsvRuler::GetNoScrollPos( sal_Int32 nPos ) const
             sal_Int32 nScroll = (GetFirstVisPos() > 0) ? CSV_SCROLL_DIST : 0;
             nNewPos = std::max( nPos, GetFirstVisPos() + nScroll );
         }
-        else if( nNewPos > GetLastVisPos() - CSV_SCROLL_DIST - 1L )
+        else if( nNewPos > GetLastVisPos() - CSV_SCROLL_DIST - 1 )
         {
             sal_Int32 nScroll = (GetFirstVisPos() < GetMaxPosOffset()) ? CSV_SCROLL_DIST : 0;
             nNewPos = std::min( nNewPos, GetLastVisPos() - nScroll - sal_Int32( 1 ) );
@@ -410,8 +418,7 @@ void ScCsvRuler::MouseMove( const MouseEvent& rMEvt )
         }
         else
         {
-            Point aPoint;
-            Rectangle aRect( aPoint, maWinSize );
+            tools::Rectangle aRect( Point(), maWinSize );
             if( !IsVisibleSplitPos( nPos ) || !aRect.IsInside( rMEvt.GetPosPixel() ) )
                 // if focused, keep old cursor position for key input
                 nPos = HasFocus() ? GetRulerCursorPos() : CSV_POS_INVALID;
@@ -514,7 +521,7 @@ void ScCsvRuler::EndMouseTracking( bool bApply )
 
 // painting -------------------------------------------------------------------
 
-void ScCsvRuler::Paint( vcl::RenderContext& /*rRenderContext*/, const Rectangle& )
+void ScCsvRuler::Paint( vcl::RenderContext& /*rRenderContext*/, const tools::Rectangle& )
 {
     Repaint();
 }
@@ -529,21 +536,24 @@ void ScCsvRuler::ImplRedraw()
             ImplDrawBackgrDev();
             ImplDrawRulerDev();
         }
-        DrawOutDev( Point(), maWinSize, Point(), maWinSize, *maRulerDev.get() );
-        ImplDrawTrackingRect();
+        DrawOutDev( Point(), maWinSize, Point(), maWinSize, *maRulerDev );
+        /* Draws directly tracking rectangle to the column with the specified index. */
+        if( HasFocus() )
+            InvertTracking( tools::Rectangle( 0, 0, GetWidth() - 1, GetHeight() - 2 ),
+                ShowTrackFlags::Small | ShowTrackFlags::TrackWindow );
     }
 }
 
 void ScCsvRuler::ImplDrawArea( sal_Int32 nPosX, sal_Int32 nWidth )
 {
     maBackgrDev->SetLineColor();
-    Rectangle aRect( Point( nPosX, 0 ), Size( nWidth, GetHeight() ) );
+    tools::Rectangle aRect( Point( nPosX, 0 ), Size( nWidth, GetHeight() ) );
     maBackgrDev->SetFillColor( maBackColor );
     maBackgrDev->DrawRect( aRect );
 
     aRect = maActiveRect;
-    aRect.Left() = std::max( GetFirstX(), nPosX );
-    aRect.Right() = std::min( std::min( GetX( GetPosCount() ), GetLastX() ), nPosX + nWidth - sal_Int32( 1 ) );
+    aRect.SetLeft( std::max( GetFirstX(), nPosX ) );
+    aRect.SetRight( std::min( std::min( GetX( GetPosCount() ), GetLastX() ), nPosX + nWidth - sal_Int32( 1 ) ) );
     if( aRect.Left() <= aRect.Right() )
     {
         maBackgrDev->SetFillColor( maActiveColor );
@@ -564,7 +574,7 @@ void ScCsvRuler::ImplDrawBackgrDev()
     maBackgrDev->SetFillColor();
     sal_Int32 nPos;
 
-    sal_Int32 nFirstPos = std::max( GetPosFromX( 0 ) - (sal_Int32)(1L), (sal_Int32)(0L) );
+    sal_Int32 nFirstPos = std::max( GetPosFromX( 0 ) - 1, sal_Int32(0) );
     sal_Int32 nLastPos = GetPosFromX( GetWidth() );
     sal_Int32 nY = (maActiveRect.Top() + maActiveRect.Bottom()) / 2;
     for( nPos = nFirstPos; nPos <= nLastPos; ++nPos )
@@ -597,7 +607,7 @@ void ScCsvRuler::ImplDrawSplit( sal_Int32 nPos )
         Size aSize( mnSplitSize, mnSplitSize );
         maRulerDev->SetLineColor( maTextColor );
         maRulerDev->SetFillColor( maSplitColor );
-        maRulerDev->DrawEllipse( Rectangle( aPos, aSize ) );
+        maRulerDev->DrawEllipse( tools::Rectangle( aPos, aSize ) );
         maRulerDev->DrawPixel( Point( GetX( nPos ), GetHeight() - 2 ) );
     }
 }
@@ -609,14 +619,14 @@ void ScCsvRuler::ImplEraseSplit( sal_Int32 nPos )
         ImplInvertCursor( GetRulerCursorPos() );
         Point aPos( GetX( nPos ) - mnSplitSize / 2, 0 );
         Size aSize( mnSplitSize, GetHeight() );
-        maRulerDev->DrawOutDev( aPos, aSize, aPos, aSize, *maBackgrDev.get() );
+        maRulerDev->DrawOutDev( aPos, aSize, aPos, aSize, *maBackgrDev );
         ImplInvertCursor( GetRulerCursorPos() );
     }
 }
 
 void ScCsvRuler::ImplDrawRulerDev()
 {
-    maRulerDev->DrawOutDev( Point(), maWinSize, Point(), maWinSize, *maBackgrDev.get() );
+    maRulerDev->DrawOutDev( Point(), maWinSize, Point(), maWinSize, *maBackgrDev );
     ImplInvertCursor( GetRulerCursorPos() );
 
     sal_uInt32 nFirst = maSplits.LowerBound( GetFirstVisPos() );
@@ -630,17 +640,10 @@ void ScCsvRuler::ImplInvertCursor( sal_Int32 nPos )
 {
     if( IsVisibleSplitPos( nPos ) )
     {
-        ImplInvertRect( *maRulerDev.get(), Rectangle( Point( GetX( nPos ) - 1, 0 ), Size( 3, GetHeight() - 1 ) ) );
+        ImplInvertRect( *maRulerDev, tools::Rectangle( Point( GetX( nPos ) - 1, 0 ), Size( 3, GetHeight() - 1 ) ) );
         if( HasSplit( nPos ) )
             ImplDrawSplit( nPos );
     }
-}
-
-void ScCsvRuler::ImplDrawTrackingRect()
-{
-    if( HasFocus() )
-        InvertTracking( Rectangle( 0, 0, GetWidth() - 1, GetHeight() - 2 ),
-            SHOWTRACK_SMALL | SHOWTRACK_WINDOW );
 }
 
 void ScCsvRuler::ImplSetMousePointer( sal_Int32 nPos )

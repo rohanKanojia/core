@@ -44,6 +44,7 @@ struct SC_DLLPUBLIC ScCellValue
     ScCellValue( double fValue );
     ScCellValue( const svl::SharedString& rString );
     ScCellValue( const ScCellValue& r );
+    ScCellValue( ScCellValue&& r );
     ~ScCellValue();
 
     void clear();
@@ -59,7 +60,7 @@ struct SC_DLLPUBLIC ScCellValue
      */
     void assign( const ScDocument& rDoc, const ScAddress& rPos );
 
-    void assign( const ScCellValue& rOther, ScDocument& rDestDoc, int nCloneFlags = SC_CLONECELL_DEFAULT );
+    void assign(const ScCellValue& rOther, ScDocument& rDestDoc, ScCloneFlags nCloneFlags = ScCloneFlags::Default);
 
     /**
      * Set cell value at specified position in specified document.
@@ -84,6 +85,7 @@ struct SC_DLLPUBLIC ScCellValue
     bool equalsWithoutFormat( const ScCellValue& r ) const;
 
     ScCellValue& operator= ( const ScCellValue& r );
+    ScCellValue& operator= ( ScCellValue&& r );
     ScCellValue& operator= ( const ScRefCellValue& r );
 
     void swap( ScCellValue& r );
@@ -110,14 +112,11 @@ struct SC_DLLPUBLIC ScRefCellValue
     ScRefCellValue( const svl::SharedString* pString );
     ScRefCellValue( const EditTextObject* pEditText );
     ScRefCellValue( ScFormulaCell* pFormula );
-    ScRefCellValue( const ScRefCellValue& r );
 
     /**
      * Take cell value from specified position in specified document.
      */
     ScRefCellValue( ScDocument& rDoc, const ScAddress& rPos );
-
-    ~ScRefCellValue();
 
     void clear();
 
@@ -135,26 +134,43 @@ struct SC_DLLPUBLIC ScRefCellValue
 
     bool hasNumeric() const;
 
+    bool hasError() const;
+
     double getValue();
 
-    /** Retrieve string value.
+    /**
+     * Retrieve a numeric value without modifying the states of any objects in
+     * the referenced document store.
+     */
+    double getRawValue() const;
 
-        @param  pDoc
-                Needed to resolve EditCells' field contents, obtain a
-                ScFieldEditEngine from that document. May be NULL if there is
-                no ScDocument in the calling context but then the document
-                specific fields can not be resolved. See
-                ScEditUtil::GetString().
+    /**
+     *  Retrieve string value.
+     *
+     *  Note that this method is NOT thread-safe.
+     *
+     *  @param  pDoc
+     *          Needed to resolve EditCells' field contents, obtain a
+     *          ScFieldEditEngine from that document. May be NULL if there is
+     *          no ScDocument in the calling context but then the document
+     *          specific fields can not be resolved. See
+     *          ScEditUtil::GetString().
      */
     OUString getString( const ScDocument* pDoc );
+
+    /**
+     * Retrieve a string value without modifying the states of any objects in
+     * the referenced document store.
+     *
+     * This method is thread-safe.
+     */
+    OUString getRawString( const ScDocument* pDoc ) const;
 
     bool isEmpty() const;
 
     bool hasEmptyValue();
 
     bool equalsWithoutFormat( const ScRefCellValue& r ) const;
-
-    ScRefCellValue& operator= ( const ScRefCellValue& r );
 };
 
 #endif

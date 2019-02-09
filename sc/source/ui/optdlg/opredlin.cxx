@@ -19,34 +19,36 @@
 
 #undef SC_DLLIMPLEMENTATION
 
+#include <svx/colorbox.hxx>
 #include <svx/dlgutil.hxx>
 #include <svx/drawitem.hxx>
 #include <svx/xtable.hxx>
 
-#include "appoptio.hxx"
-#include "scmod.hxx"
-#include "scitems.hxx"
-#include "tpview.hxx"
-#include "global.hxx"
-#include "viewopti.hxx"
-#include "tabvwsh.hxx"
-#include "uiitems.hxx"
-#include "scresid.hxx"
-#include "docsh.hxx"
-#include "sc.hrc"
-#include "globstr.hrc"
+#include <appoptio.hxx>
+#include <scmod.hxx>
+#include <scitems.hxx>
+#include <tpview.hxx>
+#include <global.hxx>
+#include <viewopti.hxx>
+#include <tabvwsh.hxx>
+#include <uiitems.hxx>
+#include <docsh.hxx>
+#include <sc.hrc>
 
-#include "opredlin.hxx"
+#include <opredlin.hxx>
 
 ScRedlineOptionsTabPage::ScRedlineOptionsTabPage( vcl::Window* pParent,
                                                     const SfxItemSet& rSet )
-    : SfxTabPage(pParent,"OptChangesPage", "modules/scalc/ui/optchangespage.ui", &rSet),
-    aAuthorStr      (ScResId(SCSTR_AUTHOR))
+    : SfxTabPage(pParent,"OptChangesPage", "modules/scalc/ui/optchangespage.ui", &rSet)
 {
     get(m_pContentColorLB, "changes");
+    m_pContentColorLB->SetSlotId(SID_AUTHOR_COLOR);
     get(m_pRemoveColorLB, "deletions");
+    m_pRemoveColorLB->SetSlotId(SID_AUTHOR_COLOR);
     get(m_pInsertColorLB, "entries");
+    m_pInsertColorLB->SetSlotId(SID_AUTHOR_COLOR);
     get(m_pMoveColorLB, "insertions");
+    m_pMoveColorLB->SetSlotId(SID_AUTHOR_COLOR);
 }
 
 ScRedlineOptionsTabPage::~ScRedlineOptionsTabPage()
@@ -63,67 +65,31 @@ void ScRedlineOptionsTabPage::dispose()
     SfxTabPage::dispose();
 }
 
-VclPtr<SfxTabPage> ScRedlineOptionsTabPage::Create( vcl::Window* pParent, const SfxItemSet* rSet )
+VclPtr<SfxTabPage> ScRedlineOptionsTabPage::Create( TabPageParent pParent, const SfxItemSet* rSet )
 {
-    return VclPtr<ScRedlineOptionsTabPage>::Create( pParent, *rSet );
+    return VclPtr<ScRedlineOptionsTabPage>::Create( pParent.pParent, *rSet );
 }
 
 bool ScRedlineOptionsTabPage::FillItemSet( SfxItemSet* /* rSet */ )
 {
     ScAppOptions aAppOptions=SC_MOD()->GetAppOptions();
 
-    sal_uLong nNew=0;
-    sal_Int32 nPos=0;
+    Color nNew = m_pContentColorLB->GetSelectEntryColor();
+    aAppOptions.SetTrackContentColor(nNew);
 
-    nPos = m_pContentColorLB->GetSelectEntryPos();
-    if (nPos != LISTBOX_ENTRY_NOTFOUND)
-    {
-        if (nPos!=0)
-            nNew= m_pContentColorLB->GetEntryColor(nPos).GetColor();
-        else
-            nNew= COL_TRANSPARENT;
+    nNew = m_pMoveColorLB->GetSelectEntryColor();
+    aAppOptions.SetTrackMoveColor(nNew);
 
-        aAppOptions.SetTrackContentColor(nNew);
+    nNew = m_pInsertColorLB->GetSelectEntryColor();
+    aAppOptions.SetTrackInsertColor(nNew);
 
-    }
-    nPos = m_pMoveColorLB->GetSelectEntryPos();
-    if (nPos != LISTBOX_ENTRY_NOTFOUND)
-    {
-        if (nPos!=0)
-            nNew= m_pMoveColorLB->GetEntryColor(nPos).GetColor();
-        else
-            nNew= COL_TRANSPARENT;
-
-        aAppOptions.SetTrackMoveColor(nNew);
-
-    }
-    nPos = m_pInsertColorLB->GetSelectEntryPos();
-    if (nPos != LISTBOX_ENTRY_NOTFOUND)
-    {
-        if (nPos!=0)
-            nNew= m_pInsertColorLB->GetEntryColor(nPos).GetColor();
-        else
-            nNew= COL_TRANSPARENT;
-
-        aAppOptions.SetTrackInsertColor(nNew);
-
-    }
-    nPos = m_pRemoveColorLB->GetSelectEntryPos();
-    if (nPos != LISTBOX_ENTRY_NOTFOUND)
-    {
-        if (nPos!=0)
-            nNew= m_pRemoveColorLB->GetEntryColor(nPos).GetColor();
-        else
-            nNew= COL_TRANSPARENT;
-
-        aAppOptions.SetTrackDeleteColor(nNew);
-
-    }
+    nNew = m_pRemoveColorLB->GetSelectEntryColor();
+    aAppOptions.SetTrackDeleteColor(nNew);
 
     SC_MOD()->SetAppOptions(aAppOptions);
 
-    //  Repaint (wenn alles ueber Items laufen wuerde, wie es sich gehoert,
-    //  waere das nicht noetig...)
+    //  repaint (if everything would be done by Items (how it should be),
+    //  this wouldn't be necessary)
     ScDocShell* pDocSh = dynamic_cast<ScDocShell*>( SfxObjectShell::Current() );
     if (pDocSh)
         pDocSh->PostPaintGridAll();
@@ -133,59 +99,19 @@ bool ScRedlineOptionsTabPage::FillItemSet( SfxItemSet* /* rSet */ )
 
 void ScRedlineOptionsTabPage::Reset( const SfxItemSet* /* rSet */ )
 {
-    m_pContentColorLB->InsertEntry(aAuthorStr);
-    m_pMoveColorLB->InsertEntry(aAuthorStr);
-    m_pInsertColorLB->InsertEntry(aAuthorStr);
-    m_pRemoveColorLB->InsertEntry(aAuthorStr);
-
-    m_pContentColorLB->SetUpdateMode( false);
-    m_pMoveColorLB->SetUpdateMode( false);
-    m_pInsertColorLB->SetUpdateMode( false);
-    m_pRemoveColorLB->SetUpdateMode( false);
-
-    XColorListRef xColorLst = XColorList::GetStdColorList();
-    for( long i = 0; i < xColorLst->Count(); ++i )
-    {
-        XColorEntry* pEntry = xColorLst->GetColor( i );
-        Color aColor = pEntry->GetColor();
-        OUString sName = pEntry->GetName();
-
-        m_pContentColorLB->InsertEntry( aColor, sName );
-        m_pMoveColorLB->InsertEntry( aColor, sName );
-        m_pInsertColorLB->InsertEntry( aColor, sName );
-        m_pRemoveColorLB->InsertEntry( aColor, sName );
-    }
-    m_pContentColorLB->SetUpdateMode( true );
-    m_pMoveColorLB->SetUpdateMode( true );
-    m_pInsertColorLB->SetUpdateMode( true );
-    m_pRemoveColorLB->SetUpdateMode( true );
-
     ScAppOptions aAppOptions=SC_MOD()->GetAppOptions();
 
-    sal_uLong nColor = aAppOptions.GetTrackContentColor();
-    if (nColor == COL_TRANSPARENT)
-        m_pContentColorLB->SelectEntryPos(0);
-    else
-        m_pContentColorLB->SelectEntry(Color(nColor));
+    Color nColor = aAppOptions.GetTrackContentColor();
+    m_pContentColorLB->SelectEntry(nColor);
 
     nColor = aAppOptions.GetTrackMoveColor();
-    if (nColor == COL_TRANSPARENT)
-        m_pMoveColorLB->SelectEntryPos(0);
-    else
-        m_pMoveColorLB->SelectEntry(Color(nColor));
+    m_pMoveColorLB->SelectEntry(nColor);
 
     nColor = aAppOptions.GetTrackInsertColor();
-    if (nColor == COL_TRANSPARENT)
-        m_pInsertColorLB->SelectEntryPos(0);
-    else
-        m_pInsertColorLB->SelectEntry(Color(nColor));
+    m_pInsertColorLB->SelectEntry(nColor);
 
     nColor = aAppOptions.GetTrackDeleteColor();
-    if (nColor == COL_TRANSPARENT)
-        m_pRemoveColorLB->SelectEntryPos(0);
-    else
-        m_pRemoveColorLB->SelectEntry(Color(nColor));
-
+    m_pRemoveColorLB->SelectEntry(nColor);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

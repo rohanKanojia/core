@@ -17,21 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vcl/dialog.hxx>
+#include <o3tl/make_unique.hxx>
+#include <vcl/field.hxx>
+#include <vcl/fixed.hxx>
 #include <vcl/layout.hxx>
+#include <vcl/lstbox.hxx>
 #include <vcl/svapp.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/module.hxx>
 #include <unotools/textsearch.hxx>
-#include <svtools/svlbitm.hxx>
-#include "svtools/viewdataentry.hxx"
+#include <vcl/svlbitm.hxx>
+#include <vcl/viewdataentry.hxx>
 #include <unotools/charclass.hxx>
 
 #include <editeng/unolingu.hxx>
-#include <svx/dialmgr.hxx>
-#include "svx/dialogs.hrc"
 #include <svx/ctredlin.hxx>
-#include "helpid.hrc"
+#include <svx/dialmgr.hxx>
+#include <svx/strings.hrc>
 
 #define WRITER_DATE     2
 #define CALC_DATE       3
@@ -73,9 +75,9 @@ SvLBoxColorString::~SvLBoxColorString()
 {
 }
 
-SvLBoxItem* SvLBoxColorString::Create() const
+std::unique_ptr<SvLBoxItem> SvLBoxColorString::Clone(SvLBoxItem const *) const
 {
-    return new SvLBoxColorString;
+    return std::unique_ptr<SvLBoxItem>(new SvLBoxColorString);
 }
 
 void SvLBoxColorString::Paint(const Point& rPos, SvTreeListBox& rDev, vcl::RenderContext& rRenderContext,
@@ -92,7 +94,6 @@ void SvLBoxColorString::Paint(const Point& rPos, SvTreeListBox& rDev, vcl::Rende
 
 SvxRedlinTable::SvxRedlinTable(SvSimpleTableContainer& rParent, WinBits nBits)
     : SvSimpleTable(rParent,nBits)
-    , bIsCalc(false)
     , nDatePos(WRITER_DATE)
     , bAuthor(false)
     , bDate(false)
@@ -102,7 +103,6 @@ SvxRedlinTable::SvxRedlinTable(SvSimpleTableContainer& rParent, WinBits nBits)
     , aDaTiLast( DateTime::EMPTY )
     , aDaTiFilterFirst( DateTime::EMPTY )
     , aDaTiFilterLast( DateTime::EMPTY )
-    , pCommentSearcher(nullptr)
 {
     SetNodeDefaultImages();
 }
@@ -114,8 +114,7 @@ SvxRedlinTable::~SvxRedlinTable()
 
 void SvxRedlinTable::dispose()
 {
-    delete pCommentSearcher;
-    pCommentSearcher = nullptr;
+    pCommentSearcher.reset();
     SvSimpleTable::dispose();
 }
 
@@ -160,17 +159,16 @@ sal_Int32 SvxRedlinTable::ColCompare(SvTreeListEntry* pLeft,SvTreeListEntry* pRi
 
     return nCompare;
 }
+
 void SvxRedlinTable::SetCalcView()
 {
-    bIsCalc=true;
     nDatePos=CALC_DATE;
 }
 
 void SvxRedlinTable::UpdateFilterTest()
 {
     Date aDateMax( Date::SYSTEM );
-    sal_uInt16 nYEAR=aDateMax.GetYear()+100;
-    aDateMax.SetYear(nYEAR);
+    aDateMax.AddYears(100);
     Date aDateMin(1,1,1989);
     tools::Time aTMin(0);
     tools::Time aTMax(23,59,59);
@@ -259,9 +257,7 @@ void SvxRedlinTable::SetCommentParams( const utl::SearchParam* pSearchPara )
 {
     if(pSearchPara!=nullptr)
     {
-        delete pCommentSearcher;
-
-        pCommentSearcher=new utl::TextSearch(*pSearchPara, LANGUAGE_SYSTEM );
+        pCommentSearcher.reset(new utl::TextSearch(*pSearchPara, LANGUAGE_SYSTEM ));
     }
 }
 
@@ -295,15 +291,15 @@ bool SvxRedlinTable::IsValidComment(const OUString &rCommentStr)
 }
 
 SvTreeListEntry* SvxRedlinTable::InsertEntry(const OUString& rStr,
-        RedlinData *pUserData, SvTreeListEntry* pParent, sal_uIntPtr nPos)
+        std::unique_ptr<RedlinData> pUserData, SvTreeListEntry* pParent, sal_uLong nPos)
 {
-    const Color aColor = (pUserData && pUserData->bDisabled) ? Color(COL_GRAY) : GetTextColor();
+    const Color aColor = (pUserData && pUserData->bDisabled) ? COL_GRAY : GetTextColor();
 
-    return InsertEntry(rStr, pUserData, aColor, pParent, nPos);
+    return InsertEntry(rStr, std::move(pUserData), aColor, pParent, nPos);
 }
 
 SvTreeListEntry* SvxRedlinTable::InsertEntry(const OUString& rStr,
-        RedlinData *pUserData, const Color& rColor, SvTreeListEntry* pParent, sal_uIntPtr nPos)
+        std::unique_ptr<RedlinData> pUserData, const Color& rColor, SvTreeListEntry* pParent, sal_uLong nPos)
 {
     maEntryColor = rColor;
     maEntryImage = Image();
@@ -312,17 +308,17 @@ SvTreeListEntry* SvxRedlinTable::InsertEntry(const OUString& rStr,
     const OUString aFirstStr(rStr.getToken(0, '\t', nIndex));
     maEntryString = nIndex > 0 ? rStr.copy(nIndex) : OUString();
 
-    return SvSimpleTable::InsertEntry(aFirstStr, pParent, false, nPos, pUserData);
+    return SvSimpleTable::InsertEntry(aFirstStr, pParent, false, nPos, pUserData.release());
 }
 
 SvTreeListEntry* SvxRedlinTable::InsertEntry(const Image &rRedlineType, const OUString& rStr,
-        RedlinData *pUserData, SvTreeListEntry* pParent, sal_uIntPtr nPos)
+        std::unique_ptr<RedlinData> pUserData, SvTreeListEntry* pParent, sal_uLong nPos)
 {
-    maEntryColor = (pUserData && pUserData->bDisabled) ? Color(COL_GRAY) : GetTextColor();
+    maEntryColor = (pUserData && pUserData->bDisabled) ? COL_GRAY : GetTextColor();
     maEntryImage = rRedlineType;
     maEntryString = rStr;
 
-    return SvSimpleTable::InsertEntry(OUString(), pParent, false, nPos, pUserData);
+    return SvSimpleTable::InsertEntry(OUString(), pParent, false, nPos, pUserData.release());
 }
 
 SvTreeListEntry* SvxRedlinTable::CreateEntry() const
@@ -335,22 +331,22 @@ void SvxRedlinTable::InitEntry(SvTreeListEntry* pEntry, const OUString& rStr,
 {
     if (nTreeFlags & SvTreeFlags::CHKBTN)
     {
-        pEntry->AddItem(std::unique_ptr<SvLBoxButton>(
-                new SvLBoxButton(eButtonKind, pCheckButtonData)));
+        pEntry->AddItem(o3tl::make_unique<SvLBoxButton>(
+                eButtonKind, pCheckButtonData));
     }
 
-    pEntry->AddItem(std::unique_ptr<SvLBoxContextBmp>(
-                new SvLBoxContextBmp(rColl, rExp, true)));
+    pEntry->AddItem(o3tl::make_unique<SvLBoxContextBmp>(
+                rColl, rExp, true));
 
     // the type of the change
     assert((rStr.isEmpty() && !!maEntryImage) || (!rStr.isEmpty() && !maEntryImage));
 
     if (rStr.isEmpty())
-        pEntry->AddItem(std::unique_ptr<SvLBoxContextBmp>(new SvLBoxContextBmp(
-                        maEntryImage, maEntryImage, true)));
+        pEntry->AddItem(o3tl::make_unique<SvLBoxContextBmp>(
+                        maEntryImage, maEntryImage, true));
     else
-        pEntry->AddItem(std::unique_ptr<SvLBoxColorString>(
-                    new SvLBoxColorString(rStr, maEntryColor)));
+        pEntry->AddItem(o3tl::make_unique<SvLBoxColorString>(
+                    rStr, maEntryColor));
 
     // the change tracking entries
     sal_Int32 nIndex = 0;
@@ -358,8 +354,8 @@ void SvxRedlinTable::InitEntry(SvTreeListEntry* pEntry, const OUString& rStr,
     for (sal_uInt16 nToken = 0; nToken < nCount; nToken++)
     {
         const OUString aToken = GetToken(maEntryString, nIndex);
-        pEntry->AddItem(std::unique_ptr<SvLBoxColorString>(
-                    new SvLBoxColorString(aToken, maEntryColor)));
+        pEntry->AddItem(o3tl::make_unique<SvLBoxColorString>(
+                    aToken, maEntryColor));
     }
 }
 
@@ -377,9 +373,14 @@ SvxTPView::SvxTPView(vcl::Window *pParent, VclBuilderContainer *pTopLevel)
     pTopLevel->get(m_pRejectAll, "rejectall");
     pTopLevel->get(m_pUndo, "undo");
 
+    // set wider window for the optional extending button labels
+    // eg. "Reject/Clear formatting" instead of "Reject"
+    EnableClearFormat(true);
+    EnableClearFormatAll(true);
+
     SvSimpleTableContainer* pTable = get<SvSimpleTableContainer>("changes");
     Size aControlSize(80, 65);
-    aControlSize = LogicToPixel(aControlSize, MAP_APPFONT);
+    aControlSize = LogicToPixel(aControlSize, MapMode(MapUnit::MapAppFont));
     pTable->set_width_request(aControlSize.Width());
     pTable->set_height_request(aControlSize.Height());
     m_pViewData = VclPtr<SvxRedlinTable>::Create(*pTable, 0);
@@ -431,36 +432,36 @@ void SvxTPView::dispose()
 
 void SvxTPView::InsertWriterHeader()
 {
-    const long pTabs[] = { 5, 10, 20, 70, 120, 170 };
-    m_pViewData->SetTabs(pTabs);
+    const long aTabPositions[] = { 10, 20, 70, 120 };
+    m_pViewData->SetTabs(SAL_N_ELEMENTS(aTabPositions), aTabPositions);
 
     OUString aStrTab('\t');
-    OUString aString(get<FixedText>("action")->GetText());
-    aString += aStrTab;
-    aString += get<FixedText>("author")->GetText();
-    aString += aStrTab;
-    aString += get<FixedText>("date")->GetText();
-    aString += aStrTab;
-    aString += get<FixedText>("comment")->GetText();
+    OUString aString = get<FixedText>("action")->GetText()
+                     + aStrTab
+                     + get<FixedText>("author")->GetText()
+                     + aStrTab
+                     + get<FixedText>("date")->GetText()
+                     + aStrTab
+                     + get<FixedText>("comment")->GetText();
     m_pViewData->ClearHeader();
     m_pViewData->InsertHeaderEntry(aString);
 }
 
 void SvxTPView::InsertCalcHeader()
 {
-    const long pTabs[] = { 5, 10, 65, 120, 170, 220 };
-    m_pViewData->SetTabs(pTabs);
+    const long aTabPositions[] = { 10, 65, 120, 170, 220 };
+    m_pViewData->SetTabs(SAL_N_ELEMENTS(aTabPositions), aTabPositions);
 
     OUString aStrTab('\t');
-    OUString aString(get<FixedText>("action")->GetText());
-    aString += aStrTab;
-    aString += get<FixedText>("position")->GetText();
-    aString += aStrTab;
-    aString += get<FixedText>("author")->GetText();
-    aString += aStrTab;
-    aString += get<FixedText>("date")->GetText();
-    aString += aStrTab;
-    aString += get<FixedText>("comment")->GetText();
+    OUString aString = get<FixedText>("action")->GetText()
+                     + aStrTab
+                     + get<FixedText>("position")->GetText()
+                     + aStrTab
+                     + get<FixedText>("author")->GetText()
+                     + aStrTab
+                     + get<FixedText>("date")->GetText()
+                     + aStrTab
+                     + get<FixedText>("comment")->GetText();
     m_pViewData->ClearHeader();
     m_pViewData->InsertHeaderEntry(aString);
 }
@@ -489,6 +490,39 @@ void SvxTPView::EnableRejectAll(bool bFlag)
     m_pRejectAll->Enable(bFlag);
 }
 
+void SvxTPView::EnableClearFormatButton(VclPtr<PushButton> pButton, bool bFlag)
+{
+    OUString sText = pButton->GetText();
+    OUString sClearFormat = SvxResId(RID_SVXSTR_CLEARFORM);
+    sal_Int32 nPos = sText.indexOf(sClearFormat);
+
+    // add or remove "Clear formatting" to get "Reject" or "Reject/Clear formatting"
+    if (bFlag)
+    {
+        if (nPos == -1)
+        {
+            pButton->SetText(sText + "/" + sClearFormat);
+        }
+    }
+    else
+    {
+        if (nPos > 0)
+        {
+            pButton->SetText(sText.copy(0, nPos - 1));
+        }
+    }
+}
+
+void SvxTPView::EnableClearFormat(bool bFlag)
+{
+    EnableClearFormatButton( m_pReject, bFlag );
+}
+
+void SvxTPView::EnableClearFormatAll(bool bFlag)
+{
+    EnableClearFormatButton( m_pRejectAll, bFlag );
+}
+
 void SvxTPView::ShowUndo()
 {
     m_pUndo->Show();
@@ -501,7 +535,7 @@ void SvxTPView::EnableUndo(bool bFlag)
 }
 
 
-IMPL_LINK_TYPED( SvxTPView, PbClickHdl, Button*, pButton, void )
+IMPL_LINK( SvxTPView, PbClickHdl, Button*, pButton, void )
 {
     PushButton* pPushB = static_cast<PushButton*>(pButton);
     if (pPushB == m_pAccept)
@@ -550,9 +584,6 @@ SvxTPFilter::SvxTPFilter( vcl::Window * pParent)
     get(m_pCbComment, "comment");
     get(m_pEdComment, "commentedit");
 
-    m_pLbAuthor->SetAccessibleName(m_pCbAuthor->GetText());
-    m_pEdComment->SetAccessibleName(m_pCbComment->GetText());
-
     m_pDfDate->SetShowDateCentury( true );
     m_pDfDate2->SetShowDateCentury( true );
 
@@ -587,12 +618,11 @@ SvxTPFilter::SvxTPFilter( vcl::Window * pParent)
     RowEnableHdl(m_pCbAction);
     RowEnableHdl(m_pCbComment);
 
-    Date aDate( Date::SYSTEM );
-    tools::Time aTime( tools::Time::SYSTEM );
-    m_pDfDate->SetDate(aDate);
-    m_pTfDate->SetTime(aTime);
-    m_pDfDate2->SetDate(aDate);
-    m_pTfDate2->SetTime(aTime);
+    DateTime aDateTime( DateTime::SYSTEM );
+    m_pDfDate->SetDate(aDateTime);
+    m_pTfDate->SetTime(aDateTime);
+    m_pDfDate2->SetDate(aDateTime);
+    m_pTfDate2->SetTime(aDateTime);
     HideRange();
     ShowAction();
     bModified=false;
@@ -630,43 +660,6 @@ void SvxTPFilter::dispose()
 void SvxTPFilter::SetRedlinTable(SvxRedlinTable* pTable)
 {
     pRedlinTable=pTable;
-}
-
-void SvxTPFilter::ShowDateFields(SvxRedlinDateMode nKind)
-{
-    switch(nKind)
-    {
-        case SvxRedlinDateMode::BEFORE:
-                EnableDateLine1(true);
-                EnableDateLine2(false);
-                break;
-        case SvxRedlinDateMode::SINCE:
-                EnableDateLine1(true);
-                EnableDateLine2(false);
-                break;
-        case SvxRedlinDateMode::EQUAL:
-                EnableDateLine1(true);
-                m_pTfDate->Disable();
-                m_pTfDate->SetText(OUString());
-                EnableDateLine2(false);
-                break;
-        case SvxRedlinDateMode::NOTEQUAL:
-                EnableDateLine1(true);
-                m_pTfDate->Disable();
-                m_pTfDate->SetText(OUString());
-                EnableDateLine2(false);
-                break;
-        case SvxRedlinDateMode::BETWEEN:
-                EnableDateLine1(true);
-                EnableDateLine2(true);
-                break;
-        case SvxRedlinDateMode::SAVE:
-                EnableDateLine1(false);
-                EnableDateLine2(false);
-                break;
-        case SvxRedlinDateMode::NONE:
-                break;
-    }
 }
 
 void SvxTPFilter::EnableDateLine1(bool bFlag)
@@ -753,7 +746,7 @@ void SvxTPFilter::SetDateMode(sal_uInt16 nMode)
 
 SvxRedlinDateMode SvxTPFilter::GetDateMode()
 {
-    return static_cast<SvxRedlinDateMode>(m_pLbDate->GetSelectEntryPos());
+    return static_cast<SvxRedlinDateMode>(m_pLbDate->GetSelectedEntryPos());
 }
 void SvxTPFilter::ClearAuthors()
 {
@@ -767,7 +760,7 @@ void SvxTPFilter::InsertAuthor( const OUString& rString)
 
 OUString SvxTPFilter::GetSelectedAuthor() const
 {
-    return m_pLbAuthor->GetSelectEntry();
+    return m_pLbAuthor->GetSelectedEntry();
 }
 
 void SvxTPFilter::SelectedAuthorPos(sal_Int32 nPos)
@@ -778,7 +771,7 @@ void SvxTPFilter::SelectedAuthorPos(sal_Int32 nPos)
 sal_Int32 SvxTPFilter::SelectAuthor(const OUString& aString)
 {
     m_pLbAuthor->SelectEntry(aString);
-    return m_pLbAuthor->GetSelectEntryPos();
+    return m_pLbAuthor->GetSelectedEntryPos();
 }
 
 void SvxTPFilter::SetRange(const OUString& rString)
@@ -899,13 +892,46 @@ void SvxTPFilter::ShowAction(bool bShow)
 }
 
 
-IMPL_LINK_NOARG_TYPED( SvxTPFilter, SelDateHdl, ListBox&, void )
+IMPL_LINK_NOARG( SvxTPFilter, SelDateHdl, ListBox&, void )
 {
-    ShowDateFields(static_cast<SvxRedlinDateMode>(m_pLbDate->GetSelectEntryPos()));
+    SvxRedlinDateMode nKind = static_cast<SvxRedlinDateMode>(m_pLbDate->GetSelectedEntryPos());
+    switch(nKind)
+    {
+        case SvxRedlinDateMode::BEFORE:
+                EnableDateLine1(true);
+                EnableDateLine2(false);
+                break;
+        case SvxRedlinDateMode::SINCE:
+                EnableDateLine1(true);
+                EnableDateLine2(false);
+                break;
+        case SvxRedlinDateMode::EQUAL:
+                EnableDateLine1(true);
+                m_pTfDate->Disable();
+                m_pTfDate->SetText(OUString());
+                EnableDateLine2(false);
+                break;
+        case SvxRedlinDateMode::NOTEQUAL:
+                EnableDateLine1(true);
+                m_pTfDate->Disable();
+                m_pTfDate->SetText(OUString());
+                EnableDateLine2(false);
+                break;
+        case SvxRedlinDateMode::BETWEEN:
+                EnableDateLine1(true);
+                EnableDateLine2(true);
+                break;
+        case SvxRedlinDateMode::SAVE:
+                EnableDateLine1(false);
+                EnableDateLine2(false);
+                break;
+        case SvxRedlinDateMode::NONE:
+                break;
+    }
     bModified=true;
 }
 
-IMPL_LINK_TYPED( SvxTPFilter, RowEnableHdl, Button*, pButton, void )
+IMPL_LINK( SvxTPFilter, RowEnableHdl, Button*, pButton, void )
 {
     CheckBox* pCB = static_cast<CheckBox*>(pButton);
     if (pCB == m_pCbDate)
@@ -941,28 +967,27 @@ IMPL_LINK_TYPED( SvxTPFilter, RowEnableHdl, Button*, pButton, void )
         bModified=true;
 }
 
-IMPL_LINK_TYPED( SvxTPFilter, TimeHdl, Button*, pButton, void )
+IMPL_LINK( SvxTPFilter, TimeHdl, Button*, pButton, void )
 {
     ImageButton* pIB = static_cast<ImageButton*>(pButton);
-    Date aDate( Date::SYSTEM );
-    tools::Time aTime( tools::Time::SYSTEM );
+    DateTime aDateTime( DateTime::SYSTEM );
     if (pIB == m_pIbClock)
     {
-        m_pDfDate->SetDate(aDate);
-        m_pTfDate->SetTime(aTime);
+        m_pDfDate->SetDate(aDateTime);
+        m_pTfDate->SetTime(aDateTime);
     }
     else if (pIB == m_pIbClock2)
     {
-        m_pDfDate2->SetDate(aDate);
-        m_pTfDate2->SetTime(aTime);
+        m_pDfDate2->SetDate(aDateTime);
+        m_pTfDate2->SetTime(aDateTime);
     }
     bModified=true;
 }
-IMPL_LINK_NOARG_TYPED( SvxTPFilter, ModifyHdl, Edit&, void)
+IMPL_LINK_NOARG( SvxTPFilter, ModifyHdl, Edit&, void)
 {
     bModified=true;
 }
-IMPL_LINK_NOARG_TYPED( SvxTPFilter, ModifyListBoxHdl, ListBox&, void)
+IMPL_LINK_NOARG( SvxTPFilter, ModifyListBoxHdl, ListBox&, void)
 {
     bModified=true;
 }
@@ -984,7 +1009,7 @@ void SvxTPFilter::DeactivatePage()
             pRedlinTable->SetFilterComment(IsComment());
 
             utl::SearchParam aSearchParam( m_pEdComment->GetText(),
-                    utl::SearchParam::SRCH_REGEXP,false );
+                    utl::SearchParam::SearchType::Regexp,false );
 
             pRedlinTable->SetCommentParams(&aSearchParam);
 
@@ -1013,7 +1038,7 @@ void SvxTPFilter::Disable()
     Enable( false );
 }
 
-IMPL_LINK_TYPED( SvxTPFilter, ModifyDate, Edit&, rTF, void)
+IMPL_LINK( SvxTPFilter, ModifyDate, Edit&, rTF, void)
 {
     Date aDate( Date::SYSTEM );
     tools::Time aTime(0);
@@ -1053,7 +1078,7 @@ IMPL_LINK_TYPED( SvxTPFilter, ModifyDate, Edit&, rTF, void)
     ModifyHdl(*m_pDfDate);
 }
 
-IMPL_LINK_TYPED( SvxTPFilter, RefHandle, Button*, pRef, void )
+IMPL_LINK( SvxTPFilter, RefHandle, Button*, pRef, void )
 {
     if(pRef!=nullptr)
     {
@@ -1064,19 +1089,19 @@ IMPL_LINK_TYPED( SvxTPFilter, RefHandle, Button*, pRef, void )
 SvxAcceptChgCtr::SvxAcceptChgCtr(vcl::Window* pParent, VclBuilderContainer* pTopLevel)
     : TabControl(pParent, WB_TABSTOP | WB_DIALOGCONTROL)
 {
-    m_pUIBuilder = new VclBuilder(this, getUIRootDir(), "svx/ui/redlinecontrol.ui", "RedlineControl");
+    m_pUIBuilder.reset(new VclBuilder(this, getUIRootDir(), "svx/ui/redlinecontrol.ui", "RedlineControl"));
 
     pTPFilter = VclPtr<SvxTPFilter>::Create(this);
     pTPView = VclPtr<SvxTPView>::Create(this, pTopLevel);
 
-    m_nViewPageId = GetPageId("view");
+    sal_uInt16 nViewPageId = GetPageId("view");
     m_nFilterPageId = GetPageId("filter");
-    SetTabPage(m_nViewPageId, pTPView);
+    SetTabPage(nViewPageId, pTPView);
     SetTabPage(m_nFilterPageId, pTPFilter);
 
-    pTPFilter->SetRedlinTable(GetViewTable());
+    pTPFilter->SetRedlinTable(pTPView->GetTableControl());
 
-    ShowViewPage();
+    SetCurPageId(nViewPageId);
 
     Show();
 }
@@ -1097,16 +1122,6 @@ void SvxAcceptChgCtr::dispose()
 void SvxAcceptChgCtr::ShowFilterPage()
 {
     SetCurPageId(m_nFilterPageId);
-}
-
-void SvxAcceptChgCtr::ShowViewPage()
-{
-    SetCurPageId(m_nViewPageId);
-}
-
-SvxRedlinTable* SvxAcceptChgCtr::GetViewTable()
-{
-    return pTPView ? pTPView->GetTableControl() : nullptr;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

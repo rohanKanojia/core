@@ -20,16 +20,19 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_TOOLS_SDGLOBALRESOURCECONTAINER_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_TOOLS_SDGLOBALRESOURCECONTAINER_HXX
 
-#include "sdmod.hxx"
 #include <memory>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <sal/types.h>
+#include <o3tl/deleter.hxx>
+
+namespace com { namespace sun { namespace star { namespace uno { template <class interface_type> class Reference; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XInterface; } } } }
 
 namespace sd {
 
 class SdGlobalResource
 {
 public:
-    virtual ~SdGlobalResource() {};
+    virtual ~SdGlobalResource() COVERITY_NOEXCEPT_FALSE {};
 };
 
 /** The purpose of this container is to hold references to resources that
@@ -54,7 +57,7 @@ public:
     it to destroy the resource when the sd module is at the end of its
     lifetime.
 */
-class SdGlobalResourceContainer
+class SdGlobalResourceContainer final
 {
 public:
     static SdGlobalResourceContainer& Instance();
@@ -65,7 +68,7 @@ public:
 
         When in doubt, use the shared_ptr variant of this method.
     */
-    void AddResource (::std::unique_ptr<SdGlobalResource> && pResource);
+    void AddResource (::std::unique_ptr<SdGlobalResource> pResource);
 
     /** Add a resource to the container.  By using a shared_ptr and
         releasing it only when the SgGlobalResourceContainer is destroyed
@@ -81,9 +84,9 @@ public:
     */
     void AddResource (const css::uno::Reference<css::uno::XInterface>& rxResource);
 
-protected:
-    friend class ::SdModule;
-    friend struct ::std::default_delete<SdGlobalResourceContainer>;
+private:
+    friend class SdGlobalResourceContainerInstance;
+    friend struct o3tl::default_delete<SdGlobalResourceContainer>;
 
     class Implementation;
     ::std::unique_ptr<Implementation> mpImpl;

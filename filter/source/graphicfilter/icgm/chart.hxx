@@ -58,22 +58,20 @@ struct DataNode
 
 class CGM;
 class CGMImpressOutAct;
-class CGMChart
+class CGMChart final
 {
     friend class CGM;
     friend class CGMImpressOutAct;
 
-    protected:
         sal_Int8                mnCurrentFileType;
-        ::std::vector< TextEntry* > maTextEntryList;
+        ::std::vector< std::unique_ptr<TextEntry> > maTextEntryList;
         DataNode                mDataNode[ 7 ];
 
     public:
                                 CGMChart();
                                 ~CGMChart();
 
-        void                    DeleteTextEntry( TextEntry* );
-        void                    InsertTextEntry( TextEntry* );
+        void                    InsertTextEntry( std::unique_ptr<TextEntry> );
 
         void                    ResetAnnotation();
         bool                    IsAnnotation();

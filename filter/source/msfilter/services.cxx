@@ -21,23 +21,21 @@
 #include <filter/msfilter/msvbahelper.hxx>
 
 using namespace ::com::sun::star::uno;
+using namespace ::ooo::vba;
 
 namespace {
 
-#define IMPLEMENTATION_ENTRY( className ) \
-    { &className##_createInstance, &className##_getImplementationName, &className##_getSupportedServiceNames, ::cppu::createSingleComponentFactory, nullptr, 0 }
-
 static ::cppu::ImplementationEntry const spServices[] =
 {
-    IMPLEMENTATION_ENTRY( ::ooo::vba::VBAMacroResolver ),
+    { VBAMacroResolver_createInstance, VBAMacroResolver_getImplementationName,
+      VBAMacroResolver_getSupportedServiceNames,
+      ::cppu::createSingleComponentFactory, nullptr, 0 },
     { nullptr, nullptr, nullptr, nullptr, nullptr, 0 }
 };
 
-#undef IMPLEMENTATION_ENTRY
-
 } // namespace
 
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL msfilter_component_getFactory( const char* pImplName, void* pServiceManager, void* pRegistryKey )
+extern "C" SAL_DLLPUBLIC_EXPORT void* msfilter_component_getFactory( const char* pImplName, void* pServiceManager, void* pRegistryKey )
 {
     return ::cppu::component_getFactoryHelper( pImplName, pServiceManager, pRegistryKey, spServices );
 }

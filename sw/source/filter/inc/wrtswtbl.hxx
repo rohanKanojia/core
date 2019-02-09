@@ -36,7 +36,7 @@ class SvxBrushItem;
 
 namespace editeng { class SvxBorderLine; }
 
-//       Code aus dem HTML-Filter fuers schreiben von Tabellen
+//       Code from the HTML filter for writing of tables
 
 #define COLFUZZY 20
 #define ROWFUZZY 20
@@ -45,18 +45,18 @@ namespace editeng { class SvxBorderLine; }
 
 class SW_DLLPUBLIC SwWriteTableCell
 {
-    const SwTableBox *pBox;     // SwTableBox der Zelle
-    const SvxBrushItem *pBackground;    // geerbter Hintergrund einer Zeile
+    const SwTableBox *pBox;             // SwTableBox of the cell
+    const SvxBrushItem *pBackground;    // inherited background of a row
 
-    long nHeight;               // fixe/Mindest-Hoehe der Zeile
+    long const nHeight;                   // fix/minimum height of a row
 
-    sal_uInt32 nWidthOpt;          // Breite aus Option;
+    sal_uInt32 nWidthOpt;           // width from option;
 
-    sal_uInt16 nRow;                // Start-Zeile
-    sal_uInt16 nCol;                // Start-Spalte
+    sal_uInt16 const nRow;                // start row
+    sal_uInt16 const nCol;                // start column
 
-    sal_uInt16 nRowSpan;            // ueberspannte Zeilen
-    sal_uInt16 nColSpan;            // ueberspannte Spalten
+    sal_uInt16 const nRowSpan;            // spanned rows
+    sal_uInt16 const nColSpan;            // spanned columns
 
     bool bPrcWidthOpt;
 
@@ -93,29 +93,25 @@ public:
 
 typedef std::vector<std::unique_ptr<SwWriteTableCell>> SwWriteTableCells;
 
-class SW_DLLPUBLIC SwWriteTableRow
+class SW_DLLPUBLIC SwWriteTableRow final
 {
-    SwWriteTableCells m_Cells; ///< All cells of the Rows
-    const SvxBrushItem *pBackground;// Hintergrund
+    SwWriteTableCells m_Cells;       ///< all cells of the rows
+    const SvxBrushItem *pBackground; // background
 
-    long nPos;                  // End-Position (twips) der Zeile
-    bool mbUseLayoutHeights;
-
-    // Forbidden and not implemented.
-    SwWriteTableRow();
+    long const nPos;                       // end position (twips) of the row
+    bool const mbUseLayoutHeights;
 
     SwWriteTableRow & operator= (const SwWriteTableRow &) = delete;
 
-protected:
     // GCC >= 3.4 needs accessible T (const T&) to pass T as const T& argument.
     SwWriteTableRow( const SwWriteTableRow & );
 
 public:
 
-    sal_uInt16 nTopBorder;              // Dicke der oberen/unteren Umrandugen
+    sal_uInt16 nTopBorder;          // thickness of upper/lower border
     sal_uInt16 nBottomBorder;
 
-    bool bTopBorder : 1;            // Welche Umrandungen sind da?
+    bool bTopBorder : 1;            // which borders are there?
     bool bBottomBorder : 1;
 
     SwWriteTableRow( long nPos, bool bUseLayoutHeights );
@@ -143,34 +139,31 @@ public:
 
 inline bool SwWriteTableRow::operator==( const SwWriteTableRow& rRow ) const
 {
-    // etwas Unschaerfe zulassen
+    // allow for some fuzzyness
     return (nPos >= rRow.nPos ?  nPos - rRow.nPos : rRow.nPos - nPos ) <=
         (mbUseLayoutHeights ? 0 : ROWFUZZY);
 }
 
 inline bool SwWriteTableRow::operator<( const SwWriteTableRow& rRow ) const
 {
-    // Da wir hier nur die Wahrheits-Grade 0 und 1 kennen, lassen wir lieber
-    // auch nicht zu, dass x==y und x<y gleichzeitig gilt ;-)
+    // Since we only know the degrees of truth of 0 and 1 here, we also prefer to
+    // not let x==y and x<y at the same time ;-)
     return nPos < rRow.nPos - (mbUseLayoutHeights ? 0 : ROWFUZZY);
 }
 
-class SwWriteTableRows : public o3tl::sorted_vector<SwWriteTableRow*, o3tl::less_ptr_to<SwWriteTableRow> > {
-public:
-    ~SwWriteTableRows() { DeleteAndDestroyAll(); }
-};
+using SwWriteTableRows
+    = o3tl::sorted_vector< std::unique_ptr<SwWriteTableRow>, o3tl::less_uniqueptr_to<SwWriteTableRow> >;
 
 class SW_DLLPUBLIC SwWriteTableCol
 {
-    sal_uInt32 nPos;                        // End Position der Spalte
+    sal_uInt32 const nPos;                    // end position of the column
 
     sal_uInt32 nWidthOpt;
 
     bool bRelWidthOpt : 1;
-    bool bOutWidth : 1;                 // Spaltenbreite ausgeben?
 
 public:
-    bool bLeftBorder : 1;               // Welche Umrandungen sind da?
+    bool bLeftBorder : 1;               // which borders are there?
     bool bRightBorder : 1;
 
     SwWriteTableCol( sal_uInt32 nPosition );
@@ -180,8 +173,6 @@ public:
     bool HasLeftBorder() const                  { return bLeftBorder; }
 
     bool HasRightBorder() const                 { return bRightBorder; }
-
-    void SetOutWidth( bool bSet )               { bOutWidth = bSet; }
 
     inline bool operator==( const SwWriteTableCol& rCol ) const;
     inline bool operator<( const SwWriteTableCol& rCol ) const;
@@ -196,27 +187,25 @@ public:
 
 inline bool SwWriteTableCol::operator==( const SwWriteTableCol& rCol ) const
 {
-    // etwas Unschaerfe zulassen
+    // allow for some fuzzyness
     return (nPos >= rCol.nPos ? nPos - rCol.nPos
                                      : rCol.nPos - nPos ) <= COLFUZZY;
 }
 
 inline bool SwWriteTableCol::operator<( const SwWriteTableCol& rCol ) const
 {
-    // Da wir hier nur die Wahrheits-Grade 0 und 1 kennen, lassen wir lieber
-    // auch nicht zu, dass x==y und x<y gleichzeitig gilt ;-)
+    // Since we only know the degrees of truth of 0 and 1 here, we also prefer to
+    // not let x==y and x<y at the same time ;-)
     return nPos + COLFUZZY < rCol.nPos;
 }
 
 struct SwWriteTableColLess {
-    bool operator()(SwWriteTableCol const * lhs, SwWriteTableCol const * rhs) {
+    bool operator()(std::unique_ptr<SwWriteTableCol> const & lhs, std::unique_ptr<SwWriteTableCol> const & rhs) {
         return lhs->GetPos() < rhs->GetPos();
     }
 };
 
-class SwWriteTableCols : public o3tl::sorted_vector<SwWriteTableCol*, SwWriteTableColLess> {
-public:
-    ~SwWriteTableCols() { DeleteAndDestroyAll(); }
+class SwWriteTableCols : public o3tl::sorted_vector<std::unique_ptr<SwWriteTableCol>, SwWriteTableColLess> {
 };
 
 class SwTable;
@@ -226,34 +215,34 @@ class SW_DLLPUBLIC SwWriteTable
 private:
     const SwTable* m_pTable;
 protected:
-    SwWriteTableCols aCols; // alle Spalten
-    SwWriteTableRows aRows; // alle Zellen
+    SwWriteTableCols m_aCols; // all columns
+    SwWriteTableRows m_aRows; // all rows
 
-    sal_uInt32 nBorderColor;        // Umrandungsfarbe
+    Color      m_nBorderColor;        // border color
 
-    sal_uInt16 nCellSpacing;        // Dicke der inneren Umrandung
-    sal_uInt16 nCellPadding;        // Absatnd Umrandung-Inhalt
+    sal_uInt16 m_nCellSpacing;        // thickness of the inner border
+    sal_uInt16 m_nCellPadding;        // distance of border to content
 
-    sal_uInt16 nBorder;             // Dicke der ausseren Umrandung
-    sal_uInt16 nInnerBorder;        // Dicke der inneren Umrandung
-    sal_uInt32 nBaseWidth;            // Bezugsgroesse fur Breiten SwFormatFrameSize
+    sal_uInt16 m_nBorder;             // thickness of the outer border
+    sal_uInt16 m_nInnerBorder;        // thickness of the inner border
+    sal_uInt32 const m_nBaseWidth;          // reference value for SwFormatFrameSize width
 
-    sal_uInt16 nHeadEndRow;         // letzte Zeile des Tabellen-Kopfes
+    sal_uInt16 m_nHeadEndRow;         // last row of the table heading
 
-    sal_uInt16 nLeftSub;
-    sal_uInt16 nRightSub;
+    sal_uInt16 const m_nLeftSub;
+    sal_uInt16 const m_nRightSub;
 
-    sal_uInt32 nTabWidth;              // Absolute/Relative Breite der Tabelle
+    sal_uInt32 m_nTabWidth;           // absolute/relative width of the table
 
-    bool bRelWidths : 1;        // Breiten relativ ausgeben?
-    bool bUseLayoutHeights : 1; // Layout zur Hoehenbestimmung nehmen?
+    bool const m_bRelWidths : 1;        // generate relative widths?
+    bool m_bUseLayoutHeights : 1; // use layout to determine the height?
 #ifdef DBG_UTIL
     bool m_bGetLineHeightCalled : 1;
 #endif
 
-    bool bColTags : 1;
-    bool bLayoutExport : 1;
-    bool bCollectBorderWidth : 1;
+    bool const m_bColTags : 1;
+    bool const m_bLayoutExport : 1;
+    bool const m_bCollectBorderWidth : 1;
 
     virtual bool ShouldExpandSub( const SwTableBox *pBox,
                                 bool bExpandedBefore, sal_uInt16 nDepth ) const;
@@ -279,9 +268,9 @@ protected:
                             sal_uInt16 nRowSpan, sal_uInt16 nColSpan,
                             sal_uInt16 &rTopBorder, sal_uInt16 &rBottomBorder );
 
-    sal_uInt32 GetBaseWidth() const { return nBaseWidth; }
+    sal_uInt32 GetBaseWidth() const { return m_nBaseWidth; }
 
-    bool HasRelWidths() const { return bRelWidths; }
+    bool HasRelWidths() const { return m_bRelWidths; }
 
 public:
     static sal_uInt32 GetBoxWidth( const SwTableBox *pBox );
@@ -293,6 +282,7 @@ public:
 
     long GetAbsHeight(long nRawWidth, size_t nRow, sal_uInt16 nRowSpan) const;
 
+    double GetAbsWidthRatio() const { return m_nTabWidth == m_nBaseWidth ? 1.0 : double(m_nTabWidth) / m_nBaseWidth; }
 protected:
     long GetLineHeight( const SwTableLine *pLine );
     static long GetLineHeight( const SwTableBox *pBox );
@@ -309,7 +299,7 @@ public:
     SwWriteTable(const SwTable* pTable, const SwHTMLTableLayout *pLayoutInfo);
     virtual ~SwWriteTable();
 
-    const SwWriteTableRows& GetRows() const { return aRows; }
+    const SwWriteTableRows& GetRows() const { return m_aRows; }
 
     const SwTable* GetTable() const { return m_pTable; }
 };

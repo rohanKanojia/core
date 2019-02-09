@@ -17,11 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 #include "vbaoutline.hxx"
+#include <com/sun/star/sheet/XSheetOutline.hpp>
+
 using namespace ::com::sun::star;
 using namespace ::ooo::vba;
 
 void
-ScVbaOutline::ShowLevels( const uno::Any& RowLevels, const uno::Any& ColumnLevels ) throw (uno::RuntimeException, std::exception)
+ScVbaOutline::ShowLevels( const uno::Any& RowLevels, const uno::Any& ColumnLevels )
 {
     if (mxOutline.is())
     {
@@ -46,12 +48,10 @@ ScVbaOutline::getServiceImplName()
 uno::Sequence< OUString >
 ScVbaOutline::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.excel.Outline";
-    }
+        "ooo.vba.excel.Outline"
+    };
     return aServiceNames;
 }
 

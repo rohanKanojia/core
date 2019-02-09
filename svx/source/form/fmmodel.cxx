@@ -18,9 +18,9 @@
  */
 
 
-#include "fmundo.hxx"
-#include "fmdocumentclassification.hxx"
-#include "fmcontrollayout.hxx"
+#include <fmundo.hxx>
+#include <fmdocumentclassification.hxx>
+#include <fmcontrollayout.hxx>
 
 #include <svx/fmmodel.hxx>
 #include <svx/fmpage.hxx>
@@ -37,70 +37,38 @@ using namespace svxform;
 
 struct FmFormModelImplData
 {
-    FmXUndoEnvironment*     pUndoEnv;
+    rtl::Reference<FmXUndoEnvironment>  mxUndoEnv;
     bool                bOpenInDesignIsDefaulted;
-    bool                bMovingPage;
-    ::boost::optional< sal_Bool >
-                            aControlsUseRefDevice;
+    boost::optional<bool> aControlsUseRefDevice;
 
     FmFormModelImplData()
-        :pUndoEnv( nullptr )
-        ,bOpenInDesignIsDefaulted( true )
-        ,bMovingPage( false )
-        ,aControlsUseRefDevice()
+        :bOpenInDesignIsDefaulted( true )
     {
     }
 };
 
-FmFormModel::FmFormModel(SfxItemPool* pPool, SfxObjectShell* pPers)
-    : SdrModel(pPool, pPers, false)
-    , m_pImpl(nullptr)
+FmFormModel::FmFormModel(
+    SfxItemPool* pPool,
+    SfxObjectShell* pPers)
+:   SdrModel(
+        pPool,
+        pPers)
     , m_pObjShell(nullptr)
     , m_bOpenInDesignMode(false)
     , m_bAutoControlFocus(false)
 {
-    m_pImpl = new FmFormModelImplData;
-    m_pImpl->pUndoEnv = new FmXUndoEnvironment(*this);
-    m_pImpl->pUndoEnv->acquire();
-}
-
-FmFormModel::FmFormModel(const OUString& rPath, SfxItemPool* pPool, SfxObjectShell* pPers)
-    : SdrModel(rPath, pPool, pPers, false)
-    , m_pImpl(nullptr)
-    , m_pObjShell(nullptr)
-    , m_bOpenInDesignMode(false)
-    , m_bAutoControlFocus(false)
-{
-    m_pImpl = new FmFormModelImplData;
-    m_pImpl->pUndoEnv = new FmXUndoEnvironment(*this);
-    m_pImpl->pUndoEnv->acquire();
-}
-
-FmFormModel::FmFormModel(const OUString& rPath, SfxItemPool* pPool, SfxObjectShell* pPers,
-                         bool bUseExtColorTable)
-    : SdrModel(rPath, pPool, pPers, bUseExtColorTable)
-    , m_pImpl(nullptr)
-    , m_pObjShell(nullptr)
-    , m_bOpenInDesignMode(false)
-    , m_bAutoControlFocus(false)
-{
-    m_pImpl = new FmFormModelImplData;
-    m_pImpl->pUndoEnv = new FmXUndoEnvironment(*this);
-    m_pImpl->pUndoEnv->acquire();
+    m_pImpl.reset( new FmFormModelImplData );
+    m_pImpl->mxUndoEnv = new FmXUndoEnvironment(*this);
 }
 
 FmFormModel::~FmFormModel()
 {
-    if (m_pObjShell && m_pImpl->pUndoEnv->IsListening(*m_pObjShell))
+    if (m_pObjShell && m_pImpl->mxUndoEnv->IsListening(*m_pObjShell))
         SetObjectShell(nullptr);
 
     ClearUndoBuffer();
-    // minimale grenze fuer undos
+    // minimum limit for undos
     SetMaxUndoActionCount(1);
-
-    m_pImpl->pUndoEnv->release();
-    delete m_pImpl;
-
 }
 
 SdrPage* FmFormModel::AllocPage(bool bMasterPage)
@@ -110,21 +78,11 @@ SdrPage* FmFormModel::AllocPage(bool bMasterPage)
 
 void FmFormModel::InsertPage(SdrPage* pPage, sal_uInt16 nPos)
 {
-    // hack solange Methode intern
-    if (m_pObjShell && !m_pImpl->pUndoEnv->IsListening( *m_pObjShell ))
+    // hack for as long as the method is internal
+    if (m_pObjShell && !m_pImpl->mxUndoEnv->IsListening( *m_pObjShell ))
         SetObjectShell(m_pObjShell);
 
     SdrModel::InsertPage( pPage, nPos );
-}
-
-void FmFormModel::MovePage( sal_uInt16 nPgNum, sal_uInt16 nNewPos )
-{
-    m_pImpl->bMovingPage = true;
-        // see InsertPage for this
-
-    SdrModel::MovePage( nPgNum, nNewPos );
-
-    m_pImpl->bMovingPage = false;
 }
 
 SdrPage* FmFormModel::RemovePage(sal_uInt16 nPgNum)
@@ -136,7 +94,7 @@ SdrPage* FmFormModel::RemovePage(sal_uInt16 nPgNum)
     {
         Reference< XNameContainer > xForms( pToBeRemovedPage->GetForms( false ), css::uno::UNO_QUERY );
         if ( xForms.is() )
-            m_pImpl->pUndoEnv->RemoveForms( xForms );
+            m_pImpl->mxUndoEnv->RemoveForms( xForms );
     }
 
     FmFormPage* pRemovedPage = static_cast<FmFormPage*>(SdrModel::RemovePage(nPgNum));
@@ -146,8 +104,8 @@ SdrPage* FmFormModel::RemovePage(sal_uInt16 nPgNum)
 
 void FmFormModel::InsertMasterPage(SdrPage* pPage, sal_uInt16 nPos)
 {
-    // hack solange Methode intern
-    if (m_pObjShell && !m_pImpl->pUndoEnv->IsListening( *m_pObjShell ))
+    // hack for as long as the method is internal
+    if (m_pObjShell && !m_pImpl->mxUndoEnv->IsListening( *m_pObjShell ))
         SetObjectShell(m_pObjShell);
 
     SdrModel::InsertMasterPage(pPage, nPos);
@@ -161,7 +119,7 @@ SdrPage* FmFormModel::RemoveMasterPage(sal_uInt16 nPgNum)
     {
         Reference< XNameContainer > xForms( pPage->GetForms( false ), css::uno::UNO_QUERY );
         if ( xForms.is() )
-            m_pImpl->pUndoEnv->RemoveForms( xForms );
+            m_pImpl->mxUndoEnv->RemoveForms( xForms );
     }
 
     return pPage;
@@ -201,7 +159,7 @@ bool FmFormModel::ControlsUseRefDevice() const
         DocumentType eDocType = eUnknownDocumentType;
         if ( m_pObjShell )
             eDocType = DocumentClassification::classifyHostDocument( m_pObjShell->GetModel() );
-        m_pImpl->aControlsUseRefDevice.reset( ControlLayouter::useDocumentReferenceDevice( eDocType ) );
+        m_pImpl->aControlsUseRefDevice = ControlLayouter::useDocumentReferenceDevice(eDocType);
     }
     return *m_pImpl->aControlsUseRefDevice;
 }
@@ -224,27 +182,27 @@ void FmFormModel::SetObjectShell( SfxObjectShell* pShell )
 
     if (m_pObjShell)
     {
-        m_pImpl->pUndoEnv->EndListening( *this );
-        m_pImpl->pUndoEnv->EndListening( *m_pObjShell );
+        m_pImpl->mxUndoEnv->EndListening( *this );
+        m_pImpl->mxUndoEnv->EndListening( *m_pObjShell );
     }
 
     m_pObjShell = pShell;
 
     if (m_pObjShell)
     {
-        m_pImpl->pUndoEnv->SetReadOnly( m_pObjShell->IsReadOnly() || m_pObjShell->IsReadOnlyUI(), FmXUndoEnvironment::Accessor() );
+        m_pImpl->mxUndoEnv->SetReadOnly( m_pObjShell->IsReadOnly() || m_pObjShell->IsReadOnlyUI(), FmXUndoEnvironment::Accessor() );
 
-        if (!m_pImpl->pUndoEnv->IsReadOnly())
-             m_pImpl->pUndoEnv->StartListening(*this);
+        if (!m_pImpl->mxUndoEnv->IsReadOnly())
+             m_pImpl->mxUndoEnv->StartListening(*this);
 
-        m_pImpl->pUndoEnv->StartListening( *m_pObjShell );
+        m_pImpl->mxUndoEnv->StartListening( *m_pObjShell );
     }
 }
 
 
 FmXUndoEnvironment& FmFormModel::GetUndoEnv()
 {
-    return *m_pImpl->pUndoEnv;
+    return *m_pImpl->mxUndoEnv;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

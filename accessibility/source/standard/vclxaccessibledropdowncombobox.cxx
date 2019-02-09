@@ -17,12 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <accessibility/standard/vclxaccessibledropdowncombobox.hxx>
-#include <accessibility/standard/vclxaccessiblecombobox.hxx>
-#include <accessibility/standard/vclxaccessibletextfield.hxx>
-#include <accessibility/standard/vclxaccessiblelist.hxx>
-#include <accessibility/helper/accresmgr.hxx>
-#include <accessibility/helper/accessiblestrings.hrc>
+#include <standard/vclxaccessibledropdowncombobox.hxx>
+#include <standard/vclxaccessiblecombobox.hxx>
+#include <standard/vclxaccessibletextfield.hxx>
+#include <standard/vclxaccessiblelist.hxx>
 
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
@@ -34,7 +32,6 @@
 #include <toolkit/awt/vclxwindow.hxx>
 #include <toolkit/helper/convert.hxx>
 
-#include <comphelper/sequence.hxx>
 #include <cppuhelper/typeprovider.hxx>
 #include <unotools/accessiblestatesethelper.hxx>
 
@@ -51,10 +48,6 @@ VCLXAccessibleDropDownComboBox::VCLXAccessibleDropDownComboBox (VCLXWindow* pVCL
 }
 
 
-VCLXAccessibleDropDownComboBox::~VCLXAccessibleDropDownComboBox()
-{
-}
-
 bool VCLXAccessibleDropDownComboBox::IsValid() const
 {
     return GetWindow().get() != nullptr;
@@ -64,8 +57,8 @@ void VCLXAccessibleDropDownComboBox::ProcessWindowEvent (const VclWindowEvent& r
 {
     switch ( rVclWindowEvent.GetId() )
     {
-        case VCLEVENT_DROPDOWN_OPEN:
-        case VCLEVENT_DROPDOWN_CLOSE:
+        case VclEventId::DropdownOpen:
+        case VclEventId::DropdownClose:
         {
             break;
         }
@@ -79,14 +72,12 @@ void VCLXAccessibleDropDownComboBox::ProcessWindowEvent (const VclWindowEvent& r
 // XServiceInfo
 
 OUString VCLXAccessibleDropDownComboBox::getImplementationName()
-    throw (RuntimeException, std::exception)
 {
     return OUString( "com.sun.star.comp.toolkit.AccessibleDropDownComboBox" );
 }
 
 
 Sequence< OUString > VCLXAccessibleDropDownComboBox::getSupportedServiceNames()
-    throw (RuntimeException, std::exception)
 {
     Sequence< OUString > aNames = VCLXAccessibleBox::getSupportedServiceNames();
     sal_Int32 nLength = aNames.getLength();

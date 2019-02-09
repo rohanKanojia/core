@@ -17,12 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "imageprovider.hxx"
-#include "dbu_resource.hrc"
-#include "moduledbu.hxx"
-#include "dbustrings.hrc"
+#include <imageprovider.hxx>
+#include <stringconstants.hxx>
+#include <bitmaps.hlst>
 
-#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/graphic/XGraphic.hpp>
 #include <com/sun/star/graphic/GraphicColorMode.hpp>
 #include <com/sun/star/sdb/application/XTableUIProvider.hpp>
@@ -37,7 +35,6 @@ namespace dbaui
     using ::com::sun::star::sdbc::XConnection;
     using ::com::sun::star::uno::Exception;
     using ::com::sun::star::container::XNameAccess;
-    using ::com::sun::star::beans::XPropertySet;
     using ::com::sun::star::graphic::XGraphic;
     using ::com::sun::star::sdb::application::XTableUIProvider;
     using ::com::sun::star::uno::UNO_QUERY;
@@ -70,14 +67,14 @@ namespace dbaui
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
             }
         }
 
         void lcl_getTableImageResourceID_nothrow( const ImageProvider_Data& _rData, const OUString& _rName,
-            sal_uInt16& _out_rResourceID)
+            OUString& _out_rResourceID)
         {
-            _out_rResourceID = 0;
+            _out_rResourceID = OUString();
             try
             {
                 bool bIsView = _rData.xViews.is() && _rData.xViews->hasByName( _rName );
@@ -92,7 +89,7 @@ namespace dbaui
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
             }
         }
     }
@@ -116,7 +113,7 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 
@@ -138,11 +135,11 @@ namespace dbaui
             if ( !_out_rImage )
             {
                 // no -> determine by type
-                sal_uInt16 nImageResourceID = 0;
-                lcl_getTableImageResourceID_nothrow( *m_pData, _rName, nImageResourceID );
+                OUString sImageResourceID;
+                lcl_getTableImageResourceID_nothrow( *m_pData, _rName, sImageResourceID );
 
-                if ( nImageResourceID && !_out_rImage )
-                    _out_rImage = Image( ModuleRes( nImageResourceID ) );
+                if (!sImageResourceID.isEmpty() && !_out_rImage)
+                    _out_rImage = Image(StockImage::Yes, sImageResourceID);
             }
         }
     }
@@ -150,52 +147,52 @@ namespace dbaui
     Image ImageProvider::getDefaultImage( sal_Int32 _nDatabaseObjectType )
     {
         Image aObjectImage;
-        sal_uInt16 nImageResourceID( getDefaultImageResourceID( _nDatabaseObjectType) );
-        if ( nImageResourceID )
-            aObjectImage = Image( ModuleRes( nImageResourceID ) );
+        OUString sImageResourceID( getDefaultImageResourceID( _nDatabaseObjectType) );
+        if (!sImageResourceID.isEmpty())
+            aObjectImage = Image(StockImage::Yes, sImageResourceID);
         return aObjectImage;
     }
 
-    sal_uInt16 ImageProvider::getDefaultImageResourceID( sal_Int32 _nDatabaseObjectType)
+    OUString ImageProvider::getDefaultImageResourceID( sal_Int32 _nDatabaseObjectType)
     {
-        sal_uInt16 nImageResourceID( 0 );
+        OUString sImageResourceID;
         switch ( _nDatabaseObjectType )
         {
         case DatabaseObject::QUERY:
-            nImageResourceID = QUERY_TREE_ICON;
+            sImageResourceID = QUERY_TREE_ICON;
             break;
         case DatabaseObject::FORM:
-            nImageResourceID = FORM_TREE_ICON;
+            sImageResourceID = FORM_TREE_ICON;
             break;
         case DatabaseObject::REPORT:
-            nImageResourceID = REPORT_TREE_ICON;
+            sImageResourceID = REPORT_TREE_ICON;
             break;
         case DatabaseObject::TABLE:
-            nImageResourceID = TABLE_TREE_ICON;
+            sImageResourceID = TABLE_TREE_ICON;
             break;
         default:
             OSL_FAIL( "ImageProvider::getDefaultImage: invalid database object type!" );
             break;
         }
-        return nImageResourceID;
+        return sImageResourceID;
     }
 
     Image ImageProvider::getFolderImage( sal_Int32 _nDatabaseObjectType )
     {
-        sal_uInt16 nImageResourceID( 0 );
+        OUString sImageResourceID;
         switch ( _nDatabaseObjectType )
         {
         case DatabaseObject::QUERY:
-            nImageResourceID = QUERYFOLDER_TREE_ICON;
+            sImageResourceID = QUERYFOLDER_TREE_ICON;
             break;
         case DatabaseObject::FORM:
-            nImageResourceID = FORMFOLDER_TREE_ICON;
+            sImageResourceID = FORMFOLDER_TREE_ICON;
             break;
         case DatabaseObject::REPORT:
-            nImageResourceID = REPORTFOLDER_TREE_ICON;
+            sImageResourceID = REPORTFOLDER_TREE_ICON;
             break;
         case DatabaseObject::TABLE:
-            nImageResourceID = TABLEFOLDER_TREE_ICON;
+            sImageResourceID = TABLEFOLDER_TREE_ICON;
             break;
         default:
             OSL_FAIL( "ImageProvider::getDefaultImage: invalid database object type!" );
@@ -203,14 +200,14 @@ namespace dbaui
         }
 
         Image aFolderImage;
-        if ( nImageResourceID )
-            aFolderImage = Image( ModuleRes( nImageResourceID ) );
+        if (!sImageResourceID.isEmpty())
+            aFolderImage = Image(StockImage::Yes, sImageResourceID);
         return aFolderImage;
     }
 
     Image ImageProvider::getDatabaseImage()
     {
-        return Image( ModuleRes( DATABASE_TREE_ICON ) );
+        return Image(StockImage::Yes, DATABASE_TREE_ICON);
     }
 
 } // namespace dbaui

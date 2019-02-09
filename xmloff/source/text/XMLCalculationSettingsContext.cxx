@@ -18,7 +18,7 @@
  */
 
 
-#include <XMLCalculationSettingsContext.hxx>
+#include "XMLCalculationSettingsContext.hxx"
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/text/XTextDocument.hpp>
@@ -75,10 +75,7 @@ void XMLCalculationSettingsContext::EndElement()
         if (xTextDoc.is())
         {
             Reference < XPropertySet > xPropSet ( xTextDoc, UNO_QUERY );
-            OUString sTwoDigitYear ( "TwoDigitYear" );
-            Any aAny;
-            aAny <<= nYear;
-            xPropSet->setPropertyValue ( sTwoDigitYear, aAny );
+            xPropSet->setPropertyValue ( "TwoDigitYear", Any(nYear) );
         }
     }
 }

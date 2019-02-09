@@ -19,6 +19,7 @@
 #ifndef INCLUDED_STOC_SOURCE_SECURITY_LRU_CACHE_H
 #define INCLUDED_STOC_SOURCE_SECURITY_LRU_CACHE_H
 
+#include <memory>
 #include <unordered_map>
 
 // __CACHE_DIAGNOSE works only for OUString keys
@@ -27,6 +28,7 @@
 #include <rtl/ustrbuf.hxx>
 #include <rtl/ustring.hxx>
 #include <rtl/string.hxx>
+#include <sal/log.hxx>
 #endif
 
 
@@ -49,7 +51,7 @@ class lru_cache
     t_key2element m_key2element;
     ::std::size_t m_size;
 
-    Entry * m_block;
+    std::unique_ptr<Entry[]> m_block;
     mutable Entry * m_head;
     mutable Entry * m_tail;
     inline void toFront( Entry * entry ) const;
@@ -58,15 +60,6 @@ public:
     /** Default Ctor.  Does not cache.
     */
     inline lru_cache();
-    /** Ctor.
-
-        @param size number of elements to be cached; default param set to 128
-    */
-    explicit inline lru_cache( ::std::size_t size );
-
-    /** Destructor: releases all cached elements and keys.
-    */
-    inline ~lru_cache();
 
     /** Retrieves a pointer to value in cache.  Returns 0, if none was found.
 
@@ -94,31 +87,20 @@ inline void lru_cache< t_key, t_val, t_hashKey, t_equalKey >::setSize(
     ::std::size_t size )
 {
     m_key2element.clear();
-    delete [] m_block;
-    m_block = NULL;
+    m_block.reset();
     m_size = size;
 
     if (0 < m_size)
     {
-        m_block = new Entry[ m_size ];
-        m_head = m_block;
-        m_tail = m_block + m_size -1;
+        m_block.reset( new Entry[ m_size ] );
+        m_head = m_block.get();
+        m_tail = m_block.get() + m_size -1;
         for ( ::std::size_t nPos = m_size; nPos--; )
         {
-            m_block[ nPos ].m_pred = m_block + nPos -1;
-            m_block[ nPos ].m_succ = m_block + nPos +1;
+            m_block[ nPos ].m_pred = m_block.get() + nPos -1;
+            m_block[ nPos ].m_succ = m_block.get() + nPos +1;
         }
     }
-}
-
-template< typename t_key, typename t_val, typename t_hashKey, typename t_equalKey >
-inline lru_cache< t_key, t_val, t_hashKey, t_equalKey >::lru_cache(
-    ::std::size_t size )
-    : m_size( 0 )
-    , m_block( nullptr )
-    , m_tail( nullptr )
-{
-    setSize( size );
 }
 
 template< typename t_key, typename t_val, typename t_hashKey, typename t_equalKey >
@@ -128,12 +110,6 @@ inline lru_cache< t_key, t_val, t_hashKey, t_equalKey >::lru_cache()
     , m_head( nullptr )
     , m_tail( nullptr )
 {
-}
-
-template< typename t_key, typename t_val, typename t_hashKey, typename t_equalKey >
-inline lru_cache< t_key, t_val, t_hashKey, t_equalKey >::~lru_cache()
-{
-    delete [] m_block;
 }
 
 template< typename t_key, typename t_val, typename t_hashKey, typename t_equalKey >
@@ -172,12 +148,10 @@ inline t_val const * lru_cache< t_key, t_val, t_hashKey, t_equalKey >::lookup(
             toFront( entry );
 #ifdef __CACHE_DIAGNOSE
             OUStringBuffer buf( 48 );
-            buf.appendAscii( RTL_CONSTASCII_STRINGPARAM("> retrieved element \"") );
+            buf.appendAscii( "> retrieved element \"" );
             buf.append( entry->m_key );
-            buf.appendAscii( RTL_CONSTASCII_STRINGPARAM("\" from cache") );
-            OString str( OUStringToOString(
-                buf.makeStringAndClear(), RTL_TEXTENCODING_ASCII_US ) );
-            OSL_TRACE( "%s", str.getStr() );
+            buf.appendAscii( "\" from cache" );
+            SAL_INFO("stoc", buf.makeStringAndClear() );
 #endif
             return &entry->m_val;
         }
@@ -201,34 +175,27 @@ inline void lru_cache< t_key, t_val, t_hashKey, t_equalKey >::set(
             if (entry->m_key.getLength())
             {
                 OUStringBuffer buf( 48 );
-                buf.appendAscii( RTL_CONSTASCII_STRINGPARAM("> kicking element \"") );
+                buf.appendAscii( "> kicking element \"" );
                 buf.append( entry->m_key );
-                buf.appendAscii( RTL_CONSTASCII_STRINGPARAM("\" from cache") );
-                OString str( OUStringToOString(
-                    buf.makeStringAndClear(), RTL_TEXTENCODING_ASCII_US ) );
-                OSL_TRACE( "%s", str.getStr() );
+                buf.appendAscii( "\" from cache" );
+                SAL_INFO("stoc", buf.makeStringAndClear() );
             }
 #endif
             m_key2element.erase( entry->m_key );
             entry->m_key = key;
             ::std::pair< typename t_key2element::iterator, bool > insertion(
-                m_key2element.insert( typename t_key2element::value_type( key, entry ) ) );
-#ifdef __CACHE_DIAGNOSE
+                m_key2element.emplace( key, entry ) );
             OSL_ENSURE( insertion.second, "### inserting new cache entry failed?!" );
-#endif
-            (void) insertion; // avoid warnings
         }
         else
         {
             entry = iFind->second;
 #ifdef __CACHE_DIAGNOSE
             OUStringBuffer buf( 48 );
-            buf.appendAscii( RTL_CONSTASCII_STRINGPARAM("> replacing element \"") );
+            buf.appendAscii( "> replacing element \"" );
             buf.append( entry->m_key );
-            buf.appendAscii( RTL_CONSTASCII_STRINGPARAM("\" in cache") );
-            OString str( OUStringToOString(
-                buf.makeStringAndClear(), RTL_TEXTENCODING_ASCII_US ) );
-            OSL_TRACE( "%s", str.getStr() );
+            buf.appendAscii( "\" in cache" );
+            SAL_INFO("stoc", buf.makeStringAndClear() );
 #endif
         }
         entry->m_val = val;

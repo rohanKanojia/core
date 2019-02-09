@@ -9,23 +9,23 @@
  * This file incorporates work covered by the following license notice:
  */
 
-#include "PivotLayoutTreeList.hxx"
-#include "PivotLayoutDialog.hxx"
+#include <memory>
+#include <PivotLayoutTreeList.hxx>
+#include <PivotLayoutDialog.hxx>
 
 #include <vcl/builderfactory.hxx>
-#include <svtools/treelistentry.hxx>
-#include "pivot.hxx"
-#include "scabstdlg.hxx"
-
-using namespace std;
+#include <vcl/treelistentry.hxx>
+#include <pivot.hxx>
+#include <scabstdlg.hxx>
 
 VCL_BUILDER_FACTORY_ARGS(ScPivotLayoutTreeList,
-                         WB_BORDER | WB_TABSTOP | WB_CLIPCHILDREN |
-                         WB_FORCE_MAKEVISIBLE)
+                         WB_BORDER | WB_TABSTOP | WB_CLIPCHILDREN)
 
 ScPivotLayoutTreeList::ScPivotLayoutTreeList(vcl::Window* pParent, WinBits nBits) :
     ScPivotLayoutTreeListBase(pParent, nBits)
-{}
+{
+    SetForceMakeVisible(true);
+}
 
 ScPivotLayoutTreeList::~ScPivotLayoutTreeList()
 {}
@@ -53,10 +53,10 @@ bool ScPivotLayoutTreeList::DoubleClickHdl()
 
     ScAbstractDialogFactory* pFactory = ScAbstractDialogFactory::Create();
 
-    vector<ScDPName> aDataFieldNames;
+    std::vector<ScDPName> aDataFieldNames;
     mpParent->PushDataFieldNames(aDataFieldNames);
 
-    std::unique_ptr<AbstractScDPSubtotalDlg> pDialog(
+    ScopedVclPtr<AbstractScDPSubtotalDlg> pDialog(
         pFactory->CreateScDPSubtotalDlg(this, mpParent->maPivotTableObject, rCurrentLabelData, rCurrentFunctionData, aDataFieldNames));
 
     if (pDialog->Execute() == RET_OK)
@@ -73,10 +73,8 @@ void ScPivotLayoutTreeList::FillFields(ScPivotFieldVector& rFieldVector)
     Clear();
     maItemValues.clear();
 
-    ScPivotFieldVector::iterator it;
-    for (it = rFieldVector.begin(); it != rFieldVector.end(); ++it)
+    for (ScPivotField& rField : rFieldVector)
     {
-        ScPivotField& rField = *it;
         OUString aLabel = mpParent->GetItem( rField.nCol )->maName;
         ScItemValue* pItemValue = new ScItemValue( aLabel, rField.nCol, rField.nFuncMask );
         maItemValues.push_back(std::unique_ptr<ScItemValue>(pItemValue));
@@ -99,7 +97,7 @@ void ScPivotLayoutTreeList::InsertEntryForSourceTarget(SvTreeListEntry* pSource,
     InsertEntryForItem(pOriginalItemValue, nPosition);
 }
 
-void ScPivotLayoutTreeList::InsertEntryForItem(ScItemValue* pItemValue, sal_uLong nPosition)
+void ScPivotLayoutTreeList::InsertEntryForItem(const ScItemValue* pItemValue, sal_uLong nPosition)
 {
     ScItemValue *pListItemValue = new ScItemValue(pItemValue);
     maItemValues.push_back(std::unique_ptr<ScItemValue>(pListItemValue));

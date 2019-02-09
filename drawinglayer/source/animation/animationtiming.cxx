@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
+
 #include <drawinglayer/animation/animationtiming.hxx>
 #include <basegfx/numeric/ftools.hxx>
-
 
 namespace drawinglayer
 {
@@ -46,9 +47,9 @@ namespace drawinglayer
         {
         }
 
-        AnimationEntry* AnimationEntryFixed::clone() const
+        std::unique_ptr<AnimationEntry> AnimationEntryFixed::clone() const
         {
-            return new AnimationEntryFixed(mfDuration, mfState);
+            return std::make_unique<AnimationEntryFixed>(mfDuration, mfState);
         }
 
         bool AnimationEntryFixed::operator==(const AnimationEntry& rCandidate) const
@@ -95,9 +96,9 @@ namespace drawinglayer
         {
         }
 
-        AnimationEntry* AnimationEntryLinear::clone() const
+        std::unique_ptr<AnimationEntry> AnimationEntryLinear::clone() const
         {
-            return new AnimationEntryLinear(mfDuration, mfFrequency, mfStart, mfStop);
+            return std::make_unique<AnimationEntryLinear>(mfDuration, mfFrequency, mfStart, mfStop);
         }
 
         bool AnimationEntryLinear::operator==(const AnimationEntry& rCandidate) const
@@ -159,9 +160,9 @@ namespace drawinglayer
         }
 
 
-        sal_uInt32 AnimationEntryList::impGetIndexAtTime(double fTime, double &rfAddedTime) const
+        AnimationEntryList::Entries::size_type AnimationEntryList::impGetIndexAtTime(double fTime, double &rfAddedTime) const
         {
-            sal_uInt32 nIndex(0L);
+            Entries::size_type nIndex(0);
 
             while(nIndex < maEntries.size() && basegfx::fTools::lessOrEqual(rfAddedTime + maEntries[nIndex]->getDuration(), fTime))
             {
@@ -178,19 +179,15 @@ namespace drawinglayer
 
         AnimationEntryList::~AnimationEntryList()
         {
-            for(size_t a(0); a < maEntries.size(); a++)
-            {
-                delete maEntries[a];
-            }
         }
 
-        AnimationEntry* AnimationEntryList::clone() const
+        std::unique_ptr<AnimationEntry> AnimationEntryList::clone() const
         {
-            AnimationEntryList* pNew = new AnimationEntryList();
+            std::unique_ptr<AnimationEntryList> pNew(std::make_unique<AnimationEntryList>());
 
-            for(size_t a(0); a < maEntries.size(); a++)
+            for(const auto &i : maEntries)
             {
-                pNew->append(*maEntries[a]);
+                pNew->append(*i);
             }
 
             return pNew;
@@ -237,7 +234,7 @@ namespace drawinglayer
             if(!basegfx::fTools::equalZero(mfDuration))
             {
                 double fAddedTime(0.0);
-                const sal_uInt32 nIndex(impGetIndexAtTime(fTime, fAddedTime));
+                const auto nIndex(impGetIndexAtTime(fTime, fAddedTime));
 
                 if(nIndex < maEntries.size())
                 {
@@ -255,7 +252,7 @@ namespace drawinglayer
             if(!basegfx::fTools::equalZero(mfDuration))
             {
                 double fAddedTime(0.0);
-                const sal_uInt32 nIndex(impGetIndexAtTime(fTime, fAddedTime));
+                const auto nIndex(impGetIndexAtTime(fTime, fAddedTime));
 
                 if(nIndex < maEntries.size())
                 {
@@ -277,13 +274,13 @@ namespace drawinglayer
         {
         }
 
-        AnimationEntry* AnimationEntryLoop::clone() const
+        std::unique_ptr<AnimationEntry> AnimationEntryLoop::clone() const
         {
-            AnimationEntryLoop* pNew = new AnimationEntryLoop(mnRepeat);
+            std::unique_ptr<AnimationEntryLoop> pNew(std::make_unique<AnimationEntryLoop>(mnRepeat));
 
-            for(size_t a(0); a < maEntries.size(); a++)
+            for(const auto &i : maEntries)
             {
-                pNew->append(*maEntries[a]);
+                pNew->append(*i);
             }
 
             return pNew;
@@ -300,14 +297,14 @@ namespace drawinglayer
 
         double AnimationEntryLoop::getDuration() const
         {
-            return (mfDuration * (double)mnRepeat);
+            return (mfDuration * static_cast<double>(mnRepeat));
         }
 
         double AnimationEntryLoop::getStateAtTime(double fTime) const
         {
             if(mnRepeat && !basegfx::fTools::equalZero(mfDuration))
             {
-                const sal_uInt32 nCurrentLoop((sal_uInt32)(fTime / mfDuration));
+                const sal_uInt32 nCurrentLoop(static_cast<sal_uInt32>(fTime / mfDuration));
 
                 if(nCurrentLoop > mnRepeat)
                 {
@@ -315,7 +312,7 @@ namespace drawinglayer
                 }
                 else
                 {
-                    const double fTimeAtLoopStart((double)nCurrentLoop * mfDuration);
+                    const double fTimeAtLoopStart(static_cast<double>(nCurrentLoop) * mfDuration);
                     const double fRelativeTime(fTime - fTimeAtLoopStart);
                     return AnimationEntryList::getStateAtTime(fRelativeTime);
                 }
@@ -330,11 +327,11 @@ namespace drawinglayer
 
             if(mnRepeat && !basegfx::fTools::equalZero(mfDuration))
             {
-                const sal_uInt32 nCurrentLoop((sal_uInt32)(fTime / mfDuration));
+                const sal_uInt32 nCurrentLoop(static_cast<sal_uInt32>(fTime / mfDuration));
 
                 if(nCurrentLoop <= mnRepeat)
                 {
-                    const double fTimeAtLoopStart((double)nCurrentLoop * mfDuration);
+                    const double fTimeAtLoopStart(static_cast<double>(nCurrentLoop) * mfDuration);
                     const double fRelativeTime(fTime - fTimeAtLoopStart);
                     const double fNextEventAtLoop(AnimationEntryList::getNextEventTime(fRelativeTime));
 

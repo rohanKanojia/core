@@ -16,38 +16,73 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-
-#if defined(_WIN32)
-#include <windows.h>
-#else
-#include <time.h>
-#endif
-
 #include <tools/date.hxx>
 #include <sal/log.hxx>
+#include <com/sun/star/util/DateTime.hpp>
+
+#include <systemdatetime.hxx>
 
 static const sal_uInt16 aDaysInMonth[12] = { 31, 28, 31, 30, 31, 30,
                                              31, 31, 30, 31, 30, 31 };
 
-#define MAX_DAYS    3636532
+// Once upon a time the number of days we internally handled was limited to
+// MAX_DAYS 3636532. That changed with a full 16-bit year.
+// Assuming the first valid positive date in a proleptic Gregorian calendar is
+// 0001-01-01, this resulted in an end date of 9957-06-26.
+// Hence we documented that years up to and including 9956 are handled.
+/* XXX: it is unclear history why this value was chosen, the representable
+ * 9999-12-31 would be 3652060 days from 0001-01-01. Even 9998-12-31 to
+ * distinguish from a maximum possible date would be 3651695.
+ * There is connectivity/source/commontools/dbconversion.cxx that still has the
+ * same value to calculate with css::util::Date */
+/* XXX can that dbconversion cope with years > 9999 or negative years at all?
+ * Database fields may be limited to positive 4 digits. */
+
+static const sal_Int32 MIN_DAYS = -11968265;     // -32768-01-01
+static const sal_Int32 MAX_DAYS =  11967900;     //  32767-12-31
 
 namespace
 {
 
-inline long ImpYearToDays( sal_uInt16 nYear )
+const sal_Int16 kYearMax = SAL_MAX_INT16;
+const sal_Int16 kYearMin = SAL_MIN_INT16;
+
+// Days until start of year from zero, so month and day of month can be added.
+// year 1 => 0 days, year 2 => 365 days, ...
+// year -1 => -366 days, year -2 => -731 days, ...
+sal_Int32 ImpYearToDays( sal_Int16 nYear )
 {
-    const long nYr(static_cast<long>(nYear) - 1);
-    return nYr*365 + nYr/4 - nYr/100 + nYr/400;
+    assert( nYear != 0 );
+    sal_Int32 nOffset;
+    sal_Int32 nYr;
+    if (nYear < 0)
+    {
+        nOffset = -366;
+        nYr = nYear + 1;
+    }
+    else
+    {
+        nOffset = 0;
+        nYr = nYear - 1;
+    }
+    return nOffset + nYr*365 + nYr/4 - nYr/100 + nYr/400;
 }
 
-inline bool ImpIsLeapYear( sal_uInt16 nYear )
+bool ImpIsLeapYear( sal_Int16 nYear )
 {
+    // Leap years BCE are -1, -5, -9, ...
+    // See
+    // https://en.wikipedia.org/wiki/Proleptic_Gregorian_calendar#Usage
+    // https://en.wikipedia.org/wiki/0_(year)#History_of_astronomical_usage
+    assert( nYear != 0 );
+    if (nYear < 0)
+        nYear = -nYear - 1;
     return ( ( ((nYear % 4) == 0) && ((nYear % 100) != 0) ) ||
              ( (nYear % 400) == 0 ) );
 }
 
 // All callers must have sanitized or normalized month and year values!
-inline sal_uInt16 ImplDaysInMonth( sal_uInt16 nMonth, sal_uInt16 nYear )
+sal_uInt16 ImplDaysInMonth( sal_uInt16 nMonth, sal_Int16 nYear )
 {
     if ( nMonth != 2 )
         return aDaysInMonth[nMonth-1];
@@ -62,10 +97,33 @@ inline sal_uInt16 ImplDaysInMonth( sal_uInt16 nMonth, sal_uInt16 nYear )
 
 }
 
-// static
-sal_uInt16 Date::GetDaysInMonth( sal_uInt16 nMonth, sal_uInt16 nYear )
+void Date::setDateFromDMY( sal_uInt16 nDay, sal_uInt16 nMonth, sal_Int16 nYear )
 {
-    SAL_WARN_IF( nMonth < 1 || 12 < nMonth, "tools", "Date::GetDaysInMonth - nMonth out of bounds " << nMonth);
+    SAL_WARN_IF( nYear == 0, "tools.datetime", "Date::setDateFromDMY - sure about 0 year? It's not in the calendar.");
+    assert( nMonth < 100 && "nMonth % 100 not representable" );
+    assert(   nDay < 100 && "nDay % 100 not representable" );
+    if (nYear < 0)
+        mnDate =
+            (static_cast<sal_Int32>( nYear        ) * 10000) -
+            (static_cast<sal_Int32>( nMonth % 100 ) * 100) -
+             static_cast<sal_Int32>( nDay   % 100 );
+    else
+        mnDate =
+            (static_cast<sal_Int32>( nYear        ) * 10000) +
+            (static_cast<sal_Int32>( nMonth % 100 ) * 100) +
+             static_cast<sal_Int32>( nDay   % 100 );
+}
+
+void Date::SetDate( sal_Int32 nNewDate )
+{
+    assert( ((nNewDate / 10000) != 0) && "you don't want to set a 0 year, do you?" );
+    mnDate = nNewDate;
+}
+
+// static
+sal_uInt16 Date::GetDaysInMonth( sal_uInt16 nMonth, sal_Int16 nYear )
+{
+    SAL_WARN_IF( nMonth < 1 || 12 < nMonth, "tools.datetime", "Date::GetDaysInMonth - nMonth out of bounds " << nMonth);
     if (nMonth < 1)
         nMonth = 1;
     else if (12 < nMonth)
@@ -73,10 +131,10 @@ sal_uInt16 Date::GetDaysInMonth( sal_uInt16 nMonth, sal_uInt16 nYear )
     return ImplDaysInMonth( nMonth, nYear);
 }
 
-long Date::GetAsNormalizedDays() const
+sal_Int32 Date::GetAsNormalizedDays() const
 {
     // This is a very common datum we often calculate from.
-    if (nDate == 18991230) // 1899-12-30
+    if (mnDate == 18991230) // 1899-12-30
     {
         assert(DateToDays( GetDay(), GetMonth(), GetYear() ) == 693594);
         return 693594;
@@ -84,38 +142,41 @@ long Date::GetAsNormalizedDays() const
     return DateToDays( GetDay(), GetMonth(), GetYear() );
 }
 
-long Date::DateToDays( sal_uInt16 nDay, sal_uInt16 nMonth, sal_uInt16 nYear )
+sal_Int32 Date::DateToDays( sal_uInt16 nDay, sal_uInt16 nMonth, sal_Int16 nYear )
 {
     Normalize( nDay, nMonth, nYear);
 
-    long nDays = ImpYearToDays(nYear);
+    sal_Int32 nDays = ImpYearToDays(nYear);
     for( sal_uInt16 i = 1; i < nMonth; i++ )
         nDays += ImplDaysInMonth(i,nYear);
     nDays += nDay;
     return nDays;
 }
 
-static Date lcl_DaysToDate( long nDays )
+static Date lcl_DaysToDate( sal_Int32 nDays )
 {
+    if ( nDays <= MIN_DAYS )
+        return Date( 1, 1, kYearMin );
     if ( nDays >= MAX_DAYS )
-        return Date( 31, 12, 9999 );
+        return Date( 31, 12, kYearMax );
 
-    if ( nDays <= 0 )
-        return Date( 1, 0, 0 );
+    // Day 0 is -0001-12-31, day 1 is 0001-01-01
+    const sal_Int16 nSign = (nDays <= 0 ? -1 : 1);
+    sal_Int32 nTempDays;
+    sal_Int32 i = 0;
+    bool bCalc;
 
-    long    nTempDays;
-    long    i = 0;
-    bool    bCalc;
-
-    sal_uInt16 nYear;
+    sal_Int16 nYear;
     do
     {
-        nYear = (sal_uInt16)((nDays / 365) - i);
+        nYear = static_cast<sal_Int16>((nDays / 365) - (i * nSign));
+        if (nYear == 0)
+            nYear = nSign;
         nTempDays = nDays - ImpYearToDays(nYear);
         bCalc = false;
         if ( nTempDays < 1 )
         {
-            i++;
+            i += nSign;
             bCalc = true;
         }
         else
@@ -124,7 +185,7 @@ static Date lcl_DaysToDate( long nDays )
             {
                 if ( (nTempDays != 366) || !ImpIsLeapYear( nYear ) )
                 {
-                    i--;
+                    i -= nSign;
                     bCalc = true;
                 }
             }
@@ -133,10 +194,10 @@ static Date lcl_DaysToDate( long nDays )
     while ( bCalc );
 
     sal_uInt16 nMonth = 1;
-    while ( nTempDays > static_cast<long>(ImplDaysInMonth( nMonth, nYear )) )
+    while ( nTempDays > ImplDaysInMonth( nMonth, nYear ) )
     {
         nTempDays -= ImplDaysInMonth( nMonth, nYear );
-        nMonth++;
+        ++nMonth;
     }
 
     return Date( static_cast<sal_uInt16>(nTempDays), nMonth, nYear );
@@ -144,29 +205,8 @@ static Date lcl_DaysToDate( long nDays )
 
 Date::Date( DateInitSystem )
 {
-#if defined(_WIN32)
-    SYSTEMTIME aDateTime;
-    GetLocalTime( &aDateTime );
-
-    // Combine to date
-    setDateFromDMY( aDateTime.wDay, aDateTime.wMonth, aDateTime.wYear );
-#else
-    time_t     nTmpTime;
-    struct tm aTime;
-
-    // get current time
-    nTmpTime = time( nullptr );
-
-    // compute date
-    if ( localtime_r( &nTmpTime, &aTime ) )
-    {
-        setDateFromDMY( static_cast<sal_uInt16>(aTime.tm_mday),
-            static_cast<sal_uInt16>(aTime.tm_mon+1),
-            static_cast<sal_uInt16>(aTime.tm_year+1900) );
-    }
-    else
-        setDateFromDMY( 1, 100, 1900 );
-#endif
+    if ( !GetSystemDateTime( &mnDate, nullptr ) )
+        setDateFromDMY( 1, 1, 1900 );
 }
 
 Date::Date( const css::util::DateTime& rDateTime )
@@ -184,9 +224,71 @@ void Date::SetMonth( sal_uInt16 nNewMonth )
     setDateFromDMY( GetDay(), nNewMonth, GetYear() );
 }
 
-void Date::SetYear( sal_uInt16 nNewYear )
+void Date::SetYear( sal_Int16 nNewYear )
 {
+    assert( nNewYear != 0 );
     setDateFromDMY( GetDay(), GetMonth(), nNewYear );
+}
+
+void Date::AddYears( sal_Int16 nAddYears )
+{
+    sal_Int16 nYear = GetYear();
+    if (nYear < 0)
+    {
+        if (nAddYears < 0)
+        {
+            if (nYear < kYearMin - nAddYears)
+                nYear = kYearMin;
+            else
+                nYear += nAddYears;
+        }
+        else
+        {
+            nYear += nAddYears;
+            if (nYear == 0)
+                nYear = 1;
+        }
+    }
+    else
+    {
+        if (nAddYears > 0)
+        {
+            if (kYearMax - nAddYears < nYear)
+                nYear = kYearMax;
+            else
+                nYear += nAddYears;
+        }
+        else
+        {
+            nYear += nAddYears;
+            if (nYear == 0)
+                nYear = -1;
+        }
+    }
+
+    SetYear( nYear );
+    if (GetMonth() == 2 && GetDay() == 29 && !ImpIsLeapYear( nYear))
+        SetDay(28);
+}
+
+void Date::AddMonths( sal_Int32 nAddMonths )
+{
+    sal_Int32 nMonths = GetMonth() + nAddMonths;
+    sal_Int32 nNewMonth = nMonths % 12;
+    sal_Int32 nYear = GetYear() + nMonths / 12;
+    if( nMonths <= 0 || nNewMonth == 0 )
+        --nYear;
+    if( nNewMonth <= 0 )
+        nNewMonth += 12;
+    if (nYear == 0)
+        nYear = (nAddMonths < 0 ? -1 : 1);
+    else if (nYear < kYearMin)
+        nYear = kYearMin;
+    else if (nYear > kYearMax)
+        nYear = kYearMax;
+    SetMonth( static_cast<sal_uInt16>(nNewMonth) );
+    SetYear( static_cast<sal_Int16>(nYear) );
+    Normalize();
 }
 
 DayOfWeek Date::GetDayOfWeek() const
@@ -198,11 +300,11 @@ sal_uInt16 Date::GetDayOfYear() const
 {
     sal_uInt16 nDay   = GetDay();
     sal_uInt16 nMonth = GetMonth();
-    sal_uInt16 nYear  = GetYear();
+    sal_Int16  nYear  = GetYear();
     Normalize( nDay, nMonth, nYear);
 
     for( sal_uInt16 i = 1; i < nMonth; i++ )
-         nDay = nDay + ::ImplDaysInMonth( i, nYear );   // += yields a warning on MSVC, so don't use it
+         nDay += ::ImplDaysInMonth( i, nYear );
     return nDay;
 }
 
@@ -210,13 +312,13 @@ sal_uInt16 Date::GetWeekOfYear( DayOfWeek eStartDay,
                                 sal_Int16 nMinimumNumberOfDaysInWeek ) const
 {
     short nWeek;
-    short n1WDay = (short)Date( 1, 1, GetYear() ).GetDayOfWeek();
-    short nDayOfYear = (short)GetDayOfYear();
+    short n1WDay = static_cast<short>(Date( 1, 1, GetYear() ).GetDayOfWeek());
+    short nDayOfYear = static_cast<short>(GetDayOfYear());
 
     // weekdays start at 0, thus decrement one
     nDayOfYear--;
     // account for StartDay
-    n1WDay = (n1WDay+(7-(short)eStartDay)) % 7;
+    n1WDay = (n1WDay+(7-static_cast<short>(eStartDay))) % 7;
 
     if (nMinimumNumberOfDaysInWeek < 1 || 7 < nMinimumNumberOfDaysInWeek)
     {
@@ -233,9 +335,9 @@ sal_uInt16 Date::GetWeekOfYear( DayOfWeek eStartDay,
             nWeek = 1;
         else if ( nWeek == 53 )
         {
-            short nDaysInYear = (short)GetDaysInYear();
-            short nDaysNextYear = (short)Date( 1, 1, GetYear()+1 ).GetDayOfWeek();
-            nDaysNextYear = (nDaysNextYear+(7-(short)eStartDay)) % 7;
+            short nDaysInYear = static_cast<short>(GetDaysInYear());
+            short nDaysNextYear = static_cast<short>(Date( 1, 1, GetNextYear() ).GetDayOfWeek());
+            nDaysNextYear = (nDaysNextYear+(7-static_cast<short>(eStartDay))) % 7;
             if ( nDayOfYear > (nDaysInYear-nDaysNextYear-1) )
                 nWeek = 1;
         }
@@ -246,7 +348,7 @@ sal_uInt16 Date::GetWeekOfYear( DayOfWeek eStartDay,
         // First week of a year is equal to the last week of the previous year
         if ( nWeek == 0 )
         {
-            Date aLastDatePrevYear( 31, 12, GetYear()-1 );
+            Date aLastDatePrevYear( 31, 12, GetPrevYear() );
             nWeek = aLastDatePrevYear.GetWeekOfYear( eStartDay, nMinimumNumberOfDaysInWeek );
         }
     }
@@ -261,8 +363,8 @@ sal_uInt16 Date::GetWeekOfYear( DayOfWeek eStartDay,
         // Saturday
         else if ( n1WDay == nMinimumNumberOfDaysInWeek + 1 )
         {
-            // Year after leapyear
-            if ( Date( 1, 1, GetYear()-1 ).IsLeapYear() )
+            // Year after leap year
+            if ( Date( 1, 1, GetPrevYear() ).IsLeapYear() )
                 nWeek = 53;
             else
                 nWeek = 52;
@@ -281,22 +383,22 @@ sal_uInt16 Date::GetWeekOfYear( DayOfWeek eStartDay,
             {
                 // next x_Sunday == first x_Sunday in the new year
                 // == still the same week!
-                long nTempDays = GetAsNormalizedDays();
+                sal_Int32 nTempDays = GetAsNormalizedDays();
 
-                nTempDays +=  6 - (GetDayOfWeek()+(7-(short)eStartDay)) % 7;
+                nTempDays +=  6 - (GetDayOfWeek()+(7-static_cast<short>(eStartDay))) % 7;
                 nWeek = lcl_DaysToDate( nTempDays ).GetWeekOfYear( eStartDay, nMinimumNumberOfDaysInWeek );
             }
         }
     }
 
-    return (sal_uInt16)nWeek;
+    return static_cast<sal_uInt16>(nWeek);
 }
 
 sal_uInt16 Date::GetDaysInMonth() const
 {
     sal_uInt16 nDay   = GetDay();
     sal_uInt16 nMonth = GetMonth();
-    sal_uInt16 nYear  = GetYear();
+    sal_Int16  nYear  = GetYear();
     Normalize( nDay, nMonth, nYear);
 
     return ImplDaysInMonth( nMonth, nYear );
@@ -304,7 +406,7 @@ sal_uInt16 Date::GetDaysInMonth() const
 
 bool Date::IsLeapYear() const
 {
-    sal_uInt16 nYear = GetYear();
+    sal_Int16 nYear = GetYear();
     return ImpIsLeapYear( nYear );
 }
 
@@ -312,7 +414,7 @@ bool Date::IsValidAndGregorian() const
 {
     sal_uInt16 nDay   = GetDay();
     sal_uInt16 nMonth = GetMonth();
-    sal_uInt16 nYear  = GetYear();
+    sal_Int16  nYear  = GetYear();
 
     if ( !nMonth || (nMonth > 12) )
         return false;
@@ -337,8 +439,10 @@ bool Date::IsValidDate() const
 }
 
 //static
-bool Date::IsValidDate( sal_uInt16 nDay, sal_uInt16 nMonth, sal_uInt16 nYear )
+bool Date::IsValidDate( sal_uInt16 nDay, sal_uInt16 nMonth, sal_Int16 nYear )
 {
+    if (nYear == 0)
+        return false;
     if ( !nMonth || (nMonth > 12) )
         return false;
     if ( !nDay || (nDay > ImplDaysInMonth( nMonth, nYear )) )
@@ -346,83 +450,104 @@ bool Date::IsValidDate( sal_uInt16 nDay, sal_uInt16 nMonth, sal_uInt16 nYear )
     return true;
 }
 
-bool Date::Normalize()
+void Date::Normalize()
 {
     sal_uInt16 nDay   = GetDay();
     sal_uInt16 nMonth = GetMonth();
-    sal_uInt16 nYear  = GetYear();
+    sal_Int16  nYear  = GetYear();
 
     if (!Normalize( nDay, nMonth, nYear))
-        return false;
+        return;
 
     setDateFromDMY( nDay, nMonth, nYear );
-
-    return true;
 }
 
 //static
-bool Date::Normalize( sal_uInt16 & rDay, sal_uInt16 & rMonth, sal_uInt16 & rYear )
+bool Date::Normalize( sal_uInt16 & rDay, sal_uInt16 & rMonth, sal_Int16 & rYear )
 {
     if (IsValidDate( rDay, rMonth, rYear))
         return false;
+
+    if (rDay == 0 && rMonth == 0 && rYear == 0)
+        return false;   // empty date
+
+    if (rDay == 0)
+    {
+        if (rMonth == 0)
+            ;   // nothing, handled below
+        else
+            --rMonth;
+        // Last day of month is determined at the end.
+    }
 
     if (rMonth > 12)
     {
         rYear += rMonth / 12;
         rMonth = rMonth % 12;
+        if (rYear == 0)
+            rYear = 1;
     }
-    if (!rMonth)
+    if (rMonth == 0)
     {
-        if (!rYear)
-        {
-            rYear = 0;
-            rMonth = 1;
-            if (rDay > 31)
-                rDay -= 31;
-            else
-                rDay = 1;
-        }
-        else
-        {
-            --rYear;
-            rMonth = 12;
-        }
-    }
-    sal_uInt16 nDays;
-    while (rDay > (nDays = ImplDaysInMonth( rMonth, rYear)))
-    {
-        rDay -= nDays;
-        if (rMonth < 12)
-            ++rMonth;
-        else
-        {
-            ++rYear;
-            rMonth = 1;
-        }
-    }
-    if (rYear > 9999)
-    {
-        rDay = 31;
+        --rYear;
+        if (rYear == 0)
+            rYear = -1;
         rMonth = 12;
-        rYear = 9999;
     }
+
+    if (rYear < 0)
+    {
+        sal_uInt16 nDays;
+        while (rDay > (nDays = ImplDaysInMonth( rMonth, rYear)))
+        {
+            rDay -= nDays;
+            if (rMonth > 1)
+                --rMonth;
+            else
+            {
+                if (rYear == kYearMin)
+                {
+                    rDay = 1;
+                    rMonth = 1;
+                    return true;
+                }
+                --rYear;
+                rMonth = 12;
+            }
+        }
+    }
+    else
+    {
+        sal_uInt16 nDays;
+        while (rDay > (nDays = ImplDaysInMonth( rMonth, rYear)))
+        {
+            rDay -= nDays;
+            if (rMonth < 12)
+                ++rMonth;
+            else
+            {
+                if (rYear == kYearMax)
+                {
+                    rDay = 31;
+                    rMonth = 12;
+                    return true;
+                }
+                ++rYear;
+                rMonth = 1;
+            }
+        }
+    }
+
+    if (rDay == 0)
+        rDay = ImplDaysInMonth( rMonth, rYear);
+
     return true;
 }
 
-Date& Date::operator +=( long nDays )
+void Date::AddDays( sal_Int32 nDays )
 {
     if (nDays != 0)
         *this = lcl_DaysToDate( GetAsNormalizedDays() + nDays );
-
-    return *this;
-}
-
-Date& Date::operator -=( long nDays )
-{
-    if (nDays != 0)
-        *this = lcl_DaysToDate( GetAsNormalizedDays() - nDays );
-
-    return *this;
 }
 
 Date& Date::operator ++()
@@ -437,21 +562,21 @@ Date& Date::operator --()
     return *this;
 }
 
-Date operator +( const Date& rDate, long nDays )
+Date operator +( const Date& rDate, sal_Int32 nDays )
 {
     Date aDate( rDate );
-    aDate += nDays;
+    aDate.AddDays( nDays );
     return aDate;
 }
 
-Date operator -( const Date& rDate, long nDays )
+Date operator -( const Date& rDate, sal_Int32 nDays )
 {
     Date aDate( rDate );
-    aDate -= nDays;
+    aDate.AddDays( -nDays );
     return aDate;
 }
 
-long operator -( const Date& rDate1, const Date& rDate2 )
+sal_Int32 operator -( const Date& rDate1, const Date& rDate2 )
 {
     return rDate1.GetAsNormalizedDays() - rDate2.GetAsNormalizedDays();
 }

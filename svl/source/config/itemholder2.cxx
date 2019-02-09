@@ -21,6 +21,7 @@
 #include "itemholder2.hxx"
 
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
@@ -50,11 +51,7 @@ ItemHolder2::ItemHolder2()
         if(bMessage)
         {
             bMessage = false;
-            OString sMsg("CreateInstance with arguments exception: ");
-            sMsg += OString(rEx.Message.getStr(),
-                        rEx.Message.getLength(),
-                        RTL_TEXTENCODING_ASCII_US);
-            OSL_FAIL(sMsg.getStr());
+            SAL_WARN( "svl", "CreateInstance with arguments exception: " << rEx);
         }
     }
 #else
@@ -74,7 +71,6 @@ void ItemHolder2::holdConfigItem(EItem eItem)
 }
 
 void SAL_CALL ItemHolder2::disposing(const css::lang::EventObject&)
-    throw(css::uno::RuntimeException, std::exception)
 {
     impl_releaseAllItems();
 }
@@ -83,12 +79,8 @@ void ItemHolder2::impl_addItem(EItem eItem)
 {
     ::osl::ResettableMutexGuard aLock(m_aLock);
 
-    TItems::const_iterator pIt;
-    for (  pIt  = m_lItems.begin();
-           pIt != m_lItems.end()  ;
-         ++pIt                    )
+    for ( auto const & rInfo : m_lItems )
     {
-        const TItemInfo& rInfo = *pIt;
         if (rInfo.eItem == eItem)
             return;
     }
@@ -97,52 +89,35 @@ void ItemHolder2::impl_addItem(EItem eItem)
     aNewItem.eItem = eItem;
     impl_newItem(aNewItem);
     if (aNewItem.pItem)
-        m_lItems.push_back(aNewItem);
+        m_lItems.emplace_back(std::move(aNewItem));
 }
 
 void ItemHolder2::impl_releaseAllItems()
 {
-    ::osl::ResettableMutexGuard aLock(m_aLock);
-
-    TItems::iterator pIt;
-    for (  pIt  = m_lItems.begin();
-           pIt != m_lItems.end()  ;
-         ++pIt                    )
+    std::vector< TItemInfo > items;
     {
-        TItemInfo& rInfo = *pIt;
-        impl_deleteItem(rInfo);
+        ::osl::MutexGuard aLock(m_aLock);
+        items.swap(m_lItems);
     }
-    m_lItems.clear();
+
+    // items will be freed when the block exits
 }
 
 void ItemHolder2::impl_newItem(TItemInfo& rItem)
 {
     switch(rItem.eItem)
     {
-        case E_CJKOPTIONS :
-            rItem.pItem = new SvtCJKOptions();
+        case EItem::CJKOptions :
+            rItem.pItem.reset( new SvtCJKOptions() );
             break;
 
-        case E_CTLOPTIONS :
-            rItem.pItem = new SvtCTLOptions();
-            break;
-
-        case E_LANGUAGEOPTIONS :
-// capsulate CTL and CJL options !            rItem.pItem = new SvtLanguageOptions();
+        case EItem::CTLOptions :
+            rItem.pItem.reset( new SvtCTLOptions() );
             break;
 
         default:
             OSL_ASSERT(false);
             break;
-    }
-}
-
-void ItemHolder2::impl_deleteItem(TItemInfo& rItem)
-{
-    if (rItem.pItem)
-    {
-        delete rItem.pItem;
-        rItem.pItem = nullptr;
     }
 }
 

@@ -17,15 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "FieldDescriptions.hxx"
+#include <FieldDescriptions.hxx>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
-#include "dbu_tbl.hrc"
+#include <strings.hxx>
 #include <com/sun/star/sdbc/ColumnValue.hpp>
-#include "dbustrings.hrc"
+#include <stringconstants.hxx>
 #include <comphelper/types.hxx>
 #include <comphelper/extract.hxx>
-#include "UITools.hxx"
+#include <UITools.hxx>
 #include <com/sun/star/util/NumberFormat.hpp>
 
 #define DEFAULT_VARCHAR_PRECISION    100
@@ -47,7 +47,7 @@ OFieldDescription::OFieldDescription()
     ,m_nScale(0)
     ,m_nIsNullable(ColumnValue::NULLABLE)
     ,m_nFormatKey(0)
-    ,m_eHorJustify(SVX_HOR_JUSTIFY_STANDARD)
+    ,m_eHorJustify(SvxCellHorJustify::Standard)
     ,m_bIsAutoIncrement(false)
     ,m_bIsPrimaryKey(false)
     ,m_bIsCurrency(false)
@@ -91,13 +91,13 @@ OFieldDescription::OFieldDescription(const Reference< XPropertySet >& xAffectedC
     ,m_nScale(0)
     ,m_nIsNullable(ColumnValue::NULLABLE)
     ,m_nFormatKey(0)
-    ,m_eHorJustify(SVX_HOR_JUSTIFY_STANDARD)
+    ,m_eHorJustify(SvxCellHorJustify::Standard)
     ,m_bIsAutoIncrement(false)
     ,m_bIsPrimaryKey(false)
     ,m_bIsCurrency(false)
     ,m_bHidden(false)
 {
-    OSL_ENSURE(xAffectedCol.is(),"PropetySet can not be null!");
+    OSL_ENSURE(xAffectedCol.is(),"PropertySet can not be null!");
     if ( xAffectedCol.is() )
     {
         if ( _bUseAsDest )
@@ -161,7 +161,7 @@ OFieldDescription::OFieldDescription(const Reference< XPropertySet >& xAffectedC
             }
             catch(const Exception&)
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
             }
         }
     }
@@ -189,13 +189,13 @@ void OFieldDescription::FillFromTypeInfo(const TOTypeInfoSP& _pType,bool _bForce
                     sal_Int32 nPrec = DEFAULT_VARCHAR_PRECISION;
                     if ( GetPrecision() )
                         nPrec = GetPrecision();
-                    SetPrecision(::std::min<sal_Int32>(nPrec,_pType->nPrecision));
+                    SetPrecision(std::min<sal_Int32>(nPrec,_pType->nPrecision));
                 }
                 break;
             case DataType::TIMESTAMP:
                 if ( bForce && _pType->nMaximumScale)
                 {
-                    SetScale(::std::min<sal_Int32>(GetScale() ? GetScale() : DEFAULT_NUMERIC_SCALE,_pType->nMaximumScale));
+                    SetScale(std::min<sal_Int32>(GetScale() ? GetScale() : DEFAULT_NUMERIC_SCALE,_pType->nMaximumScale));
                 }
                 break;
             default:
@@ -216,9 +216,9 @@ void OFieldDescription::FillFromTypeInfo(const TOTypeInfoSP& _pType,bool _bForce
                     }
 
                     if ( _pType->nPrecision )
-                        SetPrecision(::std::min<sal_Int32>(nPrec ? nPrec : DEFAULT_NUMERIC_PRECISION,_pType->nPrecision));
+                        SetPrecision(std::min<sal_Int32>(nPrec ? nPrec : DEFAULT_NUMERIC_PRECISION,_pType->nPrecision));
                     if ( _pType->nMaximumScale )
-                        SetScale(::std::min<sal_Int32>(GetScale() ? GetScale() : DEFAULT_NUMERIC_SCALE,_pType->nMaximumScale));
+                        SetScale(std::min<sal_Int32>(GetScale() ? GetScale() : DEFAULT_NUMERIC_SCALE,_pType->nMaximumScale));
                 }
         }
         if ( _pType->aCreateParams.isEmpty() )
@@ -247,7 +247,7 @@ void OFieldDescription::SetName(const OUString& _rName)
     }
     catch(const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -262,7 +262,7 @@ void OFieldDescription::SetHelpText(const OUString& _sHelpText)
     }
     catch(const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -277,7 +277,7 @@ void OFieldDescription::SetDescription(const OUString& _rDescription)
     }
     catch(const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -292,7 +292,7 @@ void OFieldDescription::SetDefaultValue(const Any& _rDefaultValue)
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -307,7 +307,7 @@ void OFieldDescription::SetControlDefault(const Any& _rControlDefault)
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -322,7 +322,7 @@ void OFieldDescription::SetAutoIncrementValue(const OUString& _sAutoIncValue)
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -340,7 +340,7 @@ void OFieldDescription::SetType(const TOTypeInfoSP& _pType)
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 }
@@ -359,11 +359,11 @@ void OFieldDescription::SetTypeValue(sal_Int32 _nType)
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
-void OFieldDescription::SetPrecision(const sal_Int32& _rPrecision)
+void OFieldDescription::SetPrecision(sal_Int32 _rPrecision)
 {
     try
     {
@@ -374,11 +374,11 @@ void OFieldDescription::SetPrecision(const sal_Int32& _rPrecision)
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
-void OFieldDescription::SetScale(const sal_Int32& _rScale)
+void OFieldDescription::SetScale(sal_Int32 _rScale)
 {
     try
     {
@@ -389,11 +389,11 @@ void OFieldDescription::SetScale(const sal_Int32& _rScale)
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
-void OFieldDescription::SetIsNullable(const sal_Int32& _rIsNullable)
+void OFieldDescription::SetIsNullable(sal_Int32 _rIsNullable)
 {
     try
     {
@@ -404,11 +404,11 @@ void OFieldDescription::SetIsNullable(const sal_Int32& _rIsNullable)
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
-void OFieldDescription::SetFormatKey(const sal_Int32& _rFormatKey)
+void OFieldDescription::SetFormatKey(sal_Int32 _rFormatKey)
 {
     try
     {
@@ -419,7 +419,7 @@ void OFieldDescription::SetFormatKey(const sal_Int32& _rFormatKey)
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -434,7 +434,7 @@ void OFieldDescription::SetHorJustify(const SvxCellHorJustify& _rHorJustify)
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -449,7 +449,7 @@ void OFieldDescription::SetAutoIncrement(bool _bAuto)
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -616,7 +616,7 @@ void OFieldDescription::SetTypeName(const OUString& _sTypeName)
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -628,7 +628,7 @@ void OFieldDescription::copyColumnSettingsTo(const Reference< XPropertySet >& _r
 
         if ( GetFormatKey() != NumberFormat::ALL && xInfo->hasPropertyByName(PROPERTY_FORMATKEY) )
             _rxColumn->setPropertyValue(PROPERTY_FORMATKEY,makeAny(GetFormatKey()));
-        if ( GetHorJustify() != SVX_HOR_JUSTIFY_STANDARD && xInfo->hasPropertyByName(PROPERTY_ALIGN) )
+        if ( GetHorJustify() != SvxCellHorJustify::Standard && xInfo->hasPropertyByName(PROPERTY_ALIGN) )
             _rxColumn->setPropertyValue(PROPERTY_ALIGN,makeAny(dbaui::mapTextAllign(GetHorJustify())));
         if ( !GetHelpText().isEmpty() && xInfo->hasPropertyByName(PROPERTY_HELPTEXT) )
             _rxColumn->setPropertyValue(PROPERTY_HELPTEXT,makeAny(GetHelpText()));

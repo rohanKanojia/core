@@ -22,6 +22,7 @@
 
 #include <comphelper/anytostring.hxx>
 #include <cppuhelper/exc_hlp.hxx>
+#include <sal/log.hxx>
 
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/lang/NoSupportException.hpp>
@@ -30,8 +31,8 @@
 #include <tools/urlobj.hxx>
 
 #include <avmedia/mediawindow.hxx>
-
-#include "soundplayer.hxx"
+#include <mediafilemanager.hxx>
+#include <soundplayer.hxx>
 
 #include <algorithm>
 
@@ -47,12 +48,14 @@ namespace slideshow
         std::shared_ptr<SoundPlayer> SoundPlayer::create(
             EventMultiplexer & rEventMultiplexer,
             const OUString& rSoundURL,
-            const uno::Reference< uno::XComponentContext>&  rComponentContext )
+            const uno::Reference< uno::XComponentContext>&  rComponentContext,
+            MediaFileManager& rMediaFileManager)
         {
             std::shared_ptr<SoundPlayer> pPlayer(
                 new SoundPlayer( rEventMultiplexer,
                                  rSoundURL,
-                                 rComponentContext ) );
+                                 rComponentContext,
+                                 rMediaFileManager) );
             rEventMultiplexer.addPauseHandler( pPlayer );
             pPlayer->mThis = pPlayer;
             return pPlayer;
@@ -85,7 +88,8 @@ namespace slideshow
         SoundPlayer::SoundPlayer(
             EventMultiplexer & rEventMultiplexer,
             const OUString& rSoundURL,
-            const uno::Reference< uno::XComponentContext>&  rComponentContext )
+            const uno::Reference< uno::XComponentContext>&  rComponentContext,
+            MediaFileManager& rMediaFileManager)
             : mrEventMultiplexer(rEventMultiplexer),
               mThis(),
               mxPlayer()
@@ -95,9 +99,13 @@ namespace slideshow
 
             try
             {
-                const INetURLObject aURL( rSoundURL );
+                if (rSoundURL.startsWithIgnoreAsciiCase("vnd.sun.star.Package:"))
+                {
+                    mpMediaTempFile = rMediaFileManager.getMediaTempFile(rSoundURL);
+                }
+                const INetURLObject aURL( mpMediaTempFile ? mpMediaTempFile->m_TempFileURL : rSoundURL );
                 mxPlayer.set( avmedia::MediaWindow::createPlayer(
-                                aURL.GetMainURL( INetURLObject::DECODE_UNAMBIGUOUS ), ""/*TODO!*/ ),
+                                aURL.GetMainURL( INetURLObject::DecodeMechanism::Unambiguous ), ""/*TODO!*/ ),
                                 uno::UNO_QUERY);
             }
             catch( uno::RuntimeException& )
@@ -120,10 +128,7 @@ namespace slideshow
                 dispose();
             }
             catch (uno::Exception &) {
-                OSL_FAIL( OUStringToOString(
-                                comphelper::anyToString(
-                                    cppu::getCaughtException() ),
-                                RTL_TEXTENCODING_UTF8 ).getStr() );
+                SAL_WARN( "slideshow", comphelper::anyToString( cppu::getCaughtException() ) );
             }
         }
 

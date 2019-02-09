@@ -19,7 +19,7 @@
 #ifndef INCLUDED_RTL_BYTESEQ_HXX
 #define INCLUDED_RTL_BYTESEQ_HXX
 
-#include <rtl/byteseq.h>
+#include "rtl/byteseq.h"
 
 #include <cstddef>
 #include <new>
@@ -39,6 +39,14 @@ inline ByteSequence::ByteSequence( const ByteSequence & rSeq )
 {
     ::rtl_byte_sequence_assign( &_pSequence, rSeq._pSequence );
 }
+
+#if defined LIBO_INTERNAL_ONLY
+inline ByteSequence::ByteSequence( ByteSequence && rSeq )
+    : _pSequence(rSeq._pSequence)
+{
+    rSeq._pSequence = nullptr;
+}
+#endif
 
 inline ByteSequence::ByteSequence( sal_Sequence *pSequence)
     : _pSequence( pSequence )
@@ -85,6 +93,16 @@ inline ByteSequence & ByteSequence::operator = ( const ByteSequence & rSeq )
     ::rtl_byte_sequence_assign( &_pSequence, rSeq._pSequence );
     return *this;
 }
+
+#if defined LIBO_INTERNAL_ONLY
+inline ByteSequence & ByteSequence::operator = ( ByteSequence && rSeq )
+{
+    ::rtl_byte_sequence_release(_pSequence);
+    _pSequence = rSeq._pSequence;
+    rSeq._pSequence = nullptr;
+    return *this;
+}
+#endif
 
 inline bool ByteSequence::operator == ( const ByteSequence & rSeq ) const
 {

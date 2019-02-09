@@ -22,6 +22,7 @@
 #include <osl/diagnose.h>
 #include <tools/datetime.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 #include <unotools/collatorwrapper.hxx>
 #include <svl/urihelper.hxx>
 #include <svl/stritem.hxx>
@@ -65,11 +66,10 @@
 #include <paratr.hxx>
 #include <fmtcol.hxx>
 #include <poolfmt.hxx>
-#include "usrpref.hxx"
+#include <usrpref.hxx>
 
 #include <cmdid.h>
 #include <globals.hrc>
-#include <utlui.hrc>
 #include <doc.hxx>
 #include <docary.hxx>
 #include <charfmt.hxx>
@@ -87,13 +87,13 @@ using namespace ::com::sun::star;
 
 void SetMetric(MetricFormatter& rCtrl, FieldUnit eUnit)
 {
-    SwTwips nMin = static_cast< SwTwips >(rCtrl.GetMin(FUNIT_TWIP));
-    SwTwips nMax = static_cast< SwTwips >(rCtrl.GetMax(FUNIT_TWIP));
+    SwTwips nMin = static_cast< SwTwips >(rCtrl.GetMin(FieldUnit::TWIP));
+    SwTwips nMax = static_cast< SwTwips >(rCtrl.GetMax(FieldUnit::TWIP));
 
     rCtrl.SetUnit(eUnit);
 
-    rCtrl.SetMin(nMin, FUNIT_TWIP);
-    rCtrl.SetMax(nMax, FUNIT_TWIP);
+    rCtrl.SetMin(nMin, FieldUnit::TWIP);
+    rCtrl.SetMax(nMax, FieldUnit::TWIP);
 }
 
 // Set boxinfo attribute
@@ -112,7 +112,7 @@ void PrepareBoxInfo(SfxItemSet& rSet, const SwWrtShell& rSh)
         // Always show the distance field
     aBoxInfo.SetDist           (true);
         // Set minimal size in tables and paragraphs
-    aBoxInfo.SetMinDist        (rSh.IsTableMode() || rSh.GetSelectionType() & (nsSelectionType::SEL_TXT | nsSelectionType::SEL_TBL));
+    aBoxInfo.SetMinDist        (rSh.IsTableMode() || rSh.GetSelectionType() & (SelectionType::Text | SelectionType::Table));
         // Set always the default distance
     aBoxInfo.SetDefDist        (MIN_BORDER_DIST);
         // Single lines can have only in tables DontCare-Status
@@ -121,7 +121,7 @@ void PrepareBoxInfo(SfxItemSet& rSet, const SwWrtShell& rSh)
     rSet.Put(aBoxInfo);
 }
 
-void ConvertAttrCharToGen(SfxItemSet& rSet, const sal_uInt8 nMode)
+void ConvertAttrCharToGen(SfxItemSet& rSet)
 {
     // Background / highlight
     {
@@ -138,90 +138,54 @@ void ConvertAttrCharToGen(SfxItemSet& rSet, const sal_uInt8 nMode)
         }
     }
 
-    if( nMode == CONV_ATTR_STD )
-    {
-        // Border
-        const SfxPoolItem *pTmpItem;
-        if( SfxItemState::SET == rSet.GetItemState( RES_CHRATR_BOX, true, &pTmpItem ) )
-        {
-            SvxBoxItem aTmpBox( *static_cast<const SvxBoxItem*>(pTmpItem) );
-            aTmpBox.SetWhich( RES_BOX );
-            rSet.Put( aTmpBox );
-        }
-        else
-            rSet.ClearItem(RES_BOX);
-
-        // Border shadow
-        if( SfxItemState::SET == rSet.GetItemState( RES_CHRATR_SHADOW, false, &pTmpItem ) )
-        {
-            SvxShadowItem aTmpShadow( *static_cast<const SvxShadowItem*>(pTmpItem) );
-            aTmpShadow.SetWhich( RES_SHADOW );
-            rSet.Put( aTmpShadow );
-        }
-        else
-            rSet.ClearItem( RES_SHADOW );
-    }
+    // Tell dialogs to use character-specific slots/whichIds
+    std::unique_ptr<SfxGrabBagItem> pGrabBag;
+    const SfxPoolItem *pTmpItem;
+    if (SfxItemState::SET == rSet.GetItemState(RES_CHRATR_GRABBAG, false, &pTmpItem))
+        pGrabBag.reset(static_cast<SfxGrabBagItem*>(pTmpItem->Clone()));
+    else
+        pGrabBag.reset(new SfxGrabBagItem(RES_CHRATR_GRABBAG));
+    pGrabBag->GetGrabBag()["DialogUseCharAttr"] <<= true;
+    rSet.Put(*pGrabBag);
 }
 
-void ConvertAttrGenToChar(SfxItemSet& rSet, const SfxItemSet& rOrigSet, const sal_uInt8 nMode)
+void ConvertAttrGenToChar(SfxItemSet& rSet, const SfxItemSet& rOrigSet)
 {
     // Background / highlighting
+    const SfxPoolItem *pTmpItem;
+    if( SfxItemState::SET == rSet.GetItemState( RES_CHRATR_BACKGROUND, false, &pTmpItem ) )
     {
-        const SfxPoolItem *pTmpItem;
-        if( SfxItemState::SET == rSet.GetItemState( RES_CHRATR_BACKGROUND, false, &pTmpItem ) )
-        {
-            // Highlight is an MS specific thing, so remove it at the first time when LO modifies
-            // this part of the imported document.
-            rSet.Put( SvxBrushItem(RES_CHRATR_HIGHLIGHT) );
+        // Highlight is an MS specific thing, so remove it at the first time when LO modifies
+        // this part of the imported document.
+        rSet.Put( SvxBrushItem(RES_CHRATR_HIGHLIGHT) );
 
-            // Remove shading marker
-            if( SfxItemState::SET == rOrigSet.GetItemState( RES_CHRATR_GRABBAG, false, &pTmpItem ) )
+        // Remove shading marker
+        if( SfxItemState::SET == rOrigSet.GetItemState( RES_CHRATR_GRABBAG, false, &pTmpItem ) )
+        {
+            SfxGrabBagItem aGrabBag(*static_cast<const SfxGrabBagItem*>(pTmpItem));
+            std::map<OUString, css::uno::Any>& rMap = aGrabBag.GetGrabBag();
+            auto aIterator = rMap.find("CharShadingMarker");
+            if( aIterator != rMap.end() )
             {
-                SfxGrabBagItem aGrabBag(*static_cast<const SfxGrabBagItem*>(pTmpItem));
-                std::map<OUString, css::uno::Any>& rMap = aGrabBag.GetGrabBag();
-                auto aIterator = rMap.find("CharShadingMarker");
-                if( aIterator != rMap.end() )
-                {
-                    aIterator->second = uno::makeAny(false);
-                }
-                rSet.Put( aGrabBag );
+                aIterator->second <<= false;
             }
+            // Remove temporary GrabBag entry before writing to destination set
+            rMap.erase("DialogUseCharAttr");
+            rSet.Put( aGrabBag );
         }
-        rSet.ClearItem( RES_BACKGROUND );
     }
-
-    if( nMode == CONV_ATTR_STD )
-    {
-        // Border
-        const SfxPoolItem *pTmpItem;
-        if( SfxItemState::SET == rSet.GetItemState( RES_BOX, false, &pTmpItem ) )
-        {
-            SvxBoxItem aTmpBox( *static_cast<const SvxBoxItem*>(pTmpItem) );
-            aTmpBox.SetWhich( RES_CHRATR_BOX );
-            rSet.Put( aTmpBox );
-        }
-        rSet.ClearItem( RES_BOX );
-
-        // Border shadow
-        if( SfxItemState::SET == rSet.GetItemState( RES_SHADOW, false, &pTmpItem ) )
-        {
-            SvxShadowItem aTmpShadow( *static_cast<const SvxShadowItem*>(pTmpItem) );
-            aTmpShadow.SetWhich( RES_CHRATR_SHADOW );
-            rSet.Put( aTmpShadow );
-        }
-        rSet.ClearItem( RES_SHADOW );
-    }
+    rSet.ClearItem( RES_BACKGROUND );
 }
 
 // Fill header footer
 
-void FillHdFt(SwFrameFormat* pFormat, const  SfxItemSet& rSet)
+static void FillHdFt(SwFrameFormat* pFormat, const  SfxItemSet& rSet)
 {
     SwAttrSet aSet(pFormat->GetAttrSet());
     aSet.Put(rSet);
 
-    const SvxSizeItem& rSize = static_cast<const SvxSizeItem&>(rSet.Get(SID_ATTR_PAGE_SIZE));
-    const SfxBoolItem& rDynamic = static_cast<const SfxBoolItem&>(rSet.Get(SID_ATTR_PAGE_DYNAMIC));
+    const SvxSizeItem& rSize = rSet.Get(SID_ATTR_PAGE_SIZE);
+    const SfxBoolItem& rDynamic = rSet.Get(SID_ATTR_PAGE_DYNAMIC);
 
     // Convert size
     SwFormatFrameSize aFrameSize(rDynamic.GetValue() ? ATT_MIN_SIZE : ATT_FIX_SIZE,
@@ -232,32 +196,32 @@ void FillHdFt(SwFrameFormat* pFormat, const  SfxItemSet& rSet)
 }
 
 /// Convert from UseOnPage to SvxPageUsage.
-UseOnPage lcl_convertUseToSvx(UseOnPage nUse)
+static SvxPageUsage lcl_convertUseToSvx(UseOnPage nUse)
 {
-    UseOnPage nRet = nsUseOnPage::PD_NONE;
-    if ((nUse & nsUseOnPage::PD_LEFT) == nsUseOnPage::PD_LEFT)
-        nRet |= SVX_PAGE_LEFT;
-    if ((nUse & nsUseOnPage::PD_RIGHT) == nsUseOnPage::PD_RIGHT)
-        nRet |= SVX_PAGE_RIGHT;
-    if ((nUse & nsUseOnPage::PD_ALL) == nsUseOnPage::PD_ALL)
-        nRet |= SVX_PAGE_ALL;
-    if ((nUse & nsUseOnPage::PD_MIRROR) == nsUseOnPage::PD_MIRROR)
-        nRet |= SVX_PAGE_MIRROR;
+    SvxPageUsage nRet = SvxPageUsage::NONE;
+    if (nUse & UseOnPage::Left)
+        nRet = SvxPageUsage::Left;
+    if (nUse & UseOnPage::Right)
+        nRet = SvxPageUsage::Right;
+    if ((nUse & UseOnPage::All) == UseOnPage::All)
+        nRet = SvxPageUsage::All;
+    if ((nUse & UseOnPage::Mirror) == UseOnPage::Mirror)
+        nRet = SvxPageUsage::Mirror;
     return nRet;
 }
 
 /// Convert from SvxPageUsage to UseOnPage.
-UseOnPage lcl_convertUseFromSvx(UseOnPage nUse)
+static UseOnPage lcl_convertUseFromSvx(SvxPageUsage nUse)
 {
-    UseOnPage nRet = nsUseOnPage::PD_NONE;
-    if ((nUse & SVX_PAGE_LEFT) == SVX_PAGE_LEFT)
-        nRet |= nsUseOnPage::PD_LEFT;
-    if ((nUse & SVX_PAGE_RIGHT) == SVX_PAGE_RIGHT)
-        nRet |= nsUseOnPage::PD_RIGHT;
-    if ((nUse & SVX_PAGE_ALL) == SVX_PAGE_ALL)
-        nRet |= nsUseOnPage::PD_ALL;
-    if ((nUse & SVX_PAGE_MIRROR) == SVX_PAGE_MIRROR)
-        nRet |= nsUseOnPage::PD_MIRROR;
+    UseOnPage nRet = UseOnPage::NONE;
+    if (nUse == SvxPageUsage::Left)
+        nRet = UseOnPage::Left;
+    else if (nUse == SvxPageUsage::Right)
+        nRet = UseOnPage::Right;
+    else if (nUse == SvxPageUsage::All)
+        nRet = UseOnPage::All;
+    else if (nUse == SvxPageUsage::Mirror)
+        nRet = UseOnPage::Mirror;
     return nRet;
 }
 
@@ -266,7 +230,7 @@ UseOnPage lcl_convertUseFromSvx(UseOnPage nUse)
 void ItemSetToPageDesc( const SfxItemSet& rSet, SwPageDesc& rPageDesc )
 {
     SwFrameFormat& rMaster = rPageDesc.GetMaster();
-    int nFirstShare = -1;
+    bool bFirstShare = false;
 
     // Transfer all general frame attributes
     rMaster.SetFormatAttr(rSet);
@@ -274,20 +238,20 @@ void ItemSetToPageDesc( const SfxItemSet& rSet, SwPageDesc& rPageDesc )
     // PageData
     if(rSet.GetItemState(SID_ATTR_PAGE) == SfxItemState::SET)
     {
-        const SvxPageItem& rPageItem = static_cast<const SvxPageItem&>(rSet.Get(SID_ATTR_PAGE));
+        const SvxPageItem& rPageItem = rSet.Get(SID_ATTR_PAGE);
 
-        const sal_uInt16 nUse = rPageItem.GetPageUsage();
-        if(nUse)
-            rPageDesc.SetUseOn( lcl_convertUseFromSvx((UseOnPage) nUse) );
+        const SvxPageUsage nUse = rPageItem.GetPageUsage();
+        if(nUse != SvxPageUsage::NONE)
+            rPageDesc.SetUseOn( lcl_convertUseFromSvx(nUse) );
         rPageDesc.SetLandscape(rPageItem.IsLandscape());
         SvxNumberType aNumType;
-        aNumType.SetNumberingType( static_cast< sal_Int16 >(rPageItem.GetNumType()) );
+        aNumType.SetNumberingType( rPageItem.GetNumType() );
         rPageDesc.SetNumType(aNumType);
     }
     // Size
     if(rSet.GetItemState(SID_ATTR_PAGE_SIZE) == SfxItemState::SET)
     {
-        const SvxSizeItem& rSizeItem = static_cast<const SvxSizeItem&>(rSet.Get(SID_ATTR_PAGE_SIZE));
+        const SvxSizeItem& rSizeItem = rSet.Get(SID_ATTR_PAGE_SIZE);
         SwFormatFrameSize aSize(ATT_FIX_SIZE);
         aSize.SetSize(rSizeItem.GetSize());
         rMaster.SetFormatAttr(aSize);
@@ -298,7 +262,7 @@ void ItemSetToPageDesc( const SfxItemSet& rSet, SwPageDesc& rPageDesc )
             false, &pItem ) )
     {
         const SfxItemSet& rHeaderSet = static_cast<const SvxSetItem*>(pItem)->GetItemSet();
-        const SfxBoolItem& rHeaderOn = static_cast<const SfxBoolItem&>(rHeaderSet.Get(SID_ATTR_PAGE_ON));
+        const SfxBoolItem& rHeaderOn = rHeaderSet.Get(SID_ATTR_PAGE_ON);
 
         if(rHeaderOn.GetValue())
         {
@@ -313,14 +277,10 @@ void ItemSetToPageDesc( const SfxItemSet& rSet, SwPageDesc& rPageDesc )
 
             ::FillHdFt(pHeaderFormat, rHeaderSet);
 
-            rPageDesc.ChgHeaderShare(static_cast<const SfxBoolItem&>(
-                        rHeaderSet.Get(SID_ATTR_PAGE_SHARED)).GetValue());
-            if (nFirstShare < 0)
-            {
-                rPageDesc.ChgFirstShare(static_cast<const SfxBoolItem&>(
+            rPageDesc.ChgHeaderShare(rHeaderSet.Get(SID_ATTR_PAGE_SHARED).GetValue());
+            rPageDesc.ChgFirstShare(static_cast<const SfxBoolItem&>(
                             rHeaderSet.Get(SID_ATTR_PAGE_SHARED_FIRST)).GetValue());
-                nFirstShare = rPageDesc.IsFirstShared() ? 1 : 0;
-            }
+            bFirstShare = true;
         }
         else
         {
@@ -338,7 +298,7 @@ void ItemSetToPageDesc( const SfxItemSet& rSet, SwPageDesc& rPageDesc )
             false, &pItem ) )
     {
         const SfxItemSet& rFooterSet = static_cast<const SvxSetItem*>(pItem)->GetItemSet();
-        const SfxBoolItem& rFooterOn = static_cast<const SfxBoolItem&>(rFooterSet.Get(SID_ATTR_PAGE_ON));
+        const SfxBoolItem& rFooterOn = rFooterSet.Get(SID_ATTR_PAGE_ON);
 
         if(rFooterOn.GetValue())
         {
@@ -353,13 +313,11 @@ void ItemSetToPageDesc( const SfxItemSet& rSet, SwPageDesc& rPageDesc )
 
             ::FillHdFt(pFooterFormat, rFooterSet);
 
-            rPageDesc.ChgFooterShare(static_cast<const SfxBoolItem&>(
-                        rFooterSet.Get(SID_ATTR_PAGE_SHARED)).GetValue());
-            if (nFirstShare < 0)
+            rPageDesc.ChgFooterShare(rFooterSet.Get(SID_ATTR_PAGE_SHARED).GetValue());
+            if (!bFirstShare)
             {
                 rPageDesc.ChgFirstShare(static_cast<const SfxBoolItem&>(
                             rFooterSet.Get(SID_ATTR_PAGE_SHARED_FIRST)).GetValue());
-                nFirstShare = rPageDesc.IsFirstShared() ? 1 : 0;
             }
         }
         else
@@ -398,7 +356,7 @@ void ItemSetToPageDesc( const SfxItemSet& rSet, SwPageDesc& rPageDesc )
             if( !pColl )
             {
                 const sal_uInt16 nId = SwStyleNameMapper::GetPoolIdFromUIName(
-                    rColl, nsSwGetPoolIdFromName::GET_POOLID_TXTCOLL );
+                    rColl, SwGetPoolIdFromName::TxtColl );
                 if( USHRT_MAX != nId )
                     pColl = rDoc.getIDocumentStylePoolAccess().GetTextCollFromPool( nId );
                 else
@@ -421,7 +379,7 @@ void PageDescToItemSet( const SwPageDesc& rPageDesc, SfxItemSet& rSet)
     aPageItem.SetDescName(rPageDesc.GetName());
     aPageItem.SetPageUsage(lcl_convertUseToSvx(rPageDesc.GetUseOn()));
     aPageItem.SetLandscape(rPageDesc.GetLandscape());
-    aPageItem.SetNumType((SvxNumType)rPageDesc.GetNumType().GetNumberingType());
+    aPageItem.SetNumType(rPageDesc.GetNumType().GetNumberingType());
     rSet.Put(aPageItem);
 
     // Size
@@ -466,18 +424,17 @@ void PageDescToItemSet( const SwPageDesc& rPageDesc, SfxItemSet& rSet)
 
         // HeaderInfo, margins, background, border
         SfxItemSet aHeaderSet(*rSet.GetPool(),
-            RES_FRMATR_BEGIN,RES_FRMATR_END - 1,            // [82
+            svl::Items<RES_FRMATR_BEGIN,RES_FRMATR_END - 1,            // [82
 
-            //UUUU FillAttribute support
+            // FillAttribute support
             XATTR_FILL_FIRST, XATTR_FILL_LAST,              // [1014
 
             SID_ATTR_BORDER_INNER,SID_ATTR_BORDER_INNER,    // [10023
             SID_ATTR_PAGE_SIZE,SID_ATTR_PAGE_SIZE,          // [10051
             SID_ATTR_PAGE_ON,SID_ATTR_PAGE_SHARED,          // [10060
-            SID_ATTR_PAGE_SHARED_FIRST,SID_ATTR_PAGE_SHARED_FIRST,
-            0, 0);
+            SID_ATTR_PAGE_SHARED_FIRST,SID_ATTR_PAGE_SHARED_FIRST>{});
 
-        //UUUU set correct parent to get the XFILL_NONE FillStyle as needed
+        // set correct parent to get the XFILL_NONE FillStyle as needed
         aHeaderSet.SetParent(&rMaster.GetDoc()->GetDfltFrameFormat()->GetAttrSet());
 
         // Dynamic or fixed height
@@ -496,7 +453,7 @@ void PageDescToItemSet( const SwPageDesc& rPageDesc, SfxItemSet& rSet)
         aHeaderSet.Put(aFirstShared);
 
         // Size
-        SvxSizeItem aSize(SID_ATTR_PAGE_SIZE, Size(rFrameSize.GetSize()));
+        SvxSizeItem aSize(SID_ATTR_PAGE_SIZE, rFrameSize.GetSize());
         aHeaderSet.Put(aSize);
 
         // Shifting frame attributes
@@ -517,18 +474,17 @@ void PageDescToItemSet( const SwPageDesc& rPageDesc, SfxItemSet& rSet)
 
         // FooterInfo, margins, background, border
         SfxItemSet aFooterSet(*rSet.GetPool(),
-            RES_FRMATR_BEGIN,RES_FRMATR_END - 1,            // [82
+            svl::Items<RES_FRMATR_BEGIN,RES_FRMATR_END - 1,            // [82
 
-            //UUUU FillAttribute support
+            // FillAttribute support
             XATTR_FILL_FIRST, XATTR_FILL_LAST,              // [1014
 
             SID_ATTR_BORDER_INNER,SID_ATTR_BORDER_INNER,    // [10023
             SID_ATTR_PAGE_SIZE,SID_ATTR_PAGE_SIZE,          // [10051
             SID_ATTR_PAGE_ON,SID_ATTR_PAGE_SHARED,          // [10060
-            SID_ATTR_PAGE_SHARED_FIRST,SID_ATTR_PAGE_SHARED_FIRST,
-            0, 0);
+            SID_ATTR_PAGE_SHARED_FIRST,SID_ATTR_PAGE_SHARED_FIRST>{});
 
-        //UUUU set correct parent to get the XFILL_NONE FillStyle as needed
+        // set correct parent to get the XFILL_NONE FillStyle as needed
         aFooterSet.SetParent(&rMaster.GetDoc()->GetDfltFrameFormat()->GetAttrSet());
 
         // Dynamic or fixed height
@@ -547,7 +503,7 @@ void PageDescToItemSet( const SwPageDesc& rPageDesc, SfxItemSet& rSet)
         aFooterSet.Put(aFirstShared);
 
         // Size
-        SvxSizeItem aSize(SID_ATTR_PAGE_SIZE, Size(rFrameSize.GetSize()));
+        SvxSizeItem aSize(SID_ATTR_PAGE_SIZE, rFrameSize.GetSize());
         aFooterSet.Put(aSize);
 
         // Shifting Frame attributes
@@ -560,8 +516,8 @@ void PageDescToItemSet( const SwPageDesc& rPageDesc, SfxItemSet& rSet)
     }
 
     // Integrate footnotes
-    SwPageFootnoteInfo& rInfo = (SwPageFootnoteInfo&)rPageDesc.GetFootnoteInfo();
-    SwPageFootnoteInfoItem aFootnoteItem(FN_PARAM_FTN_INFO, rInfo);
+    SwPageFootnoteInfo& rInfo = const_cast<SwPageFootnoteInfo&>(rPageDesc.GetFootnoteInfo());
+    SwPageFootnoteInfoItem aFootnoteItem(rInfo);
     rSet.Put(aFootnoteItem);
 
     // Register compliant
@@ -581,7 +537,7 @@ void MakeDefTabs(SwTwips nDefDist, SvxTabStopItem& rTabs)
     if( rTabs.Count() )
         return;
     {
-        SvxTabStop aSwTabStop( nDefDist, SVX_TAB_ADJUST_DEFAULT );
+        SvxTabStop aSwTabStop( nDefDist, SvxTabAdjust::Default );
         rTabs.Insert( aSwTabStop );
     }
 }
@@ -601,10 +557,25 @@ void SfxToSwPageDescAttr( const SwWrtShell& rShell, SfxItemSet& rSet )
 
     bool bChanged = false;
     // Page number
-    if(SfxItemState::SET == rSet.GetItemState(SID_ATTR_PARA_PAGENUM, false, &pItem))
+    switch (rSet.GetItemState(SID_ATTR_PARA_PAGENUM, false, &pItem))
     {
-        aPgDesc.SetNumOffset(static_cast<const SfxUInt16Item*>(pItem)->GetValue());
-        bChanged = true;
+        case SfxItemState::SET:
+        {
+            aPgDesc.SetNumOffset(static_cast<const SfxUInt16Item*>(pItem)->GetValue());
+            bChanged = true;
+            break;
+        }
+        case SfxItemState::DISABLED:
+        {
+            bChanged = true; // default initialised aPgDesc clears the number
+            break;
+        }
+        case SfxItemState::UNKNOWN:
+        case SfxItemState::DEFAULT:
+            break;
+        default:
+            assert(false); // unexpected
+            break;
     }
     if( SfxItemState::SET == rSet.GetItemState( SID_ATTR_PARA_MODEL, false, &pItem ))
     {
@@ -613,7 +584,7 @@ void SfxToSwPageDescAttr( const SwWrtShell& rShell, SfxItemSet& rSet )
         {
             // Delete only, if PageDesc will be enabled!
             rSet.ClearItem( RES_BREAK );
-            SwPageDesc* pDesc = ((SwWrtShell&)rShell).FindPageDescByName(
+            SwPageDesc* pDesc = const_cast<SwWrtShell&>(rShell).FindPageDescByName(
                                                     rDescName, true );
             if( pDesc )
                 aPgDesc.RegisterToPageDesc( *pDesc );
@@ -623,7 +594,7 @@ void SfxToSwPageDescAttr( const SwWrtShell& rShell, SfxItemSet& rSet )
     }
     else
     {
-        SfxItemSet aCoreSet(rShell.GetView().GetPool(), RES_PAGEDESC, RES_PAGEDESC );
+        SfxItemSet aCoreSet(rShell.GetView().GetPool(), svl::Items<RES_PAGEDESC, RES_PAGEDESC>{} );
         rShell.GetCurAttr( aCoreSet );
         if(SfxItemState::SET == aCoreSet.GetItemState( RES_PAGEDESC, true, &pItem ) )
         {
@@ -690,24 +661,25 @@ void    SetDfltMetric( FieldUnit eMetric, bool bWeb )
     SW_MOD()->ApplyUserMetric(eMetric, bWeb);
 }
 
-sal_Int32 InsertStringSorted(const OUString& rEntry, ListBox& rToFill, sal_Int32 nOffset )
+void InsertStringSorted(const OUString& rId, const OUString& rEntry, weld::ComboBox& rToFill, int nOffset)
 {
     CollatorWrapper& rCaseColl = ::GetAppCaseCollator();
-    const sal_Int32 nCount = rToFill.GetEntryCount();
+    const int nCount = rToFill.get_count();
     while (nOffset < nCount)
     {
-        if( 0 < rCaseColl.compareString( rToFill.GetEntry(nOffset), rEntry ))
+        if (0 < rCaseColl.compareString(rToFill.get_text(nOffset), rEntry))
             break;
         ++nOffset;
     }
-    return rToFill.InsertEntry(rEntry, nOffset);
+    rToFill.insert(nOffset, rEntry, &rId, nullptr, nullptr);
 }
 
-void FillCharStyleListBox(ListBox& rToFill, SwDocShell* pDocSh, bool bSorted, bool bWithDefault)
+void FillCharStyleListBox(weld::ComboBox& rToFill, SwDocShell* pDocSh, bool bSorted, bool bWithDefault)
 {
-    const sal_Int32 nOffset = rToFill.GetEntryCount() > 0 ? 1 : 0;
+    const int nOffset = rToFill.get_count() > 0 ? 1 : 0;
+    rToFill.freeze();
     SfxStyleSheetBasePool* pPool = pDocSh->GetStyleSheetPool();
-    pPool->SetSearchMask(SFX_STYLE_FAMILY_CHAR);
+    pPool->SetSearchMask(SfxStyleFamily::Char);
     SwDoc* pDoc = pDocSh->GetDoc();
     const SfxStyleSheetBase* pBase = pPool->First();
     OUString sStandard;
@@ -716,11 +688,12 @@ void FillCharStyleListBox(ListBox& rToFill, SwDocShell* pDocSh, bool bSorted, bo
     {
         if(bWithDefault || pBase->GetName() !=  sStandard)
         {
-            const sal_Int32 nPos = bSorted
-                ? InsertStringSorted(pBase->GetName(), rToFill, nOffset )
-                : rToFill.InsertEntry(pBase->GetName());
-            sal_IntPtr nPoolId = SwStyleNameMapper::GetPoolIdFromUIName( pBase->GetName(), nsSwGetPoolIdFromName::GET_POOLID_CHRFMT );
-            rToFill.SetEntryData( nPos, reinterpret_cast<void*>(nPoolId));
+            sal_IntPtr nPoolId = SwStyleNameMapper::GetPoolIdFromUIName( pBase->GetName(), SwGetPoolIdFromName::ChrFmt );
+            OUString sId(OUString::number(nPoolId));
+            if (bSorted)
+                InsertStringSorted(sId, pBase->GetName(), rToFill, nOffset);
+            else
+                rToFill.append(sId, pBase->GetName());
         }
         pBase = pPool->Next();
     }
@@ -732,18 +705,19 @@ void FillCharStyleListBox(ListBox& rToFill, SwDocShell* pDocSh, bool bSorted, bo
         if(pFormat->IsDefault())
             continue;
         const OUString& rName = pFormat->GetName();
-        if(rToFill.GetEntryPos(rName) == LISTBOX_ENTRY_NOTFOUND)
+        if (rToFill.find_text(rName) == -1)
         {
-            const sal_Int32 nPos = bSorted
-                ? InsertStringSorted(rName, rToFill, nOffset )
-                : rToFill.InsertEntry(rName);
-            sal_IntPtr nPoolId = USHRT_MAX;
-            rToFill.SetEntryData( nPos, reinterpret_cast<void*>(nPoolId));
+            OUString sId(OUString::number(USHRT_MAX));
+            if (bSorted)
+                InsertStringSorted(sId, rName, rToFill, nOffset);
+            else
+                rToFill.append(sId, rName);
         }
     }
+    rToFill.thaw();
 };
 
-SwTwips GetTableWidth( SwFrameFormat* pFormat, SwTabCols& rCols, sal_uInt16 *pPercent,
+SwTwips GetTableWidth( SwFrameFormat const * pFormat, SwTabCols const & rCols, sal_uInt16 *pPercent,
             SwWrtShell* pSh )
 {
     // To get the width is slightly more complicated.
@@ -764,11 +738,11 @@ SwTwips GetTableWidth( SwFrameFormat* pFormat, SwTabCols& rCols, sal_uInt16 *pPe
             {
                 if ( nullptr == pSh->GetFlyFrameFormat() )
                 {
-                    nWidth = pSh->GetAnyCurRect(RECT_PAGE_PRT).Width();
+                    nWidth = pSh->GetAnyCurRect(CurRectType::PagePrt).Width();
                 }
                 else
                 {
-                    nWidth = pSh->GetAnyCurRect(RECT_FLY_PRT_EMBEDDED).Width();
+                    nWidth = pSh->GetAnyCurRect(CurRectType::FlyEmbeddedPrt).Width();
                 }
             }
             else
@@ -788,7 +762,7 @@ OUString GetAppLangDateTimeString( const DateTime& rDT )
 {
     const SvtSysLocale aSysLocale;
     const LocaleDataWrapper& rAppLclData = aSysLocale.GetLocaleData();
-    OUString sRet = rAppLclData.getDate( rDT ) + " " + rAppLclData.getTime( rDT, false );
+    OUString sRet = rAppLclData.getDate( rDT ) + " " + rAppLclData.getTime( rDT );
     return sRet;
 }
 
@@ -804,7 +778,7 @@ void SetApplyCharUnit(bool bApplyChar, bool bWeb)
     SW_MOD()->ApplyUserCharUnit(bApplyChar, bWeb);
 }
 
-bool ExecuteMenuCommand( PopupMenu& rMenu, SfxViewFrame& rViewFrame, sal_uInt16 nId )
+bool ExecuteMenuCommand( PopupMenu const & rMenu, SfxViewFrame const & rViewFrame, sal_uInt16 nId )
 {
     bool bRet = false;
     const sal_uInt16 nItemCount = rMenu.GetItemCount();

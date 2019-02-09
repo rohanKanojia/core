@@ -26,8 +26,6 @@
 #include <com/sun/star/util/XMacroExpander.hpp>
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 
-#include <com/sun/star/script/browse/BrowseNodeTypes.hpp>
-
 #include "MasterScriptProvider.hxx"
 #include "ActiveMSPList.hxx"
 
@@ -55,12 +53,11 @@ ActiveMSPList::~ActiveMSPList()
 Reference< provider::XScriptProvider >
 ActiveMSPList::createNewMSP( const uno::Any& context )
 {
-    OUString serviceName("com.sun.star.script.provider.MasterScriptProvider");
     Sequence< Any > args( &context, 1 );
 
     Reference< provider::XScriptProvider > msp(
         m_xContext->getServiceManager()->createInstanceWithArgumentsAndContext(
-            serviceName, args, m_xContext ), UNO_QUERY );
+            "com.sun.star.script.provider.MasterScriptProvider", args, m_xContext ), UNO_QUERY );
     return msp;
 }
 
@@ -103,7 +100,7 @@ ActiveMSPList::getMSPFromAnyContext( const Any& aContext )
         try
         {
             // the component supports executing scripts embedded in a - possibly foreign document.
-            // Check whether this other document its the component itself.
+            // Check whether this other document it's the component itself.
             if ( !xModel.is() || ( xModel != xScriptContext->getScriptContainer() ) )
             {
                 msp = getMSPFromInvocationContext( xScriptContext );
@@ -137,10 +134,10 @@ Reference< provider::XScriptProvider >
         xScripts.set( xContext->getScriptContainer() );
     if ( !xScripts.is() )
     {
-        OUStringBuffer buf;
-        buf.append( "Failed to create MasterScriptProvider for ScriptInvocationContext: " );
-        buf.append( "Component supporting XEmbeddScripts interface not found." );
-        throw lang::IllegalArgumentException( buf.makeStringAndClear(), nullptr, 1 );
+        throw lang::IllegalArgumentException(
+            "Failed to create MasterScriptProvider for ScriptInvocationContext: "
+            "Component supporting XEmbeddScripts interface not found.",
+            nullptr, 1 );
     }
 
     ::osl::MutexGuard guard( m_mutex );
@@ -175,11 +172,11 @@ Reference< provider::XScriptProvider >
             Reference< document::XScriptInvocationContext > xScriptsContext( xModel, UNO_QUERY );
             if ( !xScripts.is() && !xScriptsContext.is() )
             {
-                OUStringBuffer buf;
-                buf.append( "Failed to create MasterScriptProvider for '" );
-                buf.append     ( context );
-                buf.append( "': Either XEmbeddScripts or XScriptInvocationContext need to be supported by the document." );
-                throw lang::IllegalArgumentException( buf.makeStringAndClear(), nullptr, 1 );
+                throw lang::IllegalArgumentException(
+                    "Failed to create MasterScriptProvider for '"
+                    + context +
+                    "': Either XEmbeddScripts or XScriptInvocationContext need to be supported by the document.",
+                    nullptr, 1 );
             }
 
             ::osl::MutexGuard guard( m_mutex );
@@ -221,12 +218,11 @@ Reference< provider::XScriptProvider >
     }
     catch( const Exception& )
     {
-        OUStringBuffer aMessage;
-        aMessage.append( "Failed to create MasterScriptProvider for context '" );
-        aMessage.append     ( context );
-        aMessage.append( "'." );
+        css::uno::Any anyEx = cppu::getCaughtException();
         throw lang::WrappedTargetRuntimeException(
-            aMessage.makeStringAndClear(), *this, ::cppu::getCaughtException() );
+            "Failed to create MasterScriptProvider for context '"
+            + context + "'.",
+            *this, anyEx );
     }
     return msp;
 }
@@ -252,14 +248,13 @@ ActiveMSPList::addActiveMSP( const Reference< uno::XInterface >& xComponent,
         }
         catch ( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("scripting");
         }
     }
 }
 
 
 void SAL_CALL ActiveMSPList::disposing( const css::lang::EventObject& Source )
-throw ( css::uno::RuntimeException, std::exception )
 
 {
     try
@@ -277,7 +272,7 @@ throw ( css::uno::RuntimeException, std::exception )
     {
         // if we get an exception here, there is not much we can do about
         // it can't throw as it will screw up the model that is calling dispose
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("scripting");
     }
 }
 

@@ -20,8 +20,7 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_OUTLINERITERATORIMPL_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_OUTLINERITERATORIMPL_HXX
 
-#include <svx/svdobj.hxx>
-#include "OutlinerIterator.hxx"
+#include <OutlinerIterator.hxx>
 #include <memory>
 
 class SdDrawDocument;
@@ -33,8 +32,6 @@ namespace sd {
 class ViewShell;
 
 namespace outliner {
-
-class IteratorImplBase;
 
 /** Base class for the polymorphic implementation class of the
     <type>Iterator</type> class.  The iterators based on this class are
@@ -91,20 +88,16 @@ public:
         @param rIterator
             The iterator to compare to.
         @return
-            When both iterators ar equal <TRUE/> is returned, <FALSE/> otherwise.
+            When both iterators are equal <TRUE/> is returned, <FALSE/> otherwise.
     */
     virtual bool operator== (const IteratorImplBase& rIterator) const;
-    /** This method is used by the equality operator.  Additionally to the
-        iterator it takes a type information which is taken into account on
-        comparison.  It is part of a "multimethod" pattern.
+    /** This method is used by the equality operator. It is part of a "multimethod" pattern.
         @param rIterator
             The iterator to compare to.
-        @param aType
-            The type of the iterator.
         @return
             Returns <TRUE/> when both iterators point to the same object.
     */
-    virtual bool IsEqual (const IteratorImplBase& rIterator, IteratorType aType) const;
+    virtual bool IsEqualSelection(const IteratorImplBase& rIterator) const;
     /** Reverse the direction of iteration.  The current object stays the same.
     */
     virtual void Reverse();
@@ -134,33 +127,31 @@ class SelectionIteratorImpl
 {
 public:
     SelectionIteratorImpl (
-        const ::std::vector< SdrObjectWeakRef >& rObjectList,
+        const ::std::vector< tools::WeakReference<SdrObject> >& rObjectList,
         sal_Int32 nObjectIndex,
         SdDrawDocument* pDocument,
         const std::weak_ptr<ViewShell>& rpViewShellWeak,
         bool bDirectionIsForward);
     SelectionIteratorImpl (const SelectionIteratorImpl& rObject);
-    virtual ~SelectionIteratorImpl();
+    virtual ~SelectionIteratorImpl() override;
 
     virtual void GotoNextText() override;
     virtual const IteratorPosition& GetPosition() override;
-    virtual IteratorImplBase* Clone (IteratorImplBase* pObject) const override;
+    virtual IteratorImplBase* Clone (IteratorImplBase* pObject = nullptr) const override;
     virtual bool operator== (const IteratorImplBase& rIterator) const override;
 
 private:
-    const ::std::vector<SdrObjectWeakRef>& mrObjectList;
+    const ::std::vector<tools::WeakReference<SdrObject>>& mrObjectList;
     sal_Int32 mnObjectIndex;
 
     /** Compare the given iterator with this object.  This method handles
         only the case that the given iterator is an instance of this class.
         @param rIterator
             The iterator to compare to.
-        @param aType
-            The type of the iterator.
         @return
             Returns <TRUE/> when both iterators point to the same object.
     */
-    virtual bool IsEqual (const IteratorImplBase& rIterator, IteratorType aType) const override;
+    virtual bool IsEqualSelection(const IteratorImplBase& rIterator) const override;
 
     IteratorImplBase& operator= (const IteratorImplBase& rIterator);
 };
@@ -188,10 +179,10 @@ public:
         bool bDirectionIsForward,
         PageKind ePageKind,
         EditMode eEditMode);
-    virtual ~ViewIteratorImpl();
+    virtual ~ViewIteratorImpl() override;
 
     virtual void GotoNextText() override;
-    virtual IteratorImplBase* Clone (IteratorImplBase* pObject) const override;
+    virtual IteratorImplBase* Clone (IteratorImplBase* pObject = nullptr) const override;
     virtual void Reverse() override;
 
 protected:
@@ -209,10 +200,10 @@ private:
     /// Pointer to the page associated with the current page index. May be NULL.
     SdPage* mpPage;
     /// Iterator of all objects on the current page.
-    SdrObjListIter* mpObjectIterator;
+    std::unique_ptr<SdrObjListIter> mpObjectIterator;
 
     // Don't use this operator.
-    ViewIteratorImpl& operator= (const ViewIteratorImpl&){return *this;};
+    ViewIteratorImpl& operator= (const ViewIteratorImpl&) = delete;
 };
 
 /** Iterator for iteration over all objects in all views.  It automatically
@@ -231,17 +222,17 @@ public:
         SdDrawDocument* pDocument,
         const std::weak_ptr<ViewShell>& rpViewShellWeak,
         bool bDirectionIsForward);
-    virtual ~DocumentIteratorImpl();
+    virtual ~DocumentIteratorImpl() override;
 
     virtual void GotoNextText() override;
-    virtual IteratorImplBase* Clone (IteratorImplBase* pObject) const override;
+    virtual IteratorImplBase* Clone (IteratorImplBase* pObject = nullptr) const override;
 
 private:
     /// Number of pages in the view that is specified by <member>maPosition</member>.
     sal_Int32 mnPageCount;
 
     // Don't use this operator.
-    DocumentIteratorImpl& operator= (const DocumentIteratorImpl& ){return *this;};
+    DocumentIteratorImpl& operator= (const DocumentIteratorImpl& ) = delete;
 };
 
 } } // end of namespace ::sd::outliner

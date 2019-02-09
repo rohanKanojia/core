@@ -17,12 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "browserids.hxx"
-#include "commontypes.hxx"
+#include <browserids.hxx>
+#include <commontypes.hxx>
+#include <core_resource.hxx>
 #include <dbaccess/dataview.hxx>
-#include "dbu_misc.hrc"
-#include "dbustrings.hrc"
-#include "moduledbu.hxx"
+#include <strings.hrc>
+#include <strings.hxx>
+#include <stringconstants.hxx>
 #include <dbaccess/dbsubcomponentcontroller.hxx>
 
 #include <com/sun/star/frame/XUntitledNumbers.hpp>
@@ -35,18 +36,19 @@
 #include <com/sun/star/util/NumberFormatter.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 
-#include <comphelper/processfactory.hxx>
-#include <comphelper/sequence.hxx>
 #include <comphelper/types.hxx>
 #include <connectivity/dbexception.hxx>
+#include <connectivity/dbmetadata.hxx>
 #include <connectivity/dbtools.hxx>
 #include <cppuhelper/typeprovider.hxx>
 #include <comphelper/interfacecontainer2.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
-#include <vcl/layout.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 
 namespace dbaui
 {
@@ -54,7 +56,6 @@ namespace dbaui
     using ::com::sun::star::uno::Any;
     using ::com::sun::star::uno::Reference;
     using ::com::sun::star::beans::XPropertySet;
-    using ::com::sun::star::lang::XMultiServiceFactory;
     using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Sequence;
     using ::com::sun::star::uno::Type;
@@ -124,7 +125,6 @@ namespace dbaui
         ::boost::optional< bool >       m_aDocScriptSupport;
 
     public:
-        OModuleClient                   m_aModuleClient;
         ::dbtools::SQLExceptionInfo     m_aCurrentError;
 
         ::comphelper::OInterfaceContainerHelper2
@@ -209,7 +209,7 @@ namespace dbaui
         }
     }
 
-    Any SAL_CALL DBSubComponentController::queryInterface(const Type& _rType) throw (RuntimeException, std::exception)
+    Any SAL_CALL DBSubComponentController::queryInterface(const Type& _rType)
     {
         if ( _rType.equals( cppu::UnoType<XScriptInvocationContext>::get() ) )
         {
@@ -221,20 +221,16 @@ namespace dbaui
         return DBSubComponentController_Base::queryInterface( _rType );
     }
 
-    Sequence< Type > SAL_CALL DBSubComponentController::getTypes(  ) throw (RuntimeException, std::exception)
+    Sequence< Type > SAL_CALL DBSubComponentController::getTypes(  )
     {
         Sequence< Type > aTypes( DBSubComponentController_Base::getTypes() );
         if ( !m_pImpl->documentHasScriptSupport() )
         {
-            Sequence< Type > aStrippedTypes( aTypes.getLength() - 1 );
-            ::std::remove_copy_if(
-                aTypes.getConstArray(),
-                aTypes.getConstArray() + aTypes.getLength(),
-                aStrippedTypes.getArray(),
-                ::std::bind2nd( ::std::equal_to< Type >(), cppu::UnoType<XScriptInvocationContext>::get() )
-            );
-            aTypes = aStrippedTypes;
-        }
+            auto newEnd = std::remove_if( aTypes.begin(), aTypes.end(),
+                                          [](const Type& type)
+                                          { return type == cppu::UnoType<XScriptInvocationContext>::get(); } );
+            aTypes.realloc( std::distance(aTypes.begin(), newEnd) );
+       }
         return aTypes;
     }
 
@@ -291,7 +287,7 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 
@@ -307,14 +303,16 @@ namespace dbaui
         bool bReConnect = true;
         if ( _bUI )
         {
-            ScopedVclPtrInstance< MessageDialog > aQuery(getView(), ModuleRes(STR_QUERY_CONNECTION_LOST), VCL_MESSAGE_QUESTION, VCL_BUTTONS_YES_NO);
-            bReConnect = ( RET_YES == aQuery->Execute() );
+            std::unique_ptr<weld::MessageDialog> xQuery(Application::CreateMessageDialog(getFrameWeld(),
+                                                        VclMessageType::Question, VclButtonsType::YesNo,
+                                                        DBA_RES(STR_QUERY_CONNECTION_LOST)));
+            bReConnect = (RET_YES == xQuery->run());
         }
 
         // now really reconnect ...
         if ( bReConnect )
         {
-            m_pImpl->m_xConnection.reset( connect( m_pImpl->m_aDataSource.getDataSource(), nullptr ), SharedConnection::TakeOwnership );
+            m_pImpl->m_xConnection.reset( connect( m_pImpl->m_aDataSource.getDataSource() ), SharedConnection::TakeOwnership );
             m_pImpl->m_aSdbMetaData.reset( m_pImpl->m_xConnection );
         }
 
@@ -349,7 +347,7 @@ namespace dbaui
         m_pImpl->m_aDataSource.clear();
     }
 
-    void SAL_CALL DBSubComponentController::disposing(const EventObject& _rSource) throw( RuntimeException, std::exception )
+    void SAL_CALL DBSubComponentController::disposing(const EventObject& _rSource)
     {
         if ( _rSource.Source == getConnection() )
         {
@@ -398,21 +396,21 @@ namespace dbaui
         showError( m_pImpl->m_aCurrentError );
     }
 
-    sal_Bool SAL_CALL DBSubComponentController::suspend(sal_Bool bSuspend) throw( RuntimeException, std::exception )
+    sal_Bool SAL_CALL DBSubComponentController::suspend(sal_Bool bSuspend)
     {
         m_pImpl->m_bSuspended = bSuspend;
         if ( !bSuspend && !isConnected() )
             reconnect(true);
 
-        return sal_True;
+        return true;
     }
 
-    sal_Bool SAL_CALL DBSubComponentController::attachModel( const Reference< XModel > & _rxModel) throw( RuntimeException, std::exception )
+    sal_Bool SAL_CALL DBSubComponentController::attachModel( const Reference< XModel > & _rxModel)
     {
         if ( !_rxModel.is() )
-            return sal_False;
+            return false;
         if ( !DBSubComponentController_Base::attachModel( _rxModel ) )
-            return sal_False;
+            return false;
 
         m_pImpl->m_bNotAttached = false;
         if ( m_pImpl->m_nDocStartNumber == 1 )
@@ -423,7 +421,7 @@ namespace dbaui
         if ( xUntitledProvider.is() )
             m_pImpl->m_nDocStartNumber = xUntitledProvider->leaseNumber( static_cast< XWeak* >( this ) );
 
-        return sal_True;
+        return true;
     }
 
     void DBSubComponentController::Execute(sal_uInt16 _nId, const Sequence< PropertyValue >& _rArgs)
@@ -448,15 +446,17 @@ namespace dbaui
     }
     void DBSubComponentController::connectionLostMessage() const
     {
-        OUString aMessage(ModuleRes(RID_STR_CONNECTION_LOST));
+        OUString aMessage(DBA_RES(RID_STR_CONNECTION_LOST));
         Reference< XWindow > xWindow = getTopMostContainerWindow();
         vcl::Window* pWin = nullptr;
         if ( xWindow.is() )
-            pWin = VCLUnoHelper::GetWindow(xWindow);
+            pWin = VCLUnoHelper::GetWindow(xWindow).get();
         if ( !pWin )
             pWin = getView()->Window::GetParent();
 
-        ScopedVclPtrInstance<MessageDialog>::Create(pWin, aMessage, VCL_MESSAGE_INFO)->Execute();
+        std::unique_ptr<weld::MessageDialog> xInfo(Application::CreateMessageDialog(pWin ? pWin->GetFrameWeld() : nullptr,
+                                                   VclMessageType::Info, VclButtonsType::Ok, aMessage));
+        xInfo->run();
     }
     const Reference< XConnection >& DBSubComponentController::getConnection() const
     {
@@ -498,7 +498,7 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
         return xMeta;
     }
@@ -518,7 +518,7 @@ namespace dbaui
         return Reference< XModel >( m_pImpl->m_aDataSource.getDatabaseDocument(), UNO_QUERY );
     }
 
-    Reference< XNumberFormatter > DBSubComponentController::getNumberFormatter() const
+    Reference< XNumberFormatter > const & DBSubComponentController::getNumberFormatter() const
     {
         return m_pImpl->m_xFormatter;
     }
@@ -529,7 +529,6 @@ namespace dbaui
     }
     // XTitle
     OUString SAL_CALL DBSubComponentController::getTitle()
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard aGuard( getMutex() );
         if ( m_bExternalTitle )
@@ -551,7 +550,7 @@ namespace dbaui
         return m_pImpl->m_nDocStartNumber;
     }
 
-    Reference< XEmbeddedScripts > SAL_CALL DBSubComponentController::getScriptContainer() throw (RuntimeException, std::exception)
+    Reference< XEmbeddedScripts > SAL_CALL DBSubComponentController::getScriptContainer()
     {
         ::osl::MutexGuard aGuard( getMutex() );
         if ( !m_pImpl->documentHasScriptSupport() )
@@ -560,25 +559,25 @@ namespace dbaui
         return Reference< XEmbeddedScripts >( getDatabaseDocument(), UNO_QUERY_THROW );
     }
 
-    void SAL_CALL DBSubComponentController::addModifyListener( const Reference< XModifyListener >& i_Listener ) throw (RuntimeException, std::exception)
+    void SAL_CALL DBSubComponentController::addModifyListener( const Reference< XModifyListener >& i_Listener )
     {
         ::osl::MutexGuard aGuard( getMutex() );
         m_pImpl->m_aModifyListeners.addInterface( i_Listener );
     }
 
-    void SAL_CALL DBSubComponentController::removeModifyListener( const Reference< XModifyListener >& i_Listener ) throw (RuntimeException, std::exception)
+    void SAL_CALL DBSubComponentController::removeModifyListener( const Reference< XModifyListener >& i_Listener )
     {
         ::osl::MutexGuard aGuard( getMutex() );
         m_pImpl->m_aModifyListeners.removeInterface( i_Listener );
     }
 
-    sal_Bool SAL_CALL DBSubComponentController::isModified(  ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL DBSubComponentController::isModified(  )
     {
         ::osl::MutexGuard aGuard( getMutex() );
         return impl_isModified();
     }
 
-    void SAL_CALL DBSubComponentController::setModified( sal_Bool i_bModified ) throw (PropertyVetoException, RuntimeException, std::exception)
+    void SAL_CALL DBSubComponentController::setModified( sal_Bool i_bModified )
     {
         ::osl::ClearableMutexGuard aGuard( getMutex() );
 

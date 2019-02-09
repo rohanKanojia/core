@@ -22,8 +22,8 @@
 
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
-#include <sal/types.h>
 #include <rtl/ustring.hxx>
+#include <sax/fastattribs.hxx>
 
 /**
  * Handling of tokens in XML:
@@ -245,6 +245,7 @@ namespace xmloff { namespace token {
         XML_APPLICATION_DATA,
         XML_APPLICATION_XML,
         XML_APPLY,
+        XML_APPLY_DESIGN_MODE,
         XML_APPLY_STYLE_NAME,
         XML_AQUA,
         XML_ARC,
@@ -265,6 +266,7 @@ namespace xmloff { namespace token {
         XML_AUTHOR_INITIALS,
         XML_AUTHOR_NAME,
         XML_AUTO,
+        XML_AUTO_COMPLETE,
         XML_AUTO_GROW_HEIGHT,
         XML_AUTO_GROW_WIDTH,
         XML_AUTO_RELOAD,
@@ -275,6 +277,7 @@ namespace xmloff { namespace token {
         XML_AUTO_UPDATE,
         XML_AUTOMATIC,
         XML_AUTOMATIC_FIND_LABELS,
+        XML_AUTOMATIC_FOCUS,
         XML_AUTOMATIC_ORDER,
         XML_AUTOMATIC_STYLES,
         XML_AUTOMATIC_UPDATE,
@@ -346,6 +349,7 @@ namespace xmloff { namespace token {
         XML_BOTTOM_VALUES,
         XML_BOTTOMARC,
         XML_BOTTOMCIRCLE,
+        XML_BOUND_COLUMN,
         XML_BREAK_AFTER,
         XML_BREAK_BEFORE,
         XML_BREAK_INSIDE,
@@ -363,6 +367,7 @@ namespace xmloff { namespace token {
         XML_CALCULATION_SETTINGS,
         XML_CALENDAR,
         XML_CAPITALIZE_ENTRIES,
+        XML_CAN_ADD_COMMENT,
         XML_CAPTION,
         XML_CAPTION_POINT_X,
         XML_CAPTION_POINT_Y,
@@ -545,6 +550,7 @@ namespace xmloff { namespace token {
         XML_DATA_LABEL_NUMBER,
         XML_DATA_LABEL_SYMBOL,
         XML_DATA_LABEL_TEXT,
+        XML_DATA_PILOT_SOURCE,
         XML_DATA_PILOT_FIELD,
         XML_DATA_PILOT_GRAND_TOTAL,
         XML_DATA_PILOT_LEVEL,
@@ -575,6 +581,8 @@ namespace xmloff { namespace token {
         XML_DATE_ADJUST,
         XML_DATE_STYLE,
         XML_DATE_TIME,
+        XML_DATE_TIME_UPDATE,
+        XML_DATE_TIME_VISIBLE,
         XML_DATE_VALUE,
         XML_DATETIME,
         XML_DAY,
@@ -600,6 +608,9 @@ namespace xmloff { namespace token {
         XML_DEFAULT_STYLE_NAME,
         XML_DEGREE,
         XML_DELAY,
+        XML_DELAY_FOR_REPEAT,
+        XML_DELETE_COLUMNS,
+        XML_DELETE_ROWS,
         XML_DELETION,
         XML_DELETIONS,
         XML_DENOMALIGN,
@@ -661,6 +672,7 @@ namespace xmloff { namespace token {
         XML_DRAWING,
         XML_DRAWINGS,
         XML_DRAWPOOL,
+        XML_DROPDOWN,
         XML_DROP_CAP,
         XML_DYNAMIC,
         XML_EDGE_ROUNDING,
@@ -765,6 +777,7 @@ namespace xmloff { namespace token {
         XML_FILL_IMAGE_REF_POINT_X,
         XML_FILL_IMAGE_REF_POINT_Y,
         XML_FILL_IMAGE_WIDTH,
+        XML_FILL_RULE,
         XML_FILTER,
         XML_FILTER_AND,
         XML_FILTER_CONDITION,
@@ -846,6 +859,7 @@ namespace xmloff { namespace token {
         XML_FOOTER_FIRST,
         XML_FOOTER_LEFT,
         XML_FOOTER_STYLE,
+        XML_FOOTER_VISIBLE,
         XML_FOOTNOTE,
         XML_FOOTNOTE_BODY,
         XML_FOOTNOTE_CITATION,
@@ -904,7 +918,6 @@ namespace xmloff { namespace token {
         XML_GCD,
         XML_GENERATOR,
         XML_GEQ,
-        XML_GL3DBAR,
         XML_GOURAUD,
         XML_GRADIENT,
         XML_GRADIENT_ANGLE,
@@ -955,6 +968,7 @@ namespace xmloff { namespace token {
         XML_HIDDEN_PARAGRAPH,
         XML_HIDDEN_TEXT,
         XML_HIDE,
+        XML_HIDE_LEGEND,
         XML_HIDE_SHAPE,
         XML_HIDE_TEXT,
         XML_HIGHLIGHTED_RANGE,
@@ -1031,6 +1045,8 @@ namespace xmloff { namespace token {
         XML_INFORMATION,
         XML_INITIAL_CREATOR,
         XML_INPROCEEDINGS,
+        XML_INSERT_COLUMNS,
+        XML_INSERT_ROWS,
         XML_INSERTION,
         XML_INSERTION_CUT_OFF,
         XML_INSERTION_POSITION,
@@ -1039,6 +1055,7 @@ namespace xmloff { namespace token {
         XML_INSTITUTION,
         XML_INT,
         XML_INTENSITY,
+        XML_INTER_CHARACTER,
         XML_INTERSECT,
         XML_INTERVAL,
         XML_INTERVAL_MAJOR,
@@ -1125,6 +1142,7 @@ namespace xmloff { namespace token {
         XML_LINENUMBERING_SEPARATOR,
         XML_LINES,
         XML_LINES_USED,
+        XML_LINKED_CELL,
         XML_LINK_TO_SOURCE_DATA,
         XML_LIST,
         XML_LIST_BLOCK,
@@ -1135,6 +1153,7 @@ namespace xmloff { namespace token {
         XML_LIST_LEVEL_STYLE_BULLET,
         XML_LIST_LEVEL_STYLE_IMAGE,
         XML_LIST_LEVEL_STYLE_NUMBER,
+        XML_LIST_LINKAGE_TYPE,
         XML_LIST_NAME,
         XML_LIST_STYLE,
         XML_LIST_STYLE_NAME,
@@ -1344,6 +1363,7 @@ namespace xmloff { namespace token {
         XML_OPERATION,
         XML_OPERATOR,
         XML_OPTIMAL,
+        XML_OPTION,
         XML_OR,
         XML_ORDER,
         XML_ORDERED_LIST,
@@ -1378,6 +1398,7 @@ namespace xmloff { namespace token {
         XML_PAGE_MASTER_NAME,
         XML_PAGE_NAME,
         XML_PAGE_NUMBER,
+        XML_PAGE_NUMBER_VISIBLE,
         XML_PAGE_START_MARGIN,
         XML_PAGE_STYLE_NAME,
         XML_PAGE_THUMBNAIL,
@@ -1547,7 +1568,6 @@ namespace xmloff { namespace token {
         XML_ROTATION_ALIGN,
         XML_ROTATION_ANGLE,
         XML_ROUND,
-        XML_ROUNDED_EDGE,
         XML_ROW,
         XML_ROW_HEIGHT,
         XML_ROW_NUMBER,
@@ -1740,6 +1760,7 @@ namespace xmloff { namespace token {
         XML_STDEV,
         XML_STDEVP,
         XML_STEPS,
+        XML_STEP_SIZE,
         XML_STOCK,
         XML_STOCK_UPDOWN_BARS,
         XML_STOCK_WITH_VOLUME,
@@ -1819,6 +1840,7 @@ namespace xmloff { namespace token {
         XML_TAN,
         XML_TANH,
         XML_TARGET_CELL_ADDRESS,
+        XML_TARGET_FRAME,
         XML_TARGET_FRAME_NAME,
         XML_TARGET_RANGE_ADDRESS,
         XML_TB_RL,
@@ -1919,8 +1941,14 @@ namespace xmloff { namespace token {
         XML_DOT_DASH,
         XML_DOT_DOT_DASH,
         XML_LONG_DASH,
+        XML_SHOW_SIGN_DATE,
+        XML_SIGNATURELINE,
+        XML_SIGNING_INSTRUCTIONS,
         XML_SINGLE,
         XML_SMALL_WAVE,
+        XML_SUGGESTED_SIGNER_EMAIL,
+        XML_SUGGESTED_SIGNER_NAME,
+        XML_SUGGESTED_SIGNER_TITLE,
         XML_WAVE,
         XML_UNFORMATTED_TEXT,
         XML_UNION,
@@ -2193,6 +2221,8 @@ namespace xmloff { namespace token {
         XML_REGRESSION_PERIOD,
         XML_REGRESSION_FORCE_INTERCEPT,
         XML_REGRESSION_INTERCEPT_VALUE,
+        XML_REGRESSION_X_NAME,
+        XML_REGRESSION_Y_NAME,
 
         XML_ERROR_INDICATOR,
 
@@ -3067,6 +3097,14 @@ namespace xmloff { namespace token {
         XML_ODD_ROWS,
         XML_EVEN_COLUMNS,
         XML_ODD_COLUMNS,
+        // table styles
+        XML_FIRST_ROW_EVEN_COLUMN,
+        XML_LAST_ROW_EVEN_COLUMN,
+        XML_FIRST_ROW_END_COLUMN,
+        XML_FIRST_ROW_START_COLUMN,
+        XML_LAST_ROW_END_COLUMN,
+        XML_LAST_ROW_START_COLUMN,
+
         XML_HORIZONTAL_ON_ODD,
         // Password error from 1.4 to 2.0 Beta (#i45874#)
         XML_RESTART_NUMBERING,
@@ -3234,6 +3272,42 @@ namespace xmloff { namespace token {
         XML_MARGIN, // #i117001#
 
         XML_PROPERTY_MAPPING,
+        XML_PROVIDER,
+        XML_DATA_MAPPINGS,
+        XML_DATA_MAPPING,
+        XML_DATA_FREQUENCY,
+        XML_DATA_TRANSFORMATIONS,
+        XML_COLUMN_REMOVE_TRANSFORMATION,
+        XML_COLUMN_SPLIT_TRANSFORMATION,
+        XML_COLUMN_MERGE_TRANSFORMATION,
+        XML_COLUMN_SORT_TRANSFORMATION,
+        XML_COLUMN_TEXT_TRANSFORMATION,
+        XML_COLUMN_AGGREGATE_TRANSFORMATION,
+        XML_COLUMN_NUMBER_TRANSFORMATION,
+        XML_SORT_PARAM,
+        XML_MERGE_STRING,
+        XML_TRIM,
+        XML_ROUND_UP,
+        XML_ROUND_DOWN,
+        XML_LOG_10,
+        XML_SQUARE,
+        XML_SQUARE_ROOT,
+        XML_EVEN,
+        XML_ODD,
+        XML_SIGN,
+        XML_REPLACE_STRING,
+        XML_COLUMN_REPLACENULL_TRANSFORMATION,
+        XML_COLUMN_DATETIME_TRANSFORMATION,
+        XML_START_OF_YEAR,
+        XML_END_OF_YEAR,
+        XML_MONTH_NAME,
+        XML_START_OF_MONTH,
+        XML_END_OF_MONTH,
+        XML_DAY_OF_YEAR,
+        XML_START_OF_QUARTER,
+        XML_END_OF_QUARTER,
+
+        //Already defined XML_SEPARATOR,
 
         // regina, ODF1.2 additional symbols in charts
         XML_STAR,
@@ -3259,6 +3333,21 @@ namespace xmloff { namespace token {
         XML_EXPONENT_INTERVAL,
         XML_FORCED_EXPONENT_SIGN,
         XML_MIN_DECIMAL_PLACES,
+        XML_MAX_DENOMINATOR_VALUE,
+        XML_MAX_NUMERATOR_DIGITS,
+        XML_ZEROS_NUMERATOR_DIGITS,
+        XML_ZEROS_DENOMINATOR_DIGITS,
+        XML_INTEGER_FRACTION_DELIMITER,
+
+        // tdf#115319
+        XML_REFERENCE_LANGUAGE,
+
+        XML_NEWLINE,
+
+        XML_CREATOR_INITIALS,
+
+        // tdf#115007
+        XML_TRANSLITERATION_SPELLOUT,
 
         XML_TOKEN_END
     };
@@ -3271,6 +3360,10 @@ namespace xmloff { namespace token {
     /// compare eToken to the string
     XMLOFF_DLLPUBLIC bool IsXMLToken(
         const OUString& rString,
+        enum XMLTokenEnum eToken );
+
+    XMLOFF_DLLPUBLIC bool IsXMLToken(
+        const sax_fastparser::FastAttributeList::FastAttributeIter& aIter,
         enum XMLTokenEnum eToken );
 } }
 

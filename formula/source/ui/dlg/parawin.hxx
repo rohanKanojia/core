@@ -20,17 +20,14 @@
 #ifndef INCLUDED_FORMULA_SOURCE_UI_DLG_PARAWIN_HXX
 #define INCLUDED_FORMULA_SOURCE_UI_DLG_PARAWIN_HXX
 
-#include <svtools/stdctrl.hxx>
 #include <svtools/svmedit.hxx>
-#include <vcl/lstbox.hxx>
-#include <vcl/group.hxx>
+#include <vcl/fixed.hxx>
 #include <vcl/tabpage.hxx>
 #include <vcl/tabctrl.hxx>
 #include <vcl/scrbar.hxx>
 
 #include <vector>
-#include "formula/funcutl.hxx"
-#include "formula/omoduleclient.hxx"
+#include <formula/funcutl.hxx>
 #include "ControlHelper.hxx"
 
 namespace formula
@@ -41,10 +38,9 @@ namespace formula
 class IFunctionDescription;
 class IControlReferenceHandler;
 
-class ParaWin : public TabPage
+class ParaWin final : public TabPage
 {
 private:
-        OModuleClient        m_aModuleClient;
         Link<ParaWin&,void>  aFxLink;
         Link<ParaWin&,void>  aArgModifiedLink;
 
@@ -82,7 +78,6 @@ private:
         VclPtr<ScrollBar>       m_pSlider;
         OUString        m_sOptional;
         OUString        m_sRequired;
-        bool        bRefMode;
 
         sal_uInt16      nEdFocus;
         sal_uInt16      nActiveLine;
@@ -92,38 +87,31 @@ private:
         ::std::vector<OUString>
                         aParaArray;
 
-        DECL_LINK_TYPED( ScrollHdl, ScrollBar*, void);
-        DECL_LINK_TYPED( ModifyHdl, ArgInput&, void );
-        DECL_LINK_TYPED( GetEdFocusHdl, ArgInput&, void );
-        DECL_LINK_TYPED( GetFxFocusHdl, ArgInput&, void );
-        DECL_LINK_TYPED( GetFxHdl, ArgInput&, void );
-
-protected:
+        DECL_LINK( ScrollHdl, ScrollBar*, void);
+        DECL_LINK( ModifyHdl, ArgInput&, void );
+        DECL_LINK( GetEdFocusHdl, ArgInput&, void );
+        DECL_LINK( GetFxFocusHdl, ArgInput&, void );
+        DECL_LINK( GetFxHdl, ArgInput&, void );
 
         void            SliderMoved();
         void            ArgumentModified();
-        void            FxClick();
 
         void            InitArgInput( sal_uInt16 nPos, FixedText& rFtArg, PushButton& rBtnFx,
                                         ArgEdit& rEdArg, RefButton& rRefBtn);
 
-        void            DelParaArray();
         void            SetArgumentDesc(const OUString& aText);
         void            SetArgumentText(const OUString& aText);
 
 
         void            SetArgName      (sal_uInt16 no,const OUString &aArg);
         void            SetArgNameFont  (sal_uInt16 no,const vcl::Font&);
-        void            SetArgVal       (sal_uInt16 no,const OUString &aArg);
 
-        void            HideParaLine(sal_uInt16 no);
-        void            ShowParaLine(sal_uInt16 no);
         void            UpdateArgDesc( sal_uInt16 nArg );
         void            UpdateArgInput( sal_uInt16 nOffset, sal_uInt16 i );
 
 public:
                         ParaWin(vcl::Window* pParent,IControlReferenceHandler* _pDlg);
-                        virtual ~ParaWin();
+                        virtual ~ParaWin() override;
         virtual void    dispose() override;
 
         void            SetFunctionDesc(const IFunctionDescription* pFDesc);
@@ -131,8 +119,6 @@ public:
         void            SetEditDesc(const OUString& aText);
         void            UpdateParas();
         void            ClearAll();
-
-        void            SetRefMode(bool bFlag) {bRefMode=bFlag;}
 
         sal_uInt16      GetActiveLine() { return nActiveLine;}
         void            SetActiveLine(sal_uInt16 no);
@@ -143,7 +129,7 @@ public:
         void            SetArgument(sal_uInt16 no, const OUString& aString);
         void            SetArgumentFonts(const vcl::Font& aBoldFont,const vcl::Font& aLightFont);
 
-        void            SetEdFocus(); //Sichtbare Editzeilen
+        void            SetEdFocus(); // visible edit lines
         sal_uInt16      GetSliderPos();
         void            SetSliderPos(sal_uInt16 nSliderPos);
 

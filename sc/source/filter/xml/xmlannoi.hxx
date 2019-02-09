@@ -20,20 +20,21 @@
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLANNOI_HXX
 
 #include <xmloff/xmlictxt.hxx>
-#include <xmloff/xmlimp.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <editeng/editdata.hxx>
-#include <com/sun/star/drawing/XShape.hpp>
-#include <com/sun/star/drawing/XShapes.hpp>
-#include "xmlimprt.hxx"
+#include "importcontext.hxx"
 
-class ScXMLTableRowCellContext;
+#include <vector>
+
+class ScXMLImport;
+namespace com { namespace sun { namespace star { namespace drawing { class XShape; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShapes; } } } }
 
 struct ScXMLAnnotationStyleEntry
 {
-    sal_uInt16          mnFamily;
-    OUString       maName;
-    ESelection          maSelection;
+    sal_uInt16 const          mnFamily;
+    OUString const       maName;
+    ESelection const          maSelection;
 
     ScXMLAnnotationStyleEntry( sal_uInt16 nFam, const OUString& rNam, const ESelection& rSel ) :
         mnFamily( nFam ),
@@ -62,19 +63,18 @@ struct ScXMLAnnotationData
                         ~ScXMLAnnotationData();
 };
 
-class ScXMLAnnotationContext : public SvXMLImportContext
+class ScXMLAnnotationContext : public ScXMLImportContext
 {
 public:
 
     ScXMLAnnotationContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
                         const OUString& rLName,
                         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-                        ScXMLAnnotationData& rAnnotationData,
-                        ScXMLTableRowCellContext* pCellContext);
+                        ScXMLAnnotationData& rAnnotationData);
 
-    virtual ~ScXMLAnnotationContext();
+    virtual ~ScXMLAnnotationContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                                      const OUString& rLocalName,
                                      const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
 
@@ -97,11 +97,7 @@ private:
     OUStringBuffer maAuthorBuffer;
     OUStringBuffer maCreateDateBuffer;
     OUStringBuffer maCreateDateStringBuffer;
-    ScXMLTableRowCellContext* pCellContext;
-    SvXMLImportContext* pShapeContext;
-
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
+    std::unique_ptr<SvXMLImportContext> pShapeContext;
 };
 
 #endif

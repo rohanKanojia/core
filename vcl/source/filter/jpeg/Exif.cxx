@@ -19,6 +19,7 @@
 
 #include "Exif.hxx"
 #include <memory>
+#include <tools/stream.hxx>
 
 Exif::Exif() :
     maOrientation(TOP_LEFT),
@@ -87,8 +88,7 @@ bool Exif::processJpeg(SvStream& rStream, bool bSetValue)
     sal_uInt16  aMagic16;
     sal_uInt16  aLength;
 
-    rStream.Seek(STREAM_SEEK_TO_END);
-    sal_uInt32 aSize = rStream.Tell();
+    sal_uInt32 aSize = rStream.TellEnd();
     rStream.Seek(STREAM_SEEK_TO_BEGIN);
 
     rStream.SetEndian( SvStreamEndian::BIG );
@@ -208,7 +208,7 @@ bool Exif::processExif(SvStream& rStream, sal_uInt16 aSectionLength, bool bSetVa
     std::unique_ptr<sal_uInt8[]> aExifData(new sal_uInt8[aLength]);
     sal_uInt32 aExifDataBeginPosition = rStream.Tell();
 
-    rStream.Read(aExifData.get(), aLength);
+    rStream.ReadBytes(aExifData.get(), aLength);
 
     // Exif detected
     mbExifPresent = true;
@@ -257,7 +257,7 @@ bool Exif::processExif(SvStream& rStream, sal_uInt16 aSectionLength, bool bSetVa
     if (bSetValue)
     {
         rStream.Seek(aExifDataBeginPosition);
-        rStream.Write(aExifData.get(), aLength);
+        rStream.WriteBytes(aExifData.get(), aLength);
     }
 
     return true;

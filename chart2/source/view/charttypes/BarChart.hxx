@@ -20,7 +20,8 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_CHARTTYPES_BARCHART_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_CHARTTYPES_BARCHART_HXX
 
-#include "VSeriesPlotter.hxx"
+#include <memory>
+#include <VSeriesPlotter.hxx>
 
 namespace chart
 {
@@ -34,10 +35,10 @@ public:
 
     BarChart( const css::uno::Reference< css::chart2::XChartType >& xChartTypeModel
             , sal_Int32 nDimensionCount );
-    virtual ~BarChart();
+    virtual ~BarChart() override;
 
     virtual void createShapes() override;
-    virtual void addSeries( VDataSeries* pSeries, sal_Int32 zSlot = -1, sal_Int32 xSlot = -1,sal_Int32 ySlot = -1 ) override;
+    virtual void addSeries( std::unique_ptr<VDataSeries> pSeries, sal_Int32 zSlot, sal_Int32 xSlot, sal_Int32 ySlot ) override;
 
     virtual css::drawing::Direction3D  getPreferredDiagramAspectRatio() const override;
 
@@ -55,14 +56,14 @@ private: //methods
                         LabelAlignment& rAlignment, sal_Int32 nLabelPlacement
                         , double fScaledX, double fScaledLowerYValue, double fScaledUpperYValue, double fScaledZ
                         , double fScaledLowerBarDepth, double fScaledUpperBarDepth, double fBaseValue
-                        , BarPositionHelper* pPosHelper ) const;
+                        , BarPositionHelper const * pPosHelper ) const;
 
     virtual PlottingPositionHelper& getPlottingPositionHelper( sal_Int32 nAxisIndex ) const override;//nAxisIndex indicates whether the position belongs to the main axis ( nAxisIndex==0 ) or secondary axis ( nAxisIndex==1 )
 
     void adaptOverlapAndGapwidthForGroupBarsPerAxis();
 
 private: //member
-    BarPositionHelper*                   m_pMainPosHelper;
+    std::unique_ptr<BarPositionHelper>   m_pMainPosHelper;
     css::uno::Sequence< sal_Int32 >      m_aOverlapSequence;
     css::uno::Sequence< sal_Int32 >      m_aGapwidthSequence;
 };

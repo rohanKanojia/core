@@ -57,13 +57,13 @@
  * @file
  * Shadow object,now only used by paragraph object.
  ************************************************************************/
-#include "xfshadow.hxx"
+#include <xfilter/xfshadow.hxx>
 
-XFShadow::XFShadow():m_aColor(128,128,0)
-{
-    m_ePosition = enumXFShadowNone;
-    m_fOffset = 0.18;
-}
+XFShadow::XFShadow()
+    : m_ePosition(enumXFShadowNone)
+    , m_fOffset(0.18)
+    , m_aColor(128,128,0)
+{}
 
 OUString XFShadow::ToString()
 {
@@ -101,17 +101,14 @@ void    XFShadow::ToXml(IXFStream *pStrm)
         pAttrList->AddAttribute( "style:shadow", ToString() );
 }
 
-bool operator==(XFShadow& s1, XFShadow& s2)
+bool operator==(XFShadow const & s1, XFShadow const & s2)
 {
-    if( (s1.m_ePosition == s2.m_ePosition) &&
+    return (s1.m_ePosition == s2.m_ePosition) &&
         (s1.m_fOffset == s2.m_fOffset) &&
-        (s1.m_aColor == s2.m_aColor)
-        )
-        return true;
-    return false;
+        (s1.m_aColor == s2.m_aColor);
 }
 
-bool operator!=(XFShadow& s1, XFShadow& s2)
+bool operator!=(XFShadow const & s1, XFShadow const & s2)
 {
     return !(s1==s2);
 }

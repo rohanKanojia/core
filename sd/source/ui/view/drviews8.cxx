@@ -17,14 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DrawViewShell.hxx"
+#include <DrawViewShell.hxx>
 
-#include "ViewShellHint.hxx"
+#include <ViewShellHint.hxx>
 
+#include <com/sun/star/scanner/XScannerManager2.hpp>
+#include <editeng/outlobj.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <sfx2/dispatch.hxx>
 #include <svx/svxids.hrc>
-#include <vcl/msgbox.hxx>
 #include <svx/svddef.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/request.hxx>
@@ -32,20 +33,17 @@
 #include <svx/svdograf.hxx>
 #include <svx/svdpagv.hxx>
 
-#include "app.hrc"
-#include "strings.hrc"
+#include <app.hrc>
 
-#include "sdresid.hxx"
-#include "Window.hxx"
-#include "drawview.hxx"
-#include "zoomlist.hxx"
-#include <osl/mutex.hxx>
+#include <Window.hxx>
+#include <drawview.hxx>
+#include <zoomlist.hxx>
 #include <tools/helpers.hxx>
 #include <vcl/svapp.hxx>
 
 namespace sd {
 
-void DrawViewShell::ScannerEvent( const css::lang::EventObject& )
+void DrawViewShell::ScannerEvent()
 {
     if( mxScannerManager.is() )
     {
@@ -65,40 +63,39 @@ void DrawViewShell::ScannerEvent( const css::lang::EventObject& )
                     const SolarMutexGuard aGuard;
                     SdrPage*            pPage = mpDrawView->GetSdrPageView()->GetPage();
                     Size                aBmpSize( aScanBmp.GetPrefSize() ), aPageSize( pPage->GetSize() );
-                    const MapMode       aMap100( MAP_100TH_MM );
+                    const MapMode       aMap100( MapUnit::Map100thMM );
 
                     if( !aBmpSize.Width() || !aBmpSize.Height() )
                         aBmpSize = aScanBmp.GetSizePixel();
 
-                    if( aScanBmp.GetPrefMapMode().GetMapUnit() == MAP_PIXEL )
+                    if( aScanBmp.GetPrefMapMode().GetMapUnit() == MapUnit::MapPixel )
                         aBmpSize = GetActiveWindow()->PixelToLogic( aBmpSize, aMap100 );
                     else
                         aBmpSize = OutputDevice::LogicToLogic( aBmpSize, aScanBmp.GetPrefMapMode(), aMap100 );
 
-                    aPageSize.Width() -= pPage->GetLftBorder() + pPage->GetRgtBorder();
-                    aPageSize.Height() -= pPage->GetUppBorder() + pPage->GetLwrBorder();
+                    aPageSize.AdjustWidth( -(pPage->GetLeftBorder() + pPage->GetRightBorder()) );
+                    aPageSize.AdjustHeight( -(pPage->GetUpperBorder() + pPage->GetLowerBorder()) );
 
                     if( ( ( aBmpSize.Height() > aPageSize.Height() ) || ( aBmpSize.Width() > aPageSize.Width() ) ) && aBmpSize.Height() && aPageSize.Height() )
                     {
-                        double fGrfWH = (double) aBmpSize.Width() / aBmpSize.Height();
-                        double fWinWH = (double) aPageSize.Width() / aPageSize.Height();
+                        double fGrfWH = static_cast<double>(aBmpSize.Width()) / aBmpSize.Height();
+                        double fWinWH = static_cast<double>(aPageSize.Width()) / aPageSize.Height();
 
                         if( fGrfWH < fWinWH )
                         {
-                            aBmpSize.Width() = FRound( aPageSize.Height() * fGrfWH );
-                            aBmpSize.Height()= aPageSize.Height();
+                            aBmpSize.setWidth( FRound( aPageSize.Height() * fGrfWH ) );
+                            aBmpSize.setHeight( aPageSize.Height() );
                         }
                         else if( fGrfWH > 0.F )
                         {
-                            aBmpSize.Width() = aPageSize.Width();
-                            aBmpSize.Height()= FRound( aPageSize.Width() / fGrfWH );
+                            aBmpSize.setWidth( aPageSize.Width() );
+                            aBmpSize.setHeight( FRound( aPageSize.Width() / fGrfWH ) );
                         }
                     }
 
                     Point aPnt ( ( aPageSize.Width() - aBmpSize.Width() ) >> 1, ( aPageSize.Height() - aBmpSize.Height() ) >> 1 );
-                    aPnt += Point( pPage->GetLftBorder(), pPage->GetUppBorder() );
-                    Rectangle   aRect( aPnt, aBmpSize );
-                    SdrGrafObj* pGrafObj = nullptr;
+                    aPnt += Point( pPage->GetLeftBorder(), pPage->GetUpperBorder() );
+                    ::tools::Rectangle   aRect( aPnt, aBmpSize );
                     bool        bInsertNewObject = true;
 
                     if( GetView()->AreObjectsMarked() )
@@ -110,10 +107,8 @@ void DrawViewShell::ScannerEvent( const css::lang::EventObject& )
                             SdrMark*    pMark = rMarkList.GetMark(0);
                             SdrObject*  pObj = pMark->GetMarkedSdrObj();
 
-                            if( dynamic_cast< SdrGrafObj *>( pObj ) !=  nullptr )
+                            if( auto pGrafObj = dynamic_cast< SdrGrafObj *>( pObj ) )
                             {
-                                pGrafObj = static_cast< SdrGrafObj* >( pObj );
-
                                 if( pGrafObj->IsEmptyPresObj() )
                                 {
                                     bInsertNewObject = false;
@@ -127,7 +122,10 @@ void DrawViewShell::ScannerEvent( const css::lang::EventObject& )
 
                     if( bInsertNewObject )
                     {
-                        pGrafObj = new SdrGrafObj( Graphic( aScanBmp ), aRect );
+                        auto pGrafObj = new SdrGrafObj(
+                            GetView()->getSdrModelFromSdrView(),
+                            Graphic(aScanBmp),
+                            aRect);
                         SdrPageView* pPV = GetView()->GetSdrPageView();
                         GetView()->InsertObjectAtView( pGrafObj, *pPV, SdrInsertFlags::SETDEFLAYER );
                     }

@@ -17,10 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <utility>
+
 #include <rtl/ustring.hxx>
 #include <svl/itemset.hxx>
 #include <svl/poolitem.hxx>
 #include <tools/stream.hxx>
+#include <tools/debug.hxx>
 
 SfxSetItem::SfxSetItem( sal_uInt16 which, const SfxItemSet &rSet) :
     SfxPoolItem(which),
@@ -29,16 +34,16 @@ SfxSetItem::SfxSetItem( sal_uInt16 which, const SfxItemSet &rSet) :
 }
 
 
-SfxSetItem::SfxSetItem( sal_uInt16 which, SfxItemSet *pS) :
+SfxSetItem::SfxSetItem( sal_uInt16 which, std::unique_ptr<SfxItemSet> &&pS) :
     SfxPoolItem(which),
-    pSet(pS)
+    pSet(std::move(pS))
 {
-    DBG_ASSERT(pS, "SfxSetItem without set constructed" );
+    DBG_ASSERT(pSet, "SfxSetItem without set constructed" );
 }
 
 
 SfxSetItem::SfxSetItem( const SfxSetItem& rCopy, SfxItemPool *pPool ) :
-    SfxPoolItem(rCopy.Which()),
+    SfxPoolItem(rCopy),
     pSet(rCopy.pSet->Clone(true, pPool))
 {
 }
@@ -46,34 +51,26 @@ SfxSetItem::SfxSetItem( const SfxSetItem& rCopy, SfxItemPool *pPool ) :
 
 SfxSetItem::~SfxSetItem()
 {
-    delete pSet; pSet = nullptr;
 }
 
 
 bool SfxSetItem::operator==( const SfxPoolItem& rCmp) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==( rCmp ), "unequal type" );
+    assert(SfxPoolItem::operator==(rCmp));
     return *pSet == *static_cast<const SfxSetItem &>(rCmp).pSet;
 }
 
 
 bool SfxSetItem::GetPresentation
 (
-    SfxItemPresentation     /*ePresentation*/,
-    SfxMapUnit              /*eCoreMetric*/,
-    SfxMapUnit              /*ePresentationMetric*/,
+    SfxItemPresentation    /*ePresentation*/,
+    MapUnit                /*eCoreMetric*/,
+    MapUnit                /*ePresentationMetric*/,
     OUString&              /*rText*/,
-    const IntlWrapper *
+    const IntlWrapper&
 )   const
 {
     return false;
-}
-
-
-SvStream& SfxSetItem::Store(SvStream& rStream, sal_uInt16) const
-{
-    GetItemSet().Store(rStream);
-    return rStream;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

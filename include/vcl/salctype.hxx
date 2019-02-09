@@ -44,19 +44,14 @@ class SvStream;
 
 struct ConvertData
 {
-private:
-
-                        ConvertData();
-
 public:
 
     Graphic             maGraphic;
     SvStream&           mrStm;
-    ConvertDataFormat   mnFormat;
+    ConvertDataFormat const   mnFormat;
 
                         ConvertData( const Graphic& rGraphic, SvStream& rStm, ConvertDataFormat nFormat ) :
                             maGraphic( rGraphic ), mrStm( rStm ), mnFormat( nFormat ) {}
-                        ~ConvertData() {}
 };
 
 typedef sal_uLong (*SALGRFCVTPROC)( void* pInst,

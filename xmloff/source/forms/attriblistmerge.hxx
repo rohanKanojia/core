@@ -25,7 +25,6 @@
 #include <vector>
 
 #include <cppuhelper/implbase.hxx>
-#include <osl/mutex.hxx>
 #include <com/sun/star/xml/sax/XAttributeList.hpp>
 
 namespace xmloff
@@ -40,11 +39,8 @@ namespace xmloff
     */
     class OAttribListMerger : public OAttribListMerger_Base
     {
-    protected:
         typedef std::vector< css::uno::Reference< css::xml::sax::XAttributeList > > AttributeListArray;
         AttributeListArray  m_aLists;
-
-        virtual ~OAttribListMerger() { }
 
     public:
         OAttribListMerger() { }
@@ -54,14 +50,14 @@ namespace xmloff
         void addList(const css::uno::Reference< css::xml::sax::XAttributeList >& _rList);
 
         // XAttributeList
-        virtual sal_Int16 SAL_CALL getLength(  ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual OUString SAL_CALL getNameByIndex( sal_Int16 i ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual OUString SAL_CALL getTypeByIndex( sal_Int16 i ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual OUString SAL_CALL getTypeByName( const OUString& aName ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual OUString SAL_CALL getValueByIndex( sal_Int16 i ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual OUString SAL_CALL getValueByName( const OUString& aName ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual sal_Int16 SAL_CALL getLength(  ) override;
+        virtual OUString SAL_CALL getNameByIndex( sal_Int16 i ) override;
+        virtual OUString SAL_CALL getTypeByIndex( sal_Int16 i ) override;
+        virtual OUString SAL_CALL getTypeByName( const OUString& aName ) override;
+        virtual OUString SAL_CALL getValueByIndex( sal_Int16 i ) override;
+        virtual OUString SAL_CALL getValueByName( const OUString& aName ) override;
 
-    protected:
+    private:
         bool seekToIndex(sal_Int16 _nGlobalIndex, css::uno::Reference< css::xml::sax::XAttributeList >& _rSubList, sal_Int16& _rLocalIndex);
         bool seekToName(const OUString& _rName, css::uno::Reference< css::xml::sax::XAttributeList >& _rSubList, sal_Int16& _rLocalIndex);
     };

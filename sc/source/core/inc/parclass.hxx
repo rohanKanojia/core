@@ -21,8 +21,20 @@
 #define INCLUDED_SC_SOURCE_CORE_INC_PARCLASS_HXX
 
 #include <formula/opcode.hxx>
-#include <sys/types.h>
+#include <formula/paramclass.hxx>
 
+/** Activate parameter classification documentation.
+
+    Building with DEBUG_SC_PARCLASSDOC 1 enables generation of parameter
+    classification documentation when instantiating the first Calc document if
+    the environment variable OOO_CALC_GENPARCLASSDOC is set and SAL_LOG
+    contains +INFO.sc.core
+
+    Generated output contains CALC_GENPARCLASSDOC that can be easily grep'ed for.
+
+    Activation adds overhead to Calc initialization time to gather information
+    that otherwise is not needed for anything else.
+ */
 #define DEBUG_SC_PARCLASSDOC 0
 
 namespace formula
@@ -34,45 +46,6 @@ class ScParameterClassification
 {
 public:
 
-    enum Type
-    {
-        Unknown = 0,    // MUST be zero for initialization mechanism!
-
-        /** Out of bounds, function doesn't expect that many parameters.
-            However, not necessarily returned. */
-        Bounds,
-
-        /** In array formula: single value to be passed. Results in JumpMatrix
-            being created and multiple calls to function. Functions handling a
-            formula::svDoubleRef by means of DoubleRefToPosSingleRef() or
-            PopDoubleRefOrSingleRef() or GetDouble() or GetString() should have
-            this. */
-        Value,
-
-        /** In array formula: area reference must stay reference. Otherwise
-            don't care. Functions handling a formula::svDoubleRef by means of
-            PopDoubleRefOrSingleRef() should not have this. */
-        Reference,
-
-        /** In array formula: convert area reference to array. Function will be
-            called only once if no Value type is involved. Functions able to
-            handle a svMatrix parameter but not a formula::svDoubleRef parameter as area
-            should have this. */
-        Array,
-
-        /** Area reference must be converted to array in any case, and must
-            also be propagated to subsequent operators and functions being part
-            of a parameter of this function. */
-        ForceArray,
-
-        /** Area reference is not converted to array, but ForceArray must be
-            propagated to subsequent operators and functions being part of a
-            parameter of this function. Used with functions that treat
-            references separately from arrays, but need the forced array
-            calculation of parameters that are not references.*/
-        ReferenceOrForceArray
-    };
-
                                 /// MUST be called once before any other method.
     static  void                Init();
 
@@ -80,15 +53,17 @@ public:
 
                                 /** Get one parameter type for function eOp.
                                     @param nParameter
-                                        Which parameter, 0-based */
-    static  Type                GetParameterType( const formula::FormulaToken* pToken,
+                                        Which parameter, 0-based.
+                                        SAL_MAX_UINT16 for return type of eOp.
+                                 */
+    static  formula::ParamClass GetParameterType( const formula::FormulaToken* pToken,
                                         sal_uInt16 nParameter);
 
                                 /** Whether OpCode has a parameter of type
                                     ForceArray or ReferenceOrForceArray. */
-    static  inline  bool        HasForceArray( OpCode eOp)
+    static  bool        HasForceArray( OpCode eOp)
                                     {
-                                        return 0 <= (short)eOp &&
+                                        return 0 <= static_cast<short>(eOp) &&
                                             eOp <= SC_OPCODE_LAST_OPCODE_ID &&
                                             pData[eOp].bHasForceArray;
                                     }
@@ -99,8 +74,9 @@ private:
     {
         const static sal_Int32 nMaxParams = 7;
 
-        Type        nParam[nMaxParams];
-        sal_uInt8   nRepeatLast;
+        formula::ParamClass nParam[nMaxParams];
+        sal_uInt8           nRepeatLast;
+        formula::ParamClass eReturn;
     };
 
     struct RawData
@@ -122,7 +98,7 @@ private:
     static  RunData*            pData;
 
     // ocExternal AddIns
-    static  Type                GetExternalParameterType(
+    static  formula::ParamClass GetExternalParameterType(
                                     const formula::FormulaToken* pToken, sal_uInt16 nParameter);
 
 #if DEBUG_SC_PARCLASSDOC
@@ -152,7 +128,7 @@ private:
                                     {
                                         if ( eOp <= SC_OPCODE_LAST_OPCODE_ID )
                                             return pData[eOp].aData.nParam[0]
-                                                == Unknown ? 1 :
+                                                == formula::ParamClass::Unknown ? 1 :
                                                 pData[eOp].nMinParams;
                                         return 0;
                                     }

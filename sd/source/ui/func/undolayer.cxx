@@ -17,13 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "undolayer.hxx"
+#include <undolayer.hxx>
 
-#include "DrawDocShell.hxx"
-#include "drawdoc.hxx"
-#include "DrawViewShell.hxx"
-#include "strings.hrc"
-#include "sdresid.hxx"
+#include <DrawDocShell.hxx>
+#include <drawdoc.hxx>
+#include <DrawViewShell.hxx>
+#include <strings.hrc>
+#include <sdresid.hxx>
 
 
 SdLayerModifyUndoAction::SdLayerModifyUndoAction(
@@ -51,10 +51,10 @@ SdLayerModifyUndoAction::SdLayerModifyUndoAction(
 
 void SdLayerModifyUndoAction::Undo()
 {
-    ::sd::DrawDocShell* mpDocSh = mpDoc->GetDocSh();
-    if( mpDocSh )
+    ::sd::DrawDocShell* pDocSh = mpDoc->GetDocSh();
+    if( pDocSh )
     {
-        ::sd::DrawViewShell* pDrViewSh = dynamic_cast< ::sd::DrawViewShell*> ( mpDocSh->GetViewShell() );
+        ::sd::DrawViewShell* pDrViewSh = dynamic_cast< ::sd::DrawViewShell*> ( pDocSh->GetViewShell() );
         if( pDrViewSh )
         {
             pDrViewSh->ModifyLayer( mpLayer, maOldLayerName, maOldLayerTitle, maOldLayerDesc, mbOldIsVisible, mbOldIsLocked, mbOldIsPrintable );
@@ -64,10 +64,10 @@ void SdLayerModifyUndoAction::Undo()
 
 void SdLayerModifyUndoAction::Redo()
 {
-    ::sd::DrawDocShell* mpDocSh = mpDoc->GetDocSh();
-    if( mpDocSh )
+    ::sd::DrawDocShell* pDocSh = mpDoc->GetDocSh();
+    if( pDocSh )
     {
-        ::sd::DrawViewShell* pDrViewSh = dynamic_cast< ::sd::DrawViewShell* >( mpDocSh->GetViewShell() );
+        ::sd::DrawViewShell* pDrViewSh = dynamic_cast< ::sd::DrawViewShell* >( pDocSh->GetViewShell() );
         if( pDrViewSh )
         {
             pDrViewSh->ModifyLayer( mpLayer, maNewLayerName, maNewLayerTitle, maNewLayerDesc, mbNewIsVisible, mbNewIsLocked, mbNewIsPrintable );

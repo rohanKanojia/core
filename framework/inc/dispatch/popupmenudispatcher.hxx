@@ -20,8 +20,6 @@
 #ifndef INCLUDED_FRAMEWORK_INC_DISPATCH_POPUPMENUDISPATCHER_HXX
 #define INCLUDED_FRAMEWORK_INC_DISPATCH_POPUPMENUDISPATCHER_HXX
 
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
 #include <macros/xserviceinfo.hxx>
 #include <general.h>
 #include <stdtypes.h>
@@ -33,10 +31,6 @@
 #include <com/sun/star/frame/DispatchDescriptor.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/frame/XStatusListener.hpp>
-#include <com/sun/star/frame/XFrameLoader.hpp>
-#include <com/sun/star/frame/XLoadEventListener.hpp>
-#include <com/sun/star/frame/XDesktop.hpp>
-#include <com/sun/star/frame/FeatureStateEvent.hpp>
 #include <com/sun/star/frame/XFrameActionListener.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
@@ -55,7 +49,7 @@ typedef cppu::OMultiTypeInterfaceContainerHelperVar<OUString>
 /*-************************************************************************************************************
     @short          helper for desktop only(!) to create new tasks on demand for dispatches
     @descr          Use this class as member only! Never use it as baseclass.
-                    XInterface will be ambigous and we hold a weakcss::uno::Reference to our OWNER - not to our SUPERCLASS!
+                    XInterface will be ambiguous and we hold a weakcss::uno::Reference to our OWNER - not to our SUPERCLASS!
 
     @implements     XInterface
                     XDispatch
@@ -66,7 +60,7 @@ typedef cppu::OMultiTypeInterfaceContainerHelperVar<OUString>
 
     @devstatus      ready to use
 *//*-*************************************************************************************************************/
-class PopupMenuDispatcher :     public  ::cppu::WeakImplHelper<
+class PopupMenuDispatcher final : public  ::cppu::WeakImplHelper<
                                            css::lang::XServiceInfo,
                                            css::frame::XDispatchProvider,
                                            css::frame::XDispatch,
@@ -82,48 +76,44 @@ class PopupMenuDispatcher :     public  ::cppu::WeakImplHelper<
         PopupMenuDispatcher( const css::uno::Reference< css::uno::XComponentContext >& xContext );
 
         // XInterface, XTypeProvider, XServiceInfo
-        DECLARE_XSERVICEINFO
+        DECLARE_XSERVICEINFO_NOFACTORY
+        /* Helper for registry */
+        /// @throws css::uno::Exception
+        static css::uno::Reference< css::uno::XInterface >             SAL_CALL impl_createInstance                ( const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
+        static css::uno::Reference< css::lang::XSingleServiceFactory > impl_createFactory                 ( const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
 
         // XInitialization
-        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& lArguments ) throw( css::uno::Exception       ,
-                                                                                                         css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& lArguments ) override;
         // XDispatchProvider
         virtual css::uno::Reference< css::frame::XDispatch > SAL_CALL queryDispatch(
             const css::util::URL&  aURL        ,
             const OUString& sTarget     ,
-            sal_Int32              nFlags      )
-        throw( css::uno::RuntimeException, std::exception ) override;
+            sal_Int32              nFlags      ) override;
 
         virtual css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL queryDispatches(
-            const css::uno::Sequence< css::frame::DispatchDescriptor >& lDescriptor )
-        throw( css::uno::RuntimeException, std::exception ) override;
+            const css::uno::Sequence< css::frame::DispatchDescriptor >& lDescriptor ) override;
 
         //  XDispatch
         virtual void SAL_CALL dispatch( const css::util::URL&                                  aURL,
-                                        const css::uno::Sequence< css::beans::PropertyValue >& seqProperties ) throw( css::uno::RuntimeException, std::exception ) override;
+                                        const css::uno::Sequence< css::beans::PropertyValue >& seqProperties ) override;
 
         virtual void SAL_CALL addStatusListener( const css::uno::Reference< css::frame::XStatusListener >& xControl,
-                                                 const css::util::URL&                                     aURL ) throw( css::uno::RuntimeException, std::exception ) override;
+                                                 const css::util::URL&                                     aURL ) override;
 
         virtual void SAL_CALL removeStatusListener( const css::uno::Reference< css::frame::XStatusListener >& xControl,
-                                                    const css::util::URL&                                     aURL  ) throw( css::uno::RuntimeException, std::exception ) override;
+                                                    const css::util::URL&                                     aURL  ) override;
 
         //   XFrameActionListener
-        virtual void SAL_CALL frameAction( const css::frame::FrameActionEvent& aEvent ) throw ( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL frameAction( const css::frame::FrameActionEvent& aEvent ) override;
 
         //   XEventListener
-        void SAL_CALL disposing( const css::lang::EventObject& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
+        void SAL_CALL disposing( const css::lang::EventObject& aEvent ) override;
 
-    //  protected methods
-    protected:
-        virtual ~PopupMenuDispatcher();
+    private:
+        virtual ~PopupMenuDispatcher() override;
 
         void impl_RetrievePopupControllerQuery();
-        void impl_CreateUriRefFactory();
 
-
-    //  variables
-    private:
         css::uno::WeakReference< css::frame::XFrame >           m_xWeakFrame;   /// css::uno::WeakReference to frame (Don't use a hard css::uno::Reference. Owner can't delete us then!)
         css::uno::Reference< css::container::XNameAccess >      m_xPopupCtrlQuery;   /// reference to query for popup controller
         css::uno::Reference< css::uri::XUriReferenceFactory >   m_xUriRefFactory;   /// reference to the uri reference factory

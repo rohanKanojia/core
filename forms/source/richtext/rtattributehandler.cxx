@@ -19,6 +19,7 @@
 
 #include "rtattributehandler.hxx"
 
+#include <osl/diagnose.h>
 #include <svx/svxids.hrc>
 #include <editeng/eeitem.hxx>
 #include <svl/itemset.hxx>
@@ -67,7 +68,7 @@ namespace frm
 
     void AttributeHandler::putItemForScript( SfxItemSet& _rAttribs, const SfxPoolItem& _rItem, SvtScriptType _nForScriptType ) const
     {
-        SvxScriptSetItem aSetItem( (WhichId)getAttributeId(), *_rAttribs.GetPool() );
+        SvxScriptSetItem aSetItem( static_cast<WhichId>(getAttributeId()), *_rAttribs.GetPool() );
         aSetItem.PutItemForScriptType( _nForScriptType, _rItem );
         _rAttribs.Put( aSetItem.GetItemSet(), false );
     }
@@ -108,7 +109,7 @@ namespace frm
             case SID_ATTR_CHAR_LATIN_WEIGHT:    nWhich = EE_CHAR_WEIGHT;    break;
 
             default:
-                nWhich = _rPool.GetWhich( (SfxSlotId)_nAttributeId );
+                nWhich = _rPool.GetWhich( static_cast<SfxSlotId>(_nAttributeId) );
             }
             return nWhich;
         }
@@ -156,7 +157,7 @@ namespace frm
             break;
 
         default:
-            pReturn = new SlotHandler( (SfxSlotId)_nAttributeId, lcl_implGetWhich( _rEditEnginePool, _nAttributeId ) );
+            pReturn = new SlotHandler( static_cast<SfxSlotId>(_nAttributeId), lcl_implGetWhich( _rEditEnginePool, _nAttributeId ) );
             break;
 
         }
@@ -166,14 +167,14 @@ namespace frm
 
     ParaAlignmentHandler::ParaAlignmentHandler( AttributeId _nAttributeId )
         :AttributeHandler( _nAttributeId, EE_PARA_JUST )
-        ,m_eAdjust( SVX_ADJUST_CENTER )
+        ,m_eAdjust( SvxAdjust::Center )
     {
         switch ( getAttribute() )
         {
-            case SID_ATTR_PARA_ADJUST_LEFT  : m_eAdjust = SVX_ADJUST_LEFT;    break;
-            case SID_ATTR_PARA_ADJUST_CENTER: m_eAdjust = SVX_ADJUST_CENTER;  break;
-            case SID_ATTR_PARA_ADJUST_RIGHT : m_eAdjust = SVX_ADJUST_RIGHT;   break;
-            case SID_ATTR_PARA_ADJUST_BLOCK : m_eAdjust = SVX_ADJUST_BLOCK;   break;
+            case SID_ATTR_PARA_ADJUST_LEFT  : m_eAdjust = SvxAdjust::Left;    break;
+            case SID_ATTR_PARA_ADJUST_CENTER: m_eAdjust = SvxAdjust::Center;  break;
+            case SID_ATTR_PARA_ADJUST_RIGHT : m_eAdjust = SvxAdjust::Right;   break;
+            case SID_ATTR_PARA_ADJUST_BLOCK : m_eAdjust = SvxAdjust::Block;   break;
             default:
                 OSL_FAIL( "ParaAlignmentHandler::ParaAlignmentHandler: invalid slot!" );
                 break;
@@ -192,7 +193,6 @@ namespace frm
     void ParaAlignmentHandler::executeAttribute( const SfxItemSet& /*_rCurrentAttribs*/, SfxItemSet& _rNewAttribs, const SfxPoolItem* _pAdditionalArg, SvtScriptType /*_nForScriptType*/ ) const
     {
         OSL_ENSURE( !_pAdditionalArg, "ParaAlignmentHandler::executeAttribute: this is a simple toggle attribute - no args possible!" );
-        (void)_pAdditionalArg;
         _rNewAttribs.Put( SvxAdjustItem( m_eAdjust, getWhich() ) );
     }
 
@@ -223,26 +223,25 @@ namespace frm
     void LineSpacingHandler::executeAttribute( const SfxItemSet& /*_rCurrentAttribs*/, SfxItemSet& _rNewAttribs, const SfxPoolItem* _pAdditionalArg, SvtScriptType /*_nForScriptType*/ ) const
     {
         OSL_ENSURE( !_pAdditionalArg, "LineSpacingHandler::executeAttribute: this is a simple toggle attribute - no args possible!" );
-        (void)_pAdditionalArg;
 
         SvxLineSpacingItem aLineSpacing( m_nLineSpace, getWhich() );
-        aLineSpacing.GetLineSpaceRule() = SVX_LINE_SPACE_AUTO;
+        aLineSpacing.SetLineSpaceRule( SvxLineSpaceRule::Auto );
         if ( 100 == m_nLineSpace )
-            aLineSpacing.GetInterLineSpaceRule() = SVX_INTER_LINE_SPACE_OFF;
+            aLineSpacing.SetInterLineSpaceRule( SvxInterLineSpaceRule::Off );
         else
-            aLineSpacing.SetPropLineSpace( (sal_uInt8)m_nLineSpace );
+            aLineSpacing.SetPropLineSpace( m_nLineSpace );
 
         _rNewAttribs.Put( aLineSpacing );
     }
 
     EscapementHandler::EscapementHandler( AttributeId _nAttributeId )
         :AttributeHandler( _nAttributeId, EE_CHAR_ESCAPEMENT )
-        ,m_eEscapement( SVX_ESCAPEMENT_OFF )
+        ,m_eEscapement( SvxEscapement::Off )
     {
         switch ( getAttribute() )
         {
-            case SID_SET_SUPER_SCRIPT   : m_eEscapement = SVX_ESCAPEMENT_SUPERSCRIPT; break;
-            case SID_SET_SUB_SCRIPT     : m_eEscapement = SVX_ESCAPEMENT_SUBSCRIPT;   break;
+            case SID_SET_SUPER_SCRIPT   : m_eEscapement = SvxEscapement::Superscript; break;
+            case SID_SET_SUB_SCRIPT     : m_eEscapement = SvxEscapement::Subscript;   break;
             default:
                 OSL_FAIL( "EscapementHandler::EscapementHandler: invalid slot!" );
                 break;
@@ -261,10 +260,9 @@ namespace frm
     void EscapementHandler::executeAttribute( const SfxItemSet& _rCurrentAttribs, SfxItemSet& _rNewAttribs, const SfxPoolItem* _pAdditionalArg, SvtScriptType /*_nForScriptType*/ ) const    {
         OSL_ENSURE( !_pAdditionalArg, "EscapementHandler::executeAttribute: this is a simple toggle attribute - no args possible!" );
             // well, in theory we could allow an SvxEscapementItem here, but this is not needed
-        (void)_pAdditionalArg;
 
         bool bIsChecked = getCheckState( _rCurrentAttribs ) == eChecked;
-        _rNewAttribs.Put( SvxEscapementItem( bIsChecked ? SVX_ESCAPEMENT_OFF : m_eEscapement, getWhich() ) );
+        _rNewAttribs.Put( SvxEscapementItem( bIsChecked ? SvxEscapement::Off : m_eEscapement, getWhich() ) );
     }
 
     SlotHandler::SlotHandler( AttributeId _nAttributeId, WhichId _nWhichId )
@@ -283,7 +281,7 @@ namespace frm
 
         const SfxPoolItem* pItem = _rAttribs.GetItem( getWhich() );
         if ( pItem )
-            aState.setItem( pItem->Clone() );
+            aState.setItem( pItem );
 
         return aState;
     }
@@ -293,14 +291,13 @@ namespace frm
     {
         if ( _pAdditionalArg )
         {
-            SfxPoolItem* pCorrectWich = _pAdditionalArg->Clone();
+            std::unique_ptr<SfxPoolItem> pCorrectWich(_pAdditionalArg->Clone());
             pCorrectWich->SetWhich( getWhich() );
 
             if ( m_bScriptDependent )
                 putItemForScript( _rNewAttribs, *pCorrectWich, _nForScriptType );
             else
                 _rNewAttribs.Put( *pCorrectWich );
-            DELETEZ( pCorrectWich );
         }
         else
             OSL_FAIL( "SlotHandler::executeAttribute: need attributes to do something!" );
@@ -326,12 +323,12 @@ namespace frm
         {
             // by definition, the item should have the unit twip
             sal_uLong nHeight = pFontHeightItem->GetHeight();
-            if ( _rAttribs.GetPool()->GetMetric( getWhich() ) != SFX_MAPUNIT_TWIP )
+            if ( _rAttribs.GetPool()->GetMetric( getWhich() ) != MapUnit::MapTwip )
             {
                 nHeight = OutputDevice::LogicToLogic(
                     Size( 0, nHeight ),
-                    MapMode( (MapUnit)( _rAttribs.GetPool()->GetMetric( getWhich() ) ) ),
-                    MapMode( MAP_TWIP )
+                    MapMode(  _rAttribs.GetPool()->GetMetric( getWhich() ) ),
+                    MapMode( MapUnit::MapTwip )
                 ).Height();
             }
 
@@ -351,15 +348,13 @@ namespace frm
 
         if ( pFontHeightItem )
         {
-            // correct measurement units
-            SfxMapUnit eItemMapUnit = pFontHeightItem->GetPropUnit(); (void)eItemMapUnit;
             sal_uLong nHeight = pFontHeightItem->GetHeight();
-            if ( _rNewAttribs.GetPool()->GetMetric( getWhich() ) != SFX_MAPUNIT_TWIP )
+            if ( _rNewAttribs.GetPool()->GetMetric( getWhich() ) != MapUnit::MapTwip )
             {
                 nHeight = OutputDevice::LogicToLogic(
                     Size( 0, nHeight ),
-                    MapMode( (MapUnit)( SFX_MAPUNIT_TWIP ) ),
-                    MapMode( (MapUnit)( _rNewAttribs.GetPool()->GetMetric( getWhich() ) ) )
+                    MapMode( MapUnit::MapTwip ),
+                    MapMode( _rNewAttribs.GetPool()->GetMetric( getWhich() ) )
                 ).Height();
             }
 
@@ -375,29 +370,29 @@ namespace frm
 
     ParagraphDirectionHandler::ParagraphDirectionHandler( AttributeId _nAttributeId )
         :AttributeHandler( _nAttributeId, EE_PARA_WRITINGDIR )
-        ,m_eParagraphDirection( FRMDIR_HORI_LEFT_TOP )
-        ,m_eDefaultAdjustment( SVX_ADJUST_RIGHT )
-        ,m_eOppositeDefaultAdjustment( SVX_ADJUST_LEFT )
+        ,m_eParagraphDirection( SvxFrameDirection::Horizontal_LR_TB )
+        ,m_eDefaultAdjustment( SvxAdjust::Right )
+        ,m_eOppositeDefaultAdjustment( SvxAdjust::Left )
     {
         switch ( getAttributeId() )
         {
-            case SID_ATTR_PARA_LEFT_TO_RIGHT: m_eParagraphDirection = FRMDIR_HORI_LEFT_TOP; m_eDefaultAdjustment = SVX_ADJUST_LEFT; break;
-            case SID_ATTR_PARA_RIGHT_TO_LEFT: m_eParagraphDirection = FRMDIR_HORI_RIGHT_TOP; m_eDefaultAdjustment = SVX_ADJUST_RIGHT; break;
+            case SID_ATTR_PARA_LEFT_TO_RIGHT: m_eParagraphDirection = SvxFrameDirection::Horizontal_LR_TB; m_eDefaultAdjustment = SvxAdjust::Left; break;
+            case SID_ATTR_PARA_RIGHT_TO_LEFT: m_eParagraphDirection = SvxFrameDirection::Horizontal_RL_TB; m_eDefaultAdjustment = SvxAdjust::Right; break;
             default:
                 OSL_FAIL( "ParagraphDirectionHandler::ParagraphDirectionHandler: invalid attribute id!" );
         }
 
-        if ( SVX_ADJUST_RIGHT == m_eDefaultAdjustment )
-            m_eOppositeDefaultAdjustment = SVX_ADJUST_LEFT;
+        if ( SvxAdjust::Right == m_eDefaultAdjustment )
+            m_eOppositeDefaultAdjustment = SvxAdjust::Left;
         else
-            m_eOppositeDefaultAdjustment = SVX_ADJUST_RIGHT;
+            m_eOppositeDefaultAdjustment = SvxAdjust::Right;
     }
 
 
     AttributeCheckState ParagraphDirectionHandler::implGetCheckState( const SfxPoolItem& _rItem ) const
     {
         OSL_ENSURE( dynamic_cast<const SvxFrameDirectionItem*>( &_rItem) !=  nullptr, "ParagraphDirectionHandler::implGetCheckState: invalid pool item!" );
-        SvxFrameDirection eDirection = static_cast< SvxFrameDirection >( static_cast< const SvxFrameDirectionItem& >( _rItem ).GetValue() );
+        SvxFrameDirection eDirection = static_cast< const SvxFrameDirectionItem& >( _rItem ).GetValue();
         return ( eDirection == m_eParagraphDirection ) ? eChecked : eUnchecked;
     }
 
@@ -408,7 +403,7 @@ namespace frm
 
         // if the current adjustment of the was the default adjustment for the *previous* text direction,
         // then we toggle the adjustment, too
-        SvxAdjust eCurrentAdjustment = SVX_ADJUST_LEFT;
+        SvxAdjust eCurrentAdjustment = SvxAdjust::Left;
         const SfxPoolItem* pCurrentAdjustment = nullptr;
         if ( SfxItemState::SET == _rCurrentAttribs.GetItemState( EE_PARA_JUST, true, &pCurrentAdjustment ) )
             eCurrentAdjustment = static_cast< const SvxAdjustItem* >( pCurrentAdjustment )->GetAdjust();
@@ -438,10 +433,9 @@ namespace frm
         OSL_ENSURE( dynamic_cast<const SfxBoolItem*>( _pAdditionalArg) !=  nullptr, "BooleanHandler::executeAttribute: invalid argument!" );
         if ( _pAdditionalArg )
         {
-            SfxPoolItem* pCorrectWich = _pAdditionalArg->Clone();
+            std::unique_ptr<SfxPoolItem> pCorrectWich(_pAdditionalArg->Clone());
             pCorrectWich->SetWhich( getWhich() );
             _rNewAttribs.Put( *pCorrectWich );
-            DELETEZ( pCorrectWich );
         }
     }
 

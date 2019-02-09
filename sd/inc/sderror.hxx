@@ -20,32 +20,14 @@
 #ifndef INCLUDED_SD_INC_SDERROR_HXX
 #define INCLUDED_SD_INC_SDERROR_HXX
 
-#include <tools/errcode.hxx>
-
-#define ERROR_SD_BASE           (ERRCODE_AREA_SD)
-#define ERROR_SD_READ_BASE      (ERROR_SD_BASE | ERRCODE_CLASS_READ)
-#define ERROR_SD_WRITE_BASE     (ERROR_SD_BASE | ERRCODE_CLASS_WRITE)
-
-#define WARN_SD_BASE            (ERRCODE_AREA_SD | ERRCODE_WARNING_MASK)
-#define WARN_SD_READ_BASE       (WARN_SD_BASE | ERRCODE_CLASS_READ )
-#define WARN_SD_WRITE_BASE      (WARN_SD_BASE | ERRCODE_CLASS_WRITE )
+#include <vcl/errcode.hxx>
 
 // Import errors
-#define ERR_FORMAT_ROWCOL               (ERROR_SD_READ_BASE | 1)
-#define ERR_FORMAT_FILE_ROWCOL          (ERROR_SD_READ_BASE | 2)
+#define ERR_FORMAT_ROWCOL               ErrCode(ErrCodeArea::Sd, ErrCodeClass::Read, 1)
+#define ERR_FORMAT_FILE_ROWCOL          ErrCode(ErrCodeArea::Sd, ErrCodeClass::Read, 2)
 
-// ----- Warnings ---------------------------
-
-#define WARN_FORMAT_FILE_ROWCOL         (WARN_SD_READ_BASE | 100)
-
-#ifndef __RSC
-
-inline bool IsWarning( sal_uLong nErr )
-{
-    return 0 != ( nErr & ERRCODE_WARNING_MASK );
-}
-
-#endif
+// Warnings
+#define WARN_FORMAT_FILE_ROWCOL         ErrCode(WarningFlag::Yes, ErrCodeArea::Sd, ErrCodeClass::Read, 100)
 
 #endif
 

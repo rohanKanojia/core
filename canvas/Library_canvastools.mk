@@ -36,7 +36,6 @@ $(eval $(call gb_Library_use_libraries,canvastools,\
 	tk \
 	tl \
 	vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,canvastools,\
@@ -68,12 +67,6 @@ $(eval $(call gb_Library_add_defs,canvastools,\
 	-DAGG_VERSION=$(AGG_VERSION) \
 ))
 endif
-endif
-
-ifeq ($(OS),WNT)
-$(eval $(call gb_Library_use_system_win32_libs,canvastools,\
-	winmm \
-))
 endif
 
 # vim: set noet sw=4 ts=4:

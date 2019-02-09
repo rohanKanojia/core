@@ -19,43 +19,43 @@
 
 #include "swdlgfact.hxx"
 
-#include "abstract.hxx"
-#include "ascfldlg.hxx"
-#include "break.hxx"
-#include "convert.hxx"
-#include "dialmgr.hxx"
-#include "dbinsdlg.hxx"
-#include "DropDownFieldDialog.hxx"
-#include "fldtdlg.hxx"
-#include "glossary.hxx"
-#include "inpdlg.hxx"
-#include "insfnote.hxx"
-#include "instable.hxx"
-#include "javaedit.hxx"
-#include "label.hxx"
-#include "mailmrge.hxx"
-#include "mailmergewizard.hxx"
-#include "regionsw.hxx"
-#include "selglos.hxx"
-#include "splittbl.hxx"
-#include "tautofmt.hxx"
-#include "swmodalredlineacceptdlg.hxx"
-#include "swrenamexnameddlg.hxx"
-#include "swuiidxmrk.hxx"
-#include "swuicnttab.hxx"
-#include "wordcountdialog.hxx"
+#include <abstract.hxx>
+#include <ascfldlg.hxx>
+#include <break.hxx>
+#include <colwd.hxx>
+#include <convert.hxx>
+#include <srtdlg.hxx>
+#include <dbinsdlg.hxx>
+#include <DropDownFieldDialog.hxx>
+#include <fldtdlg.hxx>
+#include <glossary.hxx>
+#include <inpdlg.hxx>
+#include <insfnote.hxx>
+#include <instable.hxx>
+#include <javaedit.hxx>
+#include <label.hxx>
+#include <mailmrge.hxx>
+#include <mailmergewizard.hxx>
+#include <mergetbl.hxx>
+#include <multmrk.hxx>
+#include <regionsw.hxx>
+#include <rowht.hxx>
+#include <selglos.hxx>
+#include <splittbl.hxx>
+#include <tautofmt.hxx>
+#include <swmodalredlineacceptdlg.hxx>
+#include <swrenamexnameddlg.hxx>
+#include <swuiidxmrk.hxx>
+#include <swuicnttab.hxx>
+#include <wordcountdialog.hxx>
 #include <swuiexp.hxx>
 
 namespace swui
 {
-    static SwAbstractDialogFactory_Impl* pFactory=nullptr;
-    SwAbstractDialogFactory * GetFactory()
+    SwAbstractDialogFactory& GetFactory()
     {
-        if ( !pFactory )
-            pFactory = new SwAbstractDialogFactory_Impl;
-        if ( !pSwResMgr)
-            SwDialogsResMgr::GetResMgr();
-        return pFactory;
+        static SwAbstractDialogFactory_Impl aFactory;
+        return aFactory;
     }
 }
 
@@ -63,7 +63,7 @@ extern "C"
 {
     SAL_DLLPUBLIC_EXPORT SwAbstractDialogFactory* SwCreateDialogFactory()
     {
-        return ::swui::GetFactory();
+        return &::swui::GetFactory();
     }
 }
 

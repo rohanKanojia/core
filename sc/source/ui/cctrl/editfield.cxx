@@ -20,23 +20,18 @@
 #ifdef SC_DLLIMPLEMENTATION
 #undef SC_DLLIMPLEMENTATION
 #endif
-#include "editfield.hxx"
+#include <editfield.hxx>
 #include <comphelper/string.hxx>
 #include <rtl/math.hxx>
 #include <unotools/localedatawrapper.hxx>
 #include <vcl/builderfactory.hxx>
-#include "global.hxx"
+#include <global.hxx>
 
 namespace {
 
 sal_Unicode lclGetDecSep()
 {
     return ScGlobal::GetpLocaleData()->getNumDecimalSep()[0];
-}
-
-sal_Unicode lclGetGroupSep()
-{
-    return ScGlobal::GetpLocaleData()->getNumThousandSep()[0];
 }
 
 } // namespace
@@ -46,9 +41,9 @@ ScDoubleField::ScDoubleField( vcl::Window* pParent, WinBits nStyle ) :
 {
 }
 
-VCL_BUILDER_DECL_FACTORY(ScDoubleField)
+extern "C" SAL_DLLPUBLIC_EXPORT void makeScDoubleField(VclPtr<vcl::Window> & rRet, VclPtr<vcl::Window> & pParent, VclBuilder::stringmap & rMap)
 {
-    VclBuilder::ensureDefaultWidthChars(rMap);
+    BuilderUtils::ensureDefaultWidthChars(rMap);
     rRet = VclPtr<ScDoubleField>::Create(pParent, WB_LEFT|WB_VCENTER|WB_BORDER|WB_3DLOOK);
 }
 
@@ -60,7 +55,7 @@ bool ScDoubleField::GetValue( double& rfValue ) const
     {
         rtl_math_ConversionStatus eStatus;
         sal_Int32 nEnd;
-        rfValue = rtl::math::stringToDouble( aStr, lclGetDecSep(), lclGetGroupSep(), &eStatus, &nEnd );
+        rfValue = ScGlobal::GetpLocaleData()->stringToDouble( aStr, true, &eStatus, &nEnd );
         bOk = (eStatus == rtl_math_ConversionStatus_Ok) && (nEnd == aStr.getLength() );
     }
     return bOk;

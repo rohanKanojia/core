@@ -11,8 +11,8 @@
 <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
     <xsl:output method="xml" encoding="UTF-8"/>
 
-    <xsl:strip-space elements="*"/> 
-    <xsl:preserve-space elements="paragraph"/> 
+    <xsl:strip-space elements="*"/>
+    <xsl:preserve-space elements="paragraph"/>
 
     <!-- Copy everything -->
     <xsl:template match="@*|node()|text()">
@@ -21,8 +21,8 @@
         </xsl:copy>
     </xsl:template>
 
-    <!-- To remove attributes or nodes, 
-         simply write a matching template that doesn't do anything. 
+    <!-- To remove attributes or nodes,
+         simply write a matching template that doesn't do anything.
          Therefore, it is removed -->
     <xsl:template match="image/@localize">
         <xsl:copy>
@@ -41,8 +41,6 @@
     <xsl:template match="image/@height"/>
     <xsl:template match="link/@name"/>
     <xsl:template match="paragraph/@id"/>
-    <xsl:template match="paragraph/@l10n"/>
-    <xsl:template match="paragraph/@oldref"/>
     <xsl:template match="table/@id"/>
     <xsl:template match="title/@id"/>
     <xsl:template match="topic/@id"/>

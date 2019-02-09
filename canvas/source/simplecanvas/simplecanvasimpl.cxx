@@ -45,7 +45,7 @@ using namespace canvas;
 
 namespace
 {
-    inline uno::Sequence< double > color2Sequence( sal_Int32 nColor )
+    uno::Sequence< double > color2Sequence( sal_Int32 nColor )
     {
         // TODO(F3): Color management
         uno::Sequence< double > aRes( 4 );
@@ -58,7 +58,7 @@ namespace
         return aRes;
     }
 
-    inline uno::Reference< rendering::XPolyPolygon2D > rect2Poly( uno::Reference<rendering::XGraphicDevice> const& xDevice,
+    uno::Reference< rendering::XPolyPolygon2D > rect2Poly( uno::Reference<rendering::XGraphicDevice> const& xDevice,
                                                                   geometry::RealRectangle2D const&                 rRect )
     {
         uno::Sequence< geometry::RealPoint2D > rectSequence( 4 );
@@ -75,7 +75,7 @@ namespace
             xDevice->createCompatibleLinePolyPolygon( sequenceSequence ),
             uno::UNO_QUERY );
         if( xRes.is() )
-            xRes->setClosed( 0, sal_True );
+            xRes->setClosed( 0, true );
         return xRes;
     }
 
@@ -112,7 +112,7 @@ namespace
     private:
         bool isStrokingEnabled() const
         {
-            return maRenderState.m_aPenColor.getInValue() && sal_Int32(0xFF) != 0;
+            return maRenderState.m_aPenColor.getInValue() % 0x100 != 0;
         }
 
         rendering::RenderState createStrokingRenderState() const
@@ -125,7 +125,7 @@ namespace
 
         bool isFillingEnabled() const
         {
-            return maRenderState.m_aFillColor.getInValue() && sal_Int32(0xFF) != 0;
+            return maRenderState.m_aFillColor.getInValue() % 0x100 != 0;
         }
 
         rendering::RenderState createFillingRenderState() const
@@ -171,7 +171,7 @@ namespace
 
     private:
         // Ifc XServiceName
-        virtual OUString SAL_CALL getServiceName(  ) throw (uno::RuntimeException, std::exception) override
+        virtual OUString SAL_CALL getServiceName(  ) override
         {
             return OUString( SERVICE_NAME );
         }
@@ -180,7 +180,7 @@ namespace
         virtual void SAL_CALL selectFont( const OUString& sFontName,
                                           double                 size,
                                           sal_Bool             bold,
-                                          sal_Bool             italic ) throw (uno::RuntimeException, std::exception) override
+                                          sal_Bool             italic ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -192,31 +192,31 @@ namespace
                 italic ? rendering::PanoseLetterForm::OBLIQUE_CONTACT : rendering::PanoseLetterForm::ANYTHING;
         }
 
-        virtual void SAL_CALL setPenColor( ::sal_Int32 nsRgbaColor ) throw (uno::RuntimeException, std::exception) override
+        virtual void SAL_CALL setPenColor( ::sal_Int32 nsRgbaColor ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             *(maRenderState.m_aPenColor) = nsRgbaColor;
         }
 
-        virtual void SAL_CALL setFillColor( ::sal_Int32 nsRgbaColor ) throw (uno::RuntimeException, std::exception) override
+        virtual void SAL_CALL setFillColor( ::sal_Int32 nsRgbaColor ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             *(maRenderState.m_aFillColor) = nsRgbaColor;
         }
 
-        virtual void SAL_CALL setRectClip( const geometry::RealRectangle2D& aRect ) throw (uno::RuntimeException, std::exception) override
+        virtual void SAL_CALL setRectClip( const geometry::RealRectangle2D& aRect ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             *(maRenderState.m_aRectClip) = aRect;
         }
 
-        virtual void SAL_CALL setTransformation( const geometry::AffineMatrix2D& aTransform ) throw (uno::RuntimeException, std::exception) override
+        virtual void SAL_CALL setTransformation( const geometry::AffineMatrix2D& aTransform ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             maRenderState.m_aTransformation = aTransform;
         }
 
-        virtual void SAL_CALL drawPixel( const geometry::RealPoint2D& aPoint ) throw (uno::RuntimeException, std::exception) override
+        virtual void SAL_CALL drawPixel( const geometry::RealPoint2D& aPoint ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             mxCanvas->drawPoint(aPoint,
@@ -225,7 +225,7 @@ namespace
         }
 
         virtual void SAL_CALL drawLine( const geometry::RealPoint2D& aStartPoint,
-                                        const geometry::RealPoint2D& aEndPoint ) throw (uno::RuntimeException, std::exception) override
+                                        const geometry::RealPoint2D& aEndPoint ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             mxCanvas->drawLine(aStartPoint,
@@ -234,7 +234,7 @@ namespace
                                createStrokingRenderState());
         }
 
-        virtual void SAL_CALL drawRect( const geometry::RealRectangle2D& aRect ) throw (uno::RuntimeException, std::exception) override
+        virtual void SAL_CALL drawRect( const geometry::RealRectangle2D& aRect ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             uno::Reference< rendering::XPolyPolygon2D > xPoly(
@@ -251,8 +251,7 @@ namespace
                                           createStrokingRenderState());
         }
 
-        virtual void SAL_CALL drawPolyPolygon( const uno::Reference< rendering::XPolyPolygon2D >& xPolyPolygon )
-            throw (uno::RuntimeException, std::exception) override
+        virtual void SAL_CALL drawPolyPolygon( const uno::Reference< rendering::XPolyPolygon2D >& xPolyPolygon ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -268,10 +267,10 @@ namespace
 
         virtual void SAL_CALL drawText( const rendering::StringContext& aText,
                                         const geometry::RealPoint2D&    aOutPos,
-                                        ::sal_Int8                      nTextDirection ) throw (uno::RuntimeException, std::exception) override
+                                        ::sal_Int8                      nTextDirection ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
-            const basegfx::B2DHomMatrix offsetTransform(basegfx::tools::createTranslateB2DHomMatrix(aOutPos.X,aOutPos.Y));
+            const basegfx::B2DHomMatrix offsetTransform(basegfx::utils::createTranslateB2DHomMatrix(aOutPos.X,aOutPos.Y));
             rendering::RenderState aRenderState( createStrokingRenderState() );
             tools::appendToRenderState(aRenderState, offsetTransform);
 
@@ -283,72 +282,71 @@ namespace
         }
 
         virtual void SAL_CALL drawBitmap( const uno::Reference< rendering::XBitmap >& xBitmap,
-                                          const geometry::RealPoint2D&                aLeftTop )
-            throw (uno::RuntimeException, std::exception) override
+                                          const geometry::RealPoint2D&                aLeftTop ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
-            const basegfx::B2DHomMatrix offsetTransform(basegfx::tools::createTranslateB2DHomMatrix(aLeftTop.X,aLeftTop.Y));
+            const basegfx::B2DHomMatrix offsetTransform(basegfx::utils::createTranslateB2DHomMatrix(aLeftTop.X,aLeftTop.Y));
             rendering::RenderState aRenderState( createStrokingRenderState() );
             tools::appendToRenderState(aRenderState, offsetTransform);
 
             mxCanvas->drawBitmap(xBitmap,maViewState,aRenderState);
         }
 
-        virtual uno::Reference< rendering::XGraphicDevice > SAL_CALL getDevice(  ) throw (uno::RuntimeException, std::exception) override
+        virtual uno::Reference< rendering::XGraphicDevice > SAL_CALL getDevice(  ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             return mxCanvas->getDevice();
         }
 
-        virtual uno::Reference< rendering::XCanvas > SAL_CALL getCanvas(  ) throw (uno::RuntimeException, std::exception) override
+        virtual uno::Reference< rendering::XCanvas > SAL_CALL getCanvas(  ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             return mxCanvas;
         }
 
-        virtual rendering::FontMetrics SAL_CALL getFontMetrics(  ) throw (uno::RuntimeException, std::exception) override
+        virtual rendering::FontMetrics SAL_CALL getFontMetrics(  ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             return maFont.getOutValue()->getFontMetrics();
         }
 
-        virtual uno::Reference< rendering::XCanvasFont > SAL_CALL getCurrentFont(  ) throw (uno::RuntimeException, std::exception) override
+        virtual uno::Reference< rendering::XCanvasFont > SAL_CALL getCurrentFont(  ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             return maFont.getOutValue();
         }
 
-        virtual ::sal_Int32 SAL_CALL getCurrentPenColor(  ) throw (uno::RuntimeException, std::exception) override
+        virtual ::sal_Int32 SAL_CALL getCurrentPenColor(  ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             return maRenderState.m_aPenColor.getInValue();
         }
 
-        virtual ::sal_Int32 SAL_CALL getCurrentFillColor(  ) throw (uno::RuntimeException, std::exception) override
+        virtual ::sal_Int32 SAL_CALL getCurrentFillColor(  ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             return maRenderState.m_aFillColor.getInValue();
         }
 
-        virtual geometry::RealRectangle2D SAL_CALL getCurrentClipRect(  ) throw (uno::RuntimeException, std::exception) override
+        virtual geometry::RealRectangle2D SAL_CALL getCurrentClipRect(  ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             return maRenderState.m_aRectClip.getInValue();
         }
 
-        virtual geometry::AffineMatrix2D SAL_CALL getCurrentTransformation(  ) throw (uno::RuntimeException, std::exception) override
+        virtual geometry::AffineMatrix2D SAL_CALL getCurrentTransformation(  ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             return maRenderState.m_aTransformation;
         }
 
-        virtual rendering::ViewState SAL_CALL getCurrentViewState(  ) throw (uno::RuntimeException, std::exception) override
+        virtual rendering::ViewState SAL_CALL getCurrentViewState(  ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             return maViewState;
         }
 
-        virtual rendering::RenderState SAL_CALL getCurrentRenderState( sal_Bool bUseFillColor ) throw (uno::RuntimeException, std::exception) override
+        virtual rendering::RenderState SAL_CALL getCurrentRenderState( sal_Bool bUseFillColor ) override
         {
             ::osl::MutexGuard aGuard( m_aMutex );
             if( bUseFillColor )
@@ -377,7 +375,7 @@ namespace
 }
 
 // The C shared lib entry points
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL simplecanvas_component_getFactory( sal_Char const* pImplName,
+extern "C" SAL_DLLPUBLIC_EXPORT void* simplecanvas_component_getFactory( sal_Char const* pImplName,
                                          void*, void* )
 {
     return sdecl::component_getFactoryHelper( pImplName, {&simpleCanvasDecl} );

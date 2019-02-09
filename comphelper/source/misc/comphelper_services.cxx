@@ -18,8 +18,8 @@
  */
 
 
-#include "comphelper_module.hxx"
-#include "comphelper_services.hxx"
+#include <comphelper_module.hxx>
+#include <comphelper_services.hxx>
 
 #include <rtl/instance.hxx>
 
@@ -34,8 +34,6 @@ namespace comphelper { namespace module
         public:
             doInitialize()
             {
-                createRegistryInfo_OPropertyBag();
-                createRegistryInfo_UNOMemoryStream();
                 createRegistryInfo_Map();
             }
         };
@@ -52,7 +50,7 @@ namespace comphelper { namespace module
 } } // namespace comphelper::module
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL comphelp_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void* comphelp_component_getFactory(
     const sal_Char* pImplementationName, SAL_UNUSED_PARAMETER void*,
     SAL_UNUSED_PARAMETER void* )
 {

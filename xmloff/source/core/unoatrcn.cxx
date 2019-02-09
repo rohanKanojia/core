@@ -17,8 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <string.h>
 #include <com/sun/star/xml/AttributeData.hpp>
+#include <o3tl/any.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <comphelper/servicehelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -37,27 +39,20 @@ uno::Reference< uno::XInterface >  SvUnoAttributeContainer_CreateInstance()
     return *(new SvUnoAttributeContainer);
 }
 
-SvUnoAttributeContainer::SvUnoAttributeContainer( SvXMLAttrContainerData* pContainer)
-: mpContainer( pContainer )
+SvUnoAttributeContainer::SvUnoAttributeContainer( std::unique_ptr<SvXMLAttrContainerData> pContainer)
+: mpContainer( std::move( pContainer ) )
 {
-    if( mpContainer == nullptr )
-        mpContainer = new SvXMLAttrContainerData;
-}
-
-SvUnoAttributeContainer::~SvUnoAttributeContainer()
-{
-    delete mpContainer;
+    if( !mpContainer )
+        mpContainer = std::make_unique<SvXMLAttrContainerData>();
 }
 
 // container::XElementAccess
 uno::Type SAL_CALL SvUnoAttributeContainer::getElementType()
-    throw( uno::RuntimeException, std::exception )
 {
     return cppu::UnoType<xml::AttributeData>::get();
 }
 
 sal_Bool SAL_CALL SvUnoAttributeContainer::hasElements()
-    throw( uno::RuntimeException, std::exception )
 {
     return mpContainer->GetAttrCount() != 0;
 }
@@ -67,7 +62,7 @@ sal_uInt16 SvUnoAttributeContainer::getIndexByName(const OUString& aName ) const
     const sal_uInt16 nAttrCount = mpContainer->GetAttrCount();
 
     sal_Int32 nPos = aName.indexOf( ':' );
-    if( nPos == -1L )
+    if( nPos == -1 )
     {
         for( sal_uInt16 nAttr = 0; nAttr < nAttrCount; nAttr++ )
         {
@@ -79,7 +74,7 @@ sal_uInt16 SvUnoAttributeContainer::getIndexByName(const OUString& aName ) const
     else
     {
         const OUString aPrefix( aName.copy( 0L, nPos ) );
-        const OUString aLName( aName.copy( nPos+1L ) );
+        const OUString aLName( aName.copy( nPos+1 ) );
 
         for( sal_uInt16 nAttr = 0; nAttr < nAttrCount; nAttr++ )
         {
@@ -102,7 +97,7 @@ const css::uno::Sequence< sal_Int8 > & SvUnoAttributeContainer::getUnoTunnelId()
     return theSvUnoAttributeContainerUnoTunnelId::get().getSeq();
 }
 
-sal_Int64 SAL_CALL SvUnoAttributeContainer::getSomething( const css::uno::Sequence< sal_Int8 >& rId ) throw(css::uno::RuntimeException, std::exception)
+sal_Int64 SAL_CALL SvUnoAttributeContainer::getSomething( const css::uno::Sequence< sal_Int8 >& rId )
 {
     if( rId.getLength() == 16 && 0 == memcmp( getUnoTunnelId().getConstArray(),
                                                          rId.getConstArray(), 16 ) )
@@ -114,7 +109,6 @@ sal_Int64 SAL_CALL SvUnoAttributeContainer::getSomething( const css::uno::Sequen
 
 // container::XNameAccess
 uno::Any SAL_CALL SvUnoAttributeContainer::getByName(const OUString& aName)
-    throw( container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     sal_uInt16 nAttr = getIndexByName(aName );
 
@@ -126,16 +120,14 @@ uno::Any SAL_CALL SvUnoAttributeContainer::getByName(const OUString& aName)
     aData.Type = "CDATA";
     aData.Value = mpContainer->GetAttrValue(nAttr);
 
-    uno::Any aAny;
-    aAny <<= aData;
-    return aAny;
+    return uno::Any(aData);
 }
 
-uno::Sequence< OUString > SAL_CALL SvUnoAttributeContainer::getElementNames() throw( uno::RuntimeException, std::exception )
+uno::Sequence< OUString > SAL_CALL SvUnoAttributeContainer::getElementNames()
 {
     const sal_uInt16 nAttrCount = mpContainer->GetAttrCount();
 
-    uno::Sequence< OUString > aElementNames( (sal_Int32)nAttrCount );
+    uno::Sequence< OUString > aElementNames( static_cast<sal_Int32>(nAttrCount) );
     OUString *pNames = aElementNames.getArray();
 
     for( sal_uInt16 nAttr = 0; nAttr < nAttrCount; nAttr++ )
@@ -150,28 +142,25 @@ uno::Sequence< OUString > SAL_CALL SvUnoAttributeContainer::getElementNames() th
     return aElementNames;
 }
 
-sal_Bool SAL_CALL SvUnoAttributeContainer::hasByName(const OUString& aName) throw( uno::RuntimeException, std::exception )
+sal_Bool SAL_CALL SvUnoAttributeContainer::hasByName(const OUString& aName)
 {
     return getIndexByName(aName ) != USHRT_MAX;
 }
 
 // container::XNameReplace
 void SAL_CALL SvUnoAttributeContainer::replaceByName(const OUString& aName, const uno::Any& aElement)
-    throw( lang::IllegalArgumentException, container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
-    if( aElement.hasValue() && aElement.getValueType() == cppu::UnoType<xml::AttributeData>::get())
+    if( auto pData = o3tl::tryAccess<xml::AttributeData>(aElement) )
     {
         sal_uInt16 nAttr = getIndexByName(aName );
         if( nAttr == USHRT_MAX )
             throw container::NoSuchElementException();
 
-        xml::AttributeData const * pData = static_cast<xml::AttributeData const *>(aElement.getValue());
-
         sal_Int32 nPos = aName.indexOf( ':' );
-        if( nPos != -1L )
+        if( nPos != -1 )
         {
             const OUString aPrefix( aName.copy( 0L, nPos ));
-            const OUString aLName( aName.copy( nPos+1L ));
+            const OUString aLName( aName.copy( nPos+1 ));
 
             if( pData->Namespace.isEmpty() )
             {
@@ -199,22 +188,20 @@ void SAL_CALL SvUnoAttributeContainer::replaceByName(const OUString& aName, cons
 
 // container::XNameContainer
 void SAL_CALL SvUnoAttributeContainer::insertByName(const OUString& aName, const uno::Any& aElement)
-throw( lang::IllegalArgumentException, container::ElementExistException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
-    if( !aElement.hasValue() || aElement.getValueType() != cppu::UnoType<xml::AttributeData>::get())
+    auto pData = o3tl::tryAccess<xml::AttributeData>(aElement);
+    if( !pData )
         throw lang::IllegalArgumentException();
 
     sal_uInt16 nAttr = getIndexByName(aName );
     if( nAttr != USHRT_MAX )
         throw container::ElementExistException();
 
-    xml::AttributeData const * pData = static_cast<xml::AttributeData const *>(aElement.getValue());
-
     sal_Int32 nPos = aName.indexOf( ':' );
-    if( nPos != -1L )
+    if( nPos != -1 )
     {
         const OUString aPrefix( aName.copy( 0L, nPos ));
-        const OUString aLName( aName.copy( nPos+1L ));
+        const OUString aLName( aName.copy( nPos+1 ));
 
         if( pData->Namespace.isEmpty() )
         {
@@ -238,7 +225,6 @@ throw( lang::IllegalArgumentException, container::ElementExistException, lang::W
 }
 
 void SAL_CALL SvUnoAttributeContainer::removeByName(const OUString& Name)
-    throw( container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     sal_uInt16 nAttr = getIndexByName(Name);
     if( nAttr == USHRT_MAX )
@@ -248,21 +234,19 @@ void SAL_CALL SvUnoAttributeContainer::removeByName(const OUString& Name)
 }
 
 //XServiceInfo
-OUString SAL_CALL SvUnoAttributeContainer::getImplementationName() throw( uno::RuntimeException, std::exception )
+OUString SAL_CALL SvUnoAttributeContainer::getImplementationName()
 {
     return OUString( "SvUnoAttributeContainer" );
 }
 
 uno::Sequence< OUString > SvUnoAttributeContainer::getSupportedServiceNames()
-    throw( uno::RuntimeException, std::exception )
 {
     OUString aSN( "com.sun.star.xml.AttributeContainer" );
-    uno::Sequence< OUString > aNS( &aSN, 1L );
+    uno::Sequence< OUString > aNS( &aSN, 1 );
     return aNS;
 }
 
 sal_Bool SvUnoAttributeContainer::supportsService(const OUString& ServiceName)
-    throw( uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, ServiceName);
 }

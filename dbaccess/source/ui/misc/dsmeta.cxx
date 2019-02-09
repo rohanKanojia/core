@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dsmeta.hxx"
+#include <dsmeta.hxx>
 #include <connectivity/DriversConfig.hxx>
-#include "dsntypes.hxx"
+#include <dsntypes.hxx>
 #include <comphelper/processfactory.hxx>
 
 #include <map>
@@ -41,8 +41,8 @@ namespace dbaui
         {
         }
 
-        explicit FeatureSupport(AuthenticationMode _Auth)
-            :eAuthentication( _Auth )
+        explicit FeatureSupport(AuthenticationMode Auth)
+            :eAuthentication( Auth )
         {
         }
     };
@@ -86,19 +86,16 @@ namespace dbaui
 
     static const FeatureSet& lcl_getFeatureSet( const OUString& _rURL )
     {
-        typedef ::std::map< OUString, FeatureSet > FeatureSets;
-        static FeatureSets s_aFeatureSets;
-        if ( s_aFeatureSets.empty() )
+        typedef std::map< OUString, FeatureSet > FeatureSets;
+        static FeatureSets s_aFeatureSets = [&]()
         {
+            FeatureSets tmp;
             ::connectivity::DriversConfig aDriverConfig( ::comphelper::getProcessComponentContext() );
             const uno::Sequence< OUString > aPatterns = aDriverConfig.getURLs();
-            for (   const OUString* pattern = aPatterns.getConstArray();
-                    pattern != aPatterns.getConstArray() + aPatterns.getLength();
-                    ++pattern
-                )
+            for ( auto const & pattern : aPatterns )
             {
                 FeatureSet aCurrentSet;
-                const ::comphelper::NamedValueCollection aCurrentFeatures( aDriverConfig.getFeatures( *pattern ).getNamedValues() );
+                const ::comphelper::NamedValueCollection aCurrentFeatures( aDriverConfig.getFeatures( pattern ).getNamedValues() );
 
                 const FeatureMapping* pFeatureMapping = lcl_getFeatureMappings();
                 while ( pFeatureMapping->pAsciiFeatureName )
@@ -108,9 +105,10 @@ namespace dbaui
                     ++pFeatureMapping;
                 }
 
-                s_aFeatureSets[ *pattern ] = aCurrentSet;
+                tmp[ pattern ] = aCurrentSet;
             }
-        }
+            return tmp;
+        }();
 
         OSL_ENSURE( s_aFeatureSets.find( _rURL ) != s_aFeatureSets.end(), "invalid URL/pattern!" );
         return s_aFeatureSets[ _rURL ];
@@ -118,9 +116,9 @@ namespace dbaui
 
     static AuthenticationMode getAuthenticationMode( const OUString& _sURL )
     {
-        static std::map< OUString, FeatureSupport > s_aSupport;
-        if ( s_aSupport.empty() )
+        static std::map< OUString, FeatureSupport > s_aSupport = [&]()
         {
+            std::map< OUString, FeatureSupport > tmp;
             ::connectivity::DriversConfig aDriverConfig(::comphelper::getProcessComponentContext());
             const uno::Sequence< OUString > aURLs = aDriverConfig.getURLs();
             const OUString* pIter = aURLs.getConstArray();
@@ -138,9 +136,10 @@ namespace dbaui
                     else if ( sAuth == "Password" )
                         aInit = FeatureSupport(AuthPwd);
                 }
-                s_aSupport.insert(std::make_pair(*pIter,aInit));
+                tmp.insert(std::make_pair(*pIter,aInit));
             }
-        }
+            return tmp;
+        }();
         OSL_ENSURE(s_aSupport.find(_sURL) != s_aSupport.end(),"Illegal URL!");
         return s_aSupport[ _sURL ].eAuthentication;
     }

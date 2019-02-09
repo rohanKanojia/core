@@ -18,19 +18,19 @@
  */
 
 
-#include "basidesh.hxx"
-#include "dlged.hxx"
-#include "dlgedclip.hxx"
-#include "dlgeddef.hxx"
-#include "dlgedfac.hxx"
-#include "dlgedfunc.hxx"
-#include "dlgedmod.hxx"
-#include "dlgedobj.hxx"
-#include "dlgedpage.hxx"
-#include "dlgedview.hxx"
-#include "iderdll.hxx"
-#include "localizationmgr.hxx"
-#include "baside3.hxx"
+#include <basidesh.hxx>
+#include <dlged.hxx>
+#include <dlgedclip.hxx>
+#include <dlgeddef.hxx>
+#include <dlgedfac.hxx>
+#include <dlgedfunc.hxx>
+#include <dlgedmod.hxx>
+#include <dlgedobj.hxx>
+#include <dlgedpage.hxx>
+#include <dlgedview.hxx>
+#include <iderdll.hxx>
+#include <localizationmgr.hxx>
+#include <baside3.hxx>
 
 #include <com/sun/star/awt/Toolkit.hpp>
 #include <com/sun/star/awt/UnoControlDialog.hpp>
@@ -39,6 +39,7 @@
 #include <com/sun/star/util/XCloneable.hpp>
 #include <com/sun/star/util/NumberFormatsSupplier.hpp>
 #include <comphelper/types.hxx>
+#include <comphelper/processfactory.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <svl/itempool.hxx>
 #include <svx/sdrpaintwindow.hxx>
@@ -59,7 +60,6 @@ using namespace ::com::sun::star::io;
 
 static const char aResourceResolverPropName[] = "ResourceResolver";
 static const char aDecorationPropName[] = "Decoration";
-static const char aTitlePropName[] = "Title";
 
 
 // DlgEdHint
@@ -123,8 +123,8 @@ void DlgEditor::ShowDialog()
             aDecorationAny >>= bDecoration;
             if( !bDecoration )
             {
-                xNewDlgModPropSet->setPropertyValue( aDecorationPropName, makeAny( true ) );
-                xNewDlgModPropSet->setPropertyValue( aTitlePropName, makeAny( OUString() ) );
+                xNewDlgModPropSet->setPropertyValue( aDecorationPropName, Any( true ) );
+                xNewDlgModPropSet->setPropertyValue( "Title", Any( OUString() ) );
             }
         }
         catch(const UnknownPropertyException& )
@@ -176,7 +176,7 @@ bool DlgEditor::RemarkDialog()
 DlgEditor::DlgEditor (
     vcl::Window& rWindow_, DialogWindowLayout& rLayout_,
     css::uno::Reference<css::frame::XModel> const& xModel,
-    css::uno::Reference<css::container::XNameContainer> xDialogModel
+    css::uno::Reference<css::container::XNameContainer> const & xDialogModel
 )
     :pHScroll(nullptr)
     ,pVScroll(nullptr)
@@ -191,17 +191,15 @@ DlgEditor::DlgEditor (
     ,eMode( DlgEditor::SELECT )
     ,eActObj( OBJ_DLG_PUSHBUTTON )
     ,bFirstDraw(false)
-    ,aGridSize( 100, 100 )  // 100TH_MM
-    ,bGridVisible(false)
-    ,bGridSnap(true)
     ,bCreateOK(true)
     ,bDialogModelChanged(false)
+    ,aMarkIdle("basctl DlgEditor Mark")
     ,mnPaintGuard(0)
     ,m_xDocument( xModel )
 {
     pDlgEdModel->GetItemPool().FreezeIdRanges();
     pDlgEdView.reset(new DlgEdView(*pDlgEdModel, rWindow_, *this));
-    pDlgEdModel->SetScaleUnit( MAP_100TH_MM );
+    pDlgEdModel->SetScaleUnit( MapUnit::Map100thMM );
 
     SdrLayerAdmin& rAdmin = pDlgEdModel->GetLayerAdmin();
     rAdmin.NewLayer( rAdmin.GetControlLayerName() );
@@ -219,21 +217,21 @@ DlgEditor::DlgEditor (
     m_ClipboardDataFlavorsResource[1].HumanPresentableName = "Dialog 8.0" ;
     m_ClipboardDataFlavorsResource[1].DataType =             cppu::UnoType<Sequence< sal_Int8 >>::get();
 
-    aMarkIdle.SetPriority(SchedulerPriority::LOW);
-    aMarkIdle.SetIdleHdl( LINK( this, DlgEditor, MarkTimeout ) );
+    aMarkIdle.SetInvokeHandler( LINK( this, DlgEditor, MarkTimeout ) );
 
-    rWindow.SetMapMode( MapMode( MAP_100TH_MM ) );
+    rWindow.SetMapMode( MapMode( MapUnit::Map100thMM ) );
     pDlgEdPage->SetSize( rWindow.PixelToLogic( Size(DLGED_PAGE_WIDTH_MIN, DLGED_PAGE_HEIGHT_MIN) ) );
 
     pDlgEdView->ShowSdrPage(pDlgEdView->GetModel()->GetPage(0));
     pDlgEdView->SetLayerVisible( "HiddenLayer", false );
     pDlgEdView->SetMoveSnapOnlyTopLeft(true);
-    pDlgEdView->SetWorkArea( Rectangle( Point( 0, 0 ), pDlgEdPage->GetSize() ) );
+    pDlgEdView->SetWorkArea( tools::Rectangle( Point( 0, 0 ), pDlgEdPage->GetSize() ) );
 
+    Size aGridSize( 100, 100 );  // 100TH_MM
     pDlgEdView->SetGridCoarse( aGridSize );
     pDlgEdView->SetSnapGridWidth(Fraction(aGridSize.Width(), 1), Fraction(aGridSize.Height(), 1));
-    pDlgEdView->SetGridSnap( bGridSnap );
-    pDlgEdView->SetGridVisible( bGridVisible );
+    pDlgEdView->SetGridSnap( true );
+    pDlgEdView->SetGridVisible( false );
     pDlgEdView->SetDragStripes(false);
 
     pDlgEdView->SetDesignMode();
@@ -252,7 +250,7 @@ DlgEditor::~DlgEditor()
 }
 
 
-Reference< awt::XControlContainer > DlgEditor::GetWindowControlContainer()
+Reference< awt::XControlContainer > const & DlgEditor::GetWindowControlContainer()
 {
     if (!m_xControlContainer.is())
         m_xControlContainer = VCLUnoHelper::CreateControlContainer(&rWindow);
@@ -281,20 +279,19 @@ void DlgEditor::InitScrollBars()
 
     pHScroll->SetRange( Range( 0, aPgSize.Width()  ));
     pVScroll->SetRange( Range( 0, aPgSize.Height() ));
-    pHScroll->SetVisibleSize( (sal_uLong)aOutSize.Width() );
-    pVScroll->SetVisibleSize( (sal_uLong)aOutSize.Height() );
+    pHScroll->SetVisibleSize( static_cast<sal_uLong>(aOutSize.Width()) );
+    pVScroll->SetVisibleSize( static_cast<sal_uLong>(aOutSize.Height()) );
 
     pHScroll->SetLineSize( aOutSize.Width() / 10 );
     pVScroll->SetLineSize( aOutSize.Height() / 10 );
     pHScroll->SetPageSize( aOutSize.Width() / 2 );
     pVScroll->SetPageSize( aOutSize.Height() / 2 );
 
-    DoScroll( pHScroll );
-    DoScroll( pVScroll );
+    DoScroll();
 }
 
 
-void DlgEditor::DoScroll( ScrollBar* )
+void DlgEditor::DoScroll()
 {
     if( !pHScroll || !pVScroll )
         return;
@@ -351,7 +348,7 @@ void DlgEditor::SetDialog( const uno::Reference< container::XNameContainer >& xU
     m_xUnoControlDialogModel = xUnoControlDialogModel;
 
     // create dialog form
-    pDlgEdForm = new DlgEdForm(*this);
+    pDlgEdForm = new DlgEdForm(*pDlgEdModel, *this);
     uno::Reference< awt::XControlModel > xDlgMod( m_xUnoControlDialogModel , uno::UNO_QUERY );
     pDlgEdForm->SetUnoControlModel(xDlgMod);
     static_cast<DlgEdPage*>(pDlgEdModel->GetPage(0))->SetDlgEdForm( pDlgEdForm );
@@ -381,21 +378,21 @@ void DlgEditor::SetDialog( const uno::Reference< container::XNameContainer >& xU
             sal_Int16 nTabIndex = -1;
             Any aCtrl = xNameAcc->getByName( aName );
             Reference< css::beans::XPropertySet > xPSet;
-               aCtrl >>= xPSet;
+            aCtrl >>= xPSet;
             if ( xPSet.is() )
                 xPSet->getPropertyValue( DLGED_PROP_TABINDEX ) >>= nTabIndex;
 
             // insert into map
-            aIndexToNameMap.insert( IndexToNameMap::value_type( nTabIndex, aName ) );
+            aIndexToNameMap.emplace( nTabIndex, aName );
         }
 
         // create controls and insert them into drawing page
-        for ( IndexToNameMap::iterator aIt = aIndexToNameMap.begin(); aIt != aIndexToNameMap.end(); ++aIt )
+        for (auto const& indexToName : aIndexToNameMap)
         {
-            Any aCtrl = xNameAcc->getByName( aIt->second );
+            Any aCtrl = xNameAcc->getByName( indexToName.second );
             Reference< css::awt::XControlModel > xCtrlModel;
             aCtrl >>= xCtrlModel;
-            DlgEdObj* pCtrlObj = new DlgEdObj();
+            DlgEdObj* pCtrlObj = new DlgEdObj(*pDlgEdModel);
             pCtrlObj->SetUnoControlModel( xCtrlModel );
             pCtrlObj->SetDlgEdForm( pDlgEdForm );
             pDlgEdForm->AddChild( pCtrlObj );
@@ -418,7 +415,10 @@ void DlgEditor::ResetDialog ()
     SdrPageView* pPgView = pDlgEdView->GetSdrPageView();
     bool bWasMarked = pDlgEdView->IsObjMarked( pOldDlgEdForm );
     pDlgEdView->UnmarkAll();
-    pPage->Clear();
+
+    // clear SdrObjects with broadcasting
+    pPage->ClearSdrObjList();
+
     pPage->SetDlgEdForm( nullptr );
     SetDialog( m_xUnoControlDialogModel );
     if( bWasMarked )
@@ -471,13 +471,12 @@ bool DlgEditor::KeyInput( const KeyEvent& rKEvt )
 }
 
 
-void DlgEditor::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void DlgEditor::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect)
 {
     aPaintRect = rRect;
     mnPaintGuard++;
 
-    Size aMacSize;
-    if (bFirstDraw && rWindow.IsVisible() && (rRenderContext.GetOutputSize() != aMacSize))
+    if (bFirstDraw && rWindow.IsVisible() && (rRenderContext.GetOutputSize() != Size()))
     {
         bFirstDraw = false;
 
@@ -497,29 +496,29 @@ void DlgEditor::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect
 
                 // align with grid
                 Size aGridSize_(long(pDlgEdView->GetSnapGridWidthX()), long(pDlgEdView->GetSnapGridWidthY()));
-                aSize.Width()  -= aSize.Width()  % aGridSize_.Width();
-                aSize.Height() -= aSize.Height() % aGridSize_.Height();
+                aSize.AdjustWidth( -(aSize.Width()  % aGridSize_.Width()) );
+                aSize.AdjustHeight( -(aSize.Height() % aGridSize_.Height()) );
 
                 Point  aPos;
                 Size   aOutSize = rRenderContext.GetOutputSize();
-                aPos.X() = (aOutSize.Width()>>1)  -  (aSize.Width()>>1);
-                aPos.Y() = (aOutSize.Height()>>1) -  (aSize.Height()>>1);
+                aPos.setX( (aOutSize.Width()>>1)  -  (aSize.Width()>>1) );
+                aPos.setY( (aOutSize.Height()>>1) -  (aSize.Height()>>1) );
 
                 // align with grid
-                aPos.X() -= aPos.X() % aGridSize_.Width();
-                aPos.Y() -= aPos.Y() % aGridSize_.Height();
+                aPos.AdjustX( -(aPos.X() % aGridSize_.Width()) );
+                aPos.AdjustY( -(aPos.Y() % aGridSize_.Height()) );
 
                 // don't put in the corner
                 Point aMinPos = rRenderContext.PixelToLogic( Point( 30, 20 ) );
                 if( (aPos.X() < aMinPos.X()) || (aPos.Y() < aMinPos.Y()) )
                 {
                     aPos = aMinPos;
-                    aPos.X() -= aPos.X() % aGridSize_.Width();
-                    aPos.Y() -= aPos.Y() % aGridSize_.Height();
+                    aPos.AdjustX( -(aPos.X() % aGridSize_.Width()) );
+                    aPos.AdjustY( -(aPos.Y() % aGridSize_.Height()) );
                 }
 
                 // set dialog position and size
-                pDlgEdForm->SetSnapRect( Rectangle( aPos, aSize ) );
+                pDlgEdForm->SetSnapRect( tools::Rectangle( aPos, aSize ) );
                 pDlgEdForm->EndListening(false);
                 pDlgEdForm->SetPropsFromRect();
                 pDlgEdForm->GetDlgEditor().SetDialogModelChanged();
@@ -562,7 +561,7 @@ void DlgEditor::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect
     if (pTargetPaintWindow)
     {
         OutputDevice& rTargetOutDev = pTargetPaintWindow->GetTargetOutputDevice();
-        rTargetOutDev.DrawWallpaper(aPaintRect, Wallpaper(Color(COL_WHITE)));
+        rTargetOutDev.DrawWallpaper(aPaintRect, Wallpaper(COL_WHITE));
     }
 
     // do paint (unbuffered) and mark repaint end
@@ -576,7 +575,7 @@ void DlgEditor::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect
 }
 
 
-IMPL_LINK_NOARG_TYPED(DlgEditor, MarkTimeout, Idle *, void)
+IMPL_LINK_NOARG(DlgEditor, MarkTimeout, Timer *, void)
 {
     rLayout.UpdatePropertyBrowser();
 }
@@ -608,22 +607,25 @@ void DlgEditor::SetInsertObj( sal_uInt16 eObj )
 {
     eActObj = eObj;
 
-    pDlgEdView->SetCurrentObj( eActObj, DlgInventor );
+    pDlgEdView->SetCurrentObj( eActObj, SdrInventor::BasicDialog );
 }
 
 void DlgEditor::CreateDefaultObject()
 {
     // create object by factory
-    SdrObject* pObj = SdrObjFactory::MakeNewObject( pDlgEdView->GetCurrentObjInventor(), pDlgEdView->GetCurrentObjIdentifier(), pDlgEdPage );
+    SdrObject* pObj = SdrObjFactory::MakeNewObject(
+        *pDlgEdModel,
+        pDlgEdView->GetCurrentObjInventor(),
+        pDlgEdView->GetCurrentObjIdentifier());
 
     if (DlgEdObj* pDlgEdObj = dynamic_cast<DlgEdObj*>(pObj))
     {
         // set position and size
         Size aSize = rWindow.PixelToLogic( Size( 96, 24 ) );
-        Point aPoint = (pDlgEdForm->GetSnapRect()).Center();
-        aPoint.X() -= aSize.Width() / 2;
-        aPoint.Y() -= aSize.Height() / 2;
-        pDlgEdObj->SetSnapRect( Rectangle( aPoint, aSize ) );
+        Point aPoint = pDlgEdForm->GetSnapRect().Center();
+        aPoint.AdjustX( -(aSize.Width() / 2) );
+        aPoint.AdjustY( -(aSize.Height() / 2) );
+        pDlgEdObj->SetSnapRect( tools::Rectangle( aPoint, aSize ) );
 
         // set default property values
         pDlgEdObj->SetDefaults();
@@ -645,7 +647,7 @@ void DlgEditor::Cut()
 }
 
 
-void implCopyStreamToByteSequence( const Reference< XInputStream >& xStream,
+static void implCopyStreamToByteSequence( const Reference< XInputStream >& xStream,
     Sequence< sal_Int8 >& bytes )
 {
     xStream->readBytes( bytes, xStream->available() );
@@ -658,7 +660,7 @@ void implCopyStreamToByteSequence( const Reference< XInputStream >& xStream,
 
         sal_Int32 nPos = bytes.getLength();
         bytes.realloc( nPos + nRead );
-        memcpy( bytes.getArray() + nPos, readBytes.getConstArray(), (sal_uInt32)nRead );
+        memcpy( bytes.getArray() + nPos, readBytes.getConstArray(), static_cast<sal_uInt32>(nRead) );
     }
 }
 
@@ -678,8 +680,8 @@ void DlgEditor::Copy()
     Reference< container::XNameAccess > xNAcc( xClipDialogModel, UNO_QUERY );
     if ( xNAcc.is() )
     {
-           Sequence< OUString > aNames = xNAcc->getElementNames();
-           const OUString* pNames = aNames.getConstArray();
+        Sequence< OUString > aNames = xNAcc->getElementNames();
+        const OUString* pNames = aNames.getConstArray();
         sal_uInt32 nCtrls = aNames.getLength();
 
         for ( sal_uInt32 n = 0; n < nCtrls; n++ )
@@ -711,7 +713,7 @@ void DlgEditor::Copy()
 
                 // clone control model
                 Reference< util::XCloneable > xCtrl;
-                   aCtrl >>= xCtrl;
+                aCtrl >>= xCtrl;
                 Reference< util::XCloneable > xNewCtrl = xCtrl->createClone();
                 Any aNewCtrl;
                 aNewCtrl <<= xNewCtrl;
@@ -794,9 +796,7 @@ void DlgEditor::Copy()
             memcpy( pCombinedData + 4, DialogModelBytes.getConstArray(), nDialogDataLen );
             memcpy( pCombinedData + nResOffset, aResData.getConstArray(), nResDataLen );
 
-            Any aCombinedDataAny;
-            aCombinedDataAny <<= aCombinedData;
-            aSeqData[1] = aCombinedDataAny;
+            aSeqData[1] <<= aCombinedData;
 
             pTrans = new DlgEdTransferableImpl( m_ClipboardDataFlavorsResource, aSeqData );
         }
@@ -828,7 +828,6 @@ void DlgEditor::Paste()
     if ( xClipboard.is() )
     {
         Reference< datatransfer::XTransferable > xTransf;
-
         {
             SolarMutexReleaser aReleaser;
             // get clipboard content
@@ -908,8 +907,8 @@ void DlgEditor::Paste()
                 Reference< css::container::XNameAccess > xNameAcc( xClipDialogModel, UNO_QUERY );
                 if ( xNameAcc.is() )
                 {
-                       Sequence< OUString > aNames = xNameAcc->getElementNames();
-                       const OUString* pNames = aNames.getConstArray();
+                    Sequence< OUString > aNames = xNameAcc->getElementNames();
+                    const OUString* pNames = aNames.getConstArray();
                     sal_uInt32 nCtrls = aNames.getLength();
 
                     Reference< resource::XStringResourcePersistence > xStringResourcePersistence;
@@ -920,15 +919,15 @@ void DlgEditor::Paste()
                     }
                     for( sal_uInt32 n = 0; n < nCtrls; n++ )
                     {
-                           Any aA = xNameAcc->getByName( pNames[n] );
+                        Any aA = xNameAcc->getByName( pNames[n] );
                         Reference< css::awt::XControlModel > xCM;
-                           aA >>= xCM;
+                        aA >>= xCM;
 
                         // clone the control model
                         Reference< util::XCloneable > xClone( xCM, uno::UNO_QUERY );
                         Reference< awt::XControlModel > xCtrlModel( xClone->createClone(), uno::UNO_QUERY );
 
-                        DlgEdObj* pCtrlObj = new DlgEdObj();
+                        DlgEdObj* pCtrlObj = new DlgEdObj(*pDlgEdModel);
                         pCtrlObj->SetDlgEdForm(pDlgEdForm);         // set parent form
                         pDlgEdForm->AddChild(pCtrlObj);             // add child to parent form
                         pCtrlObj->SetUnoControlModel( xCtrlModel ); // set control model
@@ -936,16 +935,12 @@ void DlgEditor::Paste()
                         // set new name
                         OUString aOUniqueName( pCtrlObj->GetUniqueName() );
                         Reference< beans::XPropertySet > xPSet( xCtrlModel , UNO_QUERY );
-                        Any aUniqueName;
-                        aUniqueName <<= aOUniqueName;
-                        xPSet->setPropertyValue( DLGED_PROP_NAME, aUniqueName );
+                        xPSet->setPropertyValue( DLGED_PROP_NAME, Any(aOUniqueName) );
 
                         // set tabindex
                         Reference< container::XNameAccess > xNA( m_xUnoControlDialogModel , UNO_QUERY );
-                           Sequence< OUString > aNames_ = xNA->getElementNames();
-                        Any aTabIndex;
-                        aTabIndex <<= (sal_Int16) aNames_.getLength();
-                        xPSet->setPropertyValue( DLGED_PROP_TABINDEX, aTabIndex );
+                        Sequence< OUString > aNames_ = xNA->getElementNames();
+                        xPSet->setPropertyValue( DLGED_PROP_TABINDEX, Any(static_cast<sal_Int16>(aNames_.getLength())) );
 
                         if( bLocalized )
                         {
@@ -983,8 +978,8 @@ void DlgEditor::Paste()
                     }
 
                     // center marked objects in dialog editor form
-                    Point aMarkCenter = (pDlgEdView->GetMarkedObjRect()).Center();
-                    Point aFormCenter = (pDlgEdForm->GetSnapRect()).Center();
+                    Point aMarkCenter = pDlgEdView->GetMarkedObjRect().Center();
+                    Point aFormCenter = pDlgEdForm->GetSnapRect().Center();
                     Point aPoint = aFormCenter - aMarkCenter;
                     Size  aSize( aPoint.X() , aPoint.Y() );
                     pDlgEdView->MoveMarkedObj( aSize );                     // update of control model properties (position + size) in NbcMove
@@ -1061,11 +1056,14 @@ bool DlgEditor::IsPasteAllowed()
     Reference< datatransfer::clipboard::XClipboard > xClipboard = GetWindow().GetClipboard();
     if ( xClipboard.is() )
     {
-        // get clipboard content
-        SolarMutexReleaser aReleaser;
-        Reference< datatransfer::XTransferable > xTransf = xClipboard->getContents();
-
-        return xTransf.is() && xTransf->isDataFlavorSupported( m_ClipboardDataFlavors[0] );
+        Reference< datatransfer::XTransferable > xTransf;
+        {
+            SolarMutexReleaser aReleaser;
+            // get clipboard content
+            xTransf = xClipboard->getContents();
+        }
+        if (xTransf.is())
+            return xTransf->isDataFlavorSupported(m_ClipboardDataFlavors[0]);
     }
     return false;
 }
@@ -1105,7 +1103,7 @@ namespace Print
     long const nBorder = 300;
 }
 
-void lcl_PrintHeader( Printer* pPrinter, const OUString& rTitle ) // not working yet
+static void lcl_PrintHeader( Printer* pPrinter, const OUString& rTitle ) // not working yet
 {
 
     pPrinter->Push();
@@ -1128,7 +1126,7 @@ void lcl_PrintHeader( Printer* pPrinter, const OUString& rTitle ) // not working
     long const nXLeft = Print::nLeftMargin - Print::nBorder;
     long const nXRight = aSz.Width() - Print::nRightMargin + Print::nBorder;
 
-    pPrinter->DrawRect(Rectangle(
+    pPrinter->DrawRect(tools::Rectangle(
         Point(nXLeft, nYTop),
         Size(nXRight - nXLeft, aSz.Height() - nYTop - Print::nBottomMargin + Print::nBorder)
     ));
@@ -1153,56 +1151,54 @@ void DlgEditor::printPage( sal_Int32 nPage, Printer* pPrinter, const OUString& r
 
 void DlgEditor::Print( Printer* pPrinter, const OUString& rTitle )    // not working yet
 {
+    MapMode aOldMap( pPrinter->GetMapMode());
+    vcl::Font aOldFont( pPrinter->GetFont() );
+
+    MapMode aMap( MapUnit::Map100thMM );
+    pPrinter->SetMapMode( aMap );
+    vcl::Font aFont;
+    aFont.SetAlignment( ALIGN_BOTTOM );
+    aFont.SetFontSize( Size( 0, 360 ));
+    pPrinter->SetFont( aFont );
+
+    Size aPaperSz = pPrinter->GetOutputSize();
+    aPaperSz.AdjustWidth( -(Print::nLeftMargin + Print::nRightMargin) );
+    aPaperSz.AdjustHeight( -(Print::nTopMargin + Print::nBottomMargin) );
+
+    lcl_PrintHeader( pPrinter, rTitle );
+
+    Bitmap aDlg;
+    Size aBmpSz( pPrinter->PixelToLogic( aDlg.GetSizePixel() ) );
+    double nPaperSzWidth = aPaperSz.Width();
+    double nPaperSzHeight = aPaperSz.Height();
+    double nBmpSzWidth = aBmpSz.Width();
+    double nBmpSzHeight = aBmpSz.Height();
+    double nScaleX = nPaperSzWidth / nBmpSzWidth;
+    double nScaleY = nPaperSzHeight / nBmpSzHeight;
+
+    Size aOutputSz;
+    if( nBmpSzHeight * nScaleX <= nPaperSzHeight )
     {
-        MapMode aOldMap( pPrinter->GetMapMode());
-        vcl::Font aOldFont( pPrinter->GetFont() );
-
-        MapMode aMap( MAP_100TH_MM );
-        pPrinter->SetMapMode( aMap );
-        vcl::Font aFont;
-        aFont.SetAlignment( ALIGN_BOTTOM );
-        aFont.SetFontSize( Size( 0, 360 ));
-        pPrinter->SetFont( aFont );
-
-        Size aPaperSz = pPrinter->GetOutputSize();
-        aPaperSz.Width() -= (Print::nLeftMargin + Print::nRightMargin);
-        aPaperSz.Height() -= (Print::nTopMargin + Print::nBottomMargin);
-
-        lcl_PrintHeader( pPrinter, rTitle );
-
-        Bitmap aDlg;
-        Size aBmpSz( pPrinter->PixelToLogic( aDlg.GetSizePixel() ) );
-        double nPaperSzWidth = aPaperSz.Width();
-        double nPaperSzHeight = aPaperSz.Height();
-        double nBmpSzWidth = aBmpSz.Width();
-        double nBmpSzHeight = aBmpSz.Height();
-        double nScaleX = (nPaperSzWidth / nBmpSzWidth );
-        double nScaleY = (nPaperSzHeight / nBmpSzHeight );
-
-        Size aOutputSz;
-        if( nBmpSzHeight * nScaleX <= nPaperSzHeight )
-        {
-            aOutputSz.Width() = (long)(((double)nBmpSzWidth) * nScaleX);
-            aOutputSz.Height() = (long)(((double)nBmpSzHeight) * nScaleX);
-        }
-        else
-        {
-            aOutputSz.Width() = (long)(((double)nBmpSzWidth) * nScaleY);
-            aOutputSz.Height() = (long)(((double)nBmpSzHeight) * nScaleY);
-        }
-
-        Point aPosOffs(
-            (aPaperSz.Width() / 2) - (aOutputSz.Width() / 2),
-            (aPaperSz.Height()/ 2) - (aOutputSz.Height() / 2));
-
-        aPosOffs.X() += Print::nLeftMargin;
-        aPosOffs.Y() += Print::nTopMargin;
-
-        pPrinter->DrawBitmap( aPosOffs, aOutputSz, aDlg );
-
-        pPrinter->SetMapMode( aOldMap );
-        pPrinter->SetFont( aOldFont );
+        aOutputSz.setWidth( static_cast<long>(nBmpSzWidth * nScaleX) );
+        aOutputSz.setHeight( static_cast<long>(nBmpSzHeight * nScaleX) );
     }
+    else
+    {
+        aOutputSz.setWidth( static_cast<long>(nBmpSzWidth * nScaleY) );
+        aOutputSz.setHeight( static_cast<long>(nBmpSzHeight * nScaleY) );
+    }
+
+    Point aPosOffs(
+        (aPaperSz.Width() / 2) - (aOutputSz.Width() / 2),
+        (aPaperSz.Height()/ 2) - (aOutputSz.Height() / 2));
+
+    aPosOffs.AdjustX(Print::nLeftMargin );
+    aPosOffs.AdjustY(Print::nTopMargin );
+
+    pPrinter->DrawBitmap( aPosOffs, aOutputSz, aDlg );
+
+    pPrinter->SetMapMode( aOldMap );
+    pPrinter->SetFont( aOldFont );
 }
 
 
@@ -1222,13 +1218,13 @@ bool DlgEditor::AdjustPageSize()
         if ( pDlgEdForm && pDlgEdForm->TransformFormToSdrCoordinates( nFormXIn, nFormYIn, nFormWidthIn, nFormHeightIn, nFormX, nFormY, nFormWidth, nFormHeight ) )
         {
             Size aPageSizeDelta( 400, 300 );
-            aPageSizeDelta = rWindow.PixelToLogic( aPageSizeDelta, MapMode( MAP_100TH_MM ) );
+            aPageSizeDelta = rWindow.PixelToLogic( aPageSizeDelta, MapMode( MapUnit::Map100thMM ) );
 
             sal_Int32 nNewPageWidth = nFormX + nFormWidth + aPageSizeDelta.Width();
             sal_Int32 nNewPageHeight = nFormY + nFormHeight + aPageSizeDelta.Height();
 
             Size aPageSizeMin( DLGED_PAGE_WIDTH_MIN, DLGED_PAGE_HEIGHT_MIN );
-            aPageSizeMin = rWindow.PixelToLogic( aPageSizeMin, MapMode( MAP_100TH_MM ) );
+            aPageSizeMin = rWindow.PixelToLogic( aPageSizeMin, MapMode( MapUnit::Map100thMM ) );
             sal_Int32 nPageWidthMin = aPageSizeMin.Width();
             sal_Int32 nPageHeightMin = aPageSizeMin.Height();
 
@@ -1245,7 +1241,7 @@ bool DlgEditor::AdjustPageSize()
                 {
                     Size aNewPageSize( nNewPageWidth, nNewPageHeight );
                     pDlgEdPage->SetSize( aNewPageSize );
-                    pDlgEdView->SetWorkArea( Rectangle( Point( 0, 0 ), aNewPageSize ) );
+                    pDlgEdView->SetWorkArea( tools::Rectangle( Point( 0, 0 ), aNewPageSize ) );
                     bAdjustedPageSize = true;
                 }
             }

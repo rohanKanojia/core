@@ -22,17 +22,18 @@
 #include <iterator>
 #include <map>
 
-#include "dbu_reghelper.hxx"
-#include "uiservices.hxx"
+#include <dbu_reghelper.hxx>
+#include <uiservices.hxx>
 #include <sfx2/sfxsids.hrc>
-#include "dbu_rel.hrc"
+#include <strings.hrc>
+#include <strings.hxx>
 #include <vcl/svapp.hxx>
-#include "browserids.hxx"
+#include <vcl/weld.hxx>
+#include <browserids.hxx>
 #include <comphelper/types.hxx>
-#include "dbustrings.hrc"
+#include <core_resource.hxx>
+#include <stringconstants.hxx>
 #include <connectivity/dbtools.hxx>
-#include <com/sun/star/frame/FrameSearchFlag.hpp>
-#include <comphelper/extract.hxx>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
@@ -51,18 +52,16 @@
 #include <connectivity/dbexception.hxx>
 #include <connectivity/dbmetadata.hxx>
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
-#include <comphelper/streamsection.hxx>
-#include <comphelper/seqstream.hxx>
 #include <com/sun/star/io/XActiveDataSource.hpp>
 #include <com/sun/star/io/XActiveDataSink.hpp>
-#include "sqlmessage.hxx"
-#include "RelationController.hxx"
+#include <sqlmessage.hxx>
+#include <RelationController.hxx>
 #include <vcl/layout.hxx>
-#include "TableWindowData.hxx"
-#include "UITools.hxx"
-#include "RTableConnectionData.hxx"
-#include "RelationTableView.hxx"
-#include "RelationDesignView.hxx"
+#include <TableWindowData.hxx>
+#include <UITools.hxx>
+#include <RTableConnectionData.hxx>
+#include <RelationTableView.hxx>
+#include <RelationDesignView.hxx>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
 #include <vcl/waitobj.hxx>
@@ -71,7 +70,7 @@
 
 #define MAX_THREADS 10
 
-extern "C" void SAL_CALL createRegistryInfo_ORelationControl()
+extern "C" void createRegistryInfo_ORelationControl()
 {
     static ::dbaui::OMultiInstanceAutoRegistration< ::dbaui::ORelationController > aAutoRegistration;
 }
@@ -92,28 +91,28 @@ using namespace ::dbaui;
 using namespace ::comphelper;
 using namespace ::osl;
 
-OUString SAL_CALL ORelationController::getImplementationName() throw( RuntimeException, std::exception )
+OUString SAL_CALL ORelationController::getImplementationName()
 {
     return getImplementationName_Static();
 }
 
-OUString ORelationController::getImplementationName_Static() throw( RuntimeException )
+OUString ORelationController::getImplementationName_Static()
 {
     return OUString("org.openoffice.comp.dbu.ORelationDesign");
 }
 
-Sequence< OUString> ORelationController::getSupportedServiceNames_Static() throw( RuntimeException )
+Sequence< OUString> ORelationController::getSupportedServiceNames_Static()
 {
     Sequence<OUString> aSupported { "com.sun.star.sdb.RelationDesign" };
     return aSupported;
 }
 
-Sequence< OUString> SAL_CALL ORelationController::getSupportedServiceNames() throw(RuntimeException, std::exception)
+Sequence< OUString> SAL_CALL ORelationController::getSupportedServiceNames()
 {
     return getSupportedServiceNames_Static();
 }
 
-Reference< XInterface > SAL_CALL ORelationController::Create(const Reference<XMultiServiceFactory >& _rxFactory)
+Reference< XInterface > ORelationController::Create(const Reference<XMultiServiceFactory >& _rxFactory)
 {
     return *(new ORelationController(comphelper::getComponentContext(_rxFactory)));
 }
@@ -159,8 +158,9 @@ void ORelationController::Execute(sal_uInt16 _nId, const Sequence< PropertyValue
                 OSL_ENSURE(isEditable(),"Slot ID_BROWSER_SAVEDOC should not be enabled!");
                 if(!::dbaui::checkDataSourceAvailable(::comphelper::getString(getDataSource()->getPropertyValue(PROPERTY_NAME)), getORB()))
                 {
-                    OUString aMessage(ModuleRes(STR_DATASOURCE_DELETED));
-                    ScopedVclPtr<OSQLWarningBox>::Create( getView(), aMessage )->Execute();
+                    OUString aMessage(DBA_RES(STR_DATASOURCE_DELETED));
+                    OSQLWarningBox aWarning(getFrameWeld(), aMessage);
+                    aWarning.run();
                 }
                 else
                 {
@@ -173,12 +173,12 @@ void ORelationController::Execute(sal_uInt16 _nId, const Sequence< PropertyValue
                             ::comphelper::NamedValueCollection aWindowsData;
                             saveTableWindows( aWindowsData );
                             getDataSource()->setPropertyValue( PROPERTY_LAYOUTINFORMATION, makeAny( aWindowsData.getPropertyValues() ) );
-                            setModified(sal_False);
+                            setModified(false);
                         }
                     }
                     catch ( const Exception& )
                     {
-                        DBG_UNHANDLED_EXCEPTION();
+                        DBG_UNHANDLED_EXCEPTION("dbaccess");
                     }
                 }
             }
@@ -203,10 +203,10 @@ void ORelationController::impl_initialize()
         setEditable(false);
         m_bRelationsPossible    = false;
         {
-            OUString sTitle(ModuleRes(STR_RELATIONDESIGN));
+            OUString sTitle(DBA_RES(STR_RELATIONDESIGN));
             sTitle = sTitle.copy(3);
-            ScopedVclPtrInstance< OSQLMessageBox > aDlg(nullptr,sTitle,ModuleRes(STR_RELATIONDESIGN_NOT_AVAILABLE));
-            aDlg->Execute();
+            OSQLMessageBox aDlg(getFrameWeld(), sTitle, DBA_RES(STR_RELATIONDESIGN_NOT_AVAILABLE));
+            aDlg.run();
         }
         disconnect();
         throw SQLException();
@@ -232,7 +232,7 @@ void ORelationController::impl_initialize()
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 
 }
@@ -255,9 +255,9 @@ short ORelationController::saveModified()
     short nSaved = RET_YES;
     if(haveDataSource() && isModified())
     {
-        ScopedVclPtrInstance<MessageDialog> aQry(getView(), "DesignSaveModifiedDialog",
-                                                 "dbaccess/ui/designsavemodifieddialog.ui");
-        nSaved = aQry->Execute();
+        std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(getFrameWeld(), "dbaccess/ui/designsavemodifieddialog.ui"));
+        std::unique_ptr<weld::MessageDialog> xQuery(xBuilder->weld_message_dialog("DesignSaveModifiedDialog"));
+        nSaved = xQuery->run();
         if(nSaved == RET_YES)
             Execute(ID_BROWSER_SAVEDOC,Sequence<PropertyValue>());
     }
@@ -274,7 +274,7 @@ namespace
 {
     class RelationLoader : public ::osl::Thread
     {
-        typedef std::map<OUString, ::std::shared_ptr<OTableWindowData>, ::comphelper::UStringMixLess> TTableDataHelper;
+        typedef std::map<OUString, std::shared_ptr<OTableWindowData>, ::comphelper::UStringMixLess> TTableDataHelper;
         TTableDataHelper                    m_aTableData;
         TTableConnectionData                m_vTableConnectionData;
         const Sequence< OUString>    m_aTableList;
@@ -305,7 +305,7 @@ namespace
         virtual void SAL_CALL run() override;
         virtual void SAL_CALL onTerminated() override;
     protected:
-        virtual ~RelationLoader(){}
+        virtual ~RelationLoader() override {}
 
         void loadTableData(const Any& _aTable);
     };
@@ -314,12 +314,11 @@ namespace
     {
         osl_setThreadName("RelationLoader");
 
-        const OUString* pIter = m_aTableList.getConstArray() + m_nStartIndex;
-        for(sal_Int32 i = m_nStartIndex; i < m_nEndIndex;++i,++pIter)
+        for(sal_Int32 i = m_nStartIndex; i < m_nEndIndex; ++i)
         {
             OUString sCatalog,sSchema,sTable;
             ::dbtools::qualifiedNameComponents(m_xMetaData,
-                                                *pIter,
+                                                m_aTableList[i],
                                                 sCatalog,
                                                 sSchema,
                                                 sTable,
@@ -334,12 +333,12 @@ namespace
                 if ( xResult.is() && xResult->next() )
                 {
                     ::comphelper::disposeComponent(xResult);
-                    loadTableData(m_xTables->getByName(*pIter));
+                    loadTableData(m_xTables->getByName(m_aTableList[i]));
                 }
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
             }
         }
     }
@@ -352,11 +351,11 @@ namespace
     void RelationLoader::loadTableData(const Any& _aTable)
     {
         Reference<XPropertySet> xTableProp(_aTable,UNO_QUERY);
-        const OUString sSourceName = ::dbtools::composeTableName( m_xMetaData, xTableProp, ::dbtools::EComposeRule::InTableDefinitions, false, false, false );
+        const OUString sSourceName = ::dbtools::composeTableName( m_xMetaData, xTableProp, ::dbtools::EComposeRule::InTableDefinitions, false );
         TTableDataHelper::const_iterator aFind = m_aTableData.find(sSourceName);
         if ( aFind == m_aTableData.end() )
         {
-            aFind = m_aTableData.insert(TTableDataHelper::value_type(sSourceName,::std::shared_ptr<OTableWindowData>(new OTableWindowData(xTableProp,sSourceName, sSourceName)))).first;
+            aFind = m_aTableData.emplace(sSourceName,std::make_shared<OTableWindowData>(xTableProp,sSourceName, sSourceName, OUString())).first;
             aFind->second->ShowAll(false);
         }
         TTableWindowData::value_type pReferencingTable = aFind->second;
@@ -389,11 +388,11 @@ namespace
                         if ( m_xTables->hasByName(sReferencedTable) )
                         {
                             Reference<XPropertySet>  xReferencedTable(m_xTables->getByName(sReferencedTable),UNO_QUERY);
-                            aRefFind = m_aTableData.insert(TTableDataHelper::value_type(sReferencedTable,::std::shared_ptr<OTableWindowData>(new OTableWindowData(xReferencedTable,sReferencedTable, sReferencedTable)))).first;
+                            aRefFind = m_aTableData.emplace(sReferencedTable,std::make_shared<OTableWindowData>(xReferencedTable,sReferencedTable, sReferencedTable, OUString())).first;
                             aRefFind->second->ShowAll(false);
                         }
                         else
-                            continue; // table name could not be found so we do not show this table releation
+                            continue; // table name could not be found so we do not show this table relation
                     }
                     TTableWindowData::value_type pReferencedTable = aRefFind->second;
 
@@ -405,14 +404,12 @@ namespace
                     // insert columns
                     const Reference<XColumnsSupplier> xColsSup(xKey,UNO_QUERY);
                     OSL_ENSURE(xColsSup.is(),"Key is no XColumnsSupplier!");
-                    const Reference<XNameAccess> xColumns       = xColsSup->getColumns();
+                    const Reference<XNameAccess> xColumns = xColsSup->getColumns();
                     const Sequence< OUString> aNames = xColumns->getElementNames();
-                    const OUString* pIter    = aNames.getConstArray();
-                    const OUString* pEnd     = pIter + aNames.getLength();
                     OUString sColumnName,sRelatedName;
-                    for(sal_uInt16 j=0;pIter != pEnd;++pIter,++j)
+                    for(sal_Int32 j=0;j<aNames.getLength();++j)
                     {
-                        const Reference<XPropertySet> xPropSet(xColumns->getByName(*pIter),UNO_QUERY);
+                        const Reference<XPropertySet> xPropSet(xColumns->getByName(aNames[j]),UNO_QUERY);
                         OSL_ENSURE(xPropSet.is(),"Invalid column found in KeyColumns!");
                         if ( xPropSet.is() )
                         {
@@ -421,7 +418,7 @@ namespace
                         }
                         pTabConnData->SetConnLine( j, sColumnName, sRelatedName );
                     }
-                    // Update/Del-Flags setzen
+                    // set update/del flags
                     sal_Int32   nUpdateRule = 0;
                     sal_Int32   nDeleteRule = 0;
                     xKey->getPropertyValue(PROPERTY_UPDATERULE) >>= nUpdateRule;
@@ -430,7 +427,7 @@ namespace
                     pTabConnData->SetUpdateRules( nUpdateRule );
                     pTabConnData->SetDeleteRules( nDeleteRule );
 
-                    // Kardinalitaet setzen
+                    // set cardinality
                     pTabConnData->SetCardinality();
                 }
             }
@@ -442,19 +439,17 @@ void ORelationController::mergeData(const TTableConnectionData& _aConnectionData
 {
     ::osl::MutexGuard aGuard( getMutex() );
 
-    ::std::copy( _aConnectionData.begin(), _aConnectionData.end(), ::std::back_inserter( m_vTableConnectionData ));
+    std::copy( _aConnectionData.begin(), _aConnectionData.end(), std::back_inserter( m_vTableConnectionData ));
     // here we are finished, so we can collect the table from connection data
-    TTableConnectionData::const_iterator aConnDataIter = m_vTableConnectionData.begin();
-    TTableConnectionData::const_iterator aConnDataEnd = m_vTableConnectionData.end();
-    for(;aConnDataIter != aConnDataEnd;++aConnDataIter)
+    for (auto const& elem : m_vTableConnectionData)
     {
-        if ( !existsTable((*aConnDataIter)->getReferencingTable()->GetComposedName()) )
+        if ( !existsTable(elem->getReferencingTable()->GetComposedName()) )
         {
-            m_vTableData.push_back((*aConnDataIter)->getReferencingTable());
+            m_vTableData.push_back(elem->getReferencingTable());
         }
-        if ( !existsTable((*aConnDataIter)->getReferencedTable()->GetComposedName()) )
+        if ( !existsTable(elem->getReferencedTable()->GetComposedName()) )
         {
-            m_vTableData.push_back((*aConnDataIter)->getReferencedTable());
+            m_vTableData.push_back(elem->getReferencedTable());
         }
     }
     if ( m_nThreadEvent )
@@ -465,7 +460,7 @@ void ORelationController::mergeData(const TTableConnectionData& _aConnectionData
     }
 }
 
-IMPL_LINK_NOARG_TYPED( ORelationController, OnThreadFinished, void*, void )
+IMPL_LINK_NOARG( ORelationController, OnThreadFinished, void*, void )
 {
     ::SolarMutexGuard aSolarGuard;
     ::osl::MutexGuard aGuard( getMutex() );
@@ -474,14 +469,14 @@ IMPL_LINK_NOARG_TYPED( ORelationController, OnThreadFinished, void*, void )
         getView()->initialize();    // show the windows and fill with our information
         getView()->Invalidate(InvalidateFlags::NoErase);
         ClearUndoManager();
-        setModified(sal_False);     // and we are not modified yet
+        setModified(false);     // and we are not modified yet
 
         if(m_vTableData.empty())
             Execute(ID_BROWSER_ADDTABLE,Sequence<PropertyValue>());
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
     m_pWaitObject.reset();
 }
@@ -501,7 +496,7 @@ void ORelationController::loadData()
         if ( aMeta.supportsThreads() )
         {
             const sal_Int32 nMaxElements = (nCount / MAX_THREADS) +1;
-            sal_Int32 nStart = 0,nEnd = ::std::min(nMaxElements,nCount);
+            sal_Int32 nStart = 0,nEnd = std::min(nMaxElements,nCount);
             while(nStart != nEnd)
             {
                 ++m_nThreadEvent;
@@ -511,7 +506,7 @@ void ORelationController::loadData()
                 pThread->resume();
                 nStart = nEnd;
                 nEnd += nMaxElements;
-                nEnd = ::std::min(nEnd,nCount);
+                nEnd = std::min(nEnd,nCount);
             }
         }
         else
@@ -527,21 +522,19 @@ void ORelationController::loadData()
     }
     catch(const Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
 TTableWindowData::value_type ORelationController::existsTable(const OUString& _rComposedTableName)  const
 {
     ::comphelper::UStringMixEqual bCase(true);
-    TTableWindowData::const_iterator aIter = m_vTableData.begin();
-    TTableWindowData::const_iterator aEnd = m_vTableData.end();
-    for(;aIter != aEnd;++aIter)
+    for (auto const& elem : m_vTableData)
     {
-        if(bCase((*aIter)->GetComposedName(),_rComposedTableName))
-            break;
+        if(bCase(elem->GetComposedName(),_rComposedTableName))
+            return elem;
     }
-    return ( aIter != aEnd) ? *aIter : TTableWindowData::value_type();
+    return TTableWindowData::value_type();
 }
 
 void ORelationController::loadLayoutInformation()

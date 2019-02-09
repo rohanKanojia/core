@@ -36,10 +36,10 @@ class Size;
 class EDITENG_DLLPUBLIC SvxPaperInfo
 {
 public:
-    static Size     GetDefaultPaperSize( MapUnit eUnit = MAP_TWIP );
-    static Size     GetPaperSize( Paper ePaper, MapUnit eUnit = MAP_TWIP );
+    static Size     GetDefaultPaperSize( MapUnit eUnit = MapUnit::MapTwip );
+    static Size     GetPaperSize( Paper ePaper, MapUnit eUnit = MapUnit::MapTwip );
     static Size     GetPaperSize( const Printer* pPrinter );
-    static Paper    GetSvxPaper( const Size &rSize, MapUnit eUnit = MAP_TWIP, bool bSloppy = false );
+    static Paper    GetSvxPaper( const Size &rSize, MapUnit eUnit );
     static long     GetSloppyPaperDimension( long nSize );
     static OUString GetName( Paper ePaper );
 };
@@ -49,8 +49,8 @@ public:
 inline Size &Swap(Size &rSize)
 {
     const long lVal = rSize.Width();
-    rSize.Width() = rSize.Height();
-    rSize.Height() = lVal;
+    rSize.setWidth( rSize.Height() );
+    rSize.setHeight( lVal );
     return rSize;
 }
 

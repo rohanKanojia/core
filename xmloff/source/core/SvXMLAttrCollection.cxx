@@ -10,6 +10,7 @@
 #include "SvXMLAttrCollection.hxx"
 #include <limits.h>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 bool SvXMLAttrCollection::operator ==( const SvXMLAttrCollection& rCmp ) const
 {
@@ -20,7 +21,8 @@ bool SvXMLAttrCollection::operator ==( const SvXMLAttrCollection& rCmp ) const
 bool SvXMLAttrCollection::AddAttr( const OUString& rLName,
                                        const OUString& rValue )
 {
-    aAttrs.push_back( SvXMLAttr(rLName, rValue) );
+    assert(!rLName.isEmpty());
+    aAttrs.emplace_back(rLName, rValue );
     return true;
 }
 
@@ -29,8 +31,11 @@ bool SvXMLAttrCollection::AddAttr( const OUString& rPrefix,
                                        const OUString& rLName,
                                        const OUString& rValue )
 {
+    assert(!rPrefix.isEmpty());
+    assert(!rNamespace.isEmpty());
+    assert(!rLName.isEmpty());
     sal_uInt16 nPos = aNamespaceMap.Add( rPrefix, rNamespace );
-    aAttrs.push_back( SvXMLAttr(nPos, rLName, rValue) );
+    aAttrs.emplace_back(nPos, rLName, rValue );
     return true;
 }
 
@@ -38,10 +43,12 @@ bool SvXMLAttrCollection::AddAttr( const OUString& rPrefix,
                                        const OUString& rLName,
                                        const OUString& rValue )
 {
+    assert(!rPrefix.isEmpty());
+    assert(!rLName.isEmpty());
     sal_uInt16 nPos = aNamespaceMap.GetIndexByPrefix( rPrefix );
     if( USHRT_MAX == nPos )
         return false;
-    aAttrs.push_back( SvXMLAttr(nPos, rLName, rValue) );
+    aAttrs.emplace_back(nPos, rLName, rValue );
     return true;
 }
 
@@ -49,6 +56,7 @@ bool SvXMLAttrCollection::SetAt( size_t i,
                                      const OUString& rLName,
                                      const OUString& rValue )
 {
+    assert(!rLName.isEmpty());
     if( i >= GetAttrCount() )
         return false;
     aAttrs[i] = SvXMLAttr(rLName, rValue);
@@ -61,6 +69,9 @@ bool SvXMLAttrCollection::SetAt( size_t i,
                                      const OUString& rLName,
                                      const OUString& rValue )
 {
+    assert(!rPrefix.isEmpty());
+    assert(!rNamespace.isEmpty());
+    assert(!rLName.isEmpty());
     if( i >= GetAttrCount() )
         return false;
 
@@ -77,6 +88,8 @@ bool SvXMLAttrCollection::SetAt( size_t i,
                                      const OUString& rLName,
                                      const OUString& rValue )
 {
+    assert(!rPrefix.isEmpty());
+    assert(!rLName.isEmpty());
     if( i >= GetAttrCount() )
         return false;
 
@@ -159,7 +172,7 @@ sal_uInt16 SvXMLAttrCollection::GetNextNamespaceIndex( sal_uInt16 nIdx ) const
 
 sal_uInt16 SvXMLAttrCollection::GetPrefixPos( size_t i ) const
 {
-//  DBG_ASSERT( i >= 0 && i < aAttrs.size(),
+//  SAL_WARN_IF( i < 0 || i >= aAttrs.size()), "xmloff",
 //              "SvXMLAttrCollection::GetPrefixPos: illegal index" );
     return aAttrs[i].getPrefixPos();
 }

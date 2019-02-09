@@ -22,6 +22,7 @@
 
 #include <svx/sdrpageuser.hxx>
 #include <svx/svdsob.hxx>
+#include <memory>
 
 class SdrObject;
 class SfxItemSet;
@@ -42,15 +43,12 @@ namespace sdr
     private:
         SdrPage&                                        maOwnerPage;
         SdrPage&                                        maUsedPage;
-        SetOfByte                                       maVisibleLayers;
+        SdrLayerIDSet                                       maVisibleLayers;
 
         // ViewContact part
-        sdr::contact::ViewContact*                      mpViewContact;
+        mutable std::unique_ptr<sdr::contact::ViewContact>      mpViewContact;
 
         void operator=(const MasterPageDescriptor& rCandidate) = delete;
-
-    protected:
-        sdr::contact::ViewContact* CreateObjectSpecificViewContact();
 
     public:
         MasterPageDescriptor(SdrPage& aOwnerPage, SdrPage& aUsedPage);
@@ -71,8 +69,8 @@ namespace sdr
         SdrPage& GetOwnerPage() const { return maOwnerPage; }
 
         // member access to VisibleLayers
-        const SetOfByte& GetVisibleLayers() const { return maVisibleLayers; }
-        void SetVisibleLayers(const SetOfByte& rNew);
+        const SdrLayerIDSet& GetVisibleLayers() const { return maVisibleLayers; }
+        void SetVisibleLayers(const SdrLayerIDSet& rNew);
 
         const SdrPageProperties* getCorrectSdrPageProperties() const;
     };

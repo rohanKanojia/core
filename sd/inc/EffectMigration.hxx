@@ -24,10 +24,10 @@
 #include <com/sun/star/presentation/AnimationSpeed.hpp>
 #include <com/sun/star/presentation/FadeEffect.hpp>
 
+class SdDrawDocument;
 class SdPage;
 class SvxShape;
 class SdAnimationInfo;
-class SdrObject;
 class SdrPathObj;
 class SdrObjGroup;
 
@@ -62,12 +62,13 @@ public:
     static bool GetDimPrevious( SvxShape* pShape );
     static void SetPresentationOrder( SvxShape* pShape, sal_Int32 nNewPos );
     static sal_Int32 GetPresentationOrder( SvxShape* pShape );
-    static void UpdateSoundEffect( SvxShape* pShape, SdAnimationInfo* pInfo );
+    static void UpdateSoundEffect( SvxShape* pShape, SdAnimationInfo const * pInfo );
     static OUString GetSoundFile( SvxShape* pShape );
     static bool GetSoundOn( SvxShape* pShape );
 
-    static void SetAnimationPath( SvxShape* pShape, SdrPathObj* pPathObj );
-    static void CreateAnimatedGroup(SdrObjGroup& rGroupObj, SdPage& rPage);
+    static void SetAnimationPath( SvxShape* pShape, SdrPathObj const * pPathObj );
+    static void CreateAnimatedGroup(SdrObjGroup const & rGroupObj, SdPage& rPage);
+    static void DocumentLoaded(SdDrawDocument & rDoc);
 };
 
 } // end of namespace sd

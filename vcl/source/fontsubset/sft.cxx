@@ -33,13 +33,13 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #endif
-#include "sft.hxx"
-#include "gsub.h"
+#include <sft.hxx>
 #include "ttcr.hxx"
 #include "xlat.hxx"
 #include <rtl/crc.h>
 #include <rtl/ustring.hxx>
-
+#include <sal/log.hxx>
+#include <o3tl/safeint.hxx>
 #include <osl/endian.h>
 #include <algorithm>
 
@@ -48,9 +48,9 @@ namespace vcl
 
 /*- module identification */
 
-static const char *modname  = "SunTypeTools-TT";
-static const char *modver   = "1.0";
-static const char *modextra = "gelf";
+static const char * const modname  = "SunTypeTools-TT";
+static const char * const modver   = "1.0";
+static const char * const modextra = "gelf";
 
 /*- private functions, constants and data types */
 
@@ -87,7 +87,6 @@ typedef struct {
     sal_uInt16 aw;                /*- Advance Width (horizontal writing mode)    */
     sal_Int16  lsb;               /*- Left sidebearing (horizontal writing mode) */
     sal_uInt16 ah;                /*- advance height (vertical writing mode)     */
-    sal_Int16  tsb;               /*- top sidebearing (vertical writing mode)    */
 } TTGlyphMetrics;
 
 #define HFORMAT_LINELEN 64
@@ -103,9 +102,6 @@ typedef struct {
     sal_uInt32 nGlyphs;           /* number of glyphs in the font + 1 */
     sal_uInt32 *offs;             /* array of nGlyphs offsets */
 } GlyphOffsets;
-
-/* private tags */
-static const sal_uInt32 TTFontClassTag = 0x74746663;  /* 'ttfc' */
 
 static const sal_uInt32 T_true = 0x74727565;        /* 'true' */
 static const sal_uInt32 T_ttcf = 0x74746366;        /* 'ttcf' */
@@ -124,7 +120,6 @@ static const sal_uInt32 T_otto = 0x4f54544f;        /* 'OTTO' */
 #define T_vmtx 0x766D7478
 #define T_OS2  0x4F532F32
 #define T_post 0x706F7374
-#define T_kern 0x6B65726E
 #define T_cvt  0x63767420
 #define T_prep 0x70726570
 #define T_fpgm 0x6670676D
@@ -145,63 +140,45 @@ static void *scalloc(size_t n, size_t size)
     return res;
 }
 
-/*- Data access macros for data stored in big-endian or little-endian format */
-static sal_Int16 GetInt16(const sal_uInt8 *ptr, size_t offset, int bigendian)
+/*- Data access methods for data stored in big-endian format */
+static sal_Int16 GetInt16(const sal_uInt8 *ptr, size_t offset)
 {
     sal_Int16 t;
     assert(ptr != nullptr);
 
-    if (bigendian) {
-        t = (ptr+offset)[0] << 8 | (ptr+offset)[1];
-    } else {
-        t = (ptr+offset)[1] << 8 | (ptr+offset)[0];
-    }
+    t = (ptr+offset)[0] << 8 | (ptr+offset)[1];
 
     return t;
 }
 
-static sal_uInt16 GetUInt16(const sal_uInt8 *ptr, size_t offset, int bigendian)
+static sal_uInt16 GetUInt16(const sal_uInt8 *ptr, size_t offset)
 {
     sal_uInt16 t;
     assert(ptr != nullptr);
 
-    if (bigendian) {
-        t = (ptr+offset)[0] << 8 | (ptr+offset)[1];
-    } else {
-        t = (ptr+offset)[1] << 8 | (ptr+offset)[0];
-    }
+    t = (ptr+offset)[0] << 8 | (ptr+offset)[1];
 
     return t;
 }
 
-static sal_Int32  GetInt32(const sal_uInt8 *ptr, size_t offset, int bigendian)
+static sal_Int32  GetInt32(const sal_uInt8 *ptr, size_t offset)
 {
     sal_Int32 t;
     assert(ptr != nullptr);
 
-    if (bigendian) {
-        t = (ptr+offset)[0] << 24 | (ptr+offset)[1] << 16 |
-            (ptr+offset)[2] << 8  | (ptr+offset)[3];
-    } else {
-        t = (ptr+offset)[3] << 24 | (ptr+offset)[2] << 16 |
-            (ptr+offset)[1] << 8  | (ptr+offset)[0];
-    }
+    t = (ptr+offset)[0] << 24 | (ptr+offset)[1] << 16 |
+        (ptr+offset)[2] << 8  | (ptr+offset)[3];
 
     return t;
 }
 
-static sal_uInt32 GetUInt32(const sal_uInt8 *ptr, size_t offset, int bigendian)
+static sal_uInt32 GetUInt32(const sal_uInt8 *ptr, size_t offset)
 {
     sal_uInt32 t;
     assert(ptr != nullptr);
 
-    if (bigendian) {
-        t = (ptr+offset)[0] << 24 | (ptr+offset)[1] << 16 |
-            (ptr+offset)[2] << 8  | (ptr+offset)[3];
-    } else {
-        t = (ptr+offset)[3] << 24 | (ptr+offset)[2] << 16 |
-            (ptr+offset)[1] << 8  | (ptr+offset)[0];
-    }
+    t = (ptr+offset)[0] << 24 | (ptr+offset)[1] << 16 |
+        (ptr+offset)[2] << 8  | (ptr+offset)[3];
 
     return t;
 }
@@ -211,7 +188,7 @@ static sal_uInt32 GetUInt32(const sal_uInt8 *ptr, size_t offset, int bigendian)
 #define Int32FromMOTA(a) (a)
 #else
 static sal_uInt16 Int16FromMOTA(sal_uInt16 a) {
-  return (sal_uInt16) (((sal_uInt8)((a) >> 8)) | ((sal_uInt8)(a) << 8));
+  return static_cast<sal_uInt16>(static_cast<sal_uInt8>(a >> 8) | (static_cast<sal_uInt8>(a) << 8));
 }
 static sal_uInt32 Int32FromMOTA(sal_uInt32 a) {
   return ((a>>24)&0xFF) | (((a>>8)&0xFF00) | ((a&0xFF00)<<8) | ((a&0xFF)<<24));
@@ -285,12 +262,12 @@ static int XUnits(int unitsPerEm, int n)
     return (n * 1000) / unitsPerEm;
 }
 
-static const sal_uInt8* getTable( TrueTypeFont *ttf, sal_uInt32 ord)
+static const sal_uInt8* getTable( TrueTypeFont const *ttf, sal_uInt32 ord)
 {
     return ttf->tables[ord];
 }
 
-static sal_uInt32 getTableSize(TrueTypeFont *ttf, sal_uInt32 ord)
+static sal_uInt32 getTableSize(TrueTypeFont const *ttf, sal_uInt32 ord)
 {
     return ttf->tlens[ord];
 }
@@ -361,19 +338,19 @@ static void HexFmtBlockWrite(HexFmt *_this, const void *ptr, sal_uInt32 size)
 /* Outline Extraction functions */
 
 /* fills the aw and lsb entries of the TTGlyphMetrics structure from hmtx table -*/
-static void GetMetrics(TrueTypeFont *ttf, sal_uInt32 glyphID, TTGlyphMetrics *metrics)
+static void GetMetrics(TrueTypeFont const *ttf, sal_uInt32 glyphID, TTGlyphMetrics *metrics)
 {
     const sal_uInt8* table = getTable( ttf, O_hmtx );
 
-    metrics->aw = metrics->lsb = metrics->ah = metrics->tsb = 0;
+    metrics->aw = metrics->lsb = metrics->ah = 0;
     if (!table || !ttf->numberOfHMetrics) return;
 
     if (glyphID < ttf->numberOfHMetrics) {
-        metrics->aw  = GetUInt16(table, 4 * glyphID, 1);
-        metrics->lsb = GetInt16(table, 4 * glyphID + 2, 1);
+        metrics->aw  = GetUInt16(table, 4 * glyphID);
+        metrics->lsb = GetInt16(table, 4 * glyphID + 2);
     } else {
-        metrics->aw  = GetUInt16(table, 4 * (ttf->numberOfHMetrics - 1), 1);
-        metrics->lsb = GetInt16(table + ttf->numberOfHMetrics * 4, (glyphID - ttf->numberOfHMetrics) * 2, 1);
+        metrics->aw  = GetUInt16(table, 4 * (ttf->numberOfHMetrics - 1));
+        metrics->lsb = GetInt16(table + ttf->numberOfHMetrics * 4, (glyphID - ttf->numberOfHMetrics) * 2);
     }
 
     table = getTable(ttf, O_vmtx);
@@ -381,18 +358,16 @@ static void GetMetrics(TrueTypeFont *ttf, sal_uInt32 glyphID, TTGlyphMetrics *me
         return;
 
     if (glyphID < ttf->numOfLongVerMetrics) {
-        metrics->ah  = GetUInt16(table, 4 * glyphID, 1);
-        metrics->tsb = GetInt16(table, 4 * glyphID + 2, 1);
+        metrics->ah  = GetUInt16(table, 4 * glyphID);
     } else {
-        metrics->ah  = GetUInt16(table, 4 * (ttf->numOfLongVerMetrics - 1), 1);
-        metrics->tsb = GetInt16(table + ttf->numOfLongVerMetrics * 4, (glyphID - ttf->numOfLongVerMetrics) * 2, 1);
+        metrics->ah  = GetUInt16(table, 4 * (ttf->numOfLongVerMetrics - 1));
     }
 }
 
 static int GetTTGlyphOutline(TrueTypeFont *, sal_uInt32 , ControlPoint **, TTGlyphMetrics *, std::vector< sal_uInt32 >* );
 
 /* returns the number of control points, allocates the pointArray */
-static int GetSimpleTTOutline(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPoint **pointArray, TTGlyphMetrics *metrics)
+static int GetSimpleTTOutline(TrueTypeFont const *ttf, sal_uInt32 glyphID, ControlPoint **pointArray, TTGlyphMetrics *metrics)
 {
     const sal_uInt8* table = getTable(ttf, O_glyf);
     const sal_uInt32 nTableSize = getTableSize(ttf, O_glyf);
@@ -406,15 +381,15 @@ static int GetSimpleTTOutline(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPoin
     if( glyphID >= ttf->nglyphs )           /*- glyph is not present in the font */
         return 0;
     const sal_uInt8* ptr = table + ttf->goffsets[glyphID];
-    const sal_Int16 numberOfContours = GetInt16(ptr, 0, 1);
+    const sal_Int16 numberOfContours = GetInt16(ptr, 0);
     if( numberOfContours <= 0 )             /*- glyph is not simple */
         return 0;
 
     if (metrics) {                                                    /*- GetCompoundTTOutline() calls this function with NULL metrics -*/
-        metrics->xMin = GetInt16(ptr, 2, 1);
-        metrics->yMin = GetInt16(ptr, 4, 1);
-        metrics->xMax = GetInt16(ptr, 6, 1);
-        metrics->yMax = GetInt16(ptr, 8, 1);
+        metrics->xMin = GetInt16(ptr, 2);
+        metrics->yMin = GetInt16(ptr, 4);
+        metrics->xMax = GetInt16(ptr, 6);
+        metrics->yMax = GetInt16(ptr, 8);
         GetMetrics(ttf, glyphID, metrics);
     }
 
@@ -425,12 +400,12 @@ static int GetSimpleTTOutline(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPoin
         return 0;
     for (i=0; i<numberOfContours; i++)
     {
-        const sal_uInt16 t = GetUInt16(ptr, 10+i*2, 1);
+        const sal_uInt16 t = GetUInt16(ptr, 10+i*2);
         if (t > lastPoint)
             lastPoint = t;
     }
 
-    sal_uInt16 instLen = GetUInt16(ptr, 10 + numberOfContours*2, 1);
+    sal_uInt16 instLen = GetUInt16(ptr, 10 + numberOfContours*2);
     sal_uInt32 nOffset = 10 + 2 * numberOfContours + 2 + instLen;
     if (nOffset > nTableSize)
         return 0;
@@ -452,7 +427,8 @@ static int GetSimpleTTOutline(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPoin
 
     i = 0;
     while (i <= lastPoint) {
-        pa[i++].flags = (sal_uInt32) (flag = *p++);
+        flag = *p++;
+        pa[i++].flags = static_cast<sal_uInt32>(flag);
         if (flag & 8) {                                     /*- repeat flag */
             n = *p++;
             for (j=0; j<n; j++) {
@@ -470,15 +446,15 @@ static int GetSimpleTTOutline(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPoin
     for (i = 0; i <= lastPoint; i++) {
         if (pa[i].flags & 0x02) {
             if (pa[i].flags & 0x10) {
-                z += (int) (*p++);
+                z += static_cast<int>(*p++);
             } else {
-                z -= (int) (*p++);
+                z -= static_cast<int>(*p++);
             }
         } else if ( !(pa[i].flags & 0x10)) {
-            z += GetInt16(p, 0, 1);
+            z += GetInt16(p, 0);
             p += 2;
         }
-        pa[i].x = (sal_Int16)z;
+        pa[i].x = static_cast<sal_Int16>(z);
     }
 
     /*- Process the Y coordinate */
@@ -491,14 +467,14 @@ static int GetSimpleTTOutline(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPoin
                 z -= *p++;
             }
         } else if ( !(pa[i].flags & 0x20)) {
-            z += GetInt16(p, 0, 1);
+            z += GetInt16(p, 0);
             p += 2;
         }
-        pa[i].y = (sal_Int16)z;
+        pa[i].y = static_cast<sal_Int16>(z);
     }
 
     for (i=0; i<numberOfContours; i++) {
-        sal_uInt16 offset = GetUInt16(ptr, 10 + i * 2, 1);
+        sal_uInt16 offset = GetUInt16(ptr, 10 + i * 2);
         SAL_WARN_IF(offset >= palen, "vcl.fonts", "Font " << OUString::createFromAscii(ttf->fname) <<
             " contour " << i << " claimed an illegal offset of "
             << offset << " but max offset is " << palen-1);
@@ -514,7 +490,7 @@ static int GetSimpleTTOutline(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPoin
 static int GetCompoundTTOutline(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPoint **pointArray, TTGlyphMetrics *metrics, std::vector< sal_uInt32 >& glyphlist)
 {
     sal_uInt16 flags, index;
-    sal_Int16 e, f, numberOfContours;
+    sal_Int16 e, f;
     const sal_uInt8* table = getTable( ttf, O_glyf );
     std::vector<ControlPoint> myPoints;
     ControlPoint *nextComponent, *pa;
@@ -528,23 +504,23 @@ static int GetCompoundTTOutline(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPo
         return 0;
 
     const sal_uInt8* ptr = table + ttf->goffsets[glyphID];
-    if ((numberOfContours = GetInt16(ptr, 0, 1)) != -1)   /*- glyph is not compound */
+    if (GetInt16(ptr, 0) != -1)   /* number of contours - glyph is not compound */
         return 0;
 
     if (metrics) {
-        metrics->xMin = GetInt16(ptr, 2, 1);
-        metrics->yMin = GetInt16(ptr, 4, 1);
-        metrics->xMax = GetInt16(ptr, 6, 1);
-        metrics->yMax = GetInt16(ptr, 8, 1);
+        metrics->xMin = GetInt16(ptr, 2);
+        metrics->yMin = GetInt16(ptr, 4);
+        metrics->xMax = GetInt16(ptr, 6);
+        metrics->yMax = GetInt16(ptr, 8);
         GetMetrics(ttf, glyphID, metrics);
     }
 
     ptr += 10;
 
     do {
-        flags = GetUInt16(ptr, 0, 1);
+        flags = GetUInt16(ptr, 0);
         /* printf("flags: 0x%X\n", flags); */
-        index = GetUInt16(ptr, 2, 1);
+        index = GetUInt16(ptr, 2);
         ptr += 4;
 
         if( std::find( glyphlist.begin(), glyphlist.end(), index ) != glyphlist.end() )
@@ -553,10 +529,9 @@ static int GetCompoundTTOutline(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPo
             fprintf(stderr, "Endless loop found in a compound glyph.\n");
             fprintf(stderr, "%d -> ", index);
             fprintf(stderr," [");
-            for( std::vector< sal_uInt32 >::const_iterator it = glyphlist.begin();
-                 it != glyphlist.end(); ++it )
+            for( const auto& rGlyph : glyphlist )
             {
-                fprintf( stderr,"%d ", (int) *it );
+                fprintf( stderr,"%d ", (int) rGlyph );
             }
             fprintf(stderr,"]\n");
         /**/
@@ -577,19 +552,18 @@ static int GetCompoundTTOutline(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPo
         if( ! glyphlist.empty() )
             glyphlist.pop_back();
 
-        if (flags & USE_MY_METRICS) {
-            if (metrics) GetMetrics(ttf, index, metrics);
-        }
+        if ((flags & USE_MY_METRICS) && metrics)
+            GetMetrics(ttf, index, metrics);
 
         if (flags & ARG_1_AND_2_ARE_WORDS) {
-            e = GetInt16(ptr, 0, 1);
-            f = GetInt16(ptr, 2, 1);
+            e = GetInt16(ptr, 0);
+            f = GetInt16(ptr, 2);
             /* printf("ARG_1_AND_2_ARE_WORDS: %d %d\n", e & 0xFFFF, f & 0xFFFF); */
             ptr += 4;
         } else {
             if (flags & ARGS_ARE_XY_VALUES) {     /* args are signed */
-                e = (sal_Int8) *ptr++;
-                f = (sal_Int8) *ptr++;
+                e = static_cast<sal_Int8>(*ptr++);
+                f = static_cast<sal_Int8>(*ptr++);
                 /* printf("ARGS_ARE_XY_VALUES: %d %d\n", e & 0xFF, f & 0xFF); */
             } else {                              /* args are unsigned */
                 /* printf("!ARGS_ARE_XY_VALUES\n"); */
@@ -603,47 +577,52 @@ static int GetCompoundTTOutline(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPo
         b = c = 0;
 
         if (flags & WE_HAVE_A_SCALE) {
-            a = GetInt16(ptr, 0, 1) << 2;
+            a = GetInt16(ptr, 0) << 2;
             d = a;
             ptr += 2;
         } else if (flags & WE_HAVE_AN_X_AND_Y_SCALE) {
-            a = GetInt16(ptr, 0, 1) << 2;
-            d = GetInt16(ptr, 2, 1) << 2;
+            a = GetInt16(ptr, 0) << 2;
+            d = GetInt16(ptr, 2) << 2;
             ptr += 4;
         } else if (flags & WE_HAVE_A_TWO_BY_TWO) {
-            a = GetInt16(ptr, 0, 1) << 2;
-            b = GetInt16(ptr, 2, 1) << 2;
-            c = GetInt16(ptr, 4, 1) << 2;
-            d = GetInt16(ptr, 6, 1) << 2;
+            a = GetInt16(ptr, 0) << 2;
+            b = GetInt16(ptr, 2) << 2;
+            c = GetInt16(ptr, 4) << 2;
+            d = GetInt16(ptr, 6) << 2;
             ptr += 8;
         }
 
         abs1 = (a < 0) ? -a : a;
         abs2 = (b < 0) ? -b : b;
-        m    = (abs1 > abs2) ? abs1 : abs2;
+        m    = std::max(abs1, abs2);
         abs3 = abs1 - abs2;
         if (abs3 < 0) abs3 = -abs3;
         if (abs3 <= 33) m *= 2;
 
         abs1 = (c < 0) ? -c : c;
         abs2 = (d < 0) ? -d : d;
-        n    = (abs1 > abs2) ? abs1 : abs2;
+        n    = std::max(abs1, abs2);
         abs3 = abs1 - abs2;
         if (abs3 < 0) abs3 = -abs3;
         if (abs3 <= 33) n *= 2;
 
-        for (i=0; i<np; i++) {
-            F16Dot16 t;
-            ControlPoint cp;
-            cp.flags = nextComponent[i].flags;
-            const sal_uInt16 x = nextComponent[i].x;
-            const sal_uInt16 y = nextComponent[i].y;
-            t = fixedMulDiv(a, x << 16, m) + fixedMulDiv(c, y << 16, m) + (e << 16);
-            cp.x = (sal_Int16)(fixedMul(t, m) >> 16);
-            t = fixedMulDiv(b, x << 16, n) + fixedMulDiv(d, y << 16, n) + (f << 16);
-            cp.y = (sal_Int16)(fixedMul(t, n) >> 16);
+        SAL_WARN_IF(np && !m, "vcl.fonts", "Parsing error in " << OUString::createFromAscii(ttf->fname) <<
+                     ": divide by zero");
 
-            myPoints.push_back( cp );
+        if (m != 0) {
+            for (i=0; i<np; i++) {
+                F16Dot16 t;
+                ControlPoint cp;
+                cp.flags = nextComponent[i].flags;
+                const sal_uInt16 x = nextComponent[i].x;
+                const sal_uInt16 y = nextComponent[i].y;
+                t = fixedMulDiv(a, x << 16, m) + fixedMulDiv(c, y << 16, m) + sal_Int32(sal_uInt16(e) << 16);
+                cp.x = static_cast<sal_Int16>(fixedMul(t, m) >> 16);
+                t = fixedMulDiv(b, x << 16, n) + fixedMulDiv(d, y << 16, n) + sal_Int32(sal_uInt16(f) << 16);
+                cp.y = static_cast<sal_Int16>(fixedMul(t, n) >> 16);
+
+                myPoints.push_back( cp );
+            }
         }
 
         free(nextComponent);
@@ -695,7 +674,7 @@ static int GetTTGlyphOutline(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPoint
         return 0;
     }
 
-    numberOfContours = GetInt16(ptr, 0, 1);
+    numberOfContours = GetInt16(ptr, 0);
 
     if (numberOfContours >= 0)
     {
@@ -713,7 +692,7 @@ static int GetTTGlyphOutline(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPoint
 
 /*- returns the number of items in the path -*/
 
-static int BSplineToPSPath(ControlPoint *srcA, int srcCount, PSPathElement **path)
+static int BSplineToPSPath(ControlPoint const *srcA, int srcCount, PSPathElement **path)
 {
     std::vector< PSPathElement > aPathList;
     int nPathCount = 0;
@@ -813,7 +792,7 @@ static int BSplineToPSPath(ControlPoint *srcA, int srcCount, PSPathElement **pat
         }
 
         if (ecflag) {
-            aPathList.push_back( PSPathElement(PS_CLOSEPATH) );
+            aPathList.emplace_back(PS_CLOSEPATH );
             scflag = 1;
             ecflag = false;
             cp = EndContour + 1;
@@ -829,7 +808,7 @@ static int BSplineToPSPath(ControlPoint *srcA, int srcCount, PSPathElement **pat
         }
     }
 
-    if( (nPathCount = (int)aPathList.size()) > 0)
+    if( (nPathCount = static_cast<int>(aPathList.size())) > 0)
     {
         *path = static_cast<PSPathElement*>(calloc(nPathCount, sizeof(PSPathElement)));
         assert(*path != nullptr);
@@ -844,8 +823,8 @@ static int BSplineToPSPath(ControlPoint *srcA, int srcCount, PSPathElement **pat
 static char *nameExtract( const sal_uInt8* name, int nTableSize, int n, int dbFlag, sal_Unicode** ucs2result )
 {
     char *res;
-    const sal_uInt8* ptr = name + GetUInt16(name, 4, 1) + GetUInt16(name + 6, 12 * n + 10, 1);
-    int len = GetUInt16(name+6, 12 * n + 8, 1);
+    const sal_uInt8* ptr = name + GetUInt16(name, 4) + GetUInt16(name + 6, 12 * n + 10);
+    int len = GetUInt16(name+6, 12 * n + 8);
 
     // sanity check
     const sal_uInt8* end_table = name+nTableSize;
@@ -869,7 +848,7 @@ static char *nameExtract( const sal_uInt8* name, int nTableSize, int n, int dbFl
         {
             *ucs2result = static_cast<sal_Unicode*>(malloc( len+2 ));
             for (int i = 0; i < len/2; i++ )
-                (*ucs2result)[i] = GetUInt16( ptr, 2*i, 1 );
+                (*ucs2result)[i] = GetUInt16( ptr, 2*i );
             (*ucs2result)[len/2] = 0;
         }
     } else {
@@ -896,8 +875,8 @@ static int findname( const sal_uInt8 *name, sal_uInt16 n, sal_uInt16 platformID,
 
     do {
         const int i = (l + r) >> 1;
-        t1 = GetUInt32(name + 6, i * 12 + 0, 1);
-        t2 = GetUInt32(name + 6, i * 12 + 4, 1);
+        t1 = GetUInt32(name + 6, i * 12 + 0);
+        t2 = GetUInt32(name + 6, i * 12 + 4);
 
         if (! ((m1 < t1) || ((m1 == t1) && (m2 < t2)))) l = i + 1;
         if (! ((m1 > t1) || ((m1 == t1) && (m2 > t2)))) r = i - 1;
@@ -936,7 +915,7 @@ static void GetNames(TrueTypeFont *t)
         return;
     }
 
-    sal_uInt16 n = GetUInt16(table, 2, 1);
+    sal_uInt16 n = GetUInt16(table, 2);
 
     /* simple sanity check for name table entry count */
     const size_t nMinRecordSize = 12;
@@ -1057,12 +1036,6 @@ enum cmapType {
 
 #define MISSING_GLYPH_INDEX 0
 
-/*
- * getGlyph[0246]() functions and friends are implemented by:
- * @author Manpreet Singh
- * getGlyph12() function and friends by:
- * @author HDU
- */
 static sal_uInt32 getGlyph0(const sal_uInt8* cmap, sal_uInt32, sal_uInt32 c) {
     if (c <= 255) {
         return *(cmap + 6 + c);
@@ -1072,9 +1045,9 @@ static sal_uInt32 getGlyph0(const sal_uInt8* cmap, sal_uInt32, sal_uInt32 c) {
 }
 
 typedef struct _subHeader2 {
-    sal_uInt16 firstCode;
-    sal_uInt16 entryCount;
-    sal_uInt16 idDelta;
+    sal_uInt16 const firstCode;
+    sal_uInt16 const entryCount;
+    sal_uInt16 const idDelta;
     sal_uInt16 idRangeOffset;
 } subHeader2;
 
@@ -1089,15 +1062,15 @@ static sal_uInt32 getGlyph2(const sal_uInt8 *cmap, const sal_uInt32 nMaxCmapSize
     int k = -1;
     sal_uInt32 ToReturn;
 
-    theHighByte = (sal_uInt8)((c >> 8) & 0x00ff);
-    theLowByte = (sal_uInt8)(c & 0x00ff);
+    theHighByte = static_cast<sal_uInt8>((c >> 8) & 0x00ff);
+    theLowByte = static_cast<sal_uInt8>(c & 0x00ff);
     subHeader2Keys = CMAP2 + 3;
     subHeader2s = reinterpret_cast<subHeader2 const *>(subHeader2Keys + 256);
     if(reinterpret_cast<sal_uInt8 const *>(&subHeader2Keys[theHighByte]) - cmap < int(nMaxCmapSize - 2))
     {
         k = Int16FromMOTA(subHeader2Keys[theHighByte]) / 8;
         // check if the subheader record fits into available space
-        if((k >= 0) && (reinterpret_cast<sal_uInt8 const *>(&subHeader2s[k]) - cmap >= int(nMaxCmapSize - sizeof(subHeader2))))
+        if(reinterpret_cast<sal_uInt8 const *>(&subHeader2s[k]) - cmap >= int(nMaxCmapSize - sizeof(subHeader2)))
             k = -1;
     }
 
@@ -1153,8 +1126,8 @@ static sal_uInt32 getGlyph6(const sal_uInt8 *cmap, sal_uInt32, sal_uInt32 c) {
 static sal_uInt16 GEbinsearch(sal_uInt16 const *ar, sal_uInt16 length, sal_uInt16 toSearch) {
     signed int low, high, lastfound = 0xffff;
     sal_uInt16 res;
-    if(length == (sal_uInt16)0 || length == (sal_uInt16)0xFFFF) {
-        return (sal_uInt16)0xFFFF;
+    if(length == sal_uInt16(0) || length == sal_uInt16(0xFFFF)) {
+        return sal_uInt16(0xFFFF);
     }
     low = 0;
     high = length - 1;
@@ -1168,7 +1141,7 @@ static sal_uInt16 GEbinsearch(sal_uInt16 const *ar, sal_uInt16 length, sal_uInt1
             low = ++mid;
         }
     }
-    return (sal_uInt16)lastfound;
+    return static_cast<sal_uInt16>(lastfound);
 }
 
 static sal_uInt32 getGlyph4(const sal_uInt8 *cmap, const sal_uInt32 nMaxCmapSize, sal_uInt32 c) {
@@ -1186,9 +1159,9 @@ static sal_uInt32 getGlyph4(const sal_uInt8 *cmap, const sal_uInt32 nMaxCmapSize
 
     segCount = Int16FromMOTA(*(CMAP4 + 3))/2;
     endCode = CMAP4 + 7;
-    i = GEbinsearch(endCode, segCount, (sal_uInt16)c);
+    i = GEbinsearch(endCode, segCount, static_cast<sal_uInt16>(c));
 
-    if (i == (sal_uInt16) 0xFFFF) {
+    if (i == sal_uInt16(0xFFFF)) {
         return MISSING_GLYPH_INDEX;
     }
     startCode = endCode + segCount + 1;
@@ -1245,7 +1218,13 @@ static void FindCmap(TrueTypeFont *ttf)
 {
     const sal_uInt8* table = getTable(ttf, O_cmap);
     sal_uInt32 table_size = getTableSize(ttf, O_cmap);
-    sal_uInt16 ncmaps = GetUInt16(table, 2, 1);
+    if (table_size < 4)
+    {
+        SAL_WARN("vcl.fonts", "Parsing error in " << OUString::createFromAscii(ttf->fname) <<
+                 "cmap table size too short");
+        return;
+    }
+    sal_uInt16 ncmaps = GetUInt16(table, 2);
     sal_uInt32 AppleUni   = 0;              // Apple Unicode
     sal_uInt32 ThreeZero  = 0;              /* MS Symbol            */
     sal_uInt32 ThreeOne   = 0;              /* MS UCS-2             */
@@ -1277,12 +1256,12 @@ static void FindCmap(TrueTypeFont *ttf)
             break;
         }
 
-        sal_uInt16 pID = GetUInt16(table, 4 + i * 8, 1);
-        sal_uInt16 eID = GetUInt16(table, 6 + i * 8, 1);
-        sal_uInt32 offset = GetUInt32(table, nLargestFixedOffsetPos, 1);
+        sal_uInt16 pID = GetUInt16(table, 4 + i * 8);
+        sal_uInt16 eID = GetUInt16(table, 6 + i * 8);
+        sal_uInt32 offset = GetUInt32(table, nLargestFixedOffsetPos);
 
          /* sanity check, cmap must lie within file */
-        if( (table - ttf->ptr) + offset > (sal_uInt32)ttf->fsize )
+        if( (table - ttf->ptr) + offset > static_cast<sal_uInt32>(ttf->fsize) )
             continue;
 
         /* Unicode tables in Apple fonts */
@@ -1335,7 +1314,14 @@ static void FindCmap(TrueTypeFont *ttf)
     }
 
     if (ttf->cmapType != CMAP_NOT_USABLE) {
-        switch (GetUInt16(ttf->cmap, 0, 1)) {
+        if( (ttf->cmap - ttf->ptr + 2U) > static_cast<sal_uInt32>(ttf->fsize) ) {
+            ttf->cmapType = CMAP_NOT_USABLE;
+            ttf->cmap = nullptr;
+        }
+    }
+
+    if (ttf->cmapType != CMAP_NOT_USABLE) {
+        switch (GetUInt16(ttf->cmap, 0)) {
             case 0: ttf->mapper = getGlyph0; break;
             case 2: ttf->mapper = getGlyph2; break;
             case 4: ttf->mapper = getGlyph4; break;
@@ -1344,93 +1330,13 @@ static void FindCmap(TrueTypeFont *ttf)
             default:
 #if OSL_DEBUG_LEVEL > 1
                 /*- if the cmap table is really broken */
-                printf("%s: %d is not a recognized cmap format.\n", ttf->fname, GetUInt16(ttf->cmap, 0, 1));
+                printf("%s: %d is not a recognized cmap format.\n", ttf->fname, GetUInt16(ttf->cmap, 0));
 #endif
                 ttf->cmapType = CMAP_NOT_USABLE;
                 ttf->cmap = nullptr;
                 ttf->mapper = nullptr;
         }
     }
-}
-
-static void GetKern(TrueTypeFont *ttf)
-{
-    const sal_uInt8* table = getTable(ttf, O_kern);
-    int nTableSize = getTableSize(ttf, O_kern);
-    const sal_uInt8 *ptr;
-
-    if( !table )
-        goto badtable;
-
-    if (GetUInt16(table, 0, 1) == 0) {                                /* Traditional Microsoft style table with sal_uInt16 version and nTables fields */
-        ttf->nkern = GetUInt16(table, 2, 1);
-        ttf->kerntype = KT_MICROSOFT;
-        ptr = table + 4;
-
-        const sal_uInt32 remaining_table_size = nTableSize-4;
-        const sal_uInt32 nMinRecordSize = 2;
-        const sal_uInt32 nMaxRecords = remaining_table_size / nMinRecordSize;
-        if (ttf->nkern > nMaxRecords)
-        {
-            SAL_WARN("vcl.fonts", "Parsing error in " << OUString::createFromAscii(ttf->fname) <<
-                     ": " << nMaxRecords << " max possible entries, but " <<
-                     ttf->nkern << " claimed, truncating");
-            ttf->nkern = nMaxRecords;
-        }
-
-        ttf->kerntables = static_cast<const sal_uInt8**>(calloc(ttf->nkern, sizeof(sal_uInt8 *)));
-        assert(ttf->kerntables != nullptr);
-
-        for( unsigned i = 0; i < ttf->nkern; ++i) {
-            ttf->kerntables[i] = ptr;
-            ptr += GetUInt16(ptr, 2, 1);
-            /* sanity check */
-            if( ptr > ttf->ptr+ttf->fsize )
-            {
-                free( ttf->kerntables );
-                goto badtable;
-            }
-        }
-        return;
-    }
-
-    if (GetUInt32(table, 0, 1) == 0x00010000) {                       /* MacOS style kern tables: fixed32 version and sal_uInt32 nTables fields */
-        ttf->nkern = GetUInt32(table, 4, 1);
-        ttf->kerntype = KT_APPLE_NEW;
-        ptr = table + 8;
-
-        const sal_uInt32 remaining_table_size = nTableSize-8;
-        const sal_uInt32 nMinRecordSize = 4;
-        const sal_uInt32 nMaxRecords = remaining_table_size / nMinRecordSize;
-        if (ttf->nkern > nMaxRecords)
-        {
-            SAL_WARN("vcl.fonts", "Parsing error in " << OUString::createFromAscii(ttf->fname) <<
-                     ": " << nMaxRecords << " max possible entries, but " <<
-                     ttf->nkern << " claimed, truncating");
-            ttf->nkern = nMaxRecords;
-        }
-
-        ttf->kerntables = static_cast<const sal_uInt8**>(calloc(ttf->nkern, sizeof(sal_uInt8 *)));
-        assert(ttf->kerntables != nullptr);
-
-        for( unsigned i = 0; i < ttf->nkern; ++i) {
-            ttf->kerntables[i] = ptr;
-            ptr += GetUInt32(ptr, 0, 1);
-            /* sanity check; there are some fonts that are broken in this regard */
-            if( ptr > ttf->ptr+ttf->fsize )
-            {
-                free( ttf->kerntables );
-                goto badtable;
-            }
-        }
-        return;
-    }
-
-  badtable:
-    ttf->kerntype = KT_NONE;
-    ttf->kerntables = nullptr;
-
-    return;
 }
 
 /*- Public functions */
@@ -1442,8 +1348,8 @@ int CountTTCFonts(const char* fname)
     FILE* fd = fopen(fname, "rb");
     if( fd ) {
         if (fread(buffer, 1, 12, fd) == 12) {
-            if(GetUInt32(buffer, 0, 1) == T_ttcf )
-                nFonts = GetUInt32(buffer, 8, 1);
+            if(GetUInt32(buffer, 0) == T_ttcf )
+                nFonts = GetUInt32(buffer, 8);
         }
         fclose(fd);
     }
@@ -1455,46 +1361,45 @@ static void allocTrueTypeFont( TrueTypeFont** ttf )
     *ttf = static_cast<TrueTypeFont*>(calloc(1,sizeof(TrueTypeFont)));
     if( *ttf != nullptr )
     {
-        (*ttf)->tag = 0;
         (*ttf)->fname = nullptr;
         (*ttf)->fsize = -1;
         (*ttf)->ptr = nullptr;
         (*ttf)->nglyphs = 0xFFFFFFFF;
-        (*ttf)->pGSubstitution = nullptr;
     }
 }
 
 /* forward declaration for the two entry points to use*/
-static int doOpenTTFont( sal_uInt32 facenum, TrueTypeFont* t );
+static SFErrCodes doOpenTTFont( sal_uInt32 facenum, TrueTypeFont* t );
 
 #if !defined(_WIN32)
-int OpenTTFontFile( const char* fname, sal_uInt32 facenum, TrueTypeFont** ttf )
+SFErrCodes OpenTTFontFile( const char* fname, sal_uInt32 facenum, TrueTypeFont** ttf )
 {
-    int ret, fd = -1;
+    SFErrCodes ret;
+    int fd = -1;
     struct stat st;
 
-    if (!fname || !*fname) return SF_BADFILE;
+    if (!fname || !*fname) return SFErrCodes::BadFile;
 
     allocTrueTypeFont( ttf );
     if( ! *ttf )
-        return SF_MEMORY;
+        return SFErrCodes::Memory;
 
     (*ttf)->fname = strdup(fname);
     if( ! (*ttf)->fname )
     {
-        ret = SF_MEMORY;
+        ret = SFErrCodes::Memory;
         goto cleanup;
     }
 
     fd = open(fname, O_RDONLY);
 
     if (fd == -1) {
-        ret = SF_BADFILE;
+        ret = SFErrCodes::BadFile;
         goto cleanup;
     }
 
     if (fstat(fd, &st) == -1) {
-        ret = SF_FILEIO;
+        ret = SFErrCodes::FileIo;
         goto cleanup;
     }
 
@@ -1505,12 +1410,12 @@ int OpenTTFontFile( const char* fname, sal_uInt32 facenum, TrueTypeFont** ttf )
      * Size will be 0, but fonts smaller than 4 bytes would be broken anyway.
      */
     if ((*ttf)->fsize == 0) {
-        ret = SF_BADFILE;
+        ret = SFErrCodes::BadFile;
         goto cleanup;
     }
 
     if (((*ttf)->ptr = static_cast<sal_uInt8 *>(mmap(nullptr, (*ttf)->fsize, PROT_READ, MAP_SHARED, fd, 0))) == MAP_FAILED) {
-        ret = SF_MEMORY;
+        ret = SFErrCodes::Memory;
         goto cleanup;
     }
     close(fd);
@@ -1527,11 +1432,11 @@ cleanup:
 }
 #endif
 
-int OpenTTFontBuffer(const void* pBuffer, sal_uInt32 nLen, sal_uInt32 facenum, TrueTypeFont** ttf)
+SFErrCodes OpenTTFontBuffer(const void* pBuffer, sal_uInt32 nLen, sal_uInt32 facenum, TrueTypeFont** ttf)
 {
     allocTrueTypeFont( ttf );
     if( *ttf == nullptr )
-        return SF_MEMORY;
+        return SFErrCodes::Memory;
 
     (*ttf)->fname = nullptr;
     (*ttf)->fsize = nLen;
@@ -1540,41 +1445,76 @@ int OpenTTFontBuffer(const void* pBuffer, sal_uInt32 nLen, sal_uInt32 facenum, T
     return doOpenTTFont( facenum, *ttf );
 }
 
-static int doOpenTTFont( sal_uInt32 facenum, TrueTypeFont* t )
+namespace {
+
+bool withinBounds(sal_uInt32 tdoffset, sal_uInt32 moreoffset, sal_uInt32 len, sal_uInt32 available)
 {
+    sal_uInt32 result;
+    if (o3tl::checked_add(tdoffset, moreoffset, result))
+        return false;
+    if (o3tl::checked_add(result, len, result))
+        return false;
+    return result <= available;
+}
+
+class TTFontCloser
+{
+    TrueTypeFont* m_font;
+public:
+    TTFontCloser(TrueTypeFont* t)
+        : m_font(t)
+    {
+    }
+    void clear() { m_font = nullptr; }
+    ~TTFontCloser()
+    {
+        if (m_font)
+            CloseTTFont(m_font);
+    }
+};
+
+}
+
+static SFErrCodes doOpenTTFont( sal_uInt32 facenum, TrueTypeFont* t )
+{
+    TTFontCloser aCloseGuard(t);
+
+    if (t->fsize < 4) {
+        return SFErrCodes::TtFormat;
+    }
     int i;
     sal_uInt32 length, tag;
     sal_uInt32 tdoffset = 0;        /* offset to TableDirectory in a TTC file. For TTF files is 0 */
-    int indexfmt;
 
-    sal_uInt32 TTCTag = GetInt32(t->ptr, 0, 1);
+    sal_uInt32 TTCTag = GetInt32(t->ptr, 0);
 
     if ((TTCTag == 0x00010000) || (TTCTag == T_true)) {
         tdoffset = 0;
     } else if (TTCTag == T_otto) {                         /* PS-OpenType font */
         tdoffset = 0;
     } else if (TTCTag == T_ttcf) {                         /* TrueType collection */
-        sal_uInt32 Version = GetUInt32(t->ptr, 4, 1);
+        if (!withinBounds(12, 4 * facenum, sizeof(sal_uInt32), t->fsize)) {
+            return SFErrCodes::FontNo;
+        }
+        sal_uInt32 Version = GetUInt32(t->ptr, 4);
         if (Version != 0x00010000 && Version != 0x00020000) {
-            CloseTTFont(t);
-            return SF_TTFORMAT;
+            return SFErrCodes::TtFormat;
         }
-        if (facenum >= GetUInt32(t->ptr, 8, 1)) {
-            CloseTTFont(t);
-            return SF_FONTNO;
+        if (facenum >= GetUInt32(t->ptr, 8)) {
+            return SFErrCodes::FontNo;
         }
-        tdoffset = GetUInt32(t->ptr, 12 + 4 * facenum, 1);
+        tdoffset = GetUInt32(t->ptr, 12 + 4 * facenum);
     } else {
-        CloseTTFont(t);
-        return SF_TTFORMAT;
+        return SFErrCodes::TtFormat;
     }
 
-    /* magic number */
-    t->tag = TTFontClassTag;
+    if (withinBounds(tdoffset, 0, 4 + sizeof(sal_uInt16), t->fsize)) {
+        t->ntables = GetUInt16(t->ptr + tdoffset, 4);
+    }
 
-    t->ntables = GetUInt16(t->ptr + tdoffset, 4, 1);
-    if( t->ntables >= 128 )
-        return SF_TTFORMAT;
+    if (t->ntables >= 128 || t->ntables == 0) {
+        return SFErrCodes::TtFormat;
+    }
 
     t->tables = static_cast<const sal_uInt8**>(calloc(NUM_TAGS, sizeof(sal_uInt8 *)));
     assert(t->tables != nullptr);
@@ -1582,9 +1522,14 @@ static int doOpenTTFont( sal_uInt32 facenum, TrueTypeFont* t )
     assert(t->tlens != nullptr);
 
     /* parse the tables */
-    for (i=0; i<(int)t->ntables; i++) {
+    for (i=0; i<static_cast<int>(t->ntables); i++) {
         int nIndex;
-        tag = GetUInt32(t->ptr + tdoffset + 12, 16 * i, 1);
+        const sal_uInt32 nStart = tdoffset + 12;
+        const sal_uInt32 nOffset = 16 * i;
+        if (withinBounds(nStart, nOffset, sizeof(sal_uInt32), t->fsize))
+            tag = GetUInt32(t->ptr + nStart, nOffset);
+        else
+            tag = static_cast<sal_uInt32>(-1);
         switch( tag ) {
             case T_maxp: nIndex = O_maxp; break;
             case T_glyf: nIndex = O_glyf; break;
@@ -1598,7 +1543,6 @@ static int doOpenTTFont( sal_uInt32 facenum, TrueTypeFont* t )
             case T_vmtx: nIndex = O_vmtx; break;
             case T_OS2 : nIndex = O_OS2;  break;
             case T_post: nIndex = O_post; break;
-            case T_kern: nIndex = O_kern; break;
             case T_cvt : nIndex = O_cvt;  break;
             case T_prep: nIndex = O_prep; break;
             case T_fpgm: nIndex = O_fpgm; break;
@@ -1606,19 +1550,21 @@ static int doOpenTTFont( sal_uInt32 facenum, TrueTypeFont* t )
             case T_CFF:  nIndex = O_CFF; break;
             default: nIndex = -1; break;
         }
-        if( nIndex >= 0 ) {
-            sal_uInt32 nTableOffset = GetUInt32(t->ptr + tdoffset + 12, 16 * i + 8, 1);
-            length = GetUInt32(t->ptr + tdoffset + 12, 16 * i + 12, 1);
+
+        if ((nIndex >= 0) && withinBounds(nStart, nOffset, 12 + sizeof(sal_uInt32), t->fsize)) {
+            sal_uInt32 nTableOffset = GetUInt32(t->ptr + nStart, nOffset + 8);
+            length = GetUInt32(t->ptr + nStart, nOffset + 12);
             t->tables[nIndex] = t->ptr + nTableOffset;
             t->tlens[nIndex] = length;
         }
     }
 
     /* Fixup offsets when only a TTC extract was provided */
-    if( facenum == (sal_uInt32)~0 ) {
+    if( facenum == sal_uInt32(~0) ) {
         sal_uInt8* pHead = const_cast<sal_uInt8*>(t->tables[O_head]);
-        if( !pHead )
-            return SF_TTFORMAT;
+        if (!pHead) {
+            return SFErrCodes::TtFormat;
+        }
         /* limit Head candidate to TTC extract's limits */
         if( pHead > t->ptr + (t->fsize - 54) )
             pHead = t->ptr + (t->fsize - 54);
@@ -1634,8 +1580,9 @@ static int doOpenTTFont( sal_uInt32 facenum, TrueTypeFont* t )
                 break;
             }
         }
-        if( p <= t->ptr )
-            return SF_TTFORMAT;
+        if (p <= t->ptr) {
+            return SFErrCodes::TtFormat;
+        }
     }
 
     /* Check the table offsets after TTC correction */
@@ -1657,7 +1604,7 @@ static int doOpenTTFont( sal_uInt32 facenum, TrueTypeFont* t )
         }
         else if( const_cast<sal_uInt8*>(t->tables[i]) + t->tlens[i] > t->ptr + t->fsize )
         {
-            int nMaxLen = (t->ptr + t->fsize) - t->tables[i];
+            sal_PtrDiff nMaxLen = (t->ptr + t->fsize) - t->tables[i];
             if( nMaxLen < 0 )
                 nMaxLen = 0;
             t->tlens[i] = nMaxLen;
@@ -1675,58 +1622,62 @@ static int doOpenTTFont( sal_uInt32 facenum, TrueTypeFont* t )
      */
 
     if( !(getTable(t, O_maxp) && getTable(t, O_head) && getTable(t, O_name) && getTable(t, O_cmap)) ) {
-        CloseTTFont(t);
-        return SF_TTFORMAT;
+        return SFErrCodes::TtFormat;
     }
 
     const sal_uInt8* table = getTable(t, O_maxp);
-    t->nglyphs = GetUInt16(table, 4, 1);
+    sal_uInt32 table_size = getTableSize(t, O_maxp);
+    t->nglyphs = table_size >= 6 ? GetUInt16(table, 4) : 0;
 
     table = getTable(t, O_head);
-    t->unitsPerEm = GetUInt16(table, 18, 1);
-    indexfmt = GetInt16(table, 50, 1);
+    table_size = getTableSize(t, O_head);
+    if (table_size < 52) {
+        return SFErrCodes::TtFormat;
+    }
+    t->unitsPerEm = GetUInt16(table, 18);
+    int indexfmt = GetInt16(table, 50);
 
     if( ((indexfmt != 0) && (indexfmt != 1)) || (t->unitsPerEm <= 0) ) {
-        CloseTTFont(t);
-        return SF_TTFORMAT;
+        return SFErrCodes::TtFormat;
     }
 
     if( getTable(t, O_glyf) && getTable(t, O_loca) ) /* TTF or TTF-OpenType */
     {
         int k = (getTableSize(t, O_loca) / (indexfmt ? 4 : 2)) - 1;
-        if( k < (int)t->nglyphs )       /* Hack for broken Chinese fonts */
+        if( k < static_cast<int>(t->nglyphs) )       /* Hack for broken Chinese fonts */
             t->nglyphs = k;
 
         table = getTable(t, O_loca);
         t->goffsets = static_cast<sal_uInt32 *>(calloc(1+t->nglyphs, sizeof(sal_uInt32)));
         assert(t->goffsets != nullptr);
 
-        for( i = 0; i <= (int)t->nglyphs; ++i )
-            t->goffsets[i] = indexfmt ? GetUInt32(table, i << 2, 1) : (sal_uInt32)GetUInt16(table, i << 1, 1) << 1;
+        for( i = 0; i <= static_cast<int>(t->nglyphs); ++i )
+            t->goffsets[i] = indexfmt ? GetUInt32(table, i << 2) : static_cast<sal_uInt32>(GetUInt16(table, i << 1)) << 1;
     } else if( getTable(t, O_CFF) ) {           /* PS-OpenType */
         int k = (getTableSize(t, O_CFF) / 2) - 1; /* set a limit here, presumably much lower than the table size, but establishes some sort of physical bound */
-        if( k < (int)t->nglyphs )
+        if( k < static_cast<int>(t->nglyphs) )
             t->nglyphs = k;
         t->goffsets = static_cast<sal_uInt32 *>(calloc(1+t->nglyphs, sizeof(sal_uInt32)));
         /* TODO: implement to get subsetting */
         assert(t->goffsets != nullptr);
     } else {
-        CloseTTFont(t);
-        return SF_TTFORMAT;
+        return SFErrCodes::TtFormat;
     }
 
     table = getTable(t, O_hhea);
-    t->numberOfHMetrics = (table != nullptr) ? GetUInt16(table, 34, 1) : 0;
+    table_size = getTableSize(t, O_hhea);
+    t->numberOfHMetrics = (table && table_size >= 36) ? GetUInt16(table, 34) : 0;
 
     table = getTable(t, O_vhea);
-    t->numOfLongVerMetrics = (table != nullptr) ? GetUInt16(table, 34, 1) : 0;
+    table_size = getTableSize(t, O_vhea);
+    t->numOfLongVerMetrics = (table && table_size >= 36) ? GetUInt16(table, 34) : 0;
 
     GetNames(t);
     FindCmap(t);
-    GetKern(t);
-    ReadGSUB( t, 0, 0 );
 
-    return SF_OK;
+    aCloseGuard.clear();
+
+    return SFErrCodes::Ok;
 }
 
 void CloseTTFont(TrueTypeFont *ttf)
@@ -1746,12 +1697,8 @@ void CloseTTFont(TrueTypeFont *ttf)
         free( ttf->usubfamily );
     free(ttf->tables);
     free(ttf->tlens);
-    free(ttf->kerntables);
-
-    ReleaseGSUB(ttf);
 
     free(ttf);
-    return;
 }
 
 int GetTTGlyphPoints(TrueTypeFont *ttf, sal_uInt32 glyphID, ControlPoint **pointArray)
@@ -1774,12 +1721,12 @@ int GetTTGlyphComponents(TrueTypeFont *ttf, sal_uInt32 glyphID, std::vector< sal
 
     glyphlist.push_back( glyphID );
 
-    if (GetInt16(ptr, 0, 1) == -1) {
+    if (GetInt16(ptr, 0) == -1) {
         sal_uInt16 flags, index;
         ptr += 10;
         do {
-            flags = GetUInt16(ptr, 0, 1);
-            index = GetUInt16(ptr, 2, 1);
+            flags = GetUInt16(ptr, 0);
+            index = GetUInt16(ptr, 2);
 
             ptr += 4;
             n += GetTTGlyphComponents(ttf, index, glyphlist);
@@ -1803,8 +1750,8 @@ int GetTTGlyphComponents(TrueTypeFont *ttf, sal_uInt32 glyphID, std::vector< sal
     return n;
 }
 
-int  CreateT3FromTTGlyphs(TrueTypeFont *ttf, FILE *outf, const char *fname,
-                          sal_uInt16 *glyphArray, sal_uInt8 *encoding, int nGlyphs,
+SFErrCodes CreateT3FromTTGlyphs(TrueTypeFont *ttf, FILE *outf, const char *fname,
+                          sal_uInt16 const *glyphArray, sal_uInt8 *encoding, int nGlyphs,
                           int wmode)
 {
     ControlPoint *pa;
@@ -1814,39 +1761,39 @@ int  CreateT3FromTTGlyphs(TrueTypeFont *ttf, FILE *outf, const char *fname,
     TTGlyphMetrics metrics;
     int UPEm = ttf->unitsPerEm;
 
-    const char *h01 = "%%!PS-AdobeFont-%d.%d-%d.%d\n";
-    const char *h02 = "%% Creator: %s %s %s\n";
-    const char *h09 = "%% Original font name: %s\n";
+    const char * const h01 = "%%!PS-AdobeFont-%d.%d-%d.%d\n";
+    const char * const h02 = "%% Creator: %s %s %s\n";
+    const char * const h09 = "%% Original font name: %s\n";
 
-    const char *h10 =
+    const char * const h10 =
         "30 dict begin\n"
         "/PaintType 0 def\n"
         "/FontType 3 def\n"
         "/StrokeWidth 0 def\n";
 
-    const char *h11 = "/FontName (%s) cvn def\n";
+    const char * const h11 = "/FontName (%s) cvn def\n";
 
     /*
       const char *h12 = "%/UniqueID %d def\n";
     */
-    const char *h13 = "/FontMatrix [.001 0 0 .001 0 0] def\n";
-    const char *h14 = "/FontBBox [%d %d %d %d] def\n";
+    const char * const h13 = "/FontMatrix [.001 0 0 .001 0 0] def\n";
+    const char * const h14 = "/FontBBox [%d %d %d %d] def\n";
 
-    const char *h15=
+    const char * const h15=
         "/Encoding 256 array def\n"
         "    0 1 255 {Encoding exch /.notdef put} for\n";
 
-    const char *h16 = "    Encoding %d /glyph%d put\n";
-    const char *h17 = "/XUID [103 0 0 16#%08X %d 16#%08X 16#%08X] def\n";
+    const char * const h16 = "    Encoding %d /glyph%d put\n";
+    const char * const h17 = "/XUID [103 0 0 16#%08" SAL_PRIXUINT32 " %d 16#%08" SAL_PRIXUINT32 " 16#%08" SAL_PRIXUINT32 "] def\n";
 
-    const char *h30 = "/CharProcs %d dict def\n";
-    const char *h31 = "  CharProcs begin\n";
-    const char *h32 = "    /.notdef {} def\n";
-    const char *h33 = "    /glyph%d {\n";
-    const char *h34 = "    } bind def\n";
-    const char *h35 = "  end\n";
+    const char * const h30 = "/CharProcs %d dict def\n";
+    const char * const h31 = "  CharProcs begin\n";
+    const char * const h32 = "    /.notdef {} def\n";
+    const char * const h33 = "    /glyph%d {\n";
+    const char * const h34 = "    } bind def\n";
+    const char * const h35 = "  end\n";
 
-    const char *h40 =
+    const char * const h40 =
         "/BuildGlyph {\n"
         "  exch /CharProcs get exch\n"
         "  2 copy known not\n"
@@ -1859,13 +1806,13 @@ int  CreateT3FromTTGlyphs(TrueTypeFont *ttf, FILE *outf, const char *fname,
         "} bind def\n"
         "currentdict end\n";
 
-    const char *h41 = "(%s) cvn exch definefont pop\n";
+    const char * const h41 = "(%s) cvn exch definefont pop\n";
 
-    if (!((nGlyphs > 0) && (nGlyphs <= 256))) return SF_GLYPHNUM;
-    if (!glyphArray) return SF_BADARG;
+    if (!((nGlyphs > 0) && (nGlyphs <= 256))) return SFErrCodes::GlyphNum;
+    if (!glyphArray) return SFErrCodes::BadArg;
     if (!fname) fname = ttf->psname;
 
-    fprintf(outf, h01, GetInt16(table, 0, 1), GetUInt16(table, 2, 1), GetInt16(table, 4, 1), GetUInt16(table, 6, 1));
+    fprintf(outf, h01, GetInt16(table, 0), GetUInt16(table, 2), GetInt16(table, 4), GetUInt16(table, 6));
     fprintf(outf, h02, modname, modver, modextra);
     fprintf(outf, h09, ttf->psname);
 
@@ -1885,7 +1832,7 @@ int  CreateT3FromTTGlyphs(TrueTypeFont *ttf, FILE *outf, const char *fname,
 
     fprintf(outf, h17, rtl_crc32(0, ttf->ptr, ttf->fsize), nGlyphs, rtl_crc32(0, glyphArray, nGlyphs * 2), rtl_crc32(0, encoding, nGlyphs));
     fprintf(outf, "%s", h13);
-    fprintf(outf, h14, XUnits(UPEm, GetInt16(table, 36, 1)), XUnits(UPEm, GetInt16(table, 38, 1)), XUnits(UPEm, GetInt16(table, 40, 1)), XUnits(UPEm, GetInt16(table, 42, 1)));
+    fprintf(outf, h14, XUnits(UPEm, GetInt16(table, 36)), XUnits(UPEm, GetInt16(table, 38)), XUnits(UPEm, GetInt16(table, 40)), XUnits(UPEm, GetInt16(table, 42)));
     fprintf(outf, "%s", h15);
 
     for (i = 0; i < nGlyphs; i++) {
@@ -1952,64 +1899,28 @@ int  CreateT3FromTTGlyphs(TrueTypeFont *ttf, FILE *outf, const char *fname,
     fprintf(outf, "%s", h40);
     fprintf(outf, h41, fname);
 
-    return SF_OK;
+    return SFErrCodes::Ok;
 }
 
-int  CreateTTFromTTGlyphs(TrueTypeFont  *ttf,
+SFErrCodes CreateTTFromTTGlyphs(TrueTypeFont  *ttf,
                           const char    *fname,
-                          sal_uInt16        *glyphArray,
-                          sal_uInt8          *encoding,
-                          int            nGlyphs,
-                          int            nNameRecs,
-                          NameRecord    *nr,
-                          sal_uInt32        flags)
+                          sal_uInt16 const *glyphArray,
+                          sal_uInt8 const *encoding,
+                          int            nGlyphs)
 {
     TrueTypeCreator *ttcr;
     TrueTypeTable *head=nullptr, *hhea=nullptr, *maxp=nullptr, *cvt=nullptr, *prep=nullptr, *glyf=nullptr, *fpgm=nullptr, *cmap=nullptr, *name=nullptr, *post = nullptr, *os2 = nullptr;
     int i;
-    int res;
+    SFErrCodes res;
 
     TrueTypeCreatorNewEmpty(T_true, &ttcr);
 
     /**                       name                         **/
 
-    if (flags & TTCF_AutoName) {
-        /* not implemented yet
-           NameRecord *names;
-           NameRecord newname;
-           int n = GetTTNameRecords(ttf, &names);
-           int n1 = 0, n2 = 0, n3 = 0, n4 = 0, n5 = 0, n6 = 0;
-           sal_uInt8 *cp1;
-           sal_uInt8 suffix[32];
-           sal_uInt32 c1 = crc32(glyphArray, nGlyphs * 2);
-           sal_uInt32 c2 = crc32(encoding, nGlyphs);
-           int len;
-           snprintf(suffix, 31, "S%08X%08X-%d", c1, c2, nGlyphs);
-
-           name = TrueTypeTableNew_name(0, 0);
-           for (i = 0; i < n; i++) {
-           if (names[i].platformID == 1 && names[i].encodingID == 0 && names[i].languageID == 0 && names[i].nameID == 1) {
-
-           memcpy(newname, names+i, sizeof(NameRecord));
-           newname.slen = name[i].slen + strlen(suffix);
-        */
-        const sal_uInt8 ptr[] = {0,'T',0,'r',0,'u',0,'e',0,'T',0,'y',0,'p',0,'e',0,'S',0,'u',0,'b',0,'s',0,'e',0,'t'};
-        NameRecord n1 = {1, 0, 0, 6, 14, const_cast<sal_uInt8 *>(reinterpret_cast<sal_uInt8 const *>("TrueTypeSubset"))};
-        NameRecord n2 = {3, 1, 1033, 6, 28, nullptr};
-        n2.sptr = const_cast<sal_uInt8 *>(ptr);
-        name = TrueTypeTableNew_name(0, nullptr);
-        nameAdd(name, &n1);
-        nameAdd(name, &n2);
-    } else {
-        if (nNameRecs == 0) {
-            NameRecord *names;
-            int n = GetTTNameRecords(ttf, &names);
-            name = TrueTypeTableNew_name(n, names);
-            DisposeNameRecords(names, n);
-        } else {
-            name = TrueTypeTableNew_name(nNameRecs, nr);
-        }
-    }
+    NameRecord *names;
+    int n = GetTTNameRecords(ttf, &names);
+    name = TrueTypeTableNew_name(n, names);
+    DisposeNameRecords(names, n);
 
     /**                       maxp                         **/
     maxp = TrueTypeTableNew_maxp(getTable(ttf, O_maxp), getTableSize(ttf, O_maxp));
@@ -2017,7 +1928,7 @@ int  CreateTTFromTTGlyphs(TrueTypeFont  *ttf,
     /**                       hhea                         **/
     const sal_uInt8* p = getTable(ttf, O_hhea);
     if (p) {
-        hhea = TrueTypeTableNew_hhea(GetUInt16(p, 4, 1), GetUInt16(p, 6, 1), GetUInt16(p, 8, 1), GetUInt16(p, 18, 1), GetUInt16(p, 20, 1));
+        hhea = TrueTypeTableNew_hhea(GetUInt16(p, 4), GetUInt16(p, 6), GetUInt16(p, 8), GetUInt16(p, 18), GetUInt16(p, 20));
     } else {
         hhea = TrueTypeTableNew_hhea(0, 0, 0, 0, 0);
     }
@@ -2026,13 +1937,13 @@ int  CreateTTFromTTGlyphs(TrueTypeFont  *ttf,
 
     p = getTable(ttf, O_head);
     assert(p != nullptr);
-    head = TrueTypeTableNew_head(GetUInt32(p, 4, 1),
-                                 GetUInt16(p, 16, 1),
-                                 GetUInt16(p, 18, 1),
+    head = TrueTypeTableNew_head(GetUInt32(p, 4),
+                                 GetUInt16(p, 16),
+                                 GetUInt16(p, 18),
                                  p+20,
-                                 GetUInt16(p, 44, 1),
-                                 GetUInt16(p, 46, 1),
-                                 GetInt16(p, 48, 1));
+                                 GetUInt16(p, 44),
+                                 GetUInt16(p, 46),
+                                 GetInt16(p, 48));
 
     /**                       glyf                          **/
 
@@ -2068,18 +1979,12 @@ int  CreateTTFromTTGlyphs(TrueTypeFont  *ttf,
     /**                       post                          **/
     if ((p = getTable(ttf, O_post)) != nullptr) {
         post = TrueTypeTableNew_post(0x00030000,
-                                     GetUInt32(p, 4, 1),
-                                     GetUInt16(p, 8, 1),
-                                     GetUInt16(p, 10, 1),
-                                     GetUInt16(p, 12, 1));
+                                     GetUInt32(p, 4),
+                                     GetUInt16(p, 8),
+                                     GetUInt16(p, 10),
+                                     GetUInt16(p, 12));
     } else {
         post = TrueTypeTableNew_post(0x00030000, 0, 0, 0, 0);
-    }
-
-    if (flags & TTCF_IncludeOS2) {
-        if ((p = getTable(ttf, O_OS2)) != nullptr) {
-            os2 = TrueTypeTableNew(T_OS2, getTableSize(ttf, O_OS2), p);
-        }
     }
 
     AddTable(ttcr, name); AddTable(ttcr, maxp); AddTable(ttcr, hhea);
@@ -2087,9 +1992,9 @@ int  CreateTTFromTTGlyphs(TrueTypeFont  *ttf,
     AddTable(ttcr, cvt ); AddTable(ttcr, prep); AddTable(ttcr, fpgm);
     AddTable(ttcr, post); AddTable(ttcr, os2);
 
-    if ((res = StreamToFile(ttcr, fname)) != SF_OK) {
+    if ((res = StreamToFile(ttcr, fname)) != SFErrCodes::Ok) {
 #if OSL_DEBUG_LEVEL > 1
-        fprintf(stderr, "StreamToFile: error code: %d.\n", res);
+        fprintf(stderr, "StreamToFile: error code: %d.\n", int(res));
 #endif
     }
 
@@ -2103,7 +2008,7 @@ static GlyphOffsets *GlyphOffsetsNew(sal_uInt8 *sfntP, sal_uInt32 sfntLen)
 {
     GlyphOffsets* res = static_cast<GlyphOffsets*>(smalloc(sizeof(GlyphOffsets)));
     sal_uInt8 *loca = nullptr;
-    sal_uInt16 i, numTables = GetUInt16(sfntP, 4, 1);
+    sal_uInt16 numTables = GetUInt16(sfntP, 4);
     sal_uInt32 locaLen = 0;
     sal_Int16 indexToLocFormat = 0;
 
@@ -2115,7 +2020,7 @@ static GlyphOffsets *GlyphOffsetsNew(sal_uInt8 *sfntP, sal_uInt32 sfntLen)
         numTables = nMaxPossibleTables;
     }
 
-    for (i = 0; i < numTables; i++) {
+    for (sal_uInt16 i = 0; i < numTables; i++) {
         sal_uInt32 nLargestFixedOffsetPos = 12 + 16 * i + 12;
         sal_uInt32 nMinSize = nLargestFixedOffsetPos + sizeof(sal_uInt32);
         if (nMinSize > sfntLen)
@@ -2125,15 +2030,15 @@ static GlyphOffsets *GlyphOffsetsNew(sal_uInt8 *sfntP, sal_uInt32 sfntLen)
             break;
         }
 
-        sal_uInt32 tag = GetUInt32(sfntP, 12 + 16 * i, 1);
-        sal_uInt32 off = GetUInt32(sfntP, 12 + 16 * i + 8, 1);
-        sal_uInt32 len = GetUInt32(sfntP, nLargestFixedOffsetPos, 1);
+        sal_uInt32 tag = GetUInt32(sfntP, 12 + 16 * i);
+        sal_uInt32 off = GetUInt32(sfntP, 12 + 16 * i + 8);
+        sal_uInt32 len = GetUInt32(sfntP, nLargestFixedOffsetPos);
 
         if (tag == T_loca) {
             loca = sfntP + off;
             locaLen = len;
         } else if (tag == T_head) {
-            indexToLocFormat = GetInt16(sfntP + off, 50, 1);
+            indexToLocFormat = GetInt16(sfntP + off, 50);
         }
     }
 
@@ -2141,11 +2046,11 @@ static GlyphOffsets *GlyphOffsetsNew(sal_uInt8 *sfntP, sal_uInt32 sfntLen)
     assert(res->nGlyphs != 0);
     res->offs = static_cast<sal_uInt32*>(scalloc(res->nGlyphs, sizeof(sal_uInt32)));
 
-    for (i = 0; i < res->nGlyphs; i++) {
+    for (sal_uInt32 i = 0; i < res->nGlyphs; i++) {
         if (indexToLocFormat == 1) {
-            res->offs[i] = GetUInt32(loca, i * 4, 1);
+            res->offs[i] = GetUInt32(loca, i * 4);
         } else {
-            res->offs[i] = GetUInt16(loca, i * 2, 1) << 1;
+            res->offs[i] = GetUInt16(loca, i * 2) << 1;
         }
     }
     return res;
@@ -2173,9 +2078,9 @@ static void DumpSfnts(FILE *outf, sal_uInt8 *sfntP, sal_uInt32 sfntLen)
     const sal_uInt32 nMaxPossibleTables = nSpaceForTables/nTableSize;
 
     HexFmt *h = HexFmtNew(outf);
-    sal_uInt16 i, numTables = GetUInt16(sfntP, 4, 1);
+    sal_uInt16 i, numTables = GetUInt16(sfntP, 4);
     GlyphOffsets *go = GlyphOffsetsNew(sfntP, sfntLen);
-    sal_uInt8 pad[] = {0,0,0,0};                     /* zeroes                       */
+    sal_uInt8 const pad[] = {0,0,0,0};                     /* zeroes                       */
 
     if (numTables > nMaxPossibleTables)
     {
@@ -2204,8 +2109,8 @@ static void DumpSfnts(FILE *outf, sal_uInt8 *sfntP, sal_uInt32 sfntLen)
             break;
         }
 
-        sal_uInt32 tag = GetUInt32(sfntP, 12 + 16 * i, 1);
-        sal_uInt32 off = GetUInt32(sfntP, 12 + 16 * i + 8, 1);
+        sal_uInt32 tag = GetUInt32(sfntP, 12 + 16 * i);
+        sal_uInt32 off = GetUInt32(sfntP, 12 + 16 * i + 8);
         if (off > sfntLen)
         {
             SAL_WARN( "vcl.fonts", "DumpSfnts claims offset of "
@@ -2213,7 +2118,7 @@ static void DumpSfnts(FILE *outf, sal_uInt8 *sfntP, sal_uInt32 sfntLen)
             break;
         }
         sal_uInt8 *pRecordStart = sfntP + off;
-        sal_uInt32 len = GetUInt32(sfntP, nLargestFixedOffsetPos, 1);
+        sal_uInt32 len = GetUInt32(sfntP, nLargestFixedOffsetPos);
         sal_uInt32 nMaxLenPossible = sfntLen - off;
         if (len > nMaxLenPossible)
         {
@@ -2245,17 +2150,17 @@ static void DumpSfnts(FILE *outf, sal_uInt8 *sfntP, sal_uInt32 sfntLen)
     free(offs);
 }
 
-int  CreateT42FromTTGlyphs(TrueTypeFont  *ttf,
+SFErrCodes CreateT42FromTTGlyphs(TrueTypeFont  *ttf,
                            FILE          *outf,
                            const char    *psname,
-                           sal_uInt16        *glyphArray,
+                           sal_uInt16 const *glyphArray,
                            sal_uInt8          *encoding,
                            int            nGlyphs)
 {
     TrueTypeCreator *ttcr;
     TrueTypeTable *head=nullptr, *hhea=nullptr, *maxp=nullptr, *cvt=nullptr, *prep=nullptr, *glyf=nullptr, *fpgm=nullptr;
     int i;
-    int res;
+    SFErrCodes res;
 
     sal_uInt32 ver, rev;
 
@@ -2263,7 +2168,7 @@ int  CreateT42FromTTGlyphs(TrueTypeFont  *ttf,
     sal_uInt32 sfntLen;
     int UPEm = ttf->unitsPerEm;
 
-    if (nGlyphs >= 256) return SF_GLYPHNUM;
+    if (nGlyphs >= 256) return SFErrCodes::GlyphNum;
 
     assert(psname != nullptr);
 
@@ -2273,14 +2178,14 @@ int  CreateT42FromTTGlyphs(TrueTypeFont  *ttf,
     const sal_uInt8* p = getTable(ttf, O_head);
     const sal_uInt8* headP = p;
     assert(p != nullptr);
-    head = TrueTypeTableNew_head(GetUInt32(p, 4, 1), GetUInt16(p, 16, 1), GetUInt16(p, 18, 1), p+20, GetUInt16(p, 44, 1), GetUInt16(p, 46, 1), GetInt16(p, 48, 1));
-    ver = GetUInt32(p, 0, 1);
-    rev = GetUInt32(p, 4, 1);
+    head = TrueTypeTableNew_head(GetUInt32(p, 4), GetUInt16(p, 16), GetUInt16(p, 18), p+20, GetUInt16(p, 44), GetUInt16(p, 46), GetInt16(p, 48));
+    ver = GetUInt32(p, 0);
+    rev = GetUInt32(p, 4);
 
     /**                       hhea                         **/
     p = getTable(ttf, O_hhea);
     if (p) {
-        hhea = TrueTypeTableNew_hhea(GetUInt16(p, 4, 1), GetUInt16(p, 6, 1), GetUInt16(p, 8, 1), GetUInt16(p, 18, 1), GetUInt16(p, 20, 1));
+        hhea = TrueTypeTableNew_hhea(GetUInt16(p, 4), GetUInt16(p, 6), GetUInt16(p, 8), GetUInt16(p, 18), GetUInt16(p, 20));
     } else {
         hhea = TrueTypeTableNew_hhea(0, 0, 0, 0, 0);
     }
@@ -2308,19 +2213,19 @@ int  CreateT42FromTTGlyphs(TrueTypeFont  *ttf,
     sal_uInt16* gID = static_cast<sal_uInt16*>(scalloc(nGlyphs, sizeof(sal_uInt32)));
 
     for (i = 0; i < nGlyphs; i++) {
-        gID[i] = (sal_uInt16)glyfAdd(glyf, GetTTRawGlyphData(ttf, glyphArray[i]), ttf);
+        gID[i] = static_cast<sal_uInt16>(glyfAdd(glyf, GetTTRawGlyphData(ttf, glyphArray[i]), ttf));
     }
 
     AddTable(ttcr, head); AddTable(ttcr, hhea); AddTable(ttcr, maxp); AddTable(ttcr, cvt);
     AddTable(ttcr, prep); AddTable(ttcr, glyf); AddTable(ttcr, fpgm);
 
-    if ((res = StreamToMemory(ttcr, &sfntP, &sfntLen)) != SF_OK) {
+    if ((res = StreamToMemory(ttcr, &sfntP, &sfntLen)) != SFErrCodes::Ok) {
         TrueTypeCreatorDispose(ttcr);
         free(gID);
         return res;
     }
 
-    fprintf(outf, "%%!PS-TrueTypeFont-%d.%d-%d.%d\n", (int)(ver>>16), (int)(ver & 0xFFFF), (int)(rev>>16), (int)(rev & 0xFFFF));
+    fprintf(outf, "%%!PS-TrueTypeFont-%d.%d-%d.%d\n", static_cast<int>(ver>>16), static_cast<int>(ver & 0xFFFF), static_cast<int>(rev>>16), static_cast<int>(rev & 0xFFFF));
     fprintf(outf, "%%%%Creator: %s %s %s\n", modname, modver, modextra);
     fprintf(outf, "%%- Font subset generated from a source font file: '%s'\n", ttf->fname);
     fprintf(outf, "%%- Original font name: %s\n", ttf->psname);
@@ -2330,7 +2235,7 @@ int  CreateT42FromTTGlyphs(TrueTypeFont  *ttf,
     fprintf(outf, "/FontName (%s) cvn def\n", psname);
     fprintf(outf, "/PaintType 0 def\n");
     fprintf(outf, "/FontMatrix [1 0 0 1 0 0] def\n");
-    fprintf(outf, "/FontBBox [%d %d %d %d] def\n", XUnits(UPEm, GetInt16(headP, 36, 1)), XUnits(UPEm, GetInt16(headP, 38, 1)), XUnits(UPEm, GetInt16(headP, 40, 1)), XUnits(UPEm, GetInt16(headP, 42, 1)));
+    fprintf(outf, "/FontBBox [%d %d %d %d] def\n", XUnits(UPEm, GetInt16(headP, 36)), XUnits(UPEm, GetInt16(headP, 38)), XUnits(UPEm, GetInt16(headP, 40)), XUnits(UPEm, GetInt16(headP, 42)));
     fprintf(outf, "/FontType 42 def\n");
     fprintf(outf, "/Encoding 256 array def\n");
     fprintf(outf, "    0 1 255 {Encoding exch /.notdef put} for\n");
@@ -2338,14 +2243,14 @@ int  CreateT42FromTTGlyphs(TrueTypeFont  *ttf,
     for (i = 1; i<nGlyphs; i++) {
         fprintf(outf, "Encoding %d /glyph%u put\n", encoding[i], gID[i]);
     }
-    fprintf(outf, "/XUID [103 0 1 16#%08X %d 16#%08X 16#%08X] def\n", (unsigned int)rtl_crc32(0, ttf->ptr, ttf->fsize), (unsigned int)nGlyphs, (unsigned int)rtl_crc32(0, glyphArray, nGlyphs * 2), (unsigned int)rtl_crc32(0, encoding, nGlyphs));
+    fprintf(outf, "/XUID [103 0 1 16#%08X %u 16#%08X 16#%08X] def\n", static_cast<unsigned int>(rtl_crc32(0, ttf->ptr, ttf->fsize)), static_cast<unsigned int>(nGlyphs), static_cast<unsigned int>(rtl_crc32(0, glyphArray, nGlyphs * 2)), static_cast<unsigned int>(rtl_crc32(0, encoding, nGlyphs)));
 
     DumpSfnts(outf, sfntP, sfntLen);
 
     /* dump charstrings */
     fprintf(outf, "/CharStrings %d dict dup begin\n", nGlyphs);
     fprintf(outf, "/.notdef 0 def\n");
-    for (i = 1; i < (int)glyfCount(glyf); i++) {
+    for (i = 1; i < static_cast<int>(glyfCount(glyf)); i++) {
         fprintf(outf,"/glyph%d %d def\n", i, i);
     }
     fprintf(outf, "end readonly def\n");
@@ -2354,62 +2259,11 @@ int  CreateT42FromTTGlyphs(TrueTypeFont  *ttf,
     TrueTypeCreatorDispose(ttcr);
     free(gID);
     free(sfntP);
-    return SF_OK;
-}
-
-int MapString(TrueTypeFont *ttf, sal_uInt16 *str, int nchars, sal_uInt16 *glyphArray, bool bvertical)
-{
-    int i;
-    sal_uInt16 *cp;
-
-    if (ttf->cmapType == CMAP_NOT_USABLE ) return -1;
-    if (!nchars) return 0;
-
-    if (glyphArray == nullptr) {
-        cp = str;
-    } else {
-        cp = glyphArray;
-    }
-
-    switch (ttf->cmapType) {
-        case CMAP_MS_Symbol:
-            if( ttf->mapper == getGlyph0 ) {
-                sal_uInt16 aChar;
-                for( i = 0; i < nchars; i++ ) {
-                    aChar = str[i];
-                    if( ( aChar & 0xf000 ) == 0xf000 )
-                        aChar &= 0x00ff;
-                    cp[i] = aChar;
-                }
-            }
-            else if( glyphArray )
-                memcpy(glyphArray, str, nchars * 2);
-            break;
-
-        case CMAP_MS_Unicode:
-            if (glyphArray != nullptr) {
-                memcpy(glyphArray, str, nchars * 2);
-            }
-            break;
-
-        case CMAP_MS_ShiftJIS:  TranslateString12(str, cp, nchars); break;
-        case CMAP_MS_Big5:      TranslateString13(str, cp, nchars); break;
-        case CMAP_MS_PRC:       TranslateString14(str, cp, nchars); break;
-        case CMAP_MS_Wansung:   TranslateString15(str, cp, nchars); break;
-        case CMAP_MS_Johab:     TranslateString16(str, cp, nchars); break;
-    }
-
-    const sal_uInt32 nMaxCmapSize = ttf->ptr + ttf->fsize - ttf->cmap;
-    for (i = 0; i < nchars; i++) {
-        cp[i] = (sal_uInt16)ttf->mapper(ttf->cmap, nMaxCmapSize, cp[i]);
-        if (cp[i]!=0 && bvertical)
-            cp[i] = (sal_uInt16)UseGSUB(ttf,cp[i]);
-    }
-    return nchars;
+    return SFErrCodes::Ok;
 }
 
 #if defined(_WIN32) || defined(MACOSX) || defined(IOS)
-sal_uInt16 MapChar(TrueTypeFont *ttf, sal_uInt16 ch, bool bvertical)
+sal_uInt16 MapChar(TrueTypeFont const *ttf, sal_uInt16 ch)
 {
     switch (ttf->cmapType) {
         case CMAP_MS_Symbol:
@@ -2417,7 +2271,7 @@ sal_uInt16 MapChar(TrueTypeFont *ttf, sal_uInt16 ch, bool bvertical)
             const sal_uInt32 nMaxCmapSize = ttf->ptr + ttf->fsize - ttf->cmap;
             if( ttf->mapper == getGlyph0 && ( ch & 0xf000 ) == 0xf000 )
                 ch &= 0x00ff;
-            return (sal_uInt16)ttf->mapper(ttf->cmap, nMaxCmapSize, ch );
+            return static_cast<sal_uInt16>(ttf->mapper(ttf->cmap, nMaxCmapSize, ch ));
         }
 
         case CMAP_MS_Unicode:   break;
@@ -2429,28 +2283,18 @@ sal_uInt16 MapChar(TrueTypeFont *ttf, sal_uInt16 ch, bool bvertical)
         default:                return 0;
     }
     const sal_uInt32 nMaxCmapSize = ttf->ptr + ttf->fsize - ttf->cmap;
-    ch = (sal_uInt16)ttf->mapper(ttf->cmap, nMaxCmapSize, ch);
-    if (ch!=0 && bvertical)
-        ch = (sal_uInt16)UseGSUB(ttf,ch);
+    ch = static_cast<sal_uInt16>(ttf->mapper(ttf->cmap, nMaxCmapSize, ch));
     return ch;
 }
 #endif
 
 
-int DoesVerticalSubstitution( TrueTypeFont *ttf, int bvertical)
-{
-    int nRet = 0;
-    if( bvertical)
-        nRet = HasVerticalGSUB( ttf);
-    return nRet;
-}
-
-int GetTTGlyphCount( TrueTypeFont* ttf )
+int GetTTGlyphCount( TrueTypeFont const * ttf )
 {
     return ttf->nglyphs;
 }
 
-bool GetSfntTable( TrueTypeFont* ttf, int nSubtableIndex,
+bool GetSfntTable( TrueTypeFont const * ttf, int nSubtableIndex,
     const sal_uInt8** ppRawBytes, int* pRawLength )
 {
     if( (nSubtableIndex < 0) || (nSubtableIndex >= NUM_TAGS) )
@@ -2461,7 +2305,7 @@ bool GetSfntTable( TrueTypeFont* ttf, int nSubtableIndex,
     return bOk;
 }
 
-TTSimpleGlyphMetrics *GetTTSimpleGlyphMetrics(TrueTypeFont *ttf, sal_uInt16 *glyphArray, int nGlyphs, bool vertical)
+std::unique_ptr<sal_uInt16[]> GetTTSimpleGlyphMetrics(TrueTypeFont const *ttf, const sal_uInt16 *glyphArray, int nGlyphs, bool vertical)
 {
     const sal_uInt8* pTable;
     sal_uInt32 n;
@@ -2480,57 +2324,56 @@ TTSimpleGlyphMetrics *GetTTSimpleGlyphMetrics(TrueTypeFont *ttf, sal_uInt16 *gly
     if (!nGlyphs || !glyphArray) return nullptr;        /* invalid parameters */
     if (!n || !pTable) return nullptr;                  /* the font does not contain the requested metrics */
 
-    TTSimpleGlyphMetrics* res = static_cast<TTSimpleGlyphMetrics*>(calloc(nGlyphs, sizeof(TTSimpleGlyphMetrics)));
-    assert(res != nullptr);
+    std::unique_ptr<sal_uInt16[]> res(new sal_uInt16[nGlyphs]);
 
     const int UPEm = ttf->unitsPerEm;
     for( int i = 0; i < nGlyphs; ++i) {
-        int nAdvOffset, nLsbOffset;
+        int nAdvOffset;
         sal_uInt16 glyphID = glyphArray[i];
 
         if (glyphID < n) {
             nAdvOffset = 4 * glyphID;
-            nLsbOffset = nAdvOffset + 2;
         } else {
             nAdvOffset = 4 * (n - 1);
-            if( glyphID < ttf->nglyphs )
-                nLsbOffset = 4 * n + 2 * (glyphID - n);
-            else /* font is broken -> use lsb of last hmetrics */
-                nLsbOffset = nAdvOffset + 2;
         }
 
         if( nAdvOffset >= nTableSize)
-            res[i].adv = 0; /* better than a crash for buggy fonts */
+            res[i] = 0; /* better than a crash for buggy fonts */
         else
-            res[i].adv = static_cast<sal_uInt16>(
-                XUnits( UPEm, GetUInt16( pTable, nAdvOffset, 1) ) );
-
-        if( nLsbOffset >= nTableSize)
-            res[i].sb  = 0; /* better than a crash for buggy fonts */
-        else
-            res[i].sb  = static_cast<sal_Int16>(
-                XUnits( UPEm, GetInt16( pTable, nLsbOffset, 1) ) );
+            res[i] = static_cast<sal_uInt16>(
+                XUnits( UPEm, GetUInt16( pTable, nAdvOffset) ) );
     }
 
     return res;
 }
 
-TTSimpleGlyphMetrics *GetTTSimpleCharMetrics(TrueTypeFont * ttf, sal_uInt16 firstChar, int nChars, bool vertical)
+// TODO, clean up table parsing and re-use it elsewhere in this file.
+void GetTTFontMetrics(const std::vector<uint8_t>& hhea,
+                      const std::vector<uint8_t>& os2,
+                      TTGlobalFontInfo *info)
 {
-    TTSimpleGlyphMetrics *res = nullptr;
-    int i, n;
-
-    sal_uInt16* str = static_cast<sal_uInt16*>(malloc(nChars * 2));
-    assert(str != nullptr);
-
-    for (i=0; i<nChars; i++) str[i] = (sal_uInt16)(firstChar + i);
-    if ((n = MapString(ttf, str, nChars, nullptr, vertical)) != -1) {
-        res = GetTTSimpleGlyphMetrics(ttf, str, n, vertical);
+    /* There are 3 different versions of OS/2 table: original (68 bytes long),
+     * Microsoft old (78 bytes long) and Microsoft new (86 bytes long,)
+     * Apple's documentation recommends looking at the table length.
+     *
+     * FIXME: horribly outdated comment and horrible code that uses hard-coded
+     * offsets to read the table.
+     */
+    if (os2.size() >= 76 + 2)
+    {
+        info->fsSelection   = GetUInt16(os2.data(), 62);
+        info->typoAscender  = GetInt16(os2.data(),  68);
+        info->typoDescender = GetInt16(os2.data(),  70);
+        info->typoLineGap   = GetInt16(os2.data(),  72);
+        info->winAscent     = GetUInt16(os2.data(), 74);
+        info->winDescent    = GetUInt16(os2.data(), 76);
     }
 
-    free(str);
-
-    return res;
+    if (hhea.size() >= 8 + 2) {
+        info->ascender      = GetInt16(hhea.data(), 4);
+        info->descender     = GetInt16(hhea.data(), 6);
+        info->linegap       = GetInt16(hhea.data(), 8);
+    }
 }
 
 void GetTTGlobalFontInfo(TrueTypeFont *ttf, TTGlobalFontInfo *info)
@@ -2547,63 +2390,55 @@ void GetTTGlobalFontInfo(TrueTypeFont *ttf, TTGlobalFontInfo *info)
     info->symbolEncoded = (ttf->cmapType == CMAP_MS_Symbol);
 
     const sal_uInt8* table = getTable(ttf, O_OS2);
-    if (table) {
-        info->weight = GetUInt16(table, 4, 1);
-        info->width  = GetUInt16(table, 6, 1);
+    sal_uInt32 table_size = getTableSize(ttf, O_OS2);
+    if (table && table_size >= 42) {
+        info->weight = GetUInt16(table, 4);
+        info->width  = GetUInt16(table, 6);
 
         /* There are 3 different versions of OS/2 table: original (68 bytes long),
          * Microsoft old (78 bytes long) and Microsoft new (86 bytes long,)
          * Apple's documentation recommends looking at the table length.
          */
-        if (getTableSize(ttf, O_OS2) > 68) {
-            info->typoAscender = XUnits(UPEm,GetInt16(table, 68, 1));
-            info->typoDescender = XUnits(UPEm, GetInt16(table, 70, 1));
-            info->typoLineGap = XUnits(UPEm, GetInt16(table, 72, 1));
-            info->winAscent = XUnits(UPEm, GetUInt16(table, 74, 1));
-            info->winDescent = XUnits(UPEm, GetUInt16(table, 76, 1));
+        if (table_size >= 78) {
+            info->typoAscender = XUnits(UPEm,GetInt16(table, 68));
+            info->typoDescender = XUnits(UPEm, GetInt16(table, 70));
+            info->typoLineGap = XUnits(UPEm, GetInt16(table, 72));
+            info->winAscent = XUnits(UPEm, GetUInt16(table, 74));
+            info->winDescent = XUnits(UPEm, GetUInt16(table, 76));
             /* sanity check; some fonts treat winDescent as signed
            * violating the standard */
             if( info->winDescent > 5*UPEm )
-                info->winDescent = XUnits(UPEm, GetInt16(table, 76,1));
-        }
-        if (ttf->cmapType == CMAP_MS_Unicode) {
-            info->rangeFlag = 1;
-            info->ur1 = GetUInt32(table, 42, 1);
-            info->ur2 = GetUInt32(table, 46, 1);
-            info->ur3 = GetUInt32(table, 50, 1);
-            info->ur4 = GetUInt32(table, 54, 1);
+                info->winDescent = XUnits(UPEm, GetInt16(table, 76));
         }
         memcpy(info->panose, table + 32, 10);
-        info->typeFlags = GetUInt16( table, 8, 1 );
-        if( getTable(ttf, O_CFF) )
-            info->typeFlags |= TYPEFLAG_PS_OPENTYPE;
+        info->typeFlags = GetUInt16( table, 8 );
     }
 
     table = getTable(ttf, O_post);
     if (table && getTableSize(ttf, O_post) >= 12+sizeof(sal_uInt32)) {
-        info->pitch  = GetUInt32(table, 12, 1);
-        info->italicAngle = GetInt32(table, 4, 1);
+        info->pitch  = GetUInt32(table, 12);
+        info->italicAngle = GetInt32(table, 4);
     }
 
     table = getTable(ttf, O_head);      /* 'head' tables is always there */
-    info->xMin = XUnits(UPEm, GetInt16(table, 36, 1));
-    info->yMin = XUnits(UPEm, GetInt16(table, 38, 1));
-    info->xMax = XUnits(UPEm, GetInt16(table, 40, 1));
-    info->yMax = XUnits(UPEm, GetInt16(table, 42, 1));
-    info->macStyle = GetInt16(table, 44, 1);
+    table_size = getTableSize(ttf, O_head);
+    if (table_size >= 46) {
+        info->xMin = XUnits(UPEm, GetInt16(table, 36));
+        info->yMin = XUnits(UPEm, GetInt16(table, 38));
+        info->xMax = XUnits(UPEm, GetInt16(table, 40));
+        info->yMax = XUnits(UPEm, GetInt16(table, 42));
+        info->macStyle = GetInt16(table, 44);
+    }
 
     table = getTable(ttf, O_hhea);
-    if (table) {
-        info->ascender  = XUnits(UPEm, GetInt16(table, 4, 1));
-        info->descender = XUnits(UPEm, GetInt16(table, 6, 1));
-        info->linegap   = XUnits(UPEm, GetInt16(table, 8, 1));
+    table_size = getTableSize(ttf, O_hhea);
+    if (table && table_size >= 10) {
+        info->ascender  = XUnits(UPEm, GetInt16(table, 4));
+        info->descender = XUnits(UPEm, GetInt16(table, 6));
+        info->linegap   = XUnits(UPEm, GetInt16(table, 8));
     }
 
     table = getTable(ttf, O_vhea);
-    if (table) {
-        info->vascent  = XUnits(UPEm, GetInt16(table, 4, 1));
-        info->vdescent = XUnits(UPEm, GetInt16(table, 6, 1));
-    }
 }
 
 GlyphData *GetTTRawGlyphData(TrueTypeFont *ttf, sal_uInt32 glyphID)
@@ -2630,14 +2465,14 @@ GlyphData *GetTTRawGlyphData(TrueTypeFont *ttf, sal_uInt32 glyphID)
         d->ptr = static_cast<sal_uInt8*>(malloc(nChunkLen)); assert(d->ptr != nullptr);
         memcpy(d->ptr, srcptr, length);
         memset(d->ptr + length, 0, nChunkLen - length);
-        d->compflag = (GetInt16( srcptr, 0, 1 ) < 0);
+        d->compflag = (GetInt16( srcptr, 0 ) < 0);
     } else {
         d->ptr = nullptr;
         d->compflag = false;
     }
 
     d->glyphID = glyphID;
-    d->nbytes = (sal_uInt16)((length + 1) & ~1);
+    d->nbytes = static_cast<sal_uInt16>((length + 1) & ~1);
 
     /* now calculate npoints and ncontours */
     ControlPoint *cp;
@@ -2650,8 +2485,8 @@ GlyphData *GetTTRawGlyphData(TrueTypeFont *ttf, sal_uInt32 glyphID)
             if (cp[i].flags & 0x8000)
                 m++;
         }
-        d->npoints = (sal_uInt16)n;
-        d->ncontours = (sal_uInt16)m;
+        d->npoints = static_cast<sal_uInt16>(n);
+        d->ncontours = static_cast<sal_uInt16>(m);
         free(cp);
     } else {
         d->npoints = 0;
@@ -2660,17 +2495,17 @@ GlyphData *GetTTRawGlyphData(TrueTypeFont *ttf, sal_uInt32 glyphID)
 
     /* get advance width and left sidebearing */
     if (glyphID < ttf->numberOfHMetrics) {
-        d->aw = GetUInt16(hmtx, 4 * glyphID, 1);
-        d->lsb = GetInt16(hmtx, 4 * glyphID + 2, 1);
+        d->aw = GetUInt16(hmtx, 4 * glyphID);
+        d->lsb = GetInt16(hmtx, 4 * glyphID + 2);
     } else {
-        d->aw = GetUInt16(hmtx, 4 * (ttf->numberOfHMetrics - 1), 1);
-        d->lsb  = GetInt16(hmtx + ttf->numberOfHMetrics * 4, (glyphID - ttf->numberOfHMetrics) * 2, 1);
+        d->aw = GetUInt16(hmtx, 4 * (ttf->numberOfHMetrics - 1));
+        d->lsb  = GetInt16(hmtx + ttf->numberOfHMetrics * 4, (glyphID - ttf->numberOfHMetrics) * 2);
     }
 
     return d;
 }
 
-int GetTTNameRecords(TrueTypeFont *ttf, NameRecord **nr)
+int GetTTNameRecords(TrueTypeFont const *ttf, NameRecord **nr)
 {
     const sal_uInt8* table = getTable(ttf, O_name);
     int nTableSize = getTableSize(ttf, O_name );
@@ -2683,8 +2518,8 @@ int GetTTNameRecords(TrueTypeFont *ttf, NameRecord **nr)
         return 0;
     }
 
-    sal_uInt16 n = GetUInt16(table, 2, 1);
-    int nStrBase = GetUInt16(table, 4, 1);
+    sal_uInt16 n = GetUInt16(table, 2);
+    int nStrBase = GetUInt16(table, 4);
     int i;
 
     *nr = nullptr;
@@ -2714,12 +2549,12 @@ int GetTTNameRecords(TrueTypeFont *ttf, NameRecord **nr)
             break;
         }
 
-        rec[i].platformID = GetUInt16(table, 6 + 0 + 12 * i, 1);
-        rec[i].encodingID = GetUInt16(table, 6 + 2 + 12 * i, 1);
-        rec[i].languageID = GetUInt16(table, 6 + 4 + 12 * i, 1);
-        rec[i].nameID = GetUInt16(table, 6 + 6 + 12 * i, 1);
-        rec[i].slen = GetUInt16(table, 6 + 8 + 12 * i, 1);
-        int nStrOffset = GetUInt16(table, nLargestFixedOffsetPos, 1);
+        rec[i].platformID = GetUInt16(table, 6 + 0 + 12 * i);
+        rec[i].encodingID = GetUInt16(table, 6 + 2 + 12 * i);
+        rec[i].languageID = LanguageType(GetUInt16(table, 6 + 4 + 12 * i));
+        rec[i].nameID = GetUInt16(table, 6 + 6 + 12 * i);
+        rec[i].slen = GetUInt16(table, 6 + 8 + 12 * i);
+        int nStrOffset = GetUInt16(table, nLargestFixedOffsetPos);
         if (rec[i].slen) {
             if( nStrBase+nStrOffset+rec[i].slen >= nTableSize ) {
                 rec[i].sptr = nullptr;
@@ -2762,51 +2597,38 @@ void DisposeNameRecords(NameRecord* nr, int n)
     free(nr);
 }
 
+template<size_t N> static void
+append(std::bitset<N> & rSet, size_t const nOffset, sal_uInt32 const nValue)
+{
+    for (size_t i = 0; i < 32; ++i)
+    {
+        rSet.set(nOffset + i, (nValue & (1 << i)) != 0);
+    }
+}
+
 bool getTTCoverage(
-    boost::dynamic_bitset<sal_uInt32> &rUnicodeRange,
-    boost::dynamic_bitset<sal_uInt32> &rCodePageRange,
+    boost::optional<std::bitset<UnicodeCoverage::MAX_UC_ENUM>> &rUnicodeRange,
+    boost::optional<std::bitset<CodePageCoverage::MAX_CP_ENUM>> &rCodePageRange,
     const unsigned char* pTable, size_t nLength)
 {
     bool bRet = false;
     // parse OS/2 header
     if (nLength >= 58)
     {
-        rUnicodeRange.append(GetUInt32(pTable, 42, 1));
-        rUnicodeRange.append(GetUInt32(pTable, 46, 1));
-        rUnicodeRange.append(GetUInt32(pTable, 50, 1));
-        rUnicodeRange.append(GetUInt32(pTable, 54, 1));
+        rUnicodeRange = std::bitset<UnicodeCoverage::MAX_UC_ENUM>();
+        append(rUnicodeRange.get(),  0, GetUInt32(pTable, 42));
+        append(rUnicodeRange.get(), 32, GetUInt32(pTable, 46));
+        append(rUnicodeRange.get(), 64, GetUInt32(pTable, 50));
+        append(rUnicodeRange.get(), 96, GetUInt32(pTable, 54));
         bRet = true;
         if (nLength >= 86)
         {
-            rCodePageRange.append(GetUInt32(pTable, 78, 1));
-            rCodePageRange.append(GetUInt32(pTable, 82, 1));
+            rCodePageRange = std::bitset<CodePageCoverage::MAX_CP_ENUM>();
+            append(rCodePageRange.get(),  0, GetUInt32(pTable, 78));
+            append(rCodePageRange.get(), 32, GetUInt32(pTable, 82));
         }
     }
     return bRet;
-}
-
-void getTTScripts(std::vector< sal_uInt32 > &rScriptTags, const unsigned char* pTable, size_t nLength)
-{
-    if (nLength < 6)
-        return;
-
-    // parse GSUB/GPOS header
-    const sal_uInt16 nOfsScriptList = GetUInt16(pTable, 4, 1);
-
-    // parse Script Table
-    const sal_uInt16 nCntScript = GetUInt16(pTable, nOfsScriptList, 1);
-    sal_uInt32 nCurrentPos = nOfsScriptList+2;
-    for( sal_uInt16 nScriptIndex = 0;
-         nScriptIndex < nCntScript && nLength >= 6; ++nScriptIndex,
-         nLength-=6 )
-    {
-        sal_uInt32 nTag = GetUInt32(pTable, nCurrentPos, 1);
-        nCurrentPos+=6;
-        rScriptTags.push_back(nTag); // e.g. hani/arab/kana/hang
-    }
-
-    std::sort(rScriptTags.begin(), rScriptTags.end());
-    rScriptTags.erase(std::unique(rScriptTags.begin(), rScriptTags.end()), rScriptTags.end());
 }
 
 } // namespace vcl

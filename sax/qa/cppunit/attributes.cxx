@@ -8,11 +8,12 @@
  */
 
 #include <sal/types.h>
-
+#include <com/sun/star/xml/sax/SAXException.hpp>
 #include <cppunit/TestFixture.h>
 #include <cppunit/extensions/HelperMacros.h>
 #include <cppunit/plugin/TestPlugIn.h>
 
+#include <rtl/ref.hxx>
 #include <sax/fastattribs.hxx>
 
 using namespace css;
@@ -32,37 +33,37 @@ public:
 
 void AttributesTest::test()
 {
-    uno::Reference<sax_fastparser::FastAttributeList> xAttributeList( new sax_fastparser::FastAttributeList(nullptr) );
+    rtl::Reference<sax_fastparser::FastAttributeList> xAttributeList( new sax_fastparser::FastAttributeList(nullptr) );
     xAttributeList->add(1, "1");
     xAttributeList->add(2, OString("2"));
 
     // We can't test getValueToken() and getOptionalValueToken()
     // without XFastTokenHandler :-(
-    // Uncomment to get segmantation fault:
+    // Uncomment to get segmentation fault:
     // xAttributeList->getOptionalValueToken(1, 0);
     // xAttributeList->getValueToken(2);
 
     CPPUNIT_ASSERT( xAttributeList->hasAttribute(1) );
     CPPUNIT_ASSERT( !xAttributeList->hasAttribute(3) );
 
-    CPPUNIT_ASSERT_EQUAL( xAttributeList->getOptionalValue(2), OUString("2") );
-    CPPUNIT_ASSERT_EQUAL( xAttributeList->getOptionalValue(3), OUString() );
+    CPPUNIT_ASSERT_EQUAL( OUString("2"), xAttributeList->getOptionalValue(2)  );
+    CPPUNIT_ASSERT_EQUAL( OUString(), xAttributeList->getOptionalValue(3) );
 
-    CPPUNIT_ASSERT_EQUAL( xAttributeList->getValue(1), OUString("1") );
+    CPPUNIT_ASSERT_EQUAL( OUString("1"), xAttributeList->getValue(1) );
     CPPUNIT_ASSERT_THROW( xAttributeList->getValue(3), xml::sax::SAXException );
 
     xAttributeList->addUnknown("a", "a");
     xAttributeList->addUnknown("b", "b", "b");
     xAttributeList->addUnknown("c", "c");
-    CPPUNIT_ASSERT_EQUAL( (sal_Int32) 3, xAttributeList->getUnknownAttributes().getLength() );
+    CPPUNIT_ASSERT_EQUAL( sal_Int32(3), xAttributeList->getUnknownAttributes().getLength() );
 
-    CPPUNIT_ASSERT_EQUAL( (sal_Int32) 2, xAttributeList->getFastAttributes().getLength() );
+    CPPUNIT_ASSERT_EQUAL( sal_Int32(2), xAttributeList->getFastAttributes().getLength() );
 
     xAttributeList->clear();
     CPPUNIT_ASSERT( !xAttributeList->hasAttribute(1) );
-    CPPUNIT_ASSERT_EQUAL( (sal_Int32) 0, xAttributeList->getFastAttributes().getLength() );
+    CPPUNIT_ASSERT_EQUAL( sal_Int32(0), xAttributeList->getFastAttributes().getLength() );
     xAttributeList->addUnknown("c", "c");
-    CPPUNIT_ASSERT_EQUAL( (sal_Int32) 1, xAttributeList->getUnknownAttributes().getLength() );
+    CPPUNIT_ASSERT_EQUAL( sal_Int32(1), xAttributeList->getUnknownAttributes().getLength() );
 }
 
 CPPUNIT_TEST_SUITE_REGISTRATION( AttributesTest );

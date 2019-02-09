@@ -20,7 +20,7 @@
 #ifndef INCLUDED_L10NTOOLS_INC_EXPORT_HXX
 #define INCLUDED_L10NTOOLS_INC_EXPORT_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 #include "po.hxx"
 
 #include <cstddef>
@@ -32,6 +32,7 @@
 #include <iterator>
 #include <set>
 #include <unordered_map>
+#include <memory>
 #include <vector>
 #include <queue>
 #include <string>
@@ -46,10 +47,10 @@
 
 class MergeEntrys;
 
-typedef std::unordered_map<OString, OString, OStringHash>
+typedef std::unordered_map<OString, OString>
     OStringHashMap;
 
-typedef std::unordered_map<OString, bool, OStringHash>
+typedef std::unordered_map<OString, bool>
     OStringBoolHashMap;
 
 #define SOURCE_LANGUAGE "en-US"
@@ -59,27 +60,12 @@ typedef std::unordered_map<OString, bool, OStringHash>
 // class ResData
 
 
-#define ID_LEVEL_NULL       0x0000
-#define ID_LEVEL_TEXT       0x0002
-#define ID_LEVEL_IDENTIFIER 0x0005
-
-typedef std::vector< OString > ExportList;
-
-/// Purpose: holds mandatory data to export a single res (used with ResStack)
+/// Purpose: holds mandatory data to export a single res
 class ResData
 {
 public:
     ResData( const OString &rGId );
     ResData( const OString &rGId , const OString &rFilename );
-    bool SetId(const OString &rId, sal_uInt16 nLevel);
-
-    sal_uInt16 nIdLevel;
-    bool bChild;
-    bool bChildWithText;
-
-    bool bText;
-    bool bQuickHelpText;
-    bool bTitle;
 
     OString sResTyp;
     OString sId;
@@ -87,100 +73,13 @@ public:
     OString sFilename;
 
     OStringHashMap sText;
-
-    OStringHashMap sQuickHelpText;
-
-    OStringHashMap sTitle;
-
-    OString sTextTyp;
-
-    ExportList  m_aList;
 };
 
 
 // class Export
 
 
-#define LIST_NON                    0x0000
-#define LIST_STRING                 0x0001
-#define LIST_FILTER                 0x0002
-#define LIST_ITEM                   0x0004
-#define LIST_PAIRED                 0x0005
-#define STRING_TYP_TEXT             0x0010
-#define STRING_TYP_QUICKHELPTEXT    0x0040
-#define STRING_TYP_TITLE            0x0080
-
-
-typedef ::std::vector< ResData* > ResStack;
 class ParserQueue;
-
-/// Purpose: syntax check and export of *.src, called from lexer
-class Export
-{
-private:
-    union
-    {
-        std::ofstream* mSimple;
-        PoOfstream* mPo;
-
-    } aOutput;
-
-    ResStack aResStack;                 ///< stack for parsing recursive
-
-    bool bDefine;                       // cur. res. in a define?
-    bool bNextMustBeDefineEOL;          ///< define but no \ at lineend
-    std::size_t nLevel; // res. recursiv? how deep?
-    sal_uInt16 nList;                       ///< cur. res. is List
-    std::size_t nListIndex;
-    std::size_t nListLevel;
-    bool bMergeMode;
-    OString sMergeSrc;
-    bool bError;                        // any errors while export?
-    bool bReadOver;
-    OString sFilename;
-
-    std::vector<OString> aLanguages;
-
-    ParserQueue* pParseQueue;
-
-    void WriteData( ResData *pResData, bool bCreateNew = false ); ///< called before dest. cur ResData
-    void WriteExportList( ResData *pResData, ExportList& rExportList, const sal_uInt16 nTyp );
-
-    OString FullId();                    ///< creates cur. GID
-
-    static OString GetPairedListID(const OString & rText);
-    static OString GetPairedListString(const OString& rText);
-    static OString StripList(const OString& rText);
-
-    void InsertListEntry(const OString &rLine);
-    static void CleanValue( OString &rValue );
-    static OString GetText(const OString &rSource, int nToken);
-
-    void ResData2Output( MergeEntrys *pEntry, sal_uInt16 nType, const OString& rTextType );
-    void MergeRest( ResData *pResData );
-    static void ConvertMergeContent( OString &rText );
-    static void ConvertExportContent( OString &rText );
-
-    void WriteToMerged(const OString &rText , bool bSDFContent);
-    void SetChildWithText();
-
-    static void CutComment( OString &rText );
-
-    void WriteUTF8ByteOrderMarkToOutput() { *aOutput.mSimple << '\xEF' << '\xBB' << '\xBF'; }
-
-public:
-    Export( const OString &rOutput );
-    Export(const OString &rMergeSource, const OString &rOutput, bool bUTF8BOM);
-    ~Export();
-
-    void Init();
-    void Execute( int nToken, const char * pToken ); ///< called from lexer
-
-    void SetError() { bError = true; }
-    bool GetError() { return bError; }
-    ParserQueue* GetParseQueue() { return pParseQueue; }
-};
-
 
 // class MergeEntrys
 
@@ -210,7 +109,7 @@ public:
         sTitle[ rId ] = rTitle;
         bTitleFirst[ rId ] = true;
     }
-    bool GetText( OString &rReturn, sal_uInt16 nTyp, const OString &nLangIndex, bool bDel = false );
+    bool GetText( OString &rReturn, const OString &nLangIndex, bool bDel = false );
 
     /**
       Generate QTZ string with ResData
@@ -241,7 +140,7 @@ class MergeData;
 class MergeDataHashMap
 {
     private:
-        typedef std::unordered_map<OString, MergeData*, OStringHash> HashMap_t;
+        typedef std::unordered_map<OString, std::unique_ptr<MergeData>> HashMap_t;
 
     public:
         MergeDataHashMap()
@@ -252,21 +151,13 @@ class MergeDataHashMap
         {
         }
 
-        ~MergeDataHashMap()
-        {
-        }
-
         typedef HashMap_t::iterator iterator;
         typedef HashMap_t::const_iterator const_iterator;
 
-        std::pair<iterator,bool> insert(const OString& rKey, MergeData* pMergeData);
-        iterator find(const OString& rKey);
+        std::pair<iterator,bool> insert(const OString& rKey, std::unique_ptr<MergeData> pMergeData);
+        iterator const & find(const OString& rKey);
 
-        iterator begin() {return m_aHashMap.begin();}
         iterator end() {return m_aHashMap.end();}
-
-        const_iterator begin() const {return m_aHashMap.begin();}
-        const_iterator end() const {return m_aHashMap.end();}
 
     private:
         bool bFirstSearch;
@@ -286,15 +177,13 @@ class MergeData
     friend class MergeDataHashMap;
 
 public:
-    OString sGID;
-    OString sLID;
-    MergeEntrys* pMergeEntrys;
+    std::unique_ptr<MergeEntrys> pMergeEntrys;
 private:
     MergeDataHashMap::iterator m_aNextData;
 public:
-    MergeData( const OString &rGID, const OString &rLID );
+    MergeData();
     ~MergeData();
-    MergeEntrys* GetMergeEntries() { return pMergeEntrys;}
+    MergeEntrys* GetMergeEntries() { return pMergeEntrys.get();}
 
 };
 
@@ -309,7 +198,7 @@ class MergeDataFile
         MergeDataHashMap aMap;
         std::set<OString> aLanguageSet;
 
-        MergeData *GetMergeData( ResData *pResData , bool bCaseSensitve = false );
+        MergeData *GetMergeData( ResData *pResData , bool bCaseSensitive = false );
         void InsertEntry(const OString &rTYP, const OString &rGID,
             const OString &rLID, const OString &nLang,
             const OString &rTEXT, const OString &rQHTEXT,
@@ -323,51 +212,15 @@ class MergeDataFile
 
 
         std::vector<OString> GetLanguages() const;
-        const MergeDataHashMap& getMap() const { return aMap; }
 
         MergeEntrys *GetMergeEntrys( ResData *pResData );
         MergeEntrys *GetMergeEntrysCaseSensitive( ResData *pResData );
 
         static OString CreateKey(const OString& rTYP, const OString& rGID,
-            const OString& rLID, const OString& rFilename , bool bCaseSensitive = false);
+            const OString& rLID, const OString& rFilename, bool bCaseSensitive);
 };
 
 
-class QueueEntry
-{
-public:
-    QueueEntry(int nTypVal, const OString &rLineVal)
-        : nTyp(nTypVal), sLine(rLineVal)
-    {
-    }
-    int nTyp;
-    OString sLine;
-};
-
-class ParserQueue
-{
-public:
-
-    ParserQueue( Export& aExportObj );
-    ~ParserQueue();
-
-    inline void Push( const QueueEntry& aEntry );
-    bool bCurrentIsM;  // public ?
-    bool bNextIsM;   // public ?
-    bool bLastWasM;   // public ?
-    bool bMflag;   // public ?
-
-    void Close();
-private:
-    std::queue<QueueEntry>* aQueueNext;
-    std::queue<QueueEntry>* aQueueCur;
-
-    Export& aExport;
-    bool bStart;
-
-    inline void Pop( std::queue<QueueEntry>& aQueue );
-
-};
 #endif // INCLUDED_L10NTOOLS_INC_EXPORT_HXX
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

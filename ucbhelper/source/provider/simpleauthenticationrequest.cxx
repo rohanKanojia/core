@@ -31,7 +31,6 @@ SimpleAuthenticationRequest::SimpleAuthenticationRequest(
                                       const OUString & rRealm,
                                       const OUString & rUserName,
                                       const OUString & rPassword,
-                                      const OUString & rAccount,
                                       bool bAllowUseSystemCredentials,
                                       bool bAllowSessionStoring )
 {
@@ -46,13 +45,11 @@ SimpleAuthenticationRequest::SimpleAuthenticationRequest(
     aRequest.HasRealm       = !rRealm.isEmpty();
     if ( aRequest.HasRealm )
         aRequest.Realm = rRealm;
-    aRequest.HasUserName    = sal_True;
+    aRequest.HasUserName    = true;
     aRequest.UserName       = rUserName;
-    aRequest.HasPassword    = sal_True;
+    aRequest.HasPassword    = true;
     aRequest.Password       = rPassword;
-    aRequest.HasAccount     = !rAccount.isEmpty();
-    if ( aRequest.HasAccount )
-        aRequest.Account = rAccount;
+    aRequest.HasAccount     = false;
     aRequest.URL = rURL;
 
     initialize(aRequest,
@@ -60,7 +57,6 @@ SimpleAuthenticationRequest::SimpleAuthenticationRequest(
        true,
        true,
        aRequest.HasAccount,
-       true/*bAllowPersistentStoring*/,
        bAllowUseSystemCredentials,
        bAllowSessionStoring );
 }
@@ -100,8 +96,8 @@ SimpleAuthenticationRequest::SimpleAuthenticationRequest(
        eUserNameType == ENTITY_MODIFY,
        ePasswordType == ENTITY_MODIFY,
        false,
-       true,
-       false );
+       false,
+       true );
 }
 
 
@@ -111,7 +107,6 @@ void SimpleAuthenticationRequest::initialize(
       bool bCanSetUserName,
       bool bCanSetPassword,
       bool bCanSetAccount,
-      bool bAllowPersistentStoring,
       bool bAllowUseSystemCredentials,
       bool bAllowSessionStoring )
 {
@@ -124,8 +119,7 @@ void SimpleAuthenticationRequest::initialize(
     if( bAllowSessionStoring )
         nSize++;
 
-    if( bAllowPersistentStoring )
-        nSize++;
+    nSize++;
 
     uno::Sequence< ucb::RememberAuthentication > aRememberModes( nSize );
     aRememberModes[ nPos++ ] = ucb::RememberAuthentication_NO;
@@ -133,8 +127,7 @@ void SimpleAuthenticationRequest::initialize(
     if( bAllowSessionStoring )
         aRememberModes[ nPos++ ] = ucb::RememberAuthentication_SESSION;
 
-    if ( bAllowPersistentStoring )
-        aRememberModes[ nPos++ ] = ucb::RememberAuthentication_PERSISTENT;
+    aRememberModes[ nPos++ ] = ucb::RememberAuthentication_PERSISTENT;
 
     m_xAuthSupplier
         = new InteractionSupplyAuthentication(

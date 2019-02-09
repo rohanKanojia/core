@@ -19,19 +19,20 @@
 
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/style/XStyle.hpp>
+#include <com/sun/star/table/BorderLine.hpp>
 
 #include <osl/mutex.hxx>
+#include <sal/log.hxx>
 #include <vcl/svapp.hxx>
+#include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include <cppuhelper/interfacecontainer.hxx>
 
-#include <editeng/outliner.hxx>
 #include <editeng/eeitem.hxx>
 #include <editeng/fhgtitem.hxx>
-#include <svx/svdoattr.hxx>
 #include <editeng/ulspitem.hxx>
-#include <svl/smplhint.hxx>
+#include <svl/hint.hxx>
 #include <svl/itemset.hxx>
 
 #include <svx/xflbmtit.hxx>
@@ -41,24 +42,23 @@
 #include <svx/unoshprp.hxx>
 #include <svx/unoshape.hxx>
 #include <svx/svdpool.hxx>
-#include "stlsheet.hxx"
-#include "sdresid.hxx"
-#include "sdpage.hxx"
-#include "drawdoc.hxx"
-#include "stlpool.hxx"
-#include "glob.hrc"
-#include "app.hrc"
-#include "glob.hxx"
-#include "helpids.h"
-#include "../ui/inc/DrawViewShell.hxx"
-#include "../ui/inc/ViewShellBase.hxx"
-#include <editeng/boxitem.hxx>
+#include <stlsheet.hxx>
+#include <sdresid.hxx>
+#include <sdpage.hxx>
+#include <drawdoc.hxx>
+#include <stlpool.hxx>
+#include <strings.hrc>
+#include <app.hrc>
+#include <strings.hxx>
+#include <glob.hxx>
+#include <DrawViewShell.hxx>
+#include <ViewShellBase.hxx>
 
+#include <cstddef>
 #include <memory>
 
 using ::osl::MutexGuard;
 using ::osl::ClearableMutexGuard;
-using ::comphelper::OInterfaceContainerHelper2;
 using ::com::sun::star::table::BorderLine;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::util;
@@ -90,10 +90,10 @@ static SvxItemPropertySet& GetStylePropertySet()
         TEXT_PROPERTIES_DEFAULTS
         CONNECTOR_PROPERTIES
         SPECIAL_DIMENSIONING_PROPERTIES_DEFAULTS
-        { OUString("TopBorder"),                    SDRATTR_TABLE_BORDER,           ::cppu::UnoType<BorderLine>::get(), 0, TOP_BORDER }, \
-        { OUString("BottomBorder"),                 SDRATTR_TABLE_BORDER,           ::cppu::UnoType<BorderLine>::get(), 0, BOTTOM_BORDER }, \
-        { OUString("LeftBorder"),                   SDRATTR_TABLE_BORDER,           ::cppu::UnoType<BorderLine>::get(), 0, LEFT_BORDER }, \
-        { OUString("RightBorder"),                  SDRATTR_TABLE_BORDER,           ::cppu::UnoType<BorderLine>::get(), 0, RIGHT_BORDER }, \
+        { OUString("TopBorder"),                    SDRATTR_TABLE_BORDER,           ::cppu::UnoType<BorderLine>::get(), 0, TOP_BORDER },
+        { OUString("BottomBorder"),                 SDRATTR_TABLE_BORDER,           ::cppu::UnoType<BorderLine>::get(), 0, BOTTOM_BORDER },
+        { OUString("LeftBorder"),                   SDRATTR_TABLE_BORDER,           ::cppu::UnoType<BorderLine>::get(), 0, LEFT_BORDER },
+        { OUString("RightBorder"),                  SDRATTR_TABLE_BORDER,           ::cppu::UnoType<BorderLine>::get(), 0, RIGHT_BORDER },
         { OUString(), 0, css::uno::Type(), 0, 0 }
     };
 
@@ -128,20 +128,11 @@ void ModifyListenerForewarder::Notify(SfxBroadcaster& /*rBC*/, const SfxHint& /*
         mpStyleSheet->notifyModifyListener();
 }
 
-SdStyleSheet::SdStyleSheet(const OUString& rDisplayName, SfxStyleSheetBasePool& _rPool, SfxStyleFamily eFamily, sal_uInt16 _nMask)
-: SdStyleSheetBase( OUString( rDisplayName ), _rPool, eFamily, _nMask)
+SdStyleSheet::SdStyleSheet(const OUString& rDisplayName, SfxStyleSheetBasePool& _rPool, SfxStyleFamily eFamily, SfxStyleSearchBits _nMask)
+: SdStyleSheetBase( rDisplayName, _rPool, eFamily, _nMask)
 , ::cppu::BaseMutex()
 , msApiName( rDisplayName )
 , mxPool( &_rPool )
-, mrBHelper( m_aMutex )
-{
-}
-
-SdStyleSheet::SdStyleSheet( const SdStyleSheet & r )
-: SdStyleSheetBase( r )
-, ::cppu::BaseMutex()
-, msApiName( r.msApiName )
-, mxPool( r.mxPool )
 , mrBHelper( m_aMutex )
 {
 }
@@ -157,28 +148,12 @@ void SdStyleSheet::SetApiName( const OUString& rApiName )
     msApiName = rApiName;
 }
 
-OUString SdStyleSheet::GetApiName() const
+OUString const & SdStyleSheet::GetApiName() const
 {
     if( !msApiName.isEmpty() )
         return msApiName;
     else
         return GetName();
-}
-
-void SdStyleSheet::Load (SvStream& rIn, sal_uInt16 nVersion)
-{
-    SfxStyleSheetBase::Load(rIn, nVersion);
-
-    /* previously, the default mask was 0xAFFE. The needed flags were masked
-       from this mask. Now the flag SFXSTYLEBIT_READONLY was introduced and with
-       this, all style sheets are read only. Since no style sheet should be read
-       only in Draw, we reset the flag here.  */
-    nMask &= ~SFXSTYLEBIT_READONLY;
-}
-
-void SdStyleSheet::Store(SvStream& rOut)
-{
-    SfxStyleSheetBase::Store(rOut);
 }
 
 bool SdStyleSheet::SetParent(const OUString& rParentName)
@@ -188,24 +163,24 @@ bool SdStyleSheet::SetParent(const OUString& rParentName)
     if (SfxStyleSheet::SetParent(rParentName))
     {
         // PseudoStyleSheets do not have their own ItemSets
-        if (nFamily != SD_STYLE_FAMILY_PSEUDO)
+        if (nFamily != SfxStyleFamily::Pseudo)
         {
             if( !rParentName.isEmpty() )
             {
-                SfxStyleSheetBase* pStyle = pPool->Find(rParentName, nFamily);
+                SfxStyleSheetBase* pStyle = m_pPool->Find(rParentName, nFamily);
                 if (pStyle)
                 {
                     bResult = true;
                     SfxItemSet& rParentSet = pStyle->GetItemSet();
                     GetItemSet().SetParent(&rParentSet);
-                    Broadcast( SfxSimpleHint( SFX_HINT_DATACHANGED ) );
+                    Broadcast( SfxHint( SfxHintId::DataChanged ) );
                 }
             }
             else
             {
                 bResult = true;
                 GetItemSet().SetParent(nullptr);
-                Broadcast( SfxSimpleHint( SFX_HINT_DATACHANGED ) );
+                Broadcast( SfxHint( SfxHintId::DataChanged ) );
             }
         }
         else
@@ -221,56 +196,41 @@ bool SdStyleSheet::SetParent(const OUString& rParentName)
  */
 SfxItemSet& SdStyleSheet::GetItemSet()
 {
-    if (nFamily == SD_STYLE_FAMILY_GRAPHICS || nFamily == SD_STYLE_FAMILY_MASTERPAGE)
+    if (nFamily == SfxStyleFamily::Para || nFamily == SfxStyleFamily::Page)
     {
         // we create the ItemSet 'on demand' if necessary
         if (!pSet)
         {
-            sal_uInt16 nWhichPairTable[] = { XATTR_LINE_FIRST,              XATTR_LINE_LAST,
-                                         XATTR_FILL_FIRST,              XATTR_FILL_LAST,
-
-                                        SDRATTR_SHADOW_FIRST,           SDRATTR_SHADOW_LAST,
-                                        SDRATTR_TEXT_MINFRAMEHEIGHT,    SDRATTR_TEXT_CONTOURFRAME,
-
-                                        SDRATTR_TEXT_WORDWRAP,          SDRATTR_TEXT_AUTOGROWSIZE,
-
-                                        SDRATTR_EDGE_FIRST,             SDRATTR_EDGE_LAST,
-                                        SDRATTR_MEASURE_FIRST,          SDRATTR_MEASURE_LAST,
-
-                                        EE_PARA_START,                  EE_CHAR_END,
-
-                                        SDRATTR_XMLATTRIBUTES,          SDRATTR_TEXT_USEFIXEDCELLHEIGHT,
-
-                                        SDRATTR_3D_FIRST, SDRATTR_3D_LAST,
-                                        0, 0 };
-
-            pSet = new SfxItemSet(GetPool().GetPool(), nWhichPairTable);
+            pSet = new SfxItemSet(
+                GetPool()->GetPool(),
+                svl::Items<
+                    XATTR_LINE_FIRST, XATTR_LINE_LAST,
+                    XATTR_FILL_FIRST, XATTR_FILL_LAST,
+                    SDRATTR_SHADOW_FIRST, SDRATTR_SHADOW_LAST,
+                    SDRATTR_TEXT_MINFRAMEHEIGHT, SDRATTR_TEXT_WORDWRAP,
+                    SDRATTR_EDGE_FIRST, SDRATTR_MEASURE_LAST,
+                    SDRATTR_3D_FIRST, SDRATTR_3D_LAST,
+                    EE_PARA_START, EE_CHAR_END>{});
             bMySet = true;
         }
 
         return *pSet;
     }
 
-    else if( nFamily == SD_STYLE_FAMILY_CELL )
+    else if( nFamily == SfxStyleFamily::Frame )
     {
         if (!pSet)
         {
-            sal_uInt16 nWhichPairTable[] = { XATTR_LINE_FIRST,              XATTR_LINE_LAST,
-                                         XATTR_FILL_FIRST,              XATTR_FILL_LAST,
-
-                                        SDRATTR_SHADOW_FIRST,           SDRATTR_SHADOW_LAST,
-                                        SDRATTR_TEXT_MINFRAMEHEIGHT,    SDRATTR_TEXT_CONTOURFRAME,
-
-                                        SDRATTR_TEXT_WORDWRAP,          SDRATTR_TEXT_AUTOGROWSIZE,
-
-                                        EE_PARA_START,                  EE_CHAR_END,
-
-                                        SDRATTR_TABLE_FIRST,            SDRATTR_TABLE_LAST,
-                                        SDRATTR_XMLATTRIBUTES,          SDRATTR_XMLATTRIBUTES,
-
-                                        0, 0 };
-
-            pSet = new SfxItemSet(GetPool().GetPool(), nWhichPairTable);
+            pSet = new SfxItemSet(
+                GetPool()->GetPool(),
+                svl::Items<
+                    XATTR_LINE_FIRST, XATTR_LINE_LAST,
+                    XATTR_FILL_FIRST, XATTR_FILL_LAST,
+                    SDRATTR_SHADOW_FIRST, SDRATTR_SHADOW_LAST,
+                    SDRATTR_TEXT_MINFRAMEHEIGHT, SDRATTR_XMLATTRIBUTES,
+                    SDRATTR_TEXT_WORDWRAP, SDRATTR_TEXT_WORDWRAP,
+                    SDRATTR_TABLE_FIRST, SDRATTR_TABLE_LAST,
+                    EE_PARA_START, EE_CHAR_END>{});
             bMySet = true;
         }
 
@@ -286,31 +246,22 @@ SfxItemSet& SdStyleSheet::GetItemSet()
 
         if (pSdSheet)
         {
-            return(pSdSheet->GetItemSet());
+            return pSdSheet->GetItemSet();
         }
         else
         {
             if (!pSet)
             {
-                sal_uInt16 nWhichPairTable[] = { XATTR_LINE_FIRST,              XATTR_LINE_LAST,
-                                             XATTR_FILL_FIRST,              XATTR_FILL_LAST,
-
-                                             SDRATTR_SHADOW_FIRST,          SDRATTR_SHADOW_LAST,
-                                             SDRATTR_TEXT_MINFRAMEHEIGHT,   SDRATTR_TEXT_CONTOURFRAME,
-
-                                             SDRATTR_TEXT_WORDWRAP,         SDRATTR_TEXT_AUTOGROWSIZE,
-
-                                             SDRATTR_EDGE_FIRST,            SDRATTR_EDGE_LAST,
-                                             SDRATTR_MEASURE_FIRST,         SDRATTR_MEASURE_LAST,
-
-                                             EE_PARA_START,                 EE_CHAR_END,
-
-                                            SDRATTR_XMLATTRIBUTES,          SDRATTR_TEXT_USEFIXEDCELLHEIGHT,
-
-                                            SDRATTR_3D_FIRST, SDRATTR_3D_LAST,
-                                             0, 0 };
-
-                pSet = new SfxItemSet(GetPool().GetPool(), nWhichPairTable);
+                pSet = new SfxItemSet(
+                    GetPool()->GetPool(),
+                    svl::Items<
+                        XATTR_LINE_FIRST, XATTR_LINE_LAST,
+                        XATTR_FILL_FIRST, XATTR_FILL_LAST,
+                        SDRATTR_SHADOW_FIRST, SDRATTR_SHADOW_LAST,
+                        SDRATTR_TEXT_MINFRAMEHEIGHT, SDRATTR_TEXT_WORDWRAP,
+                        SDRATTR_EDGE_FIRST, SDRATTR_MEASURE_LAST,
+                        SDRATTR_3D_FIRST, SDRATTR_3D_LAST,
+                        EE_PARA_START, EE_CHAR_END>{});
                 bMySet = true;
             }
 
@@ -370,7 +321,7 @@ SdStyleSheet* SdStyleSheet::GetRealStyleSheet() const
     OUString aRealStyle;
     OUString aSep( SD_LT_SEPARATOR );
     SdStyleSheet* pRealStyle = nullptr;
-    SdDrawDocument* pDoc = static_cast<SdStyleSheetPool*>(pPool)->GetDoc();
+    SdDrawDocument* pDoc = static_cast<SdStyleSheetPool*>(m_pPool)->GetDoc();
 
     ::sd::DrawViewShell* pDrawViewShell = nullptr;
 
@@ -394,17 +345,17 @@ SdStyleSheet* SdStyleSheet::GetRealStyleSheet() const
     }
     if (aRealStyle.isEmpty())
     {
-        SdPage* pPage = pDoc->GetSdPage(0, PK_STANDARD);
+        SdPage* pPage = pDoc->GetSdPage(0, PageKind::Standard);
 
         if (pPage)
         {
-            aRealStyle = pDoc->GetSdPage(0, PK_STANDARD)->GetLayoutName();
+            aRealStyle = pDoc->GetSdPage(0, PageKind::Standard)->GetLayoutName();
         }
         else
         {
             /* no page available yet. This can happen when actualizing the
                document templates.  */
-            SfxStyleSheetIterator aIter(pPool, SD_STYLE_FAMILY_MASTERPAGE);
+            SfxStyleSheetIterator aIter(m_pPool, SfxStyleFamily::Page);
             SfxStyleSheetBase* pSheet = aIter.First();
             if( pSheet )
                 aRealStyle = pSheet->GetName();
@@ -421,25 +372,25 @@ SdStyleSheet* SdStyleSheet::GetRealStyleSheet() const
     OUString aInternalName;
     OUString aStyleName(aName);
 
-    if (aStyleName == OUString(SdResId(STR_PSEUDOSHEET_TITLE)))
+    if (aStyleName == SdResId(STR_PSEUDOSHEET_TITLE))
     {
-        aInternalName = OUString(SdResId(STR_LAYOUT_TITLE));
+        aInternalName = STR_LAYOUT_TITLE;
     }
-    else if (aStyleName == OUString(SdResId(STR_PSEUDOSHEET_SUBTITLE)))
+    else if (aStyleName == SdResId(STR_PSEUDOSHEET_SUBTITLE))
     {
-        aInternalName = OUString(SdResId(STR_LAYOUT_SUBTITLE));
+        aInternalName = STR_LAYOUT_SUBTITLE;
     }
-    else if (aStyleName == OUString(SdResId(STR_PSEUDOSHEET_BACKGROUND)))
+    else if (aStyleName == SdResId(STR_PSEUDOSHEET_BACKGROUND))
     {
-        aInternalName = OUString(SdResId(STR_LAYOUT_BACKGROUND));
+        aInternalName = STR_LAYOUT_BACKGROUND;
     }
-        else if (aStyleName == OUString(SdResId(STR_PSEUDOSHEET_BACKGROUNDOBJECTS)))
+    else if (aStyleName == SdResId(STR_PSEUDOSHEET_BACKGROUNDOBJECTS))
     {
-        aInternalName = OUString(SdResId(STR_LAYOUT_BACKGROUNDOBJECTS));
+        aInternalName = STR_LAYOUT_BACKGROUNDOBJECTS;
     }
-        else if (aStyleName == OUString(SdResId(STR_PSEUDOSHEET_NOTES)))
+    else if (aStyleName == SdResId(STR_PSEUDOSHEET_NOTES))
     {
-        aInternalName = OUString(SdResId(STR_LAYOUT_NOTES));
+        aInternalName = STR_LAYOUT_NOTES;
     }
     else
     {
@@ -448,18 +399,18 @@ SdStyleSheet* SdStyleSheet::GetRealStyleSheet() const
         if (nPos >= 0)
         {
             OUString aNumStr(aStyleName.copy(aOutlineStr.getLength()));
-            aInternalName = OUString(SdResId(STR_LAYOUT_OUTLINE));
+            aInternalName = OUString(STR_LAYOUT_OUTLINE);
             aInternalName += aNumStr;
         }
     }
 
     aRealStyle += aInternalName;
-    pRealStyle = static_cast< SdStyleSheet* >( pPool->Find(aRealStyle, SD_STYLE_FAMILY_MASTERPAGE) );
+    pRealStyle = static_cast< SdStyleSheet* >( m_pPool->Find(aRealStyle, SfxStyleFamily::Page) );
 
 #ifdef DBG_UTIL
     if( !pRealStyle )
     {
-        SfxStyleSheetIterator aIter(pPool, SD_STYLE_FAMILY_MASTERPAGE);
+        SfxStyleSheetIterator aIter(m_pPool, SfxStyleFamily::Page);
         if( aIter.Count() > 0 )
             // StyleSheet not found, but pool already loaded
             DBG_ASSERT(pRealStyle, "Internal StyleSheet not found");
@@ -484,39 +435,39 @@ SdStyleSheet* SdStyleSheet::GetPseudoStyleSheet() const
         aStyleName = aStyleName.copy (aStyleName.indexOf(aSep) + aSep.getLength());
     }
 
-    if (aStyleName == OUString(SdResId(STR_LAYOUT_TITLE)))
+    if (aStyleName == STR_LAYOUT_TITLE)
     {
-        aStyleName = OUString(SdResId(STR_PSEUDOSHEET_TITLE));
+        aStyleName = SdResId(STR_PSEUDOSHEET_TITLE);
     }
-    else if (aStyleName == OUString(SdResId(STR_LAYOUT_SUBTITLE)))
+    else if (aStyleName == STR_LAYOUT_SUBTITLE)
     {
-        aStyleName = OUString(SdResId(STR_PSEUDOSHEET_SUBTITLE));
+        aStyleName = SdResId(STR_PSEUDOSHEET_SUBTITLE);
     }
-    else if (aStyleName == OUString(SdResId(STR_LAYOUT_BACKGROUND)))
+    else if (aStyleName == STR_LAYOUT_BACKGROUND)
     {
-        aStyleName = OUString(SdResId(STR_PSEUDOSHEET_BACKGROUND));
+        aStyleName = SdResId(STR_PSEUDOSHEET_BACKGROUND);
     }
-    else if (aStyleName == OUString(SdResId(STR_LAYOUT_BACKGROUNDOBJECTS)))
+    else if (aStyleName == STR_LAYOUT_BACKGROUNDOBJECTS)
     {
-        aStyleName = OUString(SdResId(STR_PSEUDOSHEET_BACKGROUNDOBJECTS));
+        aStyleName = SdResId(STR_PSEUDOSHEET_BACKGROUNDOBJECTS);
     }
-    else if (aStyleName == OUString(SdResId(STR_LAYOUT_NOTES)))
+    else if (aStyleName == STR_LAYOUT_NOTES)
     {
-        aStyleName = OUString(SdResId(STR_PSEUDOSHEET_NOTES));
+        aStyleName = SdResId(STR_PSEUDOSHEET_NOTES);
     }
     else
     {
-        OUString aOutlineStr((SdResId(STR_LAYOUT_OUTLINE)));
+        OUString aOutlineStr(STR_LAYOUT_OUTLINE);
         sal_Int32 nPos = aStyleName.indexOf(aOutlineStr);
         if (nPos != -1)
         {
             OUString aNumStr(aStyleName.copy(aOutlineStr.getLength()));
-            aStyleName = OUString(SdResId(STR_PSEUDOSHEET_OUTLINE));
+            aStyleName = SdResId(STR_PSEUDOSHEET_OUTLINE);
             aStyleName += aNumStr;
         }
     }
 
-    pPseudoStyle = static_cast<SdStyleSheet*>(pPool->Find(aStyleName, SD_STYLE_FAMILY_PSEUDO));
+    pPseudoStyle = static_cast<SdStyleSheet*>(m_pPool->Find(aStyleName, SfxStyleFamily::Pseudo));
     DBG_ASSERT(pPseudoStyle, "PseudoStyleSheet missing");
 
     return pPseudoStyle;
@@ -527,13 +478,12 @@ void SdStyleSheet::Notify(SfxBroadcaster& rBC, const SfxHint& rHint)
     // first, base class functionality
     SfxStyleSheet::Notify(rBC, rHint);
 
-    if (nFamily != SD_STYLE_FAMILY_PSEUDO)
+    if (nFamily != SfxStyleFamily::Pseudo)
         return;
 
     /* if the dummy gets a notify about a changed attribute, he takes care that
-       the actual ment style sheet sends broadcasts. */
-    const SfxSimpleHint* pSimple = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if (pSimple && pSimple->GetId() == SFX_HINT_DATACHANGED)
+       the actual meant style sheet sends broadcasts. */
+    if (rHint.GetId() == SfxHintId::DataChanged)
     {
         SdStyleSheet* pRealStyle = GetRealStyleSheet();
         if (pRealStyle)
@@ -555,49 +505,49 @@ void SdStyleSheet::AdjustToFontHeight(SfxItemSet& rSet, bool bOnlyMissingItems)
        height. */
     SfxStyleFamily eFamily = nFamily;
     OUString aStyleName(aName);
-    if (eFamily == SD_STYLE_FAMILY_PSEUDO)
+    if (eFamily == SfxStyleFamily::Pseudo)
     {
         SfxStyleSheet* pRealStyle = GetRealStyleSheet();
         eFamily = pRealStyle->GetFamily();
         aStyleName = pRealStyle->GetName();
     }
 
-    if (eFamily == SD_STYLE_FAMILY_MASTERPAGE &&
-        aStyleName.indexOf(OUString(SdResId(STR_LAYOUT_OUTLINE))) != -1 &&
+    if (eFamily == SfxStyleFamily::Page &&
+        aStyleName.indexOf(STR_LAYOUT_OUTLINE) != -1 &&
         rSet.GetItemState(EE_CHAR_FONTHEIGHT) == SfxItemState::SET)
     {
         const SfxItemSet* pCurSet = &GetItemSet();
-        sal_uInt32 nNewHeight = static_cast<const SvxFontHeightItem&>(rSet.Get(EE_CHAR_FONTHEIGHT)).GetHeight();
-        sal_uInt32 nOldHeight = static_cast<const SvxFontHeightItem&>(pCurSet->Get(EE_CHAR_FONTHEIGHT)).GetHeight();
+        sal_uInt32 nNewHeight = rSet.Get(EE_CHAR_FONTHEIGHT).GetHeight();
+        sal_uInt32 nOldHeight = pCurSet->Get(EE_CHAR_FONTHEIGHT).GetHeight();
 
         if (rSet.GetItemState(EE_PARA_BULLET) != SfxItemState::SET || !bOnlyMissingItems)
         {
-            const SvxBulletItem& rBItem = static_cast<const SvxBulletItem&>(pCurSet->Get(EE_PARA_BULLET));
+            const SvxBulletItem& rBItem = pCurSet->Get(EE_PARA_BULLET);
             double fBulletFraction = double(rBItem.GetWidth()) / nOldHeight;
             SvxBulletItem aNewBItem(rBItem);
-            aNewBItem.SetWidth((sal_uInt32)(fBulletFraction * nNewHeight));
+            aNewBItem.SetWidth(static_cast<sal_uInt32>(fBulletFraction * nNewHeight));
             rSet.Put(aNewBItem);
         }
 
         if (rSet.GetItemState(EE_PARA_LRSPACE) != SfxItemState::SET || !bOnlyMissingItems)
         {
-            const SvxLRSpaceItem& rLRItem = static_cast<const SvxLRSpaceItem&>(pCurSet->Get(EE_PARA_LRSPACE));
+            const SvxLRSpaceItem& rLRItem = pCurSet->Get(EE_PARA_LRSPACE);
             double fIndentFraction = double(rLRItem.GetTextLeft()) / nOldHeight;
             SvxLRSpaceItem aNewLRItem(rLRItem);
             aNewLRItem.SetTextLeft(fIndentFraction * nNewHeight);
             double fFirstIndentFraction = double(rLRItem.GetTextFirstLineOfst()) / nOldHeight;
-            aNewLRItem.SetTextFirstLineOfst((short)(fFirstIndentFraction * nNewHeight));
+            aNewLRItem.SetTextFirstLineOfst(static_cast<short>(fFirstIndentFraction * nNewHeight));
             rSet.Put(aNewLRItem);
         }
 
         if (rSet.GetItemState(EE_PARA_ULSPACE) != SfxItemState::SET || !bOnlyMissingItems)
         {
-            const SvxULSpaceItem& rULItem = static_cast<const SvxULSpaceItem&>(pCurSet->Get(EE_PARA_ULSPACE));
+            const SvxULSpaceItem& rULItem = pCurSet->Get(EE_PARA_ULSPACE);
             SvxULSpaceItem aNewULItem(rULItem);
             double fLowerFraction = double(rULItem.GetLower()) / nOldHeight;
-            aNewULItem.SetLower((sal_uInt16)(fLowerFraction * nNewHeight));
+            aNewULItem.SetLower(static_cast<sal_uInt16>(fLowerFraction * nNewHeight));
             double fUpperFraction = double(rULItem.GetUpper()) / nOldHeight;
-            aNewULItem.SetUpper((sal_uInt16)(fUpperFraction * nNewHeight));
+            aNewULItem.SetUpper(static_cast<sal_uInt16>(fUpperFraction * nNewHeight));
             rSet.Put(aNewULItem);
         }
     }
@@ -618,80 +568,107 @@ bool SdStyleSheet::HasClearParentSupport() const
     return true;
 }
 
-bool SdStyleSheet::SetName(const OUString& rName, bool bReindexNow)
+namespace
 {
-    return SfxStyleSheet::SetName(rName, bReindexNow);
+struct ApiNameMap
+{
+    OUStringLiteral const mpApiName;
+    sal_uInt32 const mnHelpId;
+} const pApiNameMap[]
+    = { { OUStringLiteral("title"), HID_PSEUDOSHEET_TITLE },
+        { OUStringLiteral("subtitle"), HID_PSEUDOSHEET_SUBTITLE },
+        { OUStringLiteral("background"), HID_PSEUDOSHEET_BACKGROUND },
+        { OUStringLiteral("backgroundobjects"), HID_PSEUDOSHEET_BACKGROUNDOBJECTS },
+        { OUStringLiteral("notes"), HID_PSEUDOSHEET_NOTES },
+        { OUStringLiteral("standard"), HID_STANDARD_STYLESHEET_NAME },
+        { OUStringLiteral("objectwithoutfill"), HID_POOLSHEET_OBJWITHOUTFILL },
+
+        { OUStringLiteral("Text"), HID_POOLSHEET_TEXT },
+        { OUStringLiteral("A4"), HID_POOLSHEET_A4 },
+        { OUStringLiteral("Title A4"), HID_POOLSHEET_A4_TITLE },
+        { OUStringLiteral("Heading A4"), HID_POOLSHEET_A4_HEADLINE },
+        { OUStringLiteral("Text A4"), HID_POOLSHEET_A4_TEXT },
+        { OUStringLiteral("A4"), HID_POOLSHEET_A0 },
+        { OUStringLiteral("Title A0"), HID_POOLSHEET_A0_TITLE },
+        { OUStringLiteral("Heading A0"), HID_POOLSHEET_A0_HEADLINE },
+        { OUStringLiteral("Text A0"), HID_POOLSHEET_A0_TEXT },
+
+        { OUStringLiteral("Graphic"), HID_POOLSHEET_GRAPHIC },
+        { OUStringLiteral("Shapes"), HID_POOLSHEET_SHAPES },
+        { OUStringLiteral("Filled"), HID_POOLSHEET_FILLED },
+        { OUStringLiteral("Filled Blue"), HID_POOLSHEET_FILLED_BLUE },
+        { OUStringLiteral("Filled Green"), HID_POOLSHEET_FILLED_GREEN },
+        { OUStringLiteral("Filled Red"), HID_POOLSHEET_FILLED_RED },
+        { OUStringLiteral("Filled Yellow"), HID_POOLSHEET_FILLED_YELLOW },
+        { OUStringLiteral("Outlined"), HID_POOLSHEET_OUTLINE },
+        { OUStringLiteral("Outlined Blue"), HID_POOLSHEET_OUTLINE_BLUE },
+        { OUStringLiteral("Outlined Green"), HID_POOLSHEET_OUTLINE_GREEN },
+        { OUStringLiteral("Outlined Red"), HID_POOLSHEET_OUTLINE_RED },
+        { OUStringLiteral("Outlined Yellow"), HID_POOLSHEET_OUTLINE_YELLOW },
+        { OUStringLiteral("Lines"), HID_POOLSHEET_LINES },
+        { OUStringLiteral("Arrow Line"), HID_POOLSHEET_MEASURE },
+        { OUStringLiteral("Arrow Dashed"), HID_POOLSHEET_LINES_DASHED }
+      };
+
+OUString GetApiNameForHelpId(sal_uLong nId)
+{
+    if ((nId >= HID_PSEUDOSHEET_OUTLINE1) && (nId <= HID_PSEUDOSHEET_OUTLINE9))
+        return "outline" + OUStringLiteral1('1' + (nId - HID_PSEUDOSHEET_OUTLINE1));
+
+    for (const auto& i : pApiNameMap)
+        if (nId == i.mnHelpId)
+            return i.mpApiName;
+
+    return OUString();
+}
+
+sal_uInt32 GetHelpIdForApiName(const OUString& sName)
+{
+    OUString sRest;
+    if (sName.startsWith("outline", &sRest))
+    {
+        if (sRest.getLength() == 1)
+        {
+            sal_Unicode ch = sRest.toChar();
+            if ('1' <= ch && ch <= '9')
+                return HID_PSEUDOSHEET_OUTLINE1 + ch - '1';
+        }
+        // No other pre-defined names start with "outline"
+        return 0;
+    }
+
+    for (const auto& i : pApiNameMap)
+        if (sName == i.mpApiName)
+            return i.mnHelpId;
+
+    return 0;
+}
 }
 
 void SdStyleSheet::SetHelpId( const OUString& r, sal_uLong nId )
 {
     SfxStyleSheet::SetHelpId( r, nId );
 
-    if( (nId >= HID_PSEUDOSHEET_OUTLINE1) && ( nId <= HID_PSEUDOSHEET_OUTLINE9 ) )
-    {
-        msApiName = "outline";
-        msApiName += OUString( (sal_Unicode)( '1' + (nId - HID_PSEUDOSHEET_OUTLINE1) ) );
-    }
-    else
-    {
-        static struct ApiNameMap
-        {
-            const sal_Char* mpApiName;
-            sal_uInt32      mnApiNameLength;
-            sal_uInt32      mnHelpId;
-        }
-        pApiNameMap[] =
-        {
-            { RTL_CONSTASCII_STRINGPARAM( "title" ),            HID_PSEUDOSHEET_TITLE },
-            { RTL_CONSTASCII_STRINGPARAM( "subtitle" ),         HID_PSEUDOSHEET_SUBTITLE },
-            { RTL_CONSTASCII_STRINGPARAM( "background" ),       HID_PSEUDOSHEET_BACKGROUND },
-            { RTL_CONSTASCII_STRINGPARAM( "backgroundobjects" ),HID_PSEUDOSHEET_BACKGROUNDOBJECTS },
-            { RTL_CONSTASCII_STRINGPARAM( "notes" ),            HID_PSEUDOSHEET_NOTES },
-            { RTL_CONSTASCII_STRINGPARAM( "standard" ),         HID_STANDARD_STYLESHEET_NAME },
-            { RTL_CONSTASCII_STRINGPARAM( "objectwitharrow" ),  HID_POOLSHEET_OBJWITHARROW },
-            { RTL_CONSTASCII_STRINGPARAM( "objectwithshadow" ), HID_POOLSHEET_OBJWITHSHADOW },
-            { RTL_CONSTASCII_STRINGPARAM( "objectwithoutfill" ),HID_POOLSHEET_OBJWITHOUTFILL },
-            { RTL_CONSTASCII_STRINGPARAM( "text" ),             HID_POOLSHEET_TEXT },
-            { RTL_CONSTASCII_STRINGPARAM( "textbody" ),         HID_POOLSHEET_TEXTBODY },
-            { RTL_CONSTASCII_STRINGPARAM( "textbodyjustfied" ), HID_POOLSHEET_TEXTBODY_JUSTIFY },
-            { RTL_CONSTASCII_STRINGPARAM( "textbodyindent" ),   HID_POOLSHEET_TEXTBODY_INDENT },
-            { RTL_CONSTASCII_STRINGPARAM( "title" ),            HID_POOLSHEET_TITLE },
-            { RTL_CONSTASCII_STRINGPARAM( "title1" ),           HID_POOLSHEET_TITLE1 },
-            { RTL_CONSTASCII_STRINGPARAM( "title2" ),           HID_POOLSHEET_TITLE2 },
-            { RTL_CONSTASCII_STRINGPARAM( "headline" ),         HID_POOLSHEET_HEADLINE },
-            { RTL_CONSTASCII_STRINGPARAM( "headline1" ),        HID_POOLSHEET_HEADLINE1 },
-            { RTL_CONSTASCII_STRINGPARAM( "headline2" ),        HID_POOLSHEET_HEADLINE2 },
-            { RTL_CONSTASCII_STRINGPARAM( "measure" ),          HID_POOLSHEET_MEASURE },
-            { nullptr, 0, 0 }
-        };
-
-        ApiNameMap* p = pApiNameMap;
-        while( p->mpApiName )
-        {
-            if( nId == p->mnHelpId )
-            {
-                msApiName = OUString( p->mpApiName, p->mnApiNameLength, RTL_TEXTENCODING_ASCII_US );
-                break;
-            }
-            p++;
-        }
-    }
+    const OUString sNewApiName = GetApiNameForHelpId(nId);
+    if (!sNewApiName.isEmpty())
+        msApiName = sNewApiName;
 }
 
 OUString SdStyleSheet::GetFamilyString( SfxStyleFamily eFamily )
 {
     switch( eFamily )
     {
-    case SD_STYLE_FAMILY_CELL:
+    case SfxStyleFamily::Frame:
         return OUString( "cell" );
     default:
         OSL_FAIL( "SdStyleSheet::GetFamilyString(), illegal family!" );
-    case SD_STYLE_FAMILY_GRAPHICS:
+        [[fallthrough]];
+    case SfxStyleFamily::Para:
         return OUString( "graphics" );
     }
 }
 
-void SdStyleSheet::throwIfDisposed() throw (RuntimeException)
+void SdStyleSheet::throwIfDisposed()
 {
     if( !mxPool.is() )
         throw DisposedException();
@@ -699,16 +676,15 @@ void SdStyleSheet::throwIfDisposed() throw (RuntimeException)
 
 SdStyleSheet* SdStyleSheet::CreateEmptyUserStyle( SfxStyleSheetBasePool& rPool, SfxStyleFamily eFamily )
 {
-    OUString aPrefix( "user" );
     OUString aName;
     sal_Int32 nIndex = 1;
     do
     {
-        aName = aPrefix + OUString::number( nIndex++ );
+        aName = "user" + OUString::number( nIndex++ );
     }
     while( rPool.Find( aName, eFamily ) != nullptr );
 
-    return new SdStyleSheet(aName, rPool, eFamily, SFXSTYLEBIT_USERDEF);
+    return new SdStyleSheet(aName, rPool, eFamily, SfxStyleSearchBits::UserDefined);
 }
 
 // XInterface
@@ -725,10 +701,7 @@ void SAL_CALL SdStyleSheet::release(  ) throw ()
         }
         catch (RuntimeException const& exc)
         { // don't break throw ()
-            OSL_FAIL(
-                OUStringToOString(
-                    exc.Message, RTL_TEXTENCODING_ASCII_US ).getStr() );
-            static_cast<void>(exc);
+            SAL_WARN( "sd", exc );
         }
         OSL_ASSERT( mrBHelper.bDisposed );
         SdStyleSheetBase::release();
@@ -737,12 +710,12 @@ void SAL_CALL SdStyleSheet::release(  ) throw ()
 
 // XComponent
 
-void SAL_CALL SdStyleSheet::dispose(  ) throw (RuntimeException, std::exception)
+void SAL_CALL SdStyleSheet::dispose(  )
 {
     ClearableMutexGuard aGuard( mrBHelper.rMutex );
     if (!mrBHelper.bDisposed && !mrBHelper.bInDispose)
     {
-        mrBHelper.bInDispose = sal_True;
+        mrBHelper.bInDispose = true;
         aGuard.clear();
         try
         {
@@ -757,14 +730,14 @@ void SAL_CALL SdStyleSheet::dispose(  ) throw (RuntimeException, std::exception)
             {
                 MutexGuard aGuard2( mrBHelper.rMutex );
                 // bDisposed and bInDispose must be set in this order:
-                mrBHelper.bDisposed = sal_True;
-                mrBHelper.bInDispose = sal_False;
+                mrBHelper.bDisposed = true;
+                mrBHelper.bInDispose = false;
                 throw;
             }
             MutexGuard aGuard2( mrBHelper.rMutex );
             // bDisposed and bInDispose must be set in this order:
-            mrBHelper.bDisposed = sal_True;
-            mrBHelper.bInDispose = sal_False;
+            mrBHelper.bDisposed = true;
+            mrBHelper.bInDispose = false;
         }
         catch (RuntimeException &)
         {
@@ -772,7 +745,10 @@ void SAL_CALL SdStyleSheet::dispose(  ) throw (RuntimeException, std::exception)
         }
         catch (const Exception & exc)
         {
-            throw RuntimeException( "unexpected UNO exception caught: " + exc.Message );
+            css::uno::Any anyEx = cppu::getCaughtException();
+            throw css::lang::WrappedTargetRuntimeException(
+                "unexpected UNO exception caught: " + exc.Message ,
+                nullptr, anyEx );
         }
     }
 }
@@ -785,11 +761,11 @@ void SdStyleSheet::disposing()
         delete pSet;
     }
     pSet = nullptr;
-    pPool = nullptr;
+    m_pPool = nullptr;
     mxPool.clear();
 }
 
-void SAL_CALL SdStyleSheet::addEventListener( const Reference< XEventListener >& xListener ) throw (RuntimeException, std::exception)
+void SAL_CALL SdStyleSheet::addEventListener( const Reference< XEventListener >& xListener )
 {
     ClearableMutexGuard aGuard( mrBHelper.rMutex );
     if (mrBHelper.bDisposed || mrBHelper.bInDispose)
@@ -804,14 +780,14 @@ void SAL_CALL SdStyleSheet::addEventListener( const Reference< XEventListener >&
     }
 }
 
-void SAL_CALL SdStyleSheet::removeEventListener( const Reference< XEventListener >& xListener  ) throw (RuntimeException, std::exception)
+void SAL_CALL SdStyleSheet::removeEventListener( const Reference< XEventListener >& xListener  )
 {
     mrBHelper.removeListener( cppu::UnoType<decltype(xListener)>::get(), xListener );
 }
 
 // XModifyBroadcaster
 
-void SAL_CALL SdStyleSheet::addModifyListener( const Reference< XModifyListener >& xListener ) throw (RuntimeException, std::exception)
+void SAL_CALL SdStyleSheet::addModifyListener( const Reference< XModifyListener >& xListener )
 {
     ClearableMutexGuard aGuard( mrBHelper.rMutex );
     if (mrBHelper.bDisposed || mrBHelper.bInDispose)
@@ -822,13 +798,13 @@ void SAL_CALL SdStyleSheet::addModifyListener( const Reference< XModifyListener 
     }
     else
     {
-        if( !mpModifyListenerForewarder.get() )
+        if (!mpModifyListenerForewarder)
             mpModifyListenerForewarder.reset( new ModifyListenerForewarder( this ) );
         mrBHelper.addListener( cppu::UnoType<XModifyListener>::get(), xListener );
     }
 }
 
-void SAL_CALL SdStyleSheet::removeModifyListener( const Reference< XModifyListener >& xListener ) throw (RuntimeException, std::exception)
+void SAL_CALL SdStyleSheet::removeModifyListener( const Reference< XModifyListener >& xListener )
 {
     mrBHelper.removeListener( cppu::UnoType<XModifyListener>::get(), xListener );
 }
@@ -849,17 +825,17 @@ void SdStyleSheet::notifyModifyListener()
 }
 
 // XServiceInfo
-OUString SAL_CALL SdStyleSheet::getImplementationName() throw(RuntimeException, std::exception)
+OUString SAL_CALL SdStyleSheet::getImplementationName()
 {
     return OUString( "SdStyleSheet" );
 }
 
-sal_Bool SAL_CALL SdStyleSheet::supportsService( const OUString& ServiceName ) throw(RuntimeException, std::exception)
+sal_Bool SAL_CALL SdStyleSheet::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
-Sequence< OUString > SAL_CALL SdStyleSheet::getSupportedServiceNames() throw(RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL SdStyleSheet::getSupportedServiceNames()
 {
     Sequence< OUString > aNameSequence( 10 );
     OUString* pStrings = aNameSequence.getArray();
@@ -878,43 +854,50 @@ Sequence< OUString > SAL_CALL SdStyleSheet::getSupportedServiceNames() throw(Run
     return aNameSequence;
 }
 
+bool SdStyleSheet::SetName(const OUString& rNewName, bool bReindexNow)
+{
+    const bool bResult = SfxUnoStyleSheet::SetName(rNewName, bReindexNow);
+    // Don't overwrite predefined API names
+    if (bResult && GetHelpIdForApiName(msApiName) == 0)
+    {
+        msApiName = rNewName;
+        Broadcast(SfxHint(SfxHintId::DataChanged));
+    }
+    return bResult;
+}
+
 // XNamed
-OUString SAL_CALL SdStyleSheet::getName() throw(RuntimeException, std::exception)
+OUString SAL_CALL SdStyleSheet::getName()
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
     return GetApiName();
 }
 
-void SAL_CALL SdStyleSheet::setName( const OUString& rName  ) throw(RuntimeException, std::exception)
+void SAL_CALL SdStyleSheet::setName( const OUString& rName  )
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
-
-    if( SetName( rName ) )
-    {
-        msApiName = rName;
-        Broadcast(SfxSimpleHint(SFX_HINT_DATACHANGED));
-    }
+    SetName(rName);
 }
 
 // XStyle
 
-sal_Bool SAL_CALL SdStyleSheet::isUserDefined() throw(RuntimeException, std::exception)
+sal_Bool SAL_CALL SdStyleSheet::isUserDefined()
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
     return IsUserDefined();
 }
 
-sal_Bool SAL_CALL SdStyleSheet::isInUse() throw(RuntimeException, std::exception)
+sal_Bool SAL_CALL SdStyleSheet::isInUse()
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
     return IsUsed();
 }
 
-OUString SAL_CALL SdStyleSheet::getParentStyle() throw(RuntimeException, std::exception)
+OUString SAL_CALL SdStyleSheet::getParentStyle()
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
@@ -923,12 +906,12 @@ OUString SAL_CALL SdStyleSheet::getParentStyle() throw(RuntimeException, std::ex
     {
         SdStyleSheet* pParentStyle = static_cast< SdStyleSheet* >( mxPool->Find( GetParent(), nFamily ) );
         if( pParentStyle )
-            return pParentStyle->msApiName;
+            return pParentStyle->GetApiName();
     }
     return OUString();
 }
 
-void SAL_CALL SdStyleSheet::setParentStyle( const OUString& rParentName  ) throw(NoSuchElementException, RuntimeException, std::exception)
+void SAL_CALL SdStyleSheet::setParentStyle( const OUString& rParentName  )
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
@@ -968,16 +951,14 @@ void SAL_CALL SdStyleSheet::setParentStyle( const OUString& rParentName  ) throw
 
 // XPropertySet
 
-Reference< XPropertySetInfo > SdStyleSheet::getPropertySetInfo() throw(RuntimeException, std::exception)
+Reference< XPropertySetInfo > SdStyleSheet::getPropertySetInfo()
 {
     throwIfDisposed();
-    static Reference< XPropertySetInfo > xInfo;
-    if( !xInfo.is() )
-        xInfo = GetStylePropertySet().getPropertySetInfo();
+    static Reference< XPropertySetInfo > xInfo = GetStylePropertySet().getPropertySetInfo();
     return xInfo;
 }
 
-void SAL_CALL SdStyleSheet::setPropertyValue( const OUString& aPropertyName, const Any& aValue ) throw(UnknownPropertyException, PropertyVetoException, IllegalArgumentException, WrappedTargetException, RuntimeException, std::exception)
+void SAL_CALL SdStyleSheet::setPropertyValue( const OUString& aPropertyName, const Any& aValue )
 {
     SolarMutexGuard aGuard;
     throwIfDisposed();
@@ -985,198 +966,196 @@ void SAL_CALL SdStyleSheet::setPropertyValue( const OUString& aPropertyName, con
     const SfxItemPropertySimpleEntry* pEntry = getPropertyMapEntry( aPropertyName );
     if( pEntry == nullptr )
     {
-        throw UnknownPropertyException();
+        throw UnknownPropertyException( aPropertyName, static_cast<cppu::OWeakObject*>(this));
     }
-    else
+
+    if( pEntry->nWID == WID_STYLE_HIDDEN )
     {
-        if( pEntry->nWID == WID_STYLE_HIDDEN )
+        bool bValue = false;
+        if ( aValue >>= bValue )
+            SetHidden( bValue );
+        return;
+    }
+    if( pEntry->nWID == SDRATTR_TEXTDIRECTION )
+        return; // not yet implemented for styles
+
+    if( pEntry->nWID == WID_STYLE_FAMILY )
+        throw PropertyVetoException();
+
+    if( (pEntry->nWID == EE_PARA_NUMBULLET) && (GetFamily() == SfxStyleFamily::Page) )
+    {
+        OUString aStr;
+        const sal_uInt32 nTempHelpId = GetHelpId( aStr );
+
+        if( (nTempHelpId >= HID_PSEUDOSHEET_OUTLINE2) && (nTempHelpId <= HID_PSEUDOSHEET_OUTLINE9) )
+            return;
+    }
+
+    SfxItemSet &rStyleSet = GetItemSet();
+
+    if( pEntry->nWID == OWN_ATTR_FILLBMP_MODE )
+    {
+        BitmapMode eMode;
+        if( aValue >>= eMode )
         {
-            bool bValue = false;
-            if ( aValue >>= bValue )
-                SetHidden( bValue );
+            rStyleSet.Put( XFillBmpStretchItem( eMode == BitmapMode_STRETCH ) );
+            rStyleSet.Put( XFillBmpTileItem( eMode == BitmapMode_REPEAT ) );
             return;
         }
-        if( pEntry->nWID == SDRATTR_TEXTDIRECTION )
-            return; // not yet implemented for styles
-
-        if( pEntry->nWID == WID_STYLE_FAMILY )
-            throw PropertyVetoException();
-
-        if( (pEntry->nWID == EE_PARA_NUMBULLET) && (GetFamily() == SD_STYLE_FAMILY_MASTERPAGE) )
-        {
-            OUString aStr;
-            const sal_uInt32 nTempHelpId = GetHelpId( aStr );
-
-            if( (nTempHelpId >= HID_PSEUDOSHEET_OUTLINE2) && (nTempHelpId <= HID_PSEUDOSHEET_OUTLINE9) )
-                return;
-        }
-
-        SfxItemSet &rStyleSet = GetItemSet();
-
-        if( pEntry->nWID == OWN_ATTR_FILLBMP_MODE )
-        {
-            BitmapMode eMode;
-            if( aValue >>= eMode )
-            {
-                rStyleSet.Put( XFillBmpStretchItem( eMode == BitmapMode_STRETCH ) );
-                rStyleSet.Put( XFillBmpTileItem( eMode == BitmapMode_REPEAT ) );
-                return;
-            }
-            throw IllegalArgumentException();
-        }
-
-        SfxItemSet aSet( GetPool().GetPool(),   pEntry->nWID, pEntry->nWID);
-        aSet.Put( rStyleSet );
-
-        if( !aSet.Count() )
-        {
-            if( EE_PARA_NUMBULLET == pEntry->nWID )
-            {
-                vcl::Font aBulletFont;
-                SdStyleSheetPool::PutNumBulletItem( this, aBulletFont );
-                aSet.Put( rStyleSet );
-            }
-            else
-            {
-                aSet.Put( GetPool().GetPool().GetDefaultItem( pEntry->nWID ) );
-            }
-        }
-
-        if( pEntry->nMemberId == MID_NAME &&
-            ( pEntry->nWID == XATTR_FILLBITMAP || pEntry->nWID == XATTR_FILLGRADIENT ||
-              pEntry->nWID == XATTR_FILLHATCH || pEntry->nWID == XATTR_FILLFLOATTRANSPARENCE ||
-              pEntry->nWID == XATTR_LINESTART || pEntry->nWID == XATTR_LINEEND || pEntry->nWID == XATTR_LINEDASH) )
-        {
-            OUString aTempName;
-            if(!(aValue >>= aTempName ))
-                throw IllegalArgumentException();
-
-            SvxShape::SetFillAttribute( pEntry->nWID, aTempName, aSet );
-        }
-        else if(!SvxUnoTextRangeBase::SetPropertyValueHelper( aSet, pEntry, aValue, aSet ))
-        {
-            SvxItemPropertySet_setPropertyValue( pEntry, aValue, aSet );
-        }
-
-        rStyleSet.Put( aSet );
-        Broadcast(SfxSimpleHint(SFX_HINT_DATACHANGED));
+        throw IllegalArgumentException();
     }
-}
 
-Any SAL_CALL SdStyleSheet::getPropertyValue( const OUString& PropertyName ) throw(UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception)
-{
-    SolarMutexGuard aGuard;
+    SfxItemSet aSet( GetPool()->GetPool(),   {{pEntry->nWID, pEntry->nWID}});
+    aSet.Put( rStyleSet );
 
-    throwIfDisposed();
-
-    const SfxItemPropertySimpleEntry* pEntry = getPropertyMapEntry( PropertyName );
-    if( pEntry == nullptr )
+    if( !aSet.Count() )
     {
-        throw UnknownPropertyException();
-    }
-    else
-    {
-        Any aAny;
-
-        if( pEntry->nWID == WID_STYLE_FAMILY )
+        if( EE_PARA_NUMBULLET == pEntry->nWID )
         {
-            if( nFamily == SD_STYLE_FAMILY_MASTERPAGE )
-            {
-                const OUString aLayoutName( GetName() );
-                aAny <<= aLayoutName.copy( 0, aLayoutName.indexOf( SD_LT_SEPARATOR) );
-            }
-            else
-            {
-                aAny <<= GetFamilyString(nFamily);
-            }
-        }
-        else if( pEntry->nWID == WID_STYLE_DISPNAME )
-        {
-            OUString aDisplayName;
-            if ( nFamily == SD_STYLE_FAMILY_MASTERPAGE )
-            {
-                const SdStyleSheet* pStyleSheet = GetPseudoStyleSheet();
-                if (pStyleSheet != nullptr)
-                    aDisplayName = pStyleSheet->GetDisplayName();
-            }
-
-            if (aDisplayName.isEmpty())
-                aDisplayName = GetDisplayName();
-
-            aAny <<= aDisplayName;
-        }
-        else if( pEntry->nWID == SDRATTR_TEXTDIRECTION )
-        {
-            aAny <<= sal_False;
-        }
-        else if( pEntry->nWID == OWN_ATTR_FILLBMP_MODE )
-        {
-            SfxItemSet &rStyleSet = GetItemSet();
-
-            const XFillBmpStretchItem* pStretchItem = static_cast<const XFillBmpStretchItem*>(rStyleSet.GetItem(XATTR_FILLBMP_STRETCH));
-            const XFillBmpTileItem* pTileItem = static_cast<const XFillBmpTileItem*>(rStyleSet.GetItem(XATTR_FILLBMP_TILE));
-
-            if( pStretchItem && pTileItem )
-            {
-                if( pTileItem->GetValue() )
-                    aAny <<= BitmapMode_REPEAT;
-                else if( pStretchItem->GetValue() )
-                    aAny <<= BitmapMode_STRETCH;
-                else
-                    aAny <<= BitmapMode_NO_REPEAT;
-            }
-        }
-        else if( pEntry->nWID == WID_STYLE_HIDDEN )
-        {
-            aAny <<= IsHidden( );
+            vcl::Font aBulletFont;
+            SdStyleSheetPool::PutNumBulletItem( this, aBulletFont );
+            aSet.Put( rStyleSet );
         }
         else
         {
-            SfxItemSet aSet( GetPool().GetPool(),   pEntry->nWID, pEntry->nWID);
-
-            const SfxPoolItem* pItem;
-            SfxItemSet& rStyleSet = GetItemSet();
-
-            if( rStyleSet.GetItemState( pEntry->nWID, true, &pItem ) == SfxItemState::SET )
-                aSet.Put(  *pItem );
-
-            if( !aSet.Count() )
-                aSet.Put( GetPool().GetPool().GetDefaultItem( pEntry->nWID ) );
-
-            if(SvxUnoTextRangeBase::GetPropertyValueHelper( aSet, pEntry, aAny ))
-                return aAny;
-
-            // Get value of ItemSet
-            aAny = SvxItemPropertySet_getPropertyValue( pEntry, aSet );
+            aSet.Put( GetPool()->GetPool().GetDefaultItem( pEntry->nWID ) );
         }
-
-        if( pEntry->aType != aAny.getValueType() )
-        {
-            // since the sfx uint16 item now exports a sal_Int32, we may have to fix this here
-            if( ( pEntry->aType == ::cppu::UnoType<sal_Int16>::get()) && aAny.getValueType() == ::cppu::UnoType<sal_Int32>::get() )
-            {
-                sal_Int32 nValue = 0;
-                aAny >>= nValue;
-                aAny <<= (sal_Int16)nValue;
-            }
-            else
-            {
-                OSL_FAIL("SvxShape::GetAnyForItem() Returnvalue has wrong Type!" );
-            }
-        }
-
-        return aAny;
     }
+
+    if( pEntry->nMemberId == MID_NAME &&
+        ( pEntry->nWID == XATTR_FILLBITMAP || pEntry->nWID == XATTR_FILLGRADIENT ||
+          pEntry->nWID == XATTR_FILLHATCH || pEntry->nWID == XATTR_FILLFLOATTRANSPARENCE ||
+          pEntry->nWID == XATTR_LINESTART || pEntry->nWID == XATTR_LINEEND || pEntry->nWID == XATTR_LINEDASH) )
+    {
+        OUString aTempName;
+        if(!(aValue >>= aTempName ))
+            throw IllegalArgumentException();
+
+        SvxShape::SetFillAttribute( pEntry->nWID, aTempName, aSet );
+    }
+    else if(!SvxUnoTextRangeBase::SetPropertyValueHelper( pEntry, aValue, aSet ))
+    {
+        SvxItemPropertySet_setPropertyValue( pEntry, aValue, aSet );
+    }
+
+    rStyleSet.Put( aSet );
+    Broadcast(SfxHint(SfxHintId::DataChanged));
+
 }
 
-void SAL_CALL SdStyleSheet::addPropertyChangeListener( const OUString& , const Reference< XPropertyChangeListener >&  ) throw(UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception) {}
-void SAL_CALL SdStyleSheet::removePropertyChangeListener( const OUString& , const Reference< XPropertyChangeListener >&  ) throw(UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception) {}
-void SAL_CALL SdStyleSheet::addVetoableChangeListener( const OUString& , const Reference< XVetoableChangeListener >&  ) throw(UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception) {}
-void SAL_CALL SdStyleSheet::removeVetoableChangeListener( const OUString& , const Reference< XVetoableChangeListener >&  ) throw(UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception) {}
+Any SAL_CALL SdStyleSheet::getPropertyValue( const OUString& PropertyName )
+{
+    SolarMutexGuard aGuard;
+
+    throwIfDisposed();
+
+    const SfxItemPropertySimpleEntry* pEntry = getPropertyMapEntry( PropertyName );
+    if( pEntry == nullptr )
+    {
+        throw UnknownPropertyException( PropertyName, static_cast<cppu::OWeakObject*>(this));
+    }
+
+    Any aAny;
+
+    if( pEntry->nWID == WID_STYLE_FAMILY )
+    {
+        if( nFamily == SfxStyleFamily::Page )
+        {
+            const OUString aLayoutName( GetName() );
+            aAny <<= aLayoutName.copy( 0, aLayoutName.indexOf( SD_LT_SEPARATOR) );
+        }
+        else
+        {
+            aAny <<= GetFamilyString(nFamily);
+        }
+    }
+    else if( pEntry->nWID == WID_STYLE_DISPNAME )
+    {
+        OUString aDisplayName;
+        if ( nFamily == SfxStyleFamily::Page )
+        {
+            const SdStyleSheet* pStyleSheet = GetPseudoStyleSheet();
+            if (pStyleSheet != nullptr)
+                aDisplayName = pStyleSheet->GetName();
+        }
+
+        if (aDisplayName.isEmpty())
+            aDisplayName = GetName();
+
+        aAny <<= aDisplayName;
+    }
+    else if( pEntry->nWID == SDRATTR_TEXTDIRECTION )
+    {
+        aAny <<= false;
+    }
+    else if( pEntry->nWID == OWN_ATTR_FILLBMP_MODE )
+    {
+        SfxItemSet &rStyleSet = GetItemSet();
+
+        const XFillBmpStretchItem* pStretchItem = rStyleSet.GetItem<XFillBmpStretchItem>(XATTR_FILLBMP_STRETCH);
+        const XFillBmpTileItem* pTileItem = rStyleSet.GetItem<XFillBmpTileItem>(XATTR_FILLBMP_TILE);
+
+        if( pStretchItem && pTileItem )
+        {
+            if( pTileItem->GetValue() )
+                aAny <<= BitmapMode_REPEAT;
+            else if( pStretchItem->GetValue() )
+                aAny <<= BitmapMode_STRETCH;
+            else
+                aAny <<= BitmapMode_NO_REPEAT;
+        }
+    }
+    else if( pEntry->nWID == WID_STYLE_HIDDEN )
+    {
+        aAny <<= IsHidden( );
+    }
+    else
+    {
+        SfxItemSet aSet( GetPool()->GetPool(),   {{pEntry->nWID, pEntry->nWID}});
+
+        const SfxPoolItem* pItem;
+        SfxItemSet& rStyleSet = GetItemSet();
+
+        if( rStyleSet.GetItemState( pEntry->nWID, true, &pItem ) == SfxItemState::SET )
+            aSet.Put(  *pItem );
+
+        if( !aSet.Count() )
+            aSet.Put( GetPool()->GetPool().GetDefaultItem( pEntry->nWID ) );
+
+        if(SvxUnoTextRangeBase::GetPropertyValueHelper( aSet, pEntry, aAny ))
+            return aAny;
+
+        // Get value of ItemSet
+        aAny = SvxItemPropertySet_getPropertyValue( pEntry, aSet );
+    }
+
+    if( pEntry->aType != aAny.getValueType() )
+    {
+        // since the sfx uint16 item now exports a sal_Int32, we may have to fix this here
+        if( ( pEntry->aType == ::cppu::UnoType<sal_Int16>::get()) && aAny.getValueType() == ::cppu::UnoType<sal_Int32>::get() )
+        {
+            sal_Int32 nValue = 0;
+            aAny >>= nValue;
+            aAny <<= static_cast<sal_Int16>(nValue);
+        }
+        else
+        {
+            OSL_FAIL("SvxShape::GetAnyForItem() Returnvalue has wrong Type!" );
+        }
+    }
+
+    return aAny;
+
+}
+
+void SAL_CALL SdStyleSheet::addPropertyChangeListener( const OUString& , const Reference< XPropertyChangeListener >&  ) {}
+void SAL_CALL SdStyleSheet::removePropertyChangeListener( const OUString& , const Reference< XPropertyChangeListener >&  ) {}
+void SAL_CALL SdStyleSheet::addVetoableChangeListener( const OUString& , const Reference< XVetoableChangeListener >&  ) {}
+void SAL_CALL SdStyleSheet::removeVetoableChangeListener( const OUString& , const Reference< XVetoableChangeListener >&  ) {}
 
 // XPropertyState
 
-PropertyState SAL_CALL SdStyleSheet::getPropertyState( const OUString& PropertyName ) throw(UnknownPropertyException, RuntimeException, std::exception)
+PropertyState SAL_CALL SdStyleSheet::getPropertyState( const OUString& PropertyName )
 {
     SolarMutexGuard aGuard;
 
@@ -1185,7 +1164,7 @@ PropertyState SAL_CALL SdStyleSheet::getPropertyState( const OUString& PropertyN
     const SfxItemPropertySimpleEntry* pEntry = getPropertyMapEntry( PropertyName );
 
     if( pEntry == nullptr )
-        throw UnknownPropertyException();
+        throw UnknownPropertyException( PropertyName, static_cast<cppu::OWeakObject*>(this));
 
     if( pEntry->nWID == WID_STYLE_FAMILY )
     {
@@ -1230,7 +1209,7 @@ PropertyState SAL_CALL SdStyleSheet::getPropertyState( const OUString& PropertyN
         }
 
         // if a item is set, this doesn't mean we want it :)
-        if( ( PropertyState_DIRECT_VALUE == eState ) )
+        if( PropertyState_DIRECT_VALUE == eState )
         {
             switch( pEntry->nWID )
             {
@@ -1242,7 +1221,7 @@ PropertyState SAL_CALL SdStyleSheet::getPropertyState( const OUString& PropertyN
             case XATTR_LINESTART:
             case XATTR_LINEDASH:
                 {
-                    const NameOrIndex* pItem = static_cast<const NameOrIndex*>(rStyleSet.GetItem((sal_uInt16)pEntry->nWID));
+                    const NameOrIndex* pItem = rStyleSet.GetItem<NameOrIndex>(pEntry->nWID);
                     if( ( pItem == nullptr ) || pItem->GetName().isEmpty() )
                         eState = PropertyState_DEFAULT_VALUE;
                 }
@@ -1253,7 +1232,7 @@ PropertyState SAL_CALL SdStyleSheet::getPropertyState( const OUString& PropertyN
     }
 }
 
-Sequence< PropertyState > SAL_CALL SdStyleSheet::getPropertyStates( const Sequence< OUString >& aPropertyName ) throw(UnknownPropertyException, RuntimeException, std::exception)
+Sequence< PropertyState > SAL_CALL SdStyleSheet::getPropertyStates( const Sequence< OUString >& aPropertyName )
 {
     SolarMutexGuard aGuard;
 
@@ -1271,7 +1250,7 @@ Sequence< PropertyState > SAL_CALL SdStyleSheet::getPropertyStates( const Sequen
     return aPropertyStateSequence;
 }
 
-void SAL_CALL SdStyleSheet::setPropertyToDefault( const OUString& PropertyName ) throw(UnknownPropertyException, RuntimeException, std::exception)
+void SAL_CALL SdStyleSheet::setPropertyToDefault( const OUString& PropertyName )
 {
     SolarMutexGuard aGuard;
 
@@ -1279,7 +1258,7 @@ void SAL_CALL SdStyleSheet::setPropertyToDefault( const OUString& PropertyName )
 
     const SfxItemPropertySimpleEntry* pEntry = getPropertyMapEntry( PropertyName );
     if( pEntry == nullptr )
-        throw UnknownPropertyException();
+        throw UnknownPropertyException( PropertyName, static_cast<cppu::OWeakObject*>(this));
 
     SfxItemSet &rStyleSet = GetItemSet();
 
@@ -1292,10 +1271,10 @@ void SAL_CALL SdStyleSheet::setPropertyToDefault( const OUString& PropertyName )
     {
         rStyleSet.ClearItem( pEntry->nWID );
     }
-    Broadcast(SfxSimpleHint(SFX_HINT_DATACHANGED));
+    Broadcast(SfxHint(SfxHintId::DataChanged));
 }
 
-Any SAL_CALL SdStyleSheet::getPropertyDefault( const OUString& aPropertyName ) throw(UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception)
+Any SAL_CALL SdStyleSheet::getPropertyDefault( const OUString& aPropertyName )
 {
     SolarMutexGuard aGuard;
 
@@ -1303,7 +1282,7 @@ Any SAL_CALL SdStyleSheet::getPropertyDefault( const OUString& aPropertyName ) t
 
     const SfxItemPropertySimpleEntry* pEntry = getPropertyMapEntry( aPropertyName );
     if( pEntry == nullptr )
-        throw UnknownPropertyException();
+        throw UnknownPropertyException( aPropertyName, static_cast<cppu::OWeakObject*>(this));
     Any aRet;
     if( pEntry->nWID == WID_STYLE_FAMILY )
     {
@@ -1311,7 +1290,7 @@ Any SAL_CALL SdStyleSheet::getPropertyDefault( const OUString& aPropertyName ) t
     }
     else if( pEntry->nWID == SDRATTR_TEXTDIRECTION )
     {
-        aRet <<= sal_False;
+        aRet <<= false;
     }
     else if( pEntry->nWID == OWN_ATTR_FILLBMP_MODE )
     {
@@ -1319,8 +1298,8 @@ Any SAL_CALL SdStyleSheet::getPropertyDefault( const OUString& aPropertyName ) t
     }
     else
     {
-        SfxItemPool& rMyPool = GetPool().GetPool();
-        SfxItemSet aSet( rMyPool,   pEntry->nWID, pEntry->nWID);
+        SfxItemPool& rMyPool = GetPool()->GetPool();
+        SfxItemSet aSet( rMyPool,   {{pEntry->nWID, pEntry->nWID}});
         aSet.Put( rMyPool.GetDefaultItem( pEntry->nWID ) );
         aRet = SvxItemPropertySet_getPropertyValue( pEntry, aSet );
     }
@@ -1328,7 +1307,7 @@ Any SAL_CALL SdStyleSheet::getPropertyDefault( const OUString& aPropertyName ) t
 }
 
 /** this is used because our property map is not sorted yet */
-const SfxItemPropertySimpleEntry* SdStyleSheet::getPropertyMapEntry( const OUString& rPropertyName ) throw (css::uno::RuntimeException)
+const SfxItemPropertySimpleEntry* SdStyleSheet::getPropertyMapEntry( const OUString& rPropertyName )
 {
     return GetStylePropertySet().getPropertyMapEntry(rPropertyName);
 }
@@ -1336,26 +1315,26 @@ const SfxItemPropertySimpleEntry* SdStyleSheet::getPropertyMapEntry( const OUStr
 //Broadcast that a SdStyleSheet has changed, taking into account outline sublevels
 //which need to be explicitly broadcast as changing if their parent style was
 //the one that changed
-void SdStyleSheet::BroadcastSdStyleSheetChange(SfxStyleSheetBase* pStyleSheet,
+void SdStyleSheet::BroadcastSdStyleSheetChange(SfxStyleSheetBase const * pStyleSheet,
     PresentationObjects ePO, SfxStyleSheetBasePool* pSSPool)
 {
-    SdStyleSheet* pRealSheet = static_cast<SdStyleSheet*>(pStyleSheet)->GetRealStyleSheet();
-    pRealSheet->Broadcast(SfxSimpleHint(SFX_HINT_DATACHANGED));
+    SdStyleSheet* pRealSheet = static_cast<SdStyleSheet const *>(pStyleSheet)->GetRealStyleSheet();
+    pRealSheet->Broadcast(SfxHint(SfxHintId::DataChanged));
 
     if( (ePO >= PO_OUTLINE_1) && (ePO <= PO_OUTLINE_8) )
     {
-        OUString sStyleName(SD_RESSTR(STR_PSEUDOSHEET_OUTLINE) + " ");
+        OUString sStyleName(SdResId(STR_PSEUDOSHEET_OUTLINE) + " ");
 
-        for( sal_uInt16 n = (sal_uInt16)(ePO - PO_OUTLINE_1 + 2); n < 10; n++ )
+        for( sal_uInt16 n = static_cast<sal_uInt16>(ePO - PO_OUTLINE_1 + 2); n < 10; n++ )
         {
             OUString aName( sStyleName + OUString::number(n) );
 
-            SfxStyleSheetBase* pSheet = pSSPool->Find( aName, SD_STYLE_FAMILY_PSEUDO);
+            SfxStyleSheetBase* pSheet = pSSPool->Find( aName, SfxStyleFamily::Pseudo);
 
             if(pSheet)
             {
                 SdStyleSheet* pRealStyleSheet = static_cast<SdStyleSheet*>(pSheet)->GetRealStyleSheet();
-                pRealStyleSheet->Broadcast(SfxSimpleHint(SFX_HINT_DATACHANGED));
+                pRealStyleSheet->Broadcast(SfxHint(SfxHintId::DataChanged));
             }
         }
     }

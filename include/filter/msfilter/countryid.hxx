@@ -21,9 +21,9 @@
 #ifndef INCLUDED_FILTER_MSFILTER_COUNTRYID_HXX
 #define INCLUDED_FILTER_MSFILTER_COUNTRYID_HXX
 
-#include <sal/types.h>
-#include <i18nlangtag/lang.h>
 #include <filter/msfilter/msfilterdllapi.h>
+#include <i18nlangtag/lang.h>
+#include <sal/types.h>
 
 
 namespace msfilter {
@@ -141,7 +141,7 @@ const CountryId COUNTRY_BURUNDI             = 257;
 const CountryId COUNTRY_MOZAMBIQUE          = 258;
 const CountryId COUNTRY_ZANZIBAR            = 259;
 const CountryId COUNTRY_ZAMBIA              = 260;
-const CountryId COUNTRY_MADAGASKAR          = 261;
+const CountryId COUNTRY_MADAGASCAR          = 261;
 const CountryId COUNTRY_REUNION             = 262;
 const CountryId COUNTRY_ZIMBABWE            = 263;
 const CountryId COUNTRY_NAMIBIA             = 264;

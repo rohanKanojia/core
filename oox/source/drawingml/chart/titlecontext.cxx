@@ -17,14 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/chart/titlecontext.hxx"
+#include <drawingml/chart/titlecontext.hxx>
 
-#include "drawingml/shapepropertiescontext.hxx"
-#include "drawingml/textbodycontext.hxx"
-#include "drawingml/chart/datasourcecontext.hxx"
-#include "drawingml/chart/titlemodel.hxx"
+#include <drawingml/shapepropertiescontext.hxx>
+#include <drawingml/textbodycontext.hxx>
+#include <drawingml/chart/datasourcecontext.hxx>
+#include <drawingml/chart/titlemodel.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
-#include "rtl/ustrbuf.hxx"
+#include <rtl/ustrbuf.hxx>
 #include <osl/diagnose.h>
 
 
@@ -74,6 +78,7 @@ void TextContext::onCharacters( const OUString& rChars )
 
         // Also store it as a single element type for non-Excel document.
         mrModel.mxDataSeq->maData[0] <<= rChars;
+        mrModel.mxDataSeq->mnPointCount = 1;
     }
 }
 

@@ -25,14 +25,12 @@
 #include <com/sun/star/beans/XPropertyAccess.hpp>
 #include <com/sun/star/lang/IllegalAccessException.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
+#include <com/sun/star/ucb/CommandAbortedException.hpp>
 #include <com/sun/star/ucb/XCommandInfo.hpp>
 #include <com/sun/star/ucb/XPersistentPropertySet.hpp>
-#include <com/sun/star/io/XOutputStream.hpp>
-#include <com/sun/star/io/XActiveDataSink.hpp>
 #include <com/sun/star/ucb/OpenCommandArgument2.hpp>
 #include <com/sun/star/ucb/OpenMode.hpp>
-#include <com/sun/star/ucb/UnsupportedDataSinkException.hpp>
-#include <com/sun/star/ucb/UnsupportedOpenModeException.hpp>
+#include <com/sun/star/ucb/UnsupportedCommandException.hpp>
 #include <com/sun/star/ucb/XDynamicResultSet.hpp>
 #include <com/sun/star/deployment/PackageInformationProvider.hpp>
 
@@ -41,11 +39,10 @@
 #include <ucbhelper/cancelcommandexecution.hxx>
 #include <ucbhelper/content.hxx>
 #include <tools/diagnose_ex.h>
-#include <comphelper/processfactory.hxx>
-#include <comphelper/string.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/uri.hxx>
 #include <sal/macros.h>
+#include <sal/log.hxx>
 
 #include <algorithm>
 
@@ -55,7 +52,6 @@ namespace ucb { namespace ucp { namespace ext
 
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::uno::UNO_SET_THROW;
     using ::com::sun::star::uno::Exception;
     using ::com::sun::star::uno::RuntimeException;
@@ -63,9 +59,7 @@ namespace ucb { namespace ucp { namespace ext
     using ::com::sun::star::uno::makeAny;
     using ::com::sun::star::uno::Sequence;
     using ::com::sun::star::uno::XComponentContext;
-    using ::com::sun::star::lang::XMultiServiceFactory;
     using ::com::sun::star::ucb::XContentIdentifier;
-    using ::com::sun::star::ucb::IllegalIdentifierException;
     using ::com::sun::star::ucb::XContent;
     using ::com::sun::star::ucb::XCommandEnvironment;
     using ::com::sun::star::ucb::Command;
@@ -75,11 +69,6 @@ namespace ucb { namespace ucp { namespace ext
     using ::com::sun::star::beans::PropertyValue;
     using ::com::sun::star::ucb::OpenCommandArgument2;
     using ::com::sun::star::ucb::XDynamicResultSet;
-    using ::com::sun::star::ucb::UnsupportedOpenModeException;
-    using ::com::sun::star::io::XOutputStream;
-    using ::com::sun::star::io::XActiveDataSink;
-    using ::com::sun::star::io::XInputStream;
-    using ::com::sun::star::ucb::UnsupportedDataSinkException;
     using ::com::sun::star::ucb::UnsupportedCommandException;
     using ::com::sun::star::sdbc::XRow;
     using ::com::sun::star::beans::XPropertySet;
@@ -110,7 +99,7 @@ namespace ucb { namespace ucp { namespace ext
         }
 
 
-        struct SelectPropertyName : public ::std::unary_function< Property, OUString >
+        struct SelectPropertyName
         {
             const OUString& operator()( const Property& i_rProperty ) const
             {
@@ -172,13 +161,13 @@ namespace ucb { namespace ucp { namespace ext
     }
 
 
-    OUString SAL_CALL Content::getImplementationName() throw( RuntimeException, std::exception )
+    OUString SAL_CALL Content::getImplementationName()
     {
         return OUString(  "org.openoffice.comp.ucp.ext.Content"  );
     }
 
 
-    Sequence< OUString > SAL_CALL Content::getSupportedServiceNames() throw( RuntimeException, std::exception )
+    Sequence< OUString > SAL_CALL Content::getSupportedServiceNames()
     {
         Sequence< OUString > aServiceNames(2);
         aServiceNames[0] = "com.sun.star.ucb.Content";
@@ -187,7 +176,7 @@ namespace ucb { namespace ucp { namespace ext
     }
 
 
-    OUString SAL_CALL Content::getContentType() throw( RuntimeException, std::exception )
+    OUString SAL_CALL Content::getContentType()
     {
         impl_determineContentType();
         return *m_aContentType;
@@ -195,7 +184,6 @@ namespace ucb { namespace ucp { namespace ext
 
 
     Any SAL_CALL Content::execute( const Command& aCommand, sal_Int32 /* CommandId */, const Reference< XCommandEnvironment >& i_rEvironment )
-        throw( Exception, CommandAbortedException, RuntimeException, std::exception )
     {
         Any aRet;
 
@@ -231,7 +219,7 @@ namespace ucb { namespace ucp { namespace ext
                 // unreachable
             }
 
-            aRet <<= setPropertyValues( aProperties, i_rEvironment );
+            aRet <<= setPropertyValues( aProperties );
         }
         else if ( aCommand.Name == "getPropertySetInfo" )
         {
@@ -286,7 +274,7 @@ namespace ucb { namespace ucp { namespace ext
     }
 
 
-    void SAL_CALL Content::abort( sal_Int32 ) throw( RuntimeException, std::exception )
+    void SAL_CALL Content::abort( sal_Int32 )
     {
     }
 
@@ -396,8 +384,6 @@ namespace ucb { namespace ucp { namespace ext
         const sal_Int32 nCount = i_rProperties.getLength();
         if ( nCount )
         {
-            Reference< XPropertySet > xAdditionalPropSet;
-
             const Property* pProps = i_rProperties.getConstArray();
             for ( sal_Int32 n = 0; n < nCount; ++n )
             {
@@ -430,22 +416,22 @@ namespace ucb { namespace ucp { namespace ext
         else
         {
             // Append all Core Properties.
-            xRow->appendString ( Property( OUString("ContentType"),
+            xRow->appendString ( Property( "ContentType",
                           -1,
                           cppu::UnoType<OUString>::get(),
                           PropertyAttribute::BOUND | PropertyAttribute::READONLY ),
                 ContentProvider::getArtificialNodeContentType() );
-            xRow->appendString ( Property( OUString("Title"),
+            xRow->appendString ( Property( "Title",
                           -1,
                           cppu::UnoType<OUString>::get(),
                           PropertyAttribute::BOUND | PropertyAttribute::READONLY ),
                 i_rTitle );
-            xRow->appendBoolean( Property( OUString("IsDocument"),
+            xRow->appendBoolean( Property( "IsDocument",
                           -1,
                           cppu::UnoType<bool>::get(),
                           PropertyAttribute::BOUND | PropertyAttribute::READONLY ),
                 false );
-            xRow->appendBoolean( Property( OUString("IsFolder"),
+            xRow->appendBoolean( Property( "IsFolder",
                           -1,
                           cppu::UnoType<bool>::get(),
                           PropertyAttribute::BOUND | PropertyAttribute::READONLY ),
@@ -488,8 +474,8 @@ namespace ucb { namespace ucp { namespace ext
             // translate the property request
             Sequence< OUString > aPropertyNames( i_rProperties.getLength() );
             ::std::transform(
-                i_rProperties.getConstArray(),
-                i_rProperties.getConstArray() + i_rProperties.getLength(),
+                i_rProperties.begin(),
+                i_rProperties.end(),
                 aPropertyNames.getArray(),
                 SelectPropertyName()
             );
@@ -516,7 +502,7 @@ namespace ucb { namespace ucp { namespace ext
     }
 
 
-    Sequence< Any > Content::setPropertyValues( const Sequence< PropertyValue >& i_rValues, const Reference< XCommandEnvironment >& /* xEnv */)
+    Sequence< Any > Content::setPropertyValues( const Sequence< PropertyValue >& i_rValues)
     {
         ::osl::ClearableGuard< osl::Mutex > aGuard( m_aMutex );
 
@@ -524,7 +510,7 @@ namespace ucb { namespace ucp { namespace ext
 
         PropertyChangeEvent aEvent;
         aEvent.Source         = static_cast< cppu::OWeakObject * >( this );
-        aEvent.Further        = sal_False;
+        aEvent.Further        = false;
         aEvent.PropertyHandle = -1;
 
         const PropertyValue* pValues = i_rValues.getConstArray();
@@ -542,29 +528,27 @@ namespace ucb { namespace ucp { namespace ext
 
     Sequence< CommandInfo > Content::getCommands( const Reference< XCommandEnvironment > & /*xEnv*/ )
     {
-        sal_uInt32 nCommandCount = 5;
         static const CommandInfo aCommandInfoTable[] =
         {
-
             // Mandatory commands
 
             CommandInfo(
-                OUString(  "getCommandInfo"  ),
+                "getCommandInfo",
                 -1,
                 cppu::UnoType<void>::get()
             ),
             CommandInfo(
-                OUString(  "getPropertySetInfo"  ),
+                "getPropertySetInfo",
                 -1,
                 cppu::UnoType<void>::get()
             ),
             CommandInfo(
-                OUString(  "getPropertyValues"  ),
+                "getPropertyValues",
                 -1,
                 cppu::UnoType<Sequence< Property >>::get()
             ),
             CommandInfo(
-                OUString(  "setPropertyValues"  ),
+                "setPropertyValues",
                 -1,
                 cppu::UnoType<Sequence< PropertyValue >>::get()
             )
@@ -572,13 +556,13 @@ namespace ucb { namespace ucp { namespace ext
             // Optional standard commands
 
             , CommandInfo(
-                OUString(  "open"  ),
+                "open",
                 -1,
                 cppu::UnoType<OpenCommandArgument2>::get()
             )
         };
 
-        return Sequence< CommandInfo >( aCommandInfoTable, nCommandCount );
+        return Sequence< CommandInfo >( aCommandInfoTable, SAL_N_ELEMENTS(aCommandInfoTable) );
     }
 
 
@@ -587,25 +571,25 @@ namespace ucb { namespace ucp { namespace ext
         static const Property aProperties[] =
         {
             Property(
-                OUString(  "ContentType"  ),
+                "ContentType",
                 -1,
                 cppu::UnoType<OUString>::get(),
                 PropertyAttribute::BOUND | PropertyAttribute::READONLY
             ),
             Property(
-                OUString(  "IsDocument"  ),
+                "IsDocument",
                 -1,
                 cppu::UnoType<bool>::get(),
                 PropertyAttribute::BOUND | PropertyAttribute::READONLY
             ),
             Property(
-                OUString(  "IsFolder"  ),
+                "IsFolder",
                 -1,
                 cppu::UnoType<bool>::get(),
                 PropertyAttribute::BOUND | PropertyAttribute::READONLY
             ),
             Property(
-                OUString(  "Title"  ),
+                "Title",
                 -1,
                 cppu::UnoType<OUString>::get(),
                 PropertyAttribute::BOUND | PropertyAttribute::READONLY
@@ -630,7 +614,7 @@ namespace ucb { namespace ucp { namespace ext
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("ucb.ucp.ext");
         }
         m_aIsFolder.reset( bIsFolder );
         return *m_aIsFolder;
@@ -654,7 +638,7 @@ namespace ucb { namespace ucp { namespace ext
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("ucb.ucp.ext");
             }
         }
     }

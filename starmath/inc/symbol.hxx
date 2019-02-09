@@ -20,16 +20,11 @@
 #ifndef INCLUDED_STARMATH_INC_SYMBOL_HXX
 #define INCLUDED_STARMATH_INC_SYMBOL_HXX
 
-#include <vcl/font.hxx>
-#include <svl/lstner.hxx>
-
 #include <map>
 #include <vector>
 #include <set>
 
-#include "unomodel.hxx"
 #include "utility.hxx"
-#include "smmod.hxx"
 
 
 #define SYMBOL_NONE     0xFFFF
@@ -43,7 +38,6 @@ private:
     OUString            m_aSetName;
     sal_UCS4            m_cChar;
     bool                m_bPredefined;
-    bool                m_bDocSymbol;
 
 public:
     SmSym();
@@ -62,8 +56,6 @@ public:
     const OUString& GetExportName() const       { return m_aExportName; }
     void            SetExportName( const OUString &rName )        { m_aExportName = rName; }
 
-    void            SetDocSymbol( bool bVal )   { m_bDocSymbol = bVal; }
-
     // true if rSymbol has the same name, font and character
     bool            IsEqualInUI( const SmSym& rSymbol ) const;
 };
@@ -75,18 +67,16 @@ typedef std::map< OUString, SmSym >    SymbolMap_t;
 typedef std::vector< const SmSym * >            SymbolPtrVec_t;
 
 
-class SmSymbolManager : public SfxListener
+class SmSymbolManager
 {
 private:
     SymbolMap_t         m_aSymbols;
     bool                m_bModified;
 
-    virtual void Notify(SfxBroadcaster& rBC, const SfxHint& rHint) override;
-
 public:
     SmSymbolManager();
     SmSymbolManager(const SmSymbolManager& rSymbolSetManager);
-    virtual ~SmSymbolManager();
+    ~SmSymbolManager();
 
     SmSymbolManager &   operator = (const SmSymbolManager& rSymbolSetManager);
 

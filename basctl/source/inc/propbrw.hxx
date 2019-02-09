@@ -40,7 +40,7 @@ namespace basctl
 
 class DialogWindowLayout;
 
-class PropBrw : public DockingWindow, public SfxListener, public SfxBroadcaster
+class PropBrw final : public DockingWindow, public SfxListener, public SfxBroadcaster
 {
 private:
     bool        m_bInitialStateChange;
@@ -54,7 +54,6 @@ private:
     css::uno::Reference< css::frame::XModel >
                     m_xContextDocument;
 
-protected:
     SdrView*        pView;
     virtual void Resize() override;
     virtual bool Close() override;
@@ -72,7 +71,7 @@ protected:
 
 public:
     explicit PropBrw (DialogWindowLayout&);
-    virtual ~PropBrw();
+    virtual ~PropBrw() override;
     virtual void dispose() override;
     using Window::Update;
     // note: changing the Context document to an instance other than the one given in the ctor is not supported

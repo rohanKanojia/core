@@ -35,7 +35,6 @@
 #include <svx/svdpage.hxx>
 #include <svx/svdundo.hxx>
 #include <svx/xdef.hxx>
-#include <vcl/msgbox.hxx>
 #include <svx/extrusionbar.hxx>
 #include <svx/fontworkbar.hxx>
 #include <sfx2/docfile.hxx>
@@ -45,20 +44,19 @@
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <com/sun/star/awt/XControlModel.hpp>
 
-#include "drawsh.hxx"
-#include "drawview.hxx"
-#include "viewdata.hxx"
-#include "tabvwsh.hxx"
-#include "docsh.hxx"
-#include "scresid.hxx"
-#include "undotab.hxx"
-#include "drwlayer.hxx"
-#include "userdat.hxx"
-#include "postit.hxx"
-#include "drtxtob.hxx"
+#include <drawsh.hxx>
+#include <drawview.hxx>
+#include <viewdata.hxx>
+#include <tabvwsh.hxx>
+#include <docsh.hxx>
+#include <undotab.hxx>
+#include <drwlayer.hxx>
+#include <userdat.hxx>
+#include <postit.hxx>
+#include <drtxtob.hxx>
 #include <memory>
 
-#include "sc.hrc"
+#include <sc.hrc>
 
 using namespace com::sun::star;
 
@@ -71,7 +69,7 @@ void ScDrawShell::GetHLinkState( SfxItemSet& rSet )             //  Hyperlink
 
     SvxHyperlinkItem aHLinkItem;
 
-    if ( rMarkList.GetMarkCount() == 1 )              // URL-Button markiert ?
+    if ( rMarkList.GetMarkCount() == 1 )              // URL-Button marked ?
     {
         SdrObject* pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
         ScMacroInfo* pInfo = ScDrawLayer::GetMacroInfo( pObj );
@@ -81,10 +79,10 @@ void ScDrawShell::GetHLinkState( SfxItemSet& rSet )             //  Hyperlink
             aHLinkItem.SetInsertMode(HLINK_FIELD);
         }
         SdrUnoObj* pUnoCtrl = dynamic_cast<SdrUnoObj*>( pObj );
-        if (pUnoCtrl && FmFormInventor == pUnoCtrl->GetObjInventor())
+        if (pUnoCtrl && SdrInventor::FmForm == pUnoCtrl->GetObjInventor())
         {
-            uno::Reference<awt::XControlModel> xControlModel = pUnoCtrl->GetUnoControlModel();
-            OSL_ENSURE( xControlModel.is(), "UNO-Control ohne Model" );
+            const uno::Reference<awt::XControlModel>& xControlModel = pUnoCtrl->GetUnoControlModel();
+            OSL_ENSURE( xControlModel.is(), "UNO-Control without model" );
             if( !xControlModel.is() )
                 return;
 
@@ -139,7 +137,7 @@ void ScDrawShell::GetHLinkState( SfxItemSet& rSet )             //  Hyperlink
     rSet.Put(aHLinkItem);
 }
 
-void ScDrawShell::ExecuteHLink( SfxRequest& rReq )
+void ScDrawShell::ExecuteHLink( const SfxRequest& rReq )
 {
     const SfxItemSet* pReqArgs = rReq.GetArgs();
 
@@ -167,11 +165,11 @@ void ScDrawShell::ExecuteHLink( SfxRequest& rReq )
                         {
                             SdrObject* pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
                             SdrUnoObj* pUnoCtrl = dynamic_cast<SdrUnoObj*>( pObj  );
-                            if (pUnoCtrl && FmFormInventor == pUnoCtrl->GetObjInventor())
+                            if (pUnoCtrl && SdrInventor::FmForm == pUnoCtrl->GetObjInventor())
                             {
-                                uno::Reference<awt::XControlModel> xControlModel =
+                                const uno::Reference<awt::XControlModel>& xControlModel =
                                                         pUnoCtrl->GetUnoControlModel();
-                                OSL_ENSURE( xControlModel.is(), "UNO-Control ohne Model" );
+                                OSL_ENSURE( xControlModel.is(), "UNO-Control without model" );
                                 if( !xControlModel.is() )
                                     return;
 
@@ -180,37 +178,30 @@ void ScDrawShell::ExecuteHLink( SfxRequest& rReq )
 
                                 OUString sPropTargetURL( "TargetURL" );
 
-                                // Darf man eine URL an dem Objekt setzen?
+                                // Is it possible to set a URL in the object?
                                 if (xInfo->hasPropertyByName( sPropTargetURL ))
                                 {
-                                    // Ja!
 
                                     OUString sPropButtonType( "ButtonType");
                                     OUString sPropTargetFrame( "TargetFrame" );
                                     OUString sPropLabel( "Label" );
 
-                                    uno::Any aAny;
                                     if ( xInfo->hasPropertyByName( sPropLabel ) )
                                     {
-                                        aAny <<= OUString(rName);
-                                        xPropSet->setPropertyValue( sPropLabel, aAny );
+                                        xPropSet->setPropertyValue( sPropLabel, uno::Any(rName) );
                                     }
 
                                     OUString aTmp = INetURLObject::GetAbsURL( pViewData->GetDocShell()->GetMedium()->GetBaseURL(), rURL );
-                                    aAny <<= aTmp;
-                                    xPropSet->setPropertyValue( sPropTargetURL, aAny );
+                                    xPropSet->setPropertyValue( sPropTargetURL, uno::Any(aTmp) );
 
                                     if( !rTarget.isEmpty() && xInfo->hasPropertyByName( sPropTargetFrame ) )
                                     {
-                                        aAny <<= OUString(rTarget);
-                                        xPropSet->setPropertyValue( sPropTargetFrame, aAny );
+                                        xPropSet->setPropertyValue( sPropTargetFrame, uno::Any(rTarget) );
                                     }
 
                                     if ( xInfo->hasPropertyByName( sPropButtonType ) )
                                     {
-                                        form::FormButtonType eButtonType = form::FormButtonType_URL;
-                                        aAny <<= eButtonType;
-                                        xPropSet->setPropertyValue( sPropButtonType, aAny );
+                                        xPropSet->setPropertyValue( sPropButtonType, uno::Any(form::FormButtonType_URL) );
                                     }
 
                                     //! Undo ???
@@ -228,32 +219,25 @@ void ScDrawShell::ExecuteHLink( SfxRequest& rReq )
 
                     if (!bDone)
                         pViewData->GetViewShell()->
-                            InsertURL( rName, rURL, rTarget, (sal_uInt16) eMode );
+                            InsertURL( rName, rURL, rTarget, static_cast<sal_uInt16>(eMode) );
 
-                    //  InsertURL an der ViewShell schaltet bei "Text" die DrawShell ab !!!
+                    //  If "text" is received by InsertURL of ViewShell, then the DrawShell is turned off !!!
                 }
             }
             break;
         default:
-            OSL_FAIL("falscher Slot");
+            OSL_FAIL("wrong slot");
     }
 }
 
-//          Funktionen auf Drawing-Objekten
+//          Functions on Drawing-Objects
 
 void ScDrawShell::ExecDrawFunc( SfxRequest& rReq )
 {
     SfxBindings& rBindings = pViewData->GetBindings();
     ScTabView*   pTabView  = pViewData->GetView();
     ScDrawView*  pView     = pTabView->GetScDrawView();
-    const SfxItemSet *pArgs = rReq.GetArgs();
     sal_uInt16 nSlotId = rReq.GetSlot();
-
-    //!!!
-    // wer weiss, wie lange das funktioniert? (->vom Abreisscontrol funktioniert es)
-
-    if (nSlotId == SID_OBJECT_ALIGN && pArgs)
-        nSlotId = SID_OBJECT_ALIGN + static_cast<const SfxEnumItem&>(pArgs->Get(SID_OBJECT_ALIGN)).GetValue() + 1;
 
     switch (nSlotId)
     {
@@ -310,32 +294,32 @@ void ScDrawShell::ExecDrawFunc( SfxRequest& rReq )
         case SID_OBJECT_ALIGN_LEFT:
         case SID_ALIGN_ANY_LEFT:
             if (pView->IsAlignPossible())
-                pView->AlignMarkedObjects(SDRHALIGN_LEFT, SDRVALIGN_NONE);
+                pView->AlignMarkedObjects(SdrHorAlign::Left, SdrVertAlign::NONE);
             break;
         case SID_OBJECT_ALIGN_CENTER:
         case SID_ALIGN_ANY_HCENTER:
             if (pView->IsAlignPossible())
-                pView->AlignMarkedObjects(SDRHALIGN_CENTER, SDRVALIGN_NONE);
+                pView->AlignMarkedObjects(SdrHorAlign::Center, SdrVertAlign::NONE);
             break;
         case SID_OBJECT_ALIGN_RIGHT:
         case SID_ALIGN_ANY_RIGHT:
             if (pView->IsAlignPossible())
-                pView->AlignMarkedObjects(SDRHALIGN_RIGHT, SDRVALIGN_NONE);
+                pView->AlignMarkedObjects(SdrHorAlign::Right, SdrVertAlign::NONE);
             break;
         case SID_OBJECT_ALIGN_UP:
         case SID_ALIGN_ANY_TOP:
             if (pView->IsAlignPossible())
-                pView->AlignMarkedObjects(SDRHALIGN_NONE, SDRVALIGN_TOP);
+                pView->AlignMarkedObjects(SdrHorAlign::NONE, SdrVertAlign::Top);
             break;
         case SID_OBJECT_ALIGN_MIDDLE:
         case SID_ALIGN_ANY_VCENTER:
             if (pView->IsAlignPossible())
-                pView->AlignMarkedObjects(SDRHALIGN_NONE, SDRVALIGN_CENTER);
+                pView->AlignMarkedObjects(SdrHorAlign::NONE, SdrVertAlign::Center);
             break;
         case SID_OBJECT_ALIGN_DOWN:
         case SID_ALIGN_ANY_BOTTOM:
             if (pView->IsAlignPossible())
-                pView->AlignMarkedObjects(SDRHALIGN_NONE, SDRVALIGN_BOTTOM);
+                pView->AlignMarkedObjects(SdrHorAlign::NONE, SdrVertAlign::Bottom);
             break;
 
         case SID_DELETE:
@@ -365,12 +349,21 @@ void ScDrawShell::ExecDrawFunc( SfxRequest& rReq )
             pView->SetPageAnchored();
             rBindings.Invalidate( SID_ANCHOR_PAGE );
             rBindings.Invalidate( SID_ANCHOR_CELL );
+            rBindings.Invalidate( SID_ANCHOR_CELL_RESIZE );
             break;
 
         case SID_ANCHOR_CELL:
-            pView->SetCellAnchored();
+            pView->SetCellAnchored(false);
             rBindings.Invalidate( SID_ANCHOR_PAGE );
             rBindings.Invalidate( SID_ANCHOR_CELL );
+            rBindings.Invalidate( SID_ANCHOR_CELL_RESIZE );
+            break;
+
+        case SID_ANCHOR_CELL_RESIZE:
+            pView->SetCellAnchored(true);
+            rBindings.Invalidate( SID_ANCHOR_PAGE );
+            rBindings.Invalidate( SID_ANCHOR_CELL );
+            rBindings.Invalidate( SID_ANCHOR_CELL_RESIZE );
             break;
 
         case SID_ANCHOR_TOGGLE:
@@ -378,28 +371,30 @@ void ScDrawShell::ExecDrawFunc( SfxRequest& rReq )
                 switch( pView->GetAnchorType() )
                 {
                     case SCA_CELL:
+                    case SCA_CELL_RESIZE:
                     pView->SetPageAnchored();
                     break;
                     default:
-                    pView->SetCellAnchored();
+                    pView->SetCellAnchored(false);
                     break;
                 }
             }
             rBindings.Invalidate( SID_ANCHOR_PAGE );
             rBindings.Invalidate( SID_ANCHOR_CELL );
+            rBindings.Invalidate( SID_ANCHOR_CELL_RESIZE );
             break;
 
         case SID_OBJECT_ROTATE:
             {
                 SdrDragMode eMode;
-                if (pView->GetDragMode() == SDRDRAG_ROTATE)
-                    eMode = SDRDRAG_MOVE;
+                if (pView->GetDragMode() == SdrDragMode::Rotate)
+                    eMode = SdrDragMode::Move;
                 else
-                    eMode = SDRDRAG_ROTATE;
+                    eMode = SdrDragMode::Rotate;
                 pView->SetDragMode( eMode );
                 rBindings.Invalidate( SID_OBJECT_ROTATE );
                 rBindings.Invalidate( SID_OBJECT_MIRROR );
-                if (eMode == SDRDRAG_ROTATE && !pView->IsFrameDragSingles())
+                if (eMode == SdrDragMode::Rotate && !pView->IsFrameDragSingles())
                 {
                     pView->SetFrameDragSingles();
                     rBindings.Invalidate( SID_BEZIER_EDIT );
@@ -409,14 +404,14 @@ void ScDrawShell::ExecDrawFunc( SfxRequest& rReq )
         case SID_OBJECT_MIRROR:
             {
                 SdrDragMode eMode;
-                if (pView->GetDragMode() == SDRDRAG_MIRROR)
-                    eMode = SDRDRAG_MOVE;
+                if (pView->GetDragMode() == SdrDragMode::Mirror)
+                    eMode = SdrDragMode::Move;
                 else
-                    eMode = SDRDRAG_MIRROR;
+                    eMode = SdrDragMode::Mirror;
                 pView->SetDragMode( eMode );
                 rBindings.Invalidate( SID_OBJECT_ROTATE );
                 rBindings.Invalidate( SID_OBJECT_MIRROR );
-                if (eMode == SDRDRAG_MIRROR && !pView->IsFrameDragSingles())
+                if (eMode == SdrDragMode::Mirror && !pView->IsFrameDragSingles())
                 {
                     pView->SetFrameDragSingles();
                     rBindings.Invalidate( SID_BEZIER_EDIT );
@@ -428,9 +423,9 @@ void ScDrawShell::ExecDrawFunc( SfxRequest& rReq )
                 bool bOld = pView->IsFrameDragSingles();
                 pView->SetFrameDragSingles( !bOld );
                 rBindings.Invalidate( SID_BEZIER_EDIT );
-                if (bOld && pView->GetDragMode() != SDRDRAG_MOVE)
+                if (bOld && pView->GetDragMode() != SdrDragMode::Move)
                 {
-                    pView->SetDragMode( SDRDRAG_MOVE );
+                    pView->SetDragMode( SdrDragMode::Move );
                     rBindings.Invalidate( SID_OBJECT_ROTATE );
                     rBindings.Invalidate( SID_OBJECT_MIRROR );
                 }
@@ -459,12 +454,16 @@ void ScDrawShell::ExecDrawFunc( SfxRequest& rReq )
             pView->SetMarkedOriginalSize();
             break;
 
+        case SID_FITCELLSIZE:
+            pView->FitToCellSize();
+            break;
+
         case SID_ENABLE_HYPHENATION:
             {
                 const SfxBoolItem* pItem = rReq.GetArg<SfxBoolItem>(SID_ENABLE_HYPHENATION);
                 if( pItem )
                 {
-                    SfxItemSet aSet( GetPool(), EE_PARA_HYPHENATE, EE_PARA_HYPHENATE );
+                    SfxItemSet aSet( GetPool(), svl::Items<EE_PARA_HYPHENATE, EE_PARA_HYPHENATE>{} );
                     bool bValue = pItem->GetValue();
                     aSet.Put( SfxBoolItem( EE_PARA_HYPHENATE, bValue ) );
                     pView->SetAttributes( aSet );
@@ -486,9 +485,8 @@ void ScDrawShell::ExecDrawFunc( SfxRequest& rReq )
                         OUString aName = pSelected->GetName();
 
                         SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-                        OSL_ENSURE(pFact, "Dialog creation failed!");
-                        std::unique_ptr<AbstractSvxObjectNameDialog> pDlg(pFact->CreateSvxObjectNameDialog(aName));
-                        OSL_ENSURE(pDlg, "Dialog creation failed!");
+                        vcl::Window* pWin = pViewData->GetActiveWin();
+                        ScopedVclPtr<AbstractSvxObjectNameDialog> pDlg(pFact->CreateSvxObjectNameDialog(pWin ? pWin->GetFrameWeld() : nullptr, aName));
 
                         pDlg->SetCheckNameHdl(LINK(this, ScDrawShell, NameObjectHdl));
 
@@ -497,7 +495,7 @@ void ScDrawShell::ExecDrawFunc( SfxRequest& rReq )
                             ScDocShell* pDocSh = pViewData->GetDocShell();
                             pDlg->GetName(aName);
 
-                            if (!aName.equals(pSelected->GetName()))
+                            if (aName != pSelected->GetName())
                             {
                                 // handle name change
                                 const sal_uInt16 nObjType(pSelected->GetObjIdentifier());
@@ -524,7 +522,7 @@ void ScDrawShell::ExecDrawFunc( SfxRequest& rReq )
                                     if(!aPersistName.isEmpty())
                                     {
                                         pDocSh->GetUndoManager()->AddUndoAction(
-                                            new ScUndoRenameObject(pDocSh, aPersistName, pSelected->GetName(), aName));
+                                            std::make_unique<ScUndoRenameObject>(pDocSh, aPersistName, pSelected->GetName(), aName));
                                     }
                                 }
 
@@ -555,9 +553,9 @@ void ScDrawShell::ExecDrawFunc( SfxRequest& rReq )
                         OUString aDescription(pSelected->GetDescription());
 
                         SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-                        OSL_ENSURE(pFact, "Dialog creation failed!");
-                        std::unique_ptr<AbstractSvxObjectTitleDescDialog> pDlg(pFact->CreateSvxObjectTitleDescDialog(aTitle, aDescription));
-                        OSL_ENSURE(pDlg, "Dialog creation failed!");
+                        vcl::Window* pWin = pViewData->GetActiveWin();
+                        ScopedVclPtr<AbstractSvxObjectTitleDescDialog> pDlg(pFact->CreateSvxObjectTitleDescDialog(
+                                    pWin ? pWin->GetFrameWeld() : nullptr, aTitle, aDescription));
 
                         if(RET_OK == pDlg->Execute())
                         {
@@ -578,7 +576,7 @@ void ScDrawShell::ExecDrawFunc( SfxRequest& rReq )
                 break;
             }
 
-        case SID_EXTRUSION_TOOGLE:
+        case SID_EXTRUSION_TOGGLE:
         case SID_EXTRUSION_TILT_DOWN:
         case SID_EXTRUSION_TILT_UP:
         case SID_EXTRUSION_TILT_LEFT:
@@ -608,7 +606,7 @@ void ScDrawShell::ExecDrawFunc( SfxRequest& rReq )
         case SID_FONTWORK_CHARACTER_SPACING_FLOATER:
         case SID_FONTWORK_ALIGNMENT_FLOATER:
         case SID_FONTWORK_CHARACTER_SPACING_DIALOG:
-            svx::FontworkBar::execute( pView, rReq, rBindings );
+            svx::FontworkBar::execute( *pView, rReq, rBindings );
             rReq.Ignore ();
             break;
 
@@ -617,7 +615,7 @@ void ScDrawShell::ExecDrawFunc( SfxRequest& rReq )
     }
 }
 
-IMPL_LINK_TYPED( ScDrawShell, NameObjectHdl, AbstractSvxObjectNameDialog&, rDialog, bool )
+IMPL_LINK( ScDrawShell, NameObjectHdl, AbstractSvxObjectNameDialog&, rDialog, bool )
 {
     OUString aName;
     rDialog.GetName( aName );
@@ -636,7 +634,7 @@ IMPL_LINK_TYPED( ScDrawShell, NameObjectHdl, AbstractSvxObjectNameDialog&, rDial
     return true;   // name is valid
 }
 
-void ScDrawShell::ExecFormText(SfxRequest& rReq)
+void ScDrawShell::ExecFormText(const SfxRequest& rReq)
 {
     ScDrawView*         pDrView     = pViewData->GetScDrawView();
     const SdrMarkList&  rMarkList   = pDrView->GetMarkedObjectList();
@@ -652,7 +650,7 @@ void ScDrawShell::ExecFormText(SfxRequest& rReq)
     }
 }
 
-void ScDrawShell::ExecFormatPaintbrush( SfxRequest& rReq )
+void ScDrawShell::ExecFormatPaintbrush( const SfxRequest& rReq )
 {
     ScViewFunc* pView = pViewData->GetView();
     if ( pView->HasPaintBrush() )
@@ -665,14 +663,13 @@ void ScDrawShell::ExecFormatPaintbrush( SfxRequest& rReq )
         bool bLock = false;
         const SfxItemSet *pArgs = rReq.GetArgs();
         if( pArgs && pArgs->Count() >= 1 )
-            bLock = static_cast<const SfxBoolItem&>(pArgs->Get(SID_FORMATPAINTBRUSH)).GetValue();
+            bLock = pArgs->Get(SID_FORMATPAINTBRUSH).GetValue();
 
         ScDrawView* pDrawView = pViewData->GetScDrawView();
         if ( pDrawView && pDrawView->AreObjectsMarked() )
         {
-            bool bOnlyHardAttr = true;
-            SfxItemSet* pItemSet = new SfxItemSet( pDrawView->GetAttrFromMarked(bOnlyHardAttr) );
-            pView->SetDrawBrushSet( pItemSet, bLock );
+            std::unique_ptr<SfxItemSet> pItemSet(new SfxItemSet( pDrawView->GetAttrFromMarked(true/*bOnlyHardAttr*/) ));
+            pView->SetDrawBrushSet( std::move(pItemSet), bLock );
         }
     }
 }

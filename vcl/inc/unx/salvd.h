@@ -32,7 +32,7 @@ class X11SalGraphics;
 class X11SalVirtualDevice : public SalVirtualDevice
 {
     SalDisplay      *pDisplay_;
-    X11SalGraphics  *pGraphics_;
+    std::unique_ptr<X11SalGraphics> pGraphics_;
 
     Pixmap          hDrawable_;
     SalX11Screen    m_nXScreen;
@@ -44,10 +44,10 @@ class X11SalVirtualDevice : public SalVirtualDevice
     bool        bExternPixmap_;
 
 public:
-    X11SalVirtualDevice(SalGraphics *pGraphics, long &nDX, long &nDY,
-            DeviceFormat eFormat, const SystemGraphicsData *pData, X11SalGraphics* pNewGraphics);
+    X11SalVirtualDevice(SalGraphics const *pGraphics, long &nDX, long &nDY,
+            DeviceFormat eFormat, const SystemGraphicsData *pData, std::unique_ptr<X11SalGraphics> pNewGraphics);
 
-    virtual ~X11SalVirtualDevice();
+    virtual ~X11SalVirtualDevice() override;
 
     Display *GetXDisplay() const
     {
@@ -59,7 +59,7 @@ public:
     }
     Pixmap          GetDrawable() const { return hDrawable_; }
     sal_uInt16      GetDepth() const { return nDepth_; }
-    SalX11Screen            GetXScreenNumber() const { return m_nXScreen; }
+    const SalX11Screen&     GetXScreenNumber() const { return m_nXScreen; }
 
     virtual SalGraphics*    AcquireGraphics() override;
     virtual void            ReleaseGraphics( SalGraphics* pGraphics ) override;

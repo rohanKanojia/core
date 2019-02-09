@@ -18,8 +18,13 @@ import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
 
+import org.libreoffice.LibreOfficeMainActivity;
+import org.libreoffice.R;
+import org.libreoffice.canvas.AdjustLengthLine;
+import org.libreoffice.canvas.CalcSelectionBox;
 import org.libreoffice.canvas.Cursor;
 import org.libreoffice.canvas.GraphicSelection;
+import org.libreoffice.canvas.PageNumberRect;
 import org.libreoffice.canvas.SelectionHandle;
 import org.libreoffice.canvas.SelectionHandleEnd;
 import org.libreoffice.canvas.SelectionHandleMiddle;
@@ -61,6 +66,17 @@ public class DocumentOverlayView extends View implements View.OnTouchListener {
 
     private SelectionHandle mDragHandle = null;
 
+    private List<RectF> mPartPageRectangles;
+    private PageNumberRect mPageNumberRect;
+    private boolean mPageNumberAvailable = false;
+    private int previousIndex = 0; // previous page number, used to compare with the current
+    private CalcHeadersController mCalcHeadersController;
+
+    private CalcSelectionBox mCalcSelectionBox;
+    private boolean mCalcSelectionBoxDragging;
+    private AdjustLengthLine mAdjustLengthLine;
+    private boolean mAdjustLengthLineDragging;
+
     public DocumentOverlayView(Context context) {
         super(context);
     }
@@ -88,14 +104,14 @@ public class DocumentOverlayView extends View implements View.OnTouchListener {
             mSelectionPaint.setAlpha(50);
             mSelectionsVisible = false;
 
-            mGraphicSelection = new GraphicSelection();
+            mGraphicSelection = new GraphicSelection((LibreOfficeMainActivity) getContext());
             mGraphicSelection.setVisible(false);
 
             postDelayed(cursorAnimation, CURSOR_BLINK_TIME);
 
-            mHandleMiddle = new SelectionHandleMiddle(getContext());
-            mHandleStart = new SelectionHandleStart(getContext());
-            mHandleEnd = new SelectionHandleEnd(getContext());
+            mHandleMiddle = new SelectionHandleMiddle((LibreOfficeMainActivity) getContext());
+            mHandleStart = new SelectionHandleStart((LibreOfficeMainActivity) getContext());
+            mHandleEnd = new SelectionHandleEnd((LibreOfficeMainActivity) getContext());
 
             mInitialized = true;
         }
@@ -160,6 +176,11 @@ public class DocumentOverlayView extends View implements View.OnTouchListener {
             mScaledSelections.add(scaledSelection);
         }
 
+        if (mCalcSelectionBox != null) {
+            rect = convertToScreen(mCalcSelectionBox.mDocumentPosition, x, y, zoom);
+            mCalcSelectionBox.reposition(rect);
+        }
+
         RectF scaledGraphicSelection = convertToScreen(mGraphicSelection.mRectangle, x, y, zoom);
         mGraphicSelection.reposition(scaledGraphicSelection);
         invalidate();
@@ -176,6 +197,16 @@ public class DocumentOverlayView extends View implements View.OnTouchListener {
     }
 
     /**
+     * Set part page rectangles and initialize a page number rectangle object
+     * (canvas element).
+     */
+    public void setPartPageRectangles (List<RectF> rectangles) {
+        mPartPageRectangles = rectangles;
+        mPageNumberRect = new PageNumberRect();
+        mPageNumberAvailable = true;
+    }
+
+    /**
      * Drawing on canvas.
      */
     @Override
@@ -183,6 +214,10 @@ public class DocumentOverlayView extends View implements View.OnTouchListener {
         super.onDraw(canvas);
 
         mCursor.draw(canvas);
+
+        if (mPageNumberAvailable) {
+            mPageNumberRect.draw(canvas);
+        }
 
         mHandleMiddle.draw(canvas);
         mHandleStart.draw(canvas);
@@ -194,8 +229,19 @@ public class DocumentOverlayView extends View implements View.OnTouchListener {
             }
         }
 
+        if (mCalcSelectionBox != null) {
+            mCalcSelectionBox.draw(canvas);
+        }
+
         mGraphicSelection.draw(canvas);
 
+        if (mCalcHeadersController != null) {
+            mCalcHeadersController.showHeaders();
+        }
+
+        if (mAdjustLengthLine != null) {
+            mAdjustLengthLine.draw(canvas);
+        }
     }
 
     /**
@@ -227,6 +273,49 @@ public class DocumentOverlayView extends View implements View.OnTouchListener {
     public void hideCursor() {
         if (mCursor.isVisible()) {
             mCursor.setVisible(false);
+            invalidate();
+        }
+    }
+
+    /**
+     * Calculate and show page number according to current viewport position.
+     * In particular, this function compares the middle point of the
+     * view port with page rectangles and finds out which page the user
+     * is currently on. It does not update the associated canvas element
+     * unless there is a change of page number.
+     */
+    public void showPageNumberRect() {
+        if (null == mPartPageRectangles) return;
+        PointF midPoint = mLayerView.getLayerClient().convertViewPointToLayerPoint(new PointF(getWidth()/2f, getHeight()/2f));
+        int index = previousIndex;
+        // search which page the user in currently on. can enhance the search algorithm to binary search if necessary
+        for (RectF page : mPartPageRectangles) {
+            if (page.top < midPoint.y && midPoint.y < page.bottom) {
+                index = mPartPageRectangles.indexOf(page) + 1;
+                break;
+            }
+        }
+        // index == 0 applies to non-text document, i.e. don't show page info on non-text docs
+        if (index == 0) {
+            return;
+        }
+        // if page rectangle canvas element is not visible or the page number is changed, show
+        if (!mPageNumberRect.isVisible() || index != previousIndex) {
+            previousIndex = index;
+            String pageNumberString = getContext().getString(R.string.page) + " " + index + "/" + mPartPageRectangles.size();
+            mPageNumberRect.setPageNumberString(pageNumberString);
+            mPageNumberRect.setVisible(true);
+            invalidate();
+        }
+    }
+
+    /**
+     * Hide page number rectangle canvas element.
+     */
+    public void hidePageNumberRect() {
+        if (null == mPageNumberRect) return;
+        if (mPageNumberRect.isVisible()) {
+            mPageNumberRect.setVisible(false);
             invalidate();
         }
     }
@@ -281,6 +370,10 @@ public class DocumentOverlayView extends View implements View.OnTouchListener {
         PointF point = new PointF(event.getX(), event.getY());
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
+                if (mAdjustLengthLine != null && !mAdjustLengthLine.contains(point.x, point.y)) {
+                    mAdjustLengthLine.setVisible(false);
+                    invalidate();
+                }
                 if (mGraphicSelection.isVisible()) {
                     // Check if inside graphic selection was hit
                     if (mGraphicSelection.contains(point.x, point.y)) {
@@ -302,6 +395,17 @@ public class DocumentOverlayView extends View implements View.OnTouchListener {
                         mHandleMiddle.dragStart(point);
                         mDragHandle = mHandleMiddle;
                         return true;
+                    } else if (mCalcSelectionBox != null &&
+                            mCalcSelectionBox.contains(point.x, point.y) &&
+                            !mHandleStart.isVisible()) {
+                        mCalcSelectionBox.dragStart(point);
+                        mCalcSelectionBoxDragging = true;
+                        return true;
+                    } else if (mAdjustLengthLine != null &&
+                            mAdjustLengthLine.contains(point.x, point.y)) {
+                        mAdjustLengthLine.dragStart(point);
+                        mAdjustLengthLineDragging = true;
+                        return true;
                     }
                 }
             }
@@ -314,6 +418,13 @@ public class DocumentOverlayView extends View implements View.OnTouchListener {
                 } else if (mDragHandle != null) {
                     mDragHandle.dragEnd(point);
                     mDragHandle = null;
+                } else if (mCalcSelectionBoxDragging) {
+                    mCalcSelectionBox.dragEnd(point);
+                    mCalcSelectionBoxDragging = false;
+                } else if (mAdjustLengthLineDragging) {
+                    mAdjustLengthLine.dragEnd(point);
+                    mAdjustLengthLineDragging = false;
+                    invalidate();
                 }
             }
             case MotionEvent.ACTION_MOVE: {
@@ -323,6 +434,11 @@ public class DocumentOverlayView extends View implements View.OnTouchListener {
                     return true;
                 } else if (mDragHandle != null) {
                     mDragHandle.dragging(point);
+                } else if (mCalcSelectionBoxDragging) {
+                    mCalcSelectionBox.dragging(point);
+                } else if (mAdjustLengthLineDragging) {
+                    mAdjustLengthLine.dragging(point);
+                    invalidate();
                 }
             }
         }
@@ -387,6 +503,46 @@ public class DocumentOverlayView extends View implements View.OnTouchListener {
 
     public RectF getCurrentCursorPosition() {
         return mCursor.mPosition;
+    }
+
+    public void setCalcHeadersController(CalcHeadersController calcHeadersController) {
+        mCalcHeadersController = calcHeadersController;
+        mCalcSelectionBox = new CalcSelectionBox((LibreOfficeMainActivity) getContext());
+    }
+
+    public void showCellSelection(RectF cellCursorRect) {
+        if (mCalcHeadersController == null || mCalcSelectionBox == null) return;
+        if (RectUtils.fuzzyEquals(mCalcSelectionBox.mDocumentPosition, cellCursorRect)) {
+            return;
+        }
+
+        // show selection on main GL view (i.e. in the document)
+        RectUtils.assign(mCalcSelectionBox.mDocumentPosition, cellCursorRect);
+        mCalcSelectionBox.setVisible(true);
+
+        ImmutableViewportMetrics metrics = mLayerView.getViewportMetrics();
+        repositionWithViewport(metrics.viewportRectLeft, metrics.viewportRectTop, metrics.zoomFactor);
+
+        // show selection on headers
+        if (!mCalcHeadersController.pendingRowOrColumnSelectionToShowUp()) {
+            showHeaderSelection(cellCursorRect);
+        } else {
+            mCalcHeadersController.setPendingRowOrColumnSelectionToShowUp(false);
+        }
+    }
+
+    public void showHeaderSelection(RectF rect) {
+        if (mCalcHeadersController == null) return;
+        mCalcHeadersController.showHeaderSelection(rect);
+    }
+
+    public void showAdjustLengthLine(boolean isRow, final CalcHeadersView view) {
+        mAdjustLengthLine = new AdjustLengthLine((LibreOfficeMainActivity) getContext(), view, isRow, getWidth(), getHeight());
+        ImmutableViewportMetrics metrics = mLayerView.getViewportMetrics();
+        RectF position = convertToScreen(mCalcSelectionBox.mDocumentPosition, metrics.viewportRectLeft, metrics.viewportRectTop, metrics.zoomFactor);
+        mAdjustLengthLine.setScreenRect(position);
+        mAdjustLengthLine.setVisible(true);
+        invalidate();
     }
 }
 

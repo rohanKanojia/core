@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "Linear3DTransformation.hxx"
+#include <Linear3DTransformation.hxx>
 #include <algorithm>
 
 using namespace ::com::sun::star;
@@ -39,8 +39,6 @@ Linear3DTransformation::~Linear3DTransformation()
 // ____ XTransformation ____
 Sequence< double > SAL_CALL Linear3DTransformation::transform(
                         const Sequence< double >& rSourceValues )
-    throw (RuntimeException,
-           lang::IllegalArgumentException, std::exception)
 {
     double fX = rSourceValues[0];
     double fY = rSourceValues[1];
@@ -82,13 +80,11 @@ Sequence< double > SAL_CALL Linear3DTransformation::transform(
 }
 
 sal_Int32 SAL_CALL Linear3DTransformation::getSourceDimension()
-    throw (RuntimeException, std::exception)
 {
     return 3;
 }
 
 sal_Int32 SAL_CALL Linear3DTransformation::getTargetDimension()
-    throw (RuntimeException, std::exception)
 {
     return 3;
 }

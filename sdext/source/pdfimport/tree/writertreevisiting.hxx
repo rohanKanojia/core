@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SDEXT_SOURCE_PDFIMPORT_TREE_WRITERTREEVISITING_HXX
 #define INCLUDED_SDEXT_SOURCE_PDFIMPORT_TREE_WRITERTREEVISITING_HXX
 
-#include "treevisiting.hxx"
+#include <treevisiting.hxx>
 
 namespace pdfi
 {
@@ -37,17 +37,15 @@ namespace pdfi
         explicit WriterXmlOptimizer(PDFIProcessor& rProcessor) :
             m_rProcessor(rProcessor)
         {}
-        virtual ~WriterXmlOptimizer()
-        {}
 
-        virtual void visit( HyperlinkElement&, const std::list< Element* >::const_iterator& ) override;
-        virtual void visit( TextElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( ParagraphElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( FrameElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( PolyPolyElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( ImageElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( PageElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( DocumentElement&, const std::list< Element* >::const_iterator&  ) override;
+        virtual void visit( HyperlinkElement&, const std::list< std::unique_ptr<Element> >::const_iterator& ) override;
+        virtual void visit( TextElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( ParagraphElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( FrameElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( PolyPolyElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( ImageElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( PageElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( DocumentElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
     };
 
     class WriterXmlFinalizer : public ElementTreeVisitor
@@ -66,17 +64,15 @@ namespace pdfi
             m_rStyleContainer(rStyleContainer),
             m_rProcessor(rProcessor)
         {}
-        virtual ~WriterXmlFinalizer()
-        {}
 
-        virtual void visit( HyperlinkElement&, const std::list< Element* >::const_iterator& ) override;
-        virtual void visit( TextElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( ParagraphElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( FrameElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( PolyPolyElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( ImageElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( PageElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( DocumentElement&, const std::list< Element* >::const_iterator&  ) override;
+        virtual void visit( HyperlinkElement&, const std::list< std::unique_ptr<Element> >::const_iterator& ) override;
+        virtual void visit( TextElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( ParagraphElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( FrameElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( PolyPolyElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( ImageElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( PageElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( DocumentElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
     };
 
     class WriterXmlEmitter : public ElementTreeVisitor
@@ -91,17 +87,15 @@ namespace pdfi
         explicit WriterXmlEmitter(EmitContext& rEmitContext) :
             m_rEmitContext(rEmitContext)
         {}
-        virtual ~WriterXmlEmitter()
-        {}
 
-        virtual void visit( HyperlinkElement&, const std::list< Element* >::const_iterator& ) override;
-        virtual void visit( TextElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( ParagraphElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( FrameElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( PolyPolyElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( ImageElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( PageElement&, const std::list< Element* >::const_iterator&  ) override;
-        virtual void visit( DocumentElement&, const std::list< Element* >::const_iterator&  ) override;
+        virtual void visit( HyperlinkElement&, const std::list< std::unique_ptr<Element> >::const_iterator& ) override;
+        virtual void visit( TextElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( ParagraphElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( FrameElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( PolyPolyElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( ImageElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( PageElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
+        virtual void visit( DocumentElement&, const std::list< std::unique_ptr<Element> >::const_iterator&  ) override;
     };
 }
 

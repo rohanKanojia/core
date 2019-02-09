@@ -23,15 +23,15 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
 #include "xmlCell.hxx"
-#include <tools/debug.hxx>
 #include "xmlStyleImport.hxx"
 #include "xmlTable.hxx"
-#include <comphelper/namecontainer.hxx>
 #include <comphelper/genericpropertyset.hxx>
+#include <comphelper/propertysetinfo.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
-#include "xmlstrings.hrc"
+#include <strings.hxx>
 
 #define PROPERTY_ID_WIDTH    1
 #define PROPERTY_ID_HEIGHT   2
@@ -81,7 +81,7 @@ OXMLRowColumn::~OXMLRowColumn()
 {
 }
 
-SvXMLImportContext* OXMLRowColumn::CreateChildContext(
+SvXMLImportContextRef OXMLRowColumn::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )

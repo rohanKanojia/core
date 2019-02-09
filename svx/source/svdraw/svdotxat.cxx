@@ -34,7 +34,6 @@
 
 
 #include <editeng/editview.hxx>
-#include <svl/smplhint.hxx>
 #include <svl/whiter.hxx>
 #include <editeng/outlobj.hxx>
 #include <editeng/outliner.hxx>
@@ -57,14 +56,10 @@ const short PADDING_LENGTH_FOR_STYLE_FAMILY = 5;
 const sal_Char PADDING_CHARACTER_FOR_STYLE_FAMILY = ' ';
 }
 
-bool SdrTextObj::AdjustTextFrameWidthAndHeight( Rectangle& rR, bool bHgt, bool bWdt ) const
+bool SdrTextObj::AdjustTextFrameWidthAndHeight( tools::Rectangle& rR, bool bHgt, bool bWdt ) const
 {
     if (!bTextFrame)
         // Not a text frame.  Bail out.
-        return false;
-
-    if (!pModel)
-        // Model doesn't exist.  Bail out.
         return false;
 
     if (rR.IsEmpty())
@@ -84,24 +79,24 @@ bool SdrTextObj::AdjustTextFrameWidthAndHeight( Rectangle& rR, bool bHgt, bool b
     SdrTextAniKind eAniKind = GetTextAniKind();
     SdrTextAniDirection eAniDir = GetTextAniDirection();
 
-    bool bScroll = eAniKind == SDRTEXTANI_SCROLL || eAniKind == SDRTEXTANI_ALTERNATE || eAniKind == SDRTEXTANI_SLIDE;
-    bool bHScroll = bScroll && (eAniDir == SDRTEXTANI_LEFT || eAniDir == SDRTEXTANI_RIGHT);
-    bool bVScroll = bScroll && (eAniDir == SDRTEXTANI_UP || eAniDir == SDRTEXTANI_DOWN);
+    bool bScroll = eAniKind == SdrTextAniKind::Scroll || eAniKind == SdrTextAniKind::Alternate || eAniKind == SdrTextAniKind::Slide;
+    bool bHScroll = bScroll && (eAniDir == SdrTextAniDirection::Left || eAniDir == SdrTextAniDirection::Right);
+    bool bVScroll = bScroll && (eAniDir == SdrTextAniDirection::Up || eAniDir == SdrTextAniDirection::Down);
 
-    Rectangle aOldRect = rR;
+    tools::Rectangle aOldRect = rR;
     long nHgt = 0, nMinHgt = 0, nMaxHgt = 0;
     long nWdt = 0, nMinWdt = 0, nMaxWdt = 0;
 
     Size aNewSize = rR.GetSize();
-    aNewSize.Width()--; aNewSize.Height()--;
+    aNewSize.AdjustWidth( -1 ); aNewSize.AdjustHeight( -1 );
 
     Size aMaxSiz(100000, 100000);
-    Size aTmpSiz = pModel->GetMaxObjSize();
+    Size aTmpSiz(getSdrModelFromSdrObject().GetMaxObjSize());
 
     if (aTmpSiz.Width())
-        aMaxSiz.Width() = aTmpSiz.Width();
+        aMaxSiz.setWidth( aTmpSiz.Width() );
     if (aTmpSiz.Height())
-        aMaxSiz.Height() = aTmpSiz.Height();
+        aMaxSiz.setHeight( aTmpSiz.Height() );
 
     if (bWdtGrow)
     {
@@ -112,7 +107,7 @@ bool SdrTextObj::AdjustTextFrameWidthAndHeight( Rectangle& rR, bool bHgt, bool b
         if (nMinWdt <= 0)
             nMinWdt = 1;
 
-        aNewSize.Width() = nMaxWdt;
+        aNewSize.setWidth( nMaxWdt );
     }
 
     if (bHgtGrow)
@@ -124,25 +119,25 @@ bool SdrTextObj::AdjustTextFrameWidthAndHeight( Rectangle& rR, bool bHgt, bool b
         if (nMinHgt <= 0)
             nMinHgt = 1;
 
-        aNewSize.Height() = nMaxHgt;
+        aNewSize.setHeight( nMaxHgt );
     }
 
     long nHDist = GetTextLeftDistance() + GetTextRightDistance();
     long nVDist = GetTextUpperDistance() + GetTextLowerDistance();
-    aNewSize.Width() -= nHDist;
-    aNewSize.Height() -= nVDist;
+    aNewSize.AdjustWidth( -nHDist );
+    aNewSize.AdjustHeight( -nVDist );
 
     if (aNewSize.Width() < 2)
-        aNewSize.Width() = 2;
+        aNewSize.setWidth( 2 );
     if (aNewSize.Height() < 2)
-        aNewSize.Height() = 2;
+        aNewSize.setHeight( 2 );
 
     if (!IsInEditMode())
     {
         if (bHScroll)
-            aNewSize.Width() = 0x0FFFFFFF; // don't break ticker text
+            aNewSize.setWidth( 0x0FFFFFFF ); // don't break ticker text
         if (bVScroll)
-            aNewSize.Height() = 0x0FFFFFFF;
+            aNewSize.setHeight( 0x0FFFFFFF );
     }
 
     if (pEdtOutl)
@@ -170,7 +165,7 @@ bool SdrTextObj::AdjustTextFrameWidthAndHeight( Rectangle& rR, bool bHgt, bool b
         if (pOutlinerParaObject)
         {
             rOutliner.SetText(*pOutlinerParaObject);
-            rOutliner.SetFixedCellHeight(static_cast<const SdrTextFixedCellHeightItem&>(GetMergedItem(SDRATTR_TEXT_USEFIXEDCELLHEIGHT)).GetValue());
+            rOutliner.SetFixedCellHeight(GetMergedItem(SDRATTR_TEXT_USEFIXEDCELLHEIGHT).GetValue());
         }
 
         if (bWdtGrow)
@@ -217,14 +212,14 @@ bool SdrTextObj::AdjustTextFrameWidthAndHeight( Rectangle& rR, bool bHgt, bool b
         SdrTextHorzAdjust eHAdj = GetTextHorizontalAdjust();
 
         if (eHAdj == SDRTEXTHORZADJUST_LEFT)
-            rR.Right() += nWdtGrow;
+            rR.AdjustRight(nWdtGrow );
         else if (eHAdj == SDRTEXTHORZADJUST_RIGHT)
-            rR.Left() -= nWdtGrow;
+            rR.AdjustLeft( -nWdtGrow );
         else
         {
             long nWdtGrow2 = nWdtGrow / 2;
-            rR.Left() -= nWdtGrow2;
-            rR.Right() = rR.Left() + nWdt;
+            rR.AdjustLeft( -nWdtGrow2 );
+            rR.SetRight( rR.Left() + nWdt );
         }
     }
 
@@ -233,14 +228,14 @@ bool SdrTextObj::AdjustTextFrameWidthAndHeight( Rectangle& rR, bool bHgt, bool b
         SdrTextVertAdjust eVAdj = GetTextVerticalAdjust();
 
         if (eVAdj == SDRTEXTVERTADJUST_TOP)
-            rR.Bottom() += nHgtGrow;
+            rR.AdjustBottom(nHgtGrow );
         else if (eVAdj == SDRTEXTVERTADJUST_BOTTOM)
-            rR.Top() -= nHgtGrow;
+            rR.AdjustTop( -nHgtGrow );
         else
         {
             long nHgtGrow2 = nHgtGrow / 2;
-            rR.Top() -= nHgtGrow2;
-            rR.Bottom() = rR.Top() + nHgt;
+            rR.AdjustTop( -nHgtGrow2 );
+            rR.SetBottom( rR.Top() + nHgt );
         }
     }
 
@@ -276,11 +271,11 @@ bool SdrTextObj::NbcAdjustTextFrameWidthAndHeight(bool bHgt, bool bWdt)
 
 bool SdrTextObj::AdjustTextFrameWidthAndHeight()
 {
-    Rectangle aNeuRect(maRect);
-    bool bRet=AdjustTextFrameWidthAndHeight(aNeuRect);
+    tools::Rectangle aNewRect(maRect);
+    bool bRet=AdjustTextFrameWidthAndHeight(aNewRect);
     if (bRet) {
-        Rectangle aBoundRect0; if (pUserCall!=nullptr) aBoundRect0=GetLastBoundRect();
-        maRect = aNeuRect;
+        tools::Rectangle aBoundRect0; if (pUserCall!=nullptr) aBoundRect0=GetLastBoundRect();
+        maRect = aNewRect;
         SetRectsDirty();
         if (dynamic_cast<const SdrRectObj *>(this) != nullptr) { // this is a hack
             static_cast<SdrRectObj*>(this)->SetXPolyDirty();
@@ -288,16 +283,32 @@ bool SdrTextObj::AdjustTextFrameWidthAndHeight()
         if (dynamic_cast<const SdrCaptionObj *>(this) != nullptr) { // this is a hack
             static_cast<SdrCaptionObj*>(this)->ImpRecalcTail();
         }
-        SetChanged();
-        BroadcastObjectChange();
-        SendUserCall(SDRUSERCALL_RESIZE,aBoundRect0);
+
+        // to not slow down EditView visualization on Overlay (see
+        // TextEditOverlayObject) it is necessary to suppress the
+        // Invalidates for the deep repaint when the size of the
+        // TextFrame changed (AdjustTextFrameWidthAndHeight returned
+        // true). The ObjectChanges are valid, invalidate will be
+        // done on EndTextEdit anyways
+        const bool bSuppressChangeWhenEditOnOverlay(
+            IsInEditMode() &&
+            GetTextEditOutliner() &&
+            GetTextEditOutliner()->hasEditViewCallbacks());
+
+        if (!bSuppressChangeWhenEditOnOverlay)
+        {
+            SetChanged();
+            BroadcastObjectChange();
+        }
+
+        SendUserCall(SdrUserCallType::Resize,aBoundRect0);
     }
     return bRet;
 }
 
 void SdrTextObj::ImpSetTextStyleSheetListeners()
 {
-    SfxStyleSheetBasePool* pStylePool=pModel!=nullptr ? pModel->GetStyleSheetPool() : nullptr;
+    SfxStyleSheetBasePool* pStylePool(getSdrModelFromSdrObject().GetStyleSheetPool());
     if (pStylePool!=nullptr)
     {
         std::vector<OUString> aStyleNames;
@@ -310,10 +321,10 @@ void SdrTextObj::ImpSetTextStyleSheetListeners()
             const EditTextObject& rTextObj=pOutlinerParaObject->GetTextObject();
             OUString aStyleName;
             SfxStyleFamily eStyleFam;
-            sal_Int32 nParaAnz=rTextObj.GetParagraphCount();
+            sal_Int32 nParaCnt=rTextObj.GetParagraphCount();
 
 
-            for(sal_Int32 nParaNum(0); nParaNum < nParaAnz; nParaNum++)
+            for(sal_Int32 nParaNum(0); nParaNum < nParaCnt; nParaNum++)
             {
                 rTextObj.GetStyleSheet(nParaNum, aStyleName, eStyleFam);
 
@@ -356,7 +367,7 @@ void SdrTextObj::ImpSetTextStyleSheetListeners()
         sal_uIntPtr nNum=GetBroadcasterCount();
         while (nNum>0) {
             nNum--;
-            SfxBroadcaster* pBroadcast=GetBroadcasterJOE((sal_uInt16)nNum);
+            SfxBroadcaster* pBroadcast=GetBroadcasterJOE(static_cast<sal_uInt16>(nNum));
             SfxStyleSheet* pStyle=dynamic_cast<SfxStyleSheet*>( pBroadcast );
             if (pStyle!=nullptr && pStyle!=GetStyleSheet()) { // special case for stylesheet of the object
                 if (aStyleSheets.find(pStyle)==aStyleSheets.end()) {
@@ -365,10 +376,9 @@ void SdrTextObj::ImpSetTextStyleSheetListeners()
             }
         }
         // and finally, merge all stylesheets that are contained in aStyles with previous broadcasters
-        for(std::set<SfxStyleSheet*>::const_iterator it = aStyleSheets.begin(); it != aStyleSheets.end(); ++it) {
-            SfxStyleSheet* pStyle=*it;
+        for(SfxStyleSheet* pStyle : aStyleSheets) {
             // let StartListening see for itself if there's already a listener registered
-            StartListening(*pStyle,true);
+            StartListening(*pStyle, DuplicateHandling::Prevent);
         }
     }
 }
@@ -400,18 +410,17 @@ void SdrTextObj::RemoveOutlinerCharacterAttribs( const std::vector<sal_uInt16>& 
             }
 
             ESelection aSelAll( 0, 0, EE_PARA_ALL, EE_TEXTPOS_ALL );
-            std::vector<sal_uInt16>::const_iterator aIter( rCharWhichIds.begin() );
-            while( aIter != rCharWhichIds.end() )
+            for( const auto& rWhichId : rCharWhichIds )
             {
-                pOutliner->RemoveAttribs( aSelAll, false, (*aIter++) );
+                pOutliner->RemoveAttribs( aSelAll, false, rWhichId );
             }
 
             if(!pEdtOutl || (pText != getActiveText()) )
             {
                 const sal_Int32 nParaCount = pOutliner->GetParagraphCount();
-                OutlinerParaObject* pTemp = pOutliner->CreateParaObject(0, nParaCount);
+                std::unique_ptr<OutlinerParaObject> pTemp = pOutliner->CreateParaObject(0, nParaCount);
                 pOutliner->Clear();
-                NbcSetOutlinerParaObjectForText(pTemp, pText);
+                NbcSetOutlinerParaObjectForText(std::move(pTemp), pText);
             }
         }
     }
@@ -420,7 +429,7 @@ void SdrTextObj::RemoveOutlinerCharacterAttribs( const std::vector<sal_uInt16>& 
 bool SdrTextObj::HasText() const
 {
     if( pEdtOutl )
-        return HasEditText();
+        return HasTextImpl(pEdtOutl);
 
     OutlinerParaObject* pOPO = GetOutlinerParaObject();
 

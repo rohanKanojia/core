@@ -7,13 +7,18 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <sal/config.h>
+#include <sal/log.hxx>
+
+#include <deque>
+
 #include <vcl/IconThemeScanner.hxx>
 
 #include <config_folders.h>
 #include <osl/file.hxx>
 #include <rtl/bootstrap.hxx>
 #include <salhelper/linkhelper.hxx>
-
+#include <unotools/pathoptions.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/IconThemeInfo.hxx>
 
@@ -55,33 +60,44 @@ OUString convert_to_absolute_path(const OUString& path)
 }
 
 IconThemeScanner::IconThemeScanner()
-{;}
+{}
 
-bool
-IconThemeScanner::ScanDirectoryForIconThemes(const OUString& path)
+void IconThemeScanner::ScanDirectoryForIconThemes(const OUString& paths)
 {
-    osl::FileStatus fileStatus(osl_FileStatus_Mask_Type);
-    bool couldSetFileStatus = set_file_status(fileStatus, path);
-    if (!couldSetFileStatus) {
-        return false;
-    }
-
-    if (!fileStatus.isDirectory()) {
-        SAL_INFO("vcl.app", "Cannot search for icon themes in '"<< path << "'. It is not a directory.");
-        return false;
-    }
-
-    std::vector<OUString> iconThemePaths = ReadIconThemesFromPath(path);
-    if (iconThemePaths.empty()) {
-        SAL_WARN("vcl.app", "Could not find any icon themes in the provided directory ('" <<path<<"'.");
-        return false;
-    }
     mFoundIconThemes.clear();
-    for (std::vector<OUString>::iterator aI = iconThemePaths.begin(); aI != iconThemePaths.end(); ++aI)
+
+    std::deque<OUString> aPaths;
+
+    sal_Int32 nIndex = 0;
+    do
     {
-        AddIconThemeByPath(*aI);
+        aPaths.push_front(paths.getToken(0, ';', nIndex));
     }
-    return true;
+    while (nIndex >= 0);
+
+    for (const auto& path : aPaths)
+    {
+        osl::FileStatus fileStatus(osl_FileStatus_Mask_Type);
+        bool couldSetFileStatus = set_file_status(fileStatus, path);
+        if (!couldSetFileStatus) {
+            continue;
+        }
+
+        if (!fileStatus.isDirectory()) {
+            SAL_INFO("vcl.app", "Cannot search for icon themes in '"<< path << "'. It is not a directory.");
+            continue;
+        }
+
+        std::vector<OUString> iconThemePaths = ReadIconThemesFromPath(path);
+        if (iconThemePaths.empty()) {
+            SAL_WARN("vcl.app", "Could not find any icon themes in the provided directory ('" <<path<<"'.");
+            continue;
+        }
+        for (auto const& iconThemePath : iconThemePaths)
+        {
+            AddIconThemeByPath(iconThemePath);
+        }
+    }
 }
 
 bool
@@ -165,18 +181,13 @@ IconThemeScanner::Create(const OUString &path)
 /*static*/ OUString
 IconThemeScanner::GetStandardIconThemePath()
 {
-    OUString url( "$BRAND_BASE_DIR/" LIBO_SHARE_FOLDER "/config/" );
-    rtl::Bootstrap::expandMacros(url);
-    return url;
+    SvtPathOptions aPathOptions;
+    return aPathOptions.GetIconsetPath();
 }
-
-IconThemeScanner::~IconThemeScanner()
-{;}
 
 namespace
 {
-    class SameTheme :
-        public std::unary_function<const vcl::IconThemeInfo &, bool>
+    class SameTheme
     {
     private:
         const OUString& m_rThemeId;

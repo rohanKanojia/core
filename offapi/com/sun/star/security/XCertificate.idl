@@ -23,13 +23,14 @@
 #include <com/sun/star/uno/XInterface.idl>
 #include <com/sun/star/util/DateTime.idl>
 #include <com/sun/star/security/XCertificateExtension.idl>
+#include <com/sun/star/security/CertificateKind.idl>
 
 module com { module sun { module star { module security {
 
 /**
  * Interface of a PKI Certificate
  *
- * <p>This interface represents a x509 certificate.</p>
+ * <p>This interface represents a certificate (X.509 or OpenPGP) .</p>
  */
 interface XCertificate : com::sun::star::uno::XInterface
 {
@@ -109,12 +110,22 @@ interface XCertificate : com::sun::star::uno::XInterface
     [attribute, readonly] sequence< byte > MD5Thumbprint;
 
     /**
+     *  the kind of certificate, X.509 or OpenPGP
+     *
+     * @since LibreOffice 5.4
+     */
+    [attribute, readonly] com::sun::star::security::CertificateKind CertificateKind;
+
+    /**
      * Find a extension with a object identifier.
      */
     XCertificateExtension findCertificateExtension( [in]sequence< byte > oid ) ;
 
     /**
-     * get the certificate usage
+     * get the certificate usage. The return value is a set of bits, as defined in RFC3280 for the
+     * KeyUsage BIT STRING. Note the bit and byte order used in ASN.1, so for instance the bit
+     * dataEncipherment in KeyUsage, "bit 3", corresponds to CERT_DATA_ENCIPHERMENT_KEY_USAGE in
+     * Win32 and KU_DATA_ENCIPHERMENT in NSS, both with value 0x10.
      */
     long getCertificateUsage();
 } ;

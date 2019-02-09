@@ -17,29 +17,27 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/drawingml/lineproperties.hxx"
+#include <drawingml/lineproperties.hxx>
 #include <vector>
 #include <rtl/ustrbuf.hxx>
 #include <osl/diagnose.h>
 #include <com/sun/star/beans/NamedValue.hpp>
-#include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/drawing/FlagSequence.hpp>
 #include <com/sun/star/drawing/LineDash.hpp>
 #include <com/sun/star/drawing/LineJoint.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/drawing/PointSequence.hpp>
 #include <com/sun/star/drawing/PolyPolygonBezierCoords.hpp>
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "oox/drawingml/shapepropertymap.hxx"
-#include "oox/helper/containerhelper.hxx"
-#include "oox/helper/graphichelper.hxx"
-#include "oox/token/tokens.hxx"
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <oox/drawingml/shapepropertymap.hxx>
+#include <oox/helper/containerhelper.hxx>
+#include <oox/helper/graphichelper.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::drawing;
 
-using ::com::sun::star::container::XNameContainer;
 
 namespace oox {
 namespace drawingml {
@@ -57,11 +55,8 @@ void lclSetDashData( LineDash& orLineDash, sal_Int16 nDots, sal_Int32 nDotLen,
 }
 
 /** Converts the specified preset dash to API dash.
-
-    Line length and dot length are set relative to line width and have to be
-    multiplied by the actual line width after this function.
  */
-void lclConvertPresetDash( LineDash& orLineDash, sal_Int32 nPresetDash )
+void lclConvertPresetDash(LineDash& orLineDash, sal_Int32 nPresetDash, sal_Int32 nLineWidth)
 {
     switch( nPresetDash )
     {
@@ -82,54 +77,41 @@ void lclConvertPresetDash( LineDash& orLineDash, sal_Int32 nPresetDash )
             OSL_FAIL( "lclConvertPresetDash - unsupported preset dash" );
             lclSetDashData( orLineDash, 0, 0, 1, 4, 3 );
     }
+    // convert relative dash/dot length to absolute length
+    orLineDash.DotLen *= nLineWidth;
+    orLineDash.DashLen *= nLineWidth;
+    orLineDash.Distance *= nLineWidth;
 }
 
-/** Converts the passed custom dash to API dash.
-
-    Line length and dot length are set relative to line width and have to be
-    multiplied by the actual line width after this function.
+/** Converts the passed custom dash to API dash. rCustomDash should not be empty.
  */
-void lclConvertCustomDash( LineDash& orLineDash, const LineProperties::DashStopVector& rCustomDash )
+void lclConvertCustomDash(LineDash& orLineDash, const LineProperties::DashStopVector& rCustomDash, sal_Int32 nLineWidth)
 {
-    if( rCustomDash.empty() )
-    {
-        OSL_FAIL( "lclConvertCustomDash - unexpected empty custom dash" );
-        lclSetDashData( orLineDash, 0, 0, 1, 4, 3 );
-        return;
-    }
+    OSL_ASSERT(!rCustomDash.empty());
+    orLineDash.Dashes = 0;
+    // Follow the order we export custDash: dashes first.
+    orLineDash.DashLen = rCustomDash[0].first;
+    // Also assume dash and dot have the same sp values.
+    orLineDash.Distance = rCustomDash[0].second;
+    orLineDash.DotLen = 0;
 
-    // count dashes and dots (stops equal or less than 2 are assumed to be dots)
-    sal_Int16 nDots = 0;
-    sal_Int32 nDotLen = 0;
-    sal_Int16 nDashes = 0;
-    sal_Int32 nDashLen = 0;
-    sal_Int32 nDistance = 0;
-    sal_Int32 nConvertedLen = 0;
-    sal_Int32 nConvertedDistance = 0;
-    for( LineProperties::DashStopVector::const_iterator aIt = rCustomDash.begin(), aEnd = rCustomDash.end(); aIt != aEnd; ++aIt )
+    for(const auto& rIt : rCustomDash)
     {
-        // Get from "1000th of percent" ==> percent ==> multiplier
-        nConvertedLen      = aIt->first  / 1000 / 100;
-        nConvertedDistance = aIt->second / 1000 / 100;
-
-        // Check if it is a dot (100% = dot)
-        if( nConvertedLen == 1 )
+        sal_Int32 nLen = rIt.first;
+        if (nLen != orLineDash.DashLen)
         {
-            ++nDots;
-            nDotLen += nConvertedLen;
+            orLineDash.DotLen = nLen;
+            break;
         }
-        else
-        {
-            ++nDashes;
-            nDashLen += nConvertedLen;
-        }
-        nDistance += nConvertedDistance;
+        ++orLineDash.Dashes;
     }
-    orLineDash.DotLen = (nDots > 0) ? ::std::max< sal_Int32 >( nDotLen / nDots, 1 ) : 0;
-    orLineDash.Dots = nDots;
-    orLineDash.DashLen = (nDashes > 0) ? ::std::max< sal_Int32 >( nDashLen / nDashes, 1 ) : 0;
-    orLineDash.Dashes = nDashes;
-    orLineDash.Distance = ::std::max< sal_Int32 >( nDistance / rCustomDash.size(), 1 );
+    // TODO: verify the assumption and approximate complex line patterns.
+
+    // Assume we only have two types of dash stops, the rest are all dots.
+    orLineDash.Dots = rCustomDash.size() - orLineDash.Dashes;
+    orLineDash.DashLen = orLineDash.DashLen / 100000.0 * nLineWidth;
+    orLineDash.DotLen = orLineDash.DotLen / 100000.0 * nLineWidth;
+    orLineDash.Distance = orLineDash.Distance / 100000.0 * nLineWidth;
 }
 
 DashStyle lclGetDashStyle( sal_Int32 nToken )
@@ -207,31 +189,36 @@ void lclPushMarkerProperties( ShapePropertyMap& rPropMap,
 
     if( !aBuffer.isEmpty() )
     {
+        bool bIsArrow = nArrowType == XML_arrow;
         sal_Int32 nLength = lclGetArrowSize( rArrowProps.moArrowLength.get( XML_med ) );
         sal_Int32 nWidth  = lclGetArrowSize( rArrowProps.moArrowWidth.get( XML_med ) );
 
         sal_Int32 nNameIndex = nWidth * 3 + nLength + 1;
         aBuffer.append( ' ' ).append( nNameIndex );
+        if (bIsArrow)
+        {
+            // Arrow marker form depends also on line width
+            aBuffer.append(' ').append(nLineWidth);
+        }
         OUString aMarkerName = aBuffer.makeStringAndClear();
 
-        bool bIsArrow = nArrowType == XML_arrow;
         double fArrowLength = 1.0;
         switch( nLength )
         {
-            case OOX_ARROWSIZE_SMALL:   fArrowLength = (bIsArrow ? 3.5 : 2.0); break;
-            case OOX_ARROWSIZE_MEDIUM:  fArrowLength = (bIsArrow ? 4.5 : 3.0); break;
-            case OOX_ARROWSIZE_LARGE:   fArrowLength = (bIsArrow ? 6.0 : 5.0); break;
+            case OOX_ARROWSIZE_SMALL:   fArrowLength = (bIsArrow ? 2.5 : 2.0); break;
+            case OOX_ARROWSIZE_MEDIUM:  fArrowLength = (bIsArrow ? 3.5 : 3.0); break;
+            case OOX_ARROWSIZE_LARGE:   fArrowLength = (bIsArrow ? 5.5 : 5.0); break;
         }
         double fArrowWidth = 1.0;
         switch( nWidth )
         {
-            case OOX_ARROWSIZE_SMALL:   fArrowWidth = (bIsArrow ? 3.5 : 2.0);  break;
-            case OOX_ARROWSIZE_MEDIUM:  fArrowWidth = (bIsArrow ? 4.5 : 3.0);  break;
-            case OOX_ARROWSIZE_LARGE:   fArrowWidth = (bIsArrow ? 6.0 : 5.0);  break;
+            case OOX_ARROWSIZE_SMALL:   fArrowWidth = (bIsArrow ? 2.5 : 2.0);  break;
+            case OOX_ARROWSIZE_MEDIUM:  fArrowWidth = (bIsArrow ? 3.5 : 3.0);  break;
+            case OOX_ARROWSIZE_LARGE:   fArrowWidth = (bIsArrow ? 5.5 : 5.0);  break;
         }
         // set arrow width relative to line width
         sal_Int32 nBaseLineWidth = ::std::max< sal_Int32 >( nLineWidth, 70 );
-        nMarkerWidth = static_cast< sal_Int32 >( fArrowWidth * nBaseLineWidth );
+        nMarkerWidth = static_cast<sal_Int32>( fArrowWidth * nBaseLineWidth );
 
         /*  Test if the marker already exists in the marker table, do not
             create it again in this case. If markers are inserted explicitly
@@ -239,8 +226,12 @@ void lclPushMarkerProperties( ShapePropertyMap& rPropMap,
             TODO: this can be optimized by using a map. */
         if( !rPropMap.hasNamedLineMarkerInTable( aMarkerName ) )
         {
-// pass X and Y as percentage to OOX_ARROW_POINT
-#define OOX_ARROW_POINT( x, y ) awt::Point( static_cast< sal_Int32 >( fArrowWidth * x ), static_cast< sal_Int32 >( fArrowLength * y ) )
+            // pass X and Y as percentage to OOX_ARROW_POINT
+            auto OOX_ARROW_POINT = [fArrowLength, fArrowWidth]( double x, double y ) { return awt::Point( static_cast< sal_Int32 >( fArrowWidth * x ), static_cast< sal_Int32 >( fArrowLength * y ) ); };
+            // tdf#100491 Arrow line marker, unlike other markers, depends on line width.
+            // So calculate width of half line (more convenient during drawing) taking into account
+            // further conversions/scaling done in OOX_ARROW_POINT and scaling to nMarkerWidth.
+            const double fArrowLineHalfWidth = ::std::max< double >( 100.0 * 0.5 * nLineWidth / nMarkerWidth, 1 );
 
             ::std::vector< awt::Point > aPoints;
             OSL_ASSERT((rArrowProps.moArrowType.get() & sal_Int32(0xFFFF0000))==0);
@@ -253,13 +244,16 @@ void lclPushMarkerProperties( ShapePropertyMap& rPropMap,
                     aPoints.push_back( OOX_ARROW_POINT(  50,   0 ) );
                 break;
                 case XML_arrow:
-                    aPoints.push_back( OOX_ARROW_POINT(  50,   0 ) );
-                    aPoints.push_back( OOX_ARROW_POINT( 100,  91 ) );
-                    aPoints.push_back( OOX_ARROW_POINT(  85, 100 ) );
-                    aPoints.push_back( OOX_ARROW_POINT(  50,  36 ) );
-                    aPoints.push_back( OOX_ARROW_POINT(  15, 100 ) );
-                    aPoints.push_back( OOX_ARROW_POINT(   0,  91 ) );
-                    aPoints.push_back( OOX_ARROW_POINT(  50,   0 ) );
+                    aPoints.push_back( OOX_ARROW_POINT( 50, 0 ) );
+                    aPoints.push_back( OOX_ARROW_POINT( 100, 100 - fArrowLineHalfWidth * 1.5) );
+                    aPoints.push_back( OOX_ARROW_POINT( 100 - fArrowLineHalfWidth * 1.5, 100 ) );
+                    aPoints.push_back( OOX_ARROW_POINT( 50.0 + fArrowLineHalfWidth, 5.5 * fArrowLineHalfWidth) );
+                    aPoints.push_back( OOX_ARROW_POINT( 50.0 + fArrowLineHalfWidth, 100 ) );
+                    aPoints.push_back( OOX_ARROW_POINT( 50.0 - fArrowLineHalfWidth, 100 ) );
+                    aPoints.push_back( OOX_ARROW_POINT( 50.0 - fArrowLineHalfWidth, 5.5 * fArrowLineHalfWidth) );
+                    aPoints.push_back( OOX_ARROW_POINT( fArrowLineHalfWidth * 1.5, 100 ) );
+                    aPoints.push_back( OOX_ARROW_POINT( 0, 100 - fArrowLineHalfWidth * 1.5) );
+                    aPoints.push_back( OOX_ARROW_POINT( 50, 0 ) );
                 break;
                 case XML_stealth:
                     aPoints.push_back( OOX_ARROW_POINT(  50,   0 ) );
@@ -291,7 +285,6 @@ void lclPushMarkerProperties( ShapePropertyMap& rPropMap,
                     aPoints.push_back( OOX_ARROW_POINT(  50,   0 ) );
                 break;
             }
-#undef OOX_ARROW_POINT
 
             OSL_ENSURE( !aPoints.empty(), "lclPushMarkerProperties - missing arrow coordinates" );
             if( !aPoints.empty() )
@@ -322,15 +315,15 @@ void lclPushMarkerProperties( ShapePropertyMap& rPropMap,
     {
         if( bLineEnd )
         {
-            rPropMap.setProperty( SHAPEPROP_LineEnd, aNamedMarker );
-            rPropMap.setProperty( SHAPEPROP_LineEndWidth, nMarkerWidth );
-            rPropMap.setProperty( SHAPEPROP_LineEndCenter, bMarkerCenter );
+            rPropMap.setProperty( ShapeProperty::LineEnd, aNamedMarker );
+            rPropMap.setProperty( ShapeProperty::LineEndWidth, nMarkerWidth );
+            rPropMap.setProperty( ShapeProperty::LineEndCenter, bMarkerCenter );
         }
         else
         {
-            rPropMap.setProperty( SHAPEPROP_LineStart, aNamedMarker );
-            rPropMap.setProperty( SHAPEPROP_LineStartWidth, nMarkerWidth );
-            rPropMap.setProperty( SHAPEPROP_LineStartCenter, bMarkerCenter );
+            rPropMap.setProperty( ShapeProperty::LineStart, aNamedMarker );
+            rPropMap.setProperty( ShapeProperty::LineStartWidth, nMarkerWidth );
+            rPropMap.setProperty( ShapeProperty::LineStartCenter, bMarkerCenter );
         }
     }
 }
@@ -359,7 +352,7 @@ void LineProperties::assignUsed( const LineProperties& rSourceProps )
 }
 
 void LineProperties::pushToPropMap( ShapePropertyMap& rPropMap,
-        const GraphicHelper& rGraphicHelper, sal_Int32 nPhClr ) const
+        const GraphicHelper& rGraphicHelper, ::Color nPhClr ) const
 {
     // line fill type must exist, otherwise ignore other properties
     if( maLineFill.moFillType.has() )
@@ -377,38 +370,36 @@ void LineProperties::pushToPropMap( ShapePropertyMap& rPropMap,
             aLineDash.Style = lclGetDashStyle( moLineCap.get( XML_rnd ) );
 
             // convert preset dash or custom dash
-            if( moPresetDash.differsFrom( XML_solid ) )
-                lclConvertPresetDash( aLineDash, moPresetDash.get() );
+            if(moPresetDash.differsFrom(XML_solid) || maCustomDash.empty())
+            {
+                sal_Int32 nBaseLineWidth = ::std::max<sal_Int32>(nLineWidth, 35);
+                lclConvertPresetDash(aLineDash, moPresetDash.get(XML_dash), nBaseLineWidth);
+            }
             else
-                lclConvertCustomDash( aLineDash, maCustomDash );
+                lclConvertCustomDash(aLineDash, maCustomDash, nLineWidth);
 
-            // convert relative dash/dot length to absolute length
-            sal_Int32 nBaseLineWidth = ::std::max< sal_Int32 >( nLineWidth, 35 );
-            aLineDash.DotLen *= nBaseLineWidth;
-            aLineDash.DashLen *= nBaseLineWidth;
-            aLineDash.Distance *= nBaseLineWidth;
 
-            if( rPropMap.setProperty( SHAPEPROP_LineDash, aLineDash ) )
+            if( rPropMap.setProperty( ShapeProperty::LineDash, aLineDash ) )
                 eLineStyle = drawing::LineStyle_DASH;
         }
 
         // set final line style property
-        rPropMap.setProperty( SHAPEPROP_LineStyle, eLineStyle );
+        rPropMap.setProperty( ShapeProperty::LineStyle, eLineStyle );
 
         // line joint type
         if( moLineJoint.has() )
-            rPropMap.setProperty( SHAPEPROP_LineJoint, lclGetLineJoint( moLineJoint.get() ) );
+            rPropMap.setProperty( ShapeProperty::LineJoint, lclGetLineJoint( moLineJoint.get() ) );
 
         // line width in 1/100mm
-        rPropMap.setProperty( SHAPEPROP_LineWidth, nLineWidth );
+        rPropMap.setProperty( ShapeProperty::LineWidth, nLineWidth );
 
         // line color and transparence
         Color aLineColor = maLineFill.getBestSolidColor();
         if( aLineColor.isUsed() )
         {
-            rPropMap.setProperty( SHAPEPROP_LineColor, aLineColor.getColor( rGraphicHelper, nPhClr ) );
+            rPropMap.setProperty( ShapeProperty::LineColor, aLineColor.getColor( rGraphicHelper, nPhClr ) );
             if( aLineColor.hasTransparency() )
-                rPropMap.setProperty( SHAPEPROP_LineTransparency, aLineColor.getTransparency() );
+                rPropMap.setProperty( ShapeProperty::LineTransparency, aLineColor.getTransparency() );
         }
 
         // line markers

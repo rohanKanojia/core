@@ -21,17 +21,15 @@
 #define INCLUDED_UNOTOOLS_LINGUCFG_HXX
 
 #include <unotools/unotoolsdllapi.h>
-#include <com/sun/star/beans/PropertyValues.hpp>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/uno/Any.h>
-#include <com/sun/star/lang/Locale.hpp>
-#include <com/sun/star/util/XChangesBatch.hpp>
 #include <rtl/ustring.hxx>
-#include <unotools/configitem.hxx>
-#include <osl/mutex.hxx>
 #include <unotools/options.hxx>
 #include <i18nlangtag/lang.h>
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace com { namespace sun { namespace star { namespace util { class XChangesBatch; } } } }
 
 class SvtLinguConfigItem;
 
@@ -53,9 +51,9 @@ struct UNOTOOLS_DLLPUBLIC SvtLinguOptions
             bROHyphMinWordLength;
 
     // misc options (non-service specific)
-    sal_Int16   nDefaultLanguage;
-    sal_Int16   nDefaultLanguage_CJK;
-    sal_Int16   nDefaultLanguage_CTL;
+    LanguageType nDefaultLanguage;
+    LanguageType nDefaultLanguage_CJK;
+    LanguageType nDefaultLanguage_CTL;
 
     bool    bRODefaultLanguage;
     bool    bRODefaultLanguage_CJK;
@@ -112,7 +110,7 @@ struct UNOTOOLS_DLLPUBLIC SvtLinguOptions
     bool    bROIsTranslateCommonTerms;
     bool    bROIsReverseMapping;
 
-    // check value need to determine if the configuration needs to updatet
+    // check value need to determine if the configuration needs to be updated
     // or not (used for a quick check if data files have been changed/added
     // or deleted
     sal_Int32   nDataFilesChangedCheckValue;
@@ -140,14 +138,12 @@ struct UNOTOOLS_DLLPUBLIC SvtLinguConfigDictionaryEntry
 class UNOTOOLS_DLLPUBLIC SvtLinguConfig: public utl::detail::Options
 {
     // returns static object
-    UNOTOOLS_DLLPRIVATE SvtLinguConfigItem &   GetConfigItem();
-
-    SvtLinguConfigItem &   GetConfigItem() const    { return const_cast< SvtLinguConfig * >( this )->GetConfigItem(); }
+    UNOTOOLS_DLLPRIVATE static SvtLinguConfigItem & GetConfigItem();
 
     // configuration update access for the 'Linguistic' main node
     mutable css::uno::Reference< css::util::XChangesBatch > m_xMainUpdateAccess;
 
-    css::uno::Reference< css::util::XChangesBatch > GetMainUpdateAccess() const;
+    css::uno::Reference< css::util::XChangesBatch > const & GetMainUpdateAccess() const;
 
     OUString GetVendorImageUrl_Impl( const OUString &rServiceImplName, const OUString &rImageName ) const;
 
@@ -156,16 +152,16 @@ class UNOTOOLS_DLLPUBLIC SvtLinguConfig: public utl::detail::Options
 
 public:
     SvtLinguConfig();
-    virtual ~SvtLinguConfig();
+    virtual ~SvtLinguConfig() override;
 
     // borrowed from utl::ConfigItem
 
     css::uno::Sequence< OUString >
-        GetNodeNames( const OUString &rNode );
+        GetNodeNames( const OUString &rNode ) const;
 
     css::uno::Sequence< css::uno::Any >
         GetProperties(
-            const css::uno::Sequence< OUString > &rNames );
+            const css::uno::Sequence< OUString > &rNames ) const;
 
     bool
         ReplaceSetProperties(
@@ -182,7 +178,7 @@ public:
     bool    SetProperty( sal_Int32 nPropertyHandle,
                          const css::uno::Any &rValue );
 
-    bool    GetOptions( SvtLinguOptions &rOptions ) const;
+    void    GetOptions( SvtLinguOptions &rOptions ) const;
 
     bool    IsReadOnly( const OUString &rPropertyName ) const;
 
@@ -198,7 +194,7 @@ public:
 
     css::uno::Sequence< OUString > GetDisabledDictionaries() const;
 
-    std::vector< SvtLinguConfigDictionaryEntry > GetActiveDictionariesByFormat( const OUString &rFormatName );
+    std::vector< SvtLinguConfigDictionaryEntry > GetActiveDictionariesByFormat( const OUString &rFormatName ) const;
 
     // functions returning file URLs to the respective images (if found) and empty string otherwise
     OUString     GetSpellAndGrammarContextSuggestionImage( const OUString &rServiceImplName ) const;

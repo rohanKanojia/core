@@ -17,12 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "LinearRegressionCurveCalculator.hxx"
-#include "macros.hxx"
-#include "RegressionCalculationHelper.hxx"
-
-#include <rtl/math.hxx>
-#include <rtl/ustrbuf.hxx>
+#include <LinearRegressionCurveCalculator.hxx>
 
 using namespace ::com::sun::star;
 
@@ -41,7 +36,6 @@ void LinearRegressionCurveCalculator::setRegressionProperties(
     sal_Bool  aForceIntercept,
     double    aInterceptValue,
     sal_Int32 aPeriod )
-        throw (uno::RuntimeException, std::exception)
 {
     PolynomialRegressionCurveCalculator::setRegressionProperties(
                                             1,
@@ -55,8 +49,6 @@ uno::Sequence< geometry::RealPoint2D > SAL_CALL LinearRegressionCurveCalculator:
     const uno::Reference< chart2::XScaling >& xScalingX,
     const uno::Reference< chart2::XScaling >& xScalingY,
     sal_Bool bMaySkipPointsInCalculation )
-    throw (lang::IllegalArgumentException,
-           uno::RuntimeException, std::exception)
 {
     if( bMaySkipPointsInCalculation &&
         isLinearScaling( xScalingX ) &&
@@ -65,9 +57,9 @@ uno::Sequence< geometry::RealPoint2D > SAL_CALL LinearRegressionCurveCalculator:
         // optimize result
         uno::Sequence< geometry::RealPoint2D > aResult( 2 );
         aResult[0].X = min;
-        aResult[0].Y = this->getCurveValue( min );
+        aResult[0].Y = getCurveValue( min );
         aResult[1].X = max;
-        aResult[1].Y = this->getCurveValue( max );
+        aResult[1].Y = getCurveValue( max );
 
         return aResult;
     }

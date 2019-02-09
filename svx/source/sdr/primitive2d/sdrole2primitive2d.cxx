@@ -23,6 +23,7 @@
 #include <svx/sdr/primitive2d/sdrdecompositiontools.hxx>
 #include <drawinglayer/primitive2d/sdrdecompositiontools2d.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
+#include <basegfx/polygon/b2dpolypolygon.hxx>
 
 
 using namespace com::sun::star;
@@ -66,7 +67,7 @@ namespace drawinglayer
             return false;
         }
 
-        Primitive2DContainer SdrOle2Primitive2D::get2DDecomposition(const geometry::ViewInformation2D& /*aViewInformation*/) const
+        void SdrOle2Primitive2D::get2DDecomposition(Primitive2DDecompositionVisitor& rVisitor, const geometry::ViewInformation2D& /*aViewInformation*/) const
         {
             // to take care of getSdrLFSTAttribute() later, the same as in SdrGrafPrimitive2D::create2DDecomposition
             // should happen. For the moment we only need the OLE itself
@@ -76,7 +77,7 @@ namespace drawinglayer
             Primitive2DContainer  aRetval;
 
             // create unit outline polygon
-            const basegfx::B2DPolygon aUnitOutline(basegfx::tools::createUnitPolygon());
+            const basegfx::B2DPolygon& aUnitOutline(basegfx::utils::createUnitPolygon());
 
             // add fill
             if(!bBehaveCompatibleToPaintVersion
@@ -112,7 +113,7 @@ namespace drawinglayer
                     double fScaleX(0.0 != aScale.getX() ? fHalfLineWidth / fabs(aScale.getX()) : 1.0);
                     double fScaleY(0.0 != aScale.getY() ? fHalfLineWidth / fabs(aScale.getY()) : 1.0);
                     const basegfx::B2DRange aExpandedRange(-fScaleX, -fScaleY, 1.0 + fScaleX, 1.0 + fScaleY);
-                    basegfx::B2DPolygon aExpandedUnitOutline(basegfx::tools::createPolygonFromRect(aExpandedRange));
+                    basegfx::B2DPolygon aExpandedUnitOutline(basegfx::utils::createPolygonFromRect(aExpandedRange));
 
                     aExpandedUnitOutline.transform(getTransform());
                 aRetval.push_back(
@@ -157,7 +158,6 @@ namespace drawinglayer
                         getSdrLFSTAttribute().getText(),
                         getSdrLFSTAttribute().getLine(),
                         false,
-                        false,
                         false));
             }
 
@@ -170,7 +170,7 @@ namespace drawinglayer
                     getSdrLFSTAttribute().getShadow());
             }
 
-            return aRetval;
+            rVisitor.append(aRetval);
         }
 
         // provide unique ID

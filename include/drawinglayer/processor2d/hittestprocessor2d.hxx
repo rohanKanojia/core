@@ -46,17 +46,14 @@ namespace drawinglayer
             /// discrete HitTolerance
             double                      mfDiscreteHitTolerance;
 
-            /// bitfield
-            bool                        mbHit : 1;
-            bool                        mbHitToleranceUsed : 1;
+            /// stack of HitPrimitives, taken care of during HitTest run
+            primitive2d::Primitive2DContainer        maHitStack;
 
-            /*  this flag decides if primitives which are embedded to an
-                UnifiedTransparencePrimitive2D and are invisible will be taken into account for
-                HitTesting or not. Those primitives are created for objects which are else
-                completely invisible and normally their content exists of hairline
-                primitives describing the object's contour
-             */
-            bool                        mbUseInvisiblePrimitiveContent : 1;
+            /// flag if HitStack shall be collected as part of the result, default is false
+            bool                        mbCollectHitStack : 1;
+
+            /// Boolean to flag if a hit was found. If yes, fast exit is taken
+            bool                        mbHit : 1;
 
             /// flag to concentrate on text hits only
             bool                        mbHitTextOnly : 1;
@@ -65,10 +62,10 @@ namespace drawinglayer
             void processBasePrimitive2D(const primitive2d::BasePrimitive2D& rCandidate) override;
             bool checkHairlineHitWithTolerance(
                 const basegfx::B2DPolygon& rPolygon,
-                double fDiscreteHitTolerance);
+                double fDiscreteHitTolerance) const;
             bool checkFillHitWithTolerance(
                 const basegfx::B2DPolyPolygon& rPolyPolygon,
-                double fDiscreteHitTolerance);
+                double fDiscreteHitTolerance) const;
             void check3DHit(const primitive2d::ScenePrimitive2D& rCandidate);
 
         public:
@@ -77,13 +74,20 @@ namespace drawinglayer
                 const basegfx::B2DPoint& rLogicHitPosition,
                 double fLogicHitTolerance,
                 bool bHitTextOnly);
-            virtual ~HitTestProcessor2D();
+            virtual ~HitTestProcessor2D() override;
+
+            /// switch on collecting primitives for a found hit on maHitStack, default is off
+            void collectHitStack(bool bCollect) { mbCollectHitStack = bCollect; }
+
+            /// get HitStack of primitives, first is the one that created the hit, last is the
+            /// top-most
+            const primitive2d::Primitive2DContainer& getHitStack() const { return maHitStack; }
 
             /// data read access
             const basegfx::B2DPoint& getDiscreteHitPosition() const { return maDiscreteHitPosition; }
             double getDiscreteHitTolerance() const { return mfDiscreteHitTolerance; }
+            bool getCollectHitStack() const { return mbCollectHitStack; }
             bool getHit() const { return mbHit; }
-            bool getUseInvisiblePrimitiveContent() const { return mbUseInvisiblePrimitiveContent;}
             bool getHitTextOnly() const { return mbHitTextOnly; }
         };
     } // end of namespace processor2d

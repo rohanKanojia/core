@@ -19,7 +19,6 @@
 #ifndef INCLUDED_SW_INC_NDHINTS_HXX
 #define INCLUDED_SW_INC_NDHINTS_HXX
 
-#include <tools/mempool.hxx>
 #include <o3tl/sorted_vector.hxx>
 
 #include "swtypes.hxx"
@@ -33,10 +32,7 @@ class SfxPoolItem;
 class SfxItemSet;
 class SwDoc;
 
-typedef enum {
-    COPY = int(true),
-    NEW  = int(false),
-} CopyOrNew_t;
+enum class CopyOrNewType { Copy, New };
 
 /// if COPY then pTextNode must be given!
 SwTextAttr * MakeTextAttr(
@@ -44,7 +40,7 @@ SwTextAttr * MakeTextAttr(
     SfxPoolItem & rNew,
     sal_Int32 const nStt,
     sal_Int32 const nEnd,
-    CopyOrNew_t const bIsCopy = NEW,
+    CopyOrNewType const bIsCopy = CopyOrNewType::New,
     SwTextNode *const pTextNode = nullptr );
 
 SwTextAttr * MakeTextAttr(
@@ -56,13 +52,13 @@ SwTextAttr * MakeTextAttr(
 /// create redline dummy text hint that must not be inserted into hints array
 SwTextAttr* MakeRedlineTextAttr(
     SwDoc & rDoc,
-    SfxPoolItem& rAttr );
+    SfxPoolItem const & rAttr );
 
 
 /// SwTextAttr's, sorted by start
 struct CompareSwpHtStart
 {
-    bool operator()(SwTextAttr* const lhs, SwTextAttr* const rhs) const;
+    bool operator()(SwTextAttr const * const lhs, SwTextAttr const * const rhs) const;
 };
 class SwpHtStart : public o3tl::sorted_vector<SwTextAttr*, CompareSwpHtStart,
     o3tl::find_partialorder_ptrequals> {};
@@ -70,7 +66,7 @@ class SwpHtStart : public o3tl::sorted_vector<SwTextAttr*, CompareSwpHtStart,
 /// SwTextAttr's, sorted by end
 struct CompareSwpHtEnd
 {
-    bool operator()(SwTextAttr* const lhs, SwTextAttr* const rhs) const;
+    bool operator()(SwTextAttr const * const lhs, SwTextAttr const * const rhs) const;
 };
 class SwpHtEnd : public o3tl::sorted_vector<SwTextAttr*, CompareSwpHtEnd,
     o3tl::find_partialorder_ptrequals> {};
@@ -80,6 +76,8 @@ class SwpHtEnd : public o3tl::sorted_vector<SwTextAttr*, CompareSwpHtEnd,
 class SwpHints
 {
 private:
+    const SwTextNode& m_rParent;
+
     // SAL_MAX_SIZE is used by GetStartOf to return
     // failure, so just allow SAL_MAX_SIZE-1 hints
     static const size_t MAX_HINTS = SAL_MAX_SIZE-1;
@@ -91,13 +89,15 @@ private:
 
     /// true: the Node is in Split and Frames are moved
     bool          m_bInSplitNode         : 1;
-    /// m_bHasHiddenParaField is invalid, call CalcHiddenParaField()
-    bool          m_bCalcHiddenParaField : 1;
-    bool          m_bHasHiddenParaField  : 1;   ///< HiddenParaField
+    // m_bHiddenByParaField is invalid, call CalcHiddenParaField()
+    mutable bool  m_bCalcHiddenParaField : 1;
+    // if all fields controlling visibility of the paragraph require to hide it
+    // (if there's no such fields, or if any field requires to show, then this is false)
+    mutable bool  m_bHiddenByParaField   : 1;
     bool          m_bFootnote            : 1;   ///< footnotes
     bool          m_bDDEFields           : 1;   ///< the TextNode has DDE fields
 
-    /// records a new attibute in m_pHistory.
+    /// records a new attribute in m_pHistory.
     void NoteInHistory( SwTextAttr *pAttr, const bool bNew = false );
 
     void CalcFlags( );
@@ -108,18 +108,18 @@ private:
     friend class SwTextNode;
     void DeleteAtPos( size_t nPos );
     /// Delete the given Hint. The Hint must actually be in the array!
-    void Delete( SwTextAttr* pTextHt );
+    void Delete( SwTextAttr const * pTextHt );
 
     void SetInSplitNode(bool bInSplit) { m_bInSplitNode = bInSplit; }
-    void SetCalcHiddenParaField() { m_bCalcHiddenParaField = true; }
-    void SetHiddenParaField( const bool bNew ) { m_bHasHiddenParaField = bNew; }
-    bool HasHiddenParaField() const
+    void SetCalcHiddenParaField() const { m_bCalcHiddenParaField = true; }
+    void SetHiddenByParaField( const bool bNew ) const { m_bHiddenByParaField = bNew; }
+    bool IsHiddenByParaField() const
     {
         if ( m_bCalcHiddenParaField )
         {
-            (const_cast<SwpHints*>(this))->CalcHiddenParaField();
+            CalcHiddenParaField();
         }
-        return m_bHasHiddenParaField;
+        return m_bHiddenByParaField;
     }
 
     void InsertNesting(SwTextAttrNesting & rNewHint);
@@ -147,7 +147,7 @@ private:
 #endif
 
 public:
-    SwpHints();
+    SwpHints(const SwTextNode& rParent);
 
     size_t Count() const { return m_HintsByStart.size(); }
     bool Contains( const SwTextAttr *pHt ) const;
@@ -182,10 +182,8 @@ public:
     bool HasFootnote() const          { return m_bFootnote; }
     bool IsInSplitNode() const   { return m_bInSplitNode; }
 
-    /// calc current value of m_bHasHiddenParaField, returns true iff changed
-    bool CalcHiddenParaField();
-
-    DECL_FIXEDMEMPOOL_NEWDEL(SwpHints)
+    // calc current value of m_bHiddenByParaField, returns true iff changed
+    bool CalcHiddenParaField() const; // changes mutable state
 };
 
 #endif

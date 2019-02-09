@@ -27,7 +27,7 @@ ScVbaPivotTable::ScVbaPivotTable( const uno::Reference< uno::XComponentContext >
 }
 
 uno::Reference< excel::XPivotCache >
-ScVbaPivotTable::PivotCache() throw (uno::RuntimeException, std::exception)
+ScVbaPivotTable::PivotCache()
 {
     // #FIXME with a quick example failed to determine what the parent
     // should be, leaving as null at the moment
@@ -43,12 +43,10 @@ ScVbaPivotTable::getServiceImplName()
 uno::Sequence< OUString >
 ScVbaPivotTable::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.excel.PivotTable";
-    }
+        "ooo.vba.excel.PivotTable"
+    };
     return aServiceNames;
 }
 

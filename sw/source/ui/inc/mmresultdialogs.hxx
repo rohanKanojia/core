@@ -21,17 +21,15 @@
 #include <svtools/wizardmachine.hxx>
 #include <vcl/button.hxx>
 #include <vcl/layout.hxx>
-#include <svtools/stdctrl.hxx>
-#include <vcl/combobox.hxx>
 #include <vcl/field.hxx>
-#include <vcl/lstbox.hxx>
 #include <vcl/prgsbar.hxx>
+#include <vcl/weld.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/basedlgs.hxx>
 #include <svtools/simptabl.hxx>
-#include <svtools/svtabbx.hxx>
-#include <svtools/headbar.hxx>
-#include "mailmergehelper.hxx"
+#include <vcl/svtabbx.hxx>
+#include <vcl/headbar.hxx>
+#include <mailmergehelper.hxx>
 
 class SwMailMergeWizard;
 class SfxPrinter;
@@ -44,110 +42,89 @@ namespace com{ namespace sun{ namespace star{
 }}}
 
 /// Dialog implementing the saving as of the result document.
-class SwMMResultSaveDialog : public SfxModalDialog
+class SwMMResultSaveDialog : public SfxDialogController
 {
-    VclPtr<RadioButton>    m_pSaveAsOneRB;
-    VclPtr<RadioButton>    m_pSaveIndividualRB;
-    VclPtr<RadioButton>    m_pFromRB;
-    VclPtr<NumericField>   m_pFromNF;
-    VclPtr<FixedText>      m_pToFT;
-    VclPtr<NumericField>   m_pToNF;
-
-    VclPtr<Button>         m_pOKButton;
-
     bool                   m_bCancelSaving;
 
-    DECL_LINK_TYPED(SaveOutputHdl_Impl, Button* , void);
-    DECL_LINK_TYPED(SaveCancelHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(DocumentSelectionHdl_Impl, Button*, void);
+    std::unique_ptr<weld::RadioButton> m_xSaveAsOneRB;
+    std::unique_ptr<weld::RadioButton> m_xSaveIndividualRB;
+    std::unique_ptr<weld::RadioButton> m_xFromRB;
+    std::unique_ptr<weld::SpinButton> m_xFromNF;
+    std::unique_ptr<weld::Label> m_xToFT;
+    std::unique_ptr<weld::SpinButton> m_xToNF;
+    std::unique_ptr<weld::Button> m_xOKButton;
+
+    DECL_LINK(SaveOutputHdl_Impl, weld::Button& , void);
+    DECL_LINK(DocumentSelectionHdl_Impl, weld::ToggleButton&, void);
 
 public:
-    SwMMResultSaveDialog(vcl::Window* pParent = nullptr);
-    virtual ~SwMMResultSaveDialog();
-
-    virtual void dispose() override;
+    SwMMResultSaveDialog(weld::Window* pParent);
+    virtual ~SwMMResultSaveDialog() override;
 };
 
 /// Dialog implementing the printing of the result document.
-class SwMMResultPrintDialog : public SfxModalDialog
+class SwMMResultPrintDialog : public SfxDialogController
 {
-    VclPtr<FixedText>      m_pPrinterFT;
-    VclPtr<ListBox>        m_pPrinterLB;
-    VclPtr<PushButton>     m_pPrinterSettingsPB;
-
-    VclPtr<RadioButton>    m_pPrintAllRB;
-
-    VclPtr<RadioButton>    m_pFromRB;
-    VclPtr<NumericField>   m_pFromNF;
-    VclPtr<FixedText>      m_pToFT;
-    VclPtr<NumericField>   m_pToNF;
-
-    VclPtr<Button>         m_pOKButton;
-
     VclPtr<Printer>        m_pTempPrinter;
 
-    DECL_LINK_TYPED(PrinterChangeHdl_Impl, ListBox&,void );
-    DECL_LINK_TYPED(PrintHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(PrinterSetupHdl_Impl, Button*, void );
-    DECL_LINK_TYPED(DocumentSelectionHdl_Impl, Button*, void);
+    std::unique_ptr<weld::Label>        m_xPrinterFT;
+    std::unique_ptr<weld::ComboBox> m_xPrinterLB;
+    std::unique_ptr<weld::Button>       m_xPrinterSettingsPB;
+    std::unique_ptr<weld::RadioButton>  m_xPrintAllRB;
+    std::unique_ptr<weld::RadioButton>  m_xFromRB;
+    std::unique_ptr<weld::SpinButton>   m_xFromNF;
+    std::unique_ptr<weld::Label>        m_xToFT;
+    std::unique_ptr<weld::SpinButton>   m_xToNF;
+    std::unique_ptr<weld::Button>       m_xOKButton;
+
+    DECL_LINK(PrinterChangeHdl_Impl, weld::ComboBox&, void );
+    DECL_LINK(PrintHdl_Impl, weld::Button&, void);
+    DECL_LINK(PrinterSetupHdl_Impl, weld::Button&, void );
+    DECL_LINK(DocumentSelectionHdl_Impl, weld::ToggleButton&, void);
 
     void FillInPrinterSettings();
 
 public:
-    SwMMResultPrintDialog(vcl::Window* pParent = nullptr);
-    virtual ~SwMMResultPrintDialog();
-
-    virtual void dispose() override;
+    SwMMResultPrintDialog(weld::Window* pParent);
+    virtual ~SwMMResultPrintDialog() override;
 };
 
 /// Dialog implementing the sending as email of the result document.
-class SwMMResultEmailDialog : public SfxModalDialog
+class SwMMResultEmailDialog : public SfxDialogController
 {
-    VclPtr<FixedText>      m_pMailToFT;
-    VclPtr<ListBox>        m_pMailToLB;
-    VclPtr<PushButton>     m_pCopyToPB;
-
-    VclPtr<FixedText>      m_pSubjectFT;
-    VclPtr<Edit>           m_pSubjectED;
-
-    VclPtr<FixedText>      m_pSendAsFT;
-    VclPtr<ListBox>        m_pSendAsLB;
-    VclPtr<PushButton>     m_pSendAsPB;
-
-    VclPtr<VclContainer>   m_pAttachmentGroup;
-    VclPtr<Edit>           m_pAttachmentED;
-
-    VclPtr<RadioButton>    m_pSendAllRB;
-
-    VclPtr<RadioButton>    m_pFromRB;
-    VclPtr<NumericField>   m_pFromNF;
-    VclPtr<FixedText>      m_pToFT;
-    VclPtr<NumericField>   m_pToNF;
-
-    VclPtr<Button>         m_pOKButton;
-
-    OUString        m_sDefaultAttachmentST;
-    OUString        m_sNoSubjectST;
-    OUString        m_sConfigureMail;
-
+    OUString const  m_sConfigureMail;
     OUString        m_sCC;
     OUString        m_sBCC;
-
     OUString        m_sBody;
 
-    DECL_LINK_TYPED(CopyToHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(SendTypeHdl_Impl, ListBox&, void);
-    DECL_LINK_TYPED(SendAsHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(SendDocumentsHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(DocumentSelectionHdl_Impl, Button*, void);
+    std::unique_ptr<weld::Label> m_xMailToFT;
+    std::unique_ptr<weld::ComboBox> m_xMailToLB;
+    std::unique_ptr<weld::Button> m_xCopyToPB;
+    std::unique_ptr<weld::Label> m_xSubjectFT;
+    std::unique_ptr<weld::Entry> m_xSubjectED;
+    std::unique_ptr<weld::Label> m_xSendAsFT;
+    std::unique_ptr<weld::ComboBox> m_xSendAsLB;
+    std::unique_ptr<weld::Button> m_xSendAsPB;
+    std::unique_ptr<weld::Widget> m_xAttachmentGroup;
+    std::unique_ptr<weld::Entry> m_xAttachmentED;
+    std::unique_ptr<weld::RadioButton> m_xSendAllRB;
+    std::unique_ptr<weld::RadioButton> m_xFromRB;
+    std::unique_ptr<weld::SpinButton> m_xFromNF;
+    std::unique_ptr<weld::Label> m_xToFT;
+    std::unique_ptr<weld::SpinButton> m_xToNF;
+    std::unique_ptr<weld::Button> m_xOKButton;
+
+    DECL_LINK(CopyToHdl_Impl, weld::Button&, void);
+    DECL_LINK(SendTypeHdl_Impl, weld::ComboBox&, void);
+    DECL_LINK(SendAsHdl_Impl, weld::Button&, void);
+    DECL_LINK(SendDocumentsHdl_Impl, weld::Button&, void);
+    DECL_LINK(DocumentSelectionHdl_Impl, weld::ToggleButton&, void);
 
     void FillInEmailSettings();
 
 public:
-    SwMMResultEmailDialog(vcl::Window* pParent = nullptr);
-    virtual ~SwMMResultEmailDialog();
-
-    virtual void dispose() override;
+    SwMMResultEmailDialog(weld::Window *pParent);
+    virtual ~SwMMResultEmailDialog() override;
 };
 
 struct SwMailDescriptor
@@ -165,7 +142,7 @@ struct SwMailDescriptor
 };
 struct SwSendMailDialog_Impl;
 class SwMailMergeConfigItem;
-class SwSendMailDialog : public ModelessDialog //SfxModalDialog
+class SwSendMailDialog : public Dialog
 {
     VclPtr<FixedText>               m_pTransferStatus;
     VclPtr<FixedText>               m_pPaused;
@@ -179,48 +156,43 @@ class SwSendMailDialog : public ModelessDialog //SfxModalDialog
     VclPtr<PushButton>              m_pStop;
     VclPtr<PushButton>              m_pClose;
 
-    OUString                m_sContinue;
-    OUString                m_sStop;
-    OUString                m_sTransferStatus;
-    OUString                m_sErrorStatus;
-    OUString                m_sSendingTo;
-    OUString                m_sCompleted;
-    OUString                m_sFailed;
+    OUString const          m_sContinue;
+    OUString const          m_sStop;
+    OUString const          m_sTransferStatus;
+    OUString const          m_sErrorStatus;
+    OUString const          m_sSendingTo;
+    OUString const          m_sCompleted;
+    OUString const          m_sFailed;
 
     bool                    m_bCancel;
-    bool                    m_bDesctructionEnabled;
+    bool                    m_bDestructionEnabled;
 
-    ImageList               m_aImageList;
-
-    SwSendMailDialog_Impl*  m_pImpl;
-    SwMailMergeConfigItem*  m_pConfigItem;
-    sal_Int32               m_nStatusHeight;
+    std::unique_ptr<SwSendMailDialog_Impl> m_pImpl;
+    SwMailMergeConfigItem* const  m_pConfigItem;
+    sal_Int32               m_nExpectedCount;
     sal_Int32               m_nSendCount;
     sal_Int32               m_nErrorCount;
 
-    DECL_DLLPRIVATE_LINK_TYPED( StopHdl_Impl, Button*, void );
-    DECL_DLLPRIVATE_LINK_TYPED( CloseHdl_Impl, Button* , void);
-    DECL_DLLPRIVATE_STATIC_LINK_TYPED( SwSendMailDialog, StartSendMails, void*, void );
-    DECL_DLLPRIVATE_STATIC_LINK_TYPED( SwSendMailDialog, StopSendMails, void*, void );
-    DECL_DLLPRIVATE_LINK_TYPED( RemoveThis, Idle*, void );
+    DECL_LINK( StopHdl_Impl, Button*, void );
+    DECL_LINK( CloseHdl_Impl, Button* , void);
+    DECL_STATIC_LINK( SwSendMailDialog, StartSendMails, void*, void );
+    DECL_STATIC_LINK( SwSendMailDialog, StopSendMails, void*, void );
+    DECL_LINK( RemoveThis, Timer*, void );
 
-    SAL_DLLPRIVATE void        IterateMails();
-    SAL_DLLPRIVATE void        SendMails();
-    SAL_DLLPRIVATE void        UpdateTransferStatus();
-
-    virtual void        StateChanged( StateChangedType nStateChange ) override;
+    void        IterateMails();
+    void        SendMails();
+    void        UpdateTransferStatus();
 
 public:
     SwSendMailDialog( vcl::Window* pParent, SwMailMergeConfigItem& );
-    virtual ~SwSendMailDialog();
+    virtual ~SwSendMailDialog() override;
     virtual void        dispose() override;
 
-    void                AddDocument( SwMailDescriptor& rDesc );
-    void                SetDocumentCount( sal_Int32 nAllDocuments );
-    void                EnableDesctruction() {m_bDesctructionEnabled = true;}
-    void                ShowDialog();
+    void                AddDocument( SwMailDescriptor const & rDesc );
+    void                EnableDestruction() {m_bDestructionEnabled = true;}
+    void                ShowDialog(sal_Int32 nExpectedCount);
 
-    void                DocumentSent( css::uno::Reference< css::mail::XMailMessage>,
+    void                DocumentSent( css::uno::Reference< css::mail::XMailMessage> const & xMessage,
                                         bool bResult,
                                         const OUString* pError );
     void                AllMailsSent();

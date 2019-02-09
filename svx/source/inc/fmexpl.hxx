@@ -38,14 +38,8 @@
 #include <com/sun/star/beans/XPropertyChangeListener.hpp>
 #include <com/sun/star/container/XIndexContainer.hpp>
 
-#include <svtools/treelistbox.hxx>
+#include <vcl/treelistbox.hxx>
 
-#include <vcl/dialog.hxx>
-#include <vcl/group.hxx>
-#include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/dockwin.hxx>
 #include <svx/fmview.hxx>
 
 #include "fmexch.hxx"
@@ -64,12 +58,12 @@ class SdrMarkList;
 class FmEntryData;
 class FmNavInsertedHint : public SfxHint
 {
-    FmEntryData* pEntryData;
-    sal_uInt32 nPos;
+    FmEntryData* const pEntryData;
+    sal_uInt32 const nPos;
 
 public:
     FmNavInsertedHint( FmEntryData* pInsertedEntryData, sal_uInt32 nRelPos );
-    virtual ~FmNavInsertedHint();
+    virtual ~FmNavInsertedHint() override;
 
     FmEntryData* GetEntryData() const { return pEntryData; }
     sal_uInt32 GetRelPos() const { return nPos; }
@@ -78,11 +72,11 @@ public:
 
 class FmNavModelReplacedHint : public SfxHint
 {
-    FmEntryData* pEntryData;    // die Daten des Eintrages, der ein neues Model bekommen hat
+    FmEntryData* const pEntryData;    // the data of the entry that has got a new model
 
 public:
     FmNavModelReplacedHint( FmEntryData* pAffectedEntryData );
-    virtual ~FmNavModelReplacedHint();
+    virtual ~FmNavModelReplacedHint() override;
 
     FmEntryData* GetEntryData() const { return pEntryData; }
 };
@@ -90,11 +84,11 @@ public:
 
 class FmNavRemovedHint : public SfxHint
 {
-    FmEntryData* pEntryData;
+    FmEntryData* const pEntryData;
 
 public:
     FmNavRemovedHint( FmEntryData* pInsertedEntryData );
-    virtual ~FmNavRemovedHint();
+    virtual ~FmNavRemovedHint() override;
 
     FmEntryData* GetEntryData() const { return pEntryData; }
 };
@@ -102,15 +96,15 @@ public:
 
 class FmNavNameChangedHint : public SfxHint
 {
-    FmEntryData*    pEntryData;
-    OUString          aNewName;
+    FmEntryData* const    pEntryData;
+    OUString const          aNewName;
 
 public:
     FmNavNameChangedHint( FmEntryData* pData, const OUString& rNewName );
-    virtual ~FmNavNameChangedHint();
+    virtual ~FmNavNameChangedHint() override;
 
     FmEntryData*    GetEntryData() const { return pEntryData; }
-    OUString          GetNewName() const { return aNewName; }
+    const OUString& GetNewName() const { return aNewName; }
 };
 
 
@@ -118,7 +112,7 @@ class FmNavClearedHint : public SfxHint
 {
 public:
     FmNavClearedHint();
-    virtual ~FmNavClearedHint();
+    virtual ~FmNavClearedHint() override;
 };
 
 
@@ -127,7 +121,6 @@ class FmNavViewMarksChanged : public SfxHint
     FmFormView* pView;
 public:
     FmNavViewMarksChanged(FmFormView* pWhichView) { pView = pWhichView; }
-    virtual ~FmNavViewMarksChanged() {}
 
     const FmFormView* GetAffectedView() const { return pView; }
 };
@@ -145,7 +138,8 @@ protected:
     Image               m_aNormalImage;
     OUString            aText;
 
-    FmEntryDataList*    pChildList;
+    std::unique_ptr<FmEntryDataList>
+                        pChildList;
     FmEntryData*        pParent;
 
 protected:
@@ -157,18 +151,17 @@ public:
     FmEntryData( const FmEntryData& rEntryData );
     virtual ~FmEntryData();
 
-    void    Clear();
     void    SetText( const OUString& rText ){ aText = rText; }
     void    SetParent( FmEntryData* pParentData ){ pParent = pParentData; }
 
     const Image&    GetNormalImage() const { return m_aNormalImage; }
 
-    OUString          GetText() const { return aText; }
+    const OUString& GetText() const { return aText; }
     FmEntryData*    GetParent() const { return pParent; }
-    FmEntryDataList* GetChildList() const { return pChildList; }
+    FmEntryDataList* GetChildList() const { return pChildList.get(); }
 
     virtual bool IsEqualWithoutChildren( FmEntryData* pEntryData );
-    virtual FmEntryData* Clone() = 0;
+    virtual std::unique_ptr<FmEntryData> Clone() = 0;
 
     // note that the interface returned is normalized, i.e. querying the given XInterface of the object
     // for XInterface must return the interface itself.
@@ -191,26 +184,26 @@ public:
 
 typedef ::std::vector< FmEntryData* > FmEntryDataBaseList;
 
-class FmEntryDataList
+class FmEntryDataList final
 {
 private:
-    FmEntryDataBaseList maEntryDataList;
+    std::vector< std::unique_ptr<FmEntryData> > maEntryDataList;
 
 public:
     FmEntryDataList();
-    virtual ~FmEntryDataList();
+    ~FmEntryDataList();
 
     FmEntryData*    at( size_t Index )
-        { return ( Index < maEntryDataList.size() ) ? maEntryDataList[ Index ] : nullptr; }
+        { return maEntryDataList.at(Index).get(); }
 
     size_t          size() const { return maEntryDataList.size(); }
-    FmEntryData*    remove( FmEntryData* pItem );
-    void            insert( FmEntryData* pItem, size_t Index );
+    void            removeNoDelete( FmEntryData* pItem );
+    void            insert( std::unique_ptr<FmEntryData> pItem, size_t Index );
     void            clear();
 };
 
 
-// FmNavRequestSelectHint - jemand teilt dem NavigatorTree mit, dass er bestimmte Eintraege selektieren soll
+// FmNavRequestSelectHint - someone tells the NavigatorTree to select certain entries
 
 typedef std::set<FmEntryData*> FmEntryDataArray;
 
@@ -223,7 +216,6 @@ public:
         : m_bMixedSelection(false)
     {
     }
-    virtual ~FmNavRequestSelectHint() {}
 
     void SetMixedSelection(bool bMixedSelection) { m_bMixedSelection = bMixedSelection; }
     bool IsMixedSelection() const { return m_bMixedSelection; }
@@ -236,24 +228,16 @@ public:
 class FmFormData : public FmEntryData
 {
     css::uno::Reference< css::form::XForm >           m_xForm;
-    css::uno::Reference< css::container::XContainer > m_xContainer;
 
 public:
-
-    FmFormData(
-        const css::uno::Reference< css::form::XForm >& _rxForm,
-        const ImageList& _rNormalImages,
-        FmFormData* _pParent = nullptr
-    );
-
+    FmFormData(const css::uno::Reference< css::form::XForm >& _rxForm, FmFormData* _pParent);
     FmFormData( const FmFormData& rFormData );
-    virtual ~FmFormData();
+    virtual ~FmFormData() override;
 
     const css::uno::Reference< css::form::XForm >& GetFormIface() const { return m_xForm; }
-    const css::uno::Reference< css::container::XContainer >& GetContainer() const { return m_xContainer; }
 
     virtual bool IsEqualWithoutChildren( FmEntryData* pEntryData ) override;
-    virtual FmEntryData* Clone() override;
+    virtual std::unique_ptr<FmEntryData> Clone() override;
 };
 
 
@@ -261,26 +245,22 @@ class FmControlData : public FmEntryData
 {
     css::uno::Reference< css::form::XFormComponent >  m_xFormComponent;
 
-    Image GetImage(const ImageList& ilNavigatorImages) const;
+    Image GetImage() const;
 
 public:
 
     FmControlData(
         const css::uno::Reference< css::form::XFormComponent >& _rxComponent,
-        const ImageList& _rNormalImages,
         FmFormData* _pParent
     );
     FmControlData( const FmControlData& rControlData );
-    virtual ~FmControlData();
+    virtual ~FmControlData() override;
 
     const css::uno::Reference< css::form::XFormComponent >& GetFormComponent() const { return m_xFormComponent; }
     virtual bool IsEqualWithoutChildren( FmEntryData* pEntryData ) override;
-    virtual FmEntryData* Clone() override;
+    virtual std::unique_ptr<FmEntryData> Clone() override;
 
-    void ModelReplaced(
-        const css::uno::Reference< css::form::XFormComponent >& _rxNew,
-        const ImageList& _rNormalImages
-    );
+    void ModelReplaced(const css::uno::Reference< css::form::XFormComponent >& _rxNew);
 };
 
 
@@ -290,7 +270,7 @@ namespace svxform
 
     class NavigatorTreeModel;
 
-    class OFormComponentObserver
+    class OFormComponentObserver final
         :public ::cppu::WeakImplHelper <   css::beans::XPropertyChangeListener
                                         ,   css::container::XContainerListener
                                         >
@@ -303,23 +283,23 @@ namespace svxform
         OFormComponentObserver( ::svxform::NavigatorTreeModel* pModel );
 
     // XEventListenerListener
-        virtual void SAL_CALL disposing(const css::lang::EventObject& Source) throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing(const css::lang::EventObject& Source) override;
 
     // css::beans::XPropertyChangeListener
-        virtual void SAL_CALL propertyChange(const css::beans::PropertyChangeEvent& evt) throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL propertyChange(const css::beans::PropertyChangeEvent& evt) override;
 
     // css::container::XContainerListener
 
-        virtual void SAL_CALL elementInserted(const  css::container::ContainerEvent& rEvent) throw(css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL elementReplaced(const  css::container::ContainerEvent& rEvent) throw(css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL elementRemoved(const  css::container::ContainerEvent& rEvent) throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL elementInserted(const  css::container::ContainerEvent& rEvent) override;
+        virtual void SAL_CALL elementReplaced(const  css::container::ContainerEvent& rEvent) override;
+        virtual void SAL_CALL elementRemoved(const  css::container::ContainerEvent& rEvent) override;
 
         void Lock() { m_nLocks++; }
         void UnLock() { m_nLocks--; }
         bool IsLocked() const { return m_nLocks != 0; }
         bool CanUndo() const { return m_bCanUndo; }
         void ReleaseModel() { m_pNavModel = nullptr; }
-    protected:
+    private:
         void Insert(const css::uno::Reference< css::uno::XInterface >& xIface, sal_Int32 nIndex);
         void Remove( const css::uno::Reference< css::uno::XInterface >& _rxElement );
     };
@@ -330,43 +310,41 @@ namespace svxform
         friend class NavigatorTree;
         friend class OFormComponentObserver;
 
-        FmEntryDataList*            m_pRootList;
+        std::unique_ptr<FmEntryDataList>
+                                    m_pRootList;
         FmFormShell*                m_pFormShell;
         FmFormPage*                 m_pFormPage;
         FmFormModel*                m_pFormModel;
-        OFormComponentObserver*     m_pPropChangeList;
-
-        ImageList                   m_aNormalImages;
+        rtl::Reference<OFormComponentObserver> m_pPropChangeList;
 
         void UpdateContent( const css::uno::Reference< css::form::XForms >& xForms );
 
         void InsertForm(const css::uno::Reference< css::form::XForm >& xForm, sal_uInt32 nRelPos);
-        void RemoveForm(FmFormData* pFormData);
+        void RemoveForm(FmFormData const * pFormData);
 
         void InsertFormComponent(const css::uno::Reference< css::form::XFormComponent >& xComp, sal_uInt32 nRelPos);
-        void RemoveFormComponent(FmControlData* pControlData);
+        void RemoveFormComponent(FmControlData const * pControlData);
         void InsertSdrObj(const SdrObject* pSdrObj);
         void RemoveSdrObj(const SdrObject* pSdrObj);
 
         void ReplaceFormComponent(const css::uno::Reference< css::form::XFormComponent >& xOld, const css::uno::Reference< css::form::XFormComponent >& xNew);
 
         void BroadcastMarkedObjects(const SdrMarkList& mlMarked);
-            // einen RequestSelectHint mit den aktuell markierten Objekten broadcasten
+            // send a RequestSelectHint with the currently selected objects
         bool InsertFormComponent(FmNavRequestSelectHint& rHint, SdrObject* pObject);
-            // ist ein Helper fuer vorherige, managet das Abteigen in SdrObjGroups
-            // Rueckgabe sal_True, wenn das Objekt eine FormComponent ist (oder rekursiv nur aus solchen besteht)
+            // is a helper for previous, manages the ... in SdrObjGroups;
+            // returns sal_True if the object is a FormComponent (or recursively consists only of such)
 
     public:
-        NavigatorTreeModel( const ImageList& _rNormalImages );
-        virtual ~NavigatorTreeModel();
+        NavigatorTreeModel();
+        virtual ~NavigatorTreeModel() override;
 
         void FillBranch( FmFormData* pParentData );
-        void ClearBranch( FmFormData* pParentData );
         void UpdateContent( FmFormShell* pNewShell );
 
-        void Insert( FmEntryData* pEntryData, sal_uLong nRelPos = CONTAINER_APPEND,
-                                              bool bAlterModel = false );
-        void Remove( FmEntryData* pEntryData, bool bAlterModel = false );
+        void Insert(FmEntryData* pEntryData, sal_uInt32 nRelPos = SAL_MAX_UINT32,
+                                             bool bAlterModel = false);
+        void Remove(FmEntryData* pEntryData, bool bAlterModel = false);
 
         static bool Rename( FmEntryData* pEntryData, const OUString& rNewText );
 
@@ -377,10 +355,9 @@ namespace svxform
         FmFormShell*        GetFormShell() const { return m_pFormShell; }
         FmFormPage*         GetFormPage() const { return m_pFormPage; }
         FmEntryData*        FindData( const css::uno::Reference< css::uno::XInterface >& xElement, FmEntryDataList* pDataList, bool bRecurs=true );
-        FmEntryData*        FindData( const OUString& rText, FmFormData* pParentData, bool bRecurs=true );
-        FmEntryDataList*    GetRootList() const { return m_pRootList; }
-        static css::uno::Reference< css::container::XIndexContainer >   GetFormComponents( FmFormData* pParentFormData );
-        SdrObject*          Search(SdrObjListIter& rIter, const css::uno::Reference< css::form::XFormComponent >& xComp);
+        FmEntryData*        FindData( const OUString& rText, FmFormData const * pParentData, bool bRecurs );
+        FmEntryDataList*    GetRootList() const { return m_pRootList.get(); }
+        static css::uno::Reference< css::container::XIndexContainer >   GetFormComponents( FmFormData const * pParentFormData );
 
         virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
     };
@@ -393,88 +370,85 @@ namespace svxform
         enum DROP_ACTION        { DA_SCROLLUP, DA_SCROLLDOWN, DA_EXPANDNODE };
         enum SELDATA_ITEMS      { SDI_DIRTY, SDI_ALL, SDI_NORMALIZED, SDI_NORMALIZED_FORMARK };
 
-        // beim Droppen will ich scrollen und Folder aufklappen koennen, dafuer :
+        // when dropping I want to be able to scroll and to expand folders, for this:
         AutoTimer           m_aDropActionTimer;
         Timer               m_aSynchronizeTimer;
-        // die Meta-Daten ueber meine aktuelle Selektion
+        // the meta-data about my current selection
         SvLBoxEntrySortedArray  m_arrCurrentSelection;
         // the entries which, in the view, are currently marked as "cut" (painted semi-transparent)
         ListBoxEntrySet         m_aCutEntries;
-        // die Images, die ich brauche (und an FormDatas und EntryDatas weiterreiche)
-        ImageList           m_aNavigatorImages;
 
         ::svxform::OControlExchangeHelper   m_aControlExchange;
 
-        NavigatorTreeModel* m_pNavModel;
+        std::unique_ptr<NavigatorTreeModel> m_pNavModel;
         SvTreeListEntry*        m_pRootEntry;
         SvTreeListEntry*        m_pEditEntry;
 
         ImplSVEvent *       nEditEvent;
 
         SELDATA_ITEMS       m_sdiState;
-        Point               m_aTimerTriggered;      // die Position, an der der DropTimer angeschaltet wurde
+        Point               m_aTimerTriggered;      // the position at which the DropTimer was switched on
         DROP_ACTION         m_aDropActionType;
 
         sal_uInt16          m_nSelectLock;
         sal_uInt16          m_nFormsSelected;
         sal_uInt16          m_nControlsSelected;
-        sal_uInt16          m_nHiddenControls;      // (die Zahl geht in m_nControlsSelected mit ein)
+        sal_uInt16          m_nHiddenControls;      // (the number is included in m_nControlsSelected)
 
         unsigned short      m_aTimerCounter;
 
-        bool            m_bDragDataDirty        : 1;    // dito
+        bool            m_bDragDataDirty        : 1;    // ditto
         bool            m_bPrevSelectionMixed   : 1;
-        bool            m_bMarkingObjects       : 1;    // wenn das sal_True ist, brauche ich auf die RequestSelectHints nicht reagieren
         bool            m_bRootSelected         : 1;
-        bool            m_bInitialUpdate        : 1;   // bin ich das erste Mal im UpdateContent ?
+        bool            m_bInitialUpdate        : 1;    // am I the first time in the UpdateContent?
         bool            m_bKeyboardCut          : 1;
 
-        FmControlData*  NewControl( const OUString& rServiceName, SvTreeListEntry* pParentEntry, bool bEditName = true );
-        void            NewForm( SvTreeListEntry* pParentEntry );
-        SvTreeListEntry*    Insert( FmEntryData* pEntryData, sal_uLong nRelPos=TREELIST_APPEND );
+        FmControlData*  NewControl( const OUString& rServiceName, SvTreeListEntry const * pParentEntry, bool bEditName );
+        void            NewForm( SvTreeListEntry const * pParentEntry );
+        SvTreeListEntry*    Insert( FmEntryData* pEntryData, sal_uLong nRelPos );
         void            Remove( FmEntryData* pEntryData );
 
 
         void CollectSelectionData(SELDATA_ITEMS sdiHow);
-            // sammelt in m_arrCurrentSelection die aktuell selektierten Eintraege, normalisiert die Liste wenn verlangt
-            // SDI_NORMALIZED bedeutet einfach, dass alle Eintraege, die schon einen selektierten Vorfahren haben, nicht mit gesammelt
-            // werden.
-            // SDI_NORMALIZED_FORMARK bedeutet, dass wie bei SDI_NORMALIZED verfahren wird, aber Eintraege, deren direktes Elter nicht
-            // selektiert ist, aufgenommen werden (unabhaengig vom Status weiterer Vorfahren), desgleichen Formulare, die selektiert sind,
-            // unabhaengig vom Status irgendwelcher Vorfahren
-            // Bei beiden Normalized-Modi enthalten die m_nFormsSelected, ... die richtige Anzahl, auch wenn nicht alle dieser Eintraege
-            // in m_arrCurrentSelection landen.
-            // SDI_DIRTY ist natuerlich nicht erlaubt als Parameter
+            // Collects the currently selected entries in m_arrCurrentSelection, normalizes the list if requested.
+            // - SDI_NORMALIZED simply means that all entries that already have a selected ancestor are not collected.
+            // - SDI_NORMALIZED_FORMARK means that the procedure is the same as for SDI_NORMALIZED,
+            //   but entries whose direct parent is not selected are collected (independent of the
+            //   status of further ancestors). The same applies for forms that are selected,
+            //   regardless of the status of any ancestors.
+            // For both normalized modes, the m_nFormsSelected, ... contain the correct number,
+            // even if not all of these entries end up in m_arrCurrentSelection.
+            // SDI_DIRTY is of course not allowed as a parameter.
 
-        // ein einziges Interface fuer alle selektierten Eintraege zusammensetzen
+        // a single interface for all selected entries
         void    ShowSelectionProperties(bool bForce = false);
-        // alle selektierten Elemnte loeschen
+        // delete all selected elements
         void    DeleteSelection();
 
         void SynchronizeSelection(FmEntryDataArray& arredToSelect);
-            // nach dem Aufruf dieser Methode sind genau die Eintraege selektiert, die in dem Array bezeichnet sind
+            // after calling this method, exactly the entries marked in the array are selected
         void SynchronizeSelection();
-            // macht das selbe, nimmt die MarkList der View
+            // makes the same, takes the MarkList of the View
         void SynchronizeMarkList();
-            // umgekehrte Richtung von SynchronizeMarkList : markiert in der View alle der aktuellen Selektion entsprechenden Controls
+            // reverse direction of SynchronizeMarkList: selects in the view all controls corresponding to the current selection
 
-        void CollectObjects(FmFormData* pFormData, bool bDeep, ::std::set< css::uno::Reference< css::form::XFormComponent > >& _rObjects);
+        void CollectObjects(FmFormData const * pFormData, bool bDeep, ::std::set< css::uno::Reference< css::form::XFormComponent > >& _rObjects);
 
-        // im Select aktualisiere ich normalerweise die Marklist der zugehoerigen View, mit folgenden Funktionen
-        // kann ich das Locking dieses Verhaltens steuern
+        // in the Select I usually update the Marklist of the corresponding view,
+        // with the following functions I can control the locking of this behavior
         void LockSelectionHandling() { ++m_nSelectLock; }
         void UnlockSelectionHandling() { --m_nSelectLock; }
         bool IsSelectionHandlingLocked() const { return m_nSelectLock>0; }
 
-        static bool IsHiddenControl(FmEntryData* pEntryData);
+        static bool IsHiddenControl(FmEntryData const * pEntryData);
 
-        DECL_LINK_TYPED( OnEdit, void*, void );
-        DECL_LINK_TYPED( OnDropActionTimer, Timer*, void );
+        DECL_LINK( OnEdit, void*, void );
+        DECL_LINK( OnDropActionTimer, Timer*, void );
 
-        DECL_LINK_TYPED( OnEntrySelDesel, SvTreeListBox*, void );
-        DECL_LINK_TYPED( OnSynchronizeTimer, Timer*, void );
+        DECL_LINK( OnEntrySelDesel, SvTreeListBox*, void );
+        DECL_LINK( OnSynchronizeTimer, Timer*, void );
 
-        DECL_LINK_TYPED( OnClipboardAction, OLocalExchange&, void );
+        DECL_LINK( OnClipboardAction, OLocalExchange&, void );
 
     protected:
         virtual void    Command( const CommandEvent& rEvt ) override;
@@ -485,21 +459,21 @@ namespace svxform
 
     public:
         NavigatorTree(vcl::Window* pParent );
-        virtual ~NavigatorTree();
+        virtual ~NavigatorTree() override;
         virtual void dispose() override;
 
         void Clear();
         void UpdateContent( FmFormShell* pFormShell );
-        void MarkViewObj( FmFormData* pFormData, bool bDeep );
-        void MarkViewObj( FmControlData* pControlData );
+        void MarkViewObj( FmFormData const * pFormData, bool bDeep );
+        void MarkViewObj( FmControlData const * pControlData );
         void UnmarkAllViewObj();
 
-        static bool IsFormEntry( SvTreeListEntry* pEntry );
-        static bool IsFormComponentEntry( SvTreeListEntry* pEntry );
+        static bool IsFormEntry( SvTreeListEntry const * pEntry );
+        static bool IsFormComponentEntry( SvTreeListEntry const * pEntry );
 
-        OUString GenerateName( FmEntryData* pEntryData );
+        OUString GenerateName( FmEntryData const * pEntryData );
 
-        NavigatorTreeModel*    GetNavModel() const { return m_pNavModel; }
+        NavigatorTreeModel*    GetNavModel() const { return m_pNavModel.get(); }
         SvTreeListEntry*        FindEntry( FmEntryData* pEntryData );
 
         virtual bool EditedEntry( SvTreeListEntry* pEntry, const OUString& rNewText ) override;
@@ -513,10 +487,8 @@ namespace svxform
         using SvTreeListBox::Insert;
         using SvTreeListBox::ExecuteDrop;
         using SvTreeListBox::Select;
-        using SvTreeListBox::Notify;
 
     private:
-        sal_Int8    implAcceptDataTransfer( const DataFlavorExVector& _rFlavors, sal_Int8 _nAction, const Point& _rDropPos, bool _bDnD );
         sal_Int8    implAcceptDataTransfer( const DataFlavorExVector& _rFlavors, sal_Int8 _nAction, SvTreeListEntry* _pTargetEntry, bool _bDnD );
 
         sal_Int8    implExecuteDataTransfer( const OControlTransferData& _rData, sal_Int8 _nAction, const Point& _rDropPos, bool _bDnD );
@@ -555,7 +527,7 @@ namespace svxform
     public:
         NavigatorFrame( SfxBindings *pBindings, SfxChildWindow *pMgr,
                        vcl::Window* pParent );
-        virtual ~NavigatorFrame();
+        virtual ~NavigatorFrame() override;
         virtual void dispose() override;
 
         void UpdateContent( FmFormShell* pFormShell );

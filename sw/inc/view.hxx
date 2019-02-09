@@ -20,25 +20,16 @@
 #define INCLUDED_SW_INC_VIEW_HXX
 
 #include <vcl/timer.hxx>
-#include <vcl/field.hxx>
-#include <vcl/floatwin.hxx>
-#include <svtools/htmlcfg.hxx>
-#include <sfx2/viewfac.hxx>
 #include <sfx2/viewsh.hxx>
 #include <sfx2/objsh.hxx>
 #include <editeng/svxenum.hxx>
 #include <sfx2/zoomitem.hxx>
 #include <svx/ruler.hxx>
-#include <svx/svxids.hrc>
 #include <svx/fmshell.hxx>
-#include <editeng/editstat.hxx>
 #include "swdllapi.h"
-#include <swtypes.hxx>
-#include <shellid.hxx>
-#include <IMark.hxx>
+#include "swtypes.hxx"
+#include "shellid.hxx"
 
-class Button;
-class ImageButton;
 class SwTextFormatColl;
 class SwPageDesc;
 class SwFrameFormat;
@@ -46,7 +37,6 @@ class SwCharFormat;
 class SwNumRule;
 class SwGlossaryHdl;
 class SwDrawBase;
-class SvxRuler;
 class SvxLRSpaceItem;
 class SwDocShell;
 class SwScrollbar;
@@ -56,11 +46,7 @@ class SvxSearchItem;
 class SearchAttrItemList;
 class SvxSearchDialog;
 class SdrView;
-class Dialog;
-class SdrObject;
 class SdrPageView;
-class SwHlpImageButton;
-class SwView;
 class SwEditWin;
 class SwWrtShell;
 class SwView_Impl;
@@ -74,17 +60,18 @@ class SwMailMergeConfigItem;
 class SwTextNode; // #i23726#
 class SwFormatClipboard;
 struct SwConversionArgs;
-class Graphic;
 class GraphicFilter;
 class SwPostItMgr;
 enum class SotExchangeDest;
 class SwCursorShell;
 enum class SvxSearchCmd;
+enum class SelectionType : sal_Int32;
 
 namespace com{ namespace sun { namespace star {
     namespace view{ class XSelectionSupplier; }
 }}}
 namespace sfx2 { class FileDialogHelper; }
+namespace sw { namespace mark { class IFieldmark; } }
 
 const long nLeftOfst = -370;
 const long nScrollX  =   30;
@@ -95,28 +82,23 @@ const long nScrollY  =   30;
 
 #define MAX_MARKS 5
 
-#define CHILDWIN_LABEL      1
-#define CHILDWIN_MAILMERGE  2
-
-enum ShellModes
+enum class ShellMode
 {
-    SHELL_MODE_TEXT,
-    SHELL_MODE_FRAME,
-    SHELL_MODE_GRAPHIC,
-    SHELL_MODE_OBJECT,
-    SHELL_MODE_DRAW,
-    SHELL_MODE_DRAW_CTRL,
-    SHELL_MODE_DRAW_FORM,
-    SHELL_MODE_DRAWTEXT,
-    SHELL_MODE_BEZIER,
-    SHELL_MODE_LIST_TEXT,
-    SHELL_MODE_TABLE_TEXT,
-    SHELL_MODE_TABLE_LIST_TEXT,
-    SHELL_MODE_MEDIA,
-    SHELL_MODE_EXTRUDED_CUSTOMSHAPE,
-    SHELL_MODE_FONTWORK,
-    SHELL_MODE_POSTIT,
-    SHELL_MODE_NAVIGATION
+    Text,
+    Frame,
+    Graphic,
+    Object,
+    Draw,
+    DrawForm,
+    DrawText,
+    Bezier,
+    ListText,
+    TableText,
+    TableListText,
+    Media,
+    ExtrudedCustomShape,
+    FontWork,
+    PostIt
 };
 
 // apply a template
@@ -131,19 +113,31 @@ struct SwApplyTemplate
         SwNumRule*    pNumRule;
     } aColl;
 
-    int eType;
+    SfxStyleFamily eType;
     sal_uInt16 nColor;
     SwFormatClipboard* m_pFormatClipboard;
     size_t nUndo;     //< The initial undo stack depth.
 
     SwApplyTemplate() :
-        eType(0),
+        eType(SfxStyleFamily::None),
         nColor(0),
         m_pFormatClipboard(nullptr),
         nUndo(0)
     {
         aColl.pTextColl = nullptr;
     }
+};
+
+class SwView;
+
+// manage connection and disconnection of SwView and SwDocShell
+class SwViewGlueDocShell
+{
+private:
+    SwView& m_rView;
+public:
+    SwViewGlueDocShell(SwView& rView, SwDocShell& rDocSh);
+    ~SwViewGlueDocShell();
 };
 
 // view of a document
@@ -181,15 +175,16 @@ class SW_DLLPUBLIC SwView: public SfxViewShell
     SwTextNode           * m_pNumRuleNodeFromDoc; // Moving indent of numrule #i23726#
 
     Size                m_aDocSz;         // current document size
-    Rectangle           m_aVisArea;       // visible region
+    tools::Rectangle           m_aVisArea;       // visible region
 
     VclPtr<SwEditWin>    m_pEditWin;
-    SwWrtShell          *m_pWrtShell;
+    std::unique_ptr<SwWrtShell> m_pWrtShell;
+    std::unique_ptr<SwViewGlueDocShell> m_xGlueDocShell;
 
     SfxShell            *m_pShell;        // current SubShell at the dispatcher
     FmFormShell         *m_pFormShell;    // DB-FormShell
 
-    SwView_Impl         *m_pViewImpl;     // Impl-data for UNO + Basic
+    std::unique_ptr<SwView_Impl> m_pViewImpl;     // Impl-data for UNO + Basic
 
     VclPtr<SwScrollbar>  m_pHScrollbar,   // MDI control elements
                          m_pVScrollbar;
@@ -202,18 +197,17 @@ class SW_DLLPUBLIC SwView: public SfxViewShell
 
     VclPtr<SvxRuler>    m_pHRuler,
                         m_pVRuler;
-    VclPtr<ImageButton> m_pTogglePageBtn;
 
-    SwGlossaryHdl       *m_pGlosHdl;          // handle text block
-    SwDrawBase          *m_pDrawActual;
+    std::unique_ptr<SwGlossaryHdl> m_pGlosHdl;          // handle text block
+    std::unique_ptr<SwDrawBase>    m_pDrawActual;
 
     const SwFrameFormat      *m_pLastTableFormat;
 
-    SwFormatClipboard   *m_pFormatClipboard; //holds data for format paintbrush
+    std::unique_ptr<SwFormatClipboard> m_pFormatClipboard; //holds data for format paintbrush
 
-    SwPostItMgr         *m_pPostItMgr;
+    std::unique_ptr<SwPostItMgr> m_pPostItMgr;
 
-    int                 m_nSelectionType;
+    SelectionType       m_nSelectionType;
     VclPtr<FloatingWindow> m_pFieldPopup;
     sal_uInt16          m_nPageCnt;
 
@@ -233,7 +227,6 @@ class SW_DLLPUBLIC SwView: public SfxViewShell
 
     bool            m_bCenterCursor : 1,
                     m_bTopCursor : 1,
-                    m_bAlwaysShowSel : 1,
                     m_bTabColFromDoc : 1,
                     m_bTabRowFromDoc : 1,
                     m_bSetTabColFromDoc : 1 ,
@@ -252,8 +245,8 @@ class SW_DLLPUBLIC SwView: public SfxViewShell
                     m_bInDtor : 1, //detect destructor to prevent creating of sub shells while closing
                     m_bOldShellWasPagePreview : 1,
                     m_bIsPreviewDoubleClick : 1, // #i114045#
-                    m_bMakeSelectionVisible : 1, // transport the bookmark selection
-                    m_bAnnotationMode; ///< The real cursor position is inside an annotation.
+                    m_bMakeSelectionVisible : 1; // transport the bookmark selection
+    bool m_bInitOnceCompleted = false;
 
     /// LibreOfficeKit has to force the page size for PgUp/PgDown
     /// functionality based on the user's view, instead of using the m_aVisArea.
@@ -261,7 +254,7 @@ class SW_DLLPUBLIC SwView: public SfxViewShell
 
     // methods for searching
     // set search context
-    SAL_DLLPRIVATE bool          SearchAndWrap(bool bApi = false);
+    SAL_DLLPRIVATE bool          SearchAndWrap(bool bApi);
     SAL_DLLPRIVATE bool          SearchAll();
     SAL_DLLPRIVATE sal_uLong     FUNC_Search( const SwSearchOptions& rOptions );
     SAL_DLLPRIVATE void          Replace();
@@ -270,33 +263,33 @@ class SW_DLLPUBLIC SwView: public SfxViewShell
 
     SAL_DLLPRIVATE bool          IsTextTool() const;
 
-    DECL_DLLPRIVATE_LINK_TYPED( TimeoutHdl, Timer*, void );
+    DECL_DLLPRIVATE_LINK( TimeoutHdl, Timer*, void );
 
-    DECL_DLLPRIVATE_LINK_TYPED( FieldPopupModeEndHdl, FloatingWindow*, void );
+    DECL_DLLPRIVATE_LINK( FieldPopupModeEndHdl, FloatingWindow*, void );
 
-    inline long     GetXScroll() const;
-    inline long     GetYScroll() const;
-    SAL_DLLPRIVATE  Point    AlignToPixel(const Point& rPt) const;
-    SAL_DLLPRIVATE   void        CalcPt( Point* pPt,const Rectangle& rRect,
-                            sal_uInt16 nRangeX = USHRT_MAX,
-                            sal_uInt16 nRangeY = USHRT_MAX);
+    inline long                  GetXScroll() const;
+    inline long                  GetYScroll() const;
+    SAL_DLLPRIVATE Point         AlignToPixel(const Point& rPt) const;
+    SAL_DLLPRIVATE void          CalcPt( Point* pPt,const tools::Rectangle& rRect,
+                                    sal_uInt16 nRangeX,
+                                    sal_uInt16 nRangeY);
 
     SAL_DLLPRIVATE bool          GetPageScrollUpOffset(SwTwips& rOff) const;
     SAL_DLLPRIVATE bool          GetPageScrollDownOffset(SwTwips& rOff) const;
 
     // scrollbar movements
-    SAL_DLLPRIVATE long          PageUp();
-    SAL_DLLPRIVATE long          PageDown();
+    SAL_DLLPRIVATE bool          PageUp();
+    SAL_DLLPRIVATE bool          PageDown();
     SAL_DLLPRIVATE bool          PageUpCursor(bool bSelect);
     SAL_DLLPRIVATE bool          PageDownCursor(bool bSelect);
-    SAL_DLLPRIVATE long          PhyPageUp();
-    SAL_DLLPRIVATE long          PhyPageDown();
+    SAL_DLLPRIVATE void          PhyPageUp();
+    SAL_DLLPRIVATE void          PhyPageDown();
 
-    SAL_DLLPRIVATE void           _CreateScrollbar( bool bHori );
-    DECL_DLLPRIVATE_LINK_TYPED(  ScrollHdl, ScrollBar*, void );
-    DECL_DLLPRIVATE_LINK_TYPED(  EndScrollHdl, ScrollBar*, void );
+    SAL_DLLPRIVATE void           CreateScrollbar( bool bHori );
+    DECL_DLLPRIVATE_LINK(  ScrollHdl, ScrollBar*, void );
+    DECL_DLLPRIVATE_LINK(  EndScrollHdl, ScrollBar*, void );
     SAL_DLLPRIVATE bool          UpdateScrollbars();
-    DECL_DLLPRIVATE_LINK_TYPED( WindowChildEventListener, VclWindowEvent&, void );
+    DECL_DLLPRIVATE_LINK( WindowChildEventListener, VclWindowEvent&, void );
     SAL_DLLPRIVATE void          CalcVisArea( const Size &rPixelSz );
 
     // linguistics functions
@@ -310,26 +303,26 @@ class SW_DLLPUBLIC SwView: public SfxViewShell
 
     // used for spell checking and text conversion
     SAL_DLLPRIVATE void          SpellStart( SvxSpellArea eSpell, bool bStartDone,
-                                        bool bEndDone, SwConversionArgs *pConvArgs = nullptr );
-    SAL_DLLPRIVATE void          SpellEnd( SwConversionArgs *pConvArgs = nullptr );
+                                        bool bEndDone, SwConversionArgs *pConvArgs );
+    SAL_DLLPRIVATE void          SpellEnd( SwConversionArgs const *pConvArgs );
 
     SAL_DLLPRIVATE void          HyphStart( SvxSpellArea eSpell );
-    SAL_DLLPRIVATE void          SpellKontext(bool bOn = true)
-                                 { m_bCenterCursor = bOn; m_bAlwaysShowSel = bOn; }
+    SAL_DLLPRIVATE void          SpellContext(bool bOn = true)
+                                 { m_bCenterCursor = bOn; }
 
     // for readonly switching
     SAL_DLLPRIVATE virtual void  Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
-    SAL_DLLPRIVATE void          _CheckReadonlyState();
-    SAL_DLLPRIVATE void          _CheckReadonlySelection();
+    SAL_DLLPRIVATE void          CheckReadonlyState();
+    SAL_DLLPRIVATE void          CheckReadonlySelection();
 
     // method for rotating PageDesc
     SAL_DLLPRIVATE void          SwapPageMargin(const SwPageDesc&, SvxLRSpaceItem& rLR);
 
-    SAL_DLLPRIVATE void          _SetZoom( const Size &rEditSz,
-                              SvxZoomType eZoomType,
-                              short nFactor = 100,
-                              bool bViewOnly = false);
-    SAL_DLLPRIVATE void          CalcAndSetBorderPixel( SvBorder &rToFill, bool bInner );
+    SAL_DLLPRIVATE void          SetZoom_( const Size &rEditSz,
+                                      SvxZoomType eZoomType,
+                                      short nFactor,
+                                      bool bViewOnly);
+    SAL_DLLPRIVATE void          CalcAndSetBorderPixel( SvBorder &rToFill );
 
     SAL_DLLPRIVATE void          ShowAtResize();
 
@@ -340,12 +333,12 @@ public: // #i123922# Needs to be called from a 2nd place now as a helper method
 
 protected:
 
-    SwView_Impl*    GetViewImpl() {return m_pViewImpl;}
+    SwView_Impl*    GetViewImpl() {return m_pViewImpl.get();}
 
-    void ImpSetVerb( int nSelType );
+    void ImpSetVerb( SelectionType nSelType );
 
-    int             GetSelectionType() const { return m_nSelectionType; }
-    void            SetSelectionType(int nSet) { m_nSelectionType = nSet;}
+    SelectionType   GetSelectionType() const { return m_nSelectionType; }
+    void            SetSelectionType(SelectionType nSet) { m_nSelectionType = nSet;}
 
     // for SwWebView
     void            SetShell( SfxShell* pS )            { m_pShell = pS; }
@@ -355,7 +348,7 @@ protected:
 
     virtual void    Activate(bool) override;
     virtual void    Deactivate(bool) override;
-    virtual void    InnerResizePixel( const Point &rOfs, const Size &rSize ) override;
+    virtual void    InnerResizePixel( const Point &rOfs, const Size &rSize, bool inplaceEditModeChange ) override;
     virtual void    OuterResizePixel( const Point &rOfs, const Size &rSize ) override;
 
     const SwFrameFormat* GetLastTableFrameFormat() const {return m_pLastTableFormat;}
@@ -379,19 +372,19 @@ public:
 
     void                    GotFocus() const;
     virtual SdrView*        GetDrawView() const override;
-    virtual bool            HasUIFeature( sal_uInt32 nFeature ) override;
+    virtual bool            HasUIFeature(SfxShellFeature nFeature) const override;
     virtual void            ShowCursor( bool bOn = true ) override;
     virtual ErrCode         DoVerb( long nVerb ) override;
 
-    virtual sal_uInt16          SetPrinter( SfxPrinter* pNew,
+    virtual sal_uInt16      SetPrinter( SfxPrinter* pNew,
                                         SfxPrinterChangeFlags nDiff = SFX_PRINTER_ALL) override;
-    ShellModes              GetShellMode();
+    ShellMode               GetShellMode();
 
     css::view::XSelectionSupplier*       GetUNOObject();
 
     OUString                GetSelectionTextParam( bool bCompleteWords,
                                                    bool bEraseTrail );
-    virtual bool            HasSelection( bool bText ) const override;
+    virtual bool            HasSelection( bool bText = true ) const override;
     virtual OUString        GetSelectionText( bool bCompleteWords = false ) override;
     virtual bool            PrepareClose( bool bUI = true ) override;
     virtual void            MarginChanged() override;
@@ -405,35 +398,35 @@ public:
     // immediately switch shell -> for GetSelectionObject
     void                    StopShellTimer();
 
-    inline SwWrtShell&      GetWrtShell   () const { return *m_pWrtShell; }
-    inline SwWrtShell*      GetWrtShellPtr() const { return  m_pWrtShell; }
+    SwWrtShell&      GetWrtShell   () const { return *m_pWrtShell; }
+    SwWrtShell*      GetWrtShellPtr() const { return  m_pWrtShell.get(); }
 
-    inline       SwEditWin &GetEditWin()        { return *m_pEditWin; }
-    inline const SwEditWin &GetEditWin () const { return *m_pEditWin; }
+    SwEditWin &GetEditWin()        { return *m_pEditWin; }
+    const SwEditWin &GetEditWin () const { return *m_pEditWin; }
 
 #if defined(_WIN32) || defined UNX
-    void ScannerEventHdl( const css::lang::EventObject& rEventObject );
+    void ScannerEventHdl();
 #endif
 
     // hand the handler for text blocks to the shell; create if applicable
     SwGlossaryHdl*          GetGlosHdl();
 
-    inline const Rectangle& GetVisArea() const { return m_aVisArea; }
+    const tools::Rectangle& GetVisArea() const { return m_aVisArea; }
 
-    bool            IsScroll(const Rectangle& rRect) const;
-    void            Scroll( const Rectangle& rRect,
+    bool            IsScroll(const tools::Rectangle& rRect) const;
+    void            Scroll( const tools::Rectangle& rRect,
                             sal_uInt16 nRangeX = USHRT_MAX,
                             sal_uInt16 nRangeY = USHRT_MAX);
 
-    long        SetVScrollMax(long lMax);
-    long        SetHScrollMax(long lMax);
+    long            SetVScrollMax(long lMax);
+    long            SetHScrollMax(long lMax);
 
-    void SpellError(LanguageType eLang);
+    void            SpellError(LanguageType eLang);
     bool            ExecSpellPopup( const Point& rPt );
     void                ExecFieldPopup( const Point& rPt, sw::mark::IFieldmark *fieldBM );
     void            ExecSmartTagPopup( const Point& rPt );
 
-    DECL_LINK_TYPED( OnlineSpellCallback, SpellCallbackInfo&, void );
+    DECL_LINK( OnlineSpellCallback, SpellCallbackInfo&, void );
     bool            ExecDrwTextSpellPopup(const Point& rPt);
 
     void            SetTabColFromDocPos( const Point &rPt ) { m_aTabColFromDocPos = rPt; }
@@ -447,7 +440,7 @@ public:
 
     void    DocSzChgd( const Size& rNewSize );
     const   Size&   GetDocSz() const { return m_aDocSz; }
-    void    SetVisArea( const Rectangle&, bool bUpdateScrollbar = true);
+    void    SetVisArea( const tools::Rectangle&, bool bUpdateScrollbar = true);
             void    SetVisArea( const Point&, bool bUpdateScrollbar = true);
             void    CheckVisArea();
 
@@ -456,7 +449,7 @@ public:
 
     static sal_uInt16   GetMoveType();
     static void     SetMoveType(sal_uInt16 nSet);
-    DECL_LINK_TYPED( MoveNavigationHdl, void*, void );
+    DECL_LINK( MoveNavigationHdl, void*, void );
     static void     SetActMark(sal_Int32 nSet);
 
     bool            HandleWheelCommands( const CommandEvent& );
@@ -478,10 +471,10 @@ public:
     void            EnableHScrollbar(bool bEnable);
     void            EnableVScrollbar(bool bEnable);
 
-    int             CreateVRuler();
-    int             KillVRuler();
-    int             CreateTab();
-    int             KillTab();
+    void            CreateVRuler();
+    void            KillVRuler();
+    void            CreateTab();
+    void            KillTab();
 
     bool            StatVRuler() const { return m_pVRuler->IsVisible(); }
     void            ChangeVRulerMetric(FieldUnit eUnit);
@@ -496,16 +489,18 @@ public:
     // Handler
     void            Execute(SfxRequest&);
     void            ExecLingu(SfxRequest&);
-    void            ExecDlg(SfxRequest&);
-    void            ExecDlgExt(SfxRequest&);
-    void            ExecColl(SfxRequest&);
+    void            ExecDlg(SfxRequest const &);
+    void            ExecDlgExt(SfxRequest const &);
+    void            ExecColl(SfxRequest const &);
     void            ExecutePrint(SfxRequest&);
     void            ExecDraw(SfxRequest&);
-    void            ExecTabWin(SfxRequest&);
+    void            ExecTabWin(SfxRequest const &);
     void            ExecuteStatusLine(SfxRequest&);
-    DECL_LINK_TYPED( ExecRulerClick, Ruler *, void );
+    DECL_LINK( ExecRulerClick, Ruler *, void );
     void            ExecSearch(SfxRequest&);
     void            ExecViewOptions(SfxRequest &);
+
+    virtual bool    IsConditionalFastCall( const SfxRequest &rReq ) override;
 
     void            StateViewOptions(SfxItemSet &);
     void            StateSearch(SfxItemSet &);
@@ -516,15 +511,15 @@ public:
     void            ExecNumberingOutline(SfxItemPool &);
 
     // functions for drawing
-    void            SetDrawFuncPtr(SwDrawBase* pFuncPtr);
-    inline SwDrawBase* GetDrawFuncPtr() const  { return m_pDrawActual; }
+    void            SetDrawFuncPtr(std::unique_ptr<SwDrawBase> pFuncPtr);
+    SwDrawBase*     GetDrawFuncPtr() const  { return m_pDrawActual.get(); }
     void            GetDrawState(SfxItemSet &rSet);
     void            ExitDraw();
-    inline bool     IsDrawRotate()      { return m_bDrawRotate; }
-    inline void     FlipDrawRotate()    { m_bDrawRotate = !m_bDrawRotate; }
-    inline bool     IsDrawSelMode()     { return m_bDrawSelMode; }
+    bool     IsDrawRotate()      { return m_bDrawRotate; }
+    void     FlipDrawRotate()    { m_bDrawRotate = !m_bDrawRotate; }
+    bool     IsDrawSelMode()     { return m_bDrawSelMode; }
     void            SetSelDrawSlot();
-    inline void     FlipDrawSelMode()   { m_bDrawSelMode = !m_bDrawSelMode; }
+    void     FlipDrawSelMode()   { m_bDrawSelMode = !m_bDrawSelMode; }
     void            NoRotate();     // turn off rotate mode
     bool            EnterDrawTextMode(const Point& aDocPos);
     /// Same as EnterDrawTextMode(), but takes an SdrObject instead of guessing it by document position.
@@ -534,18 +529,19 @@ public:
     bool            IsFormMode() const;
     bool            IsBezierEditMode();
     bool            AreOnlyFormsSelected() const;
-    bool            HasDrwObj(SdrObject *pSdrObj) const;
-    bool            HasOnlyObj(SdrObject *pSdrObj, sal_uInt32 eObjInventor) const;
+    bool            HasOnlyObj(SdrObject const *pSdrObj, SdrInventor eObjInventor) const;
     bool            BeginTextEdit(  SdrObject* pObj, SdrPageView* pPV=nullptr,
                                     vcl::Window* pWin=nullptr, bool bIsNewObj=false, bool bSetSelectionToStart=false );
+    bool isSignatureLineSelected();
+    bool isSignatureLineSigned();
 
     void            StateTabWin(SfxItemSet&);
 
     // attributes have changed
-    DECL_LINK_TYPED( AttrChangedNotify, SwCursorShell*, void );
+    DECL_LINK( AttrChangedNotify, SwCursorShell*, void );
 
     // form control has been activated
-    DECL_LINK_TYPED( FormControlActivated, LinkParamNone*, void );
+    DECL_LINK( FormControlActivated, LinkParamNone*, void );
 
     // edit links
     void            EditLinkDlg();
@@ -567,8 +563,8 @@ public:
                  SfxShell       *GetCurShell()  { return m_pShell; }
                  SwDocShell     *GetDocShell();
     inline const SwDocShell     *GetDocShell() const;
-    inline virtual       FmFormShell    *GetFormShell()       override { return m_pFormShell; }
-    inline virtual const FmFormShell    *GetFormShell() const override { return m_pFormShell; }
+    virtual       FmFormShell    *GetFormShell()       override { return m_pFormShell; }
+    virtual const FmFormShell    *GetFormShell() const override { return m_pFormShell; }
 
     // so that in the SubShells' DTors m_pShell can be reset if applicable
     void ResetSubShell()    { m_pShell = nullptr; }
@@ -580,8 +576,6 @@ public:
 
     void SetCursorAtTop( bool bFlag, bool bCenter = false )
         { m_bTopCursor = bFlag; m_bCenterCursor = bCenter; }
-    bool IsCursorAtTop() const                    { return m_bTopCursor; }
-    bool IsCursorAtCenter() const                 { return m_bCenterCursor; }
 
     bool JumpToSwMark( const OUString& rMark );
 
@@ -589,8 +583,8 @@ public:
                     const OUString& rFilterName, sal_Int16 nVersion = 0 );
 
     void ExecuteInsertDoc( SfxRequest& rRequest, const SfxPoolItem* pItem );
-    long InsertMedium( sal_uInt16 nSlotId, SfxMedium* pMedium, sal_Int16 nVersion );
-    DECL_LINK_TYPED( DialogClosedHdl, sfx2::FileDialogHelper *, void );
+    long InsertMedium( sal_uInt16 nSlotId, std::unique_ptr<SfxMedium> pMedium, sal_Int16 nVersion );
+    DECL_LINK( DialogClosedHdl, sfx2::FileDialogHelper *, void );
 
     // status methods for clipboard.
     // Status changes now notified from the clipboard.
@@ -600,10 +594,10 @@ public:
     // Enable mail merge - mail merge field dialog enabled
     void EnableMailMerge();
     //apply Accessiblity options
-    void ApplyAccessiblityOptions(SvtAccessibilityOptions& rAccessibilityOptions);
+    void ApplyAccessiblityOptions(SvtAccessibilityOptions const & rAccessibilityOptions);
 
     SwView(SfxViewFrame* pFrame, SfxViewShell*);
-    virtual ~SwView();
+    virtual ~SwView() override;
 
     void NotifyDBChanged();
 
@@ -613,47 +607,83 @@ public:
 
     // store MailMerge data while "Back to Mail Merge Wizard" FloatingWindow is active
     // or to support printing
-    void   SetMailMergeConfigItem(SwMailMergeConfigItem*  pConfigItem, sal_uInt16 nRestart, bool bIsSource);
-    SwMailMergeConfigItem*  GetMailMergeConfigItem();
-    sal_uInt16              GetMailMergeRestartPage() const;
-    bool                IsMailMergeSourceView() const;
+    void SetMailMergeConfigItem(std::shared_ptr<SwMailMergeConfigItem> const & rConfigItem);
+    std::shared_ptr<SwMailMergeConfigItem> const & GetMailMergeConfigItem() const;
+    std::shared_ptr<SwMailMergeConfigItem> EnsureMailMergeConfigItem(const SfxItemSet* pArgs = nullptr);
 
-    void ExecFormatPaintbrush(SfxRequest &);
+    void ExecFormatPaintbrush(SfxRequest const &);
     void StateFormatPaintbrush(SfxItemSet &);
 
-    //public fuer D&D
-    int     InsertGraphic( const OUString &rPath, const OUString &rFilter,
-                            bool bLink = true, GraphicFilter *pFlt = nullptr,
-                            Graphic* pPreviewGrf = nullptr );
+    // public for D&D
+    ErrCode     InsertGraphic( const OUString &rPath, const OUString &rFilter,
+                            bool bLink, GraphicFilter *pFlt );
 
     void ExecuteScan( SfxRequest& rReq );
 
-    SwPostItMgr* GetPostItMgr() { return m_pPostItMgr;}
-    const SwPostItMgr* GetPostItMgr() const { return m_pPostItMgr;}
+    SwPostItMgr* GetPostItMgr() { return m_pPostItMgr.get();}
+    const SwPostItMgr* GetPostItMgr() const { return m_pPostItMgr.get();}
 
     // exhibition hack (MA,MBA)
     void SelectShellForDrop();
 
     void UpdateDocStats();
-    /// Where is the real cursor: in the annotation or in the main document?
-    void SetAnnotationMode(bool bMode);
 
     // methods for printing
     SAL_DLLPRIVATE virtual   SfxPrinter*     GetPrinter( bool bCreate = false ) override;
     SAL_DLLPRIVATE virtual bool  HasPrintOptionsPage() const override;
-    SAL_DLLPRIVATE virtual VclPtr<SfxTabPage> CreatePrintOptionsPage( vcl::Window* pParent,
+    SAL_DLLPRIVATE virtual VclPtr<SfxTabPage> CreatePrintOptionsPage(TabPageParent pParent,
                                                     const SfxItemSet& rSet) override;
     static SvxSearchItem* GetSearchItem() { return m_pSrchItem; }
+    /// See SfxViewShell::getPart().
+    int getPart() const override;
+    /// See SfxViewShell::dumpAsXml().
+    void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
+    void SetRedlineAuthor(const OUString& rAuthor);
+    const OUString& GetRedlineAuthor();
+    /// See SfxViewShell::NotifyCursor().
+    void NotifyCursor(SfxViewShell* pViewShell) const override;
+    void ShowUIElement(const OUString& sElementURL) const;
+
+
+    enum CachedStringID
+    {
+        OldGrfCat,
+        OldTabCat,
+        OldFrameCat,
+        OldDrwCat,
+        CachedStrings
+    };
+
+    OUString m_StringCache[CachedStrings];
+
+    const OUString& GetCachedString(CachedStringID id)
+    {
+        return m_StringCache[id];
+    }
+
+    void SetCachedString(CachedStringID id, const OUString& sStr)
+    {
+        m_StringCache[id] = sStr;
+    }
+
+    const OUString& GetOldGrfCat();
+    void SetOldGrfCat(const OUString& sStr);
+    const OUString& GetOldTabCat();
+    void SetOldTabCat(const OUString& sStr);
+    const OUString& GetOldFrameCat();
+    void SetOldFrameCat(const OUString& sStr);
+    const OUString& GetOldDrwCat();
+    void SetOldDrwCat(const OUString& sStr);
 };
 
 inline long SwView::GetXScroll() const
 {
-    return m_aVisArea.GetWidth() * nScrollX / 100L;
+    return (m_aVisArea.GetWidth() * nScrollX) / 100;
 }
 
 inline long SwView::GetYScroll() const
 {
-    return m_aVisArea.GetHeight() * nScrollY / 100L;
+    return (m_aVisArea.GetHeight() * nScrollY) / 100;
 }
 
 inline const SwDocShell *SwView::GetDocShell() const
@@ -661,9 +691,11 @@ inline const SwDocShell *SwView::GetDocShell() const
     return const_cast<SwView*>(this)->GetDocShell();
 }
 
-VclPtr<SfxTabPage> CreatePrintOptionsPage( vcl::Window *pParent,
-                                           const SfxItemSet &rOptions,
-                                           bool bPreview);
+VclPtr<SfxTabPage> CreatePrintOptionsPage(TabPageParent pParent,
+                                          const SfxItemSet &rOptions,
+                                          bool bPreview);
+
+extern bool bDocSzUpdated;
 
 #endif
 

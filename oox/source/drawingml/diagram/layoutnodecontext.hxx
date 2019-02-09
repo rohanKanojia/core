@@ -20,7 +20,7 @@
 #ifndef INCLUDED_OOX_SOURCE_DRAWINGML_DIAGRAM_LAYOUTNODECONTEXT_HXX
 #define INCLUDED_OOX_SOURCE_DRAWINGML_DIAGRAM_LAYOUTNODECONTEXT_HXX
 
-#include "oox/core/contexthandler2.hxx"
+#include <oox/core/contexthandler2.hxx>
 #include "diagramlayoutatoms.hxx"
 #include "diagram.hxx"
 
@@ -29,12 +29,10 @@ namespace oox { namespace drawingml {
 class LayoutNodeContext : public ::oox::core::ContextHandler2
 {
 public:
-    LayoutNodeContext( ::oox::core::ContextHandler2Helper& rParent, const ::oox::AttributeList& rAttributes, const LayoutAtomPtr &pNode );
-    virtual ~LayoutNodeContext();
+    LayoutNodeContext( ::oox::core::ContextHandler2Helper const & rParent, const ::oox::AttributeList& rAttributes, const LayoutAtomPtr &pNode );
+    virtual ~LayoutNodeContext() override;
 
     virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
-
-    static ::sal_Int32 tagToVarIdx( ::sal_Int32 aTag );
 private:
     LayoutAtomPtr mpNode;
 };

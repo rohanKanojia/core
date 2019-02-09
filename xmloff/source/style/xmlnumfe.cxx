@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <comphelper/sequence.hxx>
 #include <comphelper/string.hxx>
 #include <svl/zforlist.hxx>
 #include <svl/zformat.hxx>
@@ -29,10 +30,12 @@
 #include <unotools/charclass.hxx>
 #include <com/sun/star/lang/Locale.hpp>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 #include <tools/color.hxx>
 #include <sax/tools/converter.hxx>
 
-#include <com/sun/star/i18n/NativeNumberXmlAttributes.hpp>
+#include <com/sun/star/i18n/NativeNumberXmlAttributes2.hpp>
 
 #include <xmloff/xmlnumfe.hxx>
 #include <xmloff/xmlnmspe.hxx>
@@ -45,6 +48,7 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlexp.hxx>
 
+#include <float.h>
 #include <set>
 #include <vector>
 
@@ -52,21 +56,13 @@ using namespace ::com::sun::star;
 using namespace ::xmloff::token;
 using namespace ::svt;
 
-struct LessuInt32
-{
-    bool operator() (const sal_uInt32 rValue1, const sal_uInt32 rValue2) const
-    {
-        return rValue1 < rValue2;
-    }
-};
-
-typedef std::set< sal_uInt32, LessuInt32 >  SvXMLuInt32Set;
+typedef std::set< sal_uInt32 >  SvXMLuInt32Set;
 
 struct SvXMLEmbeddedTextEntry
 {
-    sal_uInt16      nSourcePos;     // position in NumberFormat (to skip later)
-    sal_Int32       nFormatPos;     // resulting position in embedded-text element
-    OUString   aText;
+    sal_uInt16 const  nSourcePos;     // position in NumberFormat (to skip later)
+    sal_Int32 const   nFormatPos;     // resulting position in embedded-text element
+    OUString const    aText;
 
     SvXMLEmbeddedTextEntry( sal_uInt16 nSP, sal_Int32 nFP, const OUString& rT ) :
         nSourcePos(nSP), nFormatPos(nFP), aText(rT) {}
@@ -105,7 +101,6 @@ class SvXMLNumUsedList_Impl
 
 public:
             SvXMLNumUsedList_Impl();
-            ~SvXMLNumUsedList_Impl();
 
     void    SetUsed( sal_uInt32 nKey );
     bool    IsUsed( sal_uInt32 nKey ) const;
@@ -115,7 +110,7 @@ public:
     bool    GetFirstUsed(sal_uInt32& nKey);
     bool    GetNextUsed(sal_uInt32& nKey);
 
-    void GetWasUsed(uno::Sequence<sal_Int32>& rWasUsed);
+    uno::Sequence<sal_Int32> GetWasUsed();
     void SetWasUsed(const uno::Sequence<sal_Int32>& rWasUsed);
 };
 
@@ -124,10 +119,6 @@ public:
 SvXMLNumUsedList_Impl::SvXMLNumUsedList_Impl() :
     nUsedCount(0),
     nWasUsedCount(0)
-{
-}
-
-SvXMLNumUsedList_Impl::~SvXMLNumUsedList_Impl()
 {
 }
 
@@ -195,20 +186,9 @@ bool SvXMLNumUsedList_Impl::GetNextUsed(sal_uInt32& nKey)
     return bRet;
 }
 
-void SvXMLNumUsedList_Impl::GetWasUsed(uno::Sequence<sal_Int32>& rWasUsed)
+uno::Sequence<sal_Int32> SvXMLNumUsedList_Impl::GetWasUsed()
 {
-    rWasUsed.realloc(nWasUsedCount);
-    sal_Int32* pWasUsed = rWasUsed.getArray();
-    if (pWasUsed)
-    {
-        SvXMLuInt32Set::const_iterator aItr = aWasUsed.begin();
-        while (aItr != aWasUsed.end())
-        {
-            *pWasUsed = *aItr;
-            ++aItr;
-            ++pWasUsed;
-        }
-    }
+    return comphelper::containerToSequence<sal_Int32>(aWasUsed);
 }
 
 void SvXMLNumUsedList_Impl::SetWasUsed(const uno::Sequence<sal_Int32>& rWasUsed)
@@ -229,9 +209,7 @@ SvXMLNumFmtExport::SvXMLNumFmtExport(
             const uno::Reference< util::XNumberFormatsSupplier >& rSupp ) :
     rExport( rExp ),
     sPrefix( OUString("N") ),
-    pFormatter( nullptr ),
-    pCharClass( nullptr ),
-    pLocaleData( nullptr )
+    pFormatter( nullptr )
 {
     //  supplier must be SvNumberFormatsSupplierObj
     SvNumberFormatsSupplierObj* pObj =
@@ -241,20 +219,20 @@ SvXMLNumFmtExport::SvXMLNumFmtExport(
 
     if ( pFormatter )
     {
-        pCharClass = new CharClass( pFormatter->GetComponentContext(),
-            pFormatter->GetLanguageTag() );
-        pLocaleData = new LocaleDataWrapper( pFormatter->GetComponentContext(),
-            pFormatter->GetLanguageTag() );
+        pCharClass.reset( new CharClass( pFormatter->GetComponentContext(),
+            pFormatter->GetLanguageTag() ) );
+        pLocaleData.reset( new LocaleDataWrapper( pFormatter->GetComponentContext(),
+            pFormatter->GetLanguageTag() ) );
     }
     else
     {
         LanguageTag aLanguageTag( MsLangId::getSystemLanguage() );
 
-        pCharClass = new CharClass( rExport.getComponentContext(), aLanguageTag );
-        pLocaleData = new LocaleDataWrapper( rExport.getComponentContext(), aLanguageTag );
+        pCharClass.reset( new CharClass( rExport.getComponentContext(), aLanguageTag ) );
+        pLocaleData.reset( new LocaleDataWrapper( rExport.getComponentContext(), aLanguageTag ) );
     }
 
-    pUsedList = new SvXMLNumUsedList_Impl;
+    pUsedList.reset(new SvXMLNumUsedList_Impl);
 }
 
 SvXMLNumFmtExport::SvXMLNumFmtExport(
@@ -263,9 +241,7 @@ SvXMLNumFmtExport::SvXMLNumFmtExport(
                        const OUString& rPrefix ) :
     rExport( rExp ),
     sPrefix( rPrefix ),
-    pFormatter( nullptr ),
-    pCharClass( nullptr ),
-    pLocaleData( nullptr )
+    pFormatter( nullptr )
 {
     //  supplier must be SvNumberFormatsSupplierObj
     SvNumberFormatsSupplierObj* pObj =
@@ -275,27 +251,24 @@ SvXMLNumFmtExport::SvXMLNumFmtExport(
 
     if ( pFormatter )
     {
-        pCharClass = new CharClass( pFormatter->GetComponentContext(),
-            pFormatter->GetLanguageTag() );
-        pLocaleData = new LocaleDataWrapper( pFormatter->GetComponentContext(),
-            pFormatter->GetLanguageTag() );
+        pCharClass.reset( new CharClass( pFormatter->GetComponentContext(),
+            pFormatter->GetLanguageTag() ) );
+        pLocaleData.reset( new LocaleDataWrapper( pFormatter->GetComponentContext(),
+            pFormatter->GetLanguageTag() ) );
     }
     else
     {
         LanguageTag aLanguageTag( MsLangId::getSystemLanguage() );
 
-        pCharClass = new CharClass( rExport.getComponentContext(), aLanguageTag );
-        pLocaleData = new LocaleDataWrapper( rExport.getComponentContext(), aLanguageTag );
+        pCharClass.reset( new CharClass( rExport.getComponentContext(), aLanguageTag ) );
+        pLocaleData.reset( new LocaleDataWrapper( rExport.getComponentContext(), aLanguageTag ) );
     }
 
-    pUsedList = new SvXMLNumUsedList_Impl;
+    pUsedList.reset(new SvXMLNumUsedList_Impl);
 }
 
 SvXMLNumFmtExport::~SvXMLNumFmtExport()
 {
-    delete pUsedList;
-    delete pLocaleData;
-    delete pCharClass;
 }
 
 //  helper methods
@@ -321,14 +294,6 @@ void SvXMLNumFmtExport::AddCalendarAttr_Impl( const OUString& rCalendar )
     }
 }
 
-void SvXMLNumFmtExport::AddTextualAttr_Impl( bool bText )
-{
-    if ( bText )            // non-textual
-    {
-        rExport.AddAttribute( XML_NAMESPACE_NUMBER, XML_TEXTUAL, XML_TRUE );
-    }
-}
-
 void SvXMLNumFmtExport::AddStyleAttr_Impl( bool bLong )
 {
     if ( bLong )            // short is default
@@ -337,12 +302,12 @@ void SvXMLNumFmtExport::AddStyleAttr_Impl( bool bLong )
     }
 }
 
-void SvXMLNumFmtExport::AddLanguageAttr_Impl( sal_Int32 nLang )
+void SvXMLNumFmtExport::AddLanguageAttr_Impl( LanguageType nLang )
 {
     if ( nLang != LANGUAGE_SYSTEM )
     {
         rExport.AddLanguageTagAttributes( XML_NAMESPACE_NUMBER, XML_NAMESPACE_NUMBER,
-                LanguageTag( (LanguageType)nLang), false);
+                LanguageTag( nLang), false);
     }
 }
 
@@ -372,7 +337,7 @@ void SvXMLNumFmtExport::WriteColorElement_Impl( const Color& rColor )
     FinishTextElement_Impl();
 
     OUStringBuffer aColStr( 7 );
-    ::sax::Converter::convertColor( aColStr, rColor.GetColor() );
+    ::sax::Converter::convertColor( aColStr, rColor );
     rExport.AddAttribute( XML_NAMESPACE_FO, XML_COLOR,
                           aColStr.makeStringAndClear() );
 
@@ -393,7 +358,7 @@ void SvXMLNumFmtExport::WriteCurrencyElement_Impl( const OUString& rString,
         sal_Int32 nLang = rExt.toInt32(16);
         if ( nLang < 0 )
             nLang = -nLang;
-        AddLanguageAttr_Impl( nLang );          // adds to pAttrList
+        AddLanguageAttr_Impl( LanguageType(nLang) );          // adds to pAttrList
     }
 
     SvXMLElementExport aElem( rExport,
@@ -437,7 +402,10 @@ void SvXMLNumFmtExport::WriteMonthElement_Impl( const OUString& rCalendar, bool 
 
     AddCalendarAttr_Impl( rCalendar ); // adds to pAttrList
     AddStyleAttr_Impl( bLong );     // adds to pAttrList
-    AddTextualAttr_Impl( bText );   // adds to pAttrList
+    if ( bText )
+    {
+        rExport.AddAttribute( XML_NAMESPACE_NUMBER, XML_TEXTUAL, XML_TRUE );
+    }
 
     SvXMLElementExport aElem( rExport, XML_NAMESPACE_NUMBER, XML_MONTH,
                               true, false );
@@ -521,10 +489,17 @@ void SvXMLNumFmtExport::WriteMinutesElement_Impl( bool bLong )
 
 void SvXMLNumFmtExport::WriteRepeatedElement_Impl( sal_Unicode nChar )
 {
-    FinishTextElement_Impl(true);
-    SvXMLElementExport aElem( rExport, XML_NAMESPACE_LO_EXT, XML_FILL_CHARACTER,
-                                  true, false );
-    rExport.Characters( OUString( nChar ) );
+    // Export only for 1.2 with extensions or 1.3 and later.
+    SvtSaveOptions::ODFSaneDefaultVersion eVersion = rExport.getSaneDefaultVersion();
+    if (eVersion > SvtSaveOptions::ODFSVER_012)
+    {
+        FinishTextElement_Impl(true);
+        // For 1.2+ use loext namespace, for 1.3 use number namespace.
+        SvXMLElementExport aElem( rExport,
+                                  ((eVersion < SvtSaveOptions::ODFSVER_013) ? XML_NAMESPACE_LO_EXT : XML_NAMESPACE_NUMBER),
+                                  XML_FILL_CHARACTER, true, false );
+        rExport.Characters( OUString( nChar ) );
+    }
 }
 
 void SvXMLNumFmtExport::WriteSecondsElement_Impl( bool bLong, sal_uInt16 nDecimals )
@@ -569,8 +544,16 @@ void SvXMLNumFmtExport::WriteNumberElement_Impl(
 
     if ( nMinDecimals >= 0 )   // negative = automatic
     {
-        rExport.AddAttribute( XML_NAMESPACE_LO_EXT, XML_MIN_DECIMAL_PLACES,
-                              OUString::number( nMinDecimals ) );
+        // Export only for 1.2 with extensions or 1.3 and later.
+        SvtSaveOptions::ODFSaneDefaultVersion eVersion = rExport.getSaneDefaultVersion();
+        if (eVersion > SvtSaveOptions::ODFSVER_012)
+        {
+            // For 1.2+ use loext namespace, for 1.3 use number namespace.
+            rExport.AddAttribute(
+                ((eVersion < SvtSaveOptions::ODFSVER_013) ? XML_NAMESPACE_LO_EXT : XML_NAMESPACE_NUMBER),
+                                 XML_MIN_DECIMAL_PLACES,
+                                 OUString::number( nMinDecimals ) );
+        }
     }
 
     //  integer digits
@@ -610,8 +593,8 @@ void SvXMLNumFmtExport::WriteNumberElement_Impl(
 
     //  number:embedded-text as child elements
 
-    sal_uInt16 nEntryCount = rEmbeddedEntries.size();
-    for (sal_uInt16 nEntry=0; nEntry<nEntryCount; nEntry++)
+    auto nEntryCount = rEmbeddedEntries.size();
+    for (decltype(nEntryCount) nEntry=0; nEntry < nEntryCount; ++nEntry)
     {
         const SvXMLEmbeddedTextEntry *const pObj = &rEmbeddedEntries[nEntry];
 
@@ -622,16 +605,16 @@ void SvXMLNumFmtExport::WriteNumberElement_Impl(
                                           true, false );
 
         //  text as element content
-        OUString aContent( pObj->aText );
+        OUStringBuffer aContent( pObj->aText );
         while ( nEntry+1 < nEntryCount && rEmbeddedEntries[nEntry+1].nFormatPos == pObj->nFormatPos )
         {
             // The array can contain several elements for the same position in the number
             // (for example, literal text and space from underscores). They must be merged
             // into a single embedded-text element.
-            aContent += rEmbeddedEntries[nEntry+1].aText;
+            aContent.append(rEmbeddedEntries[nEntry+1].aText);
             ++nEntry;
         }
-        rExport.Characters( aContent );
+        rExport.Characters( aContent.makeStringAndClear() );
     }
 }
 
@@ -648,10 +631,18 @@ void SvXMLNumFmtExport::WriteScientificElement_Impl(
                               OUString::number( nDecimals ) );
     }
 
+    SvtSaveOptions::ODFSaneDefaultVersion eVersion = rExport.getSaneDefaultVersion();
     if ( nMinDecimals >= 0 )   // negative = automatic
     {
-        rExport.AddAttribute( XML_NAMESPACE_LO_EXT, XML_MIN_DECIMAL_PLACES,
-                              OUString::number( nMinDecimals ) );
+        // Export only for 1.2 with extensions or 1.3 and later.
+        if (eVersion > SvtSaveOptions::ODFSVER_012)
+        {
+            // For 1.2+ use loext namespace, for 1.3 use number namespace.
+            rExport.AddAttribute(
+                ((eVersion < SvtSaveOptions::ODFSVER_013) ? XML_NAMESPACE_LO_EXT : XML_NAMESPACE_NUMBER),
+                                 XML_MIN_DECIMAL_PLACES,
+                                 OUString::number( nMinDecimals ) );
+        }
     }
 
     //  integer digits
@@ -678,7 +669,6 @@ void SvXMLNumFmtExport::WriteScientificElement_Impl(
     if ( nExpInterval >= 0 )
     {
         // Export only for 1.2 with extensions or 1.3 and later.
-        SvtSaveOptions::ODFSaneDefaultVersion eVersion = rExport.getSaneDefaultVersion();
         if (eVersion > SvtSaveOptions::ODFSVER_012)
         {
             // For 1.2+ use loext namespace, for 1.3 use number namespace.
@@ -689,13 +679,14 @@ void SvXMLNumFmtExport::WriteScientificElement_Impl(
     }
 
     //  exponent sign
-    if ( bExpSign )
+    // Export only for 1.2 with extensions or 1.3 and later.
+    if (eVersion > SvtSaveOptions::ODFSVER_012)
     {
-        rExport.AddAttribute( XML_NAMESPACE_LO_EXT, XML_FORCED_EXPONENT_SIGN, XML_TRUE );
-    }
-    else
-    {
-        rExport.AddAttribute( XML_NAMESPACE_LO_EXT, XML_FORCED_EXPONENT_SIGN, XML_FALSE );
+        // For 1.2+ use loext namespace, for 1.3 use number namespace.
+        rExport.AddAttribute(
+            ((eVersion < SvtSaveOptions::ODFSVER_013) ? XML_NAMESPACE_LO_EXT : XML_NAMESPACE_NUMBER),
+                             XML_FORCED_EXPONENT_SIGN,
+                             bExpSign? XML_TRUE : XML_FALSE );
     }
 
     SvXMLElementExport aElem( rExport,
@@ -705,9 +696,36 @@ void SvXMLNumFmtExport::WriteScientificElement_Impl(
 
 void SvXMLNumFmtExport::WriteFractionElement_Impl(
                             sal_Int32 nInteger, bool bGrouping,
-                            sal_Int32 nNumeratorDigits, sal_Int32 nDenominatorDigits, sal_Int32 nDenominator )
+                            const SvNumberformat& rFormat, sal_uInt16 nPart )
 {
     FinishTextElement_Impl();
+    const OUString aNumeratorString = rFormat.GetNumeratorString( nPart );
+    const OUString aDenominatorString = rFormat.GetDenominatorString( nPart );
+    const OUString aIntegerFractionDelimiterString = rFormat.GetIntegerFractionDelimiterString( nPart );
+    sal_Int32 nMaxNumeratorDigits = aNumeratorString.getLength();
+    // Count '0' as '?'
+    sal_Int32 nMinNumeratorDigits = aNumeratorString.replaceAll("0","?").indexOf('?');
+    sal_Int32 nZerosNumeratorDigits = aNumeratorString.indexOf('0');
+    if ( nMinNumeratorDigits >= 0 )
+        nMinNumeratorDigits = nMaxNumeratorDigits - nMinNumeratorDigits;
+    else
+        nMinNumeratorDigits = 0;
+    if ( nZerosNumeratorDigits >= 0 )
+        nZerosNumeratorDigits = nMaxNumeratorDigits - nZerosNumeratorDigits;
+    else
+        nZerosNumeratorDigits = 0;
+    sal_Int32 nMaxDenominatorDigits = aDenominatorString.getLength();
+    sal_Int32 nMinDenominatorDigits = aDenominatorString.replaceAll("0","?").indexOf('?');
+    sal_Int32 nZerosDenominatorDigits = aDenominatorString.indexOf('0');
+    if ( nMinDenominatorDigits >= 0 )
+        nMinDenominatorDigits = nMaxDenominatorDigits - nMinDenominatorDigits;
+    else
+        nMinDenominatorDigits = 0;
+    if ( nZerosDenominatorDigits >= 0 )
+        nZerosDenominatorDigits = nMaxDenominatorDigits - nZerosDenominatorDigits;
+    else
+        nZerosDenominatorDigits = 0;
+    sal_Int32 nDenominator = aDenominatorString.toInt32();
 
     //  integer digits
     if ( nInteger >= 0 )        // negative = default (no integer part)
@@ -722,24 +740,55 @@ void SvXMLNumFmtExport::WriteFractionElement_Impl(
         rExport.AddAttribute( XML_NAMESPACE_NUMBER, XML_GROUPING, XML_TRUE );
     }
 
-    //  numerator digits
-    if ( nNumeratorDigits >= 0 )
-    {
-        rExport.AddAttribute( XML_NAMESPACE_NUMBER, XML_MIN_NUMERATOR_DIGITS,
-                                 OUString::number( nNumeratorDigits ) );
+    // integer/fraction delimiter
+    SvtSaveOptions::ODFSaneDefaultVersion eVersion = rExport.getSaneDefaultVersion();
+    if ( !aIntegerFractionDelimiterString.isEmpty() && aIntegerFractionDelimiterString != " "
+        && ((eVersion & SvtSaveOptions::ODFSVER_EXTENDED) != 0) )
+    {   // Export only for 1.2 with extensions or 1.3 and later.
+        rExport.AddAttribute( XML_NAMESPACE_LO_EXT, XML_INTEGER_FRACTION_DELIMITER,
+                              aIntegerFractionDelimiterString );
     }
+
+    //  numerator digits
+    if ( nMinNumeratorDigits == 0 ) // at least one digit to keep compatibility with previous versions
+        nMinNumeratorDigits++;
+    rExport.AddAttribute( XML_NAMESPACE_NUMBER, XML_MIN_NUMERATOR_DIGITS,
+                          OUString::number( nMinNumeratorDigits ) );
+    // Export only for 1.2 with extensions or 1.3 and later.
+    if ((eVersion & SvtSaveOptions::ODFSVER_EXTENDED) != 0)
+    {
+        // For extended ODF use loext namespace
+        rExport.AddAttribute( XML_NAMESPACE_LO_EXT, XML_MAX_NUMERATOR_DIGITS,
+                              OUString::number( nMaxNumeratorDigits ) );
+    }
+    if ( nZerosNumeratorDigits && ((eVersion & SvtSaveOptions::ODFSVER_EXTENDED) != 0) )
+        rExport.AddAttribute( XML_NAMESPACE_LO_EXT, XML_ZEROS_NUMERATOR_DIGITS,
+                              OUString::number( nZerosNumeratorDigits ) );
 
     if ( nDenominator )
     {
         rExport.AddAttribute( XML_NAMESPACE_NUMBER, XML_DENOMINATOR_VALUE,
                               OUString::number( nDenominator) );
     }
-    //  I guess it's not necessary to export nDenominatorDigits
-    //  if we have a forced denominator ( remove ? )
-    if ( nDenominatorDigits >= 0 )
+    //  it's not necessary to export nDenominatorDigits
+    //  if we have a forced denominator
+    else
     {
+        if ( nMinDenominatorDigits == 0 ) // at least one digit to keep compatibility with previous versions
+            nMinDenominatorDigits++;
         rExport.AddAttribute( XML_NAMESPACE_NUMBER, XML_MIN_DENOMINATOR_DIGITS,
-                              OUString::number( nDenominatorDigits ) );
+                              OUString::number( nMinDenominatorDigits ) );
+        if (eVersion > SvtSaveOptions::ODFSVER_012)
+        {
+            // For 1.2+ use loext namespace, for 1.3 use number namespace.
+            rExport.AddAttribute(
+                ((eVersion < SvtSaveOptions::ODFSVER_013) ? XML_NAMESPACE_LO_EXT : XML_NAMESPACE_NUMBER),
+                                 XML_MAX_DENOMINATOR_VALUE,
+                                 OUString::number( pow ( 10.0, nMaxDenominatorDigits ) - 1 ) ); // 9, 99 or 999
+        }
+        if ( nZerosDenominatorDigits && ((eVersion & SvtSaveOptions::ODFSVER_EXTENDED) != 0) )
+            rExport.AddAttribute( XML_NAMESPACE_LO_EXT, XML_ZEROS_DENOMINATOR_DIGITS,
+                                  OUString::number( nZerosDenominatorDigits ) );
     }
 
     SvXMLElementExport aElem( rExport, XML_NAMESPACE_NUMBER, XML_FRACTION,
@@ -788,7 +837,7 @@ void SvXMLNumFmtExport::WriteMapElement_Impl( sal_Int32 nOp, double fLimit,
 
 //  for old (automatic) currency formats: parse currency symbol from text
 
-sal_Int32 lcl_FindSymbol( const OUString& sUpperStr, const OUString& sCurString )
+static sal_Int32 lcl_FindSymbol( const OUString& sUpperStr, const OUString& sCurString )
 {
     //  search for currency symbol
     //  Quoting as in ImpSvNumberformatScan::Symbol_Division
@@ -869,7 +918,7 @@ bool SvXMLNumFmtExport::WriteTextWithCurrency_Impl( const OUString& rString,
     return bRet;        // true: currency element written
 }
 
-static OUString lcl_GetDefaultCalendar( SvNumberFormatter* pFormatter, LanguageType nLang )
+static OUString lcl_GetDefaultCalendar( SvNumberFormatter const * pFormatter, LanguageType nLang )
 {
     //  get name of first non-gregorian calendar for the language
 
@@ -896,8 +945,8 @@ static OUString lcl_GetDefaultCalendar( SvNumberFormatter* pFormatter, LanguageT
 
 static bool lcl_IsInEmbedded( const SvXMLEmbeddedTextEntryArr& rEmbeddedEntries, sal_uInt16 nPos )
 {
-    sal_uInt16 nCount = rEmbeddedEntries.size();
-    for (sal_uInt16 i=0; i<nCount; i++)
+    auto nCount = rEmbeddedEntries.size();
+    for (decltype(nCount) i=0; i<nCount; i++)
         if ( rEmbeddedEntries[i].nSourcePos == nPos )
             return true;
 
@@ -968,8 +1017,8 @@ static bool lcl_IsDefaultDateFormat( const SvNumberformat& rFormat, bool bSystem
         return false;                       // additional elements
     else
     {
-        NfIndexTableOffset eFound = (NfIndexTableOffset) SvXMLNumFmtDefaults::GetDefaultDateFormat(
-                eDateDOW, eDateDay, eDateMonth, eDateYear, eDateHours, eDateMins, eDateSecs, bSystemDate );
+        NfIndexTableOffset eFound = static_cast<NfIndexTableOffset>(SvXMLNumFmtDefaults::GetDefaultDateFormat(
+                eDateDOW, eDateDay, eDateMonth, eDateYear, eDateHours, eDateMins, eDateSecs, bSystemDate ));
 
         return ( eFound == eBuiltIn );
     }
@@ -977,30 +1026,30 @@ static bool lcl_IsDefaultDateFormat( const SvNumberformat& rFormat, bool bSystem
 
 //  export one part (condition)
 
-void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt32 nKey,
+void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt32 nKey, sal_uInt32 nRealKey,
                                             sal_uInt16 nPart, bool bDefPart )
 {
     //! for the default part, pass the conditions from the other parts!
 
     //  element name
 
-    NfIndexTableOffset eBuiltIn = pFormatter->GetIndexTableOffset( nKey );
+    NfIndexTableOffset eBuiltIn = pFormatter->GetIndexTableOffset( nRealKey );
 
-    short nFmtType = 0;
+    SvNumFormatType nFmtType = SvNumFormatType::ALL;
     bool bThousand = false;
     sal_uInt16 nPrecision = 0;
     sal_uInt16 nLeading = 0;
     rFormat.GetNumForInfo( nPart, nFmtType, bThousand, nPrecision, nLeading);
-    nFmtType &= ~css::util::NumberFormat::DEFINED;
+    nFmtType &= ~SvNumFormatType::DEFINED;
 
     //  special treatment of builtin formats that aren't detected by normal parsing
     //  (the same formats that get the type set in SvNumberFormatter::ImpGenerateFormats)
     if ( eBuiltIn == NF_NUMBER_STANDARD )
-        nFmtType = css::util::NumberFormat::NUMBER;
+        nFmtType = SvNumFormatType::NUMBER;
     else if ( eBuiltIn == NF_BOOLEAN )
-        nFmtType = css::util::NumberFormat::LOGICAL;
+        nFmtType = SvNumFormatType::LOGICAL;
     else if ( eBuiltIn == NF_TEXT )
-        nFmtType = css::util::NumberFormat::TEXT;
+        nFmtType = SvNumFormatType::TEXT;
 
     // #101606# An empty subformat is a valid number-style resulting in an
     // empty display string for the condition of the subformat.
@@ -1008,39 +1057,47 @@ void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt
     XMLTokenEnum eType = XML_TOKEN_INVALID;
     switch ( nFmtType )
     {
-        // type is 0 if a format contains no recognized elements
+        // Type UNDEFINED likely is a crappy format string for that we could
+        // not decide on any format type (and maybe could try harder?), but the
+        // resulting XMLTokenEnum should be something valid, so make that
+        // number-style.
+        case SvNumFormatType::UNDEFINED:
+            SAL_WARN("xmloff.style","UNDEFINED number format: '" << rFormat.GetFormatstring() << "'");
+            [[fallthrough]];
+        // Type is 0 if a format contains no recognized elements
         // (like text only) - this is handled as a number-style.
-        case 0:
-        case css::util::NumberFormat::EMPTY:
-        case css::util::NumberFormat::NUMBER:
-        case css::util::NumberFormat::SCIENTIFIC:
-        case css::util::NumberFormat::FRACTION:
+        case SvNumFormatType::ALL:
+        case SvNumFormatType::EMPTY:
+        case SvNumFormatType::NUMBER:
+        case SvNumFormatType::SCIENTIFIC:
+        case SvNumFormatType::FRACTION:
             eType = XML_NUMBER_STYLE;
             break;
-        case css::util::NumberFormat::PERCENT:
+        case SvNumFormatType::PERCENT:
             eType = XML_PERCENTAGE_STYLE;
             break;
-        case css::util::NumberFormat::CURRENCY:
+        case SvNumFormatType::CURRENCY:
             eType = XML_CURRENCY_STYLE;
             break;
-        case css::util::NumberFormat::DATE:
-        case css::util::NumberFormat::DATETIME:
+        case SvNumFormatType::DATE:
+        case SvNumFormatType::DATETIME:
             eType = XML_DATE_STYLE;
             break;
-        case css::util::NumberFormat::TIME:
+        case SvNumFormatType::TIME:
             eType = XML_TIME_STYLE;
             break;
-        case css::util::NumberFormat::TEXT:
+        case SvNumFormatType::TEXT:
             eType = XML_TEXT_STYLE;
             break;
-        case css::util::NumberFormat::LOGICAL:
+        case SvNumFormatType::LOGICAL:
             eType = XML_BOOLEAN_STYLE;
             break;
+        default: break;
     }
-    DBG_ASSERT( eType != XML_TOKEN_INVALID, "unknown format type" );
+    SAL_WARN_IF( eType == XML_TOKEN_INVALID, "xmloff.style", "unknown format type" );
 
     OUString sAttrValue;
-    bool bUserDef = ( rFormat.GetType() & css::util::NumberFormat::DEFINED );
+    bool bUserDef( rFormat.GetType() & SvNumFormatType::DEFINED );
 
     //  common attributes for format
 
@@ -1085,14 +1142,14 @@ void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt
     bool bLongSysDate = ( eBuiltIn == NF_DATE_SYSTEM_LONG );
 
     // check if the format definition matches the key
-    if ( bAutoOrder && ( nFmtType == css::util::NumberFormat::DATE || nFmtType == css::util::NumberFormat::DATETIME ) &&
+    if ( bAutoOrder && ( nFmtType == SvNumFormatType::DATE || nFmtType == SvNumFormatType::DATETIME ) &&
             !lcl_IsDefaultDateFormat( rFormat, bSystemDate, eBuiltIn ) )
     {
         bAutoOrder = bSystemDate = bLongSysDate = false;        // don't write automatic-order attribute then
     }
 
     if ( bAutoOrder &&
-        ( nFmtType == css::util::NumberFormat::CURRENCY || nFmtType == css::util::NumberFormat::DATE || nFmtType == css::util::NumberFormat::DATETIME ) )
+        ( nFmtType == SvNumFormatType::CURRENCY || nFmtType == SvNumFormatType::DATE || nFmtType == SvNumFormatType::DATETIME ) )
     {
         //  #85109# format type must be checked to avoid dtd errors if
         //  locale data contains other format types at the built-in positions
@@ -1102,7 +1159,7 @@ void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt
     }
 
     if ( bSystemDate && bAutoOrder &&
-        ( nFmtType == css::util::NumberFormat::DATE || nFmtType == css::util::NumberFormat::DATETIME ) )
+        ( nFmtType == SvNumFormatType::DATE || nFmtType == SvNumFormatType::DATETIME ) )
     {
         //  #85109# format type must be checked to avoid dtd errors if
         //  locale data contains other format types at the built-in positions
@@ -1114,17 +1171,19 @@ void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt
     //  overflow for time formats as in [hh]:mm
     //  controlled by bThousand from number format info
     //  default for truncate-on-overflow is true
-    if ( nFmtType == css::util::NumberFormat::TIME && bThousand )
+    if ( nFmtType == SvNumFormatType::TIME && bThousand )
     {
         rExport.AddAttribute( XML_NAMESPACE_NUMBER, XML_TRUNCATE_ON_OVERFLOW,
                               XML_FALSE );
     }
 
     // Native number transliteration
-    css::i18n::NativeNumberXmlAttributes aAttr;
+    css::i18n::NativeNumberXmlAttributes2 aAttr;
     rFormat.GetNatNumXml( aAttr, nPart );
     if ( !aAttr.Format.isEmpty() )
     {
+        assert(aAttr.Spellout.isEmpty());   // mutually exclusive
+
         /* FIXME-BCP47: ODF defines no transliteration-script or
          * transliteration-rfc-language-tag */
         LanguageTag aLanguageTag( aAttr.Locale);
@@ -1138,6 +1197,34 @@ void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt
                               aCountry );
         rExport.AddAttribute( XML_NAMESPACE_NUMBER, XML_TRANSLITERATION_STYLE,
                               aAttr.Style );
+    }
+
+    if ( !aAttr.Spellout.isEmpty() )
+    {
+        const bool bWriteSpellout = aAttr.Format.isEmpty();
+        assert(bWriteSpellout);     // mutually exclusive
+
+        // Export only for 1.2 with extensions or 1.3 and later.
+        SvtSaveOptions::ODFSaneDefaultVersion eVersion = rExport.getSaneDefaultVersion();
+        // Also ensure that duplicated transliteration-language and
+        // transliteration-country attributes never escape into the wild with
+        // releases.
+        if (eVersion > SvtSaveOptions::ODFSVER_012 && bWriteSpellout)
+        {
+            /* FIXME-BCP47: ODF defines no transliteration-script or
+             * transliteration-rfc-language-tag */
+            LanguageTag aLanguageTag( aAttr.Locale);
+            OUString aLanguage, aScript, aCountry;
+            aLanguageTag.getIsoLanguageScriptCountry( aLanguage, aScript, aCountry);
+            // For 1.2+ use loext namespace, for 1.3 use number namespace.
+            rExport.AddAttribute( ((eVersion < SvtSaveOptions::ODFSVER_013) ?
+                        XML_NAMESPACE_LO_EXT : XML_NAMESPACE_NUMBER),
+                    XML_TRANSLITERATION_SPELLOUT, aAttr.Spellout );
+            rExport.AddAttribute( XML_NAMESPACE_NUMBER, XML_TRANSLITERATION_LANGUAGE,
+                                  aLanguage );
+            rExport.AddAttribute( XML_NAMESPACE_NUMBER, XML_TRANSLITERATION_COUNTRY,
+                                  aCountry );
+        }
     }
 
     // The element
@@ -1234,8 +1321,9 @@ void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt
                 case NF_SYMBOLTYPE_EXP:
                     bExpFound = true;           // following digits are exponent digits
                     bInInteger = false;
-                    if ( pElemStr && pElemStr->getLength() == 1 )
-                        bExpSign = false;       // for 0.00E0
+                    if ( pElemStr && ( pElemStr->getLength() == 1
+                                  || ( pElemStr->getLength() == 2 && (*pElemStr)[1] == '-' ) ) )
+                        bExpSign = false;       // for 0.00E0 or 0.00E-00
                     break;
                 case NF_SYMBOLTYPE_CURRENCY:
                     bCurrFound = true;
@@ -1260,9 +1348,9 @@ void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt
 
         //  collect strings for embedded-text (must be known before number element is written)
 
-        bool bAllowEmbedded = ( nFmtType == 0 || nFmtType == css::util::NumberFormat::NUMBER ||
-                                        nFmtType == css::util::NumberFormat::CURRENCY ||
-                                        nFmtType == css::util::NumberFormat::PERCENT );
+        bool bAllowEmbedded = ( nFmtType == SvNumFormatType::ALL || nFmtType == SvNumFormatType::NUMBER ||
+                                        nFmtType == SvNumFormatType::CURRENCY ||
+                                        nFmtType == SvNumFormatType::PERCENT );
         if ( bAllowEmbedded )
         {
             sal_Int32 nDigitsPassed = 0;
@@ -1294,7 +1382,7 @@ void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt
                             {
                                 aEmbeddedStr = *pElemStr;
                             }
-                            else
+                            else if (pElemStr->getLength() >= 2)
                             {
                                 SvNumberformat::InsertBlanks( aEmbeddedStr, 0, (*pElemStr)[1] );
                             }
@@ -1347,7 +1435,7 @@ void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt
                             //  text is written as embedded-text child of the number,
                             //  don't create a text element
                         }
-                        else if ( nFmtType == css::util::NumberFormat::CURRENCY && !bCurrFound && !bCurrencyWritten )
+                        else if ( nFmtType == SvNumFormatType::CURRENCY && !bCurrFound && !bCurrencyWritten )
                         {
                             //  automatic currency symbol is implemented as part of
                             //  normal text -> search for the symbol
@@ -1366,7 +1454,8 @@ void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt
                         //  (#i20396# the spaces may also be in embedded-text elements)
 
                         OUString aBlanks;
-                        SvNumberformat::InsertBlanks( aBlanks, 0, (*pElemStr)[1] );
+                        if (pElemStr->getLength() >= 2)
+                            SvNumberformat::InsertBlanks( aBlanks, 0, (*pElemStr)[1] );
                         AddToTextElement_Impl( aBlanks );
                     }
                     break;
@@ -1410,10 +1499,10 @@ void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt
                         {
                             // for type 0 (not recognized as a special type),
                             // write a "normal" number
-                            case 0:
-                            case css::util::NumberFormat::NUMBER:
-                            case css::util::NumberFormat::CURRENCY:
-                            case css::util::NumberFormat::PERCENT:
+                            case SvNumFormatType::ALL:
+                            case SvNumFormatType::NUMBER:
+                            case SvNumFormatType::CURRENCY:
+                            case SvNumFormatType::PERCENT:
                                 {
                                     //  decimals
                                     //  only some built-in formats have automatic decimals
@@ -1446,28 +1535,28 @@ void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt
                                     bAnyContent = true;
                                 }
                                 break;
-                            case css::util::NumberFormat::SCIENTIFIC:
+                            case SvNumFormatType::SCIENTIFIC:
                                 // #i43959# for scientific numbers, count all integer symbols ("0" and "#")
                                 // as integer digits: use nIntegerSymbols instead of nLeading
                                 // nIntegerSymbols represents exponent interval (for engineering notation)
                                 WriteScientificElement_Impl( nPrecision, nMinDecimals, nLeading, bThousand, nExpDigits, nIntegerSymbols, bExpSign );
                                 bAnyContent = true;
                                 break;
-                            case css::util::NumberFormat::FRACTION:
+                            case SvNumFormatType::FRACTION:
                                 {
                                     sal_Int32 nInteger = nLeading;
-                                    if ( pElemStr && (*pElemStr)[0] == '?' )
+                                    if ( rFormat.GetNumForNumberElementCount( nPart ) == 3 )
                                     {
-                                        //  If the first digit character is a question mark,
+                                        //  If there is only two numbers + fraction in format string
                                         //  the fraction doesn't have an integer part, and no
                                         //  min-integer-digits attribute must be written.
                                         nInteger = -1;
                                     }
-                                    sal_Int32 nDenominator = rFormat.GetForcedDenominatorForType( nPart );
-                                    WriteFractionElement_Impl( nInteger, bThousand, nPrecision, nPrecision, nDenominator );
+                                    WriteFractionElement_Impl( nInteger, bThousand,  rFormat, nPart );
                                     bAnyContent = true;
                                 }
                                 break;
+                            default: break;
                         }
 
                         bNumWritten = true;
@@ -1697,14 +1786,14 @@ void SvXMLNumFmtExport::ExportPart_Impl( const SvNumberformat& rFormat, sal_uInt
 
 //  export one format
 
-void SvXMLNumFmtExport::ExportFormat_Impl( const SvNumberformat& rFormat, sal_uInt32 nKey )
+void SvXMLNumFmtExport::ExportFormat_Impl( const SvNumberformat& rFormat, sal_uInt32 nKey, sal_uInt32 nRealKey )
 {
     const sal_uInt16 XMLNUM_MAX_PARTS = 4;
     bool bParts[XMLNUM_MAX_PARTS] = { false, false, false, false };
     sal_uInt16 nUsedParts = 0;
     for (sal_uInt16 nPart=0; nPart<XMLNUM_MAX_PARTS; ++nPart)
     {
-        if (rFormat.GetNumForInfoScannedType( nPart) != css::util::NumberFormat::UNDEFINED)
+        if (rFormat.GetNumForInfoScannedType( nPart) != SvNumFormatType::UNDEFINED)
         {
             bParts[nPart] = true;
             nUsedParts = nPart + 1;
@@ -1741,7 +1830,7 @@ void SvXMLNumFmtExport::ExportFormat_Impl( const SvNumberformat& rFormat, sal_uI
         if (bParts[nPart])
         {
             bool bDefault = ( nPart+1 == nUsedParts );          // last = default
-            ExportPart_Impl( rFormat, nKey, nPart, bDefault );
+            ExportPart_Impl( rFormat, nKey, nRealKey, nPart, bDefault );
         }
     }
 }
@@ -1758,37 +1847,41 @@ void SvXMLNumFmtExport::Export( bool bIsAutoStyle )
     bool bNext(pUsedList->GetFirstUsed(nKey));
     while(bNext)
     {
-        pFormat = pFormatter->GetEntry(nKey);
+        // ODF has its notation of system formats, so obtain the "real" already
+        // substituted format but use the original key for style name.
+        sal_uInt32 nRealKey = nKey;
+        pFormat = pFormatter->GetSubstitutedEntry( nKey, nRealKey);
         if(pFormat)
-            ExportFormat_Impl( *pFormat, nKey );
+            ExportFormat_Impl( *pFormat, nKey, nRealKey );
         bNext = pUsedList->GetNextUsed(nKey);
     }
     if (!bIsAutoStyle)
     {
-        std::vector<sal_uInt16> aLanguages;
+        std::vector<LanguageType> aLanguages;
         pFormatter->GetUsedLanguages( aLanguages );
-        for (std::vector<sal_uInt16>::const_iterator it(aLanguages.begin()); it != aLanguages.end(); ++it)
+        for (const auto& nLang : aLanguages)
         {
-            LanguageType nLang = *it;
-
             sal_uInt32 nDefaultIndex = 0;
             SvNumberFormatTable& rTable = pFormatter->GetEntryTable(
-                                            css::util::NumberFormat::DEFINED, nDefaultIndex, nLang );
-            SvNumberFormatTable::iterator it2 = rTable.begin();
-            while (it2 != rTable.end())
+                                         SvNumFormatType::DEFINED, nDefaultIndex, nLang );
+            for (const auto& rTableEntry : rTable)
             {
-                nKey = it2->first;
-                pFormat = it2->second;
+                nKey = rTableEntry.first;
+                pFormat = rTableEntry.second;
                 if (!pUsedList->IsUsed(nKey))
                 {
-                    DBG_ASSERT((pFormat->GetType() & css::util::NumberFormat::DEFINED), "a not user defined numberformat found");
+                    DBG_ASSERT((pFormat->GetType() & SvNumFormatType::DEFINED), "a not user defined numberformat found");
+                    sal_uInt32 nRealKey = nKey;
+                    if (pFormat->IsSubstituted())
+                    {
+                        pFormat = pFormatter->GetSubstitutedEntry( nKey, nRealKey); // export the "real" format
+                        assert(pFormat);
+                    }
                     //  user-defined and used formats are exported
-                    ExportFormat_Impl( *pFormat, nKey );
+                    ExportFormat_Impl( *pFormat, nKey, nRealKey );
                     // if it is a user-defined Format it will be added else nothing will happen
                     pUsedList->SetUsed(nKey);
                 }
-
-                ++it2;
             }
         }
     }
@@ -1808,7 +1901,7 @@ OUString SvXMLNumFmtExport::GetStyleName( sal_uInt32 nKey )
 
 void SvXMLNumFmtExport::SetUsed( sal_uInt32 nKey )
 {
-    DBG_ASSERT( pFormatter != nullptr, "missing formatter" );
+    SAL_WARN_IF( pFormatter == nullptr, "xmloff.style", "missing formatter" );
     if( !pFormatter )
         return;
 
@@ -1819,10 +1912,11 @@ void SvXMLNumFmtExport::SetUsed( sal_uInt32 nKey )
     }
 }
 
-void SvXMLNumFmtExport::GetWasUsed(uno::Sequence<sal_Int32>& rWasUsed)
+uno::Sequence<sal_Int32> SvXMLNumFmtExport::GetWasUsed()
 {
     if (pUsedList)
-        pUsedList->GetWasUsed(rWasUsed);
+        return pUsedList->GetWasUsed();
+    return uno::Sequence<sal_Int32>();
 }
 
 void SvXMLNumFmtExport::SetWasUsed(const uno::Sequence<sal_Int32>& rWasUsed)
@@ -1831,7 +1925,7 @@ void SvXMLNumFmtExport::SetWasUsed(const uno::Sequence<sal_Int32>& rWasUsed)
         pUsedList->SetWasUsed(rWasUsed);
 }
 
-static const SvNumberformat* lcl_GetFormat( SvNumberFormatter* pFormatter,
+static const SvNumberformat* lcl_GetFormat( SvNumberFormatter const * pFormatter,
                            sal_uInt32 nKey )
 {
     return ( pFormatter != nullptr ) ? pFormatter->GetEntry( nKey ) : nullptr;
@@ -1844,10 +1938,10 @@ sal_uInt32 SvXMLNumFmtExport::ForceSystemLanguage( sal_uInt32 nKey )
     const SvNumberformat* pFormat = lcl_GetFormat( pFormatter, nKey );
     if( pFormat != nullptr )
     {
-        DBG_ASSERT( pFormatter != nullptr, "format without formatter?" );
+        SAL_WARN_IF( pFormatter == nullptr, "xmloff.style", "format without formatter?" );
 
         sal_Int32 nErrorPos;
-        short nType = pFormat->GetType();
+        SvNumFormatType nType = pFormat->GetType();
 
         sal_uInt32 nNewKey = pFormatter->GetFormatForLanguageIfBuiltIn(
                        nKey, LANGUAGE_SYSTEM );
@@ -1862,7 +1956,7 @@ sal_uInt32 SvXMLNumFmtExport::ForceSystemLanguage( sal_uInt32 nKey )
             pFormatter->PutandConvertEntry(
                             aFormatString,
                             nErrorPos, nType, nNewKey,
-                            pFormat->GetLanguage(), LANGUAGE_SYSTEM );
+                            pFormat->GetLanguage(), LANGUAGE_SYSTEM, true);
 
             // success? Then use new key.
             if( nErrorPos == 0 )

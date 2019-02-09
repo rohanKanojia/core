@@ -47,6 +47,10 @@ gb_COMPILERDEFS := \
 	-DBOOST_ERROR_CODE_HEADER_ONLY \
 	-DBOOST_OPTIONAL_USE_OLD_DEFINITION_OF_NONE \
 	-DBOOST_SYSTEM_NO_DEPRECATED \
+	-D_HAS_AUTO_PTR_ETC \
+	-D_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING \
+	-D_SILENCE_CXX17_OLD_ALLOCATOR_MEMBERS_DEPRECATION_WARNING \
+	-D_SILENCE_CXX17_RESULT_OF_DEPRECATION_WARNING \
 	-D_CRT_NON_CONFORMING_SWPRINTFS \
 	-D_CRT_NONSTDC_NO_DEPRECATE \
 	-D_CRT_SECURE_NO_DEPRECATE \
@@ -54,7 +58,6 @@ gb_COMPILERDEFS := \
 	-D_MT \
 	-D_DLL \
 	-DCPPU_ENV=$(gb_CPPU_ENV) \
-	$(if $(findstring 120_70,$(VCVER)_$(WINDOWS_SDK_VERSION)),-D_USING_V110_SDK71_) \
 
 ifeq ($(CPUNAME),INTEL)
 gb_COMPILERDEFS += \
@@ -63,8 +66,7 @@ gb_COMPILERDEFS += \
 endif
 
 gb_RCDEFS := \
-	-DWINVER=0x0502 \
-	-DWIN32 \
+	$(gb_WIN_VERSION_DEFS) \
 
 gb_RCFLAGS :=
 
@@ -75,6 +77,8 @@ gb_AFLAGS := $(AFLAGS)
 # cleaning away from the code, to avoid warnings when building with
 # gcc or Clang and -Wall -Werror.
 
+# C4091: 'typedef ': ignored on left of '' when no variable is declared
+
 # C4100: 'identifier' : unreferenced formal parameter
 
 # C4127: conditional expression is constant
@@ -84,9 +88,6 @@ gb_AFLAGS := $(AFLAGS)
 # C4200: nonstandard extension used : zero-sized array in struct/union
 
 # C4201: nonstandard extension used : nameless struct/union
-
-# C4242: 'identifier' : conversion from 'type1' to 'type2', possible
-#   loss of data
 
 # C4244: nonstandard extension used : formal parameter 'identifier'
 #   was previously defined as a type
@@ -106,8 +107,7 @@ gb_AFLAGS := $(AFLAGS)
 
 # C4351: new behavior: elements of array 'array' will be default
 #   initialized
-
-# C4355: 'this' : used in base member initializer list
+# (an issue with MSVC 2013 that appears to be gone with MSVC 2015)
 
 # C4373: '%$S': virtual function overrides '%$pS', previous versions
 #   of the compiler did not override when parameters only differed by
@@ -115,21 +115,17 @@ gb_AFLAGS := $(AFLAGS)
 # [translation: ancient compilers that don't actually support C++ do
 #  stupid things]
 
-# C4481: nonstandard extension used: override specifier 'override'
-# (MSVC 2010 warns about this, even though it's C++11 keyword)
-
 # C4505: 'function' : unreferenced local function has been removed
 
-# C4512: 'class' : assignment operator could not be generated
+# C4510: 'class' : default constructor could not be generated
 
-# C4589: Constructor of abstract class 'Derived' ignores initializer for
-# virtual base class 'Base'  https://codereview.chromium.org/1234253003
+# C4512: 'class' : assignment operator could not be generated
+# (an issue with MSVC 2013 that appears to be gone with MSVC 2015)
+
+# C4610: 'class' can never be instantiated - user defined constructor required
 
 # C4611: interaction between 'function' and C++ object destruction is
 #   non-portable
-
-# C4626: 'derived class' : assignment operator could not be generated
-#   because a base class assignment operator is inaccessible
 
 # C4702: unreachable code
 
@@ -138,10 +134,8 @@ gb_AFLAGS := $(AFLAGS)
 # C4800: 'type' : forcing value to bool 'true' or 'false' (performance
 #   warning)
 
-# C4913: user defined binary operator ',' exists but no overload could
-#    convert all operands, default built-in binary operator ',' used
-
 gb_CFLAGS := \
+	-utf-8 \
 	-Gd \
 	-GR \
 	-Gs \
@@ -149,39 +143,30 @@ gb_CFLAGS := \
 	$(if $(MSVC_USE_DEBUG_RUNTIME),-MDd,-MD) \
 	-nologo \
 	-W4 \
+	-wd4091 \
 	$(if $(filter 0,$(gb_DEBUGLEVEL)),-wd4100) \
 	-wd4127 \
 	$(if $(filter 0,$(gb_DEBUGLEVEL)),-wd4189) \
 	-wd4200 \
-	-wd4242 \
 	-wd4244 \
 	-wd4251 \
-	-wd4355 \
 	-wd4505 \
 	-wd4512 \
-	-wd4589 \
-	-wd4626 \
 	-wd4706 \
 	-wd4800 \
-	-Zc:wchar_t- \
+	-wd4267 \
 
-ifeq ($(COM_IS_CLANG),TRUE)
+ifneq ($(COM_IS_CLANG),TRUE)
+
+# clang-cl doesn't support -Wv:18 for now
 gb_CFLAGS += \
-	-Wdeclaration-after-statement \
-	-Wendif-labels \
-	-Wshadow \
-	-Wstrict-prototypes \
-	-Wundef \
-	-Wunused-macros \
-
-else
-
-gb_CFLAGS += \
-	$(if $(filter-out 120,$(VCVER)), -Wv:18 -wd4267) \
+	-Wv:18 \
 
 endif
 
 gb_CXXFLAGS := \
+	-utf-8 \
+	$(CXXFLAGS_CXX11) \
 	-Gd \
 	-GR \
 	-Gs \
@@ -190,6 +175,7 @@ gb_CXXFLAGS := \
 	$(if $(MSVC_USE_DEBUG_RUNTIME),-MDd,-MD) \
 	-nologo \
 	-W4 \
+	-wd4091 \
 	$(if $(filter 0,$(gb_DEBUGLEVEL)),-wd4100) \
 	-wd4127 \
 	$(if $(filter 0,$(gb_DEBUGLEVEL)),-wd4189) \
@@ -197,27 +183,20 @@ gb_CXXFLAGS := \
 	-wd4244 \
 	-wd4250 \
 	-wd4251 \
+	-wd4267 \
 	-wd4275 \
 	-wd4290 \
 	-wd4351 \
-	-wd4355 \
 	-wd4373 \
-	-wd4481 \
 	-wd4505 \
+	-wd4510 \
 	-wd4512 \
-	-wd4589 \
+	-wd4610 \
 	-wd4611 \
 	-wd4706 \
 	-wd4800 \
-	-wd4913 \
-	-Zc:wchar_t- \
 
-ifeq ($(CPUNAME),X86_64)
-
-gb_CXXFLAGS += \
-	-wd4267 \
-
-else
+ifeq ($(CPUNAME),INTEL)
 
 gb_CXXFLAGS += \
 	-Zm500 \
@@ -227,21 +206,15 @@ gb_CFLAGS += \
 
 endif
 
-ifeq ($(COM_IS_CLANG),TRUE)
-gb_CXXFLAGS += \
-	-Wendif-labels \
-	-Wno-missing-braces \
-	-Wno-missing-braces \
-	-Wnon-virtual-dtor \
-	-Woverloaded-virtual \
-	-Wshadow \
-	-Wundef \
-	-Wunused-macros \
+ifneq ($(COM_IS_CLANG),TRUE)
 
-else
-
+# clang-cl doesn't support -Wv:18 for now
+# Work around MSVC 2017 C4702 compiler bug with release builds
+# http://document-foundation-mail-archive.969070.n3.nabble.com/Windows-32-bit-build-failure-unreachable-code-tp4243848.html
+# http://document-foundation-mail-archive.969070.n3.nabble.com/64-bit-Windows-build-failure-after-MSVC-Update-tp4246816.html
 gb_CXXFLAGS += \
-	$(if $(filter-out 120,$(VCVER)), -Wv:18 -wd4267) \
+	-Wv:18 \
+	$(if $(filter 0,$(gb_DEBUGLEVEL)),-wd4702) \
 
 endif
 
@@ -260,14 +233,14 @@ gb_PCHWARNINGS = \
 gb_STDLIBS := \
 	advapi32.lib \
 
-gb_CFLAGS_WERROR := $(if $(ENABLE_WERROR),-WX)
+gb_CFLAGS_WERROR = $(if $(ENABLE_WERROR),-WX)
 
 # there does not seem to be a way to force C++03 with MSVC
 gb_CXX03FLAGS :=
 
 gb_LinkTarget_EXCEPTIONFLAGS := \
 	-DEXCEPTIONS_ON \
-	-EHa \
+	-EHs \
 
 gb_PrecompiledHeader_EXCEPTIONFLAGS := $(gb_LinkTarget_EXCEPTIONFLAGS)
 
@@ -277,21 +250,14 @@ gb_LinkTarget_LDFLAGS := \
 
 # Prevent warning spamming
 # Happens because of the way we link our unit tests with our libraries.
+# LNK4049: locally defined symbol
 gb_LinkTarget_LDFLAGS += \
-	/ignore:4217
+	/ignore:4217 /ignore:4049
 
 
 gb_DEBUGINFO_FLAGS := \
 	-FS \
 	-Zi \
-
-gb_DEBUG_CFLAGS := $(gb_DEBUGINFO_FLAGS)
-
-# this does not use CFLAGS so it is not overridable
-ifeq ($(gb_SYMBOL),$(true))
-gb_CFLAGS+=$(gb_DEBUG_CFLAGS)
-gb_CXXFLAGS+=$(gb_DEBUG_CFLAGS)
-endif
 
 gb_COMPILEROPTFLAGS := -O2 -Oy-
 gb_COMPILERNOOPTFLAGS := -Od
@@ -309,6 +275,64 @@ endif
 
 gb_LTOFLAGS := $(if $(filter TRUE,$(ENABLE_LTO)),-GL)
 
+# When compiling for CLR, disable "warning C4339: use of undefined type detected
+# in CLR meta-data - use of this type may lead to a runtime exception":
+gb_CXXCLRFLAGS := $(gb_CXXFLAGS) $(gb_LinkTarget_EXCEPTIONFLAGS) \
+	-AI $(INSTDIR)/$(LIBO_URE_LIB_FOLDER) \
+	-EHa \
+	-clr \
+	-wd4339 \
+	-Wv:18 \
+	-wd4267 \
+
+ifeq ($(COM_IS_CLANG),TRUE)
+
+gb_CFLAGS += \
+	-Wdeclaration-after-statement \
+	-Wendif-labels \
+	-Wshadow \
+	-Wstrict-prototypes \
+	-Wundef \
+	-Wunused-macros \
+
+gb_CXXFLAGS += \
+	-Wendif-labels \
+	-Wimplicit-fallthrough \
+	-Wno-missing-braces \
+	-Wno-missing-braces \
+	-Wnon-virtual-dtor \
+	-Woverloaded-virtual \
+	-Wshadow \
+	-Wundef \
+	-Wunused-macros \
+
+endif
+
+ifeq ($(COM_IS_CLANG),TRUE)
+gb_COMPILER_TEST_FLAGS := -Xclang -plugin-arg-loplugin -Xclang --unit-test-mode
+ifeq ($(COMPILER_PLUGIN_TOOL),)
+gb_COMPILER_PLUGINS := -Xclang -load -Xclang $(BUILDDIR)/compilerplugins/obj/plugin.dll -Xclang -add-plugin -Xclang loplugin
+ifneq ($(COMPILER_PLUGIN_WARNINGS_ONLY),)
+gb_COMPILER_PLUGINS += -Xclang -plugin-arg-loplugin -Xclang \
+    --warnings-only='$(COMPILER_PLUGIN_WARNINGS_ONLY)'
+endif
+else
+gb_COMPILER_PLUGINS := -Xclang -load -Xclang $(BUILDDIR)/compilerplugins/obj/plugin.dll -Xclang -plugin -Xclang loplugin $(foreach plugin,$(COMPILER_PLUGIN_TOOL), -Xclang -plugin-arg-loplugin -Xclang $(plugin))
+ifneq ($(UPDATE_FILES),)
+gb_COMPILER_PLUGINS += -Xclang -plugin-arg-loplugin -Xclang --scope=$(UPDATE_FILES)
+endif
+endif
+ifeq ($(COMPILER_PLUGINS_DEBUG),TRUE)
+gb_COMPILER_PLUGINS += -Xclang -plugin-arg-loplugin -Xclang --debug
+endif
+gb_COMPILER_PLUGINS_WARNINGS_AS_ERRORS := \
+    -Xclang -plugin-arg-loplugin -Xclang --warnings-as-errors
+else
+gb_COMPILER_TEST_FLAGS :=
+gb_COMPILER_PLUGINS :=
+gb_COMPILER_PLUGINS_WARNINGS_AS_ERRORS :=
+endif
+
 # Helper class
 
 ifeq ($(GNUMAKE_WIN_NATIVE),TRUE)
@@ -318,11 +342,21 @@ define gb_Helper_prepend_ld_path
 PATH="$(shell cygpath -w $(INSTDIR)/$(LIBO_URE_LIB_FOLDER));$(shell cygpath -w $(INSTDIR)/$(LIBO_BIN_FOLDER));$(1);$$PATH"
 endef
 
+# $(1): one directory pathname to append to the ld path
+define gb_Helper_extend_ld_path
+$(gb_Helper_set_ld_path)';$(shell cygpath -w $(1))'
+endef
+
 else
 gb_Helper_set_ld_path := PATH="$(shell cygpath -u $(INSTDIR)/$(LIBO_URE_LIB_FOLDER)):$(shell cygpath -u $(INSTDIR)/$(LIBO_BIN_FOLDER)):$$PATH"
 
 define gb_Helper_prepend_ld_path
 PATH="$(shell cygpath -u $(INSTDIR)/$(LIBO_URE_LIB_FOLDER)):$(shell cygpath -u $(INSTDIR)/$(LIBO_BIN_FOLDER)):$(1):$$PATH"
+endef
+
+# $(1): one directory pathname to append to the ld path
+define gb_Helper_extend_ld_path
+$(gb_Helper_set_ld_path):$(shell cygpath -u $(1))
 endef
 
 endif

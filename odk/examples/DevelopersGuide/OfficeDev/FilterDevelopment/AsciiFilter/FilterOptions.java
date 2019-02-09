@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -162,7 +163,7 @@ public class FilterOptions
             catch(com.sun.star.lang.IllegalArgumentException exConvert)
             {
                 // ONE argument has the wrong type
-                // But I think we mustn't react here - because we setted
+                // But I think we mustn't react here - because we set
                 // default values for every necessary item we need.
                 // In case this exception occurs - this default exist
                 // and we can live with it.
@@ -220,3 +221,5 @@ public class FilterOptions
         catch(com.sun.star.uno.Exception               exUno    ) {}
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

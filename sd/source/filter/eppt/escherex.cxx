@@ -20,7 +20,7 @@
 #include "escherex.hxx"
 
 PptEscherEx::PptEscherEx( SvStream& rOutStrm, const OUString& rBaseURI ) :
-    EscherEx( EscherExGlobalRef( new EscherExGlobal ), &rOutStrm )
+    EscherEx( std::make_shared<EscherExGlobal>( ), &rOutStrm )
 {
     mxGlobal->SetBaseURI( rBaseURI );
     mnCurrentDg = 0;
@@ -203,7 +203,7 @@ void PptEscherEx::CloseContainer()
     }
 }
 
-sal_uInt32 PptEscherEx::EnterGroup( Rectangle* pBoundRect, SvMemoryStream* pClientData )
+sal_uInt32 PptEscherEx::EnterGroup( ::tools::Rectangle const * pBoundRect, SvMemoryStream* pClientData )
 {
     sal_uInt32 nShapeId = 0;
     /* SJ: #Issue 26747#
@@ -212,7 +212,7 @@ sal_uInt32 PptEscherEx::EnterGroup( Rectangle* pBoundRect, SvMemoryStream* pClie
     */
     if ( mnGroupLevel < 12 )
     {
-        Rectangle aRect;
+        ::tools::Rectangle aRect;
         if ( pBoundRect )
             aRect = *pBoundRect;
 
@@ -227,10 +227,10 @@ sal_uInt32 PptEscherEx::EnterGroup( Rectangle* pBoundRect, SvMemoryStream* pClie
 
         nShapeId = GenerateShapeId();
         if ( !mnGroupLevel )
-            AddShape( ESCHER_ShpInst_Min, 5, nShapeId );                    // Flags: Group | Patriarch
+            AddShape( ESCHER_ShpInst_Min, ShapeFlag::Group | ShapeFlag::Patriarch, nShapeId );
         else
         {
-            AddShape( ESCHER_ShpInst_Min, 0x201, nShapeId );                // Flags: Group | HaveAnchor
+            AddShape( ESCHER_ShpInst_Min, ShapeFlag::HaveAnchor | ShapeFlag::Group, nShapeId );
             if ( mnGroupLevel == 1 )
             {
                 AddAtom( 8, ESCHER_ClientAnchor );
@@ -249,13 +249,12 @@ sal_uInt32 PptEscherEx::EnterGroup( Rectangle* pBoundRect, SvMemoryStream* pClie
         }
         if ( pClientData )
         {
-            pClientData->Seek( STREAM_SEEK_TO_END );
-            sal_uInt32 nSize = pClientData->Tell();
+            sal_uInt32 nSize = pClientData->TellEnd();
             if ( nSize )
             {
                 mpOutStrm->WriteUInt32( ( ESCHER_ClientData << 16 ) | 0xf )
                        .WriteUInt32( nSize );
-                mpOutStrm->Write( pClientData->GetData(), nSize );
+                mpOutStrm->WriteBytes(pClientData->GetData(), nSize);
             }
         }
         CloseContainer();                                               // ESCHER_SpContainer

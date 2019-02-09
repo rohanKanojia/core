@@ -29,6 +29,7 @@
 #include <com/sun/star/document/XScriptInvocationContext.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <cppuhelper/implbase.hxx>
+#include <svl/lstner.hxx>
 
 class BasicManager;
 
@@ -47,7 +48,7 @@ namespace basprov
         css::script::browse::XBrowseNode > BasicProviderImpl_BASE;
 
 
-    class BasicProviderImpl : public BasicProviderImpl_BASE
+    class BasicProviderImpl : public BasicProviderImpl_BASE, public SfxListener
     {
     private:
         BasicManager*   m_pAppBasicManager;
@@ -67,34 +68,29 @@ namespace basprov
     public:
         explicit BasicProviderImpl(
             const css::uno::Reference< css::uno::XComponentContext >& xContext );
-        virtual ~BasicProviderImpl();
+        virtual ~BasicProviderImpl() override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName(  )
-            throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-            throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  )
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getImplementationName(  ) override;
+        virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 
         // XInitialization
-        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments )
-            throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
         // XScriptProvider
         virtual css::uno::Reference < css::script::provider::XScript > SAL_CALL getScript(
-            const OUString& scriptURI )
-            throw (  css::script::provider::ScriptFrameworkErrorException, css::uno::RuntimeException, std::exception) override;
+            const OUString& scriptURI ) override;
 
         // XBrowseNode
-        virtual OUString SAL_CALL getName(  )
-            throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< css::uno::Reference< css::script::browse::XBrowseNode > > SAL_CALL getChildNodes(  )
-            throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL hasChildNodes(  )
-            throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Int16 SAL_CALL getType(  )
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getName(  ) override;
+        virtual css::uno::Sequence< css::uno::Reference< css::script::browse::XBrowseNode > > SAL_CALL getChildNodes(  ) override;
+        virtual sal_Bool SAL_CALL hasChildNodes(  ) override;
+        virtual sal_Int16 SAL_CALL getType(  ) override;
+
+    protected:
+        // SfxListener
+        virtual void Notify(SfxBroadcaster& rBC, const SfxHint& rHint) override;
     };
 
 

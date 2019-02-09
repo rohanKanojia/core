@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -86,13 +87,13 @@ public class Test03 implements StorageTest {
                 return false;
 
 
-            // check storage hyerarchy tree
+            // check storage hierarchy tree
 
 
-            // check that isStorageElement() and isStreamElement reacts to nonexisting object correctly
+            // check that isStorageElement() and isStreamElement reacts to nonexistent object correctly
             try {
                 xTempStorage.isStorageElement( "does not exist" );
-                m_aTestHelper.Error( "Nonexisting element doesn't detected by isStorageElement() call!" );
+                m_aTestHelper.Error( "Nonexistent element doesn't detected by isStorageElement() call!" );
                 return false;
             }
             catch( com.sun.star.container.NoSuchElementException ne )
@@ -106,7 +107,7 @@ public class Test03 implements StorageTest {
 
             try {
                 xTempStorage.isStreamElement( "does not exist" );
-                m_aTestHelper.Error( "Nonexisting element doesn't detected by isStreamElement() call!" );
+                m_aTestHelper.Error( "Nonexistent element doesn't detected by isStreamElement() call!" );
                 return false;
             }
             catch( com.sun.star.container.NoSuchElementException ne )
@@ -216,3 +217,4 @@ public class Test03 implements StorageTest {
 
 }
 
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

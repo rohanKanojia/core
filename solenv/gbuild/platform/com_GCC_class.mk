@@ -8,12 +8,22 @@
 #
 
 ifeq ($(gb_FULLDEPS),$(true))
+ifneq (,$(CCACHE_HARDLINK))
+# cannot move hardlink over itself, so create dep file directly, even if that
+# might leave a broken file behind in case the build is interrupted forcefully
+define gb_cxx_dep_generation_options
+-MMD -MT $(1) -MP -MF $(2)
+endef
+define gb_cxx_dep_copy
+endef
+else
 define gb_cxx_dep_generation_options
 -MMD -MT $(1) -MP -MF $(2)_
 endef
 define gb_cxx_dep_copy
 && mv $(1)_ $(1)
 endef
+endif
 else
 define gb_cxx_dep_generation_options
 endef
@@ -46,108 +56,24 @@ endef
 define gb_CObject__command_pattern
 $(call gb_Helper_abbreviate_dirs,\
 	mkdir -p $(dir $(1)) $(dir $(4)) && cd $(SRCDIR) && \
+	$(gb_COMPILER_SETUP) \
 	$(if $(5),$(gb_COMPILER_PLUGINS_SETUP)) \
 	$(if $(filter %.c %.m,$(3)), $(gb_CC), $(gb_CXX)) \
 		$(DEFS) \
 		$(gb_LTOFLAGS) \
 		$(if $(VISIBILITY),,$(gb_VISIBILITY_FLAGS)) \
-		$(if $(WARNINGS_NOT_ERRORS),,$(gb_CFLAGS_WERROR)) \
+		$(if $(WARNINGS_NOT_ERRORS),$(if $(ENABLE_WERROR),$(if $(PLUGIN_WARNINGS_AS_ERRORS),$(gb_COMPILER_PLUGINS_WARNINGS_AS_ERRORS))),$(gb_CFLAGS_WERROR)) \
 		$(if $(5),$(gb_COMPILER_PLUGINS)) \
+		$(if $(COMPILER_TEST),-fsyntax-only -ferror-limit=0 -Xclang -verify) \
 		$(2) \
 		$(if $(EXTERNAL_CODE),$(gb_CXXFLAGS_Wundef),$(gb_DEFS_INTERNAL)) \
 		-c $(3) \
 		-o $(1) \
-		$(call gb_cxx_dep_generation_options,$(1),$(4)) \
-		-I$(dir $(3)) \
+		$(if $(COMPILER_TEST),,$(call gb_cxx_dep_generation_options,$(1),$(4))) \
 		$(INCLUDE) \
 		$(PCHFLAGS) \
-		$(call gb_cxx_dep_copy,$(4)) \
+		$(if $(COMPILER_TEST),,$(call gb_cxx_dep_copy,$(4))) \
 		)
-endef
-
-# Used to run a compiler plugin tool.
-# $(call gb_CObject__tool_command,relative-source,source)
-define gb_CObject__tool_command
-$(call gb_Output_announce,$(1).c,$(true),C  ,3)
-$(call gb_Helper_abbreviate_dirs,\
-        ICECC=no CCACHE_DISABLE=1 \
-	$(gb_CC) \
-		$(DEFS) \
-		$(gb_LTOFLAGS) \
-		$(if $(VISIBILITY),,$(gb_VISIBILITY_FLAGS)) \
-		$(if $(WARNINGS_NOT_ERRORS),,$(gb_CFLAGS_WERROR)) \
-		$(gb_COMPILER_PLUGINS) \
-		$(T_CFLAGS) $(T_CFLAGS_APPEND) \
-		$(if $(EXTERNAL_CODE),$(gb_CXXFLAGS_Wundef),$(gb_DEFS_INTERNAL)) \
-		-c $(2) \
-		-I$(dir $(2)) \
-		$(INCLUDE) \
-		)
-endef
-define gb_ObjCObject__tool_command
-$(call gb_Output_announce,$(1).m,$(true),OCC,3)
-$(call gb_Helper_abbreviate_dirs,\
-        ICECC=no CCACHE_DISABLE=1 \
-	$(gb_CC) \
-		$(DEFS) \
-		$(gb_LTOFLAGS) \
-		$(if $(VISIBILITY),,$(gb_VISIBILITY_FLAGS)) \
-		$(if $(WARNINGS_NOT_ERRORS),,$(gb_CFLAGS_WERROR)) \
-		$(gb_COMPILER_PLUGINS) \
-		$(T_OBJCFLAGS) $(T_OBJCFLAGS_APPEND) \
-		$(if $(EXTERNAL_CODE),$(gb_CXXFLAGS_Wundef),$(gb_DEFS_INTERNAL)) \
-		-c $(2) \
-		-I$(dir $(2)) \
-		$(INCLUDE) \
-		)
-endef
-
-# Used to run a compiler plugin tool.
-# $(call gb_CxxObject__tool_command,relative-source,source)
-define gb_CxxObject__tool_command
-$(call gb_Output_announce,$(1).cxx,$(true),CXX,3)
-$(call gb_Helper_abbreviate_dirs,\
-        ICECC=no CCACHE_DISABLE=1 \
-	$(gb_CXX) \
-		$(DEFS) \
-		$(gb_LTOFLAGS) \
-		$(if $(VISIBILITY),,$(gb_VISIBILITY_FLAGS)) \
-		$(if $(WARNINGS_NOT_ERRORS),,$(gb_CFLAGS_WERROR)) \
-		$(gb_COMPILER_PLUGINS) \
-		$(T_CXXFLAGS) $(T_CXXFLAGS_APPEND) \
-		$(if $(EXTERNAL_CODE),$(gb_CXXFLAGS_Wundef),$(gb_DEFS_INTERNAL)) \
-		-c $(2) \
-		-I$(dir $(2)) \
-		$(INCLUDE) \
-		)
-endef
-define gb_ObjCxxObject__tool_command
-$(call gb_Output_announce,$(1).mm,$(true),OCX,3)
-$(call gb_Helper_abbreviate_dirs,\
-        ICECC=no CCACHE_DISABLE=1 \
-	$(gb_CXX) \
-		$(DEFS) \
-		$(gb_LTOFLAGS) \
-		$(if $(VISIBILITY),,$(gb_VISIBILITY_FLAGS)) \
-		$(if $(WARNINGS_NOT_ERRORS),,$(gb_CFLAGS_WERROR)) \
-		$(gb_COMPILER_PLUGINS) \
-		$(T_OBJCXXFLAGS) $(T_OBJCXXFLAGS_APPEND) \
-		$(if $(EXTERNAL_CODE),$(gb_CXXFLAGS_Wundef),$(gb_DEFS_INTERNAL)) \
-		-c $(2) \
-		-I$(dir $(2)) \
-		$(INCLUDE) \
-		)
-endef
-
-define gb_SrsPartTarget__command_dep
-$(call gb_Helper_abbreviate_dirs,\
-	mkdir -p $(dir $(call gb_SrsPartTarget_get_dep_target,$(1))) && cd $(SRCDIR) && \
-	$(gb_GCCP) \
-		-MM -MP -MT $(call gb_SrsPartTarget_get_target,$(1)) \
-		$(INCLUDE) \
-		$(DEFS) \
-		-c -x c++-header $(2) \
-		-o $(call gb_SrsPartTarget_get_dep_target,$(1)))
 endef
 
 # PrecompiledHeader class
@@ -193,7 +119,7 @@ endef
 # CppunitTest class
 
 ifeq ($(strip $(DEBUGCPPUNIT)),TRUE)
-gb_CppunitTest_GDBTRACE := gdb -nx -ex "add-auto-load-safe-path $(INSTDIR)" --batch --command=$(SRCDIR)/solenv/bin/gdbtrycatchtrace-stdout -return-child-result --args
+gb_CppunitTest_GDBTRACE := gdb -nx -ex "add-auto-load-safe-path $(INSTDIR)" -ex "set environment $(subst =, ,$(gb_CppunitTest_CPPTESTPRECOMMAND))" --batch --command=$(SRCDIR)/solenv/bin/gdbtrycatchtrace-stdout -return-child-result --args
 endif
 
 # ExternalProject class
@@ -221,10 +147,19 @@ gb_ICU_PRECOMMAND := $(call gb_Helper_extend_ld_path,$(WORKDIR_FOR_BUILD)/Unpack
 
 # UIConfig class
 
-# Mac OS X sort(1) cannot read a response file
+# macOS sort(1) cannot read a response file
 define gb_UIConfig__command
 $(call gb_Helper_abbreviate_dirs,\
 	$(SORT) -u $(UI_IMAGELISTS) /dev/null > $@ \
+)
+
+endef
+
+define gb_UIConfig__gla11y_command
+$(call gb_Helper_abbreviate_dirs,\
+	$(gb_UIConfig_LXML_PATH) $(gb_Helper_set_ld_path) \
+	$(call gb_ExternalExecutable_get_command,python) \
+	$(gb_UIConfig_gla11y_SCRIPT) $(gb_UIConfig_gla11y_PARAMETERS) -o $@ $(UIFILES)
 )
 
 endef

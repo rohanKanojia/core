@@ -24,6 +24,7 @@ import com.sun.star.awt.Point;
 import com.sun.star.awt.Size;
 import com.sun.star.awt.XControl;
 import com.sun.star.awt.XControlModel;
+import com.sun.star.awt.XToolkitExperimental;
 import com.sun.star.beans.NamedValue;
 import com.sun.star.beans.XPropertySet;
 import com.sun.star.container.NoSuchElementException;
@@ -182,6 +183,10 @@ public class UndoManager
 
         // switch the doc's view to form alive mode (so the button will actually work)
         m_currentDocument.getCurrentView().dispatch( ".uno:SwitchControlDesignMode" );
+        XToolkitExperimental xToolkit = UnoRuntime.queryInterface(
+                XToolkitExperimental.class,
+                getORB().createInstance("com.sun.star.awt.Toolkit"));
+        xToolkit.processEventsToIdle();
 
         // click the button
         m_callbackCalled = false;
@@ -219,7 +224,7 @@ public class UndoManager
         };
         events.replaceByName( "OnViewCreated", scriptDescriptor );
 
-        // The below doesn't work: event notification is broken in m96, see http://www.openoffice.org/issues/show_bug.cgi?id=116313
+        // The below doesn't work: event notification is broken in m96, see https://bz.apache.org/ooo/show_bug.cgi?id=116313
         m_callbackCalled = false;
         m_currentDocument.getCurrentView().dispatch( ".uno:NewWindow" );
         assertTrue( "triggering an event did not work as expected - basic script not called", m_callbackCalled );

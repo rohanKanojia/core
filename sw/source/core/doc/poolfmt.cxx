@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <hintids.hxx>
 #include <i18nlangtag/mslangid.hxx>
 #include <unotools/localedatawrapper.hxx>
@@ -62,12 +63,12 @@
 #include <fmtcol.hxx>
 #include <ndtxt.hxx>
 #include <fmtline.hxx>
-#include <poolfmt.hrc>
 #include <GetMetricVal.hxx>
 #include <numrule.hxx>
+#include <swtable.hxx>
+#include <tblafmt.hxx>
+#include <hints.hxx>
 #include <svx/xdef.hxx>
-
-//UUUU
 #include <svx/xfillit0.hxx>
 
 using namespace ::editeng;
@@ -102,20 +103,25 @@ void SetAllScriptItem( SfxItemSet& rSet, const SfxPoolItem& rItem )
     }
 
     if( nWhCJK )
-        rSet.Put( rItem, nWhCJK );
+    {
+        std::unique_ptr<SfxPoolItem> pNewItem(rItem.CloneSetWhich(nWhCJK));
+        rSet.Put( *pNewItem );
+    }
     if( nWhCTL )
-        rSet.Put( rItem, nWhCTL );
+    {
+        std::unique_ptr<SfxPoolItem> pNewItem(rItem.CloneSetWhich(nWhCTL));
+        rSet.Put( *pNewItem );
+    }
 }
 
 /// Return the AutoCollection by its Id. If it doesn't
 /// exist yet, create it.
 /// If the String pointer is defined, then only query for
 /// the Attribute descriptions. It doesn't create a style!
-SvxFrameDirection GetDefaultFrameDirection(sal_uLong nLanguage)
+SvxFrameDirection GetDefaultFrameDirection(LanguageType nLanguage)
 {
-    SvxFrameDirection eResult = (MsLangId::isRightToLeft( static_cast<LanguageType>(nLanguage)) ?
-            FRMDIR_HORI_RIGHT_TOP : FRMDIR_HORI_LEFT_TOP);
-    return eResult;
+    return MsLangId::isRightToLeft(nLanguage) ?
+            SvxFrameDirection::Horizontal_RL_TB : SvxFrameDirection::Horizontal_LR_TB;
 }
 
 // See if the Paragraph/Character/Frame/Page style is in use
@@ -125,6 +131,20 @@ bool SwDoc::IsUsed( const SwModify& rModify ) const
     // (also indirect ones for derived Formats)
     SwAutoFormatGetDocNode aGetHt( &GetNodes() );
     return !rModify.GetInfo( aGetHt );
+}
+
+// See if Table style is in use
+bool SwDoc::IsUsed( const SwTableAutoFormat& rTableAutoFormat) const
+{
+    size_t nTableCount = GetTableFrameFormatCount(true);
+    for (size_t i=0; i < nTableCount; ++i)
+    {
+        SwFrameFormat* pFrameFormat = &GetTableFrameFormat(i, true);
+        SwTable* pTable = SwTable::FindTable(pFrameFormat);
+        if (pTable->GetTableStyleName() == rTableAutoFormat.GetName())
+            return true;
+    }
+    return false;
 }
 
 // See if the NumRule is used
@@ -230,7 +250,7 @@ sal_uInt16 GetPoolParent( sal_uInt16 nId )
             switch( nId )
             {
             case RES_POOLCOLL_TABLE_HDLN:
-                    nRet = RES_POOLCOLL_TABLE;                  break;
+                    nRet = RES_POOLCOLL_TABLE;                 break;
 
             case RES_POOLCOLL_FRAME:
             case RES_POOLCOLL_TABLE:
@@ -238,19 +258,25 @@ sal_uInt16 GetPoolParent( sal_uInt16 nId )
             case RES_POOLCOLL_ENDNOTE:
             case RES_POOLCOLL_JAKETADRESS:
             case RES_POOLCOLL_SENDADRESS:
+            case RES_POOLCOLL_HEADERFOOTER:
+            case RES_POOLCOLL_LABEL:
+                    nRet = RES_POOLCOLL_STANDARD;              break;        
             case RES_POOLCOLL_HEADER:
+                    nRet = RES_POOLCOLL_HEADERFOOTER;          break;
             case RES_POOLCOLL_HEADERL:
             case RES_POOLCOLL_HEADERR:
+                    nRet = RES_POOLCOLL_HEADER;                break;
             case RES_POOLCOLL_FOOTER:
+                    nRet = RES_POOLCOLL_HEADERFOOTER;          break;
             case RES_POOLCOLL_FOOTERL:
             case RES_POOLCOLL_FOOTERR:
-            case RES_POOLCOLL_LABEL:
-                    nRet = RES_POOLCOLL_STANDARD;               break;
+                    nRet = RES_POOLCOLL_FOOTER;                break;
 
             case RES_POOLCOLL_LABEL_ABB:
             case RES_POOLCOLL_LABEL_TABLE:
             case RES_POOLCOLL_LABEL_FRAME:
             case RES_POOLCOLL_LABEL_DRAWING:
+            case RES_POOLCOLL_LABEL_FIGURE:
                     nRet = RES_POOLCOLL_LABEL;                  break;
             }
             break;
@@ -290,7 +316,7 @@ sal_uInt16 GetPoolParent( sal_uInt16 nId )
 
 void SwDoc::RemoveAllFormatLanguageDependencies()
 {
-    /* Restore the language independ pool defaults and styles. */
+    /* Restore the language independent pool defaults and styles. */
     GetAttrPool().ResetPoolDefaultItem( RES_PARATR_ADJUST );
 
     SwTextFormatColl * pTextFormatColl = getIDocumentStylePoolAccess().GetTextCollFromPool( RES_POOLCOLL_STANDARD );
@@ -299,7 +325,7 @@ void SwDoc::RemoveAllFormatLanguageDependencies()
     /* koreans do not like SvxScriptItem(TRUE) */
     pTextFormatColl->ResetFormatAttr( RES_PARATR_SCRIPTSPACE );
 
-    SvxFrameDirectionItem aFrameDir( FRMDIR_HORI_LEFT_TOP, RES_FRAMEDIR );
+    SvxFrameDirectionItem aFrameDir( SvxFrameDirection::Horizontal_LR_TB, RES_FRAMEDIR );
 
     size_t nCount = GetPageDescCnt();
     for( size_t i=0; i<nCount; ++i )

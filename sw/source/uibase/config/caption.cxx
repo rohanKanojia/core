@@ -17,52 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/diagnose.h>
 
-#include "numrule.hxx"
-#include "caption.hxx"
+#include <numrule.hxx>
+#include <caption.hxx>
 
 InsCaptionOpt::InsCaptionOpt(const SwCapObjType eType, const SvGlobalName* pOleId) :
-    bUseCaption(false),
-    eObjType(eType),
-    nNumType(SVX_NUM_ARABIC),
-    sNumberSeparator((". ")),
-    nPos(1),
-    nLevel(0),
-    sSeparator( OUString(": ") ),
-    bIgnoreSeqOpts(false),
-    bCopyAttributes(false)
+    m_bUseCaption(false),
+    m_eObjType(eType),
+    m_nNumType(SVX_NUM_ARABIC),
+    m_sNumberSeparator(". "),
+    m_nPos(1),
+    m_nLevel(0),
+    m_sSeparator( OUString(": ") ),
+    m_bIgnoreSeqOpts(false),
+    m_bCopyAttributes(false)
 {
     if (pOleId)
-        aOleId = *pOleId;
-}
-
-InsCaptionOpt::InsCaptionOpt(const InsCaptionOpt& rOpt)
-{
-    *this = rOpt;
-}
-
-InsCaptionOpt::~InsCaptionOpt()
-{
-}
-
-InsCaptionOpt& InsCaptionOpt::operator=( const InsCaptionOpt& rOpt )
-{
-    bUseCaption = rOpt.bUseCaption;
-    eObjType = rOpt.eObjType;
-    aOleId = rOpt.aOleId;
-    sCategory = rOpt.sCategory;
-    nNumType = rOpt.nNumType;
-    sNumberSeparator = rOpt.sNumberSeparator;
-    sCaption = rOpt.sCaption;
-    nPos = rOpt.nPos;
-    nLevel = rOpt.nLevel;
-    sSeparator = rOpt.sSeparator;
-    bIgnoreSeqOpts = rOpt.bIgnoreSeqOpts;
-    sCharacterStyle = rOpt.sCharacterStyle;
-    bCopyAttributes = rOpt.bCopyAttributes;
-
-    return *this;
+        m_aOleId = *pOleId;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

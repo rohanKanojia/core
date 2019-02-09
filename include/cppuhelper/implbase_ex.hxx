@@ -19,9 +19,15 @@
 #ifndef INCLUDED_CPPUHELPER_IMPLBASE_EX_HXX
 #define INCLUDED_CPPUHELPER_IMPLBASE_EX_HXX
 
-#include <cppuhelper/weak.hxx>
-#include <cppuhelper/weakagg.hxx>
-#include <com/sun/star/lang/XTypeProvider.hpp>
+#include "com/sun/star/uno/Any.h"
+#include "com/sun/star/uno/Sequence.h"
+#include "com/sun/star/uno/Type.h"
+#include "com/sun/star/uno/genfunc.h"
+#include "cppuhelper/cppuhelperdllapi.h"
+#include "sal/types.h"
+
+namespace cppu { class OWeakAggObject; }
+namespace cppu { class OWeakObject; }
 
 
 /* If you need to define implementation helper classes that deal with more than
@@ -46,7 +52,7 @@ typedef css::uno::Type const & (SAL_CALL * fptr_getCppuType)( void * );
 
 /** single type + object offset
 */
-struct type_entry
+struct SAL_WARN_UNUSED type_entry
 {
     /** the type_entry is initialized with function pointer to ::getCppuType() function first,
         but holds an unacquired typelib_TypeDescriptionReference * after initialization,
@@ -69,7 +75,7 @@ struct type_entry
 
 /** identical dummy struct for casting class_dataN to class_data
 */
-struct class_data
+struct SAL_WARN_UNUSED class_data
 {
     /** number of supported types in m_typeEntries
     */

@@ -17,17 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/ppt/timenode.hxx"
-#include "oox/ppt/pptshape.hxx"
-#include "oox/ppt/slidepersist.hxx"
-#include "oox/drawingml/fillproperties.hxx"
-#include "oox/drawingml/shapepropertymap.hxx"
-#include "oox/helper/propertymap.hxx"
-#include "oox/helper/propertyset.hxx"
-#include "oox/vml/vmldrawing.hxx"
-#include "oox/core/xmlfilterbase.hxx"
-#include "drawingml/textliststyle.hxx"
-#include "drawingml/textparagraphproperties.hxx"
+#include <basegfx/matrix/b2dhommatrix.hxx>
+#include <com/sun/star/drawing/XShapes.hpp>
+#include <oox/ppt/timenode.hxx>
+#include <oox/ppt/pptshape.hxx>
+#include <oox/ppt/slidepersist.hxx>
+#include <drawingml/fillproperties.hxx>
+#include <oox/drawingml/shapepropertymap.hxx>
+#include <oox/helper/propertymap.hxx>
+#include <oox/helper/propertyset.hxx>
+#include <oox/vml/vmldrawing.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <drawingml/textliststyle.hxx>
+#include <drawingml/textparagraphproperties.hxx>
 
 #include <osl/diagnose.h>
 
@@ -48,7 +52,7 @@ namespace oox { namespace ppt {
 
 SlidePersist::SlidePersist( XmlFilterBase& rFilter, bool bMaster, bool bNotes,
     const css::uno::Reference< css::drawing::XDrawPage >& rxPage,
-        oox::drawingml::ShapePtr pShapesPtr, const drawingml::TextListStylePtr & pDefaultTextStyle )
+        oox::drawingml::ShapePtr const & pShapesPtr, const drawingml::TextListStylePtr & pDefaultTextStyle )
 : mpDrawingPtr( new oox::vml::Drawing( rFilter, rxPage, oox::vml::VMLDRAWING_POWERPOINT ) )
 , mxPage( rxPage )
 , maShapesPtr( pShapesPtr )
@@ -129,21 +133,17 @@ void SlidePersist::createXShapes( XmlFilterBase& rFilterBase )
     Reference< XShapes > xShapes( getPage(), UNO_QUERY );
 
     std::vector< oox::drawingml::ShapePtr >& rShapes( maShapesPtr->getChildren() );
-    const std::vector< oox::drawingml::ShapePtr >::const_iterator aShapesEnd( rShapes.end() );
-    for (std::vector< oox::drawingml::ShapePtr >::const_iterator aShapesIter( rShapes.begin() );
-         aShapesIter != aShapesEnd ; ++aShapesIter)
+    for (auto const& shape : rShapes)
     {
-        std::vector< oox::drawingml::ShapePtr >& rChildren( (*aShapesIter)->getChildren() );
-        const std::vector< oox::drawingml::ShapePtr >::const_iterator aChildEnd( rChildren.end() );
-        for (std::vector< oox::drawingml::ShapePtr >::const_iterator aChildIter( rChildren.begin() );
-             aChildIter != aChildEnd ; ++aChildIter)
+        std::vector< oox::drawingml::ShapePtr >& rChildren( shape->getChildren() );
+        for (auto const& child : rChildren)
         {
-            PPTShape* pPPTShape = dynamic_cast< PPTShape* >( (*aChildIter).get() );
+            PPTShape* pPPTShape = dynamic_cast< PPTShape* >( child.get() );
             basegfx::B2DHomMatrix aTransformation;
             if ( pPPTShape )
-                pPPTShape->addShape( rFilterBase, *this, getTheme().get(), xShapes, aTransformation, nullptr, &getShapeMap() );
+                pPPTShape->addShape( rFilterBase, *this, getTheme().get(), xShapes, aTransformation, &getShapeMap() );
             else
-                (*aChildIter)->addShape( rFilterBase, getTheme().get(), xShapes, aTransformation, maShapesPtr->getFillProperties(), nullptr, &getShapeMap() );
+                child->addShape( rFilterBase, getTheme().get(), xShapes, aTransformation, maShapesPtr->getFillProperties(), &getShapeMap() );
         }
     }
 
@@ -157,7 +157,8 @@ void SlidePersist::createXShapes( XmlFilterBase& rFilterBase )
             TimeNodePtr pNode(maTimeNodeList.front());
             OSL_ENSURE( pNode, "pNode" );
 
-            pNode->setNode( rFilterBase, xNode, pSlidePtr );
+            Reference<XAnimationNode> xDummy;
+            pNode->setNode(rFilterBase, xNode, pSlidePtr, xDummy);
         }
     }
 }
@@ -166,16 +167,20 @@ void SlidePersist::createBackground( const XmlFilterBase& rFilterBase )
 {
     if ( mpBackgroundPropertiesPtr )
     {
-        sal_Int32 nPhClr = mpBackgroundPropertiesPtr->getBestSolidColor().getColor( rFilterBase.getGraphicHelper() );
+        ::Color nPhClr = maBackgroundColor.isUsed() ?
+            maBackgroundColor.getColor( rFilterBase.getGraphicHelper() ) : API_RGB_TRANSPARENT;
 
-        ::oox::drawingml::ShapePropertyMap aPropMap( rFilterBase.getModelObjectHelper() );
+        oox::drawingml::ShapePropertyIds aPropertyIds = oox::drawingml::ShapePropertyInfo::DEFAULT.mrPropertyIds;
+        aPropertyIds[oox::drawingml::ShapeProperty::FillGradient] = PROP_FillGradientName;
+        oox::drawingml::ShapePropertyInfo aPropInfo( aPropertyIds, true, false, true, false, false );
+        oox::drawingml::ShapePropertyMap aPropMap( rFilterBase.getModelObjectHelper(), aPropInfo );
         mpBackgroundPropertiesPtr->pushToPropMap( aPropMap, rFilterBase.getGraphicHelper(), 0, nPhClr );
         PropertySet( mxPage ).setProperty( PROP_Background, aPropMap.makePropertySet() );
     }
 }
 
-void setTextStyle( Reference< beans::XPropertySet >& rxPropSet, const XmlFilterBase& rFilter,
-    oox::drawingml::TextListStylePtr& pTextListStylePtr, int nLevel )
+static void setTextStyle( Reference< beans::XPropertySet > const & rxPropSet, const XmlFilterBase& rFilter,
+    oox::drawingml::TextListStylePtr const & pTextListStylePtr, int nLevel )
 {
     ::oox::drawingml::TextParagraphPropertiesPtr pTextParagraphPropertiesPtr( pTextListStylePtr->getListStyle()[ nLevel ] );
     if( pTextParagraphPropertiesPtr == nullptr )
@@ -201,7 +206,7 @@ void SlidePersist::applyTextStyles( const XmlFilterBase& rFilterBase )
             Reference< container::XNameAccess > aXNameAccess( aXStyleFamiliesSupplier->getStyleFamilies() );
             Reference< container::XNamed > aXNamed( mxPage, UNO_QUERY_THROW );
 
-            if ( aXNameAccess.is() && aXNamed.is() )
+            if ( aXNameAccess.is() )
             {
                 oox::drawingml::TextListStylePtr pTextListStylePtr;
                 OUString aStyle;
@@ -300,20 +305,15 @@ void SlidePersist::applyTextStyles( const XmlFilterBase& rFilterBase )
 void SlidePersist::hideShapesAsMasterShapes()
 {
     std::vector< oox::drawingml::ShapePtr >& rShapes( maShapesPtr->getChildren() );
-    std::vector< oox::drawingml::ShapePtr >::iterator aShapesIter( rShapes.begin() );
-    while( aShapesIter != rShapes.end() )
+    for (auto const& shape : rShapes)
     {
-        while( aShapesIter != rShapes.end() )
+        std::vector< oox::drawingml::ShapePtr >& rChildren( shape->getChildren() );
+        for (auto const& child : rChildren)
         {
-            std::vector< oox::drawingml::ShapePtr >& rChildren( (*aShapesIter++)->getChildren() );
-            std::vector< oox::drawingml::ShapePtr >::iterator aChildIter( rChildren.begin() );
-            while( aChildIter != rChildren.end() ) {
-                PPTShape* pPPTShape = dynamic_cast< PPTShape* >( (*aChildIter++).get() );
-                if (!pPPTShape)
-                    continue;
-                OSL_TRACE("hide shape with id: %s", OUStringToOString(pPPTShape->getId(), RTL_TEXTENCODING_UTF8 ).getStr());
-                pPPTShape->setHiddenMasterShape( true );
-            }
+            PPTShape* pPPTShape = dynamic_cast< PPTShape* >( child.get() );
+            if (!pPPTShape)
+                continue;
+            pPPTShape->setHiddenMasterShape( true );
         }
     }
 }

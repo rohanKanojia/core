@@ -24,7 +24,6 @@
 #include <tools/gen.hxx>
 #include <tools/color.hxx>
 #include "scdllapi.h"
-#include "token.hxx"
 
 #include <vector>
 
@@ -32,12 +31,10 @@ class SdrObject;
 
 class ScDetectiveData;
 class ScDocument;
-class ScAddress;
-class ScRange;
 
 #define SC_DET_MAXCIRCLE    1000
 
-enum ScDetectiveDelete { SC_DET_ALL, SC_DET_DETECTIVE, SC_DET_CIRCLES, SC_DET_ARROWS };
+enum class ScDetectiveDelete { Detective, Circles, Arrows };
 
 enum ScDetectiveObjType
 {
@@ -50,31 +47,29 @@ enum ScDetectiveObjType
 
 class SC_DLLPUBLIC ScDetectiveFunc
 {
-    static ColorData nArrowColor;
-    static ColorData nErrorColor;
-    static ColorData nCommentColor;
+    static Color     nArrowColor;
+    static Color     nErrorColor;
+    static Color     nCommentColor;
     static bool      bColorsInitialized;
 
     ScDocument*     pDoc;
-    SCTAB           nTab;
+    SCTAB const     nTab;
 
-    enum DrawPosMode
+    enum class DrawPosMode
     {
-        DRAWPOS_TOPLEFT,        ///< Top-left edge of the cell.
-        DRAWPOS_BOTTOMRIGHT,    ///< Bottom-right edge of the cell.
-        DRAWPOS_DETARROW,       ///< Position inside cell for detective arrows.
-        DRAWPOS_CAPTIONLEFT,    ///< Top-left edge of the cell for captions.
-        DRAWPOS_CAPTIONRIGHT    ///< Top-right edge of the cell for captions (incl. merged cells).
+        TopLeft,        ///< Top-left edge of the cell.
+        BottomRight,    ///< Bottom-right edge of the cell.
+        DetectiveArrow, ///< Position inside cell for detective arrows.
     };
 
     /** @return a drawing layer position for the passed cell address. */
     Point       GetDrawPos( SCCOL nCol, SCROW nRow, DrawPosMode eMode ) const;
 
     /** @return the drawing layer rectangle for the passed cell range. */
-    Rectangle   GetDrawRect( SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2 ) const;
+    tools::Rectangle   GetDrawRect( SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2 ) const;
 
     /** @return the drawing layer rectangle for the passed cell address. */
-    Rectangle   GetDrawRect( SCCOL nCol, SCROW nRow ) const;
+    tools::Rectangle   GetDrawRect( SCCOL nCol, SCROW nRow ) const;
 
     bool        HasArrow( const ScAddress& rStart,
                             SCCOL nEndCol, SCROW nEndRow, SCTAB nEndTab );
@@ -85,12 +80,12 @@ class SC_DLLPUBLIC ScDetectiveFunc
     bool        HasError( const ScRange& rRange, ScAddress& rErrPos );
 
                 /// called from DrawEntry/DrawAlienEntry and InsertObject
-    bool        InsertArrow( SCCOL nCol, SCROW nRow,
+    void        InsertArrow( SCCOL nCol, SCROW nRow,
                                 SCCOL nRefStartCol, SCROW nRefStartRow,
                                 SCCOL nRefEndCol, SCROW nRefEndRow,
                                 bool bFromOtherTab, bool bRed,
                                 ScDetectiveData& rData );
-    bool        InsertToOtherTab( SCCOL nStartCol, SCROW nStartRow,
+    void        InsertToOtherTab( SCCOL nStartCol, SCROW nStartRow,
                                 SCCOL nEndCol, SCROW nEndRow, bool bRed,
                                 ScDetectiveData& rData );
 
@@ -116,7 +111,7 @@ class SC_DLLPUBLIC ScDetectiveFunc
     sal_uInt16      FindSuccLevel( SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2,
                                 sal_uInt16 nLevel, sal_uInt16 nDeleteLevel );
 
-    void        FindFrameForObject( SdrObject* pObject, ScRange& rRange );
+    void        FindFrameForObject( const SdrObject* pObject, ScRange& rRange );
 
     void        Modified();
 
@@ -139,16 +134,16 @@ public:
     static void UpdateAllComments( ScDocument& rDoc );        ///< on all tables
     void        UpdateAllArrowColors();     ///< on all tables
 
-    static bool IsNonAlienArrow( SdrObject* pObject );
+    static bool IsNonAlienArrow( const SdrObject* pObject );
 
     ScDetectiveObjType GetDetectiveObjectType( SdrObject* pObject, SCTAB nObjTab,
                                 ScAddress& rPosition, ScRange& rSource, bool& rRedLine );
     void        InsertObject( ScDetectiveObjType eType, const ScAddress& rPosition,
                                 const ScRange& rSource, bool bRedLine );
 
-    static ColorData GetArrowColor();
-    static ColorData GetErrorColor();
-    static ColorData GetCommentColor();
+    static Color GetArrowColor();
+    static Color GetErrorColor();
+    static Color GetCommentColor();
     static void InitializeColors();
     static bool IsColorsInitialized();
     static void AppendChangTrackNoteSeparator(OUString &str);

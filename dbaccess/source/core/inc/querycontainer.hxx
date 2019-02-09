@@ -41,7 +41,7 @@
 #include <com/sun/star/container/XContainerApproveListener.hpp>
 
 #include "definitioncontainer.hxx"
-#include "apitools.hxx"
+#include <apitools.hxx>
 
 namespace dbtools
 {
@@ -69,8 +69,8 @@ namespace dbaccess
         css::uno::Reference< css::sdbc::XConnection >
                                         m_xConnection;
         // possible actions on our "aggregate"
-        enum AGGREGATE_ACTION { NONE, INSERTING, FLUSHING };
-        AGGREGATE_ACTION        m_eDoingCurrently;
+        enum class AggregateAction { NONE, Inserting };
+        AggregateAction        m_eDoingCurrently;
 
         /** a class which automatically resets m_eDoingCurrently in its destructor
         */
@@ -78,10 +78,10 @@ namespace dbaccess
         friend class OAutoActionReset;
         class OAutoActionReset
         {
-            OQueryContainer*        m_pActor;
+            OQueryContainer&        m_rActor;
         public:
-            OAutoActionReset(OQueryContainer* _pActor) : m_pActor(_pActor) { }
-            ~OAutoActionReset() { m_pActor->m_eDoingCurrently = NONE; }
+            OAutoActionReset(OQueryContainer& _rActor) : m_rActor(_rActor) { }
+            ~OAutoActionReset() { m_rActor.m_eDoingCurrently = AggregateAction::NONE; }
         };
 
         // ODefinitionContainer
@@ -90,7 +90,7 @@ namespace dbaccess
 
         // helper
         virtual void SAL_CALL disposing() override;
-        virtual ~OQueryContainer();
+        virtual ~OQueryContainer() override;
 
         /** ctor of the container. The parent has to support the <type scope="css::sdbc">XConnection</type>
             interface.<BR>
@@ -99,7 +99,7 @@ namespace dbaccess
                 specifies a warnings container (May be <NULL/>)
 
                 Any errors which occur during the lifetime of the query container,
-                which cannot be reported as exceptionts (for instance in methods where throwing an SQLException is
+                which cannot be reported as exceptions (for instance in methods where throwing an SQLException is
                 not allowed) will be appended to this container.</p>
                 <p>The caller is responsible for ensuring the lifetime of the object pointed to by this parameter.
         */
@@ -125,34 +125,34 @@ namespace dbaccess
         DECLARE_SERVICE_INFO();
 
     // css::container::XContainerListener
-        virtual void SAL_CALL elementInserted( const css::container::ContainerEvent& Event ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL elementRemoved( const css::container::ContainerEvent& Event ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL elementReplaced( const css::container::ContainerEvent& Event ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL elementInserted( const css::container::ContainerEvent& Event ) override;
+        virtual void SAL_CALL elementRemoved( const css::container::ContainerEvent& Event ) override;
+        virtual void SAL_CALL elementReplaced( const css::container::ContainerEvent& Event ) override;
 
         // XContainerApproveListener
-        virtual css::uno::Reference< css::util::XVeto > SAL_CALL approveInsertElement( const css::container::ContainerEvent& Event ) throw (css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Reference< css::util::XVeto > SAL_CALL approveReplaceElement( const css::container::ContainerEvent& Event ) throw (css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Reference< css::util::XVeto > SAL_CALL approveRemoveElement( const css::container::ContainerEvent& Event ) throw (css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::util::XVeto > SAL_CALL approveInsertElement( const css::container::ContainerEvent& Event ) override;
+        virtual css::uno::Reference< css::util::XVeto > SAL_CALL approveReplaceElement( const css::container::ContainerEvent& Event ) override;
+        virtual css::uno::Reference< css::util::XVeto > SAL_CALL approveRemoveElement( const css::container::ContainerEvent& Event ) override;
 
     // css::lang::XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
     // css::sdbcx::XDataDescriptorFactory
-        virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL createDataDescriptor(  ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL createDataDescriptor(  ) override;
 
     // css::sdbcx::XAppend
-        virtual void SAL_CALL appendByDescriptor( const css::uno::Reference< css::beans::XPropertySet >& descriptor ) throw(css::sdbc::SQLException, css::container::ElementExistException, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL appendByDescriptor( const css::uno::Reference< css::beans::XPropertySet >& descriptor ) override;
 
     // css::sdbcx::XDrop
-        virtual void SAL_CALL dropByName( const OUString& elementName ) throw(css::sdbc::SQLException, css::container::NoSuchElementException, css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL dropByIndex( sal_Int32 index ) throw(css::sdbc::SQLException, css::lang::IndexOutOfBoundsException, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL dropByName( const OUString& elementName ) override;
+        virtual void SAL_CALL dropByIndex( sal_Int32 index ) override;
 
     // css::container::XElementAccess
-        virtual sal_Bool SAL_CALL hasElements(  ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL hasElements(  ) override;
     // css::container::XIndexAccess
-        virtual sal_Int32 SAL_CALL getCount(  ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual sal_Int32 SAL_CALL getCount(  ) override;
     // css::container::XNameAccess
-        virtual css::uno::Sequence< OUString > SAL_CALL getElementNames(  ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getElementNames(  ) override;
 
     private:
         // OContentHelper overridables

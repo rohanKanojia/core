@@ -17,17 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "Window.hxx"
-#include "DrawDocShell.hxx"
+#include <Window.hxx>
+#include <DrawDocShell.hxx>
 
-#include "app.hrc"
+#include <app.hrc>
 
 #include <svx/svxids.hrc>
 #include <svx/dialogs.hrc>
 
 #include <svx/ofaitem.hxx>
 #include <svx/svxerr.hxx>
-#include <svx/dialmgr.hxx>
 #include <svl/srchitem.hxx>
 #include <svl/languageoptions.hxx>
 #include <svtools/langtab.hxx>
@@ -42,20 +41,17 @@
 #include <editeng/langitem.hxx>
 #include <editeng/eeitem.hxx>
 #include <com/sun/star/i18n/TextConversionOption.hpp>
+#include <sfx2/notebookbar/SfxNotebookBar.hxx>
 
-#include "strings.hrc"
-#include "glob.hrc"
-#include "res_bmp.hrc"
-
-#include "sdmod.hxx"
-#include "drawdoc.hxx"
-#include "sdpage.hxx"
-#include "sdattr.hxx"
-#include "fusearch.hxx"
-#include "ViewShell.hxx"
-#include "View.hxx"
-#include "slideshow.hxx"
-#include "fuhhconv.hxx"
+#include <sdmod.hxx>
+#include <drawdoc.hxx>
+#include <sdpage.hxx>
+#include <sdattr.hxx>
+#include <fusearch.hxx>
+#include <ViewShell.hxx>
+#include <View.hxx>
+#include <slideshow.hxx>
+#include <fuhhconv.hxx>
 #include <memory>
 
 using namespace ::com::sun::star;
@@ -64,7 +60,7 @@ using namespace ::com::sun::star::uno;
 
 namespace sd {
 
-static void lcl_setLanguageForObj( SdrObject *pObj, LanguageType nLang, bool bLanguageNone = false )
+static void lcl_setLanguageForObj( SdrObject *pObj, LanguageType nLang, bool bLanguageNone )
 {
     const sal_uInt16 aLangWhichId_EE[3] =
     {
@@ -80,8 +76,8 @@ static void lcl_setLanguageForObj( SdrObject *pObj, LanguageType nLang, bool bLa
     {
         if( nLang == LANGUAGE_NONE )
         {
-            for(sal_Int32 n = 0; n < 3; n++ )
-                pObj->SetMergedItem( SvxLanguageItem( nLang, aLangWhichId_EE[n] ) );
+            for(sal_uInt16 n : aLangWhichId_EE)
+                pObj->SetMergedItem( SvxLanguageItem( nLang, n ) );
         }
         else
         {
@@ -101,8 +97,8 @@ static void lcl_setLanguageForObj( SdrObject *pObj, LanguageType nLang, bool bLa
     }
     else    // Reset to default
     {
-        for( sal_Int32 n = 0; n < 3; n++ )
-            pObj->ClearMergedItem( aLangWhichId_EE[n] );
+        for(sal_uInt16 n : aLangWhichId_EE)
+            pObj->ClearMergedItem( n );
     }
 }
 
@@ -120,7 +116,8 @@ static void lcl_setLanguage( const SdDrawDocument *pDoc, const OUString &rLangua
         for( size_t nObj = 0; nObj < nObjCount; ++nObj )
         {
             SdrObject *pObj = pPage->GetObj( nObj );
-            lcl_setLanguageForObj( pObj, nLang, bLanguageNone );
+            if (pObj->GetObjIdentifier() != OBJ_PAGE)
+                lcl_setLanguageForObj( pObj, nLang, bLanguageNone );
         }
     }
 }
@@ -144,13 +141,9 @@ void DrawDocShell::Execute( SfxRequest& rReq )
 
             if (pReqArgs)
             {
-                const SvxSearchItem* pSearchItem = static_cast<const SvxSearchItem*>( &pReqArgs->Get(SID_SEARCH_ITEM) );
+                const SvxSearchItem & rSearchItem = pReqArgs->Get(SID_SEARCH_ITEM);
 
-                // would be nice to have an assign operation at SearchItem
-                SvxSearchItem* pAppSearchItem = SD_MOD()->GetSearchItem();
-                delete pAppSearchItem;
-                pAppSearchItem = static_cast<SvxSearchItem*>( pSearchItem->Clone() );
-                SD_MOD()->SetSearchItem(pAppSearchItem);
+                SD_MOD()->SetSearchItem(std::unique_ptr<SvxSearchItem>(static_cast<SvxSearchItem*>(rSearchItem.Clone())));
             }
 
             rReq.Done();
@@ -211,15 +204,10 @@ void DrawDocShell::Execute( SfxRequest& rReq )
 
                 if( xFuSearch.is() )
                 {
-                    const SvxSearchItem* pSearchItem =
-                        static_cast<const SvxSearchItem*>( &pReqArgs->Get(SID_SEARCH_ITEM) );
+                    const SvxSearchItem& rSearchItem = pReqArgs->Get(SID_SEARCH_ITEM);
 
-                    // would be nice to have an assign operation at SearchItem
-                    SvxSearchItem* pAppSearchItem = SD_MOD()->GetSearchItem();
-                    delete pAppSearchItem;
-                    pAppSearchItem = static_cast<SvxSearchItem*>( pSearchItem->Clone() );
-                    SD_MOD()->SetSearchItem(pAppSearchItem);
-                    xFuSearch->SearchAndReplace(pSearchItem);
+                    SD_MOD()->SetSearchItem(std::unique_ptr<SvxSearchItem>(static_cast<SvxSearchItem*>( rSearchItem.Clone() )));
+                    xFuSearch->SearchAndReplace(&rSearchItem);
                 }
             }
 
@@ -235,19 +223,15 @@ void DrawDocShell::Execute( SfxRequest& rReq )
 
         case SID_GET_COLORLIST:
         {
-            const SvxColorListItem* pColItem = static_cast<const SvxColorListItem*>( GetItem( SID_COLOR_TABLE ) );
-            XColorListRef pList = pColItem->GetColorList();
+            const SvxColorListItem* pColItem = GetItem( SID_COLOR_TABLE );
+            const XColorListRef& pList = pColItem->GetColorList();
             rReq.SetReturnValue( OfaRefItem<XColorList>( SID_GET_COLORLIST, pList ) );
         }
         break;
 
         case SID_VERSION:
         {
-            const SdrSwapGraphicsMode nOldSwapMode = mpDoc->GetSwapGraphicsMode();
-
-            mpDoc->SetSwapGraphicsMode( SdrSwapGraphicsMode::TEMP );
             ExecuteSlot( rReq, SfxObjectShell::GetStaticInterface() );
-            mpDoc->SetSwapGraphicsMode( nOldSwapMode );
         }
         break;
 
@@ -279,10 +263,10 @@ void DrawDocShell::Execute( SfxRequest& rReq )
             if (aNewLangTxt == "*" )
             {
                 // open the dialog "Tools/Options/Language Settings - Language"
-                SfxAbstractDialogFactory* pFact = SfxAbstractDialogFactory::Create();
-                if (pFact && mpViewShell)
+                if (mpViewShell)
                 {
-                    std::unique_ptr<VclAbstractDialog> pDlg(pFact->CreateVclDialog( mpViewShell->GetActiveWindow(), SID_LANGUAGE_OPTIONS ));
+                    SfxAbstractDialogFactory* pFact = SfxAbstractDialogFactory::Create();
+                    ScopedVclPtr<VclAbstractDialog> pDlg(pFact->CreateVclDialog( mpViewShell->GetActiveWindow(), SID_LANGUAGE_OPTIONS ));
                     pDlg->Execute();
                 }
             }
@@ -296,6 +280,7 @@ void DrawDocShell::Execute( SfxRequest& rReq )
                         const OUString aDocumentLangPrefix("Default_");
                         const OUString aStrNone("LANGUAGE_NONE");
                         const OUString aStrResetLangs("RESET_LANGUAGES");
+                        SdDrawDocument* pDoc = mpViewShell->GetDoc();
                         sal_Int32 nPos = -1;
                         if (-1 != (nPos = aNewLangTxt.indexOf( aDocumentLangPrefix )))
                         {
@@ -306,13 +291,35 @@ void DrawDocShell::Execute( SfxRequest& rReq )
                             break;
                         }
                         if (aNewLangTxt == aStrNone)
-                            lcl_setLanguage( mpViewShell->GetDoc(), OUString() );
+                            lcl_setLanguage( pDoc, OUString(), true );
                         else if (aNewLangTxt == aStrResetLangs)
-                            lcl_setLanguage( mpViewShell->GetDoc(), OUString(), true );
+                            lcl_setLanguage( pDoc, OUString() );
                         else
-                            lcl_setLanguage( mpViewShell->GetDoc(), aNewLangTxt );
+                            lcl_setLanguage( pDoc, aNewLangTxt );
+
+                        if ( pDoc->GetOnlineSpell() )
+                        {
+                            pDoc->StartOnlineSpelling();
+                        }
                     }
                 }
+            }
+            Broadcast(SfxHint(SfxHintId::LanguageChanged));
+        }
+        break;
+
+        case SID_NOTEBOOKBAR:
+        {
+            const SfxStringItem* pFile = rReq.GetArg<SfxStringItem>( SID_NOTEBOOKBAR );
+
+            if ( mpViewShell )
+            {
+                SfxBindings& rBindings( mpViewShell->GetFrame()->GetBindings() );
+
+                if ( sfx2::SfxNotebookBar::IsActive() )
+                    sfx2::SfxNotebookBar::ExecMethod( rBindings, pFile ? pFile->GetValue() : "" );
+                else
+                    sfx2::SfxNotebookBar::CloseMethod( rBindings );
             }
         }
         break;

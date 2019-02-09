@@ -20,7 +20,9 @@
 #include <config_features.h>
 #include <config_folders.h>
 
-#include <pyuno/pyuno.hxx>
+#include <pyuno.hxx>
+
+#include <o3tl/any.hxx>
 
 #include <osl/process.h>
 #include <osl/file.hxx>
@@ -52,7 +54,6 @@ using pyuno::NOT_NULL;
 using pyuno::Runtime;
 using pyuno::PyThreadAttach;
 
-using com::sun::star::registry::XRegistryKey;
 using com::sun::star::uno::Reference;
 using com::sun::star::uno::XInterface;
 using com::sun::star::uno::Sequence;
@@ -62,7 +63,8 @@ using com::sun::star::uno::RuntimeException;
 namespace pyuno_loader
 {
 
-static void raiseRuntimeExceptionWhenNeeded() throw ( RuntimeException )
+/// @throws RuntimeException
+static void raiseRuntimeExceptionWhenNeeded()
 {
     if( PyErr_Occurred() )
     {
@@ -72,13 +74,14 @@ static void raiseRuntimeExceptionWhenNeeded() throw ( RuntimeException )
         css::uno::Any a = runtime.extractUnoException( excType, excValue, excTraceback );
         OUStringBuffer buf;
         buf.append( "python-loader:" );
-        if( a.hasValue() )
-            buf.append( static_cast<css::uno::Exception const *>(a.getValue())->Message );
+        if( auto e = o3tl::tryAccess<css::uno::Exception>(a) )
+            buf.append( e->Message );
         throw RuntimeException( buf.makeStringAndClear() );
     }
 }
 
-static PyRef getLoaderModule() throw( RuntimeException )
+/// @throws RuntimeException
+static PyRef getLoaderModule()
 {
     PyRef module(
         PyImport_ImportModule( "pythonloader" ),
@@ -91,26 +94,24 @@ static PyRef getLoaderModule() throw( RuntimeException )
     return PyRef( PyModule_GetDict( module.get() ));
 }
 
+/// @throws RuntimeException
 static PyRef getObjectFromLoaderModule( const char * func )
-    throw ( RuntimeException )
 {
     PyRef object( PyDict_GetItemString(getLoaderModule().get(), func ) );
     if( !object.is() )
     {
-        OUStringBuffer buf;
-        buf.append( "pythonloader: couldn't find core element pythonloader." );
-        buf.appendAscii( func );
-        throw RuntimeException(buf.makeStringAndClear());
+        throw RuntimeException( "pythonloader: couldn't find core element pythonloader." +
+                OUString::createFromAscii( func ));
     }
     return object;
 }
 
-OUString getImplementationName()
+static OUString getImplementationName()
 {
     return OUString( "org.openoffice.comp.pyuno.Loader" );
 }
 
-Sequence< OUString > getSupportedServiceNames()
+static Sequence< OUString > getSupportedServiceNames()
 {
     OUString serviceName( "com.sun.star.loader.Python" );
     return Sequence< OUString > ( &serviceName, 1 );
@@ -125,7 +126,7 @@ static void setPythonHome ( const OUString & pythonHome )
     // static because Py_SetPythonHome just copies the "wide" pointer
     static wchar_t wide[PATH_MAX + 1];
     size_t len = mbstowcs(wide, o.pData->buffer, PATH_MAX + 1);
-    if(len == (size_t)-1)
+    if(len == size_t(-1))
     {
         PyErr_SetString(PyExc_SystemError, "invalid multibyte sequence in python home path");
         return;
@@ -175,11 +176,10 @@ static void prependPythonPath( const OUString & pythonPathBootstrap )
     osl_setEnvironment(envVar.pData, envValue.pData);
 }
 
-Reference< XInterface > CreateInstance( const Reference< XComponentContext > & ctx )
+struct PythonInit
 {
-    Reference< XInterface > ret;
-
-    if( ! Py_IsInitialized() )
+PythonInit() {
+    if (! Py_IsInitialized()) // may be inited by getComponentContext() already
     {
         OUString pythonPath;
         OUString pythonHome;
@@ -235,9 +235,22 @@ Reference< XInterface > CreateInstance( const Reference< XComponentContext > & c
         // PyThreadAttach below.
         PyThreadState_Delete(tstate);
     }
+}
+};
+
+static Reference<XInterface> CreateInstance(const Reference<XComponentContext> & ctx)
+{
+    // tdf#114815 thread-safe static to init python only once
+    static PythonInit s_Init;
+
+    Reference< XInterface > ret;
 
     PyThreadAttach attach( PyInterpreterState_Head() );
     {
+        // note: this can't race against getComponentContext() because
+        // either (in soffice.bin) CreateInstance() must be called before
+        // getComponentContext() can be called, or (in python.bin) the other
+        // way around
         if( ! Runtime::isInitialized() )
         {
             Runtime::initialize( ctx );
@@ -272,7 +285,7 @@ static const struct cppu::ImplementationEntry g_entries[] =
 extern "C"
 {
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL pythonloader_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * pythonloader_component_getFactory(
     const sal_Char * pImplName, void * pServiceManager, void * pRegistryKey )
 {
     return cppu::component_getFactoryHelper( pImplName, pServiceManager, pRegistryKey , g_entries );

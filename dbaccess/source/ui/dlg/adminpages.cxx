@@ -18,26 +18,27 @@
  */
 
 #include "adminpages.hxx"
-#include "dbadmin.hxx"
-#include "dbu_dlg.hrc"
+#include <core_resource.hxx>
+#include <dbadmin.hxx>
+#include <dbu_dlg.hxx>
+#include <strings.hrc>
 #include <svl/stritem.hxx>
 #include <svl/eitem.hxx>
 #include <svl/intitem.hxx>
-#include "dbustrings.hrc"
-#include "dsitems.hxx"
+#include <stringconstants.hxx>
+#include <dsitems.hxx>
 #include "dsselect.hxx"
-#include "localresaccess.hxx"
 #include "odbcconfig.hxx"
 #include "optionalboolitem.hxx"
-#include "sqlmessage.hxx"
+#include <sqlmessage.hxx>
 
+#include <comphelper/types.hxx>
 #include <osl/file.hxx>
 #include <vcl/accel.hxx>
 #include <vcl/button.hxx>
 #include <vcl/edit.hxx>
 #include <vcl/field.hxx>
-#include <vcl/layout.hxx>
-#include <vcl/lstbox.hxx>
+#include <vcl/weld.hxx>
 
 #include <algorithm>
 #include <stdlib.h>
@@ -66,16 +67,26 @@ namespace dbaui
         SetExchangeSupport();
     }
 
-    SfxTabPage::sfxpg OGenericAdministrationPage::DeactivatePage(SfxItemSet* _pSet)
+    OGenericAdministrationPage::OGenericAdministrationPage(TabPageParent pParent, const OUString& rUIXMLDescription, const OString& rId, const SfxItemSet& rAttrSet)
+        : SfxTabPage(pParent, rUIXMLDescription, rId, &rAttrSet)
+        , m_abEnableRoadmap(false)
+        , m_pAdminDialog(nullptr)
+        , m_pItemSetHelper(nullptr)
+    {
+
+        SetExchangeSupport();
+    }
+
+    DeactivateRC OGenericAdministrationPage::DeactivatePage(SfxItemSet* _pSet)
     {
         if (_pSet)
         {
             if (!prepareLeave())
-                return KEEP_PAGE;
+                return DeactivateRC::KeepPage;
             FillItemSet(_pSet);
         }
 
-        return LEAVE_PAGE;
+        return DeactivateRC::LeavePage;
     }
 
     void OGenericAdministrationPage::Reset(const SfxItemSet* _rCoreAttrs)
@@ -102,34 +113,55 @@ namespace dbaui
         _rReadonly = !_rValid || (pReadonly && pReadonly->GetValue());
     }
 
-    IMPL_LINK_TYPED(OGenericAdministrationPage, OnControlModified, void*, pCtrl, void)
+    IMPL_LINK(OGenericAdministrationPage, OnControlModified, void*, pCtrl, void)
     {
         callModifiedHdl(pCtrl);
     }
-    IMPL_LINK_TYPED(OGenericAdministrationPage, OnControlModifiedClick, Button*, pCtrl, void)
-    {
-        callModifiedHdl(pCtrl);
-    }
-    IMPL_LINK_TYPED(OGenericAdministrationPage, ControlModifiedCheckBoxHdl, CheckBox&, rCtrl, void)
+
+    IMPL_LINK(OGenericAdministrationPage, OnControlModifiedButtonClick, weld::ToggleButton&, rCtrl, void)
     {
         callModifiedHdl(&rCtrl);
     }
-    IMPL_LINK_TYPED(OGenericAdministrationPage, OnControlEditModifyHdl, Edit&, rCtrl, void)
+
+    IMPL_LINK(OGenericAdministrationPage, OnControlModifiedClick, Button*, rCtrl, void)
     {
         callModifiedHdl(&rCtrl);
     }
-    bool OGenericAdministrationPage::getSelectedDataSource(OUString& _sReturn, OUString& _sCurr)
+
+    IMPL_LINK(OGenericAdministrationPage, ControlModifiedCheckBoxHdl, CheckBox&, rCtrl, void)
+    {
+        callModifiedHdl(&rCtrl);
+    }
+
+    IMPL_LINK(OGenericAdministrationPage, OnControlEditModifyHdl, Edit&, rCtrl, void)
+    {
+        callModifiedHdl(&rCtrl);
+    }
+
+    IMPL_LINK(OGenericAdministrationPage, OnControlEntryModifyHdl, weld::Entry&, rCtrl, void)
+    {
+        callModifiedHdl(&rCtrl);
+    }
+
+    IMPL_LINK(OGenericAdministrationPage, OnControlSpinButtonModifyHdl, weld::SpinButton&, rCtrl, void)
+    {
+        callModifiedHdl(&rCtrl);
+    }
+
+    bool OGenericAdministrationPage::getSelectedDataSource(OUString& _sReturn, OUString const & _sCurr)
     {
         // collect all ODBC data source names
-        StringBag aOdbcDatasources;
+        std::set<OUString> aOdbcDatasources;
         OOdbcEnumeration aEnumeration;
         if (!aEnumeration.isLoaded())
         {
             // show an error message
-            OUString sError( ModuleRes( STR_COULD_NOT_LOAD_ODBC_LIB ) );
+            OUString sError(DBA_RES(STR_COULD_NOT_LOAD_ODBC_LIB));
             sError = sError.replaceFirst("#lib#", aEnumeration.getLibraryName());
-            ScopedVclPtrInstance< MessageDialog > aDialog(this, sError);
-            aDialog->Execute();
+            std::unique_ptr<weld::MessageDialog> xDialog(Application::CreateMessageDialog(GetFrameWeld(),
+                                                         VclMessageType::Warning, VclButtonsType::Ok,
+                                                         sError));
+            xDialog->run();
             return false;
         }
         else
@@ -151,7 +183,7 @@ namespace dbaui
         bool bValid, bReadonly;
         getFlags(_rSet, bValid, bReadonly);
 
-        ::std::vector< ISaveValueWrapper* > aControlList;
+        std::vector< std::unique_ptr<ISaveValueWrapper> > aControlList;
         if ( _bSaveValue )
         {
             fillControls(aControlList);
@@ -169,12 +201,6 @@ namespace dbaui
                 pValueWrapper->Disable();
             }
         }
-
-        for( const auto& pValueWrapper : aControlList )
-        {
-            delete pValueWrapper;
-        }
-        aControlList.clear();
     }
 
     void OGenericAdministrationPage::initializePage()
@@ -191,7 +217,7 @@ namespace dbaui
     {
         return true;
     }
-    void OGenericAdministrationPage::fillBool( SfxItemSet& _rSet, CheckBox* _pCheckBox, sal_uInt16 _nID, bool& _bChangedSomething, bool _bRevertValue )
+    void OGenericAdministrationPage::fillBool( SfxItemSet& _rSet, CheckBox const * _pCheckBox, sal_uInt16 _nID, bool& _bChangedSomething, bool _bRevertValue )
     {
         if ( _pCheckBox && _pCheckBox->IsValueChangedFromSaved() )
         {
@@ -212,7 +238,28 @@ namespace dbaui
             _bChangedSomething = true;
         }
     }
-    void OGenericAdministrationPage::fillInt32(SfxItemSet& _rSet, NumericField* _pEdit, sal_uInt16 _nID, bool& _bChangedSomething)
+    void OGenericAdministrationPage::fillBool( SfxItemSet& _rSet, const weld::CheckButton* pCheckBox, sal_uInt16 _nID, bool bOptionalBool, bool& _bChangedSomething, bool _bRevertValue )
+    {
+        if (pCheckBox && pCheckBox->get_state_changed_from_saved())
+        {
+            bool bValue = pCheckBox->get_active();
+            if ( _bRevertValue )
+                bValue = !bValue;
+
+            if (bOptionalBool)
+            {
+                OptionalBoolItem aValue( _nID );
+                if ( pCheckBox->get_state() != TRISTATE_INDET )
+                    aValue.SetValue( bValue );
+                _rSet.Put( aValue );
+            }
+            else
+                _rSet.Put( SfxBoolItem( _nID, bValue ) );
+
+            _bChangedSomething = true;
+        }
+    }
+    void OGenericAdministrationPage::fillInt32(SfxItemSet& _rSet, NumericField const * _pEdit, sal_uInt16 _nID, bool& _bChangedSomething)
     {
         if( _pEdit && _pEdit->IsValueChangedFromSaved() )
         {
@@ -220,7 +267,15 @@ namespace dbaui
             _bChangedSomething = true;
         }
     }
-    void OGenericAdministrationPage::fillString(SfxItemSet& _rSet, Edit* _pEdit, sal_uInt16 _nID, bool& _bChangedSomething)
+    void OGenericAdministrationPage::fillInt32(SfxItemSet& _rSet, const weld::SpinButton* pEdit, sal_uInt16 _nID, bool& _bChangedSomething)
+    {
+        if (pEdit && pEdit->get_value_changed_from_saved())
+        {
+            _rSet.Put(SfxInt32Item(_nID, pEdit->get_value()));
+            _bChangedSomething = true;
+        }
+    }
+    void OGenericAdministrationPage::fillString(SfxItemSet& _rSet, Edit const * _pEdit, sal_uInt16 _nID, bool& _bChangedSomething)
     {
         if( _pEdit && _pEdit->IsValueChangedFromSaved() )
         {
@@ -228,8 +283,24 @@ namespace dbaui
             _bChangedSomething = true;
         }
     }
+    void OGenericAdministrationPage::fillString(SfxItemSet& _rSet, const weld::Entry* pEdit, sal_uInt16 _nID, bool& _bChangedSomething)
+    {
+        if (pEdit && pEdit->get_value_changed_from_saved())
+        {
+            _rSet.Put(SfxStringItem(_nID, pEdit->get_text()));
+            _bChangedSomething = true;
+        }
+    }
+    void OGenericAdministrationPage::fillString(SfxItemSet& _rSet, const dbaui::OConnectionURLEdit* pEdit, sal_uInt16 _nID, bool& _bChangedSomething)
+    {
+        if (pEdit && pEdit->get_value_changed_from_saved())
+        {
+            _rSet.Put(SfxStringItem(_nID, pEdit->GetText()));
+            _bChangedSomething = true;
+        }
+    }
 
-    IMPL_LINK_NOARG_TYPED(OGenericAdministrationPage, OnTestConnectionClickHdl, Button*, void)
+    IMPL_LINK_NOARG(OGenericAdministrationPage, OnTestConnectionClickHdl, Button*, void)
     {
         OSL_ENSURE(m_pAdminDialog,"No Admin dialog set! ->GPF");
         bool bSuccess = false;
@@ -240,30 +311,71 @@ namespace dbaui
             bool bShowMessage = true;
             try
             {
-                ::std::pair< Reference<XConnection>,sal_Bool> xConnection = m_pAdminDialog->createConnection();
-                bShowMessage = xConnection.second;
-                bSuccess = xConnection.first.is();
-                ::comphelper::disposeComponent(xConnection.first);
+                std::pair< Reference<XConnection>,bool> aConnectionPair = m_pAdminDialog->createConnection();
+                bShowMessage = aConnectionPair.second;
+                bSuccess = aConnectionPair.first.is();
+                ::comphelper::disposeComponent(aConnectionPair.first);
             }
             catch(Exception&)
             {
             }
             if ( bShowMessage )
             {
-                OSQLMessageBox::MessageType eImage = OSQLMessageBox::Info;
+                MessageType eImage = MessageType::Info;
                 OUString aMessage,sTitle;
-                sTitle = ModuleRes(STR_CONNECTION_TEST);
+                sTitle = DBA_RES(STR_CONNECTION_TEST);
                 if ( bSuccess )
                 {
-                    aMessage = ModuleRes(STR_CONNECTION_SUCCESS);
+                    aMessage = DBA_RES(STR_CONNECTION_SUCCESS);
                 }
                 else
                 {
-                    eImage = OSQLMessageBox::Error;
-                    aMessage = ModuleRes(STR_CONNECTION_NO_SUCCESS);
+                    eImage = MessageType::Error;
+                    aMessage = DBA_RES(STR_CONNECTION_NO_SUCCESS);
                 }
-                ScopedVclPtrInstance< OSQLMessageBox > aMsg( this, sTitle, aMessage, WB_OK, eImage );
-                aMsg->Execute();
+                OSQLMessageBox aMsg(GetFrameWeld(), sTitle, aMessage, MessBoxStyle::Ok, eImage);
+                aMsg.run();
+            }
+            if ( !bSuccess )
+                m_pAdminDialog->clearPassword();
+        }
+    }
+
+    IMPL_LINK_NOARG(OGenericAdministrationPage, OnTestConnectionButtonClickHdl, weld::Button&, void)
+    {
+        OSL_ENSURE(m_pAdminDialog,"No Admin dialog set! ->GPF");
+        bool bSuccess = false;
+        if ( m_pAdminDialog )
+        {
+            m_pAdminDialog->saveDatasource();
+            OGenericAdministrationPage::implInitControls(*m_pItemSetHelper->getOutputSet(), true);
+            bool bShowMessage = true;
+            try
+            {
+                std::pair< Reference<XConnection>,bool> aConnectionPair = m_pAdminDialog->createConnection();
+                bShowMessage = aConnectionPair.second;
+                bSuccess = aConnectionPair.first.is();
+                ::comphelper::disposeComponent(aConnectionPair.first);
+            }
+            catch(Exception&)
+            {
+            }
+            if ( bShowMessage )
+            {
+                MessageType eImage = MessageType::Info;
+                OUString aMessage,sTitle;
+                sTitle = DBA_RES(STR_CONNECTION_TEST);
+                if ( bSuccess )
+                {
+                    aMessage = DBA_RES(STR_CONNECTION_SUCCESS);
+                }
+                else
+                {
+                    eImage = MessageType::Error;
+                    aMessage = DBA_RES(STR_CONNECTION_NO_SUCCESS);
+                }
+                OSQLMessageBox aMsg(GetFrameWeld(), sTitle, aMessage, MessBoxStyle::Ok, eImage);
+                aMsg.run();
             }
             if ( !bSuccess )
                 m_pAdminDialog->clearPassword();
@@ -271,14 +383,14 @@ namespace dbaui
     }
 
     // LayoutHelper
-    void LayoutHelper::positionBelow( const Control& _rReference, Control& _rControl, const ControlRelation _eRelation,
+    void LayoutHelper::positionBelow( const Control& _rReference, Control& _rControl,
         const long _nIndentAppFont )
     {
         Point aReference = _rReference.GetPosPixel();
-        aReference.Y() += _rReference.GetSizePixel().Height();
+        aReference.AdjustY(_rReference.GetSizePixel().Height() );
 
         const vcl::Window* pConverter = _rControl.GetParent();
-        Size aOffset = pConverter->LogicToPixel( Size( _nIndentAppFont, ( _eRelation == RelatedControls ? 3 : 6 ) ), MAP_APPFONT );
+        Size aOffset = pConverter->LogicToPixel(Size(_nIndentAppFont, 3), MapMode(MapUnit::MapAppFont));
 
         Point aControlPos( aReference.X() + aOffset.Width(), aReference.Y() + aOffset.Height() );
         _rControl.SetPosPixel( aControlPos );

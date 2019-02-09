@@ -17,16 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DrawViewShell.hxx"
-#include "ViewShellImplementation.hxx"
+#include <DrawViewShell.hxx>
+#include <ViewShellImplementation.hxx>
 
-#include "DrawController.hxx"
+#include <DrawController.hxx>
 #include <com/sun/star/embed/EmbedStates.hpp>
 
-#include "comphelper/anytostring.hxx"
-#include "comphelper/scopeguard.hxx"
-#include "cppuhelper/exc_hlp.hxx"
-#include "rtl/ref.hxx"
+#include <comphelper/anytostring.hxx>
+#include <comphelper/scopeguard.hxx>
+#include <cppuhelper/exc_hlp.hxx>
+#include <rtl/ref.hxx>
+#include <sal/log.hxx>
 
 #include <svx/svxids.hrc>
 #include <svx/svdpagv.hxx>
@@ -37,7 +38,6 @@
 #include <vcl/scrbar.hxx>
 #include <svx/svdograf.hxx>
 #include <svx/svdopage.hxx>
-#include <vcl/msgbox.hxx>
 #include <sot/storage.hxx>
 #include <svx/fmshell.hxx>
 #include <svx/globl3d.hxx>
@@ -45,42 +45,43 @@
 #include <editeng/outliner.hxx>
 #include <svx/dialogs.hrc>
 
-#include "view/viewoverlaymanager.hxx"
+#include <view/viewoverlaymanager.hxx>
 
-#include "glob.hrc"
-#include "app.hrc"
-#include "res_bmp.hrc"
-#include "strings.hrc"
-#include "helpids.h"
+#include <strings.hrc>
+#include <app.hrc>
 
-#include "sdmod.hxx"
-#include "fupoor.hxx"
-#include "sdresid.hxx"
-#include "fusel.hxx"
-#include "sdpage.hxx"
-#include "FrameView.hxx"
-#include "stlpool.hxx"
-#include "Window.hxx"
-#include "drawview.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "Ruler.hxx"
-#include "Client.hxx"
-#include "slideshow.hxx"
-#include "optsitem.hxx"
-#include "fusearch.hxx"
-#include "Outliner.hxx"
-#include "AnimationChildWindow.hxx"
-#include "SdUnoDrawView.hxx"
-#include "ToolBarManager.hxx"
-#include "FormShellManager.hxx"
-#include "ViewShellBase.hxx"
-#include "LayerTabBar.hxx"
-#include "ViewShellManager.hxx"
-#include "ViewShellHint.hxx"
+#include <sdmod.hxx>
+#include <fupoor.hxx>
+#include <sdresid.hxx>
+#include <unokywds.hxx>
+#include <fusel.hxx>
+#include <sdpage.hxx>
+#include <FrameView.hxx>
+#include <stlpool.hxx>
+#include <Window.hxx>
+#include <drawview.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <Ruler.hxx>
+#include <Client.hxx>
+#include <slideshow.hxx>
+#include <optsitem.hxx>
+#include <fusearch.hxx>
+#include <Outliner.hxx>
+#include <AnimationChildWindow.hxx>
+#include <SdUnoDrawView.hxx>
+#include <ToolBarManager.hxx>
+#include <FormShellManager.hxx>
+#include <ViewShellBase.hxx>
+#include <LayerTabBar.hxx>
+#include <ViewShellManager.hxx>
+#include <ViewShellHint.hxx>
 
 #include <sfx2/request.hxx>
 #include <comphelper/lok.hxx>
+#include <LibreOfficeKit/LibreOfficeKitEnums.h>
+#include <vcl/uitest/logger.hxx>
+#include <vcl/uitest/eventdescription.hxx>
 
 using namespace com::sun::star;
 
@@ -176,10 +177,10 @@ void DrawViewShell::SelectionHasChanged()
             SdrMark* pMark = rMarkList.GetMark(0);
             SdrObject* pObj = pMark->GetMarkedSdrObj();
 
-            sal_uInt32 nInv = pObj->GetObjInventor();
-            sal_uInt16 nSdrObjKind = pObj->GetObjIdentifier();
+            SdrInventor nInv        = pObj->GetObjInventor();
+            sal_uInt16  nSdrObjKind = pObj->GetObjIdentifier();
 
-            if (nInv == SdrInventor && nSdrObjKind == OBJ_OLE2)
+            if (nInv == SdrInventor::Default && nSdrObjKind == OBJ_OLE2)
             {
                 pOleObj = static_cast<SdrOle2Obj*>(pObj);
                 UpdateIMapDlg( pObj );
@@ -210,7 +211,7 @@ void DrawViewShell::SelectionHasChanged()
             }
             else
             {
-                uno::Reference < embed::XEmbeddedObject > xObj = pOleObj->GetObjRef();
+                const uno::Reference < embed::XEmbeddedObject >& xObj = pOleObj->GetObjRef();
                 if ( xObj.is() )
                 {
                     rBase.SetVerbs( xObj->getSupportedVerbs() );
@@ -225,7 +226,7 @@ void DrawViewShell::SelectionHasChanged()
         {
             if ( pOleObj )
             {
-                uno::Reference < embed::XEmbeddedObject > xObj = pOleObj->GetObjRef();
+                const uno::Reference < embed::XEmbeddedObject >& xObj = pOleObj->GetObjRef();
                 if ( xObj.is() )
                 {
                     rBase.SetVerbs( xObj->getSupportedVerbs() );
@@ -243,12 +244,8 @@ void DrawViewShell::SelectionHasChanged()
     }
     catch( css::uno::Exception& )
     {
-        OSL_FAIL(
-            OString(OString("sd::DrawViewShell::SelectionHasChanged(), "
-                    "exception caught: ") +
-            OUStringToOString(
-                comphelper::anyToString( cppu::getCaughtException() ),
-                RTL_TEXTENCODING_UTF8 )).getStr() );
+        SAL_WARN( "sd", "sd::DrawViewShell::SelectionHasChanged(), exception caught: "
+                << comphelper::anyToString( cppu::getCaughtException() ) );
     }
 
     if( HasCurrentFunction() )
@@ -268,6 +265,22 @@ void DrawViewShell::SelectionHasChanged()
     GetViewShellBase().GetDrawController().FireSelectionChangeListener();
 }
 
+namespace {
+
+void collectUIInformation(const OUString& aZoom)
+{
+    EventDescription aDescription;
+    aDescription.aID = "impress_win";
+    aDescription.aParameters = {{"ZOOM", aZoom}};
+    aDescription.aAction = "SET";
+    aDescription.aKeyWord = "ImpressWindowUIObject";
+    aDescription.aParent = "MainWindow";
+
+    UITestLogger::getInstance().logEvent(aDescription);
+}
+
+}
+
 /**
  * set zoom factor
  */
@@ -280,13 +293,14 @@ void DrawViewShell::SetZoom( long nZoom )
     GetViewFrame()->GetBindings().Invalidate( SID_ATTR_ZOOM );
     GetViewFrame()->GetBindings().Invalidate( SID_ATTR_ZOOMSLIDER );
     mpViewOverlayManager->onZoomChanged();
+    collectUIInformation(OUString::number(nZoom));
 }
 
 /**
  * Set zoom rectangle for active window
  */
 
-void DrawViewShell::SetZoomRect( const Rectangle& rZoomRect )
+void DrawViewShell::SetZoomRect( const ::tools::Rectangle& rZoomRect )
 {
     ViewShell::SetZoomRect( rZoomRect );
     GetViewFrame()->GetBindings().Invalidate( SID_ATTR_ZOOM );
@@ -327,9 +341,15 @@ void DrawViewShell::ChangeEditMode(EditMode eEMode, bool bIsLayerModeActive)
     {
         ViewShellManager::UpdateLock aLock (GetViewShellBase().GetViewShellManager());
 
-        sal_uInt16 nActualPageNum = 0;
+        sal_uInt16 nActualPageId = maTabControl->GetPageId(0);
 
-        GetViewShellBase().GetDrawController().FireChangeEditMode (eEMode == EM_MASTERPAGE);
+        if (mePageKind == PageKind::Handout)
+        {
+            // at handouts only allow MasterPage
+            eEMode = EditMode::MasterPage;
+        }
+
+        GetViewShellBase().GetDrawController().FireChangeEditMode (eEMode == EditMode::MasterPage);
         GetViewShellBase().GetDrawController().FireChangeLayerMode (bIsLayerModeActive);
 
         if ( mpDrawView->IsTextEdit() )
@@ -341,12 +361,6 @@ void DrawViewShell::ChangeEditMode(EditMode eEMode, bool bIsLayerModeActive)
         if (pLayerBar != nullptr)
             pLayerBar->EndEditMode();
         maTabControl->EndEditMode();
-
-        if (mePageKind == PK_HANDOUT)
-        {
-            // at handouts only allow MasterPage
-            eEMode = EM_MASTERPAGE;
-        }
 
         GetViewShellBase().GetDrawController().BroadcastContextChange();
 
@@ -362,9 +376,9 @@ void DrawViewShell::ChangeEditMode(EditMode eEMode, bool bIsLayerModeActive)
         // Determine whether to show the master view toolbar.  The master
         // page mode has to be active and the shell must not be a handout
         // view.
-        bool bShowMasterViewToolbar (meEditMode == EM_MASTERPAGE
+        bool bShowMasterViewToolbar (meEditMode == EditMode::MasterPage
              && GetShellType() != ViewShell::ST_HANDOUT);
-        bool bShowPresentationToolbar (meEditMode != EM_MASTERPAGE
+        bool bShowPresentationToolbar (meEditMode != EditMode::MasterPage
              && GetShellType() != ViewShell::ST_HANDOUT
              && GetShellType() != ViewShell::ST_DRAW);
 
@@ -374,17 +388,14 @@ void DrawViewShell::ChangeEditMode(EditMode eEMode, bool bIsLayerModeActive)
             && IsMainViewShell())
         {
             if ( !bShowMasterViewToolbar )
-                GetViewShellBase().GetToolBarManager()->ResetToolBars(ToolBarManager::TBG_MASTER_MODE);
+                GetViewShellBase().GetToolBarManager()->ResetToolBars(ToolBarManager::ToolBarGroup::MasterMode);
             if ( !bShowPresentationToolbar )
-                GetViewShellBase().GetToolBarManager()->ResetToolBars(ToolBarManager::TBG_COMMON_TASK);
+                GetViewShellBase().GetToolBarManager()->ResetToolBars(ToolBarManager::ToolBarGroup::CommonTask);
         }
 
-        svtools::ColorConfig aColorConfig;
-        Color aFillColor( aColorConfig.GetColorValue( svtools::APPBACKGROUND ).nColor );
-        if (comphelper::LibreOfficeKit::isActive())
-            aFillColor = COL_TRANSPARENT;
+        ConfigureAppBackgroundColor();
 
-        if (meEditMode == EM_PAGE)
+        if (meEditMode == EditMode::Page)
         {
             /******************************************************************
             * PAGEMODE
@@ -399,19 +410,20 @@ void DrawViewShell::ChangeEditMode(EditMode eEMode, bool bIsLayerModeActive)
             {
                 pPage = GetDoc()->GetSdPage(i, mePageKind);
                 OUString aPageName = pPage->GetName();
-                maTabControl->InsertPage(i + 1, aPageName);
+                maTabControl->InsertPage(pPage->getPageId(), aPageName);
 
-                if ( pPage->IsSelected() && nActualPageNum == 0 )
+                if ( pPage->IsSelected() )
                 {
-                    nActualPageNum = i;
+                    nActualPageId = pPage->getPageId();
                 }
             }
 
-            maTabControl->SetCurPageId(nActualPageNum + 1);
+            maTabControl->SetCurPageId(nActualPageId);
 
-            SetAppBackgroundColor( aFillColor );
+            SwitchPage(maTabControl->GetPagePos(nActualPageId));
 
-            SwitchPage(nActualPageNum);
+            //tdf#102343 re-enable common undo on switch back from master mode
+            mpDrawView->GetModel()->SetDisableTextEditUsesCommonUndoManager(false);
         }
         else
         {
@@ -428,7 +440,7 @@ void DrawViewShell::ChangeEditMode(EditMode eEMode, bool bIsLayerModeActive)
             }
 
             maTabControl->Clear();
-            sal_uInt16 nActualMasterPageNum = 0;
+            sal_uInt16 nActualMasterPageId = maTabControl->GetPageId(0);
             sal_uInt16 nMasterPageCnt = GetDoc()->GetMasterSdPageCount(mePageKind);
 
             for (sal_uInt16 i = 0; i < nMasterPageCnt; i++)
@@ -439,19 +451,22 @@ void DrawViewShell::ChangeEditMode(EditMode eEMode, bool bIsLayerModeActive)
                 if (nPos != -1)
                     aLayoutName = aLayoutName.copy(0, nPos);
 
-                maTabControl->InsertPage(i + 1, aLayoutName);
+                maTabControl->InsertPage(pMaster->getPageId(), aLayoutName);
 
                 if (&(mpActualPage->TRG_GetMasterPage()) == pMaster)
                 {
-                    nActualMasterPageNum = i;
+                    nActualMasterPageId = pMaster->getPageId();
                 }
             }
 
-            aFillColor.DecreaseLuminance( 64 );
-            SetAppBackgroundColor( aFillColor );
+            maTabControl->SetCurPageId(nActualMasterPageId);
+            SwitchPage(maTabControl->GetPagePos(nActualMasterPageId));
 
-            maTabControl->SetCurPageId(nActualMasterPageNum + 1);
-            SwitchPage(nActualMasterPageNum);
+            //tdf#102343 changing attributes of textboxes in master typically
+            //changes the stylesheet they are linked to, so if the common
+            //undo manager is in use, those stylesheet changes are thrown
+            //away at present
+            mpDrawView->GetModel()->SetDisableTextEditUsesCommonUndoManager(true);
         }
 
         // If the master view toolbar is to be shown we turn it on after the
@@ -461,11 +476,11 @@ void DrawViewShell::ChangeEditMode(EditMode eEMode, bool bIsLayerModeActive)
         {
             if (bShowMasterViewToolbar)
                 GetViewShellBase().GetToolBarManager()->SetToolBar(
-                    ToolBarManager::TBG_MASTER_MODE,
+                    ToolBarManager::ToolBarGroup::MasterMode,
                     ToolBarManager::msMasterViewToolBar);
             if (bShowPresentationToolbar)
                 GetViewShellBase().GetToolBarManager()->SetToolBar(
-                    ToolBarManager::TBG_COMMON_TASK,
+                    ToolBarManager::ToolBarGroup::CommonTask,
                     ToolBarManager::msCommonTaskToolBar);
         }
 
@@ -474,8 +489,8 @@ void DrawViewShell::ChangeEditMode(EditMode eEMode, bool bIsLayerModeActive)
             maTabControl->Show();
             // Set the tab control only for draw pages.  For master page
             // this has been done already above.
-            if (meEditMode == EM_PAGE)
-                maTabControl->SetCurPageId (nActualPageNum + 1);
+            if (meEditMode == EditMode::Page)
+                maTabControl->SetCurPageId (nActualPageId);
         }
 
         ResetActualLayer();
@@ -492,33 +507,32 @@ void DrawViewShell::ChangeEditMode(EditMode eEMode, bool bIsLayerModeActive)
 
         SetContextName(GetSidebarContextName());
     }
+
 }
 
 /**
  * Generate horizontal ruler
  */
 
-SvxRuler* DrawViewShell::CreateHRuler (::sd::Window* pWin)
+VclPtr<SvxRuler> DrawViewShell::CreateHRuler (::sd::Window* pWin)
 {
-    Ruler* pRuler;
+    VclPtr<Ruler> pRuler;
     WinBits  aWBits;
     SvxRulerSupportFlags nFlags = SvxRulerSupportFlags::OBJECT;
 
     aWBits  = WB_HSCROLL | WB_3DLOOK | WB_BORDER | WB_EXTRAFIELD;
     nFlags |= SvxRulerSupportFlags::SET_NULLOFFSET |
               SvxRulerSupportFlags::TABS |
-              SvxRulerSupportFlags::PARAGRAPH_MARGINS; // Neu
+              SvxRulerSupportFlags::PARAGRAPH_MARGINS; // new
 
     pRuler = VclPtr<Ruler>::Create(*this, GetParentWindow(), pWin, nFlags,
         GetViewFrame()->GetBindings(), aWBits);
 
-    pRuler->SetSourceUnit(pWin->GetMapMode().GetMapUnit());
-
     // Metric ...
-    sal_uInt16 nMetric = (sal_uInt16)GetDoc()->GetUIUnit();
+    sal_uInt16 nMetric = static_cast<sal_uInt16>(GetDoc()->GetUIUnit());
 
     if( nMetric == 0xffff )
-        nMetric = (sal_uInt16)GetViewShellBase().GetViewFrame()->GetDispatcher()->GetModule()->GetFieldUnit();
+        nMetric = static_cast<sal_uInt16>(GetViewShellBase().GetViewFrame()->GetDispatcher()->GetModule()->GetFieldUnit());
 
     pRuler->SetUnit( FieldUnit( nMetric ) );
 
@@ -536,21 +550,20 @@ SvxRuler* DrawViewShell::CreateHRuler (::sd::Window* pWin)
  * Generate vertical ruler
  */
 
-SvxRuler* DrawViewShell::CreateVRuler(::sd::Window* pWin)
+VclPtr<SvxRuler> DrawViewShell::CreateVRuler(::sd::Window* pWin)
 {
-    Ruler* pRuler;
+    VclPtr<SvxRuler> pRuler;
     WinBits  aWBits = WB_VSCROLL | WB_3DLOOK | WB_BORDER;
     SvxRulerSupportFlags nFlags = SvxRulerSupportFlags::OBJECT;
 
     pRuler = VclPtr<Ruler>::Create(*this, GetParentWindow(), pWin, nFlags,
         GetViewFrame()->GetBindings(), aWBits);
-    pRuler->SetSourceUnit(pWin->GetMapMode().GetMapUnit());
 
     // Metric same as HRuler, use document setting
-    sal_uInt16 nMetric = (sal_uInt16)GetDoc()->GetUIUnit();
+    sal_uInt16 nMetric = static_cast<sal_uInt16>(GetDoc()->GetUIUnit());
 
     if( nMetric == 0xffff )
-        nMetric = (sal_uInt16)GetViewShellBase().GetViewFrame()->GetDispatcher()->GetModule()->GetFieldUnit();
+        nMetric = static_cast<sal_uInt16>(GetViewShellBase().GetViewFrame()->GetDispatcher()->GetModule()->GetFieldUnit());
 
     pRuler->SetUnit( FieldUnit( nMetric ) );
 
@@ -591,25 +604,16 @@ void DrawViewShell::UpdateVRuler()
 }
 
 /**
- * Set metric
- */
-
-void DrawViewShell::SetUIUnit(FieldUnit eUnit)
-{
-    ViewShell::SetUIUnit(eUnit);
-}
-
-/**
  * Refresh TabControl on splitter change
  */
 
-IMPL_LINK_TYPED( DrawViewShell, TabSplitHdl, TabBar *, pTab, void )
+IMPL_LINK( DrawViewShell, TabSplitHdl, TabBar *, pTab, void )
 {
     const long int nMax = maViewSize.Width() - maScrBarWH.Width()
         - maTabControl->GetPosPixel().X() ;
 
     Size aTabSize = maTabControl->GetSizePixel();
-    aTabSize.Width() = std::min(pTab->GetSplitSize(), (long)(nMax-1));
+    aTabSize.setWidth( std::min(pTab->GetSplitSize(), static_cast<long>(nMax-1)) );
 
     maTabControl->SetSizePixel(aTabSize);
 
@@ -619,7 +623,7 @@ IMPL_LINK_TYPED( DrawViewShell, TabSplitHdl, TabBar *, pTab, void )
     }
 
     Point aPos = maTabControl->GetPosPixel();
-    aPos.X() += aTabSize.Width();
+    aPos.AdjustX(aTabSize.Width() );
 
     Size aScrSize(nMax - aTabSize.Width(), maScrBarWH.Height());
     mpHorizontalScrollBar->SetPosSizePixel(aPos, aScrSize);
@@ -628,22 +632,22 @@ IMPL_LINK_TYPED( DrawViewShell, TabSplitHdl, TabBar *, pTab, void )
 /// inherited from sd::ViewShell
 SdPage* DrawViewShell::getCurrentPage() const
 {
-    const sal_Int32 nPageCount = (meEditMode == EM_PAGE)?
+    const sal_uInt16 nPageCount = (meEditMode == EditMode::Page)?
                                     GetDoc()->GetSdPageCount(mePageKind):
                                     GetDoc()->GetMasterSdPageCount(mePageKind);
 
-    sal_Int32 nCurrentPage = maTabControl->GetCurPageId() - 1;
-    DBG_ASSERT( (nPageCount>0) && (nCurrentPage<nPageCount), "sd::DrawViewShell::getCurrentPage(), illegal page index!" );
-    if( (nPageCount < 0) || (nCurrentPage>=nPageCount) )
+    sal_uInt16 nCurrentPage = maTabControl->GetCurPagePos();
+    DBG_ASSERT((nCurrentPage<nPageCount), "sd::DrawViewShell::getCurrentPage(), illegal page index!");
+    if (nCurrentPage >= nPageCount)
         nCurrentPage = 0; // play safe here
 
-    if (meEditMode == EM_PAGE)
+    if (meEditMode == EditMode::Page)
     {
-        return GetDoc()->GetSdPage((sal_uInt16)nCurrentPage, mePageKind);
+        return GetDoc()->GetSdPage(nCurrentPage, mePageKind);
     }
-    else // EM_MASTERPAGE
+    else // EditMode::MasterPage
     {
-        return GetDoc()->GetMasterSdPage((sal_uInt16)nCurrentPage, mePageKind);
+        return GetDoc()->GetMasterSdPage(nCurrentPage, mePageKind);
     }
 }
 
@@ -656,14 +660,11 @@ void DrawViewShell::ResetActualPage()
     if (!GetDoc())
         return;
 
-    sal_uInt16 nCurrentPage = maTabControl->GetCurPageId() - 1;
-    sal_uInt16 nPageCount   = (meEditMode == EM_PAGE)?GetDoc()->GetSdPageCount(mePageKind):GetDoc()->GetMasterSdPageCount(mePageKind);
-    if (nPageCount > 0)
-        nCurrentPage = std::min((sal_uInt16)(nPageCount - 1), nCurrentPage);
-    else
-        nCurrentPage = 0;
+    sal_uInt16 nCurrentPageId = maTabControl->GetCurPageId();
+    sal_uInt16 nCurrentPageNum = maTabControl->GetPagePos(nCurrentPageId);
+    sal_uInt16 nPageCount   = (meEditMode == EditMode::Page)?GetDoc()->GetSdPageCount(mePageKind):GetDoc()->GetMasterSdPageCount(mePageKind);
 
-    if (meEditMode == EM_PAGE)
+    if (meEditMode == EditMode::Page)
     {
 
         // Update for TabControl
@@ -675,19 +676,22 @@ void DrawViewShell::ResetActualPage()
         {
             pPage = GetDoc()->GetSdPage(i, mePageKind);
             OUString aPageName = pPage->GetName();
-            maTabControl->InsertPage(i + 1, aPageName);
+            maTabControl->InsertPage(pPage->getPageId(), aPageName);
 
-            // correct selection recognition of the pages
-            GetDoc()->SetSelected(pPage, i == nCurrentPage);
+            if (nCurrentPageId == pPage->getPageId())
+            {
+                nCurrentPageNum = i;
+                GetDoc()->SetSelected(pPage, true);
+            }
+            else
+                GetDoc()->SetSelected(pPage, false);
         }
 
-        maTabControl->SetCurPageId(nCurrentPage + 1);
+        maTabControl->SetCurPageId(maTabControl->GetPageId(nCurrentPageNum));
     }
-    else // EM_MASTERPAGE
+    else // EditMode::MasterPage
     {
-        SdPage* pActualPage = GetDoc()->GetMasterSdPage(nCurrentPage, mePageKind);
         maTabControl->Clear();
-        sal_uInt16 nActualMasterPageNum = 0;
 
         sal_uInt16 nMasterPageCnt = GetDoc()->GetMasterSdPageCount(mePageKind);
         for (sal_uInt16 i = 0; i < nMasterPageCnt; i++)
@@ -697,14 +701,14 @@ void DrawViewShell::ResetActualPage()
             sal_Int32 nPos = aLayoutName.indexOf(SD_LT_SEPARATOR);
             if (nPos != -1)
                 aLayoutName = aLayoutName.copy(0, nPos);
-            maTabControl->InsertPage(i + 1, aLayoutName);
+            maTabControl->InsertPage(pMaster->getPageId(), aLayoutName);
 
-            if (pActualPage == pMaster)
-                nActualMasterPageNum = i;
+            if (pMaster->getPageId() == nCurrentPageId)
+                nCurrentPageNum = i;
         }
 
-        maTabControl->SetCurPageId(nActualMasterPageNum + 1);
-        SwitchPage(nActualMasterPageNum);
+        maTabControl->SetCurPageId(maTabControl->GetPageId(nCurrentPageNum));
+        SwitchPage(nCurrentPageNum);
     }
 
     GetViewFrame()->GetDispatcher()->Execute(SID_SWITCHPAGE,
@@ -726,17 +730,17 @@ ErrCode DrawViewShell::DoVerb(long nVerb)
             SdrMark* pMark = rMarkList.GetMark(0);
             SdrObject* pObj = pMark->GetMarkedSdrObj();
 
-            sal_uInt32 nInv = pObj->GetObjInventor();
-            sal_uInt16 nSdrObjKind = pObj->GetObjIdentifier();
+            SdrInventor nInv        = pObj->GetObjInventor();
+            sal_uInt16  nSdrObjKind = pObj->GetObjIdentifier();
 
-            if (nInv == SdrInventor && nSdrObjKind == OBJ_OLE2)
+            if (nInv == SdrInventor::Default && nSdrObjKind == OBJ_OLE2)
             {
                 ActivateObject( static_cast<SdrOle2Obj*>(pObj), nVerb);
             }
         }
     }
 
-    return 0;
+    return ERRCODE_NONE;
 }
 
 /**
@@ -752,11 +756,6 @@ bool DrawViewShell::ActivateObject(SdrOle2Obj* pObj, long nVerb)
         ToolBarManager::UpdateLock aLock (GetViewShellBase().GetToolBarManager());
 
         bActivated = ViewShell::ActivateObject(pObj, nVerb);
-
-        OSL_ASSERT(GetViewShell()!=nullptr);
-        Client* pClient = static_cast<Client*>(GetViewShell()->GetIPClient());
-        if (pClient)
-            pClient->SetSdrGrafObj(nullptr);
     }
 
     return bActivated;
@@ -774,6 +773,7 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
         83888 for details.)  Therefore the nested calls are ignored (they
         would jump to the wrong page anyway.)
     */
+
     if (mbIsInSwitchPage)
         return false;
     mbIsInSwitchPage = true;
@@ -807,7 +807,7 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
     {
         // Make sure that the given page index points to an existing page.  Move
         // the index into the valid range if necessary.
-        sal_uInt16 nPageCount = (meEditMode == EM_PAGE)
+        sal_uInt16 nPageCount = (meEditMode == EditMode::Page)
             ? GetDoc()->GetSdPageCount(mePageKind)
             : GetDoc()->GetMasterSdPageCount(mePageKind);
         if (nSelectedPage >= nPageCount)
@@ -824,7 +824,7 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
         {
             SdPage* pNewPage = nullptr;
 
-            if (meEditMode == EM_MASTERPAGE)
+            if (meEditMode == EditMode::MasterPage)
             {
                 if( GetDoc()->GetMasterSdPageCount(mePageKind) > nSelectedPage )
                     pNewPage = GetDoc()->GetMasterSdPage(nSelectedPage, mePageKind);
@@ -838,7 +838,7 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
                         sPageText = sPageText.copy(0, nPos);
                     if (pPV
                         && pNewPage == dynamic_cast< SdPage* >( pPV->GetPage() )
-                        && sPageText == maTabControl->GetPageText(nSelectedPage+1))
+                        && sPageText == maTabControl->GetPageText(maTabControl->GetPageId(nSelectedPage)))
                     {
                         // this slide is already visible
                         return true;
@@ -860,7 +860,7 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
                     SdPage* pCurrentPage = pPV ? dynamic_cast<SdPage*>(pPV->GetPage()) : nullptr;
                     if (pCurrentPage
                         && pNewPage == pCurrentPage
-                        && maTabControl->GetPageText(nSelectedPage+1).equals(pNewPage->GetName()))
+                        && maTabControl->GetPageText(maTabControl->GetPageId(nSelectedPage)) == pNewPage->GetName())
                     {
                         // this slide is already visible
                         return true;
@@ -873,7 +873,7 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
 
         mpActualPage = nullptr;
 
-        if (meEditMode == EM_PAGE)
+        if (meEditMode == EditMode::Page)
         {
             mpActualPage = GetDoc()->GetSdPage(nSelectedPage, mePageKind);
         }
@@ -924,6 +924,14 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
         // never at a masterpage)
         GetDoc()->SetSelected(mpActualPage, true);
 
+        if (comphelper::LibreOfficeKit::isActive())
+        {
+            // notify LibreOfficeKit about changed page
+            OString aPayload = OString::number(nSelectedPage);
+            if (SfxViewShell* pViewShell = GetViewShell())
+                pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_SET_PART, aPayload.getStr());
+        }
+
         rtl::Reference< sd::SlideShow > xSlideshow( SlideShow::GetSlideShow( GetDoc() ) );
         if( !xSlideshow.is() || !xSlideshow->isRunning() || ( xSlideshow->getAnimationMode() != ANIMATIONMODE_SHOW ) )
         {
@@ -931,10 +939,10 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
             // !!! only if we are not in presentation mode (#96279) !!!
             OSL_ASSERT (GetViewShell()!=nullptr);
             GetViewShell()->DisconnectAllClients();
-            VisAreaChanged(Rectangle(Point(), Size(1, 1)));
+            VisAreaChanged(::tools::Rectangle(Point(), Size(1, 1)));
         }
 
-        if (meEditMode == EM_PAGE)
+        if (meEditMode == EditMode::Page)
         {
             /**********************************************************************
             * PAGEMODE
@@ -949,11 +957,11 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
                 mpFrameView->SetPrintableLayers( pPageView->GetPrintableLayers() );
                 mpFrameView->SetLockedLayers( pPageView->GetLockedLayers() );
 
-                if (mePageKind == PK_NOTES)
+                if (mePageKind == PageKind::Notes)
                 {
                     mpFrameView->SetNotesHelpLines( pPageView->GetHelpLines() );
                 }
-                else if (mePageKind == PK_HANDOUT)
+                else if (mePageKind == PageKind::Handout)
                 {
                     mpFrameView->SetHandoutHelpLines( pPageView->GetHelpLines() );
                 }
@@ -964,7 +972,7 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
             }
 
             mpDrawView->HideSdrPage();
-            maTabControl->SetCurPageId(nSelectedPage+1);
+            maTabControl->SetCurPageId(maTabControl->GetPageId(nSelectedPage));
             mpDrawView->ShowSdrPage(mpActualPage);
             GetViewShellBase().GetDrawController().FireSwitchCurrentPage(mpActualPage);
 
@@ -976,11 +984,11 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
                 pNewPageView->SetPrintableLayers( mpFrameView->GetPrintableLayers() );
                 pNewPageView->SetLockedLayers( mpFrameView->GetLockedLayers() );
 
-                if (mePageKind == PK_NOTES)
+                if (mePageKind == PageKind::Notes)
                 {
                     pNewPageView->SetHelpLines( mpFrameView->GetNotesHelpLines() );
                 }
-                else if (mePageKind == PK_HANDOUT)
+                else if (mePageKind == PageKind::Handout)
                 {
                     pNewPageView->SetHelpLines( mpFrameView->GetHandoutHelpLines() );
                 }
@@ -992,9 +1000,9 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
 
             OUString aPageName = mpActualPage->GetName();
 
-            if (maTabControl->GetPageText(nSelectedPage+1) != aPageName)
+            if (maTabControl->GetPageText(maTabControl->GetPageId(nSelectedPage)) != aPageName)
             {
-                maTabControl->SetPageText(nSelectedPage+1, aPageName);
+                maTabControl->SetPageText(maTabControl->GetPageId(nSelectedPage), aPageName);
             }
         }
         else
@@ -1010,11 +1018,11 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
                 mpFrameView->SetPrintableLayers( pPageView->GetPrintableLayers() );
                 mpFrameView->SetLockedLayers( pPageView->GetLockedLayers() );
 
-                if (mePageKind == PK_NOTES)
+                if (mePageKind == PageKind::Notes)
                 {
                     mpFrameView->SetNotesHelpLines( pPageView->GetHelpLines() );
                 }
-                else if (mePageKind == PK_HANDOUT)
+                else if (mePageKind == PageKind::Handout)
                 {
                     mpFrameView->SetHandoutHelpLines( pPageView->GetHelpLines() );
                 }
@@ -1025,7 +1033,7 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
             }
 
             mpDrawView->HideSdrPage();
-            maTabControl->SetCurPageId(nSelectedPage+1);
+            maTabControl->SetCurPageId(maTabControl->GetPageId(nSelectedPage));
 
             SdPage* pMaster = GetDoc()->GetMasterSdPage(nSelectedPage, mePageKind);
 
@@ -1045,11 +1053,11 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
                 pNewPageView->SetPrintableLayers( mpFrameView->GetPrintableLayers() );
                 pNewPageView->SetLockedLayers( mpFrameView->GetLockedLayers() );
 
-                if (mePageKind == PK_NOTES)
+                if (mePageKind == PageKind::Notes)
                 {
                     pNewPageView->SetHelpLines( mpFrameView->GetNotesHelpLines() );
                 }
-                else if (mePageKind == PK_HANDOUT)
+                else if (mePageKind == PageKind::Handout)
                 {
                     pNewPageView->SetHelpLines( mpFrameView->GetHandoutHelpLines() );
                 }
@@ -1064,12 +1072,12 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
             if (nPos != -1)
                 aLayoutName = aLayoutName.copy(0, nPos);
 
-            if (maTabControl->GetPageText(nSelectedPage+1) != aLayoutName)
+            if (maTabControl->GetPageText(maTabControl->GetPageId(nSelectedPage)) != aLayoutName)
             {
-                maTabControl->SetPageText(nSelectedPage+1, aLayoutName);
+                maTabControl->SetPageText(maTabControl->GetPageId(nSelectedPage), aLayoutName);
             }
 
-            if( mePageKind == PK_HANDOUT )
+            if( mePageKind == PageKind::Handout )
             {
                 // set pages for all available handout presentation objects
                 sd::ShapeList& rShapeList = pMaster->GetPresentationShapeList();
@@ -1080,7 +1088,7 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
                 {
                     if( pMaster->GetPresObjKind(pObj) == PRESOBJ_HANDOUT )
                     {
-                        // #i105146# We want no content to be displayed for PK_HANDOUT,
+                        // #i105146# We want no content to be displayed for PageKind::Handout,
                         // so just never set a page as content
                         static_cast<SdrPageObj*>(pObj)->SetReferencedPage(nullptr);
                     }
@@ -1089,12 +1097,13 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage)
         }
 
         Size aVisSizePixel = GetActiveWindow()->GetOutputSizePixel();
-        Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0), aVisSizePixel) );
+        ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0), aVisSizePixel) );
         VisAreaChanged(aVisAreaWin);
         mpDrawView->VisAreaChanged(GetActiveWindow());
 
         // so navigator (and effect window) notice that
         SfxBindings& rBindings = GetViewFrame()->GetBindings();
+        rBindings.Invalidate(SID_NAVIGATOR_STATE, true);
         rBindings.Invalidate(SID_NAVIGATOR_PAGENAME, true);
         rBindings.Invalidate(SID_STATUS_PAGE, true);
         rBindings.Invalidate(SID_DELETE_MASTER_PAGE, true);
@@ -1133,96 +1142,102 @@ void DrawViewShell::ResetActualLayer()
     LayerTabBar* pLayerBar = GetLayerTabControl();
     if (pLayerBar != nullptr)
     {
-        // remember old layer cound and current layer id
+        // remember old tab count and current tab id
         // this is needed when one layer is renamed to
-        // restore current layer
-        sal_uInt16 nOldLayerCnt = pLayerBar->GetPageCount();
-        sal_uInt16 nOldLayerId = pLayerBar->GetCurPageId();
+        // restore current tab
+        sal_uInt16 nOldLayerCnt = pLayerBar->GetPageCount(); // actually it is tab count
+        sal_uInt16 nOldLayerPos = pLayerBar->GetCurPageId(); // actually it is a tab nId
 
         /**
          * Update for LayerTab
          */
         pLayerBar->Clear();
 
-        OUString aName;
+        OUString aName; // a real layer name
         OUString aActiveLayer = mpDrawView->GetActiveLayer();
-        OUString aBackgroundLayer = SD_RESSTR(STR_LAYER_BCKGRND);
-        OUString aBackgroundObjLayer = SD_RESSTR(STR_LAYER_BCKGRNDOBJ);
-        OUString aLayoutLayer = SD_RESSTR(STR_LAYER_LAYOUT);
-        OUString aControlsLayer = SD_RESSTR(STR_LAYER_CONTROLS);
-        OUString aMeasureLinesLayer = SD_RESSTR(STR_LAYER_MEASURELINES);
-        sal_uInt16 nActiveLayer = SDRLAYER_NOTFOUND;
+        sal_uInt16 nActiveLayerPos = SDRLAYERPOS_NOTFOUND;
         SdrLayerAdmin& rLayerAdmin = GetDoc()->GetLayerAdmin();
         sal_uInt16 nLayerCnt = rLayerAdmin.GetLayerCount();
 
-        for ( sal_uInt16 nLayer = 0; nLayer < nLayerCnt; nLayer++ )
+        for ( sal_uInt16 nLayerPos = 0; nLayerPos < nLayerCnt; nLayerPos++ )
         {
-            aName = rLayerAdmin.GetLayer(nLayer)->GetName();
+            aName = rLayerAdmin.GetLayer(nLayerPos)->GetName();
 
             if ( aName == aActiveLayer )
             {
-                nActiveLayer = nLayer;
+                nActiveLayerPos = nLayerPos;
             }
 
-            if ( aName != aBackgroundLayer )
+            if ( aName != sUNO_LayerName_background ) // layer "background" has never a tab
             {
-                if (meEditMode == EM_MASTERPAGE)
+                if (meEditMode == EditMode::MasterPage)
                 {
                     // don't show page layer onto the masterpage
-                    if (aName != aLayoutLayer   &&
-                        aName != aControlsLayer &&
-                        aName != aMeasureLinesLayer)
+                    if (aName != sUNO_LayerName_layout   &&
+                        aName != sUNO_LayerName_controls &&
+                        aName != sUNO_LayerName_measurelines)
                     {
-                        pLayerBar->InsertPage(nLayer+1, aName);
-
-                        TabBarPageBits nBits = 0;
+                        TabBarPageBits nBits = TabBarPageBits::NONE;
                         SdrPageView* pPV = mpDrawView->GetSdrPageView();
-
-                        if (pPV && !pPV->IsLayerVisible(aName))
+                        if (pPV)
                         {
-                            // invisible layers are displayed differently
-                            nBits = TPB_SPECIAL;
+                            if (!pPV->IsLayerVisible(aName))
+                            {
+                                nBits |= TabBarPageBits::Blue;
+                            }
+                            if (pPV->IsLayerLocked(aName))
+                            {
+                                nBits |= TabBarPageBits::Italic;
+                            }
+                            if (!pPV->IsLayerPrintable(aName))
+                            {
+                                nBits |= TabBarPageBits::Underline;
+                            }
                         }
 
-                        pLayerBar->SetPageBits(nLayer+1, nBits);
+                        pLayerBar->InsertPage(nLayerPos+1, aName, nBits); // why +1? It is a nId, not a position. Position is APPEND.
                     }
                 }
                 else
                 {
                     // don't show masterpage layer onto the page
-                    if ( aName != aBackgroundObjLayer )
+                    if (aName != sUNO_LayerName_background_objects)
                     {
-                        pLayerBar->InsertPage(nLayer+1, aName);
-
-                        TabBarPageBits nBits = 0;
-
+                        TabBarPageBits nBits = TabBarPageBits::NONE;
                         if (!mpDrawView->GetSdrPageView()->IsLayerVisible(aName))
                         {
-                            // invisible layers are displayed differently
-                            nBits = TPB_SPECIAL;
+                            nBits = TabBarPageBits::Blue;
+                        }
+                        if (mpDrawView->GetSdrPageView()->IsLayerLocked(aName))
+                        {
+                            nBits |= TabBarPageBits::Italic;
+                        }
+                        if (!mpDrawView->GetSdrPageView()->IsLayerPrintable(aName))
+                        {
+                            nBits |= TabBarPageBits::Underline;
                         }
 
-                        pLayerBar->SetPageBits(nLayer+1, nBits);
+                        pLayerBar->InsertPage(nLayerPos+1, aName, nBits);// why +1?
                     }
                 }
             }
         }
 
-        if ( nActiveLayer == SDRLAYER_NOTFOUND )
+        if ( nActiveLayerPos == SDRLAYERPOS_NOTFOUND )
         {
             if( nOldLayerCnt == pLayerBar->GetPageCount() )
             {
-                nActiveLayer = nOldLayerId - 1;
+                nActiveLayerPos = nOldLayerPos - 1;
             }
             else
             {
-                nActiveLayer = ( meEditMode == EM_MASTERPAGE ) ? 2 : 0;
+                nActiveLayerPos = ( meEditMode == EditMode::MasterPage ) ? 2 : 0;
             }
 
-            mpDrawView->SetActiveLayer( pLayerBar->GetPageText(nActiveLayer + 1) );
+            mpDrawView->SetActiveLayer( pLayerBar->GetLayerName(nActiveLayerPos + 1) );// why +1?
         }
 
-        pLayerBar->SetCurPageId(nActiveLayer + 1);
+        pLayerBar->SetCurPageId(nActiveLayerPos + 1);
         GetViewFrame()->GetBindings().Invalidate( SID_MODIFYLAYER );
         GetViewFrame()->GetBindings().Invalidate( SID_DELETE_LAYER );
     }
@@ -1237,7 +1252,7 @@ sal_Int8 DrawViewShell::AcceptDrop (
     DropTargetHelper& rTargetHelper,
     ::sd::Window* pTargetWindow,
     sal_uInt16 nPage,
-    sal_uInt16 nLayer )
+    SdrLayerID nLayer )
 {
     if( nPage != SDRPAGE_NOTFOUND )
         nPage = GetDoc()->GetSdPage( nPage, mePageKind )->GetPageNum();
@@ -1257,7 +1272,7 @@ sal_Int8 DrawViewShell::ExecuteDrop (
     DropTargetHelper& /*rTargetHelper*/,
     ::sd::Window* pTargetWindow,
     sal_uInt16 nPage,
-    sal_uInt16 nLayer)
+    SdrLayerID nLayer)
 {
     if( nPage != SDRPAGE_NOTFOUND )
         nPage = GetDoc()->GetSdPage( nPage, mePageKind )->GetPageNum();

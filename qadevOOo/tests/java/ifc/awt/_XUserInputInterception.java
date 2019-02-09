@@ -158,7 +158,7 @@ public class _XUserInputInterception extends MultiMethodTest {
                       ! m_keyPressed2 & ! m_keyReleased2;
 
         if (! bOK){
-            log.println("The key listener has not the expectd status:");
+            log.println("The key listener has not the expected status:");
             log.println("listener\texpected\tgot");
             log.println("keyPressed1\ttrue\t"+m_keyPressed1);
             log.println("keyReleased1\ttrue\t"+m_keyReleased1);
@@ -198,7 +198,7 @@ public class _XUserInputInterception extends MultiMethodTest {
      * Has <b> OK </b> status if only one of the listener are triggered. <p>
      * The following method tests are to be completed successfully before :
      * <ul>
-     *  <li> <code> addMouseKlickHandler() </code> : adds two key listener </li>
+     *  <li> <code> addMouseClickHandler() </code> : adds two key listener </li>
      * </ul>
      */
     public void _removeMouseClickHandler() {
@@ -220,7 +220,7 @@ public class _XUserInputInterception extends MultiMethodTest {
                       ! m_mousePressed2 & ! m_mouseReleased2;
 
         if (! bOK){
-            log.println("The mouse listener has not the expectd status:");
+            log.println("The mouse listener has not the expected status:");
             log.println("listener\t\texpected\tgot");
             log.println("mousePressed1\ttrue\t\t"+m_mousePressed1);
             log.println("mouseReleased1\ttrue\t\t"+m_mouseReleased1);

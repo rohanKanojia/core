@@ -21,7 +21,6 @@
 #define INCLUDED_BASEGFX_TUPLE_B3ITUPLE_HXX
 
 #include <sal/types.h>
-#include <basegfx/tuple/b3dtuple.hxx>
 #include <basegfx/basegfxdllapi.h>
 
 namespace basegfx
@@ -70,20 +69,6 @@ namespace basegfx
         :   mnX(nX),
             mnY(nY),
             mnZ(nZ)
-        {}
-
-        /** Create a copy of a 3D Tuple
-
-            @param rTup
-            The 3D Tuple which will be copied.
-        */
-        B3ITuple(const B3ITuple& rTup)
-        :   mnX( rTup.mnX ),
-            mnY( rTup.mnY ),
-            mnZ( rTup.mnZ )
-        {}
-
-        ~B3ITuple()
         {}
 
         /// get X-Coordinate of 3D Tuple
@@ -180,14 +165,6 @@ namespace basegfx
         bool operator!=( const B3ITuple& rTup ) const
         {
             return !(*this == rTup);
-        }
-
-        B3ITuple& operator=( const B3ITuple& rTup )
-        {
-            mnX = rTup.mnX;
-            mnY = rTup.mnY;
-            mnZ = rTup.mnZ;
-            return *this;
         }
     };
 

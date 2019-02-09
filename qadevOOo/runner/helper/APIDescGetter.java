@@ -166,7 +166,7 @@ public class APIDescGetter extends DescGetter
             }
             else
             {
-                //look the scenarion like this? :
+                //look the scenario like this? :
                 // sw.SwXBodyText,sw.SwXTextCursor
                 ArrayList<String> subs = getSubObjects(job);
                 DescEntry[] entries = new DescEntry[subs.size()];
@@ -286,7 +286,7 @@ public class APIDescGetter extends DescGetter
                 {
                     continue;
                 }
-// TODO Probleme here
+// TODO Problem here
 
                 String ifc_name = ""; //  = line.substring(line.indexOf(";") + 2, line.lastIndexOf(";") - 1);
                 String meth_name = ""; //  = line.substring(line.lastIndexOf(";") + 2, line.length() - 1);

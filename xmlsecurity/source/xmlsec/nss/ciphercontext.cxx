@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
 
+#include <com/sun/star/lang/DisposedException.hpp>
 #include <osl/diagnose.h>
-#include <osl/time.h>
 #include <rtl/random.h>
 #include <rtl/ref.hxx>
 
@@ -91,7 +92,6 @@ void OCipherContext::Dispose()
 }
 
 uno::Sequence< ::sal_Int8 > SAL_CALL OCipherContext::convertWithCipherContext( const uno::Sequence< ::sal_Int8 >& aData )
-    throw ( lang::IllegalArgumentException, lang::DisposedException, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -172,7 +172,6 @@ uno::Sequence< ::sal_Int8 > SAL_CALL OCipherContext::convertWithCipherContext( c
 }
 
 uno::Sequence< ::sal_Int8 > SAL_CALL OCipherContext::finalizeCipherContextAndDispose()
-    throw (lang::DisposedException, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -192,7 +191,7 @@ uno::Sequence< ::sal_Int8 > SAL_CALL OCipherContext::finalizeCipherContextAndDis
 
     if ( m_bW3CPadding && m_bEncryption )
     {
-        // in this case the last block should be smaller than standtard block
+        // in this case the last block should be smaller than standard block
         // it will be increased with the padding
         OSL_ENSURE( m_aLastBlock.getLength() < m_nBlockSize, "Unexpected size of cashed incomplete last block!" );
 
@@ -203,10 +202,7 @@ uno::Sequence< ::sal_Int8 > SAL_CALL OCipherContext::finalizeCipherContextAndDis
 
         if ( nPaddingSize > 1 )
         {
-            TimeValue aTime;
-            osl_getSystemTime( &aTime );
             rtlRandomPool aRandomPool = rtl_random_createPool();
-            rtl_random_addBytes( aRandomPool, &aTime, 8 );
             rtl_random_getBytes( aRandomPool, m_aLastBlock.getArray() + nOldLastBlockLen, nPaddingSize - 1 );
             rtl_random_destroyPool ( aRandomPool );
         }

@@ -29,15 +29,11 @@
 namespace connectivity
 {
 
-enum ExpressionFunct
+enum class ExpressionFunct
 {
-    FUNC_CONST,
-
-    ENUM_FUNC_EQUATION,
-
-    UNARY_FUNC_COLUMN,
-    ENUM_FUNC_AND,
-    ENUM_FUNC_OR
+    Equation,
+    And,
+    Or
 };
 
 #define EXPRESSION_FLAG_SUMANGLE_MODE 1
@@ -55,14 +51,12 @@ public:
 
     virtual void fill(const ODatabaseMetaDataResultSet::ORow& _aRow ) const = 0;
 };
-typedef std::shared_ptr< ExpressionNode > ExpressionNodeSharedPtr;
 
 /** This exception is thrown, when the arithmetic expression
     parser failed to parse a string.
     */
 struct OOO_DLLPUBLIC_DBTOOLS ParseError
 {
-    ParseError() {}
     ParseError( const char* ) {}
 };
 
@@ -103,13 +97,12 @@ public:
         @return the generated function object.
        */
 
-    static ExpressionNodeSharedPtr parseFunction( const OUString& _sFunction);
+    static std::shared_ptr<ExpressionNode> const & parseFunction( const OUString& _sFunction);
 
 private:
     // disabled constructor/destructor, since this is
     // supposed to be a singleton
-    FunctionParser();
-
+    FunctionParser() = delete;
     FunctionParser(const FunctionParser&) = delete;
     FunctionParser& operator=( const FunctionParser& ) = delete;
 };

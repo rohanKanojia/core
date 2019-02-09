@@ -15,6 +15,7 @@
 #include <new>
 
 #include <sal/log.hxx>
+#include <osl/socket.hxx>
 
 #ifdef LINUX_BLUETOOTH
   #include <glib.h>
@@ -41,22 +42,13 @@
 #ifdef MACOSX
   #include <osl/conditn.hxx>
   #include <premac.h>
-  #if MACOSX_SDK_VERSION == 1080
-    #import <IOBluetooth/IOBluetooth.h>
-  #else
-    #import <CoreFoundation/CoreFoundation.h>
-    #import <IOBluetooth/IOBluetoothUtilities.h>
-    #import <IOBluetooth/objc/IOBluetoothSDPUUID.h>
-    #import <IOBluetooth/objc/IOBluetoothSDPServiceRecord.h>
-  #endif
+  #import <CoreFoundation/CoreFoundation.h>
+  #import <IOBluetooth/IOBluetoothUtilities.h>
+  #import <IOBluetooth/objc/IOBluetoothSDPUUID.h>
+  #import <IOBluetooth/objc/IOBluetoothSDPServiceRecord.h>
   #include <postmac.h>
   #import "OSXBluetooth.h"
   #include "OSXBluetoothWrapper.hxx"
-#endif
-
-#ifdef __MINGW32__
-// Value taken from http://msdn.microsoft.com/en-us/library/windows/desktop/ms738518%28v=vs.85%29.aspx
-#define NS_BTH 16
 #endif
 
 #include "Communicator.hxx"
@@ -79,9 +71,9 @@ struct DBusObject {
         return dbus_message_new_method_call( maBusName.getStr(), maPath.getStr(),
                                              maInterface.getStr(), pName );
     }
-    DBusObject *cloneForInterface( const char *pInterface )
+    std::unique_ptr<DBusObject> cloneForInterface( const char *pInterface )
     {
-        DBusObject *pObject = new DBusObject();
+        std::unique_ptr<DBusObject> pObject(new DBusObject());
 
         pObject->maBusName = maBusName;
         pObject->maPath = maPath;
@@ -91,33 +83,29 @@ struct DBusObject {
     }
 };
 
-static DBusObject* getBluez5Adapter(DBusConnection *pConnection);
+static std::unique_ptr<DBusObject> getBluez5Adapter(DBusConnection *pConnection);
 
 struct sd::BluetoothServer::Impl {
     // the glib mainloop running in the thread
     GMainContext *mpContext;
     DBusConnection *mpConnection;
-    DBusObject *mpService;
-    volatile bool mbExitMainloop;
-    enum BluezVersion { BLUEZ4, BLUEZ5, UNKNOWN };
+    std::unique_ptr<DBusObject> mpService;
+    enum class BluezVersion { BLUEZ4, BLUEZ5, UNKNOWN };
     BluezVersion maBluezVersion;
 
     Impl()
         : mpContext( g_main_context_new() )
         , mpConnection( nullptr )
-        , mpService( nullptr )
-        , mbExitMainloop( false )
-        , maBluezVersion( UNKNOWN )
+        , maBluezVersion( BluezVersion::UNKNOWN )
     { }
 
-    DBusObject *getAdapter()
+    std::unique_ptr<DBusObject> getAdapter()
     {
         if (mpService)
         {
-            DBusObject* pAdapter = mpService->cloneForInterface( "org.bluez.Adapter" );
-            return pAdapter;
+            return mpService->cloneForInterface( "org.bluez.Adapter" );
         }
-        else if (spServer->mpImpl->maBluezVersion == BLUEZ5)
+        else if (spServer->mpImpl->maBluezVersion == BluezVersion::BLUEZ5)
         {
             return getBluez5Adapter(mpConnection);
         }
@@ -177,7 +165,7 @@ isBluez5Available(DBusConnection *pConnection)
 {
     DBusMessage *pMsg;
 
-    // Simplest wasy to check whether we have Bluez 5+ is to check
+    // Simplest ways to check whether we have Bluez 5+ is to check
     // that we can obtain adapters using the new interfaces.
     // The first two error checks however don't tell us anything as they should
     // succeed as long as dbus is working correctly.
@@ -209,7 +197,7 @@ isBluez5Available(DBusConnection *pConnection)
     return true;
 }
 
-static DBusObject*
+static std::unique_ptr<DBusObject>
 getBluez5Adapter(DBusConnection *pConnection)
 {
     DBusMessage *pMsg;
@@ -219,7 +207,7 @@ getBluez5Adapter(DBusConnection *pConnection)
     if (!pMsg)
         return nullptr;
 
-    const gchar* pInterfaceType = "org.bluez.Adapter1";
+    const gchar* const pInterfaceType = "org.bluez.Adapter1";
 
     pMsg = sendUnrefAndWaitForReply( pConnection, pMsg );
 
@@ -267,7 +255,7 @@ getBluez5Adapter(DBusConnection *pConnection)
                                                 dbus_message_unref(pMsg);
                                                 if (pPath)
                                                 {
-                                                    return new DBusObject( "org.bluez", pPath, pInterfaceType );
+                                                    return std::make_unique<DBusObject>( "org.bluez", pPath, pInterfaceType );
                                                 }
                                                 assert(false); // We should already have pPath provided for us.
                                             }
@@ -295,7 +283,7 @@ bluez4GetDefaultService( DBusConnection *pConnection )
 {
     DBusMessage *pMsg;
     DBusMessageIter it;
-    const gchar* pInterfaceType = "org.bluez.Service";
+    const gchar* const pInterfaceType = "org.bluez.Service";
 
     // org.bluez.manager only exists for bluez 4.
     // getMethodCall should return NULL if there is any issue e.g. the
@@ -338,7 +326,7 @@ bluez4GetDefaultService( DBusConnection *pConnection )
     else
     {
         SAL_INFO( "sdremote.bluetooth", "invalid type of reply to DefaultAdapter: '"
-                << (const char) dbus_message_iter_get_arg_type( &it ) << "'" );
+                << static_cast<char>(dbus_message_iter_get_arg_type( &it )) << "'" );
     }
     dbus_message_unref(pMsg);
     return nullptr;
@@ -466,12 +454,12 @@ sal_Int32 OSXBluetoothWrapper::readLine( OString& aLine )
             std::ostringstream s;
             if (mBuffer.size() > 0)
             {
-                for (unsigned char *p = reinterpret_cast<unsigned char *>(&mBuffer.front()); p != reinterpret_cast<unsigned char *>(&mBuffer.front()) + mBuffer.size(); p++)
+                for (unsigned char *p = reinterpret_cast<unsigned char *>(mBuffer.data()); p != reinterpret_cast<unsigned char *>(mBuffer.data()) + mBuffer.size(); p++)
                 {
                     if (*p == '\n')
                         s << "\\n";
                     else if (*p < ' ' || *p >= 0x7F)
-                        s << "\\0x" << std::hex << std::setw(2) << std::setfill('0') << (int) *p << std::setfill(' ') << std::setw(1) << std::dec;
+                        s << "\\0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(*p) << std::setfill(' ') << std::setw(1) << std::dec;
                     else
                         s << *p;
                 }
@@ -558,11 +546,9 @@ void OSXBluetoothWrapper::channelClosed()
 }
 
 void incomingCallback( void *userRefCon,
-                       IOBluetoothUserNotificationRef inRef,
+                       IOBluetoothUserNotificationRef,
                        IOBluetoothObjectRef objectRef )
 {
-    (void) inRef;
-
     SAL_INFO( "sdremote.bluetooth", "incomingCallback()" );
 
     BluetoothServer* pServer = static_cast<BluetoothServer*>(userRefCon);
@@ -570,7 +556,7 @@ void incomingCallback( void *userRefCon,
     IOBluetoothRFCOMMChannel* channel = [IOBluetoothRFCOMMChannel withRFCOMMChannelRef:reinterpret_cast<IOBluetoothRFCOMMChannelRef>(objectRef)];
 
     OSXBluetoothWrapper* socket = new OSXBluetoothWrapper( channel);
-    Communicator* pCommunicator = new Communicator( socket );
+    Communicator* pCommunicator = new Communicator( std::unique_ptr<IBluetoothSocket>(socket) );
     pServer->addCommunicator( pCommunicator );
 
     ChannelDelegate* delegate = [[ChannelDelegate alloc] initWithCommunicatorAndSocket: pCommunicator socket: socket];
@@ -865,17 +851,15 @@ setDiscoverable( DBusConnection *pConnection, DBusObject *pAdapter, bool bDiscov
     }
 }
 
-static DBusObject *
+static std::unique_ptr<DBusObject>
 registerWithDefaultAdapter( DBusConnection *pConnection )
 {
-    DBusObject *pService;
-    pService = bluez4GetDefaultService( pConnection );
+    std::unique_ptr<DBusObject> pService(bluez4GetDefaultService( pConnection ));
     if( pService )
     {
-        if( !bluez4RegisterServiceRecord( pConnection, pService,
+        if( !bluez4RegisterServiceRecord( pConnection, pService.get(),
                                      bluetooth_service_record ) )
         {
-            delete pService;
             return nullptr;
         }
     }
@@ -883,27 +867,24 @@ registerWithDefaultAdapter( DBusConnection *pConnection )
     return pService;
 }
 
-void ProfileUnregisterFunction
-(DBusConnection *connection, void *user_data)
+static void ProfileUnregisterFunction
+(DBusConnection *, void *)
 {
     // We specifically don't need to do anything here.
-    (void) connection;
-    (void) user_data;
 }
 
-DBusHandlerResult ProfileMessageFunction
+static DBusHandlerResult ProfileMessageFunction
 (DBusConnection *pConnection, DBusMessage *pMessage, void *user_data)
 {
     SAL_INFO("sdremote.bluetooth", "ProfileMessageFunction||" << dbus_message_get_interface(pMessage) << "||" <<  dbus_message_get_member(pMessage));
-    DBusHandlerResult aRet = DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
-    if (OString(dbus_message_get_interface(pMessage)).equals("org.bluez.Profile1"))
+    if (OString(dbus_message_get_interface(pMessage)) == "org.bluez.Profile1")
     {
-        if (OString(dbus_message_get_member(pMessage)).equals("Release"))
+        if (OString(dbus_message_get_member(pMessage)) == "Release")
         {
             return DBUS_HANDLER_RESULT_HANDLED;
         }
-        else if (OString(dbus_message_get_member(pMessage)).equals("NewConnection"))
+        else if (OString(dbus_message_get_member(pMessage)) == "NewConnection")
         {
             if (!dbus_message_has_signature(pMessage, "oha{sv}"))
             {
@@ -936,7 +917,7 @@ DBusHandlerResult ProfileMessageFunction
                     (void)fcntl(nDescriptor, F_SETFL, fcntl(nDescriptor, F_GETFL) & ~O_NONBLOCK);
 
                     SAL_INFO( "sdremote.bluetooth", "connection accepted " << nDescriptor);
-                    Communicator* pCommunicator = new Communicator( new BufferedStreamSocket( nDescriptor ) );
+                    Communicator* pCommunicator = new Communicator( std::make_unique<BufferedStreamSocket>( nDescriptor ) );
                     pCommunicators->push_back( pCommunicator );
                     pCommunicator->launch();
                 }
@@ -954,13 +935,13 @@ DBusHandlerResult ProfileMessageFunction
                 return DBUS_HANDLER_RESULT_HANDLED;
             }
         }
-        else if (OString(dbus_message_get_member(pMessage)).equals("RequestDisconnection"))
+        else if (OString(dbus_message_get_member(pMessage)) == "RequestDisconnection")
         {
             return DBUS_HANDLER_RESULT_HANDLED;
         }
     }
     SAL_WARN("sdremote.bluetooth", "Couldn't handle message correctly.");
-    return aRet;
+    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
 }
 
@@ -975,7 +956,7 @@ setupBluez5Profile1(DBusConnection* pConnection, std::vector<Communicator*>* pCo
     aVTable.message_function = ProfileMessageFunction;
 
     // dbus_connection_try_register_object_path could be used but only exists for
-    // dbus-glib >= 1.2 -- we really shouldn't be trying this twice in any case.
+    // dbus >= 1.2 -- we really shouldn't be trying this twice in any case.
     // (dbus_connection_try_register_object_path also returns an error with more
     // information which could be useful for debugging purposes.)
     bErr = !dbus_connection_register_object_path(pConnection, "/org/libreoffice/bluez/profile1", &aVTable, pCommunicators);
@@ -1134,17 +1115,15 @@ void BluetoothServer::doEnsureDiscoverable()
         return;
 
     // Find out if we are discoverable already ...
-    DBusObject *pAdapter = spServer->mpImpl->getAdapter();
+    std::unique_ptr<DBusObject> pAdapter = spServer->mpImpl->getAdapter();
     if( !pAdapter )
         return;
 
-    bool bDiscoverable = getDiscoverable(spServer->mpImpl->mpConnection, pAdapter );
+    bool bDiscoverable = getDiscoverable(spServer->mpImpl->mpConnection, pAdapter.get() );
 
     spServer->meWasDiscoverable = bDiscoverable ? DISCOVERABLE : NOT_DISCOVERABLE;
     if( !bDiscoverable )
-        setDiscoverable( spServer->mpImpl->mpConnection, pAdapter, true );
-
-    delete pAdapter;
+        setDiscoverable( spServer->mpImpl->mpConnection, pAdapter.get(), true );
 #endif
 }
 
@@ -1153,11 +1132,10 @@ void BluetoothServer::doRestoreDiscoverable()
     if( spServer->meWasDiscoverable == NOT_DISCOVERABLE )
     {
 #ifdef LINUX_BLUETOOTH
-        DBusObject *pAdapter = spServer->mpImpl->getAdapter();
+        std::unique_ptr<DBusObject> pAdapter = spServer->mpImpl->getAdapter();
         if( !pAdapter )
             return;
-        setDiscoverable( spServer->mpImpl->mpConnection, pAdapter, false );
-        delete pAdapter;
+        setDiscoverable( spServer->mpImpl->mpConnection, pAdapter.get(), false );
 #endif
     }
     spServer->meWasDiscoverable = UNKNOWN;
@@ -1167,9 +1145,8 @@ void BluetoothServer::doRestoreDiscoverable()
 // re-bind to the same port number it appears.
 void BluetoothServer::cleanupCommunicators()
 {
-    for (std::vector<Communicator *>::iterator it = mpCommunicators->begin();
-         it != mpCommunicators->end(); ++it)
-        (*it)->forceClose();
+    for (auto& rpCommunicator : *mpCommunicators)
+        rpCommunicator->forceClose();
     // the hope is that all the threads then terminate cleanly and
     // clean themselves up.
 }
@@ -1200,7 +1177,7 @@ void SAL_CALL BluetoothServer::run()
         SAL_INFO("sdremote.bluetooth", "Using Bluez 5");
         registerBluez5Profile(pConnection, mpCommunicators);
         mpImpl->mpConnection = pConnection;
-        mpImpl->maBluezVersion = Impl::BLUEZ5;
+        mpImpl->maBluezVersion = Impl::BluezVersion::BLUEZ5;
 
         // We don't need to listen to adapter changes anymore -- profile
         // registration is done globally for the entirety of bluez, so we only
@@ -1209,7 +1186,7 @@ void SAL_CALL BluetoothServer::run()
 
         // TODO: exit on SD deinit
         // Probably best to do that in SdModule::~SdModule?
-        while (!mpImpl->mbExitMainloop)
+        while (true)
         {
             aDBusFD.revents = 0;
             g_main_context_iteration( mpImpl->mpContext, TRUE );
@@ -1219,6 +1196,9 @@ void SAL_CALL BluetoothServer::run()
                 while (DBUS_DISPATCH_DATA_REMAINS == dbus_connection_get_dispatch_status( pConnection ))
                     dbus_connection_dispatch( pConnection );
             }
+            if ((false)) break;
+                // silence Clang -Wunreachable-code after loop (TODO: proper
+                // fix?)
         }
         unregisterBluez5Profile( pConnection );
         g_main_context_unref( mpImpl->mpContext );
@@ -1228,7 +1208,7 @@ void SAL_CALL BluetoothServer::run()
     }
 
     // Otherwise we could be on Bluez 4 and continue as usual.
-    mpImpl->maBluezVersion = Impl::BLUEZ4;
+    mpImpl->maBluezVersion = Impl::BluezVersion::BLUEZ4;
 
     // Try to setup the default adapter, otherwise wait for add/remove signal
     mpImpl->mpService = registerWithDefaultAdapter( pConnection );
@@ -1249,7 +1229,7 @@ void SAL_CALL BluetoothServer::run()
 
     mpImpl->mpConnection = pConnection;
 
-    while( !mpImpl->mbExitMainloop )
+    while( true )
     {
         aDBusFD.revents = 0;
         aSocketFD.revents = 0;
@@ -1302,11 +1282,13 @@ void SAL_CALL BluetoothServer::run()
                 SAL_WARN( "sdremote.bluetooth", "accept failed with errno " << errno );
             } else {
                 SAL_INFO( "sdremote.bluetooth", "connection accepted " << nClient );
-                Communicator* pCommunicator = new Communicator( new BufferedStreamSocket( nClient ) );
+                Communicator* pCommunicator = new Communicator( std::make_unique<BufferedStreamSocket>( nClient ) );
                 mpCommunicators->push_back( pCommunicator );
                 pCommunicator->launch();
             }
         }
+        if ((false)) break;
+            // silence Clang -Wunreachable-code after loop (TODO: proper fix?)
     }
 
     unregisterBluez5Profile( pConnection );
@@ -1314,7 +1296,7 @@ void SAL_CALL BluetoothServer::run()
     mpImpl->mpConnection = nullptr;
     mpImpl->mpContext = nullptr;
 
-#elif defined(WIN32)
+#elif defined(_WIN32)
     WORD wVersionRequested;
     WSADATA wsaData;
 
@@ -1336,23 +1318,21 @@ void SAL_CALL BluetoothServer::run()
     aAddr.btAddr = 0;
     aAddr.serviceClassId = GUID_NULL;
     aAddr.port = BT_PORT_ANY; // Select any free socket.
-    if ( bind( aSocket, (SOCKADDR*) &aAddr, sizeof(aAddr) ) == SOCKET_ERROR )
+    if ( bind( aSocket, reinterpret_cast<SOCKADDR*>(&aAddr), sizeof(aAddr) ) == SOCKET_ERROR )
     {
         closesocket( aSocket );
         WSACleanup();
         return;
     }
 
-    SOCKADDR aName;
+    SOCKADDR_BTH aName;
     int aNameSize = sizeof(aName);
-    getsockname( aSocket, &aName, &aNameSize ); // Retrieve the local address and port
+    getsockname( aSocket, reinterpret_cast<SOCKADDR*>(&aName), &aNameSize ); // Retrieve the local address and port
 
     CSADDR_INFO aAddrInfo;
     memset( &aAddrInfo, 0, sizeof(aAddrInfo) );
-    aAddrInfo.LocalAddr.lpSockaddr = &aName;
+    aAddrInfo.LocalAddr.lpSockaddr = reinterpret_cast<SOCKADDR*>(&aName);
     aAddrInfo.LocalAddr.iSockaddrLength = sizeof( SOCKADDR_BTH );
-    aAddrInfo.RemoteAddr.lpSockaddr = &aName;
-    aAddrInfo.RemoteAddr.iSockaddrLength = sizeof( SOCKADDR_BTH );
     aAddrInfo.iSocketType = SOCK_STREAM;
     aAddrInfo.iProtocol = BTHPROTO_RFCOMM;
 
@@ -1372,11 +1352,10 @@ void SAL_CALL BluetoothServer::run()
         L"LibreOffice Impress Remote Control");
     aRecord.lpszComment = const_cast<wchar_t *>(
         L"Remote control of presentations over bluetooth.");
-    aRecord.lpServiceClassId = (LPGUID) &SerialPortServiceClass_UUID;
+    aRecord.lpServiceClassId = const_cast<LPGUID>(&SerialPortServiceClass_UUID);
     aRecord.dwNameSpace = NS_BTH;
     aRecord.dwNumberOfCsAddrs = 1;
     aRecord.lpcsaBuffer = &aAddrInfo;
-
     if (WSASetServiceW( &aRecord, RNRSERVICE_REGISTER, 0 ) == SOCKET_ERROR)
     {
         closesocket( aSocket );
@@ -1396,13 +1375,13 @@ void SAL_CALL BluetoothServer::run()
     while ( true )
     {
         SOCKET socket;
-        if ( (socket = accept(aSocket, (sockaddr*) &aRemoteAddr, &aRemoteAddrLen)) == INVALID_SOCKET )
+        if ( (socket = accept(aSocket, reinterpret_cast<sockaddr*>(&aRemoteAddr), &aRemoteAddrLen)) == INVALID_SOCKET )
         {
             closesocket( aSocket );
             WSACleanup();
             return;
         } else {
-            Communicator* pCommunicator = new Communicator( new BufferedStreamSocket( socket) );
+            Communicator* pCommunicator = new Communicator( std::make_unique<BufferedStreamSocket>( socket) );
             mpCommunicators->push_back( pCommunicator );
             pCommunicator->launch();
         }
@@ -1510,14 +1489,11 @@ void SAL_CALL BluetoothServer::run()
         [serviceRecord getServiceRecordHandle: &serviceRecordHandle];
 
         // Register callback for incoming connections
-        IOBluetoothUserNotificationRef callbackRef =
-            IOBluetoothRegisterForFilteredRFCOMMChannelOpenNotifications(
-                incomingCallback,
-                this,
-                channelID,
-                kIOBluetoothUserNotificationChannelDirectionIncoming);
-
-        (void) callbackRef;
+        IOBluetoothRegisterForFilteredRFCOMMChannelOpenNotifications(
+            incomingCallback,
+            this,
+            channelID,
+            kIOBluetoothUserNotificationChannelDirectionIncoming);
 
         [serviceRecord release];
     }

@@ -20,27 +20,26 @@
 #ifndef INCLUDED_SC_SOURCE_CORE_INC_CELLKEYTRANSLATOR_HXX
 #define INCLUDED_SC_SOURCE_CORE_INC_CELLKEYTRANSLATOR_HXX
 
-#include "global.hxx"
 #include <formula/opcode.hxx>
 #include <unotools/transliterationwrapper.hxx>
-#include <list>
+#include <vector>
 #include <memory>
 #include <unordered_map>
 
-#include <com/sun/star/lang/Locale.hpp>
+namespace com { namespace sun { namespace star { namespace lang { struct Locale; } } } }
 
 struct TransItem;
 
 struct ScCellKeyword
 {
     const sal_Char* mpName;
-    OpCode meOpCode;
+    OpCode const meOpCode;
     const css::lang::Locale& mrLocale;
 
     ScCellKeyword(const sal_Char* pName, OpCode eOpCode, const css::lang::Locale& rLocale);
 };
 
-typedef std::unordered_map< OUString, ::std::list<ScCellKeyword>, OUStringHash > ScCellKeywordHashMap;
+typedef std::unordered_map< OUString, ::std::vector<ScCellKeyword> > ScCellKeywordHashMap;
 
 /** Translate cell function keywords.
 
@@ -63,7 +62,7 @@ typedef std::unordered_map< OUString, ::std::list<ScCellKeyword>, OUStringHash >
 class ScCellKeywordTranslator
 {
 public:
-    static void transKeyword(OUString& rName, const css::lang::Locale* pLocale = nullptr, OpCode eOpCode = ocNone);
+    static void transKeyword(OUString& rName, const css::lang::Locale* pLocale, OpCode eOpCode);
     ~ScCellKeywordTranslator();
 
 private:
@@ -72,7 +71,7 @@ private:
     void init();
     void addToMap(const OUString& rKey, const sal_Char* pName,
                   const css::lang::Locale& rLocale,
-                  OpCode eOpCode = ocNone);
+                  OpCode eOpCode);
     void addToMap(const TransItem* pItems, const css::lang::Locale& rLocale);
 
     static ::std::unique_ptr<ScCellKeywordTranslator> spInstance;

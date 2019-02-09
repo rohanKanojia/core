@@ -10,25 +10,18 @@
 #ifndef INCLUDED_SC_QA_UNIT_HELPER_CSV_HANDLER_HXX
 #define INCLUDED_SC_QA_UNIT_HELPER_CSV_HANDLER_HXX
 
-#include <iostream>
+#include "qahelper.hxx"
 
-#include "docsh.hxx"
-#include "postit.hxx"
-#include "patattr.hxx"
-#include "scitems.hxx"
-#include "document.hxx"
-#include "cellform.hxx"
-#include "cellvalue.hxx"
+#include <patattr.hxx>
+#include <document.hxx>
+#include <cellform.hxx>
+#include <cellvalue.hxx>
 
 #include <rtl/strbuf.hxx>
 
-#include <test/bootstrapfixture.hxx>
-
 #define DEBUG_CSV_HANDLER 0
 
-namespace {
-
-OUString getConditionalFormatString(ScDocument* pDoc, SCCOL nCol, SCROW nRow, SCTAB nTab)
+inline OUString getConditionalFormatString(ScDocument* pDoc, SCCOL nCol, SCROW nRow, SCTAB nTab)
 {
     OUString aString;
     Color* pColor;
@@ -44,7 +37,7 @@ OUString getConditionalFormatString(ScDocument* pDoc, SCCOL nCol, SCROW nRow, SC
     return aString;
 }
 
-OString createErrorMessage(SCCOL nCol, SCROW nRow, SCTAB nTab)
+inline OString createErrorMessage(SCCOL nCol, SCROW nRow, SCTAB nTab)
 {
     OStringBuffer aString("Error in Table: ");
     aString.append(static_cast<sal_Int32>(nTab));
@@ -55,7 +48,7 @@ OString createErrorMessage(SCCOL nCol, SCROW nRow, SCTAB nTab)
     return aString.makeStringAndClear();
 }
 
-OString createErrorMessage(SCCOL nCol, SCROW nRow, SCTAB nTab, const OUString& rExpectedString, const OUString& rString)
+inline OString createErrorMessage(SCCOL nCol, SCROW nRow, SCTAB nTab, const OUString& rExpectedString, const OUString& rString)
 {
     OStringBuffer aString(createErrorMessage(nCol, nRow, nTab));
     aString.append("; Expected: '");
@@ -66,7 +59,7 @@ OString createErrorMessage(SCCOL nCol, SCROW nRow, SCTAB nTab, const OUString& r
     return aString.makeStringAndClear();
 }
 
-OString createErrorMessage(SCCOL nCol, SCROW nRow, SCTAB nTab, double aExpected, double aValue)
+inline OString createErrorMessage(SCCOL nCol, SCROW nRow, SCTAB nTab, double aExpected, double aValue)
 {
     OStringBuffer aString(createErrorMessage(nCol, nRow, nTab));
     aString.append("; Expected: '");
@@ -78,12 +71,10 @@ OString createErrorMessage(SCCOL nCol, SCROW nRow, SCTAB nTab, double aExpected,
 
 }
 
-}
-
 class csv_handler
 {
 public:
-    csv_handler(ScDocument* pDoc, SCTAB nTab, StringType eType = StringValue):
+    csv_handler(ScDocument* pDoc, SCTAB nTab, StringType eType):
             mpDoc(pDoc),
             mnCol(0),
             mnRow(0),
@@ -102,7 +93,7 @@ public:
         mnCol = 0;
     }
 
-    void cell(const char* p, size_t n)
+    void cell(const char* p, size_t n, bool /*transient*/)
     {
 #if DEBUG_CSV_HANDLER
         std::cout << "Col: " << mnCol << " Row: " << mnRow << std::endl;
@@ -116,7 +107,7 @@ public:
                 CPPUNIT_ASSERT_MESSAGE(createErrorMessage(mnCol, mnRow, mnTab).getStr(), false);
             }
         }
-        else if (meStringType == PureString)
+        else if (meStringType == StringType::PureString)
         {
             OUString aCSVString(p, n, RTL_TEXTENCODING_UTF8);
             OUString aString = mpDoc->GetString(mnCol, mnRow, mnTab);
@@ -139,11 +130,8 @@ public:
                 OUString aString;
                 switch (meStringType)
                 {
-                    case StringValue:
+                    case StringType::StringValue:
                         aString = mpDoc->GetString(mnCol, mnRow, mnTab);
-                        break;
-                    case FormulaValue:
-                        mpDoc->GetFormula(mnCol, mnRow, mnTab, aString);
                         break;
                     default:
                         break;
@@ -173,11 +161,11 @@ public:
     }
 
 private:
-    ScDocument* mpDoc;
+    ScDocument* const mpDoc;
     SCCOL mnCol;
     SCROW mnRow;
-    SCTAB mnTab;
-    StringType meStringType;
+    SCTAB const mnTab;
+    StringType const meStringType;
 };
 
 class conditional_format_handler
@@ -201,7 +189,7 @@ public:
         mnCol = 0;
     }
 
-    void cell(const char* p, size_t n)
+    void cell(const char* p, size_t n, bool /*transient*/)
     {
 #if DEBUG_CSV_HANDLER
         std::cout << "Col: " << mnCol << " Row: " << mnRow << std::endl;
@@ -218,10 +206,10 @@ public:
     }
 
 private:
-    ScDocument* mpDoc;
+    ScDocument* const mpDoc;
     SCCOL mnCol;
     SCROW mnRow;
-    SCTAB mnTab;
+    SCTAB const mnTab;
 };
 
 #endif

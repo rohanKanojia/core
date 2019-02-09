@@ -25,6 +25,8 @@
  *************************************************************************/
 #include "ftpcontentidentifier.hxx"
 #include "ftpcontentprovider.hxx"
+#include <cppuhelper/typeprovider.hxx>
+#include <cppuhelper/supportsservice.hxx>
 
 using namespace ftp;
 using namespace com::sun::star::uno;
@@ -49,14 +51,11 @@ Any SAL_CALL
 FTPContentIdentifier::queryInterface(
     const Type& rType
 )
-    throw(
-        RuntimeException, std::exception
-    )
 {
     Any aRet =
         ::cppu::queryInterface(rType,
-                               (static_cast< XTypeProvider* >(this)),
-                               (static_cast< XContentIdentifier* >(this)));
+                               static_cast< XTypeProvider* >(this),
+                               static_cast< XContentIdentifier* >(this));
 
     return aRet.hasValue() ? aRet : OWeakObject::queryInterface( rType );
 }
@@ -74,38 +73,25 @@ void SAL_CALL FTPContentIdentifier::release() throw() {
 
 Sequence<sal_Int8> SAL_CALL
 FTPContentIdentifier::getImplementationId()
-    throw(RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 
 Sequence<Type> SAL_CALL
-FTPContentIdentifier::getTypes(
-    void )
-    throw(RuntimeException, std::exception)
+FTPContentIdentifier::getTypes()
 {
-    static cppu::OTypeCollection* pCollection = nullptr;
-    if ( !pCollection ) {
-        osl::Guard< osl::Mutex > aGuard( osl::Mutex::getGlobalMutex() );
-        if ( !pCollection )
-        {
-            static cppu::OTypeCollection collection(
+    static cppu::OTypeCollection s_aCollection(
                 cppu::UnoType<XTypeProvider>::get(),
                 cppu::UnoType<XContentIdentifier>::get());
-            pCollection = &collection;
-        }
-    }
-    return (*pCollection).getTypes();
+
+    return s_aCollection.getTypes();
 }
 
 
 OUString SAL_CALL
 FTPContentIdentifier::getContentIdentifier(
 )
-    throw (
-        css::uno::RuntimeException, std::exception
-    )
 {
     return m_ident;
 }
@@ -114,9 +100,6 @@ FTPContentIdentifier::getContentIdentifier(
 OUString SAL_CALL
 FTPContentIdentifier::getContentProviderScheme(
 )
-    throw (
-        css::uno::RuntimeException, std::exception
-    )
 {
     return OUString("ftp");
 }

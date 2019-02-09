@@ -19,9 +19,11 @@
 #ifndef INCLUDED_I18NPOOL_INC_INDEXENTRYSUPPLIER_DEFAULT_HXX
 #define INCLUDED_I18NPOOL_INC_INDEXENTRYSUPPLIER_DEFAULT_HXX
 
-#include <indexentrysupplier_common.hxx>
+#include "indexentrysupplier_common.hxx"
 
-namespace com { namespace sun { namespace star { namespace i18n {
+#include <memory>
+
+namespace i18npool {
 
 class Index;
 
@@ -31,29 +33,25 @@ class Index;
 class IndexEntrySupplier_Unicode : public IndexEntrySupplier_Common {
 public:
     IndexEntrySupplier_Unicode( const css::uno::Reference < css::uno::XComponentContext >& rxContext );
-    virtual ~IndexEntrySupplier_Unicode();
+    virtual ~IndexEntrySupplier_Unicode() override;
 
     virtual sal_Bool SAL_CALL loadAlgorithm(
         const css::lang::Locale& rLocale,
-        const OUString& SortAlgorithm, sal_Int32 collatorOptions )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const OUString& SortAlgorithm, sal_Int32 collatorOptions ) override;
 
     virtual OUString SAL_CALL getIndexKey( const OUString& IndexEntry,
-        const OUString& PhoneticEntry, const css::lang::Locale& rLocale )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const OUString& PhoneticEntry, const css::lang::Locale& rLocale ) override;
 
     virtual sal_Int16 SAL_CALL compareIndexEntry( const OUString& IndexEntry1,
         const OUString& PhoneticEntry1, const css::lang::Locale& rLocale1,
         const OUString& IndexEntry2, const OUString& PhoneticEntry2,
-        const css::lang::Locale& rLocale2 )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::Locale& rLocale2 ) override;
 
     virtual OUString SAL_CALL getIndexCharacter( const OUString& rIndexEntry,
-        const css::lang::Locale& rLocale, const OUString& rSortAlgorithm )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::Locale& rLocale, const OUString& rSortAlgorithm ) override;
 
 private:
-    Index *index;
+    std::unique_ptr<Index> index;
 };
 
 struct IndexKey {
@@ -68,7 +66,7 @@ public:
     IndexTable();
     ~IndexTable();
 
-    void init(sal_Unicode start_, sal_Unicode end_, IndexKey* keys, sal_Int16 key_count, Index *index);
+    void init(sal_Unicode start_, sal_Unicode end_, IndexKey const * keys, sal_Int16 key_count, Index *index);
 
     sal_Unicode start;
     sal_Unicode end;
@@ -84,9 +82,11 @@ public:
     Index(const css::uno::Reference < css::uno::XComponentContext >& rxContext);
     ~Index();
 
-    void init(const css::lang::Locale& rLocale, const OUString& algorithm) throw (css::uno::RuntimeException);
+    /// @throws css::uno::RuntimeException
+    void init(const css::lang::Locale& rLocale, const OUString& algorithm);
 
-    void makeIndexKeys(const css::lang::Locale &rLocale, const OUString &algorithm) throw (css::uno::RuntimeException);
+    /// @throws css::uno::RuntimeException
+    void makeIndexKeys(const css::lang::Locale &rLocale, const OUString &algorithm);
     sal_Int16 getIndexWeight(const OUString& rIndexEntry);
     OUString getIndexDescription(const OUString& rIndexEntry);
 
@@ -97,11 +97,11 @@ public:
     sal_Int16 mkeys[MAX_KEYS];
     sal_Int16 mkey_count;
     OUString skipping_chars;
-    CollatorImpl *collator;
+    rtl::Reference<CollatorImpl> collator;
     sal_Int16 compare(sal_Unicode c1, sal_Unicode c2);
 };
 
-} } } }
+}
 
 #endif
 

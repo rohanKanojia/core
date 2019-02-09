@@ -7,15 +7,18 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "oox/mathml/importutils.hxx"
+#include <oox/mathml/importutils.hxx>
 
 #include <assert.h>
 
+#include <com/sun/star/xml/FastAttribute.hpp>
+#include <com/sun/star/xml/sax/XFastAttributeList.hpp>
 #include <oox/token/namespacemap.hxx>
 #include <oox/token/tokenmap.hxx>
 #include <oox/token/tokens.hxx>
 #include <oox/token/namespaces.hxx>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 
 #define OPENING( token ) XML_STREAM_OPENING( token )
 #define CLOSING( token ) XML_STREAM_CLOSING( token )
@@ -56,7 +59,7 @@ AttributeListBuilder::AttributeListBuilder( const uno::Reference< xml::sax::XFas
 
 OString tokenToString( int token )
 {
-    const uno::Sequence< sal_Int8 > aTokenNameSeq = StaticTokenMap::get().getUtf8TokenName( token & TOKEN_MASK );
+    uno::Sequence< sal_Int8 > const & aTokenNameSeq = StaticTokenMap::get().getUtf8TokenName( token & TOKEN_MASK );
     OString tokenname( reinterpret_cast< const char* >( aTokenNameSeq.getConstArray() ), aTokenNameSeq.getLength() );
     if( tokenname.isEmpty())
         tokenname = "???";
@@ -139,10 +142,9 @@ sal_Unicode XmlStream::AttributeList::attribute( int token, sal_Unicode def ) co
     return def;
 }
 
-XmlStream::Tag::Tag( int t, const uno::Reference< xml::sax::XFastAttributeList >& a, const OUString& txt )
+XmlStream::Tag::Tag( int t, const uno::Reference< xml::sax::XFastAttributeList >& a )
 : token( t )
 , attributes( AttributeListBuilder( a ))
-, text( txt )
 {
 }
 
@@ -319,17 +321,17 @@ void XmlStream::handleUnexpectedTag()
 
 void XmlStreamBuilder::appendOpeningTag( int token, const uno::Reference< xml::sax::XFastAttributeList >& attrs )
 {
-    tags.push_back( Tag( OPENING( token ), attrs ));
+    tags.emplace_back( OPENING( token ), attrs );
 }
 
 void XmlStreamBuilder::appendOpeningTag( int token, const AttributeList& attrs )
 {
-    tags.push_back( Tag( OPENING( token ), attrs ));
+    tags.emplace_back( OPENING( token ), attrs );
 }
 
 void XmlStreamBuilder::appendClosingTag( int token )
 {
-    tags.push_back( Tag( CLOSING( token )));
+    tags.emplace_back( CLOSING( token ));
 }
 
 void XmlStreamBuilder::appendCharacters( const OUString& chars )

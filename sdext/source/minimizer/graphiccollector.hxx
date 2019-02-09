@@ -33,11 +33,11 @@
 
 struct GraphicSettings
 {
-    bool    mbJPEGCompression;
-    sal_Int32   mnJPEGQuality;
+    bool const    mbJPEGCompression;
+    sal_Int32 const   mnJPEGQuality;
     bool    mbRemoveCropArea;
-    sal_Int32   mnImageResolution;
-    bool    mbEmbedLinkedGraphics;
+    sal_Int32 const   mnImageResolution;
+    bool const    mbEmbedLinkedGraphics;
 
     GraphicSettings( bool bJPEGCompression, sal_Int32 nJPEGQuality, bool bRemoveCropArea,
                         sal_Int32 nImageResolution, bool bEmbedLinkedGraphics )
@@ -57,8 +57,8 @@ class GraphicCollector
         css::uno::Reference< css::drawing::XShape >       mxShape;            // if mbFillBitmap is false the xShape has
         css::uno::Reference< css::beans::XPropertySet >   mxPropertySet;      // to be used otherwise the PropertySet
         css::uno::Reference< css::beans::XPropertySet >   mxPagePropertySet;
-        OUString                       maGraphicURL;
-        OUString                       maGraphicStreamURL;
+        css::uno::Reference< css::graphic::XGraphic > mxGraphic;
+
         css::text::GraphicCrop         maGraphicCropLogic;
         css::awt::Size                 maLogicalSize;
         bool                            mbFillBitmap;

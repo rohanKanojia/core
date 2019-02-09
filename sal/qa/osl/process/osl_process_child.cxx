@@ -18,11 +18,8 @@
  */
 
 #if defined(_WIN32)                     // Windows
-#   define UNICODE
-#   define _UNICODE
 #   define WIN32_LEAN_AND_MEAN
 #   include <windows.h>
-#   include <tchar.h>
 #else
 #   include <unistd.h>
 #endif
@@ -48,41 +45,39 @@
 #   define SLEEP(t) (sleep((t)))
 #endif
 
-void wait_for_seconds(char* time)
+static void wait_for_seconds(char* time)
 {
     SLEEP(atoi(time));
 }
 
 #ifdef _WIN32
 
-void w_to_a(LPCTSTR _strW, LPSTR strA, DWORD size)
+static void w_to_a(LPCWSTR strW, LPSTR strA, DWORD size)
 {
-    LPCWSTR strW = reinterpret_cast<LPCWSTR>(_strW);
-    WideCharToMultiByte(CP_ACP, 0, strW, -1, strA, size, NULL, NULL);
+    WideCharToMultiByte(CP_ACP, 0, strW, -1, strA, size, nullptr, nullptr);
 }
 
-    void dump_env(char* file_path)
+    static void dump_env(char* file_path)
     {
-        LPTSTR env = reinterpret_cast<LPTSTR>(
-            GetEnvironmentStrings());
-        LPTSTR p   = env;
+        LPWSTR env = GetEnvironmentStringsW();
+        LPWSTR p   = env;
 
         std::ofstream file(file_path);
 
         char buffer[32767];
-        while (size_t l = _tcslen(reinterpret_cast<wchar_t*>(p)))
+        while (size_t l = wcslen(p))
         {
             w_to_a(p, buffer, sizeof(buffer));
             file << buffer << '\0';
             p += l + 1;
         }
-        FreeEnvironmentStrings(env);
+        FreeEnvironmentStringsW(env);
     }
 #else
-    void dump_env(char* file_path)
+    static void dump_env(char* file_path)
     {
         std::ofstream file(file_path);
-        for (int i = 0; nullptr != environ[i]; ++i)
+        for (int i = 0; environ[i] != nullptr; ++i)
             file << environ[i] << '\0';
     }
 #endif
@@ -91,12 +86,12 @@ int main(int argc, char* argv[])
 {
     if (argc > 2)
     {
-        if (0 == strcmp("-join", argv[1]))
+        if (strcmp("-join", argv[1]) == 0)
         {
             // coverity[tainted_data] - this is a build-time only test tool
             wait_for_seconds(argv[2]);
         }
-        else if (0 == strcmp("-env", argv[1]))
+        else if (strcmp("-env", argv[1]) == 0)
             dump_env(argv[2]);
     }
 

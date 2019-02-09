@@ -21,10 +21,7 @@
 #include <inputsequencechecker_hi.hxx>
 
 
-namespace com {
-namespace sun {
-namespace star {
-namespace i18n {
+namespace i18npool {
 
 InputSequenceChecker_hi::InputSequenceChecker_hi()
     : InputSequenceCheckerImpl("com.sun.star.i18n.InputSequenceChecker_hi")
@@ -99,20 +96,21 @@ static const sal_uInt16 dev_cell_check[14][14] = {
   /* 13 */ { 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0 }  /* HD */
 };
 
-sal_Bool DEV_Composible[2][2] = {
-/* Mode 0 */    {sal_True, sal_True }, // PASSTHROUGH = 0
-/* Mode 1 */    {sal_False, sal_True}  // STRICT = 1
+bool const DEV_Composible[2][2] = {
+/* Mode 0 */    {true, true }, // PASSTHROUGH = 0
+/* Mode 1 */    {false, true}  // STRICT = 1
 };
 
-#define getCharType(x) \
-    ((x >= 0x0900 && x < 0x097f) ? devaCT[x - 0x0900] : ND_)
+static constexpr sal_uInt16 getCharType(sal_Unicode x)
+{
+    return (x >= 0x0900 && x < 0x097f) ? devaCT[x - 0x0900] : ND_;
+}
 
 sal_Bool SAL_CALL
 InputSequenceChecker_hi::checkInputSequence(const OUString& Text,
                                             sal_Int32       nStartPos,
                                             sal_Unicode     inputChar,
                                             sal_Int16       inputCheckMode)
-  throw(css::uno::RuntimeException, std::exception)
 {
     sal_Unicode currentChar = Text[nStartPos];
   sal_uInt16  ch1 = getCharType(inputChar);
@@ -126,7 +124,6 @@ InputSequenceChecker_hi::correctInputSequence(OUString& Text,
                                             sal_Int32       nStartPos,
                                             sal_Unicode     inputChar,
                                             sal_Int16       inputCheckMode)
-  throw(css::uno::RuntimeException, std::exception)
 {
     if (checkInputSequence(Text, nStartPos, inputChar, inputCheckMode))
         Text = Text.replaceAt(++nStartPos, 0, OUString(inputChar));
@@ -134,6 +131,6 @@ InputSequenceChecker_hi::correctInputSequence(OUString& Text,
         nStartPos=Text.getLength();
     return nStartPos;
 }
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

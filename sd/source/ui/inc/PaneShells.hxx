@@ -20,9 +20,8 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_PANESHELLS_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_PANESHELLS_HXX
 
-#include <sfx2/module.hxx>
 #include <sfx2/shell.hxx>
-#include "glob.hxx"
+#include <glob.hxx>
 
 namespace sd {
 
@@ -41,7 +40,7 @@ private:
 
 public:
     LeftImpressPaneShell();
-    virtual ~LeftImpressPaneShell();
+    virtual ~LeftImpressPaneShell() override;
 };
 
 /** Shell that displays the left pane for Draw.  The shell does not do
@@ -59,20 +58,7 @@ private:
 
 public:
     LeftDrawPaneShell();
-    virtual ~LeftDrawPaneShell();
-};
-
-/** Shell that displays the right pane for both Impress and Draw.  The shell
-    does not do anything else and has especially no slots.
-*/
-class ToolPanelPaneShell : public SfxShell
-{
-public:
-    SFX_DECL_INTERFACE( SD_IF_SDTOOLPANELPANESHELL )
-
-public:
-    ToolPanelPaneShell();
-    virtual ~ToolPanelPaneShell();
+    virtual ~LeftDrawPaneShell() override;
 };
 
 } // end of namespace sd

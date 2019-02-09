@@ -21,15 +21,49 @@
 #define INCLUDED_SVX_FRMSEL_HXX
 
 #include <memory>
-#include <tools/color.hxx>
 #include <vcl/ctrl.hxx>
+#include <vcl/customweld.hxx>
 #include <vcl/bitmap.hxx>
 #include <editeng/borderline.hxx>
 #include <svx/framebordertype.hxx>
 #include <svx/svxdllapi.h>
+#include <o3tl/typed_flags_set.hxx>
+
+class Color;
 
 namespace editeng {
     class SvxBorderLine;
+}
+
+enum class FrameSelFlags
+{
+    NONE            = 0x0000,
+    /** If set, the left frame border is enabled. */
+    Left            = 0x0001,
+    /** If set, the right frame border is enabled. */
+    Right           = 0x0002,
+    /** If set, the top frame border is enabled. */
+    Top             = 0x0004,
+    /** If set, the bottom frame border is enabled. */
+    Bottom          = 0x0008,
+    /** If set, the inner horizontal frame border is enabled. */
+    InnerHorizontal = 0x0010,
+    /** If set, the inner vertical frame border is enabled. */
+    InnerVertical   = 0x0020,
+    /** If set, the top-left to bottom-right diagonal frame border is enabled. */
+    DiagonalTLBR    = 0x0040,
+    /** If set, the bottom-left to top-right diagonal frame border is enabled. */
+    DiagonalBLTR    = 0x0080,
+
+    /** If set, all four outer frame borders are enabled. */
+    Outer           = Left | Right | Top | Bottom,
+
+    /** If set, all frame borders will support the don't care state. */
+    DontCare        = 0x0100
+};
+namespace o3tl
+{
+    template<> struct typed_flags<FrameSelFlags> : is_typed_flags<FrameSelFlags, 0x1ff> {};
 }
 
 namespace svx {
@@ -37,56 +71,31 @@ namespace svx {
 struct FrameSelectorImpl;
 
 
-typedef int FrameSelFlags;
-
-const FrameSelFlags FRAMESEL_NONE       = 0x0000;
-/** If set, the left frame border is enabled. */
-const FrameSelFlags FRAMESEL_LEFT       = 0x0001;
-/** If set, the right frame border is enabled. */
-const FrameSelFlags FRAMESEL_RIGHT      = 0x0002;
-/** If set, the top frame border is enabled. */
-const FrameSelFlags FRAMESEL_TOP        = 0x0004;
-/** If set, the bottom frame border is enabled. */
-const FrameSelFlags FRAMESEL_BOTTOM     = 0x0008;
-/** If set, the inner horizontal frame border is enabled. */
-const FrameSelFlags FRAMESEL_INNER_HOR  = 0x0010;
-/** If set, the inner vertical frame border is enabled. */
-const FrameSelFlags FRAMESEL_INNER_VER  = 0x0020;
-/** If set, the top-left to bottom-right diagonal frame border is enabled. */
-const FrameSelFlags FRAMESEL_DIAG_TLBR  = 0x0040;
-/** If set, the bottom-left to top-right diagonal frame border is enabled. */
-const FrameSelFlags FRAMESEL_DIAG_BLTR  = 0x0080;
-
-/** If set, all four outer frame borders are enabled. */
-const FrameSelFlags FRAMESEL_OUTER      = FRAMESEL_LEFT|FRAMESEL_RIGHT|FRAMESEL_TOP|FRAMESEL_BOTTOM;
-/** If set, both inner frame borders are enabled. */
-const FrameSelFlags FRAMESEL_INNER      = FRAMESEL_INNER_HOR|FRAMESEL_INNER_VER;
-/** If set, both diagonal frame borders are enabled. */
-const FrameSelFlags FRAMESEL_DIAGONAL   = FRAMESEL_DIAG_TLBR|FRAMESEL_DIAG_BLTR;
-
-/** If set, all frame borders will support the don't care state. */
-const FrameSelFlags FRAMESEL_DONTCARE   = 0x0100;
-
-
 /** All possible states of a frame border. */
-enum FrameBorderState
+enum class FrameBorderState
 {
-    FRAMESTATE_SHOW,        /// Frame border has a visible style.
-    FRAMESTATE_HIDE,        /// Frame border is hidden (off).
-    FRAMESTATE_DONTCARE     /// Frame border is in don't care state (if enabled).
+    Show,        /// Frame border has a visible style.
+    Hide,        /// Frame border is hidden (off).
+    DontCare     /// Frame border is in don't care state (if enabled).
 };
 
 
-class SAL_WARN_UNUSED SVX_DLLPUBLIC FrameSelector : public Control
+namespace a11y
+{
+    class AccFrameSelector;
+}
+
+class SAL_WARN_UNUSED SVX_DLLPUBLIC FrameSelector : public weld::CustomWidgetController
 {
 public:
-    FrameSelector(vcl::Window* pParent);
-    virtual ~FrameSelector();
+    FrameSelector();
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
+    virtual ~FrameSelector() override;
 
     /** Initializes the control, enables/disables frame borders according to flags. */
     void                Initialize( FrameSelFlags nFlags );
 
-    // enabled frame borders --------------------------------------------------
+    // enabled frame borders
 
     /** Returns true, if the specified frame border is enabled. */
     bool                IsBorderEnabled( FrameBorderType eBorder ) const;
@@ -94,10 +103,8 @@ public:
     sal_Int32           GetEnabledBorderCount() const;
     /** Returns the border type from the passed index (counts only enabled frame borders). */
     FrameBorderType     GetEnabledBorderType( sal_Int32 nIndex ) const;
-    /** Returns the index of a frame border (counts only enabled borders) from passed type. */
-    sal_Int32           GetEnabledBorderIndex( FrameBorderType eBorder ) const;
 
-    // frame border state and style -------------------------------------------
+    // frame border state and style
 
     /** Returns true, if the control supports the "don't care" frame border state. */
     bool                SupportsDontCareState() const;
@@ -120,13 +127,13 @@ public:
     /** Returns true, if all visible frame borders have equal widths.
         @descr  Ignores hidden and "don't care" frame borders. On success,
         returns the width in the passed parameter. */
-    bool                GetVisibleWidth( long& rnWidth, editeng::SvxBorderStyle& rnStyle ) const;
+    bool                GetVisibleWidth( long& rnWidth, SvxBorderLineStyle& rnStyle ) const;
     /** Returns true, if all visible frame borders have equal color.
         @descr  Ignores hidden and "don't care" frame borders. On success,
         returns the color in the passed parameter. */
     bool                GetVisibleColor( Color& rColor ) const;
 
-    // frame border selection -------------------------------------------------
+    // frame border selection
 
     /** Returns the current selection handler. */
     const Link<LinkParamNone*,void>&  GetSelectHdl() const;
@@ -140,22 +147,23 @@ public:
     /** Returns true, if any of the enabled frame borders is selected. */
     bool                IsAnyBorderSelected() const;
     /** Selects or deselects all frame borders. */
-    void                SelectAllBorders( bool bSelect = true );
+    void                SelectAllBorders( bool bSelect );
     /** Deselects all frame borders. */
-    inline void         DeselectAllBorders() { SelectAllBorders( false ); }
+    void         DeselectAllBorders() { SelectAllBorders( false ); }
 
     /** Selects or deselects all visible frame borders (ignores hidden and "don't care" borders). */
     void                SelectAllVisibleBorders();
 
     /** Sets the passed line widths to all selected frame borders (in twips). */
-    void                SetStyleToSelection( long nWidth, editeng::SvxBorderStyle nStyle );
+    void                SetStyleToSelection( long nWidth, SvxBorderLineStyle nStyle );
     /** Sets the passed color to all selected frame borders. */
     void                SetColorToSelection( const Color& rColor );
 
-    // accessibility ----------------------------------------------------------
+    // accessibility
 
-    virtual css::uno::Reference< css::accessibility::XAccessible >
-                        CreateAccessible() override;
+    css::uno::Reference<css::accessibility::XAccessible> getAccessibleParent() { return GetDrawingArea()->get_accessible_parent(); }
+    virtual css::uno::Reference<css::accessibility::XAccessible> CreateAccessible() override;
+    a11yrelationset get_accessible_relation_set() { return GetDrawingArea()->get_accessible_relation_set(); }
 
     /** Returns the accessibility child object of the specified frame border (if enabled). */
     css::uno::Reference< css::accessibility::XAccessible >
@@ -167,26 +175,22 @@ public:
     css::uno::Reference< css::accessibility::XAccessible >
                         GetChildAccessible( const Point& rPos );
 
-    /** Returns true, if the passed point is inside the click area of any enabled frame border. */
-    bool                ContainsClickPoint( const Point& rPos ) const;
     /** Returns the bounding rectangle of the specified frame border (if enabled). */
-    Rectangle           GetClickBoundRect( FrameBorderType eBorder ) const;
-
+    tools::Rectangle           GetClickBoundRect( FrameBorderType eBorder ) const;
 
 protected:
-    virtual void        Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void        Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void        MouseButtonDown( const MouseEvent& rMEvt ) override;
-    virtual void        KeyInput( const KeyEvent& rKEvt ) override;
+    virtual bool        KeyInput( const KeyEvent& rKEvt ) override;
     virtual void        GetFocus() override;
     virtual void        LoseFocus() override;
-    virtual void        DataChanged( const DataChangedEvent& rDCEvt ) override;
+    virtual void        StyleUpdated() override;
     virtual void        Resize() override;
-    virtual Size        GetOptimalSize() const override;
 
 private:
+    rtl::Reference<a11y::AccFrameSelector> mxAccess;   /// Pointer to accessibility object of the control.
     std::unique_ptr< FrameSelectorImpl > mxImpl;
 };
-
 
 }
 

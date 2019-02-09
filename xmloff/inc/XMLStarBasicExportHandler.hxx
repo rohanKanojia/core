@@ -33,15 +33,9 @@ namespace com { namespace sun { namespace star {
 
 class XMLStarBasicExportHandler : public XMLEventExportHandler
 {
-    const OUString sStarBasic;
-    const OUString sLibrary;
-    const OUString sMacroName;
-    const OUString sStarOffice;
-    const OUString sApplication;
-
 public:
     XMLStarBasicExportHandler();
-    virtual ~XMLStarBasicExportHandler();
+    virtual ~XMLStarBasicExportHandler() override;
 
     virtual void Export(
         SvXMLExport& rExport,

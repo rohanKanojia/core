@@ -18,10 +18,10 @@
  */
 
 
-#include <idlc/astexpression.hxx>
-#include <idlc/astconstant.hxx>
-#include <idlc/astscope.hxx>
-#include <idlc/errorhandler.hxx>
+#include <astexpression.hxx>
+#include <astconstant.hxx>
+#include <astscope.hxx>
+#include <errorhandler.hxx>
 
 #include <osl/diagnose.h>
 
@@ -33,99 +33,71 @@ AstExpression::AstExpression(ExprComb c, AstExpression *pExpr1, AstExpression *p
     : m_combOperator(c)
     , m_subExpr1(pExpr1)
     , m_subExpr2(pExpr2)
-    , m_exprValue(nullptr)
-    , m_pSymbolicName(nullptr)
 {
     fillDefinitionDetails();
 
 }
 
 AstExpression::AstExpression(sal_Int32 l)
-    : m_combOperator(EC_none)
-    , m_subExpr1(nullptr)
-    , m_subExpr2(nullptr)
-    , m_exprValue(nullptr)
-    , m_pSymbolicName(nullptr)
+    : m_combOperator(ExprComb::NONE)
 {
     fillDefinitionDetails();
 
-    m_exprValue = new AstExprValue();
+    m_exprValue.reset( new AstExprValue );
     m_exprValue->et = ET_long;
     m_exprValue->u.lval = l;
 }
 
 AstExpression::AstExpression(sal_Int32  l, ExprType et)
-    : m_combOperator(EC_none)
-    , m_subExpr1(nullptr)
-    , m_subExpr2(nullptr)
-    , m_exprValue(nullptr)
-    , m_pSymbolicName(nullptr)
+    : m_combOperator(ExprComb::NONE)
 {
     fillDefinitionDetails();
 
-    m_exprValue = new AstExprValue();
+    m_exprValue.reset( new AstExprValue );
     m_exprValue->et = et;
     m_exprValue->u.lval = l;
 }
 
 AstExpression::AstExpression(sal_Int64  h)
-    : m_combOperator(EC_none)
-    , m_subExpr1(nullptr)
-    , m_subExpr2(nullptr)
-    , m_exprValue(nullptr)
-    , m_pSymbolicName(nullptr)
+    : m_combOperator(ExprComb::NONE)
 {
     fillDefinitionDetails();
 
-    m_exprValue = new AstExprValue();
+    m_exprValue.reset( new AstExprValue );
     m_exprValue->et = ET_hyper;
     m_exprValue->u.hval = h;
 }
 
 AstExpression::AstExpression(sal_uInt64 uh)
-    : m_combOperator(EC_none)
-    , m_subExpr1(nullptr)
-    , m_subExpr2(nullptr)
-    , m_exprValue(nullptr)
-    , m_pSymbolicName(nullptr)
+    : m_combOperator(ExprComb::NONE)
 {
     fillDefinitionDetails();
 
-    m_exprValue = new AstExprValue();
+    m_exprValue.reset( new AstExprValue );
     m_exprValue->et = ET_uhyper;
     m_exprValue->u.uhval = uh;
 }
 
 AstExpression::AstExpression(double d)
-    : m_combOperator(EC_none)
-    , m_subExpr1(nullptr)
-    , m_subExpr2(nullptr)
-    , m_exprValue(nullptr)
-    , m_pSymbolicName(nullptr)
+    : m_combOperator(ExprComb::NONE)
 {
     fillDefinitionDetails();
 
-    m_exprValue = new AstExprValue();
+    m_exprValue.reset( new AstExprValue );
     m_exprValue->et = ET_double;
     m_exprValue->u.dval = d;
 }
 
 AstExpression::AstExpression(OString* scopedName)
-    : m_combOperator(EC_symbol)
-    , m_subExpr1(nullptr)
-    , m_subExpr2(nullptr)
-    , m_exprValue(nullptr)
-    , m_pSymbolicName(scopedName)
+    : m_combOperator(ExprComb::Symbol)
 {
+    if (scopedName)
+        m_xSymbolicName = *scopedName;
     fillDefinitionDetails();
 }
 
 AstExpression::~AstExpression()
 {
-    delete m_exprValue;
-    delete m_subExpr1;
-    delete m_subExpr2;
-    delete m_pSymbolicName;
 }
 
 /*
@@ -149,51 +121,51 @@ coerce_value(AstExprValue *ev, ExprType t)
                 case ET_ushort:
                     if (ev->u.usval > SAL_MAX_INT16)
                         return false;
-                    ev->u.sval = (sal_Int16)ev->u.usval;
+                    ev->u.sval = static_cast<sal_Int16>(ev->u.usval);
                     ev->et = ET_short;
                     return true;
                 case ET_long:
                     if (ev->u.lval < SAL_MIN_INT16 || ev->u.lval > SAL_MAX_INT16)
                         return false;
-                    ev->u.sval = (sal_Int16)ev->u.lval;
+                    ev->u.sval = static_cast<sal_Int16>(ev->u.lval);
                     ev->et = ET_short;
                     return true;
                 case ET_ulong:
                     if (ev->u.ulval > SAL_MAX_INT16)
                         return false;
-                    ev->u.sval = (sal_Int16)ev->u.ulval;
+                    ev->u.sval = static_cast<sal_Int16>(ev->u.ulval);
                     ev->et = ET_short;
                     return true;
                 case ET_hyper:
                     if (ev->u.hval < SAL_MIN_INT16 || ev->u.hval > SAL_MAX_INT16)
                         return false;
-                    ev->u.sval = (sal_Int16)ev->u.hval;
+                    ev->u.sval = static_cast<sal_Int16>(ev->u.hval);
                     ev->et = ET_short;
                     return true;
                 case ET_uhyper:
                     if (ev->u.uhval > SAL_MAX_INT16)
                         return false;
-                    ev->u.sval = (sal_Int16)ev->u.uhval;
+                    ev->u.sval = static_cast<sal_Int16>(ev->u.uhval);
                     ev->et = ET_short;
                     return true;
                 case ET_boolean:
-                    ev->u.sval = (sal_Int16)ev->u.bval;
+                    ev->u.sval = static_cast<sal_Int16>(ev->u.bval);
                     ev->et = ET_short;
                     return true;
                 case ET_float:
                     if (ev->u.fval < SAL_MIN_INT16 || ev->u.fval > SAL_MAX_INT16)
                         return false;
-                    ev->u.sval = (sal_Int16)ev->u.fval;
+                    ev->u.sval = static_cast<sal_Int16>(ev->u.fval);
                     ev->et = ET_short;
                     return true;
                 case ET_double:
                     if (ev->u.dval < SAL_MIN_INT16 || ev->u.dval > SAL_MAX_INT16)
                         return false;
-                    ev->u.sval = (sal_Int16)ev->u.dval;
+                    ev->u.sval = static_cast<sal_Int16>(ev->u.dval);
                     ev->et = ET_short;
                     return true;
                 case ET_byte:
-                    ev->u.sval = (sal_Int16)ev->u.byval;
+                    ev->u.sval = static_cast<sal_Int16>(ev->u.byval);
                     ev->et = ET_short;
                     return true;
                 default:
@@ -206,7 +178,7 @@ coerce_value(AstExprValue *ev, ExprType t)
                 case ET_short:
                     if (ev->u.sval < 0)
                         return false;
-                    ev->u.usval = (sal_uInt16)ev->u.sval;
+                    ev->u.usval = static_cast<sal_uInt16>(ev->u.sval);
                     ev->et = ET_ushort;
                     return true;
                 case ET_ushort:
@@ -214,45 +186,45 @@ coerce_value(AstExprValue *ev, ExprType t)
                 case ET_long:
                     if (ev->u.lval < 0 || ev->u.lval > SAL_MAX_UINT16)
                         return false;
-                    ev->u.usval = (sal_uInt16)ev->u.lval;
+                    ev->u.usval = static_cast<sal_uInt16>(ev->u.lval);
                     ev->et = ET_ushort;
                     return true;
                 case ET_ulong:
                     if (ev->u.ulval > SAL_MAX_UINT16)
                         return false;
-                    ev->u.usval = (sal_uInt16)ev->u.ulval;
+                    ev->u.usval = static_cast<sal_uInt16>(ev->u.ulval);
                     ev->et = ET_ushort;
                     return true;
                 case ET_hyper:
                     if (ev->u.hval < 0 || ev->u.hval > SAL_MAX_UINT16)
                         return false;
-                    ev->u.usval = (sal_uInt16)ev->u.hval;
+                    ev->u.usval = static_cast<sal_uInt16>(ev->u.hval);
                     ev->et = ET_ushort;
                     return true;
                 case ET_uhyper:
                     if (ev->u.uhval > SAL_MAX_UINT16)
                         return false;
-                    ev->u.usval = (sal_uInt16)ev->u.uhval;
+                    ev->u.usval = static_cast<sal_uInt16>(ev->u.uhval);
                     ev->et = ET_ushort;
                     return true;
                 case ET_boolean:
-                    ev->u.usval = (sal_uInt16)ev->u.bval;
+                    ev->u.usval = static_cast<sal_uInt16>(ev->u.bval);
                     ev->et = ET_short;
                     return true;
                 case ET_float:
                     if (ev->u.fval < 0.0 || ev->u.fval > SAL_MAX_UINT16)
                         return false;
-                    ev->u.usval = (sal_uInt16)ev->u.fval;
+                    ev->u.usval = static_cast<sal_uInt16>(ev->u.fval);
                     ev->et = ET_short;
                     return true;
                 case ET_double:
                     if (ev->u.dval < 0.0 || ev->u.dval > SAL_MAX_UINT16)
                         return false;
-                    ev->u.usval = (sal_uInt16)ev->u.dval;
+                    ev->u.usval = static_cast<sal_uInt16>(ev->u.dval);
                     ev->et = ET_short;
                     return true;
                 case ET_byte:
-                    ev->u.usval = (sal_uInt16)ev->u.byval;
+                    ev->u.usval = static_cast<sal_uInt16>(ev->u.byval);
                     ev->et = ET_ushort;
                     return true;
                 default:
@@ -263,11 +235,11 @@ coerce_value(AstExprValue *ev, ExprType t)
             switch (ev->et)
             {
                 case ET_short:
-                    ev->u.lval = (sal_Int32)ev->u.sval;
+                    ev->u.lval = static_cast<sal_Int32>(ev->u.sval);
                     ev->et = ET_long;
                     return true;
                 case ET_ushort:
-                    ev->u.lval = (sal_Int32)ev->u.usval;
+                    ev->u.lval = static_cast<sal_Int32>(ev->u.usval);
                     ev->et = ET_long;
                     return true;
                 case ET_long:
@@ -275,39 +247,39 @@ coerce_value(AstExprValue *ev, ExprType t)
                 case ET_ulong:
                     if (ev->u.ulval > SAL_MAX_INT32)
                         return false;
-                    ev->u.lval = (sal_Int32)ev->u.ulval;
+                    ev->u.lval = static_cast<sal_Int32>(ev->u.ulval);
                     ev->et = ET_long;
                     return true;
                 case ET_hyper:
                     if (ev->u.hval < SAL_MIN_INT32 || ev->u.hval > SAL_MAX_INT32)
                         return false;
-                    ev->u.lval = (sal_Int32)ev->u.hval;
+                    ev->u.lval = static_cast<sal_Int32>(ev->u.hval);
                     ev->et = ET_long;
                     return true;
                 case ET_uhyper:
                     if (ev->u.uhval > SAL_MAX_INT32)
                         return false;
-                    ev->u.lval = (sal_Int32)ev->u.uhval;
+                    ev->u.lval = static_cast<sal_Int32>(ev->u.uhval);
                     ev->et = ET_long;
                     return true;
                 case ET_boolean:
-                    ev->u.lval = (sal_Int32)ev->u.bval;
+                    ev->u.lval = static_cast<sal_Int32>(ev->u.bval);
                     ev->et = ET_long;
                     return true;
                 case ET_float:
                     if (ev->u.fval < SAL_MIN_INT32 || ev->u.fval > SAL_MAX_INT32)
                         return false;
-                    ev->u.lval = (sal_Int32)ev->u.fval;
+                    ev->u.lval = static_cast<sal_Int32>(ev->u.fval);
                     ev->et = ET_long;
                     return true;
                 case ET_double:
                     if (ev->u.dval < SAL_MIN_INT32 || ev->u.dval > SAL_MAX_INT32)
                         return false;
-                    ev->u.lval = (sal_Int32)ev->u.dval;
+                    ev->u.lval = static_cast<sal_Int32>(ev->u.dval);
                     ev->et = ET_long;
                     return true;
                 case ET_byte:
-                    ev->u.lval = (sal_Int32) ev->u.byval;
+                    ev->u.lval = static_cast<sal_Int32>(ev->u.byval);
                     ev->et = ET_long;
                     return true;
                 default:
@@ -320,17 +292,17 @@ coerce_value(AstExprValue *ev, ExprType t)
                 case ET_short:
                     if (ev->u.sval < 0)
                         return false;
-                    ev->u.ulval = (sal_uInt32)ev->u.sval;
+                    ev->u.ulval = static_cast<sal_uInt32>(ev->u.sval);
                     ev->et = ET_ulong;
                     return true;
                 case ET_ushort:
-                    ev->u.ulval = (sal_uInt32)ev->u.usval;
+                    ev->u.ulval = static_cast<sal_uInt32>(ev->u.usval);
                     ev->et = ET_ulong;
                     return true;
                 case ET_long:
                     if (ev->u.lval < 0)
                         return false;
-                    ev->u.ulval = (sal_uInt32)ev->u.lval;
+                    ev->u.ulval = static_cast<sal_uInt32>(ev->u.lval);
                     ev->et = ET_ulong;
                     return true;
                 case ET_ulong:
@@ -338,33 +310,33 @@ coerce_value(AstExprValue *ev, ExprType t)
                 case ET_hyper:
                     if (ev->u.hval < 0 || ev->u.hval > SAL_MAX_UINT32)
                         return false;
-                    ev->u.lval = (sal_uInt32)ev->u.hval;
+                    ev->u.lval = static_cast<sal_uInt32>(ev->u.hval);
                     ev->et = ET_ulong;
                     return true;
                 case ET_uhyper:
                     if (ev->u.uhval > SAL_MAX_UINT32)
                         return false;
-                    ev->u.ulval = (sal_uInt32)ev->u.uhval;
+                    ev->u.ulval = static_cast<sal_uInt32>(ev->u.uhval);
                     ev->et = ET_ulong;
                     return true;
                 case ET_boolean:
-                    ev->u.ulval = (sal_uInt32)ev->u.bval;
+                    ev->u.ulval = static_cast<sal_uInt32>(ev->u.bval);
                     ev->et = ET_ulong;
                     return true;
                 case ET_float:
                     if (ev->u.fval < 0.0 || ev->u.fval > SAL_MAX_UINT32)
                         return false;
-                    ev->u.ulval = (sal_uInt32)ev->u.fval;
+                    ev->u.ulval = static_cast<sal_uInt32>(ev->u.fval);
                     ev->et = ET_ulong;
                     return true;
                 case ET_double:
                     if (ev->u.dval < 0.0 || ev->u.dval > SAL_MAX_UINT32)
                         return false;
-                    ev->u.ulval = (sal_uInt32)ev->u.dval;
+                    ev->u.ulval = static_cast<sal_uInt32>(ev->u.dval);
                     ev->et = ET_ulong;
                     return true;
                 case ET_byte:
-                    ev->u.ulval = (sal_uInt32)ev->u.byval;
+                    ev->u.ulval = static_cast<sal_uInt32>(ev->u.byval);
                     ev->et = ET_ulong;
                     return true;
                 default:
@@ -375,19 +347,19 @@ coerce_value(AstExprValue *ev, ExprType t)
             switch (ev->et)
             {
                 case ET_short:
-                    ev->u.hval = (sal_Int64)ev->u.sval;
+                    ev->u.hval = static_cast<sal_Int64>(ev->u.sval);
                     ev->et = ET_hyper;
                     return true;
                 case ET_ushort:
-                    ev->u.hval = (sal_Int64)ev->u.usval;
+                    ev->u.hval = static_cast<sal_Int64>(ev->u.usval);
                     ev->et = ET_hyper;
                     return true;
                 case ET_long:
-                    ev->u.hval = (sal_Int64)ev->u.lval;
+                    ev->u.hval = static_cast<sal_Int64>(ev->u.lval);
                     ev->et = ET_hyper;
                     return true;
                 case ET_ulong:
-                    ev->u.hval = (sal_Int64)ev->u.ulval;
+                    ev->u.hval = static_cast<sal_Int64>(ev->u.ulval);
                     ev->et = ET_hyper;
                     return true;
                 case ET_hyper:
@@ -395,27 +367,27 @@ coerce_value(AstExprValue *ev, ExprType t)
                 case ET_uhyper:
                     if (ev->u.uhval > SAL_MAX_INT64)
                         return false;
-                    ev->u.hval = (sal_Int64)ev->u.uhval;
+                    ev->u.hval = static_cast<sal_Int64>(ev->u.uhval);
                     ev->et = ET_long;
                     return true;
                 case ET_boolean:
-                    ev->u.hval = (sal_Int64)ev->u.bval;
+                    ev->u.hval = static_cast<sal_Int64>(ev->u.bval);
                     ev->et = ET_hyper;
                     return true;
                 case ET_float:
                     if (ev->u.fval < SAL_MIN_INT64 || ev->u.fval > SAL_MAX_INT64)
                         return false;
-                    ev->u.hval = (sal_Int64)ev->u.fval;
+                    ev->u.hval = static_cast<sal_Int64>(ev->u.fval);
                     ev->et = ET_hyper;
                     return true;
                 case ET_double:
                     if (ev->u.dval < SAL_MIN_INT64 || ev->u.dval > SAL_MAX_INT64)
                         return false;
-                    ev->u.hval = (sal_Int64)ev->u.dval;
+                    ev->u.hval = static_cast<sal_Int64>(ev->u.dval);
                     ev->et = ET_hyper;
                     return true;
                 case ET_byte:
-                    ev->u.hval = (sal_Int64)ev->u.byval;
+                    ev->u.hval = static_cast<sal_Int64>(ev->u.byval);
                     ev->et = ET_hyper;
                     return true;
                 default:
@@ -428,49 +400,49 @@ coerce_value(AstExprValue *ev, ExprType t)
                 case ET_short:
                     if (ev->u.sval < 0)
                         return false;
-                    ev->u.uhval = (sal_uInt64)ev->u.sval;
+                    ev->u.uhval = static_cast<sal_uInt64>(ev->u.sval);
                     ev->et = ET_uhyper;
                     return true;
                 case ET_ushort:
-                    ev->u.uhval = (sal_uInt64)ev->u.usval;
+                    ev->u.uhval = static_cast<sal_uInt64>(ev->u.usval);
                     ev->et = ET_uhyper;
                     return true;
                 case ET_long:
                     if (ev->u.lval < 0)
                         return false;
-                    ev->u.uhval = (sal_uInt64)ev->u.lval;
+                    ev->u.uhval = static_cast<sal_uInt64>(ev->u.lval);
                     ev->et = ET_uhyper;
                     return true;
                 case ET_ulong:
-                    ev->u.uhval = (sal_uInt64)ev->u.ulval;
+                    ev->u.uhval = static_cast<sal_uInt64>(ev->u.ulval);
                     ev->et = ET_uhyper;
                     return true;
                 case ET_hyper:
                     if (ev->u.hval < 0)
                         return false;
-                    ev->u.uhval = (sal_uInt64)ev->u.hval;
+                    ev->u.uhval = static_cast<sal_uInt64>(ev->u.hval);
                     ev->et = ET_uhyper;
                     return true;
                 case ET_uhyper:
                     return true;
                 case ET_boolean:
-                    ev->u.uhval = (sal_uInt64)ev->u.bval;
+                    ev->u.uhval = static_cast<sal_uInt64>(ev->u.bval);
                     ev->et = ET_uhyper;
                     return true;
                 case ET_float:
                     if (ev->u.fval < 0.0 || ev->u.fval > SAL_MAX_UINT64)
                         return false;
-                    ev->u.uhval = (sal_uInt64)ev->u.fval;
+                    ev->u.uhval = static_cast<sal_uInt64>(ev->u.fval);
                     ev->et = ET_uhyper;
                     return true;
                 case ET_double:
                     if (ev->u.dval < 0.0 || ev->u.dval > SAL_MAX_UINT64)
                         return false;
-                    ev->u.uhval = (sal_uInt64)ev->u.dval;
+                    ev->u.uhval = static_cast<sal_uInt64>(ev->u.dval);
                     ev->et = ET_uhyper;
                     return true;
                 case ET_byte:
-                    ev->u.uhval = (sal_uInt64)ev->u.byval;
+                    ev->u.uhval = static_cast<sal_uInt64>(ev->u.byval);
                     ev->et = ET_uhyper;
                     return true;
                 default:
@@ -526,29 +498,29 @@ coerce_value(AstExprValue *ev, ExprType t)
             switch (ev->et)
             {
                 case ET_short:
-                    ev->u.fval = (float)ev->u.sval;
+                    ev->u.fval = static_cast<float>(ev->u.sval);
                     ev->et = ET_float;
                     return true;
                 case ET_ushort:
-                    ev->u.fval = (float)ev->u.usval;
+                    ev->u.fval = static_cast<float>(ev->u.usval);
                     ev->et = ET_float;
                     return true;
                 case ET_long:
-                    ev->u.fval = (float)ev->u.lval;
+                    ev->u.fval = static_cast<float>(ev->u.lval);
                     ev->et = ET_float;
                     return true;
                 case ET_ulong:
-                    ev->u.fval = (float)ev->u.ulval;
+                    ev->u.fval = static_cast<float>(ev->u.ulval);
                     ev->et = ET_float;
                     return true;
                 case ET_hyper:
-                    ev->u.fval = (float)ev->u.hval;
+                    ev->u.fval = static_cast<float>(ev->u.hval);
                     ev->et = ET_float;
                     return true;
                 case ET_uhyper:
-                    if ((float)ev->u.ulval > FLT_MAX)
+                    if (static_cast<float>(ev->u.ulval) > FLT_MAX)
                         return false;
-                    ev->u.fval = (float)ev->u.ulval;
+                    ev->u.fval = static_cast<float>(ev->u.ulval);
                     ev->et = ET_float;
                     return true;
                 case ET_boolean:
@@ -558,13 +530,13 @@ coerce_value(AstExprValue *ev, ExprType t)
                 case ET_float:
                     return true;
                 case ET_double:
-                    if ((float)ev->u.dval > FLT_MAX || (float)ev->u.dval < -FLT_MAX)
+                    if (static_cast<float>(ev->u.dval) > FLT_MAX || static_cast<float>(ev->u.dval) < -FLT_MAX)
                         return false;
-                    ev->u.fval = (float)ev->u.dval;
+                    ev->u.fval = static_cast<float>(ev->u.dval);
                     ev->et = ET_float;
                     return true;
                 case ET_byte:
-                    ev->u.fval = (float)ev->u.byval;
+                    ev->u.fval = static_cast<float>(ev->u.byval);
                     ev->et = ET_float;
                     return true;
                 default:
@@ -575,29 +547,29 @@ coerce_value(AstExprValue *ev, ExprType t)
             switch (ev->et)
             {
                 case ET_short:
-                    ev->u.dval = (double)ev->u.sval;
+                    ev->u.dval = static_cast<double>(ev->u.sval);
                     ev->et = ET_double;
                     return true;
                 case ET_ushort:
-                    ev->u.dval = (double)ev->u.usval;
+                    ev->u.dval = static_cast<double>(ev->u.usval);
                     ev->et = ET_double;
                     return true;
                 case ET_long:
-                    ev->u.dval = (double)ev->u.lval;
+                    ev->u.dval = static_cast<double>(ev->u.lval);
                     ev->et = ET_double;
                     return true;
                 case ET_ulong:
-                    ev->u.dval = (double)ev->u.ulval;
+                    ev->u.dval = static_cast<double>(ev->u.ulval);
                     ev->et = ET_double;
                     return true;
                 case ET_hyper:
-                    ev->u.dval = (double)ev->u.hval;
+                    ev->u.dval = static_cast<double>(ev->u.hval);
                     ev->et = ET_double;
                     return true;
                 case ET_uhyper:
-                    if ((double)ev->u.dval > FLT_MAX || (double)ev->u.dval < -FLT_MAX)
+                    if (ev->u.dval > FLT_MAX || ev->u.dval < -FLT_MAX)
                         return false;
-                    ev->u.dval = (double)ev->u.ulval;
+                    ev->u.dval = static_cast<double>(ev->u.ulval);
                     ev->et = ET_double;
                     return true;
                 case ET_boolean:
@@ -605,13 +577,13 @@ coerce_value(AstExprValue *ev, ExprType t)
                     ev->et = ET_double;
                     return true;
                 case ET_float:
-                    ev->u.dval = (double)ev->u.fval;
+                    ev->u.dval = static_cast<double>(ev->u.fval);
                     ev->et = ET_double;
                     return true;
                 case ET_double:
                     return true;
                 case ET_byte:
-                    ev->u.dval = (double)ev->u.byval;
+                    ev->u.dval = static_cast<double>(ev->u.byval);
                     ev->et = ET_double;
                     return true;
                 default:
@@ -624,37 +596,37 @@ coerce_value(AstExprValue *ev, ExprType t)
                 case ET_short:
                     if (ev->u.sval < SAL_MIN_INT8 || ev->u.sval > SAL_MAX_UINT8)
                         return false;
-                    ev->u.byval = (unsigned char)ev->u.sval;
+                    ev->u.byval = static_cast<unsigned char>(ev->u.sval);
                     ev->et = ET_byte;
                     return true;
                 case ET_ushort:
                     if (ev->u.usval > SAL_MAX_UINT8)
                         return false;
-                    ev->u.byval = (unsigned char)ev->u.usval;
+                    ev->u.byval = static_cast<unsigned char>(ev->u.usval);
                     ev->et = ET_byte;
                     return true;
                 case ET_long:
                     if (ev->u.lval < SAL_MIN_INT8 || ev->u.lval > SAL_MAX_UINT8)
                         return false;
-                    ev->u.byval = (unsigned char) ev->u.lval;
+                    ev->u.byval = static_cast<unsigned char>(ev->u.lval);
                     ev->et = ET_byte;
                     return true;
                 case ET_ulong:
                     if (ev->u.ulval > SAL_MAX_UINT8)
                         return false;
-                    ev->u.byval = (unsigned char) ev->u.ulval;
+                    ev->u.byval = static_cast<unsigned char>(ev->u.ulval);
                     ev->et = ET_byte;
                     return true;
                 case ET_hyper:
                     if (ev->u.hval < SAL_MIN_INT8 || ev->u.hval > SAL_MAX_UINT8)
                         return false;
-                    ev->u.byval = (unsigned char) ev->u.hval;
+                    ev->u.byval = static_cast<unsigned char>(ev->u.hval);
                     ev->et = ET_byte;
                     return true;
                 case ET_uhyper:
                     if (ev->u.uhval > SAL_MAX_UINT8)
                         return false;
-                    ev->u.byval = (unsigned char) ev->u.uhval;
+                    ev->u.byval = static_cast<unsigned char>(ev->u.uhval);
                     ev->et = ET_byte;
                     return true;
                 case ET_boolean:
@@ -664,13 +636,13 @@ coerce_value(AstExprValue *ev, ExprType t)
                 case ET_float:
                     if (ev->u.fval < SAL_MIN_INT8 || ev->u.fval > SAL_MAX_UINT8)
                         return false;
-                    ev->u.byval = (unsigned char) ev->u.fval;
+                    ev->u.byval = static_cast<unsigned char>(ev->u.fval);
                     ev->et = ET_byte;
                     return true;
                 case ET_double:
                     if (ev->u.dval < SAL_MIN_INT8 || ev->u.dval > SAL_MAX_UINT8)
                         return false;
-                    ev->u.byval = (unsigned char) ev->u.dval;
+                    ev->u.byval = static_cast<unsigned char>(ev->u.dval);
                     ev->et = ET_byte;
                     return true;
                 case ET_byte:
@@ -687,8 +659,6 @@ coerce_value(AstExprValue *ev, ExprType t)
 
 bool AstExpression::coerce(ExprType t)
 {
-    AstExprValue *copy;
-
     /*
      * Is it already of the right type?
      */
@@ -704,64 +674,16 @@ bool AstExpression::coerce(ExprType t)
     if (m_exprValue == nullptr)
         return false;
 
-    /*
-     * Create a copy to contain coercion result
-     */
-    copy = new AstExprValue;
-
-    copy->et = m_exprValue->et;
-    switch (m_exprValue->et)
-    {
-        case ET_short:
-            copy->u.sval = m_exprValue->u.sval;
-            break;
-        case ET_ushort:
-            copy->u.usval = m_exprValue->u.usval;
-            break;
-        case ET_long:
-            copy->u.lval = m_exprValue->u.lval;
-            break;
-        case ET_ulong:
-            copy->u.ulval = m_exprValue->u.ulval;
-            break;
-        case ET_hyper:
-            copy->u.hval = m_exprValue->u.hval;
-            break;
-        case ET_uhyper:
-            copy->u.uhval = m_exprValue->u.uhval;
-            break;
-        case ET_boolean:
-            copy->u.bval = m_exprValue->u.bval;
-            break;
-        case ET_float:
-            copy->u.fval = m_exprValue->u.fval;
-            break;
-        case ET_double:
-            copy->u.dval = m_exprValue->u.dval;
-            break;
-          case ET_byte:
-            copy->u.byval = m_exprValue->u.byval;
-            break;
-        default:
-            OSL_ASSERT(false);
-            break;
-    }
-
-    if (!coerce_value(copy, t))
-    {
-        delete copy;
-        copy = nullptr;
-    }
-
-    m_exprValue = copy;
+    if (!coerce_value(m_exprValue.get(), t))
+        m_exprValue.reset();
 
     return m_exprValue != nullptr;
 }
 
-bool AstExpression::compare(AstExpression *pExpr)
+bool AstExpression::compareLong(AstExpression *pExpr)
 {
     bool bRet = false;
-    if (m_combOperator != pExpr->getCombOperator())
+    if (m_combOperator != pExpr->m_combOperator)
         return bRet;
     evaluate();
     pExpr->evaluate();
@@ -771,34 +693,7 @@ bool AstExpression::compare(AstExpression *pExpr)
         return bRet;
     switch (m_exprValue->et)
     {
-        case ET_short:
-            bRet = m_exprValue->u.sval == pExpr->getExprValue()->u.sval;
-            break;
-        case ET_ushort:
-            bRet = m_exprValue->u.usval == pExpr->getExprValue()->u.usval;
-            break;
         case ET_long:
-            bRet = m_exprValue->u.lval == pExpr->getExprValue()->u.lval;
-            break;
-        case ET_ulong:
-            bRet = m_exprValue->u.ulval == pExpr->getExprValue()->u.ulval;
-            break;
-        case ET_hyper:
-            bRet = m_exprValue->u.hval == pExpr->getExprValue()->u.hval;
-            break;
-        case ET_uhyper:
-            bRet = m_exprValue->u.uhval == pExpr->getExprValue()->u.uhval;
-            break;
-        case ET_float:
-            bRet = m_exprValue->u.fval == pExpr->getExprValue()->u.fval;
-            break;
-        case ET_double:
-            bRet = m_exprValue->u.dval == pExpr->getExprValue()->u.dval;
-            break;
-        case ET_byte:
-            bRet = m_exprValue->u.byval == pExpr->getExprValue()->u.byval;
-            break;
-        case ET_boolean:
             bRet = m_exprValue->u.lval == pExpr->getExprValue()->u.lval;
             break;
         default:
@@ -811,8 +706,6 @@ bool AstExpression::compare(AstExpression *pExpr)
 
 void AstExpression::fillDefinitionDetails()
 {
-    m_pScope = idlc()->scopes()->depth() > 0 ? idlc()->scopes()->top() : nullptr;
-    m_lineNo = idlc()->getLineNumber();
     m_fileName = idlc()->getFileName();
 }
 
@@ -828,29 +721,28 @@ void AstExpression::evaluate()
      */
     switch (m_combOperator)
     {
-        case EC_add:
-        case EC_minus:
-        case EC_mul:
-        case EC_div:
-        case EC_mod:
-            m_exprValue = eval_bin_op().release();
+        case ExprComb::Add:
+        case ExprComb::Minus:
+        case ExprComb::Mul:
+        case ExprComb::Div:
+        case ExprComb::Mod:
+            m_exprValue = eval_bin_op();
             break;
-        case EC_or:
-        case EC_xor:
-        case EC_and:
-        case EC_left:
-        case EC_right:
-            m_exprValue = eval_bit_op().release();
+        case ExprComb::Or:
+        case ExprComb::Xor:
+        case ExprComb::And:
+        case ExprComb::Left:
+        case ExprComb::Right:
+            m_exprValue = eval_bit_op();
             break;
-        case EC_u_plus:
-        case EC_u_minus:
-        case EC_bit_neg:
-            m_exprValue = eval_un_op().release();
+        case ExprComb::UPlus:
+        case ExprComb::UMinus:
+            m_exprValue = eval_un_op();
             break;
-        case EC_symbol:
+        case ExprComb::Symbol:
             m_exprValue = eval_symbol();
             break;
-        case EC_none:
+        case ExprComb::NONE:
             break;
     }
 }
@@ -859,7 +751,7 @@ std::unique_ptr<AstExprValue> AstExpression::eval_bin_op()
 {
     ExprType eType = ET_double;
 
-    if ( m_combOperator == EC_mod )
+    if ( m_combOperator == ExprComb::Mod )
         eType = ET_hyper;
 
     if (m_subExpr1 == nullptr || m_subExpr2 == nullptr)
@@ -875,26 +767,26 @@ std::unique_ptr<AstExprValue> AstExpression::eval_bin_op()
     if (!m_subExpr2->coerce(eType))
         return nullptr;
 
-    std::unique_ptr< AstExprValue > retval(new AstExprValue());
+    std::unique_ptr< AstExprValue > retval(new AstExprValue);
     retval->et = eType;
 
     switch (m_combOperator)
     {
-        case EC_mod:
+        case ExprComb::Mod:
             if (m_subExpr2->getExprValue()->u.hval == 0)
                 return nullptr;
             retval->u.hval = m_subExpr1->getExprValue()->u.hval % m_subExpr2->getExprValue()->u.hval;
             break;
-        case EC_add:
+        case ExprComb::Add:
             retval->u.dval = m_subExpr1->getExprValue()->u.dval + m_subExpr2->getExprValue()->u.dval;
             break;
-        case EC_minus:
+        case ExprComb::Minus:
             retval->u.dval = m_subExpr1->getExprValue()->u.dval - m_subExpr2->getExprValue()->u.dval;
             break;
-        case EC_mul:
+        case ExprComb::Mul:
             retval->u.dval = m_subExpr1->getExprValue()->u.dval * m_subExpr2->getExprValue()->u.dval;
             break;
-        case EC_div:
+        case ExprComb::Div:
             if (m_subExpr2->getExprValue()->u.dval == 0.0)
                 return nullptr;
             retval->u.dval = m_subExpr1->getExprValue()->u.dval / m_subExpr2->getExprValue()->u.dval;
@@ -921,24 +813,24 @@ std::unique_ptr<AstExprValue> AstExpression::eval_bit_op()
     if (!m_subExpr2->coerce(ET_long))
         return nullptr;
 
-    std::unique_ptr< AstExprValue > retval(new AstExprValue());
+    std::unique_ptr< AstExprValue > retval(new AstExprValue);
     retval->et = ET_long;
 
     switch (m_combOperator)
     {
-        case EC_or:
+        case ExprComb::Or:
             retval->u.lval = m_subExpr1->getExprValue()->u.lval | m_subExpr2->getExprValue()->u.lval;
             break;
-        case EC_xor:
+        case ExprComb::Xor:
             retval->u.lval = m_subExpr1->getExprValue()->u.lval ^ m_subExpr2->getExprValue()->u.lval;
             break;
-        case EC_and:
+        case ExprComb::And:
             retval->u.lval = m_subExpr1->getExprValue()->u.lval & m_subExpr2->getExprValue()->u.lval;
             break;
-        case EC_left:
+        case ExprComb::Left:
             retval->u.lval = m_subExpr1->getExprValue()->u.lval << m_subExpr2->getExprValue()->u.lval;
             break;
-        case EC_right:
+        case ExprComb::Right:
             retval->u.lval = m_subExpr1->getExprValue()->u.lval >> m_subExpr2->getExprValue()->u.lval;
             break;
         default:
@@ -958,21 +850,16 @@ std::unique_ptr<AstExprValue> AstExpression::eval_un_op()
     if (!m_subExpr1->coerce(ET_double))
         return nullptr;
 
-    std::unique_ptr< AstExprValue > retval(new AstExprValue());
+    std::unique_ptr< AstExprValue > retval(new AstExprValue);
     retval->et = ET_double;
 
     switch (m_combOperator)
     {
-        case EC_u_plus:
+        case ExprComb::UPlus:
             retval->u.lval = m_subExpr1->getExprValue()->u.lval;
             break;
-        case EC_u_minus:
+        case ExprComb::UMinus:
             retval->u.lval = -(m_subExpr1->getExprValue()->u.lval);
-            break;
-        case EC_bit_neg:
-            if (!m_subExpr1->coerce(ET_long))
-                return nullptr;
-            retval->u.lval = ~m_subExpr1->getExprValue()->u.lval;
             break;
         default:
             return nullptr;
@@ -981,7 +868,7 @@ std::unique_ptr<AstExprValue> AstExpression::eval_un_op()
     return retval;
 }
 
-AstExprValue* AstExpression::eval_symbol()
+std::unique_ptr<AstExprValue> AstExpression::eval_symbol()
 {
     AstScope        *pScope = nullptr;
     AstDeclaration  *pDecl;
@@ -990,7 +877,7 @@ AstExprValue* AstExpression::eval_symbol()
     /*
      * Is there a symbol stored?
      */
-    if (m_pSymbolicName == nullptr)
+    if (!m_xSymbolicName)
     {
         ErrorHandler::evalError(this);
         return nullptr;
@@ -1002,16 +889,16 @@ AstExprValue* AstExpression::eval_symbol()
         pScope = idlc()->scopes()->topNonNull();
     if ( !pScope )
     {
-        ErrorHandler::lookupError(*m_pSymbolicName);
+        ErrorHandler::lookupError(*m_xSymbolicName);
         return nullptr;
     }
     /*
      * Do lookup
      */
-    pDecl = pScope->lookupByName(*m_pSymbolicName);
+    pDecl = pScope->lookupByName(*m_xSymbolicName);
     if (pDecl == nullptr)
     {
-        ErrorHandler::lookupError(*m_pSymbolicName);
+        ErrorHandler::lookupError(*m_xSymbolicName);
         return nullptr;
     }
     /*
@@ -1020,7 +907,7 @@ AstExprValue* AstExpression::eval_symbol()
     if (pDecl->getNodeType() != NT_const &&
         pDecl->getNodeType() != NT_enum_val)
     {
-        ErrorHandler::constantExpected(pDecl, *m_pSymbolicName);
+        ErrorHandler::constantExpected(pDecl, *m_xSymbolicName);
         return nullptr;
     }
     if (!ErrorHandler::checkPublished(pDecl))
@@ -1032,14 +919,15 @@ AstExprValue* AstExpression::eval_symbol()
      */
     pConst = static_cast< AstConstant* >(pDecl);
     pConst->getConstValue()->evaluate();
-    return pConst->getConstValue()->getExprValue();
+    auto const val = pConst->getConstValue()->getExprValue();
+    return val == nullptr ? nullptr : std::make_unique<AstExprValue>(*val);
 }
 
 OString AstExpression::toString()
 {
     OString exprStr;
-    if ( m_combOperator == EC_symbol )
-        return m_pSymbolicName ? *m_pSymbolicName : OString("<Undefined Name>");
+    if ( m_combOperator == ExprComb::Symbol )
+        return m_xSymbolicName ? *m_xSymbolicName : OString("<Undefined Name>");
 
     if ( m_exprValue )
     {
@@ -1076,14 +964,11 @@ OString AstExpression::toString()
 
     switch (m_combOperator)
     {
-        case EC_u_plus:
-            exprStr += OString("+");
+        case ExprComb::UPlus:
+            exprStr += "+";
             break;
-        case EC_u_minus:
-            exprStr += OString("-");
-            break;
-        case EC_bit_neg:
-            exprStr += OString("~");
+        case ExprComb::UMinus:
+            exprStr += "-";
             break;
         default:
             break;
@@ -1092,35 +977,35 @@ OString AstExpression::toString()
         exprStr += m_subExpr1->toString();
     switch (m_combOperator)
     {
-        case EC_add:
-            exprStr += OString(" + ");
+        case ExprComb::Add:
+            exprStr += " + ";
             break;
-        case EC_minus:
-            exprStr += OString(" - ");
+        case ExprComb::Minus:
+            exprStr += " - ";
             break;
-        case EC_mul:
-            exprStr += OString(" * ");
+        case ExprComb::Mul:
+            exprStr += " * ";
             break;
-        case EC_div:
-            exprStr += OString(" / ");
+        case ExprComb::Div:
+            exprStr += " / ";
             break;
-        case EC_mod:
-            exprStr += OString(" % ");
+        case ExprComb::Mod:
+            exprStr += " % ";
             break;
-        case EC_or:
-            exprStr += OString(" | ");
+        case ExprComb::Or:
+            exprStr += " | ";
             break;
-        case EC_xor:
-            exprStr += OString(" ^ ");
+        case ExprComb::Xor:
+            exprStr += " ^ ";
             break;
-        case EC_and:
-            exprStr += OString(" & ");
+        case ExprComb::And:
+            exprStr += " & ";
             break;
-        case EC_left:
-            exprStr += OString(" << ");
+        case ExprComb::Left:
+            exprStr += " << ";
             break;
-        case EC_right:
-            exprStr += OString(" >> ");
+        case ExprComb::Right:
+            exprStr += " >> ";
             break;
         default:
             break;
@@ -1133,7 +1018,7 @@ OString AstExpression::toString()
 }
 
 // Convert the type of an AST_Expression to a char *
-const sal_Char* SAL_CALL exprTypeToString(ExprType t)
+const sal_Char* exprTypeToString(ExprType t)
 {
     switch (t)
     {
@@ -1171,7 +1056,7 @@ const sal_Char* SAL_CALL exprTypeToString(ExprType t)
             return "none";
     }
 
-    return ("unknown");
+    return "unknown";
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

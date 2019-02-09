@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "calc/CCatalog.hxx"
-#include "calc/CConnection.hxx"
-#include "calc/CTables.hxx"
+#include <calc/CCatalog.hxx>
+#include <calc/CConnection.hxx>
+#include <calc/CTables.hxx>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 
@@ -38,7 +38,7 @@ OCalcCatalog::OCalcCatalog(OCalcConnection* _pCon) : file::OFileCatalog(_pCon)
 
 void OCalcCatalog::refreshTables()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
     Sequence< OUString > aTypes;
     OCalcConnection::ODocHolder aDocHolder(static_cast<OCalcConnection*>(m_pConnection));
     Reference< XResultSet > xResult = m_xMetaData->getTables(Any(),
@@ -53,7 +53,7 @@ void OCalcCatalog::refreshTables()
     if(m_pTables)
         m_pTables->reFill(aVector);
     else
-        m_pTables = new OCalcTables(m_xMetaData,*this,m_aMutex,aVector);
+        m_pTables.reset( new OCalcTables(m_xMetaData,*this,m_aMutex,aVector) );
 
     // this avoids that the document will be loaded a 2nd time when one table will be accessed.
     //if ( m_pTables && m_pTables->hasElements() )

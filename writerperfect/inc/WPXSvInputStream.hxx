@@ -12,7 +12,7 @@
 
 #include <librevenge-stream/librevenge-stream.h>
 #include <com/sun/star/uno/Reference.h>
-#include <writerperfectdllapi.h>
+#include "writerperfectdllapi.h"
 #include <memory>
 
 namespace com
@@ -32,23 +32,22 @@ class XSeekable;
 
 namespace writerperfect
 {
-
 class WPXSvInputStreamImpl;
 
 class WRITERPERFECT_DLLPUBLIC WPXSvInputStream : public librevenge::RVNGInputStream
 {
 public:
-    WPXSvInputStream(css::uno::Reference< css::io::XInputStream > xStream);
-    virtual ~WPXSvInputStream();
+    WPXSvInputStream(css::uno::Reference<css::io::XInputStream> const& xStream);
+    virtual ~WPXSvInputStream() override;
 
     virtual bool isStructured() override;
     virtual unsigned subStreamCount() override;
-    virtual const char *subStreamName(unsigned id) override;
-    virtual bool existsSubStream(const char *name) override;
-    virtual librevenge::RVNGInputStream *getSubStreamByName(const char *name) override;
-    virtual librevenge::RVNGInputStream *getSubStreamById(unsigned id) override;
+    virtual const char* subStreamName(unsigned id) override;
+    virtual bool existsSubStream(const char* name) override;
+    virtual librevenge::RVNGInputStream* getSubStreamByName(const char* name) override;
+    virtual librevenge::RVNGInputStream* getSubStreamById(unsigned id) override;
 
-    virtual const unsigned char *read(unsigned long numBytes, unsigned long &numBytesRead) override;
+    virtual const unsigned char* read(unsigned long numBytes, unsigned long& numBytesRead) override;
     virtual int seek(long offset, librevenge::RVNG_SEEK_TYPE seekType) override;
     virtual long tell() override;
     virtual bool isEnd() override;
@@ -56,7 +55,6 @@ public:
 private:
     std::unique_ptr<WPXSvInputStreamImpl> mpImpl;
 };
-
 }
 
 #endif // INCLUDED_WRITERPERFECT_WPXSVINPUTSTREAM_HXX

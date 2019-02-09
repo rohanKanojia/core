@@ -20,21 +20,21 @@
 #ifndef INCLUDED_OSL_THREAD_HXX
 #define INCLUDED_OSL_THREAD_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <cassert>
 #include <cstddef>
 
-#include <osl/time.h>
-#include <osl/thread.h>
-#include <rtl/alloc.h>
+#include "osl/time.h"
+#include "osl/thread.h"
+#include "rtl/alloc.h"
 
 namespace osl
 {
 /** threadFunc is the function which is executed by the threads
     created by the osl::Thread class. The function's signature
     matches the one of oslWorkerFunction which is declared in
-    osl/thread.h .
+    osl/thread.h
 */
 extern "C" inline void SAL_CALL threadFunc( void* param);
 
@@ -51,18 +51,18 @@ class Thread
     Thread& operator= ( const Thread& ) SAL_DELETED_FUNCTION;
 public:
     // these are here to force memory de/allocation to sal lib.
-    inline static void * SAL_CALL operator new( size_t nSize )
+    static void * SAL_CALL operator new( size_t nSize )
         { return ::rtl_allocateMemory( nSize ); }
-    inline static void SAL_CALL operator delete( void * pMem )
+    static void SAL_CALL operator delete( void * pMem )
         { ::rtl_freeMemory( pMem ); }
-    inline static void * SAL_CALL operator new( size_t, void * pMem )
+    static void * SAL_CALL operator new( size_t, void * pMem )
         { return pMem; }
-    inline static void SAL_CALL operator delete( void *, void * )
+    static void SAL_CALL operator delete( void *, void * )
         {}
 
     Thread(): m_hThread(NULL){}
 
-    virtual  ~Thread()
+    virtual  ~Thread() COVERITY_NOEXCEPT_FALSE
     {
         osl_destroyThread( m_hThread);
     }
@@ -148,7 +148,7 @@ public:
         osl_yieldThread();
     }
 
-    static inline void setName(char const * name) throw () {
+    static void setName(char const * name) throw () {
         osl_setThreadName(name);
     }
 
@@ -208,7 +208,7 @@ public:
     */
     bool SAL_CALL setData(void *pData)
     {
-           return (osl_setThreadKeyData(m_hKey, pData));
+           return osl_setThreadKeyData(m_hKey, pData);
     }
 
     /** Get the data associated with the data key.

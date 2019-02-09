@@ -20,14 +20,12 @@
 #ifndef INCLUDED_SLIDESHOW_SOURCE_ENGINE_TRANSITIONS_SLIDECHANGEBASE_HXX
 #define INCLUDED_SLIDESHOW_SOURCE_ENGINE_TRANSITIONS_SLIDECHANGEBASE_HXX
 
-#include <osl/mutex.hxx>
-
-#include "unoview.hxx"
-#include "vieweventhandler.hxx"
-#include "numberanimation.hxx"
-#include "slide.hxx"
-#include "screenupdater.hxx"
-#include "soundplayer.hxx"
+#include <unoview.hxx>
+#include <vieweventhandler.hxx>
+#include <numberanimation.hxx>
+#include <slide.hxx>
+#include <screenupdater.hxx>
+#include <soundplayer.hxx>
 
 #include <memory>
 #include <boost/optional.hpp>
@@ -88,8 +86,6 @@ protected:
     /// Info on a per-view basis
     struct ViewEntry
     {
-        ViewEntry() {}
-
         explicit ViewEntry( const UnoViewSharedPtr& rView ) :
             mpView( rView )
         {

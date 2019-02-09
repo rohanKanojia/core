@@ -25,28 +25,20 @@
 
 
 //   Forward Declarations
-
-
 class ImpCaptParams;
 
 namespace sdr { namespace properties {
     class CaptionProperties;
 }}
 
-
 //   Helper Class SdrCaptObjGeoData
-
-
 class SdrCaptObjGeoData : public SdrTextObjGeoData
 {
 public:
     tools::Polygon aTailPoly;
 };
 
-
 //   SdrCaptionObj
-
-
 class SVX_DLLPUBLIC SdrCaptionObj : public SdrRectObj
 {
 private:
@@ -54,33 +46,51 @@ private:
     friend class sdr::properties::CaptionProperties;
     friend class                SdrTextObj; // for ImpRecalcTail() during AutoGrow
 
+    // tdf#118662 exclusive friend function and setter for SuppressGetBitmap
+    friend void setSuppressGetBitmapFromXclObjComment(SdrCaptionObj* pSdrCaptionObj, bool bValue);
+    void setSuppressGetBitmap(bool bNew)
+    {
+        mbSuppressGetBitmap = bNew;
+    }
+
 protected:
-    virtual sdr::properties::BaseProperties* CreateObjectSpecificProperties() override;
-    virtual sdr::contact::ViewContact* CreateObjectSpecificViewContact() override;
+    virtual std::unique_ptr<sdr::properties::BaseProperties> CreateObjectSpecificProperties() override;
+    virtual std::unique_ptr<sdr::contact::ViewContact> CreateObjectSpecificViewContact() override;
 
 private:
-    tools::Polygon aTailPoly;  // the whole tail polygon
-    bool                        mbSpecialTextBoxShadow; // for calc special shadow, default FALSE
-    bool                        mbFixedTail; // for calc note box fixed tail, default FALSE
-    Point                       maFixedTailPos; // for calc note box fixed tail position.
+    tools::Polygon  aTailPoly;              // the whole tail polygon
+    bool            mbSpecialTextBoxShadow; // for calc special shadow, default FALSE
+    bool            mbFixedTail;            // for calc note box fixed tail, default FALSE
+    bool            mbSuppressGetBitmap;    // tdf#118662
+    Point           maFixedTailPos;         // for calc note box fixed tail position.
 
-private:
     SVX_DLLPRIVATE void ImpGetCaptParams(ImpCaptParams& rPara) const;
-    SVX_DLLPRIVATE void ImpCalcTail1(const ImpCaptParams& rPara, tools::Polygon& rPoly, Rectangle& rRect) const;
-    SVX_DLLPRIVATE void ImpCalcTail2(const ImpCaptParams& rPara, tools::Polygon& rPoly, Rectangle& rRect) const;
-    SVX_DLLPRIVATE void ImpCalcTail3(const ImpCaptParams& rPara, tools::Polygon& rPoly, Rectangle& rRect) const;
-    SVX_DLLPRIVATE void ImpCalcTail4(const ImpCaptParams& rPara, tools::Polygon& rPoly, Rectangle& rRect) const;
-    SVX_DLLPRIVATE void ImpCalcTail (const ImpCaptParams& rPara, tools::Polygon& rPoly, Rectangle& rRect) const;
+    SVX_DLLPRIVATE static void ImpCalcTail1(const ImpCaptParams& rPara, tools::Polygon& rPoly, tools::Rectangle const & rRect);
+    SVX_DLLPRIVATE static void ImpCalcTail2(const ImpCaptParams& rPara, tools::Polygon& rPoly, tools::Rectangle const & rRect);
+    SVX_DLLPRIVATE static void ImpCalcTail3(const ImpCaptParams& rPara, tools::Polygon& rPoly, tools::Rectangle const & rRect);
+    SVX_DLLPRIVATE static void ImpCalcTail (const ImpCaptParams& rPara, tools::Polygon& rPoly, tools::Rectangle const & rRect);
     SVX_DLLPRIVATE void ImpRecalcTail();
 
+protected:
+    // protected destructor
+    virtual ~SdrCaptionObj() override;
+
 public:
-    SdrCaptionObj();
-    SdrCaptionObj(const Rectangle& rRect, const Point& rTail);
-    virtual ~SdrCaptionObj();
+    SdrCaptionObj(SdrModel& rSdrModel);
+    SdrCaptionObj(
+        SdrModel& rSdrModel,
+        const tools::Rectangle& rRect,
+        const Point& rTail);
+
+    // tdf#118662 getter for SuppressGetBitmap
+    bool isSuppressGetBitmap() const { return mbSuppressGetBitmap; }
 
     virtual void TakeObjInfo(SdrObjTransformInfoRec& rInfo) const override;
     virtual sal_uInt16 GetObjIdentifier() const override;
-    virtual SdrCaptionObj* Clone() const override;
+    virtual SdrCaptionObj* CloneSdrObject(SdrModel& rTargetModel) const override;
+
+    // implemented mainly for the purposes of Clone()
+    SdrCaptionObj& operator=(const SdrCaptionObj& rObj);
 
     // for calc: special shadow only for text box
     void SetSpecialTextBoxShadow() { mbSpecialTextBoxShadow = true; }
@@ -93,11 +103,10 @@ public:
     virtual OUString TakeObjNamePlural() const override;
 
     virtual basegfx::B2DPolyPolygon TakeXorPoly() const override;
-    virtual void SetModel(SdrModel* pNewModel) override;
     virtual void Notify(SfxBroadcaster& rBC, const SfxHint& rHint) override;
 
     virtual sal_uInt32 GetHdlCount() const override;
-    virtual SdrHdl* GetHdl(sal_uInt32 nHdlNum) const override;
+    virtual void AddToHdlList(SdrHdlList& rHdlList) const override;
 
     // special drag methods
     virtual bool hasSpecialDrag() const override;
@@ -118,14 +127,9 @@ public:
 
     virtual void NbcSetRelativePos(const Point& rPnt) override;
     virtual Point GetRelativePos() const override;
-    virtual void NbcSetAnchorPos(const Point& rPnt) override;
-    virtual const Point& GetAnchorPos() const override;
 
-    virtual void RecalcSnapRect() override;
-    virtual const Rectangle& GetSnapRect() const override;
-    virtual void NbcSetSnapRect(const Rectangle& rRect) override;
-    virtual const Rectangle& GetLogicRect() const override;
-    virtual void NbcSetLogicRect(const Rectangle& rRect) override;
+    virtual const tools::Rectangle& GetLogicRect() const override;
+    virtual void NbcSetLogicRect(const tools::Rectangle& rRect) override;
 
     virtual sal_uInt32 GetSnapPointCount() const override;
     virtual Point GetSnapPoint(sal_uInt32 i) const override;
@@ -146,7 +150,7 @@ public:
     // Add own implementation for TRSetBaseGeometry to handle TailPos over changes
     virtual void TRSetBaseGeometry(const basegfx::B2DHomMatrix& rMatrix, const basegfx::B2DPolyPolygon& rPolyPolygon) override;
 
-    inline const Point& GetFixedTailPos() const  {return maFixedTailPos;}
+    const Point& GetFixedTailPos() const  {return maFixedTailPos;}
 
     // geometry access
     ::basegfx::B2DPolygon getTailPolygon() const;

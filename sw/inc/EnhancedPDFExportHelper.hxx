@@ -20,12 +20,13 @@
 #ifndef INCLUDED_SW_INC_ENHANCEDPDFEXPORTHELPER_HXX
 #define INCLUDED_SW_INC_ENHANCEDPDFEXPORTHELPER_HXX
 
-#include <vcl/pdfextoutdevdata.hxx>
 #include <i18nlangtag/lang.h>
-#include <swrect.hxx>
-#include <swtypes.hxx>
+#include <vcl/pdfwriter.hxx>
+#include "swrect.hxx"
+#include "swtypes.hxx"
 
 #include <map>
+#include <memory>
 #include <vector>
 #include <set>
 
@@ -42,10 +43,8 @@ class SwTextPainter;
 class SwEditShell;
 class StringRangeEnumerator;
 class SwTextNode;
-class SwNumRule;
 class SwTable;
 class SwNumberTreeNode;
-class SvxLanguageItem;
 
 /*
  * Mapping of OOo elements to tagged pdf elements:
@@ -156,7 +155,7 @@ class SwTaggedPDFHelper
     void EndStructureElements();
 
     bool CheckReopenTag();
-    bool CheckRestoreTag() const;
+    void CheckRestoreTag() const;
 
     public:
 
@@ -164,7 +163,7 @@ class SwTaggedPDFHelper
     // pPorInfo != 0 => BeginInlineStructureElement
     // pFrameInfo, pPorInfo = 0 => BeginNonStructureElement
     SwTaggedPDFHelper( const Num_Info* pNumInfo, const Frame_Info* pFrameInfo, const Por_Info* pPorInfo,
-                       OutputDevice& rOut );
+                       OutputDevice const & rOut );
     ~SwTaggedPDFHelper();
 
     static bool IsExportTaggedPDF( const OutputDevice& rOut );
@@ -196,7 +195,7 @@ class SwEnhancedPDFExportHelper
     SwEditShell& mrSh;
     OutputDevice& mrOut;
 
-    StringRangeEnumerator* mpRangeEnum;
+    std::unique_ptr<StringRangeEnumerator> mpRangeEnum;
     /** The problem is that numbers in StringRangeEnumerator aren't accordant
      * to real page numbers if mbSkipEmptyPages is true, because in this case
      * empty pages are excluded from a page range and numbers in
@@ -206,8 +205,8 @@ class SwEnhancedPDFExportHelper
      * in a page range without empty pages, or -1 if this page is empty. */
     std::vector< sal_Int32 > maPageNumberMap;
 
-    bool mbSkipEmptyPages;
-    bool mbEditEngineOnly;
+    bool const mbSkipEmptyPages;
+    bool const mbEditEngineOnly;
 
     const SwPrintData& mrPrintData;
 
@@ -247,8 +246,8 @@ class SwEnhancedPDFExportHelper
     static LanguageType GetDefaultLanguage() {return eLanguageDefault; }
 
     //scale and position rRectangle if we're scaling due to notes in margins.
-    Rectangle SwRectToPDFRect(const SwPageFrame* pCurrPage,
-        const Rectangle& rRectangle) const;
+    tools::Rectangle SwRectToPDFRect(const SwPageFrame* pCurrPage,
+        const tools::Rectangle& rRectangle) const;
 };
 
 #endif

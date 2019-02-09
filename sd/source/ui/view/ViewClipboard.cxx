@@ -17,21 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ViewClipboard.hxx"
+#include <ViewClipboard.hxx>
 
-#include "DrawDocShell.hxx"
-#include "View.hxx"
-#include "ViewShell.hxx"
-#include "Window.hxx"
+#include <DrawDocShell.hxx>
+#include <DrawViewShell.hxx>
+#include <View.hxx>
+#include <ViewShell.hxx>
+#include <Window.hxx>
 
-#include "drawdoc.hxx"
-#include "sdpage.hxx"
-#include "sdxfer.hxx"
-#include "sdresid.hxx"
-#include "glob.hrc"
+#include <drawdoc.hxx>
+#include <sdmod.hxx>
+#include <sdpage.hxx>
+#include <sdxfer.hxx>
+#include <strings.hxx>
 
 #include <svx/svdpagv.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 
 namespace sd {
@@ -49,8 +49,11 @@ void ViewClipboard::HandlePageDrop (const SdTransferable& rTransferable)
 {
     // Determine whether to insert the given set of slides or to assign a
     // given master page.
-    SdPage* pMasterPage = GetFirstMasterPage (rTransferable);
-    if (pMasterPage != nullptr)
+    // tdf#113405 only assign master pages to normal pages, don't attempt to assign a master
+    // page to a master page
+    sd::DrawViewShell* pDrawViewShell = dynamic_cast<::sd::DrawViewShell*>(mrView.GetViewShell());
+    SdPage* pMasterPage = (pDrawViewShell && pDrawViewShell->GetEditMode() == EditMode::Page) ? GetFirstMasterPage(rTransferable) : nullptr;
+    if (pMasterPage)
         AssignMasterPage (rTransferable, pMasterPage);
     else
         InsertSlides (rTransferable, DetermineInsertPosition (rTransferable));
@@ -77,10 +80,8 @@ SdPage* ViewClipboard::GetFirstMasterPage (const SdTransferable& rTransferable)
             if (pDocument == nullptr)
                 break;
 
-            std::vector<OUString>::const_iterator pIter;
-            for ( pIter = rBookmarks.begin(); pIter != rBookmarks.end(); ++pIter )
+            for (const OUString& sName : rBookmarks)
             {
-                OUString sName (*pIter);
                 bool bIsMasterPage;
 
                 // SdPage* GetMasterSdPage(sal_uInt16 nPgNum, PageKind ePgKind);
@@ -112,7 +113,7 @@ SdPage* ViewClipboard::GetFirstMasterPage (const SdTransferable& rTransferable)
 
 void ViewClipboard::AssignMasterPage (
     const SdTransferable& rTransferable,
-    SdPage* pMasterPage)
+    SdPage const * pMasterPage)
 {
     if (pMasterPage == nullptr)
         return;
@@ -141,7 +142,7 @@ void ViewClipboard::AssignMasterPage (
 
     // We have to remove the layout suffix from the layout name which is
     // appended again by SetMasterPage() to the given name.  Don't ask.
-    OUString sLayoutSuffix = SD_LT_SEPARATOR + SD_RESSTR(STR_LAYOUT_OUTLINE);
+    OUString sLayoutSuffix = SD_LT_SEPARATOR STR_LAYOUT_OUTLINE;
     sal_Int32 nLength = sLayoutSuffix.getLength();
     OUString sLayoutName = pMasterPage->GetLayoutName();
     if (sLayoutName.endsWith(sLayoutSuffix))
@@ -160,14 +161,14 @@ sal_uInt16 ViewClipboard::DetermineInsertPosition  (
     const SdTransferable& )
 {
     SdDrawDocument& rDoc = mrView.GetDoc();
-    sal_uInt16 nPgCnt = rDoc.GetSdPageCount( PK_STANDARD );
+    sal_uInt16 nPgCnt = rDoc.GetSdPageCount( PageKind::Standard );
 
     // Insert position is the behind the last selected page or behind the
     // last page when the selection is empty.
-    sal_uInt16 nInsertPos = rDoc.GetSdPageCount( PK_STANDARD ) * 2 + 1;
+    sal_uInt16 nInsertPos = rDoc.GetSdPageCount( PageKind::Standard ) * 2 + 1;
     for( sal_uInt16 nPage = 0; nPage < nPgCnt; nPage++ )
     {
-        SdPage* pPage = rDoc.GetSdPage( nPage, PK_STANDARD );
+        SdPage* pPage = rDoc.GetSdPage( nPage, PageKind::Standard );
 
         if( pPage->IsSelected() )
             nInsertPos = nPage * 2 + 3;
@@ -194,18 +195,18 @@ sal_uInt16 ViewClipboard::InsertSlides (
         // pages are inserted.
         pBookmarkList = &rTransferable.GetPageBookmarks();
         pDataDocSh = rTransferable.GetPageDocShell();
-        nInsertPgCnt = (sal_uInt16)pBookmarkList->size();
+        nInsertPgCnt = static_cast<sal_uInt16>(pBookmarkList->size());
     }
     else
     {
         // Otherwise all pages of the document of the transferable are
         // inserted.
-        SfxObjectShell* pShell = rTransferable.GetDocShell();
+        SfxObjectShell* pShell = rTransferable.GetDocShell().get();
         pDataDocSh = static_cast<DrawDocShell*>(pShell);
         SdDrawDocument* pDataDoc = pDataDocSh->GetDoc();
 
-        if (pDataDoc!=nullptr && pDataDoc->GetSdPageCount(PK_STANDARD))
-            nInsertPgCnt = pDataDoc->GetSdPageCount(PK_STANDARD);
+        if (pDataDoc!=nullptr && pDataDoc->GetSdPageCount(PageKind::Standard))
+            nInsertPgCnt = pDataDoc->GetSdPageCount(PageKind::Standard);
     }
     if (nInsertPgCnt > 0)
     {

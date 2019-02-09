@@ -22,7 +22,7 @@
 #include <com/sun/star/document/XEventsSupplier.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/frame/theGlobalEventBroadcaster.hpp>
-#include <com/sun/star/frame/XModuleManager.hpp>
+#include <com/sun/star/frame/XStorable.hpp>
 
 #include <comphelper/processfactory.hxx>
 #include <comphelper/documentinfo.hxx>
@@ -39,16 +39,13 @@
 #include <sfx2/docfac.hxx>
 #include <sfx2/fcontnr.hxx>
 #include <unotools/eventcfg.hxx>
-#include <svtools/treelistentry.hxx>
+#include <vcl/treelistentry.hxx>
 
-#include "headertablistbox.hxx"
+#include <headertablistbox.hxx>
 #include "macropg_impl.hxx"
 
-#include <dialmgr.hxx>
-#include <cuires.hrc>
-#include "helpid.hrc"
-#include "selector.hxx"
-#include "cfg.hxx"
+#include <cfgutil.hxx>
+#include <cfg.hxx>
 
 
 using namespace ::com::sun::star;
@@ -56,16 +53,15 @@ using namespace ::com::sun::star;
 
 SvxEventConfigPage::SvxEventConfigPage(vcl::Window *pParent, const SfxItemSet& rSet,
     SvxEventConfigPage::EarlyInit)
-    : _SvxMacroTabPage(pParent, "EventsConfigPage",
+    : SvxMacroTabPage_(pParent, "EventsConfigPage",
         "cui/ui/eventsconfigpage.ui", rSet)
-    , bAppConfig(true)
 {
     get(m_pSaveInListBox, "savein");
 
     mpImpl->sStrEvent = get<FixedText>("eventft")->GetText();
     mpImpl->sAssignedMacro = get<FixedText>("actionft")->GetText();
     get(mpImpl->pEventLB, "events");
-    Size aSize(LogicToPixel(Size(205, 229), MAP_APPFONT));
+    Size aSize(LogicToPixel(Size(205, 229), MapMode(MapUnit::MapAppFont)));
     mpImpl->pEventLB->set_width_request(aSize.Width());
     mpImpl->pEventLB->set_height_request(aSize.Height());
     get(mpImpl->pAssignPB, "macro");
@@ -115,10 +111,10 @@ void SvxEventConfigPage::dispose()
         OUString const * pEventName = static_cast<OUString const *>(pE->GetUserData());
         delete pEventName;
         pE->SetUserData(nullptr);
-        pE = SvTreeListBox::NextSibling( pE );
+        pE = pE->NextSibling();
     }
     m_pSaveInListBox.clear();
-    _SvxMacroTabPage::dispose();
+    SvxMacroTabPage_::dispose();
 }
 
 void SvxEventConfigPage::ImplInitDocument()
@@ -157,27 +153,24 @@ void SvxEventConfigPage::ImplInitDocument()
 
             m_pSaveInListBox->SetEntryData( nPos, new bool(false) );
             m_pSaveInListBox->SelectEntryPos( nPos );
-
-            bAppConfig = false;
         }
     }
     catch( const uno::Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("cui.customize");
     }
 }
 
-IMPL_LINK_NOARG_TYPED( SvxEventConfigPage, SelectHdl_Impl, ListBox&, void )
+IMPL_LINK_NOARG( SvxEventConfigPage, SelectHdl_Impl, ListBox&, void )
 {
     bool* bApp = static_cast<bool*>(m_pSaveInListBox->GetEntryData(
-            m_pSaveInListBox->GetSelectEntryPos()));
+            m_pSaveInListBox->GetSelectedEntryPos()));
 
     mpImpl->pEventLB->SetUpdateMode( false );
-    bAppConfig = *bApp;
     if ( *bApp )
     {
         SetReadOnly( false );
-        _SvxMacroTabPage::DisplayAppEvents( true );
+        SvxMacroTabPage_::DisplayAppEvents( true );
     }
     else
     {
@@ -203,15 +196,10 @@ IMPL_LINK_NOARG_TYPED( SvxEventConfigPage, SelectHdl_Impl, ListBox&, void )
         }
 
         SetReadOnly( isReadonly );
-        _SvxMacroTabPage::DisplayAppEvents( false );
+        SvxMacroTabPage_::DisplayAppEvents( false );
     }
 
     mpImpl->pEventLB->SetUpdateMode( true );
-}
-
-bool SvxEventConfigPage::FillItemSet( SfxItemSet* rSet )
-{
-    return _SvxMacroTabPage::FillItemSet( rSet );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

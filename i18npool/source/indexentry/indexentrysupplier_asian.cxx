@@ -20,16 +20,16 @@
 
 #include <rtl/ustrbuf.hxx>
 #include <indexentrysupplier_asian.hxx>
-#include <data/indexdata_alphanumeric.h>
+#include "data/indexdata_alphanumeric.h"
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 #ifndef DISABLE_DYNLOADING
 
-extern "C" { static void SAL_CALL thisModule() {} }
+extern "C" { static void thisModule() {} }
 
 #endif
 
@@ -77,7 +77,7 @@ sal_uInt16** get_zh_zhuyin(sal_Int16*);
 
 OUString SAL_CALL
 IndexEntrySupplier_asian::getIndexCharacter( const OUString& rIndexEntry,
-    const Locale& rLocale, const OUString& rAlgorithm ) throw (RuntimeException, std::exception)
+    const Locale& rLocale, const OUString& rAlgorithm )
 {
     sal_Int32 i=0;
     sal_uInt32 ch = rIndexEntry.iterateCodePoints(&i, 0);
@@ -117,7 +117,7 @@ IndexEntrySupplier_asian::getIndexCharacter( const OUString& rIndexEntry,
     if (func) {
         sal_Int16 max_index;
         sal_uInt16** idx=func(&max_index);
-        if (((sal_Int16)(ch >> 8)) <= max_index) {
+        if (static_cast<sal_Int16>(ch >> 8) <= max_index) {
             sal_uInt16 address=idx[0][ch >> 8];
             if (address != 0xFFFF) {
                 address=idx[1][address+(ch & 0xFF)];
@@ -135,7 +135,7 @@ IndexEntrySupplier_asian::getIndexCharacter( const OUString& rIndexEntry,
 
 OUString SAL_CALL
 IndexEntrySupplier_asian::getIndexKey( const OUString& rIndexEntry,
-    const OUString& rPhoneticEntry, const Locale& rLocale) throw (RuntimeException, std::exception)
+    const OUString& rPhoneticEntry, const Locale& rLocale)
 {
     return getIndexCharacter(getEntry(rIndexEntry, rPhoneticEntry, rLocale), rLocale, aAlgorithm);
 }
@@ -144,7 +144,6 @@ sal_Int16 SAL_CALL
 IndexEntrySupplier_asian::compareIndexEntry(
     const OUString& rIndexEntry1, const OUString& rPhoneticEntry1, const Locale& rLocale1,
     const OUString& rIndexEntry2, const OUString& rPhoneticEntry2, const Locale& rLocale2 )
-    throw (RuntimeException, std::exception)
 {
     sal_Int32 result = collator->compareString(getEntry(rIndexEntry1, rPhoneticEntry1, rLocale1),
                                     getEntry(rIndexEntry2, rPhoneticEntry2, rLocale2));
@@ -160,7 +159,7 @@ IndexEntrySupplier_asian::compareIndexEntry(
 
 OUString SAL_CALL
 IndexEntrySupplier_asian::getPhoneticCandidate( const OUString& rIndexEntry,
-        const Locale& rLocale ) throw (RuntimeException, std::exception)
+        const Locale& rLocale )
 {
     sal_uInt16 **(*func)(sal_Int16*)=nullptr;
 #ifndef DISABLE_DYNLOADING
@@ -186,7 +185,7 @@ IndexEntrySupplier_asian::getPhoneticCandidate( const OUString& rIndexEntry,
         sal_uInt16** idx=func(&max_index);
         for (sal_Int32 i=0,j=0; i < rIndexEntry.getLength(); i=j) {
             sal_uInt32 ch = rIndexEntry.iterateCodePoints(&j);
-            if (((sal_Int16)(ch>>8)) <= max_index) {
+            if (static_cast<sal_Int16>(ch>>8) <= max_index) {
                 sal_uInt16 address = idx[0][ch>>8];
                 if (address != 0xFFFF) {
                     address = idx[1][address + (ch & 0xFF)];
@@ -205,6 +204,8 @@ IndexEntrySupplier_asian::getPhoneticCandidate( const OUString& rIndexEntry,
     }
     return OUString();
 }
-} } } }
+
+}
+
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

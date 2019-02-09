@@ -20,8 +20,9 @@
 #ifndef INCLUDED_VCL_SYSDATA_HXX
 #define INCLUDED_VCL_SYSDATA_HXX
 
+#include <sal/types.h>
+
 #include <vector>
-#include <cstddef>
 
 #include <config_cairo_canvas.h>
 
@@ -50,7 +51,7 @@ typedef struct CGContext *CGContextRef;
 
 struct SystemEnvData
 {
-    unsigned long       nSize;          // size in bytes of this structure
+    sal_uInt32          nSize;          // size in bytes of this structure
 #if defined(_WIN32)
     HWND                hWnd;           // the window hwnd
 #elif defined( MACOSX )
@@ -62,23 +63,21 @@ struct SystemEnvData
     // Nothing
 #elif defined( UNX )
     void*               pDisplay;       // the relevant display connection
-    long                aWindow;        // the window of the object
+    unsigned long       aWindow;        // the window of the object
     void*               pSalFrame;      // contains a salframe, if object has one
     void*               pWidget;        // the corresponding widget
     void*               pVisual;        // the visual in use
     int                 nScreen;        // the current screen of the window
-    int                 nDepth;         // depth of said visual
-    long                aColormap;      // the colormap being used
-    void*               pAppContext;    // the application context in use
-    long                aShellWindow;   // the window of the frame's shell
-    void*               pShellWidget;   // the frame's shell widget
+    // note: this is a "long" in Xlib *but* in the protocol it's only 32-bit
+    // however, the GTK3 vclplug wants to store pointers in here!
+    sal_IntPtr          aShellWindow;   // the window of the frame's shell
     const char*         pToolkit;       // the toolkit in use (gtk2 vs gtk3)
 #endif
 
     SystemEnvData()
         : nSize(0)
 #if defined(_WIN32)
-        , hWnd(0)
+        , hWnd(nullptr)
 #elif defined( MACOSX )
         , mpNSView(nullptr)
         , mbOpenGL(false)
@@ -91,11 +90,7 @@ struct SystemEnvData
         , pWidget(nullptr)
         , pVisual(nullptr)
         , nScreen(0)
-        , nDepth(0)
-        , aColormap(0)
-        , pAppContext(nullptr)
         , aShellWindow(0)
-        , pShellWidget(nullptr)
         , pToolkit(nullptr)
 #endif
     {
@@ -104,7 +99,7 @@ struct SystemEnvData
 
 struct SystemParentData
 {
-    unsigned long   nSize;            // size in bytes of this structure
+    sal_uInt32      nSize;            // size in bytes of this structure
 #if defined(_WIN32)
     HWND            hWnd;             // the window hwnd
 #elif defined( MACOSX )
@@ -131,7 +126,7 @@ struct SystemMenuData
 
 struct SystemGraphicsData
 {
-    unsigned long   nSize;          // size in bytes of this structure
+    sal_uInt32      nSize;          // size in bytes of this structure
 #if defined(_WIN32)
     HDC             hDC;            // handle to a device context
     HWND            hWnd;           // optional handle to a window
@@ -145,16 +140,14 @@ struct SystemGraphicsData
     void*           pDisplay;       // the relevant display connection
     long            hDrawable;      // a drawable
     void*           pVisual;        // the visual in use
-    int         nScreen;        // the current screen of the drawable
-    int             nDepth;         // depth of said visual
-    long            aColormap;      // the colormap being used
+    int             nScreen;        // the current screen of the drawable
     void*           pXRenderFormat;  // render format for drawable
 #endif
     SystemGraphicsData()
         : nSize( sizeof( SystemGraphicsData ) )
 #if defined(_WIN32)
-        , hDC( 0 )
-        , hWnd( 0 )
+        , hDC( nullptr )
+        , hWnd( nullptr )
 #elif defined( MACOSX )
         , rCGContext( nullptr )
 #elif defined( ANDROID )
@@ -166,8 +159,6 @@ struct SystemGraphicsData
         , hDrawable( 0 )
         , pVisual( nullptr )
         , nScreen( 0 )
-        , nDepth( 0 )
-        , aColormap( 0 )
         , pXRenderFormat( nullptr )
 #endif
     { }
@@ -175,7 +166,6 @@ struct SystemGraphicsData
 
 struct SystemWindowData
 {
-    unsigned long   nSize;          // size in bytes of this structure
 #if defined(_WIN32)                  // meaningless on Windows
 #elif defined( MACOSX )
     bool            bOpenGL;        // create a OpenGL providing NSView
@@ -191,7 +181,7 @@ struct SystemWindowData
 
 struct SystemGlyphData
 {
-    unsigned long        index;
+    sal_uInt32           index;
     double               x;
     double               y;
     int                  fallbacklevel;
@@ -201,7 +191,6 @@ struct SystemGlyphData
 
 struct SystemFontData
 {
-    unsigned long   nSize;          // size in bytes of this structure
 #if defined( UNX )
     void*           nFontId;        // native font id
     int             nFontFlags;     // native font flags
@@ -212,15 +201,15 @@ struct SystemFontData
     bool            bVerticalCharacterType;      // Is the font using vertical character type
 
     SystemFontData()
-        : nSize( sizeof( SystemFontData ) )
+        :
 #if defined( UNX )
-        , nFontId( nullptr )
-        , nFontFlags( 0 )
+        nFontId( nullptr ),
+        nFontFlags( 0 ),
 #endif
-        , bFakeBold( false )
-        , bFakeItalic( false )
-        , bAntialias( true )
-        , bVerticalCharacterType( false )
+        bFakeBold( false ),
+        bFakeItalic( false ),
+        bAntialias( true ),
+        bVerticalCharacterType( false )
     {
     }
 };
@@ -231,7 +220,6 @@ typedef std::vector<SystemGlyphData> SystemGlyphDataVector;
 
 struct SystemTextLayoutData
 {
-    unsigned long         nSize;         // size in bytes of this structure
     SystemGlyphDataVector rGlyphData;    // glyph data
     int                   orientation;   // Text orientation
 };

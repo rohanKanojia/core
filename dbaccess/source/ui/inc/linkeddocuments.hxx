@@ -27,8 +27,6 @@
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/sdbc/XConnection.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
 #include <com/sun/star/ucb/XContent.hpp>
 #include <com/sun/star/sdb/application/XDatabaseDocumentUI.hpp>
 #include <comphelper/namedvaluecollection.hxx>
@@ -39,9 +37,8 @@ namespace dbaui
 {
 
     // OLinkedDocumentsAccess
-    class OLinkedDocumentsAccess
+    class OLinkedDocumentsAccess final
     {
-    protected:
         css::uno::Reference< css::uno::XComponentContext >
                     m_xContext;
         css::uno::Reference< css::container::XNameAccess >
@@ -64,7 +61,7 @@ namespace dbaui
         );
         ~OLinkedDocumentsAccess();
 
-        inline bool isConnected() const { return m_xConnection.is(); }
+        bool isConnected() const { return m_xConnection.is(); }
 
         css::uno::Reference< css::lang::XComponent>
                 open(
@@ -82,22 +79,16 @@ namespace dbaui
                 );
 
         void    newFormWithPilot(
-                    const sal_Int32 _nCommandType = -1,
-                    const OUString& _rObjectName = OUString()
+                    const sal_Int32 _nCommandType,
+                    const OUString& _rObjectName
                 );
         void    newReportWithPilot(
-                    const sal_Int32 _nCommandType = -1,
-                    const OUString& _rObjectName = OUString()
+                    const sal_Int32 _nCommandType,
+                    const OUString& _rObjectName
                 );
         void    newQueryWithPilot();
         void    newTableWithPilot();
 
-        enum RESULT
-        {
-            ERROR,
-            SUCCESS,
-            CANCEL
-        };
     private:
         css::uno::Reference< css::lang::XComponent >
             impl_open(

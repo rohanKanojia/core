@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -68,7 +69,7 @@ public class TextReplace {
             xReplaceable = UnoRuntime.queryInterface(
                 com.sun.star.util.XReplaceable.class, xTextDocument);
 
-            // You need a descriptor to set properies for Replace
+            // You need a descriptor to set properties for Replace
             xReplaceDescr = xReplaceable.createReplaceDescriptor();
 
             System.out.println("Change all occurrences of ...");
@@ -118,7 +119,7 @@ public class TextReplace {
             xTextCursor.gotoEnd(false);
             xCPS.setPropertyValue( "CharColor", Integer.valueOf( 0 ) );
 
-            xText.insertString( xTextCursor, "in the alley. Like lightening he darted off to the left and disappeared between the two warehouses almost falling over the trash can lying in the ", false  );
+            xText.insertString( xTextCursor, "in the alley. Like lightning he darted off to the left and disappeared between the two warehouses almost falling over the trash can lying in the ", false  );
 
             xText.insertString( xTextCursor, "centre ", true );
             xCPS = UnoRuntime.queryInterface(
@@ -219,3 +220,5 @@ public class TextReplace {
         return xComponent ;
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

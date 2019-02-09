@@ -36,14 +36,14 @@ namespace sdr
     namespace overlay
     {
         // combine rages geometrically to a single, ORed polygon
-        basegfx::B2DPolyPolygon impCombineRangesToPolyPolygon(const std::vector< basegfx::B2DRange >& rRanges)
+        static basegfx::B2DPolyPolygon impCombineRangesToPolyPolygon(const std::vector< basegfx::B2DRange >& rRanges)
         {
             const sal_uInt32 nCount(rRanges.size());
             basegfx::B2DPolyPolygon aRetval;
 
             for(sal_uInt32 a(0); a < nCount; a++)
             {
-                const basegfx::B2DPolygon aDiscretePolygon(basegfx::tools::createPolygonFromRect(rRanges[a]));
+                const basegfx::B2DPolygon aDiscretePolygon(basegfx::utils::createPolygonFromRect(rRanges[a]));
 
                 if(0 == a)
                 {
@@ -51,25 +51,25 @@ namespace sdr
                 }
                 else
                 {
-                    aRetval = basegfx::tools::solvePolygonOperationOr(aRetval, basegfx::B2DPolyPolygon(aDiscretePolygon));
+                    aRetval = basegfx::utils::solvePolygonOperationOr(aRetval, basegfx::B2DPolyPolygon(aDiscretePolygon));
                 }
             }
 
             return aRetval;
         }
 
-        // check if wanted type OVERLAY_TRANSPARENT or OVERLAY_SOLID
+        // check if wanted type OverlayType::Transparent or OverlayType::Solid
         // is possible. If not, fallback to invert mode (classic mode)
-        OverlayType impCheckPossibleOverlayType(OverlayType aOverlayType)
+        static OverlayType impCheckPossibleOverlayType(OverlayType aOverlayType)
         {
-            if(OVERLAY_INVERT != aOverlayType)
+            if(OverlayType::Invert != aOverlayType)
             {
                 const SvtOptionsDrawinglayer aSvtOptionsDrawinglayer;
 
                 if(!aSvtOptionsDrawinglayer.IsTransparentSelection())
                 {
                     // not possible when switched off by user
-                    return OVERLAY_INVERT;
+                    return OverlayType::Invert;
                 }
                 else if (const OutputDevice* pOut = Application::GetDefaultDevice())
                 {
@@ -77,13 +77,13 @@ namespace sdr
                     if(pOut->GetSettings().GetStyleSettings().GetHighContrastMode())
                     {
                         // not possible when in high contrast mode
-                        return  OVERLAY_INVERT;
+                        return  OverlayType::Invert;
                     }
 
-                    if(!pOut->SupportsOperation(OutDevSupport_TransparentRect))
+                    if(!pOut->SupportsOperation(OutDevSupportType::TransparentRect))
                     {
                         // not possible when no fast transparence paint is supported on the system
-                        return OVERLAY_INVERT;
+                        return OverlayType::Invert;
                     }
                 }
             }
@@ -99,7 +99,7 @@ namespace sdr
             if(nCount)
             {
                 // create range primitives
-                const bool bInvert(OVERLAY_INVERT == maLastOverlayType);
+                const bool bInvert(OverlayType::Invert == maLastOverlayType);
                 basegfx::BColor aRGBColor(getBaseColor().getBColor());
                 aRetval.resize(nCount);
 
@@ -111,7 +111,7 @@ namespace sdr
 
                 for(sal_uInt32 a(0);a < nCount; a++)
                 {
-                    const basegfx::B2DPolygon aPolygon(basegfx::tools::createPolygonFromRect(maRanges[a]));
+                    const basegfx::B2DPolygon aPolygon(basegfx::utils::createPolygonFromRect(maRanges[a]));
                     aRetval[a] = drawinglayer::primitive2d::Primitive2DReference(
                         new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(
                             basegfx::B2DPolyPolygon(aPolygon),
@@ -126,7 +126,7 @@ namespace sdr
                             aRetval));
                     aRetval = drawinglayer::primitive2d::Primitive2DContainer { aInvert };
                 }
-                else if(OVERLAY_TRANSPARENT == maLastOverlayType)
+                else if(OverlayType::Transparent == maLastOverlayType)
                 {
                     // embed all rectangles in transparent paint
                     const double fTransparence(mnLastTransparence / 100.0);
@@ -135,7 +135,7 @@ namespace sdr
                             aRetval,
                             fTransparence));
 
-                    if(getBorder())
+                    if(mbBorder)
                     {
                         const basegfx::B2DPolyPolygon aPolyPolygon(impCombineRangesToPolyPolygon(getRanges()));
                         const drawinglayer::primitive2d::Primitive2DReference aSelectionOutline(
@@ -196,7 +196,7 @@ namespace sdr
                     || nNewTransparence != mnLastTransparence)
                 {
                     // conditions of last local decomposition have changed, delete
-                    const_cast< OverlaySelection* >(this)->setPrimitive2DSequence(drawinglayer::primitive2d::Primitive2DContainer());
+                    const_cast< OverlaySelection* >(this)->resetPrimitive2DSequence();
                 }
             }
 

@@ -10,11 +10,18 @@
 #ifndef INCLUDED_SC_INC_COLUMNITERATOR_HXX
 #define INCLUDED_SC_INC_COLUMNITERATOR_HXX
 
-#include "column.hxx"
+#include <stddef.h>
+#include "address.hxx"
+#include <mdds/multi_type_vector_types.hpp>
+#include "mtvelements.hxx"
+#include <sal/types.h>
+#include "types.hxx"
+class ScColumn;
+class ScDocument;
+struct ScRefCellValue;
 
 class ScColumnTextWidthIterator
 {
-    sc::CellTextAttrStoreType& mrCellTextAttrs;
     const size_t mnEnd;
     size_t mnCurPos;
     sc::CellTextAttrStoreType::iterator miBlockCur;
@@ -25,7 +32,6 @@ class ScColumnTextWidthIterator
 public:
     ScColumnTextWidthIterator(const ScColumnTextWidthIterator&) = delete;
     const ScColumnTextWidthIterator& operator=(const ScColumnTextWidthIterator&) = delete;
-    ~ScColumnTextWidthIterator() = default;
     ScColumnTextWidthIterator(ScColumn& rCol, SCROW nStartRow, SCROW nEndRow);
 
     /**
@@ -49,6 +55,36 @@ private:
     void getDataIterators(size_t nOffsetInBlock);
     void checkEndRow();
 };
+
+namespace sc {
+
+/**
+ * This iterator lets you iterate over cells over specified range in a
+ * single column.  It does not modify the state of the cells, and therefore
+ * is thread safe.
+ */
+class ColumnIterator
+{
+    CellStoreType::const_position_type maPos;
+    CellStoreType::const_position_type const maPosEnd;
+    bool mbComplete;
+
+public:
+    ColumnIterator( const CellStoreType& rCells, SCROW nRow1, SCROW nRow2 );
+    ~ColumnIterator();
+
+    void next();
+
+    SCROW getRow() const;
+
+    bool hasCell() const;
+
+    mdds::mtv::element_t getType() const;
+
+    ScRefCellValue getCell() const;
+};
+
+}
 
 #endif
 

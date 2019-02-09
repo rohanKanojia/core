@@ -17,8 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "WrappedDirectStateProperty.hxx"
-#include "macros.hxx"
+#include <WrappedDirectStateProperty.hxx>
 
 using namespace ::com::sun::star;
 
@@ -37,8 +36,6 @@ WrappedDirectStateProperty::~WrappedDirectStateProperty()
 
 beans::PropertyState WrappedDirectStateProperty::getPropertyState(
     const Reference< beans::XPropertyState >& /* xInnerPropertyState */ ) const
-    throw (beans::UnknownPropertyException,
-           uno::RuntimeException)
 {
     return beans::PropertyState_DIRECT_VALUE;
 }

@@ -20,20 +20,25 @@
 #ifndef INCLUDED_OOX_PPT_SLIDETRANSITIONCONTEXT_HXX
 #define INCLUDED_OOX_PPT_SLIDETRANSITIONCONTEXT_HXX
 
+#include <oox/core/contexthandler.hxx>
 #include <oox/core/fragmenthandler2.hxx>
 #include <oox/ppt/slidetransition.hxx>
+#include <sal/types.h>
 
-namespace oox { class PropertyMap; }
+namespace oox {
+    class AttributeList;
+    class PropertyMap;
+}
 
 namespace oox { namespace ppt {
 
     class SlideTransitionContext : public ::oox::core::FragmentHandler2
     {
     public:
-        SlideTransitionContext( ::oox::core::FragmentHandler2& rParent,
+        SlideTransitionContext( ::oox::core::FragmentHandler2 const & rParent,
             const AttributeList& rAttributes,
             PropertyMap & aProperties ) throw();
-        virtual ~SlideTransitionContext() throw();
+        virtual ~SlideTransitionContext() throw() override;
 
     virtual void onEndElement() override;
     virtual ::oox::core::ContextHandlerRef onCreateContext( sal_Int32 aElementToken, const AttributeList& rAttribs ) override;
@@ -42,6 +47,7 @@ namespace oox { namespace ppt {
     private:
         PropertyMap&                    maSlideProperties;
         bool                            mbHasTransition;
+        bool                            mbHasTransitionDuration;
         SlideTransition                 maTransition;
     };
 

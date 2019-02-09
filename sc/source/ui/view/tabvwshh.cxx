@@ -19,6 +19,7 @@
 
 #include <config_features.h>
 
+#include <basic/sberrors.hxx>
 #include <svx/svdmark.hxx>
 #include <svx/svdoole2.hxx>
 #include <svx/svdview.hxx>
@@ -27,31 +28,19 @@
 #include <sfx2/request.hxx>
 #include <basic/sbxcore.hxx>
 #include <svl/whiter.hxx>
-#include <vcl/msgbox.hxx>
 
-#include "tabvwsh.hxx"
-#include "client.hxx"
-#include "document.hxx"
-#include "docsh.hxx"
-#include "sc.hrc"
-#include "drwlayer.hxx"
-#include "retypepassdlg.hxx"
-#include "tabprotection.hxx"
+#include <tabvwsh.hxx>
+#include <client.hxx>
+#include <document.hxx>
+#include <docsh.hxx>
+#include <sc.hrc>
+#include <drwlayer.hxx>
+#include <retypepassdlg.hxx>
+#include <tabprotection.hxx>
 
 using namespace com::sun::star;
 
-void ScTabViewShell::ExecuteSbx( SfxRequest& /* rReq */ )
-{
-    //  SID_RANGE_OFFSET (Offset),
-    //  SID_PIVOT_CREATE (DataPilotCreate) - removed (old Basic)
-}
-
-void ScTabViewShell::GetSbxState( SfxItemSet& /* rSet */ )
-{
-    //  SID_RANGE_REGION (CurrentRegion) - removed (old Basic)
-}
-
-void ScTabViewShell::ExecuteObject( SfxRequest& rReq )
+void ScTabViewShell::ExecuteObject( const SfxRequest& rReq )
 {
     sal_uInt16 nSlotId = rReq.GetSlot();
     const SfxItemSet* pReqArgs = rReq.GetArgs();
@@ -113,7 +102,7 @@ void ScTabViewShell::ExecuteObject( SfxRequest& rReq )
                         if (rMarkList.GetMarkCount() == 1)
                         {
                             SdrObject* pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
-                            Rectangle aRect = pObj->GetLogicRect();
+                            tools::Rectangle aRect = pObj->GetLogicRect();
 
                             if ( nSlotId == SID_OBJECT_LEFT )
                                 pDrView->MoveMarkedObj( Size( nNewVal - aRect.Left(), 0 ) );
@@ -133,7 +122,7 @@ void ScTabViewShell::ExecuteObject( SfxRequest& rReq )
                 }
 #if HAVE_FEATURE_SCRIPTING
                 if (!bDone)
-                    SbxBase::SetError( ERRCODE_SBX_BAD_PARAMETER );  // basic error
+                    SbxBase::SetError( ERRCODE_BASIC_BAD_PARAMETER );  // basic error
 #endif
             }
             break;
@@ -141,7 +130,7 @@ void ScTabViewShell::ExecuteObject( SfxRequest& rReq )
     }
 }
 
-static uno::Reference < embed::XEmbeddedObject > lcl_GetSelectedObj( SdrView* pDrView )       //! member of ScDrawView?
+static uno::Reference < embed::XEmbeddedObject > lcl_GetSelectedObj( const SdrView* pDrView )       //! member of ScDrawView?
 {
     uno::Reference < embed::XEmbeddedObject > xRet;
     if (pDrView)
@@ -163,8 +152,6 @@ static uno::Reference < embed::XEmbeddedObject > lcl_GetSelectedObj( SdrView* pD
 
 void ScTabViewShell::GetObjectState( SfxItemSet& rSet )
 {
-    //  SID_OLE_OBJECT - removed (old Basic)
-
     SfxWhichIter aIter(rSet);
     sal_uInt16 nWhich = aIter.FirstWhich();
     while ( nWhich )
@@ -194,7 +181,7 @@ void ScTabViewShell::GetObjectState( SfxItemSet& rSet )
                         if (rMarkList.GetMarkCount() == 1)
                         {
                             SdrObject* pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
-                            Rectangle aRect = pObj->GetLogicRect();
+                            tools::Rectangle aRect = pObj->GetLogicRect();
 
                             long nVal;
                             if ( nWhich == SID_OBJECT_LEFT )
@@ -221,7 +208,7 @@ void ScTabViewShell::GetObjectState( SfxItemSet& rSet )
 void ScTabViewShell::AddAccessibilityObject( SfxListener& rObject )
 {
     if (!pAccessibilityBroadcaster)
-        pAccessibilityBroadcaster = new SfxBroadcaster;
+        pAccessibilityBroadcaster.reset( new SfxBroadcaster );
 
     rObject.StartListening( *pAccessibilityBroadcaster );
     ScDocument* pDoc = GetViewData().GetDocument();

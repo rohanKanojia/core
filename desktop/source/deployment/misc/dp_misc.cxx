@@ -21,9 +21,9 @@
 #include <config_features.h>
 #include <chrono>
 
-#include "dp_misc.h"
-#include "dp_version.hxx"
-#include "dp_interact.h"
+#include <dp_misc.h>
+#include <dp_version.hxx>
+#include <dp_interact.h>
 #include <rtl/uri.hxx>
 #include <rtl/digest.h>
 #include <rtl/random.h>
@@ -34,7 +34,6 @@
 #include <osl/pipe.hxx>
 #include <osl/security.hxx>
 #include <osl/thread.hxx>
-#include <osl/mutex.hxx>
 #include <com/sun/star/ucb/CommandAbortedException.hpp>
 #include <com/sun/star/task/XInteractionHandler.hpp>
 #include <com/sun/star/bridge/BridgeFactory.hpp>
@@ -43,12 +42,12 @@
 #include <com/sun/star/deployment/ExtensionManager.hpp>
 #include <com/sun/star/task/OfficeRestartManager.hpp>
 #include <memory>
+#include <string_view>
 #include <comphelper/lok.hxx>
 #include <comphelper/processfactory.hxx>
 #include <salhelper/linkhelper.hxx>
 
 #ifdef _WIN32
-#define UNICODE
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #endif
@@ -108,7 +107,7 @@ const OUString OfficePipeId::operator () ()
 
     sal_uInt8 const * data =
         reinterpret_cast<sal_uInt8 const *>(userPath.getStr());
-    sal_Size size = (userPath.getLength() * sizeof (sal_Unicode));
+    std::size_t size = userPath.getLength() * sizeof (sal_Unicode);
     sal_uInt32 md5_key_len = rtl_digest_queryLength( digest );
     std::unique_ptr<sal_uInt8[]> md5_buf( new sal_uInt8 [ md5_key_len ] );
 
@@ -241,7 +240,7 @@ bool needToSyncRepository(OUString const & name)
 
 
 namespace {
-inline OUString encodeForRcFile( OUString const & str )
+OUString encodeForRcFile( OUString const & str )
 {
     // escape $\{} (=> rtl bootstrap files)
     OUStringBuffer buf;
@@ -268,7 +267,7 @@ OUString makeURL( OUString const & baseURL, OUString const & relPath_ )
 {
     OUStringBuffer buf;
     if (baseURL.getLength() > 1 && baseURL[ baseURL.getLength() - 1 ] == '/')
-        buf.append( baseURL.copy( 0, baseURL.getLength() - 1 ) );
+        buf.append( std::u16string_view(baseURL).substr(0, baseURL.getLength() - 1) );
     else
         buf.append( baseURL );
     OUString relPath(relPath_);
@@ -294,10 +293,9 @@ OUString makeURL( OUString const & baseURL, OUString const & relPath_ )
     return buf.makeStringAndClear();
 }
 
-OUString makeURLAppendSysPathSegment( OUString const & baseURL, OUString const & relPath_ )
+OUString makeURLAppendSysPathSegment( OUString const & baseURL, OUString const & segment )
 {
-    OUString segment = relPath_;
-    OSL_ASSERT(segment.indexOf(static_cast<sal_Unicode>('/')) == -1);
+    OSL_ASSERT(segment.indexOf(u'/') == -1);
 
     ::rtl::Uri::encode(
         segment, rtl_UriCharClassPchar, rtl_UriEncodeIgnoreEscapes,
@@ -378,7 +376,7 @@ bool office_is_running()
     else
     {
         OSL_FAIL("NOT osl_Process_E_None ");
-        //if osl_getExecutable file than we take the risk of creating a pipe
+        //if osl_getExecutable file then we take the risk of creating a pipe
         ret =  existsOfficePipe();
     }
     return ret;
@@ -429,12 +427,12 @@ OUString generateRandomPipeId()
         throw RuntimeException( "cannot create random pool!?", nullptr );
     sal_uInt8 bytes[ 32 ];
     if (rtl_random_getBytes(
-            s_hPool, bytes, ARLEN(bytes) ) != rtl_Random_E_None) {
+            s_hPool, bytes, SAL_N_ELEMENTS(bytes) ) != rtl_Random_E_None) {
         throw RuntimeException( "random pool error!?", nullptr );
     }
     OUStringBuffer buf;
-    for ( sal_uInt32 i = 0; i < ARLEN(bytes); ++i ) {
-        buf.append( static_cast<sal_Int32>(bytes[ i ]), 0x10 );
+    for (unsigned char byte : bytes) {
+        buf.append( static_cast<sal_Int32>(byte), 0x10 );
     }
     return buf.makeStringAndClear();
 }
@@ -443,12 +441,12 @@ OUString generateRandomPipeId()
 Reference<XInterface> resolveUnoURL(
     OUString const & connectString,
     Reference<XComponentContext> const & xLocalContext,
-    AbortChannel * abortChannel )
+    AbortChannel const * abortChannel )
 {
     Reference<bridge::XUnoUrlResolver> xUnoUrlResolver(
         bridge::UnoUrlResolver::create( xLocalContext ) );
 
-    for (int i = 0; i <= 20; ++i) // 10 seconds
+    for (int i = 0; i <= 40; ++i) // 20 seconds
     {
         if (abortChannel != nullptr && abortChannel->isAborted()) {
             throw ucb::CommandAbortedException( "abort!" );
@@ -457,7 +455,7 @@ Reference<XInterface> resolveUnoURL(
             return xUnoUrlResolver->resolve( connectString );
         }
         catch (const connection::NoConnectException &) {
-            if (i < 20)
+            if (i < 40)
             {
                 ::osl::Thread::wait( std::chrono::milliseconds(500) );
             }
@@ -468,14 +466,14 @@ Reference<XInterface> resolveUnoURL(
 }
 
 #ifdef _WIN32
-void writeConsoleWithStream(OUString const & sText, HANDLE stream)
+static void writeConsoleWithStream(OUString const & sText, HANDLE stream)
 {
     DWORD nWrittenChars = 0;
     WriteFile(stream, sText.getStr(),
-        sText.getLength() * 2, &nWrittenChars, NULL);
+        sText.getLength() * 2, &nWrittenChars, nullptr);
 }
 #else
-void writeConsoleWithStream(OUString const & sText, FILE * stream)
+static void writeConsoleWithStream(OUString const & sText, FILE * stream)
 {
     OString s = OUStringToOString(sText, osl_getThreadTextEncoding());
     fprintf(stream, "%s", s.getStr());
@@ -507,7 +505,7 @@ OUString readConsole()
     sal_Unicode aBuffer[1024];
     DWORD   dwRead = 0;
     //unopkg.com feeds unopkg.exe with wchar_t|s
-    if (ReadFile( GetStdHandle(STD_INPUT_HANDLE), &aBuffer, sizeof(aBuffer), &dwRead, NULL ) )
+    if (ReadFile( GetStdHandle(STD_INPUT_HANDLE), &aBuffer, sizeof(aBuffer), &dwRead, nullptr ) )
     {
         OSL_ASSERT((dwRead % 2) == 0);
         OUString value( aBuffer, dwRead / 2);
@@ -523,7 +521,7 @@ OUString readConsole()
         return value.trim();
     }
 #endif
-    return OUString();
+    throw css::uno::RuntimeException("reading from stdin failed");
 }
 
 void TRACE(OUString const & sText)
@@ -540,7 +538,7 @@ void syncRepositories(
         return;
 
     Reference<deployment::XExtensionManager> xExtensionManager;
-    //synchronize shared before bundled otherewise there are
+    //synchronize shared before bundled otherwise there are
     //more revoke and registration calls.
     bool bModified = false;
     if (force || needToSyncRepository("shared") || needToSyncRepository("bundled"))
@@ -561,7 +559,6 @@ void syncRepositories(
         Reference<task::XRestartManager> restarter(task::OfficeRestartManager::get(comphelper::getProcessComponentContext()));
         if (restarter.is())
         {
-            OSL_TRACE( "Request restart for modified extensions manager" );
             restarter->requestRestart(xCmdEnv.is() ? xCmdEnv->getInteractionHandler() :
                                       Reference<task::XInteractionHandler>());
         }

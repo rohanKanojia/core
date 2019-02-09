@@ -24,6 +24,11 @@
 #include <com/sun/star/ucb/NameClashException.hpp>
 #include <com/sun/star/io/WrongFormatException.hpp>
 #include <com/sun/star/io/TempFile.hpp>
+#include <com/sun/star/io/XStream.hpp>
+#include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/io/XOutputStream.hpp>
+#include <com/sun/star/io/XSeekable.hpp>
+#include <com/sun/star/io/XTruncate.hpp>
 
 #include <osl/time.h>
 #include <osl/security.hxx>
@@ -49,11 +54,8 @@ using namespace ::com::sun::star;
 
 namespace svt {
 
-bool DocumentLockFile::m_bAllowInteraction = true;
-
-
 DocumentLockFile::DocumentLockFile( const OUString& aOrigURL )
-: LockFileCommon( aOrigURL, OUString( ".~lock."  ) )
+: LockFileCommon( aOrigURL, ".~lock." )
 {
 }
 
@@ -112,14 +114,14 @@ bool DocumentLockFile::CreateOwnLockFile()
 
         ucb::InsertCommandArgument aInsertArg;
         aInsertArg.Data = xInput;
-        aInsertArg.ReplaceExisting = sal_False;
+        aInsertArg.ReplaceExisting = false;
         uno::Any aCmdArg;
         aCmdArg <<= aInsertArg;
         aTargetContent.executeCommand( "insert", aCmdArg );
 
         // try to let the file be hidden if possible
         try {
-            aTargetContent.setPropertyValue("IsHidden", uno::makeAny( sal_True ) );
+            aTargetContent.setPropertyValue("IsHidden", uno::makeAny( true ) );
         } catch( uno::Exception& ) {}
     }
     catch( ucb::NameClashException& )
@@ -202,16 +204,23 @@ void DocumentLockFile::RemoveFile()
     LockFileEntry aNewEntry = GenerateOwnEntry();
     LockFileEntry aFileData = GetLockData();
 
-    if ( !aFileData[LockFileComponent::SYSUSERNAME].equals( aNewEntry[LockFileComponent::SYSUSERNAME] )
-      || !aFileData[LockFileComponent::LOCALHOST].equals( aNewEntry[LockFileComponent::LOCALHOST] )
-      || !aFileData[LockFileComponent::USERURL].equals( aNewEntry[LockFileComponent::USERURL] ) )
+    if ( aFileData[LockFileComponent::SYSUSERNAME] != aNewEntry[LockFileComponent::SYSUSERNAME]
+      || aFileData[LockFileComponent::LOCALHOST] != aNewEntry[LockFileComponent::LOCALHOST]
+      || aFileData[LockFileComponent::USERURL] != aNewEntry[LockFileComponent::USERURL] )
         throw io::IOException(); // not the owner, access denied
 
+    RemoveFileDirectly();
+}
+
+void DocumentLockFile::RemoveFileDirectly()
+{
     uno::Reference < css::ucb::XCommandEnvironment > xEnv;
     ::ucbhelper::Content aCnt(m_aURL, xEnv, comphelper::getProcessComponentContext());
     aCnt.executeCommand("delete",
         uno::makeAny(true));
 }
+
+
 
 } // namespace svt
 

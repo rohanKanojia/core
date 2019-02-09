@@ -18,11 +18,11 @@
  */
 
 #include "Currency.hxx"
-#include "services.hxx"
+#include <services.hxx>
 #include <unotools/localedatawrapper.hxx>
 #include <vcl/svapp.hxx>
 #include <unotools/syslocale.hxx>
-#include <comphelper/processfactory.hxx>
+#include <comphelper/types.hxx>
 
 
 namespace frm
@@ -45,13 +45,7 @@ OCurrencyControl::OCurrencyControl(const Reference<XComponentContext>& _rxFactor
 {
 }
 
-Sequence<Type> OCurrencyControl::_getTypes()
-{
-    return OBoundControl::_getTypes();
-}
-
-
-css::uno::Sequence<OUString> SAL_CALL OCurrencyControl::getSupportedServiceNames() throw(std::exception)
+css::uno::Sequence<OUString> SAL_CALL OCurrencyControl::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OBoundControl::getSupportedServiceNames();
     aSupported.realloc(aSupported.getLength() + 2);
@@ -64,12 +58,6 @@ css::uno::Sequence<OUString> SAL_CALL OCurrencyControl::getSupportedServiceNames
 
 
 // OCurrencyModel
-
-Sequence<Type> OCurrencyModel::_getTypes()
-{
-    return OEditBaseModel::_getTypes();
-}
-
 
 void OCurrencyModel::implConstruct()
 {
@@ -145,7 +133,7 @@ IMPLEMENT_DEFAULT_CLONING( OCurrencyModel )
 
 // XServiceInfo
 
-css::uno::Sequence<OUString> SAL_CALL OCurrencyModel::getSupportedServiceNames() throw(std::exception)
+css::uno::Sequence<OUString> SAL_CALL OCurrencyModel::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OBoundControlModel::getSupportedServiceNames();
 
@@ -177,7 +165,7 @@ void OCurrencyModel::describeFixedProperties( Sequence< Property >& _rProps ) co
 }
 
 
-OUString SAL_CALL OCurrencyModel::getServiceName() throw ( css::uno::RuntimeException, std::exception)
+OUString SAL_CALL OCurrencyModel::getServiceName()
 {
     return OUString(FRM_COMPONENT_CURRENCYFIELD); // old (non-sun) name for compatibility !
 }
@@ -236,14 +224,14 @@ void OCurrencyModel::resetNoBroadcast()
 
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OCurrencyModel_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {
     return cppu::acquire(new frm::OCurrencyModel(component));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OCurrencyControl_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {

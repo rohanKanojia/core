@@ -36,42 +36,24 @@ public:
 
     // XMimeContentType
 
-    virtual OUString SAL_CALL getMediaType(  ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getMediaSubtype(  ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getFullMediaType(  ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getMediaType(  ) override;
+    virtual OUString SAL_CALL getMediaSubtype(  ) override;
+    virtual OUString SAL_CALL getFullMediaType(  ) override;
 
-    virtual css::uno::Sequence< OUString > SAL_CALL getParameters(  )
-        throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getParameters(  ) override;
 
-    virtual sal_Bool SAL_CALL hasParameter( const OUString& aName )
-        throw(css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL hasParameter( const OUString& aName ) override;
 
-    virtual OUString SAL_CALL getParameterValue( const OUString& aName )
-        throw(css::container::NoSuchElementException, css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getParameterValue( const OUString& aName ) override;
 
 private:
-    void SAL_CALL init( const OUString& aCntType ) throw( css::lang::IllegalArgumentException );
-    void SAL_CALL getSym();
-    void SAL_CALL acceptSym( const OUString& pSymTlb );
-    void SAL_CALL skipSpaces();
-    void SAL_CALL type();
-    void SAL_CALL subtype();
-    void SAL_CALL trailer();
-    OUString SAL_CALL pName( );
-    OUString SAL_CALL pValue( );
-    OUString SAL_CALL quotedPValue( );
-    OUString SAL_CALL nonquotedPValue( );
-    void SAL_CALL comment();
-    static bool SAL_CALL isInRange( const OUString& aChr, const OUString& aRange );
+    /// @throws css::lang::IllegalArgumentException
+    void init( const OUString& aCntType );
 
 private:
-    ::osl::Mutex                             m_aMutex;
     OUString                            m_MediaType;
     OUString                            m_MediaSubtype;
-    OUString                            m_ContentType;
     std::map< OUString, OUString > m_ParameterMap;
-    sal_Int32                                m_nPos;
-    OUString                            m_nxtSym;
 };
 
 #endif

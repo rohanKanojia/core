@@ -25,13 +25,12 @@
 #include <X11/Xutil.h>
 #include <X11/extensions/shape.h>
 
-#include <tools/debug.hxx>
 
 #include <vcl/keycodes.hxx>
 #include <vcl/event.hxx>
+#include <sal/log.hxx>
 
 #include <unx/salunx.h>
-#include <unx/saldata.hxx>
 #include <unx/salinst.h>
 #include <unx/saldisp.hxx>
 #include <unx/salframe.h>
@@ -61,10 +60,11 @@ X11SalObject* X11SalObject::CreateObject( SalFrame* pParent, SystemWindowData* p
 
     pObject->mpParent = pParent;
 
-    SalDisplay* pSalDisp        = vcl_sal::getSalDisplay(GetGenericData());
+    SalDisplay* pSalDisp        = vcl_sal::getSalDisplay(GetGenericUnixSalData());
     const SystemEnvData* pEnv   = pParent->GetSystemData();
     Display* pDisp              = pSalDisp->GetDisplay();
-    ::Window aObjectParent      = (::Window)pEnv->aWindow;
+    ::Window aObjectParent      = static_cast<::Window>(pEnv->aWindow);
+    pObject->maParentWin = aObjectParent;
 
     // find out on which screen that window is
     XWindowAttributes aParentAttr;
@@ -80,7 +80,7 @@ X11SalObject* X11SalObject::CreateObject( SalFrame* pParent, SystemWindowData* p
     int nVisuals = 0;
     XVisualInfo* pInfo = XGetVisualInfo( pDisp, VisualIDMask, &aTemplate, &nVisuals );
     // only one VisualInfo structure can match the visual id
-    DBG_ASSERT( nVisuals == 1, "match count for visual id is not 1" );
+    SAL_WARN_IF( nVisuals != 1, "vcl", "match count for visual id is not 1" );
     unsigned int nDepth     = pInfo->depth;
     XFree( pInfo );
     XSetWindowAttributes aAttribs;
@@ -120,7 +120,7 @@ X11SalObject* X11SalObject::CreateObject( SalFrame* pParent, SystemWindowData* p
                  static_cast<unsigned int> (pSalDisp->GetVisual( nXScreen ).GetVisualId()),
                  static_cast<unsigned int> (aVisID) );
         #endif
-        GetGenericData()->ErrorTrapPush();
+        GetGenericUnixSalData()->ErrorTrapPush();
 
         // create colormap for visual - there might not be one
         pObject->maColormap = aAttribs.colormap = XCreateColormap(
@@ -138,7 +138,7 @@ X11SalObject* X11SalObject::CreateObject( SalFrame* pParent, SystemWindowData* p
                            pVisual,
                            CWEventMask|CWColormap, &aAttribs );
         XSync( pDisp, False );
-        if( GetGenericData()->ErrorTrapPop( false ) )
+        if( GetGenericUnixSalData()->ErrorTrapPop( false ) )
         {
             pObject->maSecondary = None;
             delete pObject;
@@ -147,7 +147,7 @@ X11SalObject* X11SalObject::CreateObject( SalFrame* pParent, SystemWindowData* p
         XReparentWindow( pDisp, pObject->maSecondary, pObject->maPrimary, 0, 0 );
     }
 
-    GetGenericData()->ErrorTrapPush();
+    GetGenericUnixSalData()->ErrorTrapPush();
     if( bShow ) {
         XMapWindow( pDisp, pObject->maSecondary );
         XMapWindow( pDisp, pObject->maPrimary );
@@ -157,13 +157,9 @@ X11SalObject* X11SalObject::CreateObject( SalFrame* pParent, SystemWindowData* p
     pObjData->aWindow       = pObject->maSecondary;
     pObjData->pWidget       = nullptr;
     pObjData->pVisual       = pVisual;
-    pObjData->nDepth        = nDepth;
-    pObjData->aColormap     = aVisID == pSalDisp->GetVisual( nXScreen ).GetVisualId() ?
-                              pSalDisp->GetColormap( nXScreen ).GetXColormap() : None;
-    pObjData->pAppContext   = nullptr;
 
     XSync(pDisp, False);
-    if( GetGenericData()->ErrorTrapPop( false ) )
+    if( GetGenericUnixSalData()->ErrorTrapPop( false ) )
     {
         delete pObject;
         return nullptr;
@@ -178,7 +174,7 @@ void X11SalInstance::DestroyObject( SalObject* pObject )
 }
 
 // SalClipRegion is a member of SalObject
-// definition of SalClipRegion my be found in unx/inc/salobj.h
+// definition of SalClipRegion my be found in vcl/inc/unx/salobj.h
 
 SalClipRegion::SalClipRegion()
 {
@@ -189,17 +185,12 @@ SalClipRegion::SalClipRegion()
 
 SalClipRegion::~SalClipRegion()
 {
-    if ( ClipRectangleList )
-        delete [] ClipRectangleList;
 }
 
 void
 SalClipRegion::BeginSetClipRegion( sal_uLong nRects )
 {
-    if (ClipRectangleList)
-        delete [] ClipRectangleList;
-
-    ClipRectangleList = new XRectangle[nRects];
+    ClipRectangleList.reset( new XRectangle[nRects] );
     numClipRectangles = 0;
     maxClipRectangles = nRects;
 }
@@ -209,12 +200,12 @@ SalClipRegion::UnionClipRegion( long nX, long nY, long nWidth, long nHeight )
 {
     if ( nWidth && nHeight && (numClipRectangles < maxClipRectangles) )
     {
-        XRectangle *aRect = ClipRectangleList + numClipRectangles;
+        XRectangle& aRect = ClipRectangleList[numClipRectangles];
 
-        aRect->x     = (short) nX;
-        aRect->y     = (short) nY;
-        aRect->width = (unsigned short) nWidth;
-        aRect->height= (unsigned short) nHeight;
+        aRect.x     = static_cast<short>(nX);
+        aRect.y     = static_cast<short>(nY);
+        aRect.width = static_cast<unsigned short>(nWidth);
+        aRect.height= static_cast<unsigned short>(nHeight);
 
         numClipRectangles++;
     }
@@ -223,33 +214,32 @@ SalClipRegion::UnionClipRegion( long nX, long nY, long nWidth, long nHeight )
 // SalObject Implementation
 X11SalObject::X11SalObject()
     : mpParent(nullptr)
+    , maParentWin(0)
     , maPrimary(0)
     , maSecondary(0)
     , maColormap(0)
     , mbVisible(false)
 {
     maSystemChildData.nSize     = sizeof( SystemEnvData );
-    maSystemChildData.pDisplay  = vcl_sal::getSalDisplay(GetGenericData())->GetDisplay();
+    maSystemChildData.pDisplay  = vcl_sal::getSalDisplay(GetGenericUnixSalData())->GetDisplay();
     maSystemChildData.aWindow       = None;
     maSystemChildData.pSalFrame = nullptr;
     maSystemChildData.pWidget       = nullptr;
     maSystemChildData.pVisual       = nullptr;
-    maSystemChildData.nDepth        = 0;
-    maSystemChildData.aColormap = 0;
-    maSystemChildData.pAppContext   = nullptr;
     maSystemChildData.aShellWindow  = 0;
-    maSystemChildData.pShellWidget  = nullptr;
 
-    std::list< SalObject* >& rObjects = vcl_sal::getSalDisplay(GetGenericData())->getSalObjects();
+    std::list< SalObject* >& rObjects = vcl_sal::getSalDisplay(GetGenericUnixSalData())->getSalObjects();
     rObjects.push_back( this );
 }
 
 X11SalObject::~X11SalObject()
 {
-    std::list< SalObject* >& rObjects = vcl_sal::getSalDisplay(GetGenericData())->getSalObjects();
+    std::list< SalObject* >& rObjects = vcl_sal::getSalDisplay(GetGenericUnixSalData())->getSalObjects();
     rObjects.remove( this );
 
-    GetGenericData()->ErrorTrapPush();
+    GetGenericUnixSalData()->ErrorTrapPush();
+    ::Window aObjectParent = maParentWin;
+    XSetWindowBackgroundPixmap(static_cast<Display*>(maSystemChildData.pDisplay), aObjectParent, None);
     if ( maSecondary )
         XDestroyWindow( static_cast<Display*>(maSystemChildData.pDisplay), maSecondary );
     if ( maPrimary )
@@ -257,7 +247,7 @@ X11SalObject::~X11SalObject()
     if ( maColormap )
         XFreeColormap(static_cast<Display*>(maSystemChildData.pDisplay), maColormap);
     XSync( static_cast<Display*>(maSystemChildData.pDisplay), False );
-    GetGenericData()->ErrorTrapPop();
+    GetGenericUnixSalData()->ErrorTrapPop();
 }
 
 void
@@ -394,11 +384,11 @@ static sal_uInt16 sal_GetCode( int state )
 
 bool X11SalObject::Dispatch( XEvent* pEvent )
 {
-    std::list< SalObject* >& rObjects = vcl_sal::getSalDisplay(GetGenericData())->getSalObjects();
+    std::list< SalObject* >& rObjects = vcl_sal::getSalDisplay(GetGenericUnixSalData())->getSalObjects();
 
-    for( std::list< SalObject* >::iterator it = rObjects.begin(); it != rObjects.end(); ++it )
+    for (auto const& elem : rObjects)
     {
-        X11SalObject* pObject = static_cast<X11SalObject*>(*it);
+        X11SalObject* pObject = static_cast<X11SalObject*>(elem);
         if( pEvent->xany.window == pObject->maPrimary ||
             pEvent->xany.window == pObject->maSecondary )
         {
@@ -412,12 +402,11 @@ bool X11SalObject::Dispatch( XEvent* pEvent )
                )
             {
                 SalMouseEvent aEvt;
-                const SystemEnvData* pParentData = pObject->mpParent->GetSystemData();
                 int dest_x, dest_y;
                 ::Window aChild = None;
                 XTranslateCoordinates( pEvent->xbutton.display,
                                        pEvent->xbutton.root,
-                                       pParentData->aWindow,
+                                       pObject->maParentWin,
                                        pEvent->xbutton.x_root,
                                        pEvent->xbutton.y_root,
                                        &dest_x, &dest_y,
@@ -427,7 +416,7 @@ bool X11SalObject::Dispatch( XEvent* pEvent )
                 aEvt.mnTime     = pEvent->xbutton.time;
                 aEvt.mnCode     = sal_GetCode( pEvent->xbutton.state );
                 aEvt.mnButton   = 0;
-                sal_uInt16 nEvent = 0;
+                SalEvent nEvent = SalEvent::NONE;
                 if( pEvent->type == ButtonPress ||
                     pEvent->type == ButtonRelease )
                 {
@@ -438,13 +427,13 @@ bool X11SalObject::Dispatch( XEvent* pEvent )
                         case Button3: aEvt.mnButton = MOUSE_RIGHT;break;
                     }
                     nEvent = (pEvent->type == ButtonPress) ?
-                             SALEVENT_MOUSEBUTTONDOWN :
-                             SALEVENT_MOUSEBUTTONUP;
+                             SalEvent::MouseButtonDown :
+                             SalEvent::MouseButtonUp;
                 }
                 else if( pEvent->type == EnterNotify )
-                    nEvent = SALEVENT_MOUSELEAVE;
+                    nEvent = SalEvent::MouseLeave;
                 else
-                    nEvent = SALEVENT_MOUSEMOVE;
+                    nEvent = SalEvent::MouseMove;
                 pObject->mpParent->CallCallback( nEvent, &aEvt );
             }
             else
@@ -458,13 +447,13 @@ bool X11SalObject::Dispatch( XEvent* pEvent )
                     pObject->mbVisible = true;
                     return true;
                     case ButtonPress:
-                    pObject->CallCallback( SALOBJ_EVENT_TOTOP, nullptr );
+                    pObject->CallCallback( SalObjEvent::ToTop );
                     return true;
                     case FocusIn:
-                    pObject->CallCallback( SALOBJ_EVENT_GETFOCUS, nullptr );
+                    pObject->CallCallback( SalObjEvent::GetFocus );
                     return true;
                     case FocusOut:
-                    pObject->CallCallback( SALOBJ_EVENT_LOSEFOCUS, nullptr );
+                    pObject->CallCallback( SalObjEvent::LoseFocus );
                     return true;
                     default: break;
                 }
@@ -473,6 +462,41 @@ bool X11SalObject::Dispatch( XEvent* pEvent )
         }
     }
     return false;
+}
+
+void X11SalObject::SetLeaveEnterBackgrounds(const css::uno::Sequence<css::uno::Any>& rLeaveArgs, const css::uno::Sequence<css::uno::Any>& rEnterArgs)
+{
+    SalDisplay* pSalDisp        = vcl_sal::getSalDisplay(GetGenericUnixSalData());
+    Display* pDisp              = pSalDisp->GetDisplay();
+    ::Window aObjectParent      = maParentWin;
+
+    bool bFreePixmap = false;
+    Pixmap aPixmap = None;
+    if (rEnterArgs.getLength() == 3)
+    {
+        rEnterArgs[0] >>= bFreePixmap;
+        long pixmapHandle = None;
+        rEnterArgs[1] >>= pixmapHandle;
+        aPixmap = pixmapHandle;
+    }
+
+    XSetWindowBackgroundPixmap(pDisp, aObjectParent, aPixmap);
+    if (bFreePixmap)
+        XFreePixmap(pDisp, aPixmap);
+
+    bFreePixmap = false;
+    aPixmap = None;
+    if (rLeaveArgs.getLength() == 3)
+    {
+        rLeaveArgs[0] >>= bFreePixmap;
+        long pixmapHandle = None;
+        rLeaveArgs[1] >>= pixmapHandle;
+        aPixmap = pixmapHandle;
+    }
+
+    XSetWindowBackgroundPixmap(pDisp, maSecondary, aPixmap);
+    if (bFreePixmap)
+        XFreePixmap(pDisp, aPixmap);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

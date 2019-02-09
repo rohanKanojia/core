@@ -19,11 +19,11 @@
 #ifndef INCLUDED_SW_INC_TXTFLD_HXX
 #define INCLUDED_SW_INC_TXTFLD_HXX
 
-#include <txatbase.hxx>
+#include "txatbase.hxx"
 #include <rtl/ustring.hxx>
-#include <osl/diagnose.h>
 
 #include <memory>
+#include <cassert>
 
 class SwPaM;
 class SwTextNode;
@@ -39,7 +39,7 @@ public:
         sal_Int32 const nStart,
         bool const bInClipboard );
 
-    virtual ~SwTextField();
+    virtual ~SwTextField() override;
 
     void CopyTextField( SwTextField *pDest ) const;
 
@@ -52,7 +52,7 @@ public:
     }
     SwTextNode& GetTextNode() const
     {
-        OSL_ENSURE( m_pTextNode, "SwTextField:: where is my TextNode?" );
+        assert(m_pTextNode);
         return *m_pTextNode;
     }
     void ChgTextNode( SwTextNode* pNew )
@@ -85,7 +85,7 @@ public:
         sal_Int32 const nEnd,
         bool const bInClipboard );
 
-    virtual ~SwTextInputField();
+    virtual ~SwTextInputField() override;
 
     void LockNotifyContentChange();
     void UnlockNotifyContentChange();

@@ -21,21 +21,27 @@ gb_PythonTest_EXECUTABLE_GDB := $(PYTHON_FOR_BUILD)
 gb_PythonTest_DEPS :=
 endif
 
-gb_PythonTest_COMMAND := $(gb_PythonTest_EXECUTABLE) -m unittest
+gb_PythonTest_COMMAND := $(gb_PythonTest_EXECUTABLE) -m org.libreoffice.unittest
 
 .PHONY : $(call gb_PythonTest_get_clean_target,%)
 $(call gb_PythonTest_get_clean_target,%) :
 	$(call gb_Helper_abbreviate_dirs,\
-		rm -f $@ $@.log)
+		rm -fr $(WORKDIR)/PythonTest/$*)
 
 ifneq ($(DISABLE_PYTHON),TRUE)
 
 .PHONY : $(call gb_PythonTest_get_target,%)
-$(call gb_PythonTest_get_target,%) :| $(gb_PythonTest_DEPS)
+$(call gb_PythonTest_get_target,%) :\
+        $(call gb_Library_get_target,pyuno) \
+        $(if $(filter-out WNT,$(OS)),$(call gb_Library_get_target,pyuno_wrapper)) \
+        | $(gb_PythonTest_DEPS)
+ifneq ($(gb_SUPPRESS_TESTS),)
+	@true
+else
 	$(call gb_Output_announce,$*,$(true),PYT,2)
 	$(call gb_Helper_abbreviate_dirs,\
 		rm -rf $(dir $(call gb_PythonTest_get_target,$*)) && \
-		mkdir -p $(dir $(call gb_PythonTest_get_target,$*)) && \
+		mkdir -p $(dir $(call gb_PythonTest_get_target,$*))user/user/autotext && \
 		$(if $(gb_CppunitTest__interactive),, \
 			$(if $(value gb_CppunitTest_postprocess), \
 				rm -fr $@.core && mkdir $@.core && cd $@.core &&)) \
@@ -49,18 +55,17 @@ $(call gb_PythonTest_get_target,%) :| $(gb_PythonTest_DEPS)
 		UserInstallation=$(call gb_Helper_make_url,$(dir $(call gb_PythonTest_get_target,$*))user) \
 		TestUserDir="$(call gb_Helper_make_url,$(dir $(call gb_PythonTest_get_target,$*)))" \
 		PYTHONDONTWRITEBYTECODE=1 \
-		$(if $(filter-out MACOSX WNT,$(OS_FOR_BUILD)),$(if $(ENABLE_HEADLESS),, \
-			SAL_USE_VCLPLUGIN=svp \
-		)) \
-		$(gb_CppunitTest_GDBTRACE) $(gb_CppunitTest_VALGRINDTOOL) \
+		$(gb_TEST_ENV_VARS) \
+		$(gb_CppunitTest_GDBTRACE) $(gb_CppunitTest_VALGRINDTOOL) $(gb_CppunitTest_RR) \
 			$(gb_PythonTest_COMMAND) \
-			$(MODULES) \
+			$(if $(PYTHON_TEST_NAME),$(PYTHON_TEST_NAME),$(MODULES)) \
 		$(if $(gb_CppunitTest__interactive),, \
 			> $@.log 2>&1 \
 			|| ($(if $(value gb_CppunitTest_postprocess), \
 					RET=$$?; \
 					$(call gb_CppunitTest_postprocess,$(gb_PythonTest_EXECUTABLE_GDB),$@.core,$$RET) >> $@.log 2>&1;) \
 				cat $@.log; $(gb_PythonTest_UNITTESTFAILED) Python $*))))
+endif
 
 # always use udkapi and URE services
 define gb_PythonTest_PythonTest
@@ -99,7 +104,9 @@ else # DISABLE_PYTHON
 
 .PHONY : $(call gb_PythonTest_get_target,$(1))
 $(call gb_PythonTest_get_target,%) :
+ifeq ($(gb_SUPPRESS_TESTS),)
 	$(call gb_Output_announce,$* (skipped - no PythonTest),$(true),PYT,2)
+endif
 	@true
 
 define gb_PythonTest_PythonTest

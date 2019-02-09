@@ -34,7 +34,6 @@
  *************************************************************************/
 
 #include <stdio.h>
-#include <osl/diagnose.h>
 #include "SStatement.hxx"
 #include "SConnection.hxx"
 #include "SResultSet.hxx"
@@ -96,7 +95,7 @@ void OStatement_BASE2::disposing()
 
 void SAL_CALL OStatement_BASE2::release() throw()
 {
-    relase_ChildImpl();
+    release_ChildImpl();
 }
 
 Any SAL_CALL OStatement_Base::queryInterface( const Type & rType ) throw(RuntimeException)
@@ -196,7 +195,7 @@ void SAL_CALL OStatement::addBatch( const ::rtl::OUString& sql ) throw(SQLExcept
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
 
 
-    m_aBatchList.push_back(sql);
+    m_aBatchVector.push_back(sql);
 }
 
 Sequence< sal_Int32 > SAL_CALL OStatement::executeBatch(  ) throw(SQLException, RuntimeException)

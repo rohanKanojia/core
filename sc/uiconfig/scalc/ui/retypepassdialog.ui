@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<interface domain="sc">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="RetypePass">
     <property name="can_focus">False</property>
     <property name="hexpand">True</property>
     <property name="vexpand">True</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Re-type Password</property>
+    <property name="title" translatable="yes" context="retypepassdialog|RetypePass">Re-type Password</property>
     <property name="resizable">False</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
@@ -24,7 +24,6 @@
             <child>
               <object class="GtkButton" id="ok">
                 <property name="label">gtk-ok</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="can_default">True</property>
@@ -41,7 +40,6 @@
             <child>
               <object class="GtkButton" id="cancel">
                 <property name="label">gtk-cancel</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -56,7 +54,6 @@
             <child>
               <object class="GtkButton" id="help">
                 <property name="label">gtk-help</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -90,7 +87,7 @@
                 <property name="can_focus">False</property>
                 <property name="halign">start</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">The document you are about to export has one or more protected items with password that cannot be exported. Please re-type your password to be able to export your document.</property>
+                <property name="label" translatable="yes" context="retypepassdialog|descLabel">The document you are about to export has one or more protected items with password that cannot be exported. Please re-type your password to be able to export your document.</property>
                 <property name="wrap">True</property>
                 <property name="max_width_chars">60</property>
               </object>
@@ -121,7 +118,7 @@
                           <object class="GtkLabel" id="docStatusLabel">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">Status unknown</property>
+                            <property name="label" translatable="yes" context="retypepassdialog|docStatusLabel">Status unknown</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -131,8 +128,7 @@
                         </child>
                         <child>
                           <object class="GtkButton" id="retypeDocButton">
-                            <property name="label" translatable="yes">_Re-type</property>
-                            <property name="use_action_appearance">False</property>
+                            <property name="label" translatable="yes" context="retypepassdialog|retypeDocButton">_Re-type</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
@@ -152,7 +148,7 @@
                   <object class="GtkLabel" id="label2">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Document protection</property>
+                    <property name="label" translatable="yes" context="retypepassdialog|label2">Document protection</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -214,7 +210,7 @@
                   <object class="GtkLabel" id="label3">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Sheet protection</property>
+                    <property name="label" translatable="yes" context="retypepassdialog|label3">Sheet protection</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -237,9 +233,9 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">cancel</action-widget>
-      <action-widget response="0">help</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
   </object>
 </interface>

@@ -26,6 +26,7 @@
 #include <tools/urlobj.hxx>
 
 #include <cstdio>
+#include <memory>
 #include <vector>
 
 class SvStream;
@@ -41,21 +42,18 @@ private:
     INetURLObject           aSdvURL;
     INetURLObject           aStrURL;
     sal_uInt32              nId;
-    bool                    bReadOnly;
+    bool const              bReadOnly;
     bool                    bModified;
     bool                    bThemeNameFromResource;
 
-                            GalleryThemeEntry();
     static INetURLObject    ImplGetURLIgnoreCase( const INetURLObject& rURL );
 
 public:
-
                             GalleryThemeEntry( bool bCreateUniqueURL,
                                                const INetURLObject& rBaseURL,
                                                const OUString& rName,
                                                bool bReadOnly, bool bNewFile,
                                                sal_uInt32 nId, bool bThemeNameFromResource );
-                            ~GalleryThemeEntry() {};
 
     const OUString&         GetThemeName() const { return aName; }
 
@@ -81,8 +79,6 @@ public:
     void                    SetId( sal_uInt32 nNewId, bool bResetThemeName );
 };
 
-typedef ::std::vector< GalleryThemeEntry* > GalleryThemeList;
-
 class SfxListener;
 class GalleryTheme;
 class GalleryThemeCacheEntry;
@@ -90,15 +86,11 @@ class GalleryThemeCacheEntry;
 
 class SVX_DLLPUBLIC Gallery : public SfxBroadcaster
 {
-    // only for gengal utility!
-    friend Gallery* createGallery( const OUString& );
-    friend void     disposeGallery( Gallery* );
-
     typedef std::vector<GalleryThemeCacheEntry*> GalleryCacheThemeList;
 
 private:
 
-    GalleryThemeList            aThemeList;
+    std::vector< std::unique_ptr<GalleryThemeEntry> > aThemeList;
     GalleryCacheThemeList       aThemeCache;
     INetURLObject               aRelURL;
     INetURLObject               aUserURL;
@@ -110,22 +102,25 @@ private:
     GalleryThemeEntry*          ImplGetThemeEntry( const OUString& rThemeName );
 
     SAL_DLLPRIVATE GalleryTheme* ImplGetCachedTheme( const GalleryThemeEntry* pThemeEntry );
-    SAL_DLLPRIVATE void         ImplDeleteCachedTheme( GalleryTheme* pTheme );
+    SAL_DLLPRIVATE void         ImplDeleteCachedTheme( GalleryTheme const * pTheme );
 
-                                Gallery( const OUString& rMultiPath );
-                                virtual ~Gallery();
+    Gallery&                    operator=( Gallery const & ) = delete; // MSVC2015 workaround
+                                Gallery( Gallery const & ) = delete; // MSVC2015 workaround
 
 public:
+                                // only for gengal utility!
+                                Gallery( const OUString& rMultiPath );
+                                virtual ~Gallery() override;
 
     static Gallery*             GetGalleryInstance();
 
     SAL_DLLPRIVATE size_t       GetThemeCount() const { return aThemeList.size(); }
     SAL_DLLPRIVATE const GalleryThemeEntry* GetThemeInfo( size_t nPos )
-                                { return nPos < aThemeList.size() ? aThemeList[ nPos ] : nullptr; }
+                                { return nPos < aThemeList.size() ? aThemeList[ nPos ].get() : nullptr; }
     SAL_DLLPRIVATE const GalleryThemeEntry* GetThemeInfo( const OUString& rThemeName ) { return ImplGetThemeEntry( rThemeName ); }
 
     bool                        HasTheme( const OUString& rThemeName );
-    SAL_DLLPRIVATE OUString     GetThemeName( sal_uIntPtr nThemeId ) const;
+    SAL_DLLPRIVATE OUString     GetThemeName( sal_uInt32 nThemeId ) const;
 
     bool                        CreateTheme( const OUString& rThemeName );
     SAL_DLLPRIVATE void         RenameTheme( const OUString& rOldName, const OUString& rNewName );

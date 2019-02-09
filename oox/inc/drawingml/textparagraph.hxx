@@ -20,6 +20,7 @@
 #ifndef INCLUDED_OOX_DRAWINGML_TEXTPARAGRAPH_HXX
 #define INCLUDED_OOX_DRAWINGML_TEXTPARAGRAPH_HXX
 
+#include <memory>
 #include <com/sun/star/text/XTextCursor.hpp>
 #include <com/sun/star/text/XText.hpp>
 
@@ -28,6 +29,8 @@
 #include <drawingml/textliststyle.hxx>
 #include <drawingml/textparagraphproperties.hxx>
 
+// The height the bullet is relative to is different in OOXML
+#define OOX_BULLET_LIST_SCALE_FACTOR 0.7f
 
 namespace oox { namespace formulaimport {
     class XmlStreamBuilder;
@@ -53,14 +56,21 @@ public:
     TextCharacterProperties&         getEndProperties() { return maEndProperties; }
     const TextCharacterProperties&   getEndProperties() const { return maEndProperties; }
 
+    TextCharacterProperties          getCharacterStyle(
+        const TextCharacterProperties& rTextStyleProperties,
+        const TextListStyle& rTextListStyle) const;
+
+    TextParagraphPropertiesPtr      getParagraphStyle(
+        const TextListStyle& rTextListStyle) const;
+
     void                        insertAt(
                                     const ::oox::core::XmlFilterBase& rFilterBase,
                                     const css::uno::Reference < css::text::XText > & xText,
                                     const css::uno::Reference < css::text::XTextCursor > &xAt,
                                     const TextCharacterProperties& rTextStyleProperties,
                                     const TextListStyle& rTextListStyle,
-                                    bool bFirst = false,
-                                    float nDefaultCharHeight = 0) const;
+                                    bool bFirst,
+                                    float nDefaultCharHeight) const;
 
     bool HasMathXml() const
     {

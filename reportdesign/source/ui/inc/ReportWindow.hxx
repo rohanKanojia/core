@@ -22,10 +22,12 @@
 #include <com/sun/star/report/XSection.hpp>
 #include "ReportDefines.hxx"
 #include "StartMarker.hxx"
+#include <o3tl/deleter.hxx>
 #include <svtools/ruler.hxx>
 #include <svx/svdedtv.hxx>
 #include <sfx2/zoomitem.hxx>
 
+#include <memory>
 #include <vector>
 #include <comphelper/propmultiplex.hxx>
 
@@ -48,35 +50,34 @@ namespace rptui
         VclPtr<ODesignView>            m_pView;
         VclPtr<OScrollWindowHelper>    m_pParent;
         VclPtr<OViewsWindow>           m_aViewsWindow;
-        ::rtl::Reference< comphelper::OPropertyChangeMultiplexer>   m_pReportListener;
-        ::std::unique_ptr<DlgEdFactory>
-                                m_pObjFac;
+        rtl::Reference< comphelper::OPropertyChangeMultiplexer>   m_pReportListener;
+        std::unique_ptr<DlgEdFactory, o3tl::default_delete<DlgEdFactory>>  m_pObjFac;
 
         void ImplInitSettings();
 
         sal_Int32 GetTotalHeight() const;
         sal_Int32 impl_getRealPixelWidth() const;
 
-        OReportWindow(OReportWindow&) = delete;
-        void operator =(OReportWindow&) = delete;
+        OReportWindow(OReportWindow const &) = delete;
+        void operator =(OReportWindow const &) = delete;
     protected:
         virtual void DataChanged( const DataChangedEvent& rDCEvt ) override;
         // OPropertyChangeListener
-        virtual void    _propertyChanged(const css::beans::PropertyChangeEvent& _rEvent) throw( css::uno::RuntimeException) override;
+        virtual void    _propertyChanged(const css::beans::PropertyChangeEvent& _rEvent) override;
     public:
         OReportWindow(OScrollWindowHelper* _pParent,ODesignView* _pView);
-        virtual ~OReportWindow();
+        virtual ~OReportWindow() override;
         virtual void dispose() override;
 
         // Window overrides
         virtual void Resize() override;
 
-        inline ODesignView*         getReportView() const { return m_pView; }
-        inline OScrollWindowHelper* getScrollWindow() const { return m_pParent; }
+        ODesignView*         getReportView() const { return m_pView; }
+        OScrollWindowHelper* getScrollWindow() const { return m_pParent; }
 
         void            SetMode( DlgEdMode m_eMode );
-        void            SetInsertObj( sal_uInt16 eObj,const OUString& _sShapeType = OUString());
-        OUString        GetInsertObjString() const;
+        void            SetInsertObj( sal_uInt16 eObj, const OUString& _sShapeType);
+        OUString const & GetInsertObjString() const;
         void            setGridSnap(bool bOn);
         void            setDragStripes(bool bOn);
 
@@ -121,7 +122,7 @@ namespace rptui
         */
         void            addSection(const css::uno::Reference< css::report::XSection >& _xSection
                                     ,const OUString& _sColorEntry
-                                    ,sal_uInt16 _nPosition = USHRT_MAX);
+                                    ,sal_uInt16 _nPosition);
 
         sal_uInt16          getSectionCount() const;
 
@@ -136,7 +137,7 @@ namespace rptui
         */
         void            showRuler(bool _bShow);
 
-        inline sal_Int32 getRulerHeight() const { return m_aHRuler->GetSizePixel().Height(); }
+        sal_Int32 getRulerHeight() const { return m_aHRuler->GetSizePixel().Height(); }
 
         /** returns the total width of the first section
         */
@@ -154,10 +155,8 @@ namespace rptui
         void            notifySizeChanged();
 
         /** unmark all objects on the views without the given one.
-        *
-        * @param _pSectionView The view where the objects should not be unmarked.
         */
-        void            unmarkAllObjects(OSectionView* _pSectionView);
+        void            unmarkAllObjects();
 
         /** triggers the property browser with the report component or section
             @param  _xReportComponent
@@ -174,7 +173,7 @@ namespace rptui
             @param  _pSectionView   the section where to set the marked flag
             @param  _bMark  the marked flag
         */
-        void            setMarked(OSectionView* _pSectionView, bool _bMark);
+        void            setMarked(OSectionView const * _pSectionView, bool _bMark);
         void            setMarked(const css::uno::Reference< css::report::XSection>& _xSection, bool _bMark);
         void            setMarked(const css::uno::Sequence< css::uno::Reference< css::report::XReportComponent> >& _xShape, bool _bMark);
 
@@ -198,7 +197,7 @@ namespace rptui
 
         /** align all marked objects in all sections
         */
-        void alignMarkedObjects(sal_Int32 _nControlModification, bool _bAlignAtSection);
+        void alignMarkedObjects(ControlModification _nControlModification, bool _bAlignAtSection);
 
         sal_uInt32 getMarkedObjectCount() const;
 

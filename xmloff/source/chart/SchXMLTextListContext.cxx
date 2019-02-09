@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "SchXMLImport.hxx"
+#include <SchXMLImport.hxx>
 #include "SchXMLTextListContext.hxx"
 #include "SchXMLParagraphContext.hxx"
 
@@ -34,11 +34,11 @@ class SchXMLListItemContext : public SvXMLImportContext
 {
 public:
     SchXMLListItemContext( SvXMLImport& rImport, const OUString& rLocalName, OUString& rText );
-    virtual ~SchXMLListItemContext();
+
     virtual void StartElement( const Reference< xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext* CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
@@ -56,9 +56,6 @@ SchXMLListItemContext::SchXMLListItemContext(
 {
 }
 
-SchXMLListItemContext::~SchXMLListItemContext()
-{}
-
 void SchXMLListItemContext::StartElement( const Reference< xml::sax::XAttributeList >& /*xAttrList*/ )
 {
 }
@@ -67,7 +64,7 @@ void SchXMLListItemContext::EndElement()
 {
 }
 
-SvXMLImportContext* SchXMLListItemContext::CreateChildContext(
+SvXMLImportContextRef SchXMLListItemContext::CreateChildContext(
     sal_uInt16 nPrefix, const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList >& )
 {
@@ -106,14 +103,14 @@ void SchXMLTextListContext::EndElement()
         m_rTextList[nN]=m_aTextVector[nN];
 }
 
-SvXMLImportContext* SchXMLTextListContext::CreateChildContext(
+SvXMLImportContextRef SchXMLTextListContext::CreateChildContext(
     sal_uInt16 nPrefix, const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList >& )
 {
     SvXMLImportContext* pContext = nullptr;
     if( nPrefix == XML_NAMESPACE_TEXT && IsXMLToken( rLocalName, XML_LIST_ITEM ) )
     {
-        m_aTextVector.push_back( OUString() );
+        m_aTextVector.emplace_back( );
         pContext = new SchXMLListItemContext( GetImport(), rLocalName, m_aTextVector.back() );
     }
     else

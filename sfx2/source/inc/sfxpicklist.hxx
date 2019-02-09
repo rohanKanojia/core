@@ -20,53 +20,20 @@
 #ifndef INCLUDED_SFX2_SOURCE_INC_SFXPICKLIST_HXX
 #define INCLUDED_SFX2_SOURCE_INC_SFXPICKLIST_HXX
 
-#include <osl/mutex.hxx>
-#include <vcl/menu.hxx>
-#include <svl/lstner.hxx>
-#include <com/sun/star/util/XStringWidth.hpp>
-
-#include <vector>
+#include <memory>
 
 #define PICKLIST_MAXSIZE  100
 
-class SfxPickList : public SfxListener
+class SfxApplication;
+class SfxPickListImpl;
+
+class SfxPickList
 {
-    struct PickListEntry
-    {
-        PickListEntry( const OUString& _aName, const OUString& _aFilter ) :
-            aName( _aName ), aFilter( _aFilter ) {}
-
-        OUString aName;
-        OUString aFilter;
-    };
-
-    std::vector< PickListEntry* >   m_aPicklistVector;
-    sal_uInt32                      m_nAllowedMenuSize;
-    css::uno::Reference< css::util::XStringWidth > m_xStringLength;
-
-                            SfxPickList( sal_uInt32 nMenuSize );
-                            virtual ~SfxPickList();
-
-    void                    CreatePicklistMenuTitle( Menu* pMenu, sal_uInt16 nItemId, const OUString& aURL, sal_uInt32 nNo );
-    PickListEntry*          GetPickListEntry( sal_uInt32 nIndex );
-    void                    CreatePickListEntries();
-    void                    RemovePickListEntries();
-    /**
-     * Adds the given document to the pick list (recent documents) if it satisfies
-       certain requirements, e.g. being writable. Check implementation for requirement
-       details.
-     */
-    static void             AddDocumentToPickList( SfxObjectShell* pDocShell );
-
-    public:
-        static SfxPickList& Get();
-        static void ensure() { Get(); }
-
-        void                CreateMenuEntries( Menu* pMenu );
-        static void         ExecuteMenuEntry( sal_uInt16 nId );
-        static void         ExecuteEntry( sal_uInt32 nIndex );
-
-        virtual void        Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
+private:
+    std::unique_ptr<SfxPickListImpl> mxImpl;
+public:
+    SfxPickList(SfxApplication& rApp);
+    ~SfxPickList();
 };
 
 #endif // INCLUDED_SFX2_SOURCE_INC_SFXPICKLIST_HXX

@@ -38,10 +38,15 @@ $(eval $(call gb_Library_use_libraries,file,\
 	dbtools \
 	utl \
 	comphelper \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,file,\
+	connectivity/source/drivers/component/CColumns \
+	connectivity/source/drivers/component/CDatabaseMetaData \
+	connectivity/source/drivers/component/CPreparedStatement \
+	connectivity/source/drivers/component/CResultSet \
+	connectivity/source/drivers/component/CStatement \
+	connectivity/source/drivers/component/CTable \
 	connectivity/source/drivers/file/FCatalog \
 	connectivity/source/drivers/file/FColumns \
 	connectivity/source/drivers/file/FConnection \

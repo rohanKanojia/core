@@ -61,8 +61,9 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPDLVLIST_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPDLVLIST_HXX
 
-#include "lwpatomholder.hxx"
-#include "lwpobj.hxx"
+#include <lwpatomholder.hxx>
+#include <lwpobj.hxx>
+#include <memory>
 
 /**
  * @brief   Double Linked Virtual List
@@ -70,9 +71,9 @@
 class LwpDLVList : public LwpObject
 {
 public:
-    LwpDLVList(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
+    LwpDLVList(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
 protected:
-    virtual ~LwpDLVList(){}
+    virtual ~LwpDLVList() override {}
 
     LwpObjectID m_ListPrevious;
     LwpObjectID m_ListNext;
@@ -89,9 +90,9 @@ public:
 class LwpDLNFVList : public LwpDLVList
 {
 public:
-    LwpDLNFVList(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
+    LwpDLNFVList(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
 protected:
-    virtual ~LwpDLNFVList(){}
+    virtual ~LwpDLNFVList() override {}
 
     LwpObjectID m_ChildHead;
     LwpObjectID m_ChildTail;
@@ -115,16 +116,16 @@ class LwpPropList;
 class LwpDLNFPVList : public LwpDLNFVList
 {
 public:
-    LwpDLNFPVList(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpDLNFPVList();
+    LwpDLNFPVList(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpDLNFPVList() override;
 protected:
     bool m_bHasProperties;
-    LwpPropList* m_pPropList;
+    std::unique_ptr<LwpPropList> m_pPropList;
 protected:
     void Read() override;
     void ReadPropertyList(LwpObjectStream* pObjStrm);
 public:
-    LwpPropList* GetPropList() { return m_pPropList; }
+    LwpPropList* GetPropList() { return m_pPropList.get(); }
 };
 
 /**
@@ -150,7 +151,6 @@ class LwpDLVListHead
 {
 public:
     LwpDLVListHead(){}
-    ~LwpDLVListHead(){}
     void Read(LwpObjectStream* pObjStrm);
     LwpObjectID& GetFirst() { return m_objHead; }
 protected:

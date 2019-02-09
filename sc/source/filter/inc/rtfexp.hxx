@@ -20,11 +20,13 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_RTFEXP_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_RTFEXP_HXX
 
+#include <memory>
 #include "expbase.hxx"
+#include <tools/solar.h>
 
 class ScRTFExport : public ScExportBase
 {
-    sal_uLong*              pCellX;     // cumulative range in a table
+    std::unique_ptr<sal_uLong[]>  pCellX;     // cumulative range in a table
 
     void                WriteTab( SCTAB nTab );
     void                WriteRow( SCTAB nTab, SCROW nRow );
@@ -33,7 +35,7 @@ class ScRTFExport : public ScExportBase
 public:
 
                         ScRTFExport( SvStream&, ScDocument*, const ScRange& );
-    virtual             ~ScRTFExport();
+    virtual             ~ScRTFExport() override;
 
     void                Write();
 };

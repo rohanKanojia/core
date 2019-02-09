@@ -25,8 +25,7 @@
 #include <com/sun/star/sdbc/KeyRule.hpp>
 #include <connectivity/dbtools.hxx>
 #include <comphelper/types.hxx>
-#include <comphelper/property.hxx>
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 
 namespace connectivity
 {
@@ -43,7 +42,7 @@ using namespace ::com::sun::star::lang;
 
 OKeysHelper::OKeysHelper(   OTableHelper* _pTable,
         ::osl::Mutex& _rMutex,
-        const TStringVector& _rVector
+        const ::std::vector< OUString>& _rVector
         ) : OKeys_BASE(*_pTable,true,_rMutex,_rVector,true)
     ,m_pTable(_pTable)
 {
@@ -51,7 +50,7 @@ OKeysHelper::OKeysHelper(   OTableHelper* _pTable,
 
 sdbcx::ObjectType OKeysHelper::createObject(const OUString& _rName)
 {
-    sdbcx::ObjectType xRet = nullptr;
+    sdbcx::ObjectType xRet;
 
     if(!_rName.isEmpty())
     {
@@ -68,7 +67,7 @@ sdbcx::ObjectType OKeysHelper::createObject(const OUString& _rName)
     return xRet;
 }
 
-void OKeysHelper::impl_refresh() throw(RuntimeException)
+void OKeysHelper::impl_refresh()
 {
     m_pTable->refreshKeys();
 }
@@ -80,7 +79,7 @@ Reference< XPropertySet > OKeysHelper::createDescriptor()
 
 /** returns the keyrule string for the primary key
 */
-OUString getKeyRuleString(bool _bUpdate,sal_Int32 _nKeyRule)
+static OUString getKeyRuleString(bool _bUpdate,sal_Int32 _nKeyRule)
 {
     const char* pKeyRule = nullptr;
     switch ( _nKeyRule )
@@ -159,7 +158,7 @@ sdbcx::ObjectType OKeysHelper::appendObject( const OUString& _rForName, const Re
         aSql.append("ALTER TABLE ");
         OUString aQuote  = m_pTable->getConnection()->getMetaData()->getIdentifierQuoteString(  );
 
-        aSql.append(composeTableName( m_pTable->getConnection()->getMetaData(), m_pTable, ::dbtools::EComposeRule::InTableDefinitions, false, false, true ));
+        aSql.append(composeTableName( m_pTable->getConnection()->getMetaData(), m_pTable, ::dbtools::EComposeRule::InTableDefinitions, true ));
         aSql.append(" ADD ");
 
         if ( nKeyType == KeyType::PRIMARY )
@@ -248,7 +247,7 @@ sdbcx::ObjectType OKeysHelper::appendObject( const OUString& _rForName, const Re
     {
     }
 
-    m_pTable->addKey(sNewName,sdbcx::TKeyProperties(new sdbcx::KeyProperties(sReferencedName,nKeyType,nUpdateRule,nDeleteRule)));
+    m_pTable->addKey(sNewName,std::make_shared<sdbcx::KeyProperties>(sReferencedName,nKeyType,nUpdateRule,nDeleteRule));
 
     return createObject( sNewName );
 }
@@ -274,7 +273,7 @@ void OKeysHelper::dropObject(sal_Int32 _nPos, const OUString& _sElementName)
             OUStringBuffer aSql;
             aSql.append("ALTER TABLE ");
 
-            aSql.append( composeTableName( m_pTable->getConnection()->getMetaData(), m_pTable,::dbtools::EComposeRule::InTableDefinitions, false, false, true ));
+            aSql.append( composeTableName( m_pTable->getConnection()->getMetaData(), m_pTable,::dbtools::EComposeRule::InTableDefinitions, true ));
 
             sal_Int32 nKeyType = KeyType::PRIMARY;
             if ( xKey.is() )

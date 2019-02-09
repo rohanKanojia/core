@@ -17,15 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "NumberFormatterWrapper.hxx"
-#include "macros.hxx"
-#include <comphelper/processfactory.hxx>
+#include <NumberFormatterWrapper.hxx>
 #include <svl/numuno.hxx>
-#include <svl/zformat.hxx>
+#include <svl/zforlist.hxx>
 #include <tools/color.hxx>
-#include <i18nlangtag/mslangid.hxx>
 #include <com/sun/star/util/Date.hpp>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 namespace chart
 {
@@ -43,7 +41,7 @@ FixedNumberFormatter::~FixedNumberFormatter()
 {
 }
 
-OUString FixedNumberFormatter::getFormattedString( double fValue, sal_Int32& rLabelColor, bool& rbColorChanged ) const
+OUString FixedNumberFormatter::getFormattedString( double fValue, Color& rLabelColor, bool& rbColorChanged ) const
 {
     return m_aNumberFormatterWrapper.getFormattedString(
         m_nNumberFormatKey, fValue, rLabelColor, rbColorChanged );
@@ -70,8 +68,7 @@ NumberFormatterWrapper::~NumberFormatterWrapper()
 
 Date NumberFormatterWrapper::getNullDate() const
 {
-    sal_uInt16 nYear = 1899,nDay = 30,nMonth = 12;
-    Date aRet(nDay,nMonth,nYear);
+    Date aRet(30,12,1899);
 
     util::Date aUtilDate;
     if( m_aNullDate.hasValue() && (m_aNullDate >>= aUtilDate) )
@@ -80,15 +77,13 @@ Date NumberFormatterWrapper::getNullDate() const
     }
     else if( m_pNumberFormatter )
     {
-        Date* pDate = m_pNumberFormatter->GetNullDate();
-        if( pDate )
-            aRet = *pDate;
+        aRet = m_pNumberFormatter->GetNullDate();
     }
     return aRet;
 }
 
 OUString NumberFormatterWrapper::getFormattedString( sal_Int32 nNumberFormatKey, double fValue,
-                                                     sal_Int32& rLabelColor, bool& rbColorChanged ) const
+                                                     Color& rLabelColor, bool& rbColorChanged ) const
 {
     OUString aText;
     Color* pTextColor = nullptr;
@@ -98,16 +93,14 @@ OUString NumberFormatterWrapper::getFormattedString( sal_Int32 nNumberFormatKey,
         return aText;
     }
     // i99104 handle null date correctly
-    sal_uInt16 nYear = 1899,nDay = 30,nMonth = 12;
+    sal_Int16 nYear = 1899;
+    sal_uInt16 nDay = 30,nMonth = 12;
     if ( m_aNullDate.hasValue() )
     {
-        Date* pDate = m_pNumberFormatter->GetNullDate();
-        if ( pDate )
-        {
-            nYear = pDate->GetYear();
-            nMonth = pDate->GetMonth();
-            nDay = pDate->GetDay();
-        } // if ( pDate )
+        const Date& rDate = m_pNumberFormatter->GetNullDate();
+        nYear = rDate.GetYear();
+        nMonth = rDate.GetMonth();
+        nDay = rDate.GetDay();
         util::Date aNewNullDate;
         m_aNullDate >>= aNewNullDate;
         m_pNumberFormatter->ChangeNullDate(aNewNullDate.Day,aNewNullDate.Month,aNewNullDate.Year);
@@ -121,7 +114,7 @@ OUString NumberFormatterWrapper::getFormattedString( sal_Int32 nNumberFormatKey,
     if(pTextColor)
     {
         rbColorChanged = true;
-        rLabelColor = pTextColor->GetColor();
+        rLabelColor = *pTextColor;
     }
     else
         rbColorChanged = false;

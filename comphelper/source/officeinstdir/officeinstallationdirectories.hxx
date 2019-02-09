@@ -26,6 +26,8 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/util/XOfficeInstallationDirectories.hpp>
+#include <memory>
+#include <boost/optional.hpp>
 
 namespace comphelper {
 
@@ -45,41 +47,32 @@ class OfficeInstallationDirectories : public mutex_holder, public UnoImplBase
 public:
     explicit OfficeInstallationDirectories(
         const css::uno::Reference< css::uno::XComponentContext > & xCtx );
-    virtual ~OfficeInstallationDirectories();
+    virtual ~OfficeInstallationDirectories() override;
 
     // XOfficeInstallationDirectories
     virtual OUString SAL_CALL
-    getOfficeInstallationDirectoryURL()
-        throw (css::uno::RuntimeException, std::exception) override;
+    getOfficeInstallationDirectoryURL() override;
     virtual OUString SAL_CALL
-    getOfficeUserDataDirectoryURL()
-        throw (css::uno::RuntimeException, std::exception) override;
+    getOfficeUserDataDirectoryURL() override;
     virtual OUString SAL_CALL
-    makeRelocatableURL( const OUString& URL )
-        throw (css::uno::RuntimeException, std::exception) override;
+    makeRelocatableURL( const OUString& URL ) override;
     virtual OUString SAL_CALL
-    makeAbsoluteURL( const OUString& URL )
-        throw (css::uno::RuntimeException, std::exception) override;
+    makeAbsoluteURL( const OUString& URL ) override;
 
     // XServiceInfo
     virtual OUString SAL_CALL
-    getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override;
+    getImplementationName() override;
     virtual sal_Bool SAL_CALL
-    supportsService( const OUString& ServiceName )
-        throw (css::uno::RuntimeException, std::exception) override;
+    supportsService( const OUString& ServiceName ) override;
     virtual css::uno::Sequence< OUString > SAL_CALL
-    getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override;
+    getSupportedServiceNames() override;
 
 private:
     void initDirs();
 
-    OUString                                   m_aOfficeBrandDirMacro;
-    OUString                                   m_aUserDirMacro;
     css::uno::Reference< css::uno::XComponentContext >    m_xCtx;
-    OUString *                                 m_pOfficeBrandDir;
-    OUString *                                 m_pUserDir;
+    boost::optional<OUString>                  m_xOfficeBrandDir;
+    boost::optional<OUString>                  m_xUserDir;
 };
 
 } // namespace comphelper

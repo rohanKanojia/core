@@ -22,7 +22,6 @@
 #include <vcl/button.hxx>
 #include <vcl/field.hxx>
 #include <vcl/fixed.hxx>
-#include <vcl/group.hxx>
 #include <sfx2/tabdlg.hxx>
 #include <svx/txencbox.hxx>
 
@@ -47,14 +46,14 @@ class OfaHtmlTabPage : public SfxTabPage
     VclPtr<CheckBox>        aSaveGrfLocalCB;
     VclPtr<SvxTextEncodingBox> aCharSetLB;
 
-    DECL_LINK_TYPED(CheckBoxHdl_Impl, Button*, void);
+    DECL_LINK(CheckBoxHdl_Impl, Button*, void);
 
 public:
-    virtual ~OfaHtmlTabPage();
+    virtual ~OfaHtmlTabPage() override;
     virtual void dispose() override;
 
     OfaHtmlTabPage(vcl::Window* pParent, const SfxItemSet& rSet);
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent,
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent,
                                        const SfxItemSet* rAttrSet );
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;

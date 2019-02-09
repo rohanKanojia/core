@@ -26,6 +26,7 @@
 #include <rtl/uuid.h>
 #include <sal/log.hxx>
 #include <cppuhelper/compbase_ex.hxx>
+#include <cppuhelper/implbase_ex.hxx>
 
 #include <com/sun/star/uno/RuntimeException.hpp>
 
@@ -33,10 +34,6 @@ using namespace ::cppu;
 using namespace ::osl;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
-
-using rtl::OString;
-using rtl::OUString;
-using rtl::OUStringBuffer;
 
 namespace
 {
@@ -49,13 +46,13 @@ namespace cppu
 /** Shared mutex for implementation helper initialization.
     Not for public use.
 */
-::osl::Mutex & SAL_CALL getImplHelperInitMutex()
+static ::osl::Mutex & getImplHelperInitMutex()
 {
     return theImplHelperInitMutex::get();
 }
 
 
-static inline void checkInterface( Type const & rType )
+static void checkInterface( Type const & rType )
 {
     if (TypeClass_INTERFACE != rType.getTypeClass())
     {
@@ -65,17 +62,17 @@ static inline void checkInterface( Type const & rType )
     }
 }
 
-static inline bool isXInterface( rtl_uString * pStr )
+static bool isXInterface( rtl_uString * pStr )
 {
     return OUString::unacquired(&pStr) == "com.sun.star.uno.XInterface";
 }
 
-static inline void * makeInterface( sal_IntPtr nOffset, void * that )
+static void * makeInterface( sal_IntPtr nOffset, void * that )
 {
     return (static_cast<char *>(that) + nOffset);
 }
 
-static inline bool td_equals(
+static bool td_equals(
     typelib_TypeDescriptionReference const * pTDR1,
     typelib_TypeDescriptionReference const * pTDR2 )
 {
@@ -83,7 +80,7 @@ static inline bool td_equals(
             OUString::unacquired(&pTDR1->pTypeName) == OUString::unacquired(&pTDR2->pTypeName));
 }
 
-static inline type_entry * getTypeEntries( class_data * cd )
+static type_entry * getTypeEntries( class_data * cd )
 {
     type_entry * pEntries = cd->m_typeEntries;
     if (! cd->m_storedTypeRefs) // not inited?
@@ -107,13 +104,18 @@ static inline type_entry * getTypeEntries( class_data * cd )
                 // ref is statically held by getCppuType()
                 pEntry->m_type.typeRef = rType.getTypeLibType();
             }
-            cd->m_storedTypeRefs = sal_True;
+            OSL_DOUBLE_CHECKED_LOCKING_MEMORY_BARRIER();
+            cd->m_storedTypeRefs = true;
         }
+    }
+    else
+    {
+        OSL_DOUBLE_CHECKED_LOCKING_MEMORY_BARRIER();
     }
     return pEntries;
 }
 
-static inline void fillTypes( Type * types, class_data * cd )
+static void fillTypes( Type * types, class_data * cd )
 {
     type_entry * pEntries = getTypeEntries( cd );
     for ( sal_Int32 n = cd->m_nTypes; n--; )
@@ -164,8 +166,8 @@ bool recursivelyFindType(
 
 }
 
-static inline void * queryDeepNoXInterface(
-    typelib_TypeDescriptionReference * pDemandedTDR, class_data * cd, void * that )
+static void * queryDeepNoXInterface(
+    typelib_TypeDescriptionReference const * pDemandedTDR, class_data * cd, void * that )
 {
     type_entry * pEntries = getTypeEntries( cd );
     sal_Int32 nTypes = cd->m_nTypes;
@@ -249,10 +251,7 @@ Any SAL_CALL ImplHelper_queryNoXInterface(
     {
         return Any( &p, pTDR );
     }
-    else
-    {
-        return Any();
-    }
+    return Any();
 }
 
 css::uno::Sequence<sal_Int8> ImplHelper_getImplementationId(

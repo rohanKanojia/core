@@ -19,6 +19,7 @@
 
 #include <svl/listener.hxx>
 #include <svl/broadcast.hxx>
+#include <cassert>
 
 SvtListener::QueryBase::QueryBase( sal_uInt16 nId ) : mnId(nId) {}
 SvtListener::QueryBase::~QueryBase() {}
@@ -30,16 +31,15 @@ sal_uInt16 SvtListener::QueryBase::getId() const
 
 SvtListener::SvtListener() {}
 
-SvtListener::SvtListener( const SvtListener &r ) :
-    maBroadcasters(r.maBroadcasters) {}
+SvtListener::SvtListener( const SvtListener & )  {}
 
-SvtListener::~SvtListener()
+SvtListener::~SvtListener() COVERITY_NOEXCEPT_FALSE
 {
     // Unregister itself from all broadcasters it's listening to.
     EndListeningAll();
 }
 
-// registeres at a specific SvtBroadcaster
+// registers at a specific SvtBroadcaster
 
 bool SvtListener::StartListening( SvtBroadcaster& rBroadcaster )
 {
@@ -65,13 +65,20 @@ bool SvtListener::EndListening( SvtBroadcaster& rBroadcaster )
     return true;
 }
 
+// called from the SvtBroadcaster destructor, used to avoid calling
+// back into the broadcaster again
+void SvtListener::BroadcasterDying( SvtBroadcaster& rBroadcaster )
+{
+    BroadcastersType::iterator it = maBroadcasters.find(&rBroadcaster);
+    if (it != maBroadcasters.end())
+        maBroadcasters.erase(it);
+}
+
 void SvtListener::EndListeningAll()
 {
-    BroadcastersType::iterator it = maBroadcasters.begin();
-    BroadcastersType::const_iterator itEnd = maBroadcasters.end();
-    for (; it != itEnd; ++it)
+    for (SvtBroadcaster* p : maBroadcasters)
     {
-        SvtBroadcaster& rBC = **it;
+        SvtBroadcaster& rBC = *p;
         rBC.Remove(this);
     }
     maBroadcasters.clear();
@@ -80,13 +87,11 @@ void SvtListener::EndListeningAll()
 
 void SvtListener::CopyAllBroadcasters( const SvtListener& r )
 {
+    EndListeningAll();
     BroadcastersType aCopy(r.maBroadcasters);
     maBroadcasters.swap(aCopy);
-    BroadcastersType::iterator it = maBroadcasters.begin();
-    BroadcastersType::const_iterator itEnd = maBroadcasters.end();
-    for (; it != itEnd; ++it)
+    for (SvtBroadcaster* p : maBroadcasters)
     {
-        SvtBroadcaster* p = *it;
         p->Add(this);
     }
 }

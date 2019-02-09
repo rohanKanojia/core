@@ -24,7 +24,6 @@
 
 #include <rtl/instance.hxx>
 #include <rtl/crc.h>
-#include <osl/diagnose.h>
 #include <osl/getglobalmutex.hxx>
 #include <tools/solar.h>
 #include <tools/debug.hxx>
@@ -48,7 +47,6 @@ class INetURLHistory_Impl
         */
         sal_uInt32 m_nMagic;
         sal_uInt16 m_nNext;
-        sal_uInt16 m_nMBZ;
 
         /** Initialization.
         */
@@ -56,7 +54,6 @@ class INetURLHistory_Impl
         {
             m_nMagic = INETHIST_MAGIC_HEAD;
             m_nNext  = 0;
-            m_nMBZ   = 0;
         }
     };
 
@@ -66,7 +63,6 @@ class INetURLHistory_Impl
         */
         sal_uInt32 m_nHash;
         sal_uInt16 m_nLru;
-        sal_uInt16 m_nMBZ;
 
         /** Initialization.
         */
@@ -74,7 +70,6 @@ class INetURLHistory_Impl
         {
             m_nHash = 0;
             m_nLru  = nLru;
-            m_nMBZ  = 0;
         }
 
         /** Comparison.
@@ -119,7 +114,7 @@ class INetURLHistory_Impl
 
     static sal_uInt16 capacity()
     {
-        return (sal_uInt16)(INETHIST_SIZE_LIMIT);
+        return sal_uInt16(INETHIST_SIZE_LIMIT);
     }
 
     static sal_uInt32 crc32 (OUString const & rData)
@@ -154,23 +149,18 @@ class INetURLHistory_Impl
 
 public:
     INetURLHistory_Impl();
-    ~INetURLHistory_Impl();
     INetURLHistory_Impl(const INetURLHistory_Impl&) = delete;
     INetURLHistory_Impl& operator=(const INetURLHistory_Impl&) = delete;
 
     /** putUrl/queryUrl.
     */
     void putUrl   (const OUString &rUrl);
-    bool queryUrl (const OUString &rUrl);
+    bool queryUrl (const OUString &rUrl) const;
 };
 
 INetURLHistory_Impl::INetURLHistory_Impl()
 {
     initialize();
-}
-
-INetURLHistory_Impl::~INetURLHistory_Impl()
-{
 }
 
 void INetURLHistory_Impl::initialize()
@@ -252,7 +242,7 @@ void INetURLHistory_Impl::putUrl (const OUString &rUrl)
         sal_uInt16 nLRU = m_pList[m_aHead.m_nNext].m_nPrev;
 
         sal_uInt16 nSI = find (m_pList[nLRU].m_nHash);
-        if (!(nLRU == m_pHash[nSI].m_nLru))
+        if (nLRU != m_pHash[nSI].m_nLru)
         {
             // Update LRU chain.
             nLRU = m_pHash[nSI].m_nLru;
@@ -282,20 +272,12 @@ void INetURLHistory_Impl::putUrl (const OUString &rUrl)
     }
 }
 
-bool INetURLHistory_Impl::queryUrl (const OUString &rUrl)
+bool INetURLHistory_Impl::queryUrl (const OUString &rUrl) const
 {
     sal_uInt32 h = crc32 (rUrl);
     sal_uInt16 k = find (h);
-    if ((k < capacity()) && (m_pHash[k] == h))
-    {
-        // Cache hit.
-        return true;
-    }
-    else
-    {
-        // Cache miss.
-        return false;
-    }
+    // true if cache hit
+    return (k < capacity()) && (m_pHash[k] == h);
 }
 
 /*
@@ -333,8 +315,8 @@ void INetURLHistory::NormalizeUrl_Impl (INetURLObject &rUrl)
         case INetProtocol::File:
             if (!INetURLObject::IsCaseSensitive())
             {
-                OUString aPath (rUrl.GetURLPath(INetURLObject::NO_DECODE).toAsciiLowerCase());
-                rUrl.SetURLPath (aPath, INetURLObject::NOT_CANONIC);
+                OUString aPath (rUrl.GetURLPath(INetURLObject::DecodeMechanism::NONE).toAsciiLowerCase());
+                rUrl.SetURLPath (aPath, INetURLObject::EncodeMechanism::NotCanonical);
             }
             break;
 
@@ -365,22 +347,22 @@ void INetURLHistory::NormalizeUrl_Impl (INetURLObject &rUrl)
 void INetURLHistory::PutUrl_Impl (const INetURLObject &rUrl)
 {
     DBG_ASSERT (m_pImpl, "PutUrl_Impl(): no Implementation");
-    if (m_pImpl)
+    if (!m_pImpl)
+        return;
+
+    INetURLObject aHistUrl (rUrl);
+    NormalizeUrl_Impl (aHistUrl);
+
+    m_pImpl->putUrl (aHistUrl.GetMainURL(INetURLObject::DecodeMechanism::NONE));
+    Broadcast (INetURLHistoryHint (&rUrl));
+
+    if (aHistUrl.HasMark())
     {
-        INetURLObject aHistUrl (rUrl);
-        NormalizeUrl_Impl (aHistUrl);
+        aHistUrl.SetURL (aHistUrl.GetURLNoMark(INetURLObject::DecodeMechanism::NONE),
+                         INetURLObject::EncodeMechanism::NotCanonical);
 
-        m_pImpl->putUrl (aHistUrl.GetMainURL(INetURLObject::NO_DECODE));
-        Broadcast (INetURLHistoryHint (&rUrl));
-
-        if (aHistUrl.HasMark())
-        {
-            aHistUrl.SetURL (aHistUrl.GetURLNoMark(INetURLObject::NO_DECODE),
-                             INetURLObject::NOT_CANONIC);
-
-            m_pImpl->putUrl (aHistUrl.GetMainURL(INetURLObject::NO_DECODE));
-            Broadcast (INetURLHistoryHint (&aHistUrl));
-        }
+        m_pImpl->putUrl (aHistUrl.GetMainURL(INetURLObject::DecodeMechanism::NONE));
+        Broadcast (INetURLHistoryHint (&aHistUrl));
     }
 }
 
@@ -392,7 +374,7 @@ bool INetURLHistory::QueryUrl_Impl (const INetURLObject &rUrl)
         INetURLObject aHistUrl (rUrl);
         NormalizeUrl_Impl (aHistUrl);
 
-        return m_pImpl->queryUrl (aHistUrl.GetMainURL(INetURLObject::NO_DECODE));
+        return m_pImpl->queryUrl (aHistUrl.GetMainURL(INetURLObject::DecodeMechanism::NONE));
     }
     return false;
 }

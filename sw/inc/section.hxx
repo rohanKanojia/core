@@ -23,11 +23,11 @@
 #include <com/sun/star/uno/Sequence.h>
 
 #include <tools/ref.hxx>
-#include <svl/smplhint.hxx>
+#include <svl/hint.hxx>
 #include <sfx2/lnkbase.hxx>
 #include <sfx2/Metadatable.hxx>
 
-#include <frmfmt.hxx>
+#include "frmfmt.hxx"
 #include <vector>
 
 namespace com { namespace sun { namespace star {
@@ -90,13 +90,13 @@ public:
     SwSectionData & operator=(SwSectionData const&);
     bool operator==(SwSectionData const&) const;
 
-    OUString GetSectionName() const         { return m_sSectionName; }
+    const OUString& GetSectionName() const         { return m_sSectionName; }
     void SetSectionName(OUString const& rName){ m_sSectionName = rName; }
     SectionType GetType() const             { return m_eType; }
     void SetType(SectionType const eNew)    { m_eType = eNew; }
 
     bool IsHidden() const { return m_bHidden; }
-    void SetHidden(bool const bFlag = true) { m_bHidden = bFlag; }
+    void SetHidden(bool const bFlag) { m_bHidden = bFlag; }
 
     bool IsHiddenFlag() const { return m_bHiddenFlag; }
     SAL_DLLPRIVATE void
@@ -108,19 +108,19 @@ public:
     void SetEditInReadonlyFlag(bool const bFlag)
         { m_bEditInReadonlyFlag = bFlag; }
 
-    void SetCondHidden(bool const bFlag = true) { m_bCondHiddenFlag = bFlag; }
+    void SetCondHidden(bool const bFlag) { m_bCondHiddenFlag = bFlag; }
     bool IsCondHidden() const { return m_bCondHiddenFlag; }
 
-    OUString GetCondition() const           { return m_sCondition; }
+    const OUString& GetCondition() const           { return m_sCondition; }
     void SetCondition(OUString const& rNew) { m_sCondition = rNew; }
 
-    OUString GetLinkFileName() const        { return m_sLinkFileName; }
+    const OUString& GetLinkFileName() const        { return m_sLinkFileName; }
     void SetLinkFileName(OUString const& rNew)
     {
         m_sLinkFileName = rNew;
     }
 
-    OUString GetLinkFilePassword() const        { return m_sLinkFilePassword; }
+    const OUString& GetLinkFilePassword() const        { return m_sLinkFilePassword; }
     void SetLinkFilePassword(OUString const& rS){ m_sLinkFilePassword = rS; }
 
     css::uno::Sequence<sal_Int8> const& GetPassword() const
@@ -131,7 +131,7 @@ public:
     { return (DDE_LINK_SECTION == m_eType) || (FILE_LINK_SECTION == m_eType); }
 
     bool IsConnectFlag() const                  { return m_bConnectFlag; }
-    void SetConnectFlag(bool const bFlag = true){ m_bConnectFlag = bFlag; }
+    void SetConnectFlag(bool const bFlag){ m_bConnectFlag = bFlag; }
 
     static OUString CollapseWhiteSpaces(const OUString& sName);
 };
@@ -160,13 +160,13 @@ public:
 
     SwSection(SectionType const eType, OUString const& rName,
                 SwSectionFormat & rFormat);
-    virtual ~SwSection();
+    virtual ~SwSection() override;
 
     bool DataEquals(SwSectionData const& rCmp) const;
 
     void SetSectionData(SwSectionData const& rData);
 
-    OUString GetSectionName() const         { return m_Data.GetSectionName(); }
+    const OUString& GetSectionName() const         { return m_Data.GetSectionName(); }
     void SetSectionName(OUString const& rName){ m_Data.SetSectionName(rName); }
     SectionType GetType() const             { return m_Data.GetType(); }
     void SetType(SectionType const eType)   { return m_Data.SetType(eType); }
@@ -189,20 +189,20 @@ public:
     bool IsProtectFlag() const { return m_Data.IsProtectFlag(); }
     bool IsEditInReadonlyFlag() const { return m_Data.IsEditInReadonlyFlag(); }
 
-    void SetCondHidden(bool const bFlag = true);
+    void SetCondHidden(bool const bFlag);
     bool IsCondHidden() const { return m_Data.IsCondHidden(); }
     // Query (also for parents) if this section is to be hidden.
     bool CalcHiddenFlag() const;
 
     inline SwSection* GetParent() const;
 
-    OUString GetCondition() const           { return m_Data.GetCondition(); }
+    OUString const & GetCondition() const           { return m_Data.GetCondition(); }
     void SetCondition(OUString const& rNew) { m_Data.SetCondition(rNew); }
 
-    OUString GetLinkFileName() const;
+    OUString const & GetLinkFileName() const;
     void SetLinkFileName(OUString const& rNew);
     // Password of linked file (only valid during runtime!)
-    OUString GetLinkFilePassword() const
+    OUString const & GetLinkFilePassword() const
         { return m_Data.GetLinkFilePassword(); }
     void SetLinkFilePassword(OUString const& rS)
         { m_Data.SetLinkFilePassword(rS); }
@@ -213,16 +213,16 @@ public:
 
     // Data server methods.
     void SetRefObject( SwServerObject* pObj );
-    const SwServerObject* GetObject() const {  return & m_RefObj; }
-          SwServerObject* GetObject()       {  return & m_RefObj; }
-    bool IsServer() const                   {  return m_RefObj.Is(); }
+    const SwServerObject* GetObject() const {  return m_RefObj.get(); }
+          SwServerObject* GetObject()       {  return m_RefObj.get(); }
+    bool IsServer() const                   {  return m_RefObj.is(); }
 
     // Methods for linked ranges.
     SfxLinkUpdateMode GetUpdateType() const    { return m_RefLink->GetUpdateMode(); }
     void SetUpdateType(SfxLinkUpdateMode nType )
         { m_RefLink->SetUpdateMode(nType); }
 
-    bool IsConnected() const        { return m_RefLink.Is(); }
+    bool IsConnected() const        { return m_RefLink.is(); }
     void UpdateNow()                { m_RefLink->Update(); }
     void Disconnect()               { m_RefLink->Disconnect(); }
 
@@ -248,15 +248,12 @@ public:
 };
 
 // #i117863#
-class SwSectionFrameMoveAndDeleteHint : public SfxSimpleHint
+class SwSectionFrameMoveAndDeleteHint : public SfxHint
 {
     public:
         SwSectionFrameMoveAndDeleteHint( const bool bSaveContent )
-            : SfxSimpleHint( SFX_HINT_DYING )
+            : SfxHint( SfxHintId::SwSectionFrameMoveAndDelete )
             , mbSaveContent( bSaveContent )
-        {}
-
-        virtual ~SwSectionFrameMoveAndDeleteHint()
         {}
 
         bool IsSaveContent() const
@@ -268,7 +265,7 @@ class SwSectionFrameMoveAndDeleteHint : public SfxSimpleHint
         const bool mbSaveContent;
 };
 
-enum SectionSort { SORTSECT_NOT, SORTSECT_NAME, SORTSECT_POS };
+enum class SectionSort { Not, Pos };
 
 class SW_DLLPUBLIC SwSectionFormat
     : public SwFrameFormat
@@ -286,10 +283,10 @@ class SW_DLLPUBLIC SwSectionFormat
 
 protected:
     SwSectionFormat( SwFrameFormat* pDrvdFrame, SwDoc *pDoc );
-   virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew ) override;
+    virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew ) override;
 
 public:
-    virtual ~SwSectionFormat();
+    virtual ~SwSectionFormat() override;
 
     // Deletes all Frames in aDepend (Frames are recognized via dynamic_cast).
     virtual void DelFrames() override;
@@ -308,7 +305,7 @@ public:
     //  - sorted according to name or position or unsorted
     //  - all of them or only those that are in the normal Nodes-array.
     void GetChildSections( SwSections& rArr,
-                            SectionSort eSort = SORTSECT_NOT,
+                            SectionSort eSort = SectionSort::Not,
                             bool bAllSections = true ) const;
 
     // Query whether section is in Nodes-array or in UndoNodes-array.

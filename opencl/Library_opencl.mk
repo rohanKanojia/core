@@ -24,6 +24,7 @@ $(eval $(call gb_Library_use_externals,opencl,\
     icu_headers \
     icui18n \
     icuuc \
+    libxml2 \
 ))
 
 $(eval $(call gb_Library_use_custom_headers,opencl,\
@@ -33,10 +34,11 @@ $(eval $(call gb_Library_use_custom_headers,opencl,\
 $(eval $(call gb_Library_use_sdk_api,opencl))
 
 $(eval $(call gb_Library_use_libraries,opencl,\
-    configmgr \
     comphelper \
     cppu \
     sal \
+    salhelper \
+    tl \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,opencl,\
@@ -44,6 +46,7 @@ $(eval $(call gb_Library_add_exception_objects,opencl,\
     opencl/source/openclwrapper \
     opencl/source/opencl_device \
     opencl/source/platforminfo \
+    opencl/source/OpenCLZone \
 ))
 
 ifeq ($(OS),LINUX)

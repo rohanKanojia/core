@@ -25,7 +25,6 @@ $(eval $(call gb_Library_use_libraries,i18npool,\
 	i18nlangtag \
 	i18nutil \
 	sal \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_externals,i18npool,\
@@ -35,7 +34,7 @@ $(eval $(call gb_Library_use_externals,i18npool,\
 	icu_headers \
 ))
 
-ifeq ($(OS),IOS)
+ifeq ($(DISABLE_DYNLOADING),TRUE)
 $(eval $(call gb_Library_add_cxxflags,i18npool,\
 	-DDICT_JA_ZH_IN_DATAFILE \
 ))
@@ -43,7 +42,6 @@ endif
 
 $(eval $(call gb_Library_add_exception_objects,i18npool,\
 	i18npool/source/breakiterator/breakiterator_cjk \
-	i18npool/source/breakiterator/breakiterator_ctl \
 	i18npool/source/breakiterator/breakiteratorImpl \
 	i18npool/source/breakiterator/breakiterator_th \
 	i18npool/source/breakiterator/breakiterator_unicode \

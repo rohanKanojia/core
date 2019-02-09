@@ -11,8 +11,9 @@
 #define INCLUDED_WRITERFILTER_SOURCE_RTFTOK_RTFLOOKAHEAD_HXX
 
 #include <memory>
-#include <rtflistener.hxx>
-#include <rtftokenizer.hxx>
+#include <sal/types.h>
+#include <tools/ref.hxx>
+#include "rtflistener.hxx"
 
 class SvStream;
 
@@ -20,6 +21,7 @@ namespace writerfilter
 {
 namespace rtftok
 {
+class RTFTokenizer;
 /**
  * This acts like an importer, but used for looking ahead, e.g. to
  * determine if the current group contains a table, etc.
@@ -27,32 +29,32 @@ namespace rtftok
 class RTFLookahead : public RTFListener
 {
 public:
-    RTFLookahead(SvStream& rStream, sal_Size nGroupStart);
-    virtual ~RTFLookahead();
-    virtual RTFError dispatchDestination(RTFKeyword nKeyword) override;
-    virtual RTFError dispatchFlag(RTFKeyword nKeyword) override;
-    virtual RTFError dispatchSymbol(RTFKeyword nKeyword) override;
-    virtual RTFError dispatchToggle(RTFKeyword nKeyword, bool bParam, int nParam) override;
-    virtual RTFError dispatchValue(RTFKeyword nKeyword, int nParam) override;
-    virtual RTFError resolveChars(char ch) override;
-    virtual RTFError pushState() override;
-    virtual RTFError popState() override;
-    virtual Destination getDestination() override;
-    virtual void setDestination(Destination eDestination) override;
-    virtual RTFInternalState getInternalState() override;
-    virtual void setInternalState(RTFInternalState nInternalState) override;
-    virtual bool getSkipUnknown() override;
-    virtual void setSkipUnknown(bool bSkipUnknown) override;
-    virtual void finishSubstream() override;
-    virtual bool isSubstream() const override;
-    bool hasTable()
-    {
-        return m_bHasTable;
-    }
+    RTFLookahead(SvStream& rStream, sal_uInt64 nGroupStart);
+    ~RTFLookahead() override;
+    RTFError dispatchDestination(RTFKeyword nKeyword) override;
+    RTFError dispatchFlag(RTFKeyword nKeyword) override;
+    RTFError dispatchSymbol(RTFKeyword nKeyword) override;
+    RTFError dispatchToggle(RTFKeyword nKeyword, bool bParam, int nParam) override;
+    RTFError dispatchValue(RTFKeyword nKeyword, int nParam) override;
+    RTFError resolveChars(char ch) override;
+    RTFError pushState() override;
+    RTFError popState() override;
+    Destination getDestination() override;
+    void setDestination(Destination eDestination) override;
+    RTFInternalState getInternalState() override;
+    void setInternalState(RTFInternalState nInternalState) override;
+    bool getSkipUnknown() override;
+    void setSkipUnknown(bool bSkipUnknown) override;
+    void finishSubstream() override;
+    bool isSubstream() const override;
+    bool hasTable() { return m_bHasTable; }
+    bool hasColumns() { return m_bHasColumns; }
+
 private:
-    std::shared_ptr<RTFTokenizer> m_pTokenizer;
+    tools::SvRef<RTFTokenizer> m_pTokenizer;
     SvStream& m_rStream;
     bool m_bHasTable;
+    bool m_bHasColumns;
 };
 } // namespace rtftok
 } // namespace writerfilter

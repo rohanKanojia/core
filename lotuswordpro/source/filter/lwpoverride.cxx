@@ -61,9 +61,9 @@
 #include <memory>
 
 #include "clone.hxx"
-#include "lwpoverride.hxx"
-#include "lwpfilehdr.hxx"
-#include "lwpatomholder.hxx"
+#include <lwpoverride.hxx>
+#include <lwpfilehdr.hxx>
+#include <lwpatomholder.hxx>
 #include "lwpborderstuff.hxx"
 #include "lwpmargins.hxx"
 #include "lwpbackgroundstuff.hxx"
@@ -359,39 +359,15 @@ m_pParaSpacingBelow(new LwpSpacingCommonOverride)
 
 LwpSpacingOverride::~LwpSpacingOverride()
 {
-    if (m_pSpacing)
-    {
-        delete m_pSpacing;
-    }
-    if (m_pAboveLineSpacing)
-    {
-        delete m_pAboveLineSpacing;
-    }
-    if (m_pParaSpacingAbove)
-    {
-        delete m_pParaSpacingAbove;
-    }
-    if (m_pParaSpacingBelow)
-    {
-        delete m_pParaSpacingBelow;
-    }
 }
 
 LwpSpacingOverride::LwpSpacingOverride(LwpSpacingOverride const& rOther)
     : LwpOverride(rOther)
-    , m_pSpacing(nullptr)
-    , m_pAboveLineSpacing(nullptr)
-    , m_pParaSpacingAbove(nullptr)
-    , m_pParaSpacingBelow(nullptr)
 {
-    std::unique_ptr<LwpSpacingCommonOverride> pSpacing(::clone(rOther.m_pSpacing));
-    std::unique_ptr<LwpSpacingCommonOverride> pAboveLineSpacing(::clone(rOther.m_pAboveLineSpacing));
-    std::unique_ptr<LwpSpacingCommonOverride> pParaSpacingAbove(::clone(rOther.m_pParaSpacingAbove));
-    std::unique_ptr<LwpSpacingCommonOverride> pParaSpacingBelow(::clone(rOther.m_pParaSpacingBelow));
-    m_pSpacing = pSpacing.release();
-    m_pAboveLineSpacing = pAboveLineSpacing.release();
-    m_pParaSpacingAbove = pParaSpacingAbove.release();
-    m_pParaSpacingBelow = pParaSpacingBelow.release();
+    m_pSpacing.reset( ::clone(rOther.m_pSpacing.get()) );
+    m_pAboveLineSpacing.reset( ::clone(rOther.m_pAboveLineSpacing.get()) );
+    m_pParaSpacingAbove.reset( ::clone(rOther.m_pParaSpacingAbove.get()) );
+    m_pParaSpacingBelow.reset( ::clone(rOther.m_pParaSpacingBelow.get()) );
 }
 
 LwpSpacingOverride* LwpSpacingOverride::clone() const
@@ -454,19 +430,13 @@ m_pBackgroundStuff(new LwpBackgroundStuff), m_nType(AMIKAKE_NONE)
 
 LwpAmikakeOverride::~LwpAmikakeOverride()
 {
-    if (m_pBackgroundStuff)
-    {
-        delete m_pBackgroundStuff;
-    }
 }
 
 LwpAmikakeOverride::LwpAmikakeOverride(LwpAmikakeOverride const& rOther)
     : LwpOverride(rOther)
-    , m_pBackgroundStuff(nullptr)
+    , m_pBackgroundStuff(::clone(rOther.m_pBackgroundStuff.get()))
     , m_nType(rOther.m_nType)
 {
-    std::unique_ptr<LwpBackgroundStuff> pBackgroundStuff(::clone(rOther.m_pBackgroundStuff));
-    m_pBackgroundStuff = pBackgroundStuff.release();
 }
 
 LwpAmikakeOverride* LwpAmikakeOverride::clone() const

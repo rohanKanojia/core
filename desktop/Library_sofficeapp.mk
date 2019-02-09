@@ -24,25 +24,34 @@ $(eval $(call gb_Library_add_libs,sofficeapp,\
 ))
 
 $(eval $(call gb_Library_use_externals,sofficeapp, \
+	$(if $(ENABLE_BREAKPAD),breakpad) \
+	$(if $(filter OPENCL,$(BUILD_TYPE)),clew) \
     boost_headers \
     dbus \
+    icu_headers \
+    icui18n \
+    icuuc \
+    $(if $(filter-out iOS,$(OS)), \
+    curl \
+    )\
+    $(if $(ENABLE_ONLINE_UPDATE_MAR),\
+        orcus-parser \
+        orcus )\
 ))
-
-ifeq ($(ENABLE_BREAKPAD),TRUE)
-$(eval $(call gb_Library_use_external,sofficeapp,breakpad))
-endif
 
 $(eval $(call gb_Library_use_custom_headers,sofficeapp,\
 	officecfg/registry \
 ))
 
-$(eval $(call gb_Library_use_sdk_api,sofficeapp))
+$(eval $(call gb_Library_use_api,sofficeapp,\
+	udkapi \
+	offapi \
+))
 
 $(eval $(call gb_Library_add_defs,sofficeapp,\
     -DDESKTOP_DLLIMPLEMENTATION \
     $(if $(filter WNT,$(OS)),-DENABLE_QUICKSTART_APPLET) \
     $(if $(filter MACOSX,$(OS)),-DENABLE_QUICKSTART_APPLET) \
-    $(if $(filter TRUE,$(ENABLE_SYSTRAY_GTK)),-DENABLE_QUICKSTART_APPLET) \
 ))
 
 $(eval $(call gb_Library_set_precompiled_header,sofficeapp,$(SRCDIR)/desktop/inc/pch/precompiled_sofficeapp))
@@ -51,17 +60,19 @@ $(eval $(call gb_Library_use_libraries,sofficeapp,\
     comphelper \
     cppu \
     cppuhelper \
-    $(if $(filter TRUE,$(ENABLE_BREAKPAD)), \
+    $(if $(ENABLE_BREAKPAD), \
         crashreport \
     ) \
     deploymentmisc \
     editeng \
     i18nlangtag \
+    $(if $(filter OPENCL,$(BUILD_TYPE)),opencl) \
     sal \
     salhelper \
     sb \
     sfx \
     svl \
+    svx \
     svxcore \
     svt \
     tk \
@@ -69,8 +80,14 @@ $(eval $(call gb_Library_use_libraries,sofficeapp,\
     ucbhelper \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
+
+ifeq ($(OS),WNT)
+$(eval $(call gb_Library_use_static_libraries,sofficeapp,\
+    $(if $(ENABLE_ONLINE_UPDATE_MAR),\
+        windows_process )\
+))
+endif
 
 ifeq ($(OS),MACOSX)
 
@@ -84,10 +101,16 @@ $(eval $(call gb_Library_use_system_darwin_frameworks,sofficeapp,\
 
 endif
 
-ifeq ($(OS),IOS)
+ifeq ($(OS),iOS)
+
 $(eval $(call gb_Library_add_cflags,sofficeapp,\
     $(gb_OBJCFLAGS) \
 ))
+
+$(eval $(call gb_Library_add_cxxflags,sofficeapp,\
+    $(gb_OBJCXXFLAGS) \
+))
+
 endif
 
 $(eval $(call gb_Library_add_exception_objects,sofficeapp,\
@@ -97,26 +120,30 @@ $(eval $(call gb_Library_add_exception_objects,sofficeapp,\
     desktop/source/app/cmdlineargs \
     desktop/source/app/cmdlinehelp \
     desktop/source/app/desktopcontext \
-    desktop/source/app/desktopresid \
     desktop/source/app/dispatchwatcher \
     desktop/source/app/langselect \
     desktop/source/app/lockfile2 \
     desktop/source/app/officeipcthread \
+    desktop/source/app/opencl \
     desktop/source/app/sofficemain \
+    $(if $(ENABLE_ONLINE_UPDATE_MAR),\
+        desktop/source/app/updater )\
     desktop/source/app/userinstall \
     desktop/source/migration/migration \
 ))
 
-ifeq ($(ENABLE_HEADLESS),TRUE)
+ifeq ($(DISABLE_GUI),TRUE)
 $(eval $(call gb_Library_add_libs,sofficeapp,\
 	-lm $(DLOPEN_LIBS) \
 	-lpthread \
 ))
 else
 ifeq ($(OS), $(filter LINUX %BSD SOLARIS, $(OS)))
+ifeq ($(USING_X11),TRUE)
 $(eval $(call gb_Library_use_static_libraries,sofficeapp,\
     glxtest \
 ))
+endif
 
 $(eval $(call gb_Library_add_libs,sofficeapp,\
 	-lm $(DLOPEN_LIBS) \
@@ -127,7 +154,7 @@ endif
 endif
 
 # LibreOfficeKit bits
-ifneq ($(filter $(OS),ANDROID IOS MACOSX WNT),)
+ifneq ($(filter $(OS),ANDROID iOS MACOSX WNT),)
 $(eval $(call gb_Library_add_exception_objects,sofficeapp,\
 	desktop/source/lib/init \
 	desktop/source/lib/lokinteractionhandler \
@@ -143,17 +170,13 @@ $(eval $(call gb_Library_add_exception_objects,sofficeapp,\
 	desktop/source/lib/lokclipboard \
 ))
 endif
-ifeq ($(ENABLE_HEADLESS),TRUE)
+ifeq ($(DISABLE_GUI),TRUE)
 $(eval $(call gb_Library_add_exception_objects,sofficeapp,\
     desktop/source/lib/init \
     desktop/source/lib/lokinteractionhandler \
     desktop/source/lib/lokclipboard \
 ))
 endif
-endif
-
-ifeq ($(ENABLE_TELEPATHY),TRUE)
-$(eval $(call gb_Library_use_libraries,sofficeapp,tubes))
 endif
 
 # vim: set ts=4 sw=4 et:

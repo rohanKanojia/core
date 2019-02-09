@@ -44,7 +44,6 @@ in this Software without prior written authorization from the X Consortium.
 #include <unistd.h>
 #endif
 
-#include <ctype.h>
 #ifndef X_NOT_POSIX
 #ifndef _POSIX_SOURCE
 #define _POSIX_SOURCE
@@ -72,24 +71,10 @@ in this Software without prior written authorization from the X Consortium.
 
 /* the following must match the directives table in main.c */
 #define IF      0
-#define IFDEF       1
-#define IFNDEF      2
-#define ELSE        3
-#define ENDIF       4
-#define DEFINE      5
-#define UNDEF       6
-#define INCLUDE     7
-#define LINE        8
-#define PRAGMA      9
 #define ERROR           10
-#define IDENT           11
-#define SCCS            12
 #define ELIF            13
-#define EJECT           14
 #define IFFALSE         15     /* pseudo value --- never matched */
 #define ELIFFALSE       16     /* pseudo value --- never matched */
-#define INCLUDEDOT      17     /* pseudo value --- never matched */
-#define IFGUESSFALSE    18     /* pseudo value --- never matched */
 #define ELIFGUESSFALSE  19     /* pseudo value --- never matched */
 
 #ifdef DEBUG
@@ -131,20 +116,16 @@ struct  inclist {
     boolean     i_notified;    /* whether we have revealed includes */
     boolean     i_marked;      /* whether it's in the makefile */
     boolean     i_searched;    /* whether we have read this */
-    boolean     i_included_sym; /* whether #include SYMBOL was found */
-                    /* Can't use i_list if TRUE */
 };
 
 struct filepointer {
     char    *f_p;
     char    *f_base;
     char    *f_end;
-    long    f_len;
-    long    f_line;
+    int      f_line;
 };
 
 #ifndef X_NOT_STDC_ENV
-#include <stdlib.h>
 #if defined(macII) && !defined(__STDC__)  /* stdlib.h fails to define these */
 char *malloc(), *realloc();
 #endif /* macII */
@@ -153,18 +134,18 @@ char            *malloc();
 char            *realloc();
 #endif
 
-char            *copy(char *);
+char            *copy(char const *);
 char            *base_name(char *);
 char            *get_line(struct filepointer *);
 char            *isdefined(char *);
 struct filepointer  *getfile(char *);
-struct inclist *newinclude(char *newfile,
-                           char *incstring);
+struct inclist *newinclude(char const *newfile,
+                           char const *incstring);
 struct inclist      *inc_path(char *, char *, boolean,
                                   struct IncludesCollection *);
 
 void define( char *def, struct symhash **symbols );
-void hash_define(char *name, char * val, struct symhash **symbols);
+void hash_define(char *name, char const * val, struct symhash **symbols);
 struct symhash *hash_copy( struct symhash *symbols );
 void hash_free( struct symhash *symbols );
 void freefile( struct filepointer * fp );
@@ -173,22 +154,40 @@ int find_includes(struct filepointer *filep, struct inclist *file,
     struct IncludesCollection* incCollection, struct symhash *symbols);
 void included_by(struct inclist *ip,
     struct inclist * newfile);
-int cppsetup(char *line,
-    struct filepointer *filep, struct inclist *inc);
+int cppsetup(char const *line);
 void add_include(struct filepointer *filep, struct inclist *file,
     struct inclist *file_red, char *include, boolean dot, boolean failOK,
     struct IncludesCollection* incCollection, struct symhash *symbols);
-int match(char *str, char **list);
+int match(char const *str, char **list);
 void recursive_pr_include(struct inclist *head, char *file,
     char *base);
 void recursive_pr_dummy(struct inclist *head, char *file);
 void inc_clean(void);
 
 void fatalerr(char *, ...);
-void warning(char *, ...);
-void warning1(char *, ...);
+void warning(char const *, ...);
+void warning1(char const *, ...);
 
 void convert_slashes(char *);
 char *append_slash(char *);
+
+extern char * directives[];
+
+extern struct inclist inclist[ MAXFILES ];
+extern struct inclist * inclistp;
+
+extern char *includedirs[ ];
+
+extern char * objprefix;
+
+extern char * objsuffix;
+
+extern boolean printed;
+
+extern boolean verbose;
+
+extern boolean show_where_not;
+
+extern boolean warn_multiple;
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -6,9 +6,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#include <TrackChangesHandler.hxx>
-#include <PropertyMap.hxx>
-#include <ConversionHelper.hxx>
+#include "TrackChangesHandler.hxx"
+#include "PropertyMap.hxx"
+#include "ConversionHelper.hxx"
 #include <ooxml/resourceids.hxx>
 #include <oox/token/tokens.hxx>
 #include <osl/diagnose.h>
@@ -21,9 +21,9 @@ using namespace oox;
 
 
 TrackChangesHandler::TrackChangesHandler( sal_Int32 nToken ) :
-LoggedProperties("TrackChangesHandler")
+    LoggedProperties("TrackChangesHandler"),
+    m_pRedlineParams(new RedlineParams)
 {
-    m_pRedlineParams = RedlineParamsPtr( new RedlineParams() );
     m_pRedlineParams->m_nToken = nToken;
 }
 
@@ -35,9 +35,7 @@ TrackChangesHandler::~TrackChangesHandler()
 
 void TrackChangesHandler::lcl_attribute(Id rName, Value & rVal)
 {
-    sal_Int32 nIntValue = rVal.getInt();
     OUString sStringValue = rVal.getString();
-    (void)rName;
     switch( rName )
     {
         case NS_ooxml::LN_CT_TrackChange_author:
@@ -51,9 +49,6 @@ void TrackChangesHandler::lcl_attribute(Id rName, Value & rVal)
         }
         break;
         case NS_ooxml::LN_CT_Markup_id:
-        {
-            m_pRedlineParams->m_nId = nIntValue;
-        }
         break;
         default:
             OSL_FAIL( "unknown attribute");
@@ -94,10 +89,7 @@ uno::Sequence<beans::PropertyValue> TrackChangesHandler::getRedlineProperties() 
     return aRedlineProperties;
 }
 
-void TrackChangesHandler::lcl_sprm(Sprm & rSprm)
-{
-    (void)rSprm;
-}
+void TrackChangesHandler::lcl_sprm(Sprm &) {}
 
 } //namespace dmapper
 } //namespace writerfilter

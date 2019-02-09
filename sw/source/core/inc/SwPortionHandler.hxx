@@ -21,8 +21,10 @@
 #define INCLUDED_SW_SOURCE_CORE_INC_SWPORTIONHANDLER_HXX
 
 #include <swtypes.hxx>
+#include "TextFrameIndex.hxx"
 
 class SwFont;
+enum class PortionType;
 
 /** The SwPortionHandler interface implements a visitor for the layout
  * engine's text portions. This can be used to gather information of
@@ -33,42 +35,42 @@ class SwFont;
  * any other portion. Additionally, the linebreak() method is called
  * once at the end of every on-screen line.
  *
- * All parameters relate to the 'model string', which is the text string
- * held by the corresponding SwTextNode.
+ * All parameters relate to the 'view string', which is the text string
+ * held by the sequence of all corresponding SwTextFrames.
  *
  * The SwPortionHandler can be used with the
  * SwTextFrame::VisitPortions(...) method.
  */
-class SwPortionHandler
+class SW_DLLPUBLIC SwPortionHandler
 {
 public:
 
-    SwPortionHandler() {}           /// (emtpy) constructor
+    SwPortionHandler() {}           /// (empty) constructor
 
     virtual ~SwPortionHandler() {}  /// (empty) destructor
 
-    /** text portion. A run of nLength characters from the model
+    /** text portion. A run of nLength characters from the view
      * string, that contains no special characters like embedded
      * fields, etc. Thus, the on-screen text of this portion
      * corresponds exactly to the corresponding characters in the
-     * model string.
+     * view string.
      */
     virtual void Text(
-        sal_Int32 nLength,      /// length of this portion in the model string
-        sal_uInt16 nType,         /// type of this portion
+        TextFrameIndex nLength, ///< length of this portion in the view string
+        PortionType nType,       /// type of this portion
         sal_Int32 nHeight = 0,   /// height of this portion
         sal_Int32 nWidth = 0     /// width of this portion
         ) = 0;
 
     /** special portion. This method is called for every non-text
      * portion. The parameters describe the length of the
-     * corresponding characters in the model string (often 0 or 1),
+     * corresponding characters in the view string (often 0 or 1),
      * the text which is displayed, and the type of the portion.
      */
     virtual void Special(
-        sal_Int32 nLength,      /// length of this portion in the model string
+        TextFrameIndex nLength, ///< length of this portion in the view string
         const OUString& rText, /// text which is painted on-screen
-        sal_uInt16 nType,         /// type of this portion
+        PortionType nType,         /// type of this portion
         sal_Int32 nHeight = 0,     /// font height of the painted text
         sal_Int32 nWidth = 0,     /// width of this portion
         const SwFont* pFont = nullptr /// font of this portion
@@ -83,20 +85,18 @@ public:
      * display a certain paragraph (e.g. when the paragraph is split
      * across multiple pages). In this case, the Skip() method must be
      * called to inform the portion handler to ignore a certain run of
-     * characters in the 'model string'. Skip(), if used at all, must
+     * characters in the 'view string'. Skip(), if used at all, must
      * be called before any of the other methods is called. Calling
      * Skip() between portions is not allowed.
      */
     virtual void Skip(
-        sal_Int32 nLength   /// number of 'model string' characters to be skipped
+        TextFrameIndex nLength   /// number of 'view string' characters to be skipped
         ) = 0;
 
     /** end of paragraph. This method is to be called when all the
      * paragraph's portions have been processed.
      */
     virtual void Finish() = 0;
-    virtual void SetAttrFieldType( sal_uInt16 )
-    { return; }
 };
 
 #endif

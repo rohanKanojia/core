@@ -82,10 +82,10 @@
       <FormatCode>##0,00E+00</FormatCode>
     </FormatElement>
     <FormatElement msgid="PercentFormatskey1" default="true" type="short" usage="PERCENT_NUMBER" formatindex="8">
-      <FormatCode>0%</FormatCode>
+      <FormatCode>0" "%</FormatCode>
     </FormatElement>
     <FormatElement msgid="PercentFormatskey2" default="true" type="long" usage="PERCENT_NUMBER" formatindex="9">
-      <FormatCode>0,00%</FormatCode>
+      <FormatCode>0,00" "%</FormatCode>
     </FormatElement>
     <FormatElement msgid="CurrencyFormatskey1" default="true" type="short" usage="CURRENCY" formatindex="12">
       <FormatCode># ##0 [CURRENCY];-# ##0 [CURRENCY]</FormatCode>
@@ -350,8 +350,8 @@
       <quarter2Word>2 kvartalet</quarter2Word>
       <quarter3Word>3 kvartalet</quarter3Word>
       <quarter4Word>4 kvartalet</quarter4Word>
-      <aboveWord>nedan</aboveWord>
-      <belowWord>ovan</belowWord>
+      <aboveWord>ovan</aboveWord>
+      <belowWord>nedan</belowWord>
       <quarter1Abbreviation>K1</quarter1Abbreviation>
       <quarter2Abbreviation>K2</quarter2Abbreviation>
       <quarter3Abbreviation>K3</quarter3Abbreviation>

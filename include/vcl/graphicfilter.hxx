@@ -21,33 +21,34 @@
 #define INCLUDED_VCL_GRAPHICFILTER_HXX
 
 #include <tools/gen.hxx>
-#include <tools/urlobj.hxx>
 #include <vcl/dllapi.h>
-#include <vcl/field.hxx>
 #include <vcl/graph.hxx>
+#include <vcl/errcode.hxx>
 #include <o3tl/typed_flags_set.hxx>
 
-#include <com/sun/star/uno/Sequence.h>
-#include <com/sun/star/beans/PropertyValue.hpp>
+#include <memory>
+
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <class E> class Sequence; } } } }
+
+class INetURLObject;
 
 class FilterConfigCache;
 class SvStream;
-struct WMF_EXTERNALHEADER;
+struct WmfExternal;
 struct ConvertData;
 
-#define GRFILTER_OK                 0
-#define GRFILTER_OPENERROR          1
-#define GRFILTER_IOERROR            2
-#define GRFILTER_FORMATERROR        3
-#define GRFILTER_VERSIONERROR       4
-#define GRFILTER_FILTERERROR        5
-#define GRFILTER_ABORT              6
-#define GRFILTER_TOOBIG             7
+#define ERRCODE_GRFILTER_OPENERROR    ErrCode(ErrCodeArea::Vcl, ErrCodeClass::General, 1)
+#define ERRCODE_GRFILTER_IOERROR      ErrCode(ErrCodeArea::Vcl, ErrCodeClass::General, 2)
+#define ERRCODE_GRFILTER_FORMATERROR  ErrCode(ErrCodeArea::Vcl, ErrCodeClass::General, 3)
+#define ERRCODE_GRFILTER_VERSIONERROR ErrCode(ErrCodeArea::Vcl, ErrCodeClass::General, 4)
+#define ERRCODE_GRFILTER_FILTERERROR  ErrCode(ErrCodeArea::Vcl, ErrCodeClass::General, 5)
+#define ERRCODE_GRFILTER_TOOBIG       ErrCode(ErrCodeArea::Vcl, ErrCodeClass::General, 7)
 
 #define GRFILTER_OUTHINT_GREY       1
 
-#define GRFILTER_FORMAT_NOTFOUND    ((sal_uInt16)0xFFFF)
-#define GRFILTER_FORMAT_DONTKNOW    ((sal_uInt16)0xFFFF)
+#define GRFILTER_FORMAT_NOTFOUND    (sal_uInt16(0xFFFF))
+#define GRFILTER_FORMAT_DONTKNOW    (sal_uInt16(0xFFFF))
 
 enum class GraphicFilterImportFlags
 {
@@ -55,11 +56,14 @@ enum class GraphicFilterImportFlags
     SetLogsizeForJpeg      = 0x001,
     DontSetLogsizeForJpeg  = 0x002,
     ForPreview             = 0x004,
-    AllowPartialStreamRead = 0x010,
+    /// Only create a bitmap, do not read pixel data.
+    OnlyCreateBitmap       = 0x020,
+    /// Read pixel data into an existing bitmap.
+    UseExistingBitmap      = 0x040,
 };
 namespace o3tl
 {
-    template<> struct typed_flags<GraphicFilterImportFlags> : is_typed_flags<GraphicFilterImportFlags, 0x0017> {};
+    template<> struct typed_flags<GraphicFilterImportFlags> : is_typed_flags<GraphicFilterImportFlags, 0x0067> {};
 }
 
 #define IMP_BMP                 "SVBMP"
@@ -67,20 +71,20 @@ namespace o3tl
 #define IMP_SVMETAFILE          "SVMETAFILE"
 #define IMP_WMF                 "SVWMF"
 #define IMP_EMF                 "SVEMF"
-#define IMP_SVSGF               "SVSGF"
-#define IMP_SVSGV               "SVSGV"
 #define IMP_GIF                 "SVIGIF"
 #define IMP_PNG                 "SVIPNG"
 #define IMP_JPEG                "SVIJPEG"
 #define IMP_XBM                 "SVIXBM"
 #define IMP_XPM                 "SVIXPM"
 #define IMP_SVG                 "SVISVG"
+#define IMP_PDF                 "SVIPDF"
 #define EXP_BMP                 "SVBMP"
 #define EXP_SVMETAFILE          "SVMETAFILE"
 #define EXP_WMF                 "SVWMF"
 #define EXP_EMF                 "SVEMF"
 #define EXP_JPEG                "SVEJPEG"
 #define EXP_SVG                 "SVESVG"
+#define EXP_PDF                 "SVEPDF"
 #define EXP_PNG                 "SVEPNG"
 
 #define BMP_SHORTNAME           "BMP"
@@ -94,6 +98,7 @@ namespace o3tl
 #define WMF_SHORTNAME           "WMF"
 #define EMF_SHORTNAME           "EMF"
 #define SVG_SHORTNAME           "SVG"
+#define PDF_SHORTNAME           "PDF"
 
 //  Info class for all supported file formats
 
@@ -119,18 +124,16 @@ enum class GraphicFileFormat
     DXF = 0x00f1,
     MET = 0x00f2,
     PCT = 0x00f3,
-    SGF = 0x00f4,
+    // retired SGF = 0x00f4,
     SVM = 0x00f5,
     WMF = 0x00f6,
-    SGV = 0x00f7,
+    // retired SGV = 0x00f7,
     EMF = 0x00f8,
-    SVG = 0x00f9,
-    MOV = 0x00fa,
-    XXX = 0xffff
+    SVG = 0x00f9
 };
 
 
-class VCL_DLLPUBLIC GraphicDescriptor
+class VCL_DLLPUBLIC GraphicDescriptor final
 {
     SvStream*           pFileStm;
 
@@ -140,8 +143,8 @@ class VCL_DLLPUBLIC GraphicDescriptor
     sal_uInt16          nBitsPerPixel;
     sal_uInt16          nPlanes;
     GraphicFileFormat   nFormat;
-    bool                bCompressed;
-    bool                bOwnStream;
+    bool const          bOwnStream;
+    sal_uInt8 mnNumberOfImageComponents;
 
     void                ImpConstruct();
 
@@ -149,7 +152,7 @@ class VCL_DLLPUBLIC GraphicDescriptor
     bool            ImpDetectGIF( SvStream& rStm, bool bExtendedInfo );
     bool            ImpDetectJPG( SvStream& rStm, bool bExtendedInfo );
     bool            ImpDetectPCD( SvStream& rStm, bool bExtendedInfo );
-    bool            ImpDetectPCX( SvStream& rStm, bool bExtendedInfo );
+    bool            ImpDetectPCX( SvStream& rStm );
     bool            ImpDetectPNG( SvStream& rStm, bool bExtendedInfo );
     bool            ImpDetectTIF( SvStream& rStm, bool bExtendedInfo );
     bool            ImpDetectXBM( SvStream& rStm, bool bExtendedInfo );
@@ -164,10 +167,8 @@ class VCL_DLLPUBLIC GraphicDescriptor
     bool            ImpDetectDXF( SvStream& rStm, bool bExtendedInfo );
     bool            ImpDetectMET( SvStream& rStm, bool bExtendedInfo );
     bool            ImpDetectPCT( SvStream& rStm, bool bExtendedInfo );
-    bool            ImpDetectSGF( SvStream& rStm, bool bExtendedInfo );
     bool            ImpDetectSVM( SvStream& rStm, bool bExtendedInfo );
     bool            ImpDetectWMF( SvStream& rStm, bool bExtendedInfo );
-    bool            ImpDetectSGV( SvStream& rStm, bool bExtendedInfo );
     bool            ImpDetectEMF( SvStream& rStm, bool bExtendedInfo );
     bool            ImpDetectSVG( SvStream& rStm, bool bExtendedInfo );
     GraphicDescriptor( const GraphicDescriptor& ) = delete;
@@ -188,9 +189,9 @@ public:
         As some formats (Mtf's) do not have a unique header, it makes sense
         to supply the file name (incl. ext.), so that the format can be
         derived from the extension */
-    GraphicDescriptor( SvStream& rInStream, const OUString* pPath = nullptr );
+    GraphicDescriptor( SvStream& rInStream, const OUString* pPath );
 
-    virtual ~GraphicDescriptor();
+    ~GraphicDescriptor();
 
     /** starts the detection
 
@@ -202,13 +203,16 @@ public:
     GraphicFileFormat  GetFileFormat() const { return nFormat; }
 
     /** @return graphic size in pixels or 0 size */
-    const Size&     GetSizePixel() const { return (Size&) aPixSize; }
+    const Size&     GetSizePixel() const { return aPixSize; }
 
     /** @return the logical graphic size in 1/100mm or 0 size */
-    const Size&     GetSize_100TH_MM() const { return (Size&) aLogSize; }
+    const Size&     GetSize_100TH_MM() const { return aLogSize; }
 
     /** @return bits/pixel or 0 **/
     sal_uInt16          GetBitsPerPixel() const { return nBitsPerPixel; }
+
+    /** @return number of color channels */
+    sal_uInt8 GetNumberOfImageComponents() const { return mnNumberOfImageComponents; }
 
     /** @return filter number that is needed by the GraphFilter to read this format */
     static OUString GetImportFormatShortName( GraphicFileFormat nFormat );
@@ -217,34 +221,15 @@ public:
 /** Information about errors during the GraphicFilter operation. */
 struct FilterErrorEx
 {
-    sal_uLong   nFilterError;
-    sal_uLong   nStreamError;
+    ErrCode   nStreamError;
 
-            FilterErrorEx() : nFilterError( 0UL ), nStreamError( 0UL ) {}
+    FilterErrorEx() : nStreamError( ERRCODE_NONE ) {}
 };
 
 /** Class to import and export graphic formats. */
 class VCL_DLLPUBLIC GraphicFilter
 {
-private:
-
-    void            ImplInit();
-    sal_uLong           ImplSetError( sal_uLong nError, const SvStream* pStm = nullptr );
-    sal_uInt16      ImpTestOrFindFormat( const OUString& rPath, SvStream& rStream, sal_uInt16& rFormat );
-
-                    DECL_LINK_TYPED( FilterCallback, ConvertData&, bool );
-
-protected:
-
-    OUString       aFilterPath;
-    FilterConfigCache*  pConfig;
-    FilterErrorEx*      pErrorEx;
-    bool            bAbort;
-    bool            bUseConfig;
-    long                nExpGraphHint;
-
 public:
-
                     GraphicFilter( bool bUseConfig = true );
                     ~GraphicFilter();
 
@@ -258,7 +243,7 @@ public:
     OUString        GetImportFormatMediaType( sal_uInt16 nFormat );
 #endif
     OUString        GetImportFormatShortName( sal_uInt16 nFormat );
-    OUString        GetImportWildcard( sal_uInt16 nFormat, sal_Int32 nEntry = 0 );
+    OUString        GetImportWildcard( sal_uInt16 nFormat, sal_Int32 nEntry );
 
     sal_uInt16      GetExportFormatCount();
     sal_uInt16      GetExportFormatNumber( const OUString& rFormatName );
@@ -272,49 +257,69 @@ public:
     OUString        GetExportWildcard( sal_uInt16 nFormat );
     bool            IsExportPixelFormat( sal_uInt16 nFormat );
 
-    sal_uInt16          ExportGraphic( const Graphic& rGraphic, const INetURLObject& rPath,
-                                    sal_uInt16 nFormat = GRFILTER_FORMAT_DONTKNOW,
-                                        const css::uno::Sequence< css::beans::PropertyValue >* pFilterData = nullptr );
-    sal_uInt16          ExportGraphic( const Graphic& rGraphic, const OUString& rPath,
-                                    SvStream& rOStm, sal_uInt16 nFormat = GRFILTER_FORMAT_DONTKNOW,
-                                        const css::uno::Sequence< css::beans::PropertyValue >* pFilterData = nullptr );
+    ErrCode             ExportGraphic( const Graphic& rGraphic, const INetURLObject& rPath,
+                                       sal_uInt16 nFormat,
+                                       const css::uno::Sequence< css::beans::PropertyValue >* pFilterData = nullptr );
+    ErrCode             ExportGraphic( const Graphic& rGraphic, const OUString& rPath,
+                                       SvStream& rOStm, sal_uInt16 nFormat,
+                                       const css::uno::Sequence< css::beans::PropertyValue >* pFilterData = nullptr );
 
-    sal_uInt16          CanImportGraphic( const INetURLObject& rPath,
-                                      sal_uInt16 nFormat = GRFILTER_FORMAT_DONTKNOW,
-                                      sal_uInt16 * pDeterminedFormat = nullptr);
+    ErrCode             CanImportGraphic( const INetURLObject& rPath,
+                                      sal_uInt16 nFormat,
+                                      sal_uInt16 * pDeterminedFormat);
 
-    sal_uInt16          ImportGraphic( Graphic& rGraphic, const INetURLObject& rPath,
+    ErrCode             ImportGraphic( Graphic& rGraphic, const INetURLObject& rPath,
                                    sal_uInt16 nFormat = GRFILTER_FORMAT_DONTKNOW,
                                    sal_uInt16 * pDeterminedFormat = nullptr, GraphicFilterImportFlags nImportFlags = GraphicFilterImportFlags::NONE );
 
-    sal_uInt16          CanImportGraphic( const OUString& rPath, SvStream& rStream,
-                                      sal_uInt16 nFormat = GRFILTER_FORMAT_DONTKNOW,
-                                      sal_uInt16 * pDeterminedFormat = nullptr);
+    ErrCode             CanImportGraphic( const OUString& rPath, SvStream& rStream,
+                                      sal_uInt16 nFormat,
+                                      sal_uInt16 * pDeterminedFormat);
 
-    sal_uInt16          ImportGraphic( Graphic& rGraphic, const OUString& rPath,
+    ErrCode             ImportGraphic( Graphic& rGraphic, const OUString& rPath,
                                    SvStream& rStream,
                                    sal_uInt16 nFormat = GRFILTER_FORMAT_DONTKNOW,
                                    sal_uInt16 * pDeterminedFormat = nullptr, GraphicFilterImportFlags nImportFlags = GraphicFilterImportFlags::NONE,
-                                   WMF_EXTERNALHEADER *pExtHeader = nullptr );
+                                   WmfExternal const *pExtHeader = nullptr );
 
-    sal_uInt16          ImportGraphic( Graphic& rGraphic, const OUString& rPath,
+    /// Imports multiple graphics.
+    ///
+    /// The resulting graphic is added to rGraphics on success, nullptr is added on failure.
+    void ImportGraphics(std::vector< std::shared_ptr<Graphic> >& rGraphics, std::vector< std::unique_ptr<SvStream> > vStreams);
+
+    ErrCode             ImportGraphic( Graphic& rGraphic, const OUString& rPath,
                                    SvStream& rStream,
                                    sal_uInt16 nFormat,
                                    sal_uInt16 * pDeterminedFormat, GraphicFilterImportFlags nImportFlags,
                                    css::uno::Sequence< css::beans::PropertyValue >* pFilterData,
-                                   WMF_EXTERNALHEADER *pExtHeader = nullptr );
+                                   WmfExternal const *pExtHeader = nullptr );
+
+    Graphic ImportUnloadedGraphic(SvStream& rIStream);
 
     const FilterErrorEx&    GetLastError() const { return *pErrorEx;}
     void                    ResetLastError();
 
     const Link<ConvertData&,bool> GetFilterCallback() const;
     static GraphicFilter& GetGraphicFilter();
-    static int      LoadGraphic( const OUString& rPath, const OUString& rFilter,
+    static ErrCode  LoadGraphic( const OUString& rPath, const OUString& rFilter,
                      Graphic& rGraphic,
                      GraphicFilter* pFilter = nullptr,
                      sal_uInt16* pDeterminedFormat = nullptr );
 
-    sal_uInt16 compressAsPNG(const Graphic& rGraphic, SvStream& rOutputStream, sal_uInt32 nCompression = 5);
+    ErrCode         compressAsPNG(const Graphic& rGraphic, SvStream& rOutputStream);
+
+private:
+    OUString        aFilterPath;
+    FilterConfigCache*  pConfig;
+
+    void            ImplInit();
+    ErrCode         ImplSetError( ErrCode nError, const SvStream* pStm = nullptr );
+    ErrCode         ImpTestOrFindFormat( const OUString& rPath, SvStream& rStream, sal_uInt16& rFormat );
+
+                    DECL_LINK( FilterCallback, ConvertData&, bool );
+
+    std::unique_ptr<FilterErrorEx> pErrorEx;
+    bool const                     bUseConfig;
 };
 
 #endif // INCLUDED_VCL_GRAPHICFILTER_HXX

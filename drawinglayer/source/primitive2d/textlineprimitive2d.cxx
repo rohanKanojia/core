@@ -30,10 +30,8 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        Primitive2DContainer TextLinePrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& /*rViewInformation*/) const
+        void TextLinePrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& /*rViewInformation*/) const
         {
-            Primitive2DContainer xRetval;
-
             if(TEXT_LINE_NONE != getTextLine())
             {
                 bool bDoubleLine(false);
@@ -173,11 +171,11 @@ namespace drawinglayer
 
                 if(pDotDashArray)
                 {
-                    ::std::vector< double > aDoubleArray;
+                    std::vector< double > aDoubleArray;
 
                     for(const int* p = pDotDashArray; *p; ++p)
                     {
-                        aDoubleArray.push_back((double)(*p) * fHeight);
+                        aDoubleArray.push_back(static_cast<double>(*p) * fHeight);
                     }
 
                     aStrokeAttribute = attribute::StrokeAttribute(aDoubleArray);
@@ -191,7 +189,7 @@ namespace drawinglayer
                 aLine.append(basegfx::B2DPoint(getWidth(), fOffset));
 
                 const basegfx::B2DHomMatrix aUnscaledTransform(
-                    basegfx::tools::createShearXRotateTranslateB2DHomMatrix(
+                    basegfx::utils::createShearXRotateTranslateB2DHomMatrix(
                         fShearX, fRotate, aTranslate));
 
                 aLine.transform(aUnscaledTransform);
@@ -218,7 +216,7 @@ namespace drawinglayer
                 }
 
                 // add primitive
-                xRetval.push_back(aNewPrimitive);
+                rContainer.push_back(aNewPrimitive);
 
                 if(bDoubleLine)
                 {
@@ -232,7 +230,7 @@ namespace drawinglayer
                     }
 
                     // move base point of text to 0.0 and de-rotate
-                    basegfx::B2DHomMatrix aTransform(basegfx::tools::createTranslateB2DHomMatrix(
+                    basegfx::B2DHomMatrix aTransform(basegfx::utils::createTranslateB2DHomMatrix(
                         -aTranslate.getX(), -aTranslate.getY()));
                     aTransform.rotate(-fRotate);
 
@@ -245,11 +243,9 @@ namespace drawinglayer
 
                     // add transform primitive
                     const Primitive2DContainer aContent { aNewPrimitive };
-                    xRetval.push_back( Primitive2DReference(new TransformPrimitive2D(aTransform, aContent)));
+                    rContainer.push_back( new TransformPrimitive2D(aTransform, aContent) );
                 }
             }
-
-            return xRetval;
         }
 
         TextLinePrimitive2D::TextLinePrimitive2D(

@@ -61,7 +61,7 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPFRIBFRAME_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPFRIBFRAME_HXX
 
-#include "lwpfrib.hxx"
+#include <lwpfrib.hxx>
 #include "lwplayout.hxx"
 #include "lwppara.hxx"
 #include "lwpframelayout.hxx"
@@ -70,7 +70,6 @@ class LwpFribFrame : public LwpFrib
 {
 public:
     explicit LwpFribFrame( LwpPara* pPara) : LwpFrib(pPara){}
-    virtual ~LwpFribFrame(){}
     void Read(LwpObjectStream* pObjStrm, sal_uInt16 len) override;
     rtl::Reference<LwpObject> GetLayout();
     void RegisterStyle(LwpFoundry* pFoundry) override;
@@ -84,11 +83,10 @@ class LwpFribRubyFrame : public LwpFrib
 {
 public:
     explicit LwpFribRubyFrame(LwpPara* pPara) : LwpFrib(pPara){}
-    virtual ~LwpFribRubyFrame(){}
     void Read(LwpObjectStream* pObjStrm, sal_uInt16 len) override;
     LwpRubyLayout* GetLayout();
     void RegisterStyle(LwpFoundry* pFoundry) override;
-    void XFConvert(XFContentContainer* pCont);
+    void XFConvert();
 private:
     LwpObjectID m_objLayout;
 };

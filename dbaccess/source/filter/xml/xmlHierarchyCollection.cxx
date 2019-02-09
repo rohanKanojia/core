@@ -25,11 +25,12 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
-#include "xmlstrings.hrc"
+#include <stringconstants.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
-#include <tools/debug.hxx>
+#include <comphelper/propertysequence.hxx>
 
 namespace dbaxml
 {
@@ -72,20 +73,14 @@ OXMLHierarchyCollection::OXMLHierarchyCollection( ODBFilter& rImport
     {
         try
         {
-            Sequence< Any > aArguments(2);
-            PropertyValue aValue;
-            // set as folder
-            aValue.Name = "Name";
-            aValue.Value <<= m_sName;
-            aArguments[0] <<= aValue;
-            //parent
-            aValue.Name = "Parent";
-            aValue.Value <<= _xParentContainer;
-            aArguments[1] <<= aValue;
-
             Reference<XMultiServiceFactory> xORB(_xParentContainer,UNO_QUERY);
             if ( xORB.is() )
             {
+                Sequence<Any> aArguments(comphelper::InitAnyPropertySequence(
+                {
+                    {"Name", Any(m_sName)}, // set as folder
+                    {"Parent", Any(_xParentContainer)},
+                }));
                 m_xContainer.set(xORB->createInstanceWithArguments(_sCollectionServiceName,aArguments),UNO_QUERY);
                 Reference<XNameContainer> xNameContainer(_xParentContainer,UNO_QUERY);
                 if ( xNameContainer.is() && !xNameContainer->hasByName(m_sName) )
@@ -94,7 +89,7 @@ OXMLHierarchyCollection::OXMLHierarchyCollection( ODBFilter& rImport
         }
         catch(Exception&)
         {
-            OSL_FAIL("OXMLHierarchyCollection::OXMLHierarchyCollection -> exception catched");
+            OSL_FAIL("OXMLHierarchyCollection::OXMLHierarchyCollection -> exception caught");
         }
     }
 }
@@ -116,7 +111,7 @@ OXMLHierarchyCollection::~OXMLHierarchyCollection()
 
 }
 
-SvXMLImportContext* OXMLHierarchyCollection::CreateChildContext(
+SvXMLImportContextRef OXMLHierarchyCollection::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )

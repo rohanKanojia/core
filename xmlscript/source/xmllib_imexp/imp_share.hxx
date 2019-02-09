@@ -32,6 +32,8 @@
 #include <com/sun/star/awt/FontDescriptor.hpp>
 
 #include <com/sun/star/xml/input/XRoot.hpp>
+#include <com/sun/star/xml/sax/SAXException.hpp>
+#include <rtl/ref.hxx>
 
 #include <vector>
 
@@ -108,7 +110,7 @@ struct LibraryImport
     friend class LibraryElement;
 
     LibDescriptorArray* mpLibArray;
-    LibDescriptor*      mpLibDesc;      // Single library mode
+    LibDescriptor* const mpLibDesc;      // Single library mode
 
     sal_Int32 XMLNS_LIBRARY_UID;
     sal_Int32 XMLNS_XLINK_UID;
@@ -131,34 +133,29 @@ public:
     {
     }
 
-    virtual ~LibraryImport();
+    virtual ~LibraryImport() override;
 
     // XRoot
     virtual void SAL_CALL startDocument(
-        css::uno::Reference< css::xml::input::XNamespaceMapping > const & xNamespaceMapping )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL endDocument()
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference< css::xml::input::XNamespaceMapping > const & xNamespaceMapping ) override;
+    virtual void SAL_CALL endDocument() override;
     virtual void SAL_CALL processingInstruction(
-        OUString const & rTarget, OUString const & rData )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+        OUString const & rTarget, OUString const & rData ) override;
     virtual void SAL_CALL setDocumentLocator(
-        css::uno::Reference< css::xml::sax::XLocator > const & xLocator )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference< css::xml::sax::XLocator > const & xLocator ) override;
     virtual css::uno::Reference< css::xml::input::XElement > SAL_CALL startRootElement(
         sal_Int32 nUid, OUString const & rLocalName,
-        css::uno::Reference< css::xml::input::XAttributes > const & xAttributes )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference< css::xml::input::XAttributes > const & xAttributes ) override;
 };
 
 class LibElementBase
     : public ::cppu::WeakImplHelper< css::xml::input::XElement >
 {
 protected:
-    LibraryImport * _pImport;
-    LibElementBase * _pParent;
-
-    OUString _aLocalName;
+    rtl::Reference<LibraryImport>  mxImport;
+    rtl::Reference<LibElementBase> mxParent;
+private:
+    OUString const _aLocalName;
     css::uno::Reference< css::xml::input::XAttributes > _xAttributes;
 
 public:
@@ -166,69 +163,54 @@ public:
         OUString const & rLocalName,
         css::uno::Reference< css::xml::input::XAttributes > const & xAttributes,
         LibElementBase * pParent, LibraryImport * pImport );
-    virtual ~LibElementBase();
+    virtual ~LibElementBase() override;
 
     // XElement
-    virtual css::uno::Reference< css::xml::input::XElement > SAL_CALL getParent()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getLocalName()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int32 SAL_CALL getUid()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::xml::input::XAttributes > SAL_CALL getAttributes()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::xml::input::XElement > SAL_CALL getParent() override;
+    virtual OUString SAL_CALL getLocalName() override;
+    virtual sal_Int32 SAL_CALL getUid() override;
+    virtual css::uno::Reference< css::xml::input::XAttributes > SAL_CALL getAttributes() override;
     virtual void SAL_CALL ignorableWhitespace(
-        OUString const & rWhitespaces )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL characters( OUString const & rChars )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+        OUString const & rWhitespaces ) override;
+    virtual void SAL_CALL characters( OUString const & rChars ) override;
     virtual void SAL_CALL processingInstruction(
-        OUString const & rTarget, OUString const & rData )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL endElement()
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+        OUString const & rTarget, OUString const & rData ) override;
+    virtual void SAL_CALL endElement() override;
     virtual css::uno::Reference< css::xml::input::XElement > SAL_CALL startChildElement(
         sal_Int32 nUid, OUString const & rLocalName,
-        css::uno::Reference< css::xml::input::XAttributes > const & xAttributes )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference< css::xml::input::XAttributes > const & xAttributes ) override;
 };
 
 class LibrariesElement : public LibElementBase
 {
     friend class LibraryElement;
 
-protected:
     std::vector< LibDescriptor > mLibDescriptors;
 
 public:
     virtual css::uno::Reference< css::xml::input::XElement > SAL_CALL startChildElement(
         sal_Int32 nUid, OUString const & rLocalName,
-        css::uno::Reference< css::xml::input::XAttributes > const & xAttributes )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL endElement()
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference< css::xml::input::XAttributes > const & xAttributes ) override;
+    virtual void SAL_CALL endElement() override;
 
     LibrariesElement(
         OUString const & rLocalName,
         css::uno::Reference< css::xml::input::XAttributes > const & xAttributes,
-        LibElementBase * pParent, LibraryImport * pImport )
-        : LibElementBase( rLocalName, xAttributes, pParent, pImport )
+        LibraryImport * pImport )
+        : LibElementBase( rLocalName, xAttributes, nullptr, pImport )
         {}
 };
 
 class LibraryElement : public LibElementBase
 {
-protected:
     std::vector< OUString > mElements;
 
 public:
 
     virtual css::uno::Reference< css::xml::input::XElement > SAL_CALL startChildElement(
         sal_Int32 nUid, OUString const & rLocalName,
-        css::uno::Reference< css::xml::input::XAttributes > const & xAttributes )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL endElement()
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference< css::xml::input::XAttributes > const & xAttributes ) override;
+    virtual void SAL_CALL endElement() override;
 
     LibraryElement(
         OUString const & rLocalName,

@@ -19,7 +19,7 @@
 
 #include "filglob.hxx"
 #include "filerror.hxx"
-#include "shell.hxx"
+#include "filtask.hxx"
 #include "bc.hxx"
 #include <osl/file.hxx>
 #include <vector>
@@ -34,16 +34,16 @@
 #include <com/sun/star/ucb/NameClashException.hpp>
 #include <com/sun/star/ucb/InteractiveBadTransferURLException.hpp>
 #include <com/sun/star/ucb/UnsupportedNameClashException.hpp>
-#include "com/sun/star/beans/PropertyState.hpp"
-#include "com/sun/star/beans/PropertyValue.hpp"
+#include <com/sun/star/beans/PropertyState.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/ucb/InteractiveAugmentedIOException.hpp>
-#include "com/sun/star/uno/Any.hxx"
-#include "com/sun/star/uno/Sequence.hxx"
-#include "osl/diagnose.h"
-#include "rtl/ustrbuf.hxx"
+#include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <osl/diagnose.h>
+#include <rtl/ustrbuf.hxx>
 #include <rtl/uri.hxx>
 #include <rtl/ustring.hxx>
-#include "sal/types.h"
+#include <sal/types.h>
 
 using namespace ucbhelper;
 using namespace osl;
@@ -120,25 +120,25 @@ namespace {
                                     (bRemoveProperty ? 1 : 0) );
         sal_Int32 i = 0;
         aArguments[i++]
-            <<= PropertyValue(OUString( "Uri"),
+            <<= PropertyValue("Uri",
                               -1,
                               makeAny(rPhysicalUrl),
                               PropertyState_DIRECT_VALUE);
         if (bResourceName)
             aArguments[i++]
-                <<= PropertyValue(OUString( "ResourceName"),
+                <<= PropertyValue("ResourceName",
                                   -1,
                                   makeAny(aResourceName),
                                   PropertyState_DIRECT_VALUE);
         if (bResourceType)
             aArguments[i++]
-                <<= PropertyValue(OUString( "ResourceType"),
+                <<= PropertyValue("ResourceType",
                                   -1,
                                   makeAny(aResourceType),
                                   PropertyState_DIRECT_VALUE);
         if (bRemoveProperty)
             aArguments[i++]
-                <<= PropertyValue(OUString( "Removable"),
+                <<= PropertyValue("Removable",
                                   -1,
                                   makeAny(bRemovable),
                                   PropertyState_DIRECT_VALUE);
@@ -154,7 +154,7 @@ namespace fileaccess {
     bool isChild( const OUString& srcUnqPath,
                       const OUString& dstUnqPath )
     {
-        static sal_Unicode slash = '/';
+        static const sal_Unicode slash = '/';
         // Simple lexical comparison
         sal_Int32 srcL = srcUnqPath.getLength();
         sal_Int32 dstL = dstUnqPath.getLength();
@@ -178,16 +178,13 @@ namespace fileaccess {
     {
         sal_Int32 srcL = aOldPrefix.getLength();
 
-        OUString new_Name = old_Name.copy( srcL );
-        new_Name = ( aNewPrefix + new_Name );
-        return new_Name;
+        return aNewPrefix + old_Name.copy( srcL );
     }
 
 
     OUString getTitle( const OUString& aPath )
     {
-        sal_Unicode slash = '/';
-        sal_Int32 lastIndex = aPath.lastIndexOf( slash );
+        sal_Int32 lastIndex = aPath.lastIndexOf( '/' );
         return aPath.copy( lastIndex + 1 );
     }
 
@@ -263,16 +260,13 @@ namespace fileaccess {
         {
             IllegalArgumentException excep;
             excep.ArgumentPosition = 0;
-            aAny <<= excep;
-            cancelCommandExecution(
-                aAny,xEnv);
+            cancelCommandExecution(Any(excep), xEnv);
         }
         else if( errorCode == TASKHANDLING_UNSUPPORTED_OPEN_MODE )
         {
             UnsupportedOpenModeException excep;
             excep.Mode = sal::static_int_cast< sal_Int16 >(minorCode);
-            aAny <<= excep;
-                cancelCommandExecution( aAny,xEnv );
+            cancelCommandExecution( Any(excep),xEnv );
         }
         else if(errorCode == TASKHANDLING_DELETED_STATE_IN_OPEN_COMMAND  ||
                 errorCode == TASKHANDLING_INSERTED_STATE_IN_OPEN_COMMAND ||
@@ -314,6 +308,7 @@ namespace fileaccess {
                 case FileBase::E_ROFS:
                     // #i4735# handle ROFS transparently as ACCESS_DENIED
                 case FileBase::E_ACCES:
+                case FileBase::E_PERM:
                     // permission denied<P>
                     ioErrorCode = IOErrorCode_ACCESS_DENIED;
                     break;
@@ -349,7 +344,9 @@ namespace fileaccess {
                 case FileBase::E_NOLCK:  // No record locks available
                     ioErrorCode = IOErrorCode_LOCKING_VIOLATION;
                     break;
-
+                case FileBase::E_NOSYS:
+                    ioErrorCode = IOErrorCode_NOT_SUPPORTED;
+                    break;
                 case FileBase::E_FAULT: // Bad address
                 case FileBase::E_LOOP:  // Too many symbolic links encountered
                 case FileBase::E_NOSPC: // No space left on device
@@ -509,8 +506,7 @@ namespace fileaccess {
                 OUString("ContentType");
 
             aAny <<= MissingPropertiesException(
-                OUString( "a property is missing necessary"
-                               "to create a content"),
+                "a property is missing, necessary to create a content",
                 xComProc,
                 aSeq);
             cancelCommandExecution(aAny,xEnv);
@@ -541,8 +537,7 @@ namespace fileaccess {
         {
             aAny <<=
                 MissingInputStreamException(
-                    OUString( "the inputstream is missing necessary"
-                                   "to create a content"),
+                    "the inputstream is missing, necessary to create a content",
                     xComProc);
             cancelCommandExecution(aAny,xEnv);
         }
@@ -554,8 +549,7 @@ namespace fileaccess {
             excep.Classification = InteractionClassification_ERROR;
             excep.Context = Reference<XInterface>( xComProc, UNO_QUERY );
             excep.Message = "file exists and overwrite forbidden";
-            aAny <<= excep;
-            cancelCommandExecution( aAny,xEnv );
+            cancelCommandExecution( Any(excep), xEnv );
         }
         else if( errorCode == TASKHANDLING_INVALID_NAME_MKDIR )
         {
@@ -564,12 +558,12 @@ namespace fileaccess {
             PropertyValue prop;
             prop.Name = "ResourceName";
             prop.Handle = -1;
-            OUString m_aClashingName(
+            OUString aClashingName(
                 rtl::Uri::decode(
                     getTitle(aUncPath),
                     rtl_UriDecodeWithCharset,
                     RTL_TEXTENCODING_UTF8));
-            prop.Value <<= m_aClashingName;
+            prop.Value <<= aClashingName;
             Sequence<Any> seq(1);
             seq[0] <<= prop;
             excep.Arguments = seq;
@@ -578,10 +572,7 @@ namespace fileaccess {
             excep.Message = "the name contained invalid characters";
             if(isHandled)
                 throw excep;
-            else {
-                aAny <<= excep;
-                cancelCommandExecution( aAny,xEnv );
-            }
+            cancelCommandExecution( Any(excep), xEnv );
 //              ioErrorCode = IOErrorCode_INVALID_CHARACTER;
 //              cancelCommandExecution(
 //                  ioErrorCode,
@@ -599,10 +590,7 @@ namespace fileaccess {
             excep.Message = "folder exists and overwrite forbidden";
             if(isHandled)
                 throw excep;
-            else {
-                aAny <<= excep;
-                cancelCommandExecution( aAny,xEnv );
-            }
+            cancelCommandExecution( Any(excep), xEnv );
 //              ioErrorCode = IOErrorCode_ALREADY_EXISTING;
 //              cancelCommandExecution(
 //                  ioErrorCode,
@@ -787,10 +775,9 @@ namespace fileaccess {
         }
         else if( errorCode == TASKHANDLING_TRANSFER_INVALIDSCHEME )
         {
-            aAny <<=
-                InteractiveBadTransferURLException(
-                    OUString( "bad transfer url"),
-                    xComProc);
+            aAny <<= InteractiveBadTransferURLException(
+                        "bad transfer url",
+                        xComProc);
             cancelCommandExecution( aAny,xEnv );
         }
         else if( errorCode == TASKHANDLING_OVERWRITE_FOR_MOVE      ||
@@ -853,9 +840,8 @@ namespace fileaccess {
             excep.Classification = InteractionClassification_ERROR;
             excep.Context = Reference<XInterface>( xComProc, UNO_QUERY );
             excep.Message = "name clash during copy or move";
-            aAny <<= excep;
 
-            cancelCommandExecution(aAny,xEnv);
+            cancelCommandExecution(Any(excep), xEnv);
         }
         else if( errorCode == TASKHANDLING_NAMECLASHSUPPORT_FOR_MOVE   ||
                  errorCode == TASKHANDLING_NAMECLASHSUPPORT_FOR_COPY )
@@ -865,8 +851,7 @@ namespace fileaccess {
             excep.Context = Reference<XInterface>( xComProc, UNO_QUERY );
             excep.Message = "name clash value not supported during copy or move";
 
-            aAny <<= excep;
-            cancelCommandExecution(aAny,xEnv);
+            cancelCommandExecution(Any(excep), xEnv);
         }
         else
         {

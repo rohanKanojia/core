@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <config_features.h>
+#include <config_java.h>
 
 #include "desktopcontext.hxx"
 
@@ -36,14 +36,14 @@ DesktopContext::DesktopContext( const Reference< XCurrentContext > & ctx )
 {
 }
 
-Any SAL_CALL DesktopContext::getValueByName( const OUString& Name) throw (RuntimeException, std::exception)
+Any SAL_CALL DesktopContext::getValueByName( const OUString& Name)
 {
     Any retVal;
 
     if ( Name == JAVA_INTERACTION_HANDLER_NAME )
     {
 #if HAVE_FEATURE_JAVA
-        retVal = makeAny( Reference< XInteractionHandler >( new svt::JavaInteractionHandler()) );
+        retVal <<= Reference< XInteractionHandler >( new svt::JavaInteractionHandler());
 #endif
     }
     else if( m_xNextContext.is() )

@@ -21,9 +21,9 @@
 #include <comphelper/documentinfo.hxx>
 #include <comphelper/namedvaluecollection.hxx>
 
-#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
 #include <com/sun/star/document/XDocumentProperties.hpp>
+#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/frame/XTitle.hpp>
 
@@ -31,6 +31,7 @@
 
 #include <osl/diagnose.h>
 #include <osl/thread.h>
+#include <sal/log.hxx>
 
 namespace comphelper {
 
@@ -39,15 +40,12 @@ namespace comphelper {
     using ::com::sun::star::uno::UNO_QUERY;
     using ::com::sun::star::uno::UNO_QUERY_THROW;
     using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::frame::XModel;
     using ::com::sun::star::frame::XTitle;
     using ::com::sun::star::frame::XController;
-    using ::com::sun::star::beans::XPropertySet;
     using ::com::sun::star::document::XDocumentPropertiesSupplier;
     using ::com::sun::star::document::XDocumentProperties;
     using ::com::sun::star::frame::XStorable;
-    using ::com::sun::star::beans::XPropertySetInfo;
     using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::frame::XFrame;
 
@@ -105,7 +103,6 @@ namespace comphelper {
             {
                 Reference< XDocumentProperties > xDocProps (
                     xDPS->getDocumentProperties(), UNO_QUERY_THROW );
-                OSL_ENSURE(xDocProps.is(), "no DocumentProperties");
                 sTitle = xDocProps->getTitle();
                 if ( !sTitle.isEmpty() )
                     return sTitle;
@@ -118,7 +115,7 @@ namespace comphelper {
                 return sTitle;
 
             // 5. try the last segment of the document URL
-            // this formerly was an INetURLObject::getName( LAST_SEGMENT, true, DECODE_WITH_CHARSET ),
+            // this formerly was an INetURLObject::getName( LAST_SEGMENT, true, DecodeMechanism::WithCharset ),
             // but since we moved this code to comphelper, we do not have access to an INetURLObject anymore
             // This heuristics here should be sufficient - finally, we will get an UNO title API in a not
             // too distant future (hopefully), then  this complete class is superfluous)
@@ -151,17 +148,11 @@ namespace comphelper {
         catch ( const Exception& )
         {
             css::uno::Any caught( ::cppu::getCaughtException() );
-            OString sMessage( "caught an exception!" );
-            sMessage += "\ntype   : ";
-            sMessage += OString( caught.getValueTypeName().getStr(), caught.getValueTypeName().getLength(), osl_getThreadTextEncoding() );
-            sMessage += "\nmessage: ";
             css::uno::Exception exception;
             caught >>= exception;
-            sMessage += OString( exception.Message.getStr(), exception.Message.getLength(), osl_getThreadTextEncoding() );
-            sMessage += "\nin function:\n";
-            sMessage += OSL_THIS_FUNC;
-            sMessage += "\n";
-            OSL_FAIL( sMessage.getStr() );
+            SAL_WARN( "comphelper", "caught an exception!\ntype   : " << caught.getValueTypeName()
+                                    << "\nmessage: " << exception
+                                    << "\nin function:\n" << OSL_THIS_FUNC);
         }
 
         return sTitle;

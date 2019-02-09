@@ -29,15 +29,12 @@ namespace svx
 {
 
 
-/**
-*/
-
 class SAL_WARN_UNUSED SVX_DLLPUBLIC FormatPaintBrushToolBoxControl : public SfxToolBoxControl
 {
 public:
     SFX_DECL_TOOLBOX_CONTROL();
     FormatPaintBrushToolBoxControl( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx );
-    virtual ~FormatPaintBrushToolBoxControl();
+    virtual ~FormatPaintBrushToolBoxControl() override;
 
     virtual void    DoubleClick() override;
     virtual void    Click() override;
@@ -46,7 +43,7 @@ public:
     virtual void    StateChanged( sal_uInt16 nSID, SfxItemState eState,
                                               const SfxPoolItem* pState ) override;
 private:
-    DECL_LINK_TYPED( WaitDoubleClickHdl, Timer*, void );
+    DECL_LINK( WaitDoubleClickHdl, Timer*, void );
     void impl_executePaintBrush();
 
 private:

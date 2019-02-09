@@ -18,6 +18,7 @@
  */
 
 #include <editeng/formatbreakitem.hxx>
+#include <sal/log.hxx>
 #include <doc.hxx>
 #include <IDocumentStatistics.hxx>
 #include <IDocumentLayoutAccess.hxx>
@@ -25,7 +26,7 @@
 #include <docary.hxx>
 #include <fmtpdsc.hxx>
 #include <laycache.hxx>
-#include <layhelp.hxx>
+#include "layhelp.hxx"
 #include <pagefrm.hxx>
 #include <rootfrm.hxx>
 #include <txtfrm.hxx>
@@ -38,13 +39,18 @@
 #include <frmtool.hxx>
 #include <dflyobj.hxx>
 #include <dcontact.hxx>
-#include "viewopt.hxx"
+#include <viewopt.hxx>
 #include <flyfrm.hxx>
 #include <sortedobjs.hxx>
+#include <ndindex.hxx>
+#include <node.hxx>
 
+#include <limits>
 #include <set>
 
 using namespace ::com::sun::star;
+
+SwLayoutCache::SwLayoutCache() : nLockCount( 0 ) {}
 
 /*
  *  Reading and writing of the layout cache.
@@ -61,11 +67,10 @@ void SwLayoutCache::Read( SvStream &rStream )
 {
     if( !pImpl )
     {
-        pImpl = new SwLayCacheImpl;
+        pImpl.reset( new SwLayCacheImpl );
         if( !pImpl->Read( rStream ) )
         {
-            delete pImpl;
-            pImpl = nullptr;
+            pImpl.reset();
         }
     }
 }
@@ -108,8 +113,8 @@ bool SwLayCacheImpl::Read( SvStream& rStream )
             else
                 nOffset = COMPLETE_STRING;
             aIo.CloseFlagRec();
-            Insert( SW_LAYCACHE_IO_REC_PARA, nIndex, (sal_Int32)nOffset );
-            aIo.CloseRec( SW_LAYCACHE_IO_REC_PARA );
+            Insert( SW_LAYCACHE_IO_REC_PARA, nIndex, static_cast<sal_Int32>(nOffset) );
+            aIo.CloseRec();
             break;
         }
         case SW_LAYCACHE_IO_REC_TABLE:
@@ -117,9 +122,9 @@ bool SwLayCacheImpl::Read( SvStream& rStream )
             aIo.OpenFlagRec();
             aIo.GetStream().ReadUInt32( nIndex )
                            .ReadUInt32( nOffset );
-            Insert( SW_LAYCACHE_IO_REC_TABLE, nIndex, (sal_Int32)nOffset );
+            Insert( SW_LAYCACHE_IO_REC_TABLE, nIndex, static_cast<sal_Int32>(nOffset) );
             aIo.CloseFlagRec();
-            aIo.CloseRec( SW_LAYCACHE_IO_REC_TABLE );
+            aIo.CloseRec();
             break;
         case SW_LAYCACHE_IO_REC_FLY:
         {
@@ -130,8 +135,8 @@ bool SwLayCacheImpl::Read( SvStream& rStream )
             sal_uInt16 nPgNum(0);
             aIo.GetStream().ReadUInt16( nPgNum ).ReadUInt32( nIndex )
                    .ReadInt32( nX ).ReadInt32( nY ).ReadInt32( nW ).ReadInt32( nH );
-            m_FlyCache.push_back(SwFlyCache( nPgNum, nIndex, nX, nY, nW, nH ));
-            aIo.CloseRec( SW_LAYCACHE_IO_REC_FLY );
+            m_FlyCache.emplace_back( nPgNum, nIndex, nX, nY, nW, nH );
+            aIo.CloseRec();
             break;
         }
         default:
@@ -139,7 +144,7 @@ bool SwLayCacheImpl::Read( SvStream& rStream )
             break;
         }
     }
-    aIo.CloseRec( SW_LAYCACHE_IO_REC_PAGES );
+    aIo.CloseRec();
 
     return !aIo.HasError();
 }
@@ -183,7 +188,9 @@ void SwLayoutCache::Write( SvStream &rStream, const SwDoc& rDoc )
                 {
                     if( pTmp->IsTextFrame() )
                     {
-                        sal_uLong nNdIdx = static_cast<SwTextFrame*>(pTmp)->GetNode()->GetIndex();
+                        SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(pTmp));
+                        assert(!pFrame->GetMergedPara());
+                        sal_uLong nNdIdx = pFrame->GetTextNodeFirst()->GetIndex();
                         if( nNdIdx > nStartOfContent )
                         {
                             /*  Open Paragraph Record */
@@ -194,10 +201,10 @@ void SwLayoutCache::Write( SvStream &rStream, const SwDoc& rDoc )
                             nNdIdx -= nStartOfContent;
                             aIo.GetStream().WriteUInt32( nNdIdx );
                             if( bFollow )
-                                aIo.GetStream().WriteUInt32( static_cast<SwTextFrame*>(pTmp)->GetOfst() );
+                                aIo.GetStream().WriteUInt32( sal_Int32(static_cast<SwTextFrame*>(pTmp)->GetOfst()) );
                             aIo.CloseFlagRec();
                             /*  Close Paragraph Record */
-                            aIo.CloseRec( SW_LAYCACHE_IO_REC_PARA );
+                            aIo.CloseRec();
                         }
                     }
                     else if( pTmp->IsTabFrame() )
@@ -237,14 +244,14 @@ void SwLayoutCache::Write( SvStream &rStream, const SwDoc& rDoc )
                                                .WriteUInt32( nOfst );
                                 aIo.CloseFlagRec();
                                 /* Close Table Record  */
-                                aIo.CloseRec( SW_LAYCACHE_IO_REC_TABLE );
+                                aIo.CloseRec();
                             }
                             // If the table has a follow on the next page,
                             // we know already the row number and store this
                             // immediately.
                             if( pTab->GetFollow() )
                             {
-                                if( nOfst == (sal_uLong) COMPLETE_STRING )
+                                if( nOfst == sal_uLong(COMPLETE_STRING) )
                                     nOfst = 0;
                                 do
                                 {
@@ -275,12 +282,11 @@ void SwLayoutCache::Write( SvStream &rStream, const SwDoc& rDoc )
             if( pPage->GetSortedObjs() )
             {
                 SwSortedObjs &rObjs = *pPage->GetSortedObjs();
-                for ( size_t i = 0; i < rObjs.size(); ++i )
+                for (SwAnchoredObject* pAnchoredObj : rObjs)
                 {
-                    SwAnchoredObject* pAnchoredObj = rObjs[i];
                     if (SwFlyFrame *pFly = dynamic_cast<SwFlyFrame*>(pAnchoredObj))
                     {
-                        if( pFly->Frame().Left() != FAR_AWAY &&
+                        if( pFly->getFrameArea().Left() != FAR_AWAY &&
                             !pFly->GetAnchorFrame()->FindFooterOrHeader() )
                         {
                             const SwContact *pC =
@@ -293,15 +299,15 @@ void SwLayoutCache::Write( SvStream &rStream, const SwDoc& rDoc )
                                 aIo.OpenRec( SW_LAYCACHE_IO_REC_FLY );
                                 aIo.OpenFlagRec( 0, 0 );
                                 aIo.CloseFlagRec();
-                                SwRect &rRct = pFly->Frame();
-                                sal_Int32 nX = rRct.Left() - pPage->Frame().Left();
-                                sal_Int32 nY = rRct.Top() - pPage->Frame().Top();
+                                const SwRect& rRct = pFly->getFrameArea();
+                                sal_Int32 nX = rRct.Left() - pPage->getFrameArea().Left();
+                                sal_Int32 nY = rRct.Top() - pPage->getFrameArea().Top();
                                 aIo.GetStream().WriteUInt16( nPageNum ).WriteUInt32( nOrdNum )
                                                .WriteInt32( nX ).WriteInt32( nY )
                                                .WriteInt32( rRct.Width() )
                                                .WriteInt32( rRct.Height() );
                                 /* Close Fly Record  */
-                                aIo.CloseRec( SW_LAYCACHE_IO_REC_FLY );
+                                aIo.CloseRec();
                             }
                         }
                     }
@@ -309,7 +315,7 @@ void SwLayoutCache::Write( SvStream &rStream, const SwDoc& rDoc )
             }
             pPage = static_cast<SwPageFrame*>(pPage->GetNext());
         }
-        aIo.CloseRec( SW_LAYCACHE_IO_REC_PAGES );
+        aIo.CloseRec();
     }
 }
 
@@ -321,7 +327,7 @@ bool SwLayoutCache::CompareLayout( const SwDoc& rDoc ) const
     const SwRootFrame *pRootFrame = rDoc.getIDocumentLayoutAccess().GetCurrentLayout();
     if( pRootFrame )
     {
-        sal_uInt16 nIndex = 0;
+        size_t nIndex = 0;
         sal_uLong nStartOfContent = rDoc.GetNodes().GetEndOfContent().
                                 StartOfSectionNode()->GetIndex();
         const SwPageFrame* pPage = static_cast<const SwPageFrame*>(pRootFrame->Lower());
@@ -340,7 +346,10 @@ bool SwLayoutCache::CompareLayout( const SwDoc& rDoc ) const
             {
                 if( pTmp->IsTextFrame() )
                 {
-                    sal_uLong nNdIdx = static_cast<const SwTextFrame*>(pTmp)->GetNode()->GetIndex();
+
+                    SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(pTmp));
+                    assert(!pFrame->GetMergedPara());
+                    sal_uLong nNdIdx = pFrame->GetTextNodeFirst()->GetIndex();
                     if( nNdIdx > nStartOfContent )
                     {
                         bool bFollow = static_cast<const SwTextFrame*>(pTmp)->IsFollow();
@@ -348,8 +357,9 @@ bool SwLayoutCache::CompareLayout( const SwDoc& rDoc ) const
                         if( pImpl->GetBreakIndex( nIndex ) != nNdIdx ||
                             SW_LAYCACHE_IO_REC_PARA !=
                             pImpl->GetBreakType( nIndex ) ||
-                            ( bFollow ? static_cast<const SwTextFrame*>(pTmp)->GetOfst()
-                              : COMPLETE_STRING ) != pImpl->GetBreakOfst( nIndex ) )
+                            (bFollow
+                              ? sal_Int32(static_cast<const SwTextFrame*>(pTmp)->GetOfst())
+                              : COMPLETE_STRING) != pImpl->GetBreakOfst(nIndex))
                         {
                             return false;
                         }
@@ -429,15 +439,13 @@ void SwLayoutCache::ClearImpl()
 {
     if( !IsLocked() )
     {
-        delete pImpl;
-        pImpl = nullptr;
+        pImpl.reset();
     }
 }
 
 SwLayoutCache::~SwLayoutCache()
 {
     OSL_ENSURE( !nLockCount, "Deleting a locked SwLayoutCache!?" );
-    delete pImpl;
 }
 
 /// helper class to create not nested section frames for nested sections.
@@ -455,58 +463,103 @@ SwActualSection::SwActualSection( SwActualSection *pUp,
     }
 }
 
+namespace {
+
+bool sanityCheckLayoutCache(SwLayCacheImpl const& rCache,
+        SwNodes const& rNodes, sal_uLong nNodeIndex)
+{
+    auto const nStartOfContent(rNodes.GetEndOfContent().StartOfSectionNode()->GetIndex());
+    nNodeIndex -= nStartOfContent;
+    auto const nMaxIndex(rNodes.GetEndOfContent().GetIndex() - nStartOfContent);
+    for (size_t nIndex = 0; nIndex < rCache.size(); ++nIndex)
+    {
+        auto const nBreakIndex(rCache.GetBreakIndex(nIndex));
+        if (nBreakIndex < nNodeIndex || nMaxIndex <= nBreakIndex)
+        {
+            SAL_WARN("sw.layout",
+                "invalid node index in layout-cache: " << nBreakIndex);
+            return false;
+        }
+        auto const nBreakType(rCache.GetBreakType(nIndex));
+        switch (nBreakType)
+        {
+            case SW_LAYCACHE_IO_REC_PARA:
+                if (!rNodes[nBreakIndex + nStartOfContent]->IsTextNode())
+                {
+                    SAL_WARN("sw.layout",
+                        "invalid node of type 'P' in layout-cache");
+                    return false;
+                }
+                break;
+            case SW_LAYCACHE_IO_REC_TABLE:
+                if (!rNodes[nBreakIndex + nStartOfContent]->IsTableNode())
+                {
+                    SAL_WARN("sw.layout",
+                        "invalid node of type 'T' in layout-cache");
+                    return false;
+                }
+                break;
+            default:
+                assert(false); // Read shouldn't have inserted that
+        }
+    }
+    return true;
+}
+
+} // namespace
+
 /** helper class, which utilizes the layout cache information
  *  to distribute the document content to the right pages.
- * It's used by the _InsertCnt(..)-function.
- * If there's no layout cache, the distibution to the pages is more
+ * It's used by the InsertCnt_(..)-function.
+ * If there's no layout cache, the distribution to the pages is more
  * a guess, but a guess with statistical background.
  */
 SwLayHelper::SwLayHelper( SwDoc *pD, SwFrame* &rpF, SwFrame* &rpP, SwPageFrame* &rpPg,
-                          SwLayoutFrame* &rpL, SwActualSection* &rpA, bool &rB,
+                          SwLayoutFrame* &rpL, std::unique_ptr<SwActualSection> &rpA,
                           sal_uLong nNodeIndex, bool bCache )
-    : rpFrame( rpF )
-    , rpPrv( rpP )
-    , rpPage( rpPg )
-    , rpLay( rpL )
-    , rpActualSection( rpA )
-    , rbBreakAfter(rB)
-    , pDoc(pD)
-    , nMaxParaPerPage( 25 )
-    , nParagraphCnt( bCache ? 0 : USHRT_MAX )
-    , nFlyIdx( 0 )
-    , bFirst( bCache )
+    : mrpFrame( rpF )
+    , mrpPrv( rpP )
+    , mrpPage( rpPg )
+    , mrpLay( rpL )
+    , mrpActualSection( rpA )
+    , mbBreakAfter(false)
+    , mpDoc(pD)
+    , mnMaxParaPerPage( 25 )
+    , mnParagraphCnt( bCache ? 0 : USHRT_MAX )
+    , mnFlyIdx( 0 )
+    , mbFirst( bCache )
 {
-    pImpl = pDoc->GetLayoutCache() ? pDoc->GetLayoutCache()->LockImpl() : nullptr;
-    if( pImpl )
+    mpImpl = mpDoc->GetLayoutCache() ? mpDoc->GetLayoutCache()->LockImpl() : nullptr;
+    if( mpImpl )
     {
-        nMaxParaPerPage = 1000;
-        nStartOfContent = pDoc->GetNodes().GetEndOfContent().StartOfSectionNode()
-                          ->GetIndex();
-        nNodeIndex -= nStartOfContent;
-        nIndex = 0;
-        while( nIndex < pImpl->size() && pImpl->GetBreakIndex( nIndex ) < nNodeIndex )
+        SwNodes const& rNodes(mpDoc->GetNodes());
+        if (sanityCheckLayoutCache(*mpImpl, rNodes, nNodeIndex))
         {
-            ++nIndex;
+            mnIndex = 0;
+            mnStartOfContent = rNodes.GetEndOfContent().StartOfSectionNode()->GetIndex();
+            mnMaxParaPerPage = 1000;
         }
-        if( nIndex >= pImpl->size() )
+        else
         {
-            pDoc->GetLayoutCache()->UnlockImpl();
-            pImpl = nullptr;
+            mpDoc->GetLayoutCache()->UnlockImpl();
+            mpImpl = nullptr;
+            mnIndex = std::numeric_limits<size_t>::max();
+            mnStartOfContent = USHRT_MAX;
         }
     }
     else
     {
-        nIndex = USHRT_MAX;
-        nStartOfContent = ULONG_MAX;
+        mnIndex = std::numeric_limits<size_t>::max();
+        mnStartOfContent = ULONG_MAX;
     }
 }
 
 SwLayHelper::~SwLayHelper()
 {
-    if( pImpl )
+    if( mpImpl )
     {
-        OSL_ENSURE( pDoc && pDoc->GetLayoutCache(), "Missing layoutcache" );
-        pDoc->GetLayoutCache()->UnlockImpl();
+        OSL_ENSURE( mpDoc && mpDoc->GetLayoutCache(), "Missing layoutcache" );
+        mpDoc->GetLayoutCache()->UnlockImpl();
     }
 }
 
@@ -517,51 +570,51 @@ SwLayHelper::~SwLayHelper()
 sal_uLong SwLayHelper::CalcPageCount()
 {
     sal_uLong nPgCount;
-    SwLayCacheImpl *pCache = pDoc->GetLayoutCache() ?
-                             pDoc->GetLayoutCache()->LockImpl() : nullptr;
+    SwLayCacheImpl *pCache = mpDoc->GetLayoutCache() ?
+                             mpDoc->GetLayoutCache()->LockImpl() : nullptr;
     if( pCache )
     {
         nPgCount = pCache->size() + 1;
-        pDoc->GetLayoutCache()->UnlockImpl();
+        mpDoc->GetLayoutCache()->UnlockImpl();
     }
     else
     {
-        nPgCount = pDoc->getIDocumentStatistics().GetDocStat().nPage;
+        nPgCount = mpDoc->getIDocumentStatistics().GetDocStat().nPage;
         if ( nPgCount <= 10 ) // no page insertion for less than 10 pages
             nPgCount = 0;
-        sal_uLong nNdCount = pDoc->getIDocumentStatistics().GetDocStat().nPara;
+        sal_uLong nNdCount = mpDoc->getIDocumentStatistics().GetDocStat().nPara;
         if ( nNdCount <= 1 )
         {
             //Estimates the number of paragraphs.
-            sal_uLong nTmp = pDoc->GetNodes().GetEndOfContent().GetIndex() -
-                        pDoc->GetNodes().GetEndOfExtras().GetIndex();
+            sal_uLong nTmp = mpDoc->GetNodes().GetEndOfContent().GetIndex() -
+                        mpDoc->GetNodes().GetEndOfExtras().GetIndex();
             //Tables have a little overhead..
-            nTmp -= pDoc->GetTableFrameFormats()->size() * 25;
+            nTmp -= mpDoc->GetTableFrameFormats()->size() * 25;
             //Fly frames, too ..
-            nTmp -= (pDoc->GetNodes().GetEndOfAutotext().GetIndex() -
-                       pDoc->GetNodes().GetEndOfInserts().GetIndex()) / 3 * 5;
+            nTmp -= (mpDoc->GetNodes().GetEndOfAutotext().GetIndex() -
+                       mpDoc->GetNodes().GetEndOfInserts().GetIndex()) / 3 * 5;
             if ( nTmp > 0 )
                 nNdCount = nTmp;
         }
         if ( nNdCount > 100 ) // no estimation below this value
         {
             if ( nPgCount > 0 )
-                nMaxParaPerPage = nNdCount / nPgCount;
+                mnMaxParaPerPage = nNdCount / nPgCount;
             else
             {
-                nMaxParaPerPage = std::max( sal_uLong(20),
+                mnMaxParaPerPage = std::max( sal_uLong(20),
                                        sal_uLong(20 + nNdCount / 1000 * 3) );
                 const sal_uLong nMax = 53;
-                nMaxParaPerPage = std::min( nMaxParaPerPage, nMax );
-                nPgCount = nNdCount / nMaxParaPerPage;
+                mnMaxParaPerPage = std::min( mnMaxParaPerPage, nMax );
+                nPgCount = nNdCount / mnMaxParaPerPage;
             }
             if ( nNdCount < 1000 )
                 nPgCount = 0;// no progress bar for small documents
             SwViewShell *pSh = nullptr;
-            if( rpLay && rpLay->getRootFrame() )
-                pSh = rpLay->getRootFrame()->GetCurrShell();
+            if( mrpLay && mrpLay->getRootFrame() )
+                pSh = mrpLay->getRootFrame()->GetCurrShell();
             if( pSh && pSh->GetViewOptions()->getBrowseMode() )
-                nMaxParaPerPage *= 6;
+                mnMaxParaPerPage *= 6;
         }
     }
     return nPgCount;
@@ -578,43 +631,42 @@ sal_uLong SwLayHelper::CalcPageCount()
  */
 bool SwLayHelper::CheckInsertPage()
 {
-    bool bEnd = nullptr == rpPage->GetNext();
-    const SwAttrSet* pAttr = rpFrame->GetAttrSet();
-    const SvxFormatBreakItem& rBrk = pAttr->GetBreak();
-    const SwFormatPageDesc& rDesc = pAttr->GetPageDesc();
+    bool bEnd = nullptr == mrpPage->GetNext();
+    const SvxFormatBreakItem& rBrk = mrpFrame->GetBreakItem();
+    const SwFormatPageDesc& rDesc = mrpFrame->GetPageDescItem();
     // #118195# Do not evaluate page description if frame
     // is a follow frame!
-    const SwPageDesc* pDesc = rpFrame->IsFlowFrame() &&
-                              SwFlowFrame::CastFlowFrame( rpFrame )->IsFollow() ?
+    const SwPageDesc* pDesc = mrpFrame->IsFlowFrame() &&
+                              SwFlowFrame::CastFlowFrame( mrpFrame )->IsFollow() ?
                               nullptr :
                               rDesc.GetPageDesc();
 
-    bool bBrk = nParagraphCnt > nMaxParaPerPage || rbBreakAfter;
-    rbBreakAfter = rBrk.GetBreak() == SVX_BREAK_PAGE_AFTER ||
-                   rBrk.GetBreak() == SVX_BREAK_PAGE_BOTH;
+    bool bBrk = mnParagraphCnt > mnMaxParaPerPage || mbBreakAfter;
+    mbBreakAfter = rBrk.GetBreak() == SvxBreak::PageAfter ||
+                   rBrk.GetBreak() == SvxBreak::PageBoth;
     if ( !bBrk )
-        bBrk = rBrk.GetBreak() == SVX_BREAK_PAGE_BEFORE ||
-               rBrk.GetBreak() == SVX_BREAK_PAGE_BOTH;
+        bBrk = rBrk.GetBreak() == SvxBreak::PageBefore ||
+               rBrk.GetBreak() == SvxBreak::PageBoth;
 
     if ( bBrk || pDesc )
     {
         ::boost::optional<sal_uInt16> oPgNum;
         if ( !pDesc )
         {
-            pDesc = rpPage->GetPageDesc()->GetFollow();
+            pDesc = mrpPage->GetPageDesc()->GetFollow();
 
             SwFormatPageDesc aFollowDesc( pDesc );
             oPgNum = aFollowDesc.GetNumOffset();
             if ( oPgNum )
-                static_cast<SwRootFrame*>(rpPage->GetUpper())->SetVirtPageNum(true);
+                static_cast<SwRootFrame*>(mrpPage->GetUpper())->SetVirtPageNum(true);
         }
         else
         {
             oPgNum = rDesc.GetNumOffset();
             if ( oPgNum )
-                static_cast<SwRootFrame*>(rpPage->GetUpper())->SetVirtPageNum(true);
+                static_cast<SwRootFrame*>(mrpPage->GetUpper())->SetVirtPageNum(true);
         }
-        bool bNextPageOdd = !rpPage->OnRightPage();
+        bool bNextPageOdd = !mrpPage->OnRightPage();
         bool bInsertEmpty = false;
         if( oPgNum && bNextPageOdd != ( ( oPgNum.get() % 2 ) != 0 ) )
         {
@@ -622,35 +674,35 @@ bool SwLayHelper::CheckInsertPage()
             bInsertEmpty = true;
         }
         // If the page style is changing, we'll have a first page.
-        bool bNextPageFirst = pDesc != rpPage->GetPageDesc();
-        ::InsertNewPage( (SwPageDesc&)*pDesc, rpPage->GetUpper(),
-                         bNextPageOdd, bNextPageFirst, bInsertEmpty, false, rpPage->GetNext() );
+        bool bNextPageFirst = pDesc != mrpPage->GetPageDesc();
+        ::InsertNewPage( const_cast<SwPageDesc&>(*pDesc), mrpPage->GetUpper(),
+                         bNextPageOdd, bNextPageFirst, bInsertEmpty, false, mrpPage->GetNext() );
         if ( bEnd )
         {
-            OSL_ENSURE( rpPage->GetNext(), "No new page?" );
+            OSL_ENSURE( mrpPage->GetNext(), "No new page?" );
             do
-            {   rpPage = static_cast<SwPageFrame*>(rpPage->GetNext());
-            } while ( rpPage->GetNext() );
+            {   mrpPage = static_cast<SwPageFrame*>(mrpPage->GetNext());
+            } while ( mrpPage->GetNext() );
         }
         else
         {
-            OSL_ENSURE( rpPage->GetNext(), "No new page?" );
-            rpPage = static_cast<SwPageFrame*>(rpPage->GetNext());
-            if ( rpPage->IsEmptyPage() )
+            OSL_ENSURE( mrpPage->GetNext(), "No new page?" );
+            mrpPage = static_cast<SwPageFrame*>(mrpPage->GetNext());
+            if ( mrpPage->IsEmptyPage() )
             {
-                OSL_ENSURE( rpPage->GetNext(), "No new page?" );
-                rpPage = static_cast<SwPageFrame*>(rpPage->GetNext());
+                OSL_ENSURE( mrpPage->GetNext(), "No new page?" );
+                mrpPage = static_cast<SwPageFrame*>(mrpPage->GetNext());
             }
         }
-        rpLay = rpPage->FindBodyCont();
-        while( rpLay->Lower() )
-            rpLay = static_cast<SwLayoutFrame*>(rpLay->Lower());
+        mrpLay = mrpPage->FindBodyCont();
+        while( mrpLay->Lower() )
+            mrpLay = static_cast<SwLayoutFrame*>(mrpLay->Lower());
         return true;
     }
     return false;
 }
 
-/** entry point for the _InsertCnt-function.
+/** entry point for the InsertCnt_-function.
  *  The document content index is checked either it is
  *  in the layout cache either it's time to insert a page
  *  cause the maximal estimation of content per page is reached.
@@ -662,33 +714,33 @@ bool SwLayHelper::CheckInsert( sal_uLong nNodeIndex )
     bool bRet = false;
     bool bLongTab = false;
     sal_uLong nMaxRowPerPage( 0 );
-    nNodeIndex -= nStartOfContent;
+    nNodeIndex -= mnStartOfContent;
     sal_uInt16 nRows( 0 );
-    if( rpFrame->IsTabFrame() )
+    if( mrpFrame->IsTabFrame() )
     {
         //Inside a table counts every row as a paragraph
-        SwFrame *pLow = static_cast<SwTabFrame*>(rpFrame)->Lower();
+        SwFrame *pLow = static_cast<SwTabFrame*>(mrpFrame)->Lower();
         nRows = 0;
         do
         {
             ++nRows;
             pLow = pLow->GetNext();
         } while ( pLow );
-        nParagraphCnt += nRows;
-        if( !pImpl && nParagraphCnt > nMaxParaPerPage + 10 )
+        mnParagraphCnt += nRows;
+        if( !mpImpl && mnParagraphCnt > mnMaxParaPerPage + 10 )
         {
             // OD 09.04.2003 #108698# - improve heuristics:
             // Assume that a table, which has more than three times the quantity
             // of maximal paragraphs per page rows, consists of rows, which have
             // the height of a normal paragraph. Thus, allow as much rows per page
             // as much paragraphs are allowed.
-            if ( nRows > ( 3*nMaxParaPerPage ) )
+            if ( nRows > ( 3*mnMaxParaPerPage ) )
             {
-                nMaxRowPerPage = nMaxParaPerPage;
+                nMaxRowPerPage = mnMaxParaPerPage;
             }
             else
             {
-                SwFrame *pTmp = static_cast<SwTabFrame*>(rpFrame)->Lower();
+                SwFrame *pTmp = static_cast<SwTabFrame*>(mrpFrame)->Lower();
                 if( pTmp->GetNext() )
                     pTmp = pTmp->GetNext();
                 pTmp = static_cast<SwRowFrame*>(pTmp)->Lower();
@@ -698,57 +750,47 @@ bool SwLayHelper::CheckInsert( sal_uLong nNodeIndex )
                     ++nCnt;
                     pTmp = pTmp->GetNext();
                 } while( pTmp );
-                nMaxRowPerPage = std::max( sal_uLong(2), nMaxParaPerPage / nCnt );
+                nMaxRowPerPage = std::max( sal_uLong(2), mnMaxParaPerPage / nCnt );
             }
             bLongTab = true;
         }
     }
     else
-        ++nParagraphCnt;
-    if( bFirst && pImpl && nIndex < pImpl->size() &&
-        pImpl->GetBreakIndex( nIndex ) == nNodeIndex &&
-        ( pImpl->GetBreakOfst( nIndex ) < COMPLETE_STRING ||
-          ( ++nIndex < pImpl->size() &&
-          pImpl->GetBreakIndex( nIndex ) == nNodeIndex ) ) )
-        bFirst = false;
-#if OSL_DEBUG_LEVEL > 1
-    sal_uLong nBreakIndex = ( pImpl && nIndex < pImpl->size() ) ?
-                        pImpl->GetBreakIndex(nIndex) : 0xffff;
-    (void)nBreakIndex;
-#endif
+        ++mnParagraphCnt;
+    if( mbFirst && mpImpl && mnIndex < mpImpl->size() &&
+        mpImpl->GetBreakIndex( mnIndex ) == nNodeIndex &&
+        ( mpImpl->GetBreakOfst( mnIndex ) < COMPLETE_STRING ||
+          ( ++mnIndex < mpImpl->size() &&
+          mpImpl->GetBreakIndex( mnIndex ) == nNodeIndex ) ) )
+        mbFirst = false;
     // OD 09.04.2003 #108698# - always split a big tables.
-    if ( !bFirst ||
-         ( rpFrame->IsTabFrame() && bLongTab )
+    if ( !mbFirst ||
+         ( mrpFrame->IsTabFrame() && bLongTab )
        )
     {
         sal_Int32 nRowCount = 0;
         do
         {
-            if( pImpl || bLongTab )
+            if( mpImpl || bLongTab )
             {
-#if OSL_DEBUG_LEVEL > 1
-                sal_uLong nBrkIndex = ( pImpl && nIndex < pImpl->size() ) ?
-                        pImpl->GetBreakIndex(nIndex) : 0xffff;
-                (void)nBrkIndex;
-#endif
                 sal_Int32 nOfst = COMPLETE_STRING;
                 sal_uInt16 nType = SW_LAYCACHE_IO_REC_PAGES;
                 if( bLongTab )
                 {
-                    rbBreakAfter = true;
+                    mbBreakAfter = true;
                     nOfst = static_cast<sal_Int32>(nRowCount + nMaxRowPerPage);
                 }
                 else
                 {
-                    while( nIndex < pImpl->size() &&
-                           pImpl->GetBreakIndex(nIndex) < nNodeIndex)
-                        ++nIndex;
-                    if( nIndex < pImpl->size() &&
-                        pImpl->GetBreakIndex(nIndex) == nNodeIndex )
+                    while( mnIndex < mpImpl->size() &&
+                           mpImpl->GetBreakIndex(mnIndex) < nNodeIndex)
+                        ++mnIndex;
+                    if( mnIndex < mpImpl->size() &&
+                        mpImpl->GetBreakIndex(mnIndex) == nNodeIndex )
                     {
-                        nType = pImpl->GetBreakType( nIndex );
-                        nOfst = pImpl->GetBreakOfst( nIndex++ );
-                        rbBreakAfter = true;
+                        nType = mpImpl->GetBreakType( mnIndex );
+                        nOfst = mpImpl->GetBreakOfst( mnIndex++ );
+                        mbBreakAfter = true;
                     }
                 }
 
@@ -756,27 +798,32 @@ bool SwLayHelper::CheckInsert( sal_uLong nNodeIndex )
                 {
                     bool bSplit = false;
                     sal_uInt16 nRepeat( 0 );
-                    if( !bLongTab && rpFrame->IsTextFrame() &&
+                    if( !bLongTab && mrpFrame->IsTextFrame() &&
                         SW_LAYCACHE_IO_REC_PARA == nType &&
-                        nOfst < static_cast<SwTextFrame*>(rpFrame)->GetTextNode()->GetText().getLength())
+                        nOfst < static_cast<SwTextFrame*>(mrpFrame)->GetText().getLength())
                         bSplit = true;
-                    else if( rpFrame->IsTabFrame() && nRowCount < nOfst &&
+                    else if( mrpFrame->IsTabFrame() && nRowCount < nOfst &&
                              ( bLongTab || SW_LAYCACHE_IO_REC_TABLE == nType ) )
                     {
-                        nRepeat = static_cast<SwTabFrame*>(rpFrame)->
+                        nRepeat = static_cast<SwTabFrame*>(mrpFrame)->
                                   GetTable()->GetRowsToRepeat();
                         bSplit = nOfst < nRows && nRowCount + nRepeat < nOfst;
                         bLongTab = bLongTab && bSplit;
                     }
                     if( bSplit )
                     {
-                        rpFrame->InsertBehind( rpLay, rpPrv );
-                        rpFrame->Frame().Pos() = rpLay->Frame().Pos();
-                        rpFrame->Frame().Pos().Y() += 1;
-                        rpPrv = rpFrame;
-                        if( rpFrame->IsTabFrame() )
+                        mrpFrame->InsertBehind( mrpLay, mrpPrv );
+
                         {
-                            SwTabFrame* pTab = static_cast<SwTabFrame*>(rpFrame);
+                            SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*mrpFrame);
+                            aFrm.Pos() = mrpLay->getFrameArea().Pos();
+                            aFrm.Pos().AdjustY(1 );
+                        }
+
+                        mrpPrv = mrpFrame;
+                        if( mrpFrame->IsTabFrame() )
+                        {
+                            SwTabFrame* pTab = static_cast<SwTabFrame*>(mrpFrame);
                             // #i33629#, #i29955#
                             ::RegistFlys( pTab->FindPageFrame(), pTab );
                             SwFrame *pRow = pTab->Lower();
@@ -792,7 +839,7 @@ bool SwLayHelper::CheckInsert( sal_uLong nNodeIndex )
                                 SwRowFrame* pHeadline = nullptr;
                                 while( nRowIdx < nRepeat )
                                 {
-                                    OSL_ENSURE( pTab->GetTable()->GetTabLines()[ nRowIdx ], "Table ohne Zeilen?" );
+                                    OSL_ENSURE( pTab->GetTable()->GetTabLines()[ nRowIdx ], "Table without rows?" );
                                     pHeadline =
                                         new SwRowFrame( *pTab->GetTable()->GetTabLines()[ nRowIdx ], pTab );
                                     pHeadline->SetRepeatedHeadline( true );
@@ -821,67 +868,77 @@ bool SwLayHelper::CheckInsert( sal_uLong nNodeIndex )
                                 pPrv = pRow;
                                 pRow = pNxt;
                             }
-                            rpFrame = pFoll;
+                            mrpFrame = pFoll;
                         }
                         else
                         {
                             SwTextFrame *const pNew = static_cast<SwTextFrame*>(
-                                static_cast<SwTextFrame*>(rpFrame)
-                                    ->GetTextNode()->MakeFrame(rpFrame));
-                            pNew->ManipOfst( nOfst );
-                            pNew->SetFollow( static_cast<SwTextFrame*>(rpFrame)->GetFollow() );
-                            static_cast<SwTextFrame*>(rpFrame)->SetFollow( pNew );
-                            rpFrame = pNew;
+                                static_cast<SwTextFrame*>(mrpFrame)
+                                    ->GetTextNodeFirst()->MakeFrame(mrpFrame));
+                            pNew->ManipOfst( TextFrameIndex(nOfst) );
+                            pNew->SetFollow( static_cast<SwTextFrame*>(mrpFrame)->GetFollow() );
+                            static_cast<SwTextFrame*>(mrpFrame)->SetFollow( pNew );
+                            mrpFrame = pNew;
                         }
                     }
                 }
             }
 
-            SwPageFrame* pLastPage = rpPage;
+            SwPageFrame* pLastPage = mrpPage;
             if( CheckInsertPage() )
             {
-                _CheckFlyCache( pLastPage );
-                if( rpPrv && rpPrv->IsTextFrame() && !rpPrv->GetValidSizeFlag() )
-                    rpPrv->Frame().Height( rpPrv->GetUpper()->Prt().Height() );
+                CheckFlyCache_( pLastPage );
+                if( mrpPrv && mrpPrv->IsTextFrame() && !mrpPrv->isFrameAreaSizeValid() )
+                {
+                    SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*mrpPrv);
+                    aFrm.Height( mrpPrv->GetUpper()->getFramePrintArea().Height() );
+                }
 
                 bRet = true;
-                rpPrv = nullptr;
-                nParagraphCnt = 0;
+                mrpPrv = nullptr;
+                mnParagraphCnt = 0;
 
-                if ( rpActualSection )
+                if ( mrpActualSection )
                 {
                     //Did the SectionFrame even have a content? If not, we can
                     //directly put it somewhere else
                     SwSectionFrame *pSct;
                     bool bInit = false;
-                    if ( !rpActualSection->GetSectionFrame()->ContainsContent())
+                    if ( !mrpActualSection->GetSectionFrame()->ContainsContent())
                     {
-                        pSct = rpActualSection->GetSectionFrame();
+                        pSct = mrpActualSection->GetSectionFrame();
                         pSct->RemoveFromLayout();
                     }
                     else
                     {
                         pSct = new SwSectionFrame(
-                            *rpActualSection->GetSectionFrame(), false );
-                        rpActualSection->GetSectionFrame()->SimpleFormat();
+                            *mrpActualSection->GetSectionFrame(), false );
+                        mrpActualSection->GetSectionFrame()->SimpleFormat();
                         bInit = true;
                     }
-                    rpActualSection->SetSectionFrame( pSct );
-                    pSct->InsertBehind( rpLay, nullptr );
-                    if( bInit )
-                        pSct->Init();
-                    pSct->Frame().Pos() = rpLay->Frame().Pos();
-                    pSct->Frame().Pos().Y() += 1; //because of the notifications
+                    mrpActualSection->SetSectionFrame( pSct );
+                    pSct->InsertBehind( mrpLay, nullptr );
 
-                    rpLay = pSct;
-                    if ( rpLay->Lower() && rpLay->Lower()->IsLayoutFrame() )
-                        rpLay = rpLay->GetNextLayoutLeaf();
+                    if( bInit )
+                    {
+                        pSct->Init();
+                    }
+
+                    {
+                        SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*pSct);
+                        aFrm.Pos() = mrpLay->getFrameArea().Pos();
+                        aFrm.Pos().AdjustY(1 ); //because of the notifications
+                    }
+
+                    mrpLay = pSct;
+                    if ( mrpLay->Lower() && mrpLay->Lower()->IsLayoutFrame() )
+                        mrpLay = mrpLay->GetNextLayoutLeaf();
                 }
             }
-        } while( bLongTab || ( pImpl && nIndex < pImpl->size() &&
-                 pImpl->GetBreakIndex( nIndex ) == nNodeIndex ) );
+        } while( bLongTab || ( mpImpl && mnIndex < mpImpl->size() &&
+                 mpImpl->GetBreakIndex( mnIndex ) == nNodeIndex ) );
     }
-    bFirst = false;
+    mbFirst = false;
     return bRet;
 }
 
@@ -906,13 +963,13 @@ struct FlyCacheCompare
  * If there are text frames with default position, the fly cache
  * is checked, if these frames are stored in the cache.
  */
-void SwLayHelper::_CheckFlyCache( SwPageFrame* pPage )
+void SwLayHelper::CheckFlyCache_( SwPageFrame* pPage )
 {
-    if( !pImpl || !pPage )
+    if( !mpImpl || !pPage )
         return;
-    const size_t nFlyCount = pImpl->GetFlyCount();
+    const size_t nFlyCount = mpImpl->GetFlyCount();
     // Any text frames at the page, fly cache available?
-    if( pPage->GetSortedObjs() && nFlyIdx < nFlyCount )
+    if( pPage->GetSortedObjs() && mnFlyIdx < nFlyCount )
     {
         SwSortedObjs &rObjs = *pPage->GetSortedObjs();
         sal_uInt16 nPgNum = pPage->GetPhyPageNum();
@@ -921,17 +978,17 @@ void SwLayHelper::_CheckFlyCache( SwPageFrame* pPage )
         // relative ordnums for the objects on this page.
 
         // skip fly frames from pages before the current page
-        while( nFlyIdx < nFlyCount &&
-               pImpl->GetFlyCache(nFlyIdx).nPageNum < nPgNum )
-            ++nFlyIdx;
+        while( mnFlyIdx < nFlyCount &&
+               mpImpl->GetFlyCache(mnFlyIdx).nPageNum < nPgNum )
+            ++mnFlyIdx;
 
         // sort cached objects on this page by ordnum
         std::set< const SwFlyCache*, FlyCacheCompare > aFlyCacheSet;
-        size_t nIdx = nFlyIdx;
+        size_t nIdx = mnFlyIdx;
 
         SwFlyCache* pFlyC;
         while( nIdx < nFlyCount &&
-               ( pFlyC = &pImpl->GetFlyCache( nIdx ) )->nPageNum == nPgNum )
+               ( pFlyC = &mpImpl->GetFlyCache( nIdx ) )->nPageNum == nPgNum )
         {
             aFlyCacheSet.insert( pFlyC );
             ++nIdx;
@@ -939,9 +996,8 @@ void SwLayHelper::_CheckFlyCache( SwPageFrame* pPage )
 
         // sort objects on this page by ordnum
         std::set< const SdrObject*, SdrObjectCompare > aFlySet;
-        for ( size_t i = 0; i < rObjs.size(); ++i )
+        for (SwAnchoredObject* pAnchoredObj : rObjs)
         {
-            SwAnchoredObject* pAnchoredObj = rObjs[i];
             if (SwFlyFrame *pFly = dynamic_cast<SwFlyFrame*>(pAnchoredObj))  // a text frame?
             {
                 if( pFly->GetAnchorFrame() &&
@@ -958,31 +1014,27 @@ void SwLayHelper::_CheckFlyCache( SwPageFrame* pPage )
 
         if ( aFlyCacheSet.size() == aFlySet.size() )
         {
-            std::set< const SwFlyCache*, FlyCacheCompare >::iterator aFlyCacheSetIt =
-                    aFlyCacheSet.begin();
             std::set< const SdrObject*, SdrObjectCompare >::iterator aFlySetIt =
                     aFlySet.begin();
 
-            while ( aFlyCacheSetIt != aFlyCacheSet.end() )
+            for ( const SwFlyCache* pFlyCache : aFlyCacheSet )
             {
-                const SwFlyCache* pFlyCache = *aFlyCacheSetIt;
                 SwFlyFrame* pFly = const_cast<SwVirtFlyDrawObj*>(static_cast<const SwVirtFlyDrawObj*>(*aFlySetIt))->GetFlyFrame();
 
-                if ( pFly->Frame().Left() == FAR_AWAY )
+                if ( pFly->getFrameArea().Left() == FAR_AWAY )
                 {
                     // we get the stored information
-                    pFly->Frame().Pos().X() = pFlyCache->Left() +
-                                            pPage->Frame().Left();
-                    pFly->Frame().Pos().Y() = pFlyCache->Top() +
-                                            pPage->Frame().Top();
-                    if ( pImpl->IsUseFlyCache() )
+                    SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*pFly);
+                    aFrm.Pos().setX( pFlyCache->Left() + pPage->getFrameArea().Left() );
+                    aFrm.Pos().setY( pFlyCache->Top() + pPage->getFrameArea().Top() );
+
+                    if ( mpImpl->IsUseFlyCache() )
                     {
-                        pFly->Frame().Width( pFlyCache->Width() );
-                        pFly->Frame().Height( pFlyCache->Height() );
+                        aFrm.Width( pFlyCache->Width() );
+                        aFrm.Height( pFlyCache->Height() );
                     }
                 }
 
-                ++aFlyCacheSetIt;
                 ++aFlySetIt;
             }
         }
@@ -1006,40 +1058,36 @@ SwLayCacheIoImpl::SwLayCacheIoImpl( SvStream& rStrm, bool bWrtMd ) :
                 .ReadUInt16( nMinorVersion );
 }
 
-bool SwLayCacheIoImpl::OpenRec( sal_uInt8 cType )
+void SwLayCacheIoImpl::OpenRec( sal_uInt8 cType )
 {
-    bool bRes = true;
     sal_uInt32 nPos = pStream->Tell();
     if( bWriteMode )
     {
-        aRecords.push_back( RecTypeSize(cType, nPos) );
+        aRecords.emplace_back(cType, nPos );
         pStream->WriteUInt32( 0 );
     }
     else
     {
         sal_uInt32 nVal(0);
         pStream->ReadUInt32( nVal );
-        sal_uInt8 cRecTyp = (sal_uInt8)nVal;
-        if( !nVal || cRecTyp != cType ||
-            pStream->GetErrorCode() != SVSTREAM_OK || pStream->IsEof() )
+        sal_uInt8 cRecTyp = static_cast<sal_uInt8>(nVal);
+        if (!nVal || cRecTyp != cType || !pStream->good())
         {
             OSL_ENSURE( nVal, "OpenRec: Record-Header is 0" );
             OSL_ENSURE( cRecTyp == cType, "OpenRec: Wrong Record Type" );
-            aRecords.push_back( RecTypeSize(0, pStream->Tell()) );
-            bRes = false;
+            aRecords.emplace_back(0, pStream->Tell() );
             bError = true;
         }
         else
         {
             sal_uInt32 nSize = nVal >> 8;
-            aRecords.push_back( RecTypeSize(cRecTyp, nPos+nSize) );
+            aRecords.emplace_back(cRecTyp, nPos+nSize );
         }
     }
-    return bRes;
 }
 
 // Close record
-bool SwLayCacheIoImpl::CloseRec( sal_uInt8 )
+void SwLayCacheIoImpl::CloseRec()
 {
     bool bRes = true;
     OSL_ENSURE( !aRecords.empty(), "CloseRec: no levels" );
@@ -1054,7 +1102,7 @@ bool SwLayCacheIoImpl::CloseRec( sal_uInt8 )
             sal_uInt32 nVal = ( nSize << 8 ) | aRecords.back().type;
             pStream->WriteUInt32( nVal );
             pStream->Seek( nPos );
-            if( pStream->GetError() != SVSTREAM_OK )
+            if( pStream->GetError() != ERRCODE_NONE )
                  bRes = false;
         }
         else
@@ -1067,7 +1115,7 @@ bool SwLayCacheIoImpl::CloseRec( sal_uInt8 )
                 if( n < nPos )
                      bRes = false;
             }
-            if( pStream->GetErrorCode() != SVSTREAM_OK )
+            if( pStream->GetErrorCode() != ERRCODE_NONE )
                 bRes = false;
         }
         aRecords.pop_back();
@@ -1075,8 +1123,6 @@ bool SwLayCacheIoImpl::CloseRec( sal_uInt8 )
 
     if( !bRes )
         bError = true;
-
-    return bRes;
 }
 
 sal_uInt32 SwLayCacheIoImpl::BytesLeft()
@@ -1100,7 +1146,7 @@ sal_uInt8 SwLayCacheIoImpl::Peek()
         sal_uInt32 nPos = pStream->Tell();
         pStream->ReadUChar( c );
         pStream->Seek( nPos );
-        if( pStream->GetErrorCode() != SVSTREAM_OK )
+        if( pStream->GetErrorCode() != ERRCODE_NONE )
         {
             c = 0;
             bError = true;
@@ -1114,7 +1160,7 @@ void SwLayCacheIoImpl::SkipRec()
     sal_uInt8 c = Peek();
     OpenRec( c );
     pStream->Seek( aRecords.back().size );
-    CloseRec( c );
+    CloseRec();
 }
 
 sal_uInt8 SwLayCacheIoImpl::OpenFlagRec()
@@ -1144,7 +1190,7 @@ void SwLayCacheIoImpl::CloseFlagRec()
     }
     else
     {
-        OSL_ENSURE( pStream->Tell() <= nFlagRecEnd, "To many data read" );
+        OSL_ENSURE( pStream->Tell() <= nFlagRecEnd, "Too many data read" );
         if( pStream->Tell() != nFlagRecEnd )
             pStream->Seek( nFlagRecEnd );
     }

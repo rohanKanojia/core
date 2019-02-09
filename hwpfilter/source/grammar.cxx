@@ -28,7 +28,7 @@
 #define YYMAXDEPTH 0
 #endif
 
-#include <list>
+#include <vector>
 #include <stdlib.h>
 #include <string.h>
 
@@ -36,40 +36,31 @@
 #include "lexer.hxx"
 #include "nodes.h"
 
-std::list<Node*> nodelist;
+extern "C" {
+#include "grammar.h"
+}
 
-void yyerror(const char *);
+std::vector<std::unique_ptr<Node>> nodelist;
 
-Node *top=nullptr;
+static void yyerror(const char *);
+
+static Node *top=nullptr;
 
 int Node::count = 0;
 
 #ifdef PARSE_DEBUG
 #define debug printf
 #else
-int debug(const char *format, ...);
+static int debug(const char *format, ...);
 #endif
 
-
-typedef union {
-    char *dval;
-    char *str;
-    Node *ptr;
-} YYSTYPE;
 #include <stdio.h>
-
-#ifndef __cplusplus
-#ifndef __STDC__
-#define const
-#endif
-#endif
-
 
 #define YYFINAL     102
 #define YYFLAG      -32768
 #define YYNTBASE    43
 
-#define YYTRANSLATE(x) ((unsigned)(x) <= 285 ? yytranslate[x] : 66)
+#define YYTRANSLATE(x) (static_cast<unsigned>(x) <= 285 ? yytranslate[x] : 66)
 
 static const char yytranslate[] = {     0,
      2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
@@ -396,7 +387,7 @@ static const short yycheck[] = {    11,
 
 #ifndef YYPURE
 
-int yychar;         /*  the lookahead symbol        */
+static int yychar;  /*  the lookahead symbol        */
 YYSTYPE yylval;         /*  the semantic value of the       */
                 /*  lookahead symbol            */
 
@@ -405,7 +396,7 @@ YYLTYPE yylloc;         /*  location data for the lookahead */
                 /*  symbol              */
 #endif
 
-int yynerrs;            /*  number of parse errors so far       */
+static int yynerrs;     /*  number of parse errors so far       */
 #endif  /* not YYPURE */
 
 #if YYDEBUG != 0
@@ -438,13 +429,8 @@ int yydebug;            /*  nonzero means print parse trace */
    to the proper pointer type.  */
 
 #ifdef YYPARSE_PARAM
-#ifdef __cplusplus
 #define YYPARSE_PARAM_ARG void *YYPARSE_PARAM
 #define YYPARSE_PARAM_DECL
-#else /* not __cplusplus */
-#define YYPARSE_PARAM_ARG YYPARSE_PARAM
-#define YYPARSE_PARAM_DECL void *YYPARSE_PARAM;
-#endif /* not __cplusplus */
 #else /* not YYPARSE_PARAM */
 #define YYPARSE_PARAM_ARG
 #define YYPARSE_PARAM_DECL
@@ -455,11 +441,11 @@ int yydebug;            /*  nonzero means print parse trace */
 #ifdef YYPARSE_PARAM
 int yyparse (void *);
 #else
-int yyparse();
+static int yyparse();
 #endif
 #endif
 
-int
+static int
 yyparse(YYPARSE_PARAM_ARG)
      YYPARSE_PARAM_DECL
 {
@@ -526,7 +512,7 @@ yyparse(YYPARSE_PARAM_ARG)
 
 /* Push a new state, which is found in  yystate  .  */
 /* In all cases, when you get here, the value and location stacks
-   have just been pushed. so pushing a state here evens the stacks.  */
+   have just been pushed. So pushing a state here events the stacks.  */
 yynewstate:
 
   *++yyssp = sal::static_int_cast<short>(yystate);
@@ -586,15 +572,12 @@ yynewstate:
     yystacksize = YYMAXDEPTH;
       yyfree_stacks = 1;
       yyss = static_cast<short *>(malloc (yystacksize * sizeof (*yyssp)));
-      memcpy (yyss, yyss1,
-           size * (unsigned int) sizeof (*yyssp));
+      memcpy (yyss, yyss1, size * sizeof (*yyssp));
       yyvs = static_cast<YYSTYPE *>(malloc (yystacksize * sizeof (*yyvsp)));
-      memcpy (yyvs, yyvs1,
-           size * (unsigned int) sizeof (*yyvsp));
+      memcpy (yyvs, yyvs1, size * sizeof (*yyvsp));
 #ifdef YYLSP_NEEDED
       yyls = (YYLTYPE *) malloc (yystacksize * sizeof (*yylsp));
-      memcpy ((char *)yyls, (char *)yyls1,
-           size * (unsigned int) sizeof (*yylsp));
+      memcpy ((char *)yyls, (char *)yyls1, size * sizeof (*yylsp));
 #endif
 #endif /* no yyoverflow */
 
@@ -755,220 +738,220 @@ yyreduce:
   switch (yyn) {
 
 case 1:
-{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 2:
-{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 3:
-{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 4:
-{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 5:
-{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 6:
-{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 7:
-{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 8:
-{ yyval.ptr = new Node(ID_CHARACTER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_CHARACTER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 9:
-{ yyval.ptr = new Node(ID_OPERATOR); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_OPERATOR); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 10:
-{ yyval.ptr = new Node(ID_OPERATOR); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_OPERATOR); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 11:
-{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 12:
-{ yyval.ptr = new Node(ID_DELIMETER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_DELIMITER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 13:
-{ yyval.ptr = new Node(ID_DELIMETER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_DELIMITER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 14:
-{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_IDENTIFIER); yyval.ptr->value = strdup(yyvsp[0].str); debug("Identifier : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 15:
-{ yyval.ptr = new Node(ID_CHARACTER); yyval.ptr->value = strdup("|"); debug("Identifier : '|'\n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_CHARACTER); yyval.ptr->value = strdup("|"); debug("Identifier : '|'\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 16:
-{ yyval.ptr = new Node(ID_NUMBER); yyval.ptr->value = strdup(yyvsp[0].dval); debug("Number : %s\n",yyvsp[0].dval); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_NUMBER); yyval.ptr->value = strdup(yyvsp[0].dval); debug("Number : %s\n",yyvsp[0].dval); nodelist.emplace_back(yyval.ptr);
     break;}
 case 17:
-{ yyval.ptr = new Node(ID_STRING); yyval.ptr->value = strdup(yyvsp[0].str); debug("String : %s\n",yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_STRING); yyval.ptr->value = strdup(yyvsp[0].str); debug("String : %s\n",yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 18:
-{ yyval.ptr = new Node(ID_PRIMARYEXPR); yyval.ptr->child = yyvsp[0].ptr; debug("PrimaryExpr\n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_PRIMARYEXPR); yyval.ptr->child = yyvsp[0].ptr; debug("PrimaryExpr\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 19:
-{ yyval.ptr = new Node(ID_PRIMARYEXPR); yyval.ptr->child = yyvsp[-1].ptr; yyval.ptr->next = yyvsp[0].ptr; debug("PrimaryExpr : PrimaryExpr Identifier\n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_PRIMARYEXPR); yyval.ptr->child = yyvsp[-1].ptr; yyval.ptr->next = yyvsp[0].ptr; debug("PrimaryExpr : PrimaryExpr Identifier\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 20:
-{ yyval.ptr = new Node(ID_LEFT); yyval.ptr->value = strdup("("); debug("EQLeft \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_LEFT); yyval.ptr->value = strdup("("); debug("EQLeft \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 21:
-{ yyval.ptr = new Node(ID_LEFT); yyval.ptr->value = strdup("["); debug("EQLeft \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_LEFT); yyval.ptr->value = strdup("["); debug("EQLeft \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 22:
-{   yyval.ptr = new Node(ID_LEFT); yyval.ptr->value = strdup("{"); debug("EQLeft \n"); nodelist.push_back(yyval.ptr); ;
+{   yyval.ptr = new Node(ID_LEFT); yyval.ptr->value = strdup("{"); debug("EQLeft \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 23:
-{   yyval.ptr = new Node(ID_LEFT); yyval.ptr->value = strdup("<"); debug("EQLeft \n"); nodelist.push_back(yyval.ptr); ;
+{   yyval.ptr = new Node(ID_LEFT); yyval.ptr->value = strdup("<"); debug("EQLeft \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 24:
-{ yyval.ptr = new Node(ID_LEFT); yyval.ptr->value = strdup("|"); debug("EQLeft \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_LEFT); yyval.ptr->value = strdup("|"); debug("EQLeft \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 25:
-{ yyval.ptr = new Node(ID_LEFT); yyval.ptr->value =strdup("||"); debug("EQLeft \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_LEFT); yyval.ptr->value =strdup("||"); debug("EQLeft \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 26:
-{ yyval.ptr = new Node(ID_LEFT); yyval.ptr->value = strdup(yyvsp[0].str); debug("EQLeft \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_LEFT); yyval.ptr->value = strdup(yyvsp[0].str); debug("EQLeft \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 27:
-{ yyval.ptr = new Node(ID_RIGHT); yyval.ptr->value = strdup(")"); debug("EQRight \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_RIGHT); yyval.ptr->value = strdup(")"); debug("EQRight \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 28:
-{ yyval.ptr = new Node(ID_RIGHT); yyval.ptr->value = strdup("]"); debug("EQRight \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_RIGHT); yyval.ptr->value = strdup("]"); debug("EQRight \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 29:
-{ yyval.ptr = new Node(ID_RIGHT); yyval.ptr->value = strdup("}"); debug("EQRight \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_RIGHT); yyval.ptr->value = strdup("}"); debug("EQRight \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 30:
-{ yyval.ptr = new Node(ID_RIGHT); yyval.ptr->value = strdup(">"); debug("EQRight \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_RIGHT); yyval.ptr->value = strdup(">"); debug("EQRight \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 31:
-{ yyval.ptr = new Node(ID_RIGHT); yyval.ptr->value = strdup("|"); debug("EQRight \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_RIGHT); yyval.ptr->value = strdup("|"); debug("EQRight \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 32:
-{ yyval.ptr = new Node(ID_RIGHT); yyval.ptr->value = strdup("||"); debug("EQRight \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_RIGHT); yyval.ptr->value = strdup("||"); debug("EQRight \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 33:
-{ yyval.ptr = new Node(ID_RIGHT); yyval.ptr->value = strdup(yyvsp[0].str); debug("EQRight \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_RIGHT); yyval.ptr->value = strdup(yyvsp[0].str); debug("EQRight \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 34:
-{ yyval.ptr = new Node(ID_FENCE); yyval.ptr->child=yyvsp[-2].ptr; yyvsp[-2].ptr->next=yyvsp[-1].ptr; yyvsp[-1].ptr->next=yyvsp[0].ptr; debug("Fence \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_FENCE); yyval.ptr->child=yyvsp[-2].ptr; yyvsp[-2].ptr->next=yyvsp[-1].ptr; yyvsp[-1].ptr->next=yyvsp[0].ptr; debug("Fence \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 35:
-{ yyval.ptr = new Node(ID_PARENTH); yyval.ptr->child = yyvsp[-1].ptr; debug("Parenth: '(' ExprList ')' \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_PARENTH); yyval.ptr->child = yyvsp[-1].ptr; debug("Parenth: '(' ExprList ')' \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 36:
-{ yyval.ptr = new Node(ID_PARENTH); debug("Parenth: '(' ')' \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_PARENTH); debug("Parenth: '(' ')' \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 37:
-{ yyval.ptr = new Node(ID_BLOCK); yyval.ptr->child = yyvsp[-1].ptr; debug("Block: '{' ExprList '}' \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_BLOCK); yyval.ptr->child = yyvsp[-1].ptr; debug("Block: '{' ExprList '}' \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 38:
-{ yyval.ptr = new Node(ID_BLOCK); debug("Block: '{' '}' \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_BLOCK); debug("Block: '{' '}' \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 39:
-{ yyval.ptr = new Node(ID_BRACKET); yyval.ptr->child = yyvsp[-1].ptr; debug("Bracket \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_BRACKET); yyval.ptr->child = yyvsp[-1].ptr; debug("Bracket \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 40:
-{ yyval.ptr = new Node(ID_BRACKET); debug("Bracket \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_BRACKET); debug("Bracket \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 41:
-{ yyval.ptr = new Node(ID_SUBEXPR); yyval.ptr->child = yyvsp[-2].ptr; yyvsp[-2].ptr->next = yyvsp[0].ptr; debug("SubSupExpr : ID_SUBEXPR\n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_SUBEXPR); yyval.ptr->child = yyvsp[-2].ptr; yyvsp[-2].ptr->next = yyvsp[0].ptr; debug("SubSupExpr : ID_SUBEXPR\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 42:
-{ yyval.ptr = new Node(ID_SUPEXPR); yyval.ptr->child = yyvsp[-2].ptr; yyvsp[-2].ptr->next = yyvsp[0].ptr; debug("SubSupExpr : ID_SUPEXPR\n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_SUPEXPR); yyval.ptr->child = yyvsp[-2].ptr; yyvsp[-2].ptr->next = yyvsp[0].ptr; debug("SubSupExpr : ID_SUPEXPR\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 43:
-{ yyval.ptr = new Node(ID_SUBSUPEXPR); yyval.ptr->child=yyvsp[-4].ptr; yyvsp[-4].ptr->next=yyvsp[-2].ptr; yyvsp[-2].ptr->next=yyvsp[0].ptr; debug("SubSupExpr : ID_SUBSUPEXPR\n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_SUBSUPEXPR); yyval.ptr->child=yyvsp[-4].ptr; yyvsp[-4].ptr->next=yyvsp[-2].ptr; yyvsp[-2].ptr->next=yyvsp[0].ptr; debug("SubSupExpr : ID_SUBSUPEXPR\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 44:
-{ yyval.ptr = new Node(ID_FRACTIONEXPR); yyval.ptr->child = yyvsp[-1].ptr; yyvsp[-1].ptr->next = yyvsp[0].ptr; debug("FractionExpr : %s\n",yyvsp[-2].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_FRACTIONEXPR); yyval.ptr->child = yyvsp[-1].ptr; yyvsp[-1].ptr->next = yyvsp[0].ptr; debug("FractionExpr : %s\n",yyvsp[-2].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 45:
-{ yyval.ptr = new Node(ID_OVER); yyval.ptr->child = yyvsp[-3].ptr; yyvsp[-3].ptr->next = yyvsp[-1].ptr; debug("OverExpr\n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_OVER); yyval.ptr->child = yyvsp[-3].ptr; yyvsp[-3].ptr->next = yyvsp[-1].ptr; debug("OverExpr\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 46:
-{ yyval.ptr = new Node(ID_ACCENTEXPR); yyval.ptr->value = strdup(yyvsp[0].str); debug("Accent : %s\n", yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_ACCENTEXPR); yyval.ptr->value = strdup(yyvsp[0].str); debug("Accent : %s\n", yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 47:
-{ yyval.ptr = new Node(ID_ACCENTEXPR); yyval.ptr->child=yyvsp[-1].ptr; yyvsp[-1].ptr->next = yyvsp[0].ptr; debug("AccentExpr \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_ACCENTEXPR); yyval.ptr->child=yyvsp[-1].ptr; yyvsp[-1].ptr->next = yyvsp[0].ptr; debug("AccentExpr \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 48:
-{ yyval.ptr = new Node(ID_DECORATIONEXPR); yyval.ptr->value = strdup(yyvsp[0].str); debug("Decoration : %s\n", yyvsp[0].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_DECORATIONEXPR); yyval.ptr->value = strdup(yyvsp[0].str); debug("Decoration : %s\n", yyvsp[0].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 49:
-{ yyval.ptr = new Node(ID_DECORATIONEXPR); yyval.ptr->child = yyvsp[-1].ptr; yyvsp[-1].ptr->next = yyvsp[0].ptr; debug("DecorationExpr \n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_DECORATIONEXPR); yyval.ptr->child = yyvsp[-1].ptr; yyvsp[-1].ptr->next = yyvsp[0].ptr; debug("DecorationExpr \n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 50:
-{ yyval.ptr = new Node(ID_SQRTEXPR); yyval.ptr->child = yyvsp[0].ptr; debug("RootExpr : %s\n", yyvsp[-1].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_SQRTEXPR); yyval.ptr->child = yyvsp[0].ptr; debug("RootExpr : %s\n", yyvsp[-1].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 51:
-{ yyval.ptr = new Node(ID_ROOTEXPR); yyval.ptr->child = yyvsp[-1].ptr; yyvsp[-1].ptr->next= yyvsp[0].ptr; debug("RootExpr : %s\n", yyvsp[-2].str); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_ROOTEXPR); yyval.ptr->child = yyvsp[-1].ptr; yyvsp[-1].ptr->next= yyvsp[0].ptr; debug("RootExpr : %s\n", yyvsp[-2].str); nodelist.emplace_back(yyval.ptr);
     break;}
 case 52:
-{ yyval.ptr = new Node(ID_BEGIN); yyval.ptr->child = yyvsp[0].ptr; nodelist.push_back(yyval.ptr);  debug("BeginExpr\n"); ;
+{ yyval.ptr = new Node(ID_BEGIN); yyval.ptr->child = yyvsp[0].ptr; nodelist.emplace_back(yyval.ptr);  debug("BeginExpr\n");
     break;}
 case 53:
-{ yyval.ptr = new Node(ID_BEGIN); yyval.ptr->child = yyvsp[-1].ptr; yyvsp[-1].ptr->next= yyvsp[0].ptr; nodelist.push_back(yyval.ptr); debug("BeginExpr\n"); ;
+{ yyval.ptr = new Node(ID_BEGIN); yyval.ptr->child = yyvsp[-1].ptr; yyvsp[-1].ptr->next= yyvsp[0].ptr; nodelist.emplace_back(yyval.ptr); debug("BeginExpr\n");
     break;}
 case 54:
-{ yyval.ptr = new Node(ID_END); yyval.ptr->child = yyvsp[0].ptr; nodelist.push_back(yyval.ptr); debug("EndExpr\n"); ;
+{ yyval.ptr = new Node(ID_END); yyval.ptr->child = yyvsp[0].ptr; nodelist.emplace_back(yyval.ptr); debug("EndExpr\n");
     break;}
 case 55:
-{ yyval.ptr = new Node(ID_MATHML); yyval.ptr->child = yyvsp[0].ptr; nodelist.push_back(yyval.ptr); top = yyval.ptr; debug("MathML\n"); ;
+{ yyval.ptr = new Node(ID_MATHML); yyval.ptr->child = yyvsp[0].ptr; nodelist.emplace_back(yyval.ptr); top = yyval.ptr; debug("MathML\n");
     break;}
 case 56:
-{ yyval.ptr = new Node(ID_LINES); yyval.ptr->child = yyvsp[0].ptr; nodelist.push_back(yyval.ptr); debug("Lines\n"); ;
+{ yyval.ptr = new Node(ID_LINES); yyval.ptr->child = yyvsp[0].ptr; nodelist.emplace_back(yyval.ptr); debug("Lines\n");
     break;}
 case 57:
-{ yyval.ptr = new Node(ID_LINES); yyval.ptr->child = yyvsp[-2].ptr; yyvsp[-2].ptr->next = yyvsp[0].ptr; nodelist.push_back(yyval.ptr); debug("Lines\n"); ;
+{ yyval.ptr = new Node(ID_LINES); yyval.ptr->child = yyvsp[-2].ptr; yyvsp[-2].ptr->next = yyvsp[0].ptr; nodelist.emplace_back(yyval.ptr); debug("Lines\n");
     break;}
 case 58:
-{ yyval.ptr = new Node(ID_LINE); yyval.ptr->child = yyvsp[0].ptr; nodelist.push_back(yyval.ptr); debug("Line\n"); ;
+{ yyval.ptr = new Node(ID_LINE); yyval.ptr->child = yyvsp[0].ptr; nodelist.emplace_back(yyval.ptr); debug("Line\n");
     break;}
 case 59:
-{ yyval.ptr = new Node(ID_EXPRLIST); yyval.ptr->child = yyvsp[0].ptr; debug("ExprList : Expr\n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_EXPRLIST); yyval.ptr->child = yyvsp[0].ptr; debug("ExprList : Expr\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 60:
-{ yyval.ptr = new Node(ID_EXPRLIST); yyval.ptr->child = yyvsp[-1].ptr; yyvsp[-1].ptr->next = yyvsp[0].ptr;  debug("ExprList : ExprList Expr\n"); nodelist.push_back(yyval.ptr); ;
+{ yyval.ptr = new Node(ID_EXPRLIST); yyval.ptr->child = yyvsp[-1].ptr; yyvsp[-1].ptr->next = yyvsp[0].ptr;  debug("ExprList : ExprList Expr\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 61:
-{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : Block\n"); nodelist.push_back(yyval.ptr);
+{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : Block\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 62:
-{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : Parenth\n");  nodelist.push_back(yyval.ptr);
+{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : Parenth\n");  nodelist.emplace_back(yyval.ptr);
     break;}
 case 63:
-{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : Fence\n");  nodelist.push_back(yyval.ptr);
+{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : Fence\n");  nodelist.emplace_back(yyval.ptr);
     break;}
 case 64:
-{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : SubSupExpr\n"); nodelist.push_back(yyval.ptr);
+{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : SubSupExpr\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 65:
-{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : FractionExpr\n"); nodelist.push_back(yyval.ptr);
+{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : FractionExpr\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 66:
-{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : OverExpr\n"); nodelist.push_back(yyval.ptr);
+{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : OverExpr\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 67:
-{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : DecorationExpr\n"); nodelist.push_back(yyval.ptr);
+{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : DecorationExpr\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 68:
-{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : RootExpr\n"); nodelist.push_back(yyval.ptr);
+{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : RootExpr\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 69:
-{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : AccentExpr\n"); nodelist.push_back(yyval.ptr);
+{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : AccentExpr\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 70:
-{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : PrimaryExpr\n"); nodelist.push_back(yyval.ptr);
+{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : PrimaryExpr\n"); nodelist.emplace_back(yyval.ptr);
     break;}
 case 71:
-{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : BeginExpr\n");  nodelist.push_back(yyval.ptr);
+{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : BeginExpr\n");  nodelist.emplace_back(yyval.ptr);
     break;}
 case 72:
-{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : EndExpr\n");  nodelist.push_back(yyval.ptr);
+{ yyval.ptr = new Node(ID_EXPR); yyval.ptr->child = yyvsp[0].ptr; debug("Expr : EndExpr\n");  nodelist.emplace_back(yyval.ptr);
     break;}
 }
    /* the action file gets copied in place of this dollarsign */
@@ -1041,7 +1024,7 @@ yyerrlab:   /* here on detecting error */
       int x, count;
 
       count = 0;
-      /* Start X at -yyn if nec to avoid negative indexes in yycheck.  */
+      /* Start X at -yyn if negative to avoid negative indexes in yycheck.  */
       for (x = ((yyn < 0) ? -yyn : 0);
            x < (sizeof(yytname) / sizeof(char *)); x++)
         if (yycheck[x + yyn] == x)
@@ -1208,12 +1191,7 @@ void yyerror(const char * /*err*/)
 {
 //  printf("REALKING ERR[%s]\n",err);
     // if error, delete all nodes.
-    int ncount = nodelist.size();
-    for( int i = 0 ; i < ncount ; i++){
-        Node *pNode = nodelist.front();
-        nodelist.pop_front();
-        delete pNode;
-    }
+    nodelist.clear();
     top = nullptr;
 }
 

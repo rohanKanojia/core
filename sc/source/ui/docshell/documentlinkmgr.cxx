@@ -17,14 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <comphelper/doublecheckedinit.hxx>
 #include <documentlinkmgr.hxx>
 #include <datastream.hxx>
 #include <ddelink.hxx>
-#include <sc.hrc>
+#include <webservicelink.hxx>
+#include <strings.hrc>
 #include <scresid.hxx>
-
-#include <sfx2/linkmgr.hxx>
-#include <vcl/layout.hxx>
+#include <o3tl/deleter.hxx>
+#include <svx/svdoole2.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 
 #include <memory>
 
@@ -32,28 +35,30 @@ namespace sc {
 
 struct DocumentLinkManagerImpl
 {
-    SfxObjectShell* mpShell;
-    std::unique_ptr<DataStream> mpDataStream;
-    std::unique_ptr<sfx2::LinkManager> mpLinkManager;
+    SfxObjectShell* const mpShell;
+    std::unique_ptr<DataStream, o3tl::default_delete<DataStream>> mpDataStream;
+    std::atomic<sfx2::LinkManager*> mpLinkManager;
 
     DocumentLinkManagerImpl(const DocumentLinkManagerImpl&) = delete;
     const DocumentLinkManagerImpl& operator=(const DocumentLinkManagerImpl&) = delete;
 
     explicit DocumentLinkManagerImpl(SfxObjectShell* pShell)
-        : mpShell(pShell), mpDataStream(nullptr), mpLinkManager(nullptr) {}
+        : mpShell(pShell), mpLinkManager(nullptr) {}
 
     ~DocumentLinkManagerImpl()
     {
         // Shared base links
-        if (mpLinkManager)
+        sfx2::LinkManager* linkManager = mpLinkManager;
+        if (linkManager)
         {
-            sfx2::SvLinkSources aTemp = mpLinkManager->GetServers();
-            for (sfx2::SvLinkSources::const_iterator it = aTemp.begin(); it != aTemp.end(); ++it)
-                (*it)->Closed();
+            sfx2::SvLinkSources aTemp = linkManager->GetServers();
+            for (const auto& pLinkSource : aTemp)
+                pLinkSource->Closed();
 
-            if (!mpLinkManager->GetLinks().empty())
-                mpLinkManager->Remove(0, mpLinkManager->GetLinks().size());
+            if (!linkManager->GetLinks().empty())
+                linkManager->Remove(0, linkManager->GetLinks().size());
         }
+        delete linkManager;
     }
 };
 
@@ -81,26 +86,28 @@ const DataStream* DocumentLinkManager::getDataStream() const
 
 sfx2::LinkManager* DocumentLinkManager::getLinkManager( bool bCreate )
 {
-    if (!mpImpl->mpLinkManager && bCreate && mpImpl->mpShell)
-        mpImpl->mpLinkManager.reset(new sfx2::LinkManager(mpImpl->mpShell));
-    return mpImpl->mpLinkManager.get();
+    if (bCreate && mpImpl->mpShell)
+        return comphelper::doubleCheckedInit( mpImpl->mpLinkManager,
+            [this]() { return new sfx2::LinkManager(mpImpl->mpShell); } );
+    return mpImpl->mpLinkManager;
 }
 
 const sfx2::LinkManager* DocumentLinkManager::getExistingLinkManager() const
 {
-    return mpImpl->mpLinkManager.get();
+    return mpImpl->mpLinkManager;
 }
 
 bool DocumentLinkManager::idleCheckLinks()
 {
-    if (!mpImpl->mpLinkManager)
+    sfx2::LinkManager* pMgr = mpImpl->mpLinkManager;
+    if (!pMgr)
         return false;
 
     bool bAnyLeft = false;
-    const sfx2::SvBaseLinks& rLinks = mpImpl->mpLinkManager->GetLinks();
-    for (size_t i = 0, n = rLinks.size(); i < n; ++i)
+    const sfx2::SvBaseLinks& rLinks = pMgr->GetLinks();
+    for (const auto & rLink : rLinks)
     {
-        sfx2::SvBaseLink* pBase = rLinks[i].get();
+        sfx2::SvBaseLink* pBase = rLink.get();
         ScDdeLink* pDdeLink = dynamic_cast<ScDdeLink*>(pBase);
         if (!pDdeLink || !pDdeLink->NeedsUpdate())
             continue;
@@ -115,34 +122,64 @@ bool DocumentLinkManager::idleCheckLinks()
 
 bool DocumentLinkManager::hasDdeLinks() const
 {
-    if (!mpImpl->mpLinkManager)
+    return hasDdeOrOleOrWebServiceLinks(true, false, false);
+}
+
+bool DocumentLinkManager::hasDdeOrOleOrWebServiceLinks() const
+{
+    return hasDdeOrOleOrWebServiceLinks(true, true, true);
+}
+
+bool DocumentLinkManager::hasDdeOrOleOrWebServiceLinks(bool bDde, bool bOle, bool bWebService) const
+{
+    sfx2::LinkManager* pMgr = mpImpl->mpLinkManager;
+    if (!pMgr)
         return false;
 
-    const sfx2::SvBaseLinks& rLinks = mpImpl->mpLinkManager->GetLinks();
-    for (size_t i = 0, n = rLinks.size(); i < n; ++i)
+    const sfx2::SvBaseLinks& rLinks = pMgr->GetLinks();
+    for (const auto & rLink : rLinks)
     {
-        sfx2::SvBaseLink* pBase = rLinks[i].get();
-        if (dynamic_cast<ScDdeLink*>(pBase))
+        sfx2::SvBaseLink* pBase = rLink.get();
+        if (bDde && dynamic_cast<ScDdeLink*>(pBase))
+            return true;
+        if (bOle && dynamic_cast<SdrEmbedObjectLink*>(pBase))
+            return true;
+        if (bWebService && dynamic_cast<ScWebServiceLink*>(pBase))
             return true;
     }
 
     return false;
 }
 
-bool DocumentLinkManager::updateDdeLinks( vcl::Window* pWin )
+bool DocumentLinkManager::updateDdeOrOleOrWebServiceLinks(weld::Window* pWin)
 {
-    if (!mpImpl->mpLinkManager)
+    sfx2::LinkManager* pMgr = mpImpl->mpLinkManager;
+    if (!pMgr)
         return false;
 
-    sfx2::LinkManager* pMgr = mpImpl->mpLinkManager.get();
     const sfx2::SvBaseLinks& rLinks = pMgr->GetLinks();
 
     // If the update takes longer, reset all values so that nothing
     // old (wrong) is left behind
     bool bAny = false;
-    for (size_t i = 0, n = rLinks.size(); i < n; ++i)
+    for (const auto & rLink : rLinks)
     {
-        sfx2::SvBaseLink* pBase = rLinks[i].get();
+        sfx2::SvBaseLink* pBase = rLink.get();
+
+        SdrEmbedObjectLink* pOleLink = dynamic_cast<SdrEmbedObjectLink*>(pBase);
+        if (pOleLink)
+        {
+            pOleLink->Update();
+            continue;
+        }
+
+        ScWebServiceLink* pWebserviceLink = dynamic_cast<ScWebServiceLink*>(pBase);
+        if (pWebserviceLink)
+        {
+            pWebserviceLink->Update();
+            continue;
+        }
+
         ScDdeLink* pDdeLink = dynamic_cast<ScDdeLink*>(pBase);
         if (!pDdeLink)
             continue;
@@ -152,12 +189,12 @@ bool DocumentLinkManager::updateDdeLinks( vcl::Window* pWin )
         else
         {
             // Update failed.  Notify the user.
-            OUString aFile = pDdeLink->GetTopic();
-            OUString aElem = pDdeLink->GetItem();
-            OUString aType = pDdeLink->GetAppl();
+            const OUString& aFile = pDdeLink->GetTopic();
+            const OUString& aElem = pDdeLink->GetItem();
+            const OUString& aType = pDdeLink->GetAppl();
 
             OUStringBuffer aBuf;
-            aBuf.append(OUString(ScResId(SCSTR_DDEDOC_NOT_LOADED)));
+            aBuf.append(ScResId(SCSTR_DDEDOC_NOT_LOADED));
             aBuf.append("\n\n");
             aBuf.append("Source : ");
             aBuf.append(aFile);
@@ -165,8 +202,10 @@ bool DocumentLinkManager::updateDdeLinks( vcl::Window* pWin )
             aBuf.append(aElem);
             aBuf.append("\nType : ");
             aBuf.append(aType);
-            ScopedVclPtrInstance< MessageDialog > aBox(pWin, aBuf.makeStringAndClear());
-            aBox->Execute();
+            std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pWin,
+                                                      VclMessageType::Warning, VclButtonsType::Ok,
+                                                      aBuf.makeStringAndClear()));
+            xBox->run();
         }
     }
 
@@ -177,22 +216,22 @@ bool DocumentLinkManager::updateDdeLinks( vcl::Window* pWin )
 
 void DocumentLinkManager::updateDdeLink( const OUString& rAppl, const OUString& rTopic, const OUString& rItem )
 {
-    if (!mpImpl->mpLinkManager)
+    sfx2::LinkManager* pMgr = mpImpl->mpLinkManager;
+    if (!pMgr)
         return;
 
-    sfx2::LinkManager* pMgr = mpImpl->mpLinkManager.get();
     const sfx2::SvBaseLinks& rLinks = pMgr->GetLinks();
 
-    for (size_t i = 0, n = rLinks.size(); i < n; ++i)
+    for (const auto & rLink : rLinks)
     {
-        ::sfx2::SvBaseLink* pBase = rLinks[i].get();
+        ::sfx2::SvBaseLink* pBase = rLink.get();
         ScDdeLink* pDdeLink = dynamic_cast<ScDdeLink*>(pBase);
         if (!pDdeLink)
             continue;
 
-        if ( OUString(pDdeLink->GetAppl()) == rAppl &&
-             OUString(pDdeLink->GetTopic()) == rTopic &&
-             OUString(pDdeLink->GetItem()) == rItem )
+        if ( pDdeLink->GetAppl() == rAppl &&
+             pDdeLink->GetTopic() == rTopic &&
+             pDdeLink->GetItem() == rItem )
         {
             pDdeLink->TryUpdate();
             // Could be multiple (Mode), so continue searching
@@ -202,14 +241,15 @@ void DocumentLinkManager::updateDdeLink( const OUString& rAppl, const OUString& 
 
 size_t DocumentLinkManager::getDdeLinkCount() const
 {
-    if (!mpImpl->mpLinkManager)
+    sfx2::LinkManager* pMgr = mpImpl->mpLinkManager;
+    if (!pMgr)
         return 0;
 
     size_t nDdeCount = 0;
-    const sfx2::SvBaseLinks& rLinks = mpImpl->mpLinkManager->GetLinks();
-    for (size_t i = 0, n = rLinks.size(); i < n; ++i)
+    const sfx2::SvBaseLinks& rLinks = pMgr->GetLinks();
+    for (const auto & rLink : rLinks)
     {
-        ::sfx2::SvBaseLink* pBase = rLinks[i].get();
+        ::sfx2::SvBaseLink* pBase = rLink.get();
         ScDdeLink* pDdeLink = dynamic_cast<ScDdeLink*>(pBase);
         if (!pDdeLink)
             continue;
@@ -218,21 +258,6 @@ size_t DocumentLinkManager::getDdeLinkCount() const
     }
 
     return nDdeCount;
-}
-
-void DocumentLinkManager::disconnectDdeLinks()
-{
-    if (!mpImpl->mpLinkManager)
-        return;
-
-    const sfx2::SvBaseLinks& rLinks = mpImpl->mpLinkManager->GetLinks();
-    for (size_t i = 0, n = rLinks.size(); i < n; ++i)
-    {
-        ::sfx2::SvBaseLink* pBase = rLinks[i].get();
-        ScDdeLink* pDdeLink = dynamic_cast<ScDdeLink*>(pBase);
-        if (pDdeLink)
-            pDdeLink->Disconnect();
-    }
 }
 
 }

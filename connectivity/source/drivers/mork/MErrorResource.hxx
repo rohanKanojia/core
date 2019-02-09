@@ -27,33 +27,26 @@ namespace connectivity
         class ErrorDescriptor
         {
         private:
-            sal_uInt16      m_nErrorResourceId;
-            sal_Int32       m_nErrorCondition;
-            OUString m_sParameter;
+            const char* m_pErrorResourceId;
 
         public:
             ErrorDescriptor()
-                :m_nErrorResourceId(0)
-                ,m_nErrorCondition(0)
-                ,m_sParameter()
+                :m_pErrorResourceId(nullptr)
             {
             }
 
-            inline void setResId( const sal_uInt16 _nErrorResourceId )
+            void setResId(const char* pErrorResourceId)
             {
-                m_nErrorResourceId = _nErrorResourceId;
+                m_pErrorResourceId = pErrorResourceId;
             }
-            inline void reset()
+            void reset()
             {
-                m_nErrorResourceId = 0;
-                m_nErrorCondition = 0;
+                m_pErrorResourceId = nullptr;
             }
 
-            inline sal_uInt16 getResId() const                  { return m_nErrorResourceId; }
-            inline sal_Int32  getErrorCondition() const         { return m_nErrorCondition; }
-            inline const OUString& getParameter() const  { return m_sParameter; }
+            const char* getResId() const                  { return m_pErrorResourceId; }
 
-            inline bool is() const { return ( m_nErrorResourceId != 0 ) || ( m_nErrorCondition != 0 ); }
+            bool is() const { return m_pErrorResourceId != nullptr; }
         };
     }
 }

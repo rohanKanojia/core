@@ -20,15 +20,21 @@
 #ifndef INCLUDED_FORMULA_IFUNCTIONDESCRIPTION_HXX
 #define INCLUDED_FORMULA_IFUNCTIONDESCRIPTION_HXX
 
-#include <vector>
 #include <memory>
-#include <formula/formuladllapi.h>
-#include <rtl/ustring.hxx>
-#include <tools/solar.h>
-#include <com/sun/star/sheet/XFormulaParser.hpp>
-#include <com/sun/star/sheet/XFormulaOpCodeMapper.hpp>
+#include <vector>
 
-class SvTreeListEntry;
+#include <com/sun/star/table/CellAddress.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <rtl/string.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+
+namespace com { namespace sun { namespace star {
+    namespace sheet { struct FormulaToken; }
+    namespace sheet { class XFormulaOpCodeMapper; }
+    namespace sheet { class XFormulaParser; }
+} } }
 
 namespace formula
 {
@@ -36,6 +42,7 @@ namespace formula
     class IFunctionDescription;
     class FormEditData;
     class FormulaTokenArray;
+    class FormulaCompiler;
 
     class SAL_NO_VTABLE IFunctionManager
     {
@@ -101,16 +108,6 @@ namespace formula
         ~IFunctionDescription() {}
     };
 
-    class SAL_NO_VTABLE IFormulaToken
-    {
-    public:
-        virtual bool isFunction() const = 0;
-        virtual sal_uInt32 getArgumentCount() const = 0;
-
-    protected:
-        ~IFormulaToken() {}
-    };
-
     class SAL_NO_VTABLE IFormulaEditorHelper
     {
     public:
@@ -127,11 +124,21 @@ namespace formula
         virtual FormEditData* getFormEditData() const = 0;
         virtual bool calculateValue(const OUString& _sExpression, OUString& _rResult, bool bMatrixFormula) = 0;
 
+        /** Obtain a resident FormulaCompiler instance, created without
+            FormulaTokenArray and reused but being application specific derived.
+         */
+        virtual std::shared_ptr<FormulaCompiler> getCompiler() const = 0;
+
+        /** Create an application specific FormulaCompiler instance with
+            FormulaTokenArray. The FormulaTokenArray had to be created using
+            convertToTokenArray().
+         */
+        virtual std::unique_ptr<FormulaCompiler> createCompiler( FormulaTokenArray& rArray ) const = 0;
+
         virtual void switchBack() = 0;
 
         virtual void clear() = 0;
         virtual void deleteFormData() = 0;
-        virtual void setReferenceInput(const FormEditData* _pData) = 0;
 
         virtual IFunctionManager*   getFunctionManager() = 0;
         virtual ::std::unique_ptr<FormulaTokenArray> convertToTokenArray(const css::uno::Sequence< css::sheet::FormulaToken >& _aTokenList) = 0;

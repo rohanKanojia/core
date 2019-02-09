@@ -28,6 +28,7 @@
 #include <com/sun/star/util/XNumberFormatsSupplier.hpp>
 #include <com/sun/star/xforms/XDataTypeRepository.hpp>
 #include <unotools/syslocale.hxx>
+#include <i18nlangtag/languagetag.hxx>
 #include <tools/diagnose_ex.h>
 
 
@@ -74,7 +75,7 @@ namespace pcr
     }
 
 
-    void XSDValidationHelper::getAvailableDataTypeNames( ::std::vector< OUString >& /* [out] */ _rNames ) const
+    void XSDValidationHelper::getAvailableDataTypeNames( std::vector< OUString >& /* [out] */ _rNames ) const
     {
         _rNames.resize( 0 );
 
@@ -86,7 +87,7 @@ namespace pcr
                 aElements = xRepository->getElementNames();
 
             _rNames.resize( aElements.getLength() );
-            ::std::copy( aElements.begin(), aElements.end(), _rNames.begin() );
+            std::copy( aElements.begin(), aElements.end(), _rNames.begin() );
         }
         catch( const Exception& )
         {
@@ -258,7 +259,7 @@ namespace pcr
                 Reference< XPropertySet > xNewType( getDataType( _rName ), UNO_QUERY );
 
                 // fire any changes in the properties which result from this new type
-                std::set< OUString > aFilter; aFilter.insert( static_cast<const OUString&>(PROPERTY_NAME) );
+                std::set< OUString > aFilter; aFilter.insert( PROPERTY_NAME );
                 firePropertyChanges( xOldType, xNewType, aFilter );
 
                 // fire the change in the Data Type property
@@ -269,7 +270,7 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
     }
 
@@ -372,7 +373,7 @@ namespace pcr
     }
 
 
-    OUString XSDValidationHelper::getBasicTypeNameForClass( sal_Int16 _nClass, Reference< XDataTypeRepository > _rxRepository )
+    OUString XSDValidationHelper::getBasicTypeNameForClass( sal_Int16 _nClass, const Reference< XDataTypeRepository >& _rxRepository )
     {
         OUString sReturn;
         OSL_ENSURE( _rxRepository.is(), "XSDValidationHelper::getBasicTypeNameForClass: invalid repository!" );

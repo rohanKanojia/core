@@ -33,8 +33,6 @@ namespace com { namespace sun { namespace star {
 
 class XMLImageMapContext : public SvXMLImportContext
 {
-    const OUString sImageMap;
-
     /// the image map to be imported
     css::uno::Reference< css::container::XIndexContainer> xImageMap;
 
@@ -48,11 +46,11 @@ public:
         SvXMLImport& rImport,
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
-        css::uno::Reference< css::beans::XPropertySet> & rPropertySet);
+        css::uno::Reference< css::beans::XPropertySet> const & rPropertySet);
 
-    virtual ~XMLImageMapContext();
+    virtual ~XMLImageMapContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;

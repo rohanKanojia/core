@@ -17,25 +17,29 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ObjectNameProvider.hxx"
-#include "ResId.hxx"
-#include "Strings.hrc"
-#include "macros.hxx"
-#include "AxisHelper.hxx"
-#include "ChartModelHelper.hxx"
-#include "DiagramHelper.hxx"
-#include "DataSeriesHelper.hxx"
-#include "TitleHelper.hxx"
-#include "AxisIndexDefines.hxx"
-#include "ExplicitCategoriesProvider.hxx"
-#include "CommonConverters.hxx"
-#include "NumberFormatterWrapper.hxx"
-#include "RegressionCurveHelper.hxx"
+#include <ObjectNameProvider.hxx>
+#include <ResId.hxx>
+#include <strings.hrc>
+#include <AxisHelper.hxx>
+#include <ChartModel.hxx>
+#include <ChartModelHelper.hxx>
+#include <DiagramHelper.hxx>
+#include <DataSeriesHelper.hxx>
+#include <TitleHelper.hxx>
+#include <ExplicitCategoriesProvider.hxx>
+#include <CommonConverters.hxx>
+#include <NumberFormatterWrapper.hxx>
+#include <RegressionCurveHelper.hxx>
 #include <rtl/math.hxx>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
+#include <vcl/settings.hxx>
+#include <vcl/svapp.hxx>
+#include <unotools/localedatawrapper.hxx>
 
 #include <com/sun/star/chart2/XTitle.hpp>
 #include <com/sun/star/chart2/XRegressionCurveContainer.hpp>
+#include <tools/diagnose_ex.h>
 
 namespace chart
 {
@@ -69,7 +73,7 @@ OUString lcl_getDataSeriesName( const OUString& rObjectCID, const Reference< fra
 
 OUString lcl_getFullSeriesName( const OUString& rObjectCID, const Reference< frame::XModel >& xChartModel )
 {
-    OUString aRet(SCH_RESSTR(STR_TIP_DATASERIES));
+    OUString aRet(SchResId(STR_TIP_DATASERIES));
     OUString aWildcard( "%SERIESNAME" );
     sal_Int32 nIndex = aRet.indexOf( aWildcard );
     if( nIndex != -1 )
@@ -104,7 +108,7 @@ OUString lcl_getDataPointValueText( const Reference< XDataSeries >& xSeries, sal
 
     uno::Reference< util::XNumberFormatsSupplier > xNumberFormatsSupplier( xChartModel, uno::UNO_QUERY );
     NumberFormatterWrapper aNumberFormatterWrapper( xNumberFormatsSupplier );
-    sal_Int32 nLabelColor = 0;//dummy
+    Color nLabelColor;//dummy
     bool bColorChanged;//dummy
 
     for(sal_Int32 nN = aDataSequences.getLength();nN--;)
@@ -169,14 +173,14 @@ OUString lcl_getDataPointValueText( const Reference< XDataSeries >& xSeries, sal
             }
             catch( const uno::Exception& e )
             {
-                ASSERT_EXCEPTION( e );
+                SAL_WARN("chart2", "Exception caught. " << e );
             }
         }
     }
 
     if( aX.isEmpty() )
     {
-        ChartModel& rModel = dynamic_cast<ChartModel&>(*xChartModel.get());
+        ChartModel& rModel = dynamic_cast<ChartModel&>(*xChartModel);
         aRet = ExplicitCategoriesProvider::getCategoryByIndex( xCooSys, rModel, nPointIndex );
     }
     else
@@ -204,103 +208,103 @@ OUString ObjectNameProvider::getName( ObjectType eObjectType, bool bPlural )
     switch( eObjectType )
     {
         case OBJECTTYPE_PAGE:
-                aRet=SCH_RESSTR(STR_OBJECT_PAGE);
+                aRet=SchResId(STR_OBJECT_PAGE);
                 break;
         case OBJECTTYPE_TITLE:
             {
                 if(bPlural)
-                    aRet=SCH_RESSTR(STR_OBJECT_TITLES);
+                    aRet=SchResId(STR_OBJECT_TITLES);
                 else
-                    aRet=SCH_RESSTR(STR_OBJECT_TITLE);
+                    aRet=SchResId(STR_OBJECT_TITLE);
             }
                 break;
         case OBJECTTYPE_LEGEND:
-                aRet=SCH_RESSTR(STR_OBJECT_LEGEND);
+                aRet=SchResId(STR_OBJECT_LEGEND);
                 break;
         case OBJECTTYPE_LEGEND_ENTRY:
-                aRet=SCH_RESSTR(STR_OBJECT_LEGEND_SYMBOL);//@todo change string if we do differenciate symbol and legend entry in future
+                aRet=SchResId(STR_OBJECT_LEGEND_SYMBOL);//@todo change string if we do differentiate symbol and legend entry in future
                 break;
         case OBJECTTYPE_DIAGRAM:
-                aRet=SCH_RESSTR(STR_OBJECT_DIAGRAM);
+                aRet=SchResId(STR_OBJECT_DIAGRAM);
                 break;
         case OBJECTTYPE_DIAGRAM_WALL:
-                aRet=SCH_RESSTR(STR_OBJECT_DIAGRAM_WALL);
+                aRet=SchResId(STR_OBJECT_DIAGRAM_WALL);
                 break;
         case OBJECTTYPE_DIAGRAM_FLOOR:
-                aRet=SCH_RESSTR(STR_OBJECT_DIAGRAM_FLOOR);
+                aRet=SchResId(STR_OBJECT_DIAGRAM_FLOOR);
                 break;
         case OBJECTTYPE_AXIS:
             {
                 if(bPlural)
-                    aRet=SCH_RESSTR(STR_OBJECT_AXES);
+                    aRet=SchResId(STR_OBJECT_AXES);
                 else
-                    aRet=SCH_RESSTR(STR_OBJECT_AXIS);
+                    aRet=SchResId(STR_OBJECT_AXIS);
             }
                 break;
         case OBJECTTYPE_AXIS_UNITLABEL:
-                aRet=SCH_RESSTR(STR_OBJECT_LABEL);//@todo maybe a more concrete name
+                aRet=SchResId(STR_OBJECT_LABEL);//@todo maybe a more concrete name
                 break;
         case OBJECTTYPE_GRID:
         case OBJECTTYPE_SUBGRID: //maybe todo: different names for subgrids
             {
                 if(bPlural)
-                    aRet=SCH_RESSTR(STR_OBJECT_GRIDS);
+                    aRet=SchResId(STR_OBJECT_GRIDS);
                 else
-                    aRet=SCH_RESSTR(STR_OBJECT_GRID);
+                    aRet=SchResId(STR_OBJECT_GRID);
             }
                 break;
         case OBJECTTYPE_DATA_SERIES:
             {
                 if(bPlural)
-                    aRet=SCH_RESSTR(STR_OBJECT_DATASERIES_PLURAL);
+                    aRet=SchResId(STR_OBJECT_DATASERIES_PLURAL);
                 else
-                    aRet=SCH_RESSTR(STR_OBJECT_DATASERIES);
+                    aRet=SchResId(STR_OBJECT_DATASERIES);
             }
                 break;
         case OBJECTTYPE_DATA_POINT:
             {
                 if(bPlural)
-                    aRet=SCH_RESSTR(STR_OBJECT_DATAPOINTS);
+                    aRet=SchResId(STR_OBJECT_DATAPOINTS);
                 else
-                    aRet=SCH_RESSTR(STR_OBJECT_DATAPOINT);
+                    aRet=SchResId(STR_OBJECT_DATAPOINT);
             }
                 break;
         case OBJECTTYPE_DATA_LABELS:
-                aRet=SCH_RESSTR(STR_OBJECT_DATALABELS);
+                aRet=SchResId(STR_OBJECT_DATALABELS);
                 break;
         case OBJECTTYPE_DATA_LABEL:
-                aRet=SCH_RESSTR(STR_OBJECT_LABEL);
+                aRet=SchResId(STR_OBJECT_LABEL);
                 break;
         case OBJECTTYPE_DATA_ERRORS_X:
-                aRet=SCH_RESSTR(STR_OBJECT_ERROR_BARS_X);
+                aRet=SchResId(STR_OBJECT_ERROR_BARS_X);
                 break;
         case OBJECTTYPE_DATA_ERRORS_Y:
-                aRet=SCH_RESSTR(STR_OBJECT_ERROR_BARS_Y);
+                aRet=SchResId(STR_OBJECT_ERROR_BARS_Y);
                 break;
         case OBJECTTYPE_DATA_ERRORS_Z:
-                aRet=SCH_RESSTR(STR_OBJECT_ERROR_BARS_Z);
+                aRet=SchResId(STR_OBJECT_ERROR_BARS_Z);
                 break;
         case OBJECTTYPE_DATA_AVERAGE_LINE:
-                aRet=SCH_RESSTR(STR_OBJECT_AVERAGE_LINE);
+                aRet=SchResId(STR_OBJECT_AVERAGE_LINE);
                 break;
         case OBJECTTYPE_DATA_CURVE:
             {
                 if(bPlural)
-                    aRet=SCH_RESSTR(STR_OBJECT_CURVES);
+                    aRet=SchResId(STR_OBJECT_CURVES);
                 else
-                    aRet=SCH_RESSTR(STR_OBJECT_CURVE);
+                    aRet=SchResId(STR_OBJECT_CURVE);
             }
                 break;
         case OBJECTTYPE_DATA_STOCK_RANGE:
                 break;
         case OBJECTTYPE_DATA_STOCK_LOSS:
-                aRet=SCH_RESSTR(STR_OBJECT_STOCK_LOSS);
+                aRet=SchResId(STR_OBJECT_STOCK_LOSS);
                 break;
         case OBJECTTYPE_DATA_STOCK_GAIN:
-                aRet=SCH_RESSTR(STR_OBJECT_STOCK_GAIN);
+                aRet=SchResId(STR_OBJECT_STOCK_GAIN);
                 break;
         case OBJECTTYPE_DATA_CURVE_EQUATION:
-                aRet=SCH_RESSTR(STR_OBJECT_CURVE_EQUATION);
+                aRet=SchResId(STR_OBJECT_CURVE_EQUATION);
                 break;
         default: //OBJECTTYPE_UNKNOWN
             ;
@@ -325,21 +329,21 @@ OUString ObjectNameProvider::getAxisName( const OUString& rObjectCID
     {
         case 0://x-axis
             if( nAxisIndex == 0 )
-                aRet=SCH_RESSTR(STR_OBJECT_AXIS_X);
+                aRet=SchResId(STR_OBJECT_AXIS_X);
             else
-                aRet=SCH_RESSTR(STR_OBJECT_SECONDARY_X_AXIS);
+                aRet=SchResId(STR_OBJECT_SECONDARY_X_AXIS);
             break;
         case 1://y-axis
             if( nAxisIndex == 0 )
-                aRet=SCH_RESSTR(STR_OBJECT_AXIS_Y);
+                aRet=SchResId(STR_OBJECT_AXIS_Y);
             else
-                aRet=SCH_RESSTR(STR_OBJECT_SECONDARY_Y_AXIS);
+                aRet=SchResId(STR_OBJECT_SECONDARY_Y_AXIS);
             break;
         case 2://z-axis
-            aRet=SCH_RESSTR(STR_OBJECT_AXIS_Z);
+            aRet=SchResId(STR_OBJECT_AXIS_Z);
             break;
         default://axis
-            aRet=SCH_RESSTR(STR_OBJECT_AXIS);
+            aRet=SchResId(STR_OBJECT_AXIS);
             break;
     }
 
@@ -353,25 +357,25 @@ OUString ObjectNameProvider::getTitleNameByType( TitleHelper::eTitleType eType )
     switch(eType)
     {
         case TitleHelper::MAIN_TITLE:
-            aRet=SCH_RESSTR(STR_OBJECT_TITLE_MAIN);
+            aRet=SchResId(STR_OBJECT_TITLE_MAIN);
             break;
         case TitleHelper::SUB_TITLE:
-            aRet=SCH_RESSTR(STR_OBJECT_TITLE_SUB);
+            aRet=SchResId(STR_OBJECT_TITLE_SUB);
             break;
         case TitleHelper::X_AXIS_TITLE:
-            aRet=SCH_RESSTR(STR_OBJECT_TITLE_X_AXIS);
+            aRet=SchResId(STR_OBJECT_TITLE_X_AXIS);
             break;
         case TitleHelper::Y_AXIS_TITLE:
-            aRet=SCH_RESSTR(STR_OBJECT_TITLE_Y_AXIS);
+            aRet=SchResId(STR_OBJECT_TITLE_Y_AXIS);
             break;
         case TitleHelper::Z_AXIS_TITLE:
-            aRet=SCH_RESSTR(STR_OBJECT_TITLE_Z_AXIS);
+            aRet=SchResId(STR_OBJECT_TITLE_Z_AXIS);
             break;
         case TitleHelper::SECONDARY_X_AXIS_TITLE:
-            aRet=SCH_RESSTR(STR_OBJECT_TITLE_SECONDARY_X_AXIS);
+            aRet=SchResId(STR_OBJECT_TITLE_SECONDARY_X_AXIS);
             break;
         case TitleHelper::SECONDARY_Y_AXIS_TITLE:
-            aRet=SCH_RESSTR(STR_OBJECT_TITLE_SECONDARY_Y_AXIS);
+            aRet=SchResId(STR_OBJECT_TITLE_SECONDARY_Y_AXIS);
             break;
         default:
             OSL_FAIL("unknown title type");
@@ -379,7 +383,7 @@ OUString ObjectNameProvider::getTitleNameByType( TitleHelper::eTitleType eType )
     }
 
     if( aRet.isEmpty() )
-        aRet=SCH_RESSTR(STR_OBJECT_TITLE);
+        aRet=SchResId(STR_OBJECT_TITLE);
 
     return aRet;
 }
@@ -398,7 +402,7 @@ OUString ObjectNameProvider::getTitleName( const OUString& rObjectCID
             aRet = ObjectNameProvider::getTitleNameByType( eType );
     }
     if( aRet.isEmpty() )
-        aRet=SCH_RESSTR(STR_OBJECT_TITLE);
+        aRet=SchResId(STR_OBJECT_TITLE);
 
     return aRet;
 }
@@ -422,16 +426,16 @@ OUString ObjectNameProvider::getGridName( const OUString& rObjectCID
         switch(nDimensionIndex)
         {
             case 0://x-axis
-                aRet=SCH_RESSTR(STR_OBJECT_GRID_MAJOR_X);
+                aRet=SchResId(STR_OBJECT_GRID_MAJOR_X);
                 break;
             case 1://y-axis
-                aRet=SCH_RESSTR(STR_OBJECT_GRID_MAJOR_Y);
+                aRet=SchResId(STR_OBJECT_GRID_MAJOR_Y);
                 break;
             case 2://z-axis
-                aRet=SCH_RESSTR(STR_OBJECT_GRID_MAJOR_Z);
+                aRet=SchResId(STR_OBJECT_GRID_MAJOR_Z);
                 break;
             default://axis
-                aRet=SCH_RESSTR(STR_OBJECT_GRID);
+                aRet=SchResId(STR_OBJECT_GRID);
                 break;
         }
     }
@@ -440,16 +444,16 @@ OUString ObjectNameProvider::getGridName( const OUString& rObjectCID
         switch(nDimensionIndex)
         {
             case 0://x-axis
-                aRet=SCH_RESSTR(STR_OBJECT_GRID_MINOR_X);
+                aRet=SchResId(STR_OBJECT_GRID_MINOR_X);
                 break;
             case 1://y-axis
-                aRet=SCH_RESSTR(STR_OBJECT_GRID_MINOR_Y);
+                aRet=SchResId(STR_OBJECT_GRID_MINOR_Y);
                 break;
             case 2://z-axis
-                aRet=SCH_RESSTR(STR_OBJECT_GRID_MINOR_Z);
+                aRet=SchResId(STR_OBJECT_GRID_MINOR_Z);
                 break;
             default://axis
-                aRet=SCH_RESSTR(STR_OBJECT_GRID);
+                aRet=SchResId(STR_OBJECT_GRID);
                 break;
         }
     }
@@ -465,37 +469,33 @@ OUString ObjectNameProvider::getHelpText( const OUString& rObjectCID, const Refe
 {
     OUString aRet;
     ObjectType eObjectType( ObjectIdentifier::getObjectType(rObjectCID) );
-    if( OBJECTTYPE_AXIS == eObjectType )
+    if( eObjectType == OBJECTTYPE_AXIS )
     {
         aRet=ObjectNameProvider::getAxisName( rObjectCID, xChartModel );
     }
-    else if( OBJECTTYPE_GRID == eObjectType
-        || OBJECTTYPE_SUBGRID == eObjectType )
+    else if( eObjectType == OBJECTTYPE_GRID
+        || eObjectType == OBJECTTYPE_SUBGRID )
     {
         aRet=ObjectNameProvider::getGridName( rObjectCID, xChartModel );
     }
-    else if( OBJECTTYPE_TITLE == eObjectType )
+    else if( eObjectType == OBJECTTYPE_TITLE )
     {
         aRet=ObjectNameProvider::getTitleName( rObjectCID, xChartModel );
     }
-    else if( OBJECTTYPE_DATA_SERIES == eObjectType )
+    else if( eObjectType == OBJECTTYPE_DATA_SERIES )
     {
         aRet = lcl_getFullSeriesName( rObjectCID, xChartModel );
     }
-    else if( OBJECTTYPE_DATA_POINT == eObjectType )
+    else if( eObjectType == OBJECTTYPE_DATA_POINT )
     {
         if( bVerbose )
         {
-            OUString aNewLine( "\n" );
-
-            aRet=SCH_RESSTR(STR_TIP_DATAPOINT_INDEX);
-            aRet+=aNewLine;
-            aRet+=SCH_RESSTR(STR_TIP_DATASERIES);
-            aRet+=aNewLine;
-            aRet+=SCH_RESSTR(STR_TIP_DATAPOINT_VALUES);
+            aRet= SchResId(STR_TIP_DATAPOINT_INDEX) + "\n"
+                + SchResId(STR_TIP_DATASERIES) + "\n"
+                + SchResId(STR_TIP_DATAPOINT_VALUES);
         }
         else
-            aRet=SCH_RESSTR(STR_TIP_DATAPOINT);
+            aRet=SchResId(STR_TIP_DATAPOINT);
 
         Reference< XDiagram > xDiagram( ChartModelHelper::findDiagram( xChartModel ) );
         Reference< XDataSeries > xSeries( ObjectIdentifier::getDataSeriesForCID( rObjectCID , xChartModel ), uno::UNO_QUERY );
@@ -516,7 +516,7 @@ OUString ObjectNameProvider::getHelpText( const OUString& rObjectCID, const Refe
             nIndex = aRet.indexOf( aWildcard );
             if( nIndex != -1 )
             {
-                ::std::vector< Reference< chart2::XDataSeries > > aSeriesVector(
+                std::vector< Reference< chart2::XDataSeries > > aSeriesVector(
                     DiagramHelper::getDataSeriesFromDiagram( xDiagram ) );
                 sal_Int32 nSeriesIndex = -1;
                 for( nSeriesIndex=aSeriesVector.size();nSeriesIndex--;)
@@ -545,11 +545,11 @@ OUString ObjectNameProvider::getHelpText( const OUString& rObjectCID, const Refe
                 aRet = aRet.replaceAt( nIndex, aWildcard.getLength(), lcl_getDataSeriesName( rObjectCID, xChartModel ) );
         }
     }
-    else if( OBJECTTYPE_DATA_CURVE == eObjectType )
+    else if( eObjectType == OBJECTTYPE_DATA_CURVE )
     {
         if( bVerbose )
         {
-            aRet = SCH_RESSTR( STR_OBJECT_CURVE_WITH_PARAMETERS );
+            aRet = SchResId( STR_OBJECT_CURVE_WITH_PARAMETERS );
             Reference< chart2::XDataSeries > xSeries( ObjectIdentifier::getDataSeriesForCID( rObjectCID , xChartModel ));
             Reference< chart2::XRegressionCurveContainer > xCurveCnt( xSeries, uno::UNO_QUERY );
 
@@ -566,6 +566,11 @@ OUString ObjectNameProvider::getHelpText( const OUString& rObjectCID, const Refe
                         sal_Int32 aPeriod = 2;
                         bool bForceIntercept = false;
                         double aInterceptValue = 0.0;
+                        OUString aXName ("x"), aYName ("f(x)");
+                        const LocaleDataWrapper& rLocaleDataWrapper = Application::GetSettings().GetLocaleDataWrapper();
+                        const OUString& aNumDecimalSep = rLocaleDataWrapper.getNumDecimalSep();
+                        sal_Unicode cDecSeparator = aNumDecimalSep[0];
+
                         uno::Reference< beans::XPropertySet > xProperties( xCurve, uno::UNO_QUERY );
                         if ( xProperties.is())
                         {
@@ -574,8 +579,17 @@ OUString ObjectNameProvider::getHelpText( const OUString& rObjectCID, const Refe
                                 xProperties->getPropertyValue( "ForceIntercept") >>= bForceIntercept;
                                 if (bForceIntercept)
                                         xProperties->getPropertyValue( "InterceptValue") >>= aInterceptValue;
+                                uno::Reference< beans::XPropertySet > xEqProp( xCurve->getEquationProperties());
+                                if( xEqProp.is())
+                                {
+                                    if ( !(xEqProp->getPropertyValue( "XName") >>= aXName) )
+                                        aXName = "x";
+                                    if ( !(xEqProp->getPropertyValue( "YName") >>= aYName) )
+                                        aYName = "f(x)";
+                                }
                         }
                         xCalculator->setRegressionProperties(aDegree, bForceIntercept, aInterceptValue, 2);
+                        xCalculator->setXYNames ( aXName, aYName );
                         RegressionCurveHelper::initializeCurveCalculator( xCalculator, xSeries, xChartModel );
 
                         // change text for Moving Average
@@ -591,24 +605,30 @@ OUString ObjectNameProvider::getHelpText( const OUString& rObjectCID, const Refe
                         aWildcard = "%FORMULA";
                         nIndex = aRet.indexOf( aWildcard );
                         if( nIndex != -1 )
-                            aRet = aRet.replaceAt( nIndex, aWildcard.getLength(), xCalculator->getRepresentation());
+                        {
+                            OUString aFormula ( xCalculator->getRepresentation() );
+                            if ( cDecSeparator != '.' )
+                            {
+                                aFormula = aFormula.replace( '.', cDecSeparator );
+                            }
+                            aRet = aRet.replaceAt( nIndex, aWildcard.getLength(), aFormula );
+                        }
 
                         // replace r^2
                         aWildcard = "%RSQUARED";
                         nIndex = aRet.indexOf( aWildcard );
                         if( nIndex != -1 )
                         {
-                            sal_Unicode aDecimalSep( '.' );
                             double fR( xCalculator->getCorrelationCoefficient());
                             aRet = aRet.replaceAt(
                                 nIndex, aWildcard.getLength(),
                                 ::rtl::math::doubleToUString(
-                                    fR*fR, rtl_math_StringFormat_G, 4, aDecimalSep, true ));
+                                    fR*fR, rtl_math_StringFormat_G, 4, cDecSeparator, true ));
                         }
                     }
-                    catch( const uno::Exception & ex )
+                    catch( const uno::Exception & )
                     {
-                        ASSERT_EXCEPTION( ex );
+                        DBG_UNHANDLED_EXCEPTION("chart2");
                     }
                 }
             }
@@ -625,18 +645,16 @@ OUString ObjectNameProvider::getHelpText( const OUString& rObjectCID, const Refe
                 Reference< chart2::XRegressionCurve > xCurve( RegressionCurveHelper::getRegressionCurveAtIndex(xCurveCnt, nCurveIndex) );
                 if( xCurve.is())
                 {
-                    aRet += " (";
-                    aRet += RegressionCurveHelper::getRegressionCurveName(xCurve);
-                    aRet += " )";
+                    aRet += " (" + RegressionCurveHelper::getRegressionCurveName(xCurve) + " )";
                 }
             }
         }
     }
-    else if( OBJECTTYPE_DATA_AVERAGE_LINE == eObjectType )
+    else if( eObjectType == OBJECTTYPE_DATA_AVERAGE_LINE )
     {
         if( bVerbose )
         {
-            aRet = SCH_RESSTR(STR_OBJECT_AVERAGE_LINE_WITH_PARAMETERS);
+            aRet = SchResId(STR_OBJECT_AVERAGE_LINE_WITH_PARAMETERS);
             Reference< chart2::XDataSeries > xSeries( ObjectIdentifier::getDataSeriesForCID( rObjectCID , xChartModel ));
             Reference< chart2::XRegressionCurveContainer > xCurveCnt( xSeries, uno::UNO_QUERY );
             if( xCurveCnt.is())
@@ -649,7 +667,9 @@ OUString ObjectNameProvider::getHelpText( const OUString& rObjectCID, const Refe
                         Reference< chart2::XRegressionCurveCalculator > xCalculator( xCurve->getCalculator(), uno::UNO_QUERY_THROW );
                         RegressionCurveHelper::initializeCurveCalculator( xCalculator, xSeries, xChartModel );
 
-                        sal_Unicode aDecimalSep( '.' );
+                        const LocaleDataWrapper& rLocaleDataWrapper = Application::GetSettings().GetLocaleDataWrapper();
+                        const OUString& aNumDecimalSep = rLocaleDataWrapper.getNumDecimalSep();
+                        sal_Unicode cDecSeparator = aNumDecimalSep[0];
 
                         OUString aWildcard( "%AVERAGE_VALUE" );
                         sal_Int32 nIndex = aRet.indexOf( aWildcard );
@@ -660,7 +680,7 @@ OUString ObjectNameProvider::getHelpText( const OUString& rObjectCID, const Refe
                             aRet = aRet.replaceAt(
                                 nIndex, aWildcard.getLength(),
                                 ::rtl::math::doubleToUString(
-                                    fMeanValue, rtl_math_StringFormat_G, 4, aDecimalSep, true ));
+                                    fMeanValue, rtl_math_StringFormat_G, 4, cDecSeparator, true ));
                         }
 
                         // replace standard deviation
@@ -672,12 +692,12 @@ OUString ObjectNameProvider::getHelpText( const OUString& rObjectCID, const Refe
                             aRet = aRet.replaceAt(
                                 nIndex, aWildcard.getLength(),
                                 ::rtl::math::doubleToUString(
-                                    fStdDev, rtl_math_StringFormat_G, 4, aDecimalSep, true ));
+                                    fStdDev, rtl_math_StringFormat_G, 4, cDecSeparator, true ));
                         }
                     }
-                    catch( const uno::Exception & ex )
+                    catch( const uno::Exception & )
                     {
-                        ASSERT_EXCEPTION( ex );
+                        DBG_UNHANDLED_EXCEPTION("chart2");
                     }
                 }
             }
@@ -701,9 +721,9 @@ OUString ObjectNameProvider::getSelectedObjectText( const OUString & rObjectCID,
     ObjectType eObjectType( ObjectIdentifier::getObjectType(rObjectCID) );
     Reference< frame::XModel > xChartModel( xChartDocument, uno::UNO_QUERY );
 
-    if( OBJECTTYPE_DATA_POINT == eObjectType )
+    if( eObjectType == OBJECTTYPE_DATA_POINT )
     {
-        aRet = SCH_RESSTR( STR_STATUS_DATAPOINT_MARKED );
+        aRet = SchResId( STR_STATUS_DATAPOINT_MARKED );
 
         Reference< XDiagram > xDiagram( ChartModelHelper::findDiagram( xChartModel ) );
         Reference< XDataSeries > xSeries( ObjectIdentifier::getDataSeriesForCID( rObjectCID , xChartModel ), uno::UNO_QUERY );
@@ -716,7 +736,7 @@ OUString ObjectNameProvider::getSelectedObjectText( const OUString & rObjectCID,
 
             // replace data series index
             {
-                ::std::vector< Reference< chart2::XDataSeries > > aSeriesVector(
+                std::vector< Reference< chart2::XDataSeries > > aSeriesVector(
                     DiagramHelper::getDataSeriesFromDiagram( xDiagram ) );
                 sal_Int32 nSeriesIndex = -1;
                 for( nSeriesIndex=aSeriesVector.size();nSeriesIndex--;)
@@ -735,11 +755,11 @@ OUString ObjectNameProvider::getSelectedObjectText( const OUString & rObjectCID,
     else
     {
         // use the verbose text including the formula for trend lines
-        const bool bVerbose( OBJECTTYPE_DATA_CURVE == eObjectType || OBJECTTYPE_DATA_AVERAGE_LINE == eObjectType );
+        const bool bVerbose( eObjectType == OBJECTTYPE_DATA_CURVE || eObjectType == OBJECTTYPE_DATA_AVERAGE_LINE );
         const OUString aHelpText( getHelpText( rObjectCID, xChartModel, bVerbose ));
         if( !aHelpText.isEmpty())
         {
-            aRet = SCH_RESSTR( STR_STATUS_OBJECT_MARKED );
+            aRet = SchResId( STR_STATUS_OBJECT_MARKED );
             replaceParamterInString( aRet, "%OBJECTNAME", aHelpText );
         }
     }
@@ -775,19 +795,15 @@ OUString ObjectNameProvider::getNameForCID(
         case OBJECTTYPE_DATA_CURVE:
         case OBJECTTYPE_DATA_CURVE_EQUATION:
             {
-                OUString aRet = lcl_getFullSeriesName( rObjectCID, xModel );
-                aRet += " ";
+                OUString aRet = lcl_getFullSeriesName( rObjectCID, xModel ) + " ";
                 if( eType == OBJECTTYPE_DATA_POINT || eType == OBJECTTYPE_DATA_LABEL )
                 {
                     aRet += getName( OBJECTTYPE_DATA_POINT  );
                     sal_Int32 nPointIndex = ObjectIdentifier::getIndexFromParticleOrCID( rObjectCID );
-                    aRet += " ";
-                    aRet += OUString::number(nPointIndex+1);
-
+                    aRet += " " + OUString::number(nPointIndex+1);
                     if( eType == OBJECTTYPE_DATA_LABEL )
                     {
-                        aRet += " ";
-                        aRet += getName( OBJECTTYPE_DATA_LABEL  );
+                        aRet += " " + getName( OBJECTTYPE_DATA_LABEL  );
                     }
                 }
                 else if (eType == OBJECTTYPE_DATA_CURVE || eType == OBJECTTYPE_DATA_CURVE_EQUATION)
@@ -795,8 +811,7 @@ OUString ObjectNameProvider::getNameForCID(
                     Reference< chart2::XDataSeries > xSeries( ObjectIdentifier::getDataSeriesForCID( rObjectCID , xModel ));
                     Reference< chart2::XRegressionCurveContainer > xCurveCnt( xSeries, uno::UNO_QUERY );
 
-                    aRet += " ";
-                    aRet += getName(eType);
+                    aRet += " " + getName(eType);
 
                     if( xCurveCnt.is())
                     {
@@ -804,9 +819,7 @@ OUString ObjectNameProvider::getNameForCID(
                         Reference< chart2::XRegressionCurve > xCurve( RegressionCurveHelper::getRegressionCurveAtIndex(xCurveCnt, nCurveIndex) );
                         if( xCurve.is())
                         {
-                            aRet += " (";
-                            aRet += RegressionCurveHelper::getRegressionCurveName(xCurve);
-                            aRet += ")";
+                           aRet += " (" + RegressionCurveHelper::getRegressionCurveName(xCurve) + ")";
                         }
                     }
                 }
@@ -832,7 +845,7 @@ OUString ObjectNameProvider::getName_ObjectForSeries(
     Reference< XDataSeries > xSeries( ObjectIdentifier::getDataSeriesForCID( rSeriesCID , xChartModel ), uno::UNO_QUERY );
     if( xSeries.is() )
     {
-        OUString aRet = SCH_RESSTR(STR_OBJECT_FOR_SERIES);
+        OUString aRet = SchResId(STR_OBJECT_FOR_SERIES);
         replaceParamterInString( aRet, "%OBJECTNAME", getName( eObjectType ) );
         replaceParamterInString( aRet, "%SERIESNAME", lcl_getDataSeriesName( rSeriesCID, xChartModel ) );
         return aRet;
@@ -843,7 +856,7 @@ OUString ObjectNameProvider::getName_ObjectForSeries(
 
 OUString ObjectNameProvider::getName_ObjectForAllSeries( ObjectType eObjectType )
 {
-    OUString aRet = SCH_RESSTR(STR_OBJECT_FOR_ALL_SERIES);
+    OUString aRet = SchResId(STR_OBJECT_FOR_ALL_SERIES);
     replaceParamterInString( aRet, "%OBJECTNAME", getName( eObjectType, true /*bPlural*/ ) );
     return aRet;
 }

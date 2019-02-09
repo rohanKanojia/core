@@ -21,29 +21,24 @@
 #define INCLUDED_XMLOFF_XMLNUME_HXX
 
 #include <rtl/ustring.hxx>
-#include <tools/mapunit.hxx>
-#include <xmloff/attrlist.hxx>
+#include <xmloff/dllapi.h>
 
 namespace com { namespace sun { namespace star {
-    namespace frame { class XModel; }
     namespace style { class XStyle; }
     namespace container { class XIndexReplace; }
     namespace beans { struct PropertyValue; }
 } } }
 
-class SvXMLNamespaceMap;
-class SvXMLUnitConverter;
-class SvXMLExportItemMapper;
+namespace com { namespace sun { namespace star { namespace uno { template <class E> class Sequence; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <class interface_type> class Reference; } } } }
+
 class SvXMLExport;
 class XMLTextListAutoStylePool;
 
-class XMLOFF_DLLPUBLIC SvxXMLNumRuleExport
+class XMLOFF_DLLPUBLIC SvxXMLNumRuleExport final
 {
     SvXMLExport& rExport;
-    const OUString sNumberingRules;
-    const OUString sIsPhysical;
-    const OUString sIsContinuousNumbering;
-    // Boolean indicating, if properties for position-and-space-mode LABEL_ALIGNEMNT
+    // Boolean indicating, if properties for position-and-space-mode LABEL_ALIGNMENT
     // are exported or not. (#i89178#)
     // These properties have been introduced in ODF 1.2. Thus, its export have
     // to be suppressed on writing ODF 1.0 respectively ODF 1.1
@@ -52,12 +47,7 @@ class XMLOFF_DLLPUBLIC SvxXMLNumRuleExport
     SAL_DLLPRIVATE void exportLevelStyle(
             sal_Int32 nLevel,
             const css::uno::Sequence< css::beans::PropertyValue>& rProps,
-            bool bOutline=false );
-
-protected:
-
-    /// Override this to add attributes to the <list-style> element.
-    SAL_DLLPRIVATE void AddListStyleAttributes();
+            bool bOutline );
 
     SAL_DLLPRIVATE void exportStyle( const css::uno::Reference< css::style::XStyle >& rStyle );
     SAL_DLLPRIVATE void exportOutline();
@@ -67,7 +57,7 @@ protected:
 public:
 
     SvxXMLNumRuleExport( SvXMLExport& rExport );
-    virtual ~SvxXMLNumRuleExport();
+    ~SvxXMLNumRuleExport();
 
     // should be private but sw::StoredChapterNumberingExport needs it
     void exportLevelStyles(
@@ -76,7 +66,7 @@ public:
 
     void exportStyles( bool bUsed,
                        XMLTextListAutoStylePool *pPool,
-                       bool bExportChapterNumbering = true );
+                       bool bExportChapterNumbering );
     void exportNumberingRule(
             const OUString& rName, bool bIsHidden,
             const css::uno::Reference< css::container::XIndexReplace > & xNumRule );

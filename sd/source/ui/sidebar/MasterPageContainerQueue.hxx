@@ -23,6 +23,8 @@
 #include "MasterPageContainer.hxx"
 #include "MasterPageDescriptor.hxx"
 
+#include <vcl/timer.hxx>
+
 #include <memory>
 
 namespace sd { namespace sidebar {
@@ -33,7 +35,7 @@ namespace sd { namespace sidebar {
     heuristic that uses values given with each request and which is
     controlled by various parameters that are described below.
 */
-class MasterPageContainerQueue
+class MasterPageContainerQueue final
 {
 public:
     class ContainerAdapter {
@@ -50,7 +52,7 @@ public:
 
     static MasterPageContainerQueue* Create (
         const std::weak_ptr<ContainerAdapter>& rpContainer);
-    virtual ~MasterPageContainerQueue();
+    ~MasterPageContainerQueue();
 
     /** This method is typically called for entries in the container for
         which GetPreviewState() returns OS_CREATABLE.  The creation of the
@@ -77,7 +79,7 @@ public:
     void ProcessAllRequests();
 
 private:
-    std::weak_ptr<ContainerAdapter> mpWeakContainer;
+    std::weak_ptr<ContainerAdapter> const mpWeakContainer;
     class PreviewCreationRequest;
     class RequestQueue;
     std::unique_ptr<RequestQueue> mpRequestQueue;
@@ -122,7 +124,7 @@ private:
     */
     static sal_Int32 CalculatePriority (const SharedMasterPageDescriptor& rDescriptor);
 
-    DECL_LINK_TYPED(DelayedPreviewCreation, Timer *, void);
+    DECL_LINK(DelayedPreviewCreation, Timer *, void);
 };
 
 } } // end of namespace sd::sidebar

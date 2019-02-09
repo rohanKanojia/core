@@ -7,6 +7,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <sal/config.h>
+
+#include <string_view>
+
 #include <unicode/regex.h>
 
 #include <comphelper/configuration.hxx>
@@ -14,6 +18,7 @@
 #include <opencl/openclconfig.hxx>
 #include <opencl/platforminfo.hxx>
 #include <rtl/ustring.hxx>
+#include <rtl/ustrbuf.hxx>
 #include <sal/log.hxx>
 #include <sal/types.h>
 
@@ -38,8 +43,7 @@ bool OpenCLConfig::operator== (const OpenCLConfig& r) const
 {
     return (mbUseOpenCL == r.mbUseOpenCL &&
             maBlackList == r.maBlackList &&
-            maWhiteList == r.maWhiteList &&
-            true);
+            maWhiteList == r.maWhiteList);
 }
 
 bool OpenCLConfig::operator!= (const OpenCLConfig& r) const
@@ -70,16 +74,16 @@ css::uno::Sequence<OUString> SetOfImplMatcherToStringSequence(const OpenCLConfig
 OUString getToken(const OUString& string, sal_Int32& index)
 {
     OUString token(string.getToken(0, '/', index));
-    OUString result;
+    OUStringBuffer result;
     sal_Int32 i(0);
     sal_Int32 p;
     while ((p = token.indexOf('%', i)) >= 0)
     {
         if (p > i)
-            result += token.copy(i, p - i);
+            result.append(std::u16string_view(token).substr(i, p - i));
         if (p < token.getLength() - 2)
         {
-            result += OUString(static_cast<sal_Unicode>(token.copy(p+1, 2).toInt32(16)));
+            result.append(OUStringLiteral1(token.copy(p+1, 2).toInt32(16)));
             i = p + 3;
         }
         else
@@ -87,9 +91,9 @@ OUString getToken(const OUString& string, sal_Int32& index)
             i = token.getLength();
         }
     }
-    result += token.copy(i);
+    result.append(std::u16string_view(token).substr(i));
 
-    return result;
+    return result.makeStringAndClear();
 }
 
 OpenCLConfig::ImplMatcherSet StringSequenceToSetOfImplMatcher(const css::uno::Sequence<OUString>& rSequence)
@@ -120,12 +124,9 @@ bool match(const OUString& rPattern, const OUString& rInput)
     UErrorCode nIcuError(U_ZERO_ERROR);
     icu::UnicodeString sIcuPattern(reinterpret_cast<const UChar*>(rPattern.getStr()), rPattern.getLength());
     icu::UnicodeString sIcuInput(reinterpret_cast<const UChar*>(rInput.getStr()), rInput.getLength());
-    RegexMatcher aMatcher(sIcuPattern, sIcuInput, 0, nIcuError);
+    icu::RegexMatcher aMatcher(sIcuPattern, sIcuInput, 0, nIcuError);
 
-    if (U_SUCCESS(nIcuError) && aMatcher.matches(nIcuError) && U_SUCCESS(nIcuError))
-        return true;
-
-    return false;
+    return U_SUCCESS(nIcuError) && aMatcher.matches(nIcuError) && U_SUCCESS(nIcuError);
 }
 
 bool match(const OpenCLConfig::ImplMatcher& rListEntry, const OpenCLPlatformInfo& rPlatform, const OpenCLDeviceInfo& rDevice)

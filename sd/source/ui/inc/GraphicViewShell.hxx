@@ -35,7 +35,7 @@ namespace sd {
     ViewShell that turns off some of the features for GraphicViewShell
     instances.</p>
 */
-class GraphicViewShell
+class GraphicViewShell final
     : public DrawViewShell
 {
 public:
@@ -43,11 +43,6 @@ public:
     SFX_DECL_VIEWFACTORY(GraphicViewShell);
     SFX_DECL_INTERFACE(SD_IF_SDGRAPHICVIEWSHELL)
 
-private:
-    /// SfxInterface initializer.
-    static void InitInterface_Impl();
-
-public:
     /** Create a new view shell for the Draw application.
         @param rViewShellBase
             The new object will be stacked on this view shell base.
@@ -56,18 +51,20 @@ public:
             one view shell to the next.
     */
     GraphicViewShell (
-        SfxViewFrame* pFrame,
         ViewShellBase& rViewShellBase,
         vcl::Window* pParentWindow,
-        FrameView* pFrameView = nullptr);
+        FrameView* pFrameView);
 
-    virtual ~GraphicViewShell();
+    virtual ~GraphicViewShell() override;
 
     /** Override this method in order to have the layer mode always active.
     */
     virtual void ChangeEditMode (EditMode eMode, bool bIsLayerModeActive) override;
 
-protected:
+private:
+    /// SfxInterface initializer.
+    static void InitInterface_Impl();
+
     void ConstructGraphicViewShell();
     virtual void ArrangeGUIElements() override;
 };

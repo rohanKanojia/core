@@ -19,9 +19,9 @@
 
 /* make Python.h go first as a hack to work around _POSIX_C_SOURCE redefinition
    warnings: */
-#include "Python.h"
+#include <Python.h>
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -31,14 +31,14 @@
 #endif
 #include <dlfcn.h>
 
-#include "rtl/string.h"
+#include <rtl/string.h>
 
 /* A wrapper around libpyuno.so, making sure the latter is loaded RTLD_GLOBAL
    so that C++ exception handling works with old GCC versions (that determine
    RTTI identity by comparing string addresses rather than string content).
 */
 
-static void * load(void * address, char const * symbol) {
+static void * load(void const * address, char const * symbol) {
     Dl_info dl_info;
     char * slash;
     size_t len;
@@ -72,6 +72,7 @@ static void * load(void * address, char const * symbol) {
         dlclose(h);
         abort();
     }
+    // coverity[leaked_storage] - this is on purpose
     return func;
 }
 

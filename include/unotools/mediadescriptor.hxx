@@ -42,7 +42,7 @@ namespace utl {
     @descr  It wraps a unordered_map around the Sequence< css::beans::PropertyValue >, which
             represent the MediaDescriptor item.
             Further this helper defines often used functions (as e.g. open of the required streams,
-            consistent checks etcpp.) and it defines all useable property names.
+            consistent checks etcpp.) and it defines all usable property names.
 
     @attention  This class isn't threadsafe and must be guarded from outside!
  */
@@ -99,6 +99,7 @@ class UNOTOOLS_DLLPUBLIC MediaDescriptor : public comphelper::SequenceAsHashMap
         static const OUString& PROP_MODEL();
         static const OUString& PROP_VIEWONLY();
         static const OUString& PROP_DOCUMENTBASEURL();
+        static const OUString& PROP_SUGGESTEDSAVEASNAME();
 
     // interface
     public:
@@ -251,12 +252,12 @@ class UNOTOOLS_DLLPUBLIC MediaDescriptor : public comphelper::SequenceAsHashMap
             @return
             If not empty, contains the password that has been validated by the
             passed password verifier. If empty, no valid password has been
-            found, or the user has chossen to cancel password input.
+            found, or the user has chosen to cancel password input.
         */
         css::uno::Sequence< css::beans::NamedValue > requestAndVerifyDocPassword(
             comphelper::IDocPasswordVerifier& rVerifier,
             comphelper::DocPasswordRequestType eRequestType,
-            const ::std::vector< OUString >* pDefaultPasswords = nullptr );
+            const ::std::vector< OUString >* pDefaultPasswords );
 
     // helper
     private:
@@ -282,12 +283,12 @@ class UNOTOOLS_DLLPUBLIC MediaDescriptor : public comphelper::SequenceAsHashMap
          */
         SAL_DLLPRIVATE bool impl_openStreamWithPostData(
             const css::uno::Reference< css::io::XInputStream >& _rxPostData
-            )   throw(css::uno::RuntimeException);
+            );
 
         /** @short  tries to open a stream by using the given URL.
 
             @descr  First it tries to open the content in r/w mode (if its
-                    allowed to do so). Only in case its not allowed or it failed
+                    allowed to do so). Only in case it's not allowed or it failed
                     the stream will be tried to open in readonly mode.
 
                     The MediaDescriptor itself is changed inside this method.
@@ -308,7 +309,7 @@ class UNOTOOLS_DLLPUBLIC MediaDescriptor : public comphelper::SequenceAsHashMap
         SAL_DLLPRIVATE bool impl_openStreamWithURL(
             const OUString& sURL,
             bool bLockFile
-            ) throw(css::uno::RuntimeException);
+            );
 
         /** @short  it checks if the descriptor already has a valid
                     InputStream item and creates a new one, if not.

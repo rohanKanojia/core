@@ -21,6 +21,8 @@
 #include <com/sun/star/style/TabStop.hpp>
 #include <com/sun/star/style/TabAlign.hpp>
 #include <rtl/ustrbuf.hxx>
+#include <osl/diagnose.h>
+#include <xmloff/xmlement.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltoken.hxx>
@@ -32,14 +34,14 @@
 using namespace ::com::sun::star;
 using namespace ::xmloff::token;
 
-SvXMLEnumMapEntry pXML_tabstop_style[] =
+SvXMLEnumMapEntry<style::TabAlign> const pXML_tabstop_style[] =
 {
     { XML_LEFT,     style::TabAlign_LEFT    },
     { XML_CENTER,   style::TabAlign_CENTER  },
     { XML_RIGHT,    style::TabAlign_RIGHT   },
     { XML_CHAR,     style::TabAlign_DECIMAL },
     { XML_DEFAULT,  style::TabAlign_DEFAULT  }, // ?????????????????????????????????????
-    { XML_TOKEN_INVALID,        0 }
+    { XML_TOKEN_INVALID,        style::TabAlign(0) }
 };
 
 void SvxXMLTabStopExport::exportTabStop( const css::style::TabStop* pTabStop )

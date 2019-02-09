@@ -33,7 +33,6 @@
 
 using namespace css;
 using namespace css::uno;
-using ::rtl::OUString;
 
 namespace sfx2 { namespace sidebar {
 
@@ -53,8 +52,10 @@ Reference<frame::XToolbarController> ControllerFactory::CreateToolBoxController(
             rxFrame, rxController,
             nWidth));
 
+    bool bFactoryHasController( xController.is() );
+
     // Create a controller for the new item.
-    if ( ! xController.is())
+    if ( !bFactoryHasController )
     {
         xController.set(
             static_cast<XWeak*>(::framework::CreateToolBoxController(
@@ -78,7 +79,7 @@ Reference<frame::XToolbarController> ControllerFactory::CreateToolBoxController(
 
     // Initialize the controller with eg a service factory.
     Reference<lang::XInitialization> xInitialization (xController, UNO_QUERY);
-    if (xInitialization.is())
+    if (!bFactoryHasController && xInitialization.is())
     {
         beans::PropertyValue aPropValue;
         std::vector<Any> aPropertyVector;
@@ -104,11 +105,11 @@ Reference<frame::XToolbarController> ControllerFactory::CreateToolBoxController(
         if (rxParentWindow.is())
         {
             Reference<awt::XWindow> xItemWindow (xController->createItemWindow(rxParentWindow));
-            vcl::Window* pItemWindow = VCLUnoHelper::GetWindow(xItemWindow);
+            VclPtr<vcl::Window> pItemWindow = VCLUnoHelper::GetWindow(xItemWindow);
             if (pItemWindow != nullptr)
             {
                 WindowType nType = pItemWindow->GetType();
-                if (nType == WINDOW_LISTBOX || nType == WINDOW_MULTILISTBOX || nType == WINDOW_COMBOBOX)
+                if (nType == WindowType::LISTBOX || nType == WindowType::MULTILISTBOX || nType == WindowType::COMBOBOX)
                     pItemWindow->SetAccessibleName(pToolBox->GetItemText(nItemId));
                 if (nWidth > 0)
                     pItemWindow->SetSizePixel(Size(nWidth, pItemWindow->GetSizePixel().Height()));
@@ -123,10 +124,11 @@ Reference<frame::XToolbarController> ControllerFactory::CreateToolBoxController(
         // Add tooltip.
         if (xController.is())
         {
-            const OUString sTooltip (vcl::CommandInfoProvider::Instance().GetTooltipForCommand(
+            const OUString sTooltip (vcl::CommandInfoProvider::GetTooltipForCommand(
                     rsCommandName,
                     rxFrame));
-            pToolBox->SetQuickHelpText(nItemId, sTooltip);
+            if (pToolBox->GetQuickHelpText(nItemId).isEmpty())
+                pToolBox->SetQuickHelpText(nItemId, sTooltip);
             pToolBox->EnableItem(nItemId);
         }
     }

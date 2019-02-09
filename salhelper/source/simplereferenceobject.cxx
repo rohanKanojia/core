@@ -17,24 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "salhelper/simplereferenceobject.hxx"
-#include "osl/diagnose.h"
+#include <salhelper/simplereferenceobject.hxx>
 
+#include <cassert>
 #include <new>
 
 using salhelper::SimpleReferenceObject;
 
 SimpleReferenceObject::~SimpleReferenceObject()
 {
-    OSL_ASSERT(m_nCount == 0);
+    assert(m_nCount == 0);
 }
 
-void * SimpleReferenceObject::operator new(std::size_t nSize)
+void *SimpleReferenceObject::operator new(std::size_t nSize)
 {
     return ::operator new(nSize);
 }
 
-void * SimpleReferenceObject::operator new(std::size_t nSize,
+void *SimpleReferenceObject::operator new(std::size_t nSize,
                                            std::nothrow_t const &)
 {
 #if defined(_WIN32)
@@ -58,20 +58,5 @@ void SimpleReferenceObject::operator delete(void * pPtr, std::nothrow_t const &)
     ::operator delete(pPtr, std::nothrow);
 #endif // WNT
 }
-
-#ifdef _MSC_VER
-
-/* This operator is supposed to be unimplemented, but that now leads
- * to compilation and/or linking errors with MSVC2008. Problem still
- * there with MSVC2013. As it can be left unimplemented just fine with
- * other compilers, presumably it is never called. So do implement it
- * then to avoid the compilation and/or linking errors, but make it
- * crash intentionally if called.
- */
-void SimpleReferenceObject::operator delete[](void * /* pPtr */)
-{
-    abort();
-}
-#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

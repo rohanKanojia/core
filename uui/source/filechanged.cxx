@@ -17,26 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ids.hrc"
+#include <strings.hrc>
+#include <unotools/resmgr.hxx>
+#include <vcl/button.hxx>
+#include <vcl/svapp.hxx>
 #include "filechanged.hxx"
 
-FileChangedQueryBox::FileChangedQueryBox( vcl::Window* pParent, ResMgr* pResMgr ) :
-    MessBox(pParent, 0,
-            ResId(STR_FILECHANGED_TITLE, *pResMgr).toString(),
-            OUString() )
+FileChangedQueryBox::FileChangedQueryBox(weld::Window* pParent, const std::locale& rLocale)
+    : m_xQueryBox(Application::CreateMessageDialog(pParent, VclMessageType::Question,
+                  VclButtonsType::NONE, Translate::get(STR_FILECHANGED_MSG, rLocale)))
 {
-    SetImage( QueryBox::GetStandardImage() );
-
-    AddButton(ResId(STR_FILECHANGED_SAVEANYWAY_BTN, *pResMgr).toString(), RET_YES,
-            ButtonDialogFlags::Default | ButtonDialogFlags::OK | ButtonDialogFlags::Focus);
-    AddButton( StandardButtonType::Cancel, RET_CANCEL, ButtonDialogFlags::Cancel );
-
-    SetButtonHelpText( RET_YES, OUString() );
-    SetMessText(ResId(STR_FILECHANGED_MSG, *pResMgr).toString());
-}
-
-FileChangedQueryBox::~FileChangedQueryBox()
-{
+    m_xQueryBox->set_title(Translate::get(STR_FILECHANGED_TITLE, rLocale));
+    m_xQueryBox->add_button(Translate::get(STR_FILECHANGED_SAVEANYWAY_BTN, rLocale), RET_YES);
+    m_xQueryBox->add_button(Button::GetStandardText(StandardButtonType::Cancel), RET_CANCEL);
+    m_xQueryBox->set_default_response(RET_YES);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

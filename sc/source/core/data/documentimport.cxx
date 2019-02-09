@@ -7,26 +7,26 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "documentimport.hxx"
-#include "document.hxx"
-#include "table.hxx"
-#include "column.hxx"
-#include "formulacell.hxx"
-#include "docoptio.hxx"
-#include "globalnames.hxx"
-#include "mtvelements.hxx"
-#include "tokenarray.hxx"
-#include "stringutil.hxx"
-#include "compiler.hxx"
-#include "paramisc.hxx"
-#include "listenercontext.hxx"
+#include <documentimport.hxx>
+#include <document.hxx>
+#include <table.hxx>
+#include <column.hxx>
+#include <formulacell.hxx>
+#include <docoptio.hxx>
+#include <mtvelements.hxx>
+#include <tokenarray.hxx>
+#include <stringutil.hxx>
+#include <compiler.hxx>
+#include <paramisc.hxx>
+#include <listenercontext.hxx>
 #include <attarray.hxx>
 #include <sharedformula.hxx>
+#include <bcaslot.hxx>
+#include <scopetools.hxx>
 
 #include <svl/sharedstringpool.hxx>
 #include <svl/languageoptions.hxx>
-
-#include <vector>
+#include <unotools/configmgr.hxx>
 
 namespace {
 
@@ -48,19 +48,23 @@ struct ScDocumentImportImpl
 {
     ScDocument& mrDoc;
     sc::StartListeningContext maListenCxt;
-    sc::ColumnBlockPositionSet maBlockPosSet;
+    std::vector<sc::TableColumnBlockPositionSet> maBlockPosSet;
     SvtScriptType mnDefaultScriptNumeric;
     std::vector<TabAttr> maTabAttrs;
 
     explicit ScDocumentImportImpl(ScDocument& rDoc) :
         mrDoc(rDoc),
         maListenCxt(rDoc),
-        maBlockPosSet(rDoc),
         mnDefaultScriptNumeric(SvtScriptType::UNKNOWN) {}
+
+    static bool isValid( size_t nTab, size_t nCol )
+    {
+        return (nTab <= size_t(MAXTAB) && nCol <= size_t(MAXCOL));
+    }
 
     ColAttr* getColAttr( size_t nTab, size_t nCol )
     {
-        if (nTab > static_cast<size_t>(MAXTAB) || nCol > static_cast<size_t>(MAXCOL))
+        if (!isValid(nTab, nCol))
             return nullptr;
 
         if (nTab >= maTabAttrs.size())
@@ -72,9 +76,36 @@ struct ScDocumentImportImpl
 
         return &rTab.maCols[nCol];
     }
+
+    sc::ColumnBlockPosition* getBlockPosition( SCTAB nTab, SCCOL nCol )
+    {
+        if (!isValid(nTab, nCol))
+            return nullptr;
+
+        if (size_t(nTab) >= maBlockPosSet.size())
+        {
+            for (SCTAB i = maBlockPosSet.size(); i <= nTab; ++i)
+                maBlockPosSet.emplace_back(mrDoc, i);
+        }
+
+        sc::TableColumnBlockPositionSet& rTab = maBlockPosSet[nTab];
+        return rTab.getBlockPosition(nCol);
+    }
+
+    void initForSheets()
+    {
+        size_t n = mrDoc.GetTableCount();
+        for (size_t i = maBlockPosSet.size(); i < n; ++i)
+            maBlockPosSet.emplace_back(mrDoc, i);
+
+        if (maTabAttrs.size() < n)
+            maTabAttrs.resize(n);
+    }
 };
 
-ScDocumentImport::Attrs::Attrs() : mpData(nullptr), mnSize(0), mbLatinNumFmtOnly(false) {}
+ScDocumentImport::Attrs::Attrs() : mbLatinNumFmtOnly(false) {}
+
+ScDocumentImport::Attrs::~Attrs() {}
 
 ScDocumentImport::ScDocumentImport(ScDocument& rDoc) : mpImpl(new ScDocumentImportImpl(rDoc)) {}
 
@@ -90,6 +121,11 @@ ScDocument& ScDocumentImport::getDoc()
 const ScDocument& ScDocumentImport::getDoc() const
 {
     return mpImpl->mrDoc;
+}
+
+void ScDocumentImport::initForSheets()
+{
+    mpImpl->initForSheets();
 }
 
 void ScDocumentImport::setDefaultNumericScript(SvtScriptType nScript)
@@ -126,29 +162,37 @@ bool ScDocumentImport::appendSheet(const OUString& rName)
     if (!ValidTab(nTabCount))
         return false;
 
-    mpImpl->mrDoc.maTabs.push_back(new ScTable(&mpImpl->mrDoc, nTabCount, rName));
+    mpImpl->mrDoc.maTabs.emplace_back(new ScTable(&mpImpl->mrDoc, nTabCount, rName));
     return true;
+}
+
+void ScDocumentImport::setSheetName(SCTAB nTab, const OUString& rName)
+{
+    mpImpl->mrDoc.SetTabNameOnLoad(nTab, rName);
 }
 
 void ScDocumentImport::setOriginDate(sal_uInt16 nYear, sal_uInt16 nMonth, sal_uInt16 nDay)
 {
     if (!mpImpl->mrDoc.pDocOptions)
-        mpImpl->mrDoc.pDocOptions = new ScDocOptions;
+        mpImpl->mrDoc.pDocOptions.reset( new ScDocOptions );
 
     mpImpl->mrDoc.pDocOptions->SetDate(nDay, nMonth, nYear);
 }
 
-void ScDocumentImport::setAutoInput(const ScAddress& rPos, const OUString& rStr, ScSetStringParam* pStringParam)
+void ScDocumentImport::setAutoInput(const ScAddress& rPos, const OUString& rStr, const ScSetStringParam* pStringParam)
 {
     ScTable* pTab = mpImpl->mrDoc.FetchTable(rPos.Tab());
     if (!pTab)
         return;
 
-    sc::ColumnBlockPosition* pBlockPos =
-        mpImpl->maBlockPosSet.getBlockPosition(rPos.Tab(), rPos.Col());
+    sc::ColumnBlockPosition* pBlockPos = mpImpl->getBlockPosition(rPos.Tab(), rPos.Col());
 
     if (!pBlockPos)
         return;
+
+    // If ScSetStringParam was given, ScColumn::ParseString() shall take care
+    // of checking. Ensure caller said so.
+    assert(!pStringParam || pStringParam->mbCheckLinkFormula);
 
     ScCellValue aCell;
     pTab->aCol[rPos.Col()].ParseString(
@@ -170,6 +214,8 @@ void ScDocumentImport::setAutoInput(const ScAddress& rPos, const OUString& rStr,
             pBlockPos->miCellPos = rCells.set(pBlockPos->miCellPos, rPos.Row(), aCell.mfValue);
         break;
         case CELLTYPE_FORMULA:
+            if (!pStringParam)
+                mpImpl->mrDoc.CheckLinkFormulaNeedingCheck( *aCell.mpFormula->GetCode());
             // This formula cell instance is directly placed in the document without copying.
             pBlockPos->miCellPos = rCells.set(pBlockPos->miCellPos, rPos.Row(), aCell.mpFormula);
             aCell.mpFormula = nullptr;
@@ -185,8 +231,7 @@ void ScDocumentImport::setNumericCell(const ScAddress& rPos, double fVal)
     if (!pTab)
         return;
 
-    sc::ColumnBlockPosition* pBlockPos =
-        mpImpl->maBlockPosSet.getBlockPosition(rPos.Tab(), rPos.Col());
+    sc::ColumnBlockPosition* pBlockPos = mpImpl->getBlockPosition(rPos.Tab(), rPos.Col());
 
     if (!pBlockPos)
         return;
@@ -201,8 +246,7 @@ void ScDocumentImport::setStringCell(const ScAddress& rPos, const OUString& rStr
     if (!pTab)
         return;
 
-    sc::ColumnBlockPosition* pBlockPos =
-        mpImpl->maBlockPosSet.getBlockPosition(rPos.Tab(), rPos.Col());
+    sc::ColumnBlockPosition* pBlockPos = mpImpl->getBlockPosition(rPos.Tab(), rPos.Col());
 
     if (!pBlockPos)
         return;
@@ -215,56 +259,96 @@ void ScDocumentImport::setStringCell(const ScAddress& rPos, const OUString& rStr
     pBlockPos->miCellPos = rCells.set(pBlockPos->miCellPos, rPos.Row(), aSS);
 }
 
-void ScDocumentImport::setEditCell(const ScAddress& rPos, EditTextObject* pEditText)
+void ScDocumentImport::setEditCell(const ScAddress& rPos, std::unique_ptr<EditTextObject> pEditText)
 {
     ScTable* pTab = mpImpl->mrDoc.FetchTable(rPos.Tab());
     if (!pTab)
         return;
 
-    sc::ColumnBlockPosition* pBlockPos =
-        mpImpl->maBlockPosSet.getBlockPosition(rPos.Tab(), rPos.Col());
+    sc::ColumnBlockPosition* pBlockPos = mpImpl->getBlockPosition(rPos.Tab(), rPos.Col());
 
     if (!pBlockPos)
         return;
 
     pEditText->NormalizeString(mpImpl->mrDoc.GetSharedStringPool());
     sc::CellStoreType& rCells = pTab->aCol[rPos.Col()].maCells;
-    pBlockPos->miCellPos = rCells.set(pBlockPos->miCellPos, rPos.Row(), pEditText);
+    pBlockPos->miCellPos = rCells.set(pBlockPos->miCellPos, rPos.Row(), pEditText.release());
 }
 
 void ScDocumentImport::setFormulaCell(
-    const ScAddress& rPos, const OUString& rFormula, formula::FormulaGrammar::Grammar eGrammar)
+    const ScAddress& rPos, const OUString& rFormula, formula::FormulaGrammar::Grammar eGrammar,
+    const double* pResult )
 {
     ScTable* pTab = mpImpl->mrDoc.FetchTable(rPos.Tab());
     if (!pTab)
         return;
 
-    sc::ColumnBlockPosition* pBlockPos =
-        mpImpl->maBlockPosSet.getBlockPosition(rPos.Tab(), rPos.Col());
+    sc::ColumnBlockPosition* pBlockPos = mpImpl->getBlockPosition(rPos.Tab(), rPos.Col());
 
     if (!pBlockPos)
         return;
 
+    std::unique_ptr<ScFormulaCell> pFC =
+        std::make_unique<ScFormulaCell>(&mpImpl->mrDoc, rPos, rFormula, eGrammar);
+
+    mpImpl->mrDoc.CheckLinkFormulaNeedingCheck( *pFC->GetCode());
+
+    if (pResult)
+    {
+        // Set cached result to this formula cell.
+        pFC->SetResultDouble(*pResult);
+    }
+
     sc::CellStoreType& rCells = pTab->aCol[rPos.Col()].maCells;
     pBlockPos->miCellPos =
-        rCells.set(pBlockPos->miCellPos, rPos.Row(), new ScFormulaCell(&mpImpl->mrDoc, rPos, rFormula, eGrammar));
+        rCells.set(pBlockPos->miCellPos, rPos.Row(), pFC.release());
 }
 
-void ScDocumentImport::setFormulaCell(const ScAddress& rPos, ScTokenArray* pArray)
+void ScDocumentImport::setFormulaCell(
+    const ScAddress& rPos, const OUString& rFormula, formula::FormulaGrammar::Grammar eGrammar,
+    const OUString& rResult )
 {
     ScTable* pTab = mpImpl->mrDoc.FetchTable(rPos.Tab());
     if (!pTab)
         return;
 
-    sc::ColumnBlockPosition* pBlockPos =
-        mpImpl->maBlockPosSet.getBlockPosition(rPos.Tab(), rPos.Col());
+    sc::ColumnBlockPosition* pBlockPos = mpImpl->getBlockPosition(rPos.Tab(), rPos.Col());
 
     if (!pBlockPos)
         return;
 
+    std::unique_ptr<ScFormulaCell> pFC =
+        std::make_unique<ScFormulaCell>(&mpImpl->mrDoc, rPos, rFormula, eGrammar);
+
+    mpImpl->mrDoc.CheckLinkFormulaNeedingCheck( *pFC->GetCode());
+
+    // Set cached result to this formula cell.
+    pFC->SetHybridString(mpImpl->mrDoc.GetSharedStringPool().intern(rResult));
+
     sc::CellStoreType& rCells = pTab->aCol[rPos.Col()].maCells;
     pBlockPos->miCellPos =
-        rCells.set(pBlockPos->miCellPos, rPos.Row(), new ScFormulaCell(&mpImpl->mrDoc, rPos, pArray));
+        rCells.set(pBlockPos->miCellPos, rPos.Row(), pFC.release());
+}
+
+void ScDocumentImport::setFormulaCell(const ScAddress& rPos, std::unique_ptr<ScTokenArray> pArray)
+{
+    ScTable* pTab = mpImpl->mrDoc.FetchTable(rPos.Tab());
+    if (!pTab)
+        return;
+
+    sc::ColumnBlockPosition* pBlockPos = mpImpl->getBlockPosition(rPos.Tab(), rPos.Col());
+
+    if (!pBlockPos)
+        return;
+
+    std::unique_ptr<ScFormulaCell> pFC =
+        std::make_unique<ScFormulaCell>(&mpImpl->mrDoc, rPos, std::move(pArray));
+
+    mpImpl->mrDoc.CheckLinkFormulaNeedingCheck( *pFC->GetCode());
+
+    sc::CellStoreType& rCells = pTab->aCol[rPos.Col()].maCells;
+    pBlockPos->miCellPos =
+        rCells.set(pBlockPos->miCellPos, rPos.Row(), pFC.release());
 }
 
 void ScDocumentImport::setFormulaCell(const ScAddress& rPos, ScFormulaCell* pCell)
@@ -273,11 +357,13 @@ void ScDocumentImport::setFormulaCell(const ScAddress& rPos, ScFormulaCell* pCel
     if (!pTab)
         return;
 
-    sc::ColumnBlockPosition* pBlockPos =
-        mpImpl->maBlockPosSet.getBlockPosition(rPos.Tab(), rPos.Col());
+    sc::ColumnBlockPosition* pBlockPos = mpImpl->getBlockPosition(rPos.Tab(), rPos.Col());
 
     if (!pBlockPos)
         return;
+
+    if (pCell)
+        mpImpl->mrDoc.CheckLinkFormulaNeedingCheck( *pCell->GetCode());
 
     sc::CellStoreType& rCells = pTab->aCol[rPos.Col()].maCells;
     pBlockPos->miCellPos =
@@ -293,16 +379,20 @@ void ScDocumentImport::setMatrixCells(
     if (!pTab)
         return;
 
-    sc::ColumnBlockPosition* pBlockPos =
-        mpImpl->maBlockPosSet.getBlockPosition(rBasePos.Tab(), rBasePos.Col());
+    sc::ColumnBlockPosition* pBlockPos = mpImpl->getBlockPosition(rBasePos.Tab(), rBasePos.Col());
 
     if (!pBlockPos)
+        return;
+
+    if (utl::ConfigManager::IsFuzzing()) //just too slow
         return;
 
     sc::CellStoreType& rCells = pTab->aCol[rBasePos.Col()].maCells;
 
     // Set the master cell.
-    ScFormulaCell* pCell = new ScFormulaCell(&mpImpl->mrDoc, rBasePos, rArray, eGram, MM_FORMULA);
+    ScFormulaCell* pCell = new ScFormulaCell(&mpImpl->mrDoc, rBasePos, rArray, eGram, ScMatrixMode::Formula);
+
+    mpImpl->mrDoc.CheckLinkFormulaNeedingCheck( *pCell->GetCode());
 
     pBlockPos->miCellPos =
         rCells.set(pBlockPos->miCellPos, rBasePos.Row(), pCell);
@@ -331,14 +421,14 @@ void ScDocumentImport::setMatrixCells(
         aRefData.SetAddress(rBasePos, aPos);
         *t->GetSingleRef() = aRefData;
         std::unique_ptr<ScTokenArray> pTokArr(aArr.Clone());
-        pCell = new ScFormulaCell(&mpImpl->mrDoc, aPos, *pTokArr, eGram, MM_REFERENCE);
+        pCell = new ScFormulaCell(&mpImpl->mrDoc, aPos, *pTokArr, eGram, ScMatrixMode::Reference);
         pBlockPos->miCellPos =
             rCells.set(pBlockPos->miCellPos, aPos.Row(), pCell);
     }
 
     for (SCCOL nCol = rRange.aStart.Col()+1; nCol <= rRange.aEnd.Col(); ++nCol)
     {
-        pBlockPos = mpImpl->maBlockPosSet.getBlockPosition(rBasePos.Tab(), nCol);
+        pBlockPos = mpImpl->getBlockPosition(rBasePos.Tab(), nCol);
         if (!pBlockPos)
             return;
 
@@ -351,7 +441,7 @@ void ScDocumentImport::setMatrixCells(
             aRefData.SetAddress(rBasePos, aPos);
             *t->GetSingleRef() = aRefData;
             std::unique_ptr<ScTokenArray> pTokArr(aArr.Clone());
-            pCell = new ScFormulaCell(&mpImpl->mrDoc, aPos, *pTokArr, eGram, MM_REFERENCE);
+            pCell = new ScFormulaCell(&mpImpl->mrDoc, aPos, *pTokArr, eGram, ScMatrixMode::Reference);
             pBlockPos->miCellPos =
                 rColCells.set(pBlockPos->miCellPos, aPos.Row(), pCell);
         }
@@ -388,7 +478,7 @@ void ScDocumentImport::setTableOpCells(const ScRange& rRange, const ScTabOpParam
         aRef.Set(nCol1, nRow1, nTab, false, true, true);
         aFormulaBuf.append(aRef.GetRefString(pDoc, nTab));
         nCol1++;
-        nCol2 = std::min( nCol2, (SCCOL)(rParam.aRefFormulaEnd.Col() -
+        nCol2 = std::min( nCol2, static_cast<SCCOL>(rParam.aRefFormulaEnd.Col() -
                     rParam.aRefFormulaCell.Col() + nCol1 + 1));
     }
     else if (rParam.meMode == ScTabOpParam::Row) // row only
@@ -425,12 +515,11 @@ void ScDocumentImport::setTableOpCells(const ScRange& rRange, const ScTabOpParam
 
     ScFormulaCell aRefCell(
         pDoc, ScAddress(nCol1, nRow1, nTab), aFormulaBuf.makeStringAndClear(),
-        formula::FormulaGrammar::GRAM_NATIVE, MM_NONE);
+        formula::FormulaGrammar::GRAM_NATIVE, ScMatrixMode::NONE);
 
     for (SCCOL nCol = nCol1; nCol <= nCol2; ++nCol)
     {
-        sc::ColumnBlockPosition* pBlockPos =
-            mpImpl->maBlockPosSet.getBlockPosition(nTab, nCol);
+        sc::ColumnBlockPosition* pBlockPos = mpImpl->getBlockPosition(nTab, nCol);
 
         if (!pBlockPos)
             // Something went horribly wrong.
@@ -448,7 +537,7 @@ void ScDocumentImport::setTableOpCells(const ScRange& rRange, const ScTabOpParam
     }
 }
 
-void ScDocumentImport::setAttrEntries( SCTAB nTab, SCCOL nCol, Attrs& rAttrs )
+void ScDocumentImport::setAttrEntries( SCTAB nTab, SCCOL nCol, Attrs&& rAttrs )
 {
     ScTable* pTab = mpImpl->mrDoc.FetchTable(nTab);
     if (!pTab)
@@ -462,7 +551,7 @@ void ScDocumentImport::setAttrEntries( SCTAB nTab, SCCOL nCol, Attrs& rAttrs )
     if (pColAttr)
         pColAttr->mbLatinNumFmtOnly = rAttrs.mbLatinNumFmtOnly;
 
-    pCol->pAttrArray->SetAttrEntries(rAttrs.mpData, rAttrs.mnSize);
+    pCol->pAttrArray->SetAttrEntries(std::move(rAttrs.mvData));
 }
 
 void ScDocumentImport::setRowsVisible(SCTAB nTab, SCROW nRowStart, SCROW nRowEnd, bool bVisible)
@@ -479,6 +568,15 @@ void ScDocumentImport::setRowsVisible(SCTAB nTab, SCROW nRowStart, SCROW nRowEnd
     }
 }
 
+void ScDocumentImport::setMergedCells(SCTAB nTab, SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2)
+{
+    ScTable* pTab = mpImpl->mrDoc.FetchTable(nTab);
+    if (!pTab)
+        return;
+
+    pTab->SetMergedCells(nCol1, nRow1, nCol2, nRow2);
+}
+
 namespace {
 
 class CellStoreInitializer
@@ -487,7 +585,7 @@ class CellStoreInitializer
     //
     // The problem with having the attributes in CellStoreInitializer
     // directly is that, as a functor, it might be copied around. In
-    // that case miPos in _copied_ object points ot maAttrs in the
+    // that case miPos in _copied_ object points to maAttrs in the
     // original object, not in the copy. So later, deep in mdds, we end
     // up comparing iterators from different sequences.
     //
@@ -498,23 +596,23 @@ class CellStoreInitializer
     {
         sc::CellTextAttrStoreType maAttrs;
         sc::CellTextAttrStoreType::iterator miPos;
-        SvtScriptType mnScriptNumeric;
+        SvtScriptType const mnScriptNumeric;
 
-        Impl(const sal_uInt32 nMaxRowCount, const SvtScriptType nScriptNumeric)
-            : maAttrs(nMaxRowCount), miPos(maAttrs.begin()), mnScriptNumeric(nScriptNumeric)
+        explicit Impl(const SvtScriptType nScriptNumeric)
+            : maAttrs(MAXROWCOUNT), miPos(maAttrs.begin()), mnScriptNumeric(nScriptNumeric)
         {}
     };
 
     ScDocumentImportImpl& mrDocImpl;
-    SCTAB mnTab;
-    SCCOL mnCol;
+    SCTAB const mnTab;
+    SCCOL const mnCol;
 
 public:
     CellStoreInitializer( ScDocumentImportImpl& rDocImpl, SCTAB nTab, SCCOL nCol ) :
         mrDocImpl(rDocImpl),
         mnTab(nTab),
         mnCol(nCol),
-        mpImpl(new Impl(MAXROWCOUNT, mrDocImpl.mnDefaultScriptNumeric))
+        mpImpl(new Impl(mrDocImpl.mnDefaultScriptNumeric))
     {}
 
     std::shared_ptr<Impl> mpImpl;
@@ -624,6 +722,56 @@ void ScDocumentImport::initColumn(ScColumn& rCol)
     aFunc.swap(rCol.maCellTextAttrs);
 
     rCol.CellStorageModified();
+}
+
+namespace {
+
+class CellStoreAfterImportBroadcaster
+{
+public:
+
+    CellStoreAfterImportBroadcaster() {}
+
+    void operator() (const sc::CellStoreType::value_type& node)
+    {
+        if (node.type == sc::element_type_formula)
+        {
+            // Broadcast all formula cells marked for recalc.
+            ScFormulaCell** pp = &sc::formula_block::at(*node.data, 0);
+            ScFormulaCell** ppEnd = pp + node.size;
+            for (; pp != ppEnd; ++pp)
+            {
+                if ((*pp)->GetCode()->IsRecalcModeMustAfterImport())
+                    (*pp)->SetDirty();
+            }
+        }
+    }
+};
+
+}
+
+void ScDocumentImport::broadcastRecalcAfterImport()
+{
+    sc::AutoCalcSwitch aACSwitch( mpImpl->mrDoc, false);
+    ScBulkBroadcast aBulkBroadcast( mpImpl->mrDoc.GetBASM(), SfxHintId::ScDataChanged);
+
+    ScDocument::TableContainer::iterator itTab = mpImpl->mrDoc.maTabs.begin(), itTabEnd = mpImpl->mrDoc.maTabs.end();
+    for (; itTab != itTabEnd; ++itTab)
+    {
+        if (!*itTab)
+            continue;
+
+        ScTable& rTab = **itTab;
+        SCCOL nNumCols = rTab.aCol.size();
+        for (SCCOL nColIdx = 0; nColIdx < nNumCols; ++nColIdx)
+            broadcastRecalcAfterImportColumn(rTab.aCol[nColIdx]);
+    }
+}
+
+void ScDocumentImport::broadcastRecalcAfterImportColumn(ScColumn& rCol)
+{
+    CellStoreAfterImportBroadcaster aFunc;
+    std::for_each(rCol.maCells.begin(), rCol.maCells.end(), aFunc);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

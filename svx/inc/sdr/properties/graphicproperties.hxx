@@ -30,8 +30,11 @@ namespace sdr
         class GraphicProperties : public RectangleProperties
         {
         protected:
+            // apply the correct SfyStyleSheet from SdrObject's SdrModel
+            virtual void applyDefaultStyleSheetFromSdrModel() override;
+
             // create a new itemset
-            virtual SfxItemSet* CreateObjectSpecificItemSet(SfxItemPool& rPool) override;
+            virtual std::unique_ptr<SfxItemSet> CreateObjectSpecificItemSet(SfxItemPool& rPool) override;
 
             // react on ItemSet changes
             virtual void ItemSetChanged(const SfxItemSet& rSet) override;
@@ -44,10 +47,10 @@ namespace sdr
             GraphicProperties(const GraphicProperties& rProps, SdrObject& rObj);
 
             // destructor
-            virtual ~GraphicProperties();
+            virtual ~GraphicProperties() override;
 
             // Clone() operator, normally just calls the local copy constructor
-            virtual BaseProperties& Clone(SdrObject& rObj) const override;
+            virtual std::unique_ptr<BaseProperties> Clone(SdrObject& rObj) const override;
 
             // set a new StyleSheet and broadcast
             virtual void SetStyleSheet(SfxStyleSheet* pNewStyleSheet, bool bDontRemoveHardAttr) override;

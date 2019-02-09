@@ -53,8 +53,8 @@
  *
  *
  ************************************************************************/
-#include "lwpatomholder.hxx"
-#include "lwptools.hxx"
+#include <lwpatomholder.hxx>
+#include <lwptools.hxx>
 #include <osl/thread.h>
 #include <rtl/textenc.h>
 
@@ -62,8 +62,6 @@ LwpAtomHolder::LwpAtomHolder()
     : m_nAtom(0), m_nAssocAtom(0)
 {}
 
-LwpAtomHolder::~LwpAtomHolder()
-{}
 /**
  * @descr       read atomholder from object stream
  *          the default encoding used in Word Pro is 1252
@@ -75,16 +73,14 @@ void LwpAtomHolder::Read(LwpObjectStream *pStrm)
     sal_uInt16 diskSize = pStrm->QuickReaduInt16();
     sal_uInt16 len = pStrm->QuickReaduInt16();
 
-    if (len == 0 || diskSize == 0) {
+    if (len == 0 || diskSize < sizeof diskSize) {
         m_nAtom = BAD_ATOM;
         m_nAssocAtom = BAD_ATOM;
         return;
     }
     m_nAtom = m_nAssocAtom = len;
 
-    //rtl_TextEncoding rEncode =  osl_getThreadTextEncoding();
-    rtl_TextEncoding rEncode =  RTL_TEXTENCODING_MS_1252;
-    LwpTools::QuickReadUnicode(pStrm, m_String, diskSize-sizeof(diskSize), rEncode);
+    LwpTools::QuickReadUnicode(pStrm, m_String, diskSize-sizeof(diskSize), RTL_TEXTENCODING_MS_1252);
 }
 /**
  * @descr       skip the atom holder in object stream

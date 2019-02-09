@@ -20,6 +20,9 @@
 #include <stdio.h>
 #include <iostream>
 #include "OOXMLParserState.hxx"
+#include "Handler.hxx"
+
+#include <sal/log.hxx>
 
 namespace writerfilter {
 namespace ooxml
@@ -79,11 +82,7 @@ void OOXMLParserState::setForwardEvents(bool bForwardEvents)
 
 const std::string OOXMLParserState::getHandle() const
 {
-    char sBuffer[256];
-
-    snprintf(sBuffer, sizeof(sBuffer), "%u", mnHandle);
-
-    return sBuffer;
+    return std::to_string(mnHandle);
 }
 
 void OOXMLParserState::setHandle()
@@ -116,8 +115,8 @@ void OOXMLParserState::resolveCharacterProperties(Stream & rStream)
 {
     if (mpCharacterProps.get() != nullptr)
     {
-        rStream.props(mpCharacterProps);
-        mpCharacterProps.reset(new OOXMLPropertySet);
+        rStream.props(mpCharacterProps.get());
+        mpCharacterProps = new OOXMLPropertySet;
     }
 }
 
@@ -163,8 +162,8 @@ void OOXMLParserState::resolveCellProperties(Stream & rStream)
 
         if (rCellProps.get() != nullptr)
         {
-            rStream.props(rCellProps);
-            rCellProps.reset(new OOXMLPropertySet);
+            rStream.props(rCellProps.get());
+            rCellProps = new OOXMLPropertySet;
         }
     }
 }
@@ -177,8 +176,8 @@ void OOXMLParserState::resolveRowProperties(Stream & rStream)
 
         if (rRowProps.get() != nullptr)
         {
-            rStream.props(rRowProps);
-            rRowProps.reset(new OOXMLPropertySet);
+            rStream.props(rRowProps.get());
+            rRowProps = new OOXMLPropertySet;
         }
     }
 }
@@ -191,7 +190,7 @@ void OOXMLParserState::resolveTableProperties(Stream & rStream)
 
         if (rTableProps.get() != nullptr)
         {
-            rStream.props(rTableProps);
+            rStream.props(rTableProps.get());
             // Don't clean the table props to send them again for each row
             // This mimics the behaviour from RTF tokenizer.
         }
@@ -208,6 +207,22 @@ void OOXMLParserState::setTableProperties(const OOXMLPropertySet::Pointer_t& pPr
         else
             rTableProps->add(pProps);
     }
+}
+
+// tdf#108714
+void OOXMLParserState::resolvePostponedBreak(Stream & rStream)
+{
+    for (const auto & rBreak: mvPostponedBreaks)
+    {
+        OOXMLBreakHandler aBreakHandler(rStream);
+        rBreak->resolve(aBreakHandler);
+    }
+    mvPostponedBreaks.clear();
+}
+
+void OOXMLParserState::setPostponedBreak(const OOXMLPropertySet::Pointer_t & pProps)
+{
+    mvPostponedBreaks.push_back(pProps);
 }
 
 void OOXMLParserState::startTable()

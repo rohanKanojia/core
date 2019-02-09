@@ -23,7 +23,7 @@
  **************************************************************************
 
  *************************************************************************/
-#include "ucbhelper/activedatasink.hxx"
+#include <ucbhelper/activedatasink.hxx>
 
 using namespace com::sun::star;
 
@@ -34,7 +34,6 @@ namespace ucbhelper
 
 // virtual
 void SAL_CALL ActiveDataSink::setInputStream( const uno::Reference< io::XInputStream >& aStream )
-    throw( uno::RuntimeException, std::exception )
 {
     m_xStream = aStream;
 }
@@ -42,7 +41,6 @@ void SAL_CALL ActiveDataSink::setInputStream( const uno::Reference< io::XInputSt
 
 // virtual
 uno::Reference< io::XInputStream > SAL_CALL ActiveDataSink::getInputStream()
-    throw( uno::RuntimeException, std::exception )
 {
     return m_xStream;
 }

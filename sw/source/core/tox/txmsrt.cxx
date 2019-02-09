@@ -17,15 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/resid.hxx>
 #include <unotools/charclass.hxx>
 #include <com/sun/star/i18n/CollatorOptions.hpp>
 #include <editeng/unolingu.hxx>
 #include <txtfld.hxx>
 #include <doc.hxx>
 #include <IDocumentLayoutAccess.hxx>
+#include <IDocumentMarkAccess.hxx>
 #include <docary.hxx>
 #include <cntfrm.hxx>
+#include <txtfrm.hxx>
+#include <rootfrm.hxx>
+#include <modeltoviewhelper.hxx>
 #include <node.hxx>
 #include <frmatr.hxx>
 #include <pam.hxx>
@@ -40,7 +43,7 @@
 #include <authfld.hxx>
 #include <toxwrap.hxx>
 
-#include <comcore.hrc>
+#include <strings.hrc>
 #include <numrule.hxx>
 #include <reffld.hxx>
 
@@ -48,62 +51,62 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 
 // Initialize strings
-sal_uInt16 SwTOXSortTabBase::nOpt = 0;
+SwTOIOptions SwTOXSortTabBase::nOpt = SwTOIOptions::NONE;
 
-SwTOXInternational::SwTOXInternational( LanguageType nLang, sal_uInt16 nOpt,
+SwTOXInternational::SwTOXInternational( LanguageType nLang, SwTOIOptions nOpt,
                                         const OUString& rSortAlgorithm ) :
-    eLang( nLang ),
-    sSortAlgorithm(rSortAlgorithm),
-    nOptions( nOpt )
+    m_eLang( nLang ),
+    m_sSortAlgorithm(rSortAlgorithm),
+    m_nOptions( nOpt )
 {
     Init();
 }
 
 SwTOXInternational::SwTOXInternational( const SwTOXInternational& rIntl ) :
-    eLang( rIntl.eLang ),
-    sSortAlgorithm(rIntl.sSortAlgorithm),
-    nOptions( rIntl.nOptions )
+    m_eLang( rIntl.m_eLang ),
+    m_sSortAlgorithm(rIntl.m_sSortAlgorithm),
+    m_nOptions( rIntl.m_nOptions )
 {
   Init();
 }
 
 void SwTOXInternational::Init()
 {
-    pIndexWrapper = new IndexEntrySupplierWrapper();
+    m_pIndexWrapper.reset( new IndexEntrySupplierWrapper() );
 
-    const lang::Locale aLcl( LanguageTag::convertToLocale( eLang ) );
-    pIndexWrapper->SetLocale( aLcl );
+    const lang::Locale aLcl( LanguageTag::convertToLocale( m_eLang ) );
+    m_pIndexWrapper->SetLocale( aLcl );
 
-    if(sSortAlgorithm.isEmpty())
+    if(m_sSortAlgorithm.isEmpty())
     {
-        Sequence < OUString > aSeq( pIndexWrapper->GetAlgorithmList( aLcl ));
+        Sequence < OUString > aSeq( m_pIndexWrapper->GetAlgorithmList( aLcl ));
         if(aSeq.getLength())
-            sSortAlgorithm = aSeq.getConstArray()[0];
+            m_sSortAlgorithm = aSeq.getConstArray()[0];
     }
 
-    if ( nOptions & nsSwTOIOptions::TOI_CASE_SENSITIVE )
-        pIndexWrapper->LoadAlgorithm( aLcl, sSortAlgorithm, 0 );
+    if ( m_nOptions & SwTOIOptions::CaseSensitive )
+        m_pIndexWrapper->LoadAlgorithm( aLcl, m_sSortAlgorithm, 0 );
     else
-        pIndexWrapper->LoadAlgorithm( aLcl, sSortAlgorithm, SW_COLLATOR_IGNORES );
+        m_pIndexWrapper->LoadAlgorithm( aLcl, m_sSortAlgorithm, SW_COLLATOR_IGNORES );
 
-    pCharClass = new CharClass( LanguageTag( aLcl ));
+    m_pCharClass.reset( new CharClass( LanguageTag( aLcl )) );
 
 }
 
 SwTOXInternational::~SwTOXInternational()
 {
-    delete pCharClass;
-    delete pIndexWrapper;
+    m_pCharClass.reset();
+    m_pIndexWrapper.reset();
 }
 
 OUString SwTOXInternational::ToUpper( const OUString& rStr, sal_Int32 nPos ) const
 {
-    return pCharClass->uppercase( rStr, nPos, 1 );
+    return m_pCharClass->uppercase( rStr, nPos, 1 );
 }
 
 inline bool SwTOXInternational::IsNumeric( const OUString& rStr ) const
 {
-    return pCharClass->isNumeric( rStr );
+    return m_pCharClass->isNumeric( rStr );
 }
 
 sal_Int32 SwTOXInternational::Compare( const TextAndReading& rTaR1,
@@ -111,19 +114,19 @@ sal_Int32 SwTOXInternational::Compare( const TextAndReading& rTaR1,
                                        const TextAndReading& rTaR2,
                                        const lang::Locale& rLocale2 ) const
 {
-    return pIndexWrapper->CompareIndexEntry( rTaR1.sText, rTaR1.sReading, rLocale1,
+    return m_pIndexWrapper->CompareIndexEntry( rTaR1.sText, rTaR1.sReading, rLocale1,
                                              rTaR2.sText, rTaR2.sReading, rLocale2 );
 }
 
 OUString SwTOXInternational::GetIndexKey( const TextAndReading& rTaR,
                                         const lang::Locale& rLocale ) const
 {
-    return pIndexWrapper->GetIndexKey( rTaR.sText, rTaR.sReading, rLocale );
+    return m_pIndexWrapper->GetIndexKey( rTaR.sText, rTaR.sReading, rLocale );
 }
 
 OUString SwTOXInternational::GetFollowingText( bool bMorePages ) const
 {
-    return pIndexWrapper->GetFollowingText( bMorePages );
+    return m_pIndexWrapper->GetFollowingText( bMorePages );
 }
 
 // SortElement for TOX entries
@@ -132,7 +135,8 @@ SwTOXSortTabBase::SwTOXSortTabBase( TOXSortType nTyp, const SwContentNode* pNd,
                                     const SwTOXInternational* pInter,
                                     const lang::Locale* pLocale )
     : pTOXNd( nullptr ), pTextMark( pMark ), pTOXIntl( pInter ),
-    nPos( 0 ), nCntPos( 0 ), nType( static_cast<sal_uInt16>(nTyp) ), bValidText( false )
+    nPos( 0 ), nCntPos( 0 ), nType( static_cast<sal_uInt16>(nTyp) )
+    , m_bValidText( false )
 {
     if ( pLocale )
         aLocale = *pLocale;
@@ -158,14 +162,16 @@ SwTOXSortTabBase::SwTOXSortTabBase( TOXSortType nTyp, const SwContentNode* pNd,
             {
                 // Then get the 'anchor' (body) position
                 Point aPt;
-                const SwContentFrame* pFrame = pNd->getLayoutFrame( pNd->GetDoc()->getIDocumentLayoutAccess().GetCurrentLayout(), &aPt, nullptr, false );
+                std::pair<Point, bool> tmp(aPt, false);
+                const SwContentFrame *const pFrame = pNd->getLayoutFrame(
+                    pNd->GetDoc()->getIDocumentLayoutAccess().GetCurrentLayout(),
+                    nullptr, &tmp);
                 if( pFrame )
                 {
                     SwPosition aPos( *pNd );
                     const SwDoc& rDoc = *pNd->GetDoc();
                     bool const bResult = GetBodyTextNode( rDoc, aPos, *pFrame );
                     OSL_ENSURE(bResult, "where is the text node");
-                    (void) bResult; // unused in non-debug
                     nPos = aPos.nNode.GetIndex();
                     nCntPos = aPos.nContent.GetIndex();
                 }
@@ -183,13 +189,18 @@ OUString SwTOXSortTabBase::GetURL() const
     return OUString();
 }
 
+bool SwTOXSortTabBase::IsFullPara() const
+{
+    return false;
+}
+
 void SwTOXSortTabBase::FillText( SwTextNode& rNd, const SwIndex& rInsPos,
-                                    sal_uInt16 ) const
+                                    sal_uInt16, SwRootFrame const*const) const
 {
     rNd.InsertText( GetText().sText, rInsPos );
 }
 
-bool SwTOXSortTabBase::operator==( const SwTOXSortTabBase& rCmp )
+bool SwTOXSortTabBase::equivalent(const SwTOXSortTabBase& rCmp)
 {
     bool bRet = nPos == rCmp.nPos && nCntPos == rCmp.nCntPos &&
             (!aTOXSources[0].pNd || !rCmp.aTOXSources[0].pNd ||
@@ -215,7 +226,7 @@ bool SwTOXSortTabBase::operator==( const SwTOXSortTabBase& rCmp )
     return bRet;
 }
 
-bool SwTOXSortTabBase::operator<( const SwTOXSortTabBase& rCmp )
+bool SwTOXSortTabBase::sort_lt(const SwTOXSortTabBase& rCmp)
 {
     if( nPos < rCmp.nPos )
         return true;
@@ -265,7 +276,7 @@ bool SwTOXSortTabBase::operator<( const SwTOXSortTabBase& rCmp )
 
 // Sorted keyword entry
 SwTOXIndex::SwTOXIndex( const SwTextNode& rNd,
-                        const SwTextTOXMark* pMark, sal_uInt16 nOptions,
+                        const SwTextTOXMark* pMark, SwTOIOptions nOptions,
                         sal_uInt8 nKyLevel,
                         const SwTOXInternational& rIntl,
                         const lang::Locale& rLocale )
@@ -278,7 +289,7 @@ SwTOXIndex::SwTOXIndex( const SwTextNode& rNd,
 
 // Compare keywords. Only relates to the text.
 
-bool SwTOXIndex::operator==( const SwTOXSortTabBase& rCmpBase )
+bool SwTOXIndex::equivalent(const SwTOXSortTabBase& rCmpBase)
 {
     const SwTOXIndex& rCmp = static_cast<const SwTOXIndex&>(rCmpBase);
 
@@ -292,7 +303,7 @@ bool SwTOXIndex::operator==( const SwTOXSortTabBase& rCmpBase )
                                    rCmp.GetText(), rCmp.GetLocale() );
 
     // If we don't summarize we need to evaluate the Pos
-    if(bRet && !(GetOptions() & nsSwTOIOptions::TOI_SAME_ENTRY))
+    if(bRet && !(GetOptions() & SwTOIOptions::SameEntry))
         bRet = nPos == rCmp.nPos;
 
     return bRet;
@@ -300,7 +311,7 @@ bool SwTOXIndex::operator==( const SwTOXSortTabBase& rCmpBase )
 
 // operator, only depends on the text
 
-bool SwTOXIndex::operator<( const SwTOXSortTabBase& rCmpBase )
+bool SwTOXIndex::sort_lt(const SwTOXSortTabBase& rCmpBase)
 {
     const SwTOXIndex& rCmp = static_cast<const SwTOXIndex&>(rCmpBase);
 
@@ -314,7 +325,7 @@ bool SwTOXIndex::operator<( const SwTOXSortTabBase& rCmpBase )
                                   aOtherTaR, rCmp.GetLocale() );
 
     // If we don't summarize we need to evaluate the Pos
-    if( !bRet && !(GetOptions() & nsSwTOIOptions::TOI_SAME_ENTRY) )
+    if( !bRet && !(GetOptions() & SwTOIOptions::SameEntry) )
     {
         bRet = pTOXIntl->IsEqual( aMyTaR, GetLocale(),
                                   aOtherTaR, rCmp.GetLocale() ) &&
@@ -326,7 +337,7 @@ bool SwTOXIndex::operator<( const SwTOXSortTabBase& rCmpBase )
 
 // The keyword itself
 
-TextAndReading SwTOXIndex::GetText_Impl() const
+TextAndReading SwTOXIndex::GetText_Impl(SwRootFrame const*const pLayout) const
 {
     OSL_ENSURE(pTextMark, "pTextMark == 0, No keyword");
     const SwTOXMark& rTOXMark = pTextMark->GetTOXMark();
@@ -348,13 +359,13 @@ TextAndReading SwTOXIndex::GetText_Impl() const
         break;
         case FORM_ENTRY          :
         {
-            aRet.sText = rTOXMark.GetText();
+            aRet.sText = rTOXMark.GetText(pLayout);
             aRet.sReading = rTOXMark.GetTextReading();
         }
         break;
     }
-    // if TOI_INITIAL_CAPS is set, first character is to be capitalized
-    if( nsSwTOIOptions::TOI_INITIAL_CAPS & nOpt && pTOXIntl && !aRet.sText.isEmpty())
+    // if SwTOIOptions::InitialCaps is set, first character is to be capitalized
+    if( SwTOIOptions::InitialCaps & nOpt && pTOXIntl && !aRet.sText.isEmpty())
     {
         aRet.sText = pTOXIntl->ToUpper( aRet.sText, 0 ) + aRet.sText.copy(1);
     }
@@ -362,18 +373,25 @@ TextAndReading SwTOXIndex::GetText_Impl() const
     return aRet;
 }
 
-void SwTOXIndex::FillText( SwTextNode& rNd, const SwIndex& rInsPos, sal_uInt16 ) const
+void SwTOXIndex::FillText( SwTextNode& rNd, const SwIndex& rInsPos, sal_uInt16,
+        SwRootFrame const*const pLayout) const
 {
+    assert(!"sw_redlinehide: this is dead code, Bibliography only has SwTOXAuthority");
     const sal_Int32* pEnd = pTextMark->End();
 
     TextAndReading aRet;
     if( pEnd && !pTextMark->GetTOXMark().IsAlternativeText() &&
-            0 == (GetOptions() & nsSwTOIOptions::TOI_KEY_AS_ENTRY))
+            !(GetOptions() & SwTOIOptions::KeyAsEntry))
     {
         aRet.sText = static_cast<const SwTextNode*>(aTOXSources[0].pNd)->GetExpandText(
+                            pLayout,
                             pTextMark->GetStart(),
-                            *pEnd - pTextMark->GetStart());
-        if(nsSwTOIOptions::TOI_INITIAL_CAPS & nOpt && pTOXIntl && !aRet.sText.isEmpty())
+                            *pEnd - pTextMark->GetStart(),
+                            false, false, false,
+                            pLayout && pLayout->IsHideRedlines()
+                                ? ExpandMode::HideDeletions
+                                : ExpandMode(0));
+        if(SwTOIOptions::InitialCaps & nOpt && pTOXIntl && !aRet.sText.isEmpty())
         {
             aRet.sText = pTOXIntl->ToUpper( aRet.sText, 0 ) + aRet.sText.copy(1);
         }
@@ -390,7 +408,7 @@ sal_uInt16 SwTOXIndex::GetLevel() const
 
     sal_uInt16 nForm = FORM_PRIMARY_KEY;
 
-    if( 0 == (GetOptions() & nsSwTOIOptions::TOI_KEY_AS_ENTRY)&&
+    if( !(GetOptions() & SwTOIOptions::KeyAsEntry)&&
         !pTextMark->GetTOXMark().GetPrimaryKey().isEmpty() )
     {
         nForm = FORM_SECONDARY_KEY;
@@ -410,14 +428,14 @@ SwTOXCustom::SwTOXCustom(const TextAndReading& rKey,
 {
 }
 
-bool SwTOXCustom::operator==(const SwTOXSortTabBase& rCmpBase)
+bool SwTOXCustom::equivalent(const SwTOXSortTabBase& rCmpBase)
 {
     return GetLevel() == rCmpBase.GetLevel() &&
            pTOXIntl->IsEqual( GetText(), GetLocale(),
                               rCmpBase.GetText(), rCmpBase.GetLocale() );
 }
 
-bool SwTOXCustom::operator < (const SwTOXSortTabBase& rCmpBase)
+bool SwTOXCustom::sort_lt(const SwTOXSortTabBase& rCmpBase)
 {
     return  GetLevel() <= rCmpBase.GetLevel() &&
             pTOXIntl->IsLess( GetText(), GetLocale(),
@@ -429,7 +447,7 @@ sal_uInt16 SwTOXCustom::GetLevel() const
     return nLev;
 }
 
-TextAndReading SwTOXCustom::GetText_Impl() const
+TextAndReading SwTOXCustom::GetText_Impl(SwRootFrame const*const) const
 {
     return m_aKey;
 }
@@ -443,28 +461,36 @@ SwTOXContent::SwTOXContent( const SwTextNode& rNd, const SwTextTOXMark* pMark,
 
 // The content's text
 
-TextAndReading SwTOXContent::GetText_Impl() const
+TextAndReading SwTOXContent::GetText_Impl(SwRootFrame const*const pLayout) const
 {
     const sal_Int32* pEnd = pTextMark->End();
     if( pEnd && !pTextMark->GetTOXMark().IsAlternativeText() )
     {
         return TextAndReading(
             static_cast<const SwTextNode*>(aTOXSources[0].pNd)->GetExpandText(
+                                     pLayout,
                                      pTextMark->GetStart(),
-                                     *pEnd - pTextMark->GetStart() ),
+                                     *pEnd - pTextMark->GetStart(),
+                            false, false, false,
+                            pLayout && pLayout->IsHideRedlines()
+                                ? ExpandMode::HideDeletions
+                                : ExpandMode(0)),
             pTextMark->GetTOXMark().GetTextReading());
     }
 
     return TextAndReading(pTextMark->GetTOXMark().GetAlternativeText(), OUString());
 }
 
-void SwTOXContent::FillText( SwTextNode& rNd, const SwIndex& rInsPos, sal_uInt16 ) const
+void SwTOXContent::FillText(SwTextNode& rNd, const SwIndex& rInsPos, sal_uInt16,
+        SwRootFrame const*const pLayout) const
 {
+    assert(!"sw_redlinehide: this is dead code, Bibliography only has SwTOXAuthority");
     const sal_Int32* pEnd = pTextMark->End();
     if( pEnd && !pTextMark->GetTOXMark().IsAlternativeText() )
-        static_cast<const SwTextNode*>(aTOXSources[0].pNd)->GetExpandText( rNd, &rInsPos,
-                                    pTextMark->GetStart(),
-                                    *pEnd - pTextMark->GetStart() );
+        // sw_redlinehide: this probably won't HideDeletions
+        static_cast<const SwTextNode*>(aTOXSources[0].pNd)->CopyExpandText(
+                rNd, &rInsPos, pTextMark->GetStart(),
+                *pEnd - pTextMark->GetStart(), pLayout);
     else
     {
         rNd.InsertText( GetText().sText, rInsPos );
@@ -491,26 +517,41 @@ SwTOXPara::SwTOXPara( const SwContentNode& rNd, SwTOXElement eT, sal_uInt16 nLev
 {
 }
 
-TextAndReading SwTOXPara::GetText_Impl() const
+TextAndReading SwTOXPara::GetText_Impl(SwRootFrame const*const pLayout) const
 {
     const SwContentNode* pNd = aTOXSources[0].pNd;
     switch( eType )
     {
-    case nsSwTOXElement::TOX_SEQUENCE:
-    case nsSwTOXElement::TOX_TEMPLATE:
-    case nsSwTOXElement::TOX_OUTLINELEVEL:
+    case SwTOXElement::Sequence:
+        if (nStartIndex != 0 || nEndIndex != -1)
         {
+            // sw_redlinehide: "captions" are a rather fuzzily defined concept anyway
             return TextAndReading(static_cast<const SwTextNode*>(pNd)->GetExpandText(
-                    nStartIndex,
-                    nEndIndex == -1 ? -1 : nEndIndex - nStartIndex,
-                    false, false, false, false),
+                        pLayout,
+                        nStartIndex,
+                        nEndIndex == -1 ? -1 : nEndIndex - nStartIndex,
+                        false, false, false,
+                        pLayout && pLayout->IsHideRedlines()
+                            ? ExpandMode::HideDeletions
+                            : ExpandMode(0)),
+                    OUString());
+        }
+        BOOST_FALLTHROUGH;
+    case SwTOXElement::Template:
+    case SwTOXElement::OutlineLevel:
+        {
+            assert(nStartIndex == 0);
+            assert(nEndIndex == -1);
+            return TextAndReading(sw::GetExpandTextMerged(
+                        pLayout, *static_cast<const SwTextNode*>(pNd),
+                        false, false, ExpandMode(0)),
                     OUString());
         }
         break;
 
-    case nsSwTOXElement::TOX_OLE:
-    case nsSwTOXElement::TOX_GRAPHIC:
-    case nsSwTOXElement::TOX_FRAME:
+    case SwTOXElement::Ole:
+    case SwTOXElement::Graphic:
+    case SwTOXElement::Frame:
         {
             // Find the FlyFormat; the object/graphic name is there
             SwFrameFormat* pFly = pNd->GetFlyFormat();
@@ -518,12 +559,12 @@ TextAndReading SwTOXPara::GetText_Impl() const
                 return TextAndReading(pFly->GetName(), OUString());
 
             OSL_ENSURE( false, "Graphic/object without name" );
-            sal_uInt16 nId = nsSwTOXElement::TOX_OLE == eType
+            const char* pId = SwTOXElement::Ole == eType
                             ? STR_OBJECT_DEFNAME
-                            : nsSwTOXElement::TOX_GRAPHIC == eType
+                            : SwTOXElement::Graphic == eType
                                 ? STR_GRAPHIC_DEFNAME
                                 : STR_FRAME_DEFNAME;
-            return TextAndReading(SW_RESSTR( nId ), OUString());
+            return TextAndReading(SwResId(pId), OUString());
         }
         break;
     default: break;
@@ -531,14 +572,51 @@ TextAndReading SwTOXPara::GetText_Impl() const
     return TextAndReading();
 }
 
-void SwTOXPara::FillText( SwTextNode& rNd, const SwIndex& rInsPos, sal_uInt16 ) const
+void SwTOXPara::FillText( SwTextNode& rNd, const SwIndex& rInsPos, sal_uInt16,
+        SwRootFrame const*const pLayout) const
 {
-    if( nsSwTOXElement::TOX_TEMPLATE == eType || nsSwTOXElement::TOX_SEQUENCE == eType  || nsSwTOXElement::TOX_OUTLINELEVEL == eType)
+    assert(!"sw_redlinehide: this is dead code, Bibliography only has SwTOXAuthority");
+    if( SwTOXElement::Template == eType || SwTOXElement::Sequence == eType  || SwTOXElement::OutlineLevel == eType)
     {
         const SwTextNode* pSrc = static_cast<const SwTextNode*>(aTOXSources[0].pNd);
-        pSrc->GetExpandText( rNd, &rInsPos, nStartIndex,
-                nEndIndex == -1 ? -1 : nEndIndex - nStartIndex,
-                false, false, true );
+        if (SwTOXElement::Sequence == eType
+            && (nStartIndex != 0 || nEndIndex != -1))
+        {
+            pSrc->CopyExpandText( rNd, &rInsPos, nStartIndex,
+                    nEndIndex == -1 ? -1 : nEndIndex - nStartIndex,
+                    pLayout, false, false, true );
+        }
+        else
+        {
+            assert(nStartIndex == 0);
+            assert(nEndIndex == -1);
+            // sw_redlinehide: this probably won't HideDeletions
+            pSrc->CopyExpandText( rNd, &rInsPos, 0, -1,
+                    pLayout, false, false, true );
+            if (pLayout && pLayout->IsHideRedlines())
+            {
+                if (SwTextFrame const*const pFrame = static_cast<SwTextFrame*>(pSrc->getLayoutFrame(pLayout)))
+                {
+                    if (sw::MergedPara const*const pMerged = pFrame->GetMergedPara())
+                    {
+                        // pSrc already copied above
+                        assert(pSrc == pMerged->pParaPropsNode);
+                        for (sal_uLong i = pSrc->GetIndex() + 1;
+                             i <= pMerged->pLastNode->GetIndex(); ++i)
+                        {
+                            SwNode *const pTmp(pSrc->GetNodes()[i]);
+                            if (pTmp->GetRedlineMergeFlag() == SwNode::Merge::NonFirst)
+                            {
+
+                                pTmp->GetTextNode()->CopyExpandText(
+                                        rNd, &rInsPos, 0, -1,
+                                        pLayout, false, false, false );
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
     else
     {
@@ -551,7 +629,7 @@ sal_uInt16 SwTOXPara::GetLevel() const
     sal_uInt16 nRet = m_nLevel;
     const SwContentNode*  pNd = aTOXSources[0].pNd;
 
-    if( nsSwTOXElement::TOX_OUTLINELEVEL == eType && pNd->GetTextNode() )
+    if( SwTOXElement::OutlineLevel == eType && pNd->GetTextNode() )
     {
         const int nTmp = static_cast<const SwTextNode*>(pNd)->GetAttrOutlineLevel();
         if(nTmp != 0 )
@@ -566,34 +644,34 @@ OUString SwTOXPara::GetURL() const
     const SwContentNode* pNd = aTOXSources[0].pNd;
     switch( eType )
     {
-    case nsSwTOXElement::TOX_TEMPLATE:
-    case nsSwTOXElement::TOX_OUTLINELEVEL:
+    case SwTOXElement::Template:
+    case SwTOXElement::OutlineLevel:
         {
             const SwTextNode * pTextNd = pNd->GetTextNode();
 
             SwDoc* pDoc = const_cast<SwDoc*>( pTextNd->GetDoc() );
             ::sw::mark::IMark const * const pMark = pDoc->getIDocumentMarkAccess()->getMarkForTextNode(
-                                *(pTextNd),
+                                *pTextNd,
                                 IDocumentMarkAccess::MarkType::CROSSREF_HEADING_BOOKMARK);
             aText = "#" + pMark->GetName();
         }
         break;
 
-    case nsSwTOXElement::TOX_OLE:
-    case nsSwTOXElement::TOX_GRAPHIC:
-    case nsSwTOXElement::TOX_FRAME:
+    case SwTOXElement::Ole:
+    case SwTOXElement::Graphic:
+    case SwTOXElement::Frame:
         {
             // Find the FlyFormat; the object/graphic name is there
             SwFrameFormat* pFly = pNd->GetFlyFormat();
             if( pFly )
             {
-                aText = "#" + pFly->GetName() + OUStringLiteral1<cMarkSeparator>();
+                aText = "#" + pFly->GetName() + OUStringLiteral1(cMarkSeparator);
                 const sal_Char* pStr;
                 switch( eType )
                 {
-                case nsSwTOXElement::TOX_OLE:       pStr = "ole"; break;
-                case nsSwTOXElement::TOX_GRAPHIC:   pStr = "graphic"; break;
-                case nsSwTOXElement::TOX_FRAME:     pStr = "frame"; break;
+                case SwTOXElement::Ole:       pStr = "ole"; break;
+                case SwTOXElement::Graphic:   pStr = "graphic"; break;
+                case SwTOXElement::Frame:     pStr = "frame"; break;
                 default:            pStr = nullptr;
                 }
                 if( pStr )
@@ -601,15 +679,28 @@ OUString SwTOXPara::GetURL() const
             }
         }
         break;
-    case nsSwTOXElement::TOX_SEQUENCE:
+    case SwTOXElement::Sequence:
         {
-            aText = "#" + m_sSequenceName + OUStringLiteral1<cMarkSeparator>()
+            aText = "#" + m_sSequenceName + OUStringLiteral1(cMarkSeparator)
                  + "sequence";
         }
         break;
     default: break;
     }
     return aText;
+}
+
+bool SwTOXPara::IsFullPara() const
+{
+    switch (eType)
+    {
+        case SwTOXElement::Sequence:
+        case SwTOXElement::Template:
+        case SwTOXElement::OutlineLevel:
+            return nStartIndex == 0 && nEndIndex == -1;
+        default:
+            return false;
+    }
 }
 
 // Table
@@ -619,7 +710,7 @@ SwTOXTable::SwTOXTable( const SwContentNode& rNd )
 {
 }
 
-TextAndReading SwTOXTable::GetText_Impl() const
+TextAndReading SwTOXTable::GetText_Impl(SwRootFrame const*const) const
 {
     const SwNode* pNd = aTOXSources[0].pNd;
     if( pNd )
@@ -633,7 +724,7 @@ TextAndReading SwTOXTable::GetText_Impl() const
     }
 
     OSL_ENSURE( false, "Where's my table?" );
-    return TextAndReading(SW_RESSTR( STR_TABLE_DEFNAME ), OUString());
+    return TextAndReading(SwResId( STR_TABLE_DEFNAME ), OUString());
 }
 
 sal_uInt16 SwTOXTable::GetLevel() const
@@ -655,7 +746,7 @@ OUString SwTOXTable::GetURL() const
     if ( sName.isEmpty() )
         return OUString();
 
-    return "#" + sName + OUStringLiteral1<cMarkSeparator>() + "table";
+    return "#" + sName + OUStringLiteral1(cMarkSeparator) + "table";
 }
 
 SwTOXAuthority::SwTOXAuthority( const SwContentNode& rNd,
@@ -674,7 +765,7 @@ sal_uInt16 SwTOXAuthority::GetLevel() const
     sal_uInt16 nRet = 1;
     if( pTOXIntl->IsNumeric( sText ) )
     {
-        nRet = (sal_uInt16)sText.toInt32();
+        nRet = sText.toUInt32();
         nRet++;
     }
     //illegal values are also set to 'ARTICLE' as non-numeric values are
@@ -683,24 +774,25 @@ sal_uInt16 SwTOXAuthority::GetLevel() const
     return nRet;
 }
 
-static OUString lcl_GetText(SwFormatField const& rField)
+static OUString lcl_GetText(SwFormatField const& rField, SwRootFrame const*const pLayout)
 {
-    return rField.GetField()->ExpandField(true);
+    return rField.GetField()->ExpandField(true, pLayout);
 }
 
-TextAndReading SwTOXAuthority::GetText_Impl() const
+TextAndReading SwTOXAuthority::GetText_Impl(SwRootFrame const*const pLayout) const
 {
-    return TextAndReading(lcl_GetText(m_rField), OUString());
+    return TextAndReading(lcl_GetText(m_rField, pLayout), OUString());
 }
 
 void    SwTOXAuthority::FillText( SwTextNode& rNd,
-                        const SwIndex& rInsPos, sal_uInt16 nAuthField ) const
+                        const SwIndex& rInsPos, sal_uInt16 nAuthField,
+        SwRootFrame const*const pLayout) const
 {
     SwAuthorityField* pField = static_cast<SwAuthorityField*>(m_rField.GetField());
     OUString sText;
     if(AUTH_FIELD_IDENTIFIER == nAuthField)
     {
-        sText = lcl_GetText(m_rField);
+        sText = lcl_GetText(m_rField, pLayout);
         const SwAuthorityFieldType* pType = static_cast<const SwAuthorityFieldType*>(pField->GetTyp());
         sal_Unicode cChar = pType->GetPrefix();
         if(cChar && cChar != ' ')
@@ -713,28 +805,28 @@ void    SwTOXAuthority::FillText( SwTextNode& rNd,
     {
         sal_uInt16 nLevel = GetLevel();
         if(nLevel)
-            sText = SwAuthorityFieldType::GetAuthTypeName((ToxAuthorityType) --nLevel);
+            sText = SwAuthorityFieldType::GetAuthTypeName(static_cast<ToxAuthorityType>(--nLevel));
     }
     else
-        sText = (pField->GetFieldText((ToxAuthorityField) nAuthField));
+        sText = pField->GetFieldText(static_cast<ToxAuthorityField>(nAuthField));
     rNd.InsertText( sText, rInsPos );
 }
 
-bool    SwTOXAuthority::operator==( const SwTOXSortTabBase& rCmp)
+bool SwTOXAuthority::equivalent(const SwTOXSortTabBase& rCmp)
 {
     return nType == rCmp.nType &&
-            static_cast<SwAuthorityField*>(m_rField.GetField())->GetHandle() ==
-                static_cast<SwAuthorityField*>(static_cast<const SwTOXAuthority&>(rCmp).m_rField.GetField())->GetHandle();
+            static_cast<SwAuthorityField*>(m_rField.GetField())->GetAuthEntry() ==
+                static_cast<SwAuthorityField*>(static_cast<const SwTOXAuthority&>(rCmp).m_rField.GetField())->GetAuthEntry();
 }
 
-bool    SwTOXAuthority::operator<( const SwTOXSortTabBase& rBase)
+bool SwTOXAuthority::sort_lt(const SwTOXSortTabBase& rBase)
 {
     bool bRet = false;
     SwAuthorityField* pField = static_cast<SwAuthorityField*>(m_rField.GetField());
     SwAuthorityFieldType* pType = static_cast<SwAuthorityFieldType*>(
                                                 pField->GetTyp());
     if(pType->IsSortByDocument())
-        bRet = SwTOXSortTabBase::operator<(rBase);
+        bRet = SwTOXSortTabBase::sort_lt(rBase);
     else
     {
         SwAuthorityField* pCmpField =

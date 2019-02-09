@@ -27,18 +27,14 @@
 #include <com/sun/star/lang/XTypeProvider.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/frame/XDispatch.hpp>
-#include <com/sun/star/frame/XStatusListener.hpp>
-#include <com/sun/star/frame/XPopupMenuController.hpp>
-#include <com/sun/star/linguistic2/XLanguageGuessing.hpp>
 
 #include <svtools/popupmenucontrollerbase.hxx>
 #include <toolkit/awt/vclxmenu.hxx>
 #include <cppuhelper/weak.hxx>
 #include <rtl/ustring.hxx>
 
-#include "helper/mischelper.hxx"
+#include <helper/mischelper.hxx>
 
 namespace framework
 {
@@ -48,22 +44,26 @@ namespace framework
 
         public:
             LanguageSelectionMenuController( const css::uno::Reference< css::uno::XComponentContext >& xContext );
-            virtual ~LanguageSelectionMenuController();
+            virtual ~LanguageSelectionMenuController() override;
 
             // XServiceInfo
-            DECLARE_XSERVICEINFO
+            DECLARE_XSERVICEINFO_NOFACTORY
+            /* Helper for registry */
+            /// @throws css::uno::Exception
+            static css::uno::Reference< css::uno::XInterface >             SAL_CALL impl_createInstance                ( const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
+            static css::uno::Reference< css::lang::XSingleServiceFactory > impl_createFactory                 ( const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
 
             // XPopupMenuController
-            virtual void SAL_CALL updatePopupMenu() throw (css::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL updatePopupMenu() override;
 
             // XInitialization
-            virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
             // XStatusListener
-            virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
+            virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override;
 
             // XEventListener
-            virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception ) override;
+            virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
         private:
             virtual void impl_setPopupMenu() override;
@@ -89,7 +89,7 @@ namespace framework
             OUString                                         m_aGuessedTextLang;
             LanguageGuessingHelper                           m_aLangGuessHelper;
 
-            void fillPopupMenu( css::uno::Reference< css::awt::XPopupMenu >& rPopupMenu, const Mode rMode );
+            void fillPopupMenu( css::uno::Reference< css::awt::XPopupMenu > const & rPopupMenu, const Mode rMode );
     };
 }
 

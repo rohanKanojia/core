@@ -24,6 +24,7 @@
 #include <IDocumentUndoRedo.hxx>
 #include <IDocumentState.hxx>
 #include <IDocumentLayoutAccess.hxx>
+#include <IDocumentMarkAccess.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/linkmgr.hxx>
 #include <sfx2/docfile.hxx>
@@ -51,36 +52,34 @@ using namespace ::com::sun::star;
 //Helper functions for this file
 namespace
 {
-    struct _FindItem
+    struct FindItem
     {
         const OUString m_Item;
         SwTableNode* pTableNd;
         SwSectionNode* pSectNd;
 
-        explicit _FindItem(const OUString& rS)
+        explicit FindItem(const OUString& rS)
             : m_Item(rS), pTableNd(nullptr), pSectNd(nullptr)
         {}
      };
 
     ::sfx2::SvBaseLink* lcl_FindNextRemovableLink( const ::sfx2::SvBaseLinks& rLinks )
     {
-        for( ::sfx2::SvBaseLinks::size_type n = 0; n < rLinks.size(); ++n )
+        for (const auto& rLinkIter : rLinks)
         {
-            ::sfx2::SvBaseLink* pLnk = &(*rLinks[ n ]);
-            if( pLnk &&
-                ( OBJECT_CLIENT_GRF == pLnk->GetObjType() ||
-                  OBJECT_CLIENT_FILE == pLnk->GetObjType() ) &&
-                  dynamic_cast<const SwBaseLink*>( pLnk) !=  nullptr )
+            ::sfx2::SvBaseLink& rLnk = *rLinkIter;
+            if ((OBJECT_CLIENT_GRF == rLnk.GetObjType() || OBJECT_CLIENT_FILE == rLnk.GetObjType())
+                && dynamic_cast<const SwBaseLink*>(&rLnk) != nullptr)
             {
-                    tools::SvRef<sfx2::SvBaseLink> xLink = pLnk;
+                    tools::SvRef<sfx2::SvBaseLink> xLink(&rLnk);
 
                     OUString sFName;
-                    sfx2::LinkManager::GetDisplayNames( xLink, nullptr, &sFName );
+                    sfx2::LinkManager::GetDisplayNames( xLink.get(), nullptr, &sFName );
 
                     INetURLObject aURL( sFName );
                     if( INetProtocol::File == aURL.GetProtocol() ||
                         INetProtocol::Cid == aURL.GetProtocol() )
-                        return pLnk;
+                        return &rLnk;
             }
         }
         return nullptr;
@@ -110,15 +109,15 @@ namespace
     }
 
 
-    bool lcl_FindSection( const SwSectionFormat* pSectFormat, _FindItem * const pItem, bool bCaseSensitive )
+    bool lcl_FindSection( const SwSectionFormat* pSectFormat, FindItem * const pItem, bool bCaseSensitive )
     {
         SwSection* pSect = pSectFormat->GetSection();
         if( pSect )
         {
-            OUString sNm( (bCaseSensitive)
+            OUString sNm( bCaseSensitive
                     ? pSect->GetSectionName()
                     : GetAppCharClass().lowercase( pSect->GetSectionName() ));
-            OUString sCompare( (bCaseSensitive)
+            OUString sCompare( bCaseSensitive
                     ? pItem->m_Item
                     : GetAppCharClass().lowercase( pItem->m_Item ) );
             if( sNm == sCompare )
@@ -139,7 +138,7 @@ namespace
         return true;
     }
 
-    bool lcl_FindTable( const SwFrameFormat* pTableFormat, _FindItem * const pItem )
+    bool lcl_FindTable( const SwFrameFormat* pTableFormat, FindItem * const pItem )
     {
         OUString sNm( GetAppCharClass().lowercase( pTableFormat->GetName() ));
         if ( sNm == pItem->m_Item )
@@ -168,10 +167,11 @@ namespace
 namespace sw
 {
 
-DocumentLinksAdministrationManager::DocumentLinksAdministrationManager( SwDoc& i_rSwdoc ) : mbVisibleLinks(true),
-                                                                                            mbLinksUpdated( false ), //#i38810#
-                                                                                            mpLinkMgr( new sfx2::LinkManager( nullptr ) ),
-                                                                                            m_rDoc( i_rSwdoc )
+DocumentLinksAdministrationManager::DocumentLinksAdministrationManager( SwDoc& i_rSwdoc )
+    : mbVisibleLinks(true)
+    , mbLinksUpdated( false ) //#i38810#
+    , m_pLinkMgr( new sfx2::LinkManager(nullptr) )
+    , m_rDoc( i_rSwdoc )
 {
 }
 
@@ -187,56 +187,65 @@ void DocumentLinksAdministrationManager::SetVisibleLinks(bool bFlag)
 
 sfx2::LinkManager& DocumentLinksAdministrationManager::GetLinkManager()
 {
-    return *mpLinkMgr;
+    return *m_pLinkMgr;
 }
 
 const sfx2::LinkManager& DocumentLinksAdministrationManager::GetLinkManager() const
 {
-    return *mpLinkMgr;
+    return *m_pLinkMgr;
 }
 
 // #i42634# Moved common code of SwReader::Read() and SwDocShell::UpdateLinks()
 // to new SwDoc::UpdateLinks():
 void DocumentLinksAdministrationManager::UpdateLinks()
 {
-    SfxObjectCreateMode eMode;
-    sal_uInt16 nLinkMode = m_rDoc.GetDocumentSettingManager().getLinkUpdateMode( true );
-    if ( m_rDoc.GetDocShell()) {
-        sal_uInt16 nUpdateDocMode = m_rDoc.GetDocShell()->GetUpdateDocMode();
-        if( (nLinkMode != NEVER ||  document::UpdateDocMode::FULL_UPDATE == nUpdateDocMode) &&
-            !GetLinkManager().GetLinks().empty() &&
-            SfxObjectCreateMode::INTERNAL !=
-                        ( eMode = m_rDoc.GetDocShell()->GetCreateMode()) &&
-            SfxObjectCreateMode::ORGANIZER != eMode &&
-            SfxObjectCreateMode::PREVIEW != eMode &&
-            !m_rDoc.GetDocShell()->IsPreview() )
-        {
-            bool bAskUpdate = nLinkMode == MANUAL;
-            bool bUpdate = true;
-            switch(nUpdateDocMode)
-            {
-                case document::UpdateDocMode::NO_UPDATE:   bUpdate = false;break;
-                case document::UpdateDocMode::QUIET_UPDATE:bAskUpdate = false; break;
-                case document::UpdateDocMode::FULL_UPDATE: bAskUpdate = true; break;
-            }
-            if (nLinkMode == AUTOMATIC && !bAskUpdate)
-            {
-                SfxMedium * medium = m_rDoc.GetDocShell()->GetMedium();
-                if (!SvtSecurityOptions().isTrustedLocationUriForUpdatingLinks(
-                        medium == nullptr ? OUString() : medium->GetName()))
-                {
-                    bAskUpdate = true;
-                }
-            }
-            if( bUpdate )
-            {
-                SfxMedium* pMedium = m_rDoc.GetDocShell()->GetMedium();
-                SfxFrame* pFrame = pMedium ? pMedium->GetLoadTargetFrame() : nullptr;
-                vcl::Window* pDlgParent = pFrame ? &pFrame->GetWindow() : nullptr;
+    if (!m_rDoc.GetDocShell())
+        return;
+    SfxObjectCreateMode eMode = m_rDoc.GetDocShell()->GetCreateMode();
+    if (eMode == SfxObjectCreateMode::INTERNAL)
+        return;
+    if (eMode == SfxObjectCreateMode::ORGANIZER)
+        return;
+    if (m_rDoc.GetDocShell()->IsPreview())
+        return;
+    if (GetLinkManager().GetLinks().empty())
+        return;
+    sal_uInt16 nLinkMode = m_rDoc.GetDocumentSettingManager().getLinkUpdateMode(true);
+    sal_uInt16 nUpdateDocMode = m_rDoc.GetDocShell()->GetUpdateDocMode();
+    if (nLinkMode == NEVER && nUpdateDocMode != document::UpdateDocMode::FULL_UPDATE)
+        return;
 
-                GetLinkManager().UpdateAllLinks( bAskUpdate, true, false, pDlgParent );
-            }
+    bool bAskUpdate = nLinkMode == MANUAL;
+    bool bUpdate = true;
+    switch(nUpdateDocMode)
+    {
+        case document::UpdateDocMode::NO_UPDATE:   bUpdate = false;break;
+        case document::UpdateDocMode::QUIET_UPDATE:bAskUpdate = false; break;
+        case document::UpdateDocMode::FULL_UPDATE: bAskUpdate = true; break;
+    }
+    if (nLinkMode == AUTOMATIC && !bAskUpdate)
+    {
+        SfxMedium * medium = m_rDoc.GetDocShell()->GetMedium();
+        if (!SvtSecurityOptions().isTrustedLocationUriForUpdatingLinks(
+                medium == nullptr ? OUString() : medium->GetName()))
+        {
+            bAskUpdate = true;
         }
+    }
+    comphelper::EmbeddedObjectContainer& rEmbeddedObjectContainer = m_rDoc.GetDocShell()->getEmbeddedObjectContainer();
+    if (bUpdate)
+    {
+        rEmbeddedObjectContainer.setUserAllowsLinkUpdate(true);
+
+        SfxMedium* pMedium = m_rDoc.GetDocShell()->GetMedium();
+        SfxFrame* pFrame = pMedium ? pMedium->GetLoadTargetFrame() : nullptr;
+        weld::Window* pDlgParent = pFrame ? pFrame->GetWindow().GetFrameWeld() : nullptr;
+
+        GetLinkManager().UpdateAllLinks( bAskUpdate, false, pDlgParent );
+    }
+    else
+    {
+        rEmbeddedObjectContainer.setUserAllowsLinkUpdate(false);
     }
 }
 
@@ -253,7 +262,7 @@ bool DocumentLinksAdministrationManager::GetData( const OUString& rItem, const O
 
         // Do we already have the Item?
         OUString sItem( bCaseSensitive ? rItem : GetAppCharClass().lowercase(rItem));
-        _FindItem aPara( sItem );
+        FindItem aPara( sItem );
         for( const SwSectionFormat* pFormat : m_rDoc.GetSections() )
         {
             if (!(lcl_FindSection(pFormat, &aPara, bCaseSensitive)))
@@ -269,7 +278,7 @@ bool DocumentLinksAdministrationManager::GetData( const OUString& rItem, const O
         bCaseSensitive = false;
     }
 
-    _FindItem aPara( GetAppCharClass().lowercase( rItem ));
+    FindItem aPara( GetAppCharClass().lowercase( rItem ));
     for( const SwFrameFormat* pFormat : *m_rDoc.GetTableFrameFormats() )
     {
         if (!(lcl_FindTable(pFormat, &aPara)))
@@ -298,7 +307,7 @@ bool DocumentLinksAdministrationManager::SetData( const OUString& rItem, const O
 
         // Do we already have the Item?
         OUString sItem( bCaseSensitive ? rItem : GetAppCharClass().lowercase(rItem));
-        _FindItem aPara( sItem );
+        FindItem aPara( sItem );
         for( const SwSectionFormat* pFormat : m_rDoc.GetSections() )
         {
             if (!(lcl_FindSection(pFormat, &aPara, bCaseSensitive)))
@@ -315,7 +324,7 @@ bool DocumentLinksAdministrationManager::SetData( const OUString& rItem, const O
     }
 
     OUString sItem(GetAppCharClass().lowercase(rItem));
-    _FindItem aPara( sItem );
+    FindItem aPara( sItem );
     for( const SwFrameFormat* pFormat : *m_rDoc.GetTableFrameFormats() )
     {
         if (!(lcl_FindTable(pFormat, &aPara)))
@@ -346,7 +355,7 @@ bool DocumentLinksAdministrationManager::SetData( const OUString& rItem, const O
         if(pObj)
             return pObj;
 
-        _FindItem aPara(bCaseSensitive ? rItem : GetAppCharClass().lowercase(rItem));
+        FindItem aPara(bCaseSensitive ? rItem : GetAppCharClass().lowercase(rItem));
         // sections
         for( const SwSectionFormat* pFormat : m_rDoc.GetSections() )
         {
@@ -369,7 +378,7 @@ bool DocumentLinksAdministrationManager::SetData( const OUString& rItem, const O
         bCaseSensitive = false;
     }
 
-    _FindItem aPara( GetAppCharClass().lowercase(rItem) );
+    FindItem aPara( GetAppCharClass().lowercase(rItem) );
     // tables
     for( const SwFrameFormat* pFormat : *m_rDoc.GetTableFrameFormats() )
     {
@@ -405,8 +414,8 @@ bool DocumentLinksAdministrationManager::EmbedAllLinks()
             xLink->Closed();
 
             // if one forgot to remove itself
-            if( xLink.Is() )
-                rLnkMgr.Remove( xLink );
+            if( xLink.is() )
+                rLnkMgr.Remove( xLink.get() );
 
             bRet = true;
         }
@@ -429,17 +438,16 @@ bool DocumentLinksAdministrationManager::LinksUpdated() const
 
 DocumentLinksAdministrationManager::~DocumentLinksAdministrationManager()
 {
-    DELETEZ( mpLinkMgr );
 }
 
-bool DocumentLinksAdministrationManager::SelectServerObj( const OUString& rStr, SwPaM*& rpPam, SwNodeRange*& rpRange ) const
+bool DocumentLinksAdministrationManager::SelectServerObj( const OUString& rStr, SwPaM*& rpPam, std::unique_ptr<SwNodeRange>& rpRange ) const
 {
     // Do we actually have the Item?
     rpPam = nullptr;
     rpRange = nullptr;
 
     OUString sItem( INetURLObject::decode( rStr,
-                                         INetURLObject::DECODE_WITH_CHARSET ));
+                                         INetURLObject::DecodeMechanism::WithCharset ));
 
     sal_Int32 nPos = sItem.indexOf( cMarkSeparator );
 
@@ -454,7 +462,7 @@ bool DocumentLinksAdministrationManager::SelectServerObj( const OUString& rStr, 
         OUString sCmp( sItem.copy( nPos + 1 ));
         sItem = rCC.lowercase( sItem );
 
-        _FindItem aPara( sName );
+        FindItem aPara( sName );
 
         if( sCmp == "table" )
         {
@@ -466,8 +474,8 @@ bool DocumentLinksAdministrationManager::SelectServerObj( const OUString& rStr, 
             }
             if( aPara.pTableNd )
             {
-                rpRange = new SwNodeRange( *aPara.pTableNd, 0,
-                                *aPara.pTableNd->EndOfSectionNode(), 1 );
+                rpRange.reset(new SwNodeRange( *aPara.pTableNd, 0,
+                                *aPara.pTableNd->EndOfSectionNode(), 1 ));
                 return true;
             }
         }
@@ -480,7 +488,7 @@ bool DocumentLinksAdministrationManager::SelectServerObj( const OUString& rStr, 
                 nullptr != ( pIdx = const_cast<SwNodeIndex*>(pFlyFormat->GetContent().GetContentIdx()) ) &&
                 !( pNd = &pIdx->GetNode())->IsNoTextNode() )
             {
-                rpRange = new SwNodeRange( *pNd, 1, *pNd->EndOfSectionNode() );
+                rpRange.reset(new SwNodeRange( *pNd, 1, *pNd->EndOfSectionNode() ));
                 return true;
             }
         }
@@ -491,16 +499,16 @@ bool DocumentLinksAdministrationManager::SelectServerObj( const OUString& rStr, 
         }
         else if( sCmp == "outline" )
         {
-            SwPosition aPos( SwNodeIndex( (SwNodes&)m_rDoc.GetNodes() ));
-            if( m_rDoc.GotoOutline( aPos, sName ))
+            SwPosition aPos( SwNodeIndex( m_rDoc.GetNodes() ));
+            if (m_rDoc.GotoOutline(aPos, sName, nullptr))
             {
                 SwNode* pNd = &aPos.nNode.GetNode();
                 const int nLvl = pNd->GetTextNode()->GetAttrOutlineLevel()-1;
 
                 const SwOutlineNodes& rOutlNds = m_rDoc.GetNodes().GetOutLineNds();
-                sal_uInt16 nTmpPos;
+                SwOutlineNodes::size_type nTmpPos;
                 (void)rOutlNds.Seek_Entry( pNd, &nTmpPos );
-                rpRange = new SwNodeRange( aPos.nNode, 0, aPos.nNode );
+                rpRange.reset(new SwNodeRange( aPos.nNode, 0, aPos.nNode ));
 
                 // look for the section's end, now
                 for( ++nTmpPos;
@@ -536,7 +544,7 @@ bool DocumentLinksAdministrationManager::SelectServerObj( const OUString& rStr, 
             return static_cast<bool>(rpPam);
         }
 
-        _FindItem aPara( bCaseSensitive ? sItem : rCC.lowercase( sItem ) );
+        FindItem aPara( bCaseSensitive ? sItem : rCC.lowercase( sItem ) );
 
         if( !m_rDoc.GetSections().empty() )
         {
@@ -547,8 +555,8 @@ bool DocumentLinksAdministrationManager::SelectServerObj( const OUString& rStr, 
             }
             if( aPara.pSectNd )
             {
-                rpRange = new SwNodeRange( *aPara.pSectNd, 1,
-                                        *aPara.pSectNd->EndOfSectionNode() );
+                rpRange.reset(new SwNodeRange( *aPara.pSectNd, 1,
+                                        *aPara.pSectNd->EndOfSectionNode() ));
                 return true;
 
             }

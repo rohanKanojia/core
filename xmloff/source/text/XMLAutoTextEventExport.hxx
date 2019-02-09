@@ -54,19 +54,16 @@ public:
         const css::uno::Reference< css::uno::XComponentContext >& xContext, OUString const & implementationName, SvXMLExportFlags nFlags
         );
 
-    virtual ~XMLAutoTextEventExport();
+    virtual ~XMLAutoTextEventExport() override;
 
     // XInitialization
     virtual void SAL_CALL initialize(
-        const css::uno::Sequence<css::uno::Any> & rArguments )
-        throw(
-            css::uno::Exception,
-            css::uno::RuntimeException, std::exception) override;
+        const css::uno::Sequence<css::uno::Any> & rArguments ) override;
 
-protected:
+private:
 
     /// export the events off all autotexts
-    virtual sal_uInt32 exportDoc(
+    virtual ErrCode exportDoc(
         enum ::xmloff::token::XMLTokenEnum eClass = xmloff::token::XML_TOKEN_INVALID ) override;
 
     /// does the document have any events ?

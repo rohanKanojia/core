@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vbalistcontrolhelper.hxx>
+#include "vbalistcontrolhelper.hxx"
 #include <vector>
 #include <vbahelper/vbapropvalue.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
 
 using namespace com::sun::star;
 using namespace ooo::vba;
@@ -28,8 +29,8 @@ class ListPropListener : public PropListener
 {
 private:
     uno::Reference< beans::XPropertySet > m_xProps;
-    uno::Any m_pvargIndex;
-    uno::Any m_pvarColumn;
+    uno::Any const m_pvargIndex;
+    uno::Any const m_pvarColumn;
 
 public:
     ListPropListener( const uno::Reference< beans::XPropertySet >& xProps, const uno::Any& pvargIndex, const uno::Any& pvarColumn );
@@ -74,13 +75,13 @@ uno::Any ListPropListener::getValueEvent()
             sReturnArray[ i ].realloc( 10 );
             sReturnArray[ i ][ 0 ] = sList[ i ];
         }
-        aRet = uno::makeAny( sReturnArray );
+        aRet <<= sReturnArray;
     }
     return aRet;
 }
 
-void SAL_CALL
-ListControlHelper::AddItem( const uno::Any& pvargItem, const uno::Any& pvargIndex ) throw (uno::RuntimeException)
+void
+ListControlHelper::AddItem( const uno::Any& pvargItem, const uno::Any& pvargIndex )
 {
     if ( pvargItem.hasValue()  )
     {
@@ -134,8 +135,8 @@ ListControlHelper::AddItem( const uno::Any& pvargItem, const uno::Any& pvargInde
     }
 }
 
-void SAL_CALL
-ListControlHelper::removeItem( const uno::Any& index ) throw (uno::RuntimeException)
+void
+ListControlHelper::removeItem( const uno::Any& index )
 {
     sal_Int32 nIndex = 0;
     // for int index
@@ -163,31 +164,31 @@ ListControlHelper::removeItem( const uno::Any& index ) throw (uno::RuntimeExcept
     }
 }
 
-void SAL_CALL
-ListControlHelper::Clear(  ) throw (uno::RuntimeException)
+void
+ListControlHelper::Clear(  )
 {
     // urk, setValue doesn't seem to work !!
     //setValue( uno::makeAny( sal_Int16() ) );
     m_xProps->setPropertyValue( "StringItemList", uno::makeAny( uno::Sequence< OUString >() ) );
 }
 
-void SAL_CALL
-ListControlHelper::setRowSource( const OUString& _rowsource ) throw (uno::RuntimeException)
+void
+ListControlHelper::setRowSource( const OUString& _rowsource )
 {
     if ( _rowsource.isEmpty() )
         Clear();
 }
 
-sal_Int32 SAL_CALL
-ListControlHelper::getListCount() throw (uno::RuntimeException)
+sal_Int32
+ListControlHelper::getListCount()
 {
     uno::Sequence< OUString > sList;
     m_xProps->getPropertyValue( "StringItemList" ) >>= sList;
     return sList.getLength();
 }
 
-uno::Any SAL_CALL
-ListControlHelper::List( const ::uno::Any& pvargIndex, const uno::Any& pvarColumn ) throw (uno::RuntimeException)
+uno::Any
+ListControlHelper::List( const ::uno::Any& pvargIndex, const uno::Any& pvarColumn )
 {
     return uno::makeAny( uno::Reference< XPropValue > ( new ScVbaPropValue( new ListPropListener( m_xProps, pvargIndex, pvarColumn ) ) ) );
 }

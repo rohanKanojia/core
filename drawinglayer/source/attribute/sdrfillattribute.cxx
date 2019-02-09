@@ -103,25 +103,20 @@ namespace drawinglayer
         {
         }
 
-        SdrFillAttribute::SdrFillAttribute(const SdrFillAttribute& rCandidate)
-        :   mpSdrFillAttribute(rCandidate.mpSdrFillAttribute)
-        {
-        }
+        SdrFillAttribute::SdrFillAttribute(const SdrFillAttribute&) = default;
 
-        SdrFillAttribute::~SdrFillAttribute()
-        {
-        }
+        SdrFillAttribute::SdrFillAttribute(SdrFillAttribute&&) = default;
+
+        SdrFillAttribute::~SdrFillAttribute() = default;
 
         bool SdrFillAttribute::isDefault() const
         {
             return mpSdrFillAttribute.same_object(theGlobalDefault::get());
         }
 
-        SdrFillAttribute& SdrFillAttribute::operator=(const SdrFillAttribute& rCandidate)
-        {
-            mpSdrFillAttribute = rCandidate.mpSdrFillAttribute;
-            return *this;
-        }
+        SdrFillAttribute& SdrFillAttribute::operator=(const SdrFillAttribute&) = default;
+
+        SdrFillAttribute& SdrFillAttribute::operator=(SdrFillAttribute&&) = default;
 
         bool SdrFillAttribute::operator==(const SdrFillAttribute& rCandidate) const
         {

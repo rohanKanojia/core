@@ -19,33 +19,30 @@
 
 
 #if defined(_WIN32)
-#if defined _MSC_VER
-#pragma warning(push, 1)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 #endif
 
 #include <string>
 #include <string.h>
-#include "osl/mutex.hxx"
-#include "osl/module.hxx"
-#include "osl/thread.hxx"
-#include "rtl/ustring.hxx"
-#include "rtl/ustrbuf.hxx"
-#include "rtl/bootstrap.hxx"
-#include "osl/file.hxx"
-#include "osl/process.h"
-#include "rtl/instance.hxx"
-#include "rtl/uri.hxx"
-#include "osl/getglobalmutex.hxx"
-#include "com/sun/star/lang/IllegalArgumentException.hpp"
-#include "cppuhelper/bootstrap.hxx"
+#include <osl/module.hxx>
+#include <osl/thread.hxx>
+#include <rtl/ustring.hxx>
+#include <rtl/ustrbuf.hxx>
+#include <rtl/bootstrap.hxx>
+#include <osl/file.hxx>
+#include <osl/process.h>
+#include <rtl/instance.hxx>
+#include <rtl/uri.hxx>
+#include <sal/log.hxx>
+#include <osl/getglobalmutex.hxx>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
+#include <cppuhelper/bootstrap.hxx>
 
 #include "framework.hxx"
-#include "fwkutil.hxx"
+#include <fwkutil.hxx>
 #include <memory>
 
 using namespace osl;
@@ -63,24 +60,25 @@ bool isAccessibilitySupportDesired()
 
 #ifdef _WIN32
     bool retVal = false;
-    HKEY    hKey = 0;
-    if (RegOpenKeyEx(HKEY_CURRENT_USER,
-                     "Software\\LibreOffice\\Accessibility\\AtToolSupport",
-                     0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    HKEY    hKey = nullptr;
+    if (RegOpenKeyExA(HKEY_CURRENT_USER,
+                      "Software\\LibreOffice\\Accessibility\\AtToolSupport",
+                      0, KEY_READ, &hKey) == ERROR_SUCCESS)
     {
         DWORD   dwType = 0;
         DWORD   dwLen = 16;
         unsigned char arData[16];
-        if( RegQueryValueEx(hKey, "SupportAssistiveTechnology", NULL, &dwType, arData,
-                            & dwLen)== ERROR_SUCCESS)
+        if( RegQueryValueExA(hKey, "SupportAssistiveTechnology", nullptr, &dwType, arData,
+                             &dwLen)== ERROR_SUCCESS)
         {
             if (dwType == REG_SZ)
             {
-                if (strcmp((char*) arData, "true") == 0
-                    || strcmp((char*) arData, "1") == 0)
+                arData[std::min(dwLen, DWORD(15))] = 0;
+                if (strcmp(reinterpret_cast<char*>(arData), "true") == 0
+                    || strcmp(reinterpret_cast<char*>(arData), "1") == 0)
                     retVal = true;
-                else if (strcmp((char*) arData, "false") == 0
-                         || strcmp((char*) arData, "0") == 0)
+                else if (strcmp(reinterpret_cast<char*>(arData), "false") == 0
+                         || strcmp(reinterpret_cast<char*>(arData), "0") == 0)
                     retVal = false;
                 else
                     SAL_WARN("jfw", "bad registry value " << arData);
@@ -96,9 +94,8 @@ bool isAccessibilitySupportDesired()
                         "jfw", "bad registry value " << unsigned(arData[0]));
             }
         }
+        RegCloseKey(hKey);
     }
-    RegCloseKey(hKey);
-
 #elif defined UNX
     // Java is no longer required for a11y - we use atk directly.
     bool retVal = ::rtl::Bootstrap::get( "JFW_PLUGIN_FORCE_ACCESSIBILITY", sValue) && sValue == "1";
@@ -176,20 +173,19 @@ rtl::ByteSequence decodeBase16(const rtl::ByteSequence& data)
 
 OUString getDirFromFile(const OUString& usFilePath)
 {
-    sal_Int32 index= usFilePath.lastIndexOf('/');
-    return OUString(usFilePath.getStr(), index);
+    sal_Int32 index = usFilePath.lastIndexOf('/');
+    return usFilePath.copy(0, index);
 }
 
 OUString getLibraryLocation()
 {
-    OString sExcMsg("[Java framework] Error in function getLibraryLocation "
-                         "(fwkutil.cxx).");
     OUString libraryFileUrl;
 
     if (!osl::Module::getUrlFromAddress(
             reinterpret_cast< oslGenericFunction >(getLibraryLocation),
             libraryFileUrl))
-        throw FrameworkException(JFW_E_ERROR, sExcMsg);
+        throw FrameworkException(JFW_E_ERROR,
+                    "[Java framework] Error in function getLibraryLocation (fwkutil.cxx).");
 
     return getDirFromFile(libraryFileUrl);
 }

@@ -18,10 +18,10 @@
  */
 
 
-#include "accessibility/extended/accessibletablistbox.hxx"
-#include "accessibility/extended/accessibletablistboxtable.hxx"
-#include <svtools/svtabbx.hxx>
-#include <comphelper/sequence.hxx>
+#include <extended/accessibletablistbox.hxx>
+#include <extended/accessibletablistboxtable.hxx>
+#include <vcl/svtabbx.hxx>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 
 
 namespace accessibility
@@ -41,7 +41,6 @@ namespace accessibility
     AccessibleTabListBox::AccessibleTabListBox( const Reference< XAccessible >& rxParent, SvHeaderTabListBox& rBox )
         :AccessibleBrowseBox( rxParent, nullptr, rBox )
         ,m_pTabListBox( &rBox )
-
     {
         osl_atomic_increment( &m_refCount );
         {
@@ -75,24 +74,19 @@ namespace accessibility
     // XAccessibleContext ---------------------------------------------------------
 
     sal_Int32 SAL_CALL AccessibleTabListBox::getAccessibleChildCount()
-        throw ( uno::RuntimeException, std::exception )
     {
         return 2; // header and table
     }
 
-
-    Reference< XAccessibleContext > SAL_CALL AccessibleTabListBox::getAccessibleContext() throw ( RuntimeException, std::exception )
+    Reference< XAccessibleContext > SAL_CALL AccessibleTabListBox::getAccessibleContext()
     {
         return this;
     }
 
-
     Reference< XAccessible > SAL_CALL
     AccessibleTabListBox::getAccessibleChild( sal_Int32 nChildIndex )
-        throw ( IndexOutOfBoundsException, RuntimeException, std::exception )
     {
-        SolarMutexGuard aSolarGuard;
-        ::osl::MutexGuard aGuard( getOslMutex() );
+        SolarMethodGuard aGuard(getMutex());
         ensureIsAlive();
 
         if ( nChildIndex < 0 || nChildIndex > 1 )
@@ -102,10 +96,10 @@ namespace accessibility
         if (nChildIndex == 0)
         {
             //! so far the actual implementation object only supports column headers
-            xRet = implGetFixedChild( ::svt::BBINDEX_COLUMNHEADERBAR );
+            xRet = implGetHeaderBar( ::vcl::BBTYPE_COLUMNHEADERBAR );
         }
         else if (nChildIndex == 1)
-            xRet = implGetFixedChild( ::svt::BBINDEX_TABLE );
+            xRet = implGetTable();
 
         if ( !xRet.is() )
             throw RuntimeException();

@@ -28,12 +28,13 @@
 #include <tools/gen.hxx>
 
 class SdrObject;
+class SdrObjCustomShape;
 
-class EnhancedCustomShape3d
+class EnhancedCustomShape3d final
 {
     class Transformation2D
     {
-        Point                                   aCenter;
+        Point const                  aCenter;
         css::drawing::ProjectionMode eProjectionMode;
 
         // parallel projection
@@ -41,7 +42,6 @@ class EnhancedCustomShape3d
         double      fSkew;          // in percent
 
         // perspective projection
-        double      fZScreen;
         basegfx::B3DPoint       fViewPoint;
         double      fOriginX;
         double      fOriginY;
@@ -49,8 +49,9 @@ class EnhancedCustomShape3d
         const double* pMap;
 
         public:
-
-                        Transformation2D( const SdrObject* pCustomShape, const Rectangle& rBoundRect, const double* pMap );
+            Transformation2D(
+                const SdrObjCustomShape& rSdrObjCustomShape,
+                const double* pMap);
 
             basegfx::B3DPolygon ApplySkewSettings( const basegfx::B3DPolygon& rPolygon3D ) const;
             Point       Transform2D( const basegfx::B3DPoint& rPoint ) const;
@@ -59,11 +60,16 @@ class EnhancedCustomShape3d
 
     friend class Transformation2D;
 
-    protected:
-        static Rectangle CalculateNewSnapRect( const SdrObject* pCustomShape, const Rectangle& rSnapRect, const Rectangle& rBoundRect, const double* pMap );
+    static tools::Rectangle CalculateNewSnapRect(
+        const SdrObjCustomShape& rSdrObjCustomShape,
+        const tools::Rectangle& rSnapRect,
+        const tools::Rectangle& rBoundRect,
+        const double* pMap);
 
-    public:
-        static SdrObject* Create3DObject( const SdrObject* pShape2d, const SdrObject* pCustomShape );
+public:
+    static SdrObject* Create3DObject(
+        const SdrObject* pShape2d,
+        const SdrObjCustomShape& rSdrObjCustomShape);
 };
 
 #endif

@@ -11,15 +11,14 @@
 
 #include <com/sun/star/awt/XBitmap.hpp>
 #include <com/sun/star/graphic/XGraphic.hpp>
-#include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/LineJoint.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
-#include <com/sun/star/drawing/XControlShape.hpp>
 #include <com/sun/star/awt/Gradient.hpp>
 #include <com/sun/star/style/TabStop.hpp>
 #include <com/sun/star/view/XViewSettingsSupplier.hpp>
 #include <com/sun/star/text/RelOrientation.hpp>
+#include <com/sun/star/text/XFootnote.hpp>
 #include <com/sun/star/text/XTextFrame.hpp>
 #include <com/sun/star/text/XTextTable.hpp>
 #include <com/sun/star/text/XTextFramesSupplier.hpp>
@@ -32,7 +31,6 @@
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <com/sun/star/table/BorderLine2.hpp>
 #include <com/sun/star/table/ShadowFormat.hpp>
-#include <com/sun/star/text/GraphicCrop.hpp>
 #include <com/sun/star/text/XPageCursor.hpp>
 #include <com/sun/star/awt/FontWeight.hpp>
 #include <com/sun/star/awt/FontUnderline.hpp>
@@ -42,7 +40,6 @@
 #include <com/sun/star/xml/dom/XDocument.hpp>
 #include <com/sun/star/style/BreakType.hpp>
 #include <unotools/tempfile.hxx>
-#include <comphelper/sequenceashashmap.hxx>
 #include <com/sun/star/text/XDocumentIndex.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeSegment.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeSegmentCommand.hpp>
@@ -54,6 +51,8 @@
 
 #include <string>
 #include <config_features.h>
+#include <unocrsr.hxx>
+#include <ndtxt.hxx>
 
 class Test : public SwModelTestBase
 {
@@ -68,9 +67,6 @@ protected:
         const char* aBlacklist[] = {
             "math-escape.docx",
             "math-mso2k7.docx",
-            "ImageCrop.docx",
-            "test_GIF_ImageCrop.docx",
-            "test_PNG_ImageCrop.docx"
         };
         std::vector<const char*> vBlacklist(aBlacklist, aBlacklist + SAL_N_ELEMENTS(aBlacklist));
 
@@ -119,7 +115,7 @@ DECLARE_OOXMLEXPORT_TEST(testTscp, "tscp.docx")
         rdf::Statement aStatement = xStatements->nextElement().get<rdf::Statement>();
         aActualStatements[aStatement.Predicate->getNamespace() + aStatement.Predicate->getLocalName()] = aStatement.Object->getStringValue();
     }
-    CPPUNIT_ASSERT(aExpectedStatements == aActualStatements);
+    CPPUNIT_ASSERT(bool(aExpectedStatements == aActualStatements));
 
     // No RDF statement on the third paragraph.
     xParagraph.set(getParagraph(3), uno::UNO_QUERY);
@@ -373,8 +369,6 @@ DECLARE_OOXMLEXPORT_TEST(testFDO77812, "fdo77812.docx")
     assertXPath(pXmlDoc, "/w:document/w:body/w:sectPr/w:cols/w:col[2]", 1);
 }
 
-//This test gives errors due to ATL
-#if HAVE_FEATURE_ATL
 DECLARE_OOXMLEXPORT_TEST(testContentTypeOLE, "fdo77759.docx")
 {
     xmlDocPtr pXmlDoc = parseExport("[Content_Types].xml");
@@ -400,7 +394,6 @@ DECLARE_OOXMLEXPORT_TEST(testContentTypeOLE, "fdo77759.docx")
         "ProgID",
         "Excel.Sheet.12");
 }
-#endif
 
 DECLARE_OOXMLEXPORT_TEST(testfdo78420, "fdo78420.docx")
 {
@@ -489,7 +482,7 @@ DECLARE_OOXMLEXPORT_TEST(testfdo78882, "fdo78882.docx")
     // Ensure that Section Break is getting written inside second paragraph
     assertXPath(pXmlDoc, "/w:document[1]/w:body[1]/w:p[2]/w:pPr[1]/w:sectPr[1]",1);
 
-    // Ensure that no dummy paragarph gets created inside second paragraph for Section Break
+    // Ensure that no dummy paragraph gets created inside second paragraph for Section Break
     assertXPath(pXmlDoc, "/w:document[1]/w:body[1]/w:p[2]/w:p[1]/w:pPr[1]/w:sectPr[1]",0);
 }
 
@@ -520,9 +513,9 @@ DECLARE_OOXMLEXPORT_TEST(testfdo79540, "fdo79540.docx")
     if (!pXmlDoc)
         return;
 
-    // Ensure that two separate w:drawing tags are written after the code changes.
-    assertXPath ( pXmlDoc, "/w:document/w:body/w:p/w:r[2]/mc:AlternateContent/mc:Choice/w:drawing",1);
-    assertXPath ( pXmlDoc, "/w:document/w:body/w:p/w:r[3]/mc:AlternateContent/mc:Choice/w:drawing",1);
+    // Ensure that two separate w:drawing tags are written and they are not nested.
+    assertXPath(pXmlDoc, "/w:document/w:body/w:tbl/w:tr/w:tc/w:p/w:r/mc:AlternateContent/mc:Choice/w:drawing", 1);
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/mc:AlternateContent/mc:Choice/w:drawing", 1);
 }
 
 DECLARE_OOXMLEXPORT_TEST(testFDO79062, "fdo79062.docx")
@@ -536,6 +529,20 @@ DECLARE_OOXMLEXPORT_TEST(testFDO79062, "fdo79062.docx")
     if (!pXmlEndNotes)
         return;
     assertXPath(pXmlEndNotes, "/w:endnotes", "Ignorable", "w14 wp14");
+
+    //tdf#93121 don't add fake tabs in front of extra footnote paragraphs
+    uno::Reference<text::XFootnotesSupplier> xFootnoteSupp(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xFootnoteIdxAcc(xFootnoteSupp->getFootnotes(), uno::UNO_QUERY);
+    uno::Reference<text::XFootnote> xFootnote(xFootnoteIdxAcc->getByIndex(0), uno::UNO_QUERY);
+    uno::Reference<text::XText> xFootnoteText(xFootnote, uno::UNO_QUERY);
+    uno::Reference<container::XEnumerationAccess>xParaEnumAccess(xFootnoteText->getText(), uno::UNO_QUERY);
+    uno::Reference<container::XEnumeration>xParaEnum = xParaEnumAccess->createEnumeration();
+
+    uno::Reference<text::XTextRange> xTextRange;
+    xParaEnum->nextElement();
+    xParaEnum->nextElement() >>= xTextRange;
+    OUString sFootnotePara = xTextRange->getString();
+    CPPUNIT_ASSERT_EQUAL_MESSAGE( "Paragraph starts with W(87), not tab(9)", u'W', sFootnotePara[0] );
 }
 
 DECLARE_OOXMLEXPORT_TEST(testfdo79668,"fdo79668.docx")
@@ -562,6 +569,15 @@ DECLARE_OOXMLEXPORT_TEST(testfdo78907,"fdo78907.docx")
     if (!pXmlDoc1)
         return;
     assertXPath ( pXmlDoc1, "/w:ftr[1]/w:tbl[1]/w:tr[1]/w:tc[1]/w:tbl[1]/w:tr[1]/w:tc[1]/w:tbl", 0 );
+}
+
+DECLARE_OOXMLEXPORT_TEST(tdf118702,"tdf118702.odt")
+{
+    xmlDocPtr pXmlDoc = parseExport("word/document.xml");
+    if (!pXmlDoc)
+        return;
+    assertXPath ( pXmlDoc, "/w:document/w:body/w:p[1]/w:pPr/w:sectPr/w:type", "val", "nextPage" );
+    assertXPath ( pXmlDoc, "/w:document/w:body/w:p[1]/w:pPr/w:sectPr/w:pgSz", "orient", "landscape" );
 }
 
 DECLARE_OOXMLEXPORT_TEST(testfdo79822, "fdo79822.docx")
@@ -655,47 +671,19 @@ DECLARE_OOXMLEXPORT_TEST(testfdo80097, "fdo80097.docx")
     if (!pXmlDocument)
         return;
 
-    //Table Borders
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:top[@w:val = 'single']",1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:top[@w:sz = 4]", 1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:top[@w:space = 0]", 1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:top[@w:color = '00000A']", 1);
-
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:bottom[@w:val = 'single']",1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:bottom[@w:sz = 4]", 1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:bottom[@w:space = 0]", 1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:bottom[@w:color = '00000A']", 1);
-
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:insideH[@w:val = 'single']",1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:insideH[@w:sz = 4]", 1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:insideH[@w:space = 0]", 1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:insideH[@w:color = '00000A']", 1);
-
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:insideV[@w:val = 'single']",1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:insideV[@w:sz = 4]", 1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:insideV[@w:space = 0]", 1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tblPr/w:tblBorders/w:insideV[@w:color = '00000A']", 1);
-
     //Table Cell Borders
     assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:top[@w:val = 'single']",1);
     assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:top[@w:sz = 4]", 1);
     assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:top[@w:space = 0]", 1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:top[@w:color = '00000A']", 1);
+    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:top[@w:color = '000000']", 1);
 
     assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:bottom[@w:val = 'single']",1);
     assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:bottom[@w:sz = 4]", 1);
     assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:bottom[@w:space = 0]", 1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:bottom[@w:color = '00000A']", 1);
+    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:bottom[@w:color = '000000']", 1);
 
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:insideH[@w:val = 'single']",1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:insideH[@w:sz = 4]", 1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:insideH[@w:space = 0]", 1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:insideH[@w:color = '00000A']", 1);
-
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:insideV[@w:val = 'single']",1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:insideV[@w:sz = 4]", 1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:insideV[@w:space = 0]", 1);
-    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:insideV[@w:color = '00000A']", 1);
+    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:insideH",0);
+    assertXPath(pXmlDocument, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:tbl/w:tr[1]/w:tc[1]/w:tcPr/w:tcBorders/w:insideV",0);
 }
 
 DECLARE_OOXMLEXPORT_TEST(testFdo77129, "fdo77129.docx")
@@ -707,7 +695,7 @@ DECLARE_OOXMLEXPORT_TEST(testFdo77129, "fdo77129.docx")
        return;
 
     // Data was lost from this paragraph.
-    assertXPathContent(pXmlDoc, "/w:document/w:body/w:p[5]/w:r[1]/w:t", "Abstract");
+    assertXPathContent(pXmlDoc, "/w:document/w:body/w:p[4]/w:r[1]/w:t", "Abstract");
 }
 
 DECLARE_OOXMLEXPORT_TEST(testfdo79969_xlsm, "fdo79969_xlsm.docx")
@@ -737,8 +725,6 @@ DECLARE_OOXMLEXPORT_TEST(testfdo79969_xlsm, "fdo79969_xlsm.docx")
         "Excel.SheetMacroEnabled.12");
 }
 
-//This test gives errors due to ATL
-#if HAVE_FEATURE_ATL
 DECLARE_OOXMLEXPORT_TEST(testfdo80522,"fdo80522.docx")
 {
    xmlDocPtr pXmlDoc = parseExport("[Content_Types].xml");
@@ -764,10 +750,7 @@ DECLARE_OOXMLEXPORT_TEST(testfdo80522,"fdo80522.docx")
         "ProgID",
         "Word.DocumentMacroEnabled.12");
 }
-#endif
 
-//This test gives errors due to ATL
-#if HAVE_FEATURE_ATL
 DECLARE_OOXMLEXPORT_TEST(testfdo80523_pptm,"fdo80523_pptm.docx")
 {
    xmlDocPtr pXmlDoc = parseExport("[Content_Types].xml");
@@ -793,7 +776,6 @@ DECLARE_OOXMLEXPORT_TEST(testfdo80523_pptm,"fdo80523_pptm.docx")
         "ProgID",
         "PowerPoint.ShowMacroEnabled.12");
 }
-#endif
 
 DECLARE_OOXMLEXPORT_TEST(testfdo80523_sldm,"fdo80523_sldm.docx")
 {
@@ -821,8 +803,6 @@ DECLARE_OOXMLEXPORT_TEST(testfdo80523_sldm,"fdo80523_sldm.docx")
         "PowerPoint.SlideMacroEnabled.12");
 }
 
-//This test gives errors due to ATL
-#if HAVE_FEATURE_ATL
 DECLARE_OOXMLEXPORT_TEST(testfdo80898, "fdo80898.docx")
 {
     // This UT for DOCX embedded with binary excel work sheet.
@@ -849,11 +829,10 @@ DECLARE_OOXMLEXPORT_TEST(testfdo80898, "fdo80898.docx")
         "ProgID",
         "Word.Document.8");
 }
-#endif
 
 DECLARE_OOXMLEXPORT_TEST(testTableCellWithDirectFormatting, "fdo80800.docx")
 {
-    // Issue was Direct Foramatting for non-first Table cells was not getting preserved.
+    // Issue was Direct Formatting for non-first Table cells was not getting preserved.
 
     xmlDocPtr pXmlDoc = parseExport("word/document.xml");
     if (!pXmlDoc)
@@ -864,6 +843,63 @@ DECLARE_OOXMLEXPORT_TEST(testTableCellWithDirectFormatting, "fdo80800.docx")
     // For Line Spacing "1.5 lines" w:line equals 360
     assertXPath(pXmlDoc,"/w:document/w:body/w:tbl/w:tr/w:tc[3]/w:p/w:pPr/w:spacing","line","360");
 
+}
+
+DECLARE_OOXMLEXPORT_TEST(testFdo80800b_tableStyle, "fdo80800b_tableStyle.docx")
+{
+    uno::Reference<text::XTextTable> xTable(getParagraphOrTable(1), uno::UNO_QUERY);
+    uno::Reference<text::XTextRange> xCell(xTable->getCellByName("A1"), uno::UNO_QUERY);
+    uno::Reference<container::XEnumerationAccess> xParaEnumAccess(xCell->getText(), uno::UNO_QUERY);
+    uno::Reference<container::XEnumeration> xParaEnum = xParaEnumAccess->createEnumeration();
+    uno::Reference<text::XTextRange> xPara(xParaEnum->nextElement(), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(OUString("Cell1 1.5lines"), xPara->getString());
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Cell A1 1.5 line spacing", sal_Int16(150), getProperty<style::LineSpacing>(xPara, "ParaLineSpacing").Height);
+
+    xCell.set(xTable->getCellByName("B1"), uno::UNO_QUERY);
+    xParaEnumAccess.set(xCell->getText(), uno::UNO_QUERY);
+    xParaEnum = xParaEnumAccess->createEnumeration();
+    xPara.set(xParaEnum->nextElement(), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(OUString("Cell2 Implicit (Single)"), xPara->getString());
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Cell B1 single line spacing", sal_Int16(100), getProperty<style::LineSpacing>(xPara, "ParaLineSpacing").Height);
+
+    xCell.set(xTable->getCellByName("C1"), uno::UNO_QUERY);
+    xParaEnumAccess.set(xCell->getText(), uno::UNO_QUERY);
+    xParaEnum = xParaEnumAccess->createEnumeration();
+    xPara.set(xParaEnum->nextElement(), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(OUString("Cell3 Implicit (Single)"), xPara->getString());
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("C1 paragraph1 single line spacing", sal_Int16(100), getProperty<style::LineSpacing>(xPara, "ParaLineSpacing").Height);
+    xPara.set(xParaEnum->nextElement(), uno::UNO_QUERY);
+    xPara.set(xParaEnum->nextElement(), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("C1 paragraph3 line spacing", sal_Int16(212), getProperty<style::LineSpacing>(xPara, "ParaLineSpacing").Height);
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf117297_tableStyle, "tdf117297_tableStyle.docx")
+{
+    uno::Reference<text::XTextTable> xTable(getParagraphOrTable(1), uno::UNO_QUERY);
+    uno::Reference<text::XTextRange> xCell(xTable->getCellByName("B1"), uno::UNO_QUERY);
+    uno::Reference<container::XEnumerationAccess> xParaEnumAccess(xCell->getText(), uno::UNO_QUERY);
+    uno::Reference<container::XEnumeration> xParaEnum = xParaEnumAccess->createEnumeration();
+    uno::Reference<text::XTextRange> xPara(xParaEnum->nextElement(), uno::UNO_QUERY);
+    uno::Reference<text::XText> xText(xPara->getText(), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(OUString("Green text, default size (9), 1.5 spaced"), xPara->getString());
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Cell B1 Paragraph1 green font", sal_Int32(0x70AD47), getProperty<sal_Int32>(getRun(xPara, 1), "CharColor"));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Cell B1 Paragraph1 1.5 line spacing", sal_Int16(150), getProperty<style::LineSpacing>(xPara, "ParaLineSpacing").Height);
+    xPara.set(xParaEnum->nextElement(), uno::UNO_QUERY);
+    xPara.set(xParaEnum->nextElement(), uno::UNO_QUERY);
+    xText.set(xPara->getText(), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(OUString("TableGrid color (blue), TableGrid size (9), double spacing"), xPara->getString());
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Cell B1 Paragraph3 blue font", sal_Int32(0x00B0F0), getProperty<sal_Int32>(getRun(xPara, 1), "CharColor"));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Cell B1 Paragraph3 double spacing", sal_Int16(200), getProperty<style::LineSpacing>(xPara, "ParaLineSpacing").Height);
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf82175_noStyleInheritance, "tdf82175_noStyleInheritance.docx")
+{
+    // The document's "Default" paragraph style is 1 inch fixed line spacing, and that is what should not be inherited.
+    style::LineSpacing aSpacing = getProperty<style::LineSpacing>(getParagraph(1), "ParaLineSpacing");
+    // MSWord uses 115% line spacing, but LO follows the documentation and sets single spacing.
+    CPPUNIT_ASSERT_MESSAGE("Text Body style 115% line spacing", sal_Int16(120) > aSpacing.Height);
+    CPPUNIT_ASSERT_MESSAGE("THANKS for *FIXING* line spacing", sal_Int16(115) != aSpacing.Height);
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(style::LineSpacingMode::PROP), aSpacing.Mode);
 }
 
 DECLARE_OOXMLEXPORT_TEST(test2colHeader, "2col-header.docx")
@@ -961,13 +997,70 @@ DECLARE_OOXMLEXPORT_TEST(testSectionProtection, "sectionprot.odt")
         assertXPath(pXmlSettings, "/w:settings/w:documentProtection", "enforcement", "true");
         assertXPath(pXmlSettings, "/w:settings/w:documentProtection", "edit", "forms");
     }
+
+    uno::Reference<text::XTextSectionsSupplier> xTextSectionsSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xSections(xTextSectionsSupplier->getTextSections(), uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xSect(xSections->getByIndex(0), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("TextSection is protected", true, getProperty<bool>(xSect, "IsProtected"));
+    xSect.set(xSections->getByIndex(1), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Section1 is protected", false, getProperty<bool>(xSect, "IsProtected"));
+}
+
+DECLARE_OOXMLEXPORT_TEST(tdf66398_permissions, "tdf66398_permissions.docx")
+{
+    // check document permission settings for the whole document
+    if (xmlDocPtr pXmlSettings = parseExport("word/settings.xml"))
+    {
+        assertXPath(pXmlSettings, "/w:settings/w:documentProtection", "edit",               "readOnly");
+        assertXPath(pXmlSettings, "/w:settings/w:documentProtection", "enforcement",        "1");
+        assertXPath(pXmlSettings, "/w:settings/w:documentProtection", "cryptProviderType",  "rsaAES");
+        assertXPath(pXmlSettings, "/w:settings/w:documentProtection", "cryptAlgorithmClass","hash");
+        assertXPath(pXmlSettings, "/w:settings/w:documentProtection", "cryptAlgorithmType", "typeAny");
+        assertXPath(pXmlSettings, "/w:settings/w:documentProtection", "cryptAlgorithmSid",  "14");
+        assertXPath(pXmlSettings, "/w:settings/w:documentProtection", "cryptSpinCount",     "100000");
+        assertXPath(pXmlSettings, "/w:settings/w:documentProtection", "hash",               "A0/Xy6KcXljJlZjP0TwJMPJuW2rc46UwXqn2ctxckc2nCECE5i89M85z2Noh3ZEA5NBQ9RJ5ycxiUH6nzmJaKw==");
+        assertXPath(pXmlSettings, "/w:settings/w:documentProtection", "salt",               "B8k6wb1pkjUs4Nv/8QBk/w==");
+    }
+
+    // get bookmark interface
+    uno::Reference<text::XBookmarksSupplier> xBookmarksSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xBookmarksByIdx(xBookmarksSupplier->getBookmarks(), uno::UNO_QUERY);
+    uno::Reference<container::XNameAccess> xBookmarksByName(xBookmarksSupplier->getBookmarks(), uno::UNO_QUERY);
+
+    // check: we have 2 bookmarks
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(2), xBookmarksByIdx->getCount());
+    CPPUNIT_ASSERT(xBookmarksByName->hasByName("_GoBack"));
+    CPPUNIT_ASSERT(xBookmarksByName->hasByName("permission-for-group:267014232:everyone"));
+}
+
+DECLARE_OOXMLEXPORT_TEST(tdf122201_editUnprotectedText, "tdf122201_editUnprotectedText.odt")
+{
+    // get the document
+    SwXTextDocument* pTextDoc = dynamic_cast<SwXTextDocument *>(mxComponent.get());
+    CPPUNIT_ASSERT(pTextDoc);
+
+    SwDoc* pDoc = pTextDoc->GetDocShell()->GetDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    // get two different nodes
+    SwNodeIndex aDocEnd(pDoc->GetNodes().GetEndOfContent());
+    SwNodeIndex aDocStart(*aDocEnd.GetNode().StartOfSectionNode(), 3);
+
+    // check protected area
+    SwPaM aPaMPortected(aDocStart);
+    CPPUNIT_ASSERT(aPaMPortected.HasReadonlySel(false));
+
+    // check unprotected area
+    SwPaM aPaMUnprotected(aDocEnd);
+    CPPUNIT_ASSERT(!aPaMUnprotected.HasReadonlySel(false));
 }
 
 DECLARE_OOXMLEXPORT_TEST(testSectionHeader, "sectionprot.odt")
 {
     if (xmlDocPtr pXmlDoc = parseExport("word/document.xml"))
     {
-        assertXPath(pXmlDoc, "//w:headerReference", 1);
+        // this test must not be zero
+        assertXPath(pXmlDoc, "//w:headerReference", 2);
     }
 }
 
@@ -981,6 +1074,13 @@ DECLARE_OOXMLEXPORT_TEST(testOO47778_2, "ooo47778-4.odt")
 {
     if (xmlDocPtr pXmlDoc = parseExport("word/document.xml"))
         assertXPathContent(pXmlDoc, "(//w:t)[4]", "c");
+
+    // tdf116436: The problem was that the table background was undefined, not white.
+    uno::Reference<text::XTextTablesSupplier> xTextTablesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xTables(xTextTablesSupplier->getTextTables(), uno::UNO_QUERY);
+    uno::Reference<text::XTextTable> xTable(xTables->getByIndex(0), uno::UNO_QUERY);
+    uno::Reference<table::XCell> xCell = xTable->getCellByName("A1");
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0xffffff), getProperty<sal_Int32>(xCell, "BackColor"));
 }
 
 DECLARE_OOXMLEXPORT_TEST(testOO67471, "ooo67471-2.odt")

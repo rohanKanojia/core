@@ -20,11 +20,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_FUTEXT_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_FUTEXT_HXX
 
-#include <editeng/editdata.hxx>
 #include "fuconstr.hxx"
-#include <svx/svdotext.hxx>
+#include <tools/weakbase.h>
 
-struct StyleRequestData;
 class SdrTextObj;
 class FontList;
 class OutlinerView;
@@ -46,7 +44,6 @@ public:
     virtual bool MouseMove(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonUp(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonDown(const MouseEvent& rMEvt) override;
-    virtual bool Command(const CommandEvent& rCEvt) override;
     virtual bool RequestHelp(const HelpEvent& rHEvt) override;
     virtual void ReceiveRequest(SfxRequest& rReq) override;
     virtual void DoubleClick(const MouseEvent& rMEvt) override;
@@ -56,9 +53,9 @@ public:
 
     void    SetInEditMode(const MouseEvent& rMEvt, bool bQuickDrag);
     void    DeleteDefaultText();
-    SdrTextObj* GetTextObj() { return static_cast< SdrTextObj* >( mxTextObj.get() ); }
+    SdrTextObj* GetTextObj() { return mxTextObj.get(); }
 
-    virtual SdrObject* CreateDefaultObject(const sal_uInt16 nID, const Rectangle& rRectangle) override;
+    virtual SdrObjectUniquePtr CreateDefaultObject(const sal_uInt16 nID, const ::tools::Rectangle& rRectangle) override;
 
     /** is called when the current function should be aborted. <p>
         This is used when a function gets a KEY_ESCAPE but can also
@@ -70,6 +67,9 @@ public:
 
     static void ChangeFontSize( bool, OutlinerView*, const FontList*, ::sd::View* );
 
+    void InvalidateBindings();
+
+
 protected:
     FuText (ViewShell* pViewSh,
         ::sd::Window* pWin,
@@ -80,7 +80,8 @@ protected:
 private:
     virtual void disposing() override;
 
-    SdrObjectWeakRef    mxTextObj;
+    ::tools::WeakReference<SdrTextObj>
+                        mxTextObj;
     bool                bFirstObjCreated;
     bool                bJustEndedEdit;
 

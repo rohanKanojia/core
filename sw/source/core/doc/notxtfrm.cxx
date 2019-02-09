@@ -22,8 +22,8 @@
 #include <vcl/print.hxx>
 #include <vcl/virdev.hxx>
 #include <vcl/svapp.hxx>
-#include <svtools/imapobj.hxx>
-#include <svtools/imap.hxx>
+#include <vcl/imapobj.hxx>
+#include <vcl/imap.hxx>
 #include <svl/urihelper.hxx>
 #include <svtools/soerr.hxx>
 #include <sfx2/progress.hxx>
@@ -32,7 +32,6 @@
 #include <editeng/udlnitem.hxx>
 #include <editeng/colritem.hxx>
 #include <svx/xoutbmp.hxx>
-#include <vcl/window.hxx>
 #include <fmturl.hxx>
 #include <fmtsrnd.hxx>
 #include <frmfmt.hxx>
@@ -64,12 +63,12 @@
 #include <poolfmt.hxx>
 #include <mdiexp.hxx>
 #include <swwait.hxx>
-#include <comcore.hrc>
+#include <strings.hrc>
 #include <accessibilityoptions.hxx>
 #include <com/sun/star/embed/EmbedMisc.hpp>
 #include <com/sun/star/embed/EmbedStates.hpp>
+#include <com/sun/star/embed/XEmbeddedObject.hpp>
 #include <svtools/embedhlp.hxx>
-#include <svx/charthelper.hxx>
 #include <dview.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <drawinglayer/processor2d/baseprocessor2d.hxx>
@@ -79,15 +78,18 @@
 #include <txtfly.hxx>
 #include <vcl/graphicfilter.hxx>
 #include <vcl/pdfextoutdevdata.hxx>
+#include <drawinglayer/primitive2d/maskprimitive2d.hxx>
+#include <basegfx/polygon/b2dpolygontools.hxx>
+#include <drawinglayer/primitive2d/objectinfoprimitive2d.hxx>
 
 using namespace com::sun::star;
 
-inline bool GetRealURL( const SwGrfNode& rNd, OUString& rText )
+static bool GetRealURL( const SwGrfNode& rNd, OUString& rText )
 {
     bool bRet = rNd.GetFileFilterNms( &rText, nullptr );
     if( bRet )
-        rText = URIHelper::removePassword( rText, INetURLObject::WAS_ENCODED,
-                                           INetURLObject::DECODE_UNAMBIGUOUS);
+        rText = URIHelper::removePassword( rText, INetURLObject::EncodeMechanism::WasEncoded,
+                                           INetURLObject::DecodeMechanism::Unambiguous);
     if (rText.startsWith("data:image")) rText = "inline image";
 
     return bRet;
@@ -97,16 +99,16 @@ static void lcl_PaintReplacement( const SwRect &rRect, const OUString &rText,
                            const SwViewShell &rSh, const SwNoTextFrame *pFrame,
                            bool bDefect )
 {
-    static vcl::Font *pFont = nullptr;
-    if ( !pFont )
+    static vcl::Font aFont = [&]()
     {
-        pFont = new vcl::Font();
-        pFont->SetWeight( WEIGHT_BOLD );
-        pFont->SetStyleName( OUString() );
-        pFont->SetFamilyName("Arial Unicode");
-        pFont->SetFamily( FAMILY_SWISS );
-        pFont->SetTransparent( true );
-    }
+        vcl::Font tmp;
+        tmp.SetWeight( WEIGHT_BOLD );
+        tmp.SetStyleName( OUString() );
+        tmp.SetFamilyName("Arial Unicode");
+        tmp.SetFamily( FAMILY_SWISS );
+        tmp.SetTransparent( true );
+        return tmp;
+    }();
 
     Color aCol( COL_RED );
     FontLineStyle eUnderline = LINESTYLE_NONE;
@@ -136,21 +138,17 @@ static void lcl_PaintReplacement( const SwRect &rRect, const OUString &rText,
         eUnderline = pFormat->GetUnderline().GetLineStyle();
     }
 
-    pFont->SetUnderline( eUnderline );
-    pFont->SetColor( aCol );
+    aFont.SetUnderline( eUnderline );
+    aFont.SetColor( aCol );
 
     const BitmapEx& rBmp = const_cast<SwViewShell&>(rSh).GetReplacementBitmap(bDefect);
-    Graphic::DrawEx( rSh.GetOut(), rText, *pFont, rBmp, rRect.Pos(), rRect.SSize() );
+    Graphic::DrawEx( rSh.GetOut(), rText, aFont, rBmp, rRect.Pos(), rRect.SSize() );
 }
 
 SwNoTextFrame::SwNoTextFrame(SwNoTextNode * const pNode, SwFrame* pSib )
-    : SwContentFrame( pNode, pSib )
-{
-    InitCtor();
-}
-
-/// Initialization: Currently add the Frame to the Cache
-void SwNoTextFrame::InitCtor()
+:   SwContentFrame( pNode, pSib ),
+    // RotateFlyFrame3
+    mpTransformableSwFrame()
 {
     mnFrameType = SwFrameType::NoTxt;
 }
@@ -185,15 +183,16 @@ static void lcl_ClearArea( const SwFrame &rFrame,
 
     if ( !aRegion.empty() )
     {
-        const SvxBrushItem *pItem; const Color *pCol; SwRect aOrigRect;
-
-        //UUUU
+        const SvxBrushItem *pItem;
+        const Color *pCol;
+        SwRect aOrigRect;
         drawinglayer::attribute::SdrAllFillAttributesHelperPtr aFillAttributes;
 
-        if ( rFrame.GetBackgroundBrush( aFillAttributes, pItem, pCol, aOrigRect, false ) )
+        if ( rFrame.GetBackgroundBrush( aFillAttributes, pItem, pCol, aOrigRect, false, /*bConsiderTextBox=*/false ) )
         {
             SwRegionRects const region(rPtArea);
-            const bool bDone(::DrawFillAttributes(aFillAttributes, aOrigRect, region, rOut));
+            basegfx::utils::B2DClipState aClipState;
+            const bool bDone(::DrawFillAttributes(aFillAttributes, aOrigRect, region, aClipState, rOut));
 
             if(!bDone)
             {
@@ -215,9 +214,9 @@ static void lcl_ClearArea( const SwFrame &rFrame,
     }
 }
 
-void SwNoTextFrame::Paint(vcl::RenderContext& rRenderContext, SwRect const& rRect, SwPrintData const*const) const
+void SwNoTextFrame::PaintSwFrame(vcl::RenderContext& rRenderContext, SwRect const& rRect, SwPrintData const*const) const
 {
-    if ( Frame().IsEmpty() )
+    if ( getFrameArea().IsEmpty() )
         return;
 
     const SwViewShell* pSh = getRootFrame()->GetCurrShell();
@@ -233,7 +232,7 @@ void SwNoTextFrame::Paint(vcl::RenderContext& rRenderContext, SwRect const& rRec
                 GetRealURL( *static_cast<const SwGrfNode*>(pNd), aText );
             if( aText.isEmpty() )
                 aText = FindFlyFrame()->GetFormat()->GetName();
-            lcl_PaintReplacement( Frame(), aText, *pSh, this, false );
+            lcl_PaintReplacement( getFrameArea(), aText, *pSh, this, false );
         }
         return;
     }
@@ -269,24 +268,36 @@ void SwNoTextFrame::Paint(vcl::RenderContext& rRenderContext, SwRect const& rRec
     SwRect aOrigPaint( rRect );
     if ( HasAnimation() && pSh->GetWin() )
     {
-        aOrigPaint = Frame(); aOrigPaint += Prt().Pos();
+        aOrigPaint = getFrameArea(); aOrigPaint += getFramePrintArea().Pos();
     }
 
-    SwRect aGrfArea( Frame() );
+    SwRect aGrfArea( getFrameArea() );
     SwRect aPaintArea( aGrfArea );
 
     // In case the picture fly frm was clipped, render it with the origin
     // size instead of scaling it
-    if ( rNoTNd.getIDocumentSettingAccess()->get( DocumentSettingId::CLIPPED_PICTURES ) )
+    if ( pGrfNd && rNoTNd.getIDocumentSettingAccess()->get( DocumentSettingId::CLIPPED_PICTURES ) )
     {
         const SwFlyFreeFrame *pFly = dynamic_cast< const SwFlyFreeFrame* >( FindFlyFrame() );
         if( pFly )
-            aGrfArea = SwRect( Frame().Pos( ), pFly->GetUnclippedFrame( ).SSize( ) );
+        {
+            bool bGetUnclippedFrame=true;
+            const SfxPoolItem* pItem;
+            if( pFly->GetFormat() && SfxItemState::SET == pFly->GetFormat()->GetItemState(RES_BOX, false, &pItem) )
+            {
+                const SvxBoxItem& rBox = *static_cast<const SvxBoxItem*>(pItem);
+                if( rBox.HasBorder( /*bTreatPaddingAsBorder*/true) )
+                    bGetUnclippedFrame = false;
+            }
+
+            if( bGetUnclippedFrame )
+                aGrfArea = SwRect( getFrameArea().Pos( ), pFly->GetUnclippedFrame( ).SSize( ) );
+        }
     }
 
-    aPaintArea._Intersection( aOrigPaint );
+    aPaintArea.Intersection_( aOrigPaint );
 
-    SwRect aNormal( Frame().Pos() + Prt().Pos(), Prt().SSize() );
+    SwRect aNormal( getFrameArea().Pos() + getFramePrintArea().Pos(), getFramePrintArea().SSize() );
     aNormal.Justify(); // Normalized rectangle for the comparisons
 
     if( aPaintArea.IsOver( aNormal ) )
@@ -296,7 +307,7 @@ void SwNoTextFrame::Paint(vcl::RenderContext& rRenderContext, SwRect const& rRec
             ::lcl_ClearArea( *this, rRenderContext, aPaintArea, aNormal );
 
         // The intersection of the PaintArea and the Bitmap contains the absolutely visible area of the Frame
-        aPaintArea._Intersection( aNormal );
+        aPaintArea.Intersection_( aNormal );
 
         if ( bClip )
             rRenderContext.IntersectClipRegion( aPaintArea.SVRect() );
@@ -320,18 +331,18 @@ void SwNoTextFrame::Paint(vcl::RenderContext& rRenderContext, SwRect const& rRec
     @param Size   the graphic's size (also returned)
     @param nMirror the current mirror attribute
 */
-static void lcl_CalcRect( Point& rPt, Size& rDim, sal_uInt16 nMirror )
+static void lcl_CalcRect( Point& rPt, Size& rDim, MirrorGraph nMirror )
 {
-    if( nMirror == RES_MIRROR_GRAPH_VERT || nMirror == RES_MIRROR_GRAPH_BOTH )
+    if( nMirror == MirrorGraph::Vertical || nMirror == MirrorGraph::Both )
     {
         rPt.setX(rPt.getX() + rDim.Width() -1);
-        rDim.Width() = -rDim.Width();
+        rDim.setWidth( -rDim.Width() );
     }
 
-    if( nMirror == RES_MIRROR_GRAPH_HOR || nMirror == RES_MIRROR_GRAPH_BOTH )
+    if( nMirror == MirrorGraph::Horizontal || nMirror == MirrorGraph::Both )
     {
         rPt.setY(rPt.getY() + rDim.Height() -1);
-        rDim.Height() = -rDim.Height();
+        rDim.setHeight( -rDim.Height() );
     }
 }
 
@@ -340,13 +351,18 @@ void SwNoTextFrame::GetGrfArea( SwRect &rRect, SwRect* pOrigRect ) const
 {
     // Currently only used for scaling, cropping and mirroring the contour of graphics!
     // Everything else is handled by GraphicObject
-
     // We put the graphic's visible rectangle into rRect.
     // pOrigRect contains position and size of the whole graphic.
 
+    // RotateFlyFrame3: SwFrame may be transformed. Get untransformed
+    // SwRect(s) as base of calculation
+    const TransformableSwFrame* pTransformableSwFrame(getTransformableSwFrame());
+    const SwRect aFrameArea(pTransformableSwFrame ? pTransformableSwFrame->getUntransformedFrameArea() : getFrameArea());
+    const SwRect aFramePrintArea(pTransformableSwFrame ? pTransformableSwFrame->getUntransformedFramePrintArea() : getFramePrintArea());
+
     const SwAttrSet& rAttrSet = GetNode()->GetSwAttrSet();
     const SwCropGrf& rCrop = rAttrSet.GetCropGrf();
-    sal_uInt16 nMirror = rAttrSet.GetMirrorGrf().GetValue();
+    MirrorGraph nMirror = rAttrSet.GetMirrorGrf().GetValue();
 
     if( rAttrSet.GetMirrorGrf().IsGrfToggle() )
     {
@@ -354,10 +370,10 @@ void SwNoTextFrame::GetGrfArea( SwRect &rRect, SwRect* pOrigRect ) const
         {
             switch ( nMirror )
             {
-                case RES_MIRROR_GRAPH_DONT: nMirror = RES_MIRROR_GRAPH_VERT; break;
-                case RES_MIRROR_GRAPH_VERT: nMirror = RES_MIRROR_GRAPH_DONT; break;
-                case RES_MIRROR_GRAPH_HOR: nMirror = RES_MIRROR_GRAPH_BOTH; break;
-                default: nMirror = RES_MIRROR_GRAPH_HOR; break;
+                case MirrorGraph::Dont: nMirror = MirrorGraph::Vertical; break;
+                case MirrorGraph::Vertical: nMirror = MirrorGraph::Dont; break;
+                case MirrorGraph::Horizontal: nMirror = MirrorGraph::Both; break;
+                default: nMirror = MirrorGraph::Horizontal; break;
             }
         }
     }
@@ -368,7 +384,7 @@ void SwNoTextFrame::GetGrfArea( SwRect &rRect, SwRect* pOrigRect ) const
     Size aOrigSz( static_cast<const SwNoTextNode*>(GetNode())->GetTwipSize() );
     if ( !aOrigSz.Width() )
     {
-        aOrigSz.Width() = Prt().Width();
+        aOrigSz.setWidth( aFramePrintArea.Width() );
         nLeftCrop  = -rCrop.GetLeft();
         nRightCrop = -rCrop.GetRight();
     }
@@ -376,13 +392,13 @@ void SwNoTextFrame::GetGrfArea( SwRect &rRect, SwRect* pOrigRect ) const
     {
         nLeftCrop = std::max( aOrigSz.Width() -
                             (rCrop.GetRight() + rCrop.GetLeft()), long(1) );
-        const double nScale = double(Prt().Width())  / double(nLeftCrop);
+        const double nScale = double(aFramePrintArea.Width())  / double(nLeftCrop);
         nLeftCrop  = long(nScale * -rCrop.GetLeft() );
         nRightCrop = long(nScale * -rCrop.GetRight() );
     }
 
     // crop values have to be mirrored too
-    if( nMirror == RES_MIRROR_GRAPH_VERT || nMirror == RES_MIRROR_GRAPH_BOTH )
+    if( nMirror == MirrorGraph::Vertical || nMirror == MirrorGraph::Both )
     {
         long nTmpCrop = nLeftCrop;
         nLeftCrop = nRightCrop;
@@ -391,46 +407,46 @@ void SwNoTextFrame::GetGrfArea( SwRect &rRect, SwRect* pOrigRect ) const
 
     if( !aOrigSz.Height() )
     {
-        aOrigSz.Height() = Prt().Height();
+        aOrigSz.setHeight( aFramePrintArea.Height() );
         nTopCrop   = -rCrop.GetTop();
         nBottomCrop= -rCrop.GetBottom();
     }
     else
     {
         nTopCrop = std::max( aOrigSz.Height() - (rCrop.GetTop() + rCrop.GetBottom()), long(1) );
-        const double nScale = double(Prt().Height()) / double(nTopCrop);
+        const double nScale = double(aFramePrintArea.Height()) / double(nTopCrop);
         nTopCrop   = long(nScale * -rCrop.GetTop() );
         nBottomCrop= long(nScale * -rCrop.GetBottom() );
     }
 
     // crop values have to be mirrored too
-    if( nMirror == RES_MIRROR_GRAPH_HOR || nMirror == RES_MIRROR_GRAPH_BOTH )
+    if( nMirror == MirrorGraph::Horizontal || nMirror == MirrorGraph::Both )
     {
         long nTmpCrop = nTopCrop;
         nTopCrop   = nBottomCrop;
         nBottomCrop= nTmpCrop;
     }
 
-    Size  aVisSz( Prt().SSize() );
+    Size  aVisSz( aFramePrintArea.SSize() );
     Size  aGrfSz( aVisSz );
-    Point aVisPt( Frame().Pos() + Prt().Pos() );
+    Point aVisPt( aFrameArea.Pos() + aFramePrintArea.Pos() );
     Point aGrfPt( aVisPt );
 
     // Set the "visible" rectangle first
     if ( nLeftCrop > 0 )
     {
         aVisPt.setX(aVisPt.getX() + nLeftCrop);
-        aVisSz.Width() -= nLeftCrop;
+        aVisSz.AdjustWidth( -nLeftCrop );
     }
     if ( nTopCrop > 0 )
     {
         aVisPt.setY(aVisPt.getY() + nTopCrop);
-        aVisSz.Height() -= nTopCrop;
+        aVisSz.AdjustHeight( -nTopCrop );
     }
     if ( nRightCrop > 0 )
-        aVisSz.Width() -= nRightCrop;
+        aVisSz.AdjustWidth( -nRightCrop );
     if ( nBottomCrop > 0 )
-        aVisSz.Height() -= nBottomCrop;
+        aVisSz.AdjustHeight( -nBottomCrop );
 
     rRect.Pos  ( aVisPt );
     rRect.SSize( aVisSz );
@@ -440,11 +456,11 @@ void SwNoTextFrame::GetGrfArea( SwRect &rRect, SwRect* pOrigRect ) const
     {
         Size aTmpSz( aGrfSz );
         aGrfPt.setX(aGrfPt.getX() + nLeftCrop);
-        aTmpSz.Width() -= nLeftCrop + nRightCrop;
+        aTmpSz.AdjustWidth( -(nLeftCrop + nRightCrop) );
         aGrfPt.setY(aGrfPt.getY() + nTopCrop);
-        aTmpSz.Height()-= nTopCrop + nBottomCrop;
+        aTmpSz.AdjustHeight( -(nTopCrop + nBottomCrop) );
 
-        if( RES_MIRROR_GRAPH_DONT != nMirror )
+        if( MirrorGraph::Dont != nMirror )
             lcl_CalcRect( aGrfPt, aTmpSz, nMirror );
 
         pOrigRect->Pos  ( aGrfPt );
@@ -459,29 +475,180 @@ const Size& SwNoTextFrame::GetSize() const
     const SwFrame *pFly = FindFlyFrame();
     if( !pFly )
         pFly = this;
-    return pFly->Prt().SSize();
+    return pFly->getFramePrintArea().SSize();
 }
 
-void SwNoTextFrame::MakeAll(vcl::RenderContext* /*pRenderContext*/)
+void SwNoTextFrame::MakeAll(vcl::RenderContext* pRenderContext)
 {
+    // RotateFlyFrame3 - inner frame. Get rotation and check if used
+    const double fRotation(getLocalFrameRotation());
+    const bool bRotated(!basegfx::fTools::equalZero(fRotation));
+
+    if(bRotated)
+    {
+        SwFlyFreeFrame* pUpperFly(dynamic_cast< SwFlyFreeFrame* >(GetUpper()));
+
+        if(pUpperFly)
+        {
+            if(!pUpperFly->isFrameAreaDefinitionValid())
+            {
+                // RotateFlyFrame3: outer frame *needs* to be layouted first, force this by calling
+                // it's ::Calc directly
+                pUpperFly->Calc(pRenderContext);
+            }
+
+            // Reset outer frame to unrotated state. This is necessary to make the
+            // layouting below work as currently implemented in Writer. As expected
+            // using Transformations allows to do this on the fly due to all information
+            // being included there.
+            // The full solution would be to adapt the whole layouting
+            // process of Writer to take care of Transformations, but that
+            // is currently beyond scope
+            if(pUpperFly->isTransformableSwFrame())
+            {
+                pUpperFly->getTransformableSwFrame()->restoreFrameAreas();
+            }
+        }
+
+        // Re-layout may be partially (see all isFrameAreaDefinitionValid() flags),
+        // so resetting the local SwFrame(s) in the local SwFrameAreaDefinition is also
+        // needed (e.g. for PrintPreview).
+        // Reset to BoundAreas will be done below automatically
+        if(isTransformableSwFrame())
+        {
+            getTransformableSwFrame()->restoreFrameAreas();
+        }
+    }
+
     SwContentNotify aNotify( this );
     SwBorderAttrAccess aAccess( SwFrame::GetCache(), this );
     const SwBorderAttrs &rAttrs = *aAccess.Get();
 
-    while ( !mbValidPos || !mbValidSize || !mbValidPrtArea )
+    while ( !isFrameAreaPositionValid() || !isFrameAreaSizeValid() || !isFramePrintAreaValid() )
     {
         MakePos();
 
-        if ( !mbValidSize )
-            Frame().Width( GetUpper()->Prt().Width() );
+        if ( !isFrameAreaSizeValid() )
+        {
+            SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+            aFrm.Width( GetUpper()->getFramePrintArea().Width() );
+        }
 
         MakePrtArea( rAttrs );
 
-        if ( !mbValidSize )
-        {   mbValidSize = true;
+        if ( !isFrameAreaSizeValid() )
+        {
+            setFrameAreaSizeValid(true);
             Format(getRootFrame()->GetCurrShell()->GetOut());
         }
     }
+
+    // RotateFlyFrame3 - inner frame
+    if(bRotated)
+    {
+        SwFlyFreeFrame* pUpperFly(dynamic_cast< SwFlyFreeFrame* >(GetUpper()));
+
+        if(pUpperFly)
+        {
+            // restore outer frame back to Transformed state, that means
+            // set the SwFrameAreaDefinition(s) back to BoundAreas of
+            // the transformed SwFrame. All needed information is part
+            // of the already correctly created Transformations of the
+            // upper frame, so it can bre re-created on the fly
+            if(pUpperFly->isTransformableSwFrame())
+            {
+                pUpperFly->getTransformableSwFrame()->adaptFrameAreasToTransformations();
+            }
+        }
+
+        // After the unrotated layout is finished, apply possible set rotation to it
+        // get center from outer frame (layout frame) to be on the safe side
+        const Point aCenter(GetUpper() ? GetUpper()->getFrameArea().Center() : getFrameArea().Center());
+        const basegfx::B2DPoint aB2DCenter(aCenter.X(), aCenter.Y());
+
+        if(!mpTransformableSwFrame)
+        {
+            mpTransformableSwFrame.reset(new TransformableSwFrame(*this));
+        }
+
+        getTransformableSwFrame()->createFrameAreaTransformations(
+            fRotation,
+            aB2DCenter);
+        getTransformableSwFrame()->adaptFrameAreasToTransformations();
+    }
+    else
+    {
+        // reset transformations to show that they are not used
+        mpTransformableSwFrame.reset();
+    }
+}
+
+// RotateFlyFrame3 - Support for Transformations - outer frame
+basegfx::B2DHomMatrix SwNoTextFrame::getFrameAreaTransformation() const
+{
+    if(isTransformableSwFrame())
+    {
+        // use pre-created transformation
+        return getTransformableSwFrame()->getLocalFrameAreaTransformation();
+    }
+
+    // call parent
+    return SwContentFrame::getFrameAreaTransformation();
+}
+
+basegfx::B2DHomMatrix SwNoTextFrame::getFramePrintAreaTransformation() const
+{
+    if(isTransformableSwFrame())
+    {
+        // use pre-created transformation
+        return getTransformableSwFrame()->getLocalFramePrintAreaTransformation();
+    }
+
+    // call parent
+    return SwContentFrame::getFramePrintAreaTransformation();
+}
+
+// RotateFlyFrame3 - Support for Transformations
+void SwNoTextFrame::transform_translate(const Point& rOffset)
+{
+    // call parent - this will do the basic transform for SwRect(s)
+    // in the SwFrameAreaDefinition
+    SwContentFrame::transform_translate(rOffset);
+
+    // check if the Transformations need to be adapted
+    if(isTransformableSwFrame())
+    {
+        const basegfx::B2DHomMatrix aTransform(
+            basegfx::utils::createTranslateB2DHomMatrix(
+                rOffset.X(), rOffset.Y()));
+
+        // transform using TransformableSwFrame
+        getTransformableSwFrame()->transform(aTransform);
+    }
+}
+
+// RotateFlyFrame3 - inner frame
+// Check if we contain a SwGrfNode and get possible rotation from it
+double SwNoTextFrame::getLocalFrameRotation() const
+{
+    const SwNoTextNode* pSwNoTextNode(nullptr != GetNode() ? GetNode()->GetNoTextNode() : nullptr);
+
+    if(nullptr != pSwNoTextNode)
+    {
+        const SwGrfNode* pSwGrfNode(pSwNoTextNode->GetGrfNode());
+
+        if(nullptr != pSwGrfNode)
+        {
+            const SwAttrSet& rSwAttrSet(pSwGrfNode->GetSwAttrSet());
+            const SwRotationGrf& rSwRotationGrf(rSwAttrSet.GetRotationGrf());
+            const double fRotate(static_cast< double >(-rSwRotationGrf.GetValue()) * (M_PI/1800.0));
+
+            return basegfx::normalizeToRange(fRotate, F_2PI);
+        }
+    }
+
+    // no rotation
+    return 0.0;
 }
 
 /** Calculate the Bitmap's site, if needed */
@@ -491,25 +658,25 @@ void SwNoTextFrame::Format( vcl::RenderContext* /*pRenderContext*/, const SwBord
 
     // Did the height change?
     SwTwips nChgHght = IsVertical() ?
-        (SwTwips)(aNewSize.Width() - Prt().Width()) :
-        (SwTwips)(aNewSize.Height() - Prt().Height());
+        static_cast<SwTwips>(aNewSize.Width() - getFramePrintArea().Width()) :
+        static_cast<SwTwips>(aNewSize.Height() - getFramePrintArea().Height());
     if( nChgHght > 0)
         Grow( nChgHght );
     else if( nChgHght < 0)
-        Shrink( std::min(Prt().Height(), -nChgHght) );
+        Shrink( std::min(getFramePrintArea().Height(), -nChgHght) );
 }
 
 bool SwNoTextFrame::GetCharRect( SwRect &rRect, const SwPosition& rPos,
-                              SwCursorMoveState *pCMS ) const
+                              SwCursorMoveState *pCMS, bool /*bAllowFarAway*/ ) const
 {
     if ( &rPos.nNode.GetNode() != static_cast<SwNode const *>(GetNode()) )
         return false;
 
     Calc(getRootFrame()->GetCurrShell()->GetOut());
-    SwRect aFrameRect( Frame() );
+    SwRect aFrameRect( getFrameArea() );
     rRect = aFrameRect;
-    rRect.Pos( Frame().Pos() + Prt().Pos() );
-    rRect.SSize( Prt().SSize() );
+    rRect.Pos( getFrameArea().Pos() + getFramePrintArea().Pos() );
+    rRect.SSize( getFramePrintArea().SSize() );
 
     rRect.Justify();
 
@@ -521,15 +688,12 @@ bool SwNoTextFrame::GetCharRect( SwRect &rRect, const SwPosition& rPos,
         rRect.Width( 1 );
     }
     else
-        rRect._Intersection( aFrameRect );
+        rRect.Intersection_( aFrameRect );
 
-    if ( pCMS )
+    if ( pCMS && pCMS->m_bRealHeight )
     {
-        if ( pCMS->m_bRealHeight )
-        {
-            pCMS->m_aRealHeight.setY(rRect.Height());
-            pCMS->m_aRealHeight.setX(0);
-        }
+        pCMS->m_aRealHeight.setY(rRect.Height());
+        pCMS->m_aRealHeight.setX(0);
     }
 
     return true;
@@ -544,13 +708,14 @@ bool SwNoTextFrame::GetCursorOfst(SwPosition* pPos, Point& ,
     return true;
 }
 
-#define CLEARCACHE {\
-    SwFlyFrame* pFly = FindFlyFrame();\
-    if( pFly && pFly->GetFormat()->GetSurround().IsContour() )\
-    {\
-        ClrContourCache( pFly->GetVirtDrawObj() );\
-        pFly->NotifyBackground( FindPageFrame(), Prt(), PREP_FLY_ATTR_CHG );\
-    }\
+void SwNoTextFrame::ClearCache()
+{
+    SwFlyFrame* pFly = FindFlyFrame();
+    if( pFly && pFly->GetFormat()->GetSurround().IsContour() )
+    {
+        ClrContourCache( pFly->GetVirtDrawObj() );
+        pFly->NotifyBackground( FindPageFrame(), getFramePrintArea(), PREP_FLY_ATTR_CHG );
+    }
 }
 
 void SwNoTextFrame::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew )
@@ -575,41 +740,20 @@ void SwNoTextFrame::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew )
         break;
 
     case RES_GRF_REREAD_AND_INCACHE:
-        if( ND_GRFNODE == GetNode()->GetNodeType() )
+        if( SwNodeType::Grf == GetNode()->GetNodeType() )
         {
+            // TODO: Remove - due to GraphicObject refactoring
             bComplete = false;
-            SwGrfNode* pNd = static_cast<SwGrfNode*>( GetNode());
-
-            SwViewShell* pVSh = pNd->GetDoc()->getIDocumentLayoutAccess().GetCurrentViewShell();
-            if( pVSh )
-            {
-                GraphicAttr aAttr;
-                if( pNd->GetGrfObj().IsCached( pVSh->GetOut(), Point(),
-                            Prt().SSize(), &pNd->GetGraphicAttr( aAttr, this ) ))
-                {
-                    for(SwViewShell& rShell : pVSh->GetRingContainer())
-                    {
-                        SET_CURR_SHELL( &rShell );
-                        if( rShell.GetWin() )
-                        {
-                            if( rShell.IsPreview() )
-                                ::RepaintPagePreview( &rShell, Frame().SVRect() );
-                            else
-                                rShell.GetWin()->Invalidate( Frame().SVRect() );
-                        }
-                    }
-                }
-            }
         }
         break;
 
     case RES_UPDATE_ATTR:
-        if (GetNode()->GetNodeType() != ND_GRFNODE) {
+        if (GetNode()->GetNodeType() != SwNodeType::Grf) {
             break;
         }
-        // fall through
+        [[fallthrough]];
     case RES_FMT_CHG:
-        CLEARCACHE
+        ClearCache();
         break;
 
     case RES_ATTRSET_CHG:
@@ -619,7 +763,39 @@ void SwNoTextFrame::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew )
                 if( SfxItemState::SET == static_cast<const SwAttrSetChg*>(pOld)->GetChgSet()->
                                 GetItemState( n, false ))
                 {
-                    CLEARCACHE
+                    ClearCache();
+
+                    if(RES_GRFATR_ROTATION == n)
+                    {
+                        // RotGrfFlyFrame: Update Handles in view, these may be rotation-dependent
+                        // (e.g. crop handles) and need a visualisation update
+                        if ( GetNode()->GetNodeType() == SwNodeType::Grf )
+                        {
+                            SwGrfNode* pNd = static_cast<SwGrfNode*>( GetNode());
+                            SwViewShell *pVSh = pNd->GetDoc()->getIDocumentLayoutAccess().GetCurrentViewShell();
+
+                            if(pVSh)
+                            {
+                                SdrView* pDrawView = pVSh->GetDrawView();
+
+                                if(pDrawView)
+                                {
+                                    pDrawView->AdjustMarkHdl(nullptr);
+                                }
+                            }
+
+                            // RotateFlyFrame3 - invalidate needed for ContentFrame (inner, this)
+                            // and LayoutFrame (outer, GetUpper). It is possible to only invalidate
+                            // the outer frame, but that leads to an in-between state that gets
+                            // potentially painted
+                            if(GetUpper())
+                            {
+                                GetUpper()->InvalidateAll_();
+                            }
+
+                            InvalidateAll_();
+                        }
+                    }
                     break;
                 }
             if( RES_GRFATR_END == n )           // not found
@@ -631,14 +807,14 @@ void SwNoTextFrame::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew )
     case RES_GRAPHIC_ARRIVED:
     // i73788# - handle RES_LINKED_GRAPHIC_STREAM_ARRIVED as RES_GRAPHIC_ARRIVED
     case RES_LINKED_GRAPHIC_STREAM_ARRIVED:
-        if ( GetNode()->GetNodeType() == ND_GRFNODE )
+        if ( GetNode()->GetNodeType() == SwNodeType::Grf )
         {
             bComplete = false;
             SwGrfNode* pNd = static_cast<SwGrfNode*>( GetNode());
 
-            CLEARCACHE
+            ClearCache();
 
-            SwRect aRect( Frame() );
+            SwRect aRect( getFrameArea() );
 
             SwViewShell *pVSh = pNd->GetDoc()->getIDocumentLayoutAccess().GetCurrentViewShell();
             if( !pVSh )
@@ -674,13 +850,13 @@ void SwNoTextFrame::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew )
     }
 }
 
-static void lcl_correctlyAlignRect( SwRect& rAlignedGrfArea, const SwRect& rInArea, vcl::RenderContext* pOut )
+static void lcl_correctlyAlignRect( SwRect& rAlignedGrfArea, const SwRect& rInArea, vcl::RenderContext const * pOut )
 {
 
     if(!pOut)
         return;
-    Rectangle aPxRect = pOut->LogicToPixel( rInArea.SVRect() );
-    Rectangle aNewPxRect( aPxRect );
+    tools::Rectangle aPxRect = pOut->LogicToPixel( rInArea.SVRect() );
+    tools::Rectangle aNewPxRect( aPxRect );
     while( aNewPxRect.Left() < aPxRect.Left() )
     {
         rAlignedGrfArea.Left( rAlignedGrfArea.Left()+1 );
@@ -703,7 +879,7 @@ static void lcl_correctlyAlignRect( SwRect& rAlignedGrfArea, const SwRect& rInAr
     }
 }
 
-bool paintUsingPrimitivesHelper(
+static bool paintUsingPrimitivesHelper(
     vcl::RenderContext& rOutputDevice,
     const drawinglayer::primitive2d::Primitive2DContainer& rSequence,
     const basegfx::B2DRange& rSourceRange,
@@ -717,7 +893,7 @@ bool paintUsingPrimitivesHelper(
             // the mapping from 1/100th mm content to twips if needed when the target
             // range is defined in twips
             const basegfx::B2DHomMatrix aMappingTransform(
-                basegfx::tools::createSourceRangeTargetRangeTransform(
+                basegfx::utils::createSourceRangeTargetRangeTransform(
                     rSourceRange,
                     rTargetRange));
 
@@ -734,15 +910,13 @@ bool paintUsingPrimitivesHelper(
                 uno::Sequence< beans::PropertyValue >());
 
             // get a primitive processor for rendering
-            drawinglayer::processor2d::BaseProcessor2D* pProcessor2D =
+            std::unique_ptr<drawinglayer::processor2d::BaseProcessor2D> pProcessor2D(
                 drawinglayer::processor2d::createProcessor2DFromOutputDevice(
-                                                rOutputDevice, aViewInformation2D);
-
+                                                rOutputDevice, aViewInformation2D) );
             if(pProcessor2D)
             {
                 // render and cleanup
                 pProcessor2D->process(rSequence);
-                delete pProcessor2D;
                 return true;
             }
         }
@@ -751,70 +925,86 @@ bool paintUsingPrimitivesHelper(
     return false;
 }
 
-void paintGraphicUsingPrimitivesHelper(vcl::RenderContext & rOutputDevice,
-         GraphicObject const& rGrfObj, GraphicAttr const& rGraphicAttr,
-         SwRect const& rAlignedGrfArea)
+void paintGraphicUsingPrimitivesHelper(
+    vcl::RenderContext & rOutputDevice,
+    GraphicObject const& rGrfObj,
+    GraphicAttr const& rGraphicAttr,
+    const basegfx::B2DHomMatrix& rGraphicTransform,
+    const OUString& rName,
+    const OUString& rTitle,
+    const OUString& rDescription)
 {
-    // unify using GraphicPrimitive2D
+    // RotGrfFlyFrame: unify using GraphicPrimitive2D
     // -> the primitive handles all crop and mirror stuff
     // -> the primitive renderer will create the needed pdf export data
     // -> if bitmap content, it will be cached system-dependent
-    const basegfx::B2DRange aTargetRange(
-        rAlignedGrfArea.Left(), rAlignedGrfArea.Top(),
-        rAlignedGrfArea.Right(), rAlignedGrfArea.Bottom());
-    const basegfx::B2DHomMatrix aTargetTransform(
-        basegfx::tools::createScaleTranslateB2DHomMatrix(
-            aTargetRange.getRange(),
-            aTargetRange.getMinimum()));
-
     drawinglayer::primitive2d::Primitive2DContainer aContent(1);
-    bool bDone(false);
 
-    // #i125171# The mechanism to get lossless jpegs into pdf is based on having the original
-    // file data (not the bitmap data) at the Graphic in the GfxLink (which has *nothing* to
-    // do with the graphic being linked). This works well for DrawingLayer GraphicObjects (linked
-    // and unlinked) but fails for linked Writer GraphicObjects. These have the URL in the
-    // GraphicObject, but no GfxLink with the original file data when it's a linked graphic.
-    // Since this blows up PDF size by a factor of 10 (the graphics get embedded as pixel maps
-    // then) it is okay to add this workarund: In the needed case, load the graphic in a way to
-    // get the GfxLink in the needed form and use that Graphic temporarily. Do this only when
-    // - we have PDF export
-    // - the GraphicObject is linked
-    // - the Graphic has no GfxLink
-    // - LosslessCompression is activated
-    // - it's indeed a jpeg graphic (could be checked by the url ending, but is more reliable to check later)
-    // In all other cases (normal repaint, print, etc...) use the available Graphic with the
-    // already loaded pixel graphic as before this change.
-    if (rOutputDevice.GetExtOutDevData() && rGrfObj.HasLink() && !rGrfObj.GetGraphic().IsLink())
+    aContent[0] = new drawinglayer::primitive2d::GraphicPrimitive2D(
+        rGraphicTransform,
+        rGrfObj,
+        rGraphicAttr);
+
+    // RotateFlyFrame3: If ClipRegion is set at OutputDevice, we
+    // need to use that. Usually the renderer would be a VCL-based
+    // PrimitiveRenderer, but there are system-specific shortcuts that
+    // will *not* use the VCL-Paint of Bitmap and thus ignore this.
+    // Anyways, indirectly using a CLipRegion set at the target OutDev
+    // when using a PrimitiveRenderer is a non-valid implication.
+    // First tried only to use when HasPolyPolygonOrB2DPolyPolygon(),
+    // but there is an optimization at ClipRegion creation that detects
+    // a single Rectangle in a tools::PolyPolygon and forces to a simple
+    // RegionBand-based implementation, so cannot use it here.
+    if(rOutputDevice.IsClipRegion())
     {
-        const vcl::PDFExtOutDevData* pPDFExt = dynamic_cast< const vcl::PDFExtOutDevData* >(rOutputDevice.GetExtOutDevData());
+        const basegfx::B2DPolyPolygon aClip(rOutputDevice.GetClipRegion().GetAsB2DPolyPolygon());
 
-        if (pPDFExt && pPDFExt->GetIsLosslessCompression())
+        if(0 != aClip.count())
         {
-            Graphic aTempGraphic;
-            INetURLObject aURL(rGrfObj.GetLink());
+            // tdf#114076: Expand ClipRange to next PixelBound
+            // Do this by going to basegfx::B2DRange, adding a
+            // single pixel size and using floor/ceil to go to
+            // full integer (as needed for pixels). Also need
+            // to go back to basegfx::B2DPolyPolygon for the
+            // creation of the needed MaskPrimitive2D.
+            // The general problem is that Writer is scrolling
+            // using blitting the unchanged parts, this forces
+            // this part of the scroll to pixel coordinate steps,
+            // while the ViewTransformation for paint nowadays has
+            // a sub-pixel precision. This results in an offset
+            // up to one pixel in radius. To solve this for now,
+            // we need to expand to the next outer pixel bound.
+            // Hopefully in the future we will someday be able to
+            // stay on the full available precision, but this
+            // will need a change in the repaint/scroll paradigm.
+            const basegfx::B2DRange aClipRange(aClip.getB2DRange());
+            const basegfx::B2DVector aSinglePixelXY(rOutputDevice.GetInverseViewTransformation() * basegfx::B2DVector(1.0, 1.0));
+            const basegfx::B2DRange aExpandedClipRange(
+                floor(aClipRange.getMinX() - aSinglePixelXY.getX()),
+                floor(aClipRange.getMinY() - aSinglePixelXY.getY()),
+                ceil(aClipRange.getMaxX() + aSinglePixelXY.getX()),
+                ceil(aClipRange.getMaxY() + aSinglePixelXY.getY()));
 
-            if (GRFILTER_OK == GraphicFilter::GetGraphicFilter().ImportGraphic(aTempGraphic, aURL))
-            {
-                if(aTempGraphic.IsLink() && GFX_LINK_TYPE_NATIVE_JPG == aTempGraphic.GetLink().GetType())
-                {
-                    aContent[0] = new drawinglayer::primitive2d::GraphicPrimitive2D(
-                        aTargetTransform,
-                        aTempGraphic,
-                        rGraphicAttr);
-                    bDone = true;
-                }
-            }
+            aContent[0] = new drawinglayer::primitive2d::MaskPrimitive2D(
+                basegfx::B2DPolyPolygon(
+                    basegfx::utils::createPolygonFromRect(aExpandedClipRange)),
+                aContent);
         }
     }
 
-    if(!bDone)
+    if(!rName.isEmpty() || !rTitle.isEmpty() || !rDescription.isEmpty())
     {
-        aContent[0] = new drawinglayer::primitive2d::GraphicPrimitive2D(
-            aTargetTransform,
-            rGrfObj,
-            rGraphicAttr);
+        // Embed to ObjectInfoPrimitive2D when we have Name/Title/Description
+        // information available
+        aContent[0] = new drawinglayer::primitive2d::ObjectInfoPrimitive2D(
+            aContent,
+            rName,
+            rTitle,
+            rDescription);
     }
+
+    basegfx::B2DRange aTargetRange(0.0, 0.0, 1.0, 1.0);
+    aTargetRange.transform(rGraphicTransform);
 
     paintUsingPrimitivesHelper(
         rOutputDevice,
@@ -889,8 +1079,8 @@ void SwNoTextFrame::PaintPicture( vcl::RenderContext* pOut, const SwRect &rGrfAr
             }
             // #i85717#, #i90395# - check, if asynchronous retrieval
             // if input stream for the graphic is possible
-            else if ( ( rGrfObj.GetType() == GRAPHIC_DEFAULT ||
-                        rGrfObj.GetType() == GRAPHIC_NONE ) &&
+            else if ( ( rGrfObj.GetType() == GraphicType::Default ||
+                        rGrfObj.GetType() == GraphicType::NONE ) &&
                       pGrfNd->IsLinkedFile() &&
                       pGrfNd->IsAsyncRetrieveInputStreamPossible() )
             {
@@ -899,7 +1089,7 @@ void SwNoTextFrame::PaintPicture( vcl::RenderContext* pOut, const SwRect &rGrfAr
                 if( !pGrfObj ||
                     !pGrfObj->IsDataComplete() ||
                     !(aTmpSz = pGrfNd->GetTwipSize()).Width() ||
-                    !aTmpSz.Height() || !pGrfNd->GetAutoFormatLvl() )
+                    !aTmpSz.Height())
                 {
                     pGrfNd->TriggerAsyncRetrieveInputStream(); // #i73788#
                 }
@@ -930,8 +1120,7 @@ void SwNoTextFrame::PaintPicture( vcl::RenderContext* pOut, const SwRect &rGrfAr
                         pVout = pOut;
                         pOut = pShell->GetOut();
                     }
-                    else if( pShell->GetWin() &&
-                             OUTDEV_VIRDEV == pOut->GetOutDevType() )
+                    else if( pShell->GetWin() && pOut->IsVirtual() )
                     {
                         pVout = pOut;
                         pOut = pShell->GetWin();
@@ -939,38 +1128,46 @@ void SwNoTextFrame::PaintPicture( vcl::RenderContext* pOut, const SwRect &rGrfAr
                     else
                         pVout = nullptr;
 
-                    OSL_ENSURE( OUTDEV_VIRDEV != pOut->GetOutDevType() ||
+                    OSL_ENSURE( !pOut->IsVirtual() ||
                             pShell->GetViewOptions()->IsPDFExport() || pShell->isOutputToWindow(),
                             "pOut should not be a virtual device" );
 
                     pGrfNd->StartGraphicAnimation(pOut, aAlignedGrfArea.Pos(),
                                         aAlignedGrfArea.SSize(), sal_IntPtr(this),
-                                        nullptr, GraphicManagerDrawFlags::STANDARD, pVout );
+                                        pVout );
                 }
                 else
                 {
-                    paintGraphicUsingPrimitivesHelper(*pOut,
-                            rGrfObj, aGrfAttr, aAlignedGrfArea);
+                    const basegfx::B2DHomMatrix aGraphicTransform(getFrameAreaTransformation());
+
+                    paintGraphicUsingPrimitivesHelper(
+                        *pOut,
+                        rGrfObj,
+                        aGrfAttr,
+                        aGraphicTransform,
+                        nullptr == pGrfNd->GetFlyFormat() ? OUString() : pGrfNd->GetFlyFormat()->GetName(),
+                        rNoTNd.GetTitle(),
+                        rNoTNd.GetDescription());
                 }
             }
             else
             {
-                sal_uInt16 nResId = 0;
+                const char* pResId = nullptr;
 
-                if( GRAPHIC_NONE == rGrfObj.GetType() )
-                    nResId = STR_COMCORE_READERROR;
+                if( GraphicType::NONE == rGrfObj.GetType() )
+                    pResId = STR_COMCORE_READERROR;
                 else if ( !rGrfObj.GetGraphic().IsSupportedGraphic() )
-                    nResId = STR_COMCORE_CANT_SHOW;
+                    pResId = STR_COMCORE_CANT_SHOW;
 
                 OUString aText;
-                if ( !nResId &&
+                if ( !pResId &&
                      (aText = pGrfNd->GetTitle()).isEmpty() &&
                      (!GetRealURL( *pGrfNd, aText ) || aText.isEmpty()))
                 {
-                    nResId = STR_COMCORE_READERROR;
+                    pResId = STR_COMCORE_READERROR;
                 }
-                if ( nResId )
-                    aText = SW_RESSTR( nResId );
+                if (pResId)
+                    aText = SwResId(pResId);
 
                 ::lcl_PaintReplacement( aAlignedGrfArea, aText, *pShell, this, true );
             }
@@ -999,60 +1196,82 @@ void SwNoTextFrame::PaintPicture( vcl::RenderContext* pOut, const SwRect &rGrfAr
 
         if(bIsChart)
         {
-            const uno::Reference< frame::XModel > aXModel(pOLENd->GetOLEObj().GetOleRef()->getComponent(), uno::UNO_QUERY);
+            basegfx::B2DRange aSourceRange;
+            const drawinglayer::primitive2d::Primitive2DContainer aSequence(
+                pOLENd->GetOLEObj().tryToGetChartContentAsPrimitive2DSequence(
+                    aSourceRange,
+                    bPrn));
 
-            if(aXModel.is())
+            if(!aSequence.empty() && !aSourceRange.isEmpty())
             {
-                basegfx::B2DRange aSourceRange;
+                const basegfx::B2DRange aTargetRange(
+                    aAlignedGrfArea.Left(), aAlignedGrfArea.Top(),
+                    aAlignedGrfArea.Right(), aAlignedGrfArea.Bottom());
 
-                const drawinglayer::primitive2d::Primitive2DContainer aSequence(
-                    ChartHelper::tryToGetChartContentAsPrimitive2DSequence(
-                        aXModel,
-                        aSourceRange));
-
-                if(!aSequence.empty() && !aSourceRange.isEmpty())
-                {
-                    const basegfx::B2DRange aTargetRange(
-                        aAlignedGrfArea.Left(), aAlignedGrfArea.Top(),
-                        aAlignedGrfArea.Right(), aAlignedGrfArea.Bottom());
-
-                    bDone = paintUsingPrimitivesHelper(
-                        *pOut,
-                        aSequence,
-                        aSourceRange,
-                        aTargetRange);
-                }
+                bDone = paintUsingPrimitivesHelper(
+                    *pOut,
+                    aSequence,
+                    aSourceRange,
+                    aTargetRange);
             }
         }
 
         if(!bDone && pOLENd)
         {
-            Point aPosition(aAlignedGrfArea.Pos());
-            Size aSize(aAlignedGrfArea.SSize());
-
+            // SwOLENode does not have a known GraphicObject, need to
+            // work with Graphic instead
             const Graphic* pGraphic = pOLENd->GetGraphic();
-            if ( pGraphic && pGraphic->GetType() != GRAPHIC_NONE )
+
+            if ( pGraphic && pGraphic->GetType() != GraphicType::NONE )
             {
-                pGraphic->Draw( pOut, aPosition, aSize );
+                GraphicObject aTempGraphicObject(*pGraphic);
+                GraphicAttr aGrfAttr;
+                const basegfx::B2DHomMatrix aGraphicTransform(
+                    basegfx::utils::createScaleTranslateB2DHomMatrix(
+                        aAlignedGrfArea.Width(), aAlignedGrfArea.Height(),
+                        aAlignedGrfArea.Left(), aAlignedGrfArea.Top()));
+
+                paintGraphicUsingPrimitivesHelper(
+                    *pOut,
+                    aTempGraphicObject,
+                    aGrfAttr,
+                    aGraphicTransform,
+                    nullptr == pOLENd->GetFlyFormat() ? OUString() : pOLENd->GetFlyFormat()->GetName(),
+                    rNoTNd.GetTitle(),
+                    rNoTNd.GetDescription());
 
                 // shade the representation if the object is activated outplace
                 uno::Reference < embed::XEmbeddedObject > xObj = pOLENd->GetOLEObj().GetOleRef();
                 if ( xObj.is() && xObj->getCurrentState() == embed::EmbedStates::ACTIVE )
                 {
-                    ::svt::EmbeddedObjectRef::DrawShading( Rectangle( aPosition, aSize ), pOut );
+                    const Point aPosition(aAlignedGrfArea.Pos());
+                    const Size aSize(aAlignedGrfArea.SSize());
+
+                    ::svt::EmbeddedObjectRef::DrawShading(
+                        tools::Rectangle(
+                            aPosition,
+                            aSize),
+                        pOut);
                 }
             }
             else
-                ::svt::EmbeddedObjectRef::DrawPaintReplacement( Rectangle( aPosition, aSize ), pOLENd->GetOLEObj().GetCurrentPersistName(), pOut );
+            {
+                const Point aPosition(aAlignedGrfArea.Pos());
+                const Size aSize(aAlignedGrfArea.SSize());
+
+                ::svt::EmbeddedObjectRef::DrawPaintReplacement(
+                    tools::Rectangle(aPosition, aSize),
+                    pOLENd->GetOLEObj().GetCurrentPersistName(),
+                    pOut);
+            }
 
             sal_Int64 nMiscStatus = pOLENd->GetOLEObj().GetOleRef()->getStatus( pOLENd->GetAspect() );
-            if ( !bPrn && dynamic_cast< const SwCursorShell *>( pShell ) !=  nullptr && (
-                    (nMiscStatus & embed::EmbedMisc::MS_EMBED_ACTIVATEWHENVISIBLE) ||
-                    pOLENd->GetOLEObj().GetObject().IsGLChart()))
+            if ( !bPrn && dynamic_cast< const SwCursorShell *>( pShell ) !=  nullptr &&
+                    (nMiscStatus & embed::EmbedMisc::MS_EMBED_ACTIVATEWHENVISIBLE))
             {
                 const SwFlyFrame *pFly = FindFlyFrame();
                 assert( pFly != nullptr );
-                static_cast<SwFEShell*>(pShell)->ConnectObj( pOLENd->GetOLEObj().GetObject(), pFly->Prt(), pFly->Frame());
+                static_cast<SwFEShell*>(pShell)->ConnectObj( pOLENd->GetOLEObj().GetObject(), pFly->getFramePrintArea(), pFly->getFrameArea());
             }
         }
 
@@ -1067,21 +1286,53 @@ void SwNoTextFrame::PaintPicture( vcl::RenderContext* pOut, const SwRect &rGrfAr
 bool SwNoTextFrame::IsTransparent() const
 {
     const SwViewShell* pSh = getRootFrame()->GetCurrShell();
+
     if ( !pSh || !pSh->GetViewOptions()->IsGraphic() )
+    {
         return true;
+    }
 
     const SwGrfNode *pNd;
+
     if( nullptr != (pNd = GetNode()->GetGrfNode()) )
-        return pNd->IsTransparent();
+    {
+        if(pNd->IsTransparent())
+        {
+            return true;
+        }
+    }
+
+    // RotateFlyFrame3: If we are transformed, there are 'free' areas between
+    // the Graphic and the Border/Padding stuff - at least as long as those
+    // (Border and Padding) are not transformed, too
+    if(isTransformableSwFrame())
+    {
+        // we can be more specific - rotations of multiples of
+        // 90 degrees will leave no gaps. Go from [0.0 .. F_2PI]
+        // to [0 .. 360] and check modulo 90
+        const long nRot(static_cast<long>(basegfx::rad2deg(getLocalFrameRotation())));
+        const bool bMultipleOf90(0 == (nRot % 90));
+
+        if(!bMultipleOf90)
+        {
+            return true;
+        }
+    }
 
     //#29381# OLE are always transparent
-    return true;
+    if(nullptr != GetNode()->GetOLENode())
+    {
+        return true;
+    }
+
+    // return false by default to avoid background paint
+    return false;
 }
 
 void SwNoTextFrame::StopAnimation( OutputDevice* pOut ) const
 {
     // Stop animated graphics
-    const SwGrfNode* pGrfNd = dynamic_cast< const SwGrfNode* >(GetNode()->GetGrfNode());
+    const SwGrfNode* pGrfNd = GetNode()->GetGrfNode();
 
     if( pGrfNd && pGrfNd->IsAnimated() )
     {

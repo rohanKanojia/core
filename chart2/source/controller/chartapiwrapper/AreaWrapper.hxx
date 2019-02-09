@@ -19,15 +19,12 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_CHARTAPIWRAPPER_AREAWRAPPER_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_CHARTAPIWRAPPER_AREAWRAPPER_HXX
 
-#include "WrappedPropertySet.hxx"
+#include <WrappedPropertySet.hxx>
 #include <cppuhelper/implbase.hxx>
-#include <comphelper/uno3.hxx>
 #include <comphelper/interfacecontainer2.hxx>
 #include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/chart2/XChartDocument.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <memory>
 
@@ -47,49 +44,34 @@ class AreaWrapper : public ::cppu::ImplInheritanceHelper<
                     >
 {
 public:
-    explicit AreaWrapper( std::shared_ptr< Chart2ModelContact > spChart2ModelContact );
-    virtual ~AreaWrapper();
+    explicit AreaWrapper(const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact);
+    virtual ~AreaWrapper() override;
 
     /// XServiceInfo declarations
-    virtual OUString SAL_CALL getImplementationName()
-            throw( css::uno::RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-            throw( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-            throw( css::uno::RuntimeException, std::exception ) override;
-
-    static OUString getImplementationName_Static();
-    static css::uno::Sequence< OUString > getSupportedServiceNames_Static();
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // ____ XShape ____
-    virtual css::awt::Point SAL_CALL getPosition()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setPosition( const css::awt::Point& aPosition )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::awt::Size SAL_CALL getSize()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setSize( const css::awt::Size& aSize )
-        throw (css::beans::PropertyVetoException,
-               css::uno::RuntimeException, std::exception) override;
+    virtual css::awt::Point SAL_CALL getPosition() override;
+    virtual void SAL_CALL setPosition( const css::awt::Point& aPosition ) override;
+    virtual css::awt::Size SAL_CALL getSize() override;
+    virtual void SAL_CALL setSize( const css::awt::Size& aSize ) override;
 
     // ____ XShapeDescriptor (base of XShape) ____
-    virtual OUString SAL_CALL getShapeType()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getShapeType() override;
 
     // ____ XComponent ____
-    virtual void SAL_CALL dispose()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL dispose() override;
     virtual void SAL_CALL addEventListener( const css::uno::Reference<
-                                            css::lang::XEventListener >& xListener )
-        throw (css::uno::RuntimeException, std::exception) override;
+                                            css::lang::XEventListener >& xListener ) override;
     virtual void SAL_CALL removeEventListener( const css::uno::Reference<
-                                               css::lang::XEventListener >& aListener )
-        throw (css::uno::RuntimeException, std::exception) override;
+                                               css::lang::XEventListener >& aListener ) override;
 
 protected:
     // ____ WrappedPropertySet ____
     virtual const css::uno::Sequence< css::beans::Property >& getPropertySequence() override;
-    virtual const std::vector< WrappedProperty* > createWrappedProperties() override;
+    virtual std::vector< std::unique_ptr<WrappedProperty> > createWrappedProperties() override;
     virtual css::uno::Reference< css::beans::XPropertySet > getInnerPropertySet() override;
 
 private:

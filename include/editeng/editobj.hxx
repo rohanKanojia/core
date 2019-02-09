@@ -20,8 +20,7 @@
 #ifndef INCLUDED_EDITENG_EDITOBJ_HXX
 #define INCLUDED_EDITENG_EDITOBJ_HXX
 
-#include <rsc/rscsfx.hxx>
-#include <svl/itemset.hxx>
+#include <svl/style.hxx>
 #include <svl/itempool.hxx>
 #include <editeng/eeitem.hxx>
 #include <editeng/editdata.hxx>
@@ -34,11 +33,11 @@
 #include <vector>
 #include <memory>
 
-class SfxItemPool;
-class SfxStyleSheetPool;
+class SfxItemSet;
 class SvxFieldItem;
 class SvxFieldData;
 class SvStream;
+enum class OutlinerMode;
 
 namespace editeng {
 
@@ -65,18 +64,12 @@ class EDITENG_DLLPUBLIC EditTextObject : public SfxItemPoolUser
 
     std::unique_ptr<EditTextObjectImpl> mpImpl;
 
-    EditTextObject&      operator=( const EditTextObject& ) = delete;
-
-    EditTextObject(); // disabled
-
     EditTextObject( SfxItemPool* pPool );
-
-    void StoreData( SvStream& rStrm ) const;
-    void CreateData( SvStream& rStrm );
 
 public:
     EditTextObject( const EditTextObject& r );
     virtual ~EditTextObject();
+    EditTextObject&      operator=( const EditTextObject& ) = delete;
 
     /**
      * Set paragraph strings to the shared string pool.
@@ -88,19 +81,16 @@ public:
     std::vector<svl::SharedString> GetSharedStrings() const;
 
     const SfxItemPool* GetPool() const;
-    sal_uInt16 GetUserType() const;    // For OutlinerMode, it can however not save in compatible format
-    void SetUserType( sal_uInt16 n );
+    OutlinerMode GetUserType() const;    // For OutlinerMode, it can however not save in compatible format
+    void SetUserType( OutlinerMode n );
 
     bool IsVertical() const;
-    void SetVertical( bool bVertical );
+    bool IsTopToBottom() const;
+    void SetVertical( bool bVertical, bool bTopToBottom = true);
 
     SvtScriptType GetScriptType() const;
 
-    EditTextObject* Clone() const;
-
-    void Store( SvStream& rOStream ) const;
-
-    static EditTextObject* Create( SvStream& rIStream );
+    std::unique_ptr<EditTextObject> Clone() const;
 
     sal_Int32 GetParagraphCount() const;
 
@@ -112,7 +102,7 @@ public:
 
     void GetCharAttribs( sal_Int32 nPara, std::vector<EECharAttrib>& rLst ) const;
 
-    bool RemoveCharAttribs( sal_uInt16 nWhich = 0 );
+    bool RemoveCharAttribs( sal_uInt16 nWhich );
 
     /**
      * Get all text sections in this content.  Sections are non-overlapping
@@ -138,6 +128,10 @@ public:
     editeng::FieldUpdater GetFieldUpdater();
 
     bool operator==( const EditTextObject& rCompare ) const;
+
+    /** Compare, ignoring SfxItemPool pointer.
+     */
+    bool Equals( const EditTextObject& rCompare ) const;
 
     // #i102062#
     bool isWrongListEqual(const EditTextObject& rCompare) const;

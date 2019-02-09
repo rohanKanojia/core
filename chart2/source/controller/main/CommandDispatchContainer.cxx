@@ -17,18 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "CommandDispatchContainer.hxx"
+#include <CommandDispatchContainer.hxx>
 #include "UndoCommandDispatch.hxx"
 #include "StatusBarCommandDispatch.hxx"
-#include "DisposeHelper.hxx"
-#include "macros.hxx"
-#include "ChartController.hxx"
+#include <DisposeHelper.hxx>
 #include "DrawCommandDispatch.hxx"
 #include "ShapeController.hxx"
 
-#include <comphelper/InlineContainer.hxx>
-
 #include <com/sun/star/frame/XDispatchProvider.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/view/XSelectionSupplier.hpp>
 
 using namespace ::com::sun::star;
 
@@ -39,18 +37,11 @@ namespace chart
 {
 
 CommandDispatchContainer::CommandDispatchContainer(
-    const Reference< uno::XComponentContext > & xContext, ChartController* pController )
+    const Reference< uno::XComponentContext > & xContext )
         :m_xContext( xContext )
-        ,m_pChartController( pController )
         ,m_pDrawCommandDispatch( nullptr )
         ,m_pShapeController( nullptr )
 {
-    m_aContainerDocumentCommands =
-        ::comphelper::MakeSet< OUString >
-        ("AddDirect")    ("NewDoc")             ("Open")
-        ("Save")         ("SaveAs")             ("SendMail")
-        ("EditDoc")      ("ExportDirectToPDF")  ("PrintDefault")
-        ;
 }
 
 void CommandDispatchContainer::setModel(
@@ -65,7 +56,7 @@ void CommandDispatchContainer::setModel(
 
 void CommandDispatchContainer::setChartDispatch(
     const Reference< frame::XDispatch >& rChartDispatch,
-    const ::std::set< OUString > & rChartCommands )
+    const std::set< OUString > & rChartCommands )
 {
     OSL_ENSURE(rChartDispatch.is(),"Invalid fall back dispatcher!");
     m_xChartDispatcher.set( rChartDispatch );
@@ -76,6 +67,11 @@ void CommandDispatchContainer::setChartDispatch(
 Reference< frame::XDispatch > CommandDispatchContainer::getDispatchForURL(
     const util::URL & rURL )
 {
+    static const std::set< OUString >  s_aContainerDocumentCommands {
+        "AddDirect",    "NewDoc",             "Open",
+        "Save",         "SaveAs",             "SendMail",
+        "EditDoc",      "ExportDirectToPDF",  "PrintDefault"};
+
     Reference< frame::XDispatch > xResult;
     tDispatchMap::const_iterator aIt( m_aCachedDispatches.find( rURL.Complete ));
     if( aIt != m_aCachedDispatches.end())
@@ -106,7 +102,7 @@ Reference< frame::XDispatch > CommandDispatchContainer::getDispatchForURL(
             m_aToBeDisposedDispatches.push_back( xResult );
         }
         else if( xModel.is() &&
-                 (m_aContainerDocumentCommands.find( rURL.Path ) != m_aContainerDocumentCommands.end()) )
+                 (s_aContainerDocumentCommands.find( rURL.Path ) != s_aContainerDocumentCommands.end()) )
         {
             xResult.set( getContainerDispatchForURL( xModel->getCurrentController(), rURL ));
             // ToDo: can those dispatches be cached?
@@ -158,7 +154,6 @@ void CommandDispatchContainer::DisposeAndClear()
     m_aToBeDisposedDispatches.clear();
     m_xChartDispatcher.clear();
     m_aChartCommands.clear();
-    m_pChartController = nullptr;
     m_pDrawCommandDispatch = nullptr;
     m_pShapeController = nullptr;
 }
@@ -184,13 +179,13 @@ Reference< frame::XDispatch > CommandDispatchContainer::getContainerDispatchForU
 void CommandDispatchContainer::setDrawCommandDispatch( DrawCommandDispatch* pDispatch )
 {
     m_pDrawCommandDispatch = pDispatch;
-    m_aToBeDisposedDispatches.push_back( Reference< frame::XDispatch >( pDispatch ) );
+    m_aToBeDisposedDispatches.emplace_back( pDispatch );
 }
 
 void CommandDispatchContainer::setShapeController( ShapeController* pController )
 {
     m_pShapeController = pController;
-    m_aToBeDisposedDispatches.push_back( Reference< frame::XDispatch >( pController ) );
+    m_aToBeDisposedDispatches.emplace_back( pController );
 }
 
 } //  namespace chart

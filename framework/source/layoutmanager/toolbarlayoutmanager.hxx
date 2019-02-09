@@ -25,9 +25,6 @@
 */
 #include <vector>
 
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
-#include <macros/xserviceinfo.hxx>
 #include <stdtypes.h>
 #include <properties.h>
 #include <uiconfiguration/globalsettings.hxx>
@@ -37,11 +34,8 @@
 
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XTypeProvider.hpp>
-#include <com/sun/star/frame/XLayoutManager.hpp>
 #include <com/sun/star/ui/XUIConfigurationManager.hpp>
 #include <com/sun/star/ui/XUIConfiguration.hpp>
-#include <com/sun/star/frame/XModuleManager.hpp>
-#include <com/sun/star/frame/XFrameActionListener.hpp>
 #include <com/sun/star/awt/XWindowListener.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
 #include <com/sun/star/ui/XUIElementFactory.hpp>
@@ -74,7 +68,7 @@ class ToolbarLayoutManager : public ::cppu::WeakImplHelper< css::awt::XDockableW
         ToolbarLayoutManager( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
                               const css::uno::Reference< css::ui::XUIElementFactory >& xUIElementFactory,
                               LayoutManager* pParentLayouter );
-        virtual ~ToolbarLayoutManager();
+        virtual ~ToolbarLayoutManager() override;
 
         void reset();
         void attach( const css::uno::Reference< css::frame::XFrame >& xFrame,
@@ -83,7 +77,7 @@ class ToolbarLayoutManager : public ::cppu::WeakImplHelper< css::awt::XDockableW
                      const css::uno::Reference< css::container::XNameAccess >& xPersistentWindowState );
 
         void setParentWindow( const css::uno::Reference< css::awt::XWindowPeer >& xParentWindow );
-        void setDockingAreaOffsets(const ::Rectangle& rOffsets);
+        void setDockingAreaOffsets(const ::tools::Rectangle& rOffsets);
 
         void resetDockingArea();
 
@@ -115,7 +109,7 @@ class ToolbarLayoutManager : public ::cppu::WeakImplHelper< css::awt::XDockableW
         // docking and further functions
         bool dockToolbar( const OUString& rResourceURL, css::ui::DockingArea eDockingArea, const css::awt::Point& aPos );
         bool dockAllToolbars();
-        bool floatToolbar( const OUString& rResoureURL );
+        bool floatToolbar( const OUString& rResourceURL );
         bool lockToolbar( const OUString& rResourceURL );
         bool unlockToolbar( const OUString& rResourceURL );
         void setToolbarPos( const OUString& rResourceURL, const css::awt::Point& aPos );
@@ -131,36 +125,36 @@ class ToolbarLayoutManager : public ::cppu::WeakImplHelper< css::awt::XDockableW
         css::uno::Sequence< css::uno::Reference< css::ui::XUIElement > > getToolbars();
 
         // child window notifications
-        long childWindowEvent( VclSimpleEvent* pEvent );
+        void childWindowEvent( VclSimpleEvent const * pEvent );
 
         // XInterface
 
         virtual void SAL_CALL acquire() throw() override;
         virtual void SAL_CALL release() throw() override;
-        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type & rType ) throw( css::uno::RuntimeException, std::exception ) override;
+        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type & rType ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& aEvent ) override;
 
         // XWindowListener
-        virtual void SAL_CALL windowResized( const css::awt::WindowEvent& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
-        virtual void SAL_CALL windowMoved( const css::awt::WindowEvent& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
-        virtual void SAL_CALL windowShown( const css::lang::EventObject& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
-        virtual void SAL_CALL windowHidden( const css::lang::EventObject& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL windowResized( const css::awt::WindowEvent& aEvent ) override;
+        virtual void SAL_CALL windowMoved( const css::awt::WindowEvent& aEvent ) override;
+        virtual void SAL_CALL windowShown( const css::lang::EventObject& aEvent ) override;
+        virtual void SAL_CALL windowHidden( const css::lang::EventObject& aEvent ) override;
 
         // XDockableWindowListener
-        virtual void SAL_CALL startDocking( const css::awt::DockingEvent& e ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::awt::DockingData SAL_CALL docking( const css::awt::DockingEvent& e ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL endDocking( const css::awt::EndDockingEvent& e ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL prepareToggleFloatingMode( const css::lang::EventObject& e ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL toggleFloatingMode( const css::lang::EventObject& e ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL closed( const css::lang::EventObject& e ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL endPopupMode( const css::awt::EndPopupModeEvent& e ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL startDocking( const css::awt::DockingEvent& e ) override;
+        virtual css::awt::DockingData SAL_CALL docking( const css::awt::DockingEvent& e ) override;
+        virtual void SAL_CALL endDocking( const css::awt::EndDockingEvent& e ) override;
+        virtual sal_Bool SAL_CALL prepareToggleFloatingMode( const css::lang::EventObject& e ) override;
+        virtual void SAL_CALL toggleFloatingMode( const css::lang::EventObject& e ) override;
+        virtual void SAL_CALL closed( const css::lang::EventObject& e ) override;
+        virtual void SAL_CALL endPopupMode( const css::awt::EndPopupModeEvent& e ) override;
 
         // XUIConfigurationListener
-        virtual void SAL_CALL elementInserted( const css::ui::ConfigurationEvent& Event ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL elementRemoved( const css::ui::ConfigurationEvent& Event ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL elementReplaced( const css::ui::ConfigurationEvent& Event ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL elementInserted( const css::ui::ConfigurationEvent& Event ) override;
+        virtual void SAL_CALL elementRemoved( const css::ui::ConfigurationEvent& Event ) override;
+        virtual void SAL_CALL elementReplaced( const css::ui::ConfigurationEvent& Event ) override;
 
     private:
         enum DockingOperation
@@ -194,7 +188,7 @@ class ToolbarLayoutManager : public ::cppu::WeakImplHelper< css::awt::XDockableW
         // internal helper methods
 
         bool             implts_isParentWindowVisible() const;
-        ::Rectangle      implts_calcDockingArea();
+        ::tools::Rectangle      implts_calcDockingArea();
         void             implts_sortUIElements();
         void             implts_reparentToolbars();
         OUString         implts_generateGenericAddonToolbarTitle( sal_Int32 nNumber ) const;
@@ -205,7 +199,7 @@ class ToolbarLayoutManager : public ::cppu::WeakImplHelper< css::awt::XDockableW
 
         void             implts_setDockingAreaWindowSizes( const css::awt::Rectangle& rBorderSpace );
         css::awt::Point  implts_findNextCascadeFloatingPos();
-        void             implts_renumberRowColumnData( css::ui::DockingArea eDockingArea, DockingOperation eDockingOperation, const UIElement& rUIElement );
+        void             implts_renumberRowColumnData( css::ui::DockingArea eDockingArea, const UIElement& rUIElement );
         void             implts_calcWindowPosSizeOnSingleRowColumn( sal_Int32 nDockingArea,
                                                                     sal_Int32 nOffset,
                                                                     SingleRowColumnWindowData& rRowColumnWindowData,
@@ -227,26 +221,26 @@ class ToolbarLayoutManager : public ::cppu::WeakImplHelper< css::awt::XDockableW
 
         // internal docking methods
 
-        ::Rectangle      implts_calcHotZoneRect( const ::Rectangle& rRect, sal_Int32 nHotZoneOffset );
-        void             implts_calcDockingPosSize( UIElement& aUIElement, DockingOperation& eDockOperation, ::Rectangle& rTrackingRect, const Point& rMousePos );
-        DockingOperation implts_determineDockingOperation( css::ui::DockingArea DockingArea, const ::Rectangle& rRowColRect, const Point& rMousePos );
-        ::Rectangle      implts_getWindowRectFromRowColumn( css::ui::DockingArea DockingArea, const SingleRowColumnWindowData& rRowColumnWindowData, const ::Point& rMousePos, const OUString& rExcludeElementName );
-        ::Rectangle      implts_determineFrontDockingRect( css::ui::DockingArea eDockingArea,
+        ::tools::Rectangle      implts_calcHotZoneRect( const ::tools::Rectangle& rRect, sal_Int32 nHotZoneOffset );
+        void             implts_calcDockingPosSize( UIElement& aUIElement, DockingOperation& eDockOperation, ::tools::Rectangle& rTrackingRect, const Point& rMousePos );
+        DockingOperation implts_determineDockingOperation( css::ui::DockingArea DockingArea, const ::tools::Rectangle& rRowColRect, const Point& rMousePos );
+        ::tools::Rectangle      implts_getWindowRectFromRowColumn( css::ui::DockingArea DockingArea, const SingleRowColumnWindowData& rRowColumnWindowData, const ::Point& rMousePos, const OUString& rExcludeElementName );
+        ::tools::Rectangle      implts_determineFrontDockingRect( css::ui::DockingArea eDockingArea,
                                                            sal_Int32 nRowCol,
-                                                           const ::Rectangle& rDockedElementRect,
+                                                           const ::tools::Rectangle& rDockedElementRect,
                                                            const OUString& rMovedElementName,
-                                                           const ::Rectangle& rMovedElementRect );
-        ::Rectangle      implts_calcTrackingAndElementRect( css::ui::DockingArea eDockingArea,
+                                                           const ::tools::Rectangle& rMovedElementRect );
+        ::tools::Rectangle      implts_calcTrackingAndElementRect( css::ui::DockingArea eDockingArea,
                                                             sal_Int32 nRowCol,
                                                             UIElement& rUIElement,
-                                                            const ::Rectangle& rTrackingRect,
-                                                            const ::Rectangle& rRowColumnRect,
+                                                            const ::tools::Rectangle& rTrackingRect,
+                                                            const ::tools::Rectangle& rRowColumnRect,
                                                             const ::Size& rContainerWinSize );
 
         void             implts_getDockingAreaElementInfos( css::ui::DockingArea DockingArea, std::vector< SingleRowColumnWindowData >& rRowColumnsWindowData );
         void             implts_getDockingAreaElementInfoOnSingleRowCol( css::ui::DockingArea, sal_Int32 nRowCol, SingleRowColumnWindowData& rRowColumnWindowData );
         void             implts_findNextDockingPos( css::ui::DockingArea DockingArea, const ::Size& aUIElementSize, css::awt::Point& rVirtualPos, ::Point& rPixelPos );
-        void             implts_setTrackingRect( css::ui::DockingArea eDockingArea, const ::Point& rMousePos, ::Rectangle& rTrackingRect );
+        void             implts_setTrackingRect( css::ui::DockingArea eDockingArea, const ::Point& rMousePos, ::tools::Rectangle& rTrackingRect );
 
         // creation methods
 
@@ -278,20 +272,18 @@ class ToolbarLayoutManager : public ::cppu::WeakImplHelper< css::awt::XDockableW
         UIElementVector                                                      m_aUIElements;
         UIElement                                                            m_aDockUIElement;
         Point                                                                m_aStartDockMousePos;
-        Rectangle                                                            m_aDockingArea;
-        Rectangle                                                            m_aDockingAreaOffsets;
+        tools::Rectangle                                                            m_aDockingArea;
+        tools::Rectangle                                                            m_aDockingAreaOffsets;
         DockingOperation                                                     m_eDockOperation;
         PreviewFrameDetection                                                m_ePreviewDetection;
 
-        AddonsOptions*                                                       m_pAddonOptions;
-        GlobalSettings*                                                      m_pGlobalSettings;
+        std::unique_ptr<AddonsOptions>                                       m_pAddonOptions;
+        std::unique_ptr<GlobalSettings>                                      m_pGlobalSettings;
 
         bool                                                                 m_bComponentAttached;
         bool                                                                 m_bLayoutDirty;
-        bool                                                                 m_bStoreWindowState;
         bool                                                                 m_bGlobalSettings;
         bool                                                                 m_bDockingInProgress;
-        bool                                                                 m_bVisible;
         bool                                                                 m_bLayoutInProgress;
         bool                                                                 m_bToolbarCreation;
 };

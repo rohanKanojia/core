@@ -14,11 +14,13 @@
 #include <vector>
 #include <iostream>
 
-#include <comphelper/processfactory.hxx>
 #include <rtl/strbuf.hxx>
+#include <osl/socket.hxx>
 #include <config_features.h>
+#include <sal/log.hxx>
 
 #include "DiscoveryService.hxx"
+#include "ZeroconfService.hxx"
 
 #ifdef _WIN32
   // LO vs WinAPI conflict
@@ -80,6 +82,7 @@ void DiscoveryService::setupSockets()
 #ifdef MACOSX
     // Bonjour for OSX
     zService = new OSXNetworkService();
+    zService->setup();
 #endif
 
 #if HAVE_FEATURE_AVAHI
@@ -89,14 +92,13 @@ void DiscoveryService::setupSockets()
     gethostname(hostname, 1023);
 
     zService = new AvahiNetworkService(hostname);
+    zService->setup();
 #endif
 
 #ifdef _WIN32
     zService = new WINNetworkService();
+    zService->setup();
 #endif
-
-    if (zService)
-        zService->setup();
 
     // Old implementation for backward compatibility matter
     mSocket = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
@@ -123,10 +125,9 @@ void DiscoveryService::setupSockets()
     struct ip_mreq multicastRequest;
 
 // the Win32 SDK 8.1 deprecates inet_addr()
-#if defined(_WIN32_WINNT) &&  _WIN32_WINNT >= _WIN32_WINNT_VISTA
+#if defined(_WIN32)
     IN_ADDR addr;
-    OUString const saddr("239.0.0.1");
-    INT ret = InetPtonW(AF_INET, saddr.getStr(), & addr);
+    INT ret = InetPtonW(AF_INET, L"239.0.0.1", & addr);
     if (1 == ret)
     {
         multicastRequest.imr_multiaddr.s_addr = addr.S_un.S_addr;
@@ -138,9 +139,11 @@ void DiscoveryService::setupSockets()
 
     rc = setsockopt( mSocket, IPPROTO_IP, IP_ADD_MEMBERSHIP,
     #ifdef _WIN32
-        (const char*)
+        reinterpret_cast<const char*>(&multicastRequest),
+    #else
+        &multicastRequest,
     #endif
-        &multicastRequest, sizeof(multicastRequest));
+        sizeof(multicastRequest));
 
     if (rc)
     {

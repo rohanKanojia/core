@@ -20,13 +20,12 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_DOCFUNC_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_DOCFUNC_HXX
 
-#include <tools/link.hxx>
-#include "global.hxx"
+#include <tools/solar.h>
+#include <global.hxx>
 #include <formula/grammar.hxx>
-#include "tabbgcolor.hxx"
-#include "token.hxx"
-#include "rangenam.hxx"
+#include <tabbgcolor.hxx>
 
+#include <memory>
 #include <vector>
 #include <map>
 
@@ -45,11 +44,13 @@ class ScTableProtection;
 struct ScCellMergeOption;
 class ScConditionalFormat;
 class ScConditionalFormatList;
+class ScUndoRemoveMerge;
+class ScRangeName;
 
+enum class TransliterationFlags;
+enum class CreateNameFlags;
 namespace sc {
-
-struct ColRowSpan;
-
+    struct ColRowSpan;
 }
 
 class ScDocFunc
@@ -68,10 +69,10 @@ protected:
 public:
     virtual         ~ScDocFunc() {}
 
-    DECL_LINK_TYPED( NotifyDrawUndo, SdrUndoAction*, void );
+    void            NotifyDrawUndo(std::unique_ptr<SdrUndoAction>);
 
     // for grouping multiple operations into one with a new name
-    void            EnterListAction( sal_uInt16 nNameResId );
+    void            EnterListAction(const char* pNameResId);
     void            EndListAction();
 
     bool            DetectiveAddPred(const ScAddress& rPos);
@@ -91,7 +92,7 @@ public:
     bool DeleteCell(
         const ScAddress& rPos, const ScMarkData& rMark, InsertDeleteFlags nFlags, bool bRecord );
 
-    bool            TransliterateText( const ScMarkData& rMark, sal_Int32 nType,
+    bool            TransliterateText( const ScMarkData& rMark, TransliterationFlags nType,
                                                bool bApi );
 
     bool            SetNormalString( bool& o_rbNumFmtSet, const ScAddress& rPos, const OUString& rText, bool bApi );
@@ -112,7 +113,7 @@ public:
         const ScAddress& rPos, const OUString& rText, bool bInterpret, bool bEnglish, bool bApi,
         const formula::FormulaGrammar::Grammar eGrammar );
 
-    bool            ShowNote( const ScAddress& rPos, bool bShow = true );
+    bool            ShowNote( const ScAddress& rPos, bool bShow );
 
     void            SetNoteText( const ScAddress& rPos, const OUString& rNoteText, bool bApi );
     void            ReplaceNote( const ScAddress& rPos, const OUString& rNoteText, const OUString* pAuthor, const OUString* pDate, bool bApi );
@@ -133,27 +134,27 @@ public:
 
     SC_DLLPUBLIC bool InsertTable( SCTAB nTab, const OUString& rName, bool bRecord, bool bApi );
     bool            RenameTable( SCTAB nTab, const OUString& rName, bool bRecord, bool bApi );
-    bool            DeleteTable( SCTAB nTab, bool bRecord, bool bApi );
+    bool            DeleteTable( SCTAB nTab, bool bRecord );
 
     bool            SetTabBgColor( SCTAB nTab, const Color& rColor, bool bRecord, bool bApi );
     bool            SetTabBgColor( ScUndoTabColorInfo::List& rUndoTabColorList, bool bApi );
 
     void            SetTableVisible( SCTAB nTab, bool bVisible, bool bApi );
 
-    bool            SetLayoutRTL( SCTAB nTab, bool bRTL, bool bApi );
+    bool            SetLayoutRTL( SCTAB nTab, bool bRTL );
 
     SC_DLLPUBLIC bool SetWidthOrHeight(
         bool bWidth, const std::vector<sc::ColRowSpan>& rRanges, SCTAB nTab,
         ScSizeMode eMode, sal_uInt16 nSizeTwips, bool bRecord, bool bApi );
 
     bool            InsertPageBreak( bool bColumn, const ScAddress& rPos,
-                                             bool bRecord, bool bSetModified, bool bApi );
+                                             bool bRecord, bool bSetModified );
     bool            RemovePageBreak( bool bColumn, const ScAddress& rPos,
-                                             bool bRecord, bool bSetModified, bool bApi );
+                                             bool bRecord, bool bSetModified );
 
     void            ProtectSheet( SCTAB nTab, const ScTableProtection& rProtect );
 
-    bool            Protect( SCTAB nTab, const OUString& rPassword, bool bApi );
+    bool            Protect( SCTAB nTab, const OUString& rPassword );
     bool            Unprotect( SCTAB nTab, const OUString& rPassword, bool bApi );
 
     void            ClearItems( const ScMarkData& rMark, const sal_uInt16* pWhich, bool bApi );
@@ -178,7 +179,7 @@ public:
                                         double fStart, double fStep, double fMax,
                                         bool bApi );
 
-    // FillAuto: rRange wird von Source-Range auf Dest-Range angepasst
+    // FillAuto: rRange is change from Source-Range to Dest-Range
     SC_DLLPUBLIC bool
                     FillAuto( ScRange& rRange, const ScMarkData* pTabMark, FillDir eDir, FillCmd eCmd, FillDateCmd  eDateCmd, sal_uLong nCount, double fStep, double fMax, bool bRecord, bool bApi );
 
@@ -188,11 +189,12 @@ public:
     void            ResizeMatrix( const ScRange& rOldRange, const ScAddress& rNewEnd );
 
     bool            MergeCells( const ScCellMergeOption& rOption, bool bContents,
-                                        bool bRecord, bool bApi );
-    bool            UnmergeCells( const ScRange& rRange, bool bRecord );
-    bool            UnmergeCells( const ScCellMergeOption& rOption, bool bRecord );
+                                        bool bRecord, bool bApi, bool bEmptyMergedCells = false );
+    bool            UnmergeCells( const ScRange& rRange, bool bRecord, ScUndoRemoveMerge* pUndoRemoveMerge );
+    bool            UnmergeCells( const ScCellMergeOption& rOption, bool bRecord, ScUndoRemoveMerge* pUndoRemoveMerge );
 
-    void            SetNewRangeNames( ScRangeName* pNewRanges, bool bModifyDoc = true, SCTAB nTab = -1 );     // takes ownership of pNewRanges //nTab = -1 for local range names
+    // takes ownership of pNewRanges, nTab = -1 for local range names
+    void            SetNewRangeNames( std::unique_ptr<ScRangeName> pNewRanges, bool bModifyDoc, SCTAB nTab );
     void            ModifyRangeNames( const ScRangeName& rNewRanges, SCTAB nTab = -1 );
     /**
      * Modify all range names, global scope names as well as sheet local ones,
@@ -202,7 +204,7 @@ public:
      */
     void            ModifyAllRangeNames(const std::map<OUString, std::unique_ptr<ScRangeName>>& rRangeMap);
 
-    bool            CreateNames( const ScRange& rRange, sal_uInt16 nFlags, bool bApi, SCTAB nTab = -1 ); // -1 for global range names
+    bool            CreateNames( const ScRange& rRange, CreateNameFlags nFlags, bool bApi, SCTAB nTab = -1 ); // -1 for global range names
     bool            InsertNameList( const ScAddress& rStartPos, bool bApi );
 
     void            InsertAreaLink( const OUString& rFile, const OUString& rFilter,
@@ -214,7 +216,7 @@ public:
      * @param nOldIndex If 0 don't delete an old format
      * @param pFormat if NULL only delete an old format
      */
-    void ReplaceConditionalFormat( sal_uLong nOldIndex, ScConditionalFormat* pFormat, SCTAB nTab, const ScRangeList& rRanges );
+    void ReplaceConditionalFormat( sal_uLong nOldIndex, std::unique_ptr<ScConditionalFormat> pFormat, SCTAB nTab, const ScRangeList& rRanges );
 
     /**
      * Sets or replaces the conditional format list of a table
@@ -231,7 +233,6 @@ class ScDocFuncDirect : public ScDocFunc
 {
 public:
             ScDocFuncDirect( ScDocShell& rDocSh ) : ScDocFunc( rDocSh ) {}
-    virtual ~ScDocFuncDirect() {}
 };
 
 void VBA_DeleteModule( ScDocShell& rDocSh, const OUString& sModuleName );

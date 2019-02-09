@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DrawViewShell.hxx"
-#include "PresentationViewShell.hxx"
+#include <DrawViewShell.hxx>
+#include <PresentationViewShell.hxx>
 #include <editeng/outliner.hxx>
 #include <svx/svxids.hrc>
 #include <sfx2/request.hxx>
@@ -26,42 +26,40 @@
 #include <svx/svdpagv.hxx>
 #include <vcl/scrbar.hxx>
 #include <vcl/settings.hxx>
+#include <sdcommands.h>
+#include <sal/log.hxx>
 
 #include <tools/poly.hxx>
 #include <svx/fmshell.hxx>
 #include <editeng/eeitem.hxx>
 #include <svtools/colorcfg.hxx>
-#include "AccessibleDrawDocumentView.hxx"
+#include <AccessibleDrawDocumentView.hxx>
 
 #include <sfx2/viewfrm.hxx>
-#include "LayerTabBar.hxx"
+#include <LayerTabBar.hxx>
 
-#include "strings.hrc"
-#include "res_bmp.hrc"
-#include "glob.hrc"
-#include "app.hrc"
-#include "helpids.h"
-#include "optsitem.hxx"
-#include "sdmod.hxx"
-#include "FrameView.hxx"
-#include "sdattr.hxx"
-#include "futext.hxx"
-#include "sdpage.hxx"
-#include "stlpool.hxx"
-#include "prntopts.hxx"
-#include "sdresid.hxx"
-#include "Window.hxx"
-#include "drawview.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "Outliner.hxx"
-#include "Client.hxx"
-#include "slideshow.hxx"
-#include "unokywds.hxx"
-#include "SdUnoDrawView.hxx"
-#include "ViewShellBase.hxx"
-#include "FormShellManager.hxx"
-#include "DrawController.hxx"
+#include <app.hrc>
+#include <helpids.h>
+#include <optsitem.hxx>
+#include <sdmod.hxx>
+#include <FrameView.hxx>
+#include <sdattr.hxx>
+#include <futext.hxx>
+#include <sdpage.hxx>
+#include <stlpool.hxx>
+#include <prntopts.hxx>
+#include <Window.hxx>
+#include <drawview.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <Outliner.hxx>
+#include <Client.hxx>
+#include <slideshow.hxx>
+#include <unokywds.hxx>
+#include <SdUnoDrawView.hxx>
+#include <ViewShellBase.hxx>
+#include <FormShellManager.hxx>
+#include <DrawController.hxx>
 #include <memory>
 
 namespace sd {
@@ -108,9 +106,6 @@ void DrawViewShell::ArrangeGUIElements()
     // bar.
     int nScrollBarSize = GetParentWindow()->GetSettings().GetStyleSettings().GetScrollBarSize();
     maScrBarWH = Size (nScrollBarSize, nScrollBarSize);
-
-    Point aHPos = maViewPos;
-    aHPos.Y() += maViewSize.Height();
 
     ViewShell::ArrangeGUIElements ();
 
@@ -250,12 +245,12 @@ void DrawViewShell::ReadFrameViewData(FrameView* pView)
         if ( pPageView->GetLockedLayers() != pView->GetLockedLayers() )
             pPageView->SetLockedLayers( pView->GetLockedLayers() );
 
-        if (mePageKind == PK_NOTES)
+        if (mePageKind == PageKind::Notes)
         {
             if (pPageView->GetHelpLines() != pView->GetNotesHelpLines())
                 pPageView->SetHelpLines( pView->GetNotesHelpLines() );
         }
-        else if (mePageKind == PK_HANDOUT)
+        else if (mePageKind == PageKind::Handout)
         {
             if (pPageView->GetHelpLines() != pView->GetHandoutHelpLines())
                 pPageView->SetHelpLines( pView->GetHandoutHelpLines() );
@@ -272,7 +267,7 @@ void DrawViewShell::ReadFrameViewData(FrameView* pView)
 
     sal_uInt16 nSelectedPage = 0;
 
-    if (mePageKind != PK_HANDOUT)
+    if (mePageKind != PageKind::Handout)
     {
         nSelectedPage = pView->GetSelectedPage();
     }
@@ -347,14 +342,14 @@ void DrawViewShell::WriteFrameViewData()
     mpFrameView->SetDesignMode( mpDrawView->IsDesignMode() );
 
     Size aVisSizePixel = GetActiveWindow()->GetOutputSizePixel();
-    Rectangle aVisArea = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0), aVisSizePixel) );
+    ::tools::Rectangle aVisArea = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0), aVisSizePixel) );
     mpFrameView->SetVisArea(aVisArea);
 
-    if( mePageKind == PK_HANDOUT )
+    if( mePageKind == PageKind::Handout )
         mpFrameView->SetSelectedPage(0);
     else
     {
-        mpFrameView->SetSelectedPage( maTabControl->GetCurPageId() - 1 );
+        mpFrameView->SetSelectedPage( maTabControl->GetCurPagePos() );
     }
 
     mpFrameView->SetViewShEditMode(meEditMode);
@@ -373,11 +368,11 @@ void DrawViewShell::WriteFrameViewData()
         if ( mpFrameView->GetLockedLayers() != pPageView->GetLockedLayers() )
             mpFrameView->SetLockedLayers( pPageView->GetLockedLayers() );
 
-        if (mePageKind == PK_NOTES)
+        if (mePageKind == PageKind::Notes)
         {
             mpFrameView->SetNotesHelpLines( pPageView->GetHelpLines() );
         }
-        else if (mePageKind == PK_HANDOUT)
+        else if (mePageKind == PageKind::Handout)
         {
             mpFrameView->SetHandoutHelpLines( pPageView->GetHelpLines() );
         }
@@ -406,7 +401,7 @@ void DrawViewShell::PrePaint()
  *
  * Remark: pWin==NULL, if Paint() is called from ShowWindow!
  */
-void DrawViewShell::Paint(const Rectangle& rRect, ::sd::Window* pWin)
+void DrawViewShell::Paint(const ::tools::Rectangle& rRect, ::sd::Window* pWin)
 {
     /* This is done before each text edit, so why not do it before every paint.
                 The default language is only used if the outliner only contains one
@@ -414,7 +409,7 @@ void DrawViewShell::Paint(const Rectangle& rRect, ::sd::Window* pWin)
     GetDoc()->GetDrawOutliner().SetDefaultLanguage( GetDoc()->GetLanguage( EE_CHAR_LANGUAGE ) );
 
     // Set Application Background color for usage in SdrPaintView(s)
-    mpDrawView->SetApplicationBackgroundColor(GetAppBackgroundColor());
+    mpDrawView->SetApplicationBackgroundColor( mnAppBackgroundColor );
 
     /* This is done before each text edit, so why not do it before every paint.
                 The default language is only used if the outliner only contains one
@@ -442,23 +437,26 @@ void DrawViewShell::HidePage()
         pFormShell->PrepareClose(false);
 }
 
-void DrawViewShell::WriteUserDataSequence ( css::uno::Sequence < css::beans::PropertyValue >& rSequence, bool bBrowse )
+void DrawViewShell::WriteUserDataSequence ( css::uno::Sequence < css::beans::PropertyValue >& rSequence )
 {
     WriteFrameViewData();
 
-    ViewShell::WriteUserDataSequence( rSequence, bBrowse );
+    ViewShell::WriteUserDataSequence( rSequence );
 
     const sal_Int32 nIndex = rSequence.getLength();
     rSequence.realloc( nIndex + 1 );
     rSequence[nIndex].Name = sUNO_View_ZoomOnPage ;
     rSequence[nIndex].Value <<= mbZoomOnPage;
+
+    // Common SdrModel processing
+    GetDocSh()->GetDoc()->WriteUserDataSequence(rSequence);
 }
 
-void DrawViewShell::ReadUserDataSequence ( const css::uno::Sequence < css::beans::PropertyValue >& rSequence, bool bBrowse )
+void DrawViewShell::ReadUserDataSequence ( const css::uno::Sequence < css::beans::PropertyValue >& rSequence )
 {
     WriteFrameViewData();
 
-    ViewShell::ReadUserDataSequence( rSequence, bBrowse );
+    ViewShell::ReadUserDataSequence( rSequence );
 
     const sal_Int32 nLength = rSequence.getLength();
     const css::beans::PropertyValue *pValue = rSequence.getConstArray();
@@ -472,29 +470,55 @@ void DrawViewShell::ReadUserDataSequence ( const css::uno::Sequence < css::beans
                 mbZoomOnPage = bZoomPage;
             }
         }
+        // Fallback to common SdrModel processing
+        else GetDocSh()->GetDoc()->ReadUserDataSequenceValue(pValue);
     }
+
+    // The parameter rSequence contains the config-items from
+    // <config:config-item-set config:name="ooo:view-settings">. Determine, whether
+    // they contain "VisibleLayers", "PrintableLayers" and "LockedLayers". If not, it
+    // is a foreign document or a new document after transition period and the corresponding
+    // information were read from <draw:layer-set>. In that case we need to bring
+    // the information from model to view.
+    bool bHasVisiPrnLockSettings(false);
+    for ( auto & rPropertyValue : rSequence )
+    {
+        if ( rPropertyValue.Name == sUNO_View_VisibleLayers
+          || rPropertyValue.Name == sUNO_View_PrintableLayers
+          || rPropertyValue.Name == sUNO_View_LockedLayers )
+        {
+            bHasVisiPrnLockSettings = true;
+            break;
+        }
+    }
+    if ( !bHasVisiPrnLockSettings )
+    {
+        const SdrLayerAdmin& rLayerAdmin = GetDocSh()->GetDoc()->GetLayerAdmin();
+        SdrLayerIDSet aSdrLayerIDSet;
+        rLayerAdmin.getVisibleLayersODF( aSdrLayerIDSet );
+        mpFrameView -> SetVisibleLayers( aSdrLayerIDSet );
+        rLayerAdmin.getPrintableLayersODF( aSdrLayerIDSet );
+        mpFrameView -> SetPrintableLayers( aSdrLayerIDSet );
+        rLayerAdmin.getLockedLayersODF( aSdrLayerIDSet );
+        mpFrameView -> SetLockedLayers( aSdrLayerIDSet );
+    }
+
 
     if( mpFrameView->GetPageKind() != mePageKind )
     {
         mePageKind = mpFrameView->GetPageKind();
 
-        if (mePageKind == PK_NOTES)
+        if (mePageKind == PageKind::Notes)
         {
-            SetHelpId( SID_NOTES_MODE );
             GetActiveWindow()->SetHelpId( CMD_SID_NOTES_MODE );
-            GetActiveWindow()->SetUniqueId( CMD_SID_NOTES_MODE );
         }
-        else if (mePageKind == PK_HANDOUT)
+        else if (mePageKind == PageKind::Handout)
         {
-            SetHelpId( SID_HANDOUT_MASTER_MODE );
             GetActiveWindow()->SetHelpId( CMD_SID_HANDOUT_MASTER_MODE );
-            GetActiveWindow()->SetUniqueId( CMD_SID_HANDOUT_MASTER_MODE );
         }
         else
         {
-            SetHelpId( SD_IF_SDDRAWVIEWSHELL );
             GetActiveWindow()->SetHelpId( HID_SDDRAWVIEWSHELL );
-            GetActiveWindow()->SetUniqueId( HID_SDDRAWVIEWSHELL );
         }
     }
 
@@ -502,7 +526,7 @@ void DrawViewShell::ReadUserDataSequence ( const css::uno::Sequence < css::beans
 
     if( !mbZoomOnPage )
     {
-        const Rectangle aVisArea( mpFrameView->GetVisArea() );
+        const ::tools::Rectangle aVisArea( mpFrameView->GetVisArea() );
 
         if ( GetDocSh()->GetCreateMode() == SfxObjectCreateMode::EMBEDDED )
         {
@@ -524,7 +548,7 @@ void DrawViewShell::ReadUserDataSequence ( const css::uno::Sequence < css::beans
     ResetActualLayer();
 }
 
-void DrawViewShell::VisAreaChanged(const Rectangle& rRect)
+void DrawViewShell::VisAreaChanged(const ::tools::Rectangle& rRect)
 {
     ViewShell::VisAreaChanged( rRect );
 
@@ -553,7 +577,7 @@ css::uno::Reference<css::accessibility::XAccessible>
                 css::uno::UNO_QUERY);
     }
 
-    OSL_TRACE ("DrawViewShell::CreateAccessibleDocumentView: no controller");
+    SAL_WARN("sd", "DrawViewShell::CreateAccessibleDocumentView: no controller");
     return css::uno::Reference< css::accessibility::XAccessible>();
 }
 
@@ -576,9 +600,9 @@ void DrawViewShell::SetActiveTabLayerIndex (int nIndex)
         if (nIndex>=0 && nIndex<pBar->GetPageCount())
         {
             // Tell the draw view and the tab control of the new active layer.
-            mpDrawView->SetActiveLayer (pBar->GetPageText (pBar->GetPageId ((sal_uInt16)nIndex)));
-            pBar->SetCurPageId (pBar->GetPageId ((sal_uInt16)nIndex));
-            css::uno::Reference<SdUnoDrawView> pUnoDrawView(new SdUnoDrawView (
+            mpDrawView->SetActiveLayer (pBar->GetLayerName (pBar->GetPageId (static_cast<sal_uInt16>(nIndex))));
+            pBar->SetCurPageId (pBar->GetPageId (static_cast<sal_uInt16>(nIndex)));
+            rtl::Reference<SdUnoDrawView> pUnoDrawView(new SdUnoDrawView (
                 *this,
                 *GetView()));
             css::uno::Reference< css::drawing::XLayer> rLayer = pUnoDrawView->getActiveLayer();

@@ -19,7 +19,7 @@
 #ifndef INCLUDED_VCL_PPDPARSER_HXX
 #define INCLUDED_VCL_PPDPARSER_HXX
 
-#include <list>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -28,14 +28,11 @@
 #include <tools/solar.h>
 #include <vcl/dllapi.h>
 
-#include <com/sun/star/lang/Locale.hpp>
-
 #define PRINTER_PPDDIR "driver"
 
 namespace psp {
 
 class PPDCache;
-class PPDParser;
 class PPDTranslator;
 
 enum PPDValueType { eInvocation, eQuoted, eSymbol, eString, eNo };
@@ -60,11 +57,12 @@ struct VCL_DLLPUBLIC PPDValue
 class VCL_DLLPUBLIC PPDKey
 {
     friend class PPDParser;
+    friend class CPDManager;
 
-    typedef std::unordered_map< OUString, PPDValue, OUStringHash > hash_type;
+    typedef std::unordered_map< OUString, PPDValue > hash_type;
     typedef std::vector< PPDValue* > value_type;
 
-    OUString            m_aKey;
+    OUString const      m_aKey;
     hash_type           m_aValues;
     value_type          m_aOrderedValues;
     const PPDValue*     m_pDefaultValue;
@@ -73,12 +71,10 @@ class VCL_DLLPUBLIC PPDKey
     OUString            m_aGroup;
 
 public:
-    enum UIType { PickOne, PickMany, Boolean };
-    enum SetupType { ExitServer, Prolog, DocumentSetup, PageSetup, JCLSetup, AnySetup };
+    enum class SetupType { ExitServer, Prolog, DocumentSetup, PageSetup, JCLSetup, AnySetup };
 private:
 
     bool                m_bUIOption;
-    UIType              m_eUIType;
     int                 m_nOrderDependency;
     SetupType           m_eSetupType;
 
@@ -115,19 +111,17 @@ struct PPDKeyhash
  * PPDParser - parses a PPD file and contains all available keys from it
  */
 
-class PPDContext;
-class CUPSManager;
-
 class VCL_DLLPUBLIC PPDParser
 {
     friend class PPDContext;
     friend class CUPSManager;
+    friend class CPDManager;
     friend class PPDCache;
 
-    typedef std::unordered_map< OUString, PPDKey*, OUStringHash > hash_type;
+    typedef std::unordered_map< OUString, std::unique_ptr<PPDKey> > hash_type;
     typedef std::vector< PPDKey* > value_type;
 
-    void insertKey( const OUString& rKey, PPDKey* pKey );
+    void insertKey( std::unique_ptr<PPDKey> pKey );
 public:
     struct PPDConstraint
     {
@@ -141,11 +135,8 @@ public:
 private:
     hash_type                                   m_aKeys;
     value_type                                  m_aOrderedKeys;
-    ::std::list< PPDConstraint >                m_aConstraints;
+    ::std::vector< PPDConstraint >              m_aConstraints;
 
-    // some identifying fields
-    OUString                                    m_aPrinterName;
-    OUString                                    m_aNickName;
     // the full path of the PPD file
     OUString                                    m_aFile;
     // some basic attributes
@@ -157,34 +148,25 @@ private:
 
     // shortcuts to important keys and their default values
     // imageable area
-    const PPDValue*                             m_pDefaultImageableArea;
     const PPDKey*                               m_pImageableAreas;
     // paper dimensions
     const PPDValue*                             m_pDefaultPaperDimension;
     const PPDKey*                               m_pPaperDimensions;
     // paper trays
     const PPDValue*                             m_pDefaultInputSlot;
-    const PPDKey*                               m_pInputSlots;
     // resolutions
     const PPDValue*                             m_pDefaultResolution;
-    const PPDKey*                               m_pResolutions;
-    // duplex commands
-    const PPDValue*                             m_pDefaultDuplexType;
-    const PPDKey*                               m_pDuplexTypes;
-
-    // fonts
-    const PPDKey*                               m_pFontList;
 
     // translations
-    PPDTranslator*                              m_pTranslator;
+    std::unique_ptr<PPDTranslator>              m_pTranslator;
 
     PPDParser( const OUString& rFile );
-    ~PPDParser();
+    PPDParser(const OUString& rFile, const std::vector<PPDKey*>& keys);
 
     void parseOrderDependency(const OString& rLine);
     void parseOpenUI(const OString& rLine, const OString& rPPDGroup);
     void parseConstraint(const OString& rLine);
-    void parse( std::list< OString >& rLines );
+    void parse( std::vector< OString >& rLines );
 
     OUString handleTranslation(const OString& i_rString, bool i_bIsGlobalized);
 
@@ -192,6 +174,7 @@ private:
     static void initPPDFiles(PPDCache &rPPDCache);
     static OUString getPPDFile( const OUString& rFile );
 public:
+    ~PPDParser();
     static const PPDParser* getParser( const OUString& rFile );
 
     const PPDKey*   getKey( int n ) const;
@@ -199,7 +182,7 @@ public:
     int             getKeys() const { return m_aKeys.size(); }
     bool            hasKey( const PPDKey* ) const;
 
-    const ::std::list< PPDConstraint >& getConstraints() const { return m_aConstraints; }
+    const ::std::vector< PPDConstraint >& getConstraints() const { return m_aConstraints; }
 
     bool            isColorDevice() const { return m_bColorDevice; }
     bool            isType42Capable() const { return m_bType42Capable; }
@@ -253,10 +236,10 @@ class VCL_DLLPUBLIC PPDContext
     bool checkConstraints( const PPDKey*, const PPDValue*, bool bDoReset );
     bool resetValue( const PPDKey*, bool bDefaultable = false );
 public:
-    PPDContext( const PPDParser* pParser = nullptr );
+    PPDContext();
     PPDContext( const PPDContext& rContext ) { operator=( rContext ); }
     PPDContext& operator=( const PPDContext& rContext );
-    ~PPDContext();
+    PPDContext& operator=( PPDContext&& rContext );
 
     void setParser( const PPDParser* );
     const PPDParser* getParser() const { return m_pParser; }
@@ -272,7 +255,7 @@ public:
 
     // for printer setup
     char*   getStreamableBuffer( sal_uLong& rBytes ) const;
-    void    rebuildFromStreamBuffer( char* pBuffer, sal_uLong nBytes );
+    void    rebuildFromStreamBuffer(const std::vector<char> &rBuffer);
 
     // convenience
     int getRenderResolution() const;

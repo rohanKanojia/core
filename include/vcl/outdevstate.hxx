@@ -21,15 +21,18 @@
 #define INCLUDED_VCL_OUTDEVSTATE_HXX
 
 #include <vcl/mapmod.hxx>
-#include <vcl/region.hxx>
-#include <vcl/font.hxx>
 #include <vcl/vclenum.hxx>
 
-#include <tools/solar.h>
-#include <tools/gen.hxx>
 #include <tools/color.hxx>
+#include <tools/gen.hxx>
 #include <tools/fontenum.hxx>
 #include <o3tl/typed_flags_set.hxx>
+#include <memory>
+#include <boost/optional.hpp>
+#include <i18nlangtag/lang.h>
+
+namespace vcl { class Font; }
+namespace vcl { class Region; }
 
 // Flags for OutputDevice::Push() and OutDevState
 enum class PushFlags {
@@ -58,41 +61,18 @@ namespace o3tl
 #define PUSH_ALLTEXT  (PushFlags::TEXTCOLOR | PushFlags::TEXTFILLCOLOR | PushFlags::TEXTLINECOLOR | PushFlags::OVERLINECOLOR | PushFlags::TEXTALIGN | PushFlags::TEXTLAYOUTMODE | PushFlags::TEXTLANGUAGE)
 #define PUSH_ALLFONT  (PUSH_ALLTEXT | PushFlags::FONT)
 
-// LayoutModes for Complex Text Layout
+// Layout flags for Complex Text Layout
 // These are flag values, i.e they can be combined
-enum ComplexTextLayoutMode
+enum class ComplexTextLayoutFlags
 {
-  TEXT_LAYOUT_DEFAULT =             ((sal_uLong)0x00000000),
-  TEXT_LAYOUT_BIDI_RTL =            ((sal_uLong)0x00000001),
-  TEXT_LAYOUT_BIDI_STRONG =         ((sal_uLong)0x00000002),
-  TEXT_LAYOUT_TEXTORIGIN_LEFT =     ((sal_uLong)0x00000004),
-  TEXT_LAYOUT_TEXTORIGIN_RIGHT =    ((sal_uLong)0x00000008),
-  TEXT_LAYOUT_COMPLEX_DISABLED =    ((sal_uLong)0x00000100),
-  TEXT_LAYOUT_ENABLE_LIGATURES =    ((sal_uLong)0x00000200),
-  TEXT_LAYOUT_SUBSTITUTE_DIGITS =   ((sal_uLong)0x00000400)
+    Default           = 0x0000,
+    BiDiRtl           = 0x0001,
+    BiDiStrong        = 0x0002,
+    TextOriginLeft    = 0x0004,
+    TextOriginRight   = 0x0008
 };
-// make combining these type-safe
-inline ComplexTextLayoutMode operator| (ComplexTextLayoutMode lhs, ComplexTextLayoutMode rhs)
-{
-    return static_cast<ComplexTextLayoutMode>(static_cast<sal_uLong>(lhs) | static_cast<sal_uLong>(rhs));
-}
-inline ComplexTextLayoutMode operator& (ComplexTextLayoutMode lhs, ComplexTextLayoutMode rhs)
-{
-    return static_cast<ComplexTextLayoutMode>(static_cast<sal_uLong>(lhs) & static_cast<sal_uLong>(rhs));
-}
-inline ComplexTextLayoutMode operator~ (ComplexTextLayoutMode rhs)
-{
-    return static_cast<ComplexTextLayoutMode>(0x7ff & ~(static_cast<sal_uLong>(rhs)));
-}
-inline ComplexTextLayoutMode& operator|= (ComplexTextLayoutMode& lhs, ComplexTextLayoutMode rhs)
-{
-    lhs = static_cast<ComplexTextLayoutMode>(static_cast<sal_uLong>(lhs) | static_cast<sal_uLong>(rhs));
-    return lhs;
-}
-inline ComplexTextLayoutMode& operator&= (ComplexTextLayoutMode& lhs, ComplexTextLayoutMode rhs)
-{
-    lhs = static_cast<ComplexTextLayoutMode>(static_cast<sal_uLong>(lhs) & static_cast<sal_uLong>(rhs));
-    return lhs;
+namespace o3tl {
+    template<> struct typed_flags<ComplexTextLayoutFlags> : is_typed_flags<ComplexTextLayoutFlags, 0x000f> {};
 }
 
 class OutDevState
@@ -101,20 +81,20 @@ public:
     OutDevState();
     ~OutDevState();
 
-    MapMode*        mpMapMode;
+    boost::optional<MapMode>        mpMapMode;
     bool            mbMapActive;
-    vcl::Region*    mpClipRegion;
-    Color*          mpLineColor;
-    Color*          mpFillColor;
-    vcl::Font*      mpFont;
-    Color*          mpTextColor;
-    Color*          mpTextFillColor;
-    Color*          mpTextLineColor;
-    Color*          mpOverlineColor;
-    Point*          mpRefPoint;
+    std::unique_ptr<vcl::Region>    mpClipRegion;
+    boost::optional<Color>          mpLineColor;
+    boost::optional<Color>          mpFillColor;
+    std::unique_ptr<vcl::Font>      mpFont;
+    boost::optional<Color>          mpTextColor;
+    boost::optional<Color>          mpTextFillColor;
+    boost::optional<Color>          mpTextLineColor;
+    boost::optional<Color>          mpOverlineColor;
+    boost::optional<Point>          mpRefPoint;
     TextAlign       meTextAlign;
     RasterOp        meRasterOp;
-    ComplexTextLayoutMode  mnTextLayoutMode;
+    ComplexTextLayoutFlags  mnTextLayoutMode;
     LanguageType    meTextLanguage;
     PushFlags       mnFlags;
 };

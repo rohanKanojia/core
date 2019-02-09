@@ -21,13 +21,12 @@
 #define INCLUDED_SHELL_INC_INTERNAL_UTILITIES_HXX
 
 #include <malloc.h>
-#if defined _MSC_VER
-#pragma warning(push, 1)
+
+#if !defined WIN32_LEAN_AND_MEAN
+  #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
+
 #include <stdio.h>
 #include <fcntl.h>
 #include <io.h>
@@ -35,31 +34,7 @@
 
 #include <string>
 #define STRSAFE_NO_DEPRECATE
-#ifdef __MINGW32__
-
-// Work around lack of strsafe library in mingw-w64, do let their
-// strsafe.h provide inlines of StringCchVPrintfA etc, avoid linking
-// errors in a debug build.
-#ifdef __CRT__NO_INLINE
-#undef __CRT__NO_INLINE
-#define DID_UNDEFINE__CRT__NO_INLINE
-#endif
-
-extern "C" {
-
-#endif
-
 #include <strsafe.h>
-
-#ifdef __MINGW32__
-}
-
-#ifdef DID_UNDEFINE__CRT__NO_INLINE
-#define __CRT__NO_INLINE
-#endif
-
-#endif
-
 
 /** Convert a string to a wstring
     using CP_ACP
@@ -85,12 +60,6 @@ std::wstring UTF8ToWString(const std::string& String);
 std::wstring GetResString(int ResId);
 
 
-/** Returns whether we are running
-    on Windows XP or not
-*/
-bool is_windows_xp_or_above();
-
-
 /** helper function to judge if the string is only has spaces.
     @returns
         <TRUE>if the provided string contains only but at least one space
@@ -113,18 +82,18 @@ LCID LocaleSetToLCID( const LocaleSet_t & Locale );
 
 
 #ifdef DEBUG
-inline void OutputDebugStringFormat( LPCSTR pFormat, ... )
+inline void OutputDebugStringFormatW( LPCWSTR pFormat, ... )
 {
-    CHAR    buffer[1024];
+    WCHAR    buffer[1024];
     va_list args;
 
     va_start( args, pFormat );
-    StringCchVPrintfA( buffer, sizeof(buffer), pFormat, args );
+    StringCchVPrintfW( buffer, sizeof(buffer)/sizeof(*buffer), pFormat, args );
     va_end( args );
-    OutputDebugStringA( buffer );
+    OutputDebugStringW( buffer );
 }
 #else
-static inline void OutputDebugStringFormat( LPCSTR, ... )
+static inline void OutputDebugStringFormatW( LPCWSTR, ... )
 {
 }
 #endif

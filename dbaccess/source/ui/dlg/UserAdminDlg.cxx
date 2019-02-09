@@ -17,24 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <core_resource.hxx>
 #include "adminpages.hxx"
 #include "DbAdminImpl.hxx"
-#include "dbu_dlg.hrc"
+#include <dbu_dlg.hxx>
+#include <strings.hrc>
 #include "DriverSettings.hxx"
-#include "dsitems.hxx"
-#include "propertysetitem.hxx"
-#include "UITools.hxx"
+#include <dsitems.hxx>
+#include <UITools.hxx>
 #include "UserAdmin.hxx"
-#include "UserAdminDlg.hxx"
+#include <UserAdminDlg.hxx>
 
-#include <comphelper/processfactory.hxx>
 #include <connectivity/dbmetadata.hxx>
+#include <comphelper/types.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <svl/eitem.hxx>
 #include <svl/intitem.hxx>
 #include <svl/stritem.hxx>
 #include <tools/diagnose_ex.h>
-#include <vcl/msgbox.hxx>
 #include <vcl/stdtext.hxx>
 
 namespace dbaui
@@ -46,24 +46,24 @@ namespace dbaui
     using namespace ::com::sun::star::sdbcx;
 
     // OUserAdminDlg
-    OUserAdminDlg::OUserAdminDlg(vcl::Window* _pParent
-                                            , SfxItemSet* _pItems
-                                            ,const Reference< XComponentContext >& _rxORB
-                                            ,const css::uno::Any& _aDataSourceName
-                                            ,const Reference< XConnection >& _xConnection)
-        : SfxTabDialog(_pParent, "UserAdminDialog", "dbaccess/ui/useradmindialog.ui", _pItems)
-        , m_pItemSet(_pItems)
-        , m_xConnection(_xConnection)
-        , m_bOwnConnection(!_xConnection.is())
+    OUserAdminDlg::OUserAdminDlg(weld::Window* pParent,
+                                 SfxItemSet* pItems,
+                                 const Reference< XComponentContext >& rxORB,
+                                 const css::uno::Any& rDataSourceName,
+                                 const Reference< XConnection >& xConnection)
+        : SfxTabDialogController(pParent, "dbaccess/ui/useradmindialog.ui", "UserAdminDialog", pItems)
+        , m_pParent(pParent)
+        , m_pItemSet(pItems)
+        , m_xConnection(xConnection)
+        , m_bOwnConnection(!xConnection.is())
     {
-        m_pImpl.reset(new ODbDataSourceAdministrationHelper(_rxORB,_pParent,this));
-        m_pImpl->setDataSourceOrName(_aDataSourceName);
+        m_pImpl.reset(new ODbDataSourceAdministrationHelper(rxORB, m_xDialog.get(), pParent, this));
+        m_pImpl->setDataSourceOrName(rDataSourceName);
         Reference< XPropertySet > xDatasource = m_pImpl->getCurrentDataSource();
-        m_pImpl->translateProperties(xDatasource, *_pItems);
-        SetInputSet(_pItems);
+        m_pImpl->translateProperties(xDatasource, *pItems);
+        SetInputSet(pItems);
         // propagate this set as our new input set and reset the example set
-        delete m_pExampleSet;
-        m_pExampleSet = new SfxItemSet(*GetInputSetImpl());
+        m_xExampleSet.reset(new SfxItemSet(*GetInputSetImpl()));
 
         AddTabPage("settings", OUserAdmin::Create, nullptr);
 
@@ -72,11 +72,6 @@ namespace dbaui
     }
 
     OUserAdminDlg::~OUserAdminDlg()
-    {
-        disposeOnce();
-    }
-
-    void OUserAdminDlg::dispose()
     {
         if ( m_bOwnConnection )
         {
@@ -90,46 +85,39 @@ namespace dbaui
         }
 
         SetInputSet(nullptr);
-        DELETEZ(m_pExampleSet);
-        SfxTabDialog::dispose();
     }
 
-    short OUserAdminDlg::Execute()
+    short OUserAdminDlg::run()
     {
         try
         {
             ::dbtools::DatabaseMetaData aMetaData( createConnection().first );
             if ( !aMetaData.supportsUserAdministration( getORB() ) )
             {
-                OUString sError(ModuleRes(STR_USERADMIN_NOT_AVAILABLE));
-                throw SQLException(sError,nullptr,OUString("S1000") ,0,Any());
+                OUString sError(DBA_RES(STR_USERADMIN_NOT_AVAILABLE));
+                throw SQLException(sError, nullptr, "S1000", 0, Any());
             }
         }
         catch(const SQLException&)
         {
-            ::dbaui::showError( ::dbtools::SQLExceptionInfo( ::cppu::getCaughtException() ), GetParent(), getORB() );
+            ::dbtools::showError(::dbtools::SQLExceptionInfo(::cppu::getCaughtException()), m_pParent->GetXWindow(), getORB());
             return RET_CANCEL;
         }
         catch(const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
-        short nRet = SfxTabDialog::Execute();
+        short nRet = SfxTabDialogController::run();
         if ( nRet == RET_OK )
             m_pImpl->saveChanges(*GetOutputItemSet());
         return nRet;
     }
-    void OUserAdminDlg::PageCreated(sal_uInt16 _nId, SfxTabPage& _rPage)
+    void OUserAdminDlg::PageCreated(const OString& rId, SfxTabPage& _rPage)
     {
         // register ourself as modified listener
         static_cast<OGenericAdministrationPage&>(_rPage).SetServiceFactory( m_pImpl->getORB() );
         static_cast<OGenericAdministrationPage&>(_rPage).SetAdminDialog(this,this);
-
-        vcl::Window *pWin = GetViewWindow();
-        if(pWin)
-            pWin->Invalidate();
-
-        SfxTabDialog::PageCreated(_nId, _rPage);
+        SfxTabDialogController::PageCreated(rId, _rPage);
     }
     const SfxItemSet* OUserAdminDlg::getOutputSet() const
     {
@@ -139,14 +127,14 @@ namespace dbaui
     {
         return m_pItemSet;
     }
-    ::std::pair< Reference<XConnection>,sal_Bool> OUserAdminDlg::createConnection()
+    std::pair< Reference<XConnection>,bool> OUserAdminDlg::createConnection()
     {
         if ( !m_xConnection.is() )
         {
             m_xConnection = m_pImpl->createConnection().first;
             m_bOwnConnection = m_xConnection.is();
         }
-        return ::std::pair< Reference<XConnection>,sal_Bool> (m_xConnection,sal_False);
+        return std::pair< Reference<XConnection>,bool> (m_xConnection,false);
     }
     Reference< XComponentContext > OUserAdminDlg::getORB() const
     {
@@ -166,12 +154,9 @@ namespace dbaui
     }
     void OUserAdminDlg::setTitle(const OUString& _sTitle)
     {
-        SetText(_sTitle);
+        m_xDialog->set_title(_sTitle);
     }
-    void OUserAdminDlg::enableConfirmSettings( bool _bEnable )
-    {
-        (void)_bEnable;
-    }
+    void OUserAdminDlg::enableConfirmSettings( bool ) {}
     void OUserAdminDlg::saveDatasource()
     {
         PrepareLeaveCurrentPage();

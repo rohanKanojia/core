@@ -23,13 +23,14 @@
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
 
-#include "reffact.hxx"
-#include "tabvwsh.hxx"
-#include "sc.hrc"
-#include "acredlin.hxx"
-#include "simpref.hxx"
-#include "scmod.hxx"
-#include "validate.hxx"
+#include <reffact.hxx>
+#include <tabvwsh.hxx>
+#include <sc.hrc>
+#include <acredlin.hxx>
+#include <simpref.hxx>
+#include <scmod.hxx>
+#include <scres.hrc>
+#include <validate.hxx>
 
 SFX_IMPL_MODELESSDIALOG_WITHID(ScNameDlgWrapper, FID_DEFINE_NAME )
 SFX_IMPL_MODELESSDIALOG_WITHID(ScNameDefDlgWrapper, FID_ADD_NAME )
@@ -70,14 +71,14 @@ SfxChildWinInfo ScValidityRefChildWin::GetInfo() const
 
 namespace
 {
-    ScTabViewShell* lcl_GetTabViewShell( SfxBindings* pBindings );
+    ScTabViewShell* lcl_GetTabViewShell( const SfxBindings* pBindings );
 }
 
 #define IMPL_CHILD_CTOR(Class,sid) \
     Class::Class( vcl::Window*               pParentP,                   \
                     sal_uInt16              nId,                        \
                     SfxBindings*        p,                          \
-                    SfxChildWinInfo*    pInfo )                     \
+                    const SfxChildWinInfo*  pInfo )                     \
         : SfxChildWindow(pParentP, nId)                             \
     {                                                               \
         /************************************************************************************/\
@@ -153,10 +154,10 @@ ScSimpleRefDlgWrapper::ScSimpleRefDlgWrapper( vcl::Window* pParentP,
 
     if(pInfo!=nullptr && bScSimpleRefFlag)
     {
-        pInfo->aPos.X()=nScSimpleRefX;
-        pInfo->aPos.Y()=nScSimpleRefY;
-        pInfo->aSize.Height()=nScSimpleRefHeight;
-        pInfo->aSize.Width()=nScSimpleRefWidth;
+        pInfo->aPos.setX(nScSimpleRefX );
+        pInfo->aPos.setY(nScSimpleRefY );
+        pInfo->aSize.setHeight(nScSimpleRefHeight );
+        pInfo->aSize.setWidth(nScSimpleRefWidth );
     }
     SetWindow(nullptr);
 
@@ -264,7 +265,7 @@ IMPL_CHILD_CTOR( ScHighlightChgDlgWrapper, FID_CHG_SHOW )
 
 namespace
 {
-    ScTabViewShell * lcl_GetTabViewShell( SfxBindings *pBindings )
+    ScTabViewShell * lcl_GetTabViewShell( const SfxBindings *pBindings )
     {
         if( pBindings )
             if( SfxDispatcher* pDisp = pBindings ->GetDispatcher() )
@@ -278,8 +279,8 @@ namespace
 
 ScValidityRefChildWin::ScValidityRefChildWin( vcl::Window*               pParentP,
                                              sal_uInt16             nId,
-                                             SfxBindings*       p,
-                                             SfxChildWinInfo*   /*pInfo*/ )
+                                             const SfxBindings*     p,
+                                             SAL_UNUSED_PARAMETER SfxChildWinInfo* /*pInfo*/ )
                                              : SfxChildWindow(pParentP, nId),
                                              m_bVisibleLock( false ),
                                              m_bFreeWindowLock( false ),

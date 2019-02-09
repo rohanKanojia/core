@@ -19,6 +19,7 @@
 #include <svx/sidebar/SidebarDialControl.hxx>
 
 #include <vcl/builderfactory.hxx>
+#include <vcl/event.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 
@@ -34,7 +35,7 @@ VCL_BUILDER_FACTORY_ARGS(SidebarDialControl, WB_TABSTOP)
 
 Size SidebarDialControl::GetOptimalSize() const
 {
-    return LogicToPixel(Size(10, 10), MAP_APPFONT);
+    return LogicToPixel(Size(10, 10), MapMode(MapUnit::MapAppFont));
 }
 
 void SidebarDialControl::MouseButtonDown( const MouseEvent& rMEvt )
@@ -56,7 +57,7 @@ void SidebarDialControl::HandleMouseEvent( const Point& rPos, bool bInitial )
     if( fH != 0.0 )
     {
         double fAngle = acos( nX / fH );
-        sal_Int32 nAngle = static_cast< sal_Int32 >( fAngle / F_PI180 * 100.0 );
+        sal_Int32 nAngle = static_cast<sal_Int32>(basegfx::rad2deg(fAngle) * 100.0);
         if( nY < 0 )
             nAngle = 36000 - nAngle;
         if( bInitial )  // round to entire 15 degrees

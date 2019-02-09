@@ -17,30 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <svl/srchitem.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/objface.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/request.hxx>
 #include <svl/whiter.hxx>
-#include <vcl/msgbox.hxx>
-#include <sfx2/sidebar/EnumContext.hxx>
+#include <vcl/EnumContext.hxx>
 
-#include "sc.hrc"
-#include "pivotsh.hxx"
-#include "tabvwsh.hxx"
-#include "docsh.hxx"
-#include "scresid.hxx"
-#include "document.hxx"
-#include "dpobject.hxx"
-#include "dpshttab.hxx"
-#include "dbdocfun.hxx"
-#include "uiitems.hxx"
-#include "scabstdlg.hxx"
+#include <sc.hrc>
+#include <pivotsh.hxx>
+#include <tabvwsh.hxx>
+#include <docsh.hxx>
+#include <document.hxx>
+#include <dpobject.hxx>
+#include <dpshttab.hxx>
+#include <dbdocfun.hxx>
+#include <uiitems.hxx>
+#include <scabstdlg.hxx>
 
-#define ScPivotShell
-#include "scslots.hxx"
+#define ShellClass_ScPivotShell
+#include <scslots.hxx>
 #include <memory>
 
 
@@ -57,22 +55,21 @@ ScPivotShell::ScPivotShell( ScTabViewShell* pViewSh ) :
 {
     SetPool( &pViewSh->GetPool() );
     ScViewData& rViewData = pViewSh->GetViewData();
-    ::svl::IUndoManager* pMgr = rViewData.GetSfxDocShell()->GetUndoManager();
+    SfxUndoManager* pMgr = rViewData.GetSfxDocShell()->GetUndoManager();
     SetUndoManager( pMgr );
     if ( !rViewData.GetDocument()->IsUndoEnabled() )
     {
         pMgr->SetMaxUndoActionCount( 0 );
     }
-    SetHelpId( HID_SCSHELL_PIVOTSH );
     SetName("Pivot");
-    SfxShell::SetContextName(sfx2::sidebar::EnumContext::GetContextName(sfx2::sidebar::EnumContext::Context_Pivot));
+    SfxShell::SetContextName(vcl::EnumContext::GetContextName(vcl::EnumContext::Context::Pivot));
 }
 
 ScPivotShell::~ScPivotShell()
 {
 }
 
-void ScPivotShell::Execute( SfxRequest& rReq )
+void ScPivotShell::Execute( const SfxRequest& rReq )
 {
     switch ( rReq.GetSlot() )
     {
@@ -101,15 +98,13 @@ void ScPivotShell::Execute( SfxRequest& rReq )
 
                 ScViewData& rViewData = pViewShell->GetViewData();
                 SfxItemSet aArgSet( pViewShell->GetPool(),
-                    SCITEM_QUERYDATA, SCITEM_QUERYDATA );
+                    svl::Items<SCITEM_QUERYDATA, SCITEM_QUERYDATA>{} );
                 aArgSet.Put( ScQueryItem( SCITEM_QUERYDATA, &rViewData, &aQueryParam ) );
 
                 ScAbstractDialogFactory* pFact = ScAbstractDialogFactory::Create();
-                OSL_ENSURE(pFact, "ScAbstractFactory create fail!");
 
-                std::unique_ptr<AbstractScPivotFilterDlg> pDlg(pFact->CreateScPivotFilterDlg(
+                ScopedVclPtr<AbstractScPivotFilterDlg> pDlg(pFact->CreateScPivotFilterDlg(
                     pViewShell->GetDialogParent(), aArgSet, nSrcTab));
-                OSL_ENSURE(pDlg, "Dialog create fail!");
 
                 if( pDlg->Execute() == RET_OK )
                 {

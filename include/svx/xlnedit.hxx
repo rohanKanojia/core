@@ -37,27 +37,24 @@ public:
             static SfxPoolItem* CreateDefault();
             XLineEndItem(sal_Int32 nIndex = -1);
             XLineEndItem(const OUString& rName, const basegfx::B2DPolyPolygon& rPolyPolygon);
-            XLineEndItem(SfxItemPool* pPool, const basegfx::B2DPolyPolygon& rPolyPolygon);
+            XLineEndItem(const basegfx::B2DPolyPolygon& rPolyPolygon);
             XLineEndItem(const XLineEndItem& rItem);
-            XLineEndItem(SvStream& rIn);
 
     virtual bool            operator==(const SfxPoolItem& rItem) const override;
     virtual SfxPoolItem*    Clone(SfxItemPool* pPool = nullptr) const override;
-    virtual SfxPoolItem*    Create(SvStream& rIn, sal_uInt16 nVer) const override;
-    virtual SvStream&       Store(SvStream& rOut, sal_uInt16 nItemVersion ) const override;
 
     virtual bool            QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool            PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
-    basegfx::B2DPolyPolygon GetLineEndValue() const { return maPolyPolygon;}
+    const basegfx::B2DPolyPolygon& GetLineEndValue() const { return maPolyPolygon;}
     void SetLineEndValue(const basegfx::B2DPolyPolygon& rPolyPolygon) { maPolyPolygon = rPolyPolygon; Detach(); }
 
-    XLineEndItem* checkForUniqueItem( SdrModel* pModel ) const;
+    std::unique_ptr<XLineEndItem> checkForUniqueItem( SdrModel* pModel ) const;
 };
 
 #endif

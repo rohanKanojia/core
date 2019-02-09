@@ -19,12 +19,13 @@
 #ifndef INCLUDED_SW_INC_REFFLD_HXX
 #define INCLUDED_SW_INC_REFFLD_HXX
 
-#include <fldbas.hxx>
+#include "fldbas.hxx"
 
 class SfxPoolItem;
 class SwDoc;
 class SwTextNode;
 class SwTextField;
+class SwRootFrame;
 
 bool IsFrameBehind( const SwTextNode& rMyNd, sal_Int32 nMySttPos,
                     const SwTextNode& rBehindNd, sal_Int32 nSttPos );
@@ -55,14 +56,13 @@ enum REFERENCEMARK
     REF_NUMBER,              ///< "Number"
     REF_NUMBER_NO_CONTEXT,   ///< "Number (no context)"
     REF_NUMBER_FULL_CONTEXT, ///< "Number (full context)"
-    REF_END
 };
 
 /// Get reference.
 
 class SwGetRefFieldType : public SwFieldType
 {
-    SwDoc* pDoc;
+    SwDoc* m_pDoc;
 protected:
     /// Overlay in order to update all ref-fields.
     virtual void Modify( const SfxPoolItem*, const SfxPoolItem* ) override;
@@ -70,40 +70,39 @@ public:
     SwGetRefFieldType(SwDoc* pDoc );
     virtual SwFieldType*    Copy() const override;
 
-    SwDoc*                  GetDoc() const { return pDoc; }
+    SwDoc*                  GetDoc() const { return m_pDoc; }
 
     void MergeWithOtherDoc( SwDoc& rDestDoc );
 
     static SwTextNode* FindAnchor( SwDoc* pDoc, const OUString& rRefMark,
                                         sal_uInt16 nSubType, sal_uInt16 nSeqNo,
-                                        sal_Int32* pStt, sal_Int32* pEnd = nullptr );
+                                        sal_Int32* pStt, sal_Int32* pEnd = nullptr,
+                                        SwRootFrame const* pLayout = nullptr);
 };
 
 class SW_DLLPUBLIC SwGetRefField : public SwField
 {
 private:
-    OUString sSetRefName;
-    OUString sText;
-    sal_uInt16 nSubType;
-    sal_uInt16 nSeqNo;
+    OUString m_sSetRefName;
+    OUString m_sSetReferenceLanguage;
+    OUString m_sText;         ///< result
+    OUString m_sTextRLHidden; ///< result for layout with redlines hidden
+    sal_uInt16 m_nSubType;
+    /// reference to either a SwTextFootnote::m_nSeqNo or a SwSetExpField::mnSeqNo
+    sal_uInt16 m_nSeqNo;
 
-    virtual OUString    Expand() const override;
-    virtual SwField*    Copy() const override;
-
-    // #i81002#
-    static OUString MakeRefNumStr( const SwTextNode& rTextNodeOfField,
-                          const SwTextNode& rTextNodeOfReferencedItem,
-                          const sal_uInt32 nRefNumFormat );
+    virtual OUString    ExpandImpl(SwRootFrame const* pLayout) const override;
+    virtual std::unique_ptr<SwField> Copy() const override;
 
 public:
-    SwGetRefField( SwGetRefFieldType*, const OUString& rSetRef,
+    SwGetRefField( SwGetRefFieldType*, const OUString& rSetRef, const OUString& rReferenceLanguage,
                     sal_uInt16 nSubType, sal_uInt16 nSeqNo, sal_uLong nFormat );
 
-    virtual ~SwGetRefField();
+    virtual ~SwGetRefField() override;
 
     virtual OUString GetFieldName() const override;
 
-    OUString GetSetRefName() const { return sSetRefName; }
+    const OUString& GetSetRefName() const { return m_sSetRefName; }
 
     // #i81002#
     /** The <SwTextField> instance, which represents the text attribute for the
@@ -114,7 +113,7 @@ public:
        no update for these reference format types. */
     void                UpdateField( const SwTextField* pFieldTextAttr );
 
-    void                SetExpand( const OUString& rStr ) { sText = rStr; }
+    void                SetExpand( const OUString& rStr );
 
     /// Get/set sub type.
     virtual sal_uInt16      GetSubType() const override;
@@ -125,11 +124,11 @@ public:
     bool IsRefToNumItemCrossRefBookmark() const;
     const SwTextNode* GetReferencedTextNode() const;
     // #i85090#
-    OUString GetExpandedTextOfReferencedTextNode() const;
+    OUString GetExpandedTextOfReferencedTextNode(SwRootFrame const& rLayout) const;
 
     /// Get/set SequenceNo (of interest only for REF_SEQUENCEFLD).
-    sal_uInt16              GetSeqNo() const        { return nSeqNo; }
-    void                SetSeqNo( sal_uInt16 n )    { nSeqNo = n; }
+    sal_uInt16              GetSeqNo() const        { return m_nSeqNo; }
+    void                SetSeqNo( sal_uInt16 n )    { m_nSeqNo = n; }
 
     // Name of reference.
     virtual OUString    GetPar1() const override;

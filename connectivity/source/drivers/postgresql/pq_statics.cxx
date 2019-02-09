@@ -73,7 +73,7 @@ struct PropertyDef
     PropertyDef( const OUString &str, const Type &t )
         : name( str ) , type( t ) {}
     OUString name;
-    com::sun::star::uno::Type type;
+    css::uno::Type type;
 };
 
 struct PropertyDefEx : public PropertyDef
@@ -85,35 +85,30 @@ struct PropertyDefEx : public PropertyDef
 };
 
 static cppu::IPropertyArrayHelper * createPropertyArrayHelper(
-    PropertyDef *props, int count , sal_Int16 attr )
+    PropertyDef const *props, int count , sal_Int16 attr )
 {
     Sequence< Property > seq( count );
     for( int i = 0 ; i < count ; i ++ )
     {
         seq[i] = Property( props[i].name, i, props[i].type, attr );
     }
-    return new cppu::OPropertyArrayHelper( seq, sal_True );
+    return new cppu::OPropertyArrayHelper( seq, true );
 }
 
 static cppu::IPropertyArrayHelper * createPropertyArrayHelper(
-    PropertyDefEx *props, int count )
+    PropertyDefEx const *props, int count )
 {
     Sequence< Property > seq( count );
     for( int i = 0 ; i < count ; i ++ )
     {
         seq[i] = Property( props[i].name, i, props[i].type, props[i].attribute );
     }
-    return new cppu::OPropertyArrayHelper( seq, sal_True );
+    return new cppu::OPropertyArrayHelper( seq, true );
 }
 
 Statics & getStatics()
 {
-    static Statics * p;
-    if( ! p )
-    {
-        ::osl::MutexGuard guard( ::osl::Mutex::getGlobalMutex() );
-        if( ! p )
-        {
+    static Statics* p = []() {
             static Statics statics ;
             statics.SYSTEM_TABLE = "SYSTEM TABLE";
             statics.TABLE = "TABLE";
@@ -124,7 +119,6 @@ Statics & getStatics()
             statics.NO_NULLS = "NO_NULLS";
             statics.NULABLE = "NULABLE";
             statics.NULLABLE_UNKNOWN = "NULLABLE_UNKNOWN";
-            statics.cPERCENT = "%";
 
             statics.TYPE = "Type";
             statics.TYPE_NAME = "TypeName";
@@ -184,7 +178,7 @@ Statics & getStatics()
             Type tString = cppu::UnoType<OUString>::get();
             Type tInt = cppu::UnoType<sal_Int32>::get();
             Type tBool = cppu::UnoType<bool>::get();
-            Type tStringSequence = cppu::UnoType<com::sun::star::uno::Sequence< OUString >>::get();
+            Type tStringSequence = cppu::UnoType<css::uno::Sequence< OUString >>::get();
 
             // Table props set
             ImplementationStatics &ist = statics.refl.table;
@@ -201,7 +195,7 @@ Statics & getStatics()
                     PropertyDef( statics.TYPE , tString )
                 };
             ist.pProps = createPropertyArrayHelper(
-                tableDef, sizeof(tableDef)/sizeof(PropertyDef), READONLY );
+                tableDef, SAL_N_ELEMENTS(tableDef), READONLY );
 
             statics.refl.tableDescriptor.implName =
                 "org.openoffice.comp.pq.sdbcx.TableDescriptor";
@@ -240,12 +234,12 @@ Statics & getStatics()
                     PropertyDefEx( statics.TYPE_NAME , tString ,READONLY)
                 };
             statics.refl.column.pProps = createPropertyArrayHelper(
-                columnDef, sizeof(columnDef)/sizeof(PropertyDefEx) );
+                columnDef, SAL_N_ELEMENTS(columnDef) );
 
             statics.refl.columnDescriptor.implName =
                 "org.openoffice.comp.pq.sdbcx.ColumnDescriptor";
             statics.refl.columnDescriptor.serviceNames = Sequence< OUString > ( 1 );
-             statics.refl.columnDescriptor.serviceNames[0] =
+            statics.refl.columnDescriptor.serviceNames[0] =
                 "com.sun.star.sdbcx.ColumnDescriptor";
             PropertyDef columnDescDef[] =
                 {
@@ -282,7 +276,7 @@ Statics & getStatics()
                     PropertyDef( statics.UPDATE_RULE, tInt )
                 };
             statics.refl.key.pProps = createPropertyArrayHelper(
-                keyDef, sizeof(keyDef)/sizeof(PropertyDef), READONLY );
+                keyDef, SAL_N_ELEMENTS(keyDef), READONLY );
 
 
             // Key properties
@@ -324,7 +318,7 @@ Statics & getStatics()
                     PropertyDef( statics.TYPE_NAME , tString )
                 };
             statics.refl.keycolumn.pProps = createPropertyArrayHelper(
-                keycolumnDef, sizeof(keycolumnDef)/sizeof(PropertyDef), READONLY );
+                keycolumnDef, SAL_N_ELEMENTS(keycolumnDef), READONLY );
 
             // KeyColumn props set
             statics.refl.keycolumnDescriptor.implName =
@@ -353,7 +347,7 @@ Statics & getStatics()
                     PropertyDef( statics.SCHEMA_NAME , tString )
                 };
             statics.refl.view.pProps = createPropertyArrayHelper(
-                viewDef, sizeof(viewDef)/sizeof(PropertyDef), READONLY );
+                viewDef, SAL_N_ELEMENTS(viewDef), READONLY );
 
             // view props set
             statics.refl.viewDescriptor.implName = "org.openoffice.comp.pq.sdbcx.ViewDescriptor";
@@ -370,7 +364,7 @@ Statics & getStatics()
                     PropertyDef( statics.NAME , tString )
                 };
             statics.refl.user.pProps = createPropertyArrayHelper(
-                userDefRO, sizeof(userDefRO)/sizeof(PropertyDef), READONLY );
+                userDefRO, SAL_N_ELEMENTS(userDefRO), READONLY );
 
             // user props set
             statics.refl.userDescriptor.implName =
@@ -400,7 +394,7 @@ Statics & getStatics()
                     PropertyDef( statics.PRIVATE_COLUMN_INDEXES, tStringSequence )
                 };
             statics.refl.index.pProps = createPropertyArrayHelper(
-                indexDef, sizeof(indexDef)/sizeof(PropertyDef), READONLY );
+                indexDef, SAL_N_ELEMENTS(indexDef), READONLY );
 
             // index props set
             statics.refl.indexDescriptor.implName =
@@ -432,7 +426,7 @@ Statics & getStatics()
                     PropertyDef( statics.TYPE_NAME , tString )
                 };
             statics.refl.indexColumn.pProps = createPropertyArrayHelper(
-                indexColumnDef, sizeof(indexColumnDef)/sizeof(PropertyDef), READONLY );
+                indexColumnDef, SAL_N_ELEMENTS(indexColumnDef), READONLY );
 
             // indexColumn props set
             statics.refl.indexColumnDescriptor.implName =
@@ -553,66 +547,66 @@ Statics & getStatics()
             // LEM TODO see if a refresh is needed; obtain automatically from pg_catalog.pg_type?
             BaseTypeDef baseTypeDefs[] =
             {
-                { "bool" , com::sun::star::sdbc::DataType::BOOLEAN },
-                { "bytea", com::sun::star::sdbc::DataType::VARBINARY },
-                { "char" , com::sun::star::sdbc::DataType::CHAR },
+                { "bool" , css::sdbc::DataType::BOOLEAN },
+                { "bytea", css::sdbc::DataType::VARBINARY },
+                { "char" , css::sdbc::DataType::CHAR },
 
-                { "int8" , com::sun::star::sdbc::DataType::BIGINT },
-                { "serial8" , com::sun::star::sdbc::DataType::BIGINT },
-
-
-                { "int2" , com::sun::star::sdbc::DataType::SMALLINT },
-
-                { "int4" , com::sun::star::sdbc::DataType::INTEGER },
-//                 { "regproc" , com::sun::star::sdbc::DataType::INTEGER },
-//                 { "oid" , com::sun::star::sdbc::DataType::INTEGER },
-//                 { "xid" , com::sun::star::sdbc::DataType::INTEGER },
-//                 { "cid" , com::sun::star::sdbc::DataType::INTEGER },
-//                 { "serial", com::sun::star::sdbc::DataType::INTEGER },
-//                 { "serial4", com::sun::star::sdbc::DataType::INTEGER },
-
-                { "text", com::sun::star::sdbc::DataType::LONGVARCHAR },
-                { "bpchar", com::sun::star::sdbc::DataType::CHAR },
-                { "varchar", com::sun::star::sdbc::DataType::VARCHAR },
-
-                { "float4", com::sun::star::sdbc::DataType::REAL },
-                { "float8", com::sun::star::sdbc::DataType::DOUBLE },
-
-                { "numeric", com::sun::star::sdbc::DataType::NUMERIC },
-                { "decimal", com::sun::star::sdbc::DataType::DECIMAL },
-
-                { "date",  com::sun::star::sdbc::DataType::DATE },
-                { "time",  com::sun::star::sdbc::DataType::TIME },
-                { "timestamp",  com::sun::star::sdbc::DataType::TIMESTAMP },
-
-//                 { "_bool" , com::sun::star::sdbc::DataType::ARRAY },
-//                 { "_bytea", com::sun::star::sdbc::DataType::ARRAY },
-//                 { "_char" , com::sun::star::sdbc::DataType::ARRAY },
-
-//                 { "_int8" , com::sun::star::sdbc::DataType::ARRAY },
-//                 { "_serial8" , com::sun::star::sdbc::DataType::ARRAY },
+                { "int8" , css::sdbc::DataType::BIGINT },
+                { "serial8" , css::sdbc::DataType::BIGINT },
 
 
-//                 { "_int2" , com::sun::star::sdbc::DataType::ARRAY },
+                { "int2" , css::sdbc::DataType::SMALLINT },
 
-//                 { "_int4" , com::sun::star::sdbc::DataType::ARRAY },
-//                 { "_regproc" , com::sun::star::sdbc::DataType::ARRAY },
-//                 { "_oid" , com::sun::star::sdbc::DataType::ARRAY },
-//                 { "_xid" , com::sun::star::sdbc::DataType::ARRAY },
-//                 { "_cid" , com::sun::star::sdbc::DataType::ARRAY },
+                { "int4" , css::sdbc::DataType::INTEGER },
+//                 { "regproc" , css::sdbc::DataType::INTEGER },
+//                 { "oid" , css::sdbc::DataType::INTEGER },
+//                 { "xid" , css::sdbc::DataType::INTEGER },
+//                 { "cid" , css::sdbc::DataType::INTEGER },
+//                 { "serial", css::sdbc::DataType::INTEGER },
+//                 { "serial4", css::sdbc::DataType::INTEGER },
 
-//                 { "_text", com::sun::star::sdbc::DataType::ARRAY },
-//                 { "_bpchar", com::sun::star::sdbc::DataType::ARRAY },
-//                 { "_varchar", com::sun::star::sdbc::DataType::ARRAY },
+                { "text", css::sdbc::DataType::LONGVARCHAR },
+                { "bpchar", css::sdbc::DataType::CHAR },
+                { "varchar", css::sdbc::DataType::VARCHAR },
 
-//                 { "_float4", com::sun::star::sdbc::DataType::ARRAY },
-//                 { "_float8", com::sun::star::sdbc::DataType::ARRAY },
+                { "float4", css::sdbc::DataType::REAL },
+                { "float8", css::sdbc::DataType::DOUBLE },
 
-//                 { "_numeric", com::sun::star::sdbc::DataType::ARRAY },
-//                 { "_decimal", com::sun::star::sdbc::DataType::ARRAY },
+                { "numeric", css::sdbc::DataType::NUMERIC },
+                { "decimal", css::sdbc::DataType::DECIMAL },
 
-//                 { "_date",  com::sun::star::sdbc::DataType::ARRAY }, // switch to date later
-//                 { "_time",  com::sun::star::sdbc::DataType::ARRAY }, // switch to time later
+                { "date",  css::sdbc::DataType::DATE },
+                { "time",  css::sdbc::DataType::TIME },
+                { "timestamp",  css::sdbc::DataType::TIMESTAMP },
+
+//                 { "_bool" , css::sdbc::DataType::ARRAY },
+//                 { "_bytea", css::sdbc::DataType::ARRAY },
+//                 { "_char" , css::sdbc::DataType::ARRAY },
+
+//                 { "_int8" , css::sdbc::DataType::ARRAY },
+//                 { "_serial8" , css::sdbc::DataType::ARRAY },
+
+
+//                 { "_int2" , css::sdbc::DataType::ARRAY },
+
+//                 { "_int4" , css::sdbc::DataType::ARRAY },
+//                 { "_regproc" , css::sdbc::DataType::ARRAY },
+//                 { "_oid" , css::sdbc::DataType::ARRAY },
+//                 { "_xid" , css::sdbc::DataType::ARRAY },
+//                 { "_cid" , css::sdbc::DataType::ARRAY },
+
+//                 { "_text", css::sdbc::DataType::ARRAY },
+//                 { "_bpchar", css::sdbc::DataType::ARRAY },
+//                 { "_varchar", css::sdbc::DataType::ARRAY },
+
+//                 { "_float4", css::sdbc::DataType::ARRAY },
+//                 { "_float8", css::sdbc::DataType::ARRAY },
+
+//                 { "_numeric", css::sdbc::DataType::ARRAY },
+//                 { "_decimal", css::sdbc::DataType::ARRAY },
+
+//                 { "_date",  css::sdbc::DataType::ARRAY }, // switch to date later
+//                 { "_time",  css::sdbc::DataType::ARRAY }, // switch to time later
 
                 { nullptr, 0 }
             };
@@ -625,28 +619,28 @@ Statics & getStatics()
             }
 
             // This is the metadata for the columns of the recordset returned
-            // by ::com::sun::star::sdbc::XDatabaseMetaData::getTypeInfo(),
+            // by css::sdbc::XDatabaseMetaData::getTypeInfo(),
             // that is what is returned by getTypeInfo().getMetaData()
             DefColumnMetaData defTypeInfoMetaData[] =
                 {
-                    { "TYPE_NAME", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::VARCHAR, 0,50,false,false,false },  // 0
-                    { "DATA_TYPE", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::SMALLINT, 0,50,false,false,false },  // 1
-                    { "PRECISION", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::INTEGER, 0,50,false,false,false },  // 2
-                    { "LITERAL_PREFIX", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::VARCHAR, 0,50,false,false,false },  // 3
-                    { "LITERAL_SUFFIX", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::VARCHAR, 0,50,false,false,false },  // 4
-                    { "CREATE_PARAMS", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::VARCHAR, 0,50,false,false,false },  // 5
-                    { "NULLABLE", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::INTEGER, 0,50,false,false,false },  // 6
-                    { "CASE_SENSITIVE", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::BOOLEAN, 0,50,false,false,false },  // 7
-                    { "SEARCHABLE", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::SMALLINT, 0,50,false,false,false },  // 8
-                    { "UNSIGNED_ATTRIBUTE", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::BOOLEAN, 0,50,false,false,false },  // 9
-                    { "FIXED_PREC_SCALE", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::BOOLEAN, 0,50,false,false,false },  // 10
-                    { "AUTO_INCREMENT", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::BOOLEAN, 0,50,false,false,false },  // 11
-                    { "LOCAL_TYPE_NAME", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::VARCHAR, 0,50,false,false,false },  // 12
-                    { "MINIMUM_SCALE", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::SMALLINT, 0,50,false,false,false},  // 13
-                    { "MAXIMUM_SCALE", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::SMALLINT, 0,50,false,false,false },  // 14
-                    { "SQL_DATA_TYPE", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::INTEGER, 0,50,false,false,false },  // 15
-                    { "SQL_DATETIME_SUB", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::INTEGER, 0,50,false,false,false},  // 16
-                    { "NUM_PREC_RADIX", "TYPEINFO", "pg_catalog", "", com::sun::star::sdbc::DataType::INTEGER, 0,50,false,false,false },  // 17
+                    { "TYPE_NAME", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::VARCHAR, 0,50,false,false,false },  // 0
+                    { "DATA_TYPE", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::SMALLINT, 0,50,false,false,false },  // 1
+                    { "PRECISION", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::INTEGER, 0,50,false,false,false },  // 2
+                    { "LITERAL_PREFIX", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::VARCHAR, 0,50,false,false,false },  // 3
+                    { "LITERAL_SUFFIX", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::VARCHAR, 0,50,false,false,false },  // 4
+                    { "CREATE_PARAMS", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::VARCHAR, 0,50,false,false,false },  // 5
+                    { "NULLABLE", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::INTEGER, 0,50,false,false,false },  // 6
+                    { "CASE_SENSITIVE", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::BOOLEAN, 0,50,false,false,false },  // 7
+                    { "SEARCHABLE", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::SMALLINT, 0,50,false,false,false },  // 8
+                    { "UNSIGNED_ATTRIBUTE", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::BOOLEAN, 0,50,false,false,false },  // 9
+                    { "FIXED_PREC_SCALE", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::BOOLEAN, 0,50,false,false,false },  // 10
+                    { "AUTO_INCREMENT", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::BOOLEAN, 0,50,false,false,false },  // 11
+                    { "LOCAL_TYPE_NAME", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::VARCHAR, 0,50,false,false,false },  // 12
+                    { "MINIMUM_SCALE", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::SMALLINT, 0,50,false,false,false},  // 13
+                    { "MAXIMUM_SCALE", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::SMALLINT, 0,50,false,false,false },  // 14
+                    { "SQL_DATA_TYPE", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::INTEGER, 0,50,false,false,false },  // 15
+                    { "SQL_DATETIME_SUB", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::INTEGER, 0,50,false,false,false},  // 16
+                    { "NUM_PREC_RADIX", "TYPEINFO", "pg_catalog", "", css::sdbc::DataType::INTEGER, 0,50,false,false,false },  // 17
                     {nullptr,nullptr,nullptr,nullptr,0,0,0,false,false,false}
                 };
 
@@ -666,9 +660,8 @@ Statics & getStatics()
                         defTypeInfoMetaData[i].isAutoIncrement ) );
             }
 
-            p = &statics;
-        }
-    }
+            return &statics;
+    }();
     return *p;
 }
 

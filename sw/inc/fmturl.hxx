@@ -19,62 +19,61 @@
 #ifndef INCLUDED_SW_INC_FMTURL_HXX
 #define INCLUDED_SW_INC_FMTURL_HXX
 
+#include <memory>
 #include <svl/poolitem.hxx>
 #include "swdllapi.h"
-#include <hintids.hxx>
-#include <format.hxx>
+#include "hintids.hxx"
+#include "format.hxx"
 
 class ImageMap;
 class IntlWrapper;
 
-// URL, ServerMap und ClientMap
+// URL, ServerMap and ClientMap
 
 class SW_DLLPUBLIC SwFormatURL: public SfxPoolItem
 {
-    OUString  sTargetFrameName; ///< Target frame for URL.
-    OUString  sURL;             ///< Simple URL.
-    OUString  sName;            ///< Name of the anchor.
-    ImageMap *pMap;             ///< ClientSide images.
+    OUString  m_sTargetFrameName; ///< Target frame for URL.
+    OUString  m_sURL;             ///< Simple URL.
+    OUString  m_sName;            ///< Name of the anchor.
+    std::unique_ptr<ImageMap>
+              m_pMap;             ///< ClientSide images.
 
-    bool      bIsServerMap;     ///< A ServerSideImageMap with the URL.
-
-    SwFormatURL& operator=( const SwFormatURL& ) = delete;
+    bool      m_bIsServerMap;     ///< A ServerSideImageMap with the URL.
 
 public:
     SwFormatURL();
 
-    /// @@@ copy construction allowed, but assigment is not? @@@
     SwFormatURL( const SwFormatURL& );
 
-    virtual ~SwFormatURL();
+    virtual ~SwFormatURL() override;
 
     /// "Pure virtual methods" of SfxPoolItem.
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper*    pIntl = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& rIntl ) const override;
     virtual bool QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
-    void SetTargetFrameName( const OUString& rStr ) { sTargetFrameName = rStr; }
+    void SetTargetFrameName( const OUString& rStr ) { m_sTargetFrameName = rStr; }
     void SetURL(const OUString &rURL, bool bServerMap);
     void SetMap( const ImageMap *pM );  ///< Pointer will be copied.
 
-    OUString GetTargetFrameName()const { return sTargetFrameName; }
-    OUString GetURL()            const { return sURL; }
-          bool      IsServerMap()       const { return bIsServerMap; }
-    const ImageMap *GetMap()            const { return pMap; }
-          ImageMap *GetMap()                  { return pMap; }
+    const OUString& GetTargetFrameName()const { return m_sTargetFrameName; }
+    const OUString& GetURL()            const { return m_sURL; }
+          bool      IsServerMap()       const { return m_bIsServerMap; }
+    const ImageMap *GetMap()            const { return m_pMap.get(); }
+          ImageMap *GetMap()                  { return m_pMap.get(); }
 
-    OUString GetName() const                { return sName; }
-    void SetName( const OUString& rNm )     { sName = rNm; }
+    const OUString& GetName() const                { return m_sName; }
+    void SetName( const OUString& rNm )     { m_sName = rNm; }
 };
 
 inline const SwFormatURL &SwAttrSet::GetURL(bool bInP) const
-    { return static_cast<const SwFormatURL&>(Get( RES_URL,bInP)); }
+    { return Get( RES_URL,bInP); }
 
 inline const SwFormatURL &SwFormat::GetURL(bool bInP) const
     { return m_aSet.GetURL(bInP); }

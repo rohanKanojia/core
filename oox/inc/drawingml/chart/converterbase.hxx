@@ -64,10 +64,15 @@ public:
                             const css::awt::Size& rChartSize );
     virtual             ~ConverterRoot();
 
+    ConverterRoot(ConverterRoot const &) = default;
+    ConverterRoot(ConverterRoot &&) = default;
+    ConverterRoot & operator =(ConverterRoot const &) = default;
+    ConverterRoot & operator =(ConverterRoot &&) = default;
+
     /** Creates an instance for the passed service name, using the process service factory. */
     css::uno::Reference< css::uno::XInterface >
                         createInstance( const OUString& rServiceName ) const;
-    css::uno::Reference< css::uno::XComponentContext >
+    css::uno::Reference< css::uno::XComponentContext > const &
                         getComponentContext() const;
 
 protected:
@@ -76,7 +81,7 @@ protected:
     /** Returns the chart converter. */
     ChartConverter&     getChartConverter() const;
     /** Returns the API chart document model. */
-    css::uno::Reference< css::chart2::XChartDocument >
+    css::uno::Reference< css::chart2::XChartDocument > const &
                         getChartDocument() const;
     /** Returns the position and size of the chart shape in 1/100 mm. */
     const css::awt::Size& getChartSize() const;
@@ -88,7 +93,7 @@ protected:
     void                registerTitleLayout(
                             const css::uno::Reference< css::chart2::XTitle >& rxTitle,
                             const ModelRef< LayoutModel >& rxLayout, ObjectType eObjType,
-                            sal_Int32 nMainIdx = -1, sal_Int32 nSubIdx = -1 );
+                            sal_Int32 nMainIdx, sal_Int32 nSubIdx );
     /** Converts the positions of the main title and all axis titles. */
     void                convertTitlePositions();
 
@@ -109,7 +114,7 @@ public:
 protected:
     explicit            ConverterBase( const ConverterRoot& rParent, ModelType& rModel ) :
                             ConverterRoot( rParent ), mrModel( rModel ) {}
-    virtual             ~ConverterBase() {}
+    virtual             ~ConverterBase() override {}
 
 protected:
     ModelType&          mrModel;
@@ -122,7 +127,7 @@ class LayoutConverter : public ConverterBase< LayoutModel >
 {
 public:
     explicit            LayoutConverter( const ConverterRoot& rParent, LayoutModel& rModel );
-    virtual             ~LayoutConverter();
+    virtual             ~LayoutConverter() override;
 
     /** Tries to calculate the absolute position and size from the contained
         OOXML layout model. Returns true, if returned rectangle is valid. */

@@ -9,32 +9,17 @@
 
 $(eval $(call gb_CppunitTest_CppunitTest,slideshow))
 
-$(eval $(call gb_CppunitTest_use_package,slideshow,sd_qa_unit))
-
 $(eval $(call gb_CppunitTest_set_include,slideshow,\
     $$(INCLUDE) \
     -I$(SRCDIR)/slideshow/source/inc \
 ))
 
-$(eval $(call gb_CppunitTest_set_defs,slideshow,\
-    $$(DEFS) \
-))
-
-ifneq ($(strip $(debug)$(DEBUG)),)
-$(eval $(call gb_CppunitTest_set_defs,slideshow,\
-    $$(DEFS) \
-    -DBOOST_SP_ENABLE_DEBUG_HOOKS \
-))
-endif
-
-$(eval $(call gb_CppunitTest_use_api,slideshow,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,slideshow))
 
 $(eval $(call gb_CppunitTest_use_library_objects,slideshow,slideshow))
 
 $(eval $(call gb_CppunitTest_use_libraries,slideshow,\
+	$(call gb_Helper_optional,AVMEDIA,avmedia) \
     basegfx \
     canvastools \
     comphelper \
@@ -42,11 +27,11 @@ $(eval $(call gb_CppunitTest_use_libraries,slideshow,\
     cppu \
     cppuhelper \
     sal \
+    salhelper \
     svt \
     tl \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,slideshow,\

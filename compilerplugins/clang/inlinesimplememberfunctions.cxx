@@ -18,10 +18,10 @@
 namespace {
 
 class InlineSimpleMemberFunctions:
-    public RecursiveASTVisitor<InlineSimpleMemberFunctions>, public loplugin::RewritePlugin
+    public loplugin::FilteringRewritePlugin<InlineSimpleMemberFunctions>
 {
 public:
-    explicit InlineSimpleMemberFunctions(InstantiationData const & data): RewritePlugin(data) {}
+    explicit InlineSimpleMemberFunctions(loplugin::InstantiationData const & data): FilteringRewritePlugin(data) {}
 
     virtual void run() override { TraverseDecl(compiler.getASTContext().getTranslationUnitDecl()); }
 
@@ -31,10 +31,10 @@ private:
 };
 
 static bool oneAndOnlyOne(clang::Stmt::const_child_range range) {
-    if (compat::begin(range) == compat::end(range)) {
+    if (range.begin() == range.end()) {
         return false;
     }
-    if (++compat::begin(range) != compat::end(range)) {
+    if (++range.begin() != range.end()) {
         return false;
     }
     return true;
@@ -71,8 +71,7 @@ bool InlineSimpleMemberFunctions::VisitCXXMethodDecl(const CXXMethodDecl * funct
         return true;
     }
     // ignore stuff that forms part of the stable URE interface
-    if (isInUnoIncludeFile(compiler.getSourceManager().getSpellingLoc(
-                              functionDecl->getCanonicalDecl()->getNameInfo().getLoc()))) {
+    if (isInUnoIncludeFile(functionDecl)) {
         return true;
     }
     // ignore stuff like:
@@ -134,7 +133,7 @@ bool InlineSimpleMemberFunctions::VisitCXXMethodDecl(const CXXMethodDecl * funct
         {
             childStmt2 = *childStmt2->child_begin();
             if (dyn_cast<CXXThisExpr>( childStmt2 ) != nullptr
-                && compat::begin(childStmt2->children()) == compat::end(childStmt2->children()))
+                && childStmt2->children().begin() == childStmt2->children().end())
             {
                 return true;
             }
@@ -145,7 +144,7 @@ bool InlineSimpleMemberFunctions::VisitCXXMethodDecl(const CXXMethodDecl * funct
     {
         const Stmt* childStmt2 = *childStmt->child_begin();
         if (dyn_cast<CXXThisExpr>( childStmt2 ) != nullptr
-            && compat::begin(childStmt2->children()) == compat::end(childStmt2->children()))
+            && childStmt2->children().begin() == childStmt2->children().end())
         {
             return true;
         }
@@ -208,7 +207,7 @@ bool InlineSimpleMemberFunctions::VisitCXXMethodDecl(const CXXMethodDecl * funct
                 }
              return true;
         }
-        if ( compat::begin(childStmt->children()) == compat::end(childStmt->children()) )
+        if ( childStmt->children().begin() == childStmt->children().end() )
             return true;
         childStmt = *childStmt->child_begin();
     }
@@ -234,17 +233,18 @@ bool InlineSimpleMemberFunctions::rewrite(const CXXMethodDecl * functionDecl) {
     // definition (in a main file only processed later) to fail
     // with a "mismatch" error before the rewriter had a chance
     // to act upon the definition.
-    if (!compat::isInMainFile( compiler.getSourceManager(),
-               compiler.getSourceManager().getSpellingLoc(
-                   functionDecl->getNameInfo().getLoc()))) {
+    if (!compiler.getSourceManager().isInMainFile(
+            compiler.getSourceManager().getSpellingLoc(
+                functionDecl->getNameInfo().getLoc())))
+    {
         return false;
     }
 
     const char *p1, *p2;
 
     // get the function body contents
-    p1 = compiler.getSourceManager().getCharacterData( functionDecl->getBody()->getLocStart() );
-    p2 = compiler.getSourceManager().getCharacterData( functionDecl->getBody()->getLocEnd() );
+    p1 = compiler.getSourceManager().getCharacterData( compat::getBeginLoc(functionDecl->getBody()) );
+    p2 = compiler.getSourceManager().getCharacterData( compat::getEndLoc(functionDecl->getBody()) );
     std::string s1( p1, p2 - p1 + 1);
 
     /* we can't safely move around stuff containing comments, we mess up the resulting code */
@@ -274,18 +274,18 @@ bool InlineSimpleMemberFunctions::rewrite(const CXXMethodDecl * functionDecl) {
     // remove the function's out of line body and declaration
     RewriteOptions opts;
     opts.RemoveLineIfEmpty = true;
-    if (!removeText(SourceRange(functionDecl->getLocStart(), functionDecl->getBody()->getLocEnd()), opts)) {
+    if (!removeText(SourceRange(compat::getBeginLoc(functionDecl), compat::getEndLoc(functionDecl->getBody())), opts)) {
         return false;
     }
 
     // scan forward until we find the semicolon
     const FunctionDecl * canonicalDecl = functionDecl->getCanonicalDecl();
-    p1 = compiler.getSourceManager().getCharacterData( canonicalDecl->getLocEnd() );
+    p1 = compiler.getSourceManager().getCharacterData( compat::getEndLoc(canonicalDecl) );
     p2 = ++p1;
     while (*p2 != 0 && *p2 != ';') p2++;
 
     // insert the function body into the inline function definition (i.e. the one inside the class definition)
-    return replaceText(canonicalDecl->getLocEnd().getLocWithOffset(p2 - p1 + 1), 1, s1);
+    return replaceText(compat::getEndLoc(canonicalDecl).getLocWithOffset(p2 - p1 + 1), 1, s1);
 }
 
 loplugin::Plugin::Registration< InlineSimpleMemberFunctions > X("inlinesimplememberfunctions");

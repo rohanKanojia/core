@@ -17,16 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "contentreader.hxx"
+#include <contentreader.hxx>
 #include "dummytag.hxx"
 #include "simpletag.hxx"
 #include "autostyletag.hxx"
 
-#include "assert.h"
+#include <assert.h>
 
 /** constructor.
 */
-CContentReader::CContentReader( const std::string& DocumentName, LocaleSet_t const & DocumentLocale ):
+CContentReader::CContentReader( const std::wstring& DocumentName, LocaleSet_t const & DocumentLocale ):
 CBaseReader( DocumentName )
 {
     try
@@ -88,7 +88,7 @@ ITag* CContentReader::chooseTagReader( const std::wstring& tag_name, const XmlTa
         if  ( XmlAttributes.find(CONTENT_STYLE_STYLE_NAME) != XmlAttributes.end())
             return new CAutoStyleTag(XmlAttributes);
        else
-            return new CDummyTag();
+            return new CDummyTag;
     }
     else if ( ( tag_name == CONTENT_STYLE_PROPERTIES ) || ( tag_name == CONTENT_TEXT_STYLE_PROPERTIES ) )
     {
@@ -98,10 +98,10 @@ ITag* CContentReader::chooseTagReader( const std::wstring& tag_name, const XmlTa
         ITag* pTagBuilder = m_TagBuilderStack.top();
         pTagBuilder->addAttributes( XmlAttributes );
 
-        return new CDummyTag();
+        return new CDummyTag;
     }
     else
-        return new CDummyTag();
+        return new CDummyTag;
 }
 
 /** get style of the current content.
@@ -111,7 +111,7 @@ ITag* CContentReader::chooseTagReader( const std::wstring& tag_name, const XmlTa
     assert( !m_TagBuilderStack.empty() );
     ITag* pTagBuilder = m_TagBuilderStack.top();
 
-    return ( pTagBuilder->getTagAttribute(CONTENT_TEXT_STYLENAME) );
+    return pTagBuilder->getTagAttribute(CONTENT_TEXT_STYLENAME);
 }
 
 /** add chunk into Chunk Buffer.
@@ -165,7 +165,7 @@ void CContentReader::start_element(
 {
     //get appropriate Xml Tag Builder using MetaInfoBuilderFactory;
     ITag* pTagBuilder = chooseTagReader( local_name,attributes );
-    assert( pTagBuilder != NULL );
+    assert( pTagBuilder != nullptr );
     pTagBuilder->startTag( );
     m_TagBuilderStack.push( pTagBuilder );
 
@@ -208,7 +208,7 @@ void CContentReader::characters( const std::wstring& character )
 {
     if ( character.length() > 0 && !HasOnlySpaces( character ) )
     {
-        addChunk( getLocale( getCurrentContentStyle() ), ::std::wstring( character ) );
+        addChunk( getLocale( getCurrentContentStyle() ), character );
 
         ITag* pTagBuilder = m_TagBuilderStack.top();
         pTagBuilder->addCharacters( character );

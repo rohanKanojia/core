@@ -65,7 +65,7 @@ import com.sun.star.util.URL;
  * @see ifc.accessibility._XAccessibleContext
  */
 public class AccessibleBrowseBoxHeaderBar extends TestCase {
-    static XDesktop the_Desk;
+    static XDesktop xDesktop;
     static XTextDocument xTextDoc;
 
     /**
@@ -73,9 +73,7 @@ public class AccessibleBrowseBoxHeaderBar extends TestCase {
      */
     @Override
     protected void initialize(TestParameters Param, PrintWriter log) throws Exception {
-        the_Desk = UnoRuntime.queryInterface(XDesktop.class,
-            DesktopTools.createDesktop(
-            Param.getMSF()));
+        xDesktop = DesktopTools.createDesktop(Param.getMSF());
     }
 
     /**
@@ -145,7 +143,7 @@ public class AccessibleBrowseBoxHeaderBar extends TestCase {
         the_url.Complete = ".component:DB/DataSourceBrowser";
         getting = aProv.queryDispatch(the_url, "_beamer", 12);
 
-        //am controller ein XSelectionSupplier->mit params rufen
+        // an XSelectionSupplier at the controller -> call with params
         PropertyValue[] noArgs = new PropertyValue[0];
         getting.dispatch(the_url, noArgs);
 
@@ -167,7 +165,7 @@ public class AccessibleBrowseBoxHeaderBar extends TestCase {
 
         util.utils.waitForEventIdle(tParam.getMSF());
 
-        XFrame the_frame1 = the_Desk.getCurrentFrame();
+        XFrame the_frame1 = xDesktop.getCurrentFrame();
 
         if (the_frame1 == null) {
             log.println("Current frame was not found !!!");

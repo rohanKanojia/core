@@ -23,6 +23,7 @@
 #include <DocumentContentOperationsManager.hxx>
 #include <IDocumentStylePoolAccess.hxx>
 #include <cntfrm.hxx>
+#include <rootfrm.hxx>
 #include <pagefrm.hxx>
 #include <txtftn.hxx>
 #include <ftnidx.hxx>
@@ -35,6 +36,7 @@
 #include <fmtftntx.hxx>
 #include <section.hxx>
 #include <calbck.hxx>
+#include <hints.hxx>
 
 namespace {
     /// Get a sorted list of the used footnote reference numbers.
@@ -43,7 +45,7 @@ namespace {
     /// @param[out] rUsedRef The set of used reference numbers.
     /// @param[out] rInvalid  A returned list of all items that had an invalid reference number.
     void lcl_FillUsedFootnoteRefNumbers(SwDoc &rDoc,
-                                         SwTextFootnote *pExclude,
+                                         SwTextFootnote const *pExclude,
                                          std::set<sal_uInt16> &rUsedRef,
                                          std::vector<SwTextFootnote*> &rInvalid)
     {
@@ -72,7 +74,7 @@ namespace {
     /// @param[in] rUsedNums Set of used reference numbers.
     /// @param[in] requested The requested reference number.
     /// @returns true if the number is available, false if not.
-    bool lcl_IsRefNumAvailable(std::set<sal_uInt16> &rUsedNums,
+    bool lcl_IsRefNumAvailable(std::set<sal_uInt16> const &rUsedNums,
                                          sal_uInt16 requested)
     {
         if ( USHRT_MAX == requested )
@@ -95,11 +97,10 @@ namespace {
 
         rLowestUnusedNums.reserve(numRequired);
         sal_uInt16 newNum = 0;
-        std::set<sal_uInt16>::iterator it;
         //Start by using numbers from gaps in rUsedNums
-        for( it = rUsedNums.begin(); it != rUsedNums.end(); ++it )
+        for( const auto& rNum : rUsedNums )
         {
-            while ( newNum < *it )
+            while ( newNum < rNum )
             {
                 rLowestUnusedNums.push_back( newNum++ );
                 if ( --numRequired == 0)
@@ -122,6 +123,7 @@ SwFormatFootnote::SwFormatFootnote( bool bEndNote )
     , SwModify(nullptr)
     , m_pTextAttr(nullptr)
     , m_nNumber(0)
+    , m_nNumberRLHidden(0)
     , m_bEndNote(bEndNote)
 {
 }
@@ -130,6 +132,7 @@ bool SwFormatFootnote::operator==( const SfxPoolItem& rAttr ) const
 {
     assert(SfxPoolItem::operator==(rAttr));
     return m_nNumber  == static_cast<const SwFormatFootnote&>(rAttr).m_nNumber &&
+        //FIXME?
            m_aNumber  == static_cast<const SwFormatFootnote&>(rAttr).m_aNumber &&
            m_bEndNote == static_cast<const SwFormatFootnote&>(rAttr).m_bEndNote;
 }
@@ -139,6 +142,7 @@ SfxPoolItem* SwFormatFootnote::Clone( SfxItemPool* ) const
     SwFormatFootnote* pNew  = new SwFormatFootnote;
     pNew->m_aNumber = m_aNumber;
     pNew->m_nNumber = m_nNumber;
+    pNew->m_nNumberRLHidden = m_nNumberRLHidden;
     pNew->m_bEndNote = m_bEndNote;
     return pNew;
 }
@@ -175,8 +179,9 @@ SwFormatFootnote::~SwFormatFootnote()
 {
 }
 
-void SwFormatFootnote::GetFootnoteText( OUString& rStr ) const
+OUString SwFormatFootnote::GetFootnoteText(SwRootFrame const& rLayout) const
 {
+    OUStringBuffer buf;
     if( m_pTextAttr->GetStartNode() )
     {
         SwNodeIndex aIdx( *m_pTextAttr->GetStartNode(), 1 );
@@ -185,30 +190,37 @@ void SwFormatFootnote::GetFootnoteText( OUString& rStr ) const
             pCNd = aIdx.GetNodes().GoNext( &aIdx );
 
         if( pCNd->IsTextNode() ) {
-            rStr = static_cast<SwTextNode*>(pCNd)->GetExpandText();
+            buf.append(static_cast<SwTextNode*>(pCNd)->GetExpandText(&rLayout));
 
             ++aIdx;
             while ( !aIdx.GetNode().IsEndNode() ) {
                 if ( aIdx.GetNode().IsTextNode() )
-                    rStr += "  " + static_cast<SwTextNode*>((aIdx.GetNode().GetTextNode()))->GetExpandText();
+                {
+                    buf.append("  ");
+                    buf.append(aIdx.GetNode().GetTextNode()->GetExpandText(&rLayout));
+                }
                 ++aIdx;
             }
         }
     }
+    return buf.makeStringAndClear();
 }
 
-    // returnt den anzuzeigenden String der Fuss-/Endnote
-OUString SwFormatFootnote::GetViewNumStr( const SwDoc& rDoc, bool bInclStrings ) const
+/// return the view string of the foot/endnote
+OUString SwFormatFootnote::GetViewNumStr(const SwDoc& rDoc,
+        SwRootFrame const*const pLayout, bool bInclStrings) const
 {
     OUString sRet( GetNumStr() );
     if( sRet.isEmpty() )
     {
-        // dann ist die Nummer von Interesse, also ueber die Info diese
-        // besorgen.
+        // in this case the number is needed, get it via SwDoc's FootnoteInfo
         bool bMakeNum = true;
         const SwSectionNode* pSectNd = m_pTextAttr
                     ? SwUpdFootnoteEndNtAtEnd::FindSectNdWithEndAttr( *m_pTextAttr )
                     : nullptr;
+        sal_uInt16 const nNumber(pLayout && pLayout->IsHideRedlines()
+                ? GetNumberRLHidden()
+                : GetNumber());
 
         if( pSectNd )
         {
@@ -221,7 +233,7 @@ OUString SwFormatFootnote::GetViewNumStr( const SwDoc& rDoc, bool bInclStrings )
             if( FTNEND_ATTXTEND_OWNNUMANDFMT == rFootnoteEnd.GetValue() )
             {
                 bMakeNum = false;
-                sRet = rFootnoteEnd.GetSwNumType().GetNumStr( GetNumber() );
+                sRet = rFootnoteEnd.GetSwNumType().GetNumStr( nNumber );
                 if( bInclStrings )
                 {
                     sRet = rFootnoteEnd.GetPrefix() + sRet + rFootnoteEnd.GetSuffix();
@@ -236,7 +248,7 @@ OUString SwFormatFootnote::GetViewNumStr( const SwDoc& rDoc, bool bInclStrings )
                 pInfo = &rDoc.GetEndNoteInfo();
             else
                 pInfo = &rDoc.GetFootnoteInfo();
-            sRet = pInfo->aFormat.GetNumStr( GetNumber() );
+            sRet = pInfo->aFormat.GetNumStr( nNumber );
             if( bInclStrings )
             {
                 sRet = pInfo->GetPrefix() + sRet + pInfo->GetSuffix();
@@ -248,7 +260,6 @@ OUString SwFormatFootnote::GetViewNumStr( const SwDoc& rDoc, bool bInclStrings )
 
 SwTextFootnote::SwTextFootnote( SwFormatFootnote& rAttr, sal_Int32 nStartPos )
     : SwTextAttr( rAttr, nStartPos )
-    , m_pStartNode( nullptr )
     , m_pTextNode( nullptr )
     , m_nSeqNo( USHRT_MAX )
 {
@@ -267,7 +278,7 @@ void SwTextFootnote::SetStartNode( const SwNodeIndex *pNewNode, bool bDelNode )
     {
         if ( !m_pStartNode )
         {
-            m_pStartNode = new SwNodeIndex( *pNewNode );
+            m_pStartNode.reset(new SwNodeIndex(*pNewNode));
         }
         else
         {
@@ -276,9 +287,9 @@ void SwTextFootnote::SetStartNode( const SwNodeIndex *pNewNode, bool bDelNode )
     }
     else if ( m_pStartNode )
     {
-        // Zwei Dinge muessen erledigt werden:
-        // 1) Die Fussnoten muessen bei ihren Seiten abgemeldet werden
-        // 2) Die Fussnoten-Sektion in den Inserts muss geloescht werden.
+        // need to do 2 things:
+        // 1) unregister footnotes at their pages
+        // 2) delete the footnote section in the Inserts of the nodes-array
         SwDoc* pDoc;
         if ( m_pTextNode )
         {
@@ -286,39 +297,37 @@ void SwTextFootnote::SetStartNode( const SwNodeIndex *pNewNode, bool bDelNode )
         }
         else
         {
-            //JP 27.01.97: der sw3-Reader setzt einen StartNode aber das
-            //              Attribut ist noch nicht im TextNode verankert.
-            //              Wird es geloescht (z.B. bei Datei einfuegen mit
-            //              Footnote in einen Rahmen), muss auch der Inhalt
-            //              geloescht werden
+            //JP 27.01.97: the sw3-Reader creates a StartNode but the
+            //             attribute isn't anchored in the TextNode yet.
+            //             If it is deleted (e.g. Insert File with footnote
+            //             inside fly frame), the content must also be deleted.
             pDoc = m_pStartNode->GetNodes().GetDoc();
         }
 
-        // Wir duerfen die Fussnotennodes nicht loeschen
-        // und brauchen die Fussnotenframes nicht loeschen, wenn
-        // wir im ~SwDoc() stehen.
+        // If called from ~SwDoc(), must not delete the footnote nodes,
+        // and not necessary to delete the footnote frames.
         if( !pDoc->IsInDtor() )
         {
             if( bDelNode )
             {
-                // 1) Die Section fuer die Fussnote wird beseitigt
-                // Es kann sein, dass die Inserts schon geloescht wurden.
+                // 2) delete the section for the footnote nodes
+                // it's possible that the Inserts have already been deleted (how???)
                 pDoc->getIDocumentContentOperations().DeleteSection( &m_pStartNode->GetNode() );
             }
             else
-                // Werden die Nodes nicht geloescht mussen sie bei den Seiten
-                // abmeldet (Frames loeschen) werden, denn sonst bleiben sie
-                // stehen (Undo loescht sie nicht!)
+                // If the nodes are not deleted, their frames must be removed
+                // from the page (deleted), there is nothing else that deletes
+                // them (particularly not Undo)
                 DelFrames( nullptr );
         }
-        DELETEZ( m_pStartNode );
+        m_pStartNode.reset();
 
-        // loesche die Fussnote noch aus dem Array am Dokument
+        // remove the footnote from the SwDoc's array
         for( size_t n = 0; n < pDoc->GetFootnoteIdxs().size(); ++n )
             if( this == pDoc->GetFootnoteIdxs()[n] )
             {
                 pDoc->GetFootnoteIdxs().erase( pDoc->GetFootnoteIdxs().begin() + n );
-                // gibt noch weitere Fussnoten
+                // if necessary, update following footnotes
                 if( !pDoc->IsInDtor() && n < pDoc->GetFootnoteIdxs().size() )
                 {
                     SwNodeIndex aTmp( pDoc->GetFootnoteIdxs()[n]->GetTextNode() );
@@ -329,17 +338,24 @@ void SwTextFootnote::SetStartNode( const SwNodeIndex *pNewNode, bool bDelNode )
     }
 }
 
-void SwTextFootnote::SetNumber( const sal_uInt16 nNewNum, const OUString &sNumStr )
+void SwTextFootnote::SetNumber(const sal_uInt16 nNewNum,
+        sal_uInt16 const nNumberRLHidden, const OUString &sNumStr)
 {
-    SwFormatFootnote& rFootnote = (SwFormatFootnote&)GetFootnote();
+    SwFormatFootnote& rFootnote = const_cast<SwFormatFootnote&>(GetFootnote());
 
     rFootnote.m_aNumber = sNumStr;
     if ( sNumStr.isEmpty() )
     {
         rFootnote.m_nNumber = nNewNum;
+        rFootnote.m_nNumberRLHidden = nNumberRLHidden;
     }
+    InvalidateNumberInLayout();
+}
 
-    OSL_ENSURE( m_pTextNode, "SwTextFootnote: where is my TextNode?" );
+void SwTextFootnote::InvalidateNumberInLayout()
+{
+    assert(m_pTextNode);
+    SwFormatFootnote const& rFootnote(GetFootnote());
     SwNodes &rNodes = m_pTextNode->GetDoc()->GetNodes();
     m_pTextNode->ModifyNotification( nullptr, &rFootnote );
     if ( m_pStartNode )
@@ -349,7 +365,6 @@ void SwTextFootnote::SetNumber( const sal_uInt16 nNewNum, const OUString &sNumSt
         sal_uLong nEndIdx = m_pStartNode->GetNode().EndOfSectionIndex();
         for( ; nSttIdx < nEndIdx; ++nSttIdx )
         {
-            // Es koennen ja auch Grafiken in der Fussnote stehen ...
             SwNode* pNd;
             if( ( pNd = rNodes[ nSttIdx ] )->IsTextNode() )
                 static_cast<SwTextNode*>(pNd)->ModifyNotification( nullptr, &rFootnote );
@@ -357,7 +372,6 @@ void SwTextFootnote::SetNumber( const sal_uInt16 nNewNum, const OUString &sNumSt
     }
 }
 
-// Die Fussnoten duplizieren
 void SwTextFootnote::CopyFootnote(
     SwTextFootnote & rDest,
     SwTextNode & rDestNode ) const
@@ -401,13 +415,13 @@ void SwTextFootnote::CopyFootnote(
     }
 }
 
-    // lege eine neue leere TextSection fuer diese Fussnote an
+/// create a new nodes-array section for the footnote
 void SwTextFootnote::MakeNewTextSection( SwNodes& rNodes )
 {
     if ( m_pStartNode )
         return;
 
-    // Nun verpassen wir dem TextNode noch die Fussnotenvorlage.
+    // set the footnote style on the SwTextNode
     SwTextFormatColl *pFormatColl;
     const SwEndNoteInfo* pInfo;
     sal_uInt16 nPoolId;
@@ -428,20 +442,19 @@ void SwTextFootnote::MakeNewTextSection( SwNodes& rNodes )
 
     SwStartNode* pSttNd = rNodes.MakeTextSection( SwNodeIndex( rNodes.GetEndOfInserts() ),
                                         SwFootnoteStartNode, pFormatColl );
-    m_pStartNode = new SwNodeIndex( *pSttNd );
+    m_pStartNode.reset(new SwNodeIndex(*pSttNd));
 }
 
-void SwTextFootnote::DelFrames( const SwFrame* pSib )
+void SwTextFootnote::DelFrames(SwRootFrame const*const pRoot)
 {
     // delete the FootnoteFrames from the pages
     OSL_ENSURE( m_pTextNode, "SwTextFootnote: where is my TextNode?" );
     if ( !m_pTextNode )
         return;
 
-    const SwRootFrame* pRoot = pSib ? pSib->getRootFrame() : nullptr;
     bool bFrameFnd = false;
     {
-        SwIterator<SwContentFrame,SwTextNode> aIter( *m_pTextNode );
+        SwIterator<SwContentFrame, SwTextNode, sw::IteratorMode::UnwrapMulti> aIter(*m_pTextNode);
         for( SwContentFrame* pFnd = aIter.First(); pFnd; pFnd = aIter.Next() )
         {
             if( pRoot != pFnd->getRootFrame() && pRoot )
@@ -449,20 +462,24 @@ void SwTextFootnote::DelFrames( const SwFrame* pSib )
             SwPageFrame* pPage = pFnd->FindPageFrame();
             if( pPage )
             {
-                pPage->RemoveFootnote( pFnd, this );
-                bFrameFnd = true;
+                // note: we have found the correct frame only if the footnote
+                // was actually removed; in case this is called from
+                // SwTextFrame::DestroyImpl(), then that frame isn't connected
+                // to SwPageFrame any more, and RemoveFootnote on any follow
+                // must not prevent the fall-back to the !bFrameFnd code.
+                bFrameFnd = pPage->RemoveFootnote(pFnd, this);
             }
         }
     }
-    //JP 13.05.97: falls das Layout vorm loeschen der Fussnoten entfernt
-    //              wird, sollte man das ueber die Fussnote selbst tun
+    //JP 13.05.97: if the layout is deleted before the footnotes are deleted,
+    //             try to delete the footnote's frames by another way
     if ( !bFrameFnd && m_pStartNode )
     {
         SwNodeIndex aIdx( *m_pStartNode );
         SwContentNode* pCNd = m_pTextNode->GetNodes().GoNext( &aIdx );
         if( pCNd )
         {
-            SwIterator<SwContentFrame,SwContentNode> aIter( *pCNd );
+            SwIterator<SwContentFrame, SwContentNode, sw::IteratorMode::UnwrapMulti> aIter(*pCNd);
             for( SwContentFrame* pFnd = aIter.First(); pFnd; pFnd = aIter.Next() )
             {
                 if( pRoot != pFnd->getRootFrame() && pRoot )

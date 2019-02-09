@@ -36,20 +36,20 @@ private:
     SVX_DLLPRIVATE void CreateDefaultTexture();
 
 protected:
-    virtual sdr::contact::ViewContact* CreateObjectSpecificViewContact() override;
+    virtual std::unique_ptr<sdr::contact::ViewContact> CreateObjectSpecificViewContact() override;
+
+    // protected destructor
+    virtual ~E3dPolygonObj() override;
 
 public:
     void SetPolyPolygon3D(const basegfx::B3DPolyPolygon& rNewPolyPoly3D);
     void SetPolyNormals3D(const basegfx::B3DPolyPolygon& rNewPolyPoly3D);
     void SetPolyTexture2D(const basegfx::B2DPolyPolygon& rNewPolyPoly2D);
 
-
     E3dPolygonObj(
-        E3dDefaultAttributes& rDefault,
+        SdrModel& rSdrModel,
         const basegfx::B3DPolyPolygon& rPolyPoly3D);
-
-    E3dPolygonObj();
-    virtual ~E3dPolygonObj();
+    E3dPolygonObj(SdrModel& rSdrModel);
 
     const basegfx::B3DPolyPolygon& GetPolyPolygon3D() const { return aPolyPoly3D; }
     const basegfx::B3DPolyPolygon& GetPolyNormals3D() const { return aPolyNormals3D; }
@@ -58,7 +58,10 @@ public:
     virtual sal_uInt16 GetObjIdentifier() const override;
     virtual SdrObject* DoConvertToPolyObj(bool bBezier, bool bAddText) const override;
 
-    virtual E3dPolygonObj* Clone() const override;
+    virtual E3dPolygonObj* CloneSdrObject(SdrModel& rTargetModel) const override;
+
+    // implemented mainly for the purposes of Clone()
+    E3dPolygonObj& operator=(const E3dPolygonObj& rObj);
 
     // LineOnly?
     bool GetLineOnly() const { return bLineOnly; }

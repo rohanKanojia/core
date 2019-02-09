@@ -7,12 +7,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "unx/gtk/gtkprintwrapper.hxx"
+#include <unx/gtk/gtkprintwrapper.hxx>
 
-#include "unx/gtk/gtkdata.hxx"
-#include "unx/gtk/gtkframe.hxx"
-#include "unx/gtk/gtkinst.hxx"
-#include "unx/gtk/gtkprn.hxx"
+#include <unx/gtk/gtkdata.hxx>
+#include <unx/gtk/gtkframe.hxx>
+#include <unx/gtk/gtkinst.hxx>
+#include <unx/gtk/gtkprn.hxx>
 
 #include <vcl/configsettings.hxx>
 #include <vcl/help.hxx>
@@ -21,8 +21,6 @@
 #include <vcl/window.hxx>
 
 #include <gtk/gtk.h>
-
-#include <comphelper/processfactory.hxx>
 
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/container/XNamed.hpp>
@@ -39,19 +37,15 @@
 #include <officecfg/Office/Common.hxx>
 
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 
 #include <unotools/streamwrap.hxx>
 
 #include <cstring>
 #include <map>
 
-namespace frame = com::sun::star::frame;
 namespace beans = com::sun::star::beans;
-namespace container = com::sun::star::container;
 namespace uno = com::sun::star::uno;
-namespace document = com::sun::star::document;
-namespace sheet = com::sun::star::sheet;
-namespace io = com::sun::star::io;
 namespace view = com::sun::star::view;
 
 using vcl::unx::GtkPrintWrapper;
@@ -72,9 +66,7 @@ public:
         return m_xWrapper->print_unix_dialog_get_settings(GTK_PRINT_UNIX_DIALOG(m_pDialog));
     }
     void updateControllerPrintRange();
-#if 0
-    void ExportAsPDF(const OUString &rFileURL, GtkPrintSettings* pSettings) const;
-#endif
+
     ~GtkPrintDialog();
 
     static void UIOption_CheckHdl(GtkWidget* i_pWidget, GtkPrintDialog* io_pThis)
@@ -169,13 +161,14 @@ GtkSalPrinter::GtkSalPrinter(SalInfoPrinter* const i_pInfoPrinter)
 {
 }
 
+GtkSalPrinter::~GtkSalPrinter() = default;
+
 bool
 GtkSalPrinter::impl_doJob(
         const OUString* const i_pFileName,
         const OUString& i_rJobName,
         const OUString& i_rAppName,
         ImplJobSetup* const io_pSetupData,
-        const int i_nCopies,
         const bool i_bCollate,
         vcl::PrinterController& io_rController)
 {
@@ -183,7 +176,7 @@ GtkSalPrinter::impl_doJob(
     io_rController.jobStarted();
     const bool bJobStarted(
             PspSalPrinter::StartJob(i_pFileName, i_rJobName, i_rAppName,
-                i_nCopies, i_bCollate, true, io_pSetupData))
+                1/*i_nCopies*/, i_bCollate, true, io_pSetupData))
         ;
 
     if (bJobStarted)
@@ -232,23 +225,6 @@ GtkSalPrinter::StartJob(
     m_xImpl->m_pPrinter = aDialog.getPrinter();
     m_xImpl->m_pSettings = aDialog.getSettings();
 
-#if 0
-    if (const gchar *uri = gtk_print_settings_get(m_xImpl->m_pSettings, GTK_PRINT_SETTINGS_OUTPUT_URI))
-    {
-        const gchar *pStr = gtk_print_settings_get(m_xImpl->m_pSettings, GTK_PRINT_SETTINGS_OUTPUT_FILE_FORMAT);
-        if (pStr && !strcmp(pStr, "pdf"))
-        {
-            aDialog.ExportAsPDF(OUString((const sal_Char *)uri, strlen((const sal_Char *)uri), RTL_TEXTENCODING_UTF8), m_xImpl->m_pSettings);
-            bDoJob = false;
-        }
-    }
-
-    if (!bDoJob)
-        return false;
-#endif
-    int nCopies = 1;
-    bool bCollate = false;
-
     //To-Do proper name, watch for encodings
     sFileName = OString("/tmp/hacking.ps");
     m_xImpl->m_sSpoolFile = sFileName;
@@ -257,7 +233,7 @@ GtkSalPrinter::StartJob(
 
     //To-Do, swap ps/pdf for gtk_printer_accepts_ps()/gtk_printer_accepts_pdf() ?
 
-    return impl_doJob(&aFileName, i_rJobName, i_rAppName, io_pSetupData, nCopies, bCollate, io_rController);
+    return impl_doJob(&aFileName, i_rJobName, i_rAppName, io_pSetupData, /*bCollate*/false, io_rController);
 }
 
 bool
@@ -276,15 +252,6 @@ GtkSalPrinter::EndJob()
     std::shared_ptr<GtkPrintWrapper> const xWrapper(lcl_getGtkSalInstance().getPrintWrapper());
 
     GtkPageSetup* pPageSetup = xWrapper->page_setup_new();
-#if 0
-    //todo
-    gtk_page_setup_set_orientation(pPageSetup,);
-    gtk_page_setup_set_paper_size(pPageSetup,);
-    gtk_page_setup_set_top_margin(pPageSetup,);
-    gtk_page_setup_set_bottom_margin(pPageSetup,);
-    gtk_page_setup_set_left_margin(pPageSetup,);
-    gtk_page_setup_set_right_margin(pPageSetup,);
-#endif
 
     GtkPrintJob* const pJob = xWrapper->print_job_new(
         OUStringToOString(m_xImpl->m_sJobName, RTL_TEXTENCODING_UTF8).getStr(),
@@ -360,7 +327,7 @@ lcl_extractHelpTextsOrIds(
     if (!(rEntry.Value >>= rHelpStrings))
     {
         OUString aHelpString;
-        if ((rEntry.Value >>= aHelpString))
+        if (rEntry.Value >>= aHelpString)
         {
             rHelpStrings.realloc(1);
             *rHelpStrings.getArray() = aHelpString;
@@ -431,16 +398,14 @@ GtkPrintDialog::impl_initDialog()
 void
 GtkPrintDialog::impl_initCustomTab()
 {
-    typedef std::map<OUString, GtkWidget*> DependencyMap_t;
     typedef std::vector<std::pair<GtkWidget*, OUString> > CustomTabs_t;
 
     const uno::Sequence<beans::PropertyValue>& rOptions(m_rController.getUIOptions());
-    DependencyMap_t aPropertyToDependencyRowMap;
+    std::map<OUString, GtkWidget*> aPropertyToDependencyRowMap;
     CustomTabs_t aCustomTabs;
     GtkWidget* pCurParent = nullptr;
     GtkWidget* pCurTabPage = nullptr;
     GtkWidget* pCurSubGroup = nullptr;
-    GtkWidget* pStandardPrintRangeContainer = nullptr;
     bool bIgnoreSubgroup = false;
     for (int i = 0; i != rOptions.getLength(); i++)
     {
@@ -508,7 +473,7 @@ GtkPrintDialog::impl_initCustomTab()
                     const int nLen = aHelpIds.getLength();
                     aHelpTexts.realloc(nLen);
                     for (int j = 0; j != nLen; ++j)
-                        aHelpTexts[j] = pHelp->GetHelpText(aHelpIds[j], nullptr);
+                        aHelpTexts[j] = pHelp->GetHelpText(aHelpIds[j], static_cast<weld::Widget*>(nullptr));
                 }
                 else // fallback
                     aHelpTexts = aHelpIds;
@@ -543,9 +508,9 @@ GtkPrintDialog::impl_initCustomTab()
             lcl_setHelpText(pCurTabPage, aHelpTexts, 0);
 
             pCurParent = pCurTabPage;
-            aCustomTabs.push_back(std::make_pair(pCurTabPage, aText));
+            aCustomTabs.emplace_back(pCurTabPage, aText);
         }
-        else if (aCtrlType == "Subgroup" && (pCurParent /*|| bOnJobPageValue*/))
+        else if (aCtrlType == "Subgroup")
         {
             bIgnoreSubgroup = bIgnore;
             if (bIgnore)
@@ -728,9 +693,6 @@ GtkPrintDialog::impl_initCustomTab()
         }
     }
 
-    if (pStandardPrintRangeContainer)
-        gtk_widget_destroy(pStandardPrintRangeContainer);
-
     CustomTabs_t::const_reverse_iterator aEnd = aCustomTabs.rend();
     for (CustomTabs_t::const_reverse_iterator aI = aCustomTabs.rbegin(); aI != aEnd; ++aI)
     {
@@ -794,10 +756,9 @@ GtkPrintDialog::impl_initPrintContent(uno::Sequence<sal_Bool> const& i_rDisabled
 void
 GtkPrintDialog::impl_checkOptionalControlDependencies()
 {
-    for (std::map<GtkWidget*, OUString>::iterator it = m_aControlToPropertyMap.begin();
-         it != m_aControlToPropertyMap.end(); ++it)
+    for (auto& rEntry : m_aControlToPropertyMap)
     {
-        gtk_widget_set_sensitive(it->first, m_rController.isUIOptionEnabled(it->second));
+        gtk_widget_set_sensitive(rEntry.first, m_rController.isUIOptionEnabled(rEntry.second));
     }
 }
 
@@ -889,136 +850,6 @@ GtkPrintDialog::run()
     return bDoJob;
 }
 
-#if 0
-void GtkPrintDialog::ExportAsPDF(const OUString &rFileURL, GtkPrintSettings *pSettings) const
-{
-    uno::Reference < XDesktop2 > xDesktop = Desktop::create( ::comphelper::getProcessComponentContext() );
-    uno::Reference < XFrame > xFrame(xDesktop->getActiveFrame());
-    if (!xFrame.is())
-        xFrame.set(xDesktop, UNO_QUERY);
-
-    uno::Reference < XFilter > xFilter(
-        ::comphelper::getProcessServiceFactory()->createInstance("com.sun.star.document.PDFFilter"),
-        UNO_QUERY);
-
-    if (xFilter.is())
-    {
-        uno::Reference< XController > xController;
-        uno::Reference< XComponent > xDoc;
-        if (xFrame.is())
-            xController = xFrame->getController();
-        if (xController.is())
-            xDoc.set(xController->getModel(), UNO_QUERY);
-
-        SvFileStream aStream(rFileURL, STREAM_READWRITE | StreamMode::SHARE_DENYWRITE | StreamMode::TRUNC);
-        uno::Reference< XOutputStream > xOStm(new utl::OOutputStreamWrapper(aStream));
-
-        uno::Reference< XExporter > xExport(xFilter, UNO_QUERY);
-        xExport->setSourceDocument(xDoc);
-        uno::Sequence<beans::PropertyValue> aFilterData(2);
-        aFilterData[0].Name = "PageLayout";
-        aFilterData[0].Value <<= sal_Int32(0);
-        aFilterData[1].Name = "FirstPageOnLeft";
-        aFilterData[1].Value <<= sal_False;
-
-        const gchar *pStr = gtk_print_settings_get(pSettings, GTK_PRINT_SETTINGS_PRINT_PAGES);
-        if (pStr && !strcmp(pStr, "ranges"))
-        {
-            String aRangeText;
-            gint num_ranges;
-            const GtkPageRange* pRanges = gtk_print_settings_get_page_ranges(pSettings, &num_ranges);
-            for (gint i = 0; i < num_ranges; ++i)
-            {
-                aRangeText.Append(OUString::number(pRanges[i].start+1));
-                if (pRanges[i].start != pRanges[i].end)
-                {
-                    aRangeText.AppendAscii("-");
-                    aRangeText.Append(OUString::number(pRanges[i].end+1));
-                }
-
-                if (i != num_ranges-1)
-                    aRangeText.AppendAscii(",");
-            }
-            aFilterData.realloc(aFilterData.getLength()+1);
-            aFilterData[aFilterData.getLength()-1].Name = "PageRange";
-            aFilterData[aFilterData.getLength()-1].Value <<= OUString(aRangeText);
-        }
-        else if (pStr && !strcmp(pStr, "current"))
-        {
-            try
-            {
-                   uno::Reference< XSpreadsheetView > xSpreadsheetView;
-                   uno::Reference< XSpreadsheet> xSheet;
-                   uno::Reference< XSpreadsheetDocument > xSheetDoc;
-                   uno::Reference< XIndexAccess > xSheets;
-                   uno::Reference< XNamed > xName;
-
-                   if (xController.is())
-                       xSpreadsheetView.set(xController, UNO_QUERY);
-                   if (xSpreadsheetView.is())
-                       xSheet.set(xSpreadsheetView->getActiveSheet());
-                   if (xSheet.is())
-                       xName.set(xSheet, UNO_QUERY);
-                   if (xName.is())
-                       xSheetDoc.set(xController->getModel(), UNO_QUERY);
-                   if (xSheetDoc.is())
-                       xSheets.set(xSheetDoc->getSheets(), UNO_QUERY);
-                   if (xSheets.is())
-                   {
-                       const OUString &rName = xName->getName();
-
-                       sal_Int32 i;
-
-                       for (i = 0; i < xSheets->getCount(); ++i)
-                       {
-                           uno::Reference < XNamed > xItem =
-                               uno::Reference < XNamed >(xSheets->getByIndex(i), UNO_QUERY);
-                           if (rName == xItem->getName())
-                               break;
-                       }
-
-                       if (i < xSheets->getCount())
-                       {
-                            aFilterData.realloc(aFilterData.getLength()+1);
-                            aFilterData[aFilterData.getLength()-1].Name = "PageRange";
-                            aFilterData[aFilterData.getLength()-1].Value <<= OUString(OUString::number(i + 1));
-                       }
-                   }
-            }
-            catch (...) {}
-        }
-        if (gtk_print_unix_dialog_get_has_selection(GTK_PRINT_UNIX_DIALOG(m_pDialog)))
-        {
-            uno::Any aSelection;
-            try
-            {
-                if (xController.is())
-                {
-                    uno::Reference<view::XSelectionSupplier> xView(xController, UNO_QUERY);
-                    if (xView.is())
-                        xView->getSelection() >>= aSelection;
-                }
-            }
-            catch (const uno::RuntimeException &)
-            {
-            }
-            if (aSelection.hasValue())
-            {
-                aFilterData.realloc(aFilterData.getLength()+1);
-                aFilterData[aFilterData.getLength()-1].Name = "Selection";
-                aFilterData[aFilterData.getLength()-1].Value <<= aSelection;
-            }
-        }
-        uno::Sequence<beans::PropertyValue> aArgs(2);
-        aArgs[0].Name = "FilterData";
-        aArgs[0].Value <<= aFilterData;
-        aArgs[1].Name = "OutputStream";
-        aArgs[1].Value <<= xOStm;
-        xFilter->filter(aArgs);
-    }
-}
-#endif
-
 void
 GtkPrintDialog::updateControllerPrintRange()
 {
@@ -1104,7 +935,7 @@ GtkPrintDialog::impl_readFromSettings()
         bChanged = true;
         m_xWrapper->print_settings_set_collate(pSettings, bCollate);
     }
-    // TODO: wth was this var. meant for?
+    // TODO: what was this variable meant for?
     (void) bChanged;
 
     m_xWrapper->print_unix_dialog_set_settings(GTK_PRINT_UNIX_DIALOG(m_pDialog), pSettings);

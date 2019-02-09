@@ -21,8 +21,7 @@
 
 #include <xmloff/dllapi.h>
 #include <xmloff/xmlimppr.hxx>
-
-class XMLFontStylesContext;
+#include <memory>
 
 class XMLOFF_DLLPUBLIC XMLTextImportPropertyMapper : public SvXMLImportPropertyMapper
 {
@@ -37,15 +36,15 @@ class XMLOFF_DLLPUBLIC XMLTextImportPropertyMapper : public SvXMLImportPropertyM
                 XMLPropertyState *pFontCharsetState );
 
     void FontDefaultsCheck(
-                XMLPropertyState*pFontFamilyName,
-                XMLPropertyState* pFontStyleName,
-                XMLPropertyState* pFontFamily,
-                XMLPropertyState* pFontPitch,
-                XMLPropertyState* pFontCharSet,
-                XMLPropertyState** ppNewFontStyleName,
-                XMLPropertyState** ppNewFontFamily,
-                XMLPropertyState** ppNewFontPitch,
-                XMLPropertyState** ppNewFontCharSet ) const;
+                XMLPropertyState const * pFontFamilyName,
+                XMLPropertyState const * pFontStyleName,
+                XMLPropertyState const * pFontFamily,
+                XMLPropertyState const * pFontPitch,
+                XMLPropertyState const * pFontCharSet,
+                std::unique_ptr<XMLPropertyState>* ppNewFontStyleName,
+                std::unique_ptr<XMLPropertyState>* ppNewFontFamily,
+                std::unique_ptr<XMLPropertyState>* ppNewFontPitch,
+                std::unique_ptr<XMLPropertyState>* ppNewFontCharSet ) const;
 
 protected:
     virtual bool handleSpecialItem(
@@ -58,7 +57,7 @@ public:
     XMLTextImportPropertyMapper(
             const rtl::Reference< XMLPropertySetMapper >& rMapper,
             SvXMLImport& rImport );
-    virtual ~XMLTextImportPropertyMapper();
+    virtual ~XMLTextImportPropertyMapper() override;
 
     /** This method is called when all attributes have benn processed. It may be used to remove items that are incomplete */
     virtual void finished(

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "reportformula.hxx"
+#include <reportformula.hxx>
 
 #include <rtl/ustrbuf.hxx>
 
@@ -83,11 +83,9 @@ namespace rptui
         m_sCompleteFormula = _rFormula;
 
         // is it an ordinary expression?
-        if ( m_sCompleteFormula.startsWith( sExpressionPrefix ) )
+        if ( m_sCompleteFormula.startsWith( sExpressionPrefix, &m_sUndecoratedContent ) )
         {
-            sal_Int32 nPrefixLen = strlen(sExpressionPrefix);
             m_eType = Expression;
-            m_sUndecoratedContent = m_sCompleteFormula.copy( nPrefixLen );
             return;
         }
 
@@ -124,15 +122,6 @@ namespace rptui
     }
 
     bool                    ReportFormula::isValid() const { return getType() != Invalid; }
-    ReportFormula& ReportFormula::operator=(class ReportFormula const & _rHd)
-    {
-        if ( this == &_rHd )
-            return *this;
-        m_eType                 = _rHd.m_eType;
-        m_sCompleteFormula      = _rHd.m_sCompleteFormula;
-        m_sUndecoratedContent   = _rHd.m_sUndecoratedContent;
-        return *this;
-    }
 
     OUString ReportFormula::getEqualUndecoratedContent() const
     {

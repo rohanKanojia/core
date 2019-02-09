@@ -33,47 +33,44 @@ GtkSalObject::GtkSalObject( GtkSalFrame* pParent, bool bShow )
         : m_pSocket( nullptr ),
           m_pRegion( nullptr )
 {
-    if( pParent )
-    {
-        // our plug window
-        m_pSocket = gtk_drawing_area_new();
-        Show( bShow );
-        // insert into container
-        gtk_fixed_put( pParent->getFixedContainer(),
-                       m_pSocket,
-                       0, 0 );
-        // realize so we can get a window id
-        gtk_widget_realize( m_pSocket );
+    if( !pParent )
+        return;
 
-        // make it transparent; some plugins may not insert
-        // their own window here but use the socket window itself
-        gtk_widget_set_app_paintable( m_pSocket, TRUE );
+    // our plug window
+    m_pSocket = gtk_drawing_area_new();
+    Show( bShow );
+    // insert into container
+    gtk_fixed_put( pParent->getFixedContainer(),
+                   m_pSocket,
+                   0, 0 );
+    // realize so we can get a window id
+    gtk_widget_realize( m_pSocket );
 
-        // system data
-        m_aSystemData.nSize         = sizeof( SystemEnvData );
-        SalDisplay* pDisp = vcl_sal::getSalDisplay(GetGenericData());
-        m_aSystemData.pDisplay      = pDisp->GetDisplay();
-        m_aSystemData.pVisual       = pDisp->GetVisual(pParent->getXScreenNumber()).GetVisual();
-        m_aSystemData.nDepth        = pDisp->GetVisual(pParent->getXScreenNumber()).GetDepth();
-        m_aSystemData.aColormap     = pDisp->GetColormap(pParent->getXScreenNumber()).GetXColormap();
-        m_aSystemData.aWindow       = GDK_WINDOW_XWINDOW(widget_get_window(m_pSocket));
-        m_aSystemData.aShellWindow  = GDK_WINDOW_XWINDOW(widget_get_window(GTK_WIDGET(pParent->getWindow())));
-        m_aSystemData.pSalFrame     = nullptr;
-        m_aSystemData.pWidget       = m_pSocket;
-        m_aSystemData.nScreen       = pParent->getXScreenNumber().getXScreen();
-        m_aSystemData.pAppContext   = nullptr;
-        m_aSystemData.pShellWidget  = GTK_WIDGET(pParent->getWindow());
-        m_aSystemData.pToolkit      = "gtk2";
+    // make it transparent; some plugins may not insert
+    // their own window here but use the socket window itself
+    gtk_widget_set_app_paintable( m_pSocket, TRUE );
 
-        g_signal_connect( G_OBJECT(m_pSocket), "button-press-event", G_CALLBACK(signalButton), this );
-        g_signal_connect( G_OBJECT(m_pSocket), "button-release-event", G_CALLBACK(signalButton), this );
-        g_signal_connect( G_OBJECT(m_pSocket), "focus-in-event", G_CALLBACK(signalFocus), this );
-        g_signal_connect( G_OBJECT(m_pSocket), "focus-out-event", G_CALLBACK(signalFocus), this );
-        g_signal_connect( G_OBJECT(m_pSocket), "destroy", G_CALLBACK(signalDestroy), this );
+    // system data
+    m_aSystemData.nSize         = sizeof( SystemEnvData );
+    SalDisplay* pDisp = vcl_sal::getSalDisplay(GetGenericUnixSalData());
+    m_aSystemData.pDisplay      = pDisp->GetDisplay();
+    m_aSystemData.pVisual       = pDisp->GetVisual(pParent->getXScreenNumber()).GetVisual();
+    m_aSystemData.aWindow       = GDK_WINDOW_XWINDOW(widget_get_window(m_pSocket));
+    m_aSystemData.aShellWindow  = GDK_WINDOW_XWINDOW(widget_get_window(GTK_WIDGET(pParent->getWindow())));
+    m_aSystemData.pSalFrame     = nullptr;
+    m_aSystemData.pWidget       = m_pSocket;
+    m_aSystemData.nScreen       = pParent->getXScreenNumber().getXScreen();
+    m_aSystemData.pToolkit      = "gtk2";
 
-        // #i59255# necessary due to sync effects with java child windows
-        pParent->Flush();
-    }
+    g_signal_connect( G_OBJECT(m_pSocket), "button-press-event", G_CALLBACK(signalButton), this );
+    g_signal_connect( G_OBJECT(m_pSocket), "button-release-event", G_CALLBACK(signalButton), this );
+    g_signal_connect( G_OBJECT(m_pSocket), "focus-in-event", G_CALLBACK(signalFocus), this );
+    g_signal_connect( G_OBJECT(m_pSocket), "focus-out-event", G_CALLBACK(signalFocus), this );
+    g_signal_connect( G_OBJECT(m_pSocket), "destroy", G_CALLBACK(signalDestroy), this );
+
+    // #i59255# necessary due to sync effects with java child windows
+    pParent->Flush();
+
 }
 
 GtkSalObject::~GtkSalObject()
@@ -159,7 +156,7 @@ gboolean GtkSalObject::signalButton( GtkWidget*, GdkEventButton* pEvent, gpointe
 
     if( pEvent->type == GDK_BUTTON_PRESS )
     {
-        pThis->CallCallback( SALOBJ_EVENT_TOTOP, nullptr );
+        pThis->CallCallback( SalObjEvent::ToTop );
     }
 
     return FALSE;
@@ -169,7 +166,7 @@ gboolean GtkSalObject::signalFocus( GtkWidget*, GdkEventFocus* pEvent, gpointer 
 {
     GtkSalObject* pThis = static_cast<GtkSalObject*>(object);
 
-    pThis->CallCallback( pEvent->in ? SALOBJ_EVENT_GETFOCUS : SALOBJ_EVENT_LOSEFOCUS, nullptr );
+    pThis->CallCallback( pEvent->in ? SalObjEvent::GetFocus : SalObjEvent::LoseFocus );
 
     return FALSE;
 }

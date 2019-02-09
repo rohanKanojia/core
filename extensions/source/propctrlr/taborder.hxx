@@ -20,21 +20,14 @@
 #ifndef INCLUDED_EXTENSIONS_SOURCE_PROPCTRLR_TABORDER_HXX
 #define INCLUDED_EXTENSIONS_SOURCE_PROPCTRLR_TABORDER_HXX
 
-#include <svtools/treelistbox.hxx>
+#include <vcl/treelistbox.hxx>
 #include <com/sun/star/awt/XTabControllerModel.hpp>
 #include <com/sun/star/awt/XControlContainer.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <vcl/dialog.hxx>
-
 #include <vcl/button.hxx>
-#include <vcl/lstbox.hxx>
-
-#include <vcl/fixed.hxx>
-
-#include <comphelper/uno3.hxx>
-
 
 namespace pcr
 {
@@ -46,15 +39,12 @@ namespace pcr
     {
     public:
         TabOrderListBox( vcl::Window* pParent, WinBits nBits  );
-        virtual ~TabOrderListBox();
+        virtual ~TabOrderListBox() override;
 
         void            MoveSelection( long nRelPos );
 
     protected:
         virtual void    ModelHasMoved(SvTreeListEntry* pSource ) override;
-
-    private:
-        using SvTreeListBox::MoveSelection;
     };
 
 
@@ -79,17 +69,12 @@ namespace pcr
         VclPtr<PushButton>          m_pPB_MoveDown;
         VclPtr<PushButton>          m_pPB_AutoOrder;
 
-        ImageList*                  pImageList;
-
-        DECL_LINK_TYPED( MoveUpClickHdl, Button*, void );
-        DECL_LINK_TYPED( MoveDownClickHdl, Button*, void );
-        DECL_LINK_TYPED( AutoOrderClickHdl, Button*, void );
-        DECL_LINK_TYPED( OKClickHdl, Button*, void );
+        DECL_LINK( MoveUpClickHdl, Button*, void );
+        DECL_LINK( MoveDownClickHdl, Button*, void );
+        DECL_LINK( AutoOrderClickHdl, Button*, void );
+        DECL_LINK( OKClickHdl, Button*, void );
 
         void FillList();
-        Image GetImage(
-            const css::uno::Reference< css::beans::XPropertySet > & _rxSet
-        ) const;
 
     public:
         TabOrderDialog(
@@ -99,7 +84,7 @@ namespace pcr
             const css::uno::Reference< css::uno::XComponentContext >& _rxORB
         );
 
-        virtual ~TabOrderDialog();
+        virtual ~TabOrderDialog() override;
         virtual void dispose() override;
 
         void SetModified();

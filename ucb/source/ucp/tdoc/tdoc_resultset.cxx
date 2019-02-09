@@ -27,12 +27,11 @@
 
  *************************************************************************/
 
-#include "ucbhelper/resultset.hxx"
+#include <ucbhelper/resultset.hxx>
 
 #include "tdoc_datasupplier.hxx"
 #include "tdoc_resultset.hxx"
 #include "tdoc_content.hxx"
-#include <comphelper/processfactory.hxx>
 
 using namespace com::sun::star;
 using namespace tdoc_ucp;

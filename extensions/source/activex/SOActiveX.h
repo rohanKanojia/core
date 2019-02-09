@@ -19,13 +19,10 @@
 
 // SOActiveX.h : Declaration of the CSOActiveX
 
-#ifndef __SOACTIVEX_H_
-#define __SOACTIVEX_H_
+#ifndef INCLUDED_EXTENSIONS_SOURCE_ACTIVEX_SOACTIVEX_H
+#define INCLUDED_EXTENSIONS_SOURCE_ACTIVEX_SOACTIVEX_H
 
 #include "resource.h"
-
-#pragma warning (push,1)
-#pragma warning (disable:4265)
 
 #include <ExDispID.h>
 #include <ExDisp.h>
@@ -37,12 +34,10 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnon-virtual-dtor"
 #endif
-#include "so_activex.h"
+#include <so_activex.h>
 #if defined __clang__
 #pragma clang diagnostic pop
 #endif
-
-#pragma warning (pop)
 
 class SODispatchInterceptor;
 
@@ -90,7 +85,7 @@ protected:
     OLECHAR const *         mCurFileUrl;
     BOOL                    mbLoad;
     BOOL                    mbViewOnly;
-    WNDCLASS                mPWinClass;
+    WNDCLASSW               mPWinClass;
     HWND                    mParentWin;
     HWND                    mOffWin;
 
@@ -104,7 +99,7 @@ protected:
 
 public:
     CSOActiveX();
-    ~CSOActiveX();
+    ~CSOActiveX() override;
 
 DECLARE_REGISTRY_RESOURCEID(IDR_SOACTIVEX)
 
@@ -129,7 +124,14 @@ BEGIN_COM_MAP(CSOActiveX)
     COM_INTERFACE_ENTRY(IProvideClassInfo2)
     COM_INTERFACE_ENTRY(IPersistPropertyBag)
     COM_INTERFACE_ENTRY(IObjectSafety)
+#if defined __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Winconsistent-missing-override"
+#endif
 END_COM_MAP()
+#if defined __clang__
+#pragma clang diagnostic pop
+#endif
 
 #if defined __clang__
 #pragma clang diagnostic push
@@ -151,7 +153,14 @@ END_PROP_MAP()
 BEGIN_CONNECTION_POINT_MAP(CSOActiveX)
 END_CONNECTION_POINT_MAP()
 
+#if defined __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Winconsistent-missing-override"
+#endif
 BEGIN_MSG_MAP(CSOActiveX)
+#if defined __clang__
+#pragma clang diagnostic pop
+#endif
     CHAIN_MSG_MAP(CComControl<CSOActiveX>)
     DEFAULT_REFLECTION_HANDLER()
 END_MSG_MAP()
@@ -163,12 +172,12 @@ END_MSG_MAP()
 
 
 // IViewObjectEx
-    DECLARE_VIEW_STATUS(VIEWSTATUS_SOLIDBKGND | VIEWSTATUS_OPAQUE)
+    static DECLARE_VIEW_STATUS(VIEWSTATUS_SOLIDBKGND | VIEWSTATUS_OPAQUE)
 
 // ISOActiveX
 public:
 
-    STDMETHOD(SetClientSite)( IOleClientSite* aClientSite );
+    STDMETHOD(SetClientSite)( IOleClientSite* aClientSite ) override;
     STDMETHOD(Invoke)(  DISPID dispidMember,
                         REFIID riid,
                         LCID lcid,
@@ -176,19 +185,19 @@ public:
                         DISPPARAMS* pDispParams,
                         VARIANT* pvarResult,
                         EXCEPINFO* pExcepInfo,
-                        UINT* puArgErr);
-    STDMETHOD(Load) ( LPPROPERTYBAG pPropBag, LPERRORLOG pErrorLog );
-    STDMETHOD(Load) ( LPSTREAM pStm );
-    STDMETHOD(InitNew) ();
-    HRESULT OnDrawAdvanced(ATL_DRAWINFO& di);
-    HRESULT OnDraw(ATL_DRAWINFO& di);
+                        UINT* puArgErr) override;
+    STDMETHOD(Load) ( LPPROPERTYBAG pPropBag, LPERRORLOG pErrorLog ) override;
+    STDMETHOD(Load) ( LPSTREAM pStm ) override;
+    STDMETHOD(InitNew) () override;
+    HRESULT OnDrawAdvanced(ATL_DRAWINFO& di) override;
+    HRESULT OnDraw(ATL_DRAWINFO& di) override;
 
     HRESULT SetLayoutManagerProps();
     HRESULT CreateFrameOldWay( HWND hwnd, int width, int height );
     HRESULT GetUnoStruct( OLECHAR const * sStructName, CComPtr<IDispatch>& pdispResult );
     HRESULT LoadURLToFrame();
     HRESULT CallDispatchMethod( OLECHAR const * sUrl, CComVariant* sArgNames, CComVariant* sArgVal, unsigned int count );
-    HRESULT CallLoadComponentFromURL1PBool( OLECHAR* sUrl, OLECHAR* sArgName, BOOL sArgVal );
+    HRESULT CallLoadComponentFromURL1PBool( OLECHAR const * sUrl, OLECHAR const * sArgName, BOOL sArgVal );
     HRESULT GetUrlStruct( OLECHAR const * sUrl, CComPtr<IDispatch>& pdispUrl );
     HRESULT Cleanup();
     HRESULT TerminateOffice();
@@ -201,6 +210,6 @@ public:
     SOVersion GetVersionConnected();
 };
 
-#endif //__SOACTIVEX_H_
+#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

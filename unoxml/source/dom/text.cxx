@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <text.hxx>
+#include "text.hxx"
 
 #include <osl/diagnose.h>
 
@@ -58,13 +58,12 @@ namespace DOM
         }
     }
 
-    OUString SAL_CALL CText::getNodeName() throw (RuntimeException, std::exception)
+    OUString SAL_CALL CText::getNodeName()
     {
         return OUString("#text");
     }
 
     Reference< XText > SAL_CALL CText::splitText(sal_Int32 /*offset*/)
-         throw (RuntimeException, std::exception)
     {
         OSL_FAIL("CText::splitText: not implemented (#i113683#)");
         return Reference< XText >(this);

@@ -30,11 +30,10 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        enum BreakupUnit
+        enum class BreakupUnit
         {
-            BreakupUnit_character,
-            BreakupUnit_word,
-            BreakupUnit_sentence
+            Character,
+            Word
         };
 
         class DRAWINGLAYER_DLLPUBLIC TextBreakupHelper
@@ -43,9 +42,8 @@ namespace drawinglayer
             const TextSimplePortionPrimitive2D&     mrSource;
             Primitive2DContainer                       mxResult;
             TextLayouterDevice                      maTextLayouter;
-            basegfx::tools::B2DHomMatrixBufferedOnDemandDecompose maDecTrans;
+            basegfx::utils::B2DHomMatrixBufferedOnDemandDecompose maDecTrans;
 
-            /// bitfield
             bool                                    mbNoDXArray : 1;
 
             /// create a portion from nIndex to nLength and append to rTempResult
@@ -69,7 +67,7 @@ namespace drawinglayer
             virtual ~TextBreakupHelper();
 
             /// get result
-            const Primitive2DContainer& getResult(BreakupUnit aBreakupUnit = BreakupUnit_character) const;
+            const Primitive2DContainer& getResult(BreakupUnit aBreakupUnit = BreakupUnit::Character) const;
         };
 
     } // end of namespace primitive2d

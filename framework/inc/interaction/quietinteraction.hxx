@@ -20,8 +20,6 @@
 #ifndef INCLUDED_FRAMEWORK_INC_INTERACTION_QUIETINTERACTION_HXX
 #define INCLUDED_FRAMEWORK_INC_INTERACTION_QUIETINTERACTION_HXX
 
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
 #include <general.h>
 
 #include <com/sun/star/task/XInteractionHandler.hpp>
@@ -60,7 +58,7 @@ class QuietInteraction : public  ::cppu::WeakImplHelper<
             @interface  XInteractionHandler
             @short      called from outside to handle a problem
             @descr      The only interaction we can handle here is to
-                        decide which of two ambigous filters should be really used.
+                        decide which of two ambiguous filters should be really used.
                         We use the user selected one every time.
                         All other request will be aborted and can break the code,
                         which use this interaction handler.
@@ -72,7 +70,7 @@ class QuietInteraction : public  ::cppu::WeakImplHelper<
 
             @threadsafe yes
         */
-        virtual void SAL_CALL handle( const css::uno::Reference< css::task::XInteractionRequest >& xRequest ) throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL handle( const css::uno::Reference< css::task::XInteractionRequest >& xRequest ) override;
 
     // c++ interface
     public:

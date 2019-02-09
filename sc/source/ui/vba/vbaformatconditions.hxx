@@ -21,23 +21,16 @@
 #define INCLUDED_SC_SOURCE_UI_VBA_VBAFORMATCONDITIONS_HXX
 
 #include <ooo/vba/excel/XFormatConditions.hpp>
-#include <ooo/vba/excel/XStyles.hpp>
-#include <ooo/vba/excel/XRange.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/sheet/XSheetConditionalEntries.hpp>
 #include <vbahelper/vbacollectionimpl.hxx>
+
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace sheet { class XSheetConditionalEntries; } } } }
+namespace ooo { namespace vba { namespace excel { class XRange; } } }
+namespace ooo { namespace vba { namespace excel { class XStyle; } } }
+namespace ooo { namespace vba { namespace excel { class XStyles; } } }
 
 // This class is used only as a target for casting, it seems,
 // and no objects of this type are created as such, I think.
-// So avoid MSVC warnings:
-// warning C4510: 'ScVbaFormatConditions' : default constructor could not be generated
-// warning C4610: class 'ScVbaFormatConditions' can never be instantiated - user defined constructor required
-
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable: 4510)
-#pragma warning(disable: 4610)
-#endif
 
 class ScVbaFormatConditions: public CollTestImplHelper< ov::excel::XFormatConditions >
 {
@@ -46,27 +39,30 @@ class ScVbaFormatConditions: public CollTestImplHelper< ov::excel::XFormatCondit
     css::uno::Reference< ov::excel::XRange > mxRangeParent;
     css::uno::Reference< css::beans::XPropertySet > mxParentRangePropertySet;
 public:
-    void notifyRange() throw ( css::script::BasicErrorException );
-    css::uno::Reference< ov::excel::XFormatCondition > Add( ::sal_Int32 Type, const css::uno::Any& Operator, const css::uno::Any& Formula1, const css::uno::Any& Formula2, const css::uno::Reference< ov::excel::XStyle >& _xCalcStyle ) throw (css::script::BasicErrorException, css::uno::RuntimeException);
-    static OUString getA1Formula(const css::uno::Any& _aFormula) throw ( css::script::BasicErrorException );
+    /// @throws css::script::BasicErrorException
+    void notifyRange();
+    /// @throws css::script::BasicErrorException
+    /// @throws css::uno::RuntimeException
+    css::uno::Reference< ov::excel::XFormatCondition > Add( ::sal_Int32 Type, const css::uno::Any& Operator, const css::uno::Any& Formula1, const css::uno::Any& Formula2, const css::uno::Reference< ov::excel::XStyle >& _xCalcStyle );
+    /// @throws css::script::BasicErrorException
+    static OUString getA1Formula(const css::uno::Any& _aFormula);
     OUString getStyleName();
-    void removeFormatCondition( const OUString& _sStyleName, bool _bRemoveStyle) throw ( css::script::BasicErrorException );
-    css::uno::Reference< css::sheet::XSheetConditionalEntries > getSheetConditionalEntries() const { return mxSheetConditionalEntries; }
+    /// @throws css::script::BasicErrorException
+    void removeFormatCondition( const OUString& _sStyleName, bool _bRemoveStyle);
+    const css::uno::Reference< css::sheet::XSheetConditionalEntries >& getSheetConditionalEntries() const { return mxSheetConditionalEntries; }
     // XFormatConditions
-    virtual void SAL_CALL Delete(  ) throw (css::script::BasicErrorException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< ov::excel::XFormatCondition > SAL_CALL Add( ::sal_Int32 Type, const css::uno::Any& Operator, const css::uno::Any& Formula1, const css::uno::Any& Formula2 ) throw (css::script::BasicErrorException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL Delete(  ) override;
+    virtual css::uno::Reference< ov::excel::XFormatCondition > SAL_CALL Add( ::sal_Int32 Type, const css::uno::Any& Operator, const css::uno::Any& Formula1, const css::uno::Any& Formula2 ) override;
     // XEnumerationAccess
-    virtual css::uno::Type SAL_CALL getElementType() throw (css::uno::RuntimeException) override;
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() throw (css::uno::RuntimeException) override;
+    virtual css::uno::Type SAL_CALL getElementType() override;
+    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
     virtual css::uno::Any createCollectionObject(const css::uno::Any&) override;
     // XHelperInterface
     virtual OUString getServiceImplName() override;
     virtual css::uno::Sequence<OUString> getServiceNames() override;
-};
 
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
+    ScVbaFormatConditions() = delete;
+};
 
 #endif // INCLUDED_SC_SOURCE_UI_VBA_VBAFORMATCONDITIONS_HXX
 

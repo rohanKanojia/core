@@ -26,7 +26,7 @@
 
 class SVX_DLLPUBLIC SvxLongLRSpaceItem : public SfxPoolItem
 {
-    long    mlLeft;         // nLeft or the negativ first-line indentation
+    long    mlLeft;         // nLeft or the negative first-line indentation
     long    mlRight;        // the unproblematic right edge
 
   protected:
@@ -36,9 +36,9 @@ class SVX_DLLPUBLIC SvxLongLRSpaceItem : public SfxPoolItem
     virtual bool             PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     virtual SfxPoolItem*     Clone( SfxItemPool *pPool = nullptr ) const override;
 
@@ -48,7 +48,6 @@ private:
 public:
     static SfxPoolItem* CreateDefault();
     SvxLongLRSpaceItem(long lLeft, long lRight, sal_uInt16 nId);
-    SvxLongLRSpaceItem(const SvxLongLRSpaceItem &);
     SvxLongLRSpaceItem();
 
     long GetLeft() const { return mlLeft;}
@@ -69,9 +68,9 @@ class SVX_DLLPUBLIC SvxLongULSpaceItem : public SfxPoolItem
     virtual bool             PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     virtual SfxPoolItem*     Clone( SfxItemPool *pPool = nullptr ) const override;
 
@@ -81,7 +80,6 @@ private:
 public:
     static SfxPoolItem* CreateDefault();
     SvxLongULSpaceItem(long lUpper, long lLower, sal_uInt16 nId);
-    SvxLongULSpaceItem(const SvxLongULSpaceItem &);
     SvxLongULSpaceItem();
 
     long GetUpper() const { return mlLeft;}
@@ -101,9 +99,9 @@ protected:
     virtual bool             PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     virtual SfxPoolItem*     Clone( SfxItemPool *pPool = nullptr ) const override;
 
@@ -112,7 +110,6 @@ private:
 public:
     static SfxPoolItem* CreateDefault();
     SvxPagePosSizeItem(const Point &rPos, long lWidth, long lHeight);
-    SvxPagePosSizeItem(const SvxPagePosSizeItem &);
     SvxPagePosSizeItem();
 
     const Point &GetPos() const { return aPos; }
@@ -129,14 +126,10 @@ struct SVX_DLLPUBLIC SvxColumnDescription
     long nEndMin; //min. possible position of end
     long nEndMax; //max. possible position of end
 
-    SvxColumnDescription();
-
-    SvxColumnDescription(const SvxColumnDescription &rCopy);
-
-    SvxColumnDescription(long start, long end, bool bVis = true);
+    SvxColumnDescription(long start, long end, bool bVis);
 
     SvxColumnDescription(long start, long end,
-                         long endMin, long endMax, bool bVis = true);
+                         long endMin, long endMax, bool bVis);
 
     bool operator==(const SvxColumnDescription &rCmp) const;
     bool operator!=(const SvxColumnDescription &rCmp) const;
@@ -155,8 +148,7 @@ inline std::basic_ostream<charT, traits> & operator <<(
 
 class SVX_DLLPUBLIC SvxColumnItem : public SfxPoolItem
 {
-    typedef std::vector<SvxColumnDescription> SvxColumnDescriptionVector;
-    SvxColumnDescriptionVector aColumns; // Column array
+    std::vector<SvxColumnDescription>  aColumns; // Column array
 
     long nLeft;             // Left edge for the table
     long nRight;            // Right edge for the table; for columns always
@@ -169,10 +161,10 @@ protected:
     virtual bool operator==( const SfxPoolItem& ) const override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                                 SfxMapUnit eCoreMetric,
-                                                 SfxMapUnit ePresMetric,
-                                                 OUString &rText,
-                                                 const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& ) const override;
 
     virtual SfxPoolItem* Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool         QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
@@ -183,11 +175,7 @@ public:
     // right edge of the surrounding frame
     // nLeft, nRight each the distance to the surrounding frame
     SvxColumnItem(sal_uInt16 nAct = 0);
-    SvxColumnItem(sal_uInt16 nActCol, sal_uInt16 nLeft, sal_uInt16 nRight = 0); // Table with borders
-    SvxColumnItem(const SvxColumnItem& aItem);
-    virtual ~SvxColumnItem();
-
-    const SvxColumnItem &operator=(const SvxColumnItem &);
+    SvxColumnItem(sal_uInt16 nActCol, sal_uInt16 nLeft, sal_uInt16 nRight); // Table with borders
 
     SvxColumnDescription&       operator[](sal_uInt16 index);
     const SvxColumnDescription& operator[](sal_uInt16 index) const;
@@ -195,7 +183,6 @@ public:
     SvxColumnDescription&       GetActiveColumnDescription();
 
     sal_uInt16  Count() const;
-    void        Insert(const SvxColumnDescription& rDesc, sal_uInt16 nPos);
     void        Append(const SvxColumnDescription& rDesc);
     void        SetLeft(long aLeft);
     void        SetRight(long aRight);
@@ -210,24 +197,22 @@ public:
     bool        IsConsistent() const;
 };
 
-// class SvxObjectItem ---------------------------------------------------
-
 class SVX_DLLPUBLIC SvxObjectItem : public SfxPoolItem
 {
 private:
     long nStartX;   /* Start in x direction */
     long nEndX;     /* End in x direction */
     long nStartY;   /* Start in y direction */
-    long nEndY;     /* Ende in y direction */
-    bool bLimits; /* boundary limit control by the application */
+    long nEndY;     /* End in y direction */
+    bool bLimits;   /* boundary limit control by the application */
 
 protected:
     virtual bool             operator==( const SfxPoolItem& ) const override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     virtual SfxPoolItem*     Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool             QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
@@ -240,9 +225,6 @@ public:
     static SfxPoolItem* CreateDefault();
     SvxObjectItem(long nStartX, long nEndX,
                   long nStartY, long nEndY);
-    SvxObjectItem(const SvxObjectItem& rCopy);
-
-    bool HasLimits() const { return bLimits;}
 
     long GetStartX() const { return nStartX;}
     long GetEndX() const { return nEndX;}
@@ -254,7 +236,6 @@ public:
     void SetStartY(long lValue);
     void SetEndY(long lValue);
 };
-
 
 #endif
 

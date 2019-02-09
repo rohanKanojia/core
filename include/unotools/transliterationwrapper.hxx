@@ -23,13 +23,18 @@
 #include <unotools/unotoolsdllapi.h>
 #include <rtl/ustring.hxx>
 #include <i18nlangtag/languagetag.hxx>
-#include <com/sun/star/i18n/XExtendedTransliteration.hpp>
+#include <i18nlangtag/lang.h>
+#include <com/sun/star/uno/Reference.hxx>
+
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Sequence; } } } }
+namespace com { namespace sun { namespace star { namespace i18n { class XExtendedTransliteration; } } } }
 
 namespace com { namespace sun { namespace star {
     namespace uno {
         class XComponentContext;
     }
 }}}
+enum class TransliterationFlags;
 
 namespace utl
 {
@@ -38,28 +43,28 @@ class UNOTOOLS_DLLPUBLIC TransliterationWrapper
 {
     css::uno::Reference< css::i18n::XExtendedTransliteration > xTrans;
     LanguageTag aLanguageTag;
-    sal_uInt32 nType;
+    TransliterationFlags const nType;
     mutable bool bFirstCall;
 
     TransliterationWrapper( const TransliterationWrapper& ) = delete;
     TransliterationWrapper& operator=( const TransliterationWrapper& ) = delete;
 
     void loadModuleImpl() const;
-    void setLanguageLocaleImpl( sal_uInt16 nLang );
+    void setLanguageLocaleImpl( LanguageType nLang );
 
 public:
     TransliterationWrapper( const css::uno::Reference< css::uno::XComponentContext > & rxContext,
-                    sal_uInt32 nType );
+                    TransliterationFlags nType );
 
     ~TransliterationWrapper();
 
-    sal_uInt32 getType() const { return nType; }
+    TransliterationFlags getType() const { return nType; }
 
     bool needLanguageForTheMode() const;
 
     /** set a new language and load the corresponding transliteration module if
         needed for the mode set with nType in the ctor */
-    void loadModuleIfNeeded( sal_uInt16 nLang );
+    void loadModuleIfNeeded( LanguageType nLang );
 
     /** Load the transliteration module specified by rModuleName, which has to
         be the UNO service implementation name that is expanded to the full UNO
@@ -73,18 +78,17 @@ public:
         those may load a different module and overwrite this setting. Only the
         transliterate() method that takes no LanguageType parameter may be used
         for a specific module loaded with this method.  */
-    void loadModuleByImplName( const OUString& rModuleName, sal_uInt16 nLang );
+    void loadModuleByImplName( const OUString& rModuleName, LanguageType nLang );
 
     /** This transliteration method corresponds with the loadModuleByImplName()
         method. It relies on a module being loaded and does not try load one.
         If for any reason the string can't be transliterated the original
         string is returned.  */
     OUString transliterate( const OUString& rStr,
-                        sal_Int32 nStart, sal_Int32 nLen,
-                        css::uno::Sequence <sal_Int32>* pOffset ) const;
+                        sal_Int32 nStart, sal_Int32 nLen ) const;
 
     // Wrapper implementations of class Transliteration
-    OUString transliterate( const OUString& rStr, sal_uInt16 nLanguage,
+    OUString transliterate( const OUString& rStr, LanguageType nLanguage,
                         sal_Int32 nStart, sal_Int32 nLen,
                         css::uno::Sequence <sal_Int32>* pOffset );
 

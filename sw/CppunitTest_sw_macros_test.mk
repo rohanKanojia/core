@@ -49,7 +49,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_macros_test, \
     vbahelper \
     vcl \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sw_macros_test,\
@@ -101,8 +100,10 @@ $(eval $(call gb_CppunitTest_use_components,sw_macros_test,\
 	unotools/util/utl \
 	unoxml/source/rdf/unordf \
 	unoxml/source/service/unoxml \
+	uui/util/uui \
+	vcl/vcl.common \
 	xmloff/util/xo \
-	xmlsecurity/util/$(if $(filter WNT,$(OS)),xsec_xmlsec.windows,xsec_xmlsec) \
+	xmlsecurity/util/xsec_xmlsec \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,sw_macros_test))

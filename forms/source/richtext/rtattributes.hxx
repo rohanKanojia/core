@@ -43,7 +43,7 @@ namespace frm
     struct AttributeState
     {
     private:
-        SfxPoolItem     *pItemHandleItem;
+        std::unique_ptr<SfxPoolItem>  pItemHandleItem;
 
     public:
         AttributeCheckState eSimpleState;
@@ -51,7 +51,6 @@ namespace frm
         inline          AttributeState( );
         inline explicit AttributeState( AttributeCheckState _eCheckState );
         inline          AttributeState( const AttributeState& _rSource );
-        inline          ~AttributeState( );
 
         inline AttributeState& operator=( const AttributeState& _rSource );
 
@@ -62,27 +61,19 @@ namespace frm
     };
 
     inline AttributeState::AttributeState( )
-        :pItemHandleItem ( nullptr )
-        ,eSimpleState( eIndetermined )
+        :eSimpleState( eIndetermined )
     {
     }
 
     inline AttributeState::AttributeState( AttributeCheckState _eCheckState )
-        :pItemHandleItem ( nullptr )
-        ,eSimpleState( _eCheckState )
+        :eSimpleState( _eCheckState )
     {
     }
 
     inline AttributeState::AttributeState( const AttributeState& _rSource )
-        :pItemHandleItem ( nullptr )
-        ,eSimpleState( eIndetermined )
+        :eSimpleState( eIndetermined )
     {
         operator=( _rSource );
-    }
-
-    inline AttributeState::~AttributeState( )
-    {
-//        delete(pItemHandle);
     }
 
     inline AttributeState& AttributeState::operator=( const AttributeState& _rSource )
@@ -97,17 +88,15 @@ namespace frm
 
     inline const SfxPoolItem* AttributeState::getItem() const
     {
-        return pItemHandleItem;
+        return pItemHandleItem.get();
     }
 
     inline void AttributeState::setItem( const SfxPoolItem* _pItem )
     {
-        if ( pItemHandleItem )
-            delete pItemHandleItem;
         if ( _pItem )
-            pItemHandleItem = _pItem->Clone();
+            pItemHandleItem.reset(_pItem->Clone());
         else
-            pItemHandleItem = nullptr;
+            pItemHandleItem.reset();
     }
 
     inline bool AttributeState::operator==( const AttributeState& _rRHS )
@@ -121,10 +110,10 @@ namespace frm
         if ( !pItemHandleItem && _rRHS.pItemHandleItem )
             return false;
 
-        if ( !pItemHandleItem && !_rRHS.pItemHandleItem )
+        if ( pItemHandleItem == _rRHS.pItemHandleItem )
             return true;
 
-        return pItemHandleItem == _rRHS.pItemHandleItem;
+        return *pItemHandleItem == *_rRHS.pItemHandleItem;
     }
 
     class IMultiAttributeDispatcher

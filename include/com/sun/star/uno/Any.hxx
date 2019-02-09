@@ -19,22 +19,24 @@
 #ifndef INCLUDED_COM_SUN_STAR_UNO_ANY_HXX
 #define INCLUDED_COM_SUN_STAR_UNO_ANY_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <iomanip>
 #include <ostream>
+#include <utility>
 
-#include <com/sun/star/uno/Any.h>
-#include <uno/data.h>
-#include <uno/sequence2.h>
-#include <com/sun/star/uno/Type.hxx>
-#include <com/sun/star/uno/Reference.h>
-#include <com/sun/star/uno/genfunc.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <cppu/cppudllapi.h>
-#include <cppu/unotype.hxx>
+#include "com/sun/star/uno/Any.h"
+#include "uno/data.h"
+#include "uno/sequence2.h"
+#include "com/sun/star/uno/Type.hxx"
+#include "com/sun/star/uno/Reference.h"
+#include "com/sun/star/uno/genfunc.hxx"
+#include "com/sun/star/uno/RuntimeException.hpp"
+#include "cppu/cppudllapi.h"
+#include "cppu/unotype.hxx"
 
 extern "C" CPPU_DLLPUBLIC rtl_uString * SAL_CALL cppu_Any_extraction_failure_msg(
     uno_Any const * pAny, typelib_TypeDescriptionReference * pType )
@@ -73,6 +75,12 @@ inline Any::Any( bool value )
         cpp_acquire );
 }
 
+#if defined LIBO_INTERNAL_ONLY
+template<typename T1, typename T2>
+Any::Any(rtl::OUStringConcat<T1, T2> && value):
+    Any(rtl::OUString(std::move(value)))
+{}
+#endif
 
 inline Any::Any( const Any & rAny )
 {
@@ -114,6 +122,38 @@ inline Any & Any::operator = ( const Any & rAny )
     }
     return *this;
 }
+
+#if defined LIBO_INTERNAL_ONLY
+
+namespace detail {
+
+inline void moveAnyInternals(Any & from, Any & to) {
+    uno_any_construct(&to, nullptr, nullptr, &cpp_acquire);
+    std::swap(from.pType, to.pType);
+    std::swap(from.pData, to.pData);
+    std::swap(from.pReserved, to.pReserved);
+    if (to.pData == &from.pReserved) {
+        to.pData = &to.pReserved;
+    }
+    // This leaves from.pData (where "from" is now VOID) dangling to somewhere (cf.
+    // CONSTRUCT_EMPTY_ANY, cppu/source/uno/prim.hxx), but what's relevant is
+    // only that it isn't a nullptr (as e.g. >>= -> uno_type_assignData ->
+    // _assignData takes a null pSource to mean "construct a default value").
+}
+
+}
+
+Any::Any(Any && other) {
+    detail::moveAnyInternals(other, *this);
+}
+
+Any & Any::operator =(Any && other) {
+    uno_any_destruct(this, &cpp_release);
+    detail::moveAnyInternals(other, *this);
+    return *this;
+}
+
+#endif
 
 inline ::rtl::OUString Any::getValueTypeName() const
 {
@@ -165,6 +205,10 @@ inline bool Any::has() const
         cpp_release );
 }
 
+#if defined LIBO_INTERNAL_ONLY
+template<> bool Any::has<Any>() const = delete;
+#endif
+
 inline bool Any::operator == ( const Any & rAny ) const
 {
     return ::uno_type_equalData(
@@ -183,31 +227,40 @@ inline bool Any::operator != ( const Any & rAny ) const
 template< class C >
 inline Any SAL_CALL makeAny( const C & value )
 {
-    return Any( &value, ::cppu::getTypeFavourUnsigned(&value) );
+    return Any(value);
 }
 
-// additionally specialized for C++ bool
-
-template<>
-inline Any SAL_CALL makeAny( bool const & value )
-{
-    const sal_Bool b = value;
-    return Any( &b, cppu::UnoType<bool>::get() );
-}
-
-
-#ifdef LIBO_INTERNAL_ONLY // "RTL_FAST_STRING"
-template< class C1, class C2 >
-inline Any SAL_CALL makeAny( const rtl::OUStringConcat< C1, C2 >& value )
-{
-    const rtl::OUString str( value );
-    return Any( &str, ::cppu::getTypeFavourUnsigned(&str) );
-}
+#if !defined LIBO_INTERNAL_ONLY
+template<> Any makeAny(sal_uInt16 const & value)
+{ return Any(&value, cppu::UnoType<cppu::UnoUnsignedShortType>::get()); }
 #endif
 
 template<typename T> Any toAny(T const & value) { return makeAny(value); }
 
 template<> Any toAny(Any const & value) { return value; }
+
+#if defined LIBO_INTERNAL_ONLY
+
+template<typename T1, typename T2>
+Any makeAny(rtl::OUStringConcat<T1, T2> && value)
+{ return Any(std::move(value)); }
+
+template<typename T1, typename T2>
+Any toAny(rtl::OUStringConcat<T1, T2> && value)
+{ return makeAny(std::move(value)); }
+
+template<typename T> bool fromAny(Any const & any, T * value) {
+    assert(value != nullptr);
+    return any >>= *value;
+}
+
+template<> bool fromAny(Any const & any, Any * value) {
+    assert(value != nullptr);
+    *value = any;
+    return true;
+}
+
+#endif
 
 template< class C >
 inline void SAL_CALL operator <<= ( Any & rAny, const C & value )
@@ -232,14 +285,20 @@ inline void SAL_CALL operator <<= ( Any & rAny, bool const & value )
 
 #ifdef LIBO_INTERNAL_ONLY // "RTL_FAST_STRING"
 template< class C1, class C2 >
-inline void SAL_CALL operator <<= ( Any & rAny, const rtl::OUStringConcat< C1, C2 >& value )
+inline void SAL_CALL operator <<= ( Any & rAny, rtl::OUStringConcat< C1, C2 >&& value )
 {
-    const rtl::OUString str( value );
+    const rtl::OUString str( std::move(value) );
     const Type & rType = ::cppu::getTypeFavourUnsigned(&str);
     ::uno_type_any_assign(
         &rAny, const_cast< rtl::OUString * >( &str ), rType.getTypeLibType(),
         cpp_acquire, cpp_release );
 }
+template<typename T1, typename T2>
+void operator <<=(Any &, rtl::OUStringConcat<T1, T2> const &) = delete;
+#endif
+
+#if defined LIBO_INTERNAL_ONLY
+template<> void SAL_CALL operator <<=(Any &, Any const &) = delete;
 #endif
 
 template< class C >
@@ -260,7 +319,7 @@ inline bool SAL_CALL operator >>= ( const ::com::sun::star::uno::Any & rAny, sal
 {
     if (typelib_TypeClass_BOOLEAN == rAny.pType->eTypeClass)
     {
-        value = (* static_cast< const sal_Bool * >( rAny.pData ) != sal_False);
+        value = bool(* static_cast< const sal_Bool * >( rAny.pData ));
         return true;
     }
     return false;
@@ -270,7 +329,7 @@ template<>
 inline bool SAL_CALL operator == ( const Any & rAny, const sal_Bool & value )
 {
     return (typelib_TypeClass_BOOLEAN == rAny.pType->eTypeClass &&
-            (value != sal_False) == (* static_cast< const sal_Bool * >( rAny.pData ) != sal_False));
+            bool(value) == bool(* static_cast< const sal_Bool * >( rAny.pData )));
 }
 
 
@@ -279,8 +338,7 @@ inline bool SAL_CALL operator >>= ( Any const & rAny, bool & value )
 {
     if (rAny.pType->eTypeClass == typelib_TypeClass_BOOLEAN)
     {
-        value = *static_cast< sal_Bool const * >(
-            rAny.pData ) != sal_False;
+        value = *static_cast< sal_Bool const * >( rAny.pData );
         return true;
     }
     return false;
@@ -292,8 +350,7 @@ inline bool SAL_CALL operator == ( Any const & rAny, bool const & value )
 {
     return (rAny.pType->eTypeClass == typelib_TypeClass_BOOLEAN &&
             (value ==
-             (*static_cast< sal_Bool const * >( rAny.pData )
-              != sal_False)));
+             bool(*static_cast< sal_Bool const * >( rAny.pData ))));
 }
 
 // byte
@@ -333,7 +390,7 @@ inline bool SAL_CALL operator >>= ( const Any & rAny, sal_uInt16 & value )
     switch (rAny.pType->eTypeClass)
     {
     case typelib_TypeClass_BYTE:
-        value = (sal_uInt16)( * static_cast< const sal_Int8 * >( rAny.pData ) );
+        value = static_cast<sal_uInt16>( * static_cast< const sal_Int8 * >( rAny.pData ) );
         return true;
     case typelib_TypeClass_SHORT:
     case typelib_TypeClass_UNSIGNED_SHORT:
@@ -374,10 +431,10 @@ inline bool SAL_CALL operator >>= ( const Any & rAny, sal_uInt32 & value )
     switch (rAny.pType->eTypeClass)
     {
     case typelib_TypeClass_BYTE:
-        value = (sal_uInt32)( * static_cast< const sal_Int8 * >( rAny.pData ) );
+        value = static_cast<sal_uInt32>( * static_cast< const sal_Int8 * >( rAny.pData ) );
         return true;
     case typelib_TypeClass_SHORT:
-        value = (sal_uInt32)( * static_cast< const sal_Int16 * >( rAny.pData ) );
+        value = static_cast<sal_uInt32>( * static_cast< const sal_Int16 * >( rAny.pData ) );
         return true;
     case typelib_TypeClass_UNSIGNED_SHORT:
         value = * static_cast< const sal_uInt16 * >( rAny.pData );
@@ -427,16 +484,16 @@ inline bool SAL_CALL operator >>= ( const Any & rAny, sal_uInt64 & value )
     switch (rAny.pType->eTypeClass)
     {
     case typelib_TypeClass_BYTE:
-        value = (sal_uInt64)( * static_cast< const sal_Int8 * >( rAny.pData ) );
+        value = static_cast<sal_uInt64>( * static_cast< const sal_Int8 * >( rAny.pData ) );
         return true;
     case typelib_TypeClass_SHORT:
-        value = (sal_uInt64)( * static_cast< const sal_Int16 * >( rAny.pData ) );
+        value = static_cast<sal_uInt64>( * static_cast< const sal_Int16 * >( rAny.pData ) );
         return true;
     case typelib_TypeClass_UNSIGNED_SHORT:
         value = * static_cast< const sal_uInt16 * >( rAny.pData );
         return true;
     case typelib_TypeClass_LONG:
-        value = (sal_uInt64)( * static_cast< const sal_Int32 * >( rAny.pData ) );
+        value = static_cast<sal_uInt64>( * static_cast< const sal_Int32 * >( rAny.pData ) );
         return true;
     case typelib_TypeClass_UNSIGNED_LONG:
         value = * static_cast< const sal_uInt32 * >( rAny.pData );
@@ -521,7 +578,7 @@ template<>
 inline bool SAL_CALL operator == ( const Any & rAny, const ::rtl::OUString & value )
 {
     return (typelib_TypeClass_STRING == rAny.pType->eTypeClass &&
-            value.equals( * static_cast< const ::rtl::OUString * >( rAny.pData ) ));
+            value == * static_cast< const ::rtl::OUString * >( rAny.pData ) );
 }
 // type
 
@@ -544,6 +601,9 @@ inline bool SAL_CALL operator == ( const Any & rAny, const Type & value )
 }
 // any
 
+#if defined LIBO_INTERNAL_ONLY
+template<> bool SAL_CALL operator >>=(Any const &, Any &) = delete;
+#else
 template<>
 inline bool SAL_CALL operator >>= ( const Any & rAny, Any & value )
 {
@@ -555,6 +615,7 @@ inline bool SAL_CALL operator >>= ( const Any & rAny, Any & value )
     }
     return true;
 }
+#endif
 // interface
 
 template<>
@@ -600,6 +661,10 @@ T Any::get() const
     }
     return value;
 }
+
+#if defined LIBO_INTERNAL_ONLY
+template<> Any Any::get() const = delete;
+#endif
 
 /**
    Support for Any in std::ostream (and thus in CPPUNIT_ASSERT or SAL_INFO

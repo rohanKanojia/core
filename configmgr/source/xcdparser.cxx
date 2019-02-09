@@ -47,7 +47,7 @@ XcdParser::~XcdParser() {}
 
 xmlreader::XmlReader::Text XcdParser::getTextMode() {
     return nestedParser_.is()
-        ? nestedParser_->getTextMode() : xmlreader::XmlReader::TEXT_NONE;
+        ? nestedParser_->getTextMode() : xmlreader::XmlReader::Text::NONE;
 }
 
 bool XcdParser::startElement(
@@ -116,7 +116,7 @@ bool XcdParser::startElement(
             return true;
         }
         state_ = STATE_COMPONENTS;
-        // fall through
+        [[fallthrough]];
     case STATE_COMPONENTS:
         if (nsId == ParseManager::NAMESPACE_OOR &&
             name.equals("component-schema"))

@@ -20,8 +20,10 @@
 #include "Tickmarks.hxx"
 #include "Tickmarks_Equidistant.hxx"
 #include "Tickmarks_Dates.hxx"
-#include "ViewDefines.hxx"
-#include <rtl/math.hxx>
+#include <ViewDefines.hxx>
+#include "VAxisProperties.hxx"
+#include <osl/diagnose.h>
+#include <com/sun/star/chart2/AxisType.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::rtl::math;
@@ -34,7 +36,6 @@ TickInfo::TickInfo( const uno::Reference<chart2::XScaling>& xInverse )
 , xInverseScaling( xInverse )
 , aTickScreenPosition(0.0,0.0)
 , bPaintIt( true )
-, xTextShape( nullptr )
 , nFactorForLimitedTextWidth(1)
 {
 }
@@ -88,7 +89,6 @@ TickFactory::TickFactory(
           const ExplicitScaleData& rScale, const ExplicitIncrementData& rIncrement )
             : m_rScale( rScale )
             , m_rIncrement( rIncrement )
-            , m_xInverseScaling(nullptr)
 {
     //@todo: make sure that the scale is valid for the scaling
 
@@ -132,10 +132,6 @@ void TickFactory::getAllTicksShifted( TickInfoArraysType& rAllTickInfos ) const
         EquidistantTickFactory( m_rScale, m_rIncrement ).getAllTicksShifted( rAllTickInfos );
 }
 
-void TickFactory::updateScreenValues( TickInfoArraysType& /*rAllTickInfos*/ ) const
-{
-}
-
 // ___TickFactory_2D___
 TickFactory2D::TickFactory2D(
           const ExplicitScaleData& rScale, const ExplicitIncrementData& rIncrement
@@ -150,7 +146,7 @@ TickFactory2D::TickFactory2D(
           , m_fOffset_LogicToScreen(0.0)
 {
     double fWidthY = m_fScaledVisibleMax - m_fScaledVisibleMin;
-    if (chart2::AxisOrientation_MATHEMATICAL == m_rScale.Orientation)
+    if (m_rScale.Orientation == chart2::AxisOrientation_MATHEMATICAL)
     {
         m_fStretch_LogicToScreen = 1.0/fWidthY;
         m_fOffset_LogicToScreen = -m_fScaledVisibleMin;
@@ -172,13 +168,28 @@ TickFactory2D::~TickFactory2D()
 
 bool TickFactory2D::isHorizontalAxis() const
 {
-    return ( m_aAxisStartScreenPosition2D.getY() == m_aAxisEndScreenPosition2D.getY() );
+    // check trivial cases:
+    if ( m_aAxisStartScreenPosition2D.getY() == m_aAxisEndScreenPosition2D.getY() )
+        return true;
+    if ( m_aAxisStartScreenPosition2D.getX() == m_aAxisEndScreenPosition2D.getX() )
+        return false;
+
+    // for skew axes compare angle with horizontal vector
+    double fInclination = std::abs(B2DVector(m_aAxisEndScreenPosition2D-m_aAxisStartScreenPosition2D).angle(B2DVector(1.0, 0.0)));
+    return fInclination < F_PI4 || fInclination > (F_PI-F_PI4);
 }
 bool TickFactory2D::isVerticalAxis() const
 {
-    return ( m_aAxisStartScreenPosition2D.getX() == m_aAxisEndScreenPosition2D.getX() );
-}
+    // check trivial cases:
+    if ( m_aAxisStartScreenPosition2D.getX() == m_aAxisEndScreenPosition2D.getX() )
+        return true;
+    if ( m_aAxisStartScreenPosition2D.getY() == m_aAxisEndScreenPosition2D.getY() )
+        return false;
 
+    // for skew axes compare angle with vertical vector
+    double fInclination = std::abs(B2DVector(m_aAxisEndScreenPosition2D-m_aAxisStartScreenPosition2D).angle(B2DVector(0.0, -1.0)));
+    return fInclination < F_PI4 || fInclination > (F_PI-F_PI4);
+}
 //static
 sal_Int32 TickFactory2D::getTickScreenDistance( TickIter& rIter )
 {
@@ -210,7 +221,7 @@ void TickFactory2D::addPointSequenceForTickLine( drawing::PointSequenceSequence&
     if( fInnerDirectionSign==0.0 )
         fInnerDirectionSign = 1.0;
 
-    B2DVector aTickScreenPosition = this->getTickScreenPosition2D(fScaledLogicTickValue);
+    B2DVector aTickScreenPosition = getTickScreenPosition2D(fScaledLogicTickValue);
     if( bPlaceAtLabels )
         aTickScreenPosition += m_aAxisLineToLabelLineShift;
 
@@ -233,8 +244,8 @@ void TickFactory2D::addPointSequenceForTickLine( drawing::PointSequenceSequence&
 B2DVector TickFactory2D::getDistanceAxisTickToText( const AxisProperties& rAxisProperties, bool bIncludeFarAwayDistanceIfSo, bool bIncludeSpaceBetweenTickAndText ) const
 {
     bool bFarAwayLabels = false;
-    if( css::chart::ChartAxisLabelPosition_OUTSIDE_START == rAxisProperties.m_eLabelPos
-        || css::chart::ChartAxisLabelPosition_OUTSIDE_END == rAxisProperties.m_eLabelPos )
+    if( rAxisProperties.m_eLabelPos == css::chart::ChartAxisLabelPosition_OUTSIDE_START
+        || rAxisProperties.m_eLabelPos == css::chart::ChartAxisLabelPosition_OUTSIDE_END )
         bFarAwayLabels = true;
 
     double fInnerDirectionSign = rAxisProperties.maLabelAlignment.mfInnerTickDirection;
@@ -295,17 +306,12 @@ void TickFactory2D::createPointSequenceForAxisMainLine( drawing::PointSequenceSe
 void TickFactory2D::updateScreenValues( TickInfoArraysType& rAllTickInfos ) const
 {
     //get the transformed screen values for all tickmarks in rAllTickInfos
-    TickInfoArraysType::iterator aDepthIter = rAllTickInfos.begin();
-    const TickInfoArraysType::const_iterator aDepthEnd = rAllTickInfos.end();
-    for( ; aDepthIter != aDepthEnd; ++aDepthIter )
+    for (auto & tickInfos : rAllTickInfos)
     {
-        TickInfoArrayType::iterator aTickIter = (*aDepthIter).begin();
-        const TickInfoArrayType::const_iterator aTickEnd  = (*aDepthIter).end();
-        for( ; aTickIter != aTickEnd; ++aTickIter )
+        for (auto & tickInfo : tickInfos)
         {
-            TickInfo& rTickInfo = (*aTickIter);
-            rTickInfo.aTickScreenPosition =
-                this->getTickScreenPosition2D( rTickInfo.fScaledTickValue );
+            tickInfo.aTickScreenPosition =
+                getTickScreenPosition2D(tickInfo.fScaledTickValue);
         }
     }
 }

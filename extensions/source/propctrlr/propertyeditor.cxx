@@ -22,6 +22,7 @@
 #include "linedescriptor.hxx"
 
 #include <tools/debug.hxx>
+#include <osl/diagnose.h>
 
 
 namespace pcr
@@ -41,8 +42,8 @@ namespace pcr
     // class OPropertyEditor
 
 
-    OPropertyEditor::OPropertyEditor( vcl::Window* pParent, WinBits nWinStyle)
-            :Control(pParent, nWinStyle)
+    OPropertyEditor::OPropertyEditor( vcl::Window* pParent)
+            :Control(pParent, WB_DIALOGCONTROL)
             ,m_aTabControl( VclPtr<TabControl>::Create(this) )
             ,m_pListener(nullptr)
             ,m_pObserver(nullptr)
@@ -80,7 +81,7 @@ namespace pcr
         sal_uInt16 nCount = m_aTabControl->GetPageCount();
         for(long i = nCount-1; i >= 0; --i)
         {
-            sal_uInt16 nID = m_aTabControl->GetPageId((sal_uInt16)i);
+            sal_uInt16 nID = m_aTabControl->GetPageId(static_cast<sal_uInt16>(i));
             VclPtr<OBrowserPage> pPage = static_cast<OBrowserPage*>(m_aTabControl->GetTabPage(nID));
             if (pPage)
             {
@@ -114,7 +115,7 @@ namespace pcr
             sal_uInt16 nFirstID = m_aTabControl->GetPageId( 0 );
 
             // reserve space for the tabs themself
-            Rectangle aTabArea( m_aTabControl->GetTabBounds( nFirstID ) );
+            tools::Rectangle aTabArea( m_aTabControl->GetTabBounds( nFirstID ) );
             nMinHeight += aTabArea.GetHeight();
 
             // ask the page how much it requires
@@ -135,7 +136,7 @@ namespace pcr
         sal_Int32 nPageMinWidth = 0;
         for(long i = nCount-1; i >= 0; --i)
         {
-            sal_uInt16 nID = m_aTabControl->GetPageId((sal_uInt16)i);
+            sal_uInt16 nID = m_aTabControl->GetPageId(static_cast<sal_uInt16>(i));
             OBrowserPage* pPage = static_cast<OBrowserPage*>(m_aTabControl->GetTabPage(nID));
             if (pPage)
             {
@@ -187,13 +188,13 @@ namespace pcr
     }
 
 
-    OBrowserPage* OPropertyEditor::getPage( sal_uInt16& _rPageId )
+    OBrowserPage* OPropertyEditor::getPage( sal_uInt16 _rPageId )
     {
         return static_cast< OBrowserPage* >( m_aTabControl->GetTabPage( _rPageId ) );
     }
 
 
-    const OBrowserPage* OPropertyEditor::getPage( sal_uInt16& _rPageId ) const
+    const OBrowserPage* OPropertyEditor::getPage( sal_uInt16 _rPageId ) const
     {
         return const_cast< OPropertyEditor* >( this )->getPage( _rPageId );
     }
@@ -201,7 +202,7 @@ namespace pcr
 
     void OPropertyEditor::Resize()
     {
-        Rectangle aPlayground(
+        tools::Rectangle aPlayground(
             Point( LAYOUT_BORDER_LEFT, LAYOUT_BORDER_TOP ),
             Size(
                 GetOutputSizePixel().Width() - LAYOUT_BORDER_LEFT - LAYOUT_BORDER_RIGHT,
@@ -209,7 +210,7 @@ namespace pcr
             )
         );
 
-        Rectangle aTabArea( aPlayground );
+        tools::Rectangle aTabArea( aPlayground );
         m_aTabControl->SetPosSizePixel( aTabArea.TopLeft(), aTabArea.GetSize() );
     }
 
@@ -273,7 +274,7 @@ namespace pcr
     }
 
 
-    void OPropertyEditor::Update(const ::std::mem_fun_t<void,OBrowserListBox>& _aUpdateFunction)
+    void OPropertyEditor::Update(const std::function<void(OBrowserListBox *)>& _aUpdateFunction)
     {
         // forward this to all our pages
         sal_uInt16 nCount = m_aTabControl->GetPageCount();
@@ -288,12 +289,12 @@ namespace pcr
 
     void OPropertyEditor::EnableUpdate()
     {
-        Update(::std::mem_fun(&OBrowserListBox::EnableUpdate));
+        Update(std::mem_fn(&OBrowserListBox::EnableUpdate));
     }
 
     void OPropertyEditor::DisableUpdate()
     {
-        Update(::std::mem_fun(&OBrowserListBox::DisableUpdate));
+        Update(std::mem_fn(&OBrowserListBox::DisableUpdate));
     }
 
 
@@ -401,7 +402,7 @@ namespace pcr
 
         OSL_ENSURE( m_aPropertyPageIds.find( rData.sName ) == m_aPropertyPageIds.end(),
             "OPropertyEditor::InsertEntry: property already present in the map!" );
-        m_aPropertyPageIds.insert( MapStringToPageId::value_type( rData.sName, _nPageId ) );
+        m_aPropertyPageIds.emplace( rData.sName, _nPageId );
     }
 
 
@@ -459,7 +460,7 @@ namespace pcr
         }
         else
         {
-            ::std::map< sal_uInt16, HiddenPage >::iterator aPagePos = m_aHiddenPages.find( _nPageId );
+            std::map< sal_uInt16, HiddenPage >::iterator aPagePos = m_aHiddenPages.find( _nPageId );
             if ( aPagePos == m_aHiddenPages.end() )
                 return;
 
@@ -505,18 +506,18 @@ namespace pcr
     }
 
 
-    IMPL_LINK_NOARG_TYPED(OPropertyEditor, OnPageActivate, TabControl*, void)
+    IMPL_LINK_NOARG(OPropertyEditor, OnPageActivate, TabControl*, void)
     {
         m_aPageActivationHandler.Call(nullptr);
     }
 
 
-    IMPL_LINK_NOARG_TYPED(OPropertyEditor, OnPageDeactivate, TabControl *, bool)
+    IMPL_LINK_NOARG(OPropertyEditor, OnPageDeactivate, TabControl *, bool)
     {
         // commit the data on the current (to-be-deactivated) tab page
         // (79404)
         sal_Int32 nCurrentId = m_aTabControl->GetCurPageId();
-        OBrowserPage* pCurrentPage = static_cast<OBrowserPage*>(m_aTabControl->GetTabPage((sal_uInt16)nCurrentId));
+        OBrowserPage* pCurrentPage = static_cast<OBrowserPage*>(m_aTabControl->GetTabPage(static_cast<sal_uInt16>(nCurrentId)));
         if ( !pCurrentPage )
             return true;
 

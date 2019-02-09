@@ -2,8 +2,9 @@
 
 #include "MorkParser.hxx"
 #include <iostream>
+#include <sal/log.hxx>
 
-bool openAddressBook(const std::string& path)
+static bool openAddressBook(const std::string& path)
 {
     MorkParser mork;
     // Open and parse mork file
@@ -11,18 +12,18 @@ bool openAddressBook(const std::string& path)
     {
         return false;
     }
+
     const int defaultScope = 0x80;
-    MorkTableMap::Map::const_iterator tableIter;
     MorkTableMap *Tables = mork.getTables( defaultScope );
     if ( Tables )
     {
         // Iterate all tables
-        for ( tableIter = Tables->map.begin(); tableIter != Tables->map.end(); ++tableIter )
+        for (auto const& table : Tables->map)
         {
-            if ( 0 == tableIter->first ) continue;
-            SAL_INFO("connectivity.mork", "table->first : " << tableIter->first);
-            std::string column = mork.getColumn( tableIter->first );
-            std::string value = mork.getValue( tableIter->first );
+            if ( 0 == table.first ) continue;
+            SAL_INFO("connectivity.mork", "table->first : " << table.first);
+            std::string column = mork.getColumn( table.first );
+            std::string value = mork.getValue( table.first );
             SAL_INFO("connectivity.mork", "table.column : " << column);
             SAL_INFO("connectivity.mork", "table.value : " << value);
         }

@@ -9,17 +9,13 @@
 
 $(eval $(call gb_CppunitTest_CppunitTest,i18npool_test_characterclassification))
 
-$(eval $(call gb_CppunitTest_use_api,i18npool_test_characterclassification,\
-	udkapi \
-	offapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,i18npool_test_characterclassification))
 
 $(eval $(call gb_CppunitTest_use_libraries,i18npool_test_characterclassification,\
 	cppu \
 	cppuhelper \
 	sal \
 	unotest \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,i18npool_test_characterclassification,\

@@ -24,7 +24,9 @@
 #include <pam.hxx>
 #include <doc.hxx>
 #include <ndtxt.hxx>
-#include <wrtasc.hxx>
+#include <IDocumentRedlineAccess.hxx>
+#include <redline.hxx>
+#include "wrtasc.hxx"
 #include <txatbase.hxx>
 #include <fchrfmt.hxx>
 #include <txtfld.hxx>
@@ -34,6 +36,7 @@
 #include <fmtfld.hxx>
 #include <fldbas.hxx>
 #include <ftninfo.hxx>
+#include <numrule.hxx>
 
 #include <algorithm>
 
@@ -46,7 +49,7 @@ class SwASC_AttrIter
 {
     SwASCWriter& rWrt;
     const SwTextNode& rNd;
-    sal_Int32 nAktSwPos;
+    sal_Int32 nCurrentSwPos;
 
     sal_Int32 SearchNext( sal_Int32 nStartPos );
 
@@ -55,12 +58,12 @@ public:
 
     void NextPos()
     {
-        nAktSwPos = SearchNext( nAktSwPos + 1 );
+        nCurrentSwPos = SearchNext( nCurrentSwPos + 1 );
     }
 
     sal_Int32 WhereNext() const
     {
-        return nAktSwPos;
+        return nCurrentSwPos;
     }
 
     bool OutAttr( sal_Int32 nSwPos );
@@ -72,9 +75,9 @@ SwASC_AttrIter::SwASC_AttrIter(
     sal_Int32 nStt )
     : rWrt( rWr )
     , rNd( rTextNd )
-    , nAktSwPos( 0 )
+    , nCurrentSwPos( 0 )
 {
-    nAktSwPos = SearchNext( nStt + 1 );
+    nCurrentSwPos = SearchNext( nStt + 1 );
 }
 
 sal_Int32 SwASC_AttrIter::SearchNext( sal_Int32 nStartPos )
@@ -138,7 +141,7 @@ bool SwASC_AttrIter::OutAttr( sal_Int32 nSwPos )
                 case RES_TXTATR_ANNOTATION:
                 case RES_TXTATR_INPUTFIELD:
                     sOut = static_txtattr_cast<SwTextField const*>(pHt)
-                            ->GetFormatField().GetField()->ExpandField(true);
+                            ->GetFormatField().GetField()->ExpandField(true, nullptr);
                     break;
 
                 case RES_TXTATR_FTN:
@@ -147,10 +150,10 @@ bool SwASC_AttrIter::OutAttr( sal_Int32 nSwPos )
                         if( !rFootnote.GetNumStr().isEmpty() )
                             sOut = rFootnote.GetNumStr();
                         else if( rFootnote.IsEndNote() )
-                            sOut = rWrt.pDoc->GetEndNoteInfo().aFormat.
+                            sOut = rWrt.m_pDoc->GetEndNoteInfo().aFormat.
                             GetNumStr( rFootnote.GetNumber() );
                         else
-                            sOut = rWrt.pDoc->GetFootnoteInfo().aFormat.
+                            sOut = rWrt.m_pDoc->GetFootnoteInfo().aFormat.
                             GetNumStr( rFootnote.GetNumber() );
                     }
                     break;
@@ -165,46 +168,190 @@ bool SwASC_AttrIter::OutAttr( sal_Int32 nSwPos )
     return bRet;
 }
 
+class SwASC_RedlineIter
+{
+private:
+    SwTextNode const& m_rNode;
+    IDocumentRedlineAccess const& m_rIDRA;
+    SwRedlineTable::size_type m_nextRedline;
+
+public:
+    SwASC_RedlineIter(SwASCWriter const& rWriter, SwTextNode const& rNode)
+        : m_rNode(rNode)
+        , m_rIDRA(rNode.GetDoc()->getIDocumentRedlineAccess())
+        , m_nextRedline(rWriter.m_bHideDeleteRedlines
+            ? m_rIDRA.GetRedlinePos(m_rNode, nsRedlineType_t::REDLINE_DELETE)
+            : SwRedlineTable::npos)
+    {
+    }
+
+    bool CheckNodeDeleted()
+    {
+        if (m_nextRedline == SwRedlineTable::npos)
+        {
+            return false;
+        }
+        SwRangeRedline const*const pRedline(m_rIDRA.GetRedlineTable()[m_nextRedline]);
+        return pRedline->Start()->nNode.GetIndex() < m_rNode.GetIndex()
+            && m_rNode.GetIndex() < pRedline->End()->nNode.GetIndex();
+    }
+
+    std::pair<sal_Int32, sal_Int32> GetNextRedlineSkip()
+    {
+        sal_Int32 nRedlineStart(COMPLETE_STRING);
+        sal_Int32 nRedlineEnd(COMPLETE_STRING);
+        for ( ; m_nextRedline < m_rIDRA.GetRedlineTable().size(); ++m_nextRedline)
+        {
+            SwRangeRedline const*const pRedline(m_rIDRA.GetRedlineTable()[m_nextRedline]);
+            if (pRedline->GetType() != nsRedlineType_t::REDLINE_DELETE)
+            {
+                continue;
+            }
+            SwPosition const*const pStart(pRedline->Start());
+            SwPosition const*const pEnd(pRedline->End());
+            if (m_rNode.GetIndex() < pStart->nNode.GetIndex())
+            {
+                m_nextRedline = SwRedlineTable::npos;
+                break; // done
+            }
+            if (nRedlineStart == COMPLETE_STRING)
+            {
+                nRedlineStart = pStart->nNode.GetIndex() == m_rNode.GetIndex()
+                        ? pStart->nContent.GetIndex()
+                        : 0;
+            }
+            else
+            {
+                if (pStart->nContent.GetIndex() != nRedlineEnd)
+                {
+                    assert(nRedlineEnd < pStart->nContent.GetIndex());
+                    break; // no increment, revisit it next call
+                }
+            }
+            nRedlineEnd = pEnd->nNode.GetIndex() == m_rNode.GetIndex()
+                    ? pEnd->nContent.GetIndex()
+                    : COMPLETE_STRING;
+        }
+        return std::make_pair(nRedlineStart, nRedlineEnd);
+    }
+};
+
 // Output of the node
 
 static Writer& OutASC_SwTextNode( Writer& rWrt, SwContentNode& rNode )
 {
     const SwTextNode& rNd = static_cast<SwTextNode&>(rNode);
 
-    sal_Int32 nStrPos = rWrt.pCurPam->GetPoint()->nContent.GetIndex();
+    sal_Int32 nStrPos = rWrt.m_pCurrentPam->GetPoint()->nContent.GetIndex();
     const sal_Int32 nNodeEnd = rNd.Len();
     sal_Int32 nEnd = nNodeEnd;
-    bool bLastNd =  rWrt.pCurPam->GetPoint()->nNode == rWrt.pCurPam->GetMark()->nNode;
+    bool bLastNd =  rWrt.m_pCurrentPam->GetPoint()->nNode == rWrt.m_pCurrentPam->GetMark()->nNode;
     if( bLastNd )
-        nEnd = rWrt.pCurPam->GetMark()->nContent.GetIndex();
+        nEnd = rWrt.m_pCurrentPam->GetMark()->nContent.GetIndex();
+
+    bool bIsOneParagraph = rWrt.m_pOrigPam->Start()->nNode == rWrt.m_pOrigPam->End()->nNode;
 
     SwASC_AttrIter aAttrIter( static_cast<SwASCWriter&>(rWrt), rNd, nStrPos );
+    SwASC_RedlineIter redlineIter(static_cast<SwASCWriter&>(rWrt), rNd);
 
-    if( !nStrPos && rWrt.bExportPargraphNumbering )
+    if (redlineIter.CheckNodeDeleted())
     {
-        OUString numString( rNd.GetNumString() );
-        if (!numString.isEmpty())
+        return rWrt;
+    }
+
+    const SwNumRule* pNumRule = rNd.GetNumRule();
+    if (pNumRule && !nStrPos && rWrt.m_bExportPargraphNumbering && !bIsOneParagraph)
+    {
+        bool bIsOutlineNumRule = pNumRule == rNd.GetDoc()->GetOutlineNumRule();
+
+        // indent each numbering level by 4 spaces
+        OUString level;
+        if (!bIsOutlineNumRule)
         {
-            numString += " ";
-            rWrt.Strm().WriteUnicodeOrByteText(numString);
+            for (int i = 0; i <= rNd.GetActualListLevel(); ++i)
+                level += "    ";
         }
+
+        // set up bullets or numbering
+        OUString numString(rNd.GetNumString());
+        if (numString.isEmpty() && !bIsOutlineNumRule)
+        {
+            if (rNd.HasBullet() && !rNd.HasVisibleNumberingOrBullet())
+                numString = " ";
+            else if (rNd.HasBullet())
+                numString = OUString(numfunc::GetBulletChar(rNd.GetActualListLevel()));
+            else if (!rNd.HasBullet() && !rNd.HasVisibleNumberingOrBullet())
+                numString = "  ";
+        }
+
+        if (!level.isEmpty() || !numString.isEmpty())
+            rWrt.Strm().WriteUnicodeOrByteText(level + numString + " ");
     }
 
     OUString aStr( rNd.GetText() );
-    if( rWrt.bASCII_ParaAsBlanc )
+    if( rWrt.m_bASCII_ParaAsBlank )
         aStr = aStr.replace(0x0A, ' ');
 
     const bool bExportSoftHyphens = RTL_TEXTENCODING_UCS2 == rWrt.GetAsciiOptions().GetCharSet() ||
                                     RTL_TEXTENCODING_UTF8 == rWrt.GetAsciiOptions().GetCharSet();
 
+    std::pair<sal_Int32, sal_Int32> curRedline(redlineIter.GetNextRedlineSkip());
     for (;;) {
         const sal_Int32 nNextAttr = std::min(aAttrIter.WhereNext(), nEnd);
 
-        if( !aAttrIter.OutAttr( nStrPos ))
+        bool isOutAttr(false);
+        if (nStrPos < curRedline.first || curRedline.second <= nStrPos)
         {
-            OUString aOutStr( aStr.copy( nStrPos, nNextAttr - nStrPos ) );
+            isOutAttr = aAttrIter.OutAttr(nStrPos);
+        }
+
+        if (!isOutAttr)
+        {
+            OUStringBuffer buf;
+            while (true)
+            {
+                if (nNextAttr <= curRedline.first)
+                {
+                    buf.append(aStr.copy(nStrPos, nNextAttr - nStrPos));
+                    break;
+                }
+                else if (nStrPos < curRedline.second)
+                {
+                    if (nStrPos < curRedline.first)
+                    {
+                        buf.append(aStr.copy(nStrPos, curRedline.first - nStrPos));
+                    }
+                    if (curRedline.second <= nNextAttr)
+                    {
+                        nStrPos = curRedline.second;
+                        curRedline = redlineIter.GetNextRedlineSkip();
+                    }
+                    else
+                    {
+                        nStrPos = nNextAttr;
+                        break;
+                    }
+                }
+                else
+                {
+                    curRedline = redlineIter.GetNextRedlineSkip();
+                }
+            }
+            OUString aOutStr(buf.makeStringAndClear());
             if ( !bExportSoftHyphens )
-                aOutStr = comphelper::string::remove(aOutStr, CHAR_SOFTHYPHEN);
+                aOutStr = aOutStr.replaceAll(OUStringLiteral1(CHAR_SOFTHYPHEN), "");
+
+            // all INWORD/BREAKWORD should be already removed by OutAttr
+            // but the field-marks are not attributes so filter those
+            static sal_Unicode const forbidden [] = {
+                    CH_TXT_ATR_INPUTFIELDSTART,
+                    CH_TXT_ATR_INPUTFIELDEND,
+                    CH_TXT_ATR_FORMELEMENT,
+                    CH_TXT_ATR_FIELDSTART,
+                    CH_TXT_ATR_FIELDEND,
+                    0
+                };
+            aOutStr = comphelper::string::removeAny(aOutStr, forbidden);
 
             rWrt.Strm().WriteUnicodeOrByteText( aOutStr );
         }
@@ -217,7 +364,7 @@ static Writer& OutASC_SwTextNode( Writer& rWrt, SwContentNode& rNode )
     }
 
     if( !bLastNd ||
-        ( ( !rWrt.bWriteClipboardDoc && !rWrt.bASCII_NoLastLineEnd )
+        ( ( !rWrt.m_bWriteClipboardDoc && !rWrt.m_bASCII_NoLastLineEnd )
             && !nStrPos && nEnd == nNodeEnd ) )
         rWrt.Strm().WriteUnicodeOrByteText( static_cast<SwASCWriter&>(rWrt).GetLineEnd());
 

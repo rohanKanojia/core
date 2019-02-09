@@ -61,9 +61,12 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPTABLELAYOUT_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPTABLELAYOUT_HXX
 
+#include "lwplayout.hxx"
+#include <xfilter/xftable.hxx>
+
 #include <vector>
 #include <map>
-#include "lwplayout.hxx"
+#include <memory>
 
 class XFTableStyle;
 class XFTable;
@@ -85,8 +88,7 @@ class LwpColumnLayout;
 class LwpTableLayout: public LwpLayout
 {
 public:
-    LwpTableLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpTableLayout();
+    LwpTableLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
     virtual LWP_LAYOUT_TYPE GetLayoutType () override { return LWP_TABLE_LAYOUT;}
     LwpObjectID& GetColumnLayoutHead(){return m_ColumnLayout;}
     void RegisterStyle() override;
@@ -121,31 +123,31 @@ private:
     OUString m_DefaultRowStyleName;
 
     // wordpro cell  map
-    std::vector<LwpCellLayout *> m_WordProCellsMap;
+    std::vector<LwpCellLayout*> m_WordProCellsMap;
     // column vector
-    LwpColumnLayout ** m_pColumns;
+    std::vector<LwpColumnLayout*> m_aColumns;
 
 public:
     void XFConvert(XFContentContainer* pCont) override;
-    void ConvertTable(XFTable* pXFTable,sal_uInt16 nStartRow,
+    void ConvertTable(rtl::Reference<XFTable> const & pXFTable, sal_uInt16 nStartRow,
                 sal_uInt16 nEndRow,sal_uInt8 nStartCol,sal_uInt8 nEndCol);
-    OUString GetDefaultRowStyleName(){return m_DefaultRowStyleName;}
+    const OUString& GetDefaultRowStyleName(){return m_DefaultRowStyleName;}
     void SetCellsMap(sal_uInt16 nRow,sal_uInt8 nCol,XFCell* pXFCell);
     XFCell* GetCellsMap(sal_uInt16 nRow,sal_uInt8 nCol);
-    std::map<sal_uInt16,LwpRowLayout*> GetRowsMap(){return m_RowsMap;}
+   const  std::map<sal_uInt16,LwpRowLayout*>& GetRowsMap(){return m_RowsMap;}
     LwpRowLayout* GetRowLayout(sal_uInt16 nRow);
 private:
-    void ConvertDefaultRow(XFTable* pXFTable,sal_uInt8 nStartCol,
-                sal_uInt8 nEndCol,sal_uInt16 nRowID);
-    void ConvertColumn(XFTable *pXFTable,sal_uInt8 nStartCol,sal_uInt8 nEndCol);
-    sal_uInt16 ConvertHeadingRow(XFTable* pXFTable,sal_uInt16 nStartHeadRow,sal_uInt16 nEndHeadRow);
+    void ConvertDefaultRow(rtl::Reference<XFTable> const & pXFTable, sal_uInt8 nStartCol,
+                sal_uInt8 nEndCol, sal_uInt16 nRowID);
+    void ConvertColumn(rtl::Reference<XFTable> const & pXFTable, sal_uInt8 nStartCol, sal_uInt8 nEndCol);
+    sal_uInt16 ConvertHeadingRow(rtl::Reference<XFTable> const & pXFTable,sal_uInt16 nStartHeadRow,sal_uInt16 nEndHeadRow);
     static bool FindSplitColMark(XFTable* pXFTable,sal_uInt8* pCellMark,sal_uInt8& nMaxColSpan);
-    void SplitRowToCells(XFTable* pTmpTable,XFTable* pXFTable,
-                sal_uInt8 nFirstColSpann,sal_uInt8* pCellMark);
+    void SplitRowToCells(XFTable* pTmpTable, rtl::Reference<XFTable> const & pXFTable,
+                sal_uInt8 nFirstColSpann, const sal_uInt8* pCellMark);
 
     std::map<sal_uInt16,LwpRowLayout*> m_RowsMap;
     void SplitConflictCells();
-    XFTable* m_pXFTable;
+    rtl::Reference<XFTable> m_pXFTable;
     std::map<std::pair<sal_uInt16,sal_uInt8>,XFCell*> m_CellsMap;
 
     void PutCellVals(LwpFoundry* pFoundry, LwpObjectID aTableID);
@@ -157,8 +159,8 @@ private:
 class LwpSuperTableLayout: public LwpPlacableLayout
 {
 public:
-    LwpSuperTableLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpSuperTableLayout();
+    LwpSuperTableLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpSuperTableLayout() override;
     virtual LWP_LAYOUT_TYPE GetLayoutType () override { return LWP_SUPERTABLE_LAYOUT;}
     void RegisterNewStyle();
     // for table style
@@ -181,10 +183,9 @@ protected:
     LwpTableLayout* GetTableLayout();
     bool IsSizeRightToContent();
     bool IsJustifiable();
-    LwpFrame* m_pFrame;
-
-private:
+    std::unique_ptr<LwpFrame> m_pFrame;
 };
+
 /**
  * @brief
  * VO_COLUMNLAYOUT object
@@ -192,8 +193,8 @@ private:
 class LwpColumnLayout : public LwpVirtualLayout
 {
 public:
-    LwpColumnLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpColumnLayout();
+    LwpColumnLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpColumnLayout() override;
     virtual LWP_LAYOUT_TYPE GetLayoutType () override { return LWP_COLUMN_LAYOUT;}
     sal_uInt32 GetColumnID(){return ccolid;}
     double GetWidth() override {return LwpTools::ConvertFromUnitsToMetric(cwidth);}
@@ -213,8 +214,8 @@ protected:
 class LwpTableHeadingLayout : public LwpTableLayout
 {
 public:
-    LwpTableHeadingLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpTableHeadingLayout();
+    LwpTableHeadingLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpTableHeadingLayout() override;
     virtual LWP_LAYOUT_TYPE GetLayoutType () override { return LWP_TABLE_HEADING_LAYOUT;}
     void GetStartEndRow(sal_uInt16& nStartRow, sal_uInt16& nEndRow);
 protected:
@@ -229,8 +230,8 @@ protected:
 class LwpSuperParallelColumnLayout : public LwpSuperTableLayout
 {
 public:
-    LwpSuperParallelColumnLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpSuperParallelColumnLayout();
+    LwpSuperParallelColumnLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpSuperParallelColumnLayout() override;
 protected:
     void Read() override;
 };
@@ -242,8 +243,8 @@ protected:
 class LwpParallelColumnsLayout : public LwpTableLayout
 {
 public:
-    LwpParallelColumnsLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpParallelColumnsLayout();
+    LwpParallelColumnsLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpParallelColumnsLayout() override;
 protected:
     void Read() override;
 };
@@ -251,8 +252,8 @@ protected:
 class LwpSuperGlossaryLayout : public LwpSuperTableLayout
 {
 public:
-    LwpSuperGlossaryLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpSuperGlossaryLayout();
+    LwpSuperGlossaryLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpSuperGlossaryLayout() override;
 protected:
     void Read() override;
 };

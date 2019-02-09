@@ -17,16 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <utility>
 
 #include "ChildWindowPane.hxx"
 
-#include "PaneDockingWindow.hxx"
-#include "ViewShellBase.hxx"
-#include "ViewShellManager.hxx"
-#include "framework/FrameworkHelper.hxx"
+#include <PaneDockingWindow.hxx>
+#include <ViewShellBase.hxx>
+#include <ViewShellManager.hxx>
+#include <framework/FrameworkHelper.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/svapp.hxx>
 
@@ -61,7 +63,6 @@ ChildWindowPane::ChildWindowPane (
                     // The ViewShellBase has already been activated.  Make
                     // the child window visible as soon as possible.
                     pViewFrame->SetChildWindow(mnChildWindowId, true);
-                    OSL_TRACE("ChildWindowPane:activating now");
                 }
                 else
                 {
@@ -69,12 +70,11 @@ ChildWindowPane::ChildWindowPane (
                     // ConfigurationUpdater to try another update, and with
                     // that another request for this window, in a short
                     // time.
-                    OSL_TRACE("ChildWindowPane:activated asynchronously");
                 }
             }
             else
             {
-                OSL_TRACE("ChildWindowPane:not known");
+                SAL_WARN("sd", "ChildWindowPane:not known");
             }
         }
         else
@@ -83,7 +83,6 @@ ChildWindowPane::ChildWindowPane (
             // window and wait a little before it is made visible.  See
             // comments in the GetWindow() method for an explanation.
             pViewFrame->SetChildWindow(mnChildWindowId, false);
-            OSL_TRACE("ChildWindowPane:base not active");
         }
     }
 }
@@ -135,7 +134,7 @@ vcl::Window* ChildWindowPane::GetWindow()
         // visible to early then some layouting seems to be made twice or at
         // an inconvenient time and the overall process of initializing the
         // Impress takes longer.
-        if ( ! mbHasBeenActivated && mpShell.get()!=nullptr && ! mpShell->IsActive())
+        if (!mbHasBeenActivated && mpShell != nullptr && !mpShell->IsActive())
             break;
 
         mbHasBeenActivated = true;
@@ -186,7 +185,6 @@ vcl::Window* ChildWindowPane::GetWindow()
 }
 
 Reference<awt::XWindow> SAL_CALL ChildWindowPane::getWindow()
-    throw (RuntimeException, std::exception)
 {
     if (mpWindow == nullptr || ! mxWindow.is())
         GetWindow();
@@ -205,7 +203,6 @@ IMPLEMENT_FORWARD_XTYPEPROVIDER2(
 //----- XEventListener --------------------------------------------------------
 
 void SAL_CALL ChildWindowPane::disposing (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
 

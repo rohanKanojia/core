@@ -17,17 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
-#include <editeng/eeitem.hxx>
-
+#include <scitems.hxx>
+#include <comphelper/fileformat.h>
+#include <comphelper/processfactory.hxx>
 #include <tools/urlobj.hxx>
 #include <editeng/editobj.hxx>
-#include <editeng/editstat.hxx>
 #include <editeng/frmdiritem.hxx>
 #include <editeng/langitem.hxx>
 #include <sfx2/linkmgr.hxx>
-#include <editeng/scripttypeitem.hxx>
-#include <editeng/unolingu.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/printer.hxx>
@@ -38,64 +35,59 @@
 #include <svl/zforlist.hxx>
 #include <svl/zformat.hxx>
 #include <unotools/misccfg.hxx>
-#include <sfx2/app.hxx>
 #include <unotools/transliterationwrapper.hxx>
-#include <unotools/securityoptions.hxx>
+#include <sal/log.hxx>
 
 #include <vcl/virdev.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 
-#include <com/sun/star/i18n/TransliterationModulesExtra.hpp>
-
-#include "inputopt.hxx"
-#include "global.hxx"
-#include "table.hxx"
-#include "column.hxx"
-#include "poolhelp.hxx"
-#include "docpool.hxx"
-#include "stlpool.hxx"
-#include "stlsheet.hxx"
-#include "docoptio.hxx"
-#include "viewopti.hxx"
-#include "scextopt.hxx"
-#include "rechead.hxx"
-#include "ddelink.hxx"
-#include "scmatrix.hxx"
-#include "arealink.hxx"
-#include "dociter.hxx"
-#include "patattr.hxx"
-#include "hints.hxx"
-#include "editutil.hxx"
-#include "progress.hxx"
-#include "document.hxx"
-#include "chartlis.hxx"
-#include "chartlock.hxx"
-#include "refupdat.hxx"
-#include "validat.hxx"
-#include "markdata.hxx"
-#include "scmod.hxx"
-#include "printopt.hxx"
-#include "externalrefmgr.hxx"
-#include "globstr.hrc"
-#include "sc.hrc"
-#include "charthelper.hxx"
-#include "macromgr.hxx"
-#include "dpobject.hxx"
-#include "docuno.hxx"
-#include "scresid.hxx"
-#include "columniterator.hxx"
-#include "globalnames.hxx"
-#include "stringutil.hxx"
+#include <inputopt.hxx>
+#include <global.hxx>
+#include <table.hxx>
+#include <column.hxx>
+#include <poolhelp.hxx>
+#include <docpool.hxx>
+#include <stlpool.hxx>
+#include <stlsheet.hxx>
+#include <docoptio.hxx>
+#include <viewopti.hxx>
+#include <scextopt.hxx>
+#include <rechead.hxx>
+#include <ddelink.hxx>
+#include <scmatrix.hxx>
+#include <arealink.hxx>
+#include <patattr.hxx>
+#include <editutil.hxx>
+#include <progress.hxx>
+#include <document.hxx>
+#include <chartlis.hxx>
+#include <chartlock.hxx>
+#include <refupdat.hxx>
+#include <markdata.hxx>
+#include <scmod.hxx>
+#include <externalrefmgr.hxx>
+#include <globstr.hrc>
+#include <strings.hrc>
+#include <sc.hrc>
+#include <charthelper.hxx>
+#include <macromgr.hxx>
+#include <docuno.hxx>
+#include <scresid.hxx>
+#include <columniterator.hxx>
+#include <globalnames.hxx>
+#include <stringutil.hxx>
 #include <documentlinkmgr.hxx>
 #include <scopetools.hxx>
+#include <tokenarray.hxx>
 
 #include <memory>
+#include <utility>
 
 using namespace com::sun::star;
 
 namespace {
 
-inline sal_uInt16 getScaleValue(SfxStyleSheetBase& rStyle, sal_uInt16 nWhich)
+sal_uInt16 getScaleValue(SfxStyleSheetBase& rStyle, sal_uInt16 nWhich)
 {
     return static_cast<const SfxUInt16Item&>(rStyle.GetItemSet().Get(nWhich)).GetValue();
 }
@@ -104,28 +96,27 @@ inline sal_uInt16 getScaleValue(SfxStyleSheetBase& rStyle, sal_uInt16 nWhich)
 
 void ScDocument::ImplCreateOptions()
 {
-    pDocOptions  = new ScDocOptions();
-    pViewOptions = new ScViewOptions();
+    pDocOptions.reset( new ScDocOptions() );
+    pViewOptions.reset( new ScViewOptions() );
 }
 
 void ScDocument::ImplDeleteOptions()
 {
-    delete pDocOptions;
-    delete pViewOptions;
-    delete pExtDocOptions;
+    pDocOptions.reset();
+    pViewOptions.reset();
+    pExtDocOptions.reset();
 }
 
 SfxPrinter* ScDocument::GetPrinter(bool bCreateIfNotExist)
 {
-    if ( !pPrinter && bCreateIfNotExist )
+    if ( !mpPrinter && bCreateIfNotExist )
     {
-        SfxItemSet* pSet =
-            new SfxItemSet( *xPoolHelper->GetDocPool(),
-                            SID_PRINTER_NOTFOUND_WARN,  SID_PRINTER_NOTFOUND_WARN,
+        auto pSet =
+            std::make_unique<SfxItemSet>( *mxPoolHelper->GetDocPool(),
+                            svl::Items<SID_PRINTER_NOTFOUND_WARN,  SID_PRINTER_NOTFOUND_WARN,
                             SID_PRINTER_CHANGESTODOC,   SID_PRINTER_CHANGESTODOC,
                             SID_PRINT_SELECTEDSHEET,    SID_PRINT_SELECTEDSHEET,
-                            SID_SCPRINTOPTIONS,         SID_SCPRINTOPTIONS,
-                            nullptr );
+                            SID_SCPRINTOPTIONS,         SID_SCPRINTOPTIONS>{} );
 
         ::utl::MiscCfg aMisc;
         SfxPrinterChangeFlags nFlags = SfxPrinterChangeFlags::NONE;
@@ -136,18 +127,18 @@ SfxPrinter* ScDocument::GetPrinter(bool bCreateIfNotExist)
         pSet->Put( SfxFlagItem( SID_PRINTER_CHANGESTODOC, static_cast<int>(nFlags) ) );
         pSet->Put( SfxBoolItem( SID_PRINTER_NOTFOUND_WARN, aMisc.IsNotFoundWarning() ) );
 
-        pPrinter = VclPtr<SfxPrinter>::Create( pSet );
-        pPrinter->SetMapMode( MAP_100TH_MM );
+        mpPrinter = VclPtr<SfxPrinter>::Create( std::move(pSet) );
+        mpPrinter->SetMapMode(MapMode(MapUnit::Map100thMM));
         UpdateDrawPrinter();
-        pPrinter->SetDigitLanguage( SC_MOD()->GetOptDigitLanguage() );
+        mpPrinter->SetDigitLanguage( SC_MOD()->GetOptDigitLanguage() );
     }
 
-    return pPrinter;
+    return mpPrinter;
 }
 
-void ScDocument::SetPrinter( SfxPrinter* pNewPrinter )
+void ScDocument::SetPrinter( VclPtr<SfxPrinter> const & pNewPrinter )
 {
-    if ( pNewPrinter == pPrinter.get() )
+    if ( pNewPrinter == mpPrinter.get() )
     {
         //  #i6706# SetPrinter is called with the same printer again if
         //  the JobSetup has changed. In that case just call UpdateDrawPrinter
@@ -156,23 +147,23 @@ void ScDocument::SetPrinter( SfxPrinter* pNewPrinter )
     }
     else
     {
-        ScopedVclPtr<SfxPrinter> pOld( pPrinter );
-        pPrinter = pNewPrinter;
+        ScopedVclPtr<SfxPrinter> pOld( mpPrinter );
+        mpPrinter = pNewPrinter;
         UpdateDrawPrinter();
-        pPrinter->SetDigitLanguage( SC_MOD()->GetOptDigitLanguage() );
+        mpPrinter->SetDigitLanguage( SC_MOD()->GetOptDigitLanguage() );
     }
     InvalidateTextWidth(nullptr, nullptr, false);     // in both cases
 }
 
 void ScDocument::SetPrintOptions()
 {
-    if ( !pPrinter ) GetPrinter(); // this sets pPrinter
-    OSL_ENSURE( pPrinter, "Error in printer creation :-/" );
+    if ( !mpPrinter ) GetPrinter(); // this sets mpPrinter
+    OSL_ENSURE( mpPrinter, "Error in printer creation :-/" );
 
-    if ( pPrinter )
+    if ( mpPrinter )
     {
         ::utl::MiscCfg aMisc;
-        SfxItemSet aOptSet( pPrinter->GetOptions() );
+        SfxItemSet aOptSet( mpPrinter->GetOptions() );
 
         SfxPrinterChangeFlags nFlags = SfxPrinterChangeFlags::NONE;
         if ( aMisc.IsPaperOrientationWarning() )
@@ -182,25 +173,25 @@ void ScDocument::SetPrintOptions()
         aOptSet.Put( SfxFlagItem( SID_PRINTER_CHANGESTODOC, static_cast<int>(nFlags) ) );
         aOptSet.Put( SfxBoolItem( SID_PRINTER_NOTFOUND_WARN, aMisc.IsNotFoundWarning() ) );
 
-        pPrinter->SetOptions( aOptSet );
+        mpPrinter->SetOptions( aOptSet );
     }
 }
 
 VirtualDevice* ScDocument::GetVirtualDevice_100th_mm()
 {
-    if (!pVirtualDevice_100th_mm)
+    if (!mpVirtualDevice_100th_mm)
     {
 #ifdef IOS
-        pVirtualDevice_100th_mm = VclPtr<VirtualDevice>::Create(DeviceFormat::GRAYSCALE);
+        mpVirtualDevice_100th_mm = VclPtr<VirtualDevice>::Create(DeviceFormat::GRAYSCALE);
 #else
-        pVirtualDevice_100th_mm = VclPtr<VirtualDevice>::Create(DeviceFormat::BITMASK);
+        mpVirtualDevice_100th_mm = VclPtr<VirtualDevice>::Create(DeviceFormat::BITMASK);
 #endif
-        pVirtualDevice_100th_mm->SetReferenceDevice(VirtualDevice::REFDEV_MODE_MSO1);
-        MapMode aMapMode( pVirtualDevice_100th_mm->GetMapMode() );
-        aMapMode.SetMapUnit( MAP_100TH_MM );
-        pVirtualDevice_100th_mm->SetMapMode( aMapMode );
+        mpVirtualDevice_100th_mm->SetReferenceDevice(VirtualDevice::RefDevMode::MSO1);
+        MapMode aMapMode( mpVirtualDevice_100th_mm->GetMapMode() );
+        aMapMode.SetMapUnit( MapUnit::Map100thMM );
+        mpVirtualDevice_100th_mm->SetMapMode( aMapMode );
     }
-    return pVirtualDevice_100th_mm;
+    return mpVirtualDevice_100th_mm;
 }
 
 OutputDevice* ScDocument::GetRefDevice()
@@ -221,7 +212,7 @@ void ScDocument::ModifyStyleSheet( SfxStyleSheetBase& rStyleSheet,
 
     switch ( rStyleSheet.GetFamily() )
     {
-        case SFX_STYLE_FAMILY_PAGE:
+        case SfxStyleFamily::Page:
             {
                 const sal_uInt16 nOldScale = getScaleValue(rStyleSheet, ATTR_PAGE_SCALE);
                 const sal_uInt16 nOldScaleToPages = getScaleValue(rStyleSheet, ATTR_PAGE_SCALETOPAGES);
@@ -241,7 +232,7 @@ void ScDocument::ModifyStyleSheet( SfxStyleSheetBase& rStyleSheet,
             }
             break;
 
-        case SFX_STYLE_FAMILY_PARA:
+        case SfxStyleFamily::Para:
             {
                 bool bNumFormatChanged;
                 if ( ScGlobal::CheckWidthInvalidate( bNumFormatChanged,
@@ -249,15 +240,13 @@ void ScDocument::ModifyStyleSheet( SfxStyleSheetBase& rStyleSheet,
                     InvalidateTextWidth( nullptr, nullptr, bNumFormatChanged );
 
                 for (SCTAB nTab=0; nTab<=MAXTAB; ++nTab)
-                    if (maTabs[nTab] && maTabs[nTab]->IsStreamValid())
+                    if (maTabs[nTab])
                         maTabs[nTab]->SetStreamValid( false );
 
                 sal_uLong nOldFormat =
-                    static_cast<const SfxUInt32Item*>(&rSet.Get(
-                    ATTR_VALUE_FORMAT ))->GetValue();
+                    rSet.Get( ATTR_VALUE_FORMAT ).GetValue();
                 sal_uLong nNewFormat =
-                    static_cast<const SfxUInt32Item*>(&rChanges.Get(
-                    ATTR_VALUE_FORMAT ))->GetValue();
+                    rChanges.Get( ATTR_VALUE_FORMAT ).GetValue();
                 LanguageType eNewLang, eOldLang;
                 eNewLang = eOldLang = LANGUAGE_DONTKNOW;
                 if ( nNewFormat != nOldFormat )
@@ -295,11 +284,11 @@ void ScDocument::ModifyStyleSheet( SfxStyleSheetBase& rStyleSheet,
     }
 }
 
-void ScDocument::CopyStdStylesFrom( ScDocument* pSrcDoc )
+void ScDocument::CopyStdStylesFrom( const ScDocument* pSrcDoc )
 {
     // number format exchange list has to be handled here, too
     NumFmtMergeHandler aNumFmtMergeHdl(this, pSrcDoc);
-    xPoolHelper->GetStylePool()->CopyStdStylesFrom( pSrcDoc->xPoolHelper->GetStylePool() );
+    mxPoolHelper->GetStylePool()->CopyStdStylesFrom( pSrcDoc->mxPoolHelper->GetStylePool() );
 }
 
 void ScDocument::InvalidateTextWidth( const OUString& rStyleName )
@@ -341,7 +330,7 @@ bool ScDocument::RemovePageStyleInUse( const OUString& rStyle )
         if ( maTabs[i]->GetPageStyle() == rStyle )
         {
             bWasInUse = true;
-            maTabs[i]->SetPageStyle( ScGlobal::GetRscString(STR_STYLENAME_STANDARD) );
+            maTabs[i]->SetPageStyle( ScResId(STR_STYLENAME_STANDARD) );
         }
 
     return bWasInUse;
@@ -362,31 +351,31 @@ bool ScDocument::RenamePageStyleInUse( const OUString& rOld, const OUString& rNe
     return bWasInUse;
 }
 
-sal_uInt8 ScDocument::GetEditTextDirection(SCTAB nTab) const
+EEHorizontalTextDirection ScDocument::GetEditTextDirection(SCTAB nTab) const
 {
-    EEHorizontalTextDirection eRet = EE_HTEXTDIR_DEFAULT;
+    EEHorizontalTextDirection eRet = EEHorizontalTextDirection::Default;
 
     OUString aStyleName = GetPageStyle( nTab );
-    SfxStyleSheetBase* pStyle = xPoolHelper->GetStylePool()->Find( aStyleName, SFX_STYLE_FAMILY_PAGE );
+    SfxStyleSheetBase* pStyle = mxPoolHelper->GetStylePool()->Find( aStyleName, SfxStyleFamily::Page );
     if ( pStyle )
     {
         SfxItemSet& rStyleSet = pStyle->GetItemSet();
-        SvxFrameDirection eDirection = (SvxFrameDirection)
-            static_cast<const SvxFrameDirectionItem&>(rStyleSet.Get( ATTR_WRITINGDIR )).GetValue();
+        SvxFrameDirection eDirection =
+            rStyleSet.Get( ATTR_WRITINGDIR ).GetValue();
 
-        if ( eDirection == FRMDIR_HORI_LEFT_TOP )
-            eRet = EE_HTEXTDIR_L2R;
-        else if ( eDirection == FRMDIR_HORI_RIGHT_TOP )
-            eRet = EE_HTEXTDIR_R2L;
+        if ( eDirection == SvxFrameDirection::Horizontal_LR_TB )
+            eRet = EEHorizontalTextDirection::L2R;
+        else if ( eDirection == SvxFrameDirection::Horizontal_RL_TB )
+            eRet = EEHorizontalTextDirection::R2L;
         // else (invalid for EditEngine): keep "default"
     }
 
-    return sal::static_int_cast<sal_uInt8>(eRet);
+    return eRet;
 }
 
 ScMacroManager* ScDocument::GetMacroManager()
 {
-    if (!mpMacroMgr.get())
+    if (!mpMacroMgr)
         mpMacroMgr.reset(new ScMacroManager(this));
     return mpMacroMgr.get();
 }
@@ -418,14 +407,36 @@ void ScDocument::SetFormulaResults( const ScAddress& rTopPos, const double* pRes
     pTab->SetFormulaResults(rTopPos.Col(), rTopPos.Row(), pResults, nLen);
 }
 
-void ScDocument::SetFormulaResults(
-    const ScAddress& rTopPos, const formula::FormulaTokenRef* pResults, size_t nLen )
+const ScDocumentThreadSpecific& ScDocument::CalculateInColumnInThread( ScInterpreterContext& rContext, const ScAddress& rTopPos, size_t nLen, unsigned nThisThread, unsigned nThreadsTotal)
 {
+    ScTable* pTab = FetchTable(rTopPos.Tab());
+    if (!pTab)
+        return maNonThreaded;
+
+    assert(IsThreadedGroupCalcInProgress());
+
+    maThreadSpecific.pContext = &rContext;
+    ScDocumentThreadSpecific::SetupFromNonThreadedData(maNonThreaded);
+    pTab->CalculateInColumnInThread(rContext, rTopPos.Col(), rTopPos.Row(), nLen, nThisThread, nThreadsTotal);
+
+    assert(IsThreadedGroupCalcInProgress());
+    maThreadSpecific.pContext = nullptr;
+
+    return maThreadSpecific;
+}
+
+void ScDocument::HandleStuffAfterParallelCalculation( const ScAddress& rTopPos, size_t nLen )
+{
+    assert(!IsThreadedGroupCalcInProgress());
+    for( DelayedSetNumberFormat& data : GetNonThreadedContext().maDelayedSetNumberFormat)
+        SetNumberFormat( ScAddress( rTopPos.Col(), data.mRow, rTopPos.Tab()), data.mnNumberFormat );
+    GetNonThreadedContext().maDelayedSetNumberFormat.clear();
+
     ScTable* pTab = FetchTable(rTopPos.Tab());
     if (!pTab)
         return;
 
-    pTab->SetFormulaResults(rTopPos.Col(), rTopPos.Row(), pResults, nLen);
+    pTab->HandleStuffAfterParallelCalculation(rTopPos.Col(), rTopPos.Row(), nLen);
 }
 
 void ScDocument::InvalidateTextWidth( const ScAddress* pAdrFrom, const ScAddress* pAdrTo,
@@ -459,10 +470,10 @@ class IdleCalcTextWidthScope
     ScDocument& mrDoc;
     ScAddress& mrCalcPos;
     MapMode maOldMapMode;
-    sal_uInt64 mnStartTime;
+    sal_uInt64 const mnStartTime;
     ScStyleSheetPool* mpStylePool;
-    sal_uInt16 mnOldSearchMask;
-    SfxStyleFamily meOldFamily;
+    SfxStyleSearchBits const mnOldSearchMask;
+    SfxStyleFamily const meOldFamily;
     bool mbNeedMore;
     bool mbProgress;
 
@@ -482,10 +493,10 @@ public:
         // the calls.
 
         mrDoc.EnableIdle(false);
-        mpStylePool->SetSearchMask(SFX_STYLE_FAMILY_PAGE);
+        mpStylePool->SetSearchMask(SfxStyleFamily::Page);
     }
 
-    ~IdleCalcTextWidthScope()
+    ~IdleCalcTextWidthScope() COVERITY_NOEXCEPT_FALSE
     {
         SfxPrinter* pDev = mrDoc.GetPrinter();
         if (pDev)
@@ -507,7 +518,7 @@ public:
     void setRow(SCROW nRow) { mrCalcPos.SetRow(nRow); }
 
     void incTab() { mrCalcPos.IncTab(); }
-    void incCol(SCCOL nInc=1) { mrCalcPos.IncCol(nInc); }
+    void incCol(SCCOL nInc) { mrCalcPos.IncCol(nInc); }
 
     void setOldMapMode(const MapMode& rOldMapMode) { maOldMapMode = rOldMapMode; }
 
@@ -552,8 +563,8 @@ bool ScDocument::IdleCalcTextWidth()            // true = try next again
     if (!ValidTab(aScope.Tab()) || aScope.Tab() >= static_cast<SCTAB>(maTabs.size()) || !maTabs[aScope.Tab()])
         aScope.setTab(0);
 
-    ScTable* pTab = maTabs[aScope.Tab()];
-    ScStyleSheet* pStyle = static_cast<ScStyleSheet*>(aScope.getStylePool()->Find(pTab->aPageStyle, SFX_STYLE_FAMILY_PAGE));
+    ScTable* pTab = maTabs[aScope.Tab()].get();
+    ScStyleSheet* pStyle = static_cast<ScStyleSheet*>(aScope.getStylePool()->Find(pTab->aPageStyle, SfxStyleFamily::Page));
     OSL_ENSURE( pStyle, "Missing StyleSheet :-/" );
 
     if (!pStyle || getScaleValue(*pStyle, ATTR_PAGE_SCALETOPAGES) == 0)
@@ -591,9 +602,9 @@ bool ScDocument::IdleCalcTextWidth()            // true = try next again
                 {
                     pDev = GetPrinter();
                     aScope.setOldMapMode(pDev->GetMapMode());
-                    pDev->SetMapMode( MAP_PIXEL );  // Important for GetNeededSize
+                    pDev->SetMapMode(MapMode(MapUnit::MapPixel)); // Important for GetNeededSize
 
-                    Point aPix1000 = pDev->LogicToPixel( Point(1000,1000), MAP_TWIP );
+                    Point aPix1000 = pDev->LogicToPixel(Point(1000,1000), MapMode(MapUnit::MapTwip));
                     nPPTX = aPix1000.X() / 1000.0;
                     nPPTY = aPix1000.Y() / 1000.0;
                 }
@@ -601,9 +612,9 @@ bool ScDocument::IdleCalcTextWidth()            // true = try next again
                 if (!aScope.hasProgressBar() && pCol->IsFormulaDirty(nRow))
                     aScope.createProgressBar();
 
-                sal_uInt16 nNewWidth = (sal_uInt16)GetNeededSize(
+                sal_uInt16 nNewWidth = static_cast<sal_uInt16>(GetNeededSize(
                     aScope.Col(), aScope.Row(), aScope.Tab(),
-                    pDev, nPPTX, nPPTY, aZoomFract,aZoomFract, true, true);   // bTotalSize
+                    pDev, nPPTX, nPPTY, aZoomFract,aZoomFract, true, true));   // bTotalSize
 
                 pColIter->setValue(nNewWidth);
                 aScope.setNeedMore(true);
@@ -639,9 +650,9 @@ bool ScDocument::IdleCalcTextWidth()            // true = try next again
             {
                 if ( bNewTab )
                 {
-                    pTab = maTabs[aScope.Tab()];
+                    pTab = maTabs[aScope.Tab()].get();
                     pStyle = static_cast<ScStyleSheet*>(aScope.getStylePool()->Find(
-                        pTab->aPageStyle, SFX_STYLE_FAMILY_PAGE));
+                        pTab->aPageStyle, SfxStyleFamily::Page));
 
                     if ( pStyle )
                     {
@@ -691,9 +702,9 @@ bool ScDocument::IdleCalcTextWidth()            // true = try next again
 
 void ScDocument::RepaintRange( const ScRange& rRange )
 {
-    if ( bIsVisible && pShell )
+    if ( bIsVisible && mpShell )
     {
-        ScModelObj* pModel = ScModelObj::getImplementation( pShell->GetModel() );
+        ScModelObj* pModel = ScModelObj::getImplementation( mpShell->GetModel() );
         if ( pModel )
             pModel->RepaintRange( rRange );     // locked repaints are checked there
     }
@@ -701,9 +712,9 @@ void ScDocument::RepaintRange( const ScRange& rRange )
 
 void ScDocument::RepaintRange( const ScRangeList& rRange )
 {
-    if ( bIsVisible && pShell )
+    if ( bIsVisible && mpShell )
     {
-        ScModelObj* pModel = ScModelObj::getImplementation( pShell->GetModel() );
+        ScModelObj* pModel = ScModelObj::getImplementation( mpShell->GetModel() );
         if ( pModel )
             pModel->RepaintRange( rRange );     // locked repaints are checked there
     }
@@ -791,7 +802,7 @@ bool ScDocument::IsInLinkUpdate() const
 
 void ScDocument::UpdateExternalRefLinks(vcl::Window* pWin)
 {
-    if (!pExternalRefMgr.get())
+    if (!pExternalRefMgr)
         return;
 
     sfx2::LinkManager* pMgr = GetDocLinkManager().getLinkManager(bAutoCalc);
@@ -816,7 +827,7 @@ void ScDocument::UpdateExternalRefLinks(vcl::Window* pWin)
     sc::WaitPointerSwitch aWaitSwitch(pWin);
 
     pExternalRefMgr->enableDocTimer(false);
-    ScProgress aProgress(GetDocumentShell(), ScResId(SCSTR_UPDATE_EXTDOCS).toString(), aRefLinks.size(), true);
+    ScProgress aProgress(GetDocumentShell(), ScResId(SCSTR_UPDATE_EXTDOCS), aRefLinks.size(), true);
     for (size_t i = 0, n = aRefLinks.size(); i < n; ++i)
     {
         aProgress.SetState(i+1);
@@ -833,15 +844,17 @@ void ScDocument::UpdateExternalRefLinks(vcl::Window* pWin)
         OUString aFile;
         sfx2::LinkManager::GetDisplayNames(pRefLink, nullptr, &aFile);
         // Decode encoded URL for display friendliness.
-        INetURLObject aUrl(aFile,INetURLObject::WAS_ENCODED);
-        aFile = aUrl.GetMainURL(INetURLObject::DECODE_UNAMBIGUOUS);
+        INetURLObject aUrl(aFile,INetURLObject::EncodeMechanism::WasEncoded);
+        aFile = aUrl.GetMainURL(INetURLObject::DecodeMechanism::Unambiguous);
 
         OUStringBuffer aBuf;
-        aBuf.append(OUString(ScResId(SCSTR_EXTDOC_NOT_LOADED)));
+        aBuf.append(ScResId(SCSTR_EXTDOC_NOT_LOADED));
         aBuf.append("\n\n");
         aBuf.append(aFile);
-        ScopedVclPtrInstance< MessageDialog > aBox(pWin, aBuf.makeStringAndClear());
-        aBox->Execute();
+        std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pWin ? pWin->GetFrameWeld() : nullptr,
+                                                  VclMessageType::Warning, VclButtonsType::Ok,
+                                                  aBuf.makeStringAndClear()));
+        xBox->run();
     }
 
     pExternalRefMgr->enableDocTimer(true);
@@ -849,12 +862,12 @@ void ScDocument::UpdateExternalRefLinks(vcl::Window* pWin)
     if (bAny)
     {
         TrackFormulas();
-        pShell->Broadcast( SfxSimpleHint(FID_DATACHANGED) );
+        mpShell->Broadcast( SfxHint(SfxHintId::ScDataChanged) );
 
         // #i101960# set document modified, as in TrackTimeHdl for DDE links
-        if (!pShell->IsModified())
+        if (!mpShell->IsModified())
         {
-            pShell->SetModified();
+            mpShell->SetModified();
             SfxBindings* pBindings = GetViewBindings();
             if (pBindings)
             {
@@ -887,9 +900,9 @@ void ScDocument::CopyDdeLinks( ScDocument* pDestDoc ) const
         return;
 
     const sfx2::SvBaseLinks& rLinks = pMgr->GetLinks();
-    for (size_t i = 0, n = rLinks.size(); i < n; ++i)
+    for (const auto & rLink : rLinks)
     {
-        const sfx2::SvBaseLink* pBase = rLinks[i].get();
+        const sfx2::SvBaseLink* pBase = rLink.get();
         if (const ScDdeLink* p = dynamic_cast<const ScDdeLink*>(pBase))
         {
             ScDdeLink* pNew = new ScDdeLink(pDestDoc, *p);
@@ -920,9 +933,9 @@ ScDdeLink* lclGetDdeLink(
             ::sfx2::SvBaseLink* pLink = rLinks[ nIndex ].get();
             if( ScDdeLink* pDdeLink = dynamic_cast<ScDdeLink*>( pLink )  )
             {
-                if( (OUString(pDdeLink->GetAppl()) == rAppl) &&
-                    (OUString(pDdeLink->GetTopic()) == rTopic) &&
-                    (OUString(pDdeLink->GetItem()) == rItem) &&
+                if( (pDdeLink->GetAppl() == rAppl) &&
+                    (pDdeLink->GetTopic() == rTopic) &&
+                    (pDdeLink->GetItem() == rItem) &&
                     ((nMode == SC_DDE_IGNOREMODE) || (nMode == pDdeLink->GetMode())) )
                     return pDdeLink;
                 if( pnDdePos ) ++*pnDdePos;
@@ -1055,9 +1068,9 @@ void ScDocument::UpdateAreaLinks()
         return;
 
     const ::sfx2::SvBaseLinks& rLinks = pMgr->GetLinks();
-    for (size_t i=0; i<rLinks.size(); i++)
+    for (const auto & rLink : rLinks)
     {
-        ::sfx2::SvBaseLink* pBase = rLinks[i].get();
+        ::sfx2::SvBaseLink* pBase = rLink.get();
         if (dynamic_cast<const ScAreaLink*>( pBase) !=  nullptr)
             pBase->Update();
     }
@@ -1070,7 +1083,7 @@ void ScDocument::DeleteAreaLinksOnTab( SCTAB nTab )
         return;
 
     const ::sfx2::SvBaseLinks& rLinks = pMgr->GetLinks();
-    sal_uInt16 nPos = 0;
+    sfx2::SvBaseLinks::size_type nPos = 0;
     while ( nPos < rLinks.size() )
     {
         const ::sfx2::SvBaseLink* pBase = rLinks[nPos].get();
@@ -1083,7 +1096,7 @@ void ScDocument::DeleteAreaLinksOnTab( SCTAB nTab )
 }
 
 void ScDocument::UpdateRefAreaLinks( UpdateRefMode eUpdateRefMode,
-                             const ScRange& rRange, SCsCOL nDx, SCsROW nDy, SCsTAB nDz )
+                             const ScRange& rRange, SCCOL nDx, SCROW nDy, SCTAB nDz )
 {
     sfx2::LinkManager* pMgr = GetDocLinkManager().getLinkManager(false);
     if (!pMgr)
@@ -1153,38 +1166,55 @@ void ScDocument::UpdateRefAreaLinks( UpdateRefMode eUpdateRefMode,
     }
 }
 
+void ScDocument::CheckLinkFormulaNeedingCheck( const ScTokenArray& rCode )
+{
+    if (HasLinkFormulaNeedingCheck())
+        return;
+
+    // Prefer RPN over tokenized formula if available.
+    if (rCode.GetCodeLen())
+    {
+        if (rCode.HasOpCodeRPN(ocDde) || rCode.HasOpCodeRPN(ocWebservice))
+            SetLinkFormulaNeedingCheck(true);
+    }
+    else if (rCode.GetLen())
+    {
+        if (rCode.HasOpCode(ocDde) || rCode.HasOpCode(ocWebservice))
+            SetLinkFormulaNeedingCheck(true);
+    }
+    else
+    {
+        // Possible with named expression without expression like Excel
+        // internal print ranges, obscure user define names, ... formula error
+        // cells without formula ...
+        SAL_WARN("sc.core","ScDocument::CheckLinkFormulaNeedingCheck - called with empty ScTokenArray");
+    }
+}
+
 // TimerDelays etc.
-void ScDocument::KeyInput( const KeyEvent& )
+void ScDocument::KeyInput()
 {
     if ( pChartListenerCollection->hasListeners() )
         pChartListenerCollection->StartTimer();
-    if( apTemporaryChartLock.get() )
+    if (apTemporaryChartLock)
         apTemporaryChartLock->StartOrContinueLocking();
-}
-
-bool ScDocument::CheckMacroWarn()
-{
-    //  The check for macro configuration, macro warning and disabling is now handled
-    //  in SfxObjectShell::AdjustMacroMode, called by SfxObjectShell::CallBasic.
-
-    return true;
 }
 
 SfxBindings* ScDocument::GetViewBindings()
 {
     //  used to invalidate slots after changes to this document
 
-    if ( !pShell )
+    if ( !mpShell )
         return nullptr;        // no ObjShell -> no view
 
     //  first check current view
     SfxViewFrame* pViewFrame = SfxViewFrame::Current();
-    if ( pViewFrame && pViewFrame->GetObjectShell() != pShell )     // wrong document?
+    if ( pViewFrame && pViewFrame->GetObjectShell() != mpShell )     // wrong document?
         pViewFrame = nullptr;
 
     //  otherwise use first view for this doc
     if ( !pViewFrame )
-        pViewFrame = SfxViewFrame::GetFirst( pShell );
+        pViewFrame = SfxViewFrame::GetFirst( mpShell );
 
     if (pViewFrame)
         return &pViewFrame->GetBindings();
@@ -1192,15 +1222,15 @@ SfxBindings* ScDocument::GetViewBindings()
         return nullptr;
 }
 
-void ScDocument::TransliterateText( const ScMarkData& rMultiMark, sal_Int32 nType )
+void ScDocument::TransliterateText( const ScMarkData& rMultiMark, TransliterationFlags nType )
 {
     OSL_ENSURE( rMultiMark.IsMultiMarked(), "TransliterateText: no selection" );
 
     utl::TransliterationWrapper aTransliterationWrapper( comphelper::getProcessComponentContext(), nType );
     bool bConsiderLanguage = aTransliterationWrapper.needLanguageForTheMode();
-    sal_uInt16 nLanguage = LANGUAGE_SYSTEM;
+    LanguageType nLanguage = LANGUAGE_SYSTEM;
 
-    std::unique_ptr<ScEditEngineDefaulter> pEngine;        // not using pEditEngine member because of defaults
+    std::unique_ptr<ScEditEngineDefaulter> pEngine;        // not using mpEditEngine member because of defaults
 
     SCTAB nCount = GetTableCount();
     ScMarkData::const_iterator itr = rMultiMark.begin(), itrEnd = rMultiMark.end();
@@ -1224,7 +1254,7 @@ void ScDocument::TransliterateText( const ScMarkData& rMultiMark, sal_Int32 nTyp
                 // for performance reasons.
                 if (aCell.meType == CELLTYPE_EDIT ||
                     (aCell.meType == CELLTYPE_STRING &&
-                     ( nType == i18n::TransliterationModulesExtra::SENTENCE_CASE || nType == i18n::TransliterationModulesExtra::TITLE_CASE)))
+                     ( nType == TransliterationFlags::SENTENCE_CASE || nType == TransliterationFlags::TITLE_CASE)))
                 {
                     if (!pEngine)
                         pEngine.reset(new ScFieldEditEngine(this, GetEnginePool(), GetEditPool()));

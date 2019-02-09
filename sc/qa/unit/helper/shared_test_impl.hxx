@@ -10,10 +10,13 @@
 #ifndef INCLUDED_SC_QA_UNIT_HELPER_SHARED_TEST_IMPL_HXX
 #define INCLUDED_SC_QA_UNIT_HELPER_SHARED_TEST_IMPL_HXX
 
-#include "colorscale.hxx"
-#include "conditio.hxx"
-#include "document.hxx"
-#include "formulacell.hxx"
+#include <memory>
+#include <colorscale.hxx>
+#include <conditio.hxx>
+#include <document.hxx>
+#include <formulacell.hxx>
+#include "qahelper.hxx"
+#include <formula/errorcodes.hxx>
 
 struct FindCondFormatByEnclosingRange
 {
@@ -40,7 +43,7 @@ struct DataBarData
     databar::ScAxisPosition eAxisPosition;
 };
 
-DataBarData aData[] = {
+DataBarData const aData[] = {
     { ScRange(1,2,0,1,5,0), COLORSCALE_AUTO, COLORSCALE_AUTO, databar::AUTOMATIC },
     { ScRange(3,2,0,3,5,0), COLORSCALE_MIN, COLORSCALE_MAX, databar::AUTOMATIC },
     { ScRange(5,2,0,5,5,0), COLORSCALE_PERCENTILE, COLORSCALE_PERCENT, databar::AUTOMATIC },
@@ -48,7 +51,7 @@ DataBarData aData[] = {
     { ScRange(1,9,0,1,12,0), COLORSCALE_AUTO, COLORSCALE_AUTO, databar::MIDDLE }
 };
 
-void testDataBar_Impl(ScDocument& rDoc)
+void testDataBar_Impl(const ScDocument& rDoc)
 {
     ScConditionalFormatList* pList = rDoc.GetCondFormList(0);
     CPPUNIT_ASSERT(pList);
@@ -61,7 +64,7 @@ void testDataBar_Impl(ScDocument& rDoc)
         CPPUNIT_ASSERT_EQUAL(size_t(1), (*itr)->size());
 
         const ScFormatEntry* pFormatEntry = (*itr)->GetEntry(0);
-        CPPUNIT_ASSERT_EQUAL(pFormatEntry->GetType(), condformat::DATABAR);
+        CPPUNIT_ASSERT_EQUAL(ScFormatEntry::Type::Databar, pFormatEntry->GetType());
         const ScDataBarFormat* pDataBar = static_cast<const ScDataBarFormat*>(pFormatEntry);
         CPPUNIT_ASSERT(pDataBar);
         const ScDataBarFormatData* pDataBarData = pDataBar->GetDataBarData();
@@ -79,13 +82,13 @@ struct ColorScale2EntryData
     ScColorScaleEntryType eUpperType;
 };
 
-ColorScale2EntryData aData2Entry[] = {
+ColorScale2EntryData const aData2Entry[] = {
     { ScRange(1,2,0,1,5,0), COLORSCALE_MIN, COLORSCALE_MAX },
     { ScRange(3,2,0,3,5,0), COLORSCALE_PERCENTILE, COLORSCALE_PERCENT },
     { ScRange(5,2,0,5,5,0), COLORSCALE_VALUE, COLORSCALE_FORMULA }
 };
 
-void testColorScale2Entry_Impl(ScDocument& rDoc)
+void testColorScale2Entry_Impl(const ScDocument& rDoc)
 {
     const ScConditionalFormatList* pList = rDoc.GetCondFormList(0);
     CPPUNIT_ASSERT(pList);
@@ -98,7 +101,7 @@ void testColorScale2Entry_Impl(ScDocument& rDoc)
         CPPUNIT_ASSERT_EQUAL(size_t(1), (*itr)->size());
 
         const ScFormatEntry* pFormatEntry = (*itr)->GetEntry(0);
-        CPPUNIT_ASSERT_EQUAL(pFormatEntry->GetType(), condformat::COLORSCALE);
+        CPPUNIT_ASSERT_EQUAL(ScFormatEntry::Type::Colorscale, pFormatEntry->GetType());
         const ScColorScaleFormat* pColFormat = static_cast<const ScColorScaleFormat*>(pFormatEntry);
         CPPUNIT_ASSERT_EQUAL(size_t(2), pColFormat->size());
 
@@ -118,13 +121,13 @@ struct ColorScale3EntryData
     ScColorScaleEntryType eUpperType;
 };
 
-ColorScale3EntryData aData3Entry[] = {
+ColorScale3EntryData const aData3Entry[] = {
     { ScRange(1,1,1,1,6,1), COLORSCALE_MIN, COLORSCALE_PERCENTILE, COLORSCALE_MAX },
     { ScRange(3,1,1,3,6,1), COLORSCALE_PERCENTILE, COLORSCALE_VALUE, COLORSCALE_PERCENT },
     { ScRange(5,1,1,5,6,1), COLORSCALE_VALUE, COLORSCALE_VALUE, COLORSCALE_FORMULA }
 };
 
-void testColorScale3Entry_Impl(ScDocument& rDoc)
+void testColorScale3Entry_Impl(const ScDocument& rDoc)
 {
     ScConditionalFormatList* pList = rDoc.GetCondFormList(1);
     CPPUNIT_ASSERT(pList);
@@ -137,7 +140,7 @@ void testColorScale3Entry_Impl(ScDocument& rDoc)
         CPPUNIT_ASSERT_EQUAL(size_t(1), (*itr)->size());
 
         const ScFormatEntry* pFormatEntry = (*itr)->GetEntry(0);
-        CPPUNIT_ASSERT_EQUAL(pFormatEntry->GetType(), condformat::COLORSCALE);
+        CPPUNIT_ASSERT_EQUAL(ScFormatEntry::Type::Colorscale, pFormatEntry->GetType());
         const ScColorScaleFormat* pColFormat = static_cast<const ScColorScaleFormat*>(pFormatEntry);
         CPPUNIT_ASSERT_EQUAL(size_t(3), pColFormat->size());
 
@@ -156,11 +159,11 @@ void testFunctionsExcel2010_Impl( ScDocument& rDoc )
 {
     // Original test case document is functions-excel-2010.xlsx
     // Which test rows to evaluate, 1-based as in UI to ease maintenance.
-    struct
+    static struct
     {
         SCROW nRow;
         bool  bEvaluate;
-    } aTests[] = {
+    } const aTests[] = {
         {  2, false },  // name=[ AGGREGATE ], result=0, expected=1
         {  3, true  },
         {  4, true  },
@@ -259,8 +262,8 @@ void testFunctionsExcel2010_Impl( ScDocument& rDoc )
                 OString::number( rDoc.GetValue( ScAddress( 2, nRow, 0)) );
 
             ScFormulaCell* pFC = rDoc.GetFormulaCell( ScAddress( 1, nRow, 0) );
-            if ( pFC && pFC->GetErrCode() != 0 )
-                aStr += ", error code =" + OString::number( pFC->GetErrCode() );
+            if ( pFC && pFC->GetErrCode() != FormulaError::NONE )
+                aStr += ", error code =" + OString::number( static_cast<int>(pFC->GetErrCode()) );
 
             CPPUNIT_ASSERT_MESSAGE( OString( "Expected a formula cell without error at row " +
                     aStr ).getStr(), isFormulaWithoutError( rDoc, ScAddress( 1, nRow, 0)));
@@ -275,12 +278,11 @@ void testCeilingFloor_Impl( ScDocument& rDoc )
 {
     // Original test case document is ceiling-floor.xlsx
     // Sheet1.K1 has =AND(K3:K81) to evaluate all results.
-    const char* pORef = "Sheet1.K1";
-    OUString aRef( OUString::createFromAscii( pORef));
+    const char pORef[] = "Sheet1.K1";
+    OUString aRef(pORef);
     ScAddress aPos;
     aPos.Parse(aRef);
-    if (!checkFormula( rDoc, aPos, "AND(K3:K81)"))
-        CPPUNIT_FAIL("Wrong formula.");
+    ASSERT_FORMULA_EQUAL(rDoc, aPos, "AND(K3:K81)", "Wrong formula.");
     CPPUNIT_ASSERT_MESSAGE( OString( OString(pORef) + " result is error.").getStr(),
             isFormulaWithoutError( rDoc, aPos));
     CPPUNIT_ASSERT_EQUAL(1.0, rDoc.GetValue(aPos));

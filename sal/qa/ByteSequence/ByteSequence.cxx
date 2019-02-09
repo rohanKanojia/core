@@ -18,11 +18,11 @@
  */
 
 #include <sal/types.h>
-#include "cppunit/TestAssert.h"
-#include "cppunit/TestFixture.h"
-#include "cppunit/extensions/HelperMacros.h"
-#include "cppunit/plugin/TestPlugIn.h"
-#include "rtl/byteseq.hxx"
+#include <cppunit/TestAssert.h>
+#include <cppunit/TestFixture.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
+#include <rtl/byteseq.hxx>
 
 namespace {
 
@@ -179,7 +179,5 @@ public:
 CPPUNIT_TEST_SUITE_REGISTRATION(Test);
 
 }
-
-CPPUNIT_PLUGIN_IMPLEMENT();
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

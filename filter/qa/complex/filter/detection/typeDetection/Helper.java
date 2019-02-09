@@ -298,7 +298,7 @@ public class Helper  {
         return newContent;
     }
 
-    /** returns a <code>MediaDescripto</code> filled with given properties and
+    /** returns a <code>MediaDescriptor</code> filled with given properties and
      * values.
      * @param propNames String Array of property names
      * @param values Object Array of property values
@@ -352,7 +352,7 @@ public class Helper  {
     /** Returns the file type for the given file name containing in files.csv
      * @param fileAlias the alias name of the file
      * @return file type
-     * @throws FileAliasNotFoundException was thrown if not alias was thorwn
+     * @throws FileAliasNotFoundException was thrown if not alias was thrown
      */
     public String getTypeforfileAlias(String fileAlias)
                                         throws FileAliasNotFoundException{

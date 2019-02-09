@@ -22,7 +22,7 @@
 
 #include "PropertyMap.hxx"
 
-#include <TableManager.hxx>
+#include "TableManager.hxx"
 #include <dmapper/resourcemodel.hxx>
 
 #include <memory>
@@ -34,7 +34,7 @@ namespace dmapper {
 
 class DomainMapper;
 
-class TablePropertiesHandler
+class TablePropertiesHandler final : public virtual SvRefBase
 {
 private:
     PropertyMapPtr m_pCurrentProperties;
@@ -43,16 +43,15 @@ private:
 
 public:
     TablePropertiesHandler();
-    virtual ~TablePropertiesHandler( );
 
     bool sprm(Sprm & sprm);
 
-    inline void SetTableManager( TableManager* pTableManager )
+    void SetTableManager( TableManager* pTableManager )
     {
         m_pTableManager = pTableManager;
     };
 
-    inline void SetProperties( PropertyMapPtr pProperties )
+    void SetProperties( PropertyMapPtr pProperties )
     {
         m_pCurrentProperties = pProperties;
     };
@@ -61,28 +60,28 @@ public:
 
 private:
 
-    inline void cellProps( TablePropertyMapPtr pProps )
+    void cellProps( TablePropertyMapPtr pProps )
     {
         if ( m_pTableManager )
             m_pTableManager->cellProps( pProps );
         else
-            m_pCurrentProperties->InsertProps(pProps);
+            m_pCurrentProperties->InsertProps(pProps.get());
     };
 
-    inline void insertRowProps( TablePropertyMapPtr pProps )
+    void insertRowProps( TablePropertyMapPtr pProps )
     {
         if ( m_pTableManager )
             m_pTableManager->insertRowProps( pProps );
         else
-            m_pCurrentProperties->InsertProps(pProps);
+            m_pCurrentProperties->InsertProps(pProps.get());
     };
 
-    inline void insertTableProps( TablePropertyMapPtr pProps )
+    void insertTableProps( TablePropertyMapPtr pProps )
     {
         if ( m_pTableManager )
             m_pTableManager->insertTableProps( pProps );
         else
-            m_pCurrentProperties->InsertProps(pProps);
+            m_pCurrentProperties->InsertProps(pProps.get());
     };
 };
 

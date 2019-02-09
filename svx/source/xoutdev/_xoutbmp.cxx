@@ -18,7 +18,11 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
+#include <comphelper/base64.hxx>
+#include <comphelper/graphicmimetype.hxx>
+#include <tools/debug.hxx>
 #include <tools/poly.hxx>
 #include <vcl/bitmapaccess.hxx>
 #include <vcl/virdev.hxx>
@@ -26,7 +30,7 @@
 #include <svl/solar.hrc>
 #include <sfx2/docfile.hxx>
 #include <sfx2/app.hxx>
-#include "svx/xoutbmp.hxx"
+#include <svx/xoutbmp.hxx>
 #include <vcl/dibtools.hxx>
 #include <vcl/FilterConfigItem.hxx>
 #include <vcl/graphicfilter.hxx>
@@ -38,6 +42,8 @@
 #define FORMAT_GIF  "gif"
 #define FORMAT_JPG  "jpg"
 #define FORMAT_PNG  "png"
+
+using namespace com::sun::star;
 
 GraphicFilter* XOutBitmap::pGrfFilter = nullptr;
 
@@ -65,12 +71,12 @@ Animation XOutBitmap::MirrorAnimation( const Animation& rAnimation, bool bHMirr,
 
             // Adjust the positions inside the whole bitmap
             if( bHMirr )
-                aAnimBmp.aPosPix.X() = rGlobalSize.Width() - aAnimBmp.aPosPix.X() -
-                                       aAnimBmp.aSizePix.Width();
+                aAnimBmp.aPosPix.setX( rGlobalSize.Width() - aAnimBmp.aPosPix.X() -
+                                       aAnimBmp.aSizePix.Width() );
 
             if( bVMirr )
-                aAnimBmp.aPosPix.Y() = rGlobalSize.Height() - aAnimBmp.aPosPix.Y() -
-                                       aAnimBmp.aSizePix.Height();
+                aAnimBmp.aPosPix.setY( rGlobalSize.Height() - aAnimBmp.aPosPix.Y() -
+                                       aAnimBmp.aSizePix.Height() );
 
             aNewAnim.Replace( aAnimBmp, i );
         }
@@ -93,20 +99,9 @@ Graphic XOutBitmap::MirrorGraphic( const Graphic& rGraphic, const BmpMirrorFlags
         }
         else
         {
-            if( rGraphic.IsTransparent() )
-            {
-                BitmapEx aBmpEx( rGraphic.GetBitmapEx() );
-
-                aBmpEx.Mirror( nMirrorFlags );
-                aRetGraphic = aBmpEx;
-            }
-            else
-            {
-                Bitmap aBmp( rGraphic.GetBitmap() );
-
-                aBmp.Mirror( nMirrorFlags );
-                aRetGraphic = aBmp;
-            }
+            BitmapEx aBmp( rGraphic.GetBitmapEx() );
+            aBmp.Mirror( nMirrorFlags );
+            aRetGraphic = aBmp;
         }
     }
     else
@@ -115,23 +110,25 @@ Graphic XOutBitmap::MirrorGraphic( const Graphic& rGraphic, const BmpMirrorFlags
     return aRetGraphic;
 }
 
-sal_uInt16 XOutBitmap::WriteGraphic( const Graphic& rGraphic, OUString& rFileName,
-                                 const OUString& rFilterName, const sal_uIntPtr nFlags,
-                                 const Size* pMtfSize_100TH_MM )
+ErrCode XOutBitmap::WriteGraphic( const Graphic& rGraphic, OUString& rFileName,
+                                 const OUString& rFilterName, const XOutFlags nFlags,
+                                 const Size* pMtfSize_100TH_MM,
+                                 const css::uno::Sequence< css::beans::PropertyValue >* pFilterData )
 {
-    if( rGraphic.GetType() != GRAPHIC_NONE )
+    if( rGraphic.GetType() != GraphicType::NONE )
     {
         INetURLObject   aURL( rFileName );
         Graphic         aGraphic;
         OUString        aExt;
         GraphicFilter&  rFilter = GraphicFilter::GetGraphicFilter();
-        sal_uInt16          nErr = GRFILTER_FILTERERROR, nFilter = GRFILTER_FORMAT_NOTFOUND;
+        ErrCode         nErr = ERRCODE_GRFILTER_FILTERERROR;
+        sal_uInt16      nFilter = GRFILTER_FORMAT_NOTFOUND;
         bool            bTransparent = rGraphic.IsTransparent(), bAnimated = rGraphic.IsAnimated();
 
         DBG_ASSERT( aURL.GetProtocol() != INetProtocol::NotValid, "XOutBitmap::WriteGraphic(...): invalid URL" );
 
         // calculate correct file name
-        if( !( nFlags & XOUTBMP_DONT_EXPAND_FILENAME ) )
+        if( !( nFlags & XOutFlags::DontExpandFilename ) )
         {
             OUString aName( aURL.getBase() );
             aName += "_";
@@ -144,53 +141,77 @@ sal_uInt16 XOutBitmap::WriteGraphic( const Graphic& rGraphic, OUString& rFileNam
             aURL.setBase( aName );
         }
 
-        // #i121128# use shortcut to write SVG data in original form (if possible)
-        const SvgDataPtr aSvgDataPtr(rGraphic.getSvgData());
+        // #i121128# use shortcut to write Vector Graphic Data data in original form (if possible)
+        const VectorGraphicDataPtr& aVectorGraphicDataPtr(rGraphic.getVectorGraphicData());
 
-        if(aSvgDataPtr.get()
-            && aSvgDataPtr->getSvgDataArrayLength()
-            && rFilterName.equalsIgnoreAsciiCase("svg"))
+        if(aVectorGraphicDataPtr.get()
+            && aVectorGraphicDataPtr->getVectorGraphicDataArrayLength())
         {
-            if(!(nFlags & XOUTBMP_DONT_ADD_EXTENSION))
+            const bool bIsSvg(rFilterName.equalsIgnoreAsciiCase("svg") && VectorGraphicDataType::Svg == aVectorGraphicDataPtr->getVectorGraphicDataType());
+            const bool bIsWmf(rFilterName.equalsIgnoreAsciiCase("wmf") && VectorGraphicDataType::Wmf == aVectorGraphicDataPtr->getVectorGraphicDataType());
+            const bool bIsEmf(rFilterName.equalsIgnoreAsciiCase("emf") && VectorGraphicDataType::Emf == aVectorGraphicDataPtr->getVectorGraphicDataType());
+
+            if (bIsSvg || bIsWmf || bIsEmf)
             {
-                aURL.setExtension(rFilterName);
-            }
-
-            rFileName = aURL.GetMainURL(INetURLObject::NO_DECODE);
-            SfxMedium aMedium(aURL.GetMainURL(INetURLObject::NO_DECODE), StreamMode::WRITE|StreamMode::SHARE_DENYNONE|StreamMode::TRUNC);
-            SvStream* pOStm = aMedium.GetOutStream();
-
-            if(pOStm)
-            {
-                pOStm->Write(aSvgDataPtr->getSvgDataArray().getConstArray(), aSvgDataPtr->getSvgDataArrayLength());
-                aMedium.Commit();
-
-                if(!aMedium.GetError())
+                if (!(nFlags & XOutFlags::DontAddExtension))
                 {
-                    nErr = GRFILTER_OK;
+                    aURL.setExtension(rFilterName);
+                }
+
+                rFileName = aURL.GetMainURL(INetURLObject::DecodeMechanism::NONE);
+                SfxMedium aMedium(aURL.GetMainURL(INetURLObject::DecodeMechanism::NONE), StreamMode::WRITE | StreamMode::SHARE_DENYNONE | StreamMode::TRUNC);
+                SvStream* pOStm = aMedium.GetOutStream();
+
+                if (pOStm)
+                {
+                    pOStm->WriteBytes(aVectorGraphicDataPtr->getVectorGraphicDataArray().getConstArray(), aVectorGraphicDataPtr->getVectorGraphicDataArrayLength());
+                    aMedium.Commit();
+
+                    if (!aMedium.GetError())
+                    {
+                        nErr = ERRCODE_NONE;
+                    }
                 }
             }
         }
 
-        if( GRFILTER_OK != nErr )
+        // Write PDF data in original form if possible.
+        if (rGraphic.hasPdfData() && rFilterName.equalsIgnoreAsciiCase("pdf"))
         {
-            if( ( nFlags & XOUTBMP_USE_NATIVE_IF_POSSIBLE ) &&
-                !( nFlags & XOUTBMP_MIRROR_HORZ ) &&
-                !( nFlags & XOUTBMP_MIRROR_VERT ) &&
-                ( rGraphic.GetType() != GRAPHIC_GDIMETAFILE ) && rGraphic.IsLink() )
+            if (!(nFlags & XOutFlags::DontAddExtension))
+                aURL.setExtension(rFilterName);
+
+            rFileName = aURL.GetMainURL(INetURLObject::DecodeMechanism::NONE);
+            SfxMedium aMedium(aURL.GetMainURL(INetURLObject::DecodeMechanism::NONE), StreamMode::WRITE|StreamMode::SHARE_DENYNONE|StreamMode::TRUNC);
+            if (SvStream* pOutStream = aMedium.GetOutStream())
+            {
+                const std::shared_ptr<uno::Sequence<sal_Int8>>& rPdfData = rGraphic.getPdfData();
+                pOutStream->WriteBytes(rPdfData->getConstArray(), rPdfData->getLength());
+                aMedium.Commit();
+                if (!aMedium.GetError())
+                    nErr = ERRCODE_NONE;
+            }
+        }
+
+        if( ERRCODE_NONE != nErr )
+        {
+            if( ( nFlags & XOutFlags::UseNativeIfPossible ) &&
+                !( nFlags & XOutFlags::MirrorHorz ) &&
+                !( nFlags & XOutFlags::MirrorVert ) &&
+                ( rGraphic.GetType() != GraphicType::GdiMetafile ) && rGraphic.IsGfxLink() )
             {
                 // try to write native link
-                const GfxLink aGfxLink( ( (Graphic&) rGraphic ).GetLink() );
+                const GfxLink aGfxLink( rGraphic.GetGfxLink() );
 
                 switch( aGfxLink.GetType() )
                 {
-                    case GFX_LINK_TYPE_NATIVE_GIF: aExt = FORMAT_GIF; break;
+                    case GfxLinkType::NativeGif: aExt = FORMAT_GIF; break;
 
                     // #i15508# added BMP type for better exports (no call/trigger found, prob used in HTML export)
-                    case GFX_LINK_TYPE_NATIVE_BMP: aExt = FORMAT_BMP; break;
+                    case GfxLinkType::NativeBmp: aExt = FORMAT_BMP; break;
 
-                    case GFX_LINK_TYPE_NATIVE_JPG: aExt = FORMAT_JPG; break;
-                    case GFX_LINK_TYPE_NATIVE_PNG: aExt = FORMAT_PNG; break;
+                    case GfxLinkType::NativeJpg: aExt = FORMAT_JPG; break;
+                    case GfxLinkType::NativePng: aExt = FORMAT_PNG; break;
 
                     default:
                     break;
@@ -198,32 +219,32 @@ sal_uInt16 XOutBitmap::WriteGraphic( const Graphic& rGraphic, OUString& rFileNam
 
                 if( !aExt.isEmpty() )
                 {
-                    if( 0 == (nFlags & XOUTBMP_DONT_ADD_EXTENSION))
+                    if( !(nFlags & XOutFlags::DontAddExtension) )
                         aURL.setExtension( aExt );
-                    rFileName = aURL.GetMainURL( INetURLObject::NO_DECODE );
+                    rFileName = aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE );
 
-                    SfxMedium   aMedium(aURL.GetMainURL(INetURLObject::NO_DECODE), StreamMode::WRITE | StreamMode::SHARE_DENYNONE | StreamMode::TRUNC);
+                    SfxMedium   aMedium(aURL.GetMainURL(INetURLObject::DecodeMechanism::NONE), StreamMode::WRITE | StreamMode::SHARE_DENYNONE | StreamMode::TRUNC);
                     SvStream*   pOStm = aMedium.GetOutStream();
 
                     if( pOStm && aGfxLink.GetDataSize() && aGfxLink.GetData() )
                     {
-                        pOStm->Write( aGfxLink.GetData(), aGfxLink.GetDataSize() );
+                        pOStm->WriteBytes(aGfxLink.GetData(), aGfxLink.GetDataSize());
                         aMedium.Commit();
 
                         if( !aMedium.GetError() )
-                            nErr = GRFILTER_OK;
+                            nErr = ERRCODE_NONE;
                     }
                 }
             }
         }
 
-        if( GRFILTER_OK != nErr )
+        if( ERRCODE_NONE != nErr )
         {
             OUString  aFilter( rFilterName );
             bool    bWriteTransGrf = ( aFilter.equalsIgnoreAsciiCase( "transgrf" ) ) ||
                                      ( aFilter.equalsIgnoreAsciiCase( "gif" ) ) ||
-                                     ( nFlags & XOUTBMP_USE_GIF_IF_POSSIBLE ) ||
-                                     ( ( nFlags & XOUTBMP_USE_GIF_IF_SENSIBLE ) && ( bAnimated || bTransparent ) );
+                                     ( nFlags & XOutFlags::UseGifIfPossible ) ||
+                                     ( ( nFlags & XOutFlags::UseGifIfSensible ) && ( bAnimated || bTransparent ) );
 
             // get filter and extension
             if( bWriteTransGrf )
@@ -249,17 +270,17 @@ sal_uInt16 XOutBitmap::WriteGraphic( const Graphic& rGraphic, OUString& rFileNam
                         aGraphic = rGraphic;
                     else
                     {
-                        if( pMtfSize_100TH_MM && ( rGraphic.GetType() != GRAPHIC_BITMAP ) )
+                        if( pMtfSize_100TH_MM && ( rGraphic.GetType() != GraphicType::Bitmap ) )
                         {
                             ScopedVclPtrInstance< VirtualDevice > pVDev;
-                            const Size    aSize( pVDev->LogicToPixel( *pMtfSize_100TH_MM, MAP_100TH_MM ) );
+                            const Size aSize(pVDev->LogicToPixel(*pMtfSize_100TH_MM, MapMode(MapUnit::Map100thMM)));
 
                             if( pVDev->SetOutputSizePixel( aSize ) )
                             {
                                 const Wallpaper aWallpaper( pVDev->GetBackground() );
                                 const Point     aPt;
 
-                                pVDev->SetBackground( Wallpaper( Color( COL_BLACK ) ) );
+                                pVDev->SetBackground( Wallpaper( COL_BLACK ) );
                                 pVDev->Erase();
                                 rGraphic.Draw( pVDev.get(), aPt, aSize );
 
@@ -269,7 +290,7 @@ sal_uInt16 XOutBitmap::WriteGraphic( const Graphic& rGraphic, OUString& rFileNam
                                 pVDev->Erase();
                                 rGraphic.Draw( pVDev.get(), aPt, aSize );
 
-                                pVDev->SetRasterOp( ROP_XOR );
+                                pVDev->SetRasterOp( RasterOp::Xor );
                                 pVDev->DrawBitmap( aPt, aSize, aBitmap );
                                 aGraphic = BitmapEx( aBitmap, pVDev->GetBitmap( aPt, aSize ) );
                             }
@@ -282,10 +303,10 @@ sal_uInt16 XOutBitmap::WriteGraphic( const Graphic& rGraphic, OUString& rFileNam
                 }
                 else
                 {
-                    if( pMtfSize_100TH_MM && ( rGraphic.GetType() != GRAPHIC_BITMAP ) )
+                    if( pMtfSize_100TH_MM && ( rGraphic.GetType() != GraphicType::Bitmap ) )
                     {
                         ScopedVclPtrInstance< VirtualDevice > pVDev;
-                        const Size      aSize( pVDev->LogicToPixel( *pMtfSize_100TH_MM, MAP_100TH_MM ) );
+                        const Size aSize(pVDev->LogicToPixel(*pMtfSize_100TH_MM, MapMode(MapUnit::Map100thMM)));
 
                         if( pVDev->SetOutputSizePixel( aSize ) )
                         {
@@ -293,29 +314,29 @@ sal_uInt16 XOutBitmap::WriteGraphic( const Graphic& rGraphic, OUString& rFileNam
                             aGraphic = pVDev->GetBitmap( Point(), aSize );
                         }
                         else
-                            aGraphic = rGraphic.GetBitmap();
+                            aGraphic = rGraphic.GetBitmapEx();
                     }
                     else
-                        aGraphic = rGraphic.GetBitmap();
+                        aGraphic = rGraphic.GetBitmapEx();
                 }
 
                 // mirror?
-                if( ( nFlags & XOUTBMP_MIRROR_HORZ ) || ( nFlags & XOUTBMP_MIRROR_VERT ) )
+                if( ( nFlags & XOutFlags::MirrorHorz ) || ( nFlags & XOutFlags::MirrorVert ) )
                 {
                     BmpMirrorFlags nBmpMirrorFlags = BmpMirrorFlags::NONE;
-                    if( nFlags & XOUTBMP_MIRROR_HORZ )
+                    if( nFlags & XOutFlags::MirrorHorz )
                       nBmpMirrorFlags |= BmpMirrorFlags::Horizontal;
-                    if( nFlags & XOUTBMP_MIRROR_VERT )
+                    if( nFlags & XOutFlags::MirrorVert )
                       nBmpMirrorFlags |= BmpMirrorFlags::Vertical;
                     aGraphic = MirrorGraphic( aGraphic, nBmpMirrorFlags );
                 }
 
-                if( ( GRFILTER_FORMAT_NOTFOUND != nFilter ) && ( aGraphic.GetType() != GRAPHIC_NONE ) )
+                if (aGraphic.GetType() != GraphicType::NONE)
                 {
-                    if( 0 == (nFlags & XOUTBMP_DONT_ADD_EXTENSION))
+                    if( !(nFlags & XOutFlags::DontAddExtension) )
                         aURL.setExtension( aExt );
-                    rFileName = aURL.GetMainURL( INetURLObject::NO_DECODE );
-                    nErr = ExportGraphic( aGraphic, aURL, rFilter, nFilter );
+                    rFileName = aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE );
+                    nErr = ExportGraphic( aGraphic, aURL, rFilter, nFilter, pFilterData );
                 }
             }
         }
@@ -324,89 +345,78 @@ sal_uInt16 XOutBitmap::WriteGraphic( const Graphic& rGraphic, OUString& rFileNam
     }
     else
     {
-        return GRFILTER_OK;
+        return ERRCODE_NONE;
     }
 }
 
-bool XOutBitmap::GraphicToBase64(const Graphic& rGraphic, OUString& rOUString)
+bool XOutBitmap::GraphicToBase64(const Graphic& rGraphic, OUString& rOUString, bool bAddPrefix,
+                                 ConvertDataFormat aTargetFormat)
 {
     SvMemoryStream aOStm;
-    OUString aMimeType;
-    GfxLink aLink = rGraphic.GetLink();
-    ConvertDataFormat aCvtType;
-    switch(  aLink.GetType() )
+    GfxLink aLink = rGraphic.GetGfxLink();
+
+    if (aTargetFormat == ConvertDataFormat::Unknown)
     {
-        case GFX_LINK_TYPE_NATIVE_JPG:
-            aCvtType = ConvertDataFormat::JPG;
-            aMimeType = "image/jpeg";
-            break;
-        case GFX_LINK_TYPE_NATIVE_PNG:
-            aCvtType = ConvertDataFormat::PNG;
-            aMimeType = "image/png";
-            break;
-        case GFX_LINK_TYPE_NATIVE_SVG:
-            aCvtType = ConvertDataFormat::SVG;
-            aMimeType = "image/svg+xml";
-            break;
-        default:
-            // save everything else (including gif) into png
-            aCvtType = ConvertDataFormat::PNG;
-            aMimeType = "image/png";
-            break;
+        switch (aLink.GetType())
+        {
+            case GfxLinkType::NativeJpg:
+                aTargetFormat = ConvertDataFormat::JPG;
+                break;
+            case GfxLinkType::NativePng:
+                aTargetFormat = ConvertDataFormat::PNG;
+                break;
+            case GfxLinkType::NativeSvg:
+                aTargetFormat = ConvertDataFormat::SVG;
+                break;
+            default:
+                // save everything else (including gif) into png
+                aTargetFormat = ConvertDataFormat::PNG;
+                break;
+        }
     }
-    sal_uLong nErr = GraphicConverter::Export(aOStm,rGraphic,aCvtType);
+
+    ErrCode nErr = GraphicConverter::Export(aOStm,rGraphic,aTargetFormat);
     if ( nErr )
     {
         SAL_WARN("svx", "XOutBitmap::GraphicToBase64() invalid Graphic? error: " << nErr );
         return false;
     }
-    aOStm.Seek(STREAM_SEEK_TO_END);
-    css::uno::Sequence<sal_Int8> aOStmSeq( static_cast<sal_Int8 const *>(aOStm.GetData()),aOStm.Tell() );
+    css::uno::Sequence<sal_Int8> aOStmSeq( static_cast<sal_Int8 const *>(aOStm.GetData()),aOStm.TellEnd() );
     OUStringBuffer aStrBuffer;
-    ::sax::Converter::encodeBase64(aStrBuffer,aOStmSeq);
-    OUString aEncodedBase64Image = aStrBuffer.makeStringAndClear();
-    if( aLink.GetType() == GFX_LINK_TYPE_NATIVE_SVG )
+    ::comphelper::Base64::encode(aStrBuffer,aOStmSeq);
+    rOUString = aStrBuffer.makeStringAndClear();
+
+    if (bAddPrefix)
     {
-      sal_Int32 ite(8);
-      sal_Int32 nBufferLength(aOStmSeq.getLength());
-      const sal_Int8* pBuffer = aOStmSeq.getConstArray();
-      css::uno::Sequence<sal_Int8> newTempSeq = aOStmSeq;        // creates new Sequence to remove front 8 bits of garbage and encodes in base64
-      sal_Int8 *pOutBuffer = newTempSeq.getArray();
-      while(ite < nBufferLength)
-      {
-        *pOutBuffer++ = pBuffer[ite];
-        ite++;
-      }
-      ::sax::Converter::encodeBase64(aStrBuffer, newTempSeq);
-      aEncodedBase64Image = aStrBuffer.makeStringAndClear();
-      sal_Int32 SVGFixLength = aEncodedBase64Image.getLength();
-      aEncodedBase64Image = aEncodedBase64Image.replaceAt(SVGFixLength - 12, SVGFixLength, "") + "PC9zdmc+Cg=="; // removes rear 12 bits of garbage and adds svg closing tag in base64
+        OUString aMimeType
+            = comphelper::GraphicMimeTypeHelper::GetMimeTypeForConvertDataFormat(aTargetFormat);
+        rOUString = aMimeType + ";base64," + rOUString;
     }
-    rOUString = aMimeType + ";base64," + aEncodedBase64Image;
+
     return true;
 }
 
-sal_uInt16 XOutBitmap::ExportGraphic( const Graphic& rGraphic, const INetURLObject& rURL,
+ErrCode XOutBitmap::ExportGraphic( const Graphic& rGraphic, const INetURLObject& rURL,
                                   GraphicFilter& rFilter, const sal_uInt16 nFormat,
                                   const css::uno::Sequence< css::beans::PropertyValue >* pFilterData )
 {
     DBG_ASSERT( rURL.GetProtocol() != INetProtocol::NotValid, "XOutBitmap::ExportGraphic(...): invalid URL" );
 
-    SfxMedium   aMedium( rURL.GetMainURL( INetURLObject::NO_DECODE ), StreamMode::WRITE | StreamMode::SHARE_DENYNONE | StreamMode::TRUNC );
+    SfxMedium   aMedium( rURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), StreamMode::WRITE | StreamMode::SHARE_DENYNONE | StreamMode::TRUNC );
     SvStream*   pOStm = aMedium.GetOutStream();
-    sal_uInt16      nRet = GRFILTER_IOERROR;
+    ErrCode     nRet = ERRCODE_GRFILTER_IOERROR;
 
     if( pOStm )
     {
         pGrfFilter = &rFilter;
 
-        nRet = rFilter.ExportGraphic( rGraphic, rURL.GetMainURL( INetURLObject::NO_DECODE ), *pOStm, nFormat, pFilterData );
+        nRet = rFilter.ExportGraphic( rGraphic, rURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), *pOStm, nFormat, pFilterData );
 
         pGrfFilter = nullptr;
         aMedium.Commit();
 
-        if( aMedium.GetError() && ( GRFILTER_OK == nRet  ) )
-            nRet = GRFILTER_IOERROR;
+        if( aMedium.GetError() && ( ERRCODE_NONE == nRet  ) )
+            nRet = ERRCODE_GRFILTER_IOERROR;
     }
 
     return nRet;
@@ -417,73 +427,78 @@ Bitmap XOutBitmap::DetectEdges( const Bitmap& rBmp, const sal_uInt8 cThreshold )
     const Size  aSize( rBmp.GetSizePixel() );
     Bitmap      aRetBmp;
 
-    if( ( aSize.Width() > 2L ) && ( aSize.Height() > 2L ) )
+    if( ( aSize.Width() > 2 ) && ( aSize.Height() > 2 ) )
     {
         Bitmap aWorkBmp( rBmp );
 
-        if( aWorkBmp.Convert( BMP_CONVERSION_8BIT_GREYS ) )
+        if( aWorkBmp.Convert( BmpConversion::N8BitGreys ) )
         {
             bool bRet = false;
 
-            Bitmap              aDstBmp( aSize, 1 );
-            BitmapReadAccess*   pReadAcc = aWorkBmp.AcquireReadAccess();
-            BitmapWriteAccess*  pWriteAcc = aDstBmp.AcquireWriteAccess();
+            ScopedVclPtr<VirtualDevice> pVirDev(VclPtr<VirtualDevice>::Create());
+            pVirDev->SetOutputSizePixel(aSize);
+            Bitmap::ScopedReadAccess pReadAcc(aWorkBmp);
 
-            if( pReadAcc && pWriteAcc )
+            if( pReadAcc )
             {
                 const long          nWidth = aSize.Width();
-                const long          nWidth2 = nWidth - 2L;
+                const long          nWidth2 = nWidth - 2;
                 const long          nHeight = aSize.Height();
-                const long          nHeight2 = nHeight - 2L;
-                const long          lThres2 = (long) cThreshold * cThreshold;
-                const sal_uInt8 nWhitePalIdx(static_cast< sal_uInt8 >(pWriteAcc->GetBestPaletteIndex(Color(COL_WHITE))));
-                const sal_uInt8 nBlackPalIdx(static_cast< sal_uInt8 >(pWriteAcc->GetBestPaletteIndex(Color(COL_BLACK))));
+                const long          nHeight2 = nHeight - 2;
+                const long          lThres2 = static_cast<long>(cThreshold) * cThreshold;
                 long                nSum1;
                 long                nSum2;
                 long                lGray;
 
                 // initialize border with white pixels
-                pWriteAcc->SetLineColor( Color( COL_WHITE) );
-                pWriteAcc->DrawLine( Point(), Point( nWidth - 1L, 0L ) );
-                pWriteAcc->DrawLine( Point( nWidth - 1L, 0L ), Point( nWidth - 1L, nHeight - 1L ) );
-                pWriteAcc->DrawLine( Point( nWidth - 1L, nHeight - 1L ), Point( 0L, nHeight - 1L ) );
-                pWriteAcc->DrawLine( Point( 0, nHeight - 1L ), Point() );
+                pVirDev->SetLineColor( COL_WHITE );
+                pVirDev->DrawLine( Point(), Point( nWidth - 1, 0L ) );
+                pVirDev->DrawLine( Point( nWidth - 1, 0L ), Point( nWidth - 1, nHeight - 1 ) );
+                pVirDev->DrawLine( Point( nWidth - 1, nHeight - 1 ), Point( 0L, nHeight - 1 ) );
+                pVirDev->DrawLine( Point( 0, nHeight - 1 ), Point() );
 
-                for( long nY = 0L, nY1 = 1L, nY2 = 2; nY < nHeight2; nY++, nY1++, nY2++ )
+                for( long nY = 0, nY1 = 1, nY2 = 2; nY < nHeight2; nY++, nY1++, nY2++ )
                 {
-                    for( long nX = 0L, nXDst = 1L, nXTmp; nX < nWidth2; nX++, nXDst++ )
+                    Scanline pScanlineRead = pReadAcc->GetScanline( nY );
+                    Scanline pScanlineRead1 = pReadAcc->GetScanline( nY1 );
+                    Scanline pScanlineRead2 = pReadAcc->GetScanline( nY2 );
+                    for( long nX = 0, nXDst = 1, nXTmp; nX < nWidth2; nX++, nXDst++ )
                     {
                         nXTmp = nX;
 
-                        nSum1 = -( nSum2 = lGray = pReadAcc->GetPixelIndex( nY, nXTmp++ ) );
-                        nSum2 += ( (long) pReadAcc->GetPixelIndex( nY, nXTmp++ ) ) << 1;
-                        nSum1 += ( lGray = pReadAcc->GetPixelIndex( nY, nXTmp ) );
+                        nSum2 = lGray = pReadAcc->GetIndexFromData( pScanlineRead, nXTmp++ );
+                        nSum1 = -nSum2;
+                        nSum2 += static_cast<long>(pReadAcc->GetIndexFromData( pScanlineRead, nXTmp++ )) << 1;
+                        lGray = pReadAcc->GetIndexFromData( pScanlineRead, nXTmp );
+                        nSum1 += lGray;
                         nSum2 += lGray;
 
-                        nSum1 += ( (long) pReadAcc->GetPixelIndex( nY1, nXTmp ) ) << 1;
-                        nSum1 -= ( (long) pReadAcc->GetPixelIndex( nY1, nXTmp -= 2 ) ) << 1;
+                        nSum1 += static_cast<long>(pReadAcc->GetIndexFromData( pScanlineRead1, nXTmp )) << 1;
+                        nXTmp -= 2;
+                        nSum1 -= static_cast<long>(pReadAcc->GetIndexFromData( pScanlineRead1, nXTmp )) << 1;
 
-                        nSum1 += ( lGray = -(long) pReadAcc->GetPixelIndex( nY2, nXTmp++ ) );
+                        lGray = -static_cast<long>(pReadAcc->GetIndexFromData( pScanlineRead2, nXTmp++ ));
+                        nSum1 += lGray;
                         nSum2 += lGray;
-                        nSum2 -= ( (long) pReadAcc->GetPixelIndex( nY2, nXTmp++ ) ) << 1;
-                        nSum1 += ( lGray = (long) pReadAcc->GetPixelIndex( nY2, nXTmp ) );
+                        nSum2 -= static_cast<long>(pReadAcc->GetIndexFromData( pScanlineRead2, nXTmp++ )) << 1;
+                        lGray = static_cast<long>(pReadAcc->GetIndexFromData( pScanlineRead2, nXTmp ));
+                        nSum1 += lGray;
                         nSum2 -= lGray;
 
                         if( ( nSum1 * nSum1 + nSum2 * nSum2 ) < lThres2 )
-                            pWriteAcc->SetPixelIndex( nY1, nXDst, nWhitePalIdx );
+                            pVirDev->DrawPixel( Point(nXDst, nY), COL_WHITE );
                         else
-                            pWriteAcc->SetPixelIndex( nY1, nXDst, nBlackPalIdx );
+                            pVirDev->DrawPixel( Point(nXDst, nY), COL_BLACK );
                     }
                 }
 
                 bRet = true;
             }
 
-            Bitmap::ReleaseAccess( pReadAcc );
-            Bitmap::ReleaseAccess( pWriteAcc );
+            pReadAcc.reset();
 
             if( bRet )
-                aRetBmp = aDstBmp;
+                aRetBmp = pVirDev->GetBitmap(Point(0,0), aSize);
         }
     }
 
@@ -498,14 +513,13 @@ Bitmap XOutBitmap::DetectEdges( const Bitmap& rBmp, const sal_uInt8 cThreshold )
     return aRetBmp;
 }
 
-tools::Polygon XOutBitmap::GetCountour( const Bitmap& rBmp, const sal_uIntPtr nFlags,
-                                        const sal_uInt8 cEdgeDetectThreshold,
-                                        const Rectangle* pWorkRectPixel )
+tools::Polygon XOutBitmap::GetContour( const Bitmap& rBmp, const XOutFlags nFlags,
+                                        const tools::Rectangle* pWorkRectPixel )
 {
+    const sal_uInt8 cEdgeDetectThreshold = 128;
     Bitmap      aWorkBmp;
     tools::Polygon aRetPoly;
-    Point       aTmpPoint;
-    Rectangle   aWorkRect( aTmpPoint, rBmp.GetSizePixel() );
+    tools::Rectangle   aWorkRect( Point(), rBmp.GetSizePixel() );
 
     if( pWorkRectPixel )
         aWorkRect.Intersection( *pWorkRectPixel );
@@ -515,7 +529,7 @@ tools::Polygon XOutBitmap::GetCountour( const Bitmap& rBmp, const sal_uIntPtr nF
     if( ( aWorkRect.GetWidth() > 4 ) && ( aWorkRect.GetHeight() > 4 ) )
     {
         // if the flag is set, we need to detect edges
-        if( nFlags & XOUTBMP_CONTOUR_EDGEDETECT )
+        if( nFlags & XOutFlags::ContourEdgeDetect )
             aWorkBmp = DetectEdges( rBmp, cEdgeDetectThreshold );
         else
             aWorkBmp = rBmp;
@@ -528,21 +542,21 @@ tools::Polygon XOutBitmap::GetCountour( const Bitmap& rBmp, const sal_uIntPtr nF
         if (pAcc && nWidth && nHeight)
         {
             const Size&         rPrefSize = aWorkBmp.GetPrefSize();
-            const double        fFactorX = (double) rPrefSize.Width() / nWidth;
-            const double        fFactorY = (double) rPrefSize.Height() / nHeight;
-            const long          nStartX1 = aWorkRect.Left() + 1L;
+            const double        fFactorX = static_cast<double>(rPrefSize.Width()) / nWidth;
+            const double        fFactorY = static_cast<double>(rPrefSize.Height()) / nHeight;
+            const long          nStartX1 = aWorkRect.Left() + 1;
             const long          nEndX1 = aWorkRect.Right();
-            const long          nStartX2 = nEndX1 - 1L;
-            const long          nStartY1 = aWorkRect.Top() + 1L;
+            const long          nStartX2 = nEndX1 - 1;
+            const long          nStartY1 = aWorkRect.Top() + 1;
             const long          nEndY1 = aWorkRect.Bottom();
-            const long          nStartY2 = nEndY1 - 1L;
+            const long          nStartY2 = nEndY1 - 1;
             std::unique_ptr<Point[]> pPoints1;
             std::unique_ptr<Point[]> pPoints2;
             long                nX, nY;
             sal_uInt16              nPolyPos = 0;
-            const BitmapColor   aBlack = pAcc->GetBestMatchingColor( Color( COL_BLACK ) );
+            const BitmapColor   aBlack = pAcc->GetBestMatchingColor( COL_BLACK );
 
-            if( nFlags & XOUTBMP_CONTOUR_VERT )
+            if( nFlags & XOutFlags::ContourVert )
             {
                 pPoints1.reset(new Point[ nWidth ]);
                 pPoints2.reset(new Point[ nWidth ]);
@@ -554,7 +568,8 @@ tools::Polygon XOutBitmap::GetCountour( const Bitmap& rBmp, const sal_uIntPtr nF
                     // scan row from left to right
                     while( nY < nEndY1 )
                     {
-                        if( aBlack == pAcc->GetPixel( nY, nX ) )
+                        Scanline pScanline = pAcc->GetScanline( nY );
+                        if( aBlack == pAcc->GetPixelFromData( pScanline, nX ) )
                         {
                             pPoints1[ nPolyPos ] = Point( nX, nY );
                             nY = nStartY2;
@@ -562,7 +577,8 @@ tools::Polygon XOutBitmap::GetCountour( const Bitmap& rBmp, const sal_uIntPtr nF
                             // this loop always breaks eventually as there is at least one pixel
                             while( true )
                             {
-                                if( aBlack == pAcc->GetPixel( nY, nX ) )
+                                // coverity[copy_paste_error : FALSE] - this is correct nX, not nY
+                                if( aBlack == pAcc->GetPixelFromData( pScanline, nX ) )
                                 {
                                     pPoints2[ nPolyPos ] = Point( nX, nY );
                                     break;
@@ -587,11 +603,12 @@ tools::Polygon XOutBitmap::GetCountour( const Bitmap& rBmp, const sal_uIntPtr nF
                 for ( nY = nStartY1; nY < nEndY1; nY++ )
                 {
                     nX = nStartX1;
+                    Scanline pScanline = pAcc->GetScanline( nY );
 
                     // scan row from left to right
                     while( nX < nEndX1 )
                     {
-                        if( aBlack == pAcc->GetPixel( nY, nX ) )
+                        if( aBlack == pAcc->GetPixelFromData( pScanline, nX ) )
                         {
                             pPoints1[ nPolyPos ] = Point( nX, nY );
                             nX = nStartX2;
@@ -599,7 +616,7 @@ tools::Polygon XOutBitmap::GetCountour( const Bitmap& rBmp, const sal_uIntPtr nF
                             // this loop always breaks eventually as there is at least one pixel
                             while( true )
                             {
-                                if( aBlack == pAcc->GetPixel( nY, nX ) )
+                                if( aBlack == pAcc->GetPixelFromData( pScanline, nX ) )
                                 {
                                     pPoints2[ nPolyPos ] = Point( nX, nY );
                                     break;
@@ -634,18 +651,6 @@ tools::Polygon XOutBitmap::GetCountour( const Bitmap& rBmp, const sal_uIntPtr nF
     }
 
     return aRetPoly;
-}
-
-bool DitherBitmap( Bitmap& rBitmap )
-{
-    bool bRet = false;
-
-    if( ( rBitmap.GetBitCount() >= 8 ) && ( Application::GetDefaultDevice()->GetColorCount() < 257 ) )
-        bRet = rBitmap.Dither( BmpDitherFlags::Floyd );
-    else
-        bRet = false;
-
-    return bRet;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

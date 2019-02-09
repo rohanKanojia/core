@@ -20,11 +20,11 @@
 #ifndef INCLUDED_RTL_MATH_H
 #define INCLUDED_RTL_MATH_H
 
-#include <sal/config.h>
+#include "sal/config.h"
 
-#include <rtl/ustring.h>
-#include <sal/saldllapi.h>
-#include <sal/types.h>
+#include "rtl/ustring.h"
+#include "sal/saldllapi.h"
+#include "sal/types.h"
 
 #if defined __cplusplus
 extern "C" {
@@ -421,6 +421,16 @@ SAL_DLLPUBLIC double SAL_CALL rtl_math_pow10Exp(double fValue, int nExp) SAL_THR
     The value to be rounded.
   */
 SAL_DLLPUBLIC double SAL_CALL rtl_math_approxValue(double fValue) SAL_THROW_EXTERN_C();
+
+/** Test equality of two values with an accuracy of the magnitude of the
+    given values scaled by 2^-48 (4 bits roundoff stripped).
+
+    @attention
+    approxEqual( value!=0.0, 0.0 ) _never_ yields true.
+
+    @since LibreOffice 5.3
+ */
+SAL_DLLPUBLIC bool SAL_CALL rtl_math_approxEqual(double a, double b) SAL_THROW_EXTERN_C();
 
 /** Returns more accurate e^x-1 for x near 0 than calculating directly.
 

@@ -21,11 +21,10 @@
 #define INCLUDED_SC_SOURCE_UI_INC_DRFORMSH_HXX
 
 #include <sfx2/shell.hxx>
-#include "shellids.hxx"
-#include <sfx2/module.hxx>
-#include <svx/svdmark.hxx>
+#include <shellids.hxx>
 
 class ScViewData;
+class SfxModule;
 
 #include "drawsh.hxx"
 
@@ -40,7 +39,7 @@ private:
 
 public:
     ScDrawFormShell(ScViewData* pData);
-    virtual ~ScDrawFormShell();
+    virtual ~ScDrawFormShell() override;
 };
 
 #endif

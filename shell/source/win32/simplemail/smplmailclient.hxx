@@ -24,20 +24,25 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 
 #include <com/sun/star/system/XSimpleMailClient.hpp>
+#include <unotools/tempfile.hxx>
 #include <vector>
+#include <memory>
 
 class CSmplMailClient : public cppu::WeakImplHelper<css::system::XSimpleMailClient>
 {
 public:
-    virtual css::uno::Reference<css::system::XSimpleMailMessage> SAL_CALL createSimpleMailMessage()
-        throw (css::uno::RuntimeException);
+    virtual css::uno::Reference<css::system::XSimpleMailMessage> SAL_CALL createSimpleMailMessage() override;
 
-    virtual void SAL_CALL sendSimpleMailMessage(const css::uno::Reference<css::system::XSimpleMailMessage>& xSimpleMailMessage, sal_Int32 aFlag)
-        throw (css::lang::IllegalArgumentException, css::uno::Exception, css::uno::RuntimeException);
+    virtual void SAL_CALL sendSimpleMailMessage(const css::uno::Reference<css::system::XSimpleMailMessage>& xSimpleMailMessage, sal_Int32 aFlag) override;
 
 private:
     void validateParameter(const css::uno::Reference<css::system::XSimpleMailMessage>& xSimpleMailMessage, sal_Int32 aFlag);
     void assembleCommandLine(const css::uno::Reference<css::system::XSimpleMailMessage>& xSimpleMailMessage, sal_Int32 aFlag, std::vector<OUString>& rCommandArgs);
+    OUString CopyAttachment(const OUString& sOrigAttachURL, OUString& sUserVisibleName);
+    // Don't try to delete the copied attachment files; let the spawned process cleanup them
+    void ReleaseAttachments();
+
+    std::vector< std::unique_ptr<utl::TempFile> > maAttachmentFiles;
 };
 
 #endif

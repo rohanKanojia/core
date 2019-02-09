@@ -20,11 +20,11 @@
 #ifndef INCLUDED_SC_INC_FORMULAITER_HXX
 #define INCLUDED_SC_INC_FORMULAITER_HXX
 
+#include <formula/tokenarray.hxx>
+
 #include "address.hxx"
 
-class ScTokenArray;
 class ScFormulaCell;
-namespace formula { class FormulaToken; }
 
 /**
  * Iterator for references in a formula cell.
@@ -32,8 +32,8 @@ namespace formula { class FormulaToken; }
 class ScDetectiveRefIter
 {
 private:
-    ScTokenArray* pCode;
-    ScAddress aPos;
+    formula::FormulaTokenArrayPlainIterator maIter;
+    ScAddress const aPos;
 public:
                 ScDetectiveRefIter( ScFormulaCell* pCell );
     bool        GetNextRef( ScRange& rRange );

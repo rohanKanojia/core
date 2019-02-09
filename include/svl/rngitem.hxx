@@ -32,42 +32,19 @@ private:
     sal_uInt16                  nFrom;
     sal_uInt16                  nTo;
 public:
-                                SfxRangeItem();
                                 SfxRangeItem( sal_uInt16 nWID, sal_uInt16 nFrom, sal_uInt16 nTo );
-                                SfxRangeItem( const SfxRangeItem& rItem );
     virtual bool                operator==( const SfxPoolItem& ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& ) const override;
     virtual SfxPoolItem*        Clone( SfxItemPool *pPool = nullptr ) const override;
-    inline sal_uInt16&          From() { return nFrom; }
+    sal_uInt16&          From() { return nFrom; }
     virtual SfxPoolItem*        Create( SvStream &, sal_uInt16 nVersion ) const override;
     virtual SvStream&           Store( SvStream &, sal_uInt16 nItemVersion ) const override;
 };
 
-
-class SVL_DLLPUBLIC SfxUShortRangesItem : public SfxPoolItem
-{
-private:
-    sal_uInt16*                 _pRanges;
-
-public:
-                                SfxUShortRangesItem();
-                                SfxUShortRangesItem( sal_uInt16 nWID, SvStream &rStream );
-                                SfxUShortRangesItem( const SfxUShortRangesItem& rItem );
-    virtual                     ~SfxUShortRangesItem();
-    virtual bool                operator==( const SfxPoolItem& ) const override;
-    virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper * = nullptr ) const override;
-    virtual SfxPoolItem*        Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual SfxPoolItem*        Create( SvStream &, sal_uInt16 nVersion ) const override;
-    virtual SvStream&           Store( SvStream &, sal_uInt16 nItemVersion ) const override;
-};
 
 #endif
 

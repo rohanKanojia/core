@@ -22,17 +22,23 @@
 #include <tools/toolsdllapi.h>
 #include <rtl/character.hxx>
 #include <rtl/string.hxx>
-#include <rtl/strbuf.hxx>
 #include <rtl/ustring.hxx>
-#include <rtl/tencinfo.h>
 #include <tools/debug.hxx>
 
 #include <unordered_map>
 
-class INetMIMEOutputSink;
-
 struct INetContentTypeParameter
 {
+    /** The optional character set specification (see RFC 2231), in US-ASCII
+        encoding and converted to lower case.
+     */
+    OString m_sCharset;
+
+    /** The optional language specification (see RFC 2231), in US-ASCII
+        encoding and converted to lower case.
+     */
+    OString m_sLanguage;
+
     /** The attribute value.  If the value is a quoted-string, it is
         'unpacked.'  If a character set is specified, and the value can be
         converted to Unicode, this is done.  Also, if no character set is
@@ -52,14 +58,23 @@ struct INetContentTypeParameter
      */
     OUString m_sValue;
 
+    /** This is true if the value is successfully converted to Unicode, and
+        false if the value is a special mixture of ISO-LATIN-1 characters and
+        characters from Unicode's Private Use Area.
+     */
+    bool m_bConverted;
 };
 
-// the key is the m_sAttribute again; all keys are lower case:
-typedef std::unordered_map<OString, INetContentTypeParameter, OStringHash>
+/** The key is the name of the attribute, in US-ASCII encoding and converted
+    to lower case.  If a parameter value is split as described in RFC 2231,
+    there will only be one item for the complete parameter, with the attribute
+    name lacking any section suffix.
+ */
+typedef std::unordered_map<OString, INetContentTypeParameter>
     INetContentTypeParameterList;
 
 
-class TOOLS_DLLPUBLIC INetMIME
+class SAL_WARN_UNUSED TOOLS_DLLPUBLIC INetMIME
 {
 public:
     /** Check for US-ASCII visible character.
@@ -112,15 +127,6 @@ public:
      */
     static inline int getHexWeight(sal_uInt32 nChar);
 
-    /** Get a hexadecimal digit encoded as US-ASCII.
-
-        @param nWeight  Must be in the range 0--15, inclusive.
-
-        @return  The canonic (i.e., upper case) hexadecimal digit
-        corresponding to nWeight (US-ASCII '0'--'9' or 'A'--'F').
-     */
-    static sal_uInt32 getHexDigit(int nWeight);
-
     /** Check two US-ASCII strings for equality, ignoring case.
 
         @param pBegin1  Points to the start of the first string, must not be
@@ -152,7 +158,7 @@ public:
           token "/" token *(";" token "=" (token / quoted-string))
 
         with intervening linear white space and comments (cf. RFCs 822, 2045).
-        The RFC 2231 extension are supported.  The encoding of rMediaType
+        The RFC 2231 extensions are supported.  The encoding of rMediaType
         should be US-ASCII, but any Unicode values in the range U+0080..U+FFFF
         are interpreted 'as appropriate.'
 
@@ -174,13 +180,9 @@ public:
         parameters will be modified.
      */
     static sal_Unicode const * scanContentType(
-        sal_Unicode const *pBegin, sal_Unicode const * pEnd,
+        OUString const & rStr,
         OUString * pType = nullptr, OUString * pSubType = nullptr,
         INetContentTypeParameterList * pParameters = nullptr);
-
-    static void writeHeaderFieldBody(INetMIMEOutputSink & rSink,
-                                     const OUString& rBody,
-                                     rtl_TextEncoding ePreferredEncoding);
 
     static OUString decodeHeaderFieldBody(const OString& rBody);
 
@@ -237,96 +239,6 @@ inline sal_uInt32 INetMIME::getUTF32Character(const sal_Unicode *& rBegin,
         return *rBegin++;
 }
 
-class INetMIMEOutputSink
-{
-private:
-    OStringBuffer m_aBuffer;
-
-    /** Write a sequence of octets.
-
-        @param pBegin  Points to the start of the sequence, must not be null.
-
-        @param pEnd  Points past the end of the sequence, must be >= pBegin.
-     */
-    void writeSequence(const sal_Char * pBegin, const sal_Char * pEnd);
-
-    /** Write a null terminated sequence of octets (without the terminating
-        null).
-
-        @param pOctets  A null terminated sequence of octets, must not be
-        null.
-     */
-    void writeSequence(const sal_Char * pSequence);
-
-    /** Write a sequence of octets.
-
-        @descr  The supplied sequence of Unicode characters is interpreted as
-        a sequence of octets.  It is an error if any of the elements of the
-        sequence has a numerical value greater than 255.
-
-        @param pBegin  Points to the start of the sequence, must not be null.
-
-        @param pEnd  Points past the end of the sequence, must be >= pBegin.
-     */
-    void writeSequence(const sal_Unicode * pBegin,
-                               const sal_Unicode * pEnd);
-
-public:
-    /** Write a sequence of octets.
-
-        @descr  The supplied sequence of Unicode characters is interpreted as
-        a sequence of octets.  It is an error if any of the elements of the
-        sequence has a numerical value greater than 255.
-
-        @param pBegin  Points to the start of the sequence, must not be null.
-
-        @param pEnd  Points past the end of the sequence, must be >= pBegin.
-     */
-    inline void write(const sal_Unicode * pBegin, const sal_Unicode * pEnd);
-
-    /** Write a single octet.
-
-        @param nOctet  Some octet.
-
-        @return  This instance.
-     */
-    inline INetMIMEOutputSink & operator <<(sal_Char nOctet);
-
-    /** Write a null terminated sequence of octets (without the terminating
-        null).
-
-        @param pOctets  A null terminated sequence of octets, must not be
-        null.
-
-        @return  This instance.
-     */
-    inline INetMIMEOutputSink & operator <<(const sal_Char * pOctets);
-
-    OString takeBuffer()
-    {
-        return m_aBuffer.makeStringAndClear();
-    }
-};
-
-
-inline void INetMIMEOutputSink::write(const sal_Unicode * pBegin,
-                                      const sal_Unicode * pEnd)
-{
-    writeSequence(pBegin, pEnd);
-}
-
-inline INetMIMEOutputSink & INetMIMEOutputSink::operator <<(sal_Char nOctet)
-{
-    writeSequence(&nOctet, &nOctet + 1);
-    return *this;
-}
-
-inline INetMIMEOutputSink & INetMIMEOutputSink::operator <<(const sal_Char *
-                                                                pOctets)
-{
-    writeSequence(pOctets);
-    return *this;
-}
 
 #endif
 

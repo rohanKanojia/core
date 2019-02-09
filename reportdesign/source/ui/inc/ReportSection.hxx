@@ -20,13 +20,13 @@
 #define INCLUDED_REPORTDESIGN_SOURCE_UI_INC_REPORTSECTION_HXX
 
 #include <vcl/window.hxx>
-#include "RptPage.hxx"
+#include <RptPage.hxx>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <comphelper/propmultiplex.hxx>
 #include <cppuhelper/basemutex.hxx>
 #include "ReportDefines.hxx"
 #include "dlgedfunc.hxx"
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <rtl/ref.hxx>
 #include <memory>
 
@@ -61,24 +61,23 @@ namespace rptui
         */
         void impl_adjustObjectSizePosition(sal_Int32 i_nPaperWidth,sal_Int32 i_nLeftMargin,sal_Int32 i_nRightMargin);
 
-        OReportSection(OReportSection&) = delete;
-        void operator =(OReportSection&) = delete;
+        OReportSection(OReportSection const &) = delete;
+        void operator =(OReportSection const &) = delete;
     protected:
         // DropTargetHelper overridables
         virtual sal_Int8    AcceptDrop( const AcceptDropEvent& _rEvt ) override;
         virtual sal_Int8    ExecuteDrop( const ExecuteDropEvent& _rEvt ) override;
 
         // window overrides
-        virtual void        Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+        virtual void        Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
         virtual void        MouseMove( const MouseEvent& rMEvt ) override;
         virtual void        Command( const CommandEvent& rCEvt ) override;
-        virtual void        Resize() override;
 
         // OPropertyChangeListener
-        virtual void    _propertyChanged(const css::beans::PropertyChangeEvent& _rEvent) throw( css::uno::RuntimeException) override;
+        virtual void    _propertyChanged(const css::beans::PropertyChangeEvent& _rEvent) override;
     public:
         OReportSection(OSectionWindow* _pParent,const css::uno::Reference< css::report::XSection >& _xSection);
-        virtual ~OReportSection();
+        virtual ~OReportSection() override;
         virtual void dispose() override;
 
         // window overrides
@@ -113,12 +112,11 @@ namespace rptui
         */
         void SetGridVisible(bool _bVisible);
 
-        inline OSectionWindow*      getSectionWindow() const { return m_pParent; }
-        inline OSectionView&        getSectionView() const { return *m_pView; }
-        inline OReportPage*         getPage() const { return m_pPage; }
-        inline css::uno::Reference< css::report::XSection > getSection() const { return m_xSection; }
+        OSectionWindow*      getSectionWindow() const { return m_pParent; }
+        OSectionView&        getSectionView() const { return *m_pView; }
+        OReportPage*         getPage() const { return m_pPage; }
+        const css::uno::Reference< css::report::XSection >& getSection() const { return m_xSection; }
 
-        DlgEdMode       GetMode() const { return m_eMode; }
         void            SetMode( DlgEdMode m_eMode );
 
         /** checks if the keycode is known by the child windows

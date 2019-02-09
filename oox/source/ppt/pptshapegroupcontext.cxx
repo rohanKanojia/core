@@ -22,20 +22,23 @@
 #include <com/sun/star/beans/XMultiPropertySet.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 
-#include "oox/helper/attributelist.hxx"
-#include "oox/ppt/pptshape.hxx"
-#include "oox/ppt/pptgraphicshapecontext.hxx"
-#include "oox/ppt/pptshapecontext.hxx"
-#include "oox/ppt/pptshapegroupcontext.hxx"
-#include "oox/drawingml/graphicshapecontext.hxx"
-#include "oox/drawingml/lineproperties.hxx"
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "drawingml/customshapegeometry.hxx"
-#include "drawingml/shapepropertiescontext.hxx"
-#include "drawingml/textbodycontext.hxx"
-#include "oox/drawingml/connectorshapecontext.hxx"
-#include "oox/drawingml/fillproperties.hxx"
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/ppt/pptshape.hxx>
+#include <oox/ppt/pptgraphicshapecontext.hxx>
+#include <oox/ppt/pptshapecontext.hxx>
+#include <oox/ppt/pptshapegroupcontext.hxx>
+#include <oox/drawingml/graphicshapecontext.hxx>
+#include <drawingml/lineproperties.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <drawingml/customshapegeometry.hxx>
+#include <drawingml/shapepropertiescontext.hxx>
+#include <drawingml/textbodycontext.hxx>
+#include <oox/drawingml/connectorshapecontext.hxx>
+#include <drawingml/fillproperties.hxx>
 #include "extdrawingfragmenthandler.hxx"
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace oox::core;
 using namespace ::com::sun::star;
@@ -48,15 +51,14 @@ using namespace ::com::sun::star::xml::sax;
 namespace oox { namespace ppt {
 
 PPTShapeGroupContext::PPTShapeGroupContext(
-        ContextHandler2Helper& rParent,
+        ContextHandler2Helper const & rParent,
         const oox::ppt::SlidePersistPtr& rSlidePersistPtr,
         const ShapeLocation eShapeLocation,
-        oox::drawingml::ShapePtr pMasterShapePtr,
-        oox::drawingml::ShapePtr pGroupShapePtr )
+        const oox::drawingml::ShapePtr& pMasterShapePtr,
+        const oox::drawingml::ShapePtr& pGroupShapePtr )
 : ShapeGroupContext( rParent, pMasterShapePtr, pGroupShapePtr )
 , mpSlidePersistPtr( rSlidePersistPtr )
 , meShapeLocation( eShapeLocation )
-, pGraphicShape( nullptr )
 {
 }
 
@@ -98,10 +100,16 @@ ContextHandlerRef PPTShapeGroupContext::onCreateContext( sal_Int32 aElementToken
             std::shared_ptr<PPTShape> pShape( new PPTShape( meShapeLocation, "com.sun.star.drawing.CustomShape" ) );
             if( rAttribs.getBool( XML_useBgFill, false ) )
             {
-                const oox::drawingml::FillPropertiesPtr pBackgroundPropertiesPtr = mpSlidePersistPtr->getBackgroundProperties();
-                if ( pBackgroundPropertiesPtr ) {
-                    pShape->getFillProperties().assignUsed( *pBackgroundPropertiesPtr );
+                oox::drawingml::FillPropertiesPtr pBackgroundPropertiesPtr = mpSlidePersistPtr->getBackgroundProperties();
+                if (!pBackgroundPropertiesPtr)
+                {
+                    // The shape wants a background, but the slide doesn't have
+                    // one: default to white.
+                    pBackgroundPropertiesPtr.reset(new oox::drawingml::FillProperties);
+                    pBackgroundPropertiesPtr->moFillType = XML_solidFill;
+                    pBackgroundPropertiesPtr->maFillColor.setSrgbClr(0xFFFFFF);
                 }
+                pShape->getFillProperties().assignUsed( *pBackgroundPropertiesPtr );
             }
             pShape->setModelId(rAttribs.getString( XML_modelId ).get());
             return new PPTShapeContext( *this, mpSlidePersistPtr, mpGroupShapePtr, pShape );
@@ -122,10 +130,9 @@ void PPTShapeGroupContext::importExtDrawings( )
 {
     if( pGraphicShape )
     {
-        for( ::std::vector<OUString>::const_iterator aIt = pGraphicShape->getExtDrawings().begin(), aEnd = pGraphicShape->getExtDrawings().end();
-                    aIt != aEnd; ++aIt )
+        for (auto const& extDrawing : pGraphicShape->getExtDrawings())
             {
-                getFilter().importFragment( new ExtDrawingFragmentHandler( getFilter(), getFragmentPathFromRelId( *aIt ),
+                getFilter().importFragment( new ExtDrawingFragmentHandler( getFilter(), getFragmentPathFromRelId(extDrawing),
                                                                            mpSlidePersistPtr,
                                                                            meShapeLocation,
                                                                            mpGroupShapePtr,
@@ -142,9 +149,9 @@ void PPTShapeGroupContext::applyFontRefColor(const oox::drawingml::ShapePtr& pSh
 {
     pShape->getShapeStyleRefs()[XML_fontRef].maPhClr = rFontRefColor;
     std::vector< oox::drawingml::ShapePtr >& vChildren = pShape->getChildren();
-    for( std::vector< oox::drawingml::ShapePtr >::iterator aIter = vChildren.begin(); aIter != vChildren.end(); ++aIter )
+    for (auto const& child : vChildren)
     {
-        applyFontRefColor( *aIter ,rFontRefColor);
+        applyFontRefColor(child, rFontRefColor);
     }
 }
 

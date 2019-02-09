@@ -60,16 +60,17 @@
 
 #include "lwprowlayout.hxx"
 #include "lwptable.hxx"
-#include "lwpglobalmgr.hxx"
-#include "xfilter/xfstylemanager.hxx"
-#include "xfilter/xfrow.hxx"
-#include "xfilter/xfrowstyle.hxx"
-#include "xfilter/xftablestyle.hxx"
-#include "xfilter/xftable.hxx"
-#include "xfilter/xfcell.hxx"
-#include "xfilter/xfcellstyle.hxx"
+#include <lwpglobalmgr.hxx>
+#include <xfilter/xfstylemanager.hxx>
+#include <xfilter/xfrow.hxx>
+#include <xfilter/xfrowstyle.hxx>
+#include <xfilter/xftablestyle.hxx>
+#include <xfilter/xftable.hxx>
+#include <xfilter/xfcell.hxx>
+#include <xfilter/xfcellstyle.hxx>
+#include <set>
 
-LwpRowLayout::LwpRowLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpRowLayout::LwpRowLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpVirtualLayout(objHdr, pStrm)
     , crowid(0)
     , cheight(0)
@@ -95,12 +96,16 @@ void LwpRowLayout::SetRowMap()
     LwpObjectID& rCellID= GetChildHead();
     LwpCellLayout * pCellLayout = dynamic_cast<LwpCellLayout *>(rCellID.obj().get());
 
+    std::set<LwpCellLayout*> aSeen;
     while(pCellLayout)
     {
+        aSeen.insert(pCellLayout);
         pCellLayout->SetCellMap();
 
         rCellID = pCellLayout->GetNext();
         pCellLayout = dynamic_cast<LwpCellLayout *>(rCellID.obj().get());
+        if (aSeen.find(pCellLayout) != aSeen.end())
+            throw std::runtime_error("loop in conversion");
     }
 }
 /**
@@ -113,18 +118,18 @@ void LwpRowLayout::SetRowMap()
 void LwpRowLayout::RegisterStyle()
 {
     // register row style
-    XFRowStyle *pRowStyle = new XFRowStyle();
+    std::unique_ptr<XFRowStyle> pRowStyle(new XFRowStyle());
 
     if (m_nDirection & 0x0030)
     {
-        pRowStyle->SetMinRowHeight((float)LwpTools::ConvertFromUnitsToMetric(cheight));
+        pRowStyle->SetMinRowHeight(static_cast<float>(LwpTools::ConvertFromUnitsToMetric(cheight)));
     }
     else
     {
-        pRowStyle->SetRowHeight((float)LwpTools::ConvertFromUnitsToMetric(cheight));
+        pRowStyle->SetRowHeight(static_cast<float>(LwpTools::ConvertFromUnitsToMetric(cheight)));
     }
     XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
-    m_StyleName = pXFStyleManager->AddStyle(pRowStyle).m_pStyle->GetStyleName();
+    m_StyleName = pXFStyleManager->AddStyle(std::move(pRowStyle)).m_pStyle->GetStyleName();
 
     LwpTableLayout* pTableLayout = GetParentTableLayout();
     if (pTableLayout)
@@ -135,12 +140,18 @@ void LwpRowLayout::RegisterStyle()
     LwpObjectID& rCellID= GetChildHead();
     LwpCellLayout * pCellLayout = dynamic_cast<LwpCellLayout *>(rCellID.obj().get());
 
-    while(pCellLayout)
+    std::set<LwpCellLayout*> aSeen;
+    while (pCellLayout)
     {
+        aSeen.insert(pCellLayout);
+
         pCellLayout->SetFoundry(m_pFoundry);
         pCellLayout->RegisterStyle();
         rCellID = pCellLayout->GetNext();
         pCellLayout = dynamic_cast<LwpCellLayout *>(rCellID.obj().get());
+
+        if (aSeen.find(pCellLayout) != aSeen.end())
+            throw std::runtime_error("loop in conversion");
     }
 
 }
@@ -154,7 +165,7 @@ void LwpRowLayout::RegisterStyle()
 void LwpRowLayout::Read()
 {
     #define MAXUNIT (0x7fffffffL)               // Highest positive UNIT value
-    LwpObjectStream* pStrm = m_pObjStrm;
+    LwpObjectStream* pStrm = m_pObjStrm.get();
 
     LwpVirtualLayout::Read();
 
@@ -166,9 +177,9 @@ void LwpRowLayout::Read()
     // Row layout content
     crowid = pStrm->QuickReaduInt16();
     cheight = pStrm->QuickReadInt32();
-    cLeaderDotCount = (sal_uInt8)pStrm->QuickReaduInt16();  // was written as lushort.
+    cLeaderDotCount = static_cast<sal_uInt8>(pStrm->QuickReaduInt16());  // was written as lushort.
     cLeaderDotY = MAXUNIT;  // Sentinel meaning "not calculated yet"
-    cRowFlags = (sal_uInt8)pStrm->QuickReaduInt16();    // was written as lushort.
+    cRowFlags = static_cast<sal_uInt8>(pStrm->QuickReaduInt16());    // was written as lushort.
 
     pStrm->SkipExtra();
 }
@@ -177,7 +188,7 @@ void LwpRowLayout::Read()
  * @short   Parse rows with connect cell
  * @param  pXFTable - pointer to created XFTable
  */
-void LwpRowLayout::ConvertRow(XFTable* pXFTable,sal_uInt8 nStartCol,sal_uInt8 nEndCol)
+void LwpRowLayout::ConvertRow(rtl::Reference<XFTable> const & pXFTable,sal_uInt8 nStartCol,sal_uInt8 nEndCol)
 {
     LwpTableLayout* pTableLayout = GetParentTableLayout();
     LwpTable* pTable = pTableLayout->GetTable();
@@ -194,13 +205,13 @@ void LwpRowLayout::ConvertRow(XFTable* pXFTable,sal_uInt8 nStartCol,sal_uInt8 nE
 
     //register connect row style
     sal_uInt16 nRowMark = crowid + GetCurMaxSpannedRows(nStartCol,nEndCol);
-    XFRow* pXFRow = new XFRow;
-    RegisterCurRowStyle(pXFRow,nRowMark);
+    rtl::Reference<XFRow> xXFRow(new XFRow);
+    RegisterCurRowStyle(xXFRow.get(), nRowMark);
 
     //if there is connected cell
     for (sal_uInt8 i=nStartCol; i<nEndCol; )
     {
-        XFCell* pXFCell;
+        rtl::Reference<XFCell> xXFCell;
         sal_uInt8 nColMark;
 
         if (nMarkConnCell == -1)
@@ -210,18 +221,18 @@ void LwpRowLayout::ConvertRow(XFTable* pXFTable,sal_uInt8 nStartCol,sal_uInt8 nE
 
         if (nColMark > i)//create subtable
         {
-            pXFCell = new XFCell;
-            pXFCell->SetColumnSpaned(nColMark-i);
+            xXFCell.set(new XFCell);
+            xXFCell->SetColumnSpaned(nColMark-i);
             XFTable* pSubTable = new XFTable;
             pTableLayout->ConvertTable(pSubTable,crowid,nRowMark,i,nColMark);
-            pXFCell->Add(pSubTable);
+            xXFCell->Add(pSubTable);
             i = nColMark;
         }
         else
         {
             sal_uInt8 nColID = m_ConnCellList[nMarkConnCell]->GetColID()
                     +m_ConnCellList[nMarkConnCell]->GetNumcols()-1;
-            pXFCell = m_ConnCellList[nMarkConnCell]->ConvertCell(
+            xXFCell = m_ConnCellList[nMarkConnCell]->DoConvertCell(
                 pTable->GetObjectID(),
                 crowid+m_ConnCellList[nMarkConnCell]->GetNumrows()-1,
                 m_ConnCellList[nMarkConnCell]->GetColID());
@@ -229,16 +240,16 @@ void LwpRowLayout::ConvertRow(XFTable* pXFTable,sal_uInt8 nStartCol,sal_uInt8 nE
             //set all cell in this merge cell to cellsmap
             for (sal_uInt16 nRowLoop = crowid;nRowLoop<nRowMark ;nRowLoop++)
                 for (sal_uInt8 nColLoop = i;nColLoop<nColID+1;nColLoop++)
-                    pTableLayout->SetCellsMap(nRowLoop,nColLoop,pXFCell);
+                    pTableLayout->SetCellsMap(nRowLoop,nColLoop, xXFCell.get());
 
             i += m_ConnCellList[nMarkConnCell]->GetNumcols();
             nMarkConnCell = FindNextMarkConnCell(static_cast<sal_uInt16>(nMarkConnCell),nEndCol);
         }
 
-        if (pXFCell)
-            pXFRow->AddCell(pXFCell);
+        if (xXFCell)
+            xXFRow->AddCell(xXFCell);
     }
-    pXFTable->AddRow(pXFRow);
+    pXFTable->AddRow(xXFRow);
 }
 
 /**
@@ -254,12 +265,11 @@ void LwpRowLayout::RegisterCurRowStyle(XFRow* pXFRow,sal_uInt16 nRowMark)
         return;
     double fHeight = pRowStyle->GetRowHeight();
 
-    XFRowStyle* pNewStyle = new XFRowStyle;
+    std::unique_ptr<XFRowStyle> pNewStyle(new XFRowStyle);
     *pNewStyle = *pRowStyle;
     LwpTableLayout* pTableLayout = GetParentTableLayout();
     if (!pTableLayout)
     {
-        delete pNewStyle;
         return;
     }
     std::map<sal_uInt16,LwpRowLayout*> RowsMap = pTableLayout->GetRowsMap();
@@ -283,14 +293,14 @@ void LwpRowLayout::RegisterCurRowStyle(XFRow* pXFRow,sal_uInt16 nRowMark)
 
     if (m_nDirection & 0x0030)
     {
-        pNewStyle->SetMinRowHeight((float)fHeight);
+        pNewStyle->SetMinRowHeight(static_cast<float>(fHeight));
     }
     else
     {
-        pNewStyle->SetRowHeight((float)fHeight);
+        pNewStyle->SetRowHeight(static_cast<float>(fHeight));
     }
 
-    pXFRow->SetStyleName(pXFStyleManager->AddStyle(pNewStyle).m_pStyle->GetStyleName());
+    pXFRow->SetStyleName(pXFStyleManager->AddStyle(std::move(pNewStyle)).m_pStyle->GetStyleName());
 }
 
 /**
@@ -361,16 +371,15 @@ sal_uInt16 LwpRowLayout::GetCurMaxSpannedRows(sal_uInt8 nStartCol,sal_uInt8 nEnd
  * @param   nStartCol - start column ID
  * @param   nEndCol - end column ID
  */
-void LwpRowLayout::ConvertCommonRow(XFTable* pXFTable,sal_uInt8 nStartCol,sal_uInt8 nEndCol)
+void LwpRowLayout::ConvertCommonRow(rtl::Reference<XFTable> const & pXFTable, sal_uInt8 nStartCol, sal_uInt8 nEndCol)
 {
     LwpTableLayout* pTableLayout = GetParentTableLayout();
     if (!pTableLayout)
         return;
 
-    XFRow* pRow = new XFRow;
-    pRow->SetStyleName(m_StyleName);
+    rtl::Reference<XFRow> xRow(new XFRow);
+    xRow->SetStyleName(m_StyleName);
 
-    XFCell * pCell = nullptr;
     LwpTable* pTable = pTableLayout->GetTable();
     sal_uInt8 nCellStartCol,nCellEndCol;
 
@@ -381,6 +390,7 @@ void LwpRowLayout::ConvertCommonRow(XFTable* pXFTable,sal_uInt8 nStartCol,sal_uI
         LwpCellLayout * pCellLayout = dynamic_cast<LwpCellLayout *>(rCellID.obj().get());
         nCellStartCol = i;//mark the begin position of cell
         nCellEndCol = i;//mark the end position of cell
+        rtl::Reference<XFCell> xCell;
         while(pCellLayout)
         {
             if (pCellLayout->GetColID() == i)
@@ -391,7 +401,7 @@ void LwpRowLayout::ConvertCommonRow(XFTable* pXFTable,sal_uInt8 nStartCol,sal_uI
                     nCellEndCol = i+pConnCell->GetNumcols()-1;
                     i = nCellEndCol;
                 }
-                pCell = pCellLayout->ConvertCell(pTable->GetObjectID(),crowid,i);
+                xCell = pCellLayout->DoConvertCell(pTable->GetObjectID(),crowid,i);
                 break;
             }
             rCellID = pCellLayout->GetNext();
@@ -404,21 +414,21 @@ void LwpRowLayout::ConvertCommonRow(XFTable* pXFTable,sal_uInt8 nStartCol,sal_uI
             LwpCellLayout * pDefaultCell = pTableLayout->GetDefaultCellLayout();
             if (pDefaultCell)
             {
-                pCell = pDefaultCell->ConvertCell(
+                xCell = pDefaultCell->DoConvertCell(
                     pTable->GetObjectID(),crowid, i);
             }
             else
             {
-                pCell = new XFCell;
+                xCell.set(new XFCell);
             }
         }
-        pRow->AddCell(pCell);
+        xRow->AddCell(xCell);
 
         for (sal_uInt8 j=nCellStartCol;j<=nCellEndCol;j++)
-            pTableLayout->SetCellsMap(crowid,j,pCell);//set to cellsmap
+            pTableLayout->SetCellsMap(crowid,j, xCell.get());//set to cellsmap
     }
 
-    pXFTable->AddRow(pRow);
+    pXFTable->AddRow(xRow);
 }
 /**
  * @short   collect merge cell info when register row styles
@@ -445,10 +455,8 @@ void LwpRowLayout::CollectMergeInfo()
  */
 void LwpRowLayout::SetCellSplit(sal_uInt16 nEffectRows)
 {
-    LwpConnectedCellLayout* pConnCell;
-    for (size_t i=0; i<m_ConnCellList.size(); i++)
+    for (LwpConnectedCellLayout* pConnCell : m_ConnCellList)
     {
-        pConnCell = m_ConnCellList[i];
         sal_uInt16 nRowSpan = pConnCell->GetRowID()+pConnCell->GetNumrows();
         if ( nRowSpan > nEffectRows )
         {
@@ -461,13 +469,10 @@ void LwpRowLayout::SetCellSplit(sal_uInt16 nEffectRows)
  */
 bool LwpRowLayout::GetMergeCellFlag()
 {
-    if (m_ConnCellList.empty())
-        return false;
-    else
-        return true;
+    return !m_ConnCellList.empty();
 }
 
-LwpRowHeadingLayout::LwpRowHeadingLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpRowHeadingLayout::LwpRowHeadingLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpRowLayout(objHdr, pStrm)
 {}
 
@@ -477,7 +482,7 @@ void LwpRowHeadingLayout::Read()
 {
     LwpRowLayout::Read();
 
-    cRowLayout.ReadIndexed(m_pObjStrm);
+    cRowLayout.ReadIndexed(m_pObjStrm.get());
     m_pObjStrm->SkipExtra();
 }
 

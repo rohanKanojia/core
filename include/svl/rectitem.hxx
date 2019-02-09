@@ -20,7 +20,6 @@
 #define INCLUDED_SVL_RECTITEM_HXX
 
 #include <svl/svldllapi.h>
-#include <tools/debug.hxx>
 #include <tools/gen.hxx>
 #include <svl/poolitem.hxx>
 
@@ -28,27 +27,25 @@ class SvStream;
 
 class SVL_DLLPUBLIC SfxRectangleItem: public SfxPoolItem
 {
-    Rectangle                aVal;
+    tools::Rectangle                aVal;
 
 public:
                              static SfxPoolItem* CreateDefault();
                              SfxRectangleItem();
-                             SfxRectangleItem( sal_uInt16 nWhich, const Rectangle& rVal );
-                             SfxRectangleItem( const SfxRectangleItem& );
-                             virtual ~SfxRectangleItem() {}
+                             SfxRectangleItem( sal_uInt16 nWhich, const tools::Rectangle& rVal );
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& ) const override;
 
     virtual bool             operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*     Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual SfxPoolItem*     Create(SvStream &, sal_uInt16 nItemVersion) const override;
     virtual SvStream&        Store(SvStream &, sal_uInt16 nItemVersion) const override;
 
-    const Rectangle&         GetValue() const { return aVal; }
+    const tools::Rectangle&         GetValue() const { return aVal; }
     virtual bool             QueryValue( css::uno::Any& rVal,
                                           sal_uInt8 nMemberId = 0 ) const override;
     virtual bool             PutValue( const css::uno::Any& rVal,

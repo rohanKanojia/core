@@ -37,7 +37,7 @@ namespace dbaui
         ::rtl::Reference< comphelper::OContainerListenerAdapter> m_pContainerListener;
         bool m_bInRemove;
 
-        virtual void ConnDoubleClicked( OTableConnection* pConnection ) override;
+        virtual void ConnDoubleClicked(VclPtr<OTableConnection>& rConnection) override;
         virtual void AddTabWin(const OUString& _rComposedName, const OUString& rWinName, bool bNewTable = false) override;
 
         virtual VclPtr<OTableWindow> createWindow(const TTableWindowData::value_type& _pData) override;
@@ -47,18 +47,18 @@ namespace dbaui
         virtual bool    allowQueries() const override;
 
         // OContainerListener
-        virtual void _elementInserted( const css::container::ContainerEvent& _rEvent ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual void _elementRemoved( const  css::container::ContainerEvent& _rEvent ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual void _elementReplaced( const css::container::ContainerEvent& _rEvent ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual void _elementInserted( const css::container::ContainerEvent& _rEvent ) override;
+        virtual void _elementRemoved( const  css::container::ContainerEvent& _rEvent ) override;
+        virtual void _elementReplaced( const css::container::ContainerEvent& _rEvent ) override;
 
     public:
         ORelationTableView( vcl::Window* pParent, ORelationDesignView* pView );
-        virtual ~ORelationTableView();
+        virtual ~ORelationTableView() override;
         virtual void dispose() override;
 
         virtual void RemoveTabWin( OTableWindow* pTabWin ) override;
         virtual void AddConnection(const OJoinExchangeData& jxdSource, const OJoinExchangeData& jxdDest) override;
-        virtual bool RemoveConnection(OTableConnection* pConn,bool _bDelete) override;
+        virtual bool RemoveConnection(VclPtr<OTableConnection>& rConn, bool _bDelete) override;
 
         virtual void ReSync() override;
 

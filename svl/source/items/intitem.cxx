@@ -59,16 +59,16 @@ SfxInt16Item::SfxInt16Item(sal_uInt16 which, SvStream & rStream):
 // virtual
 bool SfxInt16Item::operator ==(const SfxPoolItem & rItem) const
 {
-    DBG_ASSERT(SfxPoolItem::operator ==(rItem), "unequal type");
-    return m_nValue == (static_cast< const SfxInt16Item * >(&rItem))->
+    assert(SfxPoolItem::operator==(rItem));
+    return m_nValue == static_cast< const SfxInt16Item * >(&rItem)->
                         m_nValue;
 }
 
 // virtual
 bool SfxInt16Item::GetPresentation(SfxItemPresentation,
-                                                  SfxMapUnit, SfxMapUnit,
+                                                  MapUnit, MapUnit,
                                                   OUString & rText,
-                                                  const IntlWrapper *) const
+                                                  const IntlWrapper&) const
 {
     rText = OUString::number(m_nValue);
     return true;
@@ -123,7 +123,7 @@ SfxPoolItem* SfxUInt16Item::CreateDefault()
 
 void SfxUInt16Item::dumpAsXml(xmlTextWriterPtr pWriter) const
 {
-    xmlTextWriterStartElement(pWriter, BAD_CAST("sfxUInt16Item"));
+    xmlTextWriterStartElement(pWriter, BAD_CAST("SfxUInt16Item"));
     xmlTextWriterWriteAttribute(pWriter, BAD_CAST("whichId"), BAD_CAST(OString::number(Which()).getStr()));
     xmlTextWriterWriteAttribute(pWriter, BAD_CAST("value"), BAD_CAST(OString::number(GetValue()).getStr()));
     xmlTextWriterEndElement(pWriter);
@@ -138,6 +138,14 @@ SfxPoolItem* SfxInt32Item::CreateDefault()
     return new SfxInt32Item();
 };
 
+void SfxInt32Item::dumpAsXml(xmlTextWriterPtr pWriter) const
+{
+    xmlTextWriterStartElement(pWriter, BAD_CAST("SfxInt32Item"));
+    xmlTextWriterWriteAttribute(pWriter, BAD_CAST("whichId"), BAD_CAST(OString::number(Which()).getStr()));
+    xmlTextWriterWriteAttribute(pWriter, BAD_CAST("value"), BAD_CAST(OString::number(GetValue()).getStr()));
+    xmlTextWriterEndElement(pWriter);
+}
+
 
 //  class SfxUInt32Item
 
@@ -147,19 +155,17 @@ SfxPoolItem* SfxUInt32Item::CreateDefault()
     return new SfxUInt32Item();
 };
 
+void SfxUInt32Item::dumpAsXml(xmlTextWriterPtr pWriter) const
+{
+    xmlTextWriterStartElement(pWriter, BAD_CAST("SfxUInt32Item"));
+    xmlTextWriterWriteAttribute(pWriter, BAD_CAST("whichId"), BAD_CAST(OString::number(Which()).getStr()));
+    xmlTextWriterWriteAttribute(pWriter, BAD_CAST("value"), BAD_CAST(OString::number(GetValue()).getStr()));
+    xmlTextWriterEndElement(pWriter);
+}
+
 
 SfxMetricItem::SfxMetricItem(sal_uInt16 which, sal_uInt32 nValue):
     SfxInt32Item(which, nValue)
-{
-}
-
-SfxMetricItem::SfxMetricItem(sal_uInt16 which, SvStream & rStream):
-    SfxInt32Item(which, rStream)
-{
-}
-
-SfxMetricItem::SfxMetricItem(const SfxMetricItem & rItem):
-    SfxInt32Item(rItem)
 {
 }
 

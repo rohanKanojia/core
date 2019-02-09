@@ -24,30 +24,22 @@
 #include <osl/process.h>
 
 #include <map>
-#include <list>
+#include <vector>
 
 struct ini_NameValue
 {
     OUString sName;
     OUString sValue;
-
-    inline ini_NameValue()
-        {}
-    inline ini_NameValue(
-        OUString const & name, OUString const & value )
-        : sName( name ),
-          sValue( value )
-        {}
 };
 
-typedef std::list<
+typedef std::vector<
     ini_NameValue
-> NameValueList;
+> NameValueVector;
 
 struct ini_Section
 {
     OUString sName;
-    NameValueList lList;
+    NameValueVector vVector;
 };
 typedef std::map<OUString,
                 ini_Section
@@ -59,7 +51,8 @@ class IniParser
     IniSectionMap mAllSection;
 public:
     IniSectionMap& getAllSection() { return mAllSection; }
-    explicit IniParser(OUString const & rIniName) throw(css::io::IOException, std::exception);
+    /// @throws css::io::IOException
+    explicit IniParser(OUString const & rIniName);
 };
 
 #endif

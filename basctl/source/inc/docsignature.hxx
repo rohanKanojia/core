@@ -19,10 +19,9 @@
 #ifndef INCLUDED_BASCTL_SOURCE_INC_DOCSIGNATURE_HXX
 #define INCLUDED_BASCTL_SOURCE_INC_DOCSIGNATURE_HXX
 
-#include <com/sun/star/frame/XModel.hpp>
 #include <sfx2/signaturestate.hxx>
+#include <vcl/weld.hxx>
 #include <memory>
-
 
 namespace basctl
 {
@@ -54,7 +53,7 @@ namespace basctl
             @precond
                 isValid returns <TRUE/>
         */
-        void        signScriptingContent() const;
+        void        signScriptingContent(weld::Window* pDialogParent) const;
 
         /** retrieves the state of the signature of the scripting content inside the document
 
@@ -63,7 +62,7 @@ namespace basctl
         SignatureState getScriptingSignatureState() const;
 
     private:
-        DocumentSignature();        // not implemented
+        DocumentSignature() = delete;
 
     private:
         struct Impl;

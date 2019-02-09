@@ -7,18 +7,18 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "cliputil.hxx"
-#include "viewdata.hxx"
-#include "tabvwsh.hxx"
-#include "transobj.hxx"
-#include "document.hxx"
-#include "dpobject.hxx"
-#include "globstr.hrc"
-#include "clipparam.hxx"
-#include "clipoptions.hxx"
-#include "rangelst.hxx"
-#include "viewutil.hxx"
-#include "markdata.hxx"
+#include <cliputil.hxx>
+#include <viewdata.hxx>
+#include <tabvwsh.hxx>
+#include <transobj.hxx>
+#include <document.hxx>
+#include <dpobject.hxx>
+#include <globstr.hrc>
+#include <clipparam.hxx>
+#include <clipoptions.hxx>
+#include <rangelst.hxx>
+#include <viewutil.hxx>
+#include <markdata.hxx>
 #include <gridwin.hxx>
 
 #include <vcl/waitobj.hxx>
@@ -28,7 +28,7 @@ namespace
 {
 
 /// Paste only if SfxClassificationHelper recommends so.
-bool lcl_checkClassification(ScDocument* pSourceDoc, ScDocument* pDestinationDoc)
+bool lcl_checkClassification(ScDocument* pSourceDoc, const ScDocument* pDestinationDoc)
 {
     if (!pSourceDoc || !pDestinationDoc)
         return true;
@@ -46,8 +46,7 @@ bool lcl_checkClassification(ScDocument* pSourceDoc, ScDocument* pDestinationDoc
 
 void ScClipUtil::PasteFromClipboard( ScViewData* pViewData, ScTabViewShell* pTabViewShell, bool bShowDialog )
 {
-    vcl::Window* pWin = pViewData->GetActiveWin();
-    ScTransferObj* pOwnClip = ScTransferObj::GetOwnClipboard( pWin );
+    const ScTransferObj* pOwnClip = ScTransferObj::GetOwnClipboard(ScTabViewShell::GetClipData(pViewData->GetActiveWin()));
     ScDocument* pThisDoc = pViewData->GetDocument();
     ScDPObject* pDPObj = pThisDoc->GetDPAtCursor( pViewData->GetCurX(),
                          pViewData->GetCurY(), pViewData->GetTabNo() );
@@ -96,17 +95,16 @@ void ScClipUtil::PasteFromClipboard( ScViewData* pViewData, ScTabViewShell* pTab
 }
 
 bool ScClipUtil::CheckDestRanges(
-    ScDocument* pDoc, SCCOL nSrcCols, SCROW nSrcRows, const ScMarkData& rMark, const ScRangeList& rDest)
+    const ScDocument* pDoc, SCCOL nSrcCols, SCROW nSrcRows, const ScMarkData& rMark, const ScRangeList& rDest)
 {
     for (size_t i = 0, n = rDest.size(); i < n; ++i)
     {
-        ScRange aTest = *rDest[i];
+        ScRange aTest = rDest[i];
         // Check for filtered rows in all selected sheets.
-        ScMarkData::const_iterator itrTab = rMark.begin(), itrTabEnd = rMark.end();
-        for (; itrTab != itrTabEnd; ++itrTab)
+        for (const auto& rTab : rMark)
         {
-            aTest.aStart.SetTab(*itrTab);
-            aTest.aEnd.SetTab(*itrTab);
+            aTest.aStart.SetTab(rTab);
+            aTest.aEnd.SetTab(rTab);
             if (ScViewUtil::HasFiltered(aTest, pDoc))
             {
                 // I don't know how to handle pasting into filtered rows yet.

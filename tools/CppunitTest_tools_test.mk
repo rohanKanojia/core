@@ -15,6 +15,8 @@ $(eval $(call gb_CppunitTest_use_external,tools_test,boost_headers))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,tools_test, \
     tools/qa/cppunit/test_bigint \
+    tools/qa/cppunit/test_date \
+    tools/qa/cppunit/test_time \
     tools/qa/cppunit/test_fract \
     tools/qa/cppunit/test_inetmime \
     tools/qa/cppunit/test_pathutils \
@@ -23,17 +25,19 @@ $(eval $(call gb_CppunitTest_add_exception_objects,tools_test, \
     tools/qa/cppunit/test_urlobj \
     tools/qa/cppunit/test_color \
     tools/qa/cppunit/test_rectangle \
+    tools/qa/cppunit/test_minmax \
+    tools/qa/cppunit/test_100mm2twips \
+    tools/qa/cppunit/test_fround \
+    tools/qa/cppunit/test_xmlwalker \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,tools_test, \
-	udkapi \
-	offapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,tools_test))
 
 $(eval $(call gb_CppunitTest_use_libraries,tools_test, \
     sal \
     tl \
-	$(gb_UWINAPI) \
+    test \
+    unotest \
 ))
 
 $(eval $(call gb_CppunitTest_use_static_libraries,tools_test, \
@@ -43,6 +47,10 @@ $(eval $(call gb_CppunitTest_use_static_libraries,tools_test, \
 $(eval $(call gb_CppunitTest_set_include,tools_test,\
     $$(INCLUDE) \
     -I$(SRCDIR)/tools/inc \
+))
+
+$(eval $(call gb_Library_use_externals,tools_test,\
+	libxml2 \
 ))
 
 # vim: set noet sw=4 ts=4:

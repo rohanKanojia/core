@@ -17,18 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <basegfx/tools/tools.hxx>
+#include <basegfx/utils/tools.hxx>
 #include <basegfx/range/b2drange.hxx>
 
 #include <algorithm>
 
 namespace basegfx
 {
-    namespace tools
+    namespace utils
     {
         namespace
         {
-            inline double distance( const double&                   nX,
+            double distance( const double&                   nX,
                                     const double&                   nY,
                                     const ::basegfx::B2DVector&     rNormal,
                                     const double&                   nC )
@@ -46,19 +46,19 @@ namespace basegfx
 
                 // calc maximum orthogonal distance for all four bound
                 // rect corners to the line
-                const double nMaxDistance( ::std::max(
+                const double nMaxDistance( std::max(
                                                0.0,
-                                               ::std::max(
+                                               std::max(
                                                    distance(rFitTarget.getMinX(),
                                                             rFitTarget.getMinY(),
                                                             rMoveDirection,
                                                             nC),
-                                                   ::std::max(
+                                                   std::max(
                                                        distance(rFitTarget.getMinX(),
                                                                 rFitTarget.getMaxY(),
                                                                 rMoveDirection,
                                                                 nC),
-                                                       ::std::max(
+                                                       std::max(
                                                            distance(rFitTarget.getMaxX(),
                                                                     rFitTarget.getMinY(),
                                                                     rMoveDirection,

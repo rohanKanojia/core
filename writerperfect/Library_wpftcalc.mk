@@ -33,14 +33,15 @@ $(eval $(call gb_Library_use_libraries,wpftcalc,\
 	cppu \
 	cppuhelper \
 	sal \
+	sfx \
 	sot \
 	svx \
 	tl \
+	ucbhelper \
 	utl \
 	vcl \
 	writerperfect \
 	xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_externals,wpftcalc,\
@@ -49,10 +50,12 @@ $(eval $(call gb_Library_use_externals,wpftcalc,\
 	odfgen \
 	revenge \
 	mwaw \
+	staroffice \
 	wps \
 	zlib \
 	lcms2 \
 	libxml2 \
+	icu_headers \
 	icui18n \
 	icuuc \
 ))
@@ -61,6 +64,7 @@ $(eval $(call gb_Library_add_exception_objects,wpftcalc,\
 	writerperfect/source/calc/MSWorksCalcImportFilter \
 	writerperfect/source/calc/MWAWCalcImportFilter \
 	writerperfect/source/calc/NumbersImportFilter \
+	writerperfect/source/calc/StarOfficeCalcImportFilter \
 ))
 
 # vim: set noet sw=4 ts=4:

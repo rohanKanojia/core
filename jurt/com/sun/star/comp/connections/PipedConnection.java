@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -84,7 +85,7 @@ public class PipedConnection implements XConnection {
     protected PipedConnection  _otherSide;
 
     /**
-     * Constructs a new <code>PipedConnection</code>, sees if there is an other
+     * Constructs a new <code>PipedConnection</code>, sees if there is another
      * side, which it should be connected to.
      *
      * @param    args   Another side could be in index 0.
@@ -255,3 +256,4 @@ public class PipedConnection implements XConnection {
 
 }
 
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

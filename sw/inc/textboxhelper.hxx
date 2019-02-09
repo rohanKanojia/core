@@ -14,12 +14,10 @@
 #include <set>
 #include <vector>
 
-#include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/uno/Any.h>
 #include <com/sun/star/uno/Type.h>
-#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 
-#include <swdllapi.h>
+#include "swdllapi.h"
 
 class SdrPage;
 class SdrObject;
@@ -28,9 +26,24 @@ class SwFrameFormat;
 class SwFrameFormats;
 class SwFormatContent;
 class SwDoc;
+namespace tools
+{
 class Rectangle;
-class _ZSortFly;
-class SwNode;
+}
+class ZSortFly;
+namespace com
+{
+namespace sun
+{
+namespace star
+{
+namespace drawing
+{
+class XShape;
+}
+}
+}
+}
 
 /**
  * A TextBox is a TextFrame, that is tied to a drawinglayer shape.
@@ -42,60 +55,77 @@ class SW_DLLPUBLIC SwTextBoxHelper
 {
 public:
     /// Maps a draw format to a fly format.
-    typedef std::map<const SwFrameFormat*, const SwFrameFormat*> SavedLink;
+    using SavedLink = std::map<const SwFrameFormat*, const SwFrameFormat*>;
     /// Maps a draw format to content.
-    typedef std::map<const SwFrameFormat*, SwFormatContent> SavedContent;
+    using SavedContent = std::map<const SwFrameFormat*, SwFormatContent>;
     /// Create a TextBox for a shape.
     static void create(SwFrameFormat* pShape);
     /// Destroy a TextBox for a shape.
     static void destroy(SwFrameFormat* pShape);
     /// Get interface of a shape's TextBox, if there is any.
-    static css::uno::Any queryInterface(SwFrameFormat* pShape, const css::uno::Type& rType);
+    static css::uno::Any queryInterface(const SwFrameFormat* pShape, const css::uno::Type& rType);
 
     /// Sync property of TextBox with the one of the shape.
-    static void syncProperty(SwFrameFormat* pShape, sal_uInt16 nWID, sal_uInt8 nMemberID, const css::uno::Any& rValue);
+    static void syncProperty(SwFrameFormat* pShape, sal_uInt16 nWID, sal_uInt8 nMemberID,
+                             const css::uno::Any& rValue);
     /// Does the same, but works on properties which lack an sw-specific WID / MemberID.
-    static void syncProperty(SwFrameFormat* pShape, const OUString& rPropertyName, const css::uno::Any& rValue);
+    static void syncProperty(SwFrameFormat* pShape, const OUString& rPropertyName,
+                             const css::uno::Any& rValue);
     /// Get a property of the underlying TextFrame.
-    static void getProperty(SwFrameFormat* pShape, sal_uInt16 nWID, sal_uInt8 nMemberID, css::uno::Any& rValue);
+    static void getProperty(SwFrameFormat const* pShape, sal_uInt16 nWID, sal_uInt8 nMemberID,
+                            css::uno::Any& rValue);
 
     /// Similar to syncProperty(), but used by the internal API (e.g. for UI purposes).
-    static void syncFlyFrameAttr(SwFrameFormat& rShape, SfxItemSet& rSet);
+    static void syncFlyFrameAttr(SwFrameFormat& rShape, SfxItemSet const& rSet);
 
-    /// If we have an associated TextFrame, then return that.
-    static SwFrameFormat* findTextBox(const SwFrameFormat* pShape);
-    static SwFrameFormat* findTextBox(const css::uno::Reference<css::drawing::XShape>& xShape);
-    /// Return the textbox rectangle of a draw shape (in twips).
-    static Rectangle getTextRectangle(SwFrameFormat* pShape, bool bAbsolute = true);
-
-    /// Look up TextFrames in a document, which are in fact TextBoxes.
-    static std::set<const SwFrameFormat*> findTextBoxes(const SwDoc* pDoc);
     /**
-     * Look up TextFrames in a document, which are in fact TextBoxes.
+     * If we have an associated TextFrame, then return that.
      *
-     * If rNode has a matching SwContentFrame, then only TextBoxes of rNode are
-     * returned.
+     * @param nType Expected frame format type.
+     *              Valid types are RES_DRAWFRMFMT and RES_FLYFRMFMT.
+     *
+     * @see isTextBox
      */
-    static std::set<const SwFrameFormat*> findTextBoxes(const SwNode& rNode);
-    /// Is pObject a textbox of a drawinglayer shape?
-    static bool isTextBox(const SdrObject* pObject);
-    /// Build a textbox -> shape format map.
-    static std::map<SwFrameFormat*, SwFrameFormat*> findShapes(const SwDoc* pDoc);
+    static SwFrameFormat* getOtherTextBoxFormat(const SwFrameFormat* pFormat, sal_uInt16 nType);
+    /// If we have an associated TextFrame, then return that.
+    static SwFrameFormat*
+    getOtherTextBoxFormat(css::uno::Reference<css::drawing::XShape> const& xShape);
+    /// Return the textbox rectangle of a draw shape (in twips).
+    static tools::Rectangle getTextRectangle(SwFrameFormat* pShape, bool bAbsolute = true);
+
+    /**
+     * Is the frame format a text box?
+     *
+     * A text box consists of a coupled fly and draw format. Most times you
+     * just want to check for a single type, otherwise you get duplicate results.
+     *
+     * @param nType Expected frame format input type.
+     *              Valid types are RES_DRAWFRMFMT and RES_FLYFRMFMT.
+     */
+    static bool isTextBox(const SwFrameFormat* pFormat, sal_uInt16 nType);
+
     /// Count number of shapes in the document, excluding TextBoxes.
-    static sal_Int32 getCount(SdrPage* pPage, std::set<const SwFrameFormat*>& rTextBoxes);
+    static sal_Int32 getCount(const SwDoc* pDoc);
+    /// Count number of shapes on the page, excluding TextBoxes.
+    static sal_Int32 getCount(SdrPage const* pPage);
     /// Get a shape by index, excluding TextBoxes.
-    static css::uno::Any getByIndex(SdrPage* pPage, sal_Int32 nIndex, std::set<const SwFrameFormat*>& rTextBoxes) throw(css::lang::IndexOutOfBoundsException);
+    ///
+    /// @throws css::lang::IndexOutOfBoundsException
+    static css::uno::Any getByIndex(SdrPage const* pPage, sal_Int32 nIndex);
     /// Get the order of the shape, excluding TextBoxes.
-    static sal_Int32 getOrdNum(const SdrObject* pObject, std::set<const SwFrameFormat*>& rTextBoxes);
+    static sal_Int32 getOrdNum(const SdrObject* pObject);
     /// If pTextBox is a textbox, then set rWrapThrough to the surround of its shape.
     static void getShapeWrapThrough(const SwFrameFormat* pTextBox, bool& rWrapThrough);
 
     /// Saves the current shape -> textbox links in a map, so they can be restored later.
-    static void saveLinks(const SwFrameFormats& rFormats, std::map<const SwFrameFormat*, const SwFrameFormat*>& rLinks);
+    static void saveLinks(const SwFrameFormats& rFormats,
+                          std::map<const SwFrameFormat*, const SwFrameFormat*>& rLinks);
     /// Reset the shape -> textbox link on the shape, and save it to the map, so it can be restored later.
-    static void resetLink(SwFrameFormat* pShape, std::map<const SwFrameFormat*, SwFormatContent>& rOldContent);
+    static void resetLink(SwFrameFormat* pShape,
+                          std::map<const SwFrameFormat*, SwFormatContent>& rOldContent);
     /// Undo the effect of saveLinks() + individual resetLink() calls.
-    static void restoreLinks(std::set<_ZSortFly>& rOld, std::vector<SwFrameFormat*>& rNew, SavedLink& rSavedLinks, SavedContent& rResetContent);
+    static void restoreLinks(std::set<ZSortFly>& rOld, std::vector<SwFrameFormat*>& rNew,
+                             SavedLink& rSavedLinks, SavedContent& rResetContent);
 };
 
 #endif // INCLUDED_SW_INC_TEXTBOXHELPER_HXX

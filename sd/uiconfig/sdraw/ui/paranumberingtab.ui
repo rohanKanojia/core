@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<interface domain="sd">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkAdjustment" id="adjustment1">
     <property name="upper">9999</property>
     <property name="step_increment">1</property>
@@ -27,9 +27,9 @@
             <property name="column_spacing">6</property>
             <child>
               <object class="GtkCheckButton" id="checkbuttonCB_NEW_START">
-                <property name="label" translatable="yes">R_estart at this paragraph</property>
+                <property name="label" translatable="yes" context="paranumberingtab|checkbuttonCB_NEW_START">R_estart at this paragraph</property>
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
+                <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
                 <property name="use_underline">True</property>
                 <property name="xalign">0</property>
@@ -47,7 +47,6 @@
                 <property name="visible">True</property>
                 <property name="sensitive">False</property>
                 <property name="can_focus">False</property>
-                <property name="invisible_char">•</property>
                 <property name="adjustment">adjustment1</property>
               </object>
               <packing>
@@ -57,10 +56,10 @@
             </child>
             <child>
               <object class="GtkCheckButton" id="checkbuttonCB_NUMBER_NEW_START">
-                <property name="label" translatable="yes">S_tart with:</property>
+                <property name="label" translatable="yes" context="paranumberingtab|checkbuttonCB_NUMBER_NEW_START">S_tart with:</property>
                 <property name="visible">True</property>
                 <property name="sensitive">False</property>
-                <property name="can_focus">False</property>
+                <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
                 <property name="halign">start</property>
                 <property name="margin_left">12</property>
@@ -82,7 +81,7 @@
       <object class="GtkLabel" id="label1">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="label" translatable="yes">Paragraph Numbering</property>
+        <property name="label" translatable="yes" context="paranumberingtab|label1">Paragraph Numbering</property>
         <attributes>
           <attribute name="weight" value="bold"/>
         </attributes>

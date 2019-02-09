@@ -11,7 +11,6 @@
 #define INCLUDED_SC_SOURCE_FILTER_XML_IMPORTCONTEXT_HXX
 
 #include <xmloff/xmlictxt.hxx>
-#include <xmloff/xmlimp.hxx>
 
 class ScXMLImport;
 
@@ -22,7 +21,20 @@ class ScXMLImportContext : public SvXMLImportContext
 {
 public:
     ScXMLImportContext(
-        SvXMLImport& rImport, sal_uInt16 nPrefix, const OUString& rLocalName);
+        ScXMLImport& rImport, sal_uInt16 nPrefix, const OUString& rLocalName);
+
+    ScXMLImportContext( SvXMLImport& rImport );
+
+    virtual void SAL_CALL startFastElement (sal_Int32 nElement,
+        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList) override;
+
+    virtual void SAL_CALL characters(const OUString & aChars) override;
+
+    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
+
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs ) override;
+
 
 protected:
     ScXMLImport& GetScImport();

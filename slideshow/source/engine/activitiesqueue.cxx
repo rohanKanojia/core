@@ -21,10 +21,11 @@
 #include <comphelper/anytostring.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
-#include "slideshowexceptions.hxx"
-#include "activity.hxx"
-#include "activitiesqueue.hxx"
+#include <slideshowexceptions.hxx>
+#include <activity.hxx>
+#include <activitiesqueue.hxx>
 
 #include <algorithm>
 #include <memory>
@@ -55,12 +56,9 @@ namespace slideshow
                 for( const auto& pActivity : maCurrentActivitiesReinsert )
                     pActivity->dispose();
             }
-            catch (uno::Exception &)
+            catch (const uno::Exception& e)
             {
-                OSL_FAIL( OUStringToOString(
-                                comphelper::anyToString(
-                                    cppu::getCaughtException() ),
-                                RTL_TEXTENCODING_UTF8 ).getStr() );
+                SAL_WARN("slideshow", e);
             }
         }
 
@@ -83,13 +81,9 @@ namespace slideshow
 
             // accumulate time lag for all activities, and lag time
             // base if necessary:
-            ActivityQueue::const_iterator iPos(
-                maCurrentActivitiesWaiting.begin() );
-            const ActivityQueue::const_iterator iEnd(
-                maCurrentActivitiesWaiting.end() );
             double fLag = 0.0;
-            for ( ; iPos != iEnd; ++iPos )
-                fLag = std::max<double>( fLag, (*iPos)->calcTimeLag() );
+            for ( const auto& rxActivity : maCurrentActivitiesWaiting )
+                fLag = std::max<double>( fLag, rxActivity->calcTimeLag() );
             if (fLag > 0.0)
             {
                 mpTimer->adjustTimer( -fLag );
@@ -125,9 +119,7 @@ namespace slideshow
                     // since this will also capture segmentation
                     // violations and the like. In such a case, we
                     // still better let our clients now...
-                    OSL_FAIL( OUStringToOString(
-                                    comphelper::anyToString( cppu::getCaughtException() ),
-                                    RTL_TEXTENCODING_UTF8 ).getStr() );
+                    SAL_WARN( "slideshow", comphelper::anyToString( cppu::getCaughtException() ) );
                 }
                 catch( SlideShowException& )
                 {
@@ -141,7 +133,7 @@ namespace slideshow
                     // since this will also capture segmentation
                     // violations and the like. In such a case, we
                     // still better let our clients now...
-                    OSL_TRACE( "::presentation::internal::ActivitiesQueue: Activity threw a SlideShowException, removing from ring" );
+                    SAL_WARN("slideshow", "::presentation::internal::ActivitiesQueue: Activity threw a SlideShowException, removing from ring" );
                 }
 
                 if( bReinsert )

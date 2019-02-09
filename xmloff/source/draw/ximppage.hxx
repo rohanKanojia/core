@@ -43,7 +43,7 @@ protected:
     OUString               msNavOrder;
 
     /** sets the page style on this page */
-    void SetStyle( OUString& rStyleName );
+    void SetStyle( OUString const & rStyleName );
 
     /** sets the presentation layout at this page. It is used for drawing pages and for the handout master */
     void SetLayout();
@@ -55,7 +55,7 @@ protected:
     SdXMLImport& GetSdImport() { return static_cast<SdXMLImport&>(GetImport()); }
 
     /** sets the properties from a page master style with the given name on this contexts page */
-    void SetPageMaster( OUString& rsPageMasterName );
+    void SetPageMaster( OUString const & rsPageMasterName );
 
     void SetNavigationOrder();
 
@@ -63,11 +63,11 @@ public:
 
     SdXMLGenericPageContext( SvXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes);
-    virtual ~SdXMLGenericPageContext();
+        css::uno::Reference< css::drawing::XShapes > const & rShapes);
+    virtual ~SdXMLGenericPageContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
     virtual void EndElement() override;

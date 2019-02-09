@@ -18,12 +18,14 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/ucb/SimpleFileAccess.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/embed/StorageFormats.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/io/TempFile.hpp>
 #include <com/sun/star/io/XSeekable.hpp>
 
@@ -43,7 +45,7 @@ using namespace ::com::sun::star;
 #define THROW_WHERE ""
 #endif
 
-bool CheckPackageSignature_Impl( const uno::Reference< io::XInputStream >& xInputStream,
+static bool CheckPackageSignature_Impl( const uno::Reference< io::XInputStream >& xInputStream,
                                      const uno::Reference< io::XSeekable >& xSeekable )
 {
     if ( !xInputStream.is() || !xSeekable.is() )
@@ -64,7 +66,7 @@ bool CheckPackageSignature_Impl( const uno::Reference< io::XInputStream >& xInpu
         return true; // allow to create a storage based on empty stream
 }
 
-uno::Sequence< OUString > SAL_CALL OStorageFactory::impl_staticGetSupportedServiceNames()
+uno::Sequence< OUString > OStorageFactory::impl_staticGetSupportedServiceNames()
 {
     uno::Sequence< OUString > aRet(2);
     aRet[0] = "com.sun.star.embed.StorageFactory";
@@ -72,20 +74,18 @@ uno::Sequence< OUString > SAL_CALL OStorageFactory::impl_staticGetSupportedServi
     return aRet;
 }
 
-OUString SAL_CALL OStorageFactory::impl_staticGetImplementationName()
+OUString OStorageFactory::impl_staticGetImplementationName()
 {
     return OUString("com.sun.star.comp.embed.StorageFactory");
 }
 
-uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::impl_staticCreateSelfInstance(
+uno::Reference< uno::XInterface > OStorageFactory::impl_staticCreateSelfInstance(
             const uno::Reference< lang::XMultiServiceFactory >& xServiceManager )
 {
     return uno::Reference< uno::XInterface >( *new OStorageFactory( comphelper::getComponentContext(xServiceManager) ) );
 }
 
 uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstance()
-    throw ( uno::Exception,
-            uno::RuntimeException, std::exception )
 {
     // TODO: reimplement TempStream service to support XStream interface
     uno::Reference < io::XStream > xTempStream(
@@ -103,8 +103,6 @@ uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstance()
 
 uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstanceWithArguments(
             const uno::Sequence< uno::Any >& aArguments )
-    throw ( uno::Exception,
-            uno::RuntimeException, std::exception )
 {
     // The request for storage can be done with up to three arguments
 
@@ -126,7 +124,7 @@ uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstanceWithAr
     {
         if( !( aArguments[1] >>= nStorageMode ) )
         {
-            OSL_FAIL( "Wrong second argument!\n" );
+            OSL_FAIL( "Wrong second argument!" );
             throw lang::IllegalArgumentException(); // TODO:
         }
         // it's always possible to read written storage in this implementation
@@ -146,13 +144,13 @@ uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstanceWithAr
     {
         if ( aURL.isEmpty() )
         {
-            OSL_FAIL( "Empty URL is provided!\n" );
+            OSL_FAIL( "Empty URL is provided!" );
             throw lang::IllegalArgumentException(); // TODO:
         }
 
         if ( aURL.startsWithIgnoreAsciiCase("vnd.sun.star.pkg:") )
         {
-            OSL_FAIL( "Packages URL's are not valid for storages!\n" ); // ???
+            OSL_FAIL( "Packages URL's are not valid for storages!" ); // ???
             throw lang::IllegalArgumentException(); // TODO:
         }
 
@@ -167,8 +165,8 @@ uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstanceWithAr
     }
     else if ( !( aArguments[0] >>= xStream ) && !( aArguments[0] >>= xInputStream ) )
     {
-        OSL_FAIL( "Wrong first argument!\n" );
-        throw uno::Exception(); // TODO: Illegal argument
+        OSL_FAIL( "Wrong first argument!" );
+        throw uno::Exception("wrong first arg", nullptr); // TODO: Illegal argument
     }
 
     // retrieve mediadescriptor and set storage properties
@@ -194,7 +192,6 @@ uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstanceWithAr
                   || aDescr[nInd].Name == "Password"
                   || aDescr[nInd].Name == "RepairPackage"
                   || aDescr[nInd].Name == "StatusIndicator" )
-                  // || aDescr[nInd].Name == "Unpacked" ) // TODO:
                 {
                     aPropsToSet.realloc( ++nNumArgs );
                     aPropsToSet[nNumArgs-1].Name = aDescr[nInd].Name;
@@ -227,14 +224,21 @@ uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstanceWithAr
                     else
                         throw lang::IllegalArgumentException( THROW_WHERE, uno::Reference< uno::XInterface >(), 1 );
                 }
+                else if (aDescr[nInd].Name == "NoFileSync")
+                {
+                    // Forward NoFileSync to the storage.
+                    aPropsToSet.realloc(++nNumArgs);
+                    aPropsToSet[nNumArgs - 1].Name = aDescr[nInd].Name;
+                    aPropsToSet[nNumArgs - 1].Value = aDescr[nInd].Value;
+                }
                 else
-                    OSL_FAIL( "Unacceptable property, will be ignored!\n" );
+                    OSL_FAIL( "Unacceptable property, will be ignored!" );
             }
         }
         else
         {
-            OSL_FAIL( "Wrong third argument!\n" );
-            throw uno::Exception(); // TODO: Illegal argument
+            OSL_FAIL( "Wrong third argument!" );
+            throw uno::Exception("wrong 3rd arg", nullptr); // TODO: Illegal argument
         }
 
     }
@@ -243,14 +247,14 @@ uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstanceWithAr
     if ( xInputStream.is() )
     {
         // if xInputStream is set the storage should be open from it
-        if ( ( nStorageMode & embed::ElementModes::WRITE ) )
-              throw uno::Exception(); // TODO: access denied
+        if ( nStorageMode & embed::ElementModes::WRITE )
+              throw uno::Exception("storagemode==write", nullptr); // TODO: access denied
 
         uno::Reference< io::XSeekable > xSeekable( xInputStream, uno::UNO_QUERY );
         if ( !xSeekable.is() )
         {
             // TODO: wrap stream to let it be seekable
-            OSL_FAIL( "Nonseekable streams are not supported for now!\n" );
+            OSL_FAIL( "Nonseekable streams are not supported for now!" );
         }
 
         if ( !CheckPackageSignature_Impl( xInputStream, xSeekable ) )
@@ -262,15 +266,15 @@ uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstanceWithAr
     }
     else if ( xStream.is() )
     {
-               if ( ( ( nStorageMode & embed::ElementModes::WRITE ) && !xStream->getOutputStream().is() )
-          || !xStream->getInputStream().is() )
-              throw uno::Exception(); // TODO: access denied
+        if ( ( ( nStorageMode & embed::ElementModes::WRITE ) && !xStream->getOutputStream().is() )
+             || !xStream->getInputStream().is() )
+              throw uno::Exception("access denied", nullptr); // TODO: access denied
 
         uno::Reference< io::XSeekable > xSeekable( xStream, uno::UNO_QUERY );
         if ( !xSeekable.is() )
         {
             // TODO: wrap stream to let it be seekable
-            OSL_FAIL( "Nonseekable streams are not supported for now!\n" );
+            OSL_FAIL( "Nonseekable streams are not supported for now!" );
         }
 
         if ( !CheckPackageSignature_Impl( xStream->getInputStream(), xSeekable ) )
@@ -281,23 +285,20 @@ uno::Reference< uno::XInterface > SAL_CALL OStorageFactory::createInstanceWithAr
                     uno::UNO_QUERY );
     }
 
-    throw uno::Exception(); // general error during creation
+    throw uno::Exception("no input stream or regular stream", nullptr); // general error during creation
 }
 
 OUString SAL_CALL OStorageFactory::getImplementationName()
-    throw ( uno::RuntimeException, std::exception )
 {
     return impl_staticGetImplementationName();
 }
 
 sal_Bool SAL_CALL OStorageFactory::supportsService( const OUString& ServiceName )
-    throw ( uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL OStorageFactory::getSupportedServiceNames()
-    throw ( uno::RuntimeException, std::exception )
 {
     return impl_staticGetSupportedServiceNames();
 }

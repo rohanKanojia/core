@@ -9,6 +9,11 @@
 
 $(eval $(call gb_Library_Library,uui))
 
+$(eval $(call gb_Library_set_include,uui,\
+    $$(INCLUDE) \
+    -I$(SRCDIR)/uui/inc \
+))
+
 $(eval $(call gb_Library_set_componentfile,uui,uui/util/uui))
 
 $(eval $(call gb_Library_use_external,uui,boost_headers))
@@ -29,11 +34,10 @@ $(eval $(call gb_Library_use_libraries,uui,\
 	i18nlangtag \
 	svl \
 	svt \
-	tk \
+	svx \
 	tl \
 	utl \
 	vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,uui,\
@@ -50,6 +54,7 @@ $(eval $(call gb_Library_add_exception_objects,uui,\
 	uui/source/iahndl-ssl \
 	uui/source/interactionhandler \
 	uui/source/lockfailed \
+	uui/source/lockcorrupt \
 	uui/source/logindlg \
 	uui/source/masterpasscrtdlg \
 	uui/source/masterpassworddlg \

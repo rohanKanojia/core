@@ -22,8 +22,8 @@
 
 #include <set>
 #include <vector>
-#include <swdllapi.h>
-#include <SwNumberTreeTypes.hxx>
+#include "swdllapi.h"
+#include "SwNumberTreeTypes.hxx"
 
 class SwNumberTreeNode;
 
@@ -129,7 +129,7 @@ public:
        @param nDepth   depth in which to add the child
      */
     void AddChild( SwNumberTreeNode* pChild,
-                   const int nDepth = 0 );
+                   const int nDepth );
 
     /**
        Remove a child.
@@ -148,7 +148,7 @@ public:
 
        @return the parent
     */
-    inline SwNumberTreeNode* GetParent() const
+    SwNumberTreeNode* GetParent() const
     {
         return mpParent;
     }
@@ -172,7 +172,7 @@ public:
     SwNumberTree::tNumberVector GetNumberVector() const;
 
     /**
-       Return if numbering is restartet at this node.
+       Return if numbering is restarted at this node.
      */
     virtual bool IsRestart() const = 0;
 
@@ -228,8 +228,6 @@ public:
     /** set level of this node
 
         precondition: node is already member of a list tree
-
-        @author OD
     */
     void SetLevelInListTree( const int nLevel );
 
@@ -280,27 +278,16 @@ public:
     void InvalidateMe();
 
     /**
-       Validate the tree.
-
-       Validates all nodes in this subtree.
-    */
-    void ValidateTree();
-
-    /**
        Validates this node.
 
        Calls Validate(this) on parent.
     */
     void ValidateMe();
 
-    /**
-       Notifies all invalid siblings of this node.
-    */
+    /** Notifies all invalid siblings of this node. */
     void NotifyInvalidSiblings();
 
-    /**
-       notification of all nodes in the list tree on certain list level
-    */
+    /** notification of all nodes in the list tree on certain list level */
     void NotifyNodesOnListLevel( const int nListLevel );
 
     /** Invalidation and notification of complete numbering tree
@@ -309,7 +296,7 @@ public:
         Usage: on <IsCounted()> state change its needed to invalidate the
                complete numbering tree due to wide influence of this change.
     */
-    inline void InvalidateAndNotifyTree()
+    void InvalidateAndNotifyTree()
     {
         if ( GetRoot() )
         {
@@ -332,12 +319,10 @@ public:
         The search for the preceding node is performed for the tree below the
         <this> node. To search the complete tree, the method has been called for
         the root of the tree.
-
-        @author OD
     */
     const SwNumberTreeNode* GetPrecedingNodeOf( const SwNumberTreeNode& rNode ) const;
 
-#ifdef __SW_NUMBER_TREE_SANITY_CHECK
+#ifdef DBG_UTIL
     /**
        Sanity check.
 
@@ -346,13 +331,11 @@ public:
        @retval true   the structure of this node is sane
        @retval false  else
      */
-    bool IsSane(bool bRecursive) const;
-#endif // __SW_NUMBER_TREE_SANITY_CHECK
+    void IsSane(bool bRecursive) const;
+#endif // DBG_UTIL
 
 protected:
-    /**
-       the children
-    */
+    /** the children */
     tSwNumberTreeChildren mChildren;
 
     /**
@@ -390,27 +373,19 @@ protected:
     // method called after this tree node has been removed from the list tree
     virtual void PostRemove() = 0;
 
-#ifdef __SW_NUMBER_TREE_SANITY_CHECK
-    /**
-       Sanity check with loop detection.
+#ifdef DBG_UTIL
+    /** Sanity check with loop detection.
 
        @param bRecursive   descend to children
        @param rParents     vector for recording path
+     */
+    void IsSane(bool bRecursive, std::vector<const SwNumberTreeNode *> rParents) const;
+#endif // DBG_UTIL
 
-       @retval true     this node is sane
-       @retval false    else     */
-    virtual bool IsSane
-    (bool bRecursive, std::vector<const SwNumberTreeNode *> rParents) const;
-#endif // __SW_NUMBER_TREE_SANITY_CHECK
-
-    /**
-       the parent node
-    */
+    /** he parent node */
     SwNumberTreeNode * mpParent;
 
-    /**
-       the number of the node
-    */
+    /** the number of the node */
     mutable SwNumberTree::tSwNumTreeNumber mnNumber;
 
     // boolean indicating, that a node of a not counted parent node is continuing
@@ -439,13 +414,13 @@ protected:
     SwNumberTreeNode& operator=( const SwNumberTreeNode& );
 
     /**
-       Calls _GetNumberVector on parent and adds number of this node
+       Calls GetNumberVector_ on parent and adds number of this node
        at the end.
 
        @param rVector     return value
        @param bValidate   validate the number?
      */
-    void _GetNumberVector( SwNumberTree::tNumberVector& rVector,
+    void GetNumberVector_( SwNumberTree::tNumberVector& rVector,
                            bool bValidate = true ) const;
 
     /**
@@ -456,13 +431,13 @@ protected:
 
        @param pChild      the child to invalidate
      */
-    void Invalidate( SwNumberTreeNode * pChild );
+    void Invalidate( SwNumberTreeNode const * pChild );
 
     /** Invalidation of all children
 
         Usage: on <IsCounted()> state change the children have to be invalidated
     */
-    inline void InvalidateChildren()
+    void InvalidateChildren()
     {
         SetLastValid( mChildren.end() );
     }
@@ -478,13 +453,6 @@ protected:
      */
     void SetLastValid(const tSwNumberTreeChildren::const_iterator& aItLastValid,
                       bool bValidating = false) const;
-
-    /**
-       Set this node as last valid child of its parent.
-
-       @param bValidation    see above
-     */
-    void SetLastValid(bool bValidating) const;
 
     /**
        Return if this node is notifiable.
@@ -504,15 +472,10 @@ protected:
      */
     virtual void NotifyNode() = 0;
 
-    /**
-       Notifies this node (NotifyNode) and all descendants.
-     */
+    /** Notifies this node (NotifyNode) and all descendants.*/
     void Notify();
 
-    /** notification of children nodes on certain depth
-
-        @author OD
-    */
+    /** notification of children nodes on certain depth */
     void NotifyChildrenOnDepth( const int nDepth );
 
     /**
@@ -578,18 +541,11 @@ protected:
     SwNumberTreeNode * CreatePhantom();
 
     /**
-       Set if this node is a phantom.
-     */
-    void SetPhantom();
-
-    /**
        Return if phantoms are counted.
      */
     virtual bool IsCountPhantoms() const = 0;
 
-    /**
-       Return if all descendants of this node are phantoms.
-     */
+    /** Return if all descendants of this node are phantoms. */
     bool HasOnlyPhantoms() const;
 
     bool HasPhantomCountedParent() const;

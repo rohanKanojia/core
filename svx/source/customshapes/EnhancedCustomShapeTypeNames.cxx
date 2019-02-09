@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "svx/EnhancedCustomShapeTypeNames.hxx"
+#include <svx/EnhancedCustomShapeTypeNames.hxx>
 #include <osl/mutex.hxx>
 #include <unordered_map>
 #include <memory>
@@ -34,7 +34,7 @@ static ::osl::Mutex& getHashMapMutex()
 struct NameTypeTable
 {
     const char* pS;
-    MSO_SPT     pE;
+    MSO_SPT const     pE;
 };
 static const NameTypeTable pNameTypeTableArray[] =
 {
@@ -281,7 +281,7 @@ MSO_SPT EnhancedCustomShapeTypeNames::Get( const OUString& rShapeType )
         {
             TypeNameHashMap* pH = new TypeNameHashMap;
             const NameTypeTable* pPtr = pNameTypeTableArray;
-            const NameTypeTable* pEnd = pPtr + ( sizeof( pNameTypeTableArray ) / sizeof( NameTypeTable ) );
+            const NameTypeTable* pEnd = pPtr + SAL_N_ELEMENTS( pNameTypeTableArray );
             for ( ; pPtr < pEnd; pPtr++ )
                 (*pH)[ pPtr->pS ] = pPtr->pE;
             pHashMap = pH;
@@ -291,7 +291,7 @@ MSO_SPT EnhancedCustomShapeTypeNames::Get( const OUString& rShapeType )
     int i, nLen = rShapeType.getLength();
     std::unique_ptr<char[]> pBuf(new char[ nLen + 1 ]);
     for ( i = 0; i < nLen; i++ )
-        pBuf[ i ] = (char)rShapeType[ i ];
+        pBuf[ i ] = static_cast<char>(rShapeType[ i ]);
     pBuf[ i ] = 0;
     TypeNameHashMap::const_iterator aHashIter( pHashMap->find( pBuf.get() ) );
     if ( aHashIter != pHashMap->end() )
@@ -536,7 +536,7 @@ OUString EnhancedCustomShapeTypeNames::GetAccName( const OUString& rShapeType )
         {
             TypeACCNameHashMap* pH = new TypeACCNameHashMap;
             const ACCNameTypeTable* pPtr = pACCNameTypeTableArray;
-            const ACCNameTypeTable* pEnd = pPtr + ( sizeof( pACCNameTypeTableArray ) / sizeof( ACCNameTypeTable ) );
+            const ACCNameTypeTable* pEnd = pPtr + SAL_N_ELEMENTS( pACCNameTypeTableArray );
             for ( ; pPtr < pEnd; pPtr++ )
                 (*pH)[ pPtr->pS ] = pPtr->pE;
             pACCHashMap = pH;
@@ -546,7 +546,7 @@ OUString EnhancedCustomShapeTypeNames::GetAccName( const OUString& rShapeType )
     int i, nLen = rShapeType.getLength();
     std::unique_ptr<char[]> pBuf(new char[ nLen + 1 ]);
     for ( i = 0; i < nLen; i++ )
-        pBuf[ i ] = (char)rShapeType[ i ];
+        pBuf[ i ] = static_cast<char>(rShapeType[ i ]);
     pBuf[ i ] = 0;
     TypeACCNameHashMap::const_iterator aHashIter( pACCHashMap->find( pBuf.get() ) );
     if ( aHashIter != pACCHashMap->end() )

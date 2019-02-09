@@ -22,7 +22,7 @@
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/polygon/b3dpolypolygontools.hxx>
 #include <drawinglayer/primitive3d/sdrdecompositiontools3d.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <drawinglayer/primitive3d/drawinglayer_primitivetypes3d.hxx>
 #include <drawinglayer/geometry/viewinformation3d.hxx>
 #include <drawinglayer/attribute/sdrfillattribute.hxx>
@@ -71,9 +71,9 @@ namespace drawinglayer
                 }
 
                 // create geometry
-                ::std::vector< basegfx::B3DPolyPolygon > aFill;
+                std::vector< basegfx::B3DPolyPolygon > aFill;
                 extractPlanesFromSlice(aFill, rSliceVector,
-                    bCreateNormals, getSmoothHorizontalNormals(), getSmoothNormals(), getSmoothLids(), bClosedRotation,
+                    bCreateNormals, getSmoothNormals(), getSmoothLids(), bClosedRotation,
                     0.85, 0.6, bCreateTextureCoordinatesX || bCreateTextureCoordinatesY, aTexTransform);
 
                 // get full range
@@ -205,20 +205,20 @@ namespace drawinglayer
             // prepare the polygon. No double points, correct orientations and a correct
             // outmost polygon are needed
             // Also important: subdivide here to ensure equal point count for all slices (!)
-            maCorrectedPolyPolygon = basegfx::tools::adaptiveSubdivideByAngle(getPolyPolygon());
+            maCorrectedPolyPolygon = basegfx::utils::adaptiveSubdivideByAngle(getPolyPolygon());
             maCorrectedPolyPolygon.removeDoublePoints();
-            maCorrectedPolyPolygon = basegfx::tools::correctOrientations(maCorrectedPolyPolygon);
-            maCorrectedPolyPolygon = basegfx::tools::correctOutmostPolygon(maCorrectedPolyPolygon);
+            maCorrectedPolyPolygon = basegfx::utils::correctOrientations(maCorrectedPolyPolygon);
+            maCorrectedPolyPolygon = basegfx::utils::correctOutmostPolygon(maCorrectedPolyPolygon);
 
             // check edge count of first sub-polygon. If different, reSegment polyPolygon. This ensures
-            // that for polyPolygons, the subPolys 1..n only get reSegmented when polygon 0L is different
+            // that for polyPolygons, the subPolys 1..n only get reSegmented when polygon 0 is different
             // at all (and not always)
             const basegfx::B2DPolygon aSubCandidate(maCorrectedPolyPolygon.getB2DPolygon(0));
-            const sal_uInt32 nSubEdgeCount(aSubCandidate.isClosed() ? aSubCandidate.count() : (aSubCandidate.count() ? aSubCandidate.count() - 1L : 0L));
+            const sal_uInt32 nSubEdgeCount(aSubCandidate.isClosed() ? aSubCandidate.count() : (aSubCandidate.count() ? aSubCandidate.count() - 1 : 0));
 
             if(nSubEdgeCount != getVerticalSegments())
             {
-                maCorrectedPolyPolygon = basegfx::tools::reSegmentPolyPolygon(maCorrectedPolyPolygon, getVerticalSegments());
+                maCorrectedPolyPolygon = basegfx::utils::reSegmentPolyPolygon(maCorrectedPolyPolygon, getVerticalSegments());
             }
 
             // prepare slices as geometry
@@ -229,8 +229,10 @@ namespace drawinglayer
         {
             // This can be made dependent of  getSdrLFSAttribute().getFill() and getSdrLFSAttribute().getLine()
             // again when no longer geometry is needed for non-visible 3D objects as it is now for chart
-            if(getPolyPolygon().count() && !maSlices.size())
+            if(getPolyPolygon().count() && maSlices.empty())
             {
+                ::osl::MutexGuard aGuard( m_aMutex );
+
                 const_cast< SdrLathePrimitive3D& >(*this).impCreateSlices();
             }
 
@@ -249,7 +251,6 @@ namespace drawinglayer
             double fBackScale,
             double fRotation,
             bool bSmoothNormals,
-            bool bSmoothHorizontalNormals,
             bool bSmoothLids,
             bool bCharacterMode,
             bool bCloseFront,
@@ -263,9 +264,7 @@ namespace drawinglayer
             mfDiagonal(fDiagonal),
             mfBackScale(fBackScale),
             mfRotation(fRotation),
-            mpLastRLGViewInformation(nullptr),
             mbSmoothNormals(bSmoothNormals),
-            mbSmoothHorizontalNormals(bSmoothHorizontalNormals),
             mbSmoothLids(bSmoothLids),
             mbCharacterMode(bCharacterMode),
             mbCloseFront(bCloseFront),
@@ -288,7 +287,7 @@ namespace drawinglayer
             }
 
             // no close front/back when polygon is not closed
-            if(getPolyPolygon().count() && !getPolyPolygon().getB2DPolygon(0L).isClosed())
+            if(getPolyPolygon().count() && !getPolyPolygon().getB2DPolygon(0).isClosed())
             {
                 mbCloseFront = mbCloseBack = false;
             }
@@ -302,10 +301,6 @@ namespace drawinglayer
 
         SdrLathePrimitive3D::~SdrLathePrimitive3D()
         {
-            if(mpLastRLGViewInformation)
-            {
-                delete mpLastRLGViewInformation;
-            }
         }
 
         bool SdrLathePrimitive3D::operator==(const BasePrimitive3D& rPrimitive) const
@@ -321,7 +316,6 @@ namespace drawinglayer
                     && getBackScale() == rCompare.getBackScale()
                     && getRotation() == rCompare.getRotation()
                     && getSmoothNormals() == rCompare.getSmoothNormals()
-                    && getSmoothHorizontalNormals() == rCompare.getSmoothHorizontalNormals()
                     && getSmoothLids() == rCompare.getSmoothLids()
                     && getCharacterMode() == rCompare.getCharacterMode()
                     && getCloseFront() == rCompare.getCloseFront()
@@ -350,12 +344,13 @@ namespace drawinglayer
                     (!getBuffered3DDecomposition().empty()
                         && *mpLastRLGViewInformation != rViewInformation))
                 {
+                    ::osl::MutexGuard aGuard( m_aMutex );
+
                     // conditions of last local decomposition with reduced lines have changed. Remember
                     // new one and clear current decompositiopn
                     SdrLathePrimitive3D* pThat = const_cast< SdrLathePrimitive3D* >(this);
                     pThat->setBuffered3DDecomposition(Primitive3DContainer());
-                    delete pThat->mpLastRLGViewInformation;
-                    pThat->mpLastRLGViewInformation = new geometry::ViewInformation3D(rViewInformation);
+                    pThat->mpLastRLGViewInformation.reset( new geometry::ViewInformation3D(rViewInformation) );
                 }
             }
 

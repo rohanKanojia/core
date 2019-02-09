@@ -23,8 +23,7 @@
 #include "AccessibleContextBase.hxx"
 #include <com/sun/star/accessibility/XAccessibleValue.hpp>
 #include <tools/gen.hxx>
-#include "global.hxx"
-#include "address.hxx"
+#include <address.hxx>
 #include <cppuhelper/implbase1.hxx>
 
 class ScPreviewShell;
@@ -47,7 +46,7 @@ public:
                             sal_Int32 nIndex );
 
 protected:
-    virtual ~ScAccessiblePreviewHeaderCell();
+    virtual ~ScAccessiblePreviewHeaderCell() override;
 
     using ScAccessibleContextBase::IsDefunc;
 
@@ -62,8 +61,7 @@ public:
     ///=====  XInterface  =====================================================
 
     virtual css::uno::Any SAL_CALL queryInterface(
-        css::uno::Type const & rType )
-        throw (css::uno::RuntimeException, std::exception) override;
+        css::uno::Type const & rType ) override;
 
     virtual void SAL_CALL acquire() throw () override;
 
@@ -71,64 +69,56 @@ public:
 
     //=====  XAccessibleValue  ================================================
 
-    virtual css::uno::Any SAL_CALL getCurrentValue() throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL setCurrentValue( const css::uno::Any& aNumber )
-                                throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getMaximumValue() throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getMinimumValue() throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL getCurrentValue() override;
+    virtual sal_Bool SAL_CALL setCurrentValue( const css::uno::Any& aNumber ) override;
+    virtual css::uno::Any SAL_CALL getMaximumValue() override;
+    virtual css::uno::Any SAL_CALL getMinimumValue() override;
 
     //=====  XAccessibleComponent  ============================================
 
     virtual css::uno::Reference< css::accessibility::XAccessible > SAL_CALL
-                            getAccessibleAtPoint( const css::awt::Point& aPoint )
-                                throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL   grabFocus() throw (css::uno::RuntimeException, std::exception) override;
+                            getAccessibleAtPoint( const css::awt::Point& aPoint ) override;
+    virtual void SAL_CALL   grabFocus() override;
 
     //=====  XAccessibleContext  ==============================================
 
-    virtual sal_Int32 SAL_CALL getAccessibleChildCount() throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL getAccessibleChildCount() override;
     virtual css::uno::Reference< css::accessibility::XAccessible > SAL_CALL
-                            getAccessibleChild( sal_Int32 i )
-                                throw (css::lang::IndexOutOfBoundsException,
-                                    css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int32 SAL_CALL getAccessibleIndexInParent() throw (css::uno::RuntimeException, std::exception) override;
+                            getAccessibleChild( sal_Int32 i ) override;
+    virtual sal_Int32 SAL_CALL getAccessibleIndexInParent() override;
     virtual css::uno::Reference< css::accessibility::XAccessibleStateSet > SAL_CALL
-                            getAccessibleStateSet() throw (css::uno::RuntimeException, std::exception) override;
+                            getAccessibleStateSet() override;
 
     //=====  XServiceInfo  ====================================================
 
-    virtual OUString SAL_CALL getImplementationName()
-                                throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-                                throw(css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     ///=====  XTypeProvider  ===================================================
 
     virtual css::uno::Sequence< css::uno::Type > SAL_CALL
-        getTypes()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getTypes() override;
 
     /** Returns a implementation id.
     */
     virtual css::uno::Sequence<sal_Int8> SAL_CALL
-        getImplementationId()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getImplementationId() override;
 
 protected:
-    virtual OUString SAL_CALL createAccessibleDescription() throw(css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL createAccessibleName() throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString createAccessibleDescription() override;
+    virtual OUString createAccessibleName() override;
 
-    virtual Rectangle GetBoundingBoxOnScreen() const throw(css::uno::RuntimeException, std::exception) override;
-    virtual Rectangle GetBoundingBox() const throw (css::uno::RuntimeException, std::exception) override;
+    virtual tools::Rectangle GetBoundingBoxOnScreen() const override;
+    virtual tools::Rectangle GetBoundingBox() const override;
 
 private:
     ScPreviewShell*     mpViewShell;
     accessibility::AccessibleTextHelper* mpTextHelper;
-    sal_Int32           mnIndex;
+    sal_Int32 const     mnIndex;
     ScAddress           maCellPos;
     bool                mbColumnHeader;
     bool                mbRowHeader;
-    mutable ScPreviewTableInfo* mpTableInfo;
+    mutable std::unique_ptr<ScPreviewTableInfo> mpTableInfo;
 
     bool IsDefunc(
         const css::uno::Reference<css::accessibility::XAccessibleStateSet>& rxParentStates);

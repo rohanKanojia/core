@@ -40,16 +40,14 @@ XMLIndexBodyContext::~XMLIndexBodyContext()
 {
 }
 
-SvXMLImportContext* XMLIndexBodyContext::CreateChildContext(
+SvXMLImportContextRef XMLIndexBodyContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList> & xAttrList)
 {
-    SvXMLImportContext* pContext = nullptr;
-
     // return text content (if possible)
-    pContext = GetImport().GetTextImport()->CreateTextChildContext(
-        GetImport(), nPrefix, rLocalName, xAttrList, XML_TEXT_TYPE_SECTION );
+    SvXMLImportContext* pContext = GetImport().GetTextImport()->CreateTextChildContext(
+        GetImport(), nPrefix, rLocalName, xAttrList, XMLTextType::Section );
     if (nullptr == pContext)
     {
         pContext = new SvXMLImportContext( GetImport(), nPrefix, rLocalName );

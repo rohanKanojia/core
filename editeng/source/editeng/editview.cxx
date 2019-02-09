@@ -18,11 +18,9 @@
  */
 
 
+#include <memory>
 #include <sal/macros.h>
-#include <vcl/wrkwin.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/msgbox.hxx>
-#include <vcl/svapp.hxx>
+#include <vcl/image.hxx>
 
 #include <com/sun/star/i18n/WordType.hpp>
 #include <com/sun/star/i18n/ScriptType.hpp>
@@ -37,7 +35,7 @@
 
 #include <svl/srchitem.hxx>
 
-#include <impedit.hxx>
+#include "impedit.hxx"
 #include <editeng/editeng.hxx>
 #include <editeng/editview.hxx>
 #include <editeng/flditem.hxx>
@@ -46,8 +44,9 @@
 #include <editeng/fhgtitem.hxx>
 #include <editeng/eerdll.hxx>
 #include <eerdll2.hxx>
-#include <editeng.hrc>
-#include <helpid.hrc>
+#include <editeng/editrids.hrc>
+#include <editeng.hxx>
+#include <helpids.h>
 #include <i18nlangtag/lang.h>
 #include <vcl/menu.hxx>
 #include <vcl/window.hxx>
@@ -64,6 +63,7 @@
 #include <vcl/settings.hxx>
 #include <LibreOfficeKit/LibreOfficeKitEnums.h>
 #include <comphelper/lok.hxx>
+#include <sfx2/viewsh.hxx>
 
 #include <com/sun/star/lang/XServiceInfo.hpp>
 
@@ -106,7 +106,7 @@ LanguageType EditView::CheckLanguage(
     }
     else    // check single word
     {
-            if (!xSpell.is())
+        if (!xSpell.is())
             return nLang;
 
 
@@ -132,14 +132,14 @@ LanguageType EditView::CheckLanguage(
         lang::Locale a3( LanguageTag::convertToLocale( aLangList[3] ) );
 #endif
 
-        sal_Int32 nCount = SAL_N_ELEMENTS(aLangList);
+        sal_Int32 const nCount = SAL_N_ELEMENTS(aLangList);
         for (sal_Int32 i = 0;  i < nCount;  i++)
         {
-            sal_Int16 nTmpLang = aLangList[i];
+            LanguageType nTmpLang = aLangList[i];
             if (nTmpLang != LANGUAGE_NONE  &&  nTmpLang != LANGUAGE_DONTKNOW)
             {
-                if (xSpell->hasLanguage( nTmpLang ) &&
-                    xSpell->isValid( rText, nTmpLang, Sequence< PropertyValue >() ))
+                if (xSpell->hasLanguage( static_cast<sal_uInt16>(nTmpLang) ) &&
+                    xSpell->isValid( rText, static_cast<sal_uInt16>(nTmpLang), Sequence< PropertyValue >() ))
                 {
                     nLang = nTmpLang;
                     break;
@@ -151,21 +151,34 @@ LanguageType EditView::CheckLanguage(
     return nLang;
 }
 
-// class EditView
+// class EditViewCallbacks
+EditViewCallbacks::~EditViewCallbacks()
+{
+}
 
+// class EditView
 EditView::EditView( EditEngine* pEng, vcl::Window* pWindow )
 {
-    pImpEditView = new ImpEditView( this, pEng, pWindow );
+    pImpEditView.reset( new ImpEditView( this, pEng, pWindow ) );
 }
 
 EditView::~EditView()
 {
-    delete pImpEditView;
+}
+
+void EditView::setEditViewCallbacks(const EditViewCallbacks* pEditViewCallbacks)
+{
+    pImpEditView->setEditViewCallbacks(pEditViewCallbacks);
+}
+
+bool EditView::hasEditViewCallbacks() const
+{
+    return pImpEditView->hasEditViewCallbacks();
 }
 
 ImpEditEngine* EditView::GetImpEditEngine() const
 {
-    return pImpEditView->pEditEngine->pImpEditEngine;
+    return pImpEditView->pEditEngine->pImpEditEngine.get();
 }
 
 EditEngine* EditView::GetEditEngine() const
@@ -173,20 +186,56 @@ EditEngine* EditView::GetEditEngine() const
     return pImpEditView->pEditEngine;
 }
 
-void EditView::Invalidate()
+tools::Rectangle EditView::GetInvalidateRect() const
 {
     if ( !pImpEditView->DoInvalidateMore() )
-        pImpEditView->GetWindow()->Invalidate( pImpEditView->aOutArea );
+        return pImpEditView->aOutArea;
     else
     {
-        Rectangle aRect( pImpEditView->aOutArea );
+        tools::Rectangle aRect( pImpEditView->aOutArea );
         long nMore = pImpEditView->GetWindow()->PixelToLogic( Size( pImpEditView->GetInvalidateMore(), 0 ) ).Width();
-        aRect.Left() -= nMore;
-        aRect.Right() += nMore;
-        aRect.Top() -= nMore;
-        aRect.Bottom() += nMore;
-        pImpEditView->GetWindow()->Invalidate( aRect );
+        aRect.AdjustLeft( -nMore );
+        aRect.AdjustRight(nMore );
+        aRect.AdjustTop( -nMore );
+        aRect.AdjustBottom(nMore );
+        return aRect;
     }
+}
+
+void EditView::InvalidateWindow(const tools::Rectangle& rClipRect)
+{
+    if (pImpEditView->hasEditViewCallbacks())
+    {
+        // do not invalidate and trigger a global repaint, but forward
+        // the need for change to the applied EditViewCallback, can e.g.
+        // be used to visualize the active edit text in an OverlayObject
+        pImpEditView->mpEditViewCallbacks->EditViewInvalidate();
+    }
+    else
+    {
+        // classic mode: invalidate and trigger full repaint
+        // of the changed area
+        GetWindow()->Invalidate(rClipRect);
+    }
+}
+
+void EditView::InvalidateOtherViewWindows( const tools::Rectangle& rInvRect )
+{
+    if (comphelper::LibreOfficeKit::isActive())
+    {
+        for (auto& pWin : pImpEditView->aOutWindowSet)
+        {
+            if (pWin)
+                pWin->Invalidate( rInvRect );
+        }
+    }
+}
+
+void EditView::Invalidate()
+{
+    const tools::Rectangle& rInvRect = GetInvalidateRect();
+    pImpEditView->GetWindow()->Invalidate( rInvRect );
+    InvalidateOtherViewWindows( rInvRect );
 }
 
 void EditView::SetReadOnly( bool bReadOnly )
@@ -201,11 +250,13 @@ bool EditView::IsReadOnly() const
 
 void EditView::SetSelection( const ESelection& rESel )
 {
-    // If someone has just left an empty attribute, and then the outliner
-    // manipulates the selection:
-    if ( !pImpEditView->GetEditSelection().HasRange() )
+    // If someone has just left an empty attribute, and then the outliner manipulates the
+    // selection, call the CursorMoved method so that empty attributes get cleaned up.
+    if ( !HasSelection() )
     {
-        ContentNode* pNode = pImpEditView->GetEditSelection().Max().GetNode();
+        // tdf#113591 Get node from EditDoc, as the selection might have a pointer to an
+        // already deleted node.
+        const ContentNode* pNode = pImpEditView->pEditEngine->GetEditDoc().GetEndPaM().GetNode();
         pImpEditView->pEditEngine->CursorMoved( pNode );
     }
     EditSelection aNewSelection( pImpEditView->pEditEngine->pImpEditEngine->ConvertSelection(
@@ -230,9 +281,9 @@ void EditView::SetSelection( const ESelection& rESel )
         aNewSelection.Max() = EditPaM( pNode, pNode->Len() );
     }
 
-    pImpEditView->DrawSelection();
+    pImpEditView->DrawSelectionXOR();
     pImpEditView->SetEditSelection( aNewSelection );
-    pImpEditView->DrawSelection();
+    pImpEditView->DrawSelectionXOR();
     bool bGotoCursor = pImpEditView->DoAutoScroll();
     ShowCursor( bGotoCursor );
 }
@@ -265,14 +316,14 @@ SvtScriptType EditView::GetSelectedScriptType() const
     return pImpEditView->pEditEngine->GetScriptType( pImpEditView->GetEditSelection() );
 }
 
-void EditView::GetSelectionRectangles(std::vector<Rectangle>& rLogicRects) const
+void EditView::GetSelectionRectangles(std::vector<tools::Rectangle>& rLogicRects) const
 {
-    return pImpEditView->GetSelectionRectangles(rLogicRects);
+    return pImpEditView->GetSelectionRectangles(pImpEditView->GetEditSelection(), rLogicRects);
 }
 
-void EditView::Paint( const Rectangle& rRect, OutputDevice* pTargetDevice )
+void EditView::Paint( const tools::Rectangle& rRect, OutputDevice* pTargetDevice )
 {
-    pImpEditView->pEditEngine->pImpEditEngine->Paint( pImpEditView, rRect, pTargetDevice );
+    pImpEditView->pEditEngine->pImpEditEngine->Paint( pImpEditView.get(), rRect, pTargetDevice );
 }
 
 void EditView::SetEditEngine( EditEngine* pEditEng )
@@ -294,20 +345,45 @@ vcl::Window* EditView::GetWindow() const
     return pImpEditView->pOutWin;
 }
 
-void EditView::SetVisArea( const Rectangle& rRect )
+bool EditView::HasOtherViewWindow( vcl::Window* pWin )
+{
+    OutWindowSet& rOutWindowSet = pImpEditView->aOutWindowSet;
+    auto found = std::find(rOutWindowSet.begin(), rOutWindowSet.end(), pWin);
+    return (found != rOutWindowSet.end());
+}
+
+bool EditView::AddOtherViewWindow( vcl::Window* pWin )
+{
+    if (HasOtherViewWindow(pWin))
+        return false;
+    pImpEditView->aOutWindowSet.emplace_back(pWin);
+    return true;
+}
+
+bool EditView::RemoveOtherViewWindow( vcl::Window* pWin )
+{
+    OutWindowSet& rOutWindowSet = pImpEditView->aOutWindowSet;
+    auto found = std::find(rOutWindowSet.begin(), rOutWindowSet.end(), pWin);
+    if (found == rOutWindowSet.end())
+        return false;
+    rOutWindowSet.erase(found);
+    return true;
+}
+
+void EditView::SetVisArea( const tools::Rectangle& rRect )
 {
     pImpEditView->SetVisDocStartPos( rRect.TopLeft() );
 }
 
-const Rectangle& EditView::GetVisArea() const
+const tools::Rectangle& EditView::GetVisArea() const
 {
     // Change return value to Rectangle in next incompatible build !!!
-    static Rectangle aRect;
+    static tools::Rectangle aRect;
     aRect = pImpEditView->GetVisDocArea();
     return aRect;
 }
 
-void EditView::SetOutputArea( const Rectangle& rRect )
+void EditView::SetOutputArea( const tools::Rectangle& rRect )
 {
     pImpEditView->SetOutputArea( rRect );
 
@@ -318,7 +394,7 @@ void EditView::SetOutputArea( const Rectangle& rRect )
     pImpEditView->ShowCursor( false, false );
 }
 
-const Rectangle& EditView::GetOutputArea() const
+const tools::Rectangle& EditView::GetOutputArea() const
 {
     return pImpEditView->GetOutputArea();
 }
@@ -330,14 +406,14 @@ const Pointer& EditView::GetPointer() const
 
 vcl::Cursor* EditView::GetCursor() const
 {
-    return pImpEditView->pCursor;
+    return pImpEditView->pCursor.get();
 }
 
 void EditView::InsertText( const OUString& rStr, bool bSelect )
 {
 
     EditEngine* pEE = pImpEditView->pEditEngine;
-    pImpEditView->DrawSelection();
+    pImpEditView->DrawSelectionXOR();
 
     EditPaM aPaM1;
     if ( bSelect )
@@ -349,7 +425,7 @@ void EditView::InsertText( const OUString& rStr, bool bSelect )
 
     pEE->UndoActionStart( EDITUNDO_INSERT );
     EditPaM aPaM2( pEE->InsertText( pImpEditView->GetEditSelection(), rStr ) );
-    pEE->UndoActionEnd( EDITUNDO_INSERT );
+    pEE->UndoActionEnd();
 
     if ( bSelect )
     {
@@ -362,7 +438,7 @@ void EditView::InsertText( const OUString& rStr, bool bSelect )
     pEE->FormatAndUpdate( this );
 }
 
-bool EditView::PostKeyEvent( const KeyEvent& rKeyEvent, vcl::Window* pFrameWin )
+bool EditView::PostKeyEvent( const KeyEvent& rKeyEvent, vcl::Window const * pFrameWin )
 {
     return pImpEditView->PostKeyEvent( rKeyEvent, pFrameWin );
 }
@@ -392,7 +468,7 @@ void EditView::Command( const CommandEvent& rCEvt )
     pImpEditView->Command( rCEvt );
 }
 
-void EditView::ShowCursor( bool bGotoCursor, bool bForceVisCursor )
+void EditView::ShowCursor( bool bGotoCursor, bool bForceVisCursor, bool bActivate )
 {
     if ( pImpEditView->pEditEngine->HasView( this ) )
     {
@@ -401,16 +477,25 @@ void EditView::ShowCursor( bool bGotoCursor, bool bForceVisCursor )
             bGotoCursor = false;
         pImpEditView->ShowCursor( bGotoCursor, bForceVisCursor );
 
-        if (comphelper::LibreOfficeKit::isActive())
-            pImpEditView->libreOfficeKitCallback(LOK_CALLBACK_CURSOR_VISIBLE, OString::boolean(true).getStr());
+        if (pImpEditView->mpViewShell && !bActivate)
+        {
+            OString aPayload = OString::boolean(true);
+            pImpEditView->mpViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CURSOR_VISIBLE, aPayload.getStr());
+            pImpEditView->mpViewShell->NotifyOtherViews(LOK_CALLBACK_VIEW_CURSOR_VISIBLE, "visible", aPayload);
+        }
     }
 }
 
-void EditView::HideCursor()
+void EditView::HideCursor(bool bDeactivate)
 {
     pImpEditView->GetCursor()->Hide();
-    if (comphelper::LibreOfficeKit::isActive())
-        pImpEditView->libreOfficeKitCallback(LOK_CALLBACK_CURSOR_VISIBLE, OString::boolean(false).getStr());
+
+    if (pImpEditView->mpViewShell && !bDeactivate)
+    {
+        OString aPayload = OString::boolean(false);
+        pImpEditView->mpViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CURSOR_VISIBLE, aPayload.getStr());
+        pImpEditView->mpViewShell->NotifyOtherViews(LOK_CALLBACK_VIEW_CURSOR_VISIBLE, "visible", aPayload);
+    }
 }
 
 Pair EditView::Scroll( long ndX, long ndY, ScrollRangeCheck nRangeCheck )
@@ -427,15 +512,15 @@ void EditView::SetAttribs( const SfxItemSet& rSet )
 {
     DBG_ASSERT( !pImpEditView->aEditSelection.IsInvalid(), "Blind Selection in ...." );
 
-    pImpEditView->DrawSelection();
-    pImpEditView->pEditEngine->SetAttribs( pImpEditView->GetEditSelection(), rSet, ATTRSPECIAL_WHOLEWORD );
+    pImpEditView->DrawSelectionXOR();
+    pImpEditView->pEditEngine->SetAttribs( pImpEditView->GetEditSelection(), rSet, SetAttribsMode::WholeWord );
     pImpEditView->pEditEngine->FormatAndUpdate( this );
 }
 
 void EditView::RemoveAttribsKeepLanguages( bool bRemoveParaAttribs )
 {
 
-    pImpEditView->DrawSelection();
+    pImpEditView->DrawSelectionXOR();
     pImpEditView->pEditEngine->UndoActionStart( EDITUNDO_RESETATTRIBS );
     EditSelection aSelection( pImpEditView->GetEditSelection() );
 
@@ -448,17 +533,17 @@ void EditView::RemoveAttribsKeepLanguages( bool bRemoveParaAttribs )
             pImpEditView->pEditEngine->RemoveCharAttribs( aSelection, bRemoveParaAttribs, nWID );
     }
 
-    pImpEditView->pEditEngine->UndoActionEnd( EDITUNDO_RESETATTRIBS );
+    pImpEditView->pEditEngine->UndoActionEnd();
     pImpEditView->pEditEngine->FormatAndUpdate( this );
 }
 
 void EditView::RemoveAttribs( bool bRemoveParaAttribs, sal_uInt16 nWhich )
 {
 
-    pImpEditView->DrawSelection();
+    pImpEditView->DrawSelectionXOR();
     pImpEditView->pEditEngine->UndoActionStart( EDITUNDO_RESETATTRIBS );
     pImpEditView->pEditEngine->RemoveCharAttribs( pImpEditView->GetEditSelection(), bRemoveParaAttribs, nWhich  );
-    pImpEditView->pEditEngine->UndoActionEnd( EDITUNDO_RESETATTRIBS );
+    pImpEditView->pEditEngine->UndoActionEnd();
     pImpEditView->pEditEngine->FormatAndUpdate( this );
 }
 
@@ -466,7 +551,7 @@ void EditView::RemoveCharAttribs( sal_Int32 nPara, sal_uInt16 nWhich )
 {
     pImpEditView->pEditEngine->UndoActionStart( EDITUNDO_RESETATTRIBS );
     pImpEditView->pEditEngine->RemoveCharAttribs( nPara, nWhich );
-    pImpEditView->pEditEngine->UndoActionEnd( EDITUNDO_RESETATTRIBS );
+    pImpEditView->pEditEngine->UndoActionEnd();
     pImpEditView->pEditEngine->FormatAndUpdate( this );
 }
 
@@ -486,13 +571,13 @@ void EditView::Redo()
     pImpEditView->pEditEngine->Redo( this );
 }
 
-sal_uInt32 EditView::Read( SvStream& rInput, const OUString& rBaseURL, EETextFormat eFormat, SvKeyValueIterator* pHTTPHeaderAttrs )
+ErrCode EditView::Read( SvStream& rInput, EETextFormat eFormat, SvKeyValueIterator* pHTTPHeaderAttrs )
 {
     EditSelection aOldSel( pImpEditView->GetEditSelection() );
-    pImpEditView->DrawSelection();
+    pImpEditView->DrawSelectionXOR();
     pImpEditView->pEditEngine->pImpEditEngine->UndoActionStart( EDITUNDO_READ );
-    EditPaM aEndPaM = pImpEditView->pEditEngine->pImpEditEngine->Read( rInput, rBaseURL, eFormat, aOldSel, pHTTPHeaderAttrs );
-    pImpEditView->pEditEngine->pImpEditEngine->UndoActionEnd( EDITUNDO_READ );
+    EditPaM aEndPaM = pImpEditView->pEditEngine->pImpEditEngine->Read( rInput, "", eFormat, aOldSel, pHTTPHeaderAttrs );
+    pImpEditView->pEditEngine->pImpEditEngine->UndoActionEnd();
     EditSelection aNewSel( aEndPaM, aEndPaM );
 
     pImpEditView->SetEditSelection( aNewSel );
@@ -553,7 +638,7 @@ void EditView::MoveParagraphs( Range aParagraphs, sal_Int32 nNewPos )
 {
     pImpEditView->pEditEngine->pImpEditEngine->UndoActionStart( EDITUNDO_MOVEPARAS );
     pImpEditView->pEditEngine->pImpEditEngine->MoveParagraphs( aParagraphs, nNewPos, this );
-    pImpEditView->pEditEngine->pImpEditEngine->UndoActionEnd( EDITUNDO_MOVEPARAS );
+    pImpEditView->pEditEngine->pImpEditEngine->UndoActionEnd();
 }
 
 void EditView::MoveParagraphs( long nDiff )
@@ -573,14 +658,19 @@ void EditView::SetBackgroundColor( const Color& rColor )
     pImpEditView->SetBackgroundColor( rColor );
 }
 
-Color EditView::GetBackgroundColor() const
+Color const & EditView::GetBackgroundColor() const
 {
     return pImpEditView->GetBackgroundColor();
 }
 
-void EditView::registerLibreOfficeKitCallback(OutlinerSearchable *pSearchable)
+void EditView::RegisterViewShell(OutlinerViewShell* pViewShell)
 {
-    pImpEditView->registerLibreOfficeKitCallback(pSearchable);
+    pImpEditView->RegisterViewShell(pViewShell);
+}
+
+void EditView::RegisterOtherShell(OutlinerViewShell* pOtherShell)
+{
+    pImpEditView->RegisterOtherShell(pOtherShell);
 }
 
 void EditView::SetControlWord( EVControlBits nWord )
@@ -593,31 +683,31 @@ EVControlBits EditView::GetControlWord() const
     return pImpEditView->nControl;
 }
 
-EditTextObject* EditView::CreateTextObject()
+std::unique_ptr<EditTextObject> EditView::CreateTextObject()
 {
     return pImpEditView->pEditEngine->pImpEditEngine->CreateTextObject( pImpEditView->GetEditSelection() );
 }
 
 void EditView::InsertText( const EditTextObject& rTextObject )
 {
-    pImpEditView->DrawSelection();
+    pImpEditView->DrawSelectionXOR();
 
     pImpEditView->pEditEngine->UndoActionStart( EDITUNDO_INSERT );
     EditSelection aTextSel( pImpEditView->pEditEngine->InsertText( rTextObject, pImpEditView->GetEditSelection() ) );
-    pImpEditView->pEditEngine->UndoActionEnd( EDITUNDO_INSERT );
+    pImpEditView->pEditEngine->UndoActionEnd();
 
     aTextSel.Min() = aTextSel.Max();    // Selection not retained.
     pImpEditView->SetEditSelection( aTextSel );
     pImpEditView->pEditEngine->FormatAndUpdate( this );
 }
 
-void EditView::InsertText( css::uno::Reference< css::datatransfer::XTransferable > xDataObj, const OUString& rBaseURL, bool bUseSpecial )
+void EditView::InsertText( css::uno::Reference< css::datatransfer::XTransferable > const & xDataObj, const OUString& rBaseURL, bool bUseSpecial )
 {
     pImpEditView->pEditEngine->UndoActionStart( EDITUNDO_INSERT );
     pImpEditView->DeleteSelected();
     EditSelection aTextSel =
         pImpEditView->pEditEngine->InsertText(xDataObj, rBaseURL, pImpEditView->GetEditSelection().Max(), bUseSpecial);
-    pImpEditView->pEditEngine->UndoActionEnd( EDITUNDO_INSERT );
+    pImpEditView->pEditEngine->UndoActionEnd();
 
     aTextSel.Min() = aTextSel.Max();    // Selection not retained.
     pImpEditView->SetEditSelection( aTextSel );
@@ -667,33 +757,33 @@ void EditView::SetInsertMode( bool bInsert )
     pImpEditView->SetInsertMode( bInsert );
 }
 
-void EditView::SetAnchorMode( EVAnchorMode eMode )
+void EditView::SetAnchorMode( EEAnchorMode eMode )
 {
     pImpEditView->SetAnchorMode( eMode );
 }
 
-EVAnchorMode EditView::GetAnchorMode() const
+EEAnchorMode EditView::GetAnchorMode() const
 {
     return pImpEditView->GetAnchorMode();
 }
 
-void EditView::TransliterateText( sal_Int32 nTransliterationMode )
+void EditView::TransliterateText( TransliterationFlags nTransliterationMode )
 {
     EditSelection aOldSel( pImpEditView->GetEditSelection() );
     EditSelection aNewSel = pImpEditView->pEditEngine->TransliterateText( pImpEditView->GetEditSelection(), nTransliterationMode );
     if ( aNewSel != aOldSel )
     {
-        pImpEditView->DrawSelection();
+        pImpEditView->DrawSelectionXOR();
         pImpEditView->SetEditSelection( aNewSel );
-        pImpEditView->DrawSelection();
+        pImpEditView->DrawSelectionXOR();
     }
 }
 
-void EditView::CompleteAutoCorrect( vcl::Window* pFrameWin )
+void EditView::CompleteAutoCorrect( vcl::Window const * pFrameWin )
 {
-    if ( !pImpEditView->HasSelection() && pImpEditView->pEditEngine->pImpEditEngine->GetStatus().DoAutoCorrect() )
+    if ( !HasSelection() && pImpEditView->pEditEngine->pImpEditEngine->GetStatus().DoAutoCorrect() )
     {
-        pImpEditView->DrawSelection();
+        pImpEditView->DrawSelectionXOR();
         EditSelection aSel = pImpEditView->GetEditSelection();
         aSel = pImpEditView->pEditEngine->EndOfWord( aSel.Max() );
         aSel = pImpEditView->pEditEngine->pImpEditEngine->AutoCorrect( aSel, 0, !IsInsertMode(), pFrameWin );
@@ -706,7 +796,7 @@ void EditView::CompleteAutoCorrect( vcl::Window* pFrameWin )
 EESpellState EditView::StartSpeller( bool bMultipleDoc )
 {
     if ( !pImpEditView->pEditEngine->pImpEditEngine->GetSpeller().is() )
-        return EE_SPELL_NOSPELLER;
+        return EESpellState::NoSpeller;
 
     return pImpEditView->pEditEngine->pImpEditEngine->Spell( this, bMultipleDoc );
 }
@@ -714,7 +804,7 @@ EESpellState EditView::StartSpeller( bool bMultipleDoc )
 EESpellState EditView::StartThesaurus()
 {
     if ( !pImpEditView->pEditEngine->pImpEditEngine->GetSpeller().is() )
-        return EE_SPELL_NOSPELLER;
+        return EESpellState::NoSpeller;
 
     return pImpEditView->pEditEngine->pImpEditEngine->StartThesaurus( this );
 }
@@ -751,7 +841,7 @@ bool EditView::IsWrongSpelledWordAtPos( const Point& rPosPixel, bool bMarkIfWron
     return pImpEditView->IsWrongSpelledWord( aPaM , bMarkIfWrong );
 }
 
-void EditView::ExecuteSpellPopup( const Point& rPosPixel, Link<SpellCallbackInfo&,void>* pCallBack )
+void EditView::ExecuteSpellPopup( const Point& rPosPixel, Link<SpellCallbackInfo&,void> const * pCallBack )
 {
     Point aPos ( pImpEditView->GetWindow()->PixelToLogic( rPosPixel ) );
     aPos = pImpEditView->GetDocPos( aPos );
@@ -760,10 +850,17 @@ void EditView::ExecuteSpellPopup( const Point& rPosPixel, Link<SpellCallbackInfo
     ESelection aOldSel = GetSelection();
     if ( xSpeller.is() && pImpEditView->IsWrongSpelledWord( aPaM, true ) )
     {
-        PopupMenu aPopupMenu( EditResId( RID_MENU_SPELL ) );
-        PopupMenu *pAutoMenu = aPopupMenu.GetPopupMenu( MN_AUTOCORR );
-        PopupMenu *pInsertMenu = aPopupMenu.GetPopupMenu( MN_INSERT );  // add word to user-dictionaries
+        VclBuilder aBuilder(nullptr, VclBuilderContainer::getUIRootDir(), "editeng/ui/spellmenu.ui", "");
+        VclPtr<PopupMenu> aPopupMenu(aBuilder.get_menu("menu"));
+        const sal_uInt16 nAutoCorrId = aPopupMenu->GetItemId("autocorrect");
+        PopupMenu *pAutoMenu = aPopupMenu->GetPopupMenu(nAutoCorrId);
+        const sal_uInt16 nInsertId = aPopupMenu->GetItemId("insert");
+        PopupMenu *pInsertMenu = aPopupMenu->GetPopupMenu(nInsertId);  // add word to user-dictionaries
         pInsertMenu->SetMenuFlags( MenuFlags::NoAutoMnemonics );         //! necessary to retrieve the correct dictionary names later
+        const sal_uInt16 nAddId = aPopupMenu->GetItemId("add");
+        const sal_uInt16 nIgnoreId = aPopupMenu->GetItemId("ignore");
+        const sal_uInt16 nCheckId = aPopupMenu->GetItemId("check");
+        const sal_uInt16 nAutoCorrectDlgId = aPopupMenu->GetItemId("autocorrectdlg");
 
         EditPaM aPaM2( aPaM );
         aPaM2.SetIndex( aPaM2.GetIndex()+1 );
@@ -776,7 +873,7 @@ void EditView::ExecuteSpellPopup( const Point& rPosPixel, Link<SpellCallbackInfo
         // Note: That could of course be done by clipping the
         // resulting sequence but the current third party
         // implementations result differs greatly if the number of
-        // suggestions to be retuned gets changed. Statistically
+        // suggestions to be returned gets changed. Statistically
         // it gets much better if told to return e.g. only 7 strings
         // than returning e.g. 16 suggestions and using only the
         // first 7. Thus we hand down the value to use to that
@@ -784,13 +881,13 @@ void EditView::ExecuteSpellPopup( const Point& rPosPixel, Link<SpellCallbackInfo
         Sequence< PropertyValue > aPropVals(1);
         PropertyValue &rVal = aPropVals.getArray()[0];
         rVal.Name = UPN_MAX_NUMBER_OF_SUGGESTIONS;
-        rVal.Value <<= (sal_Int16) 7;
+        rVal.Value <<= sal_Int16(7);
 
         // Are there any replace suggestions?
         Reference< linguistic2::XSpellAlternatives >  xSpellAlt =
-                xSpeller->spell( aSelected, pImpEditView->pEditEngine->pImpEditEngine->GetLanguage( aPaM2 ), aPropVals );
+                xSpeller->spell( aSelected, static_cast<sal_uInt16>(pImpEditView->pEditEngine->pImpEditEngine->GetLanguage( aPaM2 )), aPropVals );
 
-        Reference< linguistic2::XLanguageGuessing >  xLangGuesser( EE_DLL().GetGlobalData()->GetLanguageGuesser() );
+        Reference< linguistic2::XLanguageGuessing >  xLangGuesser( EditDLL::Get().GetGlobalData()->GetLanguageGuesser() );
 
         // check if text might belong to a different language...
         LanguageType nGuessLangWord = LANGUAGE_NONE;
@@ -819,48 +916,45 @@ void EditView::ExecuteSpellPopup( const Point& rPosPixel, Link<SpellCallbackInfo
             if (nGuessLangPara == LANGUAGE_NONE)
                 nGuessLangPara = nGuessLangWord;
 
-            aPopupMenu.InsertSeparator();
+            aPopupMenu->InsertSeparator();
             OUString aTmpWord( SvtLanguageTable::GetLanguageString( nGuessLangWord ) );
             OUString aTmpPara( SvtLanguageTable::GetLanguageString( nGuessLangPara ) );
-            OUString aWordStr( EE_RESSTR( RID_STR_WORD ) );
+            OUString aWordStr( EditResId( RID_STR_WORD ) );
             aWordStr = aWordStr.replaceFirst( "%x", aTmpWord );
-            OUString aParaStr( EE_RESSTR( RID_STR_PARAGRAPH ) );
+            OUString aParaStr( EditResId( RID_STR_PARAGRAPH ) );
             aParaStr = aParaStr.replaceFirst( "%x", aTmpPara );
-            aPopupMenu.InsertItem( MN_WORDLANGUAGE, aWordStr );
-            aPopupMenu.SetHelpId( MN_WORDLANGUAGE, HID_EDITENG_SPELLER_WORDLANGUAGE );
-            aPopupMenu.InsertItem( MN_PARALANGUAGE, aParaStr );
-            aPopupMenu.SetHelpId( MN_PARALANGUAGE, HID_EDITENG_SPELLER_PARALANGUAGE );
+            aPopupMenu->InsertItem( MN_WORDLANGUAGE, aWordStr );
+            aPopupMenu->SetHelpId( MN_WORDLANGUAGE, HID_EDITENG_SPELLER_WORDLANGUAGE );
+            aPopupMenu->InsertItem( MN_PARALANGUAGE, aParaStr );
+            aPopupMenu->SetHelpId( MN_PARALANGUAGE, HID_EDITENG_SPELLER_PARALANGUAGE );
         }
 
         // ## Create mnemonics here
-        if ( Application::IsAutoMnemonicEnabled() )
-        {
-            aPopupMenu.CreateAutoMnemonics();
-            aPopupMenu.SetMenuFlags( aPopupMenu.GetMenuFlags() | MenuFlags::NoAutoMnemonics );
-        }
+        aPopupMenu->CreateAutoMnemonics();
+        aPopupMenu->SetMenuFlags(aPopupMenu->GetMenuFlags() | MenuFlags::NoAutoMnemonics);
 
         // Replace suggestions...
         Sequence< OUString > aAlt;
         if (xSpellAlt.is())
             aAlt = xSpellAlt->getAlternatives();
         const OUString *pAlt = aAlt.getConstArray();
-        sal_uInt16 nWords = (sal_uInt16) aAlt.getLength();
+        sal_uInt16 nWords = static_cast<sal_uInt16>(aAlt.getLength());
         if ( nWords )
         {
             for ( sal_uInt16 nW = 0; nW < nWords; nW++ )
             {
                 OUString aAlternate( pAlt[nW] );
-                aPopupMenu.InsertItem( MN_ALTSTART+nW, aAlternate, MenuItemBits::NONE, OString(), nW );
+                aPopupMenu->InsertItem( MN_ALTSTART+nW, aAlternate, MenuItemBits::NONE, OString(), nW );
                 pAutoMenu->InsertItem( MN_AUTOSTART+nW, aAlternate, MenuItemBits::NONE, OString(), nW );
             }
-            aPopupMenu.InsertSeparator(OString(), nWords);
+            aPopupMenu->InsertSeparator(OString(), nWords);
         }
         else
-            aPopupMenu.RemoveItem( MN_AUTOCORR );   // delete?
+            aPopupMenu->RemoveItem(nAutoCorrId);   // delete?
 
         SvtLinguConfig aCfg;
 
-        Reference< linguistic2::XSearchableDictionaryList >  xDicList( SvxGetDictionaryList() );
+        Reference< linguistic2::XSearchableDictionaryList >  xDicList( LinguMgr::GetDictionaryList() );
         Sequence< Reference< linguistic2::XDictionary >  > aDics;
         if (xDicList.is())
         {
@@ -868,18 +962,18 @@ void EditView::ExecuteSpellPopup( const Point& rPosPixel, Link<SpellCallbackInfo
             // add the default positive dictionary to dic-list (if not already done).
             // This is to ensure that there is at least one dictionary to which
             // words could be added.
-            uno::Reference< linguistic2::XDictionary >  xDic( SvxGetOrCreatePosDic( xDicList ) );
+            uno::Reference< linguistic2::XDictionary >  xDic( LinguMgr::GetStandardDic() );
             if (xDic.is())
-                xDic->setActive( sal_True );
+                xDic->setActive( true );
 
             aDics = xDicList->getDictionaries();
             pDic  = aDics.getConstArray();
-            sal_uInt16 nCheckedLanguage = pImpEditView->pEditEngine->pImpEditEngine->GetLanguage( aPaM2 );
-            sal_uInt16 nDicCount = (sal_uInt16)aDics.getLength();
+            LanguageType nCheckedLanguage = pImpEditView->pEditEngine->pImpEditEngine->GetLanguage( aPaM2 );
+            sal_uInt16 nDicCount = static_cast<sal_uInt16>(aDics.getLength());
             for (sal_uInt16 i = 0; i < nDicCount; i++)
             {
                 uno::Reference< linguistic2::XDictionary >  xDicTmp( pDic[i], uno::UNO_QUERY );
-                if (!xDicTmp.is() || SvxGetIgnoreAllList() == xDicTmp)
+                if (!xDicTmp.is() || LinguMgr::GetIgnoreAllList() == xDicTmp)
                     continue;
 
                 uno::Reference< frame::XStorable > xStor( xDicTmp, uno::UNO_QUERY );
@@ -909,20 +1003,35 @@ void EditView::ExecuteSpellPopup( const Point& rPosPixel, Link<SpellCallbackInfo
                 }
             }
         }
-        if ( pInsertMenu->GetItemCount() != 1)
-            aPopupMenu.EnableItem( MN_INSERT_SINGLE, false );
-        if ( pInsertMenu->GetItemCount() < 2 )
-            aPopupMenu.EnableItem( MN_INSERT, false );
 
-        aPopupMenu.RemoveDisabledEntries( true, true );
+        if (pInsertMenu->GetItemCount() != 1)
+            aPopupMenu->EnableItem(nAddId, false);
+        if (pInsertMenu->GetItemCount() < 2)
+            aPopupMenu->EnableItem(nInsertId, false);
 
-        Rectangle aTempRect = pImpEditView->pEditEngine->pImpEditEngine->PaMtoEditCursor( aPaM, GETCRSR_TXTONLY );
+        aPopupMenu->RemoveDisabledEntries( true, true );
+
+        tools::Rectangle aTempRect = pImpEditView->pEditEngine->pImpEditEngine->PaMtoEditCursor( aPaM, GetCursorFlags::TextOnly );
         Point aScreenPos = pImpEditView->GetWindowPos( aTempRect.TopLeft() );
         aScreenPos = pImpEditView->GetWindow()->OutputToScreenPixel( aScreenPos );
-        aTempRect = pImpEditView->GetWindow()->LogicToPixel( Rectangle(aScreenPos, aTempRect.GetSize() ));
+        aTempRect = pImpEditView->GetWindow()->LogicToPixel( tools::Rectangle(aScreenPos, aTempRect.GetSize() ));
 
-        sal_uInt16 nId = aPopupMenu.Execute( pImpEditView->GetWindow(), aTempRect, PopupMenuFlags::NoMouseUpClose );
-        if ( nId == MN_IGNORE )
+        //tdf#106123 store and restore the EditPaM around the menu Execute
+        //because the loss of focus in the current editeng causes writer
+        //annotations to save their contents, making the pContent of the
+        //current EditPams invalid
+        EPaM aP = pImpEditView->pEditEngine->pImpEditEngine->CreateEPaM(aPaM);
+        EPaM aP2 = pImpEditView->pEditEngine->pImpEditEngine->CreateEPaM(aPaM2);
+
+
+        if (comphelper::LibreOfficeKit::isActive())
+            aPopupMenu->SetLOKNotifier(SfxViewShell::Current());
+        sal_uInt16 nId = aPopupMenu->Execute(pImpEditView->GetWindow(), aTempRect, PopupMenuFlags::NoMouseUpClose);
+
+        aPaM2 = pImpEditView->pEditEngine->pImpEditEngine->CreateEditPaM(aP2);
+        aPaM = pImpEditView->pEditEngine->pImpEditEngine->CreateEditPaM(aP);
+
+        if (nId == nIgnoreId)
         {
             OUString aWord = pImpEditView->SpellIgnoreWord();
             if ( pCallBack )
@@ -956,20 +1065,20 @@ void EditView::ExecuteSpellPopup( const Point& rPosPixel, Link<SpellCallbackInfo
 
             if ( pCallBack )
             {
-                SpellCallbackInfo aInf( ( nId == MN_WORDLANGUAGE ) ? SpellCallbackCommand::WORDLANGUAGE : SpellCallbackCommand::PARALANGUAGE, nLangToUse );
+                SpellCallbackInfo aInf( ( nId == MN_WORDLANGUAGE ) ? SpellCallbackCommand::WORDLANGUAGE : SpellCallbackCommand::PARALANGUAGE );
                 pCallBack->Call( aInf );
             }
             SetSelection( aOldSel );
         }
-        else if ( nId == MN_SPELLING )
+        else if (nId == nCheckId)
         {
             if ( !pCallBack )
             {
                 // Set Cursor before word...
                 EditPaM aCursor = pImpEditView->GetEditSelection().Min();
-                pImpEditView->DrawSelection();
+                pImpEditView->DrawSelectionXOR();
                 pImpEditView->SetEditSelection( EditSelection( aCursor, aCursor ) );
-                pImpEditView->DrawSelection();
+                pImpEditView->DrawSelectionXOR();
                 // Crashes when no SfxApp
                 pImpEditView->pEditEngine->pImpEditEngine->Spell( this, false );
             }
@@ -979,12 +1088,12 @@ void EditView::ExecuteSpellPopup( const Point& rPosPixel, Link<SpellCallbackInfo
                 pCallBack->Call( aInf );
             }
         }
-        else if ( nId == MN_AUTO_CORRECT_DLG && pCallBack)
+        else if (nId == nAutoCorrectDlgId && pCallBack)
         {
             SpellCallbackInfo aInf( SpellCallbackCommand::AUTOCORRECT_OPTIONS, OUString() );
             pCallBack->Call( aInf );
         }
-        else if ( nId >= MN_DICTSTART || nId == MN_INSERT_SINGLE )
+        else if ( nId >= MN_DICTSTART || nId == nAddId)
         {
             OUString aDicName;
             if (nId >= MN_DICTSTART)
@@ -997,7 +1106,7 @@ void EditView::ExecuteSpellPopup( const Point& rPosPixel, Link<SpellCallbackInfo
                 xDic = xDicList->getDictionaryByName( aDicName );
 
             if (xDic.is())
-                xDic->add( aSelected, sal_False, OUString() );
+                xDic->add( aSelected, false, OUString() );
             // save modified user-dictionary if it is persistent
             Reference< frame::XStorable >  xSavDic( xDic, UNO_QUERY );
             if (xSavDic.is())
@@ -1038,20 +1147,30 @@ void EditView::ExecuteSpellPopup( const Point& rPosPixel, Link<SpellCallbackInfo
 void EditView::SelectCurrentWord( sal_Int16 nWordType )
 {
     EditSelection aCurSel( pImpEditView->GetEditSelection() );
-    pImpEditView->DrawSelection();
+    pImpEditView->DrawSelectionXOR();
     aCurSel = pImpEditView->pEditEngine->SelectWord(aCurSel.Max(), nWordType);
     pImpEditView->SetEditSelection( aCurSel );
-    pImpEditView->DrawSelection();
+    pImpEditView->DrawSelectionXOR();
     ShowCursor( true, false );
+}
+
+void EditView::InsertParaBreak()
+{
+    pImpEditView->pEditEngine->UndoActionStart(EDITUNDO_INSERT);
+    pImpEditView->DeleteSelected();
+    EditPaM aPaM(pImpEditView->pEditEngine->InsertParaBreak(pImpEditView->GetEditSelection()));
+    pImpEditView->pEditEngine->UndoActionEnd();
+    pImpEditView->SetEditSelection(EditSelection(aPaM, aPaM));
+    pImpEditView->pEditEngine->FormatAndUpdate(this);
 }
 
 void EditView::InsertField( const SvxFieldItem& rFld )
 {
     EditEngine* pEE = pImpEditView->pEditEngine;
-    pImpEditView->DrawSelection();
+    pImpEditView->DrawSelectionXOR();
     pEE->UndoActionStart( EDITUNDO_INSERT );
     EditPaM aPaM( pEE->InsertField( pImpEditView->GetEditSelection(), rFld ) );
-    pEE->UndoActionEnd( EDITUNDO_INSERT );
+    pEE->UndoActionEnd();
     pImpEditView->SetEditSelection( EditSelection( aPaM, aPaM ) );
     pEE->UpdateFields();
     pEE->FormatAndUpdate( this );
@@ -1095,7 +1214,7 @@ const SvxFieldItem* EditView::GetFieldAtSelection() const
             if (rAttr.GetStart() == nXPos)
                 if (rAttr.Which() == EE_FEATURE_FIELD)
                 {
-                    DBG_ASSERT(dynamic_cast<const SvxFieldItem* >(rAttr.GetItem() ) != nullptr, "No FeldItem...");
+                    DBG_ASSERT(dynamic_cast<const SvxFieldItem* >(rAttr.GetItem() ) != nullptr, "No FieldItem...");
                     return static_cast<const SvxFieldItem*>(rAttr.GetItem());
                 }
         }
@@ -1110,7 +1229,7 @@ void EditView::SetInvalidateMore( sal_uInt16 nPixel )
 
 sal_uInt16 EditView::GetInvalidateMore() const
 {
-    return (sal_uInt16)pImpEditView->GetInvalidateMore();
+    return pImpEditView->GetInvalidateMore();
 }
 
 static void ChangeFontSizeImpl( EditView* pEditView, bool bGrow, const ESelection& rSel, const FontList* pFontList )
@@ -1121,9 +1240,9 @@ static void ChangeFontSizeImpl( EditView* pEditView, bool bGrow, const ESelectio
     if( EditView::ChangeFontSize( bGrow, aSet, pFontList ) )
     {
         SfxItemSet aNewSet( pEditView->GetEmptyItemSet() );
-        aNewSet.Put( aSet.Get( EE_CHAR_FONTHEIGHT ), EE_CHAR_FONTHEIGHT );
-        aNewSet.Put( aSet.Get( EE_CHAR_FONTHEIGHT_CJK ), EE_CHAR_FONTHEIGHT_CJK );
-        aNewSet.Put( aSet.Get( EE_CHAR_FONTHEIGHT_CTL ), EE_CHAR_FONTHEIGHT_CTL );
+        aNewSet.Put( aSet.Get( EE_CHAR_FONTHEIGHT ) );
+        aNewSet.Put( aSet.Get( EE_CHAR_FONTHEIGHT_CJK ) );
+        aNewSet.Put( aSet.Get( EE_CHAR_FONTHEIGHT_CTL ) );
         pEditView->SetAttribs( aNewSet );
     }
 }
@@ -1186,12 +1305,11 @@ void EditView::ChangeFontSize( bool bGrow, const FontList* pFontList )
 
 bool EditView::ChangeFontSize( bool bGrow, SfxItemSet& rSet, const FontList* pFontList )
 {
-    static const sal_uInt16 gFontSizeWichMap[] = { EE_CHAR_FONTHEIGHT, EE_CHAR_FONTHEIGHT_CJK, EE_CHAR_FONTHEIGHT_CTL, 0 };
-
-    const SvxFontItem* pFontItem = static_cast<const SvxFontItem*>(&rSet.Get( EE_CHAR_FONTINFO ));
-    if( !pFontItem || !pFontList )
+    if (!pFontList)
         return false;
 
+    static const sal_uInt16 gFontSizeWichMap[] = { EE_CHAR_FONTHEIGHT, EE_CHAR_FONTHEIGHT_CJK, EE_CHAR_FONTHEIGHT_CTL, 0 };
+    const SvxFontItem& rFontItem = rSet.Get(EE_CHAR_FONTINFO);
     bool bRet = false;
 
     const sal_uInt16* pWhich = gFontSizeWichMap;
@@ -1199,10 +1317,10 @@ bool EditView::ChangeFontSize( bool bGrow, SfxItemSet& rSet, const FontList* pFo
     {
         SvxFontHeightItem aFontHeightItem( static_cast<const SvxFontHeightItem&>(rSet.Get( *pWhich )) );
         long nHeight = aFontHeightItem.GetHeight();
-        const SfxMapUnit eUnit = rSet.GetPool()->GetMetric( *pWhich );
-        nHeight = OutputDevice::LogicToLogic( nHeight * 10, (MapUnit)eUnit, MAP_POINT );
+        const MapUnit eUnit = rSet.GetPool()->GetMetric( *pWhich );
+        nHeight = OutputDevice::LogicToLogic(nHeight * 10, eUnit, MapUnit::MapPoint);
 
-        FontMetric aFontMetric = pFontList->Get( pFontItem->GetFamilyName(), pFontItem->GetStyleName() );
+        FontMetric aFontMetric = pFontList->Get( rFontItem.GetFamilyName(), rFontItem.GetStyleName() );
         const sal_IntPtr* pAry = pFontList->GetSizeAry( aFontMetric );
 
         if( bGrow )
@@ -1253,12 +1371,13 @@ bool EditView::ChangeFontSize( bool bGrow, SfxItemSet& rSet, const FontList* pFo
 
         if( (nHeight >= 2) && (nHeight <= 9999 ) )
         {
-            nHeight = OutputDevice::LogicToLogic( nHeight, MAP_POINT, (MapUnit)eUnit  ) / 10;
+            nHeight = OutputDevice::LogicToLogic( nHeight, MapUnit::MapPoint, eUnit  ) / 10;
 
-            if( nHeight != (long)aFontHeightItem.GetHeight() )
+            if( nHeight != static_cast<long>(aFontHeightItem.GetHeight()) )
             {
                 aFontHeightItem.SetHeight( nHeight );
-                rSet.Put( aFontHeightItem, *pWhich );
+                std::unique_ptr<SfxPoolItem> pNewItem(aFontHeightItem.CloneSetWhich(*pWhich));
+                rSet.Put( *pNewItem );
                 bRet = true;
             }
         }
@@ -1335,10 +1454,17 @@ void EditView::SetCursorLogicPosition(const Point& rPosition, bool bPoint, bool 
 
     if (pImpEditView->GetEditSelection().Min() != aSelection.Min())
         pImpEditView->pEditEngine->CursorMoved(pImpEditView->GetEditSelection().Min().GetNode());
-    pImpEditView->DrawSelection(aSelection);
+    pImpEditView->DrawSelectionXOR(aSelection);
     if (pImpEditView->GetEditSelection() != aSelection)
         pImpEditView->SetEditSelection(aSelection);
     ShowCursor(/*bGotoCursor=*/false);
+}
+
+void EditView::DrawSelectionXOR(OutlinerViewShell* pOtherShell)
+{
+    pImpEditView->RegisterOtherShell(pOtherShell);
+    pImpEditView->DrawSelectionXOR();
+    pImpEditView->RegisterOtherShell(nullptr);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

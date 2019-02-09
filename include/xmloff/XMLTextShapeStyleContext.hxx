@@ -25,8 +25,6 @@
 
 class XMLOFF_DLLPUBLIC XMLTextShapeStyleContext : public XMLShapeStyleContext
 {
-    const OUString        sIsAutoUpdate;
-
     bool                  bAutoUpdate : 1;
 
     SvXMLImportContextRef xEventContext;
@@ -44,9 +42,9 @@ public:
             const OUString& rLName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList,
             SvXMLStylesContext& rStyles, sal_uInt16 nFamily );
-    virtual ~XMLTextShapeStyleContext();
+    virtual ~XMLTextShapeStyleContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 nPrefix,
             const OUString& rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;

@@ -26,26 +26,22 @@
 #include <vector>
 #include <set>
 
-typedef ::std::vector< Range* > ImpSelList;
+#define SFX_ENDOFSELECTION      (-1)
 
-#define SFX_ENDOFSELECTION      ULONG_MAX
-
-class TOOLS_DLLPUBLIC MultiSelection
+class SAL_WARN_UNUSED TOOLS_DLLPUBLIC MultiSelection
 {
 private:
-    ImpSelList      aSels;      // array of SV-selections
+    std::vector< Range >
+                    aSels;      // array of SV-selections
     Range           aTotRange;  // total range of indexes
-    sal_uIntPtr     nCurSubSel; // index in aSels of current selected index
-    long            nCurIndex;  // current selected entry
-    sal_uIntPtr     nSelCount;  // number of selected indexes
-    bool            bInverseCur;// inverse cursor
+    sal_Int32       nCurSubSel; // index in aSels of current selected index
+    sal_Int32       nCurIndex;  // current selected entry
+    sal_Int32       nSelCount;  // number of selected indexes
     bool            bCurValid;  // are nCurIndex and nCurSubSel valid
-    bool            bSelectNew; // auto-select newly inserted indexes
 
     TOOLS_DLLPRIVATE void           ImplClear();
-    TOOLS_DLLPRIVATE size_t         ImplFindSubSelection( long nIndex ) const;
-    TOOLS_DLLPRIVATE void           ImplMergeSubSelections( size_t nPos1, size_t nPos2 );
-    TOOLS_DLLPRIVATE long           ImplFwdUnselected();
+    TOOLS_DLLPRIVATE sal_Int32      ImplFindSubSelection( sal_Int32 nIndex ) const;
+    TOOLS_DLLPRIVATE void           ImplMergeSubSelections( sal_Int32 nPos1, sal_Int32 nPos2 );
 
 public:
                     MultiSelection();
@@ -56,46 +52,46 @@ public:
     MultiSelection& operator= ( const MultiSelection& rOrig );
 
     void            SelectAll( bool bSelect = true );
-    bool            Select( long nIndex, bool bSelect = true );
+    bool            Select( sal_Int32 nIndex, bool bSelect = true );
     void            Select( const Range& rIndexRange, bool bSelect = true );
-    bool            IsSelected( long nIndex ) const;
+    bool            IsSelected( sal_Int32 nIndex ) const;
     bool            IsAllSelected() const
-                        { return nSelCount == sal_uIntPtr(aTotRange.Len()); }
-    long            GetSelectCount() const { return nSelCount; }
+                        { return nSelCount == aTotRange.Len(); }
+    sal_Int32       GetSelectCount() const { return nSelCount; }
 
     void            SetTotalRange( const Range& rTotRange );
-    void            Insert( long nIndex, long nCount = 1 );
-    void            Remove( long nIndex );
+    void            Insert( sal_Int32 nIndex, sal_Int32 nCount = 1 );
+    void            Remove( sal_Int32 nIndex );
+    void            Reset();
 
     const Range&    GetTotalRange() const { return aTotRange; }
-    long            FirstSelected();
-    long            LastSelected();
-    long            NextSelected();
+    sal_Int32       FirstSelected();
+    sal_Int32       LastSelected();
+    sal_Int32       NextSelected();
 
-    size_t          GetRangeCount() const { return aSels.size(); }
-    const Range&    GetRange( size_t nRange ) const { return *aSels[nRange]; }
+    sal_Int32       GetRangeCount() const { return aSels.size(); }
+    const Range&    GetRange( sal_Int32 nRange ) const { return aSels[nRange]; }
 };
 
-class TOOLS_DLLPUBLIC StringRangeEnumerator
+class SAL_WARN_UNUSED TOOLS_DLLPUBLIC StringRangeEnumerator
 {
     struct Range
     {
-        sal_Int32   nFirst;
-        sal_Int32   nLast;
+        sal_Int32 const   nFirst;
+        sal_Int32 const   nLast;
 
-        Range() : nFirst( -1 ), nLast( -1 ) {}
         Range( sal_Int32 i_nFirst, sal_Int32 i_nLast ) : nFirst( i_nFirst ), nLast( i_nLast ) {}
     };
     std::vector< StringRangeEnumerator::Range >            maSequence;
     sal_Int32                                              mnCount;
-    sal_Int32                                              mnMin;
-    sal_Int32                                              mnMax;
-    sal_Int32                                              mnOffset;
+    sal_Int32 const                                        mnMin;
+    sal_Int32 const                                        mnMax;
+    sal_Int32 const                                        mnOffset;
     bool                                                   mbValidInput;
 
     bool setRange( const OUString& i_rNewRange );
     bool insertRange( sal_Int32 nFirst, sal_Int32 nLast, bool bSequence );
-    bool insertJoinedRanges( const std::vector< sal_Int32 >& rNumbers );
+    void insertJoinedRanges( const std::vector< sal_Int32 >& rNumbers );
     bool checkValue( sal_Int32, const std::set< sal_Int32 >* i_pPossibleValues = nullptr ) const;
 public:
     class TOOLS_DLLPUBLIC Iterator
@@ -114,7 +110,6 @@ public:
         , nRangeIndex( i_nRange ), nCurrent( i_nCurrent ) {}
 
     public:
-        Iterator() : pEnumerator( nullptr ), pPossibleValues( nullptr ), nRangeIndex( -1 ), nCurrent( -1 ) {}
         Iterator& operator++();
         sal_Int32 operator*() const { return nCurrent;}
         bool operator==(const Iterator&) const;
@@ -134,7 +129,6 @@ public:
     Iterator begin( const std::set< sal_Int32 >* i_pPossibleValues = nullptr ) const;
     Iterator end( const std::set< sal_Int32 >* i_pPossibleValues = nullptr ) const;
 
-    bool isValidInput() const { return mbValidInput; }
     bool hasValue( sal_Int32 nValue, const std::set< sal_Int32 >* i_pPossibleValues = nullptr ) const;
 
     /**
@@ -166,7 +160,7 @@ public:
                                      sal_Int32 i_nMinNumber,
                                      sal_Int32 i_nMaxNumber,
                                      sal_Int32 i_nLogicalOffset = -1,
-                                     std::set< sal_Int32 >* i_pPossibleValues = nullptr
+                                     std::set< sal_Int32 > const * i_pPossibleValues = nullptr
                                     );
 };
 

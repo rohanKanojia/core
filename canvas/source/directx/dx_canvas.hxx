@@ -92,15 +92,12 @@ namespace dxcanvas
         DECLARE_UNO3_XCOMPONENT_AGG_DEFAULTS( Canvas, GraphicDeviceBase1_Base, ::cppu::WeakComponentImplHelperBase )
 
         // XServiceName
-        virtual OUString SAL_CALL getServiceName(  ) throw (css::uno::RuntimeException) override;
+        virtual OUString SAL_CALL getServiceName(  ) override;
 
     private:
         css::uno::Sequence< css::uno::Any >                maArguments;
         css::uno::Reference< css::uno::XComponentContext > mxComponentContext;
     };
-
-    typedef ::rtl::Reference< Canvas > CanvasRef;
-
 
     typedef ::cppu::WeakComponentImplHelper< css::rendering::XBitmapCanvas,
                                              css::rendering::XIntegerBitmap,
@@ -148,7 +145,7 @@ namespace dxcanvas
         DECLARE_UNO3_XCOMPONENT_AGG_DEFAULTS( BitmapCanvas, GraphicDeviceBase2_Base, ::cppu::WeakComponentImplHelperBase )
 
         // XServiceName
-        virtual OUString SAL_CALL getServiceName(  ) throw (css::uno::RuntimeException) override;
+        virtual OUString SAL_CALL getServiceName(  ) override;
 
         // BitmapProvider
         virtual IBitmapSharedPtr getBitmap() const override;
@@ -158,8 +155,6 @@ namespace dxcanvas
         css::uno::Reference< css::uno::XComponentContext > mxComponentContext;
         IBitmapSharedPtr                                                             mpTarget;
     };
-
-    typedef ::rtl::Reference< BitmapCanvas > BitmapCanvasRef;
 }
 
 #endif

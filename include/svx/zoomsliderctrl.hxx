@@ -24,7 +24,6 @@
 #include <svx/svxdllapi.h>
 #include <memory>
 
-// class SvxZoomSliderControl ----------------------------------------
 class SVX_DLLPUBLIC SvxZoomSliderControl : public SfxStatusBarControl
 {
 private:
@@ -43,7 +42,7 @@ public:
     SFX_DECL_STATUSBAR_CONTROL();
 
     SvxZoomSliderControl( sal_uInt16 _nSlotId, sal_uInt16 _nId, StatusBar& _rStb );
-    virtual ~SvxZoomSliderControl();
+    virtual ~SvxZoomSliderControl() override;
 
     virtual void  StateChanged( sal_uInt16 nSID, SfxItemState eState, const SfxPoolItem* pState ) override;
     virtual void  Paint( const UserDrawEvent& rEvt ) override;

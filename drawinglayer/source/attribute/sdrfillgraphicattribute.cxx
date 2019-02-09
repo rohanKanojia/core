@@ -17,6 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <algorithm>
+
 #include <drawinglayer/attribute/sdrfillgraphicattribute.hxx>
 #include <drawinglayer/attribute/fillgraphicattribute.hxx>
 #include <rtl/instance.hxx>
@@ -38,7 +42,6 @@ namespace drawinglayer
             basegfx::B2DVector                      maOffsetPosition;
             basegfx::B2DVector                      maRectPoint;
 
-            // bitfield
             bool                                    mbTiling : 1;
             bool                                    mbStretch : 1;
             bool                                    mbLogSize : 1;
@@ -87,7 +90,6 @@ namespace drawinglayer
             const basegfx::B2DVector& getRectPoint() const { return maRectPoint; }
             bool getTiling() const { return mbTiling; }
             bool getStretch() const { return mbStretch; }
-            bool getLogSize() const { return mbLogSize; }
 
             bool operator==(const ImpSdrFillGraphicAttribute& rCandidate) const
             {
@@ -99,7 +101,7 @@ namespace drawinglayer
                     && getRectPoint() == rCandidate.getRectPoint()
                     && getTiling() == rCandidate.getTiling()
                     && getStretch() == rCandidate.getStretch()
-                    && getLogSize() == rCandidate.getLogSize());
+                    && mbLogSize == rCandidate.mbLogSize);
             }
         };
 
@@ -138,25 +140,20 @@ namespace drawinglayer
         {
         }
 
-        SdrFillGraphicAttribute::SdrFillGraphicAttribute(const SdrFillGraphicAttribute& rCandidate)
-        :   mpSdrFillGraphicAttribute(rCandidate.mpSdrFillGraphicAttribute)
-        {
-        }
+        SdrFillGraphicAttribute::SdrFillGraphicAttribute(const SdrFillGraphicAttribute&) = default;
 
-        SdrFillGraphicAttribute::~SdrFillGraphicAttribute()
-        {
-        }
+        SdrFillGraphicAttribute::SdrFillGraphicAttribute(SdrFillGraphicAttribute&&) = default;
+
+        SdrFillGraphicAttribute::~SdrFillGraphicAttribute() = default;
 
         bool SdrFillGraphicAttribute::isDefault() const
         {
             return mpSdrFillGraphicAttribute.same_object(theGlobalDefault::get());
         }
 
-        SdrFillGraphicAttribute& SdrFillGraphicAttribute::operator=(const SdrFillGraphicAttribute& rCandidate)
-        {
-            mpSdrFillGraphicAttribute = rCandidate.mpSdrFillGraphicAttribute;
-            return *this;
-        }
+        SdrFillGraphicAttribute& SdrFillGraphicAttribute::operator=(const SdrFillGraphicAttribute&) = default;
+
+        SdrFillGraphicAttribute& SdrFillGraphicAttribute::operator=(SdrFillGraphicAttribute&&) = default;
 
         bool SdrFillGraphicAttribute::operator==(const SdrFillGraphicAttribute& rCandidate) const
         {
@@ -202,11 +199,6 @@ namespace drawinglayer
             return mpSdrFillGraphicAttribute->getTiling();
         }
 
-        bool SdrFillGraphicAttribute::getStretch() const
-        {
-            return mpSdrFillGraphicAttribute->getStretch();
-        }
-
         FillGraphicAttribute SdrFillGraphicAttribute::createFillGraphicAttribute(const basegfx::B2DRange& rRange) const
         {
             // get logical size of bitmap (before possibly expanding it)
@@ -216,8 +208,8 @@ namespace drawinglayer
             basegfx::B2DPoint aBitmapSize(1.0, 1.0);
             basegfx::B2DVector aBitmapTopLeft(0.0, 0.0);
 
-            //UUUU are changes needed? When stretched we are already done, all other values will have no influence
-            if(getTiling() || !getStretch())
+            // are changes needed? When stretched we are already done, all other values will have no influence
+            if(getTiling() || !mpSdrFillGraphicAttribute->getStretch())
             {
                 // init values with range sizes
                 const double fRangeWidth(0.0 != rRange.getWidth() ? rRange.getWidth() : 1.0);
@@ -301,8 +293,8 @@ namespace drawinglayer
             }
 
             // get offset in percent
-            const double fOffsetX(basegfx::clamp(getOffset().getX() * 0.01, 0.0, 1.0));
-            const double fOffsetY(basegfx::clamp(getOffset().getY() * 0.01, 0.0, 1.0));
+            const double fOffsetX(std::clamp(getOffset().getX() * 0.01, 0.0, 1.0));
+            const double fOffsetY(std::clamp(getOffset().getY() * 0.01, 0.0, 1.0));
 
             // create FillGraphicAttribute
             return FillGraphicAttribute(

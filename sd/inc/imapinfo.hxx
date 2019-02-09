@@ -20,10 +20,9 @@
 #ifndef INCLUDED_SD_INC_IMAPINFO_HXX
 #define INCLUDED_SD_INC_IMAPINFO_HXX
 
-#include "sdiocmpt.hxx"
 #include "glob.hxx"
 #include <svx/svdobj.hxx>
-#include <svtools/imap.hxx>
+#include <vcl/imap.hxx>
 
 class SdIMapInfo : public SdrObjUserData, public SfxListener
 {
@@ -31,21 +30,16 @@ class SdIMapInfo : public SdrObjUserData, public SfxListener
     ImageMap        aImageMap;
 
 public:
-                    SdIMapInfo() :
-                        SdrObjUserData( SdUDInventor, SD_IMAPINFO_ID ) {};
-
                     SdIMapInfo( const ImageMap& rImageMap ) :
-                        SdrObjUserData( SdUDInventor, SD_IMAPINFO_ID ),
+                        SdrObjUserData( SdrInventor::StarDrawUserData, SD_IMAPINFO_ID ),
                         aImageMap( rImageMap ) {};
 
                     SdIMapInfo( const SdIMapInfo& rIMapInfo ) :
-                        SdrObjUserData( SdUDInventor, SD_IMAPINFO_ID ),
+                        SdrObjUserData( SdrInventor::StarDrawUserData, SD_IMAPINFO_ID ),
                         SfxListener(),
                         aImageMap( rIMapInfo.aImageMap ) {};
 
-    virtual         ~SdIMapInfo() {};
-
-    virtual SdrObjUserData* Clone( SdrObject* ) const override { return new SdIMapInfo( *this ); }
+    virtual std::unique_ptr<SdrObjUserData> Clone( SdrObject* ) const override { return std::unique_ptr<SdrObjUserData>(new SdIMapInfo( *this )); }
 
     void            SetImageMap( const ImageMap& rIMap ) { aImageMap = rIMap; }
     const ImageMap& GetImageMap() const { return aImageMap; }

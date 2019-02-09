@@ -39,8 +39,8 @@
 class SVX_DLLPUBLIC SvxGalleryItem : public SfxPoolItem
 {
     sal_Int8 m_nType;
-    rtl::OUString m_aURL;
-    rtl::OUString m_aFilterName;
+    OUString m_aURL;
+    OUString m_aFilterName;
     css::uno::Reference< css::lang::XComponent > m_xDrawing;
     css::uno::Reference< css::graphic::XGraphic > m_xGraphic;
 
@@ -49,11 +49,11 @@ public:
 
     SvxGalleryItem();
     SvxGalleryItem( const SvxGalleryItem& );
-    virtual ~SvxGalleryItem();
+    virtual ~SvxGalleryItem() override;
 
     sal_Int8 GetType() const { return m_nType; }
-    const rtl::OUString GetURL() const { return m_aURL; }
-    const css::uno::Reference< css::graphic::XGraphic > GetGraphic() const { return m_xGraphic; }
+    const OUString& GetURL() const { return m_aURL; }
+    const css::uno::Reference< css::graphic::XGraphic >& GetGraphic() const { return m_xGraphic; }
 
     // pure virtual methods from SfxPoolItem
     virtual bool         operator==( const SfxPoolItem& ) const override;
@@ -61,9 +61,6 @@ public:
     // bridge to UNO
     virtual bool         QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool         PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
-    // not implemented
-    virtual SfxPoolItem* Create(SvStream &, sal_uInt16) const override;
-    virtual SvStream&    Store(SvStream &, sal_uInt16 nItemVersion) const override;
 };
 
 #endif

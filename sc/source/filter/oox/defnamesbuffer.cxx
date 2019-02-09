@@ -17,27 +17,26 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "defnamesbuffer.hxx"
+#include <memory>
+#include <defnamesbuffer.hxx>
 
-#include <com/sun/star/sheet/ComplexReference.hpp>
-#include <com/sun/star/sheet/ExternalReference.hpp>
 #include <com/sun/star/sheet/NamedRangeFlag.hpp>
-#include <com/sun/star/sheet/ReferenceFlags.hpp>
-#include <com/sun/star/sheet/SingleReference.hpp>
-#include <com/sun/star/sheet/XFormulaTokens.hpp>
 #include <com/sun/star/sheet/XPrintAreas.hpp>
 #include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
+#include <oox/helper/binaryinputstream.hxx>
 #include <oox/helper/attributelist.hxx>
-#include <oox/helper/propertyset.hxx>
-#include "addressconverter.hxx"
-#include "biffinputstream.hxx"
-#include "externallinkbuffer.hxx"
-#include "formulaparser.hxx"
-#include "worksheetbuffer.hxx"
-#include "tokenarray.hxx"
-#include "tokenuno.hxx"
-#include "compiler.hxx"
+#include <oox/token/tokens.hxx>
+#include <addressconverter.hxx>
+#include <biffhelper.hxx>
+#include <externallinkbuffer.hxx>
+#include <formulabase.hxx>
+#include <formulaparser.hxx>
+#include <worksheetbuffer.hxx>
+#include <tokenarray.hxx>
+#include <tokenuno.hxx>
+#include <compiler.hxx>
+#include <document.hxx>
 
 namespace oox {
 namespace xls {
@@ -54,12 +53,7 @@ const sal_uInt32 BIFF12_DEFNAME_VBNAME      = 0x00000004;
 const sal_uInt32 BIFF12_DEFNAME_MACRO       = 0x00000008;
 const sal_uInt32 BIFF12_DEFNAME_BUILTIN     = 0x00000020;
 
-const sal_uInt16 BIFF_REFFLAG_COL1REL       = 0x0001;
-const sal_uInt16 BIFF_REFFLAG_ROW1REL       = 0x0002;
-const sal_uInt16 BIFF_REFFLAG_COL2REL       = 0x0004;
-const sal_uInt16 BIFF_REFFLAG_ROW2REL       = 0x0008;
-
-const sal_Char* const spcOoxPrefix = "_xlnm.";
+const OUStringLiteral spcOoxPrefix("_xlnm.");
 
 const sal_Char* const sppcBaseNames[] =
 {
@@ -92,21 +86,19 @@ OUString lclGetBaseName( sal_Unicode cBuiltinId )
 
 OUString lclGetPrefixedName( sal_Unicode cBuiltinId )
 {
-    return OUStringBuffer().appendAscii( spcOoxPrefix ).append( lclGetBaseName( cBuiltinId ) ).makeStringAndClear();
+    return spcOoxPrefix + lclGetBaseName( cBuiltinId );
 }
 
 /** returns the built-in name identifier from a prefixed built-in name, e.g. '_xlnm.Print_Area'. */
 sal_Unicode lclGetBuiltinIdFromPrefixedName( const OUString& rModelName )
 {
-    OUString aPrefix = OUString::createFromAscii( spcOoxPrefix );
-    sal_Int32 nPrefixLen = aPrefix.getLength();
-    if( rModelName.matchIgnoreAsciiCase( aPrefix ) )
+    if( rModelName.matchIgnoreAsciiCase( spcOoxPrefix ) )
     {
         for( sal_Unicode cBuiltinId = 0; cBuiltinId < SAL_N_ELEMENTS( sppcBaseNames ); ++cBuiltinId )
         {
             OUString aBaseName = lclGetBaseName( cBuiltinId );
             sal_Int32 nBaseNameLen = aBaseName.getLength();
-            if( (rModelName.getLength() == nPrefixLen + nBaseNameLen) && rModelName.matchIgnoreAsciiCase( aBaseName, nPrefixLen ) )
+            if( (rModelName.getLength() == spcOoxPrefix.size + nBaseNameLen) && rModelName.matchIgnoreAsciiCase( aBaseName, spcOoxPrefix.size ) )
                 return cBuiltinId;
         }
     }
@@ -126,84 +118,6 @@ OUString lclGetUpcaseModelName( const OUString& rModelName )
 {
     // TODO: i18n?
     return rModelName.toAsciiUpperCase();
-}
-
-void lclConvertRefFlags( sal_Int32& ornFlags, sal_Int32& ornAbsPos, sal_Int32& ornRelPos, sal_Int32 nBasePos, sal_Int32 nApiRelFlag, bool bRel )
-{
-    if( getFlag( ornFlags, nApiRelFlag ) && !bRel )
-    {
-        // convert relative to absolute
-        setFlag( ornFlags, nApiRelFlag, false );
-        ornAbsPos = nBasePos + ornRelPos;
-    }
-    else if( !getFlag( ornFlags, nApiRelFlag ) && bRel )
-    {
-        // convert absolute to relative
-        setFlag( ornFlags, nApiRelFlag, true );
-        ornRelPos = ornAbsPos - nBasePos;
-    }
-}
-
-void lclConvertSingleRefFlags( SingleReference& orApiRef, const CellAddress& rBaseAddr, bool bColRel, bool bRowRel )
-{
-    using namespace ::com::sun::star::sheet::ReferenceFlags;
-    lclConvertRefFlags(
-        orApiRef.Flags, orApiRef.Column, orApiRef.RelativeColumn,
-        rBaseAddr.Column, COLUMN_RELATIVE, bColRel );
-    lclConvertRefFlags(
-        orApiRef.Flags, orApiRef.Row, orApiRef.RelativeRow,
-        rBaseAddr.Row, ROW_RELATIVE, bRowRel );
-}
-
-void lclConvertSingleRefFlags( SingleReference& orApiRef, const ScAddress& rBaseAddr, bool bColRel, bool bRowRel )
-{
-    using namespace ::com::sun::star::sheet::ReferenceFlags;
-    lclConvertRefFlags(
-        orApiRef.Flags, orApiRef.Column, orApiRef.RelativeColumn,
-        sal_Int32( rBaseAddr.Col() ), COLUMN_RELATIVE, bColRel );
-    lclConvertRefFlags(
-        orApiRef.Flags, orApiRef.Row, orApiRef.RelativeRow,
-        rBaseAddr.Row(), ROW_RELATIVE, bRowRel );
-}
-
-Any lclConvertReference( const Any& rRefAny, const CellAddress& rBaseAddr, sal_uInt16 nRelFlags )
-{
-    if( rRefAny.has< SingleReference >() && !getFlag( nRelFlags, BIFF_REFFLAG_COL2REL ) && !getFlag( nRelFlags, BIFF_REFFLAG_ROW2REL ) )
-    {
-        SingleReference aApiRef;
-        rRefAny >>= aApiRef;
-        lclConvertSingleRefFlags( aApiRef, rBaseAddr, getFlag( nRelFlags, BIFF_REFFLAG_COL1REL ), getFlag( nRelFlags, BIFF_REFFLAG_ROW1REL ) );
-        return Any( aApiRef );
-    }
-    if( rRefAny.has< ComplexReference >() )
-    {
-        ComplexReference aApiRef;
-        rRefAny >>= aApiRef;
-        lclConvertSingleRefFlags( aApiRef.Reference1, rBaseAddr, getFlag( nRelFlags, BIFF_REFFLAG_COL1REL ), getFlag( nRelFlags, BIFF_REFFLAG_ROW1REL ) );
-        lclConvertSingleRefFlags( aApiRef.Reference2, rBaseAddr, getFlag( nRelFlags, BIFF_REFFLAG_COL2REL ), getFlag( nRelFlags, BIFF_REFFLAG_ROW2REL ) );
-        return Any( aApiRef );
-    }
-    return Any();
-}
-
-Any lclConvertReference( const Any& rRefAny, const ScAddress& rBaseAddr, sal_uInt16 nRelFlags )
-{
-    if( rRefAny.has< SingleReference >() && !getFlag( nRelFlags, BIFF_REFFLAG_COL2REL ) && !getFlag( nRelFlags, BIFF_REFFLAG_ROW2REL ) )
-    {
-        SingleReference aApiRef;
-        rRefAny >>= aApiRef;
-        lclConvertSingleRefFlags( aApiRef, rBaseAddr, getFlag( nRelFlags, BIFF_REFFLAG_COL1REL ), getFlag( nRelFlags, BIFF_REFFLAG_ROW1REL ) );
-        return Any( aApiRef );
-    }
-    if( rRefAny.has< ComplexReference >() )
-    {
-        ComplexReference aApiRef;
-        rRefAny >>= aApiRef;
-        lclConvertSingleRefFlags( aApiRef.Reference1, rBaseAddr, getFlag( nRelFlags, BIFF_REFFLAG_COL1REL ), getFlag( nRelFlags, BIFF_REFFLAG_ROW1REL ) );
-        lclConvertSingleRefFlags( aApiRef.Reference2, rBaseAddr, getFlag( nRelFlags, BIFF_REFFLAG_COL2REL ), getFlag( nRelFlags, BIFF_REFFLAG_ROW2REL ) );
-        return Any( aApiRef );
-    }
-    return Any();
 }
 
 } // namespace
@@ -228,62 +142,6 @@ const OUString& DefinedNameBase::getUpcaseModelName() const
     if( maUpModelName.isEmpty() )
         maUpModelName = lclGetUpcaseModelName( maModel.maName );
     return maUpModelName;
-}
-
-Any DefinedNameBase::getReference( const CellAddress& rBaseAddr ) const
-{
-    if( maRefAny.hasValue() && (maModel.maName.getLength() >= 2) && (maModel.maName[ 0 ] == '\x01') )
-    {
-        sal_Unicode cFlagsChar = getUpcaseModelName()[ 1 ];
-        if( ('A' <= cFlagsChar) && (cFlagsChar <= 'P') )
-        {
-            sal_uInt16 nRelFlags = static_cast< sal_uInt16 >( cFlagsChar - 'A' );
-            if( maRefAny.has< ExternalReference >() )
-            {
-                ExternalReference aApiExtRef;
-                maRefAny >>= aApiExtRef;
-                Any aRefAny = lclConvertReference( aApiExtRef.Reference, rBaseAddr, nRelFlags );
-                if( aRefAny.hasValue() )
-                {
-                    aApiExtRef.Reference <<= aRefAny;
-                    return Any( aApiExtRef );
-                }
-            }
-            else
-            {
-                return lclConvertReference( maRefAny, rBaseAddr, nRelFlags );
-            }
-        }
-    }
-    return Any();
-}
-
-Any DefinedNameBase::getReference( const ScAddress& rBaseAddr ) const
-{
-    if( maRefAny.hasValue() && (maModel.maName.getLength() >= 2) && (maModel.maName[ 0 ] == '\x01') )
-    {
-        sal_Unicode cFlagsChar = getUpcaseModelName()[ 1 ];
-        if( ('A' <= cFlagsChar) && (cFlagsChar <= 'P') )
-        {
-            sal_uInt16 nRelFlags = static_cast< sal_uInt16 >( cFlagsChar - 'A' );
-            if( maRefAny.has< ExternalReference >() )
-            {
-                ExternalReference aApiExtRef;
-                maRefAny >>= aApiExtRef;
-                Any aRefAny = lclConvertReference( aApiExtRef.Reference, rBaseAddr, nRelFlags );
-                if( aRefAny.hasValue() )
-                {
-                    aApiExtRef.Reference <<= aRefAny;
-                    return Any( aApiExtRef );
-                }
-            }
-            else
-            {
-                return lclConvertReference( maRefAny, rBaseAddr, nRelFlags );
-            }
-        }
-    }
-    return Any();
 }
 
 DefinedName::DefinedName( const WorkbookHelper& rHelper ) :
@@ -357,10 +215,6 @@ void DefinedName::createNameObject( sal_Int32 nIndex )
     if( /*maModel.mbHidden ||*/ maModel.mbFunction || maModel.mbVBName )
         return;
 
-    // skip BIFF names without stream position (e.g. BIFF3-BIFF4 internal 3D references)
-    if( (getFilterType() == FILTER_BIFF) && !mxBiffStrm.get() )
-        return;
-
     // convert original name to final Calc name (TODO: filter invalid characters from model name)
     maCalcName = isBuiltinName() ? lclGetPrefixedName( mcBuiltinId ) : maModel.maName;
 
@@ -384,75 +238,80 @@ void DefinedName::createNameObject( sal_Int32 nIndex )
     mnTokenIndex = nIndex;
 }
 
-std::unique_ptr<ScTokenArray> DefinedName::getScTokens()
+std::unique_ptr<ScTokenArray> DefinedName::getScTokens(
+        const css::uno::Sequence<css::sheet::ExternalLinkInfo>& rExternalLinks )
 {
-    ScTokenArray aTokenArray;
-    ScCompiler aCompiler(&getScDocument(), ScAddress(0, 0, mnCalcSheet));
-    aCompiler.SetGrammar(formula::FormulaGrammar::GRAM_OOXML);
+    ScCompiler aCompiler(&getScDocument(), ScAddress(0, 0, mnCalcSheet), formula::FormulaGrammar::GRAM_OOXML);
+    aCompiler.SetExternalLinks( rExternalLinks);
     std::unique_ptr<ScTokenArray> pArray(aCompiler.CompileString(maModel.maFormula));
     // Compile the tokens into RPN once to populate information into tokens
     // where necessary, e.g. for TableRef inner reference. RPN can be discarded
     // after, a resulting error must be reset.
-    sal_uInt16 nErr = pArray->GetCodeError();
+    FormulaError nErr = pArray->GetCodeError();
     aCompiler.CompileTokenArray();
+    getScDocument().CheckLinkFormulaNeedingCheck( *pArray);
     pArray->DelRPN();
     pArray->SetCodeError(nErr);
 
     return pArray;
 }
 
-void DefinedName::convertFormula()
+void DefinedName::convertFormula( const css::uno::Sequence<css::sheet::ExternalLinkInfo>& rExternalLinks )
 {
     // macro function or vba procedure
     if(!mpScRangeData)
         return;
 
     // convert and set formula of the defined name
-    if ( getFilterType() == FILTER_OOXML )
     {
-        std::unique_ptr<ScTokenArray> pTokenArray = getScTokens();
+        std::unique_ptr<ScTokenArray> pTokenArray = getScTokens( rExternalLinks);
         mpScRangeData->SetCode( *pTokenArray );
     }
 
     ScTokenArray* pTokenArray = mpScRangeData->GetCode();
     Sequence< FormulaToken > aFTokenSeq;
-    (void)ScTokenConversion::ConvertToTokenSequence( this->getScDocument(), aFTokenSeq, *pTokenArray );
+    ScTokenConversion::ConvertToTokenSequence( getScDocument(), aFTokenSeq, *pTokenArray );
     // set built-in names (print ranges, repeated titles, filter ranges)
     if( !isGlobalName() ) switch( mcBuiltinId )
     {
         case BIFF_DEFNAME_PRINTAREA:
         {
             Reference< XPrintAreas > xPrintAreas( getSheetFromDoc( mnCalcSheet ), UNO_QUERY );
-            ApiCellRangeList aPrintRanges;
-            getFormulaParser().extractCellRangeList( aPrintRanges, aFTokenSeq, false, mnCalcSheet );
+            ScRangeList aPrintRanges;
+            getFormulaParser().extractCellRangeList( aPrintRanges, aFTokenSeq, mnCalcSheet );
             if( xPrintAreas.is() && !aPrintRanges.empty() )
-                xPrintAreas->setPrintAreas( aPrintRanges.toSequence() );
+                xPrintAreas->setPrintAreas( AddressConverter::toApiSequence(aPrintRanges) );
         }
         break;
         case BIFF_DEFNAME_PRINTTITLES:
         {
             Reference< XPrintAreas > xPrintAreas( getSheetFromDoc( mnCalcSheet ), UNO_QUERY );
-            ApiCellRangeList aTitleRanges;
-            getFormulaParser().extractCellRangeList( aTitleRanges, aFTokenSeq, false, mnCalcSheet );
+            ScRangeList aTitleRanges;
+            getFormulaParser().extractCellRangeList( aTitleRanges, aFTokenSeq, mnCalcSheet );
             if( xPrintAreas.is() && !aTitleRanges.empty() )
             {
                 bool bHasRowTitles = false;
                 bool bHasColTitles = false;
                 const ScAddress& rMaxPos = getAddressConverter().getMaxAddress();
-                for( ::std::vector< CellRangeAddress >::const_iterator aIt = aTitleRanges.begin(), aEnd = aTitleRanges.end(); (aIt != aEnd) && (!bHasRowTitles || !bHasColTitles); ++aIt )
+                for (size_t i = 0, nSize = aTitleRanges.size(); i < nSize; ++i)
                 {
-                    bool bFullRow = (aIt->StartColumn == 0) && ( aIt->EndColumn >= rMaxPos.Col() );
-                    bool bFullCol = (aIt->StartRow == 0) && ( aIt->EndRow >= rMaxPos.Row() );
+                    const ScRange& rRange = aTitleRanges[i];
+                    bool bFullRow = (rRange.aStart.Col() == 0) && ( rRange.aEnd.Col() >= rMaxPos.Col() );
+                    bool bFullCol = (rRange.aStart.Row() == 0) && ( rRange.aEnd.Row() >= rMaxPos.Row() );
                     if( !bHasRowTitles && bFullRow && !bFullCol )
                     {
-                        xPrintAreas->setTitleRows( *aIt );
-                        xPrintAreas->setPrintTitleRows( sal_True );
+                        xPrintAreas->setTitleRows( CellRangeAddress(rRange.aStart.Tab(),
+                                                                    rRange.aStart.Col(), rRange.aStart.Row(),
+                                                                    rRange.aEnd.Col(), rRange.aEnd.Row()) );
+                        xPrintAreas->setPrintTitleRows( true );
                         bHasRowTitles = true;
                     }
                     else if( !bHasColTitles && bFullCol && !bFullRow )
                     {
-                        xPrintAreas->setTitleColumns( *aIt );
-                        xPrintAreas->setPrintTitleColumns( sal_True );
+                        xPrintAreas->setTitleColumns( CellRangeAddress(rRange.aStart.Tab(),
+                                                                       rRange.aStart.Col(), rRange.aStart.Row(),
+                                                                       rRange.aEnd.Col(), rRange.aEnd.Row()) );
+                        xPrintAreas->setPrintTitleColumns( true );
                         bHasColTitles = true;
                     }
                 }
@@ -462,13 +321,14 @@ void DefinedName::convertFormula()
     }
 }
 
-bool DefinedName::getAbsoluteRange( CellRangeAddress& orRange ) const
+bool DefinedName::getAbsoluteRange( ScRange& orRange ) const
 {
     ScTokenArray* pTokenArray = mpScRangeData->GetCode();
     Sequence< FormulaToken > aFTokenSeq;
     ScTokenConversion::ConvertToTokenSequence(getScDocument(), aFTokenSeq, *pTokenArray);
-    return getFormulaParser().extractCellRange( orRange, aFTokenSeq, false );
+    return getFormulaParser().extractCellRange( orRange, aFTokenSeq );
 }
+
 
 DefinedNamesBuffer::DefinedNamesBuffer( const WorkbookHelper& rHelper ) :
     WorkbookHelper( rHelper )
@@ -491,9 +351,8 @@ void DefinedNamesBuffer::finalizeImport()
 {
     // first insert all names without formula definition into the document, and insert them into the maps
     int index = 0;
-    for( DefNameVector::iterator aIt = maDefNames.begin(), aEnd = maDefNames.end(); aIt != aEnd; ++aIt )
+    for( DefinedNameRef& xDefName : maDefNames )
     {
-        DefinedNameRef xDefName = *aIt;
         xDefName->createNameObject( ++index );
         // map by sheet index and original model name
         maModelNameMap[ SheetNameKey( xDefName->getLocalCalcSheet(), xDefName->getUpcaseModelName() ) ] = xDefName;
@@ -508,7 +367,7 @@ void DefinedNamesBuffer::finalizeImport()
 
     /*  Now convert all name formulas, so that the formula parser can find all
         names in case of circular dependencies. */
-    maDefNames.forEachMem( &DefinedName::convertFormula );
+    maDefNames.forEachMem( &DefinedName::convertFormula, getExternalLinks().getLinkInfos());
 }
 
 DefinedNameRef DefinedNamesBuffer::getByIndex( sal_Int32 nIndex ) const

@@ -32,6 +32,7 @@
 
 #define SC_SERVICENAME_CHDATAPROV       "com.sun.star.chart2.data.DataProvider"
 #define SC_SERVICENAME_CHRANGEHILIGHT   "com.sun.star.chart2.data.RangeHighlightListener"
+#define SC_SERVICENAME_CHART_PIVOTTABLE_DATAPROVIDER "com.sun.star.chart2.data.PivotTableDataProvider"
 
 //  document
 #define SC_UNO_AREALINKS            "AreaLinks"
@@ -103,6 +104,7 @@
 #define SC_UNONAME_CELLVJUS_METHOD  "VertJustifyMethod"
 #define SC_UNONAME_CELLORI          "Orientation"
 #define SC_UNONAME_NUMFMT           "NumberFormat"
+#define SC_UNONAME_FORMATID         "FormatID"
 #define SC_UNONAME_SHADOW           "ShadowFormat"
 #define SC_UNONAME_TBLBORD          "TableBorder"
 #define SC_UNONAME_TBLBORD2         "TableBorder2"
@@ -207,6 +209,8 @@
 #define SC_UNONAME_VALIXML          "ValidationXML"
 #define SC_UNONAME_FORMLOC          "FormulaLocal"
 #define SC_UNONAME_FORMRT           "FormulaResultType"
+#define SC_UNONAME_FORMRT2          "FormulaResultType2"
+#define SC_UNONAME_CELLCONTENTTYPE  "CellContentType"
 
 #define SC_UNONAME_USERDEF          "UserDefinedAttributes"
 #define SC_UNONAME_TEXTUSER         "TextUserDefinedAttributes"
@@ -248,7 +252,9 @@
 
 //  data pilot field
 #define SC_UNONAME_FUNCTION         "Function"
+#define SC_UNONAME_FUNCTION2        "Function2"
 #define SC_UNONAME_SUBTOTALS        "Subtotals"
+#define SC_UNONAME_SUBTOTALS2       "Subtotals2"
 #define SC_UNONAME_SELPAGE          "SelectedPage"
 #define SC_UNONAME_USESELPAGE       "UseSelectedPage"
 #define SC_UNONAME_HASREFERENCE     "HasReference"
@@ -400,6 +406,7 @@
 #define SC_UNO_PAGE_GRAPHICFILT     "BackGraphicFilter"
 #define SC_UNO_PAGE_GRAPHICLOC      "BackGraphicLocation"
 #define SC_UNO_PAGE_GRAPHICURL      "BackGraphicURL"
+#define SC_UNO_PAGE_GRAPHIC         "BackGraphic"
 #define SC_UNO_PAGE_LEFTBORDER      SC_UNONAME_LEFTBORDER
 #define SC_UNO_PAGE_RIGHTBORDER     SC_UNONAME_RIGHTBORDER
 #define SC_UNO_PAGE_BOTTBORDER      SC_UNONAME_BOTTBORDER
@@ -445,6 +452,7 @@
 #define SC_UNO_PAGE_HDRBACKTRAN     "HeaderBackTransparent"
 #define SC_UNO_PAGE_HDRGRFFILT      "HeaderBackGraphicFilter"
 #define SC_UNO_PAGE_HDRGRFLOC       "HeaderBackGraphicLocation"
+#define SC_UNO_PAGE_HDRGRF          "HeaderBackGraphic"
 #define SC_UNO_PAGE_HDRGRFURL       "HeaderBackGraphicURL"
 #define SC_UNO_PAGE_HDRLEFTBOR      "HeaderLeftBorder"
 #define SC_UNO_PAGE_HDRRIGHTBOR     "HeaderRightBorder"
@@ -467,6 +475,7 @@
 #define SC_UNO_PAGE_FTRBACKTRAN     "FooterBackTransparent"
 #define SC_UNO_PAGE_FTRGRFFILT      "FooterBackGraphicFilter"
 #define SC_UNO_PAGE_FTRGRFLOC       "FooterBackGraphicLocation"
+#define SC_UNO_PAGE_FTRGRF          "FooterBackGraphic"
 #define SC_UNO_PAGE_FTRGRFURL       "FooterBackGraphicURL"
 #define SC_UNO_PAGE_FTRLEFTBOR      "FooterLeftBorder"
 #define SC_UNO_PAGE_FTRRIGHTBOR     "FooterRightBorder"
@@ -551,7 +560,9 @@
 #define SC_UNO_AUTOCALC             "AutoCalculate"
 #define SC_UNO_PRINTERNAME          "PrinterName"
 #define SC_UNO_PRINTERSETUP         "PrinterSetup"
+#define SC_UNO_PRINTERPAPER         "PrinterPaperFromSetup"
 #define SC_UNO_APPLYDOCINF          "ApplyUserData"
+#define SC_UNO_SAVE_THUMBNAIL       "SaveThumbnail"
 #define SC_UNO_CHARCOMP             "CharacterCompressionType"
 #define SC_UNO_ASIANKERN            "IsKernAsianPunctuation"
 #define SC_UNO_VISAREA              "VisibleArea"
@@ -581,9 +592,11 @@
 #define SC_UNO_DP_ORIENTATION          "Orientation"
 #define SC_UNO_DP_POSITION             "Position"
 #define SC_UNO_DP_FUNCTION             "Function"
+#define SC_UNO_DP_FUNCTION2            "Function2"
 #define SC_UNO_DP_USEDHIERARCHY        "UsedHierarchy"
 #define SC_UNO_DP_FILTER               "Filter"
 #define SC_UNO_DP_SUBTOTAL             "SubTotals"
+#define SC_UNO_DP_SUBTOTAL2            "SubTotals2"
 #define SC_UNO_DP_SHOWEMPTY            "ShowEmpty"
 #define SC_UNO_DP_REPEATITEMLABELS     "RepeatItemLabels"
 #define SC_UNO_DP_ISVISIBLE            "IsVisible"
@@ -633,6 +646,8 @@
 #define SC_UNONAME_RENDERDEV        "RenderDevice"
 #define SC_UNONAME_SOURCERANGE      "SourceRange"
 #define SC_UNONAME_INC_NP_AREA      "PageIncludesNonprintableArea"
+#define SC_UNONAME_CALCPAGESIZE     "CalcPageContentSize"
+#define SC_UNONAME_CALCPAGEPOS      "CalcPagePos"
 
 // CellValueBinding
 #define SC_UNONAME_BOUNDCELL        "BoundCell"
@@ -678,7 +693,11 @@
 // Named ranges
 #define SC_UNO_MODIFY_BROADCAST     "ModifyAndBroadcast"
 
-#define SC_UNO_EMBED_FONTS     "EmbedFonts"
+#define SC_UNO_EMBED_FONTS               "EmbedFonts"
+#define SC_UNO_EMBED_ONLY_USED_FONTS     "EmbedOnlyUsedFonts"
+#define SC_UNO_EMBED_FONT_SCRIPT_LATIN   "EmbedLatinScriptFonts"
+#define SC_UNO_EMBED_FONT_SCRIPT_ASIAN   "EmbedAsianScriptFonts"
+#define SC_UNO_EMBED_FONT_SCRIPT_COMPLEX "EmbedComplexScriptFonts"
 
 #define SC_UNO_ODS_LOCK_SOLAR_MUTEX "ODSLockSolarMutex"
 #define SC_UNO_ODS_IMPORT_STYLES    "ODSImportStyles"

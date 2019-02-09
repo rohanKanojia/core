@@ -20,17 +20,16 @@
 
 #include "unogalitem.hxx"
 #include "unogaltheme.hxx"
-#include "svx/galtheme.hxx"
-#include "svx/galmisc.hxx"
+#include <svx/galtheme.hxx>
+#include <svx/galmisc.hxx>
 #include <svx/fmmodel.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/graph.hxx>
 #include <svl/itemprop.hxx>
 #include <svl/itempool.hxx>
 #include <comphelper/servicehelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include "galobj.hxx"
+#include <galobj.hxx>
 
 #include <com/sun/star/beans/PropertyState.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
@@ -73,7 +72,6 @@ bool GalleryItem::isValid() const
 
 
 uno::Any SAL_CALL GalleryItem::queryAggregation( const uno::Type & rType )
-    throw( uno::RuntimeException, std::exception )
 {
     uno::Any aAny;
 
@@ -90,14 +88,13 @@ uno::Any SAL_CALL GalleryItem::queryAggregation( const uno::Type & rType )
     else if( rType == cppu::UnoType<beans::XMultiPropertySet>::get())
         aAny <<= uno::Reference< beans::XMultiPropertySet >(this);
     else
-        aAny <<= OWeakAggObject::queryAggregation( rType );
+        aAny = OWeakAggObject::queryAggregation( rType );
 
     return aAny;
 }
 
 
 uno::Any SAL_CALL GalleryItem::queryInterface( const uno::Type & rType )
-    throw( uno::RuntimeException, std::exception )
 {
     return OWeakAggObject::queryInterface( rType );
 }
@@ -117,40 +114,22 @@ void SAL_CALL GalleryItem::release()
 }
 
 
-OUString GalleryItem::getImplementationName_Static()
-    throw()
+OUString SAL_CALL GalleryItem::getImplementationName()
 {
     return OUString( "com.sun.star.comp.gallery.GalleryItem" );
 }
 
-
-uno::Sequence< OUString > GalleryItem::getSupportedServiceNames_Static()
-    throw()
-{
-    uno::Sequence< OUString > aSeq { "com.sun.star.gallery.GalleryItem" };
-    return aSeq;
-}
-
-OUString SAL_CALL GalleryItem::getImplementationName()
-    throw( uno::RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
 sal_Bool SAL_CALL GalleryItem::supportsService( const OUString& ServiceName )
-    throw( uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL GalleryItem::getSupportedServiceNames()
-    throw( uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return { "com.sun.star.gallery.GalleryItem" };
 }
 
 uno::Sequence< uno::Type > SAL_CALL GalleryItem::getTypes()
-    throw(uno::RuntimeException, std::exception)
 {
     uno::Sequence< uno::Type >  aTypes( 6 );
     uno::Type*                  pTypes = aTypes.getArray();
@@ -166,14 +145,12 @@ uno::Sequence< uno::Type > SAL_CALL GalleryItem::getTypes()
 }
 
 uno::Sequence< sal_Int8 > SAL_CALL GalleryItem::getImplementationId()
-    throw(uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 
 sal_Int8 SAL_CALL GalleryItem::getType()
-    throw (uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aGuard;
     sal_Int8            nRet = gallery::GalleryItemType::EMPTY;
@@ -182,12 +159,11 @@ sal_Int8 SAL_CALL GalleryItem::getType()
     {
         switch( implGetObject()->eObjKind )
         {
-            case SGA_OBJ_SOUND:
-            case SGA_OBJ_VIDEO:
+            case SgaObjKind::Sound:
                 nRet = gallery::GalleryItemType::MEDIA;
             break;
 
-            case SGA_OBJ_SVDRAW:
+            case SgaObjKind::SvDraw:
                 nRet = gallery::GalleryItemType::DRAWING;
             break;
 
@@ -201,11 +177,8 @@ sal_Int8 SAL_CALL GalleryItem::getType()
 }
 
 
-::comphelper::PropertySetInfo* GalleryItem::createPropertySetInfo()
+rtl::Reference<::comphelper::PropertySetInfo> GalleryItem::createPropertySetInfo()
 {
-    SolarMutexGuard aGuard;
-    ::comphelper::PropertySetInfo*  pRet = new ::comphelper::PropertySetInfo();
-
     static ::comphelper::PropertyMapEntry const aEntries[] =
     {
         { OUString("GalleryItemType"), UNOGALLERY_GALLERYITEMTYPE, cppu::UnoType<sal_Int8>::get(),
@@ -229,19 +202,10 @@ sal_Int8 SAL_CALL GalleryItem::getType()
         { OUString(), 0, css::uno::Type(), 0, 0 }
     };
 
-    pRet->acquire();
-    pRet->add( aEntries );
-
-    return pRet;
+    return rtl::Reference<::comphelper::PropertySetInfo>( new ::comphelper::PropertySetInfo( aEntries ) );
 }
 
 void GalleryItem::_setPropertyValues( const comphelper::PropertyMapEntry** ppEntries, const uno::Any* pValues )
-    throw (beans::UnknownPropertyException,
-           beans::PropertyVetoException,
-           lang::IllegalArgumentException,
-           lang::WrappedTargetException,
-           uno::RuntimeException,
-           std::exception)
 {
     const SolarMutexGuard aGuard;
 
@@ -251,28 +215,27 @@ void GalleryItem::_setPropertyValues( const comphelper::PropertyMapEntry** ppEnt
         {
             OUString aNewTitle;
 
-            if( *pValues >>= aNewTitle )
-            {
-                ::GalleryTheme* pGalTheme = ( isValid() ? mpTheme->implGetTheme() : nullptr );
-
-                if( pGalTheme )
-                {
-                    std::unique_ptr<SgaObject> pObj(pGalTheme->ImplReadSgaObject( const_cast< GalleryObject* >( implGetObject() ) ));
-
-                    if( pObj )
-                    {
-                        if( OUString( pObj->GetTitle() ) != aNewTitle )
-                        {
-                            pObj->SetTitle( aNewTitle );
-                            pGalTheme->InsertObject( *pObj );
-                        }
-                    }
-                }
-            }
-            else
+            if( !(*pValues >>= aNewTitle) )
             {
                 throw lang::IllegalArgumentException();
             }
+
+            ::GalleryTheme* pGalTheme = ( isValid() ? mpTheme->implGetTheme() : nullptr );
+
+            if( pGalTheme )
+            {
+                std::unique_ptr<SgaObject> pObj(pGalTheme->ImplReadSgaObject( implGetObject() ));
+
+                if( pObj )
+                {
+                    if( pObj->GetTitle() != aNewTitle )
+                    {
+                        pObj->SetTitle( aNewTitle );
+                        pGalTheme->InsertObject( *pObj );
+                    }
+                }
+            }
+
         }
 
         ++ppEntries;
@@ -281,10 +244,6 @@ void GalleryItem::_setPropertyValues( const comphelper::PropertyMapEntry** ppEnt
 }
 
 void GalleryItem::_getPropertyValues( const comphelper::PropertyMapEntry** ppEntries, uno::Any* pValue )
-    throw (beans::UnknownPropertyException,
-           lang::WrappedTargetException,
-           css::uno::RuntimeException,
-           std::exception)
 {
     const SolarMutexGuard aGuard;
 
@@ -294,7 +253,7 @@ void GalleryItem::_getPropertyValues( const comphelper::PropertyMapEntry** ppEnt
         {
             case UNOGALLERY_GALLERYITEMTYPE:
             {
-                *pValue <<= sal_Int8( getType() );
+                *pValue <<= getType();
             }
             break;
 
@@ -303,7 +262,7 @@ void GalleryItem::_getPropertyValues( const comphelper::PropertyMapEntry** ppEnt
                 ::GalleryTheme* pGalTheme = ( isValid() ? mpTheme->implGetTheme() : nullptr );
 
                 if( pGalTheme )
-                    *pValue <<= OUString( implGetObject()->aURL.GetMainURL( INetURLObject::NO_DECODE ) );
+                    *pValue <<= implGetObject()->aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE );
             }
             break;
 
@@ -313,12 +272,11 @@ void GalleryItem::_getPropertyValues( const comphelper::PropertyMapEntry** ppEnt
 
                 if( pGalTheme )
                 {
-                    SgaObject* pObj = pGalTheme->AcquireObject( pGalTheme->ImplGetGalleryObjectPos( implGetObject() ) );
+                    std::unique_ptr<SgaObject> pObj = pGalTheme->AcquireObject( pGalTheme->ImplGetGalleryObjectPos( implGetObject() ) );
 
                     if( pObj )
                     {
-                        *pValue <<= OUString( pObj->GetTitle() );
-                        ::GalleryTheme::ReleaseObject( pObj );
+                        *pValue <<= pObj->GetTitle();
                     }
                 }
             }
@@ -330,7 +288,7 @@ void GalleryItem::_getPropertyValues( const comphelper::PropertyMapEntry** ppEnt
 
                 if( pGalTheme )
                 {
-                    SgaObject* pObj = pGalTheme->AcquireObject( pGalTheme->ImplGetGalleryObjectPos( implGetObject() ) );
+                    std::unique_ptr<SgaObject> pObj = pGalTheme->AcquireObject( pGalTheme->ImplGetGalleryObjectPos( implGetObject() ) );
 
                     if( pObj )
                     {
@@ -342,7 +300,6 @@ void GalleryItem::_getPropertyValues( const comphelper::PropertyMapEntry** ppEnt
                             aThumbnail = pObj->GetThumbMtf();
 
                         *pValue <<= aThumbnail.GetXGraphic();
-                        ::GalleryTheme::ReleaseObject( pObj );
                     }
                 }
             }
@@ -363,7 +320,7 @@ void GalleryItem::_getPropertyValues( const comphelper::PropertyMapEntry** ppEnt
                 if( gallery::GalleryItemType::DRAWING == getType() )
                 {
                     ::GalleryTheme* pGalTheme = ( isValid() ? mpTheme->implGetTheme() : nullptr );
-                    FmFormModel*    pModel = new FmFormModel;
+                    FmFormModel*    pModel = new FmFormModel();
 
                     pModel->GetItemPool().FreezeIdRanges();
 

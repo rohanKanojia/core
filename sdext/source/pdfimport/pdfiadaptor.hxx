@@ -20,8 +20,8 @@
 #ifndef INCLUDED_SDEXT_SOURCE_PDFIMPORT_PDFIADAPTOR_HXX
 #define INCLUDED_SDEXT_SOURCE_PDFIMPORT_PDFIADAPTOR_HXX
 
-#include "xmlemitter.hxx"
-#include "treevisitorfactory.hxx"
+#include <xmlemitter.hxx>
+#include <treevisitorfactory.hxx>
 
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/xml/XImportFilter.hpp>
@@ -59,21 +59,17 @@ namespace pdfi
                                           css::uno::XComponentContext >& xContext );
 
         // XFilter
-        virtual sal_Bool SAL_CALL filter( const css::uno::Sequence<css::beans::PropertyValue>& rFilterData ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL cancel() throw(std::exception) override;
+        virtual sal_Bool SAL_CALL filter( const css::uno::Sequence<css::beans::PropertyValue>& rFilterData ) override;
+        virtual void SAL_CALL cancel() override;
 
         // XImporter
-        virtual void SAL_CALL setTargetDocument( const css::uno::Reference< css::lang::XComponent >& xDocument )
-            throw( css::lang::IllegalArgumentException, std::exception ) override;
+        virtual void SAL_CALL setTargetDocument( const css::uno::Reference< css::lang::XComponent >& xDocument ) override;
 
-        OUString SAL_CALL getImplementationName()
-            throw (css::uno::RuntimeException, std::exception) override;
+        OUString SAL_CALL getImplementationName() override;
 
-        sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-            throw (css::uno::RuntimeException, std::exception) override;
+        sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override;
 
-        css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-            throw (css::uno::RuntimeException, std::exception) override;
+        css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
     };
 
     typedef ::cppu::WeakComponentImplHelper<
@@ -93,7 +89,6 @@ namespace pdfi
         css::uno::Reference<
             css::frame::XModel >           m_xModel;
         TreeVisitorFactorySharedPtr                   m_pVisitorFactory;
-        bool                                          m_bEnableToplevelText;
 
         bool parse( const css::uno::Reference<css::io::XInputStream>&       xInput,
                     const css::uno::Reference<css::task::XInteractionHandler>& xIHdl,
@@ -101,7 +96,7 @@ namespace pdfi
                     const css::uno::Reference<css::task::XStatusIndicator>& xStatus,
                     const XmlEmitterSharedPtr&                                                    rEmitter,
                     const OUString&                                                          rURL,
-                    const OUString&                                         rFilterOptions = OUString());
+                    const OUString&                                         rFilterOptions);
 
     public:
         explicit PDFIRawAdaptor( OUString const & implementationName,
@@ -114,9 +109,6 @@ namespace pdfi
             format (writer, draw, etc)
          */
         void setTreeVisitorFactory(const TreeVisitorFactorySharedPtr& rVisitorFactory);
-
-        /// TEMP - enable writer-like text:p on doc level
-        void enableToplevelText() { m_bEnableToplevelText=true; }
 
         /** Export pdf document to ODG
 
@@ -133,20 +125,16 @@ namespace pdfi
         // XImportFilter
         virtual sal_Bool SAL_CALL importer( const css::uno::Sequence< css::beans::PropertyValue >& rSourceData,
                                             const css::uno::Reference< css::xml::sax::XDocumentHandler >& rHdl,
-                                            const css::uno::Sequence< OUString >& rUserData ) throw( css::uno::RuntimeException, std::exception ) override;
+                                            const css::uno::Sequence< OUString >& rUserData ) override;
 
         // XImporter
-        virtual void SAL_CALL setTargetDocument( const css::uno::Reference< css::lang::XComponent >& xDocument )
-            throw( css::lang::IllegalArgumentException, std::exception ) override;
+        virtual void SAL_CALL setTargetDocument( const css::uno::Reference< css::lang::XComponent >& xDocument ) override;
 
-        OUString SAL_CALL getImplementationName()
-            throw (css::uno::RuntimeException, std::exception) override;
+        OUString SAL_CALL getImplementationName() override;
 
-        sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-            throw (css::uno::RuntimeException, std::exception) override;
+        sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override;
 
-        css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-            throw (css::uno::RuntimeException, std::exception) override;
+        css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
     };
 }
 

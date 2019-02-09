@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.0 -->
+<!-- Generated with glade 3.22.1 -->
+<interface domain="sw">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkBox" id="FrameURLPage">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
+    <property name="valign">start</property>
+    <property name="hexpand">True</property>
     <property name="border_width">6</property>
     <property name="orientation">vertical</property>
     <property name="spacing">12</property>
@@ -35,13 +38,11 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="hexpand">True</property>
-                    <property name="invisible_char">●</property>
+                    <property name="activates_default">True</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -49,61 +50,53 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="hexpand">True</property>
-                    <property name="invisible_char">●</property>
+                    <property name="activates_default">True</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkLabel" id="url_label">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_URL:</property>
+                    <property name="label" translatable="yes" context="frmurlpage|url_label">_URL:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">url</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkLabel" id="name_label">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Name:</property>
+                    <property name="label" translatable="yes" context="frmurlpage|name_label">_Name:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">name</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkLabel" id="frame_label">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Frame:</property>
+                    <property name="label" translatable="yes" context="frmurlpage|frame_label">_Frame:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">frame</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -113,7 +106,7 @@
                     <property name="layout_style">start</property>
                     <child>
                       <object class="GtkButton" id="search">
-                        <property name="label" translatable="yes">_Browse...</property>
+                        <property name="label" translatable="yes" context="frmurlpage|search">_Browse...</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
@@ -129,8 +122,6 @@
                   <packing>
                     <property name="left_attach">2</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -139,19 +130,16 @@
                     <property name="can_focus">False</property>
                     <property name="hexpand">True</property>
                     <property name="has_entry">True</property>
-                    <property name="entry_text_column">0</property>
-                    <property name="id_column">1</property>
                     <child internal-child="entry">
                       <object class="GtkEntry" id="comboboxtext-entry">
                         <property name="can_focus">False</property>
+                        <property name="activates_default">True</property>
                       </object>
                     </child>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -168,7 +156,7 @@
           <object class="GtkLabel" id="label1">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Link to</property>
+            <property name="label" translatable="yes" context="frmurlpage|label1">Link to</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -207,7 +195,7 @@
                 <property name="column_spacing">12</property>
                 <child>
                   <object class="GtkCheckButton" id="server">
-                    <property name="label" translatable="yes">_Server-side image map</property>
+                    <property name="label" translatable="yes" context="frmurlpage|server">_Server-side image map</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -219,13 +207,11 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="client">
-                    <property name="label" translatable="yes">_Client-side image map</property>
+                    <property name="label" translatable="yes" context="frmurlpage|client">_Client-side image map</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -237,8 +223,6 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
               </object>
@@ -249,7 +233,7 @@
           <object class="GtkLabel" id="label2">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Image Map</property>
+            <property name="label" translatable="yes" context="frmurlpage|label2">Image Map</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>

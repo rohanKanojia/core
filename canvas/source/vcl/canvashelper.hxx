@@ -104,10 +104,6 @@ namespace vclcanvas
         // XCanvas (only providing, not implementing the
         // interface. Also note subtle method parameter differences)
         void clear();
-        void drawPoint( const css::rendering::XCanvas*         rCanvas,
-                        const css::geometry::RealPoint2D&      aPoint,
-                        const css::rendering::ViewState&       viewState,
-                        const css::rendering::RenderState&     renderState );
         void drawLine( const css::rendering::XCanvas*      rCanvas,
                        const css::geometry::RealPoint2D&   aStartPoint,
                        const css::geometry::RealPoint2D&   aEndPoint,
@@ -235,8 +231,6 @@ namespace vclcanvas
 
         css::geometry::IntegerSize2D getSize();
 
-        void queryBitmapCanvas();
-
         css::uno::Reference< css::rendering::XBitmap >
             getScaledBitmap( const css::geometry::RealSize2D&  newSize,
                              bool                              beFast );
@@ -244,14 +238,6 @@ namespace vclcanvas
         css::uno::Sequence< sal_Int8 >
             getData( css::rendering::IntegerBitmapLayout&      bitmapLayout,
                      const css::geometry::IntegerRectangle2D&  rect );
-
-        void setData( const css::uno::Sequence< sal_Int8 >&        data,
-                      const css::rendering::IntegerBitmapLayout&   bitmapLayout,
-                      const css::geometry::IntegerRectangle2D&     rect );
-
-        void setPixel( const css::uno::Sequence< sal_Int8 >&       color,
-                       const css::rendering::IntegerBitmapLayout&  bitmapLayout,
-                       const css::geometry::IntegerPoint2D&        pos );
 
         css::uno::Sequence< sal_Int8 >
             getPixel( css::rendering::IntegerBitmapLayout& bitmapLayout,
@@ -296,13 +282,13 @@ namespace vclcanvas
         css::rendering::XGraphicDevice*              mpDevice;
 
         /// Rendering to this outdev preserves its state
-        OutDevProviderSharedPtr                      mpProtectedOutDev;
+        OutDevProviderSharedPtr                      mpProtectedOutDevProvider;
 
         /// Rendering to this outdev does not preserve its state
-        OutDevProviderSharedPtr                      mpOutDev;
+        OutDevProviderSharedPtr                      mpOutDevProvider;
 
         /// Rendering to this outdev does not preserve its state
-        OutDevProviderSharedPtr                      mp2ndOutDev;
+        OutDevProviderSharedPtr                      mp2ndOutDevProvider;
 
         /// When true, content is able to represent alpha
         bool                                         mbHaveAlpha;

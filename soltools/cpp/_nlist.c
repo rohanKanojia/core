@@ -27,11 +27,10 @@ Nlist *kwdefined;
 char wd[128];
 
 /*
-    ER: Tabelle extra gross gemacht, da es anscheinend ein Problem mit der
-    der Verkettung gibt, irgendwann irgendwo wird mal ein nlist->next
-    ueberschrieben, was in eineme SIGSEGV resultiert.
-    Den GDB mit watchpoint hab ich aber nach 2 Tagen abgebrochen..
-    so loeppt's jedenfalls erstmal..
+    ER: Table was made extra large, because there seems to be a problem with the
+    chaining. An nlist->next is sometimes overwritten somewhere, which
+    results in a SIGSEGV. I canceled the GDB with watchpoint after 2 days, though..
+    It works this way for now..
  */
 #define NLSIZE 15000
 
@@ -39,11 +38,12 @@ static Nlist *nlist[NLSIZE];
 
 struct kwtab
 {
-    char *kw;
-    int val;
-    int flag;
-}   kwtab[] =
+    char * const kw;
+    int const val;
+    int const flag;
+};
 
+static const struct kwtab kwtab[] =
 {
         {"if", KIF, ISKW},
         {"ifdef", KIFDEF, ISKW},
@@ -76,10 +76,10 @@ unsigned long namebit[077 + 1];
 void
     setup_kwtab(void)
 {
-    struct kwtab *kp;
+    struct kwtab const *kp;
     Nlist *np;
     Token t;
-    static Token deftoken[1] = {{NAME, 0, 0, 7, (uchar *) "defined", 0}};
+    static Token deftoken[1] = {{NAME, 0, 7, (uchar *) "defined", 0}};
     static Tokenrow deftr = {deftoken, deftoken, deftoken + 1, 1};
 
     for (kp = kwtab; kp->kw; kp++)

@@ -38,7 +38,7 @@ public class ColumnarSingleColumn extends ReportBuilderLayouter
 
     public String getLocalizedName()
     {
-        return getResource().getResText(UIConsts.RID_REPORT + 81);
+        return getResource().getResText("RID_REPORT_81");
     }
 
     @Override
@@ -84,7 +84,7 @@ public class ColumnarSingleColumn extends ReportBuilderLayouter
     }
 
     @Override
-    protected void insertDetailFieldTitles(int lastGroupPostion)
+    protected void insertDetailFieldTitles(int lastGroupPosition)
     {
         // we won't extra field titles
     }

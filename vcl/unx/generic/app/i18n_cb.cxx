@@ -34,7 +34,7 @@
 #include <unx/i18n_status.hxx>
 #include <unx/i18n_ic.hxx>
 #include <unx/i18n_im.hxx>
-#include "salframe.hxx"
+#include <salframe.hxx>
 
 // i. preedit start callback
 
@@ -42,10 +42,9 @@ int
 PreeditStartCallback ( XIC, XPointer client_data, XPointer )
 {
       preedit_data_t* pPreeditData = reinterpret_cast<preedit_data_t*>(client_data);
-    if ( pPreeditData->eState == ePreeditStatusActivationRequired )
+    if ( pPreeditData->eState == PreeditStatus::ActivationRequired )
     {
-        pPreeditData->eState = ePreeditStatusActive;
-        pPreeditData->aText.nCursorPos = 0;
+        pPreeditData->eState = PreeditStatus::Active;
         pPreeditData->aText.nLength    = 0;
     }
 
@@ -57,13 +56,13 @@ PreeditStartCallback ( XIC, XPointer client_data, XPointer )
 void
 PreeditDoneCallback ( XIC, XPointer client_data, XPointer )
 {
-      preedit_data_t* pPreeditData = reinterpret_cast<preedit_data_t*>(client_data);
-     if (pPreeditData->eState == ePreeditStatusActive )
+    preedit_data_t* pPreeditData = reinterpret_cast<preedit_data_t*>(client_data);
+    if (pPreeditData->eState == PreeditStatus::Active )
     {
         if( pPreeditData->pFrame )
-            pPreeditData->pFrame->CallCallback( SALEVENT_ENDEXTTEXTINPUT, nullptr );
+            pPreeditData->pFrame->CallCallback( SalEvent::EndExtTextInput, nullptr );
     }
-    pPreeditData->eState = ePreeditStatusStartPending;
+    pPreeditData->eState = PreeditStatus::StartPending;
 }
 
 // iii. preedit draw callback
@@ -71,7 +70,7 @@ PreeditDoneCallback ( XIC, XPointer client_data, XPointer )
 // Handle deletion of text in a preedit_draw_callback
 // from and howmuch are guaranteed to be nonnegative
 
-void
+static void
 Preedit_DeleteText(preedit_text_t *ptext, int from, int howmuch)
 {
     // If we've been asked to delete no text then just set
@@ -84,13 +83,12 @@ Preedit_DeleteText(preedit_text_t *ptext, int from, int howmuch)
 
     int to = from + howmuch;
 
-      if (to == (int)ptext->nLength)
+    if (to == static_cast<int>(ptext->nLength))
     {
         // delete from the end of the text
         ptext->nLength = from;
-      }
-    else
-        if (to < (int)ptext->nLength)
+    }
+    else if (to < static_cast<int>(ptext->nLength))
     {
         // cut out of the middle of the text
         memmove( static_cast<void*>(ptext->pUnicodeBuffer + from),
@@ -100,7 +98,7 @@ Preedit_DeleteText(preedit_text_t *ptext, int from, int howmuch)
                 static_cast<void*>(ptext->pCharStyle + to),
                 (ptext->nLength - to) * sizeof(XIMFeedback));
         ptext->nLength -= howmuch;
-      }
+    }
     else
     {
           // XXX this indicates an error, are we out of sync ?
@@ -112,17 +110,17 @@ Preedit_DeleteText(preedit_text_t *ptext, int from, int howmuch)
     }
 
       // NULL-terminate the string
-      ptext->pUnicodeBuffer[ptext->nLength] = (sal_Unicode)0;
+      ptext->pUnicodeBuffer[ptext->nLength] = u'\0';
 }
 
 // reallocate the textbuffer with sufficiently large size 2^x
 // nnewlimit is presupposed to be larger than ptext->size
-void
+static void
 enlarge_buffer ( preedit_text_t *ptext, int nnewlimit )
 {
       size_t nnewsize = ptext->nSize;
 
-      while ( nnewsize <= (size_t)nnewlimit )
+      while ( nnewsize <= static_cast<size_t>(nnewlimit) )
         nnewsize *= 2;
 
       ptext->nSize = nnewsize;
@@ -135,7 +133,7 @@ enlarge_buffer ( preedit_text_t *ptext, int nnewlimit )
 // Handle insertion of text in a preedit_draw_callback
 // string field of XIMText struct is guaranteed to be != NULL
 
-void
+static void
 Preedit_InsertText(preedit_text_t *pText, XIMText *pInsertText, int where)
 {
     sal_Unicode *pInsertTextString;
@@ -220,16 +218,16 @@ Preedit_InsertText(preedit_text_t *pText, XIMText *pInsertText, int where)
     pText->nLength += howmany;
 
     // NULL-terminate the string
-    pText->pUnicodeBuffer[pText->nLength] = (sal_Unicode)0;
+    pText->pUnicodeBuffer[pText->nLength] = u'\0';
 }
 
 // Handle the change of attributes in a preedit_draw_callback
 
-void
-Preedit_UpdateAttributes ( preedit_text_t* ptext, XIMFeedback* feedback,
+static void
+Preedit_UpdateAttributes ( preedit_text_t* ptext, XIMFeedback const * feedback,
         int from, int amount )
 {
-    if ( (from + amount) > (int)ptext->nLength )
+    if ( (from + amount) > static_cast<int>(ptext->nLength) )
     {
         // XXX this indicates an error, are we out of sync ?
         fprintf (stderr, "Preedit_UpdateAttributes( %i + %i > %i )\n",
@@ -246,48 +244,48 @@ Preedit_UpdateAttributes ( preedit_text_t* ptext, XIMFeedback* feedback,
 // Convert the XIM feedback values into appropriate VCL
 // EXTTEXTINPUT_ATTR values
 // returns an allocate list of attributes, which must be freed by caller
-sal_uInt16*
-Preedit_FeedbackToSAL ( XIMFeedback* pfeedback, int nlength, std::vector<sal_uInt16>& rSalAttr )
+static ExtTextInputAttr*
+Preedit_FeedbackToSAL ( const XIMFeedback* pfeedback, int nlength, std::vector<ExtTextInputAttr>& rSalAttr )
 {
-      sal_uInt16 *psalattr;
-      sal_uInt16  nval;
-      sal_uInt16  noldval = 0;
-      XIMFeedback nfeedback;
+    ExtTextInputAttr *psalattr;
+    ExtTextInputAttr  nval;
+    ExtTextInputAttr  noldval = ExtTextInputAttr::NONE;
+    XIMFeedback nfeedback;
 
       // only work with reasonable length
-      if (nlength > 0 && nlength > sal::static_int_cast<int>(rSalAttr.size()) )
+    if (nlength > 0 && nlength > sal::static_int_cast<int>(rSalAttr.size()) )
     {
         rSalAttr.reserve( nlength );
         psalattr = &rSalAttr[0];
     }
-      else
+    else
         return nullptr;
 
-      for (int npos = 0; npos < nlength; npos++)
+    for (int npos = 0; npos < nlength; npos++)
     {
-        nval = 0;
+        nval = ExtTextInputAttr::NONE;
         nfeedback = pfeedback[npos];
 
         // means to use the feedback of the previous char
         if (nfeedback == 0)
         {
               nval = noldval;
-           }
+        }
         // convert feedback to attributes
         else
         {
               if (nfeedback & XIMReverse)
-                nval |= EXTTEXTINPUT_ATTR_HIGHLIGHT;
+                nval |= ExtTextInputAttr::Highlight;
               if (nfeedback & XIMUnderline)
-                nval |= EXTTEXTINPUT_ATTR_UNDERLINE;
+                nval |= ExtTextInputAttr::Underline;
               if (nfeedback & XIMHighlight)
-                nval |= EXTTEXTINPUT_ATTR_HIGHLIGHT;
+                nval |= ExtTextInputAttr::Highlight;
               if (nfeedback & XIMPrimary)
-                nval |= EXTTEXTINPUT_ATTR_DOTTEDUNDERLINE;
+                nval |= ExtTextInputAttr::DottedUnderline;
               if (nfeedback & XIMSecondary)
-                nval |= EXTTEXTINPUT_ATTR_DASHDOTUNDERLINE;
+                nval |= ExtTextInputAttr::DashDotUnderline;
               if (nfeedback & XIMTertiary) // same as 2ery
-                nval |= EXTTEXTINPUT_ATTR_DASHDOTUNDERLINE;
+                nval |= ExtTextInputAttr::DashDotUnderline;
 
         }
         // copy in list
@@ -314,8 +312,8 @@ PreeditDrawCallback(XIC ic, XPointer client_data,
     // if (pPreeditData->eState == ePreeditStatusStartPending && call_data->text == NULL)
     //    return;
 
-    if ( pPreeditData->eState == ePreeditStatusStartPending )
-        pPreeditData->eState = ePreeditStatusActivationRequired;
+    if ( pPreeditData->eState == PreeditStatus::StartPending )
+        pPreeditData->eState = PreeditStatus::ActivationRequired;
     PreeditStartCallback( ic, client_data, nullptr );
 
       // Edit the internal textbuffer as indicated by the call_data,
@@ -359,22 +357,20 @@ PreeditDrawCallback(XIC ic, XPointer client_data,
 
     // build the SalExtTextInputEvent and send it up
 
-    pPreeditData->aInputEv.mnTime = 0;
     pPreeditData->aInputEv.mpTextAttr = Preedit_FeedbackToSAL(
         pPreeditData->aText.pCharStyle, pPreeditData->aText.nLength, pPreeditData->aInputFlags);
     pPreeditData->aInputEv.mnCursorPos = call_data->caret;
     pPreeditData->aInputEv.maText = OUString(pPreeditData->aText.pUnicodeBuffer,
                                 pPreeditData->aText.nLength);
     pPreeditData->aInputEv.mnCursorFlags    = 0; // default: make cursor visible
-    pPreeditData->aInputEv.mbOnlyCursor = False;
 
-    if ( pPreeditData->eState == ePreeditStatusActive && pPreeditData->pFrame )
-        pPreeditData->pFrame->CallCallback(SALEVENT_EXTTEXTINPUT, static_cast<void*>(&pPreeditData->aInputEv));
+    if ( pPreeditData->eState == PreeditStatus::Active && pPreeditData->pFrame )
+        pPreeditData->pFrame->CallCallback(SalEvent::ExtTextInput, static_cast<void*>(&pPreeditData->aInputEv));
     if (pPreeditData->aText.nLength == 0 && pPreeditData->pFrame )
-        pPreeditData->pFrame->CallCallback( SALEVENT_ENDEXTTEXTINPUT, nullptr );
+        pPreeditData->pFrame->CallCallback( SalEvent::EndExtTextInput, nullptr );
 
     if (pPreeditData->aText.nLength == 0)
-        pPreeditData->eState = ePreeditStatusStartPending;
+        pPreeditData->eState = PreeditStatus::StartPending;
 
     GetPreeditSpotLocation(ic, reinterpret_cast<XPointer>(pPreeditData));
 }
@@ -385,22 +381,20 @@ GetPreeditSpotLocation(XIC ic, XPointer client_data)
 
     // Send SalEventExtTextInputPos event to get spotlocation
 
-    SalExtTextInputPosEvent mPosEvent;
+    SalExtTextInputPosEvent aPosEvent;
     preedit_data_t* pPreeditData = reinterpret_cast<preedit_data_t*>(client_data);
 
     if( pPreeditData->pFrame )
-        pPreeditData->pFrame->CallCallback(SALEVENT_EXTTEXTINPUTPOS, static_cast<void*>(&mPosEvent));
+        pPreeditData->pFrame->CallCallback(SalEvent::ExtTextInputPos, static_cast<void*>(&aPosEvent));
 
     XPoint point;
-    point.x = mPosEvent.mnX + mPosEvent.mnWidth;
-    point.y = mPosEvent.mnY + mPosEvent.mnHeight;
+    point.x = aPosEvent.mnX + aPosEvent.mnWidth;
+    point.y = aPosEvent.mnY + aPosEvent.mnHeight;
 
     XVaNestedList preedit_attr;
     preedit_attr = XVaCreateNestedList(0, XNSpotLocation, &point, nullptr);
     XSetICValues(ic, XNPreeditAttributes, preedit_attr, nullptr);
     XFree(preedit_attr);
-
-    return;
 }
 
 // iv. preedit caret callback
@@ -465,13 +459,11 @@ IsControlCode(sal_Unicode nChar)
 void
 StatusStartCallback (XIC, XPointer, XPointer)
 {
-    return;
 }
 
 void
 StatusDoneCallback (XIC, XPointer, XPointer)
 {
-    return;
 }
 
 void
@@ -515,7 +507,6 @@ StatusDrawCallback (XIC, XPointer, XIMStatusDrawCallbackStruct *call_data)
             call_data->type == XIMBitmapType ? "XIMBitmapType" : OString::number(call_data->type).getStr() );
     }
 #endif
-    return;
 }
 
 // vii. destroy callbacks: internally disable all IC/IM calls

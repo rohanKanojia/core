@@ -18,13 +18,14 @@
  */
 
 
-#include "parser.hxx"
+#include <memory>
+#include <parser.hxx>
 
 #include <osl/diagnose.h>
 
 #include <stdio.h>
 #include <string.h>
-#include <ctype.h>
+#include <rtl/character.hxx>
 
 // All symbol names are laid down int the symbol-pool's stringpool, so that
 // all symbols are handled in the same case. On saving the code-image, the
@@ -32,22 +33,16 @@
 // The local stringpool holds all the symbols that don't move to the image
 // (labels, constant names etc.).
 
-/***************************************************************************
-|*
-|*  SbiStringPool
-|*
-***************************************************************************/
-
 SbiStringPool::SbiStringPool( )
 {}
 
 SbiStringPool::~SbiStringPool()
 {}
 
-const OUString& SbiStringPool::Find( sal_uInt32 n ) const
+OUString SbiStringPool::Find( sal_uInt32 n ) const
 {
     if( n == 0 || n > aData.size() )
-        return aEmpty; //hack, returning a reference to a simulation of null
+        return OUString();
     else
         return aData[n - 1];
 }
@@ -63,7 +58,7 @@ short SbiStringPool::Add( const OUString& rVal )
     }
 
     aData.push_back(rVal);
-    return (short) ++n;
+    return static_cast<short>(++n);
 }
 
 short SbiStringPool::Add( double n, SbxDataType t )
@@ -71,20 +66,14 @@ short SbiStringPool::Add( double n, SbxDataType t )
     char buf[ 40 ];
     switch( t )
     {
-        case SbxINTEGER: snprintf( buf, sizeof(buf), "%d", (short) n ); break;
-        case SbxLONG:    snprintf( buf, sizeof(buf), "%ld", (long) n ); break;
-        case SbxSINGLE:  snprintf( buf, sizeof(buf), "%.6g", (float) n ); break;
+        case SbxINTEGER: snprintf( buf, sizeof(buf), "%d", static_cast<short>(n) ); break;
+        case SbxLONG:    snprintf( buf, sizeof(buf), "%ld", static_cast<long>(n) ); break;
+        case SbxSINGLE:  snprintf( buf, sizeof(buf), "%.6g", static_cast<float>(n) ); break;
         case SbxDOUBLE:  snprintf( buf, sizeof(buf), "%.16g", n ); break;
         default: break;
     }
     return Add( OUString::createFromAscii( buf ) );
 }
-
-/***************************************************************************
-|*
-|*  SbiSymPool
-|*
-***************************************************************************/
 
 SbiSymPool::SbiSymPool( SbiStringPool& r, SbiSymScope s, SbiParser* pP ) : rStrings( r ), pParser( pP )
 {
@@ -100,7 +89,7 @@ SbiSymPool::~SbiSymPool()
 
 SbiSymDef* SbiSymPool::First()
 {
-    nCur = (sal_uInt16) -1;
+    nCur = sal_uInt16(-1);
     return Next();
 }
 
@@ -159,9 +148,9 @@ void SbiSymPool::Add( SbiSymDef* pDef )
             OUString aName( pDef->aName );
             if( pDef->IsStatic() )
             {
-                aName = pParser->aGblStrings.Find( nProcId );
-                aName += ":";
-                aName += pDef->aName;
+                aName = pParser->aGblStrings.Find( nProcId )
+                      + ":"
+                      + pDef->aName;
             }
             pDef->nId = rStrings.Add( aName );
         }
@@ -245,21 +234,14 @@ sal_uInt32 SbiSymPool::Reference( const OUString& rName )
 
 void SbiSymPool::CheckRefs()
 {
-    for (size_t i = 0; i < m_Data.size(); ++i)
+    for (std::unique_ptr<SbiSymDef> & r : m_Data)
     {
-        SbiSymDef &r = *m_Data[ i ];
-        if( !r.IsDefined() )
+        if( !r->IsDefined() )
         {
-            pParser->Error( ERRCODE_BASIC_UNDEF_LABEL, r.GetName() );
+            pParser->Error( ERRCODE_BASIC_UNDEF_LABEL, r->GetName() );
         }
     }
 }
-
-/***************************************************************************
-|*
-|*  symbol definitions
-|*
-***************************************************************************/
 
 SbiSymDef::SbiSymDef( const OUString& rName ) : aName( rName )
 {
@@ -281,15 +263,13 @@ SbiSymDef::SbiSymDef( const OUString& rName ) : aName( rName )
     bByVal   =
     bChained =
     bGlobal  = false;
-    pIn      =
-    pPool    = nullptr;
+    pIn      = nullptr;
     nDefaultId = 0;
     nFixedStringLength = -1;
 }
 
 SbiSymDef::~SbiSymDef()
 {
-    delete pPool;
 }
 
 SbiProcDef* SbiSymDef::GetProcDef()
@@ -322,12 +302,12 @@ void SbiSymDef::SetType( SbxDataType t )
         sal_Unicode cu = aName[0];
         if( cu < 256 )
         {
-            char ch = (char)cu;
+            unsigned char ch = static_cast<unsigned char>(cu);
             if( ch == '_' )
             {
                 ch = 'Z';
             }
-            int ch2 = toupper( ch );
+            int ch2 = rtl::toAsciiUpperCase( ch );
             int nIndex = ch2 - 'A';
             if (nIndex >= 0 && nIndex < N_DEF_TYPES)
                 t = pIn->pParser->eDefTypes[nIndex];
@@ -371,7 +351,7 @@ SbiSymPool& SbiSymDef::GetPool()
 {
     if( !pPool )
     {
-        pPool = new SbiSymPool( pIn->pParser->aGblStrings, SbLOCAL, pIn->pParser );   // is dumped
+        pPool = std::make_unique<SbiSymPool>( pIn->pParser->aGblStrings, SbLOCAL, pIn->pParser );// is dumped
     }
     return *pPool;
 }
@@ -397,7 +377,7 @@ SbiProcDef::SbiProcDef( SbiParser* pParser, const OUString& rName,
          , mbProcDecl( bProcDecl )
 {
     aParams.SetParent( &pParser->aPublics );
-    pPool = new SbiSymPool( pParser->aGblStrings, SbLOCAL, pParser );
+    pPool = std::make_unique<SbiSymPool>( pParser->aGblStrings, SbLOCAL, pParser );
     pPool->SetParent( &aParams );
     nLine1  =
     nLine2  = 0;
@@ -452,15 +432,18 @@ void SbiProcDef::Match( SbiProcDef* pOld )
         pOld->pIn->GetParser()->SetCol1( 0 );
         pOld->pIn->GetParser()->Error( ERRCODE_BASIC_BAD_DECLARATION, aName );
     }
+
     if( !pIn && pOld->pIn )
     {
         // Replace old entry with the new one
         nPos = pOld->nPos;
         nId  = pOld->nId;
         pIn  = pOld->pIn;
-        std::unique_ptr<SbiSymDef> tmp(this);
-        std::swap(pIn->m_Data[nPos], tmp);
-        tmp.release();
+
+        // don't delete pOld twice, if it's stored in m_Data
+        if (pOld == pIn->m_Data[nPos].get())
+            pOld = nullptr;
+        pIn->m_Data[nPos].reset(this);
     }
     delete pOld;
 }

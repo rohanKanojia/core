@@ -18,17 +18,22 @@
  */
 
 #include <string.h>
-#include <vcl/syswin.hxx>
 
-#include "headless/svpframe.hxx"
-#include "headless/svpinst.hxx"
-#include "headless/svpgdi.hxx"
+#include <comphelper/lok.hxx>
+#include <vcl/syswin.hxx>
+#include <sal/log.hxx>
+
+#include <headless/svpframe.hxx>
+#include <headless/svpinst.hxx>
+#ifndef IOS
+#include <headless/svpgdi.hxx>
+#endif
 
 #include <basegfx/vector/b2ivector.hxx>
 
+#ifndef IOS
 #include <cairo.h>
-
-using namespace basegfx;
+#endif
 
 SvpSalFrame* SvpSalFrame::s_pFocusFrame = nullptr;
 
@@ -38,13 +43,14 @@ SvpSalFrame* SvpSalFrame::s_pFocusFrame = nullptr;
 
 SvpSalFrame::SvpSalFrame( SvpSalInstance* pInstance,
                           SalFrame* pParent,
-                          SalFrameStyleFlags nSalFrameStyle,
-                          SystemParentData* ) :
+                          SalFrameStyleFlags nSalFrameStyle ) :
     m_pInstance( pInstance ),
     m_pParent( static_cast<SvpSalFrame*>(pParent) ),
     m_nStyle( nSalFrameStyle ),
     m_bVisible( false ),
+#ifndef IOS
     m_pSurface( nullptr ),
+#endif
     m_nMinWidth( 0 ),
     m_nMinHeight( 0 ),
     m_nMaxWidth( 0 ),
@@ -55,12 +61,11 @@ SvpSalFrame::SvpSalFrame( SvpSalInstance* pInstance,
     memset( static_cast<void *>(&m_aSystemChildData), 0, sizeof( SystemEnvData ) );
     m_aSystemChildData.nSize        = sizeof( SystemEnvData );
 #ifdef IOS
-    (void) nScanlineFormat;
+    // Nothing
 #elif defined ANDROID
     // Nothing
 #else
     m_aSystemChildData.pSalFrame    = this;
-    m_aSystemChildData.nDepth       = 24;
 #endif
 
     if( m_pParent )
@@ -78,9 +83,8 @@ SvpSalFrame::~SvpSalFrame()
         m_pInstance->deregisterFrame( this );
 
     std::list<SvpSalFrame*> Children = m_aChildren;
-    for( std::list<SvpSalFrame*>::iterator it = Children.begin();
-         it != Children.end(); ++it )
-         (*it)->SetParent( m_pParent );
+    for( auto& rChild : Children )
+        rChild->SetParent( m_pParent );
     if( m_pParent )
         m_pParent->m_aChildren.remove( this );
 
@@ -89,15 +93,14 @@ SvpSalFrame::~SvpSalFrame()
         // SAL_DEBUG("SvpSalFrame::~SvpSalFrame: losing focus: " << this);
         s_pFocusFrame = nullptr;
         // call directly here, else an event for a destroyed frame would be dispatched
-        CallCallback( SALEVENT_LOSEFOCUS, nullptr );
+        CallCallback( SalEvent::LoseFocus, nullptr );
         // if the handler has not set a new focus frame
         // pass focus to another frame, preferably a document style window
         if( s_pFocusFrame == nullptr )
         {
-            const std::list< SalFrame* >& rFrames( m_pInstance->getFrames() );
-            for( std::list< SalFrame* >::const_iterator it = rFrames.begin(); it != rFrames.end(); ++it )
+            for (auto pSalFrame : m_pInstance->getFrames() )
             {
-                SvpSalFrame* pFrame = const_cast<SvpSalFrame*>(static_cast<const SvpSalFrame*>(*it));
+                SvpSalFrame* pFrame = static_cast<SvpSalFrame*>( pSalFrame );
                 if( pFrame->m_bVisible        &&
                     pFrame->m_pParent == nullptr &&
                     (pFrame->m_nStyle & (SalFrameStyleFlags::MOVEABLE |
@@ -111,8 +114,10 @@ SvpSalFrame::~SvpSalFrame()
             }
         }
     }
+#ifndef IOS
     if (m_pSurface)
         cairo_surface_destroy(m_pSurface);
+#endif
 }
 
 void SvpSalFrame::GetFocus()
@@ -126,7 +131,7 @@ void SvpSalFrame::GetFocus()
             s_pFocusFrame->LoseFocus();
         // SAL_DEBUG("SvpSalFrame::GetFocus(): " << this);
         s_pFocusFrame = this;
-        m_pInstance->PostEvent( this, nullptr, SALEVENT_GETFOCUS );
+        m_pInstance->PostEvent( this, nullptr, SalEvent::GetFocus );
     }
 }
 
@@ -135,7 +140,7 @@ void SvpSalFrame::LoseFocus()
     if( s_pFocusFrame == this )
     {
         // SAL_DEBUG("SvpSalFrame::LoseFocus: " << this);
-        m_pInstance->PostEvent( this, nullptr, SALEVENT_LOSEFOCUS );
+        m_pInstance->PostEvent( this, nullptr, SalEvent::LoseFocus );
         s_pFocusFrame = nullptr;
     }
 }
@@ -144,7 +149,7 @@ SalGraphics* SvpSalFrame::AcquireGraphics()
 {
     SvpSalGraphics* pGraphics = new SvpSalGraphics();
 #ifndef IOS
-    pGraphics->setSurface( m_pSurface );
+    pGraphics->setSurface(m_pSurface, basegfx::B2IVector(maGeometry.nWidth, maGeometry.nHeight));
 #endif
     m_aGraphics.push_back( pGraphics );
     return pGraphics;
@@ -153,13 +158,13 @@ SalGraphics* SvpSalFrame::AcquireGraphics()
 void SvpSalFrame::ReleaseGraphics( SalGraphics* pGraphics )
 {
     SvpSalGraphics* pSvpGraphics = dynamic_cast<SvpSalGraphics*>(pGraphics);
-    m_aGraphics.remove( pSvpGraphics );
+    m_aGraphics.erase(std::remove(m_aGraphics.begin(), m_aGraphics.end(), pSvpGraphics), m_aGraphics.end());
     delete pSvpGraphics;
 }
 
-bool SvpSalFrame::PostEvent(ImplSVEvent* pData)
+bool SvpSalFrame::PostEvent(std::unique_ptr<ImplSVEvent> pData)
 {
-    m_pInstance->PostEvent( this, pData, SALEVENT_USEREVENT );
+    m_pInstance->PostEvent( this, pData.release(), SalEvent::UserEvent );
     return true;
 }
 
@@ -169,7 +174,7 @@ void SvpSalFrame::PostPaint() const
     {
         SalPaintEvent aPEvt(0, 0, maGeometry.nWidth, maGeometry.nHeight);
         aPEvt.mbImmediateUpdate = false;
-        CallCallback( SALEVENT_PAINT, &aPEvt );
+        CallCallback( SalEvent::Paint, &aPEvt );
     }
 }
 
@@ -199,7 +204,7 @@ void SvpSalFrame::Show( bool bVisible, bool bNoActivate )
     {
         // SAL_DEBUG("SvpSalFrame::Show: showing: " << this);
         m_bVisible = true;
-        m_pInstance->PostEvent( this, nullptr, SALEVENT_RESIZE );
+        m_pInstance->PostEvent( this, nullptr, SalEvent::Resize );
         if( ! bNoActivate )
             GetFocus();
     }
@@ -207,7 +212,7 @@ void SvpSalFrame::Show( bool bVisible, bool bNoActivate )
     {
         // SAL_DEBUG("SvpSalFrame::Show: hiding: " << this);
         m_bVisible = false;
-        m_pInstance->PostEvent( this, nullptr, SALEVENT_RESIZE );
+        m_pInstance->PostEvent( this, nullptr, SalEvent::Resize );
         LoseFocus();
     }
     else
@@ -237,21 +242,21 @@ void SvpSalFrame::SetPosSize( long nX, long nY, long nWidth, long nHeight, sal_u
     if( (nFlags & SAL_FRAME_POSSIZE_WIDTH) != 0 )
     {
         maGeometry.nWidth = nWidth;
-        if( m_nMaxWidth > 0 && maGeometry.nWidth > (unsigned int)m_nMaxWidth )
+        if( m_nMaxWidth > 0 && maGeometry.nWidth > static_cast<unsigned int>(m_nMaxWidth) )
             maGeometry.nWidth = m_nMaxWidth;
-        if( m_nMinWidth > 0 && maGeometry.nWidth < (unsigned int)m_nMinWidth )
+        if( m_nMinWidth > 0 && maGeometry.nWidth < static_cast<unsigned int>(m_nMinWidth) )
             maGeometry.nWidth = m_nMinWidth;
     }
     if( (nFlags & SAL_FRAME_POSSIZE_HEIGHT) != 0 )
     {
         maGeometry.nHeight = nHeight;
-        if( m_nMaxHeight > 0 && maGeometry.nHeight > (unsigned int)m_nMaxHeight )
+        if( m_nMaxHeight > 0 && maGeometry.nHeight > static_cast<unsigned int>(m_nMaxHeight) )
             maGeometry.nHeight = m_nMaxHeight;
-        if( m_nMinHeight > 0 && maGeometry.nHeight < (unsigned int)m_nMinHeight )
+        if( m_nMinHeight > 0 && maGeometry.nHeight < static_cast<unsigned int>(m_nMinHeight) )
             maGeometry.nHeight = m_nMinHeight;
     }
 #ifndef IOS
-    B2IVector aFrameSize( maGeometry.nWidth, maGeometry.nHeight );
+    basegfx::B2IVector aFrameSize( maGeometry.nWidth, maGeometry.nHeight );
     if (!m_pSurface || cairo_image_surface_get_width(m_pSurface) != aFrameSize.getX() ||
                        cairo_image_surface_get_height(m_pSurface) != aFrameSize.getY() )
     {
@@ -265,38 +270,32 @@ void SvpSalFrame::SetPosSize( long nX, long nY, long nWidth, long nHeight, sal_u
 
         // Creating backing surfaces for invisible windows costs a big chunk of RAM.
         if (Application::IsHeadlessModeEnabled())
-             aFrameSize = B2IVector( 1, 1 );
+             aFrameSize = basegfx::B2IVector( 1, 1 );
 
         m_pSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
                                                 aFrameSize.getX(),
                                                 aFrameSize.getY());
 
         // update device in existing graphics
-        for( std::list< SvpSalGraphics* >::iterator it = m_aGraphics.begin();
-             it != m_aGraphics.end(); ++it )
+        for (auto const& graphic : m_aGraphics)
         {
-             (*it)->setSurface(m_pSurface);
+             graphic->setSurface(m_pSurface, aFrameSize);
         }
     }
     if( m_bVisible )
-        m_pInstance->PostEvent( this, nullptr, SALEVENT_RESIZE );
+        m_pInstance->PostEvent( this, nullptr, SalEvent::Resize );
 #endif
 }
 
 void SvpSalFrame::GetClientSize( long& rWidth, long& rHeight )
 {
-    if( m_bVisible )
-    {
-        rWidth = maGeometry.nWidth;
-        rHeight = maGeometry.nHeight;
-    }
-    else
-        rWidth = rHeight = 0;
+    rWidth = maGeometry.nWidth;
+    rHeight = maGeometry.nHeight;
 }
 
-void SvpSalFrame::GetWorkArea( Rectangle& rRect )
+void SvpSalFrame::GetWorkArea( tools::Rectangle& rRect )
 {
-    rRect = Rectangle( Point( 0, 0 ),
+    rRect = tools::Rectangle( Point( 0, 0 ),
                        Size( VIRTUAL_DESKTOP_WIDTH, VIRTUAL_DESKTOP_HEIGHT ) );
 }
 
@@ -305,9 +304,9 @@ SalFrame* SvpSalFrame::GetParent() const
     return m_pParent;
 }
 
-#define FRAMESTATE_MASK_GEOMETRY \
-     (WINDOWSTATE_MASK_X     | WINDOWSTATE_MASK_Y |   \
-      WINDOWSTATE_MASK_WIDTH | WINDOWSTATE_MASK_HEIGHT)
+static constexpr auto FRAMESTATE_MASK_GEOMETRY =
+     WindowStateMask::X     | WindowStateMask::Y |
+     WindowStateMask::Width | WindowStateMask::Height;
 
 void SvpSalFrame::SetWindowState( const SalFrameState *pState )
 {
@@ -323,13 +322,13 @@ void SvpSalFrame::SetWindowState( const SalFrameState *pState )
         long nHeight = maGeometry.nHeight;
 
         // change requested properties
-        if (pState->mnMask & WINDOWSTATE_MASK_X)
+        if (pState->mnMask & WindowStateMask::X)
             nX = pState->mnX;
-        if (pState->mnMask & WINDOWSTATE_MASK_Y)
+        if (pState->mnMask & WindowStateMask::Y)
             nY = pState->mnY;
-        if (pState->mnMask & WINDOWSTATE_MASK_WIDTH)
+        if (pState->mnMask & WindowStateMask::Width)
             nWidth = pState->mnWidth;
-        if (pState->mnMask & WINDOWSTATE_MASK_HEIGHT)
+        if (pState->mnMask & WindowStateMask::Height)
             nHeight = pState->mnHeight;
 
         SetPosSize( nX, nY, nWidth, nHeight,
@@ -340,12 +339,12 @@ void SvpSalFrame::SetWindowState( const SalFrameState *pState )
 
 bool SvpSalFrame::GetWindowState( SalFrameState* pState )
 {
-    pState->mnState = WINDOWSTATE_STATE_NORMAL;
+    pState->mnState = WindowStateState::Normal;
     pState->mnX      = maGeometry.nX;
     pState->mnY      = maGeometry.nY;
     pState->mnWidth  = maGeometry.nWidth;
     pState->mnHeight = maGeometry.nHeight;
-    pState->mnMask   = FRAMESTATE_MASK_GEOMETRY | WINDOWSTATE_MASK_STATE;
+    pState->mnMask   = FRAMESTATE_MASK_GEOMETRY | WindowStateMask::State;
 
     return true;
 }
@@ -364,7 +363,7 @@ void SvpSalFrame::SetAlwaysOnTop( bool )
 {
 }
 
-void SvpSalFrame::ToTop( sal_uInt16 )
+void SvpSalFrame::ToTop( SalFrameToTop )
 {
     GetFocus();
 }
@@ -408,8 +407,47 @@ LanguageType SvpSalFrame::GetInputLanguage()
     return LANGUAGE_DONTKNOW;
 }
 
-void SvpSalFrame::UpdateSettings( AllSettings& )
+void SvpSalFrame::UpdateSettings( AllSettings& rSettings )
 {
+    StyleSettings aStyleSettings = rSettings.GetStyleSettings();
+
+    Color aBackgroundColor( 0xef, 0xef, 0xef );
+    aStyleSettings.BatchSetBackgrounds( aBackgroundColor, false );
+    aStyleSettings.SetMenuColor( aBackgroundColor );
+    aStyleSettings.SetMenuBarColor( aBackgroundColor );
+
+    if (comphelper::LibreOfficeKit::isActive()) // TODO: remove this.
+    {
+        vcl::Font aStdFont( FAMILY_SWISS, Size( 0, 14 ) );
+        aStdFont.SetCharSet( osl_getThreadTextEncoding() );
+        aStdFont.SetWeight( WEIGHT_NORMAL );
+        aStdFont.SetFamilyName( "Liberation Sans" );
+        aStyleSettings.BatchSetFonts( aStdFont, aStdFont );
+
+        aStdFont.SetFontSize(Size(0, 12));
+        aStyleSettings.SetMenuFont(aStdFont);
+
+        SvpSalGraphics* pGraphics = m_aGraphics.back();
+        bool bFreeGraphics = false;
+        if (!pGraphics)
+        {
+            pGraphics = dynamic_cast<SvpSalGraphics*>(AcquireGraphics());
+            if (!pGraphics)
+            {
+                SAL_WARN("vcl.gtk3", "Could not get graphics - unable to update settings");
+                return;
+            }
+            bFreeGraphics = true;
+        }
+        rSettings.SetStyleSettings(aStyleSettings);
+#ifndef IOS // For now...
+        pGraphics->updateSettings(rSettings);
+#endif
+        if (bFreeGraphics)
+            ReleaseGraphics(pGraphics);
+    }
+    else
+        rSettings.SetStyleSettings(aStyleSettings);
 }
 
 void SvpSalFrame::Beep()

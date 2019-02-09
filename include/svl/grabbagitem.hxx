@@ -22,27 +22,24 @@ private:
     std::map<OUString, css::uno::Any> m_aMap;
 
 public:
-
     SfxGrabBagItem();
-    SfxGrabBagItem(sal_uInt16 nWhich, const std::map<OUString, css::uno::Any>* pMap = nullptr);
-    SfxGrabBagItem(const SfxGrabBagItem& rItem);
-    virtual ~SfxGrabBagItem();
+    SfxGrabBagItem(sal_uInt16 nWhich);
+    ~SfxGrabBagItem() override;
 
-    const std::map<OUString, css::uno::Any>& GetGrabBag() const
-    {
-        return m_aMap;
-    }
+    SfxGrabBagItem(SfxGrabBagItem const&) = default;
+    SfxGrabBagItem(SfxGrabBagItem&&) = default;
+    SfxGrabBagItem& operator=(SfxGrabBagItem const&) = delete; // due to SfxPoolItem
+    SfxGrabBagItem& operator=(SfxGrabBagItem&&) = delete; // due to SfxPoolItem
 
-    std::map<OUString, css::uno::Any>& GetGrabBag()
-    {
-        return m_aMap;
-    }
+    const std::map<OUString, css::uno::Any>& GetGrabBag() const { return m_aMap; }
 
-    virtual bool operator==(const SfxPoolItem&) const override;
-    virtual SfxPoolItem* Clone(SfxItemPool* pPool = nullptr) const override;
+    std::map<OUString, css::uno::Any>& GetGrabBag() { return m_aMap; }
 
-    virtual bool PutValue(const css::uno::Any& rVal, sal_uInt8 nMemberId) override;
-    virtual bool QueryValue(css::uno::Any& rVal, sal_uInt8 nMemberId = 0) const override;
+    bool operator==(const SfxPoolItem& rItem) const override;
+    SfxPoolItem* Clone(SfxItemPool* pPool = nullptr) const override;
+
+    bool PutValue(const css::uno::Any& rVal, sal_uInt8 nMemberId) override;
+    bool QueryValue(css::uno::Any& rVal, sal_uInt8 nMemberId = 0) const override;
 };
 #endif
 

@@ -18,17 +18,7 @@
  */
 
 
-#if defined(_WIN32)
-#   ifdef _MSC_VER
-#       pragma warning(push, 1) /* disable warnings within system headers */
-#   endif
-#   include <curl/curl.h>
-#   ifdef _MSC_VER
-#       pragma warning(pop)
-#   endif
-#else
-#   include <curl/curl.h>
-#endif
+#include <curl/curl.h>
 
 #include <osl/diagnose.h>
 #include <com/sun/star/beans/PropertyValue.hpp>
@@ -96,12 +86,12 @@ static void openFile( OutData& out )
         } while( osl_File_E_EXIST == rc );
 
         if( osl_File_E_None == rc )
-            out.Handler->downloadStarted(out.File, (sal_Int64) fDownloadSize);
+            out.Handler->downloadStarted(out.File, static_cast<sal_Int64>(fDownloadSize));
     }
 }
 
 
-static inline OString
+static OString
 getStringValue(const uno::Reference< container::XNameAccess >& xNameAccess, const OUString& aName)
 {
     OSL_ASSERT(xNameAccess->hasByName(aName));
@@ -111,7 +101,7 @@ getStringValue(const uno::Reference< container::XNameAccess >& xNameAccess, cons
 }
 
 
-static inline sal_Int32
+static sal_Int32
 getInt32Value(const uno::Reference< container::XNameAccess >& xNameAccess,
                     const OUString& aName)
 {
@@ -137,16 +127,13 @@ write_function( void *ptr, size_t size, size_t nmemb, void *stream )
     if( nullptr != out->FileHandle )
         osl_writeFile(out->FileHandle, ptr, size * nmemb, &nBytesWritten);
 
-    return (size_t) nBytesWritten;
+    return static_cast<size_t>(nBytesWritten);
 }
 
 
 static int
-progress_callback( void *clientp, double dltotal, double dlnow, double ultotal, double ulnow )
+progress_callback( void *clientp, double dltotal, double dlnow, SAL_UNUSED_PARAMETER double, SAL_UNUSED_PARAMETER double )
 {
-    (void) ultotal;
-    (void) ulnow;
-
     OutData *out = static_cast < OutData * > (clientp);
 
     assert(out);
@@ -163,7 +150,7 @@ progress_callback( void *clientp, double dltotal, double dlnow, double ultotal, 
         long nCode;
         curl_easy_getinfo(out->curl, CURLINFO_RESPONSE_CODE, &nCode);
         if( (nCode != 302) && (nCode != 303) && (dltotal > 0) )
-            out->Handler->downloadProgressAt((sal_Int8)fPercent);
+            out->Handler->downloadProgressAt(static_cast<sal_Int8>(fPercent));
 
         return 0;
     }
@@ -181,10 +168,10 @@ Download::getProxyForURL(const OUString& rURL, OString& rHost, sal_Int32& rPort)
 
     beans::PropertyValue aProperty;
     aProperty.Name  = "nodepath";
-    aProperty.Value = uno::makeAny( OUString("org.openoffice.Inet/Settings") );
+    aProperty.Value <<= OUString("org.openoffice.Inet/Settings");
 
     uno::Sequence< uno::Any > aArgumentList( 1 );
-    aArgumentList[0] = uno::makeAny( aProperty );
+    aArgumentList[0] <<= aProperty;
 
     uno::Reference< container::XNameAccess > xNameAccess(
         xConfigProvider->createInstanceWithArguments(
@@ -216,7 +203,7 @@ Download::getProxyForURL(const OUString& rURL, OString& rHost, sal_Int32& rPort)
 }
 
 
-bool curl_run(const OUString& rURL, OutData& out, const OString& aProxyHost, sal_Int32 nProxyPort)
+static bool curl_run(const OUString& rURL, OutData& out, const OString& aProxyHost, sal_Int32 nProxyPort)
 {
     /* Need to investigate further whether it is necessary to call
      * curl_global_init or not - leave it for now (as the ftp UCB content
@@ -238,6 +225,8 @@ bool curl_run(const OUString& rURL, OutData& out, const OString& aProxyHost, sal
 
         // enable redirection
         curl_easy_setopt(pCURL, CURLOPT_FOLLOWLOCATION, 1);
+        // only allow redirect to http:// and https://
+        curl_easy_setopt(pCURL, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
 
         // write function
         curl_easy_setopt(pCURL, CURLOPT_WRITEDATA, &out);
@@ -258,7 +247,7 @@ bool curl_run(const OUString& rURL, OutData& out, const OString& aProxyHost, sal
         {
             // curl_off_t offset = nOffset; libcurl seems to be compiled with large
             // file support (and we not) ..
-            sal_Int64 offset = (sal_Int64) out.Offset;
+            sal_Int64 offset = static_cast<sal_Int64>(out.Offset);
             curl_easy_setopt(pCURL, CURLOPT_RESUME_FROM_LARGE, offset);
         }
 
@@ -306,9 +295,9 @@ bool curl_run(const OUString& rURL, OutData& out, const OString& aProxyHost, sal
                 curl_easy_getinfo( pCURL, CURLINFO_RESPONSE_CODE, &nError );
 
                 if ( 403 == nError )
-                    aMessage += OString( " 403: Access denied!" );
+                    aMessage += " 403: Access denied!";
                 else if ( 404 == nError )
-                    aMessage += OString( " 404: File not found!" );
+                    aMessage += " 404: File not found!";
                 else if ( 416 == nError )
                 {
                     // we got this error probably, because we already downloaded the file
@@ -317,9 +306,9 @@ bool curl_run(const OUString& rURL, OutData& out, const OString& aProxyHost, sal
                 }
                 else
                 {
-                    aMessage += OString( ":error code = " );
+                    aMessage += ":error code = ";
                     aMessage += OString::number( nError );
-                    aMessage += OString( " !" );
+                    aMessage += " !";
                 }
             }
             if ( !ret )

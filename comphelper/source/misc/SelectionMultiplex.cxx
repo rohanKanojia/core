@@ -19,8 +19,7 @@
 
 
 #include <comphelper/SelectionMultiplex.hxx>
-#include <osl/diagnose.h>
-
+#include <com/sun/star/view/XSelectionSupplier.hpp>
 
 namespace comphelper
 {
@@ -32,13 +31,10 @@ using namespace ::com::sun::star::view;
 
 OSelectionChangeListener::~OSelectionChangeListener()
 {
-    if (m_pAdapter)
-        m_pAdapter->dispose();
 }
 
 
 void OSelectionChangeListener::_disposing(const EventObject&)
-    throw (RuntimeException, std::exception)
 {
     // nothing to do here
 }
@@ -46,26 +42,14 @@ void OSelectionChangeListener::_disposing(const EventObject&)
 
 void OSelectionChangeListener::setAdapter(OSelectionChangeMultiplexer* pAdapter)
 {
-    if (m_pAdapter)
-    {
-        ::osl::MutexGuard aGuard(m_rMutex);
-        m_pAdapter->release();
-        m_pAdapter = nullptr;
-    }
-
-    if (pAdapter)
-    {
-        ::osl::MutexGuard aGuard(m_rMutex);
-        m_pAdapter = pAdapter;
-        m_pAdapter->acquire();
-    }
+    ::osl::MutexGuard aGuard(m_rMutex);
+    m_xAdapter = pAdapter;
 }
 
 OSelectionChangeMultiplexer::OSelectionChangeMultiplexer(OSelectionChangeListener* _pListener, const  Reference< XSelectionSupplier>& _rxSet)
             :m_xSet(_rxSet)
             ,m_pListener(_pListener)
             ,m_nLockCount(0)
-            ,m_bListening(false)
 {
     m_pListener->setAdapter(this);
     osl_atomic_increment(&m_refCount);
@@ -94,26 +78,9 @@ void OSelectionChangeMultiplexer::unlock()
 }
 
 
-void OSelectionChangeMultiplexer::dispose()
-{
-    if (m_bListening)
-    {
-        Reference< XSelectionChangeListener> xPreventDelete(this);
-
-        m_xSet->removeSelectionChangeListener(xPreventDelete);
-
-        m_pListener->setAdapter(nullptr);
-
-        m_pListener = nullptr;
-        m_bListening = false;
-
-        m_xSet = nullptr;
-    }
-}
-
 // XEventListener
 
-void SAL_CALL OSelectionChangeMultiplexer::disposing( const  EventObject& _rSource) throw( RuntimeException, std::exception)
+void SAL_CALL OSelectionChangeMultiplexer::disposing( const  EventObject& _rSource)
 {
     if (m_pListener)
     {
@@ -121,19 +88,18 @@ void SAL_CALL OSelectionChangeMultiplexer::disposing( const  EventObject& _rSour
         if (!locked())
             m_pListener->_disposing(_rSource);
         // disconnect the listener
-        if (m_pListener)    // may have been reset whilest calling into _disposing
+        if (m_pListener)    // may have been reset whilst calling into _disposing
             m_pListener->setAdapter(nullptr);
     }
 
     m_pListener = nullptr;
-    m_bListening = false;
 
     m_xSet = nullptr;
 }
 
 // XSelectionChangeListener
 
-void SAL_CALL OSelectionChangeMultiplexer::selectionChanged( const  EventObject& _rEvent ) throw( RuntimeException, std::exception)
+void SAL_CALL OSelectionChangeMultiplexer::selectionChanged( const  EventObject& _rEvent )
 {
     if (m_pListener && !locked())
         m_pListener->_selectionChanged(_rEvent);

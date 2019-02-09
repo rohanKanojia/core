@@ -34,11 +34,11 @@ WaterfallWipe::WaterfallWipe( sal_Int32 nElements, bool flipOnYAxis )
 {
     const sal_Int32 sqrtElements = static_cast<sal_Int32>(
         sqrt( static_cast<double>(nElements) ) );
-    const double elementEdge = (1.0 / sqrtElements);
+    const double elementEdge = 1.0 / sqrtElements;
     m_waterfall.append( ::basegfx::B2DPoint( 0.0, -1.0 ) );
     for ( sal_Int32 pos = sqrtElements; pos--; )
     {
-        const sal_Int32 xPos = (sqrtElements - pos - 1);
+        const sal_Int32 xPos = sqrtElements - pos - 1;
         const double yPos = ::basegfx::pruneScaleValue( ((pos + 1) * elementEdge) - 1.0 );
         m_waterfall.append( ::basegfx::B2DPoint(
                                 ::basegfx::pruneScaleValue( xPos * elementEdge ),
@@ -54,7 +54,7 @@ WaterfallWipe::WaterfallWipe( sal_Int32 nElements, bool flipOnYAxis )
 ::basegfx::B2DPolyPolygon WaterfallWipe::operator () ( double t )
 {
     ::basegfx::B2DPolygon poly( m_waterfall );
-    poly.transform(basegfx::tools::createTranslateB2DHomMatrix(0.0, ::basegfx::pruneScaleValue(2.0 * t)));
+    poly.transform(basegfx::utils::createTranslateB2DHomMatrix(0.0, ::basegfx::pruneScaleValue(2.0 * t)));
     poly.setB2DPoint( 0, ::basegfx::B2DPoint( 0.0, -1.0 ) );
     poly.setB2DPoint( poly.count()-1, ::basegfx::B2DPoint( 1.0, -1.0 ) );
 

@@ -22,30 +22,29 @@
 #include <svx/svdobj.hxx>
 #include <svx/svdpagv.hxx>
 
-#include "fupoor.hxx"
-#include "tabvwsh.hxx"
-#include "drawview.hxx"
-#include "detfunc.hxx"
-#include "document.hxx"
+#include <fupoor.hxx>
+#include <tabvwsh.hxx>
+#include <drawview.hxx>
+#include <detfunc.hxx>
+#include <document.hxx>
 #include <vcl/svapp.hxx>
 #include <svx/sdrhittesthelper.hxx>
 
-FuPoor::FuPoor(ScTabViewShell* pViewSh, vcl::Window* pWin, ScDrawView* pViewP,
-               SdrModel* pDoc, SfxRequest& rReq) :
+FuPoor::FuPoor(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawView* pViewP,
+               SdrModel* pDoc, const SfxRequest& rReq) :
     pView(pViewP),
-    pViewShell(pViewSh),
+    rViewShell(rViewSh),
     pWindow(pWin),
     pDrDoc(pDoc),
     aSfxRequest(rReq),
-    pDialog(nullptr),
     bIsInDragMode(false),
     // remember MouseButton state
     mnCode(0)
 {
-    aScrollTimer.SetTimeoutHdl( LINK(this, FuPoor, ScrollHdl) );
+    aScrollTimer.SetInvokeHandler( LINK(this, FuPoor, ScrollHdl) );
     aScrollTimer.SetTimeout(SELENG_AUTOREPEAT_INTERVAL);
 
-    aDragTimer.SetTimeoutHdl( LINK(this, FuPoor, DragTimerHdl) );
+    aDragTimer.SetInvokeHandler( LINK(this, FuPoor, DragTimerHdl) );
     aDragTimer.SetTimeout(SELENG_DRAGDROP_TIMEOUT);
 }
 
@@ -53,80 +52,59 @@ FuPoor::~FuPoor()
 {
     aDragTimer.Stop();
     aScrollTimer.Stop();
-    pDialog.disposeAndClear();
 }
 
 void FuPoor::Activate()
 {
-    if (pDialog)
-    {
-        pDialog->Show();
-    }
 }
 
 void FuPoor::Deactivate()
 {
     aDragTimer.Stop();
     aScrollTimer.Stop();
-
-    if (pDialog)
-    {
-        pDialog->Hide();
-    }
 }
 
-/*************************************************************************
-|*
-|* Scrollen bei Erreichen des Fensterrandes; wird von
-|* MouseMove aufgerufen
-|*
-\************************************************************************/
-
+// Scroll when reached the window border; is called from MouseMove
 void FuPoor::ForceScroll(const Point& aPixPos)
 {
     aScrollTimer.Stop();
 
     Size aSize = pWindow->GetSizePixel();
-    SCsCOL dx = 0;
-    SCsROW dy = 0;
+    SCCOL dx = 0;
+    SCROW dy = 0;
 
     if ( aPixPos.X() <= 0              ) dx = -1;
     if ( aPixPos.X() >= aSize.Width()  ) dx =  1;
     if ( aPixPos.Y() <= 0              ) dy = -1;
     if ( aPixPos.Y() >= aSize.Height() ) dy =  1;
 
-    ScViewData& rViewData = pViewShell->GetViewData();
+    ScViewData& rViewData = rViewShell.GetViewData();
     if ( rViewData.GetDocument()->IsNegativePage( rViewData.GetTabNo() ) )
         dx = -dx;
 
     ScSplitPos eWhich = rViewData.GetActivePart();
     if ( dx > 0 && rViewData.GetHSplitMode() == SC_SPLIT_FIX && WhichH(eWhich) == SC_SPLIT_LEFT )
     {
-        pViewShell->ActivatePart( ( eWhich == SC_SPLIT_TOPLEFT ) ?
+        rViewShell.ActivatePart( ( eWhich == SC_SPLIT_TOPLEFT ) ?
                         SC_SPLIT_TOPRIGHT : SC_SPLIT_BOTTOMRIGHT );
         dx = 0;
     }
     if ( dy > 0 && rViewData.GetVSplitMode() == SC_SPLIT_FIX && WhichV(eWhich) == SC_SPLIT_TOP )
     {
-        pViewShell->ActivatePart( ( eWhich == SC_SPLIT_TOPLEFT ) ?
+        rViewShell.ActivatePart( ( eWhich == SC_SPLIT_TOPLEFT ) ?
                         SC_SPLIT_BOTTOMLEFT : SC_SPLIT_BOTTOMRIGHT );
         dy = 0;
     }
 
     if ( dx != 0 || dy != 0 )
     {
-        pViewShell->ScrollLines(2*dx, 4*dy);
+        rViewShell.ScrollLines(2*dx, 4*dy);
         aScrollTimer.Start();
     }
 }
 
-/*************************************************************************
-|*
-|* Timer-Handler fuer Fensterscrolling
-|*
-\************************************************************************/
-
-IMPL_LINK_NOARG_TYPED(FuPoor, ScrollHdl, Timer *, void)
+// Timer handler for window scrolling
+IMPL_LINK_NOARG(FuPoor, ScrollHdl, Timer *, void)
 {
     Point aPosPixel = pWindow->GetPointerPosPixel();
 
@@ -135,7 +113,6 @@ IMPL_LINK_NOARG_TYPED(FuPoor, ScrollHdl, Timer *, void)
     MouseMove(MouseEvent(aPosPixel, 1, MouseEventModifiers::NONE, GetMouseButtonCode()));
 }
 
-// moved from inline to *.cxx
 bool FuPoor::MouseButtonUp(const MouseEvent& rMEvt)
 {
     // remember button state for creation of own MouseEvents
@@ -144,7 +121,6 @@ bool FuPoor::MouseButtonUp(const MouseEvent& rMEvt)
     return false;
 }
 
-// moved from inline to *.cxx
 bool FuPoor::MouseButtonDown(const MouseEvent& rMEvt)
 {
     // remember button state for creation of own MouseEvents
@@ -153,15 +129,7 @@ bool FuPoor::MouseButtonDown(const MouseEvent& rMEvt)
     return false;
 }
 
-/*************************************************************************
-|*
-|* Tastaturereignisse bearbeiten
-|*
-|* Wird ein KeyEvent bearbeitet, so ist der Return-Wert sal_True, andernfalls
-|* FALSE.
-|*
-\************************************************************************/
-
+// If we handle a KeyEvent, then the return value is sal_True else FALSE.
 bool FuPoor::KeyInput(const KeyEvent& /* rKEvt */)
 {
     return false;
@@ -171,9 +139,8 @@ sal_uInt8 FuPoor::Command(const CommandEvent& rCEvt)
 {
     if ( CommandEventId::StartDrag == rCEvt.GetCommand() )
     {
-        //!!! sollte Joe eigentlich machen:
-        // nur, wenn im Outliner was selektiert ist, darf
-        // Command sal_True zurueckliefern:
+        // Only if a selection is in Outliner, then Command is allowed
+        // to return sal_True
 
         OutlinerView* pOutView = pView->GetTextEditOutlinerView();
 
@@ -186,24 +153,20 @@ sal_uInt8 FuPoor::Command(const CommandEvent& rCEvt)
         return pView->Command(rCEvt,pWindow) ? 1 : 0;
 }
 
-/*************************************************************************
-|*
-|* Timer-Handler fuer Drag&Drop
-|*
-\************************************************************************/
-IMPL_LINK_NOARG_TYPED(FuPoor, DragTimerHdl, Timer *, void)
+// Timer-Handler for Drag&Drop
+IMPL_LINK_NOARG(FuPoor, DragTimerHdl, Timer *, void)
 {
-    //  ExecuteDrag (und das damit verbundene Reschedule) direkt aus dem Timer
-    //  aufzurufen, bringt die VCL-Timer-Verwaltung durcheinander, wenn dabei
-    //  (z.B. im Drop) wieder ein Timer gestartet wird (z.B. ComeBack-Timer der
-    //  DrawView fuer Solid Handles / ModelHasChanged) - der neue Timer laeuft
-    //  dann um die Dauer des Drag&Drop zu spaet ab.
-    //  Darum Drag&Drop aus eigenem Event:
+    //  Calling ExecuteDrag (and that associated reschedule) directly from
+    //  the Timer, will confuse the VCL-Timer-Management, if (e.g during Drop)
+    //  a new timer is started (e.g ComeBack-Timer of DrawView for
+    //  Solid Handles / ModelHasChanged) - the new timer will end with a delay
+    //  of the duration of the Drag&Drop.
+    //  Therefore Drag&Drop from own event:
 
     Application::PostUserEvent( LINK( this, FuPoor, DragHdl ) );
 }
 
-IMPL_LINK_NOARG_TYPED(FuPoor, DragHdl, void*, void)
+IMPL_LINK_NOARG(FuPoor, DragHdl, void*, void)
 {
     SdrHdl* pHdl = pView->PickHandle(aMDPos);
 
@@ -211,12 +174,11 @@ IMPL_LINK_NOARG_TYPED(FuPoor, DragHdl, void*, void)
     {
         pWindow->ReleaseMouse();
         bIsInDragMode = true;
-        pViewShell->GetScDrawView()->BeginDrag(pWindow, aMDPos);
+        rViewShell.GetScDrawView()->BeginDrag(pWindow, aMDPos);
     }
 }
 
-//  Detektiv-Linie
-
+//  Detective-line
 bool FuPoor::IsDetectiveHit( const Point& rLogicPos )
 {
     SdrPageView* pPV = pView->GetSdrPageView();
@@ -224,14 +186,14 @@ bool FuPoor::IsDetectiveHit( const Point& rLogicPos )
         return false;
 
     bool bFound = false;
-    SdrObjListIter aIter( *pPV->GetObjList(), IM_FLAT );
+    SdrObjListIter aIter( pPV->GetObjList(), SdrIterMode::Flat );
     SdrObject* pObject = aIter.Next();
     while (pObject && !bFound)
     {
         if (ScDetectiveFunc::IsNonAlienArrow( pObject ))
         {
-            sal_uInt16 nHitLog = (sal_uInt16) pWindow->PixelToLogic(
-                                Size(pView->GetHitTolerancePixel(),0)).Width();
+            sal_uInt16 nHitLog = static_cast<sal_uInt16>(pWindow->PixelToLogic(
+                                Size(pView->GetHitTolerancePixel(),0)).Width());
             if(SdrObjectPrimitiveHit(*pObject, rLogicPos, nHitLog, *pPV, nullptr, false))
             {
                 bFound = true;
@@ -249,29 +211,24 @@ void FuPoor::StopDragTimer()
         aDragTimer.Stop();
 }
 
-/*************************************************************************
-|*
-|* Create default drawing objects via keyboard
-|*
-\************************************************************************/
-
-SdrObject* FuPoor::CreateDefaultObject(const sal_uInt16 /* nID */, const Rectangle& /* rRectangle */)
+// Create default drawing objects via keyboard
+SdrObjectUniquePtr FuPoor::CreateDefaultObject(const sal_uInt16 /* nID */, const tools::Rectangle& /* rRectangle */)
 {
     // empty base implementation
     return nullptr;
 }
 
-void FuPoor::ImpForceQuadratic(Rectangle& rRect)
+void FuPoor::ImpForceQuadratic(tools::Rectangle& rRect)
 {
     if(rRect.GetWidth() > rRect.GetHeight())
     {
-        rRect = Rectangle(
+        rRect = tools::Rectangle(
             Point(rRect.Left() + ((rRect.GetWidth() - rRect.GetHeight()) / 2), rRect.Top()),
             Size(rRect.GetHeight(), rRect.GetHeight()));
     }
     else
     {
-        rRect = Rectangle(
+        rRect = tools::Rectangle(
             Point(rRect.Left(), rRect.Top() + ((rRect.GetHeight() - rRect.GetWidth()) / 2)),
             Size(rRect.GetWidth(), rRect.GetWidth()));
     }
@@ -308,7 +265,9 @@ bool FuPoor::doConstructOrthogonal() const
             return bIsMediaSelected;
         }
     }
-    else if (aSfxRequest.GetSlot() == SID_DRAW_XPOLYGON || aSfxRequest.GetSlot() == SID_DRAW_XPOLYGON_NOFILL)
+    else if (aSfxRequest.GetSlot() == SID_DRAW_XPOLYGON
+          || aSfxRequest.GetSlot() == SID_DRAW_XPOLYGON_NOFILL
+          || aSfxRequest.GetSlot() == SID_DRAW_XLINE)
         return true;
 
     return false;

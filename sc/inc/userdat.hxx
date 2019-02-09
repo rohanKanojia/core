@@ -21,25 +21,14 @@
 #define INCLUDED_SC_INC_USERDAT_HXX
 
 #include <svx/svdobj.hxx>
-#include <tools/link.hxx>
-#include <svtools/imap.hxx>
-#include "global.hxx"
+#include <vcl/imap.hxx>
 #include "address.hxx"
+#include "drwlayer.hxx"
 
-#define SC_DRAWLAYER 0x30334353     // Inventor: "SC30"
-
-// Object-Ids fuer UserData
+// Object IDs for UserData
 #define SC_UD_OBJDATA       1
 #define SC_UD_IMAPDATA      2
 #define SC_UD_MACRODATA     3
-
-class ScDrawObjFactory
-{
-    DECL_STATIC_LINK_TYPED( ScDrawObjFactory, MakeUserData, SdrObjFactory *, void );
-public:
-    ScDrawObjFactory();
-   ~ScDrawObjFactory();
-};
 
 class SC_DLLPUBLIC ScDrawObjData : public SdrObjUserData
 {
@@ -51,12 +40,31 @@ public:
     Point               maStartOffset;
     Point               maEndOffset;
     Type                meType;
-    Rectangle           maLastRect;
+    bool                mbResizeWithCell = false;
+    bool                mbWasInHiddenRow = false;
 
     explicit            ScDrawObjData();
 
+    const tools::Rectangle & getShapeRect() { return maShapeRect; };
+    const tools::Rectangle & getLastCellRect() { return maLastCellRect; };
+    void setShapeRect(const ScDocument* rDoc, tools::Rectangle rNewRect, bool bIsVisible=true)
+    {
+        // bIsVisible should be false when the object is hidden obviously. we dont want to store the old cell rect in that
+        // case because it will have height=0
+        if (maStart.IsValid() && mbResizeWithCell && bIsVisible)
+            maLastCellRect = ScDrawLayer::GetCellRect(*rDoc, maStart, true);
+        maShapeRect = rNewRect;
+        mbWasInHiddenRow = !bIsVisible;
+    };
+
 private:
-     virtual ScDrawObjData* Clone( SdrObject* pObj ) const override;
+     virtual std::unique_ptr<SdrObjUserData> Clone( SdrObject* pObj ) const override;
+
+    // Stores the last cell rect this shape was anchored to.
+    // Needed when the cell is resized to resize the image accordingly.
+    tools::Rectangle maLastCellRect;
+    // Stores the rect of the shape to which this ScDrawObjData belongs.
+    tools::Rectangle maShapeRect;
 };
 
 class ScIMapInfo : public SdrObjUserData
@@ -64,12 +72,11 @@ class ScIMapInfo : public SdrObjUserData
     ImageMap        aImageMap;
 
 public:
-                    ScIMapInfo();
                     ScIMapInfo( const ImageMap& rImageMap );
                     ScIMapInfo( const ScIMapInfo& rIMapInfo );
-    virtual         ~ScIMapInfo();
+    virtual         ~ScIMapInfo() override;
 
-    virtual SdrObjUserData* Clone( SdrObject* pObj ) const override;
+    virtual std::unique_ptr<SdrObjUserData> Clone( SdrObject* pObj ) const override;
 
     void    SetImageMap( const ImageMap& rIMap )    { aImageMap = rIMap; }
     const ImageMap& GetImageMap() const             { return aImageMap; }
@@ -79,9 +86,14 @@ class ScMacroInfo : public SdrObjUserData
 {
 public:
                     ScMacroInfo();
-    virtual         ~ScMacroInfo();
+    virtual         ~ScMacroInfo() override;
 
-    virtual SdrObjUserData* Clone( SdrObject* pObj ) const override;
+    ScMacroInfo(ScMacroInfo const &) = default;
+    ScMacroInfo(ScMacroInfo &&) = default;
+    ScMacroInfo & operator =(ScMacroInfo const &) = delete; // due to SdrObjUserData
+    ScMacroInfo & operator =(ScMacroInfo &&) = delete; // due to SdrObjUserData
+
+    virtual std::unique_ptr<SdrObjUserData> Clone( SdrObject* pObj ) const override;
 
     void            SetMacro( const OUString& rMacro ) { maMacro = rMacro; }
     const OUString& GetMacro() const { return maMacro; }

@@ -31,7 +31,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_tiledrendering, \
     vcl \
     tl \
 	utl \
-    $(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_externals,sw_tiledrendering,\
@@ -48,8 +47,9 @@ $(eval $(call gb_CppunitTest_set_include,sw_tiledrendering,\
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sw_tiledrendering,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sw_tiledrendering))

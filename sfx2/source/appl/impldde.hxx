@@ -35,21 +35,20 @@ class SvDDEObject : public SvLinkSource
 {
     OUString sItem;
 
-    DdeConnection* pConnection;
-    DdeLink* pLink;
-    DdeRequest* pRequest;
+    std::unique_ptr<DdeConnection> pConnection;
+    std::unique_ptr<DdeLink> pLink;
+    std::unique_ptr<DdeRequest> pRequest;
     css::uno::Any * pGetData;
 
-    sal_uInt8 bWaitForData : 1;  // waiting for data?
-    sal_uInt8 nError       : 7;  // Error code for dialogue
+    bool bWaitForData;  // waiting for data?
 
 
     static bool ImplHasOtherFormat( DdeTransaction& );
-    DECL_LINK_TYPED( ImplGetDDEData, const DdeData*, void );
-    DECL_LINK_TYPED( ImplDoneDDEData, bool, void );
+    DECL_LINK( ImplGetDDEData, const DdeData*, void );
+    DECL_LINK( ImplDoneDDEData, bool, void );
 
 protected:
-    virtual ~SvDDEObject();
+    virtual ~SvDDEObject() override;
 
 public:
     SvDDEObject();
@@ -59,7 +58,7 @@ public:
                                 bool bSynchron = false ) override;
 
     virtual bool    Connect( SvBaseLink * ) override;
-    virtual void    Edit( vcl::Window* pParent, sfx2::SvBaseLink* pBaseLink, const Link<const OUString&, void>& rEndEditHdl ) override;
+    virtual void    Edit(weld::Window* pParent, sfx2::SvBaseLink* pBaseLink, const Link<const OUString&, void>& rEndEditHdl) override;
 
     virtual bool    IsPending() const override;
     virtual bool    IsDataComplete() const override;

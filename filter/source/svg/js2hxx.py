@@ -20,7 +20,7 @@
 
 import os, sys
 
-MAX_LINES = 200
+MAX_LINES = 150
 VARIABLE_NAME = 'aSVGScript'
 
 def get_var_decl(n):
@@ -127,6 +127,10 @@ for line in valid_lines:
 out_lines.append( ']]>";' )
 out_lines.append( '' )
 
+out_lines.append('static const char * g_SVGScripts[N_SVGSCRIPT_FRAGMENTS] = {')
+for j in range(0, fragment+1):
+    out_lines.append("    %s%d," % (VARIABLE_NAME, j))
+out_lines.append('};')
 
 outfile = open( outfile_name, 'w' )
 if( not os.path.isfile( outfile_name ) ):

@@ -22,32 +22,23 @@
 
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
-#include <sal/types.h>
-#include <com/sun/star/xml/sax/XDocumentHandler.hpp>
+#include <rtl/ustring.hxx>
 
-class SvXMLNamespaceMap;
-class SvXMLAttributeList;
-class SvXMLUnitConverter;
+namespace com { namespace sun { namespace star { namespace uno { class Any; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Reference; } } } }
+namespace com { namespace sun { namespace star { namespace xml { namespace sax { class XAttributeList; } } } } }
+
 class SvXMLExport;
 class SvXMLImport;
 
-class XMLOFF_DLLPUBLIC XMLImageStyle
+namespace XMLImageStyle
 {
-public:
-    XMLImageStyle();
-    ~XMLImageStyle();
 
-    void exportXML( const OUString& rStrName, const css::uno::Any& rValue, SvXMLExport& rExport );
-    void importXML( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList, css::uno::Any& rValue, OUString& rStrName, SvXMLImport& rImport );
+XMLOFF_DLLPUBLIC void exportXML(OUString const & rStrName, css::uno::Any const & rValue, SvXMLExport& rExport);
+XMLOFF_DLLPUBLIC bool importXML(css::uno::Reference<css::xml::sax::XAttributeList> const & xAttrList,
+                                css::uno::Any& rValue, OUString& rStrName, SvXMLImport& rImport);
 
-private:
-
-    SAL_DLLPRIVATE void ImpExportXML( const OUString& rStrName, const css::uno::Any& rValue,
-                           SvXMLExport& rExport );
-    SAL_DLLPRIVATE bool ImpImportXML( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList,
-                           css::uno::Any& rValue, OUString& rStrName,
-                           SvXMLImport& rImport );
-};
+}
 
 #endif // INCLUDED_XMLOFF_IMAGESTYLE_HXX
 

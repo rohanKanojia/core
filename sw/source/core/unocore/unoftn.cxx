@@ -21,12 +21,13 @@
 
 #include <utility>
 
-#include <osl/mutex.hxx>
 #include <comphelper/interfacecontainer2.hxx>
-#include <cppuhelper/supportsservice.hxx>
-#include <vcl/svapp.hxx>
 #include <comphelper/sequence.hxx>
 #include <comphelper/servicehelper.hxx>
+#include <cppuhelper/supportsservice.hxx>
+#include <svl/listener.hxx>
+#include <osl/mutex.hxx>
+#include <vcl/svapp.hxx>
 
 #include <unomid.h>
 #include <unofootnote.hxx>
@@ -42,35 +43,36 @@
 #include <ndtxt.hxx>
 #include <unocrsr.hxx>
 #include <hints.hxx>
+#include <svl/itemprop.hxx>
 
 using namespace ::com::sun::star;
 
 class SwXFootnote::Impl
-    : public SwClient
+    : public SvtListener
 {
 private:
     ::osl::Mutex m_Mutex; // just for OInterfaceContainerHelper2
 
 public:
 
-    SwXFootnote &               m_rThis;
+    SwXFootnote& m_rThis;
     uno::WeakReference<uno::XInterface> m_wThis;
-    const bool                  m_bIsEndnote;
-    ::comphelper::OInterfaceContainerHelper2  m_EventListeners;
-    bool                                m_bIsDescriptor;
-    const SwFormatFootnote *            m_pFormatFootnote;
-    OUString             m_sLabel;
+    const bool m_bIsEndnote;
+    ::comphelper::OInterfaceContainerHelper2 m_EventListeners;
+    bool m_bIsDescriptor;
+    SwFormatFootnote* m_pFormatFootnote;
+    OUString m_sLabel;
 
-    Impl(   SwXFootnote & rThis,
-            SwFormatFootnote *const pFootnote,
+    Impl(SwXFootnote& rThis,
+            SwFormatFootnote* const pFootnote,
             const bool bIsEndnote)
-        : SwClient(pFootnote)
-        , m_rThis(rThis)
+        : m_rThis(rThis)
         , m_bIsEndnote(bIsEndnote)
         , m_EventListeners(m_Mutex)
         , m_bIsDescriptor(nullptr == pFootnote)
         , m_pFormatFootnote(pFootnote)
     {
+        m_pFormatFootnote && StartListening(m_pFormatFootnote->GetNotifier());
     }
 
     const SwFormatFootnote* GetFootnoteFormat() const {
@@ -80,25 +82,20 @@ public:
     SwFormatFootnote const& GetFootnoteFormatOrThrow() {
         SwFormatFootnote const*const pFootnote( GetFootnoteFormat() );
         if (!pFootnote) {
-            throw uno::RuntimeException(OUString(
-                        "SwXFootnote: disposed or invalid"), nullptr);
+            throw uno::RuntimeException("SwXFootnote: disposed or invalid", nullptr);
         }
         return *pFootnote;
     }
 
-    void    Invalidate();
+    void Invalidate();
 protected:
-    // SwClient
-    virtual void Modify( const SfxPoolItem *pOld, const SfxPoolItem *pNew) override;
+    void Notify(const SfxHint& rHint) override;
 
 };
 
 void SwXFootnote::Impl::Invalidate()
 {
-    if (GetRegisteredIn())
-    {
-        GetRegisteredIn()->Remove(this);
-    }
+    EndListeningAll();
     m_pFormatFootnote = nullptr;
     m_rThis.SetDoc(nullptr);
     uno::Reference<uno::XInterface> const xThis(m_wThis);
@@ -110,24 +107,20 @@ void SwXFootnote::Impl::Invalidate()
     m_EventListeners.disposeAndClear(ev);
 }
 
-void SwXFootnote::Impl::Modify(const SfxPoolItem *pOld, const SfxPoolItem *pNew)
+void SwXFootnote::Impl::Notify(const SfxHint& rHint)
 {
-    ClientModify(this, pOld, pNew);
-
-    if (!GetRegisteredIn()) // removed => dispose
-    {
+    if(rHint.GetId() == SfxHintId::Dying)
         Invalidate();
-    }
 }
 
 SwXFootnote::SwXFootnote(const bool bEndnote)
-    : SwXText(nullptr, CURSOR_FOOTNOTE)
+    : SwXText(nullptr, CursorType::Footnote)
     , m_pImpl( new SwXFootnote::Impl(*this, nullptr, bEndnote) )
 {
 }
 
 SwXFootnote::SwXFootnote(SwDoc & rDoc, SwFormatFootnote & rFormat)
-    : SwXText(& rDoc, CURSOR_FOOTNOTE)
+    : SwXText(& rDoc, CursorType::Footnote)
     , m_pImpl( new SwXFootnote::Impl(*this, &rFormat, rFormat.IsEndNote()) )
 {
 }
@@ -148,7 +141,7 @@ SwXFootnote::CreateXFootnote(SwDoc & rDoc, SwFormatFootnote *const pFootnoteForm
     }
     if (!xNote.is())
     {
-        SwXFootnote *const pNote((pFootnoteFormat)
+        SwXFootnote *const pNote(pFootnoteFormat
                 ? new SwXFootnote(rDoc, *pFootnoteFormat)
                 : new SwXFootnote(isEndnote));
         xNote.set(pNote);
@@ -174,14 +167,13 @@ const uno::Sequence< sal_Int8 > & SwXFootnote::getUnoTunnelId()
 
 sal_Int64 SAL_CALL
 SwXFootnote::getSomething(const uno::Sequence< sal_Int8 >& rId)
-throw (uno::RuntimeException, std::exception)
 {
     const sal_Int64 nRet( ::sw::UnoTunnelImpl<SwXFootnote>(rId, this) );
-    return (nRet) ? nRet : SwXText::getSomething(rId);
+    return nRet ? nRet : SwXText::getSomething(rId);
 }
 
 OUString SAL_CALL
-SwXFootnote::getImplementationName() throw (uno::RuntimeException, std::exception)
+SwXFootnote::getImplementationName()
 {
     return OUString("SwXFootnote");
 }
@@ -199,13 +191,12 @@ static const size_t g_nServicesEndnote( SAL_N_ELEMENTS(g_ServicesFootnote) );
 static const size_t g_nServicesFootnote( g_nServicesEndnote - 1 ); // NB: omit!
 
 sal_Bool SAL_CALL SwXFootnote::supportsService(const OUString& rServiceName)
-throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL
-SwXFootnote::getSupportedServiceNames() throw (uno::RuntimeException, std::exception)
+SwXFootnote::getSupportedServiceNames()
 {
     SolarMutexGuard g;
     return ::sw::GetSupportedServiceNamesImpl(
@@ -214,7 +205,7 @@ SwXFootnote::getSupportedServiceNames() throw (uno::RuntimeException, std::excep
 }
 
 uno::Sequence< uno::Type > SAL_CALL
-SwXFootnote::getTypes() throw (uno::RuntimeException, std::exception)
+SwXFootnote::getTypes()
 {
     const uno::Sequence< uno::Type > aTypes = SwXFootnote_Base::getTypes();
     const uno::Sequence< uno::Type > aTextTypes = SwXText::getTypes();
@@ -222,14 +213,13 @@ SwXFootnote::getTypes() throw (uno::RuntimeException, std::exception)
 }
 
 uno::Sequence< sal_Int8 > SAL_CALL
-SwXFootnote::getImplementationId() throw (uno::RuntimeException, std::exception)
+SwXFootnote::getImplementationId()
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 uno::Any SAL_CALL
 SwXFootnote::queryInterface(const uno::Type& rType)
-throw (uno::RuntimeException, std::exception)
 {
     const uno::Any ret = SwXFootnote_Base::queryInterface(rType);
     return (ret.getValueType() == cppu::UnoType<void>::get())
@@ -237,7 +227,7 @@ throw (uno::RuntimeException, std::exception)
         :   ret;
 }
 
-OUString SAL_CALL SwXFootnote::getLabel() throw (uno::RuntimeException, std::exception)
+OUString SAL_CALL SwXFootnote::getLabel()
 {
     SolarMutexGuard aGuard;
 
@@ -259,7 +249,7 @@ OUString SAL_CALL SwXFootnote::getLabel() throw (uno::RuntimeException, std::exc
 }
 
 void SAL_CALL
-SwXFootnote::setLabel(const OUString& aLabel) throw (uno::RuntimeException, std::exception)
+SwXFootnote::setLabel(const OUString& aLabel)
 {
     SolarMutexGuard aGuard;
     OUString newLabel(aLabel);
@@ -272,11 +262,11 @@ SwXFootnote::setLabel(const OUString& aLabel) throw (uno::RuntimeException, std:
     if(pFormat)
     {
         const SwTextFootnote* pTextFootnote = pFormat->GetTextFootnote();
-        OSL_ENSURE(pTextFootnote, "kein TextNode?");
-        SwTextNode& rTextNode = (SwTextNode&)pTextFootnote->GetTextNode();
+        OSL_ENSURE(pTextFootnote, "No TextNode?");
+        SwTextNode& rTextNode = const_cast<SwTextNode&>(pTextFootnote->GetTextNode());
 
         SwPaM aPam(rTextNode, pTextFootnote->GetStart());
-        GetDoc()->SetCurFootnote(aPam, newLabel, pFormat->GetNumber(), pFormat->IsEndNote());
+        GetDoc()->SetCurFootnote(aPam, newLabel, pFormat->IsEndNote());
     }
     else if (m_pImpl->m_bIsDescriptor)
     {
@@ -290,7 +280,6 @@ SwXFootnote::setLabel(const OUString& aLabel) throw (uno::RuntimeException, std:
 
 void SAL_CALL
 SwXFootnote::attach(const uno::Reference< text::XTextRange > & xTextRange)
-throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -305,7 +294,7 @@ throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
     OTextCursorHelper *const pCursor =
         ::sw::UnoTunnelGetImplementation<OTextCursorHelper>(xRangeTunnel);
     SwDoc *const pNewDoc =
-        (pRange) ? &pRange->GetDoc() : ((pCursor) ? pCursor->GetDoc() : nullptr);
+        pRange ? &pRange->GetDoc() : (pCursor ? pCursor->GetDoc() : nullptr);
     if (!pNewDoc)
     {
         throw lang::IllegalArgumentException();
@@ -327,7 +316,7 @@ throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
     SwXTextCursor const*const pTextCursor(
             dynamic_cast<SwXTextCursor*>(pCursor));
     const bool bForceExpandHints( pTextCursor && pTextCursor->IsAtEndOfMeta() );
-    const SetAttrMode nInsertFlags = (bForceExpandHints)
+    const SetAttrMode nInsertFlags = bForceExpandHints
         ? SetAttrMode::FORCEHINTEXPAND
         : SetAttrMode::DEFAULT;
 
@@ -339,9 +328,10 @@ throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 
     if (pTextAttr)
     {
-        const SwFormatFootnote& rFootnote = pTextAttr->GetFootnote();
-        m_pImpl->m_pFormatFootnote = &rFootnote;
-        const_cast<SwFormatFootnote*>(m_pImpl->m_pFormatFootnote)->Add(m_pImpl.get());
+        m_pImpl->EndListeningAll();
+        SwFormatFootnote* pFootnote = const_cast<SwFormatFootnote*>(&pTextAttr->GetFootnote());
+        m_pImpl->m_pFormatFootnote = pFootnote;
+        m_pImpl->StartListening(pFootnote->GetNotifier());
         // force creation of sequence id - is used for references
         if (pNewDoc->IsInReading())
         {
@@ -357,7 +347,7 @@ throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 }
 
 uno::Reference< text::XTextRange > SAL_CALL
-SwXFootnote::getAnchor() throw (uno::RuntimeException, std::exception)
+SwXFootnote::getAnchor()
 {
     SolarMutexGuard aGuard;
 
@@ -365,7 +355,6 @@ SwXFootnote::getAnchor() throw (uno::RuntimeException, std::exception)
 
     SwTextFootnote const*const pTextFootnote = rFormat.GetTextFootnote();
     SwPaM aPam( pTextFootnote->GetTextNode(), pTextFootnote->GetStart() );
-    SwPosition aMark( *aPam.Start() );
     aPam.SetMark();
     ++aPam.GetMark()->nContent;
     const uno::Reference< text::XTextRange > xRet =
@@ -373,7 +362,7 @@ SwXFootnote::getAnchor() throw (uno::RuntimeException, std::exception)
     return xRet;
 }
 
-void SAL_CALL SwXFootnote::dispose() throw (uno::RuntimeException, std::exception)
+void SAL_CALL SwXFootnote::dispose()
 {
     SolarMutexGuard aGuard;
 
@@ -390,7 +379,6 @@ void SAL_CALL SwXFootnote::dispose() throw (uno::RuntimeException, std::exceptio
 void SAL_CALL
 SwXFootnote::addEventListener(
     const uno::Reference< lang::XEventListener > & xListener)
-throw (uno::RuntimeException, std::exception)
 {
     // no need to lock here as m_pImpl is const and container threadsafe
     m_pImpl->m_EventListeners.addInterface(xListener);
@@ -399,7 +387,6 @@ throw (uno::RuntimeException, std::exception)
 void SAL_CALL
 SwXFootnote::removeEventListener(
     const uno::Reference< lang::XEventListener > & xListener)
-throw (uno::RuntimeException, std::exception)
 {
     // no need to lock here as m_pImpl is const and container threadsafe
     m_pImpl->m_EventListeners.removeInterface(xListener);
@@ -420,13 +407,13 @@ const SwStartNode *SwXFootnote::GetStartNode() const
 }
 
 uno::Reference< text::XTextCursor >
-SwXFootnote::CreateCursor() throw (uno::RuntimeException)
+SwXFootnote::CreateCursor()
 {
     return createTextCursor();
 }
 
 uno::Reference< text::XTextCursor > SAL_CALL
-SwXFootnote::createTextCursor() throw (uno::RuntimeException, std::exception)
+SwXFootnote::createTextCursor()
 {
     SolarMutexGuard aGuard;
 
@@ -435,9 +422,9 @@ SwXFootnote::createTextCursor() throw (uno::RuntimeException, std::exception)
     SwTextFootnote const*const pTextFootnote = rFormat.GetTextFootnote();
     SwPosition aPos( *pTextFootnote->GetStartNode() );
     SwXTextCursor *const pXCursor =
-        new SwXTextCursor(*GetDoc(), this, CURSOR_FOOTNOTE, aPos);
+        new SwXTextCursor(*GetDoc(), this, CursorType::Footnote, aPos);
     auto& rUnoCursor(pXCursor->GetCursor());
-    rUnoCursor.Move(fnMoveForward, fnGoNode);
+    rUnoCursor.Move(fnMoveForward, GoInNode);
     const uno::Reference< text::XTextCursor > xRet =
         static_cast<text::XWordCursor*>(pXCursor);
     return xRet;
@@ -446,7 +433,6 @@ SwXFootnote::createTextCursor() throw (uno::RuntimeException, std::exception)
 uno::Reference< text::XTextCursor > SAL_CALL
 SwXFootnote::createTextCursorByRange(
     const uno::Reference< text::XTextRange > & xTextPosition)
-throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -469,13 +455,13 @@ throw (uno::RuntimeException, std::exception)
 
     const uno::Reference< text::XTextCursor > xRet =
         static_cast<text::XWordCursor*>(
-                new SwXTextCursor(*GetDoc(), this, CURSOR_FOOTNOTE,
+                new SwXTextCursor(*GetDoc(), this, CursorType::Footnote,
                     *aPam.GetPoint(), aPam.GetMark()));
     return xRet;
 }
 
 uno::Reference< container::XEnumeration > SAL_CALL
-SwXFootnote::createEnumeration() throw (uno::RuntimeException, std::exception)
+SwXFootnote::createEnumeration()
 {
     SolarMutexGuard aGuard;
 
@@ -484,23 +470,22 @@ SwXFootnote::createEnumeration() throw (uno::RuntimeException, std::exception)
     SwTextFootnote const*const pTextFootnote = rFormat.GetTextFootnote();
     SwPosition aPos( *pTextFootnote->GetStartNode() );
     auto pUnoCursor(GetDoc()->CreateUnoCursor(aPos));
-    pUnoCursor->Move(fnMoveForward, fnGoNode);
-    return SwXParagraphEnumeration::Create(this, pUnoCursor, CURSOR_FOOTNOTE);
+    pUnoCursor->Move(fnMoveForward, GoInNode);
+    return SwXParagraphEnumeration::Create(this, pUnoCursor, CursorType::Footnote);
 }
 
-uno::Type SAL_CALL SwXFootnote::getElementType() throw (uno::RuntimeException, std::exception)
+uno::Type SAL_CALL SwXFootnote::getElementType()
 {
     return cppu::UnoType<text::XTextRange>::get();
 }
 
-sal_Bool SAL_CALL SwXFootnote::hasElements() throw (uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL SwXFootnote::hasElements()
 {
-    return sal_True;
+    return true;
 }
 
 uno::Reference< beans::XPropertySetInfo > SAL_CALL
 SwXFootnote::getPropertySetInfo()
-throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
     static uno::Reference< beans::XPropertySetInfo > xRet =
@@ -511,9 +496,6 @@ throw (uno::RuntimeException, std::exception)
 
 void SAL_CALL
 SwXFootnote::setPropertyValue(const OUString&, const uno::Any&)
-throw (beans::UnknownPropertyException, beans::PropertyVetoException,
-        lang::IllegalArgumentException, lang::WrappedTargetException,
-        uno::RuntimeException, std::exception)
 {
     //no values to be set
     throw lang::IllegalArgumentException();
@@ -521,8 +503,6 @@ throw (beans::UnknownPropertyException, beans::PropertyVetoException,
 
 uno::Any SAL_CALL
 SwXFootnote::getPropertyValue(const OUString& rPropertyName)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -562,8 +542,6 @@ void SAL_CALL
 SwXFootnote::addPropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXFootnote::addPropertyChangeListener(): not implemented");
 }
@@ -572,8 +550,6 @@ void SAL_CALL
 SwXFootnote::removePropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXFootnote::removePropertyChangeListener(): not implemented");
 }
@@ -582,8 +558,6 @@ void SAL_CALL
 SwXFootnote::addVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXFootnote::addVetoableChangeListener(): not implemented");
 }
@@ -592,8 +566,6 @@ void SAL_CALL
 SwXFootnote::removeVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-        uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXFootnote::removeVetoableChangeListener(): not implemented");
 }

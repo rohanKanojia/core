@@ -20,12 +20,12 @@
 #ifndef INCLUDED_JVMFWK_PLUGINS_SUNMAJOR_PLUGINLIB_VENDORBASE_HXX
 #define INCLUDED_JVMFWK_PLUGINS_SUNMAJOR_PLUGINLIB_VENDORBASE_HXX
 
-#include "config_java.h"
+#include <config_java.h>
 
-#include "rtl/ustring.hxx"
-#include "rtl/ref.hxx"
-#include "osl/endian.h"
-#include "salhelper/simplereferenceobject.hxx"
+#include <rtl/ustring.hxx>
+#include <rtl/ref.hxx>
+#include <osl/endian.h>
+#include <salhelper/simplereferenceobject.hxx>
 #include <vector>
 
 namespace jfw_plugin
@@ -35,7 +35,7 @@ namespace jfw_plugin
 //Used by subclasses of VendorBase to build paths to Java runtime
 #if defined(JAVA_ARCH)
 #define JFW_PLUGIN_ARCH JAVA_ARCH
-#elif defined(__sparcv9)
+#elif defined SPARC64
 #define JFW_PLUGIN_ARCH "sparcv9"
 #elif defined SPARC
 #define JFW_PLUGIN_ARCH "sparc"
@@ -82,16 +82,10 @@ OpenJDK at least, but probably not true for Lemotes JDK */
 #endif // SPARC, INTEL, POWERPC, MIPS, MIPS64, ARM, IA64, M68K, HPPA, ALPHA
 
 
-class MalformedVersionException
+class MalformedVersionException : public std::exception
 {
 public:
-    MalformedVersionException();
-
-    MalformedVersionException(const MalformedVersionException &);
-
-    virtual ~MalformedVersionException();
-
-    MalformedVersionException & operator =(const MalformedVersionException &);
+    virtual ~MalformedVersionException() override;
 };
 
 class VendorBase: public salhelper::SimpleReferenceObject
@@ -105,7 +99,7 @@ public:
 
        For example "bin/java.exe". You need
        to implement this function in a derived class, if
-       the paths differ.  this implmentation provides for
+       the paths differ.  this implementation provides for
        Windows "bin/java.exe" and for Unix "bin/java".
        The paths are relative file URLs. That is, they always
        contain '/' even on windows. The paths are relative
@@ -133,6 +127,7 @@ public:
     const OUString & getRuntimeLibrary() const;
     const OUString & getLibraryPath() const;
     bool supportsAccessibility() const;
+    bool isValidArch() const;
      /* determines if prior to running java something has to be done,
         like setting the LD_LIBRARY_PATH. This implementation checks
         if an LD_LIBRARY_PATH (getLD_LIBRARY_PATH) needs to be set and
@@ -178,13 +173,14 @@ protected:
     OUString m_sHome;
     OUString m_sRuntimeLibrary;
     OUString m_sLD_LIBRARY_PATH;
+    OUString m_sArch;
     bool m_bAccessibility;
 
 
     typedef rtl::Reference<VendorBase> (* createInstance_func) ();
     friend rtl::Reference<VendorBase> createInstance(
         createInstance_func pFunc,
-        std::vector<std::pair<OUString, OUString> > properties);
+        const std::vector<std::pair<OUString, OUString> >& properties);
 };
 
 }

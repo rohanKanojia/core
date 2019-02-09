@@ -30,6 +30,8 @@
 class ScDocShell;
 struct TableLink_Impl;
 
+namespace weld { class Window; }
+
 class ScTableLink : public ::sfx2::SvBaseLink, public ScRefreshTimer
 {
 private:
@@ -40,19 +42,18 @@ private:
     bool bInCreate:1;
     bool bInEdit:1;
     bool bAddUndo:1;
-    bool bDoPaint:1;
 
 public:
     ScTableLink( ScDocShell* pDocSh, const OUString& rFile,
                     const OUString& rFilter, const OUString& rOpt, sal_uLong nRefresh );
     ScTableLink( SfxObjectShell* pShell, const OUString& rFile,
                     const OUString& rFilter, const OUString& rOpt, sal_uLong nRefresh );
-    virtual ~ScTableLink();
+    virtual ~ScTableLink() override;
     virtual void Closed() override;
     virtual ::sfx2::SvBaseLink::UpdateResult DataChanged(
         const OUString& rMimeType, const css::uno::Any & rValue ) override;
 
-    virtual void    Edit( vcl::Window*, const Link<SvBaseLink&,void>& rEndEditHdl ) override;
+    virtual void    Edit(weld::Window*, const Link<SvBaseLink&,void>& rEndEditHdl) override;
 
     bool    Refresh(const OUString& rNewFile, const OUString& rNewFilter,
                     const OUString* pNewOptions /* = NULL */, sal_uLong nNewRefresh );
@@ -65,8 +66,8 @@ public:
 
     bool    IsUsed() const;
 
-    DECL_LINK_TYPED( RefreshHdl, Timer*, void );
-    DECL_LINK_TYPED( TableEndEditHdl, ::sfx2::SvBaseLink&, void );
+    DECL_LINK( RefreshHdl, Timer*, void );
+    DECL_LINK( TableEndEditHdl, ::sfx2::SvBaseLink&, void );
 };
 
 class ScDocument;
@@ -83,7 +84,7 @@ private:
 public:
                         ScDocumentLoader( const OUString& rFileName,
                                           OUString& rFilterName, OUString& rOptions,
-                                          sal_uInt32 nRekCnt = 0, bool bWithInteraction = false );
+                                          sal_uInt32 nRekCnt = 0, weld::Window* pInteractionParent = nullptr );
                         ~ScDocumentLoader();
     ScDocument*         GetDocument();
     ScDocShell*         GetDocShell()       { return pDocShell; }
@@ -95,9 +96,10 @@ public:
     /** Create SfxMedium for stream read with SfxFilter and filter options set
         at the medium's SfxItemSet.
      */
-    static SfxMedium*   CreateMedium( const OUString& rFileName, std::shared_ptr<const SfxFilter> pFilter, const OUString& rOptions );
+    static SfxMedium*   CreateMedium(const OUString& rFileName, std::shared_ptr<const SfxFilter> const & pFilter,
+                                     const OUString& rOptions, weld::Window* pInteractionParent = nullptr);
 
-    static OUString     GetOptions( SfxMedium& rMedium );
+    static OUString     GetOptions( const SfxMedium& rMedium );
 
     /** Returns the filter name and options from a file name.
         @param bWithContent

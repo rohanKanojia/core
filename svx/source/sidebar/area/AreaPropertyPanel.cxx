@@ -16,22 +16,16 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "svx/sidebar/PopupContainer.hxx"
-#include "AreaTransparencyGradientControl.hxx"
 
-#include <sfx2/sidebar/ResourceDefinitions.hrc>
 #include <sfx2/sidebar/ControlFactory.hxx>
-#include <AreaPropertyPanel.hxx>
-#include <AreaPropertyPanel.hrc>
-#include <svx/dialogs.hrc>
-#include <svx/dialmgr.hxx>
+#include "AreaPropertyPanel.hxx"
+#include <svx/svxids.hrc>
 #include <sfx2/objsh.hxx>
 #include <svx/xfltrit.hxx>
 #include <svx/xflftrit.hxx>
 #include <svx/xtable.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/bindings.hxx>
-#include <helpid.hrc>
 #include <svtools/valueset.hxx>
 #include <unotools/pathoptions.hxx>
 #include <svx/svxitems.hrc>
@@ -57,6 +51,7 @@ AreaPropertyPanel::AreaPropertyPanel(
       maGradientListControl(SID_GRADIENT_LIST, *pBindings, *this),
       maHatchListControl(SID_HATCH_LIST, *pBindings, *this),
       maBitmapListControl(SID_BITMAP_LIST, *pBindings, *this),
+      maPatternListControl(SID_PATTERN_LIST, *pBindings, *this),
       maFillTransparenceController(SID_ATTR_FILL_TRANSPARENCE, *pBindings, *this),
       maFillFloatTransparenceController(SID_ATTR_FILL_FLOATTRANSPARENCE, *pBindings, *this),
       mpBindings(pBindings)
@@ -79,6 +74,7 @@ void AreaPropertyPanel::dispose()
     maGradientListControl.dispose();
     maHatchListControl.dispose();
     maBitmapListControl.dispose();
+    maPatternListControl.dispose();
     maFillTransparenceController.dispose();
     maFillFloatTransparenceController.dispose();
 
@@ -125,36 +121,36 @@ void AreaPropertyPanel::setFillStyleAndColor(const XFillStyleItem* pStyleItem,
         const XFillColorItem& rColorItem)
 {
     GetBindings()->GetDispatcher()->ExecuteList(SID_ATTR_FILL_COLOR,
-        SfxCallMode::RECORD, (pStyleItem)
-            ? std::initializer_list<SfxPoolItem const*>({ &rColorItem, pStyleItem })
-            : std::initializer_list<SfxPoolItem const*>({ &rColorItem }));
+        SfxCallMode::RECORD, pStyleItem
+            ? std::initializer_list<SfxPoolItem const*>{ &rColorItem, pStyleItem }
+            : std::initializer_list<SfxPoolItem const*>{ &rColorItem });
 }
 
 void AreaPropertyPanel::setFillStyleAndGradient(const XFillStyleItem* pStyleItem,
         const XFillGradientItem& rGradientItem)
 {
     GetBindings()->GetDispatcher()->ExecuteList(SID_ATTR_FILL_GRADIENT,
-        SfxCallMode::RECORD, (pStyleItem)
-            ? std::initializer_list<SfxPoolItem const*>({ &rGradientItem, pStyleItem })
-            : std::initializer_list<SfxPoolItem const*>({ &rGradientItem }));
+        SfxCallMode::RECORD, pStyleItem
+            ? std::initializer_list<SfxPoolItem const*>{ &rGradientItem, pStyleItem }
+            : std::initializer_list<SfxPoolItem const*>{ &rGradientItem });
 }
 
 void AreaPropertyPanel::setFillStyleAndHatch(const XFillStyleItem* pStyleItem,
         const XFillHatchItem& rHatchItem)
 {
     GetBindings()->GetDispatcher()->ExecuteList(SID_ATTR_FILL_HATCH,
-        SfxCallMode::RECORD, (pStyleItem)
-            ? std::initializer_list<SfxPoolItem const*>({ &rHatchItem, pStyleItem })
-            : std::initializer_list<SfxPoolItem const*>({ &rHatchItem }));
+        SfxCallMode::RECORD, pStyleItem
+            ? std::initializer_list<SfxPoolItem const*>{ &rHatchItem, pStyleItem }
+            : std::initializer_list<SfxPoolItem const*>{ &rHatchItem });
 }
 
 void AreaPropertyPanel::setFillStyleAndBitmap(const XFillStyleItem* pStyleItem,
         const XFillBitmapItem& rBitmapItem)
 {
     GetBindings()->GetDispatcher()->ExecuteList(SID_ATTR_FILL_BITMAP,
-        SfxCallMode::RECORD, (pStyleItem)
-            ? std::initializer_list<SfxPoolItem const*>({ &rBitmapItem, pStyleItem })
-            : std::initializer_list<SfxPoolItem const*>({ &rBitmapItem }));
+        SfxCallMode::RECORD, pStyleItem
+            ? std::initializer_list<SfxPoolItem const*>{ &rBitmapItem, pStyleItem }
+            : std::initializer_list<SfxPoolItem const*>{ &rBitmapItem });
 }
 
 } } // end of namespace svx::sidebar

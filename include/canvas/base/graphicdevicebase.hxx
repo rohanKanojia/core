@@ -48,7 +48,7 @@ namespace canvas
         actually is, that you cannot do it the plain way, since
         deriving from a common base subclass always introduces the
         whole set of pure virtuals, that your baseclass helper just
-        overrided) and your implementation class. You then only have
+        overridden) and your implementation class. You then only have
         to implement the functionality <em>besides</em>
         XGraphicDevice. If you want to support the optional debug
         XUpdatable interface, also add that to the base classes
@@ -57,7 +57,7 @@ namespace canvas
 
         <pre>
         Example:
-        typedef ::cppu::WeakComponentImplHelper5< css::rendering::XGraphicDevice,
+        typedef ::cppu::WeakComponentImplHelper < css::rendering::XGraphicDevice,
                                                   css::rendering::XColorSpace,
                                                   css::rendering::XPropertySet,
                                                   css::lang::XServiceInfo,
@@ -70,12 +70,12 @@ namespace canvas
         </pre>
 
         @tpl Base
-        Base class to use, most probably one of the
-        WeakComponentImplHelperN templates with the appropriate
+        Base class to use, most probably the
+        WeakComponentImplHelper template with the appropriate
         interfaces. At least XGraphicDevice should be among them (why else
         would you use this template, then?). Base class must have an
         Base( const Mutex& ) constructor (like the
-        WeakComponentImplHelperN templates have). As the very least,
+        WeakComponentImplHelper template has). As the very least,
         the base class must be derived from uno::XInterface, as some
         error reporting mechanisms rely on that.
 
@@ -106,10 +106,8 @@ namespace canvas
     {
     public:
         typedef Base              BaseType;
-        typedef DeviceHelper      DeviceHelperType;
         typedef Mutex             MutexType;
         typedef UnambiguousBase   UnambiguousBaseType;
-        typedef GraphicDeviceBase ThisType;
 
         typedef ::rtl::Reference< GraphicDeviceBase > Reference;
 
@@ -141,50 +139,47 @@ namespace canvas
         }
 
         // XGraphicDevice
-        virtual css::uno::Reference< css::rendering::XBufferController > SAL_CALL getBufferController(  ) throw (css::uno::RuntimeException) override
+        virtual css::uno::Reference< css::rendering::XBufferController > SAL_CALL getBufferController(  ) override
         {
             return css::uno::Reference< css::rendering::XBufferController >();
         }
 
-        virtual css::uno::Reference< css::rendering::XColorSpace > SAL_CALL getDeviceColorSpace(  ) throw (css::uno::RuntimeException) override
+        virtual css::uno::Reference< css::rendering::XColorSpace > SAL_CALL getDeviceColorSpace(  ) override
         {
             MutexType aGuard( BaseType::m_aMutex );
 
             return maDeviceHelper.getColorSpace();
         }
 
-        virtual css::geometry::RealSize2D SAL_CALL getPhysicalResolution() throw (css::uno::RuntimeException, std::exception) override
+        virtual css::geometry::RealSize2D SAL_CALL getPhysicalResolution() override
         {
             MutexType aGuard( BaseType::m_aMutex );
 
             return maDeviceHelper.getPhysicalResolution();
         }
 
-        virtual css::geometry::RealSize2D SAL_CALL getPhysicalSize() throw (css::uno::RuntimeException, std::exception) override
+        virtual css::geometry::RealSize2D SAL_CALL getPhysicalSize() override
         {
             MutexType aGuard( BaseType::m_aMutex );
 
             return maDeviceHelper.getPhysicalSize();
         }
 
-        virtual css::uno::Reference< css::rendering::XLinePolyPolygon2D > SAL_CALL createCompatibleLinePolyPolygon( const css::uno::Sequence< css::uno::Sequence< css::geometry::RealPoint2D > >& points ) throw (css::uno::RuntimeException) override
+        virtual css::uno::Reference< css::rendering::XLinePolyPolygon2D > SAL_CALL createCompatibleLinePolyPolygon( const css::uno::Sequence< css::uno::Sequence< css::geometry::RealPoint2D > >& points ) override
         {
             MutexType aGuard( BaseType::m_aMutex );
 
             return maDeviceHelper.createCompatibleLinePolyPolygon( this, points );
         }
 
-        virtual css::uno::Reference< css::rendering::XBezierPolyPolygon2D > SAL_CALL createCompatibleBezierPolyPolygon( const css::uno::Sequence< css::uno::Sequence< css::geometry::RealBezierSegment2D > >& points ) throw (css::uno::RuntimeException) override
+        virtual css::uno::Reference< css::rendering::XBezierPolyPolygon2D > SAL_CALL createCompatibleBezierPolyPolygon( const css::uno::Sequence< css::uno::Sequence< css::geometry::RealBezierSegment2D > >& points ) override
         {
             MutexType aGuard( BaseType::m_aMutex );
 
             return maDeviceHelper.createCompatibleBezierPolyPolygon( this, points );
         }
 
-        virtual css::uno::Reference< css::rendering::XBitmap > SAL_CALL createCompatibleBitmap( const css::geometry::IntegerSize2D& size )
-            throw (css::lang::IllegalArgumentException,
-                   css::uno::RuntimeException,
-                   std::exception) override
+        virtual css::uno::Reference< css::rendering::XBitmap > SAL_CALL createCompatibleBitmap( const css::geometry::IntegerSize2D& size ) override
         {
             tools::verifyBitmapSize(size,
                                     OSL_THIS_FUNC,
@@ -195,8 +190,7 @@ namespace canvas
             return maDeviceHelper.createCompatibleBitmap( this, size );
         }
 
-        virtual css::uno::Reference< css::rendering::XVolatileBitmap > SAL_CALL createVolatileBitmap( const css::geometry::IntegerSize2D& size ) throw (css::lang::IllegalArgumentException,
-                                                                                                                                                                                               css::uno::RuntimeException) override
+        virtual css::uno::Reference< css::rendering::XVolatileBitmap > SAL_CALL createVolatileBitmap( const css::geometry::IntegerSize2D& size ) override
         {
             tools::verifyBitmapSize(size,
                                     OSL_THIS_FUNC,
@@ -207,10 +201,7 @@ namespace canvas
             return maDeviceHelper.createVolatileBitmap( this, size );
         }
 
-        virtual css::uno::Reference< css::rendering::XBitmap > SAL_CALL createCompatibleAlphaBitmap( const css::geometry::IntegerSize2D& size )
-            throw (css::lang::IllegalArgumentException,
-                   css::uno::RuntimeException,
-                   std::exception) override
+        virtual css::uno::Reference< css::rendering::XBitmap > SAL_CALL createCompatibleAlphaBitmap( const css::geometry::IntegerSize2D& size ) override
         {
             tools::verifyBitmapSize(size,
                                     OSL_THIS_FUNC,
@@ -221,8 +212,7 @@ namespace canvas
             return maDeviceHelper.createCompatibleAlphaBitmap( this, size );
         }
 
-        virtual css::uno::Reference< css::rendering::XVolatileBitmap > SAL_CALL createVolatileAlphaBitmap( const css::geometry::IntegerSize2D& size ) throw (css::lang::IllegalArgumentException,
-                                                                                                                                                                                                    css::uno::RuntimeException) override
+        virtual css::uno::Reference< css::rendering::XVolatileBitmap > SAL_CALL createVolatileAlphaBitmap( const css::geometry::IntegerSize2D& size ) override
         {
             tools::verifyBitmapSize(size,
                                     OSL_THIS_FUNC,
@@ -233,23 +223,23 @@ namespace canvas
             return maDeviceHelper.createVolatileAlphaBitmap( this, size );
         }
 
-        virtual css::uno::Reference< css::lang::XMultiServiceFactory > SAL_CALL getParametricPolyPolygonFactory(  ) throw (css::uno::RuntimeException) override
+        virtual css::uno::Reference< css::lang::XMultiServiceFactory > SAL_CALL getParametricPolyPolygonFactory(  ) override
         {
             return this;
         }
 
-        virtual sal_Bool SAL_CALL hasFullScreenMode(  ) throw (css::uno::RuntimeException) override
+        virtual sal_Bool SAL_CALL hasFullScreenMode(  ) override
         {
-            return sal_False;
+            return false;
         }
 
-        virtual sal_Bool SAL_CALL enterFullScreenMode( sal_Bool ) throw (css::uno::RuntimeException) override
+        virtual sal_Bool SAL_CALL enterFullScreenMode( sal_Bool ) override
         {
             return false;
         }
 
         // XMultiServiceFactory
-        virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstance( const OUString& aServiceSpecifier ) throw (css::uno::Exception, css::uno::RuntimeException) override
+        virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstance( const OUString& aServiceSpecifier ) override
         {
             return css::uno::Reference< css::rendering::XParametricPolyPolygon2D >(
                 ParametricPolyPolygon::create(this,
@@ -257,7 +247,7 @@ namespace canvas
                                               css::uno::Sequence< css::uno::Any >()));
         }
 
-        virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceWithArguments( const OUString& aServiceSpecifier, const css::uno::Sequence< css::uno::Any >& Arguments ) throw (css::uno::Exception, css::uno::RuntimeException) override
+        virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceWithArguments( const OUString& aServiceSpecifier, const css::uno::Sequence< css::uno::Any >& Arguments ) override
         {
             return css::uno::Reference< css::rendering::XParametricPolyPolygon2D >(
                 ParametricPolyPolygon::create(this,
@@ -265,14 +255,14 @@ namespace canvas
                                               Arguments));
         }
 
-        virtual css::uno::Sequence< OUString > SAL_CALL getAvailableServiceNames(  ) throw (css::uno::RuntimeException) override
+        virtual css::uno::Sequence< OUString > SAL_CALL getAvailableServiceNames(  ) override
         {
             return ParametricPolyPolygon::getAvailableServiceNames();
         }
 
 
         // XUpdatable
-        virtual void SAL_CALL update() throw (css::uno::RuntimeException, std::exception) override
+        virtual void SAL_CALL update() override
         {
             MutexType aGuard( BaseType::m_aMutex );
 
@@ -282,37 +272,27 @@ namespace canvas
 
 
         // XPropertySet
-        virtual css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo() throw (css::uno::RuntimeException) override
+        virtual css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo() override
         {
             MutexType aGuard( BaseType::m_aMutex );
             return maPropHelper.getPropertySetInfo();
         }
 
         virtual void SAL_CALL setPropertyValue( const OUString&                   aPropertyName,
-                                                const css::uno::Any& aValue ) throw (css::beans::UnknownPropertyException,
-                                                                                     css::beans::PropertyVetoException,
-                                                                                     css::lang::IllegalArgumentException,
-                                                                                     css::lang::WrappedTargetException,
-                                                                                     css::uno::RuntimeException,
-                                                                                     std::exception) override
+                                                const css::uno::Any& aValue ) override
         {
             MutexType aGuard( BaseType::m_aMutex );
             maPropHelper.setPropertyValue( aPropertyName, aValue );
         }
 
-        virtual css::uno::Any SAL_CALL getPropertyValue( const OUString& aPropertyName ) throw (css::beans::UnknownPropertyException,
-                                                                                                css::lang::WrappedTargetException,
-                                                                                                css::uno::RuntimeException,
-                                                                                                std::exception) override
+        virtual css::uno::Any SAL_CALL getPropertyValue( const OUString& aPropertyName ) override
         {
             MutexType aGuard( BaseType::m_aMutex );
             return maPropHelper.getPropertyValue( aPropertyName );
         }
 
         virtual void SAL_CALL addPropertyChangeListener( const OUString& aPropertyName,
-                                                         const css::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) throw (css::beans::UnknownPropertyException,
-                                                                                                                                                                        css::lang::WrappedTargetException,
-                                                                                                                                                                        css::uno::RuntimeException) override
+                                                         const css::uno::Reference< css::beans::XPropertyChangeListener >& xListener ) override
         {
             MutexType aGuard( BaseType::m_aMutex );
             maPropHelper.addPropertyChangeListener( aPropertyName,
@@ -320,16 +300,12 @@ namespace canvas
         }
 
         virtual void SAL_CALL removePropertyChangeListener( const OUString& ,
-                                                            const css::uno::Reference< css::beans::XPropertyChangeListener >& ) throw (css::beans::UnknownPropertyException,
-                                                                                                                                                                           css::lang::WrappedTargetException,
-                                                                                                                                                                           css::uno::RuntimeException) override
+                                                            const css::uno::Reference< css::beans::XPropertyChangeListener >& ) override
         {
         }
 
         virtual void SAL_CALL addVetoableChangeListener( const OUString& aPropertyName,
-                                                         const css::uno::Reference< css::beans::XVetoableChangeListener >& xListener ) throw (css::beans::UnknownPropertyException,
-                                                                                                                                                                        css::lang::WrappedTargetException,
-                                                                                                                                                                        css::uno::RuntimeException) override
+                                                         const css::uno::Reference< css::beans::XVetoableChangeListener >& xListener ) override
         {
             MutexType aGuard( BaseType::m_aMutex );
             maPropHelper.addVetoableChangeListener( aPropertyName,
@@ -337,9 +313,7 @@ namespace canvas
         }
 
         virtual void SAL_CALL removeVetoableChangeListener( const OUString& ,
-                                                            const css::uno::Reference< css::beans::XVetoableChangeListener >& ) throw (css::beans::UnknownPropertyException,
-                                                                                                                                                                           css::lang::WrappedTargetException,
-                                                                                                                                                                           css::uno::RuntimeException) override
+                                                            const css::uno::Reference< css::beans::XVetoableChangeListener >& ) override
         {
         }
 
@@ -358,7 +332,7 @@ namespace canvas
             rAny >>= mbDumpScreenContent;
         }
 
-        DeviceHelperType  maDeviceHelper;
+        DeviceHelper      maDeviceHelper;
         PropertySetHelper maPropHelper;
         bool              mbDumpScreenContent;
 

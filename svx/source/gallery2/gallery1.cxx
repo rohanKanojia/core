@@ -26,21 +26,24 @@
 #include <postmac.h>
 #endif
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <comphelper/processfactory.hxx>
-#include <comphelper/string.hxx>
 #include <osl/thread.h>
 #include <tools/vcompat.hxx>
 #include <ucbhelper/content.hxx>
+#include <com/sun/star/ucb/ContentCreationException.hpp>
+#include <unotools/configmgr.hxx>
 #include <unotools/ucbstreamhelper.hxx>
 #include <unotools/pathoptions.hxx>
 #include <sfx2/docfile.hxx>
-#include "svx/gallery.hxx"
-#include "gallery.hrc"
-#include "svx/galmisc.hxx"
-#include "svx/galtheme.hxx"
-#include "svx/gallery1.hxx"
+#include <svx/dialmgr.hxx>
+#include <svx/gallery.hxx>
+#include <svx/strings.hrc>
+#include <strings.hxx>
+#include <svx/galmisc.hxx>
+#include <svx/galtheme.hxx>
+#include <svx/gallery1.hxx>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/ucb/XContentAccess.hpp>
 #include <memory>
@@ -49,12 +52,67 @@
 using namespace ::com::sun::star;
 
 
-static bool FileExists( const INetURLObject &rURL, const rtl::OUString &rExt )
+static bool FileExists( const INetURLObject &rURL, const OUString &rExt )
 {
     INetURLObject aURL( rURL );
     aURL.setExtension( rExt );
     return FileExists( aURL );
 }
+
+const std::pair<sal_uInt16, const char*> aUnlocalized[] =
+{
+    { GALLERY_THEME_HOMEPAGE, RID_GALLERYSTR_THEME_HTMLBUTTONS },
+    { GALLERY_THEME_POWERPOINT, RID_GALLERYSTR_THEME_POWERPOINT },
+    { GALLERY_THEME_USERSOUNDS, RID_GALLERYSTR_THEME_USERSOUNDS },
+    { GALLERY_THEME_DUMMY5, RID_GALLERYSTR_THEME_DUMMY5 },
+    { GALLERY_THEME_RULERS, RID_GALLERYSTR_THEME_RULERS },
+    { GALLERY_THEME_FONTWORK, RID_GALLERYSTR_THEME_FONTWORK },
+    { GALLERY_THEME_FONTWORK_VERTICAL, RID_GALLERYSTR_THEME_FONTWORK_VERTICAL }
+};
+
+const std::pair<sal_uInt16, const char*> aLocalized[] =
+{
+    { RID_GALLERY_THEME_3D, RID_GALLERYSTR_THEME_3D },
+    { RID_GALLERY_THEME_ANIMATIONS, RID_GALLERYSTR_THEME_ANIMATIONS },
+    { RID_GALLERY_THEME_BULLETS, RID_GALLERYSTR_THEME_BULLETS },
+    { RID_GALLERY_THEME_OFFICE, RID_GALLERYSTR_THEME_OFFICE },
+    { RID_GALLERY_THEME_FLAGS, RID_GALLERYSTR_THEME_FLAGS },
+    { RID_GALLERY_THEME_FLOWCHARTS, RID_GALLERYSTR_THEME_FLOWCHARTS },
+    { RID_GALLERY_THEME_EMOTICONS, RID_GALLERYSTR_THEME_EMOTICONS },
+    { RID_GALLERY_THEME_PHOTOS, RID_GALLERYSTR_THEME_PHOTOS },
+    { RID_GALLERY_THEME_BACKGROUNDS, RID_GALLERYSTR_THEME_BACKGROUNDS },
+    { RID_GALLERY_THEME_HOMEPAGE, RID_GALLERYSTR_THEME_HOMEPAGE },
+    { RID_GALLERY_THEME_INTERACTION, RID_GALLERYSTR_THEME_INTERACTION },
+    { RID_GALLERY_THEME_MAPS, RID_GALLERYSTR_THEME_MAPS },
+    { RID_GALLERY_THEME_PEOPLE, RID_GALLERYSTR_THEME_PEOPLE },
+    { RID_GALLERY_THEME_SURFACES, RID_GALLERYSTR_THEME_SURFACES },
+    { RID_GALLERY_THEME_SOUNDS, RID_GALLERYSTR_THEME_SOUNDS },
+    { RID_GALLERY_THEME_SYMBOLS, RID_GALLERYSTR_THEME_SYMBOLS },
+    { RID_GALLERY_THEME_MYTHEME, RID_GALLERYSTR_THEME_MYTHEME },
+
+    { RID_GALLERY_THEME_ARROWS, RID_GALLERYSTR_THEME_ARROWS },
+    { RID_GALLERY_THEME_BALLOONS, RID_GALLERYSTR_THEME_BALLOONS },
+    { RID_GALLERY_THEME_KEYBOARD, RID_GALLERYSTR_THEME_KEYBOARD },
+    { RID_GALLERY_THEME_TIME, RID_GALLERYSTR_THEME_TIME },
+    { RID_GALLERY_THEME_PRESENTATION, RID_GALLERYSTR_THEME_PRESENTATION },
+    { RID_GALLERY_THEME_CALENDAR, RID_GALLERYSTR_THEME_CALENDAR },
+    { RID_GALLERY_THEME_NAVIGATION, RID_GALLERYSTR_THEME_NAVIGATION },
+    { RID_GALLERY_THEME_COMMUNICATION, RID_GALLERYSTR_THEME_COMMUNICATION },
+    { RID_GALLERY_THEME_FINANCES, RID_GALLERYSTR_THEME_FINANCES },
+    { RID_GALLERY_THEME_COMPUTER, RID_GALLERYSTR_THEME_COMPUTER },
+
+    { RID_GALLERY_THEME_CLIMA, RID_GALLERYSTR_THEME_CLIMA },
+    { RID_GALLERY_THEME_EDUCATION, RID_GALLERYSTR_THEME_EDUCATION },
+    { RID_GALLERY_THEME_TROUBLE, RID_GALLERYSTR_THEME_TROUBLE },
+    { RID_GALLERY_THEME_SCREENBEANS, RID_GALLERYSTR_THEME_SCREENBEANS },
+
+    { RID_GALLERY_THEME_COMPUTERS, RID_GALLERYSTR_THEME_COMPUTERS },
+    { RID_GALLERY_THEME_DIAGRAMS, RID_GALLERYSTR_THEME_DIAGRAMS },
+    { RID_GALLERY_THEME_ENVIRONMENT, RID_GALLERYSTR_THEME_ENVIRONMENT },
+    { RID_GALLERY_THEME_FINANCE, RID_GALLERYSTR_THEME_FINANCE },
+    { RID_GALLERY_THEME_TRANSPORT, RID_GALLERYSTR_THEME_TRANSPORT },
+    { RID_GALLERY_THEME_TXTSHAPES, RID_GALLERYSTR_THEME_TXTSHAPES }
+};
 
 GalleryThemeEntry::GalleryThemeEntry( bool bCreateUniqueURL,
                                       const INetURLObject& rBaseURL, const OUString& rName,
@@ -99,10 +157,42 @@ GalleryThemeEntry::GalleryThemeEntry( bool bCreateUniqueURL,
     // This is awful - we shouldn't use these resources if we
     // possibly can avoid them
     if( aName.isEmpty() && nId && bThemeNameFromResource )
-        aName = GAL_RESSTR( RID_GALLERYSTR_THEME_START + (sal_uInt16) nId );
+    {
+        //some of these are supposed to *not* be localized
+        //so catch them before looking up the resource
+        for (size_t i = 0; i < SAL_N_ELEMENTS(aUnlocalized); ++i)
+        {
+            if (aUnlocalized[i].first == nId)
+            {
+                aName = OUString::createFromAscii(aUnlocalized[i].second);
+                break;
+            }
+        }
+        //look up the rest of the ids in string resources
+        if (aName.isEmpty())
+        {
+            for (size_t i = 0; i < SAL_N_ELEMENTS(aLocalized); ++i)
+            {
+                if (aLocalized[i].first == nId)
+                {
+                    aName = SvxResId(aLocalized[i].second);
+                    break;
+                }
+            }
+        }
+    }
 
     if( aName.isEmpty() )
         aName = rName;
+}
+
+void GalleryTheme::InsertAllThemes(weld::ComboBox& rListBox)
+{
+    for (size_t i = 0; i < SAL_N_ELEMENTS(aUnlocalized); ++i)
+        rListBox.append_text(OUString::createFromAscii(aUnlocalized[i].second));
+
+    for (size_t i = 0; i < SAL_N_ELEMENTS(aLocalized); ++i)
+        rListBox.append_text(SvxResId(aLocalized[i].second));
 }
 
 INetURLObject GalleryThemeEntry::ImplGetURLIgnoreCase( const INetURLObject& rURL )
@@ -148,16 +238,15 @@ class GalleryThemeCacheEntry
 private:
 
     const GalleryThemeEntry*        mpThemeEntry;
-    GalleryTheme*                           mpTheme;
+    std::unique_ptr<GalleryTheme>   mpTheme;
 
 public:
 
-                                GalleryThemeCacheEntry( const GalleryThemeEntry* pThemeEntry, GalleryTheme* pTheme ) :
-                                    mpThemeEntry( pThemeEntry ), mpTheme( pTheme ) {}
-                                ~GalleryThemeCacheEntry() { delete mpTheme; }
+                                GalleryThemeCacheEntry( const GalleryThemeEntry* pThemeEntry, std::unique_ptr<GalleryTheme> pTheme ) :
+                                    mpThemeEntry( pThemeEntry ), mpTheme( std::move(pTheme) ) {}
 
-    const GalleryThemeEntry*        GetThemeEntry() const { return mpThemeEntry; }
-    GalleryTheme*                           GetTheme() const { return mpTheme; }
+    const GalleryThemeEntry*    GetThemeEntry() const { return mpThemeEntry; }
+    GalleryTheme*               GetTheme() const { return mpTheme.get(); }
 };
 
 
@@ -169,34 +258,23 @@ Gallery::Gallery( const OUString& rMultiPath )
 
 Gallery::~Gallery()
 {
-    // erase theme list
-    for ( size_t i = 0, n = aThemeList.size(); i < n; ++i )
-        delete aThemeList[ i ];
-    aThemeList.clear();
 }
 
 Gallery* Gallery::GetGalleryInstance()
 {
-    static Gallery* s_pGallery = nullptr;
-
-    if (!s_pGallery)
-    {
-        ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-        if (!s_pGallery)
-        {
-            s_pGallery = new Gallery( SvtPathOptions().GetGalleryPath() );
-        }
-    }
+    // note: this would deadlock if it used osl::Mutex::getGlobalMutex()
+    static Gallery *const s_pGallery(
+        utl::ConfigManager::IsFuzzing() ? nullptr :
+            new Gallery(SvtPathOptions().GetGalleryPath()));
 
     return s_pGallery;
 }
 
 void Gallery::ImplLoad( const OUString& rMultiPath )
 {
-    const sal_Int32 nTokenCount = comphelper::string::getTokenCount(rMultiPath, ';');
-    bool            bIsReadOnlyDir;
+    bool bIsReadOnlyDir {false};
 
-    bMultiPath = ( nTokenCount > 0 );
+    bMultiPath = !rMultiPath.isEmpty();
 
     INetURLObject aCurURL(SvtPathOptions().GetConfigPath());
     ImplLoadSubDirs( aCurURL, bIsReadOnlyDir );
@@ -206,17 +284,23 @@ void Gallery::ImplLoad( const OUString& rMultiPath )
 
     if( bMultiPath )
     {
-        aRelURL = INetURLObject( rMultiPath.getToken(0, ';') );
-
-        for( sal_Int32 i = 0; i < nTokenCount; ++i )
+        bool bIsRelURL {true};
+        sal_Int32 nIdx {0};
+        do
         {
-            aCurURL = INetURLObject(rMultiPath.getToken(i, ';'));
+            aCurURL = INetURLObject(rMultiPath.getToken(0, ';', nIdx));
+            if (bIsRelURL)
+            {
+                aRelURL = aCurURL;
+                bIsRelURL = false;
+            }
 
             ImplLoadSubDirs( aCurURL, bIsReadOnlyDir );
 
             if( !bIsReadOnlyDir )
                 aUserURL = aCurURL;
         }
+        while (nIdx>0);
     }
     else
         aRelURL = INetURLObject( rMultiPath );
@@ -232,7 +316,7 @@ void Gallery::ImplLoadSubDirs( const INetURLObject& rBaseURL, bool& rbDirIsReadO
     try
     {
         uno::Reference< ucb::XCommandEnvironment > xEnv;
-        ::ucbhelper::Content                       aCnt( rBaseURL.GetMainURL( INetURLObject::NO_DECODE ), xEnv, comphelper::getProcessComponentContext() );
+        ::ucbhelper::Content                       aCnt( rBaseURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), xEnv, comphelper::getProcessComponentContext() );
 
         uno::Sequence<OUString> aProps { "Url" };
 
@@ -251,10 +335,9 @@ void Gallery::ImplLoadSubDirs( const INetURLObject& rBaseURL, bool& rbDirIsReadO
         {
             // check readonlyness the very hard way
             INetURLObject   aTestURL( rBaseURL );
-            OUString        aTestFile( "cdefghij.klm" );
 
-            aTestURL.Append( aTestFile );
-            std::unique_ptr<SvStream> pTestStm(::utl::UcbStreamHelper::CreateStream( aTestURL.GetMainURL( INetURLObject::NO_DECODE ), StreamMode::WRITE ));
+            aTestURL.Append( "cdefghij.klm" );
+            std::unique_ptr<SvStream> pTestStm(::utl::UcbStreamHelper::CreateStream( aTestURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), StreamMode::WRITE ));
 
             if( pTestStm )
             {
@@ -287,8 +370,6 @@ void Gallery::ImplLoadSubDirs( const INetURLObject& rBaseURL, bool& rbDirIsReadO
             {
                 static const char s_sTitle[] = "Title";
                 static const char s_sIsReadOnly[] = "IsReadOnly";
-                static const char s_sSDG_EXT[] = "sdg";
-                static const char s_sSDV_EXT[] = "sdv";
 
                 while( xResultSet->next() )
                 {
@@ -296,15 +377,15 @@ void Gallery::ImplLoadSubDirs( const INetURLObject& rBaseURL, bool& rbDirIsReadO
 
                     if(aThmURL.GetExtension().equalsIgnoreAsciiCase("thm"))
                     {
-                        INetURLObject   aSdgURL( aThmURL); aSdgURL.SetExtension( s_sSDG_EXT );
-                        INetURLObject   aSdvURL( aThmURL ); aSdvURL.SetExtension( s_sSDV_EXT );
+                        INetURLObject   aSdgURL( aThmURL); aSdgURL.SetExtension( "sdg" );
+                        INetURLObject   aSdvURL( aThmURL ); aSdvURL.SetExtension( "sdv" );
                         OUString        aTitle;
 
                         try
                         {
-                            ::ucbhelper::Content aThmCnt( aThmURL.GetMainURL( INetURLObject::NO_DECODE ), xEnv, comphelper::getProcessComponentContext() );
-                            ::ucbhelper::Content aSdgCnt( aSdgURL.GetMainURL( INetURLObject::NO_DECODE ), xEnv, comphelper::getProcessComponentContext() );
-                            ::ucbhelper::Content aSdvCnt( aSdvURL.GetMainURL( INetURLObject::NO_DECODE ), xEnv, comphelper::getProcessComponentContext() );
+                            ::ucbhelper::Content aThmCnt( aThmURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), xEnv, comphelper::getProcessComponentContext() );
+                            ::ucbhelper::Content aSdgCnt( aSdgURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), xEnv, comphelper::getProcessComponentContext() );
+                            ::ucbhelper::Content aSdvCnt( aSdvURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), xEnv, comphelper::getProcessComponentContext() );
 
                             try
                             {
@@ -391,7 +472,7 @@ void Gallery::ImplLoadSubDirs( const INetURLObject& rBaseURL, bool& rbDirIsReadO
                                 GalleryThemeEntry* pEntry = GalleryTheme::CreateThemeEntry( aThmURL, rbDirIsReadOnly || bReadOnly );
 
                                 if( pEntry )
-                                    aThemeList.push_back( pEntry );
+                                    aThemeList.emplace_back( pEntry );
                             }
                         }
                         catch( const ucb::ContentCreationException& )
@@ -421,25 +502,23 @@ void Gallery::ImplLoadSubDirs( const INetURLObject& rBaseURL, bool& rbDirIsReadO
 
 GalleryThemeEntry* Gallery::ImplGetThemeEntry( const OUString& rThemeName )
 {
-    GalleryThemeEntry* pFound = nullptr;
-
     if( !rThemeName.isEmpty() )
     {
-        for ( size_t i = 0, n = aThemeList.size(); i < n && !pFound; ++i )
+        for ( size_t i = 0, n = aThemeList.size(); i < n; ++i )
             if( rThemeName == aThemeList[ i ]->GetThemeName() )
-                pFound = aThemeList[ i ];
+                return aThemeList[ i ].get();
     }
 
-    return pFound;
+    return nullptr;
 }
 
-OUString Gallery::GetThemeName( sal_uIntPtr nThemeId ) const
+OUString Gallery::GetThemeName( sal_uInt32 nThemeId ) const
 {
     GalleryThemeEntry* pFound = nullptr;
 
     for ( size_t i = 0, n = aThemeList.size(); i < n && !pFound; ++i )
     {
-        GalleryThemeEntry* pEntry = aThemeList[ i ];
+        GalleryThemeEntry* pEntry = aThemeList[ i ].get();
         if( nThemeId == pEntry->GetId() )
             pFound = pEntry;
     }
@@ -452,37 +531,55 @@ OUString Gallery::GetThemeName( sal_uIntPtr nThemeId ) const
         switch( nThemeId )
         {
             case GALLERY_THEME_3D:
-                aFallback = GAL_RESSTR(RID_GALLERYSTR_THEME_3D);
+                aFallback = SvxResId(RID_GALLERYSTR_THEME_3D);
                 break;
             case GALLERY_THEME_BULLETS:
-                aFallback = GAL_RESSTR(RID_GALLERYSTR_THEME_BULLETS);
+                aFallback = SvxResId(RID_GALLERYSTR_THEME_BULLETS);
                 break;
             case GALLERY_THEME_HOMEPAGE:
-                aFallback = GAL_RESSTR(RID_GALLERYSTR_THEME_HOMEPAGE);
+                aFallback = SvxResId(RID_GALLERYSTR_THEME_HOMEPAGE);
                 break;
             case GALLERY_THEME_POWERPOINT:
-                aFallback = GAL_RESSTR(RID_GALLERYSTR_THEME_POWERPOINT);
+                aFallback = RID_GALLERYSTR_THEME_POWERPOINT;
                 break;
             case GALLERY_THEME_FONTWORK:
-                aFallback = GAL_RESSTR(RID_GALLERYSTR_THEME_FONTWORK);
+                aFallback = RID_GALLERYSTR_THEME_FONTWORK;
                 break;
             case GALLERY_THEME_FONTWORK_VERTICAL:
-                aFallback = GAL_RESSTR(RID_GALLERYSTR_THEME_FONTWORK_VERTICAL);
+                aFallback = RID_GALLERYSTR_THEME_FONTWORK_VERTICAL;
                 break;
             case GALLERY_THEME_SOUNDS:
-                aFallback = GAL_RESSTR(RID_GALLERYSTR_THEME_SOUNDS);
+                aFallback = SvxResId(RID_GALLERYSTR_THEME_SOUNDS);
                 break;
-            case RID_GALLERYSTR_THEME_ARROWS:
-            case RID_GALLERYSTR_THEME_COMPUTERS:
-            case RID_GALLERYSTR_THEME_DIAGRAMS:
-            case RID_GALLERYSTR_THEME_EDUCATION:
-            case RID_GALLERYSTR_THEME_ENVIRONMENT:
-            case RID_GALLERYSTR_THEME_FINANCE:
-            case RID_GALLERYSTR_THEME_PEOPLE:
-            case RID_GALLERYSTR_THEME_SYMBOLS:
-            case RID_GALLERYSTR_THEME_TRANSPORT:
-            case RID_GALLERYSTR_THEME_TXTSHAPES:
-                aFallback = GAL_RESSTR(static_cast<sal_uInt32>(nThemeId));
+            case RID_GALLERY_THEME_ARROWS:
+                aFallback = SvxResId(RID_GALLERYSTR_THEME_ARROWS);
+                break;
+            case RID_GALLERY_THEME_COMPUTERS:
+                aFallback = SvxResId(RID_GALLERYSTR_THEME_COMPUTERS);
+                break;
+            case RID_GALLERY_THEME_DIAGRAMS:
+                aFallback = SvxResId(RID_GALLERYSTR_THEME_DIAGRAMS);
+                break;
+            case RID_GALLERY_THEME_EDUCATION:
+                aFallback = SvxResId(RID_GALLERYSTR_THEME_EDUCATION);
+                break;
+            case RID_GALLERY_THEME_ENVIRONMENT:
+                aFallback = SvxResId(RID_GALLERYSTR_THEME_ENVIRONMENT);
+                break;
+            case RID_GALLERY_THEME_FINANCE:
+                aFallback = SvxResId(RID_GALLERYSTR_THEME_FINANCE);
+                break;
+            case RID_GALLERY_THEME_PEOPLE:
+                aFallback = SvxResId(RID_GALLERYSTR_THEME_PEOPLE);
+                break;
+            case RID_GALLERY_THEME_SYMBOLS:
+                aFallback = SvxResId(RID_GALLERYSTR_THEME_SYMBOLS);
+                break;
+            case RID_GALLERY_THEME_TRANSPORT:
+                aFallback = SvxResId(RID_GALLERYSTR_THEME_TRANSPORT);
+                break;
+            case RID_GALLERY_THEME_TXTSHAPES:
+                aFallback = SvxResId(RID_GALLERYSTR_THEME_TXTSHAPES);
                 break;
             default:
                 break;
@@ -511,8 +608,8 @@ bool Gallery::CreateTheme( const OUString& rThemeName )
                 true, aURL, rThemeName,
                 false, true, 0, false );
 
-        aThemeList.push_back( pNewEntry );
-        delete( new GalleryTheme( this, pNewEntry ) );
+        aThemeList.emplace_back( pNewEntry );
+        delete new GalleryTheme( this, pNewEntry );
         Broadcast( GalleryHint( GalleryHintType::THEME_CREATED, rThemeName ) );
         bRet = true;
     }
@@ -532,12 +629,10 @@ void Gallery::RenameTheme( const OUString& rOldName, const OUString& rNewName )
 
         if( pThm )
         {
-            const OUString aOldName( rOldName );
-
             pThemeEntry->SetName( rNewName );
             pThm->ImplWrite();
 
-            Broadcast( GalleryHint( GalleryHintType::THEME_RENAMED, aOldName, pThm->GetName() ) );
+            Broadcast( GalleryHint( GalleryHintType::THEME_RENAMED, rOldName, pThm->GetName() ) );
             ReleaseTheme( pThm, aListener );
         }
     }
@@ -560,7 +655,7 @@ bool Gallery::RemoveTheme( const OUString& rThemeName )
             INetURLObject   aThmURL( pThm->GetThmURL() );
             INetURLObject   aSdgURL( pThm->GetSdgURL() );
             INetURLObject   aSdvURL( pThm->GetSdvURL() );
-            INetURLObject   aStrURL( pThm->GetSdvURL() );
+            INetURLObject   aStrURL( pThm->GetStrURL() );
 
             ReleaseTheme( pThm, aListener );
 
@@ -570,14 +665,10 @@ bool Gallery::RemoveTheme( const OUString& rThemeName )
             KillFile( aStrURL );
         }
 
-        for ( GalleryThemeList::iterator it = aThemeList.begin(); it != aThemeList.end(); ++it )
-        {
-            if ( pThemeEntry == *it ) {
-                delete pThemeEntry;
-                aThemeList.erase( it );
-                break;
-            }
-        }
+        auto it = std::find_if(aThemeList.begin(), aThemeList.end(),
+            [&pThemeEntry](const std::unique_ptr<GalleryThemeEntry>& rpEntry) { return pThemeEntry == rpEntry.get(); });
+        if (it != aThemeList.end())
+            aThemeList.erase( it );
 
         Broadcast( GalleryHint( GalleryHintType::THEME_REMOVED, rThemeName ) );
 
@@ -593,14 +684,10 @@ GalleryTheme* Gallery::ImplGetCachedTheme(const GalleryThemeEntry* pThemeEntry)
 
     if( pThemeEntry )
     {
-        for (GalleryCacheThemeList::const_iterator it = aThemeCache.begin(); it != aThemeCache.end(); ++it)
-        {
-            if (pThemeEntry == (*it)->GetThemeEntry())
-            {
-                pTheme = (*it)->GetTheme();
-                break;
-            }
-        }
+        auto it = std::find_if(aThemeCache.begin(), aThemeCache.end(),
+            [&pThemeEntry](const GalleryThemeCacheEntry* pEntry) { return pThemeEntry == pEntry->GetThemeEntry(); });
+        if (it != aThemeCache.end())
+            pTheme = (*it)->GetTheme();
 
         if( !pTheme )
         {
@@ -608,22 +695,20 @@ GalleryTheme* Gallery::ImplGetCachedTheme(const GalleryThemeEntry* pThemeEntry)
 
             DBG_ASSERT( aURL.GetProtocol() != INetProtocol::NotValid, "invalid URL" );
 
+            std::unique_ptr<GalleryTheme> pNewTheme;
             if( FileExists( aURL ) )
             {
-                std::unique_ptr<SvStream> pIStm(::utl::UcbStreamHelper::CreateStream( aURL.GetMainURL( INetURLObject::NO_DECODE ), StreamMode::READ ));
+                std::unique_ptr<SvStream> pIStm(::utl::UcbStreamHelper::CreateStream( aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), StreamMode::READ ));
 
                 if( pIStm )
                 {
                     try
                     {
-                        pTheme = new GalleryTheme( this, const_cast<GalleryThemeEntry*>(pThemeEntry) );
-                        ReadGalleryTheme( *pIStm, *pTheme );
+                        pNewTheme.reset( new GalleryTheme( this, const_cast<GalleryThemeEntry*>(pThemeEntry) ) );
+                        ReadGalleryTheme( *pIStm, *pNewTheme );
 
                         if( pIStm->GetError() )
-                        {
-                            delete pTheme;
-                            pTheme = nullptr;
-                        }
+                            pNewTheme.reset();
                     }
                     catch (const css::ucb::ContentCreationException&)
                     {
@@ -631,24 +716,23 @@ GalleryTheme* Gallery::ImplGetCachedTheme(const GalleryThemeEntry* pThemeEntry)
                 }
             }
 
+            pTheme = pNewTheme.get();
             if( pTheme )
-                aThemeCache.push_back( new GalleryThemeCacheEntry( pThemeEntry, pTheme ));
+                aThemeCache.push_back( new GalleryThemeCacheEntry( pThemeEntry, std::move(pNewTheme) ));
         }
     }
 
     return pTheme;
 }
 
-void Gallery::ImplDeleteCachedTheme( GalleryTheme* pTheme )
+void Gallery::ImplDeleteCachedTheme( GalleryTheme const * pTheme )
 {
-    for (GalleryCacheThemeList::iterator it = aThemeCache.begin(); it != aThemeCache.end(); ++it)
+    auto it = std::find_if(aThemeCache.begin(), aThemeCache.end(),
+        [&pTheme](const GalleryThemeCacheEntry* pEntry) { return pTheme == pEntry->GetTheme(); });
+    if (it != aThemeCache.end())
     {
-        if (pTheme == (*it)->GetTheme())
-        {
-            delete *it;
-            aThemeCache.erase(it);
-            break;
-        }
+        delete *it;
+        aThemeCache.erase(it);
     }
 }
 
@@ -658,7 +742,7 @@ GalleryTheme* Gallery::AcquireTheme( const OUString& rThemeName, SfxListener& rL
     GalleryThemeEntry*      pThemeEntry = ImplGetThemeEntry( rThemeName );
 
     if( pThemeEntry && ( ( pTheme = ImplGetCachedTheme( pThemeEntry ) ) != nullptr ) )
-        rListener.StartListening( *pTheme );
+        rListener.StartListening(*pTheme, DuplicateHandling::Prevent);
 
     return pTheme;
 }
@@ -676,7 +760,7 @@ void Gallery::ReleaseTheme( GalleryTheme* pTheme, SfxListener& rListener )
 
 bool GalleryThemeEntry::IsDefault() const
 {
-    return ( nId > 0 ) && ( nId != ( RID_GALLERYSTR_THEME_MYTHEME - RID_GALLERYSTR_THEME_START ) );
+    return nId > 0 && nId != GALLERY_THEME_MYTHEME;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

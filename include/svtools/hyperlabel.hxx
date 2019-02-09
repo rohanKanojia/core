@@ -19,7 +19,7 @@
 #ifndef INCLUDED_SVTOOLS_HYPERLABEL_HXX
 #define INCLUDED_SVTOOLS_HYPERLABEL_HXX
 
-#include <vcl/event.hxx>
+#include <memory>
 
 
 #include <vcl/fixed.hxx>
@@ -29,14 +29,11 @@
 
 namespace svt
 {
-
-
     class HyperLabelImpl;
 
-    class HyperLabel : public FixedText
+    class HyperLabel final : public FixedText
     {
-    protected:
-        HyperLabelImpl*     m_pImpl;
+        std::unique_ptr<HyperLabelImpl>     m_pImpl;
         Link<HyperLabel*,void>  maClickHdl;
 
         virtual void        MouseMove( const MouseEvent& rMEvt ) override;
@@ -44,18 +41,17 @@ namespace svt
         virtual void        GetFocus() override;
         virtual void        LoseFocus() override;
 
-        void                DeactivateHyperMode(vcl::Font aFont, const Color aColor);
-        void                ActivateHyperMode(vcl::Font aFont, const Color aColor);
-
-    protected:
         void                implInit();
 
+        using FixedText::CalcMinimumSize;
+
     public:
-        HyperLabel( vcl::Window* _pParent, WinBits _nWinStyle = 0 );
-        virtual ~HyperLabel( );
+        HyperLabel( vcl::Window* _pParent, WinBits _nWinStyle );
+        virtual ~HyperLabel( ) override;
         virtual void dispose() override;
 
         virtual void    DataChanged( const DataChangedEvent& rDCEvt ) override;
+        virtual void    ApplySettings(vcl::RenderContext& rRenderContext) override;
 
         void                SetID( sal_Int16 ID );
         sal_Int16           GetID() const;
@@ -70,10 +66,7 @@ namespace svt
 
         void                SetClickHdl( const Link<HyperLabel*,void>& rLink ) { maClickHdl = rLink; }
 
-        Size                CalcMinimumSize( long nMaxWidth = 0 ) const;
-
-    private:
-        using FixedText::CalcMinimumSize;
+        Size const &        CalcMinimumSize( long nMaxWidth ) const;
     };
 }
 

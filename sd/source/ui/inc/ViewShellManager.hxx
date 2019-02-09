@@ -21,6 +21,7 @@
 #define INCLUDED_SD_SOURCE_UI_INC_VIEWSHELLMANAGER_HXX
 
 #include "ShellFactory.hxx"
+#include <o3tl/deleter.hxx>
 #include <memory>
 
 class FmFormShell;
@@ -72,10 +73,10 @@ public:
     /** Set the factory for sub shells of the specified view shell.
     */
     void AddSubShellFactory (
-        ViewShell* pViewShell,
+        ViewShell const * pViewShell,
         const SharedShellFactory& rpFactory);
     void RemoveSubShellFactory (
-        ViewShell* pViewShell,
+        ViewShell const * pViewShell,
         const SharedShellFactory& rpFactory);
 
     /** Activate the given view shell.
@@ -131,7 +132,7 @@ public:
         call.  This does not modify the shell stack.
     */
     void InvalidateAllSubShells (
-        ViewShell* pViewShell);
+        ViewShell const * pViewShell);
 
     /** Move the specified view shell to the top most position on the stack
         of view shells in relation to the other view shells.  After this the
@@ -174,7 +175,7 @@ public:
     public:
         UpdateLock (const std::shared_ptr<ViewShellManager>& rpManager)
             : mpManager(rpManager) {mpManager->LockUpdate();}
-        ~UpdateLock() {mpManager->UnlockUpdate();};
+        ~UpdateLock() COVERITY_NOEXCEPT_FALSE {mpManager->UnlockUpdate();}
     private:
         std::shared_ptr<ViewShellManager> mpManager;
     };
@@ -182,7 +183,7 @@ public:
 
 private:
     class Implementation;
-    ::std::unique_ptr<ViewShellManager::Implementation> mpImpl;
+    std::unique_ptr<ViewShellManager::Implementation, o3tl::default_delete<ViewShellManager::Implementation>> mpImpl;
     bool mbValid;
 
     void LockUpdate();

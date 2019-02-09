@@ -21,12 +21,15 @@
 #include <com/sun/star/beans/XMultiPropertySet.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 
-#include "oox/drawingml/connectorshapecontext.hxx"
-#include "oox/drawingml/graphicshapecontext.hxx"
-#include "oox/drawingml/lineproperties.hxx"
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "drawingml/customshapegeometry.hxx"
-#include "drawingml/textbodycontext.hxx"
+#include <oox/drawingml/connectorshapecontext.hxx>
+#include <oox/drawingml/graphicshapecontext.hxx>
+#include <drawingml/lineproperties.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
+#include <drawingml/customshapegeometry.hxx>
+#include <drawingml/textbodycontext.hxx>
 
 using namespace oox::core;
 using namespace ::com::sun::star;
@@ -38,8 +41,8 @@ using namespace ::com::sun::star::xml::sax;
 
 namespace oox { namespace drawingml {
 
-ConnectorShapeContext::ConnectorShapeContext( ContextHandler2Helper& rParent,
-        ShapePtr pMasterShapePtr, ShapePtr pGroupShapePtr )
+ConnectorShapeContext::ConnectorShapeContext( ContextHandler2Helper const & rParent,
+        const ShapePtr& pMasterShapePtr, const ShapePtr& pGroupShapePtr )
 : ShapeContext( rParent, pMasterShapePtr, pGroupShapePtr )
 {
 }

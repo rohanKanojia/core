@@ -18,7 +18,7 @@
  */
 
 #include <drawinglayer/primitive2d/gridprimitive2d.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <drawinglayer/primitive2d/pointarrayprimitive2d.hxx>
 #include <drawinglayer/primitive2d/markerarrayprimitive2d.hxx>
 #include <drawinglayer/geometry/viewinformation2d.hxx>
@@ -33,10 +33,8 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        Primitive2DContainer GridPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const
+        void GridPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const
         {
-            Primitive2DContainer aRetval;
-
             if(!rViewInformation.getViewport().isEmpty() && getWidth() > 0.0 && getHeight() > 0.0)
             {
                 // decompose grid matrix to get logic size
@@ -45,7 +43,7 @@ namespace drawinglayer
                 getTransform().decompose(aScale, aTranslate, fRotate, fShearX);
 
                 // create grid matrix which transforms from scaled logic to view
-                basegfx::B2DHomMatrix aRST(basegfx::tools::createShearXRotateTranslateB2DHomMatrix(
+                basegfx::B2DHomMatrix aRST(basegfx::utils::createShearXRotateTranslateB2DHomMatrix(
                     fShearX, fRotate, aTranslate.getX(), aTranslate.getY()));
                 aRST *= rViewInformation.getObjectToViewTransformation();
 
@@ -69,7 +67,7 @@ namespace drawinglayer
                 double fViewStepX((rViewInformation.getObjectToViewTransformation() * basegfx::B2DVector(fStepX, 0.0)).getLength());
                 double fViewStepY((rViewInformation.getObjectToViewTransformation() * basegfx::B2DVector(0.0, fStepY)).getLength());
                 double fSmallStepX(1.0), fViewSmallStepX(1.0), fSmallStepY(1.0), fViewSmallStepY(1.0);
-                sal_uInt32 nSmallStepsX(0L), nSmallStepsY(0L);
+                sal_uInt32 nSmallStepsX(0), nSmallStepsY(0);
 
                 // setup subdivisions
                 if(getSubdivisionsX())
@@ -106,7 +104,7 @@ namespace drawinglayer
                         fSmallStepX *= 2.0;
                     }
 
-                    nSmallStepsX = (sal_uInt32)(fStepX / fSmallStepX);
+                    nSmallStepsX = static_cast<sal_uInt32>(fStepX / fSmallStepX);
                 }
 
                 if(getSubdivisionsY())
@@ -117,7 +115,7 @@ namespace drawinglayer
                         fSmallStepY *= 2.0;
                     }
 
-                    nSmallStepsY = (sal_uInt32)(fStepY / fSmallStepY);
+                    nSmallStepsY = static_cast<sal_uInt32>(fStepY / fSmallStepY);
                 }
 
                 // calculate extended viewport in which grid points may lie at all
@@ -229,15 +227,11 @@ namespace drawinglayer
                     // prepare return value
                     const sal_uInt32 nCountPoint(aPositionsPoint.size());
                     const sal_uInt32 nCountCross(aPositionsCross.size());
-                    const sal_uInt32 nRetvalCount((nCountPoint ? 1 : 0) + (nCountCross ? 1 : 0));
-                    sal_uInt32 nInsertCounter(0);
-
-                    aRetval.resize(nRetvalCount);
 
                     // add PointArrayPrimitive2D if point markers were added
                     if(nCountPoint)
                     {
-                        aRetval[nInsertCounter++] = Primitive2DReference(new PointArrayPrimitive2D(aPositionsPoint, getBColor()));
+                        rContainer.push_back(new PointArrayPrimitive2D(aPositionsPoint, getBColor()));
                     }
 
                     // add MarkerArrayPrimitive2D if cross markers were added
@@ -247,17 +241,15 @@ namespace drawinglayer
                         {
                             // no subdivisions, so fall back to points at grid positions, no need to
                             // visualize a difference between divisions and sub-divisions
-                            aRetval[nInsertCounter++] = Primitive2DReference(new PointArrayPrimitive2D(aPositionsCross, getBColor()));
+                            rContainer.push_back(new PointArrayPrimitive2D(aPositionsCross, getBColor()));
                         }
                         else
                         {
-                            aRetval[nInsertCounter++] = Primitive2DReference(new MarkerArrayPrimitive2D(aPositionsCross, getCrossMarker()));
+                            rContainer.push_back(new MarkerArrayPrimitive2D(aPositionsCross, getCrossMarker()));
                         }
                     }
                 }
             }
-
-            return aRetval;
         }
 
         GridPrimitive2D::GridPrimitive2D(
@@ -317,7 +309,7 @@ namespace drawinglayer
             return aUnitRange;
         }
 
-        Primitive2DContainer GridPrimitive2D::get2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const
+        void GridPrimitive2D::get2DDecomposition(Primitive2DDecompositionVisitor& rVisitor, const geometry::ViewInformation2D& rViewInformation) const
         {
             ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -338,7 +330,7 @@ namespace drawinglayer
             }
 
             // use parent implementation
-            return BufferedDecompositionPrimitive2D::get2DDecomposition(rViewInformation);
+            BufferedDecompositionPrimitive2D::get2DDecomposition(rVisitor, rViewInformation);
         }
 
         // provide unique ID

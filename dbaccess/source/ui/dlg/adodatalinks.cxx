@@ -19,17 +19,12 @@
 
 
 #if defined(_WIN32)
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#pragma warning(disable: 4917)
-#endif
 // LO/windows.h conflict
 #undef WB_LEFT
 #undef WB_RIGHT
-#include "msdasc.h"
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#endif
+#include <msdasc.h>
+
+#include <o3tl/char16_t2wchar_t.hxx>
 
 #include <initguid.h>
 #include <adoid.h>
@@ -37,65 +32,45 @@
 
 #include "adodatalinks.hxx"
 
-#ifdef __MINGW32__
-const IID IID_IDataSourceLocator = { 0x2206CCB2, 0x19C1, 0x11D1, { 0x89, 0xE0, 0x00, 0xC0, 0x4F, 0xD7, 0xA8, 0x29 } };
-const CLSID CLSID_DataLinks = { 0x2206CDB2, 0x19C1, 0x11D1, { 0x89, 0xE0, 0x00, 0xC0, 0x4F, 0xD7, 0xA8, 0x29 } };
-#endif
+namespace {
 
-
-BSTR PromptEdit(long hWnd,BSTR connstr);
-BSTR PromptNew(long hWnd);
-
-OUString getAdoDatalink(long hWnd,OUString& oldLink)
+OUString PromptNew(long hWnd)
 {
-    OUString dataLink;
-    if (!oldLink.isEmpty())
-    {
-        dataLink=reinterpret_cast<sal_Unicode *>(PromptEdit(hWnd,(BSTR)oldLink.getStr()));
-    }
-    else
-        dataLink=reinterpret_cast<sal_Unicode *>(PromptNew(hWnd));
-    return dataLink;
-}
-
-BSTR PromptNew(long hWnd)
-{
-    BSTR connstr=NULL;
     HRESULT hr;
-    IDataSourceLocator* dlPrompt = NULL;
-    ADOConnection* piTmpConnection = NULL;
-    BSTR _result=NULL;
+    IDataSourceLocator* dlPrompt = nullptr;
+    ADOConnection* piTmpConnection = nullptr;
+    BSTR _result=nullptr;
 
      // Initialize COM
-     ::CoInitialize( NULL );
+     ::CoInitialize( nullptr );
 
     // Instantiate DataLinks object.
       hr = CoCreateInstance(
                     CLSID_DataLinks,                //clsid -- Data Links UI
-                    NULL,                           //pUnkOuter
+                    nullptr,                        //pUnkOuter
                     CLSCTX_INPROC_SERVER,           //dwClsContext
                     IID_IDataSourceLocator,     //riid
-                    (void**)&dlPrompt   //ppvObj
+                    reinterpret_cast<void**>(&dlPrompt)   //ppvObj
                     );
     if( FAILED( hr ) )
     {
-        return connstr;
+        return OUString();
     }
 
     dlPrompt->put_hWnd(hWnd);
     if( FAILED( hr ) )
     {
         dlPrompt->Release( );
-        return connstr;
+        return OUString();
     }
 
     // Prompt for connection information.
-    hr = dlPrompt->PromptNew((IDispatch **)&piTmpConnection);
+    hr = dlPrompt->PromptNew(reinterpret_cast<IDispatch **>(&piTmpConnection));
 
     if( FAILED( hr ) || !piTmpConnection )
     {
         dlPrompt->Release( );
-        return connstr;
+        return OUString();
     }
 
     hr = piTmpConnection->get_ConnectionString(&_result);
@@ -103,30 +78,31 @@ BSTR PromptNew(long hWnd)
     {
         piTmpConnection->Release( );
         dlPrompt->Release( );
-        return connstr;
+        return OUString();
     }
 
     piTmpConnection->Release( );
     dlPrompt->Release( );
     CoUninitialize();
-    return _result;
+    // Don't we need SysFreeString(_result)?
+    return o3tl::toU(_result);
 }
 
-BSTR PromptEdit(long hWnd,BSTR connstr)
+OUString PromptEdit(long hWnd, OUString const & connstr)
 {
     HRESULT hr;
-    IDataSourceLocator* dlPrompt = NULL;
-    ADOConnection* piTmpConnection = NULL;
-    BSTR _result=NULL;
+    IDataSourceLocator* dlPrompt = nullptr;
+    ADOConnection* piTmpConnection = nullptr;
+    BSTR _result=nullptr;
 
      // Initialize COM
-     ::CoInitialize( NULL );
+     ::CoInitialize( nullptr );
 
      hr = CoCreateInstance(CLSID_CADOConnection,
-                NULL,
+                nullptr,
                 CLSCTX_INPROC_SERVER,
                 IID_IADOConnection,
-                (LPVOID *)&piTmpConnection);
+                reinterpret_cast<LPVOID *>(&piTmpConnection));
     if( FAILED( hr ) )
     {
         piTmpConnection->Release( );
@@ -134,7 +110,8 @@ BSTR PromptEdit(long hWnd,BSTR connstr)
     }
 
 
-    hr = piTmpConnection->put_ConnectionString(connstr);
+    hr = piTmpConnection->put_ConnectionString(
+        const_cast<BSTR>(o3tl::toW(connstr.getStr())));
     if( FAILED( hr ) )
     {
         piTmpConnection->Release( );
@@ -144,10 +121,10 @@ BSTR PromptEdit(long hWnd,BSTR connstr)
     // Instantiate DataLinks object.
       hr = CoCreateInstance(
                     CLSID_DataLinks,                //clsid -- Data Links UI
-                    NULL,                           //pUnkOuter
+                    nullptr,                        //pUnkOuter
                     CLSCTX_INPROC_SERVER,           //dwClsContext
                     IID_IDataSourceLocator,     //riid
-                    (void**)&dlPrompt   //ppvObj
+                    reinterpret_cast<void**>(&dlPrompt) //ppvObj
                     );
     if( FAILED( hr ) )
     {
@@ -167,8 +144,8 @@ BSTR PromptEdit(long hWnd,BSTR connstr)
     VARIANT_BOOL pbSuccess;
 
     // Prompt for connection information.
-    hr = dlPrompt->PromptEdit((IDispatch **)&piTmpConnection,&pbSuccess);
-    if( SUCCEEDED( hr ) && sal_False == pbSuccess ) //if user press cancel then sal_False == pbSuccess
+    hr = dlPrompt->PromptEdit(reinterpret_cast<IDispatch **>(&piTmpConnection),&pbSuccess);
+    if( SUCCEEDED( hr ) && !pbSuccess ) //if user press cancel then sal_False == pbSuccess
     {
         piTmpConnection->Release( );
         dlPrompt->Release( );
@@ -179,8 +156,8 @@ BSTR PromptEdit(long hWnd,BSTR connstr)
     {
         // Prompt for new connection information.
         piTmpConnection->Release( );
-        piTmpConnection = NULL;
-        hr = dlPrompt->PromptNew((IDispatch **)&piTmpConnection);
+        piTmpConnection = nullptr;
+        hr = dlPrompt->PromptNew(reinterpret_cast<IDispatch **>(&piTmpConnection));
         if(  FAILED( hr ) || !piTmpConnection )
         {
             dlPrompt->Release( );
@@ -199,7 +176,22 @@ BSTR PromptEdit(long hWnd,BSTR connstr)
     piTmpConnection->Release( );
     dlPrompt->Release( );
     CoUninitialize();
-    return _result;
+    // Don't we need SysFreeString(_result)?
+    return o3tl::toU(_result);
+}
+
+}
+
+OUString getAdoDatalink(long hWnd,OUString const & oldLink)
+{
+    OUString dataLink;
+    if (!oldLink.isEmpty())
+    {
+        dataLink=PromptEdit(hWnd,oldLink);
+    }
+    else
+        dataLink=PromptNew(hWnd);
+    return dataLink;
 }
 
 #endif

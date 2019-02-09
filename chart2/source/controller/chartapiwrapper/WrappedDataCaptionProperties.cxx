@@ -19,13 +19,13 @@
 
 #include "WrappedDataCaptionProperties.hxx"
 #include "WrappedSeriesOrDiagramProperty.hxx"
-#include "macros.hxx"
-#include "FastPropertyIdRanges.hxx"
+#include <FastPropertyIdRanges.hxx>
 #include <unonames.hxx>
 
 #include <com/sun/star/chart2/DataPointLabel.hpp>
 #include <com/sun/star/chart/ChartDataCaption.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 
 using namespace ::com::sun::star;
 using ::com::sun::star::uno::Reference;
@@ -42,9 +42,8 @@ public:
     virtual sal_Int32 getValueFromSeries( const css::uno::Reference< css::beans::XPropertySet >& xSeriesPropertySet ) const override;
     virtual void setValueToSeries( const css::uno::Reference< css::beans::XPropertySet >& xSeriesPropertySet, const sal_Int32& aNewValue ) const override;
 
-    explicit WrappedDataCaptionProperty( std::shared_ptr< Chart2ModelContact > spChart2ModelContact,
-                                         tSeriesOrDiagramPropertyType ePropertyType );
-    virtual ~WrappedDataCaptionProperty();
+    explicit WrappedDataCaptionProperty(const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact,
+                                        tSeriesOrDiagramPropertyType ePropertyType );
 };
 
 namespace
@@ -87,48 +86,44 @@ chart2::DataPointLabel lcl_CaptionToLabel( sal_Int32 nCaption )
     return aLabel;
 }
 
-void lcl_addWrappedProperties( std::vector< WrappedProperty* >& rList
+void lcl_addWrappedProperties( std::vector< std::unique_ptr<WrappedProperty> >& rList
                                     , const std::shared_ptr< Chart2ModelContact >& spChart2ModelContact
                                     , tSeriesOrDiagramPropertyType ePropertyType )
 {
     //if !spChart2ModelContact.get() is then the created properties do belong to a single series or single datapoint
     //otherwise they do belong to the whole diagram
 
-    rList.push_back( new WrappedDataCaptionProperty( spChart2ModelContact, ePropertyType ) );
+    rList.emplace_back( new WrappedDataCaptionProperty( spChart2ModelContact, ePropertyType ) );
 }
 
 }//anonymous namespace
 
 void WrappedDataCaptionProperties::addProperties( std::vector< Property > & rOutProperties )
 {
-    rOutProperties.push_back(
-        Property( "DataCaption",
+    rOutProperties.emplace_back( "DataCaption",
                   PROP_CHART_DATAPOINT_DATA_CAPTION,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 }
 
-void WrappedDataCaptionProperties::addWrappedPropertiesForSeries( std::vector< WrappedProperty* >& rList
+void WrappedDataCaptionProperties::addWrappedPropertiesForSeries( std::vector< std::unique_ptr<WrappedProperty> >& rList
                                     , const std::shared_ptr< Chart2ModelContact >& spChart2ModelContact )
 {
     lcl_addWrappedProperties( rList, spChart2ModelContact, DATA_SERIES );
 }
 
-void WrappedDataCaptionProperties::addWrappedPropertiesForDiagram( std::vector< WrappedProperty* >& rList
+void WrappedDataCaptionProperties::addWrappedPropertiesForDiagram( std::vector< std::unique_ptr<WrappedProperty> >& rList
                                     , const std::shared_ptr< Chart2ModelContact >& spChart2ModelContact )
 {
     lcl_addWrappedProperties( rList, spChart2ModelContact, DIAGRAM );
 }
 
 WrappedDataCaptionProperty::WrappedDataCaptionProperty(
-      std::shared_ptr< Chart2ModelContact > spChart2ModelContact
+      const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact
     , tSeriesOrDiagramPropertyType ePropertyType )
         : WrappedSeriesOrDiagramProperty< sal_Int32 >( "DataCaption"
-            , uno::makeAny( sal_Int32(0) ), spChart2ModelContact, ePropertyType )
-{
-}
-WrappedDataCaptionProperty::~WrappedDataCaptionProperty()
+            , uno::Any( sal_Int32(0) ), spChart2ModelContact, ePropertyType )
 {
 }
 
@@ -148,7 +143,7 @@ void WrappedDataCaptionProperty::setValueToSeries( const Reference< beans::XProp
         return;
 
     chart2::DataPointLabel aLabel = lcl_CaptionToLabel( nCaption );
-    xSeriesPropertySet->setPropertyValue( CHART_UNONAME_LABEL, uno::makeAny( aLabel ) );
+    xSeriesPropertySet->setPropertyValue( CHART_UNONAME_LABEL, uno::Any( aLabel ) );
 }
 
 } //namespace wrapper

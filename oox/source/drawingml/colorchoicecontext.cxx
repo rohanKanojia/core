@@ -17,21 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "drawingml/colorchoicecontext.hxx"
-#include "oox/helper/attributelist.hxx"
-#include "oox/drawingml/color.hxx"
-
-using ::com::sun::star::uno::RuntimeException;
-using ::com::sun::star::xml::sax::SAXException;
-using ::com::sun::star::xml::sax::XFastAttributeList;
-using ::com::sun::star::xml::sax::XFastContextHandler;
-using ::oox::core::ContextHandler;
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <drawingml/colorchoicecontext.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/drawingml/color.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 namespace oox {
 namespace drawingml {
 
-ColorValueContext::ColorValueContext( ContextHandler2Helper& rParent, Color& rColor ) :
+ColorValueContext::ColorValueContext( ContextHandler2Helper const & rParent, Color& rColor ) :
     ContextHandler2( rParent ),
     mrColor( rColor )
 {
@@ -68,7 +64,7 @@ void ColorValueContext::onStartElement( const AttributeList& rAttribs )
         case A_TOKEN( schemeClr ):
         {
             mrColor.setSchemeClr( rAttribs.getToken( XML_val, XML_TOKEN_INVALID ) );
-            oox::OptValue<rtl::OUString> sSchemeName = rAttribs.getString( XML_val );
+            oox::OptValue<OUString> sSchemeName = rAttribs.getString( XML_val );
             if( sSchemeName.has() )
                 mrColor.setSchemeName( sSchemeName.use() );
         }
@@ -131,7 +127,7 @@ void ColorValueContext::onStartElement( const AttributeList& rAttribs )
     return nullptr;
 }
 
-ColorContext::ColorContext( ContextHandler2Helper& rParent, Color& rColor ) :
+ColorContext::ColorContext( ContextHandler2Helper const & rParent, Color& rColor ) :
     ContextHandler2( rParent ),
     mrColor( rColor )
 {

@@ -20,14 +20,14 @@
 #include <config_options.h>
 
 #include <svx/svxids.hrc>
-#include "sc.hrc"
-#include "scitems.hxx"
-#include <editeng/memberids.hrc>
+#include <sc.hrc>
+#include <mid.h>
+#include <scitems.hxx>
+#include <editeng/memberids.h>
 
 #include <sfx2/msg.hxx>
 #include <svl/stritem.hxx>
 #include <svl/slstitm.hxx>
-#include <sfx2/objitem.hxx>
 #include <editeng/fontitem.hxx>
 #include <svx/hlnkitem.hxx>
 #include <svl/srchitem.hxx>
@@ -95,18 +95,16 @@
 #include <svl/aeitem.hxx>
 #include <avmedia/mediaitem.hxx>
 #include <sfx2/frame.hxx>
-#include "attrib.hxx"
+#include <attrib.hxx>
 #include <svx/sdprcitm.hxx>
 #include <svx/sdmetitm.hxx>
 
-#define SvxDrawAlignItem            SfxAllEnumItem
 #define avmedia_MediaItem           ::avmedia::MediaItem
 
-#if defined(IOS)
+#ifdef DISABLE_DYNLOADING
 /* Avoid clash with the ones from svx/source/form/typemap.cxx */
 #define aSfxBoolItem_Impl sc_source_ui_appl_typemap_aSfxBoolItem_Impl
 #define aSfxInt32Item_Impl sc_source_ui_appl_typemap_aSfxInt32Item_Impl
-#define aSfxObjectItem_Impl sc_source_ui_appl_typemap_aSfxObjectItem_Impl
 #define aSfxStringItem_Impl sc_source_ui_appl_typemap_aSfxStringItem_Impl
 #define aSfxUInt16Item_Impl sc_source_ui_appl_typemap_aSfxUInt16Item_Impl
 #define aSfxUInt32Item_Impl sc_source_ui_appl_typemap_aSfxUInt32Item_Impl
@@ -121,17 +119,17 @@
 #define aSvxLanguageItem_Impl sc_source_ui_appl_typemap_aSvxLanguageItem_Impl
 #define aSvxPostureItem_Impl sc_source_ui_appl_typemap_aSvxPostureItem_Impl
 #define aSvxShadowedItem_Impl sc_source_ui_appl_typemap_aSvxShadowedItem_Impl
-#define aSvxTextLineItem_Impl sc_source_ui_appl_typemap_aSvxTextLineItem_Impl
+#define aSvxUnderlineItem_Impl sc_source_ui_appl_typemap_aSvxUnderlineItem_Impl
+#define aSvxOverlineItem_Impl sc_source_ui_appl_typemap_aSvxOverlineItem_Impl
 #define aSvxWeightItem_Impl sc_source_ui_appl_typemap_aSvxWeightItem_Impl
 #endif
 
 #define SFX_TYPEMAP
-#include "scslots.hxx"
+#include <scslots.hxx>
 
-#if defined(IOS)
+#ifdef DISABLE_DYNLOADING
 #undef aSfxBoolItem_Impl
 #undef aSfxInt32Item_Impl
-#undef aSfxObjectItem_Impl
 #undef aSfxStringItem_Impl
 #undef aSfxUInt16Item_Impl
 #undef aSfxUInt32Item_Impl

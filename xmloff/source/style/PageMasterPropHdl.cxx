@@ -28,6 +28,7 @@
 #include <rtl/ustrbuf.hxx>
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/style/PageStyleLayout.hpp>
+#include <com/sun/star/style/NumberingType.hpp>
 #include <comphelper/types.hxx>
 #include <comphelper/extract.hxx>
 
@@ -260,9 +261,7 @@ bool XMLPMPropHdl_PaperTrayNumber::exportXML(
             rStrExpValue = GetXMLToken( XML_DEFAULT );
         else
         {
-            OUStringBuffer aBuffer;
-            ::sax::Converter::convertNumber( aBuffer, nPaperTray );
-            rStrExpValue = aBuffer.makeStringAndClear();
+            rStrExpValue = OUString::number( nPaperTray );
         }
         bRet = true;
     }
@@ -285,17 +284,16 @@ bool XMLPMPropHdl_Print::importXML(
         Any& rValue,
         const SvXMLUnitConverter& ) const
 {
-    sal_Unicode cToken  = ' ';
     sal_Int32   nTokenIndex = 0;
     bool        bFound  = false;
 
     do
     {
-        bFound = (sAttrValue == rStrImpValue.getToken( 0, cToken, nTokenIndex ));
+        bFound = (sAttrValue == rStrImpValue.getToken( 0, ' ', nTokenIndex ));
     }
     while ( (nTokenIndex >= 0) && !bFound );
 
-    setBOOL( rValue, bFound );
+    rValue <<= bFound;
     return true;
 }
 

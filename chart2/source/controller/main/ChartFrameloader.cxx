@@ -18,14 +18,13 @@
  */
 
 #include "ChartFrameloader.hxx"
-#include "servicenames.hxx"
-#include "MediaDescriptorHelper.hxx"
-#include "macros.hxx"
+#include <servicenames.hxx>
+#include <MediaDescriptorHelper.hxx>
 #include <unotools/mediadescriptor.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include <com/sun/star/document/XImporter.hpp>
-#include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/frame/XLoadable.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
+#include <tools/diagnose_ex.h>
 
 namespace chart
 {
@@ -57,38 +56,23 @@ bool ChartFrameLoader::impl_checkCancel()
 // lang::XServiceInfo
 
 OUString SAL_CALL ChartFrameLoader::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
-OUString ChartFrameLoader::getImplementationName_Static()
 {
     return OUString(CHART_FRAMELOADER_SERVICE_IMPLEMENTATION_NAME);
 }
 
 sal_Bool SAL_CALL ChartFrameLoader::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL ChartFrameLoader::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
-}
-
-uno::Sequence< OUString > ChartFrameLoader::getSupportedServiceNames_Static()
-{
-    uno::Sequence<OUString> aSNS { CHART_FRAMELOADER_SERVICE_NAME };
-    return aSNS;
+    return { CHART_FRAMELOADER_SERVICE_NAME };
 }
 
 // frame::XFrameLoader
 
 sal_Bool SAL_CALL ChartFrameLoader::load( const uno::Sequence< beans::PropertyValue >& rMediaDescriptor, const uno::Reference<frame::XFrame >& xFrame )
-    throw (uno::RuntimeException, std::exception)
 {
     //@todo ? need to add as terminate listener to desktop?
 
@@ -115,12 +99,12 @@ sal_Bool SAL_CALL ChartFrameLoader::load( const uno::Sequence< beans::PropertyVa
                 , uno::UNO_QUERY );
 
         if( impl_checkCancel() )
-            return sal_False;
+            return false;
     }
 
     //create the controller(+XWindow)
-    uno::Reference< frame::XController >    xController = nullptr;
-    uno::Reference< awt::XWindow >          xComponentWindow = nullptr;
+    uno::Reference< frame::XController >    xController;
+    uno::Reference< awt::XWindow >          xComponentWindow;
     {
         xController.set(
             m_xCC->getServiceManager()->createInstanceWithContext(
@@ -133,7 +117,7 @@ sal_Bool SAL_CALL ChartFrameLoader::load( const uno::Sequence< beans::PropertyVa
                       uno::Reference< awt::XWindow >( xController, uno::UNO_QUERY );
 
         if( impl_checkCancel() )
-            return sal_False;
+            return false;
     }
 
     //connect frame, controller and model one to each other:
@@ -184,22 +168,20 @@ sal_Bool SAL_CALL ChartFrameLoader::load( const uno::Sequence< beans::PropertyVa
                     if( xComponentWindow.is() && aMDHelper.ISSET_FilterName && aMDHelper.FilterName == "StarChart 5.0" )
                     {
                         awt::Rectangle aRect( xComponentWindow->getPosSize() );
-                        sal_Int16 nFlags=0;
-                        xComponentWindow->setPosSize( aRect.X, aRect.Y, aRect.Width, aRect.Height, nFlags );
+                        xComponentWindow->setPosSize( aRect.X, aRect.Y, aRect.Width, aRect.Height, 0 );
                     }
                 }
             }
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
 
-    return sal_True;
+    return true;
 }
 
 void SAL_CALL ChartFrameLoader::cancel()
-    throw (uno::RuntimeException, std::exception)
 {
     m_oCancelFinished.reset();
     m_bCancelRequired = true;
@@ -209,7 +191,7 @@ void SAL_CALL ChartFrameLoader::cancel()
 
 } //namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_chart2_ChartFrameLoader_get_implementation(css::uno::XComponentContext *context,
                                                              css::uno::Sequence<css::uno::Any> const &)
 {

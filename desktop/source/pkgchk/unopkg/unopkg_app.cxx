@@ -19,10 +19,10 @@
 
 
 #include <desktop/dllapi.h>
-#include "dp_misc.h"
+#include <dp_misc.h>
 #include "unopkg_main.h"
 #include "unopkg_shared.h"
-#include "dp_identifier.hxx"
+#include <dp_identifier.hxx>
 #include <tools/extendapplicationenvironment.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/uri.hxx>
@@ -34,10 +34,20 @@
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <comphelper/anytostring.hxx>
+#include <comphelper/logging.hxx>
 #include <comphelper/sequence.hxx>
+#include <com/sun/star/deployment/DeploymentException.hpp>
 #include <com/sun/star/deployment/ExtensionManager.hpp>
 
 #include <com/sun/star/deployment/ui/PackageManagerDialog.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
+#include <com/sun/star/logging/ConsoleHandler.hpp>
+#include <com/sun/star/logging/FileHandler.hpp>
+#include <com/sun/star/logging/LogLevel.hpp>
+#include <com/sun/star/logging/SimpleTextFormatter.hpp>
+#include <com/sun/star/logging/XLogger.hpp>
+#include <com/sun/star/ucb/CommandAbortedException.hpp>
+#include <com/sun/star/ucb/CommandFailedException.hpp>
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
 #include <com/sun/star/ui/dialogs/XDialogClosedListener.hpp>
 #include <com/sun/star/bridge/BridgeFactory.hpp>
@@ -49,8 +59,10 @@
 
 
 using namespace ::com::sun::star;
+using namespace ::com::sun::star::logging;
 using namespace ::com::sun::star::uno;
 using namespace ::unopkg;
+
 namespace {
 
 struct ExtensionName
@@ -59,10 +71,8 @@ struct ExtensionName
     explicit ExtensionName( OUString const & str ) : m_str( str ) {}
     bool operator () ( Reference<deployment::XPackage> const & e ) const
     {
-        if (m_str.equals(dp_misc::getIdentifier(e))
-             ||  m_str.equals(e->getName()))
-            return true;
-        return false;
+        return m_str == dp_misc::getIdentifier(e)
+             ||  m_str == e->getName();
     }
 };
 
@@ -90,7 +100,7 @@ const char s_usingText [] =
 "options:\n"
 " -h, --help              this help\n"
 " -V, --version           version information\n"
-" -v, --verbose           verbose output to stdout\n"
+" -v, --verbose           verbose output\n"
 " -f, --force             force overwriting existing extensions\n"
 " -s, --suppress-license  prevents showing the license\n"
 " --log-file <file>       custom log file; default: <cache-dir>/log.txt\n"
@@ -131,18 +141,15 @@ public:
         : m_rDialogClosedCondition( rDialogClosedCondition ) {}
 
     // XEventListener (base of XDialogClosedListener)
-    virtual void SAL_CALL disposing( lang::EventObject const & Source )
-        throw (RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing( lang::EventObject const & Source ) override;
 
     // XDialogClosedListener
     virtual void SAL_CALL dialogClosed(
-        ui::dialogs::DialogClosedEvent const & aEvent )
-        throw (RuntimeException, std::exception) override;
+        ui::dialogs::DialogClosedEvent const & aEvent ) override;
 };
 
 // XEventListener (base of XDialogClosedListener)
 void DialogClosedListenerImpl::disposing( lang::EventObject const & )
-    throw (RuntimeException, std::exception)
 {
     // nothing to do
 }
@@ -150,7 +157,6 @@ void DialogClosedListenerImpl::disposing( lang::EventObject const & )
 // XDialogClosedListener
 void DialogClosedListenerImpl::dialogClosed(
     ui::dialogs::DialogClosedEvent const & )
-    throw (RuntimeException, std::exception)
 {
     m_rDialogClosedCondition.set();
 }
@@ -194,7 +200,10 @@ extern "C" int unopkg_main()
     OUString logFile;
     OUString repository;
     OUString cmdArg;
-    ::std::vector<OUString> cmdPackages;
+    std::vector<OUString> cmdPackages;
+    Reference<XLogHandler> xFileHandler;
+    Reference<XLogHandler> xConsoleHandler;
+    std::unique_ptr<comphelper::EventLogger> logger;
 
     OptionInfo const * info_shared = getOptionInfo(
         s_option_infos, "shared" );
@@ -231,20 +240,20 @@ extern "C" int unopkg_main()
             dp_misc::writeConsole("\n" APP_NAME " Version 3.3\n");
             return 0;
         }
-        //consume all bootstrap variables which may occur before the subcommannd
+        //consume all bootstrap variables which may occur before the sub-command
         while(isBootstrapVariable(&nPos))
             ;
 
         if(nPos >= nCount)
             return 0;
-        //get the sub command
+        //get the sub-command
         osl_getCommandArg( nPos, &subCommand.pData );
         ++nPos;
         subCommand = subCommand.trim();
         bool subcmd_add = subCommand == "add";
         subcmd_gui = subCommand == "gui";
 
-        // sun-command options and packages:
+        // sub-command options and packages:
         while (nPos < nCount)
         {
             if (readArgument( &cmdArg, info_log, &nPos )) {
@@ -289,6 +298,39 @@ extern "C" int unopkg_main()
             }
         }
 
+        xComponentContext = getUNO(
+        option_verbose, option_shared, subcmd_gui, xLocalComponentContext );
+
+        // Initialize logging. This will log errors to the console and
+        // also to file if the --log-file parameter was provided.
+        logger.reset(new comphelper::EventLogger(xComponentContext, "unopkg"));
+        const Reference<XLogger> xLogger(logger->getLogger());
+        xLogger->setLevel(LogLevel::WARNING);
+        Reference<XLogFormatter> xLogFormatter(SimpleTextFormatter::create(xComponentContext));
+        Sequence < beans::NamedValue > aSeq { { "Formatter", Any(xLogFormatter) } };
+
+        xConsoleHandler.set(ConsoleHandler::createWithSettings(xComponentContext, aSeq));
+        xLogger->addLogHandler(xConsoleHandler);
+        xConsoleHandler->setLevel(LogLevel::WARNING);
+        xLogger->setLevel(LogLevel::WARNING);
+
+
+        if (!logFile.isEmpty())
+        {
+            Sequence < beans::NamedValue > aSeq2 { { "Formatter", Any(xLogFormatter) }, {"FileURL", Any(logFile)} };
+            xFileHandler.set(css::logging::FileHandler::createWithSettings(xComponentContext, aSeq2));
+            xFileHandler->setLevel(LogLevel::WARNING);
+            xLogger->addLogHandler(xFileHandler);
+        }
+
+        if (option_verbose)
+        {
+            xLogger->setLevel(LogLevel::INFO);
+            xConsoleHandler->setLevel(LogLevel::INFO);
+            if (xFileHandler.is())
+                xFileHandler->setLevel(LogLevel::INFO);
+        }
+
         if (repository.isEmpty())
         {
             if (option_shared)
@@ -303,10 +345,9 @@ extern "C" int unopkg_main()
             if ( repository == "shared" ) {
                 option_shared = true;
             }
-            else if (option_shared) {
-                dp_misc::writeConsoleError(
-                    "WARNING: explicit context given!  Ignoring option " +
-                    toString( info_shared ) + "!\n" );
+            else if (option_shared)
+            {
+                logger->log(LogLevel::WARNING, "Explicit context given! Ignoring option '$1$'",  toString(info_shared));
             }
         }
 #if defined(UNX)
@@ -314,10 +355,8 @@ extern "C" int unopkg_main()
         {
             if ( !(option_shared || option_bundled || option_help) )
             {
-                dp_misc::writeConsoleError(
-                    "ERROR: cannot run "  APP_NAME  " as root without " +
-                    toString( info_shared ) + " or " + toString( info_bundled )
-                    + " option.\n");
+                logger->log(LogLevel::SEVERE, "Cannot run $1$ as root without $2$ or $3$ option.",
+                           APP_NAME, toString(info_shared), toString(info_bundled));
                 return 1;
             }
 
@@ -344,35 +383,30 @@ extern "C" int unopkg_main()
                 throw Exception("Could not delete " + extensionUnorc, nullptr);
         }
 
-        xComponentContext = getUNO(
-            option_verbose, option_shared, subcmd_gui, xLocalComponentContext );
-
         Reference<deployment::XExtensionManager> xExtensionManager(
             deployment::ExtensionManager::get( xComponentContext ) );
 
-        Reference< css::ucb::XCommandEnvironment > xCmdEnv(
-            createCmdEnv( xComponentContext, logFile,
-                          option_force, option_verbose, option_suppressLicense) );
+        Reference<css::ucb::XCommandEnvironment> xCmdEnv(
+            createCmdEnv(xComponentContext, option_force, option_verbose, option_suppressLicense));
 
         //synchronize bundled/shared extensions
         //Do not synchronize when command is "reinstall". This could add types and services to UNO and
         //prevent the deletion of the registry data folder
-        //synching is done in XExtensionManager.reinstall
+        //syncing is done in XExtensionManager.reinstall
         if (!subcmd_gui && ! (subCommand == "reinstall")
             && ! dp_misc::office_is_running())
             dp_misc::syncRepositories(false, xCmdEnv);
 
         if ( subcmd_add || subCommand == "remove" )
         {
-            for ( ::std::size_t pos = 0; pos < cmdPackages.size(); ++pos )
+            for (OUString & cmdPackage : cmdPackages)
             {
-                OUString const & cmdPackage = cmdPackages[ pos ];
                 if (subcmd_add)
                 {
                     beans::NamedValue nvSuppress(
-                        OUString("SUPPRESS_LICENSE"), option_suppressLicense ?
+                        "SUPPRESS_LICENSE", option_suppressLicense ?
                         makeAny(OUString("1")):makeAny(OUString("0")));
-                        xExtensionManager->addExtension(
+                    xExtensionManager->addExtension(
                             cmdPackage, Sequence<beans::NamedValue>(&nvSuppress, 1),
                             repository, Reference<task::XAbortChannel>(), xCmdEnv);
                 }
@@ -407,7 +441,7 @@ extern "C" int unopkg_main()
         }
         else if ( subCommand == "list" )
         {
-            ::std::vector<Reference<deployment::XPackage> > vecExtUnaccepted;
+            std::vector<Reference<deployment::XPackage> > vecExtUnaccepted;
             ::comphelper::sequenceToContainer(vecExtUnaccepted,
                     xExtensionManager->getExtensionsWithUnacceptedLicenses(
                         repository, xCmdEnv));
@@ -422,24 +456,24 @@ extern "C" int unopkg_main()
                     packages = xExtensionManager->getDeployedExtensions(
                         repository, Reference<task::XAbortChannel>(), xCmdEnv );
 
-                ::std::vector<Reference<deployment::XPackage> > vec_packages;
+                std::vector<Reference<deployment::XPackage> > vec_packages;
                 ::comphelper::sequenceToContainer(vec_packages, packages);
 
                 //First copy the extensions with the unaccepted license
                 //to vector allExtensions.
                 allExtensions.resize(vecExtUnaccepted.size() + vec_packages.size());
 
-                ::std::vector<Reference<deployment::XPackage> >::iterator i_all_ext =
-                      ::std::copy(vecExtUnaccepted.begin(), vecExtUnaccepted.end(),
+                std::vector<Reference<deployment::XPackage> >::iterator i_all_ext =
+                      std::copy(vecExtUnaccepted.begin(), vecExtUnaccepted.end(),
                                   allExtensions.begin());
                 //Now copy those we got from getDeployedExtensions
-                ::std::copy(vec_packages.begin(), vec_packages.end(), i_all_ext);
+                std::copy(vec_packages.begin(), vec_packages.end(), i_all_ext);
 
                 //Now prepare the vector which tells what extension has an
                 //unaccepted license
                 vecUnaccepted.resize(vecExtUnaccepted.size() + vec_packages.size());
-                ::std::fill_n(vecUnaccepted.begin(), vecExtUnaccepted.size(), true);
-                ::std::fill_n(vecUnaccepted.begin() + vecExtUnaccepted.size(),
+                std::fill_n(vecUnaccepted.begin(), vecExtUnaccepted.size(), true);
+                std::fill_n(vecUnaccepted.begin() + vecExtUnaccepted.size(),
                       vec_packages.size(), false);
 
                 dp_misc::writeConsole(
@@ -449,28 +483,28 @@ extern "C" int unopkg_main()
             {
                 //The user provided the names (ids or file names) of the extensions
                 //which shall be listed
-                for ( ::std::size_t pos = 0; pos < cmdPackages.size(); ++pos )
+                for (OUString & cmdPackage : cmdPackages)
                 {
                     Reference<deployment::XPackage> extension;
                     try
                     {
                         extension = xExtensionManager->getDeployedExtension(
-                            repository, cmdPackages[ pos ], cmdPackages[ pos ], xCmdEnv );
+                            repository, cmdPackage, cmdPackage, xCmdEnv );
                     }
                     catch (const lang::IllegalArgumentException &)
                     {
                         extension = findPackage(repository,
-                            xExtensionManager, xCmdEnv, cmdPackages[ pos ] );
+                            xExtensionManager, xCmdEnv, cmdPackage );
                     }
 
                     //Now look if the requested extension has an unaccepted license
                     bool bUnacceptedLic = false;
                     if (!extension.is())
                     {
-                        ::std::vector<Reference<deployment::XPackage> >::const_iterator
-                            i = ::std::find_if(
+                        std::vector<Reference<deployment::XPackage> >::const_iterator
+                            i = std::find_if(
                                 vecExtUnaccepted.begin(),
-                                vecExtUnaccepted.end(), ExtensionName(cmdPackages[pos]));
+                                vecExtUnaccepted.end(), ExtensionName(cmdPackage));
                         if (i != vecExtUnaccepted.end())
                         {
                             extension = *i;
@@ -478,16 +512,12 @@ extern "C" int unopkg_main()
                         }
                     }
 
-                    if (extension.is())
-                    {
-                        allExtensions.push_back(extension);
-                        vecUnaccepted.push_back(bUnacceptedLic);
-                    }
-
-                    else
+                    if (!extension.is())
                         throw lang::IllegalArgumentException(
                             "There is no such extension deployed: " +
-                            cmdPackages[pos],nullptr,-1);
+                            cmdPackage,nullptr,-1);
+                    allExtensions.push_back(extension);
+                    vecUnaccepted.push_back(bUnacceptedLic);
                 }
 
             }
@@ -496,31 +526,31 @@ extern "C" int unopkg_main()
         }
         else if ( subCommand == "validate" )
         {
-            ::std::vector<Reference<deployment::XPackage> > vecExtUnaccepted;
+            std::vector<Reference<deployment::XPackage> > vecExtUnaccepted;
             ::comphelper::sequenceToContainer(
                 vecExtUnaccepted, xExtensionManager->getExtensionsWithUnacceptedLicenses(
                     repository, xCmdEnv));
 
-            for ( ::std::size_t pos = 0; pos < cmdPackages.size(); ++pos )
+            for (OUString & cmdPackage : cmdPackages)
             {
                 Reference<deployment::XPackage> extension;
                 try
                 {
                     extension = xExtensionManager->getDeployedExtension(
-                        repository, cmdPackages[ pos ], cmdPackages[ pos ], xCmdEnv );
+                        repository, cmdPackage, cmdPackage, xCmdEnv );
                 }
                 catch (const lang::IllegalArgumentException &)
                 {
                     extension = findPackage(
-                        repository, xExtensionManager, xCmdEnv, cmdPackages[ pos ] );
+                        repository, xExtensionManager, xCmdEnv, cmdPackage );
                 }
 
                 if (!extension.is())
                 {
-                    ::std::vector<Reference<deployment::XPackage> >::const_iterator
-                        i = ::std::find_if(
+                    std::vector<Reference<deployment::XPackage> >::const_iterator
+                        i = std::find_if(
                             vecExtUnaccepted.begin(),
-                            vecExtUnaccepted.end(), ExtensionName(cmdPackages[pos]));
+                            vecExtUnaccepted.end(), ExtensionName(cmdPackage));
                     if (i != vecExtUnaccepted.end())
                     {
                         extension = *i;
@@ -537,7 +567,7 @@ extern "C" int unopkg_main()
             Reference<ui::dialogs::XAsynchronousExecutableDialog> xDialog(
                 deployment::ui::PackageManagerDialog::createAndInstall(
                     xComponentContext,
-                    cmdPackages.size() > 0 ? cmdPackages[0] : OUString() ));
+                    !cmdPackages.empty() ? cmdPackages[0] : OUString() ));
 
             osl::Condition dialogEnded;
             dialogEnded.reset();
@@ -551,61 +581,45 @@ extern "C" int unopkg_main()
         }
         else
         {
-            dp_misc::writeConsoleError(
-                "\nERROR: unknown sub-command " +
-                subCommand + "!\n       Use " APP_NAME " " +
-                toString(info_help) + " to print all options.\n");
+            logger->log(LogLevel::SEVERE,
+                       "Unknown sub-command: '$1$'. Use $2$ $3$ to print all options.",
+                       subCommand, APP_NAME, toString(info_help));
             return 1;
         }
 
-        if (option_verbose)
-            dp_misc::writeConsole("\n" APP_NAME " done.\n");
+        logger->log(LogLevel::INFO, "$1$ done.", APP_NAME);
         //Force to release all bridges which connect us to the child processes
         dp_misc::disposeBridges(xLocalComponentContext);
         return 0;
     }
     catch (const ucb::CommandFailedException &e)
     {
-        dp_misc::writeConsoleError(e.Message + "\n");
+        logger->log(LogLevel::SEVERE, "Exception occurred: $1$", e.Message);
         bNoOtherErrorMsg = true;
     }
     catch (const ucb::CommandAbortedException &)
     {
-        dp_misc::writeConsoleError("\n" APP_NAME " aborted!\n");
+        logger->log(LogLevel::SEVERE, "$1$ aborted.", APP_NAME);
     }
     catch (const deployment::DeploymentException & exc)
     {
-        OUString cause;
-        if (option_verbose)
-        {
-            cause = ::comphelper::anyToString(exc.Cause);
-        }
-        else
-        {
-            css::uno::Exception e;
-            if (exc.Cause >>= e)
-                cause = e.Message;
-        }
-
-        dp_misc::writeConsoleError("\nERROR: " + exc.Message + "\n");
-        if (!cause.isEmpty())
-            dp_misc::writeConsoleError("       Cause: " + cause + "\n");
+        logger->log(LogLevel::SEVERE, "Exception occurred: $1$", exc.Message);
+        logger->log(LogLevel::INFO, "    Cause: $1$", comphelper::anyToString(exc.Cause));
     }
     catch (const LockFileException & e)
     {
-        if (!subcmd_gui)
-            dp_misc::writeConsoleError(e.Message + "\n");
+        // No logger since it requires UNO which we don't have here
+        dp_misc::writeConsoleError(e.Message + "\n");
         bNoOtherErrorMsg = true;
     }
     catch (const css::uno::Exception & e ) {
         Any exc( ::cppu::getCaughtException() );
 
-        dp_misc::writeConsoleError("\nERROR: " +
-            OUString(option_verbose ? e.Message + "\nException details: \n" +
-            ::comphelper::anyToString(exc) : e.Message) + "\n");
+        logger->log(LogLevel::SEVERE, "Exception occurred: $1$", e.Message);
+        logger->log(LogLevel::INFO, "    Cause: $1$", comphelper::anyToString(exc));
     }
     if (!bNoOtherErrorMsg)
-        dp_misc::writeConsoleError("\n" APP_NAME " failed.\n");
+        logger->log(LogLevel::SEVERE, "$1$ failed.", APP_NAME);
     dp_misc::disposeBridges(xLocalComponentContext);
     return 1;
 }

@@ -21,6 +21,7 @@
 #define INCLUDED_VCL_INC_SALBMP_HXX
 
 #include <tools/gen.hxx>
+#include <tools/solar.h>
 #include <vcl/checksum.hxx>
 #include <vcl/salbtype.hxx>
 
@@ -33,11 +34,15 @@ class BitmapPalette;
 struct BitmapSystemData;
 enum class BmpScaleFlag;
 
+extern const sal_uLong nVCLRLut[ 6 ];
+extern const sal_uLong nVCLGLut[ 6 ];
+extern const sal_uLong nVCLBLut[ 6 ];
+extern const sal_uLong nVCLDitherLut[ 256 ];
+extern const sal_uLong nVCLLut[ 256 ];
+
 class VCL_PLUGIN_PUBLIC SalBitmap
 {
 public:
-
-    typedef BitmapChecksum  ChecksumType;
 
     SalBitmap()
         : mnChecksum(0)
@@ -66,15 +71,18 @@ public:
     virtual void            ReleaseBuffer( BitmapBuffer* pBuffer, BitmapAccessMode nMode ) = 0;
     virtual bool            GetSystemData( BitmapSystemData& rData ) = 0;
 
+    virtual bool            ScalingSupported() const = 0;
     virtual bool            Scale( const double& rScaleX, const double& rScaleY, BmpScaleFlag nScaleFlag ) = 0;
-    virtual bool            Replace( const Color& rSearchColor, const Color& rReplaceColor, sal_uLong nTol ) = 0;
+    void                    DropScaledCache();
+
+    virtual bool            Replace( const Color& rSearchColor, const Color& rReplaceColor, sal_uInt8 nTol ) = 0;
 
     virtual bool            ConvertToGreyscale()
     {
         return false;
     }
 
-    void GetChecksum(ChecksumType& rChecksum) const
+    void GetChecksum(BitmapChecksum& rChecksum) const
     {
         updateChecksum();
         if (!mbChecksumValid)
@@ -89,8 +97,8 @@ public:
     }
 
 protected:
-    ChecksumType mnChecksum;
-    bool         mbChecksumValid;
+    BitmapChecksum mnChecksum;
+    bool           mbChecksumValid;
 
 protected:
     virtual void updateChecksum() const
@@ -98,13 +106,14 @@ protected:
         if (mbChecksumValid)
             return;
 
-        ChecksumType nCrc = 0;
+        BitmapChecksum nCrc = 0;
         SalBitmap* pThis = const_cast<SalBitmap*>(this);
-        BitmapBuffer* pBuf = pThis->AcquireBuffer(BITMAP_READ_ACCESS);
+        BitmapBuffer* pBuf = pThis->AcquireBuffer(BitmapAccessMode::Read);
         if (pBuf)
         {
-            nCrc = vcl_get_checksum(0, pBuf->mpBits, pBuf->mnScanlineSize * pBuf->mnHeight);
-            pThis->ReleaseBuffer(pBuf, BITMAP_READ_ACCESS);
+            nCrc = pBuf->maPalette.GetChecksum();
+            nCrc = vcl_get_checksum(nCrc, pBuf->mpBits, pBuf->mnScanlineSize * pBuf->mnHeight);
+            pThis->ReleaseBuffer(pBuf, BitmapAccessMode::Read);
             pThis->mnChecksum = nCrc;
             pThis->mbChecksumValid = true;
         }

@@ -29,9 +29,7 @@
 
 using namespace ftp;
 
-typedef sal_uInt32 ULONG;
-
-inline bool ascii_isWhitespace( sal_Unicode ch )
+static bool ascii_isWhitespace( sal_Unicode ch )
 {
     return ((ch <= 0x20) && ch);
 }
@@ -552,7 +550,7 @@ bool FTPDirectoryParser::parseDOS (
  * The READ, WRITE, and ISLINK mode bits are not supported.
  *
  * The returned size is the <size> part, multiplied by 512, and with the high
- * order bits truncated to fit into a ULONG.
+ * order bits truncated to fit into a sal_uInt32.
  *
  */
 bool FTPDirectoryParser::parseVMS (
@@ -680,7 +678,7 @@ bool FTPDirectoryParser::parseVMS (
         // Parse <size> part and set entry's size:
         if (*p < '0' || *p > '9')
             return false;
-        ULONG nSize = *p - '0';
+        sal_uInt32 nSize = *p - '0';
         if (*p++ != '0')
             while (*p >= '0' && *p <= '9')
                 nSize = 10 * rEntry.m_nSize + (*p++ - '0');
@@ -835,10 +833,7 @@ bool FTPDirectoryParser::parseVMS (
         rEntry.m_aDate.SetNanoSec(0);
 
         // Skip <rest> part:
-        if (*p && (*p != '\t' && *p != ' '))
-            return false;
-
-        return true;
+        return !*p || *p == '\t' || *p == ' ';
     }
 }
 
@@ -1172,7 +1167,7 @@ bool FTPDirectoryParser::parseUNIX_isYearTimeField (
         return false;
 
     rDateTime.SetYear(nNumber);
-    rDateTime.SetTime(0);
+    rDateTime.SetTime();
     return true;
 }
 
@@ -1224,7 +1219,7 @@ bool FTPDirectoryParser::parseUNIX_isTime (
  * checked for validity of the given day in the given month and year.
  *
  */
-bool FTPDirectoryParser::setYear (
+void FTPDirectoryParser::setYear (
     DateTime &rDateTime, sal_uInt16 nYear)
 {
     if (nYear < 100)
@@ -1254,7 +1249,6 @@ bool FTPDirectoryParser::setYear (
     }
 
     rDateTime.SetYear(nYear);
-    return true;
 }
 
 /*

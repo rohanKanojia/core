@@ -24,10 +24,13 @@
 #include <com/sun/star/linguistic2/ProofreadingResult.hpp>
 #include <com/sun/star/i18n/TextConversionOption.hpp>
 #include <linguistic/lngprops.hxx>
+#include <comphelper/lok.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/propertyvalue.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <comphelper/scopeguard.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 #include <svtools/ehdl.hxx>
 #include <svl/stritem.hxx>
 #include <sfx2/dispatch.hxx>
@@ -59,10 +62,8 @@
 #include <vcl/lstbox.hxx>
 #include <cmdid.h>
 #include <globals.hrc>
-#include <comcore.hrc>
-#include <view.hrc>
+#include <strings.hrc>
 #include <hhcwrp.hxx>
-#include <com/sun/star/frame/XStorable.hpp>
 
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
@@ -128,13 +129,10 @@ void SwView::ExecLingu(SfxRequest &rReq)
                     if( xInit.is() )
                     {
                         //  initialize dialog
-                        Reference< awt::XWindow > xDialogParentWindow(nullptr);
-                        Sequence<Any> aSeq(1);
-                        Any* pArray = aSeq.getArray();
-                        PropertyValue aParam;
-                        aParam.Name = "ParentWindow";
-                        aParam.Value <<= makeAny(xDialogParentWindow);
-                        pArray[0] <<= makeAny(aParam);
+                        uno::Sequence<uno::Any> aSeq(comphelper::InitAnyPropertySequence(
+                        {
+                            {"ParentWindow", uno::Any(Reference< awt::XWindow >())}
+                        }));
                         xInit->initialize( aSeq );
 
                         //execute dialog
@@ -160,9 +158,9 @@ void SwView::ExecLingu(SfxRequest &rReq)
                             }
 
                             //execute translation
-                            sal_Int16 nSourceLang = bToSimplified ? LANGUAGE_CHINESE_TRADITIONAL : LANGUAGE_CHINESE_SIMPLIFIED;
-                            sal_Int16 nTargetLang = bToSimplified ? LANGUAGE_CHINESE_SIMPLIFIED : LANGUAGE_CHINESE_TRADITIONAL;
-                            sal_Int32 nOptions    = bUseVariants ? i18n::TextConversionOption::USE_CHARACTER_VARIANTS : 0;
+                            LanguageType nSourceLang = bToSimplified ? LANGUAGE_CHINESE_TRADITIONAL : LANGUAGE_CHINESE_SIMPLIFIED;
+                            LanguageType nTargetLang = bToSimplified ? LANGUAGE_CHINESE_SIMPLIFIED : LANGUAGE_CHINESE_TRADITIONAL;
+                            sal_Int32 nOptions       = bUseVariants ? i18n::TextConversionOption::USE_CHARACTER_VARIANTS : 0;
                             if( !bCommonTerms )
                                 nOptions = nOptions | i18n::TextConversionOption::CHARACTER_BY_CHARACTER;
 
@@ -182,11 +180,11 @@ void SwView::ExecLingu(SfxRequest &rReq)
 
                             // since this conversion is not interactive the whole converted
                             // document should be undone in a single undo step.
-                            m_pWrtShell->StartUndo( UNDO_OVERWRITE );
+                            m_pWrtShell->StartUndo( SwUndoId::OVERWRITE );
 
                             StartTextConversion( nSourceLang, nTargetLang, &aTargetFont, nOptions, false );
 
-                            m_pWrtShell->EndUndo( UNDO_OVERWRITE );
+                            m_pWrtShell->EndUndo( SwUndoId::OVERWRITE );
 
                             if (bRestoreCursor)
                             {
@@ -235,7 +233,7 @@ void SwView::StartTextConversion(
         return;
     }
 
-    SpellKontext();
+    SpellContext();
 
     const SwViewOption* pVOpt = m_pWrtShell->GetViewOptions();
     const bool bOldIdle = pVOpt->IsIdle();
@@ -244,7 +242,7 @@ void SwView::StartTextConversion(
     bool bOldIns = m_pWrtShell->IsInsMode();
     m_pWrtShell->SetInsMode();
 
-    const bool bSelection = static_cast<SwCursorShell*>(m_pWrtShell)->HasSelection() ||
+    const bool bSelection = static_cast<SwCursorShell*>(m_pWrtShell.get())->HasSelection() ||
         m_pWrtShell->GetCursor() != m_pWrtShell->GetCursor()->GetNext();
 
     const bool  bStart = bSelection || m_pWrtShell->IsStartOfDoc();
@@ -261,7 +259,7 @@ void SwView::StartTextConversion(
 
     m_pWrtShell->SetInsMode( bOldIns );
     pVOpt->SetIdle( bOldIdle );
-    SpellKontext(false);
+    SpellContext(false);
 }
 
 // spellcheck and text conversion related stuff
@@ -273,49 +271,49 @@ void SwView::SpellStart( SvxSpellArea eWhich,
     Reference< XLinguProperties >  xProp = ::GetLinguPropertySet();
     bool bIsWrapReverse = !pConvArgs && xProp.is() && xProp->getIsWrapReverse();
 
-    SwDocPositions eStart = DOCPOS_START;
-    SwDocPositions eEnd   = DOCPOS_END;
-    SwDocPositions eCurr  = DOCPOS_CURR;
+    SwDocPositions eStart = SwDocPositions::Start;
+    SwDocPositions eEnd   = SwDocPositions::End;
+    SwDocPositions eCurr  = SwDocPositions::Curr;
     switch ( eWhich )
     {
-        case SVX_SPELL_BODY:
+        case SvxSpellArea::Body:
             if( bIsWrapReverse )
-                eCurr = DOCPOS_END;
+                eCurr = SwDocPositions::End;
             else
-                eCurr = DOCPOS_START;
+                eCurr = SwDocPositions::Start;
             break;
-        case SVX_SPELL_BODY_END:
+        case SvxSpellArea::BodyEnd:
             if( bIsWrapReverse )
             {
                 if( bStartDone )
-                    eStart = DOCPOS_CURR;
-                eCurr = DOCPOS_END;
+                    eStart = SwDocPositions::Curr;
+                eCurr = SwDocPositions::End;
             }
             else if( bStartDone )
-                eCurr = DOCPOS_START;
+                eCurr = SwDocPositions::Start;
             break;
-        case SVX_SPELL_BODY_START:
+        case SvxSpellArea::BodyStart:
             if( !bIsWrapReverse )
             {
                 if( bEndDone )
-                    eEnd = DOCPOS_CURR;
-                eCurr = DOCPOS_START;
+                    eEnd = SwDocPositions::Curr;
+                eCurr = SwDocPositions::Start;
             }
             else if( bEndDone )
-                eCurr = DOCPOS_END;
+                eCurr = SwDocPositions::End;
             break;
-        case SVX_SPELL_OTHER:
+        case SvxSpellArea::Other:
             if( bIsWrapReverse )
             {
-                eStart = DOCPOS_OTHERSTART;
-                eEnd  = DOCPOS_OTHEREND;
-                eCurr = DOCPOS_OTHEREND;
+                eStart = SwDocPositions::OtherStart;
+                eEnd  = SwDocPositions::OtherEnd;
+                eCurr = SwDocPositions::OtherEnd;
             }
             else
             {
-                eStart = DOCPOS_OTHERSTART;
-                eEnd  = DOCPOS_OTHEREND;
-                eCurr = DOCPOS_OTHERSTART;
+                eStart = SwDocPositions::OtherStart;
+                eEnd  = SwDocPositions::OtherEnd;
+                eCurr = SwDocPositions::OtherStart;
             }
             break;
         default:
@@ -329,9 +327,6 @@ void SwView::SpellStart( SvxSpellArea eWhich,
 // The passed pointer nlang is itself the value
 void SwView::SpellError(LanguageType eLang)
 {
-#if OSL_DEBUG_LEVEL > 1
-    sal_Bool bFocus = GetEditWin().HasFocus();
-#endif
     int nPend = 0;
 
     if ( m_pWrtShell->ActionPend() )
@@ -348,9 +343,6 @@ void SwView::SpellError(LanguageType eLang)
     OUString aErr(SvtLanguageTable::GetLanguageString( eLang ) );
 
     SwEditWin &rEditWin = GetEditWin();
-#if OSL_DEBUG_LEVEL > 1
-    bFocus = rEditWin.HasFocus();
-#endif
     int nWaitCnt = 0;
     while( rEditWin.IsWait() )
     {
@@ -367,9 +359,6 @@ void SwView::SpellError(LanguageType eLang)
         rEditWin.EnterWait();
         --nWaitCnt;
     }
-#if OSL_DEBUG_LEVEL > 1
-    bFocus = GetEditWin().HasFocus();
-#endif
 
     if ( nPend )
     {
@@ -377,16 +366,11 @@ void SwView::SpellError(LanguageType eLang)
             m_pWrtShell->StartAction();
         m_pWrtShell->Combine();
     }
-#if OSL_DEBUG_LEVEL > 1
-    if( !bFocus )
-        GetEditWin().GrabFocus();
-#endif
-
 }
 
 // Finish spelling and restore cursor
 
-void SwView::SpellEnd( SwConversionArgs *pConvArgs )
+void SwView::SpellEnd( SwConversionArgs const *pConvArgs )
 {
     m_pWrtShell->SpellEnd( pConvArgs );
     if( m_pWrtShell->IsExtMode() )
@@ -397,17 +381,17 @@ void SwView::HyphStart( SvxSpellArea eWhich )
 {
     switch ( eWhich )
     {
-        case SVX_SPELL_BODY:
-            m_pWrtShell->HyphStart( DOCPOS_START, DOCPOS_END );
+        case SvxSpellArea::Body:
+            m_pWrtShell->HyphStart( SwDocPositions::Start, SwDocPositions::End );
             break;
-        case SVX_SPELL_BODY_END:
-            m_pWrtShell->HyphStart( DOCPOS_CURR, DOCPOS_END );
+        case SvxSpellArea::BodyEnd:
+            m_pWrtShell->HyphStart( SwDocPositions::Curr, SwDocPositions::End );
             break;
-        case SVX_SPELL_BODY_START:
-            m_pWrtShell->HyphStart( DOCPOS_START, DOCPOS_CURR );
+        case SvxSpellArea::BodyStart:
+            m_pWrtShell->HyphStart( SwDocPositions::Start, SwDocPositions::Curr );
             break;
-        case SVX_SPELL_OTHER:
-            m_pWrtShell->HyphStart( DOCPOS_OTHERSTART, DOCPOS_OTHEREND );
+        case SvxSpellArea::Other:
+            m_pWrtShell->HyphStart( SwDocPositions::OtherStart, SwDocPositions::OtherEnd );
             break;
         default:
             OSL_ENSURE( false, "HyphStart with unknown Area" );
@@ -421,13 +405,15 @@ void SwView::HyphenateDocument()
     // do not hyphenate if interactive hyphenation is active elsewhere
     if (SwEditShell::HasHyphIter())
     {
-        ScopedVclPtr<MessBox>::Create( nullptr, WB_OK, OUString( SW_RES( STR_HYPH_TITLE ) ),
-                                       OUString( SW_RES( STR_MULT_INTERACT_HYPH_WARN ) ) )->Execute();
+        std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(GetEditWin().GetFrameWeld(),
+            VclMessageType::Warning, VclButtonsType::Ok, SwResId(STR_MULT_INTERACT_HYPH_WARN)));
+        xBox->set_title(SwResId(STR_HYPH_TITLE));
+        xBox->run();
         return;
     }
 
-    SfxErrorContext aContext( ERRCTX_SVX_LINGU_HYPHENATION, OUString(), m_pEditWin,
-         RID_SVXERRCTX, &DIALOG_MGR() );
+    SfxErrorContext aContext( ERRCTX_SVX_LINGU_HYPHENATION, OUString(), m_pEditWin->GetFrameWeld(),
+         RID_SVXERRCTX, SvxResLocale() );
 
     Reference< XHyphenator >  xHyph( ::GetHyphenator() );
     if (!xHyph.is())
@@ -436,7 +422,7 @@ void SwView::HyphenateDocument()
         return;
     }
 
-    if (m_pWrtShell->GetSelectionType() & (nsSelectionType::SEL_DRW_TXT|nsSelectionType::SEL_DRW))
+    if (m_pWrtShell->GetSelectionType() & (SelectionType::DrawObjectEditMode|SelectionType::DrawObject))
     {
         // Hyphenation in a Draw object
         HyphenateDrawText();
@@ -449,10 +435,10 @@ void SwView::HyphenateDocument()
 
         Reference< XLinguProperties >  xProp( ::GetLinguPropertySet() );
 
-        m_pWrtShell->StartUndo(UNDO_INSATTR);         // valid later
+        m_pWrtShell->StartUndo(SwUndoId::INSATTR);         // valid later
 
         bool bHyphSpecial = xProp.is() && xProp->getIsHyphSpecial();
-        bool bSelection = static_cast<SwCursorShell*>(m_pWrtShell)->HasSelection() ||
+        bool bSelection = static_cast<SwCursorShell*>(m_pWrtShell.get())->HasSelection() ||
             m_pWrtShell->GetCursor() != m_pWrtShell->GetCursor()->GetNext();
         bool bOther = m_pWrtShell->HasOtherCnt() && bHyphSpecial && !bSelection;
         bool bStart = bSelection || ( !bOther && m_pWrtShell->IsStartOfDoc() );
@@ -461,13 +447,15 @@ void SwView::HyphenateDocument()
         // turned on no special area
         {
             // I want also in special areas hyphenation
-            ScopedVclPtrInstance< MessageDialog > aBox(&GetEditWin(), SW_RES(STR_QUERY_SPECIAL_FORCED), VCL_MESSAGE_QUESTION, VCL_BUTTONS_YES_NO);
-            if( aBox->Execute() == RET_YES )
+            std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(GetEditWin().GetFrameWeld(),
+                                                      VclMessageType::Question, VclButtonsType::YesNo,
+                                                      SwResId(STR_QUERY_SPECIAL_FORCED)));
+            if (xBox->run() == RET_YES)
             {
                 bOther = true;
                 if (xProp.is())
                 {
-                    xProp->setIsHyphSpecial( sal_True );
+                    xProp->setIsHyphSpecial( true );
                 }
             }
             else
@@ -478,7 +466,7 @@ void SwView::HyphenateDocument()
         {
             SwHyphWrapper aWrap( this, xHyph, bStart, bOther, bSelection );
             aWrap.SpellDocument();
-            m_pWrtShell->EndUndo(UNDO_INSATTR);
+            m_pWrtShell->EndUndo(SwUndoId::INSATTR);
         }
         pVOpt->SetIdle( bOldIdle );
     }
@@ -490,13 +478,13 @@ bool SwView::IsValidSelectionForThesaurus() const
     // to be within a single paragraph
 
     const bool bMultiSel = m_pWrtShell->GetCursor()->IsMultiSelection();
-    const bool bSelection = static_cast<SwCursorShell*>(m_pWrtShell)->HasSelection();
+    const bool bSelection = static_cast<SwCursorShell*>(m_pWrtShell.get())->HasSelection();
     return !bMultiSel && (!bSelection || m_pWrtShell->IsSelOnePara() );
 }
 
 OUString SwView::GetThesaurusLookUpText( bool bSelection ) const
 {
-    return bSelection ? OUString(m_pWrtShell->GetSelText()) : m_pWrtShell->GetCurWord();
+    return bSelection ? m_pWrtShell->GetSelText() : m_pWrtShell->GetCurWord();
 }
 
 void SwView::InsertThesaurusSynonym( const OUString &rSynonmText, const OUString &rLookUpText, bool bSelection )
@@ -505,7 +493,7 @@ void SwView::InsertThesaurusSynonym( const OUString &rSynonmText, const OUString
     m_pWrtShell->SetInsMode();
 
     m_pWrtShell->StartAllAction();
-    m_pWrtShell->StartUndo(UNDO_DELETE);
+    m_pWrtShell->StartUndo(SwUndoId::DELETE);
 
     if( !bSelection )
     {
@@ -520,7 +508,7 @@ void SwView::InsertThesaurusSynonym( const OUString &rSynonmText, const OUString
         // the selection accordingly.
         const sal_Unicode* pChar = rLookUpText.getStr();
         sal_Int32 nLeft = 0;
-        while (pChar && *pChar++ == CH_TXTATR_INWORD)
+        while (*pChar++ == CH_TXTATR_INWORD)
             ++nLeft;
         pChar = rLookUpText.getLength() ? rLookUpText.getStr() + rLookUpText.getLength() - 1 : nullptr;
         sal_Int32 nRight = 0;
@@ -535,7 +523,7 @@ void SwView::InsertThesaurusSynonym( const OUString &rSynonmText, const OUString
 
     m_pWrtShell->Insert( rSynonmText );
 
-    m_pWrtShell->EndUndo(UNDO_DELETE);
+    m_pWrtShell->EndUndo(SwUndoId::DELETE);
     m_pWrtShell->EndAllAction();
 
     m_pWrtShell->SetInsMode( bOldIns );
@@ -548,8 +536,8 @@ void SwView::StartThesaurus()
     if (!IsValidSelectionForThesaurus())
         return;
 
-    SfxErrorContext aContext( ERRCTX_SVX_LINGU_THESAURUS, OUString(), m_pEditWin,
-         RID_SVXERRCTX, &DIALOG_MGR() );
+    SfxErrorContext aContext( ERRCTX_SVX_LINGU_THESAURUS, OUString(), m_pEditWin->GetFrameWeld(),
+         RID_SVXERRCTX, SvxResLocale() );
 
     // Determine language
     LanguageType eLang = m_pWrtShell->GetCurLang();
@@ -563,11 +551,12 @@ void SwView::StartThesaurus()
     }
 
     SwViewOption* pVOpt = const_cast<SwViewOption*>(m_pWrtShell->GetViewOptions());
-    bool bOldIdle = pVOpt->IsIdle();
+    const bool bOldIdle = pVOpt->IsIdle();
     pVOpt->SetIdle( false );
+    comphelper::ScopeGuard guard([&]() { pVOpt->SetIdle(bOldIdle); }); // restore when leaving scope
 
     // get initial LookUp text
-    const bool bSelection = static_cast<SwCursorShell*>(m_pWrtShell)->HasSelection();
+    const bool bSelection = static_cast<SwCursorShell*>(m_pWrtShell.get())->HasSelection();
     OUString aTmp = GetThesaurusLookUpText( bSelection );
 
     Reference< XThesaurus >  xThes( ::GetThesaurus() );
@@ -576,20 +565,27 @@ void SwView::StartThesaurus()
         SpellError( eLang );
     else
     {
-        std::unique_ptr<AbstractThesaurusDialog> pDlg;
+        VclPtr<AbstractThesaurusDialog> pDlg;
         // create dialog
         {   //Scope for SwWait-Object
             SwWait aWait( *GetDocShell(), true );
             // load library with dialog only on demand ...
             SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-            pDlg.reset(pFact->CreateThesaurusDialog( &GetEditWin(), xThes, aTmp, eLang ));
+            pDlg.reset(pFact->CreateThesaurusDialog(&GetEditWin(), xThes, aTmp, eLang));
         }
 
-        if ( pDlg->Execute()== RET_OK )
-            InsertThesaurusSynonym( pDlg->GetWord(), aTmp, bSelection );
-    }
+        if (pDlg)
+        {
+            guard.dismiss(); // ignore, we'll call SetIdle() explicitly after the dialog ends
 
-    pVOpt->SetIdle( bOldIdle );
+            pDlg->StartExecuteAsync([aTmp, bSelection, bOldIdle, pDlg, pVOpt, this](sal_Int32 nResult){
+                if (nResult == RET_OK )
+                    InsertThesaurusSynonym(pDlg->GetWord(), aTmp, bSelection);
+
+                pVOpt->SetIdle(bOldIdle);
+            });
+        }
+    }
 }
 
 // Offer online suggestions
@@ -605,10 +601,10 @@ struct ExecuteInfo
 class AsyncExecute
 {
 public:
-    DECL_STATIC_LINK_TYPED( AsyncExecute, ExecuteHdl_Impl, void*, void );
+    DECL_STATIC_LINK( AsyncExecute, ExecuteHdl_Impl, void*, void );
 };
 
-IMPL_STATIC_LINK_TYPED( AsyncExecute, ExecuteHdl_Impl, void*, p, void )
+IMPL_STATIC_LINK( AsyncExecute, ExecuteHdl_Impl, void*, p, void )
 {
     ExecuteInfo* pExecuteInfo = static_cast<ExecuteInfo*>(p);
     SolarMutexReleaser aReleaser;
@@ -634,7 +630,7 @@ bool SwView::ExecSpellPopup(const Point& rPt)
     if( pVOpt->IsOnlineSpell() &&
         !m_pWrtShell->IsSelection())
     {
-        if (m_pWrtShell->GetSelectionType() & nsSelectionType::SEL_DRW_TXT)
+        if (m_pWrtShell->GetSelectionType() & SelectionType::DrawObjectEditMode)
             bRet = ExecDrwTextSpellPopup(rPt);
         else if (!m_pWrtShell->IsSelFrameMode())
         {
@@ -643,7 +639,7 @@ bool SwView::ExecSpellPopup(const Point& rPt)
             m_pWrtShell->Push();
             SwRect aToFill;
 
-            SwCursorShell *pCursorShell = static_cast<SwCursorShell*>(m_pWrtShell);
+            SwCursorShell *pCursorShell = static_cast<SwCursorShell*>(m_pWrtShell.get());
             SwPaM *pCursor = pCursorShell->GetCursor();
             SwPosition aPoint(*pCursor->GetPoint());
             const SwTextNode *pNode = aPoint.nNode.GetNode().GetTextNode();
@@ -655,12 +651,14 @@ bool SwView::ExecSpellPopup(const Point& rPt)
                 !pCursorShell->IsTableMode() &&
                 !pCursor->HasMark() && !pCursor->IsMultiSelection())
             {
-                SwContentFrame *pContentFrame = pCursor->GetContentNode()->getLayoutFrame(
+                std::pair<Point, bool> const tmp(rPt, false);
+                SwContentFrame *const pContentFrame = pCursor->GetContentNode()->getLayoutFrame(
                                         pCursorShell->GetLayout(),
-                                        &rPt, &aPoint, false);
+                                        &aPoint, &tmp);
                 if (pContentFrame)
                 {
-                    SwRect aRepaint(static_cast<SwTextFrame*>(pContentFrame)->_AutoSpell(nullptr, 0));
+                    SwRect aRepaint(static_cast<SwTextFrame*>(pContentFrame)->AutoSpell_(
+                        *pCursor->GetContentNode()->GetTextNode(), 0));
                     if (aRepaint.HasArea())
                         m_pWrtShell->InvalidateWindows(aRepaint);
                 }
@@ -703,38 +701,31 @@ bool SwView::ExecSpellPopup(const Point& rPt)
 
                 bRet = true;
                 m_pWrtShell->SttSelect();
-                std::unique_ptr< SwSpellPopup > pPopup;
-                if (bUseGrammarContext)
-                {
-                    sal_Int32 nPos = aPoint.nContent.GetIndex();
-                    (void) nPos;
-                    pPopup.reset(new SwSpellPopup( m_pWrtShell, aGrammarCheckRes, nErrorInResult, aSuggestions, aParaText ));
-                }
-                else
-                    pPopup.reset(new SwSpellPopup( m_pWrtShell, xAlt, aParaText ));
+                std::unique_ptr<SwSpellPopup> xPopup(bUseGrammarContext ?
+                    new SwSpellPopup(m_pWrtShell.get(), aGrammarCheckRes, nErrorInResult, aSuggestions, aParaText) :
+                    new SwSpellPopup(m_pWrtShell.get(), xAlt, aParaText));
                 ui::ContextMenuExecuteEvent aEvent;
                 const Point aPixPos = GetEditWin().LogicToPixel( rPt );
 
                 aEvent.SourceWindow = VCLUnoHelper::GetInterface( m_pEditWin );
                 aEvent.ExecutePosition.X = aPixPos.X();
                 aEvent.ExecutePosition.Y = aPixPos.Y();
-                Menu* pMenu = nullptr;
+                ScopedVclPtr<Menu> pMenu;
 
-                OUString sMenuName  = bUseGrammarContext ?
+                OUString sMenuName = bUseGrammarContext ?
                     OUString("private:resource/GrammarContextMenu") : OUString("private:resource/SpellContextMenu");
-                if(TryContextMenuInterception( *pPopup, sMenuName, pMenu, aEvent ))
+                if (TryContextMenuInterception(xPopup->GetMenu(), sMenuName, pMenu, aEvent))
                 {
-
                     //! happy hacking for context menu modifying extensions of this
                     //! 'custom made' menu... *sigh* (code copied from sfx2 and framework)
                     if ( pMenu )
                     {
-                        const sal_uInt16 nId = static_cast<PopupMenu*>(pMenu)->Execute(m_pEditWin, aPixPos);
-                        OUString aCommand = static_cast<PopupMenu*>(pMenu)->GetItemCommand(nId);
+                        const sal_uInt16 nId = static_cast<PopupMenu*>(pMenu.get())->Execute(m_pEditWin, aPixPos);
+                        OUString aCommand = static_cast<PopupMenu*>(pMenu.get())->GetItemCommand(nId);
                         if (aCommand.isEmpty() )
                         {
-                            if(!ExecuteMenuCommand(dynamic_cast<PopupMenu&>(*pMenu), *GetViewFrame(), nId ))
-                                pPopup->Execute(nId);
+                            if (!ExecuteMenuCommand(dynamic_cast<PopupMenu&>(*pMenu), *GetViewFrame(), nId))
+                                xPopup->Execute(nId);
                         }
                         else
                         {
@@ -772,12 +763,15 @@ bool SwView::ExecSpellPopup(const Point& rPt)
                     }
                     else
                     {
-                        pPopup->Execute( aToFill.SVRect(), m_pEditWin );
+                        if (comphelper::LibreOfficeKit::isActive())
+                            xPopup->GetMenu().SetLOKNotifier(SfxViewShell::Current());
+
+                        xPopup->Execute(aToFill.SVRect(), m_pEditWin);
                     }
                 }
             }
 
-            m_pWrtShell->Pop( false );
+            m_pWrtShell->Pop(SwCursorShell::PopMode::DeleteCurrent);
             m_pWrtShell->LockView( bOldViewLock );
         }
     }
@@ -824,7 +818,7 @@ void SwView::ExecSmartTagPopup( const Point& rPt )
             xComponent->dispose();
     }
 
-    m_pWrtShell->Pop( false );
+    m_pWrtShell->Pop(SwCursorShell::PopMode::DeleteCurrent);
     m_pWrtShell->LockView( bOldViewLock );
 }
 
@@ -834,11 +828,11 @@ private:
     VclPtr<ListBox> aListBox;
     IFieldmark *pFieldmark;
 
-    DECL_LINK_TYPED( MyListBoxHandler, ListBox&, void );
+    DECL_LINK( MyListBoxHandler, ListBox&, void );
 
 public:
     SwFieldDialog( SwEditWin* parent, IFieldmark *fieldBM );
-    virtual ~SwFieldDialog();
+    virtual ~SwFieldDialog() override;
     virtual void dispose() override;
 };
 
@@ -857,12 +851,8 @@ SwFieldDialog::SwFieldDialog( SwEditWin* parent, IFieldmark *fieldBM ) :
         {
             Sequence< OUString > vListEntries;
             pListEntries->second >>= vListEntries;
-            for( OUString* pCurrent = vListEntries.getArray();
-                pCurrent != vListEntries.getArray() + vListEntries.getLength();
-                ++pCurrent)
-            {
-                aListBox->InsertEntry(*pCurrent);
-            }
+            for( OUString const & i : vListEntries)
+                aListBox->InsertEntry(i);
         }
 
         // Select the current one
@@ -877,8 +867,8 @@ SwFieldDialog::SwFieldDialog( SwEditWin* parent, IFieldmark *fieldBM ) :
     }
 
     Size lbSize(aListBox->GetOptimalSize());
-    lbSize.Width()+=50;
-    lbSize.Height()+=20;
+    lbSize.AdjustWidth(50 );
+    lbSize.AdjustHeight(20 );
     aListBox->SetSizePixel(lbSize);
     aListBox->SetSelectHdl( LINK( this, SwFieldDialog, MyListBoxHandler ) );
     aListBox->Show();
@@ -897,15 +887,15 @@ void SwFieldDialog::dispose()
     FloatingWindow::dispose();
 }
 
-IMPL_LINK_TYPED( SwFieldDialog, MyListBoxHandler, ListBox&, rBox, void )
+IMPL_LINK( SwFieldDialog, MyListBoxHandler, ListBox&, rBox, void )
 {
     if ( !rBox.IsTravelSelect() )
     {
-        sal_Int32 selection = rBox.GetSelectEntryPos();
+        sal_Int32 selection = rBox.GetSelectedEntryPos();
         if ( selection >= 0 )
         {
             OUString sKey = ODF_FORMDROPDOWN_RESULT;
-            (*pFieldmark->GetParameters())[ sKey ] = makeAny(selection);
+            (*pFieldmark->GetParameters())[ sKey ] <<= selection;
             pFieldmark->Invalidate();
             SwView& rView = static_cast<SwEditWin*>( GetParent() )->GetView();
             rView.GetDocShell()->SetModified();
@@ -915,7 +905,7 @@ IMPL_LINK_TYPED( SwFieldDialog, MyListBoxHandler, ListBox&, rBox, void )
     }
 }
 
-IMPL_LINK_NOARG_TYPED(SwView, FieldPopupModeEndHdl, FloatingWindow*, void)
+IMPL_LINK_NOARG(SwView, FieldPopupModeEndHdl, FloatingWindow*, void)
 {
     m_pFieldPopup.disposeAndClear();
 }
@@ -927,7 +917,7 @@ void SwView::ExecFieldPopup( const Point& rPt, IFieldmark *fieldBM )
     m_pFieldPopup = VclPtr<SwFieldDialog>::Create( m_pEditWin, fieldBM );
     m_pFieldPopup->SetPopupModeEndHdl( LINK( this, SwView, FieldPopupModeEndHdl ) );
 
-    Rectangle aRect( m_pEditWin->OutputToScreenPixel( aPixPos ), Size( 0, 0 ) );
+    tools::Rectangle aRect( m_pEditWin->OutputToScreenPixel( aPixPos ), Size( 0, 0 ) );
     m_pFieldPopup->StartPopupMode( aRect, FloatWinPopupFlags::Down|FloatWinPopupFlags::GrabFocus );
 }
 

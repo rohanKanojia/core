@@ -44,13 +44,11 @@ PropertyAccessorBase::~PropertyAccessorBase()
 }
 
 PropertySetBase::PropertySetBase( )
-    :m_pProperties( nullptr )
 {
 }
 
 PropertySetBase::~PropertySetBase( )
 {
-    DELETEZ( m_pProperties );
 }
 
 cppu::IPropertyArrayHelper& SAL_CALL PropertySetBase::getInfoHelper()
@@ -58,12 +56,12 @@ cppu::IPropertyArrayHelper& SAL_CALL PropertySetBase::getInfoHelper()
     if ( !m_pProperties )
     {
         OSL_ENSURE( !m_aProperties.empty(), "PropertySetBase::getInfoHelper: no registered properties!" );
-        m_pProperties = new cppu::OPropertyArrayHelper( &m_aProperties[0], m_aProperties.size(), sal_False );
+        m_pProperties.reset(new cppu::OPropertyArrayHelper( &m_aProperties[0], m_aProperties.size(), false ));
     }
     return *m_pProperties;
 }
 
-Reference< XPropertySetInfo > SAL_CALL PropertySetBase::getPropertySetInfo(  ) throw(RuntimeException, std::exception)
+Reference< XPropertySetInfo > SAL_CALL PropertySetBase::getPropertySetInfo(  )
 {
     return cppu::OPropertySetHelper::createPropertySetInfo( getInfoHelper() );
 }
@@ -71,8 +69,9 @@ Reference< XPropertySetInfo > SAL_CALL PropertySetBase::getPropertySetInfo(  ) t
 void PropertySetBase::registerProperty( const Property& rProperty,
     const ::rtl::Reference< PropertyAccessorBase >& rAccessor )
 {
-    OSL_ENSURE( rAccessor.get(), "PropertySetBase::registerProperty: invalid property accessor, this will crash!" );
-    m_aAccessors.insert( PropertyAccessors::value_type( rProperty.Handle, rAccessor ) );
+    OSL_ENSURE(rAccessor,
+               "PropertySetBase::registerProperty: invalid property accessor, this will crash!");
+    m_aAccessors.emplace( rProperty.Handle, rAccessor );
 
     OSL_ENSURE( rAccessor->isWriteable()
                 == ( ( rProperty.Attributes & css::beans::PropertyAttribute::READONLY ) == 0 ),
@@ -98,7 +97,7 @@ void PropertySetBase::notifyAndCachePropertyValue( sal_Int32 nHandle )
             // default construct a value of this type
             Any aEmptyValue( nullptr, aProperty.Type );
             // insert into the cache
-            aPos = m_aCache.insert( PropertyValueCache::value_type( nHandle, aEmptyValue ) ).first;
+            aPos = m_aCache.emplace( nHandle, aEmptyValue ).first;
         }
         catch( const Exception& )
         {
@@ -123,7 +122,7 @@ void PropertySetBase::initializePropertyValueCache( sal_Int32 nHandle )
     getFastPropertyValue( aCurrentValue, nHandle );
 
     ::std::pair< PropertyValueCache::iterator, bool > aInsertResult =
-          m_aCache.insert( PropertyValueCache::value_type( nHandle, aCurrentValue ) );
+          m_aCache.emplace( nHandle, aCurrentValue );
     OSL_ENSURE( aInsertResult.second, "PropertySetBase::initializePropertyValueCache: already cached a value for this property!" );
 }
 
@@ -139,7 +138,6 @@ PropertyAccessorBase& PropertySetBase::locatePropertyHandler( sal_Int32 nHandle 
 
 sal_Bool SAL_CALL PropertySetBase::convertFastPropertyValue( Any& rConvertedValue, Any& rOldValue, sal_Int32 nHandle,
     const Any& rValue )
-    throw (IllegalArgumentException)
 {
     PropertyAccessorBase& rAccessor = locatePropertyHandler( nHandle );
     if ( !rAccessor.approveValue( rValue ) )
@@ -149,13 +147,12 @@ sal_Bool SAL_CALL PropertySetBase::convertFastPropertyValue( Any& rConvertedValu
     if ( rOldValue != rValue )
     {
         rConvertedValue = rValue;   // no conversion at all
-        return sal_True;
+        return true;
     }
-    return sal_False;
+    return false;
 }
 
 void SAL_CALL PropertySetBase::setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const Any& rValue )
-    throw (Exception, std::exception)
 {
     PropertyAccessorBase& rAccessor = locatePropertyHandler( nHandle );
     rAccessor.setValue( rValue );

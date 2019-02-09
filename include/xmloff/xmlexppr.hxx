@@ -20,34 +20,34 @@
 #ifndef INCLUDED_XMLOFF_XMLEXPPR_HXX
 #define INCLUDED_XMLOFF_XMLEXPPR_HXX
 
-#include <rtl/ref.hxx>
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
-#include <xmloff/xmlprmap.hxx>
 #include <salhelper/simplereferenceobject.hxx>
 #include <o3tl/typed_flags_set.hxx>
+#include <rtl/ustring.hxx>
 
-#include <com/sun/star/beans/XPropertySet.hpp>
 #include <memory>
+#include <vector>
+
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Reference; } } } }
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace rtl { template <class reference_type> class Reference; }
+
+class XMLPropertySetMapper;
+struct XMLPropertyState;
 
 enum class SvXmlExportFlags {
     NONE        = 0x0000,
-    DEFAULTS    = 0x0001,  // export also default items
-    DEEP        = 0x0002,  // export also items from
-                           // parent item sets
-    EMPTY       = 0x0004,  // export attribs element
-                           // even if its empty
     IGN_WS      = 0x0008
 };
 namespace o3tl
 {
-    template<> struct typed_flags<SvXmlExportFlags> : is_typed_flags<SvXmlExportFlags, 0xf> {};
+    template<> struct typed_flags<SvXmlExportFlags> : is_typed_flags<SvXmlExportFlags, 0x08> {};
 }
 
 class SvXMLUnitConverter;
 class SvXMLAttributeList;
 class SvXMLNamespaceMap;
-class FilterPropertiesInfos_Impl;
 class SvXMLExport;
 
 class XMLOFF_DLLPUBLIC SvXMLExportPropertyMapper : public salhelper::SimpleReferenceObject
@@ -79,7 +79,6 @@ protected:
                      const ::std::vector< XMLPropertyState >& rProperties,
                      const SvXMLUnitConverter& rUnitConverter,
                      const SvXMLNamespaceMap& rNamespaceMap,
-                     SvXmlExportFlags nFlags,
                      std::vector<sal_uInt16>* pIndexArray,
                        sal_Int32 nPropMapStartIdx, sal_Int32 nPropMapEndIdx ) const;
 
@@ -87,9 +86,8 @@ protected:
                      const XMLPropertyState& rProperty,
                      const SvXMLUnitConverter& rUnitConverter,
                      const SvXMLNamespaceMap& rNamespaceMap,
-                     SvXmlExportFlags nFlags,
-                     const ::std::vector< XMLPropertyState > *pProperties = nullptr,
-                     sal_uInt32 nIdx = 0 ) const;
+                     const ::std::vector< XMLPropertyState > *pProperties,
+                     sal_uInt32 nIdx ) const;
 
     void exportElementItems(
             SvXMLExport& rExport,
@@ -101,7 +99,7 @@ public:
 
     SvXMLExportPropertyMapper(
             const rtl::Reference< XMLPropertySetMapper >& rMapper );
-    virtual ~SvXMLExportPropertyMapper();
+    virtual ~SvXMLExportPropertyMapper() override;
 
     // Add a ExportPropertyMapper at the end of the import mapper chain.
     // The added mapper MUST not be used outside the Mapper chain any longer,
@@ -133,7 +131,7 @@ public:
     void exportXML(
             SvXMLExport& rExport,
             const ::std::vector< XMLPropertyState >& rProperties,
-            SvXmlExportFlags nFlags = SvXmlExportFlags::NONE,
+            SvXmlExportFlags nFlags,
             bool bUseExtensionNamespaceForGraphicProperties = false ) const;
 
     /** like above but only properties whose property map index is within the
@@ -145,7 +143,7 @@ public:
             SvXMLExport& rExport,
             const ::std::vector< XMLPropertyState >& rProperties,
             sal_Int32 nPropMapStartIdx, sal_Int32 nPropMapEndIdx,
-            SvXmlExportFlags nFlags = SvXmlExportFlags::NONE, bool bExtensionNamespace = false ) const;
+            SvXmlExportFlags nFlags, bool bExtensionNamespace = false ) const;
 
     /** this method is called for every item that has the
         MID_FLAG_ELEMENT_EXPORT flag set */
@@ -153,8 +151,8 @@ public:
             SvXMLExport& rExport,
             const XMLPropertyState& rProperty,
             SvXmlExportFlags nFlags,
-            const ::std::vector< XMLPropertyState > *pProperties = nullptr,
-            sal_uInt32 nIdx = 0 ) const;
+            const ::std::vector< XMLPropertyState > *pProperties,
+            sal_uInt32 nIdx ) const;
 
     /** this method is called for every item that has the
         MID_FLAG_SPECIAL_ITEM_EXPORT flag set */
@@ -163,8 +161,8 @@ public:
             const XMLPropertyState& rProperty,
             const SvXMLUnitConverter& rUnitConverter,
             const SvXMLNamespaceMap& rNamespaceMap,
-            const ::std::vector< XMLPropertyState > *pProperties = nullptr,
-            sal_uInt32 nIdx = 0 ) const;
+            const ::std::vector< XMLPropertyState > *pProperties,
+            sal_uInt32 nIdx ) const;
 
     const rtl::Reference<XMLPropertySetMapper>& getPropertySetMapper() const;
 

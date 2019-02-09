@@ -32,40 +32,42 @@
 namespace writerfilter {
 namespace ooxml {
 
-enum ResourceType_t {
-    RT_NoResource,
-    RT_Table,
-    RT_Stream,
-    RT_StreamProperties,
-    RT_List,
-    RT_Integer,
-    RT_Properties,
-    RT_Hex,
-    RT_String,
-    RT_Shape,
-    RT_Boolean,
-    RT_HexValue,
-    RT_Value,
-    RT_XNote,
-    RT_TextTableCell,
-    RT_TextTableRow,
-    RT_TextTable,
-    RT_PropertyTable,
-    RT_Math,
-    RT_Any,
-    RT_UniversalMeasure
+enum class ResourceType {
+    NoResource,
+    Table,
+    Stream,
+    List,
+    Integer,
+    Properties,
+    Hex,
+    HexColor,
+    String,
+    Shape,
+    Boolean,
+    Value,
+    XNote,
+    TextTableCell,
+    TextTableRow,
+    TextTable,
+    PropertyTable,
+    Math,
+    Any,
+    TwipsMeasure_asSigned,
+    TwipsMeasure_asZero,
+    HpsMeasure,
+    MeasurementOrPercent
 };
 
 struct AttributeInfo
 {
-    Token_t m_nToken;
-    ResourceType_t m_nResource;
-    Id m_nRef;
+    Token_t const m_nToken;
+    ResourceType const m_nResource;
+    Id const m_nRef;
 };
 
-class OOXMLFactory_ns {
+class OOXMLFactory_ns : public virtual SvRefBase {
 public:
-    typedef std::shared_ptr<OOXMLFactory_ns> Pointer_t;
+    typedef tools::SvRef<OOXMLFactory_ns> Pointer_t;
 
     virtual void startAction(OOXMLFastContextHandler * pHandler);
     virtual void charactersAction(OOXMLFastContextHandler * pHandler, const OUString & rString);
@@ -73,13 +75,13 @@ public:
     virtual void attributeAction(OOXMLFastContextHandler * pHandler, Token_t nToken, const OOXMLValue::Pointer_t& pValue);
 
 protected:
-    virtual ~OOXMLFactory_ns();
+    virtual ~OOXMLFactory_ns() override;
 
 public:
     virtual bool getListValue(Id nId, const OUString& rValue, sal_uInt32& rOutValue) = 0;
     virtual Id getResourceId(Id nDefine, sal_Int32 nToken) = 0;
     virtual const AttributeInfo* getAttributeInfoArray(Id nId) = 0;
-    virtual bool getElementId(Id nDefine, Id nId, ResourceType_t& rOutResource, Id& rOutElement) = 0;
+    virtual bool getElementId(Id nDefine, Id nId, ResourceType& rOutResource, Id& rOutElement) = 0;
 };
 
 class OOXMLFactory
@@ -94,11 +96,11 @@ public:
 
     static void characters(OOXMLFastContextHandler * pHandler, const OUString & rString);
 
-    static void startAction(OOXMLFastContextHandler * pHandler, Token_t nToken);
-    static void endAction(OOXMLFastContextHandler * pHandler, Token_t nToken);
+    static void startAction(OOXMLFastContextHandler * pHandler);
+    static void endAction(OOXMLFastContextHandler * pHandler);
 
 private:
-    OOXMLFactory() {}
+    OOXMLFactory() = delete;
     static OOXMLFactory_ns::Pointer_t getFactoryForNamespace(Id id);
 
     static css::uno::Reference< css::xml::sax::XFastContextHandler> createFastChildContextFromFactory(OOXMLFastContextHandler * pHandler, OOXMLFactory_ns::Pointer_t pFactory, Token_t Element);

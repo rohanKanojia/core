@@ -17,38 +17,39 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "svdoutlinercache.hxx"
+#include <svdoutlinercache.hxx>
 #include <svx/svdoutl.hxx>
 #include <svx/svdmodel.hxx>
 #include <svx/svdetc.hxx>
 
 SdrOutlinerCache::SdrOutlinerCache( SdrModel* pModel )
 :   mpModel( pModel ),
-    mpModeOutline( nullptr ),
-    mpModeText( nullptr )
+    maModeOutline(),
+    maModeText(),
+    maActiveOutliners()
 {
 }
 
-SdrOutliner* SdrOutlinerCache::createOutliner( sal_uInt16 nOutlinerMode )
+std::unique_ptr<SdrOutliner> SdrOutlinerCache::createOutliner( OutlinerMode nOutlinerMode )
 {
-    SdrOutliner* pOutliner = nullptr;
+    std::unique_ptr<SdrOutliner> pOutliner;
 
-    if( (OUTLINERMODE_OUTLINEOBJECT == nOutlinerMode) && mpModeOutline )
+    if( (OutlinerMode::OutlineObject == nOutlinerMode) && !maModeOutline.empty() )
     {
-        pOutliner = mpModeOutline;
-        mpModeOutline = nullptr;
+        pOutliner = std::move(maModeOutline.back());
+        maModeOutline.pop_back();
     }
-    else if( (OUTLINERMODE_TEXTOBJECT == nOutlinerMode) && mpModeText )
+    else if( (OutlinerMode::TextObject == nOutlinerMode) && !maModeText.empty() )
     {
-        pOutliner = mpModeText;
-        mpModeText = nullptr;
+        pOutliner = std::move(maModeText.back());
+        maModeText.pop_back();
     }
     else
     {
         pOutliner = SdrMakeOutliner(nOutlinerMode, *mpModel);
         Outliner& aDrawOutliner = mpModel->GetDrawOutliner();
         pOutliner->SetCalcFieldValueHdl( aDrawOutliner.GetCalcFieldValueHdl() );
-        maActiveOutliners.push_back(pOutliner);
+        maActiveOutliners.insert(pOutliner.get());
     }
 
     return pOutliner;
@@ -56,50 +57,42 @@ SdrOutliner* SdrOutlinerCache::createOutliner( sal_uInt16 nOutlinerMode )
 
 SdrOutlinerCache::~SdrOutlinerCache()
 {
-    if( mpModeOutline )
-    {
-        delete mpModeOutline;
-        mpModeOutline = nullptr;
-    }
-
-    if( mpModeText )
-    {
-        delete mpModeText;
-        mpModeText = nullptr;
-    }
 }
 
-void SdrOutlinerCache::disposeOutliner( SdrOutliner* pOutliner )
+void SdrOutlinerCache::disposeOutliner( std::unique_ptr<SdrOutliner> pOutliner )
 {
     if( pOutliner )
     {
-        sal_uInt16 nOutlMode = pOutliner->GetOutlinerMode();
+        OutlinerMode nOutlMode = pOutliner->GetOutlinerMode();
 
-        if( (OUTLINERMODE_OUTLINEOBJECT == nOutlMode) && (nullptr == mpModeOutline) )
+        if( OutlinerMode::OutlineObject == nOutlMode )
         {
-            mpModeOutline = pOutliner;
             pOutliner->Clear();
             pOutliner->SetVertical( false );
 
             // Deregister on outliner, might be reused from outliner cache
             pOutliner->SetNotifyHdl( Link<EENotify&,void>() );
+            maModeOutline.emplace_back(std::move(pOutliner));
         }
-        else if( (OUTLINERMODE_TEXTOBJECT == nOutlMode) && (nullptr == mpModeText) )
+        else if( OutlinerMode::TextObject == nOutlMode )
         {
-            mpModeText = pOutliner;
             pOutliner->Clear();
             pOutliner->SetVertical( false );
 
             // Deregister on outliner, might be reused from outliner cache
             pOutliner->SetNotifyHdl( Link<EENotify&,void>() );
+            maModeText.emplace_back(std::move(pOutliner));
         }
         else
         {
-            maActiveOutliners.erase(std::remove(maActiveOutliners.begin(), maActiveOutliners.end(), pOutliner), maActiveOutliners.end());
-            delete pOutliner;
+            maActiveOutliners.erase(pOutliner.get());
         }
     }
 }
 
+std::vector< SdrOutliner* > SdrOutlinerCache::GetActiveOutliners() const
+{
+    return std::vector< SdrOutliner* >(maActiveOutliners.begin(), maActiveOutliners.end());
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

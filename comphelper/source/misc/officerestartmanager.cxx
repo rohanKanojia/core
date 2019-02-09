@@ -35,7 +35,6 @@ namespace comphelper
 // XRestartManager
 
 void SAL_CALL OOfficeRestartManager::requestRestart( const uno::Reference< task::XInteractionHandler >& /* xInteractionHandler */ )
-    throw (uno::Exception, uno::RuntimeException, std::exception)
 {
     if ( !m_xContext.is() )
         throw uno::RuntimeException();
@@ -77,7 +76,6 @@ void SAL_CALL OOfficeRestartManager::requestRestart( const uno::Reference< task:
 
 
 sal_Bool SAL_CALL OOfficeRestartManager::isRestartRequested( sal_Bool bOfficeInitialized )
-    throw (uno::Exception, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -90,7 +88,6 @@ sal_Bool SAL_CALL OOfficeRestartManager::isRestartRequested( sal_Bool bOfficeIni
 // XCallback
 
 void SAL_CALL OOfficeRestartManager::notify( const uno::Any& /* aData */ )
-    throw ( uno::RuntimeException, std::exception )
 {
     try
     {
@@ -132,17 +129,17 @@ void SAL_CALL OOfficeRestartManager::notify( const uno::Any& /* aData */ )
 
 // XServiceInfo
 
-OUString SAL_CALL OOfficeRestartManager::getImplementationName() throw (uno::RuntimeException, std::exception)
+OUString SAL_CALL OOfficeRestartManager::getImplementationName()
 {
     return OUString("com.sun.star.comp.task.OfficeRestartManager");
 }
 
-sal_Bool SAL_CALL OOfficeRestartManager::supportsService( const OUString& aServiceName ) throw (uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL OOfficeRestartManager::supportsService( const OUString& aServiceName )
 {
     return cppu::supportsService(this, aServiceName);
 }
 
-uno::Sequence< OUString > SAL_CALL OOfficeRestartManager::getSupportedServiceNames() throw (uno::RuntimeException, std::exception)
+uno::Sequence< OUString > SAL_CALL OOfficeRestartManager::getSupportedServiceNames()
 {
     return { "com.sun.star.comp.task.OfficeRestartManager" };
 }
@@ -167,7 +164,7 @@ struct Singleton:
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_task_OfficeRestartManager(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)

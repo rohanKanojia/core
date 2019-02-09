@@ -21,39 +21,45 @@
 #define INCLUDED_OOX_CORE_RECORDPARSER_HXX
 
 #include <map>
+#include <memory>
+
 #include <com/sun/star/io/IOException.hpp>
+#include <com/sun/star/uno/RuntimeException.hpp>
 #include <com/sun/star/xml/sax/SAXException.hpp>
-#include <rtl/ref.hxx>
 #include <oox/helper/binaryinputstream.hxx>
 #include <oox/core/fragmenthandler.hxx>
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 namespace oox {
 namespace core {
 
-namespace prv { class Locator; }
-namespace prv { class ContextStack; }
+namespace prv {
+    class ContextStack;
+    class Locator;
+}
 
 
 struct RecordInputSource
 {
     BinaryInputStreamRef mxInStream;
-    OUString     maPublicId;
     OUString     maSystemId;
 };
 
 
-class RecordParser
+class RecordParser final
 {
 public:
                         RecordParser();
-    virtual             ~RecordParser();
+                        ~RecordParser();
 
     void                setFragmentHandler( const ::rtl::Reference< FragmentHandler >& rxHandler );
 
-    void                parseStream( const RecordInputSource& rInputSource )
-                            throw(  css::xml::sax::SAXException,
-                                    css::io::IOException,
-                                    css::uno::RuntimeException );
+    /// @throws css::xml::sax::SAXException
+    /// @throws css::io::IOException
+    /// @throws css::uno::RuntimeException
+    void                parseStream( const RecordInputSource& rInputSource );
 
     const RecordInputSource& getInputSource() const { return maSource; }
 

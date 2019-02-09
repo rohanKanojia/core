@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "indexcollection.hxx"
+#include <indexcollection.hxx>
 #include <tools/diagnose_ex.h>
 #include <com/sun/star/sdbcx/XAppend.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -46,7 +46,7 @@ namespace dbaui
         *this = _rSource;
     }
 
-    const OIndexCollection& OIndexCollection::operator=(const OIndexCollection& _rSource)
+    OIndexCollection& OIndexCollection::operator=(const OIndexCollection& _rSource)
     {
         detach();
         m_xIndexes = _rSource.m_xIndexes;
@@ -67,13 +67,11 @@ namespace dbaui
 
     Indexes::const_iterator OIndexCollection::find(const OUString& _rName) const
     {
-        OUString sNameCompare(_rName);
-
         // loop'n'compare
         Indexes::const_iterator aSearch = m_aIndexes.begin();
         Indexes::const_iterator aEnd = m_aIndexes.end();
         for (; aSearch != aEnd; ++aSearch)
-            if (aSearch->sName == sNameCompare)
+            if (aSearch->sName == _rName)
                 break;
 
         return aSearch;
@@ -81,13 +79,11 @@ namespace dbaui
 
     Indexes::iterator OIndexCollection::find(const OUString& _rName)
     {
-        OUString sNameCompare(_rName);
-
         // loop'n'compare
         Indexes::iterator aSearch = m_aIndexes.begin();
         Indexes::const_iterator aEnd = m_aIndexes.end();
         for (; aSearch != aEnd; ++aSearch)
-            if (aSearch->sName == sNameCompare)
+            if (aSearch->sName == _rName)
                 break;
 
         return aSearch;
@@ -95,13 +91,11 @@ namespace dbaui
 
     Indexes::const_iterator OIndexCollection::findOriginal(const OUString& _rName) const
     {
-        OUString sNameCompare(_rName);
-
         // loop'n'compare
         Indexes::const_iterator aSearch = m_aIndexes.begin();
         Indexes::const_iterator aEnd = m_aIndexes.end();
         for (; aSearch != aEnd; ++aSearch)
-            if (aSearch->getOriginalName() == sNameCompare)
+            if (aSearch->getOriginalName() == _rName)
                 break;
 
         return aSearch;
@@ -109,13 +103,11 @@ namespace dbaui
 
     Indexes::iterator OIndexCollection::findOriginal(const OUString& _rName)
     {
-        OUString sNameCompare(_rName);
-
         // loop'n'compare
         Indexes::iterator aSearch = m_aIndexes.begin();
         Indexes::const_iterator aEnd = m_aIndexes.end();
         for (; aSearch != aEnd; ++aSearch)
-            if (aSearch->getOriginalName() == sNameCompare)
+            if (aSearch->getOriginalName() == _rName)
                 break;
 
         return aSearch;
@@ -150,27 +142,22 @@ namespace dbaui
             }
 
             // set the properties
-            static const char s_sUniquePropertyName[] = "IsUnique";
-            static const char s_sSortPropertyName[] = "IsAscending";
             static const char s_sNamePropertyName[] = "Name";
             // the index' own props
-            xIndexDescriptor->setPropertyValue(s_sUniquePropertyName, css::uno::makeAny(_rPos->bUnique));
+            xIndexDescriptor->setPropertyValue("IsUnique", css::uno::makeAny(_rPos->bUnique));
             xIndexDescriptor->setPropertyValue(s_sNamePropertyName, makeAny(_rPos->sName));
 
             // the fields
-            for (   IndexFields::const_iterator aFieldLoop = _rPos->aFields.begin();
-                    aFieldLoop != _rPos->aFields.end();
-                    ++aFieldLoop
-                )
+            for (auto const& field : _rPos->aFields)
             {
-                OSL_ENSURE(!xCols->hasByName(aFieldLoop->sFieldName), "OIndexCollection::commitNewIndex: double column name (need to prevent this outside)!");
+                OSL_ENSURE(!xCols->hasByName(field.sFieldName), "OIndexCollection::commitNewIndex: double column name (need to prevent this outside)!");
 
                 Reference< XPropertySet > xColDescriptor = xColumnFactory->createDataDescriptor();
                 OSL_ENSURE(xColDescriptor.is(), "OIndexCollection::commitNewIndex: invalid column descriptor!");
                 if (xColDescriptor.is())
                 {
-                    xColDescriptor->setPropertyValue(s_sSortPropertyName, css::uno::makeAny(aFieldLoop->bSortAscending));
-                    xColDescriptor->setPropertyValue(s_sNamePropertyName, makeAny(OUString(aFieldLoop->sFieldName)));
+                    xColDescriptor->setPropertyValue("IsAscending", css::uno::makeAny(field.bSortAscending));
+                    xColDescriptor->setPropertyValue(s_sNamePropertyName, makeAny(field.sFieldName));
                     xAppendCols->appendByDescriptor(xColDescriptor);
                 }
             }
@@ -186,7 +173,7 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 
@@ -211,7 +198,7 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
             return false;
         }
 
@@ -252,14 +239,9 @@ namespace dbaui
 
     void OIndexCollection::implFillIndexInfo(OIndex& _rIndex, const Reference< XPropertySet >& _rxDescriptor)
     {
-        static const char s_sPrimaryIndexPropertyName[] = "IsPrimaryKeyIndex";
-        static const char s_sUniquePropertyName[] = "IsUnique";
-        static const char s_sSortPropertyName[] = "IsAscending";
-        static const char s_sCatalogPropertyName[] = "Catalog";
-
-        _rIndex.bPrimaryKey = ::cppu::any2bool(_rxDescriptor->getPropertyValue(s_sPrimaryIndexPropertyName));
-        _rIndex.bUnique = ::cppu::any2bool(_rxDescriptor->getPropertyValue(s_sUniquePropertyName));
-        _rxDescriptor->getPropertyValue(s_sCatalogPropertyName) >>= _rIndex.sDescription;
+        _rIndex.bPrimaryKey = ::cppu::any2bool(_rxDescriptor->getPropertyValue("IsPrimaryKeyIndex"));
+        _rIndex.bUnique = ::cppu::any2bool(_rxDescriptor->getPropertyValue("IsUnique"));
+        _rxDescriptor->getPropertyValue("Catalog") >>= _rIndex.sDescription;
 
         // the columns
         Reference< XColumnsSupplier > xSuppCols(_rxDescriptor, UNO_QUERY);
@@ -291,7 +273,7 @@ namespace dbaui
 
                 // get the relevant properties
                 aCopyTo->sFieldName = *pFieldNames;
-                aCopyTo->bSortAscending = ::cppu::any2bool(xIndexColumn->getPropertyValue(s_sSortPropertyName));
+                aCopyTo->bSortAscending = ::cppu::any2bool(xIndexColumn->getPropertyValue("IsAscending"));
             }
 
             _rIndex.aFields.resize(aCopyTo - _rIndex.aFields.begin());
@@ -318,15 +300,14 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 
     Indexes::iterator OIndexCollection::insert(const OUString& _rName)
     {
         OSL_ENSURE(end() == find(_rName), "OIndexCollection::insert: invalid new name!");
-        OUString tmpName;
-        OIndex aNewIndex(tmpName);  // the empty string indicates the index is a new one
+        OIndex aNewIndex((OUString()));  // the empty string indicates the index is a new one
         aNewIndex.sName = _rName;
         m_aIndexes.push_back(aNewIndex);
         return m_aIndexes.end() - 1;    // the last element is the new one ...

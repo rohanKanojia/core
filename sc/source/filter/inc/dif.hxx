@@ -20,17 +20,18 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_DIF_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_DIF_HXX
 
+#include <map>
+#include <memory>
 #include <vector>
 
 #include <rtl/ustring.hxx>
+#include <rtl/ustrbuf.hxx>
 
-#include "address.hxx"
-#include "global.hxx"
+#include <types.hxx>
 
 class SvStream;
 class SvNumberFormatter;
 class ScDocument;
-class ScPatternAttr;
 
 extern const sal_Unicode pKeyTABLE[];
 extern const sal_Unicode pKeyVECTORS[];
@@ -55,22 +56,17 @@ enum TOPIC
 
 enum DATASET { D_BOT, D_EOD, D_NUMERIC, D_STRING, D_UNKNOWN, D_SYNT_ERROR };
 
-class DifAttrCache;
-class ScPatternAttr;
-
 class DifParser
 {
 public:
-    OUString            aData;
+    OUStringBuffer      m_aData;
     double              fVal;
     sal_uInt32          nVector;
     sal_uInt32          nVal;
     sal_uInt32          nNumFormat;
-    rtl_TextEncoding    eCharSet;
 private:
     SvNumberFormatter*  pNumFormatter;
     SvStream&           rIn;
-    bool                bPlain;
     OUString       aLookAheadLine;
 
     bool                ReadNextLine( OUString& rStr );
@@ -80,21 +76,17 @@ private:
     static inline bool  IsEOD( const sal_Unicode* pRef );
     static inline bool  Is1_0( const sal_Unicode* pRef );
 public:
-                        DifParser( SvStream&, const sal_uInt32 nOption, ScDocument&, rtl_TextEncoding );
+                        DifParser( SvStream&, const ScDocument&, rtl_TextEncoding );
 
     TOPIC               GetNextTopic();
 
     DATASET             GetNextDataset();
 
     static const sal_Unicode* ScanIntVal( const sal_Unicode* pStart, sal_uInt32& rRet );
-    bool                ScanFloatVal( const sal_Unicode* pStart );
 
     static inline bool  IsNumber( const sal_Unicode cChar );
-    static inline bool  IsNumberEnding( const sal_Unicode cChar );
 
     static inline bool  IsV( const sal_Unicode* pRef );
-
-    inline bool         IsPlain() const;
 };
 
 inline bool DifParser::IsBOT( const sal_Unicode* pRef )
@@ -132,16 +124,6 @@ inline bool DifParser::IsNumber( const sal_Unicode cChar )
     return ( cChar >= '0' && cChar <= '9' );
 }
 
-inline bool DifParser::IsNumberEnding( const sal_Unicode cChar )
-{
-    return ( cChar == 0x00 );
-}
-
-inline bool DifParser::IsPlain() const
-{
-    return bPlain;
-}
-
 class DifColumn
 {
     friend class DifAttrCache;
@@ -153,18 +135,14 @@ class DifColumn
         SCROW nEnd;
     };
 
-    ENTRY *mpAkt;
+    ENTRY *mpCurrent;
     std::vector<ENTRY> maEntries;
 
     DifColumn();
 
-    void SetLogical( SCROW nRow );
-
     void SetNumFormat( SCROW nRow, const sal_uInt32 nNumFormat );
 
     void NewEntry( const SCROW nPos, const sal_uInt32 nNumFormat );
-
-    void Apply( ScDocument&, const SCCOL nCol, const SCTAB nTab, const ScPatternAttr& );
 
     void Apply( ScDocument &rDoc, const SCCOL nCol, const SCTAB nTab );
 };
@@ -173,11 +151,9 @@ class DifAttrCache
 {
 public:
 
-    DifAttrCache( const bool bPlain );
+    DifAttrCache();
 
     ~DifAttrCache();
-
-    void SetLogical( const SCCOL nCol, const SCROW nRow );
 
     void SetNumFormat( const SCCOL nCol, const SCROW nRow, const sal_uInt32 nNumFormat );
 
@@ -185,8 +161,7 @@ public:
 
 private:
 
-    DifColumn**         ppCols;
-    bool                bPlain;
+    std::map<SCCOL, std::unique_ptr<DifColumn>> maColMap;
 };
 
 #endif

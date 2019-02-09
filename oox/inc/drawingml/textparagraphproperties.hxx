@@ -21,9 +21,10 @@
 #define INCLUDED_OOX_DRAWINGML_TEXTPARAGRAPHPROPERTIES_HXX
 
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <drawingml/fillpropertiesgroupcontext.hxx>
+#include <drawingml/misccontexts.hxx>
 #include <drawingml/textcharacterproperties.hxx>
 #include <com/sun/star/style/NumberingType.hpp>
+#include <com/sun/star/style/ParagraphAdjust.hpp>
 #include <drawingml/textfont.hxx>
 #include <drawingml/textspacing.hxx>
 #include <boost/optional.hpp>
@@ -57,7 +58,7 @@ public:
     void setBulletSize(sal_Int16 nSize);
     void setFontSize(sal_Int16 nSize);
     void setStyleName( const OUString& rStyleName ) { maStyleName <<= rStyleName; }
-    void setGraphic( css::uno::Reference< css::graphic::XGraphic >& rXGraphic );
+    void setGraphic( css::uno::Reference< css::graphic::XGraphic > const & rXGraphic );
 
     std::shared_ptr< ::oox::drawingml::Color > maBulletColorPtr;
     css::uno::Any               mbBulletColorFollowText;
@@ -79,7 +80,6 @@ class TextParagraphProperties
 public:
 
     TextParagraphProperties();
-    ~TextParagraphProperties();
 
     void                                setLevel( sal_Int16 nLevel ) { mnLevel = nLevel; }
     sal_Int16                           getLevel( ) const { return mnLevel; }
@@ -93,8 +93,11 @@ public:
     boost::optional< sal_Int32 >&       getParaLeftMargin(){ return moParaLeftMargin; }
     boost::optional< sal_Int32 >&       getFirstLineIndentation(){ return moFirstLineIndentation; }
 
-    boost::optional< sal_Int16 >&       getParaAdjust() { return moParaAdjust; }
-    void                                setParaAdjust( sal_Int16 nParaAdjust ) { moParaAdjust = nParaAdjust; }
+    boost::optional< css::style::ParagraphAdjust >&       getParaAdjust() { return moParaAdjust; }
+    void                                setParaAdjust( css::style::ParagraphAdjust nParaAdjust ) { moParaAdjust = nParaAdjust; }
+
+    TextSpacing&                        getLineSpacing() { return maLineSpacing; }
+    void                                setLineSpacing( const TextSpacing& rLineSpacing ) { maLineSpacing = rLineSpacing; }
 
     void                                apply( const TextParagraphProperties& rSourceProps );
     void                                pushToPropSet( const ::oox::core::XmlFilterBase* pFilterBase,
@@ -123,8 +126,9 @@ protected:
     TextSpacing                     maParaBottomMargin;
     boost::optional< sal_Int32 >    moParaLeftMargin;
     boost::optional< sal_Int32 >    moFirstLineIndentation;
-    boost::optional< sal_Int16 >    moParaAdjust;
+    boost::optional< css::style::ParagraphAdjust >    moParaAdjust;
     sal_Int16                       mnLevel;
+    TextSpacing                     maLineSpacing;
 };
 
 } }

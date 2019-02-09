@@ -18,9 +18,9 @@
  */
 
 
-#include "cppuhelper/factory.hxx"
+#include <cppuhelper/factory.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include "com/sun/star/lang/IllegalArgumentException.hpp"
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 
 #include "cmdenv.hxx"
 
@@ -36,9 +36,7 @@ using namespace ucb_cmdenv;
 // UcbCommandEnvironment Implementation.
 
 
-UcbCommandEnvironment::UcbCommandEnvironment(
-    const uno::Reference< lang::XMultiServiceFactory >& /*xSMgr*/ )
-//: m_xSMgr( xSMgr )
+UcbCommandEnvironment::UcbCommandEnvironment()
 {
 }
 
@@ -55,8 +53,6 @@ UcbCommandEnvironment::~UcbCommandEnvironment()
 // virtual
 void SAL_CALL UcbCommandEnvironment::initialize(
         const uno::Sequence< uno::Any >& aArguments )
-    throw( uno::Exception,
-           uno::RuntimeException, std::exception )
 {
     if ( ( aArguments.getLength() < 2 ) ||
          !( aArguments[ 0 ] >>= m_xIH ) ||
@@ -70,7 +66,6 @@ void SAL_CALL UcbCommandEnvironment::initialize(
 
 // virtual
 OUString SAL_CALL UcbCommandEnvironment::getImplementationName()
-    throw ( uno::RuntimeException, std::exception )
 {
     return getImplementationName_Static();
 }
@@ -79,7 +74,6 @@ OUString SAL_CALL UcbCommandEnvironment::getImplementationName()
 // virtual
 sal_Bool SAL_CALL
 UcbCommandEnvironment::supportsService( const OUString& ServiceName )
-    throw ( uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, ServiceName);
 }
@@ -88,7 +82,6 @@ UcbCommandEnvironment::supportsService( const OUString& ServiceName )
 // virtual
 uno::Sequence< OUString > SAL_CALL
 UcbCommandEnvironment::getSupportedServiceNames()
-    throw ( uno::RuntimeException, std::exception )
 {
     return getSupportedServiceNames_Static();
 }
@@ -116,7 +109,6 @@ UcbCommandEnvironment::getSupportedServiceNames_Static()
 // virtual
 uno::Reference< task::XInteractionHandler > SAL_CALL
 UcbCommandEnvironment::getInteractionHandler()
-    throw ( uno::RuntimeException, std::exception )
 {
     return m_xIH;
 }
@@ -125,7 +117,6 @@ UcbCommandEnvironment::getInteractionHandler()
 // virtual
 uno::Reference< ucb::XProgressHandler > SAL_CALL
 UcbCommandEnvironment::getProgressHandler()
-    throw ( uno::RuntimeException, std::exception )
 {
     return m_xPH;
 }
@@ -133,14 +124,13 @@ UcbCommandEnvironment::getProgressHandler()
 
 // Service factory implementation.
 
-
-static uno::Reference< uno::XInterface > SAL_CALL
+/// @throws uno::Exception
+static uno::Reference< uno::XInterface >
 UcbCommandEnvironment_CreateInstance(
-    const uno::Reference< lang::XMultiServiceFactory> & rSMgr )
-    throw( uno::Exception )
+    const uno::Reference< lang::XMultiServiceFactory> & /*rSMgr*/ )
 {
     lang::XServiceInfo * pX = static_cast< lang::XServiceInfo * >(
-        new UcbCommandEnvironment( rSMgr ) );
+        new UcbCommandEnvironment );
     return uno::Reference< uno::XInterface >::query( pX );
 }
 
@@ -150,12 +140,11 @@ uno::Reference< lang::XSingleServiceFactory >
 UcbCommandEnvironment::createServiceFactory(
     const uno::Reference< lang::XMultiServiceFactory >& rxServiceMgr )
 {
-    return uno::Reference< lang::XSingleServiceFactory >(
-            cppu::createSingleFactory(
+    return cppu::createSingleFactory(
                 rxServiceMgr,
                 UcbCommandEnvironment::getImplementationName_Static(),
                 UcbCommandEnvironment_CreateInstance,
-                UcbCommandEnvironment::getSupportedServiceNames_Static() ) );
+                UcbCommandEnvironment::getSupportedServiceNames_Static() );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

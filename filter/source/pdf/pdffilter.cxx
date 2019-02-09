@@ -19,10 +19,12 @@
 
 #include "pdffilter.hxx"
 #include "pdfexport.hxx"
+#include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
 #include <svl/outstrm.hxx>
+#include <unotools/ucbstreamhelper.hxx>
 #include <vcl/FilterConfigItem.hxx>
 #include <memory>
 
@@ -44,11 +46,12 @@ bool PDFFilter::implExport( const Sequence< PropertyValue >& rDescriptor )
     Sequence< PropertyValue >   aFilterData;
     sal_Int32                   nLength = rDescriptor.getLength();
     const PropertyValue*        pValue = rDescriptor.getConstArray();
+    bool                        bIsRedactMode = false;
     bool                    bRet = false;
     Reference< task::XStatusIndicator > xStatusIndicator;
     Reference< task::XInteractionHandler > xIH;
 
-    for ( sal_Int32 i = 0 ; ( i < nLength ) && !xOStm.is(); ++i)
+    for (sal_Int32 i = 0 ; ( i < nLength ) && !xOStm.is(); ++i)
     {
         if ( pValue[ i ].Name == "OutputStream" )
             pValue[ i ].Value >>= xOStm;
@@ -58,6 +61,12 @@ bool PDFFilter::implExport( const Sequence< PropertyValue >& rDescriptor )
             pValue[ i ].Value >>= xStatusIndicator;
         else if ( pValue[i].Name == "InteractionHandler" )
             pValue[i].Value >>= xIH;
+    }
+
+    for (sal_Int32 i = 0 ; i < nLength; ++i)
+    {
+        if ( pValue[i].Name == "IsRedactMode")
+            pValue[i].Value >>= bIsRedactMode;
     }
 
     /* we don't get FilterData if we are exporting directly
@@ -72,7 +81,9 @@ bool PDFFilter::implExport( const Sequence< PropertyValue >& rDescriptor )
         aCfgItem.ReadBool(  "UseTaggedPDF", false );
         aCfgItem.ReadInt32( "SelectPdfVersion", 0 );
         aCfgItem.ReadBool(  "ExportNotes", false );
+        aCfgItem.ReadBool( "ExportPlaceholders", false );
         aCfgItem.ReadBool(  "ExportNotesPages", false );
+        aCfgItem.ReadBool(  "ExportOnlyNotesPages", false );
         aCfgItem.ReadBool(  "UseTransitionEffects", true );
         aCfgItem.ReadBool(  "IsSkipEmptyPages", false );
         aCfgItem.ReadBool(  "ExportFormFields", true );
@@ -86,8 +97,10 @@ bool PDFFilter::implExport( const Sequence< PropertyValue >& rDescriptor )
         aCfgItem.ReadBool(  "DisplayPDFDocumentTitle", true );
         aCfgItem.ReadInt32( "InitialView", 0 );
         aCfgItem.ReadInt32( "Magnification", 0 );
+        aCfgItem.ReadInt32( "Zoom", 100 );
         aCfgItem.ReadInt32( "PageLayout", 0 );
         aCfgItem.ReadBool(  "FirstPageOnLeft", false );
+        aCfgItem.ReadInt32( "InitialPage", 1 );
         aCfgItem.ReadBool(  "IsAddStream", false );
 
         // the encryption is not available when exporting directly, since the encryption is off by default and the selection
@@ -103,7 +116,34 @@ bool PDFFilter::implExport( const Sequence< PropertyValue >& rDescriptor )
         aCfgItem.ReadBool(  "ExportBookmarks", true );
         aCfgItem.ReadBool(  "ExportHiddenSlides", false );
         aCfgItem.ReadInt32( "OpenBookmarkLevels", -1 );
+
+        aCfgItem.ReadBool( "IsRedactMode", false);
+
         aFilterData = aCfgItem.GetFilterData();
+    }
+
+
+    if (bIsRedactMode)
+    {
+        bool bFound = false;
+
+        for (int i = 0; i < aFilterData.getLength(); ++i)
+        {
+            if (aFilterData[i].Name == "IsRedactMode")
+            {
+                aFilterData[i].Value <<= bIsRedactMode;
+                bFound = true;
+                break;
+            }
+        }
+
+        if (!bFound)
+        {
+            sal_Int32 nNewSize = aFilterData.getLength() + 1;
+            aFilterData.realloc( nNewSize );
+            aFilterData[nNewSize - 1].Name = "IsRedactMode";
+            aFilterData[nNewSize - 1].Value <<= bIsRedactMode;
+        }
     }
 
     if( mxSrcDoc.is() && xOStm.is() )
@@ -158,19 +198,18 @@ public:
         }
     }
 
-    DECL_LINK_TYPED( DestroyedLink, VclWindowEvent&, void );
+    DECL_LINK( DestroyedLink, VclWindowEvent&, void );
 };
 
 
-IMPL_LINK_TYPED( FocusWindowWaitCursor, DestroyedLink, VclWindowEvent&, rEvent, void )
+IMPL_LINK( FocusWindowWaitCursor, DestroyedLink, VclWindowEvent&, rEvent, void )
 {
-    if( rEvent.GetId() == VCLEVENT_OBJECT_DYING )
+    if( rEvent.GetId() == VclEventId::ObjectDying )
         m_pFocusWindow = nullptr;
 }
 
 
 sal_Bool SAL_CALL PDFFilter::filter( const Sequence< PropertyValue >& rDescriptor )
-    throw (RuntimeException, std::exception)
 {
     FocusWindowWaitCursor aCur;
 
@@ -180,59 +219,54 @@ sal_Bool SAL_CALL PDFFilter::filter( const Sequence< PropertyValue >& rDescripto
 }
 
 
-void SAL_CALL PDFFilter::cancel( ) throw (RuntimeException, std::exception)
+void SAL_CALL PDFFilter::cancel( )
 {
 }
 
 
 void SAL_CALL PDFFilter::setSourceDocument( const Reference< XComponent >& xDoc )
-    throw (IllegalArgumentException, RuntimeException, std::exception)
 {
     mxSrcDoc = xDoc;
 }
 
 
 void SAL_CALL PDFFilter::initialize( const css::uno::Sequence< css::uno::Any >& )
-    throw (Exception, RuntimeException, std::exception)
 {
 }
 
 
 OUString PDFFilter_getImplementationName ()
-    throw (RuntimeException)
 {
     return OUString ( "com.sun.star.comp.PDF.PDFFilter" );
 }
 
 
-Sequence< OUString > SAL_CALL PDFFilter_getSupportedServiceNames(  ) throw (RuntimeException)
+Sequence< OUString > PDFFilter_getSupportedServiceNames(  )
 {
     Sequence<OUString> aRet { "com.sun.star.document.PDFFilter" };
     return aRet;
 }
 
 
-Reference< XInterface > SAL_CALL PDFFilter_createInstance( const Reference< XMultiServiceFactory > & rSMgr) throw( Exception )
+Reference< XInterface > PDFFilter_createInstance( const Reference< XMultiServiceFactory > & rSMgr)
 {
     return static_cast<cppu::OWeakObject*>(new PDFFilter( comphelper::getComponentContext(rSMgr) ));
 }
 
 
 OUString SAL_CALL PDFFilter::getImplementationName()
-    throw (RuntimeException, std::exception)
 {
     return PDFFilter_getImplementationName();
 }
 
 
 sal_Bool SAL_CALL PDFFilter::supportsService( const OUString& rServiceName )
-    throw (RuntimeException, std::exception)
 {
     return cppu::supportsService( this, rServiceName );
 }
 
 
-css::uno::Sequence< OUString > SAL_CALL PDFFilter::getSupportedServiceNames(  ) throw (RuntimeException, std::exception)
+css::uno::Sequence< OUString > SAL_CALL PDFFilter::getSupportedServiceNames(  )
 {
     return PDFFilter_getSupportedServiceNames();
 }

@@ -24,7 +24,8 @@
 #include <com/sun/star/uno/Reference.h>
 #include <com/sun/star/uno/Sequence.h>
 
-#include <list>
+#include <vector>
+#include <memory>
 #include <map>
 
 class SvXMLExport;
@@ -37,13 +38,13 @@ namespace com { namespace sun { namespace star {
  } } }
 
 // store a list of redline properties
-typedef ::std::list<
-            css::uno::Reference<css::beans::XPropertySet> > ChangesListType;
+typedef ::std::vector<
+            css::uno::Reference<css::beans::XPropertySet> > ChangesVectorType;
 
 // store a list of redline properties for each XText
 typedef ::std::map<
             css::uno::Reference< css::text::XText>,
-            ChangesListType* > ChangesMapType;
+            std::unique_ptr<ChangesVectorType> > ChangesMapType;
 
 
 /**
@@ -52,29 +53,9 @@ typedef ::std::map<
  */
 class XMLRedlineExport
 {
-    const OUString sDelete;
     const OUString sDeletion;
-    const OUString sFormat;
     const OUString sFormatChange;
-    const OUString sInsert;
     const OUString sInsertion;
-    const OUString sIsCollapsed;
-    const OUString sIsStart;
-    const OUString sRedlineAuthor;
-    const OUString sRedlineComment;
-    const OUString sRedlineDateTime;
-    const OUString sRedlineSuccessorData;
-    const OUString sRedlineText;
-    const OUString sRedlineType;
-    const OUString sUnknownChange;
-    const OUString sStartRedline;
-    const OUString sEndRedline;
-    const OUString sRedlineIdentifier;
-    const OUString sIsInHeaderFooter;
-    const OUString sRecordChanges;
-    const OUString sMergeLastPara;
-
-    const OUString sChangePrefix;
 
     SvXMLExport& rExport;
 
@@ -90,7 +71,7 @@ class XMLRedlineExport
     ChangesMapType aChangeMap;              /// map of recorded changes
 
     /// list of current changes; is NULL or points to member of aChangeMap
-    ChangesListType* pCurrentChangesList;
+    ChangesVectorType* pCurrentChangesList;
 
 
 public:
@@ -171,10 +152,10 @@ private:
         const css::uno::Sequence<css::beans::PropertyValue> & rValues);
 
     /// convert the change type from API to XML names
-    const OUString ConvertTypeName(const OUString& sApiName);
+    OUString const & ConvertTypeName(const OUString& sApiName);
 
     /// Get ID string!
-    const OUString GetRedlineID(
+    static OUString GetRedlineID(
         const css::uno::Reference<css::beans::XPropertySet> & rPropSet);
 
     /// write a comment string as sequence of <text:p> elements

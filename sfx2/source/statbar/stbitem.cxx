@@ -31,7 +31,7 @@
 
 #include <sfx2/app.hxx>
 #include <sfx2/stbitem.hxx>
-#include "sfxtypes.hxx"
+#include <sfxtypes.hxx>
 #include <sfx2/msg.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/msgpool.hxx>
@@ -39,7 +39,6 @@
 #include <sfx2/dispatch.hxx>
 #include <sfx2/unoctitm.hxx>
 #include <sfx2/objsh.hxx>
-#include <sfx2/sfx.hrc>
 
 #include <comphelper/processfactory.hxx>
 #include <svl/eitem.hxx>
@@ -67,7 +66,7 @@ sal_uInt16 SfxStatusBarControl::convertAwtToVCLMouseButtons( sal_Int16 nAwtMouse
 }
 
 
-svt::StatusbarController* SAL_CALL SfxStatusBarControllerFactory(
+svt::StatusbarController* SfxStatusBarControllerFactory(
     const uno::Reference< frame::XFrame >& rFrame,
     StatusBar* pStatusBar,
     unsigned short nID,
@@ -172,12 +171,6 @@ SfxStatusBarControl::~SfxStatusBarControl()
 
 
 // XInterface
-uno::Any SAL_CALL SfxStatusBarControl::queryInterface( const uno::Type & rType )
-throw( uno::RuntimeException, std::exception)
-{
-    return svt::StatusbarController::queryInterface( rType );
-}
-
 void SAL_CALL SfxStatusBarControl::acquire() throw()
 {
     OWeakObject::acquire();
@@ -189,25 +182,8 @@ void SAL_CALL SfxStatusBarControl::release() throw()
 }
 
 
-// XEventListener
-void SAL_CALL SfxStatusBarControl::disposing( const lang::EventObject& aEvent )
-throw( uno::RuntimeException, std::exception )
-{
-    svt::StatusbarController::disposing( aEvent );
-}
-
-
-// XComponent
-void SAL_CALL SfxStatusBarControl::dispose()
-throw (uno::RuntimeException, std::exception)
-{
-    svt::StatusbarController::dispose();
-}
-
-
 // XStatusListener
 void SAL_CALL SfxStatusBarControl::statusChanged( const frame::FeatureStateEvent& rEvent )
-throw ( css::uno::RuntimeException, std::exception )
 {
     SfxViewFrame* pViewFrame = nullptr;
     uno::Reference < frame::XController > xController;
@@ -241,72 +217,71 @@ throw ( css::uno::RuntimeException, std::exception )
     if ( pSlot )
         nSlotID = pSlot->GetSlotId();
 
-    if ( nSlotID > 0 )
-    {
-        if ( rEvent.Requery )
-            svt::StatusbarController::statusChanged( rEvent );
-        else
-        {
-            SfxItemState eState = SfxItemState::DISABLED;
-            SfxPoolItem* pItem = nullptr;
-            if ( rEvent.IsEnabled )
-            {
-                eState = SfxItemState::DEFAULT;
-                uno::Type pType = rEvent.State.getValueType();
+    if ( nSlotID <= 0 )
+        return;
 
-                if ( pType == cppu::UnoType<void>::get() )
+    if ( rEvent.Requery )
+        svt::StatusbarController::statusChanged( rEvent );
+    else
+    {
+        SfxItemState eState = SfxItemState::DISABLED;
+        std::unique_ptr<SfxPoolItem> pItem;
+        if ( rEvent.IsEnabled )
+        {
+            eState = SfxItemState::DEFAULT;
+            uno::Type aType = rEvent.State.getValueType();
+
+            if ( aType == cppu::UnoType<void>::get() )
+            {
+                pItem.reset( new SfxVoidItem( nSlotID ) );
+                eState = SfxItemState::UNKNOWN;
+            }
+            else if ( aType == cppu::UnoType<bool>::get() )
+            {
+                bool bTemp = false;
+                rEvent.State >>= bTemp ;
+                pItem.reset( new SfxBoolItem( nSlotID, bTemp ) );
+            }
+            else if ( aType == ::cppu::UnoType< ::cppu::UnoUnsignedShortType >::get() )
+            {
+                sal_uInt16 nTemp = 0;
+                rEvent.State >>= nTemp ;
+                pItem.reset( new SfxUInt16Item( nSlotID, nTemp ) );
+            }
+            else if ( aType == cppu::UnoType<sal_uInt32>::get() )
+            {
+                sal_uInt32 nTemp = 0;
+                rEvent.State >>= nTemp ;
+                pItem.reset( new SfxUInt32Item( nSlotID, nTemp ) );
+            }
+            else if ( aType == cppu::UnoType<OUString>::get() )
+            {
+                OUString sTemp ;
+                rEvent.State >>= sTemp ;
+                pItem.reset( new SfxStringItem( nSlotID, sTemp ) );
+            }
+            else if ( aType == cppu::UnoType< css::frame::status::ItemStatus>::get() )
+            {
+                frame::status::ItemStatus aItemStatus;
+                rEvent.State >>= aItemStatus;
+                eState = static_cast<SfxItemState>(aItemStatus.State);
+                pItem.reset( new SfxVoidItem( nSlotID ) );
+            }
+            else
+            {
+                if ( pSlot )
+                    pItem = pSlot->GetType()->CreateItem();
+                if ( pItem )
                 {
-                    pItem = new SfxVoidItem( nSlotID );
-                    eState = SfxItemState::UNKNOWN;
-                }
-                else if ( pType == cppu::UnoType<bool>::get() )
-                {
-                    bool bTemp = false;
-                    rEvent.State >>= bTemp ;
-                    pItem = new SfxBoolItem( nSlotID, bTemp );
-                }
-                else if ( pType == ::cppu::UnoType< ::cppu::UnoUnsignedShortType >::get() )
-                {
-                    sal_uInt16 nTemp = 0;
-                    rEvent.State >>= nTemp ;
-                    pItem = new SfxUInt16Item( nSlotID, nTemp );
-                }
-                else if ( pType == cppu::UnoType<sal_uInt32>::get() )
-                {
-                    sal_uInt32 nTemp = 0;
-                    rEvent.State >>= nTemp ;
-                    pItem = new SfxUInt32Item( nSlotID, nTemp );
-                }
-                else if ( pType == cppu::UnoType<OUString>::get() )
-                {
-                    OUString sTemp ;
-                    rEvent.State >>= sTemp ;
-                    pItem = new SfxStringItem( nSlotID, sTemp );
-                }
-                else if ( pType == cppu::UnoType< css::frame::status::ItemStatus>::get() )
-                {
-                    frame::status::ItemStatus aItemStatus;
-                    rEvent.State >>= aItemStatus;
-                    eState = (SfxItemState) aItemStatus.State;
-                    pItem = new SfxVoidItem( nSlotID );
+                    pItem->SetWhich( nSlotID );
+                    pItem->PutValue( rEvent.State, 0 );
                 }
                 else
-                {
-                    if ( pSlot )
-                        pItem = pSlot->GetType()->CreateItem();
-                    if ( pItem )
-                    {
-                        pItem->SetWhich( nSlotID );
-                        pItem->PutValue( rEvent.State, 0 );
-                    }
-                    else
-                        pItem = new SfxVoidItem( nSlotID );
-                }
+                    pItem.reset( new SfxVoidItem( nSlotID ) );
             }
-
-            StateChanged( nSlotID, eState, pItem );
-            delete pItem;
         }
+
+        StateChanged( nSlotID, eState, pItem.get() );
     }
 }
 
@@ -315,13 +290,12 @@ throw ( css::uno::RuntimeException, std::exception )
 
 sal_Bool SAL_CALL SfxStatusBarControl::mouseButtonDown(
     const awt::MouseEvent& rMouseEvent )
-throw ( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     ::Point aPos( rMouseEvent.X, rMouseEvent.Y );
 
     ::MouseEvent aMouseEvent( aPos,
-                              (sal_uInt16)rMouseEvent.ClickCount,
+                              static_cast<sal_uInt16>(rMouseEvent.ClickCount),
                               MouseEventModifiers::NONE,
                               convertAwtToVCLMouseButtons( rMouseEvent.Buttons ),
                               0 );
@@ -332,13 +306,12 @@ throw ( uno::RuntimeException, std::exception )
 
 sal_Bool SAL_CALL SfxStatusBarControl::mouseMove(
     const awt::MouseEvent& rMouseEvent )
-throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     ::Point aPos( rMouseEvent.X, rMouseEvent.Y );
 
     ::MouseEvent aMouseEvent( aPos,
-                              (sal_uInt16)rMouseEvent.ClickCount,
+                              static_cast<sal_uInt16>(rMouseEvent.ClickCount),
                               MouseEventModifiers::NONE,
                               convertAwtToVCLMouseButtons( rMouseEvent.Buttons ),
                               0 );
@@ -348,13 +321,12 @@ throw (uno::RuntimeException, std::exception)
 
 sal_Bool SAL_CALL SfxStatusBarControl::mouseButtonUp(
     const ::awt::MouseEvent& rMouseEvent )
-throw ( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     ::Point aPos( rMouseEvent.X, rMouseEvent.Y );
 
     ::MouseEvent aMouseEvent( aPos,
-                              (sal_uInt16)rMouseEvent.ClickCount,
+                              static_cast<sal_uInt16>(rMouseEvent.ClickCount),
                               MouseEventModifiers::NONE,
                               convertAwtToVCLMouseButtons( rMouseEvent.Buttons ),
                               0 );
@@ -367,7 +339,6 @@ void SAL_CALL SfxStatusBarControl::command(
     ::sal_Int32 nCommand,
     sal_Bool /*bMouseEvent*/,
     const css::uno::Any& /*aData*/ )
-throw (css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     ::Point aPos( rPos.X, rPos.Y );
@@ -381,14 +352,13 @@ void SAL_CALL SfxStatusBarControl::paint(
     const uno::Reference< awt::XGraphics >& xGraphics,
     const awt::Rectangle& rOutputRectangle,
     ::sal_Int32 nStyle )
-throw ( ::uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
 
     OutputDevice* pOutDev = VCLUnoHelper::GetOutputDevice( xGraphics );
     if ( pOutDev )
     {
-        ::Rectangle aRect = VCLRectangle( rOutputRectangle );
+        ::tools::Rectangle aRect = VCLRectangle( rOutputRectangle );
         UserDrawEvent aUserDrawEvent(nullptr, pOutDev, aRect, pBar->GetCurItemId(), static_cast<sal_uInt16>(nStyle));
         Paint( aUserDrawEvent );
     }
@@ -396,7 +366,6 @@ throw ( ::uno::RuntimeException, std::exception )
 
 
 void SAL_CALL SfxStatusBarControl::click( const awt::Point& )
-throw ( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     Click();
@@ -404,7 +373,6 @@ throw ( uno::RuntimeException, std::exception )
 
 
 void SAL_CALL SfxStatusBarControl::doubleClick( const awt::Point& )
-throw ( uno::RuntimeException, std::exception )
 {
 }
 
@@ -440,7 +408,7 @@ void SfxStatusBarControl::StateChanged
         pBar->SetItemText( nSID, pStr->GetValue() );
     else
     {
-        DBG_ASSERT( eState != SfxItemState::DEFAULT || dynamic_cast< const SfxVoidItem *>( pState ) !=  nullptr,
+        DBG_ASSERT( eState != SfxItemState::DEFAULT || pState->IsVoidItem(),
                     "wrong SfxPoolItem subclass in SfxStatusBarControl" );
         pBar->SetItemText( nSID, OUString() );
     }
@@ -561,7 +529,7 @@ void SfxStatusBarControl::Paint
 /*  [Description]
 
     This virtual method is called to paint the contents if the field
-    at hand is marked with SIB_USERDRAW. The output must be obtained
+    at hand is marked with StatusBarItemBits::UserDraw. The output must be obtained
     within the Rectangle of rUDEvt.GetRect() by the OutputDevice
     given by rUDEvt.GetDevice().
 
@@ -577,7 +545,7 @@ SfxStatusBarControl* SfxStatusBarControl::CreateControl
     sal_uInt16     nSlotID,
     sal_uInt16     nStbId,
     StatusBar* pBar,
-    SfxModule* pMod
+    SfxModule const * pMod
 )
 {
     SolarMutexGuard aGuard;

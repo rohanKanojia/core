@@ -26,22 +26,23 @@
 #include <svl/itemset.hxx>
 #include <svx/svxdllapi.h>
 #include <basegfx/vector/b3dvector.hxx>
+#include <memory>
 
 class FmFormModel;
 class FmFormPage;
 class E3dView;
-class E3dPolyScene;
 class E3dObject;
+class E3dScene;
 
 enum class SvxPreviewObjectType { SPHERE, CUBE };
 
 class SAL_WARN_UNUSED SVX_DLLPUBLIC Svx3DPreviewControl : public Control
 {
 protected:
-    FmFormModel*            mpModel;
+    std::unique_ptr<FmFormModel> mpModel;
     FmFormPage*             mpFmPage;
-    E3dView*                mp3DView;
-    E3dPolyScene*           mpScene;
+    std::unique_ptr<E3dView> mp3DView;
+    E3dScene*               mpScene;
     E3dObject*              mp3DObj;
     SvxPreviewObjectType    mnObjectType;
 
@@ -49,17 +50,17 @@ protected:
 
 public:
     Svx3DPreviewControl(vcl::Window* pParent, WinBits nStyle = 0);
-    virtual ~Svx3DPreviewControl();
+    virtual ~Svx3DPreviewControl() override;
     virtual void dispose() override;
 
-    virtual void Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void MouseButtonDown( const MouseEvent& rMEvt ) override;
     virtual void Resize() override;
     virtual Size GetOptimalSize() const override;
 
     virtual void SetObjectType(SvxPreviewObjectType nType);
     SvxPreviewObjectType GetObjectType() const { return mnObjectType; }
-    SfxItemSet Get3DAttributes() const;
+    SfxItemSet const & Get3DAttributes() const;
     virtual void Set3DAttributes(const SfxItemSet& rAttr);
 };
 
@@ -85,12 +86,10 @@ class SAL_WARN_UNUSED SVX_DLLPUBLIC Svx3DLightControl : public Svx3DPreviewContr
 
     // interaction parameters
     Point                       maActionStartPoint;
-    sal_Int32                   mnInteractionStartDistance;
     double                      mfSaveActionStartHor;
     double                      mfSaveActionStartVer;
     double                      mfSaveActionStartRotZ;
 
-    // bitfield
     bool                        mbMouseMoved : 1;
     bool                        mbGeometrySelected : 1;
 
@@ -100,9 +99,9 @@ class SAL_WARN_UNUSED SVX_DLLPUBLIC Svx3DLightControl : public Svx3DPreviewContr
     void TrySelection(Point aPosPixel);
 
 public:
-    Svx3DLightControl(vcl::Window* pParent, WinBits nStyle = 0);
+    Svx3DLightControl(vcl::Window* pParent, WinBits nStyle);
 
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
     virtual void MouseButtonDown(const MouseEvent& rMEvt) override;
     virtual void Tracking( const TrackingEvent& rTEvt ) override;
     virtual void Resize() override;
@@ -135,9 +134,8 @@ public:
     basegfx::B3DVector GetLightDirection(sal_uInt32 nNum) const;
 };
 
-class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxLightCtl3D : public Control
+class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxLightCtl3D final : public Control
 {
-private:
     // local controls
     VclPtr<Svx3DLightControl>  maLightControl;
     VclPtr<ScrollBar>          maHorScroller;
@@ -150,7 +148,7 @@ private:
 
 public:
     SvxLightCtl3D(vcl::Window* pParent);
-    virtual ~SvxLightCtl3D();
+    virtual ~SvxLightCtl3D() override;
     virtual void dispose() override;
 
     // react to size changes
@@ -161,7 +159,7 @@ public:
     void CheckSelection();
 
     // bring further settings to the outside world
-    Svx3DLightControl& GetSvx3DLightControl() { return *maLightControl.get(); }
+    Svx3DLightControl& GetSvx3DLightControl() { return *maLightControl; }
 
     // register user callback
     void SetUserInteractiveChangeCallback(Link<SvxLightCtl3D*,void> aNew) { maUserInteractiveChangeCallback = aNew; }
@@ -173,12 +171,12 @@ public:
 
     virtual Size GetOptimalSize() const override;
 
-protected:
+private:
 
-    DECL_LINK_TYPED( InternalInteractiveChange, Svx3DLightControl*, void);
-    DECL_LINK_TYPED( InternalSelectionChange, Svx3DLightControl*, void);
-    DECL_LINK_TYPED( ScrollBarMove, ScrollBar*, void);
-    DECL_LINK_TYPED( ButtonPress, Button*, void);
+    DECL_LINK( InternalInteractiveChange, Svx3DLightControl*, void);
+    DECL_LINK( InternalSelectionChange, Svx3DLightControl*, void);
+    DECL_LINK( ScrollBarMove, ScrollBar*, void);
+    DECL_LINK( ButtonPress, Button*, void);
 
     // initialize local parameters
     void Init();

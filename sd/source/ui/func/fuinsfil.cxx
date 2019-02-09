@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuinsfil.hxx"
+#include <fuinsfil.hxx>
 #include <vcl/wrkwin.hxx>
 #include <sfx2/progress.hxx>
 #include <editeng/outliner.hxx>
@@ -26,7 +26,7 @@
 #include <svl/stritem.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/app.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 #include <sfx2/printer.hxx>
 #include <svx/svdorect.hxx>
 #include <svx/svdundo.hxx>
@@ -45,23 +45,25 @@
 #include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 
-#include "sdresid.hxx"
-#include "drawdoc.hxx"
-#include "Window.hxx"
-#include "View.hxx"
-#include "strings.hrc"
-#include "stlpool.hxx"
-#include "glob.hrc"
-#include "sdpage.hxx"
-#include "strmname.h"
-#include "DrawViewShell.hxx"
-#include "OutlineViewShell.hxx"
-#include "DrawDocShell.hxx"
-#include "GraphicDocShell.hxx"
-#include "app.hrc"
-#include "unmovss.hxx"
-#include "Outliner.hxx"
-#include "sdabstdlg.hxx"
+#include <sdresid.hxx>
+#include <drawdoc.hxx>
+#include <Window.hxx>
+#include <View.hxx>
+#include <strings.hrc>
+#include <stlpool.hxx>
+#include <sdmod.hxx>
+#include <sdpage.hxx>
+#include <strmname.h>
+#include <ViewShellBase.hxx>
+#include <DrawViewShell.hxx>
+#include <OutlineView.hxx>
+#include <OutlineViewShell.hxx>
+#include <DrawDocShell.hxx>
+#include <GraphicDocShell.hxx>
+#include <app.hrc>
+#include <unmovss.hxx>
+#include <Outliner.hxx>
+#include <sdabstdlg.hxx>
 #include <memory>
 
 using namespace ::com::sun::star::lang;
@@ -76,31 +78,29 @@ namespace
 
 OUString lcl_GetExtensionsList ( ::std::vector< FilterDesc > const& rFilterDescList )
 {
-    OUString aExtensions;
-    ::std::vector< FilterDesc >::const_iterator aIter( rFilterDescList.begin() );
+    OUStringBuffer aExtensions;
 
-    while (aIter != rFilterDescList.end())
+    for (const auto& rFilterDesc : rFilterDescList)
     {
-        OUString sWildcard = (*aIter).second;
+        OUString sWildcard = rFilterDesc.second;
 
         if ( aExtensions.indexOf( sWildcard ) == -1 )
         {
             if ( !aExtensions.isEmpty() )
-                aExtensions += ";";
-            aExtensions += sWildcard;
+                aExtensions.append(";");
+            aExtensions.append(sWildcard);
         }
 
-        ++aIter;
     }
 
-    return aExtensions;
+    return aExtensions.makeStringAndClear();
 }
 
 void lcl_AddFilter ( ::std::vector< FilterDesc >& rFilterDescList,
                      const std::shared_ptr<const SfxFilter>& pFilter )
 {
     if (pFilter)
-        rFilterDescList.push_back( ::std::make_pair( pFilter->GetUIName(), pFilter->GetDefaultExtension() ) );
+        rFilterDescList.emplace_back( pFilter->GetUIName(), pFilter->GetDefaultExtension() );
 }
 
 }
@@ -138,15 +138,15 @@ void FuInsertFile::DoExecute( SfxRequest& rReq )
     {
         sfx2::FileDialogHelper      aFileDialog(
                 ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE,
-                SFXWB_INSERT );
+                FileDialogFlags::Insert, mpWindow ? mpWindow->GetFrameWeld() : nullptr);
         Reference< XFilePicker >    xFilePicker( aFileDialog.GetFilePicker(), UNO_QUERY );
         Reference< XFilterManager > xFilterManager( xFilePicker, UNO_QUERY );
         OUString aOwnCont;
         OUString aOtherCont;
 
-        aFileDialog.SetTitle( SD_RESSTR(STR_DLG_INSERT_PAGES_FROM_FILE) );
+        aFileDialog.SetTitle( SdResId(STR_DLG_INSERT_PAGES_FROM_FILE) );
 
-        if( mpDoc->GetDocumentType() == DOCUMENT_TYPE_IMPRESS )
+        if( mpDoc->GetDocumentType() == DocumentType::Impress )
         {
             aOwnCont = "simpress";
             aOtherCont = "sdraw";
@@ -169,7 +169,7 @@ void FuInsertFile::DoExecute( SfxRequest& rReq )
                 lcl_AddFilter( aFilterVector, pFilter );
 
                 // get template filter
-                if( mpDoc->GetDocumentType() == DOCUMENT_TYPE_IMPRESS )
+                if( mpDoc->GetDocumentType() == DocumentType::Impress )
                     pFilter = DrawDocShell::Factory().GetTemplateFilter();
                 else
                     pFilter = GraphicDocShell::Factory().GetTemplateFilter();
@@ -204,33 +204,28 @@ void FuInsertFile::DoExecute( SfxRequest& rReq )
                 lcl_AddFilter( aFilterVector, pFilter );
 
                 // add additional supported filters
-                ::std::vector< OUString >::const_iterator aOtherIter( aOtherFilterVector.begin() );
-
-                while( aOtherIter != aOtherFilterVector.end() )
+                for( const auto& rOtherFilter : aOtherFilterVector )
                 {
-                    if( ( pFilter = rMatcher.GetFilter4Mime( *aOtherIter ) ) != nullptr )
+                    if( ( pFilter = rMatcher.GetFilter4Mime( rOtherFilter ) ) != nullptr )
                         lcl_AddFilter( aFilterVector, pFilter );
-
-                    ++aOtherIter;
                 }
 
-                // set default-filter (<All>)
-                OUString aAllSpec( SD_RESSTR( STR_ALL_FILES ) );
+                // set "All supported formats" as the default filter
+                OUString aAllSpec( SdResId( STR_ALL_SUPPORTED_FORMATS ) );
                 OUString aExtensions = lcl_GetExtensionsList( aFilterVector );
                 OUString aGUIName = aAllSpec + " (" + aExtensions + ")";
 
                 xFilterManager->appendFilter( aGUIName, aExtensions );
                 xFilterManager->setCurrentFilter( aAllSpec );
 
-                // add filters to filter manager finally
-                ::std::vector< ::std::pair < OUString, OUString > >::const_iterator aIter( aFilterVector.begin() );
-
-                while( aIter != aFilterVector.end() )
+                // append individual filters
+                for( const auto& rFilter : aFilterVector )
                 {
-                    xFilterManager->appendFilter( (*aIter).first, (*aIter).second );
-                    ++aIter;
+                    xFilterManager->appendFilter( rFilter.first, rFilter.second );
                 }
 
+                // end with "All files" as fallback
+                xFilterManager->appendFilter( SdResId( STR_ALL_FILES ), "*.*" );
             }
             catch (const IllegalArgumentException&)
             {
@@ -263,7 +258,7 @@ void FuInsertFile::DoExecute( SfxRequest& rReq )
 
     SfxGetpApp()->GetFilterMatcher().GuessFilter(*xMedium, pFilter);
 
-    bool                bDrawMode = mpViewShell && dynamic_cast< const DrawViewShell *>( mpViewShell ) !=  nullptr;
+    bool                bDrawMode = dynamic_cast< const DrawViewShell *>( mpViewShell ) != nullptr;
     bool                bInserted = false;
 
     if( pFilter )
@@ -316,8 +311,9 @@ void FuInsertFile::DoExecute( SfxRequest& rReq )
 
     if( !bInserted )
     {
-        ScopedVclPtrInstance< MessageDialog > aErrorBox(mpWindow, SD_RESSTR( STR_READ_DATA_ERROR));
-        aErrorBox->Execute();
+        std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(mpWindow->GetFrameWeld(),
+                                                       VclMessageType::Warning, VclButtonsType::Ok, SdResId(STR_READ_DATA_ERROR)));
+        xErrorBox->run();
     }
 }
 
@@ -327,19 +323,10 @@ bool FuInsertFile::InsSDDinDrMode(SfxMedium* pMedium)
 
     mpDocSh->SetWaitCursor( false );
     SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
-    std::unique_ptr<AbstractSdInsertPagesObjsDlg> pDlg(pFact ? pFact->CreateSdInsertPagesObjsDlg( mpDoc, pMedium, aFile ) : nullptr);
-
-    if( !pDlg )
-        return false;
-
-    /* Maybe a QueryBox is opened ("update links?"), therefore the dialog
-       becomes the current DefModalDialogParent */
-    vcl::Window* pDefParent = Application::GetDefDialogParent();
-    Application::SetDefDialogParent(pDlg->GetWindow());
+    vcl::Window* pParent = mpViewShell ? mpViewShell->GetActiveWindow() : nullptr;
+    ScopedVclPtr<AbstractSdInsertPagesObjsDlg> pDlg( pFact->CreateSdInsertPagesObjsDlg(pParent, mpDoc, pMedium, aFile) );
 
     sal_uInt16 nRet = pDlg->Execute();
-
-    Application::SetDefDialogParent(pDefParent);
 
     mpDocSh->SetWaitCursor( true );
 
@@ -368,11 +355,11 @@ bool FuInsertFile::InsSDDinDrMode(SfxMedium* pMedium)
 
         if (pPage && !pPage->IsMasterPage())
         {
-            if (pPage->GetPageKind() == PK_STANDARD)
+            if (pPage->GetPageKind() == PageKind::Standard)
             {
                 nPos = pPage->GetPageNum() + 2;
             }
-            else if (pPage->GetPageKind() == PK_NOTES)
+            else if (pPage->GetPageKind() == PageKind::Notes)
             {
                 nPos = pPage->GetPageNum() + 1;
             }
@@ -391,11 +378,10 @@ bool FuInsertFile::InsSDDinDrMode(SfxMedium* pMedium)
                necessary.
                bNameOK is sal_False if the user has canceled. */
             bNameOK = mpView->GetExchangeList( aExchangeList, aBookmarkList, 0 );
-            bool bReplace = false;
 
             if( bNameOK )
                 bOK = mpDoc->InsertBookmarkAsPage( aBookmarkList, &aExchangeList,
-                                    bLink, bReplace, nPos,
+                                    bLink, false/*bReplace*/, nPos,
                                     false, nullptr, true, true, false );
 
             aBookmarkList.clear();
@@ -407,7 +393,7 @@ bool FuInsertFile::InsSDDinDrMode(SfxMedium* pMedium)
 
         if( bNameOK )
             bOK = mpDoc->InsertBookmarkAsObject( aObjectBookmarkList, aExchangeList,
-                                bLink, nullptr, nullptr);
+                                nullptr, nullptr, false );
 
         if( pDlg->IsRemoveUnnessesaryMasterPages() )
             mpDoc->RemoveUnnecessaryMasterPages();
@@ -419,9 +405,7 @@ bool FuInsertFile::InsSDDinDrMode(SfxMedium* pMedium)
 void FuInsertFile::InsTextOrRTFinDrMode(SfxMedium* pMedium)
 {
     SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
-    std::unique_ptr<AbstractSdInsertPagesObjsDlg> pDlg(pFact ? pFact->CreateSdInsertPagesObjsDlg( mpDoc, nullptr, aFile ) : nullptr);
-    if( !pDlg )
-        return;
+    ScopedVclPtr<AbstractSdInsertPagesObjsDlg> pDlg( pFact->CreateSdInsertPagesObjsDlg(mpViewShell->GetActiveWindow(), mpDoc, nullptr, aFile) );
 
     mpDocSh->SetWaitCursor( false );
 
@@ -431,12 +415,12 @@ void FuInsertFile::InsTextOrRTFinDrMode(SfxMedium* pMedium)
     if( nRet == RET_OK )
     {
         // selected file format: text, RTF or HTML (default is text)
-        sal_uInt16 nFormat = EE_FORMAT_TEXT;
+        EETextFormat nFormat = EETextFormat::Text;
 
         if( aFilterName.indexOf( "Rich") != -1 )
-            nFormat = EE_FORMAT_RTF;
+            nFormat = EETextFormat::Rtf;
         else if( aFilterName.indexOf( "HTML" ) != -1 )
-            nFormat = EE_FORMAT_HTML;
+            nFormat = EETextFormat::Html;
 
         /* create our own outline since:
            - it is possible that the document outliner is actually used in the
@@ -444,10 +428,10 @@ void FuInsertFile::InsTextOrRTFinDrMode(SfxMedium* pMedium)
            - the draw outliner of the drawing engine has to draw something in
              between
            - the global outliner could be used in SdPage::CreatePresObj */
-        std::unique_ptr<SdrOutliner> pOutliner(new ::sd::Outliner( mpDoc, OUTLINERMODE_TEXTOBJECT ));
+        std::unique_ptr<SdrOutliner> pOutliner(new SdOutliner( mpDoc, OutlinerMode::TextObject ));
 
         // set reference device
-        pOutliner->SetRefDevice( SD_MOD()->GetRefDevice( *mpDocSh ) );
+        pOutliner->SetRefDevice( SD_MOD()->GetVirtualRefDevice() );
 
         SdPage* pPage = static_cast<DrawViewShell*>(mpViewShell)->GetActualPage();
         aLayoutName = pPage->GetLayoutName();
@@ -461,17 +445,18 @@ void FuInsertFile::InsTextOrRTFinDrMode(SfxMedium* pMedium)
         assert(pStream && "No InStream!");
         pStream->Seek( 0 );
 
-        sal_uLong nErr = pOutliner->Read( *pStream, pMedium->GetBaseURL(), nFormat, mpDocSh->GetHeaderAttributes() );
+        ErrCode nErr = pOutliner->Read( *pStream, pMedium->GetBaseURL(), nFormat, mpDocSh->GetHeaderAttributes() );
 
         if (nErr || pOutliner->GetEditEngine().GetText().isEmpty())
         {
-            ScopedVclPtrInstance< MessageDialog > aErrorBox(mpWindow, SD_RESSTR(STR_READ_DATA_ERROR));
-            aErrorBox->Execute();
+            std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(mpWindow->GetFrameWeld(),
+                                                           VclMessageType::Warning, VclButtonsType::Ok, SdResId(STR_READ_DATA_ERROR)));
+            xErrorBox->run();
         }
         else
         {
             // is it a master page?
-            if (static_cast<DrawViewShell*>(mpViewShell)->GetEditMode() == EM_MASTERPAGE &&
+            if (static_cast<DrawViewShell*>(mpViewShell)->GetEditMode() == EditMode::MasterPage &&
                 !pPage->IsMasterPage())
             {
                 pPage = static_cast<SdPage*>(&(pPage->TRG_GetMasterPage()));
@@ -485,7 +470,7 @@ void FuInsertFile::InsTextOrRTFinDrMode(SfxMedium* pMedium)
             {
                 SdrObject* pObj = mpView->GetTextEditObject();
                 if( pObj &&
-                    pObj->GetObjInventor()   == SdrInventor &&
+                    pObj->GetObjInventor()   == SdrInventor::Default &&
                     pObj->GetObjIdentifier() == OBJ_TITLETEXT &&
                     pOutliner->GetParagraphCount() > 1 )
                 {
@@ -500,43 +485,44 @@ void FuInsertFile::InsTextOrRTFinDrMode(SfxMedium* pMedium)
                 }
             }
 
-            OutlinerParaObject* pOPO = pOutliner->CreateParaObject();
+            std::unique_ptr<OutlinerParaObject> pOPO = pOutliner->CreateParaObject();
 
             if (pOutlinerView)
             {
                 pOutlinerView->InsertText(*pOPO);
-                delete pOPO;
             }
             else
             {
-                SdrRectObj* pTO = new SdrRectObj(OBJ_TEXT);
-                pTO->SetOutlinerParaObject(pOPO);
+                SdrRectObj* pTO = new SdrRectObj(
+                    mpView->getSdrModelFromSdrView(),
+                    OBJ_TEXT);
+                pTO->SetOutlinerParaObject(std::move(pOPO));
 
                 const bool bUndo = mpView->IsUndoEnabled();
                 if( bUndo )
-                    mpView->BegUndo(SD_RESSTR(STR_UNDO_INSERT_TEXTFRAME));
+                    mpView->BegUndo(SdResId(STR_UNDO_INSERT_TEXTFRAME));
                 pPage->InsertObject(pTO);
 
                 /* can be bigger as the maximal allowed size:
                    limit object size if necessary */
                 Size aSize(pOutliner->CalcTextSize());
                 Size aMaxSize = mpDoc->GetMaxObjSize();
-                aSize.Height() = std::min(aSize.Height(), aMaxSize.Height());
-                aSize.Width()  = std::min(aSize.Width(), aMaxSize.Width());
+                aSize.setHeight( std::min(aSize.Height(), aMaxSize.Height()) );
+                aSize.setWidth( std::min(aSize.Width(), aMaxSize.Width()) );
                 aSize = mpWindow->LogicToPixel(aSize);
 
                 // put it at the center of the window
                 Size aTemp(mpWindow->GetOutputSizePixel());
                 Point aPos(aTemp.Width() / 2, aTemp.Height() / 2);
-                aPos.X() -= aSize.Width() / 2;
-                aPos.Y() -= aSize.Height() / 2;
+                aPos.AdjustX( -(aSize.Width() / 2) );
+                aPos.AdjustY( -(aSize.Height() / 2) );
                 aSize = mpWindow->PixelToLogic(aSize);
                 aPos = mpWindow->PixelToLogic(aPos);
-                pTO->SetLogicRect(Rectangle(aPos, aSize));
+                pTO->SetLogicRect(::tools::Rectangle(aPos, aSize));
 
                 if (pDlg->IsLink())
                 {
-                    pTO->SetTextLink(aFile, aFilterName, osl_getThreadTextEncoding() );
+                    pTO->SetTextLink(aFile, aFilterName );
                 }
 
                 if( bUndo )
@@ -552,12 +538,12 @@ void FuInsertFile::InsTextOrRTFinDrMode(SfxMedium* pMedium)
 void FuInsertFile::InsTextOrRTFinOlMode(SfxMedium* pMedium)
 {
     // selected file format: text, RTF or HTML (default is text)
-    sal_uInt16 nFormat = EE_FORMAT_TEXT;
+    EETextFormat nFormat = EETextFormat::Text;
 
     if( aFilterName.indexOf( "Rich") != -1 )
-        nFormat = EE_FORMAT_RTF;
+        nFormat = EETextFormat::Rtf;
     else if( aFilterName.indexOf( "HTML" ) != -1 )
-        nFormat = EE_FORMAT_HTML;
+        nFormat = EETextFormat::Html;
 
     ::Outliner&    rDocliner = static_cast<OutlineView*>(mpView)->GetOutliner();
 
@@ -582,7 +568,7 @@ void FuInsertFile::InsTextOrRTFinOlMode(SfxMedium* pMedium)
             nPage++;
         pPara = rDocliner.GetParagraph( nPos - 1 );
     }
-    SdPage* pPage = mpDoc->GetSdPage(nPage, PK_STANDARD);
+    SdPage* pPage = mpDoc->GetSdPage(nPage, PageKind::Standard);
     aLayoutName = pPage->GetLayoutName();
     sal_Int32 nIndex = aLayoutName.indexOf(SD_LT_SEPARATOR);
     if( nIndex != -1 )
@@ -594,23 +580,24 @@ void FuInsertFile::InsTextOrRTFinOlMode(SfxMedium* pMedium)
        - the draw outliner of the drawing engine has to draw something in
          between
        - the global outliner could be used in SdPage::CreatePresObj */
-    std::unique_ptr< ::Outliner> pOutliner(new ::Outliner( &mpDoc->GetItemPool(), OUTLINERMODE_OUTLINEOBJECT ));
+    std::unique_ptr< ::Outliner> pOutliner(new ::Outliner( &mpDoc->GetItemPool(), OutlinerMode::OutlineObject ));
     pOutliner->SetStyleSheetPool(static_cast<SfxStyleSheetPool*>(mpDoc->GetStyleSheetPool()));
 
     // set reference device
-    pOutliner->SetRefDevice(SD_MOD()->GetRefDevice( *mpDocSh ));
+    pOutliner->SetRefDevice(SD_MOD()->GetVirtualRefDevice());
     pOutliner->SetPaperSize(Size(0x7fffffff, 0x7fffffff));
 
     SvStream* pStream = pMedium->GetInStream();
     DBG_ASSERT( pStream, "No InStream!" );
     pStream->Seek( 0 );
 
-    sal_uLong nErr = pOutliner->Read(*pStream, pMedium->GetBaseURL(), nFormat, mpDocSh->GetHeaderAttributes());
+    ErrCode nErr = pOutliner->Read(*pStream, pMedium->GetBaseURL(), nFormat, mpDocSh->GetHeaderAttributes());
 
     if (nErr || pOutliner->GetEditEngine().GetText().isEmpty())
     {
-        ScopedVclPtrInstance< MessageDialog > aErrorBox(mpWindow, SD_RESSTR(STR_READ_DATA_ERROR));
-        aErrorBox->Execute();
+        std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(mpWindow->GetFrameWeld(),
+                                                       VclMessageType::Warning, VclButtonsType::Ok, SdResId(STR_READ_DATA_ERROR)));
+        xErrorBox->run();
     }
     else
     {
@@ -629,14 +616,14 @@ void FuInsertFile::InsTextOrRTFinOlMode(SfxMedium* pMedium)
 
         mpDocSh->SetWaitCursor( false );
 
-        std::unique_ptr<SfxProgress> pProgress(new SfxProgress( mpDocSh, SD_RESSTR(STR_CREATE_PAGES), nNewPages));
-        if( pProgress )
-            pProgress->SetState( 0, 100 );
+        std::unique_ptr<SfxProgress> pProgress(new SfxProgress( mpDocSh, SdResId(STR_CREATE_PAGES), nNewPages));
+        pProgress->SetState( 0, 100 );
 
         nNewPages = 0;
 
+        ViewShellId nViewShellId = mpViewShell ? mpViewShell->GetViewShellBase().GetViewShellId() : ViewShellId(-1);
         rDocliner.GetUndoManager().EnterListAction(
-                                    SD_RESSTR(STR_UNDO_INSERT_FILE), OUString() );
+                                    SdResId(STR_UNDO_INSERT_FILE), OUString(), 0, nViewShellId );
 
         sal_Int32 nSourcePos = 0;
         SfxStyleSheet* pStyleSheet = pPage->GetStyleSheetForPresObj( PRESOBJ_OUTLINE );
@@ -662,8 +649,7 @@ void FuInsertFile::InsTextOrRTFinOlMode(SfxMedium* pMedium)
             if( Outliner::HasParaFlag( pSourcePara, ParaFlag::ISPAGE ) )
             {
                 nNewPages++;
-                if( pProgress )
-                    pProgress->SetState( nNewPages );
+                pProgress->SetState( nNewPages );
             }
 
             pSourcePara = pOutliner->GetParagraph( ++nPos );
@@ -686,18 +672,18 @@ bool FuInsertFile::InsSDDinOlMode(SfxMedium* pMedium)
     // transfer Outliner content to SdDrawDocument
     pOlView->PrepareClose();
 
-    // einlesen wie im Zeichenmodus
+    // read in like in the character mode
     if (InsSDDinDrMode(pMedium))
     {
         ::Outliner* pOutliner = pOlView->GetViewByWindow(mpWindow)->GetOutliner();
 
         // cut notification links temporarily
-        Link<::Outliner*,void> aOldParagraphInsertedHdl = pOutliner->GetParaInsertedHdl();
-        pOutliner->SetParaInsertedHdl( Link<::Outliner*,void>());
-        Link<::Outliner*,void> aOldParagraphRemovingHdl = pOutliner->GetParaRemovingHdl();
-        pOutliner->SetParaRemovingHdl( Link<::Outliner*,void>());
-        Link<::Outliner*,void> aOldDepthChangedHdl = pOutliner->GetDepthChangedHdl();
-        pOutliner->SetDepthChangedHdl( Link<::Outliner*,void>());
+        Link<Outliner::ParagraphHdlParam,void> aOldParagraphInsertedHdl = pOutliner->GetParaInsertedHdl();
+        pOutliner->SetParaInsertedHdl( Link<Outliner::ParagraphHdlParam,void>());
+        Link<Outliner::ParagraphHdlParam,void> aOldParagraphRemovingHdl = pOutliner->GetParaRemovingHdl();
+        pOutliner->SetParaRemovingHdl( Link<Outliner::ParagraphHdlParam,void>());
+        Link<Outliner::DepthChangeHdlParam,void> aOldDepthChangedHdl = pOutliner->GetDepthChangedHdl();
+        pOutliner->SetDepthChangedHdl( Link<::Outliner::DepthChangeHdlParam,void>());
         Link<::Outliner*,void> aOldBeginMovingHdl = pOutliner->GetBeginMovingHdl();
         pOutliner->SetBeginMovingHdl( Link<::Outliner*,void>());
         Link<::Outliner*,void> aOldEndMovingHdl = pOutliner->GetEndMovingHdl();

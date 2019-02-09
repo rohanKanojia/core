@@ -17,19 +17,15 @@
 
 #include <vcl/dialog.hxx>
 #include <vcl/button.hxx>
-#include <vcl/tabctrl.hxx>
-#include <vcl/tabpage.hxx>
+#include <vcl/fixed.hxx>
+#include <vcl/weld.hxx>
 #include <com/sun/star/frame/XDesktop2.hpp>
 
-#include <sfx2/templateabstractview.hxx>
+#include <sfx2/templatelocalview.hxx>
 
 class Edit;
 class PopupMenu;
-class SfxTemplateInfoDlg;
-class TemplateAbstractView;
 class TemplateLocalView;
-class TemplateRemoteView;
-class TemplateRepository;
 class TemplateSearchView;
 class ThumbnailView;
 class ThumbnailViewItem;
@@ -50,66 +46,61 @@ public:
 
     SfxTemplateManagerDlg(vcl::Window *parent = nullptr);
 
-    virtual ~SfxTemplateManagerDlg();
+    virtual ~SfxTemplateManagerDlg() override;
     virtual void dispose() override;
-
-    void setSaveMode();
+    virtual short Execute() override;
+    virtual bool EventNotify( NotifyEvent& rNEvt ) override;
 
     void setDocumentModel (const css::uno::Reference<css::frame::XModel> &rModel);
 
-    DECL_LINK_TYPED(ActivatePageHdl, TabControl*, void);
+protected:
 
-private:
+    void getApplicationSpecificSettings();
 
     void readSettings ();
 
     void writeSettings ();
 
-    DECL_LINK_TYPED(TBXViewHdl, ToolBox*, void);
-    DECL_LINK_TYPED(TBXActionHdl, ToolBox*, void);
-    DECL_LINK_TYPED(TBXTemplateHdl, ToolBox*, void);
-    DECL_LINK_TYPED(TBXDropdownHdl, ToolBox*, void);
+    void fillFolderComboBox();
 
-    DECL_LINK_TYPED(OkClickHdl, Button*, void);
+    DECL_LINK(TBXDropdownHdl, ToolBox*, void);
 
-    DECL_LINK_TYPED(TVItemStateHdl, const ThumbnailViewItem*, void);
+    DECL_LINK(SelectApplicationHdl, ListBox&, void);
+    DECL_LINK(SelectRegionHdl, ListBox&, void);
 
-    DECL_LINK_TYPED(MenuSelectHdl, Menu*, bool);
-    DECL_LINK_TYPED(MoveMenuSelectHdl, Menu*, bool);
-    DECL_LINK_TYPED(RepositoryMenuSelectHdl, Menu*, bool);
-    DECL_LINK_TYPED(DefaultTemplateMenuSelectHdl, Menu*, bool);
+    DECL_LINK(OkClickHdl, Button*, void);
+    DECL_LINK(MoveClickHdl, Button*, void);
+    DECL_LINK(ExportClickHdl, Button*, void);
+    DECL_LINK(ImportClickHdl, Button*, void);
+    DECL_STATIC_LINK(SfxTemplateManagerDlg, LinkClickHdl, Button*, void);
 
-    DECL_LINK_TYPED(OpenRegionHdl, void*, void);
-    DECL_LINK_TYPED(OpenTemplateHdl, ThumbnailViewItem*, void);
+    DECL_LINK(TVItemStateHdl, const ThumbnailViewItem*, void);
 
-    DECL_LINK_TYPED(SearchUpdateHdl, Edit&, void);
+    DECL_LINK(MenuSelectHdl, Menu*, bool);
+    DECL_LINK(DefaultTemplateMenuSelectHdl, Menu*, bool);
 
-    void OnTemplateImport ();
-    void OnTemplateSearch ();
+    DECL_LINK(OpenRegionHdl, void*, void);
+    DECL_LINK(CreateContextMenuHdl, ThumbnailViewItem*, void);
+    DECL_LINK(OpenTemplateHdl, ThumbnailViewItem*, void);
+    DECL_LINK(EditTemplateHdl, ThumbnailViewItem*, void);
+    DECL_LINK(DeleteTemplateHdl, ThumbnailViewItem*, void);
+    DECL_LINK(DefaultTemplateHdl, ThumbnailViewItem*, void);
+
+    DECL_LINK(SearchUpdateHdl, Edit&, void);
+    DECL_LINK(GetFocusHdl, Control&, void);
+
+    void OnTemplateImportCategory(const OUString& sCategory);
     static void OnTemplateLink ();
     void OnTemplateOpen ();
-    void OnTemplateEdit ();
-    void OnTemplateProperties ();
-    void OnTemplateDelete ();
-    void OnTemplateAsDefault ();
     void OnTemplateExport ();
 
     void OnTemplateState (const ThumbnailViewItem *pItem);
 
-    void OnFolderNew ();
-    void OnFolderDelete ();
-
-    void OnRegionState (const ThumbnailViewItem *pItem);
-
-    void OnRepositoryDelete ();
-    void OnTemplateSaveAs ();
-
-    void createRepositoryMenu ();
+    void OnCategoryNew ();
+    void OnCategoryRename();
+    void OnCategoryDelete();
 
     void createDefaultTemplateMenu ();
-
-    // Exchange view between local/online view.
-    void switchMainView (bool bDisplayLocal);
 
     /**
      *
@@ -119,8 +110,6 @@ private:
 
     void localMoveTo (sal_uInt16 nMenuId);
 
-    void remoteMoveTo (const sal_uInt16 nMenuId);
-
     /**
      *
      * Move search result templates stored in the filesystem to another folder.
@@ -129,47 +118,96 @@ private:
 
     void localSearchMoveTo (sal_uInt16 nMenuId);
 
-    // Remote repositories handling methods
-    void loadRepositories ();
+    /// Return filter according to the currently selected application filter.
+    FILTER_APPLICATION getCurrentApplicationFilter();
 
-    const std::vector<TemplateRepository*>& getRepositories () const { return maRepositories; }
+protected:
 
-    bool insertRepository (const OUString &rName, const OUString &rURL);
+    VclPtr<Edit> mpSearchFilter;
+    VclPtr<ListBox> mpCBApp;
+    VclPtr<ListBox> mpCBFolder;
 
-    bool deleteRepository (const sal_uInt16 nRepositoryId);
-
-    void syncRepositories () const;
-
-    /// Return filter according to the currently selected tab page.
-    FILTER_APPLICATION getCurrentFilter();
-
-private:
-
-    VclPtr<TabControl> mpTabControl;
-
-    VclPtr<Edit> mpSearchEdit;
     VclPtr<PushButton> mpOKButton;
-    VclPtr<ToolBox> mpViewBar;
+    VclPtr<PushButton> mpMoveButton;
+    VclPtr<PushButton> mpExportButton;
+    VclPtr<PushButton> mpImportButton;
+    VclPtr<PushButton> mpLinkButton;
+    VclPtr<CheckBox> mpCBXHideDlg;
     VclPtr<ToolBox> mpActionBar;
-    VclPtr<ToolBox> mpTemplateBar;
     VclPtr<TemplateSearchView> mpSearchView;
-    VclPtr<TemplateAbstractView> mpCurView;
     VclPtr<TemplateLocalView> mpLocalView;
-    VclPtr<TemplateRemoteView> mpRemoteView;
-    PopupMenu *mpActionMenu;
-    PopupMenu *mpRepositoryMenu;
-    PopupMenu *mpTemplateDefaultMenu;
+    VclPtr<PopupMenu> mpActionMenu;
+    VclPtr<PopupMenu> mpTemplateDefaultMenu;
 
     std::set<const ThumbnailViewItem*,selection_cmp_fn> maSelTemplates;
-    std::set<const ThumbnailViewItem*,selection_cmp_fn> maSelFolders;
 
-    bool mbIsSaveMode;  ///< Flag that indicates if we are in save mode or not.
     css::uno::Reference< css::frame::XModel > m_xModel;
     css::uno::Reference< css::frame::XDesktop2 > mxDesktop;
-
-    bool mbIsSynced; ///< Tells whether maRepositories is synchronized with the user config
-    std::vector<TemplateRepository*> maRepositories; ///< Stores the remote repositories for templates
 };
+
+//  class SfxTemplateCategoryDialog -------------------------------------------------------------------
+
+class SFX2_DLLPUBLIC SfxTemplateCategoryDialog : public weld::GenericDialogController
+{
+private:
+    OUString   msSelectedCategory;
+    bool       mbIsNewCategory;
+
+    std::unique_ptr<weld::TreeView> mxLBCategory;
+    std::unique_ptr<weld::Label> mxSelectLabel;
+    std::unique_ptr<weld::Entry> mxNewCategoryEdit;
+    std::unique_ptr<weld::Label> mxCreateLabel;
+    std::unique_ptr<weld::Button> mxOKButton;
+
+public:
+    DECL_LINK(NewCategoryEditHdl, weld::Entry&, void);
+    DECL_LINK(SelectCategoryHdl, weld::TreeView&, void);
+
+    void SetCategoryLBEntries(std::vector<OUString> names);
+
+    void HideNewCategoryOption();
+
+    const OUString& GetSelectedCategory() const {
+        return msSelectedCategory;
+    };
+
+    void SetSelectLabelText(OUString const & sText) const {
+        mxSelectLabel->set_label(sText);
+    };
+
+    bool IsNewCategoryCreated() const {
+        return mbIsNewCategory;
+    }
+
+public:
+
+    explicit SfxTemplateCategoryDialog(weld::Window* pParent);
+
+    virtual ~SfxTemplateCategoryDialog() override;
+};
+
+
+//  class SfxTemplateSelectionDialog -------------------------------------------------------------------
+
+class SFX2_DLLPUBLIC SfxTemplateSelectionDlg : public SfxTemplateManagerDlg
+{
+public:
+    SfxTemplateSelectionDlg(vcl::Window *parent);
+
+    virtual ~SfxTemplateSelectionDlg() override;
+    virtual void dispose() override;
+    virtual short Execute() override;
+
+    OUString const & getTemplatePath() const { return msTemplatePath; };
+    bool IsStartWithTemplate() const { return mpCBXHideDlg->IsChecked(); };
+
+private:
+    DECL_LINK(OpenTemplateHdl, ThumbnailViewItem*, void);
+    DECL_LINK(OkClickHdl, Button*, void);
+
+    OUString   msTemplatePath;
+};
+
 
 #endif // INCLUDED_SFX2_INC_TEMPLATEDLG_HXX
 

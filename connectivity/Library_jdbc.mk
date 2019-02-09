@@ -34,7 +34,6 @@ $(eval $(call gb_Library_use_libraries,jdbc,\
 	utl \
 	jvmfwk \
 	comphelper \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,jdbc,\
@@ -69,5 +68,8 @@ $(eval $(call gb_Library_add_exception_objects,jdbc,\
 	connectivity/source/drivers/jdbc/tools \
 	connectivity/source/drivers/jdbc/ContextClassLoader \
 ))
+
+# Runtime dependency for unit-tests
+$(call gb_Library_get_target,jdbc) :| $(call gb_Library_get_target,affine_uno_uno)
 
 # vim: set noet sw=4 ts=4:

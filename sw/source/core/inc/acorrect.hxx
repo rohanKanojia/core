@@ -20,6 +20,9 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_ACORRECT_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_ACORRECT_HXX
 
+#include <memory>
+
+#include <tools/solar.h>
 #include <editeng/svxacorr.hxx>
 #include <swundo.hxx>
 
@@ -31,11 +34,10 @@ class SfxItemSet;
 
 class SwDontExpandItem
 {
-    SfxItemSet* pDontExpItems;
+    std::unique_ptr<SfxItemSet> pDontExpItems;
 
 public:
-    SwDontExpandItem() :
-        pDontExpItems(nullptr){}
+    SwDontExpandItem() {}
     ~SwDontExpandItem();
 
     void SaveDontExpandItems( const SwPosition& rPos );
@@ -47,15 +49,16 @@ class SwAutoCorrDoc : public SvxAutoCorrDoc
 {
     SwEditShell& rEditSh;
     SwPaM& rCursor;
-    SwNodeIndex* pIdx;
+    std::unique_ptr<SwNodeIndex> pIdx;
     int m_nEndUndoCounter;
     bool    bUndoIdInitialized;
 
     void DeleteSel( SwPaM& rDelPam );
+    void DeleteSelImpl(SwPaM & rDelPam);
 
 public:
     SwAutoCorrDoc( SwEditShell& rEditShell, SwPaM& rPam, sal_Unicode cIns = 0 );
-    virtual ~SwAutoCorrDoc();
+    virtual ~SwAutoCorrDoc() override;
 
     virtual bool Delete( sal_Int32 nStt, sal_Int32 nEnd ) override;
     virtual bool Insert( sal_Int32 nPos, const OUString& rText ) override;
@@ -82,22 +85,23 @@ public:
     //  - FnCapitalStartWord and
     //  - FnCapitalStartSentence.
     // Afterwards the words can be added into exception list if needed.
-    virtual void SaveCpltSttWord( sal_uLong nFlag, sal_Int32 nPos,
+    virtual void SaveCpltSttWord( ACFlags nFlag, sal_Int32 nPos,
                                     const OUString& rExceptWord, sal_Unicode cChar ) override;
     virtual LanguageType GetLanguage( sal_Int32 nPos ) const override;
 };
 
 class SwAutoCorrExceptWord
 {
-    OUString m_sWord;
-    sal_uLong m_nFlags, m_nNode;
-    sal_Int32 m_nContent;
-    sal_Unicode m_cChar;
-    LanguageType m_eLanguage;
+    OUString const m_sWord;
+    ACFlags const m_nFlags;
+    sal_uLong const m_nNode;
+    sal_Int32 const m_nContent;
+    sal_Unicode const m_cChar;
+    LanguageType const m_eLanguage;
     bool m_bDeleted;
 
 public:
-    SwAutoCorrExceptWord(sal_uLong nAFlags, sal_uLong nNd, sal_Int32 nContent,
+    SwAutoCorrExceptWord(ACFlags nAFlags, sal_uLong nNd, sal_Int32 nContent,
                          const OUString& rWord, sal_Unicode cChr,
                          LanguageType eLang)
         : m_sWord(rWord), m_nFlags(nAFlags), m_nNode(nNd), m_nContent(nContent),

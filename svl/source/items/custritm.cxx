@@ -31,24 +31,23 @@ bool CntUnencodedStringItem::operator ==(const SfxPoolItem & rItem) const
     DBG_ASSERT(dynamic_cast<const CntUnencodedStringItem*>( &rItem ) !=  nullptr,
                "CntUnencodedStringItem::operator ==(): Bad type");
     return m_aValue
-            == (static_cast< const CntUnencodedStringItem * >(&rItem))->
+            == static_cast< const CntUnencodedStringItem * >(&rItem)->
                 m_aValue;
 }
 
 // virtual
-bool CntUnencodedStringItem::GetPresentation(SfxItemPresentation, SfxMapUnit,
-                                        SfxMapUnit, OUString & rText,
-                                        const IntlWrapper *) const
+bool CntUnencodedStringItem::GetPresentation(SfxItemPresentation, MapUnit,
+                                        MapUnit, OUString & rText,
+                                        const IntlWrapper&) const
 {
     rText = m_aValue;
     return true;
 }
 
 // virtual
-bool CntUnencodedStringItem::QueryValue(css::uno::Any& rVal, sal_uInt8)
-    const
+bool CntUnencodedStringItem::QueryValue(css::uno::Any& rVal, sal_uInt8) const
 {
-    rVal <<= OUString(m_aValue);
+    rVal <<= m_aValue;
     return true;
 }
 

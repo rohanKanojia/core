@@ -17,40 +17,37 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "thesdlg.hxx"
+#include <thesdlg.hxx>
 #include "thesdlg_impl.hxx"
-#include "cuires.hrc"
-#include "dialmgr.hxx"
+#include <strings.hrc>
+#include <dialmgr.hxx>
 
+#include <tools/debug.hxx>
 #include <svl/lngmisc.hxx>
 #include <vcl/graphicfilter.hxx>
-#include <svtools/svlbitm.hxx>
-#include <svtools/treelistbox.hxx>
-#include "svtools/treelistentry.hxx"
-#include "svtools/viewdataentry.hxx"
+#include <vcl/svlbitm.hxx>
+#include <vcl/treelistbox.hxx>
+#include <vcl/treelistentry.hxx>
+#include <vcl/viewdataentry.hxx>
 #include <vcl/wrkwin.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/builderfactory.hxx>
 #include <svx/dlgutil.hxx>
-#include <svx/dialmgr.hxx>
 #include <svx/svxerr.hxx>
 #include <editeng/unolingu.hxx>
 #include <svx/langbox.hxx>
 #include <svtools/langtab.hxx>
 #include <unotools/lingucfg.hxx>
+#include <i18nlangtag/languagetag.hxx>
 #include <i18nlangtag/mslangid.hxx>
-#include <comphelper/processfactory.hxx>
 #include <comphelper/string.hxx>
 #include <osl/file.hxx>
-#include <o3tl/make_unique.hxx>
 
 #include <stack>
 #include <algorithm>
 
 #include <com/sun/star/linguistic2/XThesaurus.hpp>
 #include <com/sun/star/linguistic2/XMeaning.hpp>
-#include <com/sun/star/linguistic2/LinguServiceManager.hpp>
 
 using namespace ::com::sun::star;
 
@@ -58,12 +55,13 @@ using namespace ::com::sun::star;
 
 LookUpComboBox::LookUpComboBox(vcl::Window *pParent)
     : ComboBox(pParent, WB_LEFT|WB_DROPDOWN|WB_VCENTER|WB_3DLOOK|WB_TABSTOP)
+    , m_aModifyIdle("cui LookUpComboBox Modify")
     , m_pDialog(nullptr)
 {
     EnableAutoSize(true);
 
-    m_aModifyIdle.SetIdleHdl( LINK( this, LookUpComboBox, ModifyTimer_Hdl ) );
-    m_aModifyIdle.SetPriority( SchedulerPriority::LOWEST );
+    m_aModifyIdle.SetInvokeHandler( LINK( this, LookUpComboBox, ModifyTimer_Hdl ) );
+    m_aModifyIdle.SetPriority( TaskPriority::LOWEST );
 
     EnableAutocomplete( false );
 }
@@ -91,7 +89,7 @@ void LookUpComboBox::Modify()
     m_aModifyIdle.Start();
 }
 
-IMPL_LINK_NOARG_TYPED( LookUpComboBox, ModifyTimer_Hdl, Idle *, void )
+IMPL_LINK_NOARG( LookUpComboBox, ModifyTimer_Hdl, Timer *, void )
 {
     m_pDialog->LookUp( GetText() );
     m_aModifyIdle.Stop();
@@ -155,10 +153,10 @@ void AlternativesString::Paint(const Point& rPos, SvTreeListBox& /*rDev*/, vcl::
         vcl::Font aFont(rRenderContext.GetFont());
         aFont.SetWeight(WEIGHT_BOLD);
         rRenderContext.SetFont(aFont);
-        aPos.X() = 0;
+        aPos.setX( 0 );
     }
     else
-        aPos.X() += 5;
+        aPos.AdjustX(5 );
     rRenderContext.DrawText(aPos, GetText());
     rRenderContext.Pop();
 }
@@ -167,7 +165,8 @@ ThesaurusAlternativesCtrl::ThesaurusAlternativesCtrl(vcl::Window* pParent)
     : SvxCheckListBox(pParent)
     , m_pDialog(nullptr)
 {
-    SetStyle( GetStyle() | WB_CLIPCHILDREN | WB_HSCROLL | WB_FORCE_MAKEVISIBLE );
+    SetStyle( GetStyle() | WB_CLIPCHILDREN | WB_HSCROLL );
+    SetForceMakeVisible(true);
     SetHighlightRange();
 }
 
@@ -228,10 +227,10 @@ SvTreeListEntry * ThesaurusAlternativesCtrl::AddEntry( sal_Int32 nVal, const OUS
     {
         aText = OUString::number( nVal ) + ". ";
     }
-    pEntry->AddItem(o3tl::make_unique<SvLBoxString>(OUString())); // add empty column
+    pEntry->AddItem(std::make_unique<SvLBoxString>(OUString())); // add empty column
     aText += rText;
-    pEntry->AddItem(o3tl::make_unique<SvLBoxContextBmp>(Image(), Image(), false)); // otherwise crash
-    pEntry->AddItem(o3tl::make_unique<AlternativesString>(*this, aText));
+    pEntry->AddItem(std::make_unique<SvLBoxContextBmp>(Image(), Image(), false)); // otherwise crash
+    pEntry->AddItem(std::make_unique<AlternativesString>(*this, aText));
 
     SetExtraData( pEntry, AlternativesExtraData( rText, bIsHeader ) );
     GetModel()->Insert( pEntry );
@@ -254,15 +253,15 @@ void ThesaurusAlternativesCtrl::KeyInput( const KeyEvent& rKEvt )
         SvxCheckListBox::KeyInput( rKEvt );
 }
 
-void ThesaurusAlternativesCtrl::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void ThesaurusAlternativesCtrl::Paint(vcl::RenderContext& rRenderContext, const ::tools::Rectangle& rRect)
 {
     if (!m_pDialog->WordFound())
     {
         Size aTextSize(rRenderContext.GetTextWidth(m_pDialog->getErrStr()), rRenderContext.GetTextHeight());
         aTextSize  = rRenderContext.LogicToPixel(aTextSize);
         Point aPos;
-        aPos.X() += GetSizePixel().Width() / 2  - aTextSize.Width() / 2;
-        aPos.Y() += GetSizePixel().Height() / 2;
+        aPos.AdjustX(GetSizePixel().Width() / 2  - aTextSize.Width() / 2 );
+        aPos.AdjustY(GetSizePixel().Height() / 2 );
         aPos = rRenderContext.PixelToLogic(aPos);
         rRenderContext.DrawText(aPos, m_pDialog->getErrStr());
     }
@@ -274,7 +273,6 @@ uno::Sequence< uno::Reference< linguistic2::XMeaning > > SvxThesaurusDialog::que
         OUString& rTerm,
         const lang::Locale& rLocale,
         const beans::PropertyValues& rProperties )
-    throw(lang::IllegalArgumentException, uno::RuntimeException)
 {
     uno::Sequence< uno::Reference< linguistic2::XMeaning > > aMeanings(
             xThesaurus->queryMeanings( rTerm, rLocale, rProperties ) );
@@ -330,12 +328,12 @@ bool SvxThesaurusDialog::UpdateAlternativesBox_Impl()
 
 void SvxThesaurusDialog::LookUp( const OUString &rText )
 {
-    if (OUString(rText) != m_pWordCB->GetText()) // avoid moving of the cursor if the text is the same
+    if (rText != m_pWordCB->GetText()) // avoid moving of the cursor if the text is the same
         m_pWordCB->SetText( rText );
     LookUp_Impl();
 }
 
-IMPL_LINK_TYPED( SvxThesaurusDialog, LeftBtnHdl_Impl, Button *, pBtn, void )
+IMPL_LINK( SvxThesaurusDialog, LeftBtnHdl_Impl, Button *, pBtn, void )
 {
     if (pBtn && aLookUpHistory.size() >= 2)
     {
@@ -346,9 +344,9 @@ IMPL_LINK_TYPED( SvxThesaurusDialog, LeftBtnHdl_Impl, Button *, pBtn, void )
     }
 }
 
-IMPL_LINK_TYPED( SvxThesaurusDialog, LanguageHdl_Impl, ListBox&, rLB, void )
+IMPL_LINK( SvxThesaurusDialog, LanguageHdl_Impl, ListBox&, rLB, void )
 {
-    OUString aLangText( rLB.GetSelectEntry() );
+    OUString aLangText( rLB.GetSelectedEntry() );
     LanguageType nLang = SvtLanguageTable::GetLanguageType( aLangText );
     DBG_ASSERT( nLang != LANGUAGE_NONE && nLang != LANGUAGE_DONTKNOW, "failed to get language" );
     if (xThesaurus->hasLocale( LanguageTag::convertToLocale( nLang ) ))
@@ -376,11 +374,11 @@ void SvxThesaurusDialog::LookUp_Impl()
     m_pLeftBtn->Enable( aLookUpHistory.size() > 1 );
 }
 
-IMPL_LINK_TYPED( SvxThesaurusDialog, WordSelectHdl_Impl, ComboBox&, rBox, void )
+IMPL_LINK( SvxThesaurusDialog, WordSelectHdl_Impl, ComboBox&, rBox, void )
 {
     if (!m_pWordCB->IsTravelSelect())  // act only upon return key and not when traveling with cursor keys
     {
-        const sal_Int32 nPos = rBox.GetSelectEntryPos();
+        const sal_Int32 nPos = rBox.GetSelectedEntryPos();
         OUString aStr( rBox.GetEntry( nPos ) );
         aStr = linguistic::GetThesaurusReplaceText( aStr );
         m_pWordCB->SetText( aStr );
@@ -388,7 +386,7 @@ IMPL_LINK_TYPED( SvxThesaurusDialog, WordSelectHdl_Impl, ComboBox&, rBox, void )
     }
 }
 
-IMPL_LINK_TYPED( SvxThesaurusDialog, AlternativesSelectHdl_Impl, SvTreeListBox *, pBox, void )
+IMPL_LINK( SvxThesaurusDialog, AlternativesSelectHdl_Impl, SvTreeListBox *, pBox, void )
 {
     SvTreeListEntry *pEntry = pBox ? pBox->GetCurEntry() : nullptr;
     if (pEntry)
@@ -404,7 +402,7 @@ IMPL_LINK_TYPED( SvxThesaurusDialog, AlternativesSelectHdl_Impl, SvTreeListBox *
     }
 }
 
-IMPL_LINK_TYPED( SvxThesaurusDialog, AlternativesDoubleClickHdl_Impl, SvTreeListBox*, pBox, bool )
+IMPL_LINK( SvxThesaurusDialog, AlternativesDoubleClickHdl_Impl, SvTreeListBox*, pBox, bool )
 {
     SvTreeListEntry *pEntry = pBox ? pBox->GetCurEntry() : nullptr;
     if (pEntry)
@@ -428,7 +426,7 @@ IMPL_LINK_TYPED( SvxThesaurusDialog, AlternativesDoubleClickHdl_Impl, SvTreeList
     return false;
 }
 
-IMPL_STATIC_LINK_TYPED( SvxThesaurusDialog, SelectFirstHdl_Impl, void *, p, void )
+IMPL_STATIC_LINK( SvxThesaurusDialog, SelectFirstHdl_Impl, void *, p, void )
 {
     SvxCheckListBox* pBox = static_cast<SvxCheckListBox*>(p);
     if (pBox && pBox->GetEntryCount() >= 2)
@@ -439,12 +437,11 @@ IMPL_STATIC_LINK_TYPED( SvxThesaurusDialog, SelectFirstHdl_Impl, void *, p, void
 
 SvxThesaurusDialog::SvxThesaurusDialog(
     vcl::Window* pParent,
-    uno::Reference< linguistic2::XThesaurus >  xThes,
+    uno::Reference< linguistic2::XThesaurus > const & xThes,
     const OUString &rWord,
     LanguageType nLanguage)
     : SvxStandardDialog(pParent, "ThesaurusDialog", "cui/ui/thesaurus.ui")
-    , m_aErrStr(CUI_RESSTR(RID_SVXSTR_ERR_TEXTNOTFOUND))
-    , xThesaurus(nullptr)
+    , m_aErrStr(CuiResId(RID_SVXSTR_ERR_TEXTNOTFOUND))
     , aLookUpText()
     , nLookUpLanguage(LANGUAGE_NONE)
     , m_bWordFound(false)
@@ -501,8 +498,8 @@ SvxThesaurusDialog::SvxThesaurusDialog(
         aLangVec.push_back( SvtLanguageTable::GetLanguageString( nLang ) );
     }
     std::sort( aLangVec.begin(), aLangVec.end() );
-    for (size_t i = 0;  i < aLangVec.size();  ++i)
-        m_pLangLB->InsertEntry( aLangVec[i] );
+    for (OUString & i : aLangVec)
+        m_pLangLB->InsertEntry( i );
 
     std::vector< OUString >::iterator aI = std::find(aLangVec.begin(), aLangVec.end(),
             SvtLanguageTable::GetLanguageString(nLanguage));
@@ -533,7 +530,7 @@ void SvxThesaurusDialog::dispose()
     SvxStandardDialog::dispose();
 }
 
-IMPL_LINK_NOARG_TYPED( SvxThesaurusDialog, ReplaceBtnHdl_Impl, Button *, void )
+IMPL_LINK_NOARG( SvxThesaurusDialog, ReplaceBtnHdl_Impl, Button *, void )
 {
     EndDialog(RET_OK);
 }
@@ -545,9 +542,7 @@ void SvxThesaurusDialog::SetWindowTitle( LanguageType nLanguage )
     sal_Int32 nIndex = aStr.indexOf( '(' );
     if( nIndex != -1 )
         aStr = aStr.copy( 0, nIndex - 1 );
-    aStr += " (";
-    aStr += SvtLanguageTable::GetLanguageString( nLanguage );
-    aStr += ")";
+    aStr += " (" + SvtLanguageTable::GetLanguageString( nLanguage ) + ")";
     SetText( aStr );    // set window title
 }
 

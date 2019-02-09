@@ -33,7 +33,7 @@
 #include <rtl/uri.hxx>
 #include <rtl/ustring.hxx>
 
-#include "dp_identifier.hxx"
+#include <dp_identifier.hxx>
 #include "dp_activepackages.hxx"
 
 // Old format of database entry:
@@ -121,7 +121,9 @@ ActivePackages::ActivePackages(OUString const & url)
     : m_map(url)
 #endif
 {
+#if !HAVE_FEATURE_EXTENSIONS
     (void) url;
+#endif
 }
 
 ActivePackages::~ActivePackages() {}
@@ -155,6 +157,7 @@ bool ActivePackages::get(
     (void) data;
     (void) id;
     (void) fileName;
+    (void) this;
     return false;
 #endif
 }
@@ -163,25 +166,24 @@ ActivePackages::Entries ActivePackages::getEntries() const {
     Entries es;
 #if HAVE_FEATURE_EXTENSIONS
     ::dp_misc::t_string2string_map m(m_map.getEntries());
-    for (::dp_misc::t_string2string_map::const_iterator i(m.begin());
-         i != m.end(); ++i)
+    for (auto const& elem : m)
     {
-        if (!i->first.isEmpty() && i->first[0] == separator) {
-            es.push_back(
-                ::std::make_pair(
+        if (!elem.first.isEmpty() && elem.first[0] == separator) {
+            es.emplace_back(
                     OUString(
-                        i->first.getStr() + 1, i->first.getLength() - 1,
+                        elem.first.getStr() + 1, elem.first.getLength() - 1,
                         RTL_TEXTENCODING_UTF8),
-                    decodeNewData(i->second)));
+                    decodeNewData(elem.second));
         } else {
             OUString fn(
-                OStringToOUString(i->first, RTL_TEXTENCODING_UTF8));
-            es.push_back(
-                ::std::make_pair(
+                OStringToOUString(elem.first, RTL_TEXTENCODING_UTF8));
+            es.emplace_back(
                     ::dp_misc::generateLegacyIdentifier(fn),
-                    decodeOldData(fn, i->second)));
+                    decodeOldData(fn, elem.second));
         }
     }
+#else
+    (void) this;
 #endif
     return es;
 }
@@ -203,6 +205,7 @@ void ActivePackages::put(OUString const & id, Data const & data) {
 #else
     (void) id;
     (void) data;
+    (void) this;
 #endif
 }
 
@@ -214,6 +217,7 @@ void ActivePackages::erase(
 #else
     (void) id;
     (void) fileName;
+    (void) this;
 #endif
 }
 

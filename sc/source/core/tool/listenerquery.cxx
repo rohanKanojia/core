@@ -10,7 +10,6 @@
 #include <listenerquery.hxx>
 #include <listenerqueryids.hxx>
 #include <address.hxx>
-#include <rangelst.hxx>
 
 namespace sc {
 
@@ -38,7 +37,7 @@ void RefQueryFormulaGroup::add( const ScAddress& rPos )
     if (itTab == maTabs.end())
     {
         std::pair<TabsType::iterator,bool> r =
-            maTabs.insert(TabsType::value_type(rPos.Tab(), ColsType()));
+            maTabs.emplace(rPos.Tab(), ColsType());
         if (!r.second)
             // Insertion failed.
             return;
@@ -51,7 +50,7 @@ void RefQueryFormulaGroup::add( const ScAddress& rPos )
     if (itCol == rCols.end())
     {
         std::pair<ColsType::iterator,bool> r =
-            rCols.insert(ColsType::value_type(rPos.Col(), ColType()));
+            rCols.emplace(rPos.Col(), ColType());
         if (!r.second)
             // Insertion failed.
             return;
@@ -68,14 +67,9 @@ const RefQueryFormulaGroup::TabsType& RefQueryFormulaGroup::getAllPositions() co
     return maTabs;
 }
 
-struct QueryRange::Impl
-{
-    ScRangeList maRanges;
-};
-
 QueryRange::QueryRange() :
-    SvtListener::QueryBase(SC_LISTENER_QUERY_FORMULA_GROUP_RANGE),
-    mpImpl(new Impl) {}
+    SvtListener::QueryBase(SC_LISTENER_QUERY_FORMULA_GROUP_RANGE)
+{}
 
 QueryRange::~QueryRange()
 {
@@ -83,12 +77,12 @@ QueryRange::~QueryRange()
 
 void QueryRange::add( const ScRange& rRange )
 {
-    mpImpl->maRanges.Join(rRange);
+    maRanges.Join(rRange);
 }
 
 void QueryRange::swapRanges( ScRangeList& rRanges )
 {
-    mpImpl->maRanges.swap(rRanges);
+    maRanges.swap(rRanges);
 }
 
 }

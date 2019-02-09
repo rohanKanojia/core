@@ -25,6 +25,7 @@
 #include <vcl/combobox.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/scrbar.hxx>
+#include <vcl/weld.hxx>
 #include <svx/checklbx.hxx>
 #include <editeng/hangulhanja.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
@@ -42,7 +43,7 @@ namespace svx
     {
     public:
         SuggestionSet( vcl::Window* pParent );
-        virtual ~SuggestionSet();
+        virtual ~SuggestionSet() override;
         virtual void dispose() override;
 
         virtual void    UserDraw( const UserDrawEvent& rUDEvt ) override;
@@ -53,7 +54,7 @@ namespace svx
     {
     public:
         SuggestionDisplay( vcl::Window* pParent, WinBits nBits );
-        virtual ~SuggestionDisplay();
+        virtual ~SuggestionDisplay() override;
         virtual void dispose() override;
 
         void DisplayListBox( bool bDisplayListBox );
@@ -67,7 +68,7 @@ namespace svx
         sal_uInt16 GetEntryCount() const;
 
         OUString GetEntry( sal_uInt16 nPos ) const;
-        OUString GetSelectEntry() const;
+        OUString GetSelectedEntry() const;
 
         virtual void StateChanged( StateChangedType nStateChange ) override;
 
@@ -79,9 +80,9 @@ namespace svx
         virtual void LoseFocus() override;
         virtual void Command( const CommandEvent& rCEvt ) override;
 
-        DECL_LINK_TYPED( SelectSuggestionListBoxHdl, ListBox&, void );
-        DECL_LINK_TYPED( SelectSuggestionValueSetHdl, ValueSet*, void );
-        void SelectSuggestionHdl(Control*);
+        DECL_LINK( SelectSuggestionListBoxHdl, ListBox&, void );
+        DECL_LINK( SelectSuggestionValueSetHdl, ValueSet*, void );
+        void SelectSuggestionHdl(Control const *);
 
         void SetHelpIds();
 
@@ -139,7 +140,7 @@ namespace svx
         HangulHanjaConversionDialog(
                 vcl::Window* _pParent,
                 editeng::HangulHanjaConversion::ConversionDirection _ePrimaryDirection );
-        virtual ~HangulHanjaConversionDialog();
+        virtual ~HangulHanjaConversionDialog() override;
         virtual void dispose() override;
 
     public:
@@ -157,7 +158,7 @@ namespace svx
         void    SetCurrentString(
                     const OUString& _rNewString,
                     const css::uno::Sequence< OUString >& _rSuggestions,
-                    bool _bOriginatesFromDocument = true
+                    bool _bOriginatesFromDocument
                 );
 
         void    FocusSuggestion( );
@@ -182,18 +183,18 @@ namespace svx
         void            EnableRubySupport( bool bVal );
 
     private:
-        DECL_LINK_TYPED( OnOption, Button*, void );
-        DECL_LINK_TYPED( OnSuggestionModified, Edit&, void );
-        DECL_LINK_TYPED( OnSuggestionSelected, SuggestionDisplay&, void );
-        DECL_LINK_TYPED( OnConversionDirectionClicked, Button*, void );
-        DECL_LINK_TYPED( ClickByCharacterHdl, Button*, void );
+        DECL_LINK( OnOption, Button*, void );
+        DECL_LINK( OnSuggestionModified, Edit&, void );
+        DECL_LINK( OnSuggestionSelected, SuggestionDisplay&, void );
+        DECL_LINK( OnConversionDirectionClicked, Button*, void );
+        DECL_LINK( ClickByCharacterHdl, Button*, void );
 
         /// fill the suggestion list box with suggestions for the actual input
         void FillSuggestions( const css::uno::Sequence< OUString >& _rSuggestions );
     };
 
 
-    typedef ::std::vector< css::uno::Reference< css::linguistic2::XConversionDictionary > > HHDictList;
+    typedef std::vector< css::uno::Reference< css::linguistic2::XConversionDictionary > > HHDictList;
 
     class HangulHanjaOptionsDialog : public ModalDialog
     {
@@ -207,45 +208,40 @@ namespace svx
         VclPtr<PushButton>         m_pDeletePB;
         VclPtr<OKButton>           m_pOkPB;
 
-        SvLBoxButtonData*   m_pCheckButtonData;
-
         HHDictList          m_aDictList;
         css::uno::Reference< css::linguistic2::XConversionDictionaryList > m_xConversionDictionaryList;
 
-        DECL_LINK_TYPED( OkHdl, Button*, void );
-        DECL_LINK_TYPED( DictsLB_SelectHdl, SvTreeListBox*, void );
-        DECL_LINK_TYPED( NewDictHdl, Button*, void );
-        DECL_LINK_TYPED( EditDictHdl, Button*, void );
-        DECL_LINK_TYPED( DeleteDictHdl, Button*, void );
+        DECL_LINK( OkHdl, Button*, void );
+        DECL_LINK( DictsLB_SelectHdl, SvTreeListBox*, void );
+        DECL_LINK( NewDictHdl, Button*, void );
+        DECL_LINK( EditDictHdl, Button*, void );
+        DECL_LINK( DeleteDictHdl, Button*, void );
 
         void                Init();       ///< reads settings from core and init controls
     public:
                             HangulHanjaOptionsDialog( vcl::Window* _pParent );
-        virtual             ~HangulHanjaOptionsDialog();
+        virtual             ~HangulHanjaOptionsDialog() override;
         virtual void        dispose() override;
 
         void                AddDict( const OUString& _rName, bool _bChecked );
     };
 
-
-    class HangulHanjaNewDictDialog : public ModalDialog
+    class HangulHanjaNewDictDialog : public weld::GenericDialogController
     {
     private:
-        VclPtr<Edit> m_pDictNameED;
-        VclPtr<OKButton> m_pOkBtn;
-
         bool m_bEntered;
 
-        DECL_LINK_TYPED( OKHdl, Button*, void );
-        DECL_LINK_TYPED( ModifyHdl, Edit&, void );
+        std::unique_ptr<weld::Button> m_xOkBtn;
+        std::unique_ptr<weld::Entry> m_xDictNameED;
+
+        DECL_LINK(OKHdl, weld::Button&, void);
+        DECL_LINK(ModifyHdl, weld::Entry&, void);
     public:
-        HangulHanjaNewDictDialog( vcl::Window* _pParent );
-        virtual ~HangulHanjaNewDictDialog();
-        virtual void dispose() override;
+        HangulHanjaNewDictDialog(weld::Window* pParent);
+        virtual ~HangulHanjaNewDictDialog() override;
 
         bool GetName( OUString& _rRetName ) const;
     };
-
 
     class SuggestionList;
 
@@ -260,7 +256,7 @@ namespace svx
         void                DoJump( bool _bUp );
     public:
                             SuggestionEdit( vcl::Window* pParent, WinBits nBits );
-        virtual             ~SuggestionEdit();
+        virtual             ~SuggestionEdit() override;
         virtual void        dispose() override;
         virtual bool        PreNotify( NotifyEvent& rNEvt ) override;
         void init( ScrollBar* pScrollBar, SuggestionEdit* pPrev, SuggestionEdit* pNext);
@@ -275,7 +271,7 @@ namespace svx
         sal_uInt32      m_nCurrentDict;
 
         OUString        m_aOriginal;
-        SuggestionList* m_pSuggestions;
+        std::unique_ptr<SuggestionList> m_pSuggestions;
 
         VclPtr<ListBox>        m_aBookLB;
         VclPtr<ComboBox>       m_aOriginalLB;
@@ -291,16 +287,16 @@ namespace svx
         bool            m_bModifiedSuggestions;
         bool            m_bModifiedOriginal;
 
-        DECL_LINK_TYPED( OriginalModifyHdl, Edit&, void );
-        DECL_LINK_TYPED( ScrollHdl, ScrollBar*, void );
-        DECL_LINK_TYPED( EditModifyHdl1, Edit&, void );
-        DECL_LINK_TYPED( EditModifyHdl2, Edit&, void );
-        DECL_LINK_TYPED( EditModifyHdl3, Edit&, void );
-        DECL_LINK_TYPED( EditModifyHdl4, Edit&, void );
+        DECL_LINK( OriginalModifyHdl, Edit&, void );
+        DECL_LINK( ScrollHdl, ScrollBar*, void );
+        DECL_LINK( EditModifyHdl1, Edit&, void );
+        DECL_LINK( EditModifyHdl2, Edit&, void );
+        DECL_LINK( EditModifyHdl3, Edit&, void );
+        DECL_LINK( EditModifyHdl4, Edit&, void );
 
-        DECL_LINK_TYPED( BookLBSelectHdl, ListBox&, void );
-        DECL_LINK_TYPED( NewPBPushHdl, Button*, void );
-        DECL_LINK_TYPED( DeletePBPushHdl, Button*, void );
+        DECL_LINK( BookLBSelectHdl, ListBox&, void );
+        DECL_LINK( NewPBPushHdl, Button*, void );
+        DECL_LINK( DeletePBPushHdl, Button*, void );
 
         void            InitEditDictDialog( sal_uInt32 _nSelDict );
         void            UpdateOriginalLB();
@@ -308,13 +304,13 @@ namespace svx
         void            UpdateButtonStates();
 
         void            SetEditText( Edit& _rEdit, sal_uInt16 _nEntryNum );
-        void            EditModify( Edit* _pEdit, sal_uInt8 _nEntryOffset );
+        void            EditModify( Edit const * _pEdit, sal_uInt8 _nEntryOffset );
 
-        bool            DeleteEntryFromDictionary( const OUString& rEntry, const css::uno::Reference< css::linguistic2::XConversionDictionary >& xDict );
+        bool            DeleteEntryFromDictionary( const css::uno::Reference< css::linguistic2::XConversionDictionary >& xDict );
 
     public:
                         HangulHanjaEditDictDialog( vcl::Window* _pParent, HHDictList& _rDictList, sal_uInt32 _nSelDict );
-                        virtual ~HangulHanjaEditDictDialog();
+                        virtual ~HangulHanjaEditDictDialog() override;
         virtual void    dispose() override;
 
         void            UpdateScrollbar();

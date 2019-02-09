@@ -29,24 +29,8 @@ class LocaleDataWrapper;
 
 class VCL_DLLPUBLIC LongCurrencyFormatter : public FormatterBase
 {
-private:
-    SAL_DLLPRIVATE friend bool ImplLongCurrencyReformat( const OUString&, BigInt, BigInt, sal_uInt16, const LocaleDataWrapper&, OUString&, LongCurrencyFormatter& );
-    SAL_DLLPRIVATE void        ImpInit();
-
-protected:
-    BigInt                  mnFieldValue;
-    BigInt                  mnLastValue;
-    BigInt                  mnMin;
-    BigInt                  mnMax;
-    BigInt                  mnCorrectedValue;
-    OUString                maCurrencySymbol;
-    sal_uInt16              mnType;
-    sal_uInt16              mnDecimalDigits;
-    bool                mbThousandSep;
-
-                            LongCurrencyFormatter();
 public:
-                            virtual ~LongCurrencyFormatter();
+                            virtual ~LongCurrencyFormatter() override;
 
     virtual void            Reformat() override;
     virtual void            ReformatAll() override;
@@ -55,18 +39,35 @@ public:
     bool                    IsUseThousandSep() const { return mbThousandSep; }
 
     void                    SetCurrencySymbol( const OUString& rStr );
-    OUString                GetCurrencySymbol() const;
+    OUString const &        GetCurrencySymbol() const;
 
     void                    SetMin(const BigInt& rNewMin);
-    BigInt                  GetMin() const { return mnMin; }
+    const BigInt&           GetMin() const { return mnMin; }
     void                    SetMax(const BigInt& rNewMax);
-    BigInt                  GetMax() const { return mnMax; }
+    const BigInt&           GetMax() const { return mnMax; }
 
     void                    SetDecimalDigits( sal_uInt16 nDigits );
-    sal_uInt16                  GetDecimalDigits() const { return mnDecimalDigits;}
+    sal_uInt16              GetDecimalDigits() const { return mnDecimalDigits;}
     void                    SetValue(const BigInt& rNewValue);
     void                    SetUserValue( BigInt nNewValue );
     BigInt                  GetValue() const;
+
+protected:
+    BigInt                  mnLastValue;
+    BigInt                  mnMin;
+    BigInt                  mnMax;
+
+                            LongCurrencyFormatter(Edit* pEdit);
+private:
+    friend bool ImplLongCurrencyReformat( const OUString&, BigInt const &, BigInt const &, sal_uInt16, const LocaleDataWrapper&, OUString&, LongCurrencyFormatter const & );
+    SAL_DLLPRIVATE void        ImpInit();
+
+    BigInt                  mnFieldValue;
+    BigInt                  mnCorrectedValue;
+    OUString                maCurrencySymbol;
+    sal_uInt16              mnDecimalDigits;
+    bool                    mbThousandSep;
+
 };
 
 
@@ -82,8 +83,7 @@ private:
 public:
                     LongCurrencyField( vcl::Window* pParent, WinBits nWinStyle );
 
-    virtual bool    PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool    Notify( NotifyEvent& rNEvt ) override;
+    virtual bool    EventNotify( NotifyEvent& rNEvt ) override;
 
     void            Modify() override;
     void            Up() override;
@@ -92,11 +92,11 @@ public:
     void            Last() override;
 
     void            SetFirst(const BigInt& rNewFirst ) { mnFirst = rNewFirst; }
-    BigInt          GetFirst() const { return mnFirst; }
+    const BigInt&   GetFirst() const { return mnFirst; }
     void            SetLast(const BigInt& rNewLast ) { mnLast = rNewLast; }
-    BigInt          GetLast() const { return mnLast; }
+    const BigInt&   GetLast() const { return mnLast; }
     void            SetSpinSize(const BigInt& rNewSize) { mnSpinSize = rNewSize; }
-    BigInt          GetSpinSize() const { return mnSpinSize; }
+    const BigInt&   GetSpinSize() const { return mnSpinSize; }
 };
 
 
@@ -105,8 +105,7 @@ class VCL_DLLPUBLIC LongCurrencyBox : public ComboBox, public LongCurrencyFormat
 public:
                     LongCurrencyBox( vcl::Window* pParent, WinBits nWinStyle );
 
-    virtual bool    PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool    Notify( NotifyEvent& rNEvt ) override;
+    virtual bool    EventNotify( NotifyEvent& rNEvt ) override;
 
     void            Modify() override;
     void            ReformatAll() override;

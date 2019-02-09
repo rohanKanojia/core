@@ -20,8 +20,9 @@
 #ifndef INCLUDED_SD_INC_SDDLL_HXX
 #define INCLUDED_SD_INC_SDDLL_HXX
 
-#include <sfx2/module.hxx>
 #include "sddllapi.h"
+
+class SdModule;
 
 /*************************************************************************
 |*
@@ -33,15 +34,14 @@
 |*
 \************************************************************************/
 
-class SD_DLLPUBLIC SdDLL
+class SD_DLLPUBLIC SdDLL final
 {
-protected:
 #ifdef ENABLE_SDREMOTE
     static void     RegisterRemotes();
 #endif
     static void     RegisterFactorys();
-    static void     RegisterInterfaces();
-    static void     RegisterControllers();
+    static void     RegisterInterfaces(SdModule* pMod);
+    static void     RegisterControllers(SdModule* pMod);
 
 public:
                     // Ctor/Dtor must be linked to the application

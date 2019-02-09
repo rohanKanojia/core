@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "flat/EStatement.hxx"
-#include "flat/EResultSet.hxx"
+#include <flat/EStatement.hxx>
+#include <flat/EResultSet.hxx>
 
 using namespace connectivity::flat;
 using namespace connectivity::file;
-using namespace com::sun::star::uno;
+using namespace css::uno;
 
 OResultSet* OFlatStatement::createResultSet()
 {

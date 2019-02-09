@@ -20,18 +20,16 @@
 #ifndef INCLUDED_FRAMEWORK_INC_HELPER_TITLEBARUPDATE_HXX
 #define INCLUDED_FRAMEWORK_INC_HELPER_TITLEBARUPDATE_HXX
 
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
 #include <general.h>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/XTitle.hpp>
 #include <com/sun/star/frame/XFrameActionListener.hpp>
 #include <com/sun/star/frame/XTitleChangeListener.hpp>
 #include <com/sun/star/lang/XEventListener.hpp>
 #include <unotools/moduleoptions.hxx>
 #include <cppuhelper/implbase.hxx>
+#include <cppuhelper/weakref.hxx>
 #include <rtl/ustrbuf.hxx>
 
 namespace framework{
@@ -78,26 +76,21 @@ class TitleBarUpdate : public  ::cppu::WeakImplHelper<
 
         // ctor/dtor
                  TitleBarUpdate(const css::uno::Reference< css::uno::XComponentContext >& xContext);
-        virtual ~TitleBarUpdate(                                                                   );
+        virtual ~TitleBarUpdate(                                                                   ) override;
 
         // XInterface, XTypeProvider
 
         // XInitialization
-        virtual void SAL_CALL initialize(const css::uno::Sequence< css::uno::Any >& lArguments)
-            throw(css::uno::Exception       ,
-                  css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL initialize(const css::uno::Sequence< css::uno::Any >& lArguments) override;
 
         // XFrameActionListener
-        virtual void SAL_CALL frameAction(const css::frame::FrameActionEvent& aEvent)
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL frameAction(const css::frame::FrameActionEvent& aEvent) override;
 
         // XTitleChangeListener
-        virtual void SAL_CALL titleChanged(const css::frame::TitleChangedEvent& aEvent)
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL titleChanged(const css::frame::TitleChangedEvent& aEvent) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing(const css::lang::EventObject& aEvent)
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing(const css::lang::EventObject& aEvent) override;
 
     // helper
 

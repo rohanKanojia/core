@@ -21,13 +21,14 @@
 #define INCLUDED_SC_SOURCE_UI_INC_DRTXTOB_HXX
 
 #include <sfx2/shell.hxx>
-#include <sfx2/module.hxx>
 #include <tools/link.hxx>
+#include <rtl/ref.hxx>
 
-#include "shellids.hxx"
+#include <shellids.hxx>
 
 sal_uInt16 ScGetFontWorkId();       // instead of SvxFontWorkChildWindow::GetChildWindowId()
 
+class SfxModule;
 class ScViewData;
 class TransferableDataHelper;
 class TransferableClipboardListener;
@@ -35,10 +36,10 @@ class TransferableClipboardListener;
 class ScDrawTextObjectBar : public SfxShell
 {
     ScViewData*         pViewData;
-    TransferableClipboardListener* pClipEvtLstnr;
+    rtl::Reference<TransferableClipboardListener> mxClipEvtLstnr;
     bool                bPastePossible;
 
-    DECL_LINK_TYPED( ClipboardChanged, TransferableDataHelper*, void );
+    DECL_LINK( ClipboardChanged, TransferableDataHelper*, void );
 
 public:
     SFX_DECL_INTERFACE(SCID_DRAW_TEXT_SHELL)
@@ -49,12 +50,12 @@ private:
 
 public:
     ScDrawTextObjectBar(ScViewData* pData);
-    virtual ~ScDrawTextObjectBar();
+    virtual ~ScDrawTextObjectBar() override;
 
     static void StateDisableItems( SfxItemSet &rSet );
 
     void Execute( SfxRequest &rReq );
-    void ExecuteTrans( SfxRequest& rReq );
+    void ExecuteTrans( const SfxRequest& rReq );
     void GetState( SfxItemSet& rSet );
     void GetClipState( SfxItemSet& rSet );
 
@@ -67,7 +68,7 @@ public:
     bool ExecuteParaDlg( const SfxItemSet& rArgs, SfxItemSet& rOutSet );
 
     void ExecuteExtra( SfxRequest &rReq );
-    void ExecFormText(SfxRequest& rReq);        // StarFontWork
+    void ExecFormText(const SfxRequest& rReq);        // StarFontWork
     void GetFormTextState(SfxItemSet& rSet);
 
 private:

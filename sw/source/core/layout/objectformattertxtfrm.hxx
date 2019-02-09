@@ -34,7 +34,7 @@ class SwObjectFormatterTextFrame : public SwObjectFormatter
         SwTextFrame& mrAnchorTextFrame;
 
         // 'master' anchor text frame
-        SwTextFrame* mpMasterAnchorTextFrame;
+        SwTextFrame* const mpMasterAnchorTextFrame;
 
         SwObjectFormatterTextFrame( SwTextFrame& _rAnchorTextFrame,
                                  const SwPageFrame& _rPageFrame,
@@ -48,7 +48,7 @@ class SwObjectFormatterTextFrame : public SwObjectFormatter
             reference to anchored object - objects, anchored previous to
             this one will be invalidated.
         */
-        void _InvalidatePrevObjs( SwAnchoredObject& _rAnchoredObj );
+        void InvalidatePrevObjs( SwAnchoredObject& _rAnchoredObj );
 
         /** method to invalidate objects, anchored after the given object at
            the page frame
@@ -57,7 +57,7 @@ class SwObjectFormatterTextFrame : public SwObjectFormatter
             reference to anchored object - objects, anchored after this one will
             be invalidated.
         */
-        void _InvalidateFollowObjs( SwAnchoredObject& _rAnchoredObj );
+        void InvalidateFollowObjs( SwAnchoredObject& _rAnchoredObj );
 
         /** method to determine first anchored object, whose 'anchor is moved
             forward'.
@@ -93,7 +93,7 @@ class SwObjectFormatterTextFrame : public SwObjectFormatter
             anchored object with a 'moved forward anchor'. If NULL, no such
             anchored object is found.
         */
-        SwAnchoredObject* _GetFirstObjWithMovedFwdAnchor(
+        SwAnchoredObject* GetFirstObjWithMovedFwdAnchor(
                                     const sal_Int16 _nWrapInfluenceOnPosition,
                                     sal_uInt32& _noToPageNum,
                                     bool& _boInFollow );
@@ -102,19 +102,19 @@ class SwObjectFormatterTextFrame : public SwObjectFormatter
 
             #i40141#
         */
-        void _FormatAnchorFrameForCheckMoveFwd();
+        void FormatAnchorFrameForCheckMoveFwd();
 
         /** method to determine if at least one anchored object has state
-            <temporarly consider wrapping style influence> set.
+            <temporarily consider wrapping style influence> set.
         */
-        bool _AtLeastOneObjIsTmpConsiderWrapInfluence();
+        bool AtLeastOneObjIsTmpConsiderWrapInfluence();
 
     protected:
 
         virtual SwFrame& GetAnchorFrame() override;
 
     public:
-        virtual ~SwObjectFormatterTextFrame();
+        virtual ~SwObjectFormatterTextFrame() override;
 
         // #i40147# - add parameter <_bCheckForMovedFwd>.
         virtual bool DoFormatObj( SwAnchoredObject& _rAnchoredObj,
@@ -124,7 +124,7 @@ class SwObjectFormatterTextFrame : public SwObjectFormatter
         /** method to create an instance of <SwObjectFormatterTextFrame> is
             necessary.
         */
-        static SwObjectFormatterTextFrame* CreateObjFormatter(
+        static std::unique_ptr<SwObjectFormatterTextFrame> CreateObjFormatter(
                                                 SwTextFrame& _rAnchorTextFrame,
                                                 const SwPageFrame& _rPageFrame,
                                                 SwLayAction* _pLayAction );

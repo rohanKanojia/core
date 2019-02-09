@@ -19,8 +19,6 @@
 #ifndef INCLUDED_FILTER_SOURCE_CONFIG_CACHE_CONSTANT_HXX
 #define INCLUDED_FILTER_SOURCE_CONFIG_CACHE_CONSTANT_HXX
 
-#include "macros.hxx"
-
 /*  disable impl_loadOnDemand function of BaseContainer for certain
     functions, where it the feature "impl_loadItemOnDemand() of class FilterCache
     can be used instead of loadAll()!*/
@@ -60,6 +58,7 @@
 #define  PROPNAME_TEMPLATENAME      "TemplateName"
 #define  PROPNAME_FILEFORMATVERSION "FileFormatVersion"
 #define  PROPNAME_EXPORTEXTENSION   "ExportExtension"
+#define  PROPNAME_ENABLED           "Enabled"
 
 /** @short  used to identify a frame loader or detect service item
             property against the configuration API and can be used
@@ -106,6 +105,7 @@
 #define  FLAGNAME_DEFAULT           "DEFAULT"
 #define  FLAGNAME_ENCRYPTION        "ENCRYPTION"
 #define  FLAGNAME_EXPORT            "EXPORT"
+#define  FLAGNAME_GPGENCRYPTION     "GPGENCRYPTION"
 #define  FLAGNAME_IMPORT            "IMPORT"
 #define  FLAGNAME_INTERNAL          "INTERNAL"
 #define  FLAGNAME_NOTINFILEDIALOG   "NOTINFILEDIALOG"
@@ -121,6 +121,7 @@
 #define  FLAGNAME_TEMPLATEPATH      "TEMPLATEPATH"
 #define  FLAGNAME_COMBINED          "COMBINED"
 #define FLAGNAME_SUPPORTSSIGNING "SUPPORTSSIGNING"
+#define FLAGNAME_EXOTIC "EXOTIC"
 
 /** @short  some uno service names.
  */

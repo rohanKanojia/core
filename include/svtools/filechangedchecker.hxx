@@ -12,11 +12,13 @@
 
 #include <svtools/svtdllapi.h>
 
-#include <osl/file.hxx>
-#include <vcl/timer.hxx>
+#include <osl/time.h>
+#include <rtl/ustring.hxx>
 #include <vcl/idle.hxx>
 
 #include <functional>
+
+class Timer;
 
 /** Periodically checks if a file has been modified
 
@@ -27,12 +29,12 @@ class SVT_DLLPUBLIC FileChangedChecker
 {
 private:
     Idle                    mIdle;
-    OUString            mFileName;
+    OUString const           mFileName;
     TimeValue                mLastModTime;
-    ::std::function<void ()> mpCallback;
+    ::std::function<void ()> const mpCallback;
 
     bool SVT_DLLPRIVATE getCurrentModTime(TimeValue& o_rValue) const;
-    DECL_LINK_TYPED(TimerHandler, Idle *, void);
+    DECL_LINK(TimerHandler, Timer *, void);
 
 public:
     void resetTimer();

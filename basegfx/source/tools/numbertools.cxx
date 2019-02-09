@@ -7,17 +7,17 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <basegfx/tools/tools.hxx>
+#include <basegfx/utils/tools.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/polygon/b2dpolypolygon.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
 
-#include <rtl/ustrbuf.hxx>
+#include <rtl/strbuf.hxx>
 #include <rtl/math.hxx>
 
 #include <utility>
 
-namespace basegfx { namespace tools
+namespace basegfx { namespace utils
 {
     B2DPolyPolygon number2PolyPolygon(double fValue, sal_Int32 nTotalDigits, sal_Int32 nDecPlaces, bool bLitSegments)
     {
@@ -27,8 +27,8 @@ namespace basegfx { namespace tools
         // }
         // config here
 
-        rtl::OUStringBuffer aNum;
-        rtl::math::doubleToUStringBuffer(aNum,
+        OStringBuffer aNum;
+        rtl::math::doubleToStringBuffer(aNum,
                                          fValue,
                                          rtl_math_StringFormat_F,
                                          nDecPlaces, '.',

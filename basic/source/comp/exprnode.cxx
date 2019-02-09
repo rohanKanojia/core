@@ -21,15 +21,16 @@
 #include <math.h>
 #include <algorithm>
 
+#include <o3tl/temporary.hxx>
 #include <rtl/math.hxx>
-#include "codegen.hxx"
-#include "parser.hxx"
-#include "expr.hxx"
+#include <codegen.hxx>
+#include <parser.hxx>
+#include <expr.hxx>
 
 
-SbiExprNode::SbiExprNode( SbiExprNode* l, SbiToken t, SbiExprNode* r ) :
-    pLeft(l),
-    pRight(r),
+SbiExprNode::SbiExprNode( std::unique_ptr<SbiExprNode> l, SbiToken t, std::unique_ptr<SbiExprNode> r ) :
+    pLeft(std::move(l)),
+    pRight(std::move(r)),
     pWithParent(nullptr),
     eNodeType(SbxNODE),
     eType(SbxVARIANT), // Nodes are always Variant
@@ -72,9 +73,9 @@ SbiExprNode::SbiExprNode( const SbiSymDef& r, SbxDataType t, SbiExprListPtr l ) 
 }
 
 // #120061 TypeOf
-SbiExprNode::SbiExprNode( SbiExprNode* l, sal_uInt16 nId ) :
+SbiExprNode::SbiExprNode( std::unique_ptr<SbiExprNode> l, sal_uInt16 nId ) :
     nTypeStrId(nId),
-    pLeft(l),
+    pLeft(std::move(l)),
     pWithParent(nullptr),
     eNodeType(SbxTYPEOF),
     eType(SbxBOOL),
@@ -152,10 +153,8 @@ void SbiExprNode::ConvertToIntConstIfPossible()
     {
         if( eType >= SbxINTEGER && eType <= SbxDOUBLE )
         {
-            double n;
-            if( nVal >= SbxMININT && nVal <= SbxMAXINT && modf( nVal, &n ) == 0 )
+            if( nVal >= SbxMININT && nVal <= SbxMAXINT && modf( nVal, &o3tl::temporary(double()) ) == 0 )
             {
-                nVal = (double) (short) nVal;
                 eType = SbxINTEGER;
             }
         }
@@ -176,18 +175,6 @@ bool SbiExprNode::IsLvalue()
 {
     return IsVariable();
 }
-
-// Identify of the depth of a tree
-
-short SbiExprNode::GetDepth()
-{
-    if( IsOperand() ) return 0;
-    else
-    {
-        return std::max(pLeft->GetDepth(), pRight->GetDepth()) + 1;
-    }
-}
-
 
 // Adjustment of a tree:
 // 1. Constant Folding
@@ -223,9 +210,9 @@ void SbiExprNode::FoldConstants(SbiParser* pParser)
 {
     if( IsOperand() || eTok == LIKE ) return;
 
-    if (IsUnary())
+    if (pLeft && !pRight)
         FoldConstantsUnaryNode(pParser);
-    else if (IsBinary())
+    else if (pLeft && pRight)
         FoldConstantsBinaryNode(pParser);
 
     if( eNodeType == SbxNUMVAL )
@@ -233,9 +220,8 @@ void SbiExprNode::FoldConstants(SbiParser* pParser)
         // Potentially convolve in INTEGER (because of better opcode)?
         if( eType == SbxSINGLE || eType == SbxDOUBLE )
         {
-            double x;
             if( nVal >= SbxMINLNG && nVal <= SbxMAXLNG
-            && !modf( nVal, &x ) )
+            && !modf( nVal, &o3tl::temporary(double()) ) )
                 eType = SbxLONG;
         }
         if( eType == SbxLONG && nVal >= SbxMININT && nVal <= SbxMAXINT )
@@ -405,15 +391,15 @@ void SbiExprNode::FoldConstantsBinaryNode(SbiParser* pParser)
                     } else nVal = llMod - lrMod * (llMod/lrMod);
                     eType = SbxLONG; break;
                 case AND:
-                    nVal = (double) ( ll & lr ); eType = SbxLONG; break;
+                    nVal = static_cast<double>( ll & lr ); eType = SbxLONG; break;
                 case OR:
-                    nVal = (double) ( ll | lr ); eType = SbxLONG; break;
+                    nVal = static_cast<double>( ll | lr ); eType = SbxLONG; break;
                 case XOR:
-                    nVal = (double) ( ll ^ lr ); eType = SbxLONG; break;
+                    nVal = static_cast<double>( ll ^ lr ); eType = SbxLONG; break;
                 case EQV:
-                    nVal = (double) ( ~ll ^ lr ); eType = SbxLONG; break;
+                    nVal = static_cast<double>( ~ll ^ lr ); eType = SbxLONG; break;
                 case IMP:
-                    nVal = (double) ( ~ll | lr ); eType = SbxLONG; break;
+                    nVal = static_cast<double>( ~ll | lr ); eType = SbxLONG; break;
                 default: break;
             }
 
@@ -425,7 +411,7 @@ void SbiExprNode::FoldConstantsBinaryNode(SbiParser* pParser)
              && nVal >= SbxMINLNG && nVal <= SbxMAXLNG )
             {
                 // Decimal place away
-                long n = (long) nVal;
+                long n = static_cast<long>(nVal);
                 nVal = n;
                 eType = ( n >= SbxMININT && n <= SbxMAXINT )
                       ? SbxINTEGER : SbxLONG;
@@ -465,7 +451,7 @@ void SbiExprNode::FoldConstantsUnaryNode(SbiParser* pParser)
                     pParser->Error( ERRCODE_BASIC_MATH_OVERFLOW );
                     bError = true;
                 }
-                nVal = (double) ~((long) nVal);
+                nVal = static_cast<double>(~static_cast<long>(nVal));
                 eType = SbxLONG;
                 } break;
             default: break;
@@ -476,9 +462,8 @@ void SbiExprNode::FoldConstantsUnaryNode(SbiParser* pParser)
         // Potentially convolve in INTEGER (because of better opcode)?
         if( eType == SbxSINGLE || eType == SbxDOUBLE )
         {
-            double x;
             if( nVal >= SbxMINLNG && nVal <= SbxMAXLNG
-            && !modf( nVal, &x ) )
+            && !modf( nVal, &o3tl::temporary(double()) ) )
                 eType = SbxLONG;
         }
         if( eType == SbxLONG && nVal >= SbxMININT && nVal <= SbxMAXINT )

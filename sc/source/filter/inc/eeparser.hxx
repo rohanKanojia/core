@@ -24,13 +24,14 @@
 #include <vcl/graph.hxx>
 #include <svl/itemset.hxx>
 #include <editeng/editdata.hxx>
+#include <boost/optional.hpp>
 #include <address.hxx>
 #include <memory>
 #include <vector>
+#include <map>
 
 const sal_Char nHorizontal = 1;
 const sal_Char nVertical = 2;
-const sal_Char nHoriVerti = nHorizontal | nVertical;
 
 struct ScHTMLImage
 {
@@ -38,48 +39,47 @@ struct ScHTMLImage
     Size                aSize;
     Point               aSpace;
     OUString            aFilterName;
-    Graphic*            pGraphic;       // wird von WriteToDocument uebernommen
-    sal_Char            nDir;           // 1==hori, 2==verti, 3==beides
+    std::unique_ptr<Graphic>
+                        pGraphic;       // is taken over by WriteToDocument
+    sal_Char            nDir;           // 1==hori, 2==verti, 3==both
 
     ScHTMLImage() :
-        aSize( 0, 0 ), aSpace( 0, 0 ), pGraphic( nullptr ),
-        nDir( nHorizontal )
+        aSize( 0, 0 ), aSpace( 0, 0 ), nDir( nHorizontal )
         {}
-
-    ~ScHTMLImage() { delete pGraphic; }
 };
 
 struct ScEEParseEntry
 {
     SfxItemSet          aItemSet;
     ESelection          aSel;           // Selection in EditEngine
-    OUString*           pValStr;        // HTML evtl. SDVAL String
-    OUString*           pNumStr;        // HTML evtl. SDNUM String
-    OUString*           pName;          // HTML evtl. Anchor/RangeName
+    boost::optional<OUString>
+                        pValStr;        // HTML possibly SDVAL string
+    boost::optional<OUString>
+                        pNumStr;        // HTML possibly SDNUM string
+    boost::optional<OUString>
+                        pName;          // HTML possibly anchor/RangeName
     OUString            aAltText;       // HTML IMG ALT Text
-    std::vector< std::unique_ptr<ScHTMLImage> > maImageList;       // Grafiken in dieser Zelle
-    SCCOL               nCol;           // relativ zum Beginn des Parse
+    std::vector< std::unique_ptr<ScHTMLImage> > maImageList;       // graphics in this cell
+    SCCOL               nCol;           // relative to the beginning of the parse
     SCROW               nRow;
     sal_uInt16          nTab;           // HTML TableInTable
     sal_uInt16          nTwips;         // RTF ColAdjust etc.
-    SCCOL               nColOverlap;    // merged cells wenn >1
-    SCROW               nRowOverlap;    // merged cells wenn >1
+    SCCOL               nColOverlap;    // merged cells if >1
+    SCROW               nRowOverlap;    // merged cells if >1
     sal_uInt16          nOffset;        // HTML PixelOffset
     sal_uInt16          nWidth;         // HTML PixelWidth
     bool                bHasGraphic:1;  // HTML any image loaded
     bool                bEntirePara:1;  // true = use entire paragraph, false = use selection
 
     ScEEParseEntry( SfxItemPool* pPool ) :
-        aItemSet( *pPool ), pValStr( nullptr ),
-        pNumStr( nullptr ), pName( nullptr ),
+        aItemSet( *pPool ),
         nCol(SCCOL_MAX), nRow(SCROW_MAX), nTab(0),
         nTwips(0), nColOverlap(1), nRowOverlap(1),
         nOffset(0), nWidth(0), bHasGraphic(false), bEntirePara(true)
         {}
 
     ScEEParseEntry( const SfxItemSet& rItemSet ) :
-        aItemSet( rItemSet ), pValStr( nullptr ),
-        pNumStr( nullptr ), pName( nullptr ),
+        aItemSet( rItemSet ),
         nCol(SCCOL_MAX), nRow(SCROW_MAX), nTab(0),
         nTwips(0), nColOverlap(1), nRowOverlap(1),
         nOffset(0), nWidth(0), bHasGraphic(false), bEntirePara(true)
@@ -87,9 +87,6 @@ struct ScEEParseEntry
 
     ~ScEEParseEntry()
     {
-        delete pValStr;
-        delete pNumStr;
-        delete pName;
         maImageList.clear();
     }
 };
@@ -103,32 +100,32 @@ class ScEEParser
 protected:
     EditEngine*         pEdit;
     SfxItemPool*        pPool;
-    SfxItemPool*        pDocPool;
-    ::std::vector< ScEEParseEntry* > maList;
-    ScEEParseEntry*     pActEntry;
+    SfxItemPool* const  pDocPool;
+    std::vector<std::shared_ptr<ScEEParseEntry>> maList;
+    std::shared_ptr<ScEEParseEntry> mxActEntry;
     ColWidthsMap        maColWidths;
-    int                 nLastToken;
+    int                 nRtfLastToken;
     SCCOL               nColCnt;
     SCROW               nRowCnt;
     SCCOL               nColMax;
     SCROW               nRowMax;
 
-    void                NewActEntry( ScEEParseEntry* );
+    void                NewActEntry( const ScEEParseEntry* );
 
 public:
                         ScEEParser( EditEngine* );
     virtual             ~ScEEParser();
 
-    virtual sal_uLong       Read( SvStream&, const OUString& rBaseURL ) = 0;
+    virtual ErrCode         Read( SvStream&, const OUString& rBaseURL ) = 0;
 
     const ColWidthsMap&     GetColWidths() const { return maColWidths; }
     ColWidthsMap&           GetColWidths() { return maColWidths; }
     void                    GetDimensions( SCCOL& nCols, SCROW& nRows ) const
                                 { nCols = nColMax; nRows = nRowMax; }
 
-    inline size_t           ListSize() const{ return maList.size(); }
-    ScEEParseEntry*         ListEntry( size_t index ) { return maList[ index ]; }
-    const ScEEParseEntry*   ListEntry( size_t index ) const { return maList[ index ]; }
+    size_t                  ListSize() const{ return maList.size(); }
+    ScEEParseEntry*         ListEntry( size_t index ) { return maList[index].get(); }
+    const ScEEParseEntry*   ListEntry( size_t index ) const { return maList[index].get(); }
 };
 
 #endif

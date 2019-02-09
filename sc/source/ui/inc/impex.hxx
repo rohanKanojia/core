@@ -20,14 +20,13 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_IMPEX_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_IMPEX_HXX
 
-#include <osl/endian.h>
-#include <sot/exchange.hxx>
-#include "global.hxx"
-#include "address.hxx"
+#include <o3tl/deleter.hxx>
+#include <sot/formats.hxx>
+#include <address.hxx>
+#include <tools/stream.hxx>
 
 class ScDocShell;
 class ScDocument;
-class SvStream;
 class ScAsciiOptions;
 
 /**
@@ -49,19 +48,20 @@ class ScImportExport
 {
     ScDocShell* pDocSh;
     ScDocument* pDoc;
-    ScDocument* pUndoDoc;
+    std::unique_ptr<ScDocument, o3tl::default_delete<ScDocument>> pUndoDoc;
     ScRange     aRange;
     OUString    aStreamPath;
     OUString    aNonConvertibleChars;
     OUString    maFilterOptions;
     sal_uLong   nSizeLimit;
+    SCROW const nMaxImportRow;
     sal_Unicode cSep;                   // Separator
     sal_Unicode cStr;                   // String Delimiter
     bool        bFormulas;              // Formula in Text?
     bool        bIncludeFiltered;       // include filtered rows? (default true)
     bool        bAll;                   // no selection
     bool        bSingle;                // Single selection
-    bool        bUndo;                  // with Undo?
+    bool const  bUndo;                  // with Undo?
     bool        bOverflowRow;           // too many rows
     bool        bOverflowCol;           // too many columns
     bool        bOverflowCell;          // too much data for a cell
@@ -72,7 +72,7 @@ class ScImportExport
                                 // do not need to broadcast after the import.
     ScExportTextOptions mExportTextOptions;
 
-    ScAsciiOptions* pExtOptions;        // extended options
+    std::unique_ptr<ScAsciiOptions> pExtOptions;        // extended options
 
     bool StartPaste();                  // Protect check, set up Undo
     void EndPaste(bool bAutoRowHeight = true);                    // Undo/Redo actions, Repaint
@@ -93,7 +93,7 @@ public:
     ScImportExport( ScDocument*, const OUString& );   // Range/cell input
     ScImportExport( ScDocument*, const ScAddress& );
     ScImportExport( ScDocument*, const ScRange& );
-   ~ScImportExport();
+   ~ScImportExport() COVERITY_NOEXCEPT_FALSE;
 
     void SetExtOptions( const ScAsciiOptions& rOpt );
     void SetFilterOptions( const OUString& rFilterOptions );
@@ -106,13 +106,12 @@ public:
     static bool  IsFormatSupported( SotClipboardFormatId nFormat );
     static const sal_Unicode* ScanNextFieldFromString( const sal_Unicode* p,
             OUString& rField, sal_Unicode cStr, const sal_Unicode* pSeps,
-            bool bMergeSeps, bool& rbIsQuoted, bool& rbOverflowCell );
+            bool bMergeSeps, bool& rbIsQuoted, bool& rbOverflowCell, bool bRemoveSpace );
     static  void    WriteUnicodeOrByteString( SvStream& rStrm, const OUString& rString, bool bZero = false );
     static  void    WriteUnicodeOrByteEndl( SvStream& rStrm );
-    static  inline  bool    IsEndianSwap( const SvStream& rStrm );
 
     //! only if stream is only used in own (!) memory
-    static  inline  void    SetNoEndianSwap( SvStream& rStrm );
+    static  void    SetNoEndianSwap( SvStream& rStrm );
 
     void SetSeparator( sal_Unicode c ) { cSep = c; }
     void SetDelimiter( sal_Unicode c ) { cStr = c; }
@@ -121,15 +120,13 @@ public:
 
     void            SetStreamPath( const OUString& rPath ) { aStreamPath = rPath; }
 
-    bool ImportString( const OUString&, SotClipboardFormatId=SotClipboardFormatId::STRING );
-    bool ExportString( OUString&, SotClipboardFormatId=SotClipboardFormatId::STRING );
-    bool ExportByteString( OString&, rtl_TextEncoding, SotClipboardFormatId=SotClipboardFormatId::STRING );
+    bool ImportString( const OUString&, SotClipboardFormatId );
+    bool ExportString( OUString&, SotClipboardFormatId );
+    bool ExportByteString( OString&, rtl_TextEncoding, SotClipboardFormatId );
 
-    bool ImportStream( SvStream&, const OUString& rBaseURL, SotClipboardFormatId=SotClipboardFormatId::STRING );
-    bool ExportStream( SvStream&, const OUString& rBaseURL, SotClipboardFormatId=SotClipboardFormatId::STRING );
+    bool ImportStream( SvStream&, const OUString& rBaseURL, SotClipboardFormatId );
+    bool ExportStream( SvStream&, const OUString& rBaseURL, SotClipboardFormatId );
 
-    static bool ImportData( const OUString& rMimeType,
-                     const css::uno::Any & rValue );
     bool ExportData( const OUString& rMimeType,
                      css::uno::Any & rValue  );
 
@@ -147,39 +144,11 @@ public:
     void SetExportTextOptions( const ScExportTextOptions& options ) { mExportTextOptions = options; }
 };
 
-inline bool ScImportExport::IsEndianSwap( const SvStream& rStrm )
-{
-#ifdef OSL_BIGENDIAN
-    return rStrm.GetEndian() != SvStreamEndian::BIG;
-#else
-    return rStrm.GetEndian() != SvStreamEndian::LITTLE;
-#endif
-}
-
-inline void ScImportExport::SetNoEndianSwap( SvStream& rStrm )
-{
-#ifdef OSL_BIGENDIAN
-    rStrm.SetEndian( SvStreamEndian::BIG );
-#else
-    rStrm.SetEndian( SvStreamEndian::LITTLE );
-#endif
-}
-
 // Helper class for importing clipboard strings as streams.
 class ScImportStringStream : public SvMemoryStream
 {
 public:
-    ScImportStringStream( const OUString& rStr )
-        : SvMemoryStream( const_cast<sal_Unicode *>(rStr.getStr()),
-                rStr.getLength() * sizeof(sal_Unicode), StreamMode::READ)
-    {
-        SetStreamCharSet( RTL_TEXTENCODING_UNICODE );
-#ifdef OSL_BIGENDIAN
-        SetEndian(SvStreamEndian::BIG);
-#else
-        SetEndian(SvStreamEndian::LITTLE);
-#endif
-    }
+    ScImportStringStream(const OUString& rStr);
 };
 
 /** Read a CSV (comma separated values) data line using
@@ -204,9 +173,20 @@ public:
 
     @param rFieldSeparators
     A list of characters that each may act as a field separator.
+    If rcDetectSep was 0 and a separator is detected then it is appended to
+    rFieldSeparators.
 
     @param cFieldQuote
     The quote character used.
+
+    @param rcDetectSep
+    If 0 then attempt to detect a possible space (blank) separator if
+    rFieldSeparators doesn't include it already. This can be necessary because
+    of the "accept broken misquoted CSV fields" feature that tries to ignore
+    trailing blanks after a quoted field and if no separator follows continues
+    to add content to the field assuming the single double quote was in error.
+    If this blank separator is detected it is added to rFieldSeparators and the
+    line is reread with the new separators
 
     check Stream::good() to detect IO problems during read
 
@@ -228,7 +208,7 @@ public:
 
   */
 SC_DLLPUBLIC OUString ReadCsvLine( SvStream &rStream, bool bEmbeddedLineBreak,
-        const OUString& rFieldSeparators, sal_Unicode cFieldQuote );
+        OUString& rFieldSeparators, sal_Unicode cFieldQuote, sal_Unicode& rcDetectSep );
 
 #endif
 

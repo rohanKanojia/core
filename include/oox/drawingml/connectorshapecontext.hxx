@@ -20,17 +20,22 @@
 #ifndef INCLUDED_OOX_DRAWINGML_CONNECTORSHAPECONTEXT_HXX
 #define INCLUDED_OOX_DRAWINGML_CONNECTORSHAPECONTEXT_HXX
 
-#include <oox/drawingml/shape.hxx>
-#include <oox/drawingml/shapecontext.hxx>
+#include <oox/core/contexthandler.hxx>
 #include <oox/dllapi.h>
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <oox/drawingml/shapecontext.hxx>
+#include <sal/types.h>
+
+namespace oox { class AttributeList; }
+namespace oox { namespace core { class ContextHandler2Helper; } }
 
 namespace oox { namespace drawingml {
 
 class OOX_DLLPUBLIC ConnectorShapeContext : public ShapeContext
 {
 public:
-    ConnectorShapeContext( ::oox::core::ContextHandler2Helper& rParent, ShapePtr pMasterShapePtr, ShapePtr pGroupShapePtr );
-    virtual ~ConnectorShapeContext();
+    ConnectorShapeContext( ::oox::core::ContextHandler2Helper const & rParent, const ShapePtr& pMasterShapePtr, const ShapePtr& pGroupShapePtr );
+    virtual ~ConnectorShapeContext() override;
     virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 };
 

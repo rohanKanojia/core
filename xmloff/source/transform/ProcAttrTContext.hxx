@@ -25,8 +25,8 @@
 
 class XMLProcAttrTransformerContext : public XMLTransformerContext
 {
-    OUString m_aElemQName;
-    sal_uInt16 m_nActionMap;
+    OUString const m_aElemQName;
+    sal_uInt16 const m_nActionMap;
 
 protected:
 
@@ -43,8 +43,6 @@ public:
                               sal_uInt16 nPrefix,
                               ::xmloff::token::XMLTokenEnum eToken,
                               sal_uInt16 nActionMap );
-
-    virtual ~XMLProcAttrTransformerContext();
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;

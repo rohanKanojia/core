@@ -51,8 +51,8 @@ def factoryGetInstance(nsLabel):
 
 OOXMLFactory_ns::Pointer_t OOXMLFactory_%s::getInstance()
 {
-    if (m_pInstance.get() == NULL)
-        m_pInstance.reset(new OOXMLFactory_%s());
+    if (!m_pInstance)
+        m_pInstance = new OOXMLFactory_%s();
 
     return m_pInstance;
 }""" % (nsLabel, nsLabel, nsLabel))
@@ -94,6 +94,13 @@ def resourceForAttribute(nsNode, attrNode):
             resourceName = "Boolean"
         elif len([i for i in attrNode.getElementsByTagName("data") if i.getAttribute("type") in ("unsignedInt", "integer", "int")]):
             resourceName = "Integer"
+        else:
+            dataNodes = attrNode.getElementsByTagName("data")
+            if len(dataNodes):
+                t = dataNodes[0].getAttribute("type")
+                # Blacklist existing unexpected data types.
+                if t not in ("token", "long", "decimal", "float", "byte", "ST_DecimalNumber", "positiveInteger"):
+                    raise Exception("unexpected data type: " + dataNodes[0].getAttribute("type"))
     return resourceName
 
 
@@ -151,7 +158,7 @@ def collectAttributeToResource(nsNode, defineNode):
                 refName = refNode.getAttribute("name")
                 for define in [i for i in getChildrenByName(getChildByName(nsNode, "grammar"), "define") if i.getAttribute("name") == refName]:
                     refDefine = idForDefine(nsNode, define)
-            ret_dict[attrToken] = "RT_%s, %s" % (resourceName, refDefine)
+            ret_dict[attrToken] = "ResourceType::%s, %s" % (resourceName, refDefine)
             ret_order.append(attrToken)
 
     return [ret_dict, ret_order]
@@ -181,7 +188,7 @@ def factoryAttributeToResourceMap(nsNode):
             print("        {")
             print("            const static AttributeInfo info[] = {")
             print(inner)
-            print("                { -1, RT_NoResource, 0 }")
+            print("                { -1, ResourceType::NoResource, 0 }")
             print("            };")
             print("            return info;")
             print("        }")
@@ -235,7 +242,6 @@ def printValueData(values):
                 output_else = "else "
             print("            else { return false; }")
             print("            return true;")
-            print("            break;")
     print("        }")
 
 
@@ -258,7 +264,6 @@ def factoryGetListValue(nsNode):
             appendValueData(values, valueData, idToLabel(valueNode.getAttribute("tokenid")))
         printValueData(values)
         print("        return false;")
-        print("        break;")
 
     print("""    default:
         break;
@@ -339,7 +344,7 @@ def factoryCreateElementMapInner(files, nsNode, defineNode, resourceNamespaceNod
             if len(resource):
                 break
         if len(resource):
-            ret[fastToken(elementNode)] = "        case %s: rOutResource = RT_%s; rOutElement = %s; break;" % (fastToken(elementNode), resource, idForRef(nsNode, getChildByName(elementNode, "ref")))
+            ret[fastToken(elementNode)] = "        case %s: rOutResource = ResourceType::%s; rOutElement = %s; break;" % (fastToken(elementNode), resource, idForRef(nsNode, getChildByName(elementNode, "ref")))
 
     return ret
 
@@ -357,7 +362,7 @@ def factoryCreateElementMapFromStart(files, nsNode):
 
 
 def factoryCreateElementMap(files, nsNode):
-    print("""bool OOXMLFactory_%s::getElementId(Id nDefine, Id nId, ResourceType_t& rOutResource, Id& rOutElement)
+    print("""bool OOXMLFactory_%s::getElementId(Id nDefine, Id nId, ResourceType& rOutResource, Id& rOutElement)
 {
     (void) rOutResource;
     (void) rOutElement;
@@ -376,7 +381,6 @@ def factoryCreateElementMap(files, nsNode):
             print("        default: return false;")
             print("        }")
             print("        return true;")
-            print("        break;")
     print("    default:")
     print("        switch (nId)")
     print("        {")
@@ -384,10 +388,7 @@ def factoryCreateElementMap(files, nsNode):
     print("""        default: return false;
         }
         return true;
-        break;
     }
-
-    return false;
 }
 """)
 
@@ -428,7 +429,7 @@ def factoryChooseAction(actionNode):
         ret.append("        {")
         extra_space = "        "
 
-    if actionNode.getAttribute("action") in ("handleXNotes", "handleHdrFtr", "handleComment", "handlePicture", "handleBreak", "handleOLE", "handleFontRel"):
+    if actionNode.getAttribute("action") in ("handleXNotes", "handleHdrFtr", "handleComment", "handlePicture", "handleBreak", "handleOutOfOrderBreak", "handleOLE", "handleFontRel", "handleHyperlinkURL"):
         ret.append("    %sif (OOXMLFastContextHandlerProperties* pProperties = dynamic_cast<OOXMLFastContextHandlerProperties*>(pHandler))" % extra_space)
         ret.append("    %s    pProperties->%s();" % (extra_space, actionNode.getAttribute("action")))
     elif actionNode.getAttribute("action") == "propagateCharacterPropertiesAsSet":
@@ -439,9 +440,13 @@ def factoryChooseAction(actionNode):
     elif actionNode.getAttribute("action") in ("startRow", "endRow"):
         ret.append("    %sif (OOXMLFastContextHandlerTextTableRow* pTextTableRow = dynamic_cast<OOXMLFastContextHandlerTextTableRow*>(pHandler))" % extra_space)
         ret.append("    %s    pTextTableRow->%s();" % (extra_space, actionNode.getAttribute("action")))
-    elif actionNode.getAttribute("action") == "handleGridBefore":
+    elif actionNode.getAttribute("action") == "handleGridBefore" or actionNode.getAttribute("action") == "handleGridAfter":
         ret.append("    %sif (OOXMLFastContextHandlerTextTableRow* pTextTableRow = dynamic_cast<OOXMLFastContextHandlerTextTableRow*>(pHandler))" % extra_space)
         ret.append("    %s    pTextTableRow->%s();" % (extra_space, actionNode.getAttribute("action")))
+    # tdf#111550
+    elif actionNode.getAttribute("action") in ("start_P_Tbl"):
+        ret.append("    %sif (OOXMLFastContextHandlerTextTable* pTextTable = dynamic_cast<OOXMLFastContextHandlerTextTable*>(pHandler))" % extra_space)
+        ret.append("    %s    pTextTable->%s();" % (extra_space, actionNode.getAttribute("action")))
     elif actionNode.getAttribute("action") in ("sendProperty", "handleHyperlink"):
         ret.append("    %sif (OOXMLFastContextHandlerStream* pStream = dynamic_cast<OOXMLFastContextHandlerStream*>(pHandler))" % extra_space)
         ret.append("    %s    pStream->%s();" % (extra_space, actionNode.getAttribute("action")))
@@ -706,7 +711,9 @@ def createImpl(modelNode, nsName):
 #include "oox/token/tokens.hxx"
 
 #ifdef _MSC_VER
+#pragma warning(disable:4060) // switch statement contains no 'case' or 'default' labels
 #pragma warning(disable:4065) // switch statement contains 'default' but no 'case' labels
+#pragma warning(disable:4702) // unreachable code
 #endif
 
 namespace writerfilter {
@@ -745,6 +752,7 @@ def main():
     modelNode = getChildByName(minidom.parse(modelPath), "model")
     nsName = filePath.split('OOXMLFactory_')[1].split('.cxx')[0]
     createImpl(modelNode, nsName)
+
 
 if __name__ == "__main__":
     main()

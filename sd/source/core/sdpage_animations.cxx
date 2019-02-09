@@ -18,19 +18,14 @@
  */
 
 #include <com/sun/star/animations/ParallelTimeContainer.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/presentation/EffectNodeType.hpp>
 #include <com/sun/star/presentation/ParagraphTarget.hpp>
 #include <comphelper/processfactory.hxx>
-#include <osl/mutex.hxx>
 #include <editeng/outliner.hxx>
-#include "CustomAnimationCloner.hxx"
-#include "drawdoc.hxx"
-#include "sdpage.hxx"
-#include <CustomAnimationPreset.hxx>
-#include <TransitionPreset.hxx>
-#include "undoanim.hxx"
-#include "EffectMigration.hxx"
+#include <CustomAnimationCloner.hxx>
+#include <CustomAnimationEffect.hxx>
+#include <sdpage.hxx>
+#include <EffectMigration.hxx>
 
 using namespace ::sd;
 using namespace ::com::sun::star::uno;
@@ -40,16 +35,16 @@ using namespace ::com::sun::star::presentation;
 using ::com::sun::star::drawing::XShape;
 
 /** returns a helper class to manipulate effects inside the main sequence */
-sd::MainSequencePtr SdPage::getMainSequence()
+sd::MainSequencePtr const & SdPage::getMainSequence()
 {
-    if( nullptr == mpMainSequence.get() )
+    if (nullptr == mpMainSequence)
         mpMainSequence.reset( new sd::MainSequence( getAnimationNode() ) );
 
     return mpMainSequence;
 }
 
 /** returns the main animation node */
-Reference< XAnimationNode > SdPage::getAnimationNode() throw (RuntimeException)
+Reference< XAnimationNode > const & SdPage::getAnimationNode()
 {
     if( !mxAnimationNode.is() )
     {
@@ -62,7 +57,7 @@ Reference< XAnimationNode > SdPage::getAnimationNode() throw (RuntimeException)
     return mxAnimationNode;
 }
 
-void SdPage::setAnimationNode( Reference< XAnimationNode >& xNode ) throw (RuntimeException)
+void SdPage::setAnimationNode( Reference< XAnimationNode > const & xNode )
 {
     mxAnimationNode = xNode;
     if( mpMainSequence.get() )
@@ -83,6 +78,18 @@ void SdPage::removeAnimations( const SdrObject* pObj )
     }
 }
 
+/** Notify that the object has been renamed and the animation effect has to update. */
+void SdPage::notifyObjectRenamed(const SdrObject* pObj)
+{
+    if (pObj && hasAnimationNode())
+    {
+        Reference<XShape> xShape(const_cast<SdrObject*>(pObj)->getUnoShape(), UNO_QUERY);
+
+        if (xShape.is() && getMainSequence()->hasEffect(xShape))
+            getMainSequence()->notify_change();
+    }
+}
+
 bool SdPage::hasAnimationNode() const
 {
     return mxAnimationNode.is();
@@ -99,7 +106,7 @@ FadeEffect SdPage::GetFadeEffect() const
 }
 
 /** callback from the sd::View when a new paragraph for one object on this page is created */
-void SdPage::onParagraphInserted( ::Outliner* pOutliner, Paragraph* pPara, SdrObject* pObj )
+void SdPage::onParagraphInserted( ::Outliner* pOutliner, Paragraph const * pPara, SdrObject* pObj )
 {
     if( mxAnimationNode.is() )
     {
@@ -107,14 +114,14 @@ void SdPage::onParagraphInserted( ::Outliner* pOutliner, Paragraph* pPara, SdrOb
         aTarget.Shape.set( pObj->getUnoShape(), UNO_QUERY );
         /* FIXME: Paragraph should be sal_Int32, though more than 64k
          * paragrapsh at a shape are unlikely.. */
-        aTarget.Paragraph = (sal_Int16)pOutliner->GetAbsPos( pPara );
+        aTarget.Paragraph = static_cast<sal_Int16>(pOutliner->GetAbsPos( pPara ));
 
         getMainSequence()->insertTextRange( makeAny( aTarget ) );
     }
 }
 
 /** callback from the sd::View when a paragraph from one object on this page is removed */
-void SdPage::onParagraphRemoving( ::Outliner* pOutliner, Paragraph* pPara, SdrObject* pObj )
+void SdPage::onParagraphRemoving( ::Outliner* pOutliner, Paragraph const * pPara, SdrObject* pObj )
 {
     if( mxAnimationNode.is() )
     {
@@ -122,7 +129,7 @@ void SdPage::onParagraphRemoving( ::Outliner* pOutliner, Paragraph* pPara, SdrOb
         aTarget.Shape.set( pObj->getUnoShape(), UNO_QUERY );
         /* FIXME: Paragraph should be sal_Int32, though more than 64k
          * paragrapsh at a shape are unlikely.. */
-        aTarget.Paragraph = (sal_Int16)pOutliner->GetAbsPos( pPara );
+        aTarget.Paragraph = static_cast<sal_Int16>(pOutliner->GetAbsPos( pPara ));
 
         getMainSequence()->disposeTextRange( makeAny( aTarget ) );
     }

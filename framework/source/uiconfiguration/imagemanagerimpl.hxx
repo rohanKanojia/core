@@ -20,9 +20,6 @@
 #ifndef INCLUDED_FRAMEWORK_SOURCE_UICONFIGURATION_IMAGEMANAGERIMPL_HXX
 #define INCLUDED_FRAMEWORK_SOURCE_UICONFIGURATION_IMAGEMANAGERIMPL_HXX
 
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
-#include <macros/xserviceinfo.hxx>
 #include <stdtypes.h>
 #include <uiconfiguration/imagetype.hxx>
 
@@ -35,6 +32,7 @@
 #include <com/sun/star/ui/XImageManager.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/ui/ConfigurationEvent.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/embed/XTransactedObject.hpp>
 
 #include <cppuhelper/weak.hxx>
@@ -48,7 +46,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include <vcl/CommandImageResolver.hxx>
+#include "CommandImageResolver.hxx"
 
 namespace framework
 {
@@ -58,8 +56,8 @@ namespace framework
             CmdImageList(const css::uno::Reference< css::uno::XComponentContext >& rxContext, const OUString& aModuleIdentifier);
             virtual ~CmdImageList();
 
-            virtual Image getImageFromCommandURL(sal_Int16 nImageType, const OUString& rCommandURL);
-            virtual bool hasImage(sal_Int16 nImageType, const OUString& rCommandURL);
+            virtual Image getImageFromCommandURL(vcl::ImageType nImageType, const OUString& rCommandURL);
+            virtual bool hasImage(vcl::ImageType nImageType, const OUString& rCommandURL);
             virtual std::vector<OUString>& getImageCommandNames();
 
         protected:
@@ -77,10 +75,10 @@ namespace framework
     {
         public:
             explicit GlobalImageList(const css::uno::Reference< css::uno::XComponentContext >& rxContext);
-            virtual ~GlobalImageList();
+            virtual ~GlobalImageList() override;
 
-            virtual Image                           getImageFromCommandURL( sal_Int16 nImageType, const OUString& rCommandURL ) override;
-            virtual bool                            hasImage( sal_Int16 nImageType, const OUString& rCommandURL ) override;
+            virtual Image                           getImageFromCommandURL( vcl::ImageType nImageType, const OUString& rCommandURL ) override;
+            virtual bool                            hasImage( vcl::ImageType nImageType, const OUString& rCommandURL ) override;
             virtual ::std::vector< OUString >&      getImageCommandNames() override;
     };
 
@@ -94,47 +92,62 @@ namespace framework
 
             void dispose();
             void initialize( const css::uno::Sequence< css::uno::Any >& aArguments );
-            void addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) throw (css::uno::RuntimeException);
-            void removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) throw (css::uno::RuntimeException);
+            /// @throws css::uno::RuntimeException
+            void addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener );
+            /// @throws css::uno::RuntimeException
+            void removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener );
 
             // XImageManager
-            void reset() throw (css::uno::RuntimeException, css::lang::IllegalAccessException);
-            css::uno::Sequence< OUString > getAllImageNames( ::sal_Int16 nImageType ) throw (css::uno::RuntimeException);
-            bool hasImage( ::sal_Int16 nImageType, const OUString& aCommandURL ) throw (css::lang::IllegalArgumentException, css::uno::RuntimeException);
-            css::uno::Sequence< css::uno::Reference< css::graphic::XGraphic > > getImages( ::sal_Int16 nImageType, const css::uno::Sequence< OUString >& aCommandURLSequence ) throw (css::lang::IllegalArgumentException, css::uno::RuntimeException);
-            void replaceImages( ::sal_Int16 nImageType, const css::uno::Sequence< OUString >& aCommandURLSequence, const css::uno::Sequence< css::uno::Reference< css::graphic::XGraphic > >& aGraphicsSequence ) throw (css::lang::IllegalArgumentException, css::lang::IllegalAccessException, css::uno::RuntimeException, std::exception);
-            void removeImages( ::sal_Int16 nImageType, const css::uno::Sequence< OUString >& aResourceURLSequence ) throw (css::lang::IllegalArgumentException, css::lang::IllegalAccessException, css::uno::RuntimeException);
-            void insertImages( ::sal_Int16 nImageType, const css::uno::Sequence< OUString >& aCommandURLSequence, const css::uno::Sequence< css::uno::Reference< css::graphic::XGraphic > >& aGraphicSequence ) throw (css::container::ElementExistException, css::lang::IllegalArgumentException, css::lang::IllegalAccessException, css::uno::RuntimeException);
+            /// @throws css::uno::RuntimeException
+            /// @throws css::lang::IllegalAccessException
+            void reset();
+            /// @throws css::uno::RuntimeException
+            css::uno::Sequence< OUString > getAllImageNames( ::sal_Int16 nImageType );
+            /// @throws css::lang::IllegalArgumentException
+            /// @throws css::uno::RuntimeException
+            bool hasImage( ::sal_Int16 nImageType, const OUString& aCommandURL );
+            /// @throws css::lang::IllegalArgumentException
+            /// @throws css::uno::RuntimeException
+            css::uno::Sequence< css::uno::Reference< css::graphic::XGraphic > > getImages( ::sal_Int16 nImageType, const css::uno::Sequence< OUString >& aCommandURLSequence );
+            /// @throws css::lang::IllegalArgumentException
+            /// @throws css::lang::IllegalAccessException
+            /// @throws css::uno::RuntimeException
+            void replaceImages( ::sal_Int16 nImageType, const css::uno::Sequence< OUString >& aCommandURLSequence, const css::uno::Sequence< css::uno::Reference< css::graphic::XGraphic > >& aGraphicsSequence );
+            /// @throws css::lang::IllegalArgumentException
+            /// @throws css::lang::IllegalAccessException
+            /// @throws css::uno::RuntimeException
+            void removeImages( ::sal_Int16 nImageType, const css::uno::Sequence< OUString >& aResourceURLSequence );
+            /// @throws css::container::ElementExistException
+            /// @throws css::lang::IllegalArgumentException
+            /// @throws css::lang::IllegalAccessException
+            /// @throws css::uno::RuntimeException
+            void insertImages( ::sal_Int16 nImageType, const css::uno::Sequence< OUString >& aCommandURLSequence, const css::uno::Sequence< css::uno::Reference< css::graphic::XGraphic > >& aGraphicSequence );
 
             // XUIConfiguration
-            void addConfigurationListener( const css::uno::Reference< css::ui::XUIConfigurationListener >& Listener ) throw (css::uno::RuntimeException);
-            void removeConfigurationListener( const css::uno::Reference< css::ui::XUIConfigurationListener >& Listener ) throw (css::uno::RuntimeException);
+            /// @throws css::uno::RuntimeException
+            void addConfigurationListener( const css::uno::Reference< css::ui::XUIConfigurationListener >& Listener );
+            /// @throws css::uno::RuntimeException
+            void removeConfigurationListener( const css::uno::Reference< css::ui::XUIConfigurationListener >& Listener );
 
             // XUIConfigurationPersistence
-            void reload() throw (css::uno::Exception, css::uno::RuntimeException, std::exception);
-            void store()
-                throw (css::uno::Exception,
-                       css::uno::RuntimeException,
-                       std::exception);
-            void storeToStorage( const css::uno::Reference< css::embed::XStorage >& Storage )
-                throw (css::uno::Exception,
-                       css::uno::RuntimeException,
-                       std::exception);
-            bool isModified() throw (css::uno::RuntimeException);
-            bool isReadOnly() throw (css::uno::RuntimeException);
+            /// @throws css::uno::Exception
+            /// @throws css::uno::RuntimeException
+            void reload();
+            /// @throws css::uno::Exception
+            /// @throws css::uno::RuntimeException
+            void store();
+            /// @throws css::uno::Exception
+            /// @throws css::uno::RuntimeException
+            void storeToStorage( const css::uno::Reference< css::embed::XStorage >& Storage );
+            /// @throws css::uno::RuntimeException
+            bool isModified();
+            /// @throws css::uno::RuntimeException
+            bool isReadOnly();
 
             void clear();
 
             typedef std::unordered_map< OUString,
-                                        sal_Bool,
-                                        OUStringHash > ImageNameMap;
-
-            enum Layer
-            {
-                LAYER_DEFAULT,
-                LAYER_USERDEFINED,
-                LAYER_COUNT
-            };
+                                        sal_Bool > ImageNameMap;
 
             enum NotifyOp
             {
@@ -147,11 +160,11 @@ namespace framework
 
             void                                      implts_initialize();
             void                                      implts_notifyContainerListener( const css::ui::ConfigurationEvent& aEvent, NotifyOp eOp );
-            ImageList*                                implts_getUserImageList( ImageType nImageType );
-            bool                                  implts_loadUserImages( ImageType nImageType,
+            ImageList*                                implts_getUserImageList( vcl::ImageType nImageType );
+            void                                      implts_loadUserImages( vcl::ImageType nImageType,
                                                                              const css::uno::Reference< css::embed::XStorage >& xUserImageStorage,
                                                                              const css::uno::Reference< css::embed::XStorage >& xUserBitmapsStorage );
-            bool                                  implts_storeUserImages( ImageType nImageType,
+            bool                                      implts_storeUserImages( vcl::ImageType nImageType,
                                                                               const css::uno::Reference< css::embed::XStorage >& xUserImageStorage,
                                                                               const css::uno::Reference< css::embed::XStorage >& xUserBitmapsStorage );
             const rtl::Reference< GlobalImageList >&  implts_getGlobalImageList();
@@ -164,18 +177,17 @@ namespace framework
             css::uno::Reference< css::uno::XComponentContext >        m_xContext;
             ::cppu::OWeakObject*                                                            m_pOwner;
             rtl::Reference< GlobalImageList >                                               m_pGlobalImageList;
-            CmdImageList*                                                                   m_pDefaultImageList;
+            std::unique_ptr<CmdImageList>                                                   m_pDefaultImageList;
             OUString                                                                   m_aModuleIdentifier;
             OUString                                                                   m_aResourceString;
             osl::Mutex m_mutex;
             ::cppu::OMultiTypeInterfaceContainerHelper                                      m_aListenerContainer;   /// container for ALL Listener
-            ImageList*                                                                      m_pUserImageList[ImageType_COUNT];
-            bool                                                                            m_bUserImageListModified[ImageType_COUNT];
+            o3tl::enumarray<vcl::ImageType,std::unique_ptr<ImageList>>                      m_pUserImageList;
+            o3tl::enumarray<vcl::ImageType,bool>                                            m_bUserImageListModified;
             bool                                                                            m_bUseGlobal;
             bool                                                                            m_bReadOnly;
             bool                                                                            m_bInitialized;
             bool                                                                            m_bModified;
-            bool                                                                            m_bConfigRead;
             bool                                                                            m_bDisposed;
    };
 }

@@ -23,52 +23,35 @@
 
 #include <vcl/button.hxx>
 #include <vcl/fixed.hxx>
+#include <vcl/weld.hxx>
 
-class SW_DLLPUBLIC CancelableDialog : public Dialog
+class SW_DLLPUBLIC PrintMonitor: public weld::GenericDialogController
 {
-    bool mbModal;
-
-protected:
-    VclPtr<CancelButton> m_pCancelButton;
-    CancelableDialog( vcl::Window *pParent, bool modal, const OUString& rID,
-                      const OUString& rUIXMLDescription );
-
-    using Dialog::Execute;
-    using Dialog::StartExecuteModal;
-
 public:
-    virtual ~CancelableDialog();
-    virtual void dispose() override;
+    std::unique_ptr<weld::Label> m_xDocName;
+    std::unique_ptr<weld::Label> m_xPrinter;
+    std::unique_ptr<weld::Label> m_xPrintInfo;
 
-    void SetCancelHdl( const Link<Button*,void>& rLink );
-    void Show();
+    PrintMonitor(weld::Window *pParent);
+    virtual ~PrintMonitor() override;
 };
 
-class SW_DLLPUBLIC PrintMonitor: public CancelableDialog
+class SW_DLLPUBLIC SaveMonitor : public weld::GenericDialogController
 {
 public:
-    enum PrintMonitorType
-    {
-        MONITOR_TYPE_PRINT,
-        MONITOR_TYPE_SAVE
-    };
+    std::unique_ptr<weld::Label> m_xDocName;
+    std::unique_ptr<weld::Label> m_xPrinter;
+    std::unique_ptr<weld::Label> m_xPrintInfo;
 
-    VclPtr<FixedText> m_pDocName;
-    VclPtr<FixedText> m_pPrinting;
-    VclPtr<FixedText> m_pPrinter;
-    VclPtr<FixedText> m_pPrintInfo;
-
-    PrintMonitor( vcl::Window *pParent, bool modal, PrintMonitorType eType );
-    virtual ~PrintMonitor();
-    virtual void dispose() override;
+    SaveMonitor(weld::Window *pParent);
+    virtual ~SaveMonitor() override;
 };
 
-class CreateMonitor : public CancelableDialog
+class CreateMonitor : public weld::GenericDialogController
 {
 public:
-    CreateMonitor( vcl::Window *pParent, bool modal );
-    virtual ~CreateMonitor();
-    virtual void dispose() override;
+    CreateMonitor(weld::Window *pParent);
+    virtual ~CreateMonitor() override;
 
     void SetTotalCount( sal_Int32 nTotal );
     void SetCurrentPosition( sal_Int32 nCurrent );
@@ -77,13 +60,11 @@ private:
     void UpdateCountingText();
 
 private:
-    VclPtr<FixedText>      m_pCounting;
-
     OUString        m_sCountingPattern;
-    OUString        m_sVariable_Total;
-    OUString        m_sVariable_Position;
     sal_Int32       m_nTotalCount;
     sal_Int32       m_nCurrentPosition;
+
+    std::unique_ptr<weld::Label> m_xCounting;
 };
 
 #endif

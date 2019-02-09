@@ -1,4 +1,4 @@
-/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -19,28 +19,28 @@
 
 #include <config_features.h>
 
+#include <sal/log.hxx>
 #include <svl/stritem.hxx>
 #include <svl/eitem.hxx>
 #include <svl/whiter.hxx>
-#include <vcl/layout.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/toolbox.hxx>
+#include <vcl/weld.hxx>
 #include <svl/intitem.hxx>
+#include <svtools/langhelp.hxx>
 #include <svtools/sfxecode.hxx>
 #include <svtools/ehdl.hxx>
 #include <com/sun/star/frame/XLayoutManager.hpp>
 #include <com/sun/star/frame/ModuleManager.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/embed/EmbedStates.hpp>
 #include <com/sun/star/embed/EmbedMisc.hpp>
 #include <com/sun/star/container/XContainerQuery.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboard.hpp>
-#include <com/sun/star/frame/theUICommandDescription.hpp>
 #include <cppuhelper/implbase.hxx>
 
 #include <osl/file.hxx>
-#include <osl/mutex.hxx>
 #include <tools/urlobj.hxx>
 #include <unotools/tempfile.hxx>
 #include <unotools/pathoptions.hxx>
@@ -51,14 +51,16 @@
 #include <basic/basmgr.hxx>
 #include <basic/sbuno.hxx>
 #include <framework/actiontriggerhelper.hxx>
+#include <comphelper/lok.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/sequenceashashmap.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/commandinfoprovider.hxx>
+#include <LibreOfficeKit/LibreOfficeKitEnums.h>
 
+#include <officecfg/Setup.hxx>
 #include <sfx2/app.hxx>
-#include "view.hrc"
 #include <sfx2/viewsh.hxx>
 #include "viewimp.hxx"
 #include <sfx2/sfxresid.hxx>
@@ -67,23 +69,25 @@
 #include <sfx2/printer.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/dispatch.hxx>
-#include "arrdecl.hxx"
+#include <arrdecl.hxx>
 #include <sfx2/docfac.hxx>
-#include "sfxlocal.hrc"
+#include <sfx2/strings.hrc>
 #include <sfx2/sfxbasecontroller.hxx>
 #include <sfx2/mailmodelapi.hxx>
-#include "bluthsndapi.hxx"
+#include <bluthsndapi.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/event.hxx>
 #include <sfx2/fcontnr.hxx>
 #include <sfx2/ipclient.hxx>
-#include "workwin.hxx"
+#include <workwin.hxx>
 #include <sfx2/objface.hxx>
 #include <sfx2/docfilt.hxx>
-#include "openuriexternally.hxx"
+#include <sfx2/lokhelper.hxx>
+#include <openuriexternally.hxx>
 #include <shellimpl.hxx>
 
 #include <vector>
+#include <libxml/xmlwriter.h>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -92,8 +96,8 @@ using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::util;
 using namespace ::cppu;
 
-#define SfxViewShell
-#include "sfxslots.hxx"
+#define ShellClass_SfxViewShell
+#include <sfxslots.hxx>
 
 
 class SfxClipboardChangeListener : public ::cppu::WeakImplHelper<
@@ -101,15 +105,12 @@ class SfxClipboardChangeListener : public ::cppu::WeakImplHelper<
 {
 public:
     SfxClipboardChangeListener( SfxViewShell* pView, const uno::Reference< datatransfer::clipboard::XClipboardNotifier >& xClpbrdNtfr );
-    virtual ~SfxClipboardChangeListener();
 
     // XEventListener
-    virtual void SAL_CALL disposing( const lang::EventObject& rEventObject )
-        throw ( uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL disposing( const lang::EventObject& rEventObject ) override;
 
     // XClipboardListener
-    virtual void SAL_CALL changedContents( const datatransfer::clipboard::ClipboardEvent& rEventObject )
-        throw ( uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL changedContents( const datatransfer::clipboard::ClipboardEvent& rEventObject ) override;
 
     void DisconnectViewShell() { m_pViewShell = nullptr; }
     void ChangedContents();
@@ -122,12 +123,11 @@ public:
 
     struct AsyncExecuteInfo
     {
-        AsyncExecuteInfo( AsyncExecuteCmd eCmd, uno::Reference< datatransfer::clipboard::XClipboardListener > xThis, SfxClipboardChangeListener* pListener ) :
-            m_eCmd( eCmd ), m_xThis( xThis ), m_pListener( pListener ) {}
+        AsyncExecuteInfo( AsyncExecuteCmd eCmd, SfxClipboardChangeListener* pListener ) :
+            m_eCmd( eCmd ), m_xListener( pListener ) {}
 
-        AsyncExecuteCmd m_eCmd;
-        uno::Reference< datatransfer::clipboard::XClipboardListener > m_xThis;
-        SfxClipboardChangeListener* m_pListener;
+        AsyncExecuteCmd const m_eCmd;
+        rtl::Reference<SfxClipboardChangeListener> m_xListener;
     };
 
 private:
@@ -135,7 +135,7 @@ private:
     uno::Reference< datatransfer::clipboard::XClipboardNotifier > m_xClpbrdNtfr;
     uno::Reference< lang::XComponent > m_xCtrl;
 
-    DECL_STATIC_LINK_TYPED( SfxClipboardChangeListener, AsyncExecuteHdl_Impl, void*, void );
+    DECL_STATIC_LINK( SfxClipboardChangeListener, AsyncExecuteHdl_Impl, void*, void );
 };
 
 SfxClipboardChangeListener::SfxClipboardChangeListener( SfxViewShell* pView, const uno::Reference< datatransfer::clipboard::XClipboardNotifier >& xClpbrdNtfr )
@@ -154,41 +154,41 @@ SfxClipboardChangeListener::SfxClipboardChangeListener( SfxViewShell* pView, con
     }
 }
 
-SfxClipboardChangeListener::~SfxClipboardChangeListener()
-{
-}
-
 void SfxClipboardChangeListener::ChangedContents()
 {
     const SolarMutexGuard aGuard;
-    if( m_pViewShell )
+    if (!m_pViewShell)
+        return;
+
+    SfxBindings& rBind = m_pViewShell->GetViewFrame()->GetBindings();
+    rBind.Invalidate(SID_PASTE);
+    rBind.Invalidate(SID_PASTE_SPECIAL);
+    rBind.Invalidate(SID_CLIPBOARD_FORMAT_ITEMS);
+
+    if (comphelper::LibreOfficeKit::isActive())
     {
-        SfxBindings& rBind = m_pViewShell->GetViewFrame()->GetBindings();
-        rBind.Invalidate( SID_PASTE );
-        rBind.Invalidate( SID_PASTE_SPECIAL );
-        rBind.Invalidate( SID_CLIPBOARD_FORMAT_ITEMS );
+        // In the future we might send the payload as well.
+        SfxLokHelper::notifyAllViews(LOK_CALLBACK_CLIPBOARD_CHANGED, "");
     }
 }
 
-IMPL_STATIC_LINK_TYPED( SfxClipboardChangeListener, AsyncExecuteHdl_Impl, void*, p, void )
+IMPL_STATIC_LINK( SfxClipboardChangeListener, AsyncExecuteHdl_Impl, void*, p, void )
 {
     AsyncExecuteInfo* pAsyncExecuteInfo = static_cast<AsyncExecuteInfo*>(p);
     if ( pAsyncExecuteInfo )
     {
-        uno::Reference< datatransfer::clipboard::XClipboardListener > xThis( pAsyncExecuteInfo->m_xThis );
-        if ( pAsyncExecuteInfo->m_pListener )
+        if ( pAsyncExecuteInfo->m_xListener.is() )
         {
             if ( pAsyncExecuteInfo->m_eCmd == ASYNCEXECUTE_CMD_DISPOSING )
-                pAsyncExecuteInfo->m_pListener->DisconnectViewShell();
+                pAsyncExecuteInfo->m_xListener->DisconnectViewShell();
             else if ( pAsyncExecuteInfo->m_eCmd == ASYNCEXECUTE_CMD_CHANGEDCONTENTS )
-                pAsyncExecuteInfo->m_pListener->ChangedContents();
+                pAsyncExecuteInfo->m_xListener->ChangedContents();
         }
     }
     delete pAsyncExecuteInfo;
 }
 
 void SAL_CALL SfxClipboardChangeListener::disposing( const lang::EventObject& /*rEventObject*/ )
-    throw ( uno::RuntimeException, std::exception )
 {
     // Either clipboard or ViewShell is going to be destroyed -> no interest in listening anymore
     uno::Reference< lang::XComponent > xCtrl( m_xCtrl );
@@ -203,66 +203,40 @@ void SAL_CALL SfxClipboardChangeListener::disposing( const lang::EventObject& /*
     // Make asynchronous call to avoid locking SolarMutex which is the
     // root for many deadlocks, especially in conjunction with the "Windows"
     // based single thread apartment clipboard code!
-    AsyncExecuteInfo* pInfo = new AsyncExecuteInfo( ASYNCEXECUTE_CMD_DISPOSING, xThis, this );
+    AsyncExecuteInfo* pInfo = new AsyncExecuteInfo( ASYNCEXECUTE_CMD_DISPOSING, this );
     Application::PostUserEvent( LINK( nullptr, SfxClipboardChangeListener, AsyncExecuteHdl_Impl ), pInfo );
 }
 
 void SAL_CALL SfxClipboardChangeListener::changedContents( const datatransfer::clipboard::ClipboardEvent& )
-    throw ( RuntimeException, std::exception )
 {
     // Make asynchronous call to avoid locking SolarMutex which is the
     // root for many deadlocks, especially in conjunction with the "Windows"
     // based single thread apartment clipboard code!
-    uno::Reference< datatransfer::clipboard::XClipboardListener > xThis( static_cast< datatransfer::clipboard::XClipboardListener* >( this ));
-    AsyncExecuteInfo* pInfo = new AsyncExecuteInfo( ASYNCEXECUTE_CMD_CHANGEDCONTENTS, xThis, this );
+    AsyncExecuteInfo* pInfo = new AsyncExecuteInfo( ASYNCEXECUTE_CMD_CHANGEDCONTENTS, this );
     Application::PostUserEvent( LINK( nullptr, SfxClipboardChangeListener, AsyncExecuteHdl_Impl ), pInfo );
 }
 
-class SfxInPlaceClientList
-{
-    typedef std::vector<SfxInPlaceClient*> DataType;
-    DataType maData;
-
-public:
-    typedef DataType::iterator iterator;
-
-    SfxInPlaceClient* at( size_t i ) { return maData.at(i); }
-
-    iterator begin() { return maData.begin(); }
-    iterator end() { return maData.end(); }
-
-    void push_back( SfxInPlaceClient* p ) { maData.push_back(p); }
-    void erase( const iterator& it ) { maData.erase(it); }
-    size_t size() const { return maData.size(); }
-};
+sal_uInt32 SfxViewShell_Impl::m_nLastViewShellId = 0;
 
 SfxViewShell_Impl::SfxViewShell_Impl(SfxViewShellFlags const nFlags)
 : aInterceptorContainer( aMutex )
-,   m_bControllerSet(false)
-,   m_nPrinterLocks(0)
-,   m_bCanPrint(nFlags & SfxViewShellFlags::CAN_PRINT)
 ,   m_bHasPrintOptions(nFlags & SfxViewShellFlags::HAS_PRINTOPTIONS)
-,   m_bPlugInsActive(true)
-,   m_bIsShowView(!(nFlags & SfxViewShellFlags::NO_SHOW))
-,   m_bGotOwnership(false)
-,   m_bGotFrameOwnership(false)
 ,   m_nFamily(0xFFFF)   // undefined, default set by TemplateDialog
-,   m_pController(nullptr)
-,   mpIPClientList(nullptr)
 ,   m_pLibreOfficeKitViewCallback(nullptr)
 ,   m_pLibreOfficeKitViewData(nullptr)
+,   m_bTiledSearching(false)
+,   m_nViewShellId(SfxViewShell_Impl::m_nLastViewShellId++)
 {}
 
 SfxViewShell_Impl::~SfxViewShell_Impl()
 {
-    DELETEZ(mpIPClientList);
 }
 
-SfxInPlaceClientList* SfxViewShell_Impl::GetIPClientList_Impl( bool bCreate ) const
+std::vector< SfxInPlaceClient* > *SfxViewShell_Impl::GetIPClients_Impl( bool bCreate ) const
 {
-    if (!mpIPClientList && bCreate)
-        mpIPClientList = new SfxInPlaceClientList;
-    return mpIPClientList;
+    if (!mpIPClients && bCreate)
+        mpIPClients.reset(new std::vector< SfxInPlaceClient* >);
+    return mpIPClients.get();
 }
 
 SFX_IMPL_SUPERCLASS_INTERFACE(SfxViewShell,SfxShell)
@@ -321,7 +295,7 @@ enum ETypeFamily
     E_OOO_DOC
 };
 
-OUString impl_searchFormatTypeForApp(const css::uno::Reference< css::frame::XFrame >& xFrame     ,
+static OUString impl_searchFormatTypeForApp(const css::uno::Reference< css::frame::XFrame >& xFrame     ,
                                                   ETypeFamily                                eTypeFamily)
 {
     try
@@ -337,16 +311,13 @@ OUString impl_searchFormatTypeForApp(const css::uno::Reference< css::frame::XFra
             case E_MS_DOC:
             {
                 if ( sModule == "com.sun.star.text.TextDocument" )
-                    sType = "writer_MS_Word_97";
+                    sType = "writer_MS_Word_2007";
                 else
                 if ( sModule == "com.sun.star.sheet.SpreadsheetDocument" )
-                    sType = "calc_MS_Excel_97";
-                else
-                if ( sModule == "com.sun.star.drawing.DrawingDocument" )
-                    sType = "impress_MS_PowerPoint_97";
+                    sType = "MS Excel 2007 XML";
                 else
                 if ( sModule == "com.sun.star.presentation.PresentationDocument" )
-                    sType = "impress_MS_PowerPoint_97";
+                    sType = "MS PowerPoint 2007 XML";
             }
             break;
 
@@ -382,21 +353,16 @@ OUString impl_searchFormatTypeForApp(const css::uno::Reference< css::frame::XFra
 
 void SfxViewShell::NewIPClient_Impl( SfxInPlaceClient *pIPClient )
 {
-    pImp->GetIPClientList_Impl()->push_back(pIPClient);
+    pImpl->GetIPClients_Impl()->push_back(pIPClient);
 }
 
-void SfxViewShell::IPClientGone_Impl( SfxInPlaceClient *pIPClient )
+void SfxViewShell::IPClientGone_Impl( SfxInPlaceClient const *pIPClient )
 {
-    SfxInPlaceClientList* pClientList = pImp->GetIPClientList_Impl();
+    std::vector< SfxInPlaceClient* > *pClients = pImpl->GetIPClients_Impl();
 
-    for( SfxInPlaceClientList::iterator it = pClientList->begin(); it != pClientList->end(); ++it )
-    {
-        if ( *it == pIPClient )
-        {
-            pClientList->erase( it );
-            break;
-        }
-    }
+    auto it = std::find(pClients->begin(), pClients->end(), pIPClient);
+    if (it != pClients->end())
+        pClients->erase( it );
 }
 
 
@@ -410,7 +376,7 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
             const SfxUInt16Item* pItem = rReq.GetArg<SfxUInt16Item>(nId);
             if (pItem)
             {
-                pImp->m_nFamily = pItem->GetValue();
+                pImpl->m_nFamily = pItem->GetValue();
             }
             break;
         }
@@ -430,27 +396,24 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
                     aValue >>= xLayoutManager;
                     if ( xLayoutManager.is() )
                     {
-                        OUString aTextResString( "private:resource/toolbar/textobjectbar" );
-                        uno::Reference< ui::XUIElement > xElement = xLayoutManager->getElement( aTextResString );
+                        uno::Reference< ui::XUIElement > xElement = xLayoutManager->getElement( "private:resource/toolbar/textobjectbar" );
                         if(!xElement.is())
                         {
-                            OUString aFrameResString( "private:resource/toolbar/frameobjectbar" );
-                            xElement = xLayoutManager->getElement( aFrameResString );
+                            xElement = xLayoutManager->getElement( "private:resource/toolbar/frameobjectbar" );
                         }
                         if(!xElement.is())
                         {
-                            OUString aOleResString( "private:resource/toolbar/oleobjectbar" );
-                            xElement = xLayoutManager->getElement( aOleResString );
+                            xElement = xLayoutManager->getElement( "private:resource/toolbar/oleobjectbar" );
                         }
                         if(xElement.is())
                         {
                             uno::Reference< awt::XWindow > xWin( xElement->getRealInterface(), uno::UNO_QUERY_THROW );
-                            vcl::Window* pWin = VCLUnoHelper::GetWindow( xWin );
-                            ToolBox* pTextToolbox = dynamic_cast< ToolBox* >( pWin );
+                            VclPtr<vcl::Window> pWin = VCLUnoHelper::GetWindow( xWin );
+                            ToolBox* pTextToolbox = dynamic_cast< ToolBox* >( pWin.get() );
                             if( pTextToolbox )
                             {
-                                sal_uInt16 nItemCount = pTextToolbox->GetItemCount();
-                                for( sal_uInt16 nItem = 0; nItem < nItemCount; ++nItem )
+                                ToolBox::ImplToolItems::size_type nItemCount = pTextToolbox->GetItemCount();
+                                for( ToolBox::ImplToolItems::size_type nItem = 0; nItem < nItemCount; ++nItem )
                                 {
                                     sal_uInt16 nItemId = pTextToolbox->GetItemId( nItem );
                                     const OUString& rCommand = pTextToolbox->GetItemCommand( nItemId );
@@ -473,7 +436,6 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
             rReq.Done();
         }
         break;
-        // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
         case SID_MAIL_SENDDOCASMS:
         case SID_MAIL_SENDDOCASOOO:
@@ -483,7 +445,7 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
         {
             SfxObjectShell* pDoc = GetObjectShell();
             if ( pDoc && pDoc->QueryHiddenInformation(
-                             HiddenWarningFact::WhenSaving, &GetViewFrame()->GetWindow() ) != RET_YES )
+                             HiddenWarningFact::WhenSaving, GetViewFrame()->GetWindow().GetFrameWeld() ) != RET_YES )
                 break;
 
 
@@ -502,7 +464,7 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
 
                 if ( aRecipient.startsWith( aMailToStr ) )
                     aRecipient = aRecipient.copy( aMailToStr.getLength() );
-                aModel.AddAddress( aRecipient, SfxMailModel::ROLE_TO );
+                aModel.AddToAddress( aRecipient );
             }
             const SfxStringItem* pMailDocType = rReq.GetArg<SfxStringItem>(SID_TYPE_NAME);
             if ( pMailDocType )
@@ -530,8 +492,11 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
 
             if ( eResult == SfxMailModel::SEND_MAIL_ERROR )
             {
-                ScopedVclPtrInstance< MessageDialog > aBox(SfxGetpApp()->GetTopWindow(), SfxResId( STR_ERROR_SEND_MAIL ), VCL_MESSAGE_INFO);
-                aBox->Execute();
+                vcl::Window* pWin = SfxGetpApp()->GetTopWindow();
+                std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pWin ? pWin->GetFrameWeld() : nullptr,
+                                                                         VclMessageType::Info, VclButtonsType::Ok,
+                                                                         SfxResId(STR_ERROR_SEND_MAIL)));
+                xBox->run();
                 rReq.Ignore();
             }
             else
@@ -544,15 +509,18 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
             SfxBluetoothModel aModel;
             SfxObjectShell* pDoc = GetObjectShell();
             if ( pDoc && pDoc->QueryHiddenInformation(
-                            HiddenWarningFact::WhenSaving, &GetViewFrame()->GetWindow() ) != RET_YES )
+                            HiddenWarningFact::WhenSaving, GetViewFrame()->GetWindow().GetFrameWeld() ) != RET_YES )
                 break;
             uno::Reference < frame::XFrame > xFrame( pFrame->GetFrame().GetFrameInterface() );
-            SfxMailModel::SendMailResult eResult = aModel.SaveAndSend( xFrame, OUString() );
+            SfxMailModel::SendMailResult eResult = aModel.SaveAndSend( xFrame );
             if( eResult == SfxMailModel::SEND_MAIL_ERROR )
             {
-                    ScopedVclPtrInstance< MessageDialog > aBox(SfxGetpApp()->GetTopWindow(), SfxResId( STR_ERROR_SEND_MAIL ), VCL_MESSAGE_INFO);
-                    aBox->Execute();
-                    rReq.Ignore();
+                vcl::Window* pWin = SfxGetpApp()->GetTopWindow();
+                std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pWin ? pWin->GetFrameWeld() : nullptr,
+                                                                         VclMessageType::Info, VclButtonsType::Ok,
+                                                                         SfxResId(STR_ERROR_SEND_MAIL)));
+                xBox->run();
+                rReq.Ignore();
             }
             else
                 rReq.Done();
@@ -562,8 +530,6 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
         // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
         case SID_WEBHTML:
         {
-            static const char HTML_DOCUMENT_TYPE[] = "generic_HTML";
-            static const char HTML_GRAPHIC_TYPE[]  = "graphic_HTML";
             const sal_Int32   FILTERFLAG_EXPORT    = 0x00000002;
 
             css::uno::Reference< lang::XMultiServiceFactory > xSMGR(::comphelper::getProcessServiceFactory(), css::uno::UNO_QUERY_THROW);
@@ -598,9 +564,8 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
             if ( xModel.is() && xStorable.is() )
             {
                 OUString aFilterName;
-                OUString aTypeName( HTML_DOCUMENT_TYPE );
+                OUString aTypeName( "generic_HTML" );
                 OUString aFileName;
-                OUString aExtension( "htm" );
 
                 OUString aLocation = xStorable->getLocation();
                 INetURLObject aFileObj( aLocation );
@@ -619,7 +584,7 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
                 {
                     // Draw/Impress uses a different type. 2nd chance try to use alternative type name
                     aFilterName = impl_retrieveFilterNameFromTypeAndModule(
-                        xContainerQuery, HTML_GRAPHIC_TYPE, aModule, nFilterFlags );
+                        xContainerQuery, "graphic_HTML", aModule, nFilterFlags );
                 }
 
                 // No filter found => error
@@ -641,7 +606,7 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
                 {
                     // Determine file name from model
                     INetURLObject aFObj( xStorable->getLocation() );
-                    aFileName = aFObj.getName( INetURLObject::LAST_SEGMENT, true, INetURLObject::NO_DECODE );
+                    aFileName = aFObj.getName( INetURLObject::LAST_SEGMENT, true, INetURLObject::DecodeMechanism::NONE );
                 }
 
                 OSL_ASSERT( !aFilterName.isEmpty() );
@@ -652,13 +617,13 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
 
                 INetURLObject aFilePathObj( aTempDir.GetURL() );
                 aFilePathObj.insertName( aFileName );
-                aFilePathObj.setExtension( aExtension );
+                aFilePathObj.setExtension( "htm" );
 
-                OUString aFileURL = aFilePathObj.GetMainURL( INetURLObject::NO_DECODE );
+                OUString aFileURL = aFilePathObj.GetMainURL( INetURLObject::DecodeMechanism::NONE );
 
                 css::uno::Sequence< css::beans::PropertyValue > aArgs( 1 );
                 aArgs[0].Name  = "FilterName";
-                aArgs[0].Value = css::uno::makeAny( aFilterName );
+                aArgs[0].Value <<= aFilterName;
 
                 // Store document in the html format
                 try
@@ -671,7 +636,8 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
                     return;
                 }
 
-                rReq.Done(sfx2::openUriExternally(aFileURL, true));
+                sfx2::openUriExternally(aFileURL, true);
+                rReq.Done(true);
                 break;
             }
             else
@@ -679,70 +645,6 @@ void SfxViewShell::ExecMisc_Impl( SfxRequest &rReq )
                 rReq.Done();
                 return;
             }
-        }
-
-        // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-        case SID_PLUGINS_ACTIVE:
-        {
-            const SfxBoolItem* pShowItem = rReq.GetArg<SfxBoolItem>(nId);
-            bool const bActive = (pShowItem)
-                ? pShowItem->GetValue()
-                : !pImp->m_bPlugInsActive;
-            // ggf. recorden
-            if ( !rReq.IsAPI() )
-                rReq.AppendItem( SfxBoolItem( nId, bActive ) );
-
-            // Jetzt schon DONE aufrufen, da die Argumente evtl. einen Pool
-            // benutzen, der demn"achst weg ist
-            rReq.Done(true);
-
-            // ausfuehren
-            if (!pShowItem || (bActive != pImp->m_bPlugInsActive))
-            {
-                SfxFrame* pTopFrame = &GetFrame()->GetTopFrame();
-                if ( pTopFrame != &GetFrame()->GetFrame() )
-                {
-                    // FramesetDocument
-                    SfxViewShell *pShell = pTopFrame->GetCurrentViewFrame()->GetViewShell();
-                    if ( pShell->GetInterface()->GetSlot( nId ) )
-                        pShell->ExecuteSlot( rReq );
-                    break;
-                }
-
-                SfxFrameIterator aIter( *pTopFrame );
-                while ( pTopFrame )
-                {
-                    if ( pTopFrame->GetCurrentViewFrame() )
-                    {
-                        SfxViewShell *pView = pTopFrame->GetCurrentViewFrame()->GetViewShell();
-                        if ( pView )
-                        {
-                            pView->pImp->m_bPlugInsActive = bActive;
-                            Rectangle aVisArea = GetObjectShell()->GetVisArea();
-                            VisAreaChanged(aVisArea);
-
-                            // the plugins might need change in their state
-                            SfxInPlaceClientList *pClients = pView->pImp->GetIPClientList_Impl(false);
-                            if ( pClients )
-                            {
-                                for ( size_t n = 0; n < pClients->size(); n++)
-                                {
-                                    SfxInPlaceClient* pIPClient = pClients->at( n );
-                                    if ( pIPClient )
-                                        pView->CheckIPClient_Impl( pIPClient, aVisArea );
-                                }
-                            }
-                        }
-                    }
-
-                    if ( !pTopFrame->GetParentFrame() )
-                        pTopFrame = aIter.FirstFrame();
-                    else
-                        pTopFrame = aIter.NextFrame( *pTopFrame );
-                }
-            }
-
-            break;
         }
     }
 }
@@ -772,8 +674,7 @@ void SfxViewShell::GetState_Impl( SfxItemSet &rSet )
             case SID_SETUPPRINTER:
             case SID_PRINTER_NAME:
             {
-                bool bEnabled = pImp->m_bCanPrint && !pImp->m_nPrinterLocks
-                              && !Application::GetSettings().GetMiscSettings().GetDisablePrinting();
+                bool bEnabled = !Application::GetSettings().GetMiscSettings().GetDisablePrinting();
                 if ( bEnabled )
                 {
                     SfxPrinter *pPrinter = GetPrinter();
@@ -790,9 +691,9 @@ void SfxViewShell::GetState_Impl( SfxItemSet &rSet )
                             uno::Reference < frame::XFrame > xFrame( pFrame->GetFrame().GetFrameInterface() );
 
                             OUStringBuffer aBuffer( 60 );
-                            aBuffer.append( vcl::CommandInfoProvider::Instance().GetLabelForCommand(
+                            aBuffer.append( vcl::CommandInfoProvider::GetLabelForCommand(
                                 ".uno:PrintDefault",
-                                xFrame ));
+                                vcl::CommandInfoProvider::GetModuleIdentifier( xFrame ) ) );
                             aBuffer.append( " (" );
                             aBuffer.append( aPrinterName );
                             aBuffer.append(')');
@@ -803,16 +704,9 @@ void SfxViewShell::GetState_Impl( SfxItemSet &rSet )
                 }
                 break;
             }
-
-            // PlugIns running
-            case SID_PLUGINS_ACTIVE:
-            {
-                rSet.Put( SfxBoolItem( SID_PLUGINS_ACTIVE, !pImp->m_bPlugInsActive) );
-                break;
-            }
             case SID_STYLE_FAMILY :
             {
-                rSet.Put( SfxUInt16Item( SID_STYLE_FAMILY, pImp->m_nFamily ) );
+                rSet.Put( SfxUInt16Item( SID_STYLE_FAMILY, pImpl->m_nFamily ) );
                 break;
             }
         }
@@ -845,7 +739,7 @@ ErrCode SfxViewShell::DoVerb(long /*nVerb*/)
 }
 
 
-void SfxViewShell::OutplaceActivated( bool bActive, SfxInPlaceClient* /*pClient*/ )
+void SfxViewShell::OutplaceActivated( bool bActive )
 {
     if ( !bActive )
         GetFrame()->GetFrame().Appear();
@@ -880,15 +774,14 @@ SfxInPlaceClient* SfxViewShell::FindIPClient
     vcl::Window*             pObjParentWin
 )   const
 {
-    SfxInPlaceClientList *pClients = pImp->GetIPClientList_Impl(false);
+    std::vector< SfxInPlaceClient* > *pClients = pImpl->GetIPClients_Impl(false);
     if ( !pClients )
         return nullptr;
 
     if( !pObjParentWin )
         pObjParentWin = GetWindow();
-    for ( size_t n = 0; n < pClients->size(); n++)
+    for (SfxInPlaceClient* pIPClient : *pClients)
     {
-        SfxInPlaceClient *pIPClient = pClients->at( n );
         if ( pIPClient->GetObject() == xObj && pIPClient->GetEditWin() == pObjParentWin )
             return pIPClient;
     }
@@ -906,13 +799,12 @@ SfxInPlaceClient* SfxViewShell::GetIPClient() const
 SfxInPlaceClient* SfxViewShell::GetUIActiveIPClient_Impl() const
 {
     // this method is needed as long as SFX still manages the border space for ChildWindows (see SfxFrame::Resize)
-    SfxInPlaceClientList *pClients = pImp->GetIPClientList_Impl(false);
+    std::vector< SfxInPlaceClient* > *pClients = pImpl->GetIPClients_Impl(false);
     if ( !pClients )
         return nullptr;
 
-    for ( size_t n = 0; n < pClients->size(); n++)
+    for (SfxInPlaceClient* pIPClient : *pClients)
     {
-        SfxInPlaceClient* pIPClient = pClients->at( n );
         if ( pIPClient->IsUIActive() )
             return pIPClient;
     }
@@ -922,14 +814,15 @@ SfxInPlaceClient* SfxViewShell::GetUIActiveIPClient_Impl() const
 
 SfxInPlaceClient* SfxViewShell::GetUIActiveClient() const
 {
-    SfxInPlaceClientList *pClients = pImp->GetIPClientList_Impl(false);
+    std::vector< SfxInPlaceClient* > *pClients = pImpl->GetIPClients_Impl(false);
     if ( !pClients )
         return nullptr;
 
-    for ( size_t n = 0; n < pClients->size(); n++)
+    const bool bIsTiledRendering = comphelper::LibreOfficeKit::isActive();
+
+    for (SfxInPlaceClient* pIPClient : *pClients)
     {
-        SfxInPlaceClient* pIPClient = pClients->at( n );
-        if ( pIPClient->IsObjectUIActive() )
+        if ( pIPClient->IsObjectUIActive() || ( bIsTiledRendering && pIPClient->IsObjectInPlaceActive() ) )
             return pIPClient;
     }
 
@@ -951,16 +844,6 @@ void SfxViewShell::Activate( bool bMDI )
 
 
 void SfxViewShell::Deactivate(bool /*bMDI*/)
-{
-}
-
-
-void SfxViewShell::AdjustPosSizePixel
-(
-    const Point&    /*rToolOffset*/,// Upper left corner Tools in Frame-Window
-    const Size&     /*rSize*/       // All available sizes.
-)
-
 {
 }
 
@@ -1038,7 +921,8 @@ void SfxViewShell::OuterResizePixel
 void SfxViewShell::InnerResizePixel
 (
     const Point&    /*rToolOffset*/,// Upper left corner Tools in Frame-Window
-    const Size&     /*rSize*/       // All available sizes.
+    const Size&     /*rSize*/,      // All available sizes.
+    bool
 )
 
 /*  [Description]
@@ -1089,9 +973,9 @@ void SfxViewShell::InvalidateBorder()
     DBG_ASSERT( GetViewFrame(), "SfxViewShell without SfxViewFrame" );
 
     GetViewFrame()->InvalidateBorderImpl( this );
-    if (pImp->m_pController.is())
+    if (pImpl->m_pController.is())
     {
-        pImp->m_pController->BorderWidthsChanged_Impl();
+        pImpl->m_pController->BorderWidthsChanged_Impl();
     }
 }
 
@@ -1103,9 +987,9 @@ void SfxViewShell::SetBorderPixel( const SvBorder &rBorder )
     GetViewFrame()->SetBorderPixelImpl( this, rBorder );
 
     // notify related controller that border size is changed
-    if (pImp->m_pController.is())
+    if (pImpl->m_pController.is())
     {
-        pImp->m_pController->BorderWidthsChanged_Impl();
+        pImpl->m_pController->BorderWidthsChanged_Impl();
     }
 }
 
@@ -1138,9 +1022,6 @@ void SfxViewShell::SetWindow
     // Disconnect existing IP-Clients if possible
     DisconnectAllClients();
 
-    //TODO: should we have a "ReconnectAllClients" method?
-    DiscardClients_Impl();
-
     // Switch View-Port
     bool bHadFocus = pWindow && pWindow->HasChildPathFocus( true );
     pWindow = pViewPort;
@@ -1167,19 +1048,14 @@ SfxViewShell::SfxViewShell
 )
 
 :   SfxShell(this)
-,   pImp( new SfxViewShell_Impl(nFlags) )
+,   pImpl( new SfxViewShell_Impl(nFlags) )
 ,   pFrame(pViewFrame)
-,   pSubShell(nullptr)
 ,   pWindow(nullptr)
 ,   bNoNewWindow( nFlags & SfxViewShellFlags::NO_NEWWINDOW )
 ,   mbPrinterSettingsModified(false)
+,   maLOKLanguageTag("en-US", true)
 {
 
-    if ( pViewFrame->GetParentViewFrame() )
-    {
-        pImp->m_bPlugInsActive = pViewFrame->GetParentViewFrame()
-            ->GetViewShell()->pImp->m_bPlugInsActive;
-    }
     SetMargin( pViewFrame->GetMargin_Impl() );
 
     SetPool( &pViewFrame->GetObjectShell()->GetPool() );
@@ -1188,6 +1064,9 @@ SfxViewShell::SfxViewShell
     // Insert into list
     SfxViewShellArr_Impl &rViewArr = SfxGetpApp()->GetViewShells_Impl();
     rViewArr.push_back(this);
+
+    if (comphelper::LibreOfficeKit::isActive())
+        pViewFrame->GetWindow().SetLOKNotifier(this, true);
 }
 
 
@@ -1200,19 +1079,20 @@ SfxViewShell::~SfxViewShell()
     SfxViewShellArr_Impl::iterator it = std::find( rViewArr.begin(), rViewArr.end(), pThis );
     rViewArr.erase( it );
 
-    if ( pImp->xClipboardListener.is() )
+    if ( pImpl->xClipboardListener.is() )
     {
-        pImp->xClipboardListener->DisconnectViewShell();
-        pImp->xClipboardListener = nullptr;
+        pImpl->xClipboardListener->DisconnectViewShell();
+        pImpl->xClipboardListener = nullptr;
     }
 
-    if (pImp->m_pController.is())
+    if (pImpl->m_pController.is())
     {
-        pImp->m_pController->ReleaseShell_Impl();
-        pImp->m_pController.clear();
+        pImpl->m_pController->ReleaseShell_Impl();
+        pImpl->m_pController.clear();
     }
 
-    DELETEZ( pImp );
+    if (GetViewFrame()->GetWindow().GetLOKNotifier())
+        GetViewFrame()->GetWindow().ReleaseLOKNotifier();
 }
 
 bool SfxViewShell::PrepareClose
@@ -1220,13 +1100,18 @@ bool SfxViewShell::PrepareClose
     bool bUI     // TRUE: Allow Dialog and so on, FALSE: silent-mode
 )
 {
+    if (GetViewFrame()->GetWindow().GetLOKNotifier())
+        GetViewFrame()->GetWindow().ReleaseLOKNotifier();
+
     SfxPrinter *pPrinter = GetPrinter();
     if ( pPrinter && pPrinter->IsPrinting() )
     {
         if ( bUI )
         {
-            ScopedVclPtrInstance< MessageDialog > aInfoBox(&GetViewFrame()->GetWindow(), SfxResId( STR_CANT_CLOSE ), VCL_MESSAGE_INFO );
-            aInfoBox->Execute();
+            std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(GetViewFrame()->GetWindow().GetFrameWeld(),
+                                                                     VclMessageType::Info, VclButtonsType::Ok,
+                                                                     SfxResId(STR_CANT_CLOSE)));
+            xBox->run();
         }
 
         return false;
@@ -1325,7 +1210,7 @@ bool SfxViewShell::HasSelection( bool ) const
 
 void SfxViewShell::AddSubShell( SfxShell& rShell )
 {
-    pImp->aArr.push_back(&rShell);
+    pImpl->aArr.push_back(&rShell);
     SfxDispatcher *pDisp = pFrame->GetDispatcher();
     if ( pDisp->IsActive(*this) )
     {
@@ -1339,21 +1224,21 @@ void SfxViewShell::RemoveSubShell( SfxShell* pShell )
     SfxDispatcher *pDisp = pFrame->GetDispatcher();
     if ( !pShell )
     {
-        size_t nCount = pImp->aArr.size();
+        size_t nCount = pImpl->aArr.size();
         if ( pDisp->IsActive(*this) )
         {
             for(size_t n = nCount; n > 0; --n)
-                pDisp->Pop(*pImp->aArr[n - 1]);
+                pDisp->Pop(*pImpl->aArr[n - 1]);
             pDisp->Flush();
         }
-        pImp->aArr.clear();
+        pImpl->aArr.clear();
     }
     else
     {
-        SfxShellArr_Impl::iterator i = std::find(pImp->aArr.begin(), pImp->aArr.end(), pShell);
-        if(i != pImp->aArr.end())
+        SfxShellArr_Impl::iterator i = std::find(pImpl->aArr.begin(), pImpl->aArr.end(), pShell);
+        if(i != pImpl->aArr.end())
         {
-            pImp->aArr.erase(i);
+            pImpl->aArr.erase(i);
             if(pDisp->IsActive(*this))
             {
                 pDisp->RemoveShell_Impl(*pShell);
@@ -1365,9 +1250,9 @@ void SfxViewShell::RemoveSubShell( SfxShell* pShell )
 
 SfxShell* SfxViewShell::GetSubShell( sal_uInt16 nNo )
 {
-    sal_uInt16 nCount = pImp->aArr.size();
+    sal_uInt16 nCount = pImpl->aArr.size();
     if(nNo < nCount)
-        return pImp->aArr[nCount - nNo - 1];
+        return pImpl->aArr[nCount - nNo - 1];
     return nullptr;
 }
 
@@ -1376,12 +1261,12 @@ void SfxViewShell::PushSubShells_Impl( bool bPush )
     SfxDispatcher *pDisp = pFrame->GetDispatcher();
     if ( bPush )
     {
-        for(SfxShellArr_Impl::const_iterator i = pImp->aArr.begin(); i != pImp->aArr.end(); ++i)
-            pDisp->Push(**i);
+        for (auto const& elem : pImpl->aArr)
+            pDisp->Push(*elem);
     }
-    else if(!pImp->aArr.empty())
+    else if(!pImpl->aArr.empty())
     {
-        SfxShell& rPopUntil = *pImp->aArr[0];
+        SfxShell& rPopUntil = *pImpl->aArr[0];
         if ( pDisp->GetShellLevel( rPopUntil ) != USHRT_MAX )
             pDisp->Pop( rPopUntil, SfxDispatcherPopFlags::POP_UNTIL );
     }
@@ -1408,6 +1293,37 @@ void SfxViewShell::WriteUserDataSequence ( uno::Sequence < beans::PropertyValue 
 }
 
 
+// returns the number of current available shells of spec. type viewing the specified doc.
+size_t SfxViewShell::GetActiveShells ( bool bOnlyVisible )
+{
+    size_t nShells = 0;
+
+    // search for a SfxViewShell of the specified type
+    SfxViewShellArr_Impl &rShells = SfxGetpApp()->GetViewShells_Impl();
+    SfxViewFrameArr_Impl &rFrames = SfxGetpApp()->GetViewFrames_Impl();
+    for (SfxViewShell* pShell : rShells)
+    {
+        if ( pShell )
+        {
+            // sometimes dangling SfxViewShells exist that point to a dead SfxViewFrame
+            // these ViewShells shouldn't be accessible anymore
+            // a destroyed ViewFrame is not in the ViewFrame array anymore, so checking this array helps
+            for (SfxViewFrame* pFrame : rFrames)
+            {
+                if ( pFrame == pShell->GetViewFrame() )
+                {
+                    // only ViewShells with a valid ViewFrame will be returned
+                    if ( !bOnlyVisible || pFrame->IsVisible() )
+                        ++nShells;
+                }
+            }
+        }
+    }
+
+    return nShells;
+}
+
+
 // returns the first shell of spec. type viewing the specified doc.
 SfxViewShell* SfxViewShell::GetFirst
 (
@@ -1418,17 +1334,15 @@ SfxViewShell* SfxViewShell::GetFirst
     // search for a SfxViewShell of the specified type
     SfxViewShellArr_Impl &rShells = SfxGetpApp()->GetViewShells_Impl();
     SfxViewFrameArr_Impl &rFrames = SfxGetpApp()->GetViewFrames_Impl();
-    for ( size_t nPos = 0; nPos < rShells.size(); ++nPos )
+    for (SfxViewShell* pShell : rShells)
     {
-        SfxViewShell *pShell = rShells[nPos];
         if ( pShell )
         {
             // sometimes dangling SfxViewShells exist that point to a dead SfxViewFrame
             // these ViewShells shouldn't be accessible anymore
             // a destroyed ViewFrame is not in the ViewFrame array anymore, so checking this array helps
-            for ( size_t n=0; n<rFrames.size(); ++n )
+            for (SfxViewFrame* pFrame : rFrames)
             {
-                SfxViewFrame *pFrame = rFrames[n];
                 if ( pFrame == pShell->GetViewFrame() )
                 {
                     // only ViewShells with a valid ViewFrame will be returned
@@ -1455,7 +1369,7 @@ SfxViewShell* SfxViewShell::GetNext
 {
     SfxViewShellArr_Impl &rShells = SfxGetpApp()->GetViewShells_Impl();
     SfxViewFrameArr_Impl &rFrames = SfxGetpApp()->GetViewFrames_Impl();
-    sal_uInt16 nPos;
+    size_t nPos;
     for ( nPos = 0; nPos < rShells.size(); ++nPos )
         if ( rShells[nPos] == &rPrev )
             break;
@@ -1468,9 +1382,8 @@ SfxViewShell* SfxViewShell::GetNext
             // sometimes dangling SfxViewShells exist that point to a dead SfxViewFrame
             // these ViewShells shouldn't be accessible anymore
             // a destroyed ViewFrame is not in the ViewFrame array anymore, so checking this array helps
-            for ( size_t n=0; n<rFrames.size(); ++n )
+            for (SfxViewFrame* pFrame : rFrames)
             {
-                SfxViewFrame *pFrame = rFrames[n];
                 if ( pFrame == pShell->GetViewFrame() )
                 {
                     // only ViewShells with a valid ViewFrame will be returned
@@ -1490,62 +1403,150 @@ void SfxViewShell::Notify( SfxBroadcaster& rBC,
                             const SfxHint& rHint )
 {
     const SfxEventHint* pEventHint = dynamic_cast<const SfxEventHint*>(&rHint);
-    if ( pEventHint )
+    if ( !(pEventHint && pEventHint->GetEventId() == SfxEventHintId::LoadFinished) )
+        return;
+
+    if ( !GetController().is() )
+        return;
+
+    // avoid access to dangling ViewShells
+    SfxViewFrameArr_Impl &rFrames = SfxGetpApp()->GetViewFrames_Impl();
+    for (SfxViewFrame* frame : rFrames)
     {
-        switch ( pEventHint->GetEventId() )
+        if ( frame == GetViewFrame() && &rBC == GetObjectShell() )
         {
-            case SFX_EVENT_LOADFINISHED:
+            SfxItemSet* pSet = GetObjectShell()->GetMedium()->GetItemSet();
+            const SfxUnoAnyItem* pItem = SfxItemSet::GetItem<SfxUnoAnyItem>(pSet, SID_VIEW_DATA, false);
+            if ( pItem )
             {
-                if ( GetController().is() )
-                {
-                    // avoid access to dangling ViewShells
-                    SfxViewFrameArr_Impl &rFrames = SfxGetpApp()->GetViewFrames_Impl();
-                    for ( size_t n=0; n<rFrames.size(); ++n )
-                    {
-                        SfxViewFrame *frame = rFrames[n];
-                        if ( frame == GetViewFrame() && &rBC == GetObjectShell() )
-                        {
-                            SfxItemSet* pSet = GetObjectShell()->GetMedium()->GetItemSet();
-                            const SfxUnoAnyItem* pItem = SfxItemSet::GetItem<SfxUnoAnyItem>(pSet, SID_VIEW_DATA, false);
-                            if ( pItem )
-                            {
-                                pImp->m_pController->restoreViewData( pItem->GetValue() );
-                                pSet->ClearItem( SID_VIEW_DATA );
-                            }
-
-                            break;
-                        }
-                    }
-                }
-
-                break;
+                pImpl->m_pController->restoreViewData( pItem->GetValue() );
+                pSet->ClearItem( SID_VIEW_DATA );
             }
+            break;
         }
     }
 }
 
 bool SfxViewShell::ExecKey_Impl(const KeyEvent& aKey)
 {
-    if (!pImp->m_xAccExec.get())
+    if (!pImpl->m_xAccExec)
     {
-        pImp->m_xAccExec = ::svt::AcceleratorExecute::createAcceleratorHelper();
-        pImp->m_xAccExec->init(::comphelper::getProcessComponentContext(),
+        pImpl->m_xAccExec = ::svt::AcceleratorExecute::createAcceleratorHelper();
+        pImpl->m_xAccExec->init(::comphelper::getProcessComponentContext(),
             pFrame->GetFrame().GetFrameInterface());
     }
 
-    return pImp->m_xAccExec->execute(aKey.GetKeyCode());
+    return pImpl->m_xAccExec->execute(aKey.GetKeyCode());
 }
 
 void SfxViewShell::registerLibreOfficeKitViewCallback(LibreOfficeKitCallback pCallback, void* pData)
 {
-    pImp->m_pLibreOfficeKitViewCallback = pCallback;
-    pImp->m_pLibreOfficeKitViewData = pData;
+    pImpl->m_pLibreOfficeKitViewCallback = pCallback;
+    pImpl->m_pLibreOfficeKitViewData = pData;
+
+    afterCallbackRegistered();
+
+    // Ask other views to tell us about their cursors.
+    SfxViewShell* pViewShell = SfxViewShell::GetFirst();
+    while (pViewShell)
+    {
+        pViewShell->NotifyCursor(this);
+        pViewShell = SfxViewShell::GetNext(*pViewShell);
+    }
 }
 
 void SfxViewShell::libreOfficeKitViewCallback(int nType, const char* pPayload) const
 {
-    if (pImp->m_pLibreOfficeKitViewCallback)
-        pImp->m_pLibreOfficeKitViewCallback(nType, pPayload, pImp->m_pLibreOfficeKitViewData);
+    if (comphelper::LibreOfficeKit::isTiledPainting())
+        return;
+
+    if (pImpl->m_bTiledSearching)
+    {
+        switch (nType)
+        {
+        case LOK_CALLBACK_TEXT_SELECTION:
+        case LOK_CALLBACK_TEXT_VIEW_SELECTION:
+        case LOK_CALLBACK_TEXT_SELECTION_START:
+        case LOK_CALLBACK_TEXT_SELECTION_END:
+        case LOK_CALLBACK_GRAPHIC_SELECTION:
+        case LOK_CALLBACK_GRAPHIC_VIEW_SELECTION:
+            return;
+        }
+    }
+
+    if (pImpl->m_pLibreOfficeKitViewCallback)
+        pImpl->m_pLibreOfficeKitViewCallback(nType, pPayload, pImpl->m_pLibreOfficeKitViewData);
+}
+
+void SfxViewShell::afterCallbackRegistered()
+{
+}
+
+vcl::Window* SfxViewShell::GetEditWindowForActiveOLEObj() const
+{
+    vcl::Window* pEditWin = nullptr;
+    SfxInPlaceClient* pIPClient = GetIPClient();
+    if (pIPClient)
+    {
+        pEditWin = pIPClient->GetEditWin();
+    }
+    return pEditWin;
+}
+
+void SfxViewShell::SetLOKLanguageTag(const OUString& rBcp47LanguageTag)
+{
+    LanguageTag aTag = LanguageTag(rBcp47LanguageTag, true);
+
+    css::uno::Sequence<OUString> inst(officecfg::Setup::Office::InstalledLocales::get()->getElementNames());
+    LanguageTag aFallbackTag = LanguageTag(getInstalledLocaleForSystemUILanguage(inst, /* bRequestInstallIfMissing */ false, rBcp47LanguageTag), true).makeFallback();
+
+    // If we want de-CH, and the de localisation is available, we don't want to use de-DE as then
+    // the magic in Translate::get() won't turn ess-zet into double s. Possibly other similar cases?
+    if (comphelper::LibreOfficeKit::isActive() && aTag.getLanguage() == aFallbackTag.getLanguage())
+        maLOKLanguageTag = aTag;
+    else
+        maLOKLanguageTag = aFallbackTag;
+}
+
+void SfxViewShell::NotifyCursor(SfxViewShell* /*pViewShell*/) const
+{
+}
+
+void SfxViewShell::setTiledSearching(bool bTiledSearching)
+{
+    pImpl->m_bTiledSearching = bTiledSearching;
+}
+
+int SfxViewShell::getPart() const
+{
+    return 0;
+}
+
+ViewShellId SfxViewShell::GetViewShellId() const
+{
+    return pImpl->m_nViewShellId;
+}
+
+void SfxViewShell::NotifyOtherViews(int nType, const OString& rKey, const OString& rPayload)
+{
+    SfxLokHelper::notifyOtherViews(this, nType, rKey, rPayload);
+}
+
+void SfxViewShell::NotifyOtherView(OutlinerViewShell* pOther, int nType, const OString& rKey, const OString& rPayload)
+{
+    auto pOtherShell = dynamic_cast<SfxViewShell*>(pOther);
+    if (!pOtherShell)
+        return;
+
+    SfxLokHelper::notifyOtherView(this, pOtherShell, nType, rKey, rPayload);
+}
+
+void SfxViewShell::dumpAsXml(xmlTextWriterPtr pWriter) const
+{
+    xmlTextWriterStartElement(pWriter, BAD_CAST("SfxViewShell"));
+    xmlTextWriterWriteFormatAttribute(pWriter, BAD_CAST("ptr"), "%p", this);
+    xmlTextWriterWriteAttribute(pWriter, BAD_CAST("id"), BAD_CAST(OString::number(static_cast<sal_Int32>(GetViewShellId())).getStr()));
+    xmlTextWriterEndElement(pWriter);
 }
 
 bool SfxViewShell::KeyInput( const KeyEvent &rKeyEvent )
@@ -1560,7 +1561,7 @@ bool SfxViewShell::KeyInput( const KeyEvent &rKeyEvent )
 
     bool                    TRUE
                             The Key (Accelerator) is configured and the
-                            the associated Handler was called
+                            associated Handler was called
 
                             FALSE
                             The Key (Accelerator) is not configured and
@@ -1592,16 +1593,15 @@ void SfxViewShell::ShowCursor( bool /*bOn*/ )
 }
 
 
-void SfxViewShell::ResetAllClients_Impl( SfxInPlaceClient *pIP )
+void SfxViewShell::ResetAllClients_Impl( SfxInPlaceClient const *pIP )
 {
 
-    SfxInPlaceClientList *pClients = pImp->GetIPClientList_Impl(false);
+    std::vector< SfxInPlaceClient* > *pClients = pImpl->GetIPClients_Impl(false);
     if ( !pClients )
         return;
 
-    for ( size_t n = 0; n < pClients->size(); n++ )
+    for (SfxInPlaceClient* pIPClient : *pClients)
     {
-        SfxInPlaceClient* pIPClient = pClients->at( n );
         if( pIPClient != pIP )
             pIPClient->ResetObject();
     }
@@ -1610,7 +1610,7 @@ void SfxViewShell::ResetAllClients_Impl( SfxInPlaceClient *pIP )
 
 void SfxViewShell::DisconnectAllClients()
 {
-    SfxInPlaceClientList *pClients = pImp->GetIPClientList_Impl(false);
+    std::vector< SfxInPlaceClient* > *pClients = pImpl->GetIPClients_Impl(false);
     if ( !pClients )
         return;
 
@@ -1620,20 +1620,19 @@ void SfxViewShell::DisconnectAllClients()
 }
 
 
-void SfxViewShell::QueryObjAreaPixel( Rectangle& ) const
+void SfxViewShell::QueryObjAreaPixel( tools::Rectangle& ) const
 {
 }
 
 
-void SfxViewShell::VisAreaChanged(const Rectangle& /*rVisArea*/)
+void SfxViewShell::VisAreaChanged()
 {
-    SfxInPlaceClientList *pClients = pImp->GetIPClientList_Impl(false);
+    std::vector< SfxInPlaceClient* > *pClients = pImpl->GetIPClients_Impl(false);
     if ( !pClients )
         return;
 
-    for ( size_t n = 0; n < pClients->size(); n++)
+    for (SfxInPlaceClient* pIPClient : *pClients)
     {
-        SfxInPlaceClient* pIPClient = pClients->at( n );
         if ( pIPClient->IsObjectInPlaceActive() )
             // client is active, notify client that the VisArea might have changed
             pIPClient->VisAreaChanged();
@@ -1641,7 +1640,8 @@ void SfxViewShell::VisAreaChanged(const Rectangle& /*rVisArea*/)
 }
 
 
-void SfxViewShell::CheckIPClient_Impl( SfxInPlaceClient *pIPClient, const Rectangle& rVisArea )
+void SfxViewShell::CheckIPClient_Impl(
+        SfxInPlaceClient const *const pIPClient, const tools::Rectangle& rVisArea)
 {
     if ( GetObjectShell()->IsInClose() )
         return;
@@ -1649,52 +1649,26 @@ void SfxViewShell::CheckIPClient_Impl( SfxInPlaceClient *pIPClient, const Rectan
     bool bAlwaysActive =
         ( ( pIPClient->GetObjectMiscStatus() & embed::EmbedMisc::EMBED_ACTIVATEIMMEDIATELY ) != 0 );
     bool bActiveWhenVisible =
-        ( (( pIPClient->GetObjectMiscStatus() & embed::EmbedMisc::MS_EMBED_ACTIVATEWHENVISIBLE ) != 0 ) ||
-         svt::EmbeddedObjectRef::IsGLChart(pIPClient->GetObject()));
+        ( pIPClient->GetObjectMiscStatus() & embed::EmbedMisc::MS_EMBED_ACTIVATEWHENVISIBLE ) != 0;
 
-    // this method is called when either a client is created or the "Edit/Plugins" checkbox is checked
-    if ( !pIPClient->IsObjectInPlaceActive() && pImp->m_bPlugInsActive )
-    {
-        // object in client is currently not active
-        // check if the object wants to be activated always or when it becomes at least partially visible
-        // TODO/LATER: maybe we should use the scaled area instead of the ObjArea?!
-        if ( bAlwaysActive || (bActiveWhenVisible && rVisArea.IsOver(pIPClient->GetObjArea())) )
-        {
-            try
-            {
-                pIPClient->GetObject()->changeState( embed::EmbedStates::INPLACE_ACTIVE );
-            }
-            catch (const uno::Exception&)
-            {
-            }
-        }
-    }
-    else if (!pImp->m_bPlugInsActive)
-    {
-        // object in client is currently active and "Edit/Plugins" checkbox is selected
-        // check if the object wants to be activated always or when it becomes at least partially visible
-        // in this case selecting of the "Edit/Plugin" checkbox should let such objects deactivate
-        if ( bAlwaysActive || bActiveWhenVisible )
-            pIPClient->GetObject()->changeState( embed::EmbedStates::RUNNING );
-    }
-}
-
-
-void SfxViewShell::DiscardClients_Impl()
-
-/*  [Description]
-
-    The purpose of this Method is to prevent the saving of Objects when closing
-    the Document, if the user has chosen to close without saving.
-*/
-
-{
-    SfxInPlaceClientList *pClients = pImp->GetIPClientList_Impl(false);
-    if ( !pClients )
+    // this method is called when a client is created
+    if (pIPClient->IsObjectInPlaceActive())
         return;
 
-    for ( size_t n = 0; n < pClients->size(); )
-        delete pClients->at( n );
+    // object in client is currently not active
+    // check if the object wants to be activated always or when it becomes at least partially visible
+    // TODO/LATER: maybe we should use the scaled area instead of the ObjArea?!
+    if (bAlwaysActive || (bActiveWhenVisible && rVisArea.IsOver(pIPClient->GetObjArea())))
+    {
+        try
+        {
+            pIPClient->GetObject()->changeState( embed::EmbedStates::INPLACE_ACTIVE );
+        }
+        catch (const uno::Exception& e)
+        {
+            SAL_WARN("sfx.view", "SfxViewShell::CheckIPClient_Impl: " << e);
+        }
+    }
 }
 
 
@@ -1726,7 +1700,7 @@ void SfxViewShell::SetCurrentDocument() const
 
 const Size& SfxViewShell::GetMargin() const
 {
-    return pImp->aMargin;
+    return pImpl->aMargin;
 }
 
 
@@ -1735,24 +1709,19 @@ void SfxViewShell::SetMargin( const Size& rSize )
     // the default margin was verified using www.apple.com !!
     Size aMargin = rSize;
     if ( aMargin.Width() == -1 )
-        aMargin.Width() = DEFAULT_MARGIN_WIDTH;
+        aMargin.setWidth( DEFAULT_MARGIN_WIDTH );
     if ( aMargin.Height() == -1 )
-        aMargin.Height() = DEFAULT_MARGIN_HEIGHT;
+        aMargin.setHeight( DEFAULT_MARGIN_HEIGHT );
 
-    if ( aMargin != pImp->aMargin )
+    if ( aMargin != pImpl->aMargin )
     {
-        pImp->aMargin = aMargin;
+        pImpl->aMargin = aMargin;
         MarginChanged();
     }
 }
 
 void SfxViewShell::MarginChanged()
 {
-}
-
-bool SfxViewShell::IsShowView_Impl() const
-{
-    return pImp->m_bIsShowView;
 }
 
 void SfxViewShell::JumpToMark( const OUString& rMark )
@@ -1766,37 +1735,36 @@ void SfxViewShell::JumpToMark( const OUString& rMark )
 
 void SfxViewShell::SetController( SfxBaseController* pController )
 {
-    pImp->m_pController = pController;
-    pImp->m_bControllerSet = true;
+    pImpl->m_pController = pController;
 
     // there should be no old listener, but if there is one, it should be disconnected
-    if (  pImp->xClipboardListener.is() )
-        pImp->xClipboardListener->DisconnectViewShell();
+    if (  pImpl->xClipboardListener.is() )
+        pImpl->xClipboardListener->DisconnectViewShell();
 
-    pImp->xClipboardListener = new SfxClipboardChangeListener( this, GetClipboardNotifier() );
+    pImpl->xClipboardListener = new SfxClipboardChangeListener( this, GetClipboardNotifier() );
 }
 
 Reference < XController > SfxViewShell::GetController()
 {
-    return pImp->m_pController.get();
+    return pImpl->m_pController.get();
 }
 
 SfxBaseController* SfxViewShell::GetBaseController_Impl() const
 {
-    return pImp->m_pController.get();
+    return pImpl->m_pController.get();
 }
 
 void SfxViewShell::AddContextMenuInterceptor_Impl( const uno::Reference< ui::XContextMenuInterceptor >& xInterceptor )
 {
-    pImp->aInterceptorContainer.addInterface( xInterceptor );
+    pImpl->aInterceptorContainer.addInterface( xInterceptor );
 }
 
 void SfxViewShell::RemoveContextMenuInterceptor_Impl( const uno::Reference< ui::XContextMenuInterceptor >& xInterceptor )
 {
-    pImp->aInterceptorContainer.removeInterface( xInterceptor );
+    pImpl->aInterceptorContainer.removeInterface( xInterceptor );
 }
 
-void Change( Menu* pMenu, SfxViewShell* pView )
+static void Change( Menu* pMenu, SfxViewShell* pView )
 {
     SfxDispatcher *pDisp = pView->GetViewFrame()->GetDispatcher();
     sal_uInt16 nCount = pMenu->GetItemCount();
@@ -1835,7 +1803,7 @@ void Change( Menu* pMenu, SfxViewShell* pView )
 }
 
 
-bool SfxViewShell::TryContextMenuInterception( Menu& rIn, const OUString& rMenuIdentifier, Menu*& rpOut, ui::ContextMenuExecuteEvent aEvent )
+bool SfxViewShell::TryContextMenuInterception( Menu& rIn, const OUString& rMenuIdentifier, VclPtr<Menu>& rpOut, ui::ContextMenuExecuteEvent aEvent )
 {
     rpOut = nullptr;
     bool bModified = false;
@@ -1848,7 +1816,7 @@ bool SfxViewShell::TryContextMenuInterception( Menu& rIn, const OUString& rMenuI
     aEvent.Selection.set( GetController(), uno::UNO_QUERY );
 
     // call interceptors
-    ::comphelper::OInterfaceIteratorHelper2 aIt( pImp->aInterceptorContainer );
+    ::comphelper::OInterfaceIteratorHelper2 aIt( pImpl->aInterceptorContainer );
     while( aIt.hasMoreElements() )
     {
         try
@@ -1890,7 +1858,7 @@ bool SfxViewShell::TryContextMenuInterception( Menu& rIn, const OUString& rMenuI
     if ( bModified )
     {
         // container was modified, create a new window out of it
-        rpOut = new PopupMenu;
+        rpOut = VclPtr<PopupMenu>::Create();
         ::framework::ActionTriggerHelper::CreateMenuFromActionTriggerContainer( rpOut, aEvent.ActionTriggerContainer );
 
         Change( rpOut, this );
@@ -1910,7 +1878,7 @@ bool SfxViewShell::TryContextMenuInterception( Menu& rMenu, const OUString& rMen
     aEvent.Selection = css::uno::Reference< css::view::XSelectionSupplier >( GetController(), css::uno::UNO_QUERY );
 
     // call interceptors
-    ::comphelper::OInterfaceIteratorHelper2 aIt( pImp->aInterceptorContainer );
+    ::comphelper::OInterfaceIteratorHelper2 aIt( pImpl->aInterceptorContainer );
     while( aIt.hasMoreElements() )
     {
         try
@@ -1958,37 +1926,23 @@ bool SfxViewShell::TryContextMenuInterception( Menu& rMenu, const OUString& rMen
     return true;
 }
 
-void SfxViewShell::TakeOwnership_Impl()
+bool SfxViewShell::HandleNotifyEvent_Impl( NotifyEvent const & rEvent )
 {
-    // currently there is only one reason to take Ownership: a hidden frame is printed
-    // so the ViewShell will check this on EndPrint (->prnmon.cxx)
-    pImp->m_bGotOwnership = true;
-}
-
-void SfxViewShell::TakeFrameOwnership_Impl()
-{
-    // currently there is only one reason to take Ownership: a hidden frame is printed
-    // so the ViewShell will check this on EndPrint (->prnmon.cxx)
-    pImp->m_bGotFrameOwnership = true;
-}
-
-bool SfxViewShell::HandleNotifyEvent_Impl( NotifyEvent& rEvent )
-{
-    if (pImp->m_pController.is())
-        return pImp->m_pController->HandleEvent_Impl( rEvent );
+    if (pImpl->m_pController.is())
+        return pImpl->m_pController->HandleEvent_Impl( rEvent );
     return false;
 }
 
 bool SfxViewShell::HasKeyListeners_Impl()
 {
-    return (pImp->m_pController.is())
-        && pImp->m_pController->HasKeyListeners_Impl();
+    return (pImpl->m_pController.is())
+        && pImpl->m_pController->HasKeyListeners_Impl();
 }
 
 bool SfxViewShell::HasMouseClickListeners_Impl()
 {
-    return (pImp->m_pController.is())
-        && pImp->m_pController->HasMouseClickListeners_Impl();
+    return (pImpl->m_pController.is())
+        && pImpl->m_pController->HasMouseClickListeners_Impl();
 }
 
 bool SfxViewShell::Escape()
@@ -2007,6 +1961,11 @@ Reference< view::XRenderable > SfxViewShell::GetRenderable()
             xRender.set( xModel, UNO_QUERY );
     }
     return xRender;
+}
+
+void SfxViewShell::notifyWindow(vcl::LOKWindowId nDialogId, const OUString& rAction, const std::vector<vcl::LOKPayloadItem>& rPayload) const
+{
+    SfxLokHelper::notifyWindow(this, nDialogId, rAction, rPayload);
 }
 
 uno::Reference< datatransfer::clipboard::XClipboardNotifier > SfxViewShell::GetClipboardNotifier()
@@ -2041,6 +2000,11 @@ void SfxViewShell::AddRemoveClipboardListener( const uno::Reference < datatransf
     catch (const uno::Exception&)
     {
     }
+}
+
+weld::Window* SfxViewShell::GetFrameWeld() const
+{
+    return pWindow ? pWindow->GetFrameWeld() : nullptr;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

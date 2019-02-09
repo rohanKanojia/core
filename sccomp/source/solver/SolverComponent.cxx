@@ -18,7 +18,7 @@
  */
 
 #include "SolverComponent.hxx"
-#include "solver.hrc"
+#include <strings.hrc>
 
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
@@ -28,7 +28,9 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <vector>
 
-#include <tools/resmgr.hxx>
+#include <unotools/resmgr.hxx>
+#include <vcl/settings.hxx>
+#include <vcl/svapp.hxx>
 
 using namespace com::sun::star;
 
@@ -42,14 +44,9 @@ using namespace com::sun::star;
 
 //  Resources from tools are used for translated strings
 
-ResMgr* SolverComponent::pSolverResMgr = nullptr;
-
-OUString SolverComponent::GetResourceString( sal_uInt32 nId )
+OUString SolverComponent::GetResourceString(const char* pId)
 {
-    if (!pSolverResMgr)
-        pSolverResMgr = ResMgr::CreateResMgr("solver");
-
-    return ResId(nId, *pSolverResMgr).toString();
+    return Translate::get(pId, Translate::Create("scc"));
 }
 
 size_t ScSolverCellHash::operator()( const css::table::CellAddress& rAddress ) const
@@ -132,38 +129,38 @@ cppu::IPropertyArrayHelper& SAL_CALL SolverComponent::getInfoHelper()
     return *getArrayHelper();
 }
 
-uno::Reference<beans::XPropertySetInfo> SAL_CALL SolverComponent::getPropertySetInfo() throw(uno::RuntimeException, std::exception)
+uno::Reference<beans::XPropertySetInfo> SAL_CALL SolverComponent::getPropertySetInfo()
 {
     return createPropertySetInfo( getInfoHelper() );
 }
 
 // XSolverDescription
 
-OUString SAL_CALL SolverComponent::getStatusDescription() throw (uno::RuntimeException, std::exception)
+OUString SAL_CALL SolverComponent::getStatusDescription()
 {
     return maStatus;
 }
 
-OUString SAL_CALL SolverComponent::getPropertyDescription( const OUString& rPropertyName ) throw (uno::RuntimeException, std::exception)
+OUString SAL_CALL SolverComponent::getPropertyDescription( const OUString& rPropertyName )
 {
-    sal_uInt32 nResId = 0;
+    const char* pResId = nullptr;
     sal_Int32 nHandle = getInfoHelper().getHandleByName( rPropertyName );
     switch (nHandle)
     {
         case PROP_NONNEGATIVE:
-            nResId = RID_PROPERTY_NONNEGATIVE;
+            pResId = RID_PROPERTY_NONNEGATIVE;
             break;
         case PROP_INTEGER:
-            nResId = RID_PROPERTY_INTEGER;
+            pResId = RID_PROPERTY_INTEGER;
             break;
         case PROP_TIMEOUT:
-            nResId = RID_PROPERTY_TIMEOUT;
+            pResId = RID_PROPERTY_TIMEOUT;
             break;
         case PROP_EPSILONLEVEL:
-            nResId = RID_PROPERTY_EPSILONLEVEL;
+            pResId = RID_PROPERTY_EPSILONLEVEL;
             break;
         case PROP_LIMITBBDEPTH:
-            nResId = RID_PROPERTY_LIMITBBDEPTH;
+            pResId = RID_PROPERTY_LIMITBBDEPTH;
             break;
         default:
             {
@@ -171,91 +168,88 @@ OUString SAL_CALL SolverComponent::getPropertyDescription( const OUString& rProp
             }
     }
     OUString aRet;
-    if ( nResId )
-        aRet = SolverComponent::GetResourceString( nResId );
+    if (pResId)
+        aRet = SolverComponent::GetResourceString(pResId);
     return aRet;
 }
 
 // XSolver: settings
 
-uno::Reference<sheet::XSpreadsheetDocument> SAL_CALL SolverComponent::getDocument() throw(uno::RuntimeException, std::exception)
+uno::Reference<sheet::XSpreadsheetDocument> SAL_CALL SolverComponent::getDocument()
 {
     return mxDoc;
 }
 
 void SAL_CALL SolverComponent::setDocument( const uno::Reference<sheet::XSpreadsheetDocument>& _document )
-                                throw(uno::RuntimeException, std::exception)
 {
     mxDoc = _document;
 }
 
-table::CellAddress SAL_CALL SolverComponent::getObjective() throw(uno::RuntimeException, std::exception)
+table::CellAddress SAL_CALL SolverComponent::getObjective()
 {
     return maObjective;
 }
 
-void SAL_CALL SolverComponent::setObjective( const table::CellAddress& _objective ) throw(uno::RuntimeException, std::exception)
+void SAL_CALL SolverComponent::setObjective( const table::CellAddress& _objective )
 {
     maObjective = _objective;
 }
 
-uno::Sequence<table::CellAddress> SAL_CALL SolverComponent::getVariables() throw(uno::RuntimeException, std::exception)
+uno::Sequence<table::CellAddress> SAL_CALL SolverComponent::getVariables()
 {
     return maVariables;
 }
 
 void SAL_CALL SolverComponent::setVariables( const uno::Sequence<table::CellAddress>& _variables )
-                                throw(uno::RuntimeException, std::exception)
 {
     maVariables = _variables;
 }
 
-uno::Sequence<sheet::SolverConstraint> SAL_CALL SolverComponent::getConstraints() throw(uno::RuntimeException, std::exception)
+uno::Sequence<sheet::SolverConstraint> SAL_CALL SolverComponent::getConstraints()
 {
     return maConstraints;
 }
 
 void SAL_CALL SolverComponent::setConstraints( const uno::Sequence<sheet::SolverConstraint>& _constraints )
-                                throw(uno::RuntimeException, std::exception)
 {
     maConstraints = _constraints;
 }
 
-sal_Bool SAL_CALL SolverComponent::getMaximize() throw(uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL SolverComponent::getMaximize()
 {
     return mbMaximize;
 }
 
-void SAL_CALL SolverComponent::setMaximize( sal_Bool _maximize ) throw(uno::RuntimeException, std::exception)
+void SAL_CALL SolverComponent::setMaximize( sal_Bool _maximize )
 {
     mbMaximize = _maximize;
 }
 
 // XSolver: get results
 
-sal_Bool SAL_CALL SolverComponent::getSuccess() throw(uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL SolverComponent::getSuccess()
 {
     return mbSuccess;
 }
 
-double SAL_CALL SolverComponent::getResultValue() throw(uno::RuntimeException, std::exception)
+double SAL_CALL SolverComponent::getResultValue()
 {
     return mfResultValue;
 }
 
-uno::Sequence<double> SAL_CALL SolverComponent::getSolution() throw(uno::RuntimeException, std::exception)
+uno::Sequence<double> SAL_CALL SolverComponent::getSolution()
 {
     return maSolution;
 }
 
 // XServiceInfo
 
-sal_Bool SAL_CALL SolverComponent::supportsService( const OUString& rServiceName ) throw(uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL SolverComponent::supportsService( const OUString& rServiceName )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-uno::Sequence<OUString> SAL_CALL SolverComponent::getSupportedServiceNames() throw(uno::RuntimeException, std::exception)
+uno::Sequence<OUString> SAL_CALL SolverComponent::getSupportedServiceNames()
 {
     uno::Sequence<OUString> aServiceNames { "com.sun.star.sheet.Solver" };
     return aServiceNames;

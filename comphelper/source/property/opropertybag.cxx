@@ -19,9 +19,8 @@
 
 
 #include "opropertybag.hxx"
-#include "comphelper_module.hxx"
-#include "comphelper_services.hxx"
 
+#include <com/sun/star/beans/IllegalTypeException.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/beans/Property.hpp>
@@ -33,17 +32,18 @@
 #include <osl/thread.h>
 
 #include <algorithm>
-#include <functional>
 #include <iterator>
 
 
 using namespace ::com::sun::star;
 
-void createRegistryInfo_OPropertyBag()
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+com_sun_star_comp_comphelper_OPropertyBag (
+    css::uno::XComponentContext *,
+    css::uno::Sequence<css::uno::Any> const &)
 {
-    static ::comphelper::module::OAutoRegistration< ::comphelper::OPropertyBag > aAutoRegistration;
+    return cppu::acquire(new comphelper::OPropertyBag());
 }
-
 
 namespace comphelper
 {
@@ -74,15 +74,7 @@ namespace comphelper
     IMPLEMENT_FORWARD_XINTERFACE2( OPropertyBag, OPropertyBag_Base, OPropertyBag_PBase )
     IMPLEMENT_FORWARD_XTYPEPROVIDER2( OPropertyBag, OPropertyBag_Base, OPropertyBag_PBase )
 
-
-    Sequence< OUString > OPropertyBag::getSupportedServiceNames_static() throw( RuntimeException )
-    {
-        Sequence< OUString > aServices { "com.sun.star.beans.PropertyBag" };
-        return aServices;
-    }
-
-
-    void SAL_CALL OPropertyBag::initialize( const Sequence< Any >& _rArguments ) throw (Exception, RuntimeException, std::exception)
+    void SAL_CALL OPropertyBag::initialize( const Sequence< Any >& _rArguments )
     {
         Sequence< Type > aTypes;
         bool AllowEmptyPropertyName(false);
@@ -93,10 +85,10 @@ namespace comphelper
            && (_rArguments[1] >>= AllowEmptyPropertyName)
            && (_rArguments[2] >>= AutomaticAddition))
         {
-            ::std::copy(
-                aTypes.getConstArray(),
-                aTypes.getConstArray() + aTypes.getLength(),
-                ::std::insert_iterator< TypeBag >( m_aAllowedTypes, m_aAllowedTypes.begin() )
+            std::copy(
+                aTypes.begin(),
+                aTypes.end(),
+                std::insert_iterator< TypeBag >( m_aAllowedTypes, m_aAllowedTypes.begin() )
             );
             m_bAutoAddProperties = AutomaticAddition;
 
@@ -104,10 +96,10 @@ namespace comphelper
             ::comphelper::NamedValueCollection aArguments( _rArguments );
 
             if ( aArguments.get_ensureType( "AllowedTypes", aTypes ) )
-                ::std::copy(
-                    aTypes.getConstArray(),
-                    aTypes.getConstArray() + aTypes.getLength(),
-                    ::std::insert_iterator< TypeBag >( m_aAllowedTypes, m_aAllowedTypes.begin() )
+                std::copy(
+                    aTypes.begin(),
+                    aTypes.end(),
+                    std::insert_iterator< TypeBag >( m_aAllowedTypes, m_aAllowedTypes.begin() )
                 );
 
             aArguments.get_ensureType( "AutomaticAddition", m_bAutoAddProperties );
@@ -120,35 +112,20 @@ namespace comphelper
         }
     }
 
-
-    OUString OPropertyBag::getImplementationName_static() throw( RuntimeException )
+    OUString SAL_CALL OPropertyBag::getImplementationName()
     {
         return OUString( "com.sun.star.comp.comphelper.OPropertyBag" );
     }
 
-
-    Reference< XInterface > SAL_CALL OPropertyBag::Create( SAL_UNUSED_PARAMETER const Reference< XComponentContext >& )
-    {
-        return *new OPropertyBag;
-    }
-
-
-    OUString SAL_CALL OPropertyBag::getImplementationName() throw (RuntimeException, std::exception)
-    {
-        return getImplementationName_static();
-    }
-
-    sal_Bool SAL_CALL OPropertyBag::supportsService( const OUString& rServiceName ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL OPropertyBag::supportsService( const OUString& rServiceName )
     {
         return cppu::supportsService(this, rServiceName);
     }
 
-
-    Sequence< OUString > SAL_CALL OPropertyBag::getSupportedServiceNames(  ) throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL OPropertyBag::getSupportedServiceNames(  )
     {
-        return getSupportedServiceNames_static();
+         return { "com.sun.star.beans.PropertyBag" };
     }
-
 
     void OPropertyBag::fireEvents(
             sal_Int32 * /*pnHandles*/,
@@ -186,48 +163,44 @@ namespace comphelper
 
 
     sal_Bool SAL_CALL OPropertyBag::isModified()
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         return m_isModified;
     }
 
     void SAL_CALL OPropertyBag::setModified( sal_Bool bModified )
-        throw (PropertyVetoException, RuntimeException, std::exception)
     {
         setModifiedImpl(bModified, false);
     }
 
     void SAL_CALL OPropertyBag::addModifyListener(
         const Reference< XModifyListener > & xListener)
-        throw (RuntimeException, std::exception)
     {
         m_NotifyListeners.addInterface(xListener);
     }
 
     void SAL_CALL OPropertyBag::removeModifyListener(
         const Reference< XModifyListener > & xListener)
-        throw (RuntimeException, std::exception)
     {
         m_NotifyListeners.removeInterface(xListener);
     }
 
 
-    Reference< XPropertySetInfo > SAL_CALL OPropertyBag::getPropertySetInfo(  ) throw(RuntimeException, std::exception)
+    Reference< XPropertySetInfo > SAL_CALL OPropertyBag::getPropertySetInfo(  )
     {
         return createPropertySetInfo( getInfoHelper() );
     }
 
 
-    sal_Bool SAL_CALL OPropertyBag::has( const Any& /*aElement*/ ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL OPropertyBag::has( const Any& /*aElement*/ )
     {
         // XSet is only a workaround for addProperty not being able to add default-void properties.
         // So, everything of XSet except insert is implemented empty
-        return sal_False;
+        return false;
     }
 
 
-    void SAL_CALL OPropertyBag::insert( const Any& _element ) throw (IllegalArgumentException, ElementExistException, RuntimeException, std::exception)
+    void SAL_CALL OPropertyBag::insert( const Any& _element )
     {
         // This is a workaround for addProperty not being able to add default-void properties.
         // If we ever have a smarter XPropertyContainer::addProperty interface, we can remove this, ehm, well, hack.
@@ -250,11 +223,11 @@ namespace comphelper
         m_pArrayHelper.reset();
 
         g.clear();
-        setModified(sal_True);
+        setModified(true);
     }
 
 
-    void SAL_CALL OPropertyBag::remove( const Any& /*aElement*/ ) throw (IllegalArgumentException, NoSuchElementException, RuntimeException, std::exception)
+    void SAL_CALL OPropertyBag::remove( const Any& /*aElement*/ )
     {
         // XSet is only a workaround for addProperty not being able to add default-void properties.
         // So, everything of XSet except insert is implemented empty
@@ -262,7 +235,7 @@ namespace comphelper
     }
 
 
-    Reference< XEnumeration > SAL_CALL OPropertyBag::createEnumeration(  ) throw (RuntimeException, std::exception)
+    Reference< XEnumeration > SAL_CALL OPropertyBag::createEnumeration(  )
     {
         // XSet is only a workaround for addProperty not being able to add default-void properties.
         // So, everything of XSet except insert is implemented empty
@@ -270,7 +243,7 @@ namespace comphelper
     }
 
 
-    Type SAL_CALL OPropertyBag::getElementType(  ) throw (RuntimeException, std::exception)
+    Type SAL_CALL OPropertyBag::getElementType(  )
     {
         // XSet is only a workaround for addProperty not being able to add default-void properties.
         // So, everything of XSet except insert is implemented empty
@@ -278,11 +251,11 @@ namespace comphelper
     }
 
 
-    sal_Bool SAL_CALL OPropertyBag::hasElements(  ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL OPropertyBag::hasElements(  )
     {
         // XSet is only a workaround for addProperty not being able to add default-void properties.
         // So, everything of XSet except insert is implemented empty
-        return sal_False;
+        return false;
     }
 
 
@@ -291,12 +264,12 @@ namespace comphelper
         m_aDynamicProperties.getFastPropertyValue( _nHandle, _rValue );
     }
 
-    sal_Bool SAL_CALL OPropertyBag::convertFastPropertyValue( Any& _rConvertedValue, Any& _rOldValue, sal_Int32 _nHandle, const Any& _rValue ) throw (IllegalArgumentException, UnknownPropertyException)
+    sal_Bool SAL_CALL OPropertyBag::convertFastPropertyValue( Any& _rConvertedValue, Any& _rOldValue, sal_Int32 _nHandle, const Any& _rValue )
     {
         return m_aDynamicProperties.convertFastPropertyValue( _nHandle, _rValue, _rConvertedValue, _rOldValue );
     }
 
-    void SAL_CALL OPropertyBag::setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const Any& rValue ) throw (Exception, std::exception)
+    void SAL_CALL OPropertyBag::setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const Any& rValue )
     {
         m_aDynamicProperties.setFastPropertyValue( nHandle, rValue );
     }
@@ -304,7 +277,7 @@ namespace comphelper
 
     ::cppu::IPropertyArrayHelper& SAL_CALL OPropertyBag::getInfoHelper()
     {
-        if ( !m_pArrayHelper.get() )
+        if (!m_pArrayHelper)
         {
             Sequence< Property > aProperties;
             m_aDynamicProperties.describeProperties( aProperties );
@@ -337,7 +310,7 @@ namespace comphelper
     }
 
 
-    void SAL_CALL OPropertyBag::addProperty( const OUString& _rName, ::sal_Int16 _nAttributes, const Any& _rInitialValue ) throw (PropertyExistException, IllegalTypeException, IllegalArgumentException, RuntimeException, std::exception)
+    void SAL_CALL OPropertyBag::addProperty( const OUString& _rName, ::sal_Int16 _nAttributes, const Any& _rInitialValue )
     {
         ::osl::ClearableMutexGuard g( m_aMutex );
 
@@ -356,11 +329,11 @@ namespace comphelper
         m_pArrayHelper.reset();
 
         g.clear();
-        setModified(sal_True);
+        setModified(true);
     }
 
 
-    void SAL_CALL OPropertyBag::removeProperty( const OUString& _rName ) throw (UnknownPropertyException, NotRemoveableException, RuntimeException, std::exception)
+    void SAL_CALL OPropertyBag::removeProperty( const OUString& _rName )
     {
         ::osl::ClearableMutexGuard g( m_aMutex );
 
@@ -370,13 +343,13 @@ namespace comphelper
         m_pArrayHelper.reset();
 
         g.clear();
-        setModified(sal_True);
+        setModified(true);
     }
 
 
     namespace
     {
-        struct ComparePropertyValueByName : public ::std::binary_function< PropertyValue, PropertyValue, bool >
+        struct ComparePropertyValueByName
         {
             bool operator()( const PropertyValue& _rLHS, const PropertyValue& _rRHS )
             {
@@ -385,7 +358,7 @@ namespace comphelper
         };
 
         template< typename CLASS >
-        struct TransformPropertyToName : public ::std::unary_function< CLASS, OUString >
+        struct TransformPropertyToName
         {
             const OUString& operator()( const CLASS& _rProp )
             {
@@ -393,7 +366,7 @@ namespace comphelper
             }
         };
 
-        struct ExtractPropertyValue : public ::std::unary_function< PropertyValue, Any >
+        struct ExtractPropertyValue
         {
             const Any& operator()( const PropertyValue& _rProp )
             {
@@ -403,7 +376,7 @@ namespace comphelper
     }
 
 
-    Sequence< PropertyValue > SAL_CALL OPropertyBag::getPropertyValues(  ) throw (RuntimeException, std::exception)
+    Sequence< PropertyValue > SAL_CALL OPropertyBag::getPropertyValues(  )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -413,9 +386,9 @@ namespace comphelper
 
         // their names
         Sequence< OUString > aNames( aProperties.getLength() );
-        ::std::transform(
-            aProperties.getConstArray(),
-            aProperties.getConstArray() + aProperties.getLength(),
+        std::transform(
+            aProperties.begin(),
+            aProperties.end(),
             aNames.getArray(),
             TransformPropertyToName< Property >()
         );
@@ -462,17 +435,17 @@ namespace comphelper
     {
         // sort (the XMultiPropertySet interface requires this)
         Sequence< PropertyValue > aProperties( _rProps );
-        ::std::sort(
-            aProperties.getArray(),
-            aProperties.getArray() + aProperties.getLength(),
+        std::sort(
+            aProperties.begin(),
+            aProperties.end(),
             ComparePropertyValueByName()
         );
 
         // a sequence of names
         Sequence< OUString > aNames( aProperties.getLength() );
-        ::std::transform(
-            aProperties.getConstArray(),
-            aProperties.getConstArray() + aProperties.getLength(),
+        std::transform(
+            aProperties.begin(),
+            aProperties.end(),
             aNames.getArray(),
             TransformPropertyToName< PropertyValue >()
         );
@@ -504,7 +477,7 @@ namespace comphelper
                 if ( m_bAutoAddProperties )
                 {
                     // add the property
-                    sal_Int16 nAttributes = PropertyAttribute::BOUND | PropertyAttribute::REMOVABLE | PropertyAttribute::MAYBEDEFAULT;
+                    sal_Int16 const nAttributes = PropertyAttribute::BOUND | PropertyAttribute::REMOVABLE | PropertyAttribute::MAYBEDEFAULT;
                     addProperty( *pName, nAttributes, pProperty->Value );
                     continue;
                 }
@@ -515,9 +488,9 @@ namespace comphelper
 
             // a sequence of values
             Sequence< Any > aValues( aProperties.getLength() );
-            ::std::transform(
-                aProperties.getConstArray(),
-                aProperties.getConstArray() + aProperties.getLength(),
+            std::transform(
+                aProperties.begin(),
+                aProperties.end(),
                 aValues.getArray(),
                 ExtractPropertyValue()
             );
@@ -536,7 +509,7 @@ namespace comphelper
     }
 
 
-    void SAL_CALL OPropertyBag::setPropertyValues( const Sequence< PropertyValue >& _rProps ) throw (UnknownPropertyException, PropertyVetoException, IllegalArgumentException, WrappedTargetException, RuntimeException, std::exception)
+    void SAL_CALL OPropertyBag::setPropertyValues( const Sequence< PropertyValue >& _rProps )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         impl_setPropertyValues_throw( _rProps );
@@ -550,8 +523,7 @@ namespace comphelper
         // (Note that this probably would belong into the base class. However, this would mean we would need
         // to check all existent usages of the base class, where MAYBEDEFAULT is *not* set, but
         // a default is nonetheless supplied/used. This is hard to accomplish reliably, in the
-        // current phase.
-        // #i78593# / 2007-07-07 / frank.schoenheit@sun.com
+        // current phase. #i78593#
 
         ::cppu::IPropertyArrayHelper& rPropInfo = getInfoHelper();
         sal_Int16 nAttributes(0);

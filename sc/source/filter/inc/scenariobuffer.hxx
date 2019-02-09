@@ -20,10 +20,12 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_SCENARIOBUFFER_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_SCENARIOBUFFER_HXX
 
-#include <com/sun/star/table/CellAddress.hpp>
 #include <oox/helper/refmap.hxx>
 #include <oox/helper/refvector.hxx>
 #include "workbookhelper.hxx"
+
+namespace oox { class AttributeList; }
+namespace oox { class SequenceInputStream; }
 
 namespace oox {
 namespace xls {
@@ -45,6 +47,7 @@ struct ScenarioModel
     OUString     maUser;             /// Name of user created the scenario.
     bool                mbLocked;           /// True = input cell values locked.
     bool                mbHidden;           /// True = scenario is hidden.
+    bool                mbActive;
 
     explicit            ScenarioModel();
 };
@@ -52,7 +55,7 @@ struct ScenarioModel
 class Scenario : public WorkbookHelper
 {
 public:
-    explicit            Scenario( const WorkbookHelper& rHelper, sal_Int16 nSheet );
+    explicit            Scenario( const WorkbookHelper& rHelper, sal_Int16 nSheet, bool bIsActive );
 
     /** Imports a scenario definition from a scenario element. */
     void                importScenario( const AttributeList& rAttribs );
@@ -72,7 +75,7 @@ private:
 
     ScenarioCellVector  maCells;            /// Scenario cells.
     ScenarioModel       maModel;            /// Scenario model data.
-    sal_Int16           mnSheet;            /// Index of the sheet this scenario is based on.
+    sal_Int16 const     mnSheet;            /// Index of the sheet this scenario is based on.
 };
 
 struct SheetScenariosModel
@@ -103,7 +106,7 @@ private:
     typedef RefVector< Scenario > ScenarioVector;
     ScenarioVector      maScenarios;
     SheetScenariosModel maModel;
-    sal_Int16           mnSheet;
+    sal_Int16 const     mnSheet;
 };
 
 class ScenarioBuffer : public WorkbookHelper

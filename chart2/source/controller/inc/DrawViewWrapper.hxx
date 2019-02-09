@@ -19,9 +19,11 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_INC_DRAWVIEWWRAPPER_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_DRAWVIEWWRAPPER_HXX
 
+#include <memory>
 #include <svx/view3d.hxx>
-#include <com/sun/star/drawing/XShape.hpp>
-#include <com/sun/star/frame/XModel.hpp>
+
+namespace com { namespace sun { namespace star { namespace drawing { class XShape; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
 
 class SdrModel;
 
@@ -45,8 +47,11 @@ protected:
 class DrawViewWrapper : public E3dView
 {
 public:
-    DrawViewWrapper(SdrModel* pModel, OutputDevice* pOut);
-    virtual ~DrawViewWrapper();
+    DrawViewWrapper(
+        SdrModel& rSdrModel,
+        OutputDevice* pOut);
+
+    virtual ~DrawViewWrapper() override;
 
     //triggers the use of an updated first page
     void    ReInit();
@@ -56,7 +61,7 @@ public:
         const css::uno::Reference< css::frame::XModel > & xChartModel );
 
     //fill list of selection handles 'aHdl'
-    virtual void SetMarkHandles() override;
+    virtual void SetMarkHandles(SfxViewShell* pOtherShell) override;
 
     SdrPageView*    GetPageView() const;
 
@@ -75,7 +80,7 @@ public:
     SfxItemSet   getPositionAndSizeItemSetFromMarkedObject() const;
 
     SdrObject* getNamedSdrObject( const OUString& rName ) const;
-    static bool IsObjectHit( SdrObject* pObj, const Point& rPnt );
+    static bool IsObjectHit( SdrObject const * pObj, const Point& rPnt );
 
     virtual void Notify(SfxBroadcaster& rBC, const SfxHint& rHint) override;
 
@@ -84,7 +89,7 @@ public:
 private:
     mutable MarkHandleProvider*     m_pMarkHandleProvider;
 
-    ::std::unique_ptr< SdrOutliner >  m_apOutliner;
+    std::unique_ptr< SdrOutliner >  m_apOutliner;
 
     // #i79965# scroll back view when ending text edit
     bool m_bRestoreMapMode;

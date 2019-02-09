@@ -17,11 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <comphelper/string.hxx>
-#include <tools/debug.hxx>
-#include <tools/bigint.hxx>
+#include <sal/config.h>
 
-#include <tools/rc.h>
+#include <string_view>
+
+#include <comphelper/string.hxx>
+#include <tools/bigint.hxx>
+#include <sal/log.hxx>
 
 #include <vcl/event.hxx>
 #include <vcl/svapp.hxx>
@@ -36,8 +38,6 @@ using namespace ::comphelper;
 namespace
 {
 
-#define FORMAT_LONGCURRENCY      4
-
 BigInt ImplPower10( sal_uInt16 n )
 {
     sal_uInt16 i;
@@ -51,10 +51,10 @@ BigInt ImplPower10( sal_uInt16 n )
 
 OUString ImplGetCurr( const LocaleDataWrapper& rLocaleDataWrapper, const BigInt &rNumber, sal_uInt16 nDigits, const OUString& rCurrSymbol, bool bShowThousandSep )
 {
-    DBG_ASSERT( nDigits < 10, "LongCurrency may only have 9 decimal places" );
+    SAL_WARN_IF( nDigits >= 10, "vcl", "LongCurrency may only have 9 decimal places" );
 
-    if ( rNumber.IsZero() || (long)rNumber )
-        return rLocaleDataWrapper.getCurr( (long)rNumber, nDigits, rCurrSymbol, bShowThousandSep );
+    if ( rNumber.IsZero() || static_cast<long>(rNumber) )
+        return rLocaleDataWrapper.getCurr( static_cast<long>(rNumber), nDigits, rCurrSymbol, bShowThousandSep );
 
     BigInt aTmp( ImplPower10( nDigits ) );
     BigInt aInteger( rNumber );
@@ -66,12 +66,12 @@ OUString ImplGetCurr( const LocaleDataWrapper& rLocaleDataWrapper, const BigInt 
     if ( !aInteger.IsZero() )
     {
         aFraction += aTmp;
-        aTmp       = 1000000000L;
+        aTmp       = 1000000000;
     }
     if ( rNumber.IsNeg() )
         aFraction *= -1;
 
-    OUStringBuffer aTemplate = rLocaleDataWrapper.getCurr( (long)aFraction, nDigits, rCurrSymbol, bShowThousandSep );
+    OUStringBuffer aTemplate = rLocaleDataWrapper.getCurr( static_cast<long>(aFraction), nDigits, rCurrSymbol, bShowThousandSep );
     while( !aInteger.IsZero() )
     {
         aFraction  = aInteger;
@@ -80,7 +80,7 @@ OUString ImplGetCurr( const LocaleDataWrapper& rLocaleDataWrapper, const BigInt 
         if( !aInteger.IsZero() )
             aFraction += aTmp;
 
-        OUString aFractionStr = rLocaleDataWrapper.getNum( (long)aFraction, 0 );
+        OUString aFractionStr = rLocaleDataWrapper.getNum( static_cast<long>(aFraction), 0 );
 
         sal_Int32 nSPos = aTemplate.indexOf( '1' );
         if (nSPos == -1)
@@ -97,32 +97,8 @@ OUString ImplGetCurr( const LocaleDataWrapper& rLocaleDataWrapper, const BigInt 
     return aTemplate.makeStringAndClear();
 }
 
-bool ImplNumericProcessKeyInput( Edit*, const KeyEvent& rKEvt,
-                                        bool bStrictFormat, bool bThousandSep,
-                                        const LocaleDataWrapper& rLocaleDataWrapper )
-{
-    if ( !bStrictFormat )
-        return false;
-    else
-    {
-        sal_Unicode cChar = rKEvt.GetCharCode();
-        sal_uInt16      nGroup = rKEvt.GetKeyCode().GetGroup();
-
-        if ( (nGroup == KEYGROUP_FKEYS) || (nGroup == KEYGROUP_CURSOR) ||
-             (nGroup == KEYGROUP_MISC) ||
-             ((cChar >= '0') && (cChar <= '9')) ||
-             (bThousandSep && string::equals(rLocaleDataWrapper.getNumThousandSep(), cChar)) ||
-             (string::equals(rLocaleDataWrapper.getNumDecimalSep(), cChar) ) ||
-             (cChar == '-') )
-            return false;
-        else
-            return true;
-    }
-}
-
-bool ImplNumericGetValue( const OUString& rStr, BigInt& rValue,
-                                 sal_uInt16 nDecDigits, const LocaleDataWrapper& rLocaleDataWrapper,
-                                 bool bCurrency = false )
+bool ImplCurrencyGetValue( const OUString& rStr, BigInt& rValue,
+                                 sal_uInt16 nDecDigits, const LocaleDataWrapper& rLocaleDataWrapper )
 {
     OUString aStr = rStr;
     OUStringBuffer aStr1;
@@ -139,23 +115,40 @@ bool ImplNumericGetValue( const OUString& rStr, BigInt& rValue,
 
     // Find decimal sign's position
     nDecPos = aStr.indexOf( rLocaleDataWrapper.getNumDecimalSep() );
+    if (nDecPos < 0 && !rLocaleDataWrapper.getNumDecimalSepAlt().isEmpty())
+        nDecPos = aStr.indexOf( rLocaleDataWrapper.getNumDecimalSepAlt() );
 
     if ( nDecPos != -1 )
     {
         aStr1 = aStr.copy( 0, nDecPos );
-        aStr2.append(aStr.copy(nDecPos+1));
+        aStr2.append(std::u16string_view(aStr).substr(nDecPos+1));
     }
     else
         aStr1 = aStr;
 
     // Negative?
-    if ( bCurrency )
+    if ( (aStr[ 0 ] == '(') && (aStr[ aStr.getLength()-1 ] == ')') )
+        bNegative = true;
+    if ( !bNegative )
     {
-        if ( (aStr[ 0 ] == '(') && (aStr[ aStr.getLength()-1 ] == ')') )
-            bNegative = true;
-        if ( !bNegative )
+        for (sal_Int32 i=0; i < aStr.getLength(); i++ )
         {
-            for (sal_Int32 i=0; i < aStr.getLength(); i++ )
+            if ( (aStr[ i ] >= '0') && (aStr[ i ] <= '9') )
+                break;
+            else if ( aStr[ i ] == '-' )
+            {
+                bNegative = true;
+                break;
+            }
+        }
+    }
+    if ( !bNegative && !aStr.isEmpty() )
+    {
+        sal_uInt16 nFormat = rLocaleDataWrapper.getCurrNegativeFormat();
+        if ( (nFormat == 3) || (nFormat == 6)  ||
+             (nFormat == 7) || (nFormat == 10) )
+        {
+            for (sal_Int32 i = aStr.getLength()-1; i > 0; i++ )
             {
                 if ( (aStr[ i ] >= '0') && (aStr[ i ] <= '9') )
                     break;
@@ -166,29 +159,6 @@ bool ImplNumericGetValue( const OUString& rStr, BigInt& rValue,
                 }
             }
         }
-        if ( !bNegative && bCurrency && !aStr.isEmpty() )
-        {
-            sal_uInt16 nFormat = rLocaleDataWrapper.getCurrNegativeFormat();
-            if ( (nFormat == 3) || (nFormat == 6)  ||
-                 (nFormat == 7) || (nFormat == 10) )
-            {
-                for (sal_Int32 i = aStr.getLength()-1; i > 0; i++ )
-                {
-                    if ( (aStr[ i ] >= '0') && (aStr[ i ] <= '9') )
-                        break;
-                    else if ( aStr[ i ] == '-' )
-                    {
-                        bNegative = true;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    else
-    {
-        if ( aStr1[ 0 ] == '-' )
-            bNegative = true;
     }
 
     // delete unwanted characters
@@ -226,8 +196,8 @@ bool ImplNumericGetValue( const OUString& rStr, BigInt& rValue,
     if (aStr2.getLength() < nDecDigits)
         string::padToLength(aStr2, nDecDigits, '0');
 
+    aStr1.append(aStr2);
     aStr  = aStr1.makeStringAndClear();
-    aStr += aStr2.makeStringAndClear();
 
     // check range
     BigInt nValue( aStr );
@@ -244,28 +214,21 @@ bool ImplNumericGetValue( const OUString& rStr, BigInt& rValue,
     return true;
 }
 
-bool ImplLongCurrencyProcessKeyInput( Edit* pEdit, const KeyEvent& rKEvt,
-                                             bool, bool bUseThousandSep, const LocaleDataWrapper& rLocaleDataWrapper )
-{
-    // There's no StrictFormat that makes sense here, thus allow all chars
-    return ImplNumericProcessKeyInput( pEdit, rKEvt, false, bUseThousandSep, rLocaleDataWrapper  );
-}
-
 } // namespace
 
-inline bool ImplLongCurrencyGetValue( const OUString& rStr, BigInt& rValue,
+static bool ImplLongCurrencyGetValue( const OUString& rStr, BigInt& rValue,
                                       sal_uInt16 nDecDigits, const LocaleDataWrapper& rLocaleDataWrapper )
 {
-    return ImplNumericGetValue( rStr, rValue, nDecDigits, rLocaleDataWrapper, true );
+    return ImplCurrencyGetValue( rStr, rValue, nDecDigits, rLocaleDataWrapper );
 }
 
-bool ImplLongCurrencyReformat( const OUString& rStr, BigInt nMin, BigInt nMax,
+bool ImplLongCurrencyReformat( const OUString& rStr, BigInt const & nMin, BigInt const & nMax,
                                sal_uInt16 nDecDigits,
                                const LocaleDataWrapper& rLocaleDataWrapper, OUString& rOutStr,
-                               LongCurrencyFormatter& rFormatter )
+                               LongCurrencyFormatter const & rFormatter )
 {
     BigInt nValue;
-    if ( !ImplNumericGetValue( rStr, nValue, nDecDigits, rLocaleDataWrapper, true ) )
+    if ( !ImplCurrencyGetValue( rStr, nValue, nDecDigits, rLocaleDataWrapper ) )
         return true;
     else
     {
@@ -289,12 +252,12 @@ void LongCurrencyFormatter::ImpInit()
     mnMax              *= 0x7FFFFFFF;
     mnCorrectedValue    = 0;
     mnDecimalDigits     = 0;
-    mnType              = FORMAT_LONGCURRENCY;
     mbThousandSep       = true;
     SetDecimalDigits( 0 );
 }
 
-LongCurrencyFormatter::LongCurrencyFormatter()
+LongCurrencyFormatter::LongCurrencyFormatter(Edit* pEdit)
+    : FormatterBase(pEdit)
 {
     ImpInit();
 }
@@ -309,7 +272,7 @@ void LongCurrencyFormatter::SetCurrencySymbol( const OUString& rStr )
     ReformatAll();
 }
 
-OUString LongCurrencyFormatter::GetCurrencySymbol() const
+OUString const & LongCurrencyFormatter::GetCurrencySymbol() const
 {
     return !maCurrencySymbol.isEmpty() ? maCurrencySymbol : GetLocaleDataWrapper().getCurrSymbol();
 }
@@ -441,10 +404,10 @@ void ImplNewLongCurrencyFieldValue(LongCurrencyField* pField, const BigInt& rNew
     pField->Modify();
 }
 
-LongCurrencyField::LongCurrencyField( vcl::Window* pParent, WinBits nWinStyle ) :
-    SpinField( pParent, nWinStyle )
+LongCurrencyField::LongCurrencyField(vcl::Window* pParent, WinBits nWinStyle)
+    : SpinField( pParent, nWinStyle )
+    , LongCurrencyFormatter(this)
 {
-    SetField( this );
     mnSpinSize   = 1;
     mnFirst      = mnMin;
     mnLast       = mnMax;
@@ -452,17 +415,7 @@ LongCurrencyField::LongCurrencyField( vcl::Window* pParent, WinBits nWinStyle ) 
     Reformat();
 }
 
-bool LongCurrencyField::PreNotify( NotifyEvent& rNEvt )
-{
-    if( rNEvt.GetType() == MouseNotifyEvent::KEYINPUT )
-    {
-        if ( ImplLongCurrencyProcessKeyInput( GetField(), *rNEvt.GetKeyEvent(), IsStrictFormat(), IsUseThousandSep(), GetLocaleDataWrapper() ) )
-            return true;
-    }
-    return SpinField::PreNotify( rNEvt );
-}
-
-bool LongCurrencyField::Notify( NotifyEvent& rNEvt )
+bool LongCurrencyField::EventNotify( NotifyEvent& rNEvt )
 {
     if( rNEvt.GetType() == MouseNotifyEvent::GETFOCUS )
     {
@@ -476,7 +429,7 @@ bool LongCurrencyField::Notify( NotifyEvent& rNEvt )
             SpinField::Modify();
         }
     }
-    return SpinField::Notify( rNEvt );
+    return SpinField::EventNotify( rNEvt );
 }
 
 void LongCurrencyField::Modify()
@@ -519,24 +472,14 @@ void LongCurrencyField::Last()
     SpinField::Last();
 }
 
-LongCurrencyBox::LongCurrencyBox( vcl::Window* pParent, WinBits nWinStyle ) :
-    ComboBox( pParent, nWinStyle )
+LongCurrencyBox::LongCurrencyBox(vcl::Window* pParent, WinBits nWinStyle)
+    : ComboBox(pParent, nWinStyle)
+    , LongCurrencyFormatter(this)
 {
-    SetField( this );
     Reformat();
 }
 
-bool LongCurrencyBox::PreNotify( NotifyEvent& rNEvt )
-{
-    if( rNEvt.GetType() == MouseNotifyEvent::KEYINPUT )
-    {
-        if ( ImplLongCurrencyProcessKeyInput( GetField(), *rNEvt.GetKeyEvent(), IsStrictFormat(), IsUseThousandSep(), GetLocaleDataWrapper() ) )
-            return true;
-    }
-    return ComboBox::PreNotify( rNEvt );
-}
-
-bool LongCurrencyBox::Notify( NotifyEvent& rNEvt )
+bool LongCurrencyBox::EventNotify( NotifyEvent& rNEvt )
 {
     if( rNEvt.GetType() == MouseNotifyEvent::GETFOCUS )
     {
@@ -550,7 +493,7 @@ bool LongCurrencyBox::Notify( NotifyEvent& rNEvt )
             ComboBox::Modify();
         }
     }
-    return ComboBox::Notify( rNEvt );
+    return ComboBox::EventNotify( rNEvt );
 }
 
 void LongCurrencyBox::Modify()

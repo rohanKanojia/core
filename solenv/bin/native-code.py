@@ -23,10 +23,10 @@ import xml.etree.ElementTree as ET
 core_factory_list = [
     ("libembobj.a", "embobj_component_getFactory"),
     ("libevtattlo.a", "evtatt_component_getFactory"),
-    ("libreflectionlo.a", "reflection_component_getFactory"),
     ("libcomphelper.a", "comphelp_component_getFactory"),
     ("libconfigmgrlo.a", "configmgr_component_getFactory"),
     ("libdrawinglayerlo.a", "drawinglayer_component_getFactory"),
+    ("libemfiolo.a", "emfio_component_getFactory"),
     ("libfilterconfiglo.a", "filterconfig1_component_getFactory"),
     ("libfsstoragelo.a", "fsstorage_component_getFactory"),
     ("libhyphenlo.a", "hyphen_component_getFactory"),
@@ -36,7 +36,6 @@ core_factory_list = [
     ("liblnglo.a", "lng_component_getFactory"),
     ("liblnthlo.a", "lnth_component_getFactory"),
     ("liblocalebe1lo.a", "localebe1_component_getFactory"),
-    ("libooxlo.a", "oox_component_getFactory"),
     ("libpackage2.a", "package2_component_getFactory"),
     ("libsmlo.a", "sm_component_getFactory"),
     ("libsrtrs1.a", "srtrs1_component_getFactory"),
@@ -48,10 +47,8 @@ core_factory_list = [
     ("libunordflo.a", "unordf_component_getFactory"),
     ("libunoxmllo.a", "unoxml_component_getFactory"),
     ("libutllo.a", "utl_component_getFactory"),
-    ("libxmlsecurity.a", "xmlsecurity_component_getFactory"),
     ("libxoflo.a", "xof_component_getFactory"),
     ("libxolo.a", "xo_component_getFactory"),
-    ("libxsec_xmlsec.a", "xsec_xmlsec_component_getFactory", "#if !defined ANDROID && !defined IOS"),
     ("libxstor.a", "xstor_component_getFactory"),
     ("libvclcanvaslo.a", "vclcanvas_component_getFactory"),
     ("libmtfrendererlo.a", "mtfrenderer_component_getFactory"),
@@ -59,37 +56,57 @@ core_factory_list = [
     ("libxmlfalo.a", "xmlfa_component_getFactory"),
     ("libodfflatxmllo.a", "odfflatxml_component_getFactory"),
     ("libxmlscriptlo.a", "xmlscript_component_getFactory"),
+    ("libmcnttype.a", "mcnttype_component_getFactory"),
+    ("libvcllo.a", "vcl_component_getFactory"),
+    ("libspelllo.a", "spell_component_getFactory"),
+    ("libpdffilterlo.a", "pdffilter_component_getFactory"),
+    ("libsvgiolo.a", "svgio_component_getFactory"),
+    ("libsvtlo.a", "svt_component_getFactory")
     ]
 
 core_constructor_list = [
 # canvas/source/factory/canvasfactory.component
     "com_sun_star_comp_rendering_CanvasFactory_get_implementation",
 # chart2/source/chartcore.component
+    "com_sun_star_chart2_ExponentialScaling_get_implementation",
     "com_sun_star_chart2_LinearScaling_get_implementation",
+    "com_sun_star_chart2_LogarithmicScaling_get_implementation",
+    "com_sun_star_chart2_PowerScaling_get_implementation",
     "com_sun_star_comp_chart_AreaChartType_get_implementation",
     "com_sun_star_comp_chart_BarChartType_get_implementation",
     "com_sun_star_comp_chart_BubbleChartType_get_implementation",
+    "com_sun_star_comp_chart_CachedDataSequence_get_implementation",
     "com_sun_star_comp_chart_CandleStickChartType_get_implementation",
     "com_sun_star_comp_chart_ChartTypeManager_get_implementation",
     "com_sun_star_comp_chart_ColumnChartType_get_implementation",
     "com_sun_star_comp_chart_DataSeries_get_implementation",
     "com_sun_star_comp_chart_DataSource_get_implementation",
     "com_sun_star_comp_chart_FilledNetChartType_get_implementation",
-    "com_sun_star_comp_chart_GL3DBarChartType_get_implementation",
     "com_sun_star_comp_chart_FormattedString_get_implementation",
+    "com_sun_star_comp_chart_InternalDataProvider_get_implementation",
     "com_sun_star_comp_chart_LineChartType_get_implementation",
     "com_sun_star_comp_chart_NetChartType_get_implementation",
     "com_sun_star_comp_chart_PieChartType_get_implementation",
     "com_sun_star_comp_chart_ScatterChartType_get_implementation",
     "com_sun_star_comp_chart2_Axis_get_implementation",
+    "com_sun_star_comp_chart2_CartesianCoordinateSystem2d_get_implementation",
+    "com_sun_star_comp_chart2_CartesianCoordinateSystem3d_get_implementation",
     "com_sun_star_comp_chart2_ChartController_get_implementation",
     "com_sun_star_comp_chart2_ChartDocumentWrapper_get_implementation",
     "com_sun_star_comp_chart2_ChartModel_get_implementation",
+    "com_sun_star_comp_chart2_ChartView_get_implementation",
+    "com_sun_star_comp_chart2_ConfigDefaultColorScheme_get_implementation",
     "com_sun_star_comp_chart2_Diagram_get_implementation",
     "com_sun_star_comp_chart2_ErrorBar_get_implementation",
+    "com_sun_star_comp_chart2_ExponentialRegressionCurve_get_implementation",
+    "com_sun_star_comp_chart2_GridProperties_get_implementation",
     "com_sun_star_comp_chart2_LabeledDataSequence_get_implementation",
     "com_sun_star_comp_chart2_Legend_get_implementation",
     "com_sun_star_comp_chart2_LinearRegressionCurve_get_implementation",
+    "com_sun_star_comp_chart2_LogarithmicRegressionCurve_get_implementation",
+    "com_sun_star_comp_chart2_MeanValueRegressionCurve_get_implementation",
+    "com_sun_star_comp_chart2_MovingAverageRegressionCurve_get_implementation",
+    "com_sun_star_comp_chart2_PageBackground_get_implementation",
     "com_sun_star_comp_chart2_PolarCoordinateSystem2d_get_implementation",
     "com_sun_star_comp_chart2_PolarCoordinateSystem3d_get_implementation",
     "com_sun_star_comp_chart2_PolynomialRegressionCurve_get_implementation",
@@ -101,38 +118,43 @@ core_constructor_list = [
     "com_sun_star_comp_chart2_ChartDocumentWrapper_get_implementation",
     "com_sun_star_comp_chart2_ChartFrameLoader_get_implementation",
 # comphelper/util/comphelp.component
-    "com_sun_star_comp_logging_SimpleLogRing",
+    "com_sun_star_comp_MemoryStream",
     "com_sun_star_comp_task_OfficeRestartManager",
+    "AnyCompareFactory_get_implementation",
     "IndexedPropertyValuesContainer_get_implementation",
     "NamedPropertyValuesContainer_get_implementation",
+    "com_sun_star_comp_comphelper_OPropertyBag",
+    "com_sun_star_comp_SequenceInputStreamService",
+    "com_sun_star_comp_SequenceOutputStreamService",
+    "com_sun_star_comp_util_OfficeInstallationDirectories",
 # dbaccess/util/dba.component
-    "com_sun_star_comp_dba_ORowSet_get_implementation",
+    ("com_sun_star_comp_dba_ORowSet_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
 # forms/util/frm.component
-    "com_sun_star_comp_forms_FormOperations_get_implementation",
-    "com_sun_star_comp_forms_ODatabaseForm_get_implementation",
-    "com_sun_star_comp_forms_OFormattedFieldWrapper_ForcedFormatted_get_implementation",
-    "com_sun_star_comp_forms_ORichTextModel_get_implementation",
-    "com_sun_star_comp_forms_OScrollBarModel_get_implementation",
-    "com_sun_star_comp_forms_OSpinButtonModel_get_implementation",
-    "com_sun_star_form_Model_get_implementation",
-    "com_sun_star_form_OButtonControl_get_implementation",
-    "com_sun_star_form_OButtonModel_get_implementation",
-    "com_sun_star_form_OCheckBoxControl_get_implementation",
-    "com_sun_star_form_OCheckBoxModel_get_implementation",
-    "com_sun_star_form_OComboBoxControl_get_implementation",
-    "com_sun_star_form_OComboBoxModel_get_implementation",
-    "com_sun_star_form_ODateControl_get_implementation",
-    "com_sun_star_form_ODateModel_get_implementation",
-    "com_sun_star_form_OEditControl_get_implementation",
-    "com_sun_star_form_OEditModel_get_implementation",
-    "com_sun_star_form_OFixedTextModel_get_implementation",
-    "com_sun_star_form_OFormsCollection_get_implementation",
-    "com_sun_star_form_OGridControlModel_get_implementation",
-    "com_sun_star_form_OGroupBoxModel_get_implementation",
-    "com_sun_star_form_OListBoxModel_get_implementation",
-    "com_sun_star_form_ONumericModel_get_implementation",
-    "com_sun_star_form_ORadioButtonModel_get_implementation",
-    "com_sun_star_form_XForms_get_implementation",
+    ("com_sun_star_comp_forms_FormOperations_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_comp_forms_ODatabaseForm_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_comp_forms_OFormattedFieldWrapper_ForcedFormatted_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_comp_forms_ORichTextModel_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_comp_forms_OScrollBarModel_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_comp_forms_OSpinButtonModel_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_Model_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_OButtonControl_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_OButtonModel_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_OCheckBoxControl_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_OCheckBoxModel_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_OComboBoxControl_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_OComboBoxModel_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_ODateControl_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_ODateModel_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_OEditControl_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_OEditModel_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_OFixedTextModel_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_OFormsCollection_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_OGridControlModel_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_OGroupBoxModel_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_OListBoxModel_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_ONumericModel_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_ORadioButtonModel_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
+    ("com_sun_star_form_XForms_get_implementation", "#if HAVE_FEATURE_DBCONNECTIVITY"),
 # framework/util/fwk.component
     "com_sun_star_comp_framework_AutoRecovery_get_implementation",
     "com_sun_star_comp_framework_Desktop_get_implementation",
@@ -183,6 +205,8 @@ core_constructor_list = [
     "com_sun_star_comp_embed_OLESimpleStorage",
 # stoc/source/inspect/introspection.component
     "com_sun_star_comp_stoc_Introspection_get_implementation",
+# stoc/source/corereflection/reflection.component
+    "com_sun_star_comp_stoc_CoreReflection_get_implementation",
 # stoc/util/stocservices.component
     "com_sun_star_comp_stoc_OServiceManagerWrapper_get_implementation",
     "com_sun_star_comp_stoc_TypeConverter_get_implementation",
@@ -190,7 +214,7 @@ core_constructor_list = [
     "com_sun_star_comp_uri_UriReferenceFactory_get_implementation",
     "com_sun_star_comp_uri_UriSchemeParser_vndDOTsunDOTstarDOTexpand_get_implementation",
     "com_sun_star_comp_uri_UriSchemeParser_vndDOTsunDOTstarDOTscript_get_implementation",
-# svtools/util/svt.component
+# vcl/vcl.android.component
     "com_sun_star_graphic_GraphicObject_get_implementation",
     "com_sun_star_comp_graphic_GraphicProvider_get_implementation",
 # svx/util/svx.component
@@ -228,6 +252,31 @@ core_constructor_list = [
     "com_sun_star_comp_uui_UUIInteractionHandler_get_implementation",
 # xmloff/util/xo.component
     "XMLVersionListPersistence_get_implementation",
+    "com_sun_star_comp_Impress_XMLOasisImporter_get_implementation",
+    "com_sun_star_comp_Impress_XMLOasisExporter_get_implementation",
+# xmlscript/util/xmlscript.component
+    "com_sun_star_comp_xmlscript_XMLBasicExporter",
+    "com_sun_star_comp_xmlscript_XMLBasicImporter",
+    "com_sun_star_comp_xmlscript_XMLOasisBasicExporter",
+    "com_sun_star_comp_xmlscript_XMLOasisBasicImporter",
+# xmlsecurity/util/xmlsecurity.component
+    ("com_sun_star_security_CertificateContainer_get_implementation", "#if HAVE_FEATURE_NSS"),
+    ("com_sun_star_security_DocumentDigitalSignatures_get_implementation", "#if HAVE_FEATURE_NSS"),
+# xmlsecurity/util/xsec_xmlsec.component
+    ("com_sun_star_xml_crypto_NSSInitializer_get_implementation", "#if HAVE_FEATURE_NSS"),
+    ("com_sun_star_xml_crypto_SEInitializer_get_implementation", "#if HAVE_FEATURE_NSS"),
+    ("com_sun_star_xml_security_SEInitializer_Gpg_get_implementation", "#if HAVE_FEATURE_GPGME"),
+    ("com_sun_star_xml_crypto_SecurityEnvironment_get_implementation", "#if HAVE_FEATURE_NSS"),
+    ("com_sun_star_xml_wrapper_XMLDocumentWrapper_get_implementation", "#if HAVE_FEATURE_NSS"),
+    ("com_sun_star_xml_wrapper_XMLElementWrapper_get_implementation", "#if HAVE_FEATURE_NSS"),
+    ("com_sun_star_xml_crypto_XMLSecurityContext_get_implementation", "#if HAVE_FEATURE_NSS"),
+    ("com_sun_star_xml_crypto_XMLSignature_get_implementation", "#if HAVE_FEATURE_NSS"),
+# oox/util/oox.component
+    "com_sun_star_comp_oox_core_FastTokenHandler_get_implementation",
+    "com_sun_star_comp_oox_FormatDetector_get_implementation",
+    "com_sun_star_comp_oox_docprop_DocumentPropertiesImporter_get_implementation",
+    "com_sun_star_comp_oox_ppt_PowerPointImport_get_implementation",
+    "com_sun_star_comp_oox_ShapeContextHandler_get_implementation",
     ]
 
 # edit group for apps, where you can edit documents
@@ -249,11 +298,27 @@ edit_constructor_list = [
 # starmath/util/sm.component
     "Math_XMLOasisMetaExporter_get_implementation",
     "Math_XMLOasisSettingsExporter_get_implementation",
+    "Math_XMLImporter_get_implementation",
+    "Math_XMLOasisMetaImporter_get_implementation",
+    "Math_XMLOasisSettingsImporter_get_implementation",
+# starmath/util/smd.component
+    "math_FormatDetector_get_implementation",
 # sw/util/sw.component
     "com_sun_star_comp_Writer_XMLOasisContentExporter_get_implementation",
     "com_sun_star_comp_Writer_XMLOasisMetaExporter_get_implementation",
     "com_sun_star_comp_Writer_XMLOasisSettingsExporter_get_implementation",
     "com_sun_star_comp_Writer_XMLOasisStylesExporter_get_implementation",
+    "com_sun_star_comp_Writer_WriterModule_get_implementation",
+    ]
+
+# math
+math_factory_list = [
+    ]
+
+math_constructor_list = [
+# starmath/util/sm.component
+    "Math_XMLOasisMetaExporter_get_implementation",
+    "Math_XMLOasisSettingsExporter_get_implementation",
     ]
 
 calc_factory_list = [
@@ -281,7 +346,6 @@ calc_constructor_list = [
 
 draw_factory_list = [
     ("libsdlo.a", "sd_component_getFactory"),
-    ("libsvgiolo.a", "svgio_component_getFactory"),
     ("libsvgfilterlo.a", "svgfilter_component_getFactory"),
     ("libdeployment.a", "deployment_component_getFactory"),
     ("libemboleobj.a", "emboleobj_component_getFactory"),
@@ -320,7 +384,7 @@ writer_factory_list = [
 writer_constructor_list = [
 # basic/util/sb.component
     ("com_sun_star_comp_sfx2_ScriptLibraryContainer_get_implementation", "#if HAVE_FEATURE_SCRIPTING"),
-# filter/source/textfilterdetect/textfd.component 
+# filter/source/textfilterdetect/textfd.component
     "com_sun_star_comp_filters_PlainTextFilterDetect_get_implementation",
 # sw/util/sw.component
     "com_sun_star_comp_Writer_XMLOasisContentImporter_get_implementation",
@@ -331,6 +395,9 @@ writer_constructor_list = [
     "com_sun_star_util_comp_FinalThreadManager_get_implementation",
 # sw/util/swd.component
     "com_sun_star_comp_writer_FormatDetector_get_implementation",
+# sw/util/msword.component
+    "com_sun_star_comp_Writer_RtfExport_get_implementation",
+    "com_sun_star_comp_Writer_DocxExport_get_implementation",
 # writerfilter/util/writerfilter.component
     "com_sun_star_comp_Writer_RtfFilter_get_implementation",
     "com_sun_star_comp_Writer_WriterFilter_get_implementation",
@@ -339,6 +406,7 @@ writer_constructor_list = [
 factory_map = {
     'core' : core_factory_list,
     'edit' : edit_factory_list,
+    'math' : math_factory_list,
     'calc' : calc_factory_list,
     'draw' : draw_factory_list,
     'writer' : writer_factory_list,
@@ -347,10 +415,131 @@ factory_map = {
 constructor_map = {
     'core' : core_constructor_list,
     'edit' : edit_constructor_list,
+    'math' : math_constructor_list,
     'calc' : calc_constructor_list,
     'draw' : draw_constructor_list,
     'writer' : writer_constructor_list,
     }
+
+custom_widgets = [
+    'ArgEdit',
+    'BookmarksBox',
+    'CategoryListBox',
+    'ClassificationEditView',
+    'ColorConfigCtrl',
+    'ColumnEdit',
+    'CommandCategoryListBox',
+    'ConditionEdit',
+    'ContentListBox',
+    'ContextVBox',
+    'CuiCustomMultilineEdit',
+    'CustomAnimationList',
+    'CustomPropertiesControl',
+    'DataTreeListBox',
+    'DriverListControl',
+    'DropdownBox',
+    'EditBox',
+    'EmojiView',
+    'ExtBoxWithBtns',
+    'ExtensionBox',
+    'FontNameBox',
+    'FontSizeBox',
+    'FontStyleBox',
+    'FormulaListBox',
+    'IndexBox',
+    'IndexBox',
+    'IntellectualPropertyPartEdit',
+    'LightButton',
+    'LookUpComboBox',
+    'MacroEventListBox',
+    'ManagedMenuButton',
+    'MultiLineEditSyntaxHighlight',
+    'NumFormatListBox',
+    'OFileURLControl',
+    'OptionalBox',
+    'PageNumberListBox',
+    'PaperSizeListBox',
+    'PriorityHBox',
+    'PriorityMergedHBox',
+    'PropertyControl',
+    'RecentDocsView',
+    'RefButton',
+    'RefEdit',
+    'ReplaceEdit',
+    'ReturnActionEdit',
+    'RowEdit',
+    'RubyEdit',
+    'RubyPreview',
+    'RubyRadioButton',
+    'SFTreeListBox',
+    'SameContentListBox',
+    'ScAutoFmtPreview',
+    'ScCondFormatList',
+    'ScCsvTableBox',
+    'ScCursorRefEdit',
+    'ScDPFunctionListBox',
+    'ScDataTableView',
+    'ScDoubleField',
+    'ScEditWindow',
+    'ScPivotLayoutTreeList',
+    'ScPivotLayoutTreeListData',
+    'ScPivotLayoutTreeListLabel',
+    'ScRefButtonEx',
+    'SdPageObjsTLB',
+    'SearchBox',
+    'SearchResultsBox',
+    'SelectionListBox',
+    'SentenceEditWindow',
+    'SfxAccCfgTabListBox',
+    'SfxConfigFunctionListBox',
+    'SfxConfigGroupListBox',
+    'ShowNupOrderWindow',
+    'ShowNupOrderWindow',
+    'SidebarDialControl',
+    'SidebarToolBox',
+    'SmallButton',
+    'SpacingListBox',
+    'StatusBar',
+    'StructListBox',
+    'SuggestionDisplay',
+    'SuggestionEdit',
+    'SvSimpleTableContainer',
+    'SvTabListBox',
+    'SvTreeListBox',
+    'SvtFileView',
+    'SvtIconChoiceCtrl',
+    'SvtURLBox',
+    'Svx3DPreviewControl',
+    'SvxCharViewControl',
+    'SvxCheckListBox',
+    'SvxColorListBox',
+    'SvxColorValueSet',
+    'SvxDictEdit',
+    'SvxFillAttrBox',
+    'SvxFillTypeBox',
+    'SvxFontPrevWindow',
+    'SvxHlmarkTreeLBox',
+    'SvxHyperURLBox',
+    'SvxLanguageBox',
+    'SvxLanguageComboBox',
+    'SvxLightCtl3D',
+    'SvxNoSpaceEdit',
+    'SvxPathControl',
+    'SvxRelativeField',
+    'SvxTextEncodingBox',
+    'SvxTextEncodingBox',
+    'SwAddressPreview',
+    'SwFieldRefTreeListBox',
+    'SwGlTreeListBox',
+    'SwMarkPreview',
+    'SwNavHelpToolBox',
+    'TableValueSet',
+    'TemplateDefaultView',
+    'TemplateLocalView',
+    'TemplateSearchView',
+    'ThesaurusAlternativesCtrl',
+    'ValueSet',
+    ]
 
 def get_constructor_guard(constructor):
     if type(full_constructor_map[constructor]) is bool:
@@ -395,10 +584,11 @@ opts = OptionParser()
 opts.add_option("-j", "--java-guard", action="store_true", help="include external java functions", dest="java", default=False)
 opts.add_option("-g", "--group", action="append", help="group of implementations to make available in application", dest="groups")
 opts.add_option("-r", "--limit-rdb", action="append", help="instead of outputting native-code.cxx, limit the services.rdb only to the services defined by the groups", dest="services")
+opts.add_option("-C", "--pure-c", action="store_true", help="do not print extern \"C\"", dest="pure_c", default=False)
 
 (options, args) = opts.parse_args()
 
-# dict of all the contructors that we need according to -g's
+# dict of all the constructors that we need according to -g's
 full_constructor_map = {}
 if options.groups:
     for constructor_group in options.groups:
@@ -431,10 +621,14 @@ print ("""/*
  */
 
 #include <config_features.h>
+#include <config_fuzzers.h>
+#include <config_gpgme.h>
 #include <osl/detail/component-mapping.h>
+#include <string.h>
 
-extern "C" {
 """)
+if not options.pure_c:
+    print ("""extern "C" {""")
 
 for entry in sorted(full_factory_map.keys()):
     factory_function = full_factory_map[entry]['function']
@@ -453,6 +647,32 @@ for constructor in sorted(full_constructor_map.keys()):
     print ('void * '+constructor+'( void *, void * );')
     if constructor_guard:
         print ('#endif')
+
+print ('')
+for entry in sorted(custom_widgets):
+    print ('void make' + entry + '();')
+print ('typedef void (*custom_widget_func)();')
+print ('#if !ENABLE_FUZZERS')
+print ('static struct { const char *name; custom_widget_func func; } custom_widgets[] = {')
+for entry in sorted(custom_widgets):
+    print ('    { "make' + entry + '", make' + entry + ' },')
+print ('};')
+print ('#endif')
+print ('')
+print ("""
+custom_widget_func lo_get_custom_widget_func(const char* name)
+{
+#if ENABLE_FUZZERS
+    (void)name;
+    return nullptr;
+#else
+    for (size_t i = 0; i < sizeof(custom_widgets) / sizeof(custom_widgets[0]); i++)
+        if (strcmp(name, custom_widgets[i].name) == 0)
+            return custom_widgets[i].func;
+    return nullptr;
+#endif
+}
+""")
 
 print ("""
 const lib_to_factory_mapping *
@@ -507,6 +727,8 @@ print ("""
     return map;
 }
 
-}""")
+""")
+if not options.pure_c:
+    print("""}""")
 
 # vim:set shiftwidth=4 softtabstop=4 expandtab:

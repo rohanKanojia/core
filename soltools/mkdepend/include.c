@@ -30,20 +30,17 @@ in this Software without prior written authorization from the X Consortium.
 
 #include "def.h"
 #include <string.h>
+#include <assert.h>
 
-void remove_dotdot( char * );
-int isdot( char * );
-int isdotdot( char * );
-int issymbolic(char * dir, char * component);
-int exists_path(struct IncludesCollection*, char*);
+static void remove_dotdot( char * );
+static int isdot( char const * );
+static int isdotdot( char const * );
+static int issymbolic(char * dir, char * component);
+static int exists_path(struct IncludesCollection*, char*);
 
-
-extern struct inclist inclist[ MAXFILES ],
-                      *inclistp;
-extern char *includedirs[ ];
-extern char *notdotdot[ ];
-extern boolean show_where_not;
-extern boolean warn_multiple;
+#ifdef S_IFLNK
+static char *notdotdot[ MAXDIRS ];
+#endif
 
 struct inclist *inc_path(char *file, char *include, boolean dot, struct IncludesCollection *incCollection)
 {
@@ -59,7 +56,7 @@ struct inclist *inc_path(char *file, char *include, boolean dot, struct Includes
      * has already been expanded.
      */
     for (ip = inclist; ip->i_file; ip++)
-        if ((strcmp(ip->i_incstring, include) == 0) && !ip->i_included_sym)
+        if (strcmp(ip->i_incstring, include) == 0)
         {
           found = TRUE;
           break;
@@ -103,7 +100,7 @@ struct inclist *inc_path(char *file, char *include, boolean dot, struct Includes
         }
         else
         {
-            int partial = (p - file);
+            int partial = p - file;
             size_t inc_len = strlen(include);
             if(inc_len + partial >= BUFSIZ )
             {
@@ -226,14 +223,14 @@ void remove_dotdot(char *path)
     strcpy(path, newpath);
 }
 
-int isdot(char *p)
+int isdot(char const *p)
 {
     if(p && p[0] == '.' && p[1] == '\0')
         return TRUE;
     return FALSE;
 }
 
-int isdotdot(char *p)
+int isdotdot(char const *p)
 {
     if(p && p[0] == '.' && p[1] == '.' && p[2] == '\0')
         return TRUE;
@@ -246,7 +243,17 @@ int issymbolic(char *dir, char *component)
     struct stat st;
     char    buf[ BUFSIZ ], **pp;
 
-    sprintf(buf, "%s%s%s", dir, *dir ? "/" : "", component);
+#if defined __GNUC__ && __GNUC__ == 8 && __GNUC_MINOR__ == 2 && !defined __clang__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+    // silence "‘snprintf’ output may be truncated before the last format character"
+#endif
+    int n = snprintf(buf, BUFSIZ, "%s%s%s", dir, *dir ? "/" : "", component);
+#if defined __GNUC__ && __GNUC__ == 8 && __GNUC_MINOR__ == 2 && !defined __clang__
+#pragma GCC diagnostic pop
+#endif
+    assert(n < BUFSIZ);
+    (void) n;
     for (pp=notdotdot; *pp; pp++)
         if (strcmp(*pp, buf) == 0)
             return TRUE;
@@ -266,7 +273,7 @@ int issymbolic(char *dir, char *component)
 /*
  * Add an include file to the list of those included by 'file'.
  */
-struct inclist *newinclude(char *newfile, char *incstring)
+struct inclist *newinclude(char const *newfile, char const *incstring)
 {
     struct inclist *ip;
 
@@ -277,7 +284,6 @@ struct inclist *newinclude(char *newfile, char *incstring)
     if (inclistp == inclist + MAXFILES - 1)
         fatalerr("out of space: increase MAXFILES\n");
     ip->i_file = copy(newfile);
-    ip->i_included_sym = FALSE;
     if (incstring == NULL)
         ip->i_incstring = ip->i_file;
     else
@@ -305,10 +311,9 @@ void included_by(struct inclist *ip, struct inclist *newfile)
         for (i=0; i<ip->i_listlen; i++)
             if (ip->i_list[ i ] == newfile) {
                 i = (int)strlen(newfile->i_file);
-                if (!ip->i_included_sym &&
-                !(i > 2 &&
-                  newfile->i_file[i-1] == 'c' &&
-                  newfile->i_file[i-2] == '.'))
+                if (!(i > 2 &&
+                      newfile->i_file[i-1] == 'c' &&
+                      newfile->i_file[i-2] == '.'))
                 {
                 /* only complain if ip has */
                 /* no #include SYMBOL lines  */

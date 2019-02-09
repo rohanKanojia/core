@@ -7,11 +7,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#ifdef _WIN32
-# undef ERROR
-#endif
-
 #include <sal/types.h>
+#include <config_libnumbertext.h>
 #include <cppunit/TestAssert.h>
 #include <cppunit/TestFixture.h>
 #include <cppunit/extensions/HelperMacros.h>
@@ -28,13 +25,18 @@
 #include <com/sun/star/sheet/DataPilotFieldOrientation.hpp>
 #include <com/sun/star/sheet/GeneralFunction.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/lang/XMultiComponentFactory.hpp>
 
 #include <i18nlangtag/lang.h>
+
+#include <math.h>
 
 #include <svl/zforlist.hxx>
 #include <svl/zformat.hxx>
 #include <svl/sharedstringpool.hxx>
 #include <svl/sharedstring.hxx>
+#include <tools/color.hxx>
 #include <unotools/syslocale.hxx>
 
 #include <memory>
@@ -43,12 +45,18 @@
 using namespace ::com::sun::star;
 using namespace svl;
 
+static std::ostream& operator<<(std::ostream& rStrm, const Color& rColor)
+{
+    rStrm << "Color: R:" << static_cast<int>(rColor.GetRed()) << " G:" << static_cast<int>(rColor.GetGreen()) << " B: " << static_cast<int>(rColor.GetBlue());
+    return rStrm;
+}
+
 namespace {
 
 class Test : public CppUnit::TestFixture {
 public:
     Test();
-    virtual ~Test();
+    virtual ~Test() override;
 
     virtual void tearDown() override;
 
@@ -58,8 +66,14 @@ public:
     void testSharedStringPoolPurge();
     void testFdo60915();
     void testI116701();
+    void testTdf103060();
     void testDateInput();
     void testIsNumberFormat();
+    void testIsNumberFormatSpecific();
+    void testUserDefinedNumberFormats();
+    void testNfEnglishKeywordsIntegrity();
+    void testStandardColorIntegrity();
+    void testColorNamesConversion();
 
     CPPUNIT_TEST_SUITE(Test);
     CPPUNIT_TEST(testNumberFormat);
@@ -68,8 +82,14 @@ public:
     CPPUNIT_TEST(testSharedStringPoolPurge);
     CPPUNIT_TEST(testFdo60915);
     CPPUNIT_TEST(testI116701);
+    CPPUNIT_TEST(testTdf103060);
     CPPUNIT_TEST(testDateInput);
     CPPUNIT_TEST(testIsNumberFormat);
+    CPPUNIT_TEST(testIsNumberFormatSpecific);
+    CPPUNIT_TEST(testUserDefinedNumberFormats);
+    CPPUNIT_TEST(testNfEnglishKeywordsIntegrity);
+    CPPUNIT_TEST(testStandardColorIntegrity);
+    CPPUNIT_TEST(testColorNamesConversion);
     CPPUNIT_TEST_SUITE_END();
 
 private:
@@ -78,7 +98,7 @@ private:
                             const OUString& sCode,
                             double fPreviewNumber,
                             LanguageType eLang,
-                            OUString& sExpected);
+                            OUString const & sExpected);
     void checkDateInput( SvNumberFormatter& rFormatter, const char* pTimezone, const char* pIsoDate );
     std::unique_ptr<icu::TimeZone> m_pDefaultTimeZone;
 };
@@ -136,29 +156,35 @@ void Test::testNumberFormat()
     const char* pFraction[] = {
         "# \?/\?",
         "# \?\?/\?\?",
-#if 0
-// TODO: Followings aren't in range of NF_FRACTION_START and NF_FRACTION_END
-// see enum NfIndexTableOffset in svl/inc/svl/zforlist.hxx
-        "# \?/4",
-        "# \?\?/100",
-#endif
         nullptr
     };
 
-#if 0 // TODO: Find out why on some systems the last two currency format codes differ.
+// Following aren't in range of NF_FRACTION_START and NF_FRACTION_END
+// see enum NfIndexTableOffset in svl/inc/svl/zforlist.hxx
+    const char* pFractionExt[] = {
+        "# \?\?\?/\?\?\?",
+        "# \?/2",
+        "# \?/4",
+        "# \?/8",
+        "# \?\?/16",
+        "# \?\?/10",
+        "# \?\?/100",
+        nullptr
+    };
+
     const char* pCurrency[] = {
+        "$#,##0;-$#,##0",
+        "$#,##0.00;-$#,##0.00",
         "$#,##0;[RED]-$#,##0",
         "$#,##0.00;[RED]-$#,##0.00",
         "#,##0.00 CCC",
         "$#,##0.--;[RED]-$#,##0.--",
-        "$#,##0;-$#,##0",
-        "$#,##0;-$#,##0",
-        0
+        nullptr
     };
-#endif
 
-#if 0 // TODO: This currently fails
     const char* pDate[] = {
+        "M/D/YY",
+        "NNNNMMMM DD, YYYY",
         "MM/DD/YY",
         "MM/DD/YYYY",
         "MMM D, YY",
@@ -178,11 +204,8 @@ void Test::testNumberFormat()
         "MMMM",
         "QQ YY",
         "WW",
-        "MM/DD/YY",
-        "WW",
-        0
+        nullptr
     };
-#endif
 
     const char* pTime[] = {
         "HH:MM",
@@ -195,13 +218,11 @@ void Test::testNumberFormat()
         nullptr
     };
 
-#if 0 // TODO: This currently fails
     const char* pDateTime[] = {
         "MM/DD/YY HH:MM AM/PM",
-        "MM/DD/YY HH:MM AM/PM",
-        0
+        "MM/DD/YYYY HH:MM:SS",
+        nullptr
     };
-#endif
 
     const char* pBoolean[] = {
         "BOOLEAN",
@@ -214,25 +235,20 @@ void Test::testNumberFormat()
     };
 
     struct {
-        NfIndexTableOffset eStart;
-        NfIndexTableOffset eEnd;
-        size_t nSize;
+        NfIndexTableOffset const eStart;
+        NfIndexTableOffset const eEnd;
+        size_t const nSize;
         const char** pCodes;
     } aTests[] = {
         { NF_NUMBER_START, NF_NUMBER_END, 6, pNumber },
         { NF_SCIENTIFIC_START, NF_SCIENTIFIC_END, 2, pScientific },
         { NF_PERCENT_START, NF_PERCENT_END, 2, pPercent },
         { NF_FRACTION_START, NF_FRACTION_END, 2, pFraction },
-#if 0 // TODO: Find out why on some systems the last two currency format codes differ.
+        { NF_FRACTION_3D, NF_FRACTION_100, 7, pFractionExt },
         { NF_CURRENCY_START, NF_CURRENCY_END, 6, pCurrency },
-#endif
-#if 0 // TODO: This currently fails
         { NF_DATE_START, NF_DATE_END, 21, pDate },
-#endif
         { NF_TIME_START, NF_TIME_END, 7, pTime },
-#if 0 // TODO: This currently fails
         { NF_DATETIME_START, NF_DATETIME_END, 2, pDateTime },
-#endif
         { NF_BOOLEAN, NF_BOOLEAN, 1, pBoolean },
         { NF_TEXT, NF_TEXT, 1, pText }
     };
@@ -244,8 +260,8 @@ void Test::testNumberFormat()
         size_t nStart = aTests[i].eStart;
         size_t nEnd = aTests[i].eEnd;
 
-        CPPUNIT_ASSERT_MESSAGE("Unexpected number of formats for this category.",
-                               (nEnd - nStart + 1) == aTests[i].nSize);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("Unexpected number of formats for this category.",
+                               aTests[i].nSize, (nEnd - nStart + 1));
 
         for (size_t j = nStart; j <= nEnd; ++j)
         {
@@ -255,13 +271,12 @@ void Test::testNumberFormat()
 
             CPPUNIT_ASSERT_MESSAGE("Number format entry is expected, but doesn't exist.", p);
             OUString aCode = p->GetFormatstring();
-            bool bEqual = aCode.equalsAscii(aTests[i].pCodes[j-nStart]);
-            CPPUNIT_ASSERT_MESSAGE("Unexpected number format code.", bEqual);
+            CPPUNIT_ASSERT_EQUAL( aCode.toUtf8() , OString( aTests[i].pCodes[j-nStart] ) );
         }
     }
 
     sal_Int32 nPos;
-    short nType = css::util::NumberFormat::DEFINED;
+    SvNumFormatType nType = SvNumFormatType::DEFINED;
     sal_uInt32 nKey;
     OUString aCode;
     // Thai date format (implicit locale).
@@ -290,7 +305,7 @@ void Test::testSharedString()
 {
     // Use shared string as normal, non-shared string, which is allowed.
     SharedString aSS1("Test"), aSS2("Test");
-    CPPUNIT_ASSERT_MESSAGE("Equality check should return true.", aSS1 == aSS2);
+    CPPUNIT_ASSERT_MESSAGE("Equality check should return true.", bool(aSS1 == aSS2));
     SharedString aSS3("test");
     CPPUNIT_ASSERT_MESSAGE("Equality check is case sensitive.", aSS1 != aSS3);
 }
@@ -298,7 +313,7 @@ void Test::testSharedString()
 void Test::testSharedStringPool()
 {
     SvtSysLocale aSysLocale;
-    svl::SharedStringPool aPool(aSysLocale.GetCharClassPtr());
+    svl::SharedStringPool aPool(*aSysLocale.GetCharClassPtr());
 
     svl::SharedString p1, p2;
     p1 = aPool.intern("Andy");
@@ -316,28 +331,28 @@ void Test::testSharedStringPool()
     CPPUNIT_ASSERT_EQUAL(p1.getData(), p2.getData());
 
     // Test case insensitive string ID's.
-    OUString aAndyLower("andy"), aAndyUpper("ANDY");
+    OUString const aAndyLower("andy"), aAndyUpper("ANDY");
     p1 = aPool.intern(aAndy);
     p2 = aPool.intern(aAndyLower);
     CPPUNIT_ASSERT_MESSAGE("Failed to intern strings.", p1.getData() && p2.getData());
     CPPUNIT_ASSERT_MESSAGE("These two ID's should differ.", p1.getData() != p2.getData());
-    CPPUNIT_ASSERT_MESSAGE("These two ID's should be equal.", p1.getDataIgnoreCase() == p2.getDataIgnoreCase());
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("These two ID's should be equal.", p2.getDataIgnoreCase(), p1.getDataIgnoreCase());
     p2 = aPool.intern(aAndyUpper);
     CPPUNIT_ASSERT_MESSAGE("Failed to intern string.", p2.getData());
     CPPUNIT_ASSERT_MESSAGE("These two ID's should differ.", p1.getData() != p2.getData());
-    CPPUNIT_ASSERT_MESSAGE("These two ID's should be equal.", p1.getDataIgnoreCase() == p2.getDataIgnoreCase());
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("These two ID's should be equal.", p2.getDataIgnoreCase(), p1.getDataIgnoreCase());
 }
 
 void Test::testSharedStringPoolPurge()
 {
     SvtSysLocale aSysLocale;
-    svl::SharedStringPool aPool(aSysLocale.GetCharClassPtr());
+    svl::SharedStringPool aPool(*aSysLocale.GetCharClassPtr());
     aPool.intern("Andy");
     aPool.intern("andy");
     aPool.intern("ANDY");
 
-    CPPUNIT_ASSERT_MESSAGE("Wrong string count.", aPool.getCount() == 3);
-    CPPUNIT_ASSERT_MESSAGE("Wrong case insensitive string count.", aPool.getCountIgnoreCase() == 1);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Wrong string count.", static_cast<size_t>(3), aPool.getCount());
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Wrong case insensitive string count.", static_cast<size_t>(1), aPool.getCountIgnoreCase());
 
     // Since no string objects referencing the pooled strings exist, purging
     // the pool should empty it.
@@ -392,13 +407,22 @@ void Test::checkPreviewString(SvNumberFormatter& aFormatter,
                               const OUString& sCode,
                               double fPreviewNumber,
                               LanguageType eLang,
-                              OUString& sExpected)
+                              OUString const & sExpected)
 {
     OUString sStr;
     Color* pColor = nullptr;
     Color** ppColor = &pColor;
     if (!aFormatter.GetPreviewString(sCode, fPreviewNumber, sStr, ppColor, eLang))
-        CPPUNIT_FAIL("GetPreviewString() failed");
+    {
+        OString aMessage = "GetPreviewString( \"";
+        aMessage += OUStringToOString( sCode, RTL_TEXTENCODING_ASCII_US );
+        aMessage += "\", ";
+        aMessage += OString::number( fPreviewNumber );
+        aMessage += ", sStr, ppColor, ";
+        aMessage += OString::number( static_cast<sal_uInt16>(eLang) );
+        aMessage += " ) failed";
+        CPPUNIT_FAIL( aMessage.getStr() );
+    }
     CPPUNIT_ASSERT_EQUAL(sExpected, sStr);
 }
 
@@ -485,19 +509,41 @@ void Test::testI116701()
     checkPreviewString(aFormatter, sCode, fPreviewNumber, eLang, sExpected);
 }
 
+void Test::testTdf103060()
+{
+    LanguageType eLang = LANGUAGE_JAPANESE;
+    OUString sCode, sExpected;
+    double fPreviewNumber = 42655; // equals 2016-10-12
+    SvNumberFormatter aFormatter(m_xContext, eLang);
+    sCode = "G";
+    sExpected = "H"; // Heisei era
+    checkPreviewString(aFormatter, sCode, fPreviewNumber, eLang, sExpected);
+    sCode = "GG";
+    const sal_Unicode EXPECTED_G2[] = {0x5E73};
+    sExpected = OUString(EXPECTED_G2, SAL_N_ELEMENTS(EXPECTED_G2));
+    checkPreviewString(aFormatter, sCode, fPreviewNumber, eLang, sExpected);
+    sCode = "GGG";
+    const sal_Unicode EXPECTED_G3[] = {0x5E73, 0x6210};
+    sExpected = OUString(EXPECTED_G3, SAL_N_ELEMENTS(EXPECTED_G3));
+    checkPreviewString(aFormatter, sCode, fPreviewNumber, eLang, sExpected);
+}
+
 void Test::testDateInput()
 {
     const char* aData[][2] = {
         { "Europe/Paris", "1938-10-07" },      // i#76623
         { "Europe/Moscow", "1919-07-01" },     // i#86094
+        { "America/St_Johns", "1935-03-30" },  // i#86094 i#90627
         { "Europe/Tallinn", "1790-03-01" },    // i#105864
         { "Australia/Perth", "2004-04-11" },   // i#17222
         { "America/Sao_Paulo", "1902-04-22" }, // tdf#44286
         { "Europe/Berlin", "1790-07-27" },
         { "US/Mountain", "1790-07-26" },
+        { "Asia/Tehran", "1999-03-22" },
 
         // Data from https://bugs.documentfoundation.org/show_bug.cgi?id=63230
         // https://bugs.documentfoundation.org/attachment.cgi?id=79051
+        // https://bugs.documentfoundation.org/show_bug.cgi?id=79663
         { "Africa/Accra", "1800-01-01" },
         { "Africa/Accra", "1800-04-10" },
         { "Africa/Addis_Ababa", "1870-01-01" },
@@ -617,6 +663,7 @@ void Test::testDateInput()
         { "America/Miquelon", "1911-05-15" },
         { "America/Moncton", "1883-12-09" },
         { "America/Montevideo", "1942-12-14" },
+        { "America/Montevideo", "1974-12-22" },
         { "America/Montreal", "1884-01-01" },
         { "America/Ojinaga", "1930-11-15" },
         { "America/Ojinaga", "1931-10-01" },
@@ -684,6 +731,7 @@ void Test::testDateInput()
         { "Asia/Chungking", "1980-05-01" },
         { "Asia/Colombo", "1880-01-01" },
         { "Asia/Colombo", "1906-01-01" },
+        { "Asia/Colombo", "1942-09-01" },
         { "Asia/Colombo", "1996-05-25" },
         { "Asia/Dacca", "1941-10-01" },
         { "Asia/Dacca", "1942-09-01" },
@@ -815,8 +863,16 @@ void Test::testDateInput()
         { "Asia/Yerevan", "1957-03-01" },
         { "Atlantic/Azores", "1884-01-01" },
         { "Atlantic/Azores", "1911-05-24" },
+        { "Atlantic/Azores", "1942-04-25" },
+        { "Atlantic/Azores", "1943-04-17" },
+        { "Atlantic/Azores", "1944-04-22" },
+        { "Atlantic/Azores", "1945-04-21" },
         { "Atlantic/Cape_Verde", "1907-01-01" },
         { "Atlantic/Jan_Mayen", "1895-01-01" },
+        { "Atlantic/Madeira", "1942-04-25" },
+        { "Atlantic/Madeira", "1943-04-17" },
+        { "Atlantic/Madeira", "1944-04-22" },
+        { "Atlantic/Madeira", "1945-04-21" },
         { "Atlantic/Reykjavik", "1837-01-01" },
         { "Atlantic/Stanley", "1912-03-12" },
         { "Australia/Adelaide", "1899-05-01" },
@@ -859,6 +915,12 @@ void Test::testDateInput()
         { "Europe/Chisinau", "1931-07-24" },
         { "Europe/Copenhagen", "1894-01-01" },
         { "Europe/Dublin", "1880-08-02" },
+        { "Europe/Gibraltar", "1941-05-04" },
+        { "Europe/Gibraltar", "1942-04-05" },
+        { "Europe/Gibraltar", "1943-04-04" },
+        { "Europe/Gibraltar", "1944-04-02" },
+        { "Europe/Gibraltar", "1945-04-02" },
+        { "Europe/Gibraltar", "1947-04-13" },
         { "Europe/Helsinki", "1921-05-01" },
         { "Europe/Istanbul", "1880-01-01" },
         { "Europe/Istanbul", "1910-10-01" },
@@ -869,16 +931,28 @@ void Test::testDateInput()
         { "Europe/Kiev", "1930-06-21" },
         { "Europe/Kiev", "1943-11-06" },
         { "Europe/Luxembourg", "1904-06-01" },
+        { "Europe/Madrid", "1942-05-02" },
+        { "Europe/Madrid", "1943-04-17" },
+        { "Europe/Madrid", "1944-04-15" },
+        { "Europe/Madrid", "1945-04-14" },
+        { "Europe/Madrid", "1946-04-13" },
         { "Europe/Malta", "1893-11-02" },
         { "Europe/Mariehamn", "1921-05-01" },
         { "Europe/Minsk", "1924-05-02" },
         { "Europe/Minsk", "1930-06-21" },
         { "Europe/Minsk", "2011-03-27" },
+        { "Europe/Monaco", "1941-05-05" },
+        { "Europe/Monaco", "1942-03-09" },
+        { "Europe/Monaco", "1943-03-29" },
+        { "Europe/Monaco", "1944-04-03" },
+        { "Europe/Monaco", "1945-04-02" },
         { "Europe/Moscow", "1916-07-03" },
+        { "Europe/Moscow", "1919-05-31" },
         { "Europe/Moscow", "1930-06-21" },
         { "Europe/Moscow", "1992-01-19" },
         { "Europe/Moscow", "2011-03-27" },
         { "Europe/Oslo", "1895-01-01" },
+        { "Europe/Paris", "1945-04-02" },
         { "Europe/Prague", "1891-10-01" },
         { "Europe/Riga", "1926-05-11" },
         { "Europe/Riga", "1940-08-05" },
@@ -936,9 +1010,12 @@ void Test::testDateInput()
         { "Mexico/General", "1931-10-01" },
         { "NZ-CHAT", "1957-01-01" },
         { "Pacific/Apia", "1911-01-01" },
+        { "Pacific/Apia", "2011-12-30" },
         { "Pacific/Chatham", "1957-01-01" },
         { "Pacific/Easter", "1932-09-01" },
         { "Pacific/Enderbury", "1901-01-01" },
+        { "Pacific/Enderbury", "1995-01-01" },
+        { "Pacific/Fakaofo", "2011-12-30" },
         { "Pacific/Fiji", "1915-10-26" },
         { "Pacific/Funafuti", "1901-01-01" },
         { "Pacific/Galapagos", "1986-01-01" },
@@ -946,8 +1023,10 @@ void Test::testDateInput()
         { "Pacific/Guadalcanal", "1912-10-01" },
         { "Pacific/Guam", "1901-01-01" },
         { "Pacific/Kiritimati", "1901-01-01" },
+        { "Pacific/Kiritimati", "1995-01-01" },
         { "Pacific/Kosrae", "1901-01-01" },
         { "Pacific/Kosrae", "1969-10-01" },
+        { "Pacific/Kwajalein", "1993-08-20" },
         { "Pacific/Majuro", "1969-10-01" },
         { "Pacific/Marquesas", "1912-10-01" },
         { "Pacific/Nauru", "1921-01-15" },
@@ -1006,9 +1085,10 @@ void Test::checkDateInput( SvNumberFormatter& rFormatter, const char* pTimezone,
     sal_uInt32 nIndex = 0;
     double fVal = 0.0;
     bool bVal = rFormatter.IsNumberFormat( aDate, nIndex, fVal);
-    CPPUNIT_ASSERT_MESSAGE("Date not recognized.", bVal);
+    CPPUNIT_ASSERT_MESSAGE( OString("Date not recognized: " +
+                OString(pTimezone) + " " + OString(pIsoDate)).getStr(), bVal);
     CPPUNIT_ASSERT_MESSAGE("Format parsed is not date.",
-            (rFormatter.GetType(nIndex) & css::util::NumberFormat::DATE));
+            (rFormatter.GetType(nIndex) & SvNumFormatType::DATE));
     OUString aOutString;
     Color *pColor;
     rFormatter.GetOutputString( fVal, nIndex, aOutString, &pColor);
@@ -1020,18 +1100,31 @@ void Test::testIsNumberFormat()
     LanguageType eLang = LANGUAGE_ENGLISH_US;
     SvNumberFormatter aFormatter(m_xContext, eLang);
 
-    struct NumberFormatData
+    static struct NumberFormatData
     {
         const char* pFormat;
-        bool bIsNumber;
-    } aTests[] = {
+        bool const bIsNumber;
+    } const aTests[] = {
         { "20.3", true },
         { "2", true },
         { "test", false },
         { "Jan1", false },
         { "Jan1 2000", true },
         { "Jan 1", true },
-        { "Jan 1 2000", true}
+        { "Jan 1 2000", true },
+        { "5-12-14", false },
+        { "005-12-14", true },
+        { "15-10-30", true },
+        { "2015-10-30", true },
+        { "1999-11-23T12:34:56", true },
+        { "1999-11-23 12:34:56", true },
+        { "1999-11-23T12:34:56.789", true },
+        { "1999-11-23T12:34:56,789", true },    // ISO 8601 defines both dot and comma as fractional separator
+        { "1999-11-23 12:34:56.789", true },
+        { "1999-11-23 12:34:56,789", false },   // comma not in en-US if 'T' separator is not present,
+                                                // debatable, 'T' "may be omitted by mutual consent of those
+                                                // interchanging data, if ambiguity can be avoided."
+        { "1999-11-23T12:34:56/789", false }
     };
 
     for (size_t i = 0; i < SAL_N_ELEMENTS(aTests); ++i)
@@ -1040,43 +1133,565 @@ void Test::testIsNumberFormat()
         double nNumber = 0;
         OUString aString = OUString::createFromAscii(aTests[i].pFormat);
         bool bIsNumber = aFormatter.IsNumberFormat(aString, nIndex, nNumber);
-        CPPUNIT_ASSERT_EQUAL(aTests[i].bIsNumber, bIsNumber);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(aTests[i].pFormat, aTests[i].bIsNumber, bIsNumber);
 
     }
+}
 
-    // Test Spanish "mar" short name ambiguity, day "martes" or month "marzo".
-    // Day of week names are only parsed away, not evaluated if they actually
-    // correspond to the date given.
-    struct SpanishDate
-    {
-        const char* mpInput;
-        bool mbNumber;
-        const char* mpOutput;
-    } aSpanishTests[] = {
-        { "22/11/1999", true, "22/11/1999" },
-        { "Lun 22/11/1999", true, "22/11/1999" },
-        { "Mar 22/11/1999", true, "22/11/1999" },
-        { "Abr 22/11/1999", false, "" },            // month name AND numeric month don't go along
-        { "Lun Mar 22/11/1999", false, "" },        // month name AND numeric month don't go along
-        { "Mar Mar 22/11/1999", false, "" },        // month name AND numeric month don't go along
-        { "Lun Mar 22 1999", true, "22/03/1999" },
-        { "Mar Mar 22 1999", true, "22/03/1999" },
-        { "Mar Lun 22 1999", false, "" }            // day name only at the beginning (could change?)
-    };
+struct FormatInputOutput
+{
+    const char*      mpInput;
+    const bool       mbNumber;
+    const char*      mpOutput;
+    const sal_uInt32 mnOutputIndex;
+};
 
-    sal_uInt32 nIndex = aFormatter.GetFormatIndex( NF_DATE_SYS_DDMMYYYY, LANGUAGE_SPANISH);
-    for (size_t i = 0; i < SAL_N_ELEMENTS(aSpanishTests); ++i)
+void checkSpecificNumberFormats( SvNumberFormatter& rFormatter,
+        const std::vector<FormatInputOutput>& rVec, const char* pName )
+{
+
+    for (size_t i = 0; i < rVec.size(); ++i)
     {
+        sal_uInt32 nIndex = 0;
         double fNumber = 0;
-        OUString aString = OUString::createFromAscii( aSpanishTests[i].mpInput);
-        bool bIsNumber = aFormatter.IsNumberFormat( aString, nIndex, fNumber);
-        CPPUNIT_ASSERT_EQUAL( aSpanishTests[i].mbNumber, bIsNumber);
-        if (aSpanishTests[i].mbNumber)
+        OUString aString( OUString::fromUtf8( rVec[i].mpInput));
+        const bool bIsNumber = rFormatter.IsNumberFormat( aString, nIndex, fNumber);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE( OString( OString(pName) + " " + OString::number(i) +
+                    (rVec[i].mbNumber ? " not recognized: " : " should not be recognized: ") +
+                    OUStringToOString( aString, RTL_TEXTENCODING_UTF8)).getStr(), rVec[i].mbNumber, bIsNumber);
+        if (bIsNumber)
         {
+            if (rVec[i].mnOutputIndex)
+                nIndex = rVec[i].mnOutputIndex;
             Color* pColor;
-            aFormatter.GetOutputString( fNumber, nIndex, aString, &pColor);
-            CPPUNIT_ASSERT_EQUAL( OUString::createFromAscii( aSpanishTests[i].mpOutput), aString);
+            rFormatter.GetOutputString( fNumber, nIndex, aString, &pColor);
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( OString( OString(pName) + " " + OString::number(i)  + " mismatch").getStr(),
+                    OUString::fromUtf8( rVec[i].mpOutput), aString);
         }
+    }
+}
+
+void Test::testIsNumberFormatSpecific()
+{
+    {
+        // en-US uses M/D/Y format, test that a-b-c input with a<=31 and b<=12
+        // does not lead to a/b/c date output
+        SvNumberFormatter aFormatter(m_xContext, LANGUAGE_ENGLISH_US);
+
+        std::vector<FormatInputOutput> aIO = {
+            {  "5-12-14", false, "", 0 },
+            { "32-12-14",  true, "1932-12-14", 0 }
+        };
+
+        checkSpecificNumberFormats( aFormatter, aIO, "[en-US] date");
+    }
+
+    {
+        // de-DE uses D.M.Y format, test that a-b-c input with a<=31 and b<=12
+        // does not lead to a.b.c date output
+        SvNumberFormatter aFormatter(m_xContext, LANGUAGE_GERMAN);
+
+        std::vector<FormatInputOutput> aIO = {
+            {  "5-12-14", false, "", 0 },
+            { "32-12-14",  true, "1932-12-14", 0 }
+        };
+
+        checkSpecificNumberFormats( aFormatter, aIO, "[de-DE] date");
+    }
+
+    {
+        // nl-NL uses D-M-Y format, test that D-M-Y input leads to D-M-Y output
+        // and ISO Y-M-D input leads to Y-M-D output.
+        SvNumberFormatter aFormatter(m_xContext, LANGUAGE_DUTCH);
+
+        std::vector<FormatInputOutput> aIO = {
+            { "22-11-1999", true, "22-11-99", 0 },      // if default YY changes to YYYY adapt this
+            { "1999-11-22", true, "1999-11-22", 0 },
+            { "1-2-11",     true, "01-02-11", 0 },      // if default YY changes to YYYY adapt this
+            { "99-2-11",    true, "1999-02-11", 0 }
+        };
+
+        checkSpecificNumberFormats( aFormatter, aIO, "[nl-NL] date");
+    }
+
+    {
+        // en-ZA uses Y-M-D and Y/M/D format, test that either are accepted.
+        // The default format changed from YY/MM/DD to YYYY-MM-DD.
+        SvNumberFormatter aFormatter(m_xContext, LANGUAGE_ENGLISH_SAFRICA);
+
+        std::vector<FormatInputOutput> aIO = {
+            { "1999/11/22", true, "1999-11-22", 0 },
+            { "1999-11-22", true, "1999-11-22", 0 },
+            { "11/2/1",     true, "2011-02-01", 0 },
+            { "99-2-11",    true, "1999-02-11", 0 },
+            { "22-2-11",    true, "2022-02-11", 0 }
+        };
+
+        checkSpecificNumberFormats( aFormatter, aIO, "[en-ZA] date");
+    }
+
+    {
+        // fr-FR uses D/M/Y format with additional D.M.Y and D-M-Y date
+        // acceptance patterns, test combinations.
+        SvNumberFormatter aFormatter(m_xContext, LANGUAGE_FRENCH);
+
+        std::vector<FormatInputOutput> aIO = {
+            { "22/11/1999", true, "22/11/99", 0 },      // if default YY changes to YYYY adapt this
+            { "1999-11-22", true, "1999-11-22", 0 },
+            { "1/2/11",     true, "01/02/11", 0 },      // if default YY changes to YYYY adapt this
+            { "99-2-11",    true, "1999-02-11", 0 },
+            { "22-2-11",    true, "22/02/11", 0 },      // if default YY changes to YYYY adapt this
+            { "22.2.11",    true, "22/02/11", 0 }       // if default YY changes to YYYY adapt this
+        };
+
+        checkSpecificNumberFormats( aFormatter, aIO, "[fr-FR] date");
+    }
+
+    {
+        // Test Spanish "mar" short name ambiguity, day "martes" or month "marzo".
+        // Day of week names are only parsed away, not evaluated if they actually
+        // correspond to the date given.
+        SvNumberFormatter aFormatter(m_xContext, LANGUAGE_SPANISH);
+
+        const sal_uInt32 n = aFormatter.GetFormatIndex( NF_DATE_SYS_DDMMYYYY, LANGUAGE_SPANISH);
+        std::vector<FormatInputOutput> aIO = {
+            { "22/11/1999", true, "22/11/1999", n },
+            { "Lun 22/11/1999", true, "22/11/1999", n },
+            { "Mar 22/11/1999", true, "22/11/1999", n },
+            { "Abr 22/11/1999", false, "", n },             // month name AND numeric month don't go along
+            { "Lun Mar 22/11/1999", false, "", n },         // month name AND numeric month don't go along
+            { "Mar Mar 22/11/1999", false, "", n },         // month name AND numeric month don't go along
+            { "Lun Mar 22 1999", true, "22/03/1999", n },
+            { "Mar Mar 22 1999", true, "22/03/1999", n },
+            { "Mar Lun 22 1999", false, "", n }             // day name only at the beginning (could change?)
+        };
+
+        checkSpecificNumberFormats( aFormatter, aIO, "[es-ES] date");
+    }
+
+    {
+        // Test that de-DE accepts Januar and Jänner.
+        SvNumberFormatter aFormatter(m_xContext, LANGUAGE_GERMAN);
+
+        const sal_uInt32 n = aFormatter.GetFormatIndex( NF_DATE_SYS_DDMMYYYY, LANGUAGE_GERMAN);
+        std::vector<FormatInputOutput> aIO = {
+            { "23. Januar 1999", true, "23.01.1999", n },
+            { "23. J\xC3\xA4nner 1999", true, "23.01.1999", n },
+            { "23. Jan. 1999", true, "23.01.1999", n },
+            { "23. J\xC3\xA4n. 1999", true, "23.01.1999", n },
+        };
+
+        checkSpecificNumberFormats( aFormatter, aIO, "[de-DE] date January month names");
+    }
+
+    {
+        // Test that de-AT accepts Januar and Jänner.
+        SvNumberFormatter aFormatter(m_xContext, LANGUAGE_GERMAN_AUSTRIAN);
+
+        const sal_uInt32 n = aFormatter.GetFormatIndex( NF_DATE_SYS_DDMMYYYY, LANGUAGE_GERMAN_AUSTRIAN);
+        std::vector<FormatInputOutput> aIO = {
+            { "23. Januar 1999", true, "23.01.1999", n },
+            { "23. J\xC3\xA4nner 1999", true, "23.01.1999", n },
+            { "23. Jan. 1999", true, "23.01.1999", n },
+            { "23. J\xC3\xA4n. 1999", true, "23.01.1999", n },
+        };
+
+        checkSpecificNumberFormats( aFormatter, aIO, "[de-AT] date January month names");
+    }
+}
+
+void Test::testUserDefinedNumberFormats()
+{
+    LanguageType eLang = LANGUAGE_ENGLISH_US;
+    OUString sCode, sExpected;
+    SvNumberFormatter aFormatter(m_xContext, eLang);
+    {  // tdf#97835: suppress decimal separator
+        sCode = "0.##\" m\"";
+        sExpected = "12 m";
+        checkPreviewString(aFormatter, sCode, 12.0, eLang, sExpected);
+    }
+    {  // tdf#61996: skip quoted text
+        sCode = "0.00\" ;\"";
+        sExpected = "-12.00 ;";
+        checkPreviewString(aFormatter, sCode, -12.0, eLang, sExpected);
+    }
+    {  // tdf#95339: detect SSMM as second minute
+        sCode =     "SS:MM:HH DD/MM/YY"; // Month not detected by Excel, but we do not follow that.
+        sExpected = "53:23:03 02/01/00";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+    }
+    {  // tdf#101147: detect SSMM as second month
+        sCode =     "HH:MM:SS MM/DD";
+        sExpected = "03:23:53 01/02";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+    }
+    {  // tdf#101096: different detection of month/minute with Excel
+        sCode =     "HH DD MM"; // month detected because of previous DD
+        sExpected = "03 02 01";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        sCode =     "HH:MM HH DD/MM"; // month detected because of previous DD
+        sExpected = "03:23 03 02/01";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        sCode =     "SS:DD-MM-YY SS:MM"; // 1st is month, because of previous DD; 2nd is minute as SS has not minute
+        sExpected = "53:02-01-00 53:23";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+    }
+    {  // tdf#99996: better algorithm for fraction representation
+        sCode = "# ?/???";
+        sExpected = "-575 540/697";
+        checkPreviewString(aFormatter, sCode, -575.774749601315, eLang, sExpected);
+    }
+    {  // tdf#102507: left alignment of denominator
+        sCode = "# ?/???";
+        sExpected = "3 1/2  ";
+        checkPreviewString(aFormatter, sCode, 3.5, eLang, sExpected);
+    }
+    {  // tdf#100594: forced denominator
+        sCode = "# ?/100";
+        sExpected = " 6/100";
+        checkPreviewString(aFormatter, sCode, 0.06, eLang, sExpected);
+    }
+    {  // tdf#100754: forced denominator with text after fraction
+        sCode = "# ?/16\" inch\"";
+        sExpected = "2 6/16 inch";
+        checkPreviewString(aFormatter, sCode, 2.379, eLang, sExpected);
+    }
+    {  // tdf#100842: text before/after fraction
+        sCode = "\"before \"?/?\" after\"";
+        sExpected = "before 11/9 after";
+        checkPreviewString(aFormatter, sCode, 1.2345667, eLang, sExpected);
+        sCode = "\"before \"# ?/?\" after\"";
+        sExpected = "before 1 2/9 after";
+        checkPreviewString(aFormatter, sCode, 1.2345667, eLang, sExpected);
+        sCode = "\"before \"0.0\"inside\"0E+0\"middle\"0\" after\"";
+        sExpected = "before 1.2inside3E+0middle4 after";
+        checkPreviewString(aFormatter, sCode, 12345.667, eLang, sExpected);
+    }
+    {  // tdf#106190: text after fraction bar
+        sCode = "?/ ?";
+        sExpected = "11/ 9";
+        checkPreviewString(aFormatter, sCode, 1.2345667, eLang, sExpected);
+        sCode = "?/ 12";
+        sExpected = "15/ 12";
+        checkPreviewString(aFormatter, sCode, 1.2345667, eLang, sExpected);
+        sCode = "# ?/\" divisor \"?";
+        sExpected = "1 2/ divisor 9";
+        checkPreviewString(aFormatter, sCode, 1.2345667, eLang, sExpected);
+        sCode = "# ?/\"divided by \"?";
+        sExpected = "1 2/divided by 9";
+        checkPreviewString(aFormatter, sCode, 1.2345667, eLang, sExpected);
+        sCode = "?/\" \"12";
+        sExpected = "15/ 12";
+        checkPreviewString(aFormatter, sCode, 1.2345667, eLang, sExpected);
+        sCode = "?/\\ 12";
+        sExpected = "15/ 12";
+        checkPreviewString(aFormatter, sCode, 1.2345667, eLang, sExpected);
+        sCode = "# ?/ ???";
+        sExpected = "3 1/ 2  ";
+        checkPreviewString(aFormatter, sCode, 3.5, eLang, sExpected);
+    }
+    {  // Display 1.96 as 2 and not 1 1/1
+        sCode = "# ?/?";
+        sExpected = "2    ";
+        checkPreviewString(aFormatter, sCode, 1.96, eLang, sExpected);
+        sCode = "# ?/ ?";
+        sExpected = "2     ";
+        checkPreviewString(aFormatter, sCode, 1.96, eLang, sExpected);
+        sCode = "# #/#";
+        sExpected = "2";
+        checkPreviewString(aFormatter, sCode, 1.96, eLang, sExpected);
+    }
+    {  // tdf#79399 tdf#101462 Native Number Formats
+        sCode = "[NatNum5][$-0404]General\\ ";
+        // Chinese upper case number characters for 120
+        sExpected = OUStringLiteral1(22777) +
+                    OUStringLiteral1(20336) +
+                    OUStringLiteral1(36019) +
+                    OUStringLiteral1(25342) +
+                    " ";
+        checkPreviewString(aFormatter, sCode, 120, eLang, sExpected);
+        sCode = "[DBNum2][$-0404]General\\ ";
+        checkPreviewString(aFormatter, sCode, 120, eLang, sExpected);
+#if ENABLE_LIBNUMBERTEXT
+        // tdf#115007 - cardinal/ordinal number names/indicators
+        sCode = "[NatNum12]0";
+        sExpected = "one hundred twenty-three";
+        checkPreviewString(aFormatter, sCode, 123, eLang, sExpected);
+        sCode = "[NatNum12]0.00";
+        sExpected = "one hundred twenty-three point four five";
+        checkPreviewString(aFormatter, sCode, 123.45, eLang, sExpected);
+        sCode = "[NatNum12 ordinal]0";
+        sExpected = "one hundred twenty-third";
+        checkPreviewString(aFormatter, sCode, 123, eLang, sExpected);
+        sCode = "[NatNum12 ordinal-number]0";
+        sExpected = "123rd";
+        checkPreviewString(aFormatter, sCode, 123, eLang, sExpected);
+        sCode = "[NatNum12 capitalize]0";
+        sExpected = "One hundred twenty-three";
+        checkPreviewString(aFormatter, sCode, 123, eLang, sExpected);
+        sCode = "[NatNum12 title ordinal]0";
+        sExpected = "One Thousand Two Hundred Thirty-Fourth";
+        checkPreviewString(aFormatter, sCode, 1234, eLang, sExpected);
+        sCode = "[NatNum12 upper ordinal-number]0";
+        sExpected = "12345TH";
+        checkPreviewString(aFormatter, sCode, 12345, eLang, sExpected);
+        sCode = "[NatNum12 D=ordinal-number]D\" of \"MMMM";
+        sExpected = "2nd of January";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        sCode = "[NatNum12 D=ordinal-number,YYYY=year]D\" of \"MMMM\", \"YYYY";
+        sExpected = "2nd of January, nineteen hundred";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        sCode = "[NatNum12 YYYY=title year, D=capitalize ordinal]D\" of \"MMMM\", \"YYYY";
+        sExpected = "Second of January, Nineteen Hundred";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+#endif
+    }
+    {  // tdf#105968 engineering format with value rounded up to next magnitude
+        sCode = "##0.00E+00";
+        sExpected = "100.00E+00";
+        checkPreviewString(aFormatter, sCode, 99.995, eLang, sExpected);
+        // test '1'=='1' assumption
+        checkPreviewString(aFormatter, sCode, 100.0, eLang, sExpected);
+        sExpected = "199.99E+00";
+        checkPreviewString(aFormatter, sCode, 199.99, eLang, sExpected);
+        sExpected = "1.00E+03";
+        checkPreviewString(aFormatter, sCode, 1000.0, eLang, sExpected);
+        // and another just "normally" rounded value
+        sExpected = "894.55E-06";
+        checkPreviewString(aFormatter, sCode, 0.000894549, eLang, sExpected);
+        // not expecting rounding into another magnitude
+        sExpected = "999.99E-06";
+        checkPreviewString(aFormatter, sCode, 0.000999991, eLang, sExpected);
+        // expecting rounding into another magnitude
+        sExpected = "1.00E-03";
+        checkPreviewString(aFormatter, sCode, 0.000999999, eLang, sExpected);
+
+        // Now the same all negative values.
+        sExpected = "-100.00E+00";
+        checkPreviewString(aFormatter, sCode, -99.995, eLang, sExpected);
+        checkPreviewString(aFormatter, sCode, -100.0, eLang, sExpected);
+        sExpected = "-199.99E+00";
+        checkPreviewString(aFormatter, sCode, -199.99, eLang, sExpected);
+        sExpected = "-1.00E+03";
+        checkPreviewString(aFormatter, sCode, -1000.0, eLang, sExpected);
+        sExpected = "-894.55E-06";
+        checkPreviewString(aFormatter, sCode, -0.000894549, eLang, sExpected);
+        sExpected = "-999.99E-06";
+        checkPreviewString(aFormatter, sCode, -0.000999991, eLang, sExpected);
+        sExpected = "-1.00E-03";
+        checkPreviewString(aFormatter, sCode, -0.000999999, eLang, sExpected);
+    }
+    {   // tdf#112933 one decimal seconds fraction
+        sCode =     "MM:SS.0";
+        sExpected = "23:53.6";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        // Two decimals.
+        sCode =     "MM:SS.00";
+        sExpected = "23:53.61";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        // Three decimals.
+        sCode =     "MM:SS.000";
+        sExpected = "23:53.605";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+
+        // Same with date+time.
+        sCode =     "YYYY-MM-DD MM:SS.0";
+        sExpected = "1900-01-02 23:53.6";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        sCode =     "YYYY-MM-DD MM:SS.00";
+        sExpected = "1900-01-02 23:53.61";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        sCode =     "YYYY-MM-DD MM:SS.000";
+        sExpected = "1900-01-02 23:53.605";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+    }
+    {   // tdf#33689 use English NfKeywords in non-English language
+        eLang = LANGUAGE_DUTCH;
+        sExpected = "Dutch: 1900/01/02 03:23:53";
+        sCode =     "\"Dutch:\" JJJJ/MM/DD UU:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        sCode =     "\"Dutch: \"YYYY/MM/DD HH:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        eLang = LANGUAGE_GERMAN;
+        sExpected = "German: 1900/01/02 03:23:53";
+        sCode =     "\"German: \"JJJJ/MM/TT HH:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        sCode =     "\"German: \"YYYY/MM/DD HH:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        eLang = LANGUAGE_FRENCH;
+        sExpected = "French: 1900/01/02 03:23:53";
+        sCode =     "\"French: \"AAAA/MM/JJ HH:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        sCode =     "\"French: \"YYYY/MM/DD HH:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        eLang = LANGUAGE_ITALIAN;
+        sExpected = "Italian: 1900/01/02 03:23:53";
+        sCode =     "\"Italian: \"AAAA/MM/GG HH:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        sCode =     "\"Italian: \"YYYY/MM/DD HH:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        eLang = LANGUAGE_PORTUGUESE;
+        sExpected = "Portuguese: 1900/01/02 03:23:53";
+        sCode =     "\"Portuguese: \"AAAA/MM/DD HH:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        sCode =     "\"Portuguese: \"YYYY/MM/DD HH:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        eLang = LANGUAGE_SPANISH_MODERN;
+        sExpected = "Spanish: 1900/01/02 03:23:53";
+        sCode =     "\"Spanish: \"AAAA/MM/DD HH:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        sCode =     "\"Spanish: \"YYYY/MM/DD HH:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        eLang = LANGUAGE_DANISH;
+        sExpected = "Danish: 1900/01/02 03:23:53";
+        sCode =     "\"Danish: \"YYYY/MM/DD TT:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        sCode =     "\"Danish: \"YYYY/MM/DD HH:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        eLang = LANGUAGE_FINNISH;
+        sExpected = "Finnish: 1900/01/02 03:23:53";
+        sCode =     "\"Finnish: \"VVVV/KK/PP TT:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        sCode =     "\"Finnish: \"YYYY/MM/DD HH:MM:SS";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+    }
+    {   // tdf#117819 wrong separator positions when displaying integers with
+        // more decimals than rtl::math::doubleToUString delivers.
+        sCode = "#,##0.00000000000000000000";
+        sExpected = "117,669,030,460,994.00000000000000000000";
+        checkPreviewString(aFormatter, sCode, 117669030460994.0, LANGUAGE_ENGLISH_US, sExpected);
+    }
+    {   // tdf#117575 treat thousand separator with '?' in integer part
+        sCode = "\"Value= \"?,??0.00";
+        sExpected = "Value=     3.14";
+        checkPreviewString(aFormatter, sCode, M_PI, LANGUAGE_ENGLISH_US, sExpected);
+        sExpected = "Value=    12.00";
+        checkPreviewString(aFormatter, sCode, 12, LANGUAGE_ENGLISH_US, sExpected);
+        sExpected = "Value=   123.00";
+        checkPreviewString(aFormatter, sCode, 123, LANGUAGE_ENGLISH_US, sExpected);
+        sExpected = "Value= 1,234.00";
+        checkPreviewString(aFormatter, sCode, 1234, LANGUAGE_ENGLISH_US, sExpected);
+        sExpected = "Value= 12,345.00";
+        checkPreviewString(aFormatter, sCode, 12345, LANGUAGE_ENGLISH_US, sExpected);
+    }
+}
+
+void Test::testNfEnglishKeywordsIntegrity()
+{
+    SvNumberFormatter aFormatter(m_xContext, LANGUAGE_ENGLISH_US);
+    const NfKeywordTable& rEnglishKeywords = aFormatter.GetEnglishKeywords();
+    const NfKeywordTable& sKeywords = aFormatter.GetKeywords(0);
+    CPPUNIT_ASSERT_EQUAL( size_t(NF_KEYWORD_ENTRIES_COUNT), rEnglishKeywords.size() );
+    for (size_t i = 0; i < size_t(NF_KEYWORD_ENTRIES_COUNT); ++i)
+    {
+        CPPUNIT_ASSERT_EQUAL( sKeywords[i], rEnglishKeywords[i] );
+    }
+    // Check the order of sEnglishKeyword
+    CPPUNIT_ASSERT_EQUAL( OUString("E"),     rEnglishKeywords[NF_KEY_E] );
+    CPPUNIT_ASSERT_EQUAL( OUString("AM/PM"), rEnglishKeywords[NF_KEY_AMPM] );
+    CPPUNIT_ASSERT_EQUAL( OUString("A/P"),   rEnglishKeywords[NF_KEY_AP] );
+    CPPUNIT_ASSERT_EQUAL( OUString("M"),     rEnglishKeywords[NF_KEY_MI]  );
+    CPPUNIT_ASSERT_EQUAL( OUString("MM"),    rEnglishKeywords[NF_KEY_MMI] );
+    CPPUNIT_ASSERT_EQUAL( OUString("M"),     rEnglishKeywords[NF_KEY_M] );
+    CPPUNIT_ASSERT_EQUAL( OUString("MM"),    rEnglishKeywords[NF_KEY_MM] );
+    CPPUNIT_ASSERT_EQUAL( OUString("MMM"),   rEnglishKeywords[NF_KEY_MMM] );
+    CPPUNIT_ASSERT_EQUAL( OUString("MMMM"),  rEnglishKeywords[NF_KEY_MMMM] );
+    CPPUNIT_ASSERT_EQUAL( OUString("H"),     rEnglishKeywords[NF_KEY_H] );
+    CPPUNIT_ASSERT_EQUAL( OUString("HH"),    rEnglishKeywords[NF_KEY_HH] );
+    CPPUNIT_ASSERT_EQUAL( OUString("S"),     rEnglishKeywords[NF_KEY_S] );
+    CPPUNIT_ASSERT_EQUAL( OUString("SS"),    rEnglishKeywords[NF_KEY_SS] );
+    CPPUNIT_ASSERT_EQUAL( OUString("Q"),     rEnglishKeywords[NF_KEY_Q] );
+    CPPUNIT_ASSERT_EQUAL( OUString("QQ"),    rEnglishKeywords[NF_KEY_QQ] );
+    CPPUNIT_ASSERT_EQUAL( OUString("D"),     rEnglishKeywords[NF_KEY_D] );
+    CPPUNIT_ASSERT_EQUAL( OUString("DD"),    rEnglishKeywords[NF_KEY_DD] );
+    CPPUNIT_ASSERT_EQUAL( OUString("DDD"),   rEnglishKeywords[NF_KEY_DDD] );
+    CPPUNIT_ASSERT_EQUAL( OUString("DDDD"),  rEnglishKeywords[NF_KEY_DDDD] );
+    CPPUNIT_ASSERT_EQUAL( OUString("YY"),    rEnglishKeywords[NF_KEY_YY] );
+    CPPUNIT_ASSERT_EQUAL( OUString("YYYY"),  rEnglishKeywords[NF_KEY_YYYY] );
+    CPPUNIT_ASSERT_EQUAL( OUString("NN"),    rEnglishKeywords[NF_KEY_NN] );
+    CPPUNIT_ASSERT_EQUAL( OUString("NNNN"),  rEnglishKeywords[NF_KEY_NNNN] );
+    CPPUNIT_ASSERT_EQUAL( OUString("CCC"),   rEnglishKeywords[NF_KEY_CCC] );
+    CPPUNIT_ASSERT_EQUAL( OUString("GENERAL"), rEnglishKeywords[NF_KEY_GENERAL] );
+    CPPUNIT_ASSERT_EQUAL( OUString("NNN"),     rEnglishKeywords[NF_KEY_NNN] );
+    CPPUNIT_ASSERT_EQUAL( OUString("WW"),      rEnglishKeywords[NF_KEY_WW] );
+    CPPUNIT_ASSERT_EQUAL( OUString("MMMMM"),   rEnglishKeywords[NF_KEY_MMMMM] );
+    CPPUNIT_ASSERT_EQUAL( OUString("TRUE"),    rEnglishKeywords[NF_KEY_TRUE] );
+    CPPUNIT_ASSERT_EQUAL( OUString("FALSE"),   rEnglishKeywords[NF_KEY_FALSE] );
+    CPPUNIT_ASSERT_EQUAL( OUString("BOOLEAN"), rEnglishKeywords[NF_KEY_BOOLEAN] );
+    CPPUNIT_ASSERT_EQUAL( OUString("COLOR"),   rEnglishKeywords[NF_KEY_COLOR] );
+    CPPUNIT_ASSERT_EQUAL( OUString("BLACK"),   rEnglishKeywords[NF_KEY_BLACK] );
+    CPPUNIT_ASSERT_EQUAL( OUString("BLUE"),    rEnglishKeywords[NF_KEY_BLUE] );
+    CPPUNIT_ASSERT_EQUAL( OUString("GREEN"),   rEnglishKeywords[NF_KEY_GREEN] );
+    CPPUNIT_ASSERT_EQUAL( OUString("CYAN"),    rEnglishKeywords[NF_KEY_CYAN] );
+    CPPUNIT_ASSERT_EQUAL( OUString("RED"),     rEnglishKeywords[NF_KEY_RED] );
+    CPPUNIT_ASSERT_EQUAL( OUString("MAGENTA"), rEnglishKeywords[NF_KEY_MAGENTA] );
+    CPPUNIT_ASSERT_EQUAL( OUString("BROWN"),   rEnglishKeywords[NF_KEY_BROWN] );
+    CPPUNIT_ASSERT_EQUAL( OUString("GREY"),    rEnglishKeywords[NF_KEY_GREY] );
+    CPPUNIT_ASSERT_EQUAL( OUString("YELLOW"),  rEnglishKeywords[NF_KEY_YELLOW] );
+    CPPUNIT_ASSERT_EQUAL( OUString("WHITE"),   rEnglishKeywords[NF_KEY_WHITE] );
+    CPPUNIT_ASSERT_EQUAL( OUString("AAA"),   rEnglishKeywords[NF_KEY_AAA]);
+    CPPUNIT_ASSERT_EQUAL( OUString("AAAA"),  rEnglishKeywords[NF_KEY_AAAA] );
+    CPPUNIT_ASSERT_EQUAL( OUString("E"),     rEnglishKeywords[NF_KEY_EC] );
+    CPPUNIT_ASSERT_EQUAL( OUString("EE"),    rEnglishKeywords[NF_KEY_EEC] );
+    CPPUNIT_ASSERT_EQUAL( OUString("G"),     rEnglishKeywords[NF_KEY_G] );
+    CPPUNIT_ASSERT_EQUAL( OUString("GG"),    rEnglishKeywords[NF_KEY_GG] );
+    CPPUNIT_ASSERT_EQUAL( OUString("GGG"),   rEnglishKeywords[NF_KEY_GGG] );
+    CPPUNIT_ASSERT_EQUAL( OUString("R"),     rEnglishKeywords[NF_KEY_R]  );
+    CPPUNIT_ASSERT_EQUAL( OUString("RR"),    rEnglishKeywords[NF_KEY_RR]  );
+    CPPUNIT_ASSERT_EQUAL( OUString("t"),     rEnglishKeywords[NF_KEY_THAI_T] );
+}
+
+void Test::testStandardColorIntegrity()
+{
+    SvNumberFormatter aFormatter(m_xContext, LANGUAGE_ENGLISH_US);
+    const ::std::vector<Color> & rStandardColors = aFormatter.GetStandardColors();
+    const size_t nMaxDefaultColors = aFormatter.GetMaxDefaultColors();
+    CPPUNIT_ASSERT_EQUAL( size_t(NF_KEY_LASTCOLOR) - size_t(NF_KEY_FIRSTCOLOR) + 1, nMaxDefaultColors );
+    CPPUNIT_ASSERT_EQUAL( nMaxDefaultColors, rStandardColors.size() );
+    // Colors must follow same order as in sEnglishKeyword
+    CPPUNIT_ASSERT_EQUAL( rStandardColors[0], COL_BLACK );
+    CPPUNIT_ASSERT_EQUAL( rStandardColors[1], COL_LIGHTBLUE );
+    CPPUNIT_ASSERT_EQUAL( rStandardColors[2], COL_LIGHTGREEN );
+    CPPUNIT_ASSERT_EQUAL( rStandardColors[3], COL_LIGHTCYAN );
+    CPPUNIT_ASSERT_EQUAL( rStandardColors[4], COL_LIGHTRED );
+    CPPUNIT_ASSERT_EQUAL( rStandardColors[5], COL_LIGHTMAGENTA );
+    CPPUNIT_ASSERT_EQUAL( rStandardColors[6], COL_BROWN );
+    CPPUNIT_ASSERT_EQUAL( rStandardColors[7], COL_GRAY );
+    CPPUNIT_ASSERT_EQUAL( rStandardColors[8], COL_YELLOW );
+    CPPUNIT_ASSERT_EQUAL( rStandardColors[9], COL_WHITE );
+}
+
+void Test::testColorNamesConversion()
+{
+    SvNumberFormatter aFormatter(m_xContext, LANGUAGE_GERMAN);
+    const NfKeywordTable& rEnglishKeywords = aFormatter.GetEnglishKeywords();
+    const NfKeywordTable& rKeywords = aFormatter.GetKeywords(0);
+
+    // Holding a reference to the NfKeywordTable doesn't help if we switch
+    // locales internally, so copy the relevant parts in advance.
+    std::vector<OUString> aGermanKeywords(NF_KEYWORD_ENTRIES_COUNT);
+    for (size_t i = NF_KEY_COLOR; i <= NF_KEY_WHITE; ++i)
+        aGermanKeywords[i] = rKeywords[i];
+
+    // Check that we actually have German and English keywords.
+    CPPUNIT_ASSERT_EQUAL( OUString("FARBE"), aGermanKeywords[NF_KEY_COLOR]);
+    CPPUNIT_ASSERT_EQUAL( OUString("COLOR"), rEnglishKeywords[NF_KEY_COLOR]);
+
+    // Test each color conversion.
+    // [FARBE1] -> [COLOR1] can't be tested because we have no color table link
+    // set, so the scanner returns nCheckPos error.
+    sal_Int32 nCheckPos;
+    SvNumFormatType nType;
+    sal_uInt32 nKey;
+    OUString aFormatCode;
+
+    for (size_t i = NF_KEY_BLACK; i <= NF_KEY_WHITE; ++i)
+    {
+        aFormatCode = "[" + aGermanKeywords[i] + "]0";
+        aFormatter.PutandConvertEntry( aFormatCode, nCheckPos, nType, nKey, LANGUAGE_GERMAN, LANGUAGE_ENGLISH_US, false);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("CheckPos should be 0.", sal_Int32(0), nCheckPos);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("Type should be NUMBER.", SvNumFormatType::NUMBER, nType);
+        CPPUNIT_ASSERT_EQUAL( OUString("[" + rEnglishKeywords[i] + "]0"), aFormatCode);
     }
 }
 

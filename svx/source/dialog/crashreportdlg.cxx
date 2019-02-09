@@ -9,10 +9,18 @@
 
 #include "crashreportdlg.hxx"
 
+
 #include <config_folders.h>
 
 #include <rtl/bootstrap.hxx>
 #include <desktop/crashreport.hxx>
+#include <desktop/minidump.hxx>
+#include <sfx2/safemode.hxx>
+#include <comphelper/processfactory.hxx>
+#include <osl/file.hxx>
+
+#include <com/sun/star/task/OfficeRestartManager.hpp>
+#include <com/sun/star/task/XInteractionHandler.hpp>
 
 CrashReportDialog::CrashReportDialog(vcl::Window* pParent):
     Dialog(pParent, "CrashReportDialog",
@@ -20,9 +28,18 @@ CrashReportDialog::CrashReportDialog(vcl::Window* pParent):
 {
     get(mpBtnSend, "btn_send");
     get(mpBtnCancel, "btn_cancel");
+    get(mpBtnClose, "btn_close");
+    get(mpEditPreUpload, "ed_pre");
+    get(mpEditPostUpload, "ed_post");
+    get(mpFtBugReport, "ed_bugreport");
+    get(mpCBSafeMode, "check_safemode");
+
+    maSuccessMsg = mpEditPostUpload->GetText();
 
     mpBtnSend->SetClickHdl(LINK(this, CrashReportDialog, BtnHdl));
     mpBtnCancel->SetClickHdl(LINK(this, CrashReportDialog, BtnHdl));
+    mpBtnClose->SetClickHdl(LINK(this, CrashReportDialog, BtnHdl));
+    mpEditPostUpload->SetReadOnly();
 }
 
 CrashReportDialog::~CrashReportDialog()
@@ -34,40 +51,70 @@ void CrashReportDialog::dispose()
 {
     mpBtnSend.clear();
     mpBtnCancel.clear();
+    mpBtnClose.clear();
+    mpEditPreUpload.clear();
+    mpEditPostUpload.clear();
+    mpFtBugReport.clear();
+    mpCBSafeMode.clear();
 
     Dialog::dispose();
 }
 
-namespace {
-
-OString getLibDir()
+bool CrashReportDialog::Close()
 {
-    OUString aOriginal = "$BRAND_BASE_DIR/" LIBO_LIBEXEC_FOLDER;
-    rtl::Bootstrap::expandMacros(aOriginal);
+    // Check whether to go to safe mode
+    if (mpCBSafeMode->IsChecked())
+    {
+        sfx2::SafeMode::putFlag();
+        css::task::OfficeRestartManager::get(comphelper::getProcessComponentContext())->requestRestart(
+            css::uno::Reference< css::task::XInteractionHandler >());
+    }
 
-    return rtl::OUStringToOString(aOriginal, RTL_TEXTENCODING_UTF8);
+    return Dialog::Close();
 }
 
-}
-
-IMPL_LINK_TYPED(CrashReportDialog, BtnHdl, Button*, pBtn, void)
+IMPL_LINK(CrashReportDialog, BtnHdl, Button*, pBtn, void)
 {
     if (pBtn == mpBtnSend.get())
     {
         std::string ini_path = CrashReporter::getIniFileName();
-        OString aCommand = getLibDir().copy(7) + "/minidump_upload " + ini_path.c_str();
-        int retVal = std::system(aCommand.getStr());
-        SAL_WARN_IF(retVal != 0, "svx.dialog", "Failed to upload minidump. Error Code: " << retVal);
-        // TODO: moggi: return the id for the user to look it up
-        Close();
+
+        std::string response;
+        bool bSuccess = crashreport::readConfig(ini_path, response);
+
+        OUString aCrashID = OUString::createFromAscii(response.c_str());
+
+        if (bSuccess)
+        {
+            OUString aProcessedMessage = maSuccessMsg.replaceAll("%CRASHID", aCrashID.replaceAll("Crash-ID=",""));
+
+            // vclbuilder seems to replace _ with ~ even in text
+            mpEditPostUpload->SetText(aProcessedMessage.replaceAll("~", "_"));
+        }
+        else
+        {
+            mpEditPostUpload->SetText(aCrashID);
+        }
+
+        mpBtnClose->Show();
+        mpFtBugReport->Show();
+        mpEditPreUpload->Hide();
+        mpEditPostUpload->Show();
+        mpBtnSend->Hide();
+        mpBtnSend->Disable();
+        mpBtnCancel->Hide();
+        mpBtnCancel->Disable();
+        mpBtnClose->GrabFocus();
+
+        setOptimalLayoutSize();
     }
     else if (pBtn == mpBtnCancel.get())
     {
         Close();
     }
-    else
+    else if (pBtn == mpBtnClose.get())
     {
-        assert(false);
+        Close();
     }
 }
 

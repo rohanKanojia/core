@@ -20,10 +20,10 @@
 #define INCLUDED_SW_INC_FMTANCHR_HXX
 
 #include "swdllapi.h"
-#include <hintids.hxx>
-#include <swtypes.hxx>
-#include <format.hxx>
+#include "hintids.hxx"
+#include "format.hxx"
 #include <svl/poolitem.hxx>
+#include <svx/swframetypes.hxx>
 
 #include <memory>
 
@@ -36,17 +36,17 @@ class SW_DLLPUBLIC SwFormatAnchor: public SfxPoolItem
     std::unique_ptr<SwPosition> m_pContentAnchor; /**< 0 for page-bound frames.
                                                      Index for paragraph-bound frames.
                                                      Position for character-bound frames. */
-    RndStdIds  nAnchorId;
-    sal_uInt16     nPageNum;        ///< Page number for page-bound frames.
+    RndStdIds  m_eAnchorId;
+    sal_uInt16     m_nPageNumber;        ///< Page number for page-bound frames.
 
     /// #i28701# - getting anchor positions ordered
-    sal_uInt32 mnOrder;
-    static sal_uInt32 mnOrderCounter;
+    sal_uInt32 m_nOrder;
+    static sal_uInt32 m_nOrderCounter;
 
 public:
-    SwFormatAnchor( RndStdIds eRnd = FLY_AT_PAGE, sal_uInt16 nPageNum = 0 );
+    SwFormatAnchor( RndStdIds eRnd = RndStdIds::FLY_AT_PAGE, sal_uInt16 nPageNum = 0 );
     SwFormatAnchor( const SwFormatAnchor &rCpy );
-    virtual ~SwFormatAnchor();
+    virtual ~SwFormatAnchor() override;
 
     SwFormatAnchor &operator=( const SwFormatAnchor& );
 
@@ -54,29 +54,29 @@ public:
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper*    pIntl = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper&    rIntl ) const override;
 
     virtual bool QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
-    RndStdIds GetAnchorId() const { return nAnchorId; }
-    sal_uInt16 GetPageNum() const { return nPageNum; }
+    RndStdIds GetAnchorId() const { return m_eAnchorId; }
+    sal_uInt16 GetPageNum() const { return m_nPageNumber; }
     const SwPosition *GetContentAnchor() const { return m_pContentAnchor.get(); }
     // #i28701#
-    sal_uInt32 GetOrder() const { return mnOrder;}
+    sal_uInt32 GetOrder() const { return m_nOrder;}
 
-    void SetType( RndStdIds nRndId ) { nAnchorId = nRndId; }
-    void SetPageNum( sal_uInt16 nNew ) { nPageNum = nNew; }
+    void SetType( RndStdIds nRndId ) { m_eAnchorId = nRndId; }
+    void SetPageNum( sal_uInt16 nNew ) { m_nPageNumber = nNew; }
     void SetAnchor( const SwPosition *pPos );
 
     void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
 };
 
 inline const SwFormatAnchor &SwAttrSet::GetAnchor(bool bInP) const
-    { return static_cast<const SwFormatAnchor&>(Get(RES_ANCHOR, bInP)); }
+    { return Get(RES_ANCHOR, bInP); }
 
  inline const SwFormatAnchor &SwFormat::GetAnchor(bool bInP) const
      { return m_aSet.GetAnchor(bInP); }

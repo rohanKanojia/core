@@ -27,8 +27,8 @@
 
 class SvI18NMapEntry_Key
 {
-    sal_uInt16      nKind;
-    OUString   aName;
+    sal_uInt16 const      nKind;
+    OUString const   aName;
 public:
     SvI18NMapEntry_Key( sal_uInt16 nKnd, const OUString& rName ) :
         nKind( nKnd ),
@@ -52,7 +52,7 @@ class XMLOFF_DLLPUBLIC SvI18NMap
 
 public:
     // Add a name mapping
-    bool Add( sal_uInt16 nKind, const OUString& rName,
+    void Add( sal_uInt16 nKind, const OUString& rName,
               const OUString& rNewName );
 
     // Return a mapped name. If the name could not be found, return the

@@ -24,7 +24,6 @@
 enum CSS1Token
 {
     CSS1_NULL,
-    CSS1_UNKNOWN,
 
     CSS1_IDENT,
     CSS1_STRING,
@@ -60,8 +59,7 @@ enum CSS1Token
 enum CSS1ParserState
 {
     CSS1_PAR_ACCEPTED = 0,
-    CSS1_PAR_WORKING,
-    CSS1_PAR_ERROR
+    CSS1_PAR_WORKING
 };
 
 enum CSS1SelectorType
@@ -87,8 +85,8 @@ enum CSS1SelectorType
  */
 class CSS1Selector
 {
-    CSS1SelectorType eType; // the type
-    OUString aSelector;     // the selector itself
+    CSS1SelectorType const eType; // the type
+    OUString const aSelector;     // the selector itself
     CSS1Selector *pNext;    // the following component
 
 public:
@@ -152,12 +150,12 @@ inline void CSS1Expression::Set( CSS1Token eTyp, const OUString &rVal,
 
 inline sal_uInt32 CSS1Expression::GetULength() const
 {
-    return nValue < 0. ? 0UL : (sal_uInt32)(nValue + .5);
+    return nValue < 0. ? 0UL : static_cast<sal_uInt32>(nValue + .5);
 }
 
 inline sal_Int32 CSS1Expression::GetSLength() const
 {
-    return (sal_Int32)(nValue + (nValue < 0. ? -.5 : .5 ));
+    return static_cast<sal_Int32>(nValue + (nValue < 0. ? -.5 : .5 ));
 }
 
 /** Parser of a style element/option
@@ -207,14 +205,10 @@ class CSS1Parser
 
     bool IsEOF() const { return bEOF; }
 
-    void IncLineNr() { ++nlLineNr; }
-    sal_uInt32 IncLinePos() { return ++nlLinePos; }
-    inline void SetLinePos( sal_uInt32 nlPos ); // inline declaration below
-
     // parse parts of the grammar
     void ParseRule();
-    CSS1Selector *ParseSelector();
-    CSS1Expression *ParseDeclaration( OUString& rProperty );
+    std::unique_ptr<CSS1Selector> ParseSelector();
+    std::unique_ptr<CSS1Expression> ParseDeclaration( OUString& rProperty );
 
 protected:
     void ParseStyleSheet();
@@ -225,9 +219,8 @@ protected:
      * or DeclarationParsed() need to be called afterwards
      *
      * @param rIn the style element as string
-     * @return true if ???
      */
-    bool ParseStyleSheet( const OUString& rIn );
+    void ParseStyleSheet( const OUString& rIn );
 
     /** parse the content of a HTML style option
      *
@@ -237,34 +230,27 @@ protected:
      * @param rIn the style option as string
      * @return true if ???
      */
-    bool ParseStyleOption( const OUString& rIn );
+    void ParseStyleOption( const OUString& rIn );
 
     /** Called after a selector was parsed.
      *
      * @param pSelector The selector that was parsed
      * @param bFirst if true, a new declaration starts with this selector
-     * @return If true, the selector will be deleted. (Returns always true?)
      */
-    virtual bool SelectorParsed( CSS1Selector* pSelector, bool bFirst );
+    virtual void SelectorParsed( std::unique_ptr<CSS1Selector> pSelector, bool bFirst );
 
     /** Called after a declaration or property was parsed
      *
      * @param rProperty The declaration/property
      * @param pExpr ???
-     * @return If true, the declaration will be deleted. (Returns always true?)
      */
-    virtual bool DeclarationParsed( const OUString& rProperty,
-                                    const CSS1Expression *pExpr );
+    virtual void DeclarationParsed( const OUString& rProperty,
+                                    std::unique_ptr<CSS1Expression> pExpr );
 
 public:
     CSS1Parser();
     virtual ~CSS1Parser();
 };
-
-inline void CSS1Parser::SetLinePos( sal_uInt32 nlPos )
-{
-    nlLinePos = nlPos;
-}
 
 #endif
 

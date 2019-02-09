@@ -41,50 +41,39 @@ class TVFactory: public cppu::WeakImplHelper <
 
         TVFactory( const css::uno::Reference< css::uno::XComponentContext >& xContext );
 
-        virtual ~TVFactory();
+        virtual ~TVFactory() override;
 
         // XServiceInfo
         virtual OUString SAL_CALL
-        getImplementationName(
-            void )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        getImplementationName() override;
 
         virtual sal_Bool SAL_CALL
-        supportsService(
-            const OUString& ServiceName )
-            throw(css::uno::RuntimeException, std::exception ) override;
+        supportsService( const OUString& ServiceName ) override;
 
         virtual css::uno::Sequence< OUString > SAL_CALL
-        getSupportedServiceNames(
-            void )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        getSupportedServiceNames() override;
 
         // XMultiServiceFactory
 
         virtual css::uno::Reference< css::uno::XInterface > SAL_CALL
         createInstance(
-            const OUString& aServiceSpecifier )
-            throw( css::uno::Exception,
-                   css::uno::RuntimeException, std::exception ) override;
+            const OUString& aServiceSpecifier ) override;
 
         virtual css::uno::Reference< css::uno::XInterface > SAL_CALL
         createInstanceWithArguments(
             const OUString& ServiceSpecifier,
-            const css::uno::Sequence< css::uno::Any >& Arguments )
-            throw( css::uno::Exception,
-                   css::uno::RuntimeException, std::exception) override;
+            const css::uno::Sequence< css::uno::Any >& Arguments ) override;
 
         virtual css::uno::Sequence< OUString > SAL_CALL
-        getAvailableServiceNames( )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        getAvailableServiceNames( ) override;
 
         // Other
 
-        static OUString SAL_CALL getImplementationName_static();
+        static OUString getImplementationName_static();
 
-        static css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames_static();
+        static css::uno::Sequence< OUString > getSupportedServiceNames_static();
 
-        static css::uno::Reference< css::lang::XSingleServiceFactory > SAL_CALL
+        static css::uno::Reference< css::lang::XSingleServiceFactory >
         createServiceFactory(
             const css::uno::Reference< css::lang::XMultiServiceFactory >& rxServiceMgr );
 

@@ -22,6 +22,7 @@
 
 #include <cppuhelper/implbase.hxx>
 #include <rtl/ustring.hxx>
+#include <osl/diagnose.h>
 #include <vcl/gdimtf.hxx>
 #include <vcl/metaact.hxx>
 #include <vcl/metric.hxx>
@@ -57,14 +58,15 @@
 #include <com/sun/star/style/NumberingType.hpp>
 #include <com/sun/star/svg/XSVGWriter.hpp>
 
+#include <memory>
 #include <stack>
 #include <unordered_map>
+
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::text;
-using namespace ::com::sun::star::drawing;
 using namespace ::com::sun::star::style;
 using namespace ::com::sun::star::svg;
 using namespace ::com::sun::star::xml::sax;
@@ -75,33 +77,96 @@ using namespace ::com::sun::star::xml::sax;
 #define SVGWRITER_WRITE_TEXT        0x00000002
 #define SVGWRITER_NO_SHAPE_COMMENTS 0x01000000
 
+
+struct SVGState
+{
+    vcl::Font                               aFont;
+//  Color                                   aLineColor;
+//  Color                                   aFillColor;
+//  basegfx::B2DLineJoin                    aLineJoin;
+//  com::sun::star::drawing::LineCap        aLineCap;
+    sal_Int32                               nRegionClipPathId;
+
+    SVGState()
+        : aFont()
+        , nRegionClipPathId( 0 )
+    {}
+};
+// - PartialState -
+
+struct PartialState
+{
+    PushFlags                           meFlags;
+    ::std::unique_ptr<vcl::Font>        mupFont;
+    sal_Int32                           mnRegionClipPathId;
+
+    const vcl::Font&        getFont( const vcl::Font& rDefaultFont ) const
+                                { return mupFont ? *mupFont : rDefaultFont; }
+
+    void                    setFont( const vcl::Font& rFont )
+                                { mupFont.reset( new vcl::Font(rFont) ); }
+
+    PartialState()
+        : meFlags( PushFlags::NONE )
+        , mupFont()
+        , mnRegionClipPathId( 0 )
+    {}
+
+    PartialState(PartialState&& aPartialState)
+        : meFlags( aPartialState.meFlags )
+        , mupFont( std::move( aPartialState.mupFont ) )
+        , mnRegionClipPathId( aPartialState.mnRegionClipPathId )
+    {
+        aPartialState.meFlags = PushFlags::NONE;
+        aPartialState.mnRegionClipPathId = 0;
+    }
+};
+
+
+// - SVGContextHandler -
+
+class SVGContextHandler
+{
+private:
+    ::std::stack<PartialState> maStateStack;
+    SVGState maCurrentState;
+
+public:
+    PushFlags getPushFlags() const;
+    SVGState& getCurrentState();
+    void pushState( PushFlags eFlags );
+    void popState();
+};
+
+
+// - SVGAttributeWriter -
+
 class SVGActionWriter;
 class SVGExport;
 class SVGFontExport;
 
 
-class SVGAttributeWriter
+class SVGAttributeWriter final
 {
 private:
 
-    vcl::Font                  maCurFont;
-    SVGExport&                 mrExport;
-    SVGFontExport&             mrFontExport;
-    SvXMLElementExport*        mpElemFont;
+    SVGExport&                              mrExport;
+    SVGFontExport&                          mrFontExport;
+    SVGState&                               mrCurrentState;
+    std::unique_ptr<SvXMLElementExport>     mpElemFont;
 
-                             SVGAttributeWriter();
 
-    static double            ImplRound( double fVal );
+    static double           ImplRound( double fVal );
 
 public:
 
-                            SVGAttributeWriter( SVGExport& rExport, SVGFontExport& rFontExport );
-    virtual                 ~SVGAttributeWriter();
+                            SVGAttributeWriter( SVGExport& rExport, SVGFontExport& rFontExport, SVGState& rCurState );
+                            ~SVGAttributeWriter();
 
     void                    AddColorAttr( const char* pColorAttrName, const char* pColorOpacityAttrName, const Color& rColor );
-    void                    AddGradientDef( const Rectangle& rObjRect,const Gradient& rGradient, OUString& rGradientId );
+    void                    AddGradientDef( const tools::Rectangle& rObjRect,const Gradient& rGradient, OUString& rGradientId );
     void                    AddPaintAttr( const Color& rLineColor, const Color& rFillColor,
-                                          const Rectangle* pObjBoundRect = nullptr, const Gradient* pFillGradient = nullptr );
+                                          const tools::Rectangle* pObjBoundRect = nullptr, const Gradient* pFillGradient = nullptr );
 
     void                    SetFontAttr( const vcl::Font& rFont );
     void                    startFontSettings();
@@ -113,21 +178,20 @@ public:
 
 struct SVGShapeDescriptor
 {
-    tools::PolyPolygon          maShapePolyPoly;
-    Color                       maShapeFillColor;
-    Color                       maShapeLineColor;
-    sal_Int32                   mnStrokeWidth;
-    SvtGraphicStroke::DashArray maDashArray;
-    ::std::unique_ptr< Gradient > mapShapeGradient;
-    OUString                    maId;
-
+    tools::PolyPolygon                  maShapePolyPoly;
+    Color                               maShapeFillColor;
+    Color                               maShapeLineColor;
+    sal_Int32                           mnStrokeWidth;
+    SvtGraphicStroke::DashArray         maDashArray;
+    ::std::unique_ptr< Gradient >       mapShapeGradient;
+    OUString                            maId;
     basegfx::B2DLineJoin        maLineJoin;
     css::drawing::LineCap       maLineCap;
 
 
     SVGShapeDescriptor() :
-        maShapeFillColor( Color( COL_TRANSPARENT ) ),
-        maShapeLineColor( Color( COL_TRANSPARENT ) ),
+        maShapeFillColor( COL_TRANSPARENT ),
+        maShapeLineColor( COL_TRANSPARENT ),
         mnStrokeWidth( 0 ),
         maLineJoin(basegfx::B2DLineJoin::Miter), // miter is Svg 'stroke-linejoin' default
         maLineCap(css::drawing::LineCap_BUTT) // butt is Svg 'stroke-linecap' default
@@ -150,27 +214,27 @@ struct BulletListItemInfo
 };
 
 
-class SVGTextWriter
+class SVGTextWriter final
 {
   public:
-    typedef std::unordered_map< OUString, BulletListItemInfo, OUStringHash >         BulletListItemInfoMap;
+    typedef std::unordered_map< OUString, BulletListItemInfo >         BulletListItemInfoMap;
 
   private:
     SVGExport&                                  mrExport;
-    SVGAttributeWriter*                         mpContext;
+    SVGAttributeWriter&                         mrAttributeWriter;
     VclPtr<VirtualDevice>                       mpVDev;
-    bool                                    mbIsTextShapeStarted;
+    bool                                        mbIsTextShapeStarted;
     Reference<XText>                            mrTextShape;
-    OUString                             msShapeId;
+    OUString                                    msShapeId;
     Reference<XEnumeration>                     mrParagraphEnumeration;
     Reference<XTextContent>                     mrCurrentTextParagraph;
     Reference<XEnumeration>                     mrTextPortionEnumeration;
     Reference<XTextRange>                       mrCurrentTextPortion;
     const GDIMetaFile*                          mpTextEmbeddedBitmapMtf;
     MapMode*                                    mpTargetMapMode;
-    SvXMLElementExport*                         mpTextShapeElem;
-    SvXMLElementExport*                         mpTextParagraphElem;
-    SvXMLElementExport*                         mpTextPositionElem;
+    std::unique_ptr<SvXMLElementExport>         mpTextShapeElem;
+    std::unique_ptr<SvXMLElementExport>         mpTextParagraphElem;
+    std::unique_ptr<SvXMLElementExport>         mpTextPositionElem;
     sal_Int32                                   mnLeftTextPortionLength;
     Point                                       maTextPos;
     long int                                    mnTextWidth;
@@ -185,13 +249,13 @@ class SVGTextWriter
     OUString                                    msUrl;
     OUString                                    msHyperlinkIdList;
     bool                                        mbIsPlaceholderShape;
-    bool                                        mbIWS;
+    static const bool                           mbIWS = false;
     vcl::Font                                   maCurrentFont;
     vcl::Font                                   maParentFont;
 
   public:
-    explicit SVGTextWriter( SVGExport& rExport );
-    virtual ~SVGTextWriter();
+    explicit SVGTextWriter( SVGExport& rExport, SVGAttributeWriter& rAttributeWriter );
+    ~SVGTextWriter();
 
     sal_Int32 setTextPosition( const GDIMetaFile& rMtf, sal_uLong& nCurAction );
     void setTextProperties( const GDIMetaFile& rMtf, sal_uLong nCurAction );
@@ -225,11 +289,6 @@ class SVGTextWriter
         mpTargetMapMode = &rTargetMapMode;
     }
 
-    void setContext( SVGAttributeWriter* pContext )
-    {
-        mpContext = pContext;
-    }
-
     void setTextShape( const Reference<XText>& rxText,
                        const GDIMetaFile* pTextEmbeddedBitmapMtf )
     {
@@ -250,62 +309,49 @@ class SVGTextWriter
 
     void implRegisterInterface( const Reference< XInterface >& rxIf );
     const OUString & implGetValidIDFromInterface( const Reference< XInterface >& rxIf );
-
-
 };
 
 
-class SVGActionWriter
+class SVGActionWriter final
 {
 private:
 
     sal_Int32                                   mnCurGradientId;
     sal_Int32                                   mnCurMaskId;
     sal_Int32                                   mnCurPatternId;
-    ::std::stack< SVGAttributeWriter* >         maContextStack;
+    sal_Int32                                   mnCurClipPathId;
+    ::std::unique_ptr< SvXMLElementExport >     mpCurrentClipRegionElem;
     ::std::unique_ptr< SVGShapeDescriptor >     mapCurShape;
     SVGExport&                                  mrExport;
-    SVGFontExport&                              mrFontExport;
-    SVGAttributeWriter*                         mpContext;
+    SVGContextHandler                           maContextHandler;
+    SVGState&                                   mrCurrentState;
+    SVGAttributeWriter                          maAttributeWriter;
     SVGTextWriter                               maTextWriter;
     VclPtr<VirtualDevice>                       mpVDev;
     MapMode                                     maTargetMapMode;
-    sal_uInt32                                  mnInnerMtfCount;
-    bool                                    mbClipAttrChanged;
-    bool                                    mbIsPlaceholderShape;
+    bool                                        mbClipAttrChanged;
+    bool                                        mbIsPlaceholderShape;
 
-
-    void                    ImplAcquireContext()
-    {
-        maContextStack.push( mpContext = new SVGAttributeWriter( mrExport, mrFontExport ) );
-        maTextWriter.setContext( mpContext );
-    }
-    void                    ImplReleaseContext()
-    {
-        if (!maContextStack.empty())
-        {
-            delete maContextStack.top();
-            maContextStack.pop();
-        }
-        mpContext = (maContextStack.empty() ? nullptr : maContextStack.top());
-        maTextWriter.setContext( mpContext );
-    }
 
     long                    ImplMap( sal_Int32 nVal ) const;
     Point&                  ImplMap( const Point& rPt, Point& rDstPt ) const;
     Size&                   ImplMap( const Size& rSz, Size& rDstSz ) const;
-    Rectangle&              ImplMap( const Rectangle& rRect, Rectangle& rDstRect ) const;
+    void                    ImplMap( const tools::Rectangle& rRect, tools::Rectangle& rDstRect ) const;
     tools::Polygon&         ImplMap( const tools::Polygon& rPoly, tools::Polygon& rDstPoly ) const;
     tools::PolyPolygon&     ImplMap( const tools::PolyPolygon& rPolyPoly, tools::PolyPolygon& rDstPolyPoly ) const;
 
     void                    ImplWriteLine( const Point& rPt1, const Point& rPt2, const Color* pLineColor = nullptr );
-    void                    ImplWriteRect( const Rectangle& rRect, long nRadX = 0, long nRadY = 0 );
+    void                    ImplWriteRect( const tools::Rectangle& rRect, long nRadX = 0, long nRadY = 0 );
     void                    ImplWriteEllipse( const Point& rCenter, long nRadX, long nRadY );
     void                    ImplWritePattern( const tools::PolyPolygon& rPolyPoly, const Hatch* pHatch, const Gradient* pGradient, sal_uInt32 nWriteFlags );
     void                    ImplAddLineAttr( const LineInfo &rAttrs );
     void                    ImplWritePolyPolygon( const tools::PolyPolygon& rPolyPoly, bool bLineOnly,
                                                   bool bApplyMapping = true );
     void                    ImplWriteShape( const SVGShapeDescriptor& rShape );
+    void                    ImplCreateClipPathDef( const tools::PolyPolygon& rPolyPoly );
+    void                    ImplStartClipRegion(sal_Int32 nClipPathId);
+    void                    ImplEndClipRegion();
+    void                    ImplWriteClipPath( const tools::PolyPolygon& rPolyPoly );
     void                    ImplWriteGradientEx( const tools::PolyPolygon& rPolyPoly, const Gradient& rGradient, sal_uInt32 nWriteFlags);
     void                    ImplWriteGradientLinear( const tools::PolyPolygon& rPolyPoly, const Gradient& rGradient );
     void                    ImplWriteGradientStop( const Color& rColor, double fOffset );
@@ -319,27 +365,26 @@ private:
     void                    ImplWriteActions( const GDIMetaFile& rMtf,
                                               sal_uInt32 nWriteFlags,
                                               const OUString* pElementId,
-                                              const Reference< XShape >* pXShape = nullptr,
+                                              const Reference< css::drawing::XShape >* pXShape = nullptr,
                                               const GDIMetaFile* pTextEmbeddedBitmapMtf = nullptr );
 
     vcl::Font               ImplSetCorrectFontHeight() const;
 
 public:
 
-    static OUString  GetPathString( const tools::PolyPolygon& rPolyPoly, bool bLine );
-    static BitmapChecksum GetChecksum( const MetaAction* pAction );
+    static OUString         GetPathString( const tools::PolyPolygon& rPolyPoly, bool bLine );
+    static BitmapChecksum   GetChecksum( const MetaAction* pAction );
 
 public:
-
                             SVGActionWriter( SVGExport& rExport, SVGFontExport& rFontExport );
-    virtual                 ~SVGActionWriter();
+                            ~SVGActionWriter();
 
     void                    WriteMetaFile( const Point& rPos100thmm,
                                            const Size& rSize100thmm,
                                            const GDIMetaFile& rMtf,
                                            sal_uInt32 nWriteFlags,
                                            const OUString* pElementId = nullptr,
-                                           const Reference< XShape >* pXShape = nullptr,
+                                           const Reference< css::drawing::XShape >* pXShape = nullptr,
                                            const GDIMetaFile* pTextEmbeddedBitmapMtf = nullptr );
 };
 
@@ -349,16 +394,15 @@ class SVGWriter : public cppu::WeakImplHelper< XSVGWriter >
 private:
     Reference< XComponentContext >                      mxContext;
     Sequence< css::beans::PropertyValue >    maFilterData;
-    SVGWriter();
 
 public:
     explicit SVGWriter( const Sequence<Any>& args,
                         const Reference< XComponentContext >& rxCtx );
-    virtual ~SVGWriter();
+    virtual ~SVGWriter() override;
 
     // XSVGWriter
     virtual void SAL_CALL write( const Reference<XDocumentHandler>& rxDocHandler,
-        const Sequence<sal_Int8>& rMtfSeq ) throw( RuntimeException, std::exception ) override;
+                                 const Sequence<sal_Int8>& rMtfSeq ) override;
 };
 
 #endif // INCLUDED_FILTER_SOURCE_SVG_SVGWRITER_HXX

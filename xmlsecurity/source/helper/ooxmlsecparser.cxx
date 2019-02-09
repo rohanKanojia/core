@@ -9,10 +9,12 @@
 
 
 #include "ooxmlsecparser.hxx"
+#include <xmlsignaturehelper.hxx>
+#include <sal/log.hxx>
 
 using namespace com::sun::star;
 
-OOXMLSecParser::OOXMLSecParser(XSecController* pXSecController)
+OOXMLSecParser::OOXMLSecParser(XMLSignatureHelper& rXMLSignatureHelper, XSecController* pXSecController)
     : m_pXSecController(pXSecController)
     ,m_bInDigestValue(false)
     ,m_bInSignatureValue(false)
@@ -22,7 +24,11 @@ OOXMLSecParser::OOXMLSecParser(XSecController* pXSecController)
     ,m_bInX509IssuerName(false)
     ,m_bInX509SerialNumber(false)
     ,m_bInCertDigest(false)
+    ,m_bInValidSignatureImage(false)
+    ,m_bInInvalidSignatureImage(false)
+    ,m_bInSignatureLineId(false)
     ,m_bReferenceUnresolved(false)
+    ,m_rXMLSignatureHelper(rXMLSignatureHelper)
 {
 }
 
@@ -30,20 +36,19 @@ OOXMLSecParser::~OOXMLSecParser()
 {
 }
 
-void SAL_CALL OOXMLSecParser::startDocument() throw (xml::sax::SAXException, uno::RuntimeException, std::exception)
+void SAL_CALL OOXMLSecParser::startDocument()
 {
     if (m_xNextHandler.is())
         m_xNextHandler->startDocument();
 }
 
-void SAL_CALL OOXMLSecParser::endDocument() throw (xml::sax::SAXException, uno::RuntimeException, std::exception)
+void SAL_CALL OOXMLSecParser::endDocument()
 {
     if (m_xNextHandler.is())
         m_xNextHandler->endDocument();
 }
 
 void SAL_CALL OOXMLSecParser::startElement(const OUString& rName, const uno::Reference<xml::sax::XAttributeList>& xAttribs)
-throw (xml::sax::SAXException, uno::RuntimeException, std::exception)
 {
     OUString aId = xAttribs->getValueByName("Id");
     if (!aId.isEmpty())
@@ -51,15 +56,23 @@ throw (xml::sax::SAXException, uno::RuntimeException, std::exception)
 
     if (rName == "Signature")
     {
+        m_rXMLSignatureHelper.StartVerifySignatureElement();
         m_pXSecController->addSignature();
         if (!aId.isEmpty())
             m_pXSecController->setId(aId);
+    }
+    else if (rName == "SignatureMethod")
+    {
+        OUString ouAlgorithm = xAttribs->getValueByName("Algorithm");
+        if (ouAlgorithm == ALGO_ECDSASHA1 || ouAlgorithm == ALGO_ECDSASHA256
+            || ouAlgorithm == ALGO_ECDSASHA512)
+            m_pXSecController->setSignatureMethod(svl::crypto::SignatureMethodAlgorithm::ECDSA);
     }
     else if (rName == "Reference")
     {
         OUString aURI = xAttribs->getValueByName("URI");
         if (aURI.startsWith("#"))
-            m_pXSecController->addReference(aURI.copy(1));
+            m_pXSecController->addReference(aURI.copy(1), xml::crypto::DigestID::SHA1);
         else
         {
             m_aReferenceURI = aURI;
@@ -73,7 +86,7 @@ throw (xml::sax::SAXException, uno::RuntimeException, std::exception)
             OUString aAlgorithm = xAttribs->getValueByName("Algorithm");
             if (aAlgorithm == ALGO_RELATIONSHIP)
             {
-                m_pXSecController->addStreamReference(m_aReferenceURI, /*isBinary=*/false);
+                m_pXSecController->addStreamReference(m_aReferenceURI, /*isBinary=*/false, /*nDigestID=*/xml::crypto::DigestID::SHA256);
                 m_bReferenceUnresolved = false;
             }
         }
@@ -118,12 +131,39 @@ throw (xml::sax::SAXException, uno::RuntimeException, std::exception)
         m_aCertDigest.clear();
         m_bInCertDigest = true;
     }
+    else if (rName == "Object")
+    {
+        OUString sId = xAttribs->getValueByName("Id");
+        if (sId == "idValidSigLnImg")
+        {
+            m_aValidSignatureImage.clear();
+            m_bInValidSignatureImage = true;
+        }
+        else if (sId == "idInvalidSigLnImg")
+        {
+            m_aInvalidSignatureImage.clear();
+            m_bInInvalidSignatureImage = true;
+        }
+        else
+        {
+            SAL_INFO("xmlsecurity.ooxml", "Unknown 'Object' child element: " << rName);
+        }
+    }
+    else if (rName == "SetupID")
+    {
+        m_aSignatureLineId.clear();
+        m_bInSignatureLineId = true;
+    }
+    else
+    {
+        SAL_INFO("xmlsecurity.ooxml", "Unknown xml element: " << rName);
+    }
 
     if (m_xNextHandler.is())
         m_xNextHandler->startElement(rName, xAttribs);
 }
 
-void SAL_CALL OOXMLSecParser::endElement(const OUString& rName) throw (xml::sax::SAXException, uno::RuntimeException, std::exception)
+void SAL_CALL OOXMLSecParser::endElement(const OUString& rName)
 {
     if (rName == "SignedInfo")
         m_pXSecController->setReferenceCount();
@@ -132,10 +172,10 @@ void SAL_CALL OOXMLSecParser::endElement(const OUString& rName) throw (xml::sax:
         if (m_bReferenceUnresolved)
         {
             // No transform algorithm found, assume binary.
-            m_pXSecController->addStreamReference(m_aReferenceURI, /*isBinary=*/true);
+            m_pXSecController->addStreamReference(m_aReferenceURI, /*isBinary=*/true, /*nDigestID=*/xml::crypto::DigestID::SHA256);
             m_bReferenceUnresolved = false;
         }
-        m_pXSecController->setDigestValue(m_aDigestValue);
+        m_pXSecController->setDigestValue(xml::crypto::DigestID::SHA256, m_aDigestValue);
     }
     else if (rName == "DigestValue" && !m_bInCertDigest)
         m_bInDigestValue = false;
@@ -174,12 +214,30 @@ void SAL_CALL OOXMLSecParser::endElement(const OUString& rName) throw (xml::sax:
         m_pXSecController->setCertDigest(m_aCertDigest);
         m_bInCertDigest = false;
     }
+    else if (rName == "Object")
+    {
+        if (m_bInValidSignatureImage)
+        {
+            m_pXSecController->setValidSignatureImage(m_aValidSignatureImage);
+            m_bInValidSignatureImage = false;
+        }
+        else if (m_bInInvalidSignatureImage)
+        {
+            m_pXSecController->setInvalidSignatureImage(m_aInvalidSignatureImage);
+            m_bInInvalidSignatureImage = false;
+        }
+    }
+    else if (rName == "SetupID")
+    {
+        m_pXSecController->setSignatureLineId(m_aSignatureLineId);
+        m_bInSignatureLineId = false;
+    }
 
     if (m_xNextHandler.is())
         m_xNextHandler->endElement(rName);
 }
 
-void SAL_CALL OOXMLSecParser::characters(const OUString& rChars) throw (xml::sax::SAXException, uno::RuntimeException, std::exception)
+void SAL_CALL OOXMLSecParser::characters(const OUString& rChars)
 {
     if (m_bInDigestValue && !m_bInCertDigest)
         m_aDigestValue += rChars;
@@ -197,30 +255,36 @@ void SAL_CALL OOXMLSecParser::characters(const OUString& rChars) throw (xml::sax
         m_aX509SerialNumber += rChars;
     else if (m_bInCertDigest)
         m_aCertDigest += rChars;
+    else if (m_bInValidSignatureImage)
+        m_aValidSignatureImage += rChars;
+    else if (m_bInInvalidSignatureImage)
+        m_aInvalidSignatureImage += rChars;
+    else if (m_bInSignatureLineId)
+        m_aSignatureLineId += rChars;
 
     if (m_xNextHandler.is())
         m_xNextHandler->characters(rChars);
 }
 
-void SAL_CALL OOXMLSecParser::ignorableWhitespace(const OUString& rWhitespace) throw (xml::sax::SAXException, uno::RuntimeException, std::exception)
+void SAL_CALL OOXMLSecParser::ignorableWhitespace(const OUString& rWhitespace)
 {
     if (m_xNextHandler.is())
         m_xNextHandler->ignorableWhitespace(rWhitespace);
 }
 
-void SAL_CALL OOXMLSecParser::processingInstruction(const OUString& rTarget, const OUString& rData) throw (xml::sax::SAXException, uno::RuntimeException, std::exception)
+void SAL_CALL OOXMLSecParser::processingInstruction(const OUString& rTarget, const OUString& rData)
 {
     if (m_xNextHandler.is())
         m_xNextHandler->processingInstruction(rTarget, rData);
 }
 
-void SAL_CALL OOXMLSecParser::setDocumentLocator(const uno::Reference<xml::sax::XLocator>& xLocator) throw (xml::sax::SAXException, uno::RuntimeException, std::exception)
+void SAL_CALL OOXMLSecParser::setDocumentLocator(const uno::Reference<xml::sax::XLocator>& xLocator)
 {
     if (m_xNextHandler.is())
         m_xNextHandler->setDocumentLocator(xLocator);
 }
 
-void SAL_CALL OOXMLSecParser::initialize(const uno::Sequence<uno::Any>& rArguments) throw (uno::Exception, uno::RuntimeException, std::exception)
+void SAL_CALL OOXMLSecParser::initialize(const uno::Sequence<uno::Any>& rArguments)
 {
     rArguments[0] >>= m_xNextHandler;
 }

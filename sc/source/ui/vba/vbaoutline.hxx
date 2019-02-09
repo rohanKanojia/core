@@ -19,10 +19,11 @@
 #ifndef INCLUDED_SC_SOURCE_UI_VBA_VBAOUTLINE_HXX
 #define INCLUDED_SC_SOURCE_UI_VBA_VBAOUTLINE_HXX
 
-#include <com/sun/star/sheet/XSheetOutline.hpp>
 #include <ooo/vba/excel/XOutline.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <vbahelper/vbahelperinterface.hxx>
+
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+namespace com { namespace sun { namespace star { namespace sheet { class XSheetOutline; } } } }
 
 typedef InheritedHelperInterfaceWeakImpl< ov::excel::XOutline > ScVbaOutline_BASE;
 
@@ -31,11 +32,10 @@ class ScVbaOutline :  public ScVbaOutline_BASE
     css::uno::Reference< css::sheet::XSheetOutline > mxOutline;
 public:
     ScVbaOutline( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext >& xContext,
-         css::uno::Reference<css::sheet::XSheetOutline> outline): ScVbaOutline_BASE( xParent, xContext) , mxOutline(outline)
+         css::uno::Reference<css::sheet::XSheetOutline> const & outline): ScVbaOutline_BASE( xParent, xContext) , mxOutline(outline)
     {}
-    virtual ~ScVbaOutline(){}
 
-    virtual void SAL_CALL ShowLevels( const css::uno::Any& RowLevels, const css::uno::Any& ColumnLevels ) throw (css::uno::RuntimeException, std::exception) override ;
+    virtual void SAL_CALL ShowLevels( const css::uno::Any& RowLevels, const css::uno::Any& ColumnLevels ) override ;
     // XHelperInterface
     virtual OUString getServiceImplName() override;
     virtual css::uno::Sequence<OUString> getServiceNames() override;

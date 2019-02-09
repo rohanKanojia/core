@@ -20,7 +20,6 @@
 #ifndef INCLUDED_UUI_SOURCE_IAHNDL_HXX
 #define INCLUDED_UUI_SOURCE_IAHNDL_HXX
 
-#include <osl/mutex.hxx>
 #include <rtl/ustring.hxx>
 
 #include <com/sun/star/uno/Reference.hxx>
@@ -30,8 +29,7 @@
 #include <com/sun/star/beans/Optional.hpp>
 #include <com/sun/star/task/InteractionClassification.hpp>
 
-#include <tools/errcode.hxx>
-#include <tools/rc.hxx>
+#include <vcl/errcode.hxx>
 #include <tools/wintypes.hxx>
 
 #include <unordered_map>
@@ -64,18 +62,14 @@ namespace vcl { class Window; }
 
 struct InteractionHandlerData
 {
-    /** The UNO service name to use to instanciate the content provider.
+    /** The UNO service name to use to instantiate the content provider.
      */
     OUString ServiceName;
-
-    InteractionHandlerData() {};
-    explicit InteractionHandlerData(const OUString & rService)
-        : ServiceName( rService ){}
 };
 
 typedef std::vector< InteractionHandlerData > InteractionHandlerDataList;
 
-typedef std::unordered_map< OUString, OUString, OUStringHash >    StringHashMap;
+typedef std::unordered_map< OUString, OUString >    StringHashMap;
 
 class UUIInteractionHelper
 {
@@ -84,8 +78,8 @@ private:
             css::uno::Reference< css::awt::XWindow >                m_xWindowParam;
             const OUString                                          m_aContextParam;
             StringHashMap                                           m_aTypedCustomHandlers;
-    UUIInteractionHelper(UUIInteractionHelper &) = delete;
-    void operator =(const UUIInteractionHelper&) = delete;
+    UUIInteractionHelper(UUIInteractionHelper const &) = delete;
+    UUIInteractionHelper& operator =(UUIInteractionHelper const &) = delete;
 
 public:
     UUIInteractionHelper(
@@ -109,7 +103,7 @@ public:
             const OUString& aMessage,
             std::vector< OUString > const & rArguments );
 
-    css::uno::Reference< css::uno::XComponentContext >
+    const css::uno::Reference< css::uno::XComponentContext >&
     getORB() const
     { return m_xContext; }
 private:
@@ -128,14 +122,8 @@ private:
 
     static void getstringfromrequest(void* pHandleData, void* pInteractionHandler);
 
-    vcl::Window *
-    getParentProperty();
-
-    css::uno::Reference< css::awt::XWindow>
+    const css::uno::Reference< css::awt::XWindow>&
     getParentXWindow() const;
-
-    OUString
-    getContextProperty();
 
     css::uno::Reference< css::task::XInteractionHandler2 >
     getInteractionHandler();
@@ -207,7 +195,7 @@ private:
 
     void
     handleGenericErrorRequest(
-        sal_Int32 nErrorCode,
+        ErrCode nErrorCode,
         css::uno::Sequence<
             css::uno::Reference< css::task::XInteractionContinuation > > const &  rContinuations,
         bool bObtainErrorStringOnly,
@@ -239,7 +227,7 @@ private:
         css::uno::Reference<
             css::task::XInteractionRequest > const & rRequest);
 
-    bool handleLockFileIgnoreRequest(
+    bool handleLockFileProblemRequest(
         css::uno::Reference< css::task::XInteractionRequest > const & rRequest);
 
     bool handleCustomRequest(
@@ -247,20 +235,23 @@ private:
                 const OUString& i_rServiceName
             ) const;
 
-    bool
+    void
     handleAuthFallbackRequest(
-            OUString & instructions,
-            OUString & url,
+            const OUString & instructions,
+            const OUString & url,
             css::uno::Sequence< css::uno::Reference< css::task::XInteractionContinuation > > const & rContinuations );
 };
 
-class ErrorResource: private Resource
+class ErrorResource
 {
+    const std::pair<const char*, ErrCode>* m_pStringArray;
+    const std::locale& m_rResLocale;
 public:
-    explicit ErrorResource(ResId & rResId): Resource(rResId) {}
-
-    ~ErrorResource() { FreeResource(); }
-
+    explicit ErrorResource(const std::pair<const char*, ErrCode>* pStringArray, const std::locale& rResLocale)
+        : m_pStringArray(pStringArray)
+        , m_rResLocale(rResLocale)
+    {
+    }
     bool getString(ErrCode nErrorCode, OUString &rString) const;
 };
 

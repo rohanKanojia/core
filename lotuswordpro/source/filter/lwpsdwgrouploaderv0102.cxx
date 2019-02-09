@@ -58,22 +58,23 @@
 
 #include "lwpsdwgrouploaderv0102.hxx"
 #include "lwpdrawobj.hxx"
-#include "lwptools.hxx"
+#include <lwptools.hxx>
 #include "lwpcharsetmgr.hxx"
 #include "lwpgrfobj.hxx"
 #include "lwpframelayout.hxx"
 
-#include "xfilter/xfcolor.hxx"
-#include "xfilter/xfdrawline.hxx"
-#include "xfilter/xfdrawpath.hxx"
-#include "xfilter/xfdrawpolyline.hxx"
-#include "xfilter/xfdrawrect.hxx"
-#include "xfilter/xfdrawpolygon.hxx"
-#include "xfilter/xfdrawgroup.hxx"
-#include "xfilter/xfdrawstyle.hxx"
-#include "xfilter/xfdrawlinestyle.hxx"
-#include "xfilter/xfparagraph.hxx"
-#include "xfilter/xfstylemanager.hxx"
+#include <xfilter/xfcolor.hxx>
+#include <xfilter/xfdrawline.hxx>
+#include <xfilter/xfdrawpath.hxx>
+#include <xfilter/xfdrawpolyline.hxx>
+#include <xfilter/xfdrawrect.hxx>
+#include <xfilter/xfdrawpolygon.hxx>
+#include <xfilter/xfdrawgroup.hxx>
+#include <xfilter/xfdrawstyle.hxx>
+#include <xfilter/xfdrawlinestyle.hxx>
+#include <xfilter/xfparagraph.hxx>
+#include <xfilter/xfstylemanager.hxx>
+#include <sal/log.hxx>
 
 LwpSdwGroupLoaderV0102::LwpSdwGroupLoaderV0102(SvStream* pStream, LwpGraphicObject* pGraphicObj)
     : m_pStream(pStream)
@@ -98,7 +99,7 @@ void LwpSdwGroupLoaderV0102::BeginDrawObjects(std::vector< rtl::Reference<XFFram
 
     //flag
     unsigned char BinSignature[2];
-    m_pStream->Read(BinSignature,2);
+    m_pStream->ReadBytes(BinSignature, 2);
     if (BinSignature[0] != 'S' || BinSignature[1] != 'M')
     {
         assert(false);
@@ -106,7 +107,7 @@ void LwpSdwGroupLoaderV0102::BeginDrawObjects(std::vector< rtl::Reference<XFFram
     }
     //version
     unsigned short nVersion;
-    m_pStream->Read(&nVersion,2);
+    m_pStream->ReadUInt16(nVersion);
     if (nVersion<0x0102)
     {
         assert(false);
@@ -115,16 +116,16 @@ void LwpSdwGroupLoaderV0102::BeginDrawObjects(std::vector< rtl::Reference<XFFram
     // topObj, botObj
     m_pStream->SeekRel(4);
     //record count
-    unsigned short nRecCount;
-    m_pStream->Read(&nRecCount,2);
+    unsigned short nRecCount(0);
+    m_pStream->ReadUInt16(nRecCount);
     // selCount
     m_pStream->SeekRel(2);
     //boundrect
-    unsigned short left,top,right,bottom;
-    m_pStream->Read(&left,2);
-    m_pStream->Read(&top,2);
-    m_pStream->Read(&right,2);
-    m_pStream->Read(&bottom,2);
+    unsigned short left(0),top(0),right(0),bottom(0);
+    m_pStream->ReadUInt16(left);
+    m_pStream->ReadUInt16(top);
+    m_pStream->ReadUInt16(right);
+    m_pStream->ReadUInt16(bottom);
     // fileSize
     m_pStream->SeekRel(2);
 
@@ -139,8 +140,8 @@ void LwpSdwGroupLoaderV0102::BeginDrawObjects(std::vector< rtl::Reference<XFFram
             // original drawing size
             long nWidth = 0, nHeight = 0;
             m_pGraphicObj->GetGrafOrgSize(nWidth, nHeight);
-            double fGrafOrgWidth = (double)nWidth/TWIPS_PER_CM;
-            double fGrafOrgHeight = (double)nHeight/TWIPS_PER_CM;
+            double fGrafOrgWidth = static_cast<double>(nWidth)/TWIPS_PER_CM;
+            double fGrafOrgHeight = static_cast<double>(nHeight)/TWIPS_PER_CM;
 
             // get margin values
             double fLeftMargin = xMyFrameLayout->GetMarginsValue(MARGIN_LEFT);
@@ -167,14 +168,14 @@ void LwpSdwGroupLoaderV0102::BeginDrawObjects(std::vector< rtl::Reference<XFFram
             }
             else if (nScalemode & LwpLayoutScale::PERCENTAGE)
             {
-                double fScalePercentage = (double)pMyScale->GetScalePercentage() / 1000;
+                double fScalePercentage = static_cast<double>(pMyScale->GetScalePercentage()) / 1000;
                 m_aTransformData.fScaleX = fScalePercentage;
                 m_aTransformData.fScaleY = fScalePercentage;
             }
             else if (nScalemode & LwpLayoutScale::FIT_IN_FRAME)
             {
-                double fWidth0 = (double)right / TWIPS_PER_CM;
-                double fHeight0 = (double)bottom / TWIPS_PER_CM;
+                double fWidth0 = static_cast<double>(right) / TWIPS_PER_CM;
+                double fHeight0 = static_cast<double>(bottom) / TWIPS_PER_CM;
 
                 double fWidth1 = LwpTools::ConvertFromUnitsToMetric(pMyScale->GetScaleWidth());
                 double fHeight1 = LwpTools::ConvertFromUnitsToMetric(pMyScale->GetScaleHeight());
@@ -197,7 +198,7 @@ void LwpSdwGroupLoaderV0102::BeginDrawObjects(std::vector< rtl::Reference<XFFram
             // placement: centered
             if (xMyFrameLayout->GetScaleCenter())
             {
-                Rectangle aBoundRect(static_cast<long>(left*m_aTransformData.fScaleX + fLeftMargin),
+                tools::Rectangle aBoundRect(static_cast<long>(left*m_aTransformData.fScaleX + fLeftMargin),
                     static_cast<long>(top    * m_aTransformData.fScaleY + fTopMargin),
                     static_cast<long>(right  * m_aTransformData.fScaleX),
                     static_cast<long>(bottom * m_aTransformData.fScaleY));
@@ -206,8 +207,8 @@ void LwpSdwGroupLoaderV0102::BeginDrawObjects(std::vector< rtl::Reference<XFFram
                 double fNewCenterX = (double(left)/TWIPS_PER_CM + fFrameWidth/*-fOffsetX*/) / 2;
                 double fNewCenterY = (double(top)/TWIPS_PER_CM + fFrameHeight/*-fOffsetY*/) / 2;
 
-                m_aTransformData.fOffsetX = fNewCenterX - (double)aCenter.X()/TWIPS_PER_CM;
-                m_aTransformData.fOffsetY = fNewCenterY -(double)aCenter.Y()/TWIPS_PER_CM;
+                m_aTransformData.fOffsetX = fNewCenterX - static_cast<double>(aCenter.X())/TWIPS_PER_CM;
+                m_aTransformData.fOffsetY = fNewCenterY -static_cast<double>(aCenter.Y())/TWIPS_PER_CM;
             }
             else
             {
@@ -220,6 +221,12 @@ void LwpSdwGroupLoaderV0102::BeginDrawObjects(std::vector< rtl::Reference<XFFram
             m_aTransformData.fLeftMargin = fLeftMargin;
             m_aTransformData.fTopMargin = fTopMargin;
         }
+    }
+
+    if (nRecCount > m_pStream->remainingSize())
+    {
+        SAL_WARN("lwp", "stream too short for claimed no of records");
+        nRecCount = m_pStream->remainingSize();
     }
 
     //load draw object
@@ -243,7 +250,7 @@ XFDrawGroup* LwpSdwGroupLoaderV0102::CreateDrawGroupObject()
 {
     //flag
     unsigned char BinSignature[2];
-    m_pStream->Read(BinSignature,2);
+    m_pStream->ReadBytes(BinSignature, 2);
     if (BinSignature[0] != 'S' || BinSignature[1] != 'M')
     {
         assert(false);
@@ -251,7 +258,7 @@ XFDrawGroup* LwpSdwGroupLoaderV0102::CreateDrawGroupObject()
     }
     //version
     unsigned short nVersion;
-    m_pStream->Read(&nVersion,2);
+    m_pStream->ReadUInt16(nVersion);
     if (nVersion<0x0102)
     {
         assert(false);
@@ -260,20 +267,26 @@ XFDrawGroup* LwpSdwGroupLoaderV0102::CreateDrawGroupObject()
     // topObj, botObj
     m_pStream->SeekRel(4);
     //record count
-    unsigned short nRecCount;
-    m_pStream->Read(&nRecCount,2);
+    unsigned short nRecCount(0);
+    m_pStream->ReadUInt16(nRecCount);
     // selCount
     m_pStream->SeekRel(2);
     //boundrect
-    unsigned short left,top,right,bottom;
-    m_pStream->Read(&left,2);
-    m_pStream->Read(&top,2);
-    m_pStream->Read(&right,2);
-    m_pStream->Read(&bottom,2);
+    unsigned short left(0),top(0),right(0),bottom(0);
+    m_pStream->ReadUInt16(left);
+    m_pStream->ReadUInt16(top);
+    m_pStream->ReadUInt16(right);
+    m_pStream->ReadUInt16(bottom);
     // fileSize
     m_pStream->SeekRel(2);
 
     XFDrawGroup* pXFDrawGroup = new XFDrawGroup();
+
+    if (nRecCount > m_pStream->remainingSize())
+    {
+        SAL_WARN("lwp", "stream too short for claimed no of records");
+        nRecCount = m_pStream->remainingSize();
+    }
 
     //load draw object
     for (unsigned short i = 0; i < nRecCount; i++)
@@ -303,10 +316,10 @@ XFDrawGroup* LwpSdwGroupLoaderV0102::CreateDrawGroupObject()
 XFFrame* LwpSdwGroupLoaderV0102::CreateDrawObject()
 {
     //record type
-    unsigned char recType;
-    m_pStream->Read(&recType,1);
+    unsigned char recType(0);
+    m_pStream->ReadUChar(recType);
 
-    LwpDrawObj* pDrawObj = nullptr;
+    std::unique_ptr<LwpDrawObj> pDrawObj;
     XFFrame* pRetObjct = nullptr;
 
     switch(recType)
@@ -314,52 +327,52 @@ XFFrame* LwpSdwGroupLoaderV0102::CreateDrawObject()
     case OT_PERPLINE://fall-through
     case OT_LINE:
     {
-        pDrawObj = new LwpDrawLine(m_pStream, &m_aTransformData);
+        pDrawObj.reset(new LwpDrawLine(m_pStream, &m_aTransformData));
         break;
     }
     case OT_POLYLINE:
     {
-        pDrawObj = new LwpDrawPolyLine(m_pStream, &m_aTransformData);
+        pDrawObj.reset(new LwpDrawPolyLine(m_pStream, &m_aTransformData));
         break;
     }
     case OT_POLYGON:
     {
-        pDrawObj = new LwpDrawPolygon(m_pStream, &m_aTransformData);
+        pDrawObj.reset(new LwpDrawPolygon(m_pStream, &m_aTransformData));
         pDrawObj->SetObjectType(OT_POLYGON);
         break;
     }
     case OT_SQUARE://fall-through
     case OT_RECT:
     {
-        pDrawObj = new LwpDrawRectangle(m_pStream, &m_aTransformData);
+        pDrawObj.reset(new LwpDrawRectangle(m_pStream, &m_aTransformData));
         break;
     }
     case OT_RNDSQUARE://fall-through
     case OT_RNDRECT:
     {
-        pDrawObj = new LwpDrawRectangle(m_pStream, &m_aTransformData);
+        pDrawObj.reset(new LwpDrawRectangle(m_pStream, &m_aTransformData));
         pDrawObj->SetObjectType(OT_RNDRECT);
         break;
     }
     case OT_CIRCLE://fall-through
     case OT_OVAL:
     {
-        pDrawObj = new LwpDrawEllipse(m_pStream, &m_aTransformData);
+        pDrawObj.reset(new LwpDrawEllipse(m_pStream, &m_aTransformData));
         break;
     }
     case OT_ARC:
     {
-        pDrawObj = new LwpDrawArc(m_pStream, &m_aTransformData);
+        pDrawObj.reset(new LwpDrawArc(m_pStream, &m_aTransformData));
         break;
     }
     case OT_TEXT:
     {
-        pDrawObj = new LwpDrawTextBox(m_pStream);
+        pDrawObj.reset(new LwpDrawTextBox(m_pStream));
         break;
     }
     case OT_TEXTART:
     {
-        pDrawObj = new LwpDrawTextArt(m_pStream, &m_aTransformData);
+        pDrawObj.reset(new LwpDrawTextArt(m_pStream, &m_aTransformData));
         pDrawObj->SetObjectType(OT_TEXTART);
         break;
     }
@@ -367,7 +380,7 @@ XFFrame* LwpSdwGroupLoaderV0102::CreateDrawObject()
     {
         m_pStream->SeekRel(2);
         // read out the object header
-        pDrawObj = new LwpDrawGroup(m_pStream);
+        pDrawObj.reset(new LwpDrawGroup(m_pStream));
 
         pRetObjct = CreateDrawGroupObject();
 
@@ -383,7 +396,7 @@ XFFrame* LwpSdwGroupLoaderV0102::CreateDrawObject()
         break;
     }
     case OT_BITMAP:
-        pDrawObj = new LwpDrawBitmap(m_pStream);
+        pDrawObj.reset(new LwpDrawBitmap(m_pStream));
         pDrawObj->SetObjectType(OT_BITMAP);
         break;
     }
@@ -392,12 +405,6 @@ XFFrame* LwpSdwGroupLoaderV0102::CreateDrawObject()
     if (pDrawObj && recType != OT_GROUP)
     {
         pRetObjct = pDrawObj->CreateXFDrawObject();
-    }
-
-    if (pDrawObj)
-    {
-        delete pDrawObj;
-        pDrawObj = nullptr;
     }
 
     return pRetObjct;

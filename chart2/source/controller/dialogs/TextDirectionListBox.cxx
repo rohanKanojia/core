@@ -17,32 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TextDirectionListBox.hxx"
-#include "ResId.hxx"
-#include "Strings.hrc"
-#include <svl/languageoptions.hxx>
-#include <vcl/window.hxx>
-#include <vcl/builderfactory.hxx>
+#include <TextDirectionListBox.hxx>
+#include <ResId.hxx>
+#include <strings.hrc>
 
 namespace chart
 {
 
-TextDirectionListBox::TextDirectionListBox( vcl::Window* pParent, vcl::Window* pWindow1, vcl::Window* pWindow2 ) :
-    svx::FrameDirectionListBox( pParent, WB_BORDER | WB_TABSTOP | WB_DROPDOWN)
+TextDirectionListBox::TextDirectionListBox(std::unique_ptr<weld::ComboBox> pControl)
+    : svx::FrameDirectionListBox(std::move(pControl))
 {
-    InsertEntryValue( SCH_RESSTR( STR_TEXT_DIRECTION_LTR ), FRMDIR_HORI_LEFT_TOP );
-    InsertEntryValue( SCH_RESSTR( STR_TEXT_DIRECTION_RTL ), FRMDIR_HORI_RIGHT_TOP );
-    InsertEntryValue( SCH_RESSTR( STR_TEXT_DIRECTION_SUPER ), FRMDIR_ENVIRONMENT );
-
-    if( !SvtLanguageOptions().IsCTLFontEnabled() )
-    {
-        Hide();
-        if( pWindow1 ) pWindow1->Hide();
-        if( pWindow2 ) pWindow2->Hide();
-    }
+    append(SvxFrameDirection::Horizontal_LR_TB, SchResId(STR_TEXT_DIRECTION_LTR));
+    append(SvxFrameDirection::Horizontal_RL_TB, SchResId(STR_TEXT_DIRECTION_RTL));
+    append(SvxFrameDirection::Environment, SchResId(STR_TEXT_DIRECTION_SUPER));
 }
-
-VCL_BUILDER_FACTORY(TextDirectionListBox)
 
 } //namespace chart
 

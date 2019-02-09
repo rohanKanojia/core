@@ -17,37 +17,33 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "cuires.hrc"
-#include "dialmgr.hxx"
-#include "newtabledlg.hxx"
+#include <newtabledlg.hxx>
 
-SvxNewTableDialog::SvxNewTableDialog( vcl::Window* pParent )
-    : m_pDialog( VclPtr<ModalDialog>::Create( pParent, "NewTableDialog", "cui/ui/newtabledialog.ui" ) )
+SvxNewTableDialog::SvxNewTableDialog(weld::Window* pWindow)
+    : GenericDialogController(pWindow, "cui/ui/newtabledialog.ui", "NewTableDialog")
+    , mxNumColumns(m_xBuilder->weld_spin_button("columns"))
+    , mxNumRows(m_xBuilder->weld_spin_button("rows"))
 {
-    m_pDialog->get(mpNumRows, "rows");
-    m_pDialog->get(mpNumColumns, "columns");
 }
 
 SvxNewTableDialog::~SvxNewTableDialog()
 {
-    mpNumColumns.clear();
-    mpNumRows.clear();
-    m_pDialog.disposeAndClear();
+    disposeOnce();
 }
 
 short SvxNewTableDialog::Execute()
 {
-    return m_pDialog->Execute();
+    return m_xDialog->run();
 }
 
 sal_Int32 SvxNewTableDialog::getRows() const
 {
-    return sal::static_int_cast< sal_Int32 >( mpNumRows->GetValue() );
+    return sal::static_int_cast< sal_Int32 >( mxNumRows->get_value() );
 }
 
 sal_Int32 SvxNewTableDialog::getColumns() const
 {
-    return sal::static_int_cast< sal_Int32 >( mpNumColumns->GetValue() );
+    return sal::static_int_cast< sal_Int32 >( mxNumColumns->get_value() );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

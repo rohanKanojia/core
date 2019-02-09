@@ -56,14 +56,13 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPFRIBTABLE_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPFRIBTABLE_HXX
 
-#include "lwpfrib.hxx"
+#include <lwpfrib.hxx>
 
 class LwpSuperTableLayout;
 class LwpFribTable : public LwpFrib
 {
 public:
     explicit LwpFribTable( LwpPara* pPara ) : LwpFrib(pPara){}
-    virtual ~LwpFribTable(){}
     void Read(LwpObjectStream* pObjStrm, sal_uInt16 len) override;
     LwpSuperTableLayout* GetSuperTable();
     void RegisterNewStyle();

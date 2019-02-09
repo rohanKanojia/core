@@ -20,54 +20,76 @@
 #ifndef INCLUDED_VCL_DIALOG_HXX
 #define INCLUDED_VCL_DIALOG_HXX
 
-#include <tools/solar.h>
+#include <memory>
 #include <vcl/dllapi.h>
 #include <vcl/syswin.hxx>
 #include <vcl/vclptr.hxx>
-
+#include <vcl/abstdlg.hxx>
 
 struct DialogImpl;
+class PushButton;
 class VclBox;
 class VclButtonBox;
 
 class VCL_DLLPUBLIC Dialog : public SystemWindow
 {
 public:
-    enum class InitFlag { Default, NoParent };
+    enum class InitFlag
+    {
+        /** Use given parent or get a default one using GetDefaultParent(...) */
+        Default,
+
+        /** No Parent */
+        NoParent
+    };
 
 private:
-    VclPtr<Dialog>  mpPrevExecuteDlg;
-    DialogImpl*     mpDialogImpl;
+    std::unique_ptr<DialogImpl> mpDialogImpl;
     long            mnMousePositioned;
     bool            mbInExecute;
+    bool            mbInSyncExecute;
     bool            mbInClose;
     bool            mbModalMode;
-    InitFlag        mnInitFlag; // used for deferred init
+    bool            mbPaintComplete;
+    bool const      mbForceBorderWindow;
+    InitFlag const  mnInitFlag; // used for deferred init
 
     VclPtr<VclButtonBox> mpActionArea;
     VclPtr<VclBox>       mpContentArea;
 
+    SAL_DLLPRIVATE void    RemoveFromDlgList();
     SAL_DLLPRIVATE void    ImplInitDialogData();
     SAL_DLLPRIVATE void    ImplInitSettings();
+    SAL_DLLPRIVATE VclPtr<vcl::Window> AddBorderWindow(vcl::Window* pParent, WinBits nBits);
 
     virtual void ApplySettings(vcl::RenderContext& rRenderContext) override;
 
     SAL_DLLPRIVATE         Dialog (const Dialog &) = delete;
     SAL_DLLPRIVATE         Dialog & operator= (const Dialog &) = delete;
 
-    DECL_DLLPRIVATE_LINK_TYPED( ImplAsyncCloseHdl, void*, void );
+    DECL_DLLPRIVATE_LINK(ImplAsyncCloseHdl, void*, void);
+    DECL_DLLPRIVATE_LINK(ResponseHdl, Button*, void);
+
+    // ensureRepaint - triggers Application::Yield until the dialog is
+    // completely repainted. Sometimes needed for dialogs showing progress
+    // during actions
+    void ensureRepaint();
 
 protected:
     using Window::ImplInit;
-    SAL_DLLPRIVATE void    ImplInit( vcl::Window* pParent, WinBits nStyle, InitFlag eFlag = InitFlag::Default );
+    void    ImplInit( vcl::Window* pParent, WinBits nStyle, InitFlag eFlag = InitFlag::Default );
+
+    /// Find and set the LOK notifier according to the pParent.
+    void ImplLOKNotifier(vcl::Window* pParent);
 
 public:
     SAL_DLLPRIVATE bool    IsInClose() const { return mbInClose; }
     virtual        void    doDeferredInit(WinBits nBits) override;
+    SAL_DLLPRIVATE void    disposeOwnedButtons();
 
 protected:
     explicit        Dialog( WindowType nType );
-    explicit        Dialog( vcl::Window* pParent, const OUString& rID, const OUString& rUIXMLDescription, WindowType nType, InitFlag eFlag = InitFlag::Default );
+    explicit        Dialog( vcl::Window* pParent, const OUString& rID, const OUString& rUIXMLDescription, WindowType nType, InitFlag eFlag = InitFlag::Default, bool bBorder = false );
     virtual void    Draw( OutputDevice* pDev, const Point& rPos, const Size& rSize, DrawFlags nFlags ) override;
     virtual void    settingOptimalLayoutSize(Window *pBox) override;
 
@@ -79,47 +101,86 @@ protected:
 public:
     explicit        Dialog( vcl::Window* pParent, WinBits nStyle = WB_STDDIALOG, InitFlag eFlag = InitFlag::Default );
     explicit        Dialog( vcl::Window* pParent, const OUString& rID, const OUString& rUIXMLDescription );
-    virtual         ~Dialog();
+    virtual         ~Dialog() override;
     virtual void    dispose() override;
 
-    virtual bool    Notify( NotifyEvent& rNEvt ) override;
+    // get the default parent for a dialog as is done in standard initialization
+    static vcl::Window* GetDefaultParent(WinBits nStyle);
+
+    virtual bool    EventNotify( NotifyEvent& rNEvt ) override;
     virtual void    StateChanged( StateChangedType nStateChange ) override;
     virtual void    DataChanged( const DataChangedEvent& rDCEvt ) override;
 
     virtual void queue_resize(StateChangedType eReason = StateChangedType::Layout) override;
-    virtual bool set_property(const OString &rKey, const OString &rValue) override;
+    virtual bool set_property(const OString &rKey, const OUString &rValue) override;
     VclButtonBox* get_action_area() { return mpActionArea; }
     VclBox* get_content_area() { return mpContentArea; }
 
     virtual bool    Close() override;
 
+    // try to extract content and return as Bitmap. To do that reliably, a Yield-loop
+    // like in Execute() has to be executed and it is necessary to detect when the
+    // paint is finished
+    virtual void PrePaint(vcl::RenderContext& rRenderContext) override;
+    virtual void PostPaint(vcl::RenderContext& rRenderContext) override;
+
+    // Screenshot interface
+    virtual std::vector<OString> getAllPageUIXMLDescriptions() const;
+    virtual bool selectPageByUIXMLDescription(const OString& rUIXMLDescription);
+    BitmapEx createScreenshot();
+
     virtual short   Execute();
     bool            IsInExecute() const { return mbInExecute; }
+    // Return true when dialog is synchronously executed (calling ::Execute())
+    bool            IsInSyncExecute() const { return mbInSyncExecute; };
 
-    // Dialog::Execute replacement API
-public:
-    virtual void    StartExecuteModal( const Link<Dialog&,void>& rEndDialogHdl );
-    long            GetResult() const;
+    virtual FactoryFunction GetUITestFactory() const override;
+
 private:
-    bool            ImplStartExecuteModal();
+    bool            ImplStartExecute();
     static void     ImplEndExecuteModal();
-    bool            ImplHandleCmdEvent ( const CommandEvent& rCEvent );
+    void            ImplSetModalInputMode(bool bModal);
 public:
+
+    /// Returns true if the dialog successfully starts
+    bool StartExecuteAsync(const std::function<void(sal_Int32)> &rEndDialogFn)
+    {
+        VclAbstractDialog::AsyncContext aCtx;
+        aCtx.mxOwner = this;
+        aCtx.maEndDialogFn = rEndDialogFn;
+        return StartExecuteAsync(aCtx);
+    }
+
+    /// Commence execution of a modal dialog, disposes owner on failure
+    virtual bool    StartExecuteAsync(VclAbstractDialog::AsyncContext &rCtx);
 
     // Dialog::Execute replacement API
 
 
-    void            EndDialog( long nResult = 0 );
-    static void     EndAllDialogs( vcl::Window* pParent=nullptr );
+    void            EndDialog( long nResult = RET_CANCEL );
+    static void     EndAllDialogs( vcl::Window const * pParent );
+
+    // returns the most recent of the currently executing modal dialogs
+    static VclPtr<Dialog> GetMostRecentExecutingDialog();
 
     void            GetDrawWindowBorder( sal_Int32& rLeftBorder, sal_Int32& rTopBorder,
                                          sal_Int32& rRightBorder, sal_Int32& rBottomBorder ) const;
 
     void            SetModalInputMode( bool bModal );
-    void            SetModalInputMode( bool bModal, bool bSubModalDialogs );
     bool            IsModalInputMode() const { return mbModalMode; }
 
     void            GrabFocusToFirstControl();
+    virtual void    Resize() override;
+
+    void            Activate() override;
+
+
+    void            SetInstallLOKNotifierHdl(const Link<void*, vcl::ILibreOfficeKitNotifier*>& rLink);
+
+    void            add_button(PushButton* pButton, int nResponse, bool bTransferOwnership);
+    void            set_default_response(int nResponse);
+    int             get_default_response();
+    vcl::Window*    get_widget_for_response(int nResponse);
 };
 
 class VCL_DLLPUBLIC ModelessDialog : public Dialog
@@ -134,8 +195,7 @@ public:
 class VCL_DLLPUBLIC ModalDialog : public Dialog
 {
 public:
-    explicit        ModalDialog( vcl::Window* pParent, WinBits nStyle = WB_STDMODAL );
-    explicit        ModalDialog( vcl::Window* pParent, const OUString& rID, const OUString& rUIXMLDescription );
+    explicit        ModalDialog( vcl::Window* pParent, const OUString& rID, const OUString& rUIXMLDescription, bool bBorder = false );
 
 protected:
     using Window::Show;

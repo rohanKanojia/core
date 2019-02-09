@@ -18,8 +18,9 @@
  */
 
 #include <sfx2/minfitem.hxx>
+#include <sal/log.hxx>
 
-SfxPoolItem* SfxMacroInfoItem::CreateDefault() { DBG_ASSERT(false, "No SfxMacroInfItem factory available"); return nullptr; }
+SfxPoolItem* SfxMacroInfoItem::CreateDefault() { SAL_WARN( "sfx", "No SfxMacroInfItem factory available"); return nullptr; }
 
 
 SfxMacroInfoItem::SfxMacroInfoItem(
@@ -37,20 +38,6 @@ SfxMacroInfoItem::SfxMacroInfoItem(
     aCommentText(rComment)
 {
 }
-
-
-// copy constructor
-
-SfxMacroInfoItem::SfxMacroInfoItem(const SfxMacroInfoItem& rCopy):
-    SfxPoolItem(rCopy),
-    pBasicManager(rCopy.pBasicManager),
-    aLibName(rCopy.aLibName),
-    aModuleName(rCopy.aModuleName),
-    aMethodName(rCopy.aMethodName),
-    aCommentText(rCopy.aCommentText)
-{
-}
-
 
 // op ==
 

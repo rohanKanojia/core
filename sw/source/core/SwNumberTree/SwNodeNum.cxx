@@ -17,7 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <osl/diagnose.h>
 #include <editeng/svxenum.hxx>
+#include <svl/stritem.hxx>
+#include <svl/intitem.hxx>
 #include <numrule.hxx>
 #include <SwNodeNum.hxx>
 #include <ndtxt.hxx>
@@ -25,17 +28,17 @@
 #include <IDocumentListItems.hxx>
 #include <doc.hxx>
 
-SwNodeNum::SwNodeNum( SwTextNode* pTextNode )
-    : SwNumberTreeNode(),
-      mpTextNode( pTextNode ),
-      mpNumRule( nullptr )
+SwNodeNum::SwNodeNum(SwTextNode* pTextNode, bool const isHiddenRedlines)
+    : mpTextNode( pTextNode )
+    , mpNumRule( nullptr )
+    , m_isHiddenRedlines(isHiddenRedlines)
 {
 }
 
 SwNodeNum::SwNodeNum( SwNumRule* pNumRule )
-    : SwNumberTreeNode(),
-      mpTextNode( nullptr ),
-      mpNumRule( pNumRule )
+    : mpTextNode( nullptr )
+    , mpNumRule( pNumRule )
+    , m_isHiddenRedlines(false)
 {
 }
 
@@ -85,11 +88,12 @@ void SwNodeNum::PreAdd()
     }
     OSL_ENSURE( GetNumRule(),
             "<SwNodeNum::PreAdd()> - no list style set at <SwNodeNum> instance" );
-    if ( GetNumRule() && GetTextNode() )
+    if (!m_isHiddenRedlines && GetNumRule() && GetTextNode())
     {
         GetNumRule()->AddTextNode( *(GetTextNode()) );
     }
 
+    if (!m_isHiddenRedlines)
     {
         if ( GetTextNode() &&
              GetTextNode()->GetNodes().IsDocNodes() )
@@ -106,14 +110,14 @@ void SwNodeNum::PostRemove()
     OSL_ENSURE( GetNumRule(),
             "<SwNodeNum::PostRemove()> - no list style set at <SwNodeNum> instance" );
 
-    if ( GetTextNode() )
+    if (!m_isHiddenRedlines && GetTextNode())
     {
         GetTextNode()->getIDocumentListItems().removeListItem( *this );
     }
 
     if ( GetNumRule() )
     {
-        if ( GetTextNode() )
+        if (!m_isHiddenRedlines && GetTextNode())
         {
             GetNumRule()->RemoveTextNode( *(GetTextNode()) );
         }
@@ -181,26 +185,12 @@ bool SwNodeNum::IsCounted() const
 // #i64010#
 bool SwNodeNum::HasCountedChildren() const
 {
-    bool bResult = false;
-
-    tSwNumberTreeChildren::const_iterator aIt;
-
-    for (aIt = mChildren.begin(); aIt != mChildren.end(); ++aIt)
-    {
-        SwNodeNum* pChild( dynamic_cast<SwNodeNum*>(*aIt) );
-        OSL_ENSURE( pChild,
-                "<SwNodeNum::HasCountedChildren()> - unexpected type of child" );
-        if ( pChild &&
-             ( pChild->IsCountedForNumbering() ||
-               pChild->HasCountedChildren() ) )
-        {
-            bResult = true;
-
-            break;
-        }
-    }
-
-    return bResult;
+    return std::any_of(mChildren.begin(), mChildren.end(),
+        [](SwNumberTreeNode* pNode) {
+            SwNodeNum* pChild( dynamic_cast<SwNodeNum*>(pNode) );
+            OSL_ENSURE( pChild, "<SwNodeNum::HasCountedChildren()> - unexpected type of child" );
+            return pChild && (pChild->IsCountedForNumbering() || pChild->HasCountedChildren());
+        });
 }
 // #i64010#
 bool SwNodeNum::IsCountedForNumbering() const
@@ -310,10 +300,10 @@ void SwNodeNum::HandleNumberTreeRootNodeDelete( SwNodeNum& rNodeNum )
 
     // unregister all number tree node entries, which correspond to a text node,
     // about the deletion of the number tree root node.
-    _UnregisterMeAndChildrenDueToRootDelete( *pRootNode );
+    UnregisterMeAndChildrenDueToRootDelete( *pRootNode );
 }
 
-void SwNodeNum::_UnregisterMeAndChildrenDueToRootDelete( SwNodeNum& rNodeNum )
+void SwNodeNum::UnregisterMeAndChildrenDueToRootDelete( SwNodeNum& rNodeNum )
 {
     const bool bIsPhantom( rNodeNum.IsPhantom() );
     tSwNumberTreeChildren::size_type nAllowedChildCount( 0 );
@@ -324,7 +314,7 @@ void SwNodeNum::_UnregisterMeAndChildrenDueToRootDelete( SwNodeNum& rNodeNum )
         SwNodeNum* pChildNode( dynamic_cast<SwNodeNum*>((*rNodeNum.mChildren.begin())) );
         if ( !pChildNode )
         {
-            OSL_FAIL( "<SwNodeNum::_UnregisterMeAndChildrenDueToRootDelete(..)> - unknown number tree node child" );
+            OSL_FAIL( "<SwNodeNum::UnregisterMeAndChildrenDueToRootDelete(..)> - unknown number tree node child" );
             ++nAllowedChildCount;
             continue;
         }
@@ -337,7 +327,7 @@ void SwNodeNum::_UnregisterMeAndChildrenDueToRootDelete( SwNodeNum& rNodeNum )
             bDone = true;
         }
 
-        _UnregisterMeAndChildrenDueToRootDelete( *pChildNode );
+        UnregisterMeAndChildrenDueToRootDelete( *pChildNode );
     }
 
     if ( !bIsPhantom )
@@ -368,7 +358,7 @@ const SwNodeNum* SwNodeNum::GetPrecedingNodeNumOf( const SwTextNode& rTextNode )
     const SwNodeNum* pPrecedingNodeNum( nullptr );
 
     // #i83479#
-    SwNodeNum aNodeNumForTextNode( const_cast<SwTextNode*>(&rTextNode) );
+    SwNodeNum aNodeNumForTextNode( const_cast<SwTextNode*>(&rTextNode), false/*doesn't matter*/ );
 
     pPrecedingNodeNum = dynamic_cast<const SwNodeNum*>(
                             GetRoot()

@@ -22,8 +22,11 @@
 #include <rtl/string.hxx>
 #include <rtl/ustring.hxx>
 #include <unotools/tempfile.hxx>
+#include <vcl/mtfxmldump.hxx>
 
 #include <cppunit/TestAssert.h>
+
+#include <vector>
 
 class OOO_DLLPUBLIC_TEST XmlTestTools
 {
@@ -31,11 +34,13 @@ public:
     /// Return xmlDocPtr representation of the XML stream read from pStream.
     static xmlDocPtr parseXmlStream(SvStream* pStream);
 
+    static xmlDocPtr dumpAndParse(MetafileXmlDump& rDumper, const GDIMetaFile& rGDIMetaFile);
+
 protected:
     XmlTestTools();
     virtual ~XmlTestTools();
 
-    static xmlDocPtr parseXml(utl::TempFile& aTempFile);
+    static xmlDocPtr parseXml(utl::TempFile const & aTempFile);
 
     virtual void registerNamespaces(xmlXPathContextPtr& pXmlXpathCtx);
 
@@ -62,6 +67,8 @@ protected:
     void          assertXPath(xmlDocPtr pXmlDoc, const OString& rXPath,
                               const OString& rAttribute = OString(),
                               const OUString& rExpectedValue = OUString());
+    void          assertXPathAttrs(xmlDocPtr pXmlDoc, const OString& rXPath,
+                          const std::vector<std::pair<OString, OUString>>& aPairVector);
     /**
      * Assert that rXPath exists, and returns exactly nNumberOfNodes nodes.
      * Useful for checking that we do _not_ export some node (nNumberOfNodes == 0).
@@ -71,6 +78,11 @@ protected:
      * Assert that rXPath exists, and its content equals rContent.
      */
     void          assertXPathContent(xmlDocPtr pXmlDoc, const OString& rXPath, const OUString& rContent);
+    /**
+     * Assert that rXPath exists and it has an rNSPrefix=rNSHref namespace definition.
+     */
+    void assertXPathNSDef(xmlDocPtr pXmlDoc, const OString& rXPath, const OUString& rNSPrefix,
+                          const OUString& rNSHref);
     /**
      * Assert that rXPath exists, and has exactly nNumberOfChildNodes child nodes.
      * Useful for checking that we do have a no child nodes to a specific node (nNumberOfChildNodes == 0).

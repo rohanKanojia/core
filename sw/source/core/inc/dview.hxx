@@ -30,8 +30,8 @@ class SdrUndoManager;
 
 class SwDrawView : public FmFormView
 {
-    Point           aAnchorPoint;       // anchor position
-    SwViewShellImp      &rImp;               // a view is always part of a shell
+    Point           m_aAnchorPoint;       // anchor position
+    SwViewShellImp      &m_rImp;               // a view is always part of a shell
 
     const SwFrame *CalcAnchor();
 
@@ -50,7 +50,7 @@ class SwDrawView : public FmFormView
         optional input parameter - 'child' object, which will not be considered
         on the calculation of the maximal order number
     */
-    static sal_uInt32 _GetMaxChildOrdNum( const SwFlyFrame& _rParentObj,
+    static sal_uInt32 GetMaxChildOrdNum( const SwFlyFrame& _rParentObj,
                                    const SdrObject* _pExclChildObj = nullptr );
 
     /** method to move 'repeated' objects of the given moved object to the
@@ -64,7 +64,7 @@ class SwDrawView : public FmFormView
         input parameter - data collection of moved 'child' objects - the 'repeated'
         ones of these 'children' will also been moved.
     */
-    void _MoveRepeatedObjs( const SwAnchoredObject& _rMovedAnchoredObj,
+    void MoveRepeatedObjs( const SwAnchoredObject& _rMovedAnchoredObj,
                             const std::vector<SdrObject*>& _rMovedChildObjs ) const;
 
 protected:
@@ -73,13 +73,16 @@ protected:
 
     // override to allow extra handling when picking SwVirtFlyDrawObj's
     using FmFormView::CheckSingleSdrObjectHit;
-    virtual SdrObject* CheckSingleSdrObjectHit(const Point& rPnt, sal_uInt16 nTol, SdrObject* pObj, SdrPageView* pPV, SdrSearchOptions nOptions, const SetOfByte* pMVisLay) const override;
+    virtual SdrObject* CheckSingleSdrObjectHit(const Point& rPnt, sal_uInt16 nTol, SdrObject* pObj, SdrPageView* pPV, SdrSearchOptions nOptions, const SdrLayerIDSet* pMVisLay) const override;
 
     // support enhanced text edit for draw objects
     virtual SdrUndoManager* getSdrUndoManagerForEnhancedTextEdit() const override;
 
 public:
-    SwDrawView( SwViewShellImp &rI, SdrModel *pMd, OutputDevice* pOutDev=nullptr );
+    SwDrawView(
+        SwViewShellImp &rI,
+        FmFormModel& rFmFormModel,
+        OutputDevice* pOutDev);
 
     // from base class
     virtual SdrObject*   GetMaxToTopObj(SdrObject* pObj) const override;
@@ -90,21 +93,21 @@ public:
     // Override to reuse edit background color in active text edit view (OutlinerView)
     virtual void ModelHasChanged() override;
 
-    virtual void         ObjOrderChanged( SdrObject* pObj, sal_uLong nOldPos,
-                                            sal_uLong nNewPos ) override;
-    virtual bool TakeDragLimit(SdrDragMode eMode, Rectangle& rRect) const override;
-    virtual void MakeVisible( const Rectangle&, vcl::Window &rWin ) override;
+    virtual void         ObjOrderChanged( SdrObject* pObj, size_t nOldPos,
+                                            size_t nNewPos ) override;
+    virtual bool TakeDragLimit(SdrDragMode eMode, tools::Rectangle& rRect) const override;
+    virtual void MakeVisible( const tools::Rectangle&, vcl::Window &rWin ) override;
     virtual void CheckPossibilities() override;
 
-    const SwViewShellImp &Imp() const { return rImp; }
-          SwViewShellImp &Imp()       { return rImp; }
+    const SwViewShellImp &Imp() const { return m_rImp; }
+          SwViewShellImp &Imp()       { return m_rImp; }
 
     // anchor and Xor for dragging
     void ShowDragAnchor();
 
     virtual void DeleteMarked() override;
 
-    inline void ValidateMarkList() { FlushComeBackTimer(); }
+    void ValidateMarkList() { FlushComeBackTimer(); }
 
     // #i99665#
     bool IsAntiAliasing() const;
@@ -112,6 +115,9 @@ public:
     // method to replace marked/selected <SwDrawVirtObj>
     // by its reference object for delete of selection and group selection
     static void ReplaceMarkedDrawVirtObjs( SdrMarkView& _rMarkView );
+
+    /// See SdrMarkView::GetSfxViewShell().
+    SfxViewShell* GetSfxViewShell() const override;
 };
 
 #endif

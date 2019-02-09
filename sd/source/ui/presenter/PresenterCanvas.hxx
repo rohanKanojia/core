@@ -20,31 +20,26 @@
 #ifndef INCLUDED_SD_SOURCE_UI_PRESENTER_PRESENTERCANVAS_HXX
 #define INCLUDED_SD_SOURCE_UI_PRESENTER_PRESENTERCANVAS_HXX
 
-#include "CanvasUpdateRequester.hxx"
 #include <basegfx/range/b2drectangle.hxx>
 #include <com/sun/star/awt/Point.hpp>
-#include <com/sun/star/awt/XWindow.hpp>
 #include <com/sun/star/awt/XWindowListener.hpp>
-#include <com/sun/star/geometry/AffineMatrix2D.hpp>
-#include <com/sun/star/lang/XInitialization.hpp>
-#include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/rendering/XSpriteCanvas.hpp>
-#include <com/sun/star/rendering/XBitmapCanvas.hpp>
-#include <com/sun/star/rendering/VolatileContentDestroyedException.hpp>
+#include <com/sun/star/rendering/XBitmap.hpp>
 #include <cppuhelper/basemutex.hxx>
 #include <cppuhelper/compbase.hxx>
 #include <memory>
 
+namespace sd { namespace presenter { class CanvasUpdateRequester; } }
+namespace com { namespace sun { namespace star { namespace awt { class XWindow; } } } }
+namespace com { namespace sun { namespace star { namespace geometry { struct AffineMatrix2D; } } } }
+
 namespace sd { namespace presenter {
 
-namespace {
-    typedef ::cppu::WeakComponentImplHelper <
-        css::rendering::XSpriteCanvas,
-        css::rendering::XBitmap,
-        css::awt::XWindowListener
-    > PresenterCanvasInterfaceBase;
-}
+typedef ::cppu::WeakComponentImplHelper <
+    css::rendering::XSpriteCanvas,
+    css::rendering::XBitmap,
+    css::awt::XWindowListener
+> PresenterCanvasInterfaceBase;
 
 /** Wrapper around a shared canvas that forwards most of its methods to the
     shared canvas.  Most notable differences are:
@@ -96,12 +91,11 @@ public:
         const css::uno::Reference<css::rendering::XCanvas>& rxSharedCanvas,
         const css::uno::Reference<css::awt::XWindow>& rxSharedWindow,
         const css::uno::Reference<css::awt::XWindow>& rxWindow);
-    virtual ~PresenterCanvas();
+    virtual ~PresenterCanvas() override;
     PresenterCanvas(const PresenterCanvas&) = delete;
     PresenterCanvas& operator=(const PresenterCanvas&) = delete;
 
-    virtual void SAL_CALL disposing()
-        throw (css::uno::RuntimeException) override;
+    virtual void SAL_CALL disposing() override;
 
     css::awt::Point GetOffset (const css::uno::Reference<css::awt::XWindow>& rxBaseWindow);
 
@@ -120,46 +114,39 @@ public:
     */
     css::uno::Reference<css::rendering::XPolyPolygon2D> UpdateSpriteClip (
         const css::uno::Reference<css::rendering::XPolyPolygon2D>& rxOriginalClip,
-        const css::geometry::RealPoint2D& rLocation,
-        const css::geometry::RealSize2D& rSize);
+        const css::geometry::RealPoint2D& rLocation);
 
     // XCanvas
 
-    virtual void SAL_CALL clear()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL clear() override;
 
     virtual void SAL_CALL drawPoint (
         const css::geometry::RealPoint2D& aPoint,
         const css::rendering::ViewState& aViewState,
-        const css::rendering::RenderState& aRenderState)
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+        const css::rendering::RenderState& aRenderState) override;
 
     virtual void SAL_CALL drawLine (
         const css::geometry::RealPoint2D& aStartPoint,
         const css::geometry::RealPoint2D& aEndPoint,
         const css::rendering::ViewState& aViewState,
-        const css::rendering::RenderState& aRenderState)
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+        const css::rendering::RenderState& aRenderState) override;
 
     virtual void SAL_CALL drawBezier (
         const css::geometry::RealBezierSegment2D& aBezierSegment,
         const css::geometry::RealPoint2D& aEndPoint,
         const css::rendering::ViewState& aViewState,
-        const css::rendering::RenderState& aRenderState)
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+        const css::rendering::RenderState& aRenderState) override;
 
     virtual css::uno::Reference<css::rendering::XCachedPrimitive> SAL_CALL drawPolyPolygon (
         const css::uno::Reference< css::rendering::XPolyPolygon2D >& xPolyPolygon,
         const css::rendering::ViewState& aViewState,
-        const css::rendering::RenderState& aRenderState)
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+        const css::rendering::RenderState& aRenderState) override;
 
     virtual css::uno::Reference<css::rendering::XCachedPrimitive> SAL_CALL strokePolyPolygon (
         const css::uno::Reference< css::rendering::XPolyPolygon2D >& xPolyPolygon,
         const css::rendering::ViewState& aViewState,
         const css::rendering::RenderState& aRenderState,
-        const css::rendering::StrokeAttributes& aStrokeAttributes)
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+        const css::rendering::StrokeAttributes& aStrokeAttributes) override;
 
     virtual css::uno::Reference<css::rendering::XCachedPrimitive> SAL_CALL
         strokeTexturedPolyPolygon (
@@ -167,10 +154,7 @@ public:
             const css::rendering::ViewState& aViewState,
             const css::rendering::RenderState& aRenderState,
             const css::uno::Sequence< css::rendering::Texture >& aTextures,
-            const css::rendering::StrokeAttributes& aStrokeAttributes)
-        throw (css::lang::IllegalArgumentException,
-            css::rendering::VolatileContentDestroyedException,
-            css::uno::RuntimeException, std::exception) override;
+            const css::rendering::StrokeAttributes& aStrokeAttributes) override;
 
     virtual css::uno::Reference<css::rendering::XCachedPrimitive> SAL_CALL
         strokeTextureMappedPolyPolygon(
@@ -179,36 +163,27 @@ public:
             const css::rendering::RenderState& aRenderState,
             const css::uno::Sequence<css::rendering::Texture>& aTextures,
             const css::uno::Reference<css::geometry::XMapping2D>& xMapping,
-            const css::rendering::StrokeAttributes& aStrokeAttributes)
-        throw (css::lang::IllegalArgumentException,
-            css::rendering::VolatileContentDestroyedException,
-            css::uno::RuntimeException, std::exception) override;
+            const css::rendering::StrokeAttributes& aStrokeAttributes) override;
 
     virtual css::uno::Reference<css::rendering::XPolyPolygon2D> SAL_CALL
         queryStrokeShapes(
             const css::uno::Reference<css::rendering::XPolyPolygon2D>& xPolyPolygon,
             const css::rendering::ViewState& aViewState,
             const css::rendering::RenderState& aRenderState,
-            const css::rendering::StrokeAttributes& aStrokeAttributes)
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+            const css::rendering::StrokeAttributes& aStrokeAttributes) override;
 
     virtual css::uno::Reference<css::rendering::XCachedPrimitive> SAL_CALL
         fillPolyPolygon(
             const css::uno::Reference<css::rendering::XPolyPolygon2D>& xPolyPolygon,
             const css::rendering::ViewState& aViewState,
-            const css::rendering::RenderState& aRenderState)
-        throw (css::lang::IllegalArgumentException,
-            css::uno::RuntimeException, std::exception) override;
+            const css::rendering::RenderState& aRenderState) override;
 
     virtual css::uno::Reference<css::rendering::XCachedPrimitive> SAL_CALL
         fillTexturedPolyPolygon(
             const css::uno::Reference<css::rendering::XPolyPolygon2D>& xPolyPolygon,
             const css::rendering::ViewState& aViewState,
             const css::rendering::RenderState& aRenderState,
-            const css::uno::Sequence<css::rendering::Texture>& xTextures)
-        throw (css::lang::IllegalArgumentException,
-            css::rendering::VolatileContentDestroyedException,
-            css::uno::RuntimeException, std::exception) override;
+            const css::uno::Sequence<css::rendering::Texture>& xTextures) override;
 
     virtual css::uno::Reference<css::rendering::XCachedPrimitive> SAL_CALL
         fillTextureMappedPolyPolygon(
@@ -216,24 +191,18 @@ public:
             const css::rendering::ViewState& aViewState,
             const css::rendering::RenderState& aRenderState,
             const css::uno::Sequence< css::rendering::Texture >& xTextures,
-            const css::uno::Reference< css::geometry::XMapping2D >& xMapping)
-        throw (css::lang::IllegalArgumentException,
-            css::rendering::VolatileContentDestroyedException,
-            css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference< css::geometry::XMapping2D >& xMapping) override;
 
     virtual css::uno::Reference<css::rendering::XCanvasFont> SAL_CALL
         createFont(
             const css::rendering::FontRequest& aFontRequest,
             const css::uno::Sequence< css::beans::PropertyValue >& aExtraFontProperties,
-            const css::geometry::Matrix2D& aFontMatrix)
-        throw (css::lang::IllegalArgumentException,
-            css::uno::RuntimeException, std::exception) override;
+            const css::geometry::Matrix2D& aFontMatrix) override;
 
     virtual css::uno::Sequence<css::rendering::FontInfo> SAL_CALL
         queryAvailableFonts(
             const css::rendering::FontInfo& aFilter,
-            const css::uno::Sequence< css::beans::PropertyValue >& aFontProperties)
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+            const css::uno::Sequence< css::beans::PropertyValue >& aFontProperties) override;
 
     virtual css::uno::Reference<css::rendering::XCachedPrimitive> SAL_CALL
         drawText(
@@ -241,100 +210,74 @@ public:
             const css::uno::Reference< css::rendering::XCanvasFont >& xFont,
             const css::rendering::ViewState& aViewState,
             const css::rendering::RenderState& aRenderState,
-            ::sal_Int8 nTextDirection)
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+            ::sal_Int8 nTextDirection) override;
 
     virtual css::uno::Reference<css::rendering::XCachedPrimitive> SAL_CALL
         drawTextLayout(
             const css::uno::Reference< css::rendering::XTextLayout >& xLayoutetText,
             const css::rendering::ViewState& aViewState,
-            const css::rendering::RenderState& aRenderState)
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+            const css::rendering::RenderState& aRenderState) override;
 
     virtual css::uno::Reference<css::rendering::XCachedPrimitive> SAL_CALL
         drawBitmap(
             const css::uno::Reference< css::rendering::XBitmap >& xBitmap,
             const css::rendering::ViewState& aViewState,
-            const css::rendering::RenderState& aRenderState)
-        throw (css::lang::IllegalArgumentException,
-            css::rendering::VolatileContentDestroyedException,
-            css::uno::RuntimeException, std::exception) override;
+            const css::rendering::RenderState& aRenderState) override;
 
     virtual css::uno::Reference<css::rendering::XCachedPrimitive> SAL_CALL
         drawBitmapModulated(
             const css::uno::Reference< css::rendering::XBitmap>& xBitmap,
             const css::rendering::ViewState& aViewState,
-            const css::rendering::RenderState& aRenderState)
-        throw (css::lang::IllegalArgumentException,
-            css::rendering::VolatileContentDestroyedException,
-            css::uno::RuntimeException, std::exception) override;
+            const css::rendering::RenderState& aRenderState) override;
 
     virtual css::uno::Reference<css::rendering::XGraphicDevice> SAL_CALL
-        getDevice()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getDevice() override;
 
     // XSpriteCanvas
 
     css::uno::Reference< css::rendering::XAnimatedSprite > SAL_CALL
         createSpriteFromAnimation (
-            const css::uno::Reference< css::rendering::XAnimation >& animation)
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference< css::rendering::XAnimation >& animation) override;
 
     css::uno::Reference< css::rendering::XAnimatedSprite > SAL_CALL
         createSpriteFromBitmaps (
             const css::uno::Sequence<
                 css::uno::Reference< css::rendering::XBitmap > >& animationBitmaps,
-            ::sal_Int8 interpolationMode)
-        throw (css::lang::IllegalArgumentException,
-            css::rendering::VolatileContentDestroyedException,
-            css::uno::RuntimeException, std::exception) override;
+            ::sal_Int8 interpolationMode) override;
 
     css::uno::Reference< css::rendering::XCustomSprite > SAL_CALL
         createCustomSprite (
-            const css::geometry::RealSize2D& spriteSize)
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+            const css::geometry::RealSize2D& spriteSize) override;
 
     css::uno::Reference< css::rendering::XSprite > SAL_CALL
         createClonedSprite (
-            const css::uno::Reference< css::rendering::XSprite >& original)
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference< css::rendering::XSprite >& original) override;
 
-    sal_Bool SAL_CALL updateScreen (sal_Bool bUpdateAll)
-        throw (css::uno::RuntimeException, std::exception) override;
+    sal_Bool SAL_CALL updateScreen (sal_Bool bUpdateAll) override;
 
     // XEventListener
 
-    virtual void SAL_CALL disposing (const css::lang::EventObject& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing (const css::lang::EventObject& rEvent) override;
 
     // XWindowListener
 
-    virtual void SAL_CALL windowResized (const css::awt::WindowEvent& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL windowResized (const css::awt::WindowEvent& rEvent) override;
 
-    virtual void SAL_CALL windowMoved (const css::awt::WindowEvent& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL windowMoved (const css::awt::WindowEvent& rEvent) override;
 
-    virtual void SAL_CALL windowShown (const css::lang::EventObject& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL windowShown (const css::lang::EventObject& rEvent) override;
 
-    virtual void SAL_CALL windowHidden (const css::lang::EventObject& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL windowHidden (const css::lang::EventObject& rEvent) override;
 
     // XBitmap
 
-    virtual css::geometry::IntegerSize2D SAL_CALL getSize()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::geometry::IntegerSize2D SAL_CALL getSize() override;
 
-    virtual sal_Bool SAL_CALL hasAlpha()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL hasAlpha() override;
 
     virtual css::uno::Reference<css::rendering::XBitmap> SAL_CALL getScaledBitmap(
         const css::geometry::RealSize2D& rNewSize,
-        sal_Bool bFast)
-        throw (css::uno::RuntimeException,
-            css::lang::IllegalArgumentException,
-            css::rendering::VolatileContentDestroyedException, std::exception) override;
+        sal_Bool bFast) override;
 
 private:
     css::uno::Reference<css::rendering::XSpriteCanvas> mxUpdateCanvas;
@@ -353,11 +296,7 @@ private:
     /** The UpdateRequester is used by updateScreen() to schedule
         updateScreen() calls at the shared canvas.
     */
-    std::shared_ptr<CanvasUpdateRequester> mpUpdateRequester;
-
-    /** The clip rectangle as given to SetClip().
-    */
-    css::awt::Rectangle maClipRectangle;
+    std::shared_ptr<CanvasUpdateRequester> m_pUpdateRequester;
 
     /** When this flag is true (it is set to true after every call to
         updateScreen()) then the next call to MergeViewState updates the
@@ -373,11 +312,10 @@ private:
 
     css::rendering::ViewState MergeViewState (const css::rendering::ViewState& rViewState);
 
-    /** This method throws a DisposedException when the object has already been
+    /** @throws css::lang::DisposedException when the object has already been
         disposed.
     */
-    void ThrowIfDisposed()
-        throw (css::lang::DisposedException);
+    void ThrowIfDisposed();
 };
 
 } } // end of namespace ::sd::presenter

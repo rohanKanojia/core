@@ -29,19 +29,19 @@ namespace drawinglayer { namespace primitive2d {
 class OverlayStaticRectanglePrimitive : public DiscreteMetricDependentPrimitive2D
 {
 private:
-    basegfx::B2DPoint maPosition;
-    basegfx::B2DSize maSize;
+    basegfx::B2DPoint const maPosition;
+    basegfx::B2DSize const maSize;
 
     // the graphic definition
-    basegfx::BColor maStrokeColor;
-    basegfx::BColor maFillColor;
-    double mfTransparence;
+    basegfx::BColor const maStrokeColor;
+    basegfx::BColor const maFillColor;
+    double const mfTransparence;
 
     // the rotation of the primitive itself
-    double mfRotation;
+    double const mfRotation;
 
 protected:
-    virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
+    virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const override;
 
 public:
     OverlayStaticRectanglePrimitive(
@@ -72,22 +72,22 @@ namespace drawinglayer
         {
         private:
             // The BitmapEx to use, PixelSize is used
-            BitmapEx                                maBitmapEx;
+            BitmapEx const                                maBitmapEx;
 
             // The logic position
-            basegfx::B2DPoint                       maBasePosition;
+            basegfx::B2DPoint const                       maBasePosition;
 
             // The pixel inside the BitmapEx which is assocciated with
             // the target position (offset in the bitmap)
-            sal_uInt16                              mnCenterX;
-            sal_uInt16                              mnCenterY;
+            sal_uInt16 const                              mnCenterX;
+            sal_uInt16 const                              mnCenterY;
 
             // evtl. rotation and shear around center
-            double                                  mfShearX;
-            double                                  mfRotation;
+            double const                                  mfShearX;
+            double const                                  mfRotation;
 
         protected:
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const override;
 
         public:
             OverlayBitmapExPrimitive(
@@ -95,8 +95,8 @@ namespace drawinglayer
                 const basegfx::B2DPoint& rBasePosition,
                 sal_uInt16 nCenterX,
                 sal_uInt16 nCenterY,
-                double fShearX = 0.0,
-                double fRotation = 0.0);
+                double fShearX,
+                double fRotation);
 
             // data access
             const BitmapEx& getBitmapEx() const { return maBitmapEx; }
@@ -124,15 +124,15 @@ namespace drawinglayer
         {
         private:
             // The logic position
-            basegfx::B2DPoint                       maBasePosition;
+            basegfx::B2DPoint const                       maBasePosition;
 
-            // The stripe colors and legth
-            basegfx::BColor                         maRGBColorA;
-            basegfx::BColor                         maRGBColorB;
-            double                                  mfDiscreteDashLength;
+            // The stripe colors and length
+            basegfx::BColor const                         maRGBColorA;
+            basegfx::BColor const                         maRGBColorB;
+            double const                                  mfDiscreteDashLength;
 
         protected:
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const override;
 
         public:
             OverlayCrosshairPrimitive(
@@ -157,7 +157,7 @@ namespace drawinglayer
 
 
 // Overlay helper class for a hatch rectangle as used e.g. for text object
-// selection hilighting
+// selection highlighting
 namespace drawinglayer
 {
     namespace primitive2d
@@ -166,21 +166,21 @@ namespace drawinglayer
         {
         private:
             // the logic rectangle definition
-            basegfx::B2DRange               maObjectRange;
+            basegfx::B2DRange const               maObjectRange;
 
             // the graphic definition
-            basegfx::BColor                 maColor;
-            double                          mfTransparence;
+            basegfx::BColor const                 maColor;
+            double const                          mfTransparence;
 
             // the discrete grow and shrink of the box
-            double                          mfDiscreteGrow;
-            double                          mfDiscreteShrink;
+            double const                          mfDiscreteGrow;
+            double const                          mfDiscreteShrink;
 
             // the rotation of the primitive itself
-            double                          mfRotation;
+            double const                          mfRotation;
 
         protected:
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const override;
 
         public:
             OverlayRectanglePrimitive(
@@ -225,18 +225,18 @@ namespace drawinglayer
         {
         private:
             // The logic position
-            basegfx::B2DPoint                       maBasePosition;
+            basegfx::B2DPoint const                       maBasePosition;
 
             // the style
-            HelplineStyle                           meStyle;
+            HelplineStyle const                           meStyle;
 
-            // The stripe colors and legth
-            basegfx::BColor                         maRGBColorA;
-            basegfx::BColor                         maRGBColorB;
-            double                                  mfDiscreteDashLength;
+            // The stripe colors and length
+            basegfx::BColor const                         maRGBColorA;
+            basegfx::BColor const                         maRGBColorB;
+            double const                                  mfDiscreteDashLength;
 
         protected:
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const override;
 
         public:
             OverlayHelplineStripedPrimitive(
@@ -273,15 +273,15 @@ namespace drawinglayer
         {
         private:
             // The logic range
-            basegfx::B2DRange                       maRollingRectangle;
+            basegfx::B2DRange const                       maRollingRectangle;
 
-            // The stripe colors and legth
-            basegfx::BColor                         maRGBColorA;
-            basegfx::BColor                         maRGBColorB;
-            double                                  mfDiscreteDashLength;
+            // The stripe colors and length
+            basegfx::BColor const                         maRGBColorA;
+            basegfx::BColor const                         maRGBColorB;
+            double const                                  mfDiscreteDashLength;
 
         protected:
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const override;
 
         public:
             OverlayRollingRectanglePrimitive(

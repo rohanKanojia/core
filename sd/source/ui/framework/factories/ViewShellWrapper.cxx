@@ -17,45 +17,42 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "framework/ViewShellWrapper.hxx"
-#include "framework/Pane.hxx"
-#include "sdpage.hxx"
-#include "ViewShell.hxx"
-#include "Window.hxx"
+#include <framework/ViewShellWrapper.hxx>
+#include <framework/Pane.hxx>
+#include <sdpage.hxx>
+#include <ViewShell.hxx>
+#include <Window.hxx>
 
-#include "SlideSorter.hxx"
-#include "SlideSorterViewShell.hxx"
-#include "controller/SlsPageSelector.hxx"
-#include "controller/SlsCurrentSlideManager.hxx"
-#include "controller/SlideSorterController.hxx"
-#include "model/SlsPageEnumerationProvider.hxx"
-#include "model/SlideSorterModel.hxx"
-#include "model/SlsPageDescriptor.hxx"
+#include <SlideSorter.hxx>
+#include <SlideSorterViewShell.hxx>
+#include <controller/SlsPageSelector.hxx>
+#include <controller/SlsCurrentSlideManager.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <model/SlsPageEnumerationProvider.hxx>
+#include <model/SlideSorterModel.hxx>
+#include <model/SlsPageDescriptor.hxx>
 
 #include <com/sun/star/drawing/framework/XPane.hpp>
-#include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 
 #include <toolkit/helper/vclunohelper.hxx>
-#include <comphelper/sequence.hxx>
 #include <comphelper/servicehelper.hxx>
 #include <cppuhelper/typeprovider.hxx>
 #include <vcl/svapp.hxx>
 #include <osl/mutex.hxx>
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::drawing::framework;
 
 using ::com::sun::star::awt::XWindow;
-using ::com::sun::star::rendering::XCanvas;
-using ::com::sun::star::lang::DisposedException;
 
 namespace sd { namespace framework {
 
 ViewShellWrapper::ViewShellWrapper (
-    std::shared_ptr<ViewShell> pViewShell,
+    const std::shared_ptr<ViewShell>& pViewShell,
     const Reference<XResourceId>& rxViewId,
     const Reference<awt::XWindow>& rxWindow)
     : ViewShellWrapperInterfaceBase(MutexOwner::maMutex),
@@ -90,16 +87,13 @@ void SAL_CALL ViewShellWrapper::disposing()
     mpViewShell.reset();
 }
 
-uno::Any SAL_CALL ViewShellWrapper::queryInterface( const uno::Type & rType ) throw(uno::RuntimeException, std::exception)
+uno::Any SAL_CALL ViewShellWrapper::queryInterface( const uno::Type & rType )
 {
     if( mpSlideSorterViewShell &&
         rType == cppu::UnoType<view::XSelectionSupplier>::get() )
     {
-        uno::Any aAny;
         uno::Reference<view::XSelectionSupplier> xSupplier( this );
-        aAny <<= xSupplier;
-
-        return aAny;
+        return Any(xSupplier);
     }
     else
         return ViewShellWrapperInterfaceBase::queryInterface( rType );
@@ -108,25 +102,21 @@ uno::Any SAL_CALL ViewShellWrapper::queryInterface( const uno::Type & rType ) th
 //----- XResource -------------------------------------------------------------
 
 Reference<XResourceId> SAL_CALL ViewShellWrapper::getResourceId()
-    throw (RuntimeException, std::exception)
 {
     return mxViewId;
 }
 
 sal_Bool SAL_CALL ViewShellWrapper::isAnchorOnly()
-    throw (RuntimeException, std::exception)
 {
     return false;
 }
 
 //----- XSelectionSupplier --------------------------------------------------
 
-sal_Bool SAL_CALL ViewShellWrapper::select( const css::uno::Any& aSelection ) throw(lang::IllegalArgumentException, uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL ViewShellWrapper::select( const css::uno::Any& aSelection )
 {
     if (!mpSlideSorterViewShell)
         return false;
-
-    bool bOk = true;
 
     ::sd::slidesorter::controller::SlideSorterController& rSlideSorterController
         = mpSlideSorterViewShell->GetSlideSorter().GetController();
@@ -154,11 +144,10 @@ sal_Bool SAL_CALL ViewShellWrapper::select( const css::uno::Any& aSelection ) th
         }
     }
 
-    return bOk;
+    return true;
 }
 
 uno::Any SAL_CALL ViewShellWrapper::getSelection()
-    throw (uno::RuntimeException, std::exception)
 {
     Any aResult;
 
@@ -183,11 +172,11 @@ uno::Any SAL_CALL ViewShellWrapper::getSelection()
     return aResult;
 }
 
-void SAL_CALL ViewShellWrapper::addSelectionChangeListener( const uno::Reference< view::XSelectionChangeListener >& ) throw(uno::RuntimeException, std::exception)
+void SAL_CALL ViewShellWrapper::addSelectionChangeListener( const uno::Reference< view::XSelectionChangeListener >& )
 {
 }
 
-void SAL_CALL ViewShellWrapper::removeSelectionChangeListener( const uno::Reference< view::XSelectionChangeListener >& ) throw(uno::RuntimeException, std::exception)
+void SAL_CALL ViewShellWrapper::removeSelectionChangeListener( const uno::Reference< view::XSelectionChangeListener >& )
 {
 }
 
@@ -195,7 +184,6 @@ void SAL_CALL ViewShellWrapper::removeSelectionChangeListener( const uno::Refere
 
 sal_Bool SAL_CALL ViewShellWrapper::relocateToAnchor (
     const Reference<XResource>& xResource)
-    throw (RuntimeException, std::exception)
 {
     bool bResult (false);
 
@@ -208,10 +196,10 @@ sal_Bool SAL_CALL ViewShellWrapper::relocateToAnchor (
             xWindow->removeWindowListener(this);
         mxWindow = nullptr;
 
-        if (mpViewShell.get() != nullptr)
+        if (mpViewShell != nullptr)
         {
-            vcl::Window* pWindow = VCLUnoHelper::GetWindow(xPane->getWindow());
-            if (pWindow != nullptr && mpViewShell->RelocateToParentWindow(pWindow))
+            VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow(xPane->getWindow());
+            if (pWindow && mpViewShell->RelocateToParentWindow(pWindow))
             {
                 bResult = true;
 
@@ -242,7 +230,6 @@ const Sequence<sal_Int8>& ViewShellWrapper::getUnoTunnelId()
 }
 
 sal_Int64 SAL_CALL ViewShellWrapper::getSomething (const Sequence<sal_Int8>& rId)
-    throw (RuntimeException, std::exception)
 {
     sal_Int64 nResult = 0;
 
@@ -257,40 +244,27 @@ sal_Int64 SAL_CALL ViewShellWrapper::getSomething (const Sequence<sal_Int8>& rId
 
 //===== awt::XWindowListener ==================================================
 
-void SAL_CALL ViewShellWrapper::windowResized (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
+void SAL_CALL ViewShellWrapper::windowResized (const awt::WindowEvent&)
 {
-    (void)rEvent;
     ViewShell* pViewShell (mpViewShell.get());
     if (pViewShell != nullptr)
         pViewShell->Resize();
 }
 
-void SAL_CALL ViewShellWrapper::windowMoved (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL ViewShellWrapper::windowMoved (const awt::WindowEvent&) {}
 
-void SAL_CALL ViewShellWrapper::windowShown (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
+void SAL_CALL ViewShellWrapper::windowShown (const lang::EventObject&)
 {
-    (void)rEvent;
     ViewShell* pViewShell (mpViewShell.get());
     if (pViewShell != nullptr)
         pViewShell->Resize();
 }
 
-void SAL_CALL ViewShellWrapper::windowHidden (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL ViewShellWrapper::windowHidden (const lang::EventObject&) {}
 
 //===== XEventListener ========================================================
 
 void SAL_CALL ViewShellWrapper::disposing (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
 {
     if (rEvent.Source == mxWindow)
         mxWindow = nullptr;

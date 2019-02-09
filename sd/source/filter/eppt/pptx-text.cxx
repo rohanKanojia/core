@@ -17,12 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include "text.hxx"
 
 #include <com/sun/star/awt/CharSet.hpp>
 #include <com/sun/star/awt/FontWeight.hpp>
 #include <com/sun/star/awt/FontUnderline.hpp>
+#include <com/sun/star/awt/XBitmap.hpp>
 #include <com/sun/star/beans/XPropertyState.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
 #include <com/sun/star/container/XIndexReplace.hpp>
 #include <com/sun/star/i18n/BreakIterator.hpp>
@@ -35,38 +38,46 @@
 #include <com/sun/star/style/LineSpacingMode.hpp>
 #include <com/sun/star/style/ParagraphAdjust.hpp>
 #include <com/sun/star/style/TabStop.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
 
 #include <comphelper/processfactory.hxx>
 #include <editeng/svxenum.hxx>
 #include <editeng/frmdir.hxx>
 #include <filter/msfilter/util.hxx>
 #include <i18nutil/scripttypedetector.hxx>
+#include <o3tl/any.hxx>
 #include <sfx2/app.hxx>
 #include <svl/languageoptions.hxx>
 #include <oox/export/drawingml.hxx>
+#include <osl/diagnose.h>
+#include <i18nlangtag/languagetag.hxx>
 
 #include <vcl/settings.hxx>
 #include <vcl/metric.hxx>
 #include <vcl/outdev.hxx>
 #include <vcl/virdev.hxx>
-#include <o3tl/make_unique.hxx>
 
-css::uno::Reference< css::i18n::XBreakIterator > xPPTBreakIter;
+using namespace css;
 
-PortionObj::PortionObj( const css::uno::Reference< css::beans::XPropertySet > & rXPropSet,
-                FontCollection& rFontCollection ) :
-    mnCharAttrHard      ( 0 ),
-    mnCharAttr          ( 0 ),
-    mnFont              ( 0 ),
-    mnAsianOrComplexFont( 0xffff ),
-    mnTextSize          ( 0 ),
-    mbLastPortion       ( true ),
-    mpText              ( nullptr ),
-    mpFieldEntry        ( nullptr )
+static css::uno::Reference< css::i18n::XBreakIterator > xPPTBreakIter;
+
+PortionObj::PortionObj(const css::uno::Reference< css::beans::XPropertySet > & rXPropSet,
+                FontCollection& rFontCollection)
+    : meCharColor(css::beans::PropertyState_AMBIGUOUS_VALUE)
+    , meCharHeight(css::beans::PropertyState_AMBIGUOUS_VALUE)
+    , meFontName(css::beans::PropertyState_AMBIGUOUS_VALUE)
+    , meAsianOrComplexFont(css::beans::PropertyState_AMBIGUOUS_VALUE)
+    , meCharEscapement(css::beans::PropertyState_AMBIGUOUS_VALUE)
+    , mnCharAttrHard(0)
+    , mnCharAttr(0)
+    , mnFont(0)
+    , mnAsianOrComplexFont(0xffff)
+    , mnTextSize(0)
+    , mbLastPortion(true)
 {
     mXPropSet = rXPropSet;
 
-    ImplGetPortionValues( rFontCollection );
+    ImplGetPortionValues( rFontCollection, false );
 }
 
 PortionObj::PortionObj(css::uno::Reference< css::text::XTextRange > & rXTextRange,
@@ -84,8 +95,6 @@ PortionObj::PortionObj(css::uno::Reference< css::text::XTextRange > & rXTextRang
     , mnAsianOrComplexFont(0xffff)
     , mnCharEscapement(0)
     , mbLastPortion(bLast)
-    , mpText(nullptr)
-    , mpFieldEntry(nullptr)
 {
     OUString aString( rXTextRange->getString() );
     OUString aURL;
@@ -108,8 +117,8 @@ PortionObj::PortionObj(css::uno::Reference< css::text::XTextRange > & rXTextRang
             nFieldType = ImplGetTextField( rXTextRange, mXPropSet, aURL );
         if ( nFieldType )
         {
-            mpFieldEntry = new FieldEntry( nFieldType, 0, mnTextSize );
-            if ( ( nFieldType >> 28 == 4 ) )
+            mpFieldEntry.reset( new FieldEntry( nFieldType, 0, mnTextSize ) );
+            if ( nFieldType >> 28 == 4 )
             {
                 mpFieldEntry->aRepresentation = aString;
                 mpFieldEntry->aFieldUrl = aURL;
@@ -129,7 +138,7 @@ PortionObj::PortionObj(css::uno::Reference< css::text::XTextRange > & rXTextRang
             mnTextSize = 1;
             if ( bLast )
                 mnTextSize++;
-            mpText = new sal_uInt16[ mnTextSize ];
+            mpText.reset( new sal_uInt16[ mnTextSize ] );
             mpText[ 0 ] = 0x2a;
         }
         else
@@ -143,11 +152,11 @@ PortionObj::PortionObj(css::uno::Reference< css::text::XTextRange > & rXTextRang
                 mnTextSize++;
                 bRTL_endingParen = true;
             }
-            mpText = new sal_uInt16[ mnTextSize ];
+            mpText.reset( new sal_uInt16[ mnTextSize ] );
             sal_uInt16 nChar;
             for ( sal_Int32 i = 0; i < aString.getLength(); i++ )
             {
-                nChar = (sal_uInt16)aString[ i ];
+                nChar = static_cast<sal_uInt16>(aString[ i ]);
                 if ( nChar == 0xa )
                     nChar++;
                 else if ( !bSymbol )
@@ -231,9 +240,9 @@ void PortionObj::ImplGetPortionValues( FontCollection& rFontCollection, bool bGe
     meFontName = ePropState;
     if ( bOk )
     {
-        FontCollectionEntry aFontDesc( *static_cast<OUString const *>(mAny.getValue()) );
+        FontCollectionEntry aFontDesc( *o3tl::doAccess<OUString>(mAny) );
         sal_uInt32  nCount = rFontCollection.GetCount();
-        mnFont = (sal_uInt16)rFontCollection.GetId( aFontDesc );
+        mnFont = static_cast<sal_uInt16>(rFontCollection.GetId( aFontDesc ));
         if ( mnFont == nCount )
         {
             FontCollectionEntry& rFontDesc = rFontCollection.GetLast();
@@ -249,7 +258,7 @@ void PortionObj::ImplGetPortionValues( FontCollection& rFontCollection, bool bGe
     sal_Int16 nScriptType = SvtLanguageOptions::FromSvtScriptTypeToI18N( SvtLanguageOptions::GetScriptTypeOfLanguage( Application::GetSettings().GetLanguageTag().getLanguageType() ) );
     if ( mpText && mnTextSize && xPPTBreakIter.is() )
     {
-        OUString sT( reinterpret_cast<sal_Unicode *>(mpText), mnTextSize );
+        OUString sT( reinterpret_cast<sal_Unicode *>(mpText.get()), mnTextSize );
         nScriptType = xPPTBreakIter->getScriptType( sT, 0 );
     }
     if ( nScriptType != css::i18n::ScriptType::COMPLEX )
@@ -258,9 +267,9 @@ void PortionObj::ImplGetPortionValues( FontCollection& rFontCollection, bool bGe
         meAsianOrComplexFont = ePropState;
         if ( bOk )
         {
-            FontCollectionEntry aFontDesc( *static_cast<OUString const *>(mAny.getValue()) );
+            FontCollectionEntry aFontDesc( *o3tl::doAccess<OUString>(mAny) );
             sal_uInt32  nCount = rFontCollection.GetCount();
-            mnAsianOrComplexFont = (sal_uInt16)rFontCollection.GetId( aFontDesc );
+            mnAsianOrComplexFont = static_cast<sal_uInt16>(rFontCollection.GetId( aFontDesc ));
             if ( mnAsianOrComplexFont == nCount )
             {
                 FontCollectionEntry& rFontDesc = rFontCollection.GetLast();
@@ -279,9 +288,9 @@ void PortionObj::ImplGetPortionValues( FontCollection& rFontCollection, bool bGe
         meAsianOrComplexFont = ePropState;
         if ( bOk )
         {
-            FontCollectionEntry aFontDesc( *static_cast<OUString const *>(mAny.getValue()) );
+            FontCollectionEntry aFontDesc( *o3tl::doAccess<OUString>(mAny) );
             sal_uInt32  nCount = rFontCollection.GetCount();
-            mnAsianOrComplexFont = (sal_uInt16)rFontCollection.GetId( aFontDesc );
+            mnAsianOrComplexFont = static_cast<sal_uInt16>(rFontCollection.GetId( aFontDesc ));
             if ( mnAsianOrComplexFont == nCount )
             {
                 FontCollectionEntry& rFontDesc = rFontCollection.GetLast();
@@ -330,7 +339,7 @@ void PortionObj::ImplGetPortionValues( FontCollection& rFontCollection, bool bGe
         float fVal(0.0);
         if ( mAny >>= fVal )
         {
-            mnCharHeight = (sal_uInt16)( fVal + 0.5 );
+            mnCharHeight = static_cast<sal_uInt16>( fVal + 0.5 );
             meCharHeight = GetPropertyState( mXPropSet, aCharHeightName );
         }
     }
@@ -407,10 +416,10 @@ void PortionObj::ImplGetPortionValues( FontCollection& rFontCollection, bool bGe
 
     if ( ImplGetPropertyValue( "CharColor", bGetPropStateValue ) )
     {
-        sal_uInt32 nSOColor = *( static_cast<sal_uInt32 const *>(mAny.getValue()) );
+        sal_uInt32 nSOColor = *( o3tl::doAccess<sal_uInt32>(mAny) );
         mnCharColor = nSOColor & 0xff00ff00;                            // green and hibyte
-        mnCharColor |= (sal_uInt8)( nSOColor ) << 16;                   // red and blue is switched
-        mnCharColor |= (sal_uInt8)( nSOColor >> 16 );
+        mnCharColor |= static_cast<sal_uInt8>(nSOColor) << 16;                   // red and blue is switched
+        mnCharColor |= static_cast<sal_uInt8>( nSOColor >> 16 );
     }
     meCharColor = ePropState;
 
@@ -428,8 +437,8 @@ void PortionObj::ImplGetPortionValues( FontCollection& rFontCollection, bool bGe
 
 void PortionObj::ImplClear()
 {
-    delete mpFieldEntry;
-    delete[] mpText;
+    mpFieldEntry.reset();
+    mpText.reset();
 }
 
 void PortionObj::ImplConstruct( const PortionObj& rPortionObj )
@@ -453,16 +462,12 @@ void PortionObj::ImplConstruct( const PortionObj& rPortionObj )
 
     if ( rPortionObj.mpText )
     {
-        mpText = new sal_uInt16[ mnTextSize ];
-        memcpy( mpText, rPortionObj.mpText, mnTextSize << 1 );
+        mpText.reset( new sal_uInt16[ mnTextSize ] );
+        memcpy( mpText.get(), rPortionObj.mpText.get(), mnTextSize << 1 );
     }
-    else
-        mpText = nullptr;
 
     if ( rPortionObj.mpFieldEntry )
-        mpFieldEntry = new FieldEntry( *( rPortionObj.mpFieldEntry ) );
-    else
-        mpFieldEntry = nullptr;
+        mpFieldEntry.reset( new FieldEntry( *( rPortionObj.mpFieldEntry ) ) );
 }
 
 sal_uInt32 PortionObj::ImplCalculateTextPositions( sal_uInt32 nCurrentTextPosition )
@@ -495,10 +500,10 @@ sal_uInt32 PortionObj::ImplGetTextField( css::uno::Reference< css::text::XTextRa
     css::uno::Any aAny;
     if ( GetPropertyValue( aAny, rXPropSet, "TextPortionType", true ) )
     {
-        OUString  aTextFieldType( *static_cast<OUString const *>(aAny.getValue()) );
-        if ( aTextFieldType == "TextField" )
+        auto aTextFieldType = o3tl::doAccess<OUString>(aAny);
+        if ( *aTextFieldType == "TextField" )
         {
-            if ( GetPropertyValue( aAny, rXPropSet, aTextFieldType, true ) )
+            if ( GetPropertyValue( aAny, rXPropSet, *aTextFieldType, true ) )
             {
                 css::uno::Reference< css::text::XTextField > aXTextField;
                 if ( aAny >>= aXTextField )
@@ -508,7 +513,7 @@ sal_uInt32 PortionObj::ImplGetTextField( css::uno::Reference< css::text::XTextRa
                         css::uno::Reference< css::beans::XPropertySet > xFieldPropSet( aXTextField, css::uno::UNO_QUERY );
                         if ( xFieldPropSet.is() )
                         {
-                            OUString aFieldKind( aXTextField->getPresentation( sal_True ) );
+                            OUString aFieldKind( aXTextField->getPresentation( true ) );
                             if ( aFieldKind == "Date" )
                             {
                                 if ( GetPropertyValue( aAny, xFieldPropSet, "IsFix", true ) )
@@ -519,7 +524,7 @@ sal_uInt32 PortionObj::ImplGetTextField( css::uno::Reference< css::text::XTextRa
                                     {
                                         if ( GetPropertyValue( aAny, xFieldPropSet, "Format", true ) )
                                         {
-                                            nFormat = *static_cast<sal_Int32 const *>(aAny.getValue());
+                                            nFormat = *o3tl::doAccess<sal_Int32>(aAny);
                                             switch ( nFormat )
                                             {
                                                 default:
@@ -540,7 +545,7 @@ sal_uInt32 PortionObj::ImplGetTextField( css::uno::Reference< css::text::XTextRa
                             else if ( aFieldKind == "URL" )
                             {
                                 if ( GetPropertyValue( aAny, xFieldPropSet, "URL", true ) )
-                                    rURL = *static_cast<OUString const *>(aAny.getValue());
+                                    rURL = *o3tl::doAccess<OUString>(aAny);
                                 nRetValue = 4 << 28;
                             }
                             else if ( aFieldKind == "Page" )
@@ -561,7 +566,7 @@ sal_uInt32 PortionObj::ImplGetTextField( css::uno::Reference< css::text::XTextRa
                                     {
                                         if ( GetPropertyValue( aAny, xFieldPropSet, "IsFix", true ) )
                                         {
-                                            nFormat = *static_cast<sal_Int32 const *>(aAny.getValue());
+                                            nFormat = *o3tl::doAccess<sal_Int32>(aAny);
                                             nRetValue |= ( ( ( 2 << 4 ) | nFormat ) << 24 ) | 0x800000;
                                         }
                                     }
@@ -585,7 +590,7 @@ sal_uInt32 PortionObj::ImplGetTextField( css::uno::Reference< css::text::XTextRa
                                     {
                                         if ( GetPropertyValue( aAny, xFieldPropSet, "Format", true ) )
                                         {
-                                            nFormat = *static_cast<sal_Int32 const *>(aAny.getValue());
+                                            nFormat = *o3tl::doAccess<sal_Int32>(aAny);
                                             switch ( nFormat )
                                             {
                                                 default:
@@ -667,10 +672,10 @@ ParagraphObj::ParagraphObj(const css::uno::Reference< css::beans::XPropertySet >
     nBulletFlags = 0;
     nParaFlags = 0;
 
-    ImplGetParagraphValues( pProv );
+    ImplGetParagraphValues( pProv, false );
 }
 
-ParagraphObj::ParagraphObj(css::uno::Reference< css::text::XTextContent > & rXTextContent,
+ParagraphObj::ParagraphObj(css::uno::Reference< css::text::XTextContent > const & rXTextContent,
     ParaFlags aParaFlags, FontCollection& rFontCollection, PPTExBulletProvider& rProv )
     : PropStateValue()
     , SOParagraph()
@@ -720,25 +725,15 @@ ParagraphObj::ParagraphObj(css::uno::Reference< css::text::XTextContent > & rXTe
                     css::uno::Any aAny( aXTextPortionE->nextElement() );
                     if ( aAny >>= aXCursorText )
                     {
-                        PortionObj* pPortionObj = new PortionObj( aXCursorText, !aXTextPortionE->hasMoreElements(), rFontCollection );
+                        std::unique_ptr<PortionObj> pPortionObj(new PortionObj( aXCursorText, !aXTextPortionE->hasMoreElements(), rFontCollection ));
                         if ( pPortionObj->Count() )
-                            mvPortions.push_back( std::unique_ptr<PortionObj>(pPortionObj) );
-                        else
-                            delete pPortionObj;
+                            mvPortions.push_back( std::move(pPortionObj) );
                     }
                 }
             }
         }
         ImplGetParagraphValues( &rProv, true );
     }
-}
-
-ParagraphObj::ParagraphObj( const ParagraphObj& rObj )
-: PropStateValue()
-, SOParagraph()
-, mvPortions()
-{
-    ImplConstruct( rObj );
 }
 
 ParagraphObj::~ParagraphObj()
@@ -759,17 +754,17 @@ void ParagraphObj::ImplClear()
 
 void ParagraphObj::CalculateGraphicBulletSize( sal_uInt16 nFontHeight )
 {
-    if ( ( (SvxExtNumType)nNumberingType == SVX_NUM_BITMAP ) && ( nBulletId != 0xffff ) )
+    if ( ( nNumberingType == SVX_NUM_BITMAP ) && ( nBulletId != 0xffff ) )
     {
-        // calculate the bulletrealsize for this grafik
+        // calculate the bullet real size for this graphic
         if ( aBuGraSize.Width() && aBuGraSize.Height() )
         {
             double fCharHeight = nFontHeight;
             double fLen = aBuGraSize.Height();
             fCharHeight = fCharHeight * 0.2540;
             double fQuo = fLen / fCharHeight;
-            nBulletRealSize = (sal_Int16)( fQuo + 0.5 );
-            if ( (sal_uInt16)nBulletRealSize > 400 )
+            nBulletRealSize = static_cast<sal_Int16>( fQuo + 0.5 );
+            if ( static_cast<sal_uInt16>(nBulletRealSize) > 400 )
                 nBulletRealSize = 400;
         }
     }
@@ -798,114 +793,99 @@ void ParagraphObj::ImplGetNumberingLevel( PPTExBulletProvider* pBuProv, sal_Int1
     {
         if ( ( mAny >>= aXIndexReplace ) && nNumberingDepth < aXIndexReplace->getCount() )
         {
-            mAny <<= aXIndexReplace->getByIndex( nNumberingDepth );
-            css::uno::Sequence< css::beans::PropertyValue>
-                aPropertySequence( *static_cast<css::uno::Sequence< css::beans::PropertyValue> const *>(mAny.getValue()) );
+            mAny = aXIndexReplace->getByIndex( nNumberingDepth );
+            auto aPropertySequence = o3tl::doAccess<css::uno::Sequence<css::beans::PropertyValue>>(mAny);
 
-            const css::beans::PropertyValue* pPropValue = aPropertySequence.getArray();
+            const css::beans::PropertyValue* pPropValue = aPropertySequence->getConstArray();
 
-            sal_Int32 nPropertyCount = aPropertySequence.getLength();
+            sal_Int32 nPropertyCount = aPropertySequence->getLength();
             if ( nPropertyCount )
             {
                 bExtendedParameters = true;
                 nBulletRealSize = 100;
                 nMappedNumType = 0;
 
-                OUString aGraphicURL;
+                uno::Reference<graphic::XGraphic> xGraphic;
                 for ( sal_Int32 i = 0; i < nPropertyCount; i++ )
                 {
-                    const void* pValue = pPropValue[ i ].Value.getValue();
-                    if ( pValue )
+                    OUString aPropName( pPropValue[ i ].Name );
+                    if ( aPropName == "NumberingType" )
+                        nNumberingType = static_cast<SvxNumType>(*o3tl::doAccess<sal_Int16>(pPropValue[i].Value));
+                    else if ( aPropName == "Adjust" )
+                        nHorzAdjust = *o3tl::doAccess<sal_Int16>(pPropValue[i].Value);
+                    else if ( aPropName == "BulletChar" )
                     {
-                        OUString aPropName( pPropValue[ i ].Name );
-                        if ( aPropName == "NumberingType" )
-                            nNumberingType = *( static_cast<sal_Int16 const *>(pValue) );
-                        else if ( aPropName == "Adjust" )
-                            nHorzAdjust = *( static_cast<sal_Int16 const *>(pValue) );
-                        else if ( aPropName == "BulletChar" )
-                        {
-                            OUString aString( *( static_cast<OUString const *>(pValue) ) );
-                            if ( !aString.isEmpty() )
-                                cBulletId = aString[ 0 ];
-                        }
-                        else if ( aPropName == "BulletFont" )
-                        {
-                            aFontDesc = *static_cast<css::awt::FontDescriptor const *>(pValue);
-
-                            // Our numbullet dialog has set the wrong textencoding for our "StarSymbol" font,
-                            // instead of a Unicode encoding the encoding RTL_TEXTENCODING_SYMBOL was used.
-                            // Because there might exist a lot of damaged documemts I added this two lines
-                            // which fixes the bullet problem for the export.
-                            if ( aFontDesc.Name.equalsIgnoreAsciiCase("StarSymbol") )
-                                aFontDesc.CharSet = RTL_TEXTENCODING_MS_1252;
-
-                        }
-                        else if ( aPropName == "GraphicURL" )
-                            aGraphicURL = *static_cast<OUString const *>(pValue);
-                        else if ( aPropName == "GraphicSize" )
-                        {
-                            if ( pPropValue[ i ].Value.getValueType() == cppu::UnoType<css::awt::Size>::get())
-                            {
-                                // don't cast awt::Size to Size as on 64-bits they are not the same.
-                                css::awt::Size aSize;
-                                pPropValue[ i ].Value >>= aSize;
-                                aBuGraSize.A() = aSize.Width;
-                                aBuGraSize.B() = aSize.Height;
-                            }
-                        }
-                        else if ( aPropName == "StartWith" )
-                            nStartWith = *static_cast<sal_Int16 const *>(pValue);
-                        else if ( aPropName == "LeftMargin" )
-                            nTextOfs = nTextOfs + static_cast< sal_Int16 >( *static_cast<sal_Int32 const *>(pValue) / ( 2540.0 / 576 ) );
-                        else if ( aPropName == "FirstLineOffset" )
-                            nBulletOfs += (sal_Int16)( *static_cast<sal_Int32 const *>(pValue) / ( 2540.0 / 576 ) );
-                        else if ( aPropName == "BulletColor" )
-                        {
-                            sal_uInt32 nSOColor = *static_cast<sal_uInt32 const *>(pValue);
-                            nBulletColor = nSOColor & 0xff00ff00;                       // green and hibyte
-                            nBulletColor |= (sal_uInt8)( nSOColor ) << 16;              // red
-                            nBulletColor |= (sal_uInt8)( nSOColor >> 16 ) | 0xfe000000; // blue
-                        }
-                        else if ( aPropName == "BulletRelSize" )
-                        {
-                            nBulletRealSize = *static_cast<sal_Int16 const *>(pValue);
-                            nParaFlags |= 0x40;
-                            nBulletFlags |= 8;
-                        }
-                        else if ( aPropName == "Prefix" )
-                            sPrefix = *static_cast<OUString const *>(pValue);
-                        else if ( aPropName == "Suffix" )
-                            sSuffix = *static_cast<OUString const *>(pValue);
-#ifdef DBG_UTIL
-                        else if ( ! (
-                                ( aPropName == "SymbolTextDistance" )
-                            ||  ( aPropName == "Graphic" ) ) )
-                        {
-                            OSL_FAIL( "Unknown Property" );
-                        }
-#endif
+                        OUString aString( *o3tl::doAccess<OUString>(pPropValue[i].Value) );
+                        if ( !aString.isEmpty() )
+                            cBulletId = aString[ 0 ];
                     }
+                    else if ( aPropName == "BulletFont" )
+                    {
+                        aFontDesc = *o3tl::doAccess<css::awt::FontDescriptor>(pPropValue[i].Value);
+
+                        // Our numbullet dialog has set the wrong textencoding for our "StarSymbol" font,
+                        // instead of a Unicode encoding the encoding RTL_TEXTENCODING_SYMBOL was used.
+                        // Because there might exist a lot of damaged documemts I added this two lines
+                        // which fixes the bullet problem for the export.
+                        if ( aFontDesc.Name.equalsIgnoreAsciiCase("StarSymbol") )
+                            aFontDesc.CharSet = RTL_TEXTENCODING_MS_1252;
+
+                    }
+                    else if ( aPropName == "GraphicBitmap" )
+                    {
+                        auto xBitmap = pPropValue[i].Value.get<uno::Reference<awt::XBitmap>>();
+                        xGraphic.set(xBitmap, uno::UNO_QUERY);
+                    }
+                    else if ( aPropName == "GraphicSize" )
+                    {
+                        if (auto aSize = o3tl::tryAccess<css::awt::Size>(pPropValue[i].Value))
+                        {
+                            // don't cast awt::Size to Size as on 64-bits they are not the same.
+                            aBuGraSize.setWidth( aSize->Width );
+                            aBuGraSize.setHeight( aSize->Height );
+                        }
+                    }
+                    else if ( aPropName == "StartWith" )
+                        nStartWith = *o3tl::doAccess<sal_Int16>(pPropValue[i].Value);
+                    else if ( aPropName == "LeftMargin" )
+                        nTextOfs = nTextOfs + static_cast< sal_Int16 >( *o3tl::doAccess<sal_Int32>(pPropValue[i].Value) / ( 2540.0 / 576 ) );
+                    else if ( aPropName == "FirstLineOffset" )
+                        nBulletOfs += static_cast<sal_Int16>( *o3tl::doAccess<sal_Int32>(pPropValue[i].Value) / ( 2540.0 / 576 ) );
+                    else if ( aPropName == "BulletColor" )
+                    {
+                        sal_uInt32 nSOColor = *o3tl::doAccess<sal_uInt32>(pPropValue[i].Value);
+                        nBulletColor = nSOColor & 0xff00ff00;                       // green and hibyte
+                        nBulletColor |= static_cast<sal_uInt8>(nSOColor) << 16;              // red
+                        nBulletColor |= static_cast<sal_uInt8>( nSOColor >> 16 ) | 0xfe000000; // blue
+                    }
+                    else if ( aPropName == "BulletRelSize" )
+                    {
+                        nBulletRealSize = *o3tl::doAccess<sal_Int16>(pPropValue[i].Value);
+                        nParaFlags |= 0x40;
+                        nBulletFlags |= 8;
+                    }
+                    else if ( aPropName == "Prefix" )
+                        sPrefix = *o3tl::doAccess<OUString>(pPropValue[i].Value);
+                    else if ( aPropName == "Suffix" )
+                        sSuffix = *o3tl::doAccess<OUString>(pPropValue[i].Value);
+#ifdef DBG_UTIL
+                    else if ( ! (
+                            ( aPropName == "SymbolTextDistance" )
+                        ||  ( aPropName == "GraphicBitmap" ) ) )
+                    {
+                        OSL_FAIL( "Unknown Property" );
+                    }
+#endif
                 }
 
-                if ( !aGraphicURL.isEmpty() )
+                if (xGraphic.is())
                 {
                     if ( aBuGraSize.Width() && aBuGraSize.Height() )
                     {
-                        sal_Int32 nIndex = aGraphicURL.indexOf(':');
-                        if ( nIndex != -1 )
-                        {
-                            nIndex++;
-                            if ( nIndex < aGraphicURL.getLength() )
-                            {
-                                OString aUniqueId( OUStringToOString(aGraphicURL.copy(nIndex), RTL_TEXTENCODING_UTF8) );
-                                if ( !aUniqueId.isEmpty() )
-                                {
-                                    nBulletId = pBuProv->GetId( aUniqueId, aBuGraSize );
-                                    if ( nBulletId != 0xffff )
-                                        bExtendedBulletsUsed = true;
-                                }
-                            }
-                        }
+                        Graphic aGraphic(xGraphic);
+                        nBulletId = pBuProv->GetId(xGraphic, aBuGraSize );
+                        if ( nBulletId != 0xffff )
+                            bExtendedBulletsUsed = true;
                     }
                     else
                     {
@@ -932,6 +912,8 @@ void ParagraphObj::ImplGetNumberingLevel( PPTExBulletProvider* pBuProv, sal_Int1
                         {
                             nParaFlags |= 0x90; // we define the font and charset
                         }
+
+                        [[fallthrough]];
                     }
                     case SVX_NUM_CHARS_UPPER_LETTER :       // count from a-z, aa - az, ba - bz, ...
                     case SVX_NUM_CHARS_LOWER_LETTER :
@@ -958,7 +940,7 @@ void ParagraphObj::ImplGetNumberingLevel( PPTExBulletProvider* pBuProv, sal_Int1
                             else
                                 cBulletId = 0x2022;
 
-                            switch( (SvxExtNumType)nNumberingType )
+                            switch( nNumberingType )
                             {
                                 case SVX_NUM_CHARS_UPPER_LETTER :
                                 case SVX_NUM_CHARS_UPPER_LETTER_N :
@@ -1055,7 +1037,7 @@ void ParagraphObj::ImplGetNumberingLevel( PPTExBulletProvider* pBuProv, sal_Int1
                                 break;
                                 case SVX_NUM_NUMBER_LOWER_ZH :
                                 {
-                                    if ( sSuffix == OUString( sal_Unicode(0xff0e)) )
+                                    if ( sSuffix == OUStringLiteral1(0xff0e) )
                                         nMappedNumType = 0x260001;   // Japanese with double-byte period.
                                     else if ( !sSuffix.isEmpty() )
                                         nMappedNumType = 0x1B0001;   // Japanese/Korean with single-byte period.
@@ -1079,7 +1061,10 @@ void ParagraphObj::ImplGetNumberingLevel( PPTExBulletProvider* pBuProv, sal_Int1
                         nBulletFlags |= 6;
                         if ( mbIsBullet && bNumberingIsNumber )
                             nBulletFlags |= 1;
+                        break;
                     }
+                    default:
+                        break;
                 }
             }
         }
@@ -1096,7 +1081,7 @@ void ParagraphObj::ImplGetParagraphValues( PPTExBulletProvider* pBuProv, bool bG
     {
         if ( bGetPropStateValue )
             meBullet = GetPropertyState( mXPropSet, "NumberingLevel" );
-        nDepth = *static_cast<sal_Int16 const *>(aAny.getValue());
+        nDepth = *o3tl::doAccess<sal_Int16>(aAny);
 
         if ( nDepth < 0 )
         {
@@ -1118,11 +1103,11 @@ void ParagraphObj::ImplGetParagraphValues( PPTExBulletProvider* pBuProv, bool bG
     ImplGetNumberingLevel( pBuProv, nDepth, mbIsBullet, bGetPropStateValue );
 
     if ( ImplGetPropertyValue( "ParaTabStops", bGetPropStateValue ) )
-        maTabStop = *static_cast<css::uno::Sequence< css::style::TabStop> const *>(mAny.getValue());
-    sal_Int16 eTextAdjust( css::style::ParagraphAdjust_LEFT );
+        maTabStop = *o3tl::doAccess<css::uno::Sequence<css::style::TabStop>>(mAny);
+    sal_Int16 eTextAdjust = sal_Int16(css::style::ParagraphAdjust_LEFT);
     if ( GetPropertyValue( aAny, mXPropSet, "ParaAdjust", bGetPropStateValue ) )
         aAny >>= eTextAdjust;
-    switch ( (css::style::ParagraphAdjust)eTextAdjust )
+    switch ( static_cast<css::style::ParagraphAdjust>(eTextAdjust) )
     {
         case css::style::ParagraphAdjust_CENTER :
             mnTextAdjust = 1;
@@ -1143,22 +1128,22 @@ void ParagraphObj::ImplGetParagraphValues( PPTExBulletProvider* pBuProv, bool bG
     if ( ImplGetPropertyValue( "ParaLineSpacing", bGetPropStateValue ) )
     {
         css::style::LineSpacing aLineSpacing
-            = *static_cast<css::style::LineSpacing const *>(mAny.getValue());
+            = *o3tl::doAccess<css::style::LineSpacing>(mAny);
         switch ( aLineSpacing.Mode )
         {
             case css::style::LineSpacingMode::FIX :
-                mnLineSpacing = (sal_Int16)(-( aLineSpacing.Height ) );
+                mnLineSpacing = static_cast<sal_Int16>(-( aLineSpacing.Height ) );
                 mbFixedLineSpacing = true;
                 break;
             case css::style::LineSpacingMode::MINIMUM :
             case css::style::LineSpacingMode::LEADING :
-                mnLineSpacing = (sal_Int16)(-( aLineSpacing.Height ) );
+                mnLineSpacing = static_cast<sal_Int16>(-( aLineSpacing.Height ) );
                 mbFixedLineSpacing = false;
            break;
 
             case css::style::LineSpacingMode::PROP :
             default:
-                mnLineSpacing = (sal_Int16)( aLineSpacing.Height );
+                mnLineSpacing = static_cast<sal_Int16>( aLineSpacing.Height );
             break;
         }
     }
@@ -1166,15 +1151,15 @@ void ParagraphObj::ImplGetParagraphValues( PPTExBulletProvider* pBuProv, bool bG
 
     if ( ImplGetPropertyValue( "ParaBottomMargin", bGetPropStateValue ) )
     {
-        double fSpacing = *static_cast<sal_uInt32 const *>(mAny.getValue()) + ( 2540.0 / 576.0 ) - 1;
-        mnLineSpacingBottom = (sal_Int16)(-( fSpacing * 576.0 / 2540.0 ) );
+        double fSpacing = *o3tl::doAccess<sal_uInt32>(mAny) + ( 2540.0 / 576.0 ) - 1;
+        mnLineSpacingBottom = static_cast<sal_Int16>(-( fSpacing * 576.0 / 2540.0 ) );
     }
     meLineSpacingBottom = ePropState;
 
     if ( ImplGetPropertyValue( "ParaTopMargin", bGetPropStateValue ) )
     {
-        double fSpacing = *static_cast<sal_uInt32 const *>(mAny.getValue()) + ( 2540.0 / 576.0 ) - 1;
-        mnLineSpacingTop = (sal_Int16)(-( fSpacing * 576.0 / 2540.0 ) );
+        double fSpacing = *o3tl::doAccess<sal_uInt32>(mAny) + ( 2540.0 / 576.0 ) - 1;
+        mnLineSpacingTop = static_cast<sal_Int16>(-( fSpacing * 576.0 / 2540.0 ) );
     }
     meLineSpacingTop = ePropState;
 
@@ -1192,9 +1177,9 @@ void ParagraphObj::ImplGetParagraphValues( PPTExBulletProvider* pBuProv, bool bG
         sal_Int16 nWritingMode = 0;
         mAny >>= nWritingMode;
 
-        SvxFrameDirection eWritingMode( (SvxFrameDirection)nWritingMode );
-        if ( ( eWritingMode == FRMDIR_HORI_RIGHT_TOP )
-            || ( eWritingMode == FRMDIR_VERT_TOP_RIGHT ) )
+        SvxFrameDirection eWritingMode = static_cast<SvxFrameDirection>(nWritingMode);
+        if ( ( eWritingMode == SvxFrameDirection::Horizontal_RL_TB )
+            || ( eWritingMode == SvxFrameDirection::Vertical_RL_TB ) )
         {
             mnBiDi = 1;
         }
@@ -1226,7 +1211,7 @@ void ParagraphObj::ImplConstruct( const ParagraphObj& rParagraphObj )
     mnBiDi = rParagraphObj.mnBiDi;
 
     for ( std::vector<std::unique_ptr<PortionObj> >::const_iterator it = rParagraphObj.begin(); it != rParagraphObj.end(); ++it )
-        mvPortions.push_back( o3tl::make_unique<PortionObj>( **it ) );
+        mvPortions.push_back( std::make_unique<PortionObj>( **it ) );
 
     maTabStop = rParagraphObj.maTabStop;
     bExtendedParameters = rParagraphObj.bExtendedParameters;
@@ -1273,12 +1258,10 @@ struct ImplTextObj
 {
     sal_uInt32      mnTextSize;
     int             mnInstance;
-    std::vector<ParagraphObj*> maList;
+    std::vector<std::unique_ptr<ParagraphObj>> maList;
     bool        mbHasExtendedBullets;
-    bool        mbFixedCellHeightUsed;
 
     explicit ImplTextObj( int nInstance );
-    ~ImplTextObj();
 };
 
 ImplTextObj::ImplTextObj( int nInstance )
@@ -1287,16 +1270,9 @@ ImplTextObj::ImplTextObj( int nInstance )
     mnTextSize = 0;
     mnInstance = nInstance;
     mbHasExtendedBullets = false;
-    mbFixedCellHeightUsed = false;
 }
 
-ImplTextObj::~ImplTextObj()
-{
-    for ( std::vector<ParagraphObj*>::const_iterator it = maList.begin(); it != maList.end(); ++it )
-        delete *it;
-}
-
-TextObj::TextObj( css::uno::Reference< css::text::XSimpleText > & rXTextRef,
+TextObj::TextObj( css::uno::Reference< css::text::XSimpleText > const & rXTextRef,
             int nInstance, FontCollection& rFontCollection, PPTExBulletProvider& rProv ):
     mpImplTextObj(new ImplTextObj(nInstance))
 {
@@ -1316,9 +1292,9 @@ TextObj::TextObj( css::uno::Reference< css::text::XSimpleText > & rXTextRef,
                 {
                     if ( !aXTextParagraphE->hasMoreElements() )
                         aParaFlags.bLastParagraph = true;
-                    ParagraphObj* pPara = new ParagraphObj( aXParagraph, aParaFlags, rFontCollection, rProv );
+                    std::unique_ptr<ParagraphObj> pPara(new ParagraphObj( aXParagraph, aParaFlags, rFontCollection, rProv ));
                     mpImplTextObj->mbHasExtendedBullets |= pPara->bExtendedBulletsUsed;
-                    mpImplTextObj->maList.push_back( pPara );
+                    mpImplTextObj->maList.push_back( std::move(pPara) );
                     aParaFlags.bFirstParagraph = false;
                 }
             }
@@ -1336,7 +1312,7 @@ void TextObj::ImplCalculateTextPositions()
 
 ParagraphObj* TextObj::GetParagraph(int idx)
 {
-    return mpImplTextObj->maList[idx];
+    return mpImplTextObj->maList[idx].get();
 }
 
 sal_uInt32 TextObj::ParagraphCount() const
@@ -1369,12 +1345,10 @@ void FontCollectionEntry::ImplInit( const OUString& rName )
     if ( !aSubstName.isEmpty() )
     {
         Name = aSubstName;
-        bIsConverted = true;
     }
     else
     {
         Name = rName;
-        bIsConverted = false;
     }
 }
 
@@ -1419,11 +1393,11 @@ sal_uInt32 FontCollection::GetId( FontCollectionEntry& rEntry )
         pVDev->SetFont( aFont );
         FontMetric aMetric( pVDev->GetFontMetric() );
 
-        sal_uInt16 nTxtHeight = (sal_uInt16)aMetric.GetAscent() + (sal_uInt16)aMetric.GetDescent();
+        sal_uInt16 nTxtHeight = static_cast<sal_uInt16>(aMetric.GetAscent()) + static_cast<sal_uInt16>(aMetric.GetDescent());
 
         if ( nTxtHeight )
         {
-            double fScaling = (double)nTxtHeight / 120.0;
+            double fScaling = static_cast<double>(nTxtHeight) / 120.0;
             if ( ( fScaling > 0.50 ) && ( fScaling < 1.5 ) )
                 rEntry.Scaling = fScaling;
         }

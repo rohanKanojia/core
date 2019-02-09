@@ -21,12 +21,13 @@
 #define INCLUDED_UNOTOOLS_SYSLOCALE_HXX
 
 #include <unotools/unotoolsdllapi.h>
-#include <unotools/localedatawrapper.hxx>
-#include <unotools/charclass.hxx>
-#include <i18nlangtag/languagetag.hxx>
-#include <sal/types.h>
 #include <rtl/textenc.h>
 
+#include <memory>
+
+class CharClass;
+class LanguageTag;
+class LocaleDataWrapper;
 class SvtSysLocale_Impl;
 class SvtSysLocaleOptions;
 
@@ -45,8 +46,7 @@ class UNOTOOLS_DLLPUBLIC SvtSysLocale
 {
     friend class SvtSysLocale_Impl;     // access to mutex
 
-    static  SvtSysLocale_Impl*  pImpl;
-    static  sal_Int32           nRefCount;
+    std::shared_ptr<SvtSysLocale_Impl>  pImpl;
 
     UNOTOOLS_DLLPRIVATE static  ::osl::Mutex&               GetMutex();
 

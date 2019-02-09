@@ -11,7 +11,20 @@
 
 #include "LoggedResources.hxx"
 #include <memory>
-#include <com/sun/star/beans/PropertyValue.hpp>
+
+namespace com
+{
+namespace sun
+{
+namespace star
+{
+namespace beans
+{
+struct PropertyValue;
+}
+}
+}
+}
 
 namespace writerfilter
 {
@@ -26,16 +39,16 @@ class TablePositionHandler
     OUString m_aYSpec;
     OUString m_aHorzAnchor;
     OUString m_aXSpec;
-    sal_Int32 m_nY;
-    sal_Int32 m_nX;
-    sal_Int32 m_nLeftFromText;
-    sal_Int32 m_nRightFromText;
-    sal_Int32 m_nTopFromText;
-    sal_Int32 m_nBottomFromText;
+    sal_Int32 m_nY = 0;
+    sal_Int32 m_nX = 0;
+    sal_Int32 m_nLeftFromText = 0;
+    sal_Int32 m_nRightFromText = 0;
+    sal_Int32 m_nTopFromText = 0;
+    sal_Int32 m_nBottomFromText = 0;
 
     // Properties
-    virtual void lcl_attribute(Id Name, Value& val) override;
-    virtual void lcl_sprm(Sprm& sprm) override;
+    void lcl_attribute(Id nId, Value& rVal) override;
+    void lcl_sprm(Sprm& sprm) override;
 
 public:
     sal_Int32 getY()
@@ -63,25 +76,25 @@ public:
         return m_nBottomFromText;
     }
 
-    OUString getVertAnchor()
+    const OUString& getVertAnchor()
     {
         return m_aVertAnchor;
     }
-    OUString getYSpec()
+    const OUString& getYSpec()
     {
         return m_aYSpec;
     }
-    OUString getHorzAnchor()
+    const OUString& getHorzAnchor()
     {
         return m_aHorzAnchor;
     }
-    OUString getXSpec()
+    const OUString& getXSpec()
     {
         return m_aXSpec;
     }
 
     TablePositionHandler();
-    virtual ~TablePositionHandler();
+    ~TablePositionHandler() override;
 
     /** Compute the UNO properties for the frame containing the table based
         on the received tokens.
@@ -94,7 +107,7 @@ public:
     bool operator== (const TablePositionHandler& rHandler) const;
 };
 
-typedef std::shared_ptr<TablePositionHandler> TablePositionHandlerPtr;
+using TablePositionHandlerPtr = tools::SvRef<TablePositionHandler>;
 } // namespace dmapper
 } // namespace writerfilter
 

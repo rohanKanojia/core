@@ -20,13 +20,15 @@
 #ifndef INCLUDED_SD_SOURCE_UI_UNOIDL_UNODOCUMENTSETTINGS_HXX
 #define INCLUDED_SD_SOURCE_UI_UNOIDL_UNODOCUMENTSETTINGS_HXX
 
-#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+
+namespace com { namespace sun { namespace star { namespace uno { class XInterface; } } } }
 
 class SdXImpressDocument;
 
 namespace sd
 {
-    css::uno::Reference< css::uno::XInterface > SAL_CALL DocumentSettings_createInstance( SdXImpressDocument* pDoc ) throw();
+    css::uno::Reference< css::uno::XInterface > DocumentSettings_createInstance( SdXImpressDocument* pDoc ) throw();
 }
 
 #endif

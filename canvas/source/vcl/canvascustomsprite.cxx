@@ -26,8 +26,9 @@
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <comphelper/types.hxx>
 #include <rtl/math.hxx>
 #include <tools/diagnose_ex.h>
 #include <vcl/alpha.hxx>
@@ -60,11 +61,11 @@ namespace vclcanvas
 
 
         const ::Size aSize(
-            static_cast<sal_Int32>( ::std::max( 1.0,
+            static_cast<sal_Int32>( std::max( 1.0,
                                                 ceil( rSpriteSize.Width ))),  // round up to nearest int,
                                                                               // enforce sprite to have at
                                                                                // least (1,1) pixel size
-            static_cast<sal_Int32>( ::std::max( 1.0,
+            static_cast<sal_Int32>( std::max( 1.0,
                                                 ceil( rSpriteSize.Height ))) );
 
         // create content backbuffer in screen depth
@@ -115,21 +116,19 @@ namespace vclcanvas
         maCanvasHelper.clear();
     }
 
-    OUString SAL_CALL CanvasCustomSprite::getImplementationName() throw( uno::RuntimeException, std::exception )
+    OUString SAL_CALL CanvasCustomSprite::getImplementationName()
     {
         return OUString( "VCLCanvas.CanvasCustomSprite" );
     }
 
-    sal_Bool SAL_CALL CanvasCustomSprite::supportsService( const OUString& ServiceName ) throw( uno::RuntimeException, std::exception )
+    sal_Bool SAL_CALL CanvasCustomSprite::supportsService( const OUString& ServiceName )
     {
         return cppu::supportsService( this, ServiceName );
     }
 
-    uno::Sequence< OUString > SAL_CALL CanvasCustomSprite::getSupportedServiceNames()  throw( uno::RuntimeException, std::exception )
+    uno::Sequence< OUString > SAL_CALL CanvasCustomSprite::getSupportedServiceNames()
     {
-        uno::Sequence< OUString > aRet { "com.sun.star.rendering.CanvasCustomSprite" };
-
-        return aRet;
+        return { "com.sun.star.rendering.CanvasCustomSprite" };
     }
 
     // Sprite

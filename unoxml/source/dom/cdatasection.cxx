@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <cdatasection.hxx>
+#include "cdatasection.hxx"
 
 #include <com/sun/star/xml/sax/XExtendedDocumentHandler.hpp>
 
@@ -46,12 +46,12 @@ namespace DOM
         }
     }
 
-    OUString SAL_CALL CCDATASection::getNodeName()throw (RuntimeException, std::exception)
+    OUString SAL_CALL CCDATASection::getNodeName()
     {
         return OUString( "#cdata-section" );
     }
 
-    OUString SAL_CALL CCDATASection::getNodeValue() throw (RuntimeException, std::exception)
+    OUString SAL_CALL CCDATASection::getNodeValue()
     {
         return CCharacterData::getData();
     }

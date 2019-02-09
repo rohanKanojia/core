@@ -21,13 +21,13 @@
 #define INCLUDED_SC_INC_PARAMISC_HXX
 
 #include "address.hxx"
-#include <sal/types.h>
+#include <boost/optional.hpp>
 
 struct ScSolveParam
 {
-    ScAddress   aRefFormulaCell;
-    ScAddress   aRefVariableCell;
-    OUString*   pStrTargetVal;
+    ScAddress                   aRefFormulaCell;
+    ScAddress                   aRefVariableCell;
+    boost::optional<OUString>   pStrTargetVal;
 
     ScSolveParam();
     ScSolveParam( const ScSolveParam& r );
@@ -36,7 +36,7 @@ struct ScSolveParam
                   const OUString& rTargetValStr );
     ~ScSolveParam();
 
-    ScSolveParam&   operator=   ( const ScSolveParam& r );
+    ScSolveParam&  operator=   ( const ScSolveParam& r );
     bool           operator==  ( const ScSolveParam& r ) const;
 };
 

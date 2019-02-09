@@ -22,7 +22,6 @@
 
 #include <vcl/dialog.hxx>
 #include <vcl/fixed.hxx>
-#include <vcl/lstbox.hxx>
 #include <vcl/button.hxx>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
@@ -30,7 +29,7 @@
 #include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <vcl/toolbox.hxx>
-#include <svtools/treelistbox.hxx>
+#include <vcl/treelistbox.hxx>
 #include <unotools/viewoptions.hxx>
 #include "indexes.hxx"
 #include <dbaccess/ToolBoxHelper.hxx>
@@ -39,9 +38,8 @@ namespace dbaui
 {
 
     // DbaIndexList
-    class DbaIndexList : public SvTreeListBox
+    class DbaIndexList final : public SvTreeListBox
     {
-    protected:
         css::uno::Reference< css::sdbc::XConnection > m_xConnection;
         Link<DbaIndexList&,void>                      m_aSelectHdl;
         Link<SvTreeListEntry*,bool>                   m_aEndEditHdl;
@@ -54,32 +52,30 @@ namespace dbaui
 
         void SetEndEditHdl(const Link<SvTreeListEntry*,bool>& _rHdl) { m_aEndEditHdl = _rHdl; }
 
-        virtual bool Select(SvTreeListEntry* pEntry, bool bSelect) override;
+        virtual bool Select(SvTreeListEntry* pEntry, bool bSelect = true) override;
 
         void enableSelectHandler();
         void disableSelectHandler();
 
         void SelectNoHandlerCall( SvTreeListEntry* pEntry );
 
-        inline void setConnection(const css::uno::Reference< css::sdbc::XConnection >& _rxConnection)
+        void setConnection(const css::uno::Reference< css::sdbc::XConnection >& _rxConnection)
         {
              m_xConnection = _rxConnection;
         }
 
-    protected:
+    private:
         virtual bool EditedEntry( SvTreeListEntry* pEntry, const OUString& rNewText ) override;
 
-    private:
         using SvTreeListBox::Select;
     };
 
     // DbaIndexDialog
     class IndexFieldsControl;
     class OIndexCollection;
-    class DbaIndexDialog :  public ModalDialog,
-                            public OToolBoxHelper
+    class DbaIndexDialog final : public ModalDialog,
+                                public OToolBoxHelper
     {
-    protected:
         css::uno::Reference< css::sdbc::XConnection > m_xConnection;
 
         VclPtr<ToolBox>                 m_pActions;
@@ -92,7 +88,7 @@ namespace dbaui
         VclPtr<IndexFieldsControl>      m_pFields;
         VclPtr<PushButton>              m_pClose;
 
-        OIndexCollection*               m_pIndexes;
+        std::unique_ptr<OIndexCollection> m_pIndexes;
         SvTreeListEntry*                m_pPreviousSelection;
         bool                            m_bEditAgain;
 
@@ -104,10 +100,9 @@ namespace dbaui
             const css::uno::Sequence< OUString >& _rFieldNames,
             const css::uno::Reference< css::container::XNameAccess >& _rxIndexes,
             const css::uno::Reference< css::sdbc::XConnection >& _rxConnection,
-            const css::uno::Reference< css::uno::XComponentContext >& _rxContext,
-            sal_Int32 _nMaxColumnsInIndex
+            const css::uno::Reference< css::uno::XComponentContext >& _rxContext
             );
-        virtual ~DbaIndexDialog();
+        virtual ~DbaIndexDialog() override;
         virtual void dispose() override;
 
         virtual void StateChanged( StateChangedType nStateChange ) override;
@@ -121,22 +116,20 @@ namespace dbaui
                 <svtools/imgdef.hxx>
         */
         virtual void setImageList(sal_Int16 _eBitmapSet) override;
-    protected:
+    private:
         void fillIndexList();
         void updateToolbox();
         void updateControls(const SvTreeListEntry* _pEntry);
 
-    protected:
-        DECL_LINK_TYPED( OnIndexSelected, DbaIndexList&, void );
-        DECL_LINK_TYPED( OnIndexAction, ToolBox*, void );
-        DECL_LINK_TYPED( OnEntryEdited, SvTreeListEntry*, bool );
-        DECL_LINK_TYPED( OnModifiedClick, Button*, void );
-        DECL_LINK_TYPED( OnModified, IndexFieldsControl&, void );
-        DECL_LINK_TYPED( OnCloseDialog, Button*, void );
+        DECL_LINK( OnIndexSelected, DbaIndexList&, void );
+        DECL_LINK( OnIndexAction, ToolBox*, void );
+        DECL_LINK( OnEntryEdited, SvTreeListEntry*, bool );
+        DECL_LINK( OnModifiedClick, Button*, void );
+        DECL_LINK( OnModified, IndexFieldsControl&, void );
+        DECL_LINK( OnCloseDialog, Button*, void );
 
-        DECL_LINK_TYPED( OnEditIndexAgain, void*, void );
+        DECL_LINK( OnEditIndexAgain, void*, void );
 
-    private:
         sal_uInt16 mnNewCmdId;
         sal_uInt16 mnDropCmdId;
         sal_uInt16 mnRenameCmdId;
@@ -160,11 +153,11 @@ namespace dbaui
         void OnSaveIndex();
         void OnResetIndex();
 
-        bool implCommit(SvTreeListEntry* _pEntry);
+        bool implCommit(SvTreeListEntry const * _pEntry);
         bool implSaveModified(bool _bPlausibility = true);
         bool implCommitPreviouslySelected();
 
-        bool implDropIndex(SvTreeListEntry* _pEntry, bool _bRemoveFromCollection);
+        bool implDropIndex(SvTreeListEntry const * _pEntry, bool _bRemoveFromCollection);
 
         bool implCheckPlausibility(const Indexes::const_iterator& _rPos);
     };

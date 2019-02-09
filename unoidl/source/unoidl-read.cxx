@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 #include <cstddef>
@@ -18,15 +18,15 @@
 #include <utility>
 #include <vector>
 
-#include "osl/file.h"
-#include "osl/file.hxx"
-#include "osl/process.h"
-#include "rtl/process.h"
-#include "rtl/ref.hxx"
-#include "rtl/ustring.hxx"
-#include "sal/main.h"
-#include "sal/types.h"
-#include "unoidl/unoidl.hxx"
+#include <osl/file.h>
+#include <osl/file.hxx>
+#include <osl/process.h>
+#include <rtl/process.h>
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/main.h>
+#include <sal/types.h>
+#include <unoidl/unoidl.hxx>
 
 namespace {
 
@@ -243,8 +243,6 @@ void scanMap(
                                  ->isPublished())))))
                 .first);
             switch (ent->getSort()) {
-            case unoidl::Entity::SORT_MODULE:
-                assert(false && "this cannot happen");
             case unoidl::Entity::SORT_ENUM_TYPE:
             case unoidl::Entity::SORT_CONSTANT_GROUP:
                 break;
@@ -365,6 +363,8 @@ void scanMap(
                     insertEntityDependency(manager, i, ent2->getBase());
                     break;
                 }
+            case unoidl::Entity::SORT_MODULE:
+                assert(false && "this cannot happen");
             }
         }
     }
@@ -575,9 +575,6 @@ void writeEntity(
         rtl::Reference<unoidl::PublishableEntity> ent(
             static_cast<unoidl::PublishableEntity *>(i->second.entity.get()));
         switch (ent->getSort()) {
-        case unoidl::Entity::SORT_MODULE:
-            assert(false && "this cannot happen");
-            //deliberate fall-through anyway
         case unoidl::Entity::SORT_ENUM_TYPE:
             {
                 rtl::Reference<unoidl::EnumTypeEntity> ent2(
@@ -1010,6 +1007,8 @@ void writeEntity(
                 std::cout << "; };";
                 break;
             }
+        case unoidl::Entity::SORT_MODULE:
+            assert(false && "this cannot happen");
         }
     }
 }

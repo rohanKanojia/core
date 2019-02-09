@@ -29,13 +29,15 @@
 #include <string.h>
 #include <breakiteratorImpl.hxx>
 
-namespace com { namespace sun { namespace star { namespace i18n {
+using namespace com::sun::star::i18n;
+
+namespace i18npool {
 
 #ifdef DICT_JA_ZH_IN_DATAFILE
 
 #elif !defined DISABLE_DYNLOADING
 
-extern "C" { static void SAL_CALL thisModule() {} }
+extern "C" { static void thisModule() {} }
 
 #else
 
@@ -115,18 +117,18 @@ xdictionary::xdictionary(const sal_Char *lang) :
 
 #endif
 
-    for (sal_Int32 i = 0; i < CACHE_MAX; i++)
-        cache[i].size = 0;
+    for (WordBreakCache & i : cache)
+        i.size = 0;
 
     japaneseWordBreak = false;
 }
 
 xdictionary::~xdictionary()
 {
-    for (sal_Int32 i = 0; i < CACHE_MAX; i++) {
-        if (cache[i].size > 0) {
-            delete [] cache[i].contents;
-            delete [] cache[i].wordboundary;
+    for (WordBreakCache & i : cache) {
+        if (i.size > 0) {
+            delete [] i.contents;
+            delete [] i.wordboundary;
         }
     }
 }
@@ -147,11 +149,11 @@ void xdictionary::initDictionaryData(const sal_Char *pLang)
     static std::vector< datacache > aLoadedCache;
 
     osl::MutexGuard aGuard( osl::Mutex::getGlobalMutex() );
-    for( size_t i = 0; i < aLoadedCache.size(); ++i )
+    for(datacache & i : aLoadedCache)
     {
-        if( !strcmp( pLang, aLoadedCache[ i ].maLang.getStr() ) )
+        if( i.maLang != pLang )
         {
-            data = aLoadedCache[ i ].maData;
+            data = i.maData;
             return;
         }
     }
@@ -198,7 +200,7 @@ bool xdictionary::exists(const sal_uInt32 c)
     // 0x1FFF is the hardcoded limit in gendict for data.existMarks
     bool exist = data.existMark && (c>>3) < 0x1FFF && (data.existMark[c>>3] & (1<<(c&0x07))) != 0;
     if (!exist && japaneseWordBreak)
-        return BreakIteratorImpl::getScriptClass(c) == ScriptType::ASIAN;
+        return BreakIteratorImpl::getScriptClass(c) == css::i18n::ScriptType::ASIAN;
     else
         return exist;
 }
@@ -250,7 +252,7 @@ WordBreakCache::WordBreakCache() :
  * Compare two unicode string,
  */
 
-bool WordBreakCache::equals(const sal_Unicode* str, Boundary& boundary)
+bool WordBreakCache::equals(const sal_Unicode* str, Boundary const & boundary)
 {
     // Different length, different string.
     if (length != boundary.endPos - boundary.startPos) return false;
@@ -332,7 +334,7 @@ static sal_Int16 JapaneseCharType(sal_Unicode c)
     return KANJA;
 }
 
-WordBreakCache& xdictionary::getCache(const sal_Unicode *text, Boundary& wordBoundary)
+WordBreakCache& xdictionary::getCache(const sal_Unicode *text, Boundary const & wordBoundary)
 {
     WordBreakCache& rCache = cache[text[0] & 0x1f];
 
@@ -348,7 +350,7 @@ WordBreakCache& xdictionary::getCache(const sal_Unicode *text, Boundary& wordBou
             rCache.size = len;
         }
         else
-            rCache.size = len > DEFAULT_SIZE ? len : DEFAULT_SIZE;
+            rCache.size = std::max<sal_Int32>(len, DEFAULT_SIZE);
         rCache.contents = new sal_Unicode[rCache.size + 1];
         rCache.wordboundary = new sal_Int32[rCache.size + 2];
     }
@@ -362,7 +364,7 @@ WordBreakCache& xdictionary::getCache(const sal_Unicode *text, Boundary& wordBou
     while (rCache.wordboundary[i] < rCache.length) {
         len = 0;
         // look the continuous white space as one word and cache it
-        while (u_isWhitespace((sal_uInt32)text[wordBoundary.startPos + rCache.wordboundary[i] + len]))
+        while (u_isWhitespace(static_cast<sal_uInt32>(text[wordBoundary.startPos + rCache.wordboundary[i] + len])))
             len ++;
 
         if (len == 0) {
@@ -428,7 +430,7 @@ Boundary xdictionary::nextWord(const OUString& rText, sal_Int32 anyPos, sal_Int1
         return getWordBoundary(rText, anyPos, wordType, true);
 }
 
-Boundary xdictionary::getWordBoundary(const OUString& rText, sal_Int32 anyPos, sal_Int16 wordType, bool bDirection)
+Boundary const & xdictionary::getWordBoundary(const OUString& rText, sal_Int32 anyPos, sal_Int16 wordType, bool bDirection)
 {
         const sal_Unicode *text=rText.getStr();
         sal_Int32 len=rText.getLength();
@@ -457,7 +459,7 @@ Boundary xdictionary::getWordBoundary(const OUString& rText, sal_Int32 anyPos, s
         } else {
             boundary.startPos = anyPos;
             if (anyPos < len) rText.iterateCodePoints(&anyPos);
-            boundary.endPos = anyPos < len ? anyPos : len;
+            boundary.endPos = std::min(anyPos, len);
         }
         if (wordType == WordType::WORD_COUNT) {
             // skip punctuation for word count.
@@ -474,6 +476,6 @@ Boundary xdictionary::getWordBoundary(const OUString& rText, sal_Int32 anyPos, s
         return boundary;
 }
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

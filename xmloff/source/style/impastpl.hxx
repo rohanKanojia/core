@@ -22,6 +22,7 @@
 
 #include <sal/types.h>
 #include <rtl/ustring.hxx>
+#include <rtl/ref.hxx>
 #include <set>
 #include <memory>
 #include <vector>
@@ -33,6 +34,8 @@
 
 #include <xmloff/maptype.hxx>
 #include <xmloff/xmlexppr.hxx>
+#include <xmloff/xmlprmap.hxx>
+#include <xmloff/AutoStyleEntry.hxx>
 
 class SvXMLAutoStylePoolP;
 class XMLAutoStylePoolParent;
@@ -45,16 +48,12 @@ class SvXMLExport;
 class XMLAutoStylePoolProperties
 {
     OUString                     msName;
-    ::std::vector< XMLPropertyState >   maProperties;
-    sal_uInt32                          mnPos;
+    ::std::vector< XMLPropertyState > const   maProperties;
+    sal_uInt32 const                          mnPos;
 
 public:
 
-    XMLAutoStylePoolProperties( XMLAutoStyleFamily& rFamilyData, const ::std::vector< XMLPropertyState >& rProperties, OUString& rParentname );
-
-    ~XMLAutoStylePoolProperties()
-    {
-    }
+    XMLAutoStylePoolProperties( XMLAutoStyleFamily& rFamilyData, const ::std::vector< XMLPropertyState >& rProperties, OUString const & rParentname );
 
     const OUString& GetName() const { return msName; }
     const ::std::vector< XMLPropertyState >& GetProperties() const { return maProperties; }
@@ -70,7 +69,7 @@ public:
     typedef std::vector<std::unique_ptr<XMLAutoStylePoolProperties>> PropertiesListType;
 
 private:
-    OUString msParent;
+    OUString const msParent;
     PropertiesListType m_PropertiesList;
 
 public:
@@ -82,7 +81,7 @@ public:
 
     ~XMLAutoStylePoolParent();
 
-    bool Add( XMLAutoStyleFamily& rFamilyData, const ::std::vector< XMLPropertyState >& rProperties, OUString& rName, bool bDontSeek = false );
+    bool Add( XMLAutoStyleFamily& rFamilyData, const ::std::vector< XMLPropertyState >& rProperties, OUString& rName, bool bDontSeek );
 
     bool AddNamed( XMLAutoStyleFamily& rFamilyData, const ::std::vector< XMLPropertyState >& rProperties, const OUString& rName );
 
@@ -104,25 +103,24 @@ struct XMLAutoStyleFamily
 {
     typedef std::set<std::unique_ptr<XMLAutoStylePoolParent>,
         comphelper::UniquePtrValueLess<XMLAutoStylePoolParent>> ParentSetType;
-    typedef std::set<OUString> NameSetType;
 
-    sal_uInt32 mnFamily;
-    OUString maStrFamilyName;
+    sal_uInt32 const mnFamily;
+    OUString const maStrFamilyName;
     rtl::Reference<SvXMLExportPropertyMapper> mxMapper;
 
     ParentSetType m_ParentSet;
-    NameSetType maNameSet;
+    std::set<OUString> maNameSet;
+    std::set<OUString> maReservedNameSet;
     sal_uInt32 mnCount;
     sal_uInt32 mnName;
-    OUString maStrPrefix;
-    bool mbAsFamily;
+    OUString const maStrPrefix;
+    bool const mbAsFamily;
 
     XMLAutoStyleFamily( sal_Int32 nFamily, const OUString& rStrName,
             const rtl::Reference<SvXMLExportPropertyMapper>& rMapper,
-            const OUString& rStrPrefix, bool bAsFamily = true );
+            const OUString& rStrPrefix, bool bAsFamily );
 
     explicit XMLAutoStyleFamily( sal_Int32 nFamily );
-    ~XMLAutoStyleFamily();
 
     XMLAutoStyleFamily(const XMLAutoStyleFamily&) = delete;
     XMLAutoStyleFamily& operator=(const XMLAutoStyleFamily&) = delete;
@@ -152,10 +150,11 @@ public:
 
     void AddFamily( sal_Int32 nFamily, const OUString& rStrName,
         const rtl::Reference < SvXMLExportPropertyMapper > & rMapper,
-        const OUString& rStrPrefix, bool bAsFamily = true );
+        const OUString& rStrPrefix, bool bAsFamily );
     void SetFamilyPropSetMapper( sal_Int32 nFamily,
         const rtl::Reference < SvXMLExportPropertyMapper > & rMapper );
     void RegisterName( sal_Int32 nFamily, const OUString& rName );
+    void RegisterDefinedName( sal_Int32 nFamily, const OUString& rName );
     void GetRegisteredNames(
         css::uno::Sequence<sal_Int32>& aFamilies,
         css::uno::Sequence<OUString>& aNames );
@@ -175,12 +174,11 @@ public:
                           const ::std::vector< XMLPropertyState >& rProperties ) const;
 
     void exportXML( sal_Int32 nFamily,
-        const css::uno::Reference< css::xml::sax::XDocumentHandler > & rHandler,
-        const SvXMLUnitConverter& rUnitConverter,
-        const SvXMLNamespaceMap& rNamespaceMap,
         const SvXMLAutoStylePoolP *pAntiImpl) const;
 
     void ClearEntries();
+
+    std::vector<xmloff::AutoStyleEntry> GetAutoStyleEntries() const;
 };
 
 #endif

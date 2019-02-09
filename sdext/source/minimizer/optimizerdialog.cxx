@@ -19,17 +19,25 @@
 
 
 #include "optimizerdialog.hxx"
-#include "pppoptimizer.hxx"
+#include "impoptimizer.hxx"
 #include "fileopendialog.hxx"
+#include <com/sun/star/frame/XStorable.hpp>
+#include <com/sun/star/frame/XTitle.hpp>
 #include <com/sun/star/ui/dialogs/ExecutableDialogResults.hpp>
 #include <com/sun/star/ucb/XSimpleFileAccess.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/util/XCloseBroadcaster.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
-#include <com/sun/star/frame/XLayoutManager.hpp>
+#include <com/sun/star/util/XModifiable.hpp>
 #include <sal/macros.h>
 #include <osl/time.h>
-
+#include <vcl/errinf.hxx>
+#include <vcl/weld.hxx>
+#include <vcl/layout.hxx>
+#include <svtools/sfxecode.hxx>
+#include <svtools/ehdl.hxx>
+#include <tools/urlobj.hxx>
+#include <bitmaps.hlst>
 
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::ui;
@@ -40,7 +48,6 @@ using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::script;
 using namespace ::com::sun::star::container;
 
 
@@ -57,9 +64,9 @@ void OptimizerDialog::InitDialog()
         OUString("Width") };
 
     Any pValues[] = {
-        Any( sal_True ),
+        Any( true ),
         Any( sal_Int32( DIALOG_HEIGHT ) ),
-        Any( sal_True ),
+        Any( true ),
         Any( sal_Int32( 200 ) ),
         Any( sal_Int32( 52 ) ),
         Any( getString( STR_SUN_OPTIMIZATION_WIZARD2 ) ),
@@ -111,15 +118,12 @@ void OptimizerDialog::InitRoadmap()
         InsertRoadmapItem( 3, getString( STR_OLE_OBJECTS ), ITEM_ID_OLE_OPTIMIZATION );
         InsertRoadmapItem( 4, getString( STR_SUMMARY ), ITEM_ID_SUMMARY );
 
-        // Well, that's messy, but the
-        // BMP_PRESENTATION_MINIMIZER from sd module cannot be used here directly
-        // that UNO wizard dialog should be converted to ui
-        OUString sURL( "private:graphicrepository/sd/res/minimize_presi_80.png" );
+        OUString const sURL("private:graphicrepository/" BMP_PRESENTATION_MINIMIZER);
 
         xPropertySet->setPropertyValue( "ImageURL", Any( sURL ) );
         xPropertySet->setPropertyValue( "Activated", Any( true ) );
         xPropertySet->setPropertyValue( "Complete", Any( true ) );
-        xPropertySet->setPropertyValue( "CurrentItemID", Any( (sal_Int16)ITEM_ID_INTRODUCTION ) );
+        xPropertySet->setPropertyValue( "CurrentItemID", Any( sal_Int16(ITEM_ID_INTRODUCTION) ) );
         xPropertySet->setPropertyValue( "Text", Any( getString( STR_STEPS ) ) );
     }
     catch( Exception& )
@@ -173,22 +177,19 @@ void OptimizerDialog::UpdateConfiguration()
     }
 
     aAny = getControlProperty( "CheckBox3Pg3", "State" );
-    if ( aAny >>= nInt16 )
+    if ( (aAny >>= nInt16) && nInt16 )
     {
-        if ( nInt16 )
+        aAny = getControlProperty( "ListBox0Pg3", "SelectedItems" );
+        if ( aAny >>= aSelectedItems )
         {
-            aAny = getControlProperty( "ListBox0Pg3", "SelectedItems" );
-            if ( aAny >>= aSelectedItems )
+            if ( aSelectedItems.getLength() )
             {
-                if ( aSelectedItems.getLength() )
+                sal_Int16 nSelectedItem = aSelectedItems[ 0 ];
+                aAny = getControlProperty( "ListBox0Pg3", "StringItemList" );
+                if ( aAny >>= aStringItemList )
                 {
-                    sal_Int16 nSelectedItem = aSelectedItems[ 0 ];
-                    aAny = getControlProperty( "ListBox0Pg3", "StringItemList" );
-                    if ( aAny >>= aStringItemList )
-                    {
-                        if ( aStringItemList.getLength() > nSelectedItem )
-                            SetConfigProperty( TK_CustomShowName, Any( aStringItemList[ nSelectedItem ] ) );
-                    }
+                    if ( aStringItemList.getLength() > nSelectedItem )
+                        SetConfigProperty( TK_CustomShowName, Any( aStringItemList[ nSelectedItem ] ) );
                 }
             }
         }
@@ -196,9 +197,9 @@ void OptimizerDialog::UpdateConfiguration()
 }
 
 
-OptimizerDialog::OptimizerDialog( const Reference< XComponentContext > &rxContext, Reference< XFrame >& rxFrame, Reference< XDispatch > rxStatusDispatcher ) :
+OptimizerDialog::OptimizerDialog( const Reference< XComponentContext > &rxContext, Reference< XFrame > const & rxFrame, Reference< XDispatch > const & rxStatusDispatcher ) :
     UnoDialog( rxContext, rxFrame ),
-    ConfigurationAccess( rxContext, nullptr ),
+    ConfigurationAccess( rxContext ),
     mnCurrentStep( 0 ),
     mnTabIndex( 0 ),
     mxFrame( rxFrame ),
@@ -240,11 +241,11 @@ OptimizerDialog::~OptimizerDialog()
 
 void OptimizerDialog::execute()
 {
-    Reference< XItemEventBroadcaster > maRoadmapBroadcaster( mxRoadmapControl, UNO_QUERY_THROW );
-    maRoadmapBroadcaster->addItemListener( mxItemListener );
+    Reference< XItemEventBroadcaster > xRoadmapBroadcaster( mxRoadmapControl, UNO_QUERY_THROW );
+    xRoadmapBroadcaster->addItemListener( mxItemListener );
     UnoDialog::execute();
     UpdateConfiguration();          // taking actual control settings for the configuration
-    maRoadmapBroadcaster->removeItemListener( mxItemListener );
+    xRoadmapBroadcaster->removeItemListener( mxItemListener );
 }
 
 
@@ -325,7 +326,7 @@ void OptimizerDialog::UpdateStatus( const css::uno::Sequence< css::beans::Proper
             OUString sStatus;
             if ( *pVal >>= sStatus )
             {
-                setControlProperty( "FixedText1Pg4", "Enabled", Any( sal_True ) );
+                setControlProperty( "FixedText1Pg4", "Enabled", Any( true ) );
                 setControlProperty( "FixedText1Pg4", "Label", Any( getString( TKGet( sStatus ) ) ) );
             }
         }
@@ -346,7 +347,6 @@ void OptimizerDialog::UpdateStatus( const css::uno::Sequence< css::beans::Proper
 
 
 void ItemListener::itemStateChanged( const ItemEvent& Event )
-    throw ( RuntimeException, std::exception )
 {
     try
     {
@@ -474,13 +474,10 @@ void ItemListener::itemStateChanged( const ItemEvent& Event )
     }
 }
 void ItemListener::disposing( const css::lang::EventObject& /* Source */ )
-    throw ( css::uno::RuntimeException, std::exception )
 {
 }
 
-
 void ActionListener::actionPerformed( const ActionEvent& rEvent )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     switch( TKGet( rEvent.ActionCommand ) )
     {
@@ -492,11 +489,11 @@ void ActionListener::actionPerformed( const ActionEvent& rEvent )
 
             mrOptimizerDialog.SwitchPage( ITEM_ID_SUMMARY );
             mrOptimizerDialog.DisablePage( ITEM_ID_SUMMARY );
-            mrOptimizerDialog.setControlProperty( "btnNavBack", "Enabled", Any( sal_False ) );
-            mrOptimizerDialog.setControlProperty( "btnNavNext", "Enabled", Any( sal_False ) );
-            mrOptimizerDialog.setControlProperty( "btnNavFinish", "Enabled", Any( sal_False ) );
-            mrOptimizerDialog.setControlProperty( "btnNavCancel", "Enabled", Any( sal_False ) );
-            mrOptimizerDialog.setControlProperty( "FixedText0Pg4", "Enabled", Any( sal_True ) );
+            mrOptimizerDialog.setControlProperty( "btnNavBack", "Enabled", Any( false ) );
+            mrOptimizerDialog.setControlProperty( "btnNavNext", "Enabled", Any( false ) );
+            mrOptimizerDialog.setControlProperty( "btnNavFinish", "Enabled", Any( false ) );
+            mrOptimizerDialog.setControlProperty( "btnNavCancel", "Enabled", Any( false ) );
+            mrOptimizerDialog.setControlProperty( "FixedText0Pg4", "Enabled", Any( true ) );
 
             // check if we have to open the FileDialog
             bool    bSuccessfullyExecuted = true;
@@ -504,35 +501,40 @@ void ActionListener::actionPerformed( const ActionEvent& rEvent )
             mrOptimizerDialog.getControlProperty( "RadioButton1Pg4", "State" ) >>= nInt16;
             if ( nInt16 )
             {
+                // Duplicate presentation before applying changes
                 OUString aSaveAsURL;
                 FileOpenDialog aFileOpenDialog( mrOptimizerDialog.GetComponentContext() );
 
                 // generating default file name
+                OUString aName;
                 Reference< XStorable > xStorable( mrOptimizerDialog.mxController->getModel(), UNO_QUERY );
                 if ( xStorable.is() && xStorable->hasLocation() )
                 {
-                    OUString aLocation( xStorable->getLocation() );
-                    if ( !aLocation.isEmpty() )
+                    INetURLObject aURLObj( xStorable->getLocation() );
+                    if ( !aURLObj.hasFinalSlash() )
                     {
-                        sal_Int32 nIndex = aLocation.lastIndexOf( '/', aLocation.getLength() - 1 );
-                        if ( nIndex >= 0 )
-                        {
-                            if ( nIndex < aLocation.getLength() - 1 )
-                                aLocation = aLocation.copy( nIndex + 1 );
-
-                            // remove extension
-                            nIndex = aLocation.lastIndexOf( '.', aLocation.getLength() - 1 );
-                            if ( nIndex >= 0 )
-                                aLocation = aLocation.copy( 0, nIndex );
-
-                            // adding .mini
-                            aLocation = aLocation.concat( ".mini" );
-                            aFileOpenDialog.setDefaultName( aLocation );
-                        }
+                        // tdf#105382 uri-decode file name
+                        aURLObj.removeExtension(INetURLObject::LAST_SEGMENT, false);
+                        aName = aURLObj.getName(INetURLObject::LAST_SEGMENT, false,
+                                                INetURLObject::DecodeMechanism::WithCharset);
                     }
                 }
-                 bool bDialogExecuted = aFileOpenDialog.execute() == dialogs::ExecutableDialogResults::OK;
-                if ( bDialogExecuted )
+                else
+                {
+                    // If no filename, try to use model title ("Untitled 1" or something like this)
+                    Reference<XTitle> xTitle(
+                        mrOptimizerDialog.GetFrame()->getController()->getModel(), UNO_QUERY);
+                    aName = xTitle->getTitle();
+                }
+
+                if (!aName.isEmpty())
+                {
+                    aName += " ";
+                    aName += mrOptimizerDialog.getString(STR_FILENAME_SUFFIX);
+                    aFileOpenDialog.setDefaultName(aName);
+                }
+
+                if (aFileOpenDialog.execute() == dialogs::ExecutableDialogResults::OK)
                 {
                     aSaveAsURL = aFileOpenDialog.getURL();
                     mrOptimizerDialog.SetConfigProperty( TK_SaveAsURL, Any( aSaveAsURL ) );
@@ -550,6 +552,30 @@ void ActionListener::actionPerformed( const ActionEvent& rEvent )
                     mrOptimizerDialog.mxReschedule->reschedule();
                     for ( sal_uInt32 i = osl_getGlobalTimer(); ( i + 500 ) > ( osl_getGlobalTimer() ); )
                     mrOptimizerDialog.mxReschedule->reschedule();
+                }
+            }
+            else
+            {
+                // Apply changes to current presentation
+                Reference<XModifiable> xModifiable(mrOptimizerDialog.mxController->getModel(),
+                                                   UNO_QUERY_THROW );
+                if ( xModifiable->isModified() )
+                {
+                    SolarMutexGuard aSolarGuard;
+                    std::unique_ptr<weld::MessageDialog> popupDlg(Application::CreateMessageDialog(
+                        nullptr, VclMessageType::Question, VclButtonsType::YesNo,
+                        mrOptimizerDialog.getString(STR_WARN_UNSAVED_PRESENTATION)));
+                    if (popupDlg->run() != RET_YES)
+                    {
+                        // Selected not "yes" ("no" or dialog was cancelled) so return to previous step
+                        mrOptimizerDialog.setControlProperty("btnNavBack", "Enabled",
+                                                                  Any(true));
+                        mrOptimizerDialog.setControlProperty("btnNavNext", "Enabled", Any(false));
+                        mrOptimizerDialog.setControlProperty("btnNavFinish", "Enabled", Any(true));
+                        mrOptimizerDialog.setControlProperty("btnNavCancel", "Enabled", Any(true));
+                        mrOptimizerDialog.EnablePage(ITEM_ID_SUMMARY);
+                        return;
+                    }
                 }
             }
             if ( bSuccessfullyExecuted )
@@ -572,11 +598,6 @@ void ActionListener::actionPerformed( const ActionEvent& rEvent )
             }
             if ( bSuccessfullyExecuted )
             {
-                Reference < XDispatch > xDispatch(
-                    new PPPOptimizer(
-                        mrOptimizerDialog.GetComponentContext(),
-                        mrOptimizerDialog.GetFrame()));
-
                 URL aURL;
                 aURL.Protocol = "vnd.com.sun.star.comp.PPPOptimizer:";
                 aURL.Path = "optimize";
@@ -589,16 +610,52 @@ void ActionListener::actionPerformed( const ActionEvent& rEvent )
                 lArguments[ 2 ].Name = "InformationDialog";
                 lArguments[ 2 ].Value <<= mrOptimizerDialog.GetFrame();
 
-                xDispatch->dispatch( aURL, lArguments );
+
+                ErrCode errorCode;
+                try
+                {
+                    ImpOptimizer aOptimizer(
+                        mrOptimizerDialog.GetComponentContext(),
+                        mrOptimizerDialog.GetFrame()->getController()->getModel());
+                    aOptimizer.Optimize(lArguments);
+                }
+                catch (css::io::IOException&)
+                {
+                    // We always receive just ERRCODE_IO_CANTWRITE in case of problems, so no need to bother
+                    // about extracting error code from exception text
+                    errorCode = ERRCODE_IO_CANTWRITE;
+                }
+                catch (css::uno::Exception&)
+                {
+                    // Other general exception
+                    errorCode = ERRCODE_IO_GENERAL;
+                }
+
+                if (errorCode != ERRCODE_NONE)
+                {
+                    // Restore wizard controls
+                    mrOptimizerDialog.maStats.SetStatusValue(TK_Progress,
+                                                             Any(static_cast<sal_Int32>(0)));
+                    mrOptimizerDialog.setControlProperty("btnNavBack", "Enabled", Any(true));
+                    mrOptimizerDialog.setControlProperty("btnNavNext", "Enabled", Any(false));
+                    mrOptimizerDialog.setControlProperty("btnNavFinish", "Enabled", Any(true));
+                    mrOptimizerDialog.setControlProperty("btnNavCancel", "Enabled", Any(true));
+
+                    OUString aFileName;
+                    mrOptimizerDialog.GetConfigProperty(TK_SaveAsURL) >>= aFileName;
+                    SfxErrorContext aEc(ERRCTX_SFX_SAVEASDOC, aFileName);
+                    ErrorHandler::HandleError(errorCode);
+                    break;
+                }
 
                 mrOptimizerDialog.endExecute( bSuccessfullyExecuted );
             }
             else
             {
-                mrOptimizerDialog.setControlProperty( "btnNavBack", "Enabled", Any( sal_True ) );
-                mrOptimizerDialog.setControlProperty( "btnNavNext", "Enabled", Any( sal_False ) );
-                mrOptimizerDialog.setControlProperty( "btnNavFinish", "Enabled", Any( sal_True ) );
-                mrOptimizerDialog.setControlProperty( "btnNavCancel", "Enabled", Any( sal_True ) );
+                mrOptimizerDialog.setControlProperty( "btnNavBack", "Enabled", Any( true ) );
+                mrOptimizerDialog.setControlProperty( "btnNavNext", "Enabled", Any( false ) );
+                mrOptimizerDialog.setControlProperty( "btnNavFinish", "Enabled", Any( true ) );
+                mrOptimizerDialog.setControlProperty( "btnNavCancel", "Enabled", Any( true ) );
                 mrOptimizerDialog.EnablePage( ITEM_ID_SUMMARY );
             }
         }
@@ -623,13 +680,11 @@ void ActionListener::actionPerformed( const ActionEvent& rEvent )
     }
 }
 void ActionListener::disposing( const css::lang::EventObject& /* Source */ )
-    throw ( css::uno::RuntimeException, std::exception )
 {
 }
 
 
 void ActionListenerListBox0Pg0::actionPerformed( const ActionEvent& rEvent )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     if ( !rEvent.ActionCommand.isEmpty() )
     {
@@ -641,27 +696,23 @@ void ActionListenerListBox0Pg0::actionPerformed( const ActionEvent& rEvent )
     mrOptimizerDialog.UpdateControlStates();
 }
 void ActionListenerListBox0Pg0::disposing( const css::lang::EventObject& /* Source */ )
-    throw ( css::uno::RuntimeException, std::exception )
 {
 }
 
 
 void TextListenerFormattedField0Pg1::textChanged( const TextEvent& /* rEvent */ )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     double fDouble = 0;
     Any aAny = mrOptimizerDialog.getControlProperty( "FormattedField0Pg1", "EffectiveValue" );
     if ( aAny >>= fDouble )
-        mrOptimizerDialog.SetConfigProperty( TK_JPEGQuality, Any( (sal_Int32)fDouble ) );
+        mrOptimizerDialog.SetConfigProperty( TK_JPEGQuality, Any( static_cast<sal_Int32>(fDouble) ) );
 }
 void TextListenerFormattedField0Pg1::disposing( const css::lang::EventObject& /* Source */ )
-    throw ( css::uno::RuntimeException, std::exception )
 {
 }
 
 
 void TextListenerComboBox0Pg1::textChanged( const TextEvent& /* rEvent */ )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     OUString aString;
     Any aAny = mrOptimizerDialog.getControlProperty( "ComboBox0Pg1", "Text" );
@@ -683,13 +734,11 @@ void TextListenerComboBox0Pg1::textChanged( const TextEvent& /* rEvent */ )
     }
 }
 void TextListenerComboBox0Pg1::disposing( const css::lang::EventObject& /* Source */ )
-    throw ( css::uno::RuntimeException, std::exception )
 {
 }
 
 
 void SpinListenerFormattedField0Pg1::up( const SpinEvent& /* rEvent */ )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     double fDouble;
     Any aAny = mrOptimizerDialog.getControlProperty( "FormattedField0Pg1", "EffectiveValue" );
@@ -699,11 +748,10 @@ void SpinListenerFormattedField0Pg1::up( const SpinEvent& /* rEvent */ )
         if ( fDouble > 100 )
             fDouble = 100;
         mrOptimizerDialog.setControlProperty( "FormattedField0Pg1", "EffectiveValue", Any( fDouble ) );
-        mrOptimizerDialog.SetConfigProperty( TK_JPEGQuality, Any( (sal_Int32)fDouble ) );
+        mrOptimizerDialog.SetConfigProperty( TK_JPEGQuality, Any( static_cast<sal_Int32>(fDouble) ) );
     }
 }
 void SpinListenerFormattedField0Pg1::down( const SpinEvent& /* rEvent */ )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     double fDouble;
     Any aAny = mrOptimizerDialog.getControlProperty( "FormattedField0Pg1", "EffectiveValue" );
@@ -713,23 +761,20 @@ void SpinListenerFormattedField0Pg1::down( const SpinEvent& /* rEvent */ )
         if ( fDouble < 0 )
             fDouble = 0;
         mrOptimizerDialog.setControlProperty( "FormattedField0Pg1", "EffectiveValue", Any( fDouble ) );
-        mrOptimizerDialog.SetConfigProperty( TK_JPEGQuality, Any( (sal_Int32)fDouble ) );
+        mrOptimizerDialog.SetConfigProperty( TK_JPEGQuality, Any( static_cast<sal_Int32>(fDouble) ) );
     }
 }
 void SpinListenerFormattedField0Pg1::first( const SpinEvent& /* rEvent */ )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     mrOptimizerDialog.setControlProperty( "FormattedField0Pg1", "EffectiveValue", Any( static_cast< double >( 0 ) ) );
-    mrOptimizerDialog.SetConfigProperty( TK_JPEGQuality, Any( (sal_Int32)0 ) );
+    mrOptimizerDialog.SetConfigProperty( TK_JPEGQuality, Any( sal_Int32(0) ) );
 }
 void SpinListenerFormattedField0Pg1::last( const SpinEvent& /* rEvent */ )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     mrOptimizerDialog.setControlProperty( "FormattedField0Pg1", "EffectiveValue", Any( static_cast< double >( 100 ) ) );
-    mrOptimizerDialog.SetConfigProperty( TK_JPEGQuality, Any( (sal_Int32)100 ) );
+    mrOptimizerDialog.SetConfigProperty( TK_JPEGQuality, Any( sal_Int32(100) ) );
 }
 void SpinListenerFormattedField0Pg1::disposing( const css::lang::EventObject& /* Source */ )
-    throw ( css::uno::RuntimeException, std::exception )
 {
 }
 

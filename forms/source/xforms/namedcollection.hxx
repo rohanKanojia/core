@@ -20,7 +20,7 @@
 #ifndef INCLUDED_FORMS_SOURCE_XFORMS_NAMEDCOLLECTION_HXX
 #define INCLUDED_FORMS_SOURCE_XFORMS_NAMEDCOLLECTION_HXX
 
-#include <collection.hxx>
+#include "collection.hxx"
 #include <cppuhelper/implbase.hxx>
 #include <com/sun/star/container/XNameAccess.hpp>
 
@@ -37,7 +37,6 @@ class NamedCollection : public cppu::ImplInheritanceHelper<
 
 public:
     NamedCollection() {}
-    virtual ~NamedCollection() {}
 
     const T& getItem( const OUString& rName ) const
     {
@@ -85,41 +84,32 @@ protected:
 public:
 
     // XElementAccess
-    virtual css::uno::Type SAL_CALL getElementType()
-        throw( css::uno::RuntimeException ) override
+    virtual css::uno::Type SAL_CALL getElementType() override
     {
         return Collection<T>::getElementType();
     }
 
-    virtual sal_Bool SAL_CALL hasElements()
-        throw( css::uno::RuntimeException ) override
+    virtual sal_Bool SAL_CALL hasElements() override
     {
         return Collection<T>::hasElements();
     }
 
     // XNameAccess : XElementAccess
     virtual css::uno::Any SAL_CALL getByName(
-        const OUString& aName )
-        throw( css::container::NoSuchElementException,
-               css::lang::WrappedTargetException,
-               css::uno::RuntimeException ) override
+        const OUString& aName ) override
     {
-        if( hasItem( aName ) )
-            return css::uno::makeAny( getItem( aName ) );
-        else
+        if( !hasItem( aName ) )
             throw css::container::NoSuchElementException();
-
+        return css::uno::makeAny( getItem( aName ) );
     }
 
-    virtual css::uno::Sequence<OUString> SAL_CALL getElementNames()
-        throw( css::uno::RuntimeException ) override
+    virtual css::uno::Sequence<OUString> SAL_CALL getElementNames() override
     {
         return getNames();
     }
 
     virtual sal_Bool SAL_CALL hasByName(
-        const OUString& aName )
-        throw( css::uno::RuntimeException ) override
+        const OUString& aName ) override
     {
         return hasItem( aName );
     }

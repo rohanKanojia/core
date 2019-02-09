@@ -17,9 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "VPolarTransformation.hxx"
-#include "ViewDefines.hxx"
-#include "CommonConverters.hxx"
+#include <VPolarTransformation.hxx>
+#include <CommonConverters.hxx>
 #include <algorithm>
 
 using namespace ::com::sun::star;
@@ -43,8 +42,6 @@ VPolarTransformation::~VPolarTransformation()
 // ____ XTransformation ____
 Sequence< double > SAL_CALL VPolarTransformation::transform(
                         const Sequence< double >& rSourceValues )
-    throw (RuntimeException,
-           lang::IllegalArgumentException, std::exception)
 {
     double fScaledLogicAngle  = rSourceValues[0];
     double fScaledLogicRadius = rSourceValues[1];
@@ -53,7 +50,7 @@ Sequence< double > SAL_CALL VPolarTransformation::transform(
         std::swap(fScaledLogicAngle,fScaledLogicRadius);
 
     double fAngleDegree = m_aPositionHelper.transformToAngleDegree( fScaledLogicAngle, false );
-    double fAnglePi     = fAngleDegree*F_PI/180.0;
+    double fAnglePi     = basegfx::deg2rad(fAngleDegree);
     double fRadius      = m_aPositionHelper.transformToRadius( fScaledLogicRadius, false);
 
     double fX=fRadius*cos(fAnglePi);
@@ -67,13 +64,11 @@ Sequence< double > SAL_CALL VPolarTransformation::transform(
 }
 
 sal_Int32 SAL_CALL VPolarTransformation::getSourceDimension()
-    throw (RuntimeException, std::exception)
 {
     return 3;
 }
 
 sal_Int32 SAL_CALL VPolarTransformation::getTargetDimension()
-    throw (RuntimeException, std::exception)
 {
     return 3;
 }

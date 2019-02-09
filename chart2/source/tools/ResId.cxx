@@ -17,17 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ResId.hxx"
-#include "ResourceManager.hxx"
+#include <ResId.hxx>
+#include <unotools/resmgr.hxx>
 
 namespace chart
 {
-
-    SchResId::SchResId( sal_Int16 nId )
-        : ResId( nId, ResourceManager::getResourceManager() )
+    OUString SchResId(const char *pId)
     {
+        return Translate::get(pId, Translate::Create("chart"));
     }
-
 } //  namespace chart
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

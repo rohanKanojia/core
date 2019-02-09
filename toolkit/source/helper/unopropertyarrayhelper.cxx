@@ -21,7 +21,7 @@
 #include <toolkit/helper/property.hxx>
 #include <map>
 
-#include "helper/unopropertyarrayhelper.hxx"
+#include <helper/unopropertyarrayhelper.hxx>
 
 //  class UnoPropertyArrayHelper
 
@@ -34,11 +34,10 @@ UnoPropertyArrayHelper::UnoPropertyArrayHelper( const css::uno::Sequence<sal_Int
         maIDs.insert( pIDs[n] );
 }
 
-UnoPropertyArrayHelper::UnoPropertyArrayHelper( const std::list< sal_uInt16 > &rIDs )
+UnoPropertyArrayHelper::UnoPropertyArrayHelper( const std::vector< sal_uInt16 > &rIDs )
 {
-    std::list< sal_uInt16 >::const_iterator iter;
-    for( iter = rIDs.begin(); iter != rIDs.end(); ++iter)
-      maIDs.insert( *iter );
+    for (const auto& rId : rIDs)
+      maIDs.insert( rId );
 }
 
 bool UnoPropertyArrayHelper::ImplHasProperty( sal_uInt16 nPropId ) const
@@ -66,40 +65,41 @@ sal_Bool UnoPropertyArrayHelper::fillPropertyMembersByHandle( OUString * pPropNa
 
 css::uno::Sequence< css::beans::Property > UnoPropertyArrayHelper::getProperties()
 {
-    // Sortiert nach Namen...
+    // Sort by names ...
 
     std::map<sal_Int32, sal_uInt16> aSortedPropsIds;
-    for( std::set<sal_Int32>::const_iterator it =  maIDs.begin(); it != maIDs.end(); ++it)
+    for (const auto& rId : maIDs)
     {
-        sal_uInt16 nId = sal::static_int_cast< sal_uInt16 >(*it);
+        sal_uInt16 nId = sal::static_int_cast< sal_uInt16 >(rId);
         aSortedPropsIds[ 1+GetPropertyOrderNr( nId ) ] = nId;
 
         if ( nId == BASEPROPERTY_FONTDESCRIPTOR )
         {
-            // Einzelproperties...
+            // single properties ...
             for ( sal_uInt16 i = BASEPROPERTY_FONTDESCRIPTORPART_START; i <= BASEPROPERTY_FONTDESCRIPTORPART_END; i++ )
                 aSortedPropsIds[ 1+GetPropertyOrderNr( i ) ]  = i;
         }
     }
 
-    sal_uInt32 nProps = aSortedPropsIds.size();   // koennen jetzt mehr sein
+    sal_uInt32 nProps = aSortedPropsIds.size();   // could be more now
     css::uno::Sequence< css::beans::Property> aProps( nProps );
     css::beans::Property* pProps = aProps.getArray();
 
-    std::map<sal_Int32, sal_uInt16>::const_iterator it = aSortedPropsIds.begin();
-    for ( sal_uInt32 n = 0; n < nProps; n++, ++it )
+    sal_uInt32 n = 0;
+    for ( const auto& rPropIds : aSortedPropsIds )
     {
-        sal_uInt16 nId = it->second;
+        sal_uInt16 nId = rPropIds.second;
         pProps[n].Name = GetPropertyName( nId );
         pProps[n].Handle = nId;
         pProps[n].Type = *GetPropertyType( nId );
         pProps[n].Attributes = GetPropertyAttribs( nId );
+        ++n;
     }
 
     return aProps;
 }
 
-css::beans::Property UnoPropertyArrayHelper::getPropertyByName(const OUString& rPropertyName) throw (css::beans::UnknownPropertyException)
+css::beans::Property UnoPropertyArrayHelper::getPropertyByName(const OUString& rPropertyName)
 {
     css::beans::Property aProp;
     sal_uInt16 nId = GetPropertyId( rPropertyName );
@@ -121,8 +121,8 @@ sal_Bool UnoPropertyArrayHelper::hasPropertyByName(const OUString& rPropertyName
 
 sal_Int32 UnoPropertyArrayHelper::getHandleByName( const OUString & rPropertyName )
 {
-    sal_Int32 nId = (sal_Int32 ) GetPropertyId( rPropertyName );
-    return nId ? nId : (-1);
+    sal_Int32 nId = static_cast<sal_Int32>(GetPropertyId( rPropertyName ));
+    return nId ? nId : -1;
 }
 
 sal_Int32 UnoPropertyArrayHelper::fillHandles( sal_Int32* pHandles, const css::uno::Sequence< OUString > & rPropNames )

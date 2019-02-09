@@ -20,7 +20,12 @@
 #ifndef INCLUDED_SW_INC_SWAPPLETIMPL_HXX
 #define INCLUDED_SW_INC_SWAPPLETIMPL_HXX
 
-#include <config_features.h>
+#include <config_java.h>
+
+#include <svl/itemset.hxx>
+#include <svl/ownlist.hxx>
+
+namespace com { namespace sun { namespace star { namespace embed { class XEmbeddedObject; } } } }
 
 enum class SwHtmlOptType {
     IGNORE = 0,
@@ -28,18 +33,6 @@ enum class SwHtmlOptType {
     PARAM = 2,
     SIZE = 3
 };
-
-#include <com/sun/star/embed/XEmbeddedObject.hpp>
-
-#include <sfx2/frmhtml.hxx>
-#include <sfx2/frmhtmlw.hxx>
-#include <vcl/wrkwin.hxx>
-#include <sot/storage.hxx>
-#include <svl/itemset.hxx>
-
-#include <svl/ownlist.hxx>
-
-class SfxItemSet;
 
 #define OOO_STRING_SW_HTML_O_Hidden "HIDDEN"
 
@@ -52,8 +45,8 @@ class SwApplet_Impl
 
 public:
     static SwHtmlOptType GetOptionType( const OUString& rName, bool bApplet );
-    SwApplet_Impl( SfxItemPool& rPool, sal_uInt16 nWhich1, sal_uInt16 nWhich2 );
-    SwApplet_Impl( SfxItemSet& rSet ): aItemSet ( rSet) {}
+    SwApplet_Impl( SfxItemPool& rPool );
+    SwApplet_Impl( SfxItemSet const & rSet ): aItemSet ( rSet) {}
     ~SwApplet_Impl();
     void CreateApplet( const OUString& rCode, const OUString& rName,
                        bool bMayScript, const OUString& rCodeBase,
@@ -63,7 +56,7 @@ public:
     void AppendParam( const OUString& rName, const OUString& rValue );
 #endif
     void FinishApplet();
-    css::uno::Reference < css::embed::XEmbeddedObject > GetApplet() { return xApplet; }
+    const css::uno::Reference < css::embed::XEmbeddedObject >& GetApplet() { return xApplet; }
     SfxItemSet& GetItemSet() { return aItemSet; }
     const OUString& GetAltText() const { return sAlt; }
     void SetAltText( const OUString& rAlt ) {sAlt = rAlt;}

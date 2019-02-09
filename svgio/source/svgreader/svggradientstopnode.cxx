@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svggradientstopnode.hxx>
+#include <svggradientstopnode.hxx>
 
 namespace svgio
 {
@@ -38,9 +38,7 @@ namespace svgio
 
         const SvgStyleAttributes* SvgGradientStopNode::getSvgStyleAttributes() const
         {
-            OUString aClassStr("stop");
-
-            return checkForCssStyle(aClassStr, maSvgStyleAttributes);
+            return checkForCssStyle("stop", maSvgStyleAttributes);
         }
 
         void SvgGradientStopNode::parseAttribute(const OUString& rTokenName, SVGToken aSVGToken, const OUString& aContent)
@@ -49,7 +47,7 @@ namespace svgio
             SvgNode::parseAttribute(rTokenName, aSVGToken, aContent);
 
             // read style attributes
-            maSvgStyleAttributes.parseStyleAttribute(rTokenName, aSVGToken, aContent, false);
+            maSvgStyleAttributes.parseStyleAttribute(aSVGToken, aContent, false);
 
             // parse own
             switch(aSVGToken)
@@ -67,7 +65,7 @@ namespace svgio
                     {
                         if(aNum.isPositive())
                         {
-                            setOffset(aNum);
+                            maOffset = aNum;
                         }
                     }
                     break;

@@ -17,10 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dbmm_global.hrc"
-#include "dbmm_module.hxx"
 #include "docinteraction.hxx"
-#include "macromigration.hrc"
+#include <core_resource.hxx>
+#include <strings.hrc>
 #include "macromigrationdialog.hxx"
 #include "macromigrationpages.hxx"
 #include "migrationengine.hxx"
@@ -30,6 +29,7 @@
 #include <com/sun/star/sdb/application/XDatabaseDocumentUI.hpp>
 #include <com/sun/star/frame/XModel2.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
+#include <com/sun/star/util/CloseVetoException.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
 #include <com/sun/star/frame/XComponentLoader.hpp>
 #include <com/sun/star/util/XModifiable.hpp>
@@ -38,14 +38,14 @@
 
 #include <comphelper/namedvaluecollection.hxx>
 #include <cppuhelper/exc_hlp.hxx>
-#include <cppuhelper/implbase1.hxx>
 #include <rtl/ref.hxx>
 #include <svl/filenotation.hxx>
 #include <tools/diagnose_ex.h>
 #include <ucbhelper/content.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
+#include <vcl/svapp.hxx>
 
-#include <list>
+#include <vector>
 
 namespace dbmm
 {
@@ -57,6 +57,10 @@ namespace dbmm
 
 #define PATH_DEFAULT            1
 
+// height and width of tab pages
+#define TAB_PAGE_WIDTH  280
+#define TAB_PAGE_HEIGHT 185
+
     using ::com::sun::star::uno::Reference;
     using ::com::sun::star::uno::XComponentContext;
     using ::com::sun::star::uno::XInterface;
@@ -64,23 +68,18 @@ namespace dbmm
     using ::com::sun::star::uno::UNO_QUERY_THROW;
     using ::com::sun::star::uno::UNO_SET_THROW;
     using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Any;
     using ::com::sun::star::sdb::application::XDatabaseDocumentUI;
     using ::com::sun::star::sdb::XOfficeDatabaseDocument;
     using ::com::sun::star::frame::XModel2;
-    using ::com::sun::star::frame::XController;
     using ::com::sun::star::frame::XController2;
     using ::com::sun::star::container::XEnumeration;
     using ::com::sun::star::frame::XStorable;
     using ::com::sun::star::uno::Sequence;
     using ::com::sun::star::beans::PropertyValue;
     using ::com::sun::star::frame::XFrame;
-    using ::com::sun::star::awt::XWindow;
     using ::com::sun::star::util::XCloseable;
-    using ::com::sun::star::util::XCloseListener;
     using ::com::sun::star::util::CloseVetoException;
-    using ::com::sun::star::lang::EventObject;
     using ::com::sun::star::frame::XComponentLoader;
     using ::com::sun::star::util::XModifiable;
     using ::com::sun::star::ucb::UniversalContentBroker;
@@ -90,12 +89,12 @@ namespace dbmm
 
     // helper
     static void lcl_getControllers_throw(const Reference< XModel2 >& _rxDocument,
-        ::std::list< Reference< XController2 > >& _out_rControllers )
+        std::vector< Reference< XController2 > >& _out_rControllers )
     {
         _out_rControllers.clear();
         Reference< XEnumeration > xControllerEnum( _rxDocument->getControllers(), UNO_SET_THROW );
         while ( xControllerEnum->hasMoreElements() )
-            _out_rControllers.push_back( Reference< XController2 >( xControllerEnum->nextElement(), UNO_QUERY_THROW ) );
+            _out_rControllers.emplace_back( xControllerEnum->nextElement(), UNO_QUERY_THROW );
     }
 
     // MacroMigrationDialog_Data
@@ -130,19 +129,19 @@ namespace dbmm
         : MacroMigrationDialog_Base(_pParent)
         , m_pData( new MacroMigrationDialog_Data( _rContext, _rxDocument ) )
     {
-        OUString sTitlePrepare( MacroMigrationResId( STR_STATE_CLOSE_SUB_DOCS ) );
-        OUString sTitleStoreAs( MacroMigrationResId( STR_STATE_BACKUP_DBDOC ) );
-        OUString sTitleMigrate( MacroMigrationResId( STR_STATE_MIGRATE ) );
-        OUString sTitleSummary( MacroMigrationResId( STR_STATE_SUMMARY ) );
+        OUString sTitlePrepare( DBA_RES( STR_STATE_CLOSE_SUB_DOCS ) );
+        OUString sTitleStoreAs( DBA_RES( STR_STATE_BACKUP_DBDOC ) );
+        OUString sTitleMigrate( DBA_RES( STR_STATE_MIGRATE ) );
+        OUString sTitleSummary( DBA_RES( STR_STATE_SUMMARY ) );
 
         describeState( STATE_CLOSE_SUB_DOCS,    sTitlePrepare, &PreparationPage::Create   );
         describeState( STATE_BACKUP_DBDOC,      sTitleStoreAs, &SaveDBDocPage::Create     );
         describeState( STATE_MIGRATE,           sTitleMigrate, &ProgressPage::Create      );
         describeState( STATE_SUMMARY,           sTitleSummary, &ResultPage::Create        );
 
-        declarePath( PATH_DEFAULT, STATE_CLOSE_SUB_DOCS, STATE_BACKUP_DBDOC, STATE_MIGRATE, STATE_SUMMARY, WZS_INVALID_STATE );
+        declarePath( PATH_DEFAULT, {STATE_CLOSE_SUB_DOCS, STATE_BACKUP_DBDOC, STATE_MIGRATE, STATE_SUMMARY} );
 
-        SetPageSizePixel( LogicToPixel( ::Size( TAB_PAGE_WIDTH, TAB_PAGE_HEIGHT ), MAP_APPFONT ) );
+        SetPageSizePixel(LogicToPixel(::Size(TAB_PAGE_WIDTH, TAB_PAGE_HEIGHT), MapMode(MapUnit::MapAppFont)));
         SetRoadmapInteractive( true );
         enableAutomaticNextButtonState();
         defaultButton( WizardButtonFlags::NEXT );
@@ -262,22 +261,7 @@ namespace dbmm
         return true;
     }
 
-    bool MacroMigrationDialog::leaveState( WizardState _nState )
-    {
-        return MacroMigrationDialog_Base::leaveState( _nState );
-    }
-
-    MacroMigrationDialog::WizardState MacroMigrationDialog::determineNextState( WizardState _nCurrentState ) const
-    {
-        return MacroMigrationDialog_Base::determineNextState( _nCurrentState );
-    }
-
-    bool MacroMigrationDialog::onFinish()
-    {
-        return MacroMigrationDialog_Base::onFinish();
-    }
-
-    IMPL_LINK_NOARG_TYPED( MacroMigrationDialog, OnStartMigration, void*, void )
+    IMPL_LINK_NOARG( MacroMigrationDialog, OnStartMigration, void*, void )
     {
         // prevent closing
         m_pData->bMigrationIsRunning = true;
@@ -328,16 +312,13 @@ namespace dbmm
         try
         {
             // collect all controllers of our document
-            ::std::list< Reference< XController2 > > aControllers;
+            std::vector< Reference< XController2 > > aControllers;
             lcl_getControllers_throw( m_pData->xDocumentModel, aControllers );
 
             // close all sub documents of all controllers
-            for (   ::std::list< Reference< XController2 > >::const_iterator pos = aControllers.begin();
-                    pos != aControllers.end() && bSuccess;
-                    ++pos
-                )
+            for (auto const& controller : aControllers)
             {
-                Reference< XDatabaseDocumentUI > xController( *pos, UNO_QUERY );
+                Reference< XDatabaseDocumentUI > xController( controller, UNO_QUERY );
                 OSL_ENSURE( xController.is(), "MacroMigrationDialog::impl_closeSubDocs_nothrow: unexpected: controller is missing an important interface!" );
                     // at the moment, only one implementation for a DBDoc's controller exists, which should
                     // support this interface
@@ -345,11 +326,13 @@ namespace dbmm
                     continue;
 
                 bSuccess = xController->closeSubComponents();
+                if (!bSuccess)
+                    break;
             }
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
             bSuccess = false;
         }
 
@@ -381,7 +364,7 @@ namespace dbmm
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
             }
             return bEqual;
         }
@@ -402,8 +385,9 @@ namespace dbmm
             // check that the backup location isn't the same as the document itself
             if ( lcl_equalURLs_nothrow( m_pData->aContext, sBackupLocation, m_pData->xDocumentModel->getURL() ) )
             {
-                ScopedVclPtrInstance< MessageDialog > aErrorBox( const_cast< MacroMigrationDialog* >( this ), MacroMigrationResId( STR_INVALID_BACKUP_LOCATION ) );
-                aErrorBox->Execute();
+                std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                               VclMessageType::Warning, VclButtonsType::Ok, DBA_RES(STR_INVALID_BACKUP_LOCATION)));
+                xErrorBox->run();
                 rBackupPage.grabLocationFocus();
                 return false;
             }
@@ -439,8 +423,8 @@ namespace dbmm
 
     void MacroMigrationDialog::impl_reloadDocument_nothrow( bool _bMigrationSuccess )
     {
-        typedef ::std::pair< Reference< XFrame >, OUString > ViewDescriptor;
-        ::std::list< ViewDescriptor > aViews;
+        typedef std::pair< Reference< XFrame >, OUString > ViewDescriptor;
+        std::vector< ViewDescriptor > aViews;
 
         try
         {
@@ -453,7 +437,7 @@ namespace dbmm
                 aDocumentArgs.put( "SalvagedFile", m_pData->sSuccessfulBackupLocation );
                 // reset the modified flag of the document, so the controller can be suspended later
                 Reference< XModifiable > xModify( m_pData->xDocument, UNO_QUERY_THROW );
-                xModify->setModified( sal_False );
+                xModify->setModified( false );
                 // after this reload, don't show the migration warning, again
                 aDocumentArgs.put( "SuppressMigrationWarning", true );
             }
@@ -466,19 +450,18 @@ namespace dbmm
             aDocumentArgs.remove( "URL" );
 
             // collect all controllers of our document
-            ::std::list< Reference< XController2 > > aControllers;
+            std::vector< Reference< XController2 > > aControllers;
             lcl_getControllers_throw( m_pData->xDocumentModel, aControllers );
 
             // close all those controllers
-            while ( !aControllers.empty() )
+            for (auto const& controller : aControllers)
             {
-                Reference< XController2 > xController( aControllers.front(), UNO_SET_THROW );
-                aControllers.pop_front();
+                Reference< XController2 > xController( controller, UNO_SET_THROW );
 
                 Reference< XFrame > xFrame( xController->getFrame(), UNO_SET_THROW );
                 OUString sViewName( xController->getViewControllerName() );
 
-                if ( !xController->suspend( sal_True ) )
+                if ( !xController->suspend( true ) )
                 {   // ouch. There shouldn't be any modal dialogs and such, so there
                     // really is no reason why suspending shouldn't work.
                     OSL_FAIL( "MacroMigrationDialog::impl_reloadDocument_nothrow: could not suspend a controller!" );
@@ -487,10 +470,11 @@ namespace dbmm
                     throw CloseVetoException();
                 }
 
-                aViews.push_back( ViewDescriptor( xFrame, sViewName ) );
+                aViews.emplace_back( xFrame, sViewName );
                 xFrame->setComponent( nullptr, nullptr );
                 xController->dispose();
             }
+            aControllers.clear();
 
             // Note the document is closed now - disconnecting the last controller
             // closes it automatically.
@@ -498,14 +482,11 @@ namespace dbmm
             Reference< XOfficeDatabaseDocument > xNewDocument;
 
             // re-create the views
-            while ( !aViews.empty() )
+            for (auto const& view : aViews)
             {
-                ViewDescriptor aView( aViews.front() );
-                aViews.pop_front();
-
                 // load the document into this frame
-                Reference< XComponentLoader > xLoader( aView.first, UNO_QUERY_THROW );
-                aDocumentArgs.put( "ViewName", aView.second );
+                Reference< XComponentLoader > xLoader( view.first, UNO_QUERY_THROW );
+                aDocumentArgs.put( "ViewName", view.second );
                 Reference< XInterface > xReloaded( xLoader->loadComponentFromURL(
                     sDocumentURL,
                     "_self",
@@ -531,6 +512,7 @@ namespace dbmm
                 }
                 #endif
             }
+            aViews.clear();
 
             m_pData->xDocument = xNewDocument;
             m_pData->xDocumentModel.set( xNewDocument, UNO_QUERY );
@@ -541,7 +523,7 @@ namespace dbmm
             if ( !_bMigrationSuccess )
             {
                 Reference< XModifiable > xModify( m_pData->xDocument, UNO_QUERY_THROW );
-                xModify->setModified( sal_True );
+                xModify->setModified( true );
                     // this is just paranoia - in case saving the doc fails, perhaps the user is tempted to do so
                 Reference< XStorable > xStor( m_pData->xDocument, UNO_QUERY_THROW );
                 xStor->store();
@@ -549,25 +531,24 @@ namespace dbmm
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
 
         // close all frames from aViews - the respective controllers have been closed, but
         // reloading didn't work, so the frames are zombies now.
-        while ( !aViews.empty() )
+        for (auto const& view : aViews)
         {
-            ViewDescriptor aView( aViews.front() );
-            aViews.pop_front();
             try
             {
-                Reference< XCloseable > xFrameClose( aView.first, UNO_QUERY_THROW );
-                xFrameClose->close( sal_True );
+                Reference< XCloseable > xFrameClose( view.first, UNO_QUERY_THROW );
+                xFrameClose->close( true );
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
             }
         }
+        aViews.clear();
     }
 
 } // namespace dbmm

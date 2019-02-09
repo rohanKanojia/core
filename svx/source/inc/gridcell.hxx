@@ -20,6 +20,7 @@
 #ifndef INCLUDED_SVX_SOURCE_INC_GRIDCELL_HXX
 #define INCLUDED_SVX_SOURCE_INC_GRIDCELL_HXX
 
+#include <memory>
 #include <svx/gridctrl.hxx>
 
 #include "sqlparserclient.hxx"
@@ -41,6 +42,7 @@
 
 #include <comphelper/propmultiplex.hxx>
 #include <comphelper/interfacecontainer2.hxx>
+#include <comphelper/uno3.hxx>
 #include <cppuhelper/component.hxx>
 #include <cppuhelper/implbase1.hxx>
 #include <cppuhelper/implbase2.hxx>
@@ -60,45 +62,43 @@ protected:
 };
 
 
-// DbGridColumn, Spaltenbeschreibung
+// DbGridColumn, column description
 
 class DbGridColumn
 {
     friend class DbGridControl;
 
     css::uno::Reference< css::beans::XPropertySet >       m_xModel;
-    css::uno::Reference< css::beans::XPropertySet >       m_xField;       // Verbindung zum Datenbankfeld
-    ::svt::CellControllerRef m_xController; // Struktur zum Verwalten der Controls fuer eine Spalte
-                                        // diese wird von der DbBrowseBox auf die jeweiligen Zellen
-                                        // einer Spalte positioniert
-    FmXGridCell*                m_pCell;
+    css::uno::Reference< css::beans::XPropertySet >       m_xField;       // connection to the database field
+    ::svt::CellControllerRef m_xController; // structure for managing the controls for a column
+                                        // this is positioned by the DbBrowseBox on the respective
+                                        // cells of a column
+    rtl::Reference<FmXGridCell>                           m_pCell;
 
 protected:
     DbGridControl&      m_rParent;
 
 private:
-    sal_Int32               m_nLastVisibleWidth;    // nur gueltig, wenn m_bHidden == sal_True
+    sal_Int32               m_nLastVisibleWidth;    // only valid if m_bHidden == sal_True
     sal_Int32               m_nFormatKey;
     sal_Int16               m_nFieldType;
     sal_Int16               m_nTypeId;
-    sal_uInt16              m_nId;
+    sal_uInt16 const        m_nId;
     sal_Int16               m_nFieldPos;
-    sal_Int16               m_nAlign;                       // wird mit TXT_ALIGN_LEFT .... angegeben
+    sal_Int16               m_nAlign;                       // specified with TXT_ALIGN_LEFT ....
     bool                m_bReadOnly : 1;
     bool                m_bAutoValue : 1;
     bool                m_bInSave : 1;
     bool                m_bNumeric : 1;
-    bool                m_bObject : 1;  // Verweist die Column auf ein Object Datentyp?
+    bool                m_bObject : 1;  // does the column reference an object datatype?
     bool                m_bHidden : 1;
     bool                m_bLocked : 1;
-    bool                m_bDateTime : 1;
 
     static ::svt::CellControllerRef s_xEmptyController;
         // used by locked columns
 public:
     DbGridColumn(sal_uInt16 _nId, DbGridControl& rParent)
-        :m_pCell(nullptr)
-        ,m_rParent(rParent)
+        :m_rParent(rParent)
         ,m_nLastVisibleWidth(-1)
         ,m_nFormatKey(0)
         ,m_nFieldType(0)
@@ -113,7 +113,6 @@ public:
         ,m_bObject(false)
         ,m_bHidden(false)
         ,m_bLocked(false)
-        ,m_bDateTime(false)
     {
     }
 
@@ -134,21 +133,20 @@ public:
     const   ::svt::CellControllerRef& GetController() const {return m_bLocked ? s_xEmptyController : m_xController;}
     const   css::uno::Reference< css::beans::XPropertySet >& GetField() const {return m_xField;}
     DbGridControl& GetParent() const {return m_rParent;}
-    FmXGridCell* GetCell() const {return m_pCell;}
+    FmXGridCell* GetCell() const {return m_pCell.get();}
 
     css::uno::Reference< css::sdb::XColumn >  GetCurrentFieldValue() const;
 
-    //      Zeichnen eines Feldes an einer Position, ist ein View gesetzt
-    //      uebernimmt dieser das Zeichnen, z.B. fuer CheckBoxen
+    //      Drawing a field at a position. If a view is set, it takes over the drawing,
+    //      e.g., for checkboxes.
     void    Paint(OutputDevice& rDev,
-                  const Rectangle& rRect,
+                  const tools::Rectangle& rRect,
                   const DbGridRow* pRow,
                   const css::uno::Reference< css::util::XNumberFormatter >& xFormatter);
 
 
-    //      Inititialierung im alive mode
-    //      Ist kein ColumnController gesetzt, wird eine DefaultInitialisierung
-    //      vorgenommen
+    //      Initializing in the alive mode.
+    //      If no ColumnController is set, a default initialization is performed.
     void    CreateControl(sal_Int32 _nFieldPos, const css::uno::Reference< css::beans::XPropertySet >& xField, sal_Int32 nTypeId);
     void    UpdateControl()
             {
@@ -156,11 +154,11 @@ public:
                 CreateControl(m_nFieldPos, xField, m_nTypeId);
             }
 
-    //      Editieren einer Zelle
+    //      Editing a Zelle
     void    UpdateFromField(const DbGridRow* pRow, const css::uno::Reference< css::util::XNumberFormatter >& xFormatter);
     bool    Commit();
 
-    //      freigeben aller Daten, die fuer den AliveMode noetig sind
+    //      releasing all the data required for the AliveMode
     void    Clear();
 
     OUString  GetCellText(const DbGridRow* pRow, const css::uno::Reference< css::util::XNumberFormatter >& xFormatter) const;
@@ -169,9 +167,9 @@ public:
     void    SetReadOnly(bool bRead){m_bReadOnly = bRead;}
     void    SetObject(sal_Int16 nPos) {m_bObject = m_bReadOnly = true; m_nFieldPos = nPos;}
 
-    void    ImplInitWindow( vcl::Window& rParent, const InitWindowFacet _eInitWhat );
+    void    ImplInitWindow( vcl::Window const & rParent, const InitWindowFacet _eInitWhat );
 
-    // Properties, die auf den css::frame::Controller durchschlagen koennen
+    // properties that can bleed through onto the css::frame::Controller
     sal_Int16   SetAlignment(sal_Int16 _nAlign);
         // if _nAlign is -1, the alignment is calculated from the type of the field we are bound to
         // the value really set is returned
@@ -191,17 +189,16 @@ private:
 };
 
 
-// DbCellControl, liefert die Daten fuer einen CellController
-// wird in der Regel nur f\FCr komplexe Controls wie z.B ComboBoxen
-// benoetigt
+// DbCellControl, provides the data for a CellController.
+// Is usually only required for complex controls such as combo boxes.
 
 class DbCellControl
         :public FmMutexHelper           // _before_ the listener, so the listener is to be destroyed first!
         ,public ::comphelper::OPropertyChangeListener
 {
 private:
-    ::comphelper::OPropertyChangeMultiplexer*   m_pModelChangeBroadcaster;
-    ::comphelper::OPropertyChangeMultiplexer*   m_pFieldChangeBroadcaster;
+    rtl::Reference<::comphelper::OPropertyChangeMultiplexer>  m_pModelChangeBroadcaster;
+    rtl::Reference<::comphelper::OPropertyChangeMultiplexer>  m_pFieldChangeBroadcaster;
 
 private:
     bool                    m_bTransparent : 1;
@@ -221,11 +218,11 @@ protected:
     const css::uno::Reference< css::sdbc::XRowSet >& getCursor() const { return m_xCursor; }
 
     // control transparency
-    inline  bool    isTransparent( ) const { return m_bTransparent; }
-    inline  void        setTransparent( bool _bSet ) { m_bTransparent = _bSet; }
+    bool    isTransparent( ) const { return m_bTransparent; }
+    void        setTransparent( bool _bSet ) { m_bTransparent = _bSet; }
 
     // control alignment
-    inline  void        setAlignedController( bool _bAlign = true ) { m_bAlignedController = _bAlign; }
+    void        setAlignedController( bool _bAlign ) { m_bAlignedController = _bAlign; }
 
 
     /** determined whether or not the value property is locked
@@ -262,7 +259,7 @@ protected:
 
 public:
     DbCellControl(DbGridColumn& _rColumn);
-    virtual ~DbCellControl();
+    virtual ~DbCellControl() override;
 
 
     vcl::Window& GetWindow() const
@@ -272,17 +269,17 @@ public:
     }
 
     // control alignment
-    inline  bool    isAlignedController() const { return m_bAlignedController; }
+    bool    isAlignedController() const { return m_bAlignedController; }
             void        AlignControl(sal_Int16 nAlignment);
 
     void SetTextLineColor();
     void SetTextLineColor(const Color& _rColor);
 
-    // Initialisieren bevor ein Control angezeigt wird
+    // initializing before a control is displayed
     virtual void Init( vcl::Window& rParent, const css::uno::Reference< css::sdbc::XRowSet >& xCursor );
     virtual ::svt::CellControllerRef CreateController() const = 0;
 
-    // Schreiben des Wertes in das Model
+    // writing the value into the model
     bool Commit();
 
     // Formatting the field data to output text
@@ -292,11 +289,11 @@ public:
     // Refresh the control by the field data
     virtual void UpdateFromField(const css::uno::Reference< css::sdb::XColumn >& _rxField, const css::uno::Reference< css::util::XNumberFormatter >& xFormatter) = 0;
 
-    // Painten eines Zellinhalts im vorgegeben Rechteck
-    virtual void PaintFieldToCell( OutputDevice& rDev, const Rectangle& rRect, const css::uno::Reference< css::sdb::XColumn >& _rxField, const css::uno::Reference< css::util::XNumberFormatter >& xFormatter);
-    virtual void PaintCell( OutputDevice& _rDev, const Rectangle& _rRect );
+    // painting a cell content in the specified rectangle
+    virtual void PaintFieldToCell( OutputDevice& rDev, const tools::Rectangle& rRect, const css::uno::Reference< css::sdb::XColumn >& _rxField, const css::uno::Reference< css::util::XNumberFormatter >& xFormatter);
+    virtual void PaintCell( OutputDevice& _rDev, const tools::Rectangle& _rRect );
 
-    void  ImplInitWindow( vcl::Window& rParent, const InitWindowFacet _eInitWhat );
+    void  ImplInitWindow( vcl::Window const & rParent, const InitWindowFacet _eInitWhat );
 
     double GetValue(const css::uno::Reference< css::sdb::XColumn >& _rxField, const css::uno::Reference< css::util::XNumberFormatter >& xFormatter) const;
 
@@ -324,10 +321,10 @@ protected:
 
 protected:
 // OPropertyChangeListener
-    virtual void _propertyChanged(const css::beans::PropertyChangeEvent& evt) throw(css::uno::RuntimeException) override;
+    virtual void _propertyChanged(const css::beans::PropertyChangeEvent& evt) override;
 
 private:
-    void implDoPropertyListening( const OUString& _rPropertyName, bool _bWarnIfNotExistent = true );
+    void implDoPropertyListening( const OUString& _rPropertyName, bool _bWarnIfNotExistent );
 
     /// updates the "readonly" setting on m_pWindow, according to the respective property value in the given model
     void implAdjustReadOnly( const css::uno::Reference< css::beans::XPropertySet >& _rxModel,bool i_bReadOnly );
@@ -381,24 +378,24 @@ protected:
 
 class DbTextField : public DbLimitedLengthField
 {
-    ::svt::IEditImplementation* m_pEdit;
-    ::svt::IEditImplementation* m_pPainterImplementation;
+    std::unique_ptr<::svt::IEditImplementation> m_pEdit;
+    std::unique_ptr<::svt::IEditImplementation> m_pPainterImplementation;
     bool                    m_bIsSimpleEdit;
 
 protected:
-    virtual ~DbTextField( );
+    virtual ~DbTextField( ) override;
 
 public:
     DbTextField(DbGridColumn& _rColumn);
 
-    ::svt::IEditImplementation* GetEditImplementation() { return m_pEdit; }
+    ::svt::IEditImplementation* GetEditImplementation() { return m_pEdit.get(); }
     bool                    IsSimpleEdit() const { return m_bIsSimpleEdit; }
 
     virtual void Init( vcl::Window& rParent, const css::uno::Reference< css::sdbc::XRowSet >& xCursor ) override;
     virtual OUString GetFormatText(const css::uno::Reference< css::sdb::XColumn >& _rxField, const css::uno::Reference< css::util::XNumberFormatter >& xFormatter, Color** ppColor = nullptr) override;
     virtual void UpdateFromField(const css::uno::Reference< css::sdb::XColumn >& _rxField, const css::uno::Reference< css::util::XNumberFormatter >& xFormatter) override;
     virtual ::svt::CellControllerRef CreateController() const override;
-    virtual void PaintFieldToCell( OutputDevice& _rDev, const Rectangle& _rRect,
+    virtual void PaintFieldToCell( OutputDevice& _rDev, const tools::Rectangle& _rRect,
                         const css::uno::Reference< css::sdb::XColumn >& _rxField,
                         const css::uno::Reference< css::util::XNumberFormatter >& _rxFormatter ) override;
 
@@ -411,30 +408,26 @@ protected:
 };
 
 
-class DbFormattedField : public DbLimitedLengthField
+class DbFormattedField final : public DbLimitedLengthField
 {
-protected:
-    css::uno::Reference< css::util::XNumberFormatsSupplier >  m_xSupplier;
-    sal_Int16                       m_nKeyType;
-
-
 public:
     DbFormattedField(DbGridColumn& _rColumn);
-    virtual ~DbFormattedField();
-
+    virtual ~DbFormattedField() override;
 
     virtual void Init( vcl::Window& rParent, const css::uno::Reference< css::sdbc::XRowSet >& xCursor ) override;
     virtual OUString GetFormatText(const css::uno::Reference< css::sdb::XColumn >& _rxField, const css::uno::Reference< css::util::XNumberFormatter >& xFormatter, Color** ppColor = nullptr) override;
     virtual void UpdateFromField(const css::uno::Reference< css::sdb::XColumn >& _rxField, const css::uno::Reference< css::util::XNumberFormatter >& xFormatter) override;
     virtual ::svt::CellControllerRef CreateController() const override;
 
-protected:
+private:
     // DbCellControl
     virtual bool        commitControl( ) override;
     virtual void        updateFromModel( css::uno::Reference< css::beans::XPropertySet > _rxModel ) override;
 
     // OPropertyChangeListener
-    virtual void _propertyChanged(const css::beans::PropertyChangeEvent& evt) throw(css::uno::RuntimeException) override;
+    virtual void _propertyChanged(const css::beans::PropertyChangeEvent& evt) override;
+
+    css::uno::Reference< css::util::XNumberFormatsSupplier >  m_xSupplier;
 };
 
 
@@ -446,7 +439,7 @@ public:
     virtual void Init( vcl::Window& rParent, const css::uno::Reference< css::sdbc::XRowSet >& xCursor ) override;
     virtual void UpdateFromField(const css::uno::Reference< css::sdb::XColumn >& _rxField, const css::uno::Reference< css::util::XNumberFormatter >& xFormatter) override;
     virtual ::svt::CellControllerRef CreateController() const override;
-    virtual void PaintFieldToCell(OutputDevice& rDev, const Rectangle& rRect,
+    virtual void PaintFieldToCell(OutputDevice& rDev, const tools::Rectangle& rRect,
                           const css::uno::Reference< css::sdb::XColumn >& _rxField,
                           const css::uno::Reference< css::util::XNumberFormatter >& xFormatter) override;
     virtual OUString GetFormatText(const css::uno::Reference< css::sdb::XColumn >& _rxField, const css::uno::Reference< css::util::XNumberFormatter >& xFormatter, Color** ppColor = nullptr) override;
@@ -479,7 +472,7 @@ protected:
     virtual void        implAdjustGenericFieldSetting( const css::uno::Reference< css::beans::XPropertySet >& _rxModel ) override;
 
     // OPropertyChangeListener
-    virtual void _propertyChanged(const css::beans::PropertyChangeEvent& evt) throw(css::uno::RuntimeException) override;
+    virtual void _propertyChanged(const css::beans::PropertyChangeEvent& evt) override;
 };
 
 
@@ -506,7 +499,7 @@ protected:
     virtual void        implAdjustGenericFieldSetting( const css::uno::Reference< css::beans::XPropertySet >& _rxModel ) override;
 
     // OPropertyChangeListener
-    virtual void _propertyChanged(const css::beans::PropertyChangeEvent& evt) throw(css::uno::RuntimeException) override;
+    virtual void _propertyChanged(const css::beans::PropertyChangeEvent& evt) override;
 };
 
 
@@ -539,7 +532,7 @@ private:
 class DbSpinField : public DbCellControl
 {
 private:
-    sal_Int16   m_nStandardAlign;
+    sal_Int16 const   m_nStandardAlign;
 
 public:
 
@@ -659,25 +652,17 @@ protected:
 };
 
 
-class DbFilterField
+class DbFilterField final
         :public DbCellControl
         ,public ::svxform::OSQLParserClient
 {
-    css::uno::Sequence< OUString >  m_aValueList;
-    OUString    m_aText;
-    Link<DbFilterField&,void> m_aCommitLink;
-    sal_Int16   m_nControlClass;
-    bool        m_bFilterList : 1;
-    bool        m_bFilterListFilled : 1;
-    bool        m_bBound : 1;
-
 public:
     DbFilterField(const css::uno::Reference< css::uno::XComponentContext >& rxContext, DbGridColumn& _rColumn);
-    virtual ~DbFilterField();
+    virtual ~DbFilterField() override;
 
     virtual void Init( vcl::Window& rParent, const css::uno::Reference< css::sdbc::XRowSet >& xCursor ) override;
     virtual ::svt::CellControllerRef CreateController() const override;
-    virtual void PaintCell(OutputDevice& rDev, const Rectangle& rRect) override;
+    virtual void PaintCell(OutputDevice& rDev, const tools::Rectangle& rRect) override;
     virtual void Update() override;
     virtual OUString GetFormatText(const css::uno::Reference< css::sdb::XColumn >& _rxField, const css::uno::Reference< css::util::XNumberFormatter >& xFormatter, Color** ppColor = nullptr) override;
     virtual void UpdateFromField(const css::uno::Reference< css::sdb::XColumn >& _rxField, const css::uno::Reference< css::util::XNumberFormatter >& xFormatter) override;
@@ -687,16 +672,21 @@ public:
 
     void SetCommitHdl( const Link<DbFilterField&,void>& rLink ) { m_aCommitLink = rLink; }
 
-protected:
-
+private:
     // DbCellControl
     virtual bool        commitControl( ) override;
     virtual void        updateFromModel( css::uno::Reference< css::beans::XPropertySet > _rxModel ) override;
 
-protected:
     void SetList(const css::uno::Any& rItems, bool bComboBox);
     void CreateControl(vcl::Window* pParent, const css::uno::Reference< css::beans::XPropertySet >& xModel);
-    DECL_LINK_TYPED( OnClick, VclPtr<CheckBox>, void );
+    DECL_LINK( OnClick, VclPtr<CheckBox>, void );
+
+    css::uno::Sequence< OUString >  m_aValueList;
+    OUString    m_aText;
+    Link<DbFilterField&,void> m_aCommitLink;
+    sal_Int16   m_nControlClass;
+    bool        m_bFilterList : 1;
+    bool        m_bFilterListFilled : 1;
 };
 
 
@@ -714,7 +704,7 @@ class FmXGridCell   :public ::cppu::OComponentHelper
 protected:
     ::osl::Mutex        m_aMutex;
     DbGridColumn*       m_pColumn;
-    DbCellControl*      m_pCellControl;
+    std::unique_ptr<DbCellControl> m_pCellControl;
 
 private:
     ::comphelper::OInterfaceContainerHelper2   m_aWindowListeners;
@@ -724,68 +714,68 @@ private:
     ::comphelper::OInterfaceContainerHelper2   m_aMouseMotionListeners;
 
 protected:
-    virtual ~FmXGridCell();
+    virtual ~FmXGridCell() override;
 
 public:
-    FmXGridCell( DbGridColumn* pColumn, DbCellControl* pControl );
+    FmXGridCell( DbGridColumn* pColumn, std::unique_ptr<DbCellControl> pControl );
     void init();
 
     DECLARE_UNO3_AGG_DEFAULTS(FmXGridCell, OComponentHelper)
-    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) override;
 
     void SetTextLineColor();
     void SetTextLineColor(const Color& _rColor);
 
 // XTypeProvider
-    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) override;
+    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() override;
 
 // OComponentHelper
     virtual void SAL_CALL disposing() override;
 
 // css::lang::XComponent
-    virtual void SAL_CALL dispose() throw(css::uno::RuntimeException, std::exception) override {OComponentHelper::dispose();}
-    virtual void SAL_CALL addEventListener(const css::uno::Reference< css::lang::XEventListener >& aListener)throw(css::uno::RuntimeException, std::exception) override       { OComponentHelper::addEventListener(aListener);}
-    virtual void SAL_CALL removeEventListener(const css::uno::Reference< css::lang::XEventListener >& aListener)throw(css::uno::RuntimeException, std::exception) override        { OComponentHelper::removeEventListener(aListener);}
+    virtual void SAL_CALL dispose() override {OComponentHelper::dispose();}
+    virtual void SAL_CALL addEventListener(const css::uno::Reference< css::lang::XEventListener >& aListener) override       { OComponentHelper::addEventListener(aListener);}
+    virtual void SAL_CALL removeEventListener(const css::uno::Reference< css::lang::XEventListener >& aListener) override        { OComponentHelper::removeEventListener(aListener);}
 
 // css::awt::XControl
-    virtual void SAL_CALL setContext(const css::uno::Reference< css::uno::XInterface >& /*Context*/) throw(css::uno::RuntimeException, std::exception) override {}
-    virtual css::uno::Reference< css::uno::XInterface >  SAL_CALL getContext() throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL createPeer(const css::uno::Reference< css::awt::XToolkit >& /*Toolkit*/, const css::uno::Reference< css::awt::XWindowPeer >& /*Parent*/) throw(css::uno::RuntimeException, std::exception) override {}
+    virtual void SAL_CALL setContext(const css::uno::Reference< css::uno::XInterface >& /*Context*/) override {}
+    virtual css::uno::Reference< css::uno::XInterface >  SAL_CALL getContext() override;
+    virtual void SAL_CALL createPeer(const css::uno::Reference< css::awt::XToolkit >& /*Toolkit*/, const css::uno::Reference< css::awt::XWindowPeer >& /*Parent*/) override {}
 
-    virtual css::uno::Reference< css::awt::XWindowPeer > SAL_CALL getPeer() throw (css::uno::RuntimeException, std::exception) override {return css::uno::Reference< css::awt::XWindowPeer > ();}
-    virtual sal_Bool SAL_CALL setModel(const css::uno::Reference< css::awt::XControlModel >& /*Model*/) throw (css::uno::RuntimeException, std::exception) override {return sal_False;}
-    virtual css::uno::Reference< css::awt::XControlModel > SAL_CALL getModel() throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::awt::XView > SAL_CALL getView() throw (css::uno::RuntimeException, std::exception) override {return css::uno::Reference< css::awt::XView > ();}
-    virtual void SAL_CALL setDesignMode(sal_Bool /*bOn*/) throw (css::uno::RuntimeException, std::exception) override {}
-    virtual sal_Bool SAL_CALL isDesignMode() throw (css::uno::RuntimeException, std::exception) override {return sal_False;}
-    virtual sal_Bool SAL_CALL isTransparent() throw (css::uno::RuntimeException, std::exception) override {return sal_False;}
+    virtual css::uno::Reference< css::awt::XWindowPeer > SAL_CALL getPeer() override {return css::uno::Reference< css::awt::XWindowPeer > ();}
+    virtual sal_Bool SAL_CALL setModel(const css::uno::Reference< css::awt::XControlModel >& /*Model*/) override {return false;}
+    virtual css::uno::Reference< css::awt::XControlModel > SAL_CALL getModel() override;
+    virtual css::uno::Reference< css::awt::XView > SAL_CALL getView() override {return css::uno::Reference< css::awt::XView > ();}
+    virtual void SAL_CALL setDesignMode(sal_Bool /*bOn*/) override {}
+    virtual sal_Bool SAL_CALL isDesignMode() override {return false;}
+    virtual sal_Bool SAL_CALL isTransparent() override {return false;}
 
 // css::form::XBoundControl
-    virtual sal_Bool SAL_CALL getLock() throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setLock(sal_Bool _bLock) throw(css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL getLock() override;
+    virtual void SAL_CALL setLock(sal_Bool _bLock) override;
 
     // XWindow
-    virtual void SAL_CALL setPosSize( ::sal_Int32 X, ::sal_Int32 Y, ::sal_Int32 Width, ::sal_Int32 Height, ::sal_Int16 Flags ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::awt::Rectangle SAL_CALL getPosSize(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setVisible( sal_Bool Visible ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setEnable( sal_Bool Enable ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setFocus(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addWindowListener( const css::uno::Reference< css::awt::XWindowListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeWindowListener( const css::uno::Reference< css::awt::XWindowListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addFocusListener( const css::uno::Reference< css::awt::XFocusListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeFocusListener( const css::uno::Reference< css::awt::XFocusListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addKeyListener( const css::uno::Reference< css::awt::XKeyListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeKeyListener( const css::uno::Reference< css::awt::XKeyListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addMouseListener( const css::uno::Reference< css::awt::XMouseListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeMouseListener( const css::uno::Reference< css::awt::XMouseListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addMouseMotionListener( const css::uno::Reference< css::awt::XMouseMotionListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeMouseMotionListener( const css::uno::Reference< css::awt::XMouseMotionListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addPaintListener( const css::uno::Reference< css::awt::XPaintListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removePaintListener( const css::uno::Reference< css::awt::XPaintListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setPosSize( ::sal_Int32 X, ::sal_Int32 Y, ::sal_Int32 Width, ::sal_Int32 Height, ::sal_Int16 Flags ) override;
+    virtual css::awt::Rectangle SAL_CALL getPosSize(  ) override;
+    virtual void SAL_CALL setVisible( sal_Bool Visible ) override;
+    virtual void SAL_CALL setEnable( sal_Bool Enable ) override;
+    virtual void SAL_CALL setFocus(  ) override;
+    virtual void SAL_CALL addWindowListener( const css::uno::Reference< css::awt::XWindowListener >& xListener ) override;
+    virtual void SAL_CALL removeWindowListener( const css::uno::Reference< css::awt::XWindowListener >& xListener ) override;
+    virtual void SAL_CALL addFocusListener( const css::uno::Reference< css::awt::XFocusListener >& xListener ) override;
+    virtual void SAL_CALL removeFocusListener( const css::uno::Reference< css::awt::XFocusListener >& xListener ) override;
+    virtual void SAL_CALL addKeyListener( const css::uno::Reference< css::awt::XKeyListener >& xListener ) override;
+    virtual void SAL_CALL removeKeyListener( const css::uno::Reference< css::awt::XKeyListener >& xListener ) override;
+    virtual void SAL_CALL addMouseListener( const css::uno::Reference< css::awt::XMouseListener >& xListener ) override;
+    virtual void SAL_CALL removeMouseListener( const css::uno::Reference< css::awt::XMouseListener >& xListener ) override;
+    virtual void SAL_CALL addMouseMotionListener( const css::uno::Reference< css::awt::XMouseMotionListener >& xListener ) override;
+    virtual void SAL_CALL removeMouseMotionListener( const css::uno::Reference< css::awt::XMouseMotionListener >& xListener ) override;
+    virtual void SAL_CALL addPaintListener( const css::uno::Reference< css::awt::XPaintListener >& xListener ) override;
+    virtual void SAL_CALL removePaintListener( const css::uno::Reference< css::awt::XPaintListener >& xListener ) override;
 
     bool Commit() {return m_pCellControl->Commit();}
-    void ImplInitWindow( vcl::Window& rParent, const InitWindowFacet _eInitWhat )
+    void ImplInitWindow( vcl::Window const & rParent, const InitWindowFacet _eInitWhat )
         { m_pCellControl->ImplInitWindow( rParent, _eInitWhat ); }
 
     bool isAlignedController() const { return m_pCellControl->isAlignedController(); }
@@ -794,27 +784,27 @@ public:
 
 protected:
     virtual vcl::Window* getEventWindow() const;
-    virtual void onWindowEvent( const sal_uLong _nEventId, const vcl::Window& _rWindow, const void* _pEventData );
+    virtual void onWindowEvent( const VclEventId _nEventId, const vcl::Window& _rWindow, const void* _pEventData );
 
     // default implementations call our focus listeners, don't forget to call them if you override this
     virtual void onFocusGained( const css::awt::FocusEvent& _rEvent );
     virtual void onFocusLost( const css::awt::FocusEvent& _rEvent );
 
 private:
-    DECL_LINK_TYPED( OnWindowEvent, VclWindowEvent&, void );
+    DECL_LINK( OnWindowEvent, VclWindowEvent&, void );
 };
 
 
 class FmXDataCell : public FmXGridCell
 {
 public:
-    FmXDataCell( DbGridColumn* pColumn, DbCellControl& _rControl )
-        :FmXGridCell( pColumn, &_rControl )
+    FmXDataCell( DbGridColumn* pColumn, std::unique_ptr<DbCellControl> pControl )
+        :FmXGridCell( pColumn, std::move(pControl) )
     {
     }
 
     virtual void PaintFieldToCell(OutputDevice& rDev,
-               const Rectangle& rRect,
+               const tools::Rectangle& rRect,
                const css::uno::Reference< css::sdb::XColumn >& xField,
                const css::uno::Reference< css::util::XNumberFormatter >& xFormatter);
 
@@ -846,10 +836,10 @@ protected:
     bool    m_bFastPaint;
 
 public:
-    FmXTextCell( DbGridColumn* pColumn, DbCellControl& _rControl );
+    FmXTextCell( DbGridColumn* pColumn, std::unique_ptr<DbCellControl> pControl );
 
     virtual void PaintFieldToCell(OutputDevice& rDev,
-               const Rectangle& rRect,
+               const tools::Rectangle& rRect,
                const css::uno::Reference< css::sdb::XColumn >& xField,
                const css::uno::Reference< css::util::XNumberFormatter >& xFormatter) override;
 
@@ -863,58 +853,55 @@ public:
 typedef ::cppu::ImplHelper2 <   css::awt::XTextComponent
                             ,   css::form::XChangeBroadcaster
                             >   FmXEditCell_Base;
-class FmXEditCell : public FmXTextCell,
+class FmXEditCell final : public FmXTextCell,
                     public FmXEditCell_Base
 {
-private:
-    OUString                     m_sValueOnEnter;
-
-protected:
-    ::comphelper::OInterfaceContainerHelper2   m_aTextListeners;
-    ::comphelper::OInterfaceContainerHelper2   m_aChangeListeners;
-    ::svt::IEditImplementation*         m_pEditImplementation;
-    bool                                m_bOwnEditImplementation;
-
-    virtual ~FmXEditCell();
 public:
-    FmXEditCell( DbGridColumn* pColumn, DbCellControl& _rControl );
+    FmXEditCell( DbGridColumn* pColumn, std::unique_ptr<DbCellControl> pControl );
 
     DECLARE_UNO3_AGG_DEFAULTS(FmXEditCell, FmXTextCell)
-    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) override;
 
 // XTypeProvider
-    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) override;
+    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() override;
 
 // OComponentHelper
     virtual void SAL_CALL disposing() override;
 
 // css::awt::XTextComponent
-    virtual void SAL_CALL addTextListener(const css::uno::Reference< css::awt::XTextListener >& l) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeTextListener(const css::uno::Reference< css::awt::XTextListener >& l) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setText(const OUString& aText) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL insertText(const css::awt::Selection& Sel, const OUString& Text) throw(css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getText() throw(css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getSelectedText() throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setSelection(const css::awt::Selection& aSelection) throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::awt::Selection SAL_CALL getSelection() throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL isEditable() throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setEditable(sal_Bool bEditable) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setMaxTextLen(sal_Int16 nLen) throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int16 SAL_CALL getMaxTextLen() throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL addTextListener(const css::uno::Reference< css::awt::XTextListener >& l) override;
+    virtual void SAL_CALL removeTextListener(const css::uno::Reference< css::awt::XTextListener >& l) override;
+    virtual void SAL_CALL setText(const OUString& aText) override;
+    virtual void SAL_CALL insertText(const css::awt::Selection& Sel, const OUString& Text) override;
+    virtual OUString SAL_CALL getText() override;
+    virtual OUString SAL_CALL getSelectedText() override;
+    virtual void SAL_CALL setSelection(const css::awt::Selection& aSelection) override;
+    virtual css::awt::Selection SAL_CALL getSelection() override;
+    virtual sal_Bool SAL_CALL isEditable() override;
+    virtual void SAL_CALL setEditable(sal_Bool bEditable) override;
+    virtual void SAL_CALL setMaxTextLen(sal_Int16 nLen) override;
+    virtual sal_Int16 SAL_CALL getMaxTextLen() override;
 
     // XChangeBroadcaster
-    virtual void SAL_CALL addChangeListener( const css::uno::Reference< css::form::XChangeListener >& aListener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeChangeListener( const css::uno::Reference< css::form::XChangeListener >& aListener ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL addChangeListener( const css::uno::Reference< css::form::XChangeListener >& aListener ) override;
+    virtual void SAL_CALL removeChangeListener( const css::uno::Reference< css::form::XChangeListener >& aListener ) override;
 
-protected:
-    virtual void onWindowEvent( const sal_uLong _nEventId, const vcl::Window& _rWindow, const void* _pEventData ) override;
+private:
+    virtual ~FmXEditCell() override;
+
+    virtual void onWindowEvent( const VclEventId _nEventId, const vcl::Window& _rWindow, const void* _pEventData ) override;
 
     virtual void onFocusGained( const css::awt::FocusEvent& _rEvent ) override;
     virtual void onFocusLost( const css::awt::FocusEvent& _rEvent ) override;
 
-private:
     void onTextChanged();
+
+    OUString                            m_sValueOnEnter;
+    ::comphelper::OInterfaceContainerHelper2   m_aTextListeners;
+    ::comphelper::OInterfaceContainerHelper2   m_aChangeListeners;
+    ::svt::IEditImplementation*         m_pEditImplementation;
+    bool                                m_bOwnEditImplementation;
 };
 
 
@@ -930,91 +917,89 @@ class FmXCheckBoxCell : public FmXDataCell,
     VclPtr<CheckBox>                    m_pBox;
 
 protected:
-    virtual ~FmXCheckBoxCell();
+    virtual ~FmXCheckBoxCell() override;
 
 public:
-    FmXCheckBoxCell( DbGridColumn* pColumn, DbCellControl& _rControl );
+    FmXCheckBoxCell( DbGridColumn* pColumn, std::unique_ptr<DbCellControl> pControl );
 
 // UNO
     DECLARE_UNO3_AGG_DEFAULTS(FmXCheckBoxCell, FmXDataCell)
-    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) override;
+    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) override;
+    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() override;
 
 // OComponentHelper
     virtual void SAL_CALL disposing() override;
 
 // css::awt::XCheckBox
-    virtual void SAL_CALL addItemListener(const css::uno::Reference< css::awt::XItemListener >& l) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeItemListener(const css::uno::Reference< css::awt::XItemListener >& l) throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int16 SAL_CALL getState() throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setState(sal_Int16 n) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setLabel(const OUString& Label) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL enableTriState(sal_Bool b) throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL addItemListener(const css::uno::Reference< css::awt::XItemListener >& l) override;
+    virtual void SAL_CALL removeItemListener(const css::uno::Reference< css::awt::XItemListener >& l) override;
+    virtual sal_Int16 SAL_CALL getState() override;
+    virtual void SAL_CALL setState(sal_Int16 n) override;
+    virtual void SAL_CALL setLabel(const OUString& Label) override;
+    virtual void SAL_CALL enableTriState(sal_Bool b) override;
 
     // XButton
-    virtual void SAL_CALL addActionListener( const css::uno::Reference< css::awt::XActionListener >& l ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeActionListener( const css::uno::Reference< css::awt::XActionListener >& l ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL addActionListener( const css::uno::Reference< css::awt::XActionListener >& l ) override;
+    virtual void SAL_CALL removeActionListener( const css::uno::Reference< css::awt::XActionListener >& l ) override;
     //virtual void SAL_CALL setLabel( const OUString& Label ) throw (css::uno::RuntimeException);
-    virtual void SAL_CALL setActionCommand( const OUString& Command ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setActionCommand( const OUString& Command ) override;
 
 protected:
     virtual vcl::Window* getEventWindow() const override;
-    virtual void onWindowEvent( const sal_uLong _nEventId, const vcl::Window& _rWindow, const void* _pEventData ) override;
+    virtual void onWindowEvent( const VclEventId _nEventId, const vcl::Window& _rWindow, const void* _pEventData ) override;
 };
 
 
 typedef ::cppu::ImplHelper1 <   css::awt::XListBox
                             >   FmXListBoxCell_Base;
-class FmXListBoxCell    :public FmXTextCell
+class FmXListBoxCell final :public FmXTextCell
                         ,public FmXListBoxCell_Base
 {
-    ::comphelper::OInterfaceContainerHelper2   m_aItemListeners,
-                                        m_aActionListeners;
-    VclPtr<ListBox>                     m_pBox;
-
-protected:
-    virtual ~FmXListBoxCell();
-
 public:
-    FmXListBoxCell( DbGridColumn* pColumn, DbCellControl& _rControl );
+    FmXListBoxCell( DbGridColumn* pColumn, std::unique_ptr<DbCellControl> pControl );
 
     DECLARE_UNO3_AGG_DEFAULTS(FmXListBoxCell, FmXTextCell)
-    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) override;
+    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) override;
+    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() override;
 
 // OComponentHelper
     virtual void SAL_CALL disposing() override;
 
 // css::awt::XListBox
-    virtual void SAL_CALL addItemListener(const css::uno::Reference< css::awt::XItemListener >& l) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeItemListener(const css::uno::Reference< css::awt::XItemListener >& l) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addActionListener(const css::uno::Reference< css::awt::XActionListener >& l) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeActionListener(const css::uno::Reference< css::awt::XActionListener >& l) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addItem(const OUString& aItem, sal_Int16 nPos) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addItems(const css::uno::Sequence< OUString >& aItems, sal_Int16 nPos) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeItems(sal_Int16 nPos, sal_Int16 nCount) throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int16 SAL_CALL getItemCount() throw(css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getItem(sal_Int16 nPos) throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getItems() throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int16 SAL_CALL getSelectedItemPos() throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< sal_Int16 > SAL_CALL getSelectedItemsPos() throw(css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getSelectedItem() throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSelectedItems() throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL SAL_CALL selectItemPos(sal_Int16 nPos, sal_Bool bSelect) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL SAL_CALL selectItemsPos(const css::uno::Sequence< sal_Int16 >& aPositions, sal_Bool bSelect) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL SAL_CALL selectItem(const OUString& aItem, sal_Bool bSelect) throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL isMutipleMode() throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL SAL_CALL setMultipleMode(sal_Bool bMulti) throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int16 SAL_CALL getDropDownLineCount() throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL SAL_CALL setDropDownLineCount(sal_Int16 nLines) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL SAL_CALL makeVisible(sal_Int16 nEntry) throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL addItemListener(const css::uno::Reference< css::awt::XItemListener >& l) override;
+    virtual void SAL_CALL removeItemListener(const css::uno::Reference< css::awt::XItemListener >& l) override;
+    virtual void SAL_CALL addActionListener(const css::uno::Reference< css::awt::XActionListener >& l) override;
+    virtual void SAL_CALL removeActionListener(const css::uno::Reference< css::awt::XActionListener >& l) override;
+    virtual void SAL_CALL addItem(const OUString& aItem, sal_Int16 nPos) override;
+    virtual void SAL_CALL addItems(const css::uno::Sequence< OUString >& aItems, sal_Int16 nPos) override;
+    virtual void SAL_CALL removeItems(sal_Int16 nPos, sal_Int16 nCount) override;
+    virtual sal_Int16 SAL_CALL getItemCount() override;
+    virtual OUString SAL_CALL getItem(sal_Int16 nPos) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getItems() override;
+    virtual sal_Int16 SAL_CALL getSelectedItemPos() override;
+    virtual css::uno::Sequence< sal_Int16 > SAL_CALL getSelectedItemsPos() override;
+    virtual OUString SAL_CALL getSelectedItem() override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSelectedItems() override;
+    virtual void SAL_CALL selectItemPos(sal_Int16 nPos, sal_Bool bSelect) override;
+    virtual void SAL_CALL selectItemsPos(const css::uno::Sequence< sal_Int16 >& aPositions, sal_Bool bSelect) override;
+    virtual void SAL_CALL selectItem(const OUString& aItem, sal_Bool bSelect) override;
+    virtual sal_Bool SAL_CALL isMutipleMode() override;
+    virtual void SAL_CALL setMultipleMode(sal_Bool bMulti) override;
+    virtual sal_Int16 SAL_CALL getDropDownLineCount() override;
+    virtual void SAL_CALL setDropDownLineCount(sal_Int16 nLines) override;
+    virtual void SAL_CALL makeVisible(sal_Int16 nEntry) override;
 
-protected:
-    virtual void onWindowEvent( const sal_uLong _nEventId, const vcl::Window& _rWindow, const void* _pEventData ) override;
+private:
+    virtual void onWindowEvent( const VclEventId _nEventId, const vcl::Window& _rWindow, const void* _pEventData ) override;
+    virtual ~FmXListBoxCell() override;
 
-    DECL_LINK_TYPED( OnDoubleClick, ListBox&, void );
+    DECL_LINK( OnDoubleClick, ListBox&, void );
+
+    ::comphelper::OInterfaceContainerHelper2   m_aItemListeners,
+                                        m_aActionListeners;
+    VclPtr<ListBox>                     m_pBox;
 };
 
 
@@ -1029,85 +1014,85 @@ private:
     VclPtr<ComboBox>                    m_pComboBox;
 
 protected:
-    virtual ~FmXComboBoxCell();
+    virtual ~FmXComboBoxCell() override;
 
 public:
-    FmXComboBoxCell( DbGridColumn* pColumn, DbCellControl& _rControl );
+    FmXComboBoxCell( DbGridColumn* pColumn, std::unique_ptr<DbCellControl> pControl );
 
     DECLARE_UNO3_AGG_DEFAULTS(FmXListBoxCell, FmXTextCell)
-    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) override;
+    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) override;
+    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() override;
 
     // OComponentHelper
     virtual void SAL_CALL disposing() override;
 
     // XComboBox
-    virtual void SAL_CALL addItemListener( const css::uno::Reference< css::awt::XItemListener >& _Listener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeItemListener( const css::uno::Reference< css::awt::XItemListener >& _Listener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addActionListener( const css::uno::Reference< css::awt::XActionListener >& _Listener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeActionListener( const css::uno::Reference< css::awt::XActionListener >& _Listener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addItem( const OUString& _Item, ::sal_Int16 _Pos ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addItems( const css::uno::Sequence< OUString >& _Items, ::sal_Int16 _Pos ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeItems( ::sal_Int16 nPos, ::sal_Int16 nCount ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual ::sal_Int16 SAL_CALL getItemCount(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getItem( ::sal_Int16 _Pos ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getItems(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual ::sal_Int16 SAL_CALL getDropDownLineCount(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setDropDownLineCount( ::sal_Int16 _Lines ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL addItemListener( const css::uno::Reference< css::awt::XItemListener >& Listener ) override;
+    virtual void SAL_CALL removeItemListener( const css::uno::Reference< css::awt::XItemListener >& Listener ) override;
+    virtual void SAL_CALL addActionListener( const css::uno::Reference< css::awt::XActionListener >& Listener ) override;
+    virtual void SAL_CALL removeActionListener( const css::uno::Reference< css::awt::XActionListener >& Listener ) override;
+    virtual void SAL_CALL addItem( const OUString& Item, ::sal_Int16 Pos ) override;
+    virtual void SAL_CALL addItems( const css::uno::Sequence< OUString >& Items, ::sal_Int16 Pos ) override;
+    virtual void SAL_CALL removeItems( ::sal_Int16 nPos, ::sal_Int16 nCount ) override;
+    virtual ::sal_Int16 SAL_CALL getItemCount(  ) override;
+    virtual OUString SAL_CALL getItem( ::sal_Int16 Pos ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getItems(  ) override;
+    virtual ::sal_Int16 SAL_CALL getDropDownLineCount(  ) override;
+    virtual void SAL_CALL setDropDownLineCount( ::sal_Int16 Lines ) override;
 
 protected:
-    virtual void onWindowEvent( const sal_uLong _nEventId, const vcl::Window& _rWindow, const void* _pEventData ) override;
+    virtual void onWindowEvent( const VclEventId _nEventId, const vcl::Window& _rWindow, const void* _pEventData ) override;
 };
 
 
 typedef ::cppu::ImplHelper2 <   css::awt::XTextComponent
                             ,   css::lang::XUnoTunnel
                             >   FmXFilterCell_Base;
-class FmXFilterCell :public FmXGridCell
+class FmXFilterCell final : public FmXGridCell
                     ,public FmXFilterCell_Base
 {
-    ::comphelper::OInterfaceContainerHelper2 m_aTextListeners;
-protected:
-    virtual ~FmXFilterCell();
 public:
-    FmXFilterCell(DbGridColumn* pColumn = nullptr, DbCellControl* pControl = nullptr);
+    FmXFilterCell(DbGridColumn* pColumn, std::unique_ptr<DbFilterField> pControl);
 
 
     DECLARE_UNO3_AGG_DEFAULTS(FmXFilterCell, FmXGridCell)
-    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) override;
+    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) override;
+    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() override;
 
 // XUnoTunnel
-    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
 
 // helpers for XUnoTunnel
     static const css::uno::Sequence<sal_Int8>& getUnoTunnelId();
 
 //  painting the filter text
-    void PaintCell(OutputDevice& rDev, const Rectangle& rRect);
+    void PaintCell(OutputDevice& rDev, const tools::Rectangle& rRect);
     void Update(){m_pCellControl->Update();}
 
 // OComponentHelper
     virtual void SAL_CALL disposing() override;
 
 // css::awt::XTextComponent
-    virtual void SAL_CALL addTextListener(const css::uno::Reference< css::awt::XTextListener >& l) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeTextListener(const css::uno::Reference< css::awt::XTextListener >& l) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setText(const OUString& aText) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL insertText(const css::awt::Selection& Sel, const OUString& Text) throw(css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getText() throw(css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getSelectedText() throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setSelection(const css::awt::Selection& aSelection) throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::awt::Selection SAL_CALL getSelection() throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL isEditable() throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setEditable(sal_Bool bEditable) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setMaxTextLen(sal_Int16 nLen) throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int16 SAL_CALL getMaxTextLen() throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL addTextListener(const css::uno::Reference< css::awt::XTextListener >& l) override;
+    virtual void SAL_CALL removeTextListener(const css::uno::Reference< css::awt::XTextListener >& l) override;
+    virtual void SAL_CALL setText(const OUString& aText) override;
+    virtual void SAL_CALL insertText(const css::awt::Selection& Sel, const OUString& Text) override;
+    virtual OUString SAL_CALL getText() override;
+    virtual OUString SAL_CALL getSelectedText() override;
+    virtual void SAL_CALL setSelection(const css::awt::Selection& aSelection) override;
+    virtual css::awt::Selection SAL_CALL getSelection() override;
+    virtual sal_Bool SAL_CALL isEditable() override;
+    virtual void SAL_CALL setEditable(sal_Bool bEditable) override;
+    virtual void SAL_CALL setMaxTextLen(sal_Int16 nLen) override;
+    virtual sal_Int16 SAL_CALL getMaxTextLen() override;
 
-protected:
-    DECL_LINK_TYPED( OnCommit, DbFilterField&, void );
+private:
+    DECL_LINK( OnCommit, DbFilterField&, void );
+    virtual ~FmXFilterCell() override;
+
+    ::comphelper::OInterfaceContainerHelper2 m_aTextListeners;
 };
 
 #endif // INCLUDED_SVX_SOURCE_INC_GRIDCELL_HXX

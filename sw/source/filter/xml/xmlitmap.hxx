@@ -38,14 +38,14 @@
 
 struct SvXMLItemMapEntry
 {
-    sal_uInt16 nNameSpace;      // declares the Namespace in which this item
+    sal_uInt16 const nNameSpace;      // declares the Namespace in which this item
                                 // exists
-    enum ::xmloff::token::XMLTokenEnum eLocalName;
+    enum ::xmloff::token::XMLTokenEnum const eLocalName;
                                 // the local name for the item inside
                                 // the Namespace (as an XMLTokenEnum)
     sal_uInt16 nWhichId;        // the WhichId to identify the item
                                 // in the pool
-    sal_uInt32 nMemberId;       // the memberid specifies which part
+    sal_uInt32 const nMemberId;       // the memberid specifies which part
                                 // of the item should be imported or
                                 // exported with this Namespace
                                 // and localName
@@ -56,23 +56,27 @@ class SvXMLItemMapEntries_impl;
 /** this class manages an array of SvXMLItemMapEntry. It is
     used for optimizing the static array on startup of import
     or export */
-class SvXMLItemMapEntries : public SvRefBase
+class SvXMLItemMapEntries final : public SvRefBase
 {
-protected:
     std::unique_ptr<SvXMLItemMapEntries_impl> mpImpl;
 
 public:
-    explicit SvXMLItemMapEntries(SvXMLItemMapEntry* pEntrys);
-    virtual ~SvXMLItemMapEntries();
+    explicit SvXMLItemMapEntries(SvXMLItemMapEntry const * pEntrys);
+    virtual ~SvXMLItemMapEntries() override;
 
-    SvXMLItemMapEntry* getByName( sal_uInt16 nNameSpace,
+    SvXMLItemMapEntry const * getByName( sal_uInt16 nNameSpace,
                                   const OUString& rString ) const;
-    SvXMLItemMapEntry& getByIndex( sal_uInt16 nIndex ) const;
+    SvXMLItemMapEntry const & getByIndex( sal_uInt16 nIndex ) const;
 
     sal_uInt16 getCount() const;
 };
 
 typedef tools::SvRef<SvXMLItemMapEntries> SvXMLItemMapEntriesRef;
+
+extern SvXMLItemMapEntry const aXMLTableItemMap[];
+extern SvXMLItemMapEntry const aXMLTableColItemMap[];
+extern SvXMLItemMapEntry const aXMLTableRowItemMap[];
+extern SvXMLItemMapEntry const aXMLTableCellItemMap[];
 
 #endif // INCLUDED_SW_SOURCE_FILTER_XML_XMLITMAP_HXX
 

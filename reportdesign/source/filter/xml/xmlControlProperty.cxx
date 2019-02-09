@@ -19,18 +19,20 @@
 
 #include <sal/config.h>
 
+#include <cmath>
 #include <map>
 
 #include "xmlControlProperty.hxx"
 
+#include <o3tl/temporary.hxx>
 #include <rtl/strbuf.hxx>
 #include <sax/tools/converter.hxx>
 #include "xmlfilter.hxx"
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
-#include <tools/debug.hxx>
 #include <tools/datetime.hxx>
 #include <unotools/datetime.hxx>
 #include <com/sun/star/util/DateTime.hpp>
@@ -81,20 +83,19 @@ OXMLControlProperty::OXMLControlProperty( ORptFilter& rImport
             case XML_TOK_VALUE_TYPE:
                 {
                     // needs to be translated into a css::uno::Type
-                    static std::map< OUString, css::uno::Type > s_aTypeNameMap;
-                    if (s_aTypeNameMap.empty())
+                    static std::map< OUString, css::uno::Type > const s_aTypeNameMap
                     {
-                        s_aTypeNameMap[GetXMLToken( XML_BOOLEAN)]   = cppu::UnoType<bool>::get();
+                        { GetXMLToken( XML_BOOLEAN)   , cppu::UnoType<bool>::get() },
                         // Not a copy paste error, see comment xmloff/source/forms/propertyimport.cxx lines 244-248
-                        s_aTypeNameMap[GetXMLToken( XML_FLOAT)]     = cppu::UnoType<double>::get();
-                        s_aTypeNameMap[GetXMLToken( XML_DOUBLE)]    = cppu::UnoType<double>::get();
-                        s_aTypeNameMap[GetXMLToken( XML_STRING)]    = cppu::UnoType<OUString>::get();
-                        s_aTypeNameMap[GetXMLToken( XML_INT)]       = cppu::UnoType<sal_Int32>::get();
-                        s_aTypeNameMap[GetXMLToken( XML_SHORT)]     = cppu::UnoType<sal_Int16>::get();
-                        s_aTypeNameMap[GetXMLToken( XML_DATE)]      = cppu::UnoType<css::util::Date>::get();
-                        s_aTypeNameMap[GetXMLToken( XML_TIME)]      = cppu::UnoType<css::util::Time>::get();
-                        s_aTypeNameMap[GetXMLToken( XML_VOID)]      = cppu::UnoType<void>::get();
-                    }
+                        { GetXMLToken( XML_FLOAT)     , cppu::UnoType<double>::get() },
+                        { GetXMLToken( XML_DOUBLE)    , cppu::UnoType<double>::get() },
+                        { GetXMLToken( XML_STRING)    , cppu::UnoType<OUString>::get() },
+                        { GetXMLToken( XML_INT)       , cppu::UnoType<sal_Int32>::get() },
+                        { GetXMLToken( XML_SHORT)     , cppu::UnoType<sal_Int16>::get() },
+                        { GetXMLToken( XML_DATE)      , cppu::UnoType<css::util::Date>::get() },
+                        { GetXMLToken( XML_TIME)      , cppu::UnoType<css::util::Time>::get() },
+                        { GetXMLToken( XML_VOID)      , cppu::UnoType<void>::get() },
+                    };
 
                     const std::map< OUString, css::uno::Type >::const_iterator aTypePos = s_aTypeNameMap.find(sValue);
                     OSL_ENSURE(s_aTypeNameMap.end() != aTypePos, "OXMLControlProperty::OXMLControlProperty: invalid type!");
@@ -117,7 +118,7 @@ OXMLControlProperty::~OXMLControlProperty()
 {
 }
 
-SvXMLImportContext* OXMLControlProperty::CreateChildContext(
+SvXMLImportContextRef OXMLControlProperty::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )
@@ -218,9 +219,9 @@ Any OXMLControlProperty::convertString(const css::uno::Type& _rExpectedType, con
                     append(OUStringToOString(_rReadCharacters, RTL_TEXTENCODING_ASCII_US)).
                     append("\" into an integer!").getStr());
                 if (TypeClass_SHORT == _rExpectedType.getTypeClass())
-                    aReturn <<= (sal_Int16)nValue;
+                    aReturn <<= static_cast<sal_Int16>(nValue);
                 else
-                    aReturn <<= (sal_Int32)nValue;
+                    aReturn <<= nValue;
                 break;
             }
         case TypeClass_HYPER:
@@ -237,7 +238,7 @@ Any OXMLControlProperty::convertString(const css::uno::Type& _rExpectedType, con
                     OStringBuffer("OXMLControlProperty::convertString: could not convert \"").
                 append(OUStringToOString(_rReadCharacters, RTL_TEXTENCODING_ASCII_US)).
                 append("\" into a double!").getStr());
-            aReturn <<= (double)nValue;
+            aReturn <<= nValue;
         }
         break;
         case TypeClass_STRING:
@@ -272,14 +273,14 @@ Any OXMLControlProperty::convertString(const css::uno::Type& _rExpectedType, con
                     {
                         case TYPE_DATE:
                         {
-                            OSL_ENSURE(((sal_uInt32)nValue) - nValue == 0,
+                            OSL_ENSURE(std::modf(nValue, &o3tl::temporary(double())) == 0,
                                 "OPropertyImport::convertString: a Date value with a fractional part?");
                             aReturn <<= implGetDate(nValue);
                         }
                         break;
                         case TYPE_TIME:
                         {
-                            OSL_ENSURE(((sal_uInt32)nValue) == 0,
+                            OSL_ENSURE((static_cast<sal_uInt32>(nValue)) == 0,
                                 "OPropertyImport::convertString: a tools::Time value with more than a fractional part?");
                             aReturn <<= implGetTime(nValue);
                         }
@@ -319,11 +320,11 @@ css::util::Time OXMLControlProperty::implGetTime(double _nValue)
 {
     css::util::Time aTime;
     sal_uInt64 nIntValue = ::rtl::math::round(_nValue * 86400000000000.0);
-    aTime.NanoSeconds = (sal_uInt16)( nIntValue % 1000000000 );
+    aTime.NanoSeconds = static_cast<sal_uInt16>( nIntValue % 1000000000 );
     nIntValue /= 1000000000;
-    aTime.Seconds = (sal_uInt16)( nIntValue % 60 );
+    aTime.Seconds = static_cast<sal_uInt16>( nIntValue % 60 );
     nIntValue /= 60;
-    aTime.Minutes = (sal_uInt16)( nIntValue % 60 );
+    aTime.Minutes = static_cast<sal_uInt16>( nIntValue % 60 );
     nIntValue /= 60;
     OSL_ENSURE(nIntValue < 24, "OPropertyImport::implGetTime: more than a day?");
     aTime.Hours = static_cast< sal_uInt16 >( nIntValue );
@@ -334,7 +335,7 @@ css::util::Time OXMLControlProperty::implGetTime(double _nValue)
 
 css::util::Date OXMLControlProperty::implGetDate(double _nValue)
 {
-    Date aToolsDate((sal_uInt32)_nValue);
+    Date aToolsDate(static_cast<sal_uInt32>(_nValue));
     css::util::Date aDate;
     ::utl::typeConvert(aToolsDate, aDate);
     return aDate;

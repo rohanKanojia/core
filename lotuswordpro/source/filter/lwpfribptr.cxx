@@ -64,24 +64,25 @@
 #include "lwpfribtext.hxx"
 #include "lwppara.hxx"
 #include "lwpstory.hxx"
-#include "xfilter/xftextspan.hxx"
-#include "xfilter/xftextcontent.hxx"
-#include "xfilter/xftabstop.hxx"
-#include "xfilter/xflinebreak.hxx"
+#include <xfilter/xftextspan.hxx>
+#include <xfilter/xftextcontent.hxx>
+#include <xfilter/xftabstop.hxx>
+#include <xfilter/xflinebreak.hxx>
 #include "lwpfribsection.hxx"
 #include "lwpsection.hxx"
 #include "lwpfribbreaks.hxx"
 #include "lwpfribframe.hxx"
 #include "lwpfribtable.hxx"
-#include "xfilter/xfstylemanager.hxx"
+#include <xfilter/xfstylemanager.hxx>
 #include "lwphyperlinkmgr.hxx"
-#include "xfilter/xfhyperlink.hxx"
+#include <xfilter/xfhyperlink.hxx>
 #include "lwpfootnote.hxx"
 #include "lwpnotes.hxx"
 #include "lwpfribmark.hxx"
-#include "xfilter/xfchange.hxx"
-#include "lwpchangemgr.hxx"
-#include "lwpglobalmgr.hxx"
+#include <xfilter/xfchange.hxx>
+#include <lwpchangemgr.hxx>
+#include <lwpglobalmgr.hxx>
+#include <lwpdropcapmgr.hxx>
 
 LwpFribPtr::LwpFribPtr()
     : m_pFribs(nullptr),m_pXFPara(nullptr),m_pPara(nullptr)
@@ -126,7 +127,7 @@ void LwpFribPtr::ReadPara(LwpObjectStream* pObjStrm)
             {
                 pCurFrib->SetNext(pFrib);
             }
-            else//frist frib in the para
+            else//first frib in the para
             {
                 if (pFrib->GetType() == FRIB_TAG_TEXT)
                 {
@@ -142,7 +143,6 @@ void LwpFribPtr::ReadPara(LwpObjectStream* pObjStrm)
     }
 }
 
-#include "lwpdropcapmgr.hxx"
 void LwpFribPtr::XFConvert()
 {
     LwpFrib* pFrib = m_pFribs;
@@ -162,20 +162,9 @@ void LwpFribPtr::XFConvert()
                 sChangeID = pChangeMgr->GetChangeID(pFrib);
                 if (!sChangeID.isEmpty())
                 {
-                /// if (nRevisionType == LwpFrib::REV_INSERT)
-                /// {
-                        XFChangeStart* pChangeStart = new XFChangeStart;
-                        pChangeStart->SetChangeID(sChangeID);
-                        m_pXFPara->Add(pChangeStart);
-                /// }
-                /// else if (nRevisionType == LwpFrib::REV_DELETE)
-                /// {
-                ///     XFChange* pChange = new XFChange;
-                ///     pChange->SetChangeID(sChangeID);
-                ///     m_pXFPara->Add(pChange);
-                ///     pFrib = pFrib->GetNext();
-                ///     continue;
-                /// }
+                    rtl::Reference<XFChangeStart> xChangeStart(new XFChangeStart);
+                    xChangeStart->SetChangeID(sChangeID);
+                    m_pXFPara->Add(xChangeStart.get());
                 }
             }
         }
@@ -193,25 +182,25 @@ void LwpFribPtr::XFConvert()
             LwpFribTab* tabFrib = static_cast<LwpFribTab*>(pFrib);
             if (pFrib->m_ModFlag)
             {
-                XFTextSpan *pSpan = new XFTextSpan();
-                pSpan->SetStyleName(tabFrib->GetStyleName());
-                XFTabStop *pTab = new XFTabStop();
-                pSpan->Add(pTab);
-                m_pXFPara->Add(pSpan);
+                rtl::Reference<XFTextSpan> xSpan(new XFTextSpan);
+                xSpan->SetStyleName(tabFrib->GetStyleName());
+                rtl::Reference<XFTabStop> xTab(new XFTabStop);
+                xSpan->Add(xTab.get());
+                m_pXFPara->Add(xSpan.get());
             }
             else
             {
-                XFTabStop *pTab = new XFTabStop();
-                m_pXFPara->Add(pTab);
+                rtl::Reference<XFTabStop> xTab(new XFTabStop);
+                m_pXFPara->Add(xTab.get());
             }
-        }
             break;
+        }
         case FRIB_TAG_SECTION:
         {
             LwpFribSection* pSectionFrib = static_cast<LwpFribSection*>(pFrib);
             pSectionFrib->ParseSection();
+            break;
         }
-        break;
 
         case FRIB_TAG_PAGEBREAK:
         {
@@ -230,28 +219,28 @@ void LwpFribPtr::XFConvert()
                 else
                 {
                     //parse pagebreak
-                    XFParagraph *pPara = new XFParagraph();
-                    pPara->SetStyleName(pFrib->GetStyleName());
-                    SetXFPara(pPara);
-                    m_pPara->AddXFContent(pPara);
+                    rtl::Reference<XFParagraph> xPara(new XFParagraph);
+                    xPara->SetStyleName(pFrib->GetStyleName());
+                    SetXFPara(xPara.get());
+                    m_pPara->AddXFContent(xPara.get());
                 }
             }
-        }
             break;
+        }
         case FRIB_TAG_COLBREAK:
         {
-            XFParagraph *pPara = new XFParagraph();
-            pPara->SetStyleName(pFrib->GetStyleName());
-            SetXFPara(pPara);
-            m_pPara->AddXFContent(pPara);
-        }
+            rtl::Reference<XFParagraph> xPara(new XFParagraph);
+            xPara->SetStyleName(pFrib->GetStyleName());
+            SetXFPara(xPara.get());
+            m_pPara->AddXFContent(xPara.get());
             break;
+        }
         case FRIB_TAG_LINEBREAK:
         {
-            XFLineBreak *pLineBreak = new XFLineBreak();
-            m_pXFPara->Add(pLineBreak);
-        }
+            rtl::Reference<XFLineBreak> xLineBreak(new XFLineBreak);
+            m_pXFPara->Add(xLineBreak.get());
             break;
+        }
         case FRIB_TAG_UNICODE: //fall through
         case FRIB_TAG_UNICODE2: //fall through
         case FRIB_TAG_UNICODE3: //fall through
@@ -262,7 +251,7 @@ void LwpFribPtr::XFConvert()
             break;
         case FRIB_TAG_HARDSPACE:
         {
-            OUString sHardSpace(sal_Unicode(0x00a0));
+            OUString sHardSpace(u'\x00a0');
             LwpStory *pStory = m_pPara->GetStory();
             LwpHyperlinkMgr* pHyperlink = pStory ? pStory->GetHyperlinkMgr() : nullptr;
             if (pHyperlink && pHyperlink->GetHyperlinkFlag())
@@ -273,7 +262,7 @@ void LwpFribPtr::XFConvert()
             break;
         case FRIB_TAG_SOFTHYPHEN:
         {
-            OUString sSoftHyphen(sal_Unicode(0x00ad));
+            OUString sSoftHyphen(u'\x00ad');
             pFrib->ConvertChars(m_pXFPara,sSoftHyphen);
         }
             break;
@@ -349,7 +338,7 @@ void LwpFribPtr::XFConvert()
         case FRIB_TAG_RUBYFRAME:
         {
             LwpFribRubyFrame* rubyfrmeFrib = static_cast<LwpFribRubyFrame*>(pFrib);
-            rubyfrmeFrib->XFConvert(m_pXFPara);
+            rubyfrmeFrib->XFConvert();
             break;
         }
         default :
@@ -363,9 +352,9 @@ void LwpFribPtr::XFConvert()
             {
                 if (!sChangeID.isEmpty())
                 {
-                    XFChangeEnd* pChangeEnd = new XFChangeEnd;
-                    pChangeEnd->SetChangeID(sChangeID);
-                    m_pXFPara->Add(pChangeEnd);
+                    rtl::Reference<XFChangeEnd> xChangeEnd(new XFChangeEnd);
+                    xChangeEnd->SetChangeID(sChangeID);
+                    m_pXFPara->Add(xChangeEnd.get());
                 }
             }
         }
@@ -374,54 +363,6 @@ void LwpFribPtr::XFConvert()
 
 }
 
-void LwpFribPtr::FindLayouts()
-{
-    LwpFrib* pFrib = m_pFribs;
-    while(pFrib)
-    {
-        switch(pFrib->GetType())
-        {
-            case FRIB_TAG_SECTION:
-            {
-                LwpFribSection* pSectionFrib = static_cast<LwpFribSection*>(pFrib);
-                LwpSection* pSection = pSectionFrib->GetSection();
-                if(pSection)
-                {
-                    LwpPageLayout* pLayout = pSection->GetPageLayout();
-                    if(pLayout)
-                    {
-                        LwpLayout::UseWhenType eSectionType = pLayout->GetUseWhenType();
-                        if(eSectionType==LwpLayout::StartWithinColume)
-                        {
-                            //StartWithinColume type not support now
-                            break;
-                        }
-                        LwpStory* pStory = dynamic_cast<LwpStory*>(m_pPara->GetStoryID().obj().get());
-                        if (pStory)
-                            pStory->AddPageLayout(pSection->GetPageLayout());
-                    }
-                }
-
-                break;
-            }
-            case FRIB_TAG_PAGEBREAK:
-            {
-                LwpFribPageBreak* pPageBreak = static_cast<LwpFribPageBreak*>(pFrib);
-                LwpPageLayout* pLayout = dynamic_cast<LwpPageLayout*>(pPageBreak->GetLayout().obj().get());
-                if(pLayout)
-                {
-                    LwpStory* pStory = dynamic_cast<LwpStory*>(m_pPara->GetStoryID().obj().get());
-                    if (pStory)
-                        pStory->AddPageLayout(pLayout);
-                }
-                break;
-            }
-            default:
-                break;
-        }
-        pFrib = pFrib->GetNext();
-    }
-}
 /**************************************************************************
  * @descr:  Whether has a frib which type is nType
 **************************************************************************/
@@ -595,25 +536,22 @@ void LwpFribPtr::RegisterStyle()
 
 void LwpFribPtr::ProcessDropcap(LwpStory* pStory,LwpFrib* pFrib,sal_uInt32 nLen)
 {
-    if (pStory)
+    if (pStory && pStory->GetDropcapFlag())
     {
-        if (pStory->GetDropcapFlag())
-        {
-            XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
-            XFTextStyle* pFribStyle = pXFStyleManager->FindTextStyle(pFrib->GetStyleName());
-            pFribStyle->GetFont()->SetFontSize(0);
+        XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
+        XFTextStyle* pFribStyle = pXFStyleManager->FindTextStyle(pFrib->GetStyleName());
+        pFribStyle->GetFont()->SetFontSize(0);
 
-            LwpDropcapLayout* pObj = dynamic_cast<LwpDropcapLayout*>(pStory->GetLayoutsWithMe().GetOnlyLayout().obj().get());
-            if (pObj)
-                pObj->SetChars(nLen);
-        }
+        LwpDropcapLayout* pObj = dynamic_cast<LwpDropcapLayout*>(pStory->GetLayoutsWithMe().GetOnlyLayout().obj().get());
+        if (pObj)
+            pObj->SetChars(nLen);
     }
 }
 /**
  * @descr:  If the position of pPreLayout is earlier than pNextLayout, return true, or return false, default return true
  *
 */
-bool LwpFribPtr::ComparePagePosition(LwpVirtualLayout* pPreLayout, LwpVirtualLayout* pNextLayout)
+bool LwpFribPtr::ComparePagePosition(LwpVirtualLayout const * pPreLayout, LwpVirtualLayout const * pNextLayout)
 {
     if(!pPreLayout || !pNextLayout)
         return true;

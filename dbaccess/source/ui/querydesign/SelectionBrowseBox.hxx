@@ -20,11 +20,11 @@
 #define INCLUDED_DBACCESS_SOURCE_UI_QUERYDESIGN_SELECTIONBROWSEBOX_HXX
 
 #include <svtools/editbrowsebox.hxx>
-#include "TableFieldDescription.hxx"
-#include "JoinExchange.hxx"
-#include "QEnumTypes.hxx"
+#include <TableFieldDescription.hxx>
+#include <JoinExchange.hxx>
+#include <QEnumTypes.hxx>
 #include <com/sun/star/util/XNumberFormatter.hpp>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 
 namespace connectivity
 {
@@ -48,10 +48,10 @@ namespace dbaui
 #define BROW_ROW_CNT            12
 
     class OQueryDesignView;
-    class OSelectionBrowseBox : public ::svt::EditBrowseBox
+    class OSelectionBrowseBox final : public ::svt::EditBrowseBox
     {
         friend class OQueryDesignView;
-        ::std::vector<bool>                 m_bVisibleRow;              // at pos we find the RowId
+        std::vector<bool>                 m_bVisibleRow;              // at pos we find the RowId
         Timer                               m_timerInvalidate;
 
         long                                m_nSeekRow;
@@ -75,10 +75,10 @@ namespace dbaui
         bool                            m_bDisableErrorBox;
         bool                            m_bInUndoMode;
 
-        DECL_LINK_TYPED(OnInvalidateTimer, Timer*, void);
+        DECL_LINK(OnInvalidateTimer, Timer*, void);
     public:
         explicit OSelectionBrowseBox( vcl::Window* pParent );
-                                    virtual ~OSelectionBrowseBox();
+                                    virtual ~OSelectionBrowseBox() override;
         virtual void                dispose() override;
 
         void                        initialize();
@@ -88,11 +88,11 @@ namespace dbaui
         void                        RemoveColumn( sal_uInt16 _nColumnId );
         void                        DeleteFields( const OUString& rAliasName );
 
-        bool                        HasFieldByAliasName(const OUString& rFieldName, OTableFieldDescRef& rInfo) const;
+        bool                        HasFieldByAliasName(const OUString& rFieldName, OTableFieldDescRef const & rInfo) const;
 
         // AddGroupBy:: inserts a field with function == grouping. If the fields already exists and uses an aggregate function,
         // the flag is not set
-        void                        AddGroupBy( const OTableFieldDescRef& rInfo,sal_uInt32 _nCurrentPos);
+        void                        AddGroupBy( const OTableFieldDescRef& rInfo );
         void                        AddCondition( const OTableFieldDescRef& rInfo,
                                                   const OUString& rValue,
                                                   const sal_uInt16 nLevel,
@@ -100,7 +100,7 @@ namespace dbaui
         void                        DuplicateConditionLevel( const sal_uInt16 nLevel);
         void                        AddOrder(const OTableFieldDescRef& rInfo, const EOrderDir eDir, sal_uInt32 _nCurrentPos);
         void                        ClearAll();
-        OTableFieldDescRef          AppendNewCol( sal_uInt16 nCnt=1 );
+        OTableFieldDescRef const &  AppendNewCol( sal_uInt16 nCnt=1 );
         bool                        Save();
         OQueryDesignView*           getDesignView();
         OQueryDesignView*           getDesignView() const;
@@ -139,10 +139,10 @@ namespace dbaui
 
         /** Disables the generation of undo actions
         */
-        inline void                 EnterUndoMode() { m_bInUndoMode = true; }
+        void                 EnterUndoMode() { m_bInUndoMode = true; }
         /** Enables the generation of undo actions
         */
-        inline void                 LeaveUndoMode() { m_bInUndoMode = false; }
+        void                 LeaveUndoMode() { m_bInUndoMode = false; }
 
         /** GetCellText returns the text at the given position
             @param  _nRow
@@ -170,7 +170,7 @@ namespace dbaui
             @return
                 The name of the specified object.
         */
-        virtual OUString     GetAccessibleObjectName( ::svt::AccessibleBrowseBoxObjType eObjType,sal_Int32 _nPosition = -1) const override;
+        virtual OUString     GetAccessibleObjectName( ::vcl::AccessibleBrowseBoxObjType eObjType,sal_Int32 _nPosition = -1) const override;
 
         // IAccessibleTableProvider
         /** Creates the accessible object of a data table cell.
@@ -179,11 +179,11 @@ namespace dbaui
         @return  The XAccessible interface of the specified cell. */
         virtual css::uno::Reference< css::accessibility::XAccessible > CreateAccessibleCell( sal_Int32 nRow, sal_uInt16 nColumnId ) override;
 
-    protected:
+    private:
         virtual bool                SeekRow( long nRow ) override;
 
-        virtual void                PaintStatusCell(OutputDevice& rDev, const Rectangle& rRect) const override;
-        virtual void                PaintCell(OutputDevice& rDev, const Rectangle& rRect,
+        virtual void                PaintStatusCell(OutputDevice& rDev, const tools::Rectangle& rRect) const override;
+        virtual void                PaintCell(OutputDevice& rDev, const tools::Rectangle& rRect,
                                               sal_uInt16 nColumnId ) const override;
 
         virtual sal_Int8            AcceptDrop( const BrowserAcceptDropEvent& rEvt ) override;
@@ -192,7 +192,6 @@ namespace dbaui
         virtual void                MouseButtonUp( const BrowserMouseEvent& rEvt ) override;
         virtual void                KeyInput( const KeyEvent& rEvt ) override;
         virtual void                Command(const CommandEvent& rEvt) override;
-        virtual void                ArrangeControls(sal_uInt16& nX, sal_uInt16 nY) override;
 
         virtual ::svt::CellController*  GetController(long nRow, sal_uInt16 nCol) override;
         virtual void                InitController(::svt::CellControllerRef& rController, long nRow, sal_uInt16 nCol) override;
@@ -209,18 +208,16 @@ namespace dbaui
         void                        stopTimer();
         void                        startTimer();
 
-    private:
         OTableFieldDescRef          FindFirstFreeCol(sal_uInt16& _rColumnPosition);
 
-            // rCol contains the Nummer (in pOTableFieldDescList) of the first column, which itself tells it is empty
+            // rCol contains the number (in pOTableFieldDescList) of the first column, which itself tells it is empty
             // if there are none, rCol is undefined and the returnvalue NULL
         void                        CheckFreeColumns(sal_uInt16& _rColumnPosition);
-
-            // check if empty columns are available, if not,  a new Packen is appended
-            // rCol contains the Nummer of the first empty column (in pOTableFieldDescList)
+            // checks if empty columns are available, if not, a new pack is appended
+            // rCol contains the number of the first empty column (in pOTableFieldDescList)
 
         void            RemoveField( sal_uInt16 nId );
-        Rectangle       GetInvalidRect( sal_uInt16 nColId );
+        tools::Rectangle       GetInvalidRect( sal_uInt16 nColId );
         long            GetRealRow(long nRow) const;
         long            GetBrowseRow(long nRowId) const;
         bool            GetFunctionName(sal_uInt32 _nFunctionTokenId, OUString& rFkt);
@@ -234,7 +231,7 @@ namespace dbaui
 
         void            adjustSelectionMode( bool _bClickedOntoHeader, bool _bClickedOntoHandleCol );
 
-        /** save the filed change in save modified
+        /** save the field change in save modified
             @param  _sFieldName
                 The field name inserted by the user.
             @param  _pEntry
@@ -244,7 +241,7 @@ namespace dbaui
             @return
                 <TRUE/> if an error occurred otherwise <FALSE/>
         */
-        bool            saveField(OUString& _sFieldName, OTableFieldDescRef& _pEntry, bool& _bListAction);
+        bool            saveField(OUString& _sFieldName, OTableFieldDescRef const & _pEntry, bool& _bListAction);
 
         /** sets the table window at the _pEntry
             @param  _pEntry
@@ -254,7 +251,7 @@ namespace dbaui
             @return
                 <TRUE/> if the table name was set otherwise <FALSE/>
         */
-        bool            fillEntryTable(OTableFieldDescRef& _pEntry,const OUString& _sTableName);
+        bool            fillEntryTable(OTableFieldDescRef const & _pEntry,const OUString& _sTableName);
 
         /** uses the parse node to fill all information into the field
             @param  _pColumnRef
@@ -270,12 +267,12 @@ namespace dbaui
         */
         bool            fillColumnRef(  const ::connectivity::OSQLParseNode* _pColumnRef,
                                         const css::uno::Reference< css::sdbc::XConnection >& _rxConnection,
-                                        OTableFieldDescRef& _pEntry,
+                                        OTableFieldDescRef const & _pEntry,
                                         bool& _bListAction);
         bool            fillColumnRef(  const OUString& _sColumnName,
                                         const OUString& _sTableRange,
                                         const css::uno::Reference< css::sdbc::XDatabaseMetaData >& _xMetaData,
-                                        OTableFieldDescRef& _pEntry,
+                                        OTableFieldDescRef const & _pEntry,
                                         bool& _bListAction);
 
         /** append an undo action for the table field
@@ -307,15 +304,14 @@ namespace dbaui
             @param  _bListAction
                 When <TRUE/> an list action will be created.
         */
-        void            clearEntryFunctionField(const OUString& _sFieldName,OTableFieldDescRef& _pEntry, bool& _bListAction,sal_uInt16 _nColumnId);
+        void            clearEntryFunctionField(const OUString& _sFieldName,OTableFieldDescRef const & _pEntry, bool& _bListAction,sal_uInt16 _nColumnId);
 
         /** remove or insert the necessary function types
             @param  _pEntry
                 The currently edited entry.
         */
-        void            setFunctionCell(OTableFieldDescRef& _pEntry);
+        void            setFunctionCell(OTableFieldDescRef const & _pEntry);
 
-    private:
         using ::svt::EditBrowseBox::AcceptDrop;
         using ::svt::EditBrowseBox::ExecuteDrop;
         using ::svt::EditBrowseBox::MouseButtonDown;

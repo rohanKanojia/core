@@ -17,8 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "BaseGFXHelper.hxx"
-#include <com/sun/star/drawing/DoubleSequence.hpp>
+#include <BaseGFXHelper.hxx>
+#include <com/sun/star/drawing/PolyPolygonShape3D.hpp>
+#include <com/sun/star/awt/Rectangle.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::drawing;
@@ -192,16 +193,6 @@ void ReduceToRotationMatrix( ::basegfx::B3DHomMatrix & rB3DMatrix )
     ::basegfx::B3DHomMatrix aRotationMatrix;
     aRotationMatrix.rotate(aR.getX(),aR.getY(),aR.getZ());
     rB3DMatrix = aRotationMatrix;
-}
-
-double Deg2Rad( double fDegrees )
-{
-    return fDegrees * ( F_PI / 180.0 );
-}
-
-double Rad2Deg( double fRadians )
-{
-    return fRadians * ( 180.0 / F_PI );
 }
 
 } //  namespace BaseGFXHelper

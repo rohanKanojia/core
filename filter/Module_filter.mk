@@ -28,7 +28,6 @@ $(eval $(call gb_Module_add_targets,filter,\
 	Library_msfilter \
 	Library_odfflatxml \
 	Library_pdffilter \
-	Library_placeware \
 	Library_storagefd \
 	Library_svgfilter \
 	Library_graphicfilter \
@@ -41,26 +40,18 @@ $(eval $(call gb_Module_add_targets,filter,\
 	Package_docbook \
 	Package_xhtml \
 	Package_xslt \
+	UIConfig_filter \
 ))
 
 $(eval $(call gb_Module_add_l10n_targets,filter,\
-	AllLangResTarget_eps \
-	AllLangResTarget_pdffilter \
-	AllLangResTarget_t602filter \
-	AllLangResTarget_xsltdlg \
-	UIConfig_xsltdlg \
+	AllLangMoTarget_flt \
 ))
-
-ifneq (,$(filter DESKTOP,$(BUILD_TYPE)))
-$(eval $(call gb_Module_add_targets,filter,\
-	Executable_svg2odf \
-))
-endif
 
 $(eval $(call gb_Module_add_check_targets,filter,\
     CppunitTest_filter_xslt \
     CppunitTest_filter_priority \
     CppunitTest_filter_msfilter \
+    CppunitTest_filter_textfilterdetect \
 ))
 
 ifneq ($(DISABLE_CVE_TESTS),TRUE)
@@ -82,6 +73,11 @@ endif
 # TODO
 #$(eval $(call gb_Module_add_subsequentcheck_targets,filter,\
 	JunitTest_filter_complex \
+))
+
+# screenshots
+$(eval $(call gb_Module_add_screenshot_targets,filter,\
+    CppunitTest_filter_dialogs_test \
 ))
 
 # vim: set noet sw=4 ts=4:

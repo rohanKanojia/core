@@ -18,14 +18,13 @@
  */
 
 
-#include <osl/mutex.hxx>
 #include <osl/thread.h>
 #include <cppuhelper/factory.hxx>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 
-#include <pdffilter.hxx>
-#include <pdfdialog.hxx>
-#include <pdfinteract.hxx>
+#include "pdffilter.hxx"
+#include "pdfdialog.hxx"
+#include "pdfinteract.hxx"
 
 using namespace ::cppu;
 using namespace ::com::sun::star::uno;
@@ -34,7 +33,7 @@ using namespace ::com::sun::star::registry;
 
 extern "C"
 {
-    SAL_DLLPUBLIC_EXPORT void* SAL_CALL pdffilter_component_getFactory( const sal_Char * pImplName, void * pServiceManager, void * /*pRegistryKey*/ )
+    SAL_DLLPUBLIC_EXPORT void* pdffilter_component_getFactory( const sal_Char * pImplName, void * pServiceManager, void * /*pRegistryKey*/ )
     {
         OUString    aImplName( OUString::createFromAscii( pImplName ) );
         void*       pRet = nullptr;
@@ -43,21 +42,21 @@ extern "C"
         {
             Reference< XSingleServiceFactory > xFactory;
 
-            if( aImplName.equals( PDFFilter_getImplementationName() ) )
+            if( aImplName == PDFFilter_getImplementationName() )
             {
                 xFactory = createSingleFactory( static_cast< XMultiServiceFactory* >( pServiceManager ),
                                                 OUString::createFromAscii( pImplName ),
                                                 PDFFilter_createInstance, PDFFilter_getSupportedServiceNames() );
 
             }
-            else if( aImplName.equals( PDFDialog_getImplementationName() ) )
+            else if( aImplName == PDFDialog_getImplementationName() )
             {
                 xFactory = createSingleFactory( static_cast< XMultiServiceFactory* >( pServiceManager ),
                                                 OUString::createFromAscii( pImplName ),
                                                 PDFDialog_createInstance, PDFDialog_getSupportedServiceNames() );
 
             }
-            else if( aImplName.equals( PDFInteractionHandler_getImplementationName() ) )
+            else if( aImplName == PDFInteractionHandler_getImplementationName() )
             {
                 xFactory = createSingleFactory( static_cast< XMultiServiceFactory* >( pServiceManager ),
                                                 OUString::createFromAscii( pImplName ),

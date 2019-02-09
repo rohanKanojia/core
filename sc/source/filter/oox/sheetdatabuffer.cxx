@@ -17,52 +17,41 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sheetdatabuffer.hxx"
+#include <sheetdatabuffer.hxx>
 
 #include <algorithm>
 #include <com/sun/star/sheet/XArrayFormulaTokens.hpp>
-#include <com/sun/star/sheet/XCellRangeData.hpp>
-#include <com/sun/star/sheet/XFormulaTokens.hpp>
-#include <com/sun/star/sheet/XMultipleOperation.hpp>
-#include <com/sun/star/table/XCell.hpp>
-#include <com/sun/star/text/XText.hpp>
 #include <com/sun/star/util/DateTime.hpp>
 #include <com/sun/star/util/NumberFormat.hpp>
-#include <com/sun/star/util/XMergeable.hpp>
 #include <com/sun/star/util/XNumberFormatTypes.hpp>
 #include <com/sun/star/util/XNumberFormatsSupplier.hpp>
-#include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 #include <editeng/boxitem.hxx>
-#include <editeng/editobj.hxx>
-#include <svl/eitem.hxx>
 #include <oox/helper/containerhelper.hxx>
-#include <oox/helper/propertymap.hxx>
 #include <oox/helper/propertyset.hxx>
+#include <oox/token/properties.hxx>
 #include <oox/token/tokens.hxx>
-#include "addressconverter.hxx"
-#include "biffinputstream.hxx"
-#include "formulaparser.hxx"
-#include "sharedstringsbuffer.hxx"
-#include "unitconverter.hxx"
-#include "convuno.hxx"
-#include "markdata.hxx"
-#include "rangelst.hxx"
-#include "document.hxx"
-#include "scitems.hxx"
-#include "formulacell.hxx"
-#include "docpool.hxx"
-#include "paramisc.hxx"
-#include "documentimport.hxx"
-#include "formulabuffer.hxx"
+#include <addressconverter.hxx>
+#include <formulaparser.hxx>
+#include <sharedstringsbuffer.hxx>
+#include <unitconverter.hxx>
+#include <rangelst.hxx>
+#include <document.hxx>
+#include <scitems.hxx>
+#include <docpool.hxx>
+#include <paramisc.hxx>
+#include <patattr.hxx>
+#include <documentimport.hxx>
+#include <formulabuffer.hxx>
 #include <numformat.hxx>
+#include <sax/tools/converter.hxx>
 
 namespace oox {
 namespace xls {
 
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::sheet;
-using namespace ::com::sun::star::table;
-using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::util;
 
@@ -79,36 +68,17 @@ CellFormulaModel::CellFormulaModel() :
 {
 }
 
-bool CellFormulaModel::isValidArrayRef( const CellAddress& rCellAddr )
-{
-    return
-        (maFormulaRef.Sheet == rCellAddr.Sheet) &&
-        (maFormulaRef.StartColumn == rCellAddr.Column) &&
-        (maFormulaRef.StartRow == rCellAddr.Row);
-}
-
 bool CellFormulaModel::isValidArrayRef( const ScAddress& rCellAddr )
 {
-    return
-        (maFormulaRef.Sheet == rCellAddr.Tab() ) &&
-        (maFormulaRef.StartColumn == rCellAddr.Col() ) &&
-        (maFormulaRef.StartRow == rCellAddr.Row() );
-}
-
-bool CellFormulaModel::isValidSharedRef( const CellAddress& rCellAddr )
-{
-    return
-        (maFormulaRef.Sheet == rCellAddr.Sheet) &&
-        (maFormulaRef.StartColumn <= rCellAddr.Column) && (rCellAddr.Column <= maFormulaRef.EndColumn) &&
-        (maFormulaRef.StartRow <= rCellAddr.Row) && (rCellAddr.Row <= maFormulaRef.EndRow);
+    return (maFormulaRef.aStart == rCellAddr );
 }
 
 bool CellFormulaModel::isValidSharedRef( const ScAddress& rCellAddr )
 {
     return
-        (maFormulaRef.Sheet == rCellAddr.Tab() ) &&
-        (maFormulaRef.StartColumn <= rCellAddr.Col() ) && (rCellAddr.Col() <= maFormulaRef.EndColumn) &&
-        (maFormulaRef.StartRow <= rCellAddr.Row() ) && (rCellAddr.Row() <= maFormulaRef.EndRow);
+        (maFormulaRef.aStart.Tab() == rCellAddr.Tab() ) &&
+        (maFormulaRef.aStart.Col() <= rCellAddr.Col() ) && (rCellAddr.Col() <= maFormulaRef.aEnd.Col()) &&
+        (maFormulaRef.aStart.Row() <= rCellAddr.Row() ) && (rCellAddr.Row() <= maFormulaRef.aEnd.Row());
 }
 
 DataTableModel::DataTableModel() :
@@ -130,7 +100,10 @@ void CellBlockBuffer::setColSpans( sal_Int32 nRow, const ValueRangeSet& rColSpan
     OSL_ENSURE( maColSpans.count( nRow ) == 0, "CellBlockBuffer::setColSpans - multiple column spans for the same row" );
     OSL_ENSURE( (mnCurrRow < nRow) && (maColSpans.empty() || (maColSpans.rbegin()->first < nRow)), "CellBlockBuffer::setColSpans - rows are unsorted" );
     if( (mnCurrRow < nRow) && (maColSpans.count( nRow ) == 0) )
+    {
         maColSpans[ nRow ] = rColSpans.getRanges();
+        mnCurrRow = nRow;
+    }
 }
 
 SheetDataBuffer::SheetDataBuffer( const WorksheetHelper& rHelper ) :
@@ -152,13 +125,15 @@ void SheetDataBuffer::setBlankCell( const CellModel& rModel )
 
 void SheetDataBuffer::setValueCell( const CellModel& rModel, double fValue )
 {
-    putValue( rModel.maCellAddr, fValue );
+    getDocImport().setNumericCell(rModel.maCellAddr, fValue);
     setCellFormat( rModel );
 }
 
 void SheetDataBuffer::setStringCell( const CellModel& rModel, const OUString& rText )
 {
-    putString( rModel.maCellAddr, rText );
+    if (!rText.isEmpty())
+        getDocImport().setStringCell(rModel.maCellAddr, rText);
+
     setCellFormat( rModel );
 }
 
@@ -195,7 +170,18 @@ void SheetDataBuffer::setDateTimeCell( const CellModel& rModel, const css::util:
     // set appropriate number format
     using namespace ::com::sun::star::util::NumberFormat;
     sal_Int16 nStdFmt = (fSerial < 1.0) ? TIME : (((rDateTime.Hours > 0) || (rDateTime.Minutes > 0) || (rDateTime.Seconds > 0)) ? DATETIME : DATE);
-    setStandardNumFmt( rModel.maCellAddr, nStdFmt );
+    // set number format
+    try
+    {
+        Reference< XNumberFormatsSupplier > xNumFmtsSupp( getDocument(), UNO_QUERY_THROW );
+        Reference< XNumberFormatTypes > xNumFmtTypes( xNumFmtsSupp->getNumberFormats(), UNO_QUERY_THROW );
+        sal_Int32 nIndex = xNumFmtTypes->getStandardFormat( nStdFmt, Locale() );
+        PropertySet aPropSet( getCell( rModel.maCellAddr ) );
+        aPropSet.setProperty( PROP_NumberFormat, nIndex );
+    }
+    catch( Exception& )
+    {
+    }
 }
 
 void SheetDataBuffer::setBooleanCell( const CellModel& rModel, bool bValue )
@@ -221,23 +207,17 @@ void SheetDataBuffer::setErrorCell( const CellModel& rModel, sal_uInt8 nErrorCod
 
 void SheetDataBuffer::setDateCell( const CellModel& rModel, const OUString& rDateString )
 {
-    ScDocument& rDoc = getScDocument();
-    SvNumberFormatter* pFormatter = rDoc.GetFormatTable();
+    css::util::DateTime aDateTime;
+    if (!sax::Converter::parseDateTime( aDateTime, rDateString))
+    {
+        SAL_WARN("sc.filter", "SheetDataBuffer::setDateCell - could not parse: " << rDateString);
+        // At least don't lose data.
+        setStringCell( rModel, rDateString);
+        return;
+    }
 
-    double fValue = 0.0;
-    sal_uInt32 nFormatIndex = 0;
-    bool bValid = pFormatter->IsNumberFormat( rDateString, nFormatIndex, fValue );
-
-    if(bValid)
-        setValueCell( rModel, fValue );
-}
-
-void SheetDataBuffer::createSharedFormula(const CellAddress& rAddr, const ApiTokenSequence& rTokens)
-{
-    BinAddress aAddr(rAddr);
-    maSharedFormulas[aAddr] = rTokens;
-    if( mbPendingSharedFmla )
-        setCellFormula( maSharedFmlaAddr, resolveSharedFormula( maSharedBaseAddr ) );
+    double fSerial = getUnitConverter().calcSerialFromDateTime( aDateTime);
+    setValueCell( rModel, fSerial);
 }
 
 void SheetDataBuffer::createSharedFormula(const ScAddress& rAddr, const ApiTokenSequence& rTokens)
@@ -297,20 +277,20 @@ void SheetDataBuffer::setFormulaCell( const CellModel& rModel, const ApiTokenSeq
     setCellFormat( rModel );
 }
 
-void SheetDataBuffer::createArrayFormula( const CellRangeAddress& rRange, const ApiTokenSequence& rTokens )
+void SheetDataBuffer::createArrayFormula( const ScRange& rRange, const ApiTokenSequence& rTokens )
 {
     /*  Array formulas will be inserted later in finalizeImport(). This is
         needed to not disturb collecting all the cells, which will be put into
         the sheet in large blocks to increase performance. */
-    maArrayFormulas.push_back( ArrayFormula( rRange, rTokens ) );
+    maArrayFormulas.emplace_back( rRange, rTokens );
 }
 
-void SheetDataBuffer::createTableOperation( const CellRangeAddress& rRange, const DataTableModel& rModel )
+void SheetDataBuffer::createTableOperation( const ScRange& rRange, const DataTableModel& rModel )
 {
     /*  Table operations will be inserted later in finalizeImport(). This is
         needed to not disturb collecting all the cells, which will be put into
         the sheet in large blocks to increase performance. */
-    maTableOperations.push_back( TableOperation( rRange, rModel ) );
+    maTableOperations.emplace_back( rRange, rModel );
 }
 
 void SheetDataBuffer::setRowFormat( sal_Int32 nRow, sal_Int32 nXfId, bool bCustomFormat )
@@ -334,187 +314,170 @@ void SheetDataBuffer::setRowFormat( sal_Int32 nRow, sal_Int32 nXfId, bool bCusto
     }
 }
 
-void SheetDataBuffer::setMergedRange( const CellRangeAddress& rRange )
+void SheetDataBuffer::setMergedRange( const ScRange& rRange )
 {
-    maMergedRanges.push_back( MergedRange( rRange ) );
-}
-
-void SheetDataBuffer::setStandardNumFmt( const CellAddress& rCellAddr, sal_Int16 nStdNumFmt )
-{
-    try
-    {
-        Reference< XNumberFormatsSupplier > xNumFmtsSupp( getDocument(), UNO_QUERY_THROW );
-        Reference< XNumberFormatTypes > xNumFmtTypes( xNumFmtsSupp->getNumberFormats(), UNO_QUERY_THROW );
-        sal_Int32 nIndex = xNumFmtTypes->getStandardFormat( nStdNumFmt, Locale() );
-        PropertySet aPropSet( getCell( rCellAddr ) );
-        aPropSet.setProperty( PROP_NumberFormat, nIndex );
-    }
-    catch( Exception& )
-    {
-    }
-}
-
-void SheetDataBuffer::setStandardNumFmt( const ScAddress& rCellAddr, sal_Int16 nStdNumFmt )
-{
-    try
-    {
-        Reference< XNumberFormatsSupplier > xNumFmtsSupp( getDocument(), UNO_QUERY_THROW );
-        Reference< XNumberFormatTypes > xNumFmtTypes( xNumFmtsSupp->getNumberFormats(), UNO_QUERY_THROW );
-        sal_Int32 nIndex = xNumFmtTypes->getStandardFormat( nStdNumFmt, Locale() );
-        PropertySet aPropSet( getCell( rCellAddr ) );
-        aPropSet.setProperty( PROP_NumberFormat, nIndex );
-    }
-    catch( Exception& )
-    {
-    }
+    maMergedRanges.emplace_back( rRange );
 }
 
 typedef std::pair<sal_Int32, sal_Int32> FormatKeyPair;
 
-void addIfNotInMyMap( StylesBuffer& rStyles, std::map< FormatKeyPair, ApiCellRangeList >& rMap, sal_Int32 nXfId, sal_Int32 nFormatId, const ApiCellRangeList& rRangeList )
+static void addIfNotInMyMap( const StylesBuffer& rStyles, std::map< FormatKeyPair, ScRangeList >& rMap, sal_Int32 nXfId, sal_Int32 nFormatId, const ScRangeList& rRangeList )
 {
     Xf* pXf1 = rStyles.getCellXf( nXfId ).get();
     if ( pXf1 )
     {
-        for ( std::map< FormatKeyPair, ApiCellRangeList >::iterator it = rMap.begin(), it_end = rMap.end(); it != it_end; ++it )
+        auto it = std::find_if(rMap.begin(), rMap.end(),
+            [&nFormatId, &rStyles, &pXf1](const std::pair<FormatKeyPair, ScRangeList>& rEntry) {
+                if (rEntry.first.second != nFormatId)
+                    return false;
+                Xf* pXf2 = rStyles.getCellXf( rEntry.first.first ).get();
+                return *pXf1 == *pXf2;
+            });
+        if (it != rMap.end()) // already exists
         {
-            if ( it->first.second == nFormatId )
-            {
-                Xf* pXf2 = rStyles.getCellXf( it->first.first ).get();
-                if ( *pXf1 == *pXf2 ) // already exists
-                {
-                    // add ranges from the rangelist to the existing rangelist for the
-                    // matching style ( should we check if they overlap ? )
-                    for ( ::std::vector< CellRangeAddress >::const_iterator iter = rRangeList.begin(), iter_end =  rRangeList.end(); iter != iter_end; ++iter )
-                       it->second.push_back( *iter );
-                    return;
-                }
-            }
+            // add ranges from the rangelist to the existing rangelist for the
+            // matching style ( should we check if they overlap ? )
+            for (size_t i = 0, nSize = rRangeList.size(); i < nSize; ++i)
+                it->second.push_back(rRangeList[i]);
+            return;
         }
         rMap[ FormatKeyPair( nXfId, nFormatId ) ] = rRangeList;
     }
 }
 
-void SheetDataBuffer::addColXfStyle( sal_Int32 nXfId, sal_Int32 nFormatId, const css::table::CellRangeAddress& rAddress, bool bProcessRowRange )
+void SheetDataBuffer::addColXfStyle( sal_Int32 nXfId, sal_Int32 nFormatId, const ScRange& rAddress, bool bProcessRowRange )
 {
     RowRangeStyle aStyleRows;
     aStyleRows.mnNumFmt.first = nXfId;
     aStyleRows.mnNumFmt.second = nFormatId;
-    aStyleRows.mnStartRow = rAddress.StartRow;
-    aStyleRows.mnEndRow = rAddress.EndRow;
-    for ( sal_Int32 nCol = rAddress.StartColumn; nCol <= rAddress.EndColumn; ++nCol )
+    aStyleRows.mnStartRow = rAddress.aStart.Row();
+    aStyleRows.mnEndRow = rAddress.aEnd.Row();
+    for ( sal_Int32 nCol = rAddress.aStart.Col(); nCol <= rAddress.aEnd.Col(); ++nCol )
     {
         if ( !bProcessRowRange )
             maStylesPerColumn[ nCol ].insert( aStyleRows );
         else
         {
-            RowStyles& rRowStyles =  maStylesPerColumn[ nCol ];
-            // If the rowrange style includes rows already
-            // allocated to a style then we need to split
-            // the range style Rows into sections ( to
-            // occupy only rows that have no style definition )
+            RowStyles& rRowStyles = maStylesPerColumn[ nCol ];
+            // Reset row range for each column
+            aStyleRows.mnStartRow = rAddress.aStart.Row();
+            aStyleRows.mnEndRow = rAddress.aEnd.Row();
 
-            // We don't want to set any rowstyle 'rows'
-            // for rows where there is an existing 'style' )
-            std::vector< RowRangeStyle > aRangeRowsSplits;
+            // If aStyleRows includes rows already allocated to a style
+            // in rRowStyles, then we need to split it into parts.
+            // ( to occupy only rows that have no style definition)
 
-            RowStyles::iterator rows_it = rRowStyles.begin();
+            // Start iterating at the first element that is not completely before aStyleRows
+            RowStyles::iterator rows_it = rRowStyles.lower_bound(aStyleRows);
             RowStyles::iterator rows_end = rRowStyles.end();
             bool bAddRange = true;
             for ( ; rows_it != rows_end; ++rows_it )
             {
                 const RowRangeStyle& r = *rows_it;
-                // if row is completely within existing style, discard it
-                if ( aStyleRows.mnStartRow >= r.mnStartRow && aStyleRows.mnEndRow <= r.mnEndRow )
-                    bAddRange = false;
-                else if ( aStyleRows.mnStartRow <= r.mnStartRow )
+
+                // Add the part of aStyleRows that does not overlap with r
+                if ( aStyleRows.mnStartRow < r.mnStartRow )
                 {
-                    // not intersecting at all?, if so finish as none left
-                    // to check ( row ranges are in ascending order
-                    if ( aStyleRows.mnEndRow < r.mnStartRow )
-                        break;
-                    else if ( aStyleRows.mnEndRow <= r.mnEndRow )
-                    {
-                        aStyleRows.mnEndRow = r.mnStartRow - 1;
-                        break;
-                    }
-                    if ( aStyleRows.mnStartRow < r.mnStartRow )
-                    {
-                        RowRangeStyle aSplit = aStyleRows;
-                        aSplit.mnEndRow = r.mnStartRow - 1;
-                        aRangeRowsSplits.push_back( aSplit );
-                    }
+                    RowRangeStyle aSplit = aStyleRows;
+                    aSplit.mnEndRow = std::min(aStyleRows.mnEndRow, r.mnStartRow - 1);
+                    // Insert with hint that aSplit comes directly before the current position
+                    rRowStyles.insert( rows_it, aSplit );
                 }
+
+                // Done if no part of aStyleRows extends beyond r
+                if ( aStyleRows.mnEndRow <= r.mnEndRow )
+                {
+                    bAddRange = false;
+                    break;
+                }
+
+                // Cut off the part aStyleRows that was handled above
+                aStyleRows.mnStartRow = r.mnEndRow + 1;
             }
-            std::vector< RowRangeStyle >::iterator splits_it = aRangeRowsSplits.begin();
-            std::vector< RowRangeStyle >::iterator splits_end = aRangeRowsSplits.end();
-            for ( ; splits_it != splits_end; ++splits_it )
-                rRowStyles.insert( *splits_it );
             if ( bAddRange )
                 rRowStyles.insert( aStyleRows );
         }
     }
 }
+
 void SheetDataBuffer::finalizeImport()
 {
     // create all array formulas
-    for( ArrayFormulaList::iterator aIt = maArrayFormulas.begin(), aEnd = maArrayFormulas.end(); aIt != aEnd; ++aIt )
-        finalizeArrayFormula( aIt->first, aIt->second );
+    for( const auto& [rRange, rTokens] : maArrayFormulas )
+        finalizeArrayFormula( rRange, rTokens );
 
     // create all table operations
-    for( TableOperationList::iterator aIt = maTableOperations.begin(), aEnd = maTableOperations.end(); aIt != aEnd; ++aIt )
-        finalizeTableOperation( aIt->first, aIt->second );
+    for( const auto& [rRange, rModel] : maTableOperations )
+        finalizeTableOperation( rRange, rModel );
 
     // write default formatting of remaining row range
     maXfIdRowRangeList[ maXfIdRowRange.mnXfId ].push_back( maXfIdRowRange.maRowRange );
 
-    std::map< FormatKeyPair, ApiCellRangeList > rangeStyleListMap;
-    for( XfIdRangeListMap::const_iterator aIt = maXfIdRangeLists.begin(), aEnd = maXfIdRangeLists.end(); aIt != aEnd; ++aIt )
+    std::map< FormatKeyPair, ScRangeList > rangeStyleListMap;
+    for( const auto& [rFormatKeyPair, rRangeList] : maXfIdRangeLists )
     {
-        addIfNotInMyMap( getStyles(), rangeStyleListMap, aIt->first.first, aIt->first.second, aIt->second );
+        addIfNotInMyMap( getStyles(), rangeStyleListMap, rFormatKeyPair.first, rFormatKeyPair.second, rRangeList );
     }
     // gather all ranges that have the same style and apply them in bulk
-    for (  std::map< FormatKeyPair, ApiCellRangeList >::iterator it = rangeStyleListMap.begin(), it_end = rangeStyleListMap.end(); it != it_end; ++it )
+    for ( const auto& [rFormatKeyPair, rRanges] : rangeStyleListMap )
     {
-        const ApiCellRangeList& rRanges( it->second );
-        for ( ::std::vector< CellRangeAddress >::const_iterator it_range = rRanges.begin(), it_rangeend = rRanges.end(); it_range!=it_rangeend; ++it_range )
-            addColXfStyle( it->first.first, it->first.second, *it_range );
+        for (size_t i = 0, nSize = rRanges.size(); i < nSize; ++i)
+            addColXfStyle( rFormatKeyPair.first, rFormatKeyPair.second, rRanges[i]);
     }
 
-    for ( std::map< sal_Int32, std::vector< ValueRange > >::iterator it = maXfIdRowRangeList.begin(), it_end =  maXfIdRowRangeList.end(); it != it_end; ++it )
+    for ( const auto& [rXfId, rRowRangeList] : maXfIdRowRangeList )
     {
-        ApiCellRangeList rangeList;
+        if ( rXfId == -1 ) // it's a dud skip it
+            continue;
         AddressConverter& rAddrConv = getAddressConverter();
         // get all row ranges for id
-        for ( std::vector< ValueRange >::iterator rangeIter = it->second.begin(), rangeIter_end = it->second.end(); rangeIter != rangeIter_end; ++rangeIter )
+        for ( const auto& rRange : rRowRangeList )
         {
-            if ( it->first == -1 ) // it's a dud skip it
-                continue;
-            CellRangeAddress aRange( getSheetIndex(), 0, rangeIter->mnFirst, rAddrConv.getMaxApiAddress().Col(), rangeIter->mnLast );
+            ScRange aRange( 0, rRange.mnFirst, getSheetIndex(),
+                            rAddrConv.getMaxApiAddress().Col(), rRange.mnLast, getSheetIndex() );
 
-            addColXfStyle( it->first, -1, aRange, true );
+            addColXfStyle( rXfId, -1, aRange, true );
         }
     }
 
     ScDocumentImport& rDoc = getDocImport();
     StylesBuffer& rStyles = getStyles();
-    for ( ColStyles::iterator col = maStylesPerColumn.begin(), col_end = maStylesPerColumn.end(); col != col_end; ++col )
+    for ( const auto& [rCol, rRowStyles] : maStylesPerColumn )
     {
-        RowStyles& rRowStyles = col->second;
-        Xf::AttrList aAttrs;
-        SCCOL nScCol = static_cast< SCCOL >( col->first );
-        for ( RowStyles::iterator rRows = rRowStyles.begin(), rRows_end = rRowStyles.end(); rRows != rRows_end; ++rRows )
+        SCCOL nScCol = static_cast< SCCOL >( rCol );
+
+        // tdf#91567 Get pattern from the first row without AutoFilter
+        const ScPatternAttr* pDefPattern = nullptr;
+        bool bAutoFilter = true;
+        SCROW nScRow = 0;
+        while ( bAutoFilter && nScRow < MAXROW )
         {
-             Xf* pXf = rStyles.getCellXf( rRows->mnNumFmt.first ).get();
+            pDefPattern = rDoc.getDoc().GetPattern( nScCol, nScRow, getSheetIndex() );
+            if ( pDefPattern )
+            {
+                const ScMergeFlagAttr* pAttr = pDefPattern->GetItemSet().GetItem( ATTR_MERGE_FLAG );
+                bAutoFilter = pAttr->HasAutoFilter();
+            }
+            else
+                break;
+            nScRow++;
+        }
+        if ( !pDefPattern || nScRow == MAXROW )
+            pDefPattern = rDoc.getDoc().GetDefPattern();
+
+        Xf::AttrList aAttrs(pDefPattern);
+        for ( const auto& rRowStyle : rRowStyles )
+        {
+             Xf* pXf = rStyles.getCellXf( rRowStyle.mnNumFmt.first ).get();
 
              if ( pXf )
-                 pXf->applyPatternToAttrList( aAttrs,  rRows->mnStartRow,  rRows->mnEndRow,  rRows->mnNumFmt.second );
+                 pXf->applyPatternToAttrList( aAttrs,  rRowStyle.mnStartRow,  rRowStyle.mnEndRow,  rRowStyle.mnNumFmt.second );
         }
-        if (aAttrs.maAttrs.empty() || aAttrs.maAttrs.back().nRow != MAXROW)
+        if (aAttrs.maAttrs.empty() || aAttrs.maAttrs.back().nEndRow != MAXROW)
         {
             ScAttrEntry aEntry;
-            aEntry.nRow = MAXROW;
-            aEntry.pPattern = rDoc.getDoc().GetPattern(nScCol, 0, getSheetIndex());
+            aEntry.nEndRow = MAXROW;
+            aEntry.pPattern = pDefPattern;
             rDoc.getDoc().GetPool()->Put(*aEntry.pPattern);
             aAttrs.maAttrs.push_back(aEntry);
 
@@ -523,21 +486,17 @@ void SheetDataBuffer::finalizeImport()
         }
 
         ScDocumentImport::Attrs aAttrParam;
-        aAttrParam.mnSize = aAttrs.maAttrs.size();
-        aAttrParam.mpData = new ScAttrEntry[aAttrParam.mnSize];
+        aAttrParam.mvData.swap(aAttrs.maAttrs);
         aAttrParam.mbLatinNumFmtOnly = aAttrs.mbLatinNumFmtOnly;
-        std::list<ScAttrEntry>::const_iterator itr = aAttrs.maAttrs.begin(), itrEnd = aAttrs.maAttrs.end();
-        for (size_t i = 0; itr != itrEnd; ++itr, ++i)
-            aAttrParam.mpData[i] = *itr;
 
-        rDoc.setAttrEntries(getSheetIndex(), nScCol, aAttrParam);
+        rDoc.setAttrEntries(getSheetIndex(), nScCol, std::move(aAttrParam));
     }
 
     // merge all cached merged ranges and update right/bottom cell borders
-    for( MergedRangeList::iterator aIt = maMergedRanges.begin(), aEnd = maMergedRanges.end(); aIt != aEnd; ++aIt )
-        applyCellMerging( aIt->maRange );
-    for( MergedRangeList::iterator aIt = maCenterFillRanges.begin(), aEnd = maCenterFillRanges.end(); aIt != aEnd; ++aIt )
-        applyCellMerging( aIt->maRange );
+    for( const auto& rMergedRange : maMergedRanges )
+        applyCellMerging( rMergedRange.maRange );
+    for( const auto& rCenterFillRange : maCenterFillRanges )
+        applyCellMerging( rCenterFillRange.maRange );
 }
 
 // private --------------------------------------------------------------------
@@ -572,52 +531,27 @@ bool SheetDataBuffer::XfIdRowRange::tryExpand( sal_Int32 nRow, sal_Int32 nXfId )
     return false;
 }
 
-SheetDataBuffer::MergedRange::MergedRange( const CellRangeAddress& rRange ) :
+SheetDataBuffer::MergedRange::MergedRange( const ScRange& rRange ) :
     maRange( rRange ),
     mnHorAlign( XML_TOKEN_INVALID )
 {
 }
 
-SheetDataBuffer::MergedRange::MergedRange( const CellAddress& rAddress, sal_Int32 nHorAlign ) :
-    maRange( rAddress.Sheet, rAddress.Column, rAddress.Row, rAddress.Column, rAddress.Row ),
-    mnHorAlign( nHorAlign )
-{
-}
-
 SheetDataBuffer::MergedRange::MergedRange( const ScAddress& rAddress, sal_Int32 nHorAlign ) :
-    maRange( rAddress.Tab(), rAddress.Col(), rAddress.Row(), rAddress.Col(), rAddress.Row() ),
+    maRange( rAddress, rAddress ),
     mnHorAlign( nHorAlign )
 {
-}
-
-bool SheetDataBuffer::MergedRange::tryExpand( const CellAddress& rAddress, sal_Int32 nHorAlign )
-{
-    if( (mnHorAlign == nHorAlign) && (maRange.StartRow == rAddress.Row) &&
-        (maRange.EndRow == rAddress.Row) && (maRange.EndColumn + 1 == rAddress.Column) )
-    {
-        ++maRange.EndColumn;
-        return true;
-    }
-    return false;
 }
 
 bool SheetDataBuffer::MergedRange::tryExpand( const ScAddress& rAddress, sal_Int32 nHorAlign )
 {
-    if( (mnHorAlign == nHorAlign) && (maRange.StartRow == rAddress.Row() ) &&
-        (maRange.EndRow == rAddress.Row() ) && (maRange.EndColumn + 1 == rAddress.Col() ) )
+    if( (mnHorAlign == nHorAlign) && (maRange.aStart.Row() == rAddress.Row() ) &&
+        (maRange.aEnd.Row() == rAddress.Row() ) && (maRange.aEnd.Col() + 1 == rAddress.Col() ) )
     {
-        ++maRange.EndColumn;
+        maRange.aEnd.IncCol();
         return true;
     }
     return false;
-}
-
-void SheetDataBuffer::setCellFormula( const CellAddress& rCellAddr, const ApiTokenSequence& rTokens )
-{
-    if( rTokens.hasElements() )
-    {
-        putFormulaTokens( rCellAddr, rTokens );
-    }
 }
 
 void SheetDataBuffer::setCellFormula( const ScAddress& rCellAddr, const ApiTokenSequence& rTokens )
@@ -629,13 +563,6 @@ void SheetDataBuffer::setCellFormula( const ScAddress& rCellAddr, const ApiToken
 }
 
 
-ApiTokenSequence SheetDataBuffer::resolveSharedFormula( const CellAddress& rAddr ) const
-{
-    BinAddress aAddr(rAddr);
-    ApiTokenSequence aTokens = ContainerHelper::getMapElement( maSharedFormulas, aAddr, ApiTokenSequence() );
-    return aTokens;
-}
-
 ApiTokenSequence SheetDataBuffer::resolveSharedFormula( const ScAddress& rAddr ) const
 {
     BinAddress aAddr(rAddr);
@@ -643,7 +570,7 @@ ApiTokenSequence SheetDataBuffer::resolveSharedFormula( const ScAddress& rAddr )
     return aTokens;
 }
 
-void SheetDataBuffer::finalizeArrayFormula( const CellRangeAddress& rRange, const ApiTokenSequence& rTokens ) const
+void SheetDataBuffer::finalizeArrayFormula( const ScRange& rRange, const ApiTokenSequence& rTokens ) const
 {
     Reference< XArrayFormulaTokens > xTokens( getCellRange( rRange ), UNO_QUERY );
     OSL_ENSURE( xTokens.is(), "SheetDataBuffer::finalizeArrayFormula - missing formula token interface" );
@@ -651,7 +578,7 @@ void SheetDataBuffer::finalizeArrayFormula( const CellRangeAddress& rRange, cons
         xTokens->setArrayTokens( rTokens );
 }
 
-void SheetDataBuffer::finalizeTableOperation( const CellRangeAddress& rRange, const DataTableModel& rModel )
+void SheetDataBuffer::finalizeTableOperation( const ScRange& rRange, const DataTableModel& rModel )
 {
     if (rModel.mbRef1Deleted)
         return;
@@ -659,7 +586,7 @@ void SheetDataBuffer::finalizeTableOperation( const CellRangeAddress& rRange, co
     if (rModel.maRef1.isEmpty())
         return;
 
-    if (rRange.StartColumn <= 0 || rRange.StartRow <= 0)
+    if (rRange.aStart.Col() <= 0 || rRange.aStart.Row() <= 0)
         return;
 
     sal_Int16 nSheet = getSheetIndex();
@@ -671,8 +598,7 @@ void SheetDataBuffer::finalizeTableOperation( const CellRangeAddress& rRange, co
     ScDocumentImport& rDoc = getDocImport();
     ScTabOpParam aParam;
 
-    ScRange aScRange;
-    ScUnoConversion::FillScRange(aScRange, rRange);
+    ScRange aScRange(rRange);
 
     if (rModel.mb2dTable)
     {
@@ -689,11 +615,11 @@ void SheetDataBuffer::finalizeTableOperation( const CellRangeAddress& rRange, co
 
         aParam.meMode = ScTabOpParam::Both;
 
-        aParam.aRefFormulaCell.Set(rRange.StartColumn-1, rRange.StartRow-1, nSheet, false, false, false);
-        aParam.aRefFormulaEnd = aParam.aRefFormulaCell;
-
-        aScRange.aStart.IncRow(-1);
         aScRange.aStart.IncCol(-1);
+        aScRange.aStart.IncRow(-1);
+
+        aParam.aRefFormulaCell.Set(aScRange.aStart.Col(), aScRange.aStart.Row(), nSheet, false, false, false);
+        aParam.aRefFormulaEnd = aParam.aRefFormulaCell;
 
         // Ref1 is row input cell and Ref2 is column input cell.
         aParam.aRefRowCell.Set(aRef1.Col(), aRef1.Row(), aRef1.Tab(), false, false, false);
@@ -710,7 +636,7 @@ void SheetDataBuffer::finalizeTableOperation( const CellRangeAddress& rRange, co
         // One-variable row input cell (horizontal).
         aParam.meMode = ScTabOpParam::Row;
         aParam.aRefRowCell.Set(aRef1.Col(), aRef1.Row(), aRef1.Tab(), false, false, false);
-        aParam.aRefFormulaCell.Set(rRange.StartColumn-1, rRange.StartRow, nSheet, false, true, false);
+        aParam.aRefFormulaCell.Set(rRange.aStart.Col()-1, rRange.aStart.Row(), nSheet, false, true, false);
         aParam.aRefFormulaEnd = aParam.aRefFormulaCell;
         aScRange.aStart.IncRow(-1);
         rDoc.setTableOpCells(aScRange, aParam);
@@ -720,7 +646,7 @@ void SheetDataBuffer::finalizeTableOperation( const CellRangeAddress& rRange, co
         // One-variable column input cell (vertical).
         aParam.meMode = ScTabOpParam::Column;
         aParam.aRefColCell.Set(aRef1.Col(), aRef1.Row(), aRef1.Tab(), false, false, false);
-        aParam.aRefFormulaCell.Set(rRange.StartColumn, rRange.StartRow-1, nSheet, true, false, false);
+        aParam.aRefFormulaCell.Set(rRange.aStart.Col(), rRange.aStart.Row()-1, nSheet, true, false, false);
         aParam.aRefFormulaEnd = aParam.aRefFormulaCell;
         aScRange.aStart.IncCol(-1);
         rDoc.setTableOpCells(aScRange, aParam);
@@ -731,50 +657,46 @@ void SheetDataBuffer::setCellFormat( const CellModel& rModel )
 {
     if( rModel.mnXfId >= 0 )
     {
-        ::std::vector< CellRangeAddress >::reverse_iterator aIt = maXfIdRangeLists[ XfIdNumFmtKey( rModel.mnXfId, -1 ) ].rbegin();
-        ::std::vector< CellRangeAddress >::reverse_iterator aItEnd = maXfIdRangeLists[ XfIdNumFmtKey( rModel.mnXfId, -1 ) ].rend();
+        ScRangeList& rRangeList = maXfIdRangeLists[ XfIdNumFmtKey( rModel.mnXfId, -1 ) ];
+        ScRange* pLastRange = rRangeList.empty() ? nullptr : &rRangeList.back();
         /* The xlsx sheet data contains row wise information.
          * It is sufficient to check if the row range size is one
          */
-        if(     aIt                 != aItEnd &&
-                aIt->Sheet          == rModel.maCellAddr.Tab() &&
-                aIt->StartRow       == aIt->EndRow &&
-                aIt->StartRow       == rModel.maCellAddr.Row() &&
-                (aIt->EndColumn+1)  == rModel.maCellAddr.Col() )
+        if (!rRangeList.empty() &&
+            pLastRange->aStart.Tab() == rModel.maCellAddr.Tab() &&
+            pLastRange->aStart.Row() == pLastRange->aEnd.Row() &&
+            pLastRange->aStart.Row() == rModel.maCellAddr.Row() &&
+            pLastRange->aEnd.Col() + 1 == rModel.maCellAddr.Col())
         {
-            aIt->EndColumn++;       // Expand Column
+            pLastRange->aEnd.IncCol();       // Expand Column
         }
         else
         {
-            maXfIdRangeLists[ XfIdNumFmtKey (rModel.mnXfId, -1 ) ].push_back(
-                              CellRangeAddress( rModel.maCellAddr.Tab(), rModel.maCellAddr.Col(), rModel.maCellAddr.Row(),
-                              rModel.maCellAddr.Col(), rModel.maCellAddr.Row() ) );
+            rRangeList.push_back(ScRange(rModel.maCellAddr));
+            pLastRange = &rRangeList.back();
         }
 
-        aIt = maXfIdRangeLists[ XfIdNumFmtKey( rModel.mnXfId, -1 ) ].rbegin();
-        aItEnd = maXfIdRangeLists[ XfIdNumFmtKey( rModel.mnXfId, -1 ) ].rend();
-        ::std::vector< CellRangeAddress >::reverse_iterator aItM = aIt+1;
-        while( aItM != aItEnd )
+        if (rRangeList.size() > 1)
         {
-            if( aIt->Sheet == aItM->Sheet )
+            for (size_t i = rRangeList.size() - 1; i != 0; --i)
             {
+                ScRange& rMergeRange = rRangeList[i - 1];
+                if (pLastRange->aStart.Tab() != rMergeRange.aStart.Tab())
+                    break;
+
                 /* Try to merge this with the previous range */
-                if( aIt->StartRow == (aItM->EndRow + 1) &&
-                        aIt->StartColumn == aItM->StartColumn &&
-                        aIt->EndColumn == aItM->EndColumn)
+                if (pLastRange->aStart.Row() == (rMergeRange.aEnd.Row() + 1) &&
+                    pLastRange->aStart.Col() == rMergeRange.aStart.Col() &&
+                    pLastRange->aEnd.Col() == rMergeRange.aEnd.Col())
                 {
-                    aItM->EndRow = aIt->EndRow;
-                    maXfIdRangeLists[ XfIdNumFmtKey( rModel.mnXfId, -1 ) ].pop_back();
+                    rMergeRange.aEnd.SetRow(pLastRange->aEnd.Row());
+                    rRangeList.Remove(rRangeList.size() - 1);
                     break;
                 }
-                else if( aIt->StartRow > aItM->EndRow + 1 )
+                else if (pLastRange->aStart.Row() > (rMergeRange.aEnd.Row() + 1))
                     break; // Un-necessary to check with any other rows
             }
-            else
-                break;
-            ++aItM;
         }
-
         // update merged ranges for 'center across selection' and 'fill'
         if( const Xf* pXf = getStyles().getCellXf( rModel.mnXfId ).get() )
         {
@@ -784,7 +706,7 @@ void SheetDataBuffer::setCellFormat( const CellModel& rModel )
                 /*  start new merged range, if cell is not empty (#108781#),
                     or try to expand last range with empty cell */
                 if( rModel.mnCellType != XML_TOKEN_INVALID )
-                    maCenterFillRanges.push_back( MergedRange( rModel.maCellAddr, nHorAlign ) );
+                    maCenterFillRanges.emplace_back( rModel.maCellAddr, nHorAlign );
                 else if( !maCenterFillRanges.empty() )
                     maCenterFillRanges.rbegin()->tryExpand( rModel.maCellAddr, nHorAlign );
             }
@@ -792,37 +714,35 @@ void SheetDataBuffer::setCellFormat( const CellModel& rModel )
     }
 }
 
-void lcl_SetBorderLine( ScDocument& rDoc, ScRange& rRange, SCTAB nScTab, SvxBoxItemLine nLine )
+static void lcl_SetBorderLine( ScDocument& rDoc, const ScRange& rRange, SCTAB nScTab, SvxBoxItemLine nLine )
 {
     SCCOL nFromScCol = (nLine == SvxBoxItemLine::RIGHT) ? rRange.aEnd.Col() : rRange.aStart.Col();
     SCROW nFromScRow = (nLine == SvxBoxItemLine::BOTTOM) ? rRange.aEnd.Row() : rRange.aStart.Row();
 
-    const SvxBoxItem* pFromItem = static_cast< const SvxBoxItem* >(
-        rDoc.GetAttr( nFromScCol, nFromScRow, nScTab, ATTR_BORDER ) );
-    const SvxBoxItem* pToItem = static_cast< const SvxBoxItem* >(
-        rDoc.GetAttr( rRange.aStart.Col(), rRange.aStart.Row(), nScTab, ATTR_BORDER ) );
+    const SvxBoxItem* pFromItem =
+        rDoc.GetAttr( nFromScCol, nFromScRow, nScTab, ATTR_BORDER );
+    const SvxBoxItem* pToItem =
+        rDoc.GetAttr( rRange.aStart.Col(), rRange.aStart.Row(), nScTab, ATTR_BORDER );
 
     SvxBoxItem aNewItem( *pToItem );
     aNewItem.SetLine( pFromItem->GetLine( nLine ), nLine );
     rDoc.ApplyAttr( rRange.aStart.Col(), rRange.aStart.Row(), nScTab, aNewItem );
 }
 
-void SheetDataBuffer::applyCellMerging( const CellRangeAddress& rRange )
+void SheetDataBuffer::applyCellMerging( const ScRange& rRange )
 {
-    bool bMultiCol = rRange.StartColumn < rRange.EndColumn;
-    bool bMultiRow = rRange.StartRow < rRange.EndRow;
+    bool bMultiCol = rRange.aStart.Col() < rRange.aEnd.Col();
+    bool bMultiRow = rRange.aStart.Row() < rRange.aEnd.Row();
 
-    ScRange aRange;
-    ScUnoConversion::FillScRange( aRange, rRange );
-    const ScAddress& rStart = aRange.aStart;
-    const ScAddress& rEnd = aRange.aEnd;
+    const ScAddress& rStart = rRange.aStart;
+    const ScAddress& rEnd = rRange.aEnd;
     ScDocument& rDoc = getScDocument();
     // set correct right border
     if( bMultiCol )
-        lcl_SetBorderLine( rDoc, aRange, getSheetIndex(), SvxBoxItemLine::RIGHT );
+        lcl_SetBorderLine( rDoc, rRange, getSheetIndex(), SvxBoxItemLine::RIGHT );
         // set correct lower border
     if( bMultiRow )
-        lcl_SetBorderLine( rDoc, aRange, getSheetIndex(), SvxBoxItemLine::BOTTOM );
+        lcl_SetBorderLine( rDoc, rRange, getSheetIndex(), SvxBoxItemLine::BOTTOM );
     // do merge
     if( bMultiCol || bMultiRow )
         rDoc.DoMerge( getSheetIndex(), rStart.Col(), rStart.Row(), rEnd.Col(), rEnd.Row() );

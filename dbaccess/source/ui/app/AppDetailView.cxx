@@ -19,8 +19,8 @@
 
 #include "AppDetailView.hxx"
 #include <osl/diagnose.h>
-#include "dbaccess_helpid.hrc"
-#include "dbu_app.hrc"
+#include <helpids.h>
+#include <strings.hrc>
 #include "AppView.hxx"
 #include <com/sun/star/ui/XUIConfigurationManager.hpp>
 #include <com/sun/star/ui/theModuleUIConfigurationManagerSupplier.hpp>
@@ -29,23 +29,22 @@
 #include <com/sun/star/sdbcx/XViewsSupplier.hpp>
 #include <com/sun/star/graphic/XGraphic.hpp>
 #include <com/sun/star/util/URL.hpp>
-#include "listviewitems.hxx"
+#include <core_resource.hxx>
+#include <listviewitems.hxx>
+#include <vcl/event.hxx>
 #include <vcl/image.hxx>
 #include <vcl/mnemonic.hxx>
 #include <vcl/settings.hxx>
-#include "browserids.hxx"
+#include <browserids.hxx>
 #include "AppDetailPageHelper.hxx"
 #include <vcl/svapp.hxx>
-#include "callbacks.hxx"
+#include <callbacks.hxx>
 #include <dbaccess/IController.hxx>
-#include "moduledbu.hxx"
-#include <svtools/localresaccess.hxx>
-#include "svtools/treelistentry.hxx"
-#include "svtools/viewdataentry.hxx"
+#include <vcl/treelistentry.hxx>
+#include <vcl/viewdataentry.hxx>
 #include <algorithm>
-#include "dbtreelistbox.hxx"
-#include "imageprovider.hxx"
-#include "comphelper/processfactory.hxx"
+#include <dbtreelistbox.hxx>
+#include <imageprovider.hxx>
 #include "AppController.hxx"
 
 using namespace ::dbaui;
@@ -63,10 +62,10 @@ using ::com::sun::star::sdb::application::NamedDatabaseObject;
 
 #define SPACEBETWEENENTRIES     4
 
-TaskEntry::TaskEntry( const sal_Char* _pAsciiUNOCommand, sal_uInt16 _nHelpID, sal_uInt16 _nTitleResourceID, bool _bHideWhenDisabled )
+TaskEntry::TaskEntry( const sal_Char* _pAsciiUNOCommand, const char* _pHelpID, const char* pTitleResourceID, bool _bHideWhenDisabled )
     :sUNOCommand( OUString::createFromAscii( _pAsciiUNOCommand ) )
-    ,nHelpID( _nHelpID )
-    ,sTitle( ModuleRes( _nTitleResourceID ) )
+    ,pHelpID( _pHelpID )
+    ,sTitle( DBA_RES(pTitleResourceID) )
     ,bHideWhenDisabled( _bHideWhenDisabled )
 {
 }
@@ -77,15 +76,14 @@ OCreationList::OCreationList( OTasksWindow& _rParent )
     ,m_pMouseDownEntry( nullptr )
     ,m_pLastActiveEntry( nullptr )
 {
-    sal_uInt16 nSize = SPACEBETWEENENTRIES;
-    SetSpaceBetweenEntries(nSize);
-    SetSelectionMode( NO_SELECTION );
-    SetExtendedWinBits( EWB_NO_AUTO_CURENTRY );
+    SetSpaceBetweenEntries(SPACEBETWEENENTRIES);
+    SetSelectionMode( SelectionMode::NONE );
+    SetNoAutoCurEntry( true );
     SetNodeDefaultImages( );
     EnableEntryMnemonics();
 }
 
-void OCreationList::Paint(vcl::RenderContext& rRenderContext, const Rectangle& _rRect )
+void OCreationList::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& _rRect )
 {
     SetBackground();
 
@@ -149,22 +147,22 @@ void OCreationList::ExecuteSearchEntry( const void* _pEntry ) const
         onSelected( pEntry );
 }
 
-Rectangle OCreationList::GetFocusRect( SvTreeListEntry* _pEntry, long _nLine )
+tools::Rectangle OCreationList::GetFocusRect( SvTreeListEntry* _pEntry, long _nLine )
 {
-    Rectangle aRect = SvTreeListBox::GetFocusRect( _pEntry, _nLine );
-    aRect.Left() = 0;
+    tools::Rectangle aRect = SvTreeListBox::GetFocusRect( _pEntry, _nLine );
+    aRect.SetLeft( 0 );
 
     // try to let the focus rect start before the bitmap item - this looks better
-    SvLBoxItem* pBitmapItem = _pEntry->GetFirstItem( SV_ITEM_ID_LBOXCONTEXTBMP );
+    SvLBoxItem* pBitmapItem = _pEntry->GetFirstItem(SvLBoxItemType::ContextBmp);
     SvLBoxTab* pTab = pBitmapItem ? GetTab( _pEntry, pBitmapItem ) : nullptr;
     SvViewDataItem* pItemData = pBitmapItem ? GetViewDataItem( _pEntry, pBitmapItem ) : nullptr;
     OSL_ENSURE( pTab && pItemData, "OCreationList::GetFocusRect: could not find the first bitmap item!" );
     if ( pTab && pItemData )
-        aRect.Left() = pTab->GetPos() - pItemData->maSize.Width() / 2;
+        aRect.SetLeft( pTab->GetPos() - pItemData->maSize.Width() / 2 );
 
     // inflate the rectangle a little bit - looks better, too
-    aRect.Left() = ::std::max< long >( 0, aRect.Left() - 2 );
-    aRect.Right() = ::std::min< long >( GetOutputSizePixel().Width() - 1, aRect.Right() + 2 );
+    aRect.SetLeft( std::max< long >( 0, aRect.Left() - 2 ) );
+    aRect.SetRight( std::min< long >( GetOutputSizePixel().Width() - 1, aRect.Right() + 2 ) );
 
     return aRect;
 }
@@ -287,7 +285,7 @@ bool OCreationList::setCurrentEntryInvalidate( SvTreeListEntry* _pEntry )
         if ( GetCurEntry() )
         {
             InvalidateEntry( GetCurEntry() );
-            CallEventListeners( VCLEVENT_LISTBOX_TREESELECT, GetCurEntry() );
+            CallEventListeners( VclEventId::ListboxTreeSelect, GetCurEntry() );
         }
         updateHelpText();
         return true;
@@ -297,13 +295,13 @@ bool OCreationList::setCurrentEntryInvalidate( SvTreeListEntry* _pEntry )
 
 void OCreationList::updateHelpText()
 {
-    sal_uInt16 nHelpTextId = 0;
+    const char* pHelpTextId = nullptr;
     if ( GetCurEntry() )
-        nHelpTextId = static_cast< TaskEntry* >( GetCurEntry()->GetUserData() )->nHelpID;
-    m_rTaskWindow.setHelpText( nHelpTextId );
+        pHelpTextId = static_cast< TaskEntry* >( GetCurEntry()->GetUserData() )->pHelpID;
+    m_rTaskWindow.setHelpText(pHelpTextId);
 }
 
-void OCreationList::onSelected( SvTreeListEntry* _pEntry ) const
+void OCreationList::onSelected( SvTreeListEntry const * _pEntry ) const
 {
     OSL_ENSURE( _pEntry, "OCreationList::onSelected: invalid entry!" );
     URL aCommand;
@@ -335,7 +333,7 @@ void OCreationList::KeyInput( const KeyEvent& rKEvt )
         if ( pNewCurrent )
         {
             InvalidateEntry( pNewCurrent );
-            CallEventListeners( VCLEVENT_LISTBOX_SELECT, pNewCurrent );
+            CallEventListeners( VclEventId::ListboxSelect, pNewCurrent );
         }
         updateHelpText();
     }
@@ -349,12 +347,11 @@ OTasksWindow::OTasksWindow(vcl::Window* _pParent,OApplicationDetailView* _pDetai
     ,m_aFL(VclPtr<FixedLine>::Create(this,WB_VERT))
     ,m_pDetailView(_pDetailView)
 {
-    SetUniqueId(UID_APP_TASKS_WINDOW);
     m_aCreation->SetHelpId(HID_APP_CREATION_LIST);
     m_aCreation->SetSelectHdl(LINK(this, OTasksWindow, OnEntrySelectHdl));
     m_aHelpText->SetHelpId(HID_APP_HELP_TEXT);
     m_aDescription->SetHelpId(HID_APP_DESCRIPTION_TEXT);
-    m_aDescription->SetText(ModuleRes(STR_DESCRIPTION));
+    m_aDescription->SetText(DBA_RES(STR_DESCRIPTION));
 
     Image aFolderImage = ImageProvider::getFolderImage( css::sdb::application::DatabaseObject::FORM );
     m_aCreation->SetDefaultCollapsedEntryBmp( aFolderImage );
@@ -417,11 +414,11 @@ void OTasksWindow::ImplInitSettings()
     m_aDescription->SetControlFont(aFont);
 }
 
-void OTasksWindow::setHelpText(sal_uInt16 _nId)
+void OTasksWindow::setHelpText(const char* pId)
 {
-    if ( _nId )
+    if (pId)
     {
-        OUString sText = ModuleRes(_nId);
+        OUString sText = DBA_RES(pId);
         m_aHelpText->SetText(sText);
     }
     else
@@ -431,11 +428,11 @@ void OTasksWindow::setHelpText(sal_uInt16 _nId)
 
 }
 
-IMPL_LINK_NOARG_TYPED(OTasksWindow, OnEntrySelectHdl, SvTreeListBox*, void)
+IMPL_LINK_NOARG(OTasksWindow, OnEntrySelectHdl, SvTreeListBox*, void)
 {
     SvTreeListEntry* pEntry = m_aCreation->GetHdlEntry();
     if ( pEntry )
-        m_aHelpText->SetText( ModuleRes( static_cast< TaskEntry* >( pEntry->GetUserData() )->nHelpID ) );
+        m_aHelpText->SetText(DBA_RES(static_cast<TaskEntry*>(pEntry->GetUserData())->pHelpID));
 }
 
 void OTasksWindow::Resize()
@@ -445,7 +442,7 @@ void OTasksWindow::Resize()
     long nOutputWidth   = aOutputSize.Width();
     long nOutputHeight  = aOutputSize.Height();
 
-    Size aFLSize = LogicToPixel( Size( 2, 6 ), MAP_APPFONT );
+    Size aFLSize = LogicToPixel(Size(2, 6), MapMode(MapUnit::MapAppFont));
     sal_Int32 n6PPT = aFLSize.Height();
     long nHalfOutputWidth = static_cast<long>(nOutputWidth * 0.5);
 
@@ -475,9 +472,11 @@ void OTasksWindow::fillTaskEntryList( const TaskEntryList& _rList )
         // copy the commands so we can use them with the config managers
         Sequence< OUString > aCommands( _rList.size() );
         OUString* pCommands = aCommands.getArray();
-        TaskEntryList::const_iterator aEnd = _rList.end();
-        for ( TaskEntryList::const_iterator pCopyTask = _rList.begin(); pCopyTask != aEnd; ++pCopyTask, ++pCommands )
-            *pCommands = pCopyTask->sUNOCommand;
+        for (auto const& copyTask : _rList)
+        {
+            *pCommands = copyTask.sUNOCommand;
+            ++pCommands;
+        }
 
         Sequence< Reference< XGraphic> > aImages = xImageMgr->getImages(
             ImageType::SIZE_DEFAULT | ImageType::COLOR_NORMAL ,
@@ -486,14 +485,15 @@ void OTasksWindow::fillTaskEntryList( const TaskEntryList& _rList )
 
         const Reference< XGraphic >* pImages( aImages.getConstArray() );
 
-        for ( TaskEntryList::const_iterator pTask = _rList.begin(); pTask != aEnd; ++pTask, ++pImages )
+        for (auto const& task : _rList)
         {
-            SvTreeListEntry* pEntry = m_aCreation->InsertEntry( pTask->sTitle );
-            pEntry->SetUserData( new TaskEntry( *pTask ) );
+            SvTreeListEntry* pEntry = m_aCreation->InsertEntry(task.sTitle);
+            pEntry->SetUserData( new TaskEntry(task) );
 
             Image aImage( *pImages );
             m_aCreation->SetExpandedEntryBmp(  pEntry, aImage );
             m_aCreation->SetCollapsedEntryBmp( pEntry, aImage );
+            ++pImages;
         }
     }
     catch(Exception&)
@@ -525,11 +525,10 @@ void OTasksWindow::Clear()
 
 OApplicationDetailView::OApplicationDetailView(OAppBorderWindow& _rParent,PreviewMode _ePreviewMode) : OSplitterView(&_rParent )
     ,m_aHorzSplitter(VclPtr<Splitter>::Create(this))
-    ,m_aTasks(VclPtr<dbaui::OTitleWindow>::Create(this,STR_TASKS,WB_BORDER | WB_DIALOGCONTROL) )
-    ,m_aContainer(VclPtr<dbaui::OTitleWindow>::Create(this,0,WB_BORDER | WB_DIALOGCONTROL) )
+    ,m_aTasks(VclPtr<dbaui::OTitleWindow>::Create(this, STR_TASKS, WB_BORDER | WB_DIALOGCONTROL))
+    ,m_aContainer(VclPtr<dbaui::OTitleWindow>::Create(this, nullptr, WB_BORDER | WB_DIALOGCONTROL))
     ,m_rBorderWin(_rParent)
 {
-    SetUniqueId(UID_APP_DETAIL_VIEW);
     ImplInitSettings();
 
     m_pControlHelper = VclPtr<OAppDetailPageHelper>::Create(m_aContainer.get(),m_rBorderWin,_ePreviewMode);
@@ -540,19 +539,16 @@ OApplicationDetailView::OApplicationDetailView(OAppBorderWindow& _rParent,Previe
     pTasks->Show();
     pTasks->Disable(m_rBorderWin.getView()->getCommandController().isDataSourceReadOnly());
     m_aTasks->setChildWindow(pTasks);
-    m_aTasks->SetUniqueId(UID_APP_TASKS_VIEW);
     m_aTasks->Show();
 
-    m_aContainer->SetUniqueId(UID_APP_CONTAINER_VIEW);
     m_aContainer->Show();
 
-    const long  nFrameWidth = LogicToPixel( Size( 3, 0 ), MAP_APPFONT ).Width();
+    const long  nFrameWidth = LogicToPixel(Size(3, 0), MapMode(MapUnit::MapAppFont)).Width();
     m_aHorzSplitter->SetPosSizePixel( Point(0,50), Size(0,nFrameWidth) );
     // now set the components at the base class
     set(m_aContainer.get(),m_aTasks.get());
 
     m_aHorzSplitter->Show();
-    m_aHorzSplitter->SetUniqueId(UID_APP_VIEW_HORZ_SPLIT);
     setSplitter(m_aHorzSplitter.get());
 }
 
@@ -606,12 +602,7 @@ void OApplicationDetailView::DataChanged( const DataChangedEvent& rDCEvt )
     }
 }
 
-void OApplicationDetailView::GetFocus()
-{
-    OSplitterView::GetFocus();
-}
-
-void OApplicationDetailView::setTaskExternalMnemonics( MnemonicGenerator& _rMnemonics )
+void OApplicationDetailView::setTaskExternalMnemonics( MnemonicGenerator const & _rMnemonics )
 {
     m_aExternalMnemonics = _rMnemonics;
 }
@@ -648,7 +639,7 @@ void OApplicationDetailView::impl_createPage( ElementType _eType, const Referenc
     bool bEnabled = !rData.aTasks.empty()
                 && getBorderWin().getView()->getCommandController().isCommandEnabled( rData.aTasks[0].sUNOCommand );
     getTasksWindow().Enable( bEnabled );
-    m_aContainer->setTitle( rData.nTitleId );
+    m_aContainer->setTitle(rData.pTitleId);
 
     // let our helper create the object list
     if ( _eType == E_TABLE )
@@ -681,29 +672,29 @@ void OApplicationDetailView::impl_fillTaskPaneData( ElementType _eType, TaskPane
     switch ( _eType )
     {
     case E_TABLE:
-        rList.push_back( TaskEntry( ".uno:DBNewTable", RID_STR_TABLES_HELP_TEXT_DESIGN, RID_STR_NEW_TABLE ) );
-        rList.push_back( TaskEntry( ".uno:DBNewTableAutoPilot", RID_STR_TABLES_HELP_TEXT_WIZARD, RID_STR_NEW_TABLE_AUTO ) );
-        rList.push_back( TaskEntry( ".uno:DBNewView", RID_STR_VIEWS_HELP_TEXT_DESIGN, RID_STR_NEW_VIEW, true ) );
-        _rData.nTitleId = RID_STR_TABLES_CONTAINER;
+        rList.emplace_back( ".uno:DBNewTable", RID_STR_TABLES_HELP_TEXT_DESIGN, RID_STR_NEW_TABLE );
+        rList.emplace_back( ".uno:DBNewTableAutoPilot", RID_STR_TABLES_HELP_TEXT_WIZARD, RID_STR_NEW_TABLE_AUTO );
+        rList.emplace_back( ".uno:DBNewView", RID_STR_VIEWS_HELP_TEXT_DESIGN, RID_STR_NEW_VIEW, true );
+        _rData.pTitleId = RID_STR_TABLES_CONTAINER;
         break;
 
     case E_FORM:
-        rList.push_back( TaskEntry( ".uno:DBNewForm", RID_STR_FORMS_HELP_TEXT, RID_STR_NEW_FORM ) );
-        rList.push_back( TaskEntry( ".uno:DBNewFormAutoPilot", RID_STR_FORMS_HELP_TEXT_WIZARD, RID_STR_NEW_FORM_AUTO ) );
-        _rData.nTitleId = RID_STR_FORMS_CONTAINER;
+        rList.emplace_back( ".uno:DBNewForm", RID_STR_FORMS_HELP_TEXT, RID_STR_NEW_FORM );
+        rList.emplace_back( ".uno:DBNewFormAutoPilot", RID_STR_FORMS_HELP_TEXT_WIZARD, RID_STR_NEW_FORM_AUTO );
+        _rData.pTitleId = RID_STR_FORMS_CONTAINER;
         break;
 
     case E_REPORT:
-        rList.push_back( TaskEntry( ".uno:DBNewReport", RID_STR_REPORT_HELP_TEXT, RID_STR_NEW_REPORT, true ) );
-        rList.push_back( TaskEntry( ".uno:DBNewReportAutoPilot", RID_STR_REPORTS_HELP_TEXT_WIZARD, RID_STR_NEW_REPORT_AUTO ) );
-        _rData.nTitleId = RID_STR_REPORTS_CONTAINER;
+        rList.emplace_back( ".uno:DBNewReport", RID_STR_REPORT_HELP_TEXT, RID_STR_NEW_REPORT, true );
+        rList.emplace_back( ".uno:DBNewReportAutoPilot", RID_STR_REPORTS_HELP_TEXT_WIZARD, RID_STR_NEW_REPORT_AUTO );
+        _rData.pTitleId = RID_STR_REPORTS_CONTAINER;
         break;
 
     case E_QUERY:
-        rList.push_back( TaskEntry( ".uno:DBNewQuery", RID_STR_QUERIES_HELP_TEXT, RID_STR_NEW_QUERY ) );
-        rList.push_back( TaskEntry( ".uno:DBNewQueryAutoPilot", RID_STR_QUERIES_HELP_TEXT_WIZARD, RID_STR_NEW_QUERY_AUTO ) );
-        rList.push_back( TaskEntry( ".uno:DBNewQuerySql", RID_STR_QUERIES_HELP_TEXT_SQL, RID_STR_NEW_QUERY_SQL ) );
-        _rData.nTitleId = RID_STR_QUERIES_CONTAINER;
+        rList.emplace_back( ".uno:DBNewQuery", RID_STR_QUERIES_HELP_TEXT, RID_STR_NEW_QUERY );
+        rList.emplace_back( ".uno:DBNewQueryAutoPilot", RID_STR_QUERIES_HELP_TEXT_WIZARD, RID_STR_NEW_QUERY_AUTO );
+        rList.emplace_back( ".uno:DBNewQuerySql", RID_STR_QUERIES_HELP_TEXT_SQL, RID_STR_NEW_QUERY_SQL );
+        _rData.pTitleId = RID_STR_QUERIES_CONTAINER;
         break;
 
     default:
@@ -729,12 +720,9 @@ void OApplicationDetailView::impl_fillTaskPaneData( ElementType _eType, TaskPane
     }
 
     // for the remaining entries, assign mnemonics
-    for (   TaskEntryList::const_iterator pTask = rList.begin();
-            pTask != rList.end();
-            ++pTask
-        )
+    for (auto const& task : rList)
     {
-        aAllMnemonics.CreateMnemonic( pTask->sTitle );
+        aAllMnemonics.CreateMnemonic(task.sTitle);
         // don't do this for now, until our task window really supports mnemonics
     }
 }
@@ -744,7 +732,7 @@ OUString OApplicationDetailView::getQualifiedName( SvTreeListEntry* _pEntry ) co
     return m_pControlHelper->getQualifiedName( _pEntry );
 }
 
-bool OApplicationDetailView::isLeaf(SvTreeListEntry* _pEntry)
+bool OApplicationDetailView::isLeaf(SvTreeListEntry const * _pEntry)
 {
     return OAppDetailPageHelper::isLeaf(_pEntry);
 }
@@ -796,7 +784,7 @@ sal_Int32 OApplicationDetailView::getElementCount()
     return m_pControlHelper->getElementCount();
 }
 
-void OApplicationDetailView::getSelectionElementNames( ::std::vector< OUString>& _rNames ) const
+void OApplicationDetailView::getSelectionElementNames( std::vector< OUString>& _rNames ) const
 {
     m_pControlHelper->getSelectionElementNames( _rNames );
 }

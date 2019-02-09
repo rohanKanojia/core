@@ -18,10 +18,16 @@
 #include <gio/gio.h>
 #endif
 
-#include <unx/salmenu.h>
+#include <salmenu.hxx>
 #include <unx/gtk/gtkframe.hxx>
+#include <unotools/tempfile.hxx>
+#include <vcl/idle.hxx>
 
-#if ENABLE_DBUS && ENABLE_GIO && \
+#if GTK_CHECK_VERSION(3,0,0)
+#  define ENABLE_GMENU_INTEGRATION
+#  include <unx/gtk/glomenu.h>
+#  include <unx/gtk/gloactiongroup.h>
+#elif ENABLE_DBUS && ENABLE_GIO && \
     (GLIB_MAJOR_VERSION > 2 || GLIB_MINOR_VERSION >= 36)
 #  define ENABLE_GMENU_INTEGRATION
 #  include <unx/gtk/glomenu.h>
@@ -35,6 +41,10 @@
 #  endif
 #endif
 
+#if !GTK_CHECK_VERSION(3,0,0)
+typedef void GtkCssProvider;
+#endif
+
 class MenuItemList;
 class GtkSalMenuItem;
 
@@ -42,11 +52,22 @@ class GtkSalMenu : public SalMenu
 {
 private:
     std::vector< GtkSalMenuItem* >  maItems;
+    Idle                            maUpdateMenuBarIdle;
 
-    bool                            mbMenuBar;
+    bool                            mbInActivateCallback;
+    bool const                      mbMenuBar;
+    bool                            mbNeedsUpdate;
+    bool                            mbReturnFocusToDocument;
+    bool                            mbAddedGrab;
+    GtkWidget*                      mpMenuBarContainerWidget;
+    std::unique_ptr<utl::TempFile>  mxPersonaImage;
+    BitmapEx                        maPersonaBitmap;
+    GtkWidget*                      mpMenuAllowShrinkWidget;
     GtkWidget*                      mpMenuBarWidget;
+    GtkCssProvider*                 mpMenuBarContainerProvider;
+    GtkCssProvider*                 mpMenuBarProvider;
     GtkWidget*                      mpCloseButton;
-    Menu*                           mpVCLMenu;
+    VclPtr<Menu>                    mpVCLMenu;
     GtkSalMenu*                     mpParentSalMenu;
     GtkSalFrame*                    mpFrame;
 
@@ -54,13 +75,14 @@ private:
     GMenuModel*                     mpMenuModel;
     GActionGroup*                   mpActionGroup;
 
-    GtkSalMenu*                 GetMenuForItemCommand( gchar* aCommand, int& rDupsToSkip, gboolean bGetSubmenu );
     void                        ImplUpdate(bool bRecurse, bool bRemoveDisabledEntries);
     void                        ActivateAllSubmenus(Menu* pMenuBar);
 
+    DECL_LINK(MenuBarHierarchyChangeHandler, Timer*, void);
+
 public:
     GtkSalMenu( bool bMenuBar );
-    virtual ~GtkSalMenu();
+    virtual ~GtkSalMenu() override;
 
     virtual bool                VisibleMenuBar() override;   // must return TRUE to actually DISPLAY native menu bars
                                                     // otherwise only menu messages are processed (eg, OLE on Windows)
@@ -87,6 +109,7 @@ public:
     bool                        IsItemVisible( unsigned nPos );
 
     void                        NativeSetItemText( unsigned nSection, unsigned nItemPos, const OUString& rText );
+    void                        NativeSetItemIcon( unsigned nSection, unsigned nItemPos, const Image& rImage );
     bool                        NativeSetItemCommand( unsigned nSection,
                                                       unsigned nItemPos,
                                                       sal_uInt16 nId,
@@ -94,35 +117,48 @@ public:
                                                       MenuItemBits nBits,
                                                       bool bChecked,
                                                       bool bIsSubmenu );
-    void                        NativeSetEnableItem( gchar* aCommand, gboolean bEnable );
+    void                        NativeSetEnableItem( gchar const * aCommand, gboolean bEnable );
     void                        NativeCheckItem( unsigned nSection, unsigned nItemPos, MenuItemBits bits, gboolean bCheck );
     void                        NativeSetAccelerator( unsigned nSection, unsigned nItemPos, const vcl::KeyCode& rKeyCode, const OUString& rKeyName );
 
-    void                        DispatchCommand( gint itemId, const gchar* aCommand );
-    void                        Activate( const gchar* aMenuCommand = nullptr );
-    void                        Deactivate( const gchar* aMenuCommand );
+    static void                 DispatchCommand(const gchar* pMenuCommand);
+    static void                 Activate(const gchar* pMenuCommand);
+    static void                 Deactivate(const gchar* pMenuCommand);
     void                        EnableUnity(bool bEnable);
+    virtual void                ShowMenuBar( bool bVisible ) override;
     bool                        PrepUpdate();
     virtual void                Update() override;  // Update this menu only.
-    void                        UpdateFull();       // Update full menu hierarchy from this menu.
+    // Update full menu hierarchy from this menu.
+    void                        UpdateFull () { ActivateAllSubmenus(mpVCLMenu); Update(); }
+    // Clear ActionGroup and MenuModel from full menu hierarchy
+    void                        ClearActionGroupAndMenuModel();
+    GtkSalMenu*                 GetTopLevel();
+    void                        SetNeedsUpdate();
+
+    GtkWidget*                  GetMenuBarContainerWidget() const { return mpMenuBarContainerWidget; }
 
     void CreateMenuBarWidget();
     void DestroyMenuBarWidget();
+    gboolean SignalKey(GdkEventKey const * pEvent);
+    void ReturnFocus();
 
-    virtual bool ShowNativePopupMenu(FloatingWindow * pWin, const Rectangle& rRect, FloatWinPopupFlags nFlags) override;
+    virtual bool ShowNativePopupMenu(FloatingWindow * pWin, const tools::Rectangle& rRect, FloatWinPopupFlags nFlags) override;
     virtual void ShowCloseButton(bool bShow) override;
+    virtual bool CanGetFocus() const override;
+    virtual bool TakeFocus() override;
+    virtual int GetMenuBarHeight() const override;
+    virtual void ApplyPersona() override;
 };
 
 class GtkSalMenuItem : public SalMenuItem
 {
 public:
     GtkSalMenuItem( const SalItemParams* );
-    virtual ~GtkSalMenuItem();
+    virtual ~GtkSalMenuItem() override;
 
-    sal_uInt16          mnId;               // Item ID
-    MenuItemType        mnType;             // Item type
+    sal_uInt16 const    mnId;               // Item ID
+    MenuItemType const  mnType;             // Item type
     bool                mbVisible;          // Item visibility.
-    Menu*               mpVCLMenu;          // VCL Menu into which this menu item is inserted
     GtkSalMenu*         mpParentMenu;       // The menu into which this menu item is inserted
     GtkSalMenu*         mpSubMenu;          // Submenu of this item (if defined)
 };

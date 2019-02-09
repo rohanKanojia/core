@@ -33,19 +33,18 @@ class SwMailMergeConfigItem;
 
 class SwMailMergeWizard : public ::svt::RoadmapWizard
 {
-    SwView*                 m_pSwView;
+    SwView* const           m_pSwView;
     OUString                sDocumentURL;
     bool                    m_bDocumentLoad;
 
-    SwMailMergeConfigItem&  m_rConfigItem;
+    std::shared_ptr<SwMailMergeConfigItem> m_xConfigItem;
 
-    OUString                m_sStarting;
-    OUString                m_sDocumentType;
-    OUString                m_sAddressBlock;
-    OUString                m_sAddressList;
-    OUString                m_sGreetingsLine;
-    OUString                m_sLayout;
-    OUString                m_sFinish;
+    OUString const          m_sStarting;
+    OUString const          m_sDocumentType;
+    OUString const          m_sAddressBlock;
+    OUString const          m_sAddressList;
+    OUString const          m_sGreetingsLine;
+    OUString const          m_sLayout;
 
     sal_uInt16              m_nRestartPage;
 
@@ -60,20 +59,19 @@ protected:
     virtual OUString                getStateDisplayName( WizardState _nState ) const override;
 
 public:
-    SwMailMergeWizard(SwView& rView, SwMailMergeConfigItem& rConfigItem);
-    virtual ~SwMailMergeWizard();
+    SwMailMergeWizard(SwView& rView, std::shared_ptr<SwMailMergeConfigItem> const & rConfigItem);
+    virtual ~SwMailMergeWizard() override;
 
     SwView*                     GetSwView() {return m_pSwView;}
-    SwMailMergeConfigItem&      GetConfigItem() { return m_rConfigItem;}
+    SwMailMergeConfigItem&      GetConfigItem() { return *m_xConfigItem.get();}
 
     void                    SetReloadDocument(const OUString& rURL) {sDocumentURL = rURL;}
-    OUString                GetReloadDocument() const {return sDocumentURL;}
+    const OUString&         GetReloadDocument() const {return sDocumentURL;}
 
     //next step requires loading of document
     void                    SetDocumentLoad(bool bSet) {m_bDocumentLoad = bSet;}
 
     void                    UpdateRoadmap();
-    void                    CreateTargetDocument();
 
     sal_uInt16              GetRestartPage() const {return m_nRestartPage;}
     void                    SetRestartPage(sal_uInt16 nPage) { m_nRestartPage = nPage;}
@@ -81,10 +79,9 @@ public:
     bool                skipUntil( sal_uInt16 nPage)
                                 {return ::svt::RoadmapWizard::skipUntil(WizardState(nPage));}
 
-    void                    updateRoadmapItemLabel( WizardState _nState );
+    using svt::RoadmapWizard::updateRoadmapItemLabel;
 
     virtual short           Execute() override;
-    virtual void            StartExecuteModal( const Link<Dialog&,void>& rEndDialogHdl ) override;
 };
 #endif
 

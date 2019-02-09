@@ -19,11 +19,12 @@
 #ifndef INCLUDED_CHART2_SOURCE_MODEL_MAIN_DATASERIESPROPERTIES_HXX
 #define INCLUDED_CHART2_SOURCE_MODEL_MAIN_DATASERIESPROPERTIES_HXX
 
-#include "PropertyHelper.hxx"
-#include "FastPropertyIdRanges.hxx"
-#include <com/sun/star/beans/Property.hpp>
+#include <PropertyHelper.hxx>
+#include <FastPropertyIdRanges.hxx>
 
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace beans { struct Property; } } } }
 
 namespace chart
 {
@@ -35,11 +36,12 @@ namespace DataSeriesProperties
         PROP_DATASERIES_ATTRIBUTED_DATA_POINTS = FAST_PROPERTY_ID_START_DATA_SERIES,
         PROP_DATASERIES_STACKING_DIRECTION,
         PROP_DATASERIES_VARY_COLORS_BY_POINT,
-        PROP_DATASERIES_ATTACHED_AXIS_INDEX
+        PROP_DATASERIES_ATTACHED_AXIS_INDEX,
+        PROP_DATASERIES_SHOW_LEGEND_ENTRY
     };
 
     void AddPropertiesToVector(
-        ::std::vector< css::beans::Property > & rOutProperties );
+        std::vector< css::beans::Property > & rOutProperties );
 
     void AddDefaultsToMap( tPropertyValueMap & rOutMap );
 }

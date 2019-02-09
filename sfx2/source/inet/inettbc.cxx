@@ -18,12 +18,12 @@
  */
 
 
-#include "inettbc.hxx"
+#include <inettbc.hxx>
 
 #include <com/sun/star/uno/Any.h>
 #include <com/sun/star/frame/Desktop.hpp>
-#include <com/sun/star/frame/XFramesSupplier.hpp>
 #include <com/sun/star/task/XInteractionHandler.hpp>
+#include <com/sun/star/util/XURLTransformer.hpp>
 #include <svl/eitem.hxx>
 #include <svl/stritem.hxx>
 #include <unotools/historyoptions.hxx>
@@ -31,7 +31,6 @@
 #include <toolkit/helper/vclunohelper.hxx>
 #include <osl/file.hxx>
 #include <osl/thread.hxx>
-#include <osl/mutex.hxx>
 #include <rtl/ustring.hxx>
 
 #include <svl/itemset.hxx>
@@ -39,14 +38,11 @@
 #include <svtools/asynclink.hxx>
 #include <svtools/inettbc.hxx>
 
-#include <comphelper/processfactory.hxx>
-
-#include <sfx2/sfx.hrc>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/objsh.hxx>
-#include "sfxtypes.hxx"
-#include "helper.hxx"
+#include <sfxtypes.hxx>
+#include <helper.hxx>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::beans;
@@ -76,11 +72,10 @@ SvtURLBox* SfxURLToolBoxControl_Impl::GetURLBox() const
 }
 
 
-void SfxURLToolBoxControl_Impl::OpenURL( const OUString& rName, bool /*bNew*/ ) const
+void SfxURLToolBoxControl_Impl::OpenURL( const OUString& rName ) const
 {
     OUString aName;
     OUString aFilter;
-    OUString aOptions;
 
     INetURLObject aObj( rName );
     if ( aObj.GetProtocol() == INetProtocol::NotValid )
@@ -95,43 +90,41 @@ void SfxURLToolBoxControl_Impl::OpenURL( const OUString& rName, bool /*bNew*/ ) 
         return;
 
     Reference< XDispatchProvider > xDispatchProvider( getFrameInterface(), UNO_QUERY );
-    if ( xDispatchProvider.is() )
+    if ( !xDispatchProvider.is() )
+        return;
+
+    URL             aTargetURL;
+    aTargetURL.Complete = aName;
+
+    getURLTransformer()->parseStrict( aTargetURL );
+    Reference< XDispatch > xDispatch = xDispatchProvider->queryDispatch( aTargetURL, "_default", 0 );
+    if ( !xDispatch.is() )
+        return;
+
+    Sequence< PropertyValue > aArgs( 2 );
+    aArgs[0].Name = "Referer";
+    aArgs[0].Value <<= OUString( "private:user" );
+    aArgs[1].Name = "FileName";
+    aArgs[1].Value <<= aName;
+
+    if ( !aFilter.isEmpty() )
     {
-        URL             aTargetURL;
-        OUString aTarget( "_default" );
-
-        aTargetURL.Complete = aName;
-
-        getURLTransformer()->parseStrict( aTargetURL );
-        Reference< XDispatch > xDispatch = xDispatchProvider->queryDispatch( aTargetURL, aTarget, 0 );
-        if ( xDispatch.is() )
-        {
-            Sequence< PropertyValue > aArgs( 2 );
-            aArgs[0].Name = "Referer";
-            aArgs[0].Value = makeAny( OUString( "private:user" ));
-            aArgs[1].Name = "FileName";
-            aArgs[1].Value = makeAny( OUString( aName ));
-
-            if ( !aFilter.isEmpty() )
-            {
-                aArgs.realloc( 4 );
-                aArgs[2].Name = "FilterOptions";
-                aArgs[2].Value = makeAny( OUString( aOptions ));
-                aArgs[3].Name = "FilterName";
-                aArgs[3].Value = makeAny( OUString( aFilter ));
-            }
-
-            SfxURLToolBoxControl_Impl::ExecuteInfo* pExecuteInfo = new SfxURLToolBoxControl_Impl::ExecuteInfo;
-            pExecuteInfo->xDispatch     = xDispatch;
-            pExecuteInfo->aTargetURL    = aTargetURL;
-            pExecuteInfo->aArgs         = aArgs;
-            Application::PostUserEvent( LINK( nullptr, SfxURLToolBoxControl_Impl, ExecuteHdl_Impl), pExecuteInfo );
-        }
+        aArgs.realloc( 4 );
+        aArgs[2].Name = "FilterOptions";
+        aArgs[2].Value <<= OUString();
+        aArgs[3].Name = "FilterName";
+        aArgs[3].Value <<= aFilter;
     }
+
+    SfxURLToolBoxControl_Impl::ExecuteInfo* pExecuteInfo = new SfxURLToolBoxControl_Impl::ExecuteInfo;
+    pExecuteInfo->xDispatch     = xDispatch;
+    pExecuteInfo->aTargetURL    = aTargetURL;
+    pExecuteInfo->aArgs         = aArgs;
+    Application::PostUserEvent( LINK( nullptr, SfxURLToolBoxControl_Impl, ExecuteHdl_Impl), pExecuteInfo );
 }
 
 
-IMPL_STATIC_LINK_TYPED( SfxURLToolBoxControl_Impl, ExecuteHdl_Impl, void*, p, void )
+IMPL_STATIC_LINK( SfxURLToolBoxControl_Impl, ExecuteHdl_Impl, void*, p, void )
 {
     ExecuteInfo* pExecuteInfo = static_cast<ExecuteInfo*>(p);
     try
@@ -157,25 +150,25 @@ VclPtr<vcl::Window> SfxURLToolBoxControl_Impl::CreateItemWindow( vcl::Window* pP
     return pURLBox.get();
 }
 
-IMPL_LINK_NOARG_TYPED(SfxURLToolBoxControl_Impl, SelectHdl, ComboBox&, void)
+IMPL_LINK_NOARG(SfxURLToolBoxControl_Impl, SelectHdl, ComboBox&, void)
 {
     SvtURLBox* pURLBox = GetURLBox();
     OUString aName( pURLBox->GetURL() );
 
     if ( !pURLBox->IsTravelSelect() && !aName.isEmpty() )
-        OpenURL( aName, false );
+        OpenURL( aName );
 }
 
-IMPL_LINK_NOARG_TYPED(SfxURLToolBoxControl_Impl, OpenHdl, SvtURLBox*, void)
+IMPL_LINK_NOARG(SfxURLToolBoxControl_Impl, OpenHdl, SvtURLBox*, void)
 {
     SvtURLBox* pURLBox = GetURLBox();
-    OpenURL( pURLBox->GetURL(), pURLBox->IsCtrlOpen() );
+    OpenURL( pURLBox->GetURL() );
 
     Reference< XDesktop2 > xDesktop = Desktop::create( m_xContext );
     Reference< XFrame > xFrame( xDesktop->getActiveFrame(), UNO_QUERY );
     if ( xFrame.is() )
     {
-        vcl::Window* pWin = VCLUnoHelper::GetWindow( xFrame->getContainerWindow() );
+        VclPtr<vcl::Window> pWin = VCLUnoHelper::GetWindow( xFrame->getContainerWindow() );
         if ( pWin )
         {
             pWin->GrabFocus();
@@ -198,53 +191,52 @@ void SfxURLToolBoxControl_Impl::StateChanged
         GetURLBox()->Enable( SfxItemState::DISABLED != eState );
     }
 
-    if ( GetURLBox()->IsEnabled() )
+    if ( !GetURLBox()->IsEnabled() )
+        return;
+
+    if( nSID == SID_FOCUSURLBOX )
     {
-        if( nSID == SID_FOCUSURLBOX )
+        if ( GetURLBox()->IsVisible() )
+            GetURLBox()->GrabFocus();
+    }
+    else if ( !GetURLBox()->IsModified() && SfxItemState::DEFAULT == eState )
+    {
+        SvtURLBox* pURLBox = GetURLBox();
+        pURLBox->Clear();
+
+        css::uno::Sequence< css::uno::Sequence< css::beans::PropertyValue > > lList = SvtHistoryOptions().GetList(ePICKLIST);
+        for (sal_Int32 i=0; i<lList.getLength(); ++i)
         {
-            if ( GetURLBox()->IsVisible() )
-                GetURLBox()->GrabFocus();
+            css::uno::Sequence< css::beans::PropertyValue > lProps = lList[i];
+            for (sal_Int32 p=0; p<lProps.getLength(); ++p)
+            {
+                if (lProps[p].Name != HISTORY_PROPERTYNAME_URL)
+                    continue;
+
+                OUString sURL;
+                if (!(lProps[p].Value>>=sURL) || sURL.isEmpty())
+                    continue;
+
+                INetURLObject aURL    ( sURL );
+                OUString      sMainURL( aURL.GetMainURL( INetURLObject::DecodeMechanism::WithCharset ) );
+                OUString      sFile;
+
+                if (osl::FileBase::getSystemPathFromFileURL(sMainURL, sFile) == osl::FileBase::E_None)
+                    pURLBox->InsertEntry(sFile);
+                else
+                    pURLBox->InsertEntry(sMainURL);
+            }
         }
-        else if ( !GetURLBox()->IsModified() && SfxItemState::DEFAULT == eState )
+
+        const SfxStringItem *pURL = dynamic_cast< const SfxStringItem* >(pState);
+        INetURLObject aURL( pURL->GetValue() );
+        INetProtocol eProt = aURL.GetProtocol();
+        if ( eProt == INetProtocol::File )
         {
-            SvtURLBox* pURLBox = GetURLBox();
-            pURLBox->Clear();
-
-            css::uno::Sequence< css::uno::Sequence< css::beans::PropertyValue > > lList = SvtHistoryOptions().GetList(ePICKLIST);
-            for (sal_Int32 i=0; i<lList.getLength(); ++i)
-            {
-                css::uno::Sequence< css::beans::PropertyValue > lProps = lList[i];
-                for (sal_Int32 p=0; p<lProps.getLength(); ++p)
-                {
-                    if (lProps[p].Name != HISTORY_PROPERTYNAME_URL)
-                        continue;
-
-                    OUString sURL;
-                    if (!(lProps[p].Value>>=sURL) || sURL.isEmpty())
-                        continue;
-
-                    INetURLObject aURL    ( sURL );
-                    OUString      sMainURL( aURL.GetMainURL( INetURLObject::DECODE_WITH_CHARSET ) );
-                    OUString      sFile;
-
-                    if (osl::FileBase::getSystemPathFromFileURL(sMainURL, sFile) == osl::FileBase::E_None)
-                        pURLBox->InsertEntry(sFile);
-                    else
-                        pURLBox->InsertEntry(sMainURL);
-                }
-            }
-
-            const SfxStringItem *pURL = dynamic_cast< const SfxStringItem* >(pState);
-            OUString aRep( pURL->GetValue() );
-            INetURLObject aURL( aRep );
-            INetProtocol eProt = aURL.GetProtocol();
-            if ( eProt == INetProtocol::File )
-            {
-                pURLBox->SetText( aURL.PathToFileName() );
-            }
-            else
-                pURLBox->SetText( aURL.GetURLNoPass() );
+            pURLBox->SetText( aURL.PathToFileName() );
         }
+        else
+            pURLBox->SetText( aURL.GetURLNoPass() );
     }
 }
 

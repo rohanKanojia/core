@@ -17,21 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "tablebuffer.hxx"
+#include <tablebuffer.hxx>
 
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/sheet/XDatabaseRange.hpp>
 #include <com/sun/star/sheet/XDatabaseRanges.hpp>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <oox/helper/attributelist.hxx>
 #include <oox/helper/binaryinputstream.hxx>
 #include <oox/helper/propertyset.hxx>
 #include <oox/token/properties.hxx>
-#include "addressconverter.hxx"
+#include <oox/token/tokens.hxx>
+#include <addressconverter.hxx>
+#include <biffhelper.hxx>
 
 namespace oox {
 namespace xls {
 
-using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::sheet;
 using namespace ::com::sun::star::uno;
 
@@ -88,9 +91,12 @@ void Table::finalizeImport()
     if( (maModel.mnId > 0) && !maModel.maDisplayName.isEmpty() ) try
     {
         maDBRangeName = maModel.maDisplayName;
+
         Reference< XDatabaseRange > xDatabaseRange(
             createDatabaseRangeObject( maDBRangeName, maModel.maRange ), UNO_SET_THROW);
-        maDestRange = xDatabaseRange->getDataArea();
+        ::css::table::CellRangeAddress aAddressRange = xDatabaseRange->getDataArea();
+        maDestRange = ScRange( aAddressRange.StartColumn, aAddressRange.StartRow, aAddressRange.Sheet,
+                               aAddressRange.EndColumn, aAddressRange.EndRow, aAddressRange.Sheet );
 
         PropertySet aPropSet( xDatabaseRange );
 
@@ -159,8 +165,8 @@ Table& TableBuffer::createTable()
 void TableBuffer::finalizeImport()
 {
     // map all tables by identifier and display name
-    for( TableVector::iterator aIt = maTables.begin(), aEnd = maTables.end(); aIt != aEnd; ++aIt )
-        insertTableToMaps( *aIt );
+    for( const auto& rxTable : maTables )
+        insertTableToMaps( rxTable );
     // finalize all valid tables
     maIdTables.forEachMem( &Table::finalizeImport );
 }

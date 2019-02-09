@@ -21,16 +21,29 @@
 
 #include <vcl/ctrl.hxx>
 #include <vcl/graph.hxx>
+#include <vcl/customweld.hxx>
+#include <vcl/weld.hxx>
 #include <svx/svxdllapi.h>
 
 #include <svx/svdview.hxx>
 #include <svx/svdobj.hxx>
 
-class GraphCtrlUserCall;
-class SvxGraphCtrlAccessibleContext;
+class GraphCtrl;
 
-#define WB_SDRMODE      ((WinBits)0x0080)
-#define WB_ANIMATION    ((WinBits)0x0100)
+class GraphCtrlUserCall : public SdrObjUserCall
+{
+    GraphCtrl& rWin;
+
+public:
+
+    GraphCtrlUserCall(GraphCtrl& rGraphWin)
+        : rWin(rGraphWin)
+    {}
+
+    virtual void Changed(const SdrObject& rObj, SdrUserCallType eType, const tools::Rectangle& rOldBoundRect) override;
+};
+
+class SvxGraphCtrlAccessibleContext;
 
 class SVX_DLLPUBLIC GraphCtrl : public Control
 {
@@ -42,27 +55,26 @@ class SVX_DLLPUBLIC GraphCtrl : public Control
     Link<GraphCtrl*,void>  aMousePosLink;
     Link<GraphCtrl*,void>  aGraphSizeLink;
     Link<GraphCtrl*,void>  aUpdateLink;
-    MapMode             aMap100;
+    MapMode const          aMap100;
     Size                aGraphSize;
     Point               aMousePos;
-    GraphCtrlUserCall*  pUserCall;
-    WinBits             nWinStyle;
+    std::unique_ptr<GraphCtrlUserCall> pUserCall;
     SdrObjKind          eObjKind;
     sal_uInt16          nPolyEdit;
     bool                bEditMode;
-    bool                bSdrMode;
-    bool                bAnim;
+    bool                mbSdrMode;
+    bool                mbInIdleUpdate;
 
-                        DECL_LINK_TYPED( UpdateHdl, Idle*, void );
+                        DECL_LINK( UpdateHdl, Timer*, void );
 
-    SvxGraphCtrlAccessibleContext* mpAccContext;
+    rtl::Reference<SvxGraphCtrlAccessibleContext> mpAccContext;
 
 protected:
 
-    SdrModel*           pModel;
-    SdrView*            pView;
+    std::unique_ptr<SdrModel>  pModel;
+    std::unique_ptr<SdrView>   pView;
 
-    virtual void        Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void        Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void        Resize() override;
     virtual void        KeyInput(const KeyEvent& rKEvt) override;
     virtual void        MouseButtonDown(const MouseEvent& rMEvt) override;
@@ -75,15 +87,13 @@ protected:
     virtual void        SdrObjChanged( const SdrObject& rObj );
     virtual void        MarkListHasChanged();
 
-    inline SdrObjUserCall* GetSdrUserCall();
+    SdrObjUserCall* GetSdrUserCall() { return pUserCall.get(); }
 
 public:
 
     GraphCtrl( vcl::Window* pParent, WinBits nStyle );
-    virtual ~GraphCtrl();
+    virtual ~GraphCtrl() override;
     virtual void dispose() override;
-
-    void                SetWinStyle( WinBits nWinBits );
 
     void                SetGraphic( const Graphic& rGraphic, bool bNewModel = true );
     const Graphic&      GetGraphic() const { return aGraphic; }
@@ -98,41 +108,37 @@ public:
 
     void                SetObjKind( const SdrObjKind eObjKind );
 
-    SdrModel*           GetSdrModel() const { return pModel; }
-    SdrView*            GetSdrView() const { return pView; }
+    SdrModel*           GetSdrModel() const { return pModel.get(); }
+    SdrView*            GetSdrView() const { return pView.get(); }
     SdrObject*          GetSelectedSdrObject() const;
-    bool                IsChanged() const { return bSdrMode && pModel->IsChanged(); }
+    bool                IsChanged() const { return mbSdrMode && pModel->IsChanged(); }
 
     void                SetMousePosLink( const Link<GraphCtrl*,void>& rLink ) { aMousePosLink = rLink; }
 
     void                SetGraphSizeLink( const Link<GraphCtrl*,void>& rLink ) { aGraphSizeLink = rLink; }
 
     void                SetUpdateLink( const Link<GraphCtrl*,void>& rLink ) { aUpdateLink = rLink; }
+    void                QueueIdleUpdate();
+
+    void                SetSdrMode(bool b);
 
     virtual css::uno::Reference< css::accessibility::XAccessible > CreateAccessible() override;
 };
 
-
-class GraphCtrlUserCall : public SdrObjUserCall
+class SVX_DLLPUBLIC SvxGraphCtrl : public weld::CustomWidgetController
 {
-    GraphCtrl& rWin;
+    MapMode const       aMap100;
+    Graphic             aGraphic;
+    Size                aGraphSize;
+
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
 
 public:
 
-    GraphCtrlUserCall(GraphCtrl& rGraphWin)
-        : rWin(rGraphWin)
-    {}
-
-    virtual ~GraphCtrlUserCall()
-    {}
-
-    virtual void Changed(const SdrObject& rObj, SdrUserCallType eType, const Rectangle& rOldBoundRect) override;
+    SvxGraphCtrl();
+    virtual ~SvxGraphCtrl() override;
+    void                SetGraphic( const Graphic& rGraphic );
 };
-
-SdrObjUserCall* GraphCtrl::GetSdrUserCall()
-{
-    return pUserCall;
-}
 
 class GraphCtrlView : public SdrView
 {
@@ -147,13 +153,13 @@ protected:
     }
 
 public:
-    GraphCtrlView(SdrModel* pModel, GraphCtrl* pWindow)
-        : SdrView(pModel, pWindow)
-        , rGraphCtrl(*pWindow)
-    {}
-
-    virtual ~GraphCtrlView()
-    {}
+    GraphCtrlView(
+        SdrModel& rSdrModel,
+        GraphCtrl* pWindow)
+        :   SdrView(rSdrModel, pWindow)
+        ,rGraphCtrl(*pWindow)
+    {
+    }
 };
 
 #endif // INCLUDED_SVX_GRAPHCTL_HXX

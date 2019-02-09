@@ -20,9 +20,9 @@
 #ifndef INCLUDED_I18NPOOL_INC_INDEXENTRYSUPPLIER_JA_PHONETIC_HXX
 #define INCLUDED_I18NPOOL_INC_INDEXENTRYSUPPLIER_JA_PHONETIC_HXX
 
-#include <indexentrysupplier_common.hxx>
+#include "indexentrysupplier_common.hxx"
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 
 //  class IndexEntrySupplier_ja_phonetic
@@ -33,17 +33,14 @@ public:
     IndexEntrySupplier_ja_phonetic( const css::uno::Reference < css::uno::XComponentContext >& rxContext ) : IndexEntrySupplier_Common(rxContext) {
         implementationName = "com.sun.star.i18n.IndexEntrySupplier_ja_phonetic";
     };
-    virtual OUString SAL_CALL getIndexCharacter( const OUString& rIndexEntry,\
-        const css::lang::Locale& rLocale, const OUString& rSortAlgorithm ) \
-        throw (css::uno::RuntimeException, std::exception) override;\
-    virtual OUString SAL_CALL getIndexKey( const OUString& IndexEntry, \
-        const OUString& PhoneticEntry, const css::lang::Locale& rLocale )\
-        throw (css::uno::RuntimeException, std::exception) override;\
-    virtual sal_Int16 SAL_CALL compareIndexEntry( const OUString& IndexEntry1,\
-        const OUString& PhoneticEntry1, const css::lang::Locale& rLocale1,\
-        const OUString& IndexEntry2, const OUString& PhoneticEntry2,\
-        const css::lang::Locale& rLocale2 )\
-        throw (css::uno::RuntimeException, std::exception) override;\
+    virtual OUString SAL_CALL getIndexCharacter( const OUString& rIndexEntry,
+        const css::lang::Locale& rLocale, const OUString& rSortAlgorithm ) override;
+    virtual OUString SAL_CALL getIndexKey( const OUString& IndexEntry,
+        const OUString& PhoneticEntry, const css::lang::Locale& rLocale ) override;
+    virtual sal_Int16 SAL_CALL compareIndexEntry( const OUString& IndexEntry1,
+        const OUString& PhoneticEntry1, const css::lang::Locale& rLocale1,
+        const OUString& IndexEntry2, const OUString& PhoneticEntry2,
+        const css::lang::Locale& rLocale2 ) override;
 };
 
 #define INDEXENTRYSUPPLIER_JA_PHONETIC( algorithm ) \
@@ -54,8 +51,7 @@ public:\
     };\
     virtual sal_Bool SAL_CALL loadAlgorithm(\
         const css::lang::Locale& rLocale,\
-        const OUString& SortAlgorithm, sal_Int32 collatorOptions ) \
-        throw (css::uno::RuntimeException, std::exception) override;\
+        const OUString& SortAlgorithm, sal_Int32 collatorOptions ) override;\
 };
 
 INDEXENTRYSUPPLIER_JA_PHONETIC( ja_phonetic_alphanumeric_first_by_syllable )
@@ -63,7 +59,7 @@ INDEXENTRYSUPPLIER_JA_PHONETIC( ja_phonetic_alphanumeric_first_by_consonant )
 INDEXENTRYSUPPLIER_JA_PHONETIC( ja_phonetic_alphanumeric_last_by_syllable )
 INDEXENTRYSUPPLIER_JA_PHONETIC( ja_phonetic_alphanumeric_last_by_consonant )
 
-} } } }
+}
 #endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

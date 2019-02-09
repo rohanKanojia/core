@@ -22,13 +22,10 @@
 
 #include "LabelPositionHelper.hxx"
 #include <com/sun/star/awt/Point.hpp>
-#include <com/sun/star/drawing/Position3D.hpp>
 
 namespace chart
 {
 
-/**
-*/
 class PolarPlottingPositionHelper;
 
 class PolarLabelPositionHelper : public LabelPositionHelper
@@ -38,15 +35,15 @@ public:
         PolarPlottingPositionHelper* pPosHelper
         , sal_Int32 nDimensionCount
         , const css::uno::Reference< css::drawing::XShapes >& xLogicTarget
-        , AbstractShapeFactory* pShapeFactory );
-    virtual ~PolarLabelPositionHelper();
+        , ShapeFactory* pShapeFactory );
+    virtual ~PolarLabelPositionHelper() override;
 
     css::awt::Point getLabelScreenPositionAndAlignmentForLogicValues(
                         LabelAlignment& rAlignment
                         , double fLogicValueOnAngleAxis
                         , double fLogicValueOnRadiusAxis
                         , double fLogicZ
-                        , sal_Int32 nScreenValueOffsetInRadiusDirection=0 ) const;
+                        , sal_Int32 nScreenValueOffsetInRadiusDirection ) const;
 
     /** Calculate the anchor point position for a text label.
      *  When the requested label placement is of `INSIDE` or `OUTSIDE` type the
@@ -64,7 +61,7 @@ public:
                         , double fUnitCircleStartAngleDegree, double fUnitCircleWidthAngleDegree
                         , double fUnitCircleInnerRadius, double fUnitCircleOuterRadius
                         , double fLogicZ
-                        , sal_Int32 nScreenValueOffsetInRadiusDirection=0 ) const;
+                        , sal_Int32 nScreenValueOffsetInRadiusDirection ) const;
 
 private:
     PolarPlottingPositionHelper*    m_pPosHelper;

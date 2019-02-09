@@ -18,31 +18,26 @@
  */
 
 
-#include <cppuhelper/implbase2.hxx>
 #include <cppuhelper/implementationentry.hxx>
 #include <unotools/configmgr.hxx>
-#include <comphelper/servicedecl.hxx>
 #include <comphelper/unwrapargs.hxx>
 #include <i18nlangtag/mslangid.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/msgbox.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <svtools/svmedit.hxx>
 #include <svl/lstner.hxx>
 #include <vcl/xtextedt.hxx>
+#include <vcl/textview.hxx>
 #include <vcl/scrbar.hxx>
 #include <vcl/threadex.hxx>
 #include <vcl/builderfactory.hxx>
 
-#include "dp_gui_shared.hxx"
 #include "license_dialog.hxx"
-#include "dp_gui.hrc"
 
 #include <functional>
 
 using namespace ::dp_misc;
-namespace cssu = ::com::sun::star::uno;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 
@@ -56,7 +51,7 @@ class LicenseView : public MultiLineEdit, public SfxListener
 
 public:
     LicenseView( vcl::Window* pParent, WinBits nStyle );
-    virtual ~LicenseView();
+    virtual ~LicenseView() override;
     virtual void dispose() override;
 
     void ScrollDown( ScrollType eScroll );
@@ -69,9 +64,6 @@ public:
     void SetScrolledHdl( const Link<LicenseView&,void>& rHdl ) { maScrolledHdl = rHdl; }
 
     virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
-
-protected:
-    using MultiLineEdit::Notify;
 };
 
 struct LicenseDialogImpl : public ModalDialog
@@ -85,11 +77,11 @@ struct LicenseDialogImpl : public ModalDialog
     VclPtr<PushButton> m_pAcceptButton;
     VclPtr<PushButton> m_pDeclineButton;
 
-    DECL_LINK_TYPED(PageDownHdl, Button*, void);
-    DECL_LINK_TYPED(ScrolledHdl, LicenseView&, void);
-    DECL_LINK_TYPED(EndReachedHdl, LicenseView&, void);
-    DECL_LINK_TYPED(CancelHdl, Button*, void);
-    DECL_LINK_TYPED(AcceptHdl, Button*, void);
+    DECL_LINK(PageDownHdl, Button*, void);
+    DECL_LINK(ScrolledHdl, LicenseView&, void);
+    DECL_LINK(EndReachedHdl, LicenseView&, void);
+    DECL_LINK(CancelHdl, Button*, void);
+    DECL_LINK(AcceptHdl, Button*, void);
 
     bool m_bLicenseRead;
 
@@ -97,7 +89,7 @@ struct LicenseDialogImpl : public ModalDialog
         vcl::Window * pParent,
         const OUString & sExtensionName,
         const OUString & sLicenseText);
-    virtual ~LicenseDialogImpl() { disposeOnce(); }
+    virtual ~LicenseDialogImpl() override { disposeOnce(); }
     virtual void dispose() override;
 
     virtual void Activate() override;
@@ -125,14 +117,7 @@ LicenseView::LicenseView( vcl::Window* pParent, WinBits nStyle )
     StartListening( *GetTextEngine() );
 }
 
-VCL_BUILDER_DECL_FACTORY(LicenseView)
-{
-    WinBits nWinStyle = WB_CLIPCHILDREN|WB_LEFT;
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nWinStyle |= WB_BORDER;
-    rRet = VclPtr<LicenseView>::Create(pParent, nWinStyle | WB_VSCROLL);
-}
+VCL_BUILDER_FACTORY_CONSTRUCTOR(LicenseView, WB_CLIPCHILDREN|WB_LEFT|WB_VSCROLL)
 
 LicenseView::~LicenseView()
 {
@@ -158,16 +143,13 @@ bool LicenseView::IsEndReached() const
 {
     bool bEndReached;
 
-    ExtTextView*    pView = GetTextView();
+    TextView*       pView = GetTextView();
     ExtTextEngine*  pEdit = GetTextEngine();
     const long      nHeight = pEdit->GetTextHeight();
     Size            aOutSize = pView->GetWindow()->GetOutputSizePixel();
     Point           aBottom( 0, aOutSize.Height() );
 
-    if ( pView->GetDocPos( aBottom ).Y() >= nHeight - 1 )
-        bEndReached = true;
-    else
-        bEndReached = false;
+    bEndReached = pView->GetDocPos( aBottom ).Y() >= nHeight - 1;
 
     return bEndReached;
 }
@@ -178,14 +160,14 @@ void LicenseView::Notify( SfxBroadcaster&, const SfxHint& rHint )
     if ( pTextHint )
     {
         bool    bLastVal = EndReached();
-        const sal_uInt32 nId = pTextHint->GetId();
+        const SfxHintId nId = pTextHint->GetId();
 
-        if ( nId == TEXT_HINT_PARAINSERTED )
+        if ( nId == SfxHintId::TextParaInserted )
         {
             if ( bLastVal )
                 mbEndReached = IsEndReached();
         }
-        else if ( nId == TEXT_HINT_VIEWSCROLLED )
+        else if ( nId == SfxHintId::TextViewScrolled )
         {
             if ( ! mbEndReached )
                 mbEndReached = IsEndReached();
@@ -217,7 +199,7 @@ LicenseDialogImpl::LicenseDialogImpl(
     m_pArrow2->Show(false);
     get(m_pLicense, "textview");
 
-    Size aSize(m_pLicense->LogicToPixel(Size(290, 170), MAP_APPFONT));
+    Size aSize(m_pLicense->LogicToPixel(Size(290, 170), MapMode(MapUnit::MapAppFont)));
     m_pLicense->set_width_request(aSize.Width());
     m_pLicense->set_height_request(aSize.Height());
 
@@ -237,12 +219,12 @@ LicenseDialogImpl::LicenseDialogImpl(
     m_pDown->SetStyle( aStyle );
 }
 
-IMPL_LINK_NOARG_TYPED(LicenseDialogImpl, AcceptHdl, Button*, void)
+IMPL_LINK_NOARG(LicenseDialogImpl, AcceptHdl, Button*, void)
 {
     EndDialog(RET_OK);
 }
 
-IMPL_LINK_NOARG_TYPED(LicenseDialogImpl, CancelHdl, Button*, void)
+IMPL_LINK_NOARG(LicenseDialogImpl, CancelHdl, Button*, void)
 {
     EndDialog();
 }
@@ -267,7 +249,7 @@ void LicenseDialogImpl::Activate()
     }
 }
 
-IMPL_LINK_NOARG_TYPED(LicenseDialogImpl, ScrolledHdl, LicenseView&, void)
+IMPL_LINK_NOARG(LicenseDialogImpl, ScrolledHdl, LicenseView&, void)
 {
     if (m_pLicense->IsEndReached())
         m_pDown->Disable();
@@ -275,12 +257,12 @@ IMPL_LINK_NOARG_TYPED(LicenseDialogImpl, ScrolledHdl, LicenseView&, void)
         m_pDown->Enable();
 }
 
-IMPL_LINK_NOARG_TYPED(LicenseDialogImpl, PageDownHdl, Button*, void)
+IMPL_LINK_NOARG(LicenseDialogImpl, PageDownHdl, Button*, void)
 {
-    m_pLicense->ScrollDown( SCROLL_PAGEDOWN );
+    m_pLicense->ScrollDown( ScrollType::PageDown );
 }
 
-IMPL_LINK_NOARG_TYPED(LicenseDialogImpl, EndReachedHdl, LicenseView&, void)
+IMPL_LINK_NOARG(LicenseDialogImpl, EndReachedHdl, LicenseView&, void)
 {
     m_pAcceptButton->Enable();
     m_pAcceptButton->GrabFocus();
@@ -298,13 +280,13 @@ LicenseDialog::LicenseDialog( Sequence<Any> const& args,
 
 // XExecutableDialog
 
-void LicenseDialog::setTitle( OUString const & ) throw (RuntimeException, std::exception)
+void LicenseDialog::setTitle( OUString const & )
 {
 
 }
 
 
-sal_Int16 LicenseDialog::execute() throw (RuntimeException, std::exception)
+sal_Int16 LicenseDialog::execute()
 {
     return vcl::solarthread::syncExecute(
         std::bind(&LicenseDialog::solar_execute, this));

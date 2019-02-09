@@ -19,7 +19,7 @@
 
 #include <sal/config.h>
 
-#include "unoservices.hxx"
+#include <unoservices.hxx>
 #include "xmlbas_export.hxx"
 #include <sal/log.hxx>
 #include <xmlscript/xmlns.h>
@@ -29,6 +29,7 @@
 #include <com/sun/star/script/XLibraryContainer2.hpp>
 #include <com/sun/star/script/XLibraryContainerPassword.hpp>
 #include <com/sun/star/document/XEmbeddedScripts.hpp>
+#include <com/sun/star/xml/sax/SAXException.hpp>
 #include <cppuhelper/implementationentry.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
@@ -38,31 +39,6 @@ using namespace ::com::sun::star::uno;
 
 namespace xmlscript
 {
-
-    // component operations
-
-    OUString getImplementationName_XMLBasicExporter()
-    {
-        return OUString( "com.sun.star.comp.xmlscript.XMLBasicExporter" );
-    }
-
-    Sequence< OUString > getSupportedServiceNames_XMLBasicExporter()
-    {
-        Sequence< OUString > aNames { "com.sun.star.document.XMLBasicExporter" };
-        return aNames;
-    }
-
-    OUString getImplementationName_XMLOasisBasicExporter()
-    {
-        return OUString( "com.sun.star.comp.xmlscript.XMLOasisBasicExporter" );
-    }
-
-    Sequence< OUString > getSupportedServiceNames_XMLOasisBasicExporter()
-    {
-        Sequence< OUString > aNames { "com.sun.star.document.XMLOasisBasicExporter" };
-        return aNames;
-    }
-
     // XMLBasicExporterBase
 
     XMLBasicExporterBase::XMLBasicExporterBase( bool bOasis )
@@ -75,36 +51,33 @@ namespace xmlscript
     }
 
     // XServiceInfo
-    sal_Bool XMLBasicExporterBase::supportsService( const OUString& rServiceName ) throw (RuntimeException, std::exception)
+    sal_Bool XMLBasicExporterBase::supportsService( const OUString& rServiceName )
     {
         return cppu::supportsService(this, rServiceName);
     }
 
     // XInitialization
 
-    void XMLBasicExporterBase::initialize( const Sequence< Any >& aArguments ) throw (Exception, RuntimeException, std::exception)
+    void XMLBasicExporterBase::initialize( const Sequence< Any >& aArguments )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        if ( aArguments.getLength() == 1 )
-        {
-            aArguments[0] >>= m_xHandler;
-
-            if ( !m_xHandler.is() )
-            {
-                throw RuntimeException( "XMLBasicExporterBase::initialize: invalid argument format!" );
-            }
-        }
-        else
+        if ( aArguments.getLength() != 1 )
         {
             throw RuntimeException( "XMLBasicExporterBase::initialize: invalid number of arguments!" );
+        }
+
+        aArguments[0] >>= m_xHandler;
+
+        if ( !m_xHandler.is() )
+        {
+            throw RuntimeException( "XMLBasicExporterBase::initialize: invalid argument format!" );
         }
     }
 
     // XExporter
 
     void XMLBasicExporterBase::setSourceDocument( const Reference< XComponent >& rxDoc )
-        throw (IllegalArgumentException, RuntimeException, std::exception)
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -119,7 +92,6 @@ namespace xmlscript
     // XFilter
 
 sal_Bool XMLBasicExporterBase::filter( const Sequence< beans::PropertyValue >& /*aDescriptor*/ )
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -331,22 +303,22 @@ sal_Bool XMLBasicExporterBase::filter( const Sequence< beans::PropertyValue >& /
         }
         catch ( const container::NoSuchElementException& e )
         {
-            SAL_INFO("xmlscript.xmlflat", "XMLBasicExporterBase::filter: caught NoSuchElementException reason " << e.Message );
+            SAL_INFO("xmlscript.xmlflat", "XMLBasicExporterBase::filter: caught NoSuchElementException reason " << e );
             bReturn = false;
         }
         catch ( const lang::IllegalArgumentException& e )
         {
-            SAL_INFO("xmlscript.xmlflat", "XMLBasicExporterBase::filter: caught IllegalArgumentException reason " << e.Message );
+            SAL_INFO("xmlscript.xmlflat", "XMLBasicExporterBase::filter: caught IllegalArgumentException reason " << e );
             bReturn = false;
         }
         catch ( const lang::WrappedTargetException& e )
         {
-            SAL_INFO("xmlscript.xmlflat", "XMLBasicExporterBase::filter: caught WrappedTargetException reason " << e.Message );
+            SAL_INFO("xmlscript.xmlflat", "XMLBasicExporterBase::filter: caught WrappedTargetException reason " << e );
             bReturn = false;
         }
         catch ( const xml::sax::SAXException& e )
         {
-            SAL_INFO("xmlscript.xmlflat", "XMLBasicExporterBase::filter: caught SAXException reason " << e.Message );
+            SAL_INFO("xmlscript.xmlflat", "XMLBasicExporterBase::filter: caught SAXException reason " << e );
             bReturn = false;
         }
 
@@ -354,7 +326,6 @@ sal_Bool XMLBasicExporterBase::filter( const Sequence< beans::PropertyValue >& /
     }
 
     void XMLBasicExporterBase::cancel()
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -374,14 +345,15 @@ sal_Bool XMLBasicExporterBase::filter( const Sequence< beans::PropertyValue >& /
 
     // XServiceInfo
 
-    OUString XMLBasicExporter::getImplementationName(  ) throw (RuntimeException, std::exception)
+    OUString XMLBasicExporter::getImplementationName(  )
     {
-        return getImplementationName_XMLBasicExporter();
+        return OUString( "com.sun.star.comp.xmlscript.XMLBasicExporter" );
     }
 
-    Sequence< OUString > XMLBasicExporter::getSupportedServiceNames(  ) throw (RuntimeException, std::exception)
+    Sequence< OUString > XMLBasicExporter::getSupportedServiceNames(  )
     {
-        return getSupportedServiceNames_XMLBasicExporter();
+        Sequence< OUString > aNames { "com.sun.star.document.XMLBasicExporter" };
+        return aNames;
     }
 
     // XMLOasisBasicExporter
@@ -397,30 +369,34 @@ sal_Bool XMLBasicExporterBase::filter( const Sequence< beans::PropertyValue >& /
 
     // XServiceInfo
 
-    OUString XMLOasisBasicExporter::getImplementationName(  ) throw (RuntimeException, std::exception)
+    OUString XMLOasisBasicExporter::getImplementationName(  )
     {
-        return getImplementationName_XMLOasisBasicExporter();
+        return OUString( "com.sun.star.comp.xmlscript.XMLOasisBasicExporter" );
     }
 
-    Sequence< OUString > XMLOasisBasicExporter::getSupportedServiceNames(  ) throw (RuntimeException, std::exception)
+    Sequence< OUString > XMLOasisBasicExporter::getSupportedServiceNames(  )
     {
-        return getSupportedServiceNames_XMLOasisBasicExporter();
-    }
-
-    // component operations
-
-    Reference< XInterface > SAL_CALL create_XMLBasicExporter(
-        Reference< XComponentContext > const &  )
-    {
-        return static_cast< lang::XTypeProvider * >( new XMLBasicExporter );
-    }
-
-    Reference< XInterface > SAL_CALL create_XMLOasisBasicExporter(
-        Reference< XComponentContext > const &  )
-    {
-        return static_cast< lang::XTypeProvider * >( new XMLOasisBasicExporter );
+        Sequence< OUString > aNames { "com.sun.star.document.XMLOasisBasicExporter" };
+        return aNames;
     }
 
 }   // namespace xmlscript
+
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+com_sun_star_comp_xmlscript_XMLBasicExporter(
+    css::uno::XComponentContext *,
+    css::uno::Sequence<css::uno::Any> const &)
+{
+    return cppu::acquire(new xmlscript::XMLBasicExporter());
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+com_sun_star_comp_xmlscript_XMLOasisBasicExporter(
+    css::uno::XComponentContext *,
+    css::uno::Sequence<css::uno::Any> const &)
+{
+
+    return cppu::acquire(new xmlscript::XMLOasisBasicExporter());
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

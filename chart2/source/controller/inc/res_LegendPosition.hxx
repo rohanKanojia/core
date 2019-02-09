@@ -19,26 +19,29 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_INC_RES_LEGENDPOSITION_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_RES_LEGENDPOSITION_HXX
 
-#include <vcl/builder.hxx>
-#include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
 #include <svl/itemset.hxx>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <tools/link.hxx>
+
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+namespace weld { class Builder; }
+namespace weld { class CheckButton; }
+namespace weld { class RadioButton; }
+namespace weld { class ToggleButton; }
 
 namespace chart
 {
 
-class LegendPositionResources
+class LegendPositionResources final
 {
 
 public:
     //constructor without Display checkbox
-    LegendPositionResources(VclBuilderContainer& rParent);
+    LegendPositionResources(weld::Builder& rBuilder);
     //constructor inclusive Display checkbox
-    LegendPositionResources(VclBuilderContainer& rParent, const css::uno::Reference<
+    LegendPositionResources(weld::Builder& rBuilder, const css::uno::Reference<
                        css::uno::XComponentContext>& xCC );
-    virtual ~LegendPositionResources();
+    ~LegendPositionResources();
 
     void writeToResources( const css::uno::Reference< css::frame::XModel >& xChartModel );
     void writeToModel( const css::uno::Reference< css::frame::XModel >& xChartModel ) const;
@@ -48,23 +51,21 @@ public:
 
     void SetChangeHdl( const Link<LinkParamNone*,void>& rLink );
 
-    DECL_LINK_TYPED( PositionEnableHdl, CheckBox&, void );
-    DECL_LINK_TYPED( PositionChangeHdl, RadioButton&, void );
+    DECL_LINK( PositionEnableHdl, weld::ToggleButton&, void );
+    DECL_LINK( PositionChangeHdl, weld::ToggleButton&, void );
 
 private:
     void impl_setRadioButtonToggleHdl();
 
 private:
     css::uno::Reference< css::uno::XComponentContext>    m_xCC;
-
-    VclPtr<CheckBox>       m_pCbxShow;
-
-    VclPtr<RadioButton>    m_pRbtLeft;
-    VclPtr<RadioButton>    m_pRbtRight;
-    VclPtr<RadioButton>    m_pRbtTop;
-    VclPtr<RadioButton>    m_pRbtBottom;
-
     Link<LinkParamNone*,void> m_aChangeLink;
+
+    std::unique_ptr<weld::CheckButton> m_xCbxShow;
+    std::unique_ptr<weld::RadioButton> m_xRbtLeft;
+    std::unique_ptr<weld::RadioButton> m_xRbtRight;
+    std::unique_ptr<weld::RadioButton> m_xRbtTop;
+    std::unique_ptr<weld::RadioButton> m_xRbtBottom;
 };
 
 } //namespace chart

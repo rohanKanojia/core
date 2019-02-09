@@ -26,8 +26,8 @@
 #include <com/sun/star/sdb/application/NamedDatabaseObject.hpp>
 #include <vcl/fixed.hxx>
 #include <unotools/eventlisteneradapter.hxx>
-#include "IClipBoardTest.hxx"
-#include "AppElementType.hxx"
+#include <IClipBoardTest.hxx>
+#include <AppElementType.hxx>
 
 namespace com{ namespace sun { namespace star { namespace beans    { class XPropertySet; } } } }
 
@@ -55,7 +55,7 @@ namespace dbaui
         virtual void DataChanged( const DataChangedEvent& rDCEvt ) override;
     public:
         OAppBorderWindow(OApplicationView* _pParent,PreviewMode _ePreviewMode);
-        virtual ~OAppBorderWindow();
+        virtual ~OAppBorderWindow() override;
         virtual void dispose() override;
 
         // Window overrides
@@ -78,7 +78,6 @@ namespace dbaui
             NONE
         };
     private:
-        css::lang::Locale                   m_aLocale;
         css::uno::Reference< css::lang::XComponent >
                                             m_xObject;
         VclPtr<OAppBorderWindow>            m_pWin;
@@ -91,7 +90,7 @@ namespace dbaui
     protected:
 
         // return the Rectangle where I can paint myself
-        virtual void resizeDocumentView(Rectangle& rRect) override;
+        virtual void resizeDocumentView(tools::Rectangle& rRect) override;
 
         // OEventListenerAdapter
         virtual void _disposing( const css::lang::EventObject& _rSource ) override;
@@ -104,20 +103,20 @@ namespace dbaui
                             ,OApplicationController&            _rAppController
                             ,PreviewMode _ePreviewMode
                             );
-        virtual ~OApplicationView();
+        virtual ~OApplicationView() override;
         virtual void dispose() override;
 
         /// automatically creates mnemonics for the icon/texts in our left hand side panel
         void    createIconAutoMnemonics( MnemonicGenerator& _rMnemonics );
 
         /// automatically creates mnemonics for the texts in our task pane
-        void    setTaskExternalMnemonics( MnemonicGenerator& _rMnemonics );
+        void    setTaskExternalMnemonics( MnemonicGenerator const & _rMnemonics );
 
         // Window overrides
         virtual bool PreNotify( NotifyEvent& rNEvt ) override;
         virtual void GetFocus() override;
 
-        inline OApplicationController&                  getAppController() const { return m_rAppController; }
+        OApplicationController&                  getAppController() const { return m_rAppController; }
 
         // IClipboardTest
         virtual bool isCutAllowed() override;
@@ -128,9 +127,9 @@ namespace dbaui
         virtual void paste() override;
 
         /// get the left panel
-        inline OApplicationSwapWindow*  getPanel()      const { return m_pWin->getPanel(); }
+        OApplicationSwapWindow*  getPanel()      const { return m_pWin->getPanel(); }
         /// get the detail page
-        inline OApplicationDetailView*  getDetailView() const { return m_pWin->getDetailView(); }
+        OApplicationDetailView*  getDetailView() const { return m_pWin->getDetailView(); }
 
         /** return the qualified name.
             @param  _pEntry
@@ -147,7 +146,7 @@ namespace dbaui
             @return
                 <TRUE/> if the entry is a leaf, otherwise <FALSE/>
         */
-        bool isLeaf(SvTreeListEntry* _pEntry) const;
+        bool isLeaf(SvTreeListEntry const * _pEntry) const;
 
         /** returns if one of the selected entries is a leaf
             @return
@@ -189,7 +188,7 @@ namespace dbaui
             @param  _rNames
                 The list will be filled.
         */
-        void getSelectionElementNames( ::std::vector< OUString>& _rNames ) const;
+        void getSelectionElementNames( std::vector< OUString>& _rNames ) const;
 
         /** describes the current selection for the given control
         */

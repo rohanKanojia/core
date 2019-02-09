@@ -18,7 +18,7 @@
 
 class SvStream;
 
-class SVT_DLLPUBLIC HtmlWriter
+class SVT_DLLPUBLIC HtmlWriter final
 {
 private:
     std::vector<OString> maElementStack;
@@ -26,13 +26,14 @@ private:
     SvStream& mrStream;
 
     bool mbElementOpen;
-    bool mbContentWritten;
+    bool mbCharactersWritten;
     bool mbPrettyPrint;
-    rtl_TextEncoding maEncoding;
+    /// XML namespace, in case of XHTML.
+    OString maNamespace;
 
 public:
-    HtmlWriter(SvStream& rStream);
-    virtual ~HtmlWriter();
+    HtmlWriter(SvStream& rStream, const OString& rNamespace = OString());
+    ~HtmlWriter();
 
     void prettyPrint(bool b);
 
@@ -51,6 +52,9 @@ public:
 
     void single(const OString& aContent);
     void endAttribute();
+
+    /// Writes character data.
+    void characters(const OString& rChars);
 };
 
 #endif

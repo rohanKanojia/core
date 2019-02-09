@@ -21,11 +21,9 @@
 #define INCLUDED_SD_SOURCE_UI_INC_TPOPTION_HXX
 
 #include <vcl/lstbox.hxx>
-#include <vcl/group.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/field.hxx>
 #include <vcl/button.hxx>
-#include <svtools/stdctrl.hxx>
 #include <sfx2/tabdlg.hxx>
 #include <svx/optgrid.hxx>
 
@@ -35,13 +33,12 @@
 class SdTpOptionsSnap : public SvxGridTabPage
 {
 public:
-            SdTpOptionsSnap( vcl::Window* pParent, const SfxItemSet& rInAttrs  );
-            virtual ~SdTpOptionsSnap();
+    SdTpOptionsSnap(TabPageParent pParent, const SfxItemSet& rInAttrs);
+    virtual ~SdTpOptionsSnap() override;
 
-    static  VclPtr<SfxTabPage> Create( vcl::Window*, const SfxItemSet* );
+    static  VclPtr<SfxTabPage> Create( TabPageParent, const SfxItemSet* );
     virtual bool FillItemSet( SfxItemSet* ) override;
     virtual void Reset( const SfxItemSet * ) override;
-
 };
 
 /**
@@ -57,10 +54,10 @@ private:
 
 public:
             SdTpOptionsContents( vcl::Window* pParent, const SfxItemSet& rInAttrs  );
-            virtual ~SdTpOptionsContents();
+            virtual ~SdTpOptionsContents() override;
     virtual void dispose() override;
 
-    static  VclPtr<SfxTabPage> Create( vcl::Window*, const SfxItemSet* );
+    static  VclPtr<SfxTabPage> Create( TabPageParent, const SfxItemSet* );
     virtual bool FillItemSet( SfxItemSet* ) override;
     virtual void Reset( const SfxItemSet * ) override;
 };
@@ -68,7 +65,7 @@ public:
 /**
  * Option-Tab-Page: View
  */
-class SdModule;
+
 class SdTpOptionsMisc : public SfxTabPage
 {
  friend class SdModule;
@@ -112,12 +109,12 @@ private:
     OUString aInfo1;
     OUString aInfo2;
 
-    SfxMapUnit          ePoolUnit;
+    MapUnit             ePoolUnit;
 
     static OUString        GetScale( sal_Int32 nX, sal_Int32 nY );
     static bool            SetScale( const OUString& aScale, sal_Int32& rX, sal_Int32& rY );
 
-    DECL_LINK_TYPED( SelectMetricHdl_Impl, ListBox&, void );
+    DECL_LINK( SelectMetricHdl_Impl, ListBox&, void );
 
     /** Enable or disable the controls in the compatibility section of the
         'general' tab page depending on whether there is at least one
@@ -127,14 +124,14 @@ private:
 
 protected:
     virtual void ActivatePage( const SfxItemSet& rSet ) override;
-    virtual sfxpg DeactivatePage( SfxItemSet* pSet ) override;
+    virtual DeactivateRC DeactivatePage( SfxItemSet* pSet ) override;
 
 public:
             SdTpOptionsMisc( vcl::Window* pParent, const SfxItemSet& rInAttrs  );
-            virtual ~SdTpOptionsMisc();
+            virtual ~SdTpOptionsMisc() override;
     virtual void dispose() override;
 
-    static  VclPtr<SfxTabPage> Create( vcl::Window*, const SfxItemSet* );
+    static  VclPtr<SfxTabPage> Create( TabPageParent, const SfxItemSet* );
     virtual bool FillItemSet( SfxItemSet* ) override;
     virtual void Reset( const SfxItemSet * ) override;
 

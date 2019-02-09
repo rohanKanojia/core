@@ -7,11 +7,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-
-// Include this before stdio.h for the __MINGW32__ sake.
-// This header contains a define that modifies the way
-// formatting strings work for the mingw platforms.
-#include <sal/types.h>
+#include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <stdio.h>
 #ifndef _WIN32
@@ -21,7 +18,6 @@
 #include <vector>
 
 #include <unotools/streamwrap.hxx>
-#include <unotools/ucbstreamhelper.hxx>
 
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/bootstrap.hxx>
@@ -36,6 +32,8 @@
 #include <osl/file.hxx>
 #include <osl/process.h>
 #include <rtl/bootstrap.hxx>
+#include <sfx2/app.hxx>
+#include <sal/types.h>
 #include <vcl/svapp.hxx>
 
 #include <svx/galtheme.hxx>
@@ -59,28 +57,12 @@ protected:
     void DeInit() override;
 };
 
-Gallery* createGallery( const OUString& rURL )
-{
-    return new Gallery( rURL );
-}
-
-void disposeGallery( Gallery* pGallery )
-{
-    delete pGallery;
-}
-
 static void createTheme( const OUString& aThemeName, const OUString& aGalleryURL,
                          const OUString& aDestDir, std::vector<INetURLObject> &rFiles,
                          bool bRelativeURLs )
 {
-    Gallery* pGallery;
+    std::unique_ptr<Gallery> pGallery(new Gallery( aGalleryURL ));
 
-    pGallery = createGallery( aGalleryURL );
-    if (!pGallery ) {
-            fprintf( stderr, "Could't create '%s'\n",
-                     OUStringToOString( aGalleryURL, RTL_TEXTENCODING_UTF8 ).getStr() );
-            exit( 1 );
-    }
     fprintf( stderr, "Work on gallery '%s'\n",
              OUStringToOString( aGalleryURL, RTL_TEXTENCODING_UTF8 ).getStr() );
 
@@ -100,7 +82,8 @@ static void createTheme( const OUString& aThemeName, const OUString& aGalleryURL
 
     SfxListener aListener;
 
-    if ( !( pGalTheme = pGallery->AcquireTheme( aThemeName, aListener ) ) ) {
+    pGalTheme = pGallery->AcquireTheme( aThemeName, aListener );
+    if ( !pGalTheme ) {
             fprintf( stderr, "Failed to acquire theme\n" );
             exit( 1 );
     }
@@ -109,9 +92,7 @@ static void createTheme( const OUString& aThemeName, const OUString& aGalleryURL
              OUStringToOString( aDestDir, RTL_TEXTENCODING_UTF8 ).getStr() );
     pGalTheme->SetDestDir( aDestDir, bRelativeURLs );
 
-    std::vector<INetURLObject>::const_iterator aIter;
-
-    for( aIter = rFiles.begin(); aIter != rFiles.end(); ++aIter )
+    for( const auto& rFile : rFiles )
     {
 //  Should/could use:
 //    if ( ! pGalTheme->InsertFileOrDirURL( aURL ) ) {
@@ -119,18 +100,16 @@ static void createTheme( const OUString& aThemeName, const OUString& aGalleryURL
 
         Graphic aGraphic;
 
-        if ( ! pGalTheme->InsertURL( *aIter ) )
+        if ( ! pGalTheme->InsertURL( rFile ) )
             fprintf( stderr, "Failed to import '%s'\n",
-                     OUStringToOString( aIter->GetMainURL(INetURLObject::NO_DECODE), RTL_TEXTENCODING_UTF8 ).getStr() );
+                     OUStringToOString( rFile.GetMainURL(INetURLObject::DecodeMechanism::NONE), RTL_TEXTENCODING_UTF8 ).getStr() );
         else
-            fprintf( stderr, "Imported file '%s' (%" SAL_PRI_SIZET "u)\n",
-                     OUStringToOString( aIter->GetMainURL(INetURLObject::NO_DECODE), RTL_TEXTENCODING_UTF8 ).getStr(),
+            fprintf( stderr, "Imported file '%s' (%" SAL_PRIuUINT32 ")\n",
+                     OUStringToOString( rFile.GetMainURL(INetURLObject::DecodeMechanism::NONE), RTL_TEXTENCODING_UTF8 ).getStr(),
                      pGalTheme->GetObjectCount() );
     }
 
     pGallery->ReleaseTheme( pGalTheme, aListener );
-
-    disposeGallery( pGallery );
 }
 
 static int PrintHelp()
@@ -185,7 +164,7 @@ void GalApp::Init()
             OUString envVar( "OOO_INSTALL_PREFIX");
             osl_setEnvironment(envVar.pData, installPrefix.pData);
         }
-        OSL_TRACE( "OOO_INSTALL_PREFIX=%s", getenv( "OOO_INSTALL_PREFIX" ) );
+        SAL_INFO("svx", "OOO_INSTALL_PREFIX=" << getenv( "OOO_INSTALL_PREFIX" ) );
 
         uno::Reference<uno::XComponentContext> xComponentContext
             = ::cppu::defaultBootstrap_InitialComponentContext();
@@ -202,16 +181,16 @@ void GalApp::Init()
         css::ucb::UniversalContentBroker::create(xComponentContext);
     } catch (const uno::Exception &e) {
         fprintf( stderr, "Bootstrap exception '%s'\n",
-                 rtl::OUStringToOString( e.Message, RTL_TEXTENCODING_UTF8 ).getStr() );
+                 OUStringToOString( e.Message, RTL_TEXTENCODING_UTF8 ).getStr() );
         exit( 1 );
     }
 }
 
-std::vector<OUString> ReadResponseFile_Impl(OUString const& rInput)
+static std::vector<OUString> ReadResponseFile_Impl(OUString const& rInput)
 {
     osl::File file(rInput);
     osl::FileBase::RC rc = file.open(osl_File_OpenFlag_Read);
-    OString const uInput(rtl::OUStringToOString(rInput, RTL_TEXTENCODING_UTF8));
+    OString const uInput(OUStringToOString(rInput, RTL_TEXTENCODING_UTF8));
     if (osl::FileBase::E_None != rc)
     {
         fprintf(stderr, "error while opening response file: %s (%d)\n",
@@ -262,7 +241,7 @@ std::vector<OUString> ReadResponseFile_Impl(OUString const& rInput)
     return ret;
 }
 
-void
+static void
 ReadResponseFile(std::vector<INetURLObject> & rFiles, OUString const& rInput)
 {
     std::vector<OUString> files(ReadResponseFile_Impl(rInput));
@@ -276,6 +255,8 @@ int GalApp::Main()
 {
     try
     {
+        SfxApplication::GetOrCreate();
+
         OUString aPath, aDestDir;
         OUString aName( "Default name" );
         std::vector<INetURLObject> aFiles;
@@ -297,7 +278,7 @@ int GalApp::Main()
                 aName = GetCommandLineParam( ++i );
             else if ( aParam == "--path" )
                 aPath = Smartify( GetCommandLineParam( ++i ) ).
-                    GetMainURL(INetURLObject::NO_DECODE);
+                    GetMainURL(INetURLObject::DecodeMechanism::NONE);
             else if ( aParam == "--destdir" )
                 aDestDir = GetCommandLineParam( ++i );
             else if ( aParam == "--relative-urls" )
@@ -318,12 +299,12 @@ int GalApp::Main()
     }
     catch (const uno::Exception& e)
     {
-        SAL_WARN("vcl.app", "Fatal exception: " << e.Message);
+        SAL_WARN("svx", "Fatal: " << e);
         return EXIT_FAILURE;
     }
     catch (const std::exception &e)
     {
-        SAL_WARN("vcl.app", "Fatal exception: " << e.what());
+        SAL_WARN("svx", "Fatal: " << e.what());
         return 1;
     }
 

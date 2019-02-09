@@ -39,7 +39,11 @@ $(eval $(call gb_Library_use_custom_headers,sw,\
 	sw/generated \
 ))
 
-$(eval $(call gb_Library_use_sdk_api,sw))
+$(eval $(call gb_Library_use_api,sw,\
+	udkapi \
+	offapi \
+	oovbaapi \
+))
 
 $(eval $(call gb_Library_add_defs,sw,\
     -DSW_DLLIMPLEMENTATION \
@@ -59,6 +63,7 @@ $(eval $(call gb_Library_use_libraries,sw,\
     i18nlangtag \
     i18nutil \
     lng \
+    msfilter \
     sal \
     salhelper \
 	sax \
@@ -78,7 +83,6 @@ $(eval $(call gb_Library_use_libraries,sw,\
     vcl \
     xmlreader \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_externals,sw,\
@@ -159,6 +163,7 @@ $(eval $(call gb_Library_add_exception_objects,sw,\
     sw/source/core/crsr/trvltbl \
     sw/source/core/crsr/viscrs \
     sw/source/core/crsr/overlayrangesoutline \
+    sw/source/core/doc/SwDocIdle \
     sw/source/core/doc/SwStyleNameMapper \
     sw/source/core/doc/acmplwrd \
     sw/source/core/doc/CntntIdxStore \
@@ -392,7 +397,6 @@ $(eval $(call gb_Library_add_exception_objects,sw,\
     sw/source/core/text/txtftn \
     sw/source/core/text/txthyph \
     sw/source/core/text/txtinit \
-    sw/source/core/text/txtio \
     sw/source/core/text/txtpaint \
     sw/source/core/text/txttab \
     sw/source/core/text/widorp \
@@ -522,6 +526,7 @@ $(eval $(call gb_Library_add_exception_objects,sw,\
     sw/source/filter/html/htmlnumreader \
     sw/source/filter/html/htmlnumwriter \
     sw/source/filter/html/htmlplug \
+    sw/source/filter/html/htmlreqifreader \
     sw/source/filter/html/htmlsect \
     sw/source/filter/html/htmltab \
     sw/source/filter/html/htmltabw \
@@ -571,9 +576,12 @@ $(eval $(call gb_Library_add_exception_objects,sw,\
     sw/source/uibase/app/swmodul1 \
     sw/source/uibase/app/swmodule \
     sw/source/uibase/app/swwait \
+    sw/source/uibase/dbui/dbmgr \
+    sw/source/uibase/dbui/dbui \
+    sw/source/uibase/dbui/maildispatcher \
+    sw/source/uibase/dbui/mailmergehelper \
+    sw/source/uibase/dbui/mmconfigitem \
     sw/source/uibase/cctrl/actctrl \
-    sw/source/uibase/cctrl/popbox \
-    sw/source/uibase/cctrl/swlbox \
     sw/source/uibase/chrdlg/ccoll \
     sw/source/uibase/config/StoredChapterNumbering \
     sw/source/uibase/config/barcfg \
@@ -590,13 +598,16 @@ $(eval $(call gb_Library_add_exception_objects,sw,\
     sw/source/uibase/dialog/regionsw \
     sw/source/uibase/dialog/swabstdlg \
     sw/source/uibase/dialog/swwrtshitem \
+    sw/source/uibase/dialog/watermarkdialog \
     sw/source/uibase/dochdl/gloshdl \
     sw/source/uibase/dochdl/swdtflvr \
     sw/source/uibase/docvw/AnchorOverlayObject \
     sw/source/uibase/docvw/AnnotationMenuButton \
     sw/source/uibase/docvw/AnnotationWin \
+    sw/source/uibase/docvw/AnnotationWin2 \
     sw/source/uibase/docvw/DashedLine \
     sw/source/uibase/docvw/FrameControlsManager \
+    sw/source/uibase/docvw/UnfloatTableButton \
     sw/source/uibase/docvw/PageBreakWin \
     sw/source/uibase/docvw/OverlayRanges \
     sw/source/uibase/docvw/PostItMgr \
@@ -604,7 +615,6 @@ $(eval $(call gb_Library_add_exception_objects,sw,\
     sw/source/uibase/docvw/SidebarScrollBar \
     sw/source/uibase/docvw/SidebarTxtControl \
     sw/source/uibase/docvw/SidebarTxtControlAcc \
-    sw/source/uibase/docvw/SidebarWin \
     sw/source/uibase/docvw/SidebarWinAcc \
     sw/source/uibase/docvw/HeaderFooterWin \
     sw/source/uibase/docvw/edtdd \
@@ -677,16 +687,24 @@ $(eval $(call gb_Library_add_exception_objects,sw,\
     sw/source/uibase/shells/txtnum \
     sw/source/uibase/sidebar/StylePresetsPanel \
     sw/source/uibase/sidebar/PageOrientationControl \
+    sw/source/uibase/sidebar/PageOrientationPopup \
     sw/source/uibase/sidebar/PageMarginControl \
+    sw/source/uibase/sidebar/PageMarginPopup \
     sw/source/uibase/sidebar/PageSizeControl \
+    sw/source/uibase/sidebar/PageSizePopup \
     sw/source/uibase/sidebar/PageColumnControl \
-    sw/source/uibase/sidebar/PagePropertyPanel \
+    sw/source/uibase/sidebar/PageColumnPopup \
+    sw/source/uibase/sidebar/PageFormatPanel \
+    sw/source/uibase/sidebar/PageHeaderPanel \
+    sw/source/uibase/sidebar/PageFooterPanel \
+    sw/source/uibase/sidebar/PageStylesPanel \
     sw/source/uibase/sidebar/WrapPropertyPanel \
     sw/source/uibase/sidebar/ThemePanel \
     sw/source/uibase/sidebar/SwPanelFactory \
     sw/source/uibase/table/chartins \
     sw/source/uibase/table/swtablerep \
     sw/source/uibase/table/tablemgr \
+    sw/source/uibase/uitest/uiobject \
     sw/source/uibase/uiview/formatclipboard \
     sw/source/uibase/uiview/pview \
     sw/source/uibase/uiview/scroll \
@@ -716,6 +734,7 @@ $(eval $(call gb_Library_add_exception_objects,sw,\
     sw/source/uibase/uno/unodispatch \
     sw/source/uibase/uno/unodoc \
     sw/source/uibase/uno/unofreg \
+    sw/source/uibase/uno/unomailmerge \
     sw/source/uibase/uno/unomod \
     sw/source/uibase/uno/unomodule \
     sw/source/uibase/uno/unotxdoc \
@@ -729,6 +748,7 @@ $(eval $(call gb_Library_add_exception_objects,sw,\
     sw/source/uibase/utlui/initui \
     sw/source/uibase/utlui/navicfg \
     sw/source/uibase/utlui/navipi \
+    sw/source/uibase/utlui/gotodlg \
     sw/source/uibase/utlui/numfmtlb \
     sw/source/uibase/utlui/prcntfld \
     sw/source/uibase/utlui/shdwcrsr \
@@ -761,14 +781,8 @@ $(eval $(call gb_Library_add_exception_objects,sw,\
 
 ifneq (,$(filter DBCONNECTIVITY,$(BUILD_TYPE)))
 $(eval $(call gb_Library_add_exception_objects,sw,\
-    sw/source/uibase/dbui/dbmgr \
     sw/source/uibase/dbui/dbtree \
-    sw/source/uibase/dbui/dbui \
-    sw/source/uibase/dbui/maildispatcher \
-    sw/source/uibase/dbui/mailmergehelper \
     sw/source/uibase/dbui/mailmergetoolbarcontrols \
-    sw/source/uibase/dbui/mmconfigitem \
-    sw/source/uibase/uno/unomailmerge \
 ))
 endif
 
@@ -781,8 +795,5 @@ $(eval $(call gb_SdiTarget_set_include,sw/sdi/swslots,\
     -I$(SRCDIR)/sfx2/sdi \
     $$(INCLUDE) \
 ))
-
-# Runtime dependency for unit-tests
-$(eval $(call gb_Library_use_restarget,sw,sw))
 
 # vim: set noet sw=4 ts=4:

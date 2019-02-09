@@ -41,24 +41,24 @@ import com.sun.star.lang.IndexOutOfBoundsException;
 *  <li> Test environment variable <code>'THRCNT'</code> : number
 *   of interface threads running concurrently. </li>
 * <ul> <p>
-* XIndexComtainer needs n ObjectRelations "INSTANCEn" , where n=1, ...,
+* XIndexContainer needs n ObjectRelations "INSTANCEn" , where n=1, ...,
 * THRCNT.<p>
 * When this interface tested by different threads, it must use different
 * instances to insert/remove - one for each thread.
 * <p>
-* That's why we use objRelation "XIndexComtainerINDEX" to store the number of
+* That's why we use objRelation "XIndexContainerINDEX" to store the number of
 * last taken instance. If there is no such relation, it initialize with 1.
 * <p>
 * This ObjectRelations should be necessary to create an Object,
 * which is insertable by insterByIndex()
-* INSTANCEn are n Objectrelations so that every thread can isert it's own
+* INSTANCEn are n Objectrelations so that every thread can insert its own
 * object. n depends on the variable THRCNT which and comes from API.INI
 * <p>
 * Why that:
 * If you insert the same Object by insertByIndex() several times you
 * don't insert the Object several times. The first insertByIndex() inserts
 * the Object to the Container but all other insertByIndex() changes
-* the Index in the Continer because it's the same Object. <p>
+* the Index in the Container because it's the same Object. <p>
 * Test is multithread compliant. <p>
 * @see com.sun.star.container.XIndexContainer
 */
@@ -72,7 +72,7 @@ public class _XIndexContainer extends MultiMethodTest {
     * First tries to insert proper object. Second tries to insert
     * null value. For each test thread different objects are inserted
     * on different indexes. For example for the first started test index
-    * is 0 and object is get from relation 'INCTANCE1', and so on. <p>
+    * is 0 and object is get from relation 'INSTANCE1', and so on. <p>
     * Has <b>OK</b> status if in the first case <code>getByIndex</code>
     * method returns non null value and in the second <code>
     * IndexOutOfBoundsException</code> was thrown.

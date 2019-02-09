@@ -28,7 +28,6 @@
 #include <drawinglayer/primitive2d/maskprimitive2d.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
-#include <comphelper/sequence.hxx>
 
 
 namespace sdr
@@ -42,11 +41,6 @@ namespace sdr
 
         ViewObjectContactOfMasterPageDescriptor::~ViewObjectContactOfMasterPageDescriptor()
         {
-        }
-
-        sdr::MasterPageDescriptor& ViewObjectContactOfMasterPageDescriptor::GetMasterPageDescriptor() const
-        {
-            return static_cast< ViewContactOfMasterPageDescriptor& >(GetViewContact()).GetMasterPageDescriptor();
         }
 
         bool ViewObjectContactOfMasterPageDescriptor::isPrimitiveVisible(const DisplayInfo& rDisplayInfo) const
@@ -68,30 +62,30 @@ namespace sdr
         {
             drawinglayer::primitive2d::Primitive2DContainer xRetval;
             drawinglayer::primitive2d::Primitive2DContainer xMasterPageSequence;
-            const sdr::MasterPageDescriptor& rDescriptor = GetMasterPageDescriptor();
+            const sdr::MasterPageDescriptor& rDescriptor = static_cast< ViewContactOfMasterPageDescriptor& >(GetViewContact()).GetMasterPageDescriptor();
 
             // used range (retval) is fixed here, it's the MasterPage fill range
             const SdrPage& rOwnerPage = rDescriptor.GetOwnerPage();
             const basegfx::B2DRange aPageFillRange(
-                rOwnerPage.GetLftBorder(), rOwnerPage.GetUppBorder(),
-                rOwnerPage.GetWdt() - rOwnerPage.GetRgtBorder(), rOwnerPage.GetHgt() - rOwnerPage.GetLwrBorder());
+                rOwnerPage.GetLeftBorder(), rOwnerPage.GetUpperBorder(),
+                rOwnerPage.GetWidth() - rOwnerPage.GetRightBorder(), rOwnerPage.GetHeight() - rOwnerPage.GetLowerBorder());
 
             // Modify DisplayInfo for MasterPageContent collection; remember original layers and
-            // set combined LayerSet; set MasterPagePaint flag
-            const SetOfByte aRememberedLayers(rDisplayInfo.GetProcessLayers());
-            SetOfByte aPreprocessedLayers(aRememberedLayers);
+            // set combined SdrLayerIDSet; set MasterPagePaint flag
+            const SdrLayerIDSet aRememberedLayers(rDisplayInfo.GetProcessLayers());
+            SdrLayerIDSet aPreprocessedLayers(aRememberedLayers);
             aPreprocessedLayers &= rDescriptor.GetVisibleLayers();
             rDisplayInfo.SetProcessLayers(aPreprocessedLayers);
             rDisplayInfo.SetSubContentActive(true);
 
             // check layer visibility (traditionally was member of layer 1)
-            if(aPreprocessedLayers.IsSet(1))
+            if(aPreprocessedLayers.IsSet(SdrLayerID(1)))
             {
                 // hide PageBackground for special DrawModes; historical reasons
                 if(!GetObjectContact().isDrawModeGray() && !GetObjectContact().isDrawModeHighContrast())
                 {
                     // if visible, create the default background primitive sequence
-                    xRetval = static_cast< ViewContactOfMasterPageDescriptor& >(GetViewContact()).getViewIndependentPrimitive2DSequence();
+                    xRetval = static_cast< ViewContactOfMasterPageDescriptor& >(GetViewContact()).getViewIndependentPrimitive2DContainer();
                 }
             }
 
@@ -128,7 +122,7 @@ namespace sdr
 
                     // need to create a clip primitive, add clipped list to target
                     const drawinglayer::primitive2d::Primitive2DReference xReference(new drawinglayer::primitive2d::MaskPrimitive2D(
-                        basegfx::B2DPolyPolygon(basegfx::tools::createPolygonFromRect(aCommonArea)), xMasterPageSequence));
+                        basegfx::B2DPolyPolygon(basegfx::utils::createPolygonFromRect(aCommonArea)), xMasterPageSequence));
                     xRetval.push_back(xReference);
                 }
             }

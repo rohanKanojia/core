@@ -23,13 +23,15 @@
 #include <sal/types.h>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/vector/b2dvector.hxx>
-#include <basegfx/range/b2drange.hxx>
+#include <basegfx/point/b2dpoint.hxx>
+#include <basegfx/tuple/b2dtuple.hxx>
 #include <basegfx/basegfxdllapi.h>
 
+namespace basegfx { class B2DRange; }
 
 namespace basegfx
 {
-    namespace tools
+    namespace utils
     {
         /** If the rotation angle is an approximate multiple of pi/2,
             force fSin/fCos to -1/0/1, to maintain orthogonality (which
@@ -63,7 +65,7 @@ namespace basegfx
 
         /** Tooling methods for faster completely combined matrix creation
             when scale, shearX, rotation and translation needs to be done in
-            exactly that order. It's faster since it direcly calculates
+            exactly that order. It's faster since it directly calculates
             each matrix value based on a symbolic calculation of the three
             matrix multiplications.
             Inline versions for parameters as tuples added, too.
@@ -126,18 +128,34 @@ namespace basegfx
                 fRadiant);
         }
 
+        /// special for creating a mapping for a Range rotated around it's center
+        /// while keeping AspectRatio unchanged and staying inside the given Range
+        /// by optimally using the available space (no overlap or outside allowed)
+        BASEGFX_DLLPUBLIC B2DHomMatrix createRotateAroundCenterKeepAspectRatioStayInsideRange(
+            const basegfx::B2DRange& rTargetRange,
+            double fRotate);
+
         /// special for the case to map from source range to target range
         BASEGFX_DLLPUBLIC B2DHomMatrix createSourceRangeTargetRangeTransform(
             const B2DRange& rSourceRange,
             const B2DRange& rTargetRange);
 
-    } // end of namespace tools
+        /// create based on given CoordinateSystem which is defined by origin and x/yaxis
+        BASEGFX_DLLPUBLIC B2DHomMatrix createCoordinateSystemTransform(
+            const B2DPoint& rOrigin,
+            const B2DVector& rX,
+            const B2DVector& rY);
+
+        /// get column vector from B2dHomMatrix, e.g. to extract coordinate system origin and x/yaxis
+        BASEGFX_DLLPUBLIC B2DTuple getColumn(const B2DHomMatrix& rMatrix, sal_uInt16 nCol);
+
+    } // end of namespace utils
 } // end of namespace basegfx
 
 
 namespace basegfx
 {
-    namespace tools
+    namespace utils
     {
         class BASEGFX_DLLPUBLIC B2DHomMatrixBufferedDecompose
         {
@@ -169,13 +187,13 @@ namespace basegfx
             double getRotate() const { return mfRotate; }
             double getShearX() const { return mfShearX; }
         };
-    } // end of namespace tools
+    } // end of namespace utils
 } // end of namespace basegfx
 
 
 namespace basegfx
 {
-    namespace tools
+    namespace utils
     {
         class BASEGFX_DLLPUBLIC B2DHomMatrixBufferedOnDemandDecompose
         {
@@ -186,7 +204,6 @@ namespace basegfx
             double                 mfRotate;
             double                 mfShearX;
 
-            // bitfield
             bool                   mbDecomposed : 1;
 
             void impCheckDecompose()
@@ -214,8 +231,9 @@ namespace basegfx
             const B2DVector& getScale() const { const_cast< B2DHomMatrixBufferedOnDemandDecompose* >(this)->impCheckDecompose(); return maScale; }
             const B2DVector& getTranslate() const { const_cast< B2DHomMatrixBufferedOnDemandDecompose* >(this)->impCheckDecompose(); return maTranslate; }
             double getRotate() const { const_cast< B2DHomMatrixBufferedOnDemandDecompose* >(this)->impCheckDecompose(); return mfRotate; }
+            double getShearX() const { const_cast< B2DHomMatrixBufferedOnDemandDecompose* >(this)->impCheckDecompose(); return mfShearX; }
         };
-    } // end of namespace tools
+    } // end of namespace utils
 
 } // end of namespace basegfx
 

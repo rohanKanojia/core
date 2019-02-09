@@ -23,7 +23,7 @@
 #include <com/sun/star/lang/DisposedException.hpp>
 
 #include <cppuhelper/weak.hxx>
-#include <cppuhelper/interfacecontainer.hxx>
+#include <cppuhelper/interfacecontainer.h>
 
 
 namespace comphelper
@@ -40,10 +40,6 @@ namespace comphelper
         {
             if ( i_broadcastHelper.bDisposed )
                 throw css::lang::DisposedException( OUString(), &i_component );
-        }
-
-        ~ComponentGuard()
-        {
         }
 
         void clear()    { m_aGuard.clear(); }

@@ -20,6 +20,7 @@
 #include <tools/diagnose_ex.h>
 
 #include <osl/diagnose.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/awt/Rectangle.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/awt/FontWeight.hpp>
@@ -28,6 +29,7 @@
 
 #include <vcl/metaact.hxx>
 #include <vcl/gdimtf.hxx>
+#include <vcl/graph.hxx>
 #include <vcl/wrkwin.hxx>
 
 #include <basegfx/numeric/ftools.hxx>
@@ -39,14 +41,12 @@
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
 #include <tools/stream.hxx>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/datatransfer/XTransferable.hpp>
 
 #include <comphelper/scopeguard.hxx>
 #include <canvas/canvastools.hxx>
 
-#include <boost/mem_fn.hpp>
 #include <cmath>
 #include <algorithm>
 #include <iterator>
@@ -55,12 +55,12 @@
 
 #include "drawshapesubsetting.hxx"
 #include "drawshape.hxx"
-#include "eventqueue.hxx"
-#include "wakeupevent.hxx"
-#include "subsettableshapemanager.hxx"
+#include <eventqueue.hxx>
+#include <wakeupevent.hxx>
+#include <subsettableshapemanager.hxx>
 #include "intrinsicanimationactivity.hxx"
-#include "slideshowexceptions.hxx"
-#include "tools.hxx"
+#include <slideshowexceptions.hxx>
+#include <tools.hxx>
 #include "gdimtftools.hxx"
 #include "drawinglayeranimation.hxx"
 
@@ -78,17 +78,18 @@ namespace slideshow
         // Private methods
 
 
-        GDIMetaFileSharedPtr DrawShape::forceScrollTextMetaFile()
+        GDIMetaFileSharedPtr const & DrawShape::forceScrollTextMetaFile()
         {
             if ((mnCurrMtfLoadFlags & MTF_LOAD_SCROLL_TEXT_MTF) != MTF_LOAD_SCROLL_TEXT_MTF)
             {
                 // reload with added flags:
-                mpCurrMtf.reset( new GDIMetaFile );
                 mnCurrMtfLoadFlags |= MTF_LOAD_SCROLL_TEXT_MTF;
-                getMetaFile(
-                    uno::Reference<lang::XComponent>(mxShape, uno::UNO_QUERY),
-                    mxPage, *mpCurrMtf, mnCurrMtfLoadFlags,
-                    mxComponentContext );
+                mpCurrMtf = getMetaFile(uno::Reference<lang::XComponent>(mxShape, uno::UNO_QUERY),
+                                        mxPage, mnCurrMtfLoadFlags,
+                                        mxComponentContext);
+
+                if (!mpCurrMtf)
+                    mpCurrMtf.reset( new GDIMetaFile );
 
                 // TODO(F1): Currently, the scroll metafile will
                 // never contain any verbose text comments. Thus,
@@ -144,7 +145,7 @@ namespace slideshow
                 mnPriority);
         }
 
-        bool DrawShape::implRender( int nUpdateFlags ) const
+        bool DrawShape::implRender( UpdateFlags nUpdateFlags ) const
         {
             SAL_INFO( "slideshow", "::presentation::internal::DrawShape::implRender()" );
             SAL_INFO( "slideshow", "::presentation::internal::DrawShape: 0x" << std::hex << this );
@@ -188,15 +189,15 @@ namespace slideshow
             return true;
         }
 
-        int DrawShape::getUpdateFlags() const
+        UpdateFlags DrawShape::getUpdateFlags() const
         {
             // default: update nothing, unless ShapeAttributeStack
             // tells us below, or if the attribute layer was revoked
-            int nUpdateFlags(ViewShape::NONE);
+            UpdateFlags nUpdateFlags(UpdateFlags::NONE);
 
             // possibly the whole shape content changed
             if( mbAttributeLayerRevoked )
-                nUpdateFlags = ViewShape::CONTENT;
+                nUpdateFlags = UpdateFlags::Content;
 
 
             // determine what has to be updated
@@ -216,30 +217,30 @@ namespace slideshow
                         // content change because when the visibility
                         // changes then usually a sprite is shown or hidden
                         // and the background under has to be painted once.
-                        nUpdateFlags |= ViewShape::CONTENT;
+                        nUpdateFlags |= UpdateFlags::Content;
                     }
 
                     // TODO(P1): This can be done without conditional branching.
                     // See HAKMEM.
                     if( mpAttributeLayer->getPositionState() != mnAttributePositionState )
                     {
-                        nUpdateFlags |= ViewShape::POSITION;
+                        nUpdateFlags |= UpdateFlags::Position;
                     }
                     if( mpAttributeLayer->getAlphaState() != mnAttributeAlphaState )
                     {
-                        nUpdateFlags |= ViewShape::ALPHA;
+                        nUpdateFlags |= UpdateFlags::Alpha;
                     }
                     if( mpAttributeLayer->getClipState() != mnAttributeClipState )
                     {
-                        nUpdateFlags |= ViewShape::CLIP;
+                        nUpdateFlags |= UpdateFlags::Clip;
                     }
                     if( mpAttributeLayer->getTransformationState() != mnAttributeTransformationState )
                     {
-                        nUpdateFlags |= ViewShape::TRANSFORMATION;
+                        nUpdateFlags |= UpdateFlags::Transformation;
                     }
                     if( mpAttributeLayer->getContentState() != mnAttributeContentState )
                     {
-                        nUpdateFlags |= ViewShape::CONTENT;
+                        nUpdateFlags |= UpdateFlags::Content;
                     }
                 }
             }
@@ -383,7 +384,6 @@ namespace slideshow
             maSubsetting(),
             mnIsAnimatedCount(0),
             mnAnimationLoopCount(0),
-            meCycleMode(CYCLE_LOOP),
             mbIsVisible( true ),
             mbForceUpdate( false ),
             mbAttributeLayerRevoked( false ),
@@ -403,13 +403,12 @@ namespace slideshow
 
             // must NOT be called from within initializer list, uses
             // state from mnCurrMtfLoadFlags!
-            mpCurrMtf.reset( new GDIMetaFile );
-            getMetaFile(
-                uno::Reference<lang::XComponent>(xShape, uno::UNO_QUERY),
-                xContainingPage, *mpCurrMtf, mnCurrMtfLoadFlags,
-                mxComponentContext );
-            ENSURE_OR_THROW( mpCurrMtf,
-                              "DrawShape::DrawShape(): Invalid metafile" );
+            mpCurrMtf = getMetaFile(uno::Reference<lang::XComponent>(xShape, uno::UNO_QUERY),
+                                    xContainingPage, mnCurrMtfLoadFlags,
+                                    mxComponentContext );
+            if (!mpCurrMtf)
+                mpCurrMtf.reset(new GDIMetaFile);
+
             maSubsetting.reset( mpCurrMtf );
 
             prepareHyperlinkIndices();
@@ -444,7 +443,6 @@ namespace slideshow
             maSubsetting(),
             mnIsAnimatedCount(0),
             mnAnimationLoopCount(0),
-            meCycleMode(CYCLE_LOOP),
             mbIsVisible( true ),
             mbForceUpdate( false ),
             mbAttributeLayerRevoked( false ),
@@ -455,7 +453,6 @@ namespace slideshow
 
             getAnimationFromGraphic( maAnimationFrames,
                                      mnAnimationLoopCount,
-                                     meCycleMode,
                                      rGraphic );
 
             ENSURE_OR_THROW( !maAnimationFrames.empty() &&
@@ -496,7 +493,6 @@ namespace slideshow
             maSubsetting( rTreeNode, mpCurrMtf ),
             mnIsAnimatedCount(0),
             mnAnimationLoopCount(0),
-            meCycleMode(CYCLE_LOOP),
             mbIsVisible( rSrc.mbIsVisible ),
             mbForceUpdate( false ),
             mbAttributeLayerRevoked( false ),
@@ -532,7 +528,7 @@ namespace slideshow
             {
                 OSL_ASSERT( pShape->maAnimationFrames.empty() );
                 if( pShape->getNumberOfTreeNodes(
-                        DocTreeNode::NODETYPE_LOGICAL_PARAGRAPH) > 0 )
+                        DocTreeNode::NodeType::LogicalParagraph) > 0 )
                 {
                     pShape->mpIntrinsicAnimationActivity =
                         createDrawingLayerAnimActivity(
@@ -569,7 +565,7 @@ namespace slideshow
                     pShape->maAnimationFrames.begin(),
                     pShape->maAnimationFrames.end(),
                     std::back_insert_iterator< std::vector<double> >( aTimeout ),
-                    boost::mem_fn(&MtfAnimationFrame::getDuration) );
+                    std::mem_fn(&MtfAnimationFrame::getDuration) );
 
                 WakeupEventSharedPtr pWakeupEvent(
                     new WakeupEvent( rContext.mrEventQueue.getTimer(),
@@ -581,8 +577,7 @@ namespace slideshow
                         pShape,
                         pWakeupEvent,
                         aTimeout,
-                        pShape->mnAnimationLoopCount,
-                        pShape->meCycleMode);
+                        pShape->mnAnimationLoopCount);
 
                 pWakeupEvent->setActivity( pActivity );
                 pShape->mpIntrinsicAnimationActivity = pActivity;
@@ -604,9 +599,9 @@ namespace slideshow
                 if( pActivity )
                     pActivity->dispose();
             }
-            catch (uno::Exception &)
+            catch (uno::Exception const &)
             {
-                SAL_WARN( "slideshow", "" << comphelper::anyToString(cppu::getCaughtException() ) );
+                DBG_UNHANDLED_EXCEPTION("slideshow");
             }
         }
 
@@ -645,7 +640,7 @@ namespace slideshow
             {
                 pNewShape->update( mpCurrMtf,
                                    getViewRenderArgs(),
-                                   ViewShape::FORCE,
+                                   UpdateFlags::Force,
                                    isVisible() );
             }
         }
@@ -701,15 +696,15 @@ namespace slideshow
             // force redraw. Have to also pass on the update flags,
             // because e.g. content update (regeneration of the
             // metafile renderer) is normally not performed. A simple
-            // ViewShape::FORCE would only paint the metafile in its
+            // UpdateFlags::Force would only paint the metafile in its
             // old state.
-            return implRender( ViewShape::FORCE | getUpdateFlags() );
+            return implRender( UpdateFlags::Force | getUpdateFlags() );
         }
 
         bool DrawShape::isContentChanged() const
         {
             return mbForceUpdate ||
-                getUpdateFlags() != ViewShape::NONE;
+                getUpdateFlags() != UpdateFlags::NONE;
         }
 
 
@@ -876,17 +871,15 @@ namespace slideshow
                             maHyperlinkIndices.pop_back();
                             maHyperlinkRegions.pop_back();
                         }
-                        maHyperlinkIndices.push_back(
-                            HyperlinkIndexPair( nIndex + 1,
-                                                -1 /* to be filled below */ ) );
-                        maHyperlinkRegions.push_back(
-                            HyperlinkRegion(
+                        maHyperlinkIndices.emplace_back( nIndex + 1,
+                                                -1 /* to be filled below */ );
+                        maHyperlinkRegions.emplace_back(
                                 basegfx::B2DRectangle(),
                                 OUString(
                                     reinterpret_cast<sal_Unicode const*>(
                                         pAct->GetData()),
                                     pAct->GetDataSize() / sizeof(sal_Unicode) )
-                                ) );
+                                );
                     }
                     else if (pAct->GetComment().equalsIgnoreAsciiCase("FIELD_SEQ_END") &&
                              // pending end is expected:
@@ -984,12 +977,11 @@ namespace slideshow
             for( const auto& cp : maHyperlinkRegions )
             {
                 basegfx::B2DRange const& relRegion( cp.first );
-                aTranslatedRegions.push_back(
-                    std::make_pair(
+                aTranslatedRegions.emplace_back(
                         basegfx::B2DRange(
                             relRegion.getMinimum() + rOffset,
                             relRegion.getMaximum() + rOffset),
-                        cp.second) );
+                        cp.second );
             }
 
             return aTranslatedRegions;

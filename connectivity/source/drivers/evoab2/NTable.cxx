@@ -35,17 +35,17 @@ using namespace connectivity::evoab;
 
 OEvoabTable::OEvoabTable( sdbcx::OCollection* _pTables,
                 OEvoabConnection* _pConnection,
-                const OUString& _Name,
-                const OUString& _Type,
-                const OUString& _Description ,
-                const OUString& _SchemaName,
-                const OUString& _CatalogName
+                const OUString& Name,
+                const OUString& Type,
+                const OUString& Description ,
+                const OUString& SchemaName,
+                const OUString& CatalogName
                 ) : OEvoabTable_TYPEDEF(_pTables,true,
-                                  _Name,
-                                  _Type,
-                                  _Description,
-                                  _SchemaName,
-                                  _CatalogName),
+                                  Name,
+                                  Type,
+                                  Description,
+                                  SchemaName,
+                                  CatalogName),
                     m_pConnection(_pConnection)
 {
     construct();
@@ -53,7 +53,7 @@ OEvoabTable::OEvoabTable( sdbcx::OCollection* _pTables,
 
 void OEvoabTable::refreshColumns()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
 
     if (!isNew())
     {
@@ -67,10 +67,10 @@ void OEvoabTable::refreshColumns()
                 aVector.push_back(xRow->getString(4));
         }
     }
-    if (m_pColumns)
-        m_pColumns->reFill(aVector);
+    if (m_xColumns)
+        m_xColumns->reFill(aVector);
     else
-        m_pColumns  = new OEvoabColumns(this,m_aMutex,aVector);
+        m_xColumns = new OEvoabColumns(this,m_aMutex,aVector);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

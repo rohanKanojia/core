@@ -17,16 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 #include "vbacomments.hxx"
+#include "vbacomment.hxx"
 
+#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/sheet/XSheetAnnotation.hpp>
+#include <com/sun/star/table/XCellRange.hpp>
 
 #include "vbaglobals.hxx"
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
 
-uno::Any AnnotationToComment( const uno::Any& aSource, uno::Reference< uno::XComponentContext > & xContext, const uno::Reference< frame::XModel >& xModel )
+static uno::Any AnnotationToComment( const uno::Any& aSource, const uno::Reference< uno::XComponentContext > & xContext, const uno::Reference< frame::XModel >& xModel )
 {
     uno::Reference< sheet::XSheetAnnotation > xAnno( aSource, uno::UNO_QUERY_THROW );
     uno::Reference< container::XChild > xChild( xAnno, uno::UNO_QUERY_THROW );
@@ -41,16 +44,17 @@ class CommentEnumeration : public EnumerationHelperImpl
 {
     css::uno::Reference< css::frame::XModel > mxModel;
 public:
+    /// @throws uno::RuntimeException
     CommentEnumeration(
             const uno::Reference< XHelperInterface >& xParent,
             const uno::Reference< uno::XComponentContext >& xContext,
             const uno::Reference< container::XEnumeration >& xEnumeration,
-            const uno::Reference< frame::XModel >& xModel ) throw ( uno::RuntimeException ) :
+            const uno::Reference< frame::XModel >& xModel ) :
         EnumerationHelperImpl( xParent, xContext, xEnumeration ),
         mxModel( xModel, uno::UNO_SET_THROW )
     {}
 
-    virtual uno::Any SAL_CALL nextElement() throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual uno::Any SAL_CALL nextElement() override
     {
         return AnnotationToComment( m_xEnumeration->nextElement(), m_xContext, mxModel );
     }
@@ -70,7 +74,7 @@ ScVbaComments::ScVbaComments(
 // public helper functions
 
 uno::Reference< container::XEnumeration >
-ScVbaComments::createEnumeration() throw (uno::RuntimeException)
+ScVbaComments::createEnumeration()
 {
     uno::Reference< container::XEnumerationAccess > xEnumAccess( m_xIndexAccess, uno::UNO_QUERY_THROW );
     return new CommentEnumeration( mxParent, mxContext, xEnumAccess->createEnumeration(), mxModel );
@@ -83,7 +87,7 @@ ScVbaComments::createCollectionObject( const css::uno::Any& aSource )
 }
 
 uno::Type
-ScVbaComments::getElementType() throw (uno::RuntimeException)
+ScVbaComments::getElementType()
 {
     return cppu::UnoType<excel::XComment>::get();
 }
@@ -97,12 +101,10 @@ ScVbaComments::getServiceImplName()
 css::uno::Sequence<OUString>
 ScVbaComments::getServiceNames()
 {
-    static uno::Sequence< OUString > sNames;
-    if ( sNames.getLength() == 0 )
+    static uno::Sequence< OUString > const sNames
     {
-        sNames.realloc( 1 );
-        sNames[0] = "ooo.vba.excel.Comments";
-    }
+        "ooo.vba.excel.Comments"
+    };
     return sNames;
 }
 

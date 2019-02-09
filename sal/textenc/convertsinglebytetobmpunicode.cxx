@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstddef>
 
-#include "rtl/textcvt.h"
-#include "sal/types.h"
+#include <rtl/textcvt.h>
+#include <sal/types.h>
 
 #include "context.hxx"
 #include "converter.hxx"
@@ -42,7 +42,6 @@ sal_Size rtl_textenc_convertSingleByteToBmpUnicode(
     sal_Unicode * destBufPtr = destBuf;
     sal_Unicode * destBufEnd = destBuf + destChars;
     for (; converted < srcBytes; ++converted) {
-        bool undefined = true;
         sal_Char b = *srcBuf++;
         sal_Unicode c = map[static_cast< sal_uInt8 >(b)];
         if (c == 0xFFFF) {
@@ -55,7 +54,7 @@ sal_Size rtl_textenc_convertSingleByteToBmpUnicode(
         continue;
     bad_input:
         switch (sal::detail::textenc::handleBadInputTextToUnicodeConversion(
-                    undefined, false, b, flags, &destBufPtr, destBufEnd,
+                    true/*undefined*/, false, b, flags, &destBufPtr, destBufEnd,
                     &infoFlags))
         {
         case sal::detail::textenc::BAD_INPUT_STOP:
@@ -70,7 +69,7 @@ sal_Size rtl_textenc_convertSingleByteToBmpUnicode(
         break;
     no_output:
         --srcBuf;
-        infoFlags |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+        infoFlags |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
         break;
     }
     if (info != nullptr) {
@@ -126,7 +125,8 @@ sal_Size rtl_textenc_convertBmpUnicodeToSingleByte(
         for (std::size_t i = 0; i < entries; ++i) {
             if (c < ranges[i].unicode) {
                 break;
-            } else if (c <= sal::static_int_cast< sal_uInt32 >(
+            }
+            if (c <= sal::static_int_cast< sal_uInt32 >(
                            ranges[i].unicode + ranges[i].range))
             {
                 if (destBufEnd - destBufPtr < 1) {

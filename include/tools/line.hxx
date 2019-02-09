@@ -25,14 +25,13 @@
 namespace tools
 {
 
-class TOOLS_DLLPUBLIC Line
+class SAL_WARN_UNUSED TOOLS_DLLPUBLIC Line
 {
 private:
     Point           maStart;
     Point           maEnd;
 
 public:
-                    Line() {};
                     Line( const Point& rStartPt, const Point& rEndPt ) : maStart( rStartPt ), maEnd( rEndPt ) {}
 
     void            SetStart( const Point& rStartPt ) { maStart = rStartPt; }
@@ -47,7 +46,7 @@ public:
     bool            Intersection( const tools::Line& rLine, Point& rIntersection ) const;
 
     double          GetDistance( const double& rPtX, const double& rPtY ) const;
-    double          GetDistance( const Point& rPoint ) const { return( GetDistance( rPoint.X(), rPoint.Y() ) ); }
+    double          GetDistance( const Point& rPoint ) const { return GetDistance( rPoint.X(), rPoint.Y() ); }
 };
 
 } // namespace tools

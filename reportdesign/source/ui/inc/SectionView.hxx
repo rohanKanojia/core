@@ -42,14 +42,18 @@ private:
     void operator =(const OSectionView&) = delete;
 public:
 
-    OSectionView( SdrModel* pModel, OReportSection* _pSectionWindow, OReportWindow* pEditor );
-    virtual ~OSectionView();
+    OSectionView(
+        SdrModel& rSdrModel,
+        OReportSection* _pSectionWindow,
+        OReportWindow* pEditor);
+
+    virtual ~OSectionView() override;
 
     virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
     virtual void MarkListHasChanged() override;
-    virtual void MakeVisible( const Rectangle& rRect, vcl::Window& rWin ) override;
+    virtual void MakeVisible( const tools::Rectangle& rRect, vcl::Window& rWin ) override;
 
-    inline OReportSection*  getReportSection() const { return m_pSectionWindow; }
+    OReportSection*  getReportSection() const { return m_pSectionWindow; }
 
     // switch the marked objects to the given layer.
     void SetMarkedToLayer( SdrLayerID nLayerNo );
@@ -59,7 +63,7 @@ public:
 
     /* returns the common layer id of the marked objects, otherwise -1 will be returned.
     */
-    short GetLayerIdOfMarkedObjects() const;
+    SdrLayerID GetLayerIdOfMarkedObjects() const;
 
     // returns true if objects at Drag & Drop is resize not move
     bool IsDragResize() const;

@@ -7,20 +7,27 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "opengl/win/WinDeviceInfo.hxx"
+#include <opengl/win/WinDeviceInfo.hxx>
 
-#include "opengl/win/blocklist_parser.hxx"
+#include <opengl/win/blocklist_parser.hxx>
 #include <config_folders.h>
 
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
+#include <objbase.h>
 #include <setupapi.h>
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 
 #include <osl/file.hxx>
 #include <rtl/bootstrap.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <tools/stream.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
 #include <desktop/crashreport.hxx>
 
@@ -36,9 +43,8 @@ namespace {
  * Beware of the implicit trailing '\0' when using this with string constants.
 */
 template<typename T, size_t N>
-size_t ArrayLength(T (&aArr)[N])
+size_t ArrayLength(T (&)[N])
 {
-    (void) aArr;
     return N;
 }
 
@@ -67,7 +73,7 @@ bool GetKeyValue(const WCHAR* keyLocation, const WCHAR* keyName, OUString& destS
                 // We only use this for vram size
                 dwcbData = sizeof(dValue);
                 result = RegQueryValueExW(key, keyName, nullptr, &resultType,
-                        (LPBYTE)&dValue, &dwcbData);
+                        reinterpret_cast<LPBYTE>(&dValue), &dwcbData);
                 if (result == ERROR_SUCCESS && resultType == REG_DWORD)
                 {
                     dValue = dValue / 1024 / 1024;
@@ -86,7 +92,7 @@ bool GetKeyValue(const WCHAR* keyLocation, const WCHAR* keyName, OUString& destS
                 dwcbData = sizeof(wCharValue);
 
                 result = RegQueryValueExW(key, keyName, nullptr, &resultType,
-                        (LPBYTE)wCharValue, &dwcbData);
+                        reinterpret_cast<LPBYTE>(wCharValue), &dwcbData);
                 if (result == ERROR_SUCCESS && resultType == REG_MULTI_SZ)
                 {
                     // This bit here could probably be cleaner.
@@ -113,7 +119,7 @@ bool GetKeyValue(const WCHAR* keyLocation, const WCHAR* keyName, OUString& destS
                     wCharValue[strLen-1] = '\0';
 
                     if (isValid)
-                        destString = OUString(wCharValue);
+                        destString = OUString(o3tl::toU(wCharValue));
 
                 }
                 else
@@ -146,14 +152,14 @@ uint32_t ParseIDFromDeviceID(const OUString &key, const char *prefix, int length
 // OS version in 16.16 major/minor form
 // based on http://msdn.microsoft.com/en-us/library/ms724834(VS.85).aspx
 enum {
-    kWindowsUnknown = 0,
-    kWindowsXP =         0x00050001,
+    kWindowsUnknown    = 0,
+    kWindowsXP         = 0x00050001,
     kWindowsServer2003 = 0x00050002,
-    kWindowsVista =      0x00060000,
-    kWindows7 =          0x00060001,
-    kWindows8 =          0x00060002,
-    kWindows8_1 =        0x00060003,
-    kWindows10 =         0x000A0000  // Major 10 Minor 0
+    kWindowsVista      = 0x00060000,
+    kWindows7          = 0x00060001,
+    kWindows8          = 0x00060002,
+    kWindows8_1        = 0x00060003,
+    kWindows10         = 0x000A0000  // Major 10 Minor 0
 };
 
 
@@ -184,27 +190,41 @@ wgl::OperatingSystem WindowsVersionToOperatingSystem(int32_t aWindowsVersion)
 
 int32_t WindowsOSVersion()
 {
-    static int32_t winVersion = kWindowsUnknown;
-
-    OSVERSIONINFO vinfo;
-
-    if (winVersion == kWindowsUnknown)
+    static int32_t winVersion = [&]()
     {
-        vinfo.dwOSVersionInfoSize = sizeof (vinfo);
-#pragma warning(push)
-#pragma warning(disable:4996)
-        SAL_WNODEPRECATED_DECLARATIONS_PUSH
-        if (!GetVersionEx(&vinfo))
-        SAL_WNODEPRECATED_DECLARATIONS_POP
+        // GetVersion(Ex) and VersionHelpers (based on VerifyVersionInfo) API are
+        // subject to manifest-based behavior since Windows 8.1, so give wrong results.
+        // Another approach would be to use NetWkstaGetInfo, but that has some small
+        // reported delays (some milliseconds), and might get slower in domains with
+        // poor network connections.
+        // So go with a solution described at https://msdn.microsoft.com/en-us/library/ms724429
+        HINSTANCE hLibrary = LoadLibraryW(L"kernel32.dll");
+        if (hLibrary != nullptr)
         {
-#pragma warning(pop)
-            winVersion = kWindowsUnknown;
+            wchar_t szPath[MAX_PATH];
+            DWORD dwCount = GetModuleFileNameW(hLibrary, szPath, SAL_N_ELEMENTS(szPath));
+            FreeLibrary(hLibrary);
+            if (dwCount != 0 && dwCount < SAL_N_ELEMENTS(szPath))
+            {
+                dwCount = GetFileVersionInfoSizeW(szPath, nullptr);
+                if (dwCount != 0)
+                {
+                    std::unique_ptr<char[]> ver(new char[dwCount]);
+                    if (GetFileVersionInfoW(szPath, 0, dwCount, ver.get()) != FALSE)
+                    {
+                        void* pBlock = nullptr;
+                        UINT dwBlockSz = 0;
+                        if (VerQueryValueW(ver.get(), L"\\", &pBlock, &dwBlockSz) != FALSE && dwBlockSz >= sizeof(VS_FIXEDFILEINFO))
+                        {
+                            VS_FIXEDFILEINFO *vinfo = static_cast<VS_FIXEDFILEINFO *>(pBlock);
+                            return int32_t(vinfo->dwProductVersionMS);
+                        }
+                    }
+                }
+            }
         }
-        else
-        {
-            winVersion = int32_t(vinfo.dwMajorVersion << 16) + vinfo.dwMinorVersion;
-        }
-    }
+        return int32_t(kWindowsUnknown);
+    }();
 
     return winVersion;
 }
@@ -401,16 +421,15 @@ private:
 }
 
 bool WinOpenGLDeviceInfo::FindBlocklistedDeviceInList(std::vector<wgl::DriverInfo>& aDeviceInfos,
-                                                      OUString sDriverVersion, OUString sAdapterVendorID,
-                                                      OUString sAdapterDeviceID, uint32_t nWindowsVersion)
+                                                      OUString const & sDriverVersion, OUString const & sAdapterVendorID,
+                                                      OUString const & sAdapterDeviceID, uint32_t nWindowsVersion)
 {
     uint64_t driverVersion;
     wgl::ParseDriverVersion(sDriverVersion, driverVersion);
 
     wgl::OperatingSystem eOS = WindowsVersionToOperatingSystem(nWindowsVersion);
     bool match = false;
-    uint32_t i = 0;
-    for (; i < aDeviceInfos.size(); i++)
+    for (std::vector<wgl::DriverInfo>::size_type i = 0; i < aDeviceInfos.size(); i++)
     {
         if (aDeviceInfos[i].meOperatingSystem != wgl::DRIVER_OS_ALL &&
                 aDeviceInfos[i].meOperatingSystem != eOS)
@@ -509,7 +528,7 @@ OUString getCacheFolder()
     return url;
 }
 
-void writeToLog(SvStream& rStrm, const char* pKey, const OUString rVal)
+void writeToLog(SvStream& rStrm, const char* pKey, const OUString & rVal)
 {
     rStrm.WriteCharPtr(pKey);
     rStrm.WriteCharPtr(": ");
@@ -521,8 +540,10 @@ void writeToLog(SvStream& rStrm, const char* pKey, const OUString rVal)
 
 bool WinOpenGLDeviceInfo::isDeviceBlocked()
 {
-    // CrashReporter::AddKeyAndValue("AdapterVendorId", maAdapterVendorID);
-    // CrashReporter::AddKeyAndValue("AdapterDeviceId", maAdapterDeviceID);
+    CrashReporter::AddKeyValue("OpenGLVendor", maAdapterVendorID);
+    CrashReporter::AddKeyValue("OpenGLDevice", maAdapterDeviceID);
+    CrashReporter::AddKeyValue("OpenGLDriver", maDriverVersion);
+
     SAL_INFO("vcl.opengl", maDriverVersion);
     SAL_INFO("vcl.opengl", maDriverDate);
     SAL_INFO("vcl.opengl", maDeviceID);
@@ -596,13 +617,14 @@ void WinOpenGLDeviceInfo::GetData()
     }
 
     // chop off DEVICE_KEY_PREFIX
-    maDeviceKey = displayDevice.DeviceKey + ArrayLength(DEVICE_KEY_PREFIX)-1;
+    maDeviceKey = o3tl::toU(displayDevice.DeviceKey) + ArrayLength(DEVICE_KEY_PREFIX)-1;
 
-    maDeviceID = displayDevice.DeviceID;
-    maDeviceString = displayDevice.DeviceString;
+    maDeviceID = o3tl::toU(displayDevice.DeviceID);
+    maDeviceString = o3tl::toU(displayDevice.DeviceString);
 
     if (maDeviceID.isEmpty() &&
-            maDeviceString == "RDPUDD Chained DD")
+        (maDeviceString == "RDPDD Chained DD" ||
+         (maDeviceString == "RDPUDD Chained DD")))
     {
         // we need to block RDP as it does not provide OpenGL 2.1+
         mbRDP = true;
@@ -611,7 +633,7 @@ void WinOpenGLDeviceInfo::GetData()
     }
 
     /* create a device information set composed of the current display device */
-    HDEVINFO devinfo = SetupDiGetClassDevsW(nullptr, maDeviceID.getStr(), nullptr,
+    HDEVINFO devinfo = SetupDiGetClassDevsW(nullptr, o3tl::toW(maDeviceID.getStr()), nullptr,
             DIGCF_PRESENT | DIGCF_PROFILE | DIGCF_ALLCLASSES);
 
     if (devinfo != INVALID_HANDLE_VALUE)
@@ -624,7 +646,6 @@ void WinOpenGLDeviceInfo::GetData()
         DWORD memberIndex = 0;
 
         devinfoData.cbSize = sizeof(devinfoData);
-        OUString aDriverKeyPre("System\\CurrentControlSet\\Control\\Class\\");
         /* enumerate device information elements in the device information set */
         while (SetupDiEnumDeviceInfo(devinfo, memberIndex++, &devinfoData))
         {
@@ -633,22 +654,22 @@ void WinOpenGLDeviceInfo::GetData()
                         &devinfoData,
                         SPDRP_DRIVER,
                         nullptr,
-                        (PBYTE)value,
+                        reinterpret_cast<PBYTE>(value),
                         sizeof(value),
                         nullptr))
             {
-                OUString  driverKey(aDriverKeyPre);
-                driverKey += value;
-                result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, driverKey.getStr(), 0, KEY_QUERY_VALUE, &key);
+                OUString  driverKey("System\\CurrentControlSet\\Control\\Class\\");
+                driverKey += o3tl::toU(value);
+                result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, o3tl::toW(driverKey.getStr()), 0, KEY_QUERY_VALUE, &key);
                 if (result == ERROR_SUCCESS)
                 {
                     /* we've found the driver we're looking for */
                     dwcbData = sizeof(value);
                     result = RegQueryValueExW(key, L"DriverVersion", nullptr, nullptr,
-                            (LPBYTE)value, &dwcbData);
+                            reinterpret_cast<LPBYTE>(value), &dwcbData);
                     if (result == ERROR_SUCCESS)
                     {
-                        maDriverVersion = OUString(value);
+                        maDriverVersion = OUString(o3tl::toU(value));
                     }
                     else
                     {
@@ -657,10 +678,10 @@ void WinOpenGLDeviceInfo::GetData()
                     }
                     dwcbData = sizeof(value);
                     result = RegQueryValueExW(key, L"DriverDate", nullptr, nullptr,
-                            (LPBYTE)value, &dwcbData);
+                            reinterpret_cast<LPBYTE>(value), &dwcbData);
                     if (result == ERROR_SUCCESS)
                     {
-                        maDriverDate = value;
+                        maDriverDate = o3tl::toU(value);
                     }
                     else
                     {
@@ -713,7 +734,6 @@ void WinOpenGLDeviceInfo::GetData()
             uint32_t adapterVendorID2;
             uint32_t adapterDeviceID2;
 
-            OUString aDriverKeyPre("System\\CurrentControlSet\\Control\\Class\\");
             /* enumerate device information elements in the device information set */
             while (SetupDiEnumDeviceInfo(devinfo, memberIndex++, &devinfoData))
             {
@@ -722,23 +742,23 @@ void WinOpenGLDeviceInfo::GetData()
                             &devinfoData,
                             SPDRP_DRIVER,
                             nullptr,
-                            (PBYTE)value,
+                            reinterpret_cast<PBYTE>(value),
                             sizeof(value),
                             nullptr))
                 {
-                    OUString driverKey2(aDriverKeyPre);
-                    driverKey2 += value;
-                    result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, driverKey2.getStr(), 0, KEY_QUERY_VALUE, &key);
+                    OUString driverKey2("System\\CurrentControlSet\\Control\\Class\\");
+                    driverKey2 += o3tl::toU(value);
+                    result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, o3tl::toW(driverKey2.getStr()), 0, KEY_QUERY_VALUE, &key);
                     if (result == ERROR_SUCCESS)
                     {
                         dwcbData = sizeof(value);
                         result = RegQueryValueExW(key, L"MatchingDeviceId", nullptr,
-                                nullptr, (LPBYTE)value, &dwcbData);
+                                nullptr, reinterpret_cast<LPBYTE>(value), &dwcbData);
                         if (result != ERROR_SUCCESS)
                         {
                             continue;
                         }
-                        aDeviceID2 = value;
+                        aDeviceID2 = o3tl::toU(value);
                         OUString aAdapterVendorID2String;
                         OUString aAdapterDeviceID2String;
                         adapterVendorID2 = ParseIDFromDeviceID(aDeviceID2, "VEN_", 4);
@@ -754,7 +774,7 @@ void WinOpenGLDeviceInfo::GetData()
 
                         // If this device is missing driver information, it is unlikely to
                         // be a real display adapter.
-                        if (!GetKeyValue(driverKey2.getStr(), L"InstalledDisplayDrivers",
+                        if (!GetKeyValue(o3tl::toW(driverKey2.getStr()), L"InstalledDisplayDrivers",
                                         aAdapterDriver2, REG_MULTI_SZ))
                         {
                             RegCloseKey(key);
@@ -762,36 +782,36 @@ void WinOpenGLDeviceInfo::GetData()
                         }
                         dwcbData = sizeof(value);
                         result = RegQueryValueExW(key, L"DriverVersion", nullptr, nullptr,
-                                (LPBYTE)value, &dwcbData);
+                                reinterpret_cast<LPBYTE>(value), &dwcbData);
                         if (result != ERROR_SUCCESS)
                         {
                             RegCloseKey(key);
                             continue;
                         }
-                        aDriverVersion2 = value;
+                        aDriverVersion2 = o3tl::toU(value);
                         dwcbData = sizeof(value);
                         result = RegQueryValueExW(key, L"DriverDate", nullptr, nullptr,
-                                (LPBYTE)value, &dwcbData);
+                                reinterpret_cast<LPBYTE>(value), &dwcbData);
                         if (result != ERROR_SUCCESS)
                         {
                             RegCloseKey(key);
                             continue;
                         }
-                        aDriverDate2 = value;
+                        aDriverDate2 = o3tl::toU(value);
                         dwcbData = sizeof(value);
                         result = RegQueryValueExW(key, L"Device Description", nullptr,
-                                nullptr, (LPBYTE)value, &dwcbData);
+                                nullptr, reinterpret_cast<LPBYTE>(value), &dwcbData);
                         if (result != ERROR_SUCCESS)
                         {
                             dwcbData = sizeof(value);
                             result = RegQueryValueExW(key, L"DriverDesc", nullptr, nullptr,
-                                    (LPBYTE)value, &dwcbData);
+                                    reinterpret_cast<LPBYTE>(value), &dwcbData);
                         }
                         RegCloseKey(key);
                         if (result == ERROR_SUCCESS)
                         {
                             mbHasDualGPU = true;
-                            maDeviceString2 = value;
+                            maDeviceString2 = o3tl::toU(value);
                             maDeviceID2 = aDeviceID2;
                             maDeviceKey2 = driverKey2;
                             maDriverVersion2 = aDriverVersion2;
@@ -810,12 +830,6 @@ void WinOpenGLDeviceInfo::GetData()
     }
 }
 
-// Macro for assigning a device vendor id to a string.
-#define DECLARE_VENDOR_ID(name, deviceId) \
-    case name: \
-        *mpDeviceVendors[id] = OUString(deviceId); \
-break;
-
 OUString WinOpenGLDeviceInfo::GetDeviceVendor(wgl::DeviceVendor id)
 {
     assert(id >= 0 && id < wgl::DeviceVendorMax);
@@ -827,14 +841,26 @@ OUString WinOpenGLDeviceInfo::GetDeviceVendor(wgl::DeviceVendor id)
 
     switch (id)
     {
-        DECLARE_VENDOR_ID(wgl::VendorAll, "");
-        DECLARE_VENDOR_ID(wgl::VendorIntel, "0x8086");
-        DECLARE_VENDOR_ID(wgl::VendorNVIDIA, "0x10de");
-        DECLARE_VENDOR_ID(wgl::VendorAMD, "0x1022");
-        DECLARE_VENDOR_ID(wgl::VendorATI, "0x1002");
-        DECLARE_VENDOR_ID(wgl::VendorMicrosoft, "0x1414");
-        // Suppress a warning.
-        DECLARE_VENDOR_ID(wgl::DeviceVendorMax, "");
+        case wgl::VendorAll:
+            *mpDeviceVendors[id] = "";
+        break;
+        case wgl::VendorIntel:
+            *mpDeviceVendors[id] = "0x8086";
+        break;
+        case wgl::VendorNVIDIA:
+            *mpDeviceVendors[id] = "0x10de";
+        break;
+        case wgl::VendorAMD:
+            *mpDeviceVendors[id] = "0x1022";
+        break;
+        case wgl::VendorATI:
+            *mpDeviceVendors[id] = "0x1002";
+        break;
+        case wgl::VendorMicrosoft:
+            *mpDeviceVendors[id] = "0x1414";
+        break;
+        case wgl::DeviceVendorMax: // Suppress a warning.
+        break;
     }
 
     return *mpDeviceVendors[id];
@@ -863,7 +889,7 @@ void WinOpenGLDeviceInfo::FillBlacklist()
     }
     catch (...)
     {
-        SAL_WARN("vcl.opengl.win", "error parsing blacklist");
+        SAL_WARN("vcl.opengl", "error parsing blacklist");
         maDriverInfo.clear();
     }
 }

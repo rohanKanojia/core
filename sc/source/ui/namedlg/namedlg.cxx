@@ -17,25 +17,26 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "global.hxx"
-#include "reffact.hxx"
-#include "document.hxx"
-#include "docfunc.hxx"
-#include "scresid.hxx"
-#include "globstr.hrc"
-#include "namedlg.hxx"
-#include "viewdata.hxx"
-#include "tabvwsh.hxx"
+#include <memory>
+#include <global.hxx>
+#include <reffact.hxx>
+#include <compiler.hxx>
+#include <document.hxx>
+#include <docfunc.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <namedlg.hxx>
+#include <viewdata.hxx>
+#include <tabvwsh.hxx>
 
-#include "globalnames.hxx"
-#include "tokenarray.hxx"
+#include <globalnames.hxx>
+#include <tokenarray.hxx>
 
 #include <sfx2/app.hxx>
 
-#include <vcl/msgbox.hxx>
 #include <vcl/settings.hxx>
-
-#include <o3tl/make_unique.hxx>
+#include <formula/errorcodes.hxx>
+#include <unotools/charclass.hxx>
 
 #include <map>
 
@@ -47,10 +48,10 @@ ScNameDlg::ScNameDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent
         std::map<OUString, std::unique_ptr<ScRangeName>> *const pRangeMap)
     : ScAnyRefDlg(pB, pCW, pParent, "ManageNamesDialog", "modules/scalc/ui/managenamesdialog.ui")
 
-    , maGlobalNameStr(ScGlobal::GetRscString(STR_GLOBAL_SCOPE))
-    , maErrInvalidNameStr(ScGlobal::GetRscString(STR_ERR_NAME_INVALID))
-    , maErrNameInUse(ScGlobal::GetRscString(STR_ERR_NAME_EXISTS))
-    , maStrMultiSelect(ScGlobal::GetRscString(STR_MULTI_SELECT))
+    , maGlobalNameStr(ScResId(STR_GLOBAL_SCOPE))
+    , maErrInvalidNameStr(ScResId(STR_ERR_NAME_INVALID))
+    , maErrNameInUse(ScResId(STR_ERR_NAME_EXISTS))
+    , maStrMultiSelect(ScResId(STR_MULTI_SELECT))
 
     , mpViewData(ptrViewData)
     , mpDoc(ptrViewData->GetDocument())
@@ -81,12 +82,9 @@ ScNameDlg::ScNameDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent
     {
         std::map<OUString, ScRangeName*> aRangeMap;
         mpDoc->GetRangeNameMap(aRangeMap);
-        std::map<OUString, ScRangeName*>::iterator itr = aRangeMap.begin(), itrEnd = aRangeMap.end();
-        for (; itr != itrEnd; ++itr)
+        for (const auto& [aTemp, pRangeName] : aRangeMap)
         {
-            OUString aTemp(itr->first);
-            m_RangeMap.insert(std::make_pair(aTemp,
-                    o3tl::make_unique<ScRangeName>(*itr->second)));
+            m_RangeMap.insert(std::make_pair(aTemp, std::make_unique<ScRangeName>(*pRangeName)));
         }
     }
     else
@@ -122,9 +120,7 @@ void ScNameDlg::dispose()
 
 void ScNameDlg::Init()
 {
-    ScRange aRange;
-
-    OSL_ENSURE( mpViewData && mpDoc, "ViewData oder Document nicht gefunden!" );
+    OSL_ENSURE( mpViewData && mpDoc, "ViewData or Document not found!" );
 
     //init UI
     m_pFtInfo->SetStyle(WB_VCENTER);
@@ -241,7 +237,7 @@ void ScNameDlg::SetActive()
     RefInputDone();
 }
 
-void ScNameDlg::UpdateChecks(ScRangeData* pData)
+void ScNameDlg::UpdateChecks(const ScRangeData* pData)
 {
     // remove handlers, we only want the handlers to process
     // user input and not when we are syncing the controls  with our internal
@@ -269,7 +265,7 @@ void ScNameDlg::UpdateChecks(ScRangeData* pData)
 
 bool ScNameDlg::IsNameValid()
 {
-    OUString aScope = m_pLbScope->GetSelectEntry();
+    OUString aScope = m_pLbScope->GetSelectedEntry();
     OUString aName = m_pEdName->GetText();
     aName = aName.trim();
 
@@ -278,7 +274,7 @@ bool ScNameDlg::IsNameValid()
 
     ScRangeName* pRangeName = GetRangeName( aScope );
 
-    if (!ScRangeData::IsNameValid( aName, mpDoc ))
+    if (ScRangeData::IsNameValid( aName, mpDoc ) != ScRangeData::NAME_VALID)
     {
         m_pFtInfo->SetControlBackground(GetSettings().GetStyleSettings().GetHighlightColor());
         m_pFtInfo->SetText(maErrInvalidNameStr);
@@ -296,18 +292,15 @@ bool ScNameDlg::IsNameValid()
 
 bool ScNameDlg::IsFormulaValid()
 {
-    ScCompiler aComp( mpDoc, maCursorPos);
-    aComp.SetGrammar( mpDoc->GetGrammar() );
-    ScTokenArray* pCode = aComp.CompileString(m_pEdAssign->GetText());
-    if (pCode->GetCodeError())
+    ScCompiler aComp( mpDoc, maCursorPos, mpDoc->GetGrammar());
+    std::unique_ptr<ScTokenArray> pCode = aComp.CompileString(m_pEdAssign->GetText());
+    if (pCode->GetCodeError() != FormulaError::NONE)
     {
         m_pFtInfo->SetControlBackground(GetSettings().GetStyleSettings().GetHighlightColor());
-        delete pCode;
         return false;
     }
     else
     {
-        delete pCode;
         return true;
     }
 }
@@ -351,12 +344,12 @@ void ScNameDlg::SetEntry(const OUString& rName, const OUString& rScope)
 
 void ScNameDlg::RemovePushed()
 {
-    std::vector<ScRangeNameLine> maEntries = m_pRangeManagerTable->GetSelectedEntries();
+    std::vector<ScRangeNameLine> aEntries = m_pRangeManagerTable->GetSelectedEntries();
     m_pRangeManagerTable->DeleteSelectedEntries();
-    for (std::vector<ScRangeNameLine>::iterator itr = maEntries.begin(); itr != maEntries.end(); ++itr)
+    for (const auto& rEntry : aEntries)
     {
-        ScRangeName* pRangeName = GetRangeName(itr->aScope);
-        ScRangeData* pData = pRangeName->findByUpperName(ScGlobal::pCharClass->uppercase(itr->aName));
+        ScRangeName* pRangeName = GetRangeName(rEntry.aScope);
+        ScRangeData* pData = pRangeName->findByUpperName(ScGlobal::pCharClass->uppercase(rEntry.aName));
         OSL_ENSURE(pData, "table and model should be in sync");
         // be safe and check for possible problems
         if (pData)
@@ -396,7 +389,7 @@ void ScNameDlg::NameModified()
     if (aOldScope.isEmpty())
         return;
     OUString aExpr = m_pEdAssign->GetText();
-    OUString aNewScope = m_pLbScope->GetSelectEntry();
+    OUString aNewScope = m_pLbScope->GetSelectedEntry();
 
     ScRangeName* pOldRangeName = GetRangeName( aOldScope );
     ScRangeData* pData = pOldRangeName->findByUpperName( ScGlobal::pCharClass->uppercase(aOldName) );
@@ -405,6 +398,10 @@ void ScNameDlg::NameModified()
     // be safe and check for range data
     if (pData)
     {
+        // Assign new index (0) only if the scope is changed, else keep the
+        // existing index.
+        sal_uInt16 nIndex = (aNewScope != aOldScope ? 0 : pData->GetIndex());
+
         pOldRangeName->erase(*pData);
         mbNeedUpdate = false;
         m_pRangeManagerTable->DeleteSelectedEntries();
@@ -416,11 +413,12 @@ void ScNameDlg::NameModified()
 
         ScRangeData* pNewEntry = new ScRangeData( mpDoc, aNewName, aExpr,
                 maCursorPos, nType);
-        pNewRangeName->insert(pNewEntry);
+        pNewEntry->SetIndex( nIndex);
+        pNewRangeName->insert(pNewEntry, false /*bReuseFreeIndex*/);
         aLine.aName = aNewName;
         aLine.aExpression = aExpr;
         aLine.aScope = aNewScope;
-        m_pRangeManagerTable->addEntry(aLine);
+        m_pRangeManagerTable->addEntry(aLine, true);
         mbNeedUpdate = true;
         mbDataChanged = true;
     }
@@ -478,47 +476,47 @@ void ScNameDlg::GetRangeNames(std::map<OUString, std::unique_ptr<ScRangeName>>& 
     m_RangeMap.swap(rRangeMap);
 }
 
-IMPL_LINK_NOARG_TYPED(ScNameDlg, OkBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScNameDlg, OkBtnHdl, Button*, void)
 {
     Close();
 }
 
-IMPL_LINK_NOARG_TYPED(ScNameDlg, CancelBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScNameDlg, CancelBtnHdl, Button*, void)
 {
     CancelPushed();
 }
 
-IMPL_LINK_NOARG_TYPED(ScNameDlg, AddBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScNameDlg, AddBtnHdl, Button*, void)
 {
     AddPushed();
 }
 
-IMPL_LINK_NOARG_TYPED(ScNameDlg, RemoveBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScNameDlg, RemoveBtnHdl, Button*, void)
 {
     RemovePushed();
 }
 
-IMPL_LINK_NOARG_TYPED(ScNameDlg, EdModifyCheckBoxHdl, CheckBox&, void)
+IMPL_LINK_NOARG(ScNameDlg, EdModifyCheckBoxHdl, CheckBox&, void)
 {
     NameModified();
 }
 
-IMPL_LINK_NOARG_TYPED(ScNameDlg, EdModifyHdl, Edit&, void)
+IMPL_LINK_NOARG(ScNameDlg, EdModifyHdl, Edit&, void)
 {
     NameModified();
 }
 
-IMPL_LINK_NOARG_TYPED(ScNameDlg, AssignGetFocusHdl, Control&, void)
+IMPL_LINK_NOARG(ScNameDlg, AssignGetFocusHdl, Control&, void)
 {
     EdModifyHdl(*m_pEdAssign);
 }
 
-IMPL_LINK_NOARG_TYPED(ScNameDlg, SelectionChangedHdl_Impl, SvTreeListBox*, void)
+IMPL_LINK_NOARG(ScNameDlg, SelectionChangedHdl_Impl, SvTreeListBox*, void)
 {
     SelectionChanged();
 }
 
-IMPL_LINK_NOARG_TYPED(ScNameDlg, ScopeChangedHdl, ListBox&, void)
+IMPL_LINK_NOARG(ScNameDlg, ScopeChangedHdl, ListBox&, void)
 {
     ScopeChanged();
 }

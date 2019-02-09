@@ -9,7 +9,6 @@
 
 #include <utility>
 
-#include "cairo_cairo.hxx"
 #include "cairo_gtk3_cairo.hxx"
 
 #include <vcl/sysdata.hxx>
@@ -18,7 +17,7 @@
 #include <vcl/window.hxx>
 #include <basegfx/vector/b2isize.hxx>
 
-#include "unx/gtk/gtkgdi.hxx"
+#include <unx/gtk/gtkgdi.hxx>
 
 namespace cairo
 {

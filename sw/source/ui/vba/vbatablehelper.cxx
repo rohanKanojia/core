@@ -26,12 +26,12 @@ using namespace ::ooo::vba;
 
 #define UNO_TABLE_COLUMN_SUM    10000
 
-SwVbaTableHelper::SwVbaTableHelper( const uno::Reference< text::XTextTable >& xTextTable ) throw (uno::RuntimeException) : mxTextTable( xTextTable )
+SwVbaTableHelper::SwVbaTableHelper( const uno::Reference< text::XTextTable >& xTextTable ) : mxTextTable( xTextTable )
 {
     pTable = GetSwTable( mxTextTable );
 }
 
-SwTable* SwVbaTableHelper::GetSwTable( const uno::Reference< text::XTextTable >& xTextTable ) throw (uno::RuntimeException)
+SwTable* SwVbaTableHelper::GetSwTable( const uno::Reference< text::XTextTable >& xTextTable )
 {
     uno::Reference< lang::XUnoTunnel > xTunnel( xTextTable, uno::UNO_QUERY_THROW );
     SwXTextTable* pXTextTable = reinterpret_cast< SwXTextTable * >( sal::static_int_cast< sal_IntPtr >(xTunnel->getSomething(SwXTextTable::getUnoTunnelId())));
@@ -46,7 +46,7 @@ SwTable* SwVbaTableHelper::GetSwTable( const uno::Reference< text::XTextTable >&
     return pTable;
 }
 
-sal_Int32 SwVbaTableHelper::getTabColumnsCount( sal_Int32 nRowIndex ) throw (uno::RuntimeException)
+sal_Int32 SwVbaTableHelper::getTabColumnsCount( sal_Int32 nRowIndex )
 {
     sal_Int32 nRet = 0;
     if(!pTable->IsTableComplex())
@@ -58,7 +58,7 @@ sal_Int32 SwVbaTableHelper::getTabColumnsCount( sal_Int32 nRowIndex ) throw (uno
     return nRet;
 }
 
-sal_Int32 SwVbaTableHelper::getTabColumnsMaxCount( ) throw (uno::RuntimeException)
+sal_Int32 SwVbaTableHelper::getTabColumnsMaxCount( )
 {
     sal_Int32 nRet = 0;
     sal_Int32 nRowCount = pTable->GetTabLines().size();
@@ -71,11 +71,10 @@ sal_Int32 SwVbaTableHelper::getTabColumnsMaxCount( ) throw (uno::RuntimeExceptio
     return nRet;
 }
 
-sal_Int32 SwVbaTableHelper::getTabRowIndex( const OUString& CellName ) throw (uno::RuntimeException)
+sal_Int32 SwVbaTableHelper::getTabRowIndex( const OUString& rCellName )
 {
     sal_Int32 nRet = 0;
-    OUString sCellName(CellName);
-    SwTableBox* pBox = const_cast<SwTableBox*>(pTable->GetTableBox( sCellName ));
+    SwTableBox* pBox = const_cast<SwTableBox*>(pTable->GetTableBox( rCellName ));
     if( !pBox )
         throw uno::RuntimeException();
 
@@ -86,16 +85,12 @@ sal_Int32 SwVbaTableHelper::getTabRowIndex( const OUString& CellName ) throw (un
     return nRet;
 }
 
-sal_Int32 SwVbaTableHelper::getTabColIndex( const OUString& CellName ) throw (uno::RuntimeException)
+sal_Int32 SwVbaTableHelper::getTabColIndex( const OUString& rCellName )
 {
-    sal_Int32 nRet = 0;
-    OUString sCellName(CellName);
-    const SwTableBox* pBox = pTable->GetTableBox( sCellName );
+    const SwTableBox* pBox = pTable->GetTableBox( rCellName );
     if( !pBox )
         throw uno::RuntimeException();
-    const SwTableBoxes* pBoxes = &pBox->GetUpper()->GetTabBoxes();
-    nRet = pBoxes->GetPos( pBox );
-    return nRet;
+    return pBox->GetUpper()->GetBoxPos( pBox );
 }
 
 OUString SwVbaTableHelper::getColumnStr( sal_Int32 nCol )
@@ -107,9 +102,9 @@ OUString SwVbaTableHelper::getColumnStr( sal_Int32 nCol )
     do{
         nCalc = nCol % coDiff;
         if( nCalc >= 26 )
-            sRet = OUString( sal_Unicode('a' - 26 + nCalc ) ) + sRet;
+            sRet = OUStringLiteral1( 'a' - 26 + nCalc ) + sRet;
         else
-            sRet = OUString( sal_Unicode('A' + nCalc ) ) + sRet;
+            sRet = OUStringLiteral1( 'A' + nCalc ) + sRet;
 
         if( 0 == ( nCol = nCol - nCalc ) )
             break;
@@ -119,7 +114,7 @@ OUString SwVbaTableHelper::getColumnStr( sal_Int32 nCol )
     return sRet;
 }
 
-sal_Int32 SwVbaTableHelper::getTableWidth( ) throw (uno::RuntimeException)
+sal_Int32 SwVbaTableHelper::getTableWidth( )
 {
     sal_Int32 nWidth = 0;
     bool isWidthRelatvie = false;
@@ -136,7 +131,7 @@ sal_Int32 SwVbaTableHelper::getTableWidth( ) throw (uno::RuntimeException)
     return nWidth;
 }
 
-SwTableBox* SwVbaTableHelper::GetTabBox( sal_Int32 nCol, sal_Int32 nRow ) throw (css::uno::RuntimeException)
+SwTableBox* SwVbaTableHelper::GetTabBox( sal_Int32 nCol, sal_Int32 nRow )
 {
     SwTableLines& rLines = pTable->GetTabLines();
     sal_Int32 nRowCount = rLines.size();
@@ -156,7 +151,7 @@ SwTableBox* SwVbaTableHelper::GetTabBox( sal_Int32 nCol, sal_Int32 nRow ) throw 
     return pStart;
 }
 
-void SwVbaTableHelper::InitTabCols( SwTabCols& rCols, const SwTableBox *pStart, bool /*bCurRowOnly*/ )
+void SwVbaTableHelper::InitTabCols( SwTabCols& rCols, const SwTableBox *pStart )
 {
     rCols.SetLeftMin ( 0 );
     rCols.SetLeft    ( 0 );
@@ -165,7 +160,7 @@ void SwVbaTableHelper::InitTabCols( SwTabCols& rCols, const SwTableBox *pStart, 
     pTable->GetTabCols( rCols, pStart );
 }
 
-sal_Int32 SwVbaTableHelper::GetColCount( SwTabCols& rCols )
+sal_Int32 SwVbaTableHelper::GetColCount( SwTabCols const & rCols )
 {
     sal_Int32 nCount = 0;
     for( size_t i = 0; i < rCols.Count(); ++i )
@@ -174,7 +169,7 @@ sal_Int32 SwVbaTableHelper::GetColCount( SwTabCols& rCols )
     return rCols.Count() - nCount;
 }
 
-sal_Int32 SwVbaTableHelper::GetRightSeparator( SwTabCols& rCols, sal_Int32 nNum)
+sal_Int32 SwVbaTableHelper::GetRightSeparator( SwTabCols const & rCols, sal_Int32 nNum)
 {
     OSL_ENSURE( nNum < GetColCount( rCols ) ,"Index out of range");
     sal_Int32 i = 0;
@@ -187,19 +182,19 @@ sal_Int32 SwVbaTableHelper::GetRightSeparator( SwTabCols& rCols, sal_Int32 nNum)
     return i - 1;
 }
 
-sal_Int32 SwVbaTableHelper::GetColWidth( sal_Int32 nCol, sal_Int32 nRow, bool bCurRowOnly ) throw (uno::RuntimeException)
+sal_Int32 SwVbaTableHelper::GetColWidth( sal_Int32 nCol, sal_Int32 nRow )
 {
     SwTableBox* pStart = GetTabBox( nCol, nRow );
     SwTabCols aCols;
-    InitTabCols( aCols, pStart, bCurRowOnly );
+    InitTabCols( aCols, pStart );
     sal_Int32 nWidth = GetColWidth( aCols, nCol );
 
     sal_Int32 nTableWidth = getTableWidth( );
-    double dAbsWidth = ( (double)nWidth / UNO_TABLE_COLUMN_SUM ) * (double) nTableWidth;
-    return ( sal_Int32 )Millimeter::getInPoints( static_cast<int>(dAbsWidth) );
+    double dAbsWidth = ( static_cast<double>(nWidth) / UNO_TABLE_COLUMN_SUM ) * static_cast<double>(nTableWidth);
+    return static_cast<sal_Int32>(Millimeter::getInPoints( static_cast<int>(dAbsWidth) ));
 }
 
-sal_Int32 SwVbaTableHelper::GetColWidth( SwTabCols& rCols, sal_Int32 nNum ) throw (uno::RuntimeException)
+sal_Int32 SwVbaTableHelper::GetColWidth( SwTabCols& rCols, sal_Int32 nNum )
 {
     SwTwips nWidth = 0;
 
@@ -235,7 +230,7 @@ sal_Int32 SwVbaTableHelper::GetColWidth( SwTabCols& rCols, sal_Int32 nNum ) thro
     return nWidth;
 }
 
-void SwVbaTableHelper::SetColWidth( sal_Int32 _width, sal_Int32 nCol, sal_Int32 nRow, bool bCurRowOnly ) throw (css::uno::RuntimeException, std::exception)
+void SwVbaTableHelper::SetColWidth( sal_Int32 _width, sal_Int32 nCol, sal_Int32 nRow, bool bCurRowOnly )
 {
     double dAbsWidth = Millimeter::getInHundredthsOfOneMillimeter( _width );
     sal_Int32 nTableWidth = getTableWidth( );
@@ -243,7 +238,7 @@ void SwVbaTableHelper::SetColWidth( sal_Int32 _width, sal_Int32 nCol, sal_Int32 
 
     SwTableBox* pStart = GetTabBox( nCol, nRow );
     SwTabCols aOldCols;
-    InitTabCols( aOldCols, pStart, bCurRowOnly );
+    InitTabCols( aOldCols, pStart );
 
     SwTabCols aCols( aOldCols );
     if ( aCols.Count() > 0 )
@@ -259,7 +254,7 @@ void SwVbaTableHelper::SetColWidth( sal_Int32 _width, sal_Int32 nCol, sal_Int32 
                 aCols[ GetRightSeparator( aCols, nCol ) ] += nDiff;
             else
             {
-                int nDiffLeft = nDiff - (int)GetColWidth( aCols, nCol + 1) + (int)MINLAY;
+                int nDiffLeft = nDiff - static_cast<int>(GetColWidth( aCols, nCol + 1)) + int(MINLAY);
                 aCols[ GetRightSeparator( aCols, nCol ) ] += (nDiff - nDiffLeft);
                 aCols[ GetRightSeparator( aCols, nCol - 1 ) ] -= nDiffLeft;
             }
@@ -268,7 +263,7 @@ void SwVbaTableHelper::SetColWidth( sal_Int32 _width, sal_Int32 nCol, sal_Int32 
             aCols[ GetRightSeparator( aCols, nCol-1 ) ] -= nDiff;
     }
     else
-        aCols.SetRight( std::min( (long)nNewWidth, aCols.GetRightMax()) );
+        aCols.SetRight( std::min( static_cast<long>(nNewWidth), aCols.GetRightMax()) );
 
     pTable->SetTabCols(aCols, aOldCols, pStart, bCurRowOnly );
 }

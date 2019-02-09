@@ -19,17 +19,16 @@
 
 #undef SC_DLLIMPLEMENTATION
 
-#include "document.hxx"
-#include "docsh.hxx"
-#include "scresid.hxx"
+#include <document.hxx>
+#include <docsh.hxx>
 
-#include "tpstat.hxx"
+#include <tpstat.hxx>
 
 // Dokumentinfo-Tabpage:
 
-VclPtr<SfxTabPage> ScDocStatPage::Create( vcl::Window *pParent, const SfxItemSet* rSet )
+VclPtr<SfxTabPage> ScDocStatPage::Create( TabPageParent pParent, const SfxItemSet* rSet )
 {
-    return VclPtr<ScDocStatPage>::Create( pParent, *rSet );
+    return VclPtr<ScDocStatPage>::Create( pParent.pParent, *rSet );
 }
 
 ScDocStatPage::ScDocStatPage( vcl::Window *pParent, const SfxItemSet& rSet )
@@ -66,6 +65,7 @@ void ScDocStatPage::dispose()
     m_pFtTables.clear();
     m_pFtCells.clear();
     m_pFtPages.clear();
+    m_pFtFormula.clear();
     SfxTabPage::dispose();
 }
 

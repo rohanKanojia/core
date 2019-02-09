@@ -17,10 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "hsqldb/HCatalog.hxx"
-#include "hsqldb/HUsers.hxx"
-#include "hsqldb/HTables.hxx"
-#include "hsqldb/HViews.hxx"
+#include <hsqldb/HCatalog.hxx>
+#include <hsqldb/HUsers.hxx>
+#include <hsqldb/HTables.hxx>
+#include <hsqldb/HViews.hxx>
+#include <com/sun/star/sdbc/SQLException.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <comphelper/types.hxx>
@@ -40,7 +41,7 @@ OHCatalog::OHCatalog(const Reference< XConnection >& _xConnection) : sdbcx::OCat
 {
 }
 
-void OHCatalog::refreshObjects(const Sequence< OUString >& _sKindOfObject,TStringVector& _rNames)
+void OHCatalog::refreshObjects(const Sequence< OUString >& _sKindOfObject,::std::vector< OUString>& _rNames)
 {
     Reference< XResultSet > xResult = m_xMetaData->getTables(Any(),
                                                             "%",
@@ -51,20 +52,18 @@ void OHCatalog::refreshObjects(const Sequence< OUString >& _sKindOfObject,TStrin
 
 void OHCatalog::refreshTables()
 {
-    TStringVector aVector;
-    static const char s_sTableTypeView[] = "VIEW";
-    static const char s_sTableTypeTable[] = "TABLE";
+    ::std::vector< OUString> aVector;
 
     Sequence< OUString > sTableTypes(2);
-    sTableTypes[0] = s_sTableTypeView;
-    sTableTypes[1] = s_sTableTypeTable;
+    sTableTypes[0] = "VIEW";
+    sTableTypes[1] = "TABLE";
 
     refreshObjects(sTableTypes,aVector);
 
     if ( m_pTables )
         m_pTables->reFill(aVector);
     else
-        m_pTables = new OTables(m_xMetaData,*this,m_aMutex,aVector);
+        m_pTables.reset( new OTables(m_xMetaData,*this,m_aMutex,aVector) );
 }
 
 void OHCatalog::refreshViews()
@@ -88,14 +87,14 @@ void OHCatalog::refreshViews()
     {
     }
 
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
     if ( bSupportsViews )
         refreshObjects(aTypes,aVector);
 
     if ( m_pViews )
         m_pViews->reFill(aVector);
     else
-        m_pViews = new HViews( m_xConnection, *this, m_aMutex, aVector );
+        m_pViews.reset( new HViews( m_xConnection, *this, m_aMutex, aVector ) );
 }
 
 void OHCatalog::refreshGroups()
@@ -104,13 +103,12 @@ void OHCatalog::refreshGroups()
 
 void OHCatalog::refreshUsers()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
     Reference< XStatement > xStmt = m_xConnection->createStatement(  );
     Reference< XResultSet >  xResult = xStmt->executeQuery("select User from hsqldb.user group by User");
     if ( xResult.is() )
     {
         Reference< XRow > xRow(xResult,UNO_QUERY);
-        TString2IntMap aMap;
         while( xResult->next() )
             aVector.push_back(xRow->getString(1));
         ::comphelper::disposeComponent(xResult);
@@ -120,10 +118,10 @@ void OHCatalog::refreshUsers()
     if(m_pUsers)
         m_pUsers->reFill(aVector);
     else
-        m_pUsers = new OUsers(*this,m_aMutex,aVector,m_xConnection,this);
+        m_pUsers.reset( new OUsers(*this,m_aMutex,aVector,m_xConnection,this) );
 }
 
-Any SAL_CALL OHCatalog::queryInterface( const Type & rType ) throw(RuntimeException, std::exception)
+Any SAL_CALL OHCatalog::queryInterface( const Type & rType )
 {
     if ( rType == cppu::UnoType<XGroupsSupplier>::get())
         return Any();
@@ -131,10 +129,10 @@ Any SAL_CALL OHCatalog::queryInterface( const Type & rType ) throw(RuntimeExcept
     return OCatalog::queryInterface(rType);
 }
 
-Sequence< Type > SAL_CALL OHCatalog::getTypes(  ) throw(RuntimeException, std::exception)
+Sequence< Type > SAL_CALL OHCatalog::getTypes(  )
 {
     Sequence< Type > aTypes = OCatalog::getTypes();
-    ::std::vector<Type> aOwnTypes;
+    std::vector<Type> aOwnTypes;
     aOwnTypes.reserve(aTypes.getLength());
     const Type* pBegin = aTypes.getConstArray();
     const Type* pEnd = pBegin + aTypes.getLength();

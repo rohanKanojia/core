@@ -41,7 +41,7 @@ protected:
 
 public:
     explicit TextUndoManager( TextEngine* pTextEngine );
-    virtual ~TextUndoManager();
+    virtual ~TextUndoManager() override;
 
     using SfxUndoManager::Undo;
     virtual bool Undo() override;
@@ -60,12 +60,12 @@ protected:
     TextView*           GetView() const { return mpTextEngine->GetActiveView(); }
     void                SetSelection( const TextSelection& rSel );
 
-    TextDoc*            GetDoc() const { return mpTextEngine->mpDoc; }
-    TEParaPortions*     GetTEParaPortions() const { return mpTextEngine->mpTEParaPortions; }
+    TextDoc*            GetDoc() const { return mpTextEngine->mpDoc.get(); }
+    TEParaPortions*     GetTEParaPortions() const { return mpTextEngine->mpTEParaPortions.get(); }
 
 public:
     explicit            TextUndo( TextEngine* pTextEngine );
-    virtual             ~TextUndo();
+    virtual             ~TextUndo() override;
 
     TextEngine*         GetTextEngine() const   { return mpTextEngine; }
 

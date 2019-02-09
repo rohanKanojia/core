@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "RelationTableView.hxx"
-#include "JoinExchange.hxx"
-#include <comphelper/extract.hxx>
-#include "browserids.hxx"
+#include <RelationTableView.hxx>
+#include <JoinExchange.hxx>
+#include <core_resource.hxx>
+#include <browserids.hxx>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
 #include <com/sun/star/sdbc/XConnection.hpp>
 #include <com/sun/star/sdbcx/XKeysSupplier.hpp>
@@ -29,24 +29,22 @@
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include "dbustrings.hrc"
+#include <stringconstants.hxx>
 #include <connectivity/dbtools.hxx>
-#include <comphelper/sequence.hxx>
-#include <tools/debug.hxx>
-#include "dbaccess_helpid.hrc"
-#include "RelationDesignView.hxx"
-#include "JoinController.hxx"
-#include "TableWindow.hxx"
-#include "TableWindowData.hxx"
+#include <helpids.h>
+#include <RelationDesignView.hxx>
+#include <JoinController.hxx>
+#include <TableWindow.hxx>
+#include <TableWindowData.hxx>
 #include "RTableConnection.hxx"
-#include "RTableConnectionData.hxx"
-#include "RelationDlg.hxx"
-#include "sqlmessage.hxx"
-#include "dbu_rel.hrc"
-#include "UITools.hxx"
+#include <RTableConnectionData.hxx>
+#include <RelationDlg.hxx>
+#include <sqlmessage.hxx>
+#include <strings.hrc>
+#include <UITools.hxx>
 #include <connectivity/dbexception.hxx>
 #include "RTableWindow.hxx"
-#include "JAccess.hxx"
+#include <JAccess.hxx>
 #include <svl/undo.hxx>
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 
@@ -98,7 +96,7 @@ void ORelationTableView::ReSync()
     // Tables could have been hidden in the database, which are part of a relation. Or a table was in layout
     // (quite often without a relation) and does not exist anymore. In both cases creation of TabWins will fail
     // and all TabWinDatas and related ConnDates should be deleted.
-    ::std::vector< OUString> arrInvalidTables;
+    std::vector< OUString> arrInvalidTables;
 
     // create and insert windows
     TTableWindowData& rTabWinDataList = m_pView->getController().getTableWindowData();
@@ -116,7 +114,7 @@ void ORelationTableView::ReSync()
             pTabWin.disposeAndClear();
             arrInvalidTables.push_back(pData->GetTableName());
 
-            rTabWinDataList.erase( ::std::remove(rTabWinDataList.begin(), rTabWinDataList.end(), *aIter), rTabWinDataList.end());
+            rTabWinDataList.erase( std::remove(rTabWinDataList.begin(), rTabWinDataList.end(), *aIter), rTabWinDataList.end());
             continue;
         }
 
@@ -139,14 +137,14 @@ void ORelationTableView::ReSync()
         {
             // do the tables to the  connection exist?
             OUString strTabExistenceTest = pTabConnData->getReferencingTable()->GetTableName();
-            bool bInvalid = ::std::find(arrInvalidTables.begin(),arrInvalidTables.end(),strTabExistenceTest) != arrInvalidTables.end();
+            bool bInvalid = std::find(arrInvalidTables.begin(),arrInvalidTables.end(),strTabExistenceTest) != arrInvalidTables.end();
             strTabExistenceTest = pTabConnData->getReferencedTable()->GetTableName();
-            bInvalid = bInvalid || ::std::find(arrInvalidTables.begin(),arrInvalidTables.end(),strTabExistenceTest) != arrInvalidTables.end();
+            bInvalid = bInvalid || std::find(arrInvalidTables.begin(),arrInvalidTables.end(),strTabExistenceTest) != arrInvalidTables.end();
 
             if (bInvalid)
             {
                 // no -> bad luck, the connection is gone
-                rTabConnDataList.erase( ::std::remove(rTabConnDataList.begin(), rTabConnDataList.end(), *aConIter), rTabConnDataList.end() );
+                rTabConnDataList.erase( std::remove(rTabConnDataList.begin(), rTabConnDataList.end(), *aConIter), rTabConnDataList.end() );
                 continue;
             }
         }
@@ -171,11 +169,8 @@ void ORelationTableView::AddConnection(const OJoinExchangeData& jxdSource, const
     OTableWindow* pSourceWin = jxdSource.pListBox->GetTabWin();
     OTableWindow* pDestWin = jxdDest.pListBox->GetTabWin();
 
-    auto aIter = getTableConnections().begin();
-    auto aEnd = getTableConnections().end();
-    for(;aIter != aEnd;++aIter)
+    for(VclPtr<OTableConnection> const & pFirst : getTableConnections())
     {
-        OTableConnection* pFirst = *aIter;
         if((pFirst->GetSourceWin() == pSourceWin && pFirst->GetDestWin() == pDestWin) ||
            (pFirst->GetSourceWin() == pDestWin  && pFirst->GetDestWin() == pSourceWin))
         {
@@ -221,21 +216,21 @@ void ORelationTableView::AddConnection(const OJoinExchangeData& jxdSource, const
     }
 }
 
-void ORelationTableView::ConnDoubleClicked( OTableConnection* pConnection )
+void ORelationTableView::ConnDoubleClicked(VclPtr<OTableConnection>& rConnection)
 {
-    ScopedVclPtrInstance< ORelationDialog > aRelDlg( this, pConnection->GetData() );
+    ScopedVclPtrInstance< ORelationDialog > aRelDlg( this, rConnection->GetData() );
     switch (aRelDlg->Execute())
     {
         case RET_OK:
             // successfully updated
-            pConnection->UpdateLineList();
+            rConnection->UpdateLineList();
             // The connection references 1 ConnData and n ConnLines, each ConnData references n LineDatas, each Line exactly 1 LineData
             // As the Dialog and the ConnData->Update may have changed the LineDatas we have to restore the consistent state
             break;
 
         case RET_NO:
             // tried at least one update, but did not succeed -> the original connection is lost
-            RemoveConnection( pConnection ,true);
+            RemoveConnection(rConnection ,true);
             break;
 
         case RET_CANCEL:
@@ -262,13 +257,14 @@ void ORelationTableView::AddNewRelation()
     }
 }
 
-bool ORelationTableView::RemoveConnection( OTableConnection* pConn ,bool /*_bDelete*/)
+bool ORelationTableView::RemoveConnection(VclPtr<OTableConnection>& rConn, bool /*_bDelete*/)
 {
-    ORelationTableConnectionData* pTabConnData = static_cast<ORelationTableConnectionData*>(pConn->GetData().get());
+    ORelationTableConnectionData* pTabConnData = static_cast<ORelationTableConnectionData*>(rConn->GetData().get());
     try
     {
-        if ( m_bInRemove || pTabConnData->DropRelation())
-            return OJoinTableView::RemoveConnection( pConn ,true);
+        if (!m_bInRemove)
+            pTabConnData->DropRelation();
+        return OJoinTableView::RemoveConnection(rConn, true);
     }
     catch(SQLException& e)
     {
@@ -326,8 +322,8 @@ void ORelationTableView::AddTabWin(const OUString& _rComposedName, const OUStrin
 
 void ORelationTableView::RemoveTabWin( OTableWindow* pTabWin )
 {
-    ScopedVclPtrInstance< OSQLWarningBox > aDlg( this, ModuleRes( STR_QUERY_REL_DELETE_WINDOW ), WB_YES_NO | WB_DEF_YES );
-    if ( m_bInRemove || aDlg->Execute() == RET_YES )
+    OSQLWarningBox aDlg(GetFrameWeld(), DBA_RES(STR_QUERY_REL_DELETE_WINDOW), MessBoxStyle::YesNo | MessBoxStyle::DefaultYes);
+    if (m_bInRemove || aDlg.run() == RET_YES)
     {
         m_pView->getController().ClearUndoManager();
         OJoinTableView::RemoveTabWin( pTabWin );
@@ -342,16 +338,16 @@ void ORelationTableView::lookForUiActivities()
 {
     if(m_pExistingConnection)
     {
-        OUString sTitle(ModuleRes(STR_RELATIONDESIGN));
+        OUString sTitle(DBA_RES(STR_RELATIONDESIGN));
         sTitle = sTitle.copy(3);
-        ScopedVclPtrInstance< OSQLMessageBox > aDlg(this,ModuleRes(STR_QUERY_REL_EDIT_RELATION),OUString(),0);
-        aDlg->SetText(sTitle);
-        aDlg->RemoveButton(aDlg->GetButtonId(0));
-        aDlg->AddButton( ModuleRes(STR_QUERY_REL_EDIT), RET_OK, ButtonDialogFlags::Default | ButtonDialogFlags::Focus);
-        aDlg->AddButton( ModuleRes(STR_QUERY_REL_CREATE), RET_YES);
-        aDlg->AddButton( StandardButtonType::Cancel,RET_CANCEL);
-        sal_uInt16 nRet = aDlg->Execute();
-        if( nRet == RET_CANCEL)
+        OSQLMessageBox aDlg(GetFrameWeld(), DBA_RES(STR_QUERY_REL_EDIT_RELATION), OUString(), MessBoxStyle::NONE);
+        aDlg.set_title(sTitle);
+        aDlg.add_button(DBA_RES(STR_QUERY_REL_EDIT), RET_OK);
+        aDlg.set_default_response(RET_OK);
+        aDlg.add_button(DBA_RES(STR_QUERY_REL_CREATE), RET_YES);
+        aDlg.add_button(Button::GetStandardText(StandardButtonType::Cancel), RET_CANCEL);
+        sal_uInt16 nRet = aDlg.run();
+        if (nRet == RET_CANCEL)
         {
             m_pCurrentlyTabConnData.reset();
         }
@@ -384,12 +380,12 @@ bool ORelationTableView::allowQueries() const
     return false;
 }
 
-void ORelationTableView::_elementInserted( const container::ContainerEvent& /*_rEvent*/ )  throw(css::uno::RuntimeException, std::exception)
+void ORelationTableView::_elementInserted( const container::ContainerEvent& /*_rEvent*/ )
 {
 
 }
 
-void ORelationTableView::_elementRemoved( const container::ContainerEvent& _rEvent ) throw(css::uno::RuntimeException, std::exception)
+void ORelationTableView::_elementRemoved( const container::ContainerEvent& _rEvent )
 {
     m_bInRemove = true;
     OUString sName;
@@ -409,7 +405,7 @@ void ORelationTableView::_elementRemoved( const container::ContainerEvent& _rEve
     m_bInRemove = false;
 }
 
-void ORelationTableView::_elementReplaced( const container::ContainerEvent& /*_rEvent*/ ) throw(css::uno::RuntimeException, std::exception)
+void ORelationTableView::_elementReplaced( const container::ContainerEvent& /*_rEvent*/ )
 {
 }
 

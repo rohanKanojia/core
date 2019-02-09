@@ -32,13 +32,13 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmluconv.hxx>
+#include <xmloff/xmlement.hxx>
 
 
 using namespace ::com::sun::star::text;
 using namespace ::xmloff::token;
 
 using ::com::sun::star::beans::PropertyValue;
-using ::com::sun::star::beans::PropertyValues;
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Any;
@@ -52,8 +52,8 @@ XMLIndexChapterInfoEntryContext::XMLIndexChapterInfoEntryContext(
     const OUString& rLocalName,
     bool bT ) :
         XMLIndexSimpleEntryContext(rImport,
-                                   (bT ? rTemplate.sTokenEntryNumber
-                                          : rTemplate.sTokenChapterInfo),
+                                   (bT ? OUString("TokenEntryNumber")
+                                       : OUString("TokenChapterInfo")),
                                    rTemplate, nPrfx, rLocalName),
         nChapterInfo(ChapterFormat::NAME_NUMBER),
         bChapterInfoOK(false),
@@ -67,7 +67,7 @@ XMLIndexChapterInfoEntryContext::~XMLIndexChapterInfoEntryContext()
 {
 }
 
-static const SvXMLEnumMapEntry aChapterDisplayMap[] =
+static const SvXMLEnumMapEntry<sal_uInt16> aChapterDisplayMap[] =
 {
     { XML_NAME,                     ChapterFormat::NAME },
     { XML_NUMBER,                   ChapterFormat::NUMBER },
@@ -177,18 +177,14 @@ void XMLIndexChapterInfoEntryContext::FillPropertyValues(
     if( bChapterInfoOK )
     {
         // chapter info field
-        rValues[nIndex].Name = rTemplateContext.sChapterFormat;
-        Any aAny;
-        aAny <<= nChapterInfo;
-        rValues[nIndex].Value = aAny;
+        rValues[nIndex].Name = "ChapterFormat";
+        rValues[nIndex].Value <<= nChapterInfo;
         nIndex++;
     }
     if( bOutlineLevelOK )
     {
-        rValues[nIndex].Name = rTemplateContext.sChapterLevel;
-        Any aAny;
-        aAny <<= nOutlineLevel;
-        rValues[nIndex].Value = aAny;
+        rValues[nIndex].Name = "ChapterLevel";
+        rValues[nIndex].Value <<= nOutlineLevel;
     }
 }
 

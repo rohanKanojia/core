@@ -17,19 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#ifndef IOS
-
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <cstring>
 
-#include "headless/svpbmp.hxx"
-#include "headless/svpgdi.hxx"
-#include "headless/svpinst.hxx"
+#include <headless/svpbmp.hxx>
+#include <headless/svpgdi.hxx>
+#include <headless/svpinst.hxx>
 
 #include <basegfx/vector/b2ivector.hxx>
 #include <basegfx/range/b2ibox.hxx>
-
+#include <o3tl/safeint.hxx>
+#include <tools/helpers.hxx>
 #include <vcl/salbtype.hxx>
 #include <vcl/bitmap.hxx>
 
@@ -40,7 +40,7 @@ SvpSalBitmap::~SvpSalBitmap()
     Destroy();
 }
 
-BitmapBuffer* ImplCreateDIB(
+static std::unique_ptr<BitmapBuffer> ImplCreateDIB(
     const Size& rSize,
     sal_uInt16 nBitCount,
     const BitmapPalette& rPal)
@@ -55,96 +55,118 @@ BitmapBuffer* ImplCreateDIB(
         || nBitCount == 32)
         && "Unsupported BitCount!");
 
-    BitmapBuffer* pDIB = nullptr;
+    if (!rSize.Width() || !rSize.Height())
+        return nullptr;
 
-    if( rSize.Width() && rSize.Height() )
+    std::unique_ptr<BitmapBuffer> pDIB;
+
+    try
     {
-        try
-        {
-            pDIB = new BitmapBuffer;
-        }
-        catch (const std::bad_alloc&)
-        {
-            pDIB = nullptr;
-        }
+        pDIB.reset(new BitmapBuffer);
+    }
+    catch (const std::bad_alloc&)
+    {
+        return nullptr;
+    }
 
-        if( pDIB )
-        {
-            const sal_uInt16 nColors = ( nBitCount <= 8 ) ? ( 1 << nBitCount ) : 0;
+    const sal_uInt16 nColors = ( nBitCount <= 8 ) ? ( 1 << nBitCount ) : 0;
 
-            switch (nBitCount)
-            {
-                case 1:
-                    pDIB->mnFormat = BMP_FORMAT_1BIT_MSB_PAL;
-                    break;
-                case 4:
-                    pDIB->mnFormat = BMP_FORMAT_4BIT_MSN_PAL;
-                    break;
-                case 8:
-                    pDIB->mnFormat = BMP_FORMAT_8BIT_PAL;
-                    break;
-                case 16:
-                {
+    switch (nBitCount)
+    {
+        case 1:
+            pDIB->mnFormat = ScanlineFormat::N1BitLsbPal;
+            break;
+        case 4:
+            pDIB->mnFormat = ScanlineFormat::N4BitMsnPal;
+            break;
+        case 8:
+            pDIB->mnFormat = ScanlineFormat::N8BitPal;
+            break;
+        case 16:
+        {
 #ifdef OSL_BIGENDIAN
-                    pDIB->mnFormat= BMP_FORMAT_16BIT_TC_MSB_MASK;
+            pDIB->mnFormat= ScanlineFormat::N16BitTcMsbMask;
 #else
-                    pDIB->mnFormat= BMP_FORMAT_16BIT_TC_LSB_MASK;
+            pDIB->mnFormat= ScanlineFormat::N16BitTcLsbMask;
 #endif
-                    ColorMaskElement aRedMask(0xf800);
-                    aRedMask.CalcMaskShift();
-                    ColorMaskElement aGreenMask(0x07e0);
-                    aGreenMask.CalcMaskShift();
-                    ColorMaskElement aBlueMask(0x001f);
-                    aBlueMask.CalcMaskShift();
-                    pDIB->maColorMask = ColorMask(aRedMask, aGreenMask, aBlueMask);
-                    break;
-                }
-                default:
-                    nBitCount = 32;
-                    //fall through
-                case 32:
-                {
-                    pDIB->mnFormat = SVP_CAIRO_FORMAT;
-                    break;
-                }
-            }
+            ColorMaskElement aRedMask(0xf800);
+            aRedMask.CalcMaskShift();
+            ColorMaskElement aGreenMask(0x07e0);
+            aGreenMask.CalcMaskShift();
+            ColorMaskElement aBlueMask(0x001f);
+            aBlueMask.CalcMaskShift();
+            pDIB->maColorMask = ColorMask(aRedMask, aGreenMask, aBlueMask);
+            break;
+        }
+        case 24:
+            pDIB->mnFormat = SVP_24BIT_FORMAT;
+            break;
+        default:
+            nBitCount = 32;
+            [[fallthrough]];
+        case 32:
+            pDIB->mnFormat = SVP_CAIRO_FORMAT;
+            break;
+    }
 
-            pDIB->mnFormat |= BMP_FORMAT_TOP_DOWN;
-            pDIB->mnWidth = rSize.Width();
-            pDIB->mnHeight = rSize.Height();
-            pDIB->mnScanlineSize = AlignedWidth4Bytes( pDIB->mnWidth * nBitCount );
-            pDIB->mnBitCount = nBitCount;
+    pDIB->mnFormat |= ScanlineFormat::TopDown;
+    pDIB->mnWidth = rSize.Width();
+    pDIB->mnHeight = rSize.Height();
+    long nScanlineBase;
+    bool bFail = o3tl::checked_multiply<long>(pDIB->mnWidth, nBitCount, nScanlineBase);
+    if (bFail)
+    {
+        SAL_WARN("vcl.gdi", "checked multiply failed");
+        return nullptr;
+    }
+    pDIB->mnScanlineSize = AlignedWidth4Bytes(nScanlineBase);
+    if (pDIB->mnScanlineSize < nScanlineBase/8)
+    {
+        SAL_WARN("vcl.gdi", "scanline calculation wraparound");
+        return nullptr;
+    }
+    pDIB->mnBitCount = nBitCount;
 
-            if( nColors )
-            {
-                pDIB->maPalette = rPal;
-                pDIB->maPalette.SetEntryCount( nColors );
-            }
+    if( nColors )
+    {
+        pDIB->maPalette = rPal;
+        pDIB->maPalette.SetEntryCount( nColors );
+    }
 
-            try
-            {
-                size_t size = pDIB->mnScanlineSize * pDIB->mnHeight;
-                pDIB->mpBits = new sal_uInt8[size];
-                std::memset(pDIB->mpBits, 0, size);
-            }
-            catch (const std::bad_alloc&)
-            {
-                delete pDIB;
-                pDIB = nullptr;
-            }
+    size_t size;
+    bFail = o3tl::checked_multiply<size_t>(pDIB->mnHeight, pDIB->mnScanlineSize, size);
+    SAL_WARN_IF(bFail, "vcl.gdi", "checked multiply failed");
+    if (bFail || size > SAL_MAX_INT32/2)
+    {
+        return nullptr;
+    }
+
+    try
+    {
+        pDIB->mpBits = new sal_uInt8[size];
+#ifdef __SANITIZE_ADDRESS__
+        if (!pDIB->mpBits)
+        {   // can only happen with ASAN allocator_may_return_null=1
+            pDIB.reset();
+        }
+        else
+#endif
+        {
+            std::memset(pDIB->mpBits, 0, size);
         }
     }
-    else
-        pDIB = nullptr;
+    catch (const std::bad_alloc&)
+    {
+        pDIB.reset();
+    }
 
     return pDIB;
 }
 
-bool SvpSalBitmap::Create(BitmapBuffer *pBuf)
+void SvpSalBitmap::Create(std::unique_ptr<BitmapBuffer> pBuf)
 {
     Destroy();
-    mpDIB = pBuf;
-    return mpDIB != nullptr;
+    mpDIB = std::move(pBuf);
 }
 
 bool SvpSalBitmap::Create(const Size& rSize, sal_uInt16 nBitCount, const BitmapPalette& rPal)
@@ -163,18 +185,24 @@ bool SvpSalBitmap::Create(const SalBitmap& rBmp)
     if (rSalBmp.mpDIB)
     {
         // TODO: reference counting...
-        mpDIB = new BitmapBuffer( *rSalBmp.mpDIB );
+        mpDIB.reset(new BitmapBuffer( *rSalBmp.mpDIB ));
+
+        const size_t size = mpDIB->mnScanlineSize * mpDIB->mnHeight;
+        if (size > SAL_MAX_INT32/2)
+        {
+            mpDIB.reset();
+            return false;
+        }
+
         // TODO: get rid of this when BitmapBuffer gets copy constructor
         try
         {
-            size_t size = mpDIB->mnScanlineSize * mpDIB->mnHeight;
             mpDIB->mpBits = new sal_uInt8[size];
             std::memcpy(mpDIB->mpBits, rSalBmp.mpDIB->mpBits, size);
         }
         catch (const std::bad_alloc&)
         {
-            delete mpDIB;
-            mpDIB = nullptr;
+            mpDIB.reset();
         }
     }
 
@@ -203,8 +231,7 @@ void SvpSalBitmap::Destroy()
     if (mpDIB)
     {
         delete[] mpDIB->mpBits;
-        delete mpDIB;
-        mpDIB = nullptr;
+        mpDIB.reset();
     }
 }
 
@@ -214,8 +241,8 @@ Size SvpSalBitmap::GetSize() const
 
     if (mpDIB)
     {
-        aSize.Width() = mpDIB->mnWidth;
-        aSize.Height() = mpDIB->mnHeight;
+        aSize.setWidth( mpDIB->mnWidth );
+        aSize.setHeight( mpDIB->mnHeight );
     }
 
     return aSize;
@@ -235,14 +262,21 @@ sal_uInt16 SvpSalBitmap::GetBitCount() const
 
 BitmapBuffer* SvpSalBitmap::AcquireBuffer(BitmapAccessMode)
 {
-    return mpDIB;
+    return mpDIB.get();
 }
 
-void SvpSalBitmap::ReleaseBuffer(BitmapBuffer*, BitmapAccessMode)
+void SvpSalBitmap::ReleaseBuffer(BitmapBuffer*, BitmapAccessMode nMode)
 {
+    if( nMode == BitmapAccessMode::Write )
+        InvalidateChecksum();
 }
 
 bool SvpSalBitmap::GetSystemData( BitmapSystemData& )
+{
+    return false;
+}
+
+bool SvpSalBitmap::ScalingSupported() const
 {
     return false;
 }
@@ -252,11 +286,9 @@ bool SvpSalBitmap::Scale( const double& /*rScaleX*/, const double& /*rScaleY*/, 
     return false;
 }
 
-bool SvpSalBitmap::Replace( const ::Color& /*rSearchColor*/, const ::Color& /*rReplaceColor*/, sal_uLong /*nTol*/ )
+bool SvpSalBitmap::Replace( const ::Color& /*rSearchColor*/, const ::Color& /*rReplaceColor*/, sal_uInt8 /*nTol*/ )
 {
     return false;
 }
-
-#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

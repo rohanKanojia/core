@@ -21,7 +21,6 @@
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <osl/diagnose.h>
 #include <rtl/math.hxx>
-#include <rtl/instance.hxx>
 #include <sal/log.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolypolygon.hxx>
@@ -40,15 +39,11 @@
 // #i37443#
 #define ANGLE_BOUND_START_VALUE     (2.25)
 #define ANGLE_BOUND_MINIMUM_VALUE   (0.1)
-#define COUNT_SUBDIVIDE_DEFAULT     (4L)
-#ifdef DBG_UTIL
-static double fAngleBoundStartValue = ANGLE_BOUND_START_VALUE;
-#endif
 #define STEPSPERQUARTER     (3)
 
 namespace basegfx
 {
-    namespace tools
+    namespace utils
     {
         void openWithGeometryChange(B2DPolygon& rCandidate)
         {
@@ -106,11 +101,11 @@ namespace basegfx
 
             if(nIndex)
             {
-                return nIndex - 1L;
+                return nIndex - 1;
             }
             else if(rCandidate.count())
             {
-                return rCandidate.count() - 1L;
+                return rCandidate.count() - 1;
             }
             else
             {
@@ -122,11 +117,11 @@ namespace basegfx
         {
             OSL_ENSURE(nIndex < rCandidate.count(), "getIndexOfPredecessor: Access to polygon out of range (!)");
 
-            if(nIndex + 1L < rCandidate.count())
+            if(nIndex + 1 < rCandidate.count())
             {
-                return nIndex + 1L;
+                return nIndex + 1;
             }
-            else if(nIndex + 1L == rCandidate.count())
+            else if(nIndex + 1 == rCandidate.count())
             {
                 return 0;
             }
@@ -140,7 +135,7 @@ namespace basegfx
         {
             B2VectorOrientation eRetval(B2VectorOrientation::Neutral);
 
-            if(rCandidate.count() > 2L || rCandidate.areControlPointsUsed())
+            if(rCandidate.count() > 2 || rCandidate.areControlPointsUsed())
             {
                 const double fSignedArea(getSignedArea(rCandidate));
 
@@ -200,7 +195,7 @@ namespace basegfx
                             // add curved edge and generate DistanceBound
                             double fBound(0.0);
 
-                            if(rtl::math::approxEqual(0.0, fDistanceBound))
+                            if(fDistanceBound == 0.0)
                             {
                                 // If not set, use B2DCubicBezier functionality to guess a rough value
                                 const double fRoughLength((aBezier.getEdgeLength() + aBezier.getControlPolygonLength()) / 2.0);
@@ -270,13 +265,9 @@ namespace basegfx
                     aRetval.append(aBezier.getStartPoint());
 
                     // #i37443# prepare convenient AngleBound if none was given
-                    if(rtl::math::approxEqual(0.0, fAngleBound))
+                    if(fAngleBound == 0.0)
                     {
-#ifdef DBG_UTIL
-                        fAngleBound = fAngleBoundStartValue;
-#else
                         fAngleBound = ANGLE_BOUND_START_VALUE;
-#endif
                     }
                     else if(fTools::less(fAngleBound, ANGLE_BOUND_MINIMUM_VALUE))
                     {
@@ -295,72 +286,7 @@ namespace basegfx
                         if(aBezier.isBezier())
                         {
                             // call adaptive subdivide
-                            aBezier.adaptiveSubdivideByAngle(aRetval, fAngleBound, true);
-                        }
-                        else
-                        {
-                            // add non-curved edge
-                            aRetval.append(aBezier.getEndPoint());
-                        }
-
-                        // prepare next step
-                        aBezier.setStartPoint(aBezier.getEndPoint());
-                    }
-
-                    if(rCandidate.isClosed())
-                    {
-                        // set closed flag and correct last point (which is added double now).
-                        closeWithGeometryChange(aRetval);
-                    }
-                }
-
-                return aRetval;
-            }
-            else
-            {
-                return rCandidate;
-            }
-        }
-
-        B2DPolygon adaptiveSubdivideByCount(const B2DPolygon& rCandidate, sal_uInt32 nCount)
-        {
-            if(rCandidate.areControlPointsUsed())
-            {
-                const sal_uInt32 nPointCount(rCandidate.count());
-                B2DPolygon aRetval;
-
-                if(nPointCount)
-                {
-                    // prepare edge-oriented loop
-                    const sal_uInt32 nEdgeCount(rCandidate.isClosed() ? nPointCount : nPointCount - 1);
-                    B2DCubicBezier aBezier;
-                    aBezier.setStartPoint(rCandidate.getB2DPoint(0));
-
-                    // perf: try to avoid too many realloctions by guessing the result's pointcount
-                    aRetval.reserve(nPointCount*4);
-
-                    // add start point (always)
-                    aRetval.append(aBezier.getStartPoint());
-
-                    // #i37443# prepare convenient count if none was given
-                    if(0 == nCount)
-                    {
-                        nCount = COUNT_SUBDIVIDE_DEFAULT;
-                    }
-
-                    for(sal_uInt32 a(0); a < nEdgeCount; a++)
-                    {
-                        // get next and control points
-                        const sal_uInt32 nNextIndex((a + 1) % nPointCount);
-                        aBezier.setEndPoint(rCandidate.getB2DPoint(nNextIndex));
-                        aBezier.setControlPointA(rCandidate.getNextControlPoint(a));
-                        aBezier.setControlPointB(rCandidate.getPrevControlPoint(nNextIndex));
-                        aBezier.testAndSolveTrivialBezier();
-
-                        if(aBezier.isBezier())
-                        {
-                            // call adaptive subdivide
-                            aBezier.adaptiveSubdivideByCount(aRetval, nCount);
+                            aBezier.adaptiveSubdivideByAngle(aRetval, fAngleBound);
                         }
                         else
                         {
@@ -402,7 +328,7 @@ namespace basegfx
 
                 if(nPointCount)
                 {
-                    B2DPoint aCurrentPoint(aCandidate.getB2DPoint(nPointCount - 1L));
+                    B2DPoint aCurrentPoint(aCandidate.getB2DPoint(nPointCount - 1));
 
                     for(sal_uInt32 a(0); a < nPointCount; a++)
                     {
@@ -481,7 +407,7 @@ namespace basegfx
             {
                 for(sal_uInt32 a(0); a < nPointCount; a++)
                 {
-                    const B2DPoint aPreviousPoint(aCandidate.getB2DPoint((!a) ? nPointCount - 1L : a - 1L));
+                    const B2DPoint aPreviousPoint(aCandidate.getB2DPoint((!a) ? nPointCount - 1 : a - 1));
                     const B2DPoint aCurrentPoint(aCandidate.getB2DPoint(a));
 
                     fRetval += aPreviousPoint.getX() * aCurrentPoint.getY();
@@ -558,7 +484,7 @@ namespace basegfx
 
             if(nPointCount)
             {
-                const sal_uInt32 nEdgeCount(rCandidate.isClosed() ? nPointCount : nPointCount - 1L);
+                const sal_uInt32 nEdgeCount(rCandidate.isClosed() ? nPointCount : nPointCount - 1);
 
                 if(rCandidate.areControlPointsUsed())
                 {
@@ -599,12 +525,12 @@ namespace basegfx
             B2DPoint aRetval;
             const sal_uInt32 nPointCount(rCandidate.count());
 
-            if( 1L == nPointCount )
+            if( nPointCount == 1 )
             {
                 // only one point (i.e. no edge) - simply take that point
                 aRetval = rCandidate.getB2DPoint(0);
             }
-            else if(nPointCount > 1L)
+            else if(nPointCount > 1)
             {
                 const sal_uInt32 nEdgeCount(rCandidate.isClosed() ? nPointCount : nPointCount - 1);
                 sal_uInt32 nIndex(0);
@@ -623,7 +549,7 @@ namespace basegfx
                     {
                         // if fDistance < 0.0 increment with multiple of fLength
                         sal_uInt32 nCount(sal_uInt32(-fDistance / fLength));
-                        fDistance += double(nCount + 1L) * fLength;
+                        fDistance += double(nCount + 1) * fLength;
                     }
                     else
                     {
@@ -639,7 +565,7 @@ namespace basegfx
                     {
                         // if fDistance >= fLength decrement with multiple of fLength
                         sal_uInt32 nCount(sal_uInt32(fDistance / fLength));
-                        fDistance -= (double)(nCount) * fLength;
+                        fDistance -= static_cast<double>(nCount) * fLength;
                     }
                     else
                     {
@@ -691,7 +617,6 @@ namespace basegfx
                     else if(fTools::equalZero(fDistance))
                     {
                         // start point of chosen edge
-                        aRetval = aRetval;
                     }
                     else
                     {
@@ -950,7 +875,7 @@ namespace basegfx
             CutFlagValue aRetval(CutFlagValue::NONE);
             double fCut1(0.0);
             double fCut2(0.0);
-            bool bFinished(!((bool)(aCutFlags & CutFlagValue::ALL)));
+            bool bFinished(!static_cast<bool>(aCutFlags & CutFlagValue::ALL));
 
             // test for same points?
             if(!bFinished
@@ -958,7 +883,7 @@ namespace basegfx
                 && (aCutFlags & (CutFlagValue::START2|CutFlagValue::END2)))
             {
                 // same startpoint?
-                if(!bFinished && (aCutFlags & (CutFlagValue::START1|CutFlagValue::START2)) == (CutFlagValue::START1|CutFlagValue::START2))
+                if((aCutFlags & (CutFlagValue::START1|CutFlagValue::START2)) == (CutFlagValue::START1|CutFlagValue::START2))
                 {
                     if(rEdge1Start.equal(rEdge2Start))
                     {
@@ -1012,7 +937,7 @@ namespace basegfx
 
             if(!bFinished && (aCutFlags & CutFlagValue::LINE))
             {
-                if(!bFinished && (aCutFlags & CutFlagValue::START1))
+                if(aCutFlags & CutFlagValue::START1)
                 {
                     // start1 on line 2 ?
                     if(isPointOnEdge(rEdge1Start, rEdge2Start, rEdge2Delta, &fCut2))
@@ -1189,14 +1114,14 @@ namespace basegfx
             return false;
         }
 
-        void applyLineDashing(const B2DPolygon& rCandidate, const ::std::vector<double>& rDotDashArray, B2DPolyPolygon* pLineTarget, B2DPolyPolygon* pGapTarget, double fDotDashLength)
+        void applyLineDashing(const B2DPolygon& rCandidate, const std::vector<double>& rDotDashArray, B2DPolyPolygon* pLineTarget, B2DPolyPolygon* pGapTarget, double fDotDashLength)
         {
             const sal_uInt32 nPointCount(rCandidate.count());
             const sal_uInt32 nDotDashCount(rDotDashArray.size());
 
             if(fTools::lessOrEqual(fDotDashLength, 0.0))
             {
-                fDotDashLength = ::std::accumulate(rDotDashArray.begin(), rDotDashArray.end(), 0.0);
+                fDotDashLength = std::accumulate(rDotDashArray.begin(), rDotDashArray.end(), 0.0);
             }
 
             if(fTools::more(fDotDashLength, 0.0) && (pLineTarget || pGapTarget) && nPointCount)
@@ -1388,7 +1313,7 @@ namespace basegfx
                     if(nCount > 1)
                     {
                         // these polygons were created above, there exists none with less than two points,
-                        // thus dircet point access below is allowed
+                        // thus direct point access below is allowed
                         const B2DPolygon aFirst(pLineTarget->getB2DPolygon(0));
                         B2DPolygon aLast(pLineTarget->getB2DPolygon(nCount - 1));
 
@@ -1410,7 +1335,7 @@ namespace basegfx
                     if(nCount > 1)
                     {
                         // these polygons were created above, there exists none with less than two points,
-                        // thus dircet point access below is allowed
+                        // thus direct point access below is allowed
                         const B2DPolygon aFirst(pGapTarget->getB2DPolygon(0));
                         B2DPolygon aLast(pGapTarget->getB2DPolygon(nCount - 1));
 
@@ -1484,14 +1409,7 @@ namespace basegfx
                     const B2DVector aDelta(rTestPosition - aCutPoint);
                     const double fDistanceSquare(aDelta.scalar(aDelta));
 
-                    if(fDistanceSquare <= fDistance * fDistance)
-                    {
-                        return true;
-                    }
-                    else
-                    {
-                        return false;
-                    }
+                    return fDistanceSquare <= fDistance * fDistance;
                 }
             }
 
@@ -1525,12 +1443,12 @@ namespace basegfx
         bool isInEpsilonRange(const B2DPolygon& rCandidate, const B2DPoint& rTestPosition, double fDistance)
         {
             // force to non-bezier polygon
-            const B2DPolygon aCandidate(rCandidate.getDefaultAdaptiveSubdivision());
+            const B2DPolygon& aCandidate(rCandidate.getDefaultAdaptiveSubdivision());
             const sal_uInt32 nPointCount(aCandidate.count());
 
             if(nPointCount)
             {
-                const sal_uInt32 nEdgeCount(aCandidate.isClosed() ? nPointCount : nPointCount - 1L);
+                const sal_uInt32 nEdgeCount(aCandidate.isClosed() ? nPointCount : nPointCount - 1);
                 B2DPoint aCurrent(aCandidate.getB2DPoint(0));
 
                 if(nEdgeCount)
@@ -1564,51 +1482,49 @@ namespace basegfx
             return false;
         }
 
+        // Calculates distance of curve point to its control point for a Bézier curve, that
+        // approximates a unit circle arc. fAngle is the center angle of the circle arc. The
+        // constrain 0<=fAngle<=pi/2 must not be violated to give a useful accuracy. For details
+        // and alternatives read document "ApproxCircleInfo.odt", attachment of bug tdf#121425.
+        static double impDistanceBezierPointToControl(double fAngle)
+        {
+            SAL_WARN_IF(fAngle < 0 || fAngle > F_PI2,"basegfx","angle not suitable for approximate circle");
+            if (0 <= fAngle && fAngle <= F_PI2)
+            {
+                return 4.0/3.0 * ( tan(fAngle/4.0));
+            }
+            else
+                return 0;
+        }
+
         B2DPolygon createPolygonFromRect( const B2DRectangle& rRect, double fRadiusX, double fRadiusY )
         {
             const double fZero(0.0);
             const double fOne(1.0);
 
-            // crop to useful values
-            if(fTools::less(fRadiusX, fZero))
-            {
-                fRadiusX = fZero;
-            }
-            else if(fTools::more(fRadiusX, fOne))
-            {
-                fRadiusX = fOne;
-            }
-
-            if(fTools::less(fRadiusY, fZero))
-            {
-                fRadiusY = fZero;
-            }
-            else if(fTools::more(fRadiusY, fOne))
-            {
-                fRadiusY = fOne;
-            }
+            fRadiusX = std::clamp(fRadiusX, 0.0, 1.0);
+            fRadiusY = std::clamp(fRadiusY, 0.0, 1.0);
 
             if(rtl::math::approxEqual(fZero, fRadiusX) || rtl::math::approxEqual(fZero, fRadiusY))
             {
-                B2DPolygon aRetval;
-
                 // at least in one direction no radius, use rectangle.
                 // Do not use createPolygonFromRect() here since original
                 // creator (historical reasons) still creates a start point at the
                 // bottom center, so do the same here to get the same line patterns.
                 // Due to this the order of points is different, too.
                 const B2DPoint aBottomCenter(rRect.getCenter().getX(), rRect.getMaxY());
-                aRetval.append(aBottomCenter);
-
-                aRetval.append( B2DPoint( rRect.getMinX(), rRect.getMaxY() ) );
-                aRetval.append( B2DPoint( rRect.getMinX(), rRect.getMinY() ) );
-                aRetval.append( B2DPoint( rRect.getMaxX(), rRect.getMinY() ) );
-                aRetval.append( B2DPoint( rRect.getMaxX(), rRect.getMaxY() ) );
+                B2DPolygon aPolygon {
+                    aBottomCenter,
+                    { rRect.getMinX(), rRect.getMaxY() },
+                    { rRect.getMinX(), rRect.getMinY() },
+                    { rRect.getMaxX(), rRect.getMinY() },
+                    { rRect.getMaxX(), rRect.getMaxY() }
+                };
 
                 // close
-                aRetval.setClosed( true );
+                aPolygon.setClosed( true );
 
-                return aRetval;
+                return aPolygon;
             }
             else if(rtl::math::approxEqual(fOne, fRadiusX) && rtl::math::approxEqual(fOne, fRadiusY))
             {
@@ -1624,7 +1540,7 @@ namespace basegfx
                 B2DPolygon aRetval;
                 const double fBowX((rRect.getWidth() / 2.0) * fRadiusX);
                 const double fBowY((rRect.getHeight() / 2.0) * fRadiusY);
-                const double fKappa((M_SQRT2 - 1.0) * 4.0 / 3.0);
+                const double fKappa(impDistanceBezierPointToControl(F_PI2));
 
                 // create start point at bottom center
                 if(!rtl::math::approxEqual(fOne, fRadiusX))
@@ -1684,44 +1600,35 @@ namespace basegfx
 
         B2DPolygon createPolygonFromRect( const B2DRectangle& rRect )
         {
-            B2DPolygon aRetval;
-
-            aRetval.append( B2DPoint( rRect.getMinX(), rRect.getMinY() ) );
-            aRetval.append( B2DPoint( rRect.getMaxX(), rRect.getMinY() ) );
-            aRetval.append( B2DPoint( rRect.getMaxX(), rRect.getMaxY() ) );
-            aRetval.append( B2DPoint( rRect.getMinX(), rRect.getMaxY() ) );
+            B2DPolygon aPolygon {
+                { rRect.getMinX(), rRect.getMinY() },
+                { rRect.getMaxX(), rRect.getMinY() },
+                { rRect.getMaxX(), rRect.getMaxY() },
+                { rRect.getMinX(), rRect.getMaxY() }
+            };
 
             // close
-            aRetval.setClosed( true );
+            aPolygon.setClosed( true );
 
-            return aRetval;
+            return aPolygon;
         }
 
-        namespace
+        B2DPolygon const & createUnitPolygon()
         {
-            struct theUnitPolygon :
-                public rtl::StaticWithInit<B2DPolygon, theUnitPolygon>
-            {
-                B2DPolygon operator () ()
-                {
-                    B2DPolygon aRetval;
-
-                    aRetval.append( B2DPoint( 0.0, 0.0 ) );
-                    aRetval.append( B2DPoint( 1.0, 0.0 ) );
-                    aRetval.append( B2DPoint( 1.0, 1.0 ) );
-                    aRetval.append( B2DPoint( 0.0, 1.0 ) );
+            static auto const singleton = [] {
+                    B2DPolygon aPolygon {
+                        { 0.0, 0.0 },
+                        { 1.0, 0.0 },
+                        { 1.0, 1.0 },
+                        { 0.0, 1.0 }
+                    };
 
                     // close
-                    aRetval.setClosed( true );
+                    aPolygon.setClosed( true );
 
-                    return aRetval;
-                }
-            };
-        }
-
-        B2DPolygon createUnitPolygon()
-        {
-            return theUnitPolygon::get();
+                    return aPolygon;
+            }();
+            return singleton;
         }
 
         B2DPolygon createPolygonFromCircle( const B2DPoint& rCenter, double fRadius )
@@ -1729,18 +1636,17 @@ namespace basegfx
             return createPolygonFromEllipse( rCenter, fRadius, fRadius );
         }
 
-        B2DPolygon impCreateUnitCircle(sal_uInt32 nStartQuadrant)
+        static B2DPolygon impCreateUnitCircle(sal_uInt32 nStartQuadrant)
         {
             B2DPolygon aUnitCircle;
-            const double fKappa((M_SQRT2 - 1.0) * 4.0 / 3.0);
-            const double fScaledKappa(fKappa * (1.0 / STEPSPERQUARTER));
+            const double fSegmentKappa = impDistanceBezierPointToControl(F_PI2 / STEPSPERQUARTER);
             const B2DHomMatrix aRotateMatrix(createRotateB2DHomMatrix(F_PI2 / STEPSPERQUARTER));
 
             B2DPoint aPoint(1.0, 0.0);
-            B2DPoint aForward(1.0, fScaledKappa);
-            B2DPoint aBackward(1.0, -fScaledKappa);
+            B2DPoint aForward(1.0, fSegmentKappa);
+            B2DPoint aBackward(1.0, -fSegmentKappa);
 
-            if(0 != nStartQuadrant)
+            if(nStartQuadrant != 0)
             {
                 const B2DHomMatrix aQuadrantMatrix(createRotateB2DHomMatrix(F_PI2 * (nStartQuadrant % 4)));
                 aPoint *= aQuadrantMatrix;
@@ -1764,20 +1670,15 @@ namespace basegfx
             return aUnitCircle;
         }
 
-        namespace
+        B2DPolygon const & createHalfUnitCircle()
         {
-            struct theUnitHalfCircle :
-                public rtl::StaticWithInit<B2DPolygon, theUnitHalfCircle>
-            {
-                B2DPolygon operator()()
-                {
+            static auto const singleton = [] {
                     B2DPolygon aUnitHalfCircle;
-                    const double fKappa((M_SQRT2 - 1.0) * 4.0 / 3.0);
-                    const double fScaledKappa(fKappa * (1.0 / STEPSPERQUARTER));
+                    const double fSegmentKappa(impDistanceBezierPointToControl(F_PI2 / STEPSPERQUARTER));
                     const B2DHomMatrix aRotateMatrix(createRotateB2DHomMatrix(F_PI2 / STEPSPERQUARTER));
                     B2DPoint aPoint(1.0, 0.0);
-                    B2DPoint aForward(1.0, fScaledKappa);
-                    B2DPoint aBackward(1.0, -fScaledKappa);
+                    B2DPoint aForward(1.0, fSegmentKappa);
+                    B2DPoint aBackward(1.0, -fSegmentKappa);
 
                     aUnitHalfCircle.append(aPoint);
 
@@ -1789,63 +1690,43 @@ namespace basegfx
                         aForward *= aRotateMatrix;
                     }
                     return aUnitHalfCircle;
-                }
-            };
+                }();
+            return singleton;
         }
 
-        B2DPolygon createHalfUnitCircle()
-        {
-            return theUnitHalfCircle::get();
-        }
-
-        namespace
-        {
-            struct theUnitCircleStartQuadrantOne :
-                public rtl::StaticWithInit<B2DPolygon, theUnitCircleStartQuadrantOne>
-            {
-                B2DPolygon operator()() { return impCreateUnitCircle(1); }
-            };
-
-            struct theUnitCircleStartQuadrantTwo :
-                public rtl::StaticWithInit<B2DPolygon, theUnitCircleStartQuadrantTwo>
-            {
-                B2DPolygon operator()() { return impCreateUnitCircle(2); }
-            };
-
-            struct theUnitCircleStartQuadrantThree :
-                public rtl::StaticWithInit<B2DPolygon, theUnitCircleStartQuadrantThree>
-            {
-                B2DPolygon operator()() { return impCreateUnitCircle(3); }
-            };
-
-            struct theUnitCircleStartQuadrantZero :
-                public rtl::StaticWithInit<B2DPolygon, theUnitCircleStartQuadrantZero>
-            {
-                B2DPolygon operator()() { return impCreateUnitCircle(0); }
-            };
-        }
-
-        B2DPolygon createPolygonFromUnitCircle(sal_uInt32 nStartQuadrant)
+        B2DPolygon const & createPolygonFromUnitCircle(sal_uInt32 nStartQuadrant)
         {
             switch(nStartQuadrant % 4)
             {
                 case 1 :
-                    return theUnitCircleStartQuadrantOne::get();
+                    {
+                        static auto const singleton = impCreateUnitCircle(1);
+                        return singleton;
+                    }
 
                 case 2 :
-                    return theUnitCircleStartQuadrantTwo::get();
+                    {
+                        static auto const singleton = impCreateUnitCircle(2);
+                        return singleton;
+                    }
 
                 case 3 :
-                    return theUnitCircleStartQuadrantThree::get();
+                    {
+                        static auto const singleton = impCreateUnitCircle(3);
+                        return singleton;
+                    }
 
                 default : // case 0 :
-                    return theUnitCircleStartQuadrantZero::get();
+                    {
+                        static auto const singleton = impCreateUnitCircle(0);
+                        return singleton;
+                    }
             }
         }
 
-        B2DPolygon createPolygonFromEllipse( const B2DPoint& rCenter, double fRadiusX, double fRadiusY )
+        B2DPolygon createPolygonFromEllipse( const B2DPoint& rCenter, double fRadiusX, double fRadiusY, sal_uInt32 nStartQuadrant)
         {
-            B2DPolygon aRetval(createPolygonFromUnitCircle());
+            B2DPolygon aRetval(createPolygonFromUnitCircle(nStartQuadrant));
             const B2DHomMatrix aMatrix(createScaleTranslateB2DHomMatrix(fRadiusX, fRadiusY, rCenter.getX(), rCenter.getY()));
 
             aRetval.transform(aMatrix);
@@ -1890,8 +1771,7 @@ namespace basegfx
                 const double fAnglePerSegment(F_PI2 / STEPSPERQUARTER);
                 const sal_uInt32 nStartSegment(sal_uInt32(fStart / fAnglePerSegment) % nSegments);
                 const sal_uInt32 nEndSegment(sal_uInt32(fEnd / fAnglePerSegment) % nSegments);
-                const double fKappa((M_SQRT2 - 1.0) * 4.0 / 3.0);
-                const double fScaledKappa(fKappa * (1.0 / STEPSPERQUARTER));
+                const double fSegmentKappa(impDistanceBezierPointToControl(fAnglePerSegment));
 
                 B2DPoint aSegStart(cos(fStart), sin(fStart));
                 aRetval.append(aSegStart);
@@ -1900,7 +1780,7 @@ namespace basegfx
                 {
                     // start and end in one sector and in the right order, create in one segment
                     const B2DPoint aSegEnd(cos(fEnd), sin(fEnd));
-                    const double fFactor(fScaledKappa * ((fEnd - fStart) / fAnglePerSegment));
+                    const double fFactor(impDistanceBezierPointToControl(fEnd - fStart));
 
                     aRetval.appendBezierSegment(
                         aSegStart + (B2DPoint(-aSegStart.getY(), aSegStart.getX()) * fFactor),
@@ -1910,7 +1790,7 @@ namespace basegfx
                 else
                 {
                     double fSegEndRad((nStartSegment + 1) * fAnglePerSegment);
-                    double fFactor(fScaledKappa * ((fSegEndRad - fStart) / fAnglePerSegment));
+                    double fFactor(impDistanceBezierPointToControl(fSegEndRad - fStart));
                     B2DPoint aSegEnd(cos(fSegEndRad), sin(fSegEndRad));
 
                     aRetval.appendBezierSegment(
@@ -1928,8 +1808,8 @@ namespace basegfx
                         aSegEnd = B2DPoint(cos(fSegEndRad), sin(fSegEndRad));
 
                         aRetval.appendBezierSegment(
-                            aSegStart + (B2DPoint(-aSegStart.getY(), aSegStart.getX()) * fScaledKappa),
-                            aSegEnd - (B2DPoint(-aSegEnd.getY(), aSegEnd.getX()) * fScaledKappa),
+                            aSegStart + (B2DPoint(-aSegStart.getY(), aSegStart.getX()) * fSegmentKappa),
+                            aSegEnd - (B2DPoint(-aSegEnd.getY(), aSegEnd.getX()) * fSegmentKappa),
                             aSegEnd);
 
                         nSegment = (nSegment + 1) % nSegments;
@@ -1938,7 +1818,7 @@ namespace basegfx
 
                     // End in this sector
                     const double fSegStartRad(nSegment * fAnglePerSegment);
-                    fFactor = fScaledKappa * ((fEnd - fSegStartRad) / fAnglePerSegment);
+                    fFactor= impDistanceBezierPointToControl(fEnd - fSegStartRad);
                     aSegEnd = B2DPoint(cos(fEnd), sin(fEnd));
 
                     aRetval.appendBezierSegment(
@@ -1969,9 +1849,9 @@ namespace basegfx
             OSL_ENSURE(!rCandidate.areControlPointsUsed(), "hasNeutralPoints: ATM works not for curves (!)");
             const sal_uInt32 nPointCount(rCandidate.count());
 
-            if(nPointCount > 2L)
+            if(nPointCount > 2)
             {
-                B2DPoint aPrevPoint(rCandidate.getB2DPoint(nPointCount - 1L));
+                B2DPoint aPrevPoint(rCandidate.getB2DPoint(nPointCount - 1));
                 B2DPoint aCurrPoint(rCandidate.getB2DPoint(0));
 
                 for(sal_uInt32 a(0); a < nPointCount; a++)
@@ -1981,7 +1861,7 @@ namespace basegfx
                     const B2DVector aNextVec(aNextPoint - aCurrPoint);
                     const B2VectorOrientation aOrientation(getOrientation(aNextVec, aPrevVec));
 
-                    if(B2VectorOrientation::Neutral == aOrientation)
+                    if(aOrientation == B2VectorOrientation::Neutral)
                     {
                         // current has neutral orientation
                         return true;
@@ -2004,7 +1884,7 @@ namespace basegfx
             {
                 const sal_uInt32 nPointCount(rCandidate.count());
                 B2DPolygon aRetval;
-                B2DPoint aPrevPoint(rCandidate.getB2DPoint(nPointCount - 1L));
+                B2DPoint aPrevPoint(rCandidate.getB2DPoint(nPointCount - 1));
                 B2DPoint aCurrPoint(rCandidate.getB2DPoint(0));
 
                 for(sal_uInt32 a(0); a < nPointCount; a++)
@@ -2014,7 +1894,7 @@ namespace basegfx
                     const B2DVector aNextVec(aNextPoint - aCurrPoint);
                     const B2VectorOrientation aOrientation(getOrientation(aNextVec, aPrevVec));
 
-                    if(B2VectorOrientation::Neutral == aOrientation)
+                    if(aOrientation == B2VectorOrientation::Neutral)
                     {
                         // current has neutral orientation, leave it out and prepare next
                         aCurrPoint = aNextPoint;
@@ -2030,7 +1910,7 @@ namespace basegfx
                     }
                 }
 
-                while(aRetval.count() && B2VectorOrientation::Neutral == getOrientationForIndex(aRetval, 0))
+                while(aRetval.count() && getOrientationForIndex(aRetval, 0) == B2VectorOrientation::Neutral)
                 {
                     aRetval.remove(0);
                 }
@@ -2051,9 +1931,9 @@ namespace basegfx
             OSL_ENSURE(!rCandidate.areControlPointsUsed(), "isConvex: ATM works not for curves (!)");
             const sal_uInt32 nPointCount(rCandidate.count());
 
-            if(nPointCount > 2L)
+            if(nPointCount > 2)
             {
-                const B2DPoint aPrevPoint(rCandidate.getB2DPoint(nPointCount - 1L));
+                const B2DPoint aPrevPoint(rCandidate.getB2DPoint(nPointCount - 1));
                 B2DPoint aCurrPoint(rCandidate.getB2DPoint(0));
                 B2DVector aCurrVec(aPrevPoint - aCurrPoint);
                 B2VectorOrientation aOrientation(B2VectorOrientation::Neutral);
@@ -2064,14 +1944,14 @@ namespace basegfx
                     const B2DVector aNextVec(aNextPoint - aCurrPoint);
                     const B2VectorOrientation aCurrentOrientation(getOrientation(aNextVec, aCurrVec));
 
-                    if(B2VectorOrientation::Neutral == aOrientation)
+                    if(aOrientation == B2VectorOrientation::Neutral)
                     {
                         // set start value, maybe neutral again
                         aOrientation = aCurrentOrientation;
                     }
                     else
                     {
-                        if(B2VectorOrientation::Neutral != aCurrentOrientation && aCurrentOrientation != aOrientation)
+                        if(aCurrentOrientation != B2VectorOrientation::Neutral && aCurrentOrientation != aOrientation)
                         {
                             // different orientations found, that's it
                             return false;
@@ -2139,14 +2019,14 @@ namespace basegfx
             const B2DPolygon aCandidate(rCandidate.areControlPointsUsed() ? rCandidate.getDefaultAdaptiveSubdivision() : rCandidate);
             const sal_uInt32 nPointCount(aCandidate.count());
 
-            if(nPointCount > 1L)
+            if(nPointCount > 1)
             {
-                const sal_uInt32 nLoopCount(aCandidate.isClosed() ? nPointCount : nPointCount - 1L);
+                const sal_uInt32 nLoopCount(aCandidate.isClosed() ? nPointCount : nPointCount - 1);
                 B2DPoint aCurrentPoint(aCandidate.getB2DPoint(0));
 
                 for(sal_uInt32 a(0); a < nLoopCount; a++)
                 {
-                    const B2DPoint aNextPoint(aCandidate.getB2DPoint((a + 1L) % nPointCount));
+                    const B2DPoint aNextPoint(aCandidate.getB2DPoint((a + 1) % nPointCount));
 
                     if(isPointOnLine(aCurrentPoint, aNextPoint, rPoint, bWithPoints))
                     {
@@ -2188,7 +2068,7 @@ namespace basegfx
 
             // tdf#88352 increase numerical correctness and use rtl::math::approxEqual
             // instead of fTools::equalZero which compares with a fixed small value
-            if(rtl::math::approxEqual(fCrossA, 0.0))
+            if(fCrossA == 0.0)
             {
                 // one point on the line
                 return bWithLine;
@@ -2198,7 +2078,7 @@ namespace basegfx
             const double fCrossB(aLineVector.cross(aVectorToB));
 
             // increase numerical correctness
-            if(rtl::math::approxEqual(fCrossB, 0.0))
+            if(fCrossB == 0.0)
             {
                 // one point on the line
                 return bWithLine;
@@ -2208,21 +2088,24 @@ namespace basegfx
             return ((fCrossA > 0.0) == (fCrossB > 0.0));
         }
 
-        void addTriangleFan(const B2DPolygon& rCandidate, B2DPolygon& rTarget)
+        void addTriangleFan(
+            const B2DPolygon& rCandidate,
+            triangulator::B2DTriangleVector& rTarget)
         {
             const sal_uInt32 nCount(rCandidate.count());
 
-            if(nCount > 2L)
+            if(nCount > 2)
             {
                 const B2DPoint aStart(rCandidate.getB2DPoint(0));
-                B2DPoint aLast(rCandidate.getB2DPoint(1L));
+                B2DPoint aLast(rCandidate.getB2DPoint(1));
 
-                for(sal_uInt32 a(2L); a < nCount; a++)
+                for(sal_uInt32 a(2); a < nCount; a++)
                 {
                     const B2DPoint aCurrent(rCandidate.getB2DPoint(a));
-                    rTarget.append(aStart);
-                    rTarget.append(aLast);
-                    rTarget.append(aCurrent);
+                    rTarget.emplace_back(
+                        aStart,
+                        aLast,
+                        aCurrent);
 
                     // prepare next
                     aLast = aCurrent;
@@ -2233,9 +2116,9 @@ namespace basegfx
         namespace
         {
             /// return 0 for input of 0, -1 for negative and 1 for positive input
-            inline int lcl_sgn( const double n )
+            int lcl_sgn( const double n )
             {
-                return rtl::math::approxEqual(n, 0.0) ? 0 : 1 - 2*int(rtl::math::isSignBitSet(n));
+                return n == 0.0 ? 0 : 1 - 2*int(rtl::math::isSignBitSet(n));
             }
         }
 
@@ -2434,10 +2317,10 @@ namespace basegfx
             double fRetval(DBL_MAX);
             const sal_uInt32 nPointCount(rCandidate.count());
 
-            if(nPointCount > 1L)
+            if(nPointCount > 1)
             {
                 const double fZero(0.0);
-                const sal_uInt32 nEdgeCount(rCandidate.isClosed() ? nPointCount : nPointCount - 1L);
+                const sal_uInt32 nEdgeCount(rCandidate.isClosed() ? nPointCount : nPointCount - 1);
                 B2DCubicBezier aBezier;
                 aBezier.setStartPoint(rCandidate.getB2DPoint(0));
 
@@ -2466,7 +2349,7 @@ namespace basegfx
                         fEdgeDist = getSmallestDistancePointToEdge(aBezier.getStartPoint(), aBezier.getEndPoint(), rTestPoint, fNewCut);
                     }
 
-                    if(DBL_MAX == fRetval || fEdgeDist < fRetval)
+                    if(fRetval == DBL_MAX || fEdgeDist < fRetval)
                     {
                         fRetval = fEdgeDist;
                         rEdgeIndex = a;
@@ -2494,7 +2377,7 @@ namespace basegfx
                     }
                     else
                     {
-                        if(rEdgeIndex != nEdgeCount - 1L)
+                        if(rEdgeIndex != nEdgeCount - 1)
                         {
                             rEdgeIndex++;
                             rCut = 0.0;
@@ -2518,10 +2401,10 @@ namespace basegfx
                 const double fRelativeY((rCandidate.getY() - rOriginal.getMinY()) / rOriginal.getHeight());
                 const double fOneMinusRelativeX(1.0 - fRelativeX);
                 const double fOneMinusRelativeY(1.0 - fRelativeY);
-                const double fNewX((fOneMinusRelativeY) * ((fOneMinusRelativeX) * rTopLeft.getX() + fRelativeX * rTopRight.getX()) +
-                    fRelativeY * ((fOneMinusRelativeX) * rBottomLeft.getX() + fRelativeX * rBottomRight.getX()));
-                const double fNewY((fOneMinusRelativeX) * ((fOneMinusRelativeY) * rTopLeft.getY() + fRelativeY * rBottomLeft.getY()) +
-                    fRelativeX * ((fOneMinusRelativeY) * rTopRight.getY() + fRelativeY * rBottomRight.getY()));
+                const double fNewX(fOneMinusRelativeY * (fOneMinusRelativeX * rTopLeft.getX() + fRelativeX * rTopRight.getX()) +
+                    fRelativeY * (fOneMinusRelativeX * rBottomLeft.getX() + fRelativeX * rBottomRight.getX()));
+                const double fNewY(fOneMinusRelativeX * (fOneMinusRelativeY * rTopLeft.getY() + fRelativeY * rBottomLeft.getY()) +
+                    fRelativeX * (fOneMinusRelativeY * rTopRight.getY() + fRelativeY * rBottomRight.getY()));
 
                 return B2DPoint(fNewX, fNewY);
             }
@@ -2531,7 +2414,7 @@ namespace basegfx
         {
             const sal_uInt32 nPointCount(rCandidate.count());
 
-            if(nPointCount && !rtl::math::approxEqual(0.0, rOriginal.getWidth()) && !rtl::math::approxEqual(0.0, rOriginal.getHeight()))
+            if(nPointCount && rOriginal.getWidth() != 0.0 && rOriginal.getHeight() != 0.0)
             {
                 B2DPolygon aRetval;
 
@@ -2585,7 +2468,7 @@ namespace basegfx
                 // predecessor
                 if(!rCandidate.isPrevControlPointUsed(nIndex))
                 {
-                    if(!rCandidate.isClosed() && 0 == nIndex)
+                    if(!rCandidate.isClosed() && nIndex == 0)
                     {
                         // do not create previous vector for start point of open polygon
                     }
@@ -2632,7 +2515,7 @@ namespace basegfx
                     {
                         if(rCandidate.isPrevControlPointUsed(nIndex))
                         {
-                            if(!rCandidate.isClosed() && 0 == nIndex)
+                            if(!rCandidate.isClosed() && nIndex == 0)
                             {
                                 // remove existing previous vector for start point of open polygon
                                 rCandidate.resetPrevControlPoint(nIndex);
@@ -2677,7 +2560,7 @@ namespace basegfx
                             aVectorNext.normalize();
                             const B2VectorOrientation aOrientation(getOrientation(aVectorPrev, aVectorNext));
 
-                            if(B2VectorOrientation::Neutral == aOrientation && aVectorPrev.scalar(aVectorNext) < 0.0)
+                            if(aOrientation == B2VectorOrientation::Neutral && aVectorPrev.scalar(aVectorNext) < 0.0)
                             {
                                 // parallel and opposite direction; check length
                                 if(fTools::equal(fLenPrev, fLenNext))
@@ -2699,7 +2582,7 @@ namespace basegfx
                                 // not parallel or same direction, set vectors and length
                                 const B2DVector aNormalizedPerpendicular(getNormalizedPerpendicular(aVectorPrev + aVectorNext));
 
-                                if(B2VectorOrientation::Positive == aOrientation)
+                                if(aOrientation == B2VectorOrientation::Positive)
                                 {
                                     rCandidate.setControlPoints(nIndex,
                                         aCurrentPoint - (aNormalizedPerpendicular * fLenPrev),
@@ -2729,7 +2612,7 @@ namespace basegfx
                             aVectorNext.normalize();
                             const B2VectorOrientation aOrientation(getOrientation(aVectorPrev, aVectorNext));
 
-                            if(B2VectorOrientation::Neutral == aOrientation && aVectorPrev.scalar(aVectorNext) < 0.0)
+                            if(aOrientation == B2VectorOrientation::Neutral && aVectorPrev.scalar(aVectorNext) < 0.0)
                             {
                                 // parallel and opposite direction; set length. Use one direction for better numerical correctness
                                 const B2DVector aScaledDirection(aVectorPrev * fCommonLength);
@@ -2744,7 +2627,7 @@ namespace basegfx
                                 const B2DVector aNormalizedPerpendicular(getNormalizedPerpendicular(aVectorPrev + aVectorNext));
                                 const B2DVector aPerpendicular(aNormalizedPerpendicular * fCommonLength);
 
-                                if(B2VectorOrientation::Positive == aOrientation)
+                                if(aOrientation == B2VectorOrientation::Positive)
                                 {
                                     rCandidate.setControlPoints(nIndex,
                                         aCurrentPoint - aPerpendicular,
@@ -2770,7 +2653,7 @@ namespace basegfx
 
         B2DPolygon growInNormalDirection(const B2DPolygon& rCandidate, double fValue)
         {
-            if(!rtl::math::approxEqual(0.0, fValue))
+            if(fValue != 0.0)
             {
                 if(rCandidate.areControlPointsUsed())
                 {
@@ -2785,12 +2668,12 @@ namespace basegfx
 
                     if(nPointCount)
                     {
-                        B2DPoint aPrev(rCandidate.getB2DPoint(nPointCount - 1L));
+                        B2DPoint aPrev(rCandidate.getB2DPoint(nPointCount - 1));
                         B2DPoint aCurrent(rCandidate.getB2DPoint(0));
 
                         for(sal_uInt32 a(0); a < nPointCount; a++)
                         {
-                            const B2DPoint aNext(rCandidate.getB2DPoint(a + 1L == nPointCount ? 0 : a + 1L));
+                            const B2DPoint aNext(rCandidate.getB2DPoint(a + 1 == nPointCount ? 0 : a + 1));
                             const B2DVector aBack(aPrev - aCurrent);
                             const B2DVector aForw(aNext - aCurrent);
                             const B2DVector aPerpBack(getNormalizedPerpendicular(aBack));
@@ -2826,7 +2709,7 @@ namespace basegfx
             if(nPointCount && nSegments)
             {
                 // get current segment count
-                const sal_uInt32 nSegmentCount(rCandidate.isClosed() ? nPointCount : nPointCount - 1L);
+                const sal_uInt32 nSegmentCount(rCandidate.isClosed() ? nPointCount : nPointCount - 1);
 
                 if(nSegmentCount == nSegments)
                 {
@@ -2835,11 +2718,11 @@ namespace basegfx
                 else
                 {
                     const double fLength(getLength(rCandidate));
-                    const sal_uInt32 nLoopCount(rCandidate.isClosed() ? nSegments : nSegments + 1L);
+                    const sal_uInt32 nLoopCount(rCandidate.isClosed() ? nSegments : nSegments + 1);
 
                     for(sal_uInt32 a(0); a < nLoopCount; a++)
                     {
-                        const double fRelativePos((double)a / (double)nSegments); // 0.0 .. 1.0
+                        const double fRelativePos(static_cast<double>(a) / static_cast<double>(nSegments)); // 0.0 .. 1.0
                         const B2DPoint aNewPoint(getPositionRelative(rCandidate, fRelativePos, fLength));
                         aRetval.append(aNewPoint);
                     }
@@ -3279,8 +3162,7 @@ namespace basegfx
         // converters for css::drawing::PointSequence
 
         B2DPolygon UnoPointSequenceToB2DPolygon(
-            const css::drawing::PointSequence& rPointSequenceSource,
-            bool bCheckClosed)
+            const css::drawing::PointSequence& rPointSequenceSource)
         {
             B2DPolygon aRetval;
             const sal_uInt32 nLength(rPointSequenceSource.getLength());
@@ -3296,11 +3178,8 @@ namespace basegfx
                     aRetval.append(B2DPoint(pArray->X, pArray->Y));
                 }
 
-                if(bCheckClosed)
-                {
-                    // check for closed state flag
-                    tools::checkClosed(aRetval);
-                }
+                // check for closed state flag
+                utils::checkClosed(aRetval);
             }
 
             return aRetval;
@@ -3356,100 +3235,100 @@ namespace basegfx
 
         B2DPolygon UnoPolygonBezierCoordsToB2DPolygon(
             const css::drawing::PointSequence& rPointSequenceSource,
-            const css::drawing::FlagSequence& rFlagSequenceSource,
-            bool bCheckClosed)
+            const css::drawing::FlagSequence& rFlagSequenceSource)
         {
-            const sal_uInt32 nCount((sal_uInt32)rPointSequenceSource.getLength());
-            OSL_ENSURE(nCount == (sal_uInt32)rFlagSequenceSource.getLength(),
+            const sal_uInt32 nCount(static_cast<sal_uInt32>(rPointSequenceSource.getLength()));
+            OSL_ENSURE(nCount == static_cast<sal_uInt32>(rFlagSequenceSource.getLength()),
                 "UnoPolygonBezierCoordsToB2DPolygon: Unequal count of Points and Flags (!)");
 
             // prepare new polygon
             B2DPolygon aRetval;
-            const css::awt::Point* pPointSequence = rPointSequenceSource.getConstArray();
-            const css::drawing::PolygonFlags* pFlagSequence = rFlagSequenceSource.getConstArray();
 
-            // get first point and flag
-            B2DPoint aNewCoordinatePair(pPointSequence->X, pPointSequence->Y); pPointSequence++;
-            css::drawing::PolygonFlags ePolygonFlag(*pFlagSequence); pFlagSequence++;
-            B2DPoint aControlA;
-            B2DPoint aControlB;
-
-            // first point is not allowed to be a control point
-            OSL_ENSURE(css::drawing::PolygonFlags_CONTROL != ePolygonFlag,
-                "UnoPolygonBezierCoordsToB2DPolygon: Start point is a control point, illegal input polygon (!)");
-
-            // add first point as start point
-            aRetval.append(aNewCoordinatePair);
-
-            for(sal_uInt32 b(1); b < nCount;)
+            if(0 != nCount)
             {
-                // prepare loop
-                bool bControlA(false);
-                bool bControlB(false);
+                const css::awt::Point* pPointSequence = rPointSequenceSource.getConstArray();
+                const css::drawing::PolygonFlags* pFlagSequence = rFlagSequenceSource.getConstArray();
 
-                // get next point and flag
-                aNewCoordinatePair = B2DPoint(pPointSequence->X, pPointSequence->Y);
-                ePolygonFlag = *pFlagSequence;
-                pPointSequence++; pFlagSequence++; b++;
+                // get first point and flag
+                B2DPoint aNewCoordinatePair(pPointSequence->X, pPointSequence->Y); pPointSequence++;
+                css::drawing::PolygonFlags ePolygonFlag(*pFlagSequence); pFlagSequence++;
+                B2DPoint aControlA;
+                B2DPoint aControlB;
 
-                if(b < nCount && css::drawing::PolygonFlags_CONTROL == ePolygonFlag)
+                // first point is not allowed to be a control point
+                OSL_ENSURE(ePolygonFlag != css::drawing::PolygonFlags_CONTROL,
+                    "UnoPolygonBezierCoordsToB2DPolygon: Start point is a control point, illegal input polygon (!)");
+
+                // add first point as start point
+                aRetval.append(aNewCoordinatePair);
+
+                for(sal_uInt32 b(1); b < nCount;)
                 {
-                    aControlA = aNewCoordinatePair;
-                    bControlA = true;
+                    // prepare loop
+                    bool bControlA(false);
+                    bool bControlB(false);
 
                     // get next point and flag
                     aNewCoordinatePair = B2DPoint(pPointSequence->X, pPointSequence->Y);
                     ePolygonFlag = *pFlagSequence;
                     pPointSequence++; pFlagSequence++; b++;
+
+                    if(b < nCount && ePolygonFlag == css::drawing::PolygonFlags_CONTROL)
+                    {
+                        aControlA = aNewCoordinatePair;
+                        bControlA = true;
+
+                        // get next point and flag
+                        aNewCoordinatePair = B2DPoint(pPointSequence->X, pPointSequence->Y);
+                        ePolygonFlag = *pFlagSequence;
+                        pPointSequence++; pFlagSequence++; b++;
+                    }
+
+                    if(b < nCount && ePolygonFlag == css::drawing::PolygonFlags_CONTROL)
+                    {
+                        aControlB = aNewCoordinatePair;
+                        bControlB = true;
+
+                        // get next point and flag
+                        aNewCoordinatePair = B2DPoint(pPointSequence->X, pPointSequence->Y);
+                        ePolygonFlag = *pFlagSequence;
+                        pPointSequence++; pFlagSequence++; b++;
+                    }
+
+                    // two or no control points are consumed, another one would be an error.
+                    // It's also an error if only one control point was read
+                    SAL_WARN_IF(ePolygonFlag == css::drawing::PolygonFlags_CONTROL || bControlA != bControlB,
+                        "basegfx", "UnoPolygonBezierCoordsToB2DPolygon: Illegal source polygon (!)");
+
+                    // the previous writes used the B2DPolyPoygon -> utils::PolyPolygon converter
+                    // which did not create minimal PolyPolygons, but created all control points
+                    // as null vectors (identical points). Because of the former P(CA)(CB)-norm of
+                    // B2DPolygon and it's unused sign of being the zero-vector and CA and CB being
+                    // relative to P, an empty edge was exported as P == CA == CB. Luckily, the new
+                    // export format can be read without errors by the old OOo-versions, so we need only
+                    // to correct here at read and do not need to export a wrong but compatible version
+                    // for the future.
+                    if(bControlA
+                        && aControlA.equal(aControlB)
+                        && aControlA.equal(aRetval.getB2DPoint(aRetval.count() - 1)))
+                    {
+                        bControlA = false;
+                    }
+
+                    if(bControlA)
+                    {
+                        // add bezier edge
+                        aRetval.appendBezierSegment(aControlA, aControlB, aNewCoordinatePair);
+                    }
+                    else
+                    {
+                        // add edge
+                        aRetval.append(aNewCoordinatePair);
+                    }
                 }
 
-                if(b < nCount && css::drawing::PolygonFlags_CONTROL == ePolygonFlag)
-                {
-                    aControlB = aNewCoordinatePair;
-                    bControlB = true;
-
-                    // get next point and flag
-                    aNewCoordinatePair = B2DPoint(pPointSequence->X, pPointSequence->Y);
-                    ePolygonFlag = *pFlagSequence;
-                    pPointSequence++; pFlagSequence++; b++;
-                }
-
-                // two or no control points are consumed, another one would be an error.
-                // It's also an error if only one control point was read
-                SAL_WARN_IF(css::drawing::PolygonFlags_CONTROL == ePolygonFlag || bControlA != bControlB,
-                    "basegfx", "UnoPolygonBezierCoordsToB2DPolygon: Illegal source polygon (!)");
-
-                // the previous writes used the B2DPolyPoygon -> tools::PolyPolygon converter
-                // which did not create minimal PolyPolygons, but created all control points
-                // as null vectors (identical points). Because of the former P(CA)(CB)-norm of
-                // B2DPolygon and it's unused sign of being the zero-vector and CA and CB being
-                // relative to P, an empty edge was exported as P == CA == CB. Luckily, the new
-                // export format can be read without errors by the old OOo-versions, so we need only
-                // to correct here at read and do not need to export a wrong but compatible version
-                // for the future.
-                if(bControlA
-                    && aControlA.equal(aControlB)
-                    && aControlA.equal(aRetval.getB2DPoint(aRetval.count() - 1)))
-                {
-                    bControlA = false;
-                }
-
-                if(bControlA)
-                {
-                    // add bezier edge
-                    aRetval.appendBezierSegment(aControlA, aControlB, aNewCoordinatePair);
-                }
-                else
-                {
-                    // add edge
-                    aRetval.append(aNewCoordinatePair);
-                }
-            }
-
-            // #i72807# API import uses old line start/end-equal definition for closed,
-            // so we need to correct this to closed state here
-            if(bCheckClosed)
-            {
+                // #i72807# API import uses old line start/end-equal definition for closed,
+                // so we need to correct this to closed state here
                 checkClosed(aRetval);
             }
 
@@ -3493,10 +3372,9 @@ namespace basegfx
                         {
                             // add current point (always) and remember StartPointIndex for evtl. later corrections
                             const sal_uInt32 nStartPointIndex(aCollectPoints.size());
-                            aCollectPoints.push_back(
-                                css::awt::Point(
+                            aCollectPoints.emplace_back(
                                     fround(aBezierSegment.getStartPoint().getX()),
-                                    fround(aBezierSegment.getStartPoint().getY())));
+                                    fround(aBezierSegment.getStartPoint().getY()));
                             aCollectFlags.push_back(css::drawing::PolygonFlags_NORMAL);
 
                             // prepare next segment
@@ -3508,16 +3386,14 @@ namespace basegfx
                             if(aBezierSegment.isBezier())
                             {
                                 // if bezier is used, add always two control points due to the old schema
-                                aCollectPoints.push_back(
-                                    css::awt::Point(
+                                aCollectPoints.emplace_back(
                                         fround(aBezierSegment.getControlPointA().getX()),
-                                        fround(aBezierSegment.getControlPointA().getY())));
+                                        fround(aBezierSegment.getControlPointA().getY()));
                                 aCollectFlags.push_back(css::drawing::PolygonFlags_CONTROL);
 
-                                aCollectPoints.push_back(
-                                    css::awt::Point(
+                                aCollectPoints.emplace_back(
                                         fround(aBezierSegment.getControlPointB().getX()),
-                                        fround(aBezierSegment.getControlPointB().getY())));
+                                        fround(aBezierSegment.getControlPointB().getY()));
                                 aCollectFlags.push_back(css::drawing::PolygonFlags_CONTROL);
                             }
 
@@ -3526,11 +3402,11 @@ namespace basegfx
                             {
                                 const B2VectorContinuity eCont(rPolygon.getContinuityInPoint(a));
 
-                                if(B2VectorContinuity::C1 == eCont)
+                                if(eCont == B2VectorContinuity::C1)
                                 {
                                     aCollectFlags[nStartPointIndex] = css::drawing::PolygonFlags_SMOOTH;
                                 }
-                                else if(B2VectorContinuity::C2 == eCont)
+                                else if(eCont == B2VectorContinuity::C2)
                                 {
                                     aCollectFlags[nStartPointIndex] = css::drawing::PolygonFlags_SYMMETRIC;
                                 }
@@ -3549,11 +3425,10 @@ namespace basegfx
                         else
                         {
                             // add last point as closing point
-                            const B2DPoint aClosingPoint(rPolygon.getB2DPoint(nPointCount - 1L));
-                            aCollectPoints.push_back(
-                                css::awt::Point(
+                            const B2DPoint aClosingPoint(rPolygon.getB2DPoint(nPointCount - 1));
+                            aCollectPoints.emplace_back(
                                     fround(aClosingPoint.getX()),
-                                    fround(aClosingPoint.getY())));
+                                    fround(aClosingPoint.getY()));
                             aCollectFlags.push_back(css::drawing::PolygonFlags_NORMAL);
                         }
 
@@ -3561,8 +3436,8 @@ namespace basegfx
                         const sal_uInt32 nTargetCount(aCollectPoints.size());
                         OSL_ENSURE(nTargetCount == aCollectFlags.size(), "Unequal Point and Flag count (!)");
 
-                        rPointSequenceRetval.realloc((sal_Int32)nTargetCount);
-                        rFlagSequenceRetval.realloc((sal_Int32)nTargetCount);
+                        rPointSequenceRetval.realloc(static_cast<sal_Int32>(nTargetCount));
+                        rFlagSequenceRetval.realloc(static_cast<sal_Int32>(nTargetCount));
                         css::awt::Point* pPointSequence = rPointSequenceRetval.getArray();
                         css::drawing::PolygonFlags* pFlagSequence = rFlagSequenceRetval.getArray();
 
@@ -3580,8 +3455,8 @@ namespace basegfx
                     // straightforward point list creation
                     const sal_uInt32 nTargetCount(nPointCount + (bClosed ? 1 : 0));
 
-                    rPointSequenceRetval.realloc((sal_Int32)nTargetCount);
-                    rFlagSequenceRetval.realloc((sal_Int32)nTargetCount);
+                    rPointSequenceRetval.realloc(static_cast<sal_Int32>(nTargetCount));
+                    rFlagSequenceRetval.realloc(static_cast<sal_Int32>(nTargetCount));
 
                     css::awt::Point* pPointSequence = rPointSequenceRetval.getArray();
                     css::drawing::PolygonFlags* pFlagSequence = rFlagSequenceRetval.getArray();
@@ -3614,7 +3489,7 @@ namespace basegfx
             }
         }
 
-    } // end of namespace tools
+    } // end of namespace utils
 } // end of namespace basegfx
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

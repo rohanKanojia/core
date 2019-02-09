@@ -27,7 +27,7 @@
 
 
 #define WIN32_LEAN_AND_MEAN
-#include "prewin.h"
+#include <prewin.h>
 
 // Enabling Direct3D Debug Information Further more, with registry key
 // \\HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Direct3D\D3D9Debugging\\EnableCreationStack
@@ -49,12 +49,7 @@ typedef IDirect3DSurface9 surface_type;
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 
-#pragma warning(push, 1)
-#pragma warning(disable: 4458)
-
 #include <gdiplus.h>
-
-#pragma warning(pop)
 
 #undef max
 #undef min
@@ -66,9 +61,7 @@ namespace dxcanvas
     typedef std::shared_ptr< Gdiplus::Graphics >        GraphicsSharedPtr;
     typedef std::shared_ptr< Gdiplus::GraphicsPath >    GraphicsPathSharedPtr;
     typedef std::shared_ptr< Gdiplus::Bitmap >          BitmapSharedPtr;
-    typedef std::shared_ptr< Gdiplus::CachedBitmap >    CachedBitmapSharedPtr;
     typedef std::shared_ptr< Gdiplus::Font >            FontSharedPtr;
-    typedef std::shared_ptr< Gdiplus::Brush >           BrushSharedPtr;
     typedef std::shared_ptr< Gdiplus::TextureBrush >    TextureBrushSharedPtr;
 
     /** COM object RAII wrapper
@@ -83,7 +76,7 @@ namespace dxcanvas
         typedef T Wrappee;
 
         COMReference() :
-            mp( NULL )
+            mp( nullptr )
         {
         }
 
@@ -109,9 +102,9 @@ namespace dxcanvas
         }
 
         COMReference( const COMReference& rNew ) :
-            mp( NULL )
+            mp( nullptr )
         {
-            if( rNew.mp == NULL )
+            if( rNew.mp == nullptr )
                 return;
 
             rNew.mp->AddRef(); // do that _before_ assigning the
@@ -122,7 +115,7 @@ namespace dxcanvas
         COMReference& operator=( const COMReference& rRHS )
         {
             COMReference aTmp(rRHS);
-            ::std::swap( mp, aTmp.mp );
+            std::swap( mp, aTmp.mp );
 
             return *this;
         }
@@ -138,11 +131,11 @@ namespace dxcanvas
             if( mp )
                 refcount = mp->Release();
 
-            mp = NULL;
+            mp = nullptr;
             return refcount;
         }
 
-        bool        is() const { return mp != NULL; }
+        bool        is() const { return mp != nullptr; }
         T*          get() const { return mp; }
         T*          operator->() const { return mp; }
         T&          operator*() const { return *mp; }
@@ -151,15 +144,10 @@ namespace dxcanvas
         T*  mp;
     };
 
-    // get_pointer() enables boost::mem_fn to recognize COMReference
-    template<class T> inline T * get_pointer(COMReference<T> const& p)
-    {
-        return p.get();
-    }
 }
 
 
-#include "postwin.h"
+#include <postwin.h>
 
 #endif // INCLUDED_CANVAS_SOURCE_DIRECTX_DX_WINSTUFF_HXX
 

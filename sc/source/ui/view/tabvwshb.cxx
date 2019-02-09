@@ -19,9 +19,12 @@
 
 #include <com/sun/star/embed/NoVisualAreaSizeException.hpp>
 #include <com/sun/star/chart2/data/XDataReceiver.hpp>
+#include <com/sun/star/awt/XRequestCallback.hpp>
+#include <com/sun/star/awt/Rectangle.hpp>
 
 #include <com/sun/star/embed/EmbedMisc.hpp>
 #include <com/sun/star/embed/EmbedStates.hpp>
+#include <vcl/errinf.hxx>
 #include <sfx2/app.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <svx/svxdlg.hxx>
@@ -46,26 +49,27 @@
 #include <unotools/moduleoptions.hxx>
 #include <sot/exchange.hxx>
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
-#include "tabvwsh.hxx"
-#include "globstr.hrc"
-#include "scmod.hxx"
-#include "document.hxx"
-#include "sc.hrc"
-#include "client.hxx"
-#include "fuinsert.hxx"
-#include "docsh.hxx"
-#include "chartarr.hxx"
-#include "drawview.hxx"
-#include "ChartRangeSelectionListener.hxx"
+#include <tabvwsh.hxx>
+#include <scmod.hxx>
+#include <document.hxx>
+#include <sc.hrc>
+#include <client.hxx>
+#include <fuinsert.hxx>
+#include <docsh.hxx>
+#include <chartarr.hxx>
+#include <drawview.hxx>
+#include <ChartRangeSelectionListener.hxx>
 #include <gridwin.hxx>
 
 #include <tools/urlobj.hxx>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
+#include <comphelper/lok.hxx>
 
 using namespace com::sun::star;
 
-void ScTabViewShell::ConnectObject( SdrOle2Obj* pObj )
+void ScTabViewShell::ConnectObject( const SdrOle2Obj* pObj )
 {
     // is called from paint
 
@@ -78,7 +82,7 @@ void ScTabViewShell::ConnectObject( SdrOle2Obj* pObj )
     if ( !pClient )
     {
         pClient = new ScClient( this, pWin, GetSdrView()->GetModel(), pObj );
-        Rectangle aRect = pObj->GetLogicRect();
+        tools::Rectangle aRect = pObj->GetLogicRect();
         Size aDrawSize = aRect.GetSize();
 
         Size aOleSize = pObj->GetOrigObjSize();
@@ -93,10 +97,49 @@ void ScTabViewShell::ConnectObject( SdrOle2Obj* pObj )
         // the object area must be set after the scaling since it triggers the resizing
         aRect.SetSize( aOleSize );
         pClient->SetObjArea( aRect );
-
-        static_cast<ScClient*>(pClient)->SetGrafEdit( nullptr );
     }
 }
+
+class PopupCallback : public cppu::WeakImplHelper<css::awt::XCallback>
+{
+    ScTabViewShell* m_pViewShell;
+    SdrOle2Obj* const m_pObject;
+
+public:
+    explicit PopupCallback(ScTabViewShell* pViewShell, SdrOle2Obj* pObject)
+        : m_pViewShell(pViewShell)
+        , m_pObject(pObject)
+    {}
+
+    // XCallback
+    virtual void SAL_CALL notify(const css::uno::Any& aData) override
+    {
+        uno::Sequence<beans::PropertyValue> aProperties;
+        if (aData >>= aProperties)
+        {
+            awt::Rectangle xRectangle;
+            sal_Int32 dimensionIndex = 0;
+            OUString sPivotTableName("DataPilot1");
+
+            for (beans::PropertyValue const & rProperty : aProperties)
+            {
+                if (rProperty.Name == "Rectangle")
+                    rProperty.Value >>= xRectangle;
+                if (rProperty.Name == "DimensionIndex")
+                    rProperty.Value >>= dimensionIndex;
+                if (rProperty.Name == "PivotTableName")
+                    rProperty.Value >>= sPivotTableName;
+            }
+
+            tools::Rectangle aChartRect = m_pObject->GetLogicRect();
+
+            Point aPoint(xRectangle.X  + aChartRect.Left(), xRectangle.Y + aChartRect.Top());
+            Size aSize(xRectangle.Width, xRectangle.Height);
+
+            m_pViewShell->DoDPFieldPopup(sPivotTableName, dimensionIndex, aPoint, aSize);
+        }
+    }
+};
 
 void ScTabViewShell::ActivateObject( SdrOle2Obj* pObj, long nVerb )
 {
@@ -113,21 +156,21 @@ void ScTabViewShell::ActivateObject( SdrOle2Obj* pObj, long nVerb )
         if ( !pClient )
             pClient = new ScClient( this, pWin, GetSdrView()->GetModel(), pObj );
 
-        if ( !(nErr & ERRCODE_ERROR_MASK) && xObj.is() )
+        if ( (sal_uInt32(nErr) & ERRCODE_ERROR_MASK) == 0 && xObj.is() )
         {
-            Rectangle aRect = pObj->GetLogicRect();
+            tools::Rectangle aRect = pObj->GetLogicRect();
 
             {
                 // #i118485# center on BoundRect for activation,
                 // OLE may be sheared/rotated now
-                const Rectangle& rBoundRect = pObj->GetCurrentBoundRect();
+                const tools::Rectangle& rBoundRect = pObj->GetCurrentBoundRect();
                 const Point aDelta(rBoundRect.Center() - aRect.Center());
                 aRect.Move(aDelta.X(), aDelta.Y());
             }
 
             Size aDrawSize = aRect.GetSize();
 
-            MapMode aMapMode( MAP_100TH_MM );
+            MapMode aMapMode( MapUnit::Map100thMM );
             Size aOleSize = pObj->GetOrigObjSize( &aMapMode );
 
             if ( pClient->GetAspect() != embed::Aspects::MSOLE_ICON
@@ -139,7 +182,7 @@ void ScTabViewShell::ActivateObject( SdrOle2Obj* pObj, long nVerb )
                 {
                     MapUnit aUnit = VCLUnoHelper::UnoEmbed2VCLMapUnit( xObj->getMapUnit( pClient->GetAspect() ) );
                     aOleSize = OutputDevice::LogicToLogic( aDrawSize,
-                                            MAP_100TH_MM, aUnit );
+                                MapMode(MapUnit::Map100thMM), MapMode(aUnit));
                     awt::Size aSz( aOleSize.Width(), aOleSize.Height() );
                     xObj->setVisualAreaSize( pClient->GetAspect(), aSz );
                 }
@@ -162,8 +205,6 @@ void ScTabViewShell::ActivateObject( SdrOle2Obj* pObj, long nVerb )
             aRect.SetSize( aOleSize );
             pClient->SetObjArea( aRect );
 
-            static_cast<ScClient*>(pClient)->SetGrafEdit( nullptr );
-
             nErr = pClient->DoVerb( nVerb );
             bErrorShown = true;
             // SfxViewShell::DoVerb shows its error messages
@@ -183,11 +224,18 @@ void ScTabViewShell::ActivateObject( SdrOle2Obj* pObj, long nVerb )
                             xSup->getComponent(), uno::UNO_QUERY_THROW );
                         uno::Reference< chart2::data::XRangeHighlighter > xRangeHightlighter(
                             xDataReceiver->getRangeHighlighter());
-                        if( xRangeHightlighter.is())
+                        if (xRangeHightlighter.is())
                         {
                             uno::Reference< view::XSelectionChangeListener > xListener(
                                 new ScChartRangeSelectionListener( this ));
                             xRangeHightlighter->addSelectionChangeListener( xListener );
+                        }
+                        uno::Reference<awt::XRequestCallback> xPopupRequest(xDataReceiver->getPopupRequest());
+                        if (xPopupRequest.is())
+                        {
+                            uno::Reference<awt::XCallback> xCallback(new PopupCallback(this, pObj));
+                            uno::Any aAny;
+                            xPopupRequest->addCallback(xCallback, aAny);
                         }
                     }
                     catch( const uno::Exception & )
@@ -218,7 +266,6 @@ ErrCode ScTabViewShell::DoVerb(long nVerb)
         return ERRCODE_SO_NOTIMPL;          // should not be
 
     SdrOle2Obj* pOle2Obj = nullptr;
-    ErrCode nErr = ERRCODE_NONE;
 
     const SdrMarkList& rMarkList = pView->GetMarkedObjectList();
     if (rMarkList.GetMarkCount() == 1)
@@ -237,7 +284,7 @@ ErrCode ScTabViewShell::DoVerb(long nVerb)
         OSL_FAIL("no object for Verb found");
     }
 
-    return nErr;
+    return ERRCODE_NONE;
 }
 
 void ScTabViewShell::DeactivateOle()
@@ -279,42 +326,48 @@ void ScTabViewShell::ExecDrawIns(SfxRequest& rReq)
     switch ( nSlot )
     {
         case SID_INSERT_GRAPHIC:
-            FuInsertGraphic(this, pWin, pView, pDrModel, rReq);
+            FuInsertGraphic(*this, pWin, pView, pDrModel, rReq);
             // shell is set in MarkListHasChanged
             break;
 
         case SID_INSERT_AVMEDIA:
-            FuInsertMedia(this, pWin, pView, pDrModel, rReq);
+            FuInsertMedia(*this, pWin, pView, pDrModel, rReq);
             // shell is set in MarkListHasChanged
             break;
 
         case SID_INSERT_DIAGRAM:
-            FuInsertChart(this, pWin, pView, pDrModel, rReq);
+            FuInsertChart(*this, pWin, pView, pDrModel, rReq);
             break;
 
         case SID_INSERT_OBJECT:
         case SID_INSERT_SMATH:
         case SID_INSERT_FLOATINGFRAME:
-            FuInsertOLE(this, pWin, pView, pDrModel, rReq);
+            FuInsertOLE(*this, pWin, pView, pDrModel, rReq);
             break;
 
-        case SID_INSERT_DIAGRAM_FROM_FILE:
-            try
+        case SID_INSERT_SIGNATURELINE:
+        case SID_EDIT_SIGNATURELINE:
             {
-                sfx2::FileDialogHelper aDlg(ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE,
-                        0, OUString("com.sun.star.chart2.ChartDocument"));
-                if(aDlg.Execute() == ERRCODE_NONE )
-                {
-                    INetURLObject aURLObj( aDlg.GetPath() );
-                    OUString aURL = aURLObj.GetURLNoPass();
-                    FuInsertChartFromFile(this, pWin, pView, pDrModel, rReq, aURL);
-                }
+                const uno::Reference<frame::XModel> xModel( GetViewData().GetDocShell()->GetBaseModel() );
+
+                VclAbstractDialogFactory* pFact = VclAbstractDialogFactory::Create();
+                ScopedVclPtr<AbstractSignatureLineDialog> pDialog(pFact->CreateSignatureLineDialog(
+                    pWin->GetFrameWeld(), xModel, rReq.GetSlot() == SID_EDIT_SIGNATURELINE));
+                pDialog->Execute();
+                break;
             }
-            catch (const uno::Exception& e)
+
+        case SID_SIGN_SIGNATURELINE:
             {
-                SAL_WARN( "sc", "Cannot Insert Chart: " << e.Message);
+                const uno::Reference<frame::XModel> xModel(
+                    GetViewData().GetDocShell()->GetBaseModel());
+
+                VclAbstractDialogFactory* pFact = VclAbstractDialogFactory::Create();
+                ScopedVclPtr<AbstractSignSignatureLineDialog> pDialog(
+                    pFact->CreateSignSignatureLineDialog(GetFrameWeld(), xModel));
+                pDialog->Execute();
+                break;
             }
-            break;
 
         case SID_OBJECTRESIZE:
             {
@@ -324,9 +377,8 @@ void ScTabViewShell::ExecDrawIns(SfxRequest& rReq)
 
                 if ( pClient && pClient->IsObjectInPlaceActive() )
                 {
-                    const SfxRectangleItem& rRect =
-                        static_cast<const SfxRectangleItem&>(rReq.GetArgs()->Get(SID_OBJECTRESIZE));
-                    Rectangle aRect( pWin->PixelToLogic( rRect.GetValue() ) );
+                    const SfxRectangleItem& rRect = rReq.GetArgs()->Get(SID_OBJECTRESIZE);
+                    tools::Rectangle aRect( pWin->PixelToLogic( rRect.GetValue() ) );
 
                     if ( pView->AreObjectsMarked() )
                     {
@@ -355,14 +407,11 @@ void ScTabViewShell::ExecDrawIns(SfxRequest& rReq)
         case SID_LINKS:
             {
                 SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-                SfxAbstractLinksDialog* pDlg = pFact->CreateLinksDialog( pWin, rDoc.GetLinkManager() );
-                if ( pDlg )
-                {
-                    pDlg->Execute();
-                    rBindings.Invalidate( nSlot );
-                    SfxGetpApp()->Broadcast( SfxSimpleHint( SC_HINT_AREALINKS_CHANGED ) );     // Navigator
-                    rReq.Done();
-                }
+                ScopedVclPtr<SfxAbstractLinksDialog> pDlg(pFact->CreateLinksDialog( pWin, rDoc.GetLinkManager() ));
+                pDlg->Execute();
+                rBindings.Invalidate( nSlot );
+                SfxGetpApp()->Broadcast( SfxHint( SfxHintId::ScAreaLinksChanged ) );     // Navigator
+                rReq.Done();
             }
             break;
 
@@ -380,27 +429,27 @@ void ScTabViewShell::ExecDrawIns(SfxRequest& rReq)
                     if(pPageView)
                     {
                         svx::ODataAccessDescriptor aDescriptor(pDescriptorItem->GetValue());
-                        SdrObject* pNewDBField = pDrView->CreateFieldControl(aDescriptor);
+                        SdrObjectUniquePtr pNewDBField = pDrView->CreateFieldControl(aDescriptor);
 
                         if(pNewDBField)
                         {
-                            Rectangle aVisArea = pWin->PixelToLogic(Rectangle(Point(0,0), pWin->GetOutputSizePixel()));
+                            tools::Rectangle aVisArea = pWin->PixelToLogic(tools::Rectangle(Point(0,0), pWin->GetOutputSizePixel()));
                             Point aObjPos(aVisArea.Center());
                             Size aObjSize(pNewDBField->GetLogicRect().GetSize());
-                            aObjPos.X() -= aObjSize.Width() / 2;
-                            aObjPos.Y() -= aObjSize.Height() / 2;
-                            Rectangle aNewObjectRectangle(aObjPos, aObjSize);
+                            aObjPos.AdjustX( -(aObjSize.Width() / 2) );
+                            aObjPos.AdjustY( -(aObjSize.Height() / 2) );
+                            tools::Rectangle aNewObjectRectangle(aObjPos, aObjSize);
 
                             pNewDBField->SetLogicRect(aNewObjectRectangle);
 
                             // controls must be on control layer, groups on front layer
-                            if ( dynamic_cast<const SdrUnoObj*>( pNewDBField) !=  nullptr )
+                            if ( dynamic_cast<const SdrUnoObj*>( pNewDBField.get() ) !=  nullptr )
                                 pNewDBField->NbcSetLayer(SC_LAYER_CONTROLS);
                             else
                                 pNewDBField->NbcSetLayer(SC_LAYER_FRONT);
-                            if (dynamic_cast<const SdrObjGroup*>( pNewDBField) !=  nullptr)
+                            if (dynamic_cast<const SdrObjGroup*>( pNewDBField.get() ) !=  nullptr)
                             {
-                                SdrObjListIter aIter( *pNewDBField, IM_DEEPWITHGROUPS );
+                                SdrObjListIter aIter( *pNewDBField, SdrIterMode::DeepWithGroups );
                                 SdrObject* pSubObj = aIter.Next();
                                 while (pSubObj)
                                 {
@@ -412,7 +461,7 @@ void ScTabViewShell::ExecDrawIns(SfxRequest& rReq)
                                 }
                             }
 
-                            pView->InsertObjectAtView(pNewDBField, *pPageView);
+                            pView->InsertObjectAtView(pNewDBField.release(), *pPageView);
                         }
                     }
                 }
@@ -421,7 +470,7 @@ void ScTabViewShell::ExecDrawIns(SfxRequest& rReq)
             break;
 
         case SID_FONTWORK_GALLERY_FLOATER:
-            svx::FontworkBar::execute( pView, rReq, GetViewFrame()->GetBindings() );
+            svx::FontworkBar::execute(*pView, rReq, GetViewFrame()->GetBindings());
             rReq.Ignore();
             break;
     }
@@ -433,6 +482,7 @@ void ScTabViewShell::GetDrawInsState(SfxItemSet &rSet)
     bool bTabProt = GetViewData().GetDocument()->IsTabProtected(GetViewData().GetTabNo());
     ScDocShell* pDocShell = GetViewData().GetDocShell();
     bool bShared = pDocShell && pDocShell->IsDocShared();
+    SdrView* pSdrView = GetSdrView();
 
     SfxWhichIter aIter(rSet);
     sal_uInt16 nWhich = aIter.FirstWhich();
@@ -456,11 +506,43 @@ void ScTabViewShell::GetDrawInsState(SfxItemSet &rSet)
                     rSet.DisableItem( nWhich );
                 break;
 
-            case SID_INSERT_GRAPHIC:
             case SID_INSERT_AVMEDIA:
             case SID_FONTWORK_GALLERY_FLOATER:
                 if ( bTabProt || bShared )
                     rSet.DisableItem( nWhich );
+                break;
+
+            case SID_INSERT_SIGNATURELINE:
+                if ( bTabProt || bShared || (pSdrView && pSdrView->GetMarkedObjectCount() != 0))
+                    rSet.DisableItem( nWhich );
+                break;
+            case SID_EDIT_SIGNATURELINE:
+            case SID_SIGN_SIGNATURELINE:
+                if (!IsSignatureLineSelected() || IsSignatureLineSigned())
+                    rSet.DisableItem(nWhich);
+                break;
+
+            case SID_INSERT_GRAPHIC:
+                if (bTabProt || bShared)
+                {
+                    // do not disable 'insert graphic' item if the currently marked area is editable (not protected)
+                    // if there is no marked area, check the current cell
+                    bool bDisableInsertImage = true;
+                    ScMarkData& rMark = GetViewData().GetMarkData();
+                    if (!rMark.GetMarkedRanges().empty() && GetViewData().GetDocument()->IsSelectionEditable(rMark))
+                        bDisableInsertImage = false;
+                    else
+                    {
+                        if (GetViewData().GetDocument()->IsBlockEditable
+                            (GetViewData().GetTabNo(), GetViewData().GetCurX(), GetViewData().GetCurY(), GetViewData().GetCurX(), GetViewData().GetCurY()))
+                        {
+                            bDisableInsertImage = false;
+                        }
+                    }
+
+                    if (bDisableInsertImage)
+                        rSet.DisableItem(nWhich);
+                }
                 break;
 
             case SID_LINKS:
@@ -474,10 +556,50 @@ void ScTabViewShell::GetDrawInsState(SfxItemSet &rSet)
     }
 }
 
+bool ScTabViewShell::IsSignatureLineSelected()
+{
+    SdrView* pSdrView = GetSdrView();
+    if (!pSdrView)
+        return false;
+
+    if (pSdrView->GetMarkedObjectCount() != 1)
+        return false;
+
+    SdrObject* pPickObj = pSdrView->GetMarkedObjectByIndex(0);
+    if (!pPickObj)
+        return false;
+
+    SdrGrafObj* pGraphic = dynamic_cast<SdrGrafObj*>(pPickObj);
+    if (!pGraphic)
+        return false;
+
+    return pGraphic->isSignatureLine();
+}
+
+bool ScTabViewShell::IsSignatureLineSigned()
+{
+    SdrView* pSdrView = GetSdrView();
+    if (!pSdrView)
+        return false;
+
+    if (pSdrView->GetMarkedObjectCount() != 1)
+        return false;
+
+    SdrObject* pPickObj = pSdrView->GetMarkedObjectByIndex(0);
+    if (!pPickObj)
+        return false;
+
+    SdrGrafObj* pGraphic = dynamic_cast<SdrGrafObj*>(pPickObj);
+    if (!pGraphic)
+        return false;
+
+    return pGraphic->isSignatureLineSigned();
+}
+
 void ScTabViewShell::ExecuteUndo(SfxRequest& rReq)
 {
     SfxShell* pSh = GetViewData().GetDispatcher().GetShell(0);
-    ::svl::IUndoManager* pUndoManager = pSh->GetUndoManager();
+    SfxUndoManager* pUndoManager = pSh->GetUndoManager();
 
     const SfxItemSet* pReqArgs = rReq.GetArgs();
     ScDocShell* pDocSh = GetViewData().GetDocShell();
@@ -495,6 +617,36 @@ void ScTabViewShell::ExecuteUndo(SfxRequest& rReq)
                 const SfxPoolItem* pItem;
                 if ( pReqArgs && pReqArgs->GetItemState( nSlot, true, &pItem ) == SfxItemState::SET )
                     nCount = static_cast<const SfxUInt16Item*>(pItem)->GetValue();
+
+                // Repair mode: allow undo/redo of all undo actions, even if access would
+                // be limited based on the view shell ID.
+                bool bRepair = false;
+                if (pReqArgs && pReqArgs->GetItemState(SID_REPAIRPACKAGE, false, &pItem) == SfxItemState::SET)
+                    bRepair = static_cast<const SfxBoolItem*>(pItem)->GetValue();
+
+                if (comphelper::LibreOfficeKit::isActive() && !bRepair)
+                {
+                    SfxUndoAction* pAction = nullptr;
+                    if (bIsUndo)
+                    {
+                        if (pUndoManager->GetUndoActionCount() != 0)
+                            pAction = pUndoManager->GetUndoAction();
+                    }
+                    else
+                    {
+                        if (pUndoManager->GetRedoActionCount() != 0)
+                            pAction = pUndoManager->GetRedoAction();
+                    }
+                    if (pAction)
+                    {
+                        ViewShellId nViewShellId = GetViewShellId();
+                        if (pAction->GetViewShellId() != nViewShellId)
+                        {
+                            rReq.SetReturnValue(SfxUInt32Item(SID_UNDO, static_cast<sal_uInt32>(SID_REPAIRPACKAGE)));
+                            return;
+                        }
+                    }
+                }
 
                 // lock paint for more than one cell undo action (not for editing within a cell)
                 bool bLockPaint = ( nCount > 1 && pUndoManager == GetUndoManager() );
@@ -531,7 +683,7 @@ void ScTabViewShell::ExecuteUndo(SfxRequest& rReq)
 void ScTabViewShell::GetUndoState(SfxItemSet &rSet)
 {
     SfxShell* pSh = GetViewData().GetDispatcher().GetShell(0);
-    ::svl::IUndoManager* pUndoManager = pSh->GetUndoManager();
+    SfxUndoManager* pUndoManager = pSh->GetUndoManager();
 
     SfxWhichIter aIter(rSet);
     sal_uInt16 nWhich = aIter.FirstWhich();

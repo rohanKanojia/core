@@ -20,14 +20,13 @@
 #ifndef INCLUDED_SW_INC_IDOCUMENTLAYOUTACCESS_HXX
 #define INCLUDED_SW_INC_IDOCUMENTLAYOUTACCESS_HXX
 
-#include <swtypes.hxx>
-
 class SwViewShell;
 class SwRootFrame;
 class SwFrameFormat;
 class SfxItemSet;
 class SwLayouter;
 class SwFormatAnchor;
+enum class RndStdIds;
 
 /** Provides access to the layout of a document.
 */
@@ -47,22 +46,14 @@ public:
     */
     virtual void SetCurrentViewShell( SwViewShell* pNew ) = 0;
 
-    /**
-    */
     virtual SwFrameFormat* MakeLayoutFormat( RndStdIds eRequest, const SfxItemSet* pSet ) = 0;
 
-    /**
-    */
     virtual SwLayouter* GetLayouter() = 0;
     virtual const SwLayouter* GetLayouter() const = 0;
     virtual void SetLayouter( SwLayouter* pNew ) = 0;
 
-    /**
-    */
     virtual void DelLayoutFormat( SwFrameFormat *pFormat ) = 0;
 
-    /**
-    */
     virtual SwFrameFormat* CopyLayoutFormat( const SwFrameFormat& rSrc, const SwFormatAnchor& rNewAnchor,
                                      bool bSetTextFlyAtt, bool bMakeFrames ) = 0;
 

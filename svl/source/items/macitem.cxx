@@ -20,13 +20,12 @@
 #include <sal/config.h>
 
 #include <sal/log.hxx>
+#include <comphelper/fileformat.h>
 #include <tools/stream.hxx>
 
 #include <svl/macitem.hxx>
 #include <stringio.hxx>
-
-SfxPoolItem* SvxMacroItem::CreateDefault() { return new SvxMacroItem(0); }
-
+#include <algorithm>
 
 SvxMacro::SvxMacro( const OUString &rMacName, const OUString &rLanguage)
     : aMacName( rMacName ), aLibName( rLanguage),
@@ -70,37 +69,33 @@ SvxMacro& SvxMacro::operator=( const SvxMacro& rBase )
 
 SvxMacroTableDtor& SvxMacroTableDtor::operator=( const SvxMacroTableDtor& rTbl )
 {
-    aSvxMacroTable.clear();
-    aSvxMacroTable.insert(rTbl.aSvxMacroTable.begin(), rTbl.aSvxMacroTable.end());
+    if (this != &rTbl)
+    {
+        aSvxMacroTable.clear();
+        aSvxMacroTable.insert(rTbl.aSvxMacroTable.begin(), rTbl.aSvxMacroTable.end());
+    }
     return *this;
 }
 
 bool SvxMacroTableDtor::operator==( const SvxMacroTableDtor& rOther ) const
 {
     // Count different => odd in any case
-    if ( aSvxMacroTable.size() != rOther.aSvxMacroTable.size() )
-        return false;
-
     // Compare single ones; the sequence matters due to performance reasons
-    SvxMacroTable::const_iterator it1 = aSvxMacroTable.begin();
-    SvxMacroTable::const_iterator it2 = rOther.aSvxMacroTable.begin();
-    for ( ; it1 != aSvxMacroTable.end(); ++it1, ++it2 )
-    {
-        const SvxMacro& rOwnMac = it1->second;
-        const SvxMacro& rOtherMac = it2->second;
-        if (    it1->first != it2->first ||
-                rOwnMac.GetLibName() != rOtherMac.GetLibName() ||
-                rOwnMac.GetMacName() != rOtherMac.GetMacName() )
-            return false;
-    }
-
-    return true;
+    return std::equal(aSvxMacroTable.begin(), aSvxMacroTable.end(),
+        rOther.aSvxMacroTable.begin(), rOther.aSvxMacroTable.end(),
+        [](const SvxMacroTable::value_type& rOwnEntry, const SvxMacroTable::value_type& rOtherEntry) {
+            const SvxMacro& rOwnMac = rOwnEntry.second;
+            const SvxMacro& rOtherMac = rOtherEntry.second;
+            return rOwnEntry.first == rOtherEntry.first
+                && rOwnMac.GetLibName() == rOtherMac.GetLibName()
+                && rOwnMac.GetMacName() == rOtherMac.GetMacName();
+        });
 }
 
-void SvxMacroTableDtor::Read( SvStream& rStrm, sal_uInt16 nVersion )
+void SvxMacroTableDtor::Read( SvStream& rStrm )
 {
-    if( SVX_MACROTBL_VERSION40 <= nVersion )
-        rStrm.ReadUInt16( nVersion );
+    sal_uInt16 nVersion;
+    rStrm.ReadUInt16( nVersion );
 
     short nMacro(0);
     rStrm.ReadInt16(nMacro);
@@ -134,7 +129,7 @@ void SvxMacroTableDtor::Read( SvStream& rStrm, sal_uInt16 nVersion )
         if( SVX_MACROTBL_VERSION40 <= nVersion )
             rStrm.ReadUInt16( eType );
 
-        aSvxMacroTable.insert( SvxMacroTable::value_type(nCurKey, SvxMacro( aMacName, aLibName, (ScriptType)eType ) ));
+        aSvxMacroTable.emplace( SvMacroItemId(nCurKey), SvxMacro( aMacName, aLibName, static_cast<ScriptType>(eType) ) );
     }
 }
 
@@ -150,50 +145,50 @@ SvStream& SvxMacroTableDtor::Write( SvStream& rStream ) const
 
     rStream.WriteUInt16( aSvxMacroTable.size() );
 
-    SvxMacroTable::const_iterator it = aSvxMacroTable.begin();
-    while( it != aSvxMacroTable.end() && rStream.GetError() == SVSTREAM_OK )
+    for( const auto& rEntry : aSvxMacroTable )
     {
-        const SvxMacro& rMac = it->second;
-        rStream.WriteUInt16( it->first );
+        if (rStream.GetError() != ERRCODE_NONE)
+            break;
+        const SvxMacro& rMac = rEntry.second;
+        rStream.WriteUInt16( static_cast<sal_uInt16>(rEntry.first) );
         writeByteString(rStream, rMac.GetLibName());
         writeByteString(rStream, rMac.GetMacName());
 
         if( SVX_MACROTBL_VERSION40 <= nVersion )
             rStream.WriteUInt16( rMac.GetScriptType() );
-        ++it;
     }
     return rStream;
 }
 
 // returns NULL if no entry exists, or a pointer to the internal value
-const SvxMacro* SvxMacroTableDtor::Get(sal_uInt16 nEvent) const
+const SvxMacro* SvxMacroTableDtor::Get(SvMacroItemId nEvent) const
 {
     SvxMacroTable::const_iterator it = aSvxMacroTable.find(nEvent);
     return it == aSvxMacroTable.end() ? nullptr : &(it->second);
 }
 
 // returns NULL if no entry exists, or a pointer to the internal value
-SvxMacro* SvxMacroTableDtor::Get(sal_uInt16 nEvent)
+SvxMacro* SvxMacroTableDtor::Get(SvMacroItemId nEvent)
 {
     SvxMacroTable::iterator it = aSvxMacroTable.find(nEvent);
     return it == aSvxMacroTable.end() ? nullptr : &(it->second);
 }
 
 // return true if the key exists
-bool SvxMacroTableDtor::IsKeyValid(sal_uInt16 nEvent) const
+bool SvxMacroTableDtor::IsKeyValid(SvMacroItemId nEvent) const
 {
     SvxMacroTable::const_iterator it = aSvxMacroTable.find(nEvent);
     return it != aSvxMacroTable.end();
 }
 
 // This stores a copy of the rMacro parameter
-SvxMacro& SvxMacroTableDtor::Insert(sal_uInt16 nEvent, const SvxMacro& rMacro)
+SvxMacro& SvxMacroTableDtor::Insert(SvMacroItemId nEvent, const SvxMacro& rMacro)
 {
-    return aSvxMacroTable.insert( SvxMacroTable::value_type( nEvent, rMacro ) ).first->second;
+    return aSvxMacroTable.emplace( nEvent, rMacro ).first->second;
 }
 
 // If the entry exists, remove it from the map and release it's storage
-void SvxMacroTableDtor::Erase(sal_uInt16 nEvent)
+void SvxMacroTableDtor::Erase(SvMacroItemId nEvent)
 {
     SvxMacroTable::iterator it = aSvxMacroTable.find(nEvent);
     if ( it != aSvxMacroTable.end())
@@ -205,7 +200,7 @@ void SvxMacroTableDtor::Erase(sal_uInt16 nEvent)
 
 bool SvxMacroItem::operator==( const SfxPoolItem& rAttr ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==(rAttr), "unequal types" );
+    assert(SfxPoolItem::operator==(rAttr));
 
     const SvxMacroTableDtor& rOwn = aMacroTable;
     const SvxMacroTableDtor& rOther = static_cast<const SvxMacroItem&>(rAttr).aMacroTable;
@@ -223,10 +218,10 @@ SfxPoolItem* SvxMacroItem::Clone( SfxItemPool* ) const
 bool SvxMacroItem::GetPresentation
 (
     SfxItemPresentation /*ePres*/,
-    SfxMapUnit          /*eCoreUnit*/,
-    SfxMapUnit          /*ePresUnit*/,
+    MapUnit             /*eCoreUnit*/,
+    MapUnit             /*ePresUnit*/,
     OUString&           rText,
-    const IntlWrapper *
+    const IntlWrapper&
 )   const
 {
 /*!!!
@@ -248,21 +243,7 @@ bool SvxMacroItem::GetPresentation
 }
 
 
-SvStream& SvxMacroItem::Store( SvStream& rStrm , sal_uInt16 ) const
-{
-    return aMacroTable.Write( rStrm );
-}
-
-
-SfxPoolItem* SvxMacroItem::Create( SvStream& rStrm, sal_uInt16 nVersion ) const
-{
-    SvxMacroItem* pAttr = new SvxMacroItem( Which() );
-    pAttr->aMacroTable.Read( rStrm, nVersion );
-    return pAttr;
-}
-
-
-void SvxMacroItem::SetMacro( sal_uInt16 nEvent, const SvxMacro& rMacro )
+void SvxMacroItem::SetMacro( SvMacroItemId nEvent, const SvxMacro& rMacro )
 {
     aMacroTable.Insert( nEvent, rMacro);
 }

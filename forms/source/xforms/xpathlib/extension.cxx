@@ -22,26 +22,29 @@
 #include <com/sun/star/beans/NamedValue.hpp>
 #include "extension.hxx"
 #include "xpathlib.hxx"
-#include "services.hxx"
+#include <services.hxx>
+
+namespace com { namespace sun { namespace star { namespace uno {
+    class XComponentContext;
+} } } }
 
 using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::xforms;
 using namespace com::sun::star::xml::xpath;
 using namespace com::sun::star::beans;
-using com::sun::star::xml::dom::XNode;
 
-Libxml2ExtensionHandle SAL_CALL CLibxml2XFormsExtension::getLibxml2ExtensionHandle() throw (RuntimeException, std::exception)
+Libxml2ExtensionHandle SAL_CALL CLibxml2XFormsExtension::getLibxml2ExtensionHandle()
 {
     Libxml2ExtensionHandle aHandle;
     aHandle.functionLookupFunction = reinterpret_cast< sal_Int64 >( &xforms_lookupFunc );
     aHandle.functionData = reinterpret_cast< sal_Int64 >( this );
-    aHandle.variableLookupFunction = (sal_Int64)0;
-    aHandle.variableData = (sal_Int64)0;
+    aHandle.variableLookupFunction = sal_Int64(0);
+    aHandle.variableData = sal_Int64(0);
     return aHandle;
 }
 
-void SAL_CALL CLibxml2XFormsExtension::initialize(const Sequence< Any >& aSequence) throw (RuntimeException, std::exception)
+void SAL_CALL CLibxml2XFormsExtension::initialize(const Sequence< Any >& aSequence)
 {
     if (aSequence.getLength() == 2
         && (aSequence[0] >>= m_aModel)
@@ -63,7 +66,7 @@ void SAL_CALL CLibxml2XFormsExtension::initialize(const Sequence< Any >& aSequen
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_xml_xpath_XFormsExtension_get_implementation(css::uno::XComponentContext*,
         css::uno::Sequence<css::uno::Any> const &)
 {

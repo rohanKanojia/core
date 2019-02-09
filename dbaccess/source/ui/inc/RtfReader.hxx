@@ -27,25 +27,22 @@ class SvStream;
 
 namespace dbaui
 {
-    class ORTFReader : public SvRTFParser , public ODatabaseExport
+    class ORTFReader final : public SvRTFParser , public ODatabaseExport
     {
-        ::std::vector<sal_Int32>    m_vecColor;
+        std::vector<Color>    m_vecColor;
 
-    protected:
-        virtual bool            CreateTable(int nToken) override;
+        bool                    CreateTable(int nToken);
         virtual void            NextToken( int nToken ) override; // base class
         virtual TypeSelectionPageFactory
                                 getTypeSelectionPageFactory() override;
 
-        virtual ~ORTFReader();
+        virtual ~ORTFReader() override;
 
     public:
         ORTFReader( SvStream& rIn,
                     const SharedConnection& _rxConnection,
                     const css::uno::Reference< css::util::XNumberFormatter >& _rxNumberF,
-                    const css::uno::Reference< css::uno::XComponentContext >& _rxContext,
-                    const TColumnVector* rList = nullptr,
-                    const OTypeInfoMap* _pInfoMap = nullptr);
+                    const css::uno::Reference< css::uno::XComponentContext >& _rxContext);
         // required for automatic type recognition
         ORTFReader( SvStream& rIn,
                     sal_Int32 nRows,
@@ -57,12 +54,7 @@ namespace dbaui
                     bool _bAutoIncrementEnabled);
 
         virtual SvParserState   CallParser() override;// base class
-        /// @note Only recovers correct data if 2. CTOR has been used.
-        ///       Otherwise, the SbaColumnList will be returned without changes
-        virtual void            release() override;
     };
-
-    typedef tools::SvRef<ORTFReader> ORTFReaderRef;
 }
 #endif
 

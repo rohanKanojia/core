@@ -24,6 +24,7 @@
 #include <doc.hxx>
 #include <IDocumentTimerAccess.hxx>
 #include <o3tl/typed_flags_set.hxx>
+#include <set>
 #include <vector>
 
 class SwContentFrame;
@@ -35,8 +36,6 @@ class SwCursor;
 class SwShellCursor;
 class SwTableCursor;
 class SwLayVout;
-class SwDestroyList;
-class SwCurrShells;
 class SwViewOption;
 class SwSelectionList;
 struct SwPosition;
@@ -58,7 +57,19 @@ namespace o3tl
     template<> struct typed_flags<SwInvalidateFlags> : is_typed_flags<SwInvalidateFlags, 0x7f> {};
 };
 
-/// The root element of a Writer document layout.
+enum class SwRemoveResult
+{
+    Next,
+    Prev
+};
+
+using SwCurrShells = std::set<CurrShell*>;
+
+class SwSectionFrame;
+using SwDestroyList = std::set<SwSectionFrame*>;
+
+/// The root element of a Writer document layout. Lower frames are expected to
+/// be SwPageFrame instances.
 class SwRootFrame: public SwLayoutFrame
 {
     // Needs to disable the Superfluous temporarily
@@ -68,8 +79,8 @@ class SwRootFrame: public SwLayoutFrame
     friend inline void SetLastPage( SwPageFrame* );
 
     // For creating and destroying of the virtual output device manager
-    friend void _FrameInit(); // Creates s_pVout
-    friend void _FrameFinit(); // Destroys s_pVout
+    friend void FrameInit(); // Creates s_pVout
+    friend void FrameFinit(); // Destroys s_pVout
 
     std::vector<SwRect> maPageRects;// returns the current rectangle for each page frame
                                     // the rectangle is extended to the top/bottom/left/right
@@ -86,6 +97,9 @@ class SwRootFrame: public SwLayoutFrame
     static bool           s_isInPaint; // Protection against double Paints
     static bool           s_isNoVirDev;// No virt. Device for SystemPaints
 
+    /// Width of the HTML / Web document if not defined otherwise: 20cm.
+    static constexpr sal_Int64 MIN_BROWSE_WIDTH = convertMm100ToTwip(20000);
+
     bool    mbCheckSuperfluous   :1; // Search for empty Pages?
     bool    mbIdleFormat         :1; // Trigger Idle Formatter?
     bool    mbBrowseWidthValid   :1; // Is mnBrowseWidth valid?
@@ -96,6 +110,7 @@ class SwRootFrame: public SwLayoutFrame
     bool    mbCallbackActionEnabled:1; // No Action in Notification desired
                                       // @see dcontact.cxx, ::Changed()
     bool    mbLayoutFreezed;
+    bool    mbHideRedlines;
 
     /**
      * For BrowseMode
@@ -129,7 +144,7 @@ class SwRootFrame: public SwLayoutFrame
      * and will be activated by the last d'tor of CurrShell.
      * One other problem is the destruction of a shell while it is active.
      * The pointer mpCurrShell is then reset to an arbitrary other shell.
-     * If at the time of the destruction of a shell, which is still referneced
+     * If at the time of the destruction of a shell, which is still referenced
      * by a curshell object, that will be cleaned up as well.
      */
     friend class CurrShell;
@@ -137,12 +152,12 @@ class SwRootFrame: public SwLayoutFrame
     friend void InitCurrShells( SwRootFrame *pRoot );
     SwViewShell *mpCurrShell;
     SwViewShell *mpWaitingCurrShell;
-    SwCurrShells *mpCurrShells;
+    std::unique_ptr<SwCurrShells> mpCurrShells;
 
     /// One Page per DrawModel per Document; is always the size of the Root
     SdrPage *mpDrawPage;
 
-    SwDestroyList* mpDestroy;
+    std::unique_ptr<SwDestroyList> mpDestroy;
 
     sal_uInt16  mnPhyPageNums; /// Page count
     sal_uInt16 mnAccessibleShells; // Number of accessible shells
@@ -150,11 +165,11 @@ class SwRootFrame: public SwLayoutFrame
     void ImplCalcBrowseWidth();
     void ImplInvalidateBrowseWidth();
 
-    void _DeleteEmptySct(); // Destroys the registered SectionFrames
-    void _RemoveFromList( SwSectionFrame* pSct ); // Removes SectionFrames from the Delete List
+    void DeleteEmptySct_(); // Destroys the registered SectionFrames
+    void RemoveFromList_( SwSectionFrame* pSct ); // Removes SectionFrames from the Delete List
 
     virtual void DestroyImpl() override;
-    virtual ~SwRootFrame();
+    virtual ~SwRootFrame() override;
 
 protected:
 
@@ -207,7 +222,7 @@ public:
     virtual bool  GetCursorOfst( SwPosition *, Point&,
                                SwCursorMoveState* = nullptr, bool bTestBackground = false ) const override;
 
-    virtual void Paint( vcl::RenderContext& rRenderContext, SwRect const&,
+    virtual void PaintSwFrame( vcl::RenderContext& rRenderContext, SwRect const&,
                         SwPrintData const*const pPrintData = nullptr ) const override;
     virtual SwTwips ShrinkFrame( SwTwips, bool bTst = false, bool bInfo = false ) override;
     virtual SwTwips GrowFrame  ( SwTwips, bool bTst = false, bool bInfo = false ) override;
@@ -230,7 +245,7 @@ public:
         // May be NULL if called from SfxBaseModel::dispose
         // (this happens in the build test 'rtfexport').
         if (pCurrShell != nullptr)
-            pCurrShell->GetDoc()->getIDocumentTimerAccess().StartBackgroundJobs();
+            pCurrShell->GetDoc()->getIDocumentTimerAccess().StartIdling();
     }
     bool IsIdleFormat()  const { return mbIdleFormat; }
     void ResetIdleFormat()     { mbIdleFormat = false; }
@@ -246,7 +261,7 @@ public:
             // May be NULL if called from SfxBaseModel::dispose
             // (this happens in the build test 'rtfexport').
             if (pCurrShell != nullptr)
-                pCurrShell->GetDoc()->getIDocumentTimerAccess().StartBackgroundJobs();
+                pCurrShell->GetDoc()->getIDocumentTimerAccess().StartIdling();
         }
     }
 
@@ -294,7 +309,7 @@ public:
      * Point rPt: The point that should be used to find the page
      * Size pSize: If given, we return the (first) page that overlaps with the
      * rectangle defined by rPt and pSize
-     * bool bExtend: Extend each page to the left/right/top/botton up to the
+     * bool bExtend: Extend each page to the left/right/top/bottom up to the
      * next page margin
      */
     const SwPageFrame* GetPageAtPos( const Point& rPt, const Size* pSize = nullptr, bool bExtend = false ) const;
@@ -325,8 +340,8 @@ public:
     void ResetTurbo() { mpTurbo = nullptr; }
     const SwContentFrame *GetTurbo() { return mpTurbo; }
 
-    /// Update the footernumbers of all Pages
-    void UpdateFootnoteNums(); // Only for page by page numnbering!
+    /// Update the footnote numbers of all Pages
+    void UpdateFootnoteNums(); // Only for page by page numbering!
 
     /// Remove all footnotes (but no references)
     void RemoveFootnotes( SwPageFrame *pPage = nullptr, bool bPageOnly = false,
@@ -351,8 +366,8 @@ public:
      * destroyed later on or deregistered.
      */
     void InsertEmptySct( SwSectionFrame* pDel );
-    void DeleteEmptySct() { if( mpDestroy ) _DeleteEmptySct(); }
-    void RemoveFromList( SwSectionFrame* pSct ) { if( mpDestroy ) _RemoveFromList( pSct ); }
+    void DeleteEmptySct() { if( mpDestroy ) DeleteEmptySct_(); }
+    void RemoveFromList( SwSectionFrame* pSct ) { if( mpDestroy ) RemoveFromList_( pSct ); }
 #ifdef DBG_UTIL
     bool IsInDelList( SwSectionFrame* pSct ) const;
 #endif
@@ -365,7 +380,7 @@ public:
     void RemoveAccessibleShell() { --mnAccessibleShells; }
 
     /**
-     * Get page frame by phyiscal page number
+     * Get page frame by physical page number
      * looping through the lowers, which are page frame, in order to find the
      * page frame with the given physical page number.
      * if no page frame is found, 0 is returned.
@@ -385,6 +400,15 @@ public:
 
     bool IsLayoutFreezed() const { return mbLayoutFreezed; }
     void FreezeLayout( bool freeze ) { mbLayoutFreezed = freeze; }
+
+    void RemovePage( SwPageFrame **pDel, SwRemoveResult eResult );
+
+    /**
+     * Replacement for sw::DocumentRedlineManager::GetRedlineFlags()
+     * (this is layout-level redline hiding).
+     */
+    bool IsHideRedlines() const { return mbHideRedlines; }
+    void SetHideRedlines(bool);
 };
 
 inline long SwRootFrame::GetBrowseWidth() const
@@ -404,6 +428,28 @@ inline  void SwRootFrame::SetVirtPageNum( const bool bOf) const
 {
     const_cast<SwRootFrame*>(this)->mbIsVirtPageNum = bOf;
 }
+
+/// helper class to disable creation of an action by a callback event
+/// in particular, change event from a drawing object (SwDrawContact::Changed())
+class DisableCallbackAction
+{
+    private:
+        SwRootFrame & m_rRootFrame;
+        bool const m_bOldCallbackActionState;
+
+    public:
+        explicit DisableCallbackAction(SwRootFrame & rRootFrame)
+            : m_rRootFrame(rRootFrame)
+            , m_bOldCallbackActionState(rRootFrame.IsCallbackActionEnabled())
+        {
+            m_rRootFrame.SetCallbackActionEnabled(false);
+        }
+
+        ~DisableCallbackAction()
+        {
+            m_rRootFrame.SetCallbackActionEnabled(m_bOldCallbackActionState);
+        }
+};
 
 #endif // INCLUDED_SW_SOURCE_CORE_INC_ROOTFRM_HXX
 

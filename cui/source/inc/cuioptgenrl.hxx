@@ -24,6 +24,7 @@
 #include <svx/optgenrl.hxx>
 #include <sfx2/tabdlg.hxx>
 #include <vcl/fixed.hxx>
+#include <vcl/layout.hxx>
 
 #include <vector>
 
@@ -40,6 +41,10 @@ class SvxGeneralTabPage : public SfxTabPage
 private:
     // the "Use data for document properties" checkbox
     VclPtr<CheckBox> m_pUseDataCB;
+    VclPtr<VclContainer> m_pCryptoFrame;
+    VclPtr<ListBox> m_pSigningKeyLB;
+    VclPtr<ListBox> m_pEncryptionKeyLB;
+    VclPtr<CheckBox> m_pEncryptToSelfCB;
     // rows
     struct Row;
     std::vector<std::shared_ptr<Row> > vRows;
@@ -50,23 +55,24 @@ private:
     unsigned nNameRow;
     unsigned nShortNameField;
 
-    DECL_LINK_TYPED( ModifyHdl_Impl, Edit&, void );
+    DECL_LINK( ModifyHdl_Impl, Edit&, void );
 
-    bool                GetAddress_Impl();
-    void                SetAddress_Impl();
+    bool                GetData_Impl();
+    void                SetData_Impl();
 
     void InitControls ();
+    void InitCryptography();
     void SetLinks ();
 
 protected:
-    virtual sfxpg       DeactivatePage( SfxItemSet* pSet ) override;
+    virtual DeactivateRC DeactivatePage( SfxItemSet* pSet ) override;
 
 public:
     SvxGeneralTabPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual ~SvxGeneralTabPage();
+    virtual ~SvxGeneralTabPage() override;
     virtual void dispose() override;
 
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rAttrSet );
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rAttrSet );
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;

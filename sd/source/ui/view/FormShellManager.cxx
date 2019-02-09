@@ -17,13 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "FormShellManager.hxx"
+#include <FormShellManager.hxx>
 
-#include "EventMultiplexer.hxx"
-#include "ViewShell.hxx"
-#include "ViewShellBase.hxx"
-#include "ViewShellManager.hxx"
-#include "Window.hxx"
+#include <EventMultiplexer.hxx>
+#include <ViewShell.hxx>
+#include <ViewShellBase.hxx>
+#include <ViewShellManager.hxx>
+#include <Window.hxx>
 #include <svx/fmshell.hxx>
 
 namespace sd {
@@ -37,7 +37,7 @@ class FormShellManagerFactory
 {
 public:
     FormShellManagerFactory (ViewShell& rViewShell, FormShellManager& rManager);
-    virtual FmFormShell* CreateShell (ShellId nId, vcl::Window* pParentWindow, FrameView* pFrameView) override;
+    virtual FmFormShell* CreateShell (ShellId nId) override;
     virtual void ReleaseShell (SfxShell* pShell) override;
 
 private:
@@ -58,11 +58,7 @@ FormShellManager::FormShellManager (ViewShellBase& rBase)
     // Register at the EventMultiplexer to be informed about changes in the
     // center pane.
     Link<sd::tools::EventMultiplexerEvent&,void> aLink (LINK(this, FormShellManager, ConfigurationUpdateHandler));
-    mrBase.GetEventMultiplexer()->AddEventListener(
-        aLink,
-        sd::tools::EventMultiplexerEvent::EID_MAIN_VIEW_REMOVED
-        | sd::tools::EventMultiplexerEvent::EID_MAIN_VIEW_ADDED
-        | sd::tools::EventMultiplexerEvent::EID_CONFIGURATION_UPDATED);
+    mrBase.GetEventMultiplexer()->AddEventListener(aLink);
 
     RegisterAtCenterPane();
 }
@@ -153,7 +149,7 @@ void FormShellManager::RegisterAtCenterPane()
     OSL_ASSERT(mpSubShellFactory.get()==nullptr);
     mpSubShellFactory.reset(new FormShellManagerFactory(*pShell, *this));
     mrBase.GetViewShellManager()->AddSubShellFactory(pShell,mpSubShellFactory);
-    mrBase.GetViewShellManager()->ActivateSubShell(*pShell, RID_FORMLAYER_TOOLBOX);
+    mrBase.GetViewShellManager()->ActivateSubShell(*pShell, ToolbarId::FormLayer_Toolbox);
 }
 
 void FormShellManager::UnregisterAtCenterPane()
@@ -176,14 +172,14 @@ void FormShellManager::UnregisterAtCenterPane()
     ViewShell* pShell = mrBase.GetMainViewShell().get();
     if (pShell != nullptr)
     {
-        mrBase.GetViewShellManager()->DeactivateSubShell(*pShell,  RID_FORMLAYER_TOOLBOX);
+        mrBase.GetViewShellManager()->DeactivateSubShell(*pShell,  ToolbarId::FormLayer_Toolbox);
         mrBase.GetViewShellManager()->RemoveSubShellFactory(pShell, mpSubShellFactory);
     }
 
     mpSubShellFactory.reset();
 }
 
-IMPL_LINK_NOARG_TYPED(FormShellManager, FormControlActivated, LinkParamNone*, void)
+IMPL_LINK_NOARG(FormShellManager, FormControlActivated, LinkParamNone*, void)
 {
     // The form shell has been activated.  To give it priority in reacting to
     // slot calls the form shell is moved to the top of the object bar shell
@@ -198,19 +194,19 @@ IMPL_LINK_NOARG_TYPED(FormShellManager, FormControlActivated, LinkParamNone*, vo
     }
 }
 
-IMPL_LINK_TYPED(FormShellManager, ConfigurationUpdateHandler, sd::tools::EventMultiplexerEvent&, rEvent, void)
+IMPL_LINK(FormShellManager, ConfigurationUpdateHandler, sd::tools::EventMultiplexerEvent&, rEvent, void)
 {
     switch (rEvent.meEventId)
     {
-        case sd::tools::EventMultiplexerEvent::EID_MAIN_VIEW_REMOVED:
+        case EventMultiplexerEventId::MainViewRemoved:
             UnregisterAtCenterPane();
             break;
 
-        case sd::tools::EventMultiplexerEvent::EID_MAIN_VIEW_ADDED:
+        case EventMultiplexerEventId::MainViewAdded:
             mbIsMainViewChangePending = true;
             break;
 
-        case sd::tools::EventMultiplexerEvent::EID_CONFIGURATION_UPDATED:
+        case EventMultiplexerEventId::ConfigurationUpdated:
             if (mbIsMainViewChangePending)
             {
                 mbIsMainViewChangePending = false;
@@ -223,11 +219,11 @@ IMPL_LINK_TYPED(FormShellManager, ConfigurationUpdateHandler, sd::tools::EventMu
     }
 }
 
-IMPL_LINK_TYPED(FormShellManager, WindowEventHandler, VclWindowEvent&, rEvent, void)
+IMPL_LINK(FormShellManager, WindowEventHandler, VclWindowEvent&, rEvent, void)
 {
     switch (rEvent.GetId())
     {
-        case VCLEVENT_WINDOW_GETFOCUS:
+        case VclEventId::WindowGetFocus:
         {
             // The window of the center pane got the focus.  Therefore
             // the form shell is moved to the bottom of the object bar
@@ -245,7 +241,7 @@ IMPL_LINK_TYPED(FormShellManager, WindowEventHandler, VclWindowEvent&, rEvent, v
         }
         break;
 
-        case VCLEVENT_WINDOW_LOSEFOCUS:
+        case VclEventId::WindowLoseFocus:
             // We follow the sloppy focus policy.  Losing the focus is
             // ignored.  We wait for the focus to be placed either in
             // the window or the form shell.  The later, however, is
@@ -253,16 +249,17 @@ IMPL_LINK_TYPED(FormShellManager, WindowEventHandler, VclWindowEvent&, rEvent, v
             // one.
             break;
 
-        case VCLEVENT_OBJECT_DYING:
+        case VclEventId::ObjectDying:
             mpMainViewShellWindow = nullptr;
            break;
+
+        default: break;
     }
 }
 
 void FormShellManager::Notify(SfxBroadcaster&, const SfxHint& rHint)
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if (pSimpleHint!=nullptr && pSimpleHint->GetId()==SFX_HINT_DYING)
+    if (rHint.GetId()==SfxHintId::Dying)
     {
         // If all goes well this listener is called after the
         // FormShellManager was notified about the dying form shell by the
@@ -291,15 +288,12 @@ FormShellManagerFactory::FormShellManagerFactory (
 {
 }
 
-FmFormShell* FormShellManagerFactory::CreateShell (
-    ::sd::ShellId nId,
-    vcl::Window*,
-    ::sd::FrameView*)
+FmFormShell* FormShellManagerFactory::CreateShell( ::sd::ShellId nId )
 {
     FmFormShell* pShell = nullptr;
 
     ::sd::View* pView = mrViewShell.GetView();
-    if (nId == RID_FORMLAYER_TOOLBOX)
+    if (nId == ToolbarId::FormLayer_Toolbox)
     {
         pShell = new FmFormShell(&mrViewShell.GetViewShellBase(), pView);
         mrFormShellManager.SetFormShell(pShell);

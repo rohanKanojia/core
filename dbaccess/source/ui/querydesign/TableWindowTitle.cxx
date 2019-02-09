@@ -17,21 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TableWindowTitle.hxx"
-#include "TableWindow.hxx"
-#include "QueryTableView.hxx"
+#include <TableWindowTitle.hxx>
+#include <TableWindow.hxx>
+#include <QueryTableView.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/help.hxx>
 #include <vcl/menu.hxx>
 #include <vcl/settings.hxx>
-#include <tools/debug.hxx>
-#include "dbustrings.hrc"
-#include <sfx2/cntids.hrc>
-#include "TableWindowListBox.hxx"
-#include "TableConnection.hxx"
-#include "dbu_qry.hrc"
-#include "QueryDesignView.hxx"
-#include "JoinController.hxx"
+#include <vcl/commandevent.hxx>
+#include <vcl/event.hxx>
+#include <stringconstants.hxx>
+#include <TableWindowListBox.hxx>
+#include <TableConnection.hxx>
+#include <QueryDesignView.hxx>
+#include <JoinController.hxx>
 
 #include <algorithm>
 
@@ -45,7 +44,7 @@ OTableWindowTitle::OTableWindowTitle( OTableWindow* pParent ) :
 {
     // set background- and text colour
     StyleSettings aSystemStyle = Application::GetSettings().GetStyleSettings();
-    SetBackground(Wallpaper(Color(aSystemStyle.GetFaceColor())));
+    SetBackground(Wallpaper(aSystemStyle.GetFaceColor()));
     SetTextColor(aSystemStyle.GetButtonTextColor());
 
     vcl::Font aFont( GetFont() );
@@ -88,14 +87,14 @@ void OTableWindowTitle::RequestHelp( const HelpEvent& rHEvt )
         if( !aHelpText.isEmpty())
         {
             // show help
-            Rectangle aItemRect(Point(0,0),GetSizePixel());
+            tools::Rectangle aItemRect(Point(0,0),GetSizePixel());
             aItemRect = LogicToPixel( aItemRect );
             Point aPt = OutputToScreenPixel( aItemRect.TopLeft() );
-            aItemRect.Left()   = aPt.X();
-            aItemRect.Top()    = aPt.Y();
+            aItemRect.SetLeft( aPt.X() );
+            aItemRect.SetTop( aPt.Y() );
             aPt = OutputToScreenPixel( aItemRect.BottomRight() );
-            aItemRect.Right()  = aPt.X();
-            aItemRect.Bottom() = aPt.Y();
+            aItemRect.SetRight( aPt.X() );
+            aItemRect.SetBottom( aPt.Y() );
             if( rHEvt.GetMode() == HelpEventMode::BALLOON )
                 Help::ShowBalloon( this, aItemRect.Center(), aItemRect, aHelpText);
             else
@@ -135,18 +134,18 @@ void OTableWindowTitle::MouseButtonDown( const MouseEvent& rEvt )
             Size aSize(GetTextWidth(GetText()) + 20,
                         m_pTabWin->GetSizePixel().Height() - m_pTabWin->GetListBox()->GetSizePixel().Height());
 
-            aSize.Height() += (m_pTabWin->GetListBox()->GetEntryCount() + 2) * m_pTabWin->GetListBox()->GetEntryHeight();
+            aSize.AdjustHeight((m_pTabWin->GetListBox()->GetEntryCount() + 2) * m_pTabWin->GetListBox()->GetEntryHeight() );
             if(m_pTabWin->GetSizePixel() != aSize)
             {
                 m_pTabWin->SetSizePixel(aSize);
 
-                OJoinTableView* pView = static_cast<OJoinTableView*>(m_pTabWin->getTableView());
+                OJoinTableView* pView = m_pTabWin->getTableView();
                 OSL_ENSURE(pView,"No OJoinTableView!");
                 for (auto& conn : pView->getTableConnections())
                     conn->RecalcLines();
 
                 pView->InvalidateConnections();
-                pView->getDesignView()->getController().setModified(sal_True);
+                pView->getDesignView()->getController().setModified(true);
                 pView->Invalidate(InvalidateFlags::NoChildren);
             }
         }
@@ -154,7 +153,7 @@ void OTableWindowTitle::MouseButtonDown( const MouseEvent& rEvt )
         {
             Point aPos = rEvt.GetPosPixel();
             aPos = OutputToScreenPixel( aPos );
-            OJoinTableView* pView = static_cast<OJoinTableView*>(m_pTabWin->getTableView());
+            OJoinTableView* pView = m_pTabWin->getTableView();
             OSL_ENSURE(pView,"No OJoinTableView!");
             pView->NotifyTitleClicked( static_cast<OTableWindow*>(GetParent()), aPos );
         }
@@ -170,7 +169,7 @@ void OTableWindowTitle::DataChanged(const DataChangedEvent& rDCEvt)
     {
         // assume worst-case: colours have changed, therefore I have to adept
         StyleSettings aSystemStyle = Application::GetSettings().GetStyleSettings();
-        SetBackground(Wallpaper(Color(aSystemStyle.GetFaceColor())));
+        SetBackground(Wallpaper(aSystemStyle.GetFaceColor()));
         SetTextColor(aSystemStyle.GetButtonTextColor());
     }
 }

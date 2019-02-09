@@ -36,16 +36,12 @@
 #include <hints.hxx>
 #include <fntcache.hxx>
 
-#include <statstr.hrc>
-#include <comcore.hrc>
-
 #include <IDocumentFieldsAccess.hxx>
 #include <IDocumentDeviceAccess.hxx>
-#include <vprint.hxx>
+#include "vprint.hxx"
 
 using namespace ::com::sun::star;
 
-// OD 12.12.2002 #103492#
 SwPagePreviewLayout* SwViewShell::PagePreviewLayout()
 {
     return Imp()->PagePreviewLayout();
@@ -56,10 +52,7 @@ void SwViewShell::ShowPreviewSelection( sal_uInt16 nSelPage )
     Imp()->InvalidateAccessiblePreviewSelection( nSelPage );
 }
 
-/** adjust view options for page preview
-
-    OD 09.01.2003 #i6467#
-*/
+// adjust view options for page preview
 void SwViewShell::AdjustOptionsForPagePreview(SwPrintData const& rPrintOptions)
 {
     if ( !IsPreview() )
@@ -69,12 +62,10 @@ void SwViewShell::AdjustOptionsForPagePreview(SwPrintData const& rPrintOptions)
     }
 
     PrepareForPrint( rPrintOptions );
-
-    return;
 }
 
 /// print brochure
-// OD 05.05.2003 #i14016# - consider empty pages on calculation of the scaling
+// consider empty pages on calculation of the scaling
 // for a page to be printed.
 void SwViewShell::PrintProspect(
     OutputDevice *pOutDev,
@@ -106,7 +97,7 @@ void SwViewShell::PrintProspect(
 
     //!! applying view options and formatting the document should now only be done in getRendererCount!
 
-    MapMode aMapMode( MAP_TWIP );
+    MapMode aMapMode( MapUnit::MapTwip );
     Size aPrtSize( pPrinter->PixelToLogic( pPrinter->GetPaperSizePixel(), aMapMode ) );
 
     SwTwips nMaxRowSz, nMaxColSz;
@@ -122,7 +113,7 @@ void SwViewShell::PrintProspect(
         pNxtPage = sw_getPage(*aShell.GetLayout(), rPagesToPrint.second);
     }
 
-    // OD 05.05.2003 #i14016# - consider empty pages on calculation
+    // i#14016 consider empty pages on calculation
     // of page size, used for calculation of scaling.
     Size aSttPageSize;
     if ( pStPage )
@@ -130,13 +121,13 @@ void SwViewShell::PrintProspect(
         if ( pStPage->IsEmptyPage() )
         {
             if ( pStPage->GetPhyPageNum() % 2 == 0 )
-                aSttPageSize = pStPage->GetPrev()->Frame().SSize();
+                aSttPageSize = pStPage->GetPrev()->getFrameArea().SSize();
             else
-                aSttPageSize = pStPage->GetNext()->Frame().SSize();
+                aSttPageSize = pStPage->GetNext()->getFrameArea().SSize();
         }
         else
         {
-            aSttPageSize = pStPage->Frame().SSize();
+            aSttPageSize = pStPage->getFrameArea().SSize();
         }
     }
     Size aNxtPageSize;
@@ -145,13 +136,13 @@ void SwViewShell::PrintProspect(
         if ( pNxtPage->IsEmptyPage() )
         {
             if ( pNxtPage->GetPhyPageNum() % 2 == 0 )
-                aNxtPageSize = pNxtPage->GetPrev()->Frame().SSize();
+                aNxtPageSize = pNxtPage->GetPrev()->getFrameArea().SSize();
             else
-                aNxtPageSize = pNxtPage->GetNext()->Frame().SSize();
+                aNxtPageSize = pNxtPage->GetNext()->getFrameArea().SSize();
         }
         else
         {
-            aNxtPageSize = pNxtPage->Frame().SSize();
+            aNxtPageSize = pNxtPage->getFrameArea().SSize();
         }
     }
 
@@ -182,7 +173,7 @@ void SwViewShell::PrintProspect(
         {
             // Round percentages for Drawings so that these can paint their objects properly
             aScY *= Fraction( 1000, 1 );
-            long nTmp = (long)aScY;
+            long nTmp = static_cast<long>(aScY);
             if( 1 < nTmp )
                 --nTmp;
             else
@@ -204,17 +195,17 @@ void SwViewShell::PrintProspect(
         if( pStPage )
         {
             aShell.Imp()->SetFirstVisPageInvalid();
-            aShell.maVisArea = pStPage->Frame();
+            aShell.maVisArea = pStPage->getFrameArea();
 
             Point aPos( aSttPt );
             aPos -= aShell.maVisArea.Pos();
             aMapMode.SetOrigin( aPos );
             pPrinter->SetMapMode( aMapMode );
-            pStPage->GetUpper()->Paint( *pOutDev, pStPage->Frame() );
+            pStPage->GetUpper()->PaintSwFrame( *pOutDev, pStPage->getFrameArea() );
         }
 
         pStPage = pNxtPage;
-        aSttPt.X() += aTmpPrtSize.Width() / 2;
+        aSttPt.AdjustX(aTmpPrtSize.Width() / 2 );
     }
 
     SwPaintQueue::Repaint();

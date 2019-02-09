@@ -20,13 +20,15 @@
 #define INCLUDED_I18NUTIL_WIDTHFOLDING_HXX
 
 #include <sal/types.h>
-#include <com/sun/star/uno/Sequence.hxx>
-#include <i18nutil/oneToOneMapping.hxx>
+#include <rtl/ustring.hxx>
 #include <i18nutil/i18nutildllapi.h>
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Sequence; } } } }
+namespace i18nutil { class oneToOneMapping; }
 
-#define WIDTHFOLDNIG_DONT_USE_COMBINED_VU 0x01
+namespace i18nutil {
+
+#define WIDTHFOLDING_DONT_USE_COMBINED_VU 0x01
 
 class I18NUTIL_DLLPUBLIC widthfolding
 {
@@ -47,7 +49,7 @@ public:
 };
 
 
-} } } }
+}
 
 #endif
 

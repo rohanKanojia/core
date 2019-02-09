@@ -18,8 +18,6 @@
  */
 #include "vbaheaderfooterhelper.hxx"
 #include "wordvbahelper.hxx"
-#include <comphelper/processfactory.hxx>
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/text/XTextViewCursorSupplier.hpp>
 #include <com/sun/star/text/XTextRangeCompare.hpp>
 #include <com/sun/star/text/XTextRange.hpp>
@@ -34,21 +32,19 @@ using namespace ::ooo::vba;
 #define FIRST_PAGE 1
 
 // Class HeaderFooterHelper
-bool HeaderFooterHelper::isHeaderFooter( const uno::Reference< frame::XModel >& xModel ) throw (uno::RuntimeException)
+bool HeaderFooterHelper::isHeaderFooter( const uno::Reference< frame::XModel >& xModel )
 {
     return isHeaderFooter( word::getCurrentXText( xModel ) );
 }
 
-bool HeaderFooterHelper::isHeaderFooter( const uno::Reference< text::XText >& xText ) throw (uno::RuntimeException)
+bool HeaderFooterHelper::isHeaderFooter( const uno::Reference< text::XText >& xText )
 {
     uno::Reference< lang::XServiceInfo > xServiceInfo( xText, uno::UNO_QUERY_THROW );
     OUString aImplName = xServiceInfo->getImplementationName();
-    if ( aImplName == "SwXHeadFootText" )
-        return true;
-    return false;
+    return aImplName == "SwXHeadFootText";
 }
 
-bool HeaderFooterHelper::isHeader( const uno::Reference< frame::XModel >& xModel ) throw (uno::RuntimeException)
+bool HeaderFooterHelper::isHeader( const uno::Reference< frame::XModel >& xModel )
 {
     const uno::Reference< text::XText > xCurrentText = word::getCurrentXText( xModel );
     if( !isHeaderFooter( xCurrentText ) )
@@ -86,7 +82,7 @@ bool HeaderFooterHelper::isHeader( const uno::Reference< frame::XModel >& xModel
     return false;
 }
 
-bool HeaderFooterHelper::isFirstPageHeader( const uno::Reference< frame::XModel >& xModel ) throw (uno::RuntimeException)
+bool HeaderFooterHelper::isFirstPageHeader( const uno::Reference< frame::XModel >& xModel )
 {
     if( isHeader( xModel ) )
     {
@@ -98,7 +94,7 @@ bool HeaderFooterHelper::isFirstPageHeader( const uno::Reference< frame::XModel 
     return false;
 }
 
-bool HeaderFooterHelper::isEvenPagesHeader( const uno::Reference< frame::XModel >& xModel ) throw (uno::RuntimeException)
+bool HeaderFooterHelper::isEvenPagesHeader( const uno::Reference< frame::XModel >& xModel )
 {
     if( isHeader( xModel ) )
     {
@@ -114,7 +110,7 @@ bool HeaderFooterHelper::isEvenPagesHeader( const uno::Reference< frame::XModel 
     return false;
 }
 
-bool HeaderFooterHelper::isFooter( const uno::Reference< frame::XModel >& xModel ) throw (uno::RuntimeException)
+bool HeaderFooterHelper::isFooter( const uno::Reference< frame::XModel >& xModel )
 {
     const uno::Reference< text::XText > xCurrentText = word::getCurrentXText( xModel );
     if( !isHeaderFooter( xCurrentText ) )
@@ -152,7 +148,7 @@ bool HeaderFooterHelper::isFooter( const uno::Reference< frame::XModel >& xModel
     return false;
 }
 
-bool HeaderFooterHelper::isFirstPageFooter( const uno::Reference< frame::XModel >& xModel ) throw (uno::RuntimeException)
+bool HeaderFooterHelper::isFirstPageFooter( const uno::Reference< frame::XModel >& xModel )
 {
     if( isFooter( xModel ) )
     {
@@ -163,7 +159,7 @@ bool HeaderFooterHelper::isFirstPageFooter( const uno::Reference< frame::XModel 
     return false;
 }
 
-bool HeaderFooterHelper::isEvenPagesFooter( const uno::Reference< frame::XModel >& xModel ) throw (uno::RuntimeException)
+bool HeaderFooterHelper::isEvenPagesFooter( const uno::Reference< frame::XModel >& xModel )
 {
     if( isFooter( xModel ) )
     {

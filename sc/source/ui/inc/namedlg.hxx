@@ -20,18 +20,13 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_NAMEDLG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_NAMEDLG_HXX
 
-#include <vcl/morebtn.hxx>
-#include <vcl/combobox.hxx>
-#include <vcl/group.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
 
-#include "rangenam.hxx"
 #include "anyrefdg.hxx"
 #include "namemgrtable.hxx"
 
 #include <memory>
-#include <stack>
 #include <map>
 
 class ScViewData;
@@ -81,7 +76,7 @@ private:
 
 private:
     void Init();
-    void UpdateChecks(ScRangeData* pData);
+    void UpdateChecks(const ScRangeData* pData);
     void ShowOptions(const ScRangeNameLine& rLine);
 
     bool IsNameValid();
@@ -99,15 +94,15 @@ private:
     void SelectionChanged();
 
     // Handler:
-    DECL_LINK_TYPED( OkBtnHdl, Button*, void );
-    DECL_LINK_TYPED( CancelBtnHdl, Button*, void );
-    DECL_LINK_TYPED( AddBtnHdl, Button*, void );
-    DECL_LINK_TYPED( RemoveBtnHdl, Button*, void );
-    DECL_LINK_TYPED( EdModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( EdModifyCheckBoxHdl, CheckBox&, void );
-    DECL_LINK_TYPED( AssignGetFocusHdl, Control&, void );
-    DECL_LINK_TYPED( SelectionChangedHdl_Impl, SvTreeListBox*, void );
-    DECL_LINK_TYPED( ScopeChangedHdl, ListBox&, void );
+    DECL_LINK( OkBtnHdl, Button*, void );
+    DECL_LINK( CancelBtnHdl, Button*, void );
+    DECL_LINK( AddBtnHdl, Button*, void );
+    DECL_LINK( RemoveBtnHdl, Button*, void );
+    DECL_LINK( EdModifyHdl, Edit&, void );
+    DECL_LINK( EdModifyCheckBoxHdl, CheckBox&, void );
+    DECL_LINK( AssignGetFocusHdl, Control&, void );
+    DECL_LINK( SelectionChangedHdl_Impl, SvTreeListBox*, void );
+    DECL_LINK( ScopeChangedHdl, ListBox&, void );
 
 protected:
     virtual void    RefInputDone( bool bForced = false ) override;
@@ -117,7 +112,7 @@ public:
                                ScViewData*      ptrViewData,
                                const ScAddress& aCursorPos,
                                std::map<OUString, std::unique_ptr<ScRangeName>>* pRangeMap = nullptr);
-    virtual         ~ScNameDlg();
+    virtual         ~ScNameDlg() override;
     virtual void    dispose() override;
 
     virtual void    SetReference( const ScRange& rRef, ScDocument* pDoc ) override;

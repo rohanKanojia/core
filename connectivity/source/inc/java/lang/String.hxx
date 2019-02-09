@@ -19,7 +19,7 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_LANG_STRING_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_LANG_STRING_HXX
 
-#include "java/lang/Object.hxx"
+#include <java/lang/Object.hxx>
 
 namespace connectivity
 {
@@ -30,7 +30,7 @@ namespace connectivity
         static jclass theClass;
     public:
         virtual jclass getMyClass() const override;
-        virtual ~java_lang_String();
+        virtual ~java_lang_String() override;
         // a Constructor, that is needed for when Returning the Object is needed:
         java_lang_String( JNIEnv * pEnv, jobject myObj ) : java_lang_Object( pEnv, myObj ){}
 

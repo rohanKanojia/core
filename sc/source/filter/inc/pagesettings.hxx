@@ -20,8 +20,10 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_PAGESETTINGS_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_PAGESETTINGS_HXX
 
+#include <memory>
 #include "worksheethelper.hxx"
 
+namespace oox { class AttributeList; }
 namespace oox { class PropertySet; }
 namespace oox { namespace core { class Relations; } }
 
@@ -33,7 +35,7 @@ class HeaderFooterParser;
 /** Holds page style data for a single sheet. */
 struct PageSettingsModel
 {
-    OUString     maGraphicUrl;           /// URL of the graphic object.
+    css::uno::Reference<css::graphic::XGraphic> mxGraphic; /// Background Graphic
     OUString     maBinSettPath;          /// Relation identifier of binary printer settings.
     OUString     maOddHeader;            /// Header string for odd pages.
     OUString     maOddFooter;            /// Footer string for odd pages.
@@ -43,7 +45,7 @@ struct PageSettingsModel
     OUString     maFirstFooter;          /// Footer string for first page of the sheet.
     double              mfLeftMargin;           /// Margin between left edge of page and begin of sheet area.
     double              mfRightMargin;          /// Margin between end of sheet area and right edge of page.
-    double              mfTopMargin;            /// Margin between top egde of page and begin of sheet area.
+    double              mfTopMargin;            /// Margin between top edge of page and begin of sheet area.
     double              mfBottomMargin;         /// Margin between end of sheet area and bottom edge of page.
     double              mfHeaderMargin;         /// Margin between top edge of page and begin of header.
     double              mfFooterMargin;         /// Margin between end of footer and bottom edge of page.
@@ -130,7 +132,7 @@ class PageSettingsConverter : public WorkbookHelper
 {
 public:
     explicit            PageSettingsConverter( const WorkbookHelper& rHelper );
-    virtual             ~PageSettingsConverter();
+    virtual             ~PageSettingsConverter() override;
 
     /** Writes all properties to the passed property set of a page style object. */
     void                writePageSettingsProperties(
@@ -141,8 +143,8 @@ public:
 private:
     struct HFHelperData
     {
-        sal_Int32           mnLeftPropId;
-        sal_Int32           mnRightPropId;
+        sal_Int32 const     mnLeftPropId;
+        sal_Int32 const     mnRightPropId;
         sal_Int32           mnHeight;
         sal_Int32           mnBodyDist;
         bool                mbHasContent;

@@ -18,10 +18,11 @@
  */
 
 #include <vcl/window.hxx>
+#include <osl/diagnose.h>
 
-#include "invmerge.hxx"
+#include <invmerge.hxx>
 
-ScInvertMerger::ScInvertMerger( ::std::vector< Rectangle >* pRectangles ) :
+ScInvertMerger::ScInvertMerger( ::std::vector< tools::Rectangle >* pRectangles ) :
     pRects( pRectangles )
 {
     //  collect rectangles instead of inverting
@@ -47,13 +48,13 @@ void ScInvertMerger::Flush()
         size_t nComparePos = 0;
         while ( nComparePos < pRects->size() )
         {
-            Rectangle aCompRect = (*pRects)[nComparePos];
+            tools::Rectangle aCompRect = (*pRects)[nComparePos];
             sal_Int32 nBottom = aCompRect.Bottom();
             size_t nOtherPos = nComparePos + 1;
 
             while ( nOtherPos < pRects->size() )
             {
-                Rectangle aOtherRect = (*pRects)[nOtherPos];
+                tools::Rectangle aOtherRect = (*pRects)[nOtherPos];
                 if ( aOtherRect.Top() > nBottom + 1 )
                 {
                     // rectangles are sorted, so we can stop searching
@@ -65,8 +66,8 @@ void ScInvertMerger::Flush()
                 {
                     // extend first rectangle
                     nBottom = aOtherRect.Bottom();
-                    aCompRect.Bottom() = nBottom;
-                    (*pRects)[nComparePos].Bottom() = nBottom;
+                    aCompRect.SetBottom( nBottom );
+                    (*pRects)[nComparePos].SetBottom( nBottom );
 
                     // remove second rectangle
                     pRects->erase( pRects->begin() + nOtherPos );
@@ -109,7 +110,7 @@ void ScInvertMerger::FlushLine()
              aLineRect.Top()   == aTotalRect.Bottom() + 1 )
         {
             // extend total rect
-            aTotalRect.Bottom() = aLineRect.Bottom();
+            aTotalRect.SetBottom( aLineRect.Bottom() );
         }
         else
         {
@@ -121,13 +122,13 @@ void ScInvertMerger::FlushLine()
     aLineRect.SetEmpty();
 }
 
-void ScInvertMerger::AddRect( const Rectangle& rRect )
+void ScInvertMerger::AddRect( const tools::Rectangle& rRect )
 {
-    Rectangle aJustified = rRect;
+    tools::Rectangle aJustified = rRect;
     if ( rRect.Left() > rRect.Right() )     // switch for RTL layout
     {
-        aJustified.Left() = rRect.Right();
-        aJustified.Right() = rRect.Left();
+        aJustified.SetLeft( rRect.Right() );
+        aJustified.SetRight( rRect.Left() );
     }
 
     if ( aLineRect.IsEmpty() )
@@ -143,12 +144,12 @@ void ScInvertMerger::AddRect( const Rectangle& rRect )
             // try to extend line rect
             if ( aJustified.Left() == aLineRect.Right() + 1 )
             {
-                aLineRect.Right() = aJustified.Right();
+                aLineRect.SetRight( aJustified.Right() );
                 bDone = true;
             }
             else if ( aJustified.Right() + 1 == aLineRect.Left() )  // for RTL layout
             {
-                aLineRect.Left() = aJustified.Left();
+                aLineRect.SetLeft( aJustified.Left() );
                 bDone = true;
             }
         }

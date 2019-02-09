@@ -64,8 +64,8 @@
 #include <sal/types.h>
 
 #include "lwpoleobject.hxx"
-#include "lwpheader.hxx"
-#include "xfilter/xfrect.hxx"
+#include <lwpheader.hxx>
+#include <xfilter/xfrect.hxx>
 
 struct ImageProcessingData
 {
@@ -91,8 +91,8 @@ class XFFrame;
 class LwpGraphicObject : public LwpGraphicOleObject
 {
 public:
-    LwpGraphicObject(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpGraphicObject();
+    LwpGraphicObject(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpGraphicObject() override;
 private:
     unsigned char m_sDataFormat[AFID_MAX_FILE_FORMAT_SIZE];
     unsigned char m_sServerContextFormat[AFID_MAX_CONTEXT_FORMAT_SIZE];
@@ -117,14 +117,14 @@ public:
 
     void CreateDrawObjects();
     void CreateGrafObject();
-    static void GetBentoNamebyID(LwpObjectID& rMyID, std::string& rName);
-    sal_uInt32 GetRawGrafData(sal_uInt8*& pGrafData);
-    sal_uInt32 GetGrafData(sal_uInt8*& pGrafData);
+    static void GetBentoNamebyID(LwpObjectID const & rMyID, std::string& rName);
+    std::vector<sal_uInt8> GetRawGrafData();
+    sal_uInt32 GetGrafData(std::unique_ptr<sal_uInt8[]>& pGrafData);
     void GetGrafOrgSize(long& rWidth, long& rHeight) { rWidth = m_Cache.Width; rHeight = m_Cache.Height; }
     void GetGrafOrgSize(double& rWidth, double& rHeight) override;
 
     sal_Int16 IsLinked(){ return m_bIsLinked;}
-    OUString GetLinkedFilePath(){ return m_LinkedFilePath;}
+    const OUString& GetLinkedFilePath(){ return m_LinkedFilePath;}
 };
 
 #endif

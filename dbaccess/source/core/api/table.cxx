@@ -19,19 +19,15 @@
 
 #include <string.h>
 
-#include "table.hxx"
+#include <table.hxx>
 #include <definitioncolumn.hxx>
-#include "dbastrings.hrc"
-#include "core_resource.hxx"
-#include "core_resource.hrc"
+#include <stringconstants.hxx>
+#include <core_resource.hxx>
+#include <strings.hrc>
 #include "CIndexes.hxx"
 
-#include <tools/debug.hxx>
 #include <osl/diagnose.h>
 #include <cppuhelper/typeprovider.hxx>
-#include <comphelper/enumhelper.hxx>
-#include <comphelper/container.hxx>
-#include <comphelper/sequence.hxx>
 #include <comphelper/types.hxx>
 #include <com/sun/star/util/XRefreshListener.hpp>
 #include <com/sun/star/sdbc/XConnection.hpp>
@@ -44,8 +40,8 @@
 #include <connectivity/dbtools.hxx>
 #include <connectivity/dbexception.hxx>
 
-#include "sdbcoretools.hxx"
-#include "ContainerMediator.hxx"
+#include <sdbcoretools.hxx>
+#include <ContainerMediator.hxx>
 
 using namespace dbaccess;
 using namespace connectivity;
@@ -69,7 +65,7 @@ ODBTable::ODBTable(connectivity::sdbcx::OCollection* _pTables
         ,const OUString& _rName
         ,const OUString& _rType
         ,const OUString& _rDesc
-        ,const Reference< XNameAccess >& _xColumnDefinitions) throw(SQLException)
+        ,const Reference< XNameAccess >& _xColumnDefinitions)
     :OTable_Base(_pTables,_rxConn,_rxConn->getMetaData().is() && _rxConn->getMetaData()->supportsMixedCaseQuotedIdentifiers(), _rName, _rType, _rDesc, _rSchema, _rCatalog )
     ,m_xColumnDefinitions(_xColumnDefinitions)
     ,m_nPrivileges(0)
@@ -84,7 +80,6 @@ ODBTable::ODBTable(connectivity::sdbcx::OCollection* _pTables
 
 ODBTable::ODBTable(connectivity::sdbcx::OCollection* _pTables
                    ,const Reference< XConnection >& _rxConn)
-                throw(SQLException)
     :OTable_Base(_pTables,_rxConn, _rxConn->getMetaData().is() && _rxConn->getMetaData()->supportsMixedCaseQuotedIdentifiers())
     ,m_nPrivileges(-1)
 {
@@ -93,8 +88,6 @@ ODBTable::ODBTable(connectivity::sdbcx::OCollection* _pTables
 ODBTable::~ODBTable()
 {
 }
-
-IMPLEMENT_FORWARD_REFCOUNT(ODBTable,OTable_Base)
 
 OColumn* ODBTable::createColumn(const OUString& _rName) const
 {
@@ -107,7 +100,7 @@ OColumn* ODBTable::createColumn(const OUString& _rName) const
     }
     else
     {
-        OColumns* pColumns = static_cast<OColumns*>(m_pColumns);
+        OColumns* pColumns = static_cast<OColumns*>(m_xColumns.get());
         xProp.set(pColumns->createBaseObject(_rName),UNO_QUERY);
     }
 
@@ -133,7 +126,7 @@ void ODBTable::columnDropped(const OUString& _sName)
     }
 }
 
-Sequence< sal_Int8 > ODBTable::getImplementationId() throw (RuntimeException, std::exception)
+Sequence< sal_Int8 > ODBTable::getImplementationId()
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -151,7 +144,7 @@ void SAL_CALL ODBTable::disposing()
 void ODBTable::getFastPropertyValue(Any& _rValue, sal_Int32 _nHandle) const
 {
     if ((PROPERTY_ID_PRIVILEGES == _nHandle) && (-1 == m_nPrivileges))
-    {   // somebody is asking for the privileges an we do not know them, yet
+    {   // somebody is asking for the privileges and we do not know them, yet
         const_cast<ODBTable*>(this)->m_nPrivileges = ::dbtools::getTablePrivileges(getMetaData(),m_CatalogName,m_SchemaName, m_Name);
     }
 
@@ -224,18 +217,16 @@ void ODBTable::construct()
     describeProperties(aProps);
     if(!_nId)
     {
-        Property* pIter = aProps.getArray();
-        Property* pEnd  = pIter + aProps.getLength();
-        for(;pIter != pEnd;++pIter)
+        for(Property & prop : aProps)
         {
-            if (pIter->Name == PROPERTY_CATALOGNAME)
-                pIter->Attributes = PropertyAttribute::READONLY;
-            else if (pIter->Name == PROPERTY_SCHEMANAME)
-                pIter->Attributes = PropertyAttribute::READONLY;
-            else if (pIter->Name == PROPERTY_DESCRIPTION)
-                pIter->Attributes = PropertyAttribute::READONLY;
-            else if (pIter->Name == PROPERTY_NAME)
-                pIter->Attributes = PropertyAttribute::READONLY;
+            if (prop.Name == PROPERTY_CATALOGNAME)
+                prop.Attributes = PropertyAttribute::READONLY;
+            else if (prop.Name == PROPERTY_SCHEMANAME)
+                prop.Attributes = PropertyAttribute::READONLY;
+            else if (prop.Name == PROPERTY_DESCRIPTION)
+                prop.Attributes = PropertyAttribute::READONLY;
+            else if (prop.Name == PROPERTY_NAME)
+                prop.Attributes = PropertyAttribute::READONLY;
         }
     }
 
@@ -250,7 +241,7 @@ void ODBTable::construct()
 // XServiceInfo
 IMPLEMENT_SERVICE_INFO1(ODBTable, "com.sun.star.sdb.dbaccess.ODBTable", SERVICE_SDBCX_TABLE)
 
-Any SAL_CALL ODBTable::queryInterface( const Type & rType ) throw(RuntimeException, std::exception)
+Any SAL_CALL ODBTable::queryInterface( const Type & rType )
 {
     if(rType == cppu::UnoType<XRename>::get()&& !getRenameService().is() )
         return Any();
@@ -259,13 +250,13 @@ Any SAL_CALL ODBTable::queryInterface( const Type & rType ) throw(RuntimeExcepti
     return OTable_Base::queryInterface( rType);
 }
 
-Sequence< Type > SAL_CALL ODBTable::getTypes(  ) throw(RuntimeException, std::exception)
+Sequence< Type > SAL_CALL ODBTable::getTypes(  )
 {
     Type aRenameType = cppu::UnoType<XRename>::get();
     Type aAlterType = cppu::UnoType<XAlterTable>::get();
 
     Sequence< Type > aTypes(OTable_Base::getTypes());
-    ::std::vector<Type> aOwnTypes;
+    std::vector<Type> aOwnTypes;
     aOwnTypes.reserve(aTypes.getLength());
 
     const Type* pIter = aTypes.getConstArray();
@@ -280,12 +271,12 @@ Sequence< Type > SAL_CALL ODBTable::getTypes(  ) throw(RuntimeException, std::ex
 }
 
 // XRename,
-void SAL_CALL ODBTable::rename( const OUString& _rNewName ) throw(SQLException, ElementExistException, RuntimeException, std::exception)
+void SAL_CALL ODBTable::rename( const OUString& _rNewName )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     checkDisposed(connectivity::sdbcx::OTableDescriptor_BASE::rBHelper.bDisposed);
     if ( !getRenameService().is() )
-        throw SQLException(DBACORE_RESSTRING(RID_STR_NO_TABLE_RENAME),*this,SQLSTATE_GENERAL,1000,Any() );
+        throw SQLException(DBA_RES(RID_STR_NO_TABLE_RENAME),*this,SQLSTATE_GENERAL,1000,Any() );
 
     Reference<XPropertySet> xTable(this);
     getRenameService()->rename(xTable,_rNewName);
@@ -293,22 +284,22 @@ void SAL_CALL ODBTable::rename( const OUString& _rNewName ) throw(SQLException, 
 }
 
 // XAlterTable,
-void SAL_CALL ODBTable::alterColumnByName( const OUString& _rName, const Reference< XPropertySet >& _rxDescriptor ) throw(SQLException, NoSuchElementException, RuntimeException, std::exception)
+void SAL_CALL ODBTable::alterColumnByName( const OUString& _rName, const Reference< XPropertySet >& _rxDescriptor )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     checkDisposed(connectivity::sdbcx::OTableDescriptor_BASE::rBHelper.bDisposed);
     if ( !getAlterService().is() )
-        throw SQLException(DBACORE_RESSTRING(RID_STR_NO_TABLE_RENAME),*this,SQLSTATE_GENERAL,1000,Any() );
+        throw SQLException(DBA_RES(RID_STR_NO_TABLE_RENAME),*this,SQLSTATE_GENERAL,1000,Any() );
 
-    if ( !m_pColumns->hasByName(_rName) )
-        throw SQLException(DBACORE_RESSTRING(RID_STR_COLUMN_NOT_VALID),*this,SQLSTATE_GENERAL,1000,Any() );
+    if ( !m_xColumns->hasByName(_rName) )
+        throw SQLException(DBA_RES(RID_STR_COLUMN_NOT_VALID),*this,SQLSTATE_GENERAL,1000,Any() );
 
     Reference<XPropertySet> xTable(this);
     getAlterService()->alterColumnByName(xTable,_rName,_rxDescriptor);
-    m_pColumns->refresh();
+    m_xColumns->refresh();
 }
 
-sal_Int64 SAL_CALL ODBTable::getSomething( const Sequence< sal_Int8 >& rId ) throw(RuntimeException, std::exception)
+sal_Int64 SAL_CALL ODBTable::getSomething( const Sequence< sal_Int8 >& rId )
 {
     sal_Int64 nRet(0);
     if (rId.getLength() == 16 && 0 == memcmp(getUnoTunnelImplementationId().getConstArray(),  rId.getConstArray(), 16 ) )
@@ -321,17 +312,9 @@ sal_Int64 SAL_CALL ODBTable::getSomething( const Sequence< sal_Int8 >& rId ) thr
 
 Sequence< sal_Int8 > ODBTable::getUnoTunnelImplementationId()
 {
-    static ::cppu::OImplementationId * pId = nullptr;
-    if (! pId)
-    {
-        ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-        if (! pId)
-        {
-            static ::cppu::OImplementationId aId;
-            pId = &aId;
-        }
-    }
-    return pId->getImplementationId();
+    static ::cppu::OImplementationId s_Id;
+
+    return s_Id.getImplementationId();
 }
 
 Reference< XPropertySet > ODBTable::createColumnDescriptor()
@@ -339,7 +322,7 @@ Reference< XPropertySet > ODBTable::createColumnDescriptor()
     return new OTableColumnDescriptor( true );
 }
 
-sdbcx::OCollection* ODBTable::createColumns(const TStringVector& _rNames)
+sdbcx::OCollection* ODBTable::createColumns(const ::std::vector< OUString>& _rNames)
 {
     Reference<XDatabaseMetaData> xMeta = getMetaData();
     OColumns* pCol = new OColumns(*this, m_aMutex, nullptr, isCaseSensitive(), _rNames, this,this,
@@ -352,12 +335,12 @@ sdbcx::OCollection* ODBTable::createColumns(const TStringVector& _rNames)
     return pCol;
 }
 
-sdbcx::OCollection* ODBTable::createKeys(const TStringVector& _rNames)
+sdbcx::OCollection* ODBTable::createKeys(const ::std::vector< OUString>& _rNames)
 {
     return new connectivity::OKeysHelper(this,m_aMutex,_rNames);
 }
 
-sdbcx::OCollection* ODBTable::createIndexes(const TStringVector& _rNames)
+sdbcx::OCollection* ODBTable::createIndexes(const ::std::vector< OUString>& _rNames)
 {
     return new OIndexes(this,m_aMutex,_rNames,nullptr);
 }

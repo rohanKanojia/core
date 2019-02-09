@@ -17,8 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/table/tablestylelistfragmenthandler.hxx"
-#include "drawingml/table/tablestylecontext.hxx"
+#include <drawingml/table/tablestylelistfragmenthandler.hxx>
+#include <drawingml/table/tablestylecontext.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star;
@@ -51,7 +54,7 @@ ContextHandlerRef TableStyleListFragmentHandler::onCreateContext(
             break;
         case A_TOKEN( tblStyle ):       // CT_TableStyle
             std::vector< TableStyle >& rTableStyles = mrTableStyleList.getTableStyles();
-            rTableStyles.resize( rTableStyles.size() + 1 );
+            rTableStyles.emplace_back();
             return new TableStyleContext( *this, rAttribs, rTableStyles.back() );
     }
     return this;

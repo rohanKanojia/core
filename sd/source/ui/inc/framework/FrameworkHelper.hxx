@@ -20,20 +20,20 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_FRAMEWORK_FRAMEWORKHELPER_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_FRAMEWORK_FRAMEWORKHELPER_HXX
 
-#include "ViewShell.hxx"
+#include <ViewShell.hxx>
 
-#include "tools/SdGlobalResourceContainer.hxx"
-
-#include <com/sun/star/drawing/framework/XConfigurationController.hpp>
-#include <com/sun/star/drawing/framework/XView.hpp>
-#include <com/sun/star/lang/XEventListener.hpp>
+#include <tools/SdGlobalResourceContainer.hxx>
 
 #include <functional>
 #include <map>
 #include <memory>
 
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XConfigurationController; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XResourceId; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XView; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { struct ConfigurationChangeEvent; } } } } }
+
 namespace sd {
-class ViewShell;
 class ViewShellBase;
 }
 
@@ -206,7 +206,7 @@ public:
     */
     void HandleModeChangeSlot (
         sal_uLong nSlotId,
-        SfxRequest& rRequest);
+        SfxRequest const & rRequest);
 
     /** Run the given callback when the specified event is notified by the
         ConfigurationManager.  When there are no pending requests and
@@ -294,7 +294,7 @@ public:
                 const css::uno::Reference<
                     css::drawing::framework::XResourceId>& rxAnchor);
 
-    css::uno::Reference<css::drawing::framework::XConfigurationController>
+    const css::uno::Reference<css::drawing::framework::XConfigurationController>&
         GetConfigurationController() const { return mxConfigurationController;}
 
 private:
@@ -319,7 +319,7 @@ private:
 
     FrameworkHelper (ViewShellBase& rBase);
     FrameworkHelper (const FrameworkHelper& rHelper) = delete;
-    virtual ~FrameworkHelper();
+    virtual ~FrameworkHelper() override;
     class Deleter; friend class Deleter;
     FrameworkHelper& operator= (const FrameworkHelper& rHelper) = delete;
 

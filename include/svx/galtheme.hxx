@@ -25,11 +25,13 @@
 #include <tools/debug.hxx>
 #include <tools/urlobj.hxx>
 #include <vcl/salctype.hxx>
+#include <vcl/weld.hxx>
 #include <svl/SfxBroadcaster.hxx>
 #include <svl/lstner.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <svx/svdmodel.hxx>
 #include <svx/galmisc.hxx>
+#include <memory>
 #include <vector>
 
 class SotStorage;
@@ -51,12 +53,9 @@ struct GalleryObject
 };
 
 
-typedef ::std::vector< GalleryObject* > GalleryObjectList;
-
 class GalleryThemeEntry;
 class SgaObject;
 class FmFormModel;
-class ListBox;
 
 class Gallery;
 class GalleryProgress;
@@ -77,68 +76,67 @@ class SVX_DLLPUBLIC GalleryTheme : public SfxBroadcaster
 
 private:
 
-    GalleryObjectList           aObjectList;
+    ::std::vector< std::unique_ptr<GalleryObject> > aObjectList;
     OUString                    m_aDestDir;
     bool                        m_bDestDirRelative;
     tools::SvRef<SotStorage>    aSvDrawStorageRef;
-    Gallery*                    pParent;
+    Gallery* const              pParent;
     GalleryThemeEntry*          pThm;
-    sal_uIntPtr                 mnThemeLockCount;
-    sal_uIntPtr                 mnBroadcasterLockCount;
-    sal_uIntPtr                 nDragPos;
+    sal_uInt32                  mnThemeLockCount;
+    sal_uInt32                  mnBroadcasterLockCount;
+    sal_uInt32                  nDragPos;
     bool                        bDragging;
     bool                        bAbortActualize;
 
     SAL_DLLPRIVATE void         ImplCreateSvDrawStorage();
-    SgaObject*                  ImplReadSgaObject( GalleryObject* pEntry );
-    SAL_DLLPRIVATE bool         ImplWriteSgaObject( const SgaObject& rObj, size_t nPos, GalleryObject* pExistentEntry );
+    std::unique_ptr<SgaObject>  ImplReadSgaObject( GalleryObject const * pEntry );
+    SAL_DLLPRIVATE bool         ImplWriteSgaObject(const SgaObject& rObj, sal_uInt32 nPos, GalleryObject* pExistentEntry);
     SAL_DLLPRIVATE void         ImplWrite();
-    SAL_DLLPRIVATE const GalleryObject* ImplGetGalleryObject( size_t nPos ) const
-                                { return ( nPos < aObjectList.size() ) ? aObjectList[ nPos ] : nullptr; }
+    SAL_DLLPRIVATE const GalleryObject* ImplGetGalleryObject(sal_uInt32 nPos) const
+                                { return aObjectList[ nPos ].get(); }
     const GalleryObject*        ImplGetGalleryObject( const INetURLObject& rURL );
 
-    SAL_DLLPRIVATE size_t       ImplGetGalleryObjectPos( const GalleryObject* pObj ) const
+    SAL_DLLPRIVATE sal_uInt32   ImplGetGalleryObjectPos( const GalleryObject* pObj ) const
                                 {
-                                    for ( size_t i = 0, n = aObjectList.size(); i < n; ++i )
-                                        if ( pObj == aObjectList[ i ] )
+                                    for (sal_uInt32 i = 0, n = aObjectList.size(); i < n; ++i)
+                                        if ( pObj == aObjectList[ i ].get() )
                                             return i;
-                                    return size_t(-1);
+                                    return SAL_MAX_UINT32;
                                 }
-    SAL_DLLPRIVATE INetURLObject ImplGetURL( const GalleryObject* pObject ) const;
+    SAL_DLLPRIVATE static INetURLObject ImplGetURL( const GalleryObject* pObject );
     SAL_DLLPRIVATE INetURLObject ImplCreateUniqueURL( SgaObjKind eObjKind, ConvertDataFormat nFormat = ConvertDataFormat::Unknown );
     SAL_DLLPRIVATE void         ImplSetModified( bool bModified );
-    SAL_DLLPRIVATE void         ImplBroadcast( sal_uIntPtr nUpdatePos );
+    SAL_DLLPRIVATE void         ImplBroadcast(sal_uInt32 nUpdatePos);
 
-    SAL_DLLPRIVATE              GalleryTheme();
     SAL_DLLPRIVATE              GalleryTheme( Gallery* pGallery, GalleryThemeEntry* pThemeEntry );
-    SAL_DLLPRIVATE              virtual ~GalleryTheme();
 
     GalleryTheme(GalleryTheme const &) = delete;
     void operator =(GalleryTheme const &) = delete;
 
 public:
 
+    SAL_DLLPRIVATE              virtual ~GalleryTheme() override;
+
     SAL_DLLPRIVATE static GalleryThemeEntry* CreateThemeEntry( const INetURLObject& rURL, bool bReadOnly );
 
-    SAL_DLLPRIVATE size_t       GetObjectCount() const { return aObjectList.size(); }
+    SAL_DLLPRIVATE sal_uInt32   GetObjectCount() const { return aObjectList.size(); }
 
-    SgaObject*                  AcquireObject( size_t nPos );
-    static void                 ReleaseObject( SgaObject* pObj );
+    std::unique_ptr<SgaObject>  AcquireObject(sal_uInt32 nPos);
 
-    bool                        InsertObject( const SgaObject& rObj, sal_uIntPtr nPos = CONTAINER_APPEND );
-    bool                        RemoveObject( size_t nPos );
-    SAL_DLLPRIVATE bool         ChangeObjectPos( size_t nOldPos, size_t nNewPos );
+    bool                        InsertObject(const SgaObject& rObj, sal_uInt32 nPos = SAL_MAX_UINT32);
+    void                        RemoveObject(sal_uInt32 nPos);
+    SAL_DLLPRIVATE bool         ChangeObjectPos(sal_uInt32 nOldPos, sal_uInt32 nNewPos);
 
     const OUString&             GetName() const;
-    SAL_DLLPRIVATE const OUString& GetRealName() const;
 
     // used for building gallery themes during compilation:
-    SAL_DLLPRIVATE void         SetDestDir(const OUString& rDestDir, bool bRelative = true)
+    SAL_DLLPRIVATE void         SetDestDir(const OUString& rDestDir, bool bRelative)
                                 { m_aDestDir = rDestDir; m_bDestDirRelative = bRelative; }
 
     SAL_DLLPRIVATE const INetURLObject& GetThmURL() const;
     const INetURLObject&        GetSdgURL() const;
     SAL_DLLPRIVATE const INetURLObject& GetSdvURL() const;
+    SAL_DLLPRIVATE const INetURLObject& GetStrURL() const;
 
     sal_uInt32                  GetId() const;
     SAL_DLLPRIVATE void         SetId( sal_uInt32 nNewId, bool bResetThemeName );
@@ -153,65 +151,64 @@ public:
     void                        UnlockBroadcaster();
     SAL_DLLPRIVATE bool         IsBroadcasterLocked() const { return mnBroadcasterLockCount > 0; }
 
-    SAL_DLLPRIVATE void         SetDragPos( sal_uIntPtr nPos ) { nDragPos = nPos; }
-    SAL_DLLPRIVATE sal_uIntPtr  GetDragPos() const { return nDragPos; }
+    SAL_DLLPRIVATE void         SetDragPos(sal_uInt32 nPos) { nDragPos = nPos; }
+    SAL_DLLPRIVATE sal_uInt32   GetDragPos() const { return nDragPos; }
 
     SAL_DLLPRIVATE bool         IsThemeNameFromResource() const;
 
     bool                        IsReadOnly() const;
     bool                        IsDefault() const;
-    SAL_DLLPRIVATE bool         IsModified() const;
 
     void                        Actualize( const Link<const INetURLObject&, void>& rActualizeLink, GalleryProgress* pProgress = nullptr );
     SAL_DLLPRIVATE void         AbortActualize() { bAbortActualize = true; }
 
     SAL_DLLPRIVATE Gallery*     GetParent() const { return pParent; }
-    SAL_DLLPRIVATE tools::SvRef<SotStorage> GetSvDrawStorage() const;
+    SAL_DLLPRIVATE const tools::SvRef<SotStorage>& GetSvDrawStorage() const;
 
 public:
 
-    SAL_DLLPRIVATE SgaObjKind   GetObjectKind( sal_uIntPtr nPos ) const
+    SAL_DLLPRIVATE SgaObjKind   GetObjectKind(sal_uInt32 nPos) const
                                 {
                                     DBG_ASSERT( nPos < GetObjectCount(), "Position out of range" );
                                     return ImplGetGalleryObject( nPos )->eObjKind;
                                 }
 
 
-    SAL_DLLPRIVATE const INetURLObject& GetObjectURL( sal_uIntPtr nPos ) const
+    SAL_DLLPRIVATE const INetURLObject& GetObjectURL(sal_uInt32 nPos) const
                                 {
                                     DBG_ASSERT( nPos < GetObjectCount(), "Position out of range" );
                                     return ImplGetGalleryObject( nPos )->aURL;
                                 }
 
-    SAL_DLLPRIVATE bool         GetThumb( sal_uIntPtr nPos, BitmapEx& rBmp, bool bProgress = false );
+    SAL_DLLPRIVATE bool         GetThumb(sal_uInt32 nPos, BitmapEx& rBmp);
 
-    bool                        GetGraphic( sal_uIntPtr nPos, Graphic& rGraphic, bool bProgress = false );
-    bool                        InsertGraphic( const Graphic& rGraphic, sal_uIntPtr nInsertPos = CONTAINER_APPEND );
+    bool                        GetGraphic(sal_uInt32 nPos, Graphic& rGraphic);
+    bool                        InsertGraphic(const Graphic& rGraphic, sal_uInt32 nInsertPos);
 
-    bool                        GetModel( sal_uIntPtr nPos, SdrModel& rModel, bool bProgress = false );
-    bool                        InsertModel( const FmFormModel& rModel, sal_uIntPtr nInsertPos = CONTAINER_APPEND );
+    bool                        GetModel(sal_uInt32 nPos, SdrModel& rModel);
+    bool                        InsertModel(const FmFormModel& rModel, sal_uInt32 nInsertPos);
 
-    SAL_DLLPRIVATE bool         GetModelStream( sal_uIntPtr nPos, tools::SvRef<SotStorageStream>& rModelStreamRef );
-    SAL_DLLPRIVATE bool         InsertModelStream( const tools::SvRef<SotStorageStream>& rModelStream, sal_uIntPtr nInsertPos = CONTAINER_APPEND );
+    SAL_DLLPRIVATE bool         GetModelStream(sal_uInt32 nPos, tools::SvRef<SotStorageStream> const & rModelStreamRef);
+    SAL_DLLPRIVATE bool         InsertModelStream(const tools::SvRef<SotStorageStream>& rModelStream, sal_uInt32 nInsertPos);
 
-    SAL_DLLPRIVATE bool         GetURL( sal_uIntPtr nPos, INetURLObject& rURL );
-    bool                        InsertURL( const INetURLObject& rURL, sal_uIntPtr nInsertPos = CONTAINER_APPEND );
-    SAL_DLLPRIVATE bool         InsertFileOrDirURL( const INetURLObject& rFileOrDirURL, sal_uIntPtr nInsertPos = CONTAINER_APPEND );
+    SAL_DLLPRIVATE bool         GetURL(sal_uInt32 nPos, INetURLObject& rURL);
+    bool                        InsertURL(const INetURLObject& rURL, sal_uInt32 nInsertPos = SAL_MAX_UINT32);
+    SAL_DLLPRIVATE bool         InsertFileOrDirURL(const INetURLObject& rFileOrDirURL, sal_uInt32 nInsertPos);
 
-    SAL_DLLPRIVATE bool         InsertTransferable( const css::uno::Reference< css::datatransfer::XTransferable >& rxTransferable, sal_uIntPtr nInsertPos );
+    SAL_DLLPRIVATE bool         InsertTransferable(const css::uno::Reference< css::datatransfer::XTransferable >& rxTransferable, sal_uInt32 nInsertPos);
 
-    SAL_DLLPRIVATE void         CopyToClipboard( vcl::Window* pWindow, sal_uIntPtr nPos );
-    SAL_DLLPRIVATE void         StartDrag( vcl::Window* pWindow, sal_uIntPtr nPos );
+    SAL_DLLPRIVATE void         CopyToClipboard(vcl::Window* pWindow, sal_uInt32 nPos);
+    SAL_DLLPRIVATE void         StartDrag(vcl::Window* pWindow, sal_uInt32 nPos);
 
 public:
 
     SAL_DLLPRIVATE SvStream&    WriteData( SvStream& rOut ) const;
     SAL_DLLPRIVATE SvStream&    ReadData( SvStream& rIn );
-    static void                 InsertAllThemes( ListBox& rListBox );
+    static void                 InsertAllThemes(weld::ComboBox& rListBox);
 
     // for buffering PreviewBitmaps and strings for object and path
-    SAL_DLLPRIVATE void GetPreviewBitmapExAndStrings(sal_uIntPtr nPos, BitmapEx& rBitmapEx, Size& rSize, OUString& rTitle, OUString& rPath) const;
-    SAL_DLLPRIVATE void SetPreviewBitmapExAndStrings(sal_uIntPtr nPos, const BitmapEx& rBitmapEx, const Size& rSize, const OUString& rTitle, const OUString& rPath);
+    SAL_DLLPRIVATE void GetPreviewBitmapExAndStrings(sal_uInt32 nPos, BitmapEx& rBitmapEx, Size& rSize, OUString& rTitle, OUString& rPath) const;
+    SAL_DLLPRIVATE void SetPreviewBitmapExAndStrings(sal_uInt32 nPos, const BitmapEx& rBitmapEx, const Size& rSize, const OUString& rTitle, const OUString& rPath);
 };
 
 SvStream& WriteGalleryTheme( SvStream& rOut, const GalleryTheme& rTheme );

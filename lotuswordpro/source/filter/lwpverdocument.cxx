@@ -60,14 +60,14 @@
  * CVersionedGointer, so use one class
  ************************************************************************/
 
-#include "lwpglobalmgr.hxx"
+#include <lwpglobalmgr.hxx>
 #include "lwpverdocument.hxx"
 #include "lwplnopts.hxx"
 #include "lwpproplist.hxx"
-#include "xfilter/xfparastyle.hxx"
-#include "lwptools.hxx"
+#include <xfilter/xfparastyle.hxx>
+#include <lwptools.hxx>
 
-LwpVerDocument::LwpVerDocument(LwpObjectHeader& objHdr, LwpSvStream* pStrm)
+LwpVerDocument::LwpVerDocument(LwpObjectHeader const & objHdr, LwpSvStream* pStrm)
     : LwpObject(objHdr, pStrm)
     , m_nTabSpacing(0)
 {}
@@ -78,12 +78,12 @@ void LwpVerDocument::Read()
 
     if (m_pObjStrm->CheckExtra())
     {
-        LwpLineNumberOptions aLineNumberOptions(m_pObjStrm);
+        LwpLineNumberOptions aLineNumberOptions(m_pObjStrm.get());
 
         if (m_pObjStrm->CheckExtra())
         {
             LwpPropList aPropList;
-            aPropList.Read(m_pObjStrm);
+            aPropList.Read(m_pObjStrm.get());
             m_pObjStrm->SkipExtra();
         }
     }
@@ -91,15 +91,15 @@ void LwpVerDocument::Read()
 
 void LwpVerDocument::RegisterStyle()
 {
-    XFDefaultParaStyle* pDefault = new XFDefaultParaStyle;
-    double len =(double) m_nTabSpacing/UNITS_PER_INCH*CM_PER_INCH;
+    std::unique_ptr<XFDefaultParaStyle> pDefault(new XFDefaultParaStyle);
+    double len =static_cast<double>(m_nTabSpacing)/UNITS_PER_INCH*CM_PER_INCH;
     if(len < 0.001)
     {
         len = 1.27; //0.5 inch
     }
     pDefault->SetTabDistance(len);
     XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
-    pXFStyleManager->AddStyle(pDefault);
+    pXFStyleManager->AddStyle(std::move(pDefault));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -23,21 +23,17 @@
 #include <vcl/button.hxx>
 #include <vcl/dialog.hxx>
 #include <vcl/fixed.hxx>
-#include <vcl/msgbox.hxx>
 #include "JoinTableView.hxx"
 #include "RelControliFace.hxx"
-#include "moduledbu.hxx"
 #include "RelationControl.hxx"
 
 namespace dbaui
 {
     class OJoinTableView;
-    class ORelationDialog : public ModalDialog
+    class ORelationDialog final : public ModalDialog
                             ,public IRelationControlInterface
     {
-        OModuleClient                           m_aModuleClient;
         std::unique_ptr<OTableListBoxControl> m_xTableControl;
-        OJoinTableView::OTableWindowMap*        m_pTableMap;
 
         VclPtr<RadioButton> m_pRB_NoCascUpd;
         VclPtr<RadioButton> m_pRB_CascUpd;
@@ -60,7 +56,7 @@ namespace dbaui
         ORelationDialog(OJoinTableView* pParent,
                         const TTableConnectionData::value_type& pConnectionData,
                         bool bAllowTableSelect = false );
-        virtual ~ORelationDialog();
+        virtual ~ORelationDialog() override;
         virtual void dispose() override;
 
         virtual short Execute() override;
@@ -74,11 +70,10 @@ namespace dbaui
             @param  _pConnectionData    the connection which exists between the new tables
         */
         virtual void notifyConnectionChange() override;
-    protected:
+    private:
         void Init(const TTableConnectionData::value_type& _pConnectionData);
 
-    private:
-        DECL_LINK_TYPED( OKClickHdl, Button*, void );
+        DECL_LINK( OKClickHdl, Button*, void );
     };
 }
 #endif // INCLUDED_DBACCESS_SOURCE_UI_INC_RELATIONDLG_HXX

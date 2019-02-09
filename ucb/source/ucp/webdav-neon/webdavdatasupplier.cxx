@@ -33,9 +33,10 @@
 
  *************************************************************************/
 
-#include <osl/diagnose.h>
-#include <o3tl/make_unique.hxx>
+#include <sal/log.hxx>
+#include <com/sun/star/ucb/IllegalIdentifierException.hpp>
 #include <com/sun/star/ucb/OpenMode.hpp>
+#include <com/sun/star/ucb/ResultSetException.hpp>
 #include <ucbhelper/contentidentifier.hxx>
 #include <ucbhelper/providerhelper.hxx>
 #include <memory>
@@ -85,7 +86,7 @@ struct DataSupplier_Impl
     ResultList                                   m_Results;
     rtl::Reference< Content >                    m_xContent;
     uno::Reference< uno::XComponentContext >     m_xContext;
-    sal_Int32                                    m_nOpenMode;
+    sal_Int32 const                              m_nOpenMode;
     bool                                     m_bCountFinal;
     bool                                     m_bThrowException;
 
@@ -321,7 +322,6 @@ void DataSupplier::close()
 
 // virtual
 void DataSupplier::validate()
-    throw( ucb::ResultSetException )
 {
     if ( m_pImpl->m_bThrowException )
         throw ucb::ResultSetException();
@@ -342,20 +342,10 @@ bool DataSupplier::getData()
         // needed to get a valid ContentProperties::pIsFolder value, which
         // is needed for OpenMode handling.
 
-        std::vector< OUString >::const_iterator it
-            = propertyNames.begin();
-        std::vector< OUString >::const_iterator end
-            = propertyNames.end();
+        bool isNoResourceType = std::none_of(propertyNames.begin(), propertyNames.end(),
+            [](const OUString& rName) { return rName == DAVProperties::RESOURCETYPE; });
 
-        while ( it != end )
-        {
-            if ( (*it).equals( DAVProperties::RESOURCETYPE ) )
-                break;
-
-            ++it;
-        }
-
-        if ( it == end )
+        if ( isNoResourceType )
             propertyNames.push_back( DAVProperties::RESOURCETYPE );
 
         std::vector< DAVResource > resources;
@@ -371,22 +361,16 @@ bool DataSupplier::getData()
 #if defined SAL_LOG_INFO
             {
                 //print the resource for every URI returned
-                std::vector< DAVResource >::const_iterator it3 = resources.begin();
-                std::vector< DAVResource >::const_iterator end3 = resources.end();
-                while ( it3 != end3 )
+                for ( const auto& rResource : resources )
                 {
-                    NeonUri aCurrURI( (*it3).uri );
+                    NeonUri aCurrURI( rResource.uri );
                     OUString aCurrPath = aCurrURI.GetPath();
                     aCurrPath = NeonUri::unescape( aCurrPath );
-                    SAL_INFO( "ucb.ucp.webdav", "getData() - resource URL: <" << (*it3).uri << ">, unescaped to: <" << aCurrPath << "> )" );
-                    std::vector< DAVPropertyValue >::const_iterator it4 = (*it3).properties.begin();
-                    std::vector< DAVPropertyValue >::const_iterator end4 = (*it3).properties.end();
-                    while ( it4 != end4 )
+                    SAL_INFO( "ucb.ucp.webdav", "getData() - resource URL: <" << rResource.uri << ">, unescaped to: <" << aCurrPath << "> )" );
+                    for ( const auto& rProp : rResource.properties )
                     {
-                        SAL_INFO( "ucb.ucp.webdav", "PROPFIND - property name: " << (*it4).Name );
-                        ++it4;
+                        SAL_INFO( "ucb.ucp.webdav", "PROPFIND - property name: " << rProp.Name );
                     }
-                    ++it3;
                 }
             }
 #endif
@@ -411,10 +395,8 @@ bool DataSupplier::getData()
                 aPath = NeonUri::unescape( aPath );
                 bool bFoundParent = false;
 
-                for ( size_t n = 0; n < resources.size(); ++n )
+                for (DAVResource & rRes : resources)
                 {
-                    const DAVResource & rRes = resources[ n ];
-
                     // Filter parent, which is contained somewhere(!) in
                     // the vector.
                     if ( !bFoundParent )
@@ -484,7 +466,7 @@ bool DataSupplier::getData()
                     }
 
                     m_pImpl->m_Results.push_back(
-                        o3tl::make_unique<ResultListEntry>(pContentProperties));
+                        std::make_unique<ResultListEntry>(pContentProperties));
                 }
             }
             catch ( DAVException const & )

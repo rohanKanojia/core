@@ -20,8 +20,8 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_XLTRACER_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_XLTRACER_HXX
 
-#include "global.hxx"
-#include "xltools.hxx"
+#include <address.hxx>
+#include <vector>
 
 // As Trace features become implemented, we can safely delete the enum entry as
 // we use the member mnID to keep track of the actual trace tag ID value.
@@ -30,30 +30,17 @@ enum XclTracerId
     eUnKnown  ,          /// unused but allows us to set the correct index
     eRowLimitExceeded ,
     eTabLimitExceeded ,
-    ePassword ,
     ePrintRange ,
     eShortDate ,
     eBorderLineStyle ,
     eFillPattern ,
-    eInvisibleGrid ,
-    eFormattedNote ,
-    eFormulaExtName ,
     eFormulaMissingArg ,
     ePivotDataSource ,
     ePivotChartExists ,
     eChartUnKnownType ,
-    eChartTrendLines ,
-    eChartErrorBars ,
     eChartOnlySheet ,
-    eChartRange ,
-    eChartDSName,
     eChartDataTable,
     eChartLegendPosition,
-    eChartTextFormatting,
-    eChartEmbeddedObj,
-    eChartAxisAuto,
-    eChartAxisManual,
-    eChartInvalidXY,
     eUnsupportedObject ,
     eObjectNotPrintable ,
     eDVType,
@@ -61,14 +48,14 @@ enum XclTracerId
 };
 
 /** This class wraps an MSFilterTracer to create trace logs for import/export filters. */
-class XclTracer
+class XclTracer final
 {
 public:
     explicit                    XclTracer( const OUString& rDocUrl );
-    virtual                     ~XclTracer();
+                                ~XclTracer();
 
     /** Returns true, if tracing is enabled. */
-    inline bool                 IsEnabled() const { return mbEnabled; }
+    bool                 IsEnabled() const { return mbEnabled; }
 
     /** Ensure that particular traces are logged once per document. */
     void                        ProcessTraceOnce(XclTracerId eProblem);
@@ -93,9 +80,8 @@ public:
 
 private:
     bool                        mbEnabled;
-    typedef ::std::vector< bool >     BoolVec;
     /** array of flags corresponding to each entry in the XclTracerDetails table. */
-    BoolVec                     maFirstTimes;
+    std::vector<bool>           maFirstTimes;
 };
 
 #endif

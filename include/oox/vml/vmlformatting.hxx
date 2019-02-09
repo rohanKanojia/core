@@ -20,13 +20,20 @@
 #ifndef INCLUDED_OOX_VML_VMLFORMATTING_HXX
 #define INCLUDED_OOX_VML_VMLFORMATTING_HXX
 
-#include <oox/helper/helper.hxx>
-#include <oox/dllapi.h>
-#include <com/sun/star/awt/Point.hpp>
-#include <com/sun/star/drawing/PolyPolygonBezierCoords.hpp>
-#include <com/sun/star/drawing/XShape.hpp>
-
+#include <utility>
 #include <vector>
+
+#include <com/sun/star/drawing/PolygonFlags.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <oox/dllapi.h>
+#include <oox/helper/helper.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+
+namespace com { namespace sun { namespace star {
+    namespace awt { struct Point; }
+    namespace drawing { class XShape; }
+} } }
 
 namespace oox {
     class GraphicHelper;
@@ -67,6 +74,18 @@ namespace ConversionHelper
     OOX_DLLPUBLIC double       decodePercent(
                             const OUString& rValue,
                             double fDefValue );
+
+    /** Converts the passed VML rotation value to degrees.
+        See DffPropertyReader::Fix16ToAngle(): in VML, positive rotation
+        angles are clockwise, we have them as counter-clockwise.
+        Additionally, VML type is 0..360, our is 0..36000.
+
+        @param rValue  The VML rotation value. This is a floating-point value
+            with optional 'fd' suffix. If the suffix is missing, the floating
+            point value will be returned unmodified. If the 'fd' suffix is
+            present, the value will be divided by 65536.
+    */
+    OOX_DLLPUBLIC sal_Int32    decodeRotation( const OUString& rValue );
 
     /** Converts the passed VML measure string to EMU (English Metric Units).
 
@@ -134,8 +153,8 @@ namespace ConversionHelper
                             const GraphicHelper& rGraphicHelper,
                             const OptValue< OUString >& roVmlColor,
                             const OptValue< double >& roVmlOpacity,
-                            sal_Int32 nDefaultRgb,
-                            sal_Int32 nPrimaryRgb = API_RGB_TRANSPARENT );
+                            ::Color nDefaultRgb,
+                            ::Color nPrimaryRgb = API_RGB_TRANSPARENT );
 
     /** Converts VML path string into point and flag vectors.
 
@@ -234,11 +253,14 @@ struct OOX_DLLPUBLIC ShadowModel
 struct OOX_DLLPUBLIC TextpathModel
 {
     OptValue<OUString> moString;                  ///< Specifies the string of the textpath.
+    OptValue<OUString> moStyle;                   ///< Specifies the style of the textpath.
+    OptValue<bool>     moTrim;                    ///< Specifies whether extra space is removed above and below the text
 
     TextpathModel();
 
     /** Writes the properties to the passed property map. */
-    void pushToPropMap(oox::drawingml::ShapePropertyMap& rPropMap, const css::uno::Reference<css::drawing::XShape>& xShape) const;
+    void pushToPropMap(oox::drawingml::ShapePropertyMap& rPropMap, const css::uno::Reference<css::drawing::XShape>& xShape,
+                       const GraphicHelper& rGraphicHelper) const;
 };
 
 } // namespace vml

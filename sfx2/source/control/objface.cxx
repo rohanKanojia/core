@@ -29,40 +29,39 @@
 #include <sfx2/msg.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/msgpool.hxx>
-#include <sfx2/sfxresid.hxx>
 #include <sfx2/objsh.hxx>
 #include <rtl/strbuf.hxx>
 
 extern "C" {
 
-static int SAL_CALL
+static int
 SfxCompareSlots_qsort( const void* pSmaller, const void* pBigger )
 {
-    return ( (int) static_cast<SfxSlot const *>(pSmaller)->GetSlotId() ) -
-           ( (int) static_cast<SfxSlot const *>(pBigger)->GetSlotId() );
+    return static_cast<int>(static_cast<SfxSlot const *>(pSmaller)->GetSlotId()) -
+           static_cast<int>(static_cast<SfxSlot const *>(pBigger)->GetSlotId());
 }
 
-static int SAL_CALL
+static int
 SfxCompareSlots_bsearch( const void* pSmaller, const void* pBigger )
 {
-    return ( (int) *static_cast<sal_uInt16 const *>(pSmaller) ) -
-           ( (int) static_cast<SfxSlot const *>(pBigger)->GetSlotId() );
+    return static_cast<int>(*static_cast<sal_uInt16 const *>(pSmaller)) -
+           static_cast<int>(static_cast<SfxSlot const *>(pBigger)->GetSlotId());
 }
 
 }
 
 struct SfxObjectUI_Impl
 {
-    sal_uInt16  nPos;
-    sal_uInt32  nResId;
-    bool        bVisible;
-    bool        bContext;
-    sal_uInt32  nFeature;
+    sal_uInt16 const         nPos;
+    SfxVisibilityFlags const nFlags;
+    sal_uInt32 const         nObjId;
+    bool                     bContext;
+    SfxShellFeature const    nFeature;
 
-    SfxObjectUI_Impl(sal_uInt16 n, sal_uInt32 nId, sal_uInt32 nFeat) :
+    SfxObjectUI_Impl(sal_uInt16 n, SfxVisibilityFlags f, sal_uInt32 nId, SfxShellFeature nFeat) :
         nPos(n),
-        nResId(nId),
-        bVisible(true),
+        nFlags(f),
+        nObjId(nId),
         bContext(false),
         nFeature(nFeat)
     {
@@ -73,33 +72,26 @@ typedef std::vector<SfxObjectUI_Impl*> SfxObjectUIArr_Impl;
 
 struct SfxInterface_Impl
 {
-    SfxObjectUIArr_Impl     aObjectBars;    // registered ObjectBars
-    SfxObjectUIArr_Impl     aChildWindows;  // registered ChildWindows
+    std::vector<std::unique_ptr<SfxObjectUI_Impl>>
+                            aObjectBars;    // registered ObjectBars
+    std::vector<std::unique_ptr<SfxObjectUI_Impl>>
+                            aChildWindows;  // registered ChildWindows
     OUString                aPopupName;     // registered PopupMenu
-    sal_uInt32              nStatBarResId;  // registered StatusBar
+    StatusBarId             eStatBarResId;  // registered StatusBar
     SfxModule*              pModule;
     bool                    bRegistered;
 
     SfxInterface_Impl()
-        : nStatBarResId(0)
+        : eStatBarResId(StatusBarId::None)
         , pModule(nullptr)
         , bRegistered(false)
     {
     }
-
-    ~SfxInterface_Impl()
-    {
-        for (SfxObjectUIArr_Impl::const_iterator it = aObjectBars.begin(); it != aObjectBars.end(); ++it)
-            delete *it;
-
-        for (SfxObjectUIArr_Impl::const_iterator it = aChildWindows.begin(); it != aChildWindows.end(); ++it)
-            delete *it;
-    }
 };
 
-static SfxObjectUI_Impl* CreateObjectBarUI_Impl(sal_uInt16 nPos, sal_uInt32 nResId, sal_uInt32 nFeature);
+static SfxObjectUI_Impl* CreateObjectBarUI_Impl(sal_uInt16 nPos, SfxVisibilityFlags nFlags, ToolbarId eId, SfxShellFeature nFeature);
 
-// constuctor, registeres a new unit
+// constructor, registers a new unit
 SfxInterface::SfxInterface( const char *pClassName,
                             bool bUsableSuperClass,
                             SfxInterfaceId nId,
@@ -109,16 +101,15 @@ SfxInterface::SfxInterface( const char *pClassName,
     pGenoType(pParent),
     nClassId(nId),
     bSuperClass(bUsableSuperClass),
-    pImpData(nullptr)
+    pImplData(new SfxInterface_Impl)
 {
-    pImpData = new SfxInterface_Impl;
     SetSlotMap( rSlotMap, nSlotCount );
 }
 
 void SfxInterface::Register( SfxModule* pMod )
 {
-    pImpData->bRegistered = true;
-    pImpData->pModule = pMod;
+    pImplData->bRegistered = true;
+    pImplData->pModule = pMod;
     if ( pMod )
         pMod->GetSlotPool()->RegisterInterface(*this);
     else
@@ -146,39 +137,14 @@ void SfxInterface::SetSlotMap( SfxSlot& rSlotMap, sal_uInt16 nSlotCount )
             assert( nIter == nCount ||
                     pIter->GetSlotId() != (pIter+1)->GetSlotId() );
 
-            // every master refers to his first slave (ENUM),
-            // all slaves refer to their master.
-            // Slaves refer in a circle to the other slaves with the same master
-            if ( pIter->GetKind() == SfxSlotKind::Enum )
-            {
-                pIter->pLinkedSlot = GetSlot( pIter->nMasterSlotId );
-                assert( pIter->pLinkedSlot );
-                if ( !pIter->pLinkedSlot->pLinkedSlot )
-                    const_cast<SfxSlot*>(pIter->pLinkedSlot)->pLinkedSlot = pIter;
-
-                if ( nullptr == pIter->GetNextSlot() )
-                {
-                    SfxSlot *pLastSlot = pIter;
-                    for ( sal_uInt16 n = nIter; n < Count(); ++n )
-                    {
-                        SfxSlot *pCurSlot = (pSlots+n);
-                        if ( pCurSlot->nMasterSlotId == pIter->nMasterSlotId )
-                        {
-                            pLastSlot->pNextSlot = pCurSlot;
-                            pLastSlot = pCurSlot;
-                        }
-                    }
-                    pLastSlot->pNextSlot = pIter;
-                }
-            }
-            else if ( nullptr == pIter->GetNextSlot() )
+            if ( nullptr == pIter->GetNextSlot() )
             {
                 // Slots referring in circle to the next with the same
                 // Status method.
                 SfxSlot *pLastSlot = pIter;
                 for ( sal_uInt16 n = nIter; n < Count(); ++n )
                 {
-                    SfxSlot *pCurSlot = (pSlots+n);
+                    SfxSlot *pCurSlot = pSlots+n;
                     if ( pCurSlot->GetStateFnc() == pIter->GetStateFnc() )
                     {
                         pLastSlot->pNextSlot = pCurSlot;
@@ -199,70 +165,18 @@ void SfxInterface::SetSlotMap( SfxSlot& rSlotMap, sal_uInt16 nSlotCount )
             if ( pNext->GetSlotId() <= pIter->GetSlotId() )
                 SAL_WARN( "sfx.control", "Wrong order" );
 
-            if ( pIter->GetKind() == SfxSlotKind::Enum )
+            const SfxSlot *pCurSlot = pIter;
+            do
             {
-                const SfxSlot *pMasterSlot = GetSlot(pIter->nMasterSlotId);
-                const SfxSlot *pFirstSlave = pMasterSlot->pLinkedSlot;
-                const SfxSlot *pSlave = pFirstSlave;
-                do
+                pCurSlot = pCurSlot->pNextSlot;
+                if ( pCurSlot->GetStateFnc() != pIter->GetStateFnc() )
                 {
-                    if ( pSlave->pLinkedSlot != pMasterSlot )
-                    {
-                        OStringBuffer aStr("Wrong Master/Slave- link: ");
-                        aStr.append(static_cast<sal_Int32>(
-                            pMasterSlot->GetSlotId()));
-                        aStr.append(" , ");
-                        aStr.append(static_cast<sal_Int32>(
-                            pSlave->GetSlotId()));
-                        SAL_WARN("sfx.control", aStr.getStr());
-                    }
-
-                    if ( pSlave->nMasterSlotId != pMasterSlot->GetSlotId() )
-                    {
-                        OStringBuffer aStr("Wrong Master/Slave-Ids: ");
-                        aStr.append(static_cast<sal_Int32>(
-                            pMasterSlot->GetSlotId()));
-                        aStr.append(" , ");
-                        aStr.append(static_cast<sal_Int32>(
-                            pSlave->GetSlotId()));
-                        SAL_WARN("sfx.control", aStr.getStr());
-                    }
-
-                    pSlave = pSlave->pNextSlot;
+                    SAL_WARN("sfx.control", "Linked Slots with different State Methods : "
+                                << pCurSlot->GetSlotId()
+                                << " , " << pIter->GetSlotId() );
                 }
-                while ( pSlave != pFirstSlave );
             }
-            else
-            {
-                if ( pIter->pLinkedSlot )
-                {
-                    if ( pIter->pLinkedSlot->GetKind() != SfxSlotKind::Enum )
-                    {
-                        OStringBuffer aStr("Slave is no enum: ");
-                        aStr.append(static_cast<sal_Int32>(pIter->GetSlotId()));
-                        aStr.append(" , ");
-                        aStr.append(static_cast<sal_Int32>(
-                            pIter->pLinkedSlot->GetSlotId()));
-                        SAL_WARN("sfx.control", aStr.getStr());
-                    }
-                }
-
-                const SfxSlot *pCurSlot = pIter;
-                do
-                {
-                    pCurSlot = pCurSlot->pNextSlot;
-                    if ( pCurSlot->GetStateFnc() != pIter->GetStateFnc() )
-                    {
-                        OStringBuffer aStr("Linked Slots with different State Methods : ");
-                        aStr.append(static_cast<sal_Int32>(
-                            pCurSlot->GetSlotId()));
-                        aStr.append(" , ");
-                        aStr.append(static_cast<sal_Int32>(pIter->GetSlotId()));
-                        SAL_WARN("sfx.control", aStr.getStr());
-                    }
-                }
-                while ( pCurSlot != pIter );
-            }
+            while ( pCurSlot != pIter );
 
             pIter = pNext;
         }
@@ -273,14 +187,17 @@ void SfxInterface::SetSlotMap( SfxSlot& rSlotMap, sal_uInt16 nSlotCount )
 
 SfxInterface::~SfxInterface()
 {
-    SfxModule *pMod = pImpData->pModule;
-    bool bRegistered = pImpData->bRegistered;
-    delete pImpData;
+    SfxModule *pMod = pImplData->pModule;
+    bool bRegistered = pImplData->bRegistered;
     assert( bRegistered );
     if ( bRegistered )
     {
         if ( pMod )
-            pMod->GetSlotPool()->ReleaseInterface(*this);
+        {
+            // can return nullptr if we are called from the SfxSlotPool destructor
+            if (pMod->GetSlotPool())
+                pMod->GetSlotPool()->ReleaseInterface(*this);
+        }
         else
             SfxGetpApp()->GetAppSlotPool_Impl().ReleaseInterface(*this);
     }
@@ -301,7 +218,7 @@ const SfxSlot* SfxInterface::GetSlot( sal_uInt16 nFuncId ) const
     if ( !p && pGenoType )
         return pGenoType->GetSlot( nFuncId );
 
-    return p ? static_cast<const SfxSlot*>(p) : nullptr;
+    return static_cast<const SfxSlot*>(p);
 }
 
 const SfxSlot* SfxInterface::GetSlot( const OUString& rCommand ) const
@@ -337,54 +254,36 @@ const SfxSlot* SfxInterface::GetRealSlot( const SfxSlot *pSlot ) const
         return nullptr;
     }
 
-    return pSlot->pLinkedSlot;
+    return nullptr;
 }
 
-
-const SfxSlot* SfxInterface::GetRealSlot( sal_uInt16 nSlotId ) const
-{
-
-    assert( pSlots );
-    assert( nCount );
-
-    const SfxSlot *pSlot = GetSlot(nSlotId);
-    if ( !pSlot )
-    {
-        if(pGenoType)
-            return pGenoType->GetRealSlot(nSlotId);
-        SAL_WARN( "sfx.control", "unknown Slot" );
-        return nullptr;
-    }
-
-    return pSlot->pLinkedSlot;
-}
 
 void SfxInterface::RegisterPopupMenu( const OUString& rResourceName )
 {
-    pImpData->aPopupName = rResourceName;
+    pImplData->aPopupName = rResourceName;
 }
 
-void SfxInterface::RegisterObjectBar(sal_uInt16 nPos, sal_uInt32 nResId)
+void SfxInterface::RegisterObjectBar(sal_uInt16 nPos, SfxVisibilityFlags nFlags, ToolbarId eId)
 {
-    RegisterObjectBar(nPos, nResId, 0UL);
+    RegisterObjectBar(nPos, nFlags, eId, SfxShellFeature::NONE);
 }
 
-void SfxInterface::RegisterObjectBar(sal_uInt16 nPos, sal_uInt32 nResId, sal_uInt32 nFeature)
+void SfxInterface::RegisterObjectBar(sal_uInt16 nPos, SfxVisibilityFlags nFlags, ToolbarId eId, SfxShellFeature nFeature)
 {
-    SfxObjectUI_Impl* pUI = CreateObjectBarUI_Impl(nPos, nResId, nFeature);
+    SfxObjectUI_Impl* pUI = CreateObjectBarUI_Impl(nPos, nFlags, eId, nFeature);
     if ( pUI )
-        pImpData->aObjectBars.push_back(pUI);
+        pImplData->aObjectBars.emplace_back(pUI);
 }
 
-SfxObjectUI_Impl* CreateObjectBarUI_Impl(sal_uInt16 nPos, sal_uInt32 nResId, sal_uInt32 nFeature)
+SfxObjectUI_Impl* CreateObjectBarUI_Impl(sal_uInt16 nPos, SfxVisibilityFlags nFlags, ToolbarId eId, SfxShellFeature nFeature)
 {
-    if ((nPos & SFX_VISIBILITY_MASK) == 0)
-        nPos |= SFX_VISIBILITY_STANDARD;
+    if (nFlags == SfxVisibilityFlags::Invisible)
+        nFlags |= SfxVisibilityFlags::Standard;
 
-    return new SfxObjectUI_Impl(nPos, nResId, nFeature);
+    return new SfxObjectUI_Impl(nPos, nFlags, static_cast<sal_uInt32>(eId), nFeature);
 }
 
-sal_uInt32 SfxInterface::GetObjectBarId(sal_uInt16 nNo) const
+ToolbarId SfxInterface::GetObjectBarId(sal_uInt16 nNo) const
 {
     bool bGenoType = (pGenoType != nullptr && pGenoType->UseAsSuperClass());
     if ( bGenoType )
@@ -398,9 +297,9 @@ sal_uInt32 SfxInterface::GetObjectBarId(sal_uInt16 nNo) const
             nNo = nNo - nBaseCount;
     }
 
-    assert( nNo<pImpData->aObjectBars.size() );
+    assert( nNo<pImplData->aObjectBars.size() );
 
-    return pImpData->aObjectBars[nNo]->nResId;
+    return static_cast<ToolbarId>(pImplData->aObjectBars[nNo]->nObjId);
 }
 
 sal_uInt16 SfxInterface::GetObjectBarPos( sal_uInt16 nNo ) const
@@ -417,41 +316,60 @@ sal_uInt16 SfxInterface::GetObjectBarPos( sal_uInt16 nNo ) const
             nNo = nNo - nBaseCount;
     }
 
-    assert( nNo<pImpData->aObjectBars.size() );
+    assert( nNo<pImplData->aObjectBars.size() );
 
-    return pImpData->aObjectBars[nNo]->nPos;
+    return pImplData->aObjectBars[nNo]->nPos;
+}
+
+SfxVisibilityFlags SfxInterface::GetObjectBarFlags( sal_uInt16 nNo ) const
+{
+    bool bGenoType = (pGenoType != nullptr && pGenoType->UseAsSuperClass());
+    if ( bGenoType )
+    {
+        // Are there toolbars in the super class?
+        sal_uInt16 nBaseCount = pGenoType->GetObjectBarCount();
+        if ( nNo < nBaseCount )
+            // The Super class comes first
+            return pGenoType->GetObjectBarFlags( nNo );
+        else
+            nNo = nNo - nBaseCount;
+    }
+
+    assert( nNo<pImplData->aObjectBars.size() );
+
+    return pImplData->aObjectBars[nNo]->nFlags;
 }
 
 sal_uInt16 SfxInterface::GetObjectBarCount() const
 {
     if (pGenoType && pGenoType->UseAsSuperClass())
-        return pImpData->aObjectBars.size() + pGenoType->GetObjectBarCount();
+        return pImplData->aObjectBars.size() + pGenoType->GetObjectBarCount();
     else
-        return pImpData->aObjectBars.size();
+        return pImplData->aObjectBars.size();
 }
 
 void SfxInterface::RegisterChildWindow(sal_uInt16 nId, bool bContext)
 {
-    RegisterChildWindow(nId, bContext, 0UL);
+    RegisterChildWindow(nId, bContext, SfxShellFeature::NONE);
 }
 
-void SfxInterface::RegisterChildWindow(sal_uInt16 nId, bool bContext, sal_uInt32 nFeature)
+void SfxInterface::RegisterChildWindow(sal_uInt16 nId, bool bContext, SfxShellFeature nFeature)
 {
-    SfxObjectUI_Impl* pUI = new SfxObjectUI_Impl(0, nId, nFeature);
+    SfxObjectUI_Impl* pUI = new SfxObjectUI_Impl(0, SfxVisibilityFlags::Invisible, nId, nFeature);
     pUI->bContext = bContext;
-    pImpData->aChildWindows.push_back(pUI);
+    pImplData->aChildWindows.emplace_back(pUI);
 }
 
-void SfxInterface::RegisterStatusBar(sal_uInt32 nResId)
+void SfxInterface::RegisterStatusBar(StatusBarId eId)
 {
-    pImpData->nStatBarResId = nResId;
+    pImplData->eStatBarResId = eId;
 }
 
 sal_uInt32 SfxInterface::GetChildWindowId (sal_uInt16 nNo) const
 {
     if ( pGenoType )
     {
-        // Are there ChildWindows in der Superklasse?
+        // Are there ChildWindows in the superclass?
         sal_uInt16 nBaseCount = pGenoType->GetChildWindowCount();
         if ( nNo < nBaseCount )
             // The Super class comes first
@@ -460,19 +378,19 @@ sal_uInt32 SfxInterface::GetChildWindowId (sal_uInt16 nNo) const
             nNo = nNo - nBaseCount;
     }
 
-    assert( nNo<pImpData->aChildWindows.size() );
+    assert( nNo<pImplData->aChildWindows.size() );
 
-    sal_uInt32 nRet = pImpData->aChildWindows[nNo]->nResId;
-    if ( pImpData->aChildWindows[nNo]->bContext )
-        nRet += sal_uInt32( nClassId ) << 16;
+    sal_uInt32 nRet = pImplData->aChildWindows[nNo]->nObjId;
+    if ( pImplData->aChildWindows[nNo]->bContext )
+        nRet += sal_uInt16( nClassId ) << 16;
     return nRet;
 }
 
-sal_uInt32 SfxInterface::GetChildWindowFeature (sal_uInt16 nNo) const
+SfxShellFeature SfxInterface::GetChildWindowFeature (sal_uInt16 nNo) const
 {
     if ( pGenoType )
     {
-        // Are there ChildWindows in der Superklasse?
+        // Are there ChildWindows in the superclass?
         sal_uInt16 nBaseCount = pGenoType->GetChildWindowCount();
         if ( nNo < nBaseCount )
             // The Super class comes first
@@ -481,34 +399,34 @@ sal_uInt32 SfxInterface::GetChildWindowFeature (sal_uInt16 nNo) const
             nNo = nNo - nBaseCount;
     }
 
-    assert( nNo<pImpData->aChildWindows.size() );
+    assert( nNo<pImplData->aChildWindows.size() );
 
-    return pImpData->aChildWindows[nNo]->nFeature;
+    return pImplData->aChildWindows[nNo]->nFeature;
 }
 
 
 sal_uInt16 SfxInterface::GetChildWindowCount() const
 {
     if (pGenoType)
-        return pImpData->aChildWindows.size() + pGenoType->GetChildWindowCount();
+        return pImplData->aChildWindows.size() + pGenoType->GetChildWindowCount();
     else
-        return pImpData->aChildWindows.size();
+        return pImplData->aChildWindows.size();
 }
 
 const OUString& SfxInterface::GetPopupMenuName() const
 {
-    return pImpData->aPopupName;
+    return pImplData->aPopupName;
 }
 
-sal_uInt32 SfxInterface::GetStatusBarId() const
+StatusBarId SfxInterface::GetStatusBarId() const
 {
-    if (pImpData->nStatBarResId == 0 && pGenoType)
+    if (pImplData->eStatBarResId == StatusBarId::None && pGenoType)
         return pGenoType->GetStatusBarId();
     else
-        return pImpData->nStatBarResId;
+        return pImplData->eStatBarResId;
 }
 
-sal_uInt32 SfxInterface::GetObjectBarFeature ( sal_uInt16 nNo ) const
+SfxShellFeature SfxInterface::GetObjectBarFeature ( sal_uInt16 nNo ) const
 {
     bool bGenoType = (pGenoType != nullptr && pGenoType->UseAsSuperClass());
     if ( bGenoType )
@@ -522,9 +440,9 @@ sal_uInt32 SfxInterface::GetObjectBarFeature ( sal_uInt16 nNo ) const
             nNo = nNo - nBaseCount;
     }
 
-    assert( nNo<pImpData->aObjectBars.size() );
+    assert( nNo<pImplData->aObjectBars.size() );
 
-    return pImpData->aObjectBars[nNo]->nFeature;
+    return pImplData->aObjectBars[nNo]->nFeature;
 }
 
 bool SfxInterface::IsObjectBarVisible(sal_uInt16 nNo) const
@@ -541,9 +459,9 @@ bool SfxInterface::IsObjectBarVisible(sal_uInt16 nNo) const
             nNo = nNo - nBaseCount;
     }
 
-    assert( nNo<pImpData->aObjectBars.size() );
+    assert( nNo<pImplData->aObjectBars.size() );
 
-    return pImpData->aObjectBars[nNo]->bVisible;
+    return true;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

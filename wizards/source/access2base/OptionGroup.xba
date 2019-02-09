@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
-<script:module xmlns:script="http://openoffice.org/2000/script" script:name="OptionGroup" script:language="StarBasic">REM =======================================================================================================================
+<script:module xmlns:script="http://openoffice.org/2000/script" script:name="OptionGroup" script:language="StarBasic">
+REM =======================================================================================================================
 REM ===					The Access2Base library is a part of the LibreOffice project.									===
 REM ===					Full documentation is available on http://www.access2base.com									===
 REM =======================================================================================================================
@@ -18,6 +19,7 @@ Private	_Type					As String				&apos;	Must be FORM
 Private	_Name					As String
 Private _ParentType				As String
 Private _ParentComponent		As Object
+Private _MainForm				As String
 Private _DocEntry				As Integer
 Private _DbEntry				As Integer
 Private _ButtonsGroup()			As Variant
@@ -216,9 +218,9 @@ Private Function _PropertyGet(ByVal psProperty As String) As Variant
 	Utils._SetCalledSub(&quot;OptionGroup.get&quot; &amp; psProperty)
 	
 &apos;Execute
-Dim oDatabase As Object, vBookmark As Variant, vEMPTY As Variant
+Dim oDatabase As Object, vBookmark As Variant
 Dim iValue As Integer, i As Integer
-	_PropertyGet = vEMPTY
+	_PropertyGet = EMPTY
 	Select Case UCase(psProperty)
 		Case UCase(&quot;Count&quot;)
 			_PropertyGet = _Count
@@ -244,15 +246,15 @@ Exit_Function:
 	Exit Function
 Trace_Error:
 	TraceError(TRACEWARNING, ERRPROPERTY, Utils._CalledSub(), 0, 1, psProperty)
-	_PropertyGet = vEMPTY
+	_PropertyGet = EMPTY
 	Goto Exit_Function
 Trace_Error_Index:
 	TraceError(TRACEFATAL, ERRINDEXVALUE, Utils._CalledSub(), 0, 1, psProperty)
-	_PropertyGet = vEMPTY
+	_PropertyGet = EMPTY
 	Goto Exit_Function
 Error_Function:
 	TraceError(TRACEABORT, Err, &quot;OptionGroup._PropertyGet&quot;, Erl)
-	_PropertyGet = vEMPTY
+	_PropertyGet = EMPTY
 	GoTo Exit_Function
 End Function		&apos;	_PropertyGet
 
@@ -302,4 +304,5 @@ Error_Function:
 	_PropertySet = False
 	GoTo Exit_Function
 End Function		&apos;	_PropertySet
+
 </script:module>

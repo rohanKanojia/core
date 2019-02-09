@@ -20,9 +20,10 @@
 
 // must be first
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 #include "viewbackgroundshape.hxx"
-#include "tools.hxx"
+#include <tools.hxx>
 
 #include <rtl/math.hxx>
 
@@ -105,14 +106,14 @@ namespace slideshow
                 aLinearTransform.set( 1, 2, 0.0 );
                 pBitmapCanvas->setTransformation( aLinearTransform );
 
-                const basegfx::B2DHomMatrix aShapeTransform(basegfx::tools::createScaleTranslateB2DHomMatrix(
+                const basegfx::B2DHomMatrix aShapeTransform(basegfx::utils::createScaleTranslateB2DHomMatrix(
                     maBounds.getWidth(), maBounds.getHeight(),
                     maBounds.getMinX(), maBounds.getMinY()));
 
                 ::cppcanvas::RendererSharedPtr pRenderer(
                     ::cppcanvas::VCLFactory::createRenderer(
                         pBitmapCanvas,
-                        *rMtf.get(),
+                        *rMtf,
                         ::cppcanvas::Renderer::Parameters() ) );
 
                 ENSURE_OR_RETURN_FALSE( pRenderer,
@@ -142,7 +143,7 @@ namespace slideshow
             ENSURE_OR_THROW( mpViewLayer->getCanvas(), "ViewBackgroundShape::ViewBackgroundShape(): Invalid ViewLayer canvas" );
         }
 
-        ViewLayerSharedPtr ViewBackgroundShape::getViewLayer() const
+        const ViewLayerSharedPtr& ViewBackgroundShape::getViewLayer() const
         {
             return mpViewLayer;
         }
@@ -184,10 +185,7 @@ namespace slideshow
             }
             catch( uno::Exception& )
             {
-                OSL_FAIL( OUStringToOString(
-                                comphelper::anyToString( cppu::getCaughtException() ),
-                                RTL_TEXTENCODING_UTF8 ).getStr() );
-
+                SAL_WARN( "slideshow", comphelper::anyToString( cppu::getCaughtException() ) );
                 return false;
             }
 

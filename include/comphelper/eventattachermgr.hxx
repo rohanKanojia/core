@@ -20,19 +20,15 @@
 #ifndef INCLUDED_COMPHELPER_EVENTATTACHERMGR_HXX
 #define INCLUDED_COMPHELPER_EVENTATTACHERMGR_HXX
 
-#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/Reference.h>
 #include <comphelper/comphelperdllapi.h>
 
 namespace com { namespace sun { namespace star {
 namespace uno {
-    class Exception;
     class XComponentContext;
 }
 namespace script {
     class XEventAttacherManager;
-}
-namespace beans {
-    class XIntrospection;
 }
 } } }
 
@@ -40,10 +36,10 @@ namespace beans {
 namespace comphelper
 {
 
+/// @throws css::uno::Exception
 COMPHELPER_DLLPUBLIC css::uno::Reference< css::script::XEventAttacherManager >
 createEventAttacherManager(
-        const css::uno::Reference< css::uno::XComponentContext > & rxContext )
-    throw( css::uno::Exception );
+        const css::uno::Reference< css::uno::XComponentContext > & rxContext );
 
 }
 

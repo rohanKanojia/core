@@ -21,30 +21,34 @@
 
 #include <cppuhelper/weakref.hxx>
 
+#include "doc.hxx"
 #include "swdllapi.h"
-#include <node.hxx>
-#include <hintids.hxx>
-#include <ndhints.hxx>
-#include <modeltoviewhelper.hxx>
-#include <SwNumberTreeTypes.hxx>
-#include <IDocumentContentOperations.hxx>
+#include "node.hxx"
+#include "hintids.hxx"
+#include "ndhints.hxx"
+#include "SwNumberTreeTypes.hxx"
+#include "IDocumentContentOperations.hxx"
 
 #include <sfx2/Metadatable.hxx>
 
+#include <memory>
 #include <vector>
 #include <set>
+#include <functional>
 
 class SfxHint;
 class SwNumRule;
 class SwNodeNum;
-class SwList;
 class SvxLRSpaceItem;
 
 namespace utl {
     class TransliterationWrapper;
 }
+namespace vcl
+{
+class Font;
+}
 
-class SwTextFormatColl;
 class SwContentFrame;
 class SwTextField;
 class SwTextInputField;
@@ -55,10 +59,11 @@ struct SwConversionArgs;
 class SwInterHyphInfo;
 class SwWrongList;
 class SwGrammarMarkUp;
-class OutputDevice;
-class SwScriptInfo;
 struct SwDocStat;
 struct SwParaIdleData_Impl;
+enum class ExpandMode;
+
+namespace sw { namespace mark { enum class RestoreMode; } }
 
 namespace com { namespace sun { namespace star {
     namespace uno {
@@ -70,7 +75,10 @@ namespace com { namespace sun { namespace star {
 typedef std::set< sal_Int32 > SwSoftPageBreakList;
 
 /// SwTextNode is a paragraph in the document model.
-class SW_DLLPUBLIC SwTextNode: public SwContentNode, public ::sfx2::Metadatable
+class SW_DLLPUBLIC SwTextNode
+    : public SwContentNode
+    , public ::sfx2::Metadatable
+    , public sw::BroadcasterMixin
 {
     friend class SwContentNode;
     /// For creating the first TextNode.
@@ -81,9 +89,10 @@ class SW_DLLPUBLIC SwTextNode: public SwContentNode, public ::sfx2::Metadatable
 
     /** May be 0. It is only then not 0 if it contains hard attributes.
        Therefore: never access directly! */
-    SwpHints    *m_pSwpHints;
+    std::unique_ptr<SwpHints> m_pSwpHints;
 
-    mutable SwNodeNum* mpNodeNum;  ///< Numbering for this paragraph.
+    mutable std::unique_ptr<SwNodeNum> mpNodeNum;  ///< Numbering for this paragraph.
+    mutable std::unique_ptr<SwNodeNum> mpNodeNumRLHidden; ///< Numbering for this paragraph (hidden redlines)
 
     OUString m_Text;
 
@@ -107,14 +116,11 @@ class SW_DLLPUBLIC SwTextNode: public SwContentNode, public ::sfx2::Metadatable
        Needed to avoid duplicate handling of attribute change actions. */
     bool mbInSetOrResetAttr;
 
-    /// pointer to the list, to whose the text node is added to
-    SwList* mpList;
-
-    ::std::unique_ptr< OUString > m_pNumStringCache;
+    std::unique_ptr< OUString > m_pNumStringCache;
 
     css::uno::WeakReference<css::text::XTextContent> m_wXParagraph;
 
-    //UUUU DrawingLayer FillAttributes in a preprocessed form for primitive usage
+    // DrawingLayer FillAttributes in a preprocessed form for primitive usage
     drawinglayer::attribute::SdrAllFillAttributesHelperPtr  maFillAttributes;
 
     SAL_DLLPRIVATE SwTextNode( const SwNodeIndex &rWhere, SwTextFormatColl *pTextColl,
@@ -123,7 +129,7 @@ class SW_DLLPUBLIC SwTextNode: public SwContentNode, public ::sfx2::Metadatable
     /// Copies the attributes at nStart to pDest.
     SAL_DLLPRIVATE void CopyAttr( SwTextNode *pDest, const sal_Int32 nStart, const sal_Int32 nOldPos);
 
-    SAL_DLLPRIVATE SwTextNode* _MakeNewTextNode( const SwNodeIndex&, bool bNext = true,
+    SAL_DLLPRIVATE SwTextNode* MakeNewTextNode( const SwNodeIndex&, bool bNext = true,
                                 bool bChgFollow = true );
 
     SAL_DLLPRIVATE void CutImpl(
@@ -139,9 +145,9 @@ class SW_DLLPUBLIC SwTextNode: public SwContentNode, public ::sfx2::Metadatable
 
     /// Optimization: Asking for information about hidden characters at SwScriptInfo
     /// updates these flags.
-    inline bool IsCalcHiddenCharFlags() const
+    bool IsCalcHiddenCharFlags() const
         { return m_bRecalcHiddenCharFlags; }
-    inline void SetHiddenCharAttribute( bool bNewHiddenCharsHidePara, bool bNewContainsHiddenChars ) const
+    void SetHiddenCharAttribute( bool bNewHiddenCharsHidePara, bool bNewContainsHiddenChars ) const
     {
         m_bHiddenCharsHidePara = bNewHiddenCharsHidePara;
         m_bContainsHiddenChars = bNewContainsHiddenChars;
@@ -150,29 +156,13 @@ class SW_DLLPUBLIC SwTextNode: public SwContentNode, public ::sfx2::Metadatable
 
     SAL_DLLPRIVATE void CalcHiddenCharFlags() const;
 
-    SAL_DLLPRIVATE SwNumRule * _GetNumRule(bool bInParent = true) const;
-
     SAL_DLLPRIVATE void SetLanguageAndFont( const SwPaM &rPaM,
             LanguageType nLang, sal_uInt16 nLangWhichId,
             const vcl::Font *pFont,  sal_uInt16 nFontWhichId );
 
     /// Start: Data collected during idle time
 
-    SAL_DLLPRIVATE void SetParaNumberOfWords( sal_uLong nTmpWords ) const;
-    SAL_DLLPRIVATE sal_uLong GetParaNumberOfWords() const;
-    SAL_DLLPRIVATE void SetParaNumberOfAsianWords( sal_uLong nTmpAsianWords ) const;
-    SAL_DLLPRIVATE sal_uLong GetParaNumberOfAsianWords() const;
-    SAL_DLLPRIVATE void SetParaNumberOfChars( sal_uLong nTmpChars ) const;
-    SAL_DLLPRIVATE sal_uLong GetParaNumberOfChars() const;
-    SAL_DLLPRIVATE void SetParaNumberOfCharsExcludingSpaces( sal_uLong nTmpChars ) const;
-    SAL_DLLPRIVATE sal_uLong GetParaNumberOfCharsExcludingSpaces() const;
     SAL_DLLPRIVATE void InitSwParaStatistics( bool bNew );
-
-    /** create number for this text node, if not already existing
-
-        @return number of this node
-    */
-    SwNodeNum* CreateNum() const;
 
     inline void TryDeleteSwpHints();
 
@@ -201,15 +191,17 @@ public:
     const SwWrongList* GetWrong() const;
     void SetGrammarCheck( SwGrammarMarkUp* pNew, bool bDelete = true );
     SwGrammarMarkUp* GetGrammarCheck();
+    // return SwWrongList because *function pointer* return values aren't covariant
+    SwWrongList const* GetGrammarCheck() const;
     void SetSmartTags( SwWrongList* pNew, bool bDelete = true );
     SwWrongList* GetSmartTags();
-    bool TryCharSetExpandToNum(const SfxItemSet& pCharSet);
+    SwWrongList const* GetSmartTags() const;
+    void TryCharSetExpandToNum(const SfxItemSet& pCharSet);
 
     /// End: Data collected during idle time
 
 protected:
     /// for hanging TextFormatCollections somewhere else (Outline-Numbering!)
-    virtual void Modify( const SfxPoolItem*, const SfxPoolItem* ) override;
     virtual void SwClientNotify( const SwModify&, const SfxHint& ) override;
 
 public:
@@ -223,12 +215,12 @@ public:
     /// getters for SwpHints
     inline       SwpHints &GetSwpHints();
     inline const SwpHints &GetSwpHints() const;
-    inline       SwpHints *GetpSwpHints()       { return m_pSwpHints; }
-    inline const SwpHints *GetpSwpHints() const { return m_pSwpHints; }
-    inline       bool   HasHints() const { return m_pSwpHints != nullptr; }
+          SwpHints *GetpSwpHints()       { return m_pSwpHints.get(); }
+    const SwpHints *GetpSwpHints() const { return m_pSwpHints.get(); }
+    bool   HasHints() const { return m_pSwpHints != nullptr; }
     inline       SwpHints &GetOrCreateSwpHints();
 
-    virtual ~SwTextNode();
+    virtual ~SwTextNode() override;
 
     virtual sal_Int32 Len() const override;
 
@@ -310,10 +302,11 @@ public:
        the requested item set as a LR-SPACE item, if <bOnlyTextAttr> == false,
        corresponding node has not its own indent attributes and the
        position-and-space mode of the list level is SvxNumberFormat::LABEL_ALIGNMENT. */
-    bool GetAttr( SfxItemSet& rSet, sal_Int32 nStt, sal_Int32 nEnd,
+    bool GetParaAttr( SfxItemSet& rSet, sal_Int32 nStt, sal_Int32 nEnd,
                   const bool bOnlyTextAttr  = false,
                   const bool bGetFromChrFormat = true,
-                  const bool bMergeIndentValuesOfNumRule = false ) const;
+                  const bool bMergeIndentValuesOfNumRule = false,
+                  SwRootFrame const* pLayout = nullptr) const;
 
     /// Convey attributes of an AttrSet (AutoFormat) to SwpHintsArray.
     void FormatToTextAttr( SwTextNode* pNd );
@@ -329,7 +322,7 @@ public:
     void CopyText( SwTextNode * const pDest,
                const SwIndex &rStart,
                const sal_Int32 nLen,
-               const bool bForceCopyOfAllAttrs = false );
+               const bool bForceCopyOfAllAttrs );
     void CopyText( SwTextNode * const pDest,
                const SwIndex &rDestStart,
                const SwIndex &rStart,
@@ -352,9 +345,10 @@ public:
 
     /// Virtual methods from ContentNode.
     virtual SwContentFrame *MakeFrame( SwFrame* ) override;
-    virtual SwContentNode *SplitContentNode( const SwPosition & ) override;
+    SwTextNode * SplitContentNode(const SwPosition &,
+            std::function<void (SwTextNode *, sw::mark::RestoreMode)> const* pContentIndexRestore);
     virtual SwContentNode *JoinNext() override;
-    virtual void JoinPrev() override;
+    void JoinPrev();
 
     SwContentNode *AppendNode( const SwPosition & );
 
@@ -378,16 +372,16 @@ public:
      */
     SwTextAttr *GetTextAttrAt(
         sal_Int32 const nIndex,
-        RES_TXTATR const nWhich,
+        sal_uInt16 const nWhich,
         enum GetTextAttrMode const eMode = DEFAULT ) const;
 
     /** get the innermost text attributes covering position nIndex.
         @param nWhich   only attributes with this id are returned.
         @param eMode    the predicate for matching (@see GetTextAttrMode).
      */
-    ::std::vector<SwTextAttr *> GetTextAttrsAt(
+    std::vector<SwTextAttr *> GetTextAttrsAt(
         sal_Int32 const nIndex,
-        RES_TXTATR const nWhich ) const;
+        sal_uInt16 const nWhich ) const;
 
     /** get the text attribute at position nIndex which owns
         the dummy character CH_TXTATR_* at that position, if one exists.
@@ -398,23 +392,22 @@ public:
     */
     SwTextAttr *GetTextAttrForCharAt(
         const sal_Int32 nIndex,
-        const RES_TXTATR nWhich = RES_TXTATR_END ) const;
+        const sal_uInt16 nWhich = RES_TXTATR_END ) const;
 
     SwTextField* GetFieldTextAttrAt(
         const sal_Int32 nIndex,
         const bool bIncludeInputFieldAtStart = false ) const;
 
-    OUString GetCurWord(sal_Int32) const;
     bool Spell(SwSpellArgs*);
     bool Convert( SwConversionArgs & );
 
     inline SwTextFormatColl *GetTextColl() const;
     virtual SwFormatColl *ChgFormatColl( SwFormatColl* ) override;
-    void _ChgTextCollUpdateNum( const SwTextFormatColl* pOld,
+    void ChgTextCollUpdateNum( const SwTextFormatColl* pOld,
                                 const SwTextFormatColl* pNew );
 
     /** Copy collection with all auto formats to dest-node.
-        The latter might be in an other document!
+        The latter might be in another document!
        (Method in ndcopy.cxx!!). */
     void CopyCollFormat( SwTextNode& rDestNd );
 
@@ -429,12 +422,10 @@ public:
      */
     SwNumRule *GetNumRule(bool bInParent = true) const;
 
-    inline const SwNodeNum* GetNum() const
-    {
-        return mpNodeNum;
-    }
+    const SwNodeNum* GetNum(SwRootFrame const* pLayout = nullptr) const;
+    void DoNum(std::function<void (SwNodeNum &)> const&);
 
-    SwNumberTree::tNumberVector GetNumberVector() const;
+    SwNumberTree::tNumberVector GetNumberVector(SwRootFrame const* pLayout = nullptr) const;
 
     /**
        Returns if this text node is an outline.
@@ -468,7 +459,8 @@ public:
         MAXLEVEL
     */
     OUString GetNumString( const bool _bInclPrefixAndSuffixStrings = true,
-            const unsigned int _nRestrictToThisLevel = MAXLEVEL ) const;
+            const unsigned int _nRestrictToThisLevel = MAXLEVEL,
+            SwRootFrame const* pLayout = nullptr) const;
 
     /**
        Returns the additional indents of this text node and its numbering.
@@ -535,7 +527,7 @@ public:
         @retval true      This node is numbered.
         @retval false     else
      */
-    bool IsNumbered() const;
+    bool IsNumbered(SwRootFrame const* pLayout = nullptr) const;
 
     /** Returns if this text node has a marked label.
 
@@ -665,12 +657,12 @@ public:
 
     void fillSoftPageBreakList( SwSoftPageBreakList& rBreak ) const;
 
-    sal_uInt16 GetLang( const sal_Int32 nBegin, const sal_Int32 nLen = 0,
+    LanguageType GetLang( const sal_Int32 nBegin, const sal_Int32 nLen = 0,
                     sal_uInt16 nScript = 0 ) const;
 
     /// in ndcopy.cxx
-    bool IsSymbol( const sal_Int32 nBegin ) const; // In itratr.cxx.
-    virtual SwContentNode* MakeCopy( SwDoc*, const SwNodeIndex& ) const override;
+    bool IsSymbolAt(sal_Int32 nBegin) const; // In itratr.cxx.
+    virtual SwContentNode* MakeCopy(SwDoc*, const SwNodeIndex&, bool bNewFrames) const override;
 
     /// Interactive hyphenation: we find TextFrame and call its CalcHyph.
     bool Hyphenate( SwInterHyphInfo &rHyphInf );
@@ -682,14 +674,16 @@ public:
        add 5th optional parameter <bWithSpacesForLevel> indicating, if additional
        spaces are inserted in front of the expanded text string depending on
        the list level. */
-    OUString GetExpandText(  const sal_Int32 nIdx = 0,
+    OUString GetExpandText( SwRootFrame const* pLayout,
+                            const sal_Int32 nIdx = 0,
                             const sal_Int32 nLen = -1,
                             const bool bWithNum = false,
                             const bool bAddSpaceAfterListLabelStr = false,
                             const bool bWithSpacesForLevel = false,
-                            const bool bWithFootnote = true ) const;
-    bool GetExpandText( SwTextNode& rDestNd, const SwIndex* pDestIdx = nullptr,
-                           sal_Int32 nIdx = 0, sal_Int32 nLen = -1,
+                            const ExpandMode eAdditionalMode = ExpandMode(0)) const;
+    bool CopyExpandText( SwTextNode& rDestNd, const SwIndex* pDestIdx,
+                           sal_Int32 nIdx, sal_Int32 nLen,
+                           SwRootFrame const* pLayout,
                            bool bWithNum = false, bool bWithFootnote = true,
                            bool bReplaceTabsWithSpaces = false ) const;
 
@@ -703,26 +697,33 @@ public:
     bool GetDropSize(int& rFontHeight, int& rDropHeight, int& rDropDescent) const;
 
     /// Hidden Paragraph Field:
-    inline bool CalcHiddenParaField()
+    bool CalcHiddenParaField()
         { return m_pSwpHints && m_pSwpHints->CalcHiddenParaField(); }
     /// set CalcVisible flags
-    inline void SetCalcHiddenParaField()
+    void SetCalcHiddenParaField()
         { if (m_pSwpHints) m_pSwpHints->SetCalcHiddenParaField(); }
 
     /// is the paragraph visible?
-    inline bool HasHiddenParaField() const
-        { return m_pSwpHints && m_pSwpHints->HasHiddenParaField(); }
+    bool IsHiddenByParaField() const
+        { return m_pSwpHints && m_pSwpHints->IsHiddenByParaField(); }
+
+    int FieldCanHideParaWeight(SwFieldIds eFieldId) const
+        {
+            return GetDoc()->FieldCanHideParaWeight(eFieldId);
+        }
+    bool FieldHidesPara(const SwField& rField) const
+        { return GetDoc()->FieldHidesPara(rField); }
 
     /// Hidden Paragraph Field:
 
-    inline bool HasHiddenCharAttribute( bool bWholePara ) const
+    bool HasHiddenCharAttribute( bool bWholePara ) const
     {
         if ( m_bRecalcHiddenCharFlags )
             CalcHiddenCharFlags();
         return bWholePara ? m_bHiddenCharsHidePara : m_bContainsHiddenChars;
     }
 
-    inline void SetCalcHiddenCharFlags() const
+    void SetCalcHiddenCharFlags() const
         { m_bRecalcHiddenCharFlags = true; }
 
     /** @return if the node is hidden due to
@@ -743,7 +744,7 @@ public:
     /// change text to Upper/Lower/Hiragana/Katagana/...
     void TransliterateText( utl::TransliterationWrapper& rTrans,
                             sal_Int32 nStart, sal_Int32 nEnd,
-                            SwUndoTransliterate* pUndo = nullptr );
+                            SwUndoTransliterate* pUndo );
 
     /// count words in given range - returns true if we refreshed out count
     bool CountWords( SwDocStat& rStat, sal_Int32 nStart, sal_Int32 nEnd ) const;
@@ -767,12 +768,12 @@ public:
     bool IsCountedInList() const;
 
     void AddToList();
+    void AddToListRLHidden();
     void RemoveFromList();
+    void RemoveFromListRLHidden();
     bool IsInList() const;
 
-    bool IsFirstOfNumRule() const;
-
-    sal_uInt16 GetScalingOfSelectedText( sal_Int32 nStt, sal_Int32 nEnd ) const;
+    bool IsFirstOfNumRule(SwRootFrame const& rLayout) const;
 
     SAL_DLLPRIVATE css::uno::WeakReference<css::text::XTextContent> const& GetXParagraph() const
             { return m_wXParagraph; }
@@ -796,12 +797,10 @@ public:
     bool CompareRsid( const SwTextNode &rTextNode, sal_Int32 nStt1, sal_Int32 nStt2 ) const;
     bool CompareParRsid( const SwTextNode &rTextNode ) const;
 
-    DECL_FIXEDMEMPOOL_NEWDEL(SwTextNode)
-
-    //UUUU Access to DrawingLayer FillAttributes in a preprocessed form for primitive usage
+    // Access to DrawingLayer FillAttributes in a preprocessed form for primitive usage
     virtual drawinglayer::attribute::SdrAllFillAttributesHelperPtr getSdrAllFillAttributesHelper() const override;
 
-    /// In MS Word, the font underline setting of the paragraph end position wont affect the formatting of numbering, so we ignore it
+    /// In MS Word, the font underline setting of the paragraph end position won't affect the formatting of numbering, so we ignore it
     static bool IsIgnoredCharFormatForNumbering(const sal_uInt16 nWhich);
 };
 
@@ -820,7 +819,7 @@ inline SwpHints& SwTextNode::GetOrCreateSwpHints()
 {
     if ( !m_pSwpHints )
     {
-        m_pSwpHints = new SwpHints;
+        m_pSwpHints.reset(new SwpHints(*this));
     }
     return *m_pSwpHints;
 }
@@ -829,7 +828,7 @@ inline void SwTextNode::TryDeleteSwpHints()
 {
     if ( m_pSwpHints && m_pSwpHints->CanBeDeleted() )
     {
-        DELETEZ( m_pSwpHints );
+        m_pSwpHints.reset();
     }
 }
 
@@ -841,12 +840,12 @@ inline SwTextFormatColl* SwTextNode::GetTextColl() const
 /// Inline methods from Node.hxx
 inline SwTextNode *SwNode::GetTextNode()
 {
-     return ND_TEXTNODE == m_nNodeType ? static_cast<SwTextNode*>(this) : nullptr;
+     return SwNodeType::Text == m_nNodeType ? static_cast<SwTextNode*>(this) : nullptr;
 }
 
 inline const SwTextNode *SwNode::GetTextNode() const
 {
-     return ND_TEXTNODE == m_nNodeType ? static_cast<const SwTextNode*>(this) : nullptr;
+     return SwNodeType::Text == m_nNodeType ? static_cast<const SwTextNode*>(this) : nullptr;
 }
 
 inline void

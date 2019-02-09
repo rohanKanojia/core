@@ -23,7 +23,6 @@
 
 #include <unotools/confignode.hxx>
 
-#include <osl/mutex.hxx>
 #include <unordered_map>
 #include <vector>
 
@@ -50,22 +49,22 @@ namespace connectivity
                 {
                 }
             };
-            typedef std::unordered_map< OUString, AliasEntry, OUStringHash > AliasMap;
+            typedef std::unordered_map< OUString, AliasEntry > AliasMap;
 
         private:
             AliasMap    m_aAliasMap;
 
         public:
-            explicit OColumnAlias( const ::com::sun::star::uno::Reference< ::com::sun::star::lang::XMultiServiceFactory > & );
+            explicit OColumnAlias( const css::uno::Reference< css::lang::XMultiServiceFactory > & );
 
             OString getProgrammaticNameOrFallbackToUTF8Alias( const OUString& _rAlias ) const;
 
-            inline AliasMap::const_iterator begin() const { return m_aAliasMap.begin(); }
-            inline AliasMap::const_iterator end() const { return m_aAliasMap.end(); }
+            AliasMap::const_iterator begin() const { return m_aAliasMap.begin(); }
+            AliasMap::const_iterator end() const { return m_aAliasMap.end(); }
 
 
         private:
-            void initialize( const ::com::sun::star::uno::Reference< ::com::sun::star::lang::XMultiServiceFactory >& _rxORB );
+            void initialize( const css::uno::Reference< css::lang::XMultiServiceFactory >& _rxORB );
         };
     }
 }

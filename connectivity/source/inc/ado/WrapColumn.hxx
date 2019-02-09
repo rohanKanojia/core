@@ -19,11 +19,9 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_ADO_WRAPCOLUMN_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_ADO_WRAPCOLUMN_HXX
 
-#include "ado/Aolewrap.hxx"
+#include <ado/Aolewrap.hxx>
 
-#include "ado_pre_sys_include.h"
 #include <adoint.h>
-#include "ado_post_sys_include.h"
 
 namespace connectivity
 {
@@ -32,12 +30,12 @@ namespace connectivity
         class WpADOColumn : public WpOLEBase<_ADOColumn>
         {
         public:
-            WpADOColumn(_ADOColumn* pInt=NULL)  :   WpOLEBase<_ADOColumn>(pInt){}
+            WpADOColumn(_ADOColumn* pInt=nullptr)  :   WpOLEBase<_ADOColumn>(pInt){}
             WpADOColumn(const WpADOColumn& rhs) : WpOLEBase<_ADOColumn>(rhs) {}
 
             void Create();
 
-            inline WpADOColumn& operator=(const WpADOColumn& rhs)
+            WpADOColumn& operator=(const WpADOColumn& rhs)
                 {WpOLEBase<_ADOColumn>::operator=(rhs); return *this;}
 
             OUString get_Name() const;
@@ -54,7 +52,7 @@ namespace connectivity
             void put_SortOrder(SortOrderEnum _nScale);
             sal_Int32 get_DefinedSize() const;
             ColumnAttributesEnum get_Attributes() const;
-            sal_Bool put_Attributes(const ColumnAttributesEnum& _eNum);
+            bool put_Attributes(const ColumnAttributesEnum& _eNum);
             WpADOProperties get_Properties() const;
             void put_ParentCatalog(/* [in] */ _ADOCatalog __RPC_FAR *ppvObject);
         };

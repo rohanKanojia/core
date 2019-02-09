@@ -57,36 +57,24 @@
  * @file
  * Style for all draw object.
  ************************************************************************/
-#include "xfdrawstyle.hxx"
-#include "xfdrawlinestyle.hxx"
+#include <xfilter/xfdrawstyle.hxx>
+#include <xfilter/xfdrawlinestyle.hxx>
 #include "xfdrawareastyle.hxx"
-#include "xfstylemanager.hxx"
+#include <xfilter/xfstylemanager.hxx>
 #include "xffontworkstyle.hxx"
-#include "../lwpglobalmgr.hxx"
+#include <lwpglobalmgr.hxx>
 XFDrawStyle::XFDrawStyle()
-{
-    m_eWrap = enumXFWrapNone;
-    m_nWrapLines = 0;   //not limited.
-
-    m_pLineStyle = nullptr;
-    m_pAreaStyle = nullptr;
-
-    m_pFontWorkStyle = nullptr;
-
-    m_fArrowStartSize = 0.3;
-    m_fArrowEndSize = 0.3;
-    m_bArrowStartCenter = false;
-    m_bArrowEndCenter = false;
-}
+    : m_pLineStyle(nullptr)
+    , m_pAreaStyle(nullptr)
+    , m_fArrowStartSize(0.3)
+    , m_fArrowEndSize(0.3)
+    , m_bArrowStartCenter(false)
+    , m_bArrowEndCenter(false)
+{}
 
 XFDrawStyle::~XFDrawStyle()
 {
     //don't delete m_pLineStyle, it was managed by XFStyleManager.
-    if (m_pFontWorkStyle)
-    {
-        delete m_pFontWorkStyle;
-        m_pFontWorkStyle = nullptr;
-    }
 }
 
 void    XFDrawStyle::SetLineStyle(double width, XFColor color)
@@ -115,14 +103,14 @@ void    XFDrawStyle::SetLineDashStyle(enumXFLineStyle style, double len1, double
     m_pLineStyle->SetDot2Length(len2);
     m_pLineStyle->SetSpace(space);
     XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
-    pXFStyleManager->AddStyle(m_pLineStyle);
+    pXFStyleManager->AddStyle(std::unique_ptr<IXFStyle>(m_pLineStyle));
 }
 
 void XFDrawStyle::SetFontWorkStyle(enumXFFWStyle eStyle, enumXFFWAdjust eAdjust)
 {
     if (!m_pFontWorkStyle)
     {
-        m_pFontWorkStyle = new XFFontWorkStyle();
+        m_pFontWorkStyle.reset( new XFFontWorkStyle() );
     }
 
     m_pFontWorkStyle->SetButtonForm(0);
@@ -130,7 +118,7 @@ void XFDrawStyle::SetFontWorkStyle(enumXFFWStyle eStyle, enumXFFWAdjust eAdjust)
     m_pFontWorkStyle->SetFWAdjustType(eAdjust);
 }
 
-void    XFDrawStyle::SetAreaColor(XFColor& color)
+void    XFDrawStyle::SetAreaColor(XFColor const & color)
 {
     if( !m_pAreaStyle )
     {
@@ -154,7 +142,7 @@ void    XFDrawStyle::SetAreaLineStyle(enumXFAreaLineStyle style, sal_Int32 angle
     m_pAreaStyle->SetLineSpace(space);
     m_pAreaStyle->SetLineColor(lineColor);
     XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
-    pXFStyleManager->AddStyle(m_pAreaStyle);
+    pXFStyleManager->AddStyle(std::unique_ptr<IXFStyle>(m_pAreaStyle));
 }
 
 enumXFStyle XFDrawStyle::GetStyleFamily()
@@ -176,27 +164,8 @@ void    XFDrawStyle::ToXml(IXFStream *pStrm)
 
     pAttrList->Clear();
 
-    if( m_eWrap == enumXFWrapBackground )
-    {
-        pAttrList->AddAttribute( "style:run-through", "background" );
-    }
-    else
-    {
-        pAttrList->AddAttribute( "style:run-through", "foreground" );
-
-        if( m_eWrap == enumXFWrapNone )
-            pAttrList->AddAttribute( "style:wrap", "none" );
-        else if( m_eWrap == enumXFWrapLeft )
-            pAttrList->AddAttribute( "style:wrap", "left" );
-        else if( m_eWrap == enumXFWrapRight )
-            pAttrList->AddAttribute( "style:wrap", "right" );
-        else if( m_eWrap == enumXFWrapParallel )
-            pAttrList->AddAttribute( "style:wrap", "parallel" );
-        else if( m_eWrap == enumXFWrapRunThrough )
-            pAttrList->AddAttribute( "style:wrap", "run-through" );
-        else if( m_eWrap == enumXFWrapBest )
-            pAttrList->AddAttribute( "style:wrap", "dynamic" );
-    }
+    pAttrList->AddAttribute( "style:run-through", "foreground" );
+    pAttrList->AddAttribute( "style:wrap", "none" );
 
     //line style:
     if( m_pLineStyle )

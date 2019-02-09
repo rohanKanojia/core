@@ -17,19 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "formulaiter.hxx"
+#include <formulaiter.hxx>
 
-#include "formulacell.hxx"
-#include "tokenarray.hxx"
+#include <formulacell.hxx>
+#include <tokenarray.hxx>
 #include <formula/token.hxx>
+#include <token.hxx>
 
 using namespace formula;
 
-ScDetectiveRefIter::ScDetectiveRefIter( ScFormulaCell* pCell )
+ScDetectiveRefIter::ScDetectiveRefIter( ScFormulaCell* pCell ) :
+    maIter(*pCell->GetCode()),
+    aPos(pCell->aPos)
 {
-    pCode = pCell->GetCode();
-    pCode->Reset();
-    aPos = pCell->aPos;
 }
 
 static bool lcl_ScDetectiveRefIter_SkipRef( formula::FormulaToken* p, const ScAddress& rPos )
@@ -65,10 +65,10 @@ bool ScDetectiveRefIter::GetNextRef( ScRange& rRange )
 
 formula::FormulaToken* ScDetectiveRefIter::GetNextRefToken()
 {
-    formula::FormulaToken* p = pCode->GetNextReferenceRPN();
+    formula::FormulaToken* p = maIter.GetNextReferenceRPN();
     while (p && lcl_ScDetectiveRefIter_SkipRef(p, aPos))
     {
-        p = pCode->GetNextReferenceRPN();
+        p = maIter.GetNextReferenceRPN();
     }
     return p;
 }

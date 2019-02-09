@@ -20,7 +20,7 @@
 #ifndef INCLUDED_CODEMAKER_SOURCE_CPPUMAKER_CPPUOPTIONS_HXX
 #define INCLUDED_CODEMAKER_SOURCE_CPPUMAKER_CPPUOPTIONS_HXX
 
-#include "codemaker/options.hxx"
+#include <codemaker/options.hxx>
 
 class CppuOptions : public Options
 {
@@ -28,14 +28,11 @@ public:
     CppuOptions()
         : Options() {}
 
-    virtual ~CppuOptions() {}
-
-    bool initOptions(int ac, char* av[], bool bCmdFile=false)
-            throw( IllegalArgument ) override;
+    bool initOptions(int ac, char* av[], bool bCmdFile=false) override;
 
     OString  prepareHelp() override;
 
-    OString  prepareVersion();
+    OString  prepareVersion() const;
 
 protected:
 };

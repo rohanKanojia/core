@@ -21,13 +21,9 @@
 #define INCLUDED_SC_SOURCE_FILTER_INC_FTOOLS_HXX
 
 #include <vector>
-#include <map>
 #include <limits>
-#include <sal/macros.h>
-#include <sot/storage.hxx>
-#include <oox/helper/helper.hxx>
-#include "filter.hxx"
-#include "scdllapi.h"
+#include <tools/ref.hxx>
+#include <filter.hxx>
 
 // Common macros ==============================================================
 
@@ -37,13 +33,9 @@
 #define GETITEM( itemset, itemtype, which ) \
     static_cast< const itemtype & >( (itemset).Get( which ) )
 
-/** Expands to the value (with type 'valuetype') of the item with Which-ID 'which'. */
-#define GETITEMVALUE( itemset, itemtype, which, valuetype ) \
-    static_cast< valuetype >( GETITEM( itemset, itemtype, which ).GetValue() )
-
 /** Expands to the value of the SfxBoolItem with Which-ID 'which'. */
 #define GETITEMBOOL( itemset, which ) \
-    GETITEMVALUE( itemset, SfxBoolItem, which, bool )
+    (static_cast<const SfxBoolItem &>( (itemset).Get( which )).GetValue() )
 
 // Global static helpers ======================================================
 
@@ -107,9 +99,9 @@ inline void set_flag( Type& rnBitField, Type nMask, bool bSet = true )
 template< typename Type, typename InsertType >
 void insert_value( Type& rnBitField, InsertType nValue, sal_uInt8 nStartBit, sal_uInt8 nBitCount )
 {
-    unsigned long nMask = ((1UL << nBitCount) - 1);
+    unsigned int nMask = (1U << nBitCount) - 1;
     Type nNewValue = static_cast< Type >( nValue & nMask );
-    (rnBitField &= ~(nMask << nStartBit)) |= (nNewValue << nStartBit);
+    rnBitField = (rnBitField & ~(nMask << nStartBit)) | (nNewValue << nStartBit);
 }
 
 class Color;
@@ -118,12 +110,16 @@ class SfxItemSet;
 class ScStyleSheet;
 class ScStyleSheetPool;
 class SvStream;
+class SotStorage;
+class SotStorageStream;
 
 /** Contains static methods used anywhere in the filters. */
 class ScfTools
 {
 public:
-// *** noncopyable *** --------------------------------------------------------
+    /** We don't want anybody to instantiate this class, since it is just a
+        collection of static items. */
+    ScfTools() = delete;
     ScfTools(const ScfTools&) = delete;
     const ScfTools& operator=(const ScfTools&) = delete;
 
@@ -154,14 +150,14 @@ public:
 // *** streams and storages *** -----------------------------------------------
 
     /** Tries to open an existing storage with the specified name in the passed storage (read-only). */
-    static tools::SvRef<SotStorage> OpenStorageRead( tools::SvRef<SotStorage> xStrg, const OUString& rStrgName );
+    static tools::SvRef<SotStorage> OpenStorageRead( tools::SvRef<SotStorage> const & xStrg, const OUString& rStrgName );
     /** Creates and opens a storage with the specified name in the passed storage (read/write). */
-    static tools::SvRef<SotStorage> OpenStorageWrite( tools::SvRef<SotStorage> xStrg, const OUString& rStrgName );
+    static tools::SvRef<SotStorage> OpenStorageWrite( tools::SvRef<SotStorage> const & xStrg, const OUString& rStrgName );
 
     /** Tries to open an existing stream with the specified name in the passed storage (read-only). */
-    static tools::SvRef<SotStorageStream> OpenStorageStreamRead( tools::SvRef<SotStorage> xStrg, const OUString& rStrmName );
+    static tools::SvRef<SotStorageStream> OpenStorageStreamRead( tools::SvRef<SotStorage> const & xStrg, const OUString& rStrmName );
     /** Creates and opens a stream with the specified name in the passed storage (read/write). */
-    static tools::SvRef<SotStorageStream> OpenStorageStreamWrite( tools::SvRef<SotStorage> xStrg, const OUString& rStrmName );
+    static tools::SvRef<SotStorageStream> OpenStorageStreamWrite( tools::SvRef<SotStorage> const & xStrg, const OUString& rStrmName );
 
 // *** item handling *** ------------------------------------------------------
 
@@ -214,7 +210,7 @@ public:
     /** Reads and returns a zero terminated byte string and decreases a stream counter. */
     static OString read_zeroTerminated_uInt8s_ToOString(SvStream& rStrm, sal_Int32& rnBytesLeft);
     /** Reads and returns a zero terminated byte string and decreases a stream counter. */
-    inline static OUString read_zeroTerminated_uInt8s_ToOUString(SvStream& rStrm, sal_Int32& rnBytesLeft, rtl_TextEncoding eTextEnc)
+    static OUString read_zeroTerminated_uInt8s_ToOUString(SvStream& rStrm, sal_Int32& rnBytesLeft, rtl_TextEncoding eTextEnc)
     {
         return OStringToOUString(read_zeroTerminated_uInt8s_ToOString(rStrm, rnBytesLeft), eTextEnc);
     }
@@ -248,10 +244,6 @@ private:
     static const OUString& GetHTMLIndexPrefix();
     /** Returns the prefix for table names. */
     static const OUString& GetHTMLNamePrefix();
-    /** We don't want anybody to instantiate this class, since it is just a
-        collection of static items. To enforce this, the default constructor
-        is made private */
-    ScfTools();
 };
 
 // Containers =================================================================
@@ -269,29 +261,28 @@ public:
     ScFormatFilterPluginImpl();
     virtual ~ScFormatFilterPluginImpl();
     // various import filters
-    virtual FltError ScImportLotus123( SfxMedium&, ScDocument*, rtl_TextEncoding eSrc = RTL_TEXTENCODING_DONTKNOW ) override;
-    virtual FltError ScImportQuattroPro( SfxMedium &rMedium, ScDocument *pDoc ) override;
-    virtual FltError ScImportExcel( SfxMedium&, ScDocument*, const EXCIMPFORMAT ) override;
-        // eFormat == EIF_AUTO  -> passender Filter wird automatisch verwendet
-        // eFormat == EIF_BIFF5 -> nur Biff5-Stream fuehrt zum Erfolg (auch wenn in einem Excel97-Doc)
-        // eFormat == EIF_BIFF8 -> nur Biff8-Stream fuehrt zum Erfolg (nur in Excel97-Docs)
-        // eFormat == EIF_BIFF_LE4 -> nur Nicht-Storage-Dateien _koennen_ zum Erfolg fuehren
-    virtual FltError ScImportStarCalc10( SvStream&, ScDocument* ) override;
-    virtual FltError ScImportDif( SvStream&, ScDocument*, const ScAddress& rInsPos,
-                 const rtl_TextEncoding eSrc = RTL_TEXTENCODING_DONTKNOW, sal_uInt32 nDifOption = SC_DIFOPT_EXCEL ) override;
-    virtual FltError ScImportRTF( SvStream&, const OUString& rBaseURL, ScDocument*, ScRange& rRange ) override;
-    virtual FltError ScImportHTML( SvStream&, const OUString& rBaseURL, ScDocument*, ScRange& rRange,
-                                   double nOutputFactor = 1.0, bool bCalcWidthHeight = true,
-                                   SvNumberFormatter* pFormatter = nullptr, bool bConvertDate = true ) override;
+    virtual ErrCode ScImportLotus123( SfxMedium&, ScDocument*, rtl_TextEncoding eSrc ) override;
+    virtual ErrCode ScImportQuattroPro(SvStream* pStream, ScDocument *pDoc) override;
+    virtual ErrCode ScImportExcel( SfxMedium&, ScDocument*, const EXCIMPFORMAT ) override;
+        // eFormat == EIF_AUTO  -> matching filter is used automatically
+        // eFormat == EIF_BIFF5 -> only Biff5 stream leads to success (even in an Excel97 doc)
+        // eFormat == EIF_BIFF8 -> only Biff8 stream leads to success (only in Excel97 docs)
+        // eFormat == EIF_BIFF_LE4 -> only non-storage files _could_ lead to success
+    virtual ErrCode ScImportDif( SvStream&, ScDocument*, const ScAddress& rInsPos,
+                 const rtl_TextEncoding eSrc ) override;
+    virtual ErrCode ScImportRTF( SvStream&, const OUString& rBaseURL, ScDocument*, ScRange& rRange ) override;
+    virtual ErrCode ScImportHTML( SvStream&, const OUString& rBaseURL, ScDocument*, ScRange& rRange,
+                                   double nOutputFactor, bool bCalcWidthHeight,
+                                   SvNumberFormatter* pFormatter, bool bConvertDate ) override;
 
-    virtual ScEEAbsImport *CreateRTFImport( ScDocument* pDoc, const ScRange& rRange ) override;
-    virtual ScEEAbsImport *CreateHTMLImport( ScDocument* pDocP, const OUString& rBaseURL, const ScRange& rRange ) override;
+    virtual std::unique_ptr<ScEEAbsImport> CreateRTFImport( ScDocument* pDoc, const ScRange& rRange ) override;
+    virtual std::unique_ptr<ScEEAbsImport> CreateHTMLImport( ScDocument* pDocP, const OUString& rBaseURL, const ScRange& rRange ) override;
     virtual OUString       GetHTMLRangeNameList( ScDocument* pDoc, const OUString& rOrigName ) override;
 
     // various export filters
-    virtual FltError ScExportExcel5( SfxMedium&, ScDocument*, ExportFormatExcel eFormat, rtl_TextEncoding eDest ) override;
+    virtual ErrCode ScExportExcel5( SfxMedium&, ScDocument*, ExportFormatExcel eFormat, rtl_TextEncoding eDest ) override;
     virtual void ScExportDif( SvStream&, ScDocument*, const ScAddress& rOutPos, const rtl_TextEncoding eDest ) override;
-    virtual FltError ScExportDif( SvStream&, ScDocument*, const ScRange& rRange, const rtl_TextEncoding eDest ) override;
+    virtual void ScExportDif( SvStream&, ScDocument*, const ScRange& rRange, const rtl_TextEncoding eDest ) override;
     virtual void ScExportHTML( SvStream&, const OUString& rBaseURL, ScDocument*, const ScRange& rRange, const rtl_TextEncoding eDest, bool bAll,
                   const OUString& rStreamPath, OUString& rNonConvertibleChars, const OUString& rFilterOptions ) override;
     virtual void ScExportRTF( SvStream&, ScDocument*, const ScRange& rRange, const rtl_TextEncoding eDest ) override;

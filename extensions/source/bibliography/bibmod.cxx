@@ -17,13 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/resmgr.hxx>
+#include <unotools/resmgr.hxx>
 #include <svl/urihelper.hxx>
+#include <vcl/settings.hxx>
+#include <vcl/svapp.hxx>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/util/XLocalizedAliases.hpp>
 #include <com/sun/star/lang/XLocalizable.hpp>
 
 #include "bibmod.hxx"
+#include "bibprop.hxx"
 #include "bibview.hxx"
 #include "bibresid.hxx"
 #include "datman.hxx"
@@ -59,19 +62,20 @@ void CloseBibModul(HdlBibModul ppBibModul)
     }
 }
 
-BibResId::BibResId( sal_uInt16 nId ) :
-    ResId( nId, *pBibModul->GetResMgr() )
+OUString BibResId(const char* pId)
 {
+    return Translate::get(pId, pBibModul->GetResLocale());
 }
+
 BibConfig* BibModul::pBibConfig = nullptr;
+
 BibModul::BibModul()
+    : m_aResLocale(Translate::Create("pcr"))
 {
-    pResMgr = ResMgr::CreateResMgr( "bib" );
 }
 
 BibModul::~BibModul()
 {
-    delete pResMgr;
     if (pBibConfig && pBibConfig->IsModified())
         pBibConfig->Commit();
     delete pBibConfig;
@@ -92,7 +96,7 @@ BibConfig*  BibModul::GetConfig()
 
 
 // PropertyNames
-#define STATIC_USTRING(a,b) OUString a(b)
+#define STATIC_USTRING(a,b) const OUString a(b)
 STATIC_USTRING(FM_PROP_LABEL,"Label");
 STATIC_USTRING(FM_PROP_CONTROLSOURCE,"DataField");
 STATIC_USTRING(FM_PROP_NAME,"Name");

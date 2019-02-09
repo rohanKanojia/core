@@ -30,17 +30,20 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmluconv.hxx>
+#include <xmloff/xmlement.hxx>
 #include <tools/debug.hxx>
 #include <rtl/ustring.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/container/XIndexReplace.hpp>
+#include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 
 
 using namespace ::std;
 using namespace ::xmloff::token;
 
 using ::com::sun::star::beans::XPropertySet;
-using ::com::sun::star::beans::PropertyValue;
 using ::com::sun::star::beans::PropertyValues;
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Sequence;
@@ -48,27 +51,15 @@ using ::com::sun::star::uno::Any;
 using ::com::sun::star::xml::sax::XAttributeList;
 using ::com::sun::star::container::XIndexReplace;
 
-const sal_Char sAPI_TokenEntryNumber[] =    "TokenEntryNumber";
-const sal_Char sAPI_TokenEntryText[] =      "TokenEntryText";
-const sal_Char sAPI_TokenTabStop[] =        "TokenTabStop";
-const sal_Char sAPI_TokenText[] =           "TokenText";
-const sal_Char sAPI_TokenPageNumber[] =     "TokenPageNumber";
-const sal_Char sAPI_TokenChapterInfo[] =    "TokenChapterInfo";
-const sal_Char sAPI_TokenHyperlinkStart[] = "TokenHyperlinkStart";
-const sal_Char sAPI_TokenHyperlinkEnd[] =   "TokenHyperlinkEnd";
-const sal_Char sAPI_TokenBibliographyDataField[] =
-                                            "TokenBibliographyDataField";
-
-
 XMLIndexTemplateContext::XMLIndexTemplateContext(
     SvXMLImport& rImport,
     Reference<XPropertySet> & rPropSet,
     sal_uInt16 nPrfx,
     const OUString& rLocalName,
-    const SvXMLEnumMapEntry* pLevelNameMap,
+    const SvXMLEnumMapEntry<sal_uInt16>* pLevelNameMap,
     enum XMLTokenEnum eLevelAttrName,
     const sal_Char** pLevelStylePropMap,
-    const sal_Bool* pAllowedTokenTypes,
+    const bool* pAllowedTokenTypes,
     bool bT )
 :   SvXMLImportContext(rImport, nPrfx, rLocalName)
 ,   pOutlineLevelNameMap(pLevelNameMap)
@@ -80,33 +71,12 @@ XMLIndexTemplateContext::XMLIndexTemplateContext(
 ,   bOutlineLevelOK(false)
 ,   bTOC( bT )
 ,   rPropertySet(rPropSet)
-,   sTokenEntryNumber(sAPI_TokenEntryNumber)
-,   sTokenEntryText(sAPI_TokenEntryText)
-,   sTokenTabStop(sAPI_TokenTabStop)
-,   sTokenText(sAPI_TokenText)
-,   sTokenPageNumber(sAPI_TokenPageNumber)
-,   sTokenChapterInfo(sAPI_TokenChapterInfo)
-,   sTokenHyperlinkStart(sAPI_TokenHyperlinkStart)
-,   sTokenHyperlinkEnd(sAPI_TokenHyperlinkEnd)
-,   sTokenBibliographyDataField(sAPI_TokenBibliographyDataField)
-
-,   sCharacterStyleName("CharacterStyleName")
-,   sTokenType("TokenType")
-,   sText("Text")
-,   sTabStopRightAligned("TabStopRightAligned")
-,   sTabStopPosition("TabStopPosition")
-,   sTabStopFillCharacter("TabStopFillCharacter")
-,   sBibliographyDataField("BibliographyDataField")
-,   sChapterFormat("ChapterFormat")
-,   sChapterLevel("ChapterLevel") //#i53420
-
-,   sLevelFormat("LevelFormat")
 {
     DBG_ASSERT( ((XML_TOKEN_INVALID != eLevelAttrName) &&  (nullptr != pLevelNameMap))
                 || ((XML_TOKEN_INVALID == eLevelAttrName) &&  (nullptr == pLevelNameMap)),
                 "need both, attribute name and value map, or neither" );
-    DBG_ASSERT( nullptr != pOutlineLevelStylePropMap, "need property name map" );
-    DBG_ASSERT( nullptr != pAllowedTokenTypes, "need allowed tokens map" );
+    SAL_WARN_IF( nullptr == pOutlineLevelStylePropMap, "xmloff", "need property name map" );
+    SAL_WARN_IF( nullptr == pAllowedTokenTypes, "xmloff", "need allowed tokens map" );
 
     // no map for outline-level? then use 1
     if (nullptr == pLevelNameMap)
@@ -183,13 +153,12 @@ void XMLIndexTemplateContext::EndElement()
         }
 
         // get LevelFormat IndexReplace ...
-        Any aAny = rPropertySet->getPropertyValue(sLevelFormat);
+        Any aAny = rPropertySet->getPropertyValue("LevelFormat");
         Reference<XIndexReplace> xIndexReplace;
         aAny >>= xIndexReplace;
 
         // ... and insert
-        aAny <<= aValueSequence;
-        xIndexReplace->replaceByIndex(nOutlineLevel, aAny);
+        xIndexReplace->replaceByIndex(nOutlineLevel, Any(aValueSequence));
 
         if (bStyleNameOK)
         {
@@ -209,9 +178,8 @@ void XMLIndexTemplateContext::EndElement()
                 if( rStyles.is() &&
                     rStyles->hasByName( sDisplayStyleName ) )
                 {
-                    aAny <<= sDisplayStyleName;
                     rPropertySet->setPropertyValue(
-                        OUString::createFromAscii(pStyleProperty), aAny);
+                        OUString::createFromAscii(pStyleProperty), css::uno::Any(sDisplayStyleName));
                 }
             }
         }
@@ -233,7 +201,7 @@ enum TemplateTokenType
 };
 
 
-SvXMLEnumMapEntry aTemplateTokenTypeMap[] =
+SvXMLEnumMapEntry<TemplateTokenType> const aTemplateTokenTypeMap[] =
 {
     { XML_INDEX_ENTRY_TEXT,         XML_TOK_INDEX_TYPE_ENTRY_TEXT },
     { XML_INDEX_ENTRY_TAB_STOP,     XML_TOK_INDEX_TYPE_TAB_STOP },
@@ -243,48 +211,48 @@ SvXMLEnumMapEntry aTemplateTokenTypeMap[] =
     { XML_INDEX_ENTRY_LINK_START,   XML_TOK_INDEX_TYPE_LINK_START },
     { XML_INDEX_ENTRY_LINK_END,     XML_TOK_INDEX_TYPE_LINK_END },
     { XML_INDEX_ENTRY_BIBLIOGRAPHY, XML_TOK_INDEX_TYPE_BIBLIOGRAPHY },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, TemplateTokenType(0) }
 };
 
-SvXMLImportContext *XMLIndexTemplateContext::CreateChildContext(
+SvXMLImportContextRef XMLIndexTemplateContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList> & xAttrList )
 {
     SvXMLImportContext* pContext = nullptr;
 
-    if (XML_NAMESPACE_TEXT == nPrefix)
+    if (XML_NAMESPACE_TEXT == nPrefix || XML_NAMESPACE_LO_EXT == nPrefix)
     {
-        sal_uInt16 nToken;
+        TemplateTokenType nToken;
         if (SvXMLUnitConverter::convertEnum(nToken, rLocalName,
                                             aTemplateTokenTypeMap))
         {
             // can this index accept this kind of token?
             if (pAllowedTokenTypesMap[nToken])
             {
-                switch ((TemplateTokenType)nToken)
+                switch (nToken)
                 {
                     case XML_TOK_INDEX_TYPE_ENTRY_TEXT:
                         pContext = new XMLIndexSimpleEntryContext(
-                            GetImport(), sTokenEntryText, *this,
+                            GetImport(), "TokenEntryText", *this,
                             nPrefix, rLocalName);
                         break;
 
                     case XML_TOK_INDEX_TYPE_PAGE_NUMBER:
                         pContext = new XMLIndexSimpleEntryContext(
-                            GetImport(), sTokenPageNumber, *this,
+                            GetImport(), "TokenPageNumber", *this,
                             nPrefix, rLocalName);
                         break;
 
                     case XML_TOK_INDEX_TYPE_LINK_START:
                         pContext = new XMLIndexSimpleEntryContext(
-                            GetImport(), sTokenHyperlinkStart, *this,
+                            GetImport(), "TokenHyperlinkStart", *this,
                             nPrefix, rLocalName);
                         break;
 
                     case XML_TOK_INDEX_TYPE_LINK_END:
                         pContext = new XMLIndexSimpleEntryContext(
-                            GetImport(), sTokenHyperlinkEnd, *this,
+                            GetImport(), "TokenHyperlinkEnd", *this,
                             nPrefix, rLocalName);
                         break;
 
@@ -332,7 +300,7 @@ SvXMLImportContext *XMLIndexTemplateContext::CreateChildContext(
 
 // table of content and user defined index:
 
-const SvXMLEnumMapEntry aSvLevelNameTOCMap[] =
+const SvXMLEnumMapEntry<sal_uInt16> aSvLevelNameTOCMap[] =
 {
     { XML_1, 1 },
     { XML_2, 2 },
@@ -353,34 +321,34 @@ const sal_Char* aLevelStylePropNameTOCMap[] =
           "ParaStyleLevel7", "ParaStyleLevel8", "ParaStyleLevel9",
           "ParaStyleLevel10", nullptr };
 
-const sal_Bool aAllowedTokenTypesTOC[] =
+const bool aAllowedTokenTypesTOC[] =
 {
-    sal_True,       // XML_TOK_INDEX_TYPE_ENTRY_TEXT =
-    sal_True,       // XML_TOK_INDEX_TYPE_TAB_STOP,
-    sal_True,       // XML_TOK_INDEX_TYPE_TEXT,
-    sal_True,       // XML_TOK_INDEX_TYPE_PAGE_NUMBER,
-    sal_True,       // XML_TOK_INDEX_TYPE_CHAPTER,
-    sal_True,       // XML_TOK_INDEX_TYPE_LINK_START,
-    sal_True,       // XML_TOK_INDEX_TYPE_LINK_END,
-    sal_False       // XML_TOK_INDEX_TYPE_BIBLIOGRAPHY
+    true,       // XML_TOK_INDEX_TYPE_ENTRY_TEXT =
+    true,       // XML_TOK_INDEX_TYPE_TAB_STOP,
+    true,       // XML_TOK_INDEX_TYPE_TEXT,
+    true,       // XML_TOK_INDEX_TYPE_PAGE_NUMBER,
+    true,       // XML_TOK_INDEX_TYPE_CHAPTER,
+    true,       // XML_TOK_INDEX_TYPE_LINK_START,
+    true,       // XML_TOK_INDEX_TYPE_LINK_END,
+    false       // XML_TOK_INDEX_TYPE_BIBLIOGRAPHY
 };
 
-const sal_Bool aAllowedTokenTypesUser[] =
+const bool aAllowedTokenTypesUser[] =
 {
-    sal_True,       // XML_TOK_INDEX_TYPE_ENTRY_TEXT =
-    sal_True,       // XML_TOK_INDEX_TYPE_TAB_STOP,
-    sal_True,       // XML_TOK_INDEX_TYPE_TEXT,
-    sal_True,       // XML_TOK_INDEX_TYPE_PAGE_NUMBER,
-    sal_True,       // XML_TOK_INDEX_TYPE_CHAPTER,
-    sal_False,      // XML_TOK_INDEX_TYPE_LINK_START,
-    sal_False,      // XML_TOK_INDEX_TYPE_LINK_END,
-    sal_False       // XML_TOK_INDEX_TYPE_BIBLIOGRAPHY
+    true,       // XML_TOK_INDEX_TYPE_ENTRY_TEXT =
+    true,       // XML_TOK_INDEX_TYPE_TAB_STOP,
+    true,       // XML_TOK_INDEX_TYPE_TEXT,
+    true,       // XML_TOK_INDEX_TYPE_PAGE_NUMBER,
+    true,       // XML_TOK_INDEX_TYPE_CHAPTER,
+    true,       // XML_TOK_INDEX_TYPE_LINK_START,
+    true,       // XML_TOK_INDEX_TYPE_LINK_END,
+    false       // XML_TOK_INDEX_TYPE_BIBLIOGRAPHY
 };
 
 
 // alphabetical index
 
-const SvXMLEnumMapEntry aLevelNameAlphaMap[] =
+const SvXMLEnumMapEntry<sal_uInt16> aLevelNameAlphaMap[] =
 {
     { XML_SEPARATOR, 1 },
     { XML_1, 2 },
@@ -393,22 +361,22 @@ const sal_Char* aLevelStylePropNameAlphaMap[] =
     { nullptr, "ParaStyleSeparator", "ParaStyleLevel1", "ParaStyleLevel2",
           "ParaStyleLevel3", nullptr };
 
-const sal_Bool aAllowedTokenTypesAlpha[] =
+const bool aAllowedTokenTypesAlpha[] =
 {
-    sal_True,       // XML_TOK_INDEX_TYPE_ENTRY_TEXT =
-    sal_True,       // XML_TOK_INDEX_TYPE_TAB_STOP,
-    sal_True,       // XML_TOK_INDEX_TYPE_TEXT,
-    sal_True,       // XML_TOK_INDEX_TYPE_PAGE_NUMBER,
-    sal_True,       // XML_TOK_INDEX_TYPE_CHAPTER,
-    sal_False,      // XML_TOK_INDEX_TYPE_LINK_START,
-    sal_False,      // XML_TOK_INDEX_TYPE_LINK_END,
-    sal_False       // XML_TOK_INDEX_TYPE_BIBLIOGRAPHY
+    true,       // XML_TOK_INDEX_TYPE_ENTRY_TEXT =
+    true,       // XML_TOK_INDEX_TYPE_TAB_STOP,
+    true,       // XML_TOK_INDEX_TYPE_TEXT,
+    true,       // XML_TOK_INDEX_TYPE_PAGE_NUMBER,
+    true,       // XML_TOK_INDEX_TYPE_CHAPTER,
+    false,      // XML_TOK_INDEX_TYPE_LINK_START,
+    false,      // XML_TOK_INDEX_TYPE_LINK_END,
+    false       // XML_TOK_INDEX_TYPE_BIBLIOGRAPHY
 };
 
 
 // bibliography index:
 
-const SvXMLEnumMapEntry aLevelNameBibliographyMap[] =
+const SvXMLEnumMapEntry<sal_uInt16> aLevelNameBibliographyMap[] =
 {
     { XML_ARTICLE, 1 },
     { XML_BOOK, 2 },
@@ -447,37 +415,37 @@ const sal_Char* aLevelStylePropNameBibliographyMap[] =
     "ParaStyleLevel1", "ParaStyleLevel1", "ParaStyleLevel1",
     "ParaStyleLevel1", nullptr };
 
-const sal_Bool aAllowedTokenTypesBibliography[] =
+const bool aAllowedTokenTypesBibliography[] =
 {
-    sal_True,       // XML_TOK_INDEX_TYPE_ENTRY_TEXT =
-    sal_True,       // XML_TOK_INDEX_TYPE_TAB_STOP,
-    sal_True,       // XML_TOK_INDEX_TYPE_TEXT,
-    sal_True,       // XML_TOK_INDEX_TYPE_PAGE_NUMBER,
-    sal_False,      // XML_TOK_INDEX_TYPE_CHAPTER,
-    sal_False,      // XML_TOK_INDEX_TYPE_LINK_START,
-    sal_False,      // XML_TOK_INDEX_TYPE_LINK_END,
-    sal_True        // XML_TOK_INDEX_TYPE_BIBLIOGRAPHY
+    true,       // XML_TOK_INDEX_TYPE_ENTRY_TEXT =
+    true,       // XML_TOK_INDEX_TYPE_TAB_STOP,
+    true,       // XML_TOK_INDEX_TYPE_TEXT,
+    true,       // XML_TOK_INDEX_TYPE_PAGE_NUMBER,
+    false,      // XML_TOK_INDEX_TYPE_CHAPTER,
+    false,      // XML_TOK_INDEX_TYPE_LINK_START,
+    false,      // XML_TOK_INDEX_TYPE_LINK_END,
+    true        // XML_TOK_INDEX_TYPE_BIBLIOGRAPHY
 };
 
 
 // table, illustration and object index
 
 // no name map
-const SvXMLEnumMapEntry* aLevelNameTableMap = nullptr;
+const SvXMLEnumMapEntry<sal_uInt16>* aLevelNameTableMap = nullptr;
 
 const sal_Char* aLevelStylePropNameTableMap[] =
     { nullptr, "ParaStyleLevel1", nullptr };
 
-const sal_Bool aAllowedTokenTypesTable[] =
+const bool aAllowedTokenTypesTable[] =
 {
-    sal_True,       // XML_TOK_INDEX_TYPE_ENTRY_TEXT =
-    sal_True,       // XML_TOK_INDEX_TYPE_TAB_STOP,
-    sal_True,       // XML_TOK_INDEX_TYPE_TEXT,
-    sal_True,       // XML_TOK_INDEX_TYPE_PAGE_NUMBER,
-    sal_True,       // XML_TOK_INDEX_TYPE_CHAPTER,
-    sal_False,      // XML_TOK_INDEX_TYPE_LINK_START,
-    sal_False,      // XML_TOK_INDEX_TYPE_LINK_END,
-    sal_False       // XML_TOK_INDEX_TYPE_BIBLIOGRAPHY
+    true,       // XML_TOK_INDEX_TYPE_ENTRY_TEXT =
+    true,       // XML_TOK_INDEX_TYPE_TAB_STOP,
+    true,       // XML_TOK_INDEX_TYPE_TEXT,
+    true,       // XML_TOK_INDEX_TYPE_PAGE_NUMBER,
+    true,       // XML_TOK_INDEX_TYPE_CHAPTER,
+    true,       // XML_TOK_INDEX_TYPE_LINK_START,
+    true,       // XML_TOK_INDEX_TYPE_LINK_END,
+    false       // XML_TOK_INDEX_TYPE_BIBLIOGRAPHY
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

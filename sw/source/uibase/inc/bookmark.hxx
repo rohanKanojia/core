@@ -24,11 +24,11 @@
 #include <ndtxt.hxx>
 
 #include <vcl/button.hxx>
+#include "condedit.hxx"
 #include <svtools/simptabl.hxx>
 #include <pam.hxx>
 
-#include "swlbox.hxx"
-#include "IMark.hxx"
+#include <IMark.hxx>
 
 class SwWrtShell;
 class SfxRequest;
@@ -44,7 +44,6 @@ public:
     OUString            GetNameProposal();
 
     static const OUString aForbiddenChars;
-    static const OUString sDefaultBookmarkName;
     static const char     cSeparator;
 };
 
@@ -57,18 +56,23 @@ class SwInsertBookmarkDlg: public SvxStandardDialog
     VclPtr<PushButton>                  m_pDeleteBtn;
     VclPtr<PushButton>                  m_pGotoBtn;
     VclPtr<PushButton>                  m_pRenameBtn;
+    VclPtr<CheckBox>                    m_pHideCB;
+    VclPtr<FixedText>                   m_pConditionFT;
+    VclPtr<ConditionEdit>               m_pConditionED;
     OUString                            sRemoveWarning;
     SwWrtShell&                         rSh;
     SfxRequest&                         rReq;
     std::vector<std::pair<sw::mark::IMark*, OUString>> aTableBookmarks;
+    sal_Int32                           m_nLastBookmarksCount;
 
-    DECL_LINK_TYPED(ModifyHdl, Edit&, void);
-    DECL_LINK_TYPED(InsertHdl, Button*, void);
-    DECL_LINK_TYPED(DeleteHdl, Button*, void);
-    DECL_LINK_TYPED(RenameHdl, Button*, void);
-    DECL_LINK_TYPED(GotoHdl, Button*, void);
-    DECL_LINK_TYPED(SelectionChangedHdl, SvTreeListBox*, void);
-    DECL_LINK_TYPED(DoubleClickHdl, SvTreeListBox*, bool);
+    DECL_LINK(ModifyHdl, Edit&, void);
+    DECL_LINK(InsertHdl, Button*, void);
+    DECL_LINK(DeleteHdl, Button*, void);
+    DECL_LINK(RenameHdl, Button*, void);
+    DECL_LINK(GotoHdl, Button*, void);
+    DECL_LINK(SelectionChangedHdl, SvTreeListBox*, void);
+    DECL_LINK(DoubleClickHdl, SvTreeListBox*, bool);
+    DECL_LINK(ChangeHideHdl, Button *, void);
 
     // Fill table with bookmarks
     void PopulateTable();
@@ -83,7 +87,7 @@ class SwInsertBookmarkDlg: public SvxStandardDialog
 
 public:
     SwInsertBookmarkDlg(vcl::Window* pParent, SwWrtShell& rSh, SfxRequest& rReq);
-    virtual ~SwInsertBookmarkDlg();
+    virtual ~SwInsertBookmarkDlg() override;
     virtual void dispose() override;
 };
 

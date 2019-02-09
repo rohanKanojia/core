@@ -21,10 +21,8 @@
 #include "chinese_translationdialog.hxx"
 #include "chinese_dictionarydialog.hxx"
 #include <com/sun/star/i18n/TextConversionOption.hpp>
-#include <vcl/msgbox.hxx>
 #include <unotools/lingucfg.hxx>
 #include <unotools/linguprops.hxx>
-#include "helpid.hrc"
 
 
 namespace textconversiondlgs
@@ -89,7 +87,7 @@ void ChineseTranslationDialog::getSettings( bool& rbDirectionToSimplified
     rbTranslateCommonTerms = m_pCB_Translate_Commonterms->IsChecked();
 }
 
-IMPL_LINK_NOARG_TYPED(ChineseTranslationDialog, OkHdl, Button*, void)
+IMPL_LINK_NOARG(ChineseTranslationDialog, OkHdl, Button*, void)
 {
     //save settings to configuration
     SvtLinguConfig  aLngCfg;
@@ -102,7 +100,7 @@ IMPL_LINK_NOARG_TYPED(ChineseTranslationDialog, OkHdl, Button*, void)
     EndDialog( RET_OK );
 }
 
-IMPL_LINK_NOARG_TYPED(ChineseTranslationDialog, DictionaryHdl, Button*, void)
+IMPL_LINK_NOARG(ChineseTranslationDialog, DictionaryHdl, Button*, void)
 {
     if( !m_pDictionaryDialog )
     {

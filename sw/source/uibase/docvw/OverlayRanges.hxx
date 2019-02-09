@@ -31,28 +31,19 @@ namespace sw
 {
     namespace overlay
     {
-        class OverlayRanges : public sdr::overlay::OverlayObject
+        class OverlayRanges final : public sdr::overlay::OverlayObject
         {
-        protected:
-            // geometry of overlay
-            std::vector< basegfx::B2DRange > maRanges;
-
-            bool mbShowSolidBorder;
-
-            // geometry creation for OverlayObject
-            virtual drawinglayer::primitive2d::Primitive2DContainer createOverlayObjectPrimitive2DSequence() override;
-
         public:
-            static OverlayRanges* CreateOverlayRange(
-                SwView& rDocView,
+            static std::unique_ptr<OverlayRanges> CreateOverlayRange(
+                SwView const & rDocView,
                 const Color& rColor,
                 const std::vector< basegfx::B2DRange >& rRanges,
                 const bool bShowSolidBorder );
 
-            virtual ~OverlayRanges();
+            virtual ~OverlayRanges() override;
 
             // data read access
-            inline const std::vector< basegfx::B2DRange >& getRanges() const
+            const std::vector< basegfx::B2DRange >& getRanges() const
             {
                 return maRanges;
             }
@@ -69,6 +60,12 @@ namespace sw
                 const std::vector< basegfx::B2DRange >& rRanges,
                 const bool bShowSolidBorder );
 
+            // geometry creation for OverlayObject
+            virtual drawinglayer::primitive2d::Primitive2DContainer createOverlayObjectPrimitive2DSequence() override;
+
+            // geometry of overlay
+            std::vector< basegfx::B2DRange > maRanges;
+            bool mbShowSolidBorder;
         };
     } // end of namespace overlay
 } // end of namespace sw

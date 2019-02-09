@@ -21,21 +21,24 @@
 #define INCLUDED_OOX_DUMP_DFFDUMPER_HXX
 
 #include <oox/dump/dumperbase.hxx>
+#include <sal/types.h>
 
 #if OOX_INCLUDE_DUMPER
+
+namespace oox { class BinaryInputStream; }
 
 namespace oox {
 namespace dump {
 
 
-class DffStreamObject : public SequenceRecordObjectBase
+class DffStreamObject final : public SequenceRecordObjectBase
 {
 public:
     sal_uInt16   getVer() const { return mnInstVer & 0x000F; }
     sal_uInt16   getInst() const { return (mnInstVer & 0xFFF0) >> 4; }
     bool         isContainer() const { return getVer() == 15; }
 
-protected:
+private:
                         DffStreamObject() {}
 
     using               SequenceRecordObjectBase::construct;
@@ -44,15 +47,11 @@ protected:
     virtual void        implWriteExtHeader() override;
     virtual void        implDumpRecordBody() override;
 
-private:
     sal_uInt32          dumpDffSimpleColor( const String& rName );
 
     void                dumpDffOpt();
     sal_uInt16          dumpDffOptPropHeader();
 
-private:
-    ItemFormatMap       maSimpleProps;
-    ItemFormatMap       maComplexProps;
     sal_uInt16          mnInstVer;
     sal_Int32           mnRealSize;
 };

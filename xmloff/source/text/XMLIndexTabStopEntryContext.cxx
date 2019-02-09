@@ -31,7 +31,7 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmluconv.hxx>
 #include <rtl/ustring.hxx>
-#include <tools/debug.hxx>
+#include <sal/log.hxx>
 
 using namespace ::xmloff::token;
 
@@ -46,7 +46,7 @@ XMLIndexTabStopEntryContext::XMLIndexTabStopEntryContext(
     XMLIndexTemplateContext& rTemplate,
     sal_uInt16 nPrfx,
     const OUString& rLocalName ) :
-        XMLIndexSimpleEntryContext(rImport, rTemplate.sTokenTabStop,
+        XMLIndexSimpleEntryContext(rImport, "TokenTabStop",
                                    rTemplate, nPrfx, rLocalName),
         sLeaderChar(),
         nTabPosition(0),
@@ -128,15 +128,14 @@ void XMLIndexTabStopEntryContext::FillPropertyValues(
     PropertyValue* pValues = rValues.getArray();
 
     // right aligned?
-    pValues[nNextEntry].Name = rTemplateContext.sTabStopRightAligned;
-    pValues[nNextEntry].Value.setValue( &bTabRightAligned,
-                                        cppu::UnoType<bool>::get());
+    pValues[nNextEntry].Name = "TabStopRightAligned";
+    pValues[nNextEntry].Value <<= bTabRightAligned;
     nNextEntry++;
 
     // position
     if (bTabPositionOK)
     {
-        pValues[nNextEntry].Name = rTemplateContext.sTabStopPosition;
+        pValues[nNextEntry].Name = "TabStopPosition";
         pValues[nNextEntry].Value <<= nTabPosition;
         nNextEntry++;
     }
@@ -144,20 +143,19 @@ void XMLIndexTabStopEntryContext::FillPropertyValues(
     // leader char
     if (bLeaderCharOK)
     {
-        pValues[nNextEntry].Name = rTemplateContext.sTabStopFillCharacter;
+        pValues[nNextEntry].Name = "TabStopFillCharacter";
         pValues[nNextEntry].Value <<= sLeaderChar;
         nNextEntry++;
     }
 
     // tab character #i21237#
      pValues[nNextEntry].Name = "WithTab";
-    pValues[nNextEntry].Value.setValue( &bWithTab,
-                                        cppu::UnoType<bool>::get());
+    pValues[nNextEntry].Value <<= bWithTab;
     nNextEntry++;
 
     // check whether we really filled all elements of the sequence
-    DBG_ASSERT( nNextEntry == rValues.getLength(),
-                "length incorrectly precumputed!" );
+    SAL_WARN_IF( nNextEntry != rValues.getLength(), "xmloff",
+                "length incorrectly precomputed!" );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -17,16 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <config_features.h>
-
 #include <rtl/ustring.hxx>
 #include <osl/module.hxx>
 #include <vcl/abstdlg.hxx>
+#include <vcl/bitmapex.hxx>
 
-typedef VclAbstractDialogFactory* (SAL_CALL *FuncPtrCreateDialogFactory)();
+typedef VclAbstractDialogFactory* (*FuncPtrCreateDialogFactory)();
 
 #ifndef DISABLE_DYNLOADING
-extern "C" { static void SAL_CALL thisModule() {} }
+extern "C" { static void thisModule() {} }
 #else
 extern "C" VclAbstractDialogFactory* CreateDialogFactory();
 #endif
@@ -34,7 +33,6 @@ extern "C" VclAbstractDialogFactory* CreateDialogFactory();
 VclAbstractDialogFactory* VclAbstractDialogFactory::Create()
 {
     FuncPtrCreateDialogFactory fp = nullptr;
-#if HAVE_FEATURE_DESKTOP
 #ifndef DISABLE_DYNLOADING
     static ::osl::Module aDialogLibrary;
     if (aDialogLibrary.is() ||
@@ -47,7 +45,6 @@ VclAbstractDialogFactory* VclAbstractDialogFactory::Create()
 #else
     fp = CreateDialogFactory;
 #endif
-#endif
     if ( fp )
         return fp();
     return nullptr;
@@ -57,9 +54,28 @@ VclAbstractDialog::~VclAbstractDialog()
 {
 }
 
-// virtual
-VclAbstractDialog2::~VclAbstractDialog2()
+bool VclAbstractDialog::StartExecuteAsync(AsyncContext &)
 {
+    assert(false);
+    return false;
+}
+
+std::vector<OString> VclAbstractDialog::getAllPageUIXMLDescriptions() const
+{
+    // default has no pages
+    return std::vector<OString>();
+}
+
+bool VclAbstractDialog::selectPageByUIXMLDescription(const OString& /*rUIXMLDescription*/)
+{
+    // default cannot select a page (which is okay, return true)
+    return true;
+}
+
+BitmapEx VclAbstractDialog::createScreenshot() const
+{
+    // default returns empty bitmap
+    return BitmapEx();
 }
 
 VclAbstractDialogFactory::~VclAbstractDialogFactory()

@@ -20,8 +20,6 @@
 #ifndef INCLUDED_FRAMEWORK_INC_SERVICES_URIABBREVIATION_HXX
 #define INCLUDED_FRAMEWORK_INC_SERVICES_URIABBREVIATION_HXX
 
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
 #include <macros/xserviceinfo.hxx>
 #include <general.h>
 
@@ -39,16 +37,20 @@ class UriAbbreviation:    public ::cppu::WeakImplHelper< css::util::XStringAbbre
 public:
     explicit UriAbbreviation(css::uno::Reference< css::uno::XComponentContext > const & context);
 
-    DECLARE_XSERVICEINFO
+    DECLARE_XSERVICEINFO_NOFACTORY
+    /* Helper for registry */
+    /// @throws css::uno::Exception
+    static css::uno::Reference< css::uno::XInterface >             SAL_CALL impl_createInstance                ( const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
+    static css::uno::Reference< css::lang::XSingleServiceFactory > impl_createFactory                 ( const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
 
     // css::util::XStringAbbreviation:
-    virtual OUString SAL_CALL abbreviateString(const css::uno::Reference< css::util::XStringWidth > & xStringWidth, ::sal_Int32 nWidth, const OUString & aString) throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL abbreviateString(const css::uno::Reference< css::util::XStringWidth > & xStringWidth, ::sal_Int32 nWidth, const OUString & aString) override;
 
 private:
-    UriAbbreviation(UriAbbreviation &) = delete;
-    void operator =(UriAbbreviation &) = delete;
+    UriAbbreviation(UriAbbreviation const &) = delete;
+    UriAbbreviation& operator =(UriAbbreviation const &) = delete;
 
-    virtual ~UriAbbreviation() {}
+    virtual ~UriAbbreviation() override {}
 };
 
 } //    namespace framework

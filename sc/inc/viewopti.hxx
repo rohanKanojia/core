@@ -22,7 +22,6 @@
 
 #include <svx/optgrid.hxx>
 
-#include <svx/svxids.hrc>
 #include "scdllapi.h"
 #include "optutil.hxx"
 #include "global.hxx"
@@ -55,8 +54,8 @@ enum ScVObjType
     VOBJ_TYPE_DRAW
 };
 
-#define MAX_OPT             (sal_uInt16)VOPT_CLIPMARKS+1
-#define MAX_TYPE            (sal_uInt16)VOBJ_TYPE_DRAW+1
+#define MAX_OPT             sal_uInt16(VOPT_CLIPMARKS)+1
+#define MAX_TYPE            sal_uInt16(VOBJ_TYPE_DRAW)+1
 
 #define SC_STD_GRIDCOLOR    COL_LIGHTGRAY
 
@@ -69,7 +68,6 @@ public:
                 ScGridOptions( const SvxOptionsGrid& rOpt ) : SvxOptionsGrid( rOpt ) {}
 
     void                    SetDefaults();
-    const ScGridOptions&    operator=  ( const ScGridOptions& rCpy );
     bool                    operator== ( const ScGridOptions& rOpt ) const;
     bool                    operator!= ( const ScGridOptions& rOpt ) const { return !(operator==(rOpt)); }
 };
@@ -85,20 +83,20 @@ public:
 
     void                    SetDefaults();
 
-    void                    SetOption( ScViewOption eOpt, bool bNew = true )    { aOptArr[eOpt] = bNew; }
-    bool                    GetOption( ScViewOption eOpt ) const                { return aOptArr[eOpt]; }
+    void                    SetOption( ScViewOption eOpt, bool bNew )    { aOptArr[eOpt] = bNew; }
+    bool                    GetOption( ScViewOption eOpt ) const         { return aOptArr[eOpt]; }
 
     void                    SetObjMode( ScVObjType eObj, ScVObjMode eMode ) { aModeArr[eObj] = eMode; }
     ScVObjMode              GetObjMode( ScVObjType eObj ) const             { return aModeArr[eObj]; }
 
     void                    SetGridColor( const Color& rCol, const OUString& rName ) { aGridCol = rCol; aGridColName = rName;}
-    Color                   GetGridColor( OUString* pStrName = nullptr ) const;
+    Color const &           GetGridColor( OUString* pStrName = nullptr ) const;
 
     const ScGridOptions&    GetGridOptions() const                      { return aGridOpt; }
     void                    SetGridOptions( const ScGridOptions& rNew ) { aGridOpt = rNew; }
-    SvxGridItem*            CreateGridItem() const;
+    std::unique_ptr<SvxGridItem> CreateGridItem() const;
 
-    const ScViewOptions&    operator=  ( const ScViewOptions& rCpy );
+    ScViewOptions&          operator=  ( const ScViewOptions& rCpy );
     bool                    operator== ( const ScViewOptions& rOpt ) const;
     bool                    operator!= ( const ScViewOptions& rOpt ) const { return !(operator==(rOpt)); }
 
@@ -110,15 +108,18 @@ private:
     ScGridOptions   aGridOpt;
 };
 
-// Item for the options dialoge - View
+// Item for the options dialog - View
 
 class SC_DLLPUBLIC ScTpViewItem : public SfxPoolItem
 {
 public:
-                static SfxPoolItem* CreateDefault();
-                ScTpViewItem( sal_uInt16 nWhich, const ScViewOptions& rOpt );
-                ScTpViewItem( const ScTpViewItem&  rItem );
-                virtual ~ScTpViewItem();
+                ScTpViewItem( const ScViewOptions& rOpt );
+                virtual ~ScTpViewItem() override;
+
+    ScTpViewItem(ScTpViewItem const &) = default;
+    ScTpViewItem(ScTpViewItem &&) = default;
+    ScTpViewItem & operator =(ScTpViewItem const &) = delete; // due to SfxPoolItem
+    ScTpViewItem & operator =(ScTpViewItem &&) = delete; // due to SfxPoolItem
 
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
@@ -126,7 +127,7 @@ public:
     const ScViewOptions&    GetViewOptions() const { return theOptions; }
 
 private:
-    ScViewOptions   theOptions;
+    ScViewOptions const   theOptions;
 };
 
 // CfgItem for View options
@@ -137,9 +138,9 @@ class ScViewCfg : public ScViewOptions
     ScLinkConfigItem    aDisplayItem;
     ScLinkConfigItem    aGridItem;
 
-    DECL_LINK_TYPED( LayoutCommitHdl, ScLinkConfigItem&, void );
-    DECL_LINK_TYPED( DisplayCommitHdl, ScLinkConfigItem&, void );
-    DECL_LINK_TYPED( GridCommitHdl, ScLinkConfigItem&, void );
+    DECL_LINK( LayoutCommitHdl, ScLinkConfigItem&, void );
+    DECL_LINK( DisplayCommitHdl, ScLinkConfigItem&, void );
+    DECL_LINK( GridCommitHdl, ScLinkConfigItem&, void );
 
     static css::uno::Sequence<OUString> GetLayoutPropertyNames();
     static css::uno::Sequence<OUString> GetDisplayPropertyNames();

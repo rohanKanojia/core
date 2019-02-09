@@ -20,6 +20,7 @@
 #include <unotools/pathoptions.hxx>
 #include <svl/languageoptions.hxx>
 #include <unotools/ucbstreamhelper.hxx>
+#include <unotools/resmgr.hxx>
 #include <tools/urlobj.hxx>
 #include <vcl/virdev.hxx>
 #include <vcl/status.hxx>
@@ -40,91 +41,84 @@
 #include <svx/svxerr.hxx>
 
 #include <svx/xmlsecctrl.hxx>
+#include <svtools/colorcfg.hxx>
 
-#include "sderror.hxx"
-#include "sdmod.hxx"
-#include "sdresid.hxx"
-#include "optsitem.hxx"
-#include "DrawDocShell.hxx"
-#include "drawdoc.hxx"
-#include "app.hrc"
-#include "glob.hrc"
-#include "strings.hrc"
-#include "res_bmp.hrc"
-#include "cfgids.hxx"
-#include "tools/SdGlobalResourceContainer.hxx"
+#include <sderror.hxx>
+#include <sdmod.hxx>
+#include <sdresid.hxx>
+#include <optsitem.hxx>
+#include <DrawDocShell.hxx>
+#include <drawdoc.hxx>
+#include <app.hrc>
+#include <strings.hrc>
+#include <errhdl.hrc>
 
-
-#define SdModule
-#include "sdslots.hxx"
+#define ShellClass_SdModule
+#include <sdslots.hxx>
 
 SFX_IMPL_INTERFACE(SdModule, SfxModule)
 
 void SdModule::InitInterface_Impl()
 {
-    GetStaticInterface()->RegisterStatusBar(RID_DRAW_STATUSBAR);
+    GetStaticInterface()->RegisterStatusBar(StatusBarId::DrawStatusBar);
 }
 
 // Ctor
 SdModule::SdModule(SfxObjectFactory* pFact1, SfxObjectFactory* pFact2 )
-:   SfxModule( ResMgr::CreateResMgr("sd"), false,
-                  pFact1, pFact2, nullptr ),
+:   SfxModule("sd", {pFact1, pFact2}),
     pTransferClip(nullptr),
     pTransferDrag(nullptr),
     pTransferSelection(nullptr),
     pImpressOptions(nullptr),
     pDrawOptions(nullptr),
-    pSearchItem(nullptr),
-    pNumberFormatter( nullptr ),
     bWaterCan(false),
-    mpResourceContainer(new ::sd::SdGlobalResourceContainer()),
-    mbEventListenerAdded(false)
+    mbEventListenerAdded(false),
+    mpColorConfig(new svtools::ColorConfig)
 {
     SetName( "StarDraw" );  // Do not translate!
-    pSearchItem = new SvxSearchItem(SID_SEARCH_ITEM);
+    pSearchItem.reset( new SvxSearchItem(SID_SEARCH_ITEM) );
     pSearchItem->SetAppFlag(SvxSearchApp::DRAW);
     StartListening( *SfxGetpApp() );
     SvxErrorHandler::ensure();
-    mpErrorHdl = new SfxErrorHandler( RID_SD_ERRHDL,
-                                         ERRCODE_AREA_SD,
-                                         ERRCODE_AREA_SD_END,
-                                         GetResMgr() );
+    mpErrorHdl.reset( new SfxErrorHandler(RID_SD_ERRHDL, ErrCodeArea::Sd, ErrCodeArea::Sd, GetResLocale()) );
 
     // Create a new ref device and (by calling SetReferenceDevice())
     // set its resolution to 600 DPI.  This leads to a visually better
     // formatting of text in small sizes (6 point and below.)
     mpVirtualRefDevice.reset(VclPtr<VirtualDevice>::Create());
-    mpVirtualRefDevice->SetMapMode( MAP_100TH_MM );
-    mpVirtualRefDevice->SetReferenceDevice ( VirtualDevice::REFDEV_MODE06 );
+    mpVirtualRefDevice->SetMapMode(MapMode(MapUnit::Map100thMM));
+    mpVirtualRefDevice->SetReferenceDevice ( VirtualDevice::RefDevMode::Dpi600 );
+}
+
+OUString SdResId(const char* pId)
+{
+    return Translate::get(pId, SD_MOD()->GetResLocale());
 }
 
 // Dtor
 SdModule::~SdModule()
 {
-    delete pSearchItem;
-    delete pNumberFormatter;
+    pSearchItem.reset();
+    pNumberFormatter.reset();
 
     if (mbEventListenerAdded)
     {
         Application::RemoveEventListener( LINK( this, SdModule, EventListenerHdl ) );
     }
 
-    mpResourceContainer.reset();
-
-    // Mark the module in the global AppData structure as deleted.
-    SdModule** ppShellPointer = reinterpret_cast<SdModule**>(GetAppData(SHL_DRAW));
-    if (ppShellPointer != nullptr)
-        (*ppShellPointer) = nullptr;
-
-    delete mpErrorHdl;
+    mpErrorHdl.reset();
     mpVirtualRefDevice.disposeAndClear();
+}
+
+void SdModule::SetSearchItem(std::unique_ptr<SvxSearchItem> pItem)
+{
+    pSearchItem = std::move(pItem);
 }
 
 /// get notifications
 void SdModule::Notify( SfxBroadcaster&, const SfxHint& rHint )
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if( pSimpleHint && pSimpleHint->GetId() == SFX_HINT_DEINITIALIZING )
+    if( rHint.GetId() == SfxHintId::Deinitializing )
     {
         delete pImpressOptions;
         pImpressOptions = nullptr;
@@ -138,17 +132,17 @@ SdOptions* SdModule::GetSdOptions(DocumentType eDocType)
 {
     SdOptions* pOptions = nullptr;
 
-    if (eDocType == DOCUMENT_TYPE_DRAW)
+    if (eDocType == DocumentType::Draw)
     {
         if (!pDrawOptions)
-            pDrawOptions = new SdOptions( SDCFG_DRAW );
+            pDrawOptions = new SdOptions(false);
 
         pOptions = pDrawOptions;
     }
-    else if (eDocType == DOCUMENT_TYPE_IMPRESS)
+    else if (eDocType == DocumentType::Impress)
     {
         if (!pImpressOptions)
-            pImpressOptions = new SdOptions( SDCFG_IMPRESS );
+            pImpressOptions = new SdOptions(true);
 
         pOptions = pImpressOptions;
     }
@@ -183,21 +177,21 @@ tools::SvRef<SotStorageStream> SdModule::GetOptionStream( const OUString& rOptio
     {
         DocumentType    eType = pDocSh->GetDoc()->GetDocumentType();
 
-        if( !xOptionStorage.Is() )
+        if( !xOptionStorage.is() )
         {
             INetURLObject aURL( SvtPathOptions().GetUserConfigPath() );
 
             aURL.Append( "drawing.cfg" );
 
-            SvStream* pStm = ::utl::UcbStreamHelper::CreateStream( aURL.GetMainURL( INetURLObject::NO_DECODE ), STREAM_READWRITE );
+            std::unique_ptr<SvStream> pStm = ::utl::UcbStreamHelper::CreateStream( aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), StreamMode::READWRITE );
 
             if( pStm )
-                xOptionStorage = new SotStorage( pStm, true );
+                xOptionStorage = new SotStorage( pStm.release(), true );
         }
 
         OUString        aStmName;
 
-        if( DOCUMENT_TYPE_DRAW == eType )
+        if( DocumentType::Draw == eType )
             aStmName = "Draw_";
         else
             aStmName = "Impress_";
@@ -214,17 +208,14 @@ tools::SvRef<SotStorageStream> SdModule::GetOptionStream( const OUString& rOptio
 SvNumberFormatter* SdModule::GetNumberFormatter()
 {
     if( !pNumberFormatter )
-        pNumberFormatter = new SvNumberFormatter( ::comphelper::getProcessComponentContext(), LANGUAGE_SYSTEM );
+        pNumberFormatter.reset( new SvNumberFormatter( ::comphelper::getProcessComponentContext(), LANGUAGE_SYSTEM ) );
 
-    return pNumberFormatter;
+    return pNumberFormatter.get();
 }
 
-/** This method is deprecated and only an alias to
- *   <member>GetVirtualRefDevice()</member>.  The given argument is ignored.
- */
-OutputDevice* SdModule::GetRefDevice (::sd::DrawDocShell& )
+svtools::ColorConfig& SdModule::GetColorConfig()
 {
-    return GetVirtualRefDevice();
+    return *mpColorConfig;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

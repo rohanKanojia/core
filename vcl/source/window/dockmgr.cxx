@@ -18,7 +18,8 @@
  */
 
 #include <tools/time.hxx>
-#include <tools/rc.h>
+#include <sal/log.hxx>
+#include <o3tl/deleter.hxx>
 
 #include <brdwin.hxx>
 #include <svdata.hxx>
@@ -33,38 +34,35 @@
 #include <vcl/timer.hxx>
 #include <vcl/idle.hxx>
 #include <vcl/lineinfo.hxx>
-#include <vcl/unowrap.hxx>
+#include <vcl/toolkit/unowrap.hxx>
 #include <vcl/settings.hxx>
 
-#define DOCKWIN_FLOATSTYLES         (WB_SIZEABLE | WB_MOVEABLE | WB_CLOSEABLE | WB_STANDALONE | WB_PINABLE | WB_ROLLABLE )
+#define DOCKWIN_FLOATSTYLES         (WB_SIZEABLE | WB_MOVEABLE | WB_CLOSEABLE | WB_STANDALONE | WB_ROLLABLE )
 
 class ImplDockFloatWin2 : public FloatingWindow
 {
 private:
     ImplDockingWindowWrapper*  mpDockWin;
-    sal_uInt64      mnLastTicks;
-    Idle            maDockIdle;
-    Idle            maEndDockIdle;
+    sal_uInt64 const mnLastTicks;
+    Timer           m_aDockTimer;
+    Timer           m_aEndDockTimer;
     Point           maDockPos;
-    Rectangle       maDockRect;
+    tools::Rectangle       maDockRect;
     bool            mbInMove;
     ImplSVEvent *   mnLastUserEvent;
 
-    DECL_LINK_TYPED(DockingHdl, void *, void);
-    DECL_LINK_TYPED(DockTimerHdl, Idle *, void);
-    DECL_LINK_TYPED(EndDockTimerHdl, Idle *, void);
+    DECL_LINK(DockingHdl, void *, void);
+    DECL_LINK(DockTimerHdl, Timer *, void);
+    DECL_LINK(EndDockTimerHdl, Timer *, void);
 public:
     ImplDockFloatWin2( vcl::Window* pParent, WinBits nWinBits,
                       ImplDockingWindowWrapper* pDockingWin );
-    virtual ~ImplDockFloatWin2();
+    virtual ~ImplDockFloatWin2() override;
     virtual void dispose() override;
 
     virtual void    Move() override;
     virtual void    Resize() override;
     virtual void    TitleButtonClick( TitleButton nButton ) override;
-    virtual void    Pin() override;
-    virtual void    Roll() override;
-    virtual void    PopupModeEnd() override;
     virtual void    Resizing( Size& rSize ) override;
     virtual bool    Close() override;
 };
@@ -90,10 +88,15 @@ ImplDockFloatWin2::ImplDockFloatWin2( vcl::Window* pParent, WinBits nWinBits,
 
     SetBackground( GetSettings().GetStyleSettings().GetFaceColor() );
 
-    maDockIdle.SetIdleHdl( LINK( this, ImplDockFloatWin2, DockTimerHdl ) );
-    maDockIdle.SetPriority( SchedulerPriority::MEDIUM );
-    maEndDockIdle.SetIdleHdl( LINK( this, ImplDockFloatWin2, EndDockTimerHdl ) );
-    maEndDockIdle.SetPriority( SchedulerPriority::MEDIUM );
+    m_aDockTimer.SetInvokeHandler( LINK( this, ImplDockFloatWin2, DockTimerHdl ) );
+    m_aDockTimer.SetPriority( TaskPriority::HIGH_IDLE );
+    m_aDockTimer.SetTimeout( 50 );
+    m_aDockTimer.SetDebugName( "vcl::ImplDockFloatWin2 m_aDockTimer" );
+
+    m_aEndDockTimer.SetInvokeHandler( LINK( this, ImplDockFloatWin2, EndDockTimerHdl ) );
+    m_aEndDockTimer.SetPriority( TaskPriority::HIGH_IDLE );
+    m_aEndDockTimer.SetTimeout( 50 );
+    m_aEndDockTimer.SetDebugName( "vcl::ImplDockFloatWin2 m_aEndDockTimer" );
 }
 
 ImplDockFloatWin2::~ImplDockFloatWin2()
@@ -108,11 +111,10 @@ void ImplDockFloatWin2::dispose()
     FloatingWindow::dispose();
 }
 
-IMPL_LINK_NOARG_TYPED(ImplDockFloatWin2, DockTimerHdl, Idle *, void)
+IMPL_LINK_NOARG(ImplDockFloatWin2, DockTimerHdl, Timer *, void)
 {
-    DBG_ASSERT( mpDockWin->IsFloatingMode(), "docktimer called but not floating" );
+    SAL_WARN_IF( !mpDockWin->IsFloatingMode(), "vcl", "docktimer called but not floating" );
 
-    maDockIdle.Stop();
     PointerState aState = GetPointerState();
 
     if( aState.mnState & KEY_MOD1 )
@@ -120,7 +122,7 @@ IMPL_LINK_NOARG_TYPED(ImplDockFloatWin2, DockTimerHdl, Idle *, void)
         // i43499 CTRL disables docking now
         mpDockWin->GetWindow()->GetParent()->ImplGetFrameWindow()->HideTracking();
         if( aState.mnState & ( MOUSE_LEFT | MOUSE_MIDDLE | MOUSE_RIGHT ) )
-            maDockIdle.Start();
+            m_aDockTimer.Start();
     }
     else if( ! ( aState.mnState & ( MOUSE_LEFT | MOUSE_MIDDLE | MOUSE_RIGHT ) ) )
     {
@@ -129,16 +131,15 @@ IMPL_LINK_NOARG_TYPED(ImplDockFloatWin2, DockTimerHdl, Idle *, void)
     }
     else
     {
-        mpDockWin->GetWindow()->GetParent()->ImplGetFrameWindow()->ShowTracking( maDockRect, SHOWTRACK_BIG | SHOWTRACK_WINDOW );
-        maDockIdle.Start();
+        mpDockWin->GetWindow()->GetParent()->ImplGetFrameWindow()->ShowTracking( maDockRect, ShowTrackFlags::Big | ShowTrackFlags::TrackWindow );
+        m_aDockTimer.Start();
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ImplDockFloatWin2, EndDockTimerHdl, Idle *, void)
+IMPL_LINK_NOARG(ImplDockFloatWin2, EndDockTimerHdl, Timer *, void)
 {
-    DBG_ASSERT( mpDockWin->IsFloatingMode(), "enddocktimer called but not floating" );
+    SAL_WARN_IF( !mpDockWin->IsFloatingMode(), "vcl", "enddocktimer called but not floating" );
 
-    maEndDockIdle.Stop();
     PointerState aState = GetPointerState();
     if( ! ( aState.mnState & ( MOUSE_LEFT | MOUSE_MIDDLE | MOUSE_RIGHT ) ) )
     {
@@ -146,12 +147,10 @@ IMPL_LINK_NOARG_TYPED(ImplDockFloatWin2, EndDockTimerHdl, Idle *, void)
         mpDockWin->EndDocking( maDockRect, true );
     }
     else
-    {
-        maEndDockIdle.Start();
-    }
+        m_aEndDockTimer.Start();
 }
 
-IMPL_LINK_NOARG_TYPED(ImplDockFloatWin2, DockingHdl, void*, void)
+IMPL_LINK_NOARG(ImplDockFloatWin2, DockingHdl, void*, void)
 {
     // called during move of a floating window
     mnLastUserEvent = nullptr;
@@ -169,32 +168,27 @@ IMPL_LINK_NOARG_TYPED(ImplDockFloatWin2, DockingHdl, void*, void)
         vcl::Window *pBorder = GetWindow( GetWindowType::Border );
         if( pBorder != this )
         {
-            Point aPt;
-            Rectangle aBorderRect( aPt, pBorder->GetSizePixel() );
+            tools::Rectangle aBorderRect( Point(), pBorder->GetSizePixel() );
             sal_Int32 nLeft, nTop, nRight, nBottom;
             GetBorder( nLeft, nTop, nRight, nBottom );
             // limit borderrect to the caption part only and without the resizing borders
-            aBorderRect.Bottom() = aBorderRect.Top() + nTop;
-            aBorderRect.Left() += nLeft;
-            aBorderRect.Right() -= nRight;
+            aBorderRect.SetBottom( aBorderRect.Top() + nTop );
+            aBorderRect.AdjustLeft(nLeft );
+            aBorderRect.AdjustRight( -nRight );
 
             PointerState aBorderState = pBorder->GetPointerState();
-            if( aBorderRect.IsInside( aBorderState.maPos ) )
-                bRealMove = true;
-            else
-                bRealMove = false;
+            bRealMove = aBorderRect.IsInside( aBorderState.maPos );
         }
     }
 
-    if( mpDockWin->IsDockable() &&
-        mpDockWin->GetWindow()->IsVisible() &&
+    if( mpDockWin->GetWindow()->IsVisible() &&
         (tools::Time::GetSystemTicks() - mnLastTicks > 500) &&
         ( aState.mnState & ( MOUSE_LEFT | MOUSE_MIDDLE | MOUSE_RIGHT ) ) &&
         !(aState.mnState & KEY_MOD1) && // i43499 CTRL disables docking now
         bRealMove )
     {
-        maDockPos = Point( pDockingArea->OutputToScreenPixel( pDockingArea->AbsoluteScreenToOutputPixel( OutputToAbsoluteScreenPixel( Point() ) ) ) );
-        maDockRect = Rectangle( maDockPos, mpDockWin->GetSizePixel() );
+        maDockPos = pDockingArea->OutputToScreenPixel( pDockingArea->AbsoluteScreenToOutputPixel( OutputToAbsoluteScreenPixel( Point() ) ) );
+        maDockRect = tools::Rectangle( maDockPos, mpDockWin->GetSizePixel() );
 
         // mouse pos in screen pixels
         Point aMousePos = pDockingArea->OutputToScreenPixel( aState.maPos );
@@ -209,15 +203,15 @@ IMPL_LINK_NOARG_TYPED(ImplDockFloatWin2, DockingHdl, void*, void)
             // indicates that the window could be docked at maDockRect
             maDockRect.SetPos( mpDockWin->GetWindow()->GetParent()->ImplGetFrameWindow()->ScreenToOutputPixel(
                  maDockRect.TopLeft() ) );
-            mpDockWin->GetWindow()->GetParent()->ImplGetFrameWindow()->ShowTracking( maDockRect, SHOWTRACK_BIG | SHOWTRACK_WINDOW );
-            maEndDockIdle.Stop();
-            DockTimerHdl( nullptr );
+            mpDockWin->GetWindow()->GetParent()->ImplGetFrameWindow()->ShowTracking( maDockRect, ShowTrackFlags::Big | ShowTrackFlags::TrackWindow );
+            m_aEndDockTimer.Stop();
+            m_aDockTimer.Invoke();
         }
         else
         {
             mpDockWin->GetWindow()->GetParent()->ImplGetFrameWindow()->HideTracking();
-            maDockIdle.Stop();
-            EndDockTimerHdl( nullptr );
+            m_aDockTimer.Stop();
+            m_aEndDockTimer.Invoke();
         }
     }
     mbInMove = false;
@@ -262,21 +256,6 @@ void ImplDockFloatWin2::TitleButtonClick( TitleButton nButton )
     mpDockWin->TitleButtonClick( nButton );
 }
 
-void ImplDockFloatWin2::Pin()
-{
-    FloatingWindow::Pin();
-}
-
-void ImplDockFloatWin2::Roll()
-{
-    FloatingWindow::Roll();
-}
-
-void ImplDockFloatWin2::PopupModeEnd()
-{
-    FloatingWindow::PopupModeEnd();
-}
-
 void ImplDockFloatWin2::Resizing( Size& rSize )
 {
     FloatingWindow::Resizing( rSize );
@@ -294,25 +273,14 @@ DockingManager::DockingManager()
 
 DockingManager::~DockingManager()
 {
-    ::std::vector< ImplDockingWindowWrapper* >::iterator p;
-    p = mDockingWindows.begin();
-    for(; p != mDockingWindows.end(); ++p )
-    {
-        delete (*p);
-    }
-    mDockingWindows.clear();
 }
 
 ImplDockingWindowWrapper* DockingManager::GetDockingWindowWrapper( const vcl::Window *pWindow )
 {
-    ::std::vector< ImplDockingWindowWrapper* >::iterator p;
-    p = mDockingWindows.begin();
-    while( p != mDockingWindows.end() )
+    for( auto& xWrapper : mvDockingWindows )
     {
-        if( (*p)->mpDockingWindow == pWindow )
-            return (*p);
-        else
-            ++p;
+        if( xWrapper->mpDockingWindow == pWindow )
+            return xWrapper.get();
     }
     return nullptr;
 }
@@ -340,10 +308,7 @@ bool DockingManager::IsFloating( const vcl::Window *pWindow )
 bool DockingManager::IsLocked( const vcl::Window *pWindow )
 {
     ImplDockingWindowWrapper* pWrapper = GetDockingWindowWrapper( pWindow );
-    if( pWrapper && pWrapper->IsLocked() )
-        return true;
-    else
-        return false;
+    return pWrapper && pWrapper->IsLocked();
 }
 
 void DockingManager::Lock( const vcl::Window *pWindow )
@@ -367,6 +332,13 @@ void DockingManager::SetFloatingMode( const vcl::Window *pWindow, bool bFloating
         pWrapper->SetFloatingMode( bFloating );
 }
 
+void DockingManager::StartPopupMode( const vcl::Window *pWindow, const tools::Rectangle& rRect, FloatWinPopupFlags nFlags )
+{
+    ImplDockingWindowWrapper* pWrapper = GetDockingWindowWrapper( pWindow );
+    if( pWrapper )
+        pWrapper->StartPopupMode( rRect, nFlags );
+}
+
 void DockingManager::StartPopupMode( ToolBox *pParentToolBox, const vcl::Window *pWindow, FloatWinPopupFlags nFlags )
 {
     ImplDockingWindowWrapper* pWrapper = GetDockingWindowWrapper( pWindow );
@@ -377,7 +349,6 @@ void DockingManager::StartPopupMode( ToolBox *pParentToolBox, const vcl::Window 
 void DockingManager::StartPopupMode( ToolBox *pParentToolBox, const vcl::Window *pWindow )
 {
     StartPopupMode( pParentToolBox, pWindow, FloatWinPopupFlags::AllowTearOff         |
-                    FloatWinPopupFlags::NoFocusClose         |
                     FloatWinPopupFlags::AllMouseButtonClose  |
                     FloatWinPopupFlags::NoMouseUpClose );
 }
@@ -385,10 +356,7 @@ void DockingManager::StartPopupMode( ToolBox *pParentToolBox, const vcl::Window 
 bool DockingManager::IsInPopupMode( const vcl::Window *pWindow )
 {
     ImplDockingWindowWrapper* pWrapper = GetDockingWindowWrapper( pWindow );
-    if( pWrapper && pWrapper->IsInPopupMode() )
-        return true;
-    else
-        return false;
+    return pWrapper && pWrapper->IsInPopupMode();
 }
 
 void DockingManager::EndPopupMode( const vcl::Window *pWin )
@@ -403,30 +371,22 @@ void DockingManager::AddWindow( const vcl::Window *pWindow )
     ImplDockingWindowWrapper* pWrapper = GetDockingWindowWrapper( pWindow );
     if( pWrapper )
         return;
-    else
-        pWrapper = new ImplDockingWindowWrapper( pWindow );
-
-    mDockingWindows.push_back( pWrapper );
+    mvDockingWindows.emplace_back( new ImplDockingWindowWrapper( pWindow ) );
 }
 
 void DockingManager::RemoveWindow( const vcl::Window *pWindow )
 {
-    ::std::vector< ImplDockingWindowWrapper* >::iterator p;
-    p = mDockingWindows.begin();
-    while( p != mDockingWindows.end() )
+    for( auto it = mvDockingWindows.begin(); it != mvDockingWindows.end(); ++it )
     {
-        if( (*p)->mpDockingWindow == pWindow )
+        if( (*it)->mpDockingWindow == pWindow )
         {
-            delete (*p);
-            mDockingWindows.erase( p );
+            mvDockingWindows.erase( it );
             break;
         }
-        else
-            ++p;
     }
 }
 
-void DockingManager::SetPosSizePixel( vcl::Window *pWindow, long nX, long nY,
+void DockingManager::SetPosSizePixel( vcl::Window const *pWindow, long nX, long nY,
                                     long nWidth, long nHeight,
                                     PosSizeFlags nFlags )
 {
@@ -435,82 +395,37 @@ void DockingManager::SetPosSizePixel( vcl::Window *pWindow, long nX, long nY,
         pWrapper->setPosSizePixel( nX, nY, nWidth, nHeight, nFlags );
 }
 
-Rectangle DockingManager::GetPosSizePixel( const vcl::Window *pWindow )
+tools::Rectangle DockingManager::GetPosSizePixel( const vcl::Window *pWindow )
 {
-    Rectangle aRect;
+    tools::Rectangle aRect;
     ImplDockingWindowWrapper* pWrapper = GetDockingWindowWrapper( pWindow );
     if( pWrapper )
-        aRect = Rectangle( pWrapper->GetPosPixel(), pWrapper->GetSizePixel() );
+        aRect = tools::Rectangle( pWrapper->GetPosPixel(), pWrapper->GetSizePixel() );
 
     return aRect;
 }
 
-// special floating window for popup mode
-// main purpose: provides tear-off area for undocking
-
-// if TEAROFF_DASHED defined a single dashed line is used
-// otherwise multiple smaller lines will be painted
-//#define TEAROFF_DASHED
-
-// size of the drag area
-#ifdef TEAROFF_DASHED
-#define POPUP_DRAGBORDER    2
-#define POPUP_DRAGGRIP      5
-#else
-#define POPUP_DRAGBORDER    3
-#define POPUP_DRAGGRIP      5
-#endif
-#define POPUP_DRAGHEIGHT    (POPUP_DRAGGRIP+POPUP_DRAGBORDER+POPUP_DRAGBORDER)
-#define POPUP_DRAGWIDTH     20
-
 class ImplPopupFloatWin : public FloatingWindow
 {
 private:
-    ImplDockingWindowWrapper*   mpDockingWin;
-    bool                        mbHighlight;
-    bool                        mbMoving;
-    bool                        mbTrackingEnabled;
-    Point                       maDelta;
-    Point                       maTearOffPosition;
-    bool                        mbGripAtBottom;
-    bool                        mbHasGrip;
-    void                        ImplSetBorder();
+    bool const mbToolBox;
 
 public:
-    ImplPopupFloatWin( vcl::Window* pParent, ImplDockingWindowWrapper* pDockingWin, bool bHasGrip );
-    virtual ~ImplPopupFloatWin();
-    virtual void dispose() override;
-
+    ImplPopupFloatWin( vcl::Window* pParent, bool bToolBox );
+    virtual ~ImplPopupFloatWin() override;
     virtual css::uno::Reference< css::accessibility::XAccessible > CreateAccessible() override;
-    virtual void        Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
-    virtual void        MouseMove( const MouseEvent& rMEvt ) override;
-    virtual void        MouseButtonDown( const MouseEvent& rMEvt ) override;
-    virtual void        MouseButtonUp( const MouseEvent& rMEvt ) override;
-    virtual void        Tracking( const TrackingEvent& rTEvt ) override;
-    virtual void        Resize() override;
-
-    Rectangle           GetDragRect() const;
-    Point               GetToolboxPosition() const;
-    Point               GetTearOffPosition() const;
-    void                DrawGrip(vcl::RenderContext& rRenderContext);
-    void                DrawBorder(vcl::RenderContext& rRenderContext);
-
-    bool                hasGrip() const { return mbHasGrip; }
 };
 
-ImplPopupFloatWin::ImplPopupFloatWin( vcl::Window* pParent, ImplDockingWindowWrapper* pDockingWin, bool bHasGrip ) :
-    FloatingWindow( pParent, WB_NOBORDER | WB_SYSTEMWINDOW | WB_NOSHADOW)
+ImplPopupFloatWin::ImplPopupFloatWin( vcl::Window* pParent, bool bToolBox ) :
+    FloatingWindow( pParent, bToolBox ? WB_BORDER | WB_POPUP | WB_SYSTEMWINDOW | WB_NOSHADOW : WB_STDPOPUP ),
+    mbToolBox( bToolBox )
 {
-    mpWindowImpl->mbToolbarFloatingWindow = true;   // indicate window type, required for accessibility
-                                                    // which should not see this window as a toplevel window
-    mpDockingWin = pDockingWin;
-    mbHighlight = false;
-    mbMoving = false;
-    mbTrackingEnabled = false;
-    mbGripAtBottom = true;
-    mbHasGrip = bHasGrip;
-
-    ImplSetBorder();
+    if ( bToolBox )
+    {
+        // indicate window type, required for accessibility
+        // which should not see this window as a toplevel window
+        mpWindowImpl->mbToolbarFloatingWindow = true;
+    }
 }
 
 ImplPopupFloatWin::~ImplPopupFloatWin()
@@ -518,269 +433,18 @@ ImplPopupFloatWin::~ImplPopupFloatWin()
     disposeOnce();
 }
 
-void ImplPopupFloatWin::dispose()
-{
-    mpDockingWin = nullptr;
-    FloatingWindow::dispose();
-}
-
 css::uno::Reference< css::accessibility::XAccessible > ImplPopupFloatWin::CreateAccessible()
 {
-    // switch off direct accessibilty support for this window
+    if ( !mbToolBox )
+        return FloatingWindow::CreateAccessible();
+
+    // switch off direct accessibility support for this window
 
     // this is to avoid appearance of this window as standalone window in the accessibility hierarchy
     // as this window is only used as a helper for subtoolbars that are not teared-off, the parent toolbar
     // has to provide accessibility support (as implemented in the toolkit)
     // so the contained toolbar should appear as child of the corresponding toolbar item of the parent toolbar
     return css::uno::Reference< css::accessibility::XAccessible >();
-}
-
-void ImplPopupFloatWin::ImplSetBorder()
-{
-    // although we have no border in the sense of a borderwindow
-    //  we're using a special border for the grip
-    // by setting those members the method SetOutputSizePixel() can
-    //  be used to set the proper window size
-    mpWindowImpl->mnTopBorder     = 1;
-    if( hasGrip() )
-        mpWindowImpl->mnTopBorder += POPUP_DRAGHEIGHT+2;
-    mpWindowImpl->mnBottomBorder  = 1;
-    mpWindowImpl->mnLeftBorder    = 1;
-    mpWindowImpl->mnRightBorder   = 1;
-}
-
-void ImplPopupFloatWin::Resize()
-{
-    // the borderview overwrites the border during resize so restore it
-    ImplSetBorder();
-}
-
-Rectangle ImplPopupFloatWin::GetDragRect() const
-{
-    Rectangle aRect;
-    if( hasGrip() )
-    {
-        aRect = Rectangle( 1,1, GetOutputSizePixel().Width()-1, 2+POPUP_DRAGHEIGHT );
-        if( mbGripAtBottom )
-        {
-            int height = GetOutputSizePixel().Height();
-            aRect.Top() = height - 3 - POPUP_DRAGHEIGHT;
-            aRect.Bottom() = aRect.Top() + 1 + POPUP_DRAGHEIGHT;
-        }
-    }
-    return aRect;
-}
-
-Point ImplPopupFloatWin::GetToolboxPosition() const
-{
-    // return inner position where a toolbox could be placed
-    Point aPt( 1, 1 + ((mbGripAtBottom || !hasGrip()) ? 0 : GetDragRect().getHeight()) );    // grip + border
-
-    return aPt;
-}
-
-Point ImplPopupFloatWin::GetTearOffPosition() const
-{
-    Point aPt( maTearOffPosition );
-    //aPt += GetToolboxPosition();    // remove 'decoration'
-    return aPt;
-}
-
-void ImplPopupFloatWin::DrawBorder(vcl::RenderContext& rRenderContext)
-{
-    rRenderContext.SetFillColor();
-    Point aPt;
-    Rectangle aRect( aPt, GetOutputSizePixel() );
-
-    vcl::Region oldClipRgn( GetClipRegion( ) );
-    vcl::Region aClipRgn( aRect );
-    Rectangle aItemClipRect( ImplGetItemEdgeClipRect() );
-    if( !aItemClipRect.IsEmpty() )
-    {
-        aItemClipRect.SetPos( AbsoluteScreenToOutputPixel( aItemClipRect.TopLeft() ) );
-
-        // draw the excluded border part with the background color of a toolbox
-        rRenderContext.SetClipRegion( vcl::Region( aItemClipRect ) );
-        rRenderContext.SetLineColor( GetSettings().GetStyleSettings().GetFaceColor() );
-        rRenderContext.DrawRect( aRect );
-
-        aClipRgn.Exclude( aItemClipRect );
-        SetClipRegion( aClipRgn );
-    }
-    rRenderContext.SetLineColor( rRenderContext.GetSettings().GetStyleSettings().GetShadowColor() );
-    rRenderContext.DrawRect( aRect );
-    rRenderContext.SetClipRegion( oldClipRgn );
-}
-
-void ImplPopupFloatWin::DrawGrip(vcl::RenderContext& rRenderContext)
-{
-    bool bLinecolor     = rRenderContext.IsLineColor();
-    Color aLinecolor    = rRenderContext.GetLineColor();
-    bool bFillcolor     = rRenderContext.IsFillColor();
-    Color aFillcolor    = rRenderContext.GetFillColor();
-
-    // draw background
-    Rectangle aRect(GetDragRect());
-    aRect.Top() += POPUP_DRAGBORDER;
-    aRect.Bottom() -= POPUP_DRAGBORDER;
-    aRect.Left() += 3;
-    aRect.Right() -= 3;
-
-    if (mbHighlight)
-    {
-        rRenderContext.Erase(aRect);
-        vcl::RenderTools::DrawSelectionBackground(rRenderContext, *this, aRect, 2, false, true, false);
-    }
-    else
-    {
-        rRenderContext.SetFillColor(rRenderContext.GetSettings().GetStyleSettings().GetFaceColor());
-        rRenderContext.SetLineColor();
-        rRenderContext.DrawRect(aRect);
-    }
-
-    if (!ToolBox::AlwaysLocked())  // no grip if toolboxes are locked
-    {
-#ifdef TEAROFF_DASHED
-        // draw single dashed line
-        LineInfo aLineInfo(LINE_DASH);
-        aLineInfo.SetDistance(4);
-        aLineInfo.SetDashLen(12);
-        aLineInfo.SetDashCount(1);
-
-        aRect.Left() += 2;
-        aRect.Right()-= 2;
-
-        aRect.Top()   += 2;
-        aRect.Bottom() = aRect.Top();
-        rRenderContext.SetLineColor(rRenderContext.GetSettings().GetStyleSettings().GetDarkShadowColor());
-        rRenderContext.DrawLine(aRect.TopLeft(), aRect.TopRight(), aLineInfo);
-
-        if (!mbHighlight)
-        {
-            ++aRect.Top();
-            ++aRect.Bottom();
-            rRenderContext.SetLineColor(rRenderContext.GetSettings().GetStyleSettings().GetLightColor());
-            rRenderContext.DrawLine(aRect.TopLeft(), aRect.TopRight(), aLineInfo);
-        }
-
-#else
-        // draw several grip lines
-        rRenderContext.SetFillColor(rRenderContext.GetSettings().GetStyleSettings().GetShadowColor());
-        aRect.Top()++;
-        aRect.Bottom() = aRect.Top();
-
-        int width = POPUP_DRAGWIDTH;
-        while(width >= aRect.getWidth())
-        {
-            width -= 4;
-        }
-        if (width <= 0)
-            width = aRect.getWidth();
-        //aRect.nLeft = aRect.nLeft + (aRect.getWidth() - width) / 2;
-        aRect.Left() = (aRect.Left() + aRect.Right() - width) / 2;
-        aRect.Right() = aRect.Left() + width;
-
-        int i = 0;
-        while (i < POPUP_DRAGGRIP)
-        {
-            rRenderContext.DrawRect(aRect);
-            aRect.Top() += 2;
-            aRect.Bottom() += 2;
-            i += 2;
-        }
-#endif
-    }
-
-    if (bLinecolor)
-        rRenderContext.SetLineColor(aLinecolor);
-    else
-        rRenderContext.SetLineColor();
-    if (bFillcolor)
-        rRenderContext.SetFillColor(aFillcolor);
-    else
-        rRenderContext.SetFillColor();
-}
-
-void ImplPopupFloatWin::Paint(vcl::RenderContext& rRenderContext, const Rectangle&)
-{
-    Rectangle aRect(Point(), GetOutputSizePixel());
-    rRenderContext.DrawWallpaper(aRect, Wallpaper(rRenderContext.GetSettings().GetStyleSettings().GetFaceGradientColor()));
-    DrawBorder(rRenderContext);
-    if (hasGrip())
-        DrawGrip(rRenderContext);
-}
-
-void ImplPopupFloatWin::MouseMove( const MouseEvent& rMEvt )
-{
-    Point aMousePos = rMEvt.GetPosPixel();
-
-    if( !ToolBox::AlwaysLocked() )  // no tear off if locking is enabled
-    {
-        if( mbTrackingEnabled && rMEvt.IsLeft() && GetDragRect().IsInside( aMousePos ) )
-        {
-            // start window move
-            mbMoving = true;
-            StartTracking( StartTrackingFlags::NoKeyCancel );
-            return;
-        }
-        if( !mbHighlight && GetDragRect().IsInside( aMousePos ) )
-        {
-            mbHighlight = true;
-            Invalidate();
-        }
-        if (mbHighlight && ( rMEvt.IsLeaveWindow() || !GetDragRect().IsInside( aMousePos ) ) )
-        {
-            mbHighlight = false;
-            Invalidate();
-        }
-    }
-}
-
-void ImplPopupFloatWin::MouseButtonUp( const MouseEvent& rMEvt )
-{
-    mbTrackingEnabled = false;
-    FloatingWindow::MouseButtonUp( rMEvt );
-}
-
-void ImplPopupFloatWin::MouseButtonDown( const MouseEvent& rMEvt )
-{
-    Point aMousePos = rMEvt.GetPosPixel();
-    if( GetDragRect().IsInside( aMousePos ) )
-    {
-        // get mouse pos at a static window to have a fixed reference point
-        PointerState aState = GetParent()->GetPointerState();
-        if (HasMirroredGraphics() && IsRTLEnabled())
-            ImplMirrorFramePos(aState.maPos);
-        maTearOffPosition = GetWindow( GetWindowType::Border )->GetPosPixel();
-        maDelta = aState.maPos - maTearOffPosition;
-        mbTrackingEnabled = true;
-    }
-    else
-    {
-        mbTrackingEnabled = false;
-    }
-}
-
-void ImplPopupFloatWin::Tracking( const TrackingEvent& rTEvt )
-{
-    if( mbMoving )
-    {
-        if ( rTEvt.IsTrackingEnded() )
-        {
-            mbMoving = false;
-            EndPopupMode( FloatWinPopupEndFlags::TearOff );
-        }
-        else if ( !rTEvt.GetMouseEvent().IsSynthetic() )
-        {
-            // move the window according to mouse pos
-            PointerState aState = GetParent()->GetPointerState();
-            const OutputDevice *pOutDev = GetOutDev();
-            if (pOutDev->HasMirroredGraphics() && IsRTLEnabled())
-                ImplMirrorFramePos(aState.maPos);
-            maTearOffPosition = aState.maPos - maDelta;
-            GetWindow( GetWindowType::Border )->SetPosPixel( maTearOffPosition );
-        }
-    }
 }
 
 ImplDockingWindowWrapper::ImplDockingWindowWrapper( const vcl::Window *pWindow )
@@ -799,12 +463,8 @@ ImplDockingWindowWrapper::ImplDockingWindowWrapper( const vcl::Window *pWindow )
     , mnDockBottom(0)
     , mnFloatBits(WB_BORDER | WB_CLOSEABLE | WB_SIZEABLE | (pWindow->GetStyle() & DOCKWIN_FLOATSTYLES))
     , mbDockCanceled(false)
-    , mbFloatPrevented(false)
-    , mbDockable(true)
     , mbDocking(false)
     , mbLastFloatMode(false)
-    , mbStartFloat(false)
-    , mbPinned(false)
     , mbRollUp(false)
     , mbDockBtn(false)
     , mbHideBtn(false)
@@ -826,19 +486,15 @@ ImplDockingWindowWrapper::~ImplDockingWindowWrapper()
     }
 }
 
-bool ImplDockingWindowWrapper::ImplStartDocking( const Point& rPos )
+void ImplDockingWindowWrapper::ImplStartDocking( const Point& rPos )
 {
-    if ( !mbDockable )
-        return false;
-
     if( !mbStartDockingEnabled )
-        return false;
+        return;
 
     maMouseOff      = rPos;
     maMouseStart    = maMouseOff;
     mbDocking       = true;
     mbLastFloatMode = IsFloatingMode();
-    mbStartFloat    = mbLastFloatMode;
 
     // calculate FloatingBorder
     VclPtr<FloatingWindow> pWin;
@@ -859,8 +515,8 @@ bool ImplDockingWindowWrapper::ImplStartDocking( const Point& rPos )
 
     if ( mbLastFloatMode )
     {
-        maMouseOff.X()  += mnDockLeft;
-        maMouseOff.Y()  += mnDockTop;
+        maMouseOff.AdjustX(mnDockLeft );
+        maMouseOff.AdjustY(mnDockTop );
         mnTrackX        -= mnDockLeft;
         mnTrackY        -= mnDockTop;
         mnTrackWidth    += mnDockLeft+mnDockRight;
@@ -872,15 +528,14 @@ bool ImplDockingWindowWrapper::ImplStartDocking( const Point& rPos )
 
     // mouse pos in screen pixels
     Point aMousePos = pDockingArea->OutputToScreenPixel( aState.maPos );
-    Point aDockPos = Point( pDockingArea->AbsoluteScreenToOutputPixel( GetWindow()->OutputToAbsoluteScreenPixel( GetWindow()->GetPosPixel() ) ) );
-    Rectangle aDockRect( aDockPos, GetWindow()->GetSizePixel() );
+    Point aDockPos = pDockingArea->AbsoluteScreenToOutputPixel( GetWindow()->OutputToAbsoluteScreenPixel( GetWindow()->GetPosPixel() ) );
+    tools::Rectangle aDockRect( aDockPos, GetWindow()->GetSizePixel() );
     StartDocking( aMousePos, aDockRect );
 
     GetWindow()->ImplUpdateAll();
     GetWindow()->ImplGetFrameWindow()->ImplUpdateAll();
 
     GetWindow()->StartTracking( StartTrackingFlags::KeyMod );
-    return true;
 }
 
 void ImplDockingWindowWrapper::Tracking( const TrackingEvent& rTEvt )
@@ -895,11 +550,11 @@ void ImplDockingWindowWrapper::Tracking( const TrackingEvent& rTEvt )
             if ( rTEvt.IsTrackingCanceled() )
             {
                 mbDockCanceled = true;
-                EndDocking( Rectangle( Point( mnTrackX, mnTrackY ), Size( mnTrackWidth, mnTrackHeight ) ), mbLastFloatMode );
+                EndDocking( tools::Rectangle( Point( mnTrackX, mnTrackY ), Size( mnTrackWidth, mnTrackHeight ) ), mbLastFloatMode );
                 mbDockCanceled = false;
             }
             else
-                EndDocking( Rectangle( Point( mnTrackX, mnTrackY ), Size( mnTrackWidth, mnTrackHeight ) ), mbLastFloatMode );
+                EndDocking( tools::Rectangle( Point( mnTrackX, mnTrackY ), Size( mnTrackWidth, mnTrackHeight ) ), mbLastFloatMode );
         }
         // Docking only upon non-synthetic MouseEvents
         else if ( !rTEvt.GetMouseEvent().IsSynthetic() || rTEvt.GetMouseEvent().IsModifierChanged() )
@@ -908,60 +563,59 @@ void ImplDockingWindowWrapper::Tracking( const TrackingEvent& rTEvt )
             Point   aFrameMousePos = GetWindow()->ImplOutputToFrame( aMousePos );
             Size    aFrameSize = GetWindow()->ImplGetFrameWindow()->GetOutputSizePixel();
             if ( aFrameMousePos.X() < 0 )
-                aFrameMousePos.X() = 0;
+                aFrameMousePos.setX( 0 );
             if ( aFrameMousePos.Y() < 0 )
-                aFrameMousePos.Y() = 0;
+                aFrameMousePos.setY( 0 );
             if ( aFrameMousePos.X() > aFrameSize.Width()-1 )
-                aFrameMousePos.X() = aFrameSize.Width()-1;
+                aFrameMousePos.setX( aFrameSize.Width()-1 );
             if ( aFrameMousePos.Y() > aFrameSize.Height()-1 )
-                aFrameMousePos.Y() = aFrameSize.Height()-1;
+                aFrameMousePos.setY( aFrameSize.Height()-1 );
             aMousePos = GetWindow()->ImplFrameToOutput( aFrameMousePos );
-            aMousePos.X() -= maMouseOff.X();
-            aMousePos.Y() -= maMouseOff.Y();
+            aMousePos.AdjustX( -(maMouseOff.X()) );
+            aMousePos.AdjustY( -(maMouseOff.Y()) );
             Point aPos = GetWindow()->ImplOutputToFrame( aMousePos );
-            Rectangle aTrackRect( aPos, Size( mnTrackWidth, mnTrackHeight ) );
-            Rectangle aCompRect = aTrackRect;
-            aPos.X()    += maMouseOff.X();
-            aPos.Y()    += maMouseOff.Y();
+            tools::Rectangle aTrackRect( aPos, Size( mnTrackWidth, mnTrackHeight ) );
+            tools::Rectangle aCompRect = aTrackRect;
+            aPos.AdjustX(maMouseOff.X() );
+            aPos.AdjustY(maMouseOff.Y() );
 
             bool bFloatMode = Docking( aPos, aTrackRect );
 
-            mbFloatPrevented = false;
             if ( mbLastFloatMode != bFloatMode )
             {
                 if ( bFloatMode )
                 {
-                    aTrackRect.Left()   -= mnDockLeft;
-                    aTrackRect.Top()    -= mnDockTop;
-                    aTrackRect.Right()  += mnDockRight;
-                    aTrackRect.Bottom() += mnDockBottom;
+                    aTrackRect.AdjustLeft( -(mnDockLeft) );
+                    aTrackRect.AdjustTop( -(mnDockTop) );
+                    aTrackRect.AdjustRight(mnDockRight );
+                    aTrackRect.AdjustBottom(mnDockBottom );
                 }
                 else
                 {
                     if ( aCompRect == aTrackRect )
                     {
-                        aTrackRect.Left()   += mnDockLeft;
-                        aTrackRect.Top()    += mnDockTop;
-                        aTrackRect.Right()  -= mnDockRight;
-                        aTrackRect.Bottom() -= mnDockBottom;
+                        aTrackRect.AdjustLeft(mnDockLeft );
+                        aTrackRect.AdjustTop(mnDockTop );
+                        aTrackRect.AdjustRight( -(mnDockRight) );
+                        aTrackRect.AdjustBottom( -(mnDockBottom) );
                     }
                 }
                 mbLastFloatMode = bFloatMode;
             }
 
-            sal_uInt16 nTrackStyle;
+            ShowTrackFlags nTrackStyle;
             if ( bFloatMode )
-                nTrackStyle = SHOWTRACK_OBJECT;
+                nTrackStyle = ShowTrackFlags::Object;
             else
-                nTrackStyle = SHOWTRACK_BIG;
-            Rectangle aShowTrackRect = aTrackRect;
+                nTrackStyle = ShowTrackFlags::Big;
+            tools::Rectangle aShowTrackRect = aTrackRect;
             aShowTrackRect.SetPos( GetWindow()->ImplFrameToOutput( aShowTrackRect.TopLeft() ) );
 
             GetWindow()->ShowTracking( aShowTrackRect, nTrackStyle );
 
             // calculate mouse offset again, as the rectangle was changed
-            maMouseOff.X()  = aPos.X() - aTrackRect.Left();
-            maMouseOff.Y()  = aPos.Y() - aTrackRect.Top();
+            maMouseOff.setX( aPos.X() - aTrackRect.Left() );
+            maMouseOff.setY( aPos.Y() - aTrackRect.Top() );
 
             mnTrackX        = aTrackRect.Left();
             mnTrackY        = aTrackRect.Top();
@@ -971,26 +625,30 @@ void ImplDockingWindowWrapper::Tracking( const TrackingEvent& rTEvt )
     }
 }
 
-void ImplDockingWindowWrapper::StartDocking( const Point& rPoint, Rectangle& rRect )
+void ImplDockingWindowWrapper::StartDocking( const Point& rPoint, tools::Rectangle const & rRect )
 {
     DockingData data( rPoint, rRect, IsFloatingMode() );
 
-    GetWindow()->CallEventListeners( VCLEVENT_WINDOW_STARTDOCKING, &data );
+    GetWindow()->CallEventListeners( VclEventId::WindowStartDocking, &data );
     mbDocking = true;
 }
 
-bool ImplDockingWindowWrapper::Docking( const Point& rPoint, Rectangle& rRect )
+bool ImplDockingWindowWrapper::Docking( const Point& rPoint, tools::Rectangle& rRect )
 {
     DockingData data( rPoint, rRect, IsFloatingMode() );
 
-    GetWindow()->CallEventListeners( VCLEVENT_WINDOW_DOCKING, &data );
+    GetWindow()->CallEventListeners( VclEventId::WindowDocking, &data );
     rRect = data.maTrackRect;
     return data.mbFloating;
 }
 
-void ImplDockingWindowWrapper::EndDocking( const Rectangle& rRect, bool bFloatMode )
+void ImplDockingWindowWrapper::EndDocking( const tools::Rectangle& rRect, bool bFloatMode )
 {
-    Rectangle aRect( rRect );
+    tools::Rectangle aRect( rRect );
+
+    bool bOrigDockCanceled = mbDockCanceled;
+    if (bFloatMode && !StyleSettings::GetDockingFloatsSupported())
+        mbDockCanceled = true;
 
     if ( !IsDockingCanceled() )
     {
@@ -1019,18 +677,20 @@ void ImplDockingWindowWrapper::EndDocking( const Rectangle& rRect, bool bFloatMo
     }
 
     EndDockingData data( aRect, IsFloatingMode(), IsDockingCanceled() );
-    GetWindow()->CallEventListeners( VCLEVENT_WINDOW_ENDDOCKING, &data );
+    GetWindow()->CallEventListeners( VclEventId::WindowEndDocking, &data );
 
     mbDocking = false;
 
     // must be enabled in Window::Notify to prevent permanent docking during mouse move
     mbStartDockingEnabled = false;
+
+    mbDockCanceled = bOrigDockCanceled;
 }
 
 bool ImplDockingWindowWrapper::PrepareToggleFloatingMode()
 {
     bool bFloating = true;
-    GetWindow()->CallEventListeners( VCLEVENT_WINDOW_PREPARETOGGLEFLOATING, &bFloating );
+    GetWindow()->CallEventListeners( VclEventId::WindowPrepareToggleFloating, &bFloating );
     return bFloating;
 }
 
@@ -1043,7 +703,7 @@ void ImplDockingWindowWrapper::ToggleFloatingMode()
         static_cast<DockingWindow*>(GetWindow())->ToggleFloatingMode();
 
     // now notify listeners
-    GetWindow()->CallEventListeners( VCLEVENT_WINDOW_TOGGLEFLOATING );
+    GetWindow()->CallEventListeners( VclEventId::WindowToggleFloating );
 
     // must be enabled in Window::Notify to prevent permanent docking during mouse move
     mbStartDockingEnabled = false;
@@ -1086,12 +746,8 @@ void ImplDockingWindowWrapper::ShowTitleButton( TitleButton nButton, bool bVisib
     }
 }
 
-void ImplDockingWindowWrapper::StartPopupMode( ToolBox *pParentToolBox, FloatWinPopupFlags nFlags )
+void ImplDockingWindowWrapper::ImplPreparePopupMode()
 {
-    // do nothing if window is floating
-    if( IsFloatingMode() )
-        return;
-
     GetWindow()->Show( false, ShowFlags::NoFocusChange );
 
     // prepare reparenting
@@ -1101,11 +757,15 @@ void ImplDockingWindowWrapper::StartPopupMode( ToolBox *pParentToolBox, FloatWin
         mpOldBorderWin = nullptr;  // no border window found
 
     // the new parent for popup mode
-    VclPtrInstance<ImplPopupFloatWin> pWin( mpParent, this, bool(nFlags & FloatWinPopupFlags::AllowTearOff) );
-
+    VclPtrInstance<ImplPopupFloatWin> pWin( mpParent, GetWindow()->GetType() == WindowType::TOOLBOX );
     pWin->SetPopupModeEndHdl( LINK( this, ImplDockingWindowWrapper, PopupModeEnd ) );
-    pWin->SetText( GetWindow()->GetText() );
 
+    // At least for DockingWindow, GetText() has a side effect of setting deferred
+    // properties. This must be done before setting the border window (see below),
+    // so that the border width will end up in mpWindowImpl->mnBorderWidth, not in
+    // the border window (See DockingWindow::setPosSizeOnContainee() and
+    // DockingWindow::GetOptimalSize()).
+    pWin->SetText( GetWindow()->GetText() );
     pWin->SetOutputSizePixel( GetWindow()->GetSizePixel() );
 
     GetWindow()->mpWindowImpl->mpBorderWindow  = nullptr;
@@ -1113,9 +773,6 @@ void ImplDockingWindowWrapper::StartPopupMode( ToolBox *pParentToolBox, FloatWin
     GetWindow()->mpWindowImpl->mnTopBorder     = 0;
     GetWindow()->mpWindowImpl->mnRightBorder   = 0;
     GetWindow()->mpWindowImpl->mnBottomBorder  = 0;
-
-    // position toolbox below DragRect
-    GetWindow()->SetPosPixel( pWin->GetToolboxPosition() );
 
     // reparent borderwindow and window
     if ( mpOldBorderWin )
@@ -1130,6 +787,20 @@ void ImplDockingWindowWrapper::StartPopupMode( ToolBox *pParentToolBox, FloatWin
     // set mpFloatWin not until all window positioning is done !!!
     // (SetPosPixel etc. check for valid mpFloatWin pointer)
     mpFloatWin = pWin;
+}
+
+void ImplDockingWindowWrapper::StartPopupMode( ToolBox *pParentToolBox, FloatWinPopupFlags nFlags )
+{
+    // do nothing if window is floating
+    if( IsFloatingMode() )
+        return;
+
+    ImplPreparePopupMode();
+
+    // don't allow tearoff, if globally disabled
+    if( !StyleSettings::GetDockingFloatsSupported() ||
+        ( GetWindow()->GetType() == WindowType::TOOLBOX && ToolBox::AlwaysLocked() ) )
+        nFlags &= ~FloatWinPopupFlags::AllowTearOff;
 
     // if the subtoolbar was opened via keyboard make sure that key events
     // will go into subtoolbar
@@ -1143,17 +814,27 @@ void ImplDockingWindowWrapper::StartPopupMode( ToolBox *pParentToolBox, FloatWin
     {
         // send HOME key to subtoolbar in order to select first item
         KeyEvent aEvent( 0, vcl::KeyCode( KEY_HOME ) );
-        mpFloatWin->KeyInput(aEvent);
+        GetWindow()->KeyInput(aEvent);
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ImplDockingWindowWrapper, PopupModeEnd, FloatingWindow*, void)
+void ImplDockingWindowWrapper::StartPopupMode( const tools::Rectangle& rRect, FloatWinPopupFlags nFlags )
+{
+    // do nothing if window is floating
+    if( IsFloatingMode() )
+        return;
+
+    ImplPreparePopupMode();
+    mpFloatWin->StartPopupMode( rRect, nFlags );
+    GetWindow()->Show();
+}
+
+IMPL_LINK_NOARG(ImplDockingWindowWrapper, PopupModeEnd, FloatingWindow*, void)
 {
     GetWindow()->Show( false, ShowFlags::NoFocusChange );
 
     // set parameter for handler before destroying floating window
-    ImplPopupFloatWin *pPopupFloatWin = static_cast<ImplPopupFloatWin*>(mpFloatWin.get());
-    EndPopupModeData aData( pPopupFloatWin->GetTearOffPosition(), mpFloatWin->IsPopupModeTearOff() );
+    EndPopupModeData aData( mpFloatWin->GetWindow( GetWindowType::Border )->GetPosPixel(), mpFloatWin->IsPopupModeTearOff() );
 
     // before deleting change parent back, so we can delete the floating window alone
     vcl::Window* pRealParent = GetWindow()->GetWindow( GetWindowType::Parent );
@@ -1173,7 +854,7 @@ IMPL_LINK_NOARG_TYPED(ImplDockingWindowWrapper, PopupModeEnd, FloatingWindow*, v
     mpFloatWin.disposeAndClear();
 
     // call handler - which will destroy the window and thus the wrapper as well !
-    GetWindow()->CallEventListeners( VCLEVENT_WINDOW_ENDPOPUPMODE, &aData );
+    GetWindow()->CallEventListeners( VclEventId::WindowEndPopupMode, &aData );
 }
 
 bool ImplDockingWindowWrapper::IsInPopupMode() const
@@ -1207,15 +888,20 @@ void ImplDockingWindowWrapper::SetFloatingMode( bool bFloatMode )
                 if( mpOldBorderWin == mpDockingWindow )
                     mpOldBorderWin = nullptr;  // no border window found
 
-                ImplDockFloatWin2* pWin =
-                    VclPtr<ImplDockFloatWin2>::Create(
-
+                VclPtrInstance<ImplDockFloatWin2> pWin(
                                          mpParent,
                                          mnFloatBits & ( WB_MOVEABLE | WB_SIZEABLE | WB_CLOSEABLE ) ?
                                           mnFloatBits | WB_SYSTEMWINDOW
                                           | WB_OWNERDRAWDECORATION
                                           : mnFloatBits,
                                          this );
+
+                // At least for DockingWindow, GetText() has a side effect of setting deferred
+                // properties. This must be done before setting the border window (see below),
+                // so that the border width will end up in mpWindowImpl->mnBorderWidth, not in
+                // the border window (See DockingWindow::setPosSizeOnContainee() and
+                // DockingWindow::GetOptimalSize()).
+                pWin->SetText( GetWindow()->GetText() );
 
                 GetWindow()->mpWindowImpl->mpBorderWindow  = nullptr;
                 GetWindow()->mpWindowImpl->mnLeftBorder    = 0;
@@ -1233,13 +919,11 @@ void ImplDockingWindowWrapper::SetFloatingMode( bool bFloatMode )
                 pWin->mpWindowImpl->mpClientWindow = mpDockingWindow;
                 GetWindow()->mpWindowImpl->mpRealParent = pRealParent;
 
-                pWin->SetText( GetWindow()->GetText() );
                 pWin->SetOutputSizePixel( GetWindow()->GetSizePixel() );
                 pWin->SetPosPixel( maFloatPos );
                 // pass on DockingData to FloatingWindow
                 pWin->ShowTitleButton( TitleButton::Docking, mbDockBtn );
                 pWin->ShowTitleButton( TitleButton::Hide, mbHideBtn );
-                pWin->SetPin( mbPinned );
                 if ( mbRollUp )
                     pWin->RollUp();
                 else
@@ -1263,7 +947,6 @@ void ImplDockingWindowWrapper::SetFloatingMode( bool bFloatMode )
                 maFloatPos      = mpFloatWin->GetPosPixel();
                 mbDockBtn       = mpFloatWin->IsTitleButtonVisible( TitleButton::Docking );
                 mbHideBtn       = mpFloatWin->IsTitleButtonVisible( TitleButton::Hide );
-                mbPinned         = mpFloatWin->IsPinned();
                 mbRollUp        = mpFloatWin->IsRollUp();
                 maRollUpOutSize = mpFloatWin->GetRollUpOutputSizePixel();
                 maMinOutSize    = mpFloatWin->GetMinOutputSizePixel();
@@ -1349,7 +1032,7 @@ bool ImplDockingWindowWrapper::IsFloatingMode() const
     return (mpFloatWin != nullptr);
 }
 
-void    ImplDockingWindowWrapper::SetDragArea( const Rectangle& rRect )
+void    ImplDockingWindowWrapper::SetDragArea( const tools::Rectangle& rRect )
 {
     maDragArea = rRect;
 }

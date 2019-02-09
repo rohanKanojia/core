@@ -17,23 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "metainforeader.hxx"
+#include <metainforeader.hxx>
 #include "dummytag.hxx"
 #include "simpletag.hxx"
 #include "keywordstag.hxx"
 
-#include "assert.h"
+#include <assert.h>
 
 /** constructor.
 */
-CMetaInfoReader::CMetaInfoReader( const std::string& DocumentName ):
+CMetaInfoReader::CMetaInfoReader( const std::wstring& DocumentName ):
 CBaseReader( DocumentName )
 {
     try
     {
-        m_pKeywords_Builder = new CKeywordsTag( );
+        m_pKeywords_Builder = new CKeywordsTag;
         m_pSimple_Builder = new CSimpleTag( );
-        m_pDummy_Builder   = new CDummyTag( );
+        m_pDummy_Builder   = new CDummyTag;
 
         //retrieve all information that is useful
         m_AllMetaInfo[META_INFO_AUTHOR]               = EMPTY_XML_TAG;
@@ -68,9 +68,9 @@ CBaseReader( stream )
 {
 try
     {
-        m_pKeywords_Builder = new CKeywordsTag( );
+        m_pKeywords_Builder = new CKeywordsTag;
         m_pSimple_Builder = new CSimpleTag( );
-        m_pDummy_Builder   = new CDummyTag( );
+        m_pDummy_Builder   = new CDummyTag;
 
         //retrieve all information that is useful
         m_AllMetaInfo[META_INFO_AUTHOR]               = EMPTY_XML_TAG;
@@ -168,7 +168,7 @@ std::wstring CMetaInfoReader::getTagAttribute(const std::wstring& TagName,  cons
 */
 const LocaleSet_t EN_US_LOCALE( ::std::make_pair( ::std::wstring( L"en" ),  ::std::wstring( L"US" )));
 
-bool isValidLocale(const ::std::wstring& Locale)
+static bool isValidLocale(const ::std::wstring& Locale)
 {
     return ( Locale.length() == 5 );
 }
@@ -248,7 +248,7 @@ void CMetaInfoReader::start_element(
 {
     //get appropriate Xml Tag Builder using MetaInfoBuilderFactory;
     ITag* pTagBuilder = chooseTagReader( local_name,attributes );
-    assert( pTagBuilder!= NULL );
+    assert( pTagBuilder!= nullptr );
     pTagBuilder->startTag( );
     m_TagBuilderStack.push( pTagBuilder );
 

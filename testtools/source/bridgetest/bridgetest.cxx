@@ -20,16 +20,17 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <o3tl/any.hxx>
 #include <osl/diagnose.h>
-#include "osl/diagnose.hxx"
+#include <osl/diagnose.hxx>
 #include <osl/time.h>
 #include <sal/types.h>
-#include "typelib/typedescription.hxx"
+#include <typelib/typedescription.hxx>
 #include <uno/dispatcher.hxx>
 #include <uno/lbnames.h>
-#include "uno/mapping.hxx"
+#include <uno/mapping.hxx>
 #include <uno/data.h>
-#include "uno/environment.hxx"
+#include <uno/environment.hxx>
 
 #include <cppuhelper/factory.hxx>
 #include <cppuhelper/implbase.hxx>
@@ -40,14 +41,14 @@
 #include <com/sun/star/lang/XMain.hpp>
 #include <com/sun/star/bridge/UnoUrlResolver.hpp>
 #include <com/sun/star/bridge/XUnoUrlResolver.hpp>
-#include "com/sun/star/uno/RuntimeException.hpp"
-#include "com/sun/star/uno/Type.hxx"
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/uno/Type.hxx>
 
-#include "test/testtools/bridgetest/BadConstructorArguments.hpp"
-#include "test/testtools/bridgetest/TestPolyStruct.hpp"
-#include "test/testtools/bridgetest/XBridgeTest.hpp"
-#include "test/testtools/bridgetest/XBridgeTest2.hpp"
-#include "test/testtools/bridgetest/XMulti.hpp"
+#include <test/testtools/bridgetest/BadConstructorArguments.hpp>
+#include <test/testtools/bridgetest/TestPolyStruct.hpp>
+#include <test/testtools/bridgetest/XBridgeTest.hpp>
+#include <test/testtools/bridgetest/XBridgeTest2.hpp>
+#include <test/testtools/bridgetest/XMulti.hpp>
 
 #include "currentcontextchecker.hxx"
 #include "multi.hxx"
@@ -70,10 +71,10 @@ using namespace test::testtools::bridgetest;
 namespace bridge_test
 {
 template<typename T, typename U = T>
-Sequence<T> cloneSequence(const Sequence<T>& val);
+static Sequence<T> cloneSequence(const Sequence<T>& val);
 
 
-inline static Sequence< OUString > getSupportedServiceNames()
+static Sequence< OUString > getSupportedServiceNames()
 {
     OUString aName( SERVICENAME );
     return Sequence< OUString >( &aName, 1 );
@@ -110,17 +111,14 @@ public:
     explicit TestBridgeImpl( const Reference< XComponentContext > & xContext )
         : m_xContext( xContext )
         {}
-    virtual ~TestBridgeImpl()
-    {
-    }
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw (RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString & rServiceName ) throw (RuntimeException, std::exception) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() throw (RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString & rServiceName ) override;
+    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // XMain
-    virtual sal_Int32 SAL_CALL run( const Sequence< OUString > & rArgs ) throw (RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL run( const Sequence< OUString > & rArgs ) override;
 };
 
 
@@ -164,7 +162,7 @@ static bool equals( const TestData & rData1, const TestData & rData2 )
     sal_Int32 nLen;
 
     if ((rData1.Sequence == rData2.Sequence) &&
-        equals( (const TestElement &)rData1, (const TestElement &)rData2 ) &&
+        equals( static_cast<const TestElement &>(rData1), static_cast<const TestElement &>(rData2) ) &&
         (nLen = rData1.Sequence.getLength()) == rData2.Sequence.getLength())
     {
         // once again by hand sequence ==
@@ -270,12 +268,12 @@ static bool performAnyTest( const Reference< XBridgeTest > &xLBT, const TestData
 
     Any a;
     {
-        a.setValue( &(data.Bool) , cppu::UnoType<bool>::get() );
+        a <<= data.Bool;
         OSL_ASSERT( xLBT->transportAny( a ) == a );
     }
 
     {
-        a.setValue( &(data.Char) , cppu::UnoType<cppu::UnoCharType>::get() );
+        a <<= data.Char;
         OSL_ASSERT( xLBT->transportAny( a ) == a );
     }
 
@@ -313,8 +311,7 @@ private:
 public:
     void SAL_CALL callRecursivly(
         const css::uno::Reference< XRecursiveCall >& xCall,
-        sal_Int32 nToCall )
-        throw(css::uno::RuntimeException, std::exception) override
+        sal_Int32 nToCall ) override
         {
             MutexGuard guard( m_mutex );
             if( nToCall )
@@ -338,30 +335,12 @@ class MyClass : public osl::DebugBase<MyClass>, public OWeakObject
 {
 public:
     MyClass();
-    virtual ~MyClass();
-    virtual void SAL_CALL acquire() throw () override;
-    virtual void SAL_CALL release() throw () override;
 };
 
 
 MyClass::MyClass()
 {
 }
-
-MyClass::~MyClass()
-{
-}
-
-void MyClass::acquire() throw ()
-{
-    OWeakObject::acquire();
-}
-
-void MyClass::release() throw ()
-{
-    OWeakObject::release();
-}
-
 
 static bool performTest(
     const Reference<XComponentContext> & xContext,
@@ -376,8 +355,8 @@ static bool performTest(
         TestData aData; // test against this data
         Reference< XInterface > xI(new MyClass);
         assign(
-            (TestElement &) aData, true, '@', 17, 0x1234, 0xFEDC, 0x12345678,
-            0xFEDCBA98, SAL_CONST_INT64(0x123456789ABCDEF0),
+            static_cast<TestElement &>(aData), true, '@', 17, 0x1234, 0xFEDC,
+            0x12345678, 0xFEDCBA98, SAL_CONST_INT64(0x123456789ABCDEF0),
             SAL_CONST_UINT64(0xFEDCBA9876543210), 17.0815f, 3.1415926359,
             TestEnum_LOLA, STRING_TEST_CONSTANT, xI,
             Any(&xI, cppu::UnoType<XInterface>::get()));
@@ -389,10 +368,10 @@ static bool performTest(
         // aSetData is a manually copy of aData for first setting:
         TestData aSetData;
         assign(
-            (TestElement &) aSetData, aData.Bool, aData.Char, aData.Byte,
-            aData.Short, aData.UShort, aData.Long, aData.ULong, aData.Hyper,
-            aData.UHyper, aData.Float, aData.Double, aData.Enum, aData.String,
-            xI, Any(&xI, cppu::UnoType<XInterface>::get()));
+            static_cast<TestElement &>(aSetData), aData.Bool, aData.Char,
+            aData.Byte, aData.Short, aData.UShort, aData.Long, aData.ULong,
+            aData.Hyper, aData.UHyper, aData.Float, aData.Double, aData.Enum,
+            aData.String, xI, Any(&xI, cppu::UnoType<XInterface>::get()));
         aSetData.Sequence.realloc(2);
         aSetData.Sequence[0] = *static_cast<TestElement const *>(&aSetData);
         // aSetData.Sequence[1] is empty
@@ -592,12 +571,9 @@ static bool performTest(
                     xLBT->getNullPolyType().member == Type(),
                     "getNullPolyType");
                 Any nullAny(xLBT->getNullPolyAny().member);
+                auto ifc = o3tl::tryAccess<Reference<XInterface>>(nullAny);
                 bRet &= check(
-                    (((nullAny.getValueTypeName() ==
-                       "com.sun.star.uno.XInterface") &&
-                      !static_cast< Reference< XInterface > const * >(
-                          nullAny.getValue())->is())
-                     || nullAny == Any()),
+                    !nullAny.hasValue() || (ifc && !ifc->is()),
                     "getNullPolyAny");
                 bRet &= check(
                     xLBT->getNullPolySequence().member.getLength() == 0,
@@ -641,26 +617,11 @@ static bool performTest(
         }
         // Perform sequence tests (XBridgeTest2); create the sequence which is
         // compared with the results:
-        sal_Bool _arBool[] = { true, false, true };
-        sal_Unicode _arChar[] = { 0x0065, 0x0066, 0x0067 };
-        sal_Int8 _arByte[] = { 1, 2, -1 };
-        sal_Int16 _arShort[] = { -0x8000, 1, 0x7FFF };
-        sal_uInt16 _arUShort[] = { 0 , 1, 0xFFFF };
         sal_Int32 _arLong[] = {
             static_cast< sal_Int32 >(0x80000000), 1, 0x7FFFFFFF };
-        sal_uInt32 _arULong[] = { 0, 1, 0xFFFFFFFF };
-        sal_Int64 _arHyper[] = {
-            static_cast< sal_Int64 >(SAL_CONST_INT64(0x8000000000000000)), 1,
-            SAL_CONST_INT64(0x7FFFFFFFFFFFFFFF) };
-        sal_uInt64 _arUHyper[] = { 0, 1, SAL_CONST_UINT64(0xFFFFFFFFFFFFFFFF) };
-        OUString _arString[] = {
-            OUString("String 1"),
-            OUString("String 2"),
-            OUString("String 3") };
-        sal_Bool _aBool = true;
         sal_Int32 _aInt = 0xBABEBABE;
         float _aFloat = 3.14f;
-        Any _any1(&_aBool, cppu::UnoType<bool>::get());
+        Any _any1(true);
         Any _any2(&_aInt, cppu::UnoType<sal_Int32>::get());
         Any _any3(&_aFloat, cppu::UnoType<float>::get());
         Any _arAny[] = { _any1, _any2, _any3 };
@@ -668,7 +629,6 @@ static bool performTest(
         _arObj[0] = new OWeakObject();
         _arObj[1] = new OWeakObject();
         _arObj[2] = new OWeakObject();
-        TestEnum _arEnum[] = { TestEnum_ONE, TestEnum_TWO, TestEnum_CHECK };
         TestElement _arStruct[3];
         assign(
             _arStruct[0], true, '@', 17, 0x1234, 0xFEDC, 0x12345678, 0xFEDCBA98,
@@ -689,23 +649,27 @@ static bool performTest(
             TestEnum_CHECK, STRING_TEST_CONSTANT, _arObj[2],
             Any(&_arObj[2], cppu::UnoType<XInterface>::get()));
         {
-            float _arFloat[] = { 1.1f, 2.2f, 3.3f };
-            double _arDouble[] = { 1.11, 2.22, 3.33 };
-            Sequence<sal_Bool> arBool(_arBool, 3);
-            Sequence<sal_Unicode> arChar( _arChar, 3);
-            Sequence<sal_Int8> arByte(_arByte, 3);
-            Sequence<sal_Int16> arShort(_arShort, 3);
-            Sequence<sal_uInt16> arUShort(_arUShort, 3);
+            Sequence<sal_Bool> arBool({true, false, true});
+            Sequence<sal_Unicode> arChar({0x0065, 0x0066, 0x0067});
+            Sequence<sal_Int8> arByte({1, 2, -1});
+            Sequence<sal_Int16> arShort({-0x8000, 1, 0x7FFF});
+            Sequence<sal_uInt16> arUShort({0 , 1, 0xFFFF});
             Sequence<sal_Int32> arLong(_arLong, 3);
-            Sequence<sal_uInt32> arULong(_arULong, 3);
-            Sequence<sal_Int64> arHyper(_arHyper, 3);
-            Sequence<sal_uInt64> arUHyper(_arUHyper, 3);
-            Sequence<float> arFloat(_arFloat, 3);
-            Sequence<double> arDouble(_arDouble, 3);
-            Sequence<OUString> arString(_arString, 3);
+            Sequence<sal_uInt32> arULong({0, 1, 0xFFFFFFFF});
+            Sequence<sal_Int64> arHyper({
+                static_cast<sal_Int64>(SAL_CONST_INT64(0x8000000000000000)), 1,
+                SAL_CONST_INT64(0x7FFFFFFFFFFFFFFF)});
+            Sequence<sal_uInt64> arUHyper({
+                0, 1, SAL_CONST_UINT64(0xFFFFFFFFFFFFFFFF)});
+            Sequence<float> arFloat({1.1f, 2.2f, 3.3f});
+            Sequence<double> arDouble({1.11, 2.22, 3.33});
+            Sequence<OUString> arString({
+                OUString("String 1"), OUString("String 2"),
+                OUString("String 3")});
             Sequence<Any> arAny(_arAny, 3);
             Sequence<Reference<XInterface> > arObject(_arObj, 3);
-            Sequence<TestEnum> arEnum(_arEnum, 3);
+            Sequence<TestEnum> arEnum({
+                TestEnum_ONE, TestEnum_TWO, TestEnum_CHECK});
             Sequence<TestElement> arStruct(_arStruct, 3);
             Sequence<Sequence<sal_Int32> > _arSeqLong2[3];
             for (int j = 0; j != 3; ++j) {
@@ -1034,7 +998,7 @@ static bool raiseException( const Reference< XBridgeTest > & xLBT )
 
 /* Returns an acquired sequence
  */
-uno_Sequence* cloneSequence(const uno_Sequence* val, const Type& type)
+static uno_Sequence* cloneSequence(const uno_Sequence* val, const Type& type)
 {
     TypeDescription td(type);
     td.makeComplete();
@@ -1047,7 +1011,7 @@ uno_Sequence* cloneSequence(const uno_Sequence* val, const Type& type)
     sal_Int8* pBufCur = buf.get();
 
     uno_Sequence* retSeq = nullptr;
-    switch (pTdElem->eTypeClass)
+    switch (static_cast<TypeClass>(pTdElem->eTypeClass))
     {
     case TypeClass_SEQUENCE:
     {
@@ -1081,7 +1045,7 @@ Sequence<T> cloneSequence(const Sequence<T>& val)
 }
 
 template< class T >
-inline bool makeSurrogate(
+static bool makeSurrogate(
     Reference< T > & rOut, Reference< T > const & rOriginal )
 {
     rOut.clear();
@@ -1137,7 +1101,6 @@ inline bool makeSurrogate(
 
 
 sal_Int32 TestBridgeImpl::run( const Sequence< OUString > & rArgs )
-    throw (RuntimeException, std::exception)
 {
     bool bRet = false;
     try
@@ -1192,11 +1155,7 @@ sal_Int32 TestBridgeImpl::run( const Sequence< OUString > & rArgs )
         {
             throw RuntimeException( "cannot get test object!" );
         }
-        Reference< XBridgeTest > xTest( xOriginal, UNO_QUERY );
-        if (! xTest.is())
-        {
-            throw RuntimeException( "test object does not implement XBridgeTest!" );
-        }
+        Reference< XBridgeTest > xTest( xOriginal, UNO_QUERY_THROW );
 
         Reference<XBridgeTest > xLBT;
         bRet = check( makeSurrogate( xLBT, xTest ), "makeSurrogate" );
@@ -1224,25 +1183,22 @@ sal_Int32 TestBridgeImpl::run( const Sequence< OUString > & rArgs )
 // XServiceInfo
 
 OUString TestBridgeImpl::getImplementationName()
-    throw (RuntimeException, std::exception)
 {
     return OUString( IMPLNAME );
 }
 
 sal_Bool TestBridgeImpl::supportsService( const OUString & rServiceName )
-    throw (RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 Sequence< OUString > TestBridgeImpl::getSupportedServiceNames()
-    throw (RuntimeException, std::exception)
 {
     return bridge_test::getSupportedServiceNames();
 }
 
 
-static Reference< XInterface > SAL_CALL TestBridgeImpl_create(
+static Reference< XInterface > TestBridgeImpl_create(
     const Reference< XComponentContext > & xContext )
 {
     return Reference< XInterface >(
@@ -1254,7 +1210,7 @@ static Reference< XInterface > SAL_CALL TestBridgeImpl_create(
 extern "C"
 {
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * component_getFactory(
     const sal_Char * pImplName, void * pServiceManager,
     SAL_UNUSED_PARAMETER void * )
 {

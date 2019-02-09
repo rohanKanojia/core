@@ -19,9 +19,9 @@ $(eval $(call gb_Library_use_api,jvmaccess,\
 
 $(eval $(call gb_Library_use_libraries,jvmaccess,\
     cppu \
+    cppuhelper \
     sal \
     salhelper \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,jvmaccess,\

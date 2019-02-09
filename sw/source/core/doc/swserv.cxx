@@ -51,36 +51,37 @@ bool SwServerObject::GetData( uno::Any & rData,
         break;
 
     case SotClipboardFormatId::RTF:
+    case SotClipboardFormatId::RICHTEXT:
         // mba: no BaseURL for data exchange
         ::GetRTFWriter( OUString(), OUString(), xWrt );
         break;
     default: break;
     }
 
-    if( xWrt.Is() )
+    if( xWrt.is() )
     {
         SwPaM* pPam = nullptr;
-        switch( eType )
+        switch( m_eType )
         {
         case BOOKMARK_SERVER:
-            if( CNTNT_TYPE.pBkmk->IsExpanded() )
+            if( m_CNTNT_TYPE.pBkmk->IsExpanded() )
             {
                 // Span area
-                pPam = new SwPaM( CNTNT_TYPE.pBkmk->GetMarkPos(),
-                                CNTNT_TYPE.pBkmk->GetOtherMarkPos() );
+                pPam = new SwPaM( m_CNTNT_TYPE.pBkmk->GetMarkPos(),
+                                m_CNTNT_TYPE.pBkmk->GetOtherMarkPos() );
             }
             break;
 
         case TABLE_SERVER:
-            pPam = new SwPaM( *CNTNT_TYPE.pTableNd,
-                            *CNTNT_TYPE.pTableNd->EndOfSectionNode() );
+            pPam = new SwPaM( *m_CNTNT_TYPE.pTableNd,
+                            *m_CNTNT_TYPE.pTableNd->EndOfSectionNode() );
             break;
 
         case SECTION_SERVER:
-            pPam = new SwPaM( SwPosition( *CNTNT_TYPE.pSectNd ) );
+            pPam = new SwPaM( SwPosition( *m_CNTNT_TYPE.pSectNd ) );
             pPam->Move( fnMoveForward );
             pPam->SetMark();
-            pPam->GetPoint()->nNode = *CNTNT_TYPE.pSectNd->EndOfSectionNode();
+            pPam->GetPoint()->nNode = *m_CNTNT_TYPE.pSectNd->EndOfSectionNode();
             pPam->Move( fnMoveBackward );
             break;
         case NONE_SERVER: break;
@@ -91,12 +92,12 @@ bool SwServerObject::GetData( uno::Any & rData,
             // Create stream
             SvMemoryStream aMemStm( 65535, 65535 );
             SwWriter aWrt( aMemStm, *pPam, false );
-            if( !IsError( aWrt.Write( xWrt )) )
+            if( !aWrt.Write( xWrt ).IsError() )
             {
                 aMemStm.WriteChar( '\0' );        // append a zero char
                 rData <<= uno::Sequence< sal_Int8 >(
                                         static_cast<sal_Int8 const *>(aMemStm.GetData()),
-                                        aMemStm.Seek( STREAM_SEEK_TO_END ) );
+                                        aMemStm.Tell() );
                 bRet = true;
             }
             delete pPam;
@@ -112,18 +113,18 @@ void SwServerObject::SendDataChanged( const SwPosition& rPos )
     {
         bool bCall = false;
         const SwStartNode* pNd = nullptr;
-        switch( eType )
+        switch( m_eType )
         {
             case BOOKMARK_SERVER:
-                if( CNTNT_TYPE.pBkmk->IsExpanded() )
+                if( m_CNTNT_TYPE.pBkmk->IsExpanded() )
                 {
-                    bCall = CNTNT_TYPE.pBkmk->GetMarkStart() <= rPos
-                        && rPos < CNTNT_TYPE.pBkmk->GetMarkEnd();
+                    bCall = m_CNTNT_TYPE.pBkmk->GetMarkStart() <= rPos
+                        && rPos < m_CNTNT_TYPE.pBkmk->GetMarkEnd();
                 }
                 break;
 
-            case TABLE_SERVER:      pNd = CNTNT_TYPE.pTableNd;    break;
-            case SECTION_SERVER:    pNd = CNTNT_TYPE.pSectNd;   break;
+            case TABLE_SERVER:      pNd = m_CNTNT_TYPE.pTableNd;    break;
+            case SECTION_SERVER:    pNd = m_CNTNT_TYPE.pSectNd;   break;
             case NONE_SERVER: break;
         }
         if( pNd )
@@ -149,18 +150,18 @@ void SwServerObject::SendDataChanged( const SwPaM& rRange )
         bool bCall = false;
         const SwStartNode* pNd = nullptr;
         const SwPosition* pStt = rRange.Start(), *pEnd = rRange.End();
-        switch( eType )
+        switch( m_eType )
         {
         case BOOKMARK_SERVER:
-            if(CNTNT_TYPE.pBkmk->IsExpanded())
+            if(m_CNTNT_TYPE.pBkmk->IsExpanded())
             {
-                bCall = *pStt <= CNTNT_TYPE.pBkmk->GetMarkEnd()
-                    && *pEnd > CNTNT_TYPE.pBkmk->GetMarkStart();
+                bCall = *pStt <= m_CNTNT_TYPE.pBkmk->GetMarkEnd()
+                    && *pEnd > m_CNTNT_TYPE.pBkmk->GetMarkStart();
             }
             break;
 
-        case TABLE_SERVER:      pNd = CNTNT_TYPE.pTableNd;    break;
-        case SECTION_SERVER:    pNd = CNTNT_TYPE.pSectNd;   break;
+        case TABLE_SERVER:      pNd = m_CNTNT_TYPE.pTableNd;    break;
+        case SECTION_SERVER:    pNd = m_CNTNT_TYPE.pSectNd;   break;
         case NONE_SERVER: break;
         }
         if( pNd )
@@ -182,29 +183,25 @@ void SwServerObject::SendDataChanged( const SwPaM& rRange )
 bool SwServerObject::IsLinkInServer( const SwBaseLink* pChkLnk ) const
 {
     sal_uLong nSttNd = 0, nEndNd = 0;
-    sal_Int32 nStt = 0;
-    sal_Int32 nEnd = 0;
     const SwNode* pNd = nullptr;
     const SwNodes* pNds = nullptr;
 
-    switch( eType )
+    switch( m_eType )
     {
     case BOOKMARK_SERVER:
-        if( CNTNT_TYPE.pBkmk->IsExpanded() )
+        if( m_CNTNT_TYPE.pBkmk->IsExpanded() )
         {
-            const SwPosition* pStt = &CNTNT_TYPE.pBkmk->GetMarkStart(),
-                            * pEnd = &CNTNT_TYPE.pBkmk->GetMarkEnd();
+            const SwPosition* pStt = &m_CNTNT_TYPE.pBkmk->GetMarkStart(),
+                            * pEnd = &m_CNTNT_TYPE.pBkmk->GetMarkEnd();
 
             nSttNd = pStt->nNode.GetIndex();
-            nStt = pStt->nContent.GetIndex();
             nEndNd = pEnd->nNode.GetIndex();
-            nEnd = pEnd->nContent.GetIndex();
             pNds = &pStt->nNode.GetNodes();
         }
         break;
 
-    case TABLE_SERVER:      pNd = CNTNT_TYPE.pTableNd;    break;
-    case SECTION_SERVER:    pNd = CNTNT_TYPE.pSectNd;   break;
+    case TABLE_SERVER:      pNd = m_CNTNT_TYPE.pTableNd;    break;
+    case SECTION_SERVER:    pNd = m_CNTNT_TYPE.pSectNd;   break;
 
     case SECTION_SERVER+1:
         return true;
@@ -214,8 +211,6 @@ bool SwServerObject::IsLinkInServer( const SwBaseLink* pChkLnk ) const
     {
         nSttNd = pNd->GetIndex();
         nEndNd = pNd->EndOfSectionIndex();
-        nStt = 0;
-        nEnd = -1;
         pNds = &pNd->GetNodes();
     }
 
@@ -225,16 +220,16 @@ bool SwServerObject::IsLinkInServer( const SwBaseLink* pChkLnk ) const
         const ::sfx2::SvBaseLinks& rLnks = pNds->GetDoc()->getIDocumentLinksAdministration().GetLinkManager().GetLinks();
 
         // To avoid recursions: convert ServerType!
-        SwServerObject::ServerModes eSave = eType;
+        SwServerObject::ServerModes eSave = m_eType;
         if( !pChkLnk )
-            const_cast<SwServerObject*>(this)->eType = NONE_SERVER;
+            const_cast<SwServerObject*>(this)->m_eType = NONE_SERVER;
         for( size_t n = rLnks.size(); n; )
         {
             const ::sfx2::SvBaseLink* pLnk = &(*rLnks[ --n ]);
-            if( pLnk && OBJECT_CLIENT_GRF != pLnk->GetObjType() &&
+            if (OBJECT_CLIENT_GRF != pLnk->GetObjType() &&
                 dynamic_cast<const SwBaseLink*>( pLnk) !=  nullptr &&
                 !static_cast<const SwBaseLink*>(pLnk)->IsNoDataFlag() &&
-                static_cast<const SwBaseLink*>(pLnk)->IsInRange( nSttNd, nEndNd, nStt, nEnd ))
+                static_cast<const SwBaseLink*>(pLnk)->IsInRange( nSttNd, nEndNd ))
             {
                 if( pChkLnk )
                 {
@@ -247,7 +242,7 @@ bool SwServerObject::IsLinkInServer( const SwBaseLink* pChkLnk ) const
             }
         }
         if( !pChkLnk )
-            const_cast<SwServerObject*>(this)->eType = eSave;
+            const_cast<SwServerObject*>(this)->m_eType = eSave;
     }
 
     return false;
@@ -255,13 +250,13 @@ bool SwServerObject::IsLinkInServer( const SwBaseLink* pChkLnk ) const
 
 void SwServerObject::SetNoServer()
 {
-    if(eType == BOOKMARK_SERVER && CNTNT_TYPE.pBkmk)
+    if(m_eType == BOOKMARK_SERVER && m_CNTNT_TYPE.pBkmk)
     {
-        ::sw::mark::DdeBookmark* const pDdeBookmark = dynamic_cast< ::sw::mark::DdeBookmark* >(CNTNT_TYPE.pBkmk);
+        ::sw::mark::DdeBookmark* const pDdeBookmark = dynamic_cast< ::sw::mark::DdeBookmark* >(m_CNTNT_TYPE.pBkmk);
         if(pDdeBookmark)
         {
-            CNTNT_TYPE.pBkmk = nullptr;
-            eType = NONE_SERVER;
+            m_CNTNT_TYPE.pBkmk = nullptr;
+            m_eType = NONE_SERVER;
             pDdeBookmark->SetRefObject(nullptr);
         }
     }
@@ -272,8 +267,8 @@ void SwServerObject::SetDdeBookmark( ::sw::mark::IMark& rBookmark)
     ::sw::mark::DdeBookmark* const pDdeBookmark = dynamic_cast< ::sw::mark::DdeBookmark* >(&rBookmark);
     if(pDdeBookmark)
     {
-        eType = BOOKMARK_SERVER;
-        CNTNT_TYPE.pBkmk = &rBookmark;
+        m_eType = BOOKMARK_SERVER;
+        m_CNTNT_TYPE.pBkmk = &rBookmark;
         pDdeBookmark->SetRefObject(this);
     }
     else
@@ -284,14 +279,12 @@ void SwServerObject::SetDdeBookmark( ::sw::mark::IMark& rBookmark)
 SwDataChanged::SwDataChanged( const SwPaM& rPam )
     : pPam( &rPam ), pPos( nullptr ), pDoc( rPam.GetDoc() )
 {
-    nNode = rPam.GetPoint()->nNode.GetIndex();
     nContent = rPam.GetPoint()->nContent.GetIndex();
 }
 
 SwDataChanged::SwDataChanged( SwDoc* pDc, const SwPosition& rPos )
     : pPam( nullptr ), pPos( &rPos ), pDoc( pDc )
 {
-    nNode = rPos.nNode.GetIndex();
     nContent = rPos.nContent.GetIndex();
 }
 
@@ -303,13 +296,13 @@ SwDataChanged::~SwDataChanged()
         const ::sfx2::SvLinkSources& rServers = pDoc->getIDocumentLinksAdministration().GetLinkManager().GetServers();
 
         ::sfx2::SvLinkSources aTemp(rServers);
-        for( ::sfx2::SvLinkSources::const_iterator it = aTemp.begin(); it != aTemp.end(); ++it )
+        for( const auto& rpLinkSrc : aTemp )
         {
-            ::sfx2::SvLinkSourceRef refObj( *it );
+            ::sfx2::SvLinkSourceRef refObj( rpLinkSrc );
             // Any one else interested in the Object?
             if( refObj->HasDataLinks() && dynamic_cast<const SwServerObject*>( refObj.get() ) !=  nullptr)
             {
-                SwServerObject& rObj = *static_cast<SwServerObject*>(&refObj);
+                SwServerObject& rObj = *static_cast<SwServerObject*>( refObj.get() );
                 if( pPos )
                     rObj.SendDataChanged( *pPos );
                 else
@@ -320,7 +313,7 @@ SwDataChanged::~SwDataChanged()
             if( !refObj->HasDataLinks() )
             {
                 // Then remove from the list
-                pDoc->getIDocumentLinksAdministration().GetLinkManager().RemoveServer( *it );
+                pDoc->getIDocumentLinksAdministration().GetLinkManager().RemoveServer( rpLinkSrc );
             }
         }
     }

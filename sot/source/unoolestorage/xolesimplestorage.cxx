@@ -21,13 +21,15 @@
 
 #include <com/sun/star/embed/OLESimpleStorage.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/lang/NoSupportException.hpp>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/io/XStream.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XSeekable.hpp>
 #include <com/sun/star/io/XTruncate.hpp>
 #include <com/sun/star/io/TempFile.hpp>
 
-#include <comphelper/processfactory.hxx>
 #include <comphelper/storagehelper.hxx>
 #include <unotools/ucbstreamhelper.hxx>
 #include <cppuhelper/exc_hlp.hxx>
@@ -40,11 +42,9 @@ const sal_Int32 nBytesCount = 32000;
 
 
 OLESimpleStorage::OLESimpleStorage(
-        css::uno::Reference<css::uno::XComponentContext> xContext,
+        css::uno::Reference<css::uno::XComponentContext> const & xContext,
         css::uno::Sequence<css::uno::Any> const &aArguments)
 : m_bDisposed( false )
-, m_pStream( nullptr )
-, m_pStorage( nullptr )
 , m_pListenersContainer( nullptr )
 , m_xContext( xContext )
 , m_bNoTemporaryCopy( false )
@@ -134,7 +134,7 @@ OLESimpleStorage::OLESimpleStorage(
     if ( !m_pStream || m_pStream->GetError() )
         throw io::IOException(); // TODO
 
-    m_pStorage = new Storage( *m_pStream, false );
+    m_pStorage.reset(new Storage( *m_pStream, false ));
 }
 
 OLESimpleStorage::~OLESimpleStorage()
@@ -154,32 +154,31 @@ OLESimpleStorage::~OLESimpleStorage()
 
 void OLESimpleStorage::UpdateOriginal_Impl()
 {
-    if ( !m_bNoTemporaryCopy )
-    {
-        uno::Reference< io::XSeekable > xSeek( m_xStream, uno::UNO_QUERY_THROW );
-        xSeek->seek( 0 );
+    if ( m_bNoTemporaryCopy )
+        return;
 
-        uno::Reference< io::XSeekable > xTempSeek( m_xTempStream, uno::UNO_QUERY_THROW );
-        sal_Int64 nPos = xTempSeek->getPosition();
-        xTempSeek->seek( 0 );
+    uno::Reference< io::XSeekable > xSeek( m_xStream, uno::UNO_QUERY_THROW );
+    xSeek->seek( 0 );
 
-        uno::Reference< io::XInputStream > xTempInp = m_xTempStream->getInputStream();
-        uno::Reference< io::XOutputStream > xOutputStream = m_xStream->getOutputStream();
-        if ( !xTempInp.is() || !xOutputStream.is() )
-            throw uno::RuntimeException();
+    uno::Reference< io::XSeekable > xTempSeek( m_xTempStream, uno::UNO_QUERY_THROW );
+    sal_Int64 nPos = xTempSeek->getPosition();
+    xTempSeek->seek( 0 );
 
-        uno::Reference< io::XTruncate > xTrunc( xOutputStream, uno::UNO_QUERY_THROW );
-        xTrunc->truncate();
+    uno::Reference< io::XInputStream > xTempInp = m_xTempStream->getInputStream();
+    uno::Reference< io::XOutputStream > xOutputStream = m_xStream->getOutputStream();
+    if ( !xTempInp.is() || !xOutputStream.is() )
+        throw uno::RuntimeException();
 
-        ::comphelper::OStorageHelper::CopyInputToOutput( xTempInp, xOutputStream );
-        xOutputStream->flush();
-        xTempSeek->seek( nPos );
-    }
+    uno::Reference< io::XTruncate > xTrunc( xOutputStream, uno::UNO_QUERY_THROW );
+    xTrunc->truncate();
+
+    ::comphelper::OStorageHelper::CopyInputToOutput( xTempInp, xOutputStream );
+    xOutputStream->flush();
+    xTempSeek->seek( nPos );
 }
 
 
 void OLESimpleStorage::InsertInputStreamToStorage_Impl( BaseStorage* pStorage, const OUString & aName, const uno::Reference< io::XInputStream >& xInputStream )
-    throw ( uno::Exception )
 {
     if ( !pStorage || aName.isEmpty() || !xInputStream.is() )
         throw uno::RuntimeException();
@@ -187,11 +186,10 @@ void OLESimpleStorage::InsertInputStreamToStorage_Impl( BaseStorage* pStorage, c
     if ( pStorage->IsContained( aName ) )
         throw container::ElementExistException(); // TODO:
 
-    BaseStorageStream* pNewStream = pStorage->OpenStream( aName );
+    std::unique_ptr<BaseStorageStream> pNewStream(pStorage->OpenStream( aName ));
     if ( !pNewStream || pNewStream->GetError() || pStorage->GetError() )
     {
-        if ( pNewStream )
-            DELETEZ( pNewStream );
+        pNewStream.reset();
         pStorage->ResetError();
         throw io::IOException(); // TODO
     }
@@ -211,18 +209,15 @@ void OLESimpleStorage::InsertInputStreamToStorage_Impl( BaseStorage* pStorage, c
     }
     catch( uno::Exception& )
     {
-        DELETEZ( pNewStream );
+        pNewStream.reset();
         pStorage->Remove( aName );
 
         throw;
     }
-
-    DELETEZ( pNewStream );
 }
 
 
 void OLESimpleStorage::InsertNameAccessToStorage_Impl( BaseStorage* pStorage, const OUString & aName, const uno::Reference< container::XNameAccess >& xNameAccess )
-    throw ( uno::Exception )
 {
     if ( !pStorage || aName.isEmpty() || !xNameAccess.is() )
         throw uno::RuntimeException();
@@ -230,11 +225,10 @@ void OLESimpleStorage::InsertNameAccessToStorage_Impl( BaseStorage* pStorage, co
     if ( pStorage->IsContained( aName ) )
         throw container::ElementExistException(); // TODO:
 
-    BaseStorage* pNewStorage = pStorage->OpenStorage( aName );
+    std::unique_ptr<BaseStorage> pNewStorage(pStorage->OpenStorage( aName ));
     if ( !pNewStorage || pNewStorage->GetError() || pStorage->GetError() )
     {
-        if ( pNewStorage )
-            DELETEZ( pNewStorage );
+        pNewStorage.reset();
         pStorage->ResetError();
         throw io::IOException(); // TODO
     }
@@ -248,20 +242,18 @@ void OLESimpleStorage::InsertNameAccessToStorage_Impl( BaseStorage* pStorage, co
             uno::Reference< container::XNameAccess > xSubNameAccess;
             uno::Any aAny = xNameAccess->getByName( aElements[nInd] );
             if ( aAny >>= xInputStream )
-                InsertInputStreamToStorage_Impl( pNewStorage, aElements[nInd], xInputStream );
+                InsertInputStreamToStorage_Impl( pNewStorage.get(), aElements[nInd], xInputStream );
             else if ( aAny >>= xSubNameAccess )
-                InsertNameAccessToStorage_Impl( pNewStorage, aElements[nInd], xSubNameAccess );
+                InsertNameAccessToStorage_Impl( pNewStorage.get(), aElements[nInd], xSubNameAccess );
         }
     }
     catch( uno::Exception& )
     {
-        DELETEZ( pNewStorage );
+        pNewStorage.reset();
         pStorage->Remove( aName );
 
         throw;
     }
-
-    DELETEZ( pNewStorage );
 }
 
 
@@ -269,10 +261,6 @@ void OLESimpleStorage::InsertNameAccessToStorage_Impl( BaseStorage* pStorage, co
 
 
 void SAL_CALL OLESimpleStorage::insertByName( const OUString& aName, const uno::Any& aElement )
-        throw ( lang::IllegalArgumentException,
-                container::ElementExistException,
-                lang::WrappedTargetException,
-                uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -297,9 +285,9 @@ void SAL_CALL OLESimpleStorage::insertByName( const OUString& aName, const uno::
             throw lang::IllegalArgumentException(); // TODO:
 
         if ( xInputStream.is() )
-            InsertInputStreamToStorage_Impl( m_pStorage, aName, xInputStream );
+            InsertInputStreamToStorage_Impl( m_pStorage.get(), aName, xInputStream );
         else if ( xNameAccess.is() )
-            InsertNameAccessToStorage_Impl( m_pStorage, aName, xNameAccess );
+            InsertNameAccessToStorage_Impl( m_pStorage.get(), aName, xNameAccess );
         else
             throw uno::RuntimeException();
     }
@@ -311,19 +299,17 @@ void SAL_CALL OLESimpleStorage::insertByName( const OUString& aName, const uno::
     {
         throw;
     }
-    catch( const uno::Exception& e )
+    catch( const uno::Exception& )
     {
+        css::uno::Any anyEx = cppu::getCaughtException();
         throw lang::WrappedTargetException("Insert has failed!",
                                             uno::Reference< uno::XInterface >(),
-                                            uno::makeAny( e ) );
+                                            anyEx );
     }
 }
 
 
 void SAL_CALL OLESimpleStorage::removeByName( const OUString& aName )
-        throw ( container::NoSuchElementException,
-                lang::WrappedTargetException,
-                uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -350,10 +336,6 @@ void SAL_CALL OLESimpleStorage::removeByName( const OUString& aName )
 
 
 void SAL_CALL OLESimpleStorage::replaceByName( const OUString& aName, const uno::Any& aElement )
-        throw ( lang::IllegalArgumentException,
-                container::NoSuchElementException,
-                lang::WrappedTargetException,
-                uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -378,9 +360,6 @@ void SAL_CALL OLESimpleStorage::replaceByName( const OUString& aName, const uno:
 
 
 uno::Any SAL_CALL OLESimpleStorage::getByName( const OUString& aName )
-        throw ( container::NoSuchElementException,
-                lang::WrappedTargetException,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -405,22 +384,22 @@ uno::Any SAL_CALL OLESimpleStorage::getByName( const OUString& aName )
 
     if ( m_pStorage->IsStorage( aName ) )
     {
-        BaseStorage* pStrg = m_pStorage->OpenStorage( aName );
+        std::unique_ptr<BaseStorage> pStrg(m_pStorage->OpenStorage( aName ));
         m_pStorage->ResetError();
         if ( !pStrg )
             throw lang::WrappedTargetException(); // io::IOException(); // TODO
 
-        SvStream* pStream = ::utl::UcbStreamHelper::CreateStream( xTempFile, false ); // do not close the original stream
+        std::unique_ptr<SvStream> pStream = ::utl::UcbStreamHelper::CreateStream( xTempFile, false ); // do not close the original stream
         if ( !pStream )
             throw uno::RuntimeException();
 
-        BaseStorage* pNewStor = new Storage( *pStream, false );
-        bool bSuccess = ( pStrg->CopyTo( pNewStor ) && pNewStor->Commit() &&
+        std::unique_ptr<BaseStorage> pNewStor(new Storage( *pStream, false ));
+        bool bSuccess = ( pStrg->CopyTo( pNewStor.get() ) && pNewStor->Commit() &&
                           !pNewStor->GetError() && !pStrg->GetError() );
 
-        DELETEZ( pNewStor );
-        DELETEZ( pStrg );
-        DELETEZ( pStream );
+        pNewStor.reset();
+        pStrg.reset();
+        pStream.reset();
 
         if ( !bSuccess )
             throw uno::RuntimeException();
@@ -433,13 +412,12 @@ uno::Any SAL_CALL OLESimpleStorage::getByName( const OUString& aName )
     }
     else
     {
-        BaseStorageStream* pStream = m_pStorage->OpenStream( aName, StreamMode::READ | StreamMode::SHARE_DENYALL | StreamMode::NOCREATE );
+        std::unique_ptr<BaseStorageStream> pStream(m_pStorage->OpenStream( aName, StreamMode::READ | StreamMode::SHARE_DENYALL | StreamMode::NOCREATE ));
         try
         {
             if ( !pStream || pStream->GetError() || m_pStorage->GetError() )
             {
                 m_pStorage->ResetError();
-                DELETEZ( pStream );
                 throw io::IOException(); // TODO
             }
 
@@ -465,16 +443,16 @@ uno::Any SAL_CALL OLESimpleStorage::getByName( const OUString& aName )
         }
         catch (const uno::RuntimeException&)
         {
-            DELETEZ( pStream );
             throw;
         }
-        catch (const uno::Exception&)
+        catch (const uno::Exception& ex)
         {
-            DELETEZ( pStream );
-            throw lang::WrappedTargetException(); // TODO:
+            css::uno::Any anyEx = cppu::getCaughtException();
+            throw css::lang::WrappedTargetException( ex.Message,
+                    nullptr, anyEx );
         }
 
-        DELETEZ( pStream );
+        pStream.reset();
 
         aResult <<= xInputStream;
     }
@@ -484,7 +462,6 @@ uno::Any SAL_CALL OLESimpleStorage::getByName( const OUString& aName )
 
 
 uno::Sequence< OUString > SAL_CALL OLESimpleStorage::getElementNames()
-        throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -512,7 +489,6 @@ uno::Sequence< OUString > SAL_CALL OLESimpleStorage::getElementNames()
 
 
 sal_Bool SAL_CALL OLESimpleStorage::hasByName( const OUString& aName )
-        throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -535,7 +511,6 @@ sal_Bool SAL_CALL OLESimpleStorage::hasByName( const OUString& aName )
 
 
 uno::Type SAL_CALL OLESimpleStorage::getElementType()
-        throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -547,7 +522,6 @@ uno::Type SAL_CALL OLESimpleStorage::getElementType()
 
 
 sal_Bool SAL_CALL OLESimpleStorage::hasElements()
-        throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -566,7 +540,7 @@ sal_Bool SAL_CALL OLESimpleStorage::hasElements()
         throw uno::RuntimeException(); // TODO:
     }
 
-    return aList.size() != 0;
+    return !aList.empty();
 }
 
 
@@ -574,7 +548,6 @@ sal_Bool SAL_CALL OLESimpleStorage::hasElements()
 
 
 void SAL_CALL OLESimpleStorage::dispose()
-        throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -587,8 +560,8 @@ void SAL_CALL OLESimpleStorage::dispose()
         m_pListenersContainer->disposeAndClear( aSource );
     }
 
-    DELETEZ( m_pStorage );
-    DELETEZ( m_pStream );
+    m_pStorage.reset();
+    m_pStream.reset();
 
     m_xStream.clear();
     m_xTempStream.clear();
@@ -599,7 +572,6 @@ void SAL_CALL OLESimpleStorage::dispose()
 
 void SAL_CALL OLESimpleStorage::addEventListener(
             const uno::Reference< lang::XEventListener >& xListener )
-        throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -615,7 +587,6 @@ void SAL_CALL OLESimpleStorage::addEventListener(
 
 void SAL_CALL OLESimpleStorage::removeEventListener(
             const uno::Reference< lang::XEventListener >& xListener )
-        throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -631,9 +602,6 @@ void SAL_CALL OLESimpleStorage::removeEventListener(
 
 
 void SAL_CALL OLESimpleStorage::commit()
-        throw ( css::io::IOException,
-                css::lang::WrappedTargetException,
-                css::uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -657,9 +625,6 @@ void SAL_CALL OLESimpleStorage::commit()
 
 
 void SAL_CALL OLESimpleStorage::revert()
-        throw ( css::io::IOException,
-                css::lang::WrappedTargetException,
-                css::uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -686,7 +651,6 @@ void SAL_CALL OLESimpleStorage::revert()
 
 
 uno::Sequence< sal_Int8 > SAL_CALL OLESimpleStorage::getClassID()
-    throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -700,39 +664,33 @@ uno::Sequence< sal_Int8 > SAL_CALL OLESimpleStorage::getClassID()
 }
 
 OUString SAL_CALL OLESimpleStorage::getClassName()
-    throw ( uno::RuntimeException, std::exception )
 {
     return OUString();
 }
 
 void SAL_CALL OLESimpleStorage::setClassInfo( const uno::Sequence< sal_Int8 >& /*aClassID*/,
                             const OUString& /*sClassName*/ )
-    throw ( lang::NoSupportException,
-            uno::RuntimeException, std::exception )
 {
     throw lang::NoSupportException();
 }
 
 //  XServiceInfo
 OUString SAL_CALL OLESimpleStorage::getImplementationName()
-    throw ( uno::RuntimeException, std::exception )
 {
     return OUString("com.sun.star.comp.embed.OLESimpleStorage");
 }
 
 sal_Bool SAL_CALL OLESimpleStorage::supportsService( const OUString& ServiceName )
-    throw ( uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL OLESimpleStorage::getSupportedServiceNames()
-        throw ( uno::RuntimeException, std::exception )
 {
     return { "com.sun.star.embed.OLESimpleStorage" };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_embed_OLESimpleStorage(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &arguments)

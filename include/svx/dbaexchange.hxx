@@ -23,7 +23,7 @@
 #include <sal/config.h>
 
 #include <o3tl/typed_flags_set.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/sdbc/XConnection.hpp>
 #include <svx/dataaccessdescriptor.hxx>
@@ -50,19 +50,13 @@ namespace svx
 
     //= OColumnTransferable
 
-    class SAL_WARN_UNUSED SVX_DLLPUBLIC OColumnTransferable : public TransferableHelper
+    class SAL_WARN_UNUSED SVX_DLLPUBLIC OColumnTransferable final : public TransferableHelper
     {
-    protected:
-        ODataAccessDescriptor      m_aDescriptor;
-        OUString                   m_sCompatibleFormat;
-        ColumnTransferFormatFlags  m_nFormatFlags;
-
     public:
         /** construct the transferable
         */
         OColumnTransferable(
              const OUString& _rDatasource
-            ,const OUString& _rConnectionResource
             ,const OUString& _rCommand
             ,const OUString& _rFieldName
             ,ColumnTransferFormatFlags  _nFormats
@@ -76,7 +70,7 @@ namespace svx
         @param _rDescriptor
             The descriptor for the column. It must contain at least
             <ul><li>information sufficient to create a connection, that is, either one of DataSource, DatabaseLocation,
-                    ConnectionResource, and daConnection</li>
+                    ConnectionResource, and DataAccessDescriptorProperty::Connection</li>
                 <li>a Command</li>
                 <li>a CommandType</li>
                 <li>a ColumnName or ColumnObject</li>
@@ -153,14 +147,13 @@ namespace svx
         */
         void addDataToContainer( TransferDataContainer* _pContainer );
 
-    protected:
+    private:
         // TransferableHelper overridables
         virtual void        AddSupportedFormats() override;
         virtual bool GetData( const css::datatransfer::DataFlavor& rFlavor, const OUString& rDestDoc ) override;
 
         static SotClipboardFormatId  getDescriptorFormatId();
 
-    private:
         SVX_DLLPRIVATE void implConstruct(
             const OUString&  _rDatasource
             ,const OUString& _rConnectionResource
@@ -168,6 +161,10 @@ namespace svx
             ,const OUString& _rCommand
             ,const OUString& _rFieldName
         );
+
+        ODataAccessDescriptor      m_aDescriptor;
+        OUString                   m_sCompatibleFormat;
+        ColumnTransferFormatFlags const  m_nFormatFlags;
     };
 
 
@@ -192,8 +189,7 @@ namespace svx
         */
         ODataAccessObjectTransferable(
             const OUString&  _rDatasourceOrLocation
-            ,const OUString& _rConnectionResource
-            ,const sal_Int32            _nCommandType
+            ,const sal_Int32 _nCommandType
             ,const OUString& _rCommand
             ,const css::uno::Reference< css::sdbc::XConnection >& _rxConnection
         );
@@ -208,8 +204,7 @@ namespace svx
         */
         ODataAccessObjectTransferable(
             const OUString&  _rDatasourceOrLocation
-            ,const OUString& _rConnectionResource
-            ,const sal_Int32        _nCommandType
+            ,const sal_Int32 _nCommandType
             ,const OUString& _rCommand
         );
 
@@ -244,7 +239,7 @@ namespace svx
         void    addCompatibleSelectionDescription(
             const css::uno::Sequence< css::uno::Any >& _rSelRows
         );
-            // normally, a derived class could simply access getDescriptor[daSelection] and place the sequence therein
+            // normally, a derived class could simply access getDescriptor[DataAccessDescriptorProperty::Selection] and place the sequence therein
             // but unfortunately, we have this damned compatible format, and this can't be accessed in
             // derived classes (our class is the only one which should be contaminated with this)
 
@@ -263,10 +258,8 @@ namespace svx
 
     /** class for transferring multiple columns
     */
-    class SAL_WARN_UNUSED SVX_DLLPUBLIC OMultiColumnTransferable : public TransferableHelper
+    class SAL_WARN_UNUSED SVX_DLLPUBLIC OMultiColumnTransferable final : public TransferableHelper
     {
-        css::uno::Sequence< css::beans::PropertyValue >   m_aDescriptors;
-
     public:
         OMultiColumnTransferable(const css::uno::Sequence< css::beans::PropertyValue >& _aDescriptors);
 
@@ -282,11 +275,13 @@ namespace svx
         */
         static css::uno::Sequence< css::beans::PropertyValue > extractDescriptor(const TransferableDataHelper& _rData);
 
-    protected:
+    private:
         virtual void        AddSupportedFormats() override;
         virtual bool GetData( const css::datatransfer::DataFlavor& rFlavor, const OUString& rDestDoc ) override;
         virtual void        ObjectReleased() override;
         static SotClipboardFormatId  getDescriptorFormatId();
+
+        css::uno::Sequence< css::beans::PropertyValue >   m_aDescriptors;
     };
 
 

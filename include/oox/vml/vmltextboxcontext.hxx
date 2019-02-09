@@ -20,10 +20,16 @@
 #ifndef INCLUDED_OOX_VML_VMLTEXTBOXCONTEXT_HXX
 #define INCLUDED_OOX_VML_VMLTEXTBOXCONTEXT_HXX
 
+#include <cstddef>
+
+#include <oox/core/contexthandler.hxx>
 #include <oox/core/contexthandler2.hxx>
 #include <oox/vml/vmltextbox.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 namespace oox {
+    class AttributeList;
     class GraphicHelper;
 
 namespace vml {
@@ -33,9 +39,9 @@ class TextPortionContext : public ::oox::core::ContextHandler2
 {
 public:
     explicit            TextPortionContext(
-                            ::oox::core::ContextHandler2Helper& rParent,
+                            ::oox::core::ContextHandler2Helper const & rParent,
                             TextBox& rTextBox,
-                            TextParagraphModel& rParagraph,
+                            TextParagraphModel const & rParagraph,
                             const TextFontModel& rParentFont,
                             sal_Int32 nElement,
                             const AttributeList& rAttribs );
@@ -48,9 +54,9 @@ public:
 
 private:
     TextBox&            mrTextBox;
-    TextParagraphModel  maParagraph;
+    TextParagraphModel const maParagraph;
     TextFontModel       maFont;
-    size_t              mnInitialPortions;
+    size_t const        mnInitialPortions;
 };
 
 
@@ -58,7 +64,7 @@ class TextBoxContext : public ::oox::core::ContextHandler2
 {
 public:
     explicit            TextBoxContext(
-                            ::oox::core::ContextHandler2Helper& rParent,
+                            ::oox::core::ContextHandler2Helper const & rParent,
                             TextBox& rTextBox,
                             const AttributeList& rAttribs,
                             const GraphicHelper& graphicHelper );

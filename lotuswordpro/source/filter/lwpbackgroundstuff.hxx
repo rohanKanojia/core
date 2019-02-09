@@ -59,7 +59,7 @@
 ************************************************************************/
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPBACKGROUNDSTUFF_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPBACKGROUNDSTUFF_HXX
-#include "lwpcolor.hxx"
+#include <lwpcolor.hxx>
 
 /* background patterns */
 #define BACK_TRANSPARENT    0
@@ -145,15 +145,15 @@ public:
     }
 
 private:
-    static void GetPattern(sal_uInt16 btPttnIndex, sal_uInt8* pPttnArray);
+    static void GetPattern(sal_uInt16 btPttnIndex, sal_uInt8 (&pPttnArray)[8]);
 
 public:
     void    Read(LwpObjectStream *pStrm);
     LwpColor* GetFillColor();
-    XFBGImage* GetFillPattern();
+    std::unique_ptr<XFBGImage> GetFillPattern();
 
-    inline bool IsTransparent() { return (m_nID == BACK_TRANSPARENT); }
-    inline bool IsPatternFill() { return (m_nID > 2 && m_nID < 72); }
+    bool IsTransparent() { return (m_nID == BACK_TRANSPARENT); }
+    bool IsPatternFill() { return (m_nID > 2 && m_nID < 72); }
 
     friend class LwpBackgroundOverride;
 private:

@@ -34,7 +34,7 @@
  *
  ************************************************************************/
 
-#include <list>
+#include <vector>
 #include <time.h>
 #include <string.h>
 
@@ -54,6 +54,8 @@
 #include <rtl/strbuf.hxx>
 #include <rtl/uuid.h>
 #include <rtl/bootstrap.hxx>
+#include <sal/log.hxx>
+#include <o3tl/enumarray.hxx>
 #include <osl/module.h>
 
 #include <cppuhelper/implementationentry.hxx>
@@ -61,14 +63,13 @@
 
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/script/Converter.hpp>
-#include <com/sun/star/sdbc/XRow.hpp>
+#include <com/sun/star/sdbc/SQLException.hpp>
 
 using osl::MutexGuard;
 
 using com::sun::star::container::XNameAccess;
 
 using com::sun::star::lang::XComponent;
-using com::sun::star::lang::XInitialization;
 using com::sun::star::lang::IllegalArgumentException;
 
 using com::sun::star::script::Converter;
@@ -84,14 +85,9 @@ using com::sun::star::uno::XComponentContext;
 using com::sun::star::uno::Any;
 
 using com::sun::star::beans::PropertyValue;
-using com::sun::star::beans::XPropertySet;
 
-using com::sun::star::sdbc::XConnection;
-using com::sun::star::sdbc::XResultSet;
-using com::sun::star::sdbc::XRow;
 using com::sun::star::sdbc::XCloseable;
 using com::sun::star::sdbc::SQLException;
-using com::sun::star::sdbc::XWarningsSupplier;
 using com::sun::star::sdbc::XPreparedStatement;
 using com::sun::star::sdbc::XStatement;
 using com::sun::star::sdbc::XDatabaseMetaData;
@@ -101,46 +97,38 @@ namespace pq_sdbc_driver
 
 
 // Helper class for statement lifetime management
-class ClosableReference : public cppu::WeakImplHelper< com::sun::star::uno::XReference >
+class ClosableReference : public cppu::WeakImplHelper< css::uno::XReference >
 {
-    Connection *m_conn;
+    rtl::Reference<Connection> m_conn;
     ::rtl::ByteSequence m_id;
 public:
     ClosableReference( const ::rtl::ByteSequence & id , Connection *that )
       :  m_conn( that ), m_id( id )
     {
-        that->acquire();
     }
 
-    virtual ~ClosableReference()
+    virtual void SAL_CALL dispose() override
     {
-        if( m_conn )
-            m_conn->release();
-    }
-
-    virtual void SAL_CALL dispose() throw (std::exception) override
-    {
-        if( m_conn )
+        if( m_conn.is() )
         {
             m_conn->removeFromWeakMap(m_id);
-            m_conn->release();
-            m_conn = nullptr;
+            m_conn.clear();
         }
     }
 };
 
-OUString    ConnectionGetImplementationName()
+static OUString    ConnectionGetImplementationName()
 {
     return OUString( "org.openoffice.comp.connectivity.pq.Connection.noext" );
 }
-com::sun::star::uno::Sequence<OUString> ConnectionGetSupportedServiceNames()
+static css::uno::Sequence<OUString> ConnectionGetSupportedServiceNames()
 {
     return Sequence< OUString > { "com.sun.star.sdbc.Connection" };
 }
 
-static sal_Int32 readLogLevelFromConfiguration()
+static LogLevel readLogLevelFromConfiguration()
 {
-    sal_Int32 loglevel = LogLevel::NONE;
+    LogLevel nLogLevel = LogLevel::NONE;
     OUString fileName;
     osl_getModuleURLFromFunctionAddress(
         reinterpret_cast<oslGenericFunction>(readLogLevelFromConfiguration), &fileName.pData );
@@ -155,38 +143,38 @@ static sal_Int32 readLogLevelFromConfiguration()
     if( bootstrapHandle.getFrom( "PQ_LOGLEVEL", str ) )
     {
         if ( str == "NONE" )
-            loglevel = LogLevel::NONE;
+            nLogLevel = LogLevel::NONE;
         else if ( str == "ERROR" )
-            loglevel = LogLevel::ERROR;
+            nLogLevel = LogLevel::Error;
         else if ( str == "SQL" )
-            loglevel = LogLevel::SQL;
+            nLogLevel = LogLevel::Sql;
         else if ( str == "INFO" )
-            loglevel = LogLevel::INFO;
+            nLogLevel = LogLevel::Info;
         else
         {
             fprintf( stderr, "unknown loglevel %s\n",
                      OUStringToOString( str, RTL_TEXTENCODING_UTF8 ).getStr() );
         }
     }
-    return loglevel;
+    return nLogLevel;
 }
 
 Connection::Connection(
-    const rtl::Reference< RefCountedMutex > &refMutex,
-    const ::com::sun::star::uno::Reference< ::com::sun::star::uno::XComponentContext > & ctx )
-    : ConnectionBase( refMutex->mutex ),
+    const rtl::Reference< comphelper::RefCountedMutex > &refMutex,
+    const css::uno::Reference< css::uno::XComponentContext > & ctx )
+    : ConnectionBase( refMutex->GetMutex() ),
       m_ctx( ctx ) ,
-      m_refMutex( refMutex )
+      m_xMutex( refMutex )
 {
-    m_settings.loglevel = readLogLevelFromConfiguration();
+    m_settings.m_nLogLevel = readLogLevelFromConfiguration();
 
-    if( m_settings.loglevel > LogLevel::NONE )
+    if (m_settings.m_nLogLevel != LogLevel::NONE)
     {
         m_settings.logFile = fopen( "sdbc-pqsql.log", "a" );
         if( m_settings.logFile )
         {
             setvbuf( m_settings.logFile, nullptr, _IONBF, 0 );
-            log( &m_settings, m_settings.loglevel , "set this loglevel" );
+            log(&m_settings, m_settings.m_nLogLevel , "set this loglevel");
         }
         else
         {
@@ -209,51 +197,48 @@ Connection::~Connection()
         m_settings.logFile = nullptr;
     }
 }
-typedef ::std::list< ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XCloseable > > CloseableList;
+typedef std::vector< css::uno::Reference< css::sdbc::XCloseable > > CloseableVector;
 
-typedef ::std::list< ::com::sun::star::uno::Reference< ::com::sun::star::lang::XComponent > > DisposeableList;
+typedef std::vector< css::uno::Reference< css::lang::XComponent > > DisposeableVector;
 
-void Connection::close() throw ( SQLException, RuntimeException, std::exception )
+void Connection::close()
 {
-    CloseableList lst;
-    DisposeableList lstDispose;
+    CloseableVector vectorCloseable;
+    DisposeableVector vectorDispose;
     {
-        MutexGuard guard( m_refMutex->mutex );
+        MutexGuard guard( m_xMutex->GetMutex() );
         // silently ignore, if the connection has been closed already
         if( m_settings.pConnection )
         {
-            log( &m_settings, LogLevel::INFO, "closing connection" );
+            log(&m_settings, LogLevel::Info, "closing connection");
             PQfinish( m_settings.pConnection );
             m_settings.pConnection = nullptr;
         }
 
-        lstDispose.push_back( Reference< XComponent > ( m_settings.users, UNO_QUERY ) );
-        lstDispose.push_back( Reference< XComponent > ( m_settings.tables , UNO_QUERY ) );
-        lstDispose.push_back( Reference< XComponent > ( m_meta, UNO_QUERY ) );
+        vectorDispose.push_back( Reference< XComponent > ( m_settings.users, UNO_QUERY ) );
+        vectorDispose.push_back( Reference< XComponent > ( m_settings.tables , UNO_QUERY ) );
+        vectorDispose.push_back( Reference< XComponent > ( m_meta, UNO_QUERY ) );
         m_meta.clear();
         m_settings.tables.clear();
         m_settings.users.clear();
 
-        for( WeakHashMap::const_iterator ii = m_myStatements.begin() ;
-             ii != m_myStatements.end() ;
-             ++ii )
+        for (auto const& statement : m_myStatements)
         {
-            Reference< XCloseable > r = ii->second;
+            Reference< XCloseable > r = statement.second;
             if( r.is() )
-                lst.push_back( r );
+                vectorCloseable.push_back( r );
         }
     }
 
     // close all created statements
-    for( CloseableList::iterator ii = lst.begin(); ii != lst.end() ; ++ii )
-        ii->get()->close();
+    for (auto const& elem : vectorCloseable)
+        elem.get()->close();
 
     // close all created statements
-    for( DisposeableList::iterator iiDispose = lstDispose.begin();
-         iiDispose != lstDispose.end() ; ++iiDispose )
+    for (auto const& elem : vectorDispose)
     {
-        if( iiDispose->is() )
-            iiDispose->get()->dispose();
+        if( elem.is() )
+            elem.get()->dispose();
     }
 }
 
@@ -261,45 +246,43 @@ void Connection::close() throw ( SQLException, RuntimeException, std::exception 
 void Connection::removeFromWeakMap( const ::rtl::ByteSequence & id )
 {
     // shrink the list !
-    MutexGuard guard( m_refMutex->mutex );
+    MutexGuard guard( m_xMutex->GetMutex() );
     WeakHashMap::iterator ii = m_myStatements.find( id );
     if( ii != m_myStatements.end() )
         m_myStatements.erase( ii );
 }
 
-Reference< XStatement > Connection::createStatement() throw (SQLException, RuntimeException, std::exception)
+Reference< XStatement > Connection::createStatement()
 {
-    MutexGuard guard( m_refMutex->mutex );
+    MutexGuard guard( m_xMutex->GetMutex() );
     checkClosed();
 
-    Statement *stmt = new Statement( m_refMutex, this , &m_settings );
+    Statement *stmt = new Statement( m_xMutex, this , &m_settings );
     Reference< XStatement > ret( stmt );
     ::rtl::ByteSequence id( 16 );
-    rtl_createUuid( reinterpret_cast<sal_uInt8*>(id.getArray()), nullptr, sal_False );
+    rtl_createUuid( reinterpret_cast<sal_uInt8*>(id.getArray()), nullptr, false );
     m_myStatements[ id ] = Reference< XCloseable > ( stmt );
     stmt->queryAdapter()->addReference( new ClosableReference( id, this ) );
     return ret;
 }
 
 Reference< XPreparedStatement > Connection::prepareStatement( const OUString& sql )
-        throw (SQLException, RuntimeException, std::exception)
 {
-    MutexGuard guard( m_refMutex->mutex );
+    MutexGuard guard( m_xMutex->GetMutex() );
     checkClosed();
 
-    OString byteSql = OUStringToOString( sql, m_settings.encoding );
-    PreparedStatement *stmt = new PreparedStatement( m_refMutex, this, &m_settings, byteSql );
+    OString byteSql = OUStringToOString( sql, ConnectionSettings::encoding );
+    PreparedStatement *stmt = new PreparedStatement( m_xMutex, this, &m_settings, byteSql );
     Reference< XPreparedStatement > ret = stmt;
 
     ::rtl::ByteSequence id( 16 );
-    rtl_createUuid( reinterpret_cast<sal_uInt8*>(id.getArray()), nullptr, sal_False );
+    rtl_createUuid( reinterpret_cast<sal_uInt8*>(id.getArray()), nullptr, false );
     m_myStatements[ id ] = Reference< XCloseable > ( stmt );
     stmt->queryAdapter()->addReference( new ClosableReference( id, this ) );
     return ret;
 }
 
 Reference< XPreparedStatement > Connection::prepareCall( const OUString& )
-        throw (SQLException, RuntimeException, std::exception)
 {
     throw SQLException(
         "pq_driver: Callable statements not supported",
@@ -308,111 +291,106 @@ Reference< XPreparedStatement > Connection::prepareCall( const OUString& )
 
 
 OUString Connection::nativeSQL( const OUString& sql )
-        throw (SQLException, RuntimeException, std::exception)
 {
     return sql;
 }
 
-void Connection::setAutoCommit( sal_Bool ) throw (SQLException, RuntimeException, std::exception)
+void Connection::setAutoCommit( sal_Bool )
 {
     // UNSUPPORTED
 }
 
-sal_Bool Connection::getAutoCommit() throw (SQLException, RuntimeException, std::exception)
+sal_Bool Connection::getAutoCommit()
 {
     // UNSUPPORTED
-    return sal_True;
+    return true;
 }
 
-void Connection::commit() throw (SQLException, RuntimeException, std::exception)
-{
-    // UNSUPPORTED
-}
-
-void Connection::rollback() throw (SQLException, RuntimeException, std::exception)
+void Connection::commit()
 {
     // UNSUPPORTED
 }
 
-sal_Bool Connection::isClosed() throw (SQLException, RuntimeException, std::exception)
+void Connection::rollback()
+{
+    // UNSUPPORTED
+}
+
+sal_Bool Connection::isClosed()
 {
     return m_settings.pConnection == nullptr;
 }
 
 Reference< XDatabaseMetaData > Connection::getMetaData()
-        throw (SQLException, RuntimeException, std::exception)
 {
-    MutexGuard guard( m_refMutex->mutex );
+    MutexGuard guard( m_xMutex->GetMutex() );
     checkClosed();
     if( ! m_meta.is() )
-        m_meta = new DatabaseMetaData( m_refMutex, this, &m_settings );
+        m_meta = new DatabaseMetaData( m_xMutex, this, &m_settings );
     return m_meta;
 }
 
-void  Connection::setReadOnly( sal_Bool ) throw (SQLException, RuntimeException, std::exception)
+void  Connection::setReadOnly( sal_Bool )
 {
     // UNSUPPORTED
 
 }
 
-sal_Bool Connection::isReadOnly() throw (SQLException, RuntimeException, std::exception)
+sal_Bool Connection::isReadOnly()
 {
     // UNSUPPORTED
-    return sal_False;
+    return false;
 }
 
 void Connection::setCatalog( const OUString& )
-        throw (SQLException, RuntimeException, std::exception)
 {
     // UNSUPPORTED
 }
 
-OUString Connection::getCatalog() throw (SQLException, RuntimeException, std::exception)
+OUString Connection::getCatalog()
 {
-    MutexGuard guard( m_refMutex->mutex );
+    MutexGuard guard( m_xMutex->GetMutex() );
     if( m_settings.pConnection == nullptr )
     {
         throw SQLException( "pq_connection: connection is closed", *this,
                             OUString(), 1, Any() );
     }
     char * p = PQdb(m_settings.pConnection );
-    return OUString( p, strlen(p) ,  m_settings.encoding );
+    return OUString( p, strlen(p) ,  ConnectionSettings::encoding );
 }
 
 void Connection::setTransactionIsolation( sal_Int32 )
-        throw (SQLException, RuntimeException, std::exception)
 {
     // UNSUPPORTED
 }
 
-sal_Int32 Connection::getTransactionIsolation() throw (SQLException, RuntimeException, std::exception)
+sal_Int32 Connection::getTransactionIsolation()
 {
     // UNSUPPORTED
     return 0;
 }
 
-Reference< XNameAccess > Connection::getTypeMap() throw (SQLException, RuntimeException, std::exception)
+Reference< XNameAccess > Connection::getTypeMap()
 {
     Reference< XNameAccess > t;
     {
-        MutexGuard guard( m_refMutex->mutex );
+        MutexGuard guard( m_xMutex->GetMutex() );
         t = m_typeMap;
     }
     return t;
 }
 
 void Connection::setTypeMap( const Reference< XNameAccess >& typeMap )
-        throw (SQLException, RuntimeException, std::exception)
 {
-    MutexGuard guard( m_refMutex->mutex );
+    MutexGuard guard( m_xMutex->GetMutex() );
     m_typeMap = typeMap;
 }
-Any Connection::getWarnings() throw (SQLException, RuntimeException, std::exception)
+Any Connection::getWarnings()
 {
     return Any();
 }
 
-void Connection::clearWarnings() throw (SQLException, RuntimeException, std::exception)
+void Connection::clearWarnings()
 {
 }
 
@@ -472,11 +450,11 @@ static void properties2arrays( const Sequence< PropertyValue > & args,
     for( int i = 0; i < args.getLength() ; ++i )
     {
         bool append = false;
-        for( size_t j = 0; j < SAL_N_ELEMENTS( keyword_list ); j++)
+        for(const char* j : keyword_list)
         {
-            if( args[i].Name.equalsIgnoreAsciiCaseAscii( keyword_list[j] ))
+            if( args[i].Name.equalsIgnoreAsciiCaseAscii( j ))
             {
-                keywords.push_back( keyword_list[j], SAL_NO_ACQUIRE );
+                keywords.push_back( j, SAL_NO_ACQUIRE );
                 append = true;
                 break;
             }
@@ -492,13 +470,12 @@ static void properties2arrays( const Sequence< PropertyValue > & args,
         else
         {
             // ignore for now
-            OSL_TRACE("sdbc-postgresql: unknown argument '%s'", OUStringToOString( args[i].Name, RTL_TEXTENCODING_UTF8 ).getStr() );
+            SAL_WARN("connectivity.postgresql", "sdbc-postgresql: unknown argument '" << args[i].Name << "' having value: " << args[i].Value );
         }
     }
 }
 
 void Connection::initialize( const Sequence< Any >& aArguments )
-        throw (Exception, RuntimeException, std::exception)
 {
     OUString url;
     Sequence< PropertyValue > args;
@@ -511,18 +488,17 @@ void Connection::initialize( const Sequence< Any >& aArguments )
     }
     if( aArguments.getLength() != 2 )
     {
-        OUStringBuffer buf(128);
-        buf.append( "pq_driver: expected 2 arguments, got " );
-        buf.append( aArguments.getLength( ) );
-        throw IllegalArgumentException(buf.makeStringAndClear(), Reference< XInterface > () , 0 );
+        throw IllegalArgumentException(
+            "pq_driver: expected 2 arguments, got " + OUString::number( aArguments.getLength( ) ),
+            Reference< XInterface > () , 0 );
     }
 
     if( ! (aArguments[0] >>= url) )
     {
-        OUStringBuffer buf(128);
-        buf.append( "pq_driver: expected string as first argument, got " );
-        buf.append( aArguments[0].getValueType().getTypeName() );
-        throw IllegalArgumentException( buf.makeStringAndClear() , *this, 0 );
+        throw IllegalArgumentException(
+            "pq_driver: expected string as first argument, got "
+            + aArguments[0].getValueType().getTypeName(),
+            *this, 0 );
     }
 
     tc->convertTo( aArguments[1], cppu::UnoType<decltype(args)>::get() ) >>= args;
@@ -534,7 +510,7 @@ void Connection::initialize( const Sequence< Any >& aArguments )
         nColon = url.indexOf( ':' , 1+ nColon );
         if( nColon != -1 )
         {
-             o = OUStringToOString( url.getStr()+nColon+1, m_settings.encoding );
+             o = OUStringToOString( url.getStr()+nColon+1, ConnectionSettings::encoding );
         }
     }
     {
@@ -545,24 +521,21 @@ void Connection::initialize( const Sequence< Any >& aArguments )
         {
             char *err;
             std::shared_ptr<PQconninfoOption> oOpts(PQconninfoParse(o.getStr(), &err), PQconninfoFree);
-            if ( oOpts.get() == nullptr )
+            if (oOpts == nullptr)
             {
                 OUString errorMessage;
                 if ( err != nullptr)
                 {
-                    errorMessage = OUString( err, strlen(err), m_settings.encoding );
+                    errorMessage = OUString( err, strlen(err), ConnectionSettings::encoding );
                     free(err);
                 }
                 else
                     errorMessage = "#no error message#";
-                OUStringBuffer buf( 128 );
-                buf.append( "Error in database URL '" );
-                buf.append( url );
-                buf.append( "':\n" );
-                buf.append( errorMessage );
                 // HY092 is "Invalid attribute/option identifier."
                 // Just the most likely error; the error might be  HY024 "Invalid attribute value".
-                throw SQLException( buf.makeStringAndClear(), *this, OUString("HY092"), 5, Any() );
+                throw SQLException(
+                    "Error in database URL '" + url + "':\n"  + errorMessage,
+                    *this, "HY092", 5, Any() );
             }
 
             for (  PQconninfoOption * opt = oOpts.get(); opt->keyword != nullptr; ++opt)
@@ -574,7 +547,7 @@ void Connection::initialize( const Sequence< Any >& aArguments )
                 }
             }
         }
-        properties2arrays( args , tc, m_settings.encoding, keywords, values );
+        properties2arrays( args , tc, ConnectionSettings::encoding, keywords, values );
         keywords.push_back(nullptr, SAL_NO_ACQUIRE);
         values.push_back(nullptr, SAL_NO_ACQUIRE);
 
@@ -584,17 +557,14 @@ void Connection::initialize( const Sequence< Any >& aArguments )
         throw RuntimeException("pq_driver: out of memory" );
     if( PQstatus( m_settings.pConnection ) == CONNECTION_BAD )
     {
-        OUStringBuffer buf( 128 );
-
         const char * error = PQerrorMessage( m_settings.pConnection );
         OUString errorMessage( error, strlen( error) , RTL_TEXTENCODING_ASCII_US );
-        buf.append( "Couldn't establish database connection to '" );
-        buf.append( url );
-        buf.append( "'\n" );
-        buf.append( errorMessage );
         PQfinish( m_settings.pConnection );
         m_settings.pConnection = nullptr;
-        throw SQLException( buf.makeStringAndClear(), *this, errorMessage, CONNECTION_BAD, Any() );
+        throw SQLException(
+            "Couldn't establish database connection to '" + url + "'\n"
+            + errorMessage,
+            *this, errorMessage, CONNECTION_BAD, Any() );
     }
     PQsetClientEncoding( m_settings.pConnection, "UNICODE" );
     char *p = PQuser( m_settings.pConnection );
@@ -603,13 +573,13 @@ void Connection::initialize( const Sequence< Any >& aArguments )
     m_settings.catalog = OUString( p, strlen(p), RTL_TEXTENCODING_UTF8);
     m_settings.tc = tc;
 
-    if( isLog( &m_settings, LogLevel::INFO ) )
+    if (isLog(&m_settings, LogLevel::Info))
     {
         OUStringBuffer buf( 128 );
         buf.append( "connection to '" );
         buf.append( url );
         buf.append( "' successfully opened" );
-        log( &m_settings, LogLevel::INFO, buf.makeStringAndClear() );
+        log(&m_settings, LogLevel::Info, buf.makeStringAndClear());
     }
 }
 
@@ -618,7 +588,7 @@ void Connection::disposing()
     close();
 }
 
-void Connection::checkClosed() throw ( SQLException, RuntimeException )
+void Connection::checkClosed()
 {
     if( !m_settings.pConnection )
         throw SQLException( "pq_connection: Connection already closed",
@@ -626,79 +596,77 @@ void Connection::checkClosed() throw ( SQLException, RuntimeException )
 }
 
 Reference< XNameAccess > Connection::getTables()
-    throw (::com::sun::star::uno::RuntimeException, std::exception)
 {
-    if( isLog( &m_settings, LogLevel::INFO ) )
+    if (isLog(&m_settings, LogLevel::Info))
     {
-        log( &m_settings, LogLevel::INFO, "Connection::getTables() got called" );
+        log(&m_settings, LogLevel::Info, "Connection::getTables() got called");
     }
-    MutexGuard guard( m_refMutex->mutex );
+    MutexGuard guard( m_xMutex->GetMutex() );
     if( !m_settings.tables.is() )
-        m_settings.tables = Tables::create( m_refMutex, this, &m_settings , &m_settings.pTablesImpl);
+        m_settings.tables = Tables::create( m_xMutex, this, &m_settings , &m_settings.pTablesImpl);
     else
         // TODO: how to overcome the performance problem ?
-        Reference< com::sun::star::util::XRefreshable > ( m_settings.tables, UNO_QUERY )->refresh();
+        Reference< css::util::XRefreshable > ( m_settings.tables, UNO_QUERY )->refresh();
     return m_settings.tables;
 }
 
 Reference< XNameAccess > Connection::getViews()
-    throw (::com::sun::star::uno::RuntimeException, std::exception)
 {
-    if( isLog( &m_settings, LogLevel::INFO ) )
+    if (isLog(&m_settings, LogLevel::Info))
     {
-        log( &m_settings, LogLevel::INFO, "Connection::getViews() got called" );
+        log(&m_settings, LogLevel::Info, "Connection::getViews() got called");
     }
-    MutexGuard guard( m_refMutex->mutex );
+    MutexGuard guard( m_xMutex->GetMutex() );
     if( !m_settings.views.is() )
-        m_settings.views = Views::create( m_refMutex, this, &m_settings, &(m_settings.pViewsImpl) );
+        m_settings.views = Views::create( m_xMutex, this, &m_settings, &(m_settings.pViewsImpl) );
     else
         // TODO: how to overcome the performance problem ?
-        Reference< com::sun::star::util::XRefreshable > ( m_settings.views, UNO_QUERY )->refresh();
+        Reference< css::util::XRefreshable > ( m_settings.views, UNO_QUERY )->refresh();
     return m_settings.views;
 }
 
 
 Reference< XNameAccess > Connection::getUsers()
-    throw (::com::sun::star::uno::RuntimeException, std::exception)
 {
-    if( isLog( &m_settings, LogLevel::INFO ) )
+    if (isLog(&m_settings, LogLevel::Info))
     {
-        log( &m_settings, LogLevel::INFO, "Connection::getUsers() got called" );
+        log(&m_settings, LogLevel::Info, "Connection::getUsers() got called");
     }
 
-    MutexGuard guard( m_refMutex->mutex );
+    MutexGuard guard( m_xMutex->GetMutex() );
     if( !m_settings.users.is() )
-        m_settings.users = Users::create( m_refMutex, this, &m_settings );
+        m_settings.users = Users::create( m_xMutex, this, &m_settings );
     return m_settings.users;
 }
 
-
-Reference< XInterface >  ConnectionCreateInstance(
-    const Reference< XComponentContext > & ctx ) throw (Exception, std::exception)
+/// @throws Exception
+static Reference< XInterface >  ConnectionCreateInstance(
+    const Reference< XComponentContext > & ctx )
 {
-    ::rtl::Reference< RefCountedMutex > ref = new RefCountedMutex();
+    ::rtl::Reference< comphelper::RefCountedMutex > ref = new comphelper::RefCountedMutex;
     return * new Connection( ref, ctx );
 }
 
 
-bool isLog( ConnectionSettings *settings, int loglevel )
+bool isLog(ConnectionSettings const *settings, LogLevel nLevel)
 {
-    return settings->loglevel >= loglevel && settings->logFile;
+    return static_cast<int>(settings->m_nLogLevel) >= static_cast<int>(nLevel)
+           && settings->logFile;
 }
 
-void log( ConnectionSettings *settings, sal_Int32 level, const OUString &logString )
+void log(ConnectionSettings *settings, LogLevel nLevel, const OUString &logString)
 {
-    log( settings, level, OUStringToOString( logString, settings->encoding ).getStr() );
+    log( settings, nLevel, OUStringToOString( logString, ConnectionSettings::encoding ).getStr() );
 }
-void log( ConnectionSettings *settings, sal_Int32 level, const char *str )
+void log(ConnectionSettings *settings, LogLevel nLevel, const char *str)
 {
-    if( isLog( settings, level ) )
+    if (isLog(settings, nLevel))
     {
-        static const char *strLevel[] = { "NONE", "ERROR", "SQL", "INFO", "DATA" };
+        static const o3tl::enumarray<LogLevel, const char*> strLevel = {"NONE", "ERROR", "SQL", "INFO"};
 
         time_t t = ::time( nullptr );
         char *pString;
-#ifdef SAL_W32
+#ifdef _WIN32
         pString = asctime( localtime( &t ) );
 #else
         struct tm timestruc;
@@ -716,7 +684,7 @@ void log( ConnectionSettings *settings, sal_Int32 level, const char *str )
                 break;
             }
         }
-        fprintf( settings->logFile, "%s [%s]: %s\n", pString, strLevel[level], str );
+        fprintf(settings->logFile, "%s [%s]: %s\n", pString, strLevel[nLevel], str);
     }
 }
 
@@ -738,7 +706,7 @@ static const struct cppu::ImplementationEntry g_entries[] =
 extern "C"
 {
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL postgresql_sdbc_impl_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * postgresql_sdbc_impl_component_getFactory(
     const sal_Char * pImplName, void * pServiceManager, void * pRegistryKey )
 {
     return cppu::component_getFactoryHelper( pImplName, pServiceManager, pRegistryKey , g_entries );

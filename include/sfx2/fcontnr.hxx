@@ -34,26 +34,13 @@
 #include <memory>
 
 namespace vcl { class Window; }
+class ErrCode;
 class SfxFilter;
 class SfxObjectFactory;
 class SfxMedium;
 class SfxFilterContainer_Impl;
 class SfxFrame;
 
-
-class SfxRefItem : public SfxPoolItem
-{
-    tools::SvRef<SvRefBase> maRef;
-public:
-    SfxRefItem( sal_uInt16 nWhichId, const tools::SvRef<SvRefBase>& rValue ) : SfxPoolItem( nWhichId )
-    {   maRef = rValue; }
-    virtual SfxPoolItem*     Clone( SfxItemPool* = nullptr ) const override
-    {   return new SfxRefItem( *this ); }
-    virtual bool             operator==( const SfxPoolItem& rL) const override
-    {   return static_cast<const SfxRefItem&>(rL).maRef == maRef; }
-};
-
-typedef sal_uIntPtr (*SfxDetectFilter)( SfxMedium& rMedium, const SfxFilter **, SfxFilterFlags nMust, SfxFilterFlags nDont );
 
 class SFX2_DLLPUBLIC SfxFilterContainer
 {
@@ -64,7 +51,7 @@ public:
                         ~SfxFilterContainer();
 
 
-    const OUString      GetName() const;
+    OUString const &      GetName() const;
 
     std::shared_ptr<const SfxFilter>    GetAnyFilter( SfxFilterFlags nMust = SfxFilterFlags::IMPORT, SfxFilterFlags nDont = SFX_FILTER_NOTINSTALLED ) const;
     std::shared_ptr<const SfxFilter>    GetFilter4EA( const OUString& rEA, SfxFilterFlags nMust = SfxFilterFlags::IMPORT, SfxFilterFlags nDont = SFX_FILTER_NOTINSTALLED ) const;
@@ -93,12 +80,12 @@ public:
     SfxFilterMatcher&   operator=( const SfxFilterMatcher& ) = delete;
 
     SAL_DLLPRIVATE static bool IsFilterInstalled_Impl( const std::shared_ptr<const SfxFilter>& pFilter );
-    DECL_DLLPRIVATE_LINK_TYPED( MaybeFileHdl_Impl, OUString*, bool );
+    DECL_DLLPRIVATE_LINK( MaybeFileHdl_Impl, OUString*, bool );
 
-    sal_uInt32               GuessFilterIgnoringContent( SfxMedium& rMedium, std::shared_ptr<const SfxFilter>& ) const;
-    sal_uInt32               GuessFilter( SfxMedium& rMedium, std::shared_ptr<const SfxFilter>& , SfxFilterFlags nMust = SfxFilterFlags::IMPORT, SfxFilterFlags nDont = SFX_FILTER_NOTINSTALLED ) const;
-    sal_uInt32               GuessFilterControlDefaultUI( SfxMedium& rMedium, std::shared_ptr<const SfxFilter>&, SfxFilterFlags nMust = SfxFilterFlags::IMPORT, SfxFilterFlags nDont = SFX_FILTER_NOTINSTALLED ) const;
-    sal_uInt32               DetectFilter( SfxMedium& rMedium, std::shared_ptr<const SfxFilter>& ) const;
+    ErrCode                  GuessFilterIgnoringContent( SfxMedium const & rMedium, std::shared_ptr<const SfxFilter>& ) const;
+    ErrCode                  GuessFilter( SfxMedium& rMedium, std::shared_ptr<const SfxFilter>& , SfxFilterFlags nMust = SfxFilterFlags::IMPORT, SfxFilterFlags nDont = SFX_FILTER_NOTINSTALLED ) const;
+    ErrCode                  GuessFilterControlDefaultUI( SfxMedium& rMedium, std::shared_ptr<const SfxFilter>&, SfxFilterFlags nMust = SfxFilterFlags::IMPORT, SfxFilterFlags nDont = SFX_FILTER_NOTINSTALLED ) const;
+    ErrCode                  DetectFilter( SfxMedium& rMedium, std::shared_ptr<const SfxFilter>& ) const;
 
     std::shared_ptr<const SfxFilter>    GetFilter4Mime( const OUString& rMime, SfxFilterFlags nMust = SfxFilterFlags::IMPORT, SfxFilterFlags nDont = SFX_FILTER_NOTINSTALLED) const;
     std::shared_ptr<const SfxFilter>    GetFilter4ClipBoardId( SotClipboardFormatId nId, SfxFilterFlags nMust = SfxFilterFlags::IMPORT, SfxFilterFlags nDont = SFX_FILTER_NOTINSTALLED ) const;
@@ -107,7 +94,7 @@ public:
     std::shared_ptr<const SfxFilter>    GetFilter4FilterName( const OUString& rName, SfxFilterFlags nMust = SfxFilterFlags::NONE, SfxFilterFlags nDont = SFX_FILTER_NOTINSTALLED ) const;
     std::shared_ptr<const SfxFilter>    GetFilter4UIName( const OUString& rName, SfxFilterFlags nMust = SfxFilterFlags::NONE, SfxFilterFlags nDont = SFX_FILTER_NOTINSTALLED ) const;
     std::shared_ptr<const SfxFilter>    GetFilterForProps( const css::uno::Sequence < css::beans::NamedValue >& aSeq, SfxFilterFlags nMust = SfxFilterFlags::NONE, SfxFilterFlags nDont = SFX_FILTER_NOTINSTALLED ) const;
-    std::shared_ptr<const SfxFilter>    GetAnyFilter( SfxFilterFlags nMust=SfxFilterFlags::NONE, SfxFilterFlags nDont=SFX_FILTER_NOTINSTALLED ) const;
+    std::shared_ptr<const SfxFilter>    GetAnyFilter( SfxFilterFlags nMustg=SfxFilterFlags::NONE, SfxFilterFlags nDont=SFX_FILTER_NOTINSTALLED ) const;
 };
 
 class SfxFilterContainer_Impl;
@@ -115,7 +102,7 @@ class SFX2_DLLPUBLIC SfxFilterMatcherIter
 
 {
     SfxFilterFlags nOrMask;
-    SfxFilterFlags nAndMask;
+    SfxFilterFlags const nAndMask;
     sal_uInt16 nCurrent;
     const SfxFilterMatcher_Impl &m_rMatch;
 

@@ -8,11 +8,11 @@
  */
 package org.libreoffice.overlay;
 
-import android.app.Activity;
 import android.graphics.RectF;
 import android.util.Log;
 
 import org.libreoffice.LOKitShell;
+import org.libreoffice.LibreOfficeMainActivity;
 import org.libreoffice.R;
 import org.libreoffice.canvas.SelectionHandle;
 import org.mozilla.gecko.gfx.Layer;
@@ -31,6 +31,8 @@ public class DocumentOverlay {
 
     private final DocumentOverlayView mDocumentOverlayView;
     private final DocumentOverlayLayer mDocumentOverlayLayer;
+
+    private final long hidePageNumberRectDelayInMilliseconds = 500;
 
     /**
      * DocumentOverlayLayer responsibility is to get the changes to the viewport
@@ -64,14 +66,18 @@ public class DocumentOverlay {
         }
     }
 
-    public DocumentOverlay(Activity context, LayerView layerView) {
-        mDocumentOverlayView = (DocumentOverlayView) context.findViewById(R.id.text_cursor_view);
+    public DocumentOverlay(LibreOfficeMainActivity context, LayerView layerView) {
+        mDocumentOverlayView = context.findViewById(R.id.text_cursor_view);
         mDocumentOverlayLayer = new DocumentOverlayLayer();
         if (mDocumentOverlayView == null) {
             Log.e(LOGTAG, "Failed to initialize TextCursorLayer - CursorView is null");
         }
         layerView.addLayer(mDocumentOverlayLayer);
         mDocumentOverlayView.initialize(layerView);
+    }
+
+    public void setPartPageRectangles(List<RectF> rectangles) {
+        mDocumentOverlayView.setPartPageRectangles(rectangles);
     }
 
     /**
@@ -94,6 +100,28 @@ public class DocumentOverlay {
                 mDocumentOverlayView.hideCursor();
             }
         });
+    }
+
+    /**
+     * Show the page number rectangle on the overlay.
+     */
+    public void showPageNumberRect() {
+        LOKitShell.getMainHandler().post(new Runnable() {
+            public void run() {
+                mDocumentOverlayView.showPageNumberRect();
+            }
+        });
+    }
+
+    /**
+     * Hide the page number rectangle on the overlay.
+     */
+    public void hidePageNumberRect() {
+        LOKitShell.getMainHandler().postDelayed(new Runnable() {
+            public void run() {
+                mDocumentOverlayView.hidePageNumberRect();
+            }
+        }, hidePageNumberRectDelayInMilliseconds);
     }
 
     /**
@@ -208,6 +236,35 @@ public class DocumentOverlay {
 
     public RectF getCurrentCursorPosition() {
         return mDocumentOverlayView.getCurrentCursorPosition();
+    }
+
+    public void setCalcHeadersController(CalcHeadersController calcHeadersController) {
+        mDocumentOverlayView.setCalcHeadersController(calcHeadersController);
+    }
+
+    public void showCellSelection(final RectF cellCursorRect) {
+        LOKitShell.getMainHandler().post(new Runnable() {
+            public void run() {
+                mDocumentOverlayView.showCellSelection(cellCursorRect);
+            }
+        });
+    }
+
+    public void showHeaderSelection(final RectF cellCursorRect) {
+        LOKitShell.getMainHandler().post(new Runnable() {
+            public void run() {
+                mDocumentOverlayView.showHeaderSelection(cellCursorRect);
+            }
+        });
+    }
+
+    public void showAdjustLengthLine(final boolean isRow, final CalcHeadersView view) {
+        LOKitShell.getMainHandler().post(new Runnable() {
+            @Override
+            public void run() {
+                mDocumentOverlayView.showAdjustLengthLine(isRow, view);
+            }
+        });
     }
 }
 

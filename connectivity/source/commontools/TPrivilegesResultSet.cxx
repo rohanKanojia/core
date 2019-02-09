@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TPrivilegesResultSet.hxx"
+#include <TPrivilegesResultSet.hxx>
 
 using namespace connectivity;
 
@@ -55,7 +55,7 @@ OResultSetPrivileges::OResultSetPrivileges( const Reference< XDatabaseMetaData>&
         }
 
         ODatabaseMetaDataResultSet::ORows aRows;
-        static ODatabaseMetaDataResultSet::ORow aRow(8);
+        ODatabaseMetaDataResultSet::ORow aRow(8);
         aRow[5] = new ORowSetValueDecorator(sUserWorkingFor);
         aRow[6] = ODatabaseMetaDataResultSet::getSelectValue();
         aRow[7] = new ORowSetValueDecorator(OUString("YES"));
@@ -110,11 +110,11 @@ const ORowSetValue& OResultSetPrivileges::getValue(sal_Int32 columnIndex)
 void SAL_CALL OResultSetPrivileges::disposing()
 {
     ODatabaseMetaDataResultSet::disposing();
-m_xTables.clear();
-m_xRow.clear();
+    m_xTables.clear();
+    m_xRow.clear();
 }
 
-sal_Bool SAL_CALL OResultSetPrivileges::next(  ) throw(SQLException, RuntimeException, std::exception)
+sal_Bool SAL_CALL OResultSetPrivileges::next(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(ODatabaseMetaDataResultSet_BASE::rBHelper.bDisposed );
@@ -126,7 +126,7 @@ sal_Bool SAL_CALL OResultSetPrivileges::next(  ) throw(SQLException, RuntimeExce
         {
             m_bResetValues = true;
             if ( !m_xTables->next() )
-                return sal_False;
+                return false;
         }
 
         bReturn = ODatabaseMetaDataResultSet::next();

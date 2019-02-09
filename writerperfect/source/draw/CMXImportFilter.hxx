@@ -11,9 +11,9 @@
 #ifndef INCLUDED_WRITERPERFECT_SOURCE_DRAW_CMXIMPORTFILTER_HXX
 #define INCLUDED_WRITERPERFECT_SOURCE_DRAW_CMXIMPORTFILTER_HXX
 
-#include "ImportFilter.hxx"
+#include <ImportFilter.hxx>
 
-#include "DocumentHandlerForOdg.hxx"
+#include <DocumentHandlerForOdg.hxx>
 
 /* This component will be instantiated for both import or export. Whether it calls
  * setSourceDocument or setTargetDocument determines which Impl function the filter
@@ -21,22 +21,20 @@
 class CMXImportFilter : public writerperfect::ImportFilter<OdgGenerator>
 {
 public:
-    explicit CMXImportFilter(const css::uno::Reference< css::uno::XComponentContext > &rxContext)
+    explicit CMXImportFilter(const css::uno::Reference<css::uno::XComponentContext>& rxContext)
         : writerperfect::ImportFilter<OdgGenerator>(rxContext)
     {
     }
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-    throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService(const OUString &ServiceName)
-    throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService(const OUString& ServiceName) override;
+    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
 
 private:
-    virtual bool doDetectFormat(librevenge::RVNGInputStream &rInput, OUString &rTypeName) override;
-    virtual bool doImportDocument(librevenge::RVNGInputStream &rInput, OdgGenerator &rGenerator, utl::MediaDescriptor &) override;
+    virtual bool doDetectFormat(librevenge::RVNGInputStream& rInput, OUString& rTypeName) override;
+    virtual bool doImportDocument(weld::Window* pParent, librevenge::RVNGInputStream& rInput,
+                                  OdgGenerator& rGenerator, utl::MediaDescriptor&) override;
 };
 
 #endif

@@ -18,12 +18,12 @@
  */
 
 
-#include "runtime.hxx"
-#include "stdobj.hxx"
-#include "sbstdobj.hxx"
+#include <runtime.hxx>
+#include <stdobj.hxx>
+#include <sbstdobj.hxx>
 #include <sal/macros.h>
-#include "rtlproto.hxx"
-#include "sbintern.hxx"
+#include <rtlproto.hxx>
+#include <sbintern.hxx>
 // The nArgs-field of a table entry is encrypted as follows:
 // At the moment it is assumed that properties don't need any
 // parameters!
@@ -278,6 +278,12 @@ static Methods aMethods[] = {
 { "FormatDateTime", SbxSTRING,    2 | FUNCTION_ | COMPATONLY_, RTLNAME(FormatDateTime),0 },
   { "Date",         SbxDATE, 0,nullptr,0 },
   { "NamedFormat",  SbxINTEGER,        OPT_, nullptr,0 },
+{ "FormatNumber",   SbxSTRING, 5 | FUNCTION_ | COMPATONLY_, RTLNAME(FormatNumber), 0 },
+  { "expression",                  SbxDOUBLE,  0,    nullptr, 0 },
+  { "numDigitsAfterDecimal",       SbxINTEGER, OPT_, nullptr, 0 },
+  { "includeLeadingDigit",         SbxINTEGER, OPT_, nullptr, 0 }, // vbTriState
+  { "useParensForNegativeNumbers", SbxINTEGER, OPT_, nullptr, 0 }, // vbTriState
+  { "groupDigits",                 SbxINTEGER, OPT_, nullptr, 0 }, // vbTriState
 { "Frac",           SbxDOUBLE,    1 | FUNCTION_, RTLNAME(Frac),0            },
   { "number",       SbxDOUBLE, 0,nullptr,0 },
 { "FRAMEANCHORCHAR",        SbxINTEGER,       CPROP_,    RTLNAME(FRAMEANCHORCHAR),0 },
@@ -604,6 +610,7 @@ static Methods aMethods[] = {
   { "Expression",   SbxVARIANT, 0,nullptr,0 },
   { "Value",        SbxVARIANT, 0,nullptr,0 },
 { "Tab",            SbxSTRING,    1 | FUNCTION_, RTLNAME(Tab),0             },
+  { "Count",        SbxLONG, 0,nullptr,0 },
 { "Tan",            SbxDOUBLE,    1 | FUNCTION_, RTLNAME(Tan),0             },
   { "number",       SbxDOUBLE, 0,nullptr,0 },
 { "Time",           SbxVARIANT,       LFUNCTION_,RTLNAME(Time),0            },
@@ -718,21 +725,21 @@ SbiStdObject::SbiStdObject( const OUString& r, StarBASIC* pb ) : SbxObject( r )
         }
 
     // #i92642: Remove default properties
-    Remove( "Name", SbxCLASS_DONTCARE );
-    Remove( "Parent", SbxCLASS_DONTCARE );
+    Remove( "Name", SbxClassType::DontCare );
+    Remove( "Parent", SbxClassType::DontCare );
 
     SetParent( pb );
 
-    pStdFactory = new SbStdFactory;
-    SbxBase::AddFactory( pStdFactory );
+    pStdFactory.reset( new SbStdFactory );
+    SbxBase::AddFactory( pStdFactory.get() );
 
     Insert( new SbStdClipboard );
 }
 
 SbiStdObject::~SbiStdObject()
 {
-    SbxBase::RemoveFactory( pStdFactory );
-    delete pStdFactory;
+    SbxBase::RemoveFactory( pStdFactory.get() );
+    pStdFactory.reset();
 }
 
 // Finding an element:
@@ -757,9 +764,9 @@ SbxVariable* SbiStdObject::Find( const OUString& rName, SbxClassType t )
         sal_uInt16 nSrchMask = TYPEMASK_;
         switch( t )
         {
-            case SbxCLASS_METHOD:   nSrchMask = METHOD_; break;
-            case SbxCLASS_PROPERTY: nSrchMask = PROPERTY_; break;
-            case SbxCLASS_OBJECT:   nSrchMask = OBJECT_; break;
+            case SbxClassType::Method:   nSrchMask = METHOD_; break;
+            case SbxClassType::Property: nSrchMask = PROPERTY_; break;
+            case SbxClassType::Object:   nSrchMask = OBJECT_; break;
             default: break;
         }
         while( p->nArgs != -1 )
@@ -768,11 +775,23 @@ SbxVariable* SbiStdObject::Find( const OUString& rName, SbxClassType t )
              && ( p->nHash == nHash_ )
              && ( rName.equalsIgnoreAsciiCaseAscii( p->pName ) ) )
             {
-                SbiInstance* pInst = GetSbData()->pInst;
                 bFound = true;
                 if( p->nArgs & COMPTMASK_ )
                 {
-                    if ( !pInst || ( pInst->IsCompatibility()  && ( NORMONLY_ & p->nArgs )  ) || ( !pInst->IsCompatibility()  && ( COMPATONLY_ & p->nArgs )  ) )
+                    bool bCompatibility = false;
+                    SbiInstance* pInst = GetSbData()->pInst;
+                    if (pInst)
+                    {
+                        bCompatibility = pInst->IsCompatibility();
+                    }
+                    else
+                    {
+                        // No instance running => compiling a source on module level.
+                        const SbModule* pModule = GetSbData()->pCompMod;
+                        if (pModule)
+                            bCompatibility = pModule->IsVBACompat();
+                    }
+                    if ((bCompatibility && (NORMONLY_ & p->nArgs)) || (!bCompatibility && (COMPATONLY_ & p->nArgs)))
                         bFound = false;
                 }
                 break;
@@ -789,14 +808,14 @@ SbxVariable* SbiStdObject::Find( const OUString& rName, SbxClassType t )
             if( p->nArgs & CONST_ )
                 nAccess |= SbxFlagBits::Const;
             OUString aName_ = OUString::createFromAscii( p->pName );
-            SbxClassType eCT = SbxCLASS_OBJECT;
+            SbxClassType eCT = SbxClassType::Object;
             if( nType & PROPERTY_ )
             {
-                eCT = SbxCLASS_PROPERTY;
+                eCT = SbxClassType::Property;
             }
             else if( nType & METHOD_ )
             {
-                eCT = SbxCLASS_METHOD;
+                eCT = SbxClassType::Method;
             }
             pVar = Make( aName_, eCT, p->eType, ( p->nArgs & FUNCTION_ ) == FUNCTION_ );
             pVar->SetUserData( nIndex + 1 );
@@ -823,15 +842,15 @@ void SbiStdObject::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
         const sal_uInt16 nCallId = static_cast<sal_uInt16>(pVar->GetUserData());
         if( nCallId )
         {
-            const sal_uInt32 t = pHint->GetId();
-            if( t == SBX_HINT_INFOWANTED )
+            const SfxHintId t = pHint->GetId();
+            if( t == SfxHintId::BasicInfoWanted )
                 pVar->SetInfo( GetInfo( static_cast<short>(pVar->GetUserData()) ) );
             else
             {
                 bool bWrite = false;
-                if( t == SBX_HINT_DATACHANGED )
+                if( t == SfxHintId::BasicDataChanged )
                     bWrite = true;
-                if( t == SBX_HINT_DATAWANTED || bWrite )
+                if( t == SfxHintId::BasicDataWanted || bWrite )
                 {
                     RtlCall p = aMethods[ nCallId-1 ].pFunc;
                     SbxArrayRef rPar( pPar_ );

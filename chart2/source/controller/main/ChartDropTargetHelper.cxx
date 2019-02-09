@@ -18,8 +18,7 @@
  */
 
 #include "ChartDropTargetHelper.hxx"
-#include "DiagramHelper.hxx"
-#include "DataSourceHelper.hxx"
+#include <DataSourceHelper.hxx>
 
 #include <com/sun/star/chart2/XChartDocument.hpp>
 #include <com/sun/star/chart2/data/XDataProvider.hpp>
@@ -36,10 +35,10 @@ using ::com::sun::star::uno::Sequence;
 namespace
 {
 
-::std::vector< OUString > lcl_getStringsFromByteSequence(
+std::vector< OUString > lcl_getStringsFromByteSequence(
     const Sequence< sal_Int8 > & aByteSequence )
 {
-    ::std::vector< OUString > aResult;
+    std::vector< OUString > aResult;
     const sal_Int32 nLength = aByteSequence.getLength();
     const sal_Char * pBytes( reinterpret_cast< const sal_Char* >( aByteSequence.getConstArray()));
     sal_Int32 nStartPos = 0;
@@ -47,7 +46,7 @@ namespace
     {
         if( pBytes[nPos] == '\0' )
         {
-            aResult.push_back( OUString( pBytes + nStartPos, (nPos - nStartPos), RTL_TEXTENCODING_ASCII_US ));
+            aResult.emplace_back( pBytes + nStartPos, (nPos - nStartPos), RTL_TEXTENCODING_ASCII_US );
             nStartPos = nPos + 1;
         }
     }
@@ -106,7 +105,7 @@ sal_Int8 ChartDropTargetHelper::ExecuteDrop( const ExecuteDropEvent& rEvt )
             Sequence<sal_Int8> aBytes = aDataHelper.GetSequence(SotClipboardFormatId::LINK, OUString());
             if (aBytes.getLength())
             {
-                ::std::vector< OUString > aStrings( lcl_getStringsFromByteSequence( aBytes ));
+                std::vector< OUString > aStrings( lcl_getStringsFromByteSequence( aBytes ));
                 if( aStrings.size() >= 3 && aStrings[0] == "soffice" )
                 {
                     OUString aRangeString( aStrings[2] );
@@ -117,54 +116,50 @@ sal_Int8 ChartDropTargetHelper::ExecuteDrop( const ExecuteDropEvent& rEvt )
                         if( xParentModel.is() &&
                             m_xChartDocument.is())
                         {
-                            bool bDataComesFromParent = true;
                             // @todo: get the title somehow and compare it to
                             // aDocName if successful (the document is the
                             // parent)
-                            if( bDataComesFromParent )
+                            Reference< chart2::XDiagram > xDiagram( m_xChartDocument->getFirstDiagram() );
+                            Reference< chart2::data::XDataProvider > xDataProvider( m_xChartDocument->getDataProvider());
+                            if( xDataProvider.is() && xDiagram.is() &&
+                                DataSourceHelper::allArgumentsForRectRangeDetected( m_xChartDocument ))
                             {
-                                Reference< chart2::XDiagram > xDiagram( m_xChartDocument->getFirstDiagram() );
-                                Reference< chart2::data::XDataProvider > xDataProvider( m_xChartDocument->getDataProvider());
-                                if( xDataProvider.is() && xDiagram.is() &&
-                                    DataSourceHelper::allArgumentsForRectRangeDetected( m_xChartDocument ))
+                                Reference< chart2::data::XDataSource > xDataSource(
+                                    DataSourceHelper::pressUsedDataIntoRectangularFormat( m_xChartDocument ));
+                                Sequence< beans::PropertyValue > aArguments(
+                                    xDataProvider->detectArguments( xDataSource ));
+
+                                OUString aOldRange;
+                                beans::PropertyValue * pCellRange = nullptr;
+                                for( sal_Int32 i=0; i<aArguments.getLength(); ++i )
                                 {
-                                    Reference< chart2::data::XDataSource > xDataSource(
-                                        DataSourceHelper::pressUsedDataIntoRectangularFormat( m_xChartDocument ));
-                                    Sequence< beans::PropertyValue > aArguments(
-                                        xDataProvider->detectArguments( xDataSource ));
-
-                                    OUString aOldRange;
-                                    beans::PropertyValue * pCellRange = nullptr;
-                                    for( sal_Int32 i=0; i<aArguments.getLength(); ++i )
+                                    if ( aArguments[i].Name == "CellRangeRepresentation" )
                                     {
-                                        if ( aArguments[i].Name == "CellRangeRepresentation" )
-                                        {
-                                            pCellRange = (aArguments.getArray() + i);
-                                            aArguments[i].Value >>= aOldRange;
-                                            break;
-                                        }
+                                        pCellRange = (aArguments.getArray() + i);
+                                        aArguments[i].Value >>= aOldRange;
+                                        break;
                                     }
-                                    if( pCellRange )
+                                }
+                                if( pCellRange )
+                                {
+                                    // copy means add ranges, move means replace
+                                    if( rEvt.mnAction == DND_ACTION_COPY )
                                     {
-                                        // copy means add ranges, move means replace
-                                        if( rEvt.mnAction == DND_ACTION_COPY )
-                                        {
-                                            // @todo: using implicit knowledge that ranges can be
-                                            // merged with ";". This should be done more general
-                                            pCellRange->Value <<= (aOldRange + ";" + aRangeString );
-                                        }
-                                        // move means replace range
-                                        else
-                                        {
-                                            pCellRange->Value <<= aRangeString;
-                                        }
-
-                                        xDataSource.set( xDataProvider->createDataSource( aArguments ));
-                                        xDiagram->setDiagramData( xDataSource, aArguments );
-
-                                        // always return copy state to avoid deletion of the dragged range
-                                        nResult = DND_ACTION_COPY;
+                                        // @todo: using implicit knowledge that ranges can be
+                                        // merged with ";". This should be done more general
+                                        pCellRange->Value <<= aOldRange + ";" + aRangeString;
                                     }
+                                    // move means replace range
+                                    else
+                                    {
+                                        pCellRange->Value <<= aRangeString;
+                                    }
+
+                                    xDataSource.set( xDataProvider->createDataSource( aArguments ));
+                                    xDiagram->setDiagramData( xDataSource, aArguments );
+
+                                    // always return copy state to avoid deletion of the dragged range
+                                    nResult = DND_ACTION_COPY;
                                 }
                             }
                         }

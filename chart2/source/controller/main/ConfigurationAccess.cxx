@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ConfigurationAccess.hxx"
-#include "macros.hxx"
+#include <ConfigurationAccess.hxx>
 
 #include <unotools/syslocale.hxx>
 #include <unotools/configitem.hxx>
+#include <unotools/localedatawrapper.hxx>
 #include <rtl/instance.hxx>
 
 namespace chart
@@ -36,7 +36,7 @@ bool lcl_IsMetric()
     const LocaleDataWrapper* pLocWrapper = aSysLocale.GetLocaleDataPtr();
     MeasurementSystem eSys = pLocWrapper->getMeasurementSystemEnum();
 
-    return ( eSys == MEASURE_METRIC );
+    return ( eSys == MeasurementSystem::Metric );
 }
 }//end anonymous namespace
 
@@ -47,18 +47,13 @@ private:
 
 public:
     CalcConfigItem();
-    virtual ~CalcConfigItem();
 
     FieldUnit getFieldUnit();
     virtual void                    Notify( const uno::Sequence<OUString>& aPropertyNames) override;
 };
 
 CalcConfigItem::CalcConfigItem()
-    : ConfigItem( OUString( "Office.Calc/Layout" ))
-{
-}
-
-CalcConfigItem::~CalcConfigItem()
+    : ConfigItem( "Office.Calc/Layout" )
 {
 }
 
@@ -67,7 +62,7 @@ void CalcConfigItem::Notify( const uno::Sequence<OUString>& ) {}
 
 FieldUnit CalcConfigItem::getFieldUnit()
 {
-    FieldUnit eResult( FUNIT_CM );
+    FieldUnit eResult( FieldUnit::CM );
 
     uno::Sequence< OUString > aNames( 1 );
     if( lcl_IsMetric() )

@@ -24,11 +24,11 @@
 #include <vcl/fixed.hxx>
 #include <vcl/button.hxx>
 #include <vcl/edit.hxx>
-#include <vcl/lstbox.hxx>
 #include <vcl/idle.hxx>
+#include <vcl/fixedhyper.hxx>
 
 #include <svtools/svmedit.hxx>
-#include <svtools/svtabbx.hxx>
+#include <vcl/svtabbx.hxx>
 
 /********************** SvUpdateLinksDialog ******************************
 *************************************************************************/
@@ -45,13 +45,12 @@ class SvBaseLinksDlg : public ModalDialog
     using Window::SetType;
 
     VclPtr<SvTabListBox> m_pTbLinks;
-    VclPtr<FixedText> m_pFtFullFileName;
+    VclPtr<FixedHyperlink> m_pFtFullFileName;
     VclPtr<FixedText> m_pFtFullSourceName;
     VclPtr<FixedText> m_pFtFullTypeName;
     VclPtr<RadioButton> m_pRbAutomatic;
     VclPtr<RadioButton> m_pRbManual;
     VclPtr<PushButton> m_pPbUpdateNow;
-    VclPtr<PushButton> m_pPbOpenSource;
     VclPtr<PushButton> m_pPbChangeSource;
     VclPtr<PushButton> m_pPbBreakLink;
     OUString aStrAutolink;
@@ -61,38 +60,29 @@ class SvBaseLinksDlg : public ModalDialog
     OUString aStrCloselinkmsgMulti;
     OUString aStrWaitinglink;
     sfx2::LinkManager*  pLinkMgr;
-    bool            bHtmlMode;
     Idle aUpdateIdle;
 
-    DECL_LINK_TYPED( LinksSelectHdl, SvTreeListBox*, void );
-    DECL_LINK_TYPED( LinksDoubleClickHdl, SvTreeListBox*, bool );
-    DECL_LINK_TYPED( AutomaticClickHdl, Button *, void );
-    DECL_LINK_TYPED( ManualClickHdl, Button *, void );
-    DECL_LINK_TYPED( UpdateNowClickHdl, Button *, void);
-    DECL_LINK_TYPED( ChangeSourceClickHdl, Button *, void );
-    DECL_LINK_TYPED( BreakLinkClickHdl, Button *, void );
-    DECL_LINK_TYPED( UpdateWaitingHdl, Idle *, void );
-    DECL_LINK_TYPED( EndEditHdl, sfx2::SvBaseLink&, void );
+    DECL_LINK( LinksSelectHdl, SvTreeListBox*, void );
+    DECL_LINK( LinksDoubleClickHdl, SvTreeListBox*, bool );
+    DECL_LINK( AutomaticClickHdl, Button *, void );
+    DECL_LINK( ManualClickHdl, Button *, void );
+    DECL_LINK( UpdateNowClickHdl, Button *, void);
+    DECL_LINK( ChangeSourceClickHdl, Button *, void );
+    DECL_LINK( BreakLinkClickHdl, Button *, void );
+    DECL_LINK( UpdateWaitingHdl, Timer *, void );
+    DECL_LINK( EndEditHdl, sfx2::SvBaseLink&, void );
     sfx2::SvBaseLink* GetSelEntry( sal_uLong* pPos );
     OUString ImplGetStateStr( const sfx2::SvBaseLink& );
     void SetType( sfx2::SvBaseLink& rLink, sal_uLong nPos, SfxLinkUpdateMode nType );
     void InsertEntry( const sfx2::SvBaseLink& rLink, sal_uLong nPos = TREELIST_APPEND, bool bSelect = false);
 
-    void StartUpdateTimer()         { aUpdateIdle.Start(); }
-
-    OUString&       Autolink()      { return aStrAutolink; }
-    OUString&       Manuallink()    { return aStrManuallink; }
-    OUString&       Brokenlink()    { return aStrBrokenlink; }
-    OUString&       Closelinkmsg()  { return aStrCloselinkmsg; }
-    OUString&       CloselinkmsgMulti() { return aStrCloselinkmsgMulti; }
-    OUString&       Waitinglink()   { return aStrWaitinglink; }
     void SetManager( sfx2::LinkManager* );
 
 public:
-    SvBaseLinksDlg( vcl::Window * pParent, sfx2::LinkManager*, bool bHtml = false );
-    virtual ~SvBaseLinksDlg();
+    SvBaseLinksDlg( vcl::Window * pParent, sfx2::LinkManager*, bool bHtml );
+    virtual ~SvBaseLinksDlg() override;
     virtual void dispose() override;
-    void SetActLink( sfx2::SvBaseLink * pLink );
+    void SetActLink( sfx2::SvBaseLink const * pLink );
 };
 
 #endif // INCLUDED_CUI_SOURCE_INC_LINKDLG_HXX

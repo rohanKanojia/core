@@ -21,8 +21,7 @@
 #include "Driver.hxx"
 
 #include <connectivity/dbexception.hxx>
-#include <resource/common_res.hrc>
-#include <resource/hsqldb_res.hrc>
+#include <strings.hrc>
 #include <resource/sharedresources.hxx>
 
 #include <comphelper/processfactory.hxx>
@@ -30,7 +29,7 @@
 #include <osl/file.hxx>
 #include <osl/process.h>
 #include <rtl/bootstrap.hxx>
-#include <svtools/miscopt.hxx>
+#include <sal/log.hxx>
 #include <unotools/localfilehelper.hxx>
 
 using namespace com::sun::star;
@@ -48,8 +47,8 @@ namespace connectivity
 {
     namespace firebird
     {
-        Reference< XInterface >  SAL_CALL FirebirdDriver_CreateInstance(
-            const Reference< XMultiServiceFactory >& _rxFactory) throw( Exception, std::exception )
+        Reference< XInterface > FirebirdDriver_CreateInstance(
+            const Reference< XMultiServiceFactory >& _rxFactory)
         {
             SAL_INFO("connectivity.firebird", "FirebirdDriver_CreateInstance()" );
             return *(new FirebirdDriver(comphelper::getComponentContext(_rxFactory)));
@@ -57,32 +56,31 @@ namespace connectivity
     }
 }
 
-// Static const member variables
-const OUString FirebirdDriver::our_sFirebirdTmpVar("FIREBIRD_TMP");
-const OUString FirebirdDriver::our_sFirebirdLockVar("FIREBIRD_LOCK");
-const OUString FirebirdDriver::our_sFirebirdMsgVar("FIREBIRD_MSG");
+// Static const variables
+namespace {
+const char our_sFirebirdTmpVar[] = "FIREBIRD_TMP";
+const char our_sFirebirdLockVar[] = "FIREBIRD_LOCK";
+const char our_sFirebirdMsgVar[] = "FIREBIRD_MSG";
+#ifdef MACOSX
+const char our_sFirebirdLibVar[] = "LIBREOFFICE_FIREBIRD_LIB";
+#endif
+};
 
-FirebirdDriver::FirebirdDriver(const ::com::sun::star::uno::Reference< ::com::sun::star::uno::XComponentContext >& _rxContext)
+FirebirdDriver::FirebirdDriver(const css::uno::Reference< css::uno::XComponentContext >& _rxContext)
     : ODriver_BASE(m_aMutex)
     , m_aContext(_rxContext)
     , m_firebirdTMPDirectory(nullptr, true)
     , m_firebirdLockDirectory(nullptr, true)
 {
-    // Note: TempFile caches the URL on first access; call this here so that
-    // ~FirebirdDriver is not the first access, because that is called
-    // when the ServiceManager is disposing, so GetURL() would fail!
-    m_firebirdTMPDirectory.GetURL();
-    m_firebirdLockDirectory.GetURL();
-
     // ::utl::TempFile uses a unique temporary directory (subdirectory of
     // /tmp or other user specific tmp directory) per instance in which
     // we can create directories for firebird at will.
 
     // Overrides firebird's default of /tmp or c:\temp
-    osl_setEnvironment(our_sFirebirdTmpVar.pData, m_firebirdTMPDirectory.GetFileName().pData);
+    osl_setEnvironment(OUString(our_sFirebirdTmpVar).pData, m_firebirdTMPDirectory.GetFileName().pData);
 
     // Overrides firebird's default of /tmp/firebird or c:\temp\firebird
-    osl_setEnvironment(our_sFirebirdLockVar.pData, m_firebirdLockDirectory.GetFileName().pData);
+    osl_setEnvironment(OUString(our_sFirebirdLockVar).pData, m_firebirdLockDirectory.GetFileName().pData);
 
 #ifndef SYSTEM_FIREBIRD
     // Overrides firebird's hardcoded default of /usr/local/firebird on *nix,
@@ -91,8 +89,17 @@ FirebirdDriver::FirebirdDriver(const ::com::sun::star::uno::Reference< ::com::su
     ::rtl::Bootstrap::expandMacros(sMsgURL);
     OUString sMsgPath;
     ::osl::FileBase::getSystemPathFromFileURL(sMsgURL, sMsgPath);
-    osl_setEnvironment(our_sFirebirdMsgVar.pData, sMsgPath.pData);
-#endif
+    osl_setEnvironment(OUString(our_sFirebirdMsgVar).pData, sMsgPath.pData);
+#ifdef MACOSX
+    // Set an env. variable to specify library location
+    // for dlopen used in fbclient.
+    OUString sLibURL("$LO_LIB_DIR");
+    ::rtl::Bootstrap::expandMacros(sLibURL);
+    OUString sLibPath;
+    ::osl::FileBase::getSystemPathFromFileURL(sLibURL, sLibPath);
+    osl_setEnvironment(OUString(our_sFirebirdLibVar).pData, sLibPath.pData);
+#endif /*MACOSX*/
+#endif /*!SYSTEM_FIREBIRD*/
 }
 
 FirebirdDriver::~FirebirdDriver()
@@ -105,20 +112,23 @@ void FirebirdDriver::disposing()
 {
     MutexGuard aGuard(m_aMutex);
 
-    for (OWeakRefArray::iterator i = m_xConnections.begin(); m_xConnections.end() != i; ++i)
+    for (auto const& elem : m_xConnections)
     {
-        Reference< XComponent > xComp(i->get(), UNO_QUERY);
+        Reference< XComponent > xComp(elem.get(), UNO_QUERY);
         if (xComp.is())
             xComp->dispose();
     }
     m_xConnections.clear();
 
-    osl_clearEnvironment(our_sFirebirdTmpVar.pData);
-    osl_clearEnvironment(our_sFirebirdLockVar.pData);
+    osl_clearEnvironment(OUString(our_sFirebirdTmpVar).pData);
+    osl_clearEnvironment(OUString(our_sFirebirdLockVar).pData);
 
 #ifndef SYSTEM_FIREBIRD
-    osl_clearEnvironment(our_sFirebirdMsgVar.pData);
-#endif
+    osl_clearEnvironment(OUString(our_sFirebirdMsgVar).pData);
+#ifdef MACOSX
+    osl_clearEnvironment(OUString(our_sFirebirdLibVar).pData);
+#endif /*MACOSX*/
+#endif /*!SYSTEM_FIREBIRD*/
 
     OSL_VERIFY(fb_shutdown(0, 1));
 
@@ -126,12 +136,12 @@ void FirebirdDriver::disposing()
 }
 
 //----- static ServiceInfo ---------------------------------------------------
-rtl::OUString FirebirdDriver::getImplementationName_Static() throw(RuntimeException)
+OUString FirebirdDriver::getImplementationName_Static()
 {
-    return rtl::OUString("com.sun.star.comp.sdbc.firebird.Driver");
+    return OUString("com.sun.star.comp.sdbc.firebird.Driver");
 }
 
-Sequence< OUString > FirebirdDriver::getSupportedServiceNames_Static() throw (RuntimeException)
+Sequence< OUString > FirebirdDriver::getSupportedServiceNames_Static()
 {
     Sequence< OUString > aSNS( 2 );
     aSNS[0] = "com.sun.star.sdbc.Driver";
@@ -139,19 +149,17 @@ Sequence< OUString > FirebirdDriver::getSupportedServiceNames_Static() throw (Ru
     return aSNS;
 }
 
-OUString SAL_CALL FirebirdDriver::getImplementationName() throw(RuntimeException, std::exception)
+OUString SAL_CALL FirebirdDriver::getImplementationName()
 {
     return getImplementationName_Static();
 }
 
 sal_Bool SAL_CALL FirebirdDriver::supportsService(const OUString& _rServiceName)
-    throw(RuntimeException, std::exception)
 {
     return cppu::supportsService(this, _rServiceName);
 }
 
 Sequence< OUString > SAL_CALL FirebirdDriver::getSupportedServiceNames()
-    throw(RuntimeException, std::exception)
 {
     return getSupportedServiceNames_Static();
 }
@@ -159,10 +167,7 @@ Sequence< OUString > SAL_CALL FirebirdDriver::getSupportedServiceNames()
 // ----  XDriver -------------------------------------------------------------
 Reference< XConnection > SAL_CALL FirebirdDriver::connect(
     const OUString& url, const Sequence< PropertyValue >& info )
-    throw(SQLException, RuntimeException, std::exception)
 {
-    Reference< XConnection > xConnection;
-
     SAL_INFO("connectivity.firebird", "connect(), URL: " << url );
 
     MutexGuard aGuard( m_aMutex );
@@ -172,28 +177,23 @@ Reference< XConnection > SAL_CALL FirebirdDriver::connect(
     if ( ! acceptsURL(url) )
         return nullptr;
 
-    Connection* pCon = new Connection(this);
+    Connection* pCon = new Connection();
     Reference< XConnection > xCon = pCon;
     pCon->construct(url, info);
+
     m_xConnections.push_back(WeakReferenceHelper(*pCon));
 
     return xCon;
 }
 
 sal_Bool SAL_CALL FirebirdDriver::acceptsURL( const OUString& url )
-    throw(SQLException, RuntimeException, std::exception)
 {
-    SvtMiscOptions aMiscOptions;
-
-    return aMiscOptions.IsExperimentalMode() &&
-        (url == "sdbc:embedded:firebird" || url.startsWith("sdbc:firebird:"));
+    return (url == "sdbc:embedded:firebird" || url.startsWith("sdbc:firebird:"));
 }
 
 Sequence< DriverPropertyInfo > SAL_CALL FirebirdDriver::getPropertyInfo(
-    const OUString& url, const Sequence< PropertyValue >& info )
-    throw(SQLException, RuntimeException, std::exception)
+    const OUString& url, const Sequence< PropertyValue >& )
 {
-    (void) info;
     if ( ! acceptsURL(url) )
     {
         ::connectivity::SharedResources aResources;
@@ -204,14 +204,14 @@ Sequence< DriverPropertyInfo > SAL_CALL FirebirdDriver::getPropertyInfo(
     return Sequence< DriverPropertyInfo >();
 }
 
-sal_Int32 SAL_CALL FirebirdDriver::getMajorVersion(  ) throw(RuntimeException, std::exception)
+sal_Int32 SAL_CALL FirebirdDriver::getMajorVersion(  )
 {
     // The major and minor version are sdbc driver specific. Must begin with 1.0
-    // as per http://api.libreoffice.org/docs/common/ref/com/sun/star/sdbc/XDriver.html
+    // as per https://api.libreoffice.org/docs/common/ref/com/sun/star/sdbc/XDriver.html
     return 1;
 }
 
-sal_Int32 SAL_CALL FirebirdDriver::getMinorVersion(  ) throw(RuntimeException, std::exception)
+sal_Int32 SAL_CALL FirebirdDriver::getMinorVersion(  )
 {
     return 0;
 }
@@ -219,7 +219,6 @@ sal_Int32 SAL_CALL FirebirdDriver::getMinorVersion(  ) throw(RuntimeException, s
 //----- XDataDefinitionSupplier
 uno::Reference< XTablesSupplier > SAL_CALL FirebirdDriver::getDataDefinitionByConnection(
                                     const uno::Reference< XConnection >& rConnection)
-    throw(SQLException, RuntimeException, std::exception)
 {
     Connection* pConnection = static_cast< Connection* >(rConnection.get());
     return uno::Reference< XTablesSupplier >(pConnection->createCatalog(), UNO_QUERY);
@@ -228,7 +227,6 @@ uno::Reference< XTablesSupplier > SAL_CALL FirebirdDriver::getDataDefinitionByCo
 uno::Reference< XTablesSupplier > SAL_CALL FirebirdDriver::getDataDefinitionByURL(
                     const OUString& rURL,
                     const uno::Sequence< PropertyValue >& rInfo)
-    throw(SQLException, RuntimeException, std::exception)
 {
     uno::Reference< XConnection > xConnection = connect(rURL, rInfo);
     return getDataDefinitionByConnection(xConnection);
@@ -238,43 +236,7 @@ namespace connectivity
 {
     namespace firebird
     {
-
-        void release(oslInterlockedCount& _refCount, ::cppu::OBroadcastHelper& rBHelper,
-                     Reference< XInterface >& _xInterface, XComponent* _pObject)
-        {
-            if (osl_atomic_decrement( &_refCount ) == 0)
-            {
-                osl_atomic_increment( &_refCount );
-
-                if (!rBHelper.bDisposed && !rBHelper.bInDispose)
-                {
-                    // remember the parent
-                    Reference< XInterface > xParent;
-                    {
-                        MutexGuard aGuard( rBHelper.rMutex );
-                        xParent = _xInterface;
-                        _xInterface = nullptr;
-                    }
-
-                    // First dispose
-                    _pObject->dispose();
-
-                    // only the alive ref holds the object
-                    OSL_ASSERT( _refCount == 1 );
-
-                    // release the parent in the ~
-                    if (xParent.is())
-                    {
-                        MutexGuard aGuard( rBHelper.rMutex );
-                        _xInterface = xParent;
-                    }
-                }
-            }
-            else
-                osl_atomic_increment( &_refCount );
-        }
-
-        void checkDisposed(bool _bThrow) throw ( DisposedException )
+        void checkDisposed(bool _bThrow)
         {
             if (_bThrow)
                 throw DisposedException();

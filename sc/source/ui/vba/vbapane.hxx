@@ -25,31 +25,30 @@
 #include <vbahelper/vbahelperinterface.hxx>
 #include "excelvbahelper.hxx"
 
-class ScVbaPane : public cppu::WeakImplHelper< ov::excel::XPane >
+class ScVbaPane final : public cppu::WeakImplHelper< ov::excel::XPane >
 {
 public:
+    /// @throws css::uno::RuntimeException
     ScVbaPane(
         const css::uno::Reference< ov::XHelperInterface >& rParent,
         const css::uno::Reference< css::uno::XComponentContext >& rContext,
         const css::uno::Reference< css::frame::XModel >& rModel,
-        const css::uno::Reference< css::sheet::XViewPane >& rViewPane ) throw (css::uno::RuntimeException);
+        const css::uno::Reference< css::sheet::XViewPane >& rViewPane );
 
     // XPane attributes
-    virtual sal_Int32 SAL_CALL getScrollColumn() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setScrollColumn( sal_Int32 _scrollcolumn ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int32 SAL_CALL getScrollRow() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setScrollRow( sal_Int32 _scrollrow ) throw (css::uno::RuntimeException, std::exception) override;
-     virtual css::uno::Reference< ov::excel::XRange > SAL_CALL getVisibleRange() throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL getScrollColumn() override;
+    virtual void SAL_CALL setScrollColumn( sal_Int32 _scrollcolumn ) override;
+    virtual sal_Int32 SAL_CALL getScrollRow() override;
+    virtual void SAL_CALL setScrollRow( sal_Int32 _scrollrow ) override;
+     virtual css::uno::Reference< ov::excel::XRange > SAL_CALL getVisibleRange() override;
 
     // XPane methods
-    virtual void SAL_CALL SmallScroll( const css::uno::Any& Down, const css::uno::Any& Up, const css::uno::Any& ToRight, const css::uno::Any& ToLeft ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL LargeScroll( const css::uno::Any& Down, const css::uno::Any& Up, const css::uno::Any& ToRight, const css::uno::Any& ToLeft ) throw (css::uno::RuntimeException, std::exception) override;
-
-protected:
-    css::uno::Reference< css::frame::XModel > m_xModel;
-    css::uno::Reference< css::sheet::XViewPane > m_xViewPane;
+    virtual void SAL_CALL SmallScroll( const css::uno::Any& Down, const css::uno::Any& Up, const css::uno::Any& ToRight, const css::uno::Any& ToLeft ) override;
+    virtual void SAL_CALL LargeScroll( const css::uno::Any& Down, const css::uno::Any& Up, const css::uno::Any& ToRight, const css::uno::Any& ToLeft ) override;
 
 private:
+    css::uno::Reference< css::frame::XModel > m_xModel;
+    css::uno::Reference< css::sheet::XViewPane > m_xViewPane;
     css::uno::WeakReference< ov::XHelperInterface > m_xParent;
     css::uno::Reference< css::uno::XComponentContext > m_xContext;
 };

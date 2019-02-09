@@ -52,7 +52,9 @@ namespace drawinglayer
             SdrFormTextAttribute(const SfxItemSet& rSet);
             SdrFormTextAttribute();
             SdrFormTextAttribute(const SdrFormTextAttribute& rCandidate);
+            SdrFormTextAttribute(SdrFormTextAttribute&& rCandidate);
             SdrFormTextAttribute& operator=(const SdrFormTextAttribute& rCandidate);
+            SdrFormTextAttribute& operator=(SdrFormTextAttribute&& rCandidate);
             ~SdrFormTextAttribute();
 
             // checks if the incarnation is default constructed
@@ -69,7 +71,7 @@ namespace drawinglayer
             XFormTextStyle getFormTextStyle() const;
             XFormTextAdjust getFormTextAdjust() const;
             XFormTextShadow getFormTextShadow() const;
-            Color getFormTextShdwColor() const;
+            Color const & getFormTextShdwColor() const;
             const SdrFormTextOutlineAttribute& getOutline() const;
             const SdrFormTextOutlineAttribute& getShadowOutline() const;
             bool getFormTextMirror() const;

@@ -25,15 +25,15 @@
 
 namespace oox { namespace drawingml {
 
-class TextListStyleContext : public ::oox::core::ContextHandler2
+class TextListStyleContext final : public ::oox::core::ContextHandler2
 {
 public:
-    TextListStyleContext( ::oox::core::ContextHandler2Helper& rParent, TextListStyle& rTextListStyle );
-    virtual ~TextListStyleContext();
+    TextListStyleContext( ::oox::core::ContextHandler2Helper const & rParent, TextListStyle& rTextListStyle );
+    virtual ~TextListStyleContext() override;
 
     virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 
-protected:
+private:
     TextListStyle& mrTextListStyle;
 };
 

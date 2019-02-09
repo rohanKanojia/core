@@ -20,13 +20,11 @@
 #include <rtl/strbuf.hxx>
 #include <sal/config.h>
 #include <sal/macros.h>
-#include "qpro.hxx"
+#include <sal/log.hxx>
 
-#include "qproform.hxx"
-#include "formel.hxx"
-#include "compiler.hxx"
+#include <qproform.hxx>
+#include <formel.hxx>
 #include <tokstack.hxx>
-#include "ftools.hxx"
 
 void QProToSc::ReadSRD( ScSingleRefData& rSRD, sal_Int8 nPage, sal_Int8 nCol, sal_uInt16 nRelBit )
 {
@@ -43,7 +41,7 @@ void QProToSc::ReadSRD( ScSingleRefData& rSRD, sal_Int8 nPage, sal_Int8 nCol, sa
 
     if( nRelBit & 0x2000 )
     {
-        SCROW nRelRow = (sal_Int16)(nTmp << 3); // This looks weird... Mistake?
+        SCROW nRelRow = static_cast<sal_Int16>(nTmp << 3); // This looks weird... Mistake?
         nRelRow /= 8;
         rSRD.SetRelRow(nRelRow);
     }
@@ -94,8 +92,12 @@ void QProToSc::DoFunc( DefTokenId eOc, sal_uInt16 nArgs, const sal_Char* pExtStr
 
     if( nArgs < nBufSize )
     {
-        for( nCount = 0; nCount < nArgs ; nCount++ )
+        for( nCount = 0; nCount < nArgs && aStack.HasMoreTokens() ; nCount++ )
             aStack >> eParam[ nCount ];
+
+        if (nCount < nArgs)
+            // Adapt count to reality. All sort of binary crap is possible.
+            nArgs = static_cast<sal_uInt16>(nCount);
     }
     else
         return;
@@ -132,21 +134,28 @@ void QProToSc::DoFunc( DefTokenId eOc, sal_uInt16 nArgs, const sal_Char* pExtStr
 
     if( nArgs> 0 )
     {
-        sal_Int16 nLast = nArgs- 1;
-
         if( eOc == ocRRI )
-            aPool << eParam[ 2 ] << ocSep << eParam[ 1 ] << ocSep << eParam[ 0 ];
-        if( eOc == ocIpmt )
-            aPool << eParam[ 3 ] << ocSep << eParam[ 2 ] << ocSep << eParam[ 1 ] << ocSep << eParam[ 0 ];
-        else
         {
-            sal_Int16 nNull = -1;
-            aPool << eParam[ nLast ];
-            for( nCount = nLast - 1 ; nCount >= 0 ; nCount-- )
-            {
-                if( nCount != nNull )
-                    aPool << ocSep << eParam[ nCount ];
-            }
+            // There should be at least 3 arguments, but with binary crap may not..
+            SAL_WARN_IF( nArgs < 3, "sc.filter","QProToSc::DoFunc - ocRRI expects 3 parameters but got " << nArgs);
+            // Store first 3 parameters to pool in order 2,1,0
+            if (nArgs > 3)
+                nArgs = 3;
+        }
+        else if( eOc == ocIpmt )
+        {
+            // There should be at least 4 arguments, but with binary crap may not..
+            SAL_WARN_IF( nArgs < 4, "sc.filter","QProToSc::DoFunc - ocIpmt expects 4 parameters but got " << nArgs);
+            // Store first 4 parameters to pool in order 3,2,1,0
+            if (nArgs > 4)
+                nArgs = 4;
+        }
+
+        sal_Int16 nLast = nArgs - 1;
+        aPool << eParam[ nLast ];
+        for( nCount = nLast - 1 ; nCount >= 0 ; nCount-- )
+        {
+            aPool << ocSep << eParam[ nCount ];
         }
     }
 
@@ -172,9 +181,17 @@ do { \
     nRef-=amt; \
 } while(false)
 
-ConvErr QProToSc::Convert( const ScTokenArray*& pArray )
+#define SAFEREAD_OR_BREAK( aStream, i, nRef, eRet, ret ) \
+    if (!aStream.good()) \
+    { \
+        i = nRef-1;     /* will be incremented at end of while */ \
+        eRet = ret; \
+        break;          /* switch */ \
+    }
+
+ConvErr QProToSc::Convert( std::unique_ptr<ScTokenArray>& pArray )
 {
-    sal_uInt8 nFmla[ nBufSize ], i, nArg;
+    sal_uInt8 nFmla[ nBufSize ], nArg;
     sal_uInt8 nArgArray[ nBufSize ] = {0};
     sal_Int8 nCol, nPage;
     sal_uInt16 nInt, nIntCount = 0, nStringCount = 0, nFloatCount = 0, nDLLCount = 0, nArgCount = 0;
@@ -197,7 +214,7 @@ ConvErr QProToSc::Convert( const ScTokenArray*& pArray )
 
     if( nRef < nBufSize )
     {
-        for( i=0; i < nRef; i++)
+        for( sal_uInt16 i=0; i < nRef; i++)
         {
             maIn.ReadUChar( nFmla[i] );
 
@@ -205,7 +222,7 @@ ConvErr QProToSc::Convert( const ScTokenArray*& pArray )
             {
                 maIn.ReadUInt16( nInt );
                 nIntArray[ nIntCount ] = nInt;
-                SAFEDEC_OR_RET(nRef, 2, ConvErrCount);
+                SAFEDEC_OR_RET(nRef, 2, ConvErr::Count);
                 nIntCount++;
             }
 
@@ -214,7 +231,7 @@ ConvErr QProToSc::Convert( const ScTokenArray*& pArray )
                 double nFloat;
                 maIn.ReadDouble( nFloat );
                 nFloatArray[ nFloatCount ] = nFloat;
-                SAFEDEC_OR_RET(nRef, 8, ConvErrCount);
+                SAFEDEC_OR_RET(nRef, 8, ConvErr::Count);
                 nFloatCount++;
             }
 
@@ -223,7 +240,7 @@ ConvErr QProToSc::Convert( const ScTokenArray*& pArray )
                 maIn.ReadUChar( nArg ).ReadUInt16( nDummy ).ReadUInt16( nDLLId );
                 nArgArray[ nArgCount ] = nArg;
                 nDLLArray[ nDLLCount ] = nDLLId;
-                SAFEDEC_OR_RET(nRef, 5, ConvErrCount);
+                SAFEDEC_OR_RET(nRef, 5, ConvErr::Count);
                 nDLLCount++;
                 nArgCount++;
             }
@@ -232,19 +249,20 @@ ConvErr QProToSc::Convert( const ScTokenArray*& pArray )
                 OUString aTmp(::read_zeroTerminated_uInt8s_ToOUString(maIn, maIn.GetStreamCharSet()));
                 sStringArray[ nStringCount ] = aTmp;
                 nStringCount++;
-                SAFEDEC_OR_RET(nRef, aTmp.getLength() + 1, ConvErrCount);
+                SAFEDEC_OR_RET(nRef, aTmp.getLength() + 1, ConvErr::Count);
             }
         }
     }
     else
-        return ConvErrCount;
+        return ConvErr::Count;
 
-    i = 0;
+    sal_uInt16 i = 0;
     nIntCount = 0;
     nFloatCount = 0;
     nDLLCount = 0;
     nArgCount = 0;
     nStringCount = 0;
+    ConvErr eRet = ConvErr::OK;
 
     while( i < nRef && ( nFmla[ i ] != 0x03 ) )
     {
@@ -298,14 +316,17 @@ ConvErr QProToSc::Convert( const ScTokenArray*& pArray )
 
             case FT_Cref : // Single cell reference
                 maIn.ReadUInt16( nNote ).ReadSChar( nCol ).ReadSChar( nPage ).ReadUInt16( nRelBits );
+                SAFEREAD_OR_BREAK( maIn, i, nRef, eRet, ConvErr::Count);
                 ReadSRD( aSRD, nPage, nCol, nRelBits );
                 aStack << aPool.Store( aSRD );
                 break;
 
             case FT_Range: // Block reference
                 maIn.ReadUInt16( nNote ).ReadSChar( nCol ).ReadSChar( nPage ).ReadUInt16( nRelBits );
+                SAFEREAD_OR_BREAK( maIn, i, nRef, eRet, ConvErr::Count);
                 ReadSRD( aCRD.Ref1, nPage, nCol, nRelBits );
                 maIn.ReadSChar( nCol ).ReadSChar( nPage ).ReadUInt16( nRelBits );
+                SAFEREAD_OR_BREAK( maIn, i, nRef, eRet, ConvErr::Count);
                 ReadSRD( aCRD.Ref2, nPage, nCol, nRelBits );
                 // Sheet name of second corner is not displayed if identical
                 if (aCRD.Ref1.IsFlag3D() && aCRD.Ref1.Tab() == aCRD.Ref2.Tab() &&
@@ -336,7 +357,7 @@ ConvErr QProToSc::Convert( const ScTokenArray*& pArray )
             case FT_ConstInt:{
                 sal_uInt16 nVal;
                 nVal = nIntArray[ nIntCount ];
-                aStack << aPool.Store( ( double ) nVal );
+                aStack << aPool.Store( static_cast<double>(nVal) );
                 nIntCount++;
                 }
                 break;
@@ -367,14 +388,14 @@ ConvErr QProToSc::Convert( const ScTokenArray*& pArray )
         }
         i++;
     }
-    pArray = aPool[ aStack.Get() ];
-    return ConvOK;
+    pArray = aPool.GetTokenArray( aStack.Get());
+    return eRet;
 }
 
 static const struct
 {
-    DefTokenId nToken;
-    FUNC_TYPE   nType;
+    DefTokenId const nToken;
+    FUNC_TYPE const   nType;
 } aFuncMap[] = {
     { ocPush, FT_ConstFloat },
     { ocPush, FT_Cref },
@@ -610,7 +631,7 @@ DefTokenId QProToSc::IndexToDLLId( sal_uInt16 nIndex )
             break;
 
         case 0x003d:
-            eId = ocDuration;
+            eId = ocPDuration;
             break;
 
         case 0x0019:

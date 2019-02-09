@@ -28,12 +28,11 @@
 namespace rptxml
 {
     class ORptFilter;
-    class OXMLFunction : public SvXMLImportContext
+    class OXMLFunction final : public SvXMLImportContext
     {
-    protected:
         css::uno::Reference< css::report::XFunctions >    m_xFunctions;
         css::uno::Reference< css::report::XFunction >     m_xFunction;
-        bool                                              m_bAddToReport;
+        bool const                                        m_bAddToReport;
 
         ORptFilter& GetOwnImport();
 
@@ -48,7 +47,7 @@ namespace rptxml
                     ,const css::uno::Reference< css::report::XFunctionsSupplier >&    _xFunctions
                     ,bool _bAddToReport = false
                     );
-        virtual ~OXMLFunction();
+        virtual ~OXMLFunction() override;
 
         virtual void EndElement() override;
     };

@@ -20,9 +20,10 @@
 
 #include "eventhandler.hxx"
 #include "pcrservices.hxx"
-#include "propctrlr.hrc"
+#include <helpids.h>
+#include <propctrlr.h>
 #include "formbrowsertools.hxx"
-#include "formresid.hrc"
+#include <strings.hrc>
 #include "formstrings.hxx"
 #include "handlerhelper.hxx"
 #include "modulepcr.hxx"
@@ -47,7 +48,6 @@
 #include <com/sun/star/lang/NullPointerException.hpp>
 #include <com/sun/star/script/XEventAttacherManager.hpp>
 #include <com/sun/star/script/XScriptEventsSupplier.hpp>
-#include <com/sun/star/util/XModifiable.hpp>
 #include <com/sun/star/uri/UriReferenceFactory.hpp>
 #include <com/sun/star/uri/XVndSunStarScriptUrlReference.hpp>
 
@@ -65,14 +65,13 @@
 #include <svx/svxdlg.hxx>
 #include <svx/svxids.hrc>
 #include <tools/diagnose_ex.h>
-#include <vcl/msgbox.hxx>
 
 #include <map>
 #include <algorithm>
 #include <iterator>
 #include <o3tl/functional.hxx>
 
-extern "C" void SAL_CALL createRegistryInfo_EventHandler()
+extern "C" void createRegistryInfo_EventHandler()
 {
     ::pcr::OAutoRegistration< ::pcr::EventHandler > aAutoRegistration;
 }
@@ -82,7 +81,6 @@ namespace pcr
 
     using ::com::sun::star::uno::Reference;
     using ::com::sun::star::uno::XComponentContext;
-    using ::com::sun::star::beans::XPropertySet;
     using ::com::sun::star::uno::Any;
     using ::com::sun::star::uno::TypeClass_STRING;
     using ::com::sun::star::uno::Type;
@@ -124,7 +122,6 @@ namespace pcr
     using ::com::sun::star::inspection::InteractiveSelectionResult_Cancelled;
     using ::com::sun::star::inspection::InteractiveSelectionResult_Success;
     using ::com::sun::star::inspection::XObjectInspectorUI;
-    using ::com::sun::star::util::XModifiable;
     using ::com::sun::star::beans::PropertyChangeEvent;
     using ::com::sun::star::frame::XFrame;
     using ::com::sun::star::frame::XModel;
@@ -140,8 +137,8 @@ namespace pcr
     namespace FormComponentType = css::form::FormComponentType;
 
     EventDescription::EventDescription( EventId _nId, const sal_Char* _pListenerNamespaceAscii, const sal_Char* _pListenerClassAsciiName,
-            const sal_Char* _pListenerMethodAsciiName, sal_uInt16 _nDisplayNameResId, const OString& _sHelpId, const OString& _sUniqueBrowseId )
-        :sDisplayName(PcrRes( _nDisplayNameResId ).toString())
+            const sal_Char* _pListenerMethodAsciiName, const char* pDisplayNameResId, const OString& _sHelpId, const OString& _sUniqueBrowseId )
+        :sDisplayName(PcrRes( pDisplayNameResId ))
         ,sListenerMethodName( OUString::createFromAscii( _pListenerMethodAsciiName ) )
         ,sHelpId( _sHelpId )
         ,sUniqueBrowseId( _sUniqueBrowseId )
@@ -157,56 +154,53 @@ namespace pcr
 
     namespace
     {
-        #define DESCRIBE_EVENT( asciinamespace, asciilistener, asciimethod, id_postfix ) \
-            s_aKnownEvents.insert( EventMap::value_type( \
+        #define DESCRIBE_EVENT( map, asciinamespace, asciilistener, asciimethod, id_postfix ) \
+            map.emplace(  \
                 asciimethod, \
-                EventDescription( ++nEventId, asciinamespace, asciilistener, asciimethod, RID_STR_EVT_##id_postfix, HID_EVT_##id_postfix, UID_BRWEVT_##id_postfix ) ) )
+                EventDescription( ++nEventId, asciinamespace, asciilistener, asciimethod, RID_STR_EVT_##id_postfix, HID_EVT_##id_postfix, UID_BRWEVT_##id_postfix ) )
 
         bool lcl_getEventDescriptionForMethod( const OUString& _rMethodName, EventDescription& _out_rDescription )
         {
-            static EventMap s_aKnownEvents;
-            if ( s_aKnownEvents.empty() )
-            {
-                ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-                if ( s_aKnownEvents.empty() )
-                {
-                    static sal_Int32 nEventId = 0;
+            static EventMap s_aKnownEvents = []() {
+                EventMap aMap;
+                sal_Int32 nEventId = 0;
 
-                    DESCRIBE_EVENT( "form", "XApproveActionListener",       "approveAction",            APPROVEACTIONPERFORMED );
-                    DESCRIBE_EVENT( "awt",  "XActionListener",              "actionPerformed",          ACTIONPERFORMED );
-                    DESCRIBE_EVENT( "form", "XChangeListener",              "changed",                  CHANGED );
-                    DESCRIBE_EVENT( "awt",  "XTextListener",                "textChanged",              TEXTCHANGED );
-                    DESCRIBE_EVENT( "awt",  "XItemListener",                "itemStateChanged",         ITEMSTATECHANGED );
-                    DESCRIBE_EVENT( "awt",  "XFocusListener",               "focusGained",              FOCUSGAINED );
-                    DESCRIBE_EVENT( "awt",  "XFocusListener",               "focusLost",                FOCUSLOST );
-                    DESCRIBE_EVENT( "awt",  "XKeyListener",                 "keyPressed",               KEYTYPED );
-                    DESCRIBE_EVENT( "awt",  "XKeyListener",                 "keyReleased",              KEYUP );
-                    DESCRIBE_EVENT( "awt",  "XMouseListener",               "mouseEntered",             MOUSEENTERED );
-                    DESCRIBE_EVENT( "awt",  "XMouseMotionListener",         "mouseDragged",             MOUSEDRAGGED );
-                    DESCRIBE_EVENT( "awt",  "XMouseMotionListener",         "mouseMoved",               MOUSEMOVED );
-                    DESCRIBE_EVENT( "awt",  "XMouseListener",               "mousePressed",             MOUSEPRESSED );
-                    DESCRIBE_EVENT( "awt",  "XMouseListener",               "mouseReleased",            MOUSERELEASED );
-                    DESCRIBE_EVENT( "awt",  "XMouseListener",               "mouseExited",              MOUSEEXITED );
-                    DESCRIBE_EVENT( "form", "XResetListener",               "approveReset",             APPROVERESETTED );
-                    DESCRIBE_EVENT( "form", "XResetListener",               "resetted",                 RESETTED );
-                    DESCRIBE_EVENT( "form", "XSubmitListener",              "approveSubmit",            SUBMITTED );
-                    DESCRIBE_EVENT( "form", "XUpdateListener",              "approveUpdate",            BEFOREUPDATE );
-                    DESCRIBE_EVENT( "form", "XUpdateListener",              "updated",                  AFTERUPDATE );
-                    DESCRIBE_EVENT( "form", "XLoadListener",                "loaded",                   LOADED );
-                    DESCRIBE_EVENT( "form", "XLoadListener",                "reloading",                RELOADING );
-                    DESCRIBE_EVENT( "form", "XLoadListener",                "reloaded",                 RELOADED );
-                    DESCRIBE_EVENT( "form", "XLoadListener",                "unloading",                UNLOADING );
-                    DESCRIBE_EVENT( "form", "XLoadListener",                "unloaded",                 UNLOADED );
-                    DESCRIBE_EVENT( "form", "XConfirmDeleteListener",       "confirmDelete",            CONFIRMDELETE );
-                    DESCRIBE_EVENT( "sdb",  "XRowSetApproveListener",       "approveRowChange",         APPROVEROWCHANGE );
-                    DESCRIBE_EVENT( "sdbc", "XRowSetListener",              "rowChanged",               ROWCHANGE );
-                    DESCRIBE_EVENT( "sdb",  "XRowSetApproveListener",       "approveCursorMove",        POSITIONING );
-                    DESCRIBE_EVENT( "sdbc", "XRowSetListener",              "cursorMoved",              POSITIONED );
-                    DESCRIBE_EVENT( "form", "XDatabaseParameterListener",   "approveParameter",         APPROVEPARAMETER );
-                    DESCRIBE_EVENT( "sdb",  "XSQLErrorListener",            "errorOccured",             ERROROCCURRED );
-                    DESCRIBE_EVENT( "awt",  "XAdjustmentListener",          "adjustmentValueChanged",   ADJUSTMENTVALUECHANGED );
-                }
-            }
+                DESCRIBE_EVENT(aMap, "form", "XApproveActionListener",     "approveAction",          APPROVEACTIONPERFORMED);
+                DESCRIBE_EVENT(aMap, "awt",  "XActionListener",            "actionPerformed",        ACTIONPERFORMED);
+                DESCRIBE_EVENT(aMap, "form", "XChangeListener",            "changed",                CHANGED);
+                DESCRIBE_EVENT(aMap, "awt",  "XTextListener",              "textChanged",            TEXTCHANGED);
+                DESCRIBE_EVENT(aMap, "awt",  "XItemListener",              "itemStateChanged",       ITEMSTATECHANGED);
+                DESCRIBE_EVENT(aMap, "awt",  "XFocusListener",             "focusGained",            FOCUSGAINED);
+                DESCRIBE_EVENT(aMap, "awt",  "XFocusListener",             "focusLost",              FOCUSLOST);
+                DESCRIBE_EVENT(aMap, "awt",  "XKeyListener",               "keyPressed",             KEYTYPED);
+                DESCRIBE_EVENT(aMap, "awt",  "XKeyListener",               "keyReleased",            KEYUP);
+                DESCRIBE_EVENT(aMap, "awt",  "XMouseListener",             "mouseEntered",           MOUSEENTERED);
+                DESCRIBE_EVENT(aMap, "awt",  "XMouseMotionListener",       "mouseDragged",           MOUSEDRAGGED);
+                DESCRIBE_EVENT(aMap, "awt",  "XMouseMotionListener",       "mouseMoved",             MOUSEMOVED);
+                DESCRIBE_EVENT(aMap, "awt",  "XMouseListener",             "mousePressed",           MOUSEPRESSED);
+                DESCRIBE_EVENT(aMap, "awt",  "XMouseListener",             "mouseReleased",          MOUSERELEASED);
+                DESCRIBE_EVENT(aMap, "awt",  "XMouseListener",             "mouseExited",            MOUSEEXITED);
+                DESCRIBE_EVENT(aMap, "form", "XResetListener",             "approveReset",           APPROVERESETTED);
+                DESCRIBE_EVENT(aMap, "form", "XResetListener",             "resetted",               RESETTED);
+                DESCRIBE_EVENT(aMap, "form", "XSubmitListener",            "approveSubmit",          SUBMITTED);
+                DESCRIBE_EVENT(aMap, "form", "XUpdateListener",            "approveUpdate",          BEFOREUPDATE);
+                DESCRIBE_EVENT(aMap, "form", "XUpdateListener",            "updated",                AFTERUPDATE);
+                DESCRIBE_EVENT(aMap, "form", "XLoadListener",              "loaded",                 LOADED);
+                DESCRIBE_EVENT(aMap, "form", "XLoadListener",              "reloading",              RELOADING);
+                DESCRIBE_EVENT(aMap, "form", "XLoadListener",              "reloaded",               RELOADED);
+                DESCRIBE_EVENT(aMap, "form", "XLoadListener",              "unloading",              UNLOADING);
+                DESCRIBE_EVENT(aMap, "form", "XLoadListener",              "unloaded",               UNLOADED);
+                DESCRIBE_EVENT(aMap, "form", "XConfirmDeleteListener",     "confirmDelete",          CONFIRMDELETE);
+                DESCRIBE_EVENT(aMap, "sdb",  "XRowSetApproveListener",     "approveRowChange",       APPROVEROWCHANGE);
+                DESCRIBE_EVENT(aMap, "sdbc", "XRowSetListener",            "rowChanged",             ROWCHANGE);
+                DESCRIBE_EVENT(aMap, "sdb",  "XRowSetApproveListener",     "approveCursorMove",      POSITIONING);
+                DESCRIBE_EVENT(aMap, "sdbc", "XRowSetListener",            "cursorMoved",            POSITIONED);
+                DESCRIBE_EVENT(aMap, "form", "XDatabaseParameterListener", "approveParameter",       APPROVEPARAMETER);
+                DESCRIBE_EVENT(aMap, "sdb",  "XSQLErrorListener",          "errorOccured",           ERROROCCURRED);
+                DESCRIBE_EVENT(aMap, "awt",  "XAdjustmentListener",        "adjustmentValueChanged", ADJUSTMENTVALUECHANGED);
+
+                return aMap;
+            }();
 
             EventMap::const_iterator pos = s_aKnownEvents.find( _rMethodName );
             if ( pos == s_aKnownEvents.end() )
@@ -218,11 +212,7 @@ namespace pcr
 
         OUString lcl_getEventPropertyName( const OUString& _rListenerClassName, const OUString& _rMethodName )
         {
-            OUStringBuffer aPropertyName;
-            aPropertyName.append( _rListenerClassName );
-            aPropertyName.append( ';' );
-            aPropertyName.append( _rMethodName.getStr() );
-            return aPropertyName.makeStringAndClear();
+            return _rListenerClassName + OUStringLiteral1(';') + _rMethodName;
         }
 
         ScriptEventDescriptor lcl_getAssignedScriptEvent( const EventDescription& _rEvent, const std::vector< ScriptEventDescriptor >& _rAllAssignedMacros )
@@ -290,7 +280,7 @@ namespace pcr
             return _rFormComponentEventDescriptor.ListenerType;
         }
 
-        typedef ::std::set< Type, TypeLessByName > TypeBag;
+        typedef std::set< Type, TypeLessByName > TypeBag;
 
         void lcl_addListenerTypesFor_throw( const Reference< XInterface >& _rxComponent,
             const Reference< XIntrospection >& _rxIntrospection, TypeBag& _out_rTypes )
@@ -304,8 +294,8 @@ namespace pcr
 
             Sequence< Type > aListeners( xIntrospectionAccess->getSupportedListeners() );
 
-            ::std::copy( aListeners.begin(), aListeners.end(),
-                         ::std::insert_iterator< TypeBag >( _out_rTypes, _out_rTypes.begin() ) );
+            std::copy( aListeners.begin(), aListeners.end(),
+                         std::insert_iterator< TypeBag >( _out_rTypes, _out_rTypes.begin() ) );
         }
     }
 
@@ -315,8 +305,8 @@ namespace pcr
     class EventHolder : public EventHolder_Base
     {
     private:
-        typedef std::unordered_map< OUString, ScriptEventDescriptor, OUStringHash >  EventMap;
-        typedef ::std::map< EventId, EventMap::iterator >                                       EventMapIndexAccess;
+        typedef std::unordered_map< OUString, ScriptEventDescriptor >  EventMap;
+        typedef std::map< EventId, EventMap::iterator >                                       EventMapIndexAccess;
 
         EventMap            m_aEventNameAccess;
         EventMapIndexAccess m_aEventIndexAccess;
@@ -332,18 +322,18 @@ namespace pcr
         ScriptEventDescriptor getNormalizedDescriptorByName( const OUString& _rEventName ) const;
 
         // XNameReplace
-        virtual void SAL_CALL replaceByName( const OUString& _rName, const Any& aElement ) throw (IllegalArgumentException, NoSuchElementException, WrappedTargetException, RuntimeException, std::exception) override;
-        virtual Any SAL_CALL getByName( const OUString& _rName ) throw (NoSuchElementException, WrappedTargetException, RuntimeException, std::exception) override;
-        virtual Sequence< OUString > SAL_CALL getElementNames(  ) throw (RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL hasByName( const OUString& _rName ) throw (RuntimeException, std::exception) override;
-        virtual Type SAL_CALL getElementType(  ) throw (RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL hasElements(  ) throw (RuntimeException, std::exception) override;
+        virtual void SAL_CALL replaceByName( const OUString& _rName, const Any& aElement ) override;
+        virtual Any SAL_CALL getByName( const OUString& _rName ) override;
+        virtual Sequence< OUString > SAL_CALL getElementNames(  ) override;
+        virtual sal_Bool SAL_CALL hasByName( const OUString& _rName ) override;
+        virtual Type SAL_CALL getElementType(  ) override;
+        virtual sal_Bool SAL_CALL hasElements(  ) override;
 
     protected:
-        virtual ~EventHolder( );
+        virtual ~EventHolder( ) override;
 
     private:
-        ScriptEventDescriptor impl_getDescriptor_throw( const OUString& _rEventName ) const;
+        ScriptEventDescriptor const & impl_getDescriptor_throw( const OUString& _rEventName ) const;
     };
 
 
@@ -359,8 +349,8 @@ namespace pcr
 
     void EventHolder::addEvent( EventId _nId, const OUString& _rEventName, const ScriptEventDescriptor& _rScriptEvent )
     {
-        ::std::pair< EventMap::iterator, bool > insertionResult =
-            m_aEventNameAccess.insert( EventMap::value_type( _rEventName, _rScriptEvent ) );
+        std::pair< EventMap::iterator, bool > insertionResult =
+            m_aEventNameAccess.emplace( _rEventName, _rScriptEvent );
         OSL_ENSURE( insertionResult.second, "EventHolder::addEvent: there already was a MacroURL for this event!" );
         m_aEventIndexAccess[ _nId ] = insertionResult.first;
     }
@@ -370,7 +360,7 @@ namespace pcr
         return impl_getDescriptor_throw( _rEventName );
     }
 
-    ScriptEventDescriptor EventHolder::impl_getDescriptor_throw( const OUString& _rEventName ) const
+    ScriptEventDescriptor const & EventHolder::impl_getDescriptor_throw( const OUString& _rEventName ) const
     {
         EventMap::const_iterator pos = m_aEventNameAccess.find( _rEventName );
         if ( pos == m_aEventNameAccess.end() )
@@ -378,7 +368,7 @@ namespace pcr
         return pos->second;
     }
 
-    void SAL_CALL EventHolder::replaceByName( const OUString& _rName, const Any& _rElement ) throw (IllegalArgumentException, NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+    void SAL_CALL EventHolder::replaceByName( const OUString& _rName, const Any& _rElement )
     {
         EventMap::iterator pos = m_aEventNameAccess.find( _rName );
         if ( pos == m_aEventNameAccess.end() )
@@ -393,7 +383,7 @@ namespace pcr
         pos->second.ScriptCode = aExtractor.getOrDefault( "Script", OUString() );
     }
 
-    Any SAL_CALL EventHolder::getByName( const OUString& _rName ) throw (NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+    Any SAL_CALL EventHolder::getByName( const OUString& _rName )
     {
         ScriptEventDescriptor aDescriptor( impl_getDescriptor_throw( _rName ) );
 
@@ -406,7 +396,7 @@ namespace pcr
         return makeAny( aScriptDescriptor );
     }
 
-    Sequence< OUString > SAL_CALL EventHolder::getElementNames(  ) throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL EventHolder::getElementNames(  )
     {
         Sequence< OUString > aReturn( m_aEventIndexAccess.size() );
         OUString* pReturn = aReturn.getArray();
@@ -420,26 +410,26 @@ namespace pcr
         // of the implementation.
         // Well, it means we're forced to return the events in getElementNames in exactly the same as they
         // appear in the property browser UI.
-        for (   EventMapIndexAccess::const_iterator loop = m_aEventIndexAccess.begin();
-                loop != m_aEventIndexAccess.end();
-                ++loop, ++pReturn
-            )
-            *pReturn = loop->second->first;
+        for (auto const& elem : m_aEventIndexAccess)
+        {
+            *pReturn = elem.second->first;
+            ++pReturn;
+        }
         return aReturn;
     }
 
-    sal_Bool SAL_CALL EventHolder::hasByName( const OUString& _rName ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL EventHolder::hasByName( const OUString& _rName )
     {
         EventMap::const_iterator pos = m_aEventNameAccess.find( _rName );
         return pos != m_aEventNameAccess.end();
     }
 
-    Type SAL_CALL EventHolder::getElementType(  ) throw (RuntimeException, std::exception)
+    Type SAL_CALL EventHolder::getElementType(  )
     {
         return cppu::UnoType<Sequence< PropertyValue >>::get();
     }
 
-    sal_Bool SAL_CALL EventHolder::hasElements(  ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL EventHolder::hasElements(  )
     {
         return !m_aEventNameAccess.empty();
     }
@@ -459,38 +449,38 @@ namespace pcr
     {
     }
 
-    OUString SAL_CALL EventHandler::getImplementationName(  ) throw (RuntimeException, std::exception)
+    OUString SAL_CALL EventHandler::getImplementationName(  )
     {
         return getImplementationName_static();
     }
 
-    sal_Bool SAL_CALL EventHandler::supportsService( const OUString& ServiceName ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL EventHandler::supportsService( const OUString& ServiceName )
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    Sequence< OUString > SAL_CALL EventHandler::getSupportedServiceNames(  ) throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL EventHandler::getSupportedServiceNames(  )
     {
         return getSupportedServiceNames_static();
     }
 
-    OUString SAL_CALL EventHandler::getImplementationName_static(  ) throw (RuntimeException)
+    OUString EventHandler::getImplementationName_static(  )
     {
         return OUString(  "com.sun.star.comp.extensions.EventHandler"  );
     }
 
-    Sequence< OUString > SAL_CALL EventHandler::getSupportedServiceNames_static(  ) throw (RuntimeException)
+    Sequence< OUString > EventHandler::getSupportedServiceNames_static(  )
     {
         Sequence<OUString> aSupported { "com.sun.star.form.inspection.EventHandler" };
         return aSupported;
     }
 
-    Reference< XInterface > SAL_CALL EventHandler::Create( const Reference< XComponentContext >& _rxContext )
+    Reference< XInterface > EventHandler::Create( const Reference< XComponentContext >& _rxContext )
     {
         return *( new EventHandler( _rxContext ) );
     }
 
-    void SAL_CALL EventHandler::inspect( const Reference< XInterface >& _rxIntrospectee ) throw (RuntimeException, NullPointerException, std::exception)
+    void SAL_CALL EventHandler::inspect( const Reference< XInterface >& _rxIntrospectee )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -525,11 +515,11 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
     }
 
-    Any SAL_CALL EventHandler::getPropertyValue( const OUString& _rPropertyName ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    Any SAL_CALL EventHandler::getPropertyValue( const OUString& _rPropertyName )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -553,7 +543,7 @@ namespace pcr
         return makeAny( aPropertyValue );
     }
 
-    void SAL_CALL EventHandler::setPropertyValue( const OUString& _rPropertyName, const Any& _rValue ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    void SAL_CALL EventHandler::setPropertyValue( const OUString& _rPropertyName, const Any& _rValue )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -583,7 +573,7 @@ namespace pcr
         m_aPropertyListeners.notify( aEvent, &XPropertyChangeListener::propertyChange );
     }
 
-    Any SAL_CALL EventHandler::convertToPropertyValue( const OUString& _rPropertyName, const Any& _rControlValue ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    Any SAL_CALL EventHandler::convertToPropertyValue( const OUString& _rPropertyName, const Any& _rControlValue )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -610,7 +600,7 @@ namespace pcr
         return makeAny( aAssignedScript );
     }
 
-    Any SAL_CALL EventHandler::convertToControlValue( const OUString& /*_rPropertyName*/, const Any& _rPropertyValue, const Type& _rControlValueType ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    Any SAL_CALL EventHandler::convertToControlValue( const OUString& /*_rPropertyName*/, const Any& _rPropertyValue, const Type& _rControlValueType )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -619,7 +609,6 @@ namespace pcr
 
         OSL_ENSURE( _rControlValueType.getTypeClass() == TypeClass_STRING,
             "EventHandler::convertToControlValue: unexpected ControlValue type class!" );
-        (void)_rControlValueType;
 
         OUString sScript( aScriptEvent.ScriptCode );
         if ( !sScript.isEmpty() )
@@ -667,19 +656,19 @@ namespace pcr
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
             }
         }
 
         return makeAny( sScript );
     }
 
-    PropertyState SAL_CALL EventHandler::getPropertyState( const OUString& /*_rPropertyName*/ ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    PropertyState SAL_CALL EventHandler::getPropertyState( const OUString& /*_rPropertyName*/ )
     {
         return PropertyState_DIRECT_VALUE;
     }
 
-    void SAL_CALL EventHandler::addPropertyChangeListener( const Reference< XPropertyChangeListener >& _rxListener ) throw (NullPointerException, RuntimeException, std::exception)
+    void SAL_CALL EventHandler::addPropertyChangeListener( const Reference< XPropertyChangeListener >& _rxListener )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         if ( !_rxListener.is() )
@@ -687,13 +676,13 @@ namespace pcr
         m_aPropertyListeners.addListener( _rxListener );
     }
 
-    void SAL_CALL EventHandler::removePropertyChangeListener( const Reference< XPropertyChangeListener >& _rxListener ) throw (RuntimeException, std::exception)
+    void SAL_CALL EventHandler::removePropertyChangeListener( const Reference< XPropertyChangeListener >& _rxListener )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         m_aPropertyListeners.removeListener( _rxListener );
     }
 
-    Sequence< Property > SAL_CALL EventHandler::getSupportedProperties() throw (RuntimeException, std::exception)
+    Sequence< Property > SAL_CALL EventHandler::getSupportedProperties()
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         if ( !m_bEventsMapInitialized )
@@ -704,14 +693,11 @@ namespace pcr
                 std::vector< Type > aListeners;
                 impl_getComponentListenerTypes_nothrow( aListeners );
 
-                Property aCurrentProperty;
                 OUString sListenerClassName;
 
                 // loop through all listeners and all methods, and see which we can present at the UI
                 for ( const Type& rListener : aListeners )
                 {
-                    aCurrentProperty = Property();
-
                     // the programmatic name of the listener, to be used as "property" name
                     sListenerClassName = rListener.getTypeName();
                     OSL_ENSURE( !sListenerClassName.isEmpty(), "EventHandler::getSupportedProperties: strange - no listener name ..." );
@@ -719,41 +705,33 @@ namespace pcr
                         continue;
 
                     // loop through all methods
-                    Sequence< OUString > aMethods( comphelper::getEventMethodsForType( rListener ) );
-
-                    const OUString* pMethods = aMethods.getConstArray();
-                    sal_uInt32 methodCount = aMethods.getLength();
-
-                    for (sal_uInt32 method = 0 ; method < methodCount ; ++method, ++pMethods )
+                    for (const OUString& rMethod : comphelper::getEventMethodsForType( rListener ))
                     {
                         EventDescription aEvent;
-                        if ( !lcl_getEventDescriptionForMethod( *pMethods, aEvent ) )
+                        if ( !lcl_getEventDescriptionForMethod( rMethod, aEvent ) )
                             continue;
 
                         if ( !impl_filterMethod_nothrow( aEvent ) )
                             continue;
 
-                        m_aEvents.insert( EventMap::value_type(
-                            lcl_getEventPropertyName( sListenerClassName, *pMethods ), aEvent ) );
+                        m_aEvents.emplace(
+                            lcl_getEventPropertyName( sListenerClassName, rMethod ), aEvent );
                     }
                 }
 
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
             }
         }
 
         // sort them by ID - this is the relative ordering in the UI
-        ::std::map< EventId, Property > aOrderedProperties;
-        for (   EventMap::const_iterator loop = m_aEvents.begin();
-                loop != m_aEvents.end();
-                ++loop
-            )
+        std::map< EventId, Property > aOrderedProperties;
+        for (auto const& event : m_aEvents)
         {
-            aOrderedProperties[ loop->second.nId ] = Property(
-                loop->first, loop->second.nId,
+            aOrderedProperties[ event.second.nId ] = Property(
+                event.first, event.second.nId,
                 ::cppu::UnoType<OUString>::get(),
                 PropertyAttribute::BOUND );
         }
@@ -761,13 +739,13 @@ namespace pcr
         return comphelper::mapValuesToSequence( aOrderedProperties );
     }
 
-    Sequence< OUString > SAL_CALL EventHandler::getSupersededProperties( ) throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL EventHandler::getSupersededProperties( )
     {
         // none
         return Sequence< OUString >( );
     }
 
-    Sequence< OUString > SAL_CALL EventHandler::getActuatingProperties( ) throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL EventHandler::getActuatingProperties( )
     {
         // none
         return Sequence< OUString >( );
@@ -775,7 +753,6 @@ namespace pcr
 
     LineDescriptor SAL_CALL EventHandler::describePropertyLine( const OUString& _rPropertyName,
         const Reference< XPropertyControlFactory >& _rxControlFactory )
-        throw (UnknownPropertyException, NullPointerException, RuntimeException, std::exception)
     {
         if ( !_rxControlFactory.is() )
             throw NullPointerException();
@@ -784,24 +761,24 @@ namespace pcr
 
         LineDescriptor aDescriptor;
 
-        aDescriptor.Control = _rxControlFactory->createPropertyControl( PropertyControlType::TextField, sal_True );
+        aDescriptor.Control = _rxControlFactory->createPropertyControl( PropertyControlType::TextField, true );
         Reference< XEventListener > xControlExtender = new PropertyControlExtender( aDescriptor.Control );
 
         const EventDescription& rEvent = impl_getEventForName_throw( _rPropertyName );
         aDescriptor.DisplayName = rEvent.sDisplayName;
         aDescriptor.HelpURL = HelpIdUrl::getHelpURL( rEvent.sHelpId );
         aDescriptor.PrimaryButtonId = OStringToOUString(rEvent.sUniqueBrowseId, RTL_TEXTENCODING_UTF8);
-        aDescriptor.HasPrimaryButton = sal_True;
+        aDescriptor.HasPrimaryButton = true;
         aDescriptor.Category = "Events";
         return aDescriptor;
     }
 
-    sal_Bool SAL_CALL EventHandler::isComposable( const OUString& /*_rPropertyName*/ ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    sal_Bool SAL_CALL EventHandler::isComposable( const OUString& /*_rPropertyName*/ )
     {
-        return sal_False;
+        return false;
     }
 
-    InteractiveSelectionResult SAL_CALL EventHandler::onInteractivePropertySelection( const OUString& _rPropertyName, sal_Bool /*_bPrimary*/, Any& /*_rData*/, const Reference< XObjectInspectorUI >& _rxInspectorUI ) throw (UnknownPropertyException, NullPointerException, RuntimeException, std::exception)
+    InteractiveSelectionResult SAL_CALL EventHandler::onInteractivePropertySelection( const OUString& _rPropertyName, sal_Bool /*_bPrimary*/, Any& /*_rData*/, const Reference< XObjectInspectorUI >& _rxInspectorUI )
     {
         if ( !_rxInspectorUI.is() )
             throw NullPointerException();
@@ -815,27 +792,22 @@ namespace pcr
         // SvxMacroAssignDlg-compatible structure holding all event/assignments
         ::rtl::Reference< EventHolder >  pEventHolder( new EventHolder );
 
-        for (   EventMap::const_iterator event = m_aEvents.begin();
-                event != m_aEvents.end();
-                ++event
-            )
+        for (auto const& event : m_aEvents)
         {
             // the script which is assigned to the current event (if any)
-            ScriptEventDescriptor aAssignedScript = lcl_getAssignedScriptEvent( event->second, aAllAssignedEvents );
-            pEventHolder->addEvent( event->second.nId, event->second.sListenerMethodName, aAssignedScript );
+            ScriptEventDescriptor aAssignedScript = lcl_getAssignedScriptEvent( event.second, aAllAssignedEvents );
+            pEventHolder->addEvent( event.second.nId, event.second.sListenerMethodName, aAssignedScript );
         }
 
         // the initial selection in the dialog
         Sequence< OUString > aNames( pEventHolder->getElementNames() );
-        const OUString* pChosenEvent = ::std::find( aNames.getConstArray(), aNames.getConstArray() + aNames.getLength(), rForEvent.sListenerMethodName );
-        sal_uInt16 nInitialSelection = (sal_uInt16)( pChosenEvent - aNames.getConstArray() );
+        const OUString* pChosenEvent = std::find( aNames.begin(), aNames.end(), rForEvent.sListenerMethodName );
+        sal_uInt16 nInitialSelection = static_cast<sal_uInt16>( pChosenEvent - aNames.begin() );
 
         // the dialog
         SvxAbstractDialogFactory* pFactory = SvxAbstractDialogFactory::Create();
-        if ( !pFactory )
-            return InteractiveSelectionResult_Cancelled;
 
-        ::std::unique_ptr< VclAbstractDialog > pDialog( pFactory->CreateSvxMacroAssignDlg(
+        ScopedVclPtr<VclAbstractDialog> pDialog( pFactory->CreateSvxMacroAssignDlg(
             PropertyHandlerHelper::getDialogParentWindow( m_xContext ),
             impl_getContextFrame_nothrow(),
             m_bIsDialogElement,
@@ -853,29 +825,26 @@ namespace pcr
 
         try
         {
-            for (   EventMap::const_iterator event = m_aEvents.begin();
-                    event != m_aEvents.end();
-                    ++event
-                )
+            for (auto const& event : m_aEvents)
             {
-                ScriptEventDescriptor aScriptDescriptor( pEventHolder->getNormalizedDescriptorByName( event->second.sListenerMethodName ) );
+                ScriptEventDescriptor aScriptDescriptor( pEventHolder->getNormalizedDescriptorByName( event.second.sListenerMethodName ) );
 
                 // set the new "property value"
                 setPropertyValue(
-                    lcl_getEventPropertyName( event->second.sListenerClassName, event->second.sListenerMethodName ),
+                    lcl_getEventPropertyName( event.second.sListenerClassName, event.second.sListenerMethodName ),
                     makeAny( aScriptDescriptor )
                 );
             }
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
 
         return InteractiveSelectionResult_Success;
     }
 
-    void SAL_CALL EventHandler::actuatingPropertyChanged( const OUString& /*_rActuatingPropertyName*/, const Any& /*_rNewValue*/, const Any& /*_rOldValue*/, const Reference< XObjectInspectorUI >& /*_rxInspectorUI*/, sal_Bool /*_bFirstTimeInit*/ ) throw (NullPointerException, RuntimeException, std::exception)
+    void SAL_CALL EventHandler::actuatingPropertyChanged( const OUString& /*_rActuatingPropertyName*/, const Any& /*_rNewValue*/, const Any& /*_rOldValue*/, const Reference< XObjectInspectorUI >& /*_rxInspectorUI*/, sal_Bool /*_bFirstTimeInit*/ )
     {
         OSL_FAIL( "EventHandler::actuatingPropertyChanged: no actuating properties -> no callback (well, this is how it *should* be!)" );
     }
@@ -889,9 +858,9 @@ namespace pcr
         m_xComponent.clear();
     }
 
-    sal_Bool SAL_CALL EventHandler::suspend( sal_Bool /*_bSuspend*/ ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL EventHandler::suspend( sal_Bool /*_bSuspend*/ )
     {
-        return sal_True;
+        return true;
     }
 
     Reference< XFrame > EventHandler::impl_getContextFrame_nothrow() const
@@ -906,7 +875,7 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
 
         return xContextFrame;
@@ -946,7 +915,7 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
     }
 
@@ -976,7 +945,7 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
     }
 
@@ -997,7 +966,7 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
     }
 
@@ -1099,7 +1068,7 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
     }
 
@@ -1138,14 +1107,14 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
     }
 
     bool EventHandler::impl_filterMethod_nothrow( const EventDescription& _rEvent ) const
     {
         // some (control-triggered) events do not make sense for certain grid control columns. However,
-        // our mechnism to retrieve control-triggered events does not know about this, so we do some
+        // our mechanism to retrieve control-triggered events does not know about this, so we do some
         // late filtering here.
         switch ( m_nGridColumnType )
         {

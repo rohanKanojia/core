@@ -22,7 +22,7 @@
 
 #include "TablePropertiesHandler.hxx"
 
-#include <DomainMapper.hxx>
+#include "DomainMapper.hxx"
 #include "LoggedResources.hxx"
 #include <memory>
 #include <vector>
@@ -57,7 +57,7 @@ private:
     std::unique_ptr<TablePropertiesHandler>  m_pTablePropsHandler;
 
     TblStyleType                m_nType;
-    PropertyMapPtr              m_pProperties;
+    PropertyMapPtr const        m_pProperties;
     std::vector<css::beans::PropertyValue> m_aInteropGrabBag;
 
     // Properties
@@ -66,10 +66,10 @@ private:
 
 public:
     explicit TblStylePrHandler( DomainMapper & rDMapper );
-    virtual ~TblStylePrHandler( );
+    virtual ~TblStylePrHandler( ) override;
 
-    inline PropertyMapPtr       getProperties() { return m_pProperties; };
-    inline TblStyleType         getType() { return m_nType; };
+    const PropertyMapPtr&       getProperties() { return m_pProperties; };
+    TblStyleType         getType() { return m_nType; };
     OUString getTypeString();
     void appendInteropGrabBag(const OUString& aKey, const OUString& aValue);
     css::beans::PropertyValue getInteropGrabBag(const OUString& aName);
@@ -78,8 +78,6 @@ private:
 
     void resolveSprmProps(Sprm & rSprm);
 };
-
-typedef std::shared_ptr< TblStylePrHandler > TblStylePrHandlerPtr;
 
 }}
 

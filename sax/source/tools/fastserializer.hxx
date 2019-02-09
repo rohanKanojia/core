@@ -25,7 +25,7 @@
 
 #include <sax/fastattribs.hxx>
 #include <sax/fshelper.hxx>
-#include <CachedOutputStream.hxx>
+#include "CachedOutputStream.hxx"
 
 #include <stack>
 #include <map>
@@ -35,7 +35,7 @@ namespace sax_fastparser {
 
 struct TokenValue
 {
-    sal_Int32   nToken;
+    sal_Int32 const nToken;
     const char *pValue;
     TokenValue(sal_Int32 _nToken, const char *_pValue) : nToken(_nToken), pValue(_pValue) {}
 };
@@ -51,7 +51,7 @@ public:
     explicit FastSaxSerializer(const css::uno::Reference< css::io::XOutputStream >& xOutputStream);
     ~FastSaxSerializer();
 
-    css::uno::Reference< css::io::XOutputStream > getOutputStream();
+    css::uno::Reference< css::io::XOutputStream > const & getOutputStream() const;
     /// called by FSHelper to put data in for writeTokenValueList
     TokenValueList& getTokenValueList() { return maTokenValues; }
 
@@ -80,7 +80,7 @@ public:
             from the element.
 
     */
-    void startFastElement( ::sal_Int32 Element, FastAttributeList* pAttrList = nullptr );
+    void startFastElement( ::sal_Int32 Element, FastAttributeList const * pAttrList = nullptr );
 
     /** receives notification of the end of an known element.
         @see startFastElement
@@ -104,7 +104,7 @@ public:
             from the element.
 
     */
-    void singleFastElement( ::sal_Int32 Element, FastAttributeList* pAttrList = nullptr );
+    void singleFastElement( ::sal_Int32 Element, FastAttributeList const * pAttrList = nullptr );
 
     // C++ helpers
     void writeId( ::sal_Int32 Element );
@@ -130,7 +130,7 @@ public:
 
         @param nTag debugging aid to ensure mark and merge match in LIFO order
      */
-    void mark(sal_Int32 nTag, const Int32Sequence& rOrder = Int32Sequence());
+    void mark(sal_Int32 nTag, const Int32Sequence& rOrder);
 
     /** Merge 2 topmost marks.
 
@@ -150,7 +150,7 @@ public:
         @see mark()
      */
     void mergeTopMarks(sal_Int32 nTag,
-        sax_fastparser::MergeMarks eMergeType = sax_fastparser::MergeMarks::APPEND);
+        sax_fastparser::MergeMarks eMergeType);
 
 private:
     /** Helper class to cache data and write in chunks to XOutputStream or ForMerge::append.
@@ -177,7 +177,6 @@ private:
 #endif
 
         explicit ForMerge(sal_Int32 const nTag) : m_Tag(nTag) {}
-        virtual ~ForMerge() {}
 
         virtual void setCurrentElement( ::sal_Int32 /*nToken*/ ) {}
         virtual Int8Sequence& getData();
@@ -235,7 +234,7 @@ private:
 #endif
 
     void writeTokenValueList();
-    void writeFastAttributeList(FastAttributeList& rAttrList);
+    void writeFastAttributeList(FastAttributeList const & rAttrList);
 
     /** Forward the call to the output stream, or write to the stack.
 

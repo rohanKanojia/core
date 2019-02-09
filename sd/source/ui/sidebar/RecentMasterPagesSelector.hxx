@@ -26,7 +26,7 @@ namespace sd { namespace sidebar {
 
 /** Show the recently used master pages (that are not currently used).
 */
-class RecentMasterPagesSelector
+class RecentMasterPagesSelector final
     : public MasterPagesSelector
 {
     friend class VclPtrInstance<RecentMasterPagesSelector>;
@@ -36,8 +36,8 @@ public:
         ViewShellBase& rViewShellBase,
         const css::uno::Reference<css::ui::XSidebar>& rxSidebar);
 
-protected:
-    DECL_LINK_TYPED(MasterPageListListener, LinkParamNone*, void);
+private:
+    DECL_LINK(MasterPageListListener, LinkParamNone*, void);
     virtual void Fill (ItemList& rItemList) override;
 
     using sd::sidebar::MasterPagesSelector::Fill;
@@ -58,14 +58,13 @@ protected:
 
     virtual void ProcessPopupMenu (Menu& rMenu) override;
 
-private:
     RecentMasterPagesSelector (
         vcl::Window* pParent,
         SdDrawDocument& rDocument,
         ViewShellBase& rBase,
         const std::shared_ptr<MasterPageContainer>& rpContainer,
         const css::uno::Reference<css::ui::XSidebar>& rxSidebar);
-    virtual ~RecentMasterPagesSelector();
+    virtual ~RecentMasterPagesSelector() override;
     virtual void dispose() override;
 
     virtual void LateInit() override;

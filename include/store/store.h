@@ -33,31 +33,26 @@ extern "C" {
  */
 typedef void* storeHandle;
 
-
 /** Acquire a Handle.
     @param  Handle [in] the Handle.
     @return store_E_None upon success
  */
-STORE_DLLPUBLIC storeError SAL_CALL store_acquireHandle (
+STORE_DLLPUBLIC storeError store_acquireHandle (
     storeHandle Handle
 ) SAL_THROW_EXTERN_C();
-
 
 /** Release a Handle.
     @param  Handle [in] the Handle.
     @return store_E_None          upon success,
             store_E_InvalidHandle otherwise.
  */
-STORE_DLLPUBLIC storeError SAL_CALL store_releaseHandle (
+STORE_DLLPUBLIC storeError store_releaseHandle (
     storeHandle Handle
 ) SAL_THROW_EXTERN_C();
-
-
 
 /** File Handle opaque type.
  */
 typedef void* storeFileHandle;
-
 
 /** Open a temporary file in memory.
     @param  nPageSize [in] the creation page size,
@@ -65,55 +60,50 @@ typedef void* storeFileHandle;
     @param  phFile [out] the File Handle.
     @return store_E_None upon success
  */
-STORE_DLLPUBLIC storeError SAL_CALL store_createMemoryFile (
+STORE_DLLPUBLIC storeError store_createMemoryFile (
     sal_uInt16       nPageSize,
     storeFileHandle *phFile
 ) SAL_THROW_EXTERN_C();
 
-
 /** Open a file.
     @param  pFilename [in] the filename as URL or system path.
     @param  eAccessMode [in] the access mode.
-            store_AccessCreate     truncate existing and create,
+            storeAccessMode::Create     truncate existing and create,
             store_AccessReadCreate create not existing,
-            store_AccessReadWrite  write existing,
-            store_AccessReadOnly   never modifies.
+            storeAccessMode::ReadWrite  write existing,
+            storeAccessMode::ReadOnly   never modifies.
     @param  nPageSize [in] the creation page size,
             integer multiple of minimum page size.
     @param  phFile [out] the File Handle.
     @return store_E_None upon success
  */
-STORE_DLLPUBLIC storeError SAL_CALL store_openFile (
+STORE_DLLPUBLIC storeError store_openFile (
     rtl_uString     *pFilename,
     storeAccessMode  eAccessMode,
     sal_uInt16       nPageSize,
     storeFileHandle *phFile
 ) SAL_THROW_EXTERN_C();
 
-
 /** Close a file.
     @param  hFile [in] the File Handle.
     @return store_E_None upon     success,
             store_E_InvalidHandle otherwise.
  */
-STORE_DLLPUBLIC storeError SAL_CALL store_closeFile (
+STORE_DLLPUBLIC storeError store_closeFile (
     storeFileHandle hFile
 ) SAL_THROW_EXTERN_C();
-
 
 /** Flush a file.
     @param  hFile [in] the File Handle.
     @return store_E_None upon success
  */
-STORE_DLLPUBLIC storeError SAL_CALL store_flushFile (
+STORE_DLLPUBLIC storeError store_flushFile (
     storeFileHandle hFile
 ) SAL_THROW_EXTERN_C();
-
 
 /** Directory Handle opaque type.
  */
 typedef void* storeDirectoryHandle;
-
 
 /** Open a directory.
     @see store_openFile()
@@ -125,14 +115,13 @@ typedef void* storeDirectoryHandle;
     @param  phDirectory [out] the Directory Handle.
     @return store_E_None upon success
  */
-STORE_DLLPUBLIC storeError SAL_CALL store_openDirectory (
+STORE_DLLPUBLIC storeError store_openDirectory (
     storeFileHandle       hFile,
-    rtl_uString          *pPath,
-    rtl_uString          *pName,
+    rtl_uString const    *pPath,
+    rtl_uString const    *pName,
     storeAccessMode       eAccessMode,
     storeDirectoryHandle *phDirectory
 ) SAL_THROW_EXTERN_C();
-
 
 /** Find first directory entry.
     @param  hDirectory [in] the Directory Handle.
@@ -140,11 +129,10 @@ STORE_DLLPUBLIC storeError SAL_CALL store_openDirectory (
     @return store_E_None       upon success,
             store_E_NoMoreFile upon end of iteration.
  */
-STORE_DLLPUBLIC storeError SAL_CALL store_findFirst (
+STORE_DLLPUBLIC storeError store_findFirst (
     storeDirectoryHandle  hDirectory,
     storeFindData        *pFindData
 ) SAL_THROW_EXTERN_C();
-
 
 /** Find next directory entry.
     @param  hDirectory [in] the Directory Handle.
@@ -152,17 +140,14 @@ STORE_DLLPUBLIC storeError SAL_CALL store_findFirst (
     @return store_E_None       upon success,
             store_E_NoMoreFile upon end of iteration.
  */
-STORE_DLLPUBLIC storeError SAL_CALL store_findNext (
+STORE_DLLPUBLIC storeError store_findNext (
     storeDirectoryHandle  hDirectory,
     storeFindData        *pFindData
 ) SAL_THROW_EXTERN_C();
 
-
-
 /** Stream Handle opaque type.
  */
 typedef void* storeStreamHandle;
-
 
 /** Open a stream.
     @see store_openFile()
@@ -174,14 +159,13 @@ typedef void* storeStreamHandle;
     @param  phStrm [out] the Stream Handle.
     @return store_E_None upon success
  */
-STORE_DLLPUBLIC storeError SAL_CALL store_openStream (
+STORE_DLLPUBLIC storeError store_openStream (
     storeFileHandle    hFile,
-    rtl_uString       *pPath,
-    rtl_uString       *pName,
+    rtl_uString const *pPath,
+    rtl_uString const *pName,
     storeAccessMode    eMode,
     storeStreamHandle *phStrm
 ) SAL_THROW_EXTERN_C();
-
 
 /** Read from a stream.
     @param  hStrm [in] the Stream Handle.
@@ -191,14 +175,13 @@ STORE_DLLPUBLIC storeError SAL_CALL store_openStream (
     @param  pnDone [out] the number of bytes actually read.
     @return store_E_None upon success
  */
-STORE_DLLPUBLIC storeError SAL_CALL store_readStream (
+STORE_DLLPUBLIC storeError store_readStream (
     storeStreamHandle  hStrm,
     sal_uInt32         nOffset,
     void              *pBuffer,
     sal_uInt32         nBytes,
     sal_uInt32        *pnDone
 ) SAL_THROW_EXTERN_C();
-
 
 /** Write to a stream.
     @param  hStrm [in] the Stream Handle.
@@ -208,7 +191,7 @@ STORE_DLLPUBLIC storeError SAL_CALL store_readStream (
     @param  pnDone [out] the number of bytes actually written.
     @return store_E_None upon success
  */
-STORE_DLLPUBLIC storeError SAL_CALL store_writeStream (
+STORE_DLLPUBLIC storeError store_writeStream (
     storeStreamHandle  hStrm,
     sal_uInt32         nOffset,
     const void        *pBuffer,
@@ -216,25 +199,17 @@ STORE_DLLPUBLIC storeError SAL_CALL store_writeStream (
     sal_uInt32        *pnDone
 ) SAL_THROW_EXTERN_C();
 
-
-
 /** Remove a file entry.
     @param  hFile [in] the File Handle
     @param  pPath [in] the entry path
     @param  pName [in] the entry name
     @return store_E_None upon success
  */
-STORE_DLLPUBLIC storeError SAL_CALL store_remove (
+STORE_DLLPUBLIC storeError store_remove (
     storeFileHandle hFile,
-    rtl_uString    *pPath,
-    rtl_uString    *pName
+    rtl_uString const *pPath,
+    rtl_uString const *pName
 ) SAL_THROW_EXTERN_C();
-
-/*========================================================================
- *
- * The End.
- *
- *======================================================================*/
 
 #ifdef __cplusplus
 }

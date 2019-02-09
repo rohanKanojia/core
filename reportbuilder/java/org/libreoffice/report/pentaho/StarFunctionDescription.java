@@ -152,7 +152,8 @@ public final class StarFunctionDescription extends WeakBase
         final boolean infinite = functionDescription.isInfiniteParameterCount();
         if (infinite)
         {
-            count = 30;
+            // Identical value as VAR_ARGS from formula/funcvarargs.h
+            count = 255;
         }
         final FunctionArgument[] args = new FunctionArgument[count];
         for (int i = 0; i < args.length; i++)

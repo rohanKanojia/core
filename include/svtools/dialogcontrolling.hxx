@@ -24,9 +24,9 @@
 
 #include <tools/link.hxx>
 #include <vcl/button.hxx>
+#include <vcl/vclevent.hxx>
 
 #include <memory>
-#include <vector>
 
 namespace svt
 {
@@ -111,17 +111,14 @@ namespace svt
         void    reset();
 
     private:
-        void    impl_updateAll( const VclWindowEvent& _rTriggerEvent );
         void    impl_update( const VclWindowEvent& _rTriggerEvent, vcl::Window& _rWindow );
 
-        DECL_LINK_TYPED( OnWindowEvent, VclWindowEvent&, void );
+        DECL_LINK( OnWindowEvent, VclWindowEvent&, void );
 
     private:
         DialogController( const DialogController& ) = delete;
         DialogController& operator=( const DialogController& ) = delete;
     };
-    typedef std::shared_ptr< DialogController > PDialogController;
-
 
     //= ControlDependencyManager
 
@@ -141,10 +138,6 @@ namespace svt
         ControlDependencyManager();
         ~ControlDependencyManager();
 
-        /** clears all dialog controllers previously added to the manager
-        */
-        void    clear();
-
         /** ensures that a given window is enabled or disabled, according to the check state
             of a given radio button
             @param _rRadio
@@ -158,24 +151,12 @@ namespace svt
         void    enableOnRadioCheck( RadioButton& _rRadio, vcl::Window& _rDependentWindow1, vcl::Window& _rDependentWindow2, vcl::Window& _rDependentWindow3 );
         void    enableOnRadioCheck( RadioButton& _rRadio, vcl::Window& _rDependentWindow1, vcl::Window& _rDependentWindow2, vcl::Window& _rDependentWindow3, vcl::Window& _rDependentWindow4, vcl::Window& _rDependentWindow5 );
 
-        /** ensures that a given window is enabled or disabled, according to the mark state
-            of a given check box
-            @param _rBox
-                denotes the check box whose mark state is to observe
-            @param _rDependentWindow
-                denotes the window which should be enabled when ->_rBox is marked, and
-                disabled when it's unmarked
-        */
-        void    enableOnCheckMark( CheckBox& _rBox, vcl::Window& _rDependentWindow );
-        void    enableOnCheckMark( CheckBox& _rBox, vcl::Window& _rDependentWindow1, vcl::Window& _rDependentWindow2 );
-        void    enableOnCheckMark( CheckBox& _rBox, vcl::Window& _rDependentWindow1, vcl::Window& _rDependentWindow2, vcl::Window& _rDependentWindow3, vcl::Window& _rDependentWindow4 );
-
         /** adds a non-standard controller whose functionality is not covered by the other methods
 
             @param _pController
                 the controller to add to the manager. Must not be <NULL/>.
         */
-        void    addController( const PDialogController& _pController );
+        void    addController( const std::shared_ptr<DialogController>& _pController );
 
     private:
         ControlDependencyManager( const ControlDependencyManager& ) = delete;
@@ -224,8 +205,8 @@ namespace svt
     /** a helper class implementing the ->IWindowEventFilter interface,
         which filters for radio buttons or check boxes being toggled.
 
-        Technically, the class simply filters for the ->VCLEVENT_RADIOBUTTON_TOGGLE
-        and the ->VCLEVENT_CHECKBOX_TOGGLE event.
+        Technically, the class simply filters for the ->VclEventId::RadiobuttonToggle
+        and the ->VclEventId::CheckboxToggle event.
     */
     class SVT_DLLPUBLIC FilterForRadioOrCheckToggle : public IWindowEventFilter
     {
@@ -239,8 +220,8 @@ namespace svt
         bool payAttentionTo( const VclWindowEvent& _rEvent ) const override
         {
             if  (   ( _rEvent.GetWindow() == &m_rWindow )
-                &&  (   ( _rEvent.GetId() == VCLEVENT_RADIOBUTTON_TOGGLE )
-                    ||  ( _rEvent.GetId() == VCLEVENT_CHECKBOX_TOGGLE )
+                &&  (   ( _rEvent.GetId() == VclEventId::RadiobuttonToggle )
+                    ||  ( _rEvent.GetId() == VclEventId::CheckboxToggle )
                     )
                 )
                 return true;
@@ -271,13 +252,6 @@ namespace svt
             :DialogController( _rButton,
                 PWindowEventFilter( new FilterForRadioOrCheckToggle( _rButton ) ),
                 PWindowOperator( new EnableOnCheck< RadioButton >( _rButton ) ) )
-        {
-        }
-
-        RadioDependentEnabler( CheckBox& _rBox )
-            :DialogController( _rBox,
-                PWindowEventFilter( new FilterForRadioOrCheckToggle( _rBox ) ),
-                PWindowOperator( new EnableOnCheck< CheckBox >( _rBox ) ) )
         {
         }
     };

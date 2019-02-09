@@ -44,25 +44,23 @@ enum XMLPropOASISTransformerAction
     XML_OPTACTION_IMAGE_OPACITY,
     XML_OPTACTION_KEEP_TOGETHER,
     XML_OPTACTION_CONTROL_TEXT_ALIGN,
-    XML_OPTACTION_DRAW_WRITING_MODE,
     XML_ATACTION_CAPTION_ESCAPE_OASIS,
-    XML_ATACTION_DECODE_PROTECT,
-    XML_OPTACTION_END=XML_ATACTION_END
+    XML_ATACTION_DECODE_PROTECT
 };
 
-extern XMLTransformerActionInit aGraphicPropertyOASISAttrActionTable[];
-extern XMLTransformerActionInit aDrawingPagePropertyOASISAttrActionTable[];
-extern XMLTransformerActionInit aPageLayoutPropertyOASISAttrActionTable[];
-extern XMLTransformerActionInit aHeaderFooterPropertyOASISAttrActionTable[];
-extern XMLTransformerActionInit aTextPropertyOASISAttrActionTable[];
-extern XMLTransformerActionInit aParagraphPropertyOASISAttrActionTable[];
-extern XMLTransformerActionInit aSectionPropertyOASISAttrActionTable[];
-extern XMLTransformerActionInit aTablePropertyOASISAttrActionTable[];
-extern XMLTransformerActionInit aTableColumnPropertyOASISAttrActionTable[];
-extern XMLTransformerActionInit aTableRowPropertyOASISAttrActionTable[];
-extern XMLTransformerActionInit aTableCellPropertyOASISAttrActionTable[];
-extern XMLTransformerActionInit aListLevelPropertyOASISAttrActionTable[];
-extern XMLTransformerActionInit aChartPropertyOASISAttrActionTable[];
+extern XMLTransformerActionInit const aGraphicPropertyOASISAttrActionTable[];
+extern XMLTransformerActionInit const aDrawingPagePropertyOASISAttrActionTable[];
+extern XMLTransformerActionInit const aPageLayoutPropertyOASISAttrActionTable[];
+extern XMLTransformerActionInit const aHeaderFooterPropertyOASISAttrActionTable[];
+extern XMLTransformerActionInit const aTextPropertyOASISAttrActionTable[];
+extern XMLTransformerActionInit const aParagraphPropertyOASISAttrActionTable[];
+extern XMLTransformerActionInit const aSectionPropertyOASISAttrActionTable[];
+extern XMLTransformerActionInit const aTablePropertyOASISAttrActionTable[];
+extern XMLTransformerActionInit const aTableColumnPropertyOASISAttrActionTable[];
+extern XMLTransformerActionInit const aTableRowPropertyOASISAttrActionTable[];
+extern XMLTransformerActionInit const aTableCellPropertyOASISAttrActionTable[];
+extern XMLTransformerActionInit const aListLevelPropertyOASISAttrActionTable[];
+extern XMLTransformerActionInit const aChartPropertyOASISAttrActionTable[];
 
 #endif // INCLUDED_XMLOFF_SOURCE_TRANSFORM_PROPERTYACTIONSOASIS_HXX
 

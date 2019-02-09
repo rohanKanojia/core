@@ -17,29 +17,26 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#if defined _MSC_VER
-#pragma warning(push, 1)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 #include <ole2.h>
 #include <stdio.h>
 
-#include "cppunit/TestAssert.h"
-#include "cppunit/TestFixture.h"
-#include "cppunit/extensions/HelperMacros.h"
-#include "cppunit/plugin/TestPlugIn.h"
+#include <cppunit/TestAssert.h>
+#include <cppunit/TestFixture.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
 #include <string>
-#include "stream_helper.hxx"
+#include <stream_helper.hxx>
 #include "testzipimpl.hxx"
 using namespace std;
 
 class Test : public CppUnit::TestFixture
 {
 private:
-    string documentName;
+    wstring documentName;
     LPSTREAM pStream;
 public:
     Test();
@@ -61,31 +58,31 @@ public:
 
 CPPUNIT_TEST_SUITE_REGISTRATION(Test);
 
-Test::Test() : documentName(), pStream(NULL)
+Test::Test() : documentName(), pStream(nullptr)
 {
-    const char* pSrcRoot = getenv( "SRC_ROOT" );
+    const wchar_t* pSrcRoot = _wgetenv(L"SRC_ROOT");
     if (pSrcRoot)
     {
         documentName.append(pSrcRoot);
-        documentName.append("/");
+        documentName.append(L"/");
     }
-    documentName.append("shell/qa/zip/simpledocument.odt");
+    documentName.append(L"shell/qa/zip/simpledocument.odt");
 
     // Create an IStream pointer from the file
-    HANDLE hFile = CreateFileA(documentName.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+    HANDLE hFile = CreateFileW(documentName.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
 
-    DWORD dwFileSize = GetFileSize(hFile, NULL);
+    DWORD dwFileSize = GetFileSize(hFile, nullptr);
     HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, dwFileSize);
 
     LPVOID pvData = GlobalLock(hGlobal);
     DWORD dwBytesRead = 0;
-    BOOL bRead = ReadFile(hFile, pvData, dwFileSize, &dwBytesRead, NULL);
+    BOOL bRead = ReadFile(hFile, pvData, dwFileSize, &dwBytesRead, nullptr);
     CPPUNIT_ASSERT_MESSAGE("FileStream: ReadFile error.", bRead);
     GlobalUnlock(hGlobal);
     CloseHandle(hFile);
 
     HRESULT hr = CreateStreamOnHGlobal(hGlobal, TRUE, &pStream);
-    CPPUNIT_ASSERT_MESSAGE("FileStream: CreateStreamOnHGlobal failure.", hr == S_OK);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("FileStream: CreateStreamOnHGlobal failure.", S_OK, hr);
 }
 
 void Test::test_file_directory()

@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -35,7 +36,7 @@ import com.sun.star.uno.UnoRuntime;
 import com.sun.star.uno.XComponentContext;
 
 /**
- * The <code>ServiceManager</code> class is an implmentation of the
+ * The <code>ServiceManager</code> class is an implementation of the
  * <code>ServiceManager</code>the central class needed for implementing or using
  * UNO components in Java.
  *
@@ -94,7 +95,7 @@ public class ServiceManager implements XMultiServiceFactory,
      * Creates a new instance of a specified service.
      *
      * <p>Therefore the associated factory of the service is looked up and used
-     * to instanciate a new component. </p>
+     * to instantiate a new component. </p>
      *
      * @param   serviceSpecifier    indicates the service or component name.
      * @return  newly created component.
@@ -112,7 +113,7 @@ public class ServiceManager implements XMultiServiceFactory,
      * Creates a new instance of a specified service with the given parameters.
      *
      * <p>Therefore the associated factory of the service is  looked up and used
-     * to instanciate a new component.</p>
+     * to instantiate a new component.</p>
      *
      * @return  newly created component.
      * @param   serviceSpecifier    indicates the service or component name.
@@ -158,14 +159,14 @@ public class ServiceManager implements XMultiServiceFactory,
             ArrayList<Object> availableFact = factoriesByServiceNames.get( serviceName );
 
             DEBUG("");
-            DEBUG("aviable factories for " + serviceName +" "+ availableFact);
+            DEBUG("available factories for " + serviceName +" "+ availableFact);
             DEBUG("");
 
             if ( !availableFact.isEmpty() )
                 factory = availableFact.get(availableFact.size()-1);
 
         } else // not found in list of services - now try the implementations
-            factory = factoriesByImplNames.get( serviceName ); // return null if none is aviable
+            factory = factoriesByImplNames.get( serviceName ); // return null if none is available
 
         if (DEBUG) {
             if (factory == null) System.err.println("service not registered");
@@ -180,7 +181,7 @@ public class ServiceManager implements XMultiServiceFactory,
     }
 
     /**
-     * Supplies a list of all avialable services names.
+     * Supplies a list of all available services names.
      *
      * @return  list of Strings of all service names.
      * @see     com.sun.star.container.XContentEnumerationAccess
@@ -308,7 +309,7 @@ public class ServiceManager implements XMultiServiceFactory,
      * <p>The listener is notified when a service is added (removed) to (from)
      * the <code>ServiceManager</code>.</p>
      *
-     * <p>If the listener is already registred a
+     * <p>If the listener is already registered a
      * <code>com.sun.star.uno.RuntimeException</code> will be thrown.</p>
      *
      * @param   xListener   the new listener which should been added.
@@ -321,7 +322,7 @@ public class ServiceManager implements XMultiServiceFactory,
             throw new com.sun.star.uno.RuntimeException("Listener must not be null");
 
           if ( eventListener.contains(xListener) )
-              throw new com.sun.star.uno.RuntimeException("Listener already registred.");
+              throw new com.sun.star.uno.RuntimeException("Listener already registered.");
 
            eventListener.add(xListener);
     }
@@ -354,7 +355,7 @@ public class ServiceManager implements XMultiServiceFactory,
      * interface.</p>
      *
      * @param   object object which provides a <code>XServiceInfo</code> interface.
-     * @return  true if the component is registred otherwise false.
+     * @return  true if the component is registered otherwise false.
      *
      * @see     com.sun.star.container.XSet
      * @see     com.sun.star.lang.XServiceInfo
@@ -394,7 +395,7 @@ public class ServiceManager implements XMultiServiceFactory,
 
         if ( factoriesByImplNames.containsKey( xServiceInfo.getImplementationName() ) ) {
             throw new com.sun.star.container.ElementExistException(
-                xServiceInfo.getImplementationName() + " already registred"
+                xServiceInfo.getImplementationName() + " already registered"
             );
         }
 
@@ -468,7 +469,7 @@ public class ServiceManager implements XMultiServiceFactory,
                     System.err.println("The implementation " + xServiceInfo.getImplementationName() +
                             " is not registered for the service " + serviceName + " - ignoring!");
                 }
-                // remove the vector if no implementations aviable for the service
+                // remove the vector if no implementations available for the service
                 if (vec.isEmpty()) {
                     factoriesByServiceNames.remove(serviceName);
                 }
@@ -507,7 +508,7 @@ public class ServiceManager implements XMultiServiceFactory,
     /**
      * Checks if the any components are registered.
      *
-     * @return  true - if the list of the registred components is not empty - otherwise false.
+     * @return  true - if the list of the registered components is not empty - otherwise false.
      * @see     com.sun.star.container.XElementAccess
      */
     public boolean hasElements() {
@@ -657,3 +658,5 @@ public class ServiceManager implements XMultiServiceFactory,
         }
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

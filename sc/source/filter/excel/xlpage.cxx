@@ -17,41 +17,37 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xlpage.hxx"
-#include <sfx2/printer.hxx>
-#include <editeng/svxenum.hxx>
+#include <xlpage.hxx>
+#include <xltools.hxx>
 #include <editeng/paperinf.hxx>
-#include <vcl/svapp.hxx>
 #include <sal/macros.h>
-#include "scitems.hxx"
 #include <editeng/brushitem.hxx>
-#include "global.hxx"
-#include "xlconst.hxx"
-#include <oox/core/xmlfilterbase.hxx>
+#include <global.hxx>
+#include <xlconst.hxx>
 
 namespace{
 
 struct XclPaperSize
 {
-    Paper               mePaper;            /// SVX paper size identifier.
-    long                mnWidth;            /// Paper width in twips.
-    long                mnHeight;           /// Paper height in twips.
+    Paper const               mePaper;            /// SVX paper size identifier.
+    long const                mnWidth;            /// Paper width in twips.
+    long const                mnHeight;           /// Paper height in twips.
 };
 
-SAL_CONSTEXPR long in2twips(double n_inch)
+constexpr long in2twips(double n_inch)
 {
     return static_cast<long>( (n_inch * EXC_TWIPS_PER_INCH) + 0.5);
 }
-SAL_CONSTEXPR long mm2twips(double n_mm)
+constexpr long mm2twips(double n_mm)
 {
     return static_cast<long>( (n_mm * EXC_TWIPS_PER_INCH / CM_PER_INCH / 10.0) + 0.5);
 }
-SAL_CONSTEXPR long twips2mm(long n_twips)
+constexpr long twips2mm(long n_twips)
 {
     return static_cast<long>((static_cast<double>(n_twips) - 0.5) / EXC_TWIPS_PER_INCH * CM_PER_INCH * 10.0);
 }
 
-SAL_CONSTEXPR XclPaperSize pPaperSizeTable[] =
+constexpr XclPaperSize pPaperSizeTable[] =
 {
 /*  0*/ { PAPER_USER,       0,                  0                   },  // undefined
         { PAPER_LETTER,     in2twips( 8.5 ),    in2twips( 11 )      },  // Letter
@@ -220,7 +216,12 @@ Size XclPageData::GetScPaperSize() const
         aSize = SvxPaperInfo::GetDefaultPaperSize();
 
     if( !mbPortrait )
-        ::std::swap( aSize.Width(), aSize.Height() );
+    {
+        // swap width and height
+        long n = aSize.Width();
+        aSize.setWidth(aSize.Height());
+        aSize.setHeight(n);
+    }
 
     return aSize;
 }
@@ -244,21 +245,20 @@ void XclPageData::SetScPaperSize( const Size& rSize, bool bPortrait, bool bStric
     }
     else
     {
-        mnPaperSize = 0;
+        mnPaperSize = EXC_PAPERSIZE_DEFAULT;
     }
 
-    for( const XclPaperSize* pEntry = pPaperSizeTable; pEntry != STATIC_ARRAY_END( pPaperSizeTable ); ++pEntry )
+    for( const auto &rEntry : pPaperSizeTable)
     {
-        long nWDiff = std::abs( pEntry->mnWidth - nWidth );
-        long nHDiff = std::abs( pEntry->mnHeight - nHeight );
+        long nWDiff = std::abs( rEntry.mnWidth - nWidth );
+        long nHDiff = std::abs( rEntry.mnHeight - nHeight );
         if( ((nWDiff <= nMaxWDiff) && (nHDiff < nMaxHDiff)) ||
             ((nWDiff < nMaxWDiff) && (nHDiff <= nMaxHDiff)) )
         {
-            sal_uInt16 nIndex = static_cast< sal_uInt16 >( pEntry - pPaperSizeTable );
-            if( !bStrictSize )
-                mnPaperSize = nIndex;
-            else
-                mnStrictPaperSize = mnPaperSize = nIndex;
+            sal_uInt16 nIndex = static_cast< sal_uInt16 >( &rEntry - pPaperSizeTable );
+            mnPaperSize = nIndex;
+            if( bStrictSize )
+                mnStrictPaperSize = nIndex;
 
             nMaxWDiff = nWDiff;
             nMaxHDiff = nHDiff;

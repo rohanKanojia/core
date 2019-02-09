@@ -36,9 +36,9 @@ class DlgEdFactory
     const css::uno::Reference< css::frame::XModel > mxModel;
 public:
     DlgEdFactory( const css::uno::Reference< css::frame::XModel >& xModel );
-    ~DlgEdFactory();
+    ~DlgEdFactory() COVERITY_NOEXCEPT_FALSE;
 
-    DECL_LINK_TYPED( MakeObject, SdrObjFactory *, void );
+    DECL_LINK( MakeObject, SdrObjCreatorParams, SdrObject* );
 };
 
 } // namespace basctl

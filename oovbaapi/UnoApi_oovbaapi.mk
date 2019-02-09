@@ -44,6 +44,7 @@ $(eval $(call gb_UnoApi_add_idlfiles_noheader,oovbaapi,ooo/vba/excel,\
 
 $(eval $(call gb_UnoApi_add_idlfiles,oovbaapi,ooo/vba,\
     FormShowConstants \
+    TypeAndIID \
     VbAppWinStyle \
     VbCalendar \
     VbCallType \
@@ -70,6 +71,8 @@ $(eval $(call gb_UnoApi_add_idlfiles,oovbaapi,ooo/vba,\
 	XCommandBarControls \
 	XCommandBarPopup \
 	XCommandBars \
+	XConnectable \
+	XConnectionPoint \
 	XControlProvider \
 	XDialogBase \
 	XDialogsBase \
@@ -82,8 +85,11 @@ $(eval $(call gb_UnoApi_add_idlfiles,oovbaapi,ooo/vba,\
 	XFontBase \
 	XGlobalsBase \
 	XHelperInterface \
+	XInterfaceWithIID \
 	XPageSetupBase \
 	XPropValue \
+	XSink \
+	XSinkCaller \
 	XVBAToOOEventDescGen \
 	XWindowBase \
 ))
@@ -213,6 +219,7 @@ $(eval $(call gb_UnoApi_add_idlfiles,oovbaapi,ooo/vba/dao,\
 $(eval $(call gb_UnoApi_add_idlfiles,oovbaapi,ooo/vba/excel,\
     Constants \
 	XApplication \
+	XApplicationOutgoing \
 	XAxes \
 	XAxis \
 	XAxisTitle \
@@ -233,6 +240,8 @@ $(eval $(call gb_UnoApi_add_idlfiles,oovbaapi,ooo/vba/excel,\
 	XDialog \
 	XDialogs \
 	XDrawings \
+	XFileDialog \
+	XFileDialogSelectedItems \
 	XFont \
 	XFormat \
 	XFormatCondition \
@@ -528,10 +537,12 @@ $(eval $(call gb_UnoApi_add_idlfiles,oovbaapi,ooo/vba/msforms,\
 	XGroupBox \
 	XImage \
 	XLabel \
+	XLine \
 	XLineFormat \
 	XListBox \
 	XMultiPage \
 	XNewFont \
+	XOval \
 	XPages \
 	XPictureFormat \
 	XProgressBar \
@@ -1024,6 +1035,7 @@ $(eval $(call gb_UnoApi_add_idlfiles,oovbaapi,ooo/vba/word,\
 	XAddin \
 	XAddins \
 	XApplication \
+	XApplicationOutgoing \
 	XAutoTextEntries \
 	XAutoTextEntry \
 	XBookmark \
@@ -1038,6 +1050,7 @@ $(eval $(call gb_UnoApi_add_idlfiles,oovbaapi,ooo/vba/word,\
 	XDialog \
 	XDialogs \
 	XDocument \
+	XDocumentOutgoing \
 	XDocuments \
 	XField \
 	XFields \
@@ -1057,6 +1070,7 @@ $(eval $(call gb_UnoApi_add_idlfiles,oovbaapi,ooo/vba/word,\
 	XListLevels \
 	XListTemplate \
 	XListTemplates \
+	XMailMerge \
 	XOptions \
 	XPageSetup \
 	XPane \
@@ -1087,6 +1101,7 @@ $(eval $(call gb_UnoApi_add_idlfiles,oovbaapi,ooo/vba/word,\
 	XVariables \
 	XView \
 	XWindow \
+	XWordBasic \
 	XWrapFormat \
 ))
 

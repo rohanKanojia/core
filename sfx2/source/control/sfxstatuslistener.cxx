@@ -23,11 +23,10 @@
 #include <svl/stritem.hxx>
 #include <svl/intitem.hxx>
 #include <svl/itemset.hxx>
-#include "itemdel.hxx"
+#include <itemdel.hxx>
 #include <svl/visitem.hxx>
 #include <cppuhelper/weak.hxx>
 #include <comphelper/processfactory.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 #include <com/sun/star/util/URLTransformer.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
@@ -99,7 +98,7 @@ void SfxStatusListener::ReBind()
 }
 
 // new UNO API
-void SAL_CALL SfxStatusListener::dispose() throw( css::uno::RuntimeException, std::exception )
+void SAL_CALL SfxStatusListener::dispose()
 {
     if ( m_xDispatch.is() && !m_aCommand.Complete.isEmpty() )
     {
@@ -118,19 +117,16 @@ void SAL_CALL SfxStatusListener::dispose() throw( css::uno::RuntimeException, st
 }
 
 void SAL_CALL SfxStatusListener::addEventListener( const Reference< XEventListener >& )
-throw ( RuntimeException, std::exception )
 {
     // do nothing - this is a wrapper class which does not support listeners
 }
 
 void SAL_CALL SfxStatusListener::removeEventListener( const Reference< XEventListener >& )
-throw ( RuntimeException, std::exception )
 {
     // do nothing - this is a wrapper class which does not support listeners
 }
 
 void SAL_CALL SfxStatusListener::disposing( const EventObject& Source )
-throw( RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
 
@@ -141,7 +137,6 @@ throw( RuntimeException, std::exception )
 }
 
 void SAL_CALL SfxStatusListener::statusChanged( const FeatureStateEvent& rEvent)
-throw( RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
 
@@ -164,53 +159,53 @@ throw( RuntimeException, std::exception )
     const SfxSlot* pSlot = rPool.GetSlot( m_nSlotID );
 
     SfxItemState eState = SfxItemState::DISABLED;
-    SfxPoolItem* pItem = nullptr;
+    std::unique_ptr<SfxPoolItem> pItem;
     if ( rEvent.IsEnabled )
     {
         eState = SfxItemState::DEFAULT;
-        css::uno::Type pType = rEvent.State.getValueType();
+        css::uno::Type aType = rEvent.State.getValueType();
 
-        if ( pType == ::cppu::UnoType<void>::get() )
+        if ( aType == ::cppu::UnoType<void>::get() )
         {
-            pItem = new SfxVoidItem( m_nSlotID );
+            pItem.reset(new SfxVoidItem( m_nSlotID ));
             eState = SfxItemState::UNKNOWN;
         }
-        else if ( pType == cppu::UnoType< bool >::get() )
+        else if ( aType == cppu::UnoType< bool >::get() )
         {
             bool bTemp = false;
             rEvent.State >>= bTemp ;
-            pItem = new SfxBoolItem( m_nSlotID, bTemp );
+            pItem.reset(new SfxBoolItem( m_nSlotID, bTemp ));
         }
-        else if ( pType == cppu::UnoType< ::cppu::UnoUnsignedShortType >::get() )
+        else if ( aType == cppu::UnoType< ::cppu::UnoUnsignedShortType >::get() )
         {
             sal_uInt16 nTemp = 0;
             rEvent.State >>= nTemp ;
-            pItem = new SfxUInt16Item( m_nSlotID, nTemp );
+            pItem.reset(new SfxUInt16Item( m_nSlotID, nTemp ));
         }
-        else if ( pType == cppu::UnoType<sal_uInt32>::get() )
+        else if ( aType == cppu::UnoType<sal_uInt32>::get() )
         {
             sal_uInt32 nTemp = 0;
             rEvent.State >>= nTemp ;
-            pItem = new SfxUInt32Item( m_nSlotID, nTemp );
+            pItem.reset(new SfxUInt32Item( m_nSlotID, nTemp ));
         }
-        else if ( pType == cppu::UnoType<OUString>::get() )
+        else if ( aType == cppu::UnoType<OUString>::get() )
         {
             OUString sTemp ;
             rEvent.State >>= sTemp ;
-            pItem = new SfxStringItem( m_nSlotID, sTemp );
+            pItem.reset(new SfxStringItem( m_nSlotID, sTemp ));
         }
-        else if ( pType == cppu::UnoType< css::frame::status::ItemStatus >::get() )
+        else if ( aType == cppu::UnoType< css::frame::status::ItemStatus >::get() )
         {
             ItemStatus aItemStatus;
             rEvent.State >>= aItemStatus;
-            eState = (SfxItemState) aItemStatus.State;
-            pItem = new SfxVoidItem( m_nSlotID );
+            eState = static_cast<SfxItemState>(aItemStatus.State);
+            pItem.reset(new SfxVoidItem( m_nSlotID ));
         }
-        else if ( pType == cppu::UnoType< css::frame::status::Visibility >::get() )
+        else if ( aType == cppu::UnoType< css::frame::status::Visibility >::get() )
         {
             Visibility aVisibilityStatus;
             rEvent.State >>= aVisibilityStatus;
-            pItem = new SfxVisibilityItem( m_nSlotID, aVisibilityStatus.bVisible );
+            pItem.reset(new SfxVisibilityItem( m_nSlotID, aVisibilityStatus.bVisible ));
         }
         else
         {
@@ -222,12 +217,11 @@ throw( RuntimeException, std::exception )
                 pItem->PutValue( rEvent.State, 0 );
             }
             else
-                pItem = new SfxVoidItem( m_nSlotID );
+                pItem.reset(new SfxVoidItem( m_nSlotID ));
         }
     }
 
-    StateChanged( m_nSlotID, eState, pItem );
-    delete pItem;
+    StateChanged( m_nSlotID, eState, pItem.get() );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

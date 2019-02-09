@@ -19,16 +19,16 @@
 
 #include <config_features.h>
 
-#include "sdabstdlg.hxx"
+#include <sdabstdlg.hxx>
 
 #include <osl/module.hxx>
 #include <rtl/ustring.hxx>
 
-typedef SdAbstractDialogFactory* (SAL_CALL *SdFuncPtrCreateDialogFactory)();
+typedef SdAbstractDialogFactory* (*SdFuncPtrCreateDialogFactory)();
 
 #ifndef DISABLE_DYNLOADING
 
-extern "C" { static void SAL_CALL thisModule() {} }
+extern "C" { static void thisModule() {} }
 
 #else
 

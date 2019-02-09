@@ -17,13 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "cuihyperdlg.hxx"
+#include <cuihyperdlg.hxx>
 #include <osl/file.hxx>
 #include <sfx2/filedlghelper.hxx>
-#include "com/sun/star/ui/dialogs/TemplateDescription.hpp"
+#include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 
-#include "hldoctp.hxx"
-#include "hlmarkwn_def.hxx"
+#include <hldoctp.hxx>
+#include <hlmarkwn_def.hxx>
+#include <bitmaps.hlst>
 
 sal_Char const sHash[]          = "#";
 sal_Char const sFileScheme[]    = INET_FILE_SCHEME;
@@ -34,22 +35,18 @@ sal_Char const sFileScheme[]    = INET_FILE_SCHEME;
 |*
 |************************************************************************/
 
-SvxHyperlinkDocTp::SvxHyperlinkDocTp ( vcl::Window *pParent, IconChoiceDialog* pDlg, const SfxItemSet& rItemSet)
-    : SvxHyperlinkTabPageBase ( pParent, pDlg, "HyperlinkDocPage", "cui/ui/hyperlinkdocpage.ui", rItemSet ),
+SvxHyperlinkDocTp::SvxHyperlinkDocTp ( vcl::Window *pParent, IconChoiceDialog* pDlg, const SfxItemSet* pItemSet)
+    : SvxHyperlinkTabPageBase ( pParent, pDlg, "HyperlinkDocPage", "cui/ui/hyperlinkdocpage.ui", pItemSet ),
     mbMarkWndOpen   ( false )
 {
     get(m_pCbbPath, "path");
     m_pCbbPath->SetSmartProtocol(INetProtocol::File);
     get(m_pBtFileopen, "fileopen");
-    BitmapEx aBitmap = Image(CUI_RES(RID_SVXBMP_FILEOPEN)).GetBitmapEx();
-    aBitmap.Scale(GetDPIScaleFactor(),GetDPIScaleFactor(),BmpScaleFlag::BestQuality);
-    m_pBtFileopen->SetModeImage(Image(aBitmap));
+    m_pBtFileopen->SetModeImage(Image(StockImage::Yes, RID_SVXBMP_FILEOPEN));
     get(m_pEdTarget, "target");
     get(m_pFtFullURL, "url");
     get(m_pBtBrowse, "browse");
-    aBitmap = Image(CUI_RES(RID_SVXBMP_TARGET)).GetBitmapEx();
-    aBitmap.Scale(GetDPIScaleFactor(),GetDPIScaleFactor(),BmpScaleFlag::BestQuality );
-    m_pBtBrowse->SetModeImage(Image(aBitmap));
+    m_pBtBrowse->SetModeImage(Image(StockImage::Yes, RID_SVXBMP_TARGET));
 
     // Disable display of bitmap names.
     m_pBtBrowse->EnableTextDisplay (false);
@@ -58,9 +55,7 @@ SvxHyperlinkDocTp::SvxHyperlinkDocTp ( vcl::Window *pParent, IconChoiceDialog* p
     InitStdControls();
 
     m_pCbbPath->Show();
-    OUString aFileScheme( INET_FILE_SCHEME );
-    m_pCbbPath->SetBaseURL(aFileScheme);
-    m_pCbbPath->SetHelpId( HID_HYPERDLG_DOC_PATH );
+    m_pCbbPath->SetBaseURL(INET_FILE_SCHEME);
 
     SetExchangeSupport ();
 
@@ -72,7 +67,7 @@ SvxHyperlinkDocTp::SvxHyperlinkDocTp ( vcl::Window *pParent, IconChoiceDialog* p
 
     m_pCbbPath->SetLoseFocusHdl( LINK ( this, SvxHyperlinkDocTp, LostFocusPathHdl_Impl ) );
 
-    maTimer.SetTimeoutHdl ( LINK ( this, SvxHyperlinkDocTp, TimeoutHdl_Impl ) );
+    maTimer.SetInvokeHandler ( LINK ( this, SvxHyperlinkDocTp, TimeoutHdl_Impl ) );
 }
 
 SvxHyperlinkDocTp::~SvxHyperlinkDocTp()
@@ -106,7 +101,7 @@ void SvxHyperlinkDocTp::FillDlgFields(const OUString& rStrURL)
     OUString aStrMark;
     if ( nPos != -1 && nPos < rStrURL.getLength()-1 )
         aStrMark = rStrURL.copy( nPos+1 );
-     m_pEdTarget->SetText ( aStrMark );
+    m_pEdTarget->SetText ( aStrMark );
 
     ModifiedPathHdl_Impl ( *m_pCbbPath );
 }
@@ -171,9 +166,9 @@ void SvxHyperlinkDocTp::GetCurentItemData ( OUString& rStrURL, OUString& aStrNam
 |*
 |************************************************************************/
 
-VclPtr<IconChoicePage> SvxHyperlinkDocTp::Create( vcl::Window* pWindow, IconChoiceDialog* pDlg, const SfxItemSet& rItemSet )
+VclPtr<IconChoicePage> SvxHyperlinkDocTp::Create( vcl::Window* pWindow, IconChoiceDialog* pDlg, const SfxItemSet* pItemSet )
 {
-    return VclPtr<SvxHyperlinkDocTp>::Create( pWindow, pDlg, rItemSet );
+    return VclPtr<SvxHyperlinkDocTp>::Create( pWindow, pDlg, pItemSet );
 }
 
 /*************************************************************************
@@ -193,16 +188,18 @@ void SvxHyperlinkDocTp::SetInitFocus()
 |*
 |************************************************************************/
 
-IMPL_LINK_NOARG_TYPED(SvxHyperlinkDocTp, ClickFileopenHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxHyperlinkDocTp, ClickFileopenHdl_Impl, Button*, void)
 {
     // Open Fileopen-Dialog
-       ::sfx2::FileDialogHelper aDlg(
-        css::ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE, 0,
-        GetParent() );
+    sfx2::FileDialogHelper aDlg(
+        css::ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE, FileDialogFlags::NONE,
+        GetFrameWeld() );
     OUString aOldURL( GetCurrentURL() );
     if( aOldURL.startsWithIgnoreAsciiCase( sFileScheme ) )
     {
-        aDlg.SetDisplayDirectory( aOldURL );
+        OUString aPath;
+        osl::FileBase::getSystemPathFromFileURL(aOldURL, aPath);
+        aDlg.SetDisplayFolder( aPath );
     }
 
     DisableClose( true );
@@ -230,9 +227,9 @@ IMPL_LINK_NOARG_TYPED(SvxHyperlinkDocTp, ClickFileopenHdl_Impl, Button*, void)
 |*
 |************************************************************************/
 
-IMPL_LINK_NOARG_TYPED(SvxHyperlinkDocTp, ClickTargetHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxHyperlinkDocTp, ClickTargetHdl_Impl, Button*, void)
 {
-    if ( GetPathType ( maStrURL ) == Type_ExistsFile  ||
+    if ( GetPathType ( maStrURL ) == EPathType::ExistsFile  ||
          maStrURL.isEmpty() ||
          maStrURL.equalsIgnoreAsciiCase( sFileScheme ) ||
          maStrURL.startsWith( sHash ) )
@@ -256,11 +253,11 @@ IMPL_LINK_NOARG_TYPED(SvxHyperlinkDocTp, ClickTargetHdl_Impl, Button*, void)
 
 /*************************************************************************
 |*
-|* Contens of combobox "Path" modified
+|* Contents of combobox "Path" modified
 |*
 |************************************************************************/
 
-IMPL_LINK_NOARG_TYPED(SvxHyperlinkDocTp, ModifiedPathHdl_Impl, Edit&, void)
+IMPL_LINK_NOARG(SvxHyperlinkDocTp, ModifiedPathHdl_Impl, Edit&, void)
 {
     maStrURL = GetCurrentURL();
 
@@ -276,9 +273,9 @@ IMPL_LINK_NOARG_TYPED(SvxHyperlinkDocTp, ModifiedPathHdl_Impl, Edit&, void)
 |*
 |************************************************************************/
 
-IMPL_LINK_NOARG_TYPED(SvxHyperlinkDocTp, TimeoutHdl_Impl, Timer *, void)
+IMPL_LINK_NOARG(SvxHyperlinkDocTp, TimeoutHdl_Impl, Timer *, void)
 {
-    if ( IsMarkWndVisible() && ( GetPathType( maStrURL )==Type_ExistsFile ||
+    if ( IsMarkWndVisible() && ( GetPathType( maStrURL )== EPathType::ExistsFile ||
                                   maStrURL.isEmpty() ||
                                   maStrURL.equalsIgnoreAsciiCase( sFileScheme ) ) )
     {
@@ -295,11 +292,11 @@ IMPL_LINK_NOARG_TYPED(SvxHyperlinkDocTp, TimeoutHdl_Impl, Timer *, void)
 
 /*************************************************************************
 |*
-|* Contens of editfield "Target" modified
+|* Contents of editfield "Target" modified
 |*
 |************************************************************************/
 
-IMPL_LINK_NOARG_TYPED(SvxHyperlinkDocTp, ModifiedTargetHdl_Impl, Edit&, void)
+IMPL_LINK_NOARG(SvxHyperlinkDocTp, ModifiedTargetHdl_Impl, Edit&, void)
 {
     maStrURL = GetCurrentURL();
 
@@ -315,7 +312,7 @@ IMPL_LINK_NOARG_TYPED(SvxHyperlinkDocTp, ModifiedTargetHdl_Impl, Edit&, void)
 |*
 |************************************************************************/
 
-IMPL_LINK_NOARG_TYPED(SvxHyperlinkDocTp, LostFocusPathHdl_Impl, Control&, void)
+IMPL_LINK_NOARG(SvxHyperlinkDocTp, LostFocusPathHdl_Impl, Control&, void)
 {
     maStrURL = GetCurrentURL();
 
@@ -346,9 +343,9 @@ SvxHyperlinkDocTp::EPathType SvxHyperlinkDocTp::GetPathType ( const OUString& rS
     INetURLObject aURL( rStrPath, INetProtocol::File );
 
     if( aURL.HasError() )
-        return Type_Invalid;
+        return EPathType::Invalid;
     else
-        return Type_ExistsFile;
+        return EPathType::ExistsFile;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -20,7 +20,6 @@
 #ifndef INCLUDED_CANVAS_VCLWRAPPER_HXX
 #define INCLUDED_CANVAS_VCLWRAPPER_HXX
 
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 
 namespace canvas
@@ -51,10 +50,10 @@ namespace canvas
             member/method access is performed by operator-> instead of
             the non-existing "operator.".
          */
-        template< class _Wrappee > class VCLObject
+        template< class Wrappee_ > class VCLObject
         {
         public:
-            typedef _Wrappee Wrappee;
+            typedef Wrappee_ Wrappee;
 
             VCLObject() :
                 mpWrappee( new Wrappee() )
@@ -64,7 +63,7 @@ namespace canvas
             // no explicit here. VCLObjects should be freely
             // constructible with Wrappees, and AFAIK there is no other
             // implicit conversion path that could cause harm here
-            VCLObject( Wrappee* pWrappee ) :
+            VCLObject( std::unique_ptr<Wrappee> pWrappee ) :
                 mpWrappee( pWrappee )
             {
             }
@@ -79,6 +78,12 @@ namespace canvas
                     mpWrappee = nullptr;
             }
 
+            VCLObject( VCLObject&& rOrig )
+                : mpWrappee(rOrig.mpWrappee)
+            {
+                rOrig.mpWrappee = nullptr;
+            }
+
             // This object has value semantics, thus, forward copy
             // to wrappee
             VCLObject( const Wrappee& rOrig ) :
@@ -90,16 +95,25 @@ namespace canvas
             // assignment to wrappee
             VCLObject& operator=( const VCLObject& rhs )
             {
-                if( mpWrappee )
+                if (this != &rhs)
                 {
-                    if( rhs.mpWrappee )
-                        *mpWrappee = *rhs.mpWrappee;
+                    if( mpWrappee )
+                    {
+                        if( rhs.mpWrappee )
+                            *mpWrappee = *rhs.mpWrappee;
+                    }
+                    else
+                    {
+                        if( rhs.mpWrappee )
+                            mpWrappee = new Wrappee( *rhs.mpWrappee );
+                    }
                 }
-                else
-                {
-                    if( rhs.mpWrappee )
-                        mpWrappee = new Wrappee( *rhs.mpWrappee );
-                }
+                return *this;
+            }
+
+            VCLObject& operator=( VCLObject&& rhs )
+            {
+                std::swap(mpWrappee, rhs.mpWrappee);
 
                 return *this;
             }
@@ -110,12 +124,11 @@ namespace canvas
                 // protecting object deletion with the solar mutex
                 SolarMutexGuard aGuard;
 
-                if( mpWrappee )
-                    delete mpWrappee;
+                mpWrappee.reset();
             }
 
-            Wrappee*        operator->() { return mpWrappee; }
-            const Wrappee*  operator->() const { return mpWrappee; }
+            Wrappee*        operator->() { return mpWrappee.get(); }
+            const Wrappee*  operator->() const { return mpWrappee.get(); }
 
             Wrappee&        operator*() { return *mpWrappee; }
             const Wrappee&  operator*() const { return *mpWrappee; }
@@ -130,7 +143,7 @@ namespace canvas
 
         private:
 
-            Wrappee* mpWrappee;
+            std::unique_ptr<Wrappee> mpWrappee;
         };
 
     }

@@ -18,37 +18,37 @@
  */
 
 
-#include <xmlsecurity/macrosecurity.hxx>
-#include <xmlsecurity/certificatechooser.hxx>
-#include <xmlsecurity/certificateviewer.hxx>
-#include <xmlsecurity/biginteger.hxx>
+#include <macrosecurity.hxx>
+#include <certificatechooser.hxx>
+#include <certificateviewer.hxx>
+#include <biginteger.hxx>
 
 #include <osl/file.hxx>
+#include <sal/log.hxx>
 #include <vcl/help.hxx>
 #include <vcl/layout.hxx>
 
 
 #include <com/sun/star/xml/crypto/XSecurityEnvironment.hpp>
-#include <com/sun/star/security/SerialNumberAdapter.hpp>
 #include <comphelper/sequence.hxx>
 #include <sfx2/filedlghelper.hxx>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/xmlsechelper.hxx>
 #include <com/sun/star/uno/Exception.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/ui/dialogs/FolderPicker.hpp>
 #include <com/sun/star/ui/dialogs/ExecutableDialogResults.hpp>
 #include <tools/urlobj.hxx>
-#include <svtools/treelistentry.hxx>
+#include <unotools/datetime.hxx>
+#include <vcl/treelistentry.hxx>
 
-#include <vcl/msgbox.hxx>
+#include <strings.hrc>
 
-#include "dialogs.hrc"
-#include "resourcemanager.hxx"
-
+using namespace comphelper;
 using namespace ::com::sun::star;
 
 
-IMPL_LINK_NOARG_TYPED(MacroSecurity, OkBtnHdl, Button*, void)
+IMPL_LINK_NOARG(MacroSecurity, OkBtnHdl, Button*, void)
 {
     mpLevelTP->ClosePage();
     mpTrustSrcTP->ClosePage();
@@ -57,10 +57,8 @@ IMPL_LINK_NOARG_TYPED(MacroSecurity, OkBtnHdl, Button*, void)
 }
 
 MacroSecurity::MacroSecurity( vcl::Window* _pParent,
-    const css::uno::Reference< css::uno::XComponentContext> &_rxCtx,
     const css::uno::Reference< css::xml::crypto::XSecurityEnvironment >& _rxSecurityEnvironment)
     : TabDialog(_pParent, "MacroSecurityDialog", "xmlsec/ui/macrosecuritydialog.ui")
-    , mxCtx(_rxCtx)
     , mxSecurityEnvironment(_rxSecurityEnvironment)
 {
     get(m_pTabCtrl, "tabcontrol");
@@ -128,8 +126,8 @@ MacroSecurityLevelTP::MacroSecurityLevelTP(vcl::Window* _pParent, MacroSecurity*
     m_pHighRB->SetClickHdl( LINK( this, MacroSecurityLevelTP, RadioButtonHdl ) );
     m_pVeryHighRB->SetClickHdl( LINK( this, MacroSecurityLevelTP, RadioButtonHdl ) );
 
-    mnCurLevel = (sal_uInt16) mpDlg->maSecOptions.GetMacroSecurityLevel();
-    bool bReadonly = mpDlg->maSecOptions.IsReadOnly( SvtSecurityOptions::E_MACRO_SECLEVEL );
+    mnCurLevel = static_cast<sal_uInt16>(mpDlg->maSecOptions.GetMacroSecurityLevel());
+    bool bReadonly = mpDlg->maSecOptions.IsReadOnly( SvtSecurityOptions::EOption::MacroSecLevel );
 
     RadioButton* pCheck = nullptr;
     FixedImage* pImage = nullptr;
@@ -182,7 +180,7 @@ void MacroSecurityLevelTP::dispose()
     MacroSecurityTP::dispose();
 }
 
-IMPL_LINK_NOARG_TYPED(MacroSecurityLevelTP, RadioButtonHdl, Button*, void)
+IMPL_LINK_NOARG(MacroSecurityLevelTP, RadioButtonHdl, Button*, void)
 {
     sal_uInt16 nNewLevel = 0;
     if( m_pVeryHighRB->IsChecked() )
@@ -210,27 +208,24 @@ void MacroSecurityTrustedSourcesTP::ImplCheckButtons()
     m_pViewCertPB->Enable( bCertSelected );
     m_pRemoveCertPB->Enable( bCertSelected && !mbAuthorsReadonly);
 
-    bool bLocationSelected = m_pTrustFileLocLB->GetSelectEntryPos() != LISTBOX_ENTRY_NOTFOUND;
+    bool bLocationSelected = m_pTrustFileLocLB->GetSelectedEntryPos() != LISTBOX_ENTRY_NOTFOUND;
     m_pRemoveLocPB->Enable( bLocationSelected && !mbURLsReadonly);
 }
 
 
-IMPL_LINK_NOARG_TYPED(MacroSecurityTrustedSourcesTP, ViewCertPBHdl, Button*, void)
+IMPL_LINK_NOARG(MacroSecurityTrustedSourcesTP, ViewCertPBHdl, Button*, void)
 {
     if( m_pTrustCertLB->FirstSelected() )
     {
         sal_uInt16 nSelected = sal_uInt16( sal_uIntPtr( m_pTrustCertLB->FirstSelected()->GetUserData() ) );
 
-        uno::Reference< css::security::XSerialNumberAdapter > xSerialNumberAdapter =
-            css::security::SerialNumberAdapter::create(mpDlg->mxCtx);
-
-        uno::Reference< css::security::XCertificate > xCert = mpDlg->mxSecurityEnvironment->getCertificate( maTrustedAuthors[nSelected][0], xSerialNumberAdapter->toSequence( maTrustedAuthors[nSelected][1] ) );
+        uno::Reference< css::security::XCertificate > xCert = mpDlg->mxSecurityEnvironment->getCertificate( maTrustedAuthors[nSelected][0], xmlsecurity::numericStringToBigInteger( maTrustedAuthors[nSelected][1] ) );
 
         // If we don't get it, create it from signature data:
         if ( !xCert.is() )
             xCert = mpDlg->mxSecurityEnvironment->createCertificateFromAscii( maTrustedAuthors[nSelected][2] ) ;
 
-        DBG_ASSERT( xCert.is(), "*MacroSecurityTrustedSourcesTP::ViewCertPBHdl(): Certificate not found and can't be created!" );
+        SAL_WARN_IF( !xCert.is(), "xmlsecurity.dialogs", "*MacroSecurityTrustedSourcesTP::ViewCertPBHdl(): Certificate not found and can't be created!" );
 
         if ( xCert.is() )
         {
@@ -240,7 +235,7 @@ IMPL_LINK_NOARG_TYPED(MacroSecurityTrustedSourcesTP, ViewCertPBHdl, Button*, voi
     }
 }
 
-IMPL_LINK_NOARG_TYPED(MacroSecurityTrustedSourcesTP, RemoveCertPBHdl, Button*, void)
+IMPL_LINK_NOARG(MacroSecurityTrustedSourcesTP, RemoveCertPBHdl, Button*, void)
 {
     if( m_pTrustCertLB->FirstSelected() )
     {
@@ -252,7 +247,7 @@ IMPL_LINK_NOARG_TYPED(MacroSecurityTrustedSourcesTP, RemoveCertPBHdl, Button*, v
     }
 }
 
-IMPL_LINK_NOARG_TYPED(MacroSecurityTrustedSourcesTP, AddLocPBHdl, Button*, void)
+IMPL_LINK_NOARG(MacroSecurityTrustedSourcesTP, AddLocPBHdl, Button*, void)
 {
     try
     {
@@ -270,7 +265,7 @@ IMPL_LINK_NOARG_TYPED(MacroSecurityTrustedSourcesTP, AddLocPBHdl, Button*, void)
 
         // then the new path also an URL else system path
         OUString aSystemFileURL = ( aNewObj.GetProtocol() != INetProtocol::NotValid ) ?
-            aPathStr : aNewObj.getFSysPath( INetURLObject::FSYS_DETECT );
+            aPathStr : aNewObj.getFSysPath( FSysStyle::Detect );
 
         OUString aNewPathStr(aSystemFileURL);
 
@@ -290,9 +285,9 @@ IMPL_LINK_NOARG_TYPED(MacroSecurityTrustedSourcesTP, AddLocPBHdl, Button*, void)
     }
 }
 
-IMPL_LINK_NOARG_TYPED(MacroSecurityTrustedSourcesTP, RemoveLocPBHdl, Button*, void)
+IMPL_LINK_NOARG(MacroSecurityTrustedSourcesTP, RemoveLocPBHdl, Button*, void)
 {
-    sal_Int32  nSel = m_pTrustFileLocLB->GetSelectEntryPos();
+    sal_Int32  nSel = m_pTrustFileLocLB->GetSelectedEntryPos();
     if( nSel != LISTBOX_ENTRY_NOTFOUND )
     {
         m_pTrustFileLocLB->RemoveEntry( nSel );
@@ -309,12 +304,12 @@ IMPL_LINK_NOARG_TYPED(MacroSecurityTrustedSourcesTP, RemoveLocPBHdl, Button*, vo
     }
 }
 
-IMPL_LINK_NOARG_TYPED(MacroSecurityTrustedSourcesTP, TrustCertLBSelectHdl, SvTreeListBox*, void)
+IMPL_LINK_NOARG(MacroSecurityTrustedSourcesTP, TrustCertLBSelectHdl, SvTreeListBox*, void)
 {
     ImplCheckButtons();
 }
 
-IMPL_LINK_NOARG_TYPED(MacroSecurityTrustedSourcesTP, TrustFileLocLBSelectHdl, ListBox&, void)
+IMPL_LINK_NOARG(MacroSecurityTrustedSourcesTP, TrustFileLocLBSelectHdl, ListBox&, void)
 {
     ImplCheckButtons();
 }
@@ -335,10 +330,10 @@ void MacroSecurityTrustedSourcesTP::FillCertLB()
             // create from RawData
             xCert = mpDlg->mxSecurityEnvironment->createCertificateFromAscii( rEntry[ 2 ] );
 
-            SvTreeListEntry*    pLBEntry = m_pTrustCertLB->InsertEntry( XmlSec::GetContentPart( xCert->getSubjectName() ) );
-            m_pTrustCertLB->SetEntryText( XmlSec::GetContentPart( xCert->getIssuerName() ), pLBEntry, 1 );
-            m_pTrustCertLB->SetEntryText( XmlSec::GetDateTimeString( xCert->getNotValidAfter() ), pLBEntry, 2 );
-            pLBEntry->SetUserData( reinterpret_cast<void*>(nEntry) );      // missuse user data as index
+            SvTreeListEntry*    pLBEntry = m_pTrustCertLB->InsertEntry( xmlsec::GetContentPart( xCert->getSubjectName() ) );
+            m_pTrustCertLB->SetEntryText( xmlsec::GetContentPart( xCert->getIssuerName() ), pLBEntry, 1 );
+            m_pTrustCertLB->SetEntryText( utl::GetDateTimeString( xCert->getNotValidAfter() ), pLBEntry, 2 );
+            pLBEntry->SetUserData( reinterpret_cast<void*>(nEntry) );      // misuse user data as index
         }
     }
 }
@@ -356,8 +351,8 @@ public:
         if (isInitialLayout(this))
         {
             const long nControlWidth = GetSizePixel().Width();
-            long aTabLocs[] = { 3, 0, 35*nControlWidth/100, 70*nControlWidth/100 };
-            SvSimpleTable::SetTabs(aTabLocs, MAP_PIXEL);
+            long aTabLocs[] = { 0, 35*nControlWidth/100, 70*nControlWidth/100 };
+            SvSimpleTable::SetTabs(SAL_N_ELEMENTS(aTabLocs), aTabLocs, MapUnit::MapPixel);
         }
     }
 };
@@ -376,8 +371,8 @@ MacroSecurityTrustedSourcesTP::MacroSecurityTrustedSourcesTP(vcl::Window* _pPare
 
     SvSimpleTableContainer *pCertificates = get<SvSimpleTableContainer>("certificates");
     m_pTrustCertLB.reset(VclPtr<TrustCertLB>::Create(*pCertificates));
-    static long aTabs[] = { 3, 0, 0, 0 };
-    m_pTrustCertLB->SetTabs( aTabs );
+    static long aTabs[] = { 0, 0, 0 };
+    m_pTrustCertLB->SetTabs( SAL_N_ELEMENTS(aTabs), aTabs );
 
     m_pTrustCertLB->InsertHeaderEntry(get<FixedText>("to")->GetText() + "\t"
         +  get<FixedText>("by")->GetText() + "\t" + get<FixedText>("date")->GetText());
@@ -394,14 +389,14 @@ MacroSecurityTrustedSourcesTP::MacroSecurityTrustedSourcesTP(vcl::Window* _pPare
     m_pRemoveLocPB->Disable();
 
     maTrustedAuthors = mpDlg->maSecOptions.GetTrustedAuthors();
-    mbAuthorsReadonly = mpDlg->maSecOptions.IsReadOnly( SvtSecurityOptions::E_MACRO_TRUSTEDAUTHORS );
+    mbAuthorsReadonly = mpDlg->maSecOptions.IsReadOnly( SvtSecurityOptions::EOption::MacroTrustedAuthors );
     m_pTrustCertROFI->Show( mbAuthorsReadonly );
     mbAuthorsReadonly ? m_pTrustCertLB->DisableTable() : m_pTrustCertLB->EnableTable();
 
     FillCertLB();
 
     css::uno::Sequence< OUString > aSecureURLs = mpDlg->maSecOptions.GetSecureURLs();
-    mbURLsReadonly = mpDlg->maSecOptions.IsReadOnly( SvtSecurityOptions::E_SECUREURLS );
+    mbURLsReadonly = mpDlg->maSecOptions.IsReadOnly( SvtSecurityOptions::EOption::SecureUrls );
     m_pTrustFileROFI->Show( mbURLsReadonly );
     m_pTrustFileLocLB->Enable( !mbURLsReadonly );
     m_pAddLocPB->Enable( !mbURLsReadonly );

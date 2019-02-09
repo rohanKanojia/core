@@ -1,8 +1,12 @@
 package org.libreoffice.storage.owncloud;
 
+import android.content.Context;
+
 import java.io.File;
 import java.io.FileFilter;
+import java.io.UnsupportedEncodingException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -38,8 +42,15 @@ public class OwnCloudFile implements IFile {
     }
 
     @Override
-    public URI getUri() {
-        return URI.create(file.getRemotePath());
+    public URI getUri(){
+
+        try{
+            return URI.create(URLEncoder.encode(file.getRemotePath(),"UTF-8"));
+        }catch(UnsupportedEncodingException e){
+            e.printStackTrace();
+        }
+
+        return null;
     }
 
     @Override
@@ -84,17 +95,42 @@ public class OwnCloudFile implements IFile {
 
     @Override
     public List<IFile> listFiles(FileFilter filter) {
-        // TODO no filtering yet
-        return listFiles();
+        List<IFile> children = new ArrayList<IFile>();
+        if (isDirectory()) {
+            ReadRemoteFolderOperation refreshOperation = new ReadRemoteFolderOperation(
+                    file.getRemotePath());
+            RemoteOperationResult result = refreshOperation.execute(provider
+                    .getClient());
+            if (!result.isSuccess()) {
+                throw provider.buildRuntimeExceptionForResultCode(result.getCode());
+            }
+
+            for (Object obj : result.getData()) {
+                RemoteFile child = (RemoteFile) obj;
+                if (!child.getRemotePath().equals(file.getRemotePath())){
+                    OwnCloudFile ownCloudFile = new OwnCloudFile(provider, child);
+                    if(!ownCloudFile.isDirectory()){
+                        File f = new File(provider.getCacheDir().getAbsolutePath(),
+                                ownCloudFile.getName());
+                        if(filter.accept(f))
+                            children.add(ownCloudFile);
+                        f.delete();
+                    }else{
+                        children.add(ownCloudFile);
+                    }
+                }
+            }
+        }
+        return children;
     }
 
     @Override
-    public IFile getParent() {
+    public IFile getParent(Context context) {
         if (parentPath == null)
             // this is the root node
             return null;
 
-        return provider.createFromUri(URI.create(parentPath));
+        return provider.createFromUri(context, URI.create(parentPath));
     }
 
     @Override

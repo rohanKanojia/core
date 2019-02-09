@@ -21,58 +21,36 @@
 #define INCLUDED_SC_SOURCE_UI_INC_FUINSERT_HXX
 
 #include "fupoor.hxx"
-#include "scdllapi.h"
+#include <scdllapi.h>
 
 class FuInsertGraphic : public FuPoor
 {
- public:
-    FuInsertGraphic( ScTabViewShell* pViewSh, vcl::Window* pWin, ScDrawView* pView,
+public:
+    FuInsertGraphic(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawView* pView,
            SdrModel* pDoc, SfxRequest& rReq);
-    virtual ~FuInsertGraphic();
-
-    virtual void Activate() override;
-    virtual void Deactivate() override;
+    virtual ~FuInsertGraphic() override;
 };
 
 class FuInsertOLE : public FuPoor
 {
- public:
-    FuInsertOLE( ScTabViewShell* pViewSh, vcl::Window* pWin, ScDrawView* pView,
+public:
+    FuInsertOLE(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawView* pView,
            SdrModel* pDoc, SfxRequest& rReq);
-
-    virtual void Activate() override;
-    virtual void Deactivate() override;
 };
 
 class FuInsertChart : public FuPoor
 {
- public:
-    FuInsertChart( ScTabViewShell* pViewSh, vcl::Window* pWin, ScDrawView* pView,
+public:
+    FuInsertChart(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawView* pView,
            SdrModel* pDoc, SfxRequest& rReq);
-
-    virtual void Activate() override;
-    virtual void Deactivate() override;
-};
-
-class FuInsertChartFromFile : public FuPoor
-{
- public:
-    FuInsertChartFromFile( ScTabViewShell* pViewSh, vcl::Window* pWin, ScDrawView* pView,
-           SdrModel* pDoc, SfxRequest& rReq, const OUString& rURL);
-
-    virtual void Activate() override;
-    virtual void Deactivate() override;
 };
 
 class FuInsertMedia : public FuPoor
 {
- public:
-    FuInsertMedia( ScTabViewShell* pViewSh, vcl::Window* pWin, ScDrawView* pView,
-           SdrModel* pDoc, SfxRequest& rReq);
-    virtual ~FuInsertMedia();
-
-    virtual void Activate() override;
-    virtual void Deactivate() override;
+public:
+    FuInsertMedia(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawView* pView,
+           SdrModel* pDoc, const SfxRequest& rReq);
+    virtual ~FuInsertMedia() override;
 };
 
 void SC_DLLPUBLIC ScLimitSizeOnDrawPage( Size& rSize, Point& rPos, const Size& rPage );

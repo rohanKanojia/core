@@ -20,11 +20,9 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_OPTSOLVER_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_OPTSOLVER_HXX
 
-#include "global.hxx"
-#include "address.hxx"
+#include <address.hxx>
 #include "anyrefdg.hxx"
 #include <vcl/fixed.hxx>
-#include <vcl/group.hxx>
 #include <vcl/lstbox.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
 
@@ -61,15 +59,15 @@ struct ScOptConditionRow
 /// All settings from the dialog, saved with the DocShell for the next call
 class ScOptSolverSave
 {
-    OUString    maObjective;
-    bool        mbMax;
-    bool        mbMin;
-    bool        mbValue;
-    OUString    maTarget;
-    OUString    maVariable;
-    std::vector<ScOptConditionRow> maConditions;
-    OUString    maEngine;
-    css::uno::Sequence<css::beans::PropertyValue> maProperties;
+    OUString const    maObjective;
+    bool const        mbMax;
+    bool const        mbMin;
+    bool const        mbValue;
+    OUString const    maTarget;
+    OUString const    maVariable;
+    std::vector<ScOptConditionRow> const maConditions;
+    OUString const    maEngine;
+    css::uno::Sequence<css::beans::PropertyValue> const maProperties;
 
 public:
             ScOptSolverSave( const OUString& rObjective, bool bMax, bool bMin, bool bValue,
@@ -94,8 +92,8 @@ class ScOptSolverDlg : public ScAnyRefDlg
 {
 public:
                     ScOptSolverDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent,
-                                 ScDocShell* pDocSh, ScAddress aCursorPos );
-                    virtual ~ScOptSolverDlg();
+                                 ScDocShell* pDocSh, const ScAddress& aCursorPos );
+                    virtual ~ScOptSolverDlg() override;
     virtual void    dispose() override;
 
     virtual void    SetReference( const ScRange& rRef, ScDocument* pDoc ) override;
@@ -155,8 +153,8 @@ private:
     VclPtr<PushButton>      m_pBtnCancel;
     VclPtr<PushButton>      m_pBtnSolve;
 
-    OUString        maInputError;
-    OUString        maConditionError;
+    OUString const        maInputError;
+    OUString const        maConditionError;
 
     ScDocShell*     mpDocShell;
     ScDocument&     mrDoc;
@@ -189,16 +187,16 @@ private:
     bool    FindTimeout( sal_Int32& rTimeout );
     void    ShowError( bool bCondition, formula::RefEdit* pFocus );
 
-    DECL_LINK_TYPED( BtnHdl, Button*, void );
-    DECL_LINK_TYPED( DelBtnHdl, Button*, void );
-    DECL_LINK_TYPED( GetFocusHdl, Control&, void );
-    DECL_LINK_TYPED( LoseFocusHdl, Control&, void );
-    DECL_LINK_TYPED( ScrollHdl, ScrollBar*, void);
-    DECL_LINK_TYPED( CursorUpHdl, ScCursorRefEdit&, void );
-    DECL_LINK_TYPED( CursorDownHdl, ScCursorRefEdit&, void );
-    DECL_LINK_TYPED( CondModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( TargetModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( SelectHdl, ListBox&, void );
+    DECL_LINK( BtnHdl, Button*, void );
+    DECL_LINK( DelBtnHdl, Button*, void );
+    DECL_LINK( GetFocusHdl, Control&, void );
+    DECL_LINK( LoseFocusHdl, Control&, void );
+    DECL_LINK( ScrollHdl, ScrollBar*, void);
+    DECL_LINK( CursorUpHdl, ScCursorRefEdit&, void );
+    DECL_LINK( CursorDownHdl, ScCursorRefEdit&, void );
+    DECL_LINK( CondModifyHdl, Edit&, void );
+    DECL_LINK( TargetModifyHdl, Edit&, void );
+    DECL_LINK( SelectHdl, ListBox&, void );
 };
 
 class ScSolverProgressDialog : public ModelessDialog
@@ -207,35 +205,33 @@ class ScSolverProgressDialog : public ModelessDialog
 
 public:
     ScSolverProgressDialog( vcl::Window* pParent );
-    virtual ~ScSolverProgressDialog();
+    virtual ~ScSolverProgressDialog() override;
     virtual void dispose() override;
 
     void    HideTimeLimit();
     void    SetTimeLimit( sal_Int32 nSeconds );
 };
 
-class ScSolverNoSolutionDialog : public ModalDialog
+class ScSolverNoSolutionDialog : public weld::GenericDialogController
 {
-    VclPtr<FixedText> m_pFtErrorText;
+    std::unique_ptr<weld::Label> m_xFtErrorText;
 
 public:
-    ScSolverNoSolutionDialog(vcl::Window* pParent, const OUString& rErrorText);
-    virtual ~ScSolverNoSolutionDialog();
-    virtual void dispose() override;
+    ScSolverNoSolutionDialog(weld::Window* pParent, const OUString& rErrorText);
+    virtual ~ScSolverNoSolutionDialog() override;
 };
 
-class ScSolverSuccessDialog : public ModalDialog
+class ScSolverSuccessDialog : public weld::GenericDialogController
 {
-    VclPtr<FixedText> m_pFtResult;
-    VclPtr<PushButton> m_pBtnOk;
-    VclPtr<PushButton> m_pBtnCancel;
+    std::unique_ptr<weld::Label> m_xFtResult;
+    std::unique_ptr<weld::Button> m_xBtnOk;
+    std::unique_ptr<weld::Button> m_xBtnCancel;
 
-    DECL_LINK_TYPED(ClickHdl, Button*, void);
+    DECL_LINK(ClickHdl, weld::Button&, void);
 
 public:
-    ScSolverSuccessDialog( vcl::Window* pParent, const OUString& rSolution );
-    virtual ~ScSolverSuccessDialog();
-    virtual void dispose() override;
+    ScSolverSuccessDialog(weld::Window* pParent, const OUString& rSolution);
+    virtual ~ScSolverSuccessDialog() override;
 };
 
 #endif

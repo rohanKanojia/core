@@ -371,12 +371,12 @@ public class _XDataPilotDescriptor {
         String name = null;
 
         if (IA == null) {
-            System.out.println("Null retruned.") ;
+            System.out.println("Null returned.") ;
             return false ;
         }
 
         if (fieldsNames[rem] == null) {
-            System.out.println("No fields were set to this orientation - cann't check result") ;
+            System.out.println("No fields were set to this orientation - can't check result") ;
             return true ;
         }
 

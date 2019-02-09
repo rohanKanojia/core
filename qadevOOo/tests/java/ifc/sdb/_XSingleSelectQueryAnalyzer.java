@@ -76,7 +76,7 @@ public class _XSingleSelectQueryAnalyzer extends MultiMethodTest {
     }
     /**
     * call <code>setQuery()</code> once with valid query, once with invalid
-    * query. Has ok if only on sceond call <code>SQLException</code> was thrown
+    * query. Has ok if only on second call <code>SQLException</code> was thrown
     */
     public void _setQuery() {
 
@@ -149,9 +149,10 @@ public class _XSingleSelectQueryAnalyzer extends MultiMethodTest {
         requiredMethod("getFilter()");
         try{
             oObj.setQuery("SELECT \"Identifier\", \"Type\", \"Address\" FROM \"biblio\" \"biblio\"");
-            String complexFilter = "( \"Identifier\" = '1' AND \"Type\" = '4' ) OR ( \"Identifier\" = '2' AND \"Type\" = '5' ) OR ( \"Identifier\" = '3' AND \"Type\" = '6' AND \"Address\" = '7' ) OR ( \"Address\" = '8' ) OR ( \"Type\" = '9' )";
+            String complexFilter = "( \"Identifier\" >= '1' AND \"Type\" <= '4' ) OR ( \"Identifier\" <> '2' AND \"Type\" = '5' ) OR ( \"Identifier\" < '3' AND \"Type\" > '6' AND \"Address\" = '7' ) OR ( \"Address\" >= '8' ) OR ( \"Type\" = '9' )";
             xComposer.setFilter(complexFilter);
             PropertyValue[][] aStructuredFilter = oObj.getStructuredFilter();
+
             xComposer.setFilter("");
             xComposer.setStructuredFilter(aStructuredFilter);
             tRes.tested("getStructuredFilter()", oObj.getFilter().equals(complexFilter));
@@ -182,8 +183,8 @@ public class _XSingleSelectQueryAnalyzer extends MultiMethodTest {
     }
 
     /**
-    * Method <code>getGroupColumns</code> retunrs a <code>XIndexAccess</code>
-    * Test has ok status if returned value is an useable <code>XIndexAccess</code>
+    * Method <code>getGroupColumns</code> returns a <code>XIndexAccess</code>
+    * Test has ok status if returned value is an usable <code>XIndexAccess</code>
     */
     public void _getGroupColumns() {
         try{
@@ -233,8 +234,8 @@ public class _XSingleSelectQueryAnalyzer extends MultiMethodTest {
         requiredMethod("setQuery()");
         requiredMethod("getFilter()");
         executeMethod("getStructuredFilter()");
-        String complexFilter = "( \"Identifier\" = '1' AND \"Type\" = '4' ) OR ( \"Identifier\" = '2' AND \"Type\" = '5' ) OR ( \"Identifier\" = '3' AND \"Type\" = '6' AND \"Address\" = '7' ) OR ( \"Address\" = '8' ) OR ( \"Type\" = '9' )";
 
+        String complexFilter = "( \"Identifier\" >= '1' AND \"Type\" <= '4' ) OR ( \"Identifier\" <> '2' AND \"Type\" = '5' ) OR ( \"Identifier\" < '3' AND \"Type\" > '6' AND \"Address\" = '7' ) OR ( \"Address\" >= '8' ) OR ( \"Type\" = '9' )";
         try{
            xComposer.setHavingClause(complexFilter);
            PropertyValue[][] aStructuredHaving = oObj.getStructuredHavingClause();
@@ -266,8 +267,8 @@ public class _XSingleSelectQueryAnalyzer extends MultiMethodTest {
     }
 
     /**
-    * Method <code>getGroupColumns</code> retunrs a <code>XIndexAccess</code>
-    * Test has ok status if returned value is an useable <code>XIndexAccess</code>
+    * Method <code>getGroupColumns</code> returns a <code>XIndexAccess</code>
+    * Test has ok status if returned value is an usable <code>XIndexAccess</code>
     */
     public void _getOrderColumns() {
         try{

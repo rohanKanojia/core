@@ -17,38 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/mutex.hxx>
-#include <ucbhelper/content.hxx>
-#include <vcl/msgbox.hxx>
-
-#include <sfx2/dispatch.hxx>
-#include <sfx2/docfile.hxx>
-
-#include <map>
 #include <vector>
-#include <iterator>
 
-#include "symbol.hxx"
-#include "view.hxx"
-#include "utility.hxx"
-#include "dialog.hxx"
+#include <symbol.hxx>
+#include <utility.hxx>
 #include "cfgitem.hxx"
-#include "smmod.hxx"
-#include "starmath.hrc"
+#include <smmod.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
-
-using namespace ::com::sun::star::ucb;
-using namespace ::com::sun::star::uno;
-
-
-/**************************************************************************/
 
 SmSym::SmSym() :
     m_aName(OUString("unknown")),
     m_aSetName(OUString("unknown")),
     m_cChar('\0'),
-    m_bPredefined(false),
-    m_bDocSymbol(false)
+    m_bPredefined(false)
 {
     m_aExportName = m_aName;
     m_aFace.SetTransparent(true);
@@ -74,7 +57,6 @@ SmSym::SmSym(const OUString& rName, const vcl::Font& rFont, sal_UCS4 cChar,
     m_cChar         = cChar;
     m_aSetName      = rSet;
     m_bPredefined   = bIsPredefined;
-    m_bDocSymbol    = false;
 }
 
 
@@ -86,11 +68,8 @@ SmSym& SmSym::operator = (const SmSym& rSymbol)
     m_aFace         = rSymbol.m_aFace;
     m_aSetName      = rSymbol.m_aSetName;
     m_bPredefined   = rSymbol.m_bPredefined;
-    m_bDocSymbol    = rSymbol.m_bDocSymbol;
 
-    SmSymbolManager * pSymSetManager = &SM_MOD()->GetSymbolManager();
-    if (pSymSetManager)
-        pSymSetManager->SetModified(true);
+    SM_MOD()->GetSymbolManager().SetModified(true);
 
     return *this;
 }
@@ -105,10 +84,6 @@ bool SmSym::IsEqualInUI( const SmSym& rSymbol ) const
 
 /**************************************************************************/
 
-void SmSymbolManager::Notify(SfxBroadcaster& /*rBC*/, const SfxHint& /*rHint*/)
-{
-}
-
 
 SmSymbolManager::SmSymbolManager()
 {
@@ -116,8 +91,7 @@ SmSymbolManager::SmSymbolManager()
 }
 
 
-SmSymbolManager::SmSymbolManager(const SmSymbolManager& rSymbolSetManager) :
-    SfxListener()
+SmSymbolManager::SmSymbolManager(const SmSymbolManager& rSymbolSetManager)
 {
     m_aSymbols      = rSymbolSetManager.m_aSymbols;
     m_bModified     = true;
@@ -150,9 +124,8 @@ SmSym *SmSymbolManager::GetSymbolByName(const OUString& rSymbolName)
 const SymbolPtrVec_t SmSymbolManager::GetSymbols() const
 {
     SymbolPtrVec_t aRes;
-    SymbolMap_t::const_iterator aIt( m_aSymbols.begin() );
-    for ( ; aIt != m_aSymbols.end(); ++aIt)
-        aRes.push_back( &aIt->second );
+    for (const auto& rEntry : m_aSymbols)
+        aRes.push_back( &rEntry.second );
 //    OSL_ENSURE( sSymbols.size() == m_aSymbols.size(), "number of symbols mismatch " );
     return aRes;
 }
@@ -162,8 +135,8 @@ bool SmSymbolManager::AddOrReplaceSymbol( const SmSym &rSymbol, bool bForceChang
 {
     bool bAdded = false;
 
-    const OUString aSymbolName( rSymbol.GetName() );
-    if (aSymbolName.getLength() > 0 && rSymbol.GetSymbolSetName().getLength() > 0)
+    const OUString& aSymbolName( rSymbol.GetName() );
+    if (!aSymbolName.isEmpty() && !rSymbol.GetSymbolSetName().isEmpty())
     {
         const SmSym *pFound = GetSymbolByName( aSymbolName );
         const bool bSymbolConflict = pFound && !pFound->IsEqualInUI( rSymbol );
@@ -174,7 +147,7 @@ bool SmSymbolManager::AddOrReplaceSymbol( const SmSym &rSymbol, bool bForceChang
             m_aSymbols[ aSymbolName ] = rSymbol;
             bAdded = true;
         }
-        else if (pFound && !bForceChange && bSymbolConflict)
+        else if (bSymbolConflict)
         {
             // TODO: to solve this a document owned symbol manager would be required ...
                 SAL_WARN("starmath", "symbol conflict, different symbol with same name found!");
@@ -196,7 +169,7 @@ bool SmSymbolManager::AddOrReplaceSymbol( const SmSym &rSymbol, bool bForceChang
 
 void SmSymbolManager::RemoveSymbol( const OUString & rSymbolName )
 {
-    if (rSymbolName.getLength() > 0)
+    if (!rSymbolName.isEmpty())
     {
         size_t nOldSize = m_aSymbols.size();
         m_aSymbols.erase( rSymbolName );
@@ -208,9 +181,8 @@ void SmSymbolManager::RemoveSymbol( const OUString & rSymbolName )
 std::set< OUString > SmSymbolManager::GetSymbolSetNames() const
 {
     std::set< OUString >  aRes;
-    SymbolMap_t::const_iterator aIt( m_aSymbols.begin() );
-    for ( ; aIt != m_aSymbols.end(); ++aIt )
-        aRes.insert( aIt->second.GetSymbolSetName() );
+    for (const auto& rEntry : m_aSymbols)
+        aRes.insert( rEntry.second.GetSymbolSetName() );
     return aRes;
 }
 
@@ -218,13 +190,12 @@ std::set< OUString > SmSymbolManager::GetSymbolSetNames() const
 const SymbolPtrVec_t SmSymbolManager::GetSymbolSet( const OUString& rSymbolSetName )
 {
     SymbolPtrVec_t aRes;
-    if (rSymbolSetName.getLength() > 0)
+    if (!rSymbolSetName.isEmpty())
     {
-        SymbolMap_t::const_iterator aIt( m_aSymbols.begin() );
-        for ( ; aIt != m_aSymbols.end(); ++aIt )
+        for (const auto& rEntry : m_aSymbols)
         {
-            if (aIt->second.GetSymbolSetName() == rSymbolSetName)
-                aRes.push_back( &aIt->second );
+            if (rEntry.second.GetSymbolSetName() == rSymbolSetName)
+                aRes.push_back( &rEntry.second );
         }
     }
     return aRes;
@@ -242,8 +213,8 @@ void SmSymbolManager::Load()
     for (size_t i = 0;  i < nSymbolCount;  ++i)
     {
         const SmSym &rSym = aSymbols[i];
-        OSL_ENSURE( rSym.GetName().getLength() > 0, "symbol without name!" );
-        if (rSym.GetName().getLength() > 0)
+        OSL_ENSURE( !rSym.GetName().isEmpty(), "symbol without name!" );
+        if (!rSym.GetName().isEmpty())
             AddOrReplaceSymbol( rSym );
     }
     m_bModified = true;
@@ -278,27 +249,27 @@ void SmSymbolManager::Load()
 
 void SmSymbolManager::Save()
 {
-    if (m_bModified)
+    if (!m_bModified)
+        return;
+
+    SmMathConfig &rCfg = *SM_MOD()->GetConfig();
+
+    // prepare to skip symbols from iGreek on saving
+    OUString aSymbolSetName('i');
+    aSymbolSetName += SmLocalizedSymbolData::GetUiSymbolSetName("Greek");
+
+    SymbolPtrVec_t aTmp( GetSymbols() );
+    std::vector< SmSym > aSymbols;
+    for (const SmSym* i : aTmp)
     {
-        SmMathConfig &rCfg = *SM_MOD()->GetConfig();
-
-        // prepare to skip symbols from iGreek on saving
-        OUString aSymbolSetName('i');
-        aSymbolSetName += SmLocalizedSymbolData::GetUiSymbolSetName("Greek");
-
-        SymbolPtrVec_t aTmp( GetSymbols() );
-        std::vector< SmSym > aSymbols;
-        for (size_t i = 0; i < aTmp.size(); ++i)
-        {
-            // skip symbols from iGreek set since those symbols always get added
-            // by computational means in SmSymbolManager::Load
-            if (aTmp[i]->GetSymbolSetName() != aSymbolSetName)
-                aSymbols.push_back( *aTmp[i] );
-        }
-        rCfg.SetSymbols( aSymbols );
-
-        m_bModified = false;
+        // skip symbols from iGreek set since those symbols always get added
+        // by computational means in SmSymbolManager::Load
+        if (i->GetSymbolSetName() != aSymbolSetName)
+            aSymbols.push_back( *i );
     }
+    rCfg.SetSymbols( aSymbols );
+
+    m_bModified = false;
 }
 
 

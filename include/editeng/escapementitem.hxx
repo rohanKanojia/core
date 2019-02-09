@@ -54,26 +54,24 @@ public:
     // "pure virtual Methods" from SfxPoolItem
     virtual bool             operator==( const SfxPoolItem& ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                    MapUnit eCoreMetric,
+                                    MapUnit ePresMetric,
+                                    OUString &rText, const IntlWrapper& ) const override;
 
     virtual bool             QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool             PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
     virtual SfxPoolItem*     Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual SfxPoolItem*     Create(SvStream &, sal_uInt16) const override;
-    virtual SvStream&        Store(SvStream &, sal_uInt16 nItemVersion) const override;
 
-    inline void SetEscapement( const SvxEscapement eNew )
+    void SetEscapement( const SvxEscapement eNew )
     {
-        if( SVX_ESCAPEMENT_OFF == eNew )
+        if( SvxEscapement::Off == eNew )
         {
             nEsc = 0;
             nProp = 100;
         }
         else
-            if( SVX_ESCAPEMENT_SUPERSCRIPT == eNew )
+            if( SvxEscapement::Superscript == eNew )
             {
                 nEsc = DFLT_ESC_SUPER;
                 nProp = DFLT_ESC_PROP;
@@ -84,23 +82,16 @@ public:
                 nProp = DFLT_ESC_PROP;
             }
     }
-    inline SvxEscapement GetEscapement() const { return static_cast< SvxEscapement >( GetEnumValue() ); }
+    SvxEscapement GetEscapement() const { return static_cast< SvxEscapement >( GetEnumValue() ); }
 
-    inline short &GetEsc() { return nEsc; }
-    inline short GetEsc() const { return nEsc; }
+    short &GetEsc() { return nEsc; }
+    short GetEsc() const { return nEsc; }
 
-    inline sal_uInt8 &GetProportionalHeight() { return nProp; }
-    inline sal_uInt8  GetProportionalHeight() const { return nProp; }
-
-    inline SvxEscapementItem& operator=(const SvxEscapementItem& rEsc)
-        {
-            nEsc  = rEsc.GetEsc();
-            nProp = rEsc.GetProportionalHeight();
-            return *this;
-        }
+    sal_uInt8 &GetProportionalHeight() { return nProp; }
+    sal_uInt8  GetProportionalHeight() const { return nProp; }
 
     virtual sal_uInt16      GetValueCount() const override;
-    virtual OUString   GetValueTextByPos( sal_uInt16 nPos ) const override;
+    static OUString         GetValueTextByPos( sal_uInt16 nPos );
     virtual sal_uInt16      GetEnumValue() const override;
     virtual void            SetEnumValue( sal_uInt16 nNewVal ) override;
 };

@@ -13,12 +13,12 @@
 using namespace com::sun::star;
 using namespace ooo::vba;
 
-ScVbaMenuBar::ScVbaMenuBar( const uno::Reference< ov::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, const uno::Reference< XCommandBar >& rCommandBar ) throw( uno::RuntimeException ) : MenuBar_BASE(rParent, rContext), m_xCommandBar(rCommandBar)
+ScVbaMenuBar::ScVbaMenuBar( const uno::Reference< ov::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, const uno::Reference< XCommandBar >& rCommandBar ) : MenuBar_BASE(rParent, rContext), m_xCommandBar(rCommandBar)
 {
 }
 
 uno::Any SAL_CALL
-ScVbaMenuBar::Menus( const uno::Any& aIndex ) throw (script::BasicErrorException, uno::RuntimeException, std::exception)
+ScVbaMenuBar::Menus( const uno::Any& aIndex )
 {
     uno::Reference< XCommandBarControls > xCommandBarControls( m_xCommandBar->Controls( uno::Any() ), uno::UNO_QUERY_THROW );
     uno::Reference< excel::XMenus > xMenus( new ScVbaMenus( this, mxContext, xCommandBarControls ) );
@@ -38,12 +38,10 @@ ScVbaMenuBar::getServiceImplName()
 uno::Sequence<OUString>
 ScVbaMenuBar::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.excel.MenuBar";
-    }
+        "ooo.vba.excel.MenuBar"
+    };
     return aServiceNames;
 }
 

@@ -10,11 +10,16 @@
 #ifndef INCLUDED_RTL_STRINGCONCAT_HXX
 #define INCLUDED_RTL_STRINGCONCAT_HXX
 
-#include <rtl/stringutils.hxx>
+#include "rtl/stringutils.hxx"
 
+#include <cstddef>
 #include <string.h>
 
 #ifdef LIBO_INTERNAL_ONLY // "RTL_FAST_STRING"
+
+#if defined RTL_STRING_UNITTEST_CONCAT
+extern bool rtl_string_unittest_invalid_concat;
+#endif
 
 #ifdef RTL_STRING_UNITTEST
 #define rtl rtlunittest
@@ -50,9 +55,9 @@ struct ToStringHelper
     /// Return length of the string representation of the given object (if not known exactly, it needs to be the maximum).
     static int length( const T& );
     /// Add 8-bit representation of the given object to the given buffer and return position right after the added data.
-    static char* addData( char* buffer, const T& );
+    static char* addData( char* buffer, const T& ) SAL_RETURNS_NONNULL;
     /// Add Unicode representation of the given object to the given buffer and return position right after the added data.
-    static sal_Unicode* addData( sal_Unicode* buffer, const T& );
+    static sal_Unicode* addData( sal_Unicode* buffer, const T& ) SAL_RETURNS_NONNULL;
     /// If true, T can be used in concatenation resulting in OString.
     static const bool allowOStringConcat = false;
     /// If true, T can be used in concatenation resulting in OUString.
@@ -141,13 +146,19 @@ struct ToStringHelper< const char[ N ] >
     static const bool allowOUStringConcat = true;
     };
 
-template<char C> struct ToStringHelper<OUStringLiteral1_<C>> {
-    static int length(OUStringLiteral1_<C>) { return 1; }
-    static char * addData(char * buffer, OUStringLiteral1_<C> literal)
-    { return addDataHelper(buffer, &literal.c, 1); }
+template<std::size_t N> struct ToStringHelper<sal_Unicode const[N]> {
+    static int length(sal_Unicode const[N]) { return N - 1; }
+    static sal_Unicode * addData(sal_Unicode * buffer, sal_Unicode const str[N])
+    { return addDataHelper(buffer, str, N - 1); }
+    static bool const allowOStringConcat = false;
+    static bool const allowOUStringConcat = true;
+};
+
+template<> struct ToStringHelper<OUStringLiteral1_> {
+    static int length(OUStringLiteral1_) { return 1; }
     static sal_Unicode * addData(
-        sal_Unicode * buffer, OUStringLiteral1_<C> literal)
-    { return addDataLiteral(buffer, &literal.c, 1); }
+        sal_Unicode * buffer, OUStringLiteral1_ literal)
+    { return addDataHelper(buffer, &literal.c, 1); }
     static bool const allowOStringConcat = false;
     static bool const allowOUStringConcat = true;
 };
@@ -164,7 +175,7 @@ struct OStringConcat
     public:
         OStringConcat( const T1& left_, const T2& right_ ) : left( left_ ), right( right_ ) {}
         int length() const { return ToStringHelper< T1 >::length( left ) + ToStringHelper< T2 >::length( right ); }
-        char* addData( char* buffer ) const { return ToStringHelper< T2 >::addData( ToStringHelper< T1 >::addData( buffer, left ), right ); }
+        char* addData( char* buffer ) const SAL_RETURNS_NONNULL { return ToStringHelper< T2 >::addData( ToStringHelper< T1 >::addData( buffer, left ), right ); }
         // NOTE here could be functions that would forward to the "real" temporary OString. Note however that e.g. getStr()
         // is not so simple, as the OString temporary must live long enough (i.e. can't be created here in a function, a wrapper
         // temporary object containing it must be returned instead).
@@ -185,7 +196,7 @@ struct OUStringConcat
     public:
         OUStringConcat( const T1& left_, const T2& right_ ) : left( left_ ), right( right_ ) {}
         int length() const { return ToStringHelper< T1 >::length( left ) + ToStringHelper< T2 >::length( right ); }
-        sal_Unicode* addData( sal_Unicode* buffer ) const { return ToStringHelper< T2 >::addData( ToStringHelper< T1 >::addData( buffer, left ), right ); }
+        sal_Unicode* addData( sal_Unicode* buffer ) const SAL_RETURNS_NONNULL { return ToStringHelper< T2 >::addData( ToStringHelper< T1 >::addData( buffer, left ), right ); }
     private:
         const T1& left;
         const T2& right;
@@ -195,7 +206,7 @@ template< typename T1, typename T2 >
 struct ToStringHelper< OStringConcat< T1, T2 > >
     {
     static int length( const OStringConcat< T1, T2 >& c ) { return c.length(); }
-    static char* addData( char* buffer, const OStringConcat< T1, T2 >& c ) { return c.addData( buffer ); }
+    static char* addData( char* buffer, const OStringConcat< T1, T2 >& c ) SAL_RETURNS_NONNULL { return c.addData( buffer ); }
     static const bool allowOStringConcat = ToStringHelper< T1 >::allowOStringConcat && ToStringHelper< T2 >::allowOStringConcat;
     static const bool allowOUStringConcat = false;
     };
@@ -204,14 +215,14 @@ template< typename T1, typename T2 >
 struct ToStringHelper< OUStringConcat< T1, T2 > >
     {
     static int length( const OUStringConcat< T1, T2 >& c ) { return c.length(); }
-    static sal_Unicode* addData( sal_Unicode* buffer, const OUStringConcat< T1, T2 >& c ) { return c.addData( buffer ); }
+    static sal_Unicode* addData( sal_Unicode* buffer, const OUStringConcat< T1, T2 >& c ) SAL_RETURNS_NONNULL { return c.addData( buffer ); }
     static const bool allowOStringConcat = false;
     static const bool allowOUStringConcat = ToStringHelper< T1 >::allowOUStringConcat && ToStringHelper< T2 >::allowOUStringConcat;
     };
 
 template< typename T1, typename T2 >
+[[nodiscard]]
 inline
-SAL_WARN_UNUSED_RESULT
 typename libreoffice_internal::Enable< OStringConcat< T1, T2 >, ToStringHelper< T1 >::allowOStringConcat && ToStringHelper< T2 >::allowOStringConcat >::Type operator+( const T1& left, const T2& right )
     {
     return OStringConcat< T1, T2 >( left, right );
@@ -219,56 +230,56 @@ typename libreoffice_internal::Enable< OStringConcat< T1, T2 >, ToStringHelper< 
 
 // char[N] and const char[N] need to be done explicitly, otherwise the compiler likes to treat them the same way for some reason
 template< typename T, int N >
+[[nodiscard]]
 inline
-SAL_WARN_UNUSED_RESULT
 typename libreoffice_internal::Enable< OStringConcat< T, const char[ N ] >, ToStringHelper< T >::allowOStringConcat >::Type operator+( const T& left, const char (&right)[ N ] )
     {
     return OStringConcat< T, const char[ N ] >( left, right );
     }
 
 template< typename T, int N >
+[[nodiscard]]
 inline
-SAL_WARN_UNUSED_RESULT
 typename libreoffice_internal::Enable< OStringConcat< const char[ N ], T >, ToStringHelper< T >::allowOStringConcat >::Type operator+( const char (&left)[ N ], const T& right )
     {
     return OStringConcat< const char[ N ], T >( left, right );
     }
 
 template< typename T, int N >
+[[nodiscard]]
 inline
-SAL_WARN_UNUSED_RESULT
 typename libreoffice_internal::Enable< OStringConcat< T, char[ N ] >, ToStringHelper< T >::allowOStringConcat >::Type operator+( const T& left, char (&right)[ N ] )
     {
     return OStringConcat< T, char[ N ] >( left, right );
     }
 
 template< typename T, int N >
+[[nodiscard]]
 inline
-SAL_WARN_UNUSED_RESULT
 typename libreoffice_internal::Enable< OStringConcat< char[ N ], T >, ToStringHelper< T >::allowOStringConcat >::Type operator+( char (&left)[ N ], const T& right )
     {
     return OStringConcat< char[ N ], T >( left, right );
     }
 
 template< typename T1, typename T2 >
+[[nodiscard]]
 inline
-SAL_WARN_UNUSED_RESULT
 typename libreoffice_internal::Enable< OUStringConcat< T1, T2 >, ToStringHelper< T1 >::allowOUStringConcat && ToStringHelper< T2 >::allowOUStringConcat >::Type operator+( const T1& left, const T2& right )
     {
     return OUStringConcat< T1, T2 >( left, right );
     }
 
 template< typename T1, typename T2 >
+[[nodiscard]]
 inline
-SAL_WARN_UNUSED_RESULT
 typename libreoffice_internal::Enable< OUStringConcat< T1, T2 >, ToStringHelper< T1 >::allowOUStringConcat && ToStringHelper< T2 >::allowOUStringConcat && libreoffice_internal::ConstCharArrayDetector< T1, void >::ok >::Type operator+( T1& left, const T2& right )
     {
     return OUStringConcat< T1, T2 >( left, right );
     }
 
 template< typename T1, typename T2 >
+[[nodiscard]]
 inline
-SAL_WARN_UNUSED_RESULT
 typename libreoffice_internal::Enable< OUStringConcat< T1, T2 >, ToStringHelper< T1 >::allowOUStringConcat && ToStringHelper< T2 >::allowOUStringConcat && libreoffice_internal::ConstCharArrayDetector< T2, void >::ok >::Type operator+( const T1& left, T2& right )
     {
     return OUStringConcat< T1, T2 >( left, right );

@@ -78,9 +78,8 @@ namespace slideshow
                 pNewLayer = rNewView->createViewLayer(maBounds);
 
             // add to local list
-            maViewEntries.push_back(
-                ViewEntry( rNewView,
-                           pNewLayer ));
+            maViewEntries.emplace_back( rNewView,
+                           pNewLayer );
 
             return maViewEntries.back().mpViewLayer;
         }
@@ -216,8 +215,8 @@ namespace slideshow
                 // clipping, and render each shape that intersects with
                 // the calculated update area
                 ::basegfx::B2DPolyPolygon aClip( maUpdateAreas.solveCrossovers() );
-                aClip = ::basegfx::tools::stripNeutralPolygons(aClip);
-                aClip = ::basegfx::tools::stripDispensablePolygons(aClip);
+                aClip = ::basegfx::utils::stripNeutralPolygons(aClip);
+                aClip = ::basegfx::utils::stripDispensablePolygons(aClip);
 
                 // actually, if there happen to be shapes with zero
                 // update area in the maUpdateAreas vector, the
@@ -226,7 +225,7 @@ namespace slideshow
                 {
                     for( const auto& rViewEntry : maViewEntries )
                     {
-                        ViewLayerSharedPtr pViewLayer = rViewEntry.getViewLayer();
+                        const ViewLayerSharedPtr& pViewLayer = rViewEntry.getViewLayer();
 
                         // set clip to all view layers and
                         pViewLayer->setClip( aClip );
@@ -239,7 +238,7 @@ namespace slideshow
                 }
             }
 
-            return EndUpdater(new LayerEndUpdate(shared_from_this()));
+            return std::make_shared<LayerEndUpdate>(shared_from_this());
         }
 
         void Layer::endUpdate()

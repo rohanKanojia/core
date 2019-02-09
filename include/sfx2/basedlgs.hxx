@@ -19,6 +19,7 @@
 #ifndef INCLUDED_SFX2_BASEDLGS_HXX
 #define INCLUDED_SFX2_BASEDLGS_HXX
 
+#include <memory>
 #include <sal/config.h>
 #include <sfx2/dllapi.h>
 #include <sal/types.h>
@@ -26,6 +27,7 @@
 #include <vcl/dialog.hxx>
 #include <vcl/floatwin.hxx>
 #include <vcl/timer.hxx>
+#include <vcl/weld.hxx>
 
 class TabPage;
 class SfxTabPage;
@@ -38,51 +40,36 @@ class OKButton;
 class CancelButton;
 class HelpButton;
 class Button;
-class FixedLine;
-
-//There is a hack which hides the HelpId for a Dialog in SfxModelessDialog
-//and SfxDockingWindow, where it is changed into a UniqueId and cleared
-//This reverses the clear of the HelpId
-
-inline void reverseUniqueHelpIdHack(vcl::Window &rWindow)
-{
-    if (rWindow.GetHelpId().isEmpty())
-        rWindow.SetHelpId(rWindow.GetUniqueId());
-}
 
 // class SfxModalDialog --------------------------------------------------
 
 class SFX2_DLLPUBLIC SfxModalDialog: public ModalDialog
 {
-    sal_uInt32              nUniqId;
     OUString                aExtraData;
     const SfxItemSet*       pInputSet;
-    SfxItemSet*             pOutputSet;
+    std::unique_ptr<SfxItemSet> pOutputSet;
 
 private:
-    SfxModalDialog(SfxModalDialog &) = delete;
-    void operator =(SfxModalDialog &) = delete;
+    SfxModalDialog(SfxModalDialog const &) = delete;
+    SfxModalDialog& operator =(SfxModalDialog const &) = delete;
 
     SAL_DLLPRIVATE void SetDialogData_Impl();
     SAL_DLLPRIVATE void GetDialogData_Impl();
-    SAL_DLLPRIVATE void init();
+    DECL_DLLPRIVATE_STATIC_LINK(SfxModalDialog, InstallLOKNotifierHdl, void*, vcl::ILibreOfficeKitNotifier*);
 
 protected:
     SfxModalDialog(vcl::Window *pParent, const OUString& rID, const OUString& rUIXMLDescription);
 
     OUString&           GetExtraData()      { return aExtraData; }
-    sal_uInt32          GetUniqId() const   { return nUniqId; }
-    void                SetUniqId(sal_uInt32 nSettingsId)  { nUniqId = nSettingsId; }
-    SfxItemSet*         GetItemSet()        { return pOutputSet; }
-    void                CreateOutputItemSet( SfxItemPool& rPool );
     void                CreateOutputItemSet( const SfxItemSet& rInput );
     void                SetInputSet( const SfxItemSet* pInSet ) { pInputSet = pInSet; }
-    SfxItemSet*         GetOutputSetImpl() { return pOutputSet; }
+    SfxItemSet*         GetOutputSetImpl() { return pOutputSet.get(); }
 
 public:
-    virtual ~SfxModalDialog();
+    virtual ~SfxModalDialog() override;
     virtual void dispose() override;
-    const SfxItemSet*   GetOutputItemSet() const { return pOutputSet; }
+
+    const SfxItemSet*   GetOutputItemSet() const { return pOutputSet.get(); }
     const SfxItemSet*   GetInputItemSet() const { return pInputSet; }
 };
 
@@ -92,17 +79,18 @@ class SFX2_DLLPUBLIC SfxModelessDialog: public ModelessDialog
 {
     SfxBindings*            pBindings;
     Size                    aSize;
-    SfxModelessDialog_Impl* pImp;
+    std::unique_ptr< SfxModelessDialog_Impl > pImpl;
 
-    SfxModelessDialog(SfxModelessDialog &) = delete;
-    void operator =(SfxModelessDialog &) = delete;
+    SfxModelessDialog(SfxModelessDialog const &) = delete;
+    SfxModelessDialog& operator =(SfxModelessDialog const &) = delete;
 
     void Init(SfxBindings *pBindinx, SfxChildWindow *pCW);
 
+    DECL_DLLPRIVATE_STATIC_LINK(SfxModelessDialog, InstallLOKNotifierHdl, void*, vcl::ILibreOfficeKitNotifier*);
 protected:
     SfxModelessDialog( SfxBindings*, SfxChildWindow*,
         vcl::Window*, const OUString& rID, const OUString& rUIXMLDescription );
-    virtual ~SfxModelessDialog();
+    virtual ~SfxModelessDialog() override;
     virtual void dispose() override;
     virtual bool            Close() override;
     virtual void            Resize() override;
@@ -111,13 +99,48 @@ protected:
 
 public:
     virtual void            FillInfo(SfxChildWinInfo&) const;
-    void                    Initialize (SfxChildWinInfo* pInfo);
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    void                    Initialize (SfxChildWinInfo const * pInfo);
+    virtual bool            EventNotify( NotifyEvent& rNEvt ) override;
     SfxBindings&            GetBindings()
                             { return *pBindings; }
 
-    DECL_LINK_TYPED(TimerHdl, Idle *, void);
+    DECL_LINK(TimerHdl, Timer *, void);
+};
 
+class SFX2_DLLPUBLIC SfxDialogController : public weld::GenericDialogController
+{
+private:
+    DECL_DLLPRIVATE_STATIC_LINK(SfxDialogController, InstallLOKNotifierHdl, void*, vcl::ILibreOfficeKitNotifier*);
+public:
+    SfxDialogController(weld::Widget* pParent, const OUString& rUIFile, const OString& rDialogId);
+};
+
+class SfxModelessDialog_Impl;
+class SFX2_DLLPUBLIC SfxModelessDialogController : public SfxDialogController
+{
+    SfxBindings* m_pBindings;
+    std::unique_ptr<SfxModelessDialog_Impl> m_xImpl;
+
+    SfxModelessDialogController(SfxModelessDialogController&) = delete;
+    void operator =(SfxModelessDialogController&) = delete;
+
+    void Init(SfxBindings *pBindinx, SfxChildWindow *pCW);
+
+    DECL_DLLPRIVATE_LINK(FocusInHdl, weld::Widget&, void);
+    DECL_DLLPRIVATE_LINK(FocusOutHdl, weld::Widget&, void);
+protected:
+    SfxModelessDialogController(SfxBindings*, SfxChildWindow* pChildWin,
+        weld::Window* pParent, const OUString& rUIXMLDescription, const OString& rID);
+    virtual ~SfxModelessDialogController() override;
+
+public:
+    void                    FillInfo(SfxChildWinInfo&) const;
+    virtual void            Activate() {}
+    void                    Initialize (SfxChildWinInfo const * pInfo);
+    void                    Close();
+    void                    DeInit();
+    void                    EndDialog();
+    SfxBindings&            GetBindings() { return *m_pBindings; }
 };
 
 // class SfxFloatingWindow --------------------------------------------------
@@ -126,37 +149,37 @@ class SFX2_DLLPUBLIC SfxFloatingWindow: public FloatingWindow
 {
     SfxBindings*            pBindings;
     Size                    aSize;
-    SfxFloatingWindow_Impl* pImp;
+    std::unique_ptr< SfxFloatingWindow_Impl > pImpl;
 
-    SfxFloatingWindow(SfxFloatingWindow &) = delete;
-    void operator =(SfxFloatingWindow &) = delete;
+    SfxFloatingWindow(SfxFloatingWindow const &) = delete;
+    SfxFloatingWindow& operator =(SfxFloatingWindow const &) = delete;
 
 protected:
                             SfxFloatingWindow( SfxBindings *pBindings,
                                               SfxChildWindow *pCW,
                                               vcl::Window* pParent,
-                                              WinBits nWinBits=WB_STDMODELESS);
+                                              WinBits nWinBits);
                             SfxFloatingWindow( SfxBindings *pBindings,
                                               SfxChildWindow *pCW,
                                               vcl::Window* pParent,
                                               const OString& rID, const OUString& rUIXMLDescription,
                                               const css::uno::Reference<css::frame::XFrame> &rFrame = css::uno::Reference<css::frame::XFrame>());
-                            virtual ~SfxFloatingWindow();
+                            virtual ~SfxFloatingWindow() override;
     virtual void            dispose() override;
 
     virtual void            StateChanged( StateChangedType nStateChange ) override;
     virtual bool            Close() override;
     virtual void            Resize() override;
     virtual void            Move() override;
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    virtual bool            EventNotify( NotifyEvent& rNEvt ) override;
     SfxBindings&            GetBindings()
                             { return *pBindings; }
 
 public:
     virtual void            FillInfo(SfxChildWinInfo&) const;
-    void                    Initialize (SfxChildWinInfo* pInfo);
+    void                    Initialize (SfxChildWinInfo const * pInfo);
 
-    DECL_LINK_TYPED(TimerHdl, Idle *, void);
+    DECL_LINK(TimerHdl, Timer *, void);
 
 };
 
@@ -165,12 +188,11 @@ public:
 struct SingleTabDlgImpl
 {
     VclPtr<SfxTabPage>          m_pSfxPage;
-    VclPtr<FixedLine>           m_pLine;
 
     SingleTabDlgImpl();
 };
 
-typedef const sal_uInt16* (*GetTabPageRanges)(); // liefert internationale Which-Werte
+typedef const sal_uInt16* (*GetTabPageRanges)(); // provides international Which values
 
 class SFX2_DLLPUBLIC SfxSingleTabDialog : public SfxModalDialog
 {
@@ -179,28 +201,58 @@ public:
         const OUString& rID = OUString("SingleTabDialog"),
         const OUString& rUIXMLDescription = OUString("sfx/ui/singletabdialog.ui"));
 
-    SfxSingleTabDialog(vcl::Window *pParent, const SfxItemSet* pInSet = nullptr,
+    SfxSingleTabDialog(vcl::Window *pParent, const SfxItemSet* pInSet,
         const OUString& rID = OUString("SingleTabDialog"),
         const OUString& rUIXMLDescription = OUString("sfx/ui/singletabdialog.ui"));
 
-    virtual             ~SfxSingleTabDialog();
+    virtual             ~SfxSingleTabDialog() override;
     virtual void        dispose() override;
 
-    void                SetTabPage(SfxTabPage* pTabPage, GetTabPageRanges pRangesFunc = nullptr, sal_uInt32 nSettingsId = 0);
+    void                SetTabPage(SfxTabPage* pTabPage);
     SfxTabPage*         GetTabPage() const { return pImpl->m_pSfxPage; }
 
     OKButton*           GetOKButton() const { return pOKBtn; }
 
 protected:
-    GetTabPageRanges    fnGetRanges;
-
     VclPtr<OKButton>      pOKBtn;
     VclPtr<CancelButton>  pCancelBtn;
     VclPtr<HelpButton>    pHelpBtn;
 
-    SingleTabDlgImpl*   pImpl;
+    DECL_DLLPRIVATE_LINK(OKHdl_Impl, Button*, void);
 
-    DECL_DLLPRIVATE_LINK_TYPED(OKHdl_Impl, Button*, void);
+private:
+    std::unique_ptr<SingleTabDlgImpl>   pImpl;
+};
+
+class SFX2_DLLPUBLIC SfxSingleTabDialogController : public SfxDialogController
+{
+private:
+    std::unique_ptr<SfxItemSet> m_xOutputSet;
+    const SfxItemSet* m_pInputSet;
+
+public:
+    SfxSingleTabDialogController(weld::Window *pParent, const SfxItemSet& rOptionsSet,
+        const OUString& rUIXMLDescription = OUString("sfx/ui/singletabdialog.ui"),
+        const OString& rID = OString("SingleTabDialog"));
+
+    weld::Container* get_content_area() { return m_xContainer.get(); }
+
+    virtual             ~SfxSingleTabDialogController() override;
+
+    void                SetTabPage(SfxTabPage* pTabPage);
+    weld::Button&       GetOKButton() const { return *m_xOKBtn; }
+
+    const SfxItemSet*   GetOutputItemSet() const { return m_xOutputSet.get(); }
+    const SfxItemSet*   GetInputItemSet() const { return m_pInputSet; }
+
+protected:
+    VclPtr<SfxTabPage> m_xSfxPage;
+    std::unique_ptr<weld::Container> m_xContainer;
+    std::unique_ptr<weld::Button> m_xOKBtn;
+    std::unique_ptr<weld::Button> m_xHelpBtn;
+
+    void                CreateOutputItemSet(const SfxItemSet& rInput);
+    DECL_DLLPRIVATE_LINK(OKHdl_Impl, weld::Button&, void);
 };
 
 #endif

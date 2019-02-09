@@ -148,7 +148,7 @@ public:
 
     /** The next position (in integer digits) from the right where to insert a
         group separator. */
-    sal_Int32 getPos()
+    sal_Int32 getPos() const
     {
         return mnNextPos;
     }
@@ -177,11 +177,11 @@ public:
         {
             if (j == aIterator.getPos())
             {
-                pArr[nIntegerDigits] = sal_True;
+                pArr[nIntegerDigits] = true;
                 aIterator.advance();
             }
             else
-                pArr[nIntegerDigits] = sal_False;
+                pArr[nIntegerDigits] = false;
         }
         return aSeq;
     }

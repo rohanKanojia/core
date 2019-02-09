@@ -18,13 +18,14 @@
  */
 
 #include "SlsCacheConfiguration.hxx"
-#include <osl/mutex.hxx>
 #include <rtl/instance.hxx>
 #include <vcl/svapp.hxx>
 
 #include <comphelper/processfactory.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
+#include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 
@@ -41,7 +42,6 @@ namespace
 }
 
 std::weak_ptr<CacheConfiguration> CacheConfiguration::mpWeakInstance;
-Timer CacheConfiguration::maReleaseTimer;
 
 std::shared_ptr<CacheConfiguration> CacheConfiguration::Instance()
 {
@@ -58,10 +58,11 @@ std::shared_ptr<CacheConfiguration> CacheConfiguration::Instance()
             rInstancePtr.reset(new CacheConfiguration());
             mpWeakInstance = rInstancePtr;
             // Prepare to release this instance in the near future.
-            maReleaseTimer.SetTimeoutHdl(
+            rInstancePtr->m_ReleaseTimer.SetInvokeHandler(
                 LINK(rInstancePtr.get(),CacheConfiguration,TimerCallback));
-            maReleaseTimer.SetTimeout(5000 /* 5s */);
-            maReleaseTimer.Start();
+            rInstancePtr->m_ReleaseTimer.SetTimeout(5000 /* 5s */);
+            rInstancePtr->m_ReleaseTimer.SetDebugName("sd::CacheConfiguration maReleaseTimer");
+            rInstancePtr->m_ReleaseTimer.Start();
         }
     }
     return rInstancePtr;
@@ -80,22 +81,11 @@ CacheConfiguration::CacheConfiguration()
             configuration::theDefaultProvider::get( ::comphelper::getProcessComponentContext() );
 
         // Obtain access to Impress configuration.
-        Sequence<Any> aCreationArguments(3);
-        aCreationArguments[0] = makeAny(beans::PropertyValue(
-            "nodepath",
-            0,
-            makeAny(sPathToImpressConfigurationRoot),
-            beans::PropertyState_DIRECT_VALUE));
-        aCreationArguments[1] = makeAny(beans::PropertyValue(
-            "depth",
-            0,
-            makeAny((sal_Int32)-1),
-            beans::PropertyState_DIRECT_VALUE));
-        aCreationArguments[2] = makeAny(beans::PropertyValue(
-            "lazywrite",
-            0,
-            makeAny(true),
-            beans::PropertyState_DIRECT_VALUE));
+        Sequence<Any> aCreationArguments(comphelper::InitAnyPropertySequence(
+        {
+            {"nodepath", makeAny(sPathToImpressConfigurationRoot)},
+            {"depth", makeAny(sal_Int32(-1))}
+        }));
 
         Reference<XInterface> xRoot (xProvider->createInstanceWithArguments(
             "com.sun.star.configuration.ConfigurationAccess",
@@ -135,11 +125,20 @@ Any CacheConfiguration::GetValue (const OUString& rName)
     return aResult;
 }
 
-IMPL_STATIC_LINK_NOARG_TYPED(CacheConfiguration, TimerCallback, Timer *, void)
+IMPL_STATIC_LINK_NOARG(CacheConfiguration, TimerCallback, Timer *, void)
 {
     CacheConfigSharedPtr &rInstancePtr = theInstance::get();
     // Release our reference to the instance.
     rInstancePtr.reset();
+    // note: if there are no other references to the instance, m_ReleaseTimer
+    // will be deleted now
+}
+
+void CacheConfiguration::Shutdown()
+{
+    CacheConfigSharedPtr &rInstancePtr = theInstance::get();
+    rInstancePtr.reset();
+    assert(mpWeakInstance.expired()); // ensure m_ReleaseTimer is destroyed
 }
 
 } } } // end of namespace ::sd::slidesorter::cache

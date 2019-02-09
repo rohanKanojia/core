@@ -26,6 +26,7 @@
 #include <salframe.hxx>
 
 #include <list>
+#include <vector>
 
 #ifdef IOS
 #define SvpSalInstance AquaSalInstance
@@ -40,7 +41,7 @@ class VCL_DLLPUBLIC SvpSalFrame : public SalFrame
     SvpSalInstance*                     m_pInstance;
     SvpSalFrame*                        m_pParent;       // pointer to parent frame
     std::list< SvpSalFrame* >           m_aChildren;     // List of child frames
-    SalFrameStyleFlags                  m_nStyle;
+    SalFrameStyleFlags const            m_nStyle;
     bool                                m_bVisible;
 #ifndef IOS
     cairo_surface_t*                    m_pSurface;
@@ -52,15 +53,14 @@ class VCL_DLLPUBLIC SvpSalFrame : public SalFrame
 
     SystemEnvData                       m_aSystemChildData;
 
-    std::list< SvpSalGraphics* >        m_aGraphics;
+    std::vector< SvpSalGraphics* >      m_aGraphics;
 
     static SvpSalFrame*       s_pFocusFrame;
 public:
     SvpSalFrame( SvpSalInstance* pInstance,
                  SalFrame* pParent,
-                 SalFrameStyleFlags nSalFrameStyle,
-                 SystemParentData* pSystemParent = nullptr );
-    virtual ~SvpSalFrame();
+                 SalFrameStyleFlags nSalFrameStyle );
+    virtual ~SvpSalFrame() override;
 
     void GetFocus();
     void LoseFocus();
@@ -70,7 +70,7 @@ public:
     virtual SalGraphics*        AcquireGraphics() override;
     virtual void                ReleaseGraphics( SalGraphics* pGraphics ) override;
 
-    virtual bool                PostEvent(ImplSVEvent* pData) override;
+    virtual bool                PostEvent(std::unique_ptr<ImplSVEvent> pData) override;
 
     virtual void                SetTitle( const OUString& rTitle ) override;
     virtual void                SetIcon( sal_uInt16 nIcon ) override;
@@ -83,14 +83,14 @@ public:
     virtual void                SetMaxClientSize( long nWidth, long nHeight ) override;
     virtual void                SetPosSize( long nX, long nY, long nWidth, long nHeight, sal_uInt16 nFlags ) override;
     virtual void                GetClientSize( long& rWidth, long& rHeight ) override;
-    virtual void                GetWorkArea( Rectangle& rRect ) override;
+    virtual void                GetWorkArea( tools::Rectangle& rRect ) override;
     virtual SalFrame*           GetParent() const override;
     virtual void                SetWindowState( const SalFrameState* pState ) override;
     virtual bool                GetWindowState( SalFrameState* pState ) override;
     virtual void                ShowFullScreen( bool bFullScreen, sal_Int32 nDisplay ) override;
     virtual void                StartPresentation( bool bStart ) override;
     virtual void                SetAlwaysOnTop( bool bOnTop ) override;
-    virtual void                ToTop( sal_uInt16 nFlags ) override;
+    virtual void                ToTop( SalFrameToTop nFlags ) override;
     virtual void                SetPointer( PointerStyle ePointerStyle ) override;
     virtual void                CaptureMouse( bool bMouse ) override;
     virtual void                SetPointerPos( long nX, long nY ) override;
@@ -115,8 +115,8 @@ public:
     virtual void                EndSetClipRegion() override;
 
     /*TODO: functional implementation */
-    virtual void                SetScreenNumber( unsigned int nScreen ) override { (void)nScreen; }
-    virtual void                SetApplicationID(const OUString &rApplicationID) override { (void) rApplicationID; }
+    virtual void                SetScreenNumber( unsigned int ) override {}
+    virtual void                SetApplicationID(const OUString &) override {}
 
 };
 

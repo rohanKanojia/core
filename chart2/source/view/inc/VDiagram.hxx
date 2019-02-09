@@ -19,16 +19,22 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_INC_VDIAGRAM_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_INC_VDIAGRAM_HXX
 
-#include <com/sun/star/drawing/HomogenMatrix.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
-#include <com/sun/star/chart2/XDiagram.hpp>
-#include "AbstractShapeFactory.hxx"
 #include <basegfx/range/b2irectangle.hxx>
+#include <com/sun/star/drawing/Direction3D.hpp>
+#include <com/sun/star/awt/Size.hpp>
+#include <com/sun/star/awt/Point.hpp>
+
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XDiagram; } } } }
+namespace com { namespace sun { namespace star { namespace lang { class XMultiServiceFactory; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShape; } } } }
+
 
 namespace chart
 {
 
-class AbstractShapeFactory;
+class ShapeFactory;
 
 /** The VDiagram is responsible to generate the visible parts of the Diagram
 that is wall, floor, axes and data series.
@@ -36,13 +42,13 @@ The axes and data series are subobjects which are created and managed by the
 diagram.
 */
 
-class VDiagram
+class VDiagram final
 {
 public: //methods
     VDiagram( const css::uno::Reference<css::chart2::XDiagram>& xDiagram,
               const css::drawing::Direction3D& rPreferredAspectRatio,
-              sal_Int32 nDimension = 3 );
-    virtual ~VDiagram();
+              sal_Int32 nDimension );
+    ~VDiagram();
 
     void init(
         const css::uno::Reference<css::drawing::XShapes>& xTarget,
@@ -82,7 +88,7 @@ private: //members
 
     css::uno::Reference< css::drawing::XShapes >                    m_xTarget;
     css::uno::Reference< css::lang::XMultiServiceFactory>           m_xShapeFactory;
-    AbstractShapeFactory* m_pShapeFactory;
+    ShapeFactory* m_pShapeFactory;
 
     // this is the surrounding shape which contains floor, wall and coordinate
     css::uno::Reference< css::drawing::XShape >   m_xOuterGroupShape;

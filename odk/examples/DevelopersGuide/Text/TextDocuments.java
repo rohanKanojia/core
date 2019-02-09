@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -703,7 +704,7 @@ public class TextDocuments {
             // service description: com.sun.star.text.TextTableRow)
             XPropertySet xRow = UnoRuntime.queryInterface(
                 XPropertySet.class, xRows.getByIndex ( 0 ) );
-            // If BackTransparant is false, then the background color is visible
+            // If BackTransparent is false, then the background color is visible
             xRow.setPropertyValue( "BackTransparent", Boolean.FALSE);
             // Specify the color of the background to be dark blue
             xRow.setPropertyValue( "BackColor", Integer.valueOf(6710932));
@@ -964,7 +965,7 @@ public class TextDocuments {
                     ++nDepth;
                 }
                 while ( nDepth < 200 && aBlockNames.length == 0 );
-                // If we managed to find a group containg blocks...
+                // If we managed to find a group containing blocks...
                 if ( aBlockNames.length > 0 )
                 {
                     // Pick a random block in this group and get its
@@ -1719,3 +1720,5 @@ public class TextDocuments {
         }
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

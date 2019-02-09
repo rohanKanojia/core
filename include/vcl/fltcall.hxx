@@ -19,33 +19,10 @@
 
 #ifndef INCLUDED_VCL_FLTCALL_HXX
 #define INCLUDED_VCL_FLTCALL_HXX
-#include <sal/types.h>
-#include <vcl/field.hxx>
-#include <com/sun/star/uno/Sequence.h>
-#include <com/sun/star/beans/PropertyValue.hpp>
-#include <vcl/FilterConfigItem.hxx>
 
 class FilterConfigItem;
 class SvStream;
 class Graphic;
-namespace vcl { class Window; }
-
-struct FltCallDialogParameter
-{
-
-    VclPtr<vcl::Window> pWindow;
-    ResMgr*     pResMgr;
-    FieldUnit   eFieldUnit;
-    OUString    aFilterExt;
-
-    // In and Out PropertySequence for all filter dialogs
-    css::uno::Sequence< css::beans::PropertyValue > aFilterData;
-
-    FltCallDialogParameter( vcl::Window* pW, ResMgr* pRsMgr, FieldUnit eFiUni ) :
-        pWindow         ( pW ),
-        pResMgr         ( pRsMgr ),
-        eFieldUnit      ( eFiUni ) {};
-};
 
 typedef bool (*PFilterCall)(SvStream & rStream, Graphic & rGraphic,
                             FilterConfigItem* pConfigItem);

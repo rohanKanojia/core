@@ -31,14 +31,11 @@ class FuDraw : public FuPoor
     Pointer aOldPointer;
 
  public:
-    FuDraw(ScTabViewShell* pViewSh, vcl::Window* pWin, ScDrawView* pView,
-           SdrModel* pDoc, SfxRequest& rReq);
-    virtual ~FuDraw();
+    FuDraw(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawView* pView,
+           SdrModel* pDoc, const SfxRequest& rReq);
+    virtual ~FuDraw() override;
 
     virtual bool KeyInput(const KeyEvent& rKEvt) override;
-
-    virtual void Activate() override;
-    virtual void Deactivate() override;
 
     virtual void ForcePointer(const MouseEvent* pMEvt);
 

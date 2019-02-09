@@ -11,6 +11,7 @@ $(eval $(call gb_CppunitTest_CppunitTest,filter_priority))
 
 $(eval $(call gb_CppunitTest_use_sdk_api,filter_priority))
 $(eval $(call gb_CppunitTest_use_ure,filter_priority))
+$(eval $(call gb_CppunitTest_use_vcl,filter_priority))
 
 $(eval $(call gb_CppunitTest_use_configuration,filter_priority))
 
@@ -22,7 +23,6 @@ $(eval $(call gb_CppunitTest_use_libraries,filter_priority, \
 	cppuhelper \
 	cppu \
 	sal \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_components,filter_priority,\

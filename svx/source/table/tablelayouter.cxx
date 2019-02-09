@@ -19,27 +19,25 @@
 
 
 #include <com/sun/star/table/XMergeableCell.hpp>
-#include <com/sun/star/awt/XLayoutConstrains.hpp>
 
 #include <tools/gen.hxx>
+#include <libxml/xmlwriter.h>
 
-#include "cell.hxx"
+#include <cell.hxx>
 #include "cellrange.hxx"
-#include "tablemodel.hxx"
+#include <o3tl/safeint.hxx>
+#include <tablemodel.hxx>
 #include "tablerow.hxx"
 #include "tablerows.hxx"
 #include "tablecolumn.hxx"
 #include "tablecolumns.hxx"
 #include "tablelayouter.hxx"
-#include "svx/svdotable.hxx"
-#include "editeng/borderline.hxx"
-#include "editeng/boxitem.hxx"
-#include "svx/svdmodel.hxx"
-#include "svx/svdstr.hrc"
-#include "svdglob.hxx"
+#include <svx/svdotable.hxx>
+#include <editeng/borderline.hxx>
+#include <editeng/boxitem.hxx>
+#include <svx/svdmodel.hxx>
 
 using ::editeng::SvxBorderLine;
-using ::com::sun::star::awt::XLayoutConstrains;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::container;
@@ -53,10 +51,10 @@ namespace sdr { namespace table {
 
 static SvxBorderLine gEmptyBorder;
 
+static const OUStringLiteral gsSize( "Size" );
 
 TableLayouter::TableLayouter( const TableModelRef& xTableModel )
 : mxTable( xTableModel )
-, msSize( "Size" )
 {
 }
 
@@ -79,24 +77,24 @@ basegfx::B2ITuple TableLayouter::getCellSize( const CellRef& xCell, const CellPo
             CellPos aPos( rPos );
 
             sal_Int32 nRowCount = getRowCount();
-            sal_Int32 nRowSpan = std::max( xCell->getRowSpan(), (sal_Int32)1 );
+            sal_Int32 nRowSpan = std::max( xCell->getRowSpan(), sal_Int32(1) );
             while( nRowSpan && (aPos.mnRow < nRowCount) )
             {
-                if( ((sal_Int32)maRows.size()) <= aPos.mnRow )
+                if( static_cast<sal_Int32>(maRows.size()) <= aPos.mnRow )
                     break;
 
-                height += maRows[aPos.mnRow++].mnSize;
+                height = o3tl::saturating_add(height, maRows[aPos.mnRow++].mnSize);
                 nRowSpan--;
             }
 
             sal_Int32 nColCount = getColumnCount();
-            sal_Int32 nColSpan = std::max( xCell->getColumnSpan(), (sal_Int32)1 );
+            sal_Int32 nColSpan = std::max( xCell->getColumnSpan(), sal_Int32(1) );
             while( nColSpan && (aPos.mnCol < nColCount ) )
             {
-                if( ((sal_Int32)maColumns.size()) <= aPos.mnCol )
+                if( static_cast<sal_Int32>(maColumns.size()) <= aPos.mnCol )
                     break;
 
-                width += maColumns[aPos.mnCol++].mnSize;
+                width = o3tl::saturating_add(width, maColumns[aPos.mnCol++].mnSize);
                 nColSpan--;
             }
         }
@@ -119,20 +117,30 @@ bool TableLayouter::getCellArea( const CellRef& xCell, const CellPos& rPos, base
             const basegfx::B2ITuple aCellSize( getCellSize( xCell, rPos ) );
             const bool bRTL = (mxTable->getSdrTableObj()->GetWritingMode() == WritingMode_RL_TB);
 
-            if( (rPos.mnCol < ((sal_Int32)maColumns.size()) && (rPos.mnRow < ((sal_Int32)maRows.size()) ) ) )
+            if( (rPos.mnCol < static_cast<sal_Int32>(maColumns.size())) && (rPos.mnRow < static_cast<sal_Int32>(maRows.size()) ) )
             {
                 const sal_Int32 y = maRows[rPos.mnRow].mnPos;
+
+                sal_Int32 endy;
+                if (o3tl::checked_add(y, aCellSize.getY(), endy))
+                    return false;
 
                 if(bRTL)
                 {
                     ///For RTL Table Calculate the Right End of cell instead of Left
                     const sal_Int32 x = maColumns[rPos.mnCol].mnPos + maColumns[rPos.mnCol].mnSize;
-                    rArea = basegfx::B2IRectangle( x-aCellSize.getX(), y, x, y + aCellSize.getY()  );
+                    sal_Int32 startx;
+                    if (o3tl::checked_sub(x, aCellSize.getX(), startx))
+                        return false;
+                    rArea = basegfx::B2IRectangle(startx, y, x, endy);
                 }
                 else
                 {
                     const sal_Int32 x = maColumns[rPos.mnCol].mnPos;
-                    rArea = basegfx::B2IRectangle( x, y, x + aCellSize.getX(), y + aCellSize.getY()  );
+                    sal_Int32 endx;
+                    if (o3tl::checked_add(x, aCellSize.getX(), endx))
+                        return false;
+                    rArea = basegfx::B2IRectangle(x, y, endx, endy);
                 }
                 return true;
             }
@@ -161,6 +169,44 @@ sal_Int32 TableLayouter::getColumnWidth( sal_Int32 nColumn ) const
         return maColumns[nColumn].mnSize;
     else
         return 0;
+}
+
+sal_Int32 TableLayouter::calcPreferredColumnWidth( sal_Int32 nColumn, Size aSize ) const
+{
+    sal_Int32 nRet = 0;
+    for ( sal_uInt32 nRow = 0; nRow < static_cast<sal_uInt32>(maRows.size()); ++nRow )
+    {
+        // Account for the space desired by spanned columns.
+        // Only the last spanned cell will try to ensure sufficient space,
+        // by looping through the previous columns, subtracting their portion.
+        sal_Int32 nWish = 0;
+        sal_Int32 nSpannedColumn = nColumn;
+        bool bFindSpan = true;
+        while ( bFindSpan && isValidColumn(nSpannedColumn) )
+        {
+            // recursive function call gets earlier portion of spanned column.
+            if ( nSpannedColumn < nColumn )
+                nWish -= calcPreferredColumnWidth( nSpannedColumn, aSize );
+
+            CellRef xCell( getCell( CellPos( nSpannedColumn, nRow ) ) );
+            if ( xCell.is() && !xCell->isMerged()
+                 && (xCell->getColumnSpan() == 1 || nSpannedColumn < nColumn) )
+            {
+                nWish += xCell->calcPreferredWidth(aSize);
+                bFindSpan = false;
+            }
+            else if ( xCell.is() && xCell->isMerged()
+                      && nColumn == nSpannedColumn
+                      && isValidColumn(nColumn + 1) )
+            {
+                xCell = getCell( CellPos( nColumn + 1, nRow ) );
+                bFindSpan = xCell.is() && !xCell->isMerged();
+            }
+            nSpannedColumn--;
+        }
+        nRet = std::max( nRet, nWish );
+    }
+    return nRet;
 }
 
 
@@ -210,7 +256,7 @@ sal_Int32 TableLayouter::getHorizontalEdge( int nEdgeY, sal_Int32* pnMin /*= 0*/
     sal_Int32 nRet = 0;
     const sal_Int32 nRowCount = getRowCount();
     if( (nEdgeY >= 0) && (nEdgeY <= nRowCount ) )
-        nRet = maRows[std::min((sal_Int32)nEdgeY,nRowCount-1)].mnPos;
+        nRet = maRows[std::min(static_cast<sal_Int32>(nEdgeY),nRowCount-1)].mnPos;
 
     if( nEdgeY == nRowCount )
         nRet += maRows[nEdgeY - 1].mnSize;
@@ -241,7 +287,7 @@ sal_Int32 TableLayouter::getVerticalEdge( int nEdgeX, sal_Int32* pnMin /*= 0*/, 
 
     const sal_Int32 nColCount = getColumnCount();
     if( (nEdgeX >= 0) && (nEdgeX <= nColCount ) )
-        nRet = maColumns[std::min((sal_Int32)nEdgeX,nColCount-1)].mnPos;
+        nRet = maColumns[std::min(static_cast<sal_Int32>(nEdgeX),nColCount-1)].mnPos;
 
     const bool bRTL = (mxTable->getSdrTableObj()->GetWritingMode() == WritingMode_RL_TB);
     if( bRTL )
@@ -316,7 +362,7 @@ bool findMergeOrigin( const TableModelRef& xTable, sal_Int32 nMergedX, sal_Int32
     {
         // check if this cell already the origin or not merged at all
         Reference< XMergeableCell > xCell( xTable->getCellByPosition( nMergedX, nMergedY ), UNO_QUERY_THROW );
-        if( !xCell.is() || !xCell->isMerged() )
+        if( !xCell->isMerged() )
             return true;
 
         bool bCheckVert = true;
@@ -428,20 +474,24 @@ sal_Int32 TableLayouter::distribute( LayoutVector& rLayouts, sal_Int32 nDistribu
     // break loops after 100 runs to avoid freezing office due to developer error
     sal_Int32 nSafe = 100;
 
-    const sal_Size nCount = rLayouts.size();
-    sal_Size nIndex;
+    const std::size_t nCount = rLayouts.size();
+    std::size_t nIndex;
 
     bool bConstrainsBroken = false;
 
     do
     {
+        bConstrainsBroken = false;
+
         // first enforce minimum size constrains on all entities
         for( nIndex = 0; nIndex < nCount; ++nIndex )
         {
             Layout& rLayout = rLayouts[nIndex];
             if( rLayout.mnSize < rLayout.mnMinSize )
             {
-                nDistribute -= rLayout.mnMinSize - rLayout.mnSize;
+                sal_Int32 nDiff(0);
+                bConstrainsBroken |= o3tl::checked_sub(rLayout.mnMinSize, rLayout.mnSize, nDiff);
+                bConstrainsBroken |= o3tl::checked_sub(nDistribute, nDiff, nDistribute);
                 rLayout.mnSize = rLayout.mnMinSize;
             }
         }
@@ -454,10 +504,8 @@ sal_Int32 TableLayouter::distribute( LayoutVector& rLayouts, sal_Int32 nDistribu
         {
             Layout& rLayout = rLayouts[nIndex];
             if( (nDistribute > 0) || (rLayout.mnSize > rLayout.mnMinSize) )
-                nCurrentWidth += rLayout.mnSize;
+                nCurrentWidth = o3tl::saturating_add(nCurrentWidth, rLayout.mnSize);
         }
-
-        bConstrainsBroken = false;
 
         // now distribute over entities
         if( (nCurrentWidth != 0) && (nDistribute != 0) )
@@ -468,14 +516,15 @@ sal_Int32 TableLayouter::distribute( LayoutVector& rLayouts, sal_Int32 nDistribu
                 Layout& rLayout = rLayouts[nIndex];
                 if( (nDistribute > 0) || (rLayout.mnSize > rLayout.mnMinSize) )
                 {
-                    sal_Int32 n;
-                    if( nIndex == (nCount-1) )
-                        n = nDistributed; // for last entity use up rest
-                    else
-                        n  = (nDistribute * rLayout.mnSize) / nCurrentWidth;
+                    sal_Int32 n(nDistributed); // for last entity use up rest
+                    if (nIndex != (nCount-1))
+                    {
+                        bConstrainsBroken |= o3tl::checked_multiply(nDistribute, rLayout.mnSize, n);
+                        n /= nCurrentWidth;
+                    }
 
+                    bConstrainsBroken |= o3tl::checked_add(rLayout.mnSize, n, rLayout.mnSize);
                     nDistributed -= n;
-                    rLayout.mnSize += n;
 
                     if( rLayout.mnSize < rLayout.mnMinSize )
                         bConstrainsBroken = true;
@@ -486,7 +535,7 @@ sal_Int32 TableLayouter::distribute( LayoutVector& rLayouts, sal_Int32 nDistribu
 
     sal_Int32 nSize = 0;
     for( nIndex = 0; nIndex < nCount; ++nIndex )
-        nSize += rLayouts[nIndex].mnSize;
+        nSize = o3tl::saturating_add(nSize, rLayouts[nIndex].mnSize);
 
     return nSize;
 }
@@ -494,10 +543,9 @@ sal_Int32 TableLayouter::distribute( LayoutVector& rLayouts, sal_Int32 nDistribu
 
 typedef std::vector< CellRef > MergeableCellVector;
 typedef std::vector< MergeableCellVector > MergeVector;
-typedef std::vector< sal_Int32 > Int32Vector;
 
 
-void TableLayouter::LayoutTableWidth( Rectangle& rArea, bool bFit )
+void TableLayouter::LayoutTableWidth( tools::Rectangle& rArea, bool bFit )
 {
     const sal_Int32 nColCount = getColumnCount();
     const sal_Int32 nRowCount = getRowCount();
@@ -505,7 +553,7 @@ void TableLayouter::LayoutTableWidth( Rectangle& rArea, bool bFit )
         return;
 
     MergeVector aMergedCells( nColCount );
-    Int32Vector aOptimalColumns;
+    std::vector<sal_Int32> aOptimalColumns;
 
     const OUString sOptimalSize("OptimalSize");
 
@@ -562,15 +610,12 @@ void TableLayouter::LayoutTableWidth( Rectangle& rArea, bool bFit )
             }
             else
             {
-                xColSet->getPropertyValue( msSize ) >>= nColWidth;
+                xColSet->getPropertyValue( gsSize ) >>= nColWidth;
             }
 
-            maColumns[nCol].mnSize = nColWidth;
+            maColumns[nCol].mnSize = std::max( nColWidth, nMinWidth);
 
-            if( maColumns[nCol].mnSize < nMinWidth )
-                maColumns[nCol].mnSize = nMinWidth;
-
-            nCurrentWidth += maColumns[nCol].mnSize;
+            nCurrentWidth = o3tl::saturating_add(nCurrentWidth, maColumns[nCol].mnSize);
         }
     }
 
@@ -580,10 +625,10 @@ void TableLayouter::LayoutTableWidth( Rectangle& rArea, bool bFit )
         sal_Int32 nLeft = rArea.getWidth() - nCurrentWidth;
         sal_Int32 nDistribute = nLeft / aOptimalColumns.size();
 
-        Int32Vector::iterator iter( aOptimalColumns.begin() );
+        auto iter( aOptimalColumns.begin() );
         while( iter != aOptimalColumns.end() )
         {
-            sal_Int32 nOptCol = (*iter++);
+            sal_Int32 nOptCol = *iter++;
             if( iter == aOptimalColumns.end() )
                 nDistribute = nLeft;
 
@@ -598,13 +643,11 @@ void TableLayouter::LayoutTableWidth( Rectangle& rArea, bool bFit )
     for( nCol = 1; nCol < nColCount; ++nCol )
     {
         bool bChanges = false;
-        MergeableCellVector::iterator iter( aMergedCells[nCol].begin() );
 
         const sal_Int32 nOldSize = maColumns[nCol].mnSize;
 
-        while( iter != aMergedCells[nCol].end() )
+        for( const CellRef& xCell : aMergedCells[nCol] )
         {
-            CellRef xCell( (*iter++) );
             sal_Int32 nMinWidth = xCell->getMinimumWidth();
 
             for( sal_Int32 nMCol = nCol - xCell->getColumnSpan() + 1; (nMCol > 0) && (nMCol < nCol); ++nMCol )
@@ -621,7 +664,9 @@ void TableLayouter::LayoutTableWidth( Rectangle& rArea, bool bFit )
         }
 
         if( bChanges )
-            nCurrentWidth += maColumns[nCol].mnSize - nOldSize;
+        {
+            nCurrentWidth = o3tl::saturating_add(nCurrentWidth, maColumns[nCol].mnSize - nOldSize);
+        }
     }
 
     // now scale if wanted and needed
@@ -636,11 +681,11 @@ void TableLayouter::LayoutTableWidth( Rectangle& rArea, bool bFit )
     while( coliter.next(nCol ) )
     {
         maColumns[nCol].mnPos = nNewWidth;
-        nNewWidth += maColumns[nCol].mnSize;
+        nNewWidth = o3tl::saturating_add(nNewWidth, maColumns[nCol].mnSize);
         if( bFit )
         {
             Reference< XPropertySet > xColSet( xCols->getByIndex(nCol), UNO_QUERY_THROW );
-            xColSet->setPropertyValue( msSize, Any( maColumns[nCol].mnSize ) );
+            xColSet->setPropertyValue( gsSize, Any( maColumns[nCol].mnSize ) );
         }
     }
 
@@ -649,7 +694,7 @@ void TableLayouter::LayoutTableWidth( Rectangle& rArea, bool bFit )
 }
 
 
-void TableLayouter::LayoutTableHeight( Rectangle& rArea, bool bFit )
+void TableLayouter::LayoutTableHeight( tools::Rectangle& rArea, bool bFit )
 {
     const sal_Int32 nColCount = getColumnCount();
     const sal_Int32 nRowCount = getRowCount();
@@ -659,7 +704,7 @@ void TableLayouter::LayoutTableHeight( Rectangle& rArea, bool bFit )
     Reference< XTableRows > xRows( mxTable->getRows() );
 
     MergeVector aMergedCells( nRowCount );
-    Int32Vector aOptimalRows;
+    std::vector<sal_Int32> aOptimalRows;
 
     const OUString sOptimalSize("OptimalSize");
 
@@ -690,7 +735,7 @@ void TableLayouter::LayoutTableHeight( Rectangle& rArea, bool bFit )
                 else
                 {
                     bool bCellHasText = xCell->hasText();
-                    if ( (!bRowHasText && !bCellHasText) || ( bRowHasText && bCellHasText ) )
+                    if (bRowHasText == bCellHasText)
                     {
                         nMinHeight = std::max( nMinHeight, xCell->getMinimumHeight() );
                     }
@@ -722,7 +767,7 @@ void TableLayouter::LayoutTableHeight( Rectangle& rArea, bool bFit )
             }
             else
             {
-                xRowSet->getPropertyValue( msSize ) >>= nRowHeight;
+                xRowSet->getPropertyValue( gsSize ) >>= nRowHeight;
             }
 
             maRows[nRow].mnSize = nRowHeight;
@@ -730,7 +775,7 @@ void TableLayouter::LayoutTableHeight( Rectangle& rArea, bool bFit )
             if( maRows[nRow].mnSize < nMinHeight )
                 maRows[nRow].mnSize = nMinHeight;
 
-            nCurrentHeight += maRows[nRow].mnSize;
+            nCurrentHeight = o3tl::saturating_add(nCurrentHeight, maRows[nRow].mnSize);
         }
     }
 
@@ -740,10 +785,10 @@ void TableLayouter::LayoutTableHeight( Rectangle& rArea, bool bFit )
         sal_Int32 nLeft = rArea.getHeight() - nCurrentHeight;
         sal_Int32 nDistribute = nLeft / aOptimalRows.size();
 
-        Int32Vector::iterator iter( aOptimalRows.begin() );
+        auto iter( aOptimalRows.begin() );
         while( iter != aOptimalRows.end() )
         {
-            sal_Int32 nOptRow = (*iter++);
+            sal_Int32 nOptRow = *iter++;
             if( iter == aOptimalRows.end() )
                 nDistribute = nLeft;
 
@@ -761,10 +806,8 @@ void TableLayouter::LayoutTableHeight( Rectangle& rArea, bool bFit )
         bool bChanges = false;
         sal_Int32 nOldSize = maRows[nRow].mnSize;
 
-        MergeableCellVector::iterator iter( aMergedCells[nRow].begin() );
-        while( iter != aMergedCells[nRow].end() )
+        for( const CellRef& xCell : aMergedCells[nRow] )
         {
-            CellRef xCell( (*iter++) );
             sal_Int32 nMinHeight = xCell->getMinimumHeight();
 
             for( sal_Int32 nMRow = nRow - xCell->getRowSpan() + 1; (nMRow > 0) && (nMRow < nRow); ++nMRow )
@@ -780,24 +823,24 @@ void TableLayouter::LayoutTableHeight( Rectangle& rArea, bool bFit )
             }
         }
         if( bChanges )
-            nCurrentHeight += maRows[nRow].mnSize - nOldSize;
+            nCurrentHeight = o3tl::saturating_add(nCurrentHeight, maRows[nRow].mnSize - nOldSize);
     }
 
     // now scale if wanted and needed
     if( bFit && nCurrentHeight != rArea.getHeight() )
-        distribute( maRows, rArea.getHeight() - nCurrentHeight );
+        distribute(maRows, o3tl::saturating_sub<sal_Int32>(rArea.getHeight(), nCurrentHeight));
 
     // last step, update left edges
     sal_Int32 nNewHeight = 0;
     for( nRow = 0; nRow < nRowCount; ++nRow )
     {
         maRows[nRow].mnPos = nNewHeight;
-        nNewHeight += maRows[nRow].mnSize;
+        nNewHeight = o3tl::saturating_add(nNewHeight, maRows[nRow].mnSize);
 
         if( bFit )
         {
             Reference< XPropertySet > xRowSet( xRows->getByIndex(nRow), UNO_QUERY_THROW );
-            xRowSet->setPropertyValue( msSize, Any( maRows[nRow].mnSize ) );
+            xRowSet->setPropertyValue( gsSize, Any( maRows[nRow].mnSize ) );
         }
     }
 
@@ -808,7 +851,7 @@ void TableLayouter::LayoutTableHeight( Rectangle& rArea, bool bFit )
 
 /** try to fit the table into the given rectangle.
     If the rectangle is to small, it will be grown to fit the table. */
-void TableLayouter::LayoutTable( Rectangle& rRectangle, bool bFitWidth, bool bFitHeight )
+void TableLayouter::LayoutTable( tools::Rectangle& rRectangle, bool bFitWidth, bool bFitHeight )
 {
     if( !mxTable.is() )
         return;
@@ -821,7 +864,6 @@ void TableLayouter::LayoutTable( Rectangle& rRectangle, bool bFitWidth, bool bFi
         if( static_cast< sal_Int32 >( maRows.size() ) != nRowCount )
             maRows.resize( nRowCount );
 
-        Reference< XTableRows > xRows( mxTable->getRows() );
         for( sal_Int32 nRow = 0; nRow < nRowCount; nRow++ )
             maRows[nRow].clear();
 
@@ -838,7 +880,7 @@ void TableLayouter::LayoutTable( Rectangle& rRectangle, bool bFitWidth, bool bFi
 }
 
 
-void TableLayouter::updateCells( Rectangle& rRectangle )
+void TableLayouter::updateCells( tools::Rectangle const & rRectangle )
 {
     const sal_Int32 nColCount = getColumnCount();
     const sal_Int32 nRowCount = getRowCount();
@@ -854,11 +896,11 @@ void TableLayouter::updateCells( Rectangle& rRectangle )
                 basegfx::B2IRectangle aCellArea;
                 if( getCellArea( xCell, aPos, aCellArea ) )
                 {
-                    Rectangle aCellRect;
-                    aCellRect.Left() = aCellArea.getMinX();
-                    aCellRect.Right() = aCellArea.getMaxX();
-                    aCellRect.Top() = aCellArea.getMinY();
-                    aCellRect.Bottom() = aCellArea.getMaxY();
+                    tools::Rectangle aCellRect;
+                    aCellRect.SetLeft( aCellArea.getMinX() );
+                    aCellRect.SetRight( aCellArea.getMaxX() );
+                    aCellRect.SetTop( aCellArea.getMinY() );
+                    aCellRect.SetBottom( aCellArea.getMaxY() );
                     aCellRect.Move( rRectangle.Left(), rRectangle.Top() );
                     xCell->setCellRect( aCellRect );
                 }
@@ -917,35 +959,39 @@ bool TableLayouter::HasPriority( const SvxBorderLine* pThis, const SvxBorderLine
     }
 }
 
-
 void TableLayouter::SetBorder( sal_Int32 nCol, sal_Int32 nRow, bool bHorizontal, const SvxBorderLine* pLine )
 {
-    if( pLine == nullptr )
+    if (!pLine)
         pLine = &gEmptyBorder;
 
-    SvxBorderLine *pOld = bHorizontal ? maHorizontalBorders[nCol][nRow] : maVerticalBorders[nCol][nRow];
+    BorderLineMap& rMap = bHorizontal ? maHorizontalBorders : maVerticalBorders;
 
-    if( HasPriority( pLine, pOld ) )
+    if( (nCol >= 0) && (nCol < sal::static_int_cast<sal_Int32>(rMap.size())) &&
+        (nRow >= 0) && (nRow < sal::static_int_cast<sal_Int32>(rMap[nCol].size())) )
     {
-        if( (pOld != nullptr) && (pOld != &gEmptyBorder) )
-            delete pOld;
+        SvxBorderLine *pOld = rMap[nCol][nRow];
 
-        SvxBorderLine* pNew = ( pLine != &gEmptyBorder ) ?  new SvxBorderLine(*pLine) : &gEmptyBorder;
+        if (HasPriority(pLine, pOld))
+        {
+            if (pOld && pOld != &gEmptyBorder)
+                delete pOld;
 
-        if( bHorizontal )
-            maHorizontalBorders[nCol][nRow] = pNew;
-        else
-            maVerticalBorders[nCol][nRow]  = pNew;
+            SvxBorderLine* pNew = (pLine != &gEmptyBorder) ?  new SvxBorderLine(*pLine) : &gEmptyBorder;
+
+            rMap[nCol][nRow] = pNew;
+        }
+    }
+    else
+    {
+        OSL_FAIL( "sdr::table::TableLayouter::SetBorder(), invalid border!" );
     }
 }
-
 
 void TableLayouter::ClearBorderLayout()
 {
     ClearBorderLayout(maHorizontalBorders);
     ClearBorderLayout(maVerticalBorders);
 }
-
 
 void TableLayouter::ClearBorderLayout(BorderLineMap& rMap)
 {
@@ -967,7 +1013,6 @@ void TableLayouter::ClearBorderLayout(BorderLineMap& rMap)
         }
     }
 }
-
 
 void TableLayouter::ResizeBorderLayout()
 {
@@ -1010,7 +1055,7 @@ void TableLayouter::UpdateBorderLayout()
             if( !xCell.is() )
                 continue;
 
-            const SvxBoxItem* pThisAttr = static_cast<const SvxBoxItem*>(xCell->GetItemSet().GetItem( SDRATTR_TABLE_BORDER ));
+            const SvxBoxItem* pThisAttr = xCell->GetItemSet().GetItem<SvxBoxItem>( SDRATTR_TABLE_BORDER );
             OSL_ENSURE(pThisAttr,"sdr::table::TableLayouter::UpdateBorderLayout(), no border attribute?");
 
             if( !pThisAttr )
@@ -1035,92 +1080,206 @@ void TableLayouter::UpdateBorderLayout()
 }
 
 
-void TableLayouter::DistributeColumns( ::Rectangle& rArea, sal_Int32 nFirstCol, sal_Int32 nLastCol )
+void TableLayouter::DistributeColumns( ::tools::Rectangle& rArea,
+                                       sal_Int32 nFirstCol,
+                                       sal_Int32 nLastCol,
+                                       const bool bOptimize,
+                                       const bool bMinimize )
 {
     if( mxTable.is() ) try
     {
         const sal_Int32 nColCount = getColumnCount();
+        Reference< XTableColumns > xCols( mxTable->getColumns(), UNO_QUERY_THROW );
+        const Size aSize(0xffffff, 0xffffff);
+
+        //special case - optimize a single column
+        if ( (bOptimize || bMinimize) && nFirstCol == nLastCol )
+        {
+            const sal_Int32 nWish = calcPreferredColumnWidth(nFirstCol, aSize);
+            if ( nWish < getColumnWidth(nFirstCol) )
+            {
+                Reference< XPropertySet > xColSet( xCols->getByIndex(nFirstCol), UNO_QUERY_THROW );
+                xColSet->setPropertyValue( gsSize, Any( nWish ) );
+
+                //FitWidth automatically distributes the new excess space
+                LayoutTable( rArea, /*bFitWidth=*/!bMinimize, /*bFitHeight=*/false );
+            }
+        }
 
         if( (nFirstCol < 0) || (nFirstCol>= nLastCol) || (nLastCol >= nColCount) )
             return;
 
         sal_Int32 nAllWidth = 0;
+        float fAllWish = 0;
+        sal_Int32 nUnused = 0;
+        std::vector<sal_Int32> aWish(nColCount);
+
         for( sal_Int32 nCol = nFirstCol; nCol <= nLastCol; ++nCol )
             nAllWidth += getColumnWidth(nCol);
 
-        sal_Int32 nWidth = nAllWidth / (nLastCol-nFirstCol+1);
+        const sal_Int32 nEqualWidth = nAllWidth / (nLastCol-nFirstCol+1);
 
-        Reference< XTableColumns > xCols( mxTable->getColumns(), UNO_QUERY_THROW );
+        //pass 1 - collect unneeded space (from an equal width perspective)
+        if ( bMinimize || bOptimize )
+        {
+            for( sal_Int32 nCol = nFirstCol; nCol <= nLastCol; ++nCol )
+            {
+                const sal_Int32 nIndex = nCol - nFirstCol;
+                aWish[nIndex] = calcPreferredColumnWidth(nCol, aSize);
+                fAllWish += aWish[nIndex];
+                if ( aWish[nIndex] < nEqualWidth )
+                    nUnused += nEqualWidth - aWish[nIndex];
+            }
+        }
+        const sal_Int32 nDistributeExcess = nAllWidth - fAllWish;
 
+        sal_Int32 nWidth = nEqualWidth;
         for( sal_Int32 nCol = nFirstCol; nCol <= nLastCol; ++nCol )
         {
-            if( nCol == nLastCol )
-                nWidth = nAllWidth; // last column get round errors
+            if ( !bMinimize && nCol == nLastCol )
+                nWidth = nAllWidth; // last column gets rounding/logic errors
+            else if ( (bMinimize || bOptimize) && fAllWish )
+            {
+                //pass 2 - first come, first served when requesting from the
+                //  unneeded pool, or proportionally allocate excess.
+                const sal_Int32 nIndex = nCol - nFirstCol;
+                if ( aWish[nIndex] > nEqualWidth + nUnused )
+                {
+                    nWidth = nEqualWidth + nUnused;
+                    nUnused = 0;
+                }
+                else
+                {
+                    nWidth = aWish[nIndex];
+                    if ( aWish[nIndex] > nEqualWidth )
+                        nUnused -= aWish[nIndex] - nEqualWidth;
+
+                    if ( !bMinimize && nDistributeExcess > 0 )
+                        nWidth += nWidth / fAllWish * nDistributeExcess;
+                }
+            }
 
             Reference< XPropertySet > xColSet( xCols->getByIndex( nCol ), UNO_QUERY_THROW );
-            xColSet->setPropertyValue( msSize, Any( nWidth ) );
+            xColSet->setPropertyValue( gsSize, Any( nWidth ) );
 
             nAllWidth -= nWidth;
         }
 
-        LayoutTable( rArea, true, false );
+        LayoutTable( rArea, !bMinimize, false );
     }
-    catch( Exception& e )
+    catch( Exception& )
     {
-        (void)e;
         OSL_FAIL("sdr::table::TableLayouter::DistributeColumns(), exception caught!");
     }
 }
 
 
-void TableLayouter::DistributeRows( ::Rectangle& rArea, sal_Int32 nFirstRow, sal_Int32 nLastRow )
+void TableLayouter::DistributeRows( ::tools::Rectangle& rArea,
+                                    sal_Int32 nFirstRow,
+                                    sal_Int32 nLastRow,
+                                    const bool bOptimize,
+                                    const bool bMinimize )
 {
     if( mxTable.is() ) try
     {
         const sal_Int32 nRowCount = mxTable->getRowCount();
+        Reference< XTableRows > xRows( mxTable->getRows(), UNO_QUERY_THROW );
+        sal_Int32 nMinHeight = 0;
+
+        //special case - minimize a single row
+        if ( bMinimize && nFirstRow == nLastRow )
+        {
+            const sal_Int32 nWish = std::max( maRows[nFirstRow].mnMinSize, nMinHeight );
+            if ( nWish < getRowHeight(nFirstRow) )
+            {
+                Reference< XPropertySet > xRowSet( xRows->getByIndex( nFirstRow ), UNO_QUERY_THROW );
+                xRowSet->setPropertyValue( gsSize, Any( nWish ) );
+
+                LayoutTable( rArea, /*bFitWidth=*/false, /*bFitHeight=*/!bMinimize );
+            }
+        }
 
         if( (nFirstRow < 0) || (nFirstRow>= nLastRow) || (nLastRow >= nRowCount) )
             return;
 
         sal_Int32 nAllHeight = 0;
-        sal_Int32 nMinHeight = 0;
+        sal_Int32 nMaxHeight = 0;
 
         for( sal_Int32 nRow = nFirstRow; nRow <= nLastRow; ++nRow )
         {
             nMinHeight = std::max( maRows[nRow].mnMinSize, nMinHeight );
+            nMaxHeight = std::max( maRows[nRow].mnSize, nMaxHeight );
             nAllHeight += maRows[nRow].mnSize;
         }
 
-        const sal_Int32 nRows = (nLastRow-nFirstRow+1);
+        const sal_Int32 nRows = nLastRow-nFirstRow+1;
         sal_Int32 nHeight = nAllHeight / nRows;
 
-        if( nHeight < nMinHeight )
+        if ( !bMinimize && nHeight < nMaxHeight )
         {
-            sal_Int32 nNeededHeight = nRows * nMinHeight;
-            rArea.Bottom() += nNeededHeight - nAllHeight;
-            nHeight = nMinHeight;
-            nAllHeight = nRows * nMinHeight;
+            if ( !bOptimize )
+            {
+                sal_Int32 nNeededHeight = nRows * nMaxHeight;
+                rArea.AdjustBottom(nNeededHeight - nAllHeight );
+                nHeight = nMaxHeight;
+                nAllHeight = nRows * nMaxHeight;
+            }
+            else if ( nHeight < nMinHeight )
+            {
+                sal_Int32 nNeededHeight = nRows * nMinHeight;
+                rArea.AdjustBottom(nNeededHeight - nAllHeight );
+                nHeight = nMinHeight;
+                nAllHeight = nRows * nMinHeight;
+            }
         }
 
-        Reference< XTableRows > xRows( mxTable->getRows(), UNO_QUERY_THROW );
         for( sal_Int32 nRow = nFirstRow; nRow <= nLastRow; ++nRow )
         {
-            if( nRow == nLastRow )
+            if ( bMinimize )
+                nHeight = maRows[nRow].mnMinSize;
+            else if ( nRow == nLastRow )
                 nHeight = nAllHeight; // last row get round errors
 
             Reference< XPropertySet > xRowSet( xRows->getByIndex( nRow ), UNO_QUERY_THROW );
-            xRowSet->setPropertyValue( msSize, Any( nHeight ) );
+            xRowSet->setPropertyValue( gsSize, Any( nHeight ) );
 
             nAllHeight -= nHeight;
         }
 
-        LayoutTable( rArea, false, true );
+        LayoutTable( rArea, false, !bMinimize );
     }
-    catch( Exception& e )
+    catch( Exception& )
     {
-        (void)e;
         OSL_FAIL("sdr::table::TableLayouter::DistributeRows(), exception caught!");
     }
+}
+
+void TableLayouter::dumpAsXml(xmlTextWriterPtr pWriter) const
+{
+    xmlTextWriterStartElement(pWriter, BAD_CAST("TableLayouter"));
+
+    xmlTextWriterStartElement(pWriter, BAD_CAST("columns"));
+    for (const auto& rColumn : maColumns)
+        rColumn.dumpAsXml(pWriter);
+    xmlTextWriterEndElement(pWriter);
+
+    xmlTextWriterStartElement(pWriter, BAD_CAST("rows"));
+    for (const auto& rRow : maRows)
+        rRow.dumpAsXml(pWriter);
+    xmlTextWriterEndElement(pWriter);
+
+    xmlTextWriterEndElement(pWriter);
+}
+
+void TableLayouter::Layout::dumpAsXml(xmlTextWriterPtr pWriter) const
+{
+    xmlTextWriterStartElement(pWriter, BAD_CAST("TableLayouter_Layout"));
+
+    xmlTextWriterWriteAttribute(pWriter, BAD_CAST("pos"), BAD_CAST(OString::number(mnPos).getStr()));
+    xmlTextWriterWriteAttribute(pWriter, BAD_CAST("size"), BAD_CAST(OString::number(mnSize).getStr()));
+    xmlTextWriterWriteAttribute(pWriter, BAD_CAST("minSize"), BAD_CAST(OString::number(mnMinSize).getStr()));
+
+    xmlTextWriterEndElement(pWriter);
 }
 
 } }

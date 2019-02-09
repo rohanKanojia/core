@@ -23,87 +23,72 @@
 #include <sfx2/basedlgs.hxx>
 #include <svtools/simptabl.hxx>
 #include <svtools/svmedit.hxx>
-#include <svtools/svtabbx.hxx>
-#include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
+#include <vcl/weld.hxx>
 
 class SfxViewFrame;
 struct SfxVersionInfo;
 
-class SfxVersionsTabListBox_Impl : public SvSimpleTable
-{
-public:
-    SfxVersionsTabListBox_Impl(SvSimpleTableContainer& rParent, WinBits nBits)
-        : SvSimpleTable(rParent, nBits)
-    {
-    }
-    void setColSizes();
-    virtual void Resize() override;
-    virtual void KeyInput(const KeyEvent& rKeyEvent) override;
-};
-
 class SfxVersionTableDtor;
-class SfxVersionDialog : public SfxModalDialog
+class SfxVersionDialog : public SfxDialogController
 {
-    VclPtr<PushButton>                 m_pSaveButton;
-    VclPtr<CheckBox>                   m_pSaveCheckBox;
-    VclPtr<SfxVersionsTabListBox_Impl> m_pVersionBox;
-    VclPtr<PushButton>                 m_pOpenButton;
-    VclPtr<PushButton>                 m_pViewButton;
-    VclPtr<PushButton>                 m_pDeleteButton;
-    VclPtr<PushButton>                 m_pCompareButton;
-    VclPtr<PushButton>                 m_pCmisButton;
-    SfxViewFrame*               pViewFrame;
-    SfxVersionTableDtor*        m_pTable;
-    bool                        m_bIsSaveVersionOnClose;
+    SfxViewFrame* m_pViewFrame;
+    bool m_bIsSaveVersionOnClose;
+    std::unique_ptr<SfxVersionTableDtor> m_pTable;
+    std::unique_ptr<weld::Button> m_xSaveButton;
+    std::unique_ptr<weld::CheckButton> m_xSaveCheckBox;
+    std::unique_ptr<weld::Button> m_xOpenButton;
+    std::unique_ptr<weld::Button> m_xViewButton;
+    std::unique_ptr<weld::Button> m_xDeleteButton;
+    std::unique_ptr<weld::Button> m_xCompareButton;
+    std::unique_ptr<weld::Button> m_xCmisButton;
+    std::unique_ptr<weld::TreeView> m_xVersionBox;
 
-    DECL_LINK_TYPED(            DClickHdl_Impl, SvTreeListBox*, bool);
-    DECL_LINK_TYPED(            SelectHdl_Impl, SvTreeListBox*, void);
-    DECL_LINK_TYPED(            ButtonHdl_Impl, Button*, void );
-    void                        Init_Impl();
-    void                        Open_Impl();
+    DECL_LINK(DClickHdl_Impl, weld::TreeView&, void);
+    DECL_LINK(SelectHdl_Impl, weld::TreeView&, void);
+    DECL_LINK(ButtonHdl_Impl, weld::Button&, void );
+    void Init_Impl();
+    void Open_Impl();
 
 public:
-                                SfxVersionDialog ( SfxViewFrame* pFrame, bool );
-    virtual                     ~SfxVersionDialog ();
-    virtual void                dispose() override;
-    bool                        IsSaveVersionOnClose() const { return m_bIsSaveVersionOnClose; }
+    SfxVersionDialog(weld::Window* pParent, SfxViewFrame* pFrame, bool);
+    virtual ~SfxVersionDialog() override;
+    bool IsSaveVersionOnClose() const { return m_bIsSaveVersionOnClose; }
 };
 
-class SfxViewVersionDialog_Impl : public SfxModalDialog
+class SfxViewVersionDialog_Impl : public SfxDialogController
 {
-    VclPtr<FixedText>        m_pDateTimeText;
-    VclPtr<FixedText>        m_pSavedByText;
-    VclPtr<VclMultiLineEdit> m_pEdit;
-    VclPtr<OKButton>         m_pOKButton;
-    VclPtr<CancelButton>     m_pCancelButton;
-    VclPtr<CloseButton>      m_pCloseButton;
+private:
     SfxVersionInfo&   m_rInfo;
 
-    DECL_LINK_TYPED(ButtonHdl, Button*, void);
+    std::unique_ptr<weld::Label> m_xDateTimeText;
+    std::unique_ptr<weld::Label> m_xSavedByText;
+    std::unique_ptr<weld::TextView> m_xEdit;
+    std::unique_ptr<weld::Button> m_xOKButton;
+    std::unique_ptr<weld::Button> m_xCancelButton;
+    std::unique_ptr<weld::Button> m_xCloseButton;
+
+    DECL_LINK(ButtonHdl, weld::Button&, void);
 
 public:
-    SfxViewVersionDialog_Impl(vcl::Window *pParent, SfxVersionInfo& rInfo, bool bEdit);
-    virtual ~SfxViewVersionDialog_Impl();
-    virtual void dispose() override;
+    SfxViewVersionDialog_Impl(weld::Window *pParent, SfxVersionInfo& rInfo, bool bEdit);
 };
 
-class SfxCmisVersionsDialog : public SfxModalDialog
+class SfxCmisVersionsDialog : public SfxDialogController
 {
-    VclPtr<SfxVersionsTabListBox_Impl> m_pVersionBox;
-    VclPtr<PushButton>                 m_pOpenButton;
-    VclPtr<PushButton>                 m_pViewButton;
-    VclPtr<PushButton>                 m_pDeleteButton;
-    VclPtr<PushButton>                 m_pCompareButton;
-    SfxViewFrame*               pViewFrame;
-    SfxVersionTableDtor*        m_pTable;
+    SfxViewFrame* m_pViewFrame;
+    std::unique_ptr<SfxVersionTableDtor> m_pTable;
+
+    std::unique_ptr<weld::Button> m_xOpenButton;
+    std::unique_ptr<weld::Button> m_xViewButton;
+    std::unique_ptr<weld::Button> m_xDeleteButton;
+    std::unique_ptr<weld::Button> m_xCompareButton;
+    std::unique_ptr<weld::TreeView> m_xVersionBox;
 
     void                        LoadVersions();
 
 public:
-                                SfxCmisVersionsDialog ( SfxViewFrame* pFrame );
-    virtual                     ~SfxCmisVersionsDialog ();
-    virtual void                dispose() override;
+    SfxCmisVersionsDialog(weld::Window *pParent, SfxViewFrame* pFrame);
+    virtual ~SfxCmisVersionsDialog() override;
 };
 
 #endif

@@ -20,26 +20,24 @@
 #ifndef INCLUDED_SVX_XMLSECCTRL_HXX
 #define INCLUDED_SVX_XMLSECCTRL_HXX
 
+#include <memory>
 #include <sfx2/stbitem.hxx>
 #include <svx/svxdllapi.h>
 
-
 class  SvxSizeItem;
-
-// class SvxPosSizeToolBoxControl ----------------------------------------
 
 class SVX_DLLPUBLIC XmlSecStatusBarControl : public SfxStatusBarControl
 {
 private:
     struct XmlSecStatusBarControl_Impl;
 
-    XmlSecStatusBarControl_Impl*        mpImpl;
+    std::unique_ptr<XmlSecStatusBarControl_Impl>        mpImpl;
 
 public:
     SFX_DECL_STATUSBAR_CONTROL();
 
     XmlSecStatusBarControl( sal_uInt16 _nSlotId, sal_uInt16 _nId, StatusBar& _rStb );
-    virtual ~XmlSecStatusBarControl();
+    virtual ~XmlSecStatusBarControl() override;
 
     virtual void    StateChanged( sal_uInt16 nSID, SfxItemState eState, const SfxPoolItem* pState ) override;
     virtual void    Paint( const UserDrawEvent& rEvt ) override;

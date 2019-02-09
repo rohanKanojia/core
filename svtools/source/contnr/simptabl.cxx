@@ -17,13 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <comphelper/processfactory.hxx>
 #include <svtools/simptabl.hxx>
-#include <svtools/svlbitm.hxx>
-#include <svtools/treelistentry.hxx>
+#include <unotools/intlwrapper.hxx>
+#include <vcl/svlbitm.hxx>
+#include <vcl/treelistentry.hxx>
 #include <vcl/builderfactory.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/event.hxx>
+#include <uitest/uiobject.hxx>
 
 SvSimpleTableContainer::SvSimpleTableContainer(vcl::Window* pParent, WinBits nBits)
     : Control(pParent, nBits)
@@ -50,6 +52,11 @@ void SvSimpleTableContainer::SetTable(SvSimpleTable* pTable)
     m_pTable = pTable;
 }
 
+SvSimpleTable* SvSimpleTableContainer::GetTable()
+{
+    return m_pTable.get();
+}
+
 bool SvSimpleTableContainer::PreNotify( NotifyEvent& rNEvt )
 {
     bool bResult = true;
@@ -58,7 +65,7 @@ bool SvSimpleTableContainer::PreNotify( NotifyEvent& rNEvt )
         const vcl::KeyCode& aKeyCode = rNEvt.GetKeyEvent()->GetKeyCode();
         sal_uInt16 nKey = aKeyCode.GetCode();
         if (nKey == KEY_TAB)
-            GetParent()->Notify( rNEvt );
+            GetParent()->EventNotify( rNEvt );
         else if (m_pTable && m_pTable->IsFocusOnCellEnabled() && ( nKey == KEY_LEFT || nKey == KEY_RIGHT))
             return false;
         else
@@ -84,6 +91,11 @@ void SvSimpleTableContainer::GetFocus()
         m_pTable->GrabFocus();
 }
 
+FactoryFunction SvSimpleTableContainer::GetUITestFactory() const
+{
+    return SimpleTableUIObject::createFromContainer;
+}
+
 // SvSimpleTable ------------------------------------------------------------
 
 SvSimpleTable::SvSimpleTable(SvSimpleTableContainer& rParent, WinBits nBits):
@@ -92,7 +104,7 @@ SvSimpleTable::SvSimpleTable(SvSimpleTableContainer& rParent, WinBits nBits):
         aHeaderBar(VclPtr<HeaderBar>::Create(&rParent,WB_BUTTONSTYLE | WB_BORDER | WB_TABSTOP)),
         nHeaderItemId(1),
         bPaintFlag(true),
-        aCollator(*(IntlWrapper( Application::GetSettings().GetLanguageTag() ).getCaseCollator()))
+        aCollator(*(IntlWrapper(SvtSysLocale().GetUILanguageTag()).getCaseCollator()))
 {
     m_rParentTableContainer.SetTable(this);
 
@@ -133,14 +145,14 @@ void SvSimpleTable::UpdateViewSize()
     Size theWinSize=m_rParentTableContainer.GetOutputSizePixel();
     Size HbSize=aHeaderBar->GetSizePixel();
 
-    HbSize.Width()=theWinSize.Width();
-    theWinSize.Height()-=HbSize.Height();
+    HbSize.setWidth(theWinSize.Width() );
+    theWinSize.AdjustHeight(-HbSize.Height());
     Point thePos(0,0);
 
     aHeaderBar->SetPosPixel(thePos);
     aHeaderBar->SetSizePixel(HbSize);
 
-    thePos.Y()+=HbSize.Height();
+    thePos.AdjustY(HbSize.Height());
     SvHeaderTabListBox::SetPosPixel(thePos);
     SvHeaderTabListBox::SetSizePixel(theWinSize);
     Invalidate();
@@ -164,29 +176,24 @@ void SvSimpleTable::SetTabs()
     SvHeaderTabListBox::SetTabs();
 
     sal_uInt16 nPrivTabCount = TabCount();
-    if ( nPrivTabCount )
+    if ( !nPrivTabCount )
+        return;
+
+    if ( nPrivTabCount > aHeaderBar->GetItemCount() )
+        nPrivTabCount = aHeaderBar->GetItemCount();
+
+    sal_uInt16 i, nPos = 0;
+    for ( i = 1; i < nPrivTabCount; ++i )
     {
-        if ( nPrivTabCount > aHeaderBar->GetItemCount() )
-            nPrivTabCount = aHeaderBar->GetItemCount();
-
-        sal_uInt16 i, nPos = 0;
-        for ( i = 1; i < nPrivTabCount; ++i )
-        {
-            sal_uInt16 nNewSize = static_cast< sal_uInt16 >( GetTab(i) ) - nPos;
-            aHeaderBar->SetItemSize( i, nNewSize );
-            nPos = (sal_uInt16)GetTab(i);
-        }
-
-        aHeaderBar->SetItemSize( i, HEADERBAR_FULLSIZE ); // because no tab for last entry
+        sal_uInt16 nNewSize = static_cast< sal_uInt16 >( GetTab(i) ) - nPos;
+        aHeaderBar->SetItemSize( i, nNewSize );
+        nPos = static_cast<sal_uInt16>(GetTab(i));
     }
+
+    aHeaderBar->SetItemSize( i, HEADERBAR_FULLSIZE ); // because no tab for last entry
 }
 
-void SvSimpleTable::SetTabs(const long* pTabs, MapUnit eMapUnit)
-{
-    SvHeaderTabListBox::SetTabs(pTabs,eMapUnit);
-}
-
-void SvSimpleTable::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void SvSimpleTable::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect)
 {
     SvHeaderTabListBox::Paint(rRenderContext, rRect);
 
@@ -243,16 +250,6 @@ void SvSimpleTable::ClearHeader()
 void SvSimpleTable::ShowTable()
 {
     m_rParentTableContainer.Show();
-}
-
-void SvSimpleTable::HideTable()
-{
-    m_rParentTableContainer.Hide();
-}
-
-bool SvSimpleTable::IsVisible() const
-{
-    return m_rParentTableContainer.IsVisible();
 }
 
 void SvSimpleTable::EnableTable()
@@ -318,42 +315,31 @@ void SvSimpleTable::HBarClick()
 {
     sal_uInt16 nId=aHeaderBar->GetCurItemId();
 
-    if (aHeaderBar->GetItemBits(nId) & HeaderBarItemBits::CLICKABLE)
-    {
-        if(nId==nSortCol+1)
-        {
-            SortByCol(nId-1,!bSortDirection);
-        }
-        else
-        {
-            SortByCol(nId-1,bSortDirection);
-        }
+    if (!(aHeaderBar->GetItemBits(nId) & HeaderBarItemBits::CLICKABLE))
+        return;
 
-        aHeaderBarClickLink.Call(this);
+    if(nId==nSortCol+1)
+    {
+        SortByCol(nId-1,!bSortDirection);
     }
+    else
+    {
+        SortByCol(nId-1,bSortDirection);
+    }
+
+    aHeaderBarClickLink.Call(this);
 }
 
-void SvSimpleTable::HBarStartDrag()
-{
-    if(!aHeaderBar->IsItemMode())
-    {
-        Rectangle aSizeRect(Point(0,0),
-            SvHeaderTabListBox::GetOutputSizePixel());
-        aSizeRect.Left()=-GetXOffset()+aHeaderBar->GetDragPos();
-        aSizeRect.Right()=-GetXOffset()+aHeaderBar->GetDragPos();
-        ShowTracking( aSizeRect, SHOWTRACK_SPLIT );
-    }
-}
 void SvSimpleTable::HBarDrag()
 {
     HideTracking();
     if(!aHeaderBar->IsItemMode())
     {
-        Rectangle aSizeRect(Point(0,0),
+        tools::Rectangle aSizeRect(Point(0,0),
             SvHeaderTabListBox::GetOutputSizePixel());
-        aSizeRect.Left()=-GetXOffset()+aHeaderBar->GetDragPos();
-        aSizeRect.Right()=-GetXOffset()+aHeaderBar->GetDragPos();
-        ShowTracking( aSizeRect, SHOWTRACK_SPLIT );
+        aSizeRect.SetLeft(-GetXOffset()+aHeaderBar->GetDragPos() );
+        aSizeRect.SetRight(-GetXOffset()+aHeaderBar->GetDragPos() );
+        ShowTracking( aSizeRect, ShowTrackFlags::Split );
     }
 }
 void SvSimpleTable::HBarEndDrag()
@@ -371,7 +357,7 @@ void SvSimpleTable::HBarEndDrag()
         for(sal_uInt16 i=1;i<nPrivTabCount;i++)
         {
             nNewSize = static_cast< sal_uInt16 >( aHeaderBar->GetItemSize(i) ) + nPos;
-            SetTab( i, nNewSize, MAP_PIXEL );
+            SetTab( i, nNewSize, MapUnit::MapPixel );
             nPos = nNewSize;
         }
     }
@@ -388,15 +374,22 @@ void SvSimpleTable::Command( const CommandEvent& rCEvt )
     SvHeaderTabListBox::Command(rCEvt);
 }
 
-IMPL_LINK_TYPED( SvSimpleTable, StartDragHdl, HeaderBar*, pCtr, void)
+IMPL_LINK( SvSimpleTable, StartDragHdl, HeaderBar*, pCtr, void)
 {
     if(pCtr==aHeaderBar.get())
     {
-        HBarStartDrag();
+        if(!aHeaderBar->IsItemMode())
+        {
+            tools::Rectangle aSizeRect(Point(0,0),
+                SvHeaderTabListBox::GetOutputSizePixel());
+            aSizeRect.SetLeft(-GetXOffset()+aHeaderBar->GetDragPos() );
+            aSizeRect.SetRight(-GetXOffset()+aHeaderBar->GetDragPos() );
+            ShowTracking( aSizeRect, ShowTrackFlags::Split );
+        }
     }
 }
 
-IMPL_LINK_TYPED( SvSimpleTable, DragHdl, HeaderBar*, pCtr, void)
+IMPL_LINK( SvSimpleTable, DragHdl, HeaderBar*, pCtr, void)
 {
     if(pCtr==aHeaderBar.get())
     {
@@ -404,7 +397,7 @@ IMPL_LINK_TYPED( SvSimpleTable, DragHdl, HeaderBar*, pCtr, void)
     }
 }
 
-IMPL_LINK_TYPED( SvSimpleTable, EndDragHdl, HeaderBar*, pCtr, void)
+IMPL_LINK( SvSimpleTable, EndDragHdl, HeaderBar*, pCtr, void)
 {
     if(pCtr==aHeaderBar.get())
     {
@@ -412,7 +405,7 @@ IMPL_LINK_TYPED( SvSimpleTable, EndDragHdl, HeaderBar*, pCtr, void)
     }
 }
 
-IMPL_LINK_TYPED( SvSimpleTable, HeaderBarClick, HeaderBar*, pCtr, void)
+IMPL_LINK( SvSimpleTable, HeaderBarClick, HeaderBar*, pCtr, void)
 {
     if(pCtr==aHeaderBar.get())
     {
@@ -451,18 +444,18 @@ sal_Int32 SvSimpleTable::ColCompare(SvTreeListEntry* pLeft,SvTreeListEntry* pRig
 
     if(pLeftItem != nullptr && pRightItem != nullptr)
     {
-        sal_uInt16 nLeftKind = pLeftItem->GetType();
-        sal_uInt16 nRightKind = pRightItem->GetType();
+        SvLBoxItemType nLeftKind = pLeftItem->GetType();
+        SvLBoxItemType nRightKind = pRightItem->GetType();
 
-        if(nRightKind == SV_ITEM_ID_LBOXSTRING &&
-            nLeftKind == SV_ITEM_ID_LBOXSTRING )
+        if (nRightKind == SvLBoxItemType::String &&
+             nLeftKind == SvLBoxItemType::String)
             nCompare = aCollator.compareString( static_cast<SvLBoxString*>(pLeftItem)->GetText(),
                                     static_cast<SvLBoxString*>(pRightItem)->GetText());
     }
     return nCompare;
 }
 
-IMPL_LINK_TYPED( SvSimpleTable, CompareHdl, const SvSortData&, rData, sal_Int32)
+IMPL_LINK( SvSimpleTable, CompareHdl, const SvSortData&, rData, sal_Int32)
 {
     SvTreeListEntry* pLeft = const_cast<SvTreeListEntry*>(rData.pLeft);
     SvTreeListEntry* pRight = const_cast<SvTreeListEntry*>(rData.pRight);

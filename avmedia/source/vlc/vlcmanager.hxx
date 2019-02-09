@@ -21,7 +21,7 @@
 #define INCLUDED_AVMEDIA_SOURCE_VLC_VLCMANAGER_HXX
 #include <com/sun/star/media/XManager.hpp>
 #include "vlccommon.hxx"
-#include "wrapper/Wrapper.hxx"
+#include <wrapper/Wrapper.hxx>
 #include <memory>
 #include <cppuhelper/implbase.hxx>
 
@@ -34,19 +34,18 @@ class Manager : public ::cppu::WeakImplHelper< css::media::XManager,
     std::unique_ptr<wrapper::Instance> mInstance;
     wrapper::EventHandler mEventHandler;
 public:
-    explicit Manager( const css::uno::Reference< css::lang::XMultiServiceFactory >& rxMgr );
-    virtual ~Manager();
+    explicit Manager();
+    virtual ~Manager() override;
 
-    css::uno::Reference< css::media::XPlayer > SAL_CALL createPlayer( const rtl::OUString& aURL ) throw (css::uno::RuntimeException, std::exception) override;
+    css::uno::Reference< css::media::XPlayer > SAL_CALL createPlayer( const OUString& aURL ) override;
 
-    rtl::OUString SAL_CALL getImplementationName() throw (css::uno::RuntimeException, std::exception) override;
-    sal_Bool SAL_CALL supportsService( const rtl::OUString& serviceName ) throw (css::uno::RuntimeException, std::exception) override;
-    css::uno::Sequence< rtl::OUString > SAL_CALL getSupportedServiceNames() throw (css::uno::RuntimeException, std::exception) override;
+    OUString SAL_CALL getImplementationName() override;
+    sal_Bool SAL_CALL supportsService( const OUString& serviceName ) override;
+    css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
 private:
-    css::uno::Reference< css::lang::XMultiServiceFactory > mxMgr;
     css::uno::Reference< css::media::XPlayer >             mPlayer;
-    rtl::OUString                                          mURL;
+    OUString                                               mURL;
     bool                                                   m_is_vlc_found;
 };
 

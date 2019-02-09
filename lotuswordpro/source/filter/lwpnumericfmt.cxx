@@ -58,6 +58,7 @@
  *  For LWP filter architecture prototype - table cell numerics format
  */
 
+#include <memory>
 #include "lwpnumericfmt.hxx"
 
 LwpCurrencyPool  LwpNumericFormat::m_aCurrencyInfo;
@@ -114,9 +115,6 @@ LwpColor LwpNumericFormatSubset::GetColor()
     }
 }
 LwpNumericFormatSubset::LwpNumericFormatSubset():cSubFlags(0)
-{
-}
-LwpNumericFormatSubset::~LwpNumericFormatSubset()
 {
 }
 
@@ -351,14 +349,14 @@ XFStyle* LwpNumericFormat::Convert()
         pStyle->SetPrefix(aPrefix);
         //Set suffix
         pStyle->SetSurfix(aSuffix);
-        pStyle->SetColor( XFColor( (sal_uInt8)aColor.GetRed(),
-                                   (sal_uInt8)aColor.GetGreen(),
-                                   (sal_uInt8)aColor.GetBlue()) );
+        pStyle->SetColor( XFColor( static_cast<sal_uInt8>(aColor.GetRed()),
+                                   static_cast<sal_uInt8>(aColor.GetGreen()),
+                                   static_cast<sal_uInt8>(aColor.GetBlue())) );
     }
-    {//Negtive
-        pStyle->SetNegativeStyle( aNegPrefix, aNegSuffix, XFColor((sal_uInt8)aNegativeColor.GetRed(),
-                                                                    (sal_uInt8)aNegativeColor.GetGreen(),
-                                                                    (sal_uInt8)aNegativeColor.GetBlue()) );
+    {//Negative
+        pStyle->SetNegativeStyle( aNegPrefix, aNegSuffix, XFColor(static_cast<sal_uInt8>(aNegativeColor.GetRed()),
+                                                                    static_cast<sal_uInt8>(aNegativeColor.GetGreen()),
+                                                                    static_cast<sal_uInt8>(aNegativeColor.GetBlue())) );
     }
 
     return pStyle;
@@ -373,8 +371,8 @@ OUString    LwpNumericFormat::reencode(const OUString& sCode)
     const sal_Unicode * pString = sCode.getStr();
     sal_uInt16 nLen = sCode.getLength();
     bool bFound = false;
-    sal_uInt16 i;
-    sal_Unicode *pBuff = new sal_Unicode[sCode.getLength()];
+    sal_Int32 i;
+    std::unique_ptr<sal_Unicode[]> pBuff( new sal_Unicode[sCode.getLength()] );
 
     for (i=0; i< sCode.getLength() - 1; i++)
     {
@@ -392,12 +390,10 @@ OUString    LwpNumericFormat::reencode(const OUString& sCode)
         {
             pBuff[j] = pString[j+1];
         }
-        OUString sRet(pBuff, nLen - 1);
-        delete [] pBuff;
+        OUString sRet(pBuff.get(), nLen - 1);
         return sRet;
     }
 
-    delete [] pBuff;
     return sCode;
 }
 

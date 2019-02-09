@@ -20,7 +20,6 @@
 #include <connectivity/sdbcx/VDescriptor.hxx>
 #include <cppuhelper/queryinterface.hxx>
 
-#include <functional>
 #include <algorithm>
 #include <string.h>
 
@@ -44,8 +43,8 @@ namespace connectivity
         }
 
 
-        // com::sun::star::lang::XUnoTunnel
-        sal_Int64 SAL_CALL ODescriptor::getSomething( const Sequence< sal_Int8 >& rId ) throw(RuntimeException, std::exception)
+        // css::lang::XUnoTunnel
+        sal_Int64 SAL_CALL ODescriptor::getSomething( const Sequence< sal_Int8 >& rId )
         {
             return (rId.getLength() == 16 && 0 == memcmp(getUnoTunnelImplementationId().getConstArray(),  rId.getConstArray(), 16 ) )
                 ? reinterpret_cast< sal_Int64 >( this )
@@ -64,14 +63,14 @@ namespace connectivity
 
         namespace
         {
-            struct ResetROAttribute : public ::std::unary_function< Property, void >
+            struct ResetROAttribute
             {
                 void operator ()( Property& _rProperty ) const
                 {
                     _rProperty.Attributes &= ~PropertyAttribute::READONLY;
                 }
             };
-            struct SetROAttribute : public ::std::unary_function< Property, void >
+            struct SetROAttribute
             {
                 void operator ()( Property& _rProperty ) const
                 {
@@ -87,9 +86,9 @@ namespace connectivity
             describeProperties( aProperties );
 
             if ( isNew() )
-                ::std::for_each( aProperties.getArray(), aProperties.getArray() + aProperties.getLength(), ResetROAttribute() );
+                std::for_each( aProperties.begin(), aProperties.end(), ResetROAttribute() );
             else
-                ::std::for_each( aProperties.getArray(), aProperties.getArray() + aProperties.getLength(), SetROAttribute() );
+                std::for_each( aProperties.begin(), aProperties.end(), SetROAttribute() );
 
             return new ::cppu::OPropertyArrayHelper( aProperties );
         }
@@ -104,21 +103,13 @@ namespace connectivity
 
         Sequence< sal_Int8 > ODescriptor::getUnoTunnelImplementationId()
         {
-            static ::cppu::OImplementationId * pId = nullptr;
-            if (! pId)
-            {
-                ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-                if (! pId)
-                {
-                    static ::cppu::OImplementationId aId;
-                    pId = &aId;
-                }
-            }
-            return pId->getImplementationId();
+            static ::cppu::OImplementationId implId;
+
+            return implId.getImplementationId();
         }
 
 
-        Any SAL_CALL ODescriptor::queryInterface( const Type & rType ) throw(RuntimeException, std::exception)
+        Any SAL_CALL ODescriptor::queryInterface( const Type & rType )
         {
             Any aRet = ::cppu::queryInterface(rType,static_cast< XUnoTunnel*> (this));
             return aRet.hasValue() ? aRet : ODescriptor_PBASE::queryInterface(rType);
@@ -131,7 +122,7 @@ namespace connectivity
         }
 
 
-        Sequence< Type > SAL_CALL ODescriptor::getTypes(  ) throw(RuntimeException, std::exception)
+        Sequence< Type > SAL_CALL ODescriptor::getTypes(  )
         {
             ::cppu::OTypeCollection aTypes( cppu::UnoType<XMultiPropertySet>::get(),
                                             cppu::UnoType<XFastPropertySet>::get(),

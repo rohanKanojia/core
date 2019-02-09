@@ -21,14 +21,18 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/style/PageStyleLayout.hpp>
 #include <com/sun/star/beans/XMultiPropertyStates.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
+#include <com/sun/star/container/XNameContainer.hpp>
+#include <o3tl/any.hxx>
 #include <osl/diagnose.h>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/XMLTextMasterPageContext.hxx>
-#include "XMLTextHeaderFooterContext.hxx"
+#include <XMLTextHeaderFooterContext.hxx>
 #include <xmloff/xmlimp.hxx>
-#include "PageMasterImportContext.hxx"
+#include <PageMasterImportContext.hxx>
 
 
 using namespace ::com::sun::star;
@@ -58,13 +62,13 @@ Reference < XStyle > XMLTextMasterPageContext::Create()
     return xNewStyle;
 }
 
+static const OUStringLiteral gsFollowStyle( "FollowStyle" );
+
 XMLTextMasterPageContext::XMLTextMasterPageContext( SvXMLImport& rImport,
         sal_uInt16 nPrfx, const OUString& rLName,
         const Reference< XAttributeList > & xAttrList,
         bool bOverwrite )
 :   SvXMLStyleContext( rImport, nPrfx, rLName, xAttrList, XML_STYLE_FAMILY_MASTER_PAGE )
-,   sIsPhysical( "IsPhysical" )
-,   sFollowStyle( "FollowStyle" )
 ,   bInsertHeader( false )
 ,   bInsertFooter( false )
 ,   bInsertHeaderLeft( false )
@@ -73,10 +77,6 @@ XMLTextMasterPageContext::XMLTextMasterPageContext( SvXMLImport& rImport,
 ,   bInsertFooterFirst( false )
 ,   bHeaderInserted( false )
 ,   bFooterInserted( false )
-,   bHeaderLeftInserted( false )
-,   bFooterLeftInserted( false )
-,   bHeaderFirstInserted( false )
-,   bFooterFirstInserted( false )
 {
     OUString sName, sDisplayName;
     sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
@@ -137,18 +137,18 @@ XMLTextMasterPageContext::XMLTextMasterPageContext( SvXMLImport& rImport,
         if( !xStyle.is() )
             return;
 
-        aAny <<= xStyle;
-        xPageStyles->insertByName( sDisplayName, aAny );
+        xPageStyles->insertByName( sDisplayName, Any(xStyle) );
         bNew = true;
     }
 
     Reference < XPropertySet > xPropSet( xStyle, UNO_QUERY );
     Reference< XPropertySetInfo > xPropSetInfo =
                 xPropSet->getPropertySetInfo();
+    OUString sIsPhysical( "IsPhysical" );
     if( !bNew && xPropSetInfo->hasPropertyByName( sIsPhysical ) )
     {
         aAny = xPropSet->getPropertyValue( sIsPhysical );
-        bNew = !*static_cast<sal_Bool const *>(aAny.getValue());
+        bNew = !*o3tl::doAccess<bool>(aAny);
     }
     SetNew( bNew );
 
@@ -161,6 +161,12 @@ XMLTextMasterPageContext::XMLTextMasterPageContext( SvXMLImport& rImport,
         if( xMultiStates.is() )
             xMultiStates->setAllPropertiesToDefault();
 
+        if ( xPropSetInfo->hasPropertyByName( "GridDisplay" ) )
+            xPropSet->setPropertyValue( "GridDisplay", Any(false) );
+
+        if ( xPropSetInfo->hasPropertyByName( "GridPrint" ) )
+            xPropSet->setPropertyValue( "GridPrint", Any(false) );
+
         bInsertHeader = bInsertFooter = true;
         bInsertHeaderLeft = bInsertFooterLeft = true;
         bInsertHeaderFirst = bInsertFooterFirst = true;
@@ -171,12 +177,12 @@ XMLTextMasterPageContext::~XMLTextMasterPageContext()
 {
 }
 
-SvXMLImportContext *XMLTextMasterPageContext::CreateChildContext(
+SvXMLImportContextRef XMLTextMasterPageContext::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )
 {
-    SvXMLImportContext *pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     const SvXMLTokenMap& rTokenMap =
         GetImport().GetTextImport()->GetTextMasterPageElemTokenMap();
@@ -199,36 +205,36 @@ SvXMLImportContext *XMLTextMasterPageContext::CreateChildContext(
         }
         break;
     case XML_TOK_TEXT_MP_HEADER_LEFT:
-        if( bInsertHeaderLeft && bHeaderInserted && !bHeaderLeftInserted )
+        if( bInsertHeaderLeft && bHeaderInserted )
             bInsert = bLeft = true;
         break;
     case XML_TOK_TEXT_MP_FOOTER_LEFT:
-        if( bInsertFooterLeft && bFooterInserted && !bFooterLeftInserted )
+        if( bInsertFooterLeft && bFooterInserted )
             bInsert = bFooter = bLeft = true;
         break;
     case XML_TOK_TEXT_MP_HEADER_FIRST:
-        if( bInsertHeaderFirst && bHeaderInserted && !bHeaderFirstInserted )
+        if( bInsertHeaderFirst && bHeaderInserted )
             bInsert = bFirst = true;
         break;
     case XML_TOK_TEXT_MP_FOOTER_FIRST:
-        if( bInsertFooterFirst && bFooterInserted && !bFooterFirstInserted )
+        if( bInsertFooterFirst && bFooterInserted )
             bInsert = bFooter = bFirst = true;
         break;
     }
 
     if( bInsert && xStyle.is() )
     {
-        pContext = CreateHeaderFooterContext( nPrefix, rLocalName,
+        xContext = CreateHeaderFooterContext( nPrefix, rLocalName,
                                                     xAttrList,
                                                     bFooter, bLeft, bFirst );
     }
     else
     {
-        pContext = SvXMLStyleContext::CreateChildContext( nPrefix, rLocalName,
+        xContext = SvXMLStyleContext::CreateChildContext( nPrefix, rLocalName,
                                                           xAttrList );
     }
 
-    return pContext;
+    return xContext;
 }
 
 SvXMLImportContext *XMLTextMasterPageContext::CreateHeaderFooterContext(
@@ -269,7 +275,7 @@ void XMLTextMasterPageContext::Finish( bool bOverwrite )
 
         Reference< XPropertySetInfo > xPropSetInfo =
             xPropSet->getPropertySetInfo();
-        if( xPropSetInfo->hasPropertyByName( sFollowStyle ) )
+        if( xPropSetInfo->hasPropertyByName( gsFollowStyle ) )
         {
             OUString sDisplayFollow(
                 GetImport().GetStyleDisplayName(
@@ -278,13 +284,12 @@ void XMLTextMasterPageContext::Finish( bool bOverwrite )
                 !xPageStyles->hasByName( sDisplayFollow ) )
                 sDisplayFollow = xStyle->getName();
 
-            Any aAny = xPropSet->getPropertyValue( sFollowStyle );
+            Any aAny = xPropSet->getPropertyValue( gsFollowStyle );
             OUString sCurrFollow;
             aAny >>= sCurrFollow;
             if( sCurrFollow != sDisplayFollow )
             {
-                aAny <<= sDisplayFollow;
-                xPropSet->setPropertyValue( sFollowStyle, aAny );
+                xPropSet->setPropertyValue( gsFollowStyle, Any(sDisplayFollow) );
             }
         }
 

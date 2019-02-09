@@ -24,7 +24,6 @@
 #include <vcl/dialog.hxx>
 
 class FixedLine;
-class TabControl;
 
 class VCL_DLLPUBLIC TabDialog : public Dialog
 {
@@ -39,9 +38,9 @@ private:
 
 public:
                         TabDialog( vcl::Window* pParent,
-                                   WinBits nStyle = WB_STDTABDIALOG );
+                                   WinBits nStyle );
                         TabDialog( vcl::Window* pParent, const OUString& rID, const OUString& rUIXMLDescription );
-    virtual             ~TabDialog();
+    virtual             ~TabDialog() override;
     virtual void        dispose() override;
 
     virtual void        StateChanged( StateChangedType nStateChange ) override;
@@ -49,6 +48,10 @@ public:
     void                SetViewWindow( vcl::Window* pWindow ) { mpViewWindow = pWindow; }
     vcl::Window*        GetViewWindow() const { return mpViewWindow; }
     void                SetViewAlign( WindowAlign eAlign ) { meViewAlign = eAlign; }
+
+    // Screenshot interface
+    virtual std::vector<OString> getAllPageUIXMLDescriptions() const override;
+    virtual bool selectPageByUIXMLDescription(const OString& rUIXMLDescription) override;
 };
 
 #endif // INCLUDED_VCL_TABDLG_HXX

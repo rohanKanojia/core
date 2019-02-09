@@ -50,11 +50,7 @@ namespace sdr
                     false));
 
             // take unrotated snap rect (direct model data) for position and size
-            Rectangle aRectangle = GetCircObj().GetGeoRect();
-            // Hack for calc, transform position of object according
-            // to current zoom so as objects relative position to grid
-            // appears stable
-            aRectangle += GetRectObj().GetGridOffset();
+            const tools::Rectangle aRectangle(GetCircObj().GetGeoRect());
             const basegfx::B2DRange aObjectRange(
                 aRectangle.Left(), aRectangle.Top(),
                 aRectangle.Right(), aRectangle.Bottom() );
@@ -62,7 +58,7 @@ namespace sdr
 
             // fill object matrix
             const basegfx::B2DHomMatrix aObjectMatrix(
-                basegfx::tools::createScaleShearXRotateTranslateB2DHomMatrix(
+                basegfx::utils::createScaleShearXRotateTranslateB2DHomMatrix(
                     aObjectRange.getWidth(), aObjectRange.getHeight(),
                     rGeoStat.nShearAngle ? tan((36000 - rGeoStat.nShearAngle) * F_PI18000) : 0.0,
                     rGeoStat.nRotationAngle ? (36000 - rGeoStat.nRotationAngle) * F_PI18000 : 0.0,
@@ -85,8 +81,8 @@ namespace sdr
             }
             else
             {
-                const sal_Int32 nNewStart(static_cast<const SdrAngleItem&>(rItemSet.Get(SDRATTR_CIRCSTARTANGLE)).GetValue());
-                const sal_Int32 nNewEnd(static_cast<const SdrAngleItem&>(rItemSet.Get(SDRATTR_CIRCENDANGLE)).GetValue());
+                const sal_Int32 nNewStart(rItemSet.Get(SDRATTR_CIRCSTARTANGLE).GetValue());
+                const sal_Int32 nNewEnd(rItemSet.Get(SDRATTR_CIRCENDANGLE).GetValue());
                 const double fStart(((36000 - nNewEnd) % 36000) * F_PI18000);
                 const double fEnd(((36000 - nNewStart) % 36000) * F_PI18000);
                 const bool bCloseSegment(OBJ_CARC != nIdentifier);

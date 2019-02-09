@@ -19,7 +19,7 @@
 
 #undef SC_DLLIMPLEMENTATION
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <svx/algitem.hxx>
 #include <editeng/boxitem.hxx>
 #include <editeng/brushitem.hxx>
@@ -32,28 +32,30 @@
 #include <editeng/udlnitem.hxx>
 #include <editeng/wghtitem.hxx>
 #include <svl/zforlist.hxx>
-#include <vcl/msgbox.hxx>
-#include <comphelper/processfactory.hxx>
+#include <vcl/lstbox.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
+#include <sfx2/strings.hrc>
 #include <sfx2/sfxresid.hxx>
-#include "sc.hrc"
-#include "scmod.hxx"
-#include "attrib.hxx"
-#include "zforauto.hxx"
-#include "global.hxx"
-#include "globstr.hrc"
-#include "autoform.hxx"
-#include "strindlg.hxx"
-#include "miscdlgs.hrc"
-#include "scuiautofmt.hxx"
-#include "scresid.hxx"
-#include "document.hxx"
+#include <strings.hrc>
+#include <scmod.hxx>
+#include <attrib.hxx>
+#include <zforauto.hxx>
+#include <global.hxx>
+#include <globstr.hrc>
+#include <autoform.hxx>
+#include <strindlg.hxx>
+#include <scuiautofmt.hxx>
+#include <scresid.hxx>
+#include <document.hxx>
+#include <helpids.h>
 
 // AutoFormat-Dialog:
 
 ScAutoFormatDlg::ScAutoFormatDlg(vcl::Window* pParent,
     ScAutoFormat* pAutoFormat,
     const ScAutoFormatData* pSelFormatData,
-    ScViewData *pViewData)
+    const ScViewData *pViewData)
     : ModalDialog(pParent, "AutoFormatTableDialog",
         "modules/scalc/ui/autoformattable.ui")
     , aStrTitle(ScResId(STR_ADD_AUTOFORMAT_TITLE))
@@ -126,9 +128,8 @@ void ScAutoFormatDlg::Init()
     m_pBtnRename->SetClickHdl ( LINK( this, ScAutoFormatDlg, RenameHdl ) );
     m_pLbFormat->SetDoubleClickHdl( LINK( this, ScAutoFormatDlg, DblClkHdl ) );
 
-    ScAutoFormat::const_iterator it = pFormat->begin(), itEnd = pFormat->end();
-    for (; it != itEnd; ++it)
-        m_pLbFormat->InsertEntry(it->second->GetName());
+    for (const auto& rEntry : *pFormat)
+        m_pLbFormat->InsertEntry(rEntry.second->GetName());
 
     if (pFormat->size() == 1)
         m_pBtnRemove->Disable();
@@ -162,7 +163,7 @@ void ScAutoFormatDlg::UpdateChecks()
 
 // Handler:
 
-IMPL_LINK_TYPED( ScAutoFormatDlg, CloseHdl, Button *, pBtn, void )
+IMPL_LINK( ScAutoFormatDlg, CloseHdl, Button *, pBtn, void )
 {
     if (pBtn == m_pBtnOk || pBtn == m_pBtnCancel)
     {
@@ -173,7 +174,7 @@ IMPL_LINK_TYPED( ScAutoFormatDlg, CloseHdl, Button *, pBtn, void )
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, DblClkHdl, ListBox&, void)
+IMPL_LINK_NOARG(ScAutoFormatDlg, DblClkHdl, ListBox&, void)
 {
     if ( bCoreDataChanged )
         ScGlobal::GetOrCreateAutoFormat()->Save();
@@ -181,7 +182,7 @@ IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, DblClkHdl, ListBox&, void)
     EndDialog( RET_OK );
 }
 
-IMPL_LINK_TYPED( ScAutoFormatDlg, CheckHdl, Button *, pBtn, void )
+IMPL_LINK( ScAutoFormatDlg, CheckHdl, Button *, pBtn, void )
 {
     ScAutoFormatData* pData = pFormat->findByIndex(nIndex);
     bool bCheck = static_cast<CheckBox*>(pBtn)->IsChecked();
@@ -208,7 +209,7 @@ IMPL_LINK_TYPED( ScAutoFormatDlg, CheckHdl, Button *, pBtn, void )
     m_pWndPreview->NotifyChange( pData );
 }
 
-IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, AddHdl, Button*, void)
+IMPL_LINK_NOARG(ScAutoFormatDlg, AddHdl, Button*, void)
 {
     if ( !bFmtInserted && pSelFmtData )
     {
@@ -218,29 +219,25 @@ IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, AddHdl, Button*, void)
 
         while ( !bOk )
         {
-            VclPtrInstance<ScStringInputDlg> pDlg( this,
-                                                   aStrTitle,
-                                                   aStrLabel,
-                                                   aFormatName,
-                                                   HID_SC_ADD_AUTOFMT, HID_SC_AUTOFMT_NAME );
+            ScStringInputDlg aDlg(GetFrameWeld(), aStrTitle, aStrLabel, aFormatName,
+                                  HID_SC_ADD_AUTOFMT, HID_SC_AUTOFMT_NAME);
 
-            if ( pDlg->Execute() == RET_OK )
+            if (aDlg.run() == RET_OK)
             {
-                aFormatName = pDlg->GetInputString();
+                aFormatName = aDlg.GetInputString();
 
-                if ( !aFormatName.isEmpty() && !aFormatName.equals(aStrStandard) && pFormat->find(aFormatName) == pFormat->end() )
+                if ( !aFormatName.isEmpty() && aFormatName != aStrStandard && pFormat->find(aFormatName) == pFormat->end() )
                 {
-                    ScAutoFormatData* pNewData
-                        = new ScAutoFormatData( *pSelFmtData );
+                    std::unique_ptr<ScAutoFormatData> pNewData(
+                        new ScAutoFormatData( *pSelFmtData ));
 
                     pNewData->SetName( aFormatName );
-                    bFmtInserted = pFormat->insert(pNewData);
+                    ScAutoFormat::iterator it = pFormat->insert(std::move(pNewData));
+                    bFmtInserted = it != pFormat->end();
 
                     if ( bFmtInserted )
                     {
-                        ScAutoFormat::const_iterator it = pFormat->find(pNewData);
-                        ScAutoFormat::const_iterator itBeg = pFormat->begin();
-                        size_t nPos = std::distance(itBeg, it);
+                        size_t nPos = std::distance(pFormat->begin(), it);
                         m_pLbFormat->InsertEntry(aFormatName, nPos);
                         m_pLbFormat->SelectEntry( aFormatName );
                         m_pBtnAdd->Disable();
@@ -254,18 +251,15 @@ IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, AddHdl, Button*, void)
                         SelFmtHdl( *m_pLbFormat.get() );
                         bOk = true;
                     }
-                    else
-                        delete pNewData;
-
                 }
 
                 if ( !bFmtInserted )
                 {
-                    sal_uInt16 nRet = ScopedVclPtr<MessageDialog>::Create(this,
-                                            ScGlobal::GetRscString(STR_INVALID_AFNAME),
-                                            VCL_MESSAGE_ERROR,
-                                            VCL_BUTTONS_OK_CANCEL
-                                          )->Execute();
+                    std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                VclMessageType::Error, VclButtonsType::OkCancel,
+                                ScResId(STR_INVALID_AFNAME)));
+
+                    sal_uInt16 nRet = xBox->run();
 
                     bOk = ( nRet == RET_CANCEL );
                 }
@@ -276,17 +270,20 @@ IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, AddHdl, Button*, void)
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, RemoveHdl, Button*, void)
+IMPL_LINK_NOARG(ScAutoFormatDlg, RemoveHdl, Button*, void)
 {
     if ( (nIndex > 0) && (m_pLbFormat->GetEntryCount() > 0) )
     {
-        OUString aMsg( aStrDelMsg.getToken( 0, '#' ) );
+        OUString aMsg = aStrDelMsg.getToken( 0, '#' )
+                      + m_pLbFormat->GetSelectedEntry()
+                      + aStrDelMsg.getToken( 1, '#' );
 
-        aMsg += m_pLbFormat->GetSelectEntry();
-        aMsg += aStrDelMsg.getToken( 1, '#' );
+        std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                       VclMessageType::Question, VclButtonsType::YesNo,
+                                                       aMsg));
+        xQueryBox->set_default_response(RET_YES);
 
-        if ( RET_YES ==
-             ScopedVclPtr<QueryBox>::Create( this, WinBits( WB_YES_NO | WB_DEF_YES ), aMsg )->Execute() )
+        if (RET_YES == xQueryBox->run())
         {
             m_pLbFormat->RemoveEntry( nIndex );
             m_pLbFormat->SelectEntryPos( nIndex-1 );
@@ -312,24 +309,21 @@ IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, RemoveHdl, Button*, void)
     SelFmtHdl( *m_pLbFormat.get() );
 }
 
-IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, RenameHdl, Button*, void)
+IMPL_LINK_NOARG(ScAutoFormatDlg, RenameHdl, Button*, void)
 {
     bool bOk = false;
     while( !bOk )
     {
 
-        OUString aFormatName = m_pLbFormat->GetSelectEntry();
+        OUString aFormatName = m_pLbFormat->GetSelectedEntry();
         OUString aEntry;
 
-        VclPtrInstance<ScStringInputDlg> pDlg( this,
-                                               aStrRename,
-                                               aStrLabel,
-                                               aFormatName,
-                                               HID_SC_REN_AFMT_DLG, HID_SC_REN_AFMT_NAME );
-        if( pDlg->Execute() == RET_OK )
+        ScStringInputDlg aDlg(GetFrameWeld(), aStrRename, aStrLabel, aFormatName,
+                              HID_SC_REN_AFMT_DLG, HID_SC_REN_AFMT_NAME);
+        if (aDlg.run() == RET_OK)
         {
             bool bFmtRenamed = false;
-            aFormatName = pDlg->GetInputString();
+            aFormatName = aDlg.GetInputString();
 
             if (!aFormatName.isEmpty())
             {
@@ -337,7 +331,7 @@ IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, RenameHdl, Button*, void)
                 for (; it != itEnd; ++it)
                 {
                     aEntry = it->second->GetName();
-                    if (aFormatName.equals(aEntry))
+                    if (aFormatName == aEntry)
                         break;
                 }
                 if (it == itEnd)
@@ -346,8 +340,7 @@ IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, RenameHdl, Button*, void)
 
                     m_pLbFormat->RemoveEntry(nIndex );
                     const ScAutoFormatData* p = pFormat->findByIndex(nIndex);
-                    ScAutoFormatData* pNewData
-                        = new ScAutoFormatData(*p);
+                    std::unique_ptr<ScAutoFormatData> pNewData(new ScAutoFormatData(*p));
 
                     it = pFormat->begin();
                     std::advance(it, nIndex);
@@ -355,7 +348,7 @@ IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, RenameHdl, Button*, void)
 
                     pNewData->SetName( aFormatName );
 
-                    pFormat->insert(pNewData);
+                    pFormat->insert(std::move(pNewData));
 
                     m_pLbFormat->SetUpdateMode(false);
                     m_pLbFormat->Clear();
@@ -381,11 +374,11 @@ IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, RenameHdl, Button*, void)
             }
             if( !bFmtRenamed )
             {
-                bOk = RET_CANCEL == ScopedVclPtr<MessageDialog>::Create( this,
-                                      ScGlobal::GetRscString(STR_INVALID_AFNAME),
-                                      VCL_MESSAGE_ERROR,
-                                      VCL_BUTTONS_OK_CANCEL
-                                      )->Execute();
+                std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(GetFrameWeld(),
+                            VclMessageType::Error, VclButtonsType::OkCancel,
+                            ScResId(STR_INVALID_AFNAME)));
+
+                bOk = RET_CANCEL == xBox->run();
             }
         }
         else
@@ -393,9 +386,9 @@ IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, RenameHdl, Button*, void)
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ScAutoFormatDlg, SelFmtHdl, ListBox&, void)
+IMPL_LINK_NOARG(ScAutoFormatDlg, SelFmtHdl, ListBox&, void)
 {
-    nIndex = m_pLbFormat->GetSelectEntryPos();
+    nIndex = m_pLbFormat->GetSelectedEntryPos();
     UpdateChecks();
 
     if ( nIndex == 0 )

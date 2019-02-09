@@ -32,11 +32,11 @@ namespace rptxml
         OUString     m_sPageText; // page count and page number
         OUString     m_sLabel;
         OXMLCell&           m_rCell;
-        OXMLFixedContent*   m_pInP; // if set than we are in text-p element
+        OXMLFixedContent*   m_pInP; // if set then we are in text-p element
         bool                m_bFormattedField;
 
     protected:
-        virtual SvXMLImportContext* _CreateChildContext( sal_uInt16 nPrefix,
+        virtual SvXMLImportContextRef CreateChildContext_( sal_uInt16 nPrefix,
                     const OUString& rLocalName,
                     const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
     private:
@@ -49,7 +49,7 @@ namespace rptxml
                     ,OXMLCell& _rCell
                     ,OXMLTable* _pContainer
                     ,OXMLFixedContent* _pInP = nullptr);
-        virtual ~OXMLFixedContent();
+        virtual ~OXMLFixedContent() override;
 
         // This method is called for all characters that are contained in the
         // current element. The default is to ignore them.

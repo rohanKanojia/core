@@ -24,6 +24,7 @@
 #include <vcl/imgctrl.hxx>
 
 #include <svtools/hyperlabel.hxx>
+#include <memory>
 
 class Bitmap;
 
@@ -40,17 +41,11 @@ public:
 class RoadmapImpl;
 class RoadmapItem;
 
-class SVT_DLLPUBLIC ORoadmap : public Control, public RoadmapTypes
+class SVT_DLLPUBLIC ORoadmap final : public Control, public RoadmapTypes
 {
-protected:
-    RoadmapImpl*    m_pImpl;
-    // Window overridables
-    void            Paint(vcl::RenderContext& rRenderContext, const Rectangle& _rRect) override;
-    void            implInit(vcl::RenderContext& rRenderContext);
-
 public:
-    ORoadmap( vcl::Window* _pParent, WinBits _nWinStyle = 0 );
-    virtual ~ORoadmap( );
+    ORoadmap( vcl::Window* _pParent, WinBits _nWinStyle );
+    virtual ~ORoadmap( ) override;
     virtual void dispose() override;
 
     void            SetRoadmapBitmap( const BitmapEx& maBitmap );
@@ -69,7 +64,7 @@ public:
     ItemIndex       GetItemCount() const;
     ItemId          GetItemID( ItemIndex _nIndex ) const;
 
-    void            InsertRoadmapItem( ItemIndex Index, const OUString& RoadmapItem, ItemId _nUniqueId, bool _bEnabled = true );
+    void            InsertRoadmapItem( ItemIndex Index, const OUString& RoadmapItem, ItemId _nUniqueId, bool _bEnabled );
     void            ReplaceRoadmapItem( ItemIndex Index, const OUString& RoadmapItem, ItemId _nUniqueId, bool _bEnabled );
     void            DeleteRoadmapItem( ItemIndex _nIndex );
 
@@ -77,19 +72,18 @@ public:
     bool            SelectRoadmapItemByID( ItemId _nItemID );
 
     void            SetItemSelectHdl( const Link<LinkParamNone*,void>& _rHdl );
-    Link<LinkParamNone*,void> GetItemSelectHdl( ) const;
+    Link<LinkParamNone*,void> const & GetItemSelectHdl( ) const;
     virtual void    DataChanged( const DataChangedEvent& rDCEvt ) override;
     virtual void    GetFocus() override;
-
-protected:
-    bool            PreNotify( NotifyEvent& rNEvt ) override;
-
-protected:
-    /// called when an item has been selected by any means
-    void    Select();
+    virtual void    ApplySettings( vcl::RenderContext& rRenderContext ) override;
 
 private:
-    DECL_LINK_TYPED(ImplClickHdl, HyperLabel*, void);
+    bool            PreNotify( NotifyEvent& rNEvt ) override;
+
+    /// called when an item has been selected by any means
+    void            Select();
+
+    DECL_LINK(ImplClickHdl, HyperLabel*, void);
 
     RoadmapItem*         GetByIndex( ItemIndex _nItemIndex );
     const RoadmapItem*   GetByIndex( ItemIndex _nItemIndex ) const;
@@ -102,9 +96,15 @@ private:
     void                 DeselectOldRoadmapItems();
     ItemId               GetNextAvailableItemId( ItemIndex NewIndex );
     ItemId               GetPreviousAvailableItemId( ItemIndex NewIndex );
-    RoadmapItem*         GetByPointer(vcl::Window* pWindow);
+    RoadmapItem*         GetByPointer(vcl::Window const * pWindow);
     RoadmapItem*         InsertHyperLabel( ItemIndex Index, const OUString& _aStr, ItemId RMID, bool _bEnabled, bool _bIncomplete  );
     void                 UpdatefollowingHyperLabels( ItemIndex Index );
+
+    // Window overridables
+    void            Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& _rRect) override;
+    void            implInit(vcl::RenderContext& rRenderContext);
+
+    std::unique_ptr<RoadmapImpl>    m_pImpl;
 };
 
 }   // namespace svt

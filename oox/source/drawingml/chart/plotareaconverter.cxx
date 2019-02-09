@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/chart/plotareaconverter.hxx"
+#include <drawingml/chart/plotareaconverter.hxx>
 
 #include <com/sun/star/chart/XChartDocument.hpp>
 #include <com/sun/star/chart/XDiagramPositioning.hpp>
@@ -28,9 +28,14 @@
 #include <com/sun/star/drawing/ProjectionMode.hpp>
 #include <com/sun/star/drawing/ShadeMode.hpp>
 #include <osl/diagnose.h>
-#include "drawingml/chart/axisconverter.hxx"
-#include "drawingml/chart/plotareamodel.hxx"
-#include "drawingml/chart/typegroupconverter.hxx"
+#include <drawingml/chart/axisconverter.hxx>
+#include <drawingml/chart/plotareamodel.hxx>
+#include <drawingml/chart/typegroupconverter.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
+#include <tools/helpers.hxx>
 
 namespace oox {
 namespace drawingml {
@@ -52,8 +57,7 @@ struct AxesSetModel
     TypeGroupVector     maTypeGroups;       /// All type groups containing data series.
     AxisMap             maAxes;             /// All axes mapped by API axis type.
 
-    inline explicit     AxesSetModel() {}
-    inline              ~AxesSetModel() {}
+    explicit     AxesSetModel() {}
 };
 
 /** Axes set converter. This is a helper class for the plot area converter. */
@@ -61,7 +65,6 @@ class AxesSetConverter : public ConverterBase< AxesSetModel >
 {
 public:
     explicit            AxesSetConverter( const ConverterRoot& rParent, AxesSetModel& rModel );
-    virtual             ~AxesSetConverter();
 
     /** Converts the axes set model to a chart2 diagram. Returns an automatic
         chart title from a single series title, if possible. */
@@ -72,13 +75,13 @@ public:
                             bool bSupportsVaryColorsByPoint );
 
     /** Returns the automatic chart title if the axes set contains only one series. */
-    inline const OUString& getAutomaticTitle() const { return maAutoTitle; }
+    const OUString& getAutomaticTitle() const { return maAutoTitle; }
     /** Returns true, if the chart is three-dimensional. */
-    inline bool         is3dChart() const { return mb3dChart; }
+    bool         is3dChart() const { return mb3dChart; }
     /** Returns true, if chart type supports wall and floor format in 3D mode. */
-    inline bool         isWall3dChart() const { return mbWall3dChart; }
+    bool         isWall3dChart() const { return mbWall3dChart; }
     /** Returns true, if chart is a pie chart or doughnut chart. */
-    inline bool         isPieChart() const { return mbPieChart; }
+    bool         isPieChart() const { return mbPieChart; }
 
 private:
     OUString     maAutoTitle;
@@ -92,10 +95,6 @@ AxesSetConverter::AxesSetConverter( const ConverterRoot& rParent, AxesSetModel& 
     mb3dChart( false ),
     mbWall3dChart( false ),
     mbPieChart( false )
-{
-}
-
-AxesSetConverter::~AxesSetConverter()
 {
 }
 
@@ -113,8 +112,8 @@ void AxesSetConverter::convertFromModel( const Reference< XDiagram >& rxDiagram,
     // create type group converter objects for all type groups
     typedef RefVector< TypeGroupConverter > TypeGroupConvVector;
     TypeGroupConvVector aTypeGroups;
-    for( AxesSetModel::TypeGroupVector::iterator aIt = mrModel.maTypeGroups.begin(), aEnd = mrModel.maTypeGroups.end(); aIt != aEnd; ++aIt )
-        aTypeGroups.push_back( TypeGroupConvVector::value_type( new TypeGroupConverter( *this, **aIt ) ) );
+    for (auto const& typeGroup : mrModel.maTypeGroups)
+        aTypeGroups.push_back( std::make_shared<TypeGroupConverter>( *this, *typeGroup ) );
 
     OSL_ENSURE( !aTypeGroups.empty(), "AxesSetConverter::convertFromModel - no type groups in axes set" );
     if( !aTypeGroups.empty() ) try
@@ -177,8 +176,8 @@ void AxesSetConverter::convertFromModel( const Reference< XDiagram >& rxDiagram,
             }
 
             // convert all chart type groups, this converts all series data and formatting
-            for( TypeGroupConvVector::iterator aTIt = aTypeGroups.begin(), aTEnd = aTypeGroups.end(); aTIt != aTEnd; ++aTIt )
-                (*aTIt)->convertFromModel( rxDiagram, xCoordSystem, nAxesSetIdx, bSupportsVaryColorsByPoint );
+            for (auto const& typeGroup : aTypeGroups)
+                typeGroup->convertFromModel( rxDiagram, xCoordSystem, nAxesSetIdx, bSupportsVaryColorsByPoint );
         }
     }
     catch( Exception& )
@@ -197,7 +196,7 @@ View3DConverter::~View3DConverter()
 {
 }
 
-void View3DConverter::convertFromModel( const Reference< XDiagram >& rxDiagram, TypeGroupConverter& rTypeGroup )
+void View3DConverter::convertFromModel( const Reference< XDiagram >& rxDiagram, TypeGroupConverter const & rTypeGroup )
 {
     namespace cssd = ::com::sun::star::drawing;
     PropertySet aPropSet( rxDiagram );
@@ -236,8 +235,7 @@ void View3DConverter::convertFromModel( const Reference< XDiagram >& rxDiagram, 
     }
 
     // Y rotation (map OOXML [0..359] to Chart2 [-179,180])
-    nRotationY %= 360;
-    if( nRotationY > 180 ) nRotationY -= 360;
+    nRotationY = NormAngle180(nRotationY);
     /*  Perspective (map OOXML [0..200] to Chart2 [0,100]). Seems that MSO 2007 is
         buggy here, the XML plugin of MSO 2003 writes the correct perspective in
         the range from 0 to 100. We will emulate the wrong behaviour of MSO 2007. */
@@ -337,37 +335,41 @@ void PlotAreaConverter::convertFromModel( View3DModel& rView3DModel )
     // store all axis models in a map, keyed by axis identifier
     typedef ModelMap< sal_Int32, AxisModel > AxisMap;
     AxisMap aAxisMap;
-    for( PlotAreaModel::AxisVector::iterator aAIt = mrModel.maAxes.begin(), aAEnd = mrModel.maAxes.end(); aAIt != aAEnd; ++aAIt )
+    for (auto const& axis : mrModel.maAxes)
     {
-        PlotAreaModel::AxisVector::value_type xAxis = *aAIt;
-        OSL_ENSURE( xAxis->mnAxisId >= 0, "PlotAreaConverter::convertFromModel - invalid axis identifier" );
-        OSL_ENSURE( !aAxisMap.has( xAxis->mnAxisId ), "PlotAreaConverter::convertFromModel - axis identifiers not unique" );
-        if( xAxis->mnAxisId != -1 )
-            aAxisMap[ xAxis->mnAxisId ] = xAxis;
+        OSL_ENSURE( axis->mnAxisId >= 0, "PlotAreaConverter::convertFromModel - invalid axis identifier" );
+        OSL_ENSURE( !aAxisMap.has( axis->mnAxisId ), "PlotAreaConverter::convertFromModel - axis identifiers not unique" );
+        if( axis->mnAxisId != -1 )
+            aAxisMap[ axis->mnAxisId ] = axis;
     }
 
     // group the type group models into different axes sets
     typedef ModelVector< AxesSetModel > AxesSetVector;
     AxesSetVector aAxesSets;
     sal_Int32 nMaxSeriesIdx = -1;
-    for( PlotAreaModel::TypeGroupVector::iterator aTIt = mrModel.maTypeGroups.begin(), aTEnd = mrModel.maTypeGroups.end(); aTIt != aTEnd; ++aTIt )
+    for (auto const& typeGroup : mrModel.maTypeGroups)
     {
-        PlotAreaModel::TypeGroupVector::value_type xTypeGroup = *aTIt;
-        if( !xTypeGroup->maSeries.empty() )
+        if( !typeGroup->maSeries.empty() )
         {
             // try to find a compatible axes set for the type group
             AxesSetModel* pAxesSet = nullptr;
-            for( AxesSetVector::iterator aASIt = aAxesSets.begin(), aASEnd = aAxesSets.end(); !pAxesSet && (aASIt != aASEnd); ++aASIt )
-                if( (*aASIt)->maTypeGroups.front()->maAxisIds == xTypeGroup->maAxisIds )
-                    pAxesSet = aASIt->get();
+            for (auto const& axesSet : aAxesSets)
+            {
+                if( axesSet->maTypeGroups.front()->maAxisIds == typeGroup->maAxisIds )
+                {
+                    pAxesSet = axesSet.get();
+                    if (pAxesSet)
+                        break;
+                }
+            }
 
             // not possible to insert into an existing axes set -> start a new axes set
             if( !pAxesSet )
             {
                 pAxesSet = &aAxesSets.create();
                 // find axis models used by the type group
-                const TypeGroupModel::AxisIdVector& rAxisIds = xTypeGroup->maAxisIds;
-                if( rAxisIds.size() >= 1 )
+                const std::vector<sal_Int32>& rAxisIds = typeGroup->maAxisIds;
+                if( !rAxisIds.empty() )
                     pAxesSet->maAxes[ API_X_AXIS ] = aAxisMap.get( rAxisIds[ 0 ] );
                 if( rAxisIds.size() >= 2 )
                     pAxesSet->maAxes[ API_Y_AXIS ] = aAxisMap.get( rAxisIds[ 1 ] );
@@ -376,11 +378,11 @@ void PlotAreaConverter::convertFromModel( View3DModel& rView3DModel )
             }
 
             // insert the type group model
-            pAxesSet->maTypeGroups.push_back( xTypeGroup );
+            pAxesSet->maTypeGroups.push_back( typeGroup );
 
             // collect the maximum series index for automatic series formatting
-            for( TypeGroupModel::SeriesVector::iterator aSIt = xTypeGroup->maSeries.begin(), aSEnd = xTypeGroup->maSeries.end(); aSIt != aSEnd; ++aSIt )
-                nMaxSeriesIdx = ::std::max( nMaxSeriesIdx, (*aSIt)->mnIndex );
+            for (auto const& elemSeries : typeGroup->maSeries)
+                nMaxSeriesIdx = ::std::max( nMaxSeriesIdx, elemSeries->mnIndex );
         }
     }
     getFormatter().setMaxSeriesIndex( nMaxSeriesIdx );
@@ -389,10 +391,10 @@ void PlotAreaConverter::convertFromModel( View3DModel& rView3DModel )
     bool bSupportsVaryColorsByPoint = mrModel.maTypeGroups.size() == 1;
 
     // convert all axes sets
-    for( AxesSetVector::iterator aASBeg = aAxesSets.begin(), aASIt = aASBeg, aASEnd = aAxesSets.end(); aASIt != aASEnd; ++aASIt )
+    sal_Int32 nAxesSetIdx = 0;
+    for (auto const& axesSet : aAxesSets)
     {
-        AxesSetConverter aAxesSetConv( *this, **aASIt );
-        sal_Int32 nAxesSetIdx = static_cast< sal_Int32 >( aASIt - aASBeg );
+        AxesSetConverter aAxesSetConv(*this, *axesSet);
         aAxesSetConv.convertFromModel( xDiagram, rView3DModel, nAxesSetIdx, bSupportsVaryColorsByPoint );
         if( nAxesSetIdx == 0 )
         {
@@ -405,6 +407,7 @@ void PlotAreaConverter::convertFromModel( View3DModel& rView3DModel )
         {
             maAutoTitle.clear();
         }
+        ++nAxesSetIdx;
     }
 
     DataTableConverter dataTableConverter (*this, mrModel.mxDataTable.getOrCreate());

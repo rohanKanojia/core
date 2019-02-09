@@ -27,7 +27,7 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
-#include "DomExport.hxx"
+#include <DomExport.hxx>
 
 #include <sax/tools/converter.hxx>
 
@@ -35,11 +35,11 @@
 
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/document/NamedPropertyValues.hpp>
 #include <com/sun/star/xml/dom/XDocument.hpp>
-#include <com/sun/star/form/binding/XValueBinding.hpp>
 #include <com/sun/star/form/binding/XBindableValue.hpp>
 #include <com/sun/star/form/binding/XListEntrySink.hpp>
 #include <com/sun/star/form/binding/XListEntrySource.hpp>
@@ -53,7 +53,6 @@
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/xsd/WhiteSpaceTreatment.hpp>
 #include <com/sun/star/xsd/DataTypeClass.hpp>
-#include <com/sun/star/xsd/XDataType.hpp>
 #include <com/sun/star/util/Date.hpp>
 #include <com/sun/star/util/Time.hpp>
 #include <com/sun/star/util/DateTime.hpp>
@@ -71,12 +70,10 @@ using com::sun::star::container::XNameContainer;
 using com::sun::star::container::XEnumerationAccess;
 using com::sun::star::container::XEnumeration;
 using com::sun::star::xml::dom::XDocument;
-using com::sun::star::form::binding::XValueBinding;
 using com::sun::star::form::binding::XBindableValue;
 using com::sun::star::form::binding::XListEntrySink;
 using com::sun::star::form::submission::XSubmissionSupplier;
 using com::sun::star::beans::PropertyValue;
-using com::sun::star::xsd::XDataType;
 using com::sun::star::xforms::XDataTypeRepository;
 using com::sun::star::xforms::XFormsSupplier;
 using com::sun::star::util::Duration;
@@ -104,19 +101,19 @@ void exportXForms( SvXMLExport& rExport )
 }
 
 
-void exportXFormsInstance( SvXMLExport&, const Sequence<PropertyValue>& );
-void exportXFormsBinding( SvXMLExport&, const Reference<XPropertySet>& );
-void exportXFormsSubmission( SvXMLExport&, const Reference<XPropertySet>& );
-void exportXFormsSchemas( SvXMLExport&, const Reference<css::xforms::XModel>& );
+static void exportXFormsInstance( SvXMLExport&, const Sequence<PropertyValue>& );
+static void exportXFormsBinding( SvXMLExport&, const Reference<XPropertySet>& );
+static void exportXFormsSubmission( SvXMLExport&, const Reference<XPropertySet>& );
+static void exportXFormsSchemas( SvXMLExport&, const Reference<css::xforms::XModel>& );
 
 
 typedef OUString (*convert_t)( const Any& );
 typedef struct
 {
     const sal_Char* pPropertyName;
-    sal_uInt16 nNamespace;
-    sal_uInt16 nToken;
-    convert_t aConverter;
+    sal_uInt16 const nNamespace;
+    sal_uInt16 const nToken;
+    convert_t const aConverter;
 } ExportTable;
 static void lcl_export( const Reference<XPropertySet>& rPropertySet,
                  SvXMLExport& rExport,
@@ -126,24 +123,28 @@ static void lcl_export( const Reference<XPropertySet>& rPropertySet,
 #define TABLE_END { nullptr, 0, 0, nullptr }
 
 // any conversion functions
-OUString xforms_string( const Any& );
-OUString xforms_bool( const Any& );
-OUString xforms_whitespace( const Any& );
-template<typename T, void (*FUNC)( OUStringBuffer&, T )> OUString xforms_convert( const Any& );
-template<typename T, void (*FUNC)( OUStringBuffer&, const T& )> OUString xforms_convertRef( const Any& );
+static OUString xforms_string( const Any& );
+static OUString xforms_bool( const Any& );
+static OUString xforms_whitespace( const Any& );
+template<typename T, void (*FUNC)( OUStringBuffer&, T )> static OUString xforms_convert( const Any& );
+template<typename T, void (*FUNC)( OUStringBuffer&, const T& )> static OUString xforms_convertRef( const Any& );
 
-void xforms_formatDate( OUStringBuffer& aBuffer, const util::Date& aDate );
-void xforms_formatTime( OUStringBuffer& aBuffer, const css::util::Time& aTime );
-void xforms_formatDateTime( OUStringBuffer& aBuffer, const util::DateTime& aDateTime );
+static void xforms_formatDate( OUStringBuffer& aBuffer, const util::Date& aDate );
+static void xforms_formatTime( OUStringBuffer& aBuffer, const css::util::Time& aTime );
+static void xforms_formatDateTime( OUStringBuffer& aBuffer, const util::DateTime& aDateTime );
 
-convert_t xforms_int32    = &xforms_convert<sal_Int32,&::sax::Converter::convertNumber>;
-convert_t xforms_double   = &xforms_convert<double,&::sax::Converter::convertDouble>;
-convert_t xforms_dateTime = &xforms_convertRef<util::DateTime,&xforms_formatDateTime>;
-convert_t xforms_date     = &xforms_convertRef<util::Date,&xforms_formatDate>;
-convert_t xforms_time     = &xforms_convertRef<css::util::Time,&xforms_formatTime>;
+static void convertNumber(OUStringBuffer & b, sal_Int32 n) {
+    b.append(n);
+}
+
+convert_t const xforms_int32    = &xforms_convert<sal_Int32,&convertNumber>;
+convert_t const xforms_double   = &xforms_convert<double,&::sax::Converter::convertDouble>;
+convert_t const xforms_dateTime = &xforms_convertRef<util::DateTime,&xforms_formatDateTime>;
+convert_t const xforms_date     = &xforms_convertRef<util::Date,&xforms_formatDate>;
+convert_t const xforms_time     = &xforms_convertRef<css::util::Time,&xforms_formatTime>;
 
 // other functions
-static OUString lcl_getXSDType( SvXMLExport& rExport,
+static OUString lcl_getXSDType( SvXMLExport const & rExport,
                          const Reference<XPropertySet>& xType );
 
 
@@ -260,7 +261,7 @@ static const ExportTable aXFormsBindingTable[] =
     TABLE_ENTRY( "RequiredExpression",   NONE, REQUIRED,   xforms_string ),
     TABLE_ENTRY( "ConstraintExpression", NONE, CONSTRAINT, xforms_string ),
     TABLE_ENTRY( "CalculateExpression",  NONE, CALCULATE,  xforms_string ),
-    // type handled separatly, for type name <-> XSD type conversion
+    // type handled separately, for type name <-> XSD type conversion
     // TABLE_ENTRY( "Type",                 NONE, TYPE,       xforms_string ),
     TABLE_END
 };
@@ -458,7 +459,7 @@ static void lcl_exportDataTypeFacets( SvXMLExport& rExport,
     }
 }
 
-static OUString lcl_getXSDType( SvXMLExport& rExport,
+static OUString lcl_getXSDType( SvXMLExport const & rExport,
                          const Reference<XPropertySet>& xType )
 {
     // we use string as default...
@@ -560,13 +561,13 @@ void exportXFormsSchemas( SvXMLExport& rExport,
         SvXMLElementExport aSchemaElem( rExport, XML_NAMESPACE_XSD, XML_SCHEMA,
                                         true, true );
 
-        // now get data type repositry, and export
+        // now get data type repository, and export
         Reference<XEnumerationAccess> xTypes( xModel->getDataTypeRepository(),
                                               UNO_QUERY );
         if( xTypes.is() )
         {
             Reference<XEnumeration> xEnum = xTypes->createEnumeration();
-            DBG_ASSERT( xEnum.is(), "no enum?" );
+            SAL_WARN_IF( !xEnum.is(), "xmloff", "no enum?" );
             while( xEnum->hasMoreElements() )
             {
                 Reference<XPropertySet> xType( xEnum->nextElement(), UNO_QUERY );
@@ -658,9 +659,9 @@ OUString xforms_bool( const Any& rAny )
 
 void xforms_formatDate( OUStringBuffer& aBuffer, const util::Date& rDate )
 {
-    aBuffer.append(OUString::number(static_cast<sal_Int32>( rDate.Year ) )
-            + "-" + OUString::number(static_cast<sal_Int32>( rDate.Month ))
-            + "-" + OUString::number(static_cast<sal_Int32>( rDate.Day )) );
+    aBuffer.append(OUString::number(static_cast<sal_Int32>( rDate.Year ) ))
+            .append("-").append(OUString::number(static_cast<sal_Int32>( rDate.Month )))
+            .append("-").append(OUString::number(static_cast<sal_Int32>( rDate.Day )));
 }
 
 void xforms_formatTime( OUStringBuffer& aBuffer, const css::util::Time& rTime )
@@ -775,18 +776,15 @@ void getXFormsSettings( const Reference< XNameAccess >& _rXForms, Sequence< Prop
 
         Reference< XNameContainer > xModelSettings = document::NamedPropertyValues::create( comphelper::getProcessComponentContext() );
 
-        for (   const OUString* pModelName = aModelNames.getConstArray();
-                pModelName != aModelNames.getConstArray() + aModelNames.getLength();
-                ++pModelName
-            )
+        for ( auto const & modelName : aModelNames )
         {
-            Reference< XPropertySet > xModelProps( _rXForms->getByName( *pModelName ), UNO_QUERY_THROW );
+            Reference< XPropertySet > xModelProps( _rXForms->getByName( modelName ), UNO_QUERY_THROW );
 
             Sequence< PropertyValue > aModelSettings( 1 );
             aModelSettings[0].Name = "ExternalData";
             aModelSettings[0].Value = xModelProps->getPropertyValue( aModelSettings[0].Name );
 
-            xModelSettings->insertByName( *pModelName, makeAny( aModelSettings ) );
+            xModelSettings->insertByName( modelName, makeAny( aModelSettings ) );
         }
 
         if ( xModelSettings->hasElements() )
@@ -798,7 +796,7 @@ void getXFormsSettings( const Reference< XNameAccess >& _rXForms, Sequence< Prop
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("xmloff");
     }
 }
 

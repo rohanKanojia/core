@@ -19,25 +19,24 @@
 #ifndef INCLUDED_SW_INC_POSTITHELPER_HXX
 #define INCLUDED_SW_INC_POSTITHELPER_HXX
 
-#include <swrect.hxx>
-#include <fmtfld.hxx>
-#include <redline.hxx>
-#include <vector>
-#include <vcl/window.hxx>
-#include <SidebarWindowsTypes.hxx>
+#include "swrect.hxx"
+#include "fmtfld.hxx"
+#include <cstddef>
+#include <vcl/vclptr.hxx>
+#include <tools/solar.h>
+#include "SidebarWindowsTypes.hxx"
 
 class SfxBroadcaster;
-class SwTextField;
 class SwRootFrame;
 class SwPostItMgr;
 class SwEditWin;
-namespace sw { namespace sidebarwindows {
-    class SwSidebarWin;
+class SwFrame;
+class IDocumentRedlineAccess;
+namespace sw { namespace annotation {
+    class SwAnnotationWin;
 } }
 
 struct SwPosition;
-
-typedef sal_Int64 SwPostItBits;
 
 struct SwLayoutInfo
 {
@@ -54,7 +53,7 @@ struct SwLayoutInfo
 
     sw::sidebarwindows::SidebarPosition meSidebarPosition;
 
-    sal_uInt16 mRedlineAuthor;
+    std::size_t mRedlineAuthor;
 
     SwLayoutInfo()
         : mpAnchorFrame(nullptr)
@@ -89,9 +88,10 @@ namespace SwPostItHelper
 class SwSidebarItem
 {
 public:
-    VclPtr<sw::sidebarwindows::SwSidebarWin> pPostIt;
+    VclPtr<sw::annotation::SwAnnotationWin> pPostIt;
     bool bShow;
     bool bFocus;
+    bool bPendingLayout;
 
     SwPostItHelper::SwLayoutStatus mLayoutStatus;
     SwLayoutInfo maLayoutInfo;
@@ -100,6 +100,7 @@ public:
         : pPostIt(nullptr)
         , bShow(true)
         , bFocus(aFocus)
+        , bPendingLayout(false)
         , mLayoutStatus( SwPostItHelper::INVISIBLE )
         , maLayoutInfo()
     {
@@ -109,12 +110,16 @@ public:
     {
     }
 
+    SwSidebarItem(SwSidebarItem const &) = default;
+    SwSidebarItem(SwSidebarItem &&) = default;
+    SwSidebarItem & operator =(SwSidebarItem const &) = default;
+    SwSidebarItem & operator =(SwSidebarItem &&) = default;
+
     virtual SwPosition GetAnchorPosition() const = 0;
-    virtual bool UseElement() = 0;
+    virtual bool UseElement(SwRootFrame const&, IDocumentRedlineAccess const&) = 0;
     virtual const SwFormatField& GetFormatField() const = 0;
-    virtual const SfxBroadcaster* GetBroadCaster() const = 0;
-    virtual VclPtr<sw::sidebarwindows::SwSidebarWin> GetSidebarWindow( SwEditWin& rEditWin,
-                                                                WinBits nBits,
+    virtual const SfxBroadcaster* GetBroadcaster() const = 0;
+    virtual VclPtr<sw::annotation::SwAnnotationWin> GetSidebarWindow( SwEditWin& rEditWin,
                                                                 SwPostItMgr& aMgr) = 0;
 };
 
@@ -129,23 +134,18 @@ public:
     {
     }
 
-    virtual ~SwAnnotationItem()
-    {
-    }
-
     virtual SwPosition GetAnchorPosition() const override;
-    virtual bool UseElement() override;
+    virtual bool UseElement(SwRootFrame const&, IDocumentRedlineAccess const&) override;
     virtual const SwFormatField& GetFormatField() const override
     {
         return mrFormatField;
     }
-    virtual const SfxBroadcaster* GetBroadCaster() const override
+    virtual const SfxBroadcaster* GetBroadcaster() const override
     {
         return dynamic_cast<const SfxBroadcaster *> (&mrFormatField);
     }
-    virtual VclPtr<sw::sidebarwindows::SwSidebarWin> GetSidebarWindow(
+    virtual VclPtr<sw::annotation::SwAnnotationWin> GetSidebarWindow(
         SwEditWin& rEditWin,
-        WinBits nBits,
         SwPostItMgr& aMgr ) override;
 
 private:

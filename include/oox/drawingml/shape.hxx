@@ -20,24 +20,48 @@
 #ifndef INCLUDED_OOX_DRAWINGML_SHAPE_HXX
 #define INCLUDED_OOX_DRAWINGML_SHAPE_HXX
 
-#include <oox/helper/propertymap.hxx>
-#include <oox/core/xmlfilterbase.hxx>
+#include <map>
+#include <memory>
+#include <vector>
+
+#include <com/sun/star/awt/Point.hpp>
+#include <com/sun/star/awt/Size.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <oox/dllapi.h>
 #include <oox/drawingml/color.hxx>
 #include <oox/drawingml/drawingmltypes.hxx>
+#include <oox/helper/helper.hxx>
+#include <oox/helper/propertymap.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/drawing/XDrawPage.hpp>
-#include <memory>
-#include <basegfx/matrix/b2dhommatrix.hxx>
-#include <vector>
-#include <map>
-#include <oox/dllapi.h>
+namespace basegfx { class B2DHomMatrix; }
+
+namespace com { namespace sun { namespace star {
+    namespace awt { struct Rectangle; }
+    namespace drawing { class XShape; }
+    namespace drawing { class XShapes; }
+    namespace uno { class Any; }
+} } }
+
+namespace oox { namespace core {
+    class XmlFilterBase;
+} }
 
 namespace oox { namespace vml {
     struct OleObjectInfo;
 } }
 
 namespace oox { namespace drawingml {
+
+class Theme;
+struct EffectProperties;
+struct FillProperties;
+struct GraphicProperties;
+struct LineProperties;
+struct Shape3DProperties;
 
 class CustomShapeProperties;
 typedef std::shared_ptr< CustomShapeProperties > CustomShapePropertiesPtr;
@@ -57,7 +81,7 @@ typedef ::std::map< sal_Int32, ShapeStyleRef > ShapeStyleRefMap;
 struct ChartShapeInfo
 {
     OUString     maFragmentPath;     ///< Path to related XML stream, e.g. for charts.
-    bool                mbEmbedShapes;      ///< True = load chart shapes into chart, false = load into parent drawpage.
+    bool const   mbEmbedShapes;      ///< True = load chart shapes into chart, false = load into parent drawpage.
 
     explicit     ChartShapeInfo( bool bEmbedShapes ) : mbEmbedShapes( bEmbedShapes ) {}
 };
@@ -68,7 +92,6 @@ struct LinkedTxbxAttr
     sal_Int32 id;
     sal_Int32 seq;
     LinkedTxbxAttr(): id(0),seq(0){};
-    ~LinkedTxbxAttr(){};
 };
 
 class OOX_DLLPUBLIC Shape
@@ -99,9 +122,9 @@ public:
     Shape3DProperties&              get3DProperties() { return *mp3DPropertiesPtr; }
     const Shape3DProperties&        get3DProperties() const { return *mp3DPropertiesPtr; }
 
-    table::TablePropertiesPtr       getTableProperties();
+    table::TablePropertiesPtr const & getTableProperties();
 
-    EffectProperties&               getEffectProperties() { return *mpEffectPropertiesPtr; }
+    EffectProperties&               getEffectProperties() const { return *mpEffectPropertiesPtr; }
 
     void                            setChildPosition( css::awt::Point nPosition ){ maChPosition = nPosition; }
     void                            setChildSize( css::awt::Size aSize ){ maChSize = aSize; }
@@ -113,14 +136,19 @@ public:
     const css::awt::Size&           getSize() const { return maSize; }
 
     void                            setRotation( sal_Int32 nRotation ) { mnRotation = nRotation; }
+    sal_Int32                       getRotation() const { return mnRotation; }
+    void                            setDiagramRotation( sal_Int32 nRotation ) { mnDiagramRotation = nRotation; }
     void                            setFlip( bool bFlipH, bool bFlipV ) { mbFlipH = bFlipH; mbFlipV = bFlipV; }
     void                            addChild( const ShapePtr& rChildPtr ) { maChildren.push_back( rChildPtr ); }
     std::vector< ShapePtr >&        getChildren() { return maChildren; }
 
     void                            setName( const OUString& rName ) { msName = rName; }
     const OUString&                 getName( ) { return msName; }
+    void                            setInternalName( const OUString& rInternalName ) { msInternalName = rInternalName; }
+    const OUString&                 getInternalName() const { return msInternalName; }
     void                            setId( const OUString& rId ) { msId = rId; }
     const OUString&                 getId() { return msId; }
+    void                            setDescription( const OUString& rDescr ) { msDescription = rDescr; }
     void                            setHidden( bool bHidden ) { mbHidden = bHidden; }
     void                            setHiddenMasterShape( bool bHiddenMasterShape ) { mbHiddenMasterShape = bHiddenMasterShape; }
     void                            setSubType( sal_Int32 nSubType ) { mnSubType = nSubType; }
@@ -152,23 +180,13 @@ public:
                             const css::uno::Reference< css::drawing::XShapes >& rxShapes,
                             const basegfx::B2DHomMatrix& aTransformation,
                             FillProperties& rShapeOrParentShapeFillProps,
-                            const css::awt::Rectangle* pShapeRect = nullptr,
-                            ShapeIdMap* pShapeMap = nullptr );
+                            ShapeIdMap* pShapeMap = nullptr,
+                            bool bInGroup = false);
 
-    void                addChildren(
-                            ::oox::core::XmlFilterBase& rFilterBase,
-                            const Theme* pTheme,
-                            const css::uno::Reference< css::drawing::XShapes >& rxShapes,
-                            basegfx::B2DHomMatrix& aTransformation,
-                            const css::awt::Rectangle* pShapeRect = nullptr,
-                            ShapeIdMap* pShapeMap = nullptr );
-
-    void                setXShape( const css::uno::Reference< css::drawing::XShape >& rXShape )
-                            { mxShape = rXShape; };
     const css::uno::Reference< css::drawing::XShape > &
                         getXShape() const { return mxShape; }
 
-    virtual void        applyShapeReference( const Shape& rReferencedShape, bool bUseText = true );
+    void                applyShapeReference( const Shape& rReferencedShape, bool bUseText = true );
     const ::std::vector<OUString>&
                         getExtDrawings() { return maExtDrawings; }
     void                addExtDrawingRelId( const OUString &rRelId ) { maExtDrawings.push_back( rRelId ); }
@@ -190,19 +208,31 @@ public:
     const LinkedTxbxAttr&     getLinkedTxbxAttributes() { return maLinkedTxbxAttr; };
     bool                isLinkedTxbx() { return mbHasLinkedTxbx; };
 
+    void setZOrder(sal_Int32 nZOrder) { mnZOrder = nZOrder; }
+
+    sal_Int32 getZOrder() const { return mnZOrder; }
+
+    void setZOrderOff(sal_Int32 nZOrderOff) { mnZOrderOff = nZOrderOff; }
+
+    sal_Int32 getZOrderOff() const { return mnZOrderOff; }
+
+    void setDataNodeType(sal_Int32 nDataNodeType) { mnDataNodeType = nDataNodeType; }
+
+    sal_Int32 getDataNodeType() const { return mnDataNodeType; }
+
 protected:
 
-    css::uno::Reference< css::drawing::XShape >
+    css::uno::Reference< css::drawing::XShape > const &
                         createAndInsert(
                             ::oox::core::XmlFilterBase& rFilterBase,
                             const OUString& rServiceName,
                             const Theme* pTheme,
                             const css::uno::Reference< css::drawing::XShapes >& rxShapes,
-                            const css::awt::Rectangle* pShapeRect,
                             bool bClearText,
                             bool bDoNotInsertEmptyTextBody,
                             basegfx::B2DHomMatrix& aTransformation,
-                            FillProperties& rShapeOrParentShapeFillProps
+                            FillProperties& rShapeOrParentShapeFillProps,
+                            bool bInGroup = false
                              );
 
     void                addChildren(
@@ -210,14 +240,13 @@ protected:
                             Shape& rMaster,
                             const Theme* pTheme,
                             const css::uno::Reference< css::drawing::XShapes >& rxShapes,
-                            const css::awt::Rectangle& rClientRect,
                             ShapeIdMap* pShapeMap,
                             const basegfx::B2DHomMatrix& aTransformation );
 
-    void                keepDiagramCompatibilityInfo( ::oox::core::XmlFilterBase& rFilterBase );
+    void                keepDiagramCompatibilityInfo( ::oox::core::XmlFilterBase const & rFilterBase );
 
     css::uno::Reference< css::drawing::XShape >
-                        renderDiagramToGraphic( ::oox::core::XmlFilterBase& rFilterBase );
+                        renderDiagramToGraphic( ::oox::core::XmlFilterBase const & rFilterBase );
 
     OUString finalizeServiceName(
                             ::oox::core::XmlFilterBase& rFilter,
@@ -234,6 +263,10 @@ protected:
                             const css::beans::PropertyValue& pProperty );
     void                putPropertiesToGrabBag(
                             const css::uno::Sequence< css::beans::PropertyValue >& aProperties );
+
+    FillProperties      getActualFillProperties(const Theme* pTheme, const FillProperties* pParentShapeFillProps) const;
+    LineProperties      getActualLineProperties(const Theme* pTheme) const;
+    EffectProperties    getActualEffectProperties(const Theme* pTheme) const;
 
     std::vector< ShapePtr >     maChildren;               // only used for group shapes
     css::awt::Size   maChSize;                 // only used for group shapes
@@ -257,7 +290,9 @@ protected:
 
     OUString                    msServiceName;
     OUString                    msName;
+    OUString                    msInternalName; // used by diagram; not displayed in UI
     OUString                    msId;
+    OUString                    msDescription;
     sal_Int32                   mnSubType;      // if this type is not zero, then the shape is a placeholder
     OptValue< sal_Int32 >       moSubTypeIndex;
 
@@ -286,6 +321,7 @@ private:
     ChartShapeInfoRef   mxChartShapeInfo;   ///< Additional data for chart shapes.
 
     sal_Int32                       mnRotation;
+    sal_Int32                       mnDiagramRotation; // rotates shape prior to sizing, does not affect text rotation
     bool                            mbFlipH;
     bool                            mbFlipV;
     bool                            mbHidden;
@@ -299,6 +335,15 @@ private:
     bool                            mbHasLinkedTxbx; // this text box has linked text box ?
 
     css::uno::Sequence<css::beans::PropertyValue> maDiagramDoms;
+
+    /// Z-Order.
+    sal_Int32 mnZOrder = 0;
+
+    /// Z-Order offset.
+    sal_Int32 mnZOrderOff = 0;
+
+    /// Type of data node for an in-diagram shape.
+    sal_Int32 mnDataNodeType = 0;
 };
 
 } }

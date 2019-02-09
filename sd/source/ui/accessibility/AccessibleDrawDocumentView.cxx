@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "AccessibleDrawDocumentView.hxx"
+#include <AccessibleDrawDocumentView.hxx>
 #include <com/sun/star/drawing/ShapeCollection.hpp>
 #include <com/sun/star/drawing/XDrawPage.hpp>
 #include <com/sun/star/drawing/XDrawView.hpp>
@@ -25,36 +25,37 @@
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/frame/XController.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/document/XEventBroadcaster.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
+#include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <comphelper/processfactory.hxx>
 #include <rtl/ustring.h>
+#include <sal/log.hxx>
 #include <sfx2/viewfrm.hxx>
 
 #include <svx/AccessibleShape.hxx>
-
+#include <svx/ChildrenManager.hxx>
 #include <svx/svdobj.hxx>
 #include <svx/svdmodel.hxx>
 #include <svx/unoapi.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
-#include "Window.hxx"
+#include <Window.hxx>
 #include <vcl/svapp.hxx>
 
-#include "ViewShell.hxx"
-#include "View.hxx"
-#include "DrawDocShell.hxx"
+#include <ViewShell.hxx>
+#include <View.hxx>
+#include <DrawDocShell.hxx>
 #include <drawdoc.hxx>
 #include <algorithm>
-#include "sdpage.hxx"
-#include "slideshow.hxx"
-#include "anminfo.hxx"
+#include <sdpage.hxx>
+#include <slideshow.hxx>
+#include <anminfo.hxx>
+#include <AccessiblePageShape.hxx>
 
-#include "accessibility.hrc"
-#include "sdresid.hxx"
+#include <strings.hrc>
+#include <sdresid.hxx>
 #include <osl/mutex.hxx>
 
 using namespace ::com::sun::star;
@@ -85,16 +86,13 @@ AccessibleDrawDocumentView::AccessibleDrawDocumentView (
     const uno::Reference<frame::XController>& rxController,
     const uno::Reference<XAccessible>& rxParent)
     : AccessibleDocumentViewBase (pSdWindow, pViewShell, rxController, rxParent),
-      mpSdViewSh( pViewShell ),
-      mpChildrenManager (nullptr)
+      mpSdViewSh( pViewShell )
 {
-    OSL_TRACE ("AccessibleDrawDocumentView");
     UpdateAccessibleName();
 }
 
 AccessibleDrawDocumentView::~AccessibleDrawDocumentView()
 {
-    OSL_TRACE ("~AccessibleDrawDocumentView");
     DBG_ASSERT (rBHelper.bDisposed || rBHelper.bInDispose,
         "~AccessibleDrawDocumentView: object has not been disposed");
 }
@@ -110,7 +108,7 @@ void AccessibleDrawDocumentView::Init()
         xShapeList.set( xView->getCurrentPage(), uno::UNO_QUERY);
 
     // Create the children manager.
-    mpChildrenManager = new ChildrenManager(this, xShapeList, maShapeTreeInfo, *this);
+    mpChildrenManager.reset(new ChildrenManager(this, xShapeList, maShapeTreeInfo, *this));
 
     rtl::Reference<AccessiblePageShape> xPage(CreateDrawPageShape());
     if (xPage.is())
@@ -123,12 +121,11 @@ void AccessibleDrawDocumentView::Init()
     mpChildrenManager->UpdateSelection ();
 }
 
-void AccessibleDrawDocumentView::ViewForwarderChanged (ChangeType aChangeType,
-    const IAccessibleViewForwarder* pViewForwarder)
+void AccessibleDrawDocumentView::ViewForwarderChanged()
 {
-    AccessibleDocumentViewBase::ViewForwarderChanged (aChangeType, pViewForwarder);
+    AccessibleDocumentViewBase::ViewForwarderChanged();
     if (mpChildrenManager != nullptr)
-        mpChildrenManager->ViewForwarderChanged (aChangeType, pViewForwarder);
+        mpChildrenManager->ViewForwarderChanged();
 }
 
 /**  The page shape is created on every call at the moment (provided that
@@ -188,22 +185,20 @@ rtl::Reference<AccessiblePageShape> AccessibleDrawDocumentView::CreateDrawPageSh
 
 sal_Int32 SAL_CALL
     AccessibleDrawDocumentView::getAccessibleChildCount()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed ();
 
-    long mpChildCount = AccessibleDocumentViewBase::getAccessibleChildCount();
+    long nChildCount = AccessibleDocumentViewBase::getAccessibleChildCount();
 
     // Forward request to children manager.
     if (mpChildrenManager != nullptr)
-        mpChildCount += mpChildrenManager->GetChildCount ();
+        nChildCount += mpChildrenManager->GetChildCount();
 
-    return mpChildCount;
+    return nChildCount;
 }
 
 uno::Reference<XAccessible> SAL_CALL
     AccessibleDrawDocumentView::getAccessibleChild (sal_Int32 nIndex)
-    throw (uno::RuntimeException, lang::IndexOutOfBoundsException, std::exception)
 {
     ThrowIfDisposed ();
 
@@ -221,23 +216,20 @@ uno::Reference<XAccessible> SAL_CALL
 
     // Create a copy of the pointer to the children manager and release the
     // mutex before calling any of its methods.
-    ChildrenManager* pChildrenManager = mpChildrenManager;
+    ChildrenManager* pChildrenManager = mpChildrenManager.get();
     aGuard.clear();
 
     // Forward request to children manager.
-    if (pChildrenManager != nullptr)
-    {
-        return pChildrenManager->GetChild (nIndex);
-    }
-    else
+    if (pChildrenManager == nullptr)
         throw lang::IndexOutOfBoundsException (
             "no accessible child with index " + OUString::number(nIndex),
             static_cast<uno::XWeak*>(this));
+
+    return pChildrenManager->GetChild (nIndex);
 }
 
 OUString SAL_CALL
     AccessibleDrawDocumentView::getAccessibleName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -275,7 +267,6 @@ OUString SAL_CALL
 
 void SAL_CALL
     AccessibleDrawDocumentView::disposing (const lang::EventObject& rEventObject)
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed ();
 
@@ -293,19 +284,15 @@ void SAL_CALL
 
 void SAL_CALL
     AccessibleDrawDocumentView::propertyChange (const beans::PropertyChangeEvent& rEventObject)
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed ();
 
     AccessibleDocumentViewBase::propertyChange (rEventObject);
 
-    OSL_TRACE ("AccessibleDrawDocumentView::propertyChange");
     // add page switch event for slide show mode
     if (rEventObject.PropertyName == "CurrentPage" ||
         rEventObject.PropertyName == "PageChange")
     {
-        OSL_TRACE ("    current page changed");
-
         // Update the accessible name to reflect the current slide.
         UpdateAccessibleName();
 
@@ -328,25 +315,20 @@ void SAL_CALL
             }
         }
         else
-            OSL_TRACE ("View invalid");
+            SAL_WARN("sd", "View invalid");
         CommitChange(AccessibleEventId::PAGE_CHANGED,rEventObject.NewValue,rEventObject.OldValue);
     }
     else if ( rEventObject.PropertyName == "VisibleArea" )
     {
-        OSL_TRACE ("    visible area changed");
         if (mpChildrenManager != nullptr)
-            mpChildrenManager->ViewForwarderChanged (
-                IAccessibleViewForwarderListener::VISIBLE_AREA,
-                &maViewForwarder);
+            mpChildrenManager->ViewForwarderChanged();
     }
-    else if (rEventObject.PropertyName == OUString (RTL_CONSTASCII_USTRINGPARAM("ActiveLayer")))
+    else if (rEventObject.PropertyName == "ActiveLayer")
     {
         CommitChange(AccessibleEventId::PAGE_CHANGED,rEventObject.NewValue,rEventObject.OldValue);
     }
-    else if (rEventObject.PropertyName == OUString (RTL_CONSTASCII_USTRINGPARAM("UpdateAcc")))
+    else if (rEventObject.PropertyName == "UpdateAcc")
     {
-        OSL_TRACE ("    acc on current page should be updated");
-
         // The current page changed.  Update the children manager accordingly.
         uno::Reference<drawing::XDrawView> xView (mxController, uno::UNO_QUERY);
         if (xView.is() && mpChildrenManager!=nullptr)
@@ -363,10 +345,10 @@ void SAL_CALL
                 css::uno::Reference< drawing::XDrawPage > xSlide;
                 // MT IA2: Not used...
                 // sal_Int32 currentPageIndex = xSlideshow->getCurrentPageIndex();
-                css::uno::Reference< css::presentation::XSlideShowController > mpSlideController = xSlideshow->getController();
-                if( mpSlideController.is() )
+                css::uno::Reference< css::presentation::XSlideShowController > xSlideController = xSlideshow->getController();
+                if( xSlideController.is() )
                 {
-                    xSlide = mpSlideController->getCurrentSlide();
+                    xSlide = xSlideController->getCurrentSlide();
                     if (xSlide.is())
                     {
                         mpChildrenManager->SetShapeList (uno::Reference<drawing::XShapes> (
@@ -385,23 +367,20 @@ void SAL_CALL
     }
     else
     {
-        OSL_TRACE ("  unhandled");
+        SAL_INFO("sd", "unhandled");
     }
-    OSL_TRACE ("  done");
 }
 
 // XServiceInfo
 
 OUString SAL_CALL
     AccessibleDrawDocumentView::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return OUString("AccessibleDrawDocumentView");
 }
 
 css::uno::Sequence< OUString> SAL_CALL
     AccessibleDrawDocumentView::getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     // Get list of supported service names from base class...
@@ -420,7 +399,6 @@ css::uno::Sequence< OUString> SAL_CALL
 
 uno::Any SAL_CALL
     AccessibleDrawDocumentView::queryInterface (const uno::Type & rType)
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Any aReturn = AccessibleDocumentViewBase::queryInterface (rType);
     if ( ! aReturn.hasValue())
@@ -445,7 +423,6 @@ void SAL_CALL
 //=====  XAccessibleGroupPosition  =========================================
 uno::Sequence< sal_Int32 > SAL_CALL
     AccessibleDrawDocumentView::getGroupPosition( const uno::Any& rAny )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -501,25 +478,19 @@ uno::Sequence< sal_Int32 > SAL_CALL
     }
     std::sort( vXShapes.begin(), vXShapes.end(), XShapePosCompareHelper() );
     //get the index of the selected object in the group
-    std::vector< uno::Reference<drawing::XShape> >::iterator aIter;
-    //we start counting position from 1
-    sal_Int32 nPos = 1;
-    for ( aIter = vXShapes.begin(); aIter != vXShapes.end(); ++aIter, nPos++ )
+    auto aIter = std::find_if(vXShapes.begin(), vXShapes.end(),
+        [&xCurShape](const uno::Reference<drawing::XShape>& rxShape) { return rxShape.get() == xCurShape.get(); });
+    if (aIter != vXShapes.end())
     {
-        if ( (*aIter).get() == xCurShape.get() )
-        {
-            sal_Int32* pArray = aRet.getArray();
-            pArray[0] = 1; //it should be 1 based, not 0 based.
-            pArray[1] = vXShapes.size();
-            pArray[2] = nPos;
-            break;
-        }
+        sal_Int32* pArray = aRet.getArray();
+        pArray[0] = 1; //it should be 1 based, not 0 based.
+        pArray[1] = vXShapes.size();
+        pArray[2] = static_cast<sal_Int32>(std::distance(vXShapes.begin(), aIter)) + 1; //we start counting position from 1
     }
     return aRet;
 }
 
 OUString AccessibleDrawDocumentView::getObjectLink( const uno::Any& rAny )
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -553,7 +524,6 @@ OUString AccessibleDrawDocumentView::getObjectLink( const uno::Any& rAny )
 
 /// Create a name for this view.
 OUString AccessibleDrawDocumentView::CreateAccessibleName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     OUString sName;
 
@@ -568,26 +538,26 @@ OUString AccessibleDrawDocumentView::CreateAccessibleName()
             {
                 SolarMutexGuard aGuard;
 
-                sName = SD_RESSTR(SID_SD_A11Y_I_DRAWVIEW_N);
+                sName = SdResId(SID_SD_A11Y_I_DRAWVIEW_N);
             }
             else
             {
                 SolarMutexGuard aGuard;
 
-                sName = SD_RESSTR(SID_SD_A11Y_D_DRAWVIEW_N);
+                sName = SdResId(SID_SD_A11Y_D_DRAWVIEW_N);
             }
         }
         else if ( sFirstService == "com.sun.star.presentation.NotesView" )
         {
             SolarMutexGuard aGuard;
 
-            sName = SD_RESSTR(SID_SD_A11Y_I_NOTESVIEW_N);
+            sName = SdResId(SID_SD_A11Y_I_NOTESVIEW_N);
         }
         else if ( sFirstService == "com.sun.star.presentation.HandoutView" )
         {
             SolarMutexGuard aGuard;
 
-            sName = SD_RESSTR(SID_SD_A11Y_I_HANDOUTVIEW_N);
+            sName = SdResId(SID_SD_A11Y_I_HANDOUTVIEW_N);
         }
         else
         {
@@ -601,64 +571,10 @@ OUString AccessibleDrawDocumentView::CreateAccessibleName()
     return sName;
 }
 
-/** Create a description for this view.  Use the model's description or URL
-    if a description is not available.
-*/
-OUString
-    AccessibleDrawDocumentView::CreateAccessibleDescription()
-    throw (css::uno::RuntimeException, std::exception)
-{
-    OUString sDescription;
-
-    uno::Reference<lang::XServiceInfo> xInfo (mxController, uno::UNO_QUERY);
-    if (xInfo.is())
-    {
-        uno::Sequence< OUString > aServices( xInfo->getSupportedServiceNames() );
-        OUString sFirstService = aServices[0];
-        if ( sFirstService == "com.sun.star.drawing.DrawingDocumentDrawView" )
-        {
-            if( aServices.getLength() >= 2 && aServices[1] == "com.sun.star.presentation.PresentationView")
-            {
-                SolarMutexGuard aGuard;
-
-                sDescription = SD_RESSTR(SID_SD_A11Y_I_DRAWVIEW_D);
-            }
-            else
-            {
-                SolarMutexGuard aGuard;
-
-                sDescription = SD_RESSTR(SID_SD_A11Y_D_DRAWVIEW_D);
-            }
-        }
-        else if ( sFirstService == "com.sun.star.presentation.NotesView" )
-        {
-            SolarMutexGuard aGuard;
-
-            sDescription = SD_RESSTR(SID_SD_A11Y_I_NOTESVIEW_D);
-        }
-        else if ( sFirstService == "com.sun.star.presentation.HandoutView" )
-        {
-            SolarMutexGuard aGuard;
-
-            sDescription = SD_RESSTR(SID_SD_A11Y_I_HANDOUTVIEW_D);
-        }
-        else
-        {
-            sDescription = sFirstService;
-        }
-    }
-    else
-    {
-        sDescription = "Accessible Draw Document";
-    }
-    return sDescription;
-}
-
 /** Return selection state of specified child
 */
 bool
     AccessibleDrawDocumentView::implIsSelected( sal_Int32 nAccessibleChildIndex )
-    throw (uno::RuntimeException)
 {
     const SolarMutexGuard aSolarGuard;
     uno::Reference< view::XSelectionSupplier >  xSel( mxController, uno::UNO_QUERY );
@@ -700,7 +616,6 @@ bool
 */
 void
     AccessibleDrawDocumentView::implSelect( sal_Int32 nAccessibleChildIndex, bool bSelect )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException)
 {
     const SolarMutexGuard aSolarGuard;
     uno::Reference< view::XSelectionSupplier >  xSel( mxController, uno::UNO_QUERY );
@@ -730,8 +645,7 @@ void
 
                 if( xShapes->getCount() )
                 {
-                    aAny <<= xShapes;
-                    xSel->select( aAny );
+                    xSel->select( Any(xShapes) );
                 }
             }
         }
@@ -776,8 +690,7 @@ void
                     else if( bFound && !bSelect )
                         xShapes->remove( xShape );
 
-                    aAny <<= xShapes;
-                    xSel->select( aAny );
+                    xSel->select( Any(xShapes) );
                 }
             }
         }
@@ -814,12 +727,7 @@ void AccessibleDrawDocumentView::Deactivated()
 
 void AccessibleDrawDocumentView::impl_dispose()
 {
-    if (mpChildrenManager != nullptr)
-    {
-        delete mpChildrenManager;
-        mpChildrenManager = nullptr;
-    }
-
+    mpChildrenManager.reset();
     AccessibleDocumentViewBase::impl_dispose();
 }
 
@@ -828,13 +736,8 @@ void AccessibleDrawDocumentView::impl_dispose()
 */
 void SAL_CALL AccessibleDrawDocumentView::disposing()
 {
-
     // Release resources.
-    if (mpChildrenManager != nullptr)
-    {
-        delete mpChildrenManager;
-        mpChildrenManager = nullptr;
-    }
+    mpChildrenManager.reset();
 
     // Forward call to base classes.
     AccessibleDocumentViewBase::disposing ();
@@ -842,7 +745,6 @@ void SAL_CALL AccessibleDrawDocumentView::disposing()
 
 css::uno::Sequence< css::uno::Any >
         SAL_CALL AccessibleDrawDocumentView::getAccFlowTo(const css::uno::Any& rAny, sal_Int32 nType)
-        throw ( css::uno::RuntimeException, std::exception )
 {
     SolarMutexGuard g;
 
@@ -870,7 +772,7 @@ css::uno::Sequence< css::uno::Any >
                             if ( xSelContext->getAccessibleRole() == AccessibleRole::PARAGRAPH )
                             {
                                 uno::Sequence<uno::Any> aRet( 1 );
-                                aRet[0] = uno::makeAny( xSel );
+                                aRet[0] <<= xSel;
                                 return aRet;
                             }
                         }
@@ -881,7 +783,7 @@ css::uno::Sequence< css::uno::Any >
             if ( xPara.is() )
             {
                 uno::Sequence<uno::Any> aRet( 1 );
-                aRet[0] = uno::makeAny( xPara );
+                aRet[0] <<= xPara;
                 return aRet;
             }
         }
@@ -911,7 +813,7 @@ css::uno::Sequence< css::uno::Any >
                                 xChildSelContext->getAccessibleRole() == AccessibleRole::PARAGRAPH )
                             {
                                 uno::Sequence<uno::Any> aRet( 1 );
-                                aRet[0] = uno::makeAny( xChildSel );
+                                aRet[0] <<= xChildSel;
                                 return aRet;
                             }
                         }
@@ -925,7 +827,7 @@ css::uno::Sequence< css::uno::Any >
             if ( xPara.is() )
             {
                 uno::Sequence<uno::Any> aRet( 1 );
-                aRet[0] = uno::makeAny( xPara );
+                aRet[0] <<= xPara;
                 return aRet;
             }
         }

@@ -20,12 +20,13 @@
 #include <sot/formats.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/linkmgr.hxx>
-#include "servobj.hxx"
-#include "docsh.hxx"
-#include "impex.hxx"
-#include "brdcst.hxx"
-#include "rangenam.hxx"
-#include "sc.hrc"
+#include <servobj.hxx>
+#include <docsh.hxx>
+#include <impex.hxx>
+#include <brdcst.hxx>
+#include <rangenam.hxx>
+#include <sc.hrc>
+#include <unotools/charclass.hxx>
 
 using namespace formula;
 
@@ -102,8 +103,8 @@ ScServerObject::ScServerObject( ScDocShell* pShell, const OUString& rItem ) :
     pDocSh->GetDocument().GetLinkManager()->InsertServer( this );
     pDocSh->GetDocument().StartListeningArea( aRange, false, &aForwarder );
 
-    StartListening(*pDocSh);        // um mitzubekommen, wenn die DocShell geloescht wird
-    StartListening(*SfxGetpApp());     // for SC_HINT_AREAS_CHANGED
+    StartListening(*pDocSh);           // to notice if DocShell gets deleted
+    StartListening(*SfxGetpApp());     // for SfxHintId::ScAreasChanged
 }
 
 ScServerObject::~ScServerObject()
@@ -163,7 +164,8 @@ bool ScServerObject::GetData(
     OUString aDdeTextFmt = pDocSh->GetDdeTextFmt();
     ScDocument& rDoc = pDocSh->GetDocument();
 
-    if( SotClipboardFormatId::STRING == SotExchange::GetFormatIdFromMimeType( rMimeType ))
+    SotClipboardFormatId eFormatId = SotExchange::GetFormatIdFromMimeType( rMimeType );
+    if (SotClipboardFormatId::STRING == eFormatId || SotClipboardFormatId::STRING_TSVC == eFormatId)
     {
         ScImportExport aObj( &rDoc, aRange );
         if( aDdeTextFmt[0] == 'F' )
@@ -182,6 +184,7 @@ bool ScServerObject::GetData(
         }
         if( aDdeTextFmt == "CSV" || aDdeTextFmt == "FCSV" )
             aObj.SetSeparator( ',' );
+        /* TODO: STRING_TSVC could preserve line breaks with added quotes. */
         aObj.SetExportTextOptions( ScExportTextOptions( ScExportTextOptions::ToSpace, ' ', false ) );
         return aObj.ExportData( rMimeType, rData );
     }
@@ -197,12 +200,11 @@ void ScServerObject::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
 {
     bool bDataChanged = false;
 
-    //  DocShell can't be tested via type info, because SFX_HINT_DYING comes from the dtor
+    //  DocShell can't be tested via type info, because SfxHintId::Dying comes from the dtor
     if ( &rBC == pDocSh )
     {
-        //  from DocShell, only SFX_HINT_DYING is interesting
-        const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>( &rHint );
-        if ( pSimpleHint && pSimpleHint->GetId() == SFX_HINT_DYING )
+        //  from DocShell, only SfxHintId::Dying is interesting
+        if ( rHint.GetId() == SfxHintId::Dying )
         {
             pDocSh = nullptr;
             EndListening(*SfxGetpApp());
@@ -211,9 +213,7 @@ void ScServerObject::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
     }
     else if (dynamic_cast<const SfxApplication*>( &rBC) !=  nullptr)
     {
-        const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>( &rHint );
-        if ( !aItemStr.isEmpty() && pSimpleHint &&
-                pSimpleHint->GetId() == SC_HINT_AREAS_CHANGED )
+        if ( !aItemStr.isEmpty() && rHint.GetId() == SfxHintId::ScAreasChanged )
         {
             //  check if named range was modified
             ScRange aNew;
@@ -226,20 +226,20 @@ void ScServerObject::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
         //  must be from Area broadcasters
 
         const ScHint* pScHint = dynamic_cast<const ScHint*>( &rHint );
-        if (pScHint && (pScHint->GetId() & SC_HINT_DATACHANGED))
+        if (pScHint && (pScHint->GetId() == SfxHintId::ScDataChanged))
             bDataChanged = true;
         else if (const ScAreaChangedHint *pChgHint = dynamic_cast<const ScAreaChangedHint*>(&rHint))      // position of broadcaster changed
         {
-            ScRange aNewRange = pChgHint->GetRange();
+            const ScRange& aNewRange = pChgHint->GetRange();
             if ( aRange != aNewRange )
             {
                 bRefreshListener = true;
                 bDataChanged = true;
             }
         }
-        else if (const SfxSimpleHint *pSplHint = dynamic_cast<const SfxSimpleHint*>(&rHint))
+        else
         {
-            if (pSplHint->GetId() == SFX_HINT_DYING)
+            if (rHint.GetId() == SfxHintId::Dying)
             {
                 //  If the range is being deleted, listening must be restarted
                 //  after the deletion is complete (done in GetData)

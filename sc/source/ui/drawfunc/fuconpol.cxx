@@ -17,43 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuconpol.hxx"
-#include "tabvwsh.hxx"
-#include "sc.hrc"
-#include "drawview.hxx"
+#include <fuconpol.hxx>
+#include <tabvwsh.hxx>
+#include <sc.hrc>
+#include <drawview.hxx>
 
 // Create default drawing objects via keyboard
 #include <svx/svdopath.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/point/b2dpoint.hxx>
 
-/*************************************************************************
-|*
-|* Konstruktor
-|*
-\************************************************************************/
-
-FuConstPolygon::FuConstPolygon(ScTabViewShell* pViewSh, vcl::Window* pWin, ScDrawView* pViewP,
-                   SdrModel* pDoc, SfxRequest& rReq)
-    : FuConstruct(pViewSh, pWin, pViewP, pDoc, rReq)
+FuConstPolygon::FuConstPolygon(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawView* pViewP,
+                               SdrModel* pDoc, const SfxRequest& rReq)
+    : FuConstruct(rViewSh, pWin, pViewP, pDoc, rReq)
 {
 }
-
-/*************************************************************************
-|*
-|* Destruktor
-|*
-\************************************************************************/
 
 FuConstPolygon::~FuConstPolygon()
 {
 }
-
-/*************************************************************************
-|*
-|* MouseButtonDown-event
-|*
-\************************************************************************/
 
 bool FuConstPolygon::MouseButtonDown(const MouseEvent& rMEvt)
 {
@@ -64,10 +46,10 @@ bool FuConstPolygon::MouseButtonDown(const MouseEvent& rMEvt)
 
     SdrViewEvent aVEvt;
     (void)pView->PickAnything(rMEvt, SdrMouseEventKind::BUTTONDOWN, aVEvt);
-    if (aVEvt.eEvent == SDREVENT_BEGTEXTEDIT)
+    if (aVEvt.eEvent == SdrEventKind::BeginTextEdit)
     {
-        // Texteingabe hier nicht zulassen
-        aVEvt.eEvent = SDREVENT_BEGDRAGOBJ;
+        // Text input not allowed here
+        aVEvt.eEvent = SdrEventKind::BeginDragObj;
         pView->EnableExtendedMouseEventDispatcher(false);
     }
     else
@@ -81,23 +63,11 @@ bool FuConstPolygon::MouseButtonDown(const MouseEvent& rMEvt)
     return bReturn;
 }
 
-/*************************************************************************
-|*
-|* MouseMove-event
-|*
-\************************************************************************/
-
 bool FuConstPolygon::MouseMove(const MouseEvent& rMEvt)
 {
     pView->MouseMove(rMEvt, pWindow);
     return FuConstruct::MouseMove(rMEvt);
 }
-
-/*************************************************************************
-|*
-|* MouseButtonUp-event
-|*
-\************************************************************************/
 
 bool FuConstPolygon::MouseButtonUp(const MouseEvent& rMEvt)
 {
@@ -112,10 +82,10 @@ bool FuConstPolygon::MouseButtonUp(const MouseEvent& rMEvt)
 
     pView->MouseButtonUp(rMEvt, pWindow);
 
-    if (aVEvt.eEvent == SDREVENT_ENDCREATE)
+    if (aVEvt.eEvent == SdrEventKind::EndCreate)
     {
         bReturn = true;
-        bSimple = true;         // Doppelklick nicht weiterreichen
+        bSimple = true;         // Do not pass on double-click
     }
 
     bool bParent;
@@ -126,26 +96,6 @@ bool FuConstPolygon::MouseButtonUp(const MouseEvent& rMEvt)
 
     return (bParent || bReturn);
 }
-
-/*************************************************************************
-|*
-|* Tastaturereignisse bearbeiten
-|*
-|* Wird ein KeyEvent bearbeitet, so ist der Return-Wert sal_True, andernfalls
-|* FALSE.
-|*
-\************************************************************************/
-
-bool FuConstPolygon::KeyInput(const KeyEvent& rKEvt)
-{
-    return FuConstruct::KeyInput(rKEvt);
-}
-
-/*************************************************************************
-|*
-|* Function aktivieren
-|*
-\************************************************************************/
 
 void FuConstPolygon::Activate()
 {
@@ -202,34 +152,28 @@ void FuConstPolygon::Activate()
 
     pView->SetCurrentObj(sal::static_int_cast<sal_uInt16>(eKind));
 
-    pView->SetEditMode(SDREDITMODE_CREATE);
+    pView->SetEditMode(SdrViewEditMode::Create);
 
     FuConstruct::Activate();
 
     aNewPointer = Pointer( PointerStyle::DrawPolygon );
     aOldPointer = pWindow->GetPointer();
-    pViewShell->SetActivePointer( aNewPointer );
+    rViewShell.SetActivePointer( aNewPointer );
 }
-
-/*************************************************************************
-|*
-|* Function deaktivieren
-|*
-\************************************************************************/
 
 void FuConstPolygon::Deactivate()
 {
-    pView->SetEditMode(SDREDITMODE_EDIT);
+    pView->SetEditMode(SdrViewEditMode::Edit);
 
     pView->EnableExtendedMouseEventDispatcher(false);
 
     FuConstruct::Deactivate();
 
-    pViewShell->SetActivePointer( aOldPointer );
+    rViewShell.SetActivePointer( aOldPointer );
 }
 
 // Create default drawing objects via keyboard
-SdrObject* FuConstPolygon::CreateDefaultObject(const sal_uInt16 nID, const Rectangle& rRectangle)
+SdrObjectUniquePtr FuConstPolygon::CreateDefaultObject(const sal_uInt16 nID, const tools::Rectangle& rRectangle)
 {
     // case SID_DRAW_XPOLYGON:
     // case SID_DRAW_XPOLYGON_NOFILL:
@@ -240,13 +184,14 @@ SdrObject* FuConstPolygon::CreateDefaultObject(const sal_uInt16 nID, const Recta
     // case SID_DRAW_FREELINE:
     // case SID_DRAW_FREELINE_NOFILL:
 
-    SdrObject* pObj = SdrObjFactory::MakeNewObject(
-        pView->GetCurrentObjInventor(), pView->GetCurrentObjIdentifier(),
-        nullptr, pDrDoc);
+    SdrObjectUniquePtr pObj(SdrObjFactory::MakeNewObject(
+        *pDrDoc,
+        pView->GetCurrentObjInventor(),
+        pView->GetCurrentObjIdentifier()));
 
     if(pObj)
     {
-        if(dynamic_cast<const SdrPathObj*>( pObj) !=  nullptr)
+        if(dynamic_cast<const SdrPathObj*>( pObj.get() ) !=  nullptr)
         {
             basegfx::B2DPolyPolygon aPoly;
 
@@ -326,7 +271,7 @@ SdrObject* FuConstPolygon::CreateDefaultObject(const sal_uInt16 nID, const Recta
                 }
             }
 
-            static_cast<SdrPathObj*>(pObj)->SetPathPoly(aPoly);
+            static_cast<SdrPathObj*>(pObj.get())->SetPathPoly(aPoly);
         }
         else
         {

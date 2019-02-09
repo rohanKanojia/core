@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.16.1 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.22.1 -->
+<interface domain="flt">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkAdjustment" id="adjustmentquality">
     <property name="lower">1</property>
     <property name="upper">100</property>
@@ -11,9 +11,15 @@
   <object class="GtkDialog" id="ImpSWFDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Flash (SWF) Options</property>
+    <property name="title" translatable="yes" context="impswfdialog|ImpSWFDialog">Flash (SWF) Options</property>
     <property name="resizable">False</property>
+    <property name="modal">True</property>
+    <property name="default_width">0</property>
+    <property name="default_height">0</property>
     <property name="type_hint">dialog</property>
+    <child>
+      <placeholder/>
+    </child>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
         <property name="can_focus">False</property>
@@ -91,18 +97,16 @@
                   <object class="GtkLabel" id="label1">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">1: min. quality
+                    <property name="label" translatable="yes" context="impswfdialog|label1">1: min. quality
 100: max. quality</property>
                     <property name="use_underline">True</property>
                     <property name="justify">fill</property>
                     <property name="mnemonic_widget">quality</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -110,7 +114,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="valign">center</property>
-                    <property name="invisible_char">●</property>
+                    <property name="activates_default">True</property>
                     <property name="xalign">0.5</property>
                     <property name="input_purpose">digits</property>
                     <property name="adjustment">adjustmentquality</property>
@@ -119,21 +123,17 @@
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
               </object>
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">0</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
             <child>
               <object class="GtkCheckButton" id="exportall">
-                <property name="label" translatable="yes">Export _all slides (uncheck to export current slide)</property>
+                <property name="label" translatable="yes" context="impswfdialog|exportall">Export _all slides (uncheck to export current slide)</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
@@ -144,8 +144,6 @@
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">1</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
             <child>
@@ -155,7 +153,7 @@
                 <property name="row_spacing">6</property>
                 <child>
                   <object class="GtkCheckButton" id="exportmultiplefiles">
-                    <property name="label" translatable="yes">Export as _multiple files</property>
+                    <property name="label" translatable="yes" context="impswfdialog|exportmultiplefiles">Export as _multiple files</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -166,8 +164,6 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -178,7 +174,7 @@
                     <property name="row_spacing">6</property>
                     <child>
                       <object class="GtkCheckButton" id="exportbackgrounds">
-                        <property name="label" translatable="yes">Export _backgrounds</property>
+                        <property name="label" translatable="yes" context="impswfdialog|exportbackgrounds">Export _backgrounds</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -189,13 +185,11 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">0</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="exportbackgroundobjects">
-                        <property name="label" translatable="yes">Export back_ground objects</property>
+                        <property name="label" translatable="yes" context="impswfdialog|exportbackgroundobjects">Export back_ground objects</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -206,13 +200,11 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">1</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="exportslidecontents">
-                        <property name="label" translatable="yes">Export _slide contents</property>
+                        <property name="label" translatable="yes" context="impswfdialog|exportslidecontents">Export _slide contents</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -223,29 +215,23 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">2</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
               </object>
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">2</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
             <child>
               <object class="GtkCheckButton" id="exportsound">
-                <property name="label" translatable="yes">Export _Verilogix Slide Annotations</property>
+                <property name="label" translatable="yes" context="impswfdialog|exportsound">Export _Verilogix Slide Annotations</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
@@ -256,13 +242,11 @@
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">3</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
             <child>
               <object class="GtkCheckButton" id="exportoleasjpeg">
-                <property name="label" translatable="yes">Export OLE objects as _JPEG images</property>
+                <property name="label" translatable="yes" context="impswfdialog|exportoleasjpeg">Export OLE objects as _JPEG images</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
@@ -273,8 +257,6 @@
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">4</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
           </object>
@@ -287,9 +269,9 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">cancel</action-widget>
-      <action-widget response="0">help</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
   </object>
 </interface>

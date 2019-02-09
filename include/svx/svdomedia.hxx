@@ -20,6 +20,7 @@
 #ifndef INCLUDED_SVX_SVDOMEDIA_HXX
 #define INCLUDED_SVX_SVDOMEDIA_HXX
 
+#include <memory>
 #include <svx/svdorect.hxx>
 #include <avmedia/mediaitem.hxx>
 #include <svx/svxdllapi.h>
@@ -29,17 +30,19 @@ class Graphic;
 namespace sdr { namespace contact { class ViewContactOfSdrMediaObj; } }
 
 
-class SVX_DLLPUBLIC SdrMediaObj : public SdrRectObj
+class SVX_DLLPUBLIC SdrMediaObj final : public SdrRectObj
 {
     friend class sdr::contact::ViewContactOfSdrMediaObj;
 
+private:
+    // protected destructor - due to final, make private
+    virtual ~SdrMediaObj() override;
+
 public:
-
-
-                                    SdrMediaObj();
-                                    SdrMediaObj( const Rectangle& rRect );
-
-        virtual                     ~SdrMediaObj();
+        SdrMediaObj(SdrModel& rSdrModel);
+        SdrMediaObj(
+                SdrModel& rSdrModel,
+                const tools::Rectangle& rRect);
 
         virtual bool                HasTextEdit() const override;
 
@@ -49,12 +52,10 @@ public:
         virtual OUString            TakeObjNameSingul() const override;
         virtual OUString            TakeObjNamePlural() const override;
 
-        virtual SdrMediaObj*            Clone() const override;
+        virtual SdrMediaObj*        CloneSdrObject(SdrModel& rTargetModel) const override;
         SdrMediaObj&                operator=(const SdrMediaObj& rObj);
 
-        virtual void                AdjustToMaxRect( const Rectangle& rMaxRect, bool bShrinkOnly = false ) override;
-
-public:
+        virtual void                AdjustToMaxRect( const tools::Rectangle& rMaxRect, bool bShrinkOnly = false ) override;
 
         void                        setURL( const OUString& rURL, const OUString& rReferer, const OUString& rMimeType = OUString() );
         const OUString&      getURL() const;
@@ -62,20 +63,18 @@ public:
         void                        setMediaProperties( const ::avmedia::MediaItem& rState );
         const ::avmedia::MediaItem& getMediaProperties() const;
 
-        Size                        getPreferredSize() const;
-
-        const css::uno::Reference< css::graphic::XGraphic >
+        css::uno::Reference< css::graphic::XGraphic > const &
                                     getSnapshot() const;
         css::uno::Reference< css::io::XInputStream>
                                     GetInputStream();
         void                        SetInputStream(css::uno::Reference<css::io::XInputStream> const&);
 
-protected:
-
-        void                mediaPropertiesChanged( const ::avmedia::MediaItem& rNewState );
-        virtual sdr::contact::ViewContact* CreateObjectSpecificViewContact() override;
+        virtual bool shouldKeepAspectRatio() const override { return true; }
 
 private:
+        void                mediaPropertiesChanged( const ::avmedia::MediaItem& rNewState );
+        virtual std::unique_ptr<sdr::contact::ViewContact> CreateObjectSpecificViewContact() override;
+
         struct Impl;
         std::unique_ptr<Impl> m_xImpl;
 };

@@ -47,14 +47,14 @@ public:
         sal_uInt16 nPrfx,
         const OUString& rLocalName );
 
-    virtual ~XMLIndexBodyContext();
+    virtual ~XMLIndexBodyContext() override;
 
     /// return whether any content elements were encountered
     inline bool HasContent();
 
 protected:
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList ) override;

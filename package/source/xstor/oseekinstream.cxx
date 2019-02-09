@@ -21,6 +21,7 @@
 #include <cppuhelper/typeprovider.hxx>
 #include <cppuhelper/queryinterface.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 #include "oseekinstream.hxx"
 #include "owriteablestream.hxx"
@@ -28,22 +29,22 @@
 using namespace ::com::sun::star;
 
 OInputSeekStream::OInputSeekStream( OWriteStream_Impl& pImpl,
-                                    uno::Reference < io::XInputStream > xStream,
+                                    uno::Reference < io::XInputStream > const & xStream,
                                     const uno::Sequence< beans::PropertyValue >& aProps,
                                     sal_Int32 nStorageType )
 : OInputCompStream( pImpl, xStream, aProps, nStorageType )
 {
     m_xSeekable.set( m_xStream, uno::UNO_QUERY );
-    OSL_ENSURE( m_xSeekable.is(), "No seeking support!\n" );
+    OSL_ENSURE( m_xSeekable.is(), "No seeking support!" );
 }
 
-OInputSeekStream::OInputSeekStream( uno::Reference < io::XInputStream > xStream,
+OInputSeekStream::OInputSeekStream( uno::Reference < io::XInputStream > const & xStream,
                                     const uno::Sequence< beans::PropertyValue >& aProps,
                                     sal_Int32 nStorageType )
 : OInputCompStream( xStream, aProps, nStorageType )
 {
     m_xSeekable.set( m_xStream, uno::UNO_QUERY );
-    OSL_ENSURE( m_xSeekable.is(), "No seeking support!\n" );
+    OSL_ENSURE( m_xSeekable.is(), "No seeking support!" );
 }
 
 OInputSeekStream::~OInputSeekStream()
@@ -51,29 +52,14 @@ OInputSeekStream::~OInputSeekStream()
 }
 
 uno::Sequence< uno::Type > SAL_CALL OInputSeekStream::getTypes()
-        throw ( uno::RuntimeException, std::exception )
 {
-    static ::cppu::OTypeCollection* pTypeCollection = nullptr ;
+    static cppu::OTypeCollection aTypeCollection(cppu::UnoType<io::XSeekable>::get(),
+                                                   OInputCompStream::getTypes());
 
-    if ( pTypeCollection == nullptr )
-    {
-        ::osl::MutexGuard aGuard( m_rMutexRef->GetMutex() ) ;
-
-        if ( pTypeCollection == nullptr )
-        {
-            static ::cppu::OTypeCollection aTypeCollection(
-                    cppu::UnoType<io::XSeekable>::get(),
-                    OInputCompStream::getTypes() );
-
-            pTypeCollection = &aTypeCollection ;
-        }
-    }
-
-    return pTypeCollection->getTypes() ;
+    return aTypeCollection.getTypes();
 }
 
 uno::Any SAL_CALL OInputSeekStream::queryInterface( const uno::Type& rType )
-        throw( uno::RuntimeException, std::exception )
 {
     // Attention:
     //  Don't use mutex or guard in this method!!! Is a method of XInterface.
@@ -102,11 +88,8 @@ void SAL_CALL OInputSeekStream::release()
 }
 
 void SAL_CALL OInputSeekStream::seek( sal_Int64 location )
-        throw ( lang::IllegalArgumentException,
-                io::IOException,
-                uno::RuntimeException, std::exception )
 {
-    ::osl::MutexGuard aGuard( m_rMutexRef->GetMutex() );
+    ::osl::MutexGuard aGuard( m_xMutex->GetMutex() );
     if ( m_bDisposed )
     {
         SAL_INFO("package.xstor", "Disposed!");
@@ -123,10 +106,8 @@ void SAL_CALL OInputSeekStream::seek( sal_Int64 location )
 }
 
 sal_Int64 SAL_CALL OInputSeekStream::getPosition()
-        throw ( io::IOException,
-                uno::RuntimeException, std::exception)
 {
-    ::osl::MutexGuard aGuard( m_rMutexRef->GetMutex() );
+    ::osl::MutexGuard aGuard( m_xMutex->GetMutex() );
     if ( m_bDisposed )
     {
         SAL_INFO("package.xstor", "Disposed!");
@@ -143,10 +124,8 @@ sal_Int64 SAL_CALL OInputSeekStream::getPosition()
 }
 
 sal_Int64 SAL_CALL OInputSeekStream::getLength()
-        throw ( io::IOException,
-                uno::RuntimeException, std::exception )
 {
-    ::osl::MutexGuard aGuard( m_rMutexRef->GetMutex() );
+    ::osl::MutexGuard aGuard( m_xMutex->GetMutex() );
     if ( m_bDisposed )
     {
         SAL_INFO("package.xstor", "Disposed!");

@@ -17,6 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <osl/diagnose.h>
+#include <vcl/event.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/button.hxx>
 #include <vcl/tabpage.hxx>
@@ -57,8 +59,8 @@ void WizardDialog::ImplInitData()
     mbEmptyViewMargin =  false;
     mnLeftAlignCount = 0;
 
-    maWizardLayoutIdle.SetPriority(SchedulerPriority::RESIZE);
-    maWizardLayoutIdle.SetIdleHdl( LINK( this, WizardDialog, ImplHandleWizardLayoutTimerHdl ) );
+    maWizardLayoutIdle.SetPriority(TaskPriority::RESIZE);
+    maWizardLayoutIdle.SetInvokeHandler( LINK( this, WizardDialog, ImplHandleWizardLayoutTimerHdl ) );
 }
 
 
@@ -76,7 +78,7 @@ void WizardDialog::SetEmptyViewMargin()
 
 void WizardDialog::ImplCalcSize( Size& rSize )
 {
-    // ButtonBar-Hoehe berechnen
+    // calculate ButtonBar height
     long                nMaxHeight = 0;
     ImplWizButtonData*  pBtnData = mpFirstBtn;
     while ( pBtnData )
@@ -88,38 +90,33 @@ void WizardDialog::ImplCalcSize( Size& rSize )
     }
     if ( nMaxHeight )
         nMaxHeight += WIZARDDIALOG_BUTTON_OFFSET_Y*2;
-    rSize.Height() += nMaxHeight;
+    rSize.AdjustHeight(nMaxHeight );
 
-    // View-Window-Groesse dazurechnen
+    // add in the view window size
     if ( mpViewWindow && mpViewWindow->IsVisible() )
     {
         Size aViewSize = mpViewWindow->GetSizePixel();
         if ( meViewAlign == WindowAlign::Top )
-            rSize.Height() += aViewSize.Height();
+            rSize.AdjustHeight(aViewSize.Height() );
         else if ( meViewAlign == WindowAlign::Left )
-            rSize.Width() += aViewSize.Width();
+            rSize.AdjustWidth(aViewSize.Width() );
         else if ( meViewAlign == WindowAlign::Bottom )
-            rSize.Height() += aViewSize.Height();
+            rSize.AdjustHeight(aViewSize.Height() );
         else if ( meViewAlign == WindowAlign::Right )
-            rSize.Width() += aViewSize.Width();
+            rSize.AdjustWidth(aViewSize.Width() );
     }
-}
-
-bool WizardDialog::hasWizardPendingLayout() const
-{
-    return maWizardLayoutIdle.IsActive();
 }
 
 void WizardDialog::queue_resize(StateChangedType /*eReason*/)
 {
-    if (hasWizardPendingLayout())
+    if (maWizardLayoutIdle.IsActive())
         return;
     if (IsInClose())
         return;
     maWizardLayoutIdle.Start();
 }
 
-IMPL_LINK_NOARG_TYPED( WizardDialog, ImplHandleWizardLayoutTimerHdl, Idle*, void )
+IMPL_LINK_NOARG( WizardDialog, ImplHandleWizardLayoutTimerHdl, Timer*, void )
 {
     ImplPosCtrls();
     ImplPosTabPage();
@@ -182,60 +179,60 @@ void WizardDialog::ImplPosCtrls()
         nOffY -= WIZARDDIALOG_BUTTON_OFFSET_Y;
     }
 
-    if ( mpViewWindow && mpViewWindow->IsVisible() )
+    if ( !(mpViewWindow && mpViewWindow->IsVisible()) )
+        return;
+
+    long    nViewOffX = 0;
+    long    nViewOffY = 0;
+    long    nViewWidth = 0;
+    long    nViewHeight = 0;
+    long    nDlgHeight = nOffY;
+    PosSizeFlags nViewPosFlags = PosSizeFlags::Pos;
+    if ( meViewAlign == WindowAlign::Top )
     {
-        long    nViewOffX = 0;
-        long    nViewOffY = 0;
-        long    nViewWidth = 0;
-        long    nViewHeight = 0;
-        long    nDlgHeight = nOffY;
-        PosSizeFlags nViewPosFlags = PosSizeFlags::Pos;
-        if ( meViewAlign == WindowAlign::Top )
+        nViewOffX       = WIZARDDIALOG_VIEW_DLGOFFSET_X;
+        nViewOffY       = WIZARDDIALOG_VIEW_DLGOFFSET_Y;
+        nViewWidth      = aDlgSize.Width()-(WIZARDDIALOG_VIEW_DLGOFFSET_X*2);
+        nViewPosFlags  |= PosSizeFlags::Width;
+    }
+    else if ( meViewAlign == WindowAlign::Left )
+    {
+        if ( mbEmptyViewMargin )
+        {
+            nViewOffX       = 0;
+            nViewOffY       = 0;
+            nViewHeight     = nDlgHeight;
+        }
+        else
         {
             nViewOffX       = WIZARDDIALOG_VIEW_DLGOFFSET_X;
-            nViewOffY       = WIZARDDIALOG_VIEW_DLGOFFSET_Y;
-            nViewWidth      = aDlgSize.Width()-(WIZARDDIALOG_VIEW_DLGOFFSET_X*2);
-            nViewPosFlags  |= PosSizeFlags::Width;
-        }
-        else if ( meViewAlign == WindowAlign::Left )
-        {
-            if ( mbEmptyViewMargin )
-            {
-                nViewOffX       = 0;
-                nViewOffY       = 0;
-                nViewHeight     = nDlgHeight;
-            }
-            else
-            {
-                nViewOffX       = WIZARDDIALOG_VIEW_DLGOFFSET_X;
-                nViewOffY       = WIZARDDIALOG_VIEW_DLGOFFSET_Y;
-                nViewHeight     = nDlgHeight-(WIZARDDIALOG_VIEW_DLGOFFSET_Y*2);
-            }
-            nViewPosFlags  |= PosSizeFlags::Height;
-        }
-        else if ( meViewAlign == WindowAlign::Bottom )
-        {
-            nViewOffX       = WIZARDDIALOG_VIEW_DLGOFFSET_X;
-            nViewOffY       = nDlgHeight-mpViewWindow->GetSizePixel().Height()-WIZARDDIALOG_VIEW_DLGOFFSET_Y;
-            nViewWidth      = aDlgSize.Width()-(WIZARDDIALOG_VIEW_DLGOFFSET_X*2);
-            nViewPosFlags  |= PosSizeFlags::Width;
-        }
-        else if ( meViewAlign == WindowAlign::Right )
-        {
-            nViewOffX       = aDlgSize.Width()-mpViewWindow->GetSizePixel().Width()-WIZARDDIALOG_VIEW_DLGOFFSET_X;
             nViewOffY       = WIZARDDIALOG_VIEW_DLGOFFSET_Y;
             nViewHeight     = nDlgHeight-(WIZARDDIALOG_VIEW_DLGOFFSET_Y*2);
-            nViewPosFlags  |= PosSizeFlags::Height;
         }
-        mpViewWindow->setPosSizePixel( nViewOffX, nViewOffY,
-                                       nViewWidth, nViewHeight,
-                                       nViewPosFlags );
+        nViewPosFlags  |= PosSizeFlags::Height;
     }
+    else if ( meViewAlign == WindowAlign::Bottom )
+    {
+        nViewOffX       = WIZARDDIALOG_VIEW_DLGOFFSET_X;
+        nViewOffY       = nDlgHeight-mpViewWindow->GetSizePixel().Height()-WIZARDDIALOG_VIEW_DLGOFFSET_Y;
+        nViewWidth      = aDlgSize.Width()-(WIZARDDIALOG_VIEW_DLGOFFSET_X*2);
+        nViewPosFlags  |= PosSizeFlags::Width;
+    }
+    else if ( meViewAlign == WindowAlign::Right )
+    {
+        nViewOffX       = aDlgSize.Width()-mpViewWindow->GetSizePixel().Width()-WIZARDDIALOG_VIEW_DLGOFFSET_X;
+        nViewOffY       = WIZARDDIALOG_VIEW_DLGOFFSET_Y;
+        nViewHeight     = nDlgHeight-(WIZARDDIALOG_VIEW_DLGOFFSET_Y*2);
+        nViewPosFlags  |= PosSizeFlags::Height;
+    }
+    mpViewWindow->setPosSizePixel( nViewOffX, nViewOffY,
+                                   nViewWidth, nViewHeight,
+                                   nViewPosFlags );
 }
 
 
 long WizardDialog::LogicalCoordinateToPixel(int iCoordinate){
-    Size aLocSize = LogicToPixel(Size( iCoordinate, 0 ), MAP_APPFONT );
+    Size aLocSize = LogicToPixel(Size(iCoordinate, 0), MapMode(MapUnit::MapAppFont));
     int iPixelCoordinate =  aLocSize.Width();
     return iPixelCoordinate;
 }
@@ -269,7 +266,7 @@ void WizardDialog::ImplPosTabPage()
 
     // position TabPage
     Size aDlgSize = GetOutputSizePixel();
-    aDlgSize.Height() -= nMaxHeight;
+    aDlgSize.AdjustHeight( -nMaxHeight );
     long nOffX = 0;
     long nOffY = 0;
     if ( mpViewWindow && mpViewWindow->IsVisible() )
@@ -278,18 +275,18 @@ void WizardDialog::ImplPosTabPage()
         if ( meViewAlign == WindowAlign::Top )
         {
             nOffY += aViewSize.Height()+WIZARDDIALOG_VIEW_DLGOFFSET_Y;
-            aDlgSize.Height() -= aViewSize.Height()+WIZARDDIALOG_VIEW_DLGOFFSET_Y;
+            aDlgSize.AdjustHeight( -(aViewSize.Height()+WIZARDDIALOG_VIEW_DLGOFFSET_Y) );
         }
         else if ( meViewAlign == WindowAlign::Left )
         {
             long nViewOffset = mbEmptyViewMargin ? 0 : WIZARDDIALOG_VIEW_DLGOFFSET_X;
             nOffX += aViewSize.Width() + nViewOffset;
-            aDlgSize.Width() -= nOffX;
+            aDlgSize.AdjustWidth( -nOffX );
         }
         else if ( meViewAlign == WindowAlign::Bottom )
-            aDlgSize.Height() -= aViewSize.Height()+WIZARDDIALOG_VIEW_DLGOFFSET_Y;
+            aDlgSize.AdjustHeight( -(aViewSize.Height()+WIZARDDIALOG_VIEW_DLGOFFSET_Y) );
         else if ( meViewAlign == WindowAlign::Right )
-            aDlgSize.Width() -= aViewSize.Width()+WIZARDDIALOG_VIEW_DLGOFFSET_X;
+            aDlgSize.AdjustWidth( -(aViewSize.Width()+WIZARDDIALOG_VIEW_DLGOFFSET_X) );
     }
     Point aPos( nOffX, nOffY );
     mpCurTabPage->SetPosSizePixel( aPos, aDlgSize );
@@ -335,13 +332,6 @@ TabPage* WizardDialog::ImplGetPage( sal_uInt16 nLevel ) const
         return pPageData->mpPage;
     return nullptr;
 }
-
-WizardDialog::WizardDialog( vcl::Window* pParent, WinBits nStyle ) :
-    ModalDialog( pParent, nStyle )
-{
-    ImplInitData();
-}
-
 
 WizardDialog::WizardDialog( vcl::Window* pParent, const OUString& rID, const OUString& rUIXMLDescription ) :
     ModalDialog( pParent, rID, rUIXMLDescription )
@@ -402,9 +392,9 @@ void WizardDialog::StateChanged( StateChangedType nType )
                     {
                         Size aPageSize = pPageData->mpPage->GetSizePixel();
                         if ( aPageSize.Width() > aDlgSize.Width() )
-                            aDlgSize.Width() = aPageSize.Width();
+                            aDlgSize.setWidth( aPageSize.Width() );
                         if ( aPageSize.Height() > aDlgSize.Height() )
-                            aDlgSize.Height() = aPageSize.Height();
+                            aDlgSize.setHeight( aPageSize.Height() );
                     }
 
                     pPageData = pPageData->mpNext;
@@ -423,7 +413,7 @@ void WizardDialog::StateChanged( StateChangedType nType )
 }
 
 
-bool WizardDialog::Notify( NotifyEvent& rNEvt )
+bool WizardDialog::EventNotify( NotifyEvent& rNEvt )
 {
     if ( (rNEvt.GetType() == MouseNotifyEvent::KEYINPUT) && mpPrevBtn && mpNextBtn )
     {
@@ -464,7 +454,7 @@ bool WizardDialog::Notify( NotifyEvent& rNEvt )
         }
     }
 
-    return Dialog::Notify( rNEvt );
+    return Dialog::EventNotify( rNEvt );
 }
 
 

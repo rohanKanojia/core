@@ -44,7 +44,7 @@ namespace dbaui
     public:
         /** constructs a HierarchicalNameCheck instance
         @param _rxNames
-            the hierarchic container of named objects, against which given names should be
+            the hierarchical container of named objects, against which given names should be
             checked
         @param _rRelativeRoot
             the root in the hierarchy against which given names should be checked
@@ -56,7 +56,7 @@ namespace dbaui
             const OUString& _rRelativeRoot
         );
 
-        virtual ~HierarchicalNameCheck();
+        virtual ~HierarchicalNameCheck() override;
 
         HierarchicalNameCheck(const HierarchicalNameCheck&) = delete;
         const HierarchicalNameCheck& operator=(const HierarchicalNameCheck&) = delete;
@@ -66,9 +66,6 @@ namespace dbaui
             const OUString& _rObjectName,
             ::dbtools::SQLExceptionInfo& _out_rErrorToDisplay
         ) const override;
-
-    private:
-        HierarchicalNameCheck();                                            // never implemented
     };
 
     // DynamicTableOrQueryNameCheck
@@ -108,7 +105,7 @@ namespace dbaui
             sal_Int32 _nCommandType
         );
 
-        virtual ~DynamicTableOrQueryNameCheck();
+        virtual ~DynamicTableOrQueryNameCheck() override;
 
         DynamicTableOrQueryNameCheck(const DynamicTableOrQueryNameCheck&) = delete;
         const DynamicTableOrQueryNameCheck& operator=(const DynamicTableOrQueryNameCheck&) = delete;
@@ -118,9 +115,6 @@ namespace dbaui
             const OUString& _rObjectName,
             ::dbtools::SQLExceptionInfo& _out_rErrorToDisplay
         ) const override;
-
-    private:
-        DynamicTableOrQueryNameCheck();                                                // never implemented
     };
 
 } // namespace dbaui

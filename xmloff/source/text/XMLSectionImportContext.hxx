@@ -42,14 +42,6 @@ class XMLSectionImportContext : public SvXMLImportContext
     /// TextSection (as XPropertySet) for passing down to data source elements
     css::uno::Reference<css::beans::XPropertySet> xSectionPropertySet;
 
-    const OUString sTextSection;
-    const OUString sIndexHeaderSection;
-    const OUString sCondition;
-    const OUString sIsVisible;
-    const OUString sProtectionKey;
-    const OUString sIsProtected;
-    const OUString sIsCurrentlyVisible;
-
     OUString sXmlId;
     OUString sStyleName;
     OUString sName;
@@ -73,16 +65,16 @@ public:
         sal_uInt16 nPrfx,
         const OUString& rLocalName );
 
-    virtual ~XMLSectionImportContext();
+    virtual ~XMLSectionImportContext() override;
 
-protected:
+private:
 
     virtual void StartElement(
         const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList) override;
 
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList ) override;

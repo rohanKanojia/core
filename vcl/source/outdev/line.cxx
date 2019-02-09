@@ -20,13 +20,16 @@
 #include <cassert>
 #include <numeric>
 
+#include <vcl/gdimtf.hxx>
+#include <vcl/lineinfo.hxx>
+#include <vcl/metaact.hxx>
 #include <vcl/outdev.hxx>
 #include <vcl/virdev.hxx>
 #include <vcl/window.hxx>
 
 #include <salgdi.hxx>
 
-#include "outdata.hxx"
+#include <outdata.hxx>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
@@ -47,14 +50,11 @@ void OutputDevice::DrawLine( const Point& rStartPt, const Point& rEndPt,
     if ( mpMetaFile )
         mpMetaFile->AddAction( new MetaLineAction( rStartPt, rEndPt, rLineInfo ) );
 
-    if ( !IsDeviceOutputNecessary() || !mbLineColor || ( LINE_NONE == rLineInfo.GetStyle() ) || ImplIsRecordLayout() )
+    if ( !IsDeviceOutputNecessary() || !mbLineColor || ( LineStyle::NONE == rLineInfo.GetStyle() ) || ImplIsRecordLayout() )
         return;
 
-    if( !mpGraphics )
-    {
-        if ( !AcquireGraphics() )
-            return;
-    }
+    if( !mpGraphics && !AcquireGraphics() )
+        return;
 
     if ( mbInitClipRegion )
         InitClipRegion();
@@ -65,7 +65,7 @@ void OutputDevice::DrawLine( const Point& rStartPt, const Point& rEndPt,
     const Point aStartPt( ImplLogicToDevicePixel( rStartPt ) );
     const Point aEndPt( ImplLogicToDevicePixel( rEndPt ) );
     const LineInfo aInfo( ImplLogicToDevicePixel( rLineInfo ) );
-    const bool bDashUsed(LINE_DASH == aInfo.GetStyle());
+    const bool bDashUsed(LineStyle::Dash == aInfo.GetStyle());
     const bool bLineWidthUsed(aInfo.GetWidth() > 1);
 
     if ( mbInitLineColor )
@@ -98,11 +98,8 @@ void OutputDevice::DrawLine( const Point& rStartPt, const Point& rEndPt )
     if ( !IsDeviceOutputNecessary() || !mbLineColor || ImplIsRecordLayout() )
         return;
 
-    if ( !mpGraphics )
-    {
-        if ( !AcquireGraphics() )
-            return;
-    }
+    if ( !mpGraphics && !AcquireGraphics() )
+        return;
 
     if ( mbInitClipRegion )
         InitClipRegion();
@@ -115,8 +112,8 @@ void OutputDevice::DrawLine( const Point& rStartPt, const Point& rEndPt )
 
     // #i101598# support AA and snap for lines, too
     if((mnAntialiasing & AntialiasingFlags::EnableB2dDraw)
-        && mpGraphics->supportsOperation(OutDevSupport_B2DDraw)
-        && ROP_OVERPAINT == GetRasterOp()
+        && mpGraphics->supportsOperation(OutDevSupportType::B2DDraw)
+        && RasterOp::OverPaint == GetRasterOp()
         && IsLineColor())
     {
         // at least transform with double precision to device coordinates; this will
@@ -129,12 +126,18 @@ void OutputDevice::DrawLine( const Point& rStartPt, const Point& rEndPt )
         aB2DPolyLine.append(basegfx::B2DPoint(rEndPt.X(), rEndPt.Y()));
         aB2DPolyLine.transform( aTransform );
 
-        if(mnAntialiasing & AntialiasingFlags::PixelSnapHairline)
-        {
-            aB2DPolyLine = basegfx::tools::snapPointsOfHorizontalOrVerticalEdges(aB2DPolyLine);
-        }
+        const bool bPixelSnapHairline(mnAntialiasing & AntialiasingFlags::PixelSnapHairline);
 
-        if( mpGraphics->DrawPolyLine( aB2DPolyLine, 0.0, aB2DLineWidth, basegfx::B2DLineJoin::NONE, css::drawing::LineCap_BUTT, this))
+        if( mpGraphics->DrawPolyLine(
+            basegfx::B2DHomMatrix(),
+            aB2DPolyLine,
+            0.0,
+            aB2DLineWidth,
+            basegfx::B2DLineJoin::NONE,
+            css::drawing::LineCap_BUTT,
+            basegfx::deg2rad(15.0), // not used with B2DLineJoin::NONE, but the correct default
+            bPixelSnapHairline,
+            this))
         {
             return;
         }
@@ -152,11 +155,11 @@ void OutputDevice::DrawLine( const Point& rStartPt, const Point& rEndPt )
 void OutputDevice::drawLine( basegfx::B2DPolyPolygon aLinePolyPolygon, const LineInfo& rInfo )
 {
     const bool bTryAA((mnAntialiasing & AntialiasingFlags::EnableB2dDraw)
-        && mpGraphics->supportsOperation(OutDevSupport_B2DDraw)
-        && ROP_OVERPAINT == GetRasterOp()
+        && mpGraphics->supportsOperation(OutDevSupportType::B2DDraw)
+        && RasterOp::OverPaint == GetRasterOp()
         && IsLineColor());
     basegfx::B2DPolyPolygon aFillPolyPolygon;
-    const bool bDashUsed(LINE_DASH == rInfo.GetStyle());
+    const bool bDashUsed(LineStyle::Dash == rInfo.GetStyle());
     const bool bLineWidthUsed(rInfo.GetWidth() > 1);
 
     if(bDashUsed && aLinePolyPolygon.count())
@@ -184,11 +187,11 @@ void OutputDevice::drawLine( basegfx::B2DPolyPolygon aLinePolyPolygon, const Lin
         {
             basegfx::B2DPolyPolygon aResult;
 
-            for(sal_uInt32 c(0); c < aLinePolyPolygon.count(); c++)
+            for(auto const& rPolygon : aLinePolyPolygon)
             {
                 basegfx::B2DPolyPolygon aLineTarget;
-                basegfx::tools::applyLineDashing(
-                    aLinePolyPolygon.getB2DPolygon(c),
+                basegfx::utils::applyLineDashing(
+                    rPolygon,
                     fDotDashArray,
                     &aLineTarget);
                 aResult.append(aLineTarget);
@@ -209,13 +212,13 @@ void OutputDevice::drawLine( basegfx::B2DPolyPolygon aLinePolyPolygon, const Lin
             // but one that is at least as good as ImplSubdivideBezier was.
             // There, Polygon::AdaptiveSubdivide was used with default parameter
             // 1.0 as quality index.
-            aLinePolyPolygon = basegfx::tools::adaptiveSubdivideByDistance(aLinePolyPolygon, 1.0);
+            aLinePolyPolygon = basegfx::utils::adaptiveSubdivideByDistance(aLinePolyPolygon, 1.0);
         }
 
-        for(sal_uInt32 a(0); a < aLinePolyPolygon.count(); a++)
+        for(auto const& rPolygon : aLinePolyPolygon)
         {
-            aFillPolyPolygon.append(basegfx::tools::createAreaGeometry(
-                aLinePolyPolygon.getB2DPolygon(a),
+            aFillPolyPolygon.append(basegfx::utils::createAreaGeometry(
+                rPolygon,
                 fHalfLineWidth,
                 rInfo.GetLineJoin(),
                 rInfo.GetLineCap()));
@@ -229,20 +232,32 @@ void OutputDevice::drawLine( basegfx::B2DPolyPolygon aLinePolyPolygon, const Lin
 
     if(aLinePolyPolygon.count())
     {
-        for(sal_uInt32 a(0); a < aLinePolyPolygon.count(); a++)
+        for(auto const& rB2DPolygon : aLinePolyPolygon)
         {
-            const basegfx::B2DPolygon aCandidate(aLinePolyPolygon.getB2DPolygon(a));
+            const bool bPixelSnapHairline(mnAntialiasing & AntialiasingFlags::PixelSnapHairline);
             bool bDone(false);
 
             if(bTryAA)
             {
-                bDone = mpGraphics->DrawPolyLine( aCandidate, 0.0, basegfx::B2DVector(1.0,1.0), basegfx::B2DLineJoin::NONE, css::drawing::LineCap_BUTT, this);
+                bDone = mpGraphics->DrawPolyLine(
+                    basegfx::B2DHomMatrix(),
+                    rB2DPolygon,
+                    0.0,
+                    basegfx::B2DVector(1.0,1.0),
+                    basegfx::B2DLineJoin::NONE,
+                    css::drawing::LineCap_BUTT,
+                    basegfx::deg2rad(15.0), // not used with B2DLineJoin::NONE, but the correct default
+                    bPixelSnapHairline,
+                    this);
             }
 
             if(!bDone)
             {
-                const tools::Polygon aPolygon(aCandidate);
-                mpGraphics->DrawPolyLine(aPolygon.GetSize(), reinterpret_cast<const SalPoint*>(aPolygon.GetConstPointAry()), this);
+                tools::Polygon aPolygon(rB2DPolygon);
+                mpGraphics->DrawPolyLine(
+                    aPolygon.GetSize(),
+                    reinterpret_cast<SalPoint*>(aPolygon.GetPointAry()),
+                    this);
             }
         }
     }
@@ -261,14 +276,18 @@ void OutputDevice::drawLine( basegfx::B2DPolyPolygon aLinePolyPolygon, const Lin
 
         if(bTryAA)
         {
-            bDone = mpGraphics->DrawPolyPolygon(aFillPolyPolygon, 0.0, this);
+            bDone = mpGraphics->DrawPolyPolygon(
+                basegfx::B2DHomMatrix(),
+                aFillPolyPolygon,
+                0.0,
+                this);
         }
 
         if(!bDone)
         {
-            for(sal_uInt32 a(0); a < aFillPolyPolygon.count(); a++)
+            for(auto const& rB2DPolygon : aFillPolyPolygon)
             {
-                tools::Polygon aPolygon(aFillPolyPolygon.getB2DPolygon(a));
+                tools::Polygon aPolygon(rB2DPolygon);
 
                 // need to subdivide, mpGraphics->DrawPolygon ignores curves
                 aPolygon.AdaptiveSubdivide(aPolygon);

@@ -19,7 +19,7 @@
 
 #include "options.hxx"
 
-#include "osl/diagnose.h"
+#include <osl/diagnose.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -43,7 +43,6 @@ bool Options::checkArgument(std::vector< std::string> & rArgs, char const * arg,
     OSL_PRECOND(result, "registry::tools::Options::checkArgument(): invalid arguments");
     if (result)
     {
-        OSL_TRACE("registry::tools:Options::checkArgument(): \"%s\"", arg);
         switch (arg[0])
         {
         case '@':
@@ -117,8 +116,8 @@ bool Options::checkCommandFile(std::vector< std::string > & rArgs, char const * 
                 }
                 break;
             }
+            [[fallthrough]];
         default:
-            // quoted white-space fall through
             buffer.push_back(sal::static_int_cast<char>(c));
             break;
         }

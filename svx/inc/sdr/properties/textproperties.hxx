@@ -36,7 +36,7 @@ namespace sdr
 
         protected:
             // create a new itemset
-            virtual SfxItemSet* CreateObjectSpecificItemSet(SfxItemPool& rPool) override;
+            virtual std::unique_ptr<SfxItemSet> CreateObjectSpecificItemSet(SfxItemPool& rPool) override;
 
             // Do the ItemChange, may do special handling
             virtual void ItemChange(const sal_uInt16 nWhich, const SfxPoolItem* pNewItem = nullptr) override;
@@ -55,10 +55,10 @@ namespace sdr
             TextProperties(const TextProperties& rProps, SdrObject& rObj);
 
             // destructor
-            virtual ~TextProperties();
+            virtual ~TextProperties() override;
 
             // Clone() operator, normally just calls the local copy constructor
-            virtual BaseProperties& Clone(SdrObject& rObj) const override;
+            virtual std::unique_ptr<BaseProperties> Clone(SdrObject& rObj) const override;
 
             // set a new StyleSheet and broadcast
             virtual void SetStyleSheet(SfxStyleSheet* pNewStyleSheet, bool bDontRemoveHardAttr) override;

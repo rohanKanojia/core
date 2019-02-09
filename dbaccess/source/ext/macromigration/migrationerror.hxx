@@ -62,14 +62,8 @@ namespace dbmm
     struct MigrationError
     {
         const MigrationErrorType     eType;
-        ::std::vector< OUString >    aErrorDetails;
+        std::vector< OUString >    aErrorDetails;
         const css::uno::Any          aCaughtException;
-
-        explicit MigrationError(
-                const MigrationErrorType _eType )
-            :eType( _eType )
-        {
-        }
 
         MigrationError(
                 const MigrationErrorType _eType,

@@ -27,14 +27,18 @@
 // for dimensioning the lower edge of the object
 // (redundant to turn the reference edge through 180deg +
 // TextUpsideDown, but easily operated)
-// laesst sich auch draggen, indem man den Masslinienabstand
-// (SdrMeasureLineDistItem) ueber die Bezugskante hinwegdraggt
+// can also be dragged by dragging the measure line item
+// (SdrMeasureLineDistItem) over the reference edge
 class SVX_DLLPUBLIC SdrMeasureBelowRefEdgeItem: public SdrYesNoItem {
 public:
     SdrMeasureBelowRefEdgeItem(bool bOn=false): SdrYesNoItem(SDRATTR_MEASUREBELOWREFEDGE,bOn) {}
-    SdrMeasureBelowRefEdgeItem(SvStream& rIn): SdrYesNoItem(SDRATTR_MEASUREBELOWREFEDGE,rIn) {}
-    virtual ~SdrMeasureBelowRefEdgeItem();
+    virtual ~SdrMeasureBelowRefEdgeItem() override;
     virtual SfxPoolItem* Clone(SfxItemPool* pPool=nullptr) const override;
+
+    SdrMeasureBelowRefEdgeItem(SdrMeasureBelowRefEdgeItem const &) = default;
+    SdrMeasureBelowRefEdgeItem(SdrMeasureBelowRefEdgeItem &&) = default;
+    SdrMeasureBelowRefEdgeItem & operator =(SdrMeasureBelowRefEdgeItem const &) = delete; // due to SdrYesNoItem
+    SdrMeasureBelowRefEdgeItem & operator =(SdrMeasureBelowRefEdgeItem &&) = delete; // due to SdrYesNoItem
 };
 
 #endif

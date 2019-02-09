@@ -17,21 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "initui.hxx"
-#include "view.hxx"
-#include "edtwin.hxx"
-#include "wrtsh.hxx"
-#include "globals.hrc"
-#include <vcl/msgbox.hxx>
+#include <initui.hxx>
+#include <view.hxx>
+#include <edtwin.hxx>
+#include <wrtsh.hxx>
+#include <globals.hrc>
+#include <vcl/weld.hxx>
 #include <vcl/wrkwin.hxx>
 #include <linguistic/lngprops.hxx>
-#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/linguistic2/XLinguProperties.hpp>
 #include <swwait.hxx>
 
-#include "hyp.hxx"
-#include "mdiexp.hxx"
-#include "olmenu.hrc"
+#include <hyp.hxx>
+#include <mdiexp.hxx>
+#include <olmenu.hxx>
+#include <strings.hrc>
 
 #include <unomid.h>
 
@@ -43,7 +43,7 @@ using namespace ::com::sun::star;
 
 // interactive separation
 SwHyphWrapper::SwHyphWrapper( SwView* pVw,
-            uno::Reference< linguistic2::XHyphenator >  &rxHyph,
+            uno::Reference< linguistic2::XHyphenator > const &rxHyph,
             bool bStart, bool bOther, bool bSelect ) :
     SvxSpellWrapper( &pVw->GetEditWin(), rxHyph, bStart, bOther ),
     pView( pVw ),
@@ -59,7 +59,7 @@ SwHyphWrapper::SwHyphWrapper( SwView* pVw,
 
 void SwHyphWrapper::SpellStart( SvxSpellArea eSpell )
 {
-    if( SVX_SPELL_OTHER == eSpell && nPageCount )
+    if( SvxSpellArea::Other == eSpell && nPageCount )
     {
         ::EndProgress( pView->GetDocShell() );
         nPageCount = 0;
@@ -119,8 +119,13 @@ SwHyphWrapper::~SwHyphWrapper()
 {
     if( nPageCount )
         ::EndProgress( pView->GetDocShell() );
-    if( bInfoBox )
-        ScopedVclPtr<InfoBox>::Create( &pView->GetEditWin(), SW_RESSTR(STR_HYP_OK) )->Execute();
+    if( bInfoBox && !Application::IsHeadlessModeEnabled() )
+    {
+        std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(pView->GetEditWin().GetFrameWeld(),
+                                                      VclMessageType::Info, VclButtonsType::Ok,
+                                                      SwResId(STR_HYP_OK)));
+        xInfoBox->run();
+    }
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

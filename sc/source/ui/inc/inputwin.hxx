@@ -21,6 +21,7 @@
 #define INCLUDED_SC_SOURCE_UI_INC_INPUTWIN_HXX
 
 #include <vector>
+#include <memory>
 #include <vcl/toolbox.hxx>
 #include <sfx2/childwin.hxx>
 #include <svl/lstner.hxx>
@@ -28,18 +29,15 @@
 #include <vcl/combobox.hxx>
 #include <vcl/scrbar.hxx>
 #include <vcl/window.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 
-class Accelerator;
 class EditView;
 class ScAccessibleEditLineTextData;
 class ScEditEngineDefaulter;
 class ScInputBarGroup;
 class ScInputHandler;
-class ScRangeList;
 class ScTabViewShell;
 struct EENotify;
-struct ESelection;
 
 class ScTextWndBase : public vcl::Window
 {
@@ -52,6 +50,7 @@ public:
     virtual void            StartEditEngine() = 0;
     virtual void            StopEditEngine( bool bAll ) = 0;
     virtual EditView*       GetEditView() = 0;
+    virtual bool            HasEditView() const = 0;
     virtual void            MakeDialogEditView() = 0;
     virtual void            SetFormulaMode( bool bSet ) = 0;
     virtual bool            IsInputActive() = 0;
@@ -62,7 +61,7 @@ class ScTextWnd : public ScTextWndBase, public DragSourceHelper     // edit wind
 {
 public:
     ScTextWnd(ScInputBarGroup* pParent, ScTabViewShell* pViewSh);
-    virtual         ~ScTextWnd();
+    virtual         ~ScTextWnd() override;
     virtual void    dispose() override;
 
     virtual void            SetTextString( const OUString& rString ) override;
@@ -70,6 +69,7 @@ public:
 
     bool                    IsInputActive() override;
     virtual EditView*       GetEditView() override;
+    virtual bool            HasEditView() const override;
 
                         // for function autopilots
     virtual void            MakeDialogEditView() override;
@@ -99,11 +99,11 @@ public:
 
     void DoScroll();
 
-    DECL_LINK_TYPED(NotifyHdl, EENotify&, void);
-    DECL_LINK_TYPED(ModifyHdl, LinkParamNone*, void);
+    DECL_LINK(NotifyHdl, EENotify&, void);
+    DECL_LINK(ModifyHdl, LinkParamNone*, void);
 
 protected:
-    virtual void    Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void    Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
 
     virtual void    MouseMove( const MouseEvent& rMEvt ) override;
     virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
@@ -117,6 +117,7 @@ protected:
 
     virtual OUString  GetText() const override;
 
+private:
     void            ImplInitSettings();
     void            UpdateAutoCorrFlag();
 
@@ -124,14 +125,12 @@ protected:
 
     void InitEditEngine();
 
-    ScTabViewShell* GetViewShell() { return mpViewShell;}
-
     typedef ::std::vector< ScAccessibleEditLineTextData* > AccTextDataVector;
 
     OUString    aString;
     vcl::Font   aTextFont;
-    ScEditEngineDefaulter*  pEditEngine;            // only created when needed
-    EditView*   pEditView;
+    std::unique_ptr<ScEditEngineDefaulter> mpEditEngine; // only created when needed
+    std::unique_ptr<EditView> mpEditView;
     AccTextDataVector maAccTextDatas;   // #i105267# text datas may be cloned, remember all copies
     bool        bIsRTL;
     bool        bIsInsertMode;
@@ -141,7 +140,6 @@ protected:
     // it prevents the call of InputChanged in the ModifyHandler of the EditEngine
     bool        bInputMode;
 
-private:
     ScTabViewShell* mpViewShell;
     ScInputBarGroup& mrGroupBar;
     long mnLines;
@@ -154,12 +152,12 @@ class ScPosWnd : public ComboBox, public SfxListener        // Display position
 {
 private:
     OUString        aPosStr;
-    sal_uLong       nTipVisible;
+    void*           nTipVisible;
     bool            bFormulaMode;
 
 public:
                     ScPosWnd( vcl::Window* pParent );
-    virtual         ~ScPosWnd();
+    virtual         ~ScPosWnd() override;
     virtual void    dispose() override;
 
     void            SetPos( const OUString& rPosStr );        // Displayed Text
@@ -169,7 +167,7 @@ protected:
     virtual void    Select() override;
     virtual void    Modify() override;
 
-    virtual bool    Notify( NotifyEvent& rNEvt ) override;
+    virtual bool    EventNotify( NotifyEvent& rNEvt ) override;
 
     virtual void    Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
@@ -187,13 +185,14 @@ class ScInputBarGroup : public ScTextWndBase
 
 public:
                     ScInputBarGroup( vcl::Window* Parent, ScTabViewShell* pViewSh );
-    virtual         ~ScInputBarGroup();
+    virtual         ~ScInputBarGroup() override;
     virtual void    dispose() override;
     virtual void    InsertAccessibleTextData( ScAccessibleEditLineTextData& rTextData ) override;
     virtual void    RemoveAccessibleTextData( ScAccessibleEditLineTextData& rTextData ) override;
     void            SetTextString( const OUString& rString ) override;
     void            StartEditEngine() override;
-    EditView*       GetEditView() override;
+    virtual EditView* GetEditView() override;
+    virtual bool HasEditView() const override;
     virtual void    Resize() override;
     virtual const OUString&   GetTextString() const override;
     virtual void            StopEditEngine( bool bAll ) override;
@@ -201,7 +200,7 @@ public:
     void            SetFormulaMode( bool bSet ) override;
     void            MakeDialogEditView() override;
     bool            IsInputActive() override;
-    ScrollBar&      GetScrollBar() { return *maScrollbar.get(); }
+    ScrollBar&      GetScrollBar() { return *maScrollbar; }
     void            IncrementVerticalSize();
     void            DecrementVerticalSize();
     long            GetNumLines() { return maTextWnd->GetNumLines(); }
@@ -215,18 +214,18 @@ private:
     VclPtr<ScrollBar> maScrollbar;
     long            mnVertOffset;
 
-    DECL_LINK_TYPED( ClickHdl, Button*, void );
-    DECL_LINK_TYPED( Impl_ScrollHdl, ScrollBar*, void );
+    DECL_LINK( ClickHdl, Button*, void );
+    DECL_LINK( Impl_ScrollHdl, ScrollBar*, void );
 };
 
-class ScInputWindow : public ToolBox                        // Parent toolbox
+class ScInputWindow final : public ToolBox                        // Parent toolbox
 {
 public:
-                    ScInputWindow( vcl::Window* pParent, SfxBindings* pBind );
-    virtual         ~ScInputWindow();
+                    ScInputWindow( vcl::Window* pParent, const SfxBindings* pBind );
+    virtual         ~ScInputWindow() override;
     virtual void    dispose() override;
 
-    virtual void    Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void    Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void    Resize() override;
     virtual void    Select() override;
 
@@ -236,7 +235,7 @@ public:
 
     void            SetOkCancelMode();
     void            SetSumAssignMode();
-    void            EnableButtons( bool bEnable = true );
+    void            EnableButtons( bool bEnable );
 
     void            SetFormulaMode( bool bSet );
 
@@ -264,22 +263,13 @@ public:
     virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
     virtual void    MouseMove( const MouseEvent& rMEvt ) override;
 
-protected:
-    virtual void    SetText( const OUString& rString ) override;
-    virtual OUString  GetText() const override;
-
-    static bool UseSubTotal( ScRangeList* pRangeList );
+private:
     bool IsPointerAtResizePos();
 
-private:
     VclPtr<ScPosWnd>  aWndPos;
     VclPtr<ScTextWndBase> pRuntimeWindow;
     ScTextWndBase&  aTextWindow;
     ScInputHandler* pInputHdl;
-    OUString        aTextOk;
-    OUString        aTextCancel;
-    OUString        aTextSum;
-    OUString        aTextEqual;
     long            mnMaxY;
     bool            bIsOkCancelMode;
     bool            bInResize;

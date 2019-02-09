@@ -20,14 +20,12 @@
 #ifndef INCLUDED_FRAMEWORK_INC_UICONFIGURATION_GLOBALSETTINGS_HXX
 #define INCLUDED_FRAMEWORK_INC_UICONFIGURATION_GLOBALSETTINGS_HXX
 
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
-#include <macros/xserviceinfo.hxx>
 #include <stdtypes.h>
 
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XTypeProvider.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <cppuhelper/weak.hxx>
 #include <rtl/ustring.hxx>
@@ -44,13 +42,6 @@ class GlobalSettings
         GlobalSettings( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
         ~GlobalSettings();
 
-        enum UIElementType
-        {
-            UIELEMENT_TYPE_TOOLBAR,
-            UIELEMENT_TYPE_DOCKWINDOW,
-            UIELEMENT_TYPE_STATUSBAR
-        };
-
         enum StateInfo
         {
             STATEINFO_LOCKED,
@@ -58,8 +49,8 @@ class GlobalSettings
         };
 
         // settings access
-        bool HasStatesInfo( UIElementType eElementType );
-        bool GetStateInfo( UIElementType eElementType, StateInfo eStateInfo, css::uno::Any& aValue );
+        bool HasToolbarStatesInfo();
+        bool GetToolbarStateInfo( StateInfo eStateInfo, css::uno::Any& aValue );
 
     private:
         GlobalSettings(const GlobalSettings&) = delete;

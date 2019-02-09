@@ -22,13 +22,15 @@
 
 #include <string.h>
 #include <stdio.h>
-#include <tools/resary.hxx>
+#include <o3tl/any.hxx>
 #include <rtl/math.hxx>
 #include <sal/macros.h>
 #include <algorithm>
 #include <memory>
 #include "analysishelper.hxx"
-#include "analysis.hrc"
+#include <analysis.hrc>
+#include <strings.hrc>
+#include "deffuncname.hxx"
 
 using namespace                 ::com::sun::star;
 using namespace sca::analysis;
@@ -49,107 +51,107 @@ const FuncDataBase pFuncDatas[] =
 {
     //                          UNIQUE or   INTPAR or
     //         function name     DOUBLE      STDPAR     # of param  category
-    FUNCDATA( Workday,          UNIQUE,     INTPAR,     3,          FDCat_DateTime ),
-    FUNCDATA( Yearfrac,         UNIQUE,     INTPAR,     3,          FDCat_DateTime ),
-    FUNCDATA( Edate,            UNIQUE,     INTPAR,     2,          FDCat_DateTime ),
-    FUNCDATAS( Weeknum,         DOUBLE,     INTPAR,     2,          FDCat_DateTime, "_EXCEL2003" ),
-    FUNCDATA( Eomonth,          UNIQUE,     INTPAR,     2,          FDCat_DateTime ),
-    FUNCDATAS( Networkdays,     DOUBLE,     INTPAR,     3,          FDCat_DateTime, "_EXCEL2003" ),
-    FUNCDATA( Iseven,           DOUBLE,     STDPAR,     1,          FDCat_Inf ),
-    FUNCDATA( Isodd,            DOUBLE,     STDPAR,     1,          FDCat_Inf ),
-    FUNCDATA( Multinomial,      UNIQUE,     STDPAR,     1,          FDCat_Math ),
-    FUNCDATA( Seriessum,        UNIQUE,     STDPAR,     4,          FDCat_Math ),
-    FUNCDATA( Quotient,         UNIQUE,     STDPAR,     2,          FDCat_Math ),
-    FUNCDATA( Mround,           UNIQUE,     STDPAR,     2,          FDCat_Math ),
-    FUNCDATA( Sqrtpi,           UNIQUE,     STDPAR,     1,          FDCat_Math ),
-    FUNCDATA( Randbetween,      UNIQUE,     STDPAR,     2,          FDCat_Math ),
-    FUNCDATAS( Gcd,             DOUBLE,     INTPAR,     1,          FDCat_Math, "_EXCEL2003" ),
-    FUNCDATAS( Lcm,             DOUBLE,     INTPAR,     1,          FDCat_Math, "_EXCEL2003" ),
-    FUNCDATA( Besseli,          UNIQUE,     STDPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Besselj,          UNIQUE,     STDPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Besselk,          UNIQUE,     STDPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Bessely,          UNIQUE,     STDPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Bin2Oct,          UNIQUE,     INTPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Bin2Dec,          UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Bin2Hex,          UNIQUE,     INTPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Oct2Bin,          UNIQUE,     INTPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Oct2Dec,          UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Oct2Hex,          UNIQUE,     INTPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Dec2Bin,          UNIQUE,     INTPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Dec2Hex,          UNIQUE,     INTPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Dec2Oct,          UNIQUE,     INTPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Hex2Bin,          UNIQUE,     INTPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Hex2Dec,          UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Hex2Oct,          UNIQUE,     INTPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Delta,            UNIQUE,     INTPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Erf,              UNIQUE,     INTPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Erfc,             UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Gestep,           UNIQUE,     INTPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Factdouble,       UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imabs,            UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imaginary,        UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Impower,          UNIQUE,     STDPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Imargument,       UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imcos,            UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imdiv,            UNIQUE,     STDPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Imexp,            UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imconjugate,      UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imln,             UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imlog10,          UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imlog2,           UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Improduct,        UNIQUE,     INTPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Imreal,           UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imsin,            UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imsub,            UNIQUE,     STDPAR,     2,          FDCat_Tech ),
-    FUNCDATA( Imsqrt,           UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imsum,            UNIQUE,     INTPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imtan,            UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imsec,            UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imcsc,            UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imcot,            UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imsinh,           UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imcosh,           UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imsech,           UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Imcsch,           UNIQUE,     STDPAR,     1,          FDCat_Tech ),
-    FUNCDATA( Complex,          UNIQUE,     STDPAR,     3,          FDCat_Tech ),
-    FUNCDATA( Convert,          DOUBLE,     STDPAR,     3,          FDCat_Tech ),
-    FUNCDATA( Amordegrc,        UNIQUE,     INTPAR,     7,          FDCat_Finance ),
-    FUNCDATA( Amorlinc,         UNIQUE,     INTPAR,     7,          FDCat_Finance ),
-    FUNCDATA( Accrint,          UNIQUE,     INTPAR,     7,          FDCat_Finance ),
-    FUNCDATA( Accrintm,         UNIQUE,     INTPAR,     5,          FDCat_Finance ),
-    FUNCDATA( Received,         UNIQUE,     INTPAR,     5,          FDCat_Finance ),
-    FUNCDATA( Disc,             UNIQUE,     INTPAR,     5,          FDCat_Finance ),
-    FUNCDATA( Duration,         DOUBLE,     INTPAR,     6,          FDCat_Finance ),
-    FUNCDATA( Effect,           DOUBLE,     STDPAR,     2,          FDCat_Finance ),
-    FUNCDATA( Cumprinc,         DOUBLE,     STDPAR,     6,          FDCat_Finance ),
-    FUNCDATA( Cumipmt,          DOUBLE,     STDPAR,     6,          FDCat_Finance ),
-    FUNCDATA( Price,            UNIQUE,     INTPAR,     7,          FDCat_Finance ),
-    FUNCDATA( Pricedisc,        UNIQUE,     INTPAR,     5,          FDCat_Finance ),
-    FUNCDATA( Pricemat,         UNIQUE,     INTPAR,     6,          FDCat_Finance ),
-    FUNCDATA( Mduration,        UNIQUE,     INTPAR,     6,          FDCat_Finance ),
-    FUNCDATA( Nominal,          DOUBLE,     STDPAR,     2,          FDCat_Finance ),
-    FUNCDATA( Dollarfr,         UNIQUE,     STDPAR,     2,          FDCat_Finance ),
-    FUNCDATA( Dollarde,         UNIQUE,     STDPAR,     2,          FDCat_Finance ),
-    FUNCDATA( Yield,            UNIQUE,     INTPAR,     7,          FDCat_Finance ),
-    FUNCDATA( Yielddisc,        UNIQUE,     INTPAR,     5,          FDCat_Finance ),
-    FUNCDATA( Yieldmat,         UNIQUE,     INTPAR,     6,          FDCat_Finance ),
-    FUNCDATA( Tbilleq,          UNIQUE,     INTPAR,     3,          FDCat_Finance ),
-    FUNCDATA( Tbillprice,       UNIQUE,     INTPAR,     3,          FDCat_Finance ),
-    FUNCDATA( Tbillyield,       UNIQUE,     INTPAR,     3,          FDCat_Finance ),
-    FUNCDATA( Oddfprice,        UNIQUE,     INTPAR,     9,          FDCat_Finance ),
-    FUNCDATA( Oddfyield,        UNIQUE,     INTPAR,     9,          FDCat_Finance ),
-    FUNCDATA( Oddlprice,        UNIQUE,     INTPAR,     8,          FDCat_Finance ),
-    FUNCDATA( Oddlyield,        UNIQUE,     INTPAR,     8,          FDCat_Finance ),
-    FUNCDATA( Xirr,             UNIQUE,     INTPAR,     3,          FDCat_Finance ),
-    FUNCDATA( Xnpv,             UNIQUE,     STDPAR,     3,          FDCat_Finance ),
-    FUNCDATA( Intrate,          UNIQUE,     INTPAR,     5,          FDCat_Finance ),
-    FUNCDATA( Coupncd,          UNIQUE,     INTPAR,     4,          FDCat_Finance ),
-    FUNCDATA( Coupdays,         UNIQUE,     INTPAR,     4,          FDCat_Finance ),
-    FUNCDATA( Coupdaysnc,       UNIQUE,     INTPAR,     4,          FDCat_Finance ),
-    FUNCDATA( Coupdaybs,        UNIQUE,     INTPAR,     4,          FDCat_Finance ),
-    FUNCDATA( Couppcd,          UNIQUE,     INTPAR,     4,          FDCat_Finance ),
-    FUNCDATA( Coupnum,          UNIQUE,     INTPAR,     4,          FDCat_Finance ),
-    FUNCDATA( Fvschedule,       UNIQUE,     STDPAR,     2,          FDCat_Finance )
+    FUNCDATA( Workday,          UNIQUE,     INTPAR,     3,          FDCategory::DateTime ),
+    FUNCDATA( Yearfrac,         UNIQUE,     INTPAR,     3,          FDCategory::DateTime ),
+    FUNCDATA( Edate,            UNIQUE,     INTPAR,     2,          FDCategory::DateTime ),
+    FUNCDATAS( Weeknum,         DOUBLE,     INTPAR,     2,          FDCategory::DateTime, "_EXCEL2003" ),
+    FUNCDATA( Eomonth,          UNIQUE,     INTPAR,     2,          FDCategory::DateTime ),
+    FUNCDATAS( Networkdays,     DOUBLE,     INTPAR,     3,          FDCategory::DateTime, "_EXCEL2003" ),
+    FUNCDATA( Iseven,           DOUBLE,     STDPAR,     1,          FDCategory::Inf ),
+    FUNCDATA( Isodd,            DOUBLE,     STDPAR,     1,          FDCategory::Inf ),
+    FUNCDATA( Multinomial,      UNIQUE,     STDPAR,     1,          FDCategory::Math ),
+    FUNCDATA( Seriessum,        UNIQUE,     STDPAR,     4,          FDCategory::Math ),
+    FUNCDATA( Quotient,         UNIQUE,     STDPAR,     2,          FDCategory::Math ),
+    FUNCDATA( Mround,           UNIQUE,     STDPAR,     2,          FDCategory::Math ),
+    FUNCDATA( Sqrtpi,           UNIQUE,     STDPAR,     1,          FDCategory::Math ),
+    FUNCDATA( Randbetween,      UNIQUE,     STDPAR,     2,          FDCategory::Math ),
+    FUNCDATAS( Gcd,             DOUBLE,     INTPAR,     1,          FDCategory::Math, "_EXCEL2003" ),
+    FUNCDATAS( Lcm,             DOUBLE,     INTPAR,     1,          FDCategory::Math, "_EXCEL2003" ),
+    FUNCDATA( Besseli,          UNIQUE,     STDPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Besselj,          UNIQUE,     STDPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Besselk,          UNIQUE,     STDPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Bessely,          UNIQUE,     STDPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Bin2Oct,          UNIQUE,     INTPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Bin2Dec,          UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Bin2Hex,          UNIQUE,     INTPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Oct2Bin,          UNIQUE,     INTPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Oct2Dec,          UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Oct2Hex,          UNIQUE,     INTPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Dec2Bin,          UNIQUE,     INTPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Dec2Hex,          UNIQUE,     INTPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Dec2Oct,          UNIQUE,     INTPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Hex2Bin,          UNIQUE,     INTPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Hex2Dec,          UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Hex2Oct,          UNIQUE,     INTPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Delta,            UNIQUE,     INTPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Erf,              UNIQUE,     INTPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Erfc,             UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Gestep,           UNIQUE,     INTPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Factdouble,       UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imabs,            UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imaginary,        UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Impower,          UNIQUE,     STDPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Imargument,       UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imcos,            UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imdiv,            UNIQUE,     STDPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Imexp,            UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imconjugate,      UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imln,             UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imlog10,          UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imlog2,           UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Improduct,        UNIQUE,     INTPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Imreal,           UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imsin,            UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imsub,            UNIQUE,     STDPAR,     2,          FDCategory::Tech ),
+    FUNCDATA( Imsqrt,           UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imsum,            UNIQUE,     INTPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imtan,            UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imsec,            UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imcsc,            UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imcot,            UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imsinh,           UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imcosh,           UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imsech,           UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Imcsch,           UNIQUE,     STDPAR,     1,          FDCategory::Tech ),
+    FUNCDATA( Complex,          UNIQUE,     STDPAR,     3,          FDCategory::Tech ),
+    FUNCDATA( Convert,          UNIQUE,     STDPAR,     3,          FDCategory::Tech ),
+    FUNCDATA( Amordegrc,        UNIQUE,     INTPAR,     7,          FDCategory::Finance ),
+    FUNCDATA( Amorlinc,         UNIQUE,     INTPAR,     7,          FDCategory::Finance ),
+    FUNCDATA( Accrint,          UNIQUE,     INTPAR,     7,          FDCategory::Finance ),
+    FUNCDATA( Accrintm,         UNIQUE,     INTPAR,     5,          FDCategory::Finance ),
+    FUNCDATA( Received,         UNIQUE,     INTPAR,     5,          FDCategory::Finance ),
+    FUNCDATA( Disc,             UNIQUE,     INTPAR,     5,          FDCategory::Finance ),
+    FUNCDATA( Duration,         UNIQUE,     INTPAR,     6,          FDCategory::Finance ),
+    FUNCDATA( Effect,           DOUBLE,     STDPAR,     2,          FDCategory::Finance ),
+    FUNCDATA( Cumprinc,         DOUBLE,     STDPAR,     6,          FDCategory::Finance ),
+    FUNCDATA( Cumipmt,          DOUBLE,     STDPAR,     6,          FDCategory::Finance ),
+    FUNCDATA( Price,            UNIQUE,     INTPAR,     7,          FDCategory::Finance ),
+    FUNCDATA( Pricedisc,        UNIQUE,     INTPAR,     5,          FDCategory::Finance ),
+    FUNCDATA( Pricemat,         UNIQUE,     INTPAR,     6,          FDCategory::Finance ),
+    FUNCDATA( Mduration,        UNIQUE,     INTPAR,     6,          FDCategory::Finance ),
+    FUNCDATA( Nominal,          DOUBLE,     STDPAR,     2,          FDCategory::Finance ),
+    FUNCDATA( Dollarfr,         UNIQUE,     STDPAR,     2,          FDCategory::Finance ),
+    FUNCDATA( Dollarde,         UNIQUE,     STDPAR,     2,          FDCategory::Finance ),
+    FUNCDATA( Yield,            UNIQUE,     INTPAR,     7,          FDCategory::Finance ),
+    FUNCDATA( Yielddisc,        UNIQUE,     INTPAR,     5,          FDCategory::Finance ),
+    FUNCDATA( Yieldmat,         UNIQUE,     INTPAR,     6,          FDCategory::Finance ),
+    FUNCDATA( Tbilleq,          UNIQUE,     INTPAR,     3,          FDCategory::Finance ),
+    FUNCDATA( Tbillprice,       UNIQUE,     INTPAR,     3,          FDCategory::Finance ),
+    FUNCDATA( Tbillyield,       UNIQUE,     INTPAR,     3,          FDCategory::Finance ),
+    FUNCDATA( Oddfprice,        UNIQUE,     INTPAR,     9,          FDCategory::Finance ),
+    FUNCDATA( Oddfyield,        UNIQUE,     INTPAR,     9,          FDCategory::Finance ),
+    FUNCDATA( Oddlprice,        UNIQUE,     INTPAR,     8,          FDCategory::Finance ),
+    FUNCDATA( Oddlyield,        UNIQUE,     INTPAR,     8,          FDCategory::Finance ),
+    FUNCDATA( Xirr,             UNIQUE,     INTPAR,     3,          FDCategory::Finance ),
+    FUNCDATA( Xnpv,             UNIQUE,     STDPAR,     3,          FDCategory::Finance ),
+    FUNCDATA( Intrate,          UNIQUE,     INTPAR,     5,          FDCategory::Finance ),
+    FUNCDATA( Coupncd,          UNIQUE,     INTPAR,     4,          FDCategory::Finance ),
+    FUNCDATA( Coupdays,         UNIQUE,     INTPAR,     4,          FDCategory::Finance ),
+    FUNCDATA( Coupdaysnc,       UNIQUE,     INTPAR,     4,          FDCategory::Finance ),
+    FUNCDATA( Coupdaybs,        UNIQUE,     INTPAR,     4,          FDCategory::Finance ),
+    FUNCDATA( Couppcd,          UNIQUE,     INTPAR,     4,          FDCategory::Finance ),
+    FUNCDATA( Coupnum,          UNIQUE,     INTPAR,     4,          FDCategory::Finance ),
+    FUNCDATA( Fvschedule,       UNIQUE,     STDPAR,     2,          FDCategory::Finance )
 };
 #undef FUNCDATA
 
@@ -176,7 +178,7 @@ sal_uInt16 DaysInMonth( sal_uInt16 nMonth, sal_uInt16 nYear )
 
 sal_Int32 DateToDays( sal_uInt16 nDay, sal_uInt16 nMonth, sal_uInt16 nYear )
 {
-    sal_Int32 nDays = ((sal_Int32)nYear-1) * 365;
+    sal_Int32 nDays = (static_cast<sal_Int32>(nYear)-1) * 365;
     nDays += ((nYear-1) / 4) - ((nYear-1) / 100) + ((nYear-1) / 400);
 
     for( sal_uInt16 i = 1; i < nMonth; i++ )
@@ -198,7 +200,6 @@ sal_Int32 DateToDays( sal_uInt16 nDay, sal_uInt16 nMonth, sal_uInt16 nYear )
  */
 
 void DaysToDate( sal_Int32 nDays, sal_uInt16& rDay, sal_uInt16& rMonth, sal_uInt16& rYear )
-    throw( lang::IllegalArgumentException )
 {
     if( nDays < 0 )
         throw lang::IllegalArgumentException();
@@ -210,8 +211,8 @@ void DaysToDate( sal_Int32 nDays, sal_uInt16& rDay, sal_uInt16& rMonth, sal_uInt
     do
     {
         nTempDays = nDays;
-        rYear = (sal_uInt16)((nTempDays / 365) - i);
-        nTempDays -= ((sal_Int32) rYear -1) * 365;
+        rYear = static_cast<sal_uInt16>((nTempDays / 365) - i);
+        nTempDays -= (static_cast<sal_Int32>(rYear) -1) * 365;
         nTempDays -= (( rYear -1) / 4) - (( rYear -1) / 100) + ((rYear -1) / 400);
         bCalc = false;
         if ( nTempDays < 1 )
@@ -234,12 +235,12 @@ void DaysToDate( sal_Int32 nDays, sal_uInt16& rDay, sal_uInt16& rMonth, sal_uInt
     while ( bCalc );
 
     rMonth = 1;
-    while ( (sal_Int32)nTempDays > DaysInMonth( rMonth, rYear ) )
+    while ( nTempDays > DaysInMonth( rMonth, rYear ) )
     {
         nTempDays -= DaysInMonth( rMonth, rYear );
         rMonth++;
     }
-    rDay = (sal_uInt16)nTempDays;
+    rDay = static_cast<sal_uInt16>(nTempDays);
 }
 
 
@@ -252,7 +253,7 @@ void DaysToDate( sal_Int32 nDays, sal_uInt16& rDay, sal_uInt16& rMonth, sal_uInt
  *
  */
 
-sal_Int32 GetNullDate( const uno::Reference< beans::XPropertySet >& xOpt ) throw( uno::RuntimeException )
+sal_Int32 GetNullDate( const uno::Reference< beans::XPropertySet >& xOpt )
 {
     if( xOpt.is() )
     {
@@ -338,7 +339,7 @@ sal_Int32 GetDaysInYears( sal_uInt16 nYear1, sal_uInt16 nYear2 )
 
 
 sal_Int32 GetDiffDate( sal_Int32 nNullDate, sal_Int32 nStartDate, sal_Int32 nEndDate, sal_Int32 nMode,
-    sal_Int32* pOptDaysIn1stYear ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+    sal_Int32* pOptDaysIn1stYear )
 {
     bool    bNeg = nStartDate > nEndDate;
 
@@ -409,7 +410,7 @@ sal_Int32 GetDiffDate( sal_Int32 nNullDate, sal_Int32 nStartDate, sal_Int32 nEnd
 }
 
 
-double GetYearDiff( sal_Int32 nNullDate, sal_Int32 nStartDate, sal_Int32 nEndDate, sal_Int32 nMode ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+double GetYearDiff( sal_Int32 nNullDate, sal_Int32 nStartDate, sal_Int32 nEndDate, sal_Int32 nMode )
 {
     sal_Int32   nDays1stYear;
     sal_Int32   nTotalDays = GetDiffDate( nNullDate, nStartDate, nEndDate, nMode, &nDays1stYear );
@@ -418,7 +419,7 @@ double GetYearDiff( sal_Int32 nNullDate, sal_Int32 nStartDate, sal_Int32 nEndDat
 }
 
 
-sal_Int32 GetDaysInYear( sal_Int32 nNullDate, sal_Int32 nDate, sal_Int32 nMode ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+sal_Int32 GetDaysInYear( sal_Int32 nNullDate, sal_Int32 nDate, sal_Int32 nMode )
 {
     switch( nMode )
     {
@@ -441,15 +442,14 @@ sal_Int32 GetDaysInYear( sal_Int32 nNullDate, sal_Int32 nDate, sal_Int32 nMode )
 }
 
 
-//fdo40100 toDo: make function fully compliant with ODFF1.2
-// LEM: I fixed case nMode==1; anything else to fix?
+// tdf69569 making code compliant with change request for ODFF1.2 par 4.11.7.7
 /**
  * Function GetYearFrac implements YEARFRAC as defined in:
  *   Open Document Format for Office Applications version 1.2 Part 2, par. 6.10.24
  *   The calculations are defined in:
  *   Open Document Format for Office Applications version 1.2 Part 2, par. 4.11.7
  */
-double GetYearFrac( sal_Int32 nNullDate, sal_Int32 nStartDate, sal_Int32 nEndDate, sal_Int32 nMode ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+double GetYearFrac( sal_Int32 nNullDate, sal_Int32 nStartDate, sal_Int32 nEndDate, sal_Int32 nMode )
 {
     if( nStartDate == nEndDate )
         return 0.0;     // nothing to do...
@@ -537,67 +537,44 @@ double GetYearFrac( sal_Int32 nNullDate, sal_Int32 nStartDate, sal_Int32 nEndDat
                 {
                     // return average of days in year between nDate1 and nDate2, inclusive
                     sal_Int32 nDayCount = 0;
-                    for ( sal_Int16 i = nYear1; i <= nYear2; i++ )
+                    for ( sal_uInt16 i = nYear1; i <= nYear2; i++ )
                         nDayCount += ( IsLeapYear( i ) ? 366 : 365 );
 
-                    nDaysInYear = ( double ) nDayCount / ( double ) ( nYear2 - nYear1 + 1 );
-                }
-                // we take advantage of the fact that (ODFv1.2 part 2) 4.11.7.7.9
-                // 4.11.7.7.10 can be permuted without changing the end result
-                // ODFv1.2 part 2 section 4.11.7.7.8 and 4.11.7.7.10
-                else if ( ( isYearDifferent && IsLeapYear( nYear1 ) ) ||
-                          ( nMonth2 == 2 && nDay2 == 29) )
-                {
-                    nDaysInYear = 366;
+                    nDaysInYear = static_cast<double>(nDayCount) / static_cast<double>( nYear2 - nYear1 + 1 );
                 }
                 else
                 {
-                    // ODFv1.2 part 2 section 4.11.7.7.9:
-                    // we need to determine whether there is a 29 February
-                    // between nDate1 and nDate2
-                    // LEM FIXME: I have a doubt concerning nDate1 == "29 February YYYY"
-                    //            In this case, is the "29 February YYYY" between nDate1 and nDate2
-                    //            in the meaning of ODFv1.2 part 2, section 4.11.7.7.9?
-                    //            I assume "no", since if "between" is to be understood as "inclusive"
-                    //            then 4.11.7.7.10 has no point.
-                    //            OTOH, it could theoretically be possible that "between"
-                    //            is to be understood as "inclusive the lower bound, exclusive in upper bound".
+                    // as a consequence, !isYearDifferent or
+                    // nYear2 == nYear + 1 and (nMonth1 > nMonth2 or
+                    // (nMonth1 == nMonth2 and nDay1 >= nDay2))
+                    assert( ( !isYearDifferent ||
+                              ( nYear1 + 1 == nYear2 &&
+                                ( nMonth1 > nMonth2 ||
+                                  ( nMonth1 == nMonth2 || nDay1 >= nDay2 ) ) ) ) );
 
-                    assert(nYear1 == nYear2 || nYear1 + 1 == nYear2);
-                    // as a consequence, nYearDifferent iff nYear2 == nYear + 1, and
-                    // there are only two possible 29 Februaries to consider:
-                    // "29 February nYear1" and "29 February nYear2"
-
-                    // nDate2=="29 February YYYY" is handled above and the following conditions
-                    // rely on that for simplification.
-                    assert( ! (nMonth2 == 2 && nDay2 == 29));
-
-                    if( IsLeapYear( nYear1 ) )
-                       assert(nYear1 == nYear2);
-
-                    // is 29/2/nYear1 between nDate1 and nDate2?
-                    // that is only possible if IsLeapYear( nYear1 ),
-                    // which implies nYear1 == nYear2
-                    if( IsLeapYear( nYear1 ) &&
-                        ( nMonth1 == 1 || ( nMonth1 == 2 && nDay1 <= 28 )) &&
-                        nMonth2 > 2 )
-                    {
-                        nDaysInYear = 366;
-                    }
-                    // is 29/2/nYear2 between nDate1 and nDate2?
-                    // if nYear1==nYear2, then that is adequately tested by the previous test,
-                    // so no need to retest it here.
-                    else if(isYearDifferent && nMonth2 > 2 && IsLeapYear( nYear2 ))
+                    // ODFv1.2 part 2 section 4.11.7.7.8 (CHANGE REQUEST PENDING, see tdf6959)
+                    if ( !isYearDifferent && IsLeapYear( nYear1 ) )
                     {
                         nDaysInYear = 366;
                     }
                     else
                     {
-                        assert( !( IsLeapYear( nYear2 ) &&
-                                   nYear1 == nYear2 &&
-                                   (nMonth1 == 1 || (nMonth1==2 && nDay1 <= 28)) &&
-                                   nMonth2 > 2));
-                        nDaysInYear = 365;
+                        // ODFv1.2 part 2 section 4.11.7.7.9/10 (CHANGE REQUEST PENDING, see tdf69569)
+                        // we need to determine whether there is a 29 February
+                        // between nDate1 (inclusive) and nDate2 (inclusive)
+                        // the case of nYear1 == nYear2 is adequately tested in previous test
+                        if( isYearDifferent &&
+                            ( ( IsLeapYear( nYear1 ) &&
+                                ( ( nMonth1 < 2 ) || ( ( nMonth1 == 2 ) && ( nDay1 <= 29 ) ) ) ) ||
+                              ( IsLeapYear( nYear2 ) &&
+                                ( nMonth2 > 2 || ( ( nMonth2 == 2 ) && ( nDay2 == 29 ) ) ) ) ) )
+                        {
+                            nDaysInYear = 366;
+                        }
+                        else
+                        {
+                            nDaysInYear = 365;
+                        }
                     }
                 }
             }
@@ -653,7 +630,7 @@ double GetGcd( double f1, double f2 )
 }
 
 
-double ConvertToDec( const OUString& aStr, sal_uInt16 nBase, sal_uInt16 nCharLim ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+double ConvertToDec( const OUString& aStr, sal_uInt16 nBase, sal_uInt16 nCharLim )
 {
     if ( nBase < 2 || nBase > 36 )
         throw lang::IllegalArgumentException();
@@ -685,25 +662,22 @@ double ConvertToDec( const OUString& aStr, sal_uInt16 nBase, sal_uInt16 nCharLim
         else
             n = nBase;
 
-        if( n < nBase )
+        if( n >= nBase )
+            throw lang::IllegalArgumentException(); // illegal char!
+
+        if( bFirstDig )
         {
-            if( bFirstDig )
-            {
-                bFirstDig = false;
-                nFirstDig = n;
-            }
-            fVal = fVal * fBase + double( n );
+            bFirstDig = false;
+            nFirstDig = n;
         }
-        else
-            // illegal char!
-            throw lang::IllegalArgumentException();
+        fVal = fVal * fBase + double( n );
 
         p++;
 
     }
 
     if( nStrLen == nCharLim && !bFirstDig && (nFirstDig >= nBase / 2) )
-    {   // handling negativ values
+    {   // handling negative values
         fVal = ( pow( double( nBase ), double( nCharLim ) ) - fVal );   // complement
         fVal *= -1.0;
     }
@@ -712,15 +686,15 @@ double ConvertToDec( const OUString& aStr, sal_uInt16 nBase, sal_uInt16 nCharLim
 }
 
 
-static inline sal_Char GetMaxChar( sal_uInt16 nBase )
+static sal_Char GetMaxChar( sal_uInt16 nBase )
 {
-    const sal_Char* c = "--123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const sal_Char* const c = "--123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     return c[ nBase ];
 }
 
 
 OUString ConvertFromDec( double fNum, double fMin, double fMax, sal_uInt16 nBase,
-    sal_Int32 nPlaces, sal_Int32 nMaxPlaces, bool bUsePlaces ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+    sal_Int32 nPlaces, sal_Int32 nMaxPlaces, bool bUsePlaces )
 {
     fNum = ::rtl::math::approxFloor( fNum );
     fMin = ::rtl::math::approxFloor( fMin );
@@ -771,31 +745,31 @@ double Erfc( double x )
     return ::rtl::math::erfc(x);
 }
 
-inline bool IsNum( sal_Unicode c )
+static bool IsNum( sal_Unicode c )
 {
     return c >= '0' && c <= '9';
 }
 
 
-inline bool IsComma( sal_Unicode c )
+static bool IsComma( sal_Unicode c )
 {
     return c == '.' || c == ',';
 }
 
 
-inline bool IsExpStart( sal_Unicode c )
+static bool IsExpStart( sal_Unicode c )
 {
     return c == 'e' || c == 'E';
 }
 
 
-inline bool IsImagUnit( sal_Unicode c )
+static bool IsImagUnit( sal_Unicode c )
 {
     return c == 'i' || c == 'j';
 }
 
 
-inline sal_uInt16 GetVal( sal_Unicode c )
+static sal_uInt16 GetVal( sal_Unicode c )
 {
     return sal_uInt16( c - '0' );
 }
@@ -945,15 +919,19 @@ bool ParseDouble( const sal_Unicode*& rp, double& rRet )
     rp = p;
 
     fInt += fFrac;
-    sal_Int32   nLog10 = sal_Int32( log10( fInt ) );
 
-    if( bNegExp )
-        nExp = -nExp;
+    if (fInt != 0.0) // exact check; log10(0.0) may entail a pole error
+    {
+        sal_Int32   nLog10 = sal_Int32( log10( fInt ) );
 
-    if( nLog10 + nExp > nMaxExp )
-        return false;
+        if( bNegExp )
+            nExp = -nExp;
 
-    fInt = ::rtl::math::pow10Exp( fInt, nExp );
+        if( nLog10 + nExp > nMaxExp )
+            return false;
+
+        fInt = ::rtl::math::pow10Exp( fInt, nExp );
+    }
 
     if( bNegNum )
         fInt = -fInt;
@@ -982,11 +960,8 @@ OUString GetString( double f, bool bLeadingSign, sal_uInt16 nMaxDig )
 
 
 double GetAmordegrc( sal_Int32 nNullDate, double fCost, sal_Int32 nDate, sal_Int32 nFirstPer,
-    double fRestVal, double fPer, double fRate, sal_Int32 nBase ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+    double fRestVal, double fPer, double fRate, sal_Int32 nBase )
 {
-    if( nBase == 2 )
-        throw lang::IllegalArgumentException();
-
     sal_uInt32  nPer = sal_uInt32( fPer );
     double      fUsePer = 1.0 / fRate;
     double      fAmorCoeff;
@@ -1030,30 +1005,31 @@ double GetAmordegrc( sal_Int32 nNullDate, double fCost, sal_Int32 nDate, sal_Int
 
 
 double GetAmorlinc( sal_Int32 nNullDate, double fCost, sal_Int32 nDate, sal_Int32 nFirstPer,
-    double fRestVal, double fPer, double fRate, sal_Int32 nBase ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+    double fRestVal, double fPer, double fRate, sal_Int32 nBase )
 {
-    if( nBase == 2 )
-        throw lang::IllegalArgumentException();
-
     sal_uInt32  nPer = sal_uInt32( fPer );
     double      fOneRate = fCost * fRate;
     double      fCostDelta = fCost - fRestVal;
     double      f0Rate = GetYearFrac( nNullDate, nDate, nFirstPer, nBase ) * fRate * fCost;
     sal_uInt32  nNumOfFullPeriods = sal_uInt32( ( fCost - fRestVal - f0Rate) / fOneRate );
 
+    double fResult = 0.0;
     if( nPer == 0 )
-        return f0Rate;
+        fResult = f0Rate;
     else if( nPer <= nNumOfFullPeriods )
-        return fOneRate;
+        fResult = fOneRate;
     else if( nPer == nNumOfFullPeriods + 1 )
-        return fCostDelta - fOneRate * nNumOfFullPeriods - f0Rate;
+        fResult = fCostDelta - fOneRate * nNumOfFullPeriods - f0Rate;
+
+    if ( fResult > 0.0 )
+        return fResult;
     else
         return 0.0;
 }
 
 
 double GetDuration( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, double fCoup,
-    double fYield, sal_Int32 nFreq, sal_Int32 nBase ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+    double fYield, sal_Int32 nFreq, sal_Int32 nBase )
 {
     double          fYearfrac = GetYearFrac( nNullDate, nSettle, nMat, nBase );
     double          fNumOfCoups = GetCoupnum( nNullDate, nSettle, nMat, nFreq, nBase );
@@ -1068,7 +1044,7 @@ double GetDuration( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, doub
     double          t;
 
     for( t = 1.0 ; t < fNumOfCoups ; t++ )
-        fDur += ( t + nDiff ) * ( fCoup ) / pow( fYield, t + nDiff );
+        fDur += ( t + nDiff ) * fCoup / pow( fYield, t + nDiff );
 
     fDur += ( fNumOfCoups + nDiff ) * ( fCoup + f100 ) / pow( fYield, fNumOfCoups + nDiff );
 
@@ -1086,7 +1062,7 @@ double GetDuration( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, doub
 
 
 double GetYieldmat( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nIssue,
-    double fRate, double fPrice, sal_Int32 nBase ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+    double fRate, double fPrice, sal_Int32 nBase )
 {
     double      fIssMat = GetYearFrac( nNullDate, nIssue, nMat, nBase );
     double      fIssSet = GetYearFrac( nNullDate, nIssue, nSettle, nBase );
@@ -1103,7 +1079,7 @@ double GetYieldmat( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_
 
 double GetOddfprice( sal_Int32 /*nNullDate*/, sal_Int32 /*nSettle*/, sal_Int32 /*nMat*/, sal_Int32 /*nIssue*/,
     sal_Int32 /*nFirstCoup*/, double /*fRate*/, double /*fYield*/, double /*fRedemp*/, sal_Int32 /*nFreq*/,
-    sal_Int32 /*nBase*/ ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+    sal_Int32 /*nBase*/ )
 {
     // If you change this to not unconditionally throw, the
     // SAL_WNOUNREACHABLE_CODE_PUSH/POP around the caller in
@@ -1113,7 +1089,7 @@ double GetOddfprice( sal_Int32 /*nNullDate*/, sal_Int32 /*nSettle*/, sal_Int32 /
 
 
 double getYield_( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, double fCoup, double fPrice,
-                    double fRedemp, sal_Int32 nFreq, sal_Int32 nBase ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+                    double fRedemp, sal_Int32 nFreq, sal_Int32 nBase )
 {
     double      fRate = fCoup;
     double      fPriceN = 0.0;
@@ -1165,7 +1141,7 @@ double getYield_( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, double
 
 
 double getPrice_( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, double fRate, double fYield,
-                    double fRedemp, sal_Int32 nFreq, sal_Int32 nBase ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+                    double fRedemp, sal_Int32 nFreq, sal_Int32 nBase )
 {
     double      fFreq = nFreq;
 
@@ -1189,7 +1165,7 @@ double getPrice_( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, double
 
 double GetOddfyield( sal_Int32 /*nNullDate*/, sal_Int32 /*nSettle*/, sal_Int32 /*nMat*/, sal_Int32 /*nIssue*/,
     sal_Int32 /*nFirstCoup*/, double /*fRate*/, double /*fPrice*/, double /*fRedemp*/, sal_Int32 /*nFreq*/,
-    sal_Int32 /*nBase*/ ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+    sal_Int32 /*nBase*/ )
 {
     // If you change this to not unconditionally throw, the
     // SAL_WNOUNREACHABLE_CODE_PUSH/POP around the caller in
@@ -1199,7 +1175,7 @@ double GetOddfyield( sal_Int32 /*nNullDate*/, sal_Int32 /*nSettle*/, sal_Int32 /
 
 
 double GetOddlprice( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nLastCoup,
-    double fRate, double fYield, double fRedemp, sal_Int32 nFreq, sal_Int32 nBase ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+    double fRate, double fYield, double fRedemp, sal_Int32 nFreq, sal_Int32 nBase )
 {
     double      fFreq = double( nFreq );
     double      fDCi = GetYearFrac( nNullDate, nLastCoup, nMat, nBase ) * fFreq;
@@ -1215,7 +1191,7 @@ double GetOddlprice( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal
 
 
 double GetOddlyield( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nLastCoup,
-    double fRate, double fPrice, double fRedemp, sal_Int32 nFreq, sal_Int32 nBase ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+    double fRate, double fPrice, double fRedemp, sal_Int32 nFreq, sal_Int32 nBase )
 {
     double      fFreq = double( nFreq );
     double      fDCi = GetYearFrac( nNullDate, nLastCoup, nMat, nBase ) * fFreq;
@@ -1231,46 +1207,46 @@ double GetOddlyield( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal
 }
 
 
-double GetRmz( double fZins, double fZzr, double fBw, double fZw, sal_Int32 nF )
+double GetPmt( double fRate, double fNper, double fPv, double fFv, sal_Int32 nPayType )
 {
-    double      fRmz;
-    if( fZins == 0.0 )
-        fRmz = ( fBw + fZw ) / fZzr;
+    double      fPmt;
+    if( fRate == 0.0 )
+        fPmt = ( fPv + fFv ) / fNper;
     else
     {
-        double  fTerm = pow( 1.0 + fZins, fZzr );
-        if( nF > 0 )
-            fRmz = ( fZw * fZins / ( fTerm - 1.0 ) + fBw * fZins / ( 1.0 - 1.0 / fTerm ) ) / ( 1.0 + fZins );
+        double  fTerm = pow( 1.0 + fRate, fNper );
+        if( nPayType > 0 )
+            fPmt = ( fFv * fRate / ( fTerm - 1.0 ) + fPv * fRate / ( 1.0 - 1.0 / fTerm ) ) / ( 1.0 + fRate );
         else
-            fRmz = fZw * fZins / ( fTerm - 1.0 ) + fBw * fZins / ( 1.0 - 1.0 / fTerm );
+            fPmt = fFv * fRate / ( fTerm - 1.0 ) + fPv * fRate / ( 1.0 - 1.0 / fTerm );
     }
 
-    return -fRmz;
+    return -fPmt;
 }
 
 
-double GetZw( double fZins, double fZzr, double fRmz, double fBw, sal_Int32 nF )
+double GetFv( double fRate, double fNper, double fPmt, double fPv, sal_Int32 nPayType )
 {
-    double      fZw;
-    if( fZins == 0.0 )
-        fZw = fBw + fRmz * fZzr;
+    double      fFv;
+    if( fRate == 0.0 )
+        fFv = fPv + fPmt * fNper;
     else
     {
-        double  fTerm = pow( 1.0 + fZins, fZzr );
-        if( nF > 0 )
-            fZw = fBw * fTerm + fRmz * ( 1.0 + fZins ) * ( fTerm - 1.0 ) / fZins;
+        double  fTerm = pow( 1.0 + fRate, fNper );
+        if( nPayType > 0 )
+            fFv = fPv * fTerm + fPmt * ( 1.0 + fRate ) * ( fTerm - 1.0 ) / fRate;
         else
-            fZw = fBw * fTerm + fRmz * ( fTerm - 1.0 ) / fZins;
+            fFv = fPv * fTerm + fPmt * ( fTerm - 1.0 ) / fRate;
     }
 
-    return -fZw;
+    return -fFv;
 }
 
 // financial functions COUP***
 
 // COUPPCD: find last coupon date before settlement (can be equal to settlement)
+/// @throws css::lang::IllegalArgumentException
 static void lcl_GetCouppcd( ScaDate& rDate, const ScaDate& rSettle, const ScaDate& rMat, sal_Int32 nFreq )
-    throw( lang::IllegalArgumentException )
 {
     rDate = rMat;
     rDate.setYear( rSettle.getYear() );
@@ -1281,7 +1257,6 @@ static void lcl_GetCouppcd( ScaDate& rDate, const ScaDate& rSettle, const ScaDat
 }
 
 double GetCouppcd( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nFreq, sal_Int32 nBase )
-    throw( uno::RuntimeException, lang::IllegalArgumentException )
 {
     if( nSettle >= nMat || CHK_Freq )
         throw lang::IllegalArgumentException();
@@ -1292,8 +1267,8 @@ double GetCouppcd( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_I
 }
 
 // COUPNCD: find first coupon date after settlement (is never equal to settlement)
+/// @throws css::lang::IllegalArgumentException
 static void lcl_GetCoupncd( ScaDate& rDate, const ScaDate& rSettle, const ScaDate& rMat, sal_Int32 nFreq )
-    throw( lang::IllegalArgumentException )
 {
     rDate = rMat;
     rDate.setYear( rSettle.getYear() );
@@ -1304,7 +1279,6 @@ static void lcl_GetCoupncd( ScaDate& rDate, const ScaDate& rSettle, const ScaDat
 }
 
 double GetCoupncd( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nFreq, sal_Int32 nBase )
-    throw( uno::RuntimeException, lang::IllegalArgumentException )
 {
     if( nSettle >= nMat || CHK_Freq )
         throw lang::IllegalArgumentException();
@@ -1316,7 +1290,6 @@ double GetCoupncd( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_I
 
 // COUPDAYBS: get day count: coupon date before settlement <-> settlement
 double GetCoupdaybs( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nFreq, sal_Int32 nBase )
-    throw( uno::RuntimeException, lang::IllegalArgumentException )
 {
     if( nSettle >= nMat || CHK_Freq )
         throw lang::IllegalArgumentException();
@@ -1329,7 +1302,6 @@ double GetCoupdaybs( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal
 
 // COUPDAYSNC: get day count: settlement <-> coupon date after settlement
 double GetCoupdaysnc( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nFreq, sal_Int32 nBase )
-    throw( uno::RuntimeException, lang::IllegalArgumentException )
 {
     if( nSettle >= nMat || CHK_Freq )
         throw lang::IllegalArgumentException();
@@ -1346,7 +1318,6 @@ double GetCoupdaysnc( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sa
 
 // COUPDAYS: get day count: coupon date before settlement <-> coupon date after settlement
 double GetCoupdays( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nFreq, sal_Int32 nBase )
-    throw( uno::RuntimeException, lang::IllegalArgumentException )
 {
     if( nSettle >= nMat || CHK_Freq )
         throw lang::IllegalArgumentException();
@@ -1364,7 +1335,6 @@ double GetCoupdays( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_
 
 // COUPNUM: get count of coupon dates
 double GetCoupnum( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nFreq, sal_Int32 nBase )
-    throw( uno::RuntimeException, lang::IllegalArgumentException )
 {
     if( nSettle >= nMat || CHK_Freq )
         throw lang::IllegalArgumentException();
@@ -1376,51 +1346,26 @@ double GetCoupnum( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_I
     return static_cast< double >( nMonths * nFreq / 12 );
 }
 
-
-class AnalysisRscStrArrLoader : public Resource
-{
-private:
-    ResStringArray          aStrArray;
-public:
-                            AnalysisRscStrArrLoader( sal_uInt16 nRsc, sal_uInt16 nArrayId, ResMgr& rResMgr ) :
-                                Resource( AnalysisResId( nRsc, rResMgr ) ),
-                                aStrArray( AnalysisResId( nArrayId, rResMgr ) )
-                            {
-                                FreeResource();
-                            }
-
-    const ResStringArray&   GetStringArray() const { return aStrArray; }
-};
-
-
-FuncData::FuncData( const FuncDataBase& r, ResMgr& rResMgr ) :
+FuncData::FuncData(const FuncDataBase& r) :
     aIntName( OUString::createFromAscii( r.pIntName ) ),
-    nUINameID( r.nUINameID ),
-    nDescrID( r.nDescrID ),
+    pUINameID( r.pUINameID ),
+    pDescrID( r.pDescrID ),
     bDouble( r.bDouble ),
     bWithOpt( r.bWithOpt ),
     nParam( r.nNumOfParams ),
-    nCompID( r.nCompListID ),
     eCat( r.eCat )
 {
     if (r.pSuffix)
-        aSuffix = OUString::createFromAscii( r.pSuffix);
+        aSuffix = OUString::createFromAscii(r.pSuffix);
 
-    AnalysisRscStrArrLoader aArrLoader( RID_ANALYSIS_DEFFUNCTION_NAMES, nCompID, rResMgr );
-    const ResStringArray&   rArr = aArrLoader.GetStringArray();
-
-    sal_uInt16              nCount = sal::static_int_cast<sal_uInt16>( rArr.Count() );
-
-    aCompList.resize( nCount );
-    for( sal_uInt16 n = 0 ; n < nCount ; n++ )
-        aCompList[n] = rArr.GetString( n );
+    aCompList.resize(2);
+    aCompList[0] = OUString(r.pCompListID[0], strlen(r.pCompListID[0]), RTL_TEXTENCODING_UTF8);
+    aCompList[1] = OUString(r.pCompListID[1], strlen(r.pCompListID[1]), RTL_TEXTENCODING_UTF8);
 }
-
 
 FuncData::~FuncData()
 {
 }
-
 
 sal_uInt16 FuncData::GetStrIndex( sal_uInt16 nParamNum ) const
 {
@@ -1433,18 +1378,11 @@ sal_uInt16 FuncData::GetStrIndex( sal_uInt16 nParamNum ) const
         return nParamNum * 2;
 }
 
-
-void InitFuncDataList( FuncDataList& rList, ResMgr& rResMgr )
+void InitFuncDataList(FuncDataList& rList)
 {
-    for( sal_uInt16 n = 0 ; n < SAL_N_ELEMENTS(pFuncDatas) ; n++ )
-        rList.push_back( FuncData( pFuncDatas[ n ], rResMgr ) );
+    for(const auto & rFuncData : pFuncDatas)
+        rList.push_back(FuncData(rFuncData));
 }
-
-
-AnalysisResId::AnalysisResId( sal_uInt16 nId, ResMgr& rResMgr ) : ResId( nId, rResMgr )
-{
-}
-
 
 SortedIndividualInt32List::SortedIndividualInt32List()
 {
@@ -1487,7 +1425,7 @@ void SortedIndividualInt32List::Insert( sal_Int32 nDay, sal_Int32 nNullDate, boo
 
 
 void SortedIndividualInt32List::Insert(
-        double fDay, sal_Int32 nNullDate, bool bInsertOnWeekend ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+        double fDay, sal_Int32 nNullDate, bool bInsertOnWeekend )
 {
     if( (fDay < -2147483648.0) || (fDay > 2147483649.0) )
         throw lang::IllegalArgumentException();
@@ -1521,7 +1459,7 @@ void SortedIndividualInt32List::InsertHolidayList(
         const ScaAnyConverter& rAnyConv,
         const uno::Any& rHolAny,
         sal_Int32 nNullDate,
-        bool bInsertOnWeekend ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+        bool bInsertOnWeekend )
 {
     double fDay;
     if( rAnyConv.getDouble( fDay, rHolAny ) )
@@ -1533,26 +1471,24 @@ void SortedIndividualInt32List::InsertHolidayList(
         ScaAnyConverter& rAnyConv,
         const uno::Reference< beans::XPropertySet >& xOptions,
         const uno::Any& rHolAny,
-        sal_Int32 nNullDate ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+        sal_Int32 nNullDate )
 {
     rAnyConv.init( xOptions );
     if( rHolAny.getValueTypeClass() == uno::TypeClass_SEQUENCE )
     {
         uno::Sequence< uno::Sequence< uno::Any > > aAnySeq;
-        if( rHolAny >>= aAnySeq )
-        {
-            const uno::Sequence< uno::Any >* pSeqArray = aAnySeq.getConstArray();
-            for( sal_Int32 nIndex1 = 0; nIndex1 < aAnySeq.getLength(); nIndex1++ )
-            {
-                const uno::Sequence< uno::Any >& rSubSeq = pSeqArray[ nIndex1 ];
-                const uno::Any* pAnyArray = rSubSeq.getConstArray();
-
-                for( sal_Int32 nIndex2 = 0; nIndex2 < rSubSeq.getLength(); nIndex2++ )
-                    InsertHolidayList( rAnyConv, pAnyArray[ nIndex2 ], nNullDate, false/*bInsertOnWeekend*/ );
-            }
-        }
-        else
+        if( !(rHolAny >>= aAnySeq) )
             throw lang::IllegalArgumentException();
+
+        const uno::Sequence< uno::Any >* pSeqArray = aAnySeq.getConstArray();
+        for( sal_Int32 nIndex1 = 0; nIndex1 < aAnySeq.getLength(); nIndex1++ )
+        {
+            const uno::Sequence< uno::Any >& rSubSeq = pSeqArray[ nIndex1 ];
+            const uno::Any* pAnyArray = rSubSeq.getConstArray();
+
+            for( sal_Int32 nIndex2 = 0; nIndex2 < rSubSeq.getLength(); nIndex2++ )
+                InsertHolidayList( rAnyConv, pAnyArray[ nIndex2 ], nNullDate, false/*bInsertOnWeekend*/ );
+        }
     }
     else
         InsertHolidayList( rAnyConv, rHolAny, nNullDate, false/*bInsertOnWeekend*/ );
@@ -1560,7 +1496,7 @@ void SortedIndividualInt32List::InsertHolidayList(
 
 
 void ScaDoubleList::Append(
-        const uno::Sequence< uno::Sequence< double > >& rValueSeq ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+        const uno::Sequence< uno::Sequence< double > >& rValueSeq )
 {
     const uno::Sequence< double >* pSeqArray = rValueSeq.getConstArray();
     for( sal_Int32 nIndex1 = 0; nIndex1 < rValueSeq.getLength(); nIndex1++ )
@@ -1574,7 +1510,7 @@ void ScaDoubleList::Append(
 
 
 void ScaDoubleList::Append(
-        const uno::Sequence< uno::Sequence< sal_Int32 > >& rValueSeq ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+        const uno::Sequence< uno::Sequence< sal_Int32 > >& rValueSeq )
 {
     const uno::Sequence< sal_Int32 >* pSeqArray = rValueSeq.getConstArray();
     for( sal_Int32 nIndex1 = 0; nIndex1 < rValueSeq.getLength(); nIndex1++ )
@@ -1589,10 +1525,11 @@ void ScaDoubleList::Append(
 void ScaDoubleList::Append(
         const ScaAnyConverter& rAnyConv,
         const uno::Any& rAny,
-        bool bIgnoreEmpty ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+        bool bIgnoreEmpty )
 {
-    if( rAny.getValueTypeClass() == uno::TypeClass_SEQUENCE )
-        Append( rAnyConv, *static_cast< const uno::Sequence< uno::Sequence< uno::Any > >* >( rAny.getValue() ), bIgnoreEmpty );
+    if( auto s = o3tl::tryAccess<
+            css::uno::Sequence<css::uno::Sequence<css::uno::Any>>>(rAny) )
+        Append( rAnyConv, *s, bIgnoreEmpty );
     else
     {
         double fValue;
@@ -1607,7 +1544,7 @@ void ScaDoubleList::Append(
 void ScaDoubleList::Append(
         const ScaAnyConverter& rAnyConv,
         const uno::Sequence< uno::Any >& rAnySeq,
-        bool bIgnoreEmpty ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+        bool bIgnoreEmpty )
 {
     const uno::Any* pArray = rAnySeq.getConstArray();
     for( sal_Int32 nIndex = 0; nIndex < rAnySeq.getLength(); nIndex++ )
@@ -1618,7 +1555,7 @@ void ScaDoubleList::Append(
 void ScaDoubleList::Append(
         const ScaAnyConverter& rAnyConv,
         const uno::Sequence< uno::Sequence< uno::Any > >& rAnySeq,
-        bool bIgnoreEmpty ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+        bool bIgnoreEmpty )
 {
     const uno::Sequence< uno::Any >* pArray = rAnySeq.getConstArray();
     for( sal_Int32 nIndex = 0; nIndex < rAnySeq.getLength(); nIndex++ )
@@ -1628,20 +1565,20 @@ void ScaDoubleList::Append(
 void ScaDoubleList::Append(
         ScaAnyConverter& rAnyConv,
         const uno::Reference< beans::XPropertySet >& xOpt,
-        const uno::Sequence< uno::Any >& rAnySeq ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+        const uno::Sequence< uno::Any >& rAnySeq )
 {
     rAnyConv.init( xOpt );
     Append( rAnyConv, rAnySeq, true/*bIgnoreEmpty*/ );
 }
 
 
-bool ScaDoubleList::CheckInsert( double ) const throw( uno::RuntimeException, lang::IllegalArgumentException )
+bool ScaDoubleList::CheckInsert( double ) const
 {
     return true;
 }
 
 
-bool ScaDoubleListGT0::CheckInsert( double fValue ) const throw( uno::RuntimeException, lang::IllegalArgumentException )
+bool ScaDoubleListGT0::CheckInsert( double fValue ) const
 {
     if( fValue < 0.0 )
         throw lang::IllegalArgumentException();
@@ -1649,7 +1586,7 @@ bool ScaDoubleListGT0::CheckInsert( double fValue ) const throw( uno::RuntimeExc
 }
 
 
-bool ScaDoubleListGE0::CheckInsert( double fValue ) const throw( uno::RuntimeException, lang::IllegalArgumentException )
+bool ScaDoubleListGE0::CheckInsert( double fValue ) const
 {
     if( fValue < 0.0 )
         throw lang::IllegalArgumentException();
@@ -1657,7 +1594,7 @@ bool ScaDoubleListGE0::CheckInsert( double fValue ) const throw( uno::RuntimeExc
 }
 
 
-Complex::Complex( const OUString& rStr ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+Complex::Complex( const OUString& rStr )
 {
     if( !ParseString( rStr, *this ) )
         throw lang::IllegalArgumentException();
@@ -1738,7 +1675,7 @@ bool Complex::ParseString( const OUString& rStr, Complex& rCompl )
 }
 
 
-OUString Complex::GetString() const throw( uno::RuntimeException, lang::IllegalArgumentException )
+OUString Complex::GetString() const
 {
     CHK_FINITE(r);
     CHK_FINITE(i);
@@ -1748,7 +1685,7 @@ OUString Complex::GetString() const throw( uno::RuntimeException, lang::IllegalA
     bool bHasReal = !bHasImag || (r != 0.0);
 
     if( bHasReal )
-        aRet.append(::GetString( r ));
+        aRet.append(::GetString( r, false ));
     if( bHasImag )
     {
         if( i == 1.0 )
@@ -1767,7 +1704,7 @@ OUString Complex::GetString() const throw( uno::RuntimeException, lang::IllegalA
 }
 
 
-double Complex::Arg() const throw( uno::RuntimeException, lang::IllegalArgumentException )
+double Complex::Arg() const
 {
     if( r == 0.0 && i == 0.0 )
         throw lang::IllegalArgumentException();
@@ -1781,17 +1718,14 @@ double Complex::Arg() const throw( uno::RuntimeException, lang::IllegalArgumentE
 }
 
 
-void Complex::Power( double fPower ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Power( double fPower )
 {
     if( r == 0.0 && i == 0.0 )
     {
-        if( fPower > 0 )
-        {
-            r = i = 0.0;
-            return;
-        }
-        else
+        if( fPower <= 0 )
             throw lang::IllegalArgumentException();
+        r = i = 0.0;
+        return;
     }
 
     double      p, phi;
@@ -1821,7 +1755,7 @@ void Complex::Sqrt()
 }
 
 
-void Complex::Sin() throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Sin()
 {
     if( !::rtl::math::isValidArcArg( r ) )
         throw lang::IllegalArgumentException();
@@ -1839,7 +1773,7 @@ void Complex::Sin() throw( uno::RuntimeException, lang::IllegalArgumentException
 }
 
 
-void Complex::Cos() throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Cos()
 {
     if( !::rtl::math::isValidArcArg( r ) )
         throw lang::IllegalArgumentException();
@@ -1857,7 +1791,7 @@ void Complex::Cos() throw( uno::RuntimeException, lang::IllegalArgumentException
 }
 
 
-void Complex::Div( const Complex& z ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Div( const Complex& z )
 {
     if( z.r == 0 && z.i == 0 )
         throw lang::IllegalArgumentException();
@@ -1884,7 +1818,7 @@ void Complex::Exp()
 }
 
 
-void Complex::Ln() throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Ln()
 {
     if( r == 0.0 && i == 0.0 )
         throw lang::IllegalArgumentException();
@@ -1901,21 +1835,21 @@ void Complex::Ln() throw( uno::RuntimeException, lang::IllegalArgumentException 
 }
 
 
-void Complex::Log10() throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Log10()
 {
     Ln();
     Mult( 0.434294481903251828 );   // * log10( e )
 }
 
 
-void Complex::Log2() throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Log2()
 {
     Ln();
     Mult( 1.442695040888963407 );   // * log2( e )
 }
 
 
-void Complex::Tan() throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Tan()
 {
     if ( i )
     {
@@ -1934,7 +1868,7 @@ void Complex::Tan() throw( uno::RuntimeException, lang::IllegalArgumentException
 }
 
 
-void Complex::Sec() throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Sec()
 {
     if( i )
     {
@@ -1955,7 +1889,7 @@ void Complex::Sec() throw( uno::RuntimeException, lang::IllegalArgumentException
 }
 
 
-void Complex::Csc() throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Csc()
 {
     if( i )
     {
@@ -1976,7 +1910,7 @@ void Complex::Csc() throw( uno::RuntimeException, lang::IllegalArgumentException
 }
 
 
-void Complex::Cot() throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Cot()
 {
     if ( i )
     {
@@ -1995,7 +1929,7 @@ void Complex::Cot() throw( uno::RuntimeException, lang::IllegalArgumentException
 }
 
 
-void Complex::Sinh() throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Sinh()
 {
     if( !::rtl::math::isValidArcArg( r ) )
         throw lang::IllegalArgumentException();
@@ -2012,7 +1946,7 @@ void Complex::Sinh() throw( uno::RuntimeException, lang::IllegalArgumentExceptio
 }
 
 
-void Complex::Cosh() throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Cosh()
 {
     if( !::rtl::math::isValidArcArg( r ) )
         throw lang::IllegalArgumentException();
@@ -2029,7 +1963,7 @@ void Complex::Cosh() throw( uno::RuntimeException, lang::IllegalArgumentExceptio
 }
 
 
-void Complex::Sech() throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Sech()
 {
     if ( i )
     {
@@ -2050,7 +1984,7 @@ void Complex::Sech() throw( uno::RuntimeException, lang::IllegalArgumentExceptio
 }
 
 
-void Complex::Csch() throw( uno::RuntimeException, lang::IllegalArgumentException )
+void Complex::Csch()
 {
     if ( i )
     {
@@ -2073,18 +2007,14 @@ void Complex::Csch() throw( uno::RuntimeException, lang::IllegalArgumentExceptio
 
 ComplexList::~ComplexList()
 {
-    for( size_t i = 0; i < maVector.size(); ++i )
-        delete maVector[i];
 }
 
 
-void ComplexList::Append( const uno::Sequence< uno::Sequence< OUString > >& r, ComplListAppendHandl eAH ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+void ComplexList::Append( const uno::Sequence< uno::Sequence< OUString > >& r )
 {
     sal_Int32   n1, n2;
     sal_Int32   nE1 = r.getLength();
     sal_Int32   nE2;
-    bool        bEmpty0 = eAH == AH_EmpyAs0;
-    bool        bErrOnEmpty = eAH == AH_EmptyAsErr;
 
     for( n1 = 0 ; n1 < nE1 ; n1++ )
     {
@@ -2096,21 +2026,15 @@ void ComplexList::Append( const uno::Sequence< uno::Sequence< OUString > >& r, C
             const OUString&   rStr = rList[ n2 ];
 
             if( !rStr.isEmpty() )
-                Append( new Complex( rStr ) );
-            else if( bEmpty0 )
-                Append( new Complex( 0.0 ) );
-            else if( bErrOnEmpty )
-                throw lang::IllegalArgumentException();
+                Append( Complex( rStr ) );
         }
     }
 }
 
 
-void ComplexList::Append( const uno::Sequence< uno::Any >& aMultPars, ComplListAppendHandl eAH ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+void ComplexList::Append( const uno::Sequence< uno::Any >& aMultPars )
 {
     sal_Int32       nEle = aMultPars.getLength();
-    bool            bEmpty0 = eAH == AH_EmpyAs0;
-    bool            bErrOnEmpty = eAH == AH_EmptyAsErr;
 
     for( sal_Int32 i = 0 ; i < nEle ; i++ )
     {
@@ -2120,31 +2044,25 @@ void ComplexList::Append( const uno::Sequence< uno::Any >& aMultPars, ComplListA
             case uno::TypeClass_VOID:       break;
             case uno::TypeClass_STRING:
                 {
-                const OUString*       pStr = static_cast<const OUString*>(r.getValue());
+                auto       pStr = o3tl::forceAccess<OUString>(r);
 
                 if( !pStr->isEmpty() )
-                    Append( new Complex( *static_cast<OUString const *>(r.getValue()) ) );
-                else if( bEmpty0 )
-                    Append( new Complex( 0.0 ) );
-                else if( bErrOnEmpty )
-                    throw lang::IllegalArgumentException();
+                    Append( Complex( *pStr ) );
                 }
                 break;
             case uno::TypeClass_DOUBLE:
-                Append( new Complex( *static_cast<double const *>(r.getValue()), 0.0 ) );
+                Append( Complex( *o3tl::forceAccess<double>(r), 0.0 ) );
                 break;
             case uno::TypeClass_SEQUENCE:
                 {
                 uno::Sequence< uno::Sequence< uno::Any > >           aValArr;
-                if( r >>= aValArr )
-                {
-                    sal_Int32           nE = aValArr.getLength();
-                    const uno::Sequence< uno::Any >*   pArr = aValArr.getConstArray();
-                    for( sal_Int32 n = 0 ; n < nE ; n++ )
-                        Append( pArr[ n ], eAH );
-                }
-                else
+                if( !(r >>= aValArr) )
                     throw lang::IllegalArgumentException();
+
+                sal_Int32           nE = aValArr.getLength();
+                const uno::Sequence< uno::Any >*   pArr = aValArr.getConstArray();
+                for( sal_Int32 n = 0 ; n < nE ; n++ )
+                    Append( pArr[ n ] );
                 }
                 break;
             default:
@@ -2153,18 +2071,17 @@ void ComplexList::Append( const uno::Sequence< uno::Any >& aMultPars, ComplListA
     }
 }
 
-
-ConvertData::ConvertData( const sal_Char p[], double fC, ConvertDataClass e, bool bPrefSupport ) : aName( p, strlen( p ), RTL_TEXTENCODING_MS_1252 )
+ConvertData::ConvertData(const sal_Char p[], double fC, ConvertDataClass e, bool bPrefSupport)
+    : fConst(fC)
+    , aName(p, strlen(p), RTL_TEXTENCODING_MS_1252)
+    , eClass(e)
+    , bPrefixSupport(bPrefSupport)
 {
-    fConst = fC;
-    eClass = e;
-    bPrefixSupport = bPrefSupport;
 }
 
 ConvertData::~ConvertData()
 {
 }
-
 
 sal_Int16 ConvertData::GetMatchingLevel( const OUString& rRef ) const
 {
@@ -2172,19 +2089,15 @@ sal_Int16 ConvertData::GetMatchingLevel( const OUString& rRef ) const
     sal_Int32 nLen = rRef.getLength();
     sal_Int32 nIndex = rRef.lastIndexOf( '^' );
     if( nIndex > 0 && nIndex  == ( nLen - 2 ) )
-    {
-        const sal_Unicode*  p = aStr.getStr();
-        aStr = OUString( p, nLen - 2 );
-        aStr += OUString( p[ nLen - 1 ] );
-    }
-    if( aName.equals( aStr ) )
+        aStr = aStr.copy( 0, nLen - 2 ) + OUStringLiteral1( aStr[ nLen - 1 ] );
+    if( aName == aStr )
         return 0;
     else
     {
         const sal_Unicode*  p = aStr.getStr();
 
         nLen = aStr.getLength();
-        bool bPref = IsPrefixSupport();
+        bool bPref = bPrefixSupport;
         bool bOneChar = (bPref && nLen > 1 && (aName == p + 1));
         if (bOneChar || (bPref && nLen > 2 && (aName == p + 2) &&
                     *p == 'd' && *(p+1) == 'a'))
@@ -2270,7 +2183,7 @@ sal_Int16 ConvertData::GetMatchingLevel( const OUString& rRef ) const
 
 
 double ConvertData::Convert(
-    double f, const ConvertData& r, sal_Int16 nLevFrom, sal_Int16 nLevTo ) const throw( uno::RuntimeException, lang::IllegalArgumentException )
+    double f, const ConvertData& r, sal_Int16 nLevFrom, sal_Int16 nLevTo ) const
 {
     if( Class() != r.Class() )
         throw lang::IllegalArgumentException();
@@ -2305,12 +2218,6 @@ double ConvertData::Convert(
 }
 
 
-double ConvertData::ConvertToBase( double f, sal_Int16 n ) const
-{
-    return ::rtl::math::pow10Exp( f / fConst, n );
-}
-
-
 double ConvertData::ConvertFromBase( double f, sal_Int16 n ) const
 {
     return ::rtl::math::pow10Exp( f * fConst, -n );
@@ -2321,7 +2228,7 @@ ConvertDataLinear::~ConvertDataLinear()
 }
 
 double ConvertDataLinear::Convert(
-    double f, const ConvertData& r, sal_Int16 nLevFrom, sal_Int16 nLevTo ) const throw( uno::RuntimeException, lang::IllegalArgumentException )
+    double f, const ConvertData& r, sal_Int16 nLevFrom, sal_Int16 nLevTo ) const
 {
     if( Class() != r.Class() )
         throw lang::IllegalArgumentException();
@@ -2355,10 +2262,10 @@ double ConvertDataLinear::ConvertFromBase( double f, sal_Int16 n ) const
 
 ConvertDataList::ConvertDataList()
 {
-#define NEWD(str,unit,cl)   maVector.push_back(new ConvertData(str,unit,cl))
-#define NEWDP(str,unit,cl)  maVector.push_back(new ConvertData(str,unit,cl,true))
-#define NEWL(str,unit,offs,cl)  maVector.push_back(new ConvertDataLinear(str,unit,offs,cl))
-#define NEWLP(str,unit,offs,cl) maVector.push_back(new ConvertDataLinear(str,unit,offs,cl,true))
+#define NEWD(str,unit,cl)   maVector.emplace_back(new ConvertData(str,unit,cl))
+#define NEWDP(str,unit,cl)  maVector.emplace_back(new ConvertData(str,unit,cl,true))
+#define NEWL(str,unit,offs,cl)  maVector.emplace_back(new ConvertDataLinear(str,unit,offs,cl))
+#define NEWLP(str,unit,offs,cl) maVector.emplace_back(new ConvertDataLinear(str,unit,offs,cl,true))
 
     // *** are extra and not standard Excel Analysis Addin!
 
@@ -2391,7 +2298,9 @@ ConvertDataList::ConvertDataList()
     NEWD( "ft",         3.2808398950131234E00,  CDC_Length ); // Foot               3,2808398950131233595800524934383
     NEWD( "yd",         1.0936132983377078E00,  CDC_Length ); // Yard               1,0936132983377077865266841644794
     NEWDP( "ang",       1.0000000000000000E10,  CDC_Length ); // Angstroem
-    NEWD( "Pica",       2.8346456692913386E03,  CDC_Length ); // Pica (1/72 Inch)   2834,6456692913385826771653543307
+    NEWD( "Pica",       2.8346456692913386E03,  CDC_Length ); // Pica Point (1/72 Inch)   2834,6456692913385826771653543307
+    NEWD( "picapt",     2.8346456692913386E03,  CDC_Length ); // Pica Point (1/72 Inch)   2834,6456692913385826771653543307
+    NEWD( "pica",       2.36220472441E02,       CDC_Length ); // pica (1/6 Inch)
     NEWD( "ell",        8.748906E-01,           CDC_Length ); // *** Ell
     NEWDP( "parsec",    3.240779E-17,           CDC_Length ); // *** Parsec
     NEWDP( "pc",        3.240779E-17,           CDC_Length ); // *** Parsec also
@@ -2480,7 +2389,9 @@ ConvertDataList::ConvertDataList()
     NEWD( "ft3",        3.5314666721488590E-02, CDC_Volume ); // *** Cubic Foot
     NEWD( "yd3",        1.3079506193143922E-03, CDC_Volume ); // *** Cubic Yard
     NEWDP( "ang3",      1.0000000000000000E27,  CDC_Volume ); // *** Cubic Angstroem
-    NEWD( "Pica3",      2.2776990435870636E07,  CDC_Volume ); // *** Cubic Pica
+    NEWD( "Pica3",      2.2776990435870636E07,  CDC_Volume ); // *** Cubic Pica Point (1/72 inch)
+    NEWD( "picapt3",    2.2776990435870636E07,  CDC_Volume ); // *** Cubic Pica Point (1/72 inch)
+    NEWD( "pica3",      1.31811287245E04,       CDC_Volume ); // *** Cubic Pica (1/6 inch)
     NEWD( "barrel",     6.2898107704321051E-03, CDC_Volume ); // *** Barrel (=42gal)
     NEWD( "bushel",     2.837759E-02,           CDC_Volume ); // *** Bushel
     NEWD( "regton",     3.531467E-04,           CDC_Volume ); // *** Register ton
@@ -2504,7 +2415,9 @@ ConvertDataList::ConvertDataList()
     NEWD( "ft2",        1.0763910416709722E01,  CDC_Area ); // *** Square Foot
     NEWD( "yd2",        1.1959900463010803E00,  CDC_Area ); // *** Square Yard
     NEWDP( "ang2",      1.0000000000000000E20,  CDC_Area ); // *** Square Angstroem
-    NEWD( "Pica2",      8.0352160704321409E06,  CDC_Area ); // *** Square Pica
+    NEWD( "Pica2",      8.0352160704321409E06,  CDC_Area ); // *** Square Pica Point (1/72 inch)
+    NEWD( "picapt2",    8.0352160704321409E06,  CDC_Area ); // *** Square Pica Point (1/72 inch)
+    NEWD( "pica2",      5.58001116002232E04,    CDC_Area ); // *** Square Pica (1/6 inch)
     NEWD( "Morgen",     4.0000000000000000E-04, CDC_Area ); // *** Morgen
     NEWDP( "ar",        1.000000E-02,           CDC_Area ); // *** Ar
     NEWD( "acre",       2.471053815E-04,        CDC_Area ); // *** Acre
@@ -2532,12 +2445,10 @@ ConvertDataList::ConvertDataList()
 
 ConvertDataList::~ConvertDataList()
 {
-    for( std::vector<ConvertData*>::const_iterator it = maVector.begin(); it != maVector.end(); ++it )
-        delete *it;
 }
 
 
-double ConvertDataList::Convert( double fVal, const OUString& rFrom, const OUString& rTo ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+double ConvertDataList::Convert( double fVal, const OUString& rFrom, const OUString& rTo )
 {
     ConvertData*    pFrom = nullptr;
     ConvertData*    pTo = nullptr;
@@ -2546,10 +2457,9 @@ double ConvertDataList::Convert( double fVal, const OUString& rFrom, const OUStr
     sal_Int16       nLevelFrom = 0;
     sal_Int16       nLevelTo = 0;
 
-    std::vector<ConvertData*>::iterator it = maVector.begin();
-    while( it != maVector.end() && ( bSearchFrom || bSearchTo ) )
+    for( const auto& rItem : maVector )
     {
-        ConvertData*    p = *it;
+        ConvertData*    p = rItem.get();
         if( bSearchFrom )
         {
             sal_Int16   n = p->GetMatchingLevel( rFrom );
@@ -2588,13 +2498,14 @@ double ConvertDataList::Convert( double fVal, const OUString& rFrom, const OUStr
             }
         }
 
-        ++it;
+        if( !bSearchFrom && !bSearchTo )
+            break;
     }
 
-    if( pFrom && pTo )
-        return pFrom->Convert( fVal, *pTo, nLevelFrom, nLevelTo );
-    else
+    if( !pFrom || !pTo )
         throw lang::IllegalArgumentException();
+
+    return pFrom->Convert( fVal, *pTo, nLevelFrom, nLevelTo );
 }
 
 
@@ -2689,7 +2600,7 @@ sal_Int32 ScaDate::getDaysInYearRange( sal_uInt16 nFrom, sal_uInt16 nTo ) const
     return b30Days ? ((nTo - nFrom + 1) * 360) : ::GetDaysInYears( nFrom, nTo );
 }
 
-void ScaDate::doAddYears( sal_Int32 nYearCount ) throw( lang::IllegalArgumentException )
+void ScaDate::doAddYears( sal_Int32 nYearCount )
 {
     sal_Int32 nNewYear = nYearCount + nYear;
     if( (nNewYear < 0) || (nNewYear > 0x7FFF) )
@@ -2697,7 +2608,7 @@ void ScaDate::doAddYears( sal_Int32 nYearCount ) throw( lang::IllegalArgumentExc
     nYear = static_cast< sal_uInt16 >( nNewYear );
 }
 
-void ScaDate::addMonths( sal_Int32 nMonthCount ) throw( lang::IllegalArgumentException )
+void ScaDate::addMonths( sal_Int32 nMonthCount )
 {
     sal_Int32 nNewMonth = nMonthCount + nMonth;
     if( nNewMonth > 12 )
@@ -2723,7 +2634,7 @@ sal_Int32 ScaDate::getDate( sal_Int32 nNullDate ) const
     return ::DateToDays( nRealDay, nMonth, nYear ) - nNullDate;
 }
 
-sal_Int32 ScaDate::getDiff( const ScaDate& rFrom, const ScaDate& rTo ) throw( lang::IllegalArgumentException )
+sal_Int32 ScaDate::getDiff( const ScaDate& rFrom, const ScaDate& rTo )
 {
     if( rFrom > rTo )
         return getDiff( rTo, rFrom );
@@ -2777,7 +2688,7 @@ sal_Int32 ScaDate::getDiff( const ScaDate& rFrom, const ScaDate& rTo ) throw( la
     }
     // finally add remaining days in this month
     nDiff += aTo.nDay - aFrom.nDay;
-    return nDiff > 0 ? nDiff : 0;
+    return std::max<sal_Int32>(nDiff, 0);
 }
 
 bool ScaDate::operator<( const ScaDate& rCmp ) const
@@ -2805,7 +2716,7 @@ ScaAnyConverter::~ScaAnyConverter()
 {
 }
 
-void ScaAnyConverter::init( const uno::Reference< beans::XPropertySet >& xPropSet ) throw( uno::RuntimeException )
+void ScaAnyConverter::init( const uno::Reference< beans::XPropertySet >& xPropSet )
 {
     // try to get default number format
     bHasValidFormat = false;
@@ -2829,7 +2740,7 @@ void ScaAnyConverter::init( const uno::Reference< beans::XPropertySet >& xPropSe
     }
 }
 
-double ScaAnyConverter::convertToDouble( const OUString& rString ) const throw( lang::IllegalArgumentException )
+double ScaAnyConverter::convertToDouble( const OUString& rString ) const
 {
     double fValue = 0.0;
     if( bHasValidFormat )
@@ -2856,7 +2767,7 @@ double ScaAnyConverter::convertToDouble( const OUString& rString ) const throw( 
 
 bool ScaAnyConverter::getDouble(
         double& rfResult,
-        const uno::Any& rAny ) const throw( lang::IllegalArgumentException )
+        const uno::Any& rAny ) const
 {
     rfResult = 0.0;
     bool bContainsVal = true;
@@ -2870,7 +2781,7 @@ bool ScaAnyConverter::getDouble(
         break;
         case uno::TypeClass_STRING:
         {
-            const OUString* pString = static_cast< const OUString* >( rAny.getValue() );
+            auto pString = o3tl::forceAccess< OUString >( rAny );
             if( !pString->isEmpty() )
                 rfResult = convertToDouble( *pString );
             else
@@ -2886,7 +2797,7 @@ bool ScaAnyConverter::getDouble(
 bool ScaAnyConverter::getDouble(
         double& rfResult,
         const uno::Reference< beans::XPropertySet >& xPropSet,
-        const uno::Any& rAny ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+        const uno::Any& rAny )
 {
     init( xPropSet );
     return getDouble( rfResult, rAny );
@@ -2895,7 +2806,7 @@ bool ScaAnyConverter::getDouble(
 double ScaAnyConverter::getDouble(
         const uno::Reference< beans::XPropertySet >& xPropSet,
         const uno::Any& rAny,
-        double fDefault ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+        double fDefault )
 {
     double fResult;
     if( !getDouble( fResult, xPropSet, rAny ) )
@@ -2906,7 +2817,7 @@ double ScaAnyConverter::getDouble(
 bool ScaAnyConverter::getInt32(
         sal_Int32& rnResult,
         const uno::Reference< beans::XPropertySet >& xPropSet,
-        const uno::Any& rAny ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+        const uno::Any& rAny )
 {
     double fResult;
     bool bContainsVal = getDouble( fResult, xPropSet, rAny );
@@ -2920,7 +2831,7 @@ bool ScaAnyConverter::getInt32(
 sal_Int32 ScaAnyConverter::getInt32(
         const uno::Reference< beans::XPropertySet >& xPropSet,
         const uno::Any& rAny,
-        sal_Int32 nDefault ) throw( uno::RuntimeException, lang::IllegalArgumentException )
+        sal_Int32 nDefault )
 {
     sal_Int32 nResult;
     if( !getInt32( nResult, xPropSet, rAny ) )

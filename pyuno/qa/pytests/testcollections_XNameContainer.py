@@ -13,6 +13,10 @@ import uno
 from testcollections_base import CollectionsTestBase
 from com.sun.star.beans import PropertyValue
 
+# SheetCellRanges instance factory
+def getSheetCellRangesInstance(spr):
+    return spr.createInstance("com.sun.star.sheet.SheetCellRanges")
+
 
 # Tests behaviour of objects implementing XNameContainer using the new-style
 # collection accessors
@@ -28,14 +32,16 @@ class TestXNameContainer(CollectionsTestBase):
     def test_XNameContainer_InsertName(self):
         # Given
         spr = self.createBlankSpreadsheet()
-        ranges = spr.createInstance("com.sun.star.sheet.SheetCellRanges")
-        newRange = spr.Sheets.getByIndex(0).getCellRangeByPosition(1, 2, 1, 2)
+        ranges = getSheetCellRangesInstance(spr)
+        new_range = spr.Sheets.getByIndex(0).getCellRangeByPosition(1, 2, 1, 2)
 
         # When
-        ranges['foo'] = newRange
+        ranges['foo'] = new_range
 
         # Then
         self.assertEqual(1, len(ranges.ElementNames))
+
+        spr.close(True)
 
     # Tests syntax:
     #    obj[key] = val              # Insert by key
@@ -44,30 +50,34 @@ class TestXNameContainer(CollectionsTestBase):
     def test_XNameContainer_InsertName_Invalid(self):
         # Given
         spr = self.createBlankSpreadsheet()
-        ranges = spr.createInstance("com.sun.star.sheet.SheetCellRanges")
-        newRange = spr.Sheets.getByIndex(0).getCellRangeByPosition(1, 2, 1, 2)
+        ranges = getSheetCellRangesInstance(spr)
+        new_range = spr.Sheets.getByIndex(0).getCellRangeByPosition(1, 2, 1, 2)
 
         # When / Then
         with self.assertRaises(TypeError):
-            ranges[12.34] = newRange
+            ranges[12.34] = new_range
+
+        spr.close(True)
 
     # Tests syntax:
     #    obj[key] = val              # Replace by key
     def test_XNameContainer_ReplaceName(self):
         # Given
         spr = self.createBlankSpreadsheet()
-        ranges = spr.createInstance("com.sun.star.sheet.SheetCellRanges")
-        newRange1 = spr.Sheets.getByIndex(0).getCellRangeByPosition(1, 2, 1, 2)
-        newRange2 = spr.Sheets.getByIndex(0).getCellRangeByPosition(6, 6, 6, 6)
+        ranges = getSheetCellRangesInstance(spr)
+        new_range1 = spr.Sheets.getByIndex(0).getCellRangeByPosition(1, 2, 1, 2)
+        new_range2 = spr.Sheets.getByIndex(0).getCellRangeByPosition(6, 6, 6, 6)
 
         # When
-        ranges['foo'] = newRange1
-        ranges['foo'] = newRange2
+        ranges['foo'] = new_range1
+        ranges['foo'] = new_range2
 
         # Then
         self.assertEqual(1, len(ranges.ElementNames))
-        readRange = ranges['foo']
-        self.assertEqual(6, readRange.CellAddress.Column)
+        read_range = ranges['foo']
+        self.assertEqual(6, read_range.CellAddress.Column)
+
+        spr.close(True)
 
     # Tests syntax:
     #    del obj[key]                # Delete by key
@@ -85,6 +95,8 @@ class TestXNameContainer(CollectionsTestBase):
         self.assertEqual(1, len(spr.Sheets))
         self.assertFalse('foo' in spr.Sheets)
 
+        spr.close(True)
+
     # Tests syntax:
     #    del obj[key]                # Delete by key
     # For:
@@ -97,6 +109,8 @@ class TestXNameContainer(CollectionsTestBase):
         with self.assertRaises(KeyError):
             del spr.Sheets['foo']
 
+        spr.close(True)
+
     # Tests syntax:
     #    del obj[key]                # Delete by key
     # For:
@@ -108,6 +122,8 @@ class TestXNameContainer(CollectionsTestBase):
         # When / Then
         with self.assertRaises(TypeError):
             del spr.Sheets[12.34]
+
+        spr.close(True)
 
 
 if __name__ == '__main__':

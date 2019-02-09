@@ -24,13 +24,12 @@
 #include <com/sun/star/util/Date.hpp>
 #include <com/sun/star/util/Time.hpp>
 #include <com/sun/star/util/DateTime.hpp>
+#include <rtl/character.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/math.hxx>
 #include <unotools/datetime.hxx>
 #include <sstream>
 #include <iomanip>
-
-#define MAX_DAYS    3636532
 
 namespace
 {
@@ -43,6 +42,16 @@ namespace
     const sal_Int64 hourMask = 10000000000000LL;
 
     const double fNanoSecondsPerDay = nanoSecInSec * secInMin * minInHour * 24.0;
+
+    //  32767-12-31 in "(days since 0001-01-01) + 1" format
+    const sal_Int32 maxDays =  11967896;
+    // -32768-01-01 in "(days since 0001-01-01) + 1" format
+    // Yes, I know it is currently unused. Will have to be used
+    // when we implement negative years. Writing down the correct
+    // value for future reference.
+    // *** Please don't remove just because it is unused ***
+    // Lionel Élie Mamane 2017-08-02
+    // const sal_Int32 minDays = -11968270;
 }
 
 
@@ -58,7 +67,7 @@ namespace dbtools
     using namespace ::com::sun::star::beans;
 
 
-    css::util::Date DBTypeConversion::getStandardDate()
+    css::util::Date const & DBTypeConversion::getStandardDate()
     {
         static css::util::Date STANDARD_DB_DATE(1,1,1900);
         return STANDARD_DB_DATE;
@@ -66,15 +75,13 @@ namespace dbtools
 
     OUString DBTypeConversion::toDateString(const css::util::Date& rDate)
     {
-        sal_Char s[11];
-        snprintf(s,
-                sizeof(s),
-                "%04d-%02d-%02d",
-                (int)rDate.Year,
-                (int)rDate.Month,
-                (int)rDate.Day);
-        s[10] = 0;
-        return OUString::createFromAscii(s);
+        std::ostringstream ostr;
+        using std::setw;
+        ostr.fill('0');
+        ostr << setw(4) << rDate.Year  << "-"
+             << setw(2) << rDate.Month << "-"
+             << setw(2) << rDate.Day;
+        return OUString::createFromAscii(ostr.str().c_str());
     }
 
     OUString DBTypeConversion::toTimeStringS(const css::util::Time& rTime)
@@ -111,17 +118,17 @@ namespace dbtools
         return  aTemp.makeStringAndClear();
     }
 
-    css::util::Date DBTypeConversion::toDate(sal_Int32 _nVal)
+    css::util::Date DBTypeConversion::toDate(const sal_Int32 _nVal)
     {
         css::util::Date aReturn;
-        aReturn.Day = (sal_uInt16)(_nVal % 100);
-        aReturn.Month = (sal_uInt16)((_nVal  / 100) % 100);
-        aReturn.Year = (sal_uInt16)(_nVal  / 10000);
+        aReturn.Day = static_cast<sal_uInt16>(_nVal % 100);
+        aReturn.Month = static_cast<sal_uInt16>((_nVal  / 100) % 100);
+        aReturn.Year = static_cast<sal_uInt16>(_nVal  / 10000);
         return aReturn;
     }
 
 
-    css::util::Time DBTypeConversion::toTime(sal_Int64 _nVal)
+    css::util::Time DBTypeConversion::toTime(const sal_Int64 _nVal)
     {
         css::util::Time aReturn;
         sal_uInt64 unVal = static_cast<sal_uInt64>(_nVal >= 0 ? _nVal : -_nVal);
@@ -152,10 +159,10 @@ namespace dbtools
 
     static bool implIsLeapYear(sal_Int32 _nYear)
     {
-        return  (   (   ((_nYear % 4) == 0)
-                    &&  ((_nYear % 100) != 0)
-                    )
+        return  (    ((_nYear % 4) == 0)
+                 &&  ((_nYear % 100) != 0)
                 )
+
                 ||  ((_nYear % 400) == 0)
                 ;
     }
@@ -193,7 +200,7 @@ namespace dbtools
         return nDays;
     }
 
-    static void implBuildFromRelative( sal_Int32 nDays, sal_uInt16& rDay, sal_uInt16& rMonth, sal_Int16& rYear)
+    static void implBuildFromRelative( const sal_Int32 nDays, sal_uInt16& rDay, sal_uInt16& rMonth, sal_Int16& rYear)
     {
         sal_Int32   nTempDays;
         sal_Int32   i = 0;
@@ -202,7 +209,7 @@ namespace dbtools
         do
         {
             nTempDays = nDays;
-            rYear = (sal_uInt16)((nTempDays / 365) - i);
+            rYear = static_cast<sal_uInt16>((nTempDays / 365) - i);
             nTempDays -= (rYear-1) * 365;
             nTempDays -= ((rYear-1) / 4) - ((rYear-1) / 100) + ((rYear-1) / 400);
             bCalc = false;
@@ -231,7 +238,7 @@ namespace dbtools
             nTempDays -= implDaysInMonth( rMonth, rYear );
             rMonth++;
         }
-        rDay = (sal_uInt16)nTempDays;
+        rDay = static_cast<sal_uInt16>(nTempDays);
     }
 
     sal_Int32 DBTypeConversion::toDays(const css::util::Date& _rVal, const css::util::Date& _rNullDate)
@@ -242,13 +249,13 @@ namespace dbtools
 
     double DBTypeConversion::toDouble(const css::util::Date& rVal, const css::util::Date& _rNullDate)
     {
-        return (double)toDays(rVal, _rNullDate);
+        return static_cast<double>(toDays(rVal, _rNullDate));
     }
 
 
     double DBTypeConversion::toDouble(const css::util::Time& rVal)
     {
-        return (double)getNsFromTime(rVal) / fNanoSecondsPerDay;
+        return static_cast<double>(getNsFromTime(rVal)) / fNanoSecondsPerDay;
     }
 
 
@@ -262,70 +269,74 @@ namespace dbtools
         aTimePart.Seconds           = _rVal.Seconds;
         aTimePart.NanoSeconds       = _rVal.NanoSeconds;
 
-        return ((double)nTime) + toDouble(aTimePart);
+        return static_cast<double>(nTime) + toDouble(aTimePart);
     }
 
-    static void addDays(sal_Int32 nDays, css::util::Date& _rDate)
+    static void addDays(const sal_Int32 nDays, css::util::Date& _rDate)
     {
         sal_Int32   nTempDays = implRelativeToAbsoluteNull( _rDate );
 
         nTempDays += nDays;
-        if ( nTempDays > MAX_DAYS )
+        if ( nTempDays > maxDays )
         {
             _rDate.Day      = 31;
             _rDate.Month    = 12;
             _rDate.Year     = 9999;
         }
+        // TODO: can we replace that check by minDays? Would allow dates BCE
+        //       implBuildFromRelative probably needs to be updated for the "no year 0" question
         else if ( nTempDays <= 0 )
         {
             _rDate.Day      = 1;
             _rDate.Month    = 1;
-            _rDate.Year     = 00;
+            _rDate.Year     = 1;
         }
         else
             implBuildFromRelative( nTempDays, _rDate.Day, _rDate.Month, _rDate.Year );
     }
 
-    static void subDays( sal_Int32 nDays, css::util::Date& _rDate )
+    static void subDays(const sal_Int32 nDays, css::util::Date& _rDate )
     {
         sal_Int32   nTempDays = implRelativeToAbsoluteNull( _rDate );
 
         nTempDays -= nDays;
-        if ( nTempDays > MAX_DAYS )
+        if ( nTempDays > maxDays )
         {
             _rDate.Day      = 31;
             _rDate.Month    = 12;
             _rDate.Year     = 9999;
         }
+        // TODO: can we replace that check by minDays? Would allow dates BCE
+        //       implBuildFromRelative probably needs to be updated for the "no year 0" question
         else if ( nTempDays <= 0 )
         {
             _rDate.Day      = 1;
             _rDate.Month    = 1;
-            _rDate.Year     = 00;
+            _rDate.Year     = 1;
         }
         else
             implBuildFromRelative( nTempDays, _rDate.Day, _rDate.Month, _rDate.Year );
     }
 
-    css::util::Date DBTypeConversion::toDate(double dVal, const css::util::Date& _rNullDate)
+    css::util::Date DBTypeConversion::toDate(const double dVal, const css::util::Date& _rNullDate)
     {
         css::util::Date aRet = _rNullDate;
 
         if (dVal >= 0)
-            addDays((sal_Int32)dVal,aRet);
+            addDays(static_cast<sal_Int32>(dVal),aRet);
         else
-            subDays((sal_uInt32)(-dVal),aRet);
+            subDays(static_cast<sal_uInt32>(-dVal),aRet);
             //  x -= (sal_uInt32)(-nDays);
 
         return aRet;
     }
 
-    css::util::Time DBTypeConversion::toTime(double dVal, short nDigits)
+    css::util::Time DBTypeConversion::toTime(const double dVal, short nDigits)
     {
-        sal_Int32 nDays     = (sal_Int32)dVal;
+        const sal_Int32 nDays     = static_cast<sal_Int32>(dVal);
         sal_Int64 nNS;
         {
-            double fSeconds((dVal - (double)nDays) * (fNanoSecondsPerDay / nanoSecInSec));
+            double fSeconds((dVal - static_cast<double>(nDays)) * (fNanoSecondsPerDay / nanoSecInSec));
             fSeconds = ::rtl::math::round( fSeconds, nDigits );
             nNS = fSeconds * nanoSecInSec;
         }
@@ -339,36 +350,36 @@ namespace dbtools
         else
             nSign = 1;
 
-        css::util::Time xRet;
+        css::util::Time aRet;
         // normalize time
         // we have to sal_Int32 here because otherwise we get an overflow
         sal_Int64 nNanoSeconds      = nNS;
         sal_Int32 nSeconds          = nNanoSeconds / nanoSecInSec;
         sal_Int32 nMinutes          = nSeconds / secInMin;
 
-        xRet.NanoSeconds            = nNanoSeconds % nanoSecInSec;
-        xRet.Seconds                = nSeconds % secInMin;
-        xRet.Hours                  = nMinutes / minInHour;
-        xRet.Minutes                = nMinutes % minInHour;
+        aRet.NanoSeconds            = nNanoSeconds % nanoSecInSec;
+        aRet.Seconds                = nSeconds % secInMin;
+        aRet.Hours                  = nMinutes / minInHour;
+        aRet.Minutes                = nMinutes % minInHour;
 
         // assemble time
         sal_Int64 nTime = nSign *
-                          (xRet.NanoSeconds +
-                           xRet.Seconds * secMask +
-                           xRet.Minutes * minMask +
-                           xRet.Hours   * hourMask);
+                          (aRet.NanoSeconds +
+                           aRet.Seconds * secMask +
+                           aRet.Minutes * minMask +
+                           aRet.Hours   * hourMask);
 
         if(nTime < 0)
         {
-            xRet.NanoSeconds  = nanoSecInSec-1;
-            xRet.Seconds      = secInMin-1;
-            xRet.Minutes      = minInHour-1;
-            xRet.Hours        = 23;
+            aRet.NanoSeconds  = nanoSecInSec-1;
+            aRet.Seconds      = secInMin-1;
+            aRet.Minutes      = minInHour-1;
+            aRet.Hours        = 23;
         }
-        return xRet;
+        return aRet;
     }
 
-    css::util::DateTime DBTypeConversion::toDateTime(double dVal, const css::util::Date& _rNullDate)
+    css::util::DateTime DBTypeConversion::toDateTime(const double dVal, const css::util::Date& _rNullDate)
     {
         css::util::Date aDate = toDate(dVal, _rNullDate);
         // there is not enough precision in a double to have both a date
@@ -377,36 +388,36 @@ namespace dbtools
         // 12:59:59.999999790
         css::util::Time aTime = toTime(dVal, 6);
 
-        css::util::DateTime xRet;
+        css::util::DateTime aRet;
 
-        xRet.Day          = aDate.Day;
-        xRet.Month        = aDate.Month;
-        xRet.Year         = aDate.Year;
+        aRet.Day          = aDate.Day;
+        aRet.Month        = aDate.Month;
+        aRet.Year         = aDate.Year;
 
-        xRet.NanoSeconds  = aTime.NanoSeconds;
-        xRet.Minutes      = aTime.Minutes;
-        xRet.Seconds      = aTime.Seconds;
-        xRet.Hours        = aTime.Hours;
+        aRet.NanoSeconds  = aTime.NanoSeconds;
+        aRet.Minutes      = aTime.Minutes;
+        aRet.Seconds      = aTime.Seconds;
+        aRet.Hours        = aTime.Hours;
 
 
-        return xRet;
+        return aRet;
     }
 
     css::util::Date DBTypeConversion::toDate(const OUString& _sSQLString)
     {
         // get the token out of a string
-        static sal_Unicode sDateSep = '-';
+        static const sal_Unicode sDateSep = '-';
 
         sal_Int32 nIndex    = 0;
         sal_uInt16  nYear   = 0,
                     nMonth  = 0,
                     nDay    = 0;
-        nYear   = (sal_uInt16)_sSQLString.getToken(0,sDateSep,nIndex).toInt32();
+        nYear   = static_cast<sal_uInt16>(_sSQLString.getToken(0,sDateSep,nIndex).toInt32());
         if(nIndex != -1)
         {
-            nMonth = (sal_uInt16)_sSQLString.getToken(0,sDateSep,nIndex).toInt32();
+            nMonth = static_cast<sal_uInt16>(_sSQLString.getToken(0,sDateSep,nIndex).toInt32());
             if(nIndex != -1)
-                nDay = (sal_uInt16)_sSQLString.getToken(0,sDateSep,nIndex).toInt32();
+                nDay = static_cast<sal_uInt16>(_sSQLString.getToken(0,sDateSep,nIndex).toInt32());
         }
 
         return css::util::Date(nDay,nMonth,nYear);
@@ -427,7 +438,7 @@ namespace dbtools
         {
             const sal_Unicode *p = _sSQLString.getStr() + nSeparation;
             const sal_Unicode *const begin = p;
-            while (isspace(*p)) { ++p; }
+            while (rtl::isAsciiWhiteSpace(*p)) { ++p; }
             nSeparation += p - begin;
             aTime = toTime( _sSQLString.copy( nSeparation ) );
         }

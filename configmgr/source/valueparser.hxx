@@ -51,8 +51,7 @@ public:
     xmlreader::XmlReader::Text getTextMode() const;
 
     bool startElement(
-        xmlreader::XmlReader & reader, int nsId, xmlreader::Span const & name,
-        std::set< OUString > const *);
+        xmlreader::XmlReader & reader, int nsId, xmlreader::Span const & name);
 
     bool endElement();
 
@@ -73,7 +72,7 @@ private:
 
     template< typename T > css::uno::Any convertItems();
 
-    enum State { STATE_TEXT, STATE_TEXT_UNICODE, STATE_IT, STATE_IT_UNICODE };
+    enum class State { Text, TextUnicode, IT, ITUnicode };
 
     int layer_;
     rtl::Reference< Node > node_;

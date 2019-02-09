@@ -11,13 +11,8 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_ANALYSISOFVARIANCEDIALOG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_ANALYSISOFVARIANCEDIALOG_HXX
 
-#include "global.hxx"
-#include "address.hxx"
-#include "anyrefdg.hxx"
-
-#include <vcl/fixed.hxx>
-#include <vcl/group.hxx>
-#include <vcl/lstbox.hxx>
+#include <address.hxx>
+#include "viewdata.hxx"
 
 #include "StatisticsInputOutputDialog.hxx"
 
@@ -38,13 +33,13 @@ private:
     VclPtr<RadioButton>  mpTwoFactorRadio;
     VclPtr<NumericField> mpRowsPerSampleField;
 
-    DECL_LINK_TYPED(FactorChanged, RadioButton&, void);
+    DECL_LINK(FactorChanged, RadioButton&, void);
     void FactorChanged();
 
     AnovaFactor meFactor;
 
     static void RowColumn(ScRangeList& rRangeList, AddressWalkerWriter& aOutput,
-                   FormulaTemplate& aTemplate, OUString& sFormula,
+                   FormulaTemplate& aTemplate, const OUString& sFormula,
                    GroupedBy aGroupedBy, ScRange* pResultRange);
 
     void AnovaSingleFactor(AddressWalkerWriter& output, FormulaTemplate& aTemplate);
@@ -55,13 +50,13 @@ public:
         SfxBindings* pB, SfxChildWindow* pCW,
         vcl::Window* pParent, ScViewData* pViewData );
 
-    virtual ~ScAnalysisOfVarianceDialog();
+    virtual ~ScAnalysisOfVarianceDialog() override;
     virtual void dispose() override;
 
     virtual bool Close() override;
 
 protected:
-    virtual sal_Int16 GetUndoNameId() override;
+    virtual const char* GetUndoNameId() override;
     virtual ScRange ApplyOutput(ScDocShell* pDocShell) override;
 };
 

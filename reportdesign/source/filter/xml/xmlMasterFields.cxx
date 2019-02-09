@@ -21,15 +21,14 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
 #include "xmlReport.hxx"
-#include <tools/debug.hxx>
 
 
 namespace rptxml
 {
     using namespace ::com::sun::star;
-    using namespace ::com::sun::star::report;
     using namespace ::com::sun::star::uno;
     using namespace ::com::sun::star::xml::sax;
 
@@ -77,8 +76,7 @@ OXMLMasterFields::~OXMLMasterFields()
 {
 }
 
-
-SvXMLImportContext* OXMLMasterFields::CreateChildContext(
+SvXMLImportContextRef OXMLMasterFields::CreateChildContext(
         sal_uInt16 _nPrefix,
         const OUString& _rLocalName,
         const Reference< XAttributeList > & xAttrList )

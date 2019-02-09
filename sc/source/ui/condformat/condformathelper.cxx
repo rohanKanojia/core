@@ -8,8 +8,10 @@
  */
 
 #include <rtl/ustrbuf.hxx>
-#include "condformathelper.hxx"
-#include "globstr.hrc"
+#include <condformathelper.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <conditio.hxx>
 
 namespace {
 
@@ -18,22 +20,22 @@ OUString getTextForType(ScCondFormatEntryType eType)
     switch(eType)
     {
         case CONDITION:
-            return ScGlobal::GetRscString(STR_COND_CONDITION);
+            return ScResId(STR_COND_CONDITION);
         case COLORSCALE:
-            return ScGlobal::GetRscString(STR_COND_COLORSCALE);
+            return ScResId(STR_COND_COLORSCALE);
         case DATABAR:
-            return ScGlobal::GetRscString(STR_COND_DATABAR);
+            return ScResId(STR_COND_DATABAR);
         case FORMULA:
-            return ScGlobal::GetRscString(STR_COND_FORMULA);
+            return ScResId(STR_COND_FORMULA);
         case ICONSET:
-            return ScGlobal::GetRscString(STR_COND_ICONSET);
+            return ScResId(STR_COND_ICONSET);
         case DATE:
-            return ScGlobal::GetRscString(STR_COND_DATE);
+            return ScResId(STR_COND_DATE);
         default:
             break;
     }
 
-    return OUString("");
+    return OUString();
 }
 
 OUString getExpression(sal_Int32 nIndex)
@@ -53,53 +55,70 @@ OUString getExpression(sal_Int32 nIndex)
         case 5:
             return OUString("!=");
         case 6:
-            return ScGlobal::GetRscString(STR_COND_BETWEEN);
+            return ScResId(STR_COND_BETWEEN);
         case 7:
-            return ScGlobal::GetRscString(STR_COND_NOTBETWEEN);
+            return ScResId(STR_COND_NOTBETWEEN);
         case 8:
-            return ScGlobal::GetRscString(STR_COND_DUPLICATE);
+            return ScResId(STR_COND_DUPLICATE);
         case 9:
-            return ScGlobal::GetRscString(STR_COND_UNIQUE);
+            return ScResId(STR_COND_UNIQUE);
+
+        case 11:
+            return ScResId(STR_COND_TOP10);
+        case 12:
+            return ScResId(STR_COND_BOTTOM10);
+        case 13:
+            return ScResId(STR_COND_TOP_PERCENT);
+        case 14:
+            return ScResId(STR_COND_BOTTOM_PERCENT);
+        case 15:
+            return ScResId(STR_COND_ABOVE_AVERAGE);
+        case 16:
+            return ScResId(STR_COND_BELOW_AVERAGE);
+        case 17:
+            return ScResId(STR_COND_ABOVE_EQUAL_AVERAGE);
+        case 18:
+            return ScResId(STR_COND_BELOW_EQUAL_AVERAGE);
+        case 19:
+            return ScResId(STR_COND_ERROR);
+        case 20:
+            return ScResId(STR_COND_NOERROR);
+        case 21:
+            return ScResId(STR_COND_BEGINS_WITH);
+        case 22:
+            return ScResId(STR_COND_ENDS_WITH);
+        case 23:
+            return ScResId(STR_COND_CONTAINS);
+        case 24:
+            return ScResId(STR_COND_NOT_CONTAINS);
+
         case 10:
             assert(false);
-        case 11:
-            return ScGlobal::GetRscString(STR_COND_TOP10);
-        case 12:
-            return ScGlobal::GetRscString(STR_COND_BOTTOM10);
-        case 13:
-            return ScGlobal::GetRscString(STR_COND_TOP_PERCENT);
-        case 14:
-            return ScGlobal::GetRscString(STR_COND_BOTTOM_PERCENT);
-        case 15:
-            return ScGlobal::GetRscString(STR_COND_ABOVE_AVERAGE);
-        case 16:
-            return ScGlobal::GetRscString(STR_COND_BELOW_AVERAGE);
-        case 17:
-            return ScGlobal::GetRscString(STR_COND_ABOVE_EQUAL_AVERAGE);
-        case 18:
-            return ScGlobal::GetRscString(STR_COND_BELOW_EQUAL_AVERAGE);
-        case 19:
-            return ScGlobal::GetRscString(STR_COND_ERROR);
-        case 20:
-            return ScGlobal::GetRscString(STR_COND_NOERROR);
-        case 21:
-            return ScGlobal::GetRscString(STR_COND_BEGINS_WITH);
-        case 22:
-            return ScGlobal::GetRscString(STR_COND_ENDS_WITH);
-        case 23:
-            return ScGlobal::GetRscString(STR_COND_CONTAINS);
-        case 24:
-            return ScGlobal::GetRscString(STR_COND_NOT_CONTAINS);
     }
     return OUString();
 }
 
 OUString getDateString(sal_Int32 nIndex)
 {
-    sal_Int32 nStringIndex = STR_COND_TODAY + nIndex;
-    if(nStringIndex <= STR_COND_NEXTYEAR)
-        return ScGlobal::GetRscString(nStringIndex);
+    const char* aCondStrs[] =
+    {
+        STR_COND_TODAY,
+        STR_COND_YESTERDAY,
+        STR_COND_TOMORROW,
+        STR_COND_LAST7DAYS,
+        STR_COND_THISWEEK,
+        STR_COND_LASTWEEK,
+        STR_COND_NEXTWEEK,
+        STR_COND_THISMONTH,
+        STR_COND_LASTMONTH,
+        STR_COND_NEXTMONTH,
+        STR_COND_THISYEAR,
+        STR_COND_LASTYEAR,
+        STR_COND_NEXTYEAR
+    };
 
+    if (nIndex >= 0 && static_cast<sal_uInt32>(nIndex) < SAL_N_ELEMENTS(aCondStrs))
+        return ScResId(aCondStrs[nIndex]);
     assert(false);
     return OUString();
 }
@@ -113,11 +132,11 @@ OUString ScCondFormatHelper::GetExpression(const ScConditionalFormat& rFormat, c
     {
         switch(rFormat.GetEntry(0)->GetType())
         {
-            case condformat::CONDITION:
+            case ScFormatEntry::Type::Condition:
                 {
                     const ScConditionEntry* pEntry = static_cast<const ScConditionEntry*>(rFormat.GetEntry(0));
                     ScConditionMode eMode = pEntry->GetOperation();
-                    if(eMode == SC_COND_DIRECT)
+                    if(eMode == ScConditionMode::Direct)
                     {
                         aBuffer.append(getTextForType(FORMULA));
                         aBuffer.append(" ");
@@ -129,13 +148,15 @@ OUString ScCondFormatHelper::GetExpression(const ScConditionalFormat& rFormat, c
                         aBuffer.append(" ");
                         aBuffer.append(getExpression(static_cast<sal_Int32>(eMode)));
                         aBuffer.append(" ");
-                        if(eMode == SC_COND_BETWEEN || eMode == SC_COND_NOTBETWEEN)
+                        if(eMode == ScConditionMode::Between || eMode == ScConditionMode::NotBetween)
                         {
                             aBuffer.append(pEntry->GetExpression(rPos, 0));
-                            aBuffer.append(" and ");
+                            aBuffer.append(" ");
+                            aBuffer.append(ScResId(STR_COND_AND));
+                            aBuffer.append(" ");
                             aBuffer.append(pEntry->GetExpression(rPos, 1));
                         }
-                        else if(eMode <= SC_COND_NOTEQUAL || eMode >= SC_COND_BEGINS_WITH)
+                        else if(eMode <= ScConditionMode::NotEqual || eMode >= ScConditionMode::BeginsWith)
                         {
                             aBuffer.append(pEntry->GetExpression(rPos, 0));
                         }
@@ -143,16 +164,16 @@ OUString ScCondFormatHelper::GetExpression(const ScConditionalFormat& rFormat, c
                 }
 
                 break;
-            case condformat::DATABAR:
+            case ScFormatEntry::Type::Databar:
                 aBuffer.append(getTextForType(DATABAR));
                 break;
-            case condformat::COLORSCALE:
+            case ScFormatEntry::Type::Colorscale:
                 aBuffer.append(getTextForType(COLORSCALE));
                 break;
-            case condformat::ICONSET:
+            case ScFormatEntry::Type::Iconset:
                 aBuffer.append(getTextForType(ICONSET));
                 break;
-            case condformat::DATE:
+            case ScFormatEntry::Type::Date:
                 {
                     aBuffer.append(getTextForType(DATE));
                     aBuffer.append(" ");
@@ -182,7 +203,10 @@ OUString ScCondFormatHelper::GetExpression( ScCondFormatEntryType eType, sal_Int
             aBuffer.append(" ").append(aStr1);
             if(nIndex == 6 || nIndex == 7)
             {
-                aBuffer.append(" and ").append(aStr2);
+                aBuffer.append(" ");
+                aBuffer.append(ScResId(STR_COND_AND));
+                aBuffer.append(" ");
+                aBuffer.append(aStr2);
             }
         }
     }

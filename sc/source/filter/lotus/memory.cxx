@@ -20,25 +20,23 @@
 //  Remark:  Variables are not declared in header file! Modules have to declare
 //              their variables via extern!
 
-#include "scitems.hxx"
-#include "scmem.h"
-#include <svx/algitem.hxx>
+#include <scitems.hxx>
+#include <scmem.h>
 #include <editeng/justifyitem.hxx>
-#include "attrib.hxx"
 #include "lotfilter.hxx"
-#include "tool.h"
+#include <tool.h>
+#include <editeng/svxenum.hxx>
 
 bool MemNew(LotusContext &rContext)
 {
     rContext.pValueFormCache = new FormCache(rContext.pDoc);
 
-    // fuer tool.cxx::PutFormString()
-    rContext.pAttrUnprot = new ScProtectionAttr( true );
-    rContext.pAttrRight = new SvxHorJustifyItem( SVX_HOR_JUSTIFY_RIGHT, ATTR_HOR_JUSTIFY );
-    rContext.pAttrLeft = new SvxHorJustifyItem( SVX_HOR_JUSTIFY_LEFT, ATTR_HOR_JUSTIFY );
-    rContext.pAttrCenter = new SvxHorJustifyItem( SVX_HOR_JUSTIFY_CENTER, ATTR_HOR_JUSTIFY );
-    rContext.pAttrRepeat = new SvxHorJustifyItem( SVX_HOR_JUSTIFY_REPEAT, ATTR_HOR_JUSTIFY );
-    rContext.pAttrStandard = new SvxHorJustifyItem( SVX_HOR_JUSTIFY_STANDARD, ATTR_HOR_JUSTIFY );
+    // for tool.cxx::PutFormString()
+    rContext.pAttrRight = new SvxHorJustifyItem( SvxCellHorJustify::Right, ATTR_HOR_JUSTIFY );
+    rContext.pAttrLeft = new SvxHorJustifyItem( SvxCellHorJustify::Left, ATTR_HOR_JUSTIFY );
+    rContext.pAttrCenter = new SvxHorJustifyItem( SvxCellHorJustify::Center, ATTR_HOR_JUSTIFY );
+    rContext.pAttrRepeat = new SvxHorJustifyItem( SvxCellHorJustify::Repeat, ATTR_HOR_JUSTIFY );
+    rContext.pAttrStandard = new SvxHorJustifyItem( SvxCellHorJustify::Standard, ATTR_HOR_JUSTIFY );
 
     return true;
 }
@@ -51,7 +49,6 @@ void MemDelete(LotusContext &rContext)
     delete rContext.pAttrCenter;
     delete rContext.pAttrRepeat;
     delete rContext.pAttrStandard;
-    delete rContext.pAttrUnprot;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

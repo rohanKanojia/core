@@ -17,25 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "refreshtimer.hxx"
-#include "refreshtimerprotector.hxx"
+#include <refreshtimer.hxx>
+#include <refreshtimerprotector.hxx>
 
 void ScRefreshTimerControl::SetAllowRefresh( bool b )
 {
     if ( b && nBlockRefresh )
         --nBlockRefresh;
-    else if ( !b && nBlockRefresh < (sal_uInt16)(~0) )
+    else if ( !b && nBlockRefresh < sal_uInt16(~0) )
         ++nBlockRefresh;
 }
 
-ScRefreshTimerProtector::ScRefreshTimerProtector( ScRefreshTimerControl * const & rp )
+ScRefreshTimerProtector::ScRefreshTimerProtector( std::unique_ptr<ScRefreshTimerControl> const & rp )
         :
         m_rpControl( rp )
 {
     if ( m_rpControl )
     {
         m_rpControl->SetAllowRefresh( false );
-        // wait for any running refresh in another thread to finnish
+        // wait for any running refresh in another thread to finish
         ::osl::MutexGuard aGuard( m_rpControl->GetMutex() );
     }
 }
@@ -84,14 +84,14 @@ bool ScRefreshTimer::operator!=( const ScRefreshTimer& r ) const
     return !ScRefreshTimer::operator==( r );
 }
 
-void ScRefreshTimer::SetRefreshControl( ScRefreshTimerControl * const * pp )
+void ScRefreshTimer::SetRefreshControl( std::unique_ptr<ScRefreshTimerControl> const * pp )
 {
     ppControl = pp;
 }
 
 void ScRefreshTimer::SetRefreshHandler( const Link<Timer *, void>& rLink )
 {
-    SetTimeoutHdl( rLink );
+    SetInvokeHandler( rLink );
 }
 
 sal_uLong ScRefreshTimer::GetRefreshDelay() const
@@ -120,7 +120,7 @@ void ScRefreshTimer::Invoke()
     {
         // now we COULD make the call in another thread ...
         ::osl::MutexGuard aGuard( (*ppControl)->GetMutex() );
-        maTimeoutHdl.Call( this );
+        Timer::Invoke();
         // restart from now on, don't execute immediately again if timed out
         // a second time during refresh
         if ( IsActive() )

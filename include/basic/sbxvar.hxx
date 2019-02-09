@@ -25,8 +25,13 @@
 #include <basic/sbxcore.hxx>
 #include <basic/basicdllapi.h>
 
+#include <cstddef>
+#include <cstring>
+#include <memory>
+
 
 class SbxDecimal;
+enum class SfxHintId;
 
 struct SbxValues
 {
@@ -56,7 +61,6 @@ struct SbxValues
         sal_Int16*      pInteger;
         sal_uInt32*     pULong;
         sal_Int32*      pLong;
-        int*            pInt;
         sal_uInt64*     puInt64;
         sal_Int64*      pnInt64;
 
@@ -69,41 +73,35 @@ struct SbxValues
 
     SbxValues(): pData( nullptr ), eType(SbxEMPTY) {}
     SbxValues( SbxDataType e ): eType(e) {}
-    SbxValues( char _nChar ): nChar( _nChar ), eType(SbxCHAR) {}
-    SbxValues( sal_uInt8 _nByte ): nByte( _nByte ), eType(SbxBYTE) {}
-    SbxValues( short _nInteger ): nInteger( _nInteger ), eType(SbxINTEGER ) {}
-    SbxValues( long _nLong ): nLong( _nLong ), eType(SbxLONG) {}
-    SbxValues( sal_uInt16 _nUShort ): nUShort( _nUShort ), eType(SbxUSHORT) {}
-    SbxValues( sal_uIntPtr _nULong ): nULong( _nULong ), eType(SbxULONG) {}
-    SbxValues( int _nInt ): nInt( _nInt ), eType(SbxINT) {}
-    SbxValues( unsigned int _nUInt ): nUInt( _nUInt ), eType(SbxUINT) {}
-    SbxValues( float _nSingle ): nSingle( _nSingle ), eType(SbxSINGLE) {}
     SbxValues( double _nDouble ): nDouble( _nDouble ), eType(SbxDOUBLE) {}
-    SbxValues( const OUString* _pString ): pOUString( const_cast<OUString*>(_pString) ), eType(SbxSTRING) {}
-    SbxValues( SbxBase* _pObj ): pObj( _pObj ), eType(SbxOBJECT) {}
-    SbxValues( sal_Unicode* _pChar ): pChar( _pChar ), eType(SbxLPSTR) {}
-    SbxValues( void* _pData ): pData( _pData ), eType(SbxPOINTER) {}
 
+    void clear(SbxDataType type) {
+        // A hacky way of zeroing the union value corresponding to the given type (even though the
+        // relevant zero value need not be represented by all-zero bits, in general) without evoking
+        // GCC 8 -Wclass-memaccess, and without having to turn the anonymous union into a non-
+        // anonymous one:
+        std::memset(static_cast<void *>(this), 0, offsetof(SbxValues, eType));
+        eType = type;
+    }
 };
 
 class BASIC_DLLPUBLIC SbxValue : public SbxBase
 {
     // #55226 Transport additional infos
     BASIC_DLLPRIVATE SbxValue* TheRealValue( bool bObjInObjError ) const;
-    BASIC_DLLPRIVATE SbxValue* TheRealValue() const;
 protected:
     SbxValues aData; // Data
     OUString aPic;  // Picture-String
     OUString aToolString;  // tool string copy
 
-    virtual void Broadcast( sal_uInt32 );      // Broadcast-Call
-    virtual ~SbxValue();
+    virtual void Broadcast( SfxHintId );      // Broadcast-Call
+    virtual ~SbxValue() override;
     virtual bool LoadData( SvStream&, sal_uInt16 ) override;
     virtual bool StoreData( SvStream& ) const override;
 public:
-    SBX_DECL_PERSIST_NODATA(SBXCR_SBX,SBXID_VALUE,1);
+    SBX_DECL_PERSIST_NODATA(SBXID_VALUE,1);
     SbxValue();
-    SbxValue( SbxDataType, void* = nullptr );
+    SbxValue( SbxDataType );
     SbxValue( const SbxValue& );
     SbxValue& operator=( const SbxValue& );
     virtual void Clear() override;
@@ -123,7 +121,7 @@ public:
     bool IsNumericRTL() const;  // #41692 Interface for Basic
     bool ImpIsNumeric( bool bOnlyIntntl ) const;    // Implementation
 
-    virtual SbxClassType GetClass() const override;
+    virtual SbxClassType GetClass() const;
     virtual SbxDataType GetType() const override;
     SbxDataType GetFullType() const { return aData.eType;}
     bool SetType( SbxDataType );
@@ -131,6 +129,8 @@ public:
     bool Get( SbxValues& ) const;
     const SbxValues& GetValues_Impl() const { return aData; }
     bool Put( const SbxValues& );
+
+    SbxValues * data() { return &aData; }
 
     sal_Unicode GetChar() const;
     sal_Int16   GetInteger() const;
@@ -173,22 +173,22 @@ public:
     void PutNull();
 
             // Special methods
-    void PutDecimal( css::bridge::oleautomation::Decimal& rAutomationDec );
+    void PutDecimal( css::bridge::oleautomation::Decimal const & rAutomationDec );
     bool PutDecimal( SbxDecimal* pDecimal ); // This function is needed for Windows build, don't remove
     void fillAutomationDecimal( css::bridge::oleautomation::Decimal& rAutomationDec ) const;
-    bool PutCurrency( const sal_Int64& );
+    bool PutCurrency( sal_Int64 );
             // Interface for CDbl in Basic
-    static SbxError ScanNumIntnl( const OUString& rSrc, double& nVal, bool bSingle = false );
+    static ErrCode ScanNumIntnl( const OUString& rSrc, double& nVal, bool bSingle = false );
 
     bool PutObject( SbxBase* );
 
     bool Convert( SbxDataType );
     bool Compute( SbxOperator, const SbxValue& );
     bool Compare( SbxOperator, const SbxValue& ) const;
-    bool Scan( const OUString&, sal_uInt16* = nullptr );
+    bool Scan( const OUString&, sal_uInt16* );
     void Format( OUString&, const OUString* = nullptr ) const;
 
-    // The following operators are definied for easier handling.
+    // The following operators are defined for easier handling.
     // TODO: Ensure error conditions (overflow, conversions)
     // are taken into consideration in Compute and Compare
 
@@ -222,15 +222,9 @@ inline SbxValue& SbxValue::operator-=( const SbxValue& r )
 class SbxArray;
 class SbxInfo;
 
-#ifndef SBX_ARRAY_DECL_DEFINED
-#define SBX_ARRAY_DECL_DEFINED
 typedef tools::SvRef<SbxArray> SbxArrayRef;
-#endif
 
-#ifndef SBX_INFO_DECL_DEFINED
-#define SBX_INFO_DECL_DEFINED
 typedef tools::SvRef<SbxInfo> SbxInfoRef;
-#endif
 
 class SfxBroadcaster;
 
@@ -241,8 +235,8 @@ class BASIC_DLLPUBLIC SbxVariable : public SbxValue
 {
     friend class SbMethod;
 
-    SbxVariableImpl* mpSbxVariableImpl; // Impl data
-    SfxBroadcaster*  pCst;              // Broadcaster, if needed
+    std::unique_ptr<SbxVariableImpl> mpImpl; // Impl data
+    std::unique_ptr<SfxBroadcaster>  mpBroadcaster; // Broadcaster, if needed
     OUString         maName;            // Name, if available
     SbxArrayRef      mpPar;             // Parameter-Array, if set
     sal_uInt16       nHash;             // Hash-ID for search
@@ -253,20 +247,20 @@ protected:
     SbxInfoRef  pInfo;              // Probably called information
     sal_uInt32 nUserData;           // User data for Call()
     SbxObject* pParent;             // Currently attached object
-    virtual ~SbxVariable();
+    virtual ~SbxVariable() override;
     virtual bool LoadData( SvStream&, sal_uInt16 ) override;
     virtual bool StoreData( SvStream& ) const override;
 public:
-    SBX_DECL_PERSIST_NODATA(SBXCR_SBX,SBXID_VARIABLE,2);
+    SBX_DECL_PERSIST_NODATA(SBXID_VARIABLE,2);
     SbxVariable();
-    SbxVariable( SbxDataType, void* = nullptr );
+    SbxVariable( SbxDataType );
     SbxVariable( const SbxVariable& );
     SbxVariable& operator=( const SbxVariable& );
 
-    void Dump( SvStream&, bool bDumpAll=false );
+    void Dump( SvStream&, bool bDumpAll );
 
     void SetName( const OUString& );
-    const OUString& GetName( SbxNameType = SbxNAME_NONE ) const;
+    const OUString& GetName( SbxNameType = SbxNameType::NONE ) const;
     sal_uInt16 GetHashCode() const          { return nHash; }
 
     virtual void SetModified( bool ) override;
@@ -286,10 +280,10 @@ public:
     // Sfx-Broadcasting-Support:
     // Due to data reduction and better DLL-hierarchy currently via casting
     SfxBroadcaster& GetBroadcaster();
-    bool IsBroadcaster() const { return pCst != nullptr; }
-    virtual void Broadcast( sal_uInt32 nHintId ) override;
+    bool IsBroadcaster() const { return mpBroadcaster != nullptr; }
+    virtual void Broadcast( SfxHintId nHintId ) override;
 
-    inline const SbxObject* GetParent() const { return pParent; }
+    const SbxObject* GetParent() const { return pParent; }
     SbxObject* GetParent() { return pParent;}
     virtual void SetParent( SbxObject* );
 
@@ -302,7 +296,18 @@ public:
     static sal_uInt16 MakeHashCode( const OUString& rName );
 };
 
+typedef tools::SvRef<SbxObject> SbxObjectRef;
 typedef tools::SvRef<SbxVariable> SbxVariableRef;
+
+//tdf#59222 SbxEnsureParentVariable is a SbxVariable which keeps a reference to
+//its parent, ensuring it always exists while this SbxVariable exists
+class BASIC_DLLPUBLIC SbxEnsureParentVariable : public SbxVariable
+{
+    SbxObjectRef xParent;
+public:
+    SbxEnsureParentVariable(const SbxVariable& r);
+    virtual void SetParent(SbxObject* p) override;
+};
 
 #endif // INCLUDED_BASIC_SBXVAR_HXX
 

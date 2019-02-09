@@ -17,22 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "basidesh.hrc"
-#include "helpid.hrc"
+#include <strings.hrc>
+#include <helpids.h>
 
 #include "baside2.hxx"
-#include "baside3.hxx"
-#include "iderdll.hxx"
+#include <baside3.hxx>
+#include <iderdll.hxx>
 #include "iderdll2.hxx"
 
 #include <basic/basmgr.hxx>
-#include <com/sun/star/script/ModuleType.hpp>
 #include <com/sun/star/script/XLibraryContainerPassword.hpp>
+#include <sal/log.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/passwd.hxx>
 #include <svl/intitem.hxx>
 #include <svl/stritem.hxx>
 #include <svl/srchdefs.hxx>
+#include <vcl/weld.hxx>
+#include <tools/stream.hxx>
 
 namespace basctl
 {
@@ -90,7 +92,7 @@ void BaseWindow::GrabScrollBars( ScrollBar* pHScroll, ScrollBar* pVScroll )
 }
 
 
-IMPL_LINK_TYPED( BaseWindow, ScrollHdl, ScrollBar *, pCurScrollBar, void )
+IMPL_LINK( BaseWindow, ScrollHdl, ScrollBar *, pCurScrollBar, void )
 {
     DoScroll( pCurScrollBar );
 }
@@ -102,7 +104,7 @@ void BaseWindow::ExecuteGlobal (SfxRequest&)
 { }
 
 
-bool BaseWindow::Notify( NotifyEvent& rNEvt )
+bool BaseWindow::EventNotify( NotifyEvent& rNEvt )
 {
     bool bDone = false;
 
@@ -128,7 +130,7 @@ bool BaseWindow::Notify( NotifyEvent& rNEvt )
         }
     }
 
-    return bDone || Window::Notify( rNEvt );
+    return bDone || Window::EventNotify( rNEvt );
 }
 
 
@@ -195,12 +197,7 @@ bool BaseWindow::IsModified ()
     return true;
 }
 
-bool BaseWindow::IsPasteAllowed ()
-{
-    return false;
-}
-
-::svl::IUndoManager* BaseWindow::GetUndoManager()
+SfxUndoManager* BaseWindow::GetUndoManager()
 {
     return nullptr;
 }
@@ -210,9 +207,8 @@ SearchOptionFlags BaseWindow::GetSearchOptions()
     return SearchOptionFlags::NONE;
 }
 
-sal_uInt16 BaseWindow::StartSearchAndReplace (SvxSearchItem const&, bool bFromStart)
+sal_uInt16 BaseWindow::StartSearchAndReplace (SvxSearchItem const&, bool)
 {
-    static_cast<void>(bFromStart);
     return 0;
 }
 
@@ -284,7 +280,7 @@ void DockingWindow::dispose()
 // when the window is floating. Called by Layout.
 void DockingWindow::ResizeIfDocking (Point const& rPos, Size const& rSize)
 {
-    Rectangle const rRect(rPos, rSize);
+    tools::Rectangle const rRect(rPos, rSize);
     if (rRect != aDockingRect)
     {
         // saving the position and the size
@@ -332,9 +328,9 @@ void DockingWindow::Hide ()
     Show(false);
 }
 
-bool DockingWindow::Docking( const Point& rPos, Rectangle& rRect )
+bool DockingWindow::Docking( const Point& rPos, tools::Rectangle& rRect )
 {
-    if (!IsDockingPrevented() && aDockingRect.IsInside(rPos))
+    if (aDockingRect.IsInside(rPos))
     {
         rRect.SetSize(aDockingRect.GetSize());
         return false; // dock
@@ -347,7 +343,7 @@ bool DockingWindow::Docking( const Point& rPos, Rectangle& rRect )
     }
 }
 
-void DockingWindow::EndDocking( const Rectangle& rRect, bool bFloatMode )
+void DockingWindow::EndDocking( const tools::Rectangle& rRect, bool bFloatMode )
 {
     if ( bFloatMode )
         ::DockingWindow::EndDocking( rRect, bFloatMode );
@@ -376,7 +372,7 @@ bool DockingWindow::PrepareToggleFloatingMode()
     if (IsFloatingMode())
     {
         // memorize position and size on the desktop...
-        aFloatingRect = Rectangle(
+        aFloatingRect = tools::Rectangle(
             GetParent()->OutputToScreenPixel(GetPosPixel()),
             GetSizePixel()
         );
@@ -388,7 +384,7 @@ void DockingWindow::StartDocking()
 {
     if (IsFloatingMode())
     {
-        aFloatingRect = Rectangle(
+        aFloatingRect = tools::Rectangle(
             GetParent()->OutputToScreenPixel(GetPosPixel()),
             GetSizePixel()
         );
@@ -410,42 +406,32 @@ void DockingWindow::DockThis ()
     {
         if (!IsFloatingMode() && GetParent() != pLayout)
             SetParent(pLayout);
-        pLayout->DockaWindow(this);
+        pLayout->ArrangeWindows();
     }
 }
 
-
-// ExtendedEdit
-
-
-ExtendedEdit::ExtendedEdit( vcl::Window* pParent, IDEResId nRes ) :
-    Edit( pParent, nRes )
+ExtendedEdit::ExtendedEdit(vcl::Window* pParent, WinBits nStyle)
+    : Edit(pParent, nStyle)
 {
     aAcc.SetSelectHdl( LINK( this, ExtendedEdit, EditAccHdl ) );
     Control::SetGetFocusHdl( LINK( this, ExtendedEdit, ImplGetFocusHdl ) );
     Control::SetLoseFocusHdl( LINK( this, ExtendedEdit, ImplLoseFocusHdl ) );
 }
 
-IMPL_LINK_NOARG_TYPED(ExtendedEdit, ImplGetFocusHdl, Control&, void)
+IMPL_LINK_NOARG(ExtendedEdit, ImplGetFocusHdl, Control&, void)
 {
     Application::InsertAccel( &aAcc );
-    aLoseFocusHdl.Call( this );
 }
 
-
-IMPL_LINK_NOARG_TYPED(ExtendedEdit, ImplLoseFocusHdl, Control&, void)
+IMPL_LINK_NOARG(ExtendedEdit, ImplLoseFocusHdl, Control&, void)
 {
     Application::RemoveAccel( &aAcc );
 }
 
-
-IMPL_LINK_TYPED( ExtendedEdit, EditAccHdl, Accelerator&, rAcc, void )
+IMPL_LINK( ExtendedEdit, EditAccHdl, Accelerator&, rAcc, void )
 {
     aAccHdl.Call( rAcc );
 }
-
-//  TabBar
-
 
 TabBar::TabBar( vcl::Window* pParent ) :
     ::TabBar( pParent, WinBits( WB_3DLOOK | WB_SCROLL | WB_BORDER | WB_SIZEABLE | WB_DRAG ) )
@@ -479,60 +465,8 @@ void TabBar::Command( const CommandEvent& rCEvt )
             MouseEvent aMouseEvent( aP, 1, MouseEventModifiers::SIMPLECLICK, MOUSE_LEFT );
             ::TabBar::MouseButtonDown( aMouseEvent ); // base class
         }
-
-        PopupMenu aPopup( IDEResId( RID_POPUP_TABBAR ) );
-        if ( GetPageCount() == 0 )
-        {
-            aPopup.EnableItem(SID_BASICIDE_DELETECURRENT, false);
-            aPopup.EnableItem(SID_BASICIDE_RENAMECURRENT, false);
-            aPopup.EnableItem(SID_BASICIDE_HIDECURPAGE, false);
-        }
-
-        if ( StarBASIC::IsRunning() )
-        {
-            aPopup.EnableItem(SID_BASICIDE_DELETECURRENT, false);
-            aPopup.EnableItem(SID_BASICIDE_RENAMECURRENT, false);
-            aPopup.EnableItem(SID_BASICIDE_MODULEDLG, false);
-        }
-
-        if (Shell* pShell = GetShell())
-        {
-            ScriptDocument aDocument( pShell->GetCurDocument() );
-            OUString       aOULibName( pShell->GetCurLibName() );
-            Reference< script::XLibraryContainer2 > xModLibContainer( aDocument.getLibraryContainer( E_SCRIPTS ), UNO_QUERY );
-            Reference< script::XLibraryContainer2 > xDlgLibContainer( aDocument.getLibraryContainer( E_DIALOGS ), UNO_QUERY );
-            if ( ( xModLibContainer.is() && xModLibContainer->hasByName( aOULibName ) && xModLibContainer->isLibraryReadOnly( aOULibName ) ) ||
-                 ( xDlgLibContainer.is() && xDlgLibContainer->hasByName( aOULibName ) && xDlgLibContainer->isLibraryReadOnly( aOULibName ) ) )
-            {
-                aPopup.EnableItem(aPopup.GetItemId( 0 ), false);
-                aPopup.EnableItem(SID_BASICIDE_DELETECURRENT, false);
-                aPopup.EnableItem(SID_BASICIDE_RENAMECURRENT, false);
-                aPopup.RemoveDisabledEntries();
-            }
-             if ( aDocument.isInVBAMode() )
-            {
-                // disable to delete or remove object modules in IDE
-                if (BasicManager* pBasMgr = aDocument.getBasicManager())
-                {
-                    if (StarBASIC* pBasic = pBasMgr->GetLib(aOULibName))
-                    {
-                        Shell::WindowTable& aWindowTable = pShell->GetWindowTable();
-                        Shell::WindowTableIt it = aWindowTable.find( GetCurPageId() );
-                        if (it != aWindowTable.end() && dynamic_cast<ModulWindow*>(it->second.get()))
-                        {
-                            SbModule* pActiveModule = pBasic->FindModule( it->second->GetName() );
-                            if( pActiveModule && ( pActiveModule->GetModuleType() == script::ModuleType::DOCUMENT ) )
-                            {
-                                aPopup.EnableItem(SID_BASICIDE_DELETECURRENT, false);
-                                aPopup.EnableItem(SID_BASICIDE_RENAMECURRENT, false);
-                            }
-                        }
-                    }
-                }
-            }
-        }
         if (SfxDispatcher* pDispatcher = GetDispatcher())
-            pDispatcher->Execute(aPopup.Execute(this, aPos));
+            pDispatcher->ExecutePopup("tabbar", this, &aPos);
     }
 }
 
@@ -541,7 +475,11 @@ TabBarAllowRenamingReturnCode TabBar::AllowRenaming()
     bool const bValid = IsValidSbxName(GetEditText());
 
     if ( !bValid )
-        ScopedVclPtrInstance<MessageDialog>::Create(this, IDEResId(RID_STR_BADSBXNAME))->Execute();
+    {
+        std::unique_ptr<weld::MessageDialog> xError(Application::CreateMessageDialog(GetFrameWeld(),
+                                                    VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_BADSBXNAME)));
+        xError->run();
+    }
 
     return bValid ? TABBAR_RENAMING_YES : TABBAR_RENAMING_NO;
 }
@@ -594,7 +532,7 @@ void TabBar::Sort()
             sal_uInt16 nId = GetPageId( i );
             aTabBarSortHelper.nPageId = nId;
             aTabBarSortHelper.aPageText = GetPageText( nId );
-            BaseWindow* pWin = aWindowTable[ nId ];
+            BaseWindow* pWin = aWindowTable[ nId ].get();
 
             if (dynamic_cast<ModulWindow*>(pWin))
             {
@@ -607,8 +545,8 @@ void TabBar::Sort()
         }
 
         // sort module and dialog lists by page text
-        ::std::sort( aModuleList.begin() , aModuleList.end() );
-        ::std::sort( aDialogList.begin() , aDialogList.end() );
+        std::sort( aModuleList.begin() , aModuleList.end() );
+        std::sort( aDialogList.begin() , aDialogList.end() );
 
 
         sal_uInt16 nModules = sal::static_int_cast<sal_uInt16>( aModuleList.size() );
@@ -628,7 +566,7 @@ void TabBar::Sort()
     }
 }
 
-void CutLines( OUString& rStr, sal_Int32 nStartLine, sal_Int32 nLines, bool bEraseTrailingEmptyLines )
+void CutLines( OUString& rStr, sal_Int32 nStartLine, sal_Int32 nLines )
 {
     sal_Int32 nStartPos = 0;
     sal_Int32 nLine = 0;
@@ -641,7 +579,7 @@ void CutLines( OUString& rStr, sal_Int32 nStartLine, sal_Int32 nLines, bool bEra
         nLine++;
     }
 
-    SAL_WARN_IF( nStartPos == -1, "basctl.basicide", "CutLines: Startzeile nicht gefunden!" );
+    SAL_WARN_IF( nStartPos == -1, "basctl.basicide", "CutLines: Start line not found!" );
 
     if ( nStartPos == -1 )
         return;
@@ -660,7 +598,7 @@ void CutLines( OUString& rStr, sal_Int32 nStartLine, sal_Int32 nLines, bool bEra
     rStr = rStr.copy( 0, nStartPos );
     rStr += aEndStr;
 
-    if ( bEraseTrailingEmptyLines )
+    // erase trailing empty lines
     {
         sal_Int32 n = nStartPos;
         sal_Int32 nLen = rStr.getLength();
@@ -679,15 +617,15 @@ void CutLines( OUString& rStr, sal_Int32 nStartLine, sal_Int32 nLines, bool bEra
     }
 }
 
-sal_uLong CalcLineCount( SvStream& rStream )
+sal_uInt32 CalcLineCount( SvStream& rStream )
 {
-    sal_uLong nLFs = 0;
-    sal_uLong nCRs = 0;
+    sal_uInt32 nLFs = 0;
+    sal_uInt32 nCRs = 0;
     char c;
 
     rStream.Seek( 0 );
     rStream.ReadChar( c );
-    while ( !rStream.IsEof() )
+    while ( !rStream.eof() )
     {
         if ( c == '\n' )
             nLFs++;
@@ -721,7 +659,7 @@ void LibInfo::InsertInfo (
 {
     Key aKey(rDocument, rLibName);
     m_aMap.erase(aKey);
-    m_aMap.insert(Map::value_type(aKey, Item(rCurrentName, eCurrentType)));
+    m_aMap.emplace(aKey, Item(rCurrentName, eCurrentType));
 }
 
 void LibInfo::RemoveInfoFor (ScriptDocument const& rDocument)
@@ -770,38 +708,36 @@ LibInfo::Item::Item (
 LibInfo::Item::~Item ()
 { }
 
-bool QueryDel( const OUString& rName, const ResId& rId, vcl::Window* pParent )
+static bool QueryDel(const OUString& rName, const OUString &rStr, weld::Widget* pParent)
 {
-    OUString aQuery(rId.toString());
-    OUStringBuffer aNameBuf( rName );
-    aNameBuf.append('\'');
-    aNameBuf.insert(0, '\'');
-    aQuery = aQuery.replaceAll("XX", aNameBuf.makeStringAndClear());
-    ScopedVclPtrInstance< MessageDialog > aQueryBox(pParent, aQuery, VCL_MESSAGE_QUESTION, VCL_BUTTONS_YES_NO);
-    return ( aQueryBox->Execute() == RET_YES );
+    OUString aName = "\'" + rName + "\'";
+    OUString aQuery = rStr.replaceAll("XX", aName);
+    std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(pParent,
+                                                   VclMessageType::Question, VclButtonsType::YesNo, aQuery));
+    return (xQueryBox->run() == RET_YES);
 }
 
-bool QueryDelMacro( const OUString& rName, vcl::Window* pParent )
+bool QueryDelMacro( const OUString& rName, weld::Widget* pParent )
 {
     return QueryDel( rName, IDEResId( RID_STR_QUERYDELMACRO ), pParent );
 }
 
-bool QueryReplaceMacro( const OUString& rName, vcl::Window* pParent )
+bool QueryReplaceMacro( const OUString& rName, weld::Widget* pParent )
 {
     return QueryDel( rName, IDEResId( RID_STR_QUERYREPLACEMACRO ), pParent );
 }
 
-bool QueryDelDialog( const OUString& rName, vcl::Window* pParent )
+bool QueryDelDialog( const OUString& rName, weld::Widget* pParent )
 {
     return QueryDel( rName, IDEResId( RID_STR_QUERYDELDIALOG ), pParent );
 }
 
-bool QueryDelLib( const OUString& rName, bool bRef, vcl::Window* pParent )
+bool QueryDelLib( const OUString& rName, bool bRef, weld::Widget* pParent )
 {
     return QueryDel( rName, IDEResId( bRef ? RID_STR_QUERYDELLIBREF : RID_STR_QUERYDELLIB ), pParent );
 }
 
-bool QueryDelModule( const OUString& rName, vcl::Window* pParent )
+bool QueryDelModule( const OUString& rName, weld::Widget* pParent )
 {
     return QueryDel( rName, IDEResId( RID_STR_QUERYDELMODULE ), pParent );
 }
@@ -814,19 +750,20 @@ bool QueryPassword( const Reference< script::XLibraryContainer >& xLibContainer,
     do
     {
         // password dialog
-        ScopedVclPtrInstance< SfxPasswordDialog > aDlg(Application::GetDefDialogParent());
-        aDlg->SetMinLen( 1 );
+        vcl::Window* pWin = Application::GetDefDialogParent();
+        SfxPasswordDialog aDlg(pWin ? pWin->GetFrameWeld() : nullptr);
+        aDlg.SetMinLen(1);
 
         // set new title
         if ( bNewTitle )
         {
-            OUString aTitle(IDE_RESSTR(RID_STR_ENTERPASSWORD));
+            OUString aTitle(IDEResId(RID_STR_ENTERPASSWORD));
             aTitle = aTitle.replaceAll("XX", rLibName);
-            aDlg->SetText( aTitle );
+            aDlg.set_title(aTitle);
         }
 
         // execute dialog
-        nRet = aDlg->Execute();
+        nRet = aDlg.run();
 
         // verify password
         if ( nRet == RET_OK )
@@ -836,14 +773,15 @@ bool QueryPassword( const Reference< script::XLibraryContainer >& xLibContainer,
                 Reference< script::XLibraryContainerPassword > xPasswd( xLibContainer, UNO_QUERY );
                 if ( xPasswd.is() && xPasswd->isLibraryPasswordProtected( rLibName ) && !xPasswd->isLibraryPasswordVerified( rLibName ) )
                 {
-                    rPassword = aDlg->GetPassword();
-                    //                    OUString aOUPassword( rPassword );
+                    rPassword = aDlg.GetPassword();
                     bOK = xPasswd->verifyLibraryPassword( rLibName, rPassword );
 
                     if ( !bOK )
                     {
-                        ScopedVclPtrInstance< MessageDialog > aErrorBox(Application::GetDefDialogParent(), IDE_RESSTR(RID_STR_WRONGPASSWORD));
-                        aErrorBox->Execute();
+                        vcl::Window* pParent = Application::GetDefDialogParent();
+                        std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(pParent ? pParent->GetFrameWeld() : nullptr,
+                                                                       VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_WRONGPASSWORD)));
+                        xErrorBox->run();
                     }
                 }
             }

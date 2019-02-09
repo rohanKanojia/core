@@ -18,20 +18,21 @@
  */
 
 #include "ooxmldocpropimport.hxx"
-#include "services.hxx"
 
 #include <vector>
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/embed/XHierarchicalStorageAccess.hpp>
 #include <com/sun/star/embed/XRelationshipAccess.hpp>
 #include <com/sun/star/embed/XStorage.hpp>
-#include "oox/core/fastparser.hxx"
-#include "oox/core/relations.hxx"
-#include "oox/helper/containerhelper.hxx"
-#include "oox/helper/helper.hxx"
+#include <oox/core/fastparser.hxx>
+#include <oox/core/relations.hxx>
+#include <oox/helper/containerhelper.hxx>
+#include <oox/helper/helper.hxx>
 #include "docprophandler.hxx"
 
 #include <cppuhelper/supportsservice.hxx>
+
+using namespace ::com::sun::star;
 
 namespace oox {
 namespace docprop {
@@ -44,25 +45,11 @@ using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::xml::sax;
 
-OUString SAL_CALL DocumentPropertiesImport_getImplementationName()
-{
-    return OUString( "com.sun.star.comp.oox.docprop.DocumentPropertiesImporter" );
-}
-
-Sequence< OUString > SAL_CALL DocumentPropertiesImport_getSupportedServiceNames()
-{
-    Sequence<OUString> aServices { "com.sun.star.document.OOXMLDocumentPropertiesImporter" };
-    return aServices;
-}
-
-Reference< XInterface > SAL_CALL DocumentPropertiesImport_createInstance( const Reference< XComponentContext >& rxContext ) throw(Exception)
-{
-    return static_cast< ::cppu::OWeakObject* >( new DocumentPropertiesImport( rxContext ) );
-}
-
 namespace {
 
-Sequence< InputSource > lclGetRelatedStreams( const Reference< XStorage >& rxStorage, const OUString& rStreamType ) throw (RuntimeException, css::io::IOException)
+/// @throws RuntimeException
+/// @throws css::io::IOException
+Sequence< InputSource > lclGetRelatedStreams( const Reference< XStorage >& rxStorage, const OUString& rStreamType )
 {
     Reference< XRelationshipAccess > xRelation( rxStorage, UNO_QUERY_THROW );
     Reference< XHierarchicalStorageAccess > xHierarchy( rxStorage, UNO_QUERY_THROW );
@@ -89,7 +76,7 @@ Sequence< InputSource > lclGetRelatedStreams( const Reference< XStorage >& rxSto
                 Reference< XInputStream > xInStream = xExtStream->getInputStream();
                 if( xInStream.is() )
                 {
-                    aResult.resize( aResult.size() + 1 );
+                    aResult.emplace_back();
                     aResult.back().sSystemId = rEntry.Second;
                     aResult.back().aInputStream = xExtStream->getInputStream();
                 }
@@ -109,25 +96,25 @@ DocumentPropertiesImport::DocumentPropertiesImport( const Reference< XComponentC
 }
 
 // XServiceInfo
-OUString SAL_CALL DocumentPropertiesImport::getImplementationName() throw (RuntimeException, std::exception)
+OUString SAL_CALL DocumentPropertiesImport::getImplementationName()
 {
-    return DocumentPropertiesImport_getImplementationName();
+    return OUString( "com.sun.star.comp.oox.docprop.DocumentPropertiesImporter" );
 }
 
-sal_Bool SAL_CALL DocumentPropertiesImport::supportsService( const OUString& rServiceName ) throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL DocumentPropertiesImport::supportsService( const OUString& rServiceName )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-Sequence< OUString > SAL_CALL DocumentPropertiesImport::getSupportedServiceNames() throw (RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL DocumentPropertiesImport::getSupportedServiceNames()
 {
-    return DocumentPropertiesImport_getSupportedServiceNames();
+    Sequence<OUString> aServices { "com.sun.star.document.OOXMLDocumentPropertiesImporter" };
+    return aServices;
 }
 
 // XOOXMLDocumentPropertiesImporter
 void SAL_CALL DocumentPropertiesImport::importProperties(
         const Reference< XStorage >& rxSource, const Reference< XDocumentProperties >& rxDocumentProperties )
-        throw (RuntimeException, IllegalArgumentException, SAXException, Exception, std::exception)
 {
     if( !mxContext.is() )
         throw RuntimeException();
@@ -157,7 +144,7 @@ void SAL_CALL DocumentPropertiesImport::importProperties(
         if( aCoreStreams.getLength() > 1 )
             throw IOException( "Unexpected core properties stream!" );
 
-        ::oox::core::FastParser aParser( mxContext );
+        ::oox::core::FastParser aParser;
         aParser.registerNamespace( NMSP_packageMetaCorePr );
         aParser.registerNamespace( NMSP_dc );
         aParser.registerNamespace( NMSP_dcTerms );
@@ -177,5 +164,12 @@ void SAL_CALL DocumentPropertiesImport::importProperties(
 
 } // namespace docprop
 } // namespace oox
+
+extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+com_sun_star_comp_oox_docprop_DocumentPropertiesImporter_get_implementation(
+    uno::XComponentContext* pCtx, uno::Sequence<uno::Any> const& /*rSeq*/)
+{
+    return cppu::acquire(new oox::docprop::DocumentPropertiesImport(pCtx));
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

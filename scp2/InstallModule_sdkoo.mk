@@ -11,12 +11,6 @@ $(eval $(call gb_InstallModule_InstallModule,scp2/sdkoo))
 
 $(eval $(call gb_InstallModule_use_auto_install_libs,scp2/sdkoo,sdk))
 
-ifneq ($(DOXYGEN),)
-$(eval $(call gb_InstallModule_add_defs,scp2/sdkoo,\
-	-DDOXYGEN \
-))
-endif
-
 $(eval $(call gb_InstallModule_add_scpfiles,scp2/sdkoo,\
     scp2/source/sdkoo/sdkoo \
 ))

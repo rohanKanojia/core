@@ -26,18 +26,17 @@
 #include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 
+#include <basic/sbdef.hxx>
+#include <tools/svlibrary.h>
 #include <svtools/soerr.hxx>
-#include <svtools/svtools.hrc>
+#include <unotools/resmgr.hxx>
 #include <unotools/configmgr.hxx>
 #include <unotools/saveopt.hxx>
-#include <unotools/localisationoptions.hxx>
 #include <svl/intitem.hxx>
 #include <svl/eitem.hxx>
 #include <svl/stritem.hxx>
-#include <vcl/msgbox.hxx>
 #include <svtools/ehdl.hxx>
 #include <comphelper/processfactory.hxx>
-#include <unotools/configmgr.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <osl/security.hxx>
 #include <unotools/pathoptions.hxx>
@@ -47,26 +46,22 @@
 #include <cppuhelper/supportsservice.hxx>
 
 #include <vcl/edit.hxx>
-#include <vcl/scheduler.hxx>
 
 #include <sfx2/unoctitm.hxx>
-#include "app.hrc"
-#include "sfxlocal.hrc"
-#include "appdata.hxx"
-#include "arrdecl.hxx"
+#include <appdata.hxx>
+#include <arrdecl.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/docfac.hxx>
 #include <sfx2/evntconf.hxx>
 #include <sfx2/msgpool.hxx>
 #include <sfx2/progress.hxx>
 #include <sfx2/sfxhelp.hxx>
-#include <sfx2/sfxresid.hxx>
-#include "sfxtypes.hxx"
+#include <sfxtypes.hxx>
 #include <sfx2/viewsh.hxx>
-#include "nochaos.hxx"
+#include <nochaos.hxx>
 #include <sfx2/fcontnr.hxx>
-#include "helper.hxx"
-#include "sfxpicklist.hxx"
+#include <helper.hxx>
+#include <sfxpicklist.hxx>
 #include <ctrlfactoryimpl.hxx>
 #include <shellimpl.hxx>
 
@@ -80,25 +75,25 @@ class SfxTerminateListener_Impl : public ::cppu::WeakImplHelper< XTerminateListe
 public:
 
     // XTerminateListener
-    virtual void SAL_CALL queryTermination( const EventObject& aEvent ) throw( TerminationVetoException, RuntimeException, std::exception ) override;
-    virtual void SAL_CALL notifyTermination( const EventObject& aEvent ) throw( RuntimeException, std::exception ) override;
-    virtual void SAL_CALL disposing( const EventObject& Source ) throw( RuntimeException, std::exception ) override;
+    virtual void SAL_CALL queryTermination( const EventObject& aEvent ) override;
+    virtual void SAL_CALL notifyTermination( const EventObject& aEvent ) override;
+    virtual void SAL_CALL disposing( const EventObject& Source ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw (RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& sServiceName ) throw (RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw (RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& sServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 };
 
-void SAL_CALL SfxTerminateListener_Impl::disposing( const EventObject& ) throw( RuntimeException, std::exception )
+void SAL_CALL SfxTerminateListener_Impl::disposing( const EventObject& )
 {
 }
 
-void SAL_CALL SfxTerminateListener_Impl::queryTermination( const EventObject& ) throw(TerminationVetoException, RuntimeException, std::exception )
+void SAL_CALL SfxTerminateListener_Impl::queryTermination( const EventObject& )
 {
 }
 
-void SAL_CALL SfxTerminateListener_Impl::notifyTermination( const EventObject& aEvent ) throw(RuntimeException, std::exception )
+void SAL_CALL SfxTerminateListener_Impl::notifyTermination( const EventObject& aEvent )
 {
     Reference< XDesktop > xDesktop( aEvent.Source, UNO_QUERY );
     if( xDesktop.is() )
@@ -107,14 +102,10 @@ void SAL_CALL SfxTerminateListener_Impl::notifyTermination( const EventObject& a
     SolarMutexGuard aGuard;
     utl::ConfigManager::storeConfigItems();
 
-    // Timers may access the SfxApplication and are only deleted in
-    // Application::Quit(), which is asynchronous (PostUserEvent) - disable!
-    Scheduler::ImplDeInitScheduler();
-
     SfxApplication* pApp = SfxGetpApp();
-    pApp->Broadcast( SfxSimpleHint( SFX_HINT_DEINITIALIZING ) );
-    pApp->Get_Impl()->pAppDispatch->ReleaseAll();
-    pApp->Get_Impl()->pAppDispatch->release();
+    pApp->Broadcast( SfxHint( SfxHintId::Deinitializing ) );
+    pApp->Get_Impl()->mxAppDispatch->ReleaseAll();
+    pApp->Get_Impl()->mxAppDispatch.clear();
 
     css::uno::Reference< css::uno::XComponentContext > xContext = ::comphelper::getProcessComponentContext();
     css::uno::Reference< css::document::XDocumentEventListener > xGlobalBroadcaster(css::frame::theGlobalEventBroadcaster::get(xContext), css::uno::UNO_QUERY_THROW);
@@ -127,17 +118,17 @@ void SAL_CALL SfxTerminateListener_Impl::notifyTermination( const EventObject& a
     Application::Quit();
 }
 
-OUString SAL_CALL SfxTerminateListener_Impl::getImplementationName() throw (RuntimeException, std::exception)
+OUString SAL_CALL SfxTerminateListener_Impl::getImplementationName()
 {
     return OUString("com.sun.star.comp.sfx2.SfxTerminateListener");
 }
 
-sal_Bool SAL_CALL SfxTerminateListener_Impl::supportsService( const OUString& sServiceName ) throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL SfxTerminateListener_Impl::supportsService( const OUString& sServiceName )
 {
     return cppu::supportsService(this, sServiceName);
 }
 
-Sequence< OUString > SAL_CALL SfxTerminateListener_Impl::getSupportedServiceNames() throw (RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL SfxTerminateListener_Impl::getSupportedServiceNames()
 {
     // Note: That service  does not really exists .-)
     // But this implementation is not thought to be registered really within our service.rdb.
@@ -150,7 +141,7 @@ Sequence< OUString > SAL_CALL SfxTerminateListener_Impl::getSupportedServiceName
 }
 
 
-typedef bool ( *PFunc_getSpecialCharsForEdit)( vcl::Window* i_pParent, const vcl::Font& i_rFont, OUString& o_rOutString );
+typedef bool ( *PFunc_getSpecialCharsForEdit)( vcl::Window const * i_pParent, const vcl::Font& i_rFont, OUString& o_rOutString );
 
 
 // Lazy binding of the GetSpecialCharsForEdit function as it resides in
@@ -159,15 +150,15 @@ typedef bool ( *PFunc_getSpecialCharsForEdit)( vcl::Window* i_pParent, const vcl
 
 #ifndef DISABLE_DYNLOADING
 
-extern "C" { static void SAL_CALL thisModule() {} }
+extern "C" { static void thisModule() {} }
 
 #else
 
-extern "C" bool GetSpecialCharsForEdit( vcl::Window* i_pParent, const vcl::Font& i_rFont, OUString& o_rOutString );
+extern "C" bool GetSpecialCharsForEdit( vcl::Window const * i_pParent, const vcl::Font& i_rFont, OUString& o_rOutString );
 
 #endif
 
-OUString GetSpecialCharsForEdit(vcl::Window* pParent, const vcl::Font& rFont)
+static OUString SfxGetSpecialCharsForEdit(vcl::Window* pParent, const vcl::Font& rFont)
 {
     static bool bDetermineFunction = false;
     static PFunc_getSpecialCharsForEdit pfunc_getSpecialCharsForEdit = nullptr;
@@ -204,79 +195,62 @@ void SfxApplication::Initialize_Impl()
 #endif
 
     Reference < XDesktop2 > xDesktop = Desktop::create ( ::comphelper::getProcessComponentContext() );
-    xDesktop->addTerminateListener( new SfxTerminateListener_Impl() );
+    xDesktop->addTerminateListener( new SfxTerminateListener_Impl );
 
-    Application::EnableAutoHelpId();
-
-    pAppData_Impl->pAppDispatch = new SfxStatusDispatcher;
-    pAppData_Impl->pAppDispatch->acquire();
+    pImpl->mxAppDispatch = new SfxStatusDispatcher;
 
     // SV-Look
     Help::EnableContextHelp();
     Help::EnableExtHelp();
 
-    if (!utl::ConfigManager::IsAvoidConfig())
-    {
-        SvtLocalisationOptions aLocalisation;
-        Application::EnableAutoMnemonic ( aLocalisation.IsAutoMnemonic() );
-        Application::SetDialogScaleX    ( (short)(aLocalisation.GetDialogScale()) );
-    }
+    pImpl->m_pToolsErrorHdl = new SfxErrorHandler(
+        RID_ERRHDL, ErrCodeArea::Io, ErrCodeArea::Vcl);
 
-    pAppData_Impl->m_pToolsErrorHdl = new SfxErrorHandler(
-        RID_ERRHDL, ERRCODE_AREA_TOOLS, ERRCODE_AREA_LIB1);
-
+    pImpl->m_pSoErrorHdl = new SfxErrorHandler(
+        RID_SO_ERROR_HANDLER, ErrCodeArea::So, ErrCodeArea::So, SvtResLocale());
 #if HAVE_FEATURE_SCRIPTING
-    pAppData_Impl->pBasicResMgr = ResMgr::CreateResMgr("sb");
-#endif
-    pAppData_Impl->pSvtResMgr = ResMgr::CreateResMgr("svt");
-
-    pAppData_Impl->m_pSoErrorHdl = new SfxErrorHandler(
-        RID_SO_ERROR_HANDLER, ERRCODE_AREA_SO, ERRCODE_AREA_SO_END, pAppData_Impl->pSvtResMgr );
-#if HAVE_FEATURE_SCRIPTING
-    pAppData_Impl->m_pSbxErrorHdl = new SfxErrorHandler(
-        RID_BASIC_START, ERRCODE_AREA_SBX, ERRCODE_AREA_SBX_END, pAppData_Impl->pBasicResMgr );
+    pImpl->m_pSbxErrorHdl = new SfxErrorHandler(
+        RID_BASIC_START, ErrCodeArea::Sbx, ErrCodeArea::Sbx, BasResLocale());
 #endif
 
-    if (!utl::ConfigManager::IsAvoidConfig())
+    if (!utl::ConfigManager::IsFuzzing())
     {
+        SolarMutexGuard aGuard;
         //ensure instantiation of listener that manages the internal recently-used
         //list
-        SfxPickList::ensure();
+        pImpl->mxAppPickList.reset(new SfxPickList(*this));
     }
 
-    DBG_ASSERT( !pAppData_Impl->pAppDispat, "AppDispatcher already exists" );
-    pAppData_Impl->pAppDispat = new SfxDispatcher(static_cast<SfxDispatcher*>(nullptr));
-    pAppData_Impl->pSlotPool = new SfxSlotPool;
-    pAppData_Impl->pTbxCtrlFac = new SfxTbxCtrlFactArr_Impl;
-    pAppData_Impl->pStbCtrlFac = new SfxStbCtrlFactArr_Impl;
-    pAppData_Impl->pViewFrames = new SfxViewFrameArr_Impl;
-    pAppData_Impl->pViewShells = new SfxViewShellArr_Impl;
-    pAppData_Impl->pObjShells = new SfxObjectShellArr_Impl;
-    pAppData_Impl->nInterfaces = SFX_INTERFACE_APP+8;
-    pAppData_Impl->pInterfaces = new SfxInterface*[pAppData_Impl->nInterfaces];
-    memset( pAppData_Impl->pInterfaces, 0, sizeof(SfxInterface*) * pAppData_Impl->nInterfaces );
+    DBG_ASSERT( !pImpl->pAppDispat, "AppDispatcher already exists" );
+    pImpl->pAppDispat = new SfxDispatcher;
+    pImpl->pSlotPool = new SfxSlotPool;
+    pImpl->pTbxCtrlFac = new SfxTbxCtrlFactArr_Impl;
+    pImpl->pStbCtrlFac = new SfxStbCtrlFactArr_Impl;
+    pImpl->pViewFrames = new SfxViewFrameArr_Impl;
+    pImpl->pViewShells = new SfxViewShellArr_Impl;
+    pImpl->pObjShells = new SfxObjectShellArr_Impl;
 
     Registrations_Impl();
 
-    // Subklasse initialisieren
-    pAppData_Impl->bDowning = false;
+    // initialize the subclass
+    pImpl->bDowning = false;
 
     // get CHAOS item pool...
-    pAppData_Impl->pPool = NoChaos::GetItemPool();
-    SetPool( pAppData_Impl->pPool );
+    pImpl->pPool = NoChaos::GetItemPool();
+    SetPool( pImpl->pPool );
 
-    if ( pAppData_Impl->bDowning )
+    if ( pImpl->bDowning )
         return;
 
-    // App-Dispatcher aufbauen
-    pAppData_Impl->pAppDispat->Push(*this);
-    pAppData_Impl->pAppDispat->Flush();
-    pAppData_Impl->pAppDispat->DoActivate_Impl( true, nullptr );
+    // build the app dispatcher
+    pImpl->pAppDispat->Push(*this);
+    pImpl->pAppDispat->Flush();
+    pImpl->pAppDispat->DoActivate_Impl( true );
 
     {
         SolarMutexGuard aGuard;
         // Set special characters callback on vcl edit control
-        Edit::SetGetSpecialCharsFunction(&GetSpecialCharsForEdit);
+        Edit::SetGetSpecialCharsFunction(&SfxGetSpecialCharsForEdit);
     }
 }
 

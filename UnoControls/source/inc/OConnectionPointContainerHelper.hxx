@@ -25,25 +25,19 @@
 #include <cppuhelper/weak.hxx>
 #include <cppuhelper/propshlp.hxx>
 
-//  namespaces
-
-namespace unocontrols{
-
-//  class declaration OConnectionPointContainerHelper
+namespace unocontrols {
 
 class OConnectionPointContainerHelper   :   public  css::lang::XConnectionPointContainer
                                         ,   public  ::cppu::OWeakObject
 {
-
 public:
-
     OConnectionPointContainerHelper( ::osl::Mutex& aMutex );
 
-    virtual ~OConnectionPointContainerHelper();
+    virtual ~OConnectionPointContainerHelper() override;
 
     //  XInterface
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      give answer, if interface is supported
         @descr      The interfaces are searched by type.
 
@@ -56,10 +50,9 @@ public:
         @onerror    A RuntimeException is thrown.
     */
 
-    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType )
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) override;
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      increment refcount
         @seealso    XInterface
         @seealso    release()
@@ -68,7 +61,7 @@ public:
 
     virtual void SAL_CALL acquire() throw() override;
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      decrement refcount
         @seealso    XInterface
         @seealso    acquire()
@@ -79,22 +72,21 @@ public:
 
     //  XConnectionPointContainer
 
-    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getConnectionPointTypes()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getConnectionPointTypes() override;
 
     virtual css::uno::Reference< css::lang::XConnectionPoint > SAL_CALL queryConnectionPoint(
         const css::uno::Type& aType
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL advise(
         const   css::uno::Type&                              aType ,
         const   css::uno::Reference< css::uno::XInterface >&  xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL unadvise(
         const   css::uno::Type&                              aType       ,
         const   css::uno::Reference< css::uno::XInterface >&  xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     //  public but impl method!
     //  Is necessary to get container member at OConnectionPoint-instance.
@@ -102,15 +94,12 @@ public:
     // "Parent" function must do this.
     ::cppu::OMultiTypeInterfaceContainerHelper& impl_getMultiTypeContainer() { return m_aMultiTypeContainer; }
 
-
 private:
-
     ::osl::Mutex&                                   m_aSharedMutex;
     ::cppu::OMultiTypeInterfaceContainerHelper      m_aMultiTypeContainer;   // Container to hold listener
+};
 
-};  // class OConnectionPointContainerHelper
-
-}   // namespace unocontrols
+}
 
 #endif // INCLUDED_UNOCONTROLS_SOURCE_INC_OCONNECTIONPOINTCONTAINERHELPER_HXX
 

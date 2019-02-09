@@ -24,13 +24,12 @@
 #include <com/sun/star/presentation/FadeEffect.hpp>
 #include <com/sun/star/office/XAnnotation.hpp>
 
-#include <functional>
-#include <list>
 #include <memory>
 #include <vector>
+#include <editeng/flditem.hxx>
 #include <svx/svdobj.hxx>
 #include <svx/fmpage.hxx>
-#include "fadedef.h"
+#include <xmloff/autolayout.hxx>
 #include "diadef.h"
 #include "pres.hxx"
 #include "shapelist.hxx"
@@ -45,10 +44,7 @@ class SfxStyleSheet;
 class SdDrawDocument;
 class SdrTextObj;
 class SdPageLink;
-class StarBASIC;
 class SfxItemSet;
-struct StyleRequestData;
-class SdPage;
 class Paragraph;
 class Outliner;
 class SdStyleSheet;
@@ -73,7 +69,8 @@ namespace sd {
         bool mbDateTimeVisible;
         bool mbDateTimeIsFixed;
         OUString maDateTimeText;
-        int meDateTimeFormat;
+        SvxDateFormat meDateFormat;
+        SvxTimeFormat meTimeFormat;
 
         HeaderFooterSettings();
 
@@ -90,9 +87,10 @@ namespace sd {
     class UndoAttrObject;
 }
 
-class SD_DLLPUBLIC SdPage : public FmFormPage, public SdrObjUserCall
+class SD_DLLPUBLIC SdPage final : public FmFormPage, public SdrObjUserCall
 {
     SdPage& operator=(const SdPage&) = delete;
+    SdPage(const SdPage&) = delete;
 
 friend class SdGenericDrawPage;
 friend class SdDrawPage;
@@ -102,7 +100,6 @@ friend class ModifyPageUndoAction;
 friend class sd::UndoGeoObject;
 friend class sd::UndoAttrObject;
 
-protected:
     PageKind    mePageKind;               ///< page type
     AutoLayout  meAutoLayout;             ///< AutoLayout
     sd::ShapeList maPresentationShapeList;///< presentation objects
@@ -123,7 +120,6 @@ protected:
     bool    mbBackgroundFullSize;     ///< Background object to represent the whole page.
     rtl_TextEncoding meCharSet;           ///< Text encoding
     sal_uInt16  mnPaperBin;               ///< PaperBin
-    Orientation meOrientation;            ///< Print orientation.
     SdPageLink* mpPageLink;               ///< Page link (at left sides only)
 
     sd::AnnotationVector    maAnnotations;
@@ -136,7 +132,7 @@ protected:
 
     virtual css::uno::Reference< css::uno::XInterface > createUnoPage() override;
 
-    SfxItemSet* mpItems;
+    std::unique_ptr<SfxItemSet> mpItems;
 
     SfxItemSet* getOrCreateItems();
 
@@ -149,29 +145,27 @@ protected:
     sal_Int32 mnTransitionFadeColor;
     double mfTransitionDuration;
 
-    SdPage(const SdPage& rSrcPage);
     void lateInit(const SdPage& rSrcPage);
 
 public:
 
-    SdPage(SdDrawDocument& rNewDoc, bool bMasterPage=false);
-    virtual ~SdPage();
-    virtual SdrPage* Clone() const override;
-    virtual SdrPage* Clone(SdrModel* pNewModel) const override;
+    SdPage(SdDrawDocument& rNewDoc, bool bMasterPage);
+    virtual ~SdPage() override;
+
+    virtual SdrPage* CloneSdrPage(SdrModel& rTargetModel) const override;
 
     virtual void    SetSize(const Size& aSize) override;
     virtual void    SetBorder(sal_Int32 nLft, sal_Int32 nUpp, sal_Int32 nRgt, sal_Int32 Lwr) override;
-    virtual void    SetLftBorder(sal_Int32 nBorder) override;
-    virtual void    SetRgtBorder(sal_Int32 nBorder) override;
-    virtual void    SetUppBorder(sal_Int32 nBorder) override;
-    virtual void    SetLwrBorder(sal_Int32 nBorder) override;
-    virtual void    SetModel(SdrModel* pNewModel) override;
+    virtual void    SetLeftBorder(sal_Int32 nBorder) override;
+    virtual void    SetRightBorder(sal_Int32 nBorder) override;
+    virtual void    SetUpperBorder(sal_Int32 nBorder) override;
+    virtual void    SetLowerBorder(sal_Int32 nBorder) override;
     virtual bool    IsReadOnly() const override;
 
     sd::ShapeList&  GetPresentationShapeList() { return maPresentationShapeList; }
 
     void EnsureMasterPageDefaultBackground();
-    SdrObject*      CreatePresObj(PresObjKind eObjKind, bool bVertical, const Rectangle& rRect, bool bInsert=false);
+    SdrObject*      CreatePresObj(PresObjKind eObjKind, bool bVertical, const ::tools::Rectangle& rRect);
     SdrObject*      CreateDefaultPresObj(PresObjKind eObjKind);
     void            DestroyDefaultPresObj(PresObjKind eObjKind);
     SdrObject*      GetPresObj(PresObjKind eObjKind, int nIndex = 1, bool bFuzzySearch = false );
@@ -179,6 +173,7 @@ public:
     OUString        GetPresObjText(PresObjKind eObjKind) const;
     SfxStyleSheet* GetStyleSheetForMasterPageBackground() const;
     SfxStyleSheet*  GetStyleSheetForPresObj(PresObjKind eObjKind) const;
+    sal_Int64       GetHashCode() const;
     bool            RestoreDefaultText( SdrObject* pObj );
 
     /** @return true if the given SdrObject is inside the presentation object list */
@@ -193,16 +188,14 @@ public:
     void            SetAutoLayout(AutoLayout eLayout, bool bInit=false, bool bCreate=false);
     AutoLayout      GetAutoLayout() const { return meAutoLayout; }
     void            CreateTitleAndLayout(bool bInit=false, bool bCreate=false);
-    SdrObject*      InsertAutoLayoutShape(SdrObject* pObj, PresObjKind eObjKind, bool bVertical, const Rectangle& rRect, bool bInit);
+    SdrObject*      InsertAutoLayoutShape(SdrObject* pObj, PresObjKind eObjKind, bool bVertical, const ::tools::Rectangle& rRect, bool bInit);
 
-    virtual void       NbcInsertObject(SdrObject* pObj, size_t nPos=SAL_MAX_SIZE,
-                                       const SdrInsertReason* pReason=nullptr) override;
+    virtual void       NbcInsertObject(SdrObject* pObj, size_t nPos=SAL_MAX_SIZE) override;
     virtual SdrObject* NbcRemoveObject(size_t nObjNum) override;
     virtual SdrObject* RemoveObject(size_t nObjNum) override;
 
     /** Also override ReplaceObject methods to realize when
     objects are removed with this mechanism instead of RemoveObject*/
-    virtual SdrObject* NbcReplaceObject(SdrObject* pNewObj, size_t nObjNum) override;
     virtual SdrObject* ReplaceObject(SdrObject* pNewObj, size_t nObjNum) override;
 
     void        SetObjText(SdrTextObj* pObj, SdrOutliner* pOutliner, PresObjKind eObjKind, const OUString& rStr );
@@ -231,7 +224,7 @@ public:
     bool        IsScaleObjects() const              { return mbScaleObjects; }
 
     void        SetSoundFile(const OUString& rStr)    { maSoundFile = rStr; }
-    OUString    GetSoundFile() const                { return maSoundFile; }
+    const OUString& GetSoundFile() const                { return maSoundFile; }
 
     void        SetLoopSound( bool bLoopSound ) { mbLoopSound = bLoopSound; }
     bool        IsLoopSound() const                 { return mbLoopSound; }
@@ -255,24 +248,24 @@ public:
     void        setTransitionDuration( double fTranstionDuration );
 
     virtual void Changed(const SdrObject& rObj, SdrUserCallType eType,
-                         const Rectangle& rOldBoundRect) override;
+                         const ::tools::Rectangle& rOldBoundRect) override;
 
     void             SetLayoutName(const OUString& aName);
     virtual OUString GetLayoutName() const override       { return maLayoutName; }
 
     void            SetFileName(const OUString& aName) { maFileName = aName; }
-    OUString        GetFileName() const       { return maFileName; }
+    const OUString& GetFileName() const       { return maFileName; }
     void            SetBookmarkName(const OUString& aName) { maBookmarkName = aName; }
-    OUString        GetBookmarkName() const       { return maBookmarkName; }
+    const OUString& GetBookmarkName() const       { return maBookmarkName; }
 
     void            ConnectLink();
     void            DisconnectLink();
 
-    void            ScaleObjects(const Size& rNewPageSize, const Rectangle& rNewBorderRect,
+    void            ScaleObjects(const Size& rNewPageSize, const ::tools::Rectangle& rNewBorderRect,
                          bool bScaleAllObj);
 
     const OUString& GetName() const;
-    OUString        GetRealName() const { return FmFormPage::GetName(); };
+    OUString const & GetRealName() const { return FmFormPage::GetName(); };
 
     void            SetPresentationLayout(const OUString& rLayoutName,
                                   bool bReplaceStyleSheets = true,
@@ -293,14 +286,20 @@ public:
     bool setAlienAttributes( const css::uno::Any& rAttributes );
     void getAlienAttributes( css::uno::Any& rAttributes );
 
-    /** @return the main animation node */
-    css::uno::Reference< css::animations::XAnimationNode > getAnimationNode() throw (css::uno::RuntimeException);
+    /** @return the main animation node
 
-    /** sets the main animation node */
-    void setAnimationNode( css::uno::Reference< css::animations::XAnimationNode >& xNode ) throw (css::uno::RuntimeException);
+        @throws css::uno::RuntimeException
+    */
+    css::uno::Reference< css::animations::XAnimationNode > const & getAnimationNode();
+
+    /** sets the main animation node
+
+        @throws css::uno::RuntimeException
+    */
+    void setAnimationNode( css::uno::Reference< css::animations::XAnimationNode > const & xNode );
 
     /// @return a helper class to manipulate effects inside the main sequence
-    std::shared_ptr< sd::MainSequence > getMainSequence();
+    std::shared_ptr< sd::MainSequence > const & getMainSequence();
 
     /** quick check if this slide has an animation node.
         This can be used to have a cost free check if there are no animations ad this slide.
@@ -313,6 +312,9 @@ public:
 
     /** removes all custom animations for the given shape */
     void removeAnimations( const SdrObject* pObj );
+
+    /** Notify that the object has been renamed and the animation effects has to update. */
+    void notifyObjectRenamed(const SdrObject* pObj);
 
     /** Set the name of the page and broadcast a model change.
     */
@@ -334,10 +336,10 @@ public:
         bool bEdit ) override;
 
     /** callback from the sd::View when a new paragraph for one object on this page is created */
-    void onParagraphInserted( ::Outliner* pOutliner, Paragraph* pPara, SdrObject* pObj );
+    void onParagraphInserted( ::Outliner* pOutliner, Paragraph const * pPara, SdrObject* pObj );
 
     /** callback from the sd::View when a paragraph from one object on this page is removed */
-    void onParagraphRemoving( ::Outliner* pOutliner, Paragraph* pPara, SdrObject* pObj );
+    void onParagraphRemoving( ::Outliner* pOutliner, Paragraph const * pPara, SdrObject* pObj );
 
     /** callback from the sd::View when an object just left text edit mode */
     void onEndTextEdit( SdrObject* pObj );
@@ -349,10 +351,10 @@ public:
     /** removes all empty presentation objects from this slide */
     void RemoveEmptyPresentationObjects();
 
-    Rectangle   GetTitleRect() const;
-    Rectangle   GetLayoutRect() const;
+    ::tools::Rectangle   GetTitleRect() const;
+    ::tools::Rectangle   GetLayoutRect() const;
 
-    static void CalculateHandoutAreas( SdDrawDocument& rModel, AutoLayout eLayout, bool bHorizontal, std::vector< Rectangle >& rAreas );
+    static void CalculateHandoutAreas( SdDrawDocument& rModel, AutoLayout eLayout, bool bHorizontal, std::vector< ::tools::Rectangle >& rAreas );
 
     /** Set the "precious" flag to the given value.
     */
@@ -368,16 +370,24 @@ public:
     bool IsPrecious() const { return mbIsPrecious; }
 
     void createAnnotation( css::uno::Reference< css::office::XAnnotation >& xAnnotation );
-    void addAnnotation( const css::uno::Reference< css::office::XAnnotation >& xAnnotation, int nIndex = -1 );
+    void addAnnotation( const css::uno::Reference< css::office::XAnnotation >& xAnnotation, int nIndex );
     void removeAnnotation( const css::uno::Reference< css::office::XAnnotation >& xAnnotation );
     const sd::AnnotationVector& getAnnotations() const { return maAnnotations; }
-    OString stringify() const;
+    bool Equals(const SdPage&) const;
     virtual void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
+    sal_uInt16 getPageId() { return mnPageId; }
+
+    static sal_uInt16 mnLastPageId;
 
 private:
     bool mbIsPrecious;
 
+    // page id of this page
+    sal_uInt16 const mnPageId;
+
     /** clone the animations from this and set them to rTargetPage
+     *  TTTT: Order is strange, should be the other way around by
+     *  convention/convenience and makes usage a little dangerous...
     */
     void cloneAnimations( SdPage& rTargetPage ) const;
 

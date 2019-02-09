@@ -21,20 +21,15 @@
 
 #include <sal/config.h>
 
-#include <cstddef>
-#include <functional>
 #include <vector>
-#include <utility>
 
-#include <osl/diagnose.h>
-#include <osl/mutex.hxx>
-#include <rtl/alloc.h>
-#include <com/sun/star/uno/Sequence.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
 #include <com/sun/star/lang/EventObject.hpp>
 
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <comphelper/comphelperdllapi.h>
+
+namespace com { namespace sun { namespace star { namespace uno { class XInterface; } } } }
+namespace osl { class Mutex; }
 
 /** */ //for docpp
 namespace comphelper
@@ -69,7 +64,7 @@ class COMPHELPER_DLLPUBLIC OInterfaceIteratorHelper2
 public:
     /**
        Create an iterator over the elements of the container. The iterator
-       copies the elements of the conatainer. A change to the container
+       copies the elements of the container. A change to the container
        during the lifetime of an iterator is allowed and does not
        affect the iterator-instance. The iterator and the container take cares
        themself for concurrent access, no additional guarding is necessary.
@@ -88,31 +83,29 @@ public:
     ~OInterfaceIteratorHelper2();
 
     /** Return true, if there are more elements in the iterator. */
-    bool SAL_CALL hasMoreElements() const
+    bool hasMoreElements() const
         { return nRemain != 0; }
     /** Return the next element of the iterator. Calling this method if
         hasMoreElements() has returned false, is an error. Cast the
         returned pointer to the
      */
-    css::uno::XInterface * SAL_CALL next();
+    css::uno::XInterface * next();
 
     /** Removes the current element (the last one returned by next())
         from the underlying container. Calling this method before
         next() has been called or calling it twice with no next()
         inbetween is an error.
     */
-    void SAL_CALL remove();
+    void remove();
 
 private:
     OInterfaceContainerHelper2 & rCont;
-    bool                         bIsList;
+    bool const                   bIsList;
     detail::element_alias2       aData;
     sal_Int32                    nRemain;
 
-    OInterfaceIteratorHelper2( const OInterfaceIteratorHelper2 & )
-        SAL_DELETED_FUNCTION;
-    OInterfaceIteratorHelper2 &  operator = ( const OInterfaceIteratorHelper2 & )
-        SAL_DELETED_FUNCTION;
+    OInterfaceIteratorHelper2( const OInterfaceIteratorHelper2 & ) = delete;
+    OInterfaceIteratorHelper2 &  operator = ( const OInterfaceIteratorHelper2 & ) = delete;
 };
 
 
@@ -125,16 +118,6 @@ private:
 class COMPHELPER_DLLPUBLIC OInterfaceContainerHelper2
 {
 public:
-    // these are here to force memory de/allocation to sal lib.
-    inline static void * SAL_CALL operator new( size_t nSize )
-        { return ::rtl_allocateMemory( nSize ); }
-    inline static void SAL_CALL operator delete( void * pMem )
-        { ::rtl_freeMemory( pMem ); }
-    inline static void * SAL_CALL operator new( size_t, void * pMem )
-        { return pMem; }
-    inline static void SAL_CALL operator delete( void *, void * )
-        {}
-
     /**
        Create an interface container.
 
@@ -152,12 +135,12 @@ public:
       Return the number of Elements in the container. Only useful if you have acquired
       the mutex.
      */
-    sal_Int32 SAL_CALL getLength() const;
+    sal_Int32 getLength() const;
 
     /**
       Return all interfaces added to this container.
      **/
-    std::vector< css::uno::Reference< css::uno::XInterface > > SAL_CALL getElements() const;
+    std::vector< css::uno::Reference< css::uno::XInterface > > getElements() const;
 
     /** Inserts an element into the container.  The position is not specified, thus it is not
         specified in which order events are fired.
@@ -175,7 +158,7 @@ public:
         @return
                 the new count of elements in the container
     */
-    sal_Int32 SAL_CALL addInterface( const css::uno::Reference< css::uno::XInterface > & rxIFace );
+    sal_Int32 addInterface( const css::uno::Reference< css::uno::XInterface > & rxIFace );
     /** Removes an element from the container.  It uses interface equality to remove the interface.
 
         @param rxIFace
@@ -183,16 +166,16 @@ public:
         @return
                 the new count of elements in the container
     */
-    sal_Int32 SAL_CALL removeInterface( const css::uno::Reference< css::uno::XInterface > & rxIFace );
+    sal_Int32 removeInterface( const css::uno::Reference< css::uno::XInterface > & rxIFace );
     /**
       Call disposing on all object in the container that
-      support XEventListener. Than clear the container.
+      support XEventListener. Then clear the container.
      */
-    void SAL_CALL disposeAndClear( const css::lang::EventObject & rEvt );
+    void disposeAndClear( const css::lang::EventObject & rEvt );
     /**
       Clears the container without calling disposing().
      */
-    void SAL_CALL clear();
+    void clear();
 
     /** Executes a functor for each contained listener of specified type, e.g.
         <code>forEach<awt::XPaintListener>(...</code>.
@@ -245,13 +228,11 @@ friend class OInterfaceIteratorHelper2;
     /** TRUE -> aData.pAsVector is of type Sequence< XInterfaceSequence >. */
     bool                    bIsList;
 
-    OInterfaceContainerHelper2( const OInterfaceContainerHelper2 & )
-        SAL_DELETED_FUNCTION;
-    OInterfaceContainerHelper2 & operator = ( const OInterfaceContainerHelper2 & )
-        SAL_DELETED_FUNCTION;
+    OInterfaceContainerHelper2( const OInterfaceContainerHelper2 & ) = delete;
+    OInterfaceContainerHelper2 & operator = ( const OInterfaceContainerHelper2 & ) = delete;
 
     /*
-      Duplicate content of the conaitner and release the old one without destroying.
+      Duplicate content of the container and release the old one without destroying.
       The mutex must be locked and the memberbInUse must be true.
      */
     void copyAndResetInUse();
@@ -262,8 +243,8 @@ private:
     {
     private:
         typedef void ( SAL_CALL ListenerT::*NotificationMethod )( const EventT& );
-        NotificationMethod  m_pMethod;
-        const EventT&       m_rEvent;
+        NotificationMethod const m_pMethod;
+        const EventT&            m_rEvent;
     public:
         NotifySingleListener( NotificationMethod method, const EventT& event ) : m_pMethod( method ), m_rEvent( event ) { }
 

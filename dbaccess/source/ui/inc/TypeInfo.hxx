@@ -81,11 +81,9 @@ const sal_uInt16 TYPE_BIT       = 31;
 
         sal_Int16       nSearchType;    // if it is possible to search for type
 
-        bool        bCurrency       : 1,    // currency
+        bool            bCurrency       : 1,    // currency
                         bAutoIncrement  : 1,    // if automatic incrementing field
-                        bNullable       : 1,    // if field can be NULL
-                        bCaseSensitive  : 1,    // if type is case sensitive
-                        bUnsigned       : 1;    // if type is unsigned
+                        bNullable       : 1;    // if field can be NULL
 
         OTypeInfo()
                 :nPrecision(0)
@@ -97,15 +95,13 @@ const sal_uInt16 TYPE_BIT       = 31;
                 ,bCurrency(false)
                 ,bAutoIncrement(false)
                 ,bNullable(true)
-                ,bCaseSensitive(false)
-                ,bUnsigned(false)
         {}
         const OUString& getDBName() const { return aTypeName; }
 
     };
 
     typedef std::shared_ptr<OTypeInfo>          TOTypeInfoSP;
-    typedef ::std::multimap<sal_Int32,TOTypeInfoSP> OTypeInfoMap;
+    typedef std::multimap<sal_Int32,TOTypeInfoSP> OTypeInfoMap;
     /** return the most suitable typeinfo for a requested type
         @param  _rTypeInfo      contains a map of type to typeinfo
         @param  _nType          the requested type
@@ -114,7 +110,7 @@ const sal_uInt16 TYPE_BIT       = 31;
         @param  _nPrecision     the precision
         @param  _nScale         the scale
         @param  _bAutoIncrement if it is a auto increment
-        @param  _brForceToType  true when type was found which has some differenes
+        @param  _brForceToType  true when type was found which has some differences
     */
     TOTypeInfoSP getTypeInfoFromType(const OTypeInfoMap& _rTypeInfo,
                                sal_Int32 _nType,

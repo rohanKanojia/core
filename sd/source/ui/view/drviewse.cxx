@@ -17,22 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <config_features.h>
+
 #include <com/sun/star/presentation/XPresentation2.hpp>
 #include <com/sun/star/form/FormButtonType.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/i18n/TransliterationModules.hpp>
-#include <com/sun/star/i18n/TransliterationModulesExtra.hpp>
 #include <i18nutil/unicode.hxx>
+#include <i18nutil/transliteration.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/uno/Any.hxx>
 
-#include <comphelper/processfactory.hxx>
-
-#include "undo/undomanager.hxx"
+#include <comphelper/lok.hxx>
+#include <undo/undomanager.hxx>
 #include <vcl/waitobj.hxx>
 #include <svl/aeitem.hxx>
 #include <editeng/editstat.hxx>
-#include <vcl/msgbox.hxx>
+#include <editeng/outlobj.hxx>
+#include <vcl/weld.hxx>
 #include <svl/urlbmk.hxx>
 #include <svx/svdpagv.hxx>
 #include <svx/fmshell.hxx>
@@ -56,46 +57,47 @@
 #include <tools/urlobj.hxx>
 #include <svl/slstitm.hxx>
 #include <sfx2/ipclient.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <avmedia/mediawindow.hxx>
 #include <svl/urihelper.hxx>
 #include <sfx2/docfile.hxx>
+#include <sfx2/notebookbar/SfxNotebookBar.hxx>
 
-#include "DrawViewShell.hxx"
-#include "slideshow.hxx"
-#include "ViewShellImplementation.hxx"
-#include "ViewShellHint.hxx"
-#include "framework/FrameworkHelper.hxx"
-#include "app.hrc"
-#include "glob.hrc"
-#include "strings.hrc"
-#include "res_bmp.hrc"
-#include "drawdoc.hxx"
-#include "fusel.hxx"
-#include "futext.hxx"
-#include "fuconrec.hxx"
-#include "fuconcs.hxx"
-#include "fuconuno.hxx"
-#include "fuconbez.hxx"
-#include "fuediglu.hxx"
-#include "fuconarc.hxx"
-#include "fucon3d.hxx"
-#include "sdresid.hxx"
-#include "Outliner.hxx"
-#include "PresentationViewShell.hxx"
-#include "sdpage.hxx"
-#include "FrameView.hxx"
-#include "zoomlist.hxx"
-#include "drawview.hxx"
-#include "DrawDocShell.hxx"
-#include "sdattr.hxx"
-#include "ViewShellBase.hxx"
-#include "ToolBarManager.hxx"
-#include "anminfo.hxx"
-#include "optsitem.hxx"
-#include "Window.hxx"
-#include "fuformatpaintbrush.hxx"
-#include "fuzoom.hxx"
+#include <DrawViewShell.hxx>
+#include <slideshow.hxx>
+#include <ViewShellImplementation.hxx>
+#include <ViewShellHint.hxx>
+#include <framework/FrameworkHelper.hxx>
+#include <app.hrc>
+#include <strings.hrc>
+
+#include <drawdoc.hxx>
+#include <fusel.hxx>
+#include <futext.hxx>
+#include <fuconrec.hxx>
+#include <fuconcs.hxx>
+#include <fuconuno.hxx>
+#include <fuconbez.hxx>
+#include <fuediglu.hxx>
+#include <fuconarc.hxx>
+#include <fucon3d.hxx>
+#include <sdresid.hxx>
+#include <unokywds.hxx>
+#include <Outliner.hxx>
+#include <PresentationViewShell.hxx>
+#include <sdpage.hxx>
+#include <FrameView.hxx>
+#include <zoomlist.hxx>
+#include <drawview.hxx>
+#include <DrawDocShell.hxx>
+#include <sdattr.hxx>
+#include <ViewShellBase.hxx>
+#include <ToolBarManager.hxx>
+#include <anminfo.hxx>
+#include <optsitem.hxx>
+#include <Window.hxx>
+#include <fuformatpaintbrush.hxx>
+#include <fuzoom.hxx>
+#include <sdmod.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -106,7 +108,7 @@ namespace sd {
 
 // Permanent Functions
 
-void ImpAddPrintableCharactersToTextEdit(SfxRequest& rReq, ::sd::View* pView)
+static void ImpAddPrintableCharactersToTextEdit(SfxRequest const & rReq, ::sd::View* pView)
 {
     // evtl. feed characters to activated textedit
     const SfxItemSet* pSet = rReq.GetArgs();
@@ -126,7 +128,7 @@ void ImpAddPrintableCharactersToTextEdit(SfxRequest& rReq, ::sd::View* pView)
             {
                 for(sal_Int32 a(0); a < aInputString.getLength(); a++)
                 {
-                    sal_Char aChar = (sal_Char)aInputString[a];
+                    sal_Char aChar = static_cast<sal_Char>(aInputString[a]);
                     vcl::KeyCode aKeyCode;
                     KeyEvent aKeyEvent(aChar, aKeyCode);
 
@@ -226,6 +228,9 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
         rBind.Update(nOldSId);
     }
 
+    // for LibreOfficeKit - choosing a shape should construct it directly
+    bool bCreateDirectly = false;
+
     switch ( nSId )
     {
         case SID_TEXTEDIT:  // BASIC ???
@@ -234,7 +239,7 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
         case SID_TEXT_FITTOSIZE:
         case SID_TEXT_FITTOSIZE_VERTICAL:
         {
-            SetCurrentFunction( FuText::Create(this, GetActiveWindow(), mpDrawView, GetDoc(), rReq) );
+            SetCurrentFunction( FuText::Create(this, GetActiveWindow(), mpDrawView.get(), GetDoc(), rReq) );
             GetCurrentFunction()->DoExecute(rReq);
 
             SfxBindings& rBindings = GetViewFrame()->GetBindings();
@@ -253,7 +258,7 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
 
         case SID_FM_CREATE_CONTROL:
         {
-            SetCurrentFunction( FuConstructUnoControl::Create( this, GetActiveWindow(), mpDrawView, GetDoc(), rReq, bPermanent ) );
+            SetCurrentFunction( FuConstructUnoControl::Create( this, GetActiveWindow(), mpDrawView.get(), GetDoc(), rReq, bPermanent ) );
             rReq.Done();
         }
         break;
@@ -266,26 +271,26 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
             if(pDescriptorItem)
             {
                 // get the form view
-                FmFormView* pFormView = dynamic_cast<FmFormView*>( mpDrawView );
+                FmFormView* pFormView = dynamic_cast<FmFormView*>( mpDrawView.get() );
                 SdrPageView* pPageView = pFormView ? pFormView->GetSdrPageView() : nullptr;
 
                 if(pPageView)
                 {
                     svx::ODataAccessDescriptor aDescriptor(pDescriptorItem->GetValue());
-                    SdrObject* pNewDBField = pFormView->CreateFieldControl(aDescriptor);
+                    SdrObjectUniquePtr pNewDBField = pFormView->CreateFieldControl(aDescriptor);
 
                     if(pNewDBField)
                     {
-                        Rectangle aVisArea = GetActiveWindow()->PixelToLogic(Rectangle(Point(0,0), GetActiveWindow()->GetOutputSizePixel()));
+                        ::tools::Rectangle aVisArea = GetActiveWindow()->PixelToLogic(::tools::Rectangle(Point(0,0), GetActiveWindow()->GetOutputSizePixel()));
                         Point aObjPos(aVisArea.Center());
                         Size aObjSize(pNewDBField->GetLogicRect().GetSize());
-                        aObjPos.X() -= aObjSize.Width() / 2;
-                        aObjPos.Y() -= aObjSize.Height() / 2;
-                        Rectangle aNewObjectRectangle(aObjPos, aObjSize);
+                        aObjPos.AdjustX( -(aObjSize.Width() / 2) );
+                        aObjPos.AdjustY( -(aObjSize.Height() / 2) );
+                        ::tools::Rectangle aNewObjectRectangle(aObjPos, aObjSize);
 
                         pNewDBField->SetLogicRect(aNewObjectRectangle);
 
-                        GetView()->InsertObjectAtView(pNewDBField, *pPageView);
+                        GetView()->InsertObjectAtView(pNewDBField.release(), *pPageView);
                     }
                 }
             }
@@ -305,16 +310,13 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
         case SID_OBJECT_CROOK_STRETCH:
         case SID_CONVERT_TO_3D_LATHE:
         {
-            short nSlotId = rReq.GetSlot();
+            sal_uInt16 nSlotId = rReq.GetSlot();
 
-            if( nSlotId == SID_OBJECT_ROTATE )
+            // toggle function
+            if( nOldSId == nSlotId )
             {
-                // toggle rotation
-                if( nOldSId == nSlotId )
-                {
-                    nSlotId = SID_OBJECT_SELECT;
-                    rReq.SetSlot( nSlotId );
-                }
+                nSlotId = SID_OBJECT_SELECT;
+                rReq.SetSlot( nSlotId );
             }
 
             if (nSlotId == SID_OBJECT_CROOK_ROTATE ||
@@ -326,16 +328,22 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
                 {
                     if ( mpDrawView->IsPresObjSelected() )
                     {
-                        ::sd::Window* pWindow = GetActiveWindow();
-                        ScopedVclPtr<InfoBox>::Create(pWindow, SD_RESSTR(STR_ACTION_NOTPOSSIBLE) )->Execute();
+                        std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                                      VclMessageType::Info, VclButtonsType::Ok,
+                                                                      SdResId(STR_ACTION_NOTPOSSIBLE)));
+                        xInfoBox->run();
                     }
-                    else if ( ScopedVclPtr<QueryBox>::Create(GetActiveWindow(), WB_YES_NO,
-                                      SD_RESSTR(STR_ASK_FOR_CONVERT_TO_BEZIER)
-                                      )->Execute() == RET_YES )
+                    else
                     {
-                        // implicit transformation into bezier
-                        WaitObject aWait( GetActiveWindow() );
-                        mpDrawView->ConvertMarkedToPathObj(false);
+                        std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                                       VclMessageType::Question, VclButtonsType::YesNo,
+                                                                       SdResId(STR_ASK_FOR_CONVERT_TO_BEZIER)));
+                        if (xQueryBox->run() == RET_YES )
+                        {
+                            // implicit transformation into bezier
+                            WaitObject aWait( GetActiveWindow() );
+                            mpDrawView->ConvertMarkedToPathObj(false);
+                        }
                     }
                 }
             }
@@ -363,21 +371,27 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
                 {
                     if ( mpDrawView->IsPresObjSelected() )
                     {
-                        ::sd::Window* pWindow = GetActiveWindow();
-                        ScopedVclPtr<InfoBox>::Create(pWindow, SD_RESSTR(STR_ACTION_NOTPOSSIBLE) )->Execute();
+                        std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                                      VclMessageType::Info, VclButtonsType::Ok,
+                                                                      SdResId(STR_ACTION_NOTPOSSIBLE)));
+                        xInfoBox->run();
                     }
-                    else if ( ScopedVclPtr<QueryBox>::Create(GetActiveWindow(), WB_YES_NO,
-                                      SD_RESSTR(STR_ASK_FOR_CONVERT_TO_BEZIER)
-                                      )->Execute() == RET_YES )
+                    else
                     {
-                        // implicit transformation into bezier
-                        WaitObject aWait( GetActiveWindow() );
-                        mpDrawView->ConvertMarkedToPathObj(false);
+                        std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                                       VclMessageType::Question, VclButtonsType::YesNo,
+                                                                       SdResId(STR_ASK_FOR_CONVERT_TO_BEZIER)));
+                        if (xQueryBox->run() == RET_YES)
+                        {
+                            // implicit transformation into bezier
+                            WaitObject aWait( GetActiveWindow() );
+                            mpDrawView->ConvertMarkedToPathObj(false);
+                        }
                     }
                 }
             }
 
-            SetCurrentFunction( FuSelection::Create(this, GetActiveWindow(), mpDrawView, GetDoc(), rReq) );
+            SetCurrentFunction( FuSelection::Create(this, GetActiveWindow(), mpDrawView.get(), GetDoc(), rReq) );
             rReq.Done();
             Invalidate( SID_OBJECT_SELECT );
         }
@@ -437,7 +451,7 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
         case SID_CONNECTOR_LINES_CIRCLE_END:
         case SID_CONNECTOR_LINES_CIRCLES:
         {
-            SetCurrentFunction( FuConstructRectangle::Create( this, GetActiveWindow(), mpDrawView, GetDoc(), rReq, bPermanent ) );
+            SetCurrentFunction( FuConstructRectangle::Create( this, GetActiveWindow(), mpDrawView.get(), GetDoc(), rReq, bPermanent ) );
             rReq.Done();
         }
         break;
@@ -450,7 +464,7 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
         case SID_DRAW_BEZIER_FILL:          // BASIC
         case SID_DRAW_BEZIER_NOFILL:        // BASIC
         {
-            SetCurrentFunction( FuConstructBezierPolygon::Create(this, GetActiveWindow(), mpDrawView, GetDoc(), rReq, bPermanent) );
+            SetCurrentFunction( FuConstructBezierPolygon::Create(this, GetActiveWindow(), mpDrawView.get(), GetDoc(), rReq, bPermanent) );
             rReq.Done();
         }
         break;
@@ -459,7 +473,7 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
         {
             if (nOldSId != SID_GLUE_EDITMODE)
             {
-                SetCurrentFunction( FuEditGluePoints::Create( this, GetActiveWindow(), mpDrawView, GetDoc(), rReq, bPermanent ) );
+                SetCurrentFunction( FuEditGluePoints::Create( this, GetActiveWindow(), mpDrawView.get(), GetDoc(), rReq, bPermanent ) );
             }
             else
             {
@@ -481,7 +495,7 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
         case SID_DRAW_CIRCLECUT:
         case SID_DRAW_CIRCLECUT_NOFILL:
         {
-            SetCurrentFunction( FuConstructArc::Create( this, GetActiveWindow(), mpDrawView, GetDoc(), rReq, bPermanent) );
+            SetCurrentFunction( FuConstructArc::Create( this, GetActiveWindow(), mpDrawView.get(), GetDoc(), rReq, bPermanent) );
             rReq.Done();
         }
         break;
@@ -495,7 +509,7 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
         case SID_3D_CONE:
         case SID_3D_PYRAMID:
         {
-            SetCurrentFunction( FuConstruct3dObject::Create(this, GetActiveWindow(), mpDrawView, GetDoc(), rReq, bPermanent ) );
+            SetCurrentFunction( FuConstruct3dObject::Create(this, GetActiveWindow(), mpDrawView.get(), GetDoc(), rReq, bPermanent ) );
             rReq.Done();
         }
         break;
@@ -508,8 +522,10 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
         case SID_DRAWTBX_CS_STAR :
         case SID_DRAW_CS_ID :
         {
-            SetCurrentFunction( FuConstructCustomShape::Create( this, GetActiveWindow(), mpDrawView, GetDoc(), rReq, bPermanent ) );
+            SetCurrentFunction( FuConstructCustomShape::Create( this, GetActiveWindow(), mpDrawView.get(), GetDoc(), rReq, bPermanent ) );
             rReq.Done();
+
+            bCreateDirectly = comphelper::LibreOfficeKit::isActive();
 
             if ( nSId != SID_DRAW_CS_ID )
             {
@@ -522,7 +538,7 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
 
         case SID_FORMATPAINTBRUSH:
         {
-            SetCurrentFunction( FuFormatPaintBrush::Create( this, GetActiveWindow(), mpDrawView, GetDoc(), rReq ) );
+            SetCurrentFunction( FuFormatPaintBrush::Create( this, GetActiveWindow(), mpDrawView.get(), GetDoc(), rReq ) );
             rReq.Done();
             SfxBindings& rBind = GetViewFrame()->GetBindings();
             rBind.Invalidate( nSId );
@@ -533,8 +549,15 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
         case SID_ZOOM_MODE:
         case SID_ZOOM_PANNING:
         {
-            mbZoomOnPage = false;
-            SetCurrentFunction( FuZoom::Create(this, GetActiveWindow(), mpDrawView, GetDoc(), rReq ) );
+            if (nOldSId != nSId)
+            {
+                mbZoomOnPage = false;
+                SetCurrentFunction( FuZoom::Create(this, GetActiveWindow(), mpDrawView.get(), GetDoc(), rReq ) );
+            }
+            else
+            {
+                GetViewFrame()->GetDispatcher()->Execute(SID_OBJECT_SELECT, SfxCallMode::ASYNCHRON);
+            }
             rReq.Done();
         }
         break;
@@ -559,8 +582,6 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
     {
         GetCurrentFunction()->Activate();
         SetOldFunction( GetCurrentFunction() );
-
-        SetHelpId( GetCurrentFunction()->GetSlotID() );
     }
 
     // invalidate shell, is faster than every individually (says MI)
@@ -583,7 +604,7 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
     }
 
     // with qualifier construct directly
-    if(HasCurrentFunction() && (rReq.GetModifier() & KEY_MOD1))
+    if(HasCurrentFunction() && ((rReq.GetModifier() & KEY_MOD1) || bCreateDirectly))
     {
         // get SdOptions
         SdOptions* pOptions = SD_MOD()->GetSdOptions(GetDoc()->GetDocumentType());
@@ -591,22 +612,29 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
         sal_uInt32 nDefaultObjectSizeHeight(pOptions->GetDefaultObjectSizeHeight());
 
         // calc position and size
-        Rectangle aVisArea = GetActiveWindow()->PixelToLogic(Rectangle(Point(0,0), GetActiveWindow()->GetOutputSizePixel()));
+        ::tools::Rectangle aVisArea = GetActiveWindow()->PixelToLogic(::tools::Rectangle(Point(0,0), GetActiveWindow()->GetOutputSizePixel()));
+        if (comphelper::LibreOfficeKit::isActive())
+        {
+            // aVisArea is nonsensical in the LOK case, use the slide size
+            aVisArea = ::tools::Rectangle(Point(), getCurrentPage()->GetSize());
+        }
+
         Point aPagePos = aVisArea.Center();
-        aPagePos.X() -= nDefaultObjectSizeWidth / 2;
-        aPagePos.Y() -= nDefaultObjectSizeHeight / 2;
-        Rectangle aNewObjectRectangle(aPagePos, Size(nDefaultObjectSizeWidth, nDefaultObjectSizeHeight));
+        aPagePos.AdjustX( -sal_Int32(nDefaultObjectSizeWidth / 2) );
+        aPagePos.AdjustY( -sal_Int32(nDefaultObjectSizeHeight / 2) );
+        ::tools::Rectangle aNewObjectRectangle(aPagePos, Size(nDefaultObjectSizeWidth, nDefaultObjectSizeHeight));
         SdrPageView* pPageView = mpDrawView->GetSdrPageView();
 
         if(pPageView)
         {
             // create the default object
-            SdrObject* pObj = GetCurrentFunction()->CreateDefaultObject(nSId, aNewObjectRectangle);
+            SdrObjectUniquePtr pObj = GetCurrentFunction()->CreateDefaultObject(nSId, aNewObjectRectangle);
 
             if(pObj)
             {
+                auto pObjTmp = pObj.get();
                 // insert into page
-                GetView()->InsertObjectAtView(pObj, *pPageView);
+                GetView()->InsertObjectAtView(pObj.release(), *pPageView);
 
                 // Now that pFuActual has done what it was created for we
                 // can switch on the edit mode for callout objects.
@@ -621,7 +649,7 @@ void DrawViewShell::FuPermanent(SfxRequest& rReq)
                             ExecuteList(SID_TEXTEDIT, SfxCallMode::SYNCHRON |
                                 SfxCallMode::RECORD, { &aItem });
                         // Put text object into edit mode.
-                        GetView()->SdrBeginTextEdit(static_cast<SdrTextObj*>(pObj), pPageView);
+                        GetView()->SdrBeginTextEdit(static_cast<SdrTextObj*>(pObjTmp), pPageView);
                         break;
                     }
                 }
@@ -647,7 +675,7 @@ void DrawViewShell::FuDeleteSelectedObjects()
         for (size_t i=0; i < rMarkList.GetMarkCount(); ++i)
         {
             SdrObject* pObj = rMarkList.GetMark(i)->GetMarkedSdrObj();
-            SdPage* pPage = static_cast<SdPage*>(pObj->GetPage());
+            SdPage* pPage = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject());
             PresObjKind eKind = pPage->GetPresObjKind(pObj);
             if (eKind == PRESOBJ_FOOTER || eKind == PRESOBJ_HEADER ||
                 eKind == PRESOBJ_DATETIME || eKind == PRESOBJ_SLIDENUMBER)
@@ -660,7 +688,7 @@ void DrawViewShell::FuDeleteSelectedObjects()
         {
             //Unmark object
             mpDrawView->MarkObj(pObj, mpDrawView->GetSdrPageView(), true);
-            SdPage* pPage = static_cast<SdPage*>(pObj->GetPage());
+            SdPage* pPage = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject());
             //remove placeholder from master page
             pPage->DestroyDefaultPresObj(pPage->GetPresObjKind(pObj));
         }
@@ -671,8 +699,10 @@ void DrawViewShell::FuDeleteSelectedObjects()
     // placeholders which cannot be deleted selected
     if (mpDrawView->IsPresObjSelected(false, true, false, true))
     {
-        ::sd::Window* pWindow = GetActiveWindow();
-        ScopedVclPtr<InfoBox>::Create(pWindow, SD_RESSTR(STR_ACTION_NOTPOSSIBLE) )->Execute();
+        std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                      VclMessageType::Info, VclButtonsType::Ok,
+                                                      SdResId(STR_ACTION_NOTPOSSIBLE)));
+        xInfoBox->run();
         bConsumed = true;
     }
 
@@ -694,7 +724,7 @@ void DrawViewShell::FuDeleteSelectedObjects()
 void DrawViewShell::FuSupport(SfxRequest& rReq)
 {
     if( rReq.GetSlot() == SID_STYLE_FAMILY && rReq.GetArgs())
-        GetDocSh()->SetStyleFamily(static_cast<const SfxUInt16Item&>(rReq.GetArgs()->Get( SID_STYLE_FAMILY )).GetValue());
+        GetDocSh()->SetStyleFamily(static_cast<SfxStyleFamily>(rReq.GetArgs()->Get( SID_STYLE_FAMILY ).GetValue()));
 
     // We do not execute a thing during a native slide show
     if(SlideShow::IsRunning(GetViewShellBase()) &&
@@ -722,14 +752,14 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
         case SID_PRESENTATION_CURRENT_SLIDE:
         case SID_REHEARSE_TIMINGS:
         {
-            ShowSlideShow(rReq);
+            slideshowhelp::ShowSlideShow(rReq, *GetDoc());
             rReq.Ignore ();
         }
         break;
 
         case SID_PRESENTATION_END:
         {
-            StopSlideShow(true);
+            StopSlideShow();
 
             rReq.Ignore ();
         }
@@ -761,12 +791,12 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
                 SdrPathObj* pPathObj = static_cast<SdrPathObj*>( rMarkList.GetMark(0)->GetMarkedSdrObj());
                 const bool bUndo = mpDrawView->IsUndoEnabled();
                 if( bUndo )
-                    mpDrawView->BegUndo(SD_RESSTR(STR_UNDO_BEZCLOSE));
+                    mpDrawView->BegUndo(SdResId(STR_UNDO_BEZCLOSE));
 
                 mpDrawView->UnmarkAllPoints();
 
                 if( bUndo )
-                    mpDrawView->AddUndo(new SdrUndoGeoObj(*pPathObj));
+                    mpDrawView->AddUndo(std::make_unique<SdrUndoGeoObj>(*pPathObj));
 
                 pPathObj->ToggleClosed();
 
@@ -781,8 +811,10 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
         {
             if ( mpDrawView->IsPresObjSelected(false, true, false, true) )
             {
-                ::sd::Window* pWindow = GetActiveWindow();
-                ScopedVclPtr<InfoBox>::Create(pWindow, SD_RESSTR(STR_ACTION_NOTPOSSIBLE) )->Execute();
+                std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                              VclMessageType::Info, VclButtonsType::Ok,
+                                                              SdResId(STR_ACTION_NOTPOSSIBLE)));
+                xInfoBox->run();
             }
             else
             {
@@ -803,8 +835,10 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
         {
             if ( mpDrawView->IsPresObjSelected(false, true, false, true) )
             {
-                ::sd::Window* pWindow = GetActiveWindow();
-                ScopedVclPtr<InfoBox>::Create(pWindow, SD_RESSTR(STR_ACTION_NOTPOSSIBLE) )->Execute();
+                std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                              VclMessageType::Info, VclButtonsType::Ok,
+                                                              SdResId(STR_ACTION_NOTPOSSIBLE)));
+                xInfoBox->run();
             }
             else
             {
@@ -894,7 +928,7 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
                 if (aDataHelper.GetTransferable().is())
                 {
                     mpDrawView->InsertData( aDataHelper,
-                                            GetActiveWindow()->PixelToLogic( Rectangle( Point(), GetActiveWindow()->GetOutputSizePixel() ).Center() ),
+                                            GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(), GetActiveWindow()->GetOutputSizePixel() ).Center() ),
                                             nAction, false, SotClipboardFormatId::STRING);
                 }
             }
@@ -921,7 +955,7 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
                 sal_Int8 nAction = DND_ACTION_COPY;
 
                 if( !mpDrawView->InsertData( aDataHelper,
-                                          GetActiveWindow()->PixelToLogic( Rectangle( Point(), GetActiveWindow()->GetOutputSizePixel() ).Center() ),
+                                          GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(), GetActiveWindow()->GetOutputSizePixel() ).Center() ),
                                           nAction, false, nFormat ) )
                 {
                     INetBookmark    aINetBookmark( "", "" );
@@ -933,7 +967,7 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
                         ( aDataHelper.HasFormat( SotClipboardFormatId::UNIFORMRESOURCELOCATOR ) &&
                           aDataHelper.GetINetBookmark( SotClipboardFormatId::UNIFORMRESOURCELOCATOR, aINetBookmark ) ) )
                     {
-                        InsertURLField( aINetBookmark.GetURL(), aINetBookmark.GetDescription(), "", nullptr );
+                        InsertURLField( aINetBookmark.GetURL(), aINetBookmark.GetDescription(), "" );
                     }
                 }
             }
@@ -971,7 +1005,7 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
 
             // AutoLayouts have to be ready.
             GetDoc()->StopWorkStartupDelay();
-            // Fall through to following case statements.
+            [[fallthrough]];
 
         case SID_DRAWINGMODE:
         case SID_SLIDE_SORTER_MODE:
@@ -1000,9 +1034,9 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
                 ViewShellHint(ViewShellHint::HINT_CHANGE_EDIT_MODE_START));
 
             // turn on default layer of MasterPage
-            mpDrawView->SetActiveLayer( SD_RESSTR(STR_LAYER_BCKGRNDOBJ) );
+            mpDrawView->SetActiveLayer(sUNO_LayerName_background_objects);
 
-            ChangeEditMode(EM_MASTERPAGE, mbIsLayerModeActive);
+            ChangeEditMode(EditMode::MasterPage, mbIsLayerModeActive);
 
             if(HasCurrentFunction(SID_BEZIER_EDIT))
                 GetViewFrame()->GetDispatcher()->Execute(SID_OBJECT_SELECT, SfxCallMode::ASYNCHRON);
@@ -1026,7 +1060,7 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
             // crash.  This seems to be some bug in the edit mode switching
             // and page switching methods.
             SwitchPage (0);
-            ChangeEditMode(EM_PAGE, IsLayerModeActive());
+            ChangeEditMode(EditMode::Page, IsLayerModeActive());
             Broadcast (
                 ViewShellHint(ViewShellHint::HINT_CHANGE_EDIT_MODE_END));
 
@@ -1086,27 +1120,27 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
                 Point aPagePos(0, 0); // = pPageView->GetOffset();
                 Size aPageSize = pPageView->GetPage()->GetSize();
 
-                aPagePos.X() += aPageSize.Width()  / 2;
-                aPageSize.Width() = (long) (aPageSize.Width() * 1.03);
+                aPagePos.AdjustX(aPageSize.Width()  / 2 );
+                aPageSize.setWidth( static_cast<long>(aPageSize.Width() * 1.03) );
 
                 if( rReq.GetSlot() == SID_SIZE_PAGE )
                 {
-                    aPagePos.Y() += aPageSize.Height() / 2;
-                    aPageSize.Height() = (long) (aPageSize.Height() * 1.03);
-                    aPagePos.Y() -= aPageSize.Height() / 2;
+                    aPagePos.AdjustY(aPageSize.Height() / 2 );
+                    aPageSize.setHeight( static_cast<long>(aPageSize.Height() * 1.03) );
+                    aPagePos.AdjustY( -(aPageSize.Height() / 2) );
                 }
                 else
                 {
                     Point aPt = GetActiveWindow()->PixelToLogic( Point( 0, GetActiveWindow()->GetSizePixel().Height() / 2 ) );
-                    aPagePos.Y() += aPt.Y();
-                    aPageSize.Height() = 2;
+                    aPagePos.AdjustY(aPt.Y() );
+                    aPageSize.setHeight( 2 );
                 }
 
-                aPagePos.X() -= aPageSize.Width()  / 2;
+                aPagePos.AdjustX( -(aPageSize.Width()  / 2) );
 
-                SetZoomRect( Rectangle( aPagePos, aPageSize ) );
+                SetZoomRect( ::tools::Rectangle( aPagePos, aPageSize ) );
 
-                Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0),
+                ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0),
                                               GetActiveWindow()->GetOutputSizePixel()) );
                 mpZoomList->InsertZoomRect(aVisAreaWin);
             }
@@ -1121,7 +1155,7 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
         {
             mbZoomOnPage = false;
             SetZoom( 100 );
-            Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0),
+            ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0),
                                               GetActiveWindow()->GetOutputSizePixel()) );
             mpZoomList->InsertZoomRect(aVisAreaWin);
             Invalidate( SID_ZOOM_IN );
@@ -1134,8 +1168,8 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
         case SID_ZOOM_IN:  // BASIC
         {
             mbZoomOnPage = false;
-            SetZoom( std::max( (long) ( GetActiveWindow()->GetZoom() / 2 ), (long) GetActiveWindow()->GetMinZoom() ) );
-            Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0),
+            SetZoom( std::max<long>( GetActiveWindow()->GetZoom() / 2, GetActiveWindow()->GetMinZoom() ) );
+            ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0),
                                               GetActiveWindow()->GetOutputSizePixel()) );
             mpZoomList->InsertZoomRect(aVisAreaWin);
             Invalidate( SID_ZOOM_IN );
@@ -1148,8 +1182,8 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
         case SID_ZOOM_OUT:
         {
             mbZoomOnPage = false;
-            SetZoom( std::min( (long) ( GetActiveWindow()->GetZoom() * 2 ), (long) GetActiveWindow()->GetMaxZoom() ) );
-            Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0),
+            SetZoom( std::min<long>( GetActiveWindow()->GetZoom() * 2, GetActiveWindow()->GetMaxZoom() ) );
+            ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0),
                                               GetActiveWindow()->GetOutputSizePixel()) );
             mpZoomList->InsertZoomRect(aVisAreaWin);
             Invalidate( SID_ZOOM_IN );
@@ -1160,7 +1194,7 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
 
         case SID_SIZE_VISAREA:
         {
-            Rectangle aVisArea = mpFrameView->GetVisArea();
+            ::tools::Rectangle aVisArea = mpFrameView->GetVisArea();
             Size aVisAreaSize = aVisArea.GetSize();
 
             if (aVisAreaSize.Height()!=0 && aVisAreaSize.Width()!=0)
@@ -1183,16 +1217,16 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
             if ( mpDrawView->AreObjectsMarked() )
             {
                 maMarkRect = mpDrawView->GetAllMarkedRect();
-                long nW = (long) (maMarkRect.GetWidth()  * 1.03);
-                long nH = (long) (maMarkRect.GetHeight() * 1.03);
+                long nW = static_cast<long>(maMarkRect.GetWidth()  * 1.03);
+                long nH = static_cast<long>(maMarkRect.GetHeight() * 1.03);
                 Point aPos = maMarkRect.Center();
-                aPos.X() -= nW / 2;
-                aPos.Y() -= nH / 2;
+                aPos.AdjustX( -(nW / 2) );
+                aPos.AdjustY( -(nH / 2) );
                 if ( nW && nH )
                 {
-                    SetZoomRect(Rectangle(aPos, Size(nW, nH)));
+                    SetZoomRect(::tools::Rectangle(aPos, Size(nW, nH)));
 
-                    Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0),
+                    ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0),
                                               GetActiveWindow()->GetOutputSizePixel()) );
                     mpZoomList->InsertZoomRect(aVisAreaWin);
                 }
@@ -1213,18 +1247,18 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
 
             if( pPageView )
             {
-                Rectangle aBoundRect( pPageView->GetObjList()->GetAllObjBoundRect() );
+                ::tools::Rectangle aBoundRect( pPageView->GetObjList()->GetAllObjBoundRect() );
 
-                long nW = (long) (aBoundRect.GetWidth() * 1.03);
-                long nH = (long) (aBoundRect.GetHeight() * 1.03);
+                long nW = static_cast<long>(aBoundRect.GetWidth() * 1.03);
+                long nH = static_cast<long>(aBoundRect.GetHeight() * 1.03);
                 Point aPos = aBoundRect.Center();
-                aPos.X() -= nW / 2;
-                aPos.Y() -= nH / 2;
+                aPos.AdjustX( -(nW / 2) );
+                aPos.AdjustY( -(nH / 2) );
                 if ( nW && nH )
                 {
-                    SetZoomRect( Rectangle( aPos, Size( nW, nH ) ) );
+                    SetZoomRect( ::tools::Rectangle( aPos, Size( nW, nH ) ) );
 
-                    Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0),
+                    ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0),
                                               GetActiveWindow()->GetOutputSizePixel()) );
                     mpZoomList->InsertZoomRect(aVisAreaWin);
                 }
@@ -1339,37 +1373,36 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
             OutlinerView* pOLV = GetView()->GetTextEditOutlinerView();
             if( pOLV )
             {
-                using namespace ::com::sun::star::i18n;
-                sal_Int32 nType = 0;
+                TransliterationFlags nType = TransliterationFlags::NONE;
 
                 switch( nSId )
                 {
                     case SID_TRANSLITERATE_SENTENCE_CASE:
-                        nType = TransliterationModulesExtra::SENTENCE_CASE;
+                        nType = TransliterationFlags::SENTENCE_CASE;
                         break;
                     case SID_TRANSLITERATE_TITLE_CASE:
-                        nType = TransliterationModulesExtra::TITLE_CASE;
+                        nType = TransliterationFlags::TITLE_CASE;
                         break;
                     case SID_TRANSLITERATE_TOGGLE_CASE:
-                        nType = TransliterationModulesExtra::TOGGLE_CASE;
+                        nType = TransliterationFlags::TOGGLE_CASE;
                         break;
                     case SID_TRANSLITERATE_UPPER:
-                        nType = TransliterationModules_LOWERCASE_UPPERCASE;
+                        nType = TransliterationFlags::LOWERCASE_UPPERCASE;
                         break;
                     case SID_TRANSLITERATE_LOWER:
-                        nType = TransliterationModules_UPPERCASE_LOWERCASE;
+                        nType = TransliterationFlags::UPPERCASE_LOWERCASE;
                         break;
                     case SID_TRANSLITERATE_HALFWIDTH:
-                        nType = TransliterationModules_FULLWIDTH_HALFWIDTH;
+                        nType = TransliterationFlags::FULLWIDTH_HALFWIDTH;
                         break;
                     case SID_TRANSLITERATE_FULLWIDTH:
-                        nType = TransliterationModules_HALFWIDTH_FULLWIDTH;
+                        nType = TransliterationFlags::HALFWIDTH_FULLWIDTH;
                         break;
                     case SID_TRANSLITERATE_HIRAGANA:
-                        nType = TransliterationModules_KATAKANA_HIRAGANA;
+                        nType = TransliterationFlags::KATAKANA_HIRAGANA;
                         break;
                     case SID_TRANSLITERATE_KATAGANA:
-                        nType = TransliterationModules_HIRAGANA_KATAKANA;
+                        nType = TransliterationFlags::HIRAGANA_KATAKANA;
                         break;
                 }
 
@@ -1384,13 +1417,13 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
         case SID_UNDO :
         {
             // moved implementation to BaseClass
-            ImpSidUndo(true, rReq);
+            ImpSidUndo(rReq);
         }
         break;
         case SID_REDO :
         {
             // moved implementation to BaseClass
-            ImpSidRedo(true, rReq);
+            ImpSidRedo(rReq);
         }
         break;
 
@@ -1399,7 +1432,7 @@ void DrawViewShell::FuSupport(SfxRequest& rReq)
     }
 }
 
-void DrawViewShell::FuSupportRotate(SfxRequest &rReq)
+void DrawViewShell::FuSupportRotate(SfxRequest const &rReq)
 {
     if( rReq.GetSlot() == SID_TRANSLITERATE_ROTATE_CASE )
     {
@@ -1418,14 +1451,14 @@ void DrawViewShell::FuSupportRotate(SfxRequest &rReq)
 }
 
 void DrawViewShell::InsertURLField(const OUString& rURL, const OUString& rText,
-                                   const OUString& rTarget, const Point* pPos)
+                                   const OUString& rTarget)
 {
     OutlinerView* pOLV = mpDrawView->GetTextEditOutlinerView();
 
     if (pOLV)
     {
         ESelection aSel( pOLV->GetSelection() );
-        SvxFieldItem aURLItem( SvxURLField( rURL, rText, SVXURLFORMAT_REPR ), EE_FEATURE_FIELD );
+        SvxFieldItem aURLItem( SvxURLField( rURL, rText, SvxURLFormat::Repr ), EE_FEATURE_FIELD );
         pOLV->InsertField( aURLItem );
         if ( aSel.nStartPos <= aSel.nEndPos )
             aSel.nEndPos = aSel.nStartPos + 1;
@@ -1436,16 +1469,18 @@ void DrawViewShell::InsertURLField(const OUString& rURL, const OUString& rText,
     else
     {
         Outliner* pOutl = GetDoc()->GetInternalOutliner();
-        pOutl->Init( OUTLINERMODE_TEXTOBJECT );
-        sal_uInt16 nOutlMode = pOutl->GetMode();
+        pOutl->Init( OutlinerMode::TextObject );
+        OutlinerMode nOutlMode = pOutl->GetMode();
 
-        SvxURLField aURLField(rURL, rText, SVXURLFORMAT_REPR);
+        SvxURLField aURLField(rURL, rText, SvxURLFormat::Repr);
         aURLField.SetTargetFrame(rTarget);
         SvxFieldItem aURLItem(aURLField, EE_FEATURE_FIELD);
         pOutl->QuickInsertField( aURLItem, ESelection() );
-        OutlinerParaObject* pOutlParaObject = pOutl->CreateParaObject();
+        std::unique_ptr<OutlinerParaObject> pOutlParaObject = pOutl->CreateParaObject();
 
-        SdrRectObj* pRectObj = new SdrRectObj(OBJ_TEXT);
+        SdrRectObj* pRectObj = new SdrRectObj(
+            GetView()->getSdrModelFromSdrView(),
+            OBJ_TEXT);
 
         pOutl->UpdateFields();
         pOutl->SetUpdateMode( true );
@@ -1453,23 +1488,15 @@ void DrawViewShell::InsertURLField(const OUString& rURL, const OUString& rText,
         pOutl->SetUpdateMode( false );
 
         Point aPos;
+        ::tools::Rectangle aRect(aPos, GetActiveWindow()->GetOutputSizePixel() );
+        aPos = aRect.Center();
+        aPos = GetActiveWindow()->PixelToLogic(aPos);
+        aPos.AdjustX( -(aSize.Width() / 2) );
+        aPos.AdjustY( -(aSize.Height() / 2) );
 
-        if (pPos)
-        {
-            aPos = *pPos;
-        }
-        else
-        {
-            Rectangle aRect(aPos, GetActiveWindow()->GetOutputSizePixel() );
-            aPos = aRect.Center();
-            aPos = GetActiveWindow()->PixelToLogic(aPos);
-            aPos.X() -= aSize.Width() / 2;
-            aPos.Y() -= aSize.Height() / 2;
-        }
-
-        Rectangle aLogicRect(aPos, aSize);
+        ::tools::Rectangle aLogicRect(aPos, aSize);
         pRectObj->SetLogicRect(aLogicRect);
-        pRectObj->SetOutlinerParaObject( pOutlParaObject );
+        pRectObj->SetOutlinerParaObject( std::move(pOutlParaObject) );
         mpDrawView->InsertObjectAtView(pRectObj, *mpDrawView->GetSdrPageView());
         pOutl->Init( nOutlMode );
     }
@@ -1481,15 +1508,15 @@ void DrawViewShell::InsertURLButton(const OUString& rURL, const OUString& rText,
     bool bNewObj = true;
 
     const OUString sTargetURL( ::URIHelper::SmartRel2Abs( INetURLObject( GetDocSh()->GetMedium()->GetBaseURL() ), rURL, URIHelper::GetMaybeFileHdl(), true, false,
-                                                                INetURLObject::WAS_ENCODED,
-                                                                INetURLObject::DECODE_UNAMBIGUOUS ) );
+                                                                INetURLObject::EncodeMechanism::WasEncoded,
+                                                                INetURLObject::DecodeMechanism::Unambiguous ) );
     if (mpDrawView->GetMarkedObjectList().GetMarkCount() > 0)
     {
         SdrObject* pMarkedObj = mpDrawView->GetMarkedObjectList().GetMark(0)->GetMarkedSdrObj();
         if( pMarkedObj ) try
         {
             // change first marked object
-            if( (FmFormInventor == pMarkedObj->GetObjInventor() && pMarkedObj->GetObjIdentifier() == OBJ_FM_BUTTON) )
+            if( SdrInventor::FmForm == pMarkedObj->GetObjInventor() && pMarkedObj->GetObjIdentifier() == OBJ_FM_BUTTON )
             {
                 bNewObj = false;
 
@@ -1505,10 +1532,12 @@ void DrawViewShell::InsertURLButton(const OUString& rURL, const OUString& rText,
                     xPropSet->setPropertyValue("TargetFrame" , Any( rTarget ) );
 
                 xPropSet->setPropertyValue( "ButtonType" , Any( form::FormButtonType_URL ) );
+#if HAVE_FEATURE_AVMEDIA
                 if ( ::avmedia::MediaWindow::isMediaURL( rURL, ""/*TODO?*/ ) )
                 {
-                    xPropSet->setPropertyValue( "DispatchURLInternal" , Any( sal_True ) );
+                    xPropSet->setPropertyValue( "DispatchURLInternal" , Any( true ) );
                 }
+#endif
             }
             else
             {
@@ -1527,21 +1556,27 @@ void DrawViewShell::InsertURLButton(const OUString& rURL, const OUString& rText,
 
     if (bNewObj) try
     {
-        SdrUnoObj* pUnoCtrl = static_cast< SdrUnoObj* >( SdrObjFactory::MakeNewObject(FmFormInventor, OBJ_FM_BUTTON,
-                                mpDrawView->GetSdrPageView()->GetPage(), GetDoc()) );
+        SdrUnoObj* pUnoCtrl = static_cast< SdrUnoObj* >(
+            SdrObjFactory::MakeNewObject(
+                GetView()->getSdrModelFromSdrView(),
+                SdrInventor::FmForm,
+                OBJ_FM_BUTTON)); //,
+                //mpDrawView->GetSdrPageView()->GetPage()));
 
         Reference< awt::XControlModel > xControlModel( pUnoCtrl->GetUnoControlModel(), uno::UNO_QUERY_THROW );
         Reference< beans::XPropertySet > xPropSet( xControlModel, uno::UNO_QUERY_THROW );
 
-        xPropSet->setPropertyValue( "Label" , Any( OUString( rText ) ) );
+        xPropSet->setPropertyValue( "Label" , Any( rText ) );
         xPropSet->setPropertyValue( "TargetURL" , Any( sTargetURL ) );
 
         if( !rTarget.isEmpty() )
             xPropSet->setPropertyValue( "TargetFrame" , Any( rTarget ) );
 
         xPropSet->setPropertyValue( "ButtonType" , Any(  form::FormButtonType_URL ) );
+#if HAVE_FEATURE_AVMEDIA
         if ( ::avmedia::MediaWindow::isMediaURL( rURL, ""/*TODO?*/ ) )
-            xPropSet->setPropertyValue( "DispatchURLInternal" , Any( sal_True ) );
+            xPropSet->setPropertyValue( "DispatchURLInternal" , Any( true ) );
+#endif
 
         Point aPos;
 
@@ -1551,14 +1586,14 @@ void DrawViewShell::InsertURLButton(const OUString& rURL, const OUString& rText,
         }
         else
         {
-            aPos = Rectangle(aPos, GetActiveWindow()->GetOutputSizePixel()).Center();
+            aPos = ::tools::Rectangle(aPos, GetActiveWindow()->GetOutputSizePixel()).Center();
             aPos = GetActiveWindow()->PixelToLogic(aPos);
         }
 
         Size aSize(4000, 1000);
-        aPos.X() -= aSize.Width() / 2;
-        aPos.Y() -= aSize.Height() / 2;
-        pUnoCtrl->SetLogicRect(Rectangle(aPos, aSize));
+        aPos.AdjustX( -(aSize.Width() / 2) );
+        aPos.AdjustY( -(aSize.Height() / 2) );
+        pUnoCtrl->SetLogicRect(::tools::Rectangle(aPos, aSize));
 
         SdrInsertFlags nOptions = SdrInsertFlags::SETDEFLAYER;
 
@@ -1584,11 +1619,12 @@ void DrawViewShell::ShowUIControls (bool bVisible)
 
 namespace slideshowhelp
 {
-    void ShowSlideShow(SfxRequest& rReq, SdDrawDocument &rDoc)
+    void ShowSlideShow(SfxRequest const & rReq, SdDrawDocument &rDoc)
     {
         Reference< XPresentation2 > xPresentation( rDoc.getPresentation() );
         if( xPresentation.is() )
         {
+            sfx2::SfxNotebookBar::LockNotebookBar();
             if (SID_REHEARSE_TIMINGS == rReq.GetSlot())
                 xPresentation->rehearseTimings();
             else if (rDoc.getPresentationSettings().mbCustomShow)
@@ -1618,16 +1654,12 @@ namespace slideshowhelp
 
                 xPresentation->startWithArguments( aArguments );
             }
+            sfx2::SfxNotebookBar::UnlockNotebookBar();
         }
     }
 }
 
-void DrawViewShell::ShowSlideShow(SfxRequest& rReq)
-{
-    slideshowhelp::ShowSlideShow(rReq, *GetDoc());
-}
-
-void DrawViewShell::StopSlideShow (bool /*bCloseFrame*/)
+void DrawViewShell::StopSlideShow()
 {
     Reference< XPresentation2 > xPresentation( GetDoc()->getPresentation() );
     if(xPresentation.is() && xPresentation->isRunning())

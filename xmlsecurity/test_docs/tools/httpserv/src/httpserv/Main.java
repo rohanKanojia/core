@@ -50,7 +50,7 @@ public class Main {
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }        // TODO code application logic here
+    }
 
     static boolean parseOptions(String[] args, Option[] inout_options) {
         if (args.length == 0) {
@@ -130,7 +130,7 @@ class MyHandler implements HttpHandler {
                 throw new IOException("The file " + fileRequest + " does not exist!");
             }
             else if (fileRequest.isDirectory()) {
-                throw new IOException(fileRequest + " is a directory!\n");
+                throw new IOException(fileRequest + " is a directory!");
             }
 
 

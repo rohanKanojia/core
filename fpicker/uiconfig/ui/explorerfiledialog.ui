@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.20.0 -->
+<interface domain="fps">
+  <requires lib="gtk+" version="3.18"/>
   <requires lib="LibreOffice" version="1.0"/>
   <object class="GtkDialog" id="ExplorerFileDialog">
     <property name="can_focus">False</property>
@@ -69,14 +69,17 @@
                     </child>
                     <child>
                       <object class="GtkButton" id="connect_to_server">
-                        <property name="label" translatable="yes">Servers...</property>
-                        <property name="use_action_appearance">False</property>
+                        <property name="label" translatable="yes" context="explorerfiledialog|connect_to_server">Servers...</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
                         <property name="has_tooltip">True</property>
-                        <property name="tooltip_markup" translatable="yes">Connect To Server</property>
-                        <property name="tooltip_text" translatable="yes">Connect To Server</property>
+                        <property name="tooltip_text" translatable="yes" context="explorerfiledialog|connect_to_server|tooltip_text">Connect To Server</property>
+                        <child internal-child="accessible">
+                          <object class="AtkObject" id="connect_to_server-atkobject">
+                            <property name="AtkObject::accessible-name" translatable="yes" context="explorerfiledialog|connect_to_server-atkobject">Connect To Server</property>
+                          </object>
+                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -101,13 +104,17 @@
                     </child>
                     <child>
                       <object class="GtkButton" id="new_folder">
-                        <property name="use_action_appearance">False</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
+                        <property name="focus_on_click">False</property>
                         <property name="receives_default">True</property>
                         <property name="has_tooltip">True</property>
-                        <property name="tooltip_markup" translatable="yes">Create New Folder</property>
-                        <property name="tooltip_text" translatable="yes">Create New Folder</property>
+                        <property name="tooltip_text" translatable="yes" context="explorerfiledialog|new_folder|tooltip_text">Create New Folder</property>
+                        <child internal-child="accessible">
+                          <object class="AtkObject" id="new_folder-atkobject">
+                            <property name="AtkObject::accessible-name" translatable="yes" context="explorerfiledialog|new_folder-atkobject">Create New Folder</property>
+                          </object>
+                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -156,7 +163,6 @@
                         <child>
                           <object class="GtkButton" id="open">
                             <property name="label">gtk-open</property>
-                            <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="can_default">True</property>
@@ -174,7 +180,6 @@
                         <child>
                           <object class="GtkButton" id="cancel">
                             <property name="label">gtk-cancel</property>
-                            <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
@@ -189,7 +194,6 @@
                         <child>
                           <object class="GtkButton" id="help">
                             <property name="label">gtk-help</property>
-                            <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
@@ -204,7 +208,6 @@
                         <child>
                           <object class="GtkButton" id="play">
                             <property name="label">gtk-media-play</property>
-                            <property name="use_action_appearance">False</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
                             <property name="use_stock">True</property>
@@ -241,7 +244,7 @@
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
                                 <property name="halign">end</property>
-                                <property name="label" translatable="yes">File _name:</property>
+                                <property name="label" translatable="yes" context="explorerfiledialog|file_name_label">File _name:</property>
                                 <property name="use_underline">True</property>
                                 <property name="mnemonic_widget">file_name</property>
                               </object>
@@ -266,7 +269,7 @@
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
                                 <property name="halign">end</property>
-                                <property name="label" translatable="yes">File _type:</property>
+                                <property name="label" translatable="yes" context="explorerfiledialog|file_type_label">File _type:</property>
                                 <property name="use_underline">True</property>
                                 <property name="mnemonic_widget">file_type</property>
                               </object>
@@ -328,9 +331,9 @@
                                 <property name="spacing">12</property>
                                 <child>
                                   <object class="GtkCheckButton" id="link">
-                                    <property name="use_action_appearance">False</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">False</property>
+                                    <property name="use_underline">True</property>
                                     <property name="xalign">0</property>
                                     <property name="draw_indicator">True</property>
                                   </object>
@@ -342,9 +345,9 @@
                                 </child>
                                 <child>
                                   <object class="GtkCheckButton" id="cb_preview">
-                                    <property name="use_action_appearance">False</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">False</property>
+                                    <property name="use_underline">True</property>
                                     <property name="xalign">0</property>
                                     <property name="draw_indicator">True</property>
                                   </object>
@@ -362,8 +365,7 @@
                             </child>
                             <child>
                               <object class="GtkCheckButton" id="readonly">
-                                <property name="label" translatable="yes">_Read-only</property>
-                                <property name="use_action_appearance">False</property>
+                                <property name="label" translatable="yes" context="explorerfiledialog|readonly">_Read-only</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
                                 <property name="halign">start</property>
@@ -386,10 +388,10 @@
                                 <property name="column_spacing">12</property>
                                 <child>
                                   <object class="GtkCheckButton" id="password">
-                                    <property name="label" translatable="yes">Save with password</property>
-                                    <property name="use_action_appearance">False</property>
+                                    <property name="label" translatable="yes" context="explorerfiledialog|password">Save with password</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">False</property>
+                                    <property name="use_underline">True</property>
                                     <property name="xalign">0</property>
                                     <property name="draw_indicator">True</property>
                                   </object>
@@ -400,8 +402,7 @@
                                 </child>
                                 <child>
                                   <object class="GtkCheckButton" id="extension">
-                                    <property name="label" translatable="yes">_Automatic file name extension</property>
-                                    <property name="use_action_appearance">False</property>
+                                    <property name="label" translatable="yes" context="explorerfiledialog|extension">_Automatic file name extension</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">False</property>
                                     <property name="use_underline">True</property>
@@ -415,8 +416,7 @@
                                 </child>
                                 <child>
                                   <object class="GtkCheckButton" id="options">
-                                    <property name="label" translatable="yes">Edit _filter settings</property>
-                                    <property name="use_action_appearance">False</property>
+                                    <property name="label" translatable="yes" context="explorerfiledialog|options">Edit _filter settings</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">False</property>
                                     <property name="use_underline">True</property>
@@ -425,23 +425,39 @@
                                   </object>
                                   <packing>
                                     <property name="left_attach">0</property>
-                                    <property name="top_attach">1</property>
+                                    <property name="top_attach">2</property>
                                   </packing>
                                 </child>
                                 <child>
                                   <object class="GtkCheckButton" id="selection">
                                     <property name="label">
 </property>
-                                    <property name="use_action_appearance">False</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">False</property>
+                                    <property name="use_underline">True</property>
                                     <property name="xalign">0</property>
                                     <property name="draw_indicator">True</property>
                                   </object>
                                   <packing>
                                     <property name="left_attach">1</property>
+                                    <property name="top_attach">2</property>
+                                  </packing>
+                                </child>
+                                <child>
+                                  <object class="GtkCheckButton" id="gpgencrypt">
+                                    <property name="label" translatable="yes" context="explorerfiledialog|gpgencrypt">Encrypt with GPG key</property>
+                                    <property name="can_focus">True</property>
+                                    <property name="receives_default">False</property>
+                                    <property name="use_underline">True</property>
+                                    <property name="draw_indicator">True</property>
+                                  </object>
+                                  <packing>
+                                    <property name="left_attach">0</property>
                                     <property name="top_attach">1</property>
                                   </packing>
+                                </child>
+                                <child>
+                                  <placeholder/>
                                 </child>
                               </object>
                               <packing>

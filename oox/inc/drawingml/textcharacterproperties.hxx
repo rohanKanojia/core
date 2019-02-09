@@ -24,7 +24,8 @@
 #include <oox/helper/propertymap.hxx>
 #include <oox/drawingml/color.hxx>
 #include <drawingml/textfont.hxx>
-#include <oox/drawingml/fillproperties.hxx>
+
+#include <drawingml/fillproperties.hxx>
 
 namespace oox { class PropertySet; }
 
@@ -46,6 +47,8 @@ struct TextCharacterProperties
     Color               maHighlightColor;
     OptValue< OUString > moLang;
     OptValue< sal_Int32 > moHeight;
+    /// If a font scale has to be applied manually to moHeight.
+    OptValue< double > moFontScale;
     OptValue< sal_Int32 > moSpacing;
     OptValue< sal_Int32 > moUnderline;
     OptValue< sal_Int32 > moBaseline;

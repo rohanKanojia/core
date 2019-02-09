@@ -22,6 +22,7 @@
 
 #include <undobj.hxx>
 #include <svx/svdundo.hxx>
+#include <memory>
 
 struct SwUndoGroupObjImpl;
 class SdrMark;
@@ -30,17 +31,18 @@ class SdrObject;
 class SdrObjGroup;
 class SdrUndoAction;
 class SwDrawFrameFormat;
+class SwDoc;
 
 // Undo for Draw Objects
 class SwSdrUndo : public SwUndo
 {
-    SdrUndoAction* pSdrUndo;
-    SdrMarkList* pMarkList; // MarkList for all selected SdrObjects
+    std::unique_ptr<SdrUndoAction> pSdrUndo;
+    std::unique_ptr<SdrMarkList> pMarkList; // MarkList for all selected SdrObjects
 
 public:
-    SwSdrUndo( SdrUndoAction* , const SdrMarkList* pMarkList );
+    SwSdrUndo( std::unique_ptr<SdrUndoAction> , const SdrMarkList* pMarkList, const SwDoc* pDoc );
 
-    virtual ~SwSdrUndo();
+    virtual ~SwSdrUndo() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
@@ -50,14 +52,14 @@ public:
 
 class SwUndoDrawGroup : public SwUndo
 {
-    SwUndoGroupObjImpl* pObjArr;
-    sal_uInt16 nSize;
+    std::unique_ptr<SwUndoGroupObjImpl[]> pObjArr;
+    sal_uInt16 const nSize;
     bool bDelFormat;
 
 public:
-    SwUndoDrawGroup( sal_uInt16 nCnt );
+    SwUndoDrawGroup( sal_uInt16 nCnt, const SwDoc* pDoc );
 
-    virtual ~SwUndoDrawGroup();
+    virtual ~SwUndoDrawGroup() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
@@ -79,14 +81,14 @@ public:
 //   contact object.
 class SwUndoDrawUnGroup : public SwUndo
 {
-    SwUndoGroupObjImpl* pObjArr;
+    std::unique_ptr<SwUndoGroupObjImpl[]> pObjArr;
     sal_uInt16 nSize;
     bool bDelFormat;
 
 public:
-    SwUndoDrawUnGroup( SdrObjGroup* );
+    SwUndoDrawUnGroup( SdrObjGroup*, const SwDoc* pDoc );
 
-    virtual ~SwUndoDrawUnGroup();
+    virtual ~SwUndoDrawUnGroup() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
@@ -100,9 +102,9 @@ private:
     std::vector< std::pair< SwDrawFrameFormat*, SdrObject* > > aDrawFormatsAndObjs;
 
 public:
-    SwUndoDrawUnGroupConnectToLayout();
+    SwUndoDrawUnGroupConnectToLayout(const SwDoc* pDoc);
 
-    virtual ~SwUndoDrawUnGroupConnectToLayout();
+    virtual ~SwUndoDrawUnGroupConnectToLayout() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
@@ -113,20 +115,19 @@ public:
 
 class SwUndoDrawDelete : public SwUndo
 {
-    SwUndoGroupObjImpl* pObjArr;
-    SdrMarkList* pMarkLst;  // MarkList for all selected SdrObjects
-    sal_uInt16 nSize;
+    std::unique_ptr<SwUndoGroupObjImpl[]> pObjArr;
+    std::unique_ptr<SdrMarkList> pMarkLst;  // MarkList for all selected SdrObjects
     bool bDelFormat;
 
 public:
-    SwUndoDrawDelete( sal_uInt16 nCnt );
+    SwUndoDrawDelete( sal_uInt16 nCnt, const SwDoc* pDoc );
 
-    virtual ~SwUndoDrawDelete();
+    virtual ~SwUndoDrawDelete() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
 
-    void AddObj( sal_uInt16 nPos, SwDrawFrameFormat*, const SdrMark& );
+    void AddObj( SwDrawFrameFormat*, const SdrMark& );
 };
 
 #endif // INCLUDED_SW_SOURCE_CORE_INC_UNDODRAW_HXX

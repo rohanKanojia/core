@@ -22,21 +22,18 @@
 
 #include <vcl/dialog.hxx>
 #include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/lstbox.hxx>
 #include "namemgrtable.hxx"
 
 #include <memory>
 #include <vector>
 #include <map>
 
-#include "scui_def.hxx"
 class ScRangeName;
 class ScDocShell;
 
 class ScNamePasteDlg : public ModalDialog
 {
-    DECL_LINK_TYPED( ButtonHdl, Button *, void );
+    DECL_LINK( ButtonHdl, Button *, void );
 
 private:
     VclPtr<PushButton> m_pBtnPasteAll;
@@ -49,12 +46,12 @@ private:
     std::map<OUString, std::unique_ptr<ScRangeName>> m_RangeMap;
 
 public:
-    ScNamePasteDlg( vcl::Window * pParent, ScDocShell* pShell, bool bInsList=true );
+    ScNamePasteDlg( vcl::Window * pParent, ScDocShell* pShell );
 
-    virtual ~ScNamePasteDlg();
+    virtual ~ScNamePasteDlg() override;
     virtual void dispose() override;
 
-    std::vector<OUString> GetSelectedNames() const;
+    const std::vector<OUString>& GetSelectedNames() const;
 };
 
 #endif // INCLUDED_SC_SOURCE_UI_INC_NAMEPAST_HXX

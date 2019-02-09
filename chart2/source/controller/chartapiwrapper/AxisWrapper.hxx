@@ -19,21 +19,19 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_CHARTAPIWRAPPER_AXISWRAPPER_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_CHARTAPIWRAPPER_AXISWRAPPER_HXX
 
-#include "WrappedPropertySet.hxx"
+#include <WrappedPropertySet.hxx>
 #include "ReferenceSizePropertyProvider.hxx"
 #include <cppuhelper/implbase.hxx>
-#include <comphelper/uno3.hxx>
 #include <comphelper/interfacecontainer2.hxx>
 #include <com/sun/star/chart/XAxis.hpp>
-#include <com/sun/star/chart2/XAxis.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/util/XNumberFormatsSupplier.hpp>
 
 #include <memory>
+
+namespace com { namespace sun { namespace star { namespace chart2 { class XAxis; } } } }
 
 namespace chart
 {
@@ -61,21 +59,15 @@ public:
         SECOND_Y_AXIS
     };
 
-    AxisWrapper( tAxisType eType, std::shared_ptr< Chart2ModelContact > spChart2ModelContact );
-    virtual ~AxisWrapper();
+    AxisWrapper(tAxisType eType, const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact);
+    virtual ~AxisWrapper() override;
 
     static void getDimensionAndMainAxisBool( tAxisType eType, sal_Int32& rnDimensionIndex, bool& rbMainAxis );
 
     /// XServiceInfo declarations
-    virtual OUString SAL_CALL getImplementationName()
-            throw( css::uno::RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-            throw( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-            throw( css::uno::RuntimeException, std::exception ) override;
-
-    static OUString getImplementationName_Static();
-    static css::uno::Sequence< OUString > getSupportedServiceNames_Static();
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     //ReferenceSizePropertyProvider
     virtual void updateReferenceSize() override;
@@ -83,47 +75,36 @@ public:
     virtual css::awt::Size getCurrentSizeForReference() override;
 
     // ____ XComponent ____
-    virtual void SAL_CALL dispose()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL dispose() override;
     virtual void SAL_CALL addEventListener( const css::uno::Reference<
-                                            css::lang::XEventListener >& xListener )
-        throw (css::uno::RuntimeException, std::exception) override;
+                                            css::lang::XEventListener >& xListener ) override;
     virtual void SAL_CALL removeEventListener( const css::uno::Reference<
-                                               css::lang::XEventListener >& aListener )
-        throw (css::uno::RuntimeException, std::exception) override;
+                                               css::lang::XEventListener >& aListener ) override;
 
     // ____ chart::XAxis ____
-    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL getAxisTitle(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL getMajorGrid(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL getMinorGrid(  ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL getAxisTitle(  ) override;
+    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL getMajorGrid(  ) override;
+    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL getMinorGrid(  ) override;
 
     // ____ XShape ____
-    virtual css::awt::Point SAL_CALL getPosition()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setPosition( const css::awt::Point& aPosition )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::awt::Size SAL_CALL getSize()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setSize( const css::awt::Size& aSize )
-        throw (css::beans::PropertyVetoException,
-               css::uno::RuntimeException, std::exception) override;
+    virtual css::awt::Point SAL_CALL getPosition() override;
+    virtual void SAL_CALL setPosition( const css::awt::Point& aPosition ) override;
+    virtual css::awt::Size SAL_CALL getSize() override;
+    virtual void SAL_CALL setSize( const css::awt::Size& aSize ) override;
 
     // ____ XShapeDescriptor (base of XShape) ____
-    virtual OUString SAL_CALL getShapeType()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getShapeType() override;
 
     // ____ XNumberFormatsSupplier ____
     virtual css::uno::Reference<
-                css::beans::XPropertySet > SAL_CALL getNumberFormatSettings()
-            throw (css::uno::RuntimeException, std::exception) override;
+                css::beans::XPropertySet > SAL_CALL getNumberFormatSettings() override;
     virtual css::uno::Reference<
-                css::util::XNumberFormats > SAL_CALL getNumberFormats()
-            throw (css::uno::RuntimeException, std::exception) override;
+                css::util::XNumberFormats > SAL_CALL getNumberFormats() override;
 
 protected:
     // ____ WrappedPropertySet ____
     virtual const css::uno::Sequence< css::beans::Property >& getPropertySequence() override;
-    virtual const std::vector< WrappedProperty* > createWrappedProperties() override;
+    virtual std::vector< std::unique_ptr<WrappedProperty> > createWrappedProperties() override;
     virtual css::uno::Reference< css::beans::XPropertySet > getInnerPropertySet() override;
 
 private: //methods

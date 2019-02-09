@@ -40,7 +40,7 @@ in this Software without prior written authorization from the X Consortium.
 #ifdef _MSC_VER     /* Define ssize_t */
 
 #if !defined(_W64)
-#if !defined(__midl) && (defined(_X86_) || defined(_M_IX86)) && _MSC_VER >= 1300
+#if !defined(__midl) && (defined(_X86_) || defined(_M_IX86))
 #define _W64 __w64
 #else
 #define _W64
@@ -85,7 +85,7 @@ typedef _W64 int   ssize_t;
 int _debugmask;
 #endif
 
-char *ProgramName;
+static char *ProgramName;
 
 #define OBJSUFFIX ".obj"
 #define INCLUDEDIR "."
@@ -115,21 +115,20 @@ char    *directives[] = {
 
 /*******   function declarations ********/
 /*******   added by -Wall project *******/
-void redirect(char * makefile);
+static void redirect(char * makefile);
 
-struct  inclist inclist[ MAXFILES ],
-                *inclistp = inclist;
+struct  inclist inclist[ MAXFILES ];
+struct  inclist *inclistp = inclist;
 
-struct symhash *maininclist = NULL;
+static struct symhash *maininclist = NULL;
 
-char    *filelist[ MAXFILES ];
+static char    *filelist[ MAXFILES ];
 char    *includedirs[ MAXDIRS + 1 ];
-char    *notdotdot[ MAXDIRS ];
 char    *objprefix = "";
 char    *objsuffix = OBJSUFFIX;
-char    *startat = "# DO NOT DELETE";
-int width = 78;
-boolean append = FALSE;
+static char    *startat = "# DO NOT DELETE";
+static int width = 78;
+static boolean append = FALSE;
 boolean printed = FALSE;
 boolean verbose = FALSE;
 boolean show_where_not = FALSE;
@@ -158,10 +157,10 @@ catch (int sig)
 #define sa_mask sv_mask
 #define sa_flags sv_flags
 #endif
-struct sigaction sig_act;
+static struct sigaction sig_act;
 #endif /* USGISH */
 
-boolean native_win_slashes = FALSE;
+static boolean native_win_slashes = FALSE;
 
 int main(int argc, char    **argv)
 {
@@ -512,7 +511,6 @@ struct filepointer *getfile(char *file)
             fatalerr("makedepend:  Failed to read file \"%s\"\n", file);
 
     close(fd);
-    content->f_len = bytes_read+1;
     content->f_p = content->f_base;
     content->f_end = content->f_base + bytes_read;
     *content->f_end = '\0';
@@ -526,7 +524,7 @@ void freefile(struct filepointer *fp)
     free(fp);
 }
 
-char *copy(char *str)
+char *copy(char const *str)
 {
     char   *p = (char *)malloc(strlen(str) + 1);
 
@@ -534,7 +532,7 @@ char *copy(char *str)
     return p;
 }
 
-int match(char *str, char **list)
+int match(char const *str, char **list)
 {
     int    i;
 
@@ -671,7 +669,7 @@ void fatalerr(char *msg, ...)
     exit (1);
 }
 
-void warning(char *msg, ...)
+void warning(char const *msg, ...)
 {
 #ifdef DEBUG_MKDEPEND
     va_list args;
@@ -684,7 +682,7 @@ void warning(char *msg, ...)
 #endif /* DEBUG_MKDEPEND */
 }
 
-void warning1(char *msg, ...)
+void warning1(char const *msg, ...)
 {
 #ifdef DEBUG_MKDEPEND
     va_list args;

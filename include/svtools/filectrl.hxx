@@ -22,11 +22,9 @@
 
 #include <svtools/svtdllapi.h>
 #include <vcl/window.hxx>
-#include <vcl/edit.hxx>
 #include <vcl/button.hxx>
 
-
-#define STR_FILECTRL_BUTTONTEXT     333     // ID-Range?!
+class Edit;
 
 // Flags for internal use of FileControl
 enum class FileControlMode_Internal
@@ -34,40 +32,33 @@ enum class FileControlMode_Internal
     INRESIZE               = 0x0001,
     ORIGINALBUTTONTEXT     = 0x0002,
 };
+
 namespace o3tl
 {
     template<> struct typed_flags<FileControlMode_Internal> : is_typed_flags<FileControlMode_Internal, 0x03> {};
 }
 
 
-class SVT_DLLPUBLIC FileControl : public vcl::Window
+class SVT_DLLPUBLIC FileControl final : public vcl::Window
 {
-private:
     VclPtr<Edit>       maEdit;
     VclPtr<PushButton> maButton;
-
-    OUString        maButtonText;
-    bool            mbOpenDlg;
-
+    OUString const           maButtonText;
     FileControlMode_Internal    mnInternalFlags;
 
-private:
-    SVT_DLLPRIVATE void     ImplBrowseFile( );
-
-protected:
     SVT_DLLPRIVATE void     Resize() override;
     SVT_DLLPRIVATE void     GetFocus() override;
     SVT_DLLPRIVATE void     StateChanged( StateChangedType nType ) override;
     SVT_DLLPRIVATE WinBits  ImplInitStyle( WinBits nStyle );
-    DECL_DLLPRIVATE_LINK_TYPED( ButtonHdl, Button*, void );
+    DECL_DLLPRIVATE_LINK( ButtonHdl, Button*, void );
 
 public:
                     FileControl( vcl::Window* pParent, WinBits nStyle );
-    virtual         ~FileControl();
+    virtual         ~FileControl() override;
     virtual void    dispose() override;
 
-    Edit&           GetEdit() { return *maEdit.get(); }
-    PushButton&     GetButton() { return *maButton.get(); }
+    Edit&           GetEdit() { return *maEdit; }
+    PushButton&     GetButton() { return *maButton; }
 
     void            Draw( OutputDevice* pDev, const Point& rPos, const Size& rSize, DrawFlags nFlags ) override;
 

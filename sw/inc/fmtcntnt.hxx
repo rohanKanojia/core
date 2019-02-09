@@ -19,9 +19,10 @@
 #ifndef INCLUDED_SW_INC_FMTCNTNT_HXX
 #define INCLUDED_SW_INC_FMTCNTNT_HXX
 
+#include <memory>
 #include <svl/poolitem.hxx>
-#include <hintids.hxx>
-#include <format.hxx>
+#include "hintids.hxx"
+#include "format.hxx"
 
 class SwNodeIndex;
 class SwStartNode;
@@ -29,27 +30,27 @@ class SwStartNode;
 /// Content, content of frame (header, footer, fly).
 class SW_DLLPUBLIC SwFormatContent: public SfxPoolItem
 {
-    SwNodeIndex *pStartNode;
+    std::unique_ptr<SwNodeIndex> m_pStartNode;
 
     SwFormatContent &operator=( const SwFormatContent & ) = delete;
 
 public:
     SwFormatContent( const SwStartNode* pStartNode = nullptr );
     SwFormatContent( const SwFormatContent &rCpy );
-    virtual ~SwFormatContent();
+    virtual ~SwFormatContent() override;
 
     /// "Pure virtual methods" of SfxPoolItem.
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
 
-    const SwNodeIndex *GetContentIdx() const { return pStartNode; }
+    const SwNodeIndex *GetContentIdx() const { return m_pStartNode.get(); }
     void SetNewContentIdx( const SwNodeIndex *pIdx );
 
     void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
 };
 
 inline const SwFormatContent &SwAttrSet::GetContent(bool bInP) const
-    { return static_cast<const SwFormatContent&>(Get( RES_CNTNT,bInP)); }
+    { return Get( RES_CNTNT,bInP); }
 
 inline const SwFormatContent &SwFormat::GetContent(bool bInP) const
     { return m_aSet.GetContent(bInP); }

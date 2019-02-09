@@ -34,9 +34,22 @@
 #include <sal/types.h>
 #include <osl/time.h>
 #include <rtl/bootstrap.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
+#include <sal/log.hxx>
 
 #include <expat.h>
 #include <memory>
+
+namespace {
+FILE* fopen_impl(const fs::path& rPath, const char* szMode)
+{
+#ifdef _WIN32     //We need _wfopen to support long file paths on Windows XP
+    return _wfopen(rPath.native_file_string_w().c_str(), o3tl::toW(OUString::createFromAscii(szMode).getStr()));
+#else
+    return fopen(rPath.native_file_string().c_str(), szMode);
+#endif
+}
+}
 
 IndexerPreProcessor::IndexerPreProcessor
     ( const fs::path& fsIndexBaseDir,
@@ -62,7 +75,7 @@ IndexerPreProcessor::~IndexerPreProcessor()
         xsltFreeStylesheet( m_xsltStylesheetPtrContent );
 }
 
-std::string getEncodedPath( const std::string& Path )
+static std::string getEncodedPath( const std::string& Path )
 {
     OString aOStr_Path( Path.c_str() );
     OUString aOUStr_Path( OStringToOUString
@@ -87,13 +100,7 @@ void IndexerPreProcessor::processDocument
         if( pResNodeCaption )
         {
             fs::path fsCaptionPureTextFile_docURL = m_fsCaptionFilesDirName / aStdStr_EncodedDocPathURL;
-#ifdef _WIN32     //We need _wfopen to support long file paths on Windows XP
-            FILE* pFile_docURL = _wfopen(
-                fsCaptionPureTextFile_docURL.native_file_string_w(), L"w" );
-#else
-            FILE* pFile_docURL = fopen(
-                fsCaptionPureTextFile_docURL.native_file_string().c_str(), "w" );
-#endif
+            FILE* pFile_docURL = fopen_impl( fsCaptionPureTextFile_docURL, "w" );
             if( pFile_docURL )
             {
                 fprintf( pFile_docURL, "%s\n", pResNodeCaption->content );
@@ -110,13 +117,7 @@ void IndexerPreProcessor::processDocument
         if( pResNodeContent )
         {
             fs::path fsContentPureTextFile_docURL = m_fsContentFilesDirName / aStdStr_EncodedDocPathURL;
-#ifdef _WIN32     //We need _wfopen to support long file paths on Windows XP
-            FILE* pFile_docURL = _wfopen(
-                fsContentPureTextFile_docURL.native_file_string_w(), L"w" );
-#else
-            FILE* pFile_docURL = fopen(
-                fsContentPureTextFile_docURL.native_file_string().c_str(), "w" );
-#endif
+            FILE* pFile_docURL = fopen_impl( fsContentPureTextFile_docURL, "w" );
             if( pFile_docURL )
             {
                 fprintf( pFile_docURL, "%s\n", pResNodeContent->content );
@@ -130,7 +131,6 @@ void IndexerPreProcessor::processDocument
 struct Data
 {
     std::vector<std::string> _idList;
-    typedef std::vector<std::string>::const_iterator cIter;
 
     void append(const std::string &id)
     {
@@ -140,18 +140,17 @@ struct Data
     std::string getString() const
     {
         std::string ret;
-        cIter aEnd = _idList.end();
-        for (cIter aIter = _idList.begin(); aIter != aEnd; ++aIter)
-            ret += *aIter + ";";
+        for (auto const& elem : _idList)
+            ret += elem + ";";
         return ret;
     }
 };
 
-void writeKeyValue_DBHelp( FILE* pFile, const std::string& aKeyStr, const std::string& aValueStr )
+static void writeKeyValue_DBHelp( FILE* pFile, const std::string& aKeyStr, const std::string& aValueStr )
 {
     if( pFile == nullptr )
         return;
-    char cLF = 10;
+    char const cLF = 10;
     unsigned int nKeyLen = aKeyStr.length();
     unsigned int nValueLen = aValueStr.length();
     fprintf( pFile, "%x ", nKeyLen );
@@ -186,17 +185,12 @@ public:
 
     void dump_DBHelp( const fs::path& rFileName )
     {
-#ifdef _WIN32     //We need _wfopen to support long file paths on Windows XP
-        FILE* pFile = _wfopen( rFileName.native_file_string_w(), L"wb" );
-#else
-        FILE* pFile = fopen( rFileName.native_file_string().c_str(), "wb" );
-#endif
+        FILE* pFile = fopen_impl( rFileName, "wb" );
         if( pFile == nullptr )
             return;
 
-        DataHashtable::const_iterator aEnd = _hash.end();
-        for (DataHashtable::const_iterator aIter = _hash.begin(); aIter != aEnd; ++aIter)
-            writeKeyValue_DBHelp( pFile, aIter->first, aIter->second.getString() );
+        for (auto const& elem : _hash)
+            writeKeyValue_DBHelp( pFile, elem.first, elem.second.getString() );
 
         fclose( pFile );
     }
@@ -206,18 +200,19 @@ namespace URLEncoder
 {
     static std::string encode(const std::string &rIn)
     {
-        const char *good = "!$&'()*+,-.=@_";
+        const char * const good = "!$&'()*+,-.=@_";
         static const char hex[17] = "0123456789ABCDEF";
 
         std::string result;
-        for (size_t i=0; i < rIn.length(); ++i)
+        for (char c : rIn)
         {
-            unsigned char c = rIn[i];
-            if (isalnum (c) || strchr (good, c))
+            if (rtl::isAsciiAlphanumeric (static_cast<unsigned char>(c))
+                || strchr (good, c))
+            {
                 result += c;
-            else {
+            } else {
                 result += '%';
-                result += hex[c >> 4];
+                result += hex[static_cast<unsigned char>(c) >> 4];
                 result += hex[c & 0xf];
             }
         }
@@ -242,21 +237,21 @@ void HelpLinker::addBookmark( FILE* pFile_DBHelp, std::string thishid,
     std::vector<unsigned char> dataB(dataLen);
     size_t i = 0;
     dataB[i++] = static_cast<unsigned char>(fileLen);
-    for (size_t j = 0; j < fileB.length(); ++j)
-        dataB[i++] = static_cast<unsigned char>(fileB[j]);
+    for (char j : fileB)
+        dataB[i++] = static_cast<unsigned char>(j);
     if (!anchorB.empty())
     {
         dataB[i++] = '#';
-        for (size_t j = 0; j < anchorB.length(); ++j)
-            dataB[i++] = anchorB[j];
+        for (char j : anchorB)
+            dataB[i++] = j;
     }
     dataB[i++] = static_cast<unsigned char>(jarfileB.length());
-    for (size_t j = 0; j < jarfileB.length(); ++j)
-        dataB[i++] = jarfileB[j];
+    for (char j : jarfileB)
+        dataB[i++] = j;
 
     dataB[i++] = static_cast<unsigned char>(titleB.length());
-    for (size_t j = 0; j < titleB.length(); ++j)
-        dataB[i++] = titleB[j];
+    for (char j : titleB)
+        dataB[i++] = j;
 
     if( pFile_DBHelp != nullptr )
     {
@@ -267,15 +262,11 @@ void HelpLinker::addBookmark( FILE* pFile_DBHelp, std::string thishid,
 
 void HelpLinker::initIndexerPreProcessor()
 {
-    delete m_pIndexerPreProcessor;
-    m_pIndexerPreProcessor = new IndexerPreProcessor( indexDirParentName,
-         idxCaptionStylesheet, idxContentStylesheet );
+    m_pIndexerPreProcessor.reset( new IndexerPreProcessor( indexDirParentName,
+         idxCaptionStylesheet, idxContentStylesheet ) );
 }
 
-/**
-*
-*/
-void HelpLinker::link() throw(HelpProcessingException, BasicCodeTagger::TaggerException, std::exception)
+void HelpLinker::link()
 {
 
     if( bExtensionMode )
@@ -294,34 +285,15 @@ void HelpLinker::link() throw(HelpProcessingException, BasicCodeTagger::TaggerEx
     // do the work here
     // continue with introduction of the overall process thing into the
     // here all hzip files will be worked on
-    std::string appl = mod;
-    if (appl[0] == 's')
-        appl = appl.substr(1);
-
     bool bUse_ = true;
     if( !bExtensionMode )
         bUse_ = false;
 
     fs::path helpTextFileName_DBHelp(indexDirParentName / (mod + (bUse_ ? ".ht_" : ".ht")));
-#ifdef _WIN32
-    //We need _wfopen to support long file paths on Windows XP
-    FILE* pFileHelpText_DBHelp = _wfopen
-        ( helpTextFileName_DBHelp.native_file_string_w(), L"wb" );
-#else
-
-    FILE* pFileHelpText_DBHelp = fopen
-        ( helpTextFileName_DBHelp.native_file_string().c_str(), "wb" );
-#endif
+    FILE* pFileHelpText_DBHelp = fopen_impl( helpTextFileName_DBHelp, "wb" );
 
     fs::path dbBaseFileName_DBHelp(indexDirParentName / (mod + (bUse_ ? ".db_" : ".db")));
-#ifdef _WIN32
-    //We need _wfopen to support long file paths on Windows XP
-    FILE* pFileDbBase_DBHelp = _wfopen
-        ( dbBaseFileName_DBHelp.native_file_string_w(), L"wb" );
-#else
-    FILE* pFileDbBase_DBHelp = fopen
-        ( dbBaseFileName_DBHelp.native_file_string().c_str(), "wb" );
-#endif
+    FILE* pFileDbBase_DBHelp = fopen_impl( dbBaseFileName_DBHelp, "wb" );
 
     fs::path keyWordFileName_DBHelp(indexDirParentName / (mod + (bUse_ ? ".key_" : ".key")));
 
@@ -336,13 +308,12 @@ void HelpLinker::link() throw(HelpProcessingException, BasicCodeTagger::TaggerEx
             initIndexerPreProcessor();
 
         // here we start our loop over the hzip files.
-        HashSet::iterator end = helpFiles.end();
-        for (HashSet::iterator iter = helpFiles.begin(); iter != end; ++iter)
+        for (auto const& helpFile : helpFiles)
         {
             // process one file
             // streamTable contains the streams in the hzip file
             StreamTable streamTable;
-            const std::string &xhpFileName = *iter;
+            const std::string &xhpFileName = helpFile;
 
             if (!bExtensionMode && xhpFileName.rfind(".xhp") != xhpFileName.length()-4)
             {
@@ -377,20 +348,8 @@ void HelpLinker::link() throw(HelpProcessingException, BasicCodeTagger::TaggerEx
                 compactStylesheet, embeddStylesheet, module, lang, bExtensionMode );
 
             HCDBG(std::cerr << "before compile of " << xhpFileName << std::endl);
-            bool success = hc.compile();
+            hc.compile();
             HCDBG(std::cerr << "after compile of " << xhpFileName << std::endl);
-
-            if (!success && !bExtensionMode)
-            {
-                std::stringstream aStrStream;
-                aStrStream <<
-                    "\nERROR: compiling help particle '"
-                        << xhpFileName
-                        << "' for language '"
-                        << lang
-                        << "' failed!";
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
-            }
 
             if (!m_bCreateIndex)
                 continue;
@@ -412,17 +371,13 @@ void HelpLinker::link() throw(HelpProcessingException, BasicCodeTagger::TaggerEx
             // add once this as its own id.
             addBookmark( pFileDbBase_DBHelp, documentPath, fileB, std::string(), jarfileB, titleB);
 
-            const HashSet *hidlist = streamTable.appl_hidlist;
-            if (!hidlist)
-                hidlist = streamTable.default_hidlist;
-            if (hidlist && !hidlist->empty())
+            const std::vector<std::string> *hidlist = streamTable.appl_hidlist.get();
+            if (hidlist)
             {
                 // now iterate over all elements of the hidlist
-                HashSet::const_iterator aEnd = hidlist->end();
-                for (HashSet::const_iterator hidListIter = hidlist->begin();
-                    hidListIter != aEnd; ++hidListIter)
+                for (auto & elem : *hidlist)
                 {
-                    std::string thishid = *hidListIter;
+                    std::string thishid = elem;
 
                     std::string anchorB;
                     size_t index = thishid.rfind('#');
@@ -436,44 +391,34 @@ void HelpLinker::link() throw(HelpProcessingException, BasicCodeTagger::TaggerEx
             }
 
             // now the keywords
-            const Hashtable *anchorToLL = streamTable.appl_keywords;
-            if (!anchorToLL)
-                anchorToLL = streamTable.default_keywords;
+            const Hashtable *anchorToLL = streamTable.appl_keywords.get();
             if (anchorToLL && !anchorToLL->empty())
             {
                 std::string fakedHid = URLEncoder::encode(documentPath);
-                Hashtable::const_iterator aEnd = anchorToLL->end();
-                for (Hashtable::const_iterator enumer = anchorToLL->begin();
-                    enumer != aEnd; ++enumer)
+                for (auto const& elemAnchor : *anchorToLL)
                 {
-                    const std::string &anchor = enumer->first;
+                    const std::string &anchor = elemAnchor.first;
                     addBookmark(pFileDbBase_DBHelp, documentPath, fileB,
                                 anchor, jarfileB, titleB);
                     std::string totalId = fakedHid + "#" + anchor;
                     // std::cerr << hzipFileName << std::endl;
-                    const LinkedList& ll = enumer->second;
-                    LinkedList::const_iterator aOtherEnd = ll.end();
-                    for (LinkedList::const_iterator llIter = ll.begin();
-                        llIter != aOtherEnd; ++llIter)
+                    const LinkedList& ll = elemAnchor.second;
+                    for (auto const& elem : ll)
                     {
-                            helpKeyword.insert(*llIter, totalId);
+                            helpKeyword.insert(elem, totalId);
                     }
                 }
 
             }
 
             // and last the helptexts
-            const Stringtable *helpTextHash = streamTable.appl_helptexts;
-            if (!helpTextHash)
-                helpTextHash = streamTable.default_helptexts;
-            if (helpTextHash && !helpTextHash->empty())
+            const Stringtable *helpTextHash = streamTable.appl_helptexts.get();
+            if (helpTextHash)
             {
-                Stringtable::const_iterator aEnd = helpTextHash->end();
-                for (Stringtable::const_iterator helpTextIter = helpTextHash->begin();
-                    helpTextIter != aEnd; ++helpTextIter)
+                for (auto const& elem : *helpTextHash)
                 {
-                    std::string helpTextId = helpTextIter->first;
-                    const std::string& helpTextText = helpTextIter->second;
+                    std::string helpTextId = elem.first;
+                    const std::string& helpTextText = elem.second;
 
                     helpTextId = URLEncoder::encode(helpTextId);
 
@@ -487,8 +432,6 @@ void HelpLinker::link() throw(HelpProcessingException, BasicCodeTagger::TaggerEx
             {
                 // now the indexing
                 xmlDocPtr document = streamTable.appl_doc;
-                if (!document)
-                    document = streamTable.default_doc;
                 if (document)
                 {
                     std::string temp = module;
@@ -520,12 +463,10 @@ void HelpLinker::link() throw(HelpProcessingException, BasicCodeTagger::TaggerEx
     if( !bExtensionMode )
     {
         // New index
-        Stringtable::iterator aEnd = additionalFiles.end();
-        for (Stringtable::iterator enumer = additionalFiles.begin(); enumer != aEnd;
-            ++enumer)
+        for (auto const& additionalFile : additionalFiles)
         {
-            const std::string &additionalFileName = enumer->second;
-            const std::string &additionalFileKey = enumer->first;
+            const std::string &additionalFileName = additionalFile.second;
+            const std::string &additionalFileKey = additionalFile.first;
 
             fs::path fsAdditionalFileName( additionalFileName, fs::native );
             HCDBG({
@@ -543,9 +484,8 @@ void HelpLinker::link() throw(HelpProcessingException, BasicCodeTagger::TaggerEx
 
 
 void HelpLinker::main( std::vector<std::string> &args,
-                       std::string* pExtensionPath, std::string* pDestination,
+                       std::string const * pExtensionPath, std::string const * pDestination,
                        const OUString* pOfficeHelpPath )
-    throw( HelpProcessingException, std::exception )
 {
     bExtensionMode = false;
     helpFiles.clear();
@@ -578,7 +518,7 @@ void HelpLinker::main( std::vector<std::string> &args,
             {
                 std::stringstream aStrStream;
                 aStrStream << "extension source missing" << std::endl;
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+                throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
             }
             extsource = args[i];
         }
@@ -591,7 +531,7 @@ void HelpLinker::main( std::vector<std::string> &args,
             {
                 std::stringstream aStrStream;
                 aStrStream << "extension destination missing" << std::endl;
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+                throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
             }
             extdestination = args[i];
         }
@@ -602,7 +542,7 @@ void HelpLinker::main( std::vector<std::string> &args,
             {
                 std::stringstream aStrStream;
                 aStrStream << "sourceroot missing" << std::endl;
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+                throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
             }
             bSrcOption = true;
             sourceRoot = fs::path(args[i], fs::native);
@@ -614,7 +554,7 @@ void HelpLinker::main( std::vector<std::string> &args,
             {
                 std::stringstream aStrStream;
                 aStrStream << "compactStylesheet missing" << std::endl;
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+                throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
             }
 
             compactStylesheet = fs::path(args[i], fs::native);
@@ -626,7 +566,7 @@ void HelpLinker::main( std::vector<std::string> &args,
             {
                 std::stringstream aStrStream;
                 aStrStream << "embeddingStylesheet missing" << std::endl;
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+                throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
             }
 
             embeddStylesheet = fs::path(args[i], fs::native);
@@ -638,7 +578,7 @@ void HelpLinker::main( std::vector<std::string> &args,
             {
                 std::stringstream aStrStream;
                 aStrStream << "idxtemp missing" << std::endl;
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+                throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
             }
 
             zipdir = fs::path(args[i], fs::native);
@@ -650,7 +590,7 @@ void HelpLinker::main( std::vector<std::string> &args,
             {
                 std::stringstream aStrStream;
                 aStrStream << "idxcaption stylesheet missing" << std::endl;
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+                throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
             }
 
             idxCaptionStylesheet = fs::path(args[i], fs::native);
@@ -662,7 +602,7 @@ void HelpLinker::main( std::vector<std::string> &args,
             {
                 std::stringstream aStrStream;
                 aStrStream << "idxcontent stylesheet missing" << std::endl;
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+                throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
             }
 
             idxContentStylesheet = fs::path(args[i], fs::native);
@@ -674,7 +614,7 @@ void HelpLinker::main( std::vector<std::string> &args,
             {
                 std::stringstream aStrStream;
                 aStrStream << "outputfilename missing" << std::endl;
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+                throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
             }
 
             outputFile = fs::path(args[i], fs::native);
@@ -686,7 +626,7 @@ void HelpLinker::main( std::vector<std::string> &args,
             {
                 std::stringstream aStrStream;
                 aStrStream << "module name missing" << std::endl;
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+                throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
             }
 
             module = args[i];
@@ -698,7 +638,7 @@ void HelpLinker::main( std::vector<std::string> &args,
             {
                 std::stringstream aStrStream;
                 aStrStream << "language name missing" << std::endl;
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+                throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
             }
 
             lang = args[i];
@@ -706,7 +646,7 @@ void HelpLinker::main( std::vector<std::string> &args,
         else if (args[i].compare("-hid") == 0)
         {
             ++i;
-            throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, "obsolete -hid argument used" );
+            throw HelpProcessingException( HelpProcessingErrorClass::General, "obsolete -hid argument used" );
         }
         else if (args[i].compare("-add") == 0)
         {
@@ -716,7 +656,7 @@ void HelpLinker::main( std::vector<std::string> &args,
             {
                 std::stringstream aStrStream;
                 aStrStream << "pathname missing" << std::endl;
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+                throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
             }
 
             addFileUnderPath = args[i];
@@ -725,7 +665,7 @@ void HelpLinker::main( std::vector<std::string> &args,
             {
                 std::stringstream aStrStream;
                 aStrStream << "pathname missing" << std::endl;
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+                throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
             }
             addFile = args[i];
             if (!addFileUnderPath.empty() && !addFile.empty())
@@ -757,7 +697,7 @@ void HelpLinker::main( std::vector<std::string> &args,
             {
                 std::stringstream aStrStream;
                 aStrStream << "-extlangdest is missing" << std::endl;
-                throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+                throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
             }
             else
             {
@@ -778,7 +718,7 @@ void HelpLinker::main( std::vector<std::string> &args,
         {
             std::stringstream aStrStream;
             aStrStream << "-src must not be used together with -extsource missing" << std::endl;
-            throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+            throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
         }
     }
 
@@ -786,7 +726,7 @@ void HelpLinker::main( std::vector<std::string> &args,
     {
         std::stringstream aStrStream;
         aStrStream << "no index dir given" << std::endl;
-        throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+        throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
     }
 
     if ( (!bExtensionMode && idxCaptionStylesheet.empty())
@@ -797,7 +737,7 @@ void HelpLinker::main( std::vector<std::string> &args,
         // -idxcaption parameter is required
         std::stringstream aStrStream;
         aStrStream << "no index caption stylesheet given" << std::endl;
-        throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+        throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
     }
     else if ( bExtensionMode &&  extsource.empty())
     {
@@ -821,7 +761,7 @@ void HelpLinker::main( std::vector<std::string> &args,
         // -idxcontent parameter is required
         std::stringstream aStrStream;
         aStrStream << "no index content stylesheet given" << std::endl;
-        throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+        throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
     }
     else if ( bExtensionMode && extsource.empty())
     {
@@ -841,31 +781,31 @@ void HelpLinker::main( std::vector<std::string> &args,
     {
         std::stringstream aStrStream;
         aStrStream << "no embedding resolving file given" << std::endl;
-        throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+        throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
     }
     if (sourceRoot.empty())
     {
         std::stringstream aStrStream;
         aStrStream << "no sourceroot given" << std::endl;
-        throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+        throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
     }
     if (!bExtensionMode && outputFile.empty())
     {
         std::stringstream aStrStream;
         aStrStream << "no output file given" << std::endl;
-        throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+        throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
     }
     if (module.empty())
     {
         std::stringstream aStrStream;
         aStrStream << "module missing" << std::endl;
-        throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+        throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
     }
     if (!bExtensionMode && lang.empty())
     {
         std::stringstream aStrStream;
         aStrStream << "language missing" << std::endl;
-        throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+        throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
     }
     link();
 }
@@ -873,11 +813,10 @@ void HelpLinker::main( std::vector<std::string> &args,
 // Variable to set an exception in "C" StructuredXMLErrorFunction
 static const HelpProcessingException* GpXMLParsingException = nullptr;
 
-extern "C" void StructuredXMLErrorFunction(void *userData, xmlErrorPtr error)
-{
-    (void)userData;
-    (void)error;
+extern "C" {
 
+static void StructuredXMLErrorFunction(SAL_UNUSED_PARAMETER void *, xmlErrorPtr error)
+{
     std::string aErrorMsg = error->message;
     std::string aXMLParsingFile;
     if( error->file != nullptr )
@@ -888,6 +827,8 @@ extern "C" void StructuredXMLErrorFunction(void *userData, xmlErrorPtr error)
 
     // Reset error handler
     xmlSetStructuredErrorFunc( nullptr, nullptr );
+}
+
 }
 
 HelpProcessingErrorInfo& HelpProcessingErrorInfo::operator=( const struct HelpProcessingException& e )
@@ -985,7 +926,7 @@ bool compileExtensionHelp
         if (XML_STATUS_ERROR == parsed)
         {
             XML_Error nError = XML_GetErrorCode( parser );
-            o_rHelpProcessingErrorInfo.m_eErrorClass = HELPPROCESSING_XMLPARSING_ERROR;
+            o_rHelpProcessingErrorInfo.m_eErrorClass = HelpProcessingErrorClass::XmlParsing;
             o_rHelpProcessingErrorInfo.m_aErrorMsg = OUString::createFromAscii( XML_ErrorString( nError ) );
             o_rHelpProcessingErrorInfo.m_aXMLParsingFile = aTreeFileURL;
             // CRASHES!!! o_rHelpProcessingErrorInfo.m_nXMLParsingLine = XML_GetCurrentLineNumber( parser );

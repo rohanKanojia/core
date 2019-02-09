@@ -21,13 +21,14 @@
 
 #include <tools/diagnose_ex.h>
 #include <basic/basmgr.hxx>
-#include <basidesh.hrc>
+#include <svx/svxids.hrc>
+#include <strings.hrc>
 #include "baside2.hxx"
-#include "baside3.hxx"
-#include <basdoc.hxx>
-#include <basicbox.hxx>
+#include <baside3.hxx>
+#include "basdoc.hxx"
+#include <IDEComboBox.hxx>
 #include <editeng/sizeitem.hxx>
-#include <iderdll2.hxx>
+#include "iderdll2.hxx"
 #include <basidectrlr.hxx>
 #include <localizationmgr.hxx>
 #include <sfx2/app.hxx>
@@ -39,10 +40,19 @@
 #include <svl/aeitem.hxx>
 #include <svl/srchitem.hxx>
 
-#define basctl_Shell
+#ifdef DISABLE_DYNLOADING
+/* Avoid clash with the ones from svx/source/form/typemap.cxx */
+#define aSfxDocumentInfoItem_Impl basctl_source_basicide_basidesh_aSfxDocumentInfoItem_Impl
+#endif
+
+#define ShellClass_basctl_Shell
 #define SFX_TYPEMAP
-#include <idetemp.hxx>
 #include <basslots.hxx>
+
+#ifdef DISABLE_DYNLOADING
+#undef aSfxDocumentInfoItem_Impl
+#endif
+
 #include <iderdll.hxx>
 #include <svx/pszctrl.hxx>
 #include <svx/insctrl.hxx>
@@ -52,7 +62,7 @@
 #include <com/sun/star/container/XContainer.hpp>
 #include <svx/xmlsecctrl.hxx>
 #include <sfx2/viewfac.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/settings.hxx>
 #include <cppuhelper/implbase.hxx>
 
@@ -68,10 +78,6 @@ class ContainerListenerImpl : public ::cppu::WeakImplHelper< container::XContain
 public:
     explicit ContainerListenerImpl(Shell* pShell)
         : mpShell(pShell)
-    {
-    }
-
-    virtual ~ContainerListenerImpl()
     {
     }
 
@@ -103,17 +109,17 @@ public:
     }
 
     // XEventListener
-    virtual void SAL_CALL disposing( const lang::EventObject& ) throw( uno::RuntimeException, std::exception ) override {}
+    virtual void SAL_CALL disposing( const lang::EventObject& ) override {}
 
     // XContainerListener
-    virtual void SAL_CALL elementInserted( const container::ContainerEvent& Event ) throw( uno::RuntimeException, std::exception ) override
+    virtual void SAL_CALL elementInserted( const container::ContainerEvent& Event ) override
     {
         OUString sModuleName;
         if( mpShell && ( Event.Accessor >>= sModuleName ) )
             mpShell->FindBasWin( mpShell->m_aCurDocument, mpShell->m_aCurLibName, sModuleName, true );
     }
-    virtual void SAL_CALL elementReplaced( const container::ContainerEvent& ) throw( css::uno::RuntimeException, std::exception ) override { }
-    virtual void SAL_CALL elementRemoved( const container::ContainerEvent& Event ) throw( css::uno::RuntimeException, std::exception ) override
+    virtual void SAL_CALL elementReplaced( const container::ContainerEvent& ) override { }
+    virtual void SAL_CALL elementRemoved( const container::ContainerEvent& Event ) override
     {
         OUString sModuleName;
         if( mpShell && ( Event.Accessor >>= sModuleName ) )
@@ -136,7 +142,7 @@ SFX_IMPL_INTERFACE(basctl_Shell, SfxViewShell)
 void basctl_Shell::InitInterface_Impl()
 {
     GetStaticInterface()->RegisterChildWindow(SID_SEARCH_DLG);
-    GetStaticInterface()->RegisterChildWindow(SID_SHOW_PROPERTYBROWSER, false, BASICIDE_UI_FEATURE_SHOW_BROWSER);
+    GetStaticInterface()->RegisterChildWindow(SID_SHOW_PROPERTYBROWSER, false, SfxShellFeature::BasicShowBrowser);
     GetStaticInterface()->RegisterChildWindow(SfxInfoBarContainerChild::GetChildWindowId());
 
     GetStaticInterface()->RegisterPopupMenu("dialog");
@@ -145,7 +151,7 @@ void basctl_Shell::InitInterface_Impl()
 unsigned Shell::nShellCount = 0;
 
 Shell::Shell( SfxViewFrame* pFrame_, SfxViewShell* /* pOldShell */ ) :
-    SfxViewShell( pFrame_, SfxViewShellFlags::CAN_PRINT | SfxViewShellFlags::NO_NEWWINDOW ),
+    SfxViewShell( pFrame_, SfxViewShellFlags::NO_NEWWINDOW ),
     m_aCurDocument( ScriptDocument::getApplicationScriptDocument() ),
     aHScrollBar( VclPtr<ScrollBar>::Create(&GetViewFrame()->GetWindow(), WinBits( WB_HSCROLL | WB_DRAG )) ),
     aVScrollBar( VclPtr<ScrollBar>::Create(&GetViewFrame()->GetWindow(), WinBits( WB_VSCROLL | WB_DRAG )) ),
@@ -173,7 +179,6 @@ void Shell::Init()
     GetExtraData()->ShellInCriticalSection() = true;
 
     SetName( "BasicIDE" );
-    SetHelpId( SVX_INTERFACE_BASIDE_VIEWSH );
 
     LibBoxControl::RegisterControl( SID_BASICIDE_LIBSELECTOR );
     LanguageBoxControl::RegisterControl( SID_BASICIDE_CURRENT_LANG );
@@ -226,10 +231,10 @@ Shell::~Shell()
     aVScrollBar.disposeAndClear();
     aHScrollBar.disposeAndClear();
 
-    for (WindowTable::iterator it = aWindowTable.begin(); it != aWindowTable.end(); ++it)
+    for (auto & window : aWindowTable)
     {
         // no store; does already happen when the BasicManagers are destroyed
-        it->second.disposeAndClear();
+        window.second.disposeAndClear();
     }
 
     // no store; does already happen when the BasicManagers are destroyed
@@ -295,9 +300,9 @@ void Shell::onDocumentClosed( const ScriptDocument& _rDocument )
     std::vector<VclPtr<BaseWindow> > aDeleteVec;
 
     // remove all windows which belong to this document
-    for (WindowTableIt it = aWindowTable.begin(); it != aWindowTable.end(); ++it)
+    for (auto const& window : aWindowTable)
     {
-        BaseWindow* pWin = it->second;
+        BaseWindow* pWin = window.second;
         if ( pWin->IsDocument( _rDocument ) )
         {
             if ( pWin->GetStatus() & (BASWIN_RUNNINGBASIC|BASWIN_INRESCHEDULE) )
@@ -309,13 +314,12 @@ void Shell::onDocumentClosed( const ScriptDocument& _rDocument )
                 pWin->BasicStopped();
             }
             else
-                aDeleteVec.push_back( pWin );
+                aDeleteVec.emplace_back(pWin );
         }
     }
     // delete windows outside main loop so we don't invalidate the original iterator
-    for (auto it = aDeleteVec.begin(); it != aDeleteVec.end(); ++it)
+    for (VclPtr<BaseWindow> const & pWin : aDeleteVec)
     {
-        BaseWindow* pWin = *it;
         pWin->StoreData();
         if ( pWin == pCurWin )
             bSetCurWindow = true;
@@ -341,9 +345,9 @@ void Shell::onDocumentTitleChanged( const ScriptDocument& /*_rDocument*/ )
 
 void Shell::onDocumentModeChanged( const ScriptDocument& _rDocument )
 {
-    for (WindowTableIt it = aWindowTable.begin(); it != aWindowTable.end(); ++it)
+    for (auto const& window : aWindowTable)
     {
-        BaseWindow* pWin = it->second;
+        BaseWindow* pWin = window.second;
         if ( pWin->IsDocument( _rDocument ) && _rDocument.isDocument() )
             pWin->SetReadOnly( _rDocument.isReadOnly() );
     }
@@ -351,9 +355,9 @@ void Shell::onDocumentModeChanged( const ScriptDocument& _rDocument )
 
 void Shell::StoreAllWindowData( bool bPersistent )
 {
-    for (WindowTableIt it = aWindowTable.begin(); it != aWindowTable.end(); ++it)
+    for (auto const& window : aWindowTable)
     {
-        BaseWindow* pWin = it->second;
+        BaseWindow* pWin = window.second;
         DBG_ASSERT( pWin, "PrepareClose: NULL-Pointer in Table?" );
         if ( !pWin->IsSuspended() )
             pWin->StoreData();
@@ -382,23 +386,26 @@ bool Shell::PrepareClose( bool bUI )
     {
         if( bUI )
         {
-            vcl::Window *pParent = &GetViewFrame()->GetWindow();
-            ScopedVclPtr<InfoBox>::Create( pParent, IDE_RESSTR(RID_STR_CANNOTCLOSE))->Execute();
+            std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(GetViewFrame()->GetWindow().GetFrameWeld(),
+                                                          VclMessageType::Info, VclButtonsType::Ok,
+                                                          IDEResId(RID_STR_CANNOTCLOSE)));
+            xInfoBox->run();
         }
         return false;
     }
     else
     {
         bool bCanClose = true;
-        for (WindowTableIt it = aWindowTable.begin(); bCanClose && (it != aWindowTable.end()); ++it)
+        for (auto const& window : aWindowTable)
         {
-            BaseWindow* pWin = it->second;
+            BaseWindow* pWin = window.second;
             if ( !pWin->CanClose() )
             {
                 if ( !m_aCurLibName.isEmpty() && ( pWin->IsDocument( m_aCurDocument ) || pWin->GetLibName() != m_aCurLibName ) )
                     SetCurLib( ScriptDocument::getApplicationScriptDocument(), OUString(), false );
                 SetCurWindow( pWin, true );
                 bCanClose = false;
+                break;
             }
         }
 
@@ -437,11 +444,11 @@ void Shell::OuterResizePixel( const Point &rPos, const Size &rSize )
 }
 
 
-IMPL_LINK_TYPED( Shell, TabBarHdl, ::TabBar *, pCurTabBar, void )
+IMPL_LINK( Shell, TabBarHdl, ::TabBar *, pCurTabBar, void )
 {
     sal_uInt16 nCurId = pCurTabBar->GetCurPageId();
-    BaseWindow* pWin = aWindowTable[ nCurId ];
-    DBG_ASSERT( pWin, "Eintrag in TabBar passt zu keinem Fenster!" );
+    BaseWindow* pWin = aWindowTable[ nCurId ].get();
+    DBG_ASSERT( pWin, "Entry in TabBar is not matching a window!" );
     SetCurWindow( pWin );
 }
 
@@ -458,7 +465,7 @@ bool Shell::NextPage( bool bPrev )
 
     if ( nPos < pTabBar->GetPageCount() )
     {
-        BaseWindow* pWin = aWindowTable[ pTabBar->GetPageId( nPos ) ];
+        VclPtr<BaseWindow> pWin = aWindowTable[ pTabBar->GetPageId( nPos ) ];
         SetCurWindow( pWin, true );
         bRet = true;
     }
@@ -466,9 +473,9 @@ bool Shell::NextPage( bool bPrev )
     return bRet;
 }
 
-::svl::IUndoManager* Shell::GetUndoManager()
+SfxUndoManager* Shell::GetUndoManager()
 {
-    ::svl::IUndoManager* pMgr = nullptr;
+    SfxUndoManager* pMgr = nullptr;
     if( pCurWin )
         pMgr = pCurWin->GetUndoManager();
 
@@ -480,71 +487,64 @@ void Shell::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
 {
     if (GetShell())
     {
-        if (SfxSimpleHint const* pSimpleHint = dynamic_cast<SfxSimpleHint const*>(&rHint))
+        if (rHint.GetId() == SfxHintId::Dying)
         {
-            switch (pSimpleHint->GetId())
+            EndListening( rBC, true /* log off all */ );
+            aObjectCatalog->UpdateEntries();
+        }
+
+        if (SbxHint const* pSbxHint = dynamic_cast<SbxHint const*>(&rHint))
+        {
+            const SfxHintId nHintId = pSbxHint->GetId();
+            if (    ( nHintId == SfxHintId::BasicStart ) ||
+                    ( nHintId == SfxHintId::BasicStop ) )
             {
-                case SFX_HINT_DYING:
+                if (SfxBindings* pBindings = GetBindingsPtr())
                 {
-                    EndListening( rBC, true /* log off all */ );
-                    aObjectCatalog->UpdateEntries();
+                    pBindings->Invalidate( SID_BASICRUN );
+                    pBindings->Update( SID_BASICRUN );
+                    pBindings->Invalidate( SID_BASICCOMPILE );
+                    pBindings->Update( SID_BASICCOMPILE );
+                    pBindings->Invalidate( SID_BASICSTEPOVER );
+                    pBindings->Update( SID_BASICSTEPOVER );
+                    pBindings->Invalidate( SID_BASICSTEPINTO );
+                    pBindings->Update( SID_BASICSTEPINTO );
+                    pBindings->Invalidate( SID_BASICSTEPOUT );
+                    pBindings->Update( SID_BASICSTEPOUT );
+                    pBindings->Invalidate( SID_BASICSTOP );
+                    pBindings->Update( SID_BASICSTOP );
+                    pBindings->Invalidate( SID_BASICIDE_TOGGLEBRKPNT );
+                    pBindings->Update( SID_BASICIDE_TOGGLEBRKPNT );
+                    pBindings->Invalidate( SID_BASICIDE_MANAGEBRKPNTS );
+                    pBindings->Update( SID_BASICIDE_MANAGEBRKPNTS );
+                    pBindings->Invalidate( SID_BASICIDE_MODULEDLG );
+                    pBindings->Update( SID_BASICIDE_MODULEDLG );
+                    pBindings->Invalidate( SID_BASICLOAD );
+                    pBindings->Update( SID_BASICLOAD );
                 }
-                break;
-            }
 
-            if (SbxHint const* pSbxHint = dynamic_cast<SbxHint const*>(&rHint))
-            {
-                const sal_uInt32 nHintId = pSbxHint->GetId();
-                if (    ( nHintId == SBX_HINT_BASICSTART ) ||
-                        ( nHintId == SBX_HINT_BASICSTOP ) )
+                if ( nHintId == SfxHintId::BasicStop )
                 {
-                    if (SfxBindings* pBindings = GetBindingsPtr())
-                    {
-                        pBindings->Invalidate( SID_BASICRUN );
-                        pBindings->Update( SID_BASICRUN );
-                        pBindings->Invalidate( SID_BASICCOMPILE );
-                        pBindings->Update( SID_BASICCOMPILE );
-                        pBindings->Invalidate( SID_BASICSTEPOVER );
-                        pBindings->Update( SID_BASICSTEPOVER );
-                        pBindings->Invalidate( SID_BASICSTEPINTO );
-                        pBindings->Update( SID_BASICSTEPINTO );
-                        pBindings->Invalidate( SID_BASICSTEPOUT );
-                        pBindings->Update( SID_BASICSTEPOUT );
-                        pBindings->Invalidate( SID_BASICSTOP );
-                        pBindings->Update( SID_BASICSTOP );
-                        pBindings->Invalidate( SID_BASICIDE_TOGGLEBRKPNT );
-                        pBindings->Update( SID_BASICIDE_TOGGLEBRKPNT );
-                        pBindings->Invalidate( SID_BASICIDE_MANAGEBRKPNTS );
-                        pBindings->Update( SID_BASICIDE_MANAGEBRKPNTS );
-                        pBindings->Invalidate( SID_BASICIDE_MODULEDLG );
-                        pBindings->Update( SID_BASICIDE_MODULEDLG );
-                        pBindings->Invalidate( SID_BASICLOAD );
-                        pBindings->Update( SID_BASICLOAD );
-                    }
+                    // not only at error/break or explicit stoppage,
+                    // if the update is turned off due to a programming bug
+                    BasicStopped();
+                    if (pLayout)
+                        pLayout->UpdateDebug(true); // clear...
+                    if( m_pCurLocalizationMgr )
+                        m_pCurLocalizationMgr->handleBasicStopped();
+                }
+                else if( m_pCurLocalizationMgr )
+                {
+                    m_pCurLocalizationMgr->handleBasicStarted();
+                }
 
-                    if ( nHintId == SBX_HINT_BASICSTOP )
-                    {
-                        // not only at error/break or explicit stoppage,
-                        // if the update is turned off due to a programming bug
-                        BasicStopped();
-                        if (pLayout)
-                            pLayout->UpdateDebug(true); // clear...
-                        if( m_pCurLocalizationMgr )
-                            m_pCurLocalizationMgr->handleBasicStopped();
-                    }
-                    else if( m_pCurLocalizationMgr )
-                    {
-                        m_pCurLocalizationMgr->handleBasicStarted();
-                    }
-
-                    for (WindowTableIt it = aWindowTable.begin(); it != aWindowTable.end(); ++it)
-                    {
-                        BaseWindow* pWin = it->second;
-                        if ( nHintId == SBX_HINT_BASICSTART )
-                            pWin->BasicStarted();
-                        else
-                            pWin->BasicStopped();
-                    }
+                for (auto const& window : aWindowTable)
+                {
+                    BaseWindow* pWin = window.second;
+                    if ( nHintId == SfxHintId::BasicStart )
+                        pWin->BasicStarted();
+                    else
+                        pWin->BasicStopped();
                 }
             }
         }
@@ -556,15 +556,14 @@ void Shell::CheckWindows()
 {
     bool bSetCurWindow = false;
     std::vector<VclPtr<BaseWindow> > aDeleteVec;
-    for (WindowTableIt it = aWindowTable.begin(); it != aWindowTable.end(); ++it)
+    for (auto const& window : aWindowTable)
     {
-        BaseWindow* pWin = it->second;
+        BaseWindow* pWin = window.second;
         if ( pWin->GetStatus() & BASWIN_TOBEKILLED )
-            aDeleteVec.push_back( pWin );
+            aDeleteVec.emplace_back(pWin );
     }
-    for ( auto it = aDeleteVec.begin(); it != aDeleteVec.end(); ++it )
+    for ( VclPtr<BaseWindow> const & pWin : aDeleteVec )
     {
-        BaseWindow* pWin = *it;
         pWin->StoreData();
         if ( pWin == pCurWin )
             bSetCurWindow = true;
@@ -579,15 +578,14 @@ void Shell::RemoveWindows( const ScriptDocument& rDocument, const OUString& rLib
 {
     bool bChangeCurWindow = pCurWin;
     std::vector<VclPtr<BaseWindow> > aDeleteVec;
-    for (WindowTableIt it = aWindowTable.begin(); it != aWindowTable.end(); ++it)
+    for (auto const& window : aWindowTable)
     {
-        BaseWindow* pWin = it->second;
+        BaseWindow* pWin = window.second;
         if ( pWin->IsDocument( rDocument ) && pWin->GetLibName() == rLibName )
-            aDeleteVec.push_back( pWin );
+            aDeleteVec.emplace_back(pWin );
     }
-    for ( auto it = aDeleteVec.begin(); it != aDeleteVec.end(); ++it )
+    for ( VclPtr<BaseWindow> const & pWin : aDeleteVec )
     {
-        BaseWindow* pWin = *it;
         if ( pWin == pCurWin )
             bChangeCurWindow = true;
         pWin->StoreData();
@@ -605,9 +603,9 @@ void Shell::UpdateWindows()
     if ( !m_aCurLibName.isEmpty() )
     {
         std::vector<VclPtr<BaseWindow> > aDeleteVec;
-        for (WindowTableIt it = aWindowTable.begin(); it != aWindowTable.end(); ++it)
+        for (auto const& window : aWindowTable)
         {
-            BaseWindow* pWin = it->second;
+            BaseWindow* pWin = window.second;
             if ( !pWin->IsDocument( m_aCurDocument ) || pWin->GetLibName() != m_aCurLibName )
             {
                 if ( pWin == pCurWin )
@@ -617,12 +615,12 @@ void Shell::UpdateWindows()
                 // Window is frozen at first, later the windows should be changed
                 // anyway to be marked as hidden instead of being deleted.
                 if ( !(pWin->GetStatus() & ( BASWIN_TOBEKILLED | BASWIN_RUNNINGBASIC | BASWIN_SUSPENDED ) ) )
-                    aDeleteVec.push_back( pWin );
+                    aDeleteVec.emplace_back(pWin );
             }
         }
-        for ( auto it = aDeleteVec.begin(); it != aDeleteVec.end(); ++it )
+        for (auto const& elem : aDeleteVec)
         {
-            RemoveWindow( *it, false, false );
+            RemoveWindow( elem, false, false );
         }
     }
 
@@ -633,15 +631,12 @@ void Shell::UpdateWindows()
 
     // show all windows that are to be shown
     ScriptDocuments aDocuments( ScriptDocument::getAllScriptDocuments( ScriptDocument::AllWithApplication ) );
-    for (   ScriptDocuments::const_iterator doc = aDocuments.begin();
-            doc != aDocuments.end();
-            ++doc
-        )
+    for (auto const& doc : aDocuments)
     {
-        StartListening( *doc->getBasicManager(), true /* log on only once */ );
+        StartListening(*doc.getBasicManager(), DuplicateHandling::Prevent /* log on only once */);
 
         // libraries
-        Sequence< OUString > aLibNames( doc->getLibraryNames() );
+        Sequence< OUString > aLibNames( doc.getLibraryNames() );
         sal_Int32 nLibCount = aLibNames.getLength();
         const OUString* pLibNames = aLibNames.getConstArray();
 
@@ -649,11 +644,11 @@ void Shell::UpdateWindows()
         {
             OUString aLibName = pLibNames[ i ];
 
-            if ( m_aCurLibName.isEmpty() || ( *doc == m_aCurDocument && aLibName == m_aCurLibName ) )
+            if ( m_aCurLibName.isEmpty() || ( doc == m_aCurDocument && aLibName == m_aCurLibName ) )
             {
                 // check, if library is password protected and not verified
                 bool bProtected = false;
-                Reference< script::XLibraryContainer > xModLibContainer( doc->getLibraryContainer( E_SCRIPTS ) );
+                Reference< script::XLibraryContainer > xModLibContainer( doc.getLibraryContainer( E_SCRIPTS ) );
                 if ( xModLibContainer.is() && xModLibContainer->hasByName( aLibName ) )
                 {
                     Reference< script::XLibraryContainerPassword > xPasswd( xModLibContainer, UNO_QUERY );
@@ -667,27 +662,27 @@ void Shell::UpdateWindows()
                 {
                     LibInfo::Item const* pLibInfoItem = nullptr;
                     if (ExtraData* pData = GetExtraData())
-                        pLibInfoItem = pData->GetLibInfo().GetInfo(*doc, aLibName);
+                        pLibInfoItem = pData->GetLibInfo().GetInfo(doc, aLibName);
 
                     // modules
                     if ( xModLibContainer.is() && xModLibContainer->hasByName( aLibName ) )
                     {
-                        StarBASIC* pLib = doc->getBasicManager()->GetLib( aLibName );
+                        StarBASIC* pLib = doc.getBasicManager()->GetLib( aLibName );
                         if ( pLib )
-                            ImplStartListening( pLib );
+                            StartListening(pLib->GetBroadcaster(), DuplicateHandling::Prevent /* log on only once */);
 
                         try
                         {
-                            Sequence< OUString > aModNames( doc->getObjectNames( E_SCRIPTS, aLibName ) );
+                            Sequence< OUString > aModNames( doc.getObjectNames( E_SCRIPTS, aLibName ) );
                             sal_Int32 nModCount = aModNames.getLength();
                             const OUString* pModNames = aModNames.getConstArray();
 
                             for ( sal_Int32 j = 0 ; j < nModCount ; j++ )
                             {
                                 OUString aModName = pModNames[ j ];
-                                ModulWindow* pWin = FindBasWin( *doc, aLibName, aModName );
+                                VclPtr<ModulWindow> pWin = FindBasWin( doc, aLibName, aModName );
                                 if ( !pWin )
-                                    pWin = CreateBasWin( *doc, aLibName, aModName );
+                                    pWin = CreateBasWin( doc, aLibName, aModName );
                                 if ( !pNextActiveWindow && pLibInfoItem && pLibInfoItem->GetCurrentName() == aModName &&
                                      pLibInfoItem->GetCurrentType() == TYPE_MODULE )
                                 {
@@ -697,17 +692,17 @@ void Shell::UpdateWindows()
                         }
                         catch (const container::NoSuchElementException& )
                         {
-                            DBG_UNHANDLED_EXCEPTION();
+                            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
                         }
                     }
 
                     // dialogs
-                    Reference< script::XLibraryContainer > xDlgLibContainer( doc->getLibraryContainer( E_DIALOGS ) );
+                    Reference< script::XLibraryContainer > xDlgLibContainer( doc.getLibraryContainer( E_DIALOGS ) );
                     if ( xDlgLibContainer.is() && xDlgLibContainer->hasByName( aLibName ) )
                     {
                         try
                         {
-                            Sequence< OUString > aDlgNames = doc->getObjectNames( E_DIALOGS, aLibName );
+                            Sequence< OUString > aDlgNames = doc.getObjectNames( E_DIALOGS, aLibName );
                             sal_Int32 nDlgCount = aDlgNames.getLength();
                             const OUString* pDlgNames = aDlgNames.getConstArray();
 
@@ -716,9 +711,9 @@ void Shell::UpdateWindows()
                                 OUString aDlgName = pDlgNames[ j ];
                                 // this find only looks for non-suspended windows;
                                 // suspended windows are handled in CreateDlgWin
-                                VclPtr<DialogWindow> pWin = FindDlgWin( *doc, aLibName, aDlgName );
+                                VclPtr<DialogWindow> pWin = FindDlgWin( doc, aLibName, aDlgName );
                                 if ( !pWin )
-                                    pWin = CreateDlgWin( *doc, aLibName, aDlgName );
+                                    pWin = CreateDlgWin( doc, aLibName, aDlgName );
                                 if ( !pNextActiveWindow && pLibInfoItem && pLibInfoItem->GetCurrentName() == aDlgName &&
                                      pLibInfoItem->GetCurrentType() == TYPE_DIALOG )
                                 {
@@ -728,7 +723,7 @@ void Shell::UpdateWindows()
                         }
                         catch (const container::NoSuchElementException& )
                         {
-                            DBG_UNHANDLED_EXCEPTION();
+                            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
                         }
                     }
                 }
@@ -740,7 +735,7 @@ void Shell::UpdateWindows()
     {
         if ( !pNextActiveWindow )
         {
-            pNextActiveWindow = FindApplicationWindow();
+            pNextActiveWindow = FindApplicationWindow().get();
         }
         SetCurWindow( pNextActiveWindow, true );
     }
@@ -750,9 +745,9 @@ void Shell::RemoveWindow( BaseWindow* pWindow_, bool bDestroy, bool bAllowChange
 {
     VclPtr<BaseWindow> pWindowTmp( pWindow_ );
 
-    DBG_ASSERT( pWindow_, "Kann keinen NULL-Pointer loeschen!" );
+    DBG_ASSERT( pWindow_, "Cannot delete NULL-Pointer!" );
     sal_uLong nKey = GetWindowId( pWindow_ );
-    pTabBar->RemovePage( (sal_uInt16)nKey );
+    pTabBar->RemovePage( static_cast<sal_uInt16>(nKey) );
     aWindowTable.erase( nKey );
     if ( pWindow_ == pCurWin )
     {
@@ -782,7 +777,7 @@ void Shell::RemoveWindow( BaseWindow* pWindow_, bool bDestroy, bool bAllowChange
             if ( pWindow_->GetDocument().isInVBAMode() )
             {
                 SbModule* pMod = StarBASIC::GetActiveModule();
-                if ( !pMod || !pMod->GetName().equals(pWindow_->GetName()) )
+                if ( !pMod || pMod->GetName() != pWindow_->GetName() )
                 {
                     bStop = false;
                 }
@@ -845,7 +840,7 @@ void Shell::InvalidateBasicIDESlots()
             pBindings->Invalidate( SID_BASICIDE_MANAGEBRKPNTS );
             pBindings->Invalidate( SID_BASICIDE_ADDWATCH );
             pBindings->Invalidate( SID_BASICIDE_REMOVEWATCH );
-            pBindings->Invalidate( SID_CHOOSE_CONTROLS );
+
             pBindings->Invalidate( SID_PRINTDOC );
             pBindings->Invalidate( SID_PRINTDOCDIRECT );
             pBindings->Invalidate( SID_SETUPPRINTER );
@@ -856,6 +851,49 @@ void Shell::InvalidateBasicIDESlots()
             pBindings->Invalidate( SID_BASICIDE_STAT_POS );
             pBindings->Invalidate( SID_ATTR_INSERT );
             pBindings->Invalidate( SID_ATTR_SIZE );
+        }
+    }
+}
+
+void Shell::InvalidateControlSlots()
+{
+    if (GetShell())
+    {
+        if (SfxBindings* pBindings = GetBindingsPtr())
+        {
+            pBindings->Invalidate( SID_INSERT_FORM_RADIO );
+            pBindings->Invalidate( SID_INSERT_FORM_CHECK );
+            pBindings->Invalidate( SID_INSERT_FORM_LIST );
+            pBindings->Invalidate( SID_INSERT_FORM_COMBO );
+            pBindings->Invalidate( SID_INSERT_FORM_VSCROLL );
+            pBindings->Invalidate( SID_INSERT_FORM_HSCROLL );
+            pBindings->Invalidate( SID_INSERT_FORM_SPIN );
+
+            pBindings->Invalidate( SID_INSERT_SELECT );
+            pBindings->Invalidate( SID_INSERT_PUSHBUTTON );
+            pBindings->Invalidate( SID_INSERT_RADIOBUTTON );
+            pBindings->Invalidate( SID_INSERT_CHECKBOX );
+            pBindings->Invalidate( SID_INSERT_LISTBOX );
+            pBindings->Invalidate( SID_INSERT_COMBOBOX );
+            pBindings->Invalidate( SID_INSERT_GROUPBOX );
+            pBindings->Invalidate( SID_INSERT_EDIT );
+            pBindings->Invalidate( SID_INSERT_FIXEDTEXT );
+            pBindings->Invalidate( SID_INSERT_IMAGECONTROL );
+            pBindings->Invalidate( SID_INSERT_PROGRESSBAR );
+            pBindings->Invalidate( SID_INSERT_HSCROLLBAR );
+            pBindings->Invalidate( SID_INSERT_VSCROLLBAR );
+            pBindings->Invalidate( SID_INSERT_HFIXEDLINE );
+            pBindings->Invalidate( SID_INSERT_VFIXEDLINE );
+            pBindings->Invalidate( SID_INSERT_DATEFIELD );
+            pBindings->Invalidate( SID_INSERT_TIMEFIELD );
+            pBindings->Invalidate( SID_INSERT_NUMERICFIELD );
+            pBindings->Invalidate( SID_INSERT_CURRENCYFIELD );
+            pBindings->Invalidate( SID_INSERT_FORMATTEDFIELD );
+            pBindings->Invalidate( SID_INSERT_PATTERNFIELD );
+            pBindings->Invalidate( SID_INSERT_FILECONTROL );
+            pBindings->Invalidate( SID_INSERT_SPINBUTTON );
+            pBindings->Invalidate( SID_INSERT_TREECONTROL );
+            pBindings->Invalidate( SID_CHOOSE_CONTROLS );
         }
     }
 }
@@ -912,13 +950,8 @@ void Shell::SetCurLibForLocalization( const ScriptDocument& rDocument, const OUS
     catch (const container::NoSuchElementException& )
     {}
 
-    m_pCurLocalizationMgr = std::shared_ptr<LocalizationMgr>(new LocalizationMgr(this, rDocument, aLibName, xStringResourceManager));
+    m_pCurLocalizationMgr = std::make_shared<LocalizationMgr>(this, rDocument, aLibName, xStringResourceManager);
     m_pCurLocalizationMgr->handleTranslationbar();
-}
-
-void Shell::ImplStartListening( StarBASIC* pBasic )
-{
-    StartListening( pBasic->GetBroadcaster(), true /* log on only once */ );
 }
 
 } // namespace basctl

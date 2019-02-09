@@ -17,13 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <pptexsoundcollection.hxx>
+#include <memory>
+#include "pptexsoundcollection.hxx"
 #include "epptdef.hxx"
 #include <tools/stream.hxx>
 #include <tools/urlobj.hxx>
 #include <ucbhelper/content.hxx>
 #include <comphelper/processfactory.hxx>
-#include <cppuhelper/proptypehlp.hxx>
 #include <unotools/ucbstreamhelper.hxx>
 
 namespace ppt
@@ -39,8 +39,8 @@ ExSoundEntry::ExSoundEntry(const OUString& rString)
             css::uno::Reference< css::ucb::XCommandEnvironment >(),
             comphelper::getProcessComponentContext() );
         sal_Int64 nVal = 0;
-        ::cppu::convertPropertyValue( nVal, aCnt.getPropertyValue("Size") );
-        nFileSize = (sal_uInt32)nVal;
+        aCnt.getPropertyValue("Size") >>= nVal;
+        nFileSize = static_cast<sal_uInt32>(nVal);
     }
     catch( css::uno::Exception& )
     {
@@ -127,19 +127,17 @@ void ExSoundEntry::Write( SvStream& rSt, sal_uInt32 nId ) const
 
         rSt.WriteUInt32( EPP_SoundData << 16 ).WriteUInt32( nFileSize );
         sal_uInt32 nBytesLeft = nFileSize;
-        SvStream* pSourceFile = ::utl::UcbStreamHelper::CreateStream( aSoundURL, StreamMode::READ );
+        std::unique_ptr<SvStream> pSourceFile = ::utl::UcbStreamHelper::CreateStream( aSoundURL, StreamMode::READ );
         if ( pSourceFile )
         {
-            sal_uInt8* pBuf = new sal_uInt8[ 0x10000 ];   // 64 kB  Buffer
+            std::unique_ptr<sal_uInt8[]> pBuf( new sal_uInt8[ 0x10000 ] );   // 64 kB  Buffer
             while ( nBytesLeft )
             {
-                sal_uInt32 nToDo = ( nBytesLeft > 0x10000 ) ? 0x10000 : nBytesLeft;
-                pSourceFile->Read( pBuf, nToDo );
-                rSt.Write( pBuf, nToDo );
+                sal_uInt32 nToDo = std::min<sal_uInt32>( nBytesLeft, 0x10000 );
+                pSourceFile->ReadBytes(pBuf.get(), nToDo);
+                rSt.WriteBytes(pBuf.get(), nToDo);
                 nBytesLeft -= nToDo;
             }
-            delete pSourceFile;
-            delete[] pBuf;
         }
     }
     catch( css::uno::Exception& )
@@ -154,13 +152,10 @@ sal_uInt32 ExSoundCollection::GetId(const OUString& rString)
     if (!rString.isEmpty())
     {
         const sal_uInt32 nSoundCount = maEntries.size();
-        std::vector<ExSoundEntry>::const_iterator iter;
 
-        for (iter = maEntries.begin(); iter != maEntries.end(); ++iter, ++nSoundId)
-        {
-            if (iter->IsSameURL(rString))
-                break;
-        }
+        auto iter = std::find_if(maEntries.begin(), maEntries.end(),
+            [&rString](const ExSoundEntry& rEntry) { return rEntry.IsSameURL(rString); });
+        nSoundId = static_cast<sal_uInt32>(std::distance(maEntries.begin(), iter));
 
         if ( nSoundId++ == nSoundCount )
         {
@@ -182,10 +177,12 @@ sal_uInt32 ExSoundCollection::GetSize() const
     if (!maEntries.empty())
     {
         nSize += 8 + 12;    // size of SoundCollectionContainerHeader + SoundCollAtom
-        std::vector<ExSoundEntry>::const_iterator iter;
         sal_uInt32 i = 1;
-        for ( iter = maEntries.begin(); iter != maEntries.end(); ++iter, ++i)
-            nSize += iter->GetSize(i);
+        for ( const auto& rEntry : maEntries )
+        {
+            nSize += rEntry.GetSize(i);
+            ++i;
+        }
     }
     return nSize;
 }
@@ -203,9 +200,11 @@ void ExSoundCollection::Write( SvStream& rSt ) const
         // create SoundCollAtom ( reference to the next free SoundId );
         rSt.WriteUInt32( EPP_SoundCollAtom << 16 ).WriteUInt32( 4 ).WriteUInt32( nSoundCount );
 
-        std::vector<ExSoundEntry>::const_iterator iter;
-        for ( iter = maEntries.begin(); iter != maEntries.end(); ++iter, ++i)
-            iter->Write(rSt,i);
+        for ( const auto& rEntry : maEntries )
+        {
+            rEntry.Write(rSt,i);
+            ++i;
+        }
     }
 }
 

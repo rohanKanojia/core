@@ -20,6 +20,11 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_CORE_INC_VIEWCONTAINER_HXX
 #define INCLUDED_DBACCESS_SOURCE_CORE_INC_VIEWCONTAINER_HXX
 
+#include <sal/config.h>
+
+#include <atomic>
+#include <cstddef>
+
 #include <cppuhelper/implbase1.hxx>
 
 #include <com/sun/star/container/XEnumerationAccess.hpp>
@@ -30,7 +35,7 @@
 #include <com/sun/star/sdbc/SQLWarning.hpp>
 #include <com/sun/star/sdb/SQLContext.hpp>
 #include <com/sun/star/container/XContainerListener.hpp>
-#include "apitools.hxx"
+#include <apitools.hxx>
 
 #include "FilteredContainer.hxx"
 
@@ -41,11 +46,9 @@ namespace dbtools
 
 namespace dbaccess
 {
-    typedef ::cppu::ImplHelper1< css::container::XContainerListener> OViewContainer_Base;
-
     // OViewContainer
     class OViewContainer :  public OFilteredContainer,
-                            public OViewContainer_Base
+                            public ::cppu::ImplHelper1< css::container::XContainerListener>
     {
     public:
         /** ctor of the container. The parent has to support the <type scope="css::sdbc">XConnection</type>
@@ -62,11 +65,10 @@ namespace dbaccess
                         const css::uno::Reference< css::sdbc::XConnection >& _xCon,
                         bool _bCase,
                         IRefreshListener*   _pRefreshListener,
-                        ::dbtools::WarningsContainer* _pWarningsContainer,
-                        oslInterlockedCount& _nInAppend
+                        std::atomic<std::size_t>& _nInAppend
                         );
 
-        virtual ~OViewContainer();
+        virtual ~OViewContainer() override;
 
     protected:
         // OFilteredContainer overridables
@@ -79,11 +81,11 @@ namespace dbaccess
         DECLARE_SERVICE_INFO();
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
         // XContainerListener
-        virtual void SAL_CALL elementInserted( const css::container::ContainerEvent& Event ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL elementRemoved( const css::container::ContainerEvent& Event ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL elementReplaced( const css::container::ContainerEvent& Event ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL elementInserted( const css::container::ContainerEvent& Event ) override;
+        virtual void SAL_CALL elementRemoved( const css::container::ContainerEvent& Event ) override;
+        virtual void SAL_CALL elementReplaced( const css::container::ContainerEvent& Event ) override;
 
         // ::connectivity::sdbcx::OCollection
         virtual ::connectivity::sdbcx::ObjectType       createObject(const OUString& _rName) override;

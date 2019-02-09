@@ -9,7 +9,6 @@
 
 #include <swmodeltestbase.hxx>
 
-#if !defined(_WIN32)
 
 #include <com/sun/star/drawing/EnhancedCustomShapeParameterPair.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeSegment.hpp>
@@ -22,10 +21,11 @@
 #include <com/sun/star/drawing/TextVerticalAdjust.hpp>
 #include <com/sun/star/style/LineSpacing.hpp>
 #include <com/sun/star/style/LineSpacingMode.hpp>
-#include <com/sun/star/text/GraphicCrop.hpp>
 #include <pagedesc.hxx>
 
 #include <comphelper/sequenceashashmap.hxx>
+
+#include <config_features.h>
 
 class Test : public SwModelTestBase
 {
@@ -38,7 +38,7 @@ protected:
      */
     bool mustTestImportOf(const char* filename) const override {
         // If the testcase is stored in some other format, it's pointless to test.
-        return (OString(filename).endsWith(".docx"));
+        return OString(filename).endsWith(".docx");
     }
 };
 
@@ -107,6 +107,10 @@ DECLARE_OOXMLEXPORT_TEST(testTextWatermark, "textWatermark.docx")
        return;
 
     assertXPath(pXmlHeader1, "/w:hdr[1]/w:p[1]/w:r[1]/w:pict[1]/v:shape[1]","id","PowerPlusWaterMarkObject93701316");
+
+    //The second problem was that Word uses also "o:spid"
+    const OUString& sSpid = getXPath(pXmlHeader1, "/w:hdr[1]/w:p[1]/w:r[1]/w:pict[1]/v:shape[1]","spid");
+    CPPUNIT_ASSERT(!sSpid.isEmpty());
 }
 
 DECLARE_OOXMLEXPORT_TEST(testPictureWatermark, "pictureWatermark.docx")
@@ -120,7 +124,7 @@ DECLARE_OOXMLEXPORT_TEST(testPictureWatermark, "pictureWatermark.docx")
        return;
 
     // Check the watermark ID
-    assertXPath(pXmlHeader1, "/w:hdr[1]/w:p[1]/w:r[1]/mc:AlternateContent[1]/mc:Fallback[1]/w:pict[1]/v:rect[1]","id","WordPictureWatermark11962361");
+    assertXPath(pXmlHeader1, "/w:hdr[1]/w:p[1]/w:r[1]/mc:AlternateContent[1]/mc:Fallback[1]/w:pict[1]/v:shape[1]","id","WordPictureWatermark11962361");
 }
 
 
@@ -166,7 +170,7 @@ DECLARE_OOXMLEXPORT_TEST(testShapeEffectPreservation, "shape-effect-preservation
             "dir", "2700000");
     assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:r/mc:AlternateContent/mc:Choice/w:drawing/"
             "wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:effectLst/a:outerShdw",
-            "dist", "38100");
+            "dist", "37674");
     assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:r/mc:AlternateContent/mc:Choice/w:drawing/"
             "wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:effectLst/a:outerShdw",
             "rotWithShape", "0");
@@ -189,7 +193,7 @@ DECLARE_OOXMLEXPORT_TEST(testShapeEffectPreservation, "shape-effect-preservation
             "dir", "2700000");
     assertXPath(pXmlDoc, "/w:document/w:body/w:p[2]/w:r/mc:AlternateContent/mc:Choice/w:drawing/"
             "wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:effectLst/a:outerShdw",
-            "dist", "203200");
+            "dist", "203137");
     assertXPath(pXmlDoc, "/w:document/w:body/w:p[2]/w:r/mc:AlternateContent/mc:Choice/w:drawing/"
             "wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:effectLst/a:outerShdw",
             "rotWithShape", "0");
@@ -436,7 +440,7 @@ DECLARE_OOXMLEXPORT_TEST(testPictureEffectPreservation, "picture-effects-preserv
     // second picture: shadow and reflection effects
     assertXPath(pXmlDoc, "/w:document/w:body/w:p[2]/w:r/mc:AlternateContent/mc:Choice/w:drawing/"
             "wp:anchor/a:graphic/a:graphicData/pic:pic/pic:spPr/a:effectLst/a:outerShdw",
-            "dir", "8100000");
+            "dir", "8076614");
     assertXPath(pXmlDoc, "/w:document/w:body/w:p[2]/w:r/mc:AlternateContent/mc:Choice/w:drawing/"
             "wp:anchor/a:graphic/a:graphicData/pic:pic/pic:spPr/a:effectLst/a:outerShdw/a:srgbClr",
             "val", "000000");
@@ -626,6 +630,26 @@ DECLARE_OOXMLEXPORT_TEST(test77219, "test77219.docx")
     assertXPath(pXmlDoc, "/w:document[1]/w:body[1]/w:p[6]/w:r[1]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]", "behindDoc", "1");
 }
 
+DECLARE_OOXMLEXPORT_TEST(testTdf77219_backgroundShape, "tdf77219_backgroundShape.docx")
+{
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Shape is in front of the paragraph", false, getProperty<bool>(getShape(1), "Opaque"));
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf77219_foregroundShape, "tdf77219_foregroundShape.docx")
+{
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Shape is in front of the paragraph", true, getProperty<bool>(getShape(1), "Opaque"));
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf108973_backgroundTextbox, "tdf108973_backgroundTextbox.docx")
+{
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Textbox is in front of the paragraph", false, getProperty<bool>(getShape(1), "Opaque"));
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf108973_foregroundTextbox, "tdf108973_foregroundTextbox.docx")
+{
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Textbox is in front of the paragraph", true, getProperty<bool>(getShape(1), "Opaque"));
+}
+
 DECLARE_OOXMLEXPORT_TEST(testPresetShape, "preset-shape.docx")
 {
     // Document contains a flowChartMultidocument preset shape, our date for that shape wasn't correct.
@@ -686,8 +710,6 @@ DECLARE_OOXMLEXPORT_TEST(testAbsolutePositionOffsetValue,"fdo78432.docx")
     if (!pXmlDoc)
         return;
 
-    sal_Int32 IntMax = SAL_MAX_INT32;
-
     xmlXPathObjectPtr pXmlObjs[6];
     pXmlObjs[0] = getXPathNode(pXmlDoc,"/w:document[1]/w:body[1]/w:p[1]/w:r[1]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/wp:positionH[1]/wp:posOffset[1]");
     pXmlObjs[1] = getXPathNode(pXmlDoc,"/w:document[1]/w:body[1]/w:p[1]/w:r[1]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/wp:positionV[1]/wp:posOffset[1]");
@@ -703,7 +725,7 @@ DECLARE_OOXMLEXPORT_TEST(testAbsolutePositionOffsetValue,"fdo78432.docx")
         CPPUNIT_ASSERT(pXmlObjs[index]->nodesetval != nullptr);
         xmlNodePtr pXmlNode = pXmlObjs[index]->nodesetval->nodeTab[0];
         OUString contents = OUString::createFromAscii(reinterpret_cast<const char*>((pXmlNode->children[0]).content));
-        CPPUNIT_ASSERT( contents.toInt64() <= IntMax );
+        CPPUNIT_ASSERT( contents.toInt64() <= SAL_MAX_INT32 );
         xmlXPathFreeObject(pXmlObjs[index]);
     }
 }
@@ -783,37 +805,14 @@ DECLARE_OOXMLEXPORT_TEST(testFdo78957, "fdo78957.docx")
 
 DECLARE_OOXMLEXPORT_TEST(testfdo79256, "fdo79256.docx")
 {
-    /* Corruption issue containing Line Style with Long Dashes and Dots
-     * After RT checking the Dash Length value. Dash Length value should not be greater than 2147483.
+    /* corruption issue also solved by fixing tdf#108064:
+     * since that LO keeps MSO preset dash styles during OOXML export
      */
     xmlDocPtr pXmlDoc = parseExport("word/document.xml");
     if (!pXmlDoc)
         return;
 
-    const sal_Int32 maxLimit = 2147483;
-    sal_Int32 d = getXPath(pXmlDoc,"/w:document/w:body/w:p[1]/w:r[1]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/a:graphic[1]/a:graphicData[1]/wps:wsp[1]/wps:spPr[1]/a:ln[1]/a:custDash[1]/a:ds[1]","d").toInt32();
-    CPPUNIT_ASSERT(d <= maxLimit );
-}
-
-DECLARE_OOXMLEXPORT_TEST(testDashedLinePreset, "dashed_line_preset.docx")
-{
-    /* Make sure that preset line is exported correctly as "1000th of a percent".
-     * This test-file has a PRESET dash-line which will be converted by LO import
-     * to a custom-dash (dash-dot-dot). This test-case makes sure that the exporter
-     * outputs the correct values.
-     */
-    xmlDocPtr pXmlDoc = parseExport("word/document.xml");
-    if (!pXmlDoc)
-        return;
-
-    assertXPath(pXmlDoc,"/w:document/w:body/w:p[1]/w:r[1]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/a:graphic[1]/a:graphicData[1]/wps:wsp[1]/wps:spPr[1]/a:ln[1]/a:custDash[1]/a:ds[1]", "d" , "800000");
-    assertXPath(pXmlDoc,"/w:document/w:body/w:p[1]/w:r[1]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/a:graphic[1]/a:graphicData[1]/wps:wsp[1]/wps:spPr[1]/a:ln[1]/a:custDash[1]/a:ds[1]", "sp", "300000");
-
-    assertXPath(pXmlDoc,"/w:document/w:body/w:p[1]/w:r[1]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/a:graphic[1]/a:graphicData[1]/wps:wsp[1]/wps:spPr[1]/a:ln[1]/a:custDash[1]/a:ds[2]", "d" , "100000");
-    assertXPath(pXmlDoc,"/w:document/w:body/w:p[1]/w:r[1]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/a:graphic[1]/a:graphicData[1]/wps:wsp[1]/wps:spPr[1]/a:ln[1]/a:custDash[1]/a:ds[2]", "sp", "300000");
-
-    assertXPath(pXmlDoc,"/w:document/w:body/w:p[1]/w:r[1]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/a:graphic[1]/a:graphicData[1]/wps:wsp[1]/wps:spPr[1]/a:ln[1]/a:custDash[1]/a:ds[3]", "d" , "100000");
-    assertXPath(pXmlDoc,"/w:document/w:body/w:p[1]/w:r[1]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/a:graphic[1]/a:graphicData[1]/wps:wsp[1]/wps:spPr[1]/a:ln[1]/a:custDash[1]/a:ds[3]", "sp", "300000");
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:r[1]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/a:graphic[1]/a:graphicData[1]/wps:wsp[1]/wps:spPr[1]/a:ln/a:prstDash", "val", "lgDash");
 }
 
 DECLARE_OOXMLEXPORT_TEST(testDashedLine_CustDash1000thOfPercent, "dashed_line_custdash_1000th_of_percent.docx")
@@ -899,7 +898,7 @@ DECLARE_OOXMLEXPORT_TEST(testfdo79591, "fdo79591.docx")
 DECLARE_OOXMLEXPORT_TEST(testBnc884615, "bnc884615.docx")
 {
     // The problem was that the shape in the header wasn't in the background.
-    CPPUNIT_ASSERT_EQUAL(false, bool(getProperty<sal_Bool>(getShape(1), "Opaque")));
+    CPPUNIT_ASSERT_EQUAL(false, getProperty<bool>(getShape(1), "Opaque"));
 }
 
 DECLARE_OOXMLEXPORT_TEST(testFdo80894, "TextFrameRotation.docx")
@@ -1031,7 +1030,7 @@ DECLARE_OOXMLEXPORT_TEST(testTextVerticalAdjustment, "tdf36117_verticalAdjustmen
     CPPUNIT_ASSERT_EQUAL( drawing::TextVerticalAdjust_BLOCK, nVA );
 }
 
-
+#if HAVE_MORE_FONTS
 DECLARE_OOXMLEXPORT_TEST(testTDF87348, "tdf87348_linkedTextboxes.docx")
 {
     int followCount=0;
@@ -1094,6 +1093,7 @@ DECLARE_OOXMLEXPORT_TEST(testTDF87348, "tdf87348_linkedTextboxes.docx")
     //  (unknown number of flys, unknown order of leftovers)
     CPPUNIT_ASSERT ( (followCount >= 6) && (precedeCount >= 6) );
 }
+#endif
 
 DECLARE_OOXMLEXPORT_TEST(testTDF93675, "no-numlevel-but-indented.odt")
 {
@@ -1102,6 +1102,8 @@ DECLARE_OOXMLEXPORT_TEST(testTDF93675, "no-numlevel-but-indented.odt")
         return;
     assertXPath(pXmlDoc, "//w:ind", "start", "1418");
 }
+
+
 
 DECLARE_OOXMLEXPORT_TEST(testFlipAndRotateCustomShape, "flip_and_rotate.odt")
 {
@@ -1114,9 +1116,10 @@ DECLARE_OOXMLEXPORT_TEST(testFlipAndRotateCustomShape, "flip_and_rotate.odt")
     // check rotation angle
     assertXPath(pXmlDoc, "//a:xfrm", "rot", "13500000");
     // check the first few coordinates of the polygon
-#ifndef MACOSX /* Retina-related rounding rountrip error
+#ifndef MACOSX /* Retina-related rounding roundtrip error
                 * hard to smooth out due to the use of string compare
                 * instead of number */
+#if !defined(_WIN32)
     assertXPath(pXmlDoc, "//a:custGeom/a:pathLst/a:path/a:lnTo[1]/a:pt", "x", "2351");
     assertXPath(pXmlDoc, "//a:custGeom/a:pathLst/a:path/a:lnTo[1]/a:pt", "y", "3171");
     assertXPath(pXmlDoc, "//a:custGeom/a:pathLst/a:path/a:lnTo[2]/a:pt", "x", "1695");
@@ -1124,9 +1127,9 @@ DECLARE_OOXMLEXPORT_TEST(testFlipAndRotateCustomShape, "flip_and_rotate.odt")
     assertXPath(pXmlDoc, "//a:custGeom/a:pathLst/a:path/a:lnTo[3]/a:pt", "x", "1695");
     assertXPath(pXmlDoc, "//a:custGeom/a:pathLst/a:path/a:lnTo[3]/a:pt", "y", "1701");
 #endif
+#endif
 }
 
-#endif
 
 CPPUNIT_PLUGIN_IMPLEMENT();
 

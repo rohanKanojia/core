@@ -37,14 +37,13 @@
 #include <frmfmt.hxx>
 
 SwNoTextNode::SwNoTextNode( const SwNodeIndex & rWhere,
-                  const sal_uInt8 nNdType,
+                  const SwNodeType nNdType,
                   SwGrfFormatColl *pGrfColl,
-                  SwAttrSet* pAutoAttr ) :
+                  SwAttrSet const * pAutoAttr ) :
     SwContentNode( rWhere, nNdType, pGrfColl ),
-    pContour( nullptr ),
-    bAutomaticContour( false ),
-    bContourMapModeValid( true ),
-    bPixelContour( false )
+    m_bAutomaticContour( false ),
+    m_bContourMapModeValid( true ),
+    m_bPixelContour( false )
 {
     // Should this set a hard attribute?
     if( pAutoAttr )
@@ -53,7 +52,6 @@ SwNoTextNode::SwNoTextNode( const SwNodeIndex & rWhere,
 
 SwNoTextNode::~SwNoTextNode()
 {
-    delete pContour;
 }
 
 /// Creates an AttrSet for all derivations with ranges for frame-
@@ -66,7 +64,7 @@ void SwNoTextNode::NewAttrSet( SwAttrPool& rPool )
     // put names of parent style and conditional style:
     const SwFormatColl* pFormatColl = GetFormatColl();
     OUString sVal;
-    SwStyleNameMapper::FillProgName( pFormatColl->GetName(), sVal, nsSwGetPoolIdFromName::GET_POOLID_TXTCOLL, true );
+    SwStyleNameMapper::FillProgName( pFormatColl->GetName(), sVal, SwGetPoolIdFromName::TxtColl );
     SfxStringItem aFormatColl( RES_FRMATR_STYLE_NAME, sVal );
     aNewAttrSet.Put( aFormatColl );
 
@@ -88,65 +86,52 @@ bool SwNoTextNode::SavePersistentData()
 
 void SwNoTextNode::SetContour( const tools::PolyPolygon *pPoly, bool bAutomatic )
 {
-    delete pContour;
     if ( pPoly )
-        pContour = new tools::PolyPolygon( *pPoly );
+        m_pContour.reset( new tools::PolyPolygon( *pPoly ) );
     else
-        pContour = nullptr;
-    bAutomaticContour = bAutomatic;
-    bContourMapModeValid = true;
-    bPixelContour = false;
+        m_pContour.reset();
+    m_bAutomaticContour = bAutomatic;
+    m_bContourMapModeValid = true;
+    m_bPixelContour = false;
 }
 
 void SwNoTextNode::CreateContour()
 {
-    OSL_ENSURE( !pContour, "Contour available." );
-    pContour = new tools::PolyPolygon(SvxContourDlg::CreateAutoContour(GetGraphic()));
-    bAutomaticContour = true;
-    bContourMapModeValid = true;
-    bPixelContour = false;
+    OSL_ENSURE( !m_pContour, "Contour available." );
+    m_pContour.reset( new tools::PolyPolygon(SvxContourDlg::CreateAutoContour(GetGraphic())) );
+    m_bAutomaticContour = true;
+    m_bContourMapModeValid = true;
+    m_bPixelContour = false;
 }
 
 const tools::PolyPolygon *SwNoTextNode::HasContour() const
 {
-    if( !bContourMapModeValid )
+    if( !m_bContourMapModeValid )
     {
         const MapMode aGrfMap( GetGraphic().GetPrefMapMode() );
-        bool bPixelGrf = aGrfMap.GetMapUnit() == MAP_PIXEL;
-        const MapMode aContourMap( bPixelGrf ? MAP_PIXEL : MAP_100TH_MM );
-        if( bPixelGrf ? !bPixelContour : aGrfMap != aContourMap )
+        bool bPixelGrf = aGrfMap.GetMapUnit() == MapUnit::MapPixel;
+        const MapMode aContourMap( bPixelGrf ? MapUnit::MapPixel : MapUnit::Map100thMM );
+        if( bPixelGrf ? !m_bPixelContour : aGrfMap != aContourMap )
         {
             double nGrfDPIx = 0.0;
             double nGrfDPIy = 0.0;
             {
-                if ( !bPixelGrf && bPixelContour )
+                if ( !bPixelGrf && m_bPixelContour )
                 {
-                    const Size aGrfPixelSize( GetGraphic().GetSizePixel() );
-                    const Size aGrfPrefMapModeSize( GetGraphic().GetPrefSize() );
-                    if ( aGrfMap.GetMapUnit() == MAP_INCH )
-                    {
-                        nGrfDPIx = aGrfPixelSize.Width() / ( (double)aGrfMap.GetScaleX() * aGrfPrefMapModeSize.Width() );
-                        nGrfDPIy = aGrfPixelSize.Height() / ( (double)aGrfMap.GetScaleY() * aGrfPrefMapModeSize.Height() );
-                    }
-                    else
-                    {
-                        const Size aGrf1000thInchSize =
-                            OutputDevice::LogicToLogic( aGrfPrefMapModeSize,
-                                                        aGrfMap, MAP_1000TH_INCH );
-                        nGrfDPIx = 1000.0 * aGrfPixelSize.Width() / aGrf1000thInchSize.Width();
-                        nGrfDPIy = 1000.0 * aGrfPixelSize.Height() / aGrf1000thInchSize.Height();
-                    }
+                    basegfx::B2DSize aDPI = GetGraphic().GetPPI();
+                    nGrfDPIx = aDPI.getX();
+                    nGrfDPIy = aDPI.getY();
                 }
             }
             OSL_ENSURE( !bPixelGrf || aGrfMap == aContourMap,
                         "scale factor for pixel unsupported" );
             OutputDevice* pOutDev =
-                (bPixelGrf || bPixelContour) ? Application::GetDefaultDevice()
+                (bPixelGrf || m_bPixelContour) ? Application::GetDefaultDevice()
                                              : nullptr;
-            sal_uInt16 nPolyCount = pContour->Count();
+            sal_uInt16 nPolyCount = m_pContour->Count();
             for( sal_uInt16 j=0; j<nPolyCount; j++ )
             {
-                tools::Polygon& rPoly = (*pContour)[j];
+                tools::Polygon& rPoly = (*m_pContour)[j];
 
                 sal_uInt16 nCount = rPoly.GetSize();
                 for( sal_uInt16 i=0 ; i<nCount; i++ )
@@ -154,7 +139,7 @@ const tools::PolyPolygon *SwNoTextNode::HasContour() const
                     if( bPixelGrf )
                         rPoly[i] = pOutDev->LogicToPixel( rPoly[i],
                                                           aContourMap );
-                    else if( bPixelContour )
+                    else if( m_bPixelContour )
                     {
                         rPoly[i] = pOutDev->PixelToLogic( rPoly[i], aGrfMap );
 
@@ -171,43 +156,42 @@ const tools::PolyPolygon *SwNoTextNode::HasContour() const
                 }
             }
         }
-        const_cast<SwNoTextNode *>(this)->bContourMapModeValid = true;
-        const_cast<SwNoTextNode *>(this)->bPixelContour = false;
+        const_cast<SwNoTextNode *>(this)->m_bContourMapModeValid = true;
+        const_cast<SwNoTextNode *>(this)->m_bPixelContour = false;
     }
 
-    return pContour;
+    return m_pContour.get();
 }
 
 void SwNoTextNode::GetContour( tools::PolyPolygon &rPoly ) const
 {
-    OSL_ENSURE( pContour, "Contour not available." );
+    OSL_ENSURE( m_pContour, "Contour not available." );
     rPoly = *HasContour();
 }
 
 void SwNoTextNode::SetContourAPI( const tools::PolyPolygon *pPoly )
 {
-    delete pContour;
     if ( pPoly )
-        pContour = new tools::PolyPolygon( *pPoly );
+        m_pContour.reset( new tools::PolyPolygon( *pPoly ) );
     else
-        pContour = nullptr;
-    bContourMapModeValid = false;
+        m_pContour.reset();
+    m_bContourMapModeValid = false;
 }
 
 bool SwNoTextNode::GetContourAPI( tools::PolyPolygon &rContour ) const
 {
-    if( !pContour )
+    if( !m_pContour )
         return false;
 
-    rContour = *pContour;
-    if( bContourMapModeValid )
+    rContour = *m_pContour;
+    if( m_bContourMapModeValid )
     {
         const MapMode aGrfMap( GetGraphic().GetPrefMapMode() );
-        const MapMode aContourMap( MAP_100TH_MM );
-        OSL_ENSURE( aGrfMap.GetMapUnit() != MAP_PIXEL ||
-                aGrfMap == MapMode( MAP_PIXEL ),
+        const MapMode aContourMap( MapUnit::Map100thMM );
+        OSL_ENSURE( aGrfMap.GetMapUnit() != MapUnit::MapPixel ||
+                aGrfMap == MapMode( MapUnit::MapPixel ),
                     "scale factor for pixel unsupported" );
-        if( aGrfMap.GetMapUnit() != MAP_PIXEL &&
+        if( aGrfMap.GetMapUnit() != MapUnit::MapPixel &&
             aGrfMap != aContourMap )
         {
             sal_uInt16 nPolyCount = rContour.Count();
@@ -231,14 +215,14 @@ bool SwNoTextNode::GetContourAPI( tools::PolyPolygon &rContour ) const
 bool SwNoTextNode::IsPixelContour() const
 {
     bool bRet;
-    if( bContourMapModeValid )
+    if( m_bContourMapModeValid )
     {
         const MapMode aGrfMap( GetGraphic().GetPrefMapMode() );
-        bRet = aGrfMap.GetMapUnit() == MAP_PIXEL;
+        bRet = aGrfMap.GetMapUnit() == MapUnit::MapPixel;
     }
     else
     {
-        bRet = bPixelContour;
+        bRet = m_bPixelContour;
     }
 
     return bRet;

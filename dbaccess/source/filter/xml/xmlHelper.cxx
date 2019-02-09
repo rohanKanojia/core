@@ -27,9 +27,10 @@
 #include <xmloff/maptype.hxx>
 
 #include <com/sun/star/awt/TextAlign.hpp>
-#include "xmlstrings.hrc"
+#include <stringconstants.hxx>
+#include <strings.hxx>
 #include "xmlEnums.hxx"
-#include <tools/debug.hxx>
+#include <rtl/ref.hxx>
 
 namespace dbaxml
 {
@@ -52,13 +53,13 @@ const XMLPropertyHandler* OPropertyHandlerFactory::GetPropertyHandler(sal_Int32 
     switch (_nType)
     {
         case XML_DB_TYPE_EQUAL:
-            if ( !m_pDisplayHandler.get() )
+            if (!m_pDisplayHandler)
             {
-                static const SvXMLEnumMapEntry aDisplayMap[] =
+                static const SvXMLEnumMapEntry<bool> aDisplayMap[] =
                 {
-                    { XML_VISIBLE,      sal_uInt16(true) },
-                    { XML_COLLAPSE,     sal_uInt16(false) },
-                    { XML_TOKEN_INVALID, 0 }
+                    { XML_VISIBLE,       true },
+                    { XML_COLLAPSE,      false },
+                    { XML_TOKEN_INVALID, false }
                 };
                 m_pDisplayHandler.reset(new XMLConstantsPropertyHandler(aDisplayMap, XML_TOKEN_INVALID ));
             }

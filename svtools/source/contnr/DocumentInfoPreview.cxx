@@ -18,9 +18,11 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/document/XDocumentProperties.hpp>
+#include <com/sun/star/script/CannotConvertException.hpp>
 #include <com/sun/star/script/Converter.hpp>
 #include <com/sun/star/script/XTypeConverter.hpp>
 #include <comphelper/processfactory.hxx>
@@ -33,23 +35,21 @@
 #include <vcl/builder.hxx>
 #include <vcl/txtattr.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/svapp.hxx>
 #include <vcl/builderfactory.hxx>
 #include <tools/datetime.hxx>
 #include <tools/urlobj.hxx>
-#include <unotools/pathoptions.hxx>
 #include <unotools/ucbhelper.hxx>
+#include <unotools/localedatawrapper.hxx>
 
-#include "fileview.hxx"
-#include "templwin.hrc"
+#include <templwin.hrc>
 #include "templwin.hxx"
 
 namespace svtools {
 
-ODocumentInfoPreview::ODocumentInfoPreview(vcl::Window * pParent, WinBits nBits):
-    Window(pParent, WB_DIALOGCONTROL),
-    m_pEditWin( VclPtr<ExtMultiLineEdit>::Create(this, nBits) ),
-    m_xInfoTable(new SvtDocInfoTable_Impl),
-    m_aLanguageTag(SvtPathOptions().GetLanguageTag()) // detect application language
+ODocumentInfoPreview::ODocumentInfoPreview(vcl::Window * pParent, WinBits nBits)
+    : Window(pParent, WB_DIALOGCONTROL)
+    , m_pEditWin( VclPtr<ExtMultiLineEdit>::Create(this, nBits) )
 {
     m_pEditWin->SetLeftMargin(10);
     m_pEditWin->Show();
@@ -78,8 +78,7 @@ void ODocumentInfoPreview::clear() {
 }
 
 void ODocumentInfoPreview::fill(
-    css::uno::Reference< css::document::XDocumentProperties > const & xDocProps,
-    OUString const & rURL)
+    css::uno::Reference< css::document::XDocumentProperties > const & xDocProps)
 {
     assert(xDocProps.is());
 
@@ -97,19 +96,6 @@ void ODocumentInfoPreview::fill(
         DI_KEYWORDS,
         comphelper::string::convertCommaSeparated(xDocProps->getKeywords()));
     insertNonempty(DI_DESCRIPTION, xDocProps->getDescription());
-    if (!rURL.isEmpty()) {
-        insertNonempty(
-            DI_SIZE, CreateExactSizeText(utl::UCBContentHelper::GetSize(rURL)));
-        INetContentType eTypeID = INetContentTypes::GetContentTypeFromURL(rURL);
-        if(eTypeID == CONTENT_TYPE_APP_OCTSTREAM)
-        {
-            insertNonempty( DI_MIMETYPE, SvFileInformationManager::GetDescription(INetURLObject(rURL)));
-        }
-        else
-        {
-            insertNonempty( DI_MIMETYPE, INetContentTypes::GetPresentation(eTypeID, m_aLanguageTag));
-        }
-    }
 
     // User-defined (custom) properties:
     css::uno::Reference< css::beans::XPropertySet > user(
@@ -128,7 +114,7 @@ void ODocumentInfoPreview::fill(
             value = conv->convertToSimpleType(aAny, css::uno::TypeClass_STRING).
                 get< OUString >();
         } catch (css::script::CannotConvertException & e) {
-            SAL_INFO("svtools.contnr", "ignored CannotConvertException " << e.Message);
+            SAL_INFO("svtools.contnr", "ignored " << e);
         }
         if (!value.isEmpty()) {
             insertEntry(name, value);
@@ -156,7 +142,7 @@ void ODocumentInfoPreview::insertEntry(
 void ODocumentInfoPreview::insertNonempty(long id, OUString const & value)
 {
     if (!value.isEmpty()) {
-        insertEntry(m_xInfoTable->GetString(id), value);
+        insertEntry(SvtDocInfoTable_Impl::GetString(id), value);
     }
 }
 
@@ -172,7 +158,7 @@ void ODocumentInfoPreview::insertDateTime(
         OUStringBuffer buf(rLocaleWrapper.getDate(aToolsDT));
         buf.append(", ");
         buf.append(rLocaleWrapper.getTime(aToolsDT));
-        insertEntry(m_xInfoTable->GetString(id), buf.makeStringAndClear());
+        insertEntry(SvtDocInfoTable_Impl::GetString(id), buf.makeStringAndClear());
     }
 }
 

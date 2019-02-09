@@ -19,66 +19,37 @@
 
 #include <sal/config.h>
 
+#include <algorithm>
 #include <iomanip>
 #include <sstream>
 #include <stdlib.h>
 
 #include <tools/color.hxx>
-#include <tools/debug.hxx>
 #include <tools/stream.hxx>
-#include <tools/rc.hxx>
-#include <tools/rcid.h>
-#include <tools/resid.hxx>
-#include <tools/rc.h>
 #include <tools/helpers.hxx>
 #include <basegfx/color/bcolortools.hxx>
 
-Color::Color( const ResId& rResId )
-{
-    rResId.SetRT( RSC_COLOR );
-    ResMgr* pResMgr = rResId.GetResMgr();
-    if ( pResMgr && pResMgr->GetResource( rResId ) )
-    {
-        // Header ueberspringen
-        pResMgr->Increment( sizeof( RSHEADER_TYPE ) );
-
-        // Daten laden
-        sal_uInt16 nRed     = pResMgr->ReadShort();
-        sal_uInt16 nGreen   = pResMgr->ReadShort();
-        sal_uInt16 nBlue    = pResMgr->ReadShort();
-        // one more historical sal_uIntPtr
-        pResMgr->ReadLong();
-
-        // RGB-Farbe
-        mnColor = RGB_COLORDATA( nRed>>8, nGreen>>8, nBlue>>8 );
-    }
-    else
-    {
-        mnColor = RGB_COLORDATA( 0, 0, 0 );
-    }
-}
-
 sal_uInt8 Color::GetColorError( const Color& rCompareColor ) const
 {
-    const long nErrAbs = labs( (long) rCompareColor.GetRed() - GetRed() ) +
-                         labs( (long) rCompareColor.GetGreen() - GetGreen() ) +
-                         labs( (long) rCompareColor.GetBlue() - GetBlue() );
+    const long nErrAbs = labs( static_cast<long>(rCompareColor.GetRed()) - GetRed() ) +
+                         labs( static_cast<long>(rCompareColor.GetGreen()) - GetGreen() ) +
+                         labs( static_cast<long>(rCompareColor.GetBlue()) - GetBlue() );
 
-    return (sal_uInt8) FRound( nErrAbs * 0.3333333333 );
+    return static_cast<sal_uInt8>(FRound( nErrAbs * 0.3333333333 ));
 }
 
 void Color::IncreaseLuminance( sal_uInt8 cLumInc )
 {
-    SetRed( (sal_uInt8) SAL_BOUND( (long) COLORDATA_RED( mnColor ) + cLumInc, 0L, 255L ) );
-    SetGreen( (sal_uInt8) SAL_BOUND( (long) COLORDATA_GREEN( mnColor ) + cLumInc, 0L, 255L ) );
-    SetBlue( (sal_uInt8) SAL_BOUND( (long) COLORDATA_BLUE( mnColor ) + cLumInc, 0L, 255L ) );
+    SetRed( static_cast<sal_uInt8>(std::clamp( static_cast<long>(COLORDATA_RED( mnColor )) + cLumInc, 0L, 255L )) );
+    SetGreen( static_cast<sal_uInt8>(std::clamp( static_cast<long>(COLORDATA_GREEN( mnColor )) + cLumInc, 0L, 255L )) );
+    SetBlue( static_cast<sal_uInt8>(std::clamp( static_cast<long>(COLORDATA_BLUE( mnColor )) + cLumInc, 0L, 255L )) );
 }
 
 void Color::DecreaseLuminance( sal_uInt8 cLumDec )
 {
-    SetRed( (sal_uInt8) SAL_BOUND( (long) COLORDATA_RED( mnColor ) - cLumDec, 0L, 255L ) );
-    SetGreen( (sal_uInt8) SAL_BOUND( (long) COLORDATA_GREEN( mnColor ) - cLumDec, 0L, 255L ) );
-    SetBlue( (sal_uInt8) SAL_BOUND( (long) COLORDATA_BLUE( mnColor ) - cLumDec, 0L, 255L ) );
+    SetRed( static_cast<sal_uInt8>(std::clamp( static_cast<long>(COLORDATA_RED( mnColor )) - cLumDec, 0L, 255L )) );
+    SetGreen( static_cast<sal_uInt8>(std::clamp( static_cast<long>(COLORDATA_GREEN( mnColor )) - cLumDec, 0L, 255L )) );
+    SetBlue( static_cast<sal_uInt8>(std::clamp( static_cast<long>(COLORDATA_BLUE( mnColor )) - cLumDec, 0L, 255L )) );
 }
 
 void Color::DecreaseContrast( sal_uInt8 cContDec )
@@ -88,9 +59,9 @@ void Color::DecreaseContrast( sal_uInt8 cContDec )
         const double fM = ( 128.0 - 0.4985 * cContDec ) / 128.0;
         const double fOff = 128.0 - fM * 128.0;
 
-        SetRed( (sal_uInt8) SAL_BOUND( FRound( COLORDATA_RED( mnColor ) * fM + fOff ), 0L, 255L ) );
-        SetGreen( (sal_uInt8) SAL_BOUND( FRound( COLORDATA_GREEN( mnColor ) * fM + fOff ), 0L, 255L ) );
-        SetBlue( (sal_uInt8) SAL_BOUND( FRound( COLORDATA_BLUE( mnColor ) * fM + fOff ), 0L, 255L ) );
+        SetRed( static_cast<sal_uInt8>(std::clamp( FRound( COLORDATA_RED( mnColor ) * fM + fOff ), 0L, 255L )) );
+        SetGreen( static_cast<sal_uInt8>(std::clamp( FRound( COLORDATA_GREEN( mnColor ) * fM + fOff ), 0L, 255L )) );
+        SetBlue( static_cast<sal_uInt8>(std::clamp( FRound( COLORDATA_BLUE( mnColor ) * fM + fOff ), 0L, 255L )) );
     }
 }
 
@@ -153,29 +124,29 @@ void Color::RGBtoHSB( sal_uInt16& nHue, sal_uInt16& nSat, sal_uInt16& nBri ) con
 
         if( c[0] == cMax )
         {
-            dHue = (double)( c[1] - c[2] ) / (double)cDelta;
+            dHue = static_cast<double>( c[1] - c[2] ) / static_cast<double>(cDelta);
         }
         else if( c[1] == cMax )
         {
-            dHue = 2.0 + (double)( c[2] - c[0] ) / (double)cDelta;
+            dHue = 2.0 + static_cast<double>( c[2] - c[0] ) / static_cast<double>(cDelta);
         }
         else if ( c[2] == cMax )
         {
-            dHue = 4.0 + (double)( c[0] - c[1] ) / (double)cDelta;
+            dHue = 4.0 + static_cast<double>( c[0] - c[1] ) / static_cast<double>(cDelta);
         }
         dHue *= 60.0;
 
         if( dHue < 0.0 )
             dHue += 360.0;
 
-        nHue = (sal_uInt16) dHue;
+        nHue = static_cast<sal_uInt16>(dHue);
     }
 }
 
-ColorData Color::HSBtoRGB( sal_uInt16 nHue, sal_uInt16 nSat, sal_uInt16 nBri )
+Color Color::HSBtoRGB( sal_uInt16 nHue, sal_uInt16 nSat, sal_uInt16 nBri )
 {
     sal_uInt8 cR=0,cG=0,cB=0;
-    sal_uInt8 nB = (sal_uInt8) ( nBri * 255 / 100 );
+    sal_uInt8 nB = static_cast<sal_uInt8>( nBri * 255 / 100 );
 
     if( nSat == 0 )
     {
@@ -192,12 +163,12 @@ ColorData Color::HSBtoRGB( sal_uInt16 nHue, sal_uInt16 nSat, sal_uInt16 nBri )
             dH = 0.0;
 
         dH /= 60.0;
-        n = (sal_uInt16) dH;
+        n = static_cast<sal_uInt16>(dH);
         f = dH - n;
 
-        sal_uInt8 a = (sal_uInt8) ( nB * ( 100 - nSat ) / 100 );
-        sal_uInt8 b = (sal_uInt8) ( nB * ( 100 - ( (double)nSat * f ) ) / 100 );
-        sal_uInt8 c = (sal_uInt8) ( nB * ( 100 - ( (double)nSat * ( 1.0 - f ) ) ) / 100 );
+        sal_uInt8 a = static_cast<sal_uInt8>( nB * ( 100 - nSat ) / 100 );
+        sal_uInt8 b = static_cast<sal_uInt8>( nB * ( 100 - ( static_cast<double>(nSat) * f ) ) / 100 );
+        sal_uInt8 c = static_cast<sal_uInt8>( nB * ( 100 - ( static_cast<double>(nSat) * ( 1.0 - f ) ) ) / 100 );
 
         switch( n )
         {
@@ -210,7 +181,7 @@ ColorData Color::HSBtoRGB( sal_uInt16 nHue, sal_uInt16 nSat, sal_uInt16 nBri )
         }
     }
 
-    return RGB_COLORDATA( cR, cG, cB );
+    return Color( cR, cG, cB );
 }
 
 SvStream& Color::Read( SvStream& rIStm )
@@ -228,15 +199,15 @@ SvStream& Color::Write( SvStream& rOStm ) const
 OUString Color::AsRGBHexString() const
 {
     std::stringstream ss;
-    ss << std::hex << std::setfill ('0') << std::setw(6) << GetRGBColor();
+    ss << std::hex << std::setfill ('0') << std::setw(6) << sal_uInt32(GetRGBColor());
     return OUString::createFromAscii(ss.str().c_str());
 }
 
-#define COL_NAME_USER       ((sal_uInt16)0x8000)
+#define COL_NAME_USER       (sal_uInt16(0x8000))
 
 SvStream& ReadColor( SvStream& rIStream, Color& rColor )
 {
-    sal_uInt16      nColorName;
+    sal_uInt16 nColorName(0);
 
     rIStream.ReadUInt16( nColorName );
 
@@ -250,11 +221,11 @@ SvStream& ReadColor( SvStream& rIStream, Color& rColor )
         rIStream.ReadUInt16( nGreen );
         rIStream.ReadUInt16( nBlue );
 
-        rColor.mnColor = RGB_COLORDATA( nRed>>8, nGreen>>8, nBlue>>8 );
+        rColor = Color( nRed>>8, nGreen>>8, nBlue>>8 );
     }
     else
     {
-        static const ColorData aColAry[] =
+        static const Color aColAry[] =
         {
             COL_BLACK,                          // COL_BLACK
             COL_BLUE,                           // COL_BLUE
@@ -289,10 +260,10 @@ SvStream& ReadColor( SvStream& rIStream, Color& rColor )
             COL_BLACK                           // COL_FIELDTEXT
         };
 
-        if ( nColorName < (sizeof( aColAry )/sizeof(ColorData)) )
-            rColor.mnColor = aColAry[nColorName];
+        if ( nColorName < SAL_N_ELEMENTS( aColAry ) )
+            rColor = aColAry[nColorName];
         else
-            rColor.mnColor = COL_BLACK;
+            rColor = COL_BLACK;
     }
 
     return rIStream;
@@ -303,7 +274,7 @@ void Color::ApplyTintOrShade(sal_Int16 n100thPercent)
     if (n100thPercent == 0)
         return;
 
-    basegfx::BColor aBColor = basegfx::tools::rgb2hsl(getBColor());
+    basegfx::BColor aBColor = basegfx::utils::rgb2hsl(getBColor());
     double fFactor = 1.0 - (std::abs(double(n100thPercent)) / 10000.0);
     double fResult;
 
@@ -317,7 +288,7 @@ void Color::ApplyTintOrShade(sal_Int16 n100thPercent)
     }
 
     aBColor.setBlue(fResult);
-    aBColor = basegfx::tools::hsl2rgb(aBColor);
+    aBColor = basegfx::utils::hsl2rgb(aBColor);
 
     SetRed(sal_uInt8((  aBColor.getRed()   * 255.0) + 0.5));
     SetGreen(sal_uInt8((aBColor.getGreen() * 255.0) + 0.5));
@@ -326,7 +297,6 @@ void Color::ApplyTintOrShade(sal_Int16 n100thPercent)
 
 SvStream& WriteColor( SvStream& rOStream, const Color& rColor )
 {
-    sal_uInt16 nColorName   = COL_NAME_USER;
     sal_uInt16 nRed         = rColor.GetRed();
     sal_uInt16 nGreen       = rColor.GetGreen();
     sal_uInt16 nBlue        = rColor.GetBlue();
@@ -334,7 +304,7 @@ SvStream& WriteColor( SvStream& rOStream, const Color& rColor )
     nGreen  = (nGreen<<8) + nGreen;
     nBlue   = (nBlue<<8) + nBlue;
 
-    rOStream.WriteUInt16( nColorName );
+    rOStream.WriteUInt16( COL_NAME_USER );
     rOStream.WriteUInt16( nRed );
     rOStream.WriteUInt16( nGreen );
     rOStream.WriteUInt16( nBlue );

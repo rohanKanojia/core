@@ -20,7 +20,9 @@
 #ifndef INCLUDED_SW_SOURCE_FILTER_XML_XMLBRSHI_HXX
 #define INCLUDED_SW_SOURCE_FILTER_XML_XMLBRSHI_HXX
 
+#include <memory>
 #include <com/sun/star/io/XOutputStream.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
 
 #include <xmloff/xmlictxt.hxx>
 
@@ -35,8 +37,10 @@ namespace com { namespace sun { namespace star {
 class SwXMLBrushItemImportContext : public SvXMLImportContext
 {
 private:
-    css::uno::Reference < css::io::XOutputStream > xBase64Stream;
-    SvxBrushItem                *pItem;
+    css::uno::Reference<css::io::XOutputStream> m_xBase64Stream;
+    css::uno::Reference<css::graphic::XGraphic> m_xGraphic;
+
+    std::unique_ptr<SvxBrushItem> pItem;
 
     void ProcessAttrs(
                const css::uno::Reference<css::xml::sax::XAttributeList > & xAttrList,
@@ -60,9 +64,9 @@ public:
             const SvXMLUnitConverter& rUnitConv,
             sal_uInt16 nWhich   );
 
-    virtual ~SwXMLBrushItemImportContext();
+    virtual ~SwXMLBrushItemImportContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                 const OUString& rLocalName,
                  const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
 

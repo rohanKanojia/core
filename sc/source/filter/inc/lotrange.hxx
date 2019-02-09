@@ -20,9 +20,10 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_LOTRANGE_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_LOTRANGE_HXX
 
-#include <compiler.hxx>
+#include <refdata.hxx>
+#include <types.hxx>
 
-class LotusRangeList;
+struct LOTUS_ROOT;
 
 typedef sal_uInt16  LR_ID;
 
@@ -86,20 +87,17 @@ inline bool LotusRange::IsSingle() const
 class LotusRangeList
 {
 private:
-    LOTUS_ROOT*         m_pLotRoot;
     LR_ID               nIdCnt;
     ScComplexRefData    aComplRef;
-    static SCCOL        nEingCol;
-    static SCROW        nEingRow;
-    std::vector<LotusRange*> maRanges;
+    std::vector<std::unique_ptr<LotusRange>> maRanges;
 
 public:
-    LotusRangeList(LOTUS_ROOT* pLotRoot);
+    LotusRangeList();
     ~LotusRangeList();
     inline sal_uInt16       GetIndex( SCCOL nCol, SCROW nRow );
     inline sal_uInt16       GetIndex( SCCOL nColS, SCROW nRowS, SCCOL nColE, SCROW nRowE );
     sal_uInt16              GetIndex( const LotusRange& );
-    void                Append( LotusRange* pLR, const OUString& rName );
+    void                Append( std::unique_ptr<LotusRange> pLR );
 };
 
 inline LR_ID LotusRangeList::GetIndex( SCCOL nCol, SCROW nRow )

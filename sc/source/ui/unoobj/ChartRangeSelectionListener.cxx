@@ -17,14 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ChartRangeSelectionListener.hxx"
+#include <ChartRangeSelectionListener.hxx>
 
 #include <com/sun/star/chart2/data/XRangeHighlighter.hpp>
 
 #include <sfx2/viewfrm.hxx>
-#include "tabvwsh.hxx"
-#include "unonames.hxx"
-#include "miscuno.hxx"
+#include <tabvwsh.hxx>
+#include <unonames.hxx>
+#include <miscuno.hxx>
 
 using namespace ::com::sun::star;
 
@@ -44,7 +44,6 @@ ScChartRangeSelectionListener::~ScChartRangeSelectionListener()
 
 // ____ XModifyListener ____
 void SAL_CALL ScChartRangeSelectionListener::selectionChanged( const lang::EventObject& aEvent )
-    throw (uno::RuntimeException, std::exception)
 {
     Reference< chart2::data::XRangeHighlighter > xRangeHighlighter( aEvent.Source, uno::UNO_QUERY );
     if( xRangeHighlighter.is())
@@ -62,7 +61,6 @@ void SAL_CALL ScChartRangeSelectionListener::selectionChanged( const lang::Event
 
 // ____ XEventListener ____
 void SAL_CALL ScChartRangeSelectionListener::disposing( const lang::EventObject& /*Source*/ )
-    throw (uno::RuntimeException, std::exception)
 {
 }
 

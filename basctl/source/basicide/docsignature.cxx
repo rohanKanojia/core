@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "docsignature.hxx"
-#include "scriptdocument.hxx"
+#include <docsignature.hxx>
+#include <scriptdocument.hxx>
 
 #include <sfx2/objsh.hxx>
 #include <sfx2/signaturestate.hxx>
@@ -29,8 +29,6 @@
 namespace basctl
 {
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::frame::XModel;
 
     // DocumentSignature::Impl
@@ -71,11 +69,11 @@ namespace basctl
         return ( m_pImpl->pShell != nullptr );
     }
 
-    void DocumentSignature::signScriptingContent() const
+    void DocumentSignature::signScriptingContent(weld::Window* pDialogParent) const
     {
         OSL_PRECOND( supportsSignatures(), "DocumentSignature::signScriptingContent: signatures not supported by this document!" );
         if ( m_pImpl->pShell )
-            m_pImpl->pShell->SignScriptingContent();
+            m_pImpl->pShell->SignScriptingContent(pDialogParent);
     }
 
     SignatureState DocumentSignature::getScriptingSignatureState() const

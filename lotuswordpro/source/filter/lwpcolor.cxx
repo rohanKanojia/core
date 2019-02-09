@@ -58,7 +58,18 @@
  *  For LWP filter architecture prototype
  ************************************************************************/
 
-#include "lwpcolor.hxx"
+#include <lwpcolor.hxx>
+
+/**
+ * @descr       return the BGR format
+*/
+sal_uInt32 LwpColor::To24Color()
+{
+    return ((m_nRed >> 8) |
+            (m_nGreen & 0xFF00) |
+            static_cast<sal_uInt32>((m_nBlue & 0xFF00) << 8));
+}
+
 /**
  * @descr       read color and then resolve the RGB values
 */
@@ -68,23 +79,8 @@ void LwpColor::Read(LwpObjectStream *pStrm)
     m_nGreen = pStrm->QuickReaduInt16();
     m_nBlue = pStrm->QuickReaduInt16();
     m_nExtra = pStrm->QuickReaduInt16();
-    ResolveRGB();
-}
 
-/**
- * @descr       return the BGR format
-*/
-sal_uInt32 LwpColor::To24Color()
-{
-    return ((m_nRed >> 8) |
-                (m_nGreen & 0xFF00) |
-                (static_cast<sal_uInt32>((m_nBlue & 0xFF00) << 8)));
-}
-/**
- * @descr       resolver RGB values per the extra bytes
-*/
-void LwpColor::ResolveRGB()
-{
+    // resolve RGB values per the extra bytes
     switch(m_nExtra)
     {
         case AGLRGB_RGB:
@@ -135,16 +131,7 @@ void LwpColor::ResolveRGB()
             m_nRed = 0;
             m_nGreen = 0;
             m_nBlue = 0;
-        }
-}
-LwpColor& LwpColor::operator = (const LwpColor& rOther)
-{
-    m_nRed = rOther.m_nRed;
-    m_nGreen = rOther.m_nGreen;
-    m_nBlue = rOther.m_nBlue;
-    m_nExtra = rOther.m_nExtra;
-
-    return *this;
+    }
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

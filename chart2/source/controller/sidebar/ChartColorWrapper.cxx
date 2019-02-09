@@ -9,11 +9,11 @@
 
 #include "ChartColorWrapper.hxx"
 
-#include "ChartController.hxx"
+#include <ObjectIdentifier.hxx>
+#include <com/sun/star/chart2/XDiagram.hpp>
+#include <com/sun/star/view/XSelectionSupplier.hpp>
 
-#include <editeng/colritem.hxx>
 #include <svx/tbcontrl.hxx>
-#include <svx/svxids.hrc>
 
 namespace chart { namespace sidebar {
 
@@ -60,7 +60,7 @@ css::uno::Reference<css::beans::XPropertySet> getPropSet(
 }
 
 ChartColorWrapper::ChartColorWrapper(
-        css::uno::Reference<css::frame::XModel> xModel,
+        css::uno::Reference<css::frame::XModel> const & xModel,
         SvxColorToolBoxControl* pControl,
         const OUString& rName):
     mxModel(xModel),
@@ -69,12 +69,12 @@ ChartColorWrapper::ChartColorWrapper(
 {
 }
 
-void ChartColorWrapper::operator()(const OUString& , const Color& rColor)
+void ChartColorWrapper::operator()(const OUString& , const NamedColor& rColor)
 {
     css::uno::Reference<css::beans::XPropertySet> xPropSet = getPropSet(mxModel);
     assert(xPropSet.is());
 
-    xPropSet->setPropertyValue(maPropertyName, css::uno::makeAny(rColor.GetColor()));
+    xPropSet->setPropertyValue(maPropertyName, css::uno::makeAny(rColor.first));
 }
 
 void ChartColorWrapper::updateModel(const css::uno::Reference<css::frame::XModel>& xModel)
@@ -88,13 +88,14 @@ void ChartColorWrapper::updateData()
     if (!xPropSet.is())
         return;
 
-    css::uno::Any aAny = xPropSet->getPropertyValue(maPropertyName);
-    sal_uInt32 nColor = 0;
-    aAny >>= nColor;
-    Color aColor(nColor);
+    css::util::URL aUrl;
+    aUrl.Complete = ".uno:FillColor";
 
-    SvxColorItem aItem(aColor, SID_ATTR_FILL_COLOR);
-    mpControl->StateChanged(SID_ATTR_FILL_COLOR, SfxItemState::SET, &aItem);
+    css::frame::FeatureStateEvent aEvent;
+    aEvent.FeatureURL = aUrl;
+    aEvent.IsEnabled = true;
+    aEvent.State = xPropSet->getPropertyValue(maPropertyName);
+    mpControl->statusChanged(aEvent);
 }
 
 } }

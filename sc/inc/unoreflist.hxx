@@ -20,14 +20,14 @@
 #ifndef INCLUDED_SC_INC_UNOREFLIST_HXX
 #define INCLUDED_SC_INC_UNOREFLIST_HXX
 
-#include <list>
+#include <vector>
 #include <svl/hint.hxx>
 #include "rangelst.hxx"
 
 struct ScUnoRefEntry
 {
-    sal_Int64   nObjectId;
-    ScRangeList aRanges;
+    sal_Int64 const   nObjectId;
+    ScRangeList const aRanges;
 
     ScUnoRefEntry( sal_Int64 nId, const ScRangeList& rOldRanges ) :
         nObjectId( nId ),
@@ -42,7 +42,7 @@ struct ScUnoRefEntry
 class ScUnoRefList
 {
 private:
-    ::std::list<ScUnoRefEntry> aEntries;
+    ::std::vector<ScUnoRefEntry> aEntries;
 
 public:
                 ScUnoRefList();
@@ -59,11 +59,11 @@ public:
 
 class ScUnoRefUndoHint : public SfxHint
 {
-    ScUnoRefEntry   aEntry;
+    ScUnoRefEntry const   aEntry;
 
 public:
                 ScUnoRefUndoHint( const ScUnoRefEntry& rRefEntry );
-                virtual ~ScUnoRefUndoHint();
+                virtual ~ScUnoRefUndoHint() override;
 
     sal_Int64   GetObjectId() const         { return aEntry.nObjectId; }
     const ScRangeList& GetRanges() const    { return aEntry.aRanges; }

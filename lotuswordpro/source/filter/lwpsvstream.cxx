@@ -53,7 +53,7 @@
  *
  *
  ************************************************************************/
-#include "lwpsvstream.hxx"
+#include <lwpsvstream.hxx>
 #include <tools/stream.hxx>
 
 const sal_uInt32 LwpSvStream::LWP_STREAM_BASE = 0x0010;
@@ -66,9 +66,9 @@ LwpSvStream::LwpSvStream(SvStream* pStream, LwpSvStream * pCompressed)
 /**
  * @descr       read nBytesToRead bytes to buf
 */
-sal_Int32 LwpSvStream::Read(void* buf, sal_Int32 nBytesToRead)
+size_t LwpSvStream::Read(void* buf, size_t nBytesToRead)
 {
-    return m_pStream->Read(buf,nBytesToRead);
+    return m_pStream->ReadBytes(buf, nBytesToRead);
 }
 
 LwpSvStream& LwpSvStream::ReadUInt8( sal_uInt8& rUInt8 )
@@ -101,14 +101,19 @@ void LwpSvStream::SeekRel(sal_Int64 pos)
 */
 sal_Int64 LwpSvStream::Tell()
 {
-        return m_pStream->Tell();
+    return m_pStream->Tell();
 }
 /**
  * @descr       Seek to pos
 */
 sal_Int64 LwpSvStream::Seek(sal_Int64 pos)
 {
-        return m_pStream->Seek(pos);
+    return m_pStream->Seek(pos);
+}
+
+bool LwpSvStream::CheckSeek(sal_Int64 pos)
+{
+    return checkSeek(*m_pStream, pos);
 }
 /**
  * @descr       Return the stream data length

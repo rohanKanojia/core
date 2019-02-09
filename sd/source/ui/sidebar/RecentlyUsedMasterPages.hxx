@@ -20,15 +20,11 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SIDEBAR_RECENTLYUSEDMASTERPAGES_HXX
 #define INCLUDED_SD_SOURCE_UI_SIDEBAR_RECENTLYUSEDMASTERPAGES_HXX
 
-#include "tools/SdGlobalResourceContainer.hxx"
-#include <osl/mutex.hxx>
+#include <tools/SdGlobalResourceContainer.hxx>
 #include <tools/link.hxx>
-#include <vcl/image.hxx>
 #include <vector>
 
-#include "DrawDocShell.hxx"
 #include "MasterPageContainer.hxx"
-#include <com/sun/star/uno/XInterface.hpp>
 
 namespace sd {
 class MasterPageObserverEvent;
@@ -75,7 +71,7 @@ private:
             { return maToken==rDescriptor.maToken; }
 
         private:
-            ::sd::sidebar::MasterPageContainer::Token maToken;
+            ::sd::sidebar::MasterPageContainer::Token const maToken;
         };
     };
 
@@ -88,11 +84,10 @@ private:
 
     typedef ::std::vector<Descriptor> MasterPageList;
     MasterPageList mvMasterPages;
-    unsigned long int mnMaxListSize;
     std::shared_ptr<MasterPageContainer> mpContainer;
 
     RecentlyUsedMasterPages();
-    virtual ~RecentlyUsedMasterPages();
+    virtual ~RecentlyUsedMasterPages() override;
 
     /** Call this method after a new object has been created.
     */
@@ -103,8 +98,8 @@ private:
     RecentlyUsedMasterPages& operator= (const RecentlyUsedMasterPages&) = delete;
 
     void SendEvent();
-    DECL_LINK_TYPED(MasterPageChangeListener, MasterPageObserverEvent&, void);
-    DECL_LINK_TYPED(MasterPageContainerChangeListener, MasterPageContainerChangeEvent&, void);
+    DECL_LINK(MasterPageChangeListener, MasterPageObserverEvent&, void);
+    DECL_LINK(MasterPageContainerChangeListener, MasterPageContainerChangeEvent&, void);
 
     /** Add a descriptor for the specified master page to the end of the
         list of most recently used master pages.  When the page is already a

@@ -20,13 +20,11 @@
 #define INCLUDED_SVTOOLS_INSDLG_HXX
 
 #include <svtools/svtdllapi.h>
-#include <com/sun/star/embed/XEmbeddedObject.hpp>
-#include <com/sun/star/embed/XStorage.hpp>
 #include <tools/globname.hxx>
 #include <sot/formats.hxx>
 
 #include <vector>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 
 class SvObjectServer
 {
@@ -60,7 +58,7 @@ public:
                                 return aObjectServerList.size();
                             }
 
-    const SvObjectServer    operator[]( size_t n ) const
+    const SvObjectServer&   operator[]( size_t n ) const
                             {
                                 return aObjectServerList[ n ];
                             }
@@ -70,7 +68,7 @@ class SVT_DLLPUBLIC SvPasteObjectHelper
 {
 public:
     static OUString GetSotFormatUIName( SotClipboardFormatId nId );
-    static bool GetEmbeddedName(const TransferableDataHelper& rData, OUString& _rName, OUString& _rSource, SotClipboardFormatId& _nFormat);
+    static bool GetEmbeddedName(const TransferableDataHelper& rData, OUString& _rName, OUString& _rSource, SotClipboardFormatId const & _nFormat);
 };
 
 #endif // INCLUDED_SVTOOLS_INSDLG_HXX

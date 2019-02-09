@@ -19,13 +19,13 @@
 #ifndef INCLUDED_CPPUHELPER_WEAKREF_HXX
 #define INCLUDED_CPPUHELPER_WEAKREF_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <cstddef>
 
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
-#include <cppuhelper/cppuhelperdllapi.h>
+#include "com/sun/star/uno/Reference.hxx"
+#include "com/sun/star/uno/XInterface.hpp"
+#include "cppuhelper/cppuhelperdllapi.h"
 
 
 namespace com
@@ -39,15 +39,21 @@ namespace uno
 
 class OWeakRefListener;
 
-/** The WeakReferenceHelper holds a weak reference to an object. This object must implement
-    the css::uno::XWeak interface.  The implementation is thread safe.
+/** The WeakReferenceHelper holds a weak reference to an object.
+
+    That object must implement the css::uno::XWeak interface.
+
+    The WeakReferenceHelper itself is *not* thread safe, just as
+    Reference itself isn't, but the implementation of the listeners etc.
+    behind it *is* thread-safe, so multiple threads can have their own
+    WeakReferences to the same XWeak object.
 */
 class CPPUHELPER_DLLPUBLIC WeakReferenceHelper
 {
 public:
     /** Default ctor.  Creates an empty weak reference.
     */
-    inline WeakReferenceHelper()
+    WeakReferenceHelper()
         : m_pImpl( NULL )
         {}
 
@@ -56,12 +62,19 @@ public:
         @param rWeakRef another weak ref
     */
     WeakReferenceHelper( const WeakReferenceHelper & rWeakRef );
+
+#if defined LIBO_INTERNAL_ONLY
+    WeakReferenceHelper(WeakReferenceHelper && other): m_pImpl(other.m_pImpl)
+    { other.m_pImpl = nullptr; }
+#endif
+
     /** Initialize this reference with the hard interface reference xInt. If the implementation
-        behind xInt does not support XWeak or XInt is null then this reference will be null.
+        behind xInt does not support XWeak or xInt is null then this reference will be null.
 
         @param xInt another hard interface reference
     */
     WeakReferenceHelper( const css::uno::Reference< css::uno::XInterface > & xInt );
+
     /** Releases this reference.
     */
     ~WeakReferenceHelper();
@@ -71,6 +84,10 @@ public:
         @param rWeakRef another weak ref
     */
     WeakReferenceHelper & SAL_CALL operator = ( const WeakReferenceHelper & rWeakRef );
+
+#if defined LIBO_INTERNAL_ONLY
+    WeakReferenceHelper & SAL_CALL operator =(WeakReferenceHelper && other);
+#endif
 
     /** Releases this reference and takes over hard reference xInt.
         If the implementation behind xInt does not support XWeak
@@ -86,7 +103,7 @@ public:
         @param rObj another weak ref
         @return true, if both weak refs reference to the same object.
     */
-    inline bool SAL_CALL operator == ( const WeakReferenceHelper & rObj ) const
+    bool SAL_CALL operator == ( const WeakReferenceHelper & rObj ) const
         { return (get() == rObj.get()); }
 
     /**  Gets a hard reference to the object.
@@ -94,11 +111,12 @@ public:
          @return hard reference or null, if the weakly referenced interface has gone
     */
     css::uno::Reference< css::uno::XInterface > SAL_CALL get() const;
+
     /**  Gets a hard reference to the object.
 
          @return hard reference or null, if the weakly referenced interface has gone
     */
-    inline SAL_CALL operator Reference< XInterface > () const
+    SAL_CALL operator Reference< XInterface > () const
         { return get(); }
 
     /** Releases this reference.
@@ -113,8 +131,14 @@ protected:
     /// @endcond
 };
 
-/** The WeakReference<> holds a weak reference to an object. This object must implement
-    the css::uno::XWeak interface.  The implementation is thread safe.
+/** The WeakReference<> holds a weak reference to an object.
+
+    That object must implement the css::uno::XWeak interface.
+
+    The WeakReference itself is *not* thread safe, just as
+    Reference itself isn't, but the implementation of the listeners etc.
+    behind it *is* thread-safe, so multiple threads can have their own
+    WeakReferences to the same XWeak object.
 
     @tparam interface_type type of interface
 */
@@ -124,7 +148,7 @@ class SAL_WARN_UNUSED WeakReference : public WeakReferenceHelper
 public:
     /** Default ctor.  Creates an empty weak reference.
     */
-    inline WeakReference()
+    WeakReference()
         : WeakReferenceHelper()
         {}
 
@@ -132,7 +156,7 @@ public:
 
         @param rRef another hard ref
     */
-    inline WeakReference( const Reference< interface_type > & rRef )
+    WeakReference( const Reference< interface_type > & rRef )
         : WeakReferenceHelper( rRef )
         {}
 
@@ -152,7 +176,7 @@ public:
 
          @return hard reference or null, if the weakly referenced interface has gone
     */
-    inline SAL_CALL operator Reference< interface_type > () const
+    SAL_CALL operator Reference< interface_type > () const
         { return Reference< interface_type >::query( get() ); }
 };
 

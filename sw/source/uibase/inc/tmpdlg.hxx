@@ -25,60 +25,27 @@ class SfxItemSet;
 class SwWrtShell;
 
 // the tab dialog carrier of TabPages
-class SwTemplateDlg: public SfxStyleDialog
+class SwTemplateDlgController : public SfxStyleDialogController
 {
 
-    sal_uInt16      nType;
+    SfxStyleFamily const  nType;
     sal_uInt16      nHtmlMode;
     SwWrtShell*     pWrtShell;
     bool            bNewStyle;
 
-    sal_uInt16 m_nIndentsId;
-    sal_uInt16 m_nAlignId;
-    sal_uInt16 m_nTextFlowId;
-    sal_uInt16 m_nAsianTypo;
-    sal_uInt16 m_nFontId;
-    sal_uInt16 m_nFontEffectId;
-    sal_uInt16 m_nPositionId;
-    sal_uInt16 m_nAsianLayoutId;
-    sal_uInt16 m_nTabId;
-    sal_uInt16 m_nOutlineId;
-    sal_uInt16 m_nDropCapsId;
-    sal_uInt16 m_nBackgroundId;
-    sal_uInt16 m_nAreaId;
-    sal_uInt16 m_nTransparenceId;
-    sal_uInt16 m_nBorderId;
-    sal_uInt16 m_nConditionId;
-    sal_uInt16 m_nTypeId;
-    sal_uInt16 m_nOptionsId;
-    sal_uInt16 m_nWrapId;
-    sal_uInt16 m_nColumnId;
-    sal_uInt16 m_nMacroId;
-    sal_uInt16 m_nHeaderId;
-    sal_uInt16 m_nFooterId;
-    sal_uInt16 m_nPageId;
-    sal_uInt16 m_nFootNoteId;
-    sal_uInt16 m_nTextGridId;
-    sal_uInt16 m_nSingleId;
-    sal_uInt16 m_nBulletId;
-    sal_uInt16 m_nNumId;
-    sal_uInt16 m_nBmpId;
-    sal_uInt16 m_nNumOptId;
-    sal_uInt16 m_nNumPosId;
-
 public:
     /// @param sPage
     /// Identifies name of page to open at by default
-    SwTemplateDlg(  vcl::Window*             pParent,
+    SwTemplateDlgController(weld::Window* pParent,
                     SfxStyleSheetBase&  rBase,
-                    sal_uInt16          nRegion,
-                    const OString&      sPage = OString(),
-                    SwWrtShell*         pActShell = nullptr,
-                    bool                bNew = false );
+                    SfxStyleFamily      nRegion,
+                    const OString&      sPage,
+                    SwWrtShell*         pActShell,
+                    bool                bNew);
 
     virtual void RefreshInputSet() override;
 
-    virtual void PageCreated( sal_uInt16 nId, SfxTabPage &rPage ) override;
+    virtual void PageCreated(const OString& rId, SfxTabPage &rPage) override;
     virtual short Ok() override;
 };
 

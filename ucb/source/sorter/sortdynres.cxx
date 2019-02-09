@@ -18,11 +18,12 @@
  */
 
 #include <vector>
-#include <sortdynres.hxx>
+#include "sortdynres.hxx"
 #include <comphelper/interfacecontainer2.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/ucb/ContentResultSetCapability.hpp>
 #include <com/sun/star/ucb/ListActionType.hpp>
+#include <com/sun/star/ucb/ServiceNotFoundException.hpp>
 #include <com/sun/star/ucb/WelcomeDynamicResultSetStruct.hpp>
 #include <com/sun/star/ucb/CachedDynamicResultSetStubFactory.hpp>
 #include <com/sun/star/ucb/XSourceInitialization.hpp>
@@ -39,18 +40,9 @@ using namespace comphelper;
 //  The mutex to synchronize access to containers.
 static osl::Mutex& getContainerMutex()
 {
-    static osl::Mutex* pMutex = nullptr;
-    if( !pMutex )
-    {
-        osl::Guard< osl::Mutex > aGuard( osl::Mutex::getGlobalMutex() );
-        if( !pMutex )
-        {
-            static osl::Mutex aMutex;
-            pMutex = &aMutex;
-        }
-    }
+    static osl::Mutex ourMutex;
 
-    return *pMutex;
+    return ourMutex;
 }
 
 
@@ -63,17 +55,12 @@ SortedDynamicResultSet::SortedDynamicResultSet(
                         const Reference < XComponentContext > &rxContext )
 {
     mpDisposeEventListeners = nullptr;
-    mpOwnListener           = new SortedDynamicResultSetListener( this );
-
-    mxOwnListener.set( mpOwnListener );
+    mxOwnListener           = new SortedDynamicResultSetListener( this );
 
     mxOriginal  = xOriginal;
     maOptions   = aOptions;
     mxCompFac   = xCompFac;
     m_xContext  = rxContext;
-
-    mpOne = nullptr;
-    mpTwo = nullptr;
 
     mbGotWelcome    = false;
     mbUseOne        = true;
@@ -83,54 +70,36 @@ SortedDynamicResultSet::SortedDynamicResultSet(
 
 SortedDynamicResultSet::~SortedDynamicResultSet()
 {
-    mpOwnListener->impl_OwnerDies();
+    mxOwnListener->impl_OwnerDies();
     mxOwnListener.clear();
 
-    delete mpDisposeEventListeners;
+    mpDisposeEventListeners.reset();
 
     mxOne.clear();
     mxTwo.clear();
     mxOriginal.clear();
-
-    mpOne = nullptr;
-    mpTwo = nullptr;
 }
 
 // XServiceInfo methods.
 
 OUString SAL_CALL SortedDynamicResultSet::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
-OUString SortedDynamicResultSet::getImplementationName_Static()
 {
     return OUString( "com.sun.star.comp.ucb.SortedDynamicResultSet" );
 }
 
 sal_Bool SAL_CALL SortedDynamicResultSet::supportsService( const OUString& ServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
 css::uno::Sequence< OUString > SAL_CALL SortedDynamicResultSet::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
-}
-
-css::uno::Sequence< OUString > SortedDynamicResultSet::getSupportedServiceNames_Static()
-{
-    css::uno::Sequence<OUString> aSNS { DYNAMIC_RESULTSET_SERVICE_NAME };
-    return aSNS;
+    return { DYNAMIC_RESULTSET_SERVICE_NAME };
 }
 
 // XComponent methods.
 
 void SAL_CALL SortedDynamicResultSet::dispose()
-    throw( RuntimeException, std::exception )
 {
     osl::Guard< osl::Mutex > aGuard( maMutex );
 
@@ -145,27 +114,23 @@ void SAL_CALL SortedDynamicResultSet::dispose()
     mxTwo.clear();
     mxOriginal.clear();
 
-    mpOne = nullptr;
-    mpTwo = nullptr;
     mbUseOne = true;
 }
 
 void SAL_CALL SortedDynamicResultSet::addEventListener(
                             const Reference< XEventListener >& Listener )
-    throw( RuntimeException, std::exception )
 {
     osl::Guard< osl::Mutex > aGuard( maMutex );
 
     if ( !mpDisposeEventListeners )
-        mpDisposeEventListeners =
-                    new OInterfaceContainerHelper2( getContainerMutex() );
+        mpDisposeEventListeners.reset(
+                    new OInterfaceContainerHelper2( getContainerMutex() ) );
 
     mpDisposeEventListeners->addInterface( Listener );
 }
 
 void SAL_CALL SortedDynamicResultSet::removeEventListener(
                             const Reference< XEventListener >& Listener )
-    throw( RuntimeException, std::exception )
 {
     osl::Guard< osl::Mutex > aGuard( maMutex );
 
@@ -178,7 +143,6 @@ void SAL_CALL SortedDynamicResultSet::removeEventListener(
 
 Reference< XResultSet > SAL_CALL
 SortedDynamicResultSet::getStaticResultSet()
-    throw( ListenerAlreadySetException, RuntimeException, std::exception )
 {
     osl::Guard< osl::Mutex > aGuard( maMutex );
 
@@ -189,18 +153,16 @@ SortedDynamicResultSet::getStaticResultSet()
 
     if ( mxOriginal.is() )
     {
-        mpOne = new SortedResultSet( mxOriginal->getStaticResultSet() );
-        mxOne = mpOne;
-        mpOne->Initialize( maOptions, mxCompFac );
+        mxOne = new SortedResultSet( mxOriginal->getStaticResultSet() );
+        mxOne->Initialize( maOptions, mxCompFac );
     }
 
-    return mxOne;
+    return mxOne.get();
 }
 
 
 void SAL_CALL
 SortedDynamicResultSet::setListener( const Reference< XDynamicResultSetListener >& Listener )
-    throw( ListenerAlreadySetException, RuntimeException, std::exception )
 {
     osl::Guard< osl::Mutex > aGuard( maMutex );
 
@@ -212,16 +174,12 @@ SortedDynamicResultSet::setListener( const Reference< XDynamicResultSetListener 
     mxListener = Listener;
 
     if ( mxOriginal.is() )
-        mxOriginal->setListener( mxOwnListener );
+        mxOriginal->setListener( mxOwnListener.get() );
 }
 
 
 void SAL_CALL
 SortedDynamicResultSet::connectToCache( const Reference< XDynamicResultSet > & xCache )
-        throw( ListenerAlreadySetException,
-               AlreadyInitializedException,
-               ServiceNotFoundException,
-               RuntimeException, std::exception )
 {
     if( mxListener.is() )
         throw ListenerAlreadySetException();
@@ -253,7 +211,6 @@ SortedDynamicResultSet::connectToCache( const Reference< XDynamicResultSet > & x
 
 
 sal_Int16 SAL_CALL SortedDynamicResultSet::getCapabilities()
-    throw( RuntimeException, std::exception )
 {
     osl::Guard< osl::Mutex > aGuard( maMutex );
 
@@ -287,7 +244,6 @@ sal_Int16 SAL_CALL SortedDynamicResultSet::getCapabilities()
  removing himself as listener (otherwise you deadlock)!!!
 */
 void SortedDynamicResultSet::impl_notify( const ListEvent& Changes )
-    throw( RuntimeException )
 {
     osl::Guard< osl::Mutex > aGuard( maMutex );
 
@@ -303,14 +259,14 @@ void SortedDynamicResultSet::impl_notify( const ListEvent& Changes )
         if ( mbUseOne )
         {
             mbUseOne = false;
-            mpTwo->CopyData( mpOne );
-            pCurSet = mpTwo;
+            mxTwo->CopyData( mxOne.get() );
+            pCurSet = mxTwo.get();
         }
         else
         {
             mbUseOne = true;
-            mpOne->CopyData( mpTwo );
-            pCurSet = mpOne;
+            mxOne->CopyData( mxTwo.get() );
+            pCurSet = mxOne.get();
         }
     }
 
@@ -341,25 +297,23 @@ void SortedDynamicResultSet::impl_notify( const ListEvent& Changes )
                     WelcomeDynamicResultSetStruct aWelcome;
                     if ( aAction.ActionInfo >>= aWelcome )
                     {
-                        mpTwo = new SortedResultSet( aWelcome.Old );
-                        mxTwo = mpTwo;
-                        mpOne = new SortedResultSet( aWelcome.New );
-                        mxOne = mpOne;
-                        mpOne->Initialize( maOptions, mxCompFac );
+                        mxTwo = new SortedResultSet( aWelcome.Old );
+                        mxOne = new SortedResultSet( aWelcome.New );
+                        mxOne->Initialize( maOptions, mxCompFac );
                         mbGotWelcome = true;
                         mbUseOne = true;
-                        pCurSet = mpOne;
+                        pCurSet = mxOne.get();
 
-                        aWelcome.Old = mxTwo;
-                        aWelcome.New = mxOne;
+                        aWelcome.Old = mxTwo.get();
+                        aWelcome.New = mxOne.get();
 
-                        ListAction *pWelcomeAction = new ListAction;
+                        std::unique_ptr<ListAction> pWelcomeAction(new ListAction);
                         pWelcomeAction->ActionInfo <<= aWelcome;
                         pWelcomeAction->Position = 0;
                         pWelcomeAction->Count = 0;
                         pWelcomeAction->ListActionType = ListActionType::WELCOME;
 
-                        maActions.Insert( pWelcomeAction );
+                        maActions.Insert( std::move(pWelcomeAction) );
                     }
                     else
                     {
@@ -416,8 +370,7 @@ void SortedDynamicResultSet::impl_notify( const ListEvent& Changes )
 
 // XEventListener
 
-void SortedDynamicResultSet::impl_disposing( const EventObject& )
-    throw( RuntimeException )
+void SortedDynamicResultSet::impl_disposing()
 {
     mxListener.clear();
     mxOriginal.clear();
@@ -427,14 +380,14 @@ void SortedDynamicResultSet::impl_disposing( const EventObject& )
 
 void SortedDynamicResultSet::SendNotify()
 {
-    long nCount = maActions.Count();
+    sal_Int32 nCount = maActions.Count();
 
     if ( nCount && mxListener.is() )
     {
         Sequence< ListAction > aActionList( maActions.Count() );
         ListAction *pActionList = aActionList.getArray();
 
-        for ( long i=0; i<nCount; i++ )
+        for ( sal_Int32 i=0; i<nCount; i++ )
         {
             pActionList[ i ] = *(maActions.GetAction( i ));
         }
@@ -466,7 +419,6 @@ SortedDynamicResultSetFactory::~SortedDynamicResultSetFactory()
 // XServiceInfo methods.
 
 OUString SAL_CALL SortedDynamicResultSetFactory::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
 {
     return getImplementationName_Static();
 }
@@ -477,21 +429,19 @@ OUString SortedDynamicResultSetFactory::getImplementationName_Static()
 }
 
 sal_Bool SAL_CALL SortedDynamicResultSetFactory::supportsService( const OUString& ServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
 css::uno::Sequence< OUString > SAL_CALL SortedDynamicResultSetFactory::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
     return getSupportedServiceNames_Static();
 }
 
-static css::uno::Reference< css::uno::XInterface > SAL_CALL
+/// @throws css::uno::Exception
+static css::uno::Reference< css::uno::XInterface >
 SortedDynamicResultSetFactory_CreateInstance( const css::uno::Reference<
                                               css::lang::XMultiServiceFactory> & rSMgr )
-    throw( css::uno::Exception )
 {
     css::lang::XServiceInfo* pX = static_cast<css::lang::XServiceInfo*>(
         new SortedDynamicResultSetFactory( ucbhelper::getComponentContext(rSMgr) ));
@@ -509,12 +459,11 @@ css::uno::Sequence< OUString > SortedDynamicResultSetFactory::getSupportedServic
 css::uno::Reference< css::lang::XSingleServiceFactory >
 SortedDynamicResultSetFactory::createServiceFactory( const css::uno::Reference< css::lang::XMultiServiceFactory >& rxServiceMgr )
 {
-    return css::uno::Reference< css::lang::XSingleServiceFactory >(
-            cppu::createOneInstanceFactory(
+    return cppu::createOneInstanceFactory(
                     rxServiceMgr,
                     SortedDynamicResultSetFactory::getImplementationName_Static(),
                     SortedDynamicResultSetFactory_CreateInstance,
-                    SortedDynamicResultSetFactory::getSupportedServiceNames_Static() ) );
+                    SortedDynamicResultSetFactory::getSupportedServiceNames_Static() );
 }
 
 // SortedDynamicResultSetFactory methods.
@@ -524,7 +473,6 @@ SortedDynamicResultSetFactory::createSortedDynamicResultSet(
                 const Reference< XDynamicResultSet > & Source,
                 const Sequence< NumberedSortingInfo > & Info,
                 const Reference< XAnyCompareFactory > & CompareFactory )
-    throw( RuntimeException, std::exception )
 {
     Reference< XDynamicResultSet > xRet;
     xRet = new SortedDynamicResultSet( Source, Info, CompareFactory, m_xContext );
@@ -535,23 +483,17 @@ SortedDynamicResultSetFactory::createSortedDynamicResultSet(
 
 void EventList::Clear()
 {
-    for ( std::deque< ListAction* >::size_type i = 0;
-          i < maData.size(); ++i )
-    {
-        delete maData[i];
-    }
-
     maData.clear();
 }
 
 void EventList::AddEvent( sal_IntPtr nType, sal_IntPtr nPos )
 {
-    ListAction *pAction = new ListAction;
+    std::unique_ptr<ListAction> pAction(new ListAction);
     pAction->Position = nPos;
     pAction->Count = 1;
     pAction->ListActionType = nType;
 
-    Insert( pAction );
+    Insert( std::move(pAction) );
 }
 
 // SortedDynamicResultSetListener
@@ -570,13 +512,12 @@ SortedDynamicResultSetListener::~SortedDynamicResultSetListener()
 // XEventListener ( base of XDynamicResultSetListener )
 
 void SAL_CALL
-SortedDynamicResultSetListener::disposing( const EventObject& Source )
-    throw( RuntimeException, std::exception )
+SortedDynamicResultSetListener::disposing( const EventObject& /*Source*/ )
 {
     osl::Guard< osl::Mutex > aGuard( maMutex );
 
     if ( mpOwner )
-        mpOwner->impl_disposing( Source );
+        mpOwner->impl_disposing();
 }
 
 
@@ -584,7 +525,6 @@ SortedDynamicResultSetListener::disposing( const EventObject& Source )
 
 void SAL_CALL
 SortedDynamicResultSetListener::notify( const ListEvent& Changes )
-    throw( RuntimeException, std::exception )
 {
     osl::Guard< osl::Mutex > aGuard( maMutex );
 
@@ -594,7 +534,7 @@ SortedDynamicResultSetListener::notify( const ListEvent& Changes )
 
 // own methods:
 
-void SAL_CALL
+void
 SortedDynamicResultSetListener::impl_OwnerDies()
 {
     osl::Guard< osl::Mutex > aGuard( maMutex );

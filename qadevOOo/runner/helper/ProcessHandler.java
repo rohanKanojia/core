@@ -19,11 +19,12 @@ package helper;
 
 import java.io.InputStream;
 import java.io.File;
+import java.io.OutputStreamWriter;
+import java.io.UnsupportedEncodingException;
 import java.io.PrintWriter;
 import java.io.PrintStream;
 import java.io.LineNumberReader;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import lib.TestParameters;
 import util.PropertyName;
 import util.utils;
@@ -109,17 +110,13 @@ class Pump extends Thread
  */
 public class ProcessHandler
 {
-
     private String cmdLine;
-    private String[] cmdLineArray;
     private String[] envVars = null;
     private File workDir = null;
     private PrintWriter log;
     private int exitValue = -1;
     private boolean isFinished = false;
     private boolean isStarted = false;
-    private long mTimeOut = 0;
-    private Pump stdout = null;
     private PrintStream stdIn = null;
     private Process m_aProcess = null;
     private boolean debug = false;
@@ -129,28 +126,18 @@ public class ProcessHandler
     private ProcessWatcher m_aWatcher;
 
     /**
-     * Creates instance with specified external command.
-     * Debug info and output
-     * of external command is printed to stdout.
-     */
-    public ProcessHandler(String cmdLine)
-    {
-        this(cmdLine, null, null, null, 0);
-    }
-
-    /**
      * Creates instance with specified external command and
      * log stream where debug info and output
      * of external command is printed out.
      */
-    public ProcessHandler(String cmdLine, PrintWriter log)
+    public ProcessHandler(String cmdLine, PrintWriter log) throws UnsupportedEncodingException
     {
-        this(cmdLine, log, null, null, 0);
+        this(cmdLine, log, null, null);
     }
 
     /**
      * Creates instance with specified external command which
-     * will be executed in the some work directory  and
+     * will be executed in the same work directory and
      *
      * @param cmdLine       the command to be executed
      * @param log           log stream where debug info and output
@@ -165,81 +152,32 @@ public class ProcessHandler
      *                      <code>isTimedOut()</code> if it has been terminated.
      *
      *                      timeOut > 0
-     *                      Waits specified time in miliSeconds for
+     *                      Waits specified time in milliSeconds for
      *                      process to exit and return its status.
      *
      *                      timeOut = 0
      *                      Waits for the process to end regulary
      *
-     *                      timeOut < 0
-     *                      Kills the process immediately
-     *
-     *
      */
-    private ProcessHandler(String cmdLine, PrintWriter log, File workDir, String[] envVars, long timeOut)
+    private ProcessHandler(String cmdLine, PrintWriter log, File workDir, String[] envVars) throws UnsupportedEncodingException
     {
         this.cmdLine = cmdLine;
         this.workDir = workDir;
         this.log = log;
-        this.cmdLine = cmdLine;
         this.envVars = envVars;
         if (log == null)
         {
-            this.log = new PrintWriter(new OutputStreamWriter(System.out));
+            this.log = new PrintWriter(new OutputStreamWriter(System.out, "UTF-8"));
         }
         else
         {
             this.log = log;
         }
-        this.mTimeOut = timeOut;
-    }
-
-    /**
-     * Creates instance with specified external command which
-     * will be executed in the some work directory  and
-     * log stream where debug info and output of external command is printed.
-     * If log stream is null, logging is printed to stdout.
-     * From the <CODE>TestParameters</CODE> the <CODE>OfficeWachter</CODE> get a ping.
-     * @param shortWait If this parameter is true the <CODE>mTimeOut</CODE> is set to 5000 ms, else it is set to
-     *        half of time out from parameter timeout.
-     * @param param the TestParameters
-     * @see lib.TestParameters
-     * @see helper.OfficeWatcher
-     */
-    public ProcessHandler(String[] commands, PrintWriter log, File workDir, int shortWait, TestParameters param)
-    {
-        this(null, log, workDir, null, 0);
-        this.cmdLineArray = commands;
-        if (shortWait != 0)
-        {
-            this.mTimeOut = shortWait;
-        }
-        else
-        {
-            this.mTimeOut = (long) (param.getInt(PropertyName.TIME_OUT) / 1.3);
-        }
-        debug = param.getBool(PropertyName.DEBUG_IS_ACTIVE);
-
-    }
-
-    /**
-     * Executes the command and returns only when the process
-     * exits.
-     *
-     * @return <code>true</code> if process was successfully
-     * started and correctly exits (exit code doesn't affect
-     * to this result).
-     */
-    public boolean executeSynchronously()
-    {
-        execute();
-        return waitFor(mTimeOut);
     }
 
     /**
      * Executes the command immediately returns. The process
-     * remains in running state. Control of its state should
-     * be made by <code>waitFor</code> methods.
+     * remains in running state.
      *
      * @return <code>true</code> if process was successfully
      * started.
@@ -313,151 +251,35 @@ public class ProcessHandler
         final Runtime runtime = Runtime.getRuntime();
         try
         {
-            if (cmdLine == null)
+            if (workDir != null)
             {
-                log.println(utils.getDateTime() + "execute: Starting command from array: ");
-                for (int i = 0; i < cmdLineArray.length; i++)
-                {
-                    log.println(cmdLineArray[i]);
-                }
+                log.println(utils.getDateTime() + "execute: Starting command: ");
+                log.println(cmdLine + " path=" + workDir.getAbsolutePath());
                 showEnvVars();
-                log.println("");
-                initializeProcessKiller();
-                m_aProcess = runtime.exec(cmdLineArray, envVars);
+                m_aProcess = runtime.exec(cmdLine, envVars, workDir);
             }
             else
             {
-                if (workDir != null)
-                {
-                    log.println(utils.getDateTime() + "execute: Starting command: ");
-                    log.println(cmdLine + " path=" + workDir.getAbsolutePath());
-                    showEnvVars();
-                    m_aProcess = runtime.exec(cmdLine, envVars, workDir);
-                }
-                else
-                {
-                    log.println(utils.getDateTime() + "execute: Starting command: ");
-                    log.println(cmdLine);
-                    showEnvVars();
-                    m_aProcess = runtime.exec(cmdLine, envVars);
-                }
+                log.println(utils.getDateTime() + "execute: Starting command: ");
+                log.println(cmdLine);
+                showEnvVars();
+                m_aProcess = runtime.exec(cmdLine, envVars);
             }
             isStarted = true;
         }
         catch (java.io.IOException e)
         {
-            if (cmdLine == null)
-            {
-                log.println(utils.getDateTime() + "execute: The command array can't be started: " + e);
-            }
-            else
-            {
-                log.println(utils.getDateTime() + "execute: The command " + cmdLine + " can't be started: " + e);
-            }
+            log.println(utils.getDateTime() + "execute: The command " + cmdLine + " can't be started: " + e);
             return;
         }
         dbg("execute: pump io-streams");
-        stdout = new Pump(m_aProcess.getInputStream(), log, "out > ", bUseOutput);
+        new Pump(m_aProcess.getInputStream(), log, "out > ", bUseOutput);
         new Pump(m_aProcess.getErrorStream(), log, "err > ", bUseOutput);
         stdIn = new PrintStream(m_aProcess.getOutputStream());
 
         dbg("execute: flush io-streams");
 
         flushInput();
-    }
-
-
-
-    /**
-     * This method is useful when the process was executed
-     * asynchronously. Waits during specified time for process
-     * to exit and return its status.
-     *
-     * @param timeout      > 0
-     *                      Waits specified time in miliSeconds for
-     *                      process to exit and return its status.
-     *
-     *                      = 0
-     *                      Waits for the process to end regulary
-     *
-     *                      < 0
-     *                      Kills the process immediately
-     *
-     * @return <code>true</code> if process correctly exited
-     * (exit code doesn't affect to this result).
-     */
-    private boolean waitFor(long timeout)
-    {
-        return waitFor(timeout, true);
-    }
-
-    private boolean waitFor(long timeout, boolean bKillProcessAfterTimeout)
-    {
-        if (isFinished())
-        {
-            return true;
-        }
-        if (!isStarted())
-        {
-            return false;
-        }
-
-        if (timeout == 0)
-        {
-            try
-            {
-                m_aProcess.waitFor();
-            }
-            catch (InterruptedException e)
-            {
-                log.println("The process was interrupted: " + e);
-            }
-            isFinished = true;
-            try
-            {
-                exitValue = m_aProcess.exitValue();
-            }
-            catch (IllegalThreadStateException e)
-            {
-            }
-        }
-        else
-        {
-            try
-            {
-                while (!isFinished && timeout > 0)
-                {
-                    isFinished = true;
-                    Thread.sleep(1000);
-                    timeout -= 1000;
-                    try
-                    {
-                        exitValue = m_aProcess.exitValue(); // throws exception if not finished
-                    }
-                    catch (IllegalThreadStateException e)
-                    {
-                        isFinished = false;
-                    }
-                }
-                if (timeout < 0)
-                {
-                    log.println("The process has timed out!");
-                }
-            }
-            catch (InterruptedException ex)
-            {
-                log.println("The process was interrupted: " + ex);
-            }
-        }
-
-        if (bKillProcessAfterTimeout && !isFinished)
-        {
-            log.println("Going to destroy the process!!");
-            m_aProcess.destroy();
-            log.println("Process has been destroyed!");
-        }
-
-        return isFinished();
     }
 
     private void flushInput()
@@ -470,22 +292,6 @@ public class ProcessHandler
         synchronized(this)
         {
             stdIn.flush();
-        }
-    }
-
-    /**
-     * Returns the text output by external command to stdout.
-     * @return the text output by external command to stdout
-     */
-    public String getOutputText()
-    {
-        if (stdout == null)
-        {
-            return "";
-        }
-        else
-        {
-            return stdout.getStringBuffer();
         }
     }
 
@@ -538,11 +344,6 @@ public class ProcessHandler
         {
             log.println(utils.getDateTime() + "PH." + message);
         }
-    }
-
-    public void noOutput()
-    {
-        bUseOutput = false;
     }
 
     private static class ProcessWatcher extends Thread

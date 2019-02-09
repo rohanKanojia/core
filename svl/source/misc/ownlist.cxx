@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <ctype.h>
 #include <com/sun/star/beans/PropertyValues.hpp>
 
 #include <svl/ownlist.hxx>
@@ -35,7 +34,7 @@ void SvCommandList::Append
  const OUString & rArg         /* The command's argument */
 )
 {
-    aCommandList.push_back( SvCommand( rCommand, rArg ) );
+    aCommandList.emplace_back( rCommand, rArg );
 }
 
 void SvCommandList::FillFromSequence( const css::uno::Sequence < css::beans::PropertyValue >& aCommandSequence )
@@ -53,7 +52,7 @@ void SvCommandList::FillFromSequence( const css::uno::Sequence < css::beans::Pro
     }
 }
 
-void SvCommandList::FillSequence( css::uno::Sequence < css::beans::PropertyValue >& aCommandSequence )
+void SvCommandList::FillSequence( css::uno::Sequence < css::beans::PropertyValue >& aCommandSequence ) const
 {
     const sal_Int32 nCount = aCommandList.size();
     aCommandSequence.realloc( nCount );
@@ -61,7 +60,7 @@ void SvCommandList::FillSequence( css::uno::Sequence < css::beans::PropertyValue
     {
         aCommandSequence[nIndex].Name = aCommandList[ nIndex ].GetCommand();
         aCommandSequence[nIndex].Handle = -1;
-        aCommandSequence[nIndex].Value = uno::makeAny( aCommandList[ nIndex ].GetArgument() );
+        aCommandSequence[nIndex].Value <<= aCommandList[ nIndex ].GetArgument();
         aCommandSequence[nIndex].State = beans::PropertyState_DIRECT_VALUE;
     }
 }

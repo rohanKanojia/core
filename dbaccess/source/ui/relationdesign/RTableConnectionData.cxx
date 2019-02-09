@@ -17,8 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "RTableConnectionData.hxx"
-#include <tools/debug.hxx>
+#include <RTableConnectionData.hxx>
 #include <com/sun/star/sdbc/KeyRule.hpp>
 #include <com/sun/star/sdbcx/KeyType.hpp>
 #include <com/sun/star/sdbcx/XKeysSupplier.hpp>
@@ -27,10 +26,11 @@
 #include <com/sun/star/sdbcx/XAppend.hpp>
 #include <com/sun/star/sdbcx/XDrop.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
-#include "dbustrings.hrc"
-#include "dbu_rel.hrc"
-#include "UITools.hxx"
-#include "moduledbu.hxx"
+#include <stringconstants.hxx>
+#include <strings.hrc>
+#include <strings.hxx>
+#include <UITools.hxx>
+#include <core_resource.hxx>
 #include <connectivity/dbexception.hxx>
 #include <connectivity/dbtools.hxx>
 
@@ -47,7 +47,7 @@ ORelationTableConnectionData::ORelationTableConnectionData()
     :OTableConnectionData()
     ,m_nUpdateRules(KeyRule::NO_ACTION)
     ,m_nDeleteRules(KeyRule::NO_ACTION)
-    ,m_nCardinality(CARDINAL_UNDEFINED)
+    ,m_nCardinality(Cardinality::Undefined)
 {
 }
 
@@ -57,7 +57,7 @@ ORelationTableConnectionData::ORelationTableConnectionData( const TTableWindowDa
     :OTableConnectionData( _pReferencingTable, _pReferencedTable )
     ,m_nUpdateRules(KeyRule::NO_ACTION)
     ,m_nDeleteRules(KeyRule::NO_ACTION)
-    ,m_nCardinality(CARDINAL_UNDEFINED)
+    ,m_nCardinality(Cardinality::Undefined)
 {
     m_aConnName = rConnName;
 
@@ -75,7 +75,7 @@ ORelationTableConnectionData::~ORelationTableConnectionData()
 {
 }
 
-bool ORelationTableConnectionData::DropRelation()
+void ORelationTableConnectionData::DropRelation()
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     // delete relation
@@ -102,20 +102,17 @@ bool ORelationTableConnectionData::DropRelation()
             }
         }
     }
-    return true;
 }
 
 void ORelationTableConnectionData::ChangeOrientation()
 {
     // exchange Source- and DestFieldName of the lines
     OUString sTempString;
-    OConnectionLineDataVec::const_iterator aIter = m_vConnLineData.begin();
-    OConnectionLineDataVec::const_iterator aEnd = m_vConnLineData.end();
-    for(;aIter != aEnd;++aIter)
+    for (auto const& elem : m_vConnLineData)
     {
-        sTempString = (*aIter)->GetSourceFieldName();
-        (*aIter)->SetSourceFieldName( (*aIter)->GetDestFieldName() );
-        (*aIter)->SetDestFieldName( sTempString );
+        sTempString = elem->GetSourceFieldName();
+        elem->SetSourceFieldName( elem->GetDestFieldName() );
+        elem->SetDestFieldName( sTempString );
     }
 
     // adapt member
@@ -127,20 +124,20 @@ void ORelationTableConnectionData::ChangeOrientation()
 void ORelationTableConnectionData::SetCardinality()
 {
     ::osl::MutexGuard aGuard( m_aMutex );
-    m_nCardinality = CARDINAL_UNDEFINED;
+    m_nCardinality = Cardinality::Undefined;
 
     if( IsSourcePrimKey() )
     {
         if( IsDestPrimKey() )
-            m_nCardinality = CARDINAL_ONE_ONE;
+            m_nCardinality = Cardinality::OneOne;
         else
-            m_nCardinality = CARDINAL_ONE_MANY;
+            m_nCardinality = Cardinality::OneMany;
     }
 
     if( IsDestPrimKey() )
     {
         if( !IsSourcePrimKey() )
-            m_nCardinality = CARDINAL_MANY_ONE;
+            m_nCardinality = Cardinality::ManyOne;
     }
 
 }
@@ -159,12 +156,10 @@ bool ORelationTableConnectionData::checkPrimaryKey(const Reference< XPropertySet
 
         for(;pKeyIter != pKeyEnd;++pKeyIter)
         {
-            OConnectionLineDataVec::const_iterator aIter = m_vConnLineData.begin();
-            OConnectionLineDataVec::const_iterator aEnd = m_vConnLineData.end();
-            for(;aIter != aEnd;++aIter)
+            for (auto const& elem : m_vConnLineData)
             {
                 ++nValidLinesCount;
-                if ( (*aIter)->GetFieldName(_eEConnectionSide) == *pKeyIter )
+                if ( elem->GetFieldName(_eEConnectionSide) == *pKeyIter )
                 {
                     ++nPrimKeysCount;
                     break;
@@ -174,21 +169,16 @@ bool ORelationTableConnectionData::checkPrimaryKey(const Reference< XPropertySet
         if ( nPrimKeysCount != aKeyColumns.getLength() )
             return false;
     }
-    if ( !nPrimKeysCount || nPrimKeysCount != nValidLinesCount )
-        return false;
-
-    return true;
+    return nPrimKeysCount && nPrimKeysCount == nValidLinesCount;
 }
 
-bool ORelationTableConnectionData::IsConnectionPossible()
+void ORelationTableConnectionData::IsConnectionPossible()
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
     // if the SourceFields are a PrimKey, it's only the orientation which is wrong
     if ( IsSourcePrimKey() && !IsDestPrimKey() )
         ChangeOrientation();
-
-    return true;
 }
 
 OConnectionLineDataRef ORelationTableConnectionData::CreateLineDataObj()
@@ -229,14 +219,16 @@ bool operator==(const ORelationTableConnectionData& lhs, const ORelationTableCon
 
     if ( bEqual )
     {
-        std::vector< OConnectionLineDataRef >::const_iterator aIter = lhs.m_vConnLineData.begin();
-        std::vector< OConnectionLineDataRef >::const_iterator aEnd = lhs.m_vConnLineData.end();
-        for (sal_Int32 i = 0; aIter != aEnd; ++aIter,++i)
+        sal_Int32 i = 0;
+        for (auto const& elem : lhs.m_vConnLineData)
         {
-            if ( *(rhs.m_vConnLineData[i]) != **aIter )
+            if ( *(rhs.m_vConnLineData[i]) != *elem )
+            {
+                bEqual = false;
                 break;
+            }
+            ++i;
         }
-        bEqual = aIter == aEnd;
     }
     return bEqual;
 }
@@ -249,11 +241,10 @@ bool ORelationTableConnectionData::Update()
     // delete old relation
     {
         DropRelation();
-        if( !IsConnectionPossible() )
-            return false;
+        IsConnectionPossible();
     }
 
-    // reassign the keys because the orientaion could be changed
+    // reassign the keys because the orientation could be changed
     Reference<XPropertySet> xTableProp(getReferencingTable()->getTable());
     Reference< XIndexAccess> xKeys ( getReferencingTable()->getKeys());
 
@@ -272,12 +263,11 @@ bool ORelationTableConnectionData::Update()
         // build a foreign key name
         OUString sSourceName;
         xTableProp->getPropertyValue(PROPERTY_NAME) >>= sSourceName;
-        OUString sKeyName = sSourceName;
-        sKeyName += getReferencedTable()->GetTableName();
+        OUString sKeyName = sSourceName + getReferencedTable()->GetTableName();
 
         xKey->setPropertyValue(PROPERTY_NAME,makeAny(sKeyName));
         xKey->setPropertyValue(PROPERTY_TYPE,makeAny(KeyType::FOREIGN));
-        xKey->setPropertyValue(PROPERTY_REFERENCEDTABLE,makeAny(OUString(getReferencedTable()->GetTableName())));
+        xKey->setPropertyValue(PROPERTY_REFERENCEDTABLE,makeAny(getReferencedTable()->GetTableName()));
         xKey->setPropertyValue(PROPERTY_UPDATERULE, makeAny(GetUpdateRules()));
         xKey->setPropertyValue(PROPERTY_DELETERULE, makeAny(GetDeleteRules()));
     }
@@ -290,18 +280,16 @@ bool ORelationTableConnectionData::Update()
         Reference<XAppend> xColumnAppend(xColumns,UNO_QUERY);
         if ( xColumnFactory.is() )
         {
-            OConnectionLineDataVec::const_iterator aIter = m_vConnLineData.begin();
-            OConnectionLineDataVec::const_iterator aEnd = m_vConnLineData.end();
-            for(;aIter != aEnd;++aIter)
+            for (auto const& elem : m_vConnLineData)
             {
-                if(!((*aIter)->GetSourceFieldName().isEmpty() || (*aIter)->GetDestFieldName().isEmpty()))
+                if(!(elem->GetSourceFieldName().isEmpty() || elem->GetDestFieldName().isEmpty()))
                 {
                     Reference<XPropertySet> xColumn;
                     xColumn = xColumnFactory->createDataDescriptor();
                     if ( xColumn.is() )
                     {
-                        xColumn->setPropertyValue(PROPERTY_NAME,makeAny((*aIter)->GetSourceFieldName()));
-                        xColumn->setPropertyValue(PROPERTY_RELATEDCOLUMN,makeAny((*aIter)->GetDestFieldName()));
+                        xColumn->setPropertyValue(PROPERTY_NAME,makeAny(elem->GetSourceFieldName()));
+                        xColumn->setPropertyValue(PROPERTY_RELATEDCOLUMN,makeAny(elem->GetDestFieldName()));
                         xColumnAppend->appendByDescriptor(xColumn);
                     }
                 }
@@ -315,7 +303,7 @@ bool ORelationTableConnectionData::Update()
 
     // get the name of foreign key; search for columns
     m_aConnName.clear();
-xKey.clear();
+    xKey.clear();
     bool bDropRelation = false;
     for(sal_Int32 i=0;i<xKeys->getCount();++i)
     {
@@ -345,17 +333,17 @@ xKey.clear();
                         xColumn->getPropertyValue(PROPERTY_NAME)            >>= sName;
                         xColumn->getPropertyValue(PROPERTY_RELATEDCOLUMN)   >>= sRelatedColumn;
 
-                        OConnectionLineDataVec::const_iterator aIter = m_vConnLineData.begin();
-                        OConnectionLineDataVec::const_iterator aEnd = m_vConnLineData.end();
-                        for(;aIter != aEnd;++aIter)
+                        bool bFoundElem = false;
+                        for (auto const& elem : m_vConnLineData)
                         {
-                            if(    (*aIter)->GetSourceFieldName() == sName
-                                && (*aIter)->GetDestFieldName() == sRelatedColumn )
+                            if(    elem->GetSourceFieldName() == sName
+                                && elem->GetDestFieldName() == sRelatedColumn )
                             {
+                                bFoundElem = true;
                                 break;
                             }
                         }
-                        if ( aIter == m_vConnLineData.end() )
+                        if (!bFoundElem)
                             break;
                     }
                     if ( pIter == pEnd )
@@ -373,12 +361,12 @@ xKey.clear();
                 }
             }
         }
-    xKey.clear();
+        xKey.clear();
     }
     if ( bDropRelation )
     {
         DropRelation();
-        OUString sError(ModuleRes(STR_QUERY_REL_COULD_NOT_CREATE));
+        OUString sError(DBA_RES(STR_QUERY_REL_COULD_NOT_CREATE));
         ::dbtools::throwGenericSQLException(sError,nullptr);
     }
 

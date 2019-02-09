@@ -17,9 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <list>
-
-#include <osl/mutex.hxx>
 #include <osl/thread.hxx>
 #include <osl/diagnose.h>
 
@@ -36,7 +33,7 @@ using namespace ::osl;
 using namespace ::cppu;
 
 
-static inline void createLocalId( sal_Sequence **ppThreadId )
+static void createLocalId( sal_Sequence **ppThreadId )
 {
     rtl_byte_sequence_constructNoDefault( ppThreadId , 4 + 16 );
     sal_uInt32 id = osl::Thread::getCurrentIdentifier();
@@ -85,6 +82,7 @@ extern "C" void SAL_CALL uno_releaseIdFromCurrentThread()
 {
     IdContainer *p = getIdContainer();
     OSL_ASSERT( p );
+    OSL_ASSERT( p->bInit );
     OSL_ASSERT( p->nRefCountOfCurrentId );
 
     p->nRefCountOfCurrentId --;
@@ -117,11 +115,11 @@ extern "C" sal_Bool SAL_CALL uno_bindIdToCurrentThread( sal_Sequence *pThreadId 
         }
         else
         {
-            return sal_False;
+            return false;
         }
 
     }
-    return sal_True;
+    return true;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -22,35 +22,10 @@
 
 #include "global.hxx"
 #include "address.hxx"
+#include <vector>
 
 class ScDocument;
-
-struct ScReferenceEntry             // without constructor !
-{
-    SCCOL   nCol;
-    SCROW   nRow;
-    SCTAB   nTab;
-};
-
-//!     Use delta value for data?
-
-class ScReferenceList           // without constructor !
-{
-private:
-    SCSIZE              nCount;
-    SCSIZE              nFullSize;          // incl. fill entries
-    ScReferenceEntry*   pData;
-
-public:
-    void                    Init()                      { nCount=0; nFullSize=0; pData=nullptr; }
-    void                    Clear()                     { delete[] pData; }
-
-    SCSIZE                  GetCount()                  { return nCount; }
-    const ScReferenceEntry& GetEntry( SCSIZE nPos )     { return pData[nPos]; }
-    void                    SetFullSize( SCSIZE nNew )  { nFullSize = nNew; }
-
-    void                    AddEntry( SCCOL nCol, SCROW nRow, SCTAB nTab );
-};
+class ScFunctionData;
 
 //  Sequence:
 //      1)  create ScConsData
@@ -66,22 +41,27 @@ public:
 class ScConsData
 {
 private:
+    struct ScReferenceEntry             // without constructor !
+    {
+        SCCOL   nCol;
+        SCROW   nRow;
+        SCTAB   nTab;
+    };
+    typedef std::vector<ScReferenceEntry> ScReferenceList;
     ScSubTotalFunc      eFunction;
     bool                bReference;
     bool                bColByName;
     bool                bRowByName;
     SCSIZE              nColCount;
     SCSIZE              nRowCount;
-    bool**              ppUsed;
-    double**            ppSum;
-    double**            ppCount;
-    double**            ppSumSqr;
-    ScReferenceList**   ppRefs;
+    std::unique_ptr<std::unique_ptr<bool[]>[]> ppUsed;
+    std::unique_ptr<std::unique_ptr<ScFunctionData[]>[]> ppFunctionData;
+    std::unique_ptr<std::unique_ptr<ScReferenceList[]>[]> ppRefs;
     ::std::vector<OUString> maColHeaders;
     ::std::vector<OUString> maRowHeaders;
     ::std::vector<OUString> maTitles;
     SCSIZE              nDataCount;
-    SCSIZE**            ppTitlePos;
+    std::unique_ptr<std::unique_ptr<SCSIZE[]>[]> ppTitlePos;
     bool                bCornerUsed;
     OUString            aCornerText;        // only for bColByName && bRowByName
 
@@ -95,8 +75,8 @@ public:
     void        InitData();
     void        DeleteData();
 
-    void        AddFields( ScDocument* pSrcDoc, SCTAB nTab,
-                            SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2 );
+    void        AddFields( const ScDocument* pSrcDoc, SCTAB nTab,
+                           SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2 );
     void        DoneFields();
 
     void        AddData( ScDocument* pSrcDoc, SCTAB nTab,

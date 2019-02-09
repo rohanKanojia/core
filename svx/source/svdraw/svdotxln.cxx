@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <comphelper/processfactory.hxx>
 #include <osl/file.hxx>
@@ -44,16 +44,11 @@ public:
         : ::sfx2::SvBaseLink( ::SfxLinkUpdateMode::ONCALL, SotClipboardFormatId::SIMPLE_FILE ),
             pSdrObj( pObj1 )
     {}
-    virtual ~ImpSdrObjTextLink();
 
     virtual void Closed() override;
     virtual ::sfx2::SvBaseLink::UpdateResult DataChanged(
         const OUString& rMimeType, const css::uno::Any & rValue ) override;
 };
-
-ImpSdrObjTextLink::~ImpSdrObjTextLink()
-{
-}
 
 void ImpSdrObjTextLink::Closed()
 {
@@ -72,8 +67,9 @@ void ImpSdrObjTextLink::Closed()
     const OUString& /*rMimeType*/, const css::uno::Any & /*rValue */)
 {
     bool bForceReload = false;
-    SdrModel* pModel = pSdrObj ? pSdrObj->GetModel() : nullptr;
-    sfx2::LinkManager* pLinkManager= pModel ? pModel->GetLinkManager() : nullptr;
+    SdrModel* pModel(pSdrObj ? &pSdrObj->getSdrModelFromSdrObject() : nullptr);
+    sfx2::LinkManager* pLinkManager(pModel ? pModel->GetLinkManager() : nullptr);
+
     if( pLinkManager )
     {
         ImpSdrObjTextLinkUserData* pData=pSdrObj->GetLinkUserData();
@@ -101,19 +97,17 @@ void ImpSdrObjTextLink::Closed()
 
 
 ImpSdrObjTextLinkUserData::ImpSdrObjTextLinkUserData():
-    SdrObjUserData(SdrInventor,SDRUSERDATA_OBJTEXTLINK),
+    SdrObjUserData(SdrInventor::Default,SDRUSERDATA_OBJTEXTLINK),
     aFileDate0( DateTime::EMPTY ),
-    pLink(nullptr),
     eCharSet(RTL_TEXTENCODING_DONTKNOW)
 {
 }
 
 ImpSdrObjTextLinkUserData::~ImpSdrObjTextLinkUserData()
 {
-    delete pLink;
 }
 
-SdrObjUserData* ImpSdrObjTextLinkUserData::Clone(SdrObject* ) const
+std::unique_ptr<SdrObjUserData> ImpSdrObjTextLinkUserData::Clone(SdrObject* ) const
 {
     ImpSdrObjTextLinkUserData* pData=new ImpSdrObjTextLinkUserData;
     pData->aFileName  =aFileName;
@@ -121,14 +115,13 @@ SdrObjUserData* ImpSdrObjTextLinkUserData::Clone(SdrObject* ) const
     pData->aFileDate0 =aFileDate0;
     pData->eCharSet   =eCharSet;
     pData->pLink=nullptr;
-    return pData;
+    return std::unique_ptr<SdrObjUserData>(pData);
 }
 
 
-void SdrTextObj::SetTextLink(const OUString& rFileName, const OUString& rFilterName, rtl_TextEncoding eCharSet)
+void SdrTextObj::SetTextLink(const OUString& rFileName, const OUString& rFilterName)
 {
-    if(eCharSet == RTL_TEXTENCODING_DONTKNOW)
-        eCharSet = osl_getThreadTextEncoding();
+    rtl_TextEncoding eCharSet = osl_getThreadTextEncoding();
 
     ImpSdrObjTextLinkUserData* pData=GetLinkUserData();
     if (pData!=nullptr) {
@@ -138,18 +131,18 @@ void SdrTextObj::SetTextLink(const OUString& rFileName, const OUString& rFilterN
     pData->aFileName=rFileName;
     pData->aFilterName=rFilterName;
     pData->eCharSet=eCharSet;
-    AppendUserData(pData);
-    ImpLinkAnmeldung();
+    AppendUserData(std::unique_ptr<SdrObjUserData>(pData));
+    ImpRegisterLink();
 }
 
 void SdrTextObj::ReleaseTextLink()
 {
-    ImpLinkAbmeldung();
+    ImpDeregisterLink();
     sal_uInt16 nCount=GetUserDataCount();
     for (sal_uInt16 nNum=nCount; nNum>0;) {
         nNum--;
         SdrObjUserData* pData=GetUserData(nNum);
-        if (pData->GetInventor()==SdrInventor && pData->GetId()==SDRUSERDATA_OBJTEXTLINK) {
+        if (pData->GetInventor()==SdrInventor::Default && pData->GetId()==SDRUSERDATA_OBJTEXTLINK) {
             DeleteUserData(nNum);
         }
     }
@@ -170,7 +163,7 @@ bool SdrTextObj::ReloadLinkedText( bool bForceLoad)
             INetURLObject aURL( pData->aFileName );
             DBG_ASSERT( aURL.GetProtocol() != INetProtocol::NotValid, "invalid URL" );
 
-            ::ucbhelper::Content aCnt( aURL.GetMainURL( INetURLObject::NO_DECODE ), css::uno::Reference< css::ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext() );
+            ::ucbhelper::Content aCnt( aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), css::uno::Reference< css::ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext() );
             css::uno::Any aAny( aCnt.getPropertyValue("DateModified") );
             css::util::DateTime aDateTime;
 
@@ -192,7 +185,7 @@ bool SdrTextObj::ReloadLinkedText( bool bForceLoad)
 
             if( bLoad )
             {
-                bRet = LoadText( pData->aFileName, pData->aFilterName, pData->eCharSet );
+                bRet = LoadText( pData->aFileName, pData->eCharSet );
             }
 
             pData->aFileDate0 = aFileDT;
@@ -202,7 +195,7 @@ bool SdrTextObj::ReloadLinkedText( bool bForceLoad)
     return bRet;
 }
 
-bool SdrTextObj::LoadText(const OUString& rFileName, const OUString& /*rFilterName*/, rtl_TextEncoding eCharSet)
+bool SdrTextObj::LoadText(const OUString& rFileName, rtl_TextEncoding eCharSet)
 {
     INetURLObject   aFileURL( rFileName );
     bool            bRet = false;
@@ -219,7 +212,7 @@ bool SdrTextObj::LoadText(const OUString& rFileName, const OUString& /*rFilterNa
 
     DBG_ASSERT( aFileURL.GetProtocol() != INetProtocol::NotValid, "invalid URL" );
 
-    std::unique_ptr<SvStream> pIStm(::utl::UcbStreamHelper::CreateStream( aFileURL.GetMainURL( INetURLObject::NO_DECODE ), StreamMode::READ ));
+    std::unique_ptr<SvStream> pIStm(::utl::UcbStreamHelper::CreateStream( aFileURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), StreamMode::READ ));
 
     if( pIStm )
     {
@@ -227,7 +220,7 @@ bool SdrTextObj::LoadText(const OUString& rFileName, const OUString& /*rFilterNa
 
         char cRTF[5];
         cRTF[4] = 0;
-        pIStm->Read(cRTF, 5);
+        pIStm->ReadBytes(cRTF, 5);
 
         bool bRTF = cRTF[0] == '{' && cRTF[1] == '\\' && cRTF[2] == 'r' && cRTF[3] == 't' && cRTF[4] == 'f';
 
@@ -235,7 +228,7 @@ bool SdrTextObj::LoadText(const OUString& rFileName, const OUString& /*rFilterNa
 
         if( !pIStm->GetError() )
         {
-            SetText( *pIStm, aFileURL.GetMainURL( INetURLObject::NO_DECODE ), sal::static_int_cast< sal_uInt16 >( bRTF ? EE_FORMAT_RTF : EE_FORMAT_TEXT ) );
+            SetText( *pIStm, aFileURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), bRTF ? EETextFormat::Rtf : EETextFormat::Text );
             bRet = true;
         }
     }
@@ -249,7 +242,7 @@ ImpSdrObjTextLinkUserData* SdrTextObj::GetLinkUserData() const
     for (sal_uInt16 nNum=nCount; nNum>0;) {
         nNum--;
         SdrObjUserData * pData=GetUserData(nNum);
-        if (pData->GetInventor() == SdrInventor
+        if (pData->GetInventor() == SdrInventor::Default
             && pData->GetId() == SDRUSERDATA_OBJTEXTLINK)
         {
             return static_cast<ImpSdrObjTextLinkUserData *>(pData);
@@ -258,10 +251,10 @@ ImpSdrObjTextLinkUserData* SdrTextObj::GetLinkUserData() const
     return nullptr;
 }
 
-void SdrTextObj::ImpLinkAnmeldung()
+void SdrTextObj::ImpRegisterLink()
 {
     ImpSdrObjTextLinkUserData* pData=GetLinkUserData();
-    sfx2::LinkManager* pLinkManager=pModel!=nullptr ? pModel->GetLinkManager() : nullptr;
+    sfx2::LinkManager* pLinkManager(getSdrModelFromSdrObject().GetLinkManager());
     if (pLinkManager!=nullptr && pData!=nullptr && pData->pLink==nullptr) { // don't register twice
         pData->pLink = new ImpSdrObjTextLink(this);
         pLinkManager->InsertFileLink(*pData->pLink,OBJECT_CLIENT_FILE,pData->aFileName,
@@ -270,13 +263,13 @@ void SdrTextObj::ImpLinkAnmeldung()
     }
 }
 
-void SdrTextObj::ImpLinkAbmeldung()
+void SdrTextObj::ImpDeregisterLink()
 {
     ImpSdrObjTextLinkUserData* pData=GetLinkUserData();
-    sfx2::LinkManager* pLinkManager=pModel!=nullptr ? pModel->GetLinkManager() : nullptr;
+    sfx2::LinkManager* pLinkManager(getSdrModelFromSdrObject().GetLinkManager());
     if (pLinkManager!=nullptr && pData!=nullptr && pData->pLink!=nullptr) { // don't register twice
         // when doing Remove, *pLink is deleted implicitly
-        pLinkManager->Remove( pData->pLink );
+        pLinkManager->Remove( pData->pLink.get() );
         pData->pLink=nullptr;
     }
 }

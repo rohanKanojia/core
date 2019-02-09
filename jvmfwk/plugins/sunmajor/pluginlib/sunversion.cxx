@@ -19,12 +19,12 @@
 
 
 #include "sunversion.hxx"
-#include "osl/diagnose.h"
-#include "osl/thread.h"
-#include "osl/process.h"
-#include "osl/security.hxx"
+#include <osl/diagnose.h>
+#include <osl/thread.h>
+#include <osl/process.h>
+#include <osl/security.hxx>
+#include <rtl/character.hxx>
 #include <string.h>
-#include <ctype.h>
 #include "diagnostics.h"
 using namespace osl;
 
@@ -77,25 +77,27 @@ bool SunVersion::init(const char *szVersion)
     //char must me a number 0 - 999 and no leading
     while (true)
     {
-        if (pCur < pEnd && isdigit(*pCur))
+        if (pCur < pEnd && rtl::isAsciiDigit(static_cast<unsigned char>(*pCur)))
         {
-            if (pCur < pEnd)
-                pCur ++;
+            pCur ++;
             nPartPos ++;
         }
         //if  correct separator then form integer
         else if (
-            ! (nPartPos == 0) // prevents: ".4.1", "..1", part must start with digit
+            (nPartPos != 0) // prevents: ".4.1", "..1", part must start with digit
             && (
                 //separators after maintenance (1.4.1_01, 1.4.1-beta, or 1.4.1)
-                ((pCur == pEnd || *pCur == '_' || *pCur == '-') && (nPart == 2 ))
+                (pCur == pEnd || *pCur == '_' || *pCur == '-')
                 ||
                 //separators between major-minor and minor-maintenance
                 (nPart < 2 && *pCur == '.') )
             && (
                 //prevent 1.4.0. 1.4.0-
-                pCur + 1 != pEnd || isdigit(*(pCur))) )
+                pCur + 1 != pEnd
+                || rtl::isAsciiDigit(static_cast<unsigned char>(*pCur))) )
         {
+            bool afterMaint = pCur == pEnd || *pCur == '_' || *pCur == '-';
+
             int len = pCur - pLast;
             if (len >= 127)
                 return false;
@@ -106,6 +108,9 @@ bool SunVersion::init(const char *szVersion)
             pLast = pCur;
 
             m_arVersionParts[nPart] = atoi(buf);
+
+            if (afterMaint)
+                nPart = 2;
             nPart ++;
             nPartPos = 0;
             if (nPart == 3)
@@ -113,7 +118,9 @@ bool SunVersion::init(const char *szVersion)
 
             //check next character
             if (! ( (pCur < pEnd)
-                    && ( (nPart < 3) && isdigit(*pCur))))
+                    && ( (nPart < 3)
+                         && rtl::isAsciiDigit(
+                             static_cast<unsigned char>(*pCur)))))
                 return false;
         }
         else
@@ -133,11 +140,11 @@ bool SunVersion::init(const char *szVersion)
         {
             if (pCur <= pEnd)
             {
-                if ( ! isdigit(*pCur))
+                if ( ! rtl::isAsciiDigit(static_cast<unsigned char>(*pCur)))
                 {
-                    //1.4.1_01-, 1.4.1_01a, the numerical part may only be 2 chars.
-                    int len = pCur - pLast;
-                    if (len > 2)
+                    //1.8.0_102-, 1.8.0_01a,
+                    size_t len = pCur - pLast;
+                    if (len > sizeof(buf) - 1)
                         return false;
                     //we've got the update: 01, 02 etc
                     strncpy(buf, pLast, len);
@@ -184,7 +191,8 @@ bool SunVersion::init(const char *szVersion)
       if (m_preRelease == Rel_FreeBSD)
       {
           pCur++; //eliminate 'p'
-          if (pCur < pEnd && isdigit(*pCur))
+          if (pCur < pEnd
+              && rtl::isAsciiDigit(static_cast<unsigned char>(*pCur)))
               pCur ++;
           int len = pCur - pLast -1; //eliminate 'p'
           if (len >= 127)
@@ -318,24 +326,24 @@ SelfTest::SelfTest()
 {
     bool bRet = true;
 
-    char const * versions[] = {"1.4.0", "1.4.1", "1.0.0", "10.0.0", "10.10.0",
+    static char const * versions[] = {"1.4.0", "1.4.1", "1.0.0", "10.0.0", "10.10.0",
                          "10.2.2", "10.10.0", "10.10.10", "111.0.999",
                          "1.4.1_01", "9.90.99_09", "1.4.1_99",
                          "1.4.1_00a",
                          "1.4.1-ea", "1.4.1-beta", "1.4.1-rc1",
                          "1.5.0_01-ea", "1.5.0_01-rc2"};
-    char const * badVersions[] = {".4.0", "..1", "", "10.0", "10.10.0.", "10.10.0-", "10.10.0.",
+    static char const * badVersions[] = {".4.0", "..1", "", "10.0", "10.10.0.", "10.10.0-", "10.10.0.",
                             "10.2-2", "10_10.0", "10..10","10.10", "a.0.999",
                             "1.4b.1_01", "9.90.-99_09", "1.4.1_99-",
                             "1.4.1_00a2", "1.4.0_z01z", "1.4.1__99A",
                             "1.4.1-1ea", "1.5.0_010", "1.5.0._01-", "1.5.0_01-eac"};
-    char const * orderedVer[] = { "1.3.1-ea", "1.3.1-beta", "1.3.1-rc1",
+    static char const * orderedVer[] = { "1.3.1-ea", "1.3.1-beta", "1.3.1-rc1",
                             "1.3.1", "1.3.1_00a", "1.3.1_01", "1.3.1_01a",
                             "1.3.2", "1.4.0", "1.5.0_01-ea", "2.0.0"};
 
-    int num = sizeof (versions) / sizeof(char*);
-    int numBad = sizeof (badVersions) / sizeof(char*);
-    int numOrdered = sizeof (orderedVer) / sizeof(char*);
+    int num = SAL_N_ELEMENTS (versions);
+    int numBad = SAL_N_ELEMENTS (badVersions);
+    int numOrdered = SAL_N_ELEMENTS (orderedVer);
     //parsing test (positive)
     for (int i = 0; i < num; i++)
     {
@@ -406,7 +414,7 @@ SelfTest::SelfTest()
     if (bRet)
         JFW_TRACE2("Testing class SunVersion succeeded.");
     else
-        OSL_ENSURE(bRet, "[Java framework] sunjavaplugin: SunVersion self test failed.\n");
+        OSL_ENSURE(bRet, "[Java framework] sunjavaplugin: SunVersion self test failed.");
 }
 #endif
 

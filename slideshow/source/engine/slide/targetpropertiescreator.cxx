@@ -25,12 +25,13 @@
 #include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/animations/AnimationNodeType.hpp>
 #include <com/sun/star/animations/XAnimate.hpp>
+#include <comphelper/sequence.hxx>
 
 #include <unordered_map>
 #include <vector>
 
 #include "targetpropertiescreator.hxx"
-#include "tools.hxx"
+#include <tools.hxx>
 
 namespace slideshow
 {
@@ -84,7 +85,7 @@ namespace internal
                 // Costs about 17 cycles on a RISC machine with infinite
                 // instruction level parallelism (~42 basic
                 // instructions). Thus I truly doubt this pays off...
-                return reinterpret_cast< ::std::size_t >(rKey.mxRef.get()) ^ (rKey.mnParagraphIndex << 16L);
+                return reinterpret_cast< ::std::size_t >(rKey.mxRef.get()) ^ (rKey.mnParagraphIndex << 16);
             }
         };
 
@@ -168,10 +169,9 @@ namespace internal
                                 return;
                             }
                         }
+                        [[fallthrough]];
                     }
-                        // FALLTHROUGH intended
                     case animations::AnimationNodeType::PAR:
-                        // FALLTHROUGH intended
                     case animations::AnimationNodeType::SEQ:
                     {
                         /// forward bInitial
@@ -188,19 +188,12 @@ namespace internal
                     break;
 
                     case animations::AnimationNodeType::CUSTOM:
-                        // FALLTHROUGH intended
                     case animations::AnimationNodeType::ANIMATE:
-                        // FALLTHROUGH intended
                     case animations::AnimationNodeType::ANIMATEMOTION:
-                        // FALLTHROUGH intended
                     case animations::AnimationNodeType::ANIMATECOLOR:
-                        // FALLTHROUGH intended
                     case animations::AnimationNodeType::ANIMATETRANSFORM:
-                        // FALLTHROUGH intended
                     case animations::AnimationNodeType::TRANSITIONFILTER:
-                        // FALLTHROUGH intended
                     case animations::AnimationNodeType::AUDIO:
-                        // FALLTHROUGH intended
                     /*default:
                         // ignore this node, no valuable content for now.
                         break;*/
@@ -226,7 +219,7 @@ namespace internal
                         {
                             // no parent-supplied target, retrieve
                             // node target
-                            if( (xAnimateNode->getTarget() >>= aTarget.mxRef) )
+                            if( xAnimateNode->getTarget() >>= aTarget.mxRef )
                             {
                                 // pure shape target - set paragraph
                                 // index to magic
@@ -279,7 +272,7 @@ namespace internal
                             {
                                 // try to extract string
                                 OUString aString;
-                                if( (aAny >>= aString) )
+                                if( aAny >>= aString )
                                 {
                                     // we also take the strings "true" and "false",
                                     // as well as "on" and "off" here
@@ -305,15 +298,14 @@ namespace internal
 
                         // target is set the 'visible' value,
                         // so we should record the opposite value
-                        mrShapeHash.insert(
-                                    XShapeHash::value_type(
+                        mrShapeHash.emplace(
                                         aTarget,
                                         VectorOfNamedValues(
                                             1,
                                             beans::NamedValue(
                                                 //xAnimateNode->getAttributeName(),
-                                                OUString("visibility"),
-                                                uno::makeAny( bVisible ) ) ) ) );
+                                                "visibility",
+                                                uno::makeAny( bVisible ) ) ) );
                     break;
                     }
                 }
@@ -322,14 +314,14 @@ namespace internal
         private:
             XShapeHash&                         mrShapeHash;
             uno::Reference< drawing::XShape >   mxTargetShape;
-            sal_Int16                           mnParagraphIndex;
+            sal_Int16 const                     mnParagraphIndex;
 
-            // get initial or filal state
-            bool                                mbInitial;
+            // get initial or final state
+            bool const                          mbInitial;
         };
     }
 
-    uno::Sequence< animations::TargetProperties > SAL_CALL TargetPropertiesCreator::createTargetProperties
+    uno::Sequence< animations::TargetProperties > TargetPropertiesCreator::createTargetProperties
         (
             const uno::Reference< animations::XAnimationNode >& xRootNode,
             bool bInitial
@@ -361,14 +353,14 @@ namespace internal
 
             if( rIter.first.mnParagraphIndex == -1 )
             {
-                rCurrProps.Target = uno::makeAny( rIter.first.mxRef );
+                rCurrProps.Target <<= rIter.first.mxRef;
             }
             else
             {
-                rCurrProps.Target = uno::makeAny(
+                rCurrProps.Target <<=
                     presentation::ParagraphTarget(
                         rIter.first.mxRef,
-                        rIter.first.mnParagraphIndex ) );
+                        rIter.first.mnParagraphIndex );
             }
 
             rCurrProps.Properties = ::comphelper::containerToSequence( rIter.second );

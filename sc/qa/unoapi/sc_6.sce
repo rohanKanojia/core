@@ -15,21 +15,7 @@
 #   except in compliance with the License. You may obtain a copy of
 #   the License at http://www.apache.org/licenses/LICENSE-2.0 .
 #
--o sc.ScIndexEnumeration_TableColumnsEnumeration
--o sc.ScIndexEnumeration_TableConditionalEntryEnumeration
-# fdo#45337 -o sc.ScIndexEnumeration_TableRowsEnumeration
--o sc.ScIndexEnumeration_TextFieldEnumeration
--o sc.ScLabelRangeObj
--o sc.ScLabelRangesObj
 -o sc.ScModelObj
--o sc.ScNamedRangeObj
--o sc.ScNamedRangesObj
--o sc.ScRecentFunctionsObj
-# -o sc.ScScenariosObj
 # -o sc.ScShapeObj
 # -o sc.ScSheetLinkObj
--o sc.ScSheetLinksObj
--o sc.ScSpreadsheetSettings
--o sc.ScSpreadsheetSettingsObj
--o sc.ScStyleFamiliesObj
 -o sc.ScStyleFamilyObj

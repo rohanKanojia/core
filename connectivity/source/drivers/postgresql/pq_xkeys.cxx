@@ -36,11 +36,14 @@
 
 #include <rtl/ustrbuf.hxx>
 #include <rtl/strbuf.hxx>
-
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
+#include <com/sun/star/sdbc/SQLException.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XParameters.hpp>
 #include <com/sun/star/sdbc/KeyRule.hpp>
 #include <com/sun/star/sdbcx/KeyType.hpp>
+#include <cppuhelper/exc_hlp.hxx>
 
 #include "pq_xkeys.hxx"
 #include "pq_xkey.hxx"
@@ -50,31 +53,26 @@
 using osl::MutexGuard;
 
 
-using com::sun::star::beans::XPropertySet;
+using css::beans::XPropertySet;
 
 using com::sun::star::uno::makeAny;
 using com::sun::star::uno::UNO_QUERY;
-using com::sun::star::uno::XInterface;
 using com::sun::star::uno::Reference;
 using com::sun::star::uno::RuntimeException;
 
-using com::sun::star::container::NoSuchElementException;
-using com::sun::star::lang::WrappedTargetException;
 
 using com::sun::star::sdbc::XRow;
-using com::sun::star::sdbc::XCloseable;
 using com::sun::star::sdbc::XStatement;
 using com::sun::star::sdbc::XResultSet;
 using com::sun::star::sdbc::XParameters;
 using com::sun::star::sdbc::XPreparedStatement;
-using com::sun::star::sdbc::XDatabaseMetaData;
 
 namespace pq_sdbc_driver
 {
 
 Keys::Keys(
-        const ::rtl::Reference< RefCountedMutex > & refMutex,
-        const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+        const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+        const css::uno::Reference< css::sdbc::XConnection >  & origin,
         ConnectionSettings *pSettings,
         const OUString &schemaName,
         const OUString &tableName)
@@ -88,42 +86,41 @@ Keys::~Keys()
 
 static sal_Int32 string2keytype( const OUString &type )
 {
-    sal_Int32 ret = com::sun::star::sdbcx::KeyType::UNIQUE;
+    sal_Int32 ret = css::sdbcx::KeyType::UNIQUE;
     if ( type == "p" )
-        ret = com::sun::star::sdbcx::KeyType::PRIMARY;
+        ret = css::sdbcx::KeyType::PRIMARY;
     else if ( type == "f" )
-        ret =  com::sun::star::sdbcx::KeyType::FOREIGN;
+        ret =  css::sdbcx::KeyType::FOREIGN;
     return ret;
 }
 
 static sal_Int32 string2keyrule( const OUString & rule )
 {
-    sal_Int32 ret = com::sun::star::sdbc::KeyRule::NO_ACTION;
+    sal_Int32 ret = css::sdbc::KeyRule::NO_ACTION;
     if( rule == "r" )
-        ret = com::sun::star::sdbc::KeyRule::RESTRICT;
+        ret = css::sdbc::KeyRule::RESTRICT;
     else if( rule == "c" )
-        ret = com::sun::star::sdbc::KeyRule::CASCADE;
+        ret = css::sdbc::KeyRule::CASCADE;
     else if( rule == "n" )
-        ret = com::sun::star::sdbc::KeyRule::SET_NULL;
+        ret = css::sdbc::KeyRule::SET_NULL;
     else if( rule == "d" )
-        ret = com::sun::star::sdbc::KeyRule::SET_DEFAULT;
+        ret = css::sdbc::KeyRule::SET_DEFAULT;
     return ret;
 }
 
 void Keys::refresh()
-    throw (::com::sun::star::uno::RuntimeException, std::exception)
 {
     try
     {
-        if( isLog( m_pSettings, LogLevel::INFO ) )
+        if (isLog(m_pSettings, LogLevel::Info))
         {
             OString buf( "sdbcx.Keys get refreshed for table " +
-                         OUStringToOString( m_schemaName, m_pSettings->encoding ) +
-                         "." + OUStringToOString( m_tableName,m_pSettings->encoding ));
-            log( m_pSettings, LogLevel::INFO, buf.getStr() );
+                         OUStringToOString( m_schemaName, ConnectionSettings::encoding ) +
+                         "." + OUStringToOString( m_tableName, ConnectionSettings::encoding ));
+            log( m_pSettings, LogLevel::Info, buf.getStr() );
         }
 
-        osl::MutexGuard guard( m_refMutex->mutex );
+        osl::MutexGuard guard( m_xMutex->GetMutex() );
         Statics & st = getStatics();
 
         Int2StringMap mainMap;
@@ -157,8 +154,8 @@ void Keys::refresh()
         while( rs->next() )
         {
             Key * pKey =
-                new Key( m_refMutex, m_origin, m_pSettings , m_schemaName, m_tableName );
-            Reference< com::sun::star::beans::XPropertySet > prop = pKey;
+                new Key( m_xMutex, m_origin, m_pSettings , m_schemaName, m_tableName );
+            Reference< css::beans::XPropertySet > prop = pKey;
 
             pKey->setPropertyValue_NoBroadcast_public(
                 st.NAME, makeAny( xRow->getString( 1 ) ) );
@@ -175,10 +172,10 @@ void Keys::refresh()
                         mainMap,
                         string2intarray( xRow->getString( 7 ) ) ) ) );
 
-            if( com::sun::star::sdbcx::KeyType::FOREIGN == keyType )
+            if( css::sdbcx::KeyType::FOREIGN == keyType )
             {
                 OUStringBuffer buf( 128 );
-                buf.append( xRow->getString( 6 ) + "." + xRow->getString( 5 ) );
+                buf.append( xRow->getString( 6 ) ).append( "." ).append( xRow->getString( 5 ) );
                 pKey->setPropertyValue_NoBroadcast_public(
                     st.REFERENCED_TABLE, makeAny( buf.makeStringAndClear() ) );
 
@@ -201,9 +198,11 @@ void Keys::refresh()
         }
         m_name2index.swap( map );
     }
-    catch ( com::sun::star::sdbc::SQLException & e )
+    catch ( css::sdbc::SQLException & e )
     {
-        throw RuntimeException( e.Message , e.Context );
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw css::lang::WrappedTargetRuntimeException( e.Message,
+                        e.Context, anyEx );
     }
 
     fire( RefreshedBroadcaster( *this ) );
@@ -211,12 +210,9 @@ void Keys::refresh()
 
 
 void Keys::appendByDescriptor(
-    const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& descriptor )
-    throw (::com::sun::star::sdbc::SQLException,
-           ::com::sun::star::container::ElementExistException,
-           ::com::sun::star::uno::RuntimeException, std::exception)
+    const css::uno::Reference< css::beans::XPropertySet >& descriptor )
 {
-    osl::MutexGuard guard( m_refMutex->mutex );
+    osl::MutexGuard guard( m_xMutex->GetMutex() );
 
     OUStringBuffer buf( 128 );
     buf.append( "ALTER TABLE " );
@@ -231,18 +227,14 @@ void Keys::appendByDescriptor(
 
 
 void Keys::dropByIndex( sal_Int32 index )
-    throw (::com::sun::star::sdbc::SQLException,
-           ::com::sun::star::lang::IndexOutOfBoundsException,
-           ::com::sun::star::uno::RuntimeException, std::exception)
 {
-    osl::MutexGuard guard( m_refMutex->mutex );
-    if( index < 0 ||  index >= (sal_Int32)m_values.size() )
+    osl::MutexGuard guard( m_xMutex->GetMutex() );
+    if( index < 0 ||  index >= static_cast<sal_Int32>(m_values.size()) )
     {
-        OUStringBuffer buf( 128 );
-        buf.append( "TABLES: Index out of range (allowed 0 to " + OUString::number(m_values.size() -1) +
-                    ", got " + OUString::number( index ) + ")" );
-        throw com::sun::star::lang::IndexOutOfBoundsException(
-            buf.makeStringAndClear(), *this );
+        throw css::lang::IndexOutOfBoundsException(
+            "TABLES: Index out of range (allowed 0 to " + OUString::number(m_values.size() -1)
+            + ", got " + OUString::number( index ) + ")",
+            *this );
     }
 
 
@@ -261,45 +253,43 @@ void Keys::dropByIndex( sal_Int32 index )
 }
 
 
-::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > Keys::createDataDescriptor()
-        throw (::com::sun::star::uno::RuntimeException, std::exception)
+css::uno::Reference< css::beans::XPropertySet > Keys::createDataDescriptor()
 {
-    return new KeyDescriptor( m_refMutex, m_origin, m_pSettings );
+    return new KeyDescriptor( m_xMutex, m_origin, m_pSettings );
 }
 
-Reference< com::sun::star::container::XIndexAccess > Keys::create(
-    const ::rtl::Reference< RefCountedMutex > & refMutex,
-    const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+Reference< css::container::XIndexAccess > Keys::create(
+    const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+    const css::uno::Reference< css::sdbc::XConnection >  & origin,
     ConnectionSettings *pSettings,
     const OUString & schemaName,
     const OUString & tableName)
 {
     Keys *pKeys = new Keys( refMutex, origin, pSettings, schemaName, tableName );
-    Reference< com::sun::star::container::XIndexAccess > ret = pKeys;
+    Reference< css::container::XIndexAccess > ret = pKeys;
     pKeys->refresh();
 
     return ret;
 }
 
 KeyDescriptors::KeyDescriptors(
-        const ::rtl::Reference< RefCountedMutex > & refMutex,
-        const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+        const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+        const css::uno::Reference< css::sdbc::XConnection >  & origin,
         ConnectionSettings *pSettings)
     : Container( refMutex, origin, pSettings,  getStatics().KEY )
 {}
 
-Reference< com::sun::star::container::XIndexAccess > KeyDescriptors::create(
-    const ::rtl::Reference< RefCountedMutex > & refMutex,
-    const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+Reference< css::container::XIndexAccess > KeyDescriptors::create(
+    const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+    const css::uno::Reference< css::sdbc::XConnection >  & origin,
     ConnectionSettings *pSettings)
 {
     return new KeyDescriptors( refMutex, origin, pSettings );
 }
 
-::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > KeyDescriptors::createDataDescriptor()
-        throw (::com::sun::star::uno::RuntimeException, std::exception)
+css::uno::Reference< css::beans::XPropertySet > KeyDescriptors::createDataDescriptor()
 {
-    return new KeyDescriptor( m_refMutex, m_origin, m_pSettings );
+    return new KeyDescriptor( m_xMutex, m_origin, m_pSettings );
 }
 
 };

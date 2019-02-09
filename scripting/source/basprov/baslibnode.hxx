@@ -44,30 +44,26 @@ namespace basprov
     {
     private:
         css::uno::Reference< css::uno::XComponentContext >    m_xContext;
-        OUString                                              m_sScriptingContext;
-        BasicManager*                                         m_pBasicManager;
+        OUString const                                        m_sScriptingContext;
+        BasicManager* const                                   m_pBasicManager;
         css::uno::Reference< css::script::XLibraryContainer > m_xLibContainer;
         css::uno::Reference< css::container::XNameContainer > m_xLibrary;
-        OUString                                              m_sLibName;
-        bool                                                  m_bIsAppScript;
+        OUString const                                        m_sLibName;
+        bool const                                            m_bIsAppScript;
 
     public:
         BasicLibraryNodeImpl( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
         const OUString& sScriptingContext,
             BasicManager* pBasicManager,
             const css::uno::Reference< css::script::XLibraryContainer >& xLibContainer,
-            const OUString& sLibName, bool isAppScript=true );
-        virtual ~BasicLibraryNodeImpl();
+            const OUString& sLibName, bool isAppScript );
+        virtual ~BasicLibraryNodeImpl() override;
 
         // XBrowseNode
-        virtual OUString SAL_CALL getName(  )
-            throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< css::uno::Reference< css::script::browse::XBrowseNode > > SAL_CALL getChildNodes(  )
-            throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL hasChildNodes(  )
-            throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Int16 SAL_CALL getType(  )
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getName(  ) override;
+        virtual css::uno::Sequence< css::uno::Reference< css::script::browse::XBrowseNode > > SAL_CALL getChildNodes(  ) override;
+        virtual sal_Bool SAL_CALL hasChildNodes(  ) override;
+        virtual sal_Int16 SAL_CALL getType(  ) override;
     };
 
 

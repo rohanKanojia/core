@@ -35,22 +35,9 @@ public:
     static sal_uInt32   GetLanguageEntryCount();
     static LanguageType GetLanguageTypeAtIndex( sal_uInt32 nIndex );
 
-    /**
-        @param bUserInterfaceSelection
-            If TRUE, don't replace an UI-only locale. Only use for
-                     Tools->Options->LanguageSettings->UserInterface listbox.
-            If FALSE, do replace; same as GetLanguageString() without bool
-                      parameter.
-     */
-    static OUString     GetLanguageString( const LanguageType eType, bool bUserInterfaceSelection );
-
     /** Add a language tag to the table.
-
-        @param  rString
-                UI visible description string. If empty, the rLanguageTag Bcp47
-                string is used instead.
      */
-    static sal_uInt32   AddLanguageTag( const LanguageTag& rLanguageTag, const OUString& rString );
+    static sal_uInt32   AddLanguageTag( const LanguageTag& rLanguageTag );
 };
 
 // Add LRE or RLE embedding characters to the string based on the

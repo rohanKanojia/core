@@ -21,7 +21,7 @@
 #define INCLUDED_SVTOOLS_STRINGTRANSFER_HXX
 
 #include <svtools/svtdllapi.h>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 
 
 namespace svt
@@ -30,18 +30,17 @@ namespace svt
 
     //= OStringTransferable
 
-    class SVT_DLLPUBLIC OStringTransferable : public TransferableHelper
+    class SVT_DLLPUBLIC OStringTransferable final : public TransferableHelper
     {
-    protected:
-        OUString     m_sContent;
-
     public:
         OStringTransferable(const OUString& _rContent);
 
-    protected:
+    private:
         // TransferableHelper overridables
         virtual void AddSupportedFormats() override;
         virtual bool GetData( const css::datatransfer::DataFlavor& _rFlavor, const OUString& rDestDoc ) override;
+
+        OUString const     m_sContent;
     };
 
 
@@ -54,12 +53,12 @@ namespace svt
             <p>Beware: In opposite to the old DragServer::CopyString, this method does not <em>add</em> the string
             to the clipboard, instead the old clipboard content is <em>replaced</em>!</p>
         */
-        SVT_DLLPUBLIC static void           CopyString( const OUString& _rContent, vcl::Window* _pWindow = nullptr );
+        SVT_DLLPUBLIC static void           CopyString( const OUString& _rContent, vcl::Window* _pWindow );
 
         /** extracts a string from the system clipboard given
             @return <TRUE/> if the extraction was successful, i.e. if the clipboard contained a string content
         */
-        SVT_DLLPUBLIC static bool           PasteString( OUString& _rContent, vcl::Window* _pWindow = nullptr );
+        SVT_DLLPUBLIC static bool           PasteString( OUString& _rContent, vcl::Window* _pWindow );
 
         /** starts dragging a simple string
         */

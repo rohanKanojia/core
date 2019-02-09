@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -121,7 +122,7 @@ public class CalcHelper
 
 
 
-    /** Insert a chart using the given name as name of the OLE object and the range as correspoding
+    /** Insert a chart using the given name as name of the OLE object and the range as corresponding
         range of data to be used for rendering.  The chart is placed in the sheet for charts at
         position aUpperLeft extending as large as given in aExtent.
 
@@ -391,3 +392,5 @@ public class CalcHelper
         }
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

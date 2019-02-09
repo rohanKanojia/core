@@ -20,16 +20,14 @@
 // include files
 
 #include <sal/types.h>
-#include "cppunit/TestAssert.h"
-#include "cppunit/TestFixture.h"
-#include "cppunit/extensions/HelperMacros.h"
-#include "cppunit/plugin/TestPlugIn.h"
-#include "unotest/uniquepipename.hxx"
+#include <cppunit/TestAssert.h>
+#include <cppunit/TestFixture.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
 #include <rtl/ustring.hxx>
 
+#include <osl/test/uniquepipename.hxx>
 #include <osl/thread.hxx>
-
-#include <osl/mutex.hxx>
 
 #include <osl/pipe.hxx>
 #include <osl/time.h>
@@ -41,13 +39,9 @@
 
 using namespace osl;
 
-using ::rtl::OUString;
-using ::rtl::OUStringToOString;
-using ::rtl::OString;
-
 /** print last error of pipe system.
  */
-inline void printPipeError( ::osl::Pipe aPipe )
+static void printPipeError( ::osl::Pipe const & aPipe )
 {
     oslPipeError nError = aPipe.getError( );
     printf("#printPipeError# " );
@@ -93,9 +87,9 @@ inline void printPipeError( ::osl::Pipe aPipe )
 
 // pipe name and transfer contents
 
-const rtl::OUString aTestPipeName("testpipe2");
-const rtl::OUString aTestPipe1("testpipe1");
-const rtl::OUString aTestString("Sun Microsystems");
+const OUString aTestPipeName("testpipe2");
+const OUString aTestPipe1("testpipe1");
+const OUString aTestString("Sun Microsystems");
 
 const OString m_pTestString1("Sun Microsystems");
 const OString m_pTestString2("test pipe PASS/OK");
@@ -111,8 +105,8 @@ namespace osl_Pipe
 
     /** testing the methods:
         inline Pipe();
-        inline Pipe(const ::rtl::OUString& strName, oslPipeOptions Options);
-        inline Pipe(const ::rtl::OUString& strName, oslPipeOptions Options,const Security & rSecurity);
+        inline Pipe(const OUString& strName, oslPipeOptions Options);
+        inline Pipe(const OUString& strName, oslPipeOptions Options,const Security & rSecurity);
         inline Pipe(const Pipe& pipe);
         inline Pipe(oslPipe pipe, __sal_NoAcquire noacquire );
         inline Pipe(oslPipe Pipe);
@@ -120,7 +114,7 @@ namespace osl_Pipe
     class ctors : public CppUnit::TestFixture
     {
     public:
-        bool bRes, bRes1;
+        bool bRes, bRes1, bRes2;
 
         void ctors_none( )
             {
@@ -168,29 +162,28 @@ namespace osl_Pipe
                                         bRes );
             }
 
-        /**  tester comment:
-
-        When test the following two constructors, don't know how to test the
-        acquire and no acquire action. possible plans:
-        1.release one handle and check the other( did not success since the
-        other still exist and valid. )
-        2. release one handle twice to see getLastError( )(the getLastError
-        always returns invalidError(LINUX)).
-        */
-
+        /* Note: DO NOT DO THIS - I have very deliberately caused send to FAIL, *on purpose* as this is the
+           only sane way to test noacquire. This is a terrible misuse of no-acquire, but in this case is
+           needed only so we can test to make sure no-acquire is working!
+         */
         void ctors_no_acquire( )
             {
                 /// create a pipe.
-                ::osl::Pipe aPipe( test::uniquePipeName(aTestPipeName), osl_Pipe_CREATE );
-                osl_acquirePipe(aPipe.getHandle());
+                OUString aPipeName(test::uniquePipeName(aTestPipeName));
+                oslPipe handle(osl_createPipe(aPipeName.pData, osl_Pipe_CREATE, nullptr));
                 /// constructs a pipe reference without acquiring the handle.
-                ::osl::Pipe aNoAcquirePipe( aPipe.getHandle( ), SAL_NO_ACQUIRE );
+                std::unique_ptr<osl::Pipe> xNoAcquirePipe(new osl::Pipe(handle, SAL_NO_ACQUIRE));
 
-                bRes = aNoAcquirePipe.is( );
-                ///aPipe.clear( );
-                ///bRes1 = aNoAcquirePipe.is( );
+                StreamPipe aStreamPipe(handle);
+                xNoAcquirePipe.reset();
+                int nRet = aStreamPipe.send("a", 1);
 
-                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test constructor with no acquire of handle, only validation test, do not know how to test no acquire.",
+                if (nRet >= 0)
+                    bRes = false;
+                else
+                    bRes = true;
+
+                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test constructor with no acquire of handle, deleted nonacquired pipe but could still send on original pipe!.",
                                         bRes );
             }
 
@@ -198,15 +191,20 @@ namespace osl_Pipe
             {
                 /// create a base pipe.
                 ::osl::Pipe aPipe( test::uniquePipeName(aTestPipeName), osl_Pipe_CREATE );
-                /// constructs two pipes without acquiring the handle on the base pipe.
+                /// constructs two pipes, the second acquires the first pipe's handle.
                 ::osl::Pipe aAcquirePipe( aPipe.getHandle( ) );
                 ::osl::Pipe aAcquirePipe1( nullptr );
 
-                bRes = aAcquirePipe.is( );
-                bRes1 = aAcquirePipe1.is( );
+                bRes = aAcquirePipe.is();
+                bRes1 = aAcquirePipe1.is();
+                bRes2 = aPipe == aAcquirePipe;
 
-                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test constructor with no acquire of handle.only validation test, do not know how to test no acquire.",
-                                        bRes && !bRes1 );
+                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test constructor with acquire of handle, original pipe does not exist.",
+                                        bRes );
+                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test constructor with acquire of handle, copied pipe does not exist",
+                                        !bRes1 );
+
+                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test pipes should have same handle", bRes2);
             }
 
         CPPUNIT_TEST_SUITE( ctors );
@@ -217,7 +215,7 @@ namespace osl_Pipe
         CPPUNIT_TEST( ctors_no_acquire );
         CPPUNIT_TEST( ctors_acquire );
         CPPUNIT_TEST_SUITE_END( );
-    }; // class ctors
+    };
 
     /** testing the method:
         inline sal_Bool SAL_CALL is() const;
@@ -260,12 +258,12 @@ namespace osl_Pipe
         CPPUNIT_TEST( is_003 );
         CPPUNIT_TEST( is_004 );
         CPPUNIT_TEST_SUITE_END( );
-    }; // class is
+    };
 
     /** testing the methods:
-        inline sal_Bool create( const ::rtl::OUString & strName,
+        inline sal_Bool create( const OUString & strName,
         oslPipeOptions Options, const Security &rSec );
-        nline sal_Bool create( const ::rtl::OUString & strName,
+        nline sal_Bool create( const OUString & strName,
         oslPipeOptions Options = osl_Pipe_OPEN );
     */
     class create : public CppUnit::TestFixture
@@ -288,7 +286,9 @@ namespace osl_Pipe
                 aPipe.clear( );
 
                 CPPUNIT_ASSERT_MESSAGE( "#test comment#: test creation.",
-                                        bRes && !bRes1);
+                                        bRes);
+                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test creation.",
+                                        !bRes1);
             }
 
         void create_named_security_002( )
@@ -300,7 +300,9 @@ namespace osl_Pipe
                 aPipe.clear( );
 
                 CPPUNIT_ASSERT_MESSAGE( "#test comment#: test creation and open.",
-                                        bRes && bRes1);
+                                        bRes);
+                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test creation and open.",
+                                        bRes1);
             }
 
         void create_named_001( )
@@ -311,7 +313,9 @@ namespace osl_Pipe
                 aPipe.clear( );
 
                 CPPUNIT_ASSERT_MESSAGE( "#test comment#: test creation.",
-                                        bRes && !bRes1);
+                                        bRes);
+                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test creation.",
+                                        !bRes1);
             }
 
         void create_named_002( )
@@ -322,7 +326,9 @@ namespace osl_Pipe
                 aPipe.clear( );
 
                 CPPUNIT_ASSERT_MESSAGE( "#test comment#: test creation and open.",
-                                        bRes && bRes1);
+                                        bRes);
+                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test creation and open.",
+                                        bRes1);
             }
 
         void create_named_003( )
@@ -342,7 +348,7 @@ namespace osl_Pipe
         CPPUNIT_TEST( create_named_002 );
         CPPUNIT_TEST( create_named_003 );
         CPPUNIT_TEST_SUITE_END( );
-    }; // class create
+    };
 
     /** testing the method:
         inline void SAL_CALL clear();
@@ -366,7 +372,7 @@ namespace osl_Pipe
         CPPUNIT_TEST_SUITE( clear );
         CPPUNIT_TEST( clear_001 );
         CPPUNIT_TEST_SUITE_END( );
-    }; // class clear
+    };
 
     /** testing the methods:
         inline Pipe& SAL_CALL operator= (const Pipe& pipe);
@@ -388,7 +394,9 @@ namespace osl_Pipe
                 aPipe1.close( );
 
                 CPPUNIT_ASSERT_MESSAGE( "#test comment#: test assign with reference.",
-                                        bRes && bRes1 );
+                                        bRes );
+                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test assign with reference.",
+                                        bRes1 );
             }
 
         void assign_handle( )
@@ -402,14 +410,16 @@ namespace osl_Pipe
                 aPipe1.close( );
 
                 CPPUNIT_ASSERT_MESSAGE( "#test comment#: test assign with handle.",
-                                        bRes && bRes1 );
+                                        bRes );
+                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test assign with handle.",
+                                        bRes1 );
             }
 
         CPPUNIT_TEST_SUITE( assign );
         CPPUNIT_TEST( assign_ref );
         CPPUNIT_TEST( assign_handle );
         CPPUNIT_TEST_SUITE_END( );
-    }; // class assign
+    };
 
     /** testing the method:
         inline sal_Bool SAL_CALL isValid() const;
@@ -428,10 +438,10 @@ namespace osl_Pipe
             {
                 ::osl::Pipe aPipe;
                 aPipe.create( test::uniquePipeName(aTestPipeName), osl_Pipe_CREATE );
-                bRes  = aPipe == aPipe;
+                bRes  = aPipe == aPipe; // NOLINT(misc-redundant-expression)
                 aPipe.close( );
 
-                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test isEqual(), compare its self.",
+                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test isEqual(), compare itself.",
                                         bRes );
             }
 
@@ -450,14 +460,16 @@ namespace osl_Pipe
                 aPipe2.close( );
 
                 CPPUNIT_ASSERT_MESSAGE( "#test comment#: test isEqual(),create one copy instance, and compare.",
-                                        bRes && !bRes1 );
+                                        bRes );
+                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test isEqual(),create one copy instance, and compare.",
+                                        !bRes1 );
             }
 
         CPPUNIT_TEST_SUITE( isEqual );
         CPPUNIT_TEST( isEqual_001 );
         CPPUNIT_TEST( isEqual_002 );
         CPPUNIT_TEST_SUITE_END( );
-    }; // class isEqual
+    };
 
     /** testing the method:
         inline void SAL_CALL close();
@@ -477,7 +489,9 @@ namespace osl_Pipe
                 bRes1 = aPipe.is( );
 
                 CPPUNIT_ASSERT_MESSAGE( "#test comment#: difference between close and clear.",
-                                        bRes && !bRes1);
+                                        bRes);
+                CPPUNIT_ASSERT_MESSAGE( "#test comment#: difference between close and clear.",
+                                        !bRes1);
             }
 
         void close_002( )
@@ -486,15 +500,15 @@ namespace osl_Pipe
                 aPipe.close( );
                 int nRet = aPipe.send( m_pTestString1.getStr(), 3 );
 
-                CPPUNIT_ASSERT_MESSAGE( "#test comment#: use after close.",
-                                        OSL_PIPE_FAIL == nRet );
+                CPPUNIT_ASSERT_EQUAL_MESSAGE( "#test comment#: use after close.",
+                                        OSL_PIPE_FAIL, nRet );
             }
 
         CPPUNIT_TEST_SUITE( close );
         CPPUNIT_TEST( close_001 );
         CPPUNIT_TEST( close_002 );
         CPPUNIT_TEST_SUITE_END( );
-    }; // class close
+    };
 
     /** testing the method:
         inline oslPipeError SAL_CALL accept(StreamPipe& Connection);
@@ -537,7 +551,7 @@ namespace osl_Pipe
         CPPUNIT_TEST( getError_001 );
         CPPUNIT_TEST( getError_002 );
         CPPUNIT_TEST_SUITE_END( );
-    }; // class getError
+    };
 
     /** testing the method:
         inline oslPipe SAL_CALL getHandle() const;
@@ -547,7 +561,7 @@ namespace osl_Pipe
     public:
         bool bRes, bRes1;
 
-        void getHandle_001( )
+        void getHandle_equalityOperatorAgainstSelf( )
             {
                 ::osl::Pipe aPipe( test::uniquePipeName(aTestPipeName), osl_Pipe_OPEN );
                 bRes = aPipe == aPipe.getHandle( );
@@ -557,7 +571,7 @@ namespace osl_Pipe
                                         bRes );
             }
 
-        void getHandle_002( )
+        void getHandle_equalityOperatorAgainstDerivedPipe( )
             {
                 ::osl::Pipe aPipe( test::uniquePipeName(aTestPipeName), osl_Pipe_CREATE );
                 ::osl::Pipe aPipe1( aPipe.getHandle( ) );
@@ -570,10 +584,10 @@ namespace osl_Pipe
             }
 
         CPPUNIT_TEST_SUITE( getHandle );
-        CPPUNIT_TEST( getHandle_001 );
-        CPPUNIT_TEST( getHandle_002 );
+        CPPUNIT_TEST( getHandle_equalityOperatorAgainstSelf );
+        CPPUNIT_TEST( getHandle_equalityOperatorAgainstDerivedPipe );
         CPPUNIT_TEST_SUITE_END( );
-    }; // class getHandle
+    };
 
     CPPUNIT_TEST_SUITE_REGISTRATION(osl_Pipe::ctors);
     CPPUNIT_TEST_SUITE_REGISTRATION(osl_Pipe::is);
@@ -594,8 +608,8 @@ namespace osl_StreamPipe
         inline StreamPipe();
         inline StreamPipe(oslPipe Pipe);
         inline StreamPipe(const StreamPipe& Pipe);
-        inline StreamPipe(const ::rtl::OUString& strName, oslPipeOptions Options = osl_Pipe_OPEN);
-        inline StreamPipe(const ::rtl::OUString& strName, oslPipeOptions Options, const Security &rSec );
+        inline StreamPipe(const OUString& strName, oslPipeOptions Options = osl_Pipe_OPEN);
+        inline StreamPipe(const OUString& strName, oslPipeOptions Options, const Security &rSec );
         inline StreamPipe( oslPipe pipe, __sal_NoAcquire noacquire );
     */
     class ctors : public CppUnit::TestFixture
@@ -618,7 +632,9 @@ namespace osl_StreamPipe
                 aStreamPipe1.clear( );
 
                 CPPUNIT_ASSERT_MESSAGE( "#test comment#: test constructor with no parameter, before and after assign.",
-                                        !bRes && bRes1 );
+                                        !bRes );
+                CPPUNIT_ASSERT_MESSAGE( "#test comment#: test constructor with no parameter, before and after assign.",
+                                        bRes1 );
             }
 
         void ctors_handle( )
@@ -709,25 +725,22 @@ namespace osl_StreamPipe
         CPPUNIT_TEST( ctors_name_option_security );
         CPPUNIT_TEST( ctors_no_acquire );
         CPPUNIT_TEST_SUITE_END( );
-    }; // class ctors
+    };
 
     /** testing the methods:
         inline StreamPipe & SAL_CALL operator=(oslPipe Pipe);
         inline StreamPipe& SAL_CALL operator=(const Pipe& pipe);
-        mindy: not implementated in osl/pipe.hxx, so remove the cases
+        mindy: not implemented in osl/pipe.hxx, so remove the cases
     */
 
     /** wait _nSec seconds.
      */
-    void thread_sleep( sal_uInt32 _nSec )
+    static void thread_sleep( sal_uInt32 _nSec )
     {
         /// print statement in thread process must use fflush() to force display.
         fflush(stdout);
 
-        TimeValue nTV;
-        nTV.Seconds = _nSec;
-        nTV.Nanosec = 0;
-        osl_waitThread(&nTV);
+        osl::Thread::wait(std::chrono::seconds(_nSec));
     }
     // test read/write & send/recv data to pipe
 
@@ -737,9 +750,6 @@ namespace osl_StreamPipe
         sal_Char buf[256];
         Pipe_DataSink_Thread( ) { }
 
-        virtual ~Pipe_DataSink_Thread( )
-            {
-            }
     protected:
         void SAL_CALL run( ) override
             {
@@ -783,7 +793,7 @@ namespace osl_StreamPipe
                 printf("create pipe\n");
                 aListenPipe.create( test::uniquePipeName(aTestPipeName), osl_Pipe_CREATE );
             }
-        virtual ~Pipe_DataSource_Thread( )
+        virtual ~Pipe_DataSource_Thread( ) override
             {
                 aListenPipe.close();
             }
@@ -801,7 +811,7 @@ namespace osl_StreamPipe
                 {
                     //start server and wait for connection.
                     printf("accept\n");
-                    if ( osl_Pipe_E_None != aListenPipe.accept( aConnectionPipe ) )
+                    if ( aListenPipe.accept( aConnectionPipe ) != osl_Pipe_E_None )
                     {
                         printf("pipe accept failed!");
                         return;
@@ -850,7 +860,8 @@ namespace osl_StreamPipe
 
                 int nCompare1 = strcmp( myDataSinkThread.buf, m_pTestString1.getStr() );
                 int nCompare2 = strcmp( myDataSourceThread.buf, m_pTestString2.getStr() );
-                CPPUNIT_ASSERT_MESSAGE( "test send/recv/write/read.", nCompare1 == 0 && nCompare2 == 0 );
+                CPPUNIT_ASSERT_EQUAL_MESSAGE( "test send/recv/write/read.", 0, nCompare1 );
+                CPPUNIT_ASSERT_EQUAL_MESSAGE( "test send/recv/write/read.", 0, nCompare2 );
             }
         //close pipe when accept
         void recv_002()
@@ -870,14 +881,12 @@ namespace osl_StreamPipe
         CPPUNIT_TEST( recv_001 );
         CPPUNIT_TEST( recv_002 );
         CPPUNIT_TEST_SUITE_END( );
-    }; // class recv
+    };
 
     CPPUNIT_TEST_SUITE_REGISTRATION(osl_StreamPipe::ctors);
 //CPPUNIT_TEST_SUITE_REGISTRATION(osl_StreamPipe::assign);
     CPPUNIT_TEST_SUITE_REGISTRATION(osl_StreamPipe::recv);
 
 } // namespace osl_StreamPipe
-
-CPPUNIT_PLUGIN_IMPLEMENT();
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

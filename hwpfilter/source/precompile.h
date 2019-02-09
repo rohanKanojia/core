@@ -18,14 +18,9 @@
  */
 
 #ifdef _WIN32
-    #if defined _MSC_VER
-        #pragma warning(push, 1)
-    #endif
-    #include "windows.h"
-    #include "crtdbg.h"
-    #if defined _MSC_VER
-        #pragma warning(pop)
-    #endif
+    #define WIN32_LEAN_AND_MEAN
+    #include <windows.h>
+    #include <crtdbg.h>
 #endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

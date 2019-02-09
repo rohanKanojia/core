@@ -23,12 +23,17 @@
 #include <vcl/dllapi.h>
 
 #include <vector>
-#include <vcl/window.hxx>
+#include <vcl/keycod.hxx>
+#include <vcl/vclptr.hxx>
+
+class KeyEvent;
+
+namespace vcl { class Window; }
 
 class VCL_DLLPUBLIC TaskPaneList
 {
     ::std::vector< VclPtr<vcl::Window> > mTaskPanes;
-    vcl::Window *FindNextFloat( vcl::Window *pWindow, bool bForward = true );
+    vcl::Window *FindNextFloat( vcl::Window *pWindow, bool bForward );
     vcl::Window *FindNextSplitter( vcl::Window *pWindow );
 
 public:
@@ -41,6 +46,7 @@ public:
     void AddWindow( vcl::Window *pWindow );
     void RemoveWindow( vcl::Window *pWindow );
     bool HandleKeyEvent(const KeyEvent& rKeyEvent);
+    static bool IsCycleKey(const vcl::KeyCode& rKeyCode);
 };
 
 #endif

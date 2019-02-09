@@ -20,19 +20,15 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_TEXTIMPORTOPTIONS_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_TEXTIMPORTOPTIONS_HXX
 
-#include <vcl/dialog.hxx>
-#include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
+#include <vcl/weld.hxx>
 #include <i18nlangtag/lang.h>
 #include <svx/langbox.hxx>
 
-class ScTextImportOptionsDlg : public ModalDialog
+class ScTextImportOptionsDlg : public weld::GenericDialogController
 {
 public:
-    ScTextImportOptionsDlg(vcl::Window* pParent);
-    virtual ~ScTextImportOptionsDlg();
-    virtual void dispose() override;
-    virtual short Execute() override;
+    ScTextImportOptionsDlg(weld::Window* pParent);
+    virtual ~ScTextImportOptionsDlg() override;
 
     LanguageType getLanguageType() const;
     bool isDateConversionSet() const;
@@ -41,18 +37,14 @@ private:
     void init();
 
 private:
-    VclPtr<OKButton>       m_pBtnOk;
+    std::unique_ptr<weld::Button> m_xBtnOk;
+    std::unique_ptr<weld::RadioButton> m_xRbAutomatic;
+    std::unique_ptr<weld::RadioButton> m_xRbCustom;
+    std::unique_ptr<weld::CheckButton> m_xBtnConvertDate;
+    std::unique_ptr<LanguageBox> m_xLbCustomLang;
 
-    VclPtr<RadioButton>    m_pRbAutomatic;
-    VclPtr<RadioButton>    m_pRbCustom;
-
-    VclPtr<SvxLanguageBox> m_pLbCustomLang;
-
-    VclPtr<CheckBox>       m_pBtnConvertDate;
-
-    DECL_LINK_TYPED(OKHdl, Button*, void);
-
-    DECL_LINK_TYPED( RadioHdl, Button*, void );
+    DECL_LINK(OKHdl, weld::Button&, void);
+    DECL_LINK(RadioHdl, weld::ToggleButton&, void);
 };
 
 #endif

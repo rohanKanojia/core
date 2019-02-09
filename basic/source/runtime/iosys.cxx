@@ -18,22 +18,19 @@
  */
 
 #include <string.h>
-#include <vcl/dialog.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/button.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
+#include <vcl/window.hxx>
 #include <osl/file.hxx>
 #include <tools/urlobj.hxx>
-#include <osl/mutex.hxx>
 
-#include "runtime.hxx"
+#include <runtime.hxx>
 
-#include <ctype.h>
 #include <rtl/byteseq.hxx>
 #include <rtl/textenc.h>
 #include <rtl/strbuf.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
 #include <comphelper/processfactory.hxx>
 #include <comphelper/string.hxx>
@@ -57,85 +54,59 @@ using namespace com::sun::star::ucb;
 using namespace com::sun::star::io;
 using namespace com::sun::star::bridge;
 
-#include "iosys.hxx"
-#include "sbintern.hxx"
+#include <iosys.hxx>
+#include <sbintern.hxx>
 
 
-class SbiInputDialog : public ModalDialog {
-    VclPtr<Edit> aInput;
-    VclPtr<OKButton> aOk;
-    VclPtr<CancelButton> aCancel;
-    OUString aText;
-    DECL_LINK_TYPED( Ok, Button *, void );
-    DECL_LINK_TYPED( Cancel, Button *, void );
+class SbiInputDialog : public weld::GenericDialogController
+{
+    std::unique_ptr<weld::Entry> m_xInput;
+    std::unique_ptr<weld::Button> m_xOk;
+    std::unique_ptr<weld::Button> m_xCancel;
+    std::unique_ptr<weld::Label> m_xPromptText;
+    OUString m_aText;
+    DECL_LINK(Ok, weld::Button&, void);
+    DECL_LINK(Cancel, weld::Button&, void);
 public:
-    SbiInputDialog( vcl::Window*, const OUString& );
-    virtual ~SbiInputDialog() { disposeOnce(); }
-    virtual void dispose() override;
-    const OUString& GetInput() { return aText; }
+    SbiInputDialog(weld::Window*, const OUString&);
+    const OUString& GetInput() { return m_aText; }
 };
 
-SbiInputDialog::SbiInputDialog( vcl::Window* pParent, const OUString& rPrompt )
-            :ModalDialog( pParent, WB_3DLOOK | WB_MOVEABLE | WB_CLOSEABLE ),
-             aInput( VclPtr<Edit>::Create(this, WB_3DLOOK | WB_LEFT | WB_BORDER) ),
-             aOk( VclPtr<OKButton>::Create(this) ), aCancel( VclPtr<CancelButton>::Create(this) )
+SbiInputDialog::SbiInputDialog(weld::Window* pParent, const OUString& rPrompt)
+    : GenericDialogController(pParent, "svt/ui/inputbox.ui", "InputBox")
+    , m_xInput(m_xBuilder->weld_entry("entry"))
+    , m_xOk(m_xBuilder->weld_button("ok"))
+    , m_xCancel(m_xBuilder->weld_button("cancel"))
+    , m_xPromptText(m_xBuilder->weld_label("prompt"))
 {
-    SetText( rPrompt );
-    aOk->SetClickHdl( LINK( this, SbiInputDialog, Ok ) );
-    aCancel->SetClickHdl( LINK( this, SbiInputDialog, Cancel ) );
-    SetMapMode( MapMode( MAP_APPFONT ) );
-
-    Point aPt = LogicToPixel( Point( 50, 50 ) );
-    Size  aSz = LogicToPixel( Size( 145, 65 ) );
-    SetPosSizePixel( aPt, aSz );
-    aPt = LogicToPixel( Point( 10, 10 ) );
-    aSz = LogicToPixel( Size( 120, 12 ) );
-    aInput->SetPosSizePixel( aPt, aSz );
-    aPt = LogicToPixel( Point( 15, 30 ) );
-    aSz = LogicToPixel( Size( 45, 15) );
-    aOk->SetPosSizePixel( aPt, aSz );
-    aPt = LogicToPixel( Point( 80, 30 ) );
-    aSz = LogicToPixel( Size( 45, 15) );
-    aCancel->SetPosSizePixel( aPt, aSz );
-
-    aInput->Show();
-    aOk->Show();
-    aCancel->Show();
+    m_xDialog->set_title(rPrompt);
+    m_xPromptText->set_label(rPrompt);
+    m_xOk->connect_clicked( LINK( this, SbiInputDialog, Ok ) );
+    m_xCancel->connect_clicked( LINK( this, SbiInputDialog, Cancel ) );
 }
 
-void SbiInputDialog::dispose()
+IMPL_LINK_NOARG( SbiInputDialog, Ok, weld::Button&, void )
 {
-    aInput.disposeAndClear();
-    aOk.disposeAndClear();
-    aCancel.disposeAndClear();
-    ModalDialog::dispose();
+    m_aText = m_xInput->get_text();
+    m_xDialog->response(RET_OK);
 }
 
-IMPL_LINK_NOARG_TYPED( SbiInputDialog, Ok, Button *, void )
+IMPL_LINK_NOARG( SbiInputDialog, Cancel, weld::Button&, void )
 {
-    aText = aInput->GetText();
-    EndDialog( 1 );
-}
-
-IMPL_LINK_NOARG_TYPED( SbiInputDialog, Cancel, Button *, void )
-{
-    EndDialog();
+    m_xDialog->response(RET_CANCEL);
 }
 
 SbiStream::SbiStream()
-    : pStrm(nullptr)
-    , nExpandOnWriteTo(0)
+    : nExpandOnWriteTo(0)
     , nLine(0)
     , nLen(0)
     , nMode(SbiStreamFlags::NONE)
-    , nChan(0)
     , nError(0)
 {
 }
 
 SbiStream::~SbiStream()
 {
-    delete pStrm;
 }
 
 // map an SvStream-error to StarBASIC-code
@@ -144,33 +115,23 @@ void SbiStream::MapError()
 {
     if( pStrm )
     {
-        switch( pStrm->GetError() )
-        {
-        case SVSTREAM_OK:
-            nError = 0;
-            break;
-        case SVSTREAM_FILE_NOT_FOUND:
+        ErrCode nEC = pStrm->GetError();
+        if (nEC == ERRCODE_NONE)
+            nError = ERRCODE_NONE;
+        else if (nEC == SVSTREAM_FILE_NOT_FOUND)
             nError = ERRCODE_BASIC_FILE_NOT_FOUND;
-            break;
-        case SVSTREAM_PATH_NOT_FOUND:
+        else if (nEC ==SVSTREAM_PATH_NOT_FOUND)
             nError = ERRCODE_BASIC_PATH_NOT_FOUND;
-            break;
-        case SVSTREAM_TOO_MANY_OPEN_FILES:
+        else if (nEC ==SVSTREAM_TOO_MANY_OPEN_FILES)
             nError = ERRCODE_BASIC_TOO_MANY_FILES;
-            break;
-        case SVSTREAM_ACCESS_DENIED:
+        else if (nEC ==SVSTREAM_ACCESS_DENIED)
             nError = ERRCODE_BASIC_ACCESS_DENIED;
-            break;
-        case SVSTREAM_INVALID_PARAMETER:
+        else if (nEC ==SVSTREAM_INVALID_PARAMETER)
             nError = ERRCODE_BASIC_BAD_ARGUMENT;
-            break;
-        case SVSTREAM_OUTOFMEMORY:
+        else if (nEC ==SVSTREAM_OUTOFMEMORY)
             nError = ERRCODE_BASIC_NO_MEMORY;
-            break;
-        default:
+        else
             nError = ERRCODE_BASIC_IO_ERROR;
-            break;
-        }
     }
 }
 
@@ -212,9 +173,9 @@ class OslStream : public SvStream
 
 public:
                         OslStream( const OUString& rName, StreamMode nStrmMode );
-                       virtual ~OslStream();
-    virtual sal_Size GetData( void* pData, sal_Size nSize ) override;
-    virtual sal_Size PutData( const void* pData, sal_Size nSize ) override;
+                       virtual ~OslStream() override;
+    virtual std::size_t GetData(void* pData, std::size_t nSize) override;
+    virtual std::size_t PutData(const void* pData, std::size_t nSize) override;
     virtual sal_uInt64 SeekPos( sal_uInt64 nPos ) override;
     virtual void        FlushData() override;
     virtual void        SetSize( sal_uInt64 nSize) override;
@@ -257,14 +218,14 @@ OslStream::~OslStream()
     maFile.close();
 }
 
-sal_Size OslStream::GetData(void* pData, sal_Size nSize)
+std::size_t OslStream::GetData(void* pData, std::size_t nSize)
 {
     sal_uInt64 nBytesRead = nSize;
     maFile.read( pData, nBytesRead, nBytesRead );
     return nBytesRead;
 }
 
-sal_Size OslStream::PutData(const void* pData, sal_Size nSize)
+std::size_t OslStream::PutData(const void* pData, std::size_t nSize)
 {
     sal_uInt64 nBytesWritten;
     maFile.write( pData, nSize, nBytesWritten );
@@ -282,7 +243,7 @@ sal_uInt64 OslStream::SeekPos( sal_uInt64 nPos )
     }
     else
     {
-        rc = maFile.setPos( osl_Pos_Absolut, (sal_uInt64)nPos );
+        rc = maFile.setPos( osl_Pos_Absolut, nPos );
     }
     OSL_VERIFY(rc == ::osl::FileBase::E_None);
     sal_uInt64 nRealPos(0);
@@ -306,23 +267,23 @@ class UCBStream : public SvStream
     Reference< XStream >        xS;
     Reference< XSeekable >      xSeek;
 public:
-    explicit UCBStream( Reference< XInputStream > & xIS );
-    explicit UCBStream( Reference< XStream > & xS );
-                       virtual ~UCBStream();
-    virtual sal_Size GetData( void* pData, sal_Size nSize ) override;
-    virtual sal_Size PutData( const void* pData, sal_Size nSize ) override;
+    explicit UCBStream( Reference< XInputStream > const & xIS );
+    explicit UCBStream( Reference< XStream > const & xS );
+                       virtual ~UCBStream() override;
+    virtual std::size_t GetData( void* pData, std::size_t nSize ) override;
+    virtual std::size_t PutData( const void* pData, std::size_t nSize ) override;
     virtual sal_uInt64 SeekPos( sal_uInt64 nPos ) override;
     virtual void        FlushData() override;
     virtual void        SetSize( sal_uInt64 nSize ) override;
 };
 
-UCBStream::UCBStream( Reference< XInputStream > & rStm )
+UCBStream::UCBStream( Reference< XInputStream > const & rStm )
     : xIS( rStm )
     , xSeek( rStm, UNO_QUERY )
 {
 }
 
-UCBStream::UCBStream( Reference< XStream > & rStm )
+UCBStream::UCBStream( Reference< XStream > const & rStm )
     : xS( rStm )
     , xSeek( rStm, UNO_QUERY )
 {
@@ -352,7 +313,7 @@ UCBStream::~UCBStream()
     }
 }
 
-sal_Size UCBStream::GetData(void* pData, sal_Size nSize)
+std::size_t UCBStream::GetData(void* pData, std::size_t nSize)
 {
     try
     {
@@ -383,7 +344,7 @@ sal_Size UCBStream::GetData(void* pData, sal_Size nSize)
     return 0;
 }
 
-sal_Size UCBStream::PutData(const void* pData, sal_Size nSize)
+std::size_t UCBStream::PutData(const void* pData, std::size_t nSize)
 {
     try
     {
@@ -452,21 +413,18 @@ void UCBStream::FlushData()
     }
 }
 
-void    UCBStream::SetSize( sal_uInt64 nSize )
+void    UCBStream::SetSize( sal_uInt64 )
 {
-    (void)nSize;
-
     SAL_WARN("basic", "UCBStream::SetSize not allowed to call from basic" );
     SetError( ERRCODE_IO_GENERAL );
 }
 
 
-SbError SbiStream::Open
-( short nCh, const OString& rName, StreamMode nStrmMode, SbiStreamFlags nFlags, short nL )
+ErrCode const & SbiStream::Open
+( const OString& rName, StreamMode nStrmMode, SbiStreamFlags nFlags, short nL )
 {
     nMode   = nFlags;
     nLen    = nL;
-    nChan   = nCh;
     nLine   = 0;
     nExpandOnWriteTo = 0;
     if( ( nStrmMode & ( StreamMode::READ|StreamMode::WRITE ) ) == StreamMode::READ )
@@ -492,17 +450,17 @@ SbError SbiStream::Open
         if( (nStrmMode & (StreamMode::READ | StreamMode::WRITE)) == (StreamMode::READ | StreamMode::WRITE) )
         {
             Reference< XStream > xIS = xSFI->openFileReadWrite( aNameStr );
-            pStrm = new UCBStream( xIS );
+            pStrm.reset( new UCBStream( xIS ) );
         }
         else if( nStrmMode & StreamMode::WRITE )
         {
             Reference< XStream > xIS = xSFI->openFileReadWrite( aNameStr );
-            pStrm = new UCBStream( xIS );
+            pStrm.reset( new UCBStream( xIS ) );
         }
         else //if( nStrmMode & StreamMode::READ )
         {
             Reference< XInputStream > xIS = xSFI->openFileRead( aNameStr );
-            pStrm = new UCBStream( xIS );
+            pStrm.reset( new UCBStream( xIS ) );
         }
 
         }
@@ -514,7 +472,7 @@ SbError SbiStream::Open
 
     if( !pStrm )
     {
-        pStrm = new OslStream( aNameStr, nStrmMode );
+        pStrm.reset( new OslStream( aNameStr, nStrmMode ) );
     }
     if( IsAppend() )
     {
@@ -523,25 +481,22 @@ SbError SbiStream::Open
     MapError();
     if( nError )
     {
-        delete pStrm;
-        pStrm = nullptr;
+        pStrm.reset();
     }
     return nError;
 }
 
-SbError SbiStream::Close()
+ErrCode const & SbiStream::Close()
 {
     if( pStrm )
     {
         MapError();
-        delete pStrm;
-        pStrm = nullptr;
+        pStrm.reset();
     }
-    nChan = 0;
     return nError;
 }
 
-SbError SbiStream::Read(OString& rBuf, sal_uInt16 n, bool bForceReadingPerByte)
+ErrCode SbiStream::Read(OString& rBuf, sal_uInt16 n, bool bForceReadingPerByte)
 {
     nExpandOnWriteTo = 0;
     if( !bForceReadingPerByte && IsText() )
@@ -566,14 +521,14 @@ SbError SbiStream::Read(OString& rBuf, sal_uInt16 n, bool bForceReadingPerByte)
         rBuf = aBuffer.makeStringAndClear();
     }
     MapError();
-    if( !nError && pStrm->IsEof() )
+    if( !nError && pStrm->eof() )
     {
         nError = ERRCODE_BASIC_READ_PAST_EOF;
     }
     return nError;
 }
 
-SbError SbiStream::Read( char& ch )
+ErrCode const & SbiStream::Read( char& ch )
 {
     nExpandOnWriteTo = 0;
     if (aLine.isEmpty())
@@ -594,10 +549,9 @@ void SbiStream::ExpandFile()
         if( nCur < nExpandOnWriteTo )
         {
             sal_uInt64 nDiff = nExpandOnWriteTo - nCur;
-            char c = 0;
             while( nDiff-- )
             {
-                pStrm->WriteChar( c );
+                pStrm->WriteChar( 0 );
             }
         }
         else
@@ -618,7 +572,7 @@ namespace
     }
 }
 
-SbError SbiStream::Write( const OString& rBuf )
+ErrCode SbiStream::Write( const OString& rBuf )
 {
     ExpandFile();
     if( IsAppend() )
@@ -648,7 +602,7 @@ SbError SbiStream::Write( const OString& rBuf )
         {
             return nError = ERRCODE_BASIC_BAD_RECORD_LENGTH;
         }
-        pStrm->Write(rBuf.getStr(), nLen);
+        pStrm->WriteBytes(rBuf.getStr(), nLen);
         MapError();
     }
     return nError;
@@ -657,28 +611,29 @@ SbError SbiStream::Write( const OString& rBuf )
 
 SbiIoSystem::SbiIoSystem()
 {
-    for( short i = 0; i < CHANNELS; i++ )
+    for(SbiStream* & i : pChan)
     {
-        pChan[ i ] = nullptr;
+        i = nullptr;
     }
     nChan  = 0;
-    nError = 0;
+    nError = ERRCODE_NONE;
 }
 
-SbiIoSystem::~SbiIoSystem()
+SbiIoSystem::~SbiIoSystem() COVERITY_NOEXCEPT_FALSE
 {
     Shutdown();
 }
 
-SbError SbiIoSystem::GetError()
+ErrCode SbiIoSystem::GetError()
 {
-    SbError n = nError; nError = 0;
+    ErrCode n = nError;
+    nError = ERRCODE_NONE;
     return n;
 }
 
 void SbiIoSystem::Open(short nCh, const OString& rName, StreamMode nMode, SbiStreamFlags nFlags, short nLen)
 {
-    nError = 0;
+    nError = ERRCODE_NONE;
     if( nCh >= CHANNELS || !nCh )
     {
         nError = ERRCODE_BASIC_BAD_CHANNEL;
@@ -689,8 +644,8 @@ void SbiIoSystem::Open(short nCh, const OString& rName, StreamMode nMode, SbiStr
     }
     else
     {
-        pChan[ nCh ] = new SbiStream;
-        nError = pChan[ nCh ]->Open( nCh, rName, nMode, nFlags, nLen );
+       pChan[ nCh ] = new SbiStream;
+       nError = pChan[ nCh ]->Open( rName, nMode, nFlags, nLen );
        if( nError )
        {
             delete pChan[ nCh ];
@@ -727,7 +682,7 @@ void SbiIoSystem::Shutdown()
     {
         if( pChan[ i ] )
         {
-            SbError n = pChan[ i ]->Close();
+            ErrCode n = pChan[ i ]->Close();
             delete pChan[ i ];
             pChan[ i ] = nullptr;
             if( n && !nError )
@@ -740,12 +695,10 @@ void SbiIoSystem::Shutdown()
     // anything left to PRINT?
     if( !aOut.isEmpty() )
     {
-#if defined __GNUC__
         vcl::Window* pParent = Application::GetDefDialogParent();
-        ScopedVclPtrInstance<MessBox>::Create( pParent, WinBits( WB_OK ), OUString(), aOut )->Execute();
-#else
-        ScopedVclPtrInstance<MessBox>::Create( GetpApp()->GetDefDialogParent(), WinBits( WB_OK ), OUString(), aOut )->Execute();
-#endif
+        std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pParent ? pParent->GetFrameWeld() : nullptr, VclMessageType::Warning,
+            VclButtonsType::Ok, aOut));
+        xBox->run();
     }
     aOut.clear();
 }
@@ -825,7 +778,7 @@ void SbiIoSystem::CloseAll()
     {
         if( pChan[ i ] )
         {
-            SbError n = pChan[ i ]->Close();
+            ErrCode n = pChan[ i ]->Close();
             delete pChan[ i ];
             pChan[ i ] = nullptr;
             if( n && !nError )
@@ -836,20 +789,13 @@ void SbiIoSystem::CloseAll()
     }
 }
 
-/***************************************************************************
-*
-*   Console Support
-*
-***************************************************************************/
-
-
 void SbiIoSystem::ReadCon(OString& rIn)
 {
     OUString aPromptStr(OStringToOUString(aPrompt, osl_getThreadTextEncoding()));
-    ScopedVclPtrInstance< SbiInputDialog > aDlg(nullptr, aPromptStr);
-    if( aDlg->Execute() )
+    SbiInputDialog aDlg(nullptr, aPromptStr);
+    if (aDlg.run() == RET_OK)
     {
-        rIn = OUStringToOString(aDlg->GetInput(), osl_getThreadTextEncoding());
+        rIn = OUStringToOString(aDlg.GetInput(), osl_getThreadTextEncoding());
     }
     else
     {
@@ -858,7 +804,7 @@ void SbiIoSystem::ReadCon(OString& rIn)
     aPrompt.clear();
 }
 
-// output of a MessageBox, if theres a CR in the console-buffer
+// output of a MessageBox, if there's a CR in the console-buffer
 
 void SbiIoSystem::WriteCon(const OUString& rText)
 {
@@ -887,10 +833,12 @@ void SbiIoSystem::WriteCon(const OUString& rText)
         }
         {
             SolarMutexGuard aSolarGuard;
-            if( !ScopedVclPtr<MessBox>::Create(
-                        Application::GetDefDialogParent(),
-                        WinBits( WB_OK_CANCEL | WB_DEF_OK ),
-                        OUString(), s )->Execute() )
+
+            vcl::Window* pParent = Application::GetDefDialogParent();
+            std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pParent ? pParent->GetFrameWeld() : nullptr, VclMessageType::Warning,
+                VclButtonsType::OkCancel, s));
+            xBox->set_default_response(RET_OK);
+            if (!xBox->run())
             {
                 nError = ERRCODE_BASIC_USER_ABORT;
             }

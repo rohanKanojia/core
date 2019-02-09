@@ -34,7 +34,7 @@ static char *wbp = wbuf;
 static int EBCDIC_ExternTokenDetected = 0;
 static int EBCDIC_StartTokenDetected = 0;
 
-unsigned char toLatin1[256] =
+static unsigned char toLatin1[256] =
 {
     0x00, 0x01, 0x02, 0x03, 0x9c, 0x09, 0x86, 0x7f, 0x97, 0x8d,
     0x8e, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13,
@@ -66,8 +66,8 @@ unsigned char toLatin1[256] =
 
 #define MASK    "\\x%x"
 
-int
-    memcpy_EBCDIC( char * pwbuf, uchar *p, int len )
+static int
+    memcpy_EBCDIC( char * pwbuf, uchar const *p, int len )
 {
     int currpos = 0;
     int processedchars = 0;
@@ -251,7 +251,7 @@ int
  * Canonical whitespace is assured on each side.
  */
 void
-    insertrow(Tokenrow * dtr, int ntok, Tokenrow * str)
+    insertrow(Tokenrow * dtr, int ntok, Tokenrow const * str)
 {
     int nrtok = (int)rowlen(str);
 
@@ -266,7 +266,7 @@ void
  * make sure there is WS before trp->tp, if tokens might merge in the output
  */
 void
-    makespace(Tokenrow * trp, Token * ntp)
+    makespace(Tokenrow * trp, Token const * ntp)
 {
     uchar *tt;
     Token *tp = trp->tp;
@@ -280,7 +280,6 @@ void
         strncpy((char *)tt, (char *)ntp->t - ntp->wslen, ntp->wslen);
         tp->t = tt + ntp->wslen;
         tp->wslen = ntp->wslen;
-        tp->flag |= XPWS;
     }
 }
 
@@ -290,7 +289,7 @@ void
  *  Not strictly conforming.
  */
 void
-    movetokenrow(Tokenrow * dtr, Tokenrow * str)
+    movetokenrow(Tokenrow * dtr, Tokenrow const * str)
 {
     size_t nby;
 
@@ -326,7 +325,7 @@ void
  * the space for the contents.  Return the destination.
  */
 Tokenrow *
-    copytokenrow(Tokenrow * dtr, Tokenrow * str)
+    copytokenrow(Tokenrow * dtr, Tokenrow const * str)
 {
     int len = (int)rowlen(str);
 
@@ -544,7 +543,7 @@ char *
  * Null terminated.
  */
 uchar *
-    newstring(uchar * s, size_t l, size_t o)
+    newstring(uchar const * s, size_t l, size_t o)
 {
     uchar *ns = (uchar *) domalloc(l + o + 1);
 

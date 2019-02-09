@@ -21,19 +21,18 @@
 #define INCLUDED_SC_SOURCE_UI_INC_PVFUNDLG_HXX
 
 #include <com/sun/star/sheet/DataPilotFieldReference.hpp>
-#include <com/sun/star/sheet/DataPilotFieldSortInfo.hpp>
+#include <com/sun/star/sheet/DataPilotFieldOrientation.hpp>
 
 #include <vcl/fixed.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/dialog.hxx>
 #include <vcl/button.hxx>
-#include <vcl/morebtn.hxx>
 #include <vcl/field.hxx>
-#include <svtools/stdctrl.hxx>
+#include <vcl/weld.hxx>
 #include <svx/checklbx.hxx>
-#include <sfx2/itemconnect.hxx>
-#include "pivot.hxx"
+#include <sfx2/controlwrapper.hxx>
+#include <pivot.hxx>
 
 #include <memory>
 #include <unordered_map>
@@ -47,8 +46,8 @@ class ScDPFunctionListBox : public ListBox
 public:
     ScDPFunctionListBox(vcl::Window* pParent, WinBits nStyle);
 
-    void                SetSelection( sal_uInt16 nFuncMask );
-    sal_uInt16          GetSelection() const;
+    void                SetSelection( PivotFunc nFuncMask );
+    PivotFunc           GetSelection() const;
 
 private:
     void                FillFunctionNames();
@@ -56,13 +55,13 @@ private:
 
 class ScDPFunctionDlg : public ModalDialog
 {
-    typedef std::unordered_map< OUString, OUString, OUStringHash > NameMapType;
+    typedef std::unordered_map< OUString, OUString > NameMapType;
 public:
     explicit            ScDPFunctionDlg( vcl::Window* pParent, const ScDPLabelDataVector& rLabelVec,
                             const ScDPLabelData& rLabelData, const ScPivotFuncData& rFuncData );
-    virtual ~ScDPFunctionDlg();
+    virtual ~ScDPFunctionDlg() override;
     virtual void            dispose() override;
-    sal_uInt16              GetFuncMask() const;
+    PivotFunc               GetFuncMask() const;
     css::sheet::DataPilotFieldReference GetFieldRef() const;
 
 private:
@@ -74,8 +73,8 @@ private:
     /** Searches for a listbox entry, starts search at specified position. */
     sal_Int32 FindBaseItemPos( const OUString& rEntry, sal_Int32 nStartPos ) const;
 
-    DECL_LINK_TYPED( SelectHdl, ListBox&, void );
-    DECL_LINK_TYPED( DblClickHdl, ListBox&, void );
+    DECL_LINK( SelectHdl, ListBox&, void );
+    DECL_LINK( DblClickHdl, ListBox&, void );
 
 private:
     VclPtr<ScDPFunctionListBox> mpLbFunc;
@@ -102,18 +101,18 @@ public:
     explicit            ScDPSubtotalDlg( vcl::Window* pParent, ScDPObject& rDPObj,
                             const ScDPLabelData& rLabelData, const ScPivotFuncData& rFuncData,
                             const ScDPNameVec& rDataFields, bool bEnableLayout );
-    virtual             ~ScDPSubtotalDlg();
+    virtual             ~ScDPSubtotalDlg() override;
     virtual void        dispose() override;
-    sal_uInt16          GetFuncMask() const;
+    PivotFunc           GetFuncMask() const;
 
     void                FillLabelData( ScDPLabelData& rLabelData ) const;
 
 private:
     void                Init( const ScDPLabelData& rLabelData, const ScPivotFuncData& rFuncData );
 
-    DECL_LINK_TYPED( DblClickHdl, ListBox&, void );
-    DECL_LINK_TYPED( RadioClickHdl, Button*, void );
-    DECL_LINK_TYPED( ClickHdl, Button*, void );
+    DECL_LINK( DblClickHdl, ListBox&, void );
+    DECL_LINK( RadioClickHdl, Button*, void );
+    DECL_LINK( ClickHdl, Button*, void );
 
 private:
     VclPtr<RadioButton>         mpRbNone;
@@ -138,7 +137,7 @@ public:
     explicit            ScDPSubtotalOptDlg( vcl::Window* pParent, ScDPObject& rDPObj,
                             const ScDPLabelData& rLabelData, const ScDPNameVec& rDataFields,
                             bool bEnableLayout );
-    virtual              ~ScDPSubtotalOptDlg();
+    virtual              ~ScDPSubtotalOptDlg() override;
     virtual void        dispose() override;
     void                FillLabelData( ScDPLabelData& rLabelData ) const;
 
@@ -151,9 +150,9 @@ private:
     /** Searches for a listbox entry, starts search at specified position. */
     sal_Int32 FindListBoxEntry( const ListBox& rLBox, const OUString& rEntry, sal_Int32 nStartPos ) const;
 
-    DECL_LINK_TYPED( RadioClickHdl, Button*, void );
-    DECL_LINK_TYPED( CheckHdl, Button*, void );
-    DECL_LINK_TYPED( SelectHdl, ListBox&, void );
+    DECL_LINK( RadioClickHdl, Button*, void );
+    DECL_LINK( CheckHdl, Button*, void );
+    DECL_LINK( SelectHdl, ListBox&, void );
 
 private:
     VclPtr<ListBox>            m_pLbSortBy;
@@ -182,17 +181,18 @@ private:
     ScDPObject&         mrDPObj;            /// The DataPilot object (for member names).
     ScDPLabelData       maLabelData;        /// Cache for members data.
 
-    typedef std::unordered_map<OUString, ScDPName, OUStringHash> NameMapType;
+    typedef std::unordered_map<OUString, ScDPName> NameMapType;
     NameMapType maDataFieldNameMap; /// Cache for displayed name to field name mapping.
 };
 
-class ScDPShowDetailDlg : public ModalDialog
+class ScDPShowDetailDlg : public weld::GenericDialogController
 {
 public:
-    explicit            ScDPShowDetailDlg( vcl::Window* pParent, ScDPObject& rDPObj, sal_uInt16 nOrient );
-    virtual             ~ScDPShowDetailDlg();
-    virtual void        dispose() override;
-    virtual short       Execute() override;
+    explicit ScDPShowDetailDlg(weld::Window* pParent, ScDPObject& rDPObj,
+                               css::sheet::DataPilotFieldOrientation nOrient);
+    virtual ~ScDPShowDetailDlg() override;
+
+    virtual short run() override;
 
     /**
      * @return String internal name of the selected field.  Note that this may
@@ -202,15 +202,14 @@ public:
     OUString GetDimensionName() const;
 
 private:
-    DECL_LINK_TYPED( DblClickHdl, ListBox&, void );
+    DECL_LINK(DblClickHdl, weld::TreeView&, void);
 
 private:
-    VclPtr<ListBox>            mpLbDims;
-    VclPtr<OKButton>           mpBtnOk;
-
-    typedef std::unordered_map<OUString, long, OUStringHash> DimNameIndexMap;
+    typedef std::unordered_map<OUString, long> DimNameIndexMap;
     DimNameIndexMap     maNameIndexMap;
     ScDPObject&         mrDPObj;
+
+    std::unique_ptr<weld::TreeView> mxLbDims;
 };
 
 #endif

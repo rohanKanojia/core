@@ -20,7 +20,6 @@
 #include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/frame/XController.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
 #include <com/sun/star/awt/XTopWindow.hpp>
 #include <com/sun/star/embed/XClassifiedObject.hpp>
 #include <com/sun/star/io/TempFile.hpp>
@@ -41,6 +40,7 @@
 #include <comphelper/processfactory.hxx>
 #include <comphelper/storagehelper.hxx>
 #include <comphelper/mimeconfighelper.hxx>
+#include <sal/log.hxx>
 
 #include "olepersist.hxx"
 #include "ownview.hxx"
@@ -53,22 +53,13 @@ class DummyHandler_Impl : public ::cppu::WeakImplHelper< task::XInteractionHandl
 {
 public:
     DummyHandler_Impl() {}
-    virtual ~DummyHandler_Impl();
 
-    virtual void SAL_CALL handle( const uno::Reference< task::XInteractionRequest >& xRequest )
-            throw( uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL handle( const uno::Reference< task::XInteractionRequest >& xRequest ) override;
 };
 
 
-DummyHandler_Impl::~DummyHandler_Impl()
-{
-}
-
-
 void SAL_CALL DummyHandler_Impl::handle( const uno::Reference< task::XInteractionRequest >& )
-        throw( uno::RuntimeException, std::exception )
 {
-    return;
 }
 
 
@@ -116,14 +107,14 @@ bool OwnView_Impl::CreateModelFromURL( const OUString& aFileURL )
             aArgs[0].Value <<= aFileURL;
 
             aArgs[1].Name = "ReadOnly";
-            aArgs[1].Value <<= sal_True;
+            aArgs[1].Value <<= true;
 
             aArgs[2].Name = "InteractionHandler";
             aArgs[2].Value <<= uno::Reference< task::XInteractionHandler >(
                                 static_cast< ::cppu::OWeakObject* >( new DummyHandler_Impl() ), uno::UNO_QUERY );
 
             aArgs[3].Name = "DontEdit";
-            aArgs[3].Value <<= sal_True;
+            aArgs[3].Value <<= true;
 
             if ( !m_aFilterName.isEmpty() )
             {
@@ -161,8 +152,7 @@ bool OwnView_Impl::CreateModelFromURL( const OUString& aFileURL )
         }
         catch (uno::Exception const& e)
         {
-            SAL_WARN("embeddedobj.ole", "OwnView_Impl::CreateModelFromURL:"
-                    " exception caught: " << e.Message);
+            SAL_WARN("embeddedobj.ole", "OwnView_Impl::CreateModelFromURL:" << e);
         }
     }
 
@@ -216,7 +206,7 @@ OUString OwnView_Impl::GetFilterNameFromExtentionAndInStream(
         aArgs[2].Value <<= aTypeName;
     }
 
-    aTypeName = xTypeDetection->queryTypeByDescriptor( aArgs, sal_True );
+    aTypeName = xTypeDetection->queryTypeByDescriptor( aArgs, true );
 
     OUString aFilterName;
     for ( sal_Int32 nInd = 0; nInd < aArgs.getLength(); nInd++ )
@@ -264,7 +254,7 @@ bool OwnView_Impl::ReadContentsAndGenerateTempFile( const uno::Reference< io::XI
         throw uno::RuntimeException();
 
     try {
-        xNativeTempFile->setPropertyValue("RemoveFile", uno::makeAny( sal_False ) );
+        xNativeTempFile->setPropertyValue("RemoveFile", uno::makeAny( false ) );
         uno::Any aUrl = xNativeTempFile->getPropertyValue("Uri");
         aUrl >>= aNativeTempURL;
     }
@@ -299,7 +289,7 @@ bool OwnView_Impl::ReadContentsAndGenerateTempFile( const uno::Reference< io::XI
                 aReadSeq[0] == '.'
                )
             {
-                aFileSuffix += OUString( (sal_Unicode) aReadSeq[0] );
+                aFileSuffix += OUStringLiteral1( aReadSeq[0] );
             }
 
         } while( aReadSeq[0] );
@@ -320,10 +310,10 @@ bool OwnView_Impl::ReadContentsAndGenerateTempFile( const uno::Reference< io::XI
         if ( xInStream->readBytes( aReadSeq, 4 ) != 4 )
             return false;
 
-        sal_uInt32 nUrlSize = (sal_uInt8)aReadSeq[0]
-                            + (sal_uInt8)aReadSeq[1] * 0x100
-                            + (sal_uInt8)aReadSeq[2] * 0x10000
-                            + (sal_uInt8)aReadSeq[3] * 0x1000000;
+        sal_uInt32 nUrlSize = static_cast<sal_uInt8>(aReadSeq[0])
+                            + static_cast<sal_uInt8>(aReadSeq[1]) * 0x100
+                            + static_cast<sal_uInt8>(aReadSeq[2]) * 0x10000
+                            + static_cast<sal_uInt8>(aReadSeq[3]) * 0x1000000;
         sal_Int64 nTargetPos = xSeekable->getPosition() + nUrlSize;
 
         xSeekable->seek( nTargetPos );
@@ -332,16 +322,16 @@ bool OwnView_Impl::ReadContentsAndGenerateTempFile( const uno::Reference< io::XI
         if ( xInStream->readBytes( aReadSeq, 4 ) != 4 )
             return false;
 
-        sal_uInt32 nDataSize = (sal_uInt8)aReadSeq[0]
-                            + (sal_uInt8)aReadSeq[1] * 0x100
-                            + (sal_uInt8)aReadSeq[2] * 0x10000
-                            + (sal_uInt8)aReadSeq[3] * 0x1000000;
+        sal_uInt32 nDataSize = static_cast<sal_uInt8>(aReadSeq[0])
+                            + static_cast<sal_uInt8>(aReadSeq[1]) * 0x100
+                            + static_cast<sal_uInt8>(aReadSeq[2]) * 0x10000
+                            + static_cast<sal_uInt8>(aReadSeq[3]) * 0x1000000;
 
         aReadSeq.realloc( 32000 );
         sal_uInt32 nRead = 0;
         while ( nRead < nDataSize )
         {
-            sal_uInt32 nToRead = ( nDataSize - nRead > 32000 ) ? 32000 : nDataSize - nRead;
+            sal_uInt32 nToRead = std::min<sal_uInt32>( nDataSize - nRead, 32000 );
             sal_uInt32 nLocalRead = xInStream->readBytes( aReadSeq, nToRead );
 
 
@@ -422,9 +412,9 @@ void OwnView_Impl::CreateNative()
 
         if ( xNameAccess->hasByName( aSubStreamName ) )
         {
-            sal_uInt8 aClassID[] =
+            sal_uInt8 const aClassID[] =
                 { 0x00, 0x03, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 };
-            uno::Sequence< sal_Int8 > aPackageClassID( reinterpret_cast<sal_Int8*>(aClassID), 16 );
+            uno::Sequence< sal_Int8 > aPackageClassID( reinterpret_cast<sal_Int8 const *>(aClassID), 16 );
 
             uno::Reference< io::XStream > xSubStream;
             xNameAccess->getByName( aSubStreamName ) >>= xSubStream;
@@ -562,7 +552,7 @@ void OwnView_Impl::Close()
             xCloseable->removeCloseListener( uno::Reference< util::XCloseListener >(
                                                                     static_cast< ::cppu::OWeakObject* >( this ),
                                                                      uno::UNO_QUERY ) );
-            xCloseable->close( sal_True );
+            xCloseable->close( true );
         }
     }
     catch( uno::Exception& )
@@ -573,7 +563,6 @@ void OwnView_Impl::Close()
 
 
 void SAL_CALL OwnView_Impl::notifyEvent( const document::EventObject& aEvent )
-        throw ( uno::RuntimeException, std::exception )
 {
 
     uno::Reference< frame::XModel > xModel;
@@ -610,14 +599,11 @@ void SAL_CALL OwnView_Impl::notifyEvent( const document::EventObject& aEvent )
 
 
 void SAL_CALL OwnView_Impl::queryClosing( const lang::EventObject&, sal_Bool )
-        throw ( util::CloseVetoException,
-                uno::RuntimeException, std::exception )
 {
 }
 
 
 void SAL_CALL OwnView_Impl::notifyClosing( const lang::EventObject& Source )
-        throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( Source.Source == m_xModel )
@@ -626,7 +612,6 @@ void SAL_CALL OwnView_Impl::notifyClosing( const lang::EventObject& Source )
 
 
 void SAL_CALL OwnView_Impl::disposing( const lang::EventObject& Source )
-        throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( Source.Source == m_xModel )

@@ -18,16 +18,12 @@
  */
 
 #include "BubbleChartType.hxx"
-#include "PropertyHelper.hxx"
-#include "macros.hxx"
-#include "servicenames_charttypes.hxx"
-#include "ContainerHelper.hxx"
-#include "CartesianCoordinateSystem.hxx"
-#include "AxisHelper.hxx"
-#include "AxisIndexDefines.hxx"
-#include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <PropertyHelper.hxx>
+#include <servicenames_charttypes.hxx>
+#include <CartesianCoordinateSystem.hxx>
+#include <AxisHelper.hxx>
+#include <AxisIndexDefines.hxx>
 #include <com/sun/star/chart2/AxisType.hpp>
-#include <com/sun/star/chart2/CurveStyle.hpp>
 #include <cppuhelper/supportsservice.hxx>
 
 using namespace ::com::sun::star;
@@ -35,7 +31,6 @@ using namespace ::com::sun::star;
 using ::com::sun::star::beans::Property;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Reference;
-using ::osl::MutexGuard;
 
 namespace
 {
@@ -64,9 +59,9 @@ struct StaticBubbleChartTypeInfoHelper_Initializer
 private:
     static Sequence< Property > lcl_GetPropertySequence()
     {
-        ::std::vector< css::beans::Property > aProperties;
+        std::vector< css::beans::Property > aProperties;
 
-        ::std::sort( aProperties.begin(), aProperties.end(),
+        std::sort( aProperties.begin(), aProperties.end(),
                      ::chart::PropertyNameLess() );
 
         return comphelper::containerToSequence( aProperties );
@@ -96,9 +91,7 @@ struct StaticBubbleChartTypeInfo : public rtl::StaticAggregate< uno::Reference< 
 namespace chart
 {
 
-BubbleChartType::BubbleChartType(
-    const uno::Reference< uno::XComponentContext > & xContext )
-    : ChartType( xContext )
+BubbleChartType::BubbleChartType()
 {
 }
 
@@ -112,7 +105,6 @@ BubbleChartType::~BubbleChartType()
 
 // ____ XCloneable ____
 uno::Reference< util::XCloneable > SAL_CALL BubbleChartType::createClone()
-    throw (uno::RuntimeException, std::exception)
 {
     return uno::Reference< util::XCloneable >( new BubbleChartType( *this ));
 }
@@ -120,11 +112,9 @@ uno::Reference< util::XCloneable > SAL_CALL BubbleChartType::createClone()
 // ____ XChartType ____
 Reference< chart2::XCoordinateSystem > SAL_CALL
     BubbleChartType::createCoordinateSystem( ::sal_Int32 DimensionCount )
-    throw (lang::IllegalArgumentException,
-           uno::RuntimeException, std::exception)
 {
     Reference< chart2::XCoordinateSystem > xResult(
-        new CartesianCoordinateSystem( GetComponentContext(), DimensionCount ));
+        new CartesianCoordinateSystem( DimensionCount ));
 
     for( sal_Int32 i=0; i<DimensionCount; ++i )
     {
@@ -151,13 +141,11 @@ Reference< chart2::XCoordinateSystem > SAL_CALL
 }
 
 OUString SAL_CALL BubbleChartType::getChartType()
-    throw (uno::RuntimeException, std::exception)
 {
     return OUString(CHART2_SERVICE_NAME_CHARTTYPE_BUBBLE);
 }
 
 uno::Sequence< OUString > SAL_CALL BubbleChartType::getSupportedMandatoryRoles()
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Sequence< OUString > aMandRolesSeq(4);
     aMandRolesSeq[0] = "label";
@@ -168,7 +156,6 @@ uno::Sequence< OUString > SAL_CALL BubbleChartType::getSupportedMandatoryRoles()
 }
 
 uno::Sequence< OUString > SAL_CALL BubbleChartType::getSupportedPropertyRoles()
-    throw(css::uno::RuntimeException, std::exception)
 {
     uno::Sequence< OUString > aPropertyRoles(2);
     aPropertyRoles[0] = "FillColor";
@@ -177,14 +164,12 @@ uno::Sequence< OUString > SAL_CALL BubbleChartType::getSupportedPropertyRoles()
 }
 
 OUString SAL_CALL BubbleChartType::getRoleOfSequenceForSeriesLabel()
-    throw (uno::RuntimeException, std::exception)
 {
     return OUString("values-size");
 }
 
 // ____ OPropertySet ____
 uno::Any BubbleChartType::GetDefaultValue( sal_Int32 nHandle ) const
-    throw(beans::UnknownPropertyException)
 {
     const tPropertyValueMap& rStaticDefaults = *StaticBubbleChartTypeDefaults::get();
     tPropertyValueMap::const_iterator aFound( rStaticDefaults.find( nHandle ) );
@@ -201,51 +186,35 @@ uno::Any BubbleChartType::GetDefaultValue( sal_Int32 nHandle ) const
 
 // ____ XPropertySet ____
 uno::Reference< beans::XPropertySetInfo > SAL_CALL BubbleChartType::getPropertySetInfo()
-    throw (uno::RuntimeException, std::exception)
 {
     return *StaticBubbleChartTypeInfo::get();
 }
 
-uno::Sequence< OUString > BubbleChartType::getSupportedServiceNames_Static()
-{
-    uno::Sequence< OUString > aServices( 3 );
-    aServices[ 0 ] = CHART2_SERVICE_NAME_CHARTTYPE_BUBBLE;
-    aServices[ 1 ] = "com.sun.star.chart2.ChartType";
-    aServices[ 2 ] = "com.sun.star.beans.PropertySet";
-    return aServices;
-}
-
-// implement XServiceInfo methods basing upon getSupportedServiceNames_Static
 OUString SAL_CALL BubbleChartType::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
-OUString BubbleChartType::getImplementationName_Static()
 {
     return OUString("com.sun.star.comp.chart.BubbleChartType");
 }
 
 sal_Bool SAL_CALL BubbleChartType::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL BubbleChartType::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return {
+        CHART2_SERVICE_NAME_CHARTTYPE_BUBBLE,
+        "com.sun.star.chart2.ChartType",
+        "com.sun.star.beans.PropertySet" };
 }
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
-com_sun_star_comp_chart_BubbleChartType_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+com_sun_star_comp_chart_BubbleChartType_get_implementation(css::uno::XComponentContext * /*context*/,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new ::chart::BubbleChartType(context));
+    return cppu::acquire(new ::chart::BubbleChartType);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

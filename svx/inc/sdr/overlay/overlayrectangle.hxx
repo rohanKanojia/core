@@ -31,16 +31,15 @@ namespace sdr
         class OverlayRectangle : public OverlayObjectWithBasePosition
         {
             // geometric definitions
-            basegfx::B2DPoint               maSecondPosition;
+            basegfx::B2DPoint const         maSecondPosition;
             const double                    mfTransparence;
             const double                    mfDiscreteGrow;
             const double                    mfDiscreteShrink;
             const double                    mfRotation;
 
             // #i53216# added CursorBlinkTime (in ms)
-            sal_uInt32                      mnBlinkTime;
+            sal_uInt32 const                mnBlinkTime;
 
-            /// bitfield
             // Flag to remember which state to draw. Inited with false (0)
             bool                            mbOverlayState : 1;
 
@@ -56,14 +55,7 @@ namespace sdr
                 double fDiscreteGrow,
                 double fDiscreteShrink,
                 double fRotation,
-                sal_uInt64 nBlinkTime,
                 bool bAnimate);
-
-            // data read access
-            double getTransparence() const { return mfTransparence; }
-            double getDiscreteGrow() const { return mfDiscreteGrow; }
-            double getDiscreteShrink() const { return mfDiscreteShrink; }
-            double getRotation() const { return mfRotation; }
 
             // execute event from base class sdr::animation::Event. Default
             // implementation does nothing and does not create a new event.

@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xipage.hxx"
+#include <xipage.hxx>
 #include <svl/itemset.hxx>
 #include <vcl/graph.hxx>
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <svl/eitem.hxx>
 #include <svl/intitem.hxx>
 #include <svx/pageitem.hxx>
@@ -28,12 +28,12 @@
 #include <editeng/lrspitem.hxx>
 #include <editeng/ulspitem.hxx>
 #include <editeng/brushitem.hxx>
-#include "document.hxx"
-#include "stlsheet.hxx"
-#include "attrib.hxx"
-#include "xistream.hxx"
-#include "xihelper.hxx"
-#include "xiescher.hxx"
+#include <document.hxx>
+#include <stlsheet.hxx>
+#include <attrib.hxx>
+#include <xistream.hxx>
+#include <xihelper.hxx>
+#include <xiescher.hxx>
 
 // Page settings ==============================================================
 
@@ -166,7 +166,7 @@ void XclImpPageSettings::ReadPrintGridLines( XclImpStream& rStrm )
 void XclImpPageSettings::ReadImgData( XclImpStream& rStrm )
 {
     Graphic aGraphic = XclImpDrawing::ReadImgData( GetRoot(), rStrm );
-    if( aGraphic.GetType() != GRAPHIC_NONE )
+    if( aGraphic.GetType() != GraphicType::NONE )
         maData.mxBrushItem.reset( new SvxBrushItem( aGraphic, GPOS_TILED, ATTR_BACKGROUND ) );
 }
 
@@ -187,7 +187,7 @@ void lclPutMarginItem( SfxItemSet& rItemSet, sal_uInt16 nRecId, double fMarginIn
         case EXC_ID_TOPMARGIN:
         case EXC_ID_BOTTOMMARGIN:
         {
-            SvxULSpaceItem aItem( GETITEM( rItemSet, SvxULSpaceItem, ATTR_ULSPACE ) );
+            SvxULSpaceItem aItem( rItemSet.Get( ATTR_ULSPACE ) );
             if( nRecId == EXC_ID_TOPMARGIN )
                 aItem.SetUpperValue( nMarginTwips );
             else
@@ -198,7 +198,7 @@ void lclPutMarginItem( SfxItemSet& rItemSet, sal_uInt16 nRecId, double fMarginIn
         case EXC_ID_LEFTMARGIN:
         case EXC_ID_RIGHTMARGIN:
         {
-            SvxLRSpaceItem aItem( GETITEM( rItemSet, SvxLRSpaceItem, ATTR_LRSPACE ) );
+            SvxLRSpaceItem aItem( rItemSet.Get( ATTR_LRSPACE ) );
             if( nRecId == EXC_ID_LEFTMARGIN )
                 aItem.SetLeftValue( nMarginTwips );
             else
@@ -251,7 +251,7 @@ void XclImpPageSettings::Finalize()
 
     if( mbValidPaper )
     {
-        SvxPageItem aPageItem( GETITEM( rItemSet, SvxPageItem, ATTR_PAGE ) );
+        SvxPageItem aPageItem( rItemSet.Get( ATTR_PAGE ) );
         aPageItem.SetLandscape( !maData.mbPortrait );
         rItemSet.Put( aPageItem );
         ScfTools::PutItem( rItemSet, SvxSizeItem( ATTR_PAGE_SIZE, maData.GetScPaperSize() ), true );
@@ -285,7 +285,7 @@ void XclImpPageSettings::Finalize()
 
     // header
     bool bHasHeader = !maData.maHeader.isEmpty();
-    SvxSetItem aHdrSetItem( GETITEM( rItemSet, SvxSetItem, ATTR_PAGE_HEADERSET ) );
+    SvxSetItem aHdrSetItem( rItemSet.Get( ATTR_PAGE_HEADERSET ) );
     SfxItemSet& rHdrItemSet = aHdrSetItem.GetItemSet();
     rHdrItemSet.Put( SfxBoolItem( ATTR_PAGE_ON, bHasHeader ) );
     if( bHasHeader )
@@ -321,7 +321,7 @@ void XclImpPageSettings::Finalize()
 
     // footer
     bool bHasFooter = !maData.maFooter.isEmpty();
-    SvxSetItem aFtrSetItem( GETITEM( rItemSet, SvxSetItem, ATTR_PAGE_FOOTERSET ) );
+    SvxSetItem aFtrSetItem( rItemSet.Get( ATTR_PAGE_FOOTERSET ) );
     SfxItemSet& rFtrItemSet = aFtrSetItem.GetItemSet();
     rFtrItemSet.Put( SfxBoolItem( ATTR_PAGE_ON, bHasFooter ) );
     if( bHasFooter )
@@ -368,18 +368,16 @@ void XclImpPageSettings::Finalize()
 
     // *** page breaks ***
 
-    ScfUInt16Vec::const_iterator aIt, aEnd;
-
-    for( aIt = maData.maHorPageBreaks.begin(), aEnd = maData.maHorPageBreaks.end(); aIt != aEnd; ++aIt )
+    for( const auto& rHorPageBreak : maData.maHorPageBreaks )
     {
-        SCROW nScRow = static_cast< SCROW >( *aIt );
+        SCROW nScRow = static_cast< SCROW >( rHorPageBreak );
         if( nScRow <= MAXROW )
             rDoc.SetRowBreak(nScRow, nScTab, false, true);
     }
 
-    for( aIt = maData.maVerPageBreaks.begin(), aEnd = maData.maVerPageBreaks.end(); aIt != aEnd; ++aIt )
+    for( const auto& rVerPageBreak : maData.maVerPageBreaks )
     {
-        SCCOL nScCol = static_cast< SCCOL >( *aIt );
+        SCCOL nScCol = static_cast< SCCOL >( rVerPageBreak );
         if( nScCol <= MAXCOL )
             rDoc.SetColBreak(nScCol, nScTab, false, true);
     }

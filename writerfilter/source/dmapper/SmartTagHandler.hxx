@@ -11,12 +11,30 @@
 
 #include <vector>
 
-#include <com/sun/star/rdf/XDocumentMetadataAccess.hpp>
-#include <com/sun/star/text/XTextDocument.hpp>
-#include <com/sun/star/text/XTextRange.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
-
 #include "LoggedResources.hxx"
+
+namespace com
+{
+namespace sun
+{
+namespace star
+{
+namespace rdf
+{
+class XDocumentMetadataAccess;
+}
+namespace text
+{
+class XTextDocument;
+class XTextRange;
+}
+namespace uno
+{
+class XComponentContext;
+}
+}
+}
+}
 
 namespace writerfilter
 {
@@ -34,11 +52,11 @@ class SmartTagHandler
     std::vector< std::pair<OUString, OUString> > m_aAttributes;
 
 public:
-    SmartTagHandler(const css::uno::Reference<css::uno::XComponentContext>& xComponentContext, const css::uno::Reference<css::text::XTextDocument>& xTextDocument);
-    virtual ~SmartTagHandler();
+    SmartTagHandler(css::uno::Reference<css::uno::XComponentContext> xComponentContext, const css::uno::Reference<css::text::XTextDocument>& xTextDocument);
+    ~SmartTagHandler() override;
 
-    virtual void lcl_attribute(Id Name, Value& val) override;
-    virtual void lcl_sprm(Sprm& sprm) override;
+    void lcl_attribute(Id nId, Value& rValue) override;
+    void lcl_sprm(Sprm& rSprm) override;
 
     void setURI(const OUString& rURI);
     void setElement(const OUString& rElement);

@@ -20,22 +20,24 @@
 #ifndef INCLUDED_SVX_CHARTHELPER_HXX
 #define INCLUDED_SVX_CHARTHELPER_HXX
 
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/uno/Sequence.hxx>
-#include <basegfx/range/b2drange.hxx>
-#include <svx/svxdllapi.h>
+#include <com/sun/star/uno/Reference.hxx>
 #include <drawinglayer/primitive2d/baseprimitive2d.hxx>
-#include <com/sun/star/chart2/XDiagram.hpp>
-#include <com/sun/star/embed/XEmbeddedObject.hpp>
+#include <sal/types.h>
+#include <svx/svxdllapi.h>
+
+namespace com { namespace sun { namespace star {
+    namespace chart2 { class XDiagram; }
+    namespace embed { class XEmbeddedObject; }
+    namespace frame { class XModel; }
+} } }
+
+namespace basegfx { class B2DRange; }
 
 class SAL_WARN_UNUSED SVX_DLLPUBLIC ChartHelper
 {
 public:
-    /// Check that the XDiagram is a real 3D chart.
-    static bool isGL3DDiagram(const css::uno::Reference<css::chart2::XDiagram>& xDiagram);
-
     /// Use chart's XUpdatable::update() to update values.
-    static void updateChart( const css::uno::Reference< css::frame::XModel >& rXModel, bool bHardUpdate );
+    static void updateChart( const css::uno::Reference< css::frame::XModel >& rXModel );
 
     // try to access rXModel in case of a chart to get the chart content
     // as sequence of primitives. Return range of primitives (chart size) in rRange;
@@ -52,8 +54,7 @@ public:
     // since this would not be saved/loaded, thus the compatibility will be better when setting it at
     // newly created charts using this method
     static void AdaptDefaultsForChart(
-        const css::uno::Reference < css::embed::XEmbeddedObject > & xEmbObj,
-        bool bNoFillStyle = true);
+        const css::uno::Reference < css::embed::XEmbeddedObject > & xEmbObj);
 };
 
 #endif // INCLUDED_SVX_CHARTHELPER_HXX

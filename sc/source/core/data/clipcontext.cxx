@@ -7,9 +7,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "clipcontext.hxx"
-#include "document.hxx"
-#include "mtvelements.hxx"
+#include <memory>
+#include <clipcontext.hxx>
+#include <document.hxx>
+#include <mtvelements.hxx>
 #include <column.hxx>
 #include <scitems.hxx>
 #include <tokenarray.hxx>
@@ -17,6 +18,8 @@
 #include <clipparam.hxx>
 
 #include <svl/intitem.hxx>
+#include <formula/errorcodes.hxx>
+#include <refdata.hxx>
 
 namespace sc {
 
@@ -192,7 +195,7 @@ void CopyFromClipContext::setSingleCell( const ScAddress& rSrcPos, const ScColum
                 ScTokenArray* pCode = rSrcCell.mpFormula->GetCode();
                 if (pCode && pCode->GetLen() == 1)
                 {
-                    const formula::FormulaToken* p = pCode->First();
+                    const formula::FormulaToken* p = pCode->FirstToken();
                     if (p->GetOpCode() == ocTrue || p->GetOpCode() == ocFalse)
                         // This is a boolean formula. Good.
                         break;
@@ -203,13 +206,25 @@ void CopyFromClipContext::setSingleCell( const ScAddress& rSrcPos, const ScColum
                 // Good.
                 break;
 
-            sal_uInt16 nErr = rSrcCell.mpFormula->GetErrCode();
-            if (nErr)
+            FormulaError nErr = rSrcCell.mpFormula->GetErrCode();
+            if (nErr != FormulaError::NONE)
             {
                 // error codes are cloned with values
                 if (!bNumeric)
                     // Error code is treated as numeric value. Don't paste it.
                     rSrcCell.clear();
+                else
+                {
+                    // Turn this into a formula cell with just the error code.
+                    ScFormulaCell* pErrCell = new ScFormulaCell(mpClipDoc, rSrcPos);
+                    pErrCell->SetErrCode(nErr);
+                    rSrcCell.set(pErrCell);
+                }
+            }
+            else if (rSrcCell.mpFormula->IsEmptyDisplayedAsString())
+            {
+                // Empty stays empty and doesn't become 0.
+                rSrcCell.clear();
             }
             else if (rSrcCell.mpFormula->IsValue())
             {
@@ -321,25 +336,20 @@ bool CopyFromClipContext::isCloneNotes() const
 
 bool CopyFromClipContext::isDateCell( const ScColumn& rCol, SCROW nRow ) const
 {
-    sal_uLong nNumIndex = static_cast<const SfxUInt32Item&>(rCol.GetAttr(nRow, ATTR_VALUE_FORMAT)).GetValue();
-    short nType = mpClipDoc->GetFormatTable()->GetType(nNumIndex);
-    return (nType == css::util::NumberFormat::DATE) || (nType == css::util::NumberFormat::TIME) || (nType == css::util::NumberFormat::DATETIME);
+    sal_uLong nNumIndex = rCol.GetAttr(nRow, ATTR_VALUE_FORMAT).GetValue();
+    SvNumFormatType nType = mpClipDoc->GetFormatTable()->GetType(nNumIndex);
+    return (nType == SvNumFormatType::DATE) || (nType == SvNumFormatType::TIME) || (nType == SvNumFormatType::DATETIME);
 }
 
 CopyToClipContext::CopyToClipContext(
-    ScDocument& rDoc, bool bKeepScenarioFlags, bool bCloneNotes) :
-    ClipContextBase(rDoc), mbKeepScenarioFlags(bKeepScenarioFlags), mbCloneNotes(bCloneNotes) {}
+    ScDocument& rDoc, bool bKeepScenarioFlags) :
+    ClipContextBase(rDoc), mbKeepScenarioFlags(bKeepScenarioFlags) {}
 
 CopyToClipContext::~CopyToClipContext() {}
 
 bool CopyToClipContext::isKeepScenarioFlags() const
 {
     return mbKeepScenarioFlags;
-}
-
-bool CopyToClipContext::isCloneNotes() const
-{
-    return mbCloneNotes;
 }
 
 CopyToDocContext::CopyToDocContext(ScDocument& rDoc) :

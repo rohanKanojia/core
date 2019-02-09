@@ -28,27 +28,25 @@ namespace sdr
 {
     namespace overlay
     {
-        class SVX_DLLPUBLIC OverlayAnimatedBitmapEx : public OverlayObjectWithBasePosition
+        class SVX_DLLPUBLIC OverlayAnimatedBitmapEx final : public OverlayObjectWithBasePosition
         {
-        protected:
             // the Bitmaps
-            BitmapEx                                maBitmapEx1;
-            BitmapEx                                maBitmapEx2;
+            BitmapEx const                                maBitmapEx1;
+            BitmapEx const                                maBitmapEx2;
 
             // position of the basePosition inside the Bitmaps, in pixels
-            sal_uInt16                              mnCenterX1;
-            sal_uInt16                              mnCenterY1;
-            sal_uInt16                              mnCenterX2;
-            sal_uInt16                              mnCenterY2;
+            sal_uInt16 const                              mnCenterX1;
+            sal_uInt16 const                              mnCenterY1;
+            sal_uInt16 const                              mnCenterX2;
+            sal_uInt16 const                              mnCenterY2;
 
             // #i53216# added CursorBlinkTime (in ms)
-            sal_uInt32                              mnBlinkTime;
+            sal_uInt32 const                              mnBlinkTime;
 
             // optional shear and rotation
-            double                                  mfShearX;
-            double                                  mfRotation;
+            double const                                  mfShearX;
+            double const                                  mfRotation;
 
-            /// bitfield
             // Flag to remember which state to draw. Inited with false (0)
             bool                                    mbOverlayState : 1;
 
@@ -60,14 +58,14 @@ namespace sdr
                 const basegfx::B2DPoint& rBasePos,
                 const BitmapEx& rBitmapEx1,
                 const BitmapEx& rBitmapEx2,
-                sal_uInt64 nBlinkTime = 500,
+                sal_uInt64 nBlinkTime,
                 sal_uInt16 nCenX1 = 0,
                 sal_uInt16 nCenY1 = 0,
                 sal_uInt16 nCenX2 = 0,
                 sal_uInt16 nCenY2 = 0,
                 double fShearX = 0.0,
                 double fRotation = 0.0);
-            virtual ~OverlayAnimatedBitmapEx();
+            virtual ~OverlayAnimatedBitmapEx() override;
 
             const BitmapEx& getBitmapEx1() const { return maBitmapEx1; }
             const BitmapEx& getBitmapEx2() const { return maBitmapEx2; }

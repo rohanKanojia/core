@@ -25,7 +25,7 @@
 
 #include <vcl/image.hxx>
 
-#include "helper/tkresmgr.hxx"
+#include <helper/tkresmgr.hxx>
 
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::graphic::XGraphic;
@@ -48,7 +48,7 @@ Image TkResMgr::getImageFromURL( const OUString& i_rImageURL )
     }
     catch( const uno::Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("toolkit");
     }
     return Image();
 }

@@ -30,26 +30,24 @@ class Point;
 
 namespace sw { namespace sidebarwindows {
 
-enum AnchorState
+enum class AnchorState
 {
-    AS_ALL,
-    AS_START,
-    AS_END,
-    AS_TRI
+    All,
+    End,
+    Tri
 };
 
-class AnchorOverlayObject: public sdr::overlay::OverlayObjectWithBasePosition
+class AnchorOverlayObject final : public sdr::overlay::OverlayObjectWithBasePosition
 {
     public:
-        static AnchorOverlayObject* CreateAnchorOverlayObject( SwView& rDocView,
+        static std::unique_ptr<AnchorOverlayObject> CreateAnchorOverlayObject( SwView const & rDocView,
                                                                const SwRect& aAnchorRect,
-                                                               const long& aPageBorder,
+                                                               long aPageBorder,
                                                                const Point& aLineStart,
                                                                const Point& aLineEnd,
                                                                const Color& aColorAnchor );
-        static void DestroyAnchorOverlayObject( AnchorOverlayObject* pAnchor );
 
-        inline const basegfx::B2DPoint& GetSecondPosition() const { return maSecondPosition; }
+        const basegfx::B2DPoint& GetSecondPosition() const { return maSecondPosition; }
         const basegfx::B2DPoint& GetThirdPosition() const { return maThirdPosition; }
         const basegfx::B2DPoint& GetFourthPosition() const { return maFourthPosition; }
         const basegfx::B2DPoint& GetFifthPosition() const { return maFifthPosition; }
@@ -72,14 +70,12 @@ class AnchorOverlayObject: public sdr::overlay::OverlayObjectWithBasePosition
         void SetSeventhPosition( const basegfx::B2DPoint& rNew );
 
         void setLineSolid( const bool bNew );
-        inline bool getLineSolid() const { return mbLineSolid; }
-
-        inline void SetHeight( const unsigned long aHeight ) { mHeight = aHeight; };
+        bool getLineSolid() const { return mbLineSolid; }
 
         void SetAnchorState( const AnchorState aState );
-        inline AnchorState GetAnchorState() const { return mAnchorState; }
+        AnchorState GetAnchorState() const { return mAnchorState; }
 
-    protected:
+    private:
         /*                        6------------7
              1                   /
             /4\ ---------------5
@@ -100,12 +96,10 @@ class AnchorOverlayObject: public sdr::overlay::OverlayObjectWithBasePosition
         // geometry creation for OverlayObject
         virtual drawinglayer::primitive2d::Primitive2DContainer createOverlayObjectPrimitive2DSequence() override;
 
-    private:
         // object's geometry
         basegfx::B2DPolygon maTriangle;
         basegfx::B2DPolygon maLine;
         basegfx::B2DPolygon maLineTop;
-        unsigned long mHeight;
         AnchorState mAnchorState;
 
         bool mbLineSolid : 1;
@@ -118,7 +112,8 @@ class AnchorOverlayObject: public sdr::overlay::OverlayObjectWithBasePosition
                              const basegfx::B2DPoint& rSixthPos,
                              const basegfx::B2DPoint& rSeventhPos,
                              const Color& rBaseColor );
-        virtual ~AnchorOverlayObject();
+    public:
+        virtual ~AnchorOverlayObject() override;
 };
 
 } } // end of namespace sw::annotation

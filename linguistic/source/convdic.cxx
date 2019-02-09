@@ -21,6 +21,7 @@
 #include <cppuhelper/factory.hxx>
 #include <i18nlangtag/lang.h>
 #include <osl/mutex.hxx>
+#include <sal/log.hxx>
 #include <tools/debug.hxx>
 #include <tools/stream.hxx>
 #include <tools/urlobj.hxx>
@@ -30,9 +31,6 @@
 #include <unotools/streamwrap.hxx>
 #include <unotools/ucbstreamhelper.hxx>
 
-#include <com/sun/star/linguistic2/XConversionDictionary.hpp>
-#include <com/sun/star/linguistic2/ConversionDictionaryType.hpp>
-#include <com/sun/star/linguistic2/XConversionPropertyType.hpp>
 #include <com/sun/star/linguistic2/ConversionPropertyType.hpp>
 #include <com/sun/star/util/XFlushable.hpp>
 #include <com/sun/star/lang/Locale.hpp>
@@ -41,6 +39,7 @@
 #include <com/sun/star/uno/Reference.h>
 #include <com/sun/star/registry/XRegistryKey.hpp>
 #include <com/sun/star/util/XFlushListener.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/io/XActiveDataSource.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
@@ -49,11 +48,14 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/xml/sax/InputSource.hpp>
 #include <com/sun/star/xml/sax/Parser.hpp>
+#include <com/sun/star/xml/sax/SAXParseException.hpp>
+#include <com/sun/star/container/NoSuchElementException.hpp>
+#include <com/sun/star/container/ElementExistException.hpp>
 
 
 #include "convdic.hxx"
 #include "convdicxml.hxx"
-#include "linguistic/misc.hxx"
+#include <linguistic/misc.hxx>
 #include "defs.hxx"
 
 using namespace std;
@@ -68,7 +70,7 @@ using namespace linguistic;
 
 #define SN_CONV_DICTIONARY      "com.sun.star.linguistic2.ConversionDictionary"
 
-void ReadThroughDic( const OUString &rMainURL, ConvDicXMLImport &rImport )
+static void ReadThroughDic( const OUString &rMainURL, ConvDicXMLImport &rImport )
 {
     if (rMainURL.isEmpty())
         return;
@@ -85,7 +87,7 @@ void ReadThroughDic( const OUString &rMainURL, ConvDicXMLImport &rImport )
     }
     catch (const uno::Exception &)
     {
-        DBG_ASSERT( false, "failed to get input stream" );
+        SAL_WARN( "linguistic", "failed to get input stream" );
     }
     if (!xIn.is())
         return;
@@ -123,7 +125,7 @@ void ReadThroughDic( const OUString &rMainURL, ConvDicXMLImport &rImport )
     }
 }
 
-bool IsConvDic( const OUString &rFileURL, sal_Int16 &nLang, sal_Int16 &nConvType )
+bool IsConvDic( const OUString &rFileURL, LanguageType &nLang, sal_Int16 &nConvType )
 {
     bool bRes = false;
 
@@ -141,10 +143,7 @@ bool IsConvDic( const OUString &rFileURL, sal_Int16 &nLang, sal_Int16 &nConvType
     // first argument being 0 should stop the file from being parsed
     // up to the end (reading all entries) when the required
     // data (language, conversion type) is found.
-    ConvDicXMLImport *pImport = new ConvDicXMLImport( nullptr );
-
-    //!! keep a first reference to ensure the lifetime of the object !!
-    uno::Reference< XInterface > xRef( static_cast<document::XFilter *>(pImport), UNO_QUERY );
+    rtl::Reference<ConvDicXMLImport> pImport = new ConvDicXMLImport( nullptr );
 
     ReadThroughDic( rFileURL, *pImport );    // will implicitly add the entries
     bRes =  !LinguIsUnspecified( pImport->GetLanguage()) &&
@@ -163,7 +162,7 @@ bool IsConvDic( const OUString &rFileURL, sal_Int16 &nLang, sal_Int16 &nConvType
 
 ConvDic::ConvDic(
         const OUString &rName,
-        sal_Int16 nLang,
+        LanguageType nLang,
         sal_Int16 nConvType,
         bool bBiDirectional,
         const OUString &rMainURL) :
@@ -184,12 +183,11 @@ ConvDic::ConvDic(
 
     bNeedEntries = true;
     bIsModified  = bIsActive = false;
-    bIsReadonly = false;
 
     if( !rMainURL.isEmpty() )
     {
         bool bExists = false;
-        bIsReadonly = IsReadOnly( rMainURL, &bExists );
+        IsReadOnly( rMainURL, &bExists );
 
         if( !bExists )  // new empty dictionary
         {
@@ -198,7 +196,6 @@ ConvDic::ConvDic(
             //! that could be found by the dictionary-list implementation
             // (Note: empty dictionaries are not just empty files!)
             Save();
-            bIsReadonly = IsReadOnly( rMainURL );   // will be sal_False if Save was successful
         }
     }
     else
@@ -219,9 +216,7 @@ void ConvDic::Load()
 
     //!! prevent function from being called recursively via HasEntry, AddEntry
     bNeedEntries = false;
-    ConvDicXMLImport *pImport = new ConvDicXMLImport( this );
-    //!! keep a first reference to ensure the lifetime of the object !!
-    uno::Reference< XInterface > xRef( static_cast<document::XFilter *>(pImport), UNO_QUERY );
+    rtl::Reference<ConvDicXMLImport> pImport = new ConvDicXMLImport( this );
     ReadThroughDic( aMainURL, *pImport );    // will implicitly add the entries
     bIsModified = false;
 }
@@ -245,7 +240,7 @@ void ConvDic::Save()
     }
     catch (const uno::Exception &)
     {
-        DBG_ASSERT( false, "failed to get input stream" );
+        SAL_WARN( "linguistic", "failed to get input stream" );
     }
     if (!xStream.is())
         return;
@@ -262,10 +257,7 @@ void ConvDic::Save()
 
         // prepare arguments (prepend doc handler to given arguments)
         uno::Reference< xml::sax::XDocumentHandler > xDocHandler( xSaxWriter, UNO_QUERY );
-        ConvDicXMLExport *pExport = new ConvDicXMLExport( *this, aMainURL, xDocHandler );
-        //!! keep a first(!) reference until everything is done to
-        //!! ensure the proper lifetime of the object
-        uno::Reference< document::XFilter > aRef( static_cast<document::XFilter *>(pExport) );
+        rtl::Reference<ConvDicXMLExport> pExport = new ConvDicXMLExport( *this, aMainURL, xDocHandler );
         bool bRet = pExport->Export();     // write entries to file
         DBG_ASSERT( !pStream->GetError(), "I/O error while writing to stream" );
         if (bRet)
@@ -306,16 +298,16 @@ void ConvDic::AddEntry( const OUString &rLeftText, const OUString &rRightText )
         Load();
 
     DBG_ASSERT(!HasEntry( rLeftText, rRightText), "entry already exists" );
-    aFromLeft .insert( ConvMap::value_type( rLeftText, rRightText ) );
-    if (pFromRight.get())
-        pFromRight->insert( ConvMap::value_type( rRightText, rLeftText ) );
+    aFromLeft .emplace( rLeftText, rRightText );
+    if (pFromRight)
+        pFromRight->emplace( rRightText, rLeftText );
 
     if (bMaxCharCountIsValid)
     {
         if (rLeftText.getLength() > nMaxLeftCharCount)
-            nMaxLeftCharCount   = (sal_Int16) rLeftText.getLength();
+            nMaxLeftCharCount   = static_cast<sal_Int16>(rLeftText.getLength());
         if (pFromRight.get() && rRightText.getLength() > nMaxRightCharCount)
-            nMaxRightCharCount  = (sal_Int16) rRightText.getLength();
+            nMaxRightCharCount  = static_cast<sal_Int16>(rRightText.getLength());
     }
 
     bIsModified = true;
@@ -331,7 +323,7 @@ void ConvDic::RemoveEntry( const OUString &rLeftText, const OUString &rRightText
     DBG_ASSERT( aLeftIt  != aFromLeft.end(),  "left map entry missing" );
     aFromLeft .erase( aLeftIt );
 
-    if (pFromRight.get())
+    if (pFromRight)
     {
         ConvMap::iterator aRightIt = GetEntry( *pFromRight, rRightText, rLeftText );
         DBG_ASSERT( aRightIt != pFromRight->end(), "right map entry missing" );
@@ -344,7 +336,6 @@ void ConvDic::RemoveEntry( const OUString &rLeftText, const OUString &rRightText
 
 
 OUString SAL_CALL ConvDic::getName(  )
-    throw (RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     return aName;
@@ -352,7 +343,6 @@ OUString SAL_CALL ConvDic::getName(  )
 
 
 Locale SAL_CALL ConvDic::getLocale(  )
-    throw (RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     return LanguageTag::convertToLocale( nLanguage );
@@ -360,7 +350,6 @@ Locale SAL_CALL ConvDic::getLocale(  )
 
 
 sal_Int16 SAL_CALL ConvDic::getConversionType(  )
-    throw (RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     return nConversionType;
@@ -368,7 +357,6 @@ sal_Int16 SAL_CALL ConvDic::getConversionType(  )
 
 
 void SAL_CALL ConvDic::setActive( sal_Bool bActivate )
-    throw (RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     bIsActive = bActivate;
@@ -376,7 +364,6 @@ void SAL_CALL ConvDic::setActive( sal_Bool bActivate )
 
 
 sal_Bool SAL_CALL ConvDic::isActive(  )
-    throw (RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     return bIsActive;
@@ -384,11 +371,10 @@ sal_Bool SAL_CALL ConvDic::isActive(  )
 
 
 void SAL_CALL ConvDic::clear(  )
-    throw (RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     aFromLeft .clear();
-    if (pFromRight.get())
+    if (pFromRight)
         pFromRight->clear();
     bNeedEntries    = false;
     bIsModified     = true;
@@ -404,11 +390,10 @@ uno::Sequence< OUString > SAL_CALL ConvDic::getConversions(
         sal_Int32 nLength,
         ConversionDirection eDirection,
         sal_Int32 /*nTextConversionOptions*/ )
-    throw (IllegalArgumentException, RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
-    if (!pFromRight.get() && eDirection == ConversionDirection_FROM_RIGHT)
+    if (!pFromRight && eDirection == ConversionDirection_FROM_RIGHT)
         return uno::Sequence< OUString >();
 
     if (bNeedEntries)
@@ -455,11 +440,10 @@ static bool lcl_SeqHasEntry(
 
 uno::Sequence< OUString > SAL_CALL ConvDic::getConversionEntries(
         ConversionDirection eDirection )
-    throw (RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
-    if (!pFromRight.get() && eDirection == ConversionDirection_FROM_RIGHT)
+    if (!pFromRight && eDirection == ConversionDirection_FROM_RIGHT)
         return uno::Sequence< OUString >();
 
     if (bNeedEntries)
@@ -469,18 +453,16 @@ uno::Sequence< OUString > SAL_CALL ConvDic::getConversionEntries(
                                 aFromLeft : *pFromRight;
     uno::Sequence< OUString > aRes( rConvMap.size() );
     OUString *pRes = aRes.getArray();
-    ConvMap::iterator aIt = rConvMap.begin();
     sal_Int32 nIdx = 0;
-    while (aIt != rConvMap.end())
+    for (auto const& elem : rConvMap)
     {
-        OUString aCurEntry( (*aIt).first );
+        OUString aCurEntry( elem.first );
         // skip duplicate entries ( duplicate = duplicate entries
         // respective to the evaluated side (FROM_LEFT or FROM_RIGHT).
         // Thus if FROM_LEFT is evaluated for pairs (A,B) and (A,C)
         // only one entry for A will be returned in the result)
         if (nIdx == 0 || !lcl_SeqHasEntry( pRes, nIdx, aCurEntry ))
             pRes[ nIdx++ ] = aCurEntry;
-        ++aIt;
     }
     aRes.realloc( nIdx );
 
@@ -491,7 +473,6 @@ uno::Sequence< OUString > SAL_CALL ConvDic::getConversionEntries(
 void SAL_CALL ConvDic::addEntry(
         const OUString& aLeftText,
         const OUString& aRightText )
-    throw (IllegalArgumentException, container::ElementExistException, RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     if (bNeedEntries)
@@ -505,7 +486,6 @@ void SAL_CALL ConvDic::addEntry(
 void SAL_CALL ConvDic::removeEntry(
         const OUString& aLeftText,
         const OUString& aRightText )
-    throw (container::NoSuchElementException, RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     if (bNeedEntries)
@@ -517,11 +497,10 @@ void SAL_CALL ConvDic::removeEntry(
 
 
 sal_Int16 SAL_CALL ConvDic::getMaxCharCount( ConversionDirection eDirection )
-    throw (RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
-    if (!pFromRight.get() && eDirection == ConversionDirection_FROM_RIGHT)
+    if (!pFromRight && eDirection == ConversionDirection_FROM_RIGHT)
     {
         DBG_ASSERT( nMaxRightCharCount == 0, "max right char count should be 0" );
         return 0;
@@ -533,25 +512,21 @@ sal_Int16 SAL_CALL ConvDic::getMaxCharCount( ConversionDirection eDirection )
     if (!bMaxCharCountIsValid)
     {
         nMaxLeftCharCount   = 0;
-        ConvMap::iterator aIt = aFromLeft.begin();
-        while (aIt != aFromLeft.end())
+        for (auto const& elem : aFromLeft)
         {
-            sal_Int16 nTmp = (sal_Int16) (*aIt).first.getLength();
+            sal_Int16 nTmp = static_cast<sal_Int16>(elem.first.getLength());
             if (nTmp > nMaxLeftCharCount)
                 nMaxLeftCharCount = nTmp;
-            ++aIt;
         }
 
         nMaxRightCharCount  = 0;
-        if (pFromRight.get())
+        if (pFromRight)
         {
-            aIt = pFromRight->begin();
-            while (aIt != pFromRight->end())
+            for (auto const& elem : *pFromRight)
             {
-                sal_Int16 nTmp = (sal_Int16) (*aIt).first.getLength();
+                sal_Int16 nTmp = static_cast<sal_Int16>(elem.first.getLength());
                 if (nTmp > nMaxRightCharCount)
                     nMaxRightCharCount = nTmp;
-                ++aIt;
             }
         }
 
@@ -568,7 +543,6 @@ void SAL_CALL ConvDic::setPropertyType(
         const OUString& rLeftText,
         const OUString& rRightText,
         sal_Int16 nPropertyType )
-    throw (container::NoSuchElementException, IllegalArgumentException, RuntimeException, std::exception)
 {
     bool bHasElement = HasEntry( rLeftText, rRightText);
     if (!bHasElement)
@@ -576,8 +550,8 @@ void SAL_CALL ConvDic::setPropertyType(
 
     // currently we assume that entries with the same left text have the
     // same PropertyType even if the right text is different...
-    if (pConvPropType.get())
-        pConvPropType->insert( PropTypeMap::value_type( rLeftText, nPropertyType ) );
+    if (pConvPropType)
+        pConvPropType->emplace( rLeftText, nPropertyType );
     bIsModified = true;
 }
 
@@ -585,14 +559,13 @@ void SAL_CALL ConvDic::setPropertyType(
 sal_Int16 SAL_CALL ConvDic::getPropertyType(
         const OUString& rLeftText,
         const OUString& rRightText )
-    throw (container::NoSuchElementException, RuntimeException, std::exception)
 {
     bool bHasElement = HasEntry( rLeftText, rRightText);
     if (!bHasElement)
         throw container::NoSuchElementException();
 
     sal_Int16 nRes = ConversionPropertyType::NOT_DEFINED;
-    if (pConvPropType.get())
+    if (pConvPropType)
     {
         // still assuming that entries with same left text have same PropertyType
         // even if they have different right text...
@@ -605,7 +578,6 @@ sal_Int16 SAL_CALL ConvDic::getPropertyType(
 
 
 void SAL_CALL ConvDic::flush(  )
-    throw (RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -623,7 +595,6 @@ void SAL_CALL ConvDic::flush(  )
 
 void SAL_CALL ConvDic::addFlushListener(
         const uno::Reference< util::XFlushListener >& rxListener )
-    throw (RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     if (rxListener.is())
@@ -633,7 +604,6 @@ void SAL_CALL ConvDic::addFlushListener(
 
 void SAL_CALL ConvDic::removeFlushListener(
         const uno::Reference< util::XFlushListener >& rxListener )
-    throw (RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     if (rxListener.is())
@@ -642,29 +612,18 @@ void SAL_CALL ConvDic::removeFlushListener(
 
 
 OUString SAL_CALL ConvDic::getImplementationName(  )
-    throw (RuntimeException, std::exception)
 {
-    return getImplementationName_Static();
+    return OUString( "com.sun.star.lingu2.ConvDic" );
 }
 
 sal_Bool SAL_CALL ConvDic::supportsService( const OUString& rServiceName )
-    throw (RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL ConvDic::getSupportedServiceNames(  )
-    throw (RuntimeException, std::exception)
 {
-    return getSupportedServiceNames_Static();
-}
-
-
-uno::Sequence< OUString > ConvDic::getSupportedServiceNames_Static()
-    throw()
-{
-    uno::Sequence<OUString> aSNS { SN_CONV_DICTIONARY };
-    return aSNS;
+    return { SN_CONV_DICTIONARY };
 }
 
 

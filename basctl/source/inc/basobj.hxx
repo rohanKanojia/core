@@ -30,7 +30,7 @@ class StarBASIC;
 class SfxUInt16Item;
 class SfxBindings;
 class SfxDispatcher;
-namespace vcl { class Window; }
+namespace weld { class Widget; class Window; }
 
 namespace basctl
 {
@@ -39,17 +39,17 @@ namespace basctl
 
     // help methods for the general use:
     SbMethod*       CreateMacro( SbModule* pModule, const OUString& rMacroName );
-    void            RunMethod( SbMethod* pMethod );
+    void            RunMethod( SbMethod const * pMethod );
 
     StarBASIC*      FindBasic( const SbxVariable* pVar );
     void            StopBasic();
-    long            HandleBasicError( StarBASIC* pBasic );
+    long            HandleBasicError( StarBASIC const * pBasic );
     void            BasicStopped( bool* pbAppWindowDisabled = nullptr, bool* pbDispatcherLocked = nullptr, sal_uInt16* pnWaitCount = nullptr,
                             SfxUInt16Item** ppSWActionCount = nullptr, SfxUInt16Item** ppSWLockViewCount = nullptr );
 
     bool            IsValidSbxName( const OUString& rName );
 
-    BasicManager*   FindBasicManager( StarBASIC* pLib );
+    BasicManager*   FindBasicManager( StarBASIC const * pLib );
 
     SfxBindings*    GetBindingsPtr();
 
@@ -68,18 +68,21 @@ namespace basctl
         Will show an error message when renaming fails because the new name is already used.
     */
     bool            RenameModule(
-        vcl::Window* pErrorParent, const ScriptDocument& rDocument,
+        weld::Widget* pErrorParent, const ScriptDocument& rDocument,
         const OUString& rLibName, const OUString& rOldName, const OUString& rNewName );
 
     // new methods for macros
 
-    OUString        ChooseMacro(
-        const css::uno::Reference< css::frame::XModel >& rxLimitToDocument,
-        bool bChooseOnly, const OUString& rMacroDesc );
+    OUString        ChooseMacro(weld::Window* pParent,
+        const css::uno::Reference< css::frame::XModel >& rxLimitToDocument, const css::uno::Reference< css::frame::XFrame >& xDocFrame,
+        bool bChooseOnly );
+    inline OUString ChooseMacro(weld::Window* pParent, const css::uno::Reference<css::frame::XModel>& rLimitToDocument)
+    { return ChooseMacro(pParent, rLimitToDocument, css::uno::Reference< css::frame::XFrame >(), false/*bChooseOnly*/); }
 
+    /// @throws css::container::NoSuchElementException
+    /// @throws css::uno::RuntimeException
     css::uno::Sequence< OUString > GetMethodNames(
-        const ScriptDocument& rDocument, const OUString& rLibName, const OUString& rModName )
-        throw (css::container::NoSuchElementException, css::uno::RuntimeException, std::exception);
+        const ScriptDocument& rDocument, const OUString& rLibName, const OUString& rModName );
 
     bool            HasMethod(
         const ScriptDocument& rDocument, const OUString& rLibName, const OUString& rModName, const OUString& rMethName );
@@ -89,10 +92,12 @@ namespace basctl
     /** renames a dialog
 
         Will show an error message when renaming fails because the new name is already used.
+
+        @throws css::container::ElementExistException
+        @throws css::container::NoSuchElementException
+        @throws css::uno::RuntimeException
     */
-    bool            RenameDialog(
-        vcl::Window* pErrorParent, const ScriptDocument& rDocument, const OUString& rLibName, const OUString& rOldName, const OUString& rNewName )
-        throw (css::container::ElementExistException, css::container::NoSuchElementException, css::uno::RuntimeException, std::exception);
+    bool            RenameDialog(weld::Widget* pErrorParent, const ScriptDocument& rDocument, const OUString& rLibName, const OUString& rOldName, const OUString& rNewName);
 
     bool            RemoveDialog( const ScriptDocument& rDocument, const OUString& rLibName, const OUString& rDlgName );
 

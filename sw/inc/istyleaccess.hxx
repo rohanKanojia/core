@@ -20,7 +20,6 @@
 #define INCLUDED_SW_INC_ISTYLEACCESS_HXX
 
 #include <vector>
-#include <svl/stylepool.hxx>
 
 // Management of (automatic) styles
 class IStyleAccess
@@ -36,17 +35,17 @@ public:
 
     virtual ~IStyleAccess() {}
 
-    virtual StylePool::SfxItemSet_Pointer_t getAutomaticStyle( const SfxItemSet& rSet,
+    virtual std::shared_ptr<SfxItemSet> getAutomaticStyle( const SfxItemSet& rSet,
                                                                SwAutoStyleFamily eFamily ) = 0;
-    virtual void getAllStyles( std::vector<StylePool::SfxItemSet_Pointer_t> &rStyles,
+    virtual void getAllStyles( std::vector<std::shared_ptr<SfxItemSet>> &rStyles,
                                                                SwAutoStyleFamily eFamily ) = 0;
     /** It's slow to iterate through a stylepool looking for a special name, but if
      the style has been inserted via "cacheAutomaticStyle" instead of "getAutomaticStyle",
      it's faster */
-    virtual StylePool::SfxItemSet_Pointer_t getByName( const OUString& rName,
+    virtual std::shared_ptr<SfxItemSet> getByName( const OUString& rName,
                                                                SwAutoStyleFamily eFamily ) = 0;
     /// insert the style to the pool and the cache (used during import)
-    virtual StylePool::SfxItemSet_Pointer_t cacheAutomaticStyle( const SfxItemSet& rSet,
+    virtual std::shared_ptr<SfxItemSet> cacheAutomaticStyle( const SfxItemSet& rSet,
                                                                SwAutoStyleFamily eFamily ) = 0;
     /// To release the cached styles (shared_pointer!)
     virtual void clearCaches() = 0;

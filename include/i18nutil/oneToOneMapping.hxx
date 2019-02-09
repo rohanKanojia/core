@@ -19,12 +19,10 @@
 #ifndef INCLUDED_I18NUTIL_ONETOONEMAPPING_HXX
 #define INCLUDED_I18NUTIL_ONETOONEMAPPING_HXX
 
-#include <rtl/ustring.hxx>
 #include <i18nutil/i18nutildllapi.h>
+#include <memory>
 
-namespace com { namespace sun { namespace star { namespace i18n {
-
-class widthfolding;
+namespace i18nutil {
 
 struct OneToOneMappingTable_t
 {
@@ -46,7 +44,7 @@ private:
     oneToOneMapping(const oneToOneMapping&) = delete;
     oneToOneMapping& operator=(const oneToOneMapping&) = delete;
 public:
-    oneToOneMapping( OneToOneMappingTable_t *rpTable, const size_t rnSize, const size_t rnUnitSize = sizeof(OneToOneMappingTable_t) );
+    oneToOneMapping( OneToOneMappingTable_t const *rpTable, const size_t rnSize, const size_t rnUnitSize = sizeof(OneToOneMappingTable_t) );
     virtual ~oneToOneMapping();
 
     // binary search
@@ -56,11 +54,11 @@ public:
     sal_Unicode operator[] ( const sal_Unicode nKey ) const { return find( nKey ); };
 
 protected:
-    OneToOneMappingTable_t *mpTable;
+    OneToOneMappingTable_t const *mpTable;
     size_t                  mnSize;
 };
 
-class I18NUTIL_DLLPUBLIC oneToOneMappingWithFlag : public oneToOneMapping
+class I18NUTIL_DLLPUBLIC oneToOneMappingWithFlag final : public oneToOneMapping
 {
 private:
     oneToOneMappingWithFlag(const oneToOneMappingWithFlag&) = delete;
@@ -69,22 +67,22 @@ private:
     friend class widthfolding;
 
 public:
-    oneToOneMappingWithFlag( UnicodePairWithFlag *rpTableWF, const size_t rnSize, const UnicodePairFlag rnFlag );
-    virtual ~oneToOneMappingWithFlag();
+    oneToOneMappingWithFlag( UnicodePairWithFlag const *rpTableWF, const size_t rnSize, const UnicodePairFlag rnFlag );
+    virtual ~oneToOneMappingWithFlag() override;
 
     // make index for fast search
     void makeIndex();
 
     // index search
     virtual sal_Unicode find( const sal_Unicode nKey ) const override;
-protected:
-    UnicodePairWithFlag  *mpTableWF;
+private:
+    UnicodePairWithFlag const *mpTableWF;
     UnicodePairFlag       mnFlag;
-    UnicodePairWithFlag **mpIndex[256];
+    std::unique_ptr<UnicodePairWithFlag const *[]> mpIndex[256];
     bool                  mbHasIndex;
 };
 
-} } } }
+}
 
 #endif // _I18N_TRANSLITERATION_ONETOONEMAPPING_HXX_
 

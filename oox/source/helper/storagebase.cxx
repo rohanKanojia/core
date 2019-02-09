@@ -17,14 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/helper/storagebase.hxx"
+#include <oox/helper/storagebase.hxx>
 
 #include <com/sun/star/embed/XTransactedObject.hpp>
 #include <com/sun/star/io/XStream.hpp>
 #include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
-#include "oox/helper/binaryinputstream.hxx"
-#include "oox/helper/binaryoutputstream.hxx"
+#include <oox/helper/binaryinputstream.hxx>
+#include <oox/helper/binaryoutputstream.hxx>
 
 namespace oox {
 
@@ -224,8 +224,8 @@ void StorageBase::copyStorageToStorage( StorageBase& rDestStrg )
     {
         ::std::vector< OUString > aElements;
         getElementNames( aElements );
-        for( ::std::vector< OUString >::iterator aIt = aElements.begin(), aEnd = aElements.end(); aIt != aEnd; ++aIt )
-            copyToStorage( rDestStrg, *aIt );
+        for (auto const& elem : aElements)
+            copyToStorage(rDestStrg, elem);
     }
 }
 

@@ -84,23 +84,23 @@ namespace ActivitiesFactory
 
             Specifies the minimal simple duration of the
             activity (minimal, because mnMinNumberOfFrames
-            might prolongue the activity). According to SMIL,
+            might prolong the activity). According to SMIL,
             this might also be indefinite, which for our
             framework does not make much sense, though
             (wouldn't have a clue, then, how to scale the
             animation over time).
         */
-        double                                          mnMinDuration;
+        double const                                    mnMinDuration;
 
         /** Minimal number of frames for this activity.
 
             This specifies the minimal number of frames this
             activity will display per simple duration. If less
             than this number are displayed until mnMinDuration
-            is over, the activity will be prolongued until
+            is over, the activity will be prolonged until
             mnMinNumberOfFrames are rendered.
         */
-        sal_uInt32                                      mnMinNumberOfFrames;
+        sal_uInt32 const                                mnMinNumberOfFrames;
 
         /** Number of repeats for the simple duration
 
@@ -113,10 +113,10 @@ namespace ActivitiesFactory
         ::boost::optional<double> const                 maRepeats;
 
         /// Fraction of simple time to accelerate animation
-        double                                          mnAcceleration;
+        double const                                    mnAcceleration;
 
         /// Fraction of simple time to decelerate animation
-        double                                          mnDeceleration;
+        double const                                    mnDeceleration;
 
         /// Shape, to get bounds from
         ShapeSharedPtr                                  mpShape;
@@ -125,7 +125,7 @@ namespace ActivitiesFactory
         ::basegfx::B2DVector                            maSlideBounds;
 
         /// When true, activity is played reversed after mnDuration.
-        bool                                            mbAutoReverse;
+        bool const                                      mbAutoReverse;
     };
 
     /** Create an activity from an XAnimate node.

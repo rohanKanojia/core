@@ -22,40 +22,54 @@
 #include <sal/types.h>
 #include <tools/toolsdllapi.h>
 #include <memory>
+#include <ostream>
+#include <type_traits>
 
 class SvStream;
 
-// This class uses the platform defined type 'long' as valid values but do all
-// calculations using sal_Int64 with checks for 'long' overflows.
-class SAL_WARN_UNUSED TOOLS_DLLPUBLIC Fraction
+class SAL_WARN_UNUSED TOOLS_DLLPUBLIC Fraction final
 {
     struct Impl;
 
     std::unique_ptr<Impl> mpImpl;
 
-    bool            HasOverflowValue();
-
 public:
                     Fraction();
                     Fraction( const Fraction & rFrac );
-                    Fraction( long nNum, long nDen=1 );
-                    Fraction( double dVal );
+                    Fraction( Fraction && rFrac );
+    explicit        Fraction( double dVal );
+                    Fraction( double nNum, double nDen );
+                    Fraction( sal_Int64 nNum, sal_Int64 nDen );
+                    // just to prevent ambiguity between the sal_Int64 and double constructors
+                    template<typename T1, typename T2> Fraction(
+                        T1 nNum, T2 nDen,
+                        typename std::enable_if<std::is_integral<T1>::value && std::is_integral<T2>::value, int>::type = 0)
+                        : Fraction( sal_Int64(nNum), sal_Int64(nDen) ) {}
                     ~Fraction();
 
     bool            IsValid() const;
 
-    long            GetNumerator() const;
-    long            GetDenominator() const;
+    sal_Int32       GetNumerator() const;
+    sal_Int32       GetDenominator() const;
 
-    operator        long() const;
-    operator        double() const;
+    explicit operator sal_Int32() const;
+#if SAL_TYPES_SIZEOFLONG == 8
+    explicit operator long() const { return sal_Int32(*this); }
+#endif
+    explicit operator double() const;
 
     Fraction&       operator=( const Fraction& rfrFrac );
+    Fraction&       operator=( Fraction&& rfrFrac );
+    Fraction&       operator=( double v ) { return operator=(Fraction(v)); }
 
     Fraction&       operator+=( const Fraction& rfrFrac );
     Fraction&       operator-=( const Fraction& rfrFrac );
     Fraction&       operator*=( const Fraction& rfrFrac );
     Fraction&       operator/=( const Fraction& rfrFrac );
+    Fraction&       operator+=( double v ) { return operator+=(Fraction(v)); }
+    Fraction&       operator-=( double v ) { return operator-=(Fraction(v)); }
+    Fraction&       operator*=( double v ) { return operator*=(Fraction(v)); }
+    Fraction&       operator/=( double v ) { return operator/=(Fraction(v)); }
 
     void            ReduceInaccurate( unsigned nSignificantBits );
 
@@ -71,7 +85,7 @@ public:
     TOOLS_DLLPUBLIC friend bool operator<=( const Fraction& rVal1, const Fraction& rVal2 );
     TOOLS_DLLPUBLIC friend bool operator>=( const Fraction& rVal1, const Fraction& rVal2 );
 
-    TOOLS_DLLPUBLIC friend SvStream& ReadFraction( SvStream& rIStream, Fraction& rFract );
+    TOOLS_DLLPUBLIC friend SvStream& ReadFraction( SvStream& rIStream, Fraction const & rFract );
     TOOLS_DLLPUBLIC friend SvStream& WriteFraction( SvStream& rOStream, const Fraction& rFract );
 };
 
@@ -82,6 +96,24 @@ TOOLS_DLLPUBLIC Fraction operator/( const Fraction& rVal1, const Fraction& rVal2
 TOOLS_DLLPUBLIC bool operator !=( const Fraction& rVal1, const Fraction& rVal2 );
 TOOLS_DLLPUBLIC bool operator <=( const Fraction& rVal1, const Fraction& rVal2 );
 TOOLS_DLLPUBLIC bool operator >=( const Fraction& rVal1, const Fraction& rVal2 );
+
+inline Fraction operator+( double v1, const Fraction& rVal2 ) { return Fraction(v1) + rVal2; }
+inline Fraction operator-( double v1, const Fraction& rVal2 ) { return Fraction(v1) - rVal2; }
+inline Fraction operator*( double v1, const Fraction& rVal2 ) { return Fraction(v1) * rVal2; }
+inline Fraction operator/( double v1, const Fraction& rVal2 ) { return Fraction(v1) / rVal2; }
+
+inline Fraction operator+( const Fraction& rVal1, double v2 ) { return rVal1 + Fraction(v2); }
+inline Fraction operator-( const Fraction& rVal1, double v2 ) { return rVal1 - Fraction(v2); }
+inline Fraction operator*( const Fraction& rVal1, double v2 ) { return rVal1 * Fraction(v2); }
+inline Fraction operator/( const Fraction& rVal1, double v2 ) { return rVal1 / Fraction(v2); }
+
+template<typename charT, typename traits>
+inline std::basic_ostream<charT, traits> & operator <<(
+    std::basic_ostream<charT, traits> & rStream, const Fraction& rFraction)
+{
+    rStream << "(" << rFraction.GetNumerator() << "/" << rFraction.GetDenominator() << ")";
+    return rStream;
+}
 
 #endif
 

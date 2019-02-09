@@ -20,13 +20,14 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_GRAPHSH_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_GRAPHSH_HXX
 
+#include <memory>
+#include <vector>
 #include <sfx2/shell.hxx>
-#include "shellids.hxx"
-#include <sfx2/module.hxx>
-#include <svx/svdmark.hxx>
+#include <shellids.hxx>
 
 class SdrExternalToolEdit;
 class ScViewData;
+class SfxModule;
 
 #include "drawsh.hxx"
 
@@ -43,12 +44,12 @@ private:
 
 public:
     ScGraphicShell(ScViewData* pData);
-    virtual ~ScGraphicShell();
+    virtual ~ScGraphicShell() override;
 
     void    Execute(SfxRequest& rReq);
     void    GetAttrState(SfxItemSet &rSet);
 
-    void    ExecuteFilter(SfxRequest& rReq);
+    void    ExecuteFilter(const SfxRequest& rReq);
     void    GetFilterState(SfxItemSet &rSet);
 
     void    ExecuteExternalEdit(SfxRequest& rReq);

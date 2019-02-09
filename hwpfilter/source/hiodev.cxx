@@ -26,7 +26,6 @@
 # include <unistd.h>
 #endif
 
-#include <osl/diagnose.h>
 
 #include "hwplib.h"
 #include "hgzip.h"
@@ -34,7 +33,7 @@
 #include "hwpfile.h"
 #include "hstream.hxx"
 
-const int BUFSIZE = 1024;
+const size_t BUFSIZE = 1024;
 static uchar rBuf[BUFSIZE];
 
 // HIODev abstract class
@@ -54,32 +53,14 @@ void HIODev::init()
     compressed = false;
 }
 
-
-int HIODev::read1b(void *ptr, int nmemb)
-{
-    uchar *p = static_cast<uchar *>(ptr);
-    int ii;
-
-    if (state())
-        return -1;
-    for (ii = 0; ii < nmemb; ii++)
-    {
-        if (!read1b(p[ii]))
-            break;
-        if (state())
-            break;
-    }
-    return ii;
-}
-
-int HIODev::read2b(void *ptr, int nmemb)
+size_t HIODev::read2b(void *ptr, size_t nmemb)
 {
     ushort *p = static_cast<ushort *>(ptr);
-    int ii;
 
     if (state())
-        return -1;
-    for (ii = 0; ii < nmemb; ii++)
+        return 0;
+    size_t ii;
+    for (ii = 0; ii < nmemb; ++ii)
     {
         if (!read2b(p[ii]))
             break;
@@ -89,14 +70,14 @@ int HIODev::read2b(void *ptr, int nmemb)
     return ii;
 }
 
-int HIODev::read4b(void *ptr, int nmemb)
+size_t HIODev::read4b(void *ptr, size_t nmemb)
 {
     uint *p = static_cast<uint *>(ptr);
-    int ii;
 
     if (state())
-        return -1;
-    for (ii = 0; ii < nmemb; ii++)
+        return 0;
+    size_t ii;
+    for (ii = 0; ii < nmemb; ++ii)
     {
         if (!read4b(p[ii]))
             break;
@@ -108,7 +89,7 @@ int HIODev::read4b(void *ptr, int nmemb)
 
 
 // hfileiodev class
-HStreamIODev::HStreamIODev(HStream * stream):_stream(stream)
+HStreamIODev::HStreamIODev(std::unique_ptr<HStream> stream):_stream(std::move(stream))
 {
     init();
 }
@@ -116,7 +97,11 @@ HStreamIODev::HStreamIODev(HStream * stream):_stream(stream)
 
 HStreamIODev::~HStreamIODev()
 {
-    close();
+/* 플러시한 후 닫는다. */
+    flush();
+    if (_gzfp)
+        gz_close(_gzfp);
+    _gzfp = nullptr;
 }
 
 
@@ -129,9 +114,7 @@ void HStreamIODev::init()
 
 bool HStreamIODev::open()
 {
-    if (!(_stream->available()))
-        return false;
-    return true;
+    return _stream->available() != 0;
 }
 
 
@@ -141,22 +124,10 @@ void HStreamIODev::flush()
         gz_flush(_gzfp, Z_FINISH);
 }
 
-
-void HStreamIODev::close()
+bool HStreamIODev::state() const
 {
-/* 플러시한 후 닫는다. */
-    this->flush();
-    if (_gzfp)
-        gz_close(_gzfp);
-    _gzfp = nullptr;
+    return false;
 }
-
-
-int HStreamIODev::state() const
-{
-    return 0;
-}
-
 
 /* zlib 관련 부분 */
 bool HStreamIODev::setCompressed(bool flag)
@@ -180,12 +151,12 @@ bool HStreamIODev::setCompressed(bool flag)
 
 bool HStreamIODev::read1b(unsigned char &out)
 {
-    int res = (compressed) ? GZREAD(rBuf, 1) : _stream->readBytes(rBuf, 1);
+    size_t res = (compressed) ? GZREAD(rBuf, 1) : _stream->readBytes(rBuf, 1);
 
     if (res < 1)
         return false;
 
-    out = (unsigned char)rBuf[0];
+    out = static_cast<unsigned char>(rBuf[0]);
     return true;
 }
 
@@ -200,24 +171,24 @@ bool HStreamIODev::read1b(char &out)
 
 bool HStreamIODev::read2b(unsigned short &out)
 {
-    int res = (compressed) ? GZREAD(rBuf, 2) : _stream->readBytes(rBuf, 2);
+    size_t res = (compressed) ? GZREAD(rBuf, 2) : _stream->readBytes(rBuf, 2);
 
     if (res < 2)
         return false;
 
-    out = ((unsigned char) rBuf[1] << 8 | (unsigned char) rBuf[0]);
+    out = (static_cast<unsigned char>(rBuf[1]) << 8 | static_cast<unsigned char>(rBuf[0]));
     return true;
 }
 
 bool HStreamIODev::read4b(unsigned int &out)
 {
-    int res = (compressed) ? GZREAD(rBuf, 4) : _stream->readBytes(rBuf, 4);
+    size_t res = (compressed) ? GZREAD(rBuf, 4) : _stream->readBytes(rBuf, 4);
 
     if (res < 4)
         return false;
 
-    out = ((unsigned char) rBuf[3] << 24 | (unsigned char) rBuf[2] << 16 |
-        (unsigned char) rBuf[1] << 8 | (unsigned char) rBuf[0]);
+    out = (static_cast<unsigned char>(rBuf[3]) << 24 | static_cast<unsigned char>(rBuf[2]) << 16 |
+        static_cast<unsigned char>(rBuf[1]) << 8 | static_cast<unsigned char>(rBuf[0]));
     return true;
 }
 
@@ -230,9 +201,9 @@ bool HStreamIODev::read4b(int &out)
     return true;
 }
 
-int HStreamIODev::readBlock(void *ptr, int size)
+size_t HStreamIODev::readBlock(void *ptr, size_t size)
 {
-    int count =
+    size_t count =
         (compressed) ? GZREAD(ptr, size) : _stream->readBytes(static_cast<byte *>(ptr),
 
         size);
@@ -240,16 +211,20 @@ int HStreamIODev::readBlock(void *ptr, int size)
     return count;
 }
 
-int HStreamIODev::skipBlock(int size)
+size_t HStreamIODev::skipBlock(size_t size)
 {
     if (compressed){
           if( size <= BUFSIZE )
                 return GZREAD(rBuf, size);
           else{
-                int remain = size;
+                size_t remain = size;
                 while(remain){
-                     if( remain > BUFSIZE )
-                          remain -= GZREAD(rBuf, BUFSIZE);
+                     if( remain > BUFSIZE ) {
+                          size_t read = GZREAD(rBuf, BUFSIZE);
+                          remain -= read;
+                          if (read != BUFSIZE)
+                              break;
+                     }
                      else{
                           remain -= GZREAD(rBuf, remain);
                           break;
@@ -262,7 +237,7 @@ int HStreamIODev::skipBlock(int size)
 }
 
 
-HMemIODev::HMemIODev(char *s, int len)
+HMemIODev::HMemIODev(char *s, size_t len)
 {
     init();
     ptr = reinterpret_cast<uchar *>(s);
@@ -272,7 +247,6 @@ HMemIODev::HMemIODev(char *s, int len)
 
 HMemIODev::~HMemIODev()
 {
-    close();
 }
 
 
@@ -294,20 +268,10 @@ void HMemIODev::flush()
 {
 }
 
-
-void HMemIODev::close()
+bool HMemIODev::state() const
 {
+    return pos > length;
 }
-
-
-int HMemIODev::state() const
-{
-    if (pos <= length)
-        return 0;
-    else
-        return -1;
-}
-
 
 bool HMemIODev::setCompressed(bool )
 {
@@ -316,9 +280,10 @@ bool HMemIODev::setCompressed(bool )
 
 bool HMemIODev::read1b(unsigned char &out)
 {
-    if (pos <= length)
+    ++pos;
+    if (!state())
     {
-        out = ptr[pos++];
+        out = ptr[pos - 1];
         return true;
     }
     return false;
@@ -336,7 +301,7 @@ bool HMemIODev::read1b(char &out)
 bool HMemIODev::read2b(unsigned short &out)
 {
     pos += 2;
-    if (pos <= length)
+    if (!state())
     {
          out = ptr[pos - 1] << 8 | ptr[pos - 2];
          return true;
@@ -347,7 +312,7 @@ bool HMemIODev::read2b(unsigned short &out)
 bool HMemIODev::read4b(unsigned int &out)
 {
     pos += 4;
-    if (pos <= length)
+    if (!state())
     {
         out = static_cast<unsigned int>(ptr[pos - 1] << 24 | ptr[pos - 2] << 16 |
                     ptr[pos - 3] << 8 | ptr[pos - 4]);
@@ -365,8 +330,10 @@ bool HMemIODev::read4b(int &out)
     return true;
 }
 
-int HMemIODev::readBlock(void *p, int size)
+size_t HMemIODev::readBlock(void *p, size_t size)
 {
+    if (state())
+        return 0;
     if (length < pos + size)
         size = length - pos;
     memcpy(p, ptr + pos, size);
@@ -374,9 +341,9 @@ int HMemIODev::readBlock(void *p, int size)
     return size;
 }
 
-int HMemIODev::skipBlock(int size)
+size_t HMemIODev::skipBlock(size_t size)
 {
-    if (length < pos + size)
+    if (state() || length < pos + size)
         return 0;
     pos += size;
     return size;

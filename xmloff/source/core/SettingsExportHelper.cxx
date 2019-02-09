@@ -23,13 +23,15 @@
 #include <xmloff/SettingsExportHelper.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltoken.hxx>
+#include <sal/log.hxx>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
+#include <comphelper/base64.hxx>
 #include <comphelper/extract.hxx>
-#include <comphelper/processfactory.hxx>
 
 #include <com/sun/star/linguistic2/XSupportedLocales.hpp>
 #include <com/sun/star/i18n/XForbiddenCharacters.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/container/XIndexContainer.hpp>
@@ -40,20 +42,21 @@
 #include <com/sun/star/document/PrinterIndependentLayout.hpp>
 #include <com/sun/star/document/IndexedPropertyValues.hpp>
 #include <xmloff/XMLSettingsExportContext.hxx>
-#include <xmlenums.hxx>
+#include "xmlenums.hxx"
 
 using namespace ::com::sun::star;
 using namespace ::xmloff::token;
 
+static const OUStringLiteral gsPrinterIndependentLayout( "PrinterIndependentLayout" );
+static const OUStringLiteral gsColorTableURL( "ColorTableURL" );
+static const OUStringLiteral gsLineEndTableURL( "LineEndTableURL" );
+static const OUStringLiteral gsHatchTableURL( "HatchTableURL" );
+static const OUStringLiteral gsDashTableURL( "DashTableURL" );
+static const OUStringLiteral gsGradientTableURL( "GradientTableURL" );
+static const OUStringLiteral gsBitmapTableURL( "BitmapTableURL" );
+
 XMLSettingsExportHelper::XMLSettingsExportHelper( ::xmloff::XMLSettingsExportContext& i_rContext )
 : m_rContext( i_rContext )
-, msPrinterIndependentLayout( "PrinterIndependentLayout" )
-, msColorTableURL( "ColorTableURL" )
-, msLineEndTableURL( "LineEndTableURL" )
-, msHatchTableURL( "HatchTableURL" )
-, msDashTableURL( "DashTableURL" )
-, msGradientTableURL( "GradientTableURL" )
-, msBitmapTableURL( "BitmapTableURL" )
 {
 }
 
@@ -87,9 +90,7 @@ void XMLSettingsExportHelper::CallTypeFunction(const uno::Any& rAny,
         break;
         case uno::TypeClass_BYTE:
         {
-            sal_Int8 nInt8 = 0;
-            aAny >>= nInt8;
-            exportByte(nInt8, rName);
+            exportByte();
         }
         break;
         case uno::TypeClass_SHORT:
@@ -129,7 +130,7 @@ void XMLSettingsExportHelper::CallTypeFunction(const uno::Any& rAny,
         break;
         default:
         {
-            uno::Type aType = aAny.getValueType();
+            const uno::Type& aType = aAny.getValueType();
             if (aType.equals(cppu::UnoType<uno::Sequence<beans::PropertyValue>>::get() ) )
             {
                 uno::Sequence< beans::PropertyValue> aProps;
@@ -195,9 +196,8 @@ void XMLSettingsExportHelper::exportBool(const bool bValue, const OUString& rNam
     m_rContext.EndElement( false );
 }
 
-void XMLSettingsExportHelper::exportByte(const sal_Int8 nValue, const OUString& rName)
+void XMLSettingsExportHelper::exportByte()
 {
-    (void) nValue; (void) rName;
     OSL_ENSURE(false, "XMLSettingsExportHelper::exportByte(): #i114162#:\n"
         "config-items of type \"byte\" are not valid ODF, "
         "so storing them is disabled!\n"
@@ -209,9 +209,7 @@ void XMLSettingsExportHelper::exportShort(const sal_Int16 nValue, const OUString
     m_rContext.AddAttribute( XML_NAME, rName );
     m_rContext.AddAttribute( XML_TYPE, XML_SHORT );
     m_rContext.StartElement( XML_CONFIG_ITEM );
-    OUStringBuffer sBuffer;
-    ::sax::Converter::convertNumber(sBuffer, sal_Int32(nValue));
-    m_rContext.Characters( sBuffer.makeStringAndClear() );
+    m_rContext.Characters( OUString::number(nValue) );
     m_rContext.EndElement( false );
 }
 
@@ -221,9 +219,7 @@ void XMLSettingsExportHelper::exportInt(const sal_Int32 nValue, const OUString& 
     m_rContext.AddAttribute( XML_NAME, rName );
     m_rContext.AddAttribute( XML_TYPE, XML_INT );
     m_rContext.StartElement( XML_CONFIG_ITEM );
-    OUStringBuffer sBuffer;
-    ::sax::Converter::convertNumber(sBuffer, nValue);
-    m_rContext.Characters( sBuffer.makeStringAndClear() );
+    m_rContext.Characters( OUString::number(nValue) );
     m_rContext.EndElement( false );
 }
 
@@ -233,8 +229,7 @@ void XMLSettingsExportHelper::exportLong(const sal_Int64 nValue, const OUString&
     m_rContext.AddAttribute( XML_NAME, rName );
     m_rContext.AddAttribute( XML_TYPE, XML_LONG );
     m_rContext.StartElement( XML_CONFIG_ITEM );
-    OUString sValue(OUString::number(nValue));
-    m_rContext.Characters( sValue );
+    m_rContext.Characters( OUString::number(nValue) );
     m_rContext.EndElement( false );
 }
 
@@ -352,7 +347,7 @@ void XMLSettingsExportHelper::exportbase64Binary(
     if(nLength)
     {
         OUStringBuffer sBuffer;
-        ::sax::Converter::encodeBase64(sBuffer, aProps);
+        ::comphelper::Base64::encode(sBuffer, aProps);
         m_rContext.Characters( sBuffer.makeStringAndClear() );
     }
     m_rContext.EndElement( false );
@@ -425,7 +420,7 @@ void XMLSettingsExportHelper::exportForbiddenCharacters(
     rAny >>= xForbChars;
     rAny >>= xLocales;
 
-    DBG_ASSERT( xForbChars.is() && xLocales.is(),"XMLSettingsExportHelper::exportForbiddenCharacters: got illegal forbidden characters!" );
+    SAL_WARN_IF( !(xForbChars.is() && xLocales.is()), "xmloff","XMLSettingsExportHelper::exportForbiddenCharacters: got illegal forbidden characters!" );
 
     if( !xForbChars.is() || !xLocales.is() )
         return;
@@ -490,7 +485,7 @@ void XMLSettingsExportHelper::exportAllSettings(
  */
 void XMLSettingsExportHelper::ManipulateSetting( uno::Any& rAny, const OUString& rName ) const
 {
-    if( rName == msPrinterIndependentLayout )
+    if( rName == gsPrinterIndependentLayout )
     {
         sal_Int16 nTmp = sal_Int16();
         if( rAny >>= nTmp )
@@ -503,8 +498,8 @@ void XMLSettingsExportHelper::ManipulateSetting( uno::Any& rAny, const OUString&
                 rAny <<= OUString("high-resolution");
         }
     }
-    else if( (rName == msColorTableURL) || (rName == msLineEndTableURL) || (rName == msHatchTableURL) ||
-             (rName == msDashTableURL) || (rName == msGradientTableURL) || (rName == msBitmapTableURL ) )
+    else if( (rName == gsColorTableURL) || (rName == gsLineEndTableURL) || (rName == gsHatchTableURL) ||
+             (rName == gsDashTableURL) || (rName == gsGradientTableURL) || (rName == gsBitmapTableURL ) )
     {
         if( !mxStringSubsitution.is() )
         {
@@ -515,7 +510,7 @@ void XMLSettingsExportHelper::ManipulateSetting( uno::Any& rAny, const OUString&
             }
             catch( uno::Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("xmloff.core");
             }
         }
 

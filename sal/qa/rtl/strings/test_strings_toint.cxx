@@ -7,14 +7,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "cppunit/TestAssert.h"
-#include "cppunit/TestFixture.h"
-#include "cppunit/extensions/HelperMacros.h"
-#include "rtl/string.hxx"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
+#include <cppunit/TestAssert.h>
+#include <cppunit/TestFixture.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <rtl/string.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 namespace {
 
@@ -64,8 +64,8 @@ private:
     }
 };
 
-CPPUNIT_TEST_SUITE_REGISTRATION(Test< rtl::OString >);
-CPPUNIT_TEST_SUITE_REGISTRATION(Test< rtl::OUString >);
+CPPUNIT_TEST_SUITE_REGISTRATION(Test< OString >);
+CPPUNIT_TEST_SUITE_REGISTRATION(Test< OUString >);
 
 }
 

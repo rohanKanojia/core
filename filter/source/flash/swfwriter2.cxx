@@ -20,16 +20,16 @@
 #include "swfwriter.hxx"
 #include <vcl/virdev.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
+#include <tools/debug.hxx>
 
 #include <math.h>
 
 using namespace ::swf;
-using namespace ::std;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::io;
 
 
-sal_uInt16 getMaxBitsUnsigned( sal_uInt32 nValue )
+static sal_uInt16 getMaxBitsUnsigned( sal_uInt32 nValue )
 {
     sal_uInt16 nBits = 0;
 
@@ -109,11 +109,9 @@ void BitStream::writeTo( SvStream& out )
 {
     pad();
 
-    vector< sal_uInt8 >::iterator aIter( maData.begin() );
-    const vector< sal_uInt8>::iterator aEnd( maData.end() );
-    while(aIter != aEnd)
+    for (auto const& data : maData)
     {
-        out.WriteUChar( *aIter++ );
+        out.WriteUChar(data);
     }
 }
 
@@ -132,15 +130,14 @@ Tag::Tag( sal_uInt8 nTagId )
 
 void Tag::write( SvStream &out )
 {
-    Seek( STREAM_SEEK_TO_END );
-    sal_uInt32 nSz = Tell();
+    sal_uInt32 nSz = TellEnd();
     Seek( STREAM_SEEK_TO_BEGIN );
 
     if( mnTagId != 0xff )
     {
         bool bLarge = nSz > 62;
 
-        sal_uInt16 nCode = ( mnTagId << 6 ) | ( bLarge ? 0x3f : _uInt16(nSz) );
+        sal_uInt16 nCode = ( mnTagId << 6 ) | ( bLarge ? 0x3f : uInt16_(nSz) );
 
         out.WriteUChar( nCode );
         out.WriteUChar( nCode >> 8 );
@@ -159,7 +156,7 @@ void Tag::write( SvStream &out )
         }
     }
 
-    out.Write( GetData(), nSz );
+    out.WriteBytes( GetData(), nSz );
 }
 #if 0
 
@@ -221,13 +218,13 @@ void Tag::addRGB( const Color& rColor )
 }
 
 
-void Tag::addRect( const Rectangle& rRect )
+void Tag::addRect( const tools::Rectangle& rRect )
 {
     writeRect( *this, rRect );
 }
 
 
-void Tag::writeRect( SvStream& rOut, const Rectangle& rRect )
+void Tag::writeRect( SvStream& rOut, const tools::Rectangle& rRect )
 {
     BitStream aBits;
 
@@ -256,15 +253,15 @@ void Tag::writeRect( SvStream& rOut, const Rectangle& rRect )
         minY = rRect.Bottom();
     }
 
-    // AS: Figure out the maximum nubmer of bits required to represent any of the
+    // AS: Figure out the maximum number of bits required to represent any of the
     //  rectangle coordinates.  Since minX or minY could be negative, they could
     //  actually require more bits than maxX or maxY.
     // AS: Christian, can they be negative, or is that a wasted check?
     // CL: I think so, f.e. for shapes that have the top and/or left edge outside
     //         the page origin
-    sal_uInt8 nBits1 = sal::static_int_cast<sal_uInt8>( max( getMaxBitsSigned( minX ), getMaxBitsSigned( minY ) ) );
-    sal_uInt8 nBits2 = sal::static_int_cast<sal_uInt8>( max( getMaxBitsSigned( maxX ), getMaxBitsSigned( maxY ) ) );
-    sal_uInt8 nBitsMax = max( nBits1, nBits2 );
+    sal_uInt8 nBits1 = sal::static_int_cast<sal_uInt8>( std::max( getMaxBitsSigned( minX ), getMaxBitsSigned( minY ) ) );
+    sal_uInt8 nBits2 = sal::static_int_cast<sal_uInt8>( std::max( getMaxBitsSigned( maxX ), getMaxBitsSigned( maxY ) ) );
+    sal_uInt8 nBitsMax = std::max( nBits1, nBits2 );
 
     aBits.writeUB( nBitsMax, 5 );
     aBits.writeSB( minX, nBitsMax );
@@ -316,22 +313,10 @@ void Tag::writeMatrix( SvStream& rOut, const ::basegfx::B2DHomMatrix& rMatrix ) 
     sal_uInt8 nTranslateBits = 16;
 
     aBits.writeUB( nTranslateBits, 5 );
-    aBits.writeSB( (sal_Int16)rMatrix.get(0, 2), nTranslateBits );      // Translate X
-    aBits.writeSB( (sal_Int16)rMatrix.get(1, 2), nTranslateBits );      // Translate Y
+    aBits.writeSB( static_cast<sal_Int16>(rMatrix.get(0, 2)), nTranslateBits );      // Translate X
+    aBits.writeSB( static_cast<sal_Int16>(rMatrix.get(1, 2)), nTranslateBits );      // Translate Y
 
     aBits.writeTo( rOut );
-}
-
-
-void Tag::addString( const char* pString )
-{
-    if( pString )
-    {
-        while( *pString )
-            addUI8( *pString++ );
-    }
-
-    addUI8( 0 );
 }
 
 
@@ -349,16 +334,14 @@ Sprite::Sprite( sal_uInt16 nId )
 
 Sprite::~Sprite()
 {
-    for(vector< Tag* >::iterator i = maTags.begin(); i != maTags.end(); ++i)
-        delete *i;
 }
 
 
 void Sprite::write( SvStream& out )
 {
     SvMemoryStream aTmp;
-    for(vector< Tag* >::iterator i = maTags.begin(); i != maTags.end(); ++i)
-        (*i)->write( aTmp );
+    for (auto const& tag : maTags)
+        tag->write( aTmp );
 
     if( !mnFrames )
         mnFrames = 1;
@@ -367,30 +350,27 @@ void Sprite::write( SvStream& out )
 
     Tag aTag( TAG_DEFINESPRITE );
     aTag.addUI16( mnId );
-    aTag.addUI16( _uInt16( mnFrames ) );
+    aTag.addUI16( uInt16_( mnFrames ) );
     aTag.addStream( aTmp );
     aTag.write( out );
 }
 
 
-void Sprite::addTag( Tag* pNewTag )
+void Sprite::addTag( std::unique_ptr<Tag> pNewTag )
 {
-    if( pNewTag )
-    {
-        if( pNewTag->getTagId() == TAG_SHOWFRAME )
-            mnFrames++;
+    if( pNewTag->getTagId() == TAG_SHOWFRAME )
+        mnFrames++;
 
-        maTags.push_back( pNewTag );
-    }
+    maTags.push_back( std::move(pNewTag) );
 }
 
 
 sal_uInt32 swf::getFixed( double fValue )
 {
-    sal_Int16 nUpper = (sal_Int16)floor(fValue);
-    sal_uInt16 nLower = (sal_uInt16)((fValue - floor(fValue))*0x10000);
+    sal_Int16 nUpper = static_cast<sal_Int16>(floor(fValue));
+    sal_uInt16 nLower = static_cast<sal_uInt16>((fValue - floor(fValue))*0x10000);
 
-    sal_uInt32 temp = ((sal_Int32)nUpper)<<16;
+    sal_uInt32 temp = static_cast<sal_Int32>(nUpper)<<16;
     temp |= nLower;
 
     return temp;
@@ -413,7 +393,7 @@ FlashFont::~FlashFont()
 sal_uInt16 FlashFont::getGlyph( sal_uInt16 nChar, VirtualDevice* pVDev )
 {
     // see if we already created a glyph for this character
-    std::map<sal_uInt16, sal_uInt16, ltuint16>::iterator aIter( maGlyphIndex.find(nChar) );
+    std::map<sal_uInt16, sal_uInt16>::iterator aIter( maGlyphIndex.find(nChar) );
     if( aIter != maGlyphIndex.end() )
     {
         return aIter->second;
@@ -433,7 +413,7 @@ sal_uInt16 FlashFont::getGlyph( sal_uInt16 nChar, VirtualDevice* pVDev )
     tools::PolyPolygon aPolyPoly;
     pVDev->GetTextOutline( aPolyPoly, OUString(sal_Unicode(nChar)) );
 
-    maGlyphOffsets.push_back( _uInt16( maGlyphData.getOffset() ) );
+    maGlyphOffsets.push_back( uInt16_( maGlyphData.getOffset() ) );
 
     // Number of fill and line index bits set to 1
     maGlyphData.writeUB( 0x11, 8 );
@@ -451,8 +431,8 @@ sal_uInt16 FlashFont::getGlyph( sal_uInt16 nChar, VirtualDevice* pVDev )
             for( n = 0; n < nSize; n++ )
             {
                 Point aPoint( rPoly[n] );
-                aPoint.X() = static_cast<long>((double(aPoint.X()) * 1024.0 ) / double(aOldFont.GetFontHeight()));
-                aPoint.Y() = static_cast<long>((double(aPoint.Y()) * 1024.0 ) / double(aOldFont.GetFontHeight()));
+                aPoint.setX( static_cast<long>((double(aPoint.X()) * 1024.0 ) / double(aOldFont.GetFontHeight())) );
+                aPoint.setY( static_cast<long>((double(aPoint.Y()) * 1024.0 ) / double(aOldFont.GetFontHeight())) );
                 rPoly[n] = aPoint;
             }
             Writer::Impl_addPolygon( maGlyphData, rPoly, true );
@@ -474,11 +454,11 @@ void FlashFont::write( SvStream& out )
 
     aTag.addUI16( mnId );
 
-    sal_uInt16 nGlyphs = _uInt16( maGlyphOffsets.size() );
+    sal_uInt16 nGlyphs = uInt16_( maGlyphOffsets.size() );
     sal_uInt16 nOffset = nGlyphs * sizeof( sal_uInt16 );
 
-    for(vector< sal_uInt16 >::iterator i = maGlyphOffsets.begin(); i != maGlyphOffsets.end(); ++i)
-        aTag.addUI16( nOffset + (*i) );
+    for (auto const& glyphOffset : maGlyphOffsets)
+        aTag.addUI16( nOffset + glyphOffset );
 
     aTag.addBits( maGlyphData );
 
@@ -504,17 +484,17 @@ FillStyle::FillStyle( sal_uInt16 nBitmapId, bool bClipped, const ::basegfx::B2DH
 }
 
 
-FillStyle::FillStyleType Impl_getFillStyleType( const Gradient& rGradient )
+static FillStyle::FillStyleType Impl_getFillStyleType( const Gradient& rGradient )
 {
     switch( rGradient.GetStyle() )
     {
-    case GradientStyle_ELLIPTICAL:
-    case GradientStyle_RADIAL:
+    case GradientStyle::Elliptical:
+    case GradientStyle::Radial:
         return FillStyle::radial_gradient;
-//  case GradientStyle_AXIAL:
-//  case GradientStyle_SQUARE:
-//  case GradientStyle_RECT:
-//  case GradientStyle_LINEAR:
+//  case GradientStyle::Axial:
+//  case GradientStyle::Square:
+//  case GradientStyle::Rect:
+//  case GradientStyle::Linear:
     default:
         return FillStyle::linear_gradient;
     }
@@ -522,7 +502,7 @@ FillStyle::FillStyleType Impl_getFillStyleType( const Gradient& rGradient )
 
 
 /** this c'tor creates a linear or radial gradient fill style */
-FillStyle::FillStyle( const Rectangle& rBoundRect, const Gradient& rGradient )
+FillStyle::FillStyle( const tools::Rectangle& rBoundRect, const Gradient& rGradient )
     : meType(Impl_getFillStyleType(rGradient))
     , mnBitmapId(0)
     , maGradient(rGradient)
@@ -563,21 +543,21 @@ struct GradRecord
 // TODO: better emulation of our gradients
 void FillStyle::Impl_addGradient( Tag* pTag ) const
 {
-    vector< struct GradRecord > aGradientRecords;
-    basegfx::B2DHomMatrix m(basegfx::tools::createRotateB2DHomMatrix((maGradient.GetAngle() - 900) * F_PI1800));
+    std::vector< struct GradRecord > aGradientRecords;
+    basegfx::B2DHomMatrix m(basegfx::utils::createRotateB2DHomMatrix((maGradient.GetAngle() - 900) * F_PI1800));
 
     switch( maGradient.GetStyle() )
     {
-    case GradientStyle_ELLIPTICAL:
-    case GradientStyle_RADIAL:
+    case GradientStyle::Elliptical:
+    case GradientStyle::Radial:
         {
-            aGradientRecords.push_back( GradRecord( 0x00, maGradient.GetEndColor() ) );
-            aGradientRecords.push_back( GradRecord( 0xff, maGradient.GetStartColor() ) );
+            aGradientRecords.emplace_back( 0x00, maGradient.GetEndColor() );
+            aGradientRecords.emplace_back( 0xff, maGradient.GetStartColor() );
 
             double tx = ( maGradient.GetOfsX() * 32768.0 ) / 100.0;
             double ty = ( maGradient.GetOfsY() * 32768.0 ) / 100.0;
-            double scalex = (double)maBoundRect.GetWidth() / 32768.0;
-            double scaley = (double)maBoundRect.GetHeight() / 32768.0;
+            double scalex = static_cast<double>(maBoundRect.GetWidth()) / 32768.0;
+            double scaley = static_cast<double>(maBoundRect.GetHeight()) / 32768.0;
 
             m.scale( 1.2, 1.2 );
 
@@ -602,35 +582,32 @@ void FillStyle::Impl_addGradient( Tag* pTag ) const
 
         }
         break;
-    case GradientStyle_AXIAL:
+    case GradientStyle::Axial:
         {
-            aGradientRecords.push_back( GradRecord( 0x00, maGradient.GetEndColor() ) );
-            aGradientRecords.push_back( GradRecord( 0x80, maGradient.GetStartColor() ) );
-            aGradientRecords.push_back( GradRecord( 0xff, maGradient.GetEndColor() ) );
-            double tx = ( 32768.0 / 2.0 );
-            double ty = ( 32768.0 / 2.0 );
-            double scalex = (double)maBoundRect.GetWidth() / 32768.0;
-            double scaley = (double)maBoundRect.GetHeight() / 32768.0;
-
-            m.translate( tx, ty );
+            aGradientRecords.emplace_back( 0x00, maGradient.GetEndColor() );
+            aGradientRecords.emplace_back( 0x80, maGradient.GetStartColor() );
+            aGradientRecords.emplace_back( 0xff, maGradient.GetEndColor() );
+            double scalex = static_cast<double>(maBoundRect.GetWidth()) / 32768.0;
+            double scaley = static_cast<double>(maBoundRect.GetHeight()) / 32768.0;
+            m.translate( 32768.0 / 2.0, 32768.0 / 2.0 );
             m.scale( scalex, scaley );
         }
         break;
-    case GradientStyle_SQUARE:
-    case GradientStyle_RECT:
-    case GradientStyle_LINEAR:
+    case GradientStyle::Square:
+    case GradientStyle::Rect:
+    case GradientStyle::Linear:
         {
-            aGradientRecords.push_back( GradRecord( 0x00, maGradient.GetStartColor() ) );
-            aGradientRecords.push_back( GradRecord( 0xff, maGradient.GetEndColor() ) );
-            double scalex = (double)maBoundRect.GetWidth() / 32768.0;
-            double scaley = (double)maBoundRect.GetHeight() / 32768.0;
+            aGradientRecords.emplace_back( 0x00, maGradient.GetStartColor() );
+            aGradientRecords.emplace_back( 0xff, maGradient.GetEndColor() );
+            double scalex = static_cast<double>(maBoundRect.GetWidth()) / 32768.0;
+            double scaley = static_cast<double>(maBoundRect.GetHeight()) / 32768.0;
 
             m.scale( scalex, scaley );
 
             m.translate( maBoundRect.GetWidth() / 2.0, maBoundRect.GetHeight() / 2.0 );
         }
         break;
-    case  GradientStyle_FORCE_EQUAL_SIZE: break;
+    case  GradientStyle::FORCE_EQUAL_SIZE: break;
     }
 
     m.translate( maBoundRect.Left(), maBoundRect.Top() );
@@ -641,10 +618,10 @@ void FillStyle::Impl_addGradient( Tag* pTag ) const
 
     pTag->addUI8( static_cast<sal_uInt8>( aGradientRecords.size() ) );
 
-    for(std::vector< GradRecord >::iterator i = aGradientRecords.begin(); i != aGradientRecords.end(); ++i)
+    for (auto const& gradientRecord : aGradientRecords)
     {
-        pTag->addUI8( (*i).mnRatio );
-        pTag->addRGBA( (*i).maColor );
+        pTag->addUI8( gradientRecord.mnRatio );
+        pTag->addRGBA( gradientRecord.maColor );
     }
 }
 

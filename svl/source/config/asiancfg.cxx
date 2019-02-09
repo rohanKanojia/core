@@ -33,7 +33,7 @@
 #include <com/sun/star/uno/Sequence.hxx>
 #include <comphelper/configuration.hxx>
 #include <comphelper/processfactory.hxx>
-#include "officecfg/Office/Common.hxx"
+#include <officecfg/Office/Common.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/ustring.h>
 #include <rtl/ustring.hxx>
@@ -87,15 +87,14 @@ void SvxAsianConfig::SetKerningWesternTextOnly(bool value) {
         value, impl_->batch);
 }
 
-sal_Int16 SvxAsianConfig::GetCharDistanceCompression() const {
-    return
-        officecfg::Office::Common::AsianLayout::CompressCharacterDistance::get(
-            impl_->context);
+CharCompressType SvxAsianConfig::GetCharDistanceCompression() const {
+    return static_cast<CharCompressType>(officecfg::Office::Common::AsianLayout::CompressCharacterDistance::get(
+            impl_->context));
 }
 
-void SvxAsianConfig::SetCharDistanceCompression(sal_Int16 value) {
+void SvxAsianConfig::SetCharDistanceCompression(CharCompressType value) {
     officecfg::Office::Common::AsianLayout::CompressCharacterDistance::set(
-        value, impl_->batch);
+        static_cast<sal_uInt16>(value), impl_->batch);
 }
 
 css::uno::Sequence< css::lang::Locale > SvxAsianConfig::GetStartEndCharLocales()

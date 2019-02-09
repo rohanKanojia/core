@@ -7,11 +7,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-
 #include "ooxmlexport.hxx"
+#include <node.hxx>
 
 #include <oox/token/tokens.hxx>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 
 using namespace oox;
 using namespace oox::core;
@@ -24,16 +25,15 @@ SmOoxmlExport::SmOoxmlExport(const SmNode *const pIn, OoxmlVersion const v,
 {
 }
 
-bool SmOoxmlExport::ConvertFromStarMath( const ::sax_fastparser::FSHelperPtr& serializer )
+void SmOoxmlExport::ConvertFromStarMath( const ::sax_fastparser::FSHelperPtr& serializer )
 {
     if( m_pTree == nullptr )
-        return false;
+        return;
     m_pSerializer = serializer;
     m_pSerializer->startElementNS( XML_m, XML_oMath,
         FSNS( XML_xmlns, XML_m ), "http://schemas.openxmlformats.org/officeDocument/2006/math", FSEND );
     HandleNode( m_pTree, 0 );
     m_pSerializer->endElementNS( XML_m, XML_oMath );
-    return true;
 }
 
 // NOTE: This is still work in progress and unfinished, but it already covers a good
@@ -74,7 +74,7 @@ void SmOoxmlExport::HandleText( const SmNode* pNode, int /*nLevel*/)
     }
     m_pSerializer->startElementNS( XML_m, XML_t, FSNS( XML_xml, XML_space ), "preserve", FSEND );
     const SmTextNode* pTemp = static_cast<const SmTextNode* >(pNode);
-    SAL_INFO( "starmath.ooxml", "Text:" << OUStringToOString( pTemp->GetText(), RTL_TEXTENCODING_UTF8 ).getStr());
+    SAL_INFO( "starmath.ooxml", "Text:" << pTemp->GetText());
     OUStringBuffer buf(pTemp->GetText());
     for(sal_Int32 i=0;i<pTemp->GetText().getLength();i++)
     {
@@ -140,7 +140,7 @@ void SmOoxmlExport::HandleFractions( const SmNode* pNode, int nLevel, const char
         m_pSerializer->singleElementNS( XML_m, XML_type, FSNS( XML_m, XML_val ), type, FSEND );
         m_pSerializer->endElementNS( XML_m, XML_fPr );
     }
-    OSL_ASSERT( pNode->GetNumSubNodes() == 3 );
+    assert( pNode->GetNumSubNodes() == 3 );
     m_pSerializer->startElementNS( XML_m, XML_num, FSEND );
     HandleNode( pNode->GetSubNode( 0 ), nLevel + 1 );
     m_pSerializer->endElementNS( XML_m, XML_num );
@@ -238,7 +238,7 @@ void SmOoxmlExport::HandleRoot( const SmRootNode* pNode, int nLevel )
 
 static OString mathSymbolToString( const SmNode* node )
 {
-    assert( node->GetType() == NMATH || node->GetType() == NMATHIDENT );
+    assert( node->GetType() == SmNodeType::Math || node->GetType() == SmNodeType::MathIdent );
     const SmTextNode* txtnode = static_cast< const SmTextNode* >( node );
     assert( txtnode->GetText().getLength() == 1 );
     sal_Unicode chr = SmTextNode::ConvertSymbolToUnicode( txtnode->GetText()[0] );
@@ -261,7 +261,7 @@ void SmOoxmlExport::HandleOperator( const SmOperNode* pNode, int nLevel )
         case TCOPROD:
         case TSUM:
         {
-            const SmSubSupNode* subsup = pNode->GetSubNode( 0 )->GetType() == NSUBSUP
+            const SmSubSupNode* subsup = pNode->GetSubNode( 0 )->GetType() == SmNodeType::SubSup
                 ? static_cast< const SmSubSupNode* >( pNode->GetSubNode( 0 )) : nullptr;
             const SmNode* operation = subsup != nullptr ? subsup->GetBody() : pNode->GetSubNode( 0 );
             m_pSerializer->startElementNS( XML_m, XML_nary, FSEND );
@@ -303,7 +303,7 @@ void SmOoxmlExport::HandleOperator( const SmOperNode* pNode, int nLevel )
             HandleNode( pNode->GetSymbol(), nLevel + 1 );
             m_pSerializer->endElementNS( XML_m, XML_e );
             m_pSerializer->startElementNS( XML_m, XML_lim, FSEND );
-            if( const SmSubSupNode* subsup = pNode->GetSubNode( 0 )->GetType() == NSUBSUP
+            if( const SmSubSupNode* subsup = pNode->GetSubNode( 0 )->GetType() == SmNodeType::SubSup
                 ? static_cast< const SmSubSupNode* >( pNode->GetSubNode( 0 )) : nullptr )
             {
                 if( subsup->GetSubSup( CSUB ) != nullptr )
@@ -437,10 +437,10 @@ void SmOoxmlExport::HandleSubSupScriptInternal( const SmSubSupNode* pNode, int n
 void SmOoxmlExport::HandleMatrix( const SmMatrixNode* pNode, int nLevel )
 {
     m_pSerializer->startElementNS( XML_m, XML_m, FSEND );
-    for( int row = 0; row < pNode->GetNumRows(); ++row )
+    for (size_t row = 0; row < pNode->GetNumRows(); ++row)
     {
         m_pSerializer->startElementNS( XML_m, XML_mr, FSEND );
-        for( int col = 0; col < pNode->GetNumCols(); ++col )
+        for (size_t col = 0; col < pNode->GetNumCols(); ++col)
         {
             m_pSerializer->startElementNS( XML_m, XML_e, FSEND );
             if( const SmNode* node = pNode->GetSubNode( row * pNode->GetNumCols() + col ))
@@ -458,7 +458,7 @@ void SmOoxmlExport::HandleBrace( const SmBraceNode* pNode, int nLevel )
     m_pSerializer->startElementNS( XML_m, XML_dPr, FSEND );
 
     //check if the node has an opening brace
-    if( TNONE == pNode->GetSubNode(0)->GetToken().eType )
+    if( TNONE == pNode->OpeningBrace()->GetToken().eType )
         m_pSerializer->singleElementNS( XML_m, XML_begChr,
             FSNS( XML_m, XML_val ), "", FSEND );
     else
@@ -466,14 +466,14 @@ void SmOoxmlExport::HandleBrace( const SmBraceNode* pNode, int nLevel )
             FSNS( XML_m, XML_val ), mathSymbolToString( pNode->OpeningBrace()).getStr(), FSEND );
 
     std::vector< const SmNode* > subnodes;
-    if( pNode->Body()->GetType() == NBRACEBODY )
+    if( pNode->Body()->GetType() == SmNodeType::Bracebody )
     {
         const SmBracebodyNode* body = static_cast< const SmBracebodyNode* >( pNode->Body());
         bool separatorWritten = false; // assume all separators are the same
-        for( int i = 0; i < body->GetNumSubNodes(); ++i )
+        for (size_t i = 0; i < body->GetNumSubNodes(); ++i)
         {
             const SmNode* subnode = body->GetSubNode( i );
-            if (subnode->GetType() == NMATH || subnode->GetType() == NMATHIDENT)
+            if (subnode->GetType() == SmNodeType::Math || subnode->GetType() == SmNodeType::MathIdent)
             { // do not write, but write what separator it is
                 const SmMathSymbolNode* math = static_cast< const SmMathSymbolNode* >( subnode );
                 if( !separatorWritten )
@@ -490,7 +490,7 @@ void SmOoxmlExport::HandleBrace( const SmBraceNode* pNode, int nLevel )
     else
         subnodes.push_back( pNode->Body());
 
-    if( TNONE == pNode->GetSubNode(2)->GetToken().eType )
+    if( TNONE == pNode->ClosingBrace()->GetToken().eType )
         m_pSerializer->singleElementNS( XML_m, XML_endChr,
             FSNS( XML_m, XML_val ), "", FSEND );
     else
@@ -498,10 +498,10 @@ void SmOoxmlExport::HandleBrace( const SmBraceNode* pNode, int nLevel )
             FSNS( XML_m, XML_val ), mathSymbolToString( pNode->ClosingBrace()).getStr(), FSEND );
 
     m_pSerializer->endElementNS( XML_m, XML_dPr );
-    for( size_t i = 0; i < subnodes.size(); ++i )
+    for(const SmNode* subnode : subnodes)
     {
         m_pSerializer->startElementNS( XML_m, XML_e, FSEND );
-        HandleNode( subnodes[ i ], nLevel + 1 );
+        HandleNode( subnode, nLevel + 1 );
         m_pSerializer->endElementNS( XML_m, XML_e );
     }
     m_pSerializer->endElementNS( XML_m, XML_d );

@@ -20,12 +20,10 @@
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLCELLI_HXX
 
 #include "XMLDetectiveContext.hxx"
-#include "XMLCellRangeSourceContext.hxx"
 #include "importcontext.hxx"
 #include <formula/grammar.hxx>
 #include <svl/itemset.hxx>
 #include <editeng/editdata.hxx>
-#include <editeng/flditem.hxx>
 
 #include <boost/optional.hpp>
 #include <memory>
@@ -34,7 +32,9 @@
 class ScXMLImport;
 class ScFormulaCell;
 class ScEditEngineDefaulter;
+class SvxFieldData;
 struct ScXMLAnnotationData;
+struct ScMyImpCellRangeSource;
 
 class ScXMLTableRowCellContext : public ScXMLImportContext
 {
@@ -48,13 +48,13 @@ class ScXMLTableRowCellContext : public ScXMLImportContext
 
     struct Field
     {
-        SvxFieldData* mpData;
+        std::unique_ptr<SvxFieldData> mpData;
         ESelection maSelection;
 
         Field(const Field&) = delete;
         const Field& operator=(const Field&) = delete;
 
-        explicit Field(SvxFieldData* pData);
+        explicit Field(std::unique_ptr<SvxFieldData> pData);
         ~Field();
     };
 
@@ -75,8 +75,8 @@ class ScXMLTableRowCellContext : public ScXMLImportContext
     FieldsType maFields;
 
     std::unique_ptr< ScXMLAnnotationData > mxAnnotationData;
-    ScMyImpDetectiveObjVec* pDetectiveObjVec;
-    ScMyImpCellRangeSource* pCellRangeSource;
+    std::unique_ptr< ScMyImpDetectiveObjVec > pDetectiveObjVec;
+    std::unique_ptr< ScMyImpCellRangeSource > pCellRangeSource;
     double      fValue;
     SCROW       nMergedRows, nMatrixRows, nRepeatedRows;
     SCCOL       nMergedCols, nMatrixCols, nColsRepeated;
@@ -85,7 +85,7 @@ class ScXMLTableRowCellContext : public ScXMLImportContext
     sal_Int16   nCellType;
     bool        bIsMerged;
     bool        bIsMatrix;
-    bool        bIsCovered;
+    bool const  bIsCovered;
     bool        bIsEmpty;
     bool        mbNewValueType;
     bool        mbErrorValue;
@@ -96,6 +96,7 @@ class ScXMLTableRowCellContext : public ScXMLImportContext
     bool mbEditEngineHasText;
     bool mbHasFormatRuns;
     bool mbHasStyle;
+    bool mbPossibleEmptyDisplay;
 
     void DoMerge(const ScAddress& rScCellPos, const SCCOL nCols, const SCROW nRows);
 
@@ -103,9 +104,7 @@ class ScXMLTableRowCellContext : public ScXMLImportContext
     void SetContentValidation( const ScAddress& rScCellPos );
 
     void LockSolarMutex();
-    void UnlockSolarMutex();
 
-    bool HasSpecialContent() const;
     bool CellsAreRepeated() const;
 
     void SetFormulaCell             ( ScFormulaCell* pFCell ) const;
@@ -122,7 +121,7 @@ class ScXMLTableRowCellContext : public ScXMLImportContext
 
     bool IsPossibleErrorString() const;
 
-    void PushParagraphField(SvxFieldData* pData, const OUString& rStyleName);
+    void PushParagraphField(std::unique_ptr<SvxFieldData> pData, const OUString& rStyleName);
 
     void PushFormat(sal_Int32 nBegin, sal_Int32 nEnd, const OUString& rStyleName);
 
@@ -130,29 +129,31 @@ class ScXMLTableRowCellContext : public ScXMLImportContext
 
 public:
 
-    ScXMLTableRowCellContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                       const OUString& rLName,
-                       const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLTableRowCellContext( ScXMLImport& rImport,
+                       const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                        const bool bIsCovered, const sal_Int32 nRepeatedRows );
 
-    virtual ~ScXMLTableRowCellContext();
+    virtual ~ScXMLTableRowCellContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                                      const OUString& rLocalName,
                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
     void PushParagraphSpan(const OUString& rSpan, const OUString& rStyleName);
     void PushParagraphFieldDate(const OUString& rStyleName);
     void PushParagraphFieldSheetName(const OUString& rStyleName);
     void PushParagraphFieldDocTitle(const OUString& rStyleName);
-    void PushParagraphFieldURL(const OUString& rURL, const OUString& rRep, const OUString& rStyleName);
+    void PushParagraphFieldURL(const OUString& rURL, const OUString& rRep, const OUString& rStyleName, const OUString& rTargetFrame);
     void PushParagraphEnd();
 
     void SetAnnotation( const ScAddress& rPosition );
     void SetDetectiveObj( const ScAddress& rPosition );
     void SetCellRangeSource( const ScAddress& rPosition );
 
-    virtual void EndElement() override;
+    virtual void SAL_CALL endFastElement(sal_Int32 nElement) override;
 };
 
 #endif

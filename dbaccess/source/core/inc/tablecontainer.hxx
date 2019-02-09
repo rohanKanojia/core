@@ -20,6 +20,11 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_CORE_INC_TABLECONTAINER_HXX
 #define INCLUDED_DBACCESS_SOURCE_CORE_INC_TABLECONTAINER_HXX
 
+#include <sal/config.h>
+
+#include <atomic>
+#include <cstddef>
+
 #include <cppuhelper/implbase1.hxx>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
@@ -33,21 +38,18 @@
 #include "FilteredContainer.hxx"
 #include <connectivity/warningscontainer.hxx>
 #include "RefreshListener.hxx"
-#include "apitools.hxx"
+#include <apitools.hxx>
 
 namespace dbaccess
 {
-    typedef ::cppu::ImplHelper1< css::container::XContainerListener> OTableContainer_Base;
-
     // OTableContainer
     class OContainerMediator;
 
     class OTableContainer :  public OFilteredContainer,
-                             public OTableContainer_Base
+                             public ::cppu::ImplHelper1< css::container::XContainerListener>
     {
         css::uno::Reference< css::container::XNameContainer > m_xTableDefinitions;
         ::rtl::Reference< OContainerMediator >                m_pTableMediator;
-        bool                m_bInDrop;                  // set when we are in the drop method
 
         // OFilteredContainer
         virtual void addMasterContainerListener() override;
@@ -60,21 +62,22 @@ namespace dbaccess
         virtual connectivity::sdbcx::ObjectType appendObject( const OUString& _rForName, const css::uno::Reference< css::beans::XPropertySet >& descriptor ) override;
         virtual void dropObject(sal_Int32 _nPos, const OUString& _sElementName) override;
 
-        virtual void SAL_CALL disposing() override;
+        virtual void disposing() override;
 
-        virtual void SAL_CALL acquire() throw() override { OFilteredContainer::acquire();}
-        virtual void SAL_CALL release() throw() override { OFilteredContainer::release();}
     // css::lang::XServiceInfo
         DECLARE_SERVICE_INFO();
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
         // XContainerListener
-        virtual void SAL_CALL elementInserted( const css::container::ContainerEvent& Event ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL elementRemoved( const css::container::ContainerEvent& Event ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL elementReplaced( const css::container::ContainerEvent& Event ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL elementInserted( const css::container::ContainerEvent& Event ) override;
+        virtual void SAL_CALL elementRemoved( const css::container::ContainerEvent& Event ) override;
+        virtual void SAL_CALL elementReplaced( const css::container::ContainerEvent& Event ) override;
 
     public:
+        virtual void SAL_CALL acquire() throw() override { OFilteredContainer::acquire();}
+        virtual void SAL_CALL release() throw() override { OFilteredContainer::release();}
+
         /** ctor of the container. The parent has to support the <type scope="css::sdbc">XConnection</type>
             interface.<BR>
             @param          _rParent            the object which acts as parent for the container.
@@ -90,11 +93,10 @@ namespace dbaccess
             bool _bCase,
             const css::uno::Reference< css::container::XNameContainer >&  _xTableDefinitions,
             IRefreshListener*   _pRefreshListener,
-            ::dbtools::WarningsContainer* _pWarningsContainer,
-            oslInterlockedCount& _nInAppend
+            std::atomic<std::size_t>& _nInAppend
             );
 
-        virtual ~OTableContainer();
+        virtual ~OTableContainer() override;
     };
 }
 #endif // INCLUDED_DBACCESS_SOURCE_CORE_INC_TABLECONTAINER_HXX

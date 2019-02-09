@@ -21,11 +21,11 @@
 #define INCLUDED_SVTOOLS_JAVAINTERACTIONHANDLER_HXX
 
 #include <svtools/svtdllapi.h>
-#include <osl/mutex.hxx>
 #include <sal/types.h>
 
-#include <com/sun/star/task/XInteractionRequest.hpp>
-#include <svtools/javacontext.hxx>
+#include <com/sun/star/task/XInteractionHandler.hpp>
+
+namespace com :: sun :: star :: task { class XInteractionRequest; }
 
 #define JAVA_INTERACTION_HANDLER_NAME "java-vm.interaction-handler"
 
@@ -39,33 +39,24 @@ class SVT_DLLPUBLIC JavaInteractionHandler:
         public css::task::XInteractionHandler
 {
 public:
-    JavaInteractionHandler(bool bReportErrorOnce = true);
+    JavaInteractionHandler();
 
     // XInterface
     virtual css::uno::Any SAL_CALL queryInterface(
-        const css::uno::Type& aType )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::uno::Type& aType ) override;
 
     virtual void SAL_CALL acquire() throw() override;
 
     virtual void SAL_CALL release() throw() override;
 
     // XCurrentContext
-    virtual void SAL_CALL handle( const css::uno::Reference< css::task::XInteractionRequest >& Request )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL handle( const css::uno::Reference< css::task::XInteractionRequest >& Request ) override;
 
 private:
     oslInterlockedCount m_aRefCount;
     JavaInteractionHandler(JavaInteractionHandler const&) = delete;
     JavaInteractionHandler& operator = (JavaInteractionHandler const &) = delete;
     SVT_DLLPRIVATE virtual ~JavaInteractionHandler();
-    bool m_bShowErrorsOnce;
-    bool m_bJavaDisabled_Handled;
-    bool m_bInvalidSettings_Handled;
-    bool m_bJavaNotFound_Handled;
-    bool m_bVMCreationFailure_Handled;
-    bool m_bRestartRequired_Handled;
-    sal_uInt16 m_nResult_JavaDisabled;
 };
 }
 

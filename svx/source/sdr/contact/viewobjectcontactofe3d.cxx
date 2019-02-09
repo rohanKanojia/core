@@ -24,7 +24,6 @@
 #include <sdr/contact/viewobjectcontactofe3dscene.hxx>
 #include <drawinglayer/primitive2d/embedded3dprimitive2d.hxx>
 #include <svx/sdr/contact/viewcontactofe3dscene.hxx>
-#include <comphelper/sequence.hxx>
 
 namespace sdr
 {
@@ -72,7 +71,7 @@ namespace sdr
             return rViewContact.impCreateWithGivenPrimitive3DContainer(getPrimitive3DContainer(rDisplayInfo));
         }
 
-        drawinglayer::primitive3d::Primitive3DContainer ViewObjectContactOfE3d::getPrimitive3DContainer(const DisplayInfo& rDisplayInfo) const
+        drawinglayer::primitive3d::Primitive3DContainer const & ViewObjectContactOfE3d::getPrimitive3DContainer(const DisplayInfo& rDisplayInfo) const
         {
             drawinglayer::primitive3d::Primitive3DContainer xNewPrimitive3DSeq(createPrimitive3DContainer(rDisplayInfo));
 

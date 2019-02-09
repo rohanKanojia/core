@@ -30,23 +30,26 @@
 namespace com { namespace sun { namespace star {
     namespace io { class XSeekable; class XOutputStream; }
 } } }
-class ByteChucker
+class ByteChucker final
 {
-protected:
     css::uno::Reference < css::io::XOutputStream > xStream;
     css::uno::Reference < css::io::XSeekable > xSeek;
-    css::uno::Sequence < sal_Int8 > a1Sequence, a2Sequence, a4Sequence;
-    sal_Int8 * const p1Sequence, * const p2Sequence, * const p4Sequence;
+    css::uno::Sequence < sal_Int8 > a2Sequence, a4Sequence;
+    sal_Int8 * const p2Sequence, * const p4Sequence;
 
 public:
-    ByteChucker (css::uno::Reference<css::io::XOutputStream> xOstream);
+    ByteChucker (css::uno::Reference<css::io::XOutputStream> const & xOstream);
     ~ByteChucker();
 
-    void WriteBytes( const css::uno::Sequence< sal_Int8 >& aData )
-        throw(css::io::NotConnectedException, css::io::BufferSizeExceededException, css::io::IOException, css::uno::RuntimeException);
+    /// @throws css::io::NotConnectedException
+    /// @throws css::io::BufferSizeExceededException
+    /// @throws css::io::IOException
+    /// @throws css::uno::RuntimeException
+    void WriteBytes( const css::uno::Sequence< sal_Int8 >& aData );
 
-    sal_Int64 GetPosition()
-        throw(css::io::IOException, css::uno::RuntimeException);
+    /// @throws css::io::IOException
+    /// @throws css::uno::RuntimeException
+    sal_Int64 GetPosition();
 
     void WriteInt16(sal_Int16 nInt16)
     {

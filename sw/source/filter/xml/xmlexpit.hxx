@@ -43,7 +43,6 @@ protected:
                     const SfxItemSet& rSet,
                     const SvXMLUnitConverter& rUnitConverter,
                     const SvXMLNamespaceMap& rNamespaceMap,
-                    SvXmlExportFlags nFlags,
                     std::vector<sal_uInt16> *pIndexArray ) const;
 
     void exportXML( const SvXMLExport& rExport,
@@ -52,7 +51,6 @@ protected:
                     const SvXMLItemMapEntry &rEntry,
                     const SvXMLUnitConverter& rUnitConverter,
                     const SvXMLNamespaceMap& rNamespaceMap,
-                    SvXmlExportFlags nFlags,
                     const SfxItemSet *pSet ) const;
 
     void exportElementItems(  SvXMLExport& rExport,
@@ -62,8 +60,7 @@ protected:
                               const std::vector<sal_uInt16> &rIndexArray ) const;
 
     static const SfxPoolItem* GetItem( const SfxItemSet &rSet,
-                                       sal_uInt16 nWhichId,
-                                       SvXmlExportFlags nFlags );
+                                       sal_uInt16 nWhichId );
 
 public:
     explicit SvXMLExportItemMapper( SvXMLItemMapEntriesRef rMapEntries );
@@ -72,8 +69,7 @@ public:
     void exportXML( SvXMLExport& rExport,
                     const SfxItemSet& rSet,
                     const SvXMLUnitConverter& rUnitConverter,
-                    ::xmloff::token::XMLTokenEnum ePropToken,
-                    SvXmlExportFlags nFlags = SvXmlExportFlags::NONE ) const;
+                    ::xmloff::token::XMLTokenEnum ePropToken ) const;
 
     /** this method is called for every item that has the
         MID_SW_FLAG_SPECIAL_ITEM_EXPORT flag set */
@@ -82,15 +78,7 @@ public:
                                     const SfxPoolItem& rItem,
                                     const SvXMLUnitConverter& rUnitConverter,
                                     const SvXMLNamespaceMap& rNamespaceMap,
-                                    const SfxItemSet *pSet = nullptr ) const;
-
-    /** this method is called for every item that has the
-        MID_SW_FLAG_NO_ITEM_EXPORT flag set */
-    static void handleNoItem( SvXMLAttributeList& rAttrList,
-                               const SvXMLItemMapEntry& rEntry,
-                               const SvXMLUnitConverter& rUnitConverter,
-                               const SvXMLNamespaceMap& rNamespaceMap,
-                               const SfxItemSet& rSet );
+                                    const SfxItemSet *pSet ) const;
 
     /** this method is called for every item that has the
         MID_SW_FLAG_ELEMENT_EXPORT flag set */

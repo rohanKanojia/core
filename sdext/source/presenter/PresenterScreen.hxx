@@ -39,14 +39,12 @@ namespace sdext { namespace presenter {
 
 class PresenterController;
 
-namespace {
-    typedef ::cppu::WeakComponentImplHelper <
-        css::task::XJob
-        > PresenterScreenJobInterfaceBase;
-    typedef ::cppu::WeakComponentImplHelper <
-        css::lang::XEventListener
-        > PresenterScreenInterfaceBase;
-}
+typedef ::cppu::WeakComponentImplHelper <
+    css::task::XJob
+    > PresenterScreenJobInterfaceBase;
+typedef ::cppu::WeakComponentImplHelper <
+    css::lang::XEventListener
+    > PresenterScreenInterfaceBase;
 
 /** The PresenterScreenJob service is instantiated every time a document is
     created or loaded.  In its execute() method it then filters out all
@@ -70,14 +68,11 @@ public:
     // XJob
 
     virtual css::uno::Any SAL_CALL execute(
-        const css::uno::Sequence<css::beans::NamedValue >& Arguments)
-        throw (css::lang::IllegalArgumentException,
-            css::uno::Exception,
-            css::uno::RuntimeException, std::exception) override;
+        const css::uno::Sequence<css::beans::NamedValue >& Arguments) override;
 
 private:
     explicit PresenterScreenJob (const css::uno::Reference<css::uno::XComponentContext>& rxContext);
-    virtual ~PresenterScreenJob();
+    virtual ~PresenterScreenJob() override;
 
     css::uno::Reference<css::uno::XComponentContext> mxComponentContext;
 };
@@ -101,7 +96,7 @@ public:
     PresenterScreen (
         const css::uno::Reference<css::uno::XComponentContext>& rxContext,
         const css::uno::Reference<css::frame::XModel2>& rxModel);
-    virtual ~PresenterScreen();
+    virtual ~PresenterScreen() override;
     PresenterScreen(const PresenterScreen&) = delete;
     PresenterScreen& operator=(const PresenterScreen&) = delete;
 
@@ -125,7 +120,7 @@ public:
 
     // XEventListener
 
-    virtual void SAL_CALL disposing ( const css::lang::EventObject& rEvent) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing ( const css::lang::EventObject& rEvent) override;
 
 private:
     css::uno::Reference<css::frame::XModel2 > mxModel;
@@ -137,7 +132,6 @@ private:
     ::rtl::Reference<PresenterController> mpPresenterController;
     css::uno::Reference<css::drawing::framework::XConfiguration> mxSavedConfiguration;
     ::rtl::Reference<PresenterPaneContainer> mpPaneContainer;
-    sal_Int32 mnComponentIndex;
     css::uno::Reference<css::drawing::framework::XResourceFactory> mxPaneFactory;
     css::uno::Reference<css::drawing::framework::XResourceFactory> mxViewFactory;
 
@@ -188,7 +182,6 @@ private:
         configuration list.
     */
     void ProcessComponent (
-        const OUString& rsKey,
         const ::std::vector<css::uno::Any>& rValues,
         const css::uno::Reference<css::uno::XComponentContext>& rxContext,
         const css::uno::Reference<css::drawing::framework::XResourceId>& rxAnchorId);
@@ -201,7 +194,6 @@ private:
     /** Called by ProcessViewDescriptions for a single entry.
     */
     void ProcessViewDescription (
-        const OUString& rsKey,
         const ::std::vector<css::uno::Any>& rValues);
 
     void SetupView (
@@ -209,11 +201,7 @@ private:
         const css::uno::Reference<css::drawing::framework::XResourceId>& rxAnchorId,
         const OUString& rsPaneURL,
         const OUString& rsViewURL,
-        const PresenterPaneContainer::ViewInitializationFunction& rViewInitialization,
-        const double nLeft,
-        const double nTop,
-        const double nRight,
-        const double nBottom);
+        const PresenterPaneContainer::ViewInitializationFunction& rViewInitialization);
 
     /** Return the built-in screen number on the presentation will normally
         display the presenter console.

@@ -26,7 +26,7 @@ class SwTextFootnote;
 
 class SwFootnotePortion : public SwFieldPortion
 {
-    SwTextFootnote *pFootnote;
+    SwTextFootnote * const pFootnote;
     sal_uInt16 nOrigHeight;
     // #i98418#
     bool mbPreferredScriptTypeSet;
@@ -45,17 +45,14 @@ public:
     void SetPreferredScriptType( SwFontScript nPreferredScriptType );
 
     const SwTextFootnote* GetTextFootnote() const { return pFootnote; };
-    OUTPUT_OPERATOR_OVERRIDE
 };
 
 class SwFootnoteNumPortion : public SwNumberPortion
 {
 public:
-    SwFootnoteNumPortion( const OUString &rExpand, SwFont *pFntL )
-         : SwNumberPortion( rExpand, pFntL, true, false, 0, false )
-         { SetWhichPor( POR_FTNNUM ); }
-
-    OUTPUT_OPERATOR_OVERRIDE
+    SwFootnoteNumPortion( const OUString &rExpand, std::unique_ptr<SwFont> pFntL )
+         : SwNumberPortion( rExpand, std::move(pFntL), true, false, 0, false )
+         { SetWhichPor( PortionType::FootnoteNum ); }
 };
 
 class SwQuoVadisPortion : public SwFieldPortion
@@ -68,7 +65,7 @@ public:
     virtual bool GetExpText( const SwTextSizeInfo &rInf, OUString &rText ) const override;
 
     void SetNumber( const OUString& rStr ) { aErgo = rStr; }
-    const OUString GetQuoText() const { return aExpand; }
+    const OUString& GetQuoText() const { return m_aExpand; }
     const OUString &GetContText() const { return aErgo; }
 
     // Field cloner for SplitGlue
@@ -76,20 +73,17 @@ public:
 
     // Accessibility: pass information about this portion to the PortionHandler
     virtual void HandlePortion( SwPortionHandler& rPH ) const override;
-
-    OUTPUT_OPERATOR_OVERRIDE
 };
 
 class SwErgoSumPortion : public SwFieldPortion
 {
 public:
     SwErgoSumPortion( const OUString &rExp, const OUString& rStr );
-    virtual sal_Int32 GetCursorOfst( const sal_uInt16 nOfst ) const override;
+    virtual TextFrameIndex GetCursorOfst(sal_uInt16 nOfst) const override;
     virtual bool Format( SwTextFormatInfo &rInf ) override;
 
     // Field cloner for SplitGlue
     virtual SwFieldPortion *Clone( const OUString &rExpand ) const override;
-    OUTPUT_OPERATOR_OVERRIDE
 };
 
 #endif

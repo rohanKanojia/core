@@ -20,8 +20,8 @@
 #ifndef INCLUDED_SC_INC_EDITDATAARRAY_HXX
 #define INCLUDED_SC_INC_EDITDATAARRAY_HXX
 
-#include "address.hxx"
 #include <editeng/editobj.hxx>
+#include "types.hxx"
 
 #include <memory>
 #include <vector>
@@ -34,8 +34,11 @@ public:
     class Item
     {
     public:
+        Item() = delete;
         explicit Item(SCTAB nTab, SCCOL nCol, SCROW nRow,
-                      EditTextObject* pOldData, EditTextObject* pNewData);
+                      std::unique_ptr<EditTextObject> pOldData, std::unique_ptr<EditTextObject> pNewData);
+        Item(Item const &) = delete; // due to mpOldData
+        Item(Item&&) = default;
         ~Item();
 
         const EditTextObject* GetOldData() const;
@@ -45,14 +48,11 @@ public:
         SCROW GetRow() const { return mnRow;}
 
     private:
-        Item(); // disabled
-
-    private:
-        std::shared_ptr<EditTextObject> mpOldData;
-        std::shared_ptr<EditTextObject> mpNewData;
-        SCTAB mnTab;
-        SCCOL mnCol;
-        SCROW mnRow;
+        std::unique_ptr<EditTextObject> mpOldData;
+        std::unique_ptr<EditTextObject> mpNewData;
+        SCTAB const mnTab;
+        SCCOL const mnCol;
+        SCROW const mnRow;
 
     };
 
@@ -60,7 +60,7 @@ public:
     ~ScEditDataArray();
 
     void AddItem(SCTAB nTab, SCCOL nCol, SCROW nRow,
-                 EditTextObject* pOldData, EditTextObject* pNewData);
+                 std::unique_ptr<EditTextObject> pOldData, std::unique_ptr<EditTextObject> pNewData);
 
     const Item* First();
     const Item* Next();

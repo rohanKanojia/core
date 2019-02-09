@@ -20,7 +20,6 @@
 #ifndef INCLUDED_SC_INC_MARKMULTI_HXX
 #define INCLUDED_SC_INC_MARKMULTI_HXX
 
-#include "address.hxx"
 #include "segmenttree.hxx"
 #include "markarr.hxx"
 
@@ -54,29 +53,39 @@ public:
     bool GetMark( SCCOL nCol, SCROW nRow ) const;
     bool IsAllMarked( SCCOL nCol, SCROW nStartRow, SCROW nEndRow ) const;
     bool HasEqualRowsMarked( SCCOL nCol1, SCCOL nCol2 ) const;
-    SCsROW GetNextMarked( SCCOL nCol, SCsROW nRow, bool bUp ) const;
+    SCROW GetNextMarked( SCCOL nCol, SCROW nRow, bool bUp ) const;
     void SetMarkArea( SCCOL nStartCol, SCCOL nEndCol, SCROW nStartRow, SCROW nEndRow, bool bMark );
     bool IsRowMarked( SCROW nRow ) const;
     bool IsRowRangeMarked( SCROW nStartRow, SCROW nEndRow ) const;
-    bool IsEmpty() const { return ( !aMultiSelContainer.size() && !aRowSel.HasMarks() ); }
+    bool IsEmpty() const { return ( aMultiSelContainer.empty() && !aRowSel.HasMarks() ); }
     ScMarkArray GetMarkArray( SCCOL nCol ) const;
     void Clear();
     void MarkAllCols( SCROW nStartRow, SCROW nEndRow );
     bool HasAnyMarks() const;
+    void ShiftCols(SCCOL nStartCol, long nColOffset);
+    void ShiftRows(SCROW nStartRow, long nRowOffset);
+
+    // For faster access from within ScMarkData, instead of creating
+    // ScMultiSelIter with ScFlatBoolRowSegments bottleneck.
+    const ScMarkArray& GetRowSelArray() const;
+    const ScMarkArray* GetMultiSelArray( SCCOL nCol ) const;
 };
 
 class ScMultiSelIter
 {
 
 private:
-    ScFlatBoolRowSegments aRowSegs;
+    std::unique_ptr<ScFlatBoolRowSegments>  pRowSegs;
+    ScMarkArrayIter                         aMarkArrayIter;
     SCROW nNextSegmentStart;
 public:
     ScMultiSelIter( const ScMultiSel& rMultiSel, SCCOL nCol );
     ~ScMultiSelIter();
 
     bool Next( SCROW& rTop, SCROW& rBottom );
-    const ScFlatBoolRowSegments& GetRowSegments() const { return aRowSegs; }
+    /** Only to be used by ScMultiSel::IsAllMarked() or otherwise sure that a
+        segment tree is actually used. */
+    bool GetRangeData( SCROW nRow, ScFlatBoolRowSegments::RangeData& rRowRange ) const;
 };
 
 #endif

@@ -17,40 +17,27 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <sfx2/sidebar/ResourceDefinitions.hrc>
-#include <sfx2/sidebar/Theme.hxx>
-#include <sfx2/sidebar/ControlFactory.hxx>
-
-#include <com/sun/star/chart2/DataPointLabel.hpp>
 #include <com/sun/star/chart/ErrorBarStyle.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/chart/DataLabelPlacement.hpp>
 #include <com/sun/star/chart2/XChartDocument.hpp>
-#include <com/sun/star/chart2/XDiagram.hpp>
+#include <com/sun/star/chart2/XDataSeries.hpp>
 #include <com/sun/star/chart2/XChartTypeContainer.hpp>
 #include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
+#include <com/sun/star/chart2/XRegressionCurveContainer.hpp>
+#include <com/sun/star/util/XModifyBroadcaster.hpp>
 
 #include "ChartSeriesPanel.hxx"
-#include "ChartController.hxx"
-#include <sfx2/bindings.hxx>
-#include <sfx2/dispatch.hxx>
-#include <sfx2/imagemgr.hxx>
+#include <ChartController.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
-#include <vcl/field.hxx>
-#include <vcl/toolbox.hxx>
-#include <svl/intitem.hxx>
-#include <svl/stritem.hxx>
-#include <comphelper/processfactory.hxx>
 
-#include "ChartModel.hxx"
-#include "DataSeriesHelper.hxx"
-#include "RegressionCurveHelper.hxx"
-#include "StatisticsHelper.hxx"
+#include <DataSeriesHelper.hxx>
+#include <RegressionCurveHelper.hxx>
+#include <StatisticsHelper.hxx>
 
 using namespace css;
 using namespace css::uno;
-using ::sfx2::sidebar::Theme;
 
 namespace chart { namespace sidebar {
 
@@ -87,7 +74,7 @@ struct LabelPlacementMap
     sal_Int32 nApi;
 };
 
-LabelPlacementMap aLabelPlacementMap[] = {
+static LabelPlacementMap const aLabelPlacementMap[] = {
     { 0, css::chart::DataLabelPlacement::TOP },
     { 1, css::chart::DataLabelPlacement::BOTTOM },
     { 2, css::chart::DataLabelPlacement::CENTER },
@@ -112,10 +99,10 @@ sal_Int32 getDataLabelPlacement(const css::uno::Reference<css::frame::XModel>& x
     sal_Int32 nPlacement = 0;
     aAny >>= nPlacement;
 
-    for (size_t i = 0; i < SAL_N_ELEMENTS(aLabelPlacementMap); ++i)
+    for (LabelPlacementMap const & i : aLabelPlacementMap)
     {
-        if (aLabelPlacementMap[i].nApi == nPlacement)
-            return aLabelPlacementMap[i].nPos;
+        if (i.nApi == nPlacement)
+            return i.nPos;
     }
 
     return 0;
@@ -131,16 +118,16 @@ void setDataLabelPlacement(const css::uno::Reference<css::frame::XModel>& xModel
         return;
 
     sal_Int32 nApi = 0;
-    for (size_t i = 0; i < SAL_N_ELEMENTS(aLabelPlacementMap); ++i)
+    for (LabelPlacementMap const & i : aLabelPlacementMap)
     {
-        if (aLabelPlacementMap[i].nPos == nPos)
+        if (i.nPos == nPos)
         {
-            nApi = aLabelPlacementMap[i].nApi;
+            nApi = i.nApi;
             break;
         }
     }
 
-    xSeries->setPropertyValue("LabelPlacement", css::uno::makeAny(nApi));
+    xSeries->setPropertyValue("LabelPlacement", css::uno::Any(nApi));
 }
 
 bool isTrendlineVisible(const css::uno::Reference<css::frame::XModel>& xModel,
@@ -166,12 +153,9 @@ void setTrendlineVisible(const css::uno::Reference<css::frame::XModel>&
 
     if (bVisible)
     {
-        /* code */
-        uno::Reference< chart2::XRegressionCurve > xCurve =
-            RegressionCurveHelper::addRegressionCurve(
-                    CHREGRESS_LINEAR,
-                    xRegressionCurveContainer,
-                    comphelper::getProcessComponentContext());
+        RegressionCurveHelper::addRegressionCurve(
+                    SvxChartRegress::Linear,
+                    xRegressionCurveContainer);
     }
     else
         RegressionCurveHelper::removeAllExceptMeanValueLine(
@@ -202,7 +186,7 @@ void setErrorBarVisible(const css::uno::Reference<css::frame::XModel>&
 
     if (bVisible)
     {
-                StatisticsHelper::addErrorBars( xSeries, comphelper::getProcessComponentContext(),
+        StatisticsHelper::addErrorBars( xSeries,
                     css::chart::ErrorBarStyle::STANDARD_DEVIATION,
                     bYError);
     }
@@ -234,7 +218,7 @@ void setAttachedAxisType(const css::uno::Reference<css::frame::XModel>&
         return;
 
     sal_Int32 nIndex = bPrimary ? 0 : 1;
-    xSeries->setPropertyValue("AttachedAxisIndex", css::uno::makeAny(nIndex));
+    xSeries->setPropertyValue("AttachedAxisIndex", css::uno::Any(nIndex));
 }
 
 css::uno::Reference<css::chart2::XChartType> getChartType(
@@ -274,7 +258,11 @@ OUString getCID(const css::uno::Reference<css::frame::XModel>& xModel)
 
     OUString aCID;
     aAny >>= aCID;
-#ifdef DBG_UTIL
+
+    if (aCID.isEmpty())
+        return OUString();
+
+#if defined DBG_UTIL && !defined NDEBUG
     ObjectType eType = ObjectIdentifier::getObjectType(aCID);
     assert(eType == OBJECTTYPE_DATA_SERIES);
 #endif
@@ -410,7 +398,7 @@ void ChartSeriesPanel::DataChanged(
 }
 
 void ChartSeriesPanel::HandleContextChange(
-    const ::sfx2::sidebar::EnumContext& )
+    const vcl::EnumContext& )
 {
     updateData();
 }
@@ -458,7 +446,7 @@ void ChartSeriesPanel::SelectionInvalid()
 {
 }
 
-IMPL_LINK_TYPED(ChartSeriesPanel, CheckBoxHdl, Button*, pButton, void)
+IMPL_LINK(ChartSeriesPanel, CheckBoxHdl, Button*, pButton, void)
 {
     CheckBox* pCheckBox = static_cast<CheckBox*>(pButton);
     bool bChecked = pCheckBox->IsChecked();
@@ -473,7 +461,7 @@ IMPL_LINK_TYPED(ChartSeriesPanel, CheckBoxHdl, Button*, pButton, void)
         setErrorBarVisible(mxModel, aCID, true, bChecked);
 }
 
-IMPL_LINK_NOARG_TYPED(ChartSeriesPanel, RadioBtnHdl, RadioButton&, void)
+IMPL_LINK_NOARG(ChartSeriesPanel, RadioBtnHdl, RadioButton&, void)
 {
     OUString aCID = getCID(mxModel);
     bool bChecked = mpRBPrimaryAxis->IsChecked();
@@ -481,11 +469,11 @@ IMPL_LINK_NOARG_TYPED(ChartSeriesPanel, RadioBtnHdl, RadioButton&, void)
     setAttachedAxisType(mxModel, aCID, bChecked);
 }
 
-IMPL_LINK_NOARG_TYPED(ChartSeriesPanel, ListBoxHdl, ListBox&, void)
+IMPL_LINK_NOARG(ChartSeriesPanel, ListBoxHdl, ListBox&, void)
 {
     OUString aCID = getCID(mxModel);
 
-    sal_Int32 nPos = mpLBLabelPlacement->GetSelectEntryPos();
+    sal_Int32 nPos = mpLBLabelPlacement->GetSelectedEntryPos();
     setDataLabelPlacement(mxModel, aCID, nPos);
 }
 

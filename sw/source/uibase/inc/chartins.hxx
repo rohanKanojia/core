@@ -19,8 +19,12 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_CHARTINS_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_CHARTINS_HXX
 
-Point SwGetChartDialogPos( const vcl::Window *pParentWin, const Size& rDialogSize, const Rectangle& rLogicChart );
-void SwInsertChart( vcl::Window *pParent, SfxBindings *pBindings );
+#include <tools/gen.hxx>
+
+namespace vcl { class Window; }
+
+Point SwGetChartDialogPos( const vcl::Window *pParentWin, const Size& rDialogSize, const tools::Rectangle& rLogicChart );
+void SwInsertChart();
 
 #endif // INCLUDED_SW_SOURCE_UIBASE_INC_CHARTINS_HXX
 

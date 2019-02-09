@@ -18,11 +18,10 @@
  */
 
 
-#include "signaturecreatorimpl.hxx"
+#include <framework/signaturecreatorimpl.hxx>
 #include <com/sun/star/xml/crypto/XXMLSignatureTemplate.hpp>
 #include <com/sun/star/xml/wrapper/XXMLElementWrapper.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <osl/diagnose.h>
 
@@ -34,8 +33,8 @@ namespace cssxw = com::sun::star::xml::wrapper;
 
 #define IMPLEMENTATION_NAME "com.sun.star.xml.security.framework.SignatureCreatorImpl"
 
-SignatureCreatorImpl::SignatureCreatorImpl( const Reference<XComponentContext> & xContext )
-    : SignatureCreatorImpl_Base(xContext), m_nIdOfBlocker(-1)
+SignatureCreatorImpl::SignatureCreatorImpl()
+    : SignatureCreatorImpl_Base(), m_nIdOfBlocker(-1)
 {
 }
 
@@ -43,32 +42,7 @@ SignatureCreatorImpl::~SignatureCreatorImpl( )
 {
 }
 
-bool SignatureCreatorImpl::checkReady() const
-/****** SignatureCreatorImpl/checkReady **************************************
- *
- *   NAME
- *  checkReady -- checks the conditions for the signature generation.
- *
- *   SYNOPSIS
- *  bReady = checkReady( );
- *
- *   FUNCTION
- *  checks whether all following conditions are satisfied:
- *  1. the result listener is ready;
- *  2. the id of the template blocker is known;
- *  3. the SignatureEngine is ready.
- *
- *   RESULT
- *  bReady - true if all conditions are satisfied, false otherwise
- ******************************************************************************/
-{
-    return (m_xResultListener.is() &&
-            (m_nIdOfBlocker != -1) &&
-            SignatureEngine::checkReady());
-}
-
 void SignatureCreatorImpl::notifyResultListener() const
-    throw (cssu::Exception, cssu::RuntimeException)
 /****** SignatureCreatorImpl/notifyResultListener *****************************
  *
  *   NAME
@@ -82,17 +56,11 @@ void SignatureCreatorImpl::notifyResultListener() const
     xSignatureCreationResultListener->signatureCreated( m_nSecurityId, m_nStatus );
 }
 
-void SignatureCreatorImpl::startEngine( const cssu::Reference<
-    cssxc::XXMLSignatureTemplate >&
-    xSignatureTemplate)
-        throw (cssu::Exception, cssu::RuntimeException)
+void SignatureCreatorImpl::startEngine(const rtl::Reference<XMLSignatureTemplateImpl>& xSignatureTemplate)
 /****** SignatureCreatorImpl/startEngine *************************************
  *
  *   NAME
  *  startEngine -- generates the signature.
- *
- *   SYNOPSIS
- *  startEngine( xSignatureTemplate );
  *
  *   FUNCTION
  *  generates the signature element, then if succeeds, updates the link
@@ -107,7 +75,7 @@ void SignatureCreatorImpl::startEngine( const cssu::Reference<
     cssu::Reference< cssxc::XXMLSignatureTemplate > xResultTemplate;
     try
     {
-        xResultTemplate = m_xXMLSignature->generate(xSignatureTemplate, m_xSecurityEnvironment);
+        xResultTemplate = m_xXMLSignature->generate(css::uno::Reference<css::xml::crypto::XXMLSignatureTemplate>(xSignatureTemplate.get()), m_xSecurityEnvironment);
         m_nStatus = xResultTemplate->getStatus();
     }
     catch( cssu::Exception& )
@@ -147,7 +115,6 @@ void SignatureCreatorImpl::clearUp() const
 
 /* XBlockerMonitor */
 void SAL_CALL SignatureCreatorImpl::setBlockerId( sal_Int32 id )
-        throw (cssu::Exception, cssu::RuntimeException, std::exception)
 {
     m_nIdOfBlocker = id;
     tryToPerform();
@@ -156,7 +123,6 @@ void SAL_CALL SignatureCreatorImpl::setBlockerId( sal_Int32 id )
 /* XSignatureCreationResultBroadcaster */
 void SAL_CALL SignatureCreatorImpl::addSignatureCreationResultListener(
     const cssu::Reference< cssxc::sax::XSignatureCreationResultListener >& listener )
-    throw (cssu::Exception, cssu::RuntimeException, std::exception)
 {
     m_xResultListener = listener;
     tryToPerform();
@@ -164,13 +130,11 @@ void SAL_CALL SignatureCreatorImpl::addSignatureCreationResultListener(
 
 void SAL_CALL SignatureCreatorImpl::removeSignatureCreationResultListener(
     const cssu::Reference< cssxc::sax::XSignatureCreationResultListener >&)
-    throw (cssu::RuntimeException, std::exception)
 {
 }
 
 /* XInitialization */
 void SAL_CALL SignatureCreatorImpl::initialize( const cssu::Sequence< cssu::Any >& aArguments )
-    throw (cssu::Exception, cssu::RuntimeException, std::exception)
 {
     OSL_ASSERT(aArguments.getLength() == 5);
 
@@ -187,40 +151,28 @@ void SAL_CALL SignatureCreatorImpl::initialize( const cssu::Sequence< cssu::Any 
 
 
 OUString SignatureCreatorImpl_getImplementationName ()
-    throw (cssu::RuntimeException)
 {
     return OUString ( IMPLEMENTATION_NAME );
 }
 
-cssu::Sequence< OUString > SAL_CALL SignatureCreatorImpl_getSupportedServiceNames(  )
-    throw (cssu::RuntimeException)
+cssu::Sequence< OUString > SignatureCreatorImpl_getSupportedServiceNames(  )
 {
     cssu::Sequence<OUString> aRet { "com.sun.star.xml.crypto.sax.SignatureCreator" };
     return aRet;
 }
 
-cssu::Reference< cssu::XInterface > SAL_CALL SignatureCreatorImpl_createInstance(
-    const cssu::Reference< cssl::XMultiServiceFactory >& xMSF )
-    throw( cssu::Exception )
-{
-    return static_cast<cppu::OWeakObject*>(new SignatureCreatorImpl( comphelper::getComponentContext( xMSF ) ));
-}
-
 /* XServiceInfo */
 OUString SAL_CALL SignatureCreatorImpl::getImplementationName(  )
-    throw (cssu::RuntimeException, std::exception)
 {
     return SignatureCreatorImpl_getImplementationName();
 }
 
 sal_Bool SAL_CALL SignatureCreatorImpl::supportsService( const OUString& rServiceName )
-    throw (cssu::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 cssu::Sequence< OUString > SAL_CALL SignatureCreatorImpl::getSupportedServiceNames(  )
-    throw (cssu::RuntimeException, std::exception)
 {
     return SignatureCreatorImpl_getSupportedServiceNames();
 }

@@ -21,15 +21,18 @@
 #include <com/sun/star/beans/XMultiPropertySet.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 
-#include "oox/helper/attributelist.hxx"
-#include "oox/drawingml/shapegroupcontext.hxx"
-#include "oox/drawingml/connectorshapecontext.hxx"
-#include "oox/drawingml/graphicshapecontext.hxx"
-#include "oox/drawingml/lineproperties.hxx"
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "drawingml/customshapegeometry.hxx"
+#include <oox/helper/attributelist.hxx>
+#include <oox/drawingml/shapegroupcontext.hxx>
+#include <oox/drawingml/connectorshapecontext.hxx>
+#include <oox/drawingml/graphicshapecontext.hxx>
+#include <drawingml/lineproperties.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <drawingml/customshapegeometry.hxx>
 #include <drawingml/shapepropertiescontext.hxx>
-#include "drawingml/textbodycontext.hxx"
+#include <drawingml/textbodycontext.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
+#include <sal/log.hxx>
 
 using namespace oox::core;
 using namespace ::com::sun::star;
@@ -41,19 +44,19 @@ using namespace ::com::sun::star::xml::sax;
 
 namespace oox { namespace drawingml {
 
-ShapeGroupContext::ShapeGroupContext( ContextHandler2Helper& rParent, ShapePtr pMasterShapePtr, ShapePtr pGroupShapePtr )
+ShapeGroupContext::ShapeGroupContext( ContextHandler2Helper const & rParent, ShapePtr const & pMasterShapePtr, ShapePtr const & pGroupShapePtr )
 : ContextHandler2( rParent )
 , mpGroupShapePtr( pGroupShapePtr )
 , mpMasterShapePtr( pMasterShapePtr )
 {
     if( pMasterShapePtr )
         mpGroupShapePtr->setWps(pMasterShapePtr->getWps());
+    if( mpMasterShapePtr.get() && mpGroupShapePtr.get() )
+        mpMasterShapePtr->addChild( mpGroupShapePtr );
 }
 
 ShapeGroupContext::~ShapeGroupContext()
 {
-    if ( mpMasterShapePtr.get() && mpGroupShapePtr.get() )
-        mpMasterShapePtr->addChild( mpGroupShapePtr );
 }
 
 ContextHandlerRef ShapeGroupContext::onCreateContext( sal_Int32 aElementToken, const AttributeList& rAttribs )
@@ -77,7 +80,7 @@ ContextHandlerRef ShapeGroupContext::onCreateContext( sal_Int32 aElementToken, c
     case XML_grpSpPr:
         return new ShapePropertiesContext( *this, *mpGroupShapePtr );
     case XML_nvGrpSpPr:
-        return nullptr;
+        return this;
     case XML_spPr:
         return new ShapePropertiesContext( *this, *mpGroupShapePtr );
 /*
@@ -91,17 +94,17 @@ ContextHandlerRef ShapeGroupContext::onCreateContext( sal_Int32 aElementToken, c
             return new ConnectorShapeContext( *this, mpGroupShapePtr, pShape );
         }
     case XML_grpSp:         // group shape
-        return new ShapeGroupContext( *this, mpGroupShapePtr, ShapePtr( new Shape( "com.sun.star.drawing.GroupShape" ) ) );
+        return new ShapeGroupContext( *this, mpGroupShapePtr, std::make_shared<Shape>( "com.sun.star.drawing.GroupShape" ) );
     case XML_sp:            // shape
     case XML_wsp:
         // Don't set default character height for WPS shapes, Writer has its
         // own way to set the default, and if we don't set it here, editing
         // properly inherits it.
-        return new ShapeContext( *this, mpGroupShapePtr, ShapePtr( new Shape( "com.sun.star.drawing.CustomShape", getBaseToken(aElementToken) == XML_sp ) ) );
+        return new ShapeContext( *this, mpGroupShapePtr, std::make_shared<Shape>( "com.sun.star.drawing.CustomShape", getBaseToken(aElementToken) == XML_sp ) );
     case XML_pic:           // CT_Picture
-        return new GraphicShapeContext( *this, mpGroupShapePtr, ShapePtr( new Shape( "com.sun.star.drawing.GraphicObjectShape" ) ) );
+        return new GraphicShapeContext( *this, mpGroupShapePtr, std::make_shared<Shape>( "com.sun.star.drawing.GraphicObjectShape" ) );
     case XML_graphicFrame:  // CT_GraphicalObjectFrame
-        return new GraphicalObjectFrameContext( *this, mpGroupShapePtr, ShapePtr( new Shape( "com.sun.star.drawing.GraphicObjectShape" ) ), true );
+        return new GraphicalObjectFrameContext( *this, mpGroupShapePtr, std::make_shared<Shape>( "com.sun.star.drawing.GraphicObjectShape" ), true );
     case XML_cNvGrpSpPr:
         break;
     case XML_grpSpLocks:

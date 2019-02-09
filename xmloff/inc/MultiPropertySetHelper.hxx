@@ -21,7 +21,7 @@
 
 #include <rtl/ustring.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
-#include <tools/debug.hxx>
+#include <memory>
 
 
 namespace com { namespace sun { namespace star {
@@ -55,7 +55,7 @@ namespace com { namespace sun { namespace star {
 class MultiPropertySetHelper
 {
     /// names of all properties
-    OUString* pPropertyNames;
+    std::unique_ptr<OUString[]> pPropertyNames;
 
     /// length of pPropertyNames array
     sal_Int16 nLength;
@@ -66,7 +66,7 @@ class MultiPropertySetHelper
 
     /// an array of indices that maps from pPropertyNames indices to
     /// aPropertySequence indices
-    sal_Int16* pSequenceIndex;
+    std::unique_ptr<sal_Int16[]> pSequenceIndex;
 
     /// the last set of values retrieved by getValues
     css::uno::Sequence< css::uno::Any > aValues;
@@ -75,7 +75,7 @@ class MultiPropertySetHelper
     const css::uno::Any* pValues;
 
     /// an empty Any
-    css::uno::Any aEmptyAny;
+    css::uno::Any const aEmptyAny;
 
 public:
 
@@ -157,7 +157,7 @@ public:
     const css::uno::Any& getValue( sal_Int16 nIndex,
                         const css::uno::Reference<css::beans::XMultiPropertySet> & );
 
-    inline void resetValues() { pValues = nullptr; }
+    void resetValues() { pValues = nullptr; }
 };
 
 

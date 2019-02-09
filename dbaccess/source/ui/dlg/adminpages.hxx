@@ -21,11 +21,12 @@
 #define INCLUDED_DBACCESS_SOURCE_UI_DLG_ADMINPAGES_HXX
 
 #include <sfx2/tabdlg.hxx>
-#include "dsntypes.hxx"
-#include "commontypes.hxx"
+#include <dsntypes.hxx>
+#include <commontypes.hxx>
 #include <svtools/wizardmachine.hxx>
 #include <vcl/field.hxx>
 #include <vcl/fixed.hxx>
+#include <curledit.hxx>
 
 class NumericField;
 class Edit;
@@ -42,7 +43,7 @@ namespace dbaui
 
     template < class T > class OSaveValueWrapper : public ISaveValueWrapper
     {
-        T*  m_pSaveValue;
+        VclPtr<T>  m_pSaveValue;
     public:
         explicit OSaveValueWrapper(T* _pSaveValue) : m_pSaveValue(_pSaveValue)
         { OSL_ENSURE(m_pSaveValue,"Illegal argument!"); }
@@ -51,9 +52,53 @@ namespace dbaui
         virtual void Disable() override { m_pSaveValue->Disable(); }
     };
 
-    template < class T > class ODisableWrapper : public ISaveValueWrapper
+    template < class T > class OSaveValueWidgetWrapper : public ISaveValueWrapper
     {
         T*  m_pSaveValue;
+    public:
+        explicit OSaveValueWidgetWrapper(T* _pSaveValue) : m_pSaveValue(_pSaveValue)
+        { OSL_ENSURE(m_pSaveValue,"Illegal argument!"); }
+
+        virtual void SaveValue() override { m_pSaveValue->save_value(); }
+        virtual void Disable() override { m_pSaveValue->set_sensitive(false); }
+    };
+
+    template <> class OSaveValueWidgetWrapper<weld::CheckButton> : public ISaveValueWrapper
+    {
+        weld::CheckButton*  m_pSaveValue;
+    public:
+        explicit OSaveValueWidgetWrapper(weld::CheckButton* _pSaveValue) : m_pSaveValue(_pSaveValue)
+        { OSL_ENSURE(m_pSaveValue,"Illegal argument!"); }
+
+        virtual void SaveValue() override { m_pSaveValue->save_state(); }
+        virtual void Disable() override { m_pSaveValue->set_sensitive(false); }
+    };
+
+    template <> class OSaveValueWidgetWrapper<dbaui::OConnectionURLEdit> : public ISaveValueWrapper
+    {
+        dbaui::OConnectionURLEdit*  m_pSaveValue;
+    public:
+        explicit OSaveValueWidgetWrapper(dbaui::OConnectionURLEdit* _pSaveValue) : m_pSaveValue(_pSaveValue)
+        { OSL_ENSURE(m_pSaveValue,"Illegal argument!"); }
+
+        virtual void SaveValue() override { m_pSaveValue->save_value(); }
+        virtual void Disable() override { m_pSaveValue->set_sensitive(false); }
+    };
+
+    template <class T> class ODisableWidgetWrapper : public ISaveValueWrapper
+    {
+        T*  m_pSaveValue;
+    public:
+        explicit ODisableWidgetWrapper(T* _pSaveValue) : m_pSaveValue(_pSaveValue)
+        { OSL_ENSURE(m_pSaveValue,"Illegal argument!"); }
+
+        virtual void SaveValue() override {}
+        virtual void Disable() override { m_pSaveValue->set_sensitive(false); }
+    };
+
+    template < class T > class ODisableWrapper : public ISaveValueWrapper
+    {
+        VclPtr<T>  m_pSaveValue;
     public:
         explicit ODisableWrapper(T* _pSaveValue) : m_pSaveValue(_pSaveValue)
         { OSL_ENSURE(m_pSaveValue,"Illegal argument!"); }
@@ -79,6 +124,7 @@ namespace dbaui
                                    m_xORB;
     public:
         OGenericAdministrationPage(vcl::Window* _pParent, const OString& _rId, const OUString& _rUIXMLDescription, const SfxItemSet& _rAttrSet);
+        OGenericAdministrationPage(TabPageParent pParent, const OUString& rUIXMLDescription, const OString& rId, const SfxItemSet& rAttrSet);
         /// set a handler which gets called every time something on the page has been modified
         void SetModifiedHandler(const Link<OGenericAdministrationPage const *, void>& _rHandler) { m_aModifiedHandler = _rHandler; }
 
@@ -88,7 +134,7 @@ namespace dbaui
             @param  _pItemSetHelper
                 the itemset helper
         */
-        inline void SetAdminDialog(IDatabaseSettingsDialog* _pDialog,IItemSetHelper* _pItemSetHelper)
+        void SetAdminDialog(IDatabaseSettingsDialog* _pDialog,IItemSetHelper* _pItemSetHelper)
         {
             OSL_ENSURE(_pDialog && _pItemSetHelper,"Values are NULL!");
             m_pAdminDialog = _pDialog;
@@ -113,7 +159,7 @@ namespace dbaui
             @return
                 <FALSE/> if an error occurred, otherwise <TRUE/>
         */
-        bool getSelectedDataSource(OUString& _sReturn, OUString& _sCurr);
+        bool getSelectedDataSource(OUString& _sReturn, OUString const & _sCurr);
 
         // svt::IWizardPageController
         virtual void initializePage() override;
@@ -125,7 +171,7 @@ namespace dbaui
 
     protected:
         /// default implementation: call FillItemSet, call prepareLeave,
-        virtual sfxpg DeactivatePage(SfxItemSet* pSet) override;
+        virtual DeactivateRC DeactivatePage(SfxItemSet* pSet) override;
         using SfxTabPage::DeactivatePage;
         /// default implementation: call implInitControls with the given item set and _bSaveValue = sal_False
         virtual void Reset(const SfxItemSet* _rCoreAttrs) override;
@@ -152,16 +198,16 @@ namespace dbaui
         /** will be called inside <method>implInitControls</method> to save the value if necessary
             @param  _rControlList
                 The list must be filled with the controls.
-                It is not allowed to clear the list before pusching data into it.
+                It is not allowed to clear the list before pushing data into it.
         */
-        virtual void fillControls(::std::vector< ISaveValueWrapper* >& _rControlList) = 0;
+        virtual void fillControls(std::vector< std::unique_ptr<ISaveValueWrapper> >& _rControlList) = 0;
 
         /** will be called inside <method>implInitControls</method> to disable if necessary
             @param  _rControlList
                 The list must be filled with the controls.
-                It is not allowed to clear the list before pusching data into it.
+                It is not allowed to clear the list before pushing data into it.
         */
-        virtual void fillWindows(::std::vector< ISaveValueWrapper* >& _rControlList) = 0;
+        virtual void fillWindows(std::vector< std::unique_ptr<ISaveValueWrapper> >& _rControlList) = 0;
 
     public:
         /** fills the Boolean value into the item set when the value changed.
@@ -176,7 +222,8 @@ namespace dbaui
             @param _bRevertValue
                 set to <TRUE/> if the display value should be reverted before putting it into the set
         */
-        static void fillBool( SfxItemSet& _rSet, CheckBox* _pCheckBox, sal_uInt16 _nID, bool& _bChangedSomething, bool _bRevertValue = false);
+        static void fillBool(SfxItemSet& _rSet, CheckBox const * _pCheckBox, sal_uInt16 _nID, bool& _bChangedSomething, bool _bRevertValue = false);
+        static void fillBool(SfxItemSet& _rSet, const weld::CheckButton* pCheckBox, sal_uInt16 _nID, bool bOptionalBool, bool& _bChangedSomething, bool _bRevertValue = false);
 
         /** fills the int value into the item set when the value changed.
             @param  _rSet
@@ -188,7 +235,8 @@ namespace dbaui
             @param  _bChangedSomething
                 <TRUE/> if something changed otherwise <FALSE/>
         */
-        static void fillInt32(SfxItemSet& _rSet,NumericField* _pEdit,sal_uInt16 _nID, bool& _bChangedSomething);
+        static void fillInt32(SfxItemSet& _rSet,NumericField const * _pEdit,sal_uInt16 _nID, bool& _bChangedSomething);
+        static void fillInt32(SfxItemSet& _rSet,const weld::SpinButton* pEdit,sal_uInt16 _nID, bool& _bChangedSomething);
 
         /** fills the String value into the item set when the value changed.
             @param  _rSet
@@ -200,24 +248,24 @@ namespace dbaui
             @param  _bChangedSomething
                 <TRUE/> if something changed otherwise <FALSE/>
         */
-        static void fillString(SfxItemSet& _rSet,Edit* _pEdit,sal_uInt16 _nID, bool& _bChangedSomething);
+        static void fillString(SfxItemSet& _rSet,Edit const * _pEdit,sal_uInt16 _nID, bool& _bChangedSomething);
+        static void fillString(SfxItemSet& _rSet,const weld::Entry* pEdit,sal_uInt16 _nID, bool& _bChangedSomething);
+        static void fillString(SfxItemSet& _rSet,const dbaui::OConnectionURLEdit* pEdit,sal_uInt16 _nID, bool& _bChangedSomething);
 
     protected:
         /** This link be used for controls where the tabpage does not need to take any special action when the control
             is modified. The implementation just calls callModifiedHdl.
         */
-        DECL_LINK_TYPED(OnControlModified, void*, void);
-        DECL_LINK_TYPED(OnControlEditModifyHdl, Edit&, void);
-        DECL_LINK_TYPED(OnControlModifiedClick, Button*, void);
-        DECL_LINK_TYPED(ControlModifiedCheckBoxHdl, CheckBox&, void);
+        DECL_LINK(OnControlModified, void*, void);
+        DECL_LINK(OnControlEditModifyHdl, Edit&, void);
+        DECL_LINK(OnControlEntryModifyHdl, weld::Entry&, void);
+        DECL_LINK(OnControlSpinButtonModifyHdl, weld::SpinButton&, void);
+        DECL_LINK(OnControlModifiedButtonClick, weld::ToggleButton&, void);
+        DECL_LINK(OnControlModifiedClick, Button*, void);
+        DECL_LINK(ControlModifiedCheckBoxHdl, CheckBox&, void);
 
-        DECL_LINK_TYPED(OnTestConnectionClickHdl, Button*, void);
-    };
-
-    // ControlRelation
-    enum ControlRelation
-    {
-        RelatedControls, UnrelatedControls
+        DECL_LINK(OnTestConnectionButtonClickHdl, weld::Button&, void);
+        DECL_LINK(OnTestConnectionClickHdl, Button*, void);
     };
 
     // LayoutHelper
@@ -227,7 +275,6 @@ namespace dbaui
         static void     positionBelow(
                             const Control& _rReference,
                             Control& _rControl,
-                            const ControlRelation _eRelation,
                             const long _nIndentAppFont
                         );
         /** fits the button size to be large enough to contain the buttons text

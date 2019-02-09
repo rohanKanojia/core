@@ -34,12 +34,11 @@ struct RtfParserState_Impl
     {}
 };
 
-class SVT_DLLPUBLIC SvRTFParser : public SvParser
+class SVT_DLLPUBLIC SvRTFParser : public SvParser<int>
 {
     std::stack< RtfParserState_Impl > aParserStates;
     int              nOpenBrakets;
-    rtl_TextEncoding eCodeSet,
-                     eUNICodeSet;
+    rtl_TextEncoding eCodeSet;
     sal_uInt8        nUCharOverread;
 
 private:
@@ -50,14 +49,13 @@ protected:
     void ScanText();
     void SkipGroup();
 
-    // scanne das naechste Token,
+    // scan the next Token
     virtual int GetNextToken_() override;
 
     void ReadUnknownData();
-    virtual void ReadBitmapData();
-    virtual void ReadOLEData();
+    void ReadBitmapData();
 
-    virtual ~SvRTFParser();
+    virtual ~SvRTFParser() override;
 
     rtl_TextEncoding GetCodeSet() const             { return eCodeSet; }
     void SetEncoding( rtl_TextEncoding eEnc );
@@ -65,9 +63,9 @@ protected:
 public:
     SvRTFParser( SvStream& rIn, sal_uInt8 nStackSize = 3 );
 
-    virtual SvParserState CallParser() override;   // Aufruf des Parsers
+    virtual SvParserState CallParser() override;   // calling the parser
 
-    // fuers asynchrone lesen aus dem SvStream
+    // for asynchronous read from the SvStream
     virtual void Continue( int nToken ) override;
 };
 

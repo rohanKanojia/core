@@ -16,24 +16,31 @@ namespace tools
 namespace cpuid
 {
 
-#if defined(LO_SSE2_AVAILABLE)
-
 namespace
 {
 #if defined(_MSC_VER)
 #include <intrin.h>
 void getCpuId(uint32_t array[4])
 {
-    __cpuid((int*)array, 1);
+    __cpuid(reinterpret_cast<int*>(array), 1);
 }
 #else
+#if (defined(__i386__) || defined(__x86_64__))
 #include <cpuid.h>
 void getCpuId(uint32_t array[4])
 {
     __get_cpuid(1, array + 0, array + 1, array + 2, array + 3);
 }
+#else
+void getCpuId(uint32_t array[4])
+{
+   array[0] = array[1] =  array[2] = array[3] = 0;
+}
+#endif
 #endif
 }
+
+#if defined(LO_SSE2_AVAILABLE)
 
 bool hasSSE2()
 {
@@ -47,6 +54,13 @@ bool hasSSE2()
 bool hasSSE2() { return false; }
 
 #endif
+
+bool hasHyperThreading()
+{
+    uint32_t cpuInfoArray[] = {0, 0, 0, 0};
+    getCpuId(cpuInfoArray);
+    return (cpuInfoArray[3] & (1 << 28)) != 0;
+}
 
 }
 }

@@ -54,7 +54,7 @@
  *
  ************************************************************************/
 #include "first.hxx"
-#include "assert.h"
+#include <assert.h>
 #include <stdio.h>
 #include <osl/diagnose.h>
 #include <sot/storinfo.hxx>
@@ -70,10 +70,8 @@ const char gsBenMagicBytes[] = BEN_MAGIC_BYTES;
 *   @param  pointer to pointer of Bento Container object
 *   @return error code
 */
-sal_uLong BenOpenContainer(LwpSvStream * pStream, pLtcBenContainer * ppContainer)
+sal_uLong BenOpenContainer(LwpSvStream * pStream, std::unique_ptr<LtcBenContainer>* ppContainer)
 {
-    BenError Err;
-
     *ppContainer = nullptr;
 
     if (nullptr == pStream)
@@ -81,14 +79,13 @@ sal_uLong BenOpenContainer(LwpSvStream * pStream, pLtcBenContainer * ppContainer
         return BenErr_ContainerWithNoObjects;
     }
 
-    pLtcBenContainer pContainer = new LtcBenContainer(pStream);
-    if ((Err = pContainer->Open()) != BenErr_OK) // delete two inputs
+    std::unique_ptr<LtcBenContainer> pContainer(new LtcBenContainer(pStream));
+    if (pContainer->Open() != BenErr_OK) // delete two inputs
     {
-        delete pContainer;
         return BenErr_InvalidTOC;
     }
 
-    *ppContainer = pContainer;
+    *ppContainer = std::move(pContainer);
     return BenErr_OK;
 }
 
@@ -110,38 +107,38 @@ LtcBenContainer::Open() // delete two inputs
 
 void
 LtcBenContainer::RegisterPropertyName(const char * sPropertyName,
-  pCBenPropertyName * ppPropertyName)
+  CBenPropertyName ** ppPropertyName)
 {
-    pCUtListElmt pPrevNamedObjectListElmt;
-    pCBenNamedObject pNamedObject = FindNamedObject(&cNamedObjects,
+    CUtListElmt * pPrevNamedObjectListElmt;
+    CBenNamedObject * pNamedObject = FindNamedObject(&cNamedObjects,
       sPropertyName, &pPrevNamedObjectListElmt);
 
     if (pNamedObject != nullptr)
     {
         if (! pNamedObject->IsPropertyName())
             return;
-        else *ppPropertyName = static_cast<pCBenPropertyName>(pNamedObject);
+        else *ppPropertyName = static_cast<CBenPropertyName *>(pNamedObject);
     }
     else
     {
-        pCUtListElmt pPrevObject;
+        CUtListElmt * pPrevObject;
         if (FindID(&cObjects, cNextAvailObjectID, &pPrevObject) != nullptr)
             return;
 
         *ppPropertyName = new CBenPropertyName(this, cNextAvailObjectID,
-          static_cast<pCBenObject>(pPrevObject), sPropertyName, pPrevNamedObjectListElmt);
+          pPrevObject, sPropertyName, pPrevNamedObjectListElmt);
         ++cNextAvailObjectID;
     }
 }
 
-pCBenObject
-LtcBenContainer::GetNextObject(pCBenObject pCurrObject)
+CBenObject *
+LtcBenContainer::GetNextObject(CBenObject const * pCurrObject)
 {
-    return static_cast<pCBenObject>(cObjects.GetNextOrNULL(pCurrObject));
+    return static_cast<CBenObject *>(cObjects.GetNextOrNULL(pCurrObject));
 }
 
-pCBenObject
-LtcBenContainer::FindNextObjectWithProperty(pCBenObject pCurrObject,
+CBenObject *
+LtcBenContainer::FindNextObjectWithProperty(CBenObject * pCurrObject,
   BenObjectID PropertyID)
 {
     while ((pCurrObject = GetNextObject(pCurrObject)) != nullptr)
@@ -166,17 +163,15 @@ LtcBenContainer::LtcBenContainer(LwpSvStream * pStream)
 }
 
 /**
-*   Read buffer fro bento file with specified buffer
+*   Read buffer for bento file with specified buffer
 *   @param  buffer pointer
 *   @param  buffer size
 *   @param  number of bytes read
-*   @return BenError
 */
-BenError LtcBenContainer::Read(void * pBuffer, unsigned long MaxSize,
-  unsigned long * pAmtRead)
+void LtcBenContainer::Read(void * pBuffer, size_t MaxSize,
+  size_t* pAmtRead)
 {
     *pAmtRead = cpStream->Read(pBuffer, MaxSize);
-    return BenErr_OK;
 }
 /**
 *   Read buffer from bento file with specified size
@@ -184,11 +179,10 @@ BenError LtcBenContainer::Read(void * pBuffer, unsigned long MaxSize,
 *   @param  number of bytes to be read
 *   @return BenError
 */
-BenError LtcBenContainer::ReadKnownSize(void * pBuffer, unsigned long Amt)
+BenError LtcBenContainer::ReadKnownSize(void * pBuffer, size_t Amt)
 {
-    sal_uLong ulLength;
-    ulLength = cpStream->Read(pBuffer, Amt);
-    if(ulLength == Amt)
+    size_t ulLength = cpStream->Read(pBuffer, Amt);
+    if (ulLength == Amt)
     {
         return BenErr_OK;
     }
@@ -197,32 +191,26 @@ BenError LtcBenContainer::ReadKnownSize(void * pBuffer, unsigned long Amt)
 /**
 *   Seek to position from the beginning of the bento file
 *   @param  position in container file from beginning
-*   @return BenError
 */
-BenError LtcBenContainer::SeekToPosition(BenContainerPos Pos)
+void LtcBenContainer::SeekToPosition(BenContainerPos Pos)
 {
     cpStream->Seek(Pos);
-    return BenErr_OK;
 }
 /**
 *   Seek to position compare to end of bento file
 *   @param  position in container file from end
-*   @return BenError
 */
-BenError LtcBenContainer::SeekFromEnd(long Offset)
+void LtcBenContainer::SeekFromEnd(long Offset)
 {
     cpStream->Seek(STREAM_SEEK_TO_END);
     cpStream->SeekRel(Offset);
-
-    return BenErr_OK;
 }
 /**
 *   Find the next value stream with property name
 *   @param  string of property name
-*   @param  current value stream pointer with the property name
 *   @return next value stream pointer with the property names
 */
-LtcUtBenValueStream * LtcBenContainer::FindNextValueStreamWithPropertyName(const char * sPropertyName, LtcUtBenValueStream * pCurrentValueStream)
+LtcUtBenValueStream * LtcBenContainer::FindNextValueStreamWithPropertyName(const char * sPropertyName)
 {
     CBenPropertyName * pPropertyName(nullptr);
     RegisterPropertyName(sPropertyName, &pPropertyName);        // Get property name object
@@ -232,10 +220,6 @@ LtcUtBenValueStream * LtcBenContainer::FindNextValueStreamWithPropertyName(const
 
     // Get current object
     CBenObject * pObj = nullptr;
-    if (pCurrentValueStream != nullptr)
-    {
-        pObj = pCurrentValueStream->GetValue()->GetProperty()->GetBenObject();
-    }
 
     pObj =FindNextObjectWithProperty(pObj, pPropertyName->GetID()); // Get next object with same property name
     if (nullptr == pObj)
@@ -258,39 +242,40 @@ LtcUtBenValueStream * LtcBenContainer::FindNextValueStreamWithPropertyName(const
 */
 LtcUtBenValueStream * LtcBenContainer::FindValueStreamWithPropertyName(const char * sPropertyName)
 {
-    return FindNextValueStreamWithPropertyName(sPropertyName, nullptr);
-}
-/**
-*   <description>
-*   @param  pointer to length of bento file
-*   @return BenError
-*/
-BenError LtcBenContainer::GetSize(sal_uLong * pLength)
-{
-    *pLength = m_ulLength;
-    return BenErr_OK;
+    return FindNextValueStreamWithPropertyName(sPropertyName);
 }
 
-sal_uInt32 GetSvStreamSize(SvStream * pStream)
+namespace
 {
-    sal_uInt32 nCurPos = pStream->Tell();
-    pStream->Seek(STREAM_SEEK_TO_END);
-    sal_uInt32 ulLength = pStream->Tell();
-    pStream->Seek(nCurPos);
-
-    return ulLength;
+    void readDataInBlocks(SvStream& rSt, sal_uInt64 nDLen, std::vector<sal_uInt8>& rData)
+    {
+        //read data in blocks as its more likely large values are simply broken
+        //and we'll run out of data before we need to realloc
+        for (sal_uInt64 i = 0; i < nDLen; i+= SAL_MAX_UINT16)
+        {
+           size_t nOldSize = rData.size();
+           size_t nBlock = std::min<size_t>(SAL_MAX_UINT16, nDLen - nOldSize);
+           rData.resize(nOldSize + nBlock);
+           size_t nReadBlock = rSt.ReadBytes(rData.data() + nOldSize, nBlock);
+           if (nBlock != nReadBlock)
+           {
+               rData.resize(nOldSize + nReadBlock);
+               break;
+           }
+        }
+    }
 }
 
 /**
 *   Find hazily according to object ID
 *   @param  pObjectname - format as "GrXX,XXXXXXXX" wherein XX is high part of object ID, and XXXXXXXX is low part
 */
-void LtcBenContainer::CreateGraphicStream(SvStream * &pStream, const char *pObjectName)
+std::vector<sal_uInt8> LtcBenContainer::GetGraphicData(const char *pObjectName)
 {
+    std::vector<sal_uInt8> aData;
     if (!pObjectName)
     {
-        pStream = nullptr;
-        return;
+        return aData;
     }
     // construct the string of property name
     char sSName[64]="";
@@ -300,51 +285,46 @@ void LtcBenContainer::CreateGraphicStream(SvStream * &pStream, const char *pObje
     sprintf(sDName, "%s-D", pObjectName);
 
     /* traverse the found properties and construct the stream vectors */
-    SvMemoryStream * pMemStream = nullptr;
     // get S&D's stream and merge them together
-    SvStream *pD = nullptr, *pS = nullptr;
+    std::unique_ptr<SvStream> xS(FindValueStreamWithPropertyName(sSName));
+    std::unique_ptr<SvStream> xD(FindValueStreamWithPropertyName(sDName));
 
-    pS = FindValueStreamWithPropertyName(sSName);
-    pD = FindValueStreamWithPropertyName(sDName);
-
-    sal_uInt32 nDLen = 0;
-    if(pD)
+    sal_uInt64 nDLen = 0;
+    if (xD)
     {
-        nDLen = GetSvStreamSize(pD);
+        nDLen = xD->TellEnd();
     }
-    sal_uInt32 nLen = nDLen;
-    if(pS)
+    sal_uInt64 nSLen = 0;
+    if (xS)
     {
-        nLen += GetSvStreamSize(pS) ;
+        nSLen = xS->TellEnd();
     }
 
+    sal_uInt64 nLen = nDLen + nSLen;
     OSL_ENSURE(nLen > 0, "expected a non-0 length");
     // the 'D' stream is NULL or it has invalid length
     if (nLen <= 0)
     {
-        pStream = nullptr;
-        return;
+        return aData;
     }
 
-    char * pBuf = new char[nLen];
-    assert(pBuf != nullptr);
-    char * pPointer = pBuf;
-    if(pD)
+    if (xD)
     {
-        pD->Read(pPointer, nDLen);
-        delete pD;
+        readDataInBlocks(*xD, nDLen, aData);
+        xD.reset();
     }
-    pPointer += nDLen;
-    if(pS)
+    if (xS)
     {
-        pS->Read(pPointer, nLen - nDLen);
-        delete pS;
+        readDataInBlocks(*xS, nSLen, aData);
+        xS.reset();
     }
 
-    pMemStream = new SvMemoryStream(pBuf, nLen, StreamMode::READ);
-    assert(pMemStream != nullptr);
+    return aData;
+}
 
-    pStream = pMemStream;
+sal_uLong LtcBenContainer::remainingSize() const
+{
+    return m_ulLength - cpStream->Tell();
 }
 
 }// end namespace OpenStormBento

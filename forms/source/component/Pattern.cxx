@@ -18,15 +18,12 @@
  */
 
 #include "Pattern.hxx"
-#include "comphelper/processfactory.hxx"
 
 using ::com::sun::star::uno::Reference;
-using ::com::sun::star::lang::XMultiServiceFactory;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Type;
 using ::com::sun::star::uno::XComponentContext;
 using ::com::sun::star::beans::Property;
-using ::com::sun::star::uno::Exception;
 using ::com::sun::star::uno::XInterface;
 using ::com::sun::star::uno::Any;
 using ::com::sun::star::uno::makeAny;
@@ -43,14 +40,7 @@ OPatternControl::OPatternControl(const Reference<XComponentContext>& _rxFactory)
 {
 }
 
-
-Sequence<Type> OPatternControl::_getTypes()
-{
-    return OBoundControl::_getTypes();
-}
-
-
-css::uno::Sequence<OUString> OPatternControl::getSupportedServiceNames() throw(std::exception)
+css::uno::Sequence<OUString> OPatternControl::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OBoundControl::getSupportedServiceNames();
     aSupported.realloc(aSupported.getLength() + 2);
@@ -63,12 +53,6 @@ css::uno::Sequence<OUString> OPatternControl::getSupportedServiceNames() throw(s
 
 
 // OPatternModel
-
-
-Sequence<Type> OPatternModel::_getTypes()
-{
-    return OEditBaseModel::_getTypes();
-}
 
 
 OPatternModel::OPatternModel(const Reference<XComponentContext>& _rxFactory)
@@ -97,7 +81,7 @@ IMPLEMENT_DEFAULT_CLONING( OPatternModel )
 
 // XServiceInfo
 
-css::uno::Sequence<OUString> SAL_CALL OPatternModel::getSupportedServiceNames() throw(std::exception)
+css::uno::Sequence<OUString> SAL_CALL OPatternModel::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OBoundControlModel::getSupportedServiceNames();
     aSupported.realloc(aSupported.getLength() + 3);
@@ -121,7 +105,7 @@ void OPatternModel::describeFixedProperties( Sequence< Property >& _rProps ) con
 }
 
 
-OUString SAL_CALL OPatternModel::getServiceName() throw ( css::uno::RuntimeException, std::exception)
+OUString SAL_CALL OPatternModel::getServiceName()
 {
     return OUString(FRM_COMPONENT_PATTERNFIELD);  // old (non-sun) name for compatibility !
 }
@@ -146,8 +130,9 @@ bool OPatternModel::commitControlValueToDbColumn( bool /*_bPostReset*/ )
         }
         else
         {
-            OSL_ENSURE( m_pFormattedValue.get(), "OPatternModel::commitControlValueToDbColumn: no value helper!" );
-            if ( !m_pFormattedValue.get() )
+            OSL_ENSURE(m_pFormattedValue,
+                       "OPatternModel::commitControlValueToDbColumn: no value helper!");
+            if (!m_pFormattedValue)
                 return false;
 
             if ( !m_pFormattedValue->setFormattedValue( sNewValue ) )
@@ -183,9 +168,10 @@ void OPatternModel::onDisconnectedDbColumn()
 
 Any OPatternModel::translateDbColumnToControlValue()
 {
-    OSL_PRECOND( m_pFormattedValue.get(), "OPatternModel::translateDbColumnToControlValue: no value helper!" );
+    OSL_PRECOND(m_pFormattedValue,
+                "OPatternModel::translateDbColumnToControlValue: no value helper!");
 
-    if ( m_pFormattedValue.get() )
+    if (m_pFormattedValue)
     {
         OUString sValue( m_pFormattedValue->getFormattedValue() );
         if  (   sValue.isEmpty()
@@ -222,14 +208,14 @@ void OPatternModel::resetNoBroadcast()
 
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OPatternModel_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {
     return cppu::acquire(new frm::OPatternModel(component));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OPatternControl_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {

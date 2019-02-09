@@ -17,18 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuvect.hxx"
+#include <fuvect.hxx>
 #include <tools/poly.hxx>
 #include <svx/svdograf.hxx>
-#include <vcl/msgbox.hxx>
 #include <svx/svdedtv.hxx>
 
-#include "View.hxx"
-#include "ViewShell.hxx"
-#include "Window.hxx"
-#include "strings.hrc"
-#include "sdresid.hxx"
-#include "sdabstdlg.hxx"
+#include <View.hxx>
+#include <ViewShell.hxx>
+#include <Window.hxx>
+#include <strings.hrc>
+#include <sdresid.hxx>
+#include <sdabstdlg.hxx>
 #include <memory>
 
 namespace sd
@@ -60,20 +59,22 @@ void FuVectorize::DoExecute( SfxRequest& )
     {
         SdrObject* pObj = rMarkList.GetMark( 0 )->GetMarkedSdrObj();
 
-        if( pObj && dynamic_cast< const SdrGrafObj *>( pObj ) !=  nullptr )
+        if( auto pSdrGrafObj = dynamic_cast< const SdrGrafObj *>( pObj ) )
         {
             SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
-            std::unique_ptr<AbstractSdVectorizeDlg> pDlg(pFact ? pFact->CreateSdVectorizeDlg( mpWindow, static_cast<SdrGrafObj*>( pObj )->GetGraphic().GetBitmap(), mpDocSh ) : nullptr);
-            if( pDlg && pDlg->Execute() == RET_OK )
+            ScopedVclPtr<AbstractSdVectorizeDlg> pDlg(
+                    pFact->CreateSdVectorizeDlg(mpWindow ? mpWindow->GetFrameWeld() : nullptr,
+                                                pSdrGrafObj->GetGraphic().GetBitmapEx().GetBitmap(), mpDocSh ) );
+            if( pDlg->Execute() == RET_OK )
             {
                 const GDIMetaFile&  rMtf = pDlg->GetGDIMetaFile();
                 SdrPageView*        pPageView = mpView->GetSdrPageView();
 
                 if( pPageView && rMtf.GetActionSize() )
                 {
-                    SdrGrafObj* pVectObj = static_cast<SdrGrafObj*>( pObj->Clone() );
+                    SdrGrafObj* pVectObj = static_cast<SdrGrafObj*>( pObj->CloneSdrObject(pObj->getSdrModelFromSdrObject()) );
                     OUString aStr( mpView->GetDescriptionOfMarkedObjects() );
-                    aStr += " " + SD_RESSTR( STR_UNDO_VECTORIZE );
+                    aStr += " " + SdResId( STR_UNDO_VECTORIZE );
                     mpView->BegUndo( aStr );
                     pVectObj->SetGraphic( rMtf );
                     mpView->ReplaceObjectAtView( pObj, *pPageView, pVectObj );

@@ -20,7 +20,6 @@
 #include <stdio.h>
 #include <osl/time.h>
 
-#include <osl/diagnose.h>
 #include <com/sun/star/test/XSimpleTest.hpp>
 
 #include <com/sun/star/io/XActiveDataSource.hpp>
@@ -36,8 +35,7 @@
 #include <uno/mapping.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/factory.hxx>
-#include <osl/mutex.hxx>
-#include <osl/thread.h>
+#include <osl/thread.hxx>
 #include <list>
 
 
@@ -52,8 +50,7 @@ using namespace ::com::sun::star::test;
 
 static void mywait()
 {
-    TimeValue a = { 0, 10000 };
-    osl_waitThread( &a );
+    osl::Thread::wait(std::chrono::microseconds(10));
     osl_yieldThread();
     osl_yieldThread();
 }

@@ -18,14 +18,16 @@
  */
 
 
-#include "osx/salinst.h"
-#include "quartz/utils.h"
+#include <osx/salinst.h>
+#include <quartz/utils.h>
 #include "a11ytextwrapper.h"
 #include "a11ytextattributeswrapper.h"
 #include "a11yutil.h"
 
 #include <com/sun/star/accessibility/AccessibleTextType.hpp>
 #include <com/sun/star/awt/Rectangle.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 
 using namespace ::com::sun::star::accessibility;
 using namespace ::com::sun::star::awt;
@@ -58,7 +60,7 @@ using namespace ::com::sun::star::uno;
 +(void)setSelectedTextAttributeForElement:(AquaA11yWrapper *)wrapper to:(id)value {
     if ( [ wrapper accessibleEditableText ] ) {
         NSAutoreleasePool * pool = [ [ NSAutoreleasePool alloc ] init ];
-        OUString newText = GetOUString ( (NSString *) value );
+        OUString newText = GetOUString ( static_cast<NSString *>(value) );
         NSRange selectedTextRange = [ [ AquaA11yTextWrapper selectedTextRangeAttributeForElement: wrapper ] rangeValue ];
         try {
             [ wrapper accessibleEditableText ] -> replaceText ( selectedTextRange.location, selectedTextRange.location + selectedTextRange.length, newText );
@@ -106,13 +108,11 @@ using namespace ::com::sun::star::uno;
 
 +(id)sharedTextUIElementsAttributeForElement:(AquaA11yWrapper *)wrapper
 {
-    (void)wrapper;
     return [NSArray arrayWithObject:wrapper];
 }
 
 +(id)sharedCharacterRangeAttributeForElement:(AquaA11yWrapper *)wrapper
 {
-    (void)wrapper;
     return [ NSValue valueWithRange: NSMakeRange ( 0, [wrapper accessibleText]->getCharacterCount() ) ];
 }
 
@@ -153,7 +153,7 @@ using namespace ::com::sun::star::uno;
 +(id)lineForIndexAttributeForElement:(AquaA11yWrapper *)wrapper forParameter:(id)index {
     NSNumber * lineNumber = nil;
     try {
-        sal_Int32 line = [ wrapper accessibleMultiLineText ] -> getLineNumberAtIndex ( (sal_Int32) [ index intValue ] );
+        sal_Int32 line = [ wrapper accessibleMultiLineText ] -> getLineNumberAtIndex ( static_cast<sal_Int32>([ index intValue ]) );
         lineNumber = [ NSNumber numberWithInt: line ];
     } catch ( IndexOutOfBoundsException & e ) {
         // empty
@@ -203,8 +203,8 @@ using namespace ::com::sun::star::uno;
 
 +(id)rangeForPositionAttributeForElement:(AquaA11yWrapper *)wrapper forParameter:(id)point {
     NSValue * value = nil;
-    Point aPoint( [ AquaA11yUtil nsPointToVclPoint: point ]);
-    const Point screenPos = [ wrapper accessibleComponent ] -> getLocationOnScreen();
+    css::awt::Point aPoint( [ AquaA11yUtil nsPointToVclPoint: point ]);
+    const css::awt::Point screenPos = [ wrapper accessibleComponent ] -> getLocationOnScreen();
     aPoint.X -= screenPos.X;
     aPoint.Y -= screenPos.Y;
     sal_Int32 index = [ wrapper accessibleText ] -> getIndexAtPoint( aPoint );
@@ -239,9 +239,9 @@ using namespace ::com::sun::star::uno;
         }
         if ( [ wrapper accessibleComponent ] ) {
             // get location on screen (must be added since get CharacterBounds returns values relative to parent)
-            Point screenPos = [ wrapper accessibleComponent ] -> getLocationOnScreen();
-            Point pos ( minx + screenPos.X, miny + screenPos.Y );
-            Point size ( maxx - minx, maxy - miny );
+            css::awt::Point screenPos = [ wrapper accessibleComponent ] -> getLocationOnScreen();
+            css::awt::Point pos ( minx + screenPos.X, miny + screenPos.Y );
+            css::awt::Point size ( maxx - minx, maxy - miny );
             NSValue * nsPos = [ AquaA11yUtil vclPointToNSPoint: pos ];
             rect = [ NSValue valueWithRect: NSMakeRect ( [ nsPos pointValue ].x, [ nsPos pointValue ].y - size.Y, size.X, size.Y ) ];
             //printf("Range: %s --- Rect: %s\n", [ NSStringFromRange ( [ range rangeValue ] ) UTF8String ], [ NSStringFromRect ( [ rect rectValue ] ) UTF8String ]);
@@ -267,12 +267,12 @@ using namespace ::com::sun::star::uno;
 
 +(id)rTFForRangeAttributeForElement:(AquaA11yWrapper *)wrapper forParameter:(id)range {
     NSData * rtfData = nil;
-    NSAttributedString * attrString = (NSAttributedString *) [ AquaA11yTextWrapper attributedStringForRangeAttributeForElement: wrapper forParameter: range ];
+    NSAttributedString * attrString = static_cast<NSAttributedString *>([ AquaA11yTextWrapper attributedStringForRangeAttributeForElement: wrapper forParameter: range ]);
     if ( attrString != nil ) {
         @try {
             rtfData = [ attrString RTFFromRange: [ range rangeValue ] documentAttributes: @{NSDocumentTypeDocumentAttribute : NSRTFTextDocumentType} ];
         } @catch ( NSException * e) {
-            // emtpy
+            // empty
         }
     }
     return rtfData;

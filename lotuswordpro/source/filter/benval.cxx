@@ -53,30 +53,35 @@
  *
  *
  ************************************************************************/
+
+#include <sal/config.h>
+
+#include <algorithm>
+#include <cstring>
+
 #include "first.hxx"
-#include "assert.h"
+#include <assert.h>
 namespace OpenStormBento
 {
 
-unsigned long
+size_t
 CBenValue::GetValueSize()
 {
-    unsigned long Size = 0;
-    pCBenValueSegment pCurr = nullptr;
+    size_t Size = 0;
+    CBenValueSegment * pCurr = nullptr;
     while ((pCurr = GetNextValueSegment(pCurr)) != nullptr)
         Size += pCurr->GetSize();
     return Size;
 }
 
 void
-CBenValue::ReadValueData(void * pReadBuffer, unsigned long Offset,
-  unsigned long Amt, unsigned long * pAmtRead)
+CBenValue::ReadValueData(void * pReadBuffer, size_t Offset,
+  size_t Amt, size_t* pAmtRead)
 {
-    BenError Err;
-    unsigned long SegOffset = 0;
+    size_t SegOffset = 0;
     *pAmtRead = 0;
-    pCBenValueSegment pCurrSeg = nullptr;
-    pLtcBenContainer pContainer = GetContainer();
+    CBenValueSegment * pCurrSeg = nullptr;
+    LtcBenContainer * pContainer = GetProperty()->GetContainer();
     BenByte* pBuffer = static_cast<BenByte*>(pReadBuffer);
 
     /// pReadBuffer -- pointer to buffer of read result, allocated outside this function
@@ -93,28 +98,24 @@ CBenValue::ReadValueData(void * pReadBuffer, unsigned long Offset,
 
         if (SegOffset <= Offset && Offset < SegOffset + pCurrSeg->GetSize()) /// begin at current segment
         {
-            unsigned long OffsetIntoSeg = Offset - SegOffset;  /// relative value in this value segment stream
+            size_t OffsetIntoSeg = Offset - SegOffset;  /// relative value in this value segment stream
 
-            unsigned long AmtThisSeg = UtMin(Amt, pCurrSeg->GetSize() -
+            size_t AmtThisSeg = std::min(Amt, pCurrSeg->GetSize() -
                 OffsetIntoSeg);           /// size read in this segment, it's minimal value between Amt &
                                           /// remain part from OffsetIntoSeg to the end of this segment
 
-            unsigned long AmtReadThisSeg; /// actual read size in this segment
+            size_t AmtReadThisSeg; /// actual read size in this segment
             if (pCurrSeg->IsImmediate())
             {
-                UtHugeMemcpy(pBuffer, pCurrSeg->GetImmediateData() +
+                std::memcpy(pBuffer, pCurrSeg->GetImmediateData() +
                   OffsetIntoSeg, AmtThisSeg);
                 AmtReadThisSeg = AmtThisSeg;
             }
             else
             {
-                if ((Err = pContainer->SeekToPosition(pCurrSeg->GetPosition() +
-                        OffsetIntoSeg)) != BenErr_OK)
-                    return;
-
-                if ((Err = pContainer->Read(pBuffer, AmtThisSeg,
-                                            &AmtReadThisSeg)) != BenErr_OK)
-                    return;
+                pContainer->SeekToPosition(pCurrSeg->GetPosition() +
+                        OffsetIntoSeg);
+                pContainer->Read(pBuffer, AmtThisSeg, &AmtReadThisSeg);
             }
 
             *pAmtRead += AmtReadThisSeg;

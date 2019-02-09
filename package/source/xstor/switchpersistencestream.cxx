@@ -18,17 +18,17 @@
  */
 
 #include <osl/diagnose.h>
-
+#include <com/sun/star/io/IOException.hpp>
+#include <com/sun/star/io/NotConnectedException.hpp>
 #include <com/sun/star/io/TempFile.hpp>
-#include <comphelper/processfactory.hxx>
 #include <comphelper/storagehelper.hxx>
-#include <switchpersistencestream.hxx>
+#include "switchpersistencestream.hxx"
 
 using namespace ::com::sun::star;
 
 struct SPStreamData_Impl
 {
-    bool m_bInStreamBased;
+    bool const m_bInStreamBased;
 
     // the streams below are not visible from outside so there is no need to remember position
 
@@ -64,7 +64,6 @@ SwitchablePersistenceStream::SwitchablePersistenceStream(
         const uno::Reference< uno::XComponentContext >& xContext,
         const uno::Reference< io::XStream >& xStream )
 : m_xContext( xContext )
-, m_pStreamData( nullptr )
 {
     SwitchPersistenceTo( xStream );
 }
@@ -73,7 +72,6 @@ SwitchablePersistenceStream::SwitchablePersistenceStream(
         const uno::Reference< uno::XComponentContext >& xContext,
         const uno::Reference< io::XInputStream >& xInputStream )
 : m_xContext( xContext )
-, m_pStreamData( nullptr )
 {
     SwitchPersistenceTo( xInputStream );
 }
@@ -112,14 +110,13 @@ void SwitchablePersistenceStream::SwitchPersistenceTo( const uno::Reference< io:
 
     CloseAll_Impl();
 
-    m_pStreamData = new SPStreamData_Impl( false,
+    m_pStreamData.reset( new SPStreamData_Impl( false,
                                             xNewTruncate, xNewSeekable, xNewInStream, xNewOutStream,
-                                            bInOpen, bOutOpen );
+                                            bInOpen, bOutOpen ) );
 }
 
 void SwitchablePersistenceStream::SwitchPersistenceTo( const uno::Reference< io::XInputStream >& xInputStream )
 {
-    uno::Reference< io::XStream > xNewStream;
     uno::Reference< io::XTruncate > xNewTruncate;
     uno::Reference< io::XSeekable > xNewSeekable( xInputStream, uno::UNO_QUERY_THROW );
     uno::Reference< io::XOutputStream > xNewOutStream;
@@ -146,9 +143,9 @@ void SwitchablePersistenceStream::SwitchPersistenceTo( const uno::Reference< io:
 
     CloseAll_Impl();
 
-    m_pStreamData = new SPStreamData_Impl( true,
+    m_pStreamData.reset( new SPStreamData_Impl( true,
                                             xNewTruncate, xNewSeekable, xInputStream, xNewOutStream,
-                                            bInOpen, bOutOpen );
+                                            bInOpen, bOutOpen ) );
 
 }
 
@@ -190,23 +187,18 @@ void SwitchablePersistenceStream::CopyAndSwitchPersistenceTo( const uno::Referen
 
     CloseAll_Impl();
 
-    m_pStreamData = new SPStreamData_Impl( false,
+    m_pStreamData.reset( new SPStreamData_Impl( false,
                                         xTargetTruncate, xTargetSeek, xTargetInStream, xTargetOutStream,
-                                        bInOpen, bOutOpen );
+                                        bInOpen, bOutOpen ) );
 }
 
 void SwitchablePersistenceStream::CloseAll_Impl()
 {
-    if ( m_pStreamData )
-    {
-        delete m_pStreamData;
-        m_pStreamData = nullptr;
-    }
+    m_pStreamData.reset();
 }
 
 // css::io::XStream
 uno::Reference< io::XInputStream > SAL_CALL SwitchablePersistenceStream::getInputStream(  )
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -216,7 +208,6 @@ uno::Reference< io::XInputStream > SAL_CALL SwitchablePersistenceStream::getInpu
 }
 
 uno::Reference< io::XOutputStream > SAL_CALL SwitchablePersistenceStream::getOutputStream(  )
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -227,7 +218,6 @@ uno::Reference< io::XOutputStream > SAL_CALL SwitchablePersistenceStream::getOut
 
 // css::io::XInputStream
 ::sal_Int32 SAL_CALL SwitchablePersistenceStream::readBytes( uno::Sequence< ::sal_Int8 >& aData, ::sal_Int32 nBytesToRead )
-    throw (io::NotConnectedException, io::BufferSizeExceededException, io::IOException, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -242,7 +232,6 @@ uno::Reference< io::XOutputStream > SAL_CALL SwitchablePersistenceStream::getOut
 }
 
 ::sal_Int32 SAL_CALL SwitchablePersistenceStream::readSomeBytes( uno::Sequence< ::sal_Int8 >& aData, ::sal_Int32 nMaxBytesToRead )
-    throw (io::NotConnectedException, io::BufferSizeExceededException, io::IOException, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -257,7 +246,6 @@ uno::Reference< io::XOutputStream > SAL_CALL SwitchablePersistenceStream::getOut
 }
 
 void SAL_CALL SwitchablePersistenceStream::skipBytes( ::sal_Int32 nBytesToSkip )
-    throw (io::NotConnectedException, io::BufferSizeExceededException, io::IOException, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -272,7 +260,6 @@ void SAL_CALL SwitchablePersistenceStream::skipBytes( ::sal_Int32 nBytesToSkip )
 }
 
 ::sal_Int32 SAL_CALL SwitchablePersistenceStream::available(  )
-    throw (io::NotConnectedException, io::IOException, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -287,7 +274,6 @@ void SAL_CALL SwitchablePersistenceStream::skipBytes( ::sal_Int32 nBytesToSkip )
 }
 
 void SAL_CALL SwitchablePersistenceStream::closeInput()
-    throw (io::NotConnectedException, io::IOException, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -301,7 +287,6 @@ void SAL_CALL SwitchablePersistenceStream::closeInput()
 
 // css::io::XOutputStream
 void SAL_CALL SwitchablePersistenceStream::writeBytes( const uno::Sequence< ::sal_Int8 >& aData )
-    throw (io::NotConnectedException, io::BufferSizeExceededException, io::IOException, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -319,13 +304,12 @@ void SAL_CALL SwitchablePersistenceStream::writeBytes( const uno::Sequence< ::sa
 }
 
 void SAL_CALL SwitchablePersistenceStream::flush(  )
-    throw (io::NotConnectedException, io::BufferSizeExceededException, io::IOException, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
     if ( !m_pStreamData || m_pStreamData->m_bInStreamBased )
     {
-        OSL_FAIL( "flush() is not acceptable!\n" );
+        OSL_FAIL( "flush() is not acceptable!" );
         return;
         // in future throw exception, for now some code might call flush() on closed stream
         // since file ucp implementation allows it
@@ -340,7 +324,6 @@ void SAL_CALL SwitchablePersistenceStream::flush(  )
 }
 
 void SAL_CALL SwitchablePersistenceStream::closeOutput(  )
-    throw (io::NotConnectedException, io::BufferSizeExceededException, io::IOException, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -354,7 +337,6 @@ void SAL_CALL SwitchablePersistenceStream::closeOutput(  )
 
 // css::io::XTruncate
 void SAL_CALL SwitchablePersistenceStream::truncate(  )
-    throw (io::IOException, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -373,7 +355,6 @@ void SAL_CALL SwitchablePersistenceStream::truncate(  )
 
 // css::io::XSeekable
 void SAL_CALL SwitchablePersistenceStream::seek( ::sal_Int64 location )
-    throw (lang::IllegalArgumentException, io::IOException, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -388,7 +369,6 @@ void SAL_CALL SwitchablePersistenceStream::seek( ::sal_Int64 location )
 }
 
 ::sal_Int64 SAL_CALL SwitchablePersistenceStream::getPosition(  )
-    throw (io::IOException, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -403,7 +383,6 @@ void SAL_CALL SwitchablePersistenceStream::seek( ::sal_Int64 location )
 }
 
 ::sal_Int64 SAL_CALL SwitchablePersistenceStream::getLength(  )
-    throw (io::IOException, uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -418,7 +397,6 @@ void SAL_CALL SwitchablePersistenceStream::seek( ::sal_Int64 location )
 }
 
 void SAL_CALL SwitchablePersistenceStream::waitForCompletion()
-    throw (css::io::IOException, css::uno::RuntimeException, std::exception)
 {
     if ( !m_pStreamData )
         throw io::NotConnectedException();

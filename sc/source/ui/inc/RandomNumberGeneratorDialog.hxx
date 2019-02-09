@@ -11,15 +11,14 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_RANDOMNUMBERGENERATORDIALOG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_RANDOMNUMBERGENERATORDIALOG_HXX
 
-#include "global.hxx"
-#include "address.hxx"
+#include <address.hxx>
 #include "anyrefdg.hxx"
+#include "viewdata.hxx"
 
 #include <vcl/fixed.hxx>
-#include <vcl/group.hxx>
 #include <vcl/lstbox.hxx>
 
-#include <boost/optional.hpp>
+namespace boost { template <typename T> class optional; }
 
 class ScRandomNumberGeneratorDialog : public ScAnyRefDlg
 {
@@ -28,7 +27,7 @@ public:
         SfxBindings* pB, SfxChildWindow* pCW,
         vcl::Window* pParent, ScViewData* pViewData );
 
-    virtual ~ScRandomNumberGeneratorDialog();
+    virtual ~ScRandomNumberGeneratorDialog() override;
     virtual void dispose() override;
 
     virtual void SetReference( const ScRange& rRef, ScDocument* pDoc ) override;
@@ -54,8 +53,8 @@ private:
     VclPtr<CloseButton>        mpButtonClose;
 
     // Data
-    ScViewData*         mpViewData;
-    ScDocument*         mpDoc;
+    ScViewData* const          mpViewData;
+    ScDocument* const          mpDoc;
 
     ScRange             maInputRange;
 
@@ -66,21 +65,21 @@ private:
 
     template<class RNG>
 
-    void GenerateNumbers(RNG& randomGenerator, const sal_Int16 aDistributionStringId, const boost::optional<sal_Int8> aDecimalPlaces);
+    void GenerateNumbers(RNG& randomGenerator, const char* pDistributionStringId, const boost::optional<sal_Int8> aDecimalPlaces);
 
     void SelectGeneratorAndGenerateNumbers();
 
-    DECL_LINK_TYPED( OkClicked,        Button*, void );
-    DECL_LINK_TYPED( CloseClicked,     Button*, void );
-    DECL_LINK_TYPED( ApplyClicked,     Button*, void );
-    DECL_LINK_TYPED( GetFocusHandler,  Control&, void );
-    DECL_LINK_TYPED( LoseFocusHandler, Control&, void );
+    DECL_LINK( OkClicked,        Button*, void );
+    DECL_LINK( CloseClicked,     Button*, void );
+    DECL_LINK( ApplyClicked,     Button*, void );
+    DECL_LINK( GetFocusHandler,  Control&, void );
+    DECL_LINK( LoseFocusHandler, Control&, void );
 
-    DECL_LINK_TYPED( InputRangeModified, Edit&, void );
-    DECL_LINK_TYPED( Parameter1ValueModified, Edit&, void );
-    DECL_LINK_TYPED( Parameter2ValueModified, Edit&, void );
-    DECL_LINK_TYPED( DistributionChanged, ListBox&, void );
-    DECL_LINK_TYPED( CheckChanged, CheckBox&, void );
+    DECL_LINK( InputRangeModified, Edit&, void );
+    DECL_LINK( Parameter1ValueModified, Edit&, void );
+    DECL_LINK( Parameter2ValueModified, Edit&, void );
+    DECL_LINK( DistributionChanged, ListBox&, void );
+    DECL_LINK( CheckChanged, CheckBox&, void );
 
 };
 

@@ -44,31 +44,29 @@ namespace drawinglayer
             SdrFormTextAttribute                maSdrFormTextAttribute;
 
             // text distances
-            sal_Int32                           maTextLeftDistance;
-            sal_Int32                           maTextUpperDistance;
-            sal_Int32                           maTextRightDistance;
-            sal_Int32                           maTextLowerDistance;
+            sal_Int32 const                     maTextLeftDistance;
+            sal_Int32 const                     maTextUpperDistance;
+            sal_Int32 const                     maTextRightDistance;
+            sal_Int32 const                     maTextLowerDistance;
 
             // #i101556# use versioning from text attributes to detect changes
             sal_uInt32                          maPropertiesVersion;
 
             // text alignments
-            SdrTextHorzAdjust                   maSdrTextHorzAdjust;
-            SdrTextVertAdjust                   maSdrTextVertAdjust;
+            SdrTextHorzAdjust const             maSdrTextHorzAdjust;
+            SdrTextVertAdjust const             maSdrTextVertAdjust;
 
-            // bitfield
-            bool                                mbContour : 1;
-            bool                                mbFitToSize : 1;
-            bool                                mbAutoFit : 1;
-            bool                                mbHideContour : 1;
-            bool                                mbBlink : 1;
-            bool                                mbScroll : 1;
-            bool                                mbInEditMode : 1;
-            bool                                mbFixedCellHeight : 1;
-            bool                                mbWrongSpell : 1;
+            bool const                          mbContour : 1;
+            bool const                          mbFitToSize : 1;
+            bool const                          mbAutoFit : 1;
+            bool const                          mbHideContour : 1;
+            bool const                          mbBlink : 1;
+            bool const                          mbScroll : 1;
+            bool const                          mbInEditMode : 1;
+            bool const                          mbFixedCellHeight : 1;
+            bool const                          mbWrongSpell : 1;
 
-            bool                                mbToBeChained : 1;
-            bool                                mbChainable : 1;
+            bool const                          mbChainable : 1;
 
 
         public:
@@ -91,7 +89,6 @@ namespace drawinglayer
                 bool bInEditMode,
                 bool bFixedCellHeight,
                 bool bWrongSpell,
-                bool bToBeChained,
                 bool bChainable)
             :   mpSdrText(pSdrText),
                 mxOutlinerParaObject(new OutlinerParaObject(rOutlinerParaObject)),
@@ -112,12 +109,11 @@ namespace drawinglayer
                 mbInEditMode(bInEditMode),
                 mbFixedCellHeight(bFixedCellHeight),
                 mbWrongSpell(bWrongSpell),
-                mbToBeChained(bToBeChained),
                 mbChainable(bChainable)
             {
                 if(pSdrText)
                 {
-                    if(XFT_NONE != eFormTextStyle)
+                    if(XFormTextStyle::NONE != eFormTextStyle)
                     {
                         // text on path. Create FormText attribute
                         const SfxItemSet& rSet = pSdrText->GetItemSet();
@@ -150,7 +146,6 @@ namespace drawinglayer
                 mbInEditMode(false),
                 mbFixedCellHeight(false),
                 mbWrongSpell(false),
-                mbToBeChained(false),
                 mbChainable(false)
             {
             }
@@ -176,15 +171,12 @@ namespace drawinglayer
             bool isScroll() const { return mbScroll; }
             bool isInEditMode() const { return mbInEditMode; }
             bool isFixedCellHeight() const { return mbFixedCellHeight; }
-            bool isWrongSpell() const { return mbWrongSpell; }
-            bool isToBeChained() const { return mbToBeChained; }
             bool isChainable() const { return mbChainable; }
             const SdrFormTextAttribute& getSdrFormTextAttribute() const { return maSdrFormTextAttribute; }
             sal_Int32 getTextLeftDistance() const { return maTextLeftDistance; }
             sal_Int32 getTextUpperDistance() const { return maTextUpperDistance; }
             sal_Int32 getTextRightDistance() const { return maTextRightDistance; }
             sal_Int32 getTextLowerDistance() const { return maTextLowerDistance; }
-            sal_uInt32 getPropertiesVersion() const { return maPropertiesVersion; }
             SdrTextHorzAdjust getSdrTextHorzAdjust() const { return maSdrTextHorzAdjust; }
             SdrTextVertAdjust getSdrTextVertAdjust() const { return maSdrTextVertAdjust; }
 
@@ -224,7 +216,7 @@ namespace drawinglayer
                     && getTextUpperDistance() == rCandidate.getTextUpperDistance()
                     && getTextRightDistance() == rCandidate.getTextRightDistance()
                     && getTextLowerDistance() == rCandidate.getTextLowerDistance()
-                    && getPropertiesVersion() == rCandidate.getPropertiesVersion()
+                    && maPropertiesVersion == rCandidate.maPropertiesVersion
 
                     && getSdrTextHorzAdjust() == rCandidate.getSdrTextHorzAdjust()
                     && getSdrTextVertAdjust() == rCandidate.getSdrTextVertAdjust()
@@ -237,8 +229,7 @@ namespace drawinglayer
                     && isScroll() == rCandidate.isScroll()
                     && isInEditMode() == rCandidate.isInEditMode()
                     && isFixedCellHeight() == rCandidate.isFixedCellHeight()
-                    && isWrongSpell() == rCandidate.isWrongSpell()
-                    && isToBeChained() == rCandidate.isToBeChained() );
+                    && mbWrongSpell == rCandidate.mbWrongSpell );
             }
         };
 
@@ -267,7 +258,6 @@ namespace drawinglayer
             bool bInEditMode,
             bool bFixedCellHeight,
             bool bWrongSpell,
-            bool bIsToBeChained,
             bool bChainable)
         :   mpSdrTextAttribute(
                 ImpSdrTextAttribute(
@@ -275,7 +265,7 @@ namespace drawinglayer
                     aTextUpperDistance, aTextRightDistance, aTextLowerDistance,
                     aSdrTextHorzAdjust, aSdrTextVertAdjust, bContour, bFitToSize, bAutoFit,
                     bHideContour, bBlink, bScroll, bInEditMode, bFixedCellHeight, bWrongSpell,
-                    bIsToBeChained, bChainable))
+                    bChainable))
         {
         }
 
@@ -286,6 +276,11 @@ namespace drawinglayer
 
         SdrTextAttribute::SdrTextAttribute(const SdrTextAttribute& rCandidate)
         :   mpSdrTextAttribute(rCandidate.mpSdrTextAttribute)
+        {
+        }
+
+        SdrTextAttribute::SdrTextAttribute(SdrTextAttribute&& rCandidate)
+        :   mpSdrTextAttribute(std::move(rCandidate.mpSdrTextAttribute))
         {
         }
 
@@ -301,6 +296,12 @@ namespace drawinglayer
         SdrTextAttribute& SdrTextAttribute::operator=(const SdrTextAttribute& rCandidate)
         {
             mpSdrTextAttribute = rCandidate.mpSdrTextAttribute;
+            return *this;
+        }
+
+        SdrTextAttribute& SdrTextAttribute::operator=(SdrTextAttribute&& rCandidate)
+        {
+            mpSdrTextAttribute = std::move(rCandidate.mpSdrTextAttribute);
             return *this;
         }
 

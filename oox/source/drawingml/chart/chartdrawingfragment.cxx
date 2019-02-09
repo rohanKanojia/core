@@ -17,15 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/chart/chartdrawingfragment.hxx"
+#include <drawingml/chart/chartdrawingfragment.hxx>
 
 #include <osl/diagnose.h>
 
-#include "oox/core/xmlfilterbase.hxx"
-#include "oox/drawingml/connectorshapecontext.hxx"
-#include "oox/drawingml/graphicshapecontext.hxx"
-#include "oox/drawingml/shapecontext.hxx"
-#include "oox/drawingml/shapegroupcontext.hxx"
+#include <basegfx/matrix/b2dhommatrix.hxx>
+#include <com/sun/star/awt/Rectangle.hpp>
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/drawingml/connectorshapecontext.hxx>
+#include <oox/drawingml/graphicshapecontext.hxx>
+#include <oox/drawingml/shapecontext.hxx>
+#include <oox/drawingml/shapegroupcontext.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 namespace oox {
 namespace drawingml {
@@ -211,8 +216,13 @@ void ChartDrawingFragment::onEndElement()
                     getLimitedValue< sal_Int32, sal_Int64 >( aShapeRectEmu.Y, 0, SAL_MAX_INT32 ),
                     getLimitedValue< sal_Int32, sal_Int64 >( aShapeRectEmu.Width, 0, SAL_MAX_INT32 ),
                     getLimitedValue< sal_Int32, sal_Int64 >( aShapeRectEmu.Height, 0, SAL_MAX_INT32 ) );
+
+                // Set the position and size before calling addShape().
+                mxShape->setPosition(awt::Point(aShapeRectEmu32.X, aShapeRectEmu32.Y));
+                mxShape->setSize(awt::Size(aShapeRectEmu32.Width, aShapeRectEmu32.Height));
+
                 basegfx::B2DHomMatrix aMatrix;
-                mxShape->addShape( getFilter(), getFilter().getCurrentTheme(), mxDrawPage, aMatrix, mxShape->getFillProperties(), &aShapeRectEmu32 );
+                mxShape->addShape( getFilter(), getFilter().getCurrentTheme(), mxDrawPage, aMatrix, mxShape->getFillProperties() );
             }
         }
         mxShape.reset();

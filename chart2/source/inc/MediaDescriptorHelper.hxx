@@ -20,14 +20,14 @@
 #define INCLUDED_CHART2_SOURCE_INC_MEDIADESCRIPTORHELPER_HXX
 
 #include <com/sun/star/uno/Sequence.hxx>
-#include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/util/URL.hpp>
-#include <com/sun/star/awt/Rectangle.hpp>
-#include <com/sun/star/io/XStream.hpp>
-#include <com/sun/star/io/XInputStream.hpp>
-#include <com/sun/star/io/XOutputStream.hpp>
-#include <com/sun/star/embed/XStorage.hpp>
+#include <com/sun/star/uno/Reference.hxx>
 #include "charttoolsdllapi.hxx"
+
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace com { namespace sun { namespace star { namespace embed { class XStorage; } } } }
+namespace com { namespace sun { namespace star { namespace io { class XInputStream; } } } }
+namespace com { namespace sun { namespace star { namespace io { class XOutputStream; } } } }
+namespace com { namespace sun { namespace star { namespace io { class XStream; } } } }
 
 /*
 * This class helps to read and write the properties mentioned in the service description
@@ -43,16 +43,13 @@
 namespace apphelper
 {
 
-class OOO_DLLPUBLIC_CHARTTOOLS MediaDescriptorHelper
+class OOO_DLLPUBLIC_CHARTTOOLS MediaDescriptorHelper final
 {
-private:
-    //MediaDescriptorHelper(){};
 public:
     MediaDescriptorHelper( const css::uno::Sequence< css::beans::PropertyValue > & rMediaDescriptor );
 
-    css::uno::Sequence< css::beans::PropertyValue > getReducedForModel() { return m_aModelProperties;}
+    const css::uno::Sequence< css::beans::PropertyValue >& getReducedForModel() { return m_aModelProperties;}
 
-public:
     //all properties given in the constructor are stored in the following three sequences
 
     css::uno::Sequence< css::beans::PropertyValue >
@@ -61,126 +58,37 @@ public:
     css::uno::Sequence< css::beans::PropertyValue >
                         m_aDeprecatedProperties; //these are properties which are described in service com.sun.star.document.MediaDescriptor but are marked as deprecated
 
-    css::uno::Sequence< css::beans::PropertyValue >
-                        m_aAdditionalProperties; //these are properties which are not described in service com.sun.star.document.MediaDescriptor
-
     //properties which should be given to a model are additionally stored in this sequence (not documented properties and deprecated properties are not included!)
     css::uno::Sequence< css::beans::PropertyValue >
                         m_aModelProperties; //these are properties which are not described in service com.sun.star.document.MediaDescriptor
 
-    //@todo define this for debug only, except URL
-    bool            AsTemplate; //document is a template.
-    bool            ISSET_AsTemplate;
-    OUString     Author;
-    bool            ISSET_Author;
-    OUString     CharacterSet; //identifier of used character set.
-    bool            ISSET_CharacterSet;
-    OUString     Comment;
-    bool            ISSET_Comment;
+    OUString            FilterName; //internal filter name.
+    bool                ISSET_FilterName;
 
-    css::uno::Any
-                        ComponentData;
-    bool            ISSET_ComponentData;
-    OUString     FileName; //deprecated, same as url
-    bool            ISSET_FileName;
-    css::uno::Any
-                        FilterData;
-    bool            ISSET_FilterData;
-    OUString     FilterName; //internal filter name.
-    bool            ISSET_FilterName;
-    OUString     FilterFlags;//deprecated,
-    bool            ISSET_FilterFlags;
-    OUString     FilterOptions;
-    bool            ISSET_FilterOptions;
-            //not documented ... @todo remove?
-    OUString     FrameName; //name of target frame.
-    bool            ISSET_FrameName;
-    bool            Hidden; //load document, invisible.
-    bool            ISSET_Hidden;
-
-    OUString     HierarchicalDocumentName;
-    bool            ISSET_HierarchicalDocumentName;
+    OUString            HierarchicalDocumentName;
 
     css::uno::Reference< css::io::XOutputStream >
                         OutputStream; //a stream to receive the document data for saving
-    bool            ISSET_OutputStream;
+    bool                ISSET_OutputStream;
     css::uno::Reference< css::io::XInputStream >
                         InputStream; //content of document.
-    bool            ISSET_InputStream;
-    css::uno::Reference< css::uno::XInterface >
-                        InteractionHandler; //css::task::XInteractionHandler
-    bool            ISSET_InteractionHandler;
+    bool                ISSET_InputStream;
 
-    OUString     JumpMark;   //specifies the name of a mark within the document where the first view is to position itself.
-    bool            ISSET_JumpMark;
-    OUString     MediaType; //mime type.
-    bool            ISSET_MediaType;
-    OUString     OpenFlags; //deprecated
-    bool            ISSET_OpenFlags;
-    bool            OpenNewView; //opens a new view for an already loaded document.
-    bool            ISSET_OpenNewView;
-    bool            Overwrite; //opens a new view for an already loaded document.
-    bool            ISSET_Overwrite;
-    OUString     Password;
-    bool            ISSET_Password;
+    bool                ReadOnly; //open document readonly.
 
-        //not documented ... @todo remove?
-    css::awt::Rectangle
-                        PosSize; //position and size of document window.
-    bool            ISSET_PosSize;
-
-    css::uno::Sequence< sal_Int8 >
-                        PostData; //contains the data for HTTP post method as a sequence of bytes.
-    bool            ISSET_PostData;
-    OUString     PostString; //deprecated, contains the data for HTTP post method as a sequence of bytes.
-    bool            ISSET_PostString;
-    bool            Preview; //show preview.
-    bool            ISSET_Preview;
-    bool            ReadOnly; //open document readonly.
-    bool            ISSET_ReadOnly;
-    OUString     Referer; //name of document referrer.
-    bool            ISSET_Referer;
-
-    css::uno::Reference< css::uno::XInterface >
-                        StatusIndicator; //css::task::XStatusIndicator
-    bool            ISSET_StatusIndicator;
-        //not documented ... @todo remove?
-    bool            Silent; //prevents dialogs to query for more information.
-    bool            ISSET_Silent;
-    OUString     TemplateName; //deprecated, name of the template instead of the URL.
-    bool            ISSET_TemplateName;
-    OUString     TemplateRegionName; //deprecated, name of the region of the template.
-    bool            ISSET_TemplateRegionName;
-    bool            Unpacked;
-    bool            ISSET_Unpacked;
-    OUString     URL;// FileName, URL of the document.
-    bool            ISSET_URL;
-    sal_Int16           Version; //storage version.
-    bool            ISSET_Version;
-
-    css::uno::Any
-                        ViewData;
-    bool            ISSET_ViewData;
-    sal_Int16           ViewId; //id of the initial view.
-    bool            ISSET_ViewId;
+    OUString            URL;// FileName, URL of the document.
+    bool                ISSET_URL;
 
     // new framework objects
     css::uno::Reference< css::embed::XStorage >
                         Storage;
-    bool            ISSET_Storage;
+    bool                ISSET_Storage;
     css::uno::Reference< css::io::XStream >
                         Stream;
-    bool            ISSET_Stream;
+    bool                ISSET_Stream;
 
-    // undocumented SFX Properties
-    css::uno::Sequence< sal_Int32 >
-                        WinExtent;
-    bool            ISSET_WinExtent;
-    bool            SetEmbedded;
-    bool            ISSET_SetEmbedded;
-
-protected:
-SAL_DLLPRIVATE void impl_init();
+private:
+    SAL_DLLPRIVATE void impl_init();
 };
 
 }

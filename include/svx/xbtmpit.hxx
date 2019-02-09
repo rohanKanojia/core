@@ -22,16 +22,11 @@
 
 #include <svx/svxdllapi.h>
 #include <svx/xit.hxx>
-#include <svtools/grfmgr.hxx>
+#include <vcl/GraphicObject.hxx>
+#include <array>
 
 class SdrModel;
 class BitmapColor;
-
-
-// helper to construct historical 8x8 bitmaps with two colors
-
-Bitmap SVX_DLLPUBLIC createHistorical8x8FromArray(const sal_uInt16* pArray, Color aColorPix, Color aColorBack);
-bool SVX_DLLPUBLIC isHistorical8x8(const BitmapEx& rBitmapEx, BitmapColor& o_rBack, BitmapColor& o_rFront);
 
 
 // class XFillBitmapItem
@@ -45,29 +40,26 @@ public:
             static SfxPoolItem* CreateDefault();
             XFillBitmapItem() : NameOrIndex(XATTR_FILLBITMAP, -1 ) {}
             XFillBitmapItem(const OUString& rName, const GraphicObject& rGraphicObject);
-            XFillBitmapItem(SfxItemPool* pPool, const GraphicObject& rGraphicObject);
+            XFillBitmapItem( const GraphicObject& rGraphicObject );
             XFillBitmapItem( const XFillBitmapItem& rItem );
-            XFillBitmapItem( SvStream& rIn, sal_uInt16 nVer = 0 );
 
     virtual bool            operator==( const SfxPoolItem& rItem ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
-    virtual SfxPoolItem*    Create( SvStream& rIn, sal_uInt16 nVer ) const override;
-    virtual SvStream&       Store( SvStream& rOut, sal_uInt16 nItemVersion  ) const override;
     virtual sal_uInt16      GetVersion( sal_uInt16 nFileFormatVersion ) const override;
 
     virtual bool            QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool            PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     const GraphicObject& GetGraphicObject() const { return maGraphicObject;}
-    void SetGraphicObject(const GraphicObject& rGraphicObject);
+    bool isPattern() const;
 
     static bool CompareValueFunc( const NameOrIndex* p1, const NameOrIndex* p2 );
-    XFillBitmapItem* checkForUniqueItem( SdrModel* pModel ) const;
+    std::unique_ptr<XFillBitmapItem> checkForUniqueItem( SdrModel* pModel ) const;
 
     virtual void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
 };

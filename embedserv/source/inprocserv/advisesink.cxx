@@ -17,18 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#if defined _MSC_VER
-#pragma warning(disable : 4668)
-#endif
+#include <sal/config.h>
 
-#include <advisesink.hxx>
+#include "advisesink.hxx"
 
 namespace inprocserv
 {
 
 OleWrapperAdviseSink::OleWrapperAdviseSink()
 : m_nRefCount( 0 )
-, m_pFormatEtc( NULL )
 , m_nAspect( DVASPECT_CONTENT )
 , m_nRegID( 0 )
 , m_bObjectAdvise( TRUE )
@@ -42,7 +39,6 @@ OleWrapperAdviseSink::OleWrapperAdviseSink()
 OleWrapperAdviseSink::OleWrapperAdviseSink( const ComSmart< IAdviseSink >& pListener )
 : m_nRefCount( 0 )
 , m_pListener( pListener )
-, m_pFormatEtc( NULL )
 , m_nAspect( DVASPECT_CONTENT )
 , m_nRegID( 0 )
 , m_bObjectAdvise( TRUE )
@@ -56,7 +52,6 @@ OleWrapperAdviseSink::OleWrapperAdviseSink( const ComSmart< IAdviseSink >& pList
 OleWrapperAdviseSink::OleWrapperAdviseSink( const ComSmart< IAdviseSink >& pListener, FORMATETC* pFormatEtc, DWORD nDataRegFlag )
 : m_nRefCount( 0 )
 , m_pListener( pListener )
-, m_pFormatEtc( NULL )
 , m_nAspect( DVASPECT_CONTENT )
 , m_nRegID( 0 )
 , m_bObjectAdvise( FALSE )
@@ -67,9 +62,9 @@ OleWrapperAdviseSink::OleWrapperAdviseSink( const ComSmart< IAdviseSink >& pList
 {
     if ( pFormatEtc )
     {
-        m_pFormatEtc = new FORMATETC;
+        m_pFormatEtc = std::make_unique<FORMATETC>();
         m_pFormatEtc->cfFormat = pFormatEtc->cfFormat;
-        m_pFormatEtc->ptd = NULL;
+        m_pFormatEtc->ptd = nullptr;
         m_pFormatEtc->dwAspect = pFormatEtc->dwAspect;
         m_pFormatEtc->lindex = pFormatEtc->lindex;
         m_pFormatEtc->tymed = pFormatEtc->tymed;
@@ -79,7 +74,6 @@ OleWrapperAdviseSink::OleWrapperAdviseSink( const ComSmart< IAdviseSink >& pList
 OleWrapperAdviseSink::OleWrapperAdviseSink( const ComSmart< IAdviseSink >& pListener, DWORD nAspect, DWORD nViewRegFlag )
 : m_nRefCount( 0 )
 , m_pListener( pListener )
-, m_pFormatEtc( NULL )
 , m_nAspect( nAspect )
 , m_nRegID( 0 )
 , m_bObjectAdvise( TRUE )
@@ -91,23 +85,21 @@ OleWrapperAdviseSink::OleWrapperAdviseSink( const ComSmart< IAdviseSink >& pList
 }
 
 OleWrapperAdviseSink::~OleWrapperAdviseSink()
-{
-    delete m_pFormatEtc;
-}
+{}
 
 STDMETHODIMP OleWrapperAdviseSink::QueryInterface( REFIID riid , void** ppv )
 {
-    *ppv=NULL;
+    *ppv=nullptr;
 
     if ( riid == IID_IUnknown )
-        *ppv = (IUnknown*)this;
+        *ppv = static_cast<IUnknown*>(this);
 
     if ( riid == IID_IAdviseSink )
-        *ppv = (IAdviseSink*)this;
+        *ppv = static_cast<IAdviseSink*>(this);
 
-    if ( *ppv != NULL )
+    if ( *ppv != nullptr )
     {
-        ((IUnknown*)*ppv)->AddRef();
+        static_cast<IUnknown*>(*ppv)->AddRef();
         return S_OK;
     }
 

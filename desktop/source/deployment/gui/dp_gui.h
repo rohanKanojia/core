@@ -21,19 +21,17 @@
 #define INCLUDED_DESKTOP_SOURCE_DEPLOYMENT_GUI_DP_GUI_H
 
 #include "dp_gui_updatedata.hxx"
-#include "dp_misc.h"
-#include "dp_gui.hrc"
+#include <dp_misc.h>
 #include <rtl/ref.hxx>
 #include <rtl/instance.hxx>
 #include <osl/thread.hxx>
-#include <cppuhelper/implbase2.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/dialog.hxx>
 #include <vcl/button.hxx>
 #include <vcl/fixed.hxx>
 #include <salhelper/simplereferenceobject.hxx>
-#include <svtools/svtabbx.hxx>
-#include <svtools/headbar.hxx>
+#include <vcl/svtabbx.hxx>
+#include <vcl/headbar.hxx>
 #include <com/sun/star/ucb/XContentEventListener.hpp>
 #include <osl/mutex.hxx>
 

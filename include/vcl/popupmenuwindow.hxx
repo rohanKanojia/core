@@ -21,15 +21,16 @@
 #define INCLUDED_VCL_POPUPMENUWINDOW_HXX
 
 #include <vcl/floatwin.hxx>
+#include <memory>
 
 class VCL_DLLPUBLIC PopupMenuFloatingWindow : public FloatingWindow
 {
 private:
     struct ImplData;
-    ImplData* mpImplData;
+    std::unique_ptr<ImplData> mpImplData;
 public:
-    PopupMenuFloatingWindow( vcl::Window* pParent, WinBits nStyle = (WB_SYSTEMFLOATWIN|WB_SYSTEMWINDOW|WB_NOBORDER) );
-    virtual ~PopupMenuFloatingWindow();
+    PopupMenuFloatingWindow( vcl::Window* pParent );
+    virtual ~PopupMenuFloatingWindow() override;
     virtual void dispose() override;
 
     sal_uInt16      GetMenuStackLevel() const;

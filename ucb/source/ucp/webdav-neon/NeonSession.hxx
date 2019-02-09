@@ -52,9 +52,10 @@ private:
     OUString     m_aProxyName;
     sal_Int32         m_nPort;
     sal_Int32         m_nProxyPort;
-    css::uno::Sequence< css::beans::NamedValue > m_aFlags;
+    css::uno::Sequence< css::beans::NamedValue > const m_aFlags;
     HttpSession *     m_pHttpSession;
-    void *            m_pRequestData;
+    bool m_bNeedNewSession = false; // Something happened that could invalidate m_pHttpSession
+    void * const      m_pRequestData;
     const ucbhelper::InternetProxyDecider & m_rProxyDecider;
 
     // @@@ This should really be per-request data. But Neon currently
@@ -68,14 +69,14 @@ private:
     static NeonLockStore m_aNeonLockStore;
 
 protected:
-    virtual ~NeonSession();
+    virtual ~NeonSession() override;
 
 public:
+    /// @throws std::exception
     NeonSession( const rtl::Reference< DAVSessionFactory > & rSessionFactory,
                  const OUString& inUri,
                  const css::uno::Sequence< css::beans::NamedValue >& rFlags,
-                 const ucbhelper::InternetProxyDecider & rProxyDecider )
-        throw ( std::exception );
+                 const ucbhelper::InternetProxyDecider & rProxyDecider );
 
     // DAVSession methods
     virtual bool CanUse( const OUString & inPath,
@@ -86,75 +87,76 @@ public:
     const DAVRequestEnvironment & getRequestEnvironment() const
     { return m_aEnv; }
 
+    virtual void
+    OPTIONS( const OUString & inPath,
+             DAVOptions& rOptions, // contains the name+values
+             const DAVRequestEnvironment & rEnv ) override;
+
     // allprop & named
     virtual void
     PROPFIND( const OUString & inPath,
               const Depth inDepth,
               const std::vector< OUString > & inPropNames,
               std::vector< DAVResource > & ioResources,
-              const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+              const DAVRequestEnvironment & rEnv ) override;
 
     // propnames
     virtual void
     PROPFIND( const OUString & inPath,
               const Depth inDepth,
               std::vector< DAVResourceInfo >& ioResInfo,
-              const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+              const DAVRequestEnvironment & rEnv ) override;
 
     virtual void
     PROPPATCH( const OUString & inPath,
                const std::vector< ProppatchValue > & inValues,
-               const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+               const DAVRequestEnvironment & rEnv ) override;
 
     virtual void
     HEAD( const OUString &  inPath,
           const std::vector< OUString > & inHeaderNames,
           DAVResource & ioResource,
-          const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+          const DAVRequestEnvironment & rEnv ) override;
 
     virtual css::uno::Reference< css::io::XInputStream >
     GET( const OUString & inPath,
-         const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+         const DAVRequestEnvironment & rEnv ) override;
 
     virtual void
     GET( const OUString & inPath,
          css::uno::Reference< css::io::XOutputStream > &  ioOutputStream,
-         const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+         const DAVRequestEnvironment & rEnv ) override;
 
     virtual css::uno::Reference< css::io::XInputStream >
     GET( const OUString & inPath,
          const std::vector< OUString > & inHeaderNames,
          DAVResource & ioResource,
-         const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+         const DAVRequestEnvironment & rEnv ) override;
+
+    virtual void
+    GET0( const OUString & inPath,
+         const std::vector< OUString > & inHeaderNames,
+         DAVResource & ioResource,
+         const DAVRequestEnvironment & rEnv ) override;
 
     virtual void
     GET( const OUString & inPath,
          css::uno::Reference< css::io::XOutputStream > & ioOutputStream,
          const std::vector< OUString > & inHeaderNames,
          DAVResource & ioResource,
-         const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+         const DAVRequestEnvironment & rEnv ) override;
 
     virtual void
     PUT( const OUString & inPath,
          const css::uno::Reference< css::io::XInputStream > & inInputStream,
-         const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+         const DAVRequestEnvironment & rEnv ) override;
 
     virtual css::uno::Reference< css::io::XInputStream >
     POST( const OUString & inPath,
           const OUString & rContentType,
           const OUString & rReferer,
           const css::uno::Reference< css::io::XInputStream > & inInputStream,
-          const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+          const DAVRequestEnvironment & rEnv ) override;
 
     virtual void
     POST( const OUString & inPath,
@@ -162,71 +164,70 @@ public:
           const OUString & rReferer,
           const css::uno::Reference< css::io::XInputStream > & inInputStream,
           css::uno::Reference< css::io::XOutputStream > & oOutputStream,
-          const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+          const DAVRequestEnvironment & rEnv ) override;
 
     virtual void
     MKCOL( const OUString & inPath,
-           const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+           const DAVRequestEnvironment & rEnv ) override;
 
     virtual void
     COPY( const OUString & inSourceURL,
           const OUString & inDestinationURL,
           const DAVRequestEnvironment & rEnv,
-          bool inOverWrite )
-        throw ( std::exception ) override;
+          bool inOverWrite ) override;
 
     virtual void
     MOVE( const OUString & inSourceURL,
           const OUString & inDestinationURL,
           const DAVRequestEnvironment & rEnv,
-          bool inOverWrite )
-        throw ( std::exception ) override;
+          bool inOverWrite ) override;
 
     virtual void DESTROY( const OUString & inPath,
-                          const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+                          const DAVRequestEnvironment & rEnv ) override;
 
     // set new lock.
     virtual void LOCK( const OUString & inURL,
                        css::ucb::Lock & inLock,
-                       const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+                       const DAVRequestEnvironment & rEnv ) override;
 
     virtual void UNLOCK( const OUString & inURL,
-                         const DAVRequestEnvironment & rEnv )
-        throw ( std::exception ) override;
+                         const DAVRequestEnvironment & rEnv ) override;
 
     // helpers
-    virtual void abort()
-        throw ( std::exception ) override;
+    virtual void abort() override;
 
     const OUString & getHostName() const { return m_aHostName; }
 
-    const ::uno::Reference< ::uno::XComponentContext > getComponentContext()
+    ::uno::Reference< ::uno::XComponentContext > const & getComponentContext()
     { return m_xFactory->getComponentContext(); }
 
     const void * getRequestData() const { return m_pRequestData; }
 
     bool isDomainMatch( const OUString& certHostName );
 
+    int CertificationNotify(const ne_ssl_certificate *cert);
+
+    int NeonAuth(const char* inAuthProtocol, const char* inRealm,
+                 int attempt, char* inoutUserName, char * inoutPassWord);
+
+    void PreSendRequest(ne_request* req, ne_buffer* headers);
+
 private:
     friend class NeonLockStore;
 
-    void Init()
-        throw (css::uno::RuntimeException, std::exception);
+    /// @throws css::uno::RuntimeException
+    void Init();
 
-    void Init( const DAVRequestEnvironment & rEnv )
-        throw (css::uno::RuntimeException, std::exception);
+    /// @throws css::uno::RuntimeException
+    void Init( const DAVRequestEnvironment & rEnv );
 
     // ret: true => retry request.
+    /// @throws std::exception
     void HandleError( int nError,
                       const OUString & inPath,
-                      const DAVRequestEnvironment & rEnv )
-        throw ( std::exception );
+                      const DAVRequestEnvironment & rEnv );
 
-    const ucbhelper::InternetProxyServer & getProxySettings() const;
+    ucbhelper::InternetProxyServer getProxySettings() const;
 
     bool removeExpiredLocktoken( const OUString & inURL,
                                  const DAVRequestEnvironment & rEnv );
@@ -244,6 +245,13 @@ private:
                     ne_block_reader reader,
                     bool getheaders,
                     void * userdata );
+
+    // low level GET implementation, used by public GET implementations
+    // used as a HEAD substitute when head is not available
+    static int GET0( ne_session * sess,
+                     const char * uri,
+                     bool getheaders,
+                     void * userdata );
 
     // Buffer-based PUT implementation. Neon only has file descriptor-
     // based API.
@@ -270,6 +278,8 @@ private:
 
     OUString makeAbsoluteURL( OUString const & rURL ) const;
 };
+
+osl::Mutex& getGlobalNeonMutex();
 
 } // namespace webdav_ucp
 

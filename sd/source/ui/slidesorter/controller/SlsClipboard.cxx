@@ -17,49 +17,48 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "controller/SlsClipboard.hxx"
+#include <controller/SlsClipboard.hxx>
 
-#include "SlideSorterViewShell.hxx"
-#include "SlideSorter.hxx"
-#include "model/SlideSorterModel.hxx"
-#include "model/SlsPageDescriptor.hxx"
-#include "model/SlsPageEnumerationProvider.hxx"
-#include "view/SlideSorterView.hxx"
-#include "view/SlsTheme.hxx"
-#include "controller/SlideSorterController.hxx"
-#include "controller/SlsInsertionIndicatorHandler.hxx"
-#include "controller/SlsPageSelector.hxx"
-#include "controller/SlsSelectionFunction.hxx"
-#include "controller/SlsCurrentSlideManager.hxx"
-#include "controller/SlsScrollBarManager.hxx"
-#include "controller/SlsFocusManager.hxx"
-#include "controller/SlsSelectionManager.hxx"
-#include "controller/SlsTransferableData.hxx"
-#include "controller/SlsSelectionObserver.hxx"
-#include "controller/SlsVisibleAreaManager.hxx"
-#include "cache/SlsPageCache.hxx"
+#include <SlideSorterViewShell.hxx>
+#include <SlideSorter.hxx>
+#include <model/SlideSorterModel.hxx>
+#include <model/SlsPageDescriptor.hxx>
+#include <model/SlsPageEnumerationProvider.hxx>
+#include <view/SlideSorterView.hxx>
+#include <view/SlsTheme.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <controller/SlsInsertionIndicatorHandler.hxx>
+#include <controller/SlsPageSelector.hxx>
+#include <controller/SlsSelectionFunction.hxx>
+#include <controller/SlsCurrentSlideManager.hxx>
+#include <controller/SlsScrollBarManager.hxx>
+#include <controller/SlsFocusManager.hxx>
+#include <controller/SlsSelectionManager.hxx>
+#include <controller/SlsTransferableData.hxx>
+#include <controller/SlsSelectionObserver.hxx>
+#include <controller/SlsVisibleAreaManager.hxx>
+#include <cache/SlsPageCache.hxx>
 
-#include "ViewShellBase.hxx"
-#include "View.hxx"
-#include "DrawViewShell.hxx"
-#include "Window.hxx"
-#include "fupoor.hxx"
-#include "fuzoom.hxx"
-#include "fucushow.hxx"
-#include "fusldlg.hxx"
-#include "fuexpand.hxx"
-#include "fusumry.hxx"
-#include "app.hrc"
-#include "glob.hrc"
-#include "strings.hrc"
-#include "sdresid.hxx"
-#include "sdxfer.hxx"
-#include "sdmod.hxx"
-#include "ins_paste.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "sdpage.hxx"
-#include "sdtreelb.hxx"
+#include <ViewShellBase.hxx>
+#include <View.hxx>
+#include <DrawViewShell.hxx>
+#include <Window.hxx>
+#include <fupoor.hxx>
+#include <fuzoom.hxx>
+#include <fucushow.hxx>
+#include <fusldlg.hxx>
+#include <fuexpand.hxx>
+#include <fusumry.hxx>
+#include <app.hrc>
+#include <strings.hrc>
+#include <sdresid.hxx>
+#include <sdxfer.hxx>
+#include <sdmod.hxx>
+#include <ins_paste.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <sdpage.hxx>
+#include <sdtreelb.hxx>
 
 #include <com/sun/star/datatransfer/dnd/DNDConstants.hpp>
 #include <sfx2/request.hxx>
@@ -67,11 +66,8 @@
 #include <sfx2/bindings.hxx>
 #include <sfx2/docfile.hxx>
 #include <svx/svxids.hrc>
-#include <svx/svdstr.hrc>
-#include <vcl/msgbox.hxx>
 #include <tools/urlobj.hxx>
 #include <rtl/ustring.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 
 namespace sd { namespace slidesorter { namespace controller {
@@ -118,9 +114,9 @@ public:
         if (mpDocument!=nullptr && mpDocument->IsUndoEnabled())
         {
             if (mpMainViewShell && mpMainViewShell->GetShellType() == ViewShell::ST_DRAW)
-                mpDocument->BegUndo(SD_RESSTR(STRING_DRAG_AND_DROP_PAGES));
+                mpDocument->BegUndo(SdResId(STRING_DRAG_AND_DROP_PAGES));
             else
-                mpDocument->BegUndo(SD_RESSTR(STRING_DRAG_AND_DROP_SLIDES));
+                mpDocument->BegUndo(SdResId(STRING_DRAG_AND_DROP_SLIDES));
         }
     }
 
@@ -145,8 +141,6 @@ Clipboard::Clipboard (SlideSorter& rSlideSorter)
       mrSlideSorter(rSlideSorter),
       mrController(mrSlideSorter.GetController()),
       maPagesToRemove(),
-      maPagesToSelect(),
-      mbUpdateSelectionPending(false),
       mxUndoContext(),
       mxSelectionObserverContext(),
       mnDragFinishedUserEventId(nullptr)
@@ -172,7 +166,7 @@ void Clipboard::HandleSlotCall (SfxRequest& rRequest)
     switch (rRequest.GetSlot())
     {
         case SID_CUT:
-            if (mrSlideSorter.GetModel().GetEditMode() != EM_MASTERPAGE)
+            if (mrSlideSorter.GetModel().GetEditMode() != EditMode::MasterPage)
             {
                 if(xFunc.is())
                     xFunc->DoCut();
@@ -183,7 +177,7 @@ void Clipboard::HandleSlotCall (SfxRequest& rRequest)
             break;
 
         case SID_COPY:
-            if (mrSlideSorter.GetModel().GetEditMode() != EM_MASTERPAGE)
+            if (mrSlideSorter.GetModel().GetEditMode() != EditMode::MasterPage)
             {
                 if(xFunc.is())
                     xFunc->DoCopy();
@@ -197,7 +191,7 @@ void Clipboard::HandleSlotCall (SfxRequest& rRequest)
             // Prevent redraws while inserting pages from the clipboard
             // because the intermediate inconsistent state might lead to
             // a crash.
-            if (mrSlideSorter.GetModel().GetEditMode() != EM_MASTERPAGE)
+            if (mrSlideSorter.GetModel().GetEditMode() != EditMode::MasterPage)
             {
                 view::SlideSorterView::DrawLock aLock (mrSlideSorter);
                 SelectionObserver::Context aContext (mrSlideSorter);
@@ -286,11 +280,12 @@ sal_Int32 Clipboard::GetInsertionPosition ()
     else if (mrController.GetFocusManager().IsFocusShowing())
     {
         // Use the focus to determine the insertion position.
-        ScopedVclPtrInstance< SdInsertPasteDlg > aDialog(nullptr);
-        if (aDialog->Execute() == RET_OK)
+        vcl::Window* pWin = mrSlideSorter.GetContentWindow();
+        SdInsertPasteDlg aDialog(pWin ? pWin->GetFrameWeld() : nullptr);
+        if (aDialog.run() == RET_OK)
         {
             nInsertPosition = mrController.GetFocusManager().GetFocusedPageIndex();
-            if ( ! aDialog->IsInsertBefore())
+            if (!aDialog.IsInsertBefore())
                 nInsertPosition ++;
         }
     }
@@ -310,7 +305,7 @@ sal_Int32 Clipboard::PasteTransferable (sal_Int32 nInsertPosition)
         const std::vector<OUString> &rBookmarkList = pClipTransferable->GetPageBookmarks();
         const SolarMutexGuard aGuard;
 
-        nInsertPageCount = (sal_uInt16) rBookmarkList.size();
+        nInsertPageCount = static_cast<sal_uInt16>(rBookmarkList.size());
         rModel.GetDocument()->InsertBookmarkAsPage(
             rBookmarkList,
             nullptr,
@@ -325,17 +320,17 @@ sal_Int32 Clipboard::PasteTransferable (sal_Int32 nInsertPosition)
     }
     else
     {
-        SfxObjectShell* pShell = pClipTransferable->GetDocShell();
+        SfxObjectShell* pShell = pClipTransferable->GetDocShell().get();
         DrawDocShell* pDataDocSh = static_cast<DrawDocShell*>(pShell);
         SdDrawDocument* pDataDoc = pDataDocSh->GetDoc();
 
         if (pDataDoc!=nullptr
-            && pDataDoc->GetSdPageCount(PK_STANDARD))
+            && pDataDoc->GetSdPageCount(PageKind::Standard))
         {
             const SolarMutexGuard aGuard;
 
             bMergeMasterPages = (pDataDoc != rModel.GetDocument());
-            nInsertPageCount = pDataDoc->GetSdPageCount( PK_STANDARD );
+            nInsertPageCount = pDataDoc->GetSdPageCount( PageKind::Standard );
             rModel.GetDocument()->InsertBookmarkAsPage(
                 std::vector<OUString>(),
                 nullptr,
@@ -386,9 +381,29 @@ void Clipboard::CreateSlideTransferable (
     model::PageEnumeration aSelectedPages
         (model::PageEnumerationProvider::CreateSelectedPagesEnumeration(
             mrSlideSorter.GetModel()));
+    SdDrawDocument* const pDocument = mrSlideSorter.GetModel().GetDocument();
+    DrawDocShell* const pDataDocSh = pDocument->GetDocSh();
+
+    sal_Int32 nUniqueID = 0;
     while (aSelectedPages.HasMoreElements())
     {
         model::SharedPageDescriptor pDescriptor (aSelectedPages.GetNextElement());
+
+        //ensure that the slides have unique names
+        const OUString sOrigName = pDescriptor->GetPage()->GetName();
+        if ( pDataDocSh && !pDataDocSh->IsPageNameUnique( sOrigName ) )
+        {
+            OUString sUniqueName;
+            bool bUnique = false;
+            while ( !bUnique )
+            {
+                sUniqueName = sOrigName + "_clipboard" + OUString::number(nUniqueID++);
+                bUnique = pDataDocSh->IsNewPageNameValid( sUniqueName );
+                if ( bUnique )
+                    pDescriptor->GetPage()->SetName(sUniqueName);
+            }
+        }
+
         aBookmarkList.push_back(pDescriptor->GetPage()->GetName());
         maPagesToRemove.push_back (pDescriptor->GetPage());
     }
@@ -406,10 +421,10 @@ void Clipboard::CreateSlideTransferable (
         model::SharedPageDescriptor pDescriptor (aSelectedPages.GetNextElement());
         if ( ! pDescriptor || pDescriptor->GetPage()==nullptr)
             continue;
-        Bitmap aPreview (pPreviewCache->GetPreviewBitmap(pDescriptor->GetPage(), false));
-        aRepresentatives.push_back(TransferableData::Representative(
+        BitmapEx aPreview (pPreviewCache->GetPreviewBitmap(pDescriptor->GetPage(), false));
+        aRepresentatives.emplace_back(
             aPreview,
-            pDescriptor->HasState(model::PageDescriptor::ST_Excluded)));
+            pDescriptor->HasState(model::PageDescriptor::ST_Excluded));
         if (aRepresentatives.size() >= 3)
             break;
     }
@@ -417,11 +432,8 @@ void Clipboard::CreateSlideTransferable (
     if (!aBookmarkList.empty())
     {
         mrSlideSorter.GetView().BrkAction();
-        SdDrawDocument* pDocument = mrSlideSorter.GetModel().GetDocument();
         SdTransferable* pTransferable = TransferableData::CreateTransferable (
             pDocument,
-            nullptr,
-            false,
             dynamic_cast<SlideSorterViewShell*>(mrSlideSorter.GetViewShell()),
             aRepresentatives);
 
@@ -432,13 +444,12 @@ void Clipboard::CreateSlideTransferable (
 
         pDocument->CreatingDataObj (pTransferable);
         pTransferable->SetWorkDocument(pDocument->AllocSdDrawDocument());
-        TransferableObjectDescriptor aObjDesc;
+        std::unique_ptr<TransferableObjectDescriptor> pObjDesc(new TransferableObjectDescriptor);
         pTransferable->GetWorkDocument()->GetDocSh()
-            ->FillTransferableObjectDescriptor (aObjDesc);
+            ->FillTransferableObjectDescriptor (*pObjDesc);
 
-        if (pDocument->GetDocSh() != nullptr)
-            aObjDesc.maDisplayName = pDocument->GetDocSh()
-                ->GetMedium()->GetURLObject().GetURLNoPass();
+        if (pDataDocSh != nullptr)
+            pObjDesc->maDisplayName = pDataDocSh->GetMedium()->GetURLObject().GetURLNoPass();
 
         vcl::Window* pActionWindow = pWindow;
         if (pActionWindow == nullptr)
@@ -448,9 +459,11 @@ void Clipboard::CreateSlideTransferable (
                 pActionWindow = pViewShell->GetActiveWindow();
         }
 
+        assert(pActionWindow);
+
         pTransferable->SetStartPos (pActionWindow->PixelToLogic(
             pActionWindow->GetPointerPosPixel()));
-        pTransferable->SetObjectDescriptor (aObjDesc);
+        pTransferable->SetObjectDescriptor (std::move(pObjDesc));
 
         {
             TemporarySlideTrackingDeactivator aDeactivator (mrController);
@@ -497,7 +510,7 @@ std::shared_ptr<SdTransferable::UserData> Clipboard::CreateTransferableUserData 
         if ( ! aDataHelper.GetINetBookmark(SotClipboardFormatId::NETSCAPE_BOOKMARK, aINetBookmark))
             break;
         const OUString sURL (aINetBookmark.GetURL());
-        const sal_Int32 nIndex (sURL.indexOf((sal_Unicode)'#'));
+        const sal_Int32 nIndex (sURL.indexOf('#'));
         if (nIndex == -1)
             break;
         OUString sBookmark (sURL.copy(nIndex+1));
@@ -519,10 +532,10 @@ std::shared_ptr<SdTransferable::UserData> Clipboard::CreateTransferableUserData 
         model::SharedPageDescriptor pDescriptor (rSlideSorter.GetModel().GetPageDescriptor((nPageIndex-1)/2));
         if ( ! pDescriptor || pDescriptor->GetPage()==nullptr)
             break;
-        Bitmap aPreview (pPreviewCache->GetPreviewBitmap(pDescriptor->GetPage(), false));
-        aRepresentatives.push_back(TransferableData::Representative(
+        BitmapEx aPreview (pPreviewCache->GetPreviewBitmap(pDescriptor->GetPage(), false));
+        aRepresentatives.emplace_back(
                 aPreview,
-                pDescriptor->HasState(model::PageDescriptor::ST_Excluded)));
+                pDescriptor->HasState(model::PageDescriptor::ST_Excluded));
 
         // Remember the page in maPagesToRemove so that it can be removed
         // when drag and drop action is "move".
@@ -559,8 +572,6 @@ void Clipboard::StartDrag (
     vcl::Window* pWindow)
 {
     maPagesToRemove.clear();
-    maPagesToSelect.clear();
-    mbUpdateSelectionPending = false;
     CreateSlideTransferable(pWindow, true);
 
     mrController.GetInsertionIndicatorHandler()->UpdatePosition(
@@ -578,7 +589,7 @@ void Clipboard::DragFinished (sal_Int8 nDropAction)
     }
 }
 
-IMPL_LINK_TYPED(Clipboard, ProcessDragFinished, void*, pUserData, void)
+IMPL_LINK(Clipboard, ProcessDragFinished, void*, pUserData, void)
 {
     const sal_Int8 nDropAction (static_cast<sal_Int8>(reinterpret_cast<sal_IntPtr>(pUserData)));
 
@@ -596,12 +607,9 @@ IMPL_LINK_TYPED(Clipboard, ProcessDragFinished, void*, pUserData, void)
         // Remove the pages that have been moved to another place (possibly
         // in the same document.)
         rSelector.DeselectAllPages();
-        PageList::iterator aDraggedPage;
-        for (aDraggedPage=maPagesToRemove.begin();
-             aDraggedPage!=maPagesToRemove.end();
-             ++aDraggedPage)
+        for (const auto& rpDraggedPage : maPagesToRemove)
         {
-            rSelector.SelectPage(*aDraggedPage);
+            rSelector.SelectPage(rpDraggedPage);
         }
         mrController.GetSelectionManager()->DeleteSelectedPages();
     }
@@ -614,11 +622,11 @@ sal_Int8 Clipboard::AcceptDrop (
     DropTargetHelper& rTargetHelper,
     ::sd::Window* pTargetWindow,
     sal_uInt16 nPage,
-    sal_uInt16 nLayer)
+    SdrLayerID nLayer)
 {
     sal_Int8 nAction (DND_ACTION_NONE);
 
-    const Clipboard::DropType eDropType (IsDropAccepted(rTargetHelper));
+    const Clipboard::DropType eDropType (IsDropAccepted());
 
     switch (eDropType)
     {
@@ -682,11 +690,11 @@ sal_Int8 Clipboard::ExecuteDrop (
     DropTargetHelper& rTargetHelper,
     ::sd::Window* pTargetWindow,
     sal_uInt16 nPage,
-    sal_uInt16 nLayer)
+    SdrLayerID nLayer)
 {
     sal_Int8 nResult = DND_ACTION_NONE;
     mxUndoContext.reset();
-    const Clipboard::DropType eDropType (IsDropAccepted(rTargetHelper));
+    const Clipboard::DropType eDropType (IsDropAccepted());
 
     switch (eDropType)
     {
@@ -782,7 +790,7 @@ sal_Int8 Clipboard::ExecuteDrop (
 }
 
 bool Clipboard::IsInsertionTrivial (
-    SdTransferable* pTransferable,
+    SdTransferable const * pTransferable,
     const sal_Int8 nDndAction) const
 {
     std::shared_ptr<TransferableData> pSlideSorterTransferable (
@@ -825,21 +833,10 @@ sal_uInt16 Clipboard::InsertSlides (
         rTransferable,
         nInsertPosition);
 
-    // Remember the inserted pages so that they can be selected when the
-    // operation is finished.
-    maPagesToSelect.clear();
-    SdDrawDocument* pDocument = mrSlideSorter.GetModel().GetDocument();
-    if (pDocument != nullptr)
-        for (sal_Int32 i=0; i<=nInsertedPageCount; i+=2)
-            maPagesToSelect.push_back(
-                dynamic_cast<SdPage*>(pDocument->GetPage(nInsertPosition+i)));
-
-    mbUpdateSelectionPending |= (nInsertedPageCount>0);
-
     return nInsertedPageCount;
 }
 
-Clipboard::DropType Clipboard::IsDropAccepted (DropTargetHelper&) const
+Clipboard::DropType Clipboard::IsDropAccepted() const
 {
     const SdTransferable* pDragTransferable = SD_MOD()->pTransferDrag;
     if (pDragTransferable == nullptr)
@@ -847,7 +844,7 @@ Clipboard::DropType Clipboard::IsDropAccepted (DropTargetHelper&) const
 
     if (pDragTransferable->IsPageTransferable())
     {
-        if (mrSlideSorter.GetModel().GetEditMode() != EM_MASTERPAGE)
+        if (mrSlideSorter.GetModel().GetEditMode() != EditMode::MasterPage)
             return DT_PAGE;
         else
             return DT_NONE;
@@ -868,7 +865,7 @@ sal_Int8 Clipboard::ExecuteOrAcceptShapeDrop (
     DropTargetHelper& rTargetHelper,
     ::sd::Window* pTargetWindow,
     sal_uInt16 nPage,
-    sal_uInt16 nLayer)
+    SdrLayerID nLayer)
 {
     sal_Int8 nResult = 0;
 
@@ -881,7 +878,7 @@ sal_Int8 Clipboard::ExecuteOrAcceptShapeDrop (
     if (mrSlideSorter.GetViewShell() != nullptr)
         pDrawViewShell = std::dynamic_pointer_cast<DrawViewShell>(
             mrSlideSorter.GetViewShell()->GetViewShellBase().GetMainViewShell());
-    if (pDrawViewShell.get() != nullptr
+    if (pDrawViewShell != nullptr
         && (pDrawViewShell->GetShellType() == ViewShell::ST_IMPRESS
             || pDrawViewShell->GetShellType() == ViewShell::ST_DRAW))
     {

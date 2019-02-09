@@ -21,17 +21,15 @@
 #define INCLUDED_CHART2_SOURCE_INC_RELATIVEPOSITIONHELPER_HXX
 
 #include <com/sun/star/chart2/RelativePosition.hpp>
-#include <com/sun/star/chart2/RelativeSize.hpp>
 #include <com/sun/star/drawing/Alignment.hpp>
 #include <com/sun/star/awt/Point.hpp>
-#include <com/sun/star/awt/Size.hpp>
 #include "charttoolsdllapi.hxx"
+
+namespace com { namespace sun { namespace star { namespace awt { struct Size; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { struct RelativeSize; } } } }
 
 namespace chart
 {
-
-/**
-*/
 
 class OOO_DLLPUBLIC_CHARTTOOLS RelativePositionHelper
 {

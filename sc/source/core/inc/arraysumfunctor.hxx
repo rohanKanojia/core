@@ -32,7 +32,7 @@ struct ArraySumFunctor
 {
 private:
     const double* mpArray;
-    size_t mnSize;
+    size_t const mnSize;
 
 public:
     ArraySumFunctor(const double* pArray, size_t nSize)
@@ -43,7 +43,7 @@ public:
 
     double operator() ()
     {
-        static bool hasSSE2 = tools::cpuid::hasSSE2();
+        const static bool hasSSE2 = tools::cpuid::hasSSE2();
 
         double fSum = 0.0;
         size_t i = 0;
@@ -94,7 +94,7 @@ public:
     }
 
 private:
-    inline double executeSSE2(size_t& i, const double* pCurrent) const
+    double executeSSE2(size_t& i, const double* pCurrent) const
     {
 #if defined(LO_SSE2_AVAILABLE)
         double fSum = 0.0;
@@ -144,7 +144,7 @@ private:
 #endif
     }
 
-    inline double executeUnrolled(size_t& i, const double* pCurrent) const
+    double executeUnrolled(size_t& i, const double* pCurrent) const
     {
         size_t nRealSize = mnSize - i;
         size_t nUnrolledSize = nRealSize - (nRealSize % 4);

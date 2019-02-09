@@ -12,8 +12,9 @@
 #include "Keys.hxx"
 #include "Table.hxx"
 
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 
+#include <sal/log.hxx>
 #include <comphelper/sequence.hxx>
 #include <connectivity/dbtools.hxx>
 
@@ -88,21 +89,21 @@ void Table::construct()
     }
 }
 //----- OTableHelper ---------------------------------------------------------
-OCollection* Table::createColumns(const TStringVector& rNames)
+OCollection* Table::createColumns(const ::std::vector< OUString>& rNames)
 {
     return new Columns(*this,
                        m_rMutex,
                        rNames);
 }
 
-OCollection* Table::createKeys(const TStringVector& rNames)
+OCollection* Table::createKeys(const ::std::vector< OUString>& rNames)
 {
     return new Keys(this,
                     m_rMutex,
                     rNames);
 }
 
-OCollection* Table::createIndexes(const TStringVector& rNames)
+OCollection* Table::createIndexes(const ::std::vector< OUString>& rNames)
 {
     return new Indexes(this,
                        m_rMutex,
@@ -112,12 +113,11 @@ OCollection* Table::createIndexes(const TStringVector& rNames)
 //----- XAlterTable -----------------------------------------------------------
 void SAL_CALL Table::alterColumnByName(const OUString& rColName,
                                        const uno::Reference< XPropertySet >& rDescriptor)
-    throw(SQLException, NoSuchElementException, RuntimeException, std::exception)
 {
     MutexGuard aGuard(m_rMutex);
     checkDisposed(WeakComponentImplHelperBase::rBHelper.bDisposed);
 
-    uno::Reference< XPropertySet > xColumn(m_pColumns->getByName(rColName), UNO_QUERY);
+    uno::Reference< XPropertySet > xColumn(m_xColumns->getByName(rColName), UNO_QUERY);
 
     // sdbcx::Descriptor
     const bool bNameChanged = xColumn->getPropertyValue("Name") != rDescriptor->getPropertyValue("Name");
@@ -128,21 +128,11 @@ void SAL_CALL Table::alterColumnByName(const OUString& rColName,
     const bool bScaleChanged = xColumn->getPropertyValue("Scale") != rDescriptor->getPropertyValue("Scale");
     const bool bIsNullableChanged = xColumn->getPropertyValue("IsNullable") != rDescriptor->getPropertyValue("IsNullable");
     const bool bIsAutoIncrementChanged = xColumn->getPropertyValue("IsAutoIncrement") != rDescriptor->getPropertyValue("IsAutoIncrement");
+
     // TODO: remainder -- these are all "optional" so have to detect presence and change.
 
     bool bDefaultChanged = xColumn->getPropertyValue("DefaultValue")
                                      != rDescriptor->getPropertyValue("DefaultValue");
-
-    // TODO: quote identifiers as needed.
-    if (bNameChanged)
-    {
-        OUString sNewTableName;
-        rDescriptor->getPropertyValue("Name") >>= sNewTableName;
-        OUString sSql(getAlterTableColumn(rColName)
-                                            + " TO \"" + sNewTableName + "\"");
-
-        getConnection()->createStatement()->execute(sSql);
-    }
 
     if (bTypeChanged || bTypeNameChanged || bPrecisionChanged || bScaleChanged)
     {
@@ -158,22 +148,22 @@ void SAL_CALL Table::alterColumnByName(const OUString& rColName,
 
     if (bIsNullableChanged)
     {
-        sal_Int32 nNullabble = 0;
-        rDescriptor->getPropertyValue("IsNullable") >>= nNullabble;
+        sal_Int32 nNullable = 0;
+        rDescriptor->getPropertyValue("IsNullable") >>= nNullable;
 
-        if (nNullabble != ColumnValue::NULLABLE_UNKNOWN)
+        if (nNullable != ColumnValue::NULLABLE_UNKNOWN)
         {
 
             OUString sSql;
             // Dirty hack: can't change null directly in sql, we have to fiddle
             // the system tables manually.
-            if (nNullabble == ColumnValue::NULLABLE)
+            if (nNullable == ColumnValue::NULLABLE)
             {
                 sSql = "UPDATE RDB$RELATION_FIELDS SET RDB$NULL_FLAG = NULL "
                        "WHERE RDB$FIELD_NAME = '" + rColName + "' "
                        "AND RDB$RELATION_NAME = '" + getName() + "'";
             }
-            else if (nNullabble == ColumnValue::NO_NULLS)
+            else if (nNullable == ColumnValue::NO_NULLS)
             {
                 // And if we are making NOT NULL then we have to make sure we have
                 // no nulls left in the column.
@@ -196,7 +186,11 @@ void SAL_CALL Table::alterColumnByName(const OUString& rColName,
 
     if (bIsAutoIncrementChanged)
     {
-        // TODO: changeType
+       ::dbtools::throwSQLException(
+            "Changing autoincrement property of existing column is not supported",
+            ::dbtools::StandardSQLState::FUNCTION_NOT_SUPPORTED,
+            *this);
+
     }
 
     if (bDefaultChanged)
@@ -213,21 +207,29 @@ void SAL_CALL Table::alterColumnByName(const OUString& rColName,
 
         getConnection()->createStatement()->execute(sSql);
     }
+    // TODO: quote identifiers as needed.
+    if (bNameChanged)
+    {
+        OUString sNewColName;
+        rDescriptor->getPropertyValue("Name") >>= sNewColName;
+        OUString sSql(getAlterTableColumn(rColName)
+                                            + " TO \"" + sNewColName + "\"");
 
-    m_pColumns->refresh();
+        getConnection()->createStatement()->execute(sSql);
+    }
+
+
+    m_xColumns->refresh();
 }
 
 // ----- XRename --------------------------------------------------------------
-void SAL_CALL Table::rename(const OUString& rName)
-    throw(SQLException, ElementExistException, RuntimeException, std::exception)
+void SAL_CALL Table::rename(const OUString&)
 {
-    (void) rName;
     throw RuntimeException(); // Firebird doesn't support this.
 }
 
 // ----- XInterface -----------------------------------------------------------
 Any SAL_CALL Table::queryInterface(const Type& rType)
-    throw(RuntimeException, std::exception)
 {
     if (rType.getTypeName() == "com.sun.star.sdbcx.XRename")
         return Any();
@@ -237,7 +239,6 @@ Any SAL_CALL Table::queryInterface(const Type& rType)
 
 // ----- XTypeProvider --------------------------------------------------------
 uno::Sequence< Type > SAL_CALL Table::getTypes()
-    throw(RuntimeException, std::exception)
 {
     uno::Sequence< Type > aTypes = OTableHelper::getTypes();
 

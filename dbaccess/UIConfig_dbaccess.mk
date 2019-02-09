@@ -41,6 +41,9 @@ $(eval $(call gb_UIConfig_add_uifiles,dbaccess, \
     dbaccess/uiconfig/ui/indexdesigndialog \
     dbaccess/uiconfig/ui/jdbcconnectionpage \
     dbaccess/uiconfig/ui/joindialog \
+    dbaccess/uiconfig/ui/jointablemenu \
+    dbaccess/uiconfig/ui/joinviewmenu \
+    dbaccess/uiconfig/ui/keymenu \
     dbaccess/uiconfig/ui/ldapconnectionpage \
     dbaccess/uiconfig/ui/ldappage \
     dbaccess/uiconfig/ui/migratepage \
@@ -51,7 +54,9 @@ $(eval $(call gb_UIConfig_add_uifiles,dbaccess, \
     dbaccess/uiconfig/ui/parametersdialog \
     dbaccess/uiconfig/ui/password \
     dbaccess/uiconfig/ui/preparepage \
+    dbaccess/uiconfig/ui/querycolmenu \
     dbaccess/uiconfig/ui/queryfilterdialog \
+    dbaccess/uiconfig/ui/queryfuncmenu \
     dbaccess/uiconfig/ui/querypropertiesdialog  \
     dbaccess/uiconfig/ui/relationdialog \
     dbaccess/uiconfig/ui/rowheightdialog \
@@ -64,6 +69,7 @@ $(eval $(call gb_UIConfig_add_uifiles,dbaccess, \
     dbaccess/uiconfig/ui/sortdialog \
     dbaccess/uiconfig/ui/sqlexception \
     dbaccess/uiconfig/ui/summarypage \
+    dbaccess/uiconfig/ui/tabledesignrowmenu \
     dbaccess/uiconfig/ui/tabledesignsavemodifieddialog \
     dbaccess/uiconfig/ui/tablesfilterdialog \
     dbaccess/uiconfig/ui/tablesfilterpage \
@@ -74,6 +80,7 @@ $(eval $(call gb_UIConfig_add_uifiles,dbaccess, \
     dbaccess/uiconfig/ui/useradmindialog \
     dbaccess/uiconfig/ui/useradminpage \
     dbaccess/uiconfig/ui/userdetailspage \
+    dbaccess/uiconfig/ui/migrwarndlg \
 ))
 
 # vim: set noet sw=4 ts=4:

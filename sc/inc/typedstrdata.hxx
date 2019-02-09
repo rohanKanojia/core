@@ -11,7 +11,6 @@
 #define INCLUDED_SC_INC_TYPEDSTRDATA_HXX
 
 #include <rtl/ustring.hxx>
-#include "scdllapi.h"
 
 #include <set>
 
@@ -29,30 +28,27 @@ public:
     ScTypedStrData( const OUString& rStr, double nVal = 0.0,
                     StringType eType = Standard, bool bDate = false );
 
-    ScTypedStrData( const ScTypedStrData& rCpy );
-
-    bool IsStrData() const;
     bool IsDate() const { return mbIsDate;}
     const OUString& GetString() const { return maStrValue;}
     StringType GetStringType() const { return meStrType;}
     double GetValue() const { return mfValue; }
 
-    struct LessCaseSensitive : std::binary_function<ScTypedStrData, ScTypedStrData, bool>
+    struct LessCaseSensitive
     {
         bool operator() (const ScTypedStrData& left, const ScTypedStrData& right) const;
     };
 
-    struct LessCaseInsensitive : std::binary_function<ScTypedStrData, ScTypedStrData, bool>
+    struct LessCaseInsensitive
     {
         bool operator() (const ScTypedStrData& left, const ScTypedStrData& right) const;
     };
 
-    struct EqualCaseSensitive : std::binary_function<ScTypedStrData, ScTypedStrData, bool>
+    struct EqualCaseSensitive
     {
         bool operator() (const ScTypedStrData& left, const ScTypedStrData& right) const;
     };
 
-    struct EqualCaseInsensitive : std::binary_function<ScTypedStrData, ScTypedStrData, bool>
+    struct EqualCaseInsensitive
     {
         bool operator() (const ScTypedStrData& left, const ScTypedStrData& right) const;
     };
@@ -66,10 +62,10 @@ private:
     bool   mbIsDate;
 };
 
-class FindTypedStrData : public std::unary_function<ScTypedStrData, bool>
+class FindTypedStrData
 {
-    ScTypedStrData maVal;
-    bool mbCaseSens;
+    ScTypedStrData const maVal;
+    bool const mbCaseSens;
 public:
     FindTypedStrData(const ScTypedStrData& rVal, bool bCaseSens);
     bool operator() (const ScTypedStrData& r) const;

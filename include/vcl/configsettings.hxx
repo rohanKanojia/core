@@ -20,15 +20,16 @@
 #define INCLUDED_VCL_CONFIGSETTINGS_HXX
 
 #include <rtl/ustring.hxx>
-#include <com/sun/star/uno/Sequence.hxx>
 #include <unotools/configitem.hxx>
 #include <vcl/dllapi.h>
 
 #include <unordered_map>
 
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Sequence; } } } }
+
 namespace vcl
 {
-    typedef std::unordered_map< OUString, OUString, OUStringHash > OUStrMap;
+    typedef std::unordered_map< OUString, OUString > OUStrMap;
     class SmallOUStrMap : public OUStrMap { public: SmallOUStrMap() : OUStrMap(1) {} };
 
 
@@ -37,7 +38,7 @@ namespace vcl
     class VCL_DLLPUBLIC SettingsConfigItem : public ::utl::ConfigItem
     {
     private:
-        std::unordered_map< OUString, SmallOUStrMap, OUStringHash > m_aSettings;
+        std::unordered_map< OUString, SmallOUStrMap > m_aSettings;
 
         virtual void Notify( const css::uno::Sequence< OUString >& rPropertyNames ) override;
 
@@ -47,11 +48,11 @@ namespace vcl
         virtual void ImplCommit() override;
 
     public:
-        virtual ~SettingsConfigItem();
+        virtual ~SettingsConfigItem() override;
 
         static SettingsConfigItem* get();
 
-        const OUString& getValue( const OUString& rGroup, const OUString& rKey ) const;
+        OUString getValue( const OUString& rGroup, const OUString& rKey ) const;
         void setValue( const OUString& rGroup, const OUString& rKey, const OUString& rValue );
 
     };

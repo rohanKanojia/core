@@ -23,9 +23,7 @@
 #include <basegfx/vector/b2dvector.hxx>
 #include <drawinglayer/attribute/fontattribute.hxx>
 #include <drawinglayer/primitive2d/baseprimitive2d.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/bitmapex.hxx>
-#include <vcl/vclmedit.hxx>
 #include <sfx2/dllapi.h>
 
 #include <com/sun/star/accessibility/XAccessible.hpp>
@@ -34,10 +32,8 @@
 
 const int THUMBNAILVIEW_ITEM_CORNER = 5;
 
-class CheckBox;
-namespace vcl { class Font; }
-namespace vcl { class Window; }
 class ThumbnailView;
+class MouseEvent;
 
 namespace basegfx {
     class B2DPolygon;
@@ -60,6 +56,8 @@ struct ThumbnailItemAttributes
     basegfx::BColor aTextColor;
     basegfx::BColor aHighlightColor;
     basegfx::BColor aHighlightTextColor;
+    basegfx::BColor aSelectHighlightColor;
+    basegfx::BColor aSelectHighlightTextColor;
     double fHighlightTransparence;
     basegfx::B2DVector aFontSize;
     drawinglayer::attribute::FontAttribute aFontAttr;
@@ -70,12 +68,13 @@ class SFX2_DLLPUBLIC ThumbnailViewItem
 public:
 
     ThumbnailView &mrParent;
-    sal_uInt16 mnId;
+    sal_uInt16 const mnId;
     bool mbVisible;
     bool mbSelected;
     bool mbHover;
     BitmapEx maPreview1;
     OUString maTitle;
+    OUString maHelpText;
     css::uno::Reference< css::accessibility::XAccessible > mxAcc;
 
     ThumbnailViewItem (ThumbnailView &rView, sal_uInt16 nId);
@@ -98,22 +97,23 @@ public:
 
         Returns rectangle that needs to be invalidated.
     */
-    virtual Rectangle updateHighlight(bool bVisible, const Point& rPoint);
+    virtual tools::Rectangle updateHighlight(bool bVisible, const Point& rPoint);
 
     /// Text to be used for the tooltip.
-    virtual OUString getHelpText() const;
 
-    virtual void setEditTitle (bool edit, bool bChangeFocus = true);
-    void updateTitleEditSize ();
+    void setHelpText (const OUString &sText) { maHelpText = sText; }
+
+    virtual OUString getHelpText() const { return maHelpText; };
+    OUString const & getTitle() const { return maTitle; };
+
     void setTitle (const OUString& rTitle);
 
-    css::uno::Reference< css::accessibility::XAccessible >
+    css::uno::Reference< css::accessibility::XAccessible > const &
                         GetAccessible( bool bIsTransientChildrenDisabled );
 
-    void setDrawArea (const Rectangle &area);
+    void setDrawArea (const tools::Rectangle &area);
 
-    const Rectangle& getDrawArea () const { return maDrawArea; }
-    Rectangle getTextArea () const;
+    const tools::Rectangle& getDrawArea () const { return maDrawArea; }
 
     virtual void calculateItemsPosition (const long nThumbnailHeight, const long nDisplayHeight,
                                          const long nPadding, sal_uInt32 nMaxTextLength,
@@ -132,10 +132,7 @@ protected:
 
     Point maTextPos;
     Point maPrev1Pos;
-    Rectangle maDrawArea;
-    bool mbEditTitle;
-    VclPtr<VclMultiLineEdit> mpTitleED;
-    Rectangle maTextEditMaxArea;
+    tools::Rectangle maDrawArea;
 };
 
 #endif // INCLUDED_SFX2_THUMBNAILVIEWITEM_HXX

@@ -20,6 +20,10 @@
 #ifndef INCLUDED_SAX_INC_XML2UTF_HXX
 #define INCLUDED_SAX_INC_XML2UTF_HXX
 
+#include <sal/config.h>
+
+#include <memory>
+
 #include <sal/types.h>
 
 namespace sax_expatwrap {
@@ -32,7 +36,7 @@ public:
     ~Text2UnicodeConverter();
 
     css::uno::Sequence < sal_Unicode > convert( const css::uno::Sequence<sal_Int8> & );
-    bool canContinue() {  return m_bCanContinue; }
+    bool canContinue() const { return m_bCanContinue; }
 
 private:
     void init( rtl_TextEncoding encoding );
@@ -41,7 +45,6 @@ private:
     rtl_TextToUnicodeContext     m_contextText2Unicode;
     bool                         m_bCanContinue;
     bool                         m_bInitialized;
-    rtl_TextEncoding             m_rtlEncoding;
     css::uno::Sequence<sal_Int8> m_seqSource;
 };
 
@@ -57,16 +60,10 @@ public:
     ~Unicode2TextConverter();
 
     css::uno::Sequence<sal_Int8> convert( const sal_Unicode * , sal_Int32 nLength );
-    bool canContinue() {  return m_bCanContinue; }
 
 private:
-    void init( rtl_TextEncoding encoding );
-
     rtl_UnicodeToTextConverter      m_convUnicode2Text;
     rtl_UnicodeToTextContext        m_contextUnicode2Text;
-    bool                            m_bCanContinue;
-    bool                            m_bInitialized;
-    rtl_TextEncoding                m_rtlEncoding;
     css::uno::Sequence<sal_Unicode> m_seqSource;
 };
 
@@ -80,24 +77,20 @@ class XMLFile2UTFConverter
 {
 public:
     XMLFile2UTFConverter( ):
-        m_bStarted( false ),
-        m_pText2Unicode( nullptr ),
-        m_pUnicode2Text( nullptr )
+        m_bStarted( false )
         {}
 
-    ~XMLFile2UTFConverter();
-
-    void setInputStream( css::uno::Reference< css::io::XInputStream > &r ) { m_in = r; }
+    void setInputStream( css::uno::Reference< css::io::XInputStream > const &r ) { m_in = r; }
     void setEncoding( const OString &s ) { m_sEncoding = s; }
 
 
     // @param nMaxToRead The number of chars, that should be read. Note that this is no exact number. There
     //                   may be returned less or more bytes than ordered.
-    sal_Int32 readAndConvert( css::uno::Sequence<sal_Int8> &seq , sal_Int32 nMaxToRead )
-        throw ( css::io::IOException,
-                css::io::NotConnectedException ,
-                css::io::BufferSizeExceededException ,
-                css::uno::RuntimeException );
+    /// @throws css::io::IOException
+    /// @throws css::io::NotConnectedException
+    /// @throws css::io::BufferSizeExceededException
+    /// @throws css::uno::RuntimeException
+    sal_Int32 readAndConvert( css::uno::Sequence<sal_Int8> &seq , sal_Int32 nMaxToRead );
 
 private:
 
@@ -123,8 +116,8 @@ private:
     bool m_bStarted;
     OString m_sEncoding;
 
-    Text2UnicodeConverter *m_pText2Unicode;
-    Unicode2TextConverter *m_pUnicode2Text;
+    std::unique_ptr<Text2UnicodeConverter> m_pText2Unicode;
+    std::unique_ptr<Unicode2TextConverter> m_pUnicode2Text;
 };
 }
 

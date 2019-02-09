@@ -47,7 +47,7 @@ struct __cxa_exception
     std::type_info *exceptionType;
     void (*exceptionDestructor)(void *);
 
-    std::unexpected_handler unexpectedHandler;
+    void (*unexpectedHandler)(); // std::unexpected_handler dropped from C++17
     std::terminate_handler terminateHandler;
 
     __cxa_exception *nextException;
@@ -70,7 +70,7 @@ struct __cxa_eh_globals
 };
 
 void mapException(
-    __cxa_exception * exception, uno_Any * any, uno_Mapping * mapping);
+    __cxa_exception * exception, std::type_info const * type, uno_Any * any, uno_Mapping * mapping);
 
 void raiseException(uno_Any * any, uno_Mapping * mapping);
 

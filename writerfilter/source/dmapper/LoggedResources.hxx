@@ -28,21 +28,21 @@ namespace writerfilter
 {
 
 #ifdef DEBUG_WRITERFILTER
-class LoggedResourcesHelper
+class LoggedResourcesHelper final
 {
 public:
     explicit LoggedResourcesHelper(const std::string & sPrefix);
-    virtual ~LoggedResourcesHelper();
+    ~LoggedResourcesHelper();
 
     void startElement(const std::string & sElement);
-    static void endElement(const std::string & sElement);
+    static void endElement();
     static void chars(const OUString & rChars);
     static void chars(const std::string & rChars);
     static void attribute(const std::string & rName, const std::string & rValue);
     static void attribute(const std::string & rName, sal_uInt32 nValue);
 
 private:
-    std::string msPrefix;
+    std::string const msPrefix;
 };
 #endif
 
@@ -50,7 +50,7 @@ class LoggedStream : public Stream
 {
 public:
     explicit LoggedStream(const std::string & sPrefix);
-    virtual ~LoggedStream();
+    virtual ~LoggedStream() override;
 
     void startSectionGroup() override;
     void endSectionGroup() override;
@@ -69,6 +69,8 @@ public:
     void table(Id name, writerfilter::Reference<Table>::Pointer_t ref) override;
     void substream(Id name, writerfilter::Reference<Stream>::Pointer_t ref) override;
     void info(const std::string & info) override;
+    void startGlossaryEntry() override;
+    void endGlossaryEntry() override;
 
 protected:
     virtual void lcl_startSectionGroup() = 0;
@@ -89,6 +91,8 @@ protected:
     virtual void lcl_table(Id name, writerfilter::Reference<Table>::Pointer_t ref) = 0;
     virtual void lcl_substream(Id name, writerfilter::Reference<Stream>::Pointer_t ref) = 0;
     virtual void lcl_info(const std::string & info) = 0;
+    virtual void lcl_startGlossaryEntry() { }
+    virtual void lcl_endGlossaryEntry() { }
 
 #ifdef DEBUG_WRITERFILTER
     LoggedResourcesHelper mHelper;
@@ -99,7 +103,7 @@ class LoggedProperties : public Properties
 {
 public:
     explicit LoggedProperties(const std::string & sPrefix);
-    virtual ~LoggedProperties();
+    virtual ~LoggedProperties() override;
 
     void attribute(Id name, Value & val) override;
     void sprm(Sprm & sprm) override;
@@ -117,7 +121,7 @@ class LoggedTable : public Table
 {
 public:
     explicit LoggedTable(const std::string & sPrefix);
-    virtual ~LoggedTable();
+    virtual ~LoggedTable() override;
 
     void entry(int pos, writerfilter::Reference<Properties>::Pointer_t ref) override;
 

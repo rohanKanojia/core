@@ -19,24 +19,26 @@
 
 #include <sal/config.h>
 
-#include "basidesh.hrc"
+#include <strings.hrc>
+#include <bitmaps.hlst>
 
 #include "moduldlg.hxx"
-#include "localizationmgr.hxx"
-#include "basidesh.hxx"
+#include <localizationmgr.hxx>
+#include <basidesh.hxx>
 
 #include <basic/basmgr.hxx>
 #include <com/sun/star/script/XLibraryContainerPassword.hpp>
 #include <comphelper/processfactory.hxx>
-#include <o3tl/make_unique.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/request.hxx>
 #include <svl/stritem.hxx>
 #include <vcl/builderfactory.hxx>
+#include <vcl/weld.hxx>
 #include <tools/diagnose_ex.h>
 #include <xmlscript/xmldlg_imexp.hxx>
-#include <svtools/treelistentry.hxx>
+#include <vcl/treelistentry.hxx>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 namespace basctl
 {
@@ -53,14 +55,7 @@ ExtTreeListBox::ExtTreeListBox(vcl::Window* pParent, WinBits nStyle)
 {
 }
 
-VCL_BUILDER_DECL_FACTORY(ExtTreeListBox)
-{
-    WinBits nWinBits = WB_TABSTOP;
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-       nWinBits |= WB_BORDER;
-    rRet = VclPtr<ExtTreeListBox>::Create(pParent, nWinBits);
-}
+VCL_BUILDER_FACTORY_CONSTRUCTOR(ExtTreeListBox, WB_TABSTOP)
 
 bool ExtTreeListBox::EditingEntry( SvTreeListEntry* pEntry, Selection& )
 {
@@ -72,8 +67,8 @@ bool ExtTreeListBox::EditingEntry( SvTreeListEntry* pEntry, Selection& )
         if ( nDepth >= 2 )
         {
             EntryDescriptor aDesc = GetEntryDescriptor(pEntry);
-            ScriptDocument aDocument( aDesc.GetDocument() );
-            OUString aLibName( aDesc.GetLibName() );
+            const ScriptDocument& aDocument( aDesc.GetDocument() );
+            const OUString& aLibName( aDesc.GetLibName() );
             Reference< script::XLibraryContainer2 > xModLibContainer( aDocument.getLibraryContainer( E_SCRIPTS ), UNO_QUERY );
             Reference< script::XLibraryContainer2 > xDlgLibContainer( aDocument.getLibraryContainer( E_DIALOGS ), UNO_QUERY );
             if ( !( ( xModLibContainer.is() && xModLibContainer->hasByName( aLibName ) && xModLibContainer->isLibraryReadOnly( aLibName ) ) ||
@@ -92,7 +87,9 @@ bool ExtTreeListBox::EditedEntry( SvTreeListEntry* pEntry, const OUString& rNewT
 {
     if ( !IsValidSbxName(rNewText) )
     {
-        ScopedVclPtrInstance<MessageDialog>::Create(this, IDE_RESSTR(RID_STR_BADSBXNAME))->Execute();
+        std::unique_ptr<weld::MessageDialog> xError(Application::CreateMessageDialog(GetFrameWeld(),
+                                                    VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_BADSBXNAME)));
+        xError->run();
         return false;
     }
 
@@ -102,16 +99,16 @@ bool ExtTreeListBox::EditedEntry( SvTreeListEntry* pEntry, const OUString& rNewT
         return true;
 
     EntryDescriptor aDesc = GetEntryDescriptor(pEntry);
-    ScriptDocument aDocument( aDesc.GetDocument() );
+    const ScriptDocument& aDocument( aDesc.GetDocument() );
     DBG_ASSERT( aDocument.isValid(), "ExtTreeListBox::EditedEntry: no document!" );
     if ( !aDocument.isValid() )
         return false;
-    OUString aLibName( aDesc.GetLibName() );
+    const OUString& aLibName( aDesc.GetLibName() );
     EntryType eType = aDesc.GetType();
 
     bool bSuccess = eType == OBJ_TYPE_MODULE ?
-        RenameModule(this, aDocument, aLibName, aCurText, rNewText) :
-        RenameDialog(this, aDocument, aLibName, aCurText, rNewText);
+        RenameModule(GetFrameWeld(), aDocument, aLibName, aCurText, rNewText) :
+        RenameDialog(GetFrameWeld(), aDocument, aLibName, aCurText, rNewText);
 
     if ( !bSuccess )
         return false;
@@ -147,8 +144,8 @@ DragDropMode ExtTreeListBox::NotifyStartDrag( TransferDataContainer&, SvTreeList
         {
             nMode_ = DragDropMode::CTRL_COPY;
             EntryDescriptor aDesc = GetEntryDescriptor(pEntry);
-            ScriptDocument aDocument( aDesc.GetDocument() );
-            OUString aLibName( aDesc.GetLibName() );
+            const ScriptDocument& aDocument( aDesc.GetDocument() );
+            const OUString& aLibName( aDesc.GetLibName() );
             // allow MOVE mode only for libraries, which are not readonly
             Reference< script::XLibraryContainer2 > xModLibContainer( aDocument.getLibraryContainer( E_SCRIPTS ), UNO_QUERY );
             Reference< script::XLibraryContainer2 > xDlgLibContainer( aDocument.getLibraryContainer( E_DIALOGS ), UNO_QUERY );
@@ -184,7 +181,9 @@ bool ExtTreeListBox::NotifyAcceptDrop( SvTreeListEntry* pEntry )
 
     // don't drop in the same library
     SvTreeListEntry* pSelected = FirstSelected();
-    if ( ( nDepth == 1 ) && ( pEntry == GetParent( pSelected ) ) )
+    if (!pSelected)
+        bValid = false;
+    else if ( ( nDepth == 1 ) && ( pEntry == GetParent( pSelected ) ) )
         bValid = false;
     else if ( ( nDepth == 2 ) && ( GetParent( pEntry ) == GetParent( pSelected ) ) )
         bValid = false;
@@ -195,13 +194,13 @@ bool ExtTreeListBox::NotifyAcceptDrop( SvTreeListEntry* pEntry )
     {
         // get source module/dialog name
         EntryDescriptor aSourceDesc = GetEntryDescriptor(pSelected);
-        OUString aSourceName = aSourceDesc.GetName();
+        const OUString& aSourceName = aSourceDesc.GetName();
         EntryType eSourceType = aSourceDesc.GetType();
 
         // get target shell and target library name
         EntryDescriptor aDestDesc = GetEntryDescriptor(pEntry);
         ScriptDocument const& rDestDoc = aDestDesc.GetDocument();
-        OUString aDestLibName = aDestDesc.GetLibName();
+        const OUString& aDestLibName = aDestDesc.GetLibName();
 
         // check if module library is not loaded, readonly or password protected
         Reference< script::XLibraryContainer2 > xModLibContainer( rDestDoc.getLibraryContainer( E_SCRIPTS ), UNO_QUERY );
@@ -310,14 +309,13 @@ void Shell::CopyDialogResources(
     }
 }
 
-TriState ExtTreeListBox::NotifyCopyingMoving( SvTreeListEntry* pTarget, SvTreeListEntry* pEntry,
+TriState ExtTreeListBox::NotifyCopyingMoving( SvTreeListEntry* pTarget, SvTreeListEntry const * pEntry,
                         SvTreeListEntry*& rpNewParent, sal_uLong& rNewChildPos, bool bMove )
 {
-    (void)pEntry;
-    DBG_ASSERT( pEntry, "Kein Eintrag?" );  // ASS is ok here, should not be reached
-    DBG_ASSERT( pTarget, "Kein Ziel?" );    // with NULL (right at the beginning)
+    DBG_ASSERT( pEntry, "No entry?" );   // ASS is ok here, should not be reached
+    DBG_ASSERT( pTarget, "No target?" ); // with NULL (right at the beginning)
     sal_uInt16 nDepth = GetModel()->GetDepth( pTarget );
-    DBG_ASSERT( nDepth, "Tiefe?" );
+    DBG_ASSERT( nDepth, "Depth?" );
     if ( nDepth == 1 )
     {
         // Target = Basic => put module/dialog under the Basic
@@ -334,13 +332,13 @@ TriState ExtTreeListBox::NotifyCopyingMoving( SvTreeListEntry* pTarget, SvTreeLi
     // get target shell and target library name
     EntryDescriptor aDestDesc = GetEntryDescriptor(rpNewParent);
     const ScriptDocument& rDestDoc( aDestDesc.GetDocument() );
-    OUString aDestLibName( aDestDesc.GetLibName() );
+    const OUString& aDestLibName( aDestDesc.GetLibName() );
 
     // get source shell, library name and module/dialog name
     EntryDescriptor aSourceDesc = GetEntryDescriptor(FirstSelected());
-    const ScriptDocument rSourceDoc( aSourceDesc.GetDocument() );
-    OUString aSourceLibName( aSourceDesc.GetLibName() );
-    OUString aSourceName( aSourceDesc.GetName() );
+    const ScriptDocument& rSourceDoc( aSourceDesc.GetDocument() );
+    const OUString& aSourceLibName( aSourceDesc.GetLibName() );
+    const OUString& aSourceName( aSourceDesc.GetName() );
     EntryType eType = aSourceDesc.GetType();
 
     // get dispatcher
@@ -401,7 +399,7 @@ TriState ExtTreeListBox::NotifyCopyingMoving( SvTreeListEntry* pTarget, SvTreeLi
         }
         catch (const uno::Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
     }
     else    // copy
@@ -436,7 +434,7 @@ TriState ExtTreeListBox::NotifyCopyingMoving( SvTreeListEntry* pTarget, SvTreeLi
         }
         catch ( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
     }
 
@@ -456,12 +454,19 @@ TriState ExtTreeListBox::NotifyCopyingMoving( SvTreeListEntry* pTarget, SvTreeLi
 
 // OrganizeDialog
 OrganizeDialog::OrganizeDialog(vcl::Window* pParent, sal_Int16 tabId,
-    EntryDescriptor& rDesc )
+    EntryDescriptor const & rDesc )
     : TabDialog( pParent, "OrganizeDialog",
         "modules/BasicIDE/ui/organizedialog.ui" )
     , m_aCurEntry( rDesc )
 {
     get(m_pTabCtrl, "tabcontrol");
+
+    sal_uInt16 nPageCount = m_pTabCtrl->GetPageCount();
+    for (sal_uInt16 nPage = 0; nPage < nPageCount; ++nPage)
+    {
+        sal_uInt16 nPageId = m_pTabCtrl->GetPageId(nPage);
+        m_pTabCtrl->SetTabPage(nPageId, nullptr);
+    }
 
     m_pTabCtrl->SetActivatePageHdl(LINK(this, OrganizeDialog, ActivatePageHdl));
 
@@ -501,17 +506,7 @@ void OrganizeDialog::dispose()
     TabDialog::dispose();
 };
 
-short OrganizeDialog::Execute()
-{
-    vcl::Window* pPrevDlgParent = Application::GetDefDialogParent();
-    Application::SetDefDialogParent( this );
-    short nRet = TabDialog::Execute();
-    Application::SetDefDialogParent( pPrevDlgParent );
-    return nRet;
-}
-
-
-IMPL_LINK_TYPED( OrganizeDialog, ActivatePageHdl, TabControl *, pTabCtrl, void )
+IMPL_LINK( OrganizeDialog, ActivatePageHdl, TabControl *, pTabCtrl, void )
 {
     sal_uInt16 nId = pTabCtrl->GetCurPageId();
 
@@ -521,14 +516,14 @@ IMPL_LINK_TYPED( OrganizeDialog, ActivatePageHdl, TabControl *, pTabCtrl, void )
         VclPtr<TabPage> pNewTabPage;
         if (sPageName == "modules")
         {
-            VclPtrInstance<ObjectPage> pObjectPage(pTabCtrl, "ModulePage", BROWSEMODE_MODULES);
+            VclPtrInstance<ObjectPage> pObjectPage(pTabCtrl, "ModulePage", BrowseMode::Modules);
             pNewTabPage.reset(pObjectPage);
             pObjectPage->SetTabDlg(this);
             pObjectPage->SetCurrentEntry(m_aCurEntry);
         }
         else if (sPageName == "dialogs")
         {
-            VclPtrInstance<ObjectPage> pObjectPage( pTabCtrl, "DialogPage", BROWSEMODE_DIALOGS );
+            VclPtrInstance<ObjectPage> pObjectPage( pTabCtrl, "DialogPage", BrowseMode::Dialogs );
             pNewTabPage.reset(pObjectPage);
             pObjectPage->SetTabDlg(this);
             pObjectPage->SetCurrentEntry(m_aCurEntry);
@@ -541,9 +536,9 @@ IMPL_LINK_TYPED( OrganizeDialog, ActivatePageHdl, TabControl *, pTabCtrl, void )
         }
         else
         {
-            OSL_FAIL( "PageHdl: Unbekannte ID!" );
+            OSL_FAIL( "PageHdl: Unknown ID" );
         }
-        DBG_ASSERT( pNewTabPage, "Keine Page!" );
+        DBG_ASSERT( pNewTabPage, "No page" );
         pTabCtrl->SetTabPage( nId, pNewTabPage );
     }
 }
@@ -552,13 +547,13 @@ IMPL_LINK_TYPED( OrganizeDialog, ActivatePageHdl, TabControl *, pTabCtrl, void )
 // ObjectPage
 
 
-ObjectPage::ObjectPage(vcl::Window *pParent, const OString &rName, sal_uInt16 nMode)
+ObjectPage::ObjectPage(vcl::Window *pParent, const OString &rName, BrowseMode nMode)
     : TabPage(pParent, rName, "modules/BasicIDE/ui/" +
         OStringToOUString(rName, RTL_TEXTENCODING_UTF8).toAsciiLowerCase() +
         ".ui")
 {
     get(m_pBasicBox, "library");
-    Size aSize(m_pBasicBox->LogicToPixel(Size(130, 117), MAP_APPFONT));
+    Size aSize(m_pBasicBox->LogicToPixel(Size(130, 117), MapMode(MapUnit::MapAppFont)));
     m_pBasicBox->set_height_request(aSize.Height());
     m_pBasicBox->set_width_request(aSize.Width());
     get(m_pEditButton, "edit");
@@ -572,12 +567,12 @@ ObjectPage::ObjectPage(vcl::Window *pParent, const OString &rName, sal_uInt16 nM
     m_pDelButton->SetClickHdl( LINK( this, ObjectPage, ButtonHdl ) );
     m_pBasicBox->SetSelectHdl( LINK( this, ObjectPage, BasicBoxHighlightHdl ) );
 
-    if( nMode & BROWSEMODE_MODULES )
+    if( nMode & BrowseMode::Modules )
     {
         m_pNewModButton->SetClickHdl( LINK( this, ObjectPage, ButtonHdl ) );
         m_pNewDlgButton->Hide();
     }
-    else if ( nMode & BROWSEMODE_DIALOGS )
+    else if ( nMode & BrowseMode::Dialogs )
     {
         m_pNewDlgButton->SetClickHdl( LINK( this, ObjectPage, ButtonHdl ) );
         m_pNewModButton->Hide();
@@ -612,7 +607,7 @@ void ObjectPage::dispose()
     TabPage::dispose();
 }
 
-void ObjectPage::SetCurrentEntry (EntryDescriptor& rDesc)
+void ObjectPage::SetCurrentEntry (EntryDescriptor const & rDesc)
 {
     m_pBasicBox->SetCurrentEntry( rDesc );
 }
@@ -631,16 +626,16 @@ void ObjectPage::CheckButtons()
     // enable/disable edit button
     SvTreeListEntry* pCurEntry = m_pBasicBox->GetCurEntry();
     EntryDescriptor aDesc = m_pBasicBox->GetEntryDescriptor(pCurEntry);
-    ScriptDocument aDocument( aDesc.GetDocument() );
-    OUString aLibName( aDesc.GetLibName() );
-    OUString aLibSubName( aDesc.GetLibSubName() );
+    const ScriptDocument& aDocument( aDesc.GetDocument() );
+    const OUString& aLibName( aDesc.GetLibName() );
+    const OUString& aLibSubName( aDesc.GetLibSubName() );
     bool bVBAEnabled = aDocument.isInVBAMode();
-    sal_uInt16 nMode = m_pBasicBox->GetMode();
+    BrowseMode nMode = m_pBasicBox->GetMode();
 
     sal_uInt16 nDepth = pCurEntry ? m_pBasicBox->GetModel()->GetDepth( pCurEntry ) : 0;
     if ( nDepth >= 2 )
     {
-        if( bVBAEnabled && ( nMode & BROWSEMODE_MODULES ) && ( nDepth == 2 ) )
+        if( bVBAEnabled && ( nMode & BrowseMode::Modules ) && ( nDepth == 2 ) )
             m_pEditButton->Disable();
         else
         m_pEditButton->Enable();
@@ -675,7 +670,7 @@ void ObjectPage::CheckButtons()
     // enable/disable delete button
     if ( nDepth >= 2 && !bReadOnly && eLocation != LIBRARY_LOCATION_SHARE )
     {
-        if( bVBAEnabled && ( nMode & BROWSEMODE_MODULES ) && ( ( nDepth == 2 ) || aLibSubName == IDE_RESSTR(RID_STR_DOCUMENT_OBJECTS) ) )
+        if( bVBAEnabled && ( nMode & BrowseMode::Modules ) && ( ( nDepth == 2 ) || aLibSubName == IDEResId(RID_STR_DOCUMENT_OBJECTS) ) )
             m_pDelButton->Disable();
         else
         m_pDelButton->Enable();
@@ -684,7 +679,7 @@ void ObjectPage::CheckButtons()
         m_pDelButton->Disable();
 }
 
-IMPL_LINK_TYPED( ObjectPage, BasicBoxHighlightHdl, SvTreeListBox*, pBox, void )
+IMPL_LINK( ObjectPage, BasicBoxHighlightHdl, SvTreeListBox*, pBox, void )
 {
     if ( !pBox->IsSelected( pBox->GetHdlEntry() ) )
         return;
@@ -692,7 +687,7 @@ IMPL_LINK_TYPED( ObjectPage, BasicBoxHighlightHdl, SvTreeListBox*, pBox, void )
     CheckButtons();
 }
 
-IMPL_LINK_TYPED( ObjectPage, ButtonHdl, Button *, pButton, void )
+IMPL_LINK( ObjectPage, ButtonHdl, Button *, pButton, void )
 {
     if (pButton == m_pEditButton)
     {
@@ -710,10 +705,9 @@ IMPL_LINK_TYPED( ObjectPage, ButtonHdl, Button *, pButton, void )
             {
                 OUString aModName( aDesc.GetName() );
                 // extract the module name from the string like "Sheet1 (Example1)"
-                if( aDesc.GetLibSubName() == IDE_RESSTR(RID_STR_DOCUMENT_OBJECTS) )
+                if( aDesc.GetLibSubName() == IDEResId(RID_STR_DOCUMENT_OBJECTS) )
                 {
-                    sal_Int32 nIndex = 0;
-                    aModName = aModName.getToken( 0, ' ', nIndex );
+                    aModName = aModName.getToken( 0, ' ' );
                 }
                 SbxItem aSbxItem( SID_BASICIDE_ARG_SBX, aDesc.GetDocument(), aDesc.GetLibName(),
                                   aModName, TreeListBox::ConvertType( aDesc.GetType() ) );
@@ -721,9 +715,9 @@ IMPL_LINK_TYPED( ObjectPage, ButtonHdl, Button *, pButton, void )
                         SfxCallMode::SYNCHRON, { &aSbxItem });
             }
         }
-        else    // Nur Lib selektiert
+        else    // only Lib selected
         {
-            DBG_ASSERT( m_pBasicBox->GetModel()->GetDepth( pCurEntry ) == 1, "Kein LibEntry?!" );
+            DBG_ASSERT( m_pBasicBox->GetModel()->GetDepth( pCurEntry ) == 1, "No LibEntry?!" );
             ScriptDocument aDocument( ScriptDocument::getApplicationScriptDocument() );
             SvTreeListEntry* pParentEntry = m_pBasicBox->GetParent( pCurEntry );
             if ( pParentEntry )
@@ -732,7 +726,7 @@ IMPL_LINK_TYPED( ObjectPage, ButtonHdl, Button *, pButton, void )
                 if (pDocumentEntry)
                     aDocument = pDocumentEntry->GetDocument();
             }
-            SfxUsrAnyItem aDocItem( SID_BASICIDE_ARG_DOCUMENT_MODEL, makeAny( aDocument.getDocumentOrNull() ) );
+            SfxUnoAnyItem aDocItem( SID_BASICIDE_ARG_DOCUMENT_MODEL, Any( aDocument.getDocumentOrNull() ) );
             OUString aLibName( m_pBasicBox->GetEntryText( pCurEntry ) );
             SfxStringItem aLibNameItem( SID_BASICIDE_ARG_LIBNAME, aLibName );
             if ( pDispatcher )
@@ -807,9 +801,8 @@ void ObjectPage::NewModule()
 
     if ( GetSelection( aDocument, aLibName ) )
     {
-        OUString aModName;
-        createModImpl( static_cast<vcl::Window*>( this ), aDocument,
-                    *m_pBasicBox, aLibName, aModName, true );
+        createModImpl(GetFrameWeld(), aDocument,
+                      *m_pBasicBox, aLibName, true);
     }
 }
 
@@ -822,18 +815,20 @@ void ObjectPage::NewDialog()
     {
         aDocument.getOrCreateLibrary( E_DIALOGS, aLibName );
 
-        ScopedVclPtrInstance< NewObjectDialog > aNewDlg(this, ObjectMode::Dialog, true);
-        aNewDlg->SetObjectName( aDocument.createObjectName( E_DIALOGS, aLibName ) );
+        NewObjectDialog aNewDlg(GetFrameWeld(), ObjectMode::Dialog, true);
+        aNewDlg.SetObjectName(aDocument.createObjectName(E_DIALOGS, aLibName));
 
-        if (aNewDlg->Execute() != 0)
+        if (aNewDlg.run() != RET_CANCEL)
         {
-            OUString aDlgName = aNewDlg->GetObjectName();
+            OUString aDlgName = aNewDlg.GetObjectName();
             if (aDlgName.isEmpty())
                 aDlgName = aDocument.createObjectName( E_DIALOGS, aLibName);
 
             if ( aDocument.hasDialog( aLibName, aDlgName ) )
             {
-                ScopedVclPtrInstance<MessageDialog>::Create(this, IDE_RESSTR(RID_STR_SBXNAMEALLREADYUSED2))->Execute();
+                std::unique_ptr<weld::MessageDialog> xError(Application::CreateMessageDialog(GetFrameWeld(),
+                                                            VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_SBXNAMEALLREADYUSED2)));
+                xError->run();
             }
             else
             {
@@ -854,7 +849,7 @@ void ObjectPage::NewDialog()
                     if ( !m_pBasicBox->IsExpanded( pRootEntry ) )
                         m_pBasicBox->Expand( pRootEntry );
                     SvTreeListEntry* pLibEntry = m_pBasicBox->FindEntry( pRootEntry, aLibName, OBJ_TYPE_LIBRARY );
-                    DBG_ASSERT( pLibEntry, "Libeintrag nicht gefunden!" );
+                    DBG_ASSERT( pLibEntry, "LibEntry not found!" );
                     if ( pLibEntry )
                     {
                         if ( !m_pBasicBox->IsExpanded( pLibEntry ) )
@@ -864,10 +859,10 @@ void ObjectPage::NewDialog()
                         {
                             pEntry = m_pBasicBox->AddEntry(
                                 aDlgName,
-                                Image( IDEResId( RID_IMG_DIALOG ) ),
+                                Image(StockImage::Yes, RID_BMP_DIALOG),
                                 pLibEntry, false,
-                                o3tl::make_unique<Entry>(OBJ_TYPE_DIALOG));
-                            DBG_ASSERT( pEntry, "InsertEntry fehlgeschlagen!" );
+                                std::make_unique<Entry>(OBJ_TYPE_DIALOG));
+                            DBG_ASSERT( pEntry, "Insert entry failed!" );
                         }
                         m_pBasicBox->SetCurEntry( pEntry );
                         m_pBasicBox->Select( m_pBasicBox->GetCurEntry() );        // OV-Bug?!
@@ -881,18 +876,18 @@ void ObjectPage::NewDialog()
 void ObjectPage::DeleteCurrent()
 {
     SvTreeListEntry* pCurEntry = m_pBasicBox->GetCurEntry();
-    DBG_ASSERT( pCurEntry, "Kein aktueller Eintrag!" );
+    DBG_ASSERT( pCurEntry, "No current entry!" );
     EntryDescriptor aDesc( m_pBasicBox->GetEntryDescriptor( pCurEntry ) );
-    ScriptDocument aDocument( aDesc.GetDocument() );
+    const ScriptDocument& aDocument( aDesc.GetDocument() );
     DBG_ASSERT( aDocument.isAlive(), "ObjectPage::DeleteCurrent: no document!" );
     if ( !aDocument.isAlive() )
         return;
-    OUString aLibName( aDesc.GetLibName() );
-    OUString aName( aDesc.GetName() );
+    const OUString& aLibName( aDesc.GetLibName() );
+    const OUString& aName( aDesc.GetName() );
     EntryType eType = aDesc.GetType();
 
-    if ( ( eType == OBJ_TYPE_MODULE && QueryDelModule( aName, this ) ) ||
-         ( eType == OBJ_TYPE_DIALOG && QueryDelDialog( aName, this ) ) )
+    if ( ( eType == OBJ_TYPE_MODULE && QueryDelModule(aName, GetFrameWeld()) ) ||
+         ( eType == OBJ_TYPE_DIALOG && QueryDelDialog(aName, GetFrameWeld()) ) )
     {
         m_pBasicBox->GetModel()->Remove( pCurEntry );
         if ( m_pBasicBox->GetCurEntry() )  // OV-Bug ?
@@ -917,55 +912,136 @@ void ObjectPage::DeleteCurrent()
         }
         catch (const container::NoSuchElementException& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
     }
 }
 
-
 void ObjectPage::EndTabDialog()
 {
-    DBG_ASSERT( pTabDlg, "TabDlg nicht gesetzt!" );
+    DBG_ASSERT( pTabDlg, "TabDlg not set!" );
     if ( pTabDlg )
         pTabDlg->EndDialog( 1 );
 }
 
-LibDialog::LibDialog( vcl::Window* pParent )
-    : ModalDialog(pParent, "ImportLibDialog", "modules/BasicIDE/ui/importlibdialog.ui")
+LibDialog::LibDialog(weld::Window* pParent)
+    : GenericDialogController(pParent, "modules/BasicIDE/ui/importlibdialog.ui", "ImportLibDialog")
+    , m_xStorageFrame(m_xBuilder->weld_frame("storageframe"))
+    , m_xLibBox(m_xBuilder->weld_tree_view("entries"))
+    , m_xReferenceBox(m_xBuilder->weld_check_button("ref"))
+    , m_xReplaceBox(m_xBuilder->weld_check_button("replace"))
 {
-    get(m_pStorageFrame, "storageframe");
-    get(m_pReferenceBox, "ref");
-    get(m_pReplaceBox, "replace");
-    get(m_pLibBox, "entries");
-    m_pLibBox->set_height_request(m_pLibBox->GetTextHeight() * 8);
-    m_pLibBox->set_width_request(m_pLibBox->approximate_char_width() * 32);
+    m_xLibBox->set_size_request(m_xLibBox->get_approximate_digit_width() * 28,
+                                m_xLibBox->get_height_rows(8));
 }
 
 LibDialog::~LibDialog()
 {
-    disposeOnce();
 }
-
-void LibDialog::dispose()
-{
-    m_pStorageFrame.clear();
-    m_pLibBox.clear();
-    m_pReferenceBox.clear();
-    m_pReplaceBox.clear();
-    ModalDialog::dispose();
-}
-
 
 void LibDialog::SetStorageName( const OUString& rName )
 {
-    OUString aName( IDE_RESSTR(RID_STR_FILENAME) );
-    aName += rName;
-    m_pStorageFrame->set_label(aName);
+    OUString aName = IDEResId(RID_STR_FILENAME) + rName;
+    m_xStorageFrame->set_label(aName);
 }
 
 // Helper function
-SbModule* createModImpl( vcl::Window* pWin, const ScriptDocument& rDocument,
-    TreeListBox& rBasicBox, const OUString& rLibName, const OUString& _aModName, bool bMain )
+SbModule* createModImpl(weld::Window* pWin, const ScriptDocument& rDocument,
+    TreeListBox& rBasicBox, const OUString& rLibName, bool bMain )
+{
+    OSL_ENSURE( rDocument.isAlive(), "createModImpl: invalid document!" );
+    if ( !rDocument.isAlive() )
+        return nullptr;
+
+    SbModule* pModule = nullptr;
+
+    OUString aLibName( rLibName );
+    if ( aLibName.isEmpty() )
+        aLibName = "Standard" ;
+    rDocument.getOrCreateLibrary( E_SCRIPTS, aLibName );
+    OUString aModName = rDocument.createObjectName( E_SCRIPTS, aLibName );
+
+    NewObjectDialog aNewDlg(pWin, ObjectMode::Module, true);
+    aNewDlg.SetObjectName(aModName);
+
+    if (aNewDlg.run() != RET_CANCEL)
+    {
+        if (!aNewDlg.GetObjectName().isEmpty())
+            aModName = aNewDlg.GetObjectName();
+
+        try
+        {
+            OUString sModuleCode;
+            // the module has existed
+            if( rDocument.hasModule( aLibName, aModName ) )
+                return nullptr;
+            rDocument.createModule( aLibName, aModName, bMain, sModuleCode );
+            BasicManager* pBasMgr = rDocument.getBasicManager();
+            StarBASIC* pBasic = pBasMgr? pBasMgr->GetLib( aLibName ) : nullptr;
+            if ( pBasic )
+                pModule = pBasic->FindModule( aModName );
+            SbxItem aSbxItem( SID_BASICIDE_ARG_SBX, rDocument, aLibName, aModName, TYPE_MODULE );
+            if (SfxDispatcher* pDispatcher = GetDispatcher())
+            {
+                pDispatcher->ExecuteList( SID_BASICIDE_SBXINSERTED,
+                      SfxCallMode::SYNCHRON, { &aSbxItem });
+            }
+            LibraryLocation eLocation = rDocument.getLibraryLocation( aLibName );
+            SvTreeListEntry* pRootEntry = rBasicBox.FindRootEntry( rDocument, eLocation );
+            if ( pRootEntry )
+            {
+                if ( !rBasicBox.IsExpanded( pRootEntry ) )
+                    rBasicBox.Expand( pRootEntry );
+                SvTreeListEntry* pLibEntry = rBasicBox.FindEntry( pRootEntry, aLibName, OBJ_TYPE_LIBRARY );
+                DBG_ASSERT( pLibEntry, "LibEntry not found!" );
+                if ( pLibEntry )
+                {
+                    if ( !rBasicBox.IsExpanded( pLibEntry ) )
+                        rBasicBox.Expand( pLibEntry );
+                    SvTreeListEntry* pSubRootEntry = pLibEntry;
+                    if( pBasic && rDocument.isInVBAMode() )
+                    {
+                        // add the new module in the "Modules" entry
+                        SvTreeListEntry* pLibSubEntry = rBasicBox.FindEntry( pLibEntry, IDEResId(RID_STR_NORMAL_MODULES) , OBJ_TYPE_NORMAL_MODULES );
+                        if( pLibSubEntry )
+                        {
+                            if( !rBasicBox.IsExpanded( pLibSubEntry ) )
+                                rBasicBox.Expand( pLibSubEntry );
+                            pSubRootEntry = pLibSubEntry;
+                        }
+                    }
+
+                    SvTreeListEntry* pEntry = rBasicBox.FindEntry( pSubRootEntry, aModName, OBJ_TYPE_MODULE );
+                    if ( !pEntry )
+                    {
+                        pEntry = rBasicBox.AddEntry(
+                            aModName,
+                            Image(StockImage::Yes, RID_BMP_MODULE),
+                            pSubRootEntry, false,
+                            std::make_unique<Entry>(OBJ_TYPE_MODULE));
+                        DBG_ASSERT( pEntry, "Insert entry failed!" );
+                    }
+                    rBasicBox.SetCurEntry( pEntry );
+                    rBasicBox.Select( rBasicBox.GetCurEntry() );        // OV-Bug?!
+                }
+            }
+        }
+        catch (const container::ElementExistException& )
+        {
+            std::unique_ptr<weld::MessageDialog> xError(Application::CreateMessageDialog(pWin,
+                                                        VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_SBXNAMEALLREADYUSED2)));
+            xError->run();
+        }
+        catch (const container::NoSuchElementException& )
+        {
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
+        }
+    }
+    return pModule;
+}
+
+SbModule* createModImpl(weld::Window* pWin, const ScriptDocument& rDocument,
+    SbTreeListBox& rBasicBox, const OUString& rLibName, const OUString& _aModName, bool bMain )
 {
     OSL_ENSURE( rDocument.isAlive(), "createModImpl: invalid document!" );
     if ( !rDocument.isAlive() )
@@ -981,13 +1057,13 @@ SbModule* createModImpl( vcl::Window* pWin, const ScriptDocument& rDocument,
     if ( aModName.isEmpty() )
         aModName = rDocument.createObjectName( E_SCRIPTS, aLibName );
 
-    ScopedVclPtrInstance< NewObjectDialog > aNewDlg(pWin, ObjectMode::Module, true);
-    aNewDlg->SetObjectName( aModName );
+    NewObjectDialog aNewDlg(pWin, ObjectMode::Module, true);
+    aNewDlg.SetObjectName(aModName);
 
-    if (aNewDlg->Execute() != 0)
+    if (aNewDlg.run() != RET_CANCEL)
     {
-        if (!aNewDlg->GetObjectName().isEmpty() )
-            aModName = aNewDlg->GetObjectName();
+        if (!aNewDlg.GetObjectName().isEmpty())
+            aModName = aNewDlg.GetObjectName();
 
         try
         {
@@ -998,61 +1074,62 @@ SbModule* createModImpl( vcl::Window* pWin, const ScriptDocument& rDocument,
             rDocument.createModule( aLibName, aModName, bMain, sModuleCode );
             BasicManager* pBasMgr = rDocument.getBasicManager();
             StarBASIC* pBasic = pBasMgr? pBasMgr->GetLib( aLibName ) : nullptr;
-                if ( pBasic )
-                    pModule = pBasic->FindModule( aModName );
-                SbxItem aSbxItem( SID_BASICIDE_ARG_SBX, rDocument, aLibName, aModName, TYPE_MODULE );
+            if ( pBasic )
+                pModule = pBasic->FindModule( aModName );
+            SbxItem aSbxItem( SID_BASICIDE_ARG_SBX, rDocument, aLibName, aModName, TYPE_MODULE );
             if (SfxDispatcher* pDispatcher = GetDispatcher())
             {
                 pDispatcher->ExecuteList( SID_BASICIDE_SBXINSERTED,
                       SfxCallMode::SYNCHRON, { &aSbxItem });
             }
             LibraryLocation eLocation = rDocument.getLibraryLocation( aLibName );
-            SvTreeListEntry* pRootEntry = rBasicBox.FindRootEntry( rDocument, eLocation );
-            if ( pRootEntry )
+            std::unique_ptr<weld::TreeIter> xIter(rBasicBox.make_iterator());
+            bool bRootEntry = rBasicBox.FindRootEntry(rDocument, eLocation, *xIter);
+            if (bRootEntry)
             {
-                if ( !rBasicBox.IsExpanded( pRootEntry ) )
-                    rBasicBox.Expand( pRootEntry );
-                SvTreeListEntry* pLibEntry = rBasicBox.FindEntry( pRootEntry, aLibName, OBJ_TYPE_LIBRARY );
-                DBG_ASSERT( pLibEntry, "Libeintrag nicht gefunden!" );
-                if ( pLibEntry )
+                if (!rBasicBox.get_row_expanded(*xIter))
+                    rBasicBox.expand_row(*xIter);
+                bool bLibEntry = rBasicBox.FindEntry(aLibName, OBJ_TYPE_LIBRARY, *xIter);
+                DBG_ASSERT( bLibEntry, "LibEntry not found!" );
+                if (bLibEntry)
                 {
-                    if ( !rBasicBox.IsExpanded( pLibEntry ) )
-                        rBasicBox.Expand( pLibEntry );
-                    SvTreeListEntry* pSubRootEntry = pLibEntry;
-                    if( pBasic && rDocument.isInVBAMode() )
+                    if (!rBasicBox.get_row_expanded(*xIter))
+                        rBasicBox.expand_row(*xIter);
+                    std::unique_ptr<weld::TreeIter> xSubRootEntry(rBasicBox.make_iterator(xIter.get()));
+                    if (pBasic && rDocument.isInVBAMode())
                     {
                         // add the new module in the "Modules" entry
-                        SvTreeListEntry* pLibSubEntry = rBasicBox.FindEntry( pLibEntry, IDE_RESSTR(RID_STR_NORMAL_MODULES) , OBJ_TYPE_NORMAL_MODULES );
-                        if( pLibSubEntry )
+                        std::unique_ptr<weld::TreeIter> xLibSubEntry(rBasicBox.make_iterator(xIter.get()));
+                        bool bLibSubEntry = rBasicBox.FindEntry(IDEResId(RID_STR_NORMAL_MODULES) , OBJ_TYPE_NORMAL_MODULES, *xLibSubEntry);
+                        if (bLibSubEntry)
                         {
-                            if( !rBasicBox.IsExpanded( pLibSubEntry ) )
-                                rBasicBox.Expand( pLibSubEntry );
-                            pSubRootEntry = pLibSubEntry;
+                            if (!rBasicBox.get_row_expanded(*xLibSubEntry))
+                                rBasicBox.expand_row(*xLibSubEntry);
+                            rBasicBox.copy_iterator(*xLibSubEntry, *xSubRootEntry);
                         }
                     }
 
-                    SvTreeListEntry* pEntry = rBasicBox.FindEntry( pSubRootEntry, aModName, OBJ_TYPE_MODULE );
-                    if ( !pEntry )
+                    std::unique_ptr<weld::TreeIter> xEntry(rBasicBox.make_iterator(xSubRootEntry.get()));
+                    bool bEntry = rBasicBox.FindEntry(aModName, OBJ_TYPE_MODULE, *xEntry);
+                    if (!bEntry)
                     {
-                        pEntry = rBasicBox.AddEntry(
-                            aModName,
-                            Image( IDEResId( RID_IMG_MODULE ) ),
-                            pSubRootEntry, false,
-                            o3tl::make_unique<Entry>(OBJ_TYPE_MODULE));
-                        DBG_ASSERT( pEntry, "InsertEntry fehlgeschlagen!" );
+                        rBasicBox.AddEntry(aModName, RID_BMP_MODULE, xEntry.get(), false,
+                                           std::make_unique<Entry>(OBJ_TYPE_MODULE));
                     }
-                    rBasicBox.SetCurEntry( pEntry );
-                    rBasicBox.Select( rBasicBox.GetCurEntry() );        // OV-Bug?!
+                    rBasicBox.set_cursor(*xEntry);
+                    rBasicBox.select(*xEntry);
                 }
             }
         }
         catch (const container::ElementExistException& )
         {
-            ScopedVclPtrInstance<MessageDialog>::Create(pWin, IDE_RESSTR(RID_STR_SBXNAMEALLREADYUSED2))->Execute();
+            std::unique_ptr<weld::MessageDialog> xError(Application::CreateMessageDialog(pWin,
+                                                        VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_SBXNAMEALLREADYUSED2)));
+            xError->run();
         }
         catch (const container::NoSuchElementException& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
     }
     return pModule;

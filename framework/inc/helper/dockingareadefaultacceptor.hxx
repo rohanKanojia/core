@@ -21,8 +21,6 @@
 #define INCLUDED_FRAMEWORK_INC_HELPER_DOCKINGAREADEFAULTACCEPTOR_HXX
 
 #include <classes/framecontainer.hxx>
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
 
 #include <com/sun/star/ui/XDockingAreaAcceptor.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
@@ -52,13 +50,13 @@ class DockingAreaDefaultAcceptor    :   public ::cppu::WeakImplHelper< css::ui::
         *//*-*****************************************************************************************************/
 
          DockingAreaDefaultAcceptor(    const css::uno::Reference< css::frame::XFrame >& xOwner );
-        virtual ~DockingAreaDefaultAcceptor();
+        virtual ~DockingAreaDefaultAcceptor() override;
 
         //  XDockingAreaAcceptor
 
-        virtual css::uno::Reference< css::awt::XWindow > SAL_CALL getContainerWindow() throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL requestDockingAreaSpace( const css::awt::Rectangle& RequestedSpace ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL setDockingAreaSpace( const css::awt::Rectangle& BorderSpace ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::awt::XWindow > SAL_CALL getContainerWindow() override;
+        virtual sal_Bool SAL_CALL requestDockingAreaSpace( const css::awt::Rectangle& RequestedSpace ) override;
+        virtual void SAL_CALL setDockingAreaSpace( const css::awt::Rectangle& BorderSpace ) override;
 
     //  variables
     //  (should be private everyway!)

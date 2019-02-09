@@ -18,11 +18,12 @@
  */
 
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/io/IOException.hpp>
 #include <osl/process.h>
 
 #include <map>
-#include <list>
+#include <vector>
 
 
 struct ini_NameValue
@@ -39,14 +40,14 @@ struct ini_NameValue
         {}
 };
 
-typedef std::list<
+typedef std::vector<
     ini_NameValue
-> NameValueList;
+> NameValueVector;
 
 struct ini_Section
 {
     OUString sName;
-    NameValueList lList;
+    NameValueVector vVector;
 };
 typedef std::map<OUString,
                 ini_Section
@@ -64,19 +65,15 @@ public:
             return &mAllSection[secName];
         return NULL;
     }
-    explicit IniParser(OUString const & rIniName) throw(com::sun::star::io::IOException )
+    explicit IniParser(OUString const & rIniName) throw(css::io::IOException )
     {
         OUString curDirPth;
         OUString iniUrl;
         osl_getProcessWorkingDir( &curDirPth.pData );
         if (osl_getAbsoluteFileURL( curDirPth.pData,    rIniName.pData, &iniUrl.pData ))
-            throw ::com::sun::star::io::IOException();
+            throw css::io::IOException();
 
 
-#if OSL_DEBUG_LEVEL > 1
-        OString sFile = OUStringToOString(iniUrl, RTL_TEXTENCODING_ASCII_US);
-        OSL_TRACE(__FILE__" -- parser() - %s\n", sFile.getStr());
-#endif
         oslFileHandle handle=NULL;
         if (iniUrl.getLength() &&
             osl_File_E_None == osl_openFile(iniUrl.pData, &handle, osl_File_OpenFlag_Read))
@@ -104,7 +101,7 @@ public:
                     nameValue.sValue = OStringToOUString(
                         line.copy(nIndex+1).trim(), RTL_TEXTENCODING_UTF8 );
 
-                    aSection->lList.push_back(nameValue);
+                    aSection->vVector.push_back(nameValue);
 
                 }
                 else
@@ -128,9 +125,8 @@ public:
 #if OSL_DEBUG_LEVEL > 1
         else
         {
-            OString file_tmp = OUStringToOString(iniUrl, RTL_TEXTENCODING_ASCII_US);
-            OSL_TRACE( __FILE__" -- couldn't open file: %s", file_tmp.getStr() );
-            throw ::com::sun::star::io::IOException();
+            SAL_WARN("connectivity", "couldn't open file: " << iniUrl );
+            throw css::io::IOException();
         }
 #endif
     }
@@ -142,19 +138,13 @@ public:
         for(;iBegin != iEnd;iBegin++)
         {
             ini_Section *aSection = &(*iBegin).second;
-            OString sec_name_tmp = OUStringToOString(aSection->sName, RTL_TEXTENCODING_ASCII_US);
-            for(NameValueList::iterator itor=aSection->lList.begin();
-                itor != aSection->lList.end();
+            for(NameValueVector::iterator itor=aSection->vVector.begin();
+                itor != aSection->vVector.end();
                 itor++)
             {
                     struct ini_NameValue * aValue = &(*itor);
-                    OString name_tmp = OUStringToOString(aValue->sName, RTL_TEXTENCODING_ASCII_US);
-                    OString value_tmp = OUStringToOString(aValue->sValue, RTL_TEXTENCODING_UTF8);
-                    OSL_TRACE(
-                        " section=%s name=%s value=%s\n",
-                                        sec_name_tmp.getStr(),
-                                        name_tmp.getStr(),
-                                        value_tmp.getStr() );
+                    SAL_WARN("connectivity",
+                        " section=" << aSection->sName << " name=" << aValue->sName << " value=" << aValue->sValue );
 
             }
         }

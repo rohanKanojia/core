@@ -20,15 +20,16 @@
 
 // must be first
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 #include <comphelper/anytostring.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 
 #include "externalshapebase.hxx"
-#include "eventmultiplexer.hxx"
-#include "vieweventhandler.hxx"
-#include "intrinsicanimationeventhandler.hxx"
-#include "tools.hxx"
+#include <eventmultiplexer.hxx>
+#include <vieweventhandler.hxx>
+#include <intrinsicanimationeventhandler.hxx>
+#include <tools.hxx>
 
 
 using namespace ::com::sun::star;
@@ -107,10 +108,7 @@ namespace slideshow
             }
             catch (uno::Exception &)
             {
-                OSL_FAIL( OUStringToOString(
-                                comphelper::anyToString(
-                                    cppu::getCaughtException() ),
-                                RTL_TEXTENCODING_UTF8 ).getStr() );
+                SAL_WARN( "slideshow", comphelper::anyToString( cppu::getCaughtException() ) );
             }
         }
 

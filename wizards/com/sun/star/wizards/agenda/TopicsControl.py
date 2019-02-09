@@ -57,7 +57,7 @@ This control relays on the ControlScroller control which uses the following
 Data model:<br/>
 1. It uses a vector, whose members are arrays of PropertyValue.<br/>
 2. Each array represents a row.<br/>
-(Note: the Name and Value memebrs of the PropertyValue object are being used)
+(Note: the Name and Value members of the PropertyValue object are being used)
 3. Each property Value represents a value
 for a single control with the following rules:<br/>
 3. a. the Value of the property is used for as value
@@ -458,8 +458,9 @@ class TopicsControl(ControlScroller):
 
     def rowDown(self, guiRow=None, control=None):
         try:
-            if guiRow is None and control is None:
+            if guiRow is None:
                 guiRow = self.lastFocusRow - self.nscrollvalue
+            if control is None:
                 control = self.lastFocusControl
             # only perform if this is not the last row.
             actuallRow = guiRow + self.nscrollvalue
@@ -490,8 +491,9 @@ class TopicsControl(ControlScroller):
 
     def rowUp(self, guiRow=None, control=None):
         try:
-            if guiRow is None and control is None:
+            if guiRow is None:
                 guiRow = self.lastFocusRow - self.nscrollvalue
+            if control is None:
                 control = self.lastFocusControl
             # only perform if this is not the first row
             actuallRow = guiRow + self.nscrollvalue
@@ -560,7 +562,7 @@ class TopicsControl(ControlScroller):
         self.focus(self.getControl(lowerRow, control))
 
     '''
-    changes the values of the given rows with eachother
+    changes the values of the given rows with each other
     @param row1 one can figure out what this parameter is...
     @param row2 one can figure out what this parameter is...
     '''
@@ -823,7 +825,7 @@ class ControlRow(object):
         self.timebox.Model.Enabled = enabled
 
     '''
-    Impelementation of XKeyListener.
+    Implementation of XKeyListener.
     Optionally performs the one of the following:
     cursor up, or down, row up or down
     '''

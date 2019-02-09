@@ -17,7 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "RelativePositionHelper.hxx"
+#include <RelativePositionHelper.hxx>
+#include <com/sun/star/chart2/RelativeSize.hpp>
+#include <com/sun/star/awt/Size.hpp>
 #include <rtl/math.hxx>
 #include <osl/diagnose.h>
 
@@ -70,7 +72,7 @@ chart2::RelativePosition RelativePositionHelper::getReanchoredPosition(
                 nShiftHalfWidths  -= 2;
                 nShiftHalfHeights -= 2;
                 break;
-            case drawing::Alignment_MAKE_FIXED_SIZE:
+            case drawing::Alignment::Alignment_MAKE_FIXED_SIZE:
                 break;
         }
 
@@ -107,7 +109,7 @@ chart2::RelativePosition RelativePositionHelper::getReanchoredPosition(
                 nShiftHalfWidths  += 2;
                 nShiftHalfHeights += 2;
                 break;
-            case drawing::Alignment_MAKE_FIXED_SIZE:
+            case drawing::Alignment::Alignment_MAKE_FIXED_SIZE:
                 break;
         }
 
@@ -227,6 +229,7 @@ awt::Point RelativePositionHelper::getCenterOfAnchoredObject(
         case drawing::Alignment_TOP:
         case drawing::Alignment_TOP_RIGHT:
             fYDelta += aUnrotatedObjectSize.Height/2;
+            break;
         default:
             // nothing to do
             break;
@@ -276,7 +279,7 @@ bool RelativePositionHelper::centerGrow(
         case drawing::Alignment_BOTTOM_RIGHT:
             aPos.Primary += fShiftAmountX;
             break;
-        case drawing::Alignment_MAKE_FIXED_SIZE:
+        case drawing::Alignment::Alignment_MAKE_FIXED_SIZE:
             break;
     }
 
@@ -298,7 +301,7 @@ bool RelativePositionHelper::centerGrow(
         case drawing::Alignment_BOTTOM_RIGHT:
             aPos.Secondary += fShiftAmountY;
             break;
-        case drawing::Alignment_MAKE_FIXED_SIZE:
+        case drawing::Alignment::Alignment_MAKE_FIXED_SIZE:
             break;
     }
 

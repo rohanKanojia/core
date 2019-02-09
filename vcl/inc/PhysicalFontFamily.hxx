@@ -20,26 +20,36 @@
 #ifndef INCLUDED_VCL_INC_PHYSICALFONTFAMILY_HXX
 #define INCLUDED_VCL_INC_PHYSICALFONTFAMILY_HXX
 
+#include <vcl/dllapi.h>
+#include <vcl/outdev.hxx>
+
 #include <set>
 
 #include <unotools/fontcfg.hxx>
 
 #include "PhysicalFontFace.hxx"
 
+class ImplDeviceFontList;
 class PhysicalFontFace;
 class PhysicalFontCollection;
 
 // flags for mnTypeFaces member
-#define FONT_FAMILY_SCALABLE      (1<<0)
-#define FONT_FAMILY_SYMBOL        (1<<1)
-#define FONT_FAMILY_NONESYMBOL    (1<<2)
-#define FONT_FAMILY_LIGHT         (1<<4)
-#define FONT_FAMILY_BOLD          (1<<5)
-#define FONT_FAMILY_NORMAL        (1<<6)
-#define FONT_FAMILY_NONEITALIC    (1<<8)
-#define FONT_FAMILY_ITALIC        (1<<9)
+enum class FontTypeFaces {
+    NONE          = 0x00,
+    Scalable      = 0x01,
+    Symbol        = 0x02,
+    NoneSymbol    = 0x04,
+    Light         = 0x08,
+    Bold          = 0x10,
+    Normal        = 0x20,
+    NoneItalic    = 0x40,
+    Italic        = 0x80
+};
+namespace o3tl {
+    template<> struct typed_flags<FontTypeFaces> : is_typed_flags<FontTypeFaces, 0xff> {};
+};
 
-class PhysicalFontFamily
+class VCL_PLUGIN_PUBLIC PhysicalFontFamily
 {
 public:
                         PhysicalFontFamily( const OUString& rSearchName );
@@ -48,9 +58,8 @@ public:
     const OUString&     GetFamilyName() const    { return maFamilyName; }
     const OUString&     GetSearchName() const    { return maSearchName; }
     const OUString&     GetAliasNames() const    { return maMapNames; }
-    bool                IsScalable() const       { return maFontFaces[0]->IsScalable(); }
     int                 GetMinQuality() const    { return mnMinQuality; }
-    int                 GetTypeFaces() const     { return mnTypeFaces; }
+    FontTypeFaces       GetTypeFaces() const     { return mnTypeFaces; }
     void                GetFontHeights( std::set<int>& rHeights ) const;
 
     const OUString&     GetMatchFamilyName() const { return maMatchFamilyName; }
@@ -60,24 +69,23 @@ public:
     void                InitMatchData( const utl::FontSubstConfiguration&,
                                        const OUString& rSearchName );
 
-    bool                AddFontFace( PhysicalFontFace* );
+    void                AddFontFace( PhysicalFontFace* );
 
     PhysicalFontFace*   FindBestFontFace( const FontSelectPattern& rFSD ) const;
 
     void                UpdateDevFontList( ImplDeviceFontList& ) const;
-    void                UpdateCloneFontList( PhysicalFontCollection&,
-                                             bool bEmbeddable ) const;
+    void                UpdateCloneFontList(PhysicalFontCollection&) const;
 
 static void             CalcType( ImplFontAttrs& rType, FontWeight& rWeight, FontWidth& rWidth,
                                   FontFamily eFamily, const utl::FontNameAttr* pFontAttr );
 
 private:
-    std::vector< PhysicalFontFace* > maFontFaces;
+    std::vector< rtl::Reference<PhysicalFontFace> > maFontFaces;
 
     OUString            maFamilyName;       // original font family name
-    OUString            maSearchName;       // normalized font family name
+    OUString const      maSearchName;       // normalized font family name
     OUString            maMapNames;         // fontname aliases
-    int                 mnTypeFaces;        // Typeface Flags
+    FontTypeFaces       mnTypeFaces;        // Typeface Flags
     FontFamily          meFamily;
     FontPitch           mePitch;
     int                 mnMinQuality;       // quality of the worst font face

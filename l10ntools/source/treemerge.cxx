@@ -17,11 +17,11 @@
 #include <libxml/xmlmemory.h>
 #include <libxml/xmlstring.h>
 
-#include "export.hxx"
-#include "helper.hxx"
-#include "common.hxx"
-#include "po.hxx"
-#include "treemerge.hxx"
+#include <export.hxx>
+#include <helper.hxx>
+#include <common.hxx>
+#include <po.hxx>
+#include <treemerge.hxx>
 
 
 namespace
@@ -130,7 +130,7 @@ namespace
             {
                 std::cerr
                     << "Treex error: Cannot find title in "
-                    << sXhpPath.getStr() << std::endl;
+                    << sXhpPath << std::endl;
                 return nullptr;
             }
             xmlFree( pXhpFile );
@@ -168,7 +168,7 @@ namespace
                             pMergeDataFile->GetMergeEntrys( &aResData );
                         if( pEntrys )
                         {
-                            pEntrys->GetText( sNewText, STRING_TYP_TEXT, rLang );
+                            pEntrys->GetText( sNewText, rLang );
                         }
                     }
                     else if( rLang == "qtz" )
@@ -208,7 +208,7 @@ TreeParser::TreeParser(
     if ( !m_pSource ) {
         std::cerr
             << "Treex error: Cannot open source file: "
-            << rInputFile.getStr() << std::endl;
+            << rInputFile << std::endl;
         return;
     }
     if( !m_pSource->name )
@@ -231,7 +231,7 @@ void TreeParser::Extract( const OString& rPOFile )
     {
         std::cerr
             << "Treex error: Cannot open po file for extract: "
-            << rPOFile.getStr() << std::endl;
+            << rPOFile << std::endl;
         return;
     }
 
@@ -253,28 +253,27 @@ void TreeParser::Merge(
     assert( m_bIsInitialized );
 
     const xmlNodePtr pRootNode = xmlDocGetRootElement( m_pSource );
-    MergeDataFile* pMergeDataFile = nullptr;
+    std::unique_ptr<MergeDataFile> pMergeDataFile;
     if( m_sLang != "qtz" && m_sLang != "en-US" )
     {
-        pMergeDataFile = new MergeDataFile(
-            rMergeSrc, static_cast<OString>( m_pSource->name ), false, false );
+        pMergeDataFile.reset(new MergeDataFile(
+            rMergeSrc, static_cast<OString>( m_pSource->name ), false, false ));
         const std::vector<OString> vLanguages = pMergeDataFile->GetLanguages();
-        if( vLanguages.size()>=1 && vLanguages[0] != m_sLang )
+        if( !vLanguages.empty() && vLanguages[0] != m_sLang )
         {
             std::cerr
                 << ("Treex error: given language conflicts with language of"
                     " Mergedata file: ")
-                << m_sLang.getStr() << " - "
-                << vLanguages[0].getStr() << std::endl;
-            delete pMergeDataFile;
+                << m_sLang << " - "
+                << vLanguages[0] << std::endl;
             return;
         }
     }
     lcl_MergeLevel(
         m_pSource, pRootNode, reinterpret_cast<const xmlChar *>("help_section"),
-        pMergeDataFile, m_sLang, rXhpRoot );
+        pMergeDataFile.get(), m_sLang, rXhpRoot );
 
-    delete pMergeDataFile;
+    pMergeDataFile.reset();
     xmlSaveFile( rDestinationFile.getStr(), m_pSource );
     xmlFreeDoc( m_pSource );
     xmlCleanupParser();

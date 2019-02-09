@@ -17,16 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "basereader.hxx"
+#include <basereader.hxx>
 
-#include "xml_parser.hxx"
+#include <xml_parser.hxx>
 
-#include "assert.h"
+#include <assert.h>
 #include <memory>
 
 /**  constructor of CBaseReader.
 */
-CBaseReader::CBaseReader(const std::string& DocumentName):
+CBaseReader::CBaseReader(const std::wstring& DocumentName):
 m_ZipFile( DocumentName )
 {
 }
@@ -67,7 +67,7 @@ void CBaseReader::Initialize( const std::string& ContentName)
         {
             xml_parser parser;
             parser.set_document_handler(this);  // pass current reader as reader to the sax parser
-            parser.parse(&m_ZipContent[0], m_ZipContent.size());
+            parser.parse(&m_ZipContent[0], m_ZipContent.size(), true/*IsFinal*/);
         }
     }
     catch(std::exception&)

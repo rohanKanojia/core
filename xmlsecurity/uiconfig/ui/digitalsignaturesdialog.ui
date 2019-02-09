@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.0 -->
+<!-- Generated with glade 3.18.3 -->
+<interface domain="xsc">
+  <requires lib="gtk+" version="3.18"/>
+  <requires lib="LibreOffice" version="1.0"/>
   <object class="GtkDialog" id="DigitalSignaturesDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Digital Signatures</property>
+    <property name="title" translatable="yes" context="digitalsignaturesdialog|DigitalSignaturesDialog">Digital Signatures</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
@@ -65,14 +67,12 @@
               <object class="GtkLabel" id="dochint">
                 <property name="can_focus">False</property>
                 <property name="no_show_all">True</property>
+                <property name="label" translatable="yes" context="digitalsignaturesdialog|dochint">The following have signed the document content: </property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">The following have signed the document content: </property>
               </object>
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">0</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
             <child>
@@ -81,12 +81,13 @@
                 <property name="can_focus">True</property>
                 <property name="hexpand">True</property>
                 <property name="vexpand">True</property>
+                <child internal-child="selection">
+                  <object class="GtkTreeSelection" id="Simple Table Container-selection1"/>
+                </child>
               </object>
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">4</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
             <child>
@@ -98,7 +99,7 @@
                 <property name="layout_style">spread</property>
                 <child>
                   <object class="GtkButton" id="view">
-                    <property name="label" translatable="yes">View Certificate...</property>
+                    <property name="label" translatable="yes" context="digitalsignaturesdialog|view">View Certificate...</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
@@ -111,7 +112,7 @@
                 </child>
                 <child>
                   <object class="GtkButton" id="sign">
-                    <property name="label" translatable="yes">Sign Document...</property>
+                    <property name="label" translatable="yes" context="digitalsignaturesdialog|sign">Sign Document...</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="can_default">True</property>
@@ -125,7 +126,7 @@
                 </child>
                 <child>
                   <object class="GtkButton" id="remove">
-                    <property name="label" translatable="yes">Remove</property>
+                    <property name="label" translatable="yes" context="digitalsignaturesdialog|remove">Remove</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
@@ -136,12 +137,23 @@
                     <property name="position">2</property>
                   </packing>
                 </child>
+                <child>
+                  <object class="GtkButton" id="start_certmanager">
+                    <property name="label" translatable="yes" context="digitalsignaturesdialog|start_certmanager">Start Certificate Manager...</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">3</property>
+                  </packing>
+                </child>
               </object>
               <packing>
                 <property name="left_attach">0</property>
-                <property name="top_attach">6</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
+                <property name="top_attach">7</property>
               </packing>
             </child>
             <child>
@@ -155,13 +167,11 @@
                     <property name="can_focus">False</property>
                     <property name="no_show_all">True</property>
                     <property name="hexpand">True</property>
-                    <property name="label" translatable="yes">Signed by </property>
+                    <property name="label" translatable="yes" context="digitalsignaturesdialog|signed">Signed by </property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -169,13 +179,11 @@
                     <property name="can_focus">False</property>
                     <property name="no_show_all">True</property>
                     <property name="hexpand">True</property>
-                    <property name="label" translatable="yes">Digital ID issued by </property>
+                    <property name="label" translatable="yes" context="digitalsignaturesdialog|issued">Digital ID issued by </property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -183,62 +191,63 @@
                     <property name="can_focus">False</property>
                     <property name="no_show_all">True</property>
                     <property name="hexpand">True</property>
-                    <property name="label" translatable="yes">Date</property>
+                    <property name="label" translatable="yes" context="digitalsignaturesdialog|date">Date</property>
                   </object>
                   <packing>
                     <property name="left_attach">2</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkLabel" id="description">
-                    <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Description</property>
+                    <property name="no_show_all">True</property>
+                    <property name="label" translatable="yes" context="digitalsignaturesdialog|description">Description</property>
                   </object>
                   <packing>
                     <property name="left_attach">3</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkLabel" id="type">
+                    <property name="can_focus">False</property>
+                    <property name="no_show_all">True</property>
+                    <property name="label" translatable="yes" context="digitalsignaturesdialog|type">Signature type</property>
+                  </object>
+                  <packing>
+                    <property name="left_attach">4</property>
+                    <property name="top_attach">0</property>
                   </packing>
                 </child>
               </object>
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">3</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
             <child>
               <object class="GtkLabel" id="macrohint">
                 <property name="can_focus">False</property>
                 <property name="no_show_all">True</property>
+                <property name="label" translatable="yes" context="digitalsignaturesdialog|macrohint">The following have signed the document macro:</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">The following have signed the document macro:</property>
               </object>
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">1</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
             <child>
               <object class="GtkLabel" id="packagehint">
                 <property name="can_focus">False</property>
                 <property name="no_show_all">True</property>
+                <property name="label" translatable="yes" context="digitalsignaturesdialog|packagehint">The following have signed this package:</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">The following have signed this package:</property>
               </object>
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">2</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
             <child>
@@ -251,14 +260,12 @@
                     <property name="can_focus">False</property>
                     <property name="no_show_all">True</property>
                     <property name="hexpand">True</property>
+                    <property name="label" translatable="yes" context="digitalsignaturesdialog|validft">The signatures in this document are valid</property>
                     <property name="xalign">0</property>
-                    <property name="label" translatable="yes">The signatures in this document are valid</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -270,8 +277,6 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -279,14 +284,12 @@
                     <property name="can_focus">False</property>
                     <property name="no_show_all">True</property>
                     <property name="hexpand">True</property>
+                    <property name="label" translatable="yes" context="digitalsignaturesdialog|invalidft">The signatures in this document are invalid</property>
                     <property name="xalign">0</property>
-                    <property name="label" translatable="yes">The signatures in this document are invalid</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -294,14 +297,12 @@
                     <property name="can_focus">False</property>
                     <property name="no_show_all">True</property>
                     <property name="hexpand">True</property>
+                    <property name="label" translatable="yes" context="digitalsignaturesdialog|oldsignatureft">Not all parts of the document are signed</property>
                     <property name="xalign">0</property>
-                    <property name="label" translatable="yes">Not all parts of the document are signed</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -309,14 +310,12 @@
                     <property name="can_focus">False</property>
                     <property name="no_show_all">True</property>
                     <property name="hexpand">True</property>
+                    <property name="label" translatable="yes" context="digitalsignaturesdialog|notvalidatedft">Certificate could not be validated</property>
                     <property name="xalign">0</property>
-                    <property name="label" translatable="yes">Certificate could not be validated</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">3</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -328,8 +327,6 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -341,8 +338,6 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -354,16 +349,28 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">3</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
               </object>
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">5</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkCheckButton" id="adescompliant">
+                <property name="label" translatable="yes" context="digitalsignaturesdialog|adescompliant">Use AdES-compliant signature when there is a choice</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="use_underline">True</property>
+                <property name="halign">start</property>
+                <property name="xalign">0.5</property>
+                <property name="draw_indicator">False</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">6</property>
               </packing>
             </child>
           </object>
@@ -376,8 +383,8 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">help</action-widget>
-      <action-widget response="0">close</action-widget>
+      <action-widget response="-11">help</action-widget>
+      <action-widget response="-7">close</action-widget>
     </action-widgets>
   </object>
 </interface>

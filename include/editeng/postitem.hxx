@@ -32,7 +32,7 @@ class SvXMLUnitConverter;
     This item describes the font setting (Italic)
 */
 
-class EDITENG_DLLPUBLIC SvxPostureItem : public SfxEnumItem
+class EDITENG_DLLPUBLIC SvxPostureItem : public SfxEnumItem<FontItalic>
 {
 public:
     static SfxPoolItem* CreateDefault();
@@ -42,14 +42,14 @@ public:
 
     // "pure virtual Methods" from SfxPoolItem + SwEnumItem
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual SfxPoolItem*    Create(SvStream &, sal_uInt16) const override;
     virtual SvStream&       Store(SvStream &, sal_uInt16 nItemVersion) const override;
-    virtual OUString        GetValueTextByPos( sal_uInt16 nPos ) const override;
+    static OUString         GetValueTextByPos( sal_uInt16 nPos );
     virtual sal_uInt16      GetValueCount() const override;
 
     virtual bool            QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
@@ -59,14 +59,15 @@ public:
     virtual bool            GetBoolValue() const override;
     virtual void            SetBoolValue( bool bVal ) override;
 
-    inline SvxPostureItem& operator=(const SvxPostureItem& rPost) {
+    SvxPostureItem& operator=(const SvxPostureItem& rPost) {
         SetValue( rPost.GetValue() );
         return *this;
     }
+    SvxPostureItem(SvxPostureItem const &) = default; // SfxPoolItem copy function dichotomy
 
     // enum cast
     FontItalic              GetPosture() const
-                                { return (FontItalic)GetValue(); }
+                                { return GetValue(); }
 
     void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
 };

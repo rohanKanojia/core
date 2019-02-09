@@ -30,11 +30,10 @@
 #include <svx/svxdllapi.h>
 #include <svx/xtextit0.hxx>
 
-// forward ---------------------------------------------------------------
-
 class SdrView;
 class SdrPageView;
 class SdrObject;
+class SvxColorListBox;
 
 class XFormTextAdjustItem;
 class XFormTextDistanceItem;
@@ -47,11 +46,9 @@ class XFormTextShadowColorItem;
 class XFormTextShadowXValItem;
 class XFormTextShadowYValItem;
 
-/*************************************************************************
-|*
-|* ControllerItem for Fontwork
-|*
-\************************************************************************/
+/** ControllerItem for Fontwork
+ */
+
 
 class SvxFontWorkDialog;
 
@@ -67,11 +64,8 @@ public:
     SvxFontWorkControllerItem(sal_uInt16 nId, SvxFontWorkDialog&, SfxBindings&);
 };
 
-/*************************************************************************
-|*
-|* Derived from SfxChildWindow as "container" for fontwork dialog
-|*
-\************************************************************************/
+/** Derived from SfxChildWindow as "container" for fontwork dialog
+ */
 
 class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxFontWorkChildWindow : public SfxChildWindow
 {
@@ -80,11 +74,8 @@ class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxFontWorkChildWindow : public SfxChildWind
     SFX_DECL_CHILDWINDOW_WITHID(SvxFontWorkChildWindow);
 };
 
-/*************************************************************************
-|*
-|* Floating window for setting attributes of text effects
-|*
-\************************************************************************/
+/** Floating window for setting attributes of text effects
+  */
 
 class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxFontWorkDialog : public SfxDockingWindow
 {
@@ -95,9 +86,7 @@ class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxFontWorkDialog : public SfxDockingWindow
     VclPtr<ToolBox>         m_pTbxStyle;
     VclPtr<ToolBox>         m_pTbxAdjust;
 
-    VclPtr<FixedImage>      m_pFbDistance;
     VclPtr<MetricField>     m_pMtrFldDistance;
-    VclPtr<FixedImage>      m_pFbTextStart;
     VclPtr<MetricField>     m_pMtrFldTextStart;
 
     VclPtr<ToolBox>         m_pTbxShadow;
@@ -107,7 +96,7 @@ class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxFontWorkDialog : public SfxDockingWindow
     VclPtr<FixedImage>      m_pFbShadowY;
     VclPtr<MetricField>     m_pMtrFldShadowY;
 
-    VclPtr<ColorLB>         m_pShadowColorLB;
+    VclPtr<SvxColorListBox> m_pShadowColorLB;
 
     SfxBindings&    rBindings;
     Idle            aInputIdle;
@@ -138,19 +127,17 @@ class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxFontWorkDialog : public SfxDockingWindow
     long            nSaveShadowAngle;
     long            nSaveShadowSize;
 
-    XColorListRef   pColorList;
-
  friend class SvxFontWorkChildWindow;
  friend class SvxFontWorkControllerItem;
 
-    DECL_LINK_TYPED( SelectStyleHdl_Impl, ToolBox *, void );
-    DECL_LINK_TYPED( SelectAdjustHdl_Impl, ToolBox *, void );
-    DECL_LINK_TYPED( SelectShadowHdl_Impl, ToolBox *, void );
+    DECL_LINK( SelectStyleHdl_Impl, ToolBox *, void );
+    DECL_LINK( SelectAdjustHdl_Impl, ToolBox *, void );
+    DECL_LINK( SelectShadowHdl_Impl, ToolBox *, void );
 
-    DECL_LINK_TYPED( ModifyInputHdl_Impl, Edit&, void );
-    DECL_LINK_TYPED( InputTimoutHdl_Impl, Idle *, void );
+    DECL_LINK( ModifyInputHdl_Impl, Edit&, void );
+    DECL_LINK( InputTimoutHdl_Impl, Timer *, void );
 
-    DECL_LINK_TYPED( ColorSelectHdl_Impl, ListBox&, void );
+    DECL_LINK( ColorSelectHdl_Impl, SvxColorListBox&, void );
 
     void SetStyle_Impl(const XFormTextStyleItem*);
     void SetAdjust_Impl(const XFormTextAdjustItem*);
@@ -173,10 +160,8 @@ class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxFontWorkDialog : public SfxDockingWindow
  public:
     SvxFontWorkDialog(SfxBindings *pBinding, SfxChildWindow *pCW,
                       vcl::Window* pParent);
-    virtual ~SvxFontWorkDialog();
+    virtual ~SvxFontWorkDialog() override;
     virtual void dispose() override;
-
-    void SetColorList(const XColorListRef &pTable);
 };
 
 #endif // INCLUDED_SVX_FONTWORK_HXX

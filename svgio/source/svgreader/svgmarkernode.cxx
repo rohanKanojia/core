@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svgmarkernode.hxx>
+#include <svgmarkernode.hxx>
 
 namespace svgio
 {
@@ -29,11 +29,10 @@ namespace svgio
         :   SvgNode(SVGTokenMarker, rDocument, pParent),
             aPrimitives(),
             maSvgStyleAttributes(*this),
-            mpViewBox(nullptr),
             maSvgAspectRatio(),
             maRefX(0),
             maRefY(0),
-            maMarkerUnits(strokeWidth),
+            maMarkerUnits(MarkerUnits::strokeWidth),
             maMarkerWidth(3),
             maMarkerHeight(3),
             mfAngle(0.0),
@@ -43,7 +42,6 @@ namespace svgio
 
         SvgMarkerNode::~SvgMarkerNode()
         {
-            delete mpViewBox;
         }
 
         const SvgStyleAttributes* SvgMarkerNode::getSvgStyleAttributes() const
@@ -57,7 +55,7 @@ namespace svgio
             SvgNode::parseAttribute(rTokenName, aSVGToken, aContent);
 
             // read style attributes
-            maSvgStyleAttributes.parseStyleAttribute(rTokenName, aSVGToken, aContent, false);
+            maSvgStyleAttributes.parseStyleAttribute(aSVGToken, aContent, false);
 
             // parse own
             switch(aSVGToken)
@@ -79,7 +77,7 @@ namespace svgio
                 }
                 case SVGTokenPreserveAspectRatio:
                 {
-                    setSvgAspectRatio(readSvgAspectRatio(aContent));
+                    maSvgAspectRatio = readSvgAspectRatio(aContent);
                     break;
                 }
                 case SVGTokenRefX:
@@ -88,7 +86,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setRefX(aNum);
+                        maRefX = aNum;
                     }
                     break;
                 }
@@ -98,7 +96,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setRefY(aNum);
+                        maRefY = aNum;
                     }
                     break;
                 }
@@ -108,11 +106,11 @@ namespace svgio
                     {
                         if(aContent.startsWith("strokeWidth"))
                         {
-                            setMarkerUnits(strokeWidth);
+                            setMarkerUnits(MarkerUnits::strokeWidth);
                         }
                         else if(aContent.match(commonStrings::aStrUserSpaceOnUse))
                         {
-                            setMarkerUnits(userSpaceOnUse);
+                            setMarkerUnits(MarkerUnits::userSpaceOnUse);
                         }
                     }
                     break;
@@ -125,7 +123,7 @@ namespace svgio
                     {
                         if(aNum.isPositive())
                         {
-                            setMarkerWidth(aNum);
+                            maMarkerWidth = aNum;
                         }
                     }
                     break;
@@ -138,7 +136,7 @@ namespace svgio
                     {
                         if(aNum.isPositive())
                         {
-                            setMarkerHeight(aNum);
+                            maMarkerHeight = aNum;
                         }
                     }
                     break;
@@ -151,7 +149,7 @@ namespace svgio
                     {
                         if(aContent.startsWith("auto"))
                         {
-                            setOrientAuto();
+                            mbOrientAuto = true;
                         }
                         else
                         {

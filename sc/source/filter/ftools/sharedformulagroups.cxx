@@ -7,13 +7,15 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "sharedformulagroups.hxx"
+#include <memory>
+#include <sharedformulagroups.hxx>
+#include <tokenarray.hxx>
 
 namespace sc {
 
-void SharedFormulaGroups::set( size_t nSharedId, ScTokenArray* pArray )
+void SharedFormulaGroups::set( size_t nSharedId, std::unique_ptr<ScTokenArray> pArray )
 {
-    m_Store.insert(std::make_pair(nSharedId, std::unique_ptr<ScTokenArray>(pArray)));
+    m_Store.insert(std::make_pair(nSharedId, std::move(pArray)));
 }
 
 const ScTokenArray* SharedFormulaGroups::get( size_t nSharedId ) const

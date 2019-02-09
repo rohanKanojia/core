@@ -28,7 +28,7 @@ class SvStream;
 namespace sw
 {
 
-class WW8FFData
+class WW8FFData final
 {
 private:
     // offset 0x4
@@ -60,9 +60,8 @@ private:
     OUString msMacroEnter;
     OUString msMacroExit;
 
-    ::std::vector< OUString > msListEntries;
+    std::vector< OUString > msListEntries;
 
-protected:
     static void WriteOUString(SvStream * pStream, const OUString & rStr, bool bAddZero);
 
 public:
@@ -73,11 +72,7 @@ public:
 
     void setResult(sal_uInt8 nResult) { mnResult = nResult; }
 
-    void setCheckboxHeight(sal_uInt16 nCheckboxHeight) { mnCheckboxHeight = nCheckboxHeight; }
-
     void setName(const OUString & rName) { msName = rName; }
-
-    void setDefaultResult(sal_uInt16 nDefault) { mnDefault = nDefault; }
 
     void setHelp(const OUString & rHelp);
 

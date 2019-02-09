@@ -21,7 +21,8 @@
 
 #include <sot/exchange.hxx>
 #include <sot/storage.hxx>
-#include <svx/dialogs.hrc>
+#include <svx/strings.hrc>
+#include <svx/svxids.hrc>
 
 #include <sfx2/viewsh.hxx>
 #include <sfx2/objsh.hxx>
@@ -31,14 +32,14 @@
 #include <svx/colrctrl.hxx>
 
 #include <svx/svdview.hxx>
-#include "svx/drawitem.hxx"
+#include <svx/drawitem.hxx>
 #include <editeng/colritem.hxx>
-#include "svx/xattr.hxx"
+#include <svx/xattr.hxx>
 #include <svx/xtable.hxx>
 #include <svx/dialmgr.hxx>
-#include "svx/xexch.hxx"
-#include "helpid.hrc"
+#include <helpids.h>
 #include <vcl/svapp.hxx>
+#include <vcl/virdev.hxx>
 
 using namespace com::sun::star;
 
@@ -47,18 +48,18 @@ class SvxColorValueSetData : public TransferableHelper
 {
 private:
 
-    XFillExchangeData       maData;
+    uno::Sequence<beans::NamedValue> m_Data;
 
 protected:
 
     virtual void            AddSupportedFormats() override;
     virtual bool GetData( const css::datatransfer::DataFlavor& rFlavor, const OUString& rDestDoc ) override;
-    virtual bool            WriteObject( tools::SvRef<SotStorageStream>& rxOStm, void* pUserObject, SotClipboardFormatId nUserObjectId, const css::datatransfer::DataFlavor& rFlavor ) override;
 
 public:
 
-    explicit SvxColorValueSetData( const XFillAttrSetItem& rSetItem ) :
-        maData( rSetItem ) {}
+    explicit SvxColorValueSetData(const uno::Sequence<beans::NamedValue>& rProps)
+        : m_Data(rProps)
+    {}
 };
 
 void SvxColorValueSetData::AddSupportedFormats()
@@ -72,30 +73,24 @@ bool SvxColorValueSetData::GetData( const css::datatransfer::DataFlavor& rFlavor
 
     if( SotExchange::GetFormat( rFlavor ) == SotClipboardFormatId::XFA )
     {
-        SetObject( &maData, SotClipboardFormatId::NONE, rFlavor );
+        SetAny(uno::makeAny(m_Data));
         bRet = true;
     }
 
     return bRet;
 }
 
-bool SvxColorValueSetData::WriteObject( tools::SvRef<SotStorageStream>& rxOStm, void*, SotClipboardFormatId, const css::datatransfer::DataFlavor&  )
-{
-    WriteXFillExchangeData( *rxOStm, maData );
-    return( rxOStm->GetError() == ERRCODE_NONE );
-}
-
-SvxColorValueSet_docking::SvxColorValueSet_docking( vcl::Window* _pParent, WinBits nWinStyle ) :
-    SvxColorValueSet( _pParent, nWinStyle ),
+SvxColorValueSet_docking::SvxColorValueSet_docking( vcl::Window* _pParent ) :
+    SvxColorValueSet( _pParent, WB_ITEMBORDER ),
     DragSourceHelper( this ),
     mbLeftButton(true)
 {
-    SetAccessibleName(SVX_RESSTR(STR_COLORTABLE));
+    SetAccessibleName(SvxResId(STR_COLORTABLE));
 }
 
 void SvxColorValueSet_docking::MouseButtonDown( const MouseEvent& rMEvt )
 {
-    // Fuer Mac noch anders handlen !
+    // For Mac still handle differently!
     if( rMEvt.IsLeft() )
     {
         mbLeftButton = true;
@@ -117,7 +112,7 @@ void SvxColorValueSet_docking::MouseButtonDown( const MouseEvent& rMEvt )
 
 void SvxColorValueSet_docking::MouseButtonUp( const MouseEvent& rMEvt )
 {
-    // Fuer Mac noch anders handlen !
+    // For Mac still handle differently!
     if( rMEvt.IsLeft() )
     {
         mbLeftButton = true;
@@ -136,12 +131,6 @@ void SvxColorValueSet_docking::MouseButtonUp( const MouseEvent& rMEvt )
     SetNoSelection();
 }
 
-void SvxColorValueSet_docking::Command(const CommandEvent& rCEvt)
-{
-    // Basisklasse
-    SvxColorValueSet::Command(rCEvt);
-}
-
 void SvxColorValueSet_docking::StartDrag( sal_Int8 , const Point&  )
 {
     Application::PostUserEvent(LINK(this, SvxColorValueSet_docking, ExecDragHdl), nullptr, true);
@@ -154,24 +143,31 @@ void SvxColorValueSet_docking::DoDrag()
 
     if( pDocSh && nItemId )
     {
-        XFillAttrSetItem    aXFillSetItem( &pDocSh->GetPool() );
-        SfxItemSet&         rSet = aXFillSetItem.GetItemSet();
-
-        rSet.Put( XFillColorItem( GetItemText( nItemId ), GetItemColor( nItemId ) ) );
-        rSet.Put(XFillStyleItem( ( 1 == nItemId ) ? drawing::FillStyle_NONE : drawing::FillStyle_SOLID ) );
+        uno::Sequence<beans::NamedValue> props(2);
+        XFillColorItem const color(GetItemText(nItemId), GetItemColor(nItemId));
+        props[0].Name = "FillColor";
+        color.QueryValue(props[0].Value, 0);
+        XFillStyleItem const style((1 == nItemId)
+                ? drawing::FillStyle_NONE
+                : drawing::FillStyle_SOLID);
+        props[1].Name = "FillStyle";
+        style.QueryValue(props[1].Value, 0);
 
         EndSelection();
-        ( new SvxColorValueSetData( aXFillSetItem ) )->StartDrag( this, DND_ACTION_COPY );
+        ( new SvxColorValueSetData(props) )->StartDrag( this, DND_ACTION_COPY );
         ReleaseMouse();
     }
 }
 
-IMPL_LINK_NOARG_TYPED(SvxColorValueSet_docking, ExecDragHdl, void*, void)
+IMPL_LINK_NOARG(SvxColorValueSet_docking, ExecDragHdl, void*, void)
 {
-    // Als Link, damit asynchron ohne ImpMouseMoveMsg auf dem Stack auch die
-    // Farbleiste geloescht werden darf
+    // As a link, so that asynchronously without ImpMouseMoveMsg on the
+    // stack the color bar may also be deleted
     DoDrag();
 }
+
+static constexpr sal_uInt16 gnLeftSlot = SID_ATTR_FILL_COLOR;
+static constexpr sal_uInt16 gnRightSlot = SID_ATTR_LINE_COLOR;
 
 SvxColorDockingWindow::SvxColorDockingWindow
 (
@@ -183,20 +179,18 @@ SvxColorDockingWindow::SvxColorDockingWindow
     SfxDockingWindow( _pBindings, pCW, _pParent, WB_MOVEABLE|WB_CLOSEABLE|WB_SIZEABLE|WB_DOCKABLE ),
     pColorList      (),
     aColorSet       ( VclPtr<SvxColorValueSet_docking>::Create(this) ),
-    nLeftSlot       ( SID_ATTR_FILL_COLOR ),
-    nRightSlot      ( SID_ATTR_LINE_COLOR ),
     nCols           ( 20 ),
     nLines          ( 1 ),
     nCount          ( 0 )
 {
-    SetText(SVX_RESSTR(STR_COLORTABLE));
-    SetSizePixel(LogicToPixel(Size(150, 22), MapMode(MAP_APPFONT)));
+    SetText(SvxResId(STR_COLORTABLE));
+    SetSizePixel(LogicToPixel(Size(150, 22), MapMode(MapUnit::MapAppFont)));
     SetHelpId(HID_CTRL_COLOR);
 
     aColorSet->SetSelectHdl( LINK( this, SvxColorDockingWindow, SelectHdl ) );
     aColorSet->SetHelpId(HID_COLOR_CTL_COLORS);
-    aColorSet->SetPosSizePixel(LogicToPixel(Point(2, 2), MapMode(MAP_APPFONT)),
-                              LogicToPixel(Size(146, 18), MapMode(MAP_APPFONT)));
+    aColorSet->SetPosSizePixel(LogicToPixel(Point(2, 2), MapMode(MapUnit::MapAppFont)),
+                              LogicToPixel(Size(146, 18), MapMode(MapUnit::MapAppFont)));
 
     // Get the model from the view shell.  Using SfxObjectShell::Current()
     // is unreliable when called at the wrong times.
@@ -227,15 +221,15 @@ SvxColorDockingWindow::SvxColorDockingWindow
     }
 
     aItemSize = aColorSet->CalcItemSizePixel(Size(SvxColorValueSet::getEntryEdgeLength(), SvxColorValueSet::getEntryEdgeLength()));
-    aItemSize.Width() = aItemSize.Width() + SvxColorValueSet::getEntryEdgeLength();
-    aItemSize.Width() /= 2;
-    aItemSize.Height() = aItemSize.Height() + SvxColorValueSet::getEntryEdgeLength();
-    aItemSize.Height() /= 2;
+    aItemSize.setWidth( aItemSize.Width() + SvxColorValueSet::getEntryEdgeLength() );
+    aItemSize.setWidth( aItemSize.Width() / 2 );
+    aItemSize.setHeight( aItemSize.Height() + SvxColorValueSet::getEntryEdgeLength() );
+    aItemSize.setHeight( aItemSize.Height() / 2 );
 
     SetSize();
     aColorSet->Show();
     if (_pBindings != nullptr)
-        StartListening( *_pBindings, true );
+        StartListening(*_pBindings, DuplicateHandling::Prevent);
 }
 
 SvxColorDockingWindow::~SvxColorDockingWindow()
@@ -256,7 +250,7 @@ void SvxColorDockingWindow::Notify( SfxBroadcaster& , const SfxHint& rHint )
     if ( pPoolItemHint
          && ( dynamic_cast<const SvxColorListItem*>(pPoolItemHint->GetObject()) != nullptr ) )
     {
-        // Die Liste der Farben hat sich geaendert
+        // The list of colors has changed
         pColorList = static_cast<SvxColorListItem*>( pPoolItemHint->GetObject() )->GetColorList();
         FillValueSet();
     }
@@ -264,45 +258,45 @@ void SvxColorDockingWindow::Notify( SfxBroadcaster& , const SfxHint& rHint )
 
 void SvxColorDockingWindow::FillValueSet()
 {
-    if( pColorList.is() )
-    {
-        nCount = pColorList->Count();
-        aColorSet->Clear();
+    if( !pColorList.is() )
+        return;
 
-        // create the first entry for 'invisible/none'
-        const Size aColorSize(SvxColorValueSet::getEntryEdgeLength(), SvxColorValueSet::getEntryEdgeLength());
-        long nPtX = aColorSize.Width() - 1;
-        long nPtY = aColorSize.Height() - 1;
-        ScopedVclPtrInstance< VirtualDevice > pVD;
+    nCount = pColorList->Count();
+    aColorSet->Clear();
 
-        pVD->SetOutputSizePixel( aColorSize );
-        pVD->SetLineColor( Color( COL_BLACK ) );
-        pVD->SetBackground( Wallpaper( Color( COL_WHITE ) ) );
-        pVD->DrawLine( Point(), Point( nPtX, nPtY ) );
-        pVD->DrawLine( Point( 0, nPtY ), Point( nPtX, 0 ) );
+    // create the first entry for 'invisible/none'
+    const Size aColorSize(SvxColorValueSet::getEntryEdgeLength(), SvxColorValueSet::getEntryEdgeLength());
+    long nPtX = aColorSize.Width() - 1;
+    long nPtY = aColorSize.Height() - 1;
+    ScopedVclPtrInstance< VirtualDevice > pVD;
 
-        Bitmap aBmp( pVD->GetBitmap( Point(), aColorSize ) );
+    pVD->SetOutputSizePixel( aColorSize );
+    pVD->SetLineColor( COL_BLACK );
+    pVD->SetBackground( Wallpaper( COL_WHITE ) );
+    pVD->DrawLine( Point(), Point( nPtX, nPtY ) );
+    pVD->DrawLine( Point( 0, nPtY ), Point( nPtX, 0 ) );
 
-        aColorSet->InsertItem( (sal_uInt16)1, Image(aBmp), SVX_RESSTR( RID_SVXSTR_INVISIBLE ) );
+    BitmapEx aBmp( pVD->GetBitmapEx( Point(), aColorSize ) );
 
-        aColorSet->addEntriesForXColorList(*pColorList, 2);
-    }
+    aColorSet->InsertItem( sal_uInt16(1), Image(aBmp), SvxResId( RID_SVXSTR_INVISIBLE ) );
+
+    aColorSet->addEntriesForXColorList(*pColorList, 2);
 }
 
 void SvxColorDockingWindow::SetSize()
 {
-    // Groesse fuer ValueSet berechnen
+    // calculate the size for ValueSet
     Size aSize = GetOutputSizePixel();
-    aSize.Width()  -= 4;
-    aSize.Height() -= 4;
+    aSize.AdjustWidth( -4 );
+    aSize.AdjustHeight( -4 );
 
-    // Zeilen und Spalten berechnen
-    nCols = (sal_uInt16) ( aSize.Width() / aItemSize.Width() );
-    nLines = (sal_uInt16) ( (float) aSize.Height() / (float) aItemSize.Height() /*+ 0.35*/ );
+    // calculate rows and columns
+    nCols = static_cast<sal_uInt16>( aSize.Width() / aItemSize.Width() );
+    nLines = static_cast<sal_uInt16>( static_cast<float>(aSize.Height()) / static_cast<float>(aItemSize.Height()) /*+ 0.35*/ );
     if( nLines == 0 )
         nLines++;
 
-    // Scrollbar setzen/entfernen
+    // set/remove scroll bar
     WinBits nBits = aColorSet->GetStyle();
     if ( static_cast<long>(nLines) * nCols >= nCount )
         nBits &= ~WB_VSCROLL;
@@ -310,12 +304,12 @@ void SvxColorDockingWindow::SetSize()
         nBits |= WB_VSCROLL;
     aColorSet->SetStyle( nBits );
 
-    // ScrollBar ?
+    // scroll bar?
     long nScrollWidth = aColorSet->GetScrollWidth();
     if( nScrollWidth > 0 )
     {
-        // Spalten mit ScrollBar berechnen
-        nCols = (sal_uInt16) ( ( aSize.Width() - nScrollWidth ) / aItemSize.Width() );
+        // calculate columns with scroll bar
+        nCols = static_cast<sal_uInt16>( ( aSize.Width() - nScrollWidth ) / aItemSize.Width() );
     }
     aColorSet->SetColCount( nCols );
 
@@ -323,7 +317,7 @@ void SvxColorDockingWindow::SetSize()
         aColorSet->SetLineCount( nLines );
     else
     {
-        aColorSet->SetLineCount(); // sonst wird LineHeight ignoriert
+        aColorSet->SetLineCount(); // otherwise line height is ignored
         aColorSet->SetItemHeight( aItemSize.Height() );
     }
 
@@ -339,29 +333,29 @@ bool SvxColorDockingWindow::Close()
     return true;
 }
 
-IMPL_LINK_NOARG_TYPED(SvxColorDockingWindow, SelectHdl, ValueSet*, void)
+IMPL_LINK_NOARG(SvxColorDockingWindow, SelectHdl, ValueSet*, void)
 {
     SfxDispatcher* pDispatcher = GetBindings().GetDispatcher();
-    sal_uInt16 nPos = aColorSet->GetSelectItemId();
+    sal_uInt16 nPos = aColorSet->GetSelectedItemId();
     Color  aColor( aColorSet->GetItemColor( nPos ) );
     OUString aStr( aColorSet->GetItemText( nPos ) );
 
     if (aColorSet->IsLeftButton())
     {
-        if ( nLeftSlot == SID_ATTR_FILL_COLOR )
+        if ( gnLeftSlot == SID_ATTR_FILL_COLOR )
         {
-            if ( nPos == 1 )        // unsichtbar
+            if ( nPos == 1 )        // invisible
             {
                 XFillStyleItem aXFillStyleItem( drawing::FillStyle_NONE );
-                pDispatcher->ExecuteList(nLeftSlot, SfxCallMode::RECORD,
+                pDispatcher->ExecuteList(gnLeftSlot, SfxCallMode::RECORD,
                         { &aXFillStyleItem });
             }
             else
             {
                 bool bDone = false;
 
-                // Wenn wir eine DrawView haben und uns im TextEdit-Modus befinden,
-                // wird nicht die Flaechen-, sondern die Textfarbe zugewiesen
+                // If we have a DrawView and we are in TextEdit mode, then
+                // not the area color but the text color is assigned
                 SfxViewShell* pViewSh = SfxViewShell::Current();
                 if ( pViewSh )
                 {
@@ -378,31 +372,31 @@ IMPL_LINK_NOARG_TYPED(SvxColorDockingWindow, SelectHdl, ValueSet*, void)
                 {
                     XFillStyleItem aXFillStyleItem( drawing::FillStyle_SOLID );
                     XFillColorItem aXFillColorItem( aStr, aColor );
-                    pDispatcher->ExecuteList(nLeftSlot, SfxCallMode::RECORD,
+                    pDispatcher->ExecuteList(gnLeftSlot, SfxCallMode::RECORD,
                             { &aXFillColorItem, &aXFillStyleItem });
                 }
             }
         }
-        else if ( nPos != 1 )       // unsichtbar
+        else if ( nPos != 1 )       // invisible
         {
-            SvxColorItem aLeftColorItem( aColor, nLeftSlot );
-            pDispatcher->ExecuteList(nLeftSlot, SfxCallMode::RECORD,
+            SvxColorItem aLeftColorItem( aColor, gnLeftSlot );
+            pDispatcher->ExecuteList(gnLeftSlot, SfxCallMode::RECORD,
                     { &aLeftColorItem });
         }
     }
     else
     {
-        if ( nRightSlot == SID_ATTR_LINE_COLOR )
+        if ( gnRightSlot == SID_ATTR_LINE_COLOR )
         {
-            if( nPos == 1 )     // unsichtbar
+            if( nPos == 1 )     // invisible
             {
                 XLineStyleItem aXLineStyleItem( drawing::LineStyle_NONE );
-                pDispatcher->ExecuteList(nRightSlot, SfxCallMode::RECORD,
+                pDispatcher->ExecuteList(gnRightSlot, SfxCallMode::RECORD,
                         { &aXLineStyleItem });
             }
             else
             {
-                // Sollte der LineStyle unsichtbar sein, so wird er auf SOLID gesetzt
+                // If the LineStyle is invisible, it is set to SOLID
                 SfxViewShell* pViewSh = SfxViewShell::Current();
                 if ( pViewSh )
                 {
@@ -413,12 +407,12 @@ IMPL_LINK_NOARG_TYPED(SvxColorDockingWindow, SelectHdl, ValueSet*, void)
                         pView->GetAttributes( aAttrSet );
                         if ( aAttrSet.GetItemState( XATTR_LINESTYLE ) != SfxItemState::DONTCARE )
                         {
-                            drawing::LineStyle eXLS = (drawing::LineStyle)
-                                static_cast<const XLineStyleItem&>(aAttrSet.Get( XATTR_LINESTYLE ) ).GetValue();
+                            drawing::LineStyle eXLS =
+                                aAttrSet.Get( XATTR_LINESTYLE ).GetValue();
                             if ( eXLS == drawing::LineStyle_NONE )
                             {
                                 XLineStyleItem aXLineStyleItem( drawing::LineStyle_SOLID );
-                                pDispatcher->ExecuteList(nRightSlot,
+                                pDispatcher->ExecuteList(gnRightSlot,
                                     SfxCallMode::RECORD, { &aXLineStyleItem });
                             }
                         }
@@ -426,14 +420,14 @@ IMPL_LINK_NOARG_TYPED(SvxColorDockingWindow, SelectHdl, ValueSet*, void)
                 }
 
                 XLineColorItem aXLineColorItem( aStr, aColor );
-                pDispatcher->ExecuteList(nRightSlot, SfxCallMode::RECORD,
+                pDispatcher->ExecuteList(gnRightSlot, SfxCallMode::RECORD,
                         { &aXLineColorItem });
             }
         }
-        else if ( nPos != 1 )       // unsichtbar
+        else if ( nPos != 1 )       // invisible
         {
-            SvxColorItem aRightColorItem( aColor, nRightSlot );
-            pDispatcher->ExecuteList(nRightSlot, SfxCallMode::RECORD,
+            SvxColorItem aRightColorItem( aColor, gnRightSlot );
+            pDispatcher->ExecuteList(gnRightSlot, SfxCallMode::RECORD,
                     { &aRightColorItem });
         }
     }
@@ -441,16 +435,16 @@ IMPL_LINK_NOARG_TYPED(SvxColorDockingWindow, SelectHdl, ValueSet*, void)
 
 void SvxColorDockingWindow::Resizing( Size& rNewSize )
 {
-    rNewSize.Width()  -= 4;
-    rNewSize.Height() -= 4;
+    rNewSize.AdjustWidth( -4 );
+    rNewSize.AdjustHeight( -4 );
 
-    // Spalten und Reihen ermitteln
-    nCols = (sal_uInt16) ( (float) rNewSize.Width() / (float) aItemSize.Width() + 0.5 );
-    nLines = (sal_uInt16) ( (float) rNewSize.Height() / (float) aItemSize.Height() + 0.5 );
+    // determine columns and rows
+    nCols = static_cast<sal_uInt16>( static_cast<float>(rNewSize.Width()) / static_cast<float>(aItemSize.Width()) + 0.5 );
+    nLines = static_cast<sal_uInt16>( static_cast<float>(rNewSize.Height()) / static_cast<float>(aItemSize.Height()) + 0.5 );
     if( nLines == 0 )
         nLines = 1;
 
-    // Scrollbar setzen/entfernen
+    // set/remove scroll bar
     WinBits nBits = aColorSet->GetStyle();
     if ( static_cast<long>(nLines) * nCols >= nCount )
         nBits &= ~WB_VSCROLL;
@@ -458,18 +452,18 @@ void SvxColorDockingWindow::Resizing( Size& rNewSize )
         nBits |= WB_VSCROLL;
     aColorSet->SetStyle( nBits );
 
-    // ScrollBar ?
+    // scroll bar?
     long nScrollWidth = aColorSet->GetScrollWidth();
     if( nScrollWidth > 0 )
     {
-        // Spalten mit ScrollBar berechnen
-        nCols = (sal_uInt16) ( ( ( (float) rNewSize.Width() - (float) nScrollWidth ) )
-                            / (float) aItemSize.Width() + 0.5 );
+        // calculate columns with scroll bar
+        nCols = static_cast<sal_uInt16>( ( static_cast<float>(rNewSize.Width()) - static_cast<float>(nScrollWidth) )
+                               / static_cast<float>(aItemSize.Width()) + 0.5 );
     }
     if( nCols <= 1 )
         nCols = 2;
 
-    // Max. Reihen anhand der gegebenen Spalten berechnen
+    // calculate max. rows using the given columns
     long nMaxLines = nCount / nCols;
     if( nCount %  nCols )
         nMaxLines++;
@@ -477,9 +471,9 @@ void SvxColorDockingWindow::Resizing( Size& rNewSize )
     nLines = sal::static_int_cast< sal_uInt16 >(
         std::min< long >( nLines, nMaxLines ) );
 
-    // Groesse des Windows setzen
-    rNewSize.Width()  = nCols * aItemSize.Width() + nScrollWidth + 4;
-    rNewSize.Height() = nLines * aItemSize.Height() + 4;
+    // set size of the window
+    rNewSize.setWidth( nCols * aItemSize.Width() + nScrollWidth + 4 );
+    rNewSize.setHeight( nLines * aItemSize.Height() + 4 );
 }
 
 void SvxColorDockingWindow::Resize()
@@ -500,10 +494,10 @@ void SvxColorDockingWindow::GetFocus()
     }
 }
 
-bool SvxColorDockingWindow::Notify( NotifyEvent& rNEvt )
+bool SvxColorDockingWindow::EventNotify( NotifyEvent& rNEvt )
 {
     bool bRet = false;
-    if( ( rNEvt.GetType() == MouseNotifyEvent::KEYINPUT ) )
+    if( rNEvt.GetType() == MouseNotifyEvent::KEYINPUT )
     {
         KeyEvent aKeyEvt = *rNEvt.GetKeyEvent();
         sal_uInt16   nKeyCode = aKeyEvt.GetKeyCode().GetCode();
@@ -516,7 +510,7 @@ bool SvxColorDockingWindow::Notify( NotifyEvent& rNEvt )
         }
     }
 
-    return bRet || SfxDockingWindow::Notify( rNEvt );
+    return bRet || SfxDockingWindow::EventNotify(rNEvt);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

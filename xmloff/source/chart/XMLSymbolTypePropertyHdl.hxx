@@ -25,13 +25,13 @@ class XMLSymbolTypePropertyHdl : public XMLPropertyHandler
 {
 public:
     explicit XMLSymbolTypePropertyHdl( bool bIsNamedSymbol );
-    virtual ~XMLSymbolTypePropertyHdl();
+    virtual ~XMLSymbolTypePropertyHdl() override;
 
     virtual bool importXML( const OUString& rStrImpValue, css::uno::Any& rValue, const SvXMLUnitConverter& rUnitConverter ) const override;
     virtual bool exportXML( OUString& rStrExpValue, const css::uno::Any& rValue, const SvXMLUnitConverter& rUnitConverter ) const override;
 
 private:
-    bool m_bIsNamedSymbol;
+    bool const m_bIsNamedSymbol;
 };
 
 #endif // INCLUDED_XMLOFF_SOURCE_CHART_XMLSYMBOLTYPEPROPERTYHDL_HXX

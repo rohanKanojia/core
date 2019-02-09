@@ -59,10 +59,10 @@
  ************************************************************************/
 
 #include "lwpdlvlist.hxx"
-#include "lwpfilehdr.hxx"
+#include <lwpfilehdr.hxx>
 #include "lwpproplist.hxx"
 
-LwpDLVList::LwpDLVList(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpDLVList::LwpDLVList(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpObject(objHdr, pStrm)
 {}
 /**
@@ -70,7 +70,7 @@ LwpDLVList::LwpDLVList(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
  **/
 void LwpDLVList::Read()
 {
-    LwpObjectStream* pObjStrm = m_pObjStrm;
+    LwpObjectStream* pObjStrm = m_pObjStrm.get();
     m_ListNext.ReadIndexed(pObjStrm);
     if( LwpFileHeader::m_nFileRevision < 0x0006 )
         pObjStrm->SkipExtra();
@@ -80,7 +80,7 @@ void LwpDLVList::Read()
         pObjStrm->SkipExtra();
 
 }
-LwpDLNFVList::LwpDLNFVList(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpDLNFVList::LwpDLNFVList(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
         : LwpDLVList(objHdr, pStrm)
 {}
 /**
@@ -90,7 +90,7 @@ void LwpDLNFVList::Read()
 {
     LwpDLVList::Read();
 
-    LwpObjectStream* pObjStrm = m_pObjStrm;
+    LwpObjectStream* pObjStrm = m_pObjStrm.get();
 
     m_ChildHead.ReadIndexed(pObjStrm);
     if( LwpFileHeader::m_nFileRevision < 0x0006 || !m_ChildHead.IsNull() )
@@ -117,9 +117,9 @@ void LwpDLNFVList::ReadName(LwpObjectStream* pObjStrm)
  * @descr       ctor of LwpDLNFPVList from object stream
  *          Note that m_bHasProperties is initialized to true
  **/
-LwpDLNFPVList::LwpDLNFPVList(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpDLNFPVList::LwpDLNFPVList(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpDLNFVList(objHdr, pStrm),
-    m_bHasProperties(true),m_pPropList(nullptr)
+    m_bHasProperties(true)
 {}
 /**
  * @descr       Read name of LwpDLNFVList from object stream
@@ -128,7 +128,7 @@ void LwpDLNFPVList::Read()
 {
     LwpDLNFVList::Read();
 
-    LwpObjectStream* pObjStrm = m_pObjStrm;
+    LwpObjectStream* pObjStrm = m_pObjStrm.get();
     ReadPropertyList(pObjStrm);
     pObjStrm->SkipExtra();
 }
@@ -142,7 +142,7 @@ void LwpDLNFPVList::ReadPropertyList(LwpObjectStream* pObjStrm)
         m_bHasProperties = pObjStrm->QuickReaduInt8() != 0;
         if (m_bHasProperties)
         {
-            m_pPropList = new LwpPropList;
+            m_pPropList.reset( new LwpPropList );
             m_pPropList->Read(pObjStrm);
         }
     }
@@ -152,10 +152,6 @@ void LwpDLNFPVList::ReadPropertyList(LwpObjectStream* pObjStrm)
  **/
 LwpDLNFPVList::~LwpDLNFPVList()
 {
-    if(m_pPropList)
-    {
-        delete m_pPropList;
-    }
 }
 
 /**

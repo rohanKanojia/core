@@ -19,18 +19,17 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_AXES_VPOLARCOORDINATESYSTEM_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_AXES_VPOLARCOORDINATESYSTEM_HXX
 
-#include "VCoordinateSystem.hxx"
+#include <VCoordinateSystem.hxx>
 
 namespace chart
 {
 
-/**
-*/
 class VPolarCoordinateSystem : public VCoordinateSystem
 {
 public:
+    VPolarCoordinateSystem() = delete;
     explicit VPolarCoordinateSystem( const css::uno::Reference< css::chart2::XCoordinateSystem >& xCooSys );
-    virtual ~VPolarCoordinateSystem();
+    virtual ~VPolarCoordinateSystem() override;
 
     //better performance for big data
     virtual css::uno::Sequence< sal_Int32 > getCoordinateSystemResolution( const css::awt::Size& rPageSize
@@ -39,15 +38,13 @@ public:
     virtual void createVAxisList(
             const css::uno::Reference< css::chart2::XChartDocument> & xChartDoc
             , const css::awt::Size& rFontReferenceSize
-            , const css::awt::Rectangle& rMaximumSpaceForLabels ) override;
+            , const css::awt::Rectangle& rMaximumSpaceForLabels
+            , bool bLimitSpaceForLabels ) override;
 
     virtual void initVAxisInList() override;
     virtual void updateScalesAndIncrementsOnAxes() override;
 
     virtual void createGridShapes() override;
-
-private:
-    VPolarCoordinateSystem();
 };
 
 } //namespace chart

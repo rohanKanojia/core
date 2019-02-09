@@ -21,14 +21,18 @@
 #include <rtl/uuid.h>
 
 #include <com/sun/star/xml/crypto/SecurityOperationStatus.hpp>
-#include "xmlsignature_mscryptimpl.hxx"
-#include "xmldocumentwrapper_xmlsecimpl.hxx"
-#include "xmlelementwrapper_xmlsecimpl.hxx"
-#include "securityenvironment_mscryptimpl.hxx"
-#include "xmlstreamio.hxx"
-#include "errorcallback.hxx"
-#include "xmlsecurity/xmlsec-wrapper.h"
+#include <com/sun/star/xml/crypto/XXMLSignature.hpp>
 
+#include "securityenvironment_mscryptimpl.hxx"
+
+#include <xmlsec/xmldocumentwrapper_xmlsecimpl.hxx>
+#include <xmlelementwrapper_xmlsecimpl.hxx>
+#include <xmlsec/xmlstreamio.hxx>
+#include <xmlsec/errorcallback.hxx>
+
+#include <xmlsec-wrapper.h>
+
+using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno ;
 using namespace ::com::sun::star::lang ;
 using ::com::sun::star::lang::XMultiServiceFactory ;
@@ -41,13 +45,36 @@ using ::com::sun::star::xml::crypto::XXMLSignature ;
 using ::com::sun::star::xml::crypto::XXMLSignatureTemplate ;
 using ::com::sun::star::xml::crypto::XXMLSecurityContext ;
 using ::com::sun::star::xml::crypto::XUriBinding ;
-using ::com::sun::star::xml::crypto::XMLSignatureException ;
 
+class XMLSignature_MSCryptImpl : public ::cppu::WeakImplHelper<
+    css::xml::crypto::XXMLSignature ,
+    css::lang::XServiceInfo >
+{
+    public:
+        explicit XMLSignature_MSCryptImpl();
 
-XMLSignature_MSCryptImpl::XMLSignature_MSCryptImpl( const Reference< XMultiServiceFactory >& aFactory ) : m_xServiceManager( aFactory ) {
-}
+        //Methods from XXMLSignature
+        virtual css::uno::Reference< css::xml::crypto::XXMLSignatureTemplate > SAL_CALL generate(
+            const css::uno::Reference< css::xml::crypto::XXMLSignatureTemplate >& aTemplate ,
+            const css::uno::Reference< css::xml::crypto::XSecurityEnvironment >& aEnvironment
+        ) override;
 
-XMLSignature_MSCryptImpl::~XMLSignature_MSCryptImpl() {
+        virtual css::uno::Reference< css::xml::crypto::XXMLSignatureTemplate > SAL_CALL validate(
+            const css::uno::Reference< css::xml::crypto::XXMLSignatureTemplate >& aTemplate ,
+            const css::uno::Reference< css::xml::crypto::XXMLSecurityContext >& aContext
+        ) override;
+
+        //Methods from XServiceInfo
+        virtual OUString SAL_CALL getImplementationName() override;
+
+        virtual sal_Bool SAL_CALL supportsService(
+            const OUString& ServiceName
+        ) override;
+
+        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+} ;
+
+XMLSignature_MSCryptImpl::XMLSignature_MSCryptImpl() {
 }
 
 /* XXMLSignature */
@@ -55,12 +82,11 @@ Reference< XXMLSignatureTemplate >
 SAL_CALL XMLSignature_MSCryptImpl::generate(
     const Reference< XXMLSignatureTemplate >& aTemplate ,
     const Reference< XSecurityEnvironment >& aEnvironment
-) throw( css::xml::crypto::XMLSignatureException,
-         css::uno::SecurityException )
+)
 {
-    xmlSecKeysMngrPtr pMngr = NULL ;
-    xmlSecDSigCtxPtr pDsigCtx = NULL ;
-    xmlNodePtr pNode = NULL ;
+    xmlSecKeysMngrPtr pMngr = nullptr ;
+    xmlSecDSigCtxPtr pDsigCtx = nullptr ;
+    xmlNodePtr pNode = nullptr ;
 
     if( !aTemplate.is() )
         throw RuntimeException() ;
@@ -69,13 +95,9 @@ SAL_CALL XMLSignature_MSCryptImpl::generate(
         throw RuntimeException() ;
 
     //Get Keys Manager
-    Reference< XUnoTunnel > xSecTunnel( aEnvironment , UNO_QUERY ) ;
-    if( !xSecTunnel.is() ) {
-         throw RuntimeException() ;
-    }
-
-    SecurityEnvironment_MSCryptImpl* pSecEnv = ( SecurityEnvironment_MSCryptImpl* )xSecTunnel->getSomething( SecurityEnvironment_MSCryptImpl::getUnoTunnelId() ) ;
-    if( pSecEnv == NULL )
+    Reference< XUnoTunnel > xSecTunnel( aEnvironment , UNO_QUERY_THROW ) ;
+    SecurityEnvironment_MSCryptImpl* pSecEnv = reinterpret_cast<SecurityEnvironment_MSCryptImpl*>(xSecTunnel->getSomething( SecurityEnvironment_MSCryptImpl::getUnoTunnelId() ));
+    if( pSecEnv == nullptr )
         throw RuntimeException() ;
 
     //Get the xml node
@@ -84,13 +106,9 @@ SAL_CALL XMLSignature_MSCryptImpl::generate(
         throw RuntimeException() ;
     }
 
-    Reference< XUnoTunnel > xNodTunnel( xElement , UNO_QUERY ) ;
-    if( !xNodTunnel.is() ) {
-        throw RuntimeException() ;
-    }
-
-    XMLElementWrapper_XmlSecImpl* pElement = ( XMLElementWrapper_XmlSecImpl* )xNodTunnel->getSomething( XMLElementWrapper_XmlSecImpl::getUnoTunnelImplementationId() ) ;
-    if( pElement == NULL ) {
+    Reference< XUnoTunnel > xNodTunnel( xElement , UNO_QUERY_THROW ) ;
+    XMLElementWrapper_XmlSecImpl* pElement = reinterpret_cast<XMLElementWrapper_XmlSecImpl*>(xNodTunnel->getSomething( XMLElementWrapper_XmlSecImpl::getUnoTunnelImplementationId() ));
+    if( pElement == nullptr ) {
         throw RuntimeException() ;
     }
 
@@ -113,10 +131,10 @@ SAL_CALL XMLSignature_MSCryptImpl::generate(
 
     //Create Signature context
     pDsigCtx = xmlSecDSigCtxCreate( pMngr ) ;
-    if( pDsigCtx == NULL )
+    if( pDsigCtx == nullptr )
     {
         //throw XMLSignatureException() ;
-        pSecEnv->destroyKeysManager( pMngr );
+        SecurityEnvironment_MSCryptImpl::destroyKeysManager( pMngr );
         clearErrorRecorder();
         return aTemplate;
     }
@@ -136,7 +154,7 @@ SAL_CALL XMLSignature_MSCryptImpl::generate(
 
 
     xmlSecDSigCtxDestroy( pDsigCtx ) ;
-    pSecEnv->destroyKeysManager( pMngr );
+    SecurityEnvironment_MSCryptImpl::destroyKeysManager( pMngr );
 
     //Unregistered the stream/URI binding
     if( xUriBinding.is() )
@@ -151,12 +169,10 @@ Reference< XXMLSignatureTemplate >
 SAL_CALL XMLSignature_MSCryptImpl::validate(
     const Reference< XXMLSignatureTemplate >& aTemplate ,
     const Reference< XXMLSecurityContext >& aSecurityCtx
-) throw( css::uno::RuntimeException,
-         css::uno::SecurityException,
-         css::xml::crypto::XMLSignatureException ) {
-    xmlSecKeysMngrPtr pMngr = NULL ;
-    xmlSecDSigCtxPtr pDsigCtx = NULL ;
-    xmlNodePtr pNode = NULL ;
+) {
+    xmlSecKeysMngrPtr pMngr = nullptr ;
+    xmlSecDSigCtxPtr pDsigCtx = nullptr ;
+    xmlNodePtr pNode = nullptr ;
 
     if( !aTemplate.is() )
         throw RuntimeException() ;
@@ -168,13 +184,9 @@ SAL_CALL XMLSignature_MSCryptImpl::validate(
     Reference< XSecurityEnvironment > xSecEnv
         = aSecurityCtx->getSecurityEnvironmentByIndex(
             aSecurityCtx->getDefaultSecurityEnvironmentIndex());
-    Reference< XUnoTunnel > xSecTunnel( xSecEnv , UNO_QUERY ) ;
-    if( !xSecTunnel.is() ) {
-         throw RuntimeException() ;
-    }
-
-    SecurityEnvironment_MSCryptImpl* pSecEnv = ( SecurityEnvironment_MSCryptImpl* )xSecTunnel->getSomething( SecurityEnvironment_MSCryptImpl::getUnoTunnelId() ) ;
-    if( pSecEnv == NULL )
+    Reference< XUnoTunnel > xSecTunnel( xSecEnv , UNO_QUERY_THROW ) ;
+    SecurityEnvironment_MSCryptImpl* pSecEnv = reinterpret_cast<SecurityEnvironment_MSCryptImpl*>(xSecTunnel->getSomething( SecurityEnvironment_MSCryptImpl::getUnoTunnelId() ));
+    if( pSecEnv == nullptr )
         throw RuntimeException() ;
 
     //Get the xml node
@@ -182,13 +194,9 @@ SAL_CALL XMLSignature_MSCryptImpl::validate(
     if( !xElement.is() )
         throw RuntimeException() ;
 
-    Reference< XUnoTunnel > xNodTunnel( xElement , UNO_QUERY ) ;
-    if( !xNodTunnel.is() ) {
-        throw RuntimeException() ;
-    }
-
-    XMLElementWrapper_XmlSecImpl* pElement = ( XMLElementWrapper_XmlSecImpl* )xNodTunnel->getSomething( XMLElementWrapper_XmlSecImpl::getUnoTunnelImplementationId() ) ;
-    if( pElement == NULL )
+    Reference< XUnoTunnel > xNodTunnel( xElement , UNO_QUERY_THROW ) ;
+    XMLElementWrapper_XmlSecImpl* pElement = reinterpret_cast<XMLElementWrapper_XmlSecImpl*>(xNodTunnel->getSomething( XMLElementWrapper_XmlSecImpl::getUnoTunnelImplementationId() ));
+    if( pElement == nullptr )
         throw RuntimeException() ;
 
     pNode = pElement->getNativeElement() ;
@@ -210,12 +218,15 @@ SAL_CALL XMLSignature_MSCryptImpl::validate(
 
     //Create Signature context
     pDsigCtx = xmlSecDSigCtxCreate( pMngr ) ;
-    if( pDsigCtx == NULL )
+    if( pDsigCtx == nullptr )
     {
-        pSecEnv->destroyKeysManager( pMngr );
+        SecurityEnvironment_MSCryptImpl::destroyKeysManager( pMngr );
         clearErrorRecorder();
         return aTemplate;
     }
+
+    // We do certificate verification ourselves.
+    pDsigCtx->keyInfoReadCtx.flags |= XMLSEC_KEYINFO_FLAGS_X509DATA_DONT_VERIFY_CERTS;
 
     //Verify signature
     //The documentation says that the signature is only valid if the return value is 0 (that is, not < 0)
@@ -253,7 +264,7 @@ SAL_CALL XMLSignature_MSCryptImpl::validate(
     }
 
     xmlSecDSigCtxDestroy( pDsigCtx ) ;
-    pSecEnv->destroyKeysManager( pMngr );
+    SecurityEnvironment_MSCryptImpl::destroyKeysManager( pMngr );
 
     //Unregistered the stream/URI binding
     if( xUriBinding.is() )
@@ -265,44 +276,32 @@ SAL_CALL XMLSignature_MSCryptImpl::validate(
 }
 
 /* XServiceInfo */
-OUString SAL_CALL XMLSignature_MSCryptImpl::getImplementationName() throw( RuntimeException ) {
-    return impl_getImplementationName() ;
+OUString SAL_CALL XMLSignature_MSCryptImpl::getImplementationName() {
+    return OUString("com.sun.star.xml.crypto.XMLSignature");
 }
 
 /* XServiceInfo */
-sal_Bool SAL_CALL XMLSignature_MSCryptImpl::supportsService( const OUString& serviceName) throw( RuntimeException ) {
+sal_Bool SAL_CALL XMLSignature_MSCryptImpl::supportsService( const OUString& serviceName) {
     Sequence< OUString > seqServiceNames = getSupportedServiceNames() ;
     const OUString* pArray = seqServiceNames.getConstArray() ;
     for( sal_Int32 i = 0 ; i < seqServiceNames.getLength() ; i ++ ) {
         if( *( pArray + i ) == serviceName )
-            return sal_True ;
+            return true ;
     }
-    return sal_False ;
+    return false ;
 }
 
 /* XServiceInfo */
-Sequence< OUString > SAL_CALL XMLSignature_MSCryptImpl::getSupportedServiceNames() throw( RuntimeException ) {
-    return impl_getSupportedServiceNames() ;
-}
-
-//Helper for XServiceInfo
-Sequence< OUString > XMLSignature_MSCryptImpl::impl_getSupportedServiceNames() {
-    ::osl::Guard< ::osl::Mutex > aGuard( ::osl::Mutex::getGlobalMutex() ) ;
+Sequence< OUString > SAL_CALL XMLSignature_MSCryptImpl::getSupportedServiceNames() {
     Sequence<OUString> seqServiceNames { "com.sun.star.xml.crypto.XMLSignature" };
     return seqServiceNames ;
 }
 
-OUString XMLSignature_MSCryptImpl::impl_getImplementationName() throw( RuntimeException ) {
-    return OUString("com.sun.star.xml.security.bridge.xmlsec.XMLSignature_MSCryptImpl") ;
-}
-
-//Helper for registry
-Reference< XInterface > SAL_CALL XMLSignature_MSCryptImpl::impl_createInstance( const Reference< XMultiServiceFactory >& aServiceManager ) throw( RuntimeException ) {
-    return Reference< XInterface >( *new XMLSignature_MSCryptImpl( aServiceManager ) ) ;
-}
-
-Reference< XSingleServiceFactory > XMLSignature_MSCryptImpl::impl_createFactory( const Reference< XMultiServiceFactory >& aServiceManager ) {
-    return ::cppu::createSingleFactory( aServiceManager , impl_getImplementationName() , impl_createInstance , impl_getSupportedServiceNames() ) ;
+extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+com_sun_star_xml_crypto_XMLSignature_get_implementation(uno::XComponentContext* /*pCtx*/,
+                                                        uno::Sequence<uno::Any> const& /*rSeq*/)
+{
+    return cppu::acquire(new XMLSignature_MSCryptImpl);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

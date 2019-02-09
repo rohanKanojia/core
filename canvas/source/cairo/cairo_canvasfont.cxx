@@ -71,7 +71,7 @@ namespace cairocanvas
                 const Size aSize = pOutDev->GetFontMetric( *maFont ).GetFontSize();
 
                 const double fDividend( rFontMatrix.m10 + rFontMatrix.m11 );
-                double fStretch = (rFontMatrix.m00 + rFontMatrix.m01);
+                double fStretch = rFontMatrix.m00 + rFontMatrix.m01;
 
                 if( !::basegfx::fTools::equalZero( fDividend) )
                     fStretch /= fDividend;
@@ -92,7 +92,7 @@ namespace cairocanvas
         mpRefDevice.clear();
     }
 
-    uno::Reference< rendering::XTextLayout > SAL_CALL  CanvasFont::createTextLayout( const rendering::StringContext& aText, sal_Int8 nDirection, sal_Int64 nRandomSeed ) throw (uno::RuntimeException, std::exception)
+    uno::Reference< rendering::XTextLayout > SAL_CALL  CanvasFont::createTextLayout( const rendering::StringContext& aText, sal_Int8 nDirection, sal_Int64 nRandomSeed )
     {
         SolarMutexGuard aGuard;
 
@@ -106,55 +106,47 @@ namespace cairocanvas
                                mpRefDevice );
     }
 
-    rendering::FontRequest SAL_CALL  CanvasFont::getFontRequest(  ) throw (uno::RuntimeException, std::exception)
+    rendering::FontRequest SAL_CALL  CanvasFont::getFontRequest(  )
     {
         SolarMutexGuard aGuard;
 
         return maFontRequest;
     }
 
-    rendering::FontMetrics SAL_CALL  CanvasFont::getFontMetrics(  ) throw (uno::RuntimeException, std::exception)
+    rendering::FontMetrics SAL_CALL  CanvasFont::getFontMetrics(  )
     {
-        SolarMutexGuard aGuard;
-
         // TODO(F1)
         return rendering::FontMetrics();
     }
 
-    uno::Sequence< double > SAL_CALL  CanvasFont::getAvailableSizes(  ) throw (uno::RuntimeException, std::exception)
+    uno::Sequence< double > SAL_CALL  CanvasFont::getAvailableSizes(  )
     {
-        SolarMutexGuard aGuard;
-
         // TODO(F1)
         return uno::Sequence< double >();
     }
 
-    uno::Sequence< beans::PropertyValue > SAL_CALL  CanvasFont::getExtraFontProperties(  ) throw (uno::RuntimeException, std::exception)
+    uno::Sequence< beans::PropertyValue > SAL_CALL  CanvasFont::getExtraFontProperties(  )
     {
-        SolarMutexGuard aGuard;
-
         // TODO(F1)
         return uno::Sequence< beans::PropertyValue >();
     }
 
-    OUString SAL_CALL CanvasFont::getImplementationName() throw( uno::RuntimeException, std::exception )
+    OUString SAL_CALL CanvasFont::getImplementationName()
     {
         return OUString( "CairoCanvas::CanvasFont" );
     }
 
-    sal_Bool SAL_CALL CanvasFont::supportsService( const OUString& ServiceName ) throw( uno::RuntimeException, std::exception )
+    sal_Bool SAL_CALL CanvasFont::supportsService( const OUString& ServiceName )
     {
         return cppu::supportsService( this, ServiceName );
     }
 
-    uno::Sequence< OUString > SAL_CALL CanvasFont::getSupportedServiceNames()  throw( uno::RuntimeException, std::exception )
+    uno::Sequence< OUString > SAL_CALL CanvasFont::getSupportedServiceNames()
     {
-        uno::Sequence< OUString > aRet { "com.sun.star.rendering.CanvasFont" };
-
-        return aRet;
+        return { "com.sun.star.rendering.CanvasFont" };
     }
 
-    vcl::Font CanvasFont::getVCLFont() const
+    vcl::Font const & CanvasFont::getVCLFont() const
     {
         return *maFont;
     }

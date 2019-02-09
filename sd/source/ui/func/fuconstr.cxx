@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuconstr.hxx"
+#include <fuconstr.hxx>
 
 #include <svx/svxids.hrc>
 #include <svl/aeitem.hxx>
@@ -27,18 +27,20 @@
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
 
-#include "app.hrc"
-#include "glob.hrc"
-#include "fudraw.hxx"
-#include "View.hxx"
-#include "Window.hxx"
-#include "ViewShell.hxx"
-#include "drawdoc.hxx"
-#include "FrameView.hxx"
-#include "sdpage.hxx"
-#include "sdresid.hxx"
-#include "stlpool.hxx"
+#include <app.hrc>
+#include <strings.hrc>
+#include <strings.hxx>
+#include <fudraw.hxx>
+#include <View.hxx>
+#include <Window.hxx>
+#include <ViewShell.hxx>
+#include <drawdoc.hxx>
+#include <FrameView.hxx>
+#include <sdpage.hxx>
+#include <sdresid.hxx>
+#include <stlpool.hxx>
 #include <svx/globl3d.hxx>
+#include <glob.hxx>
 
 using namespace com::sun::star;
 
@@ -54,11 +56,6 @@ FuConstruct::FuConstruct (
     : FuDraw(pViewSh, pWin, pView, pDoc, rReq),
       bSelectionChanged(false)
 {
-}
-
-void FuConstruct::DoExecute( SfxRequest& rReq )
-{
-    FuDraw::DoExecute( rReq );
 }
 
 bool FuConstruct::MouseButtonDown(const MouseEvent& rMEvt)
@@ -168,11 +165,11 @@ bool FuConstruct::MouseButtonUp(const MouseEvent& rMEvt)
 
         if ( !mpView->AreObjectsMarked() )
         {
-            SdrObject* pObj;
             SdrPageView* pPV;
             sal_uInt16 nHitLog = sal_uInt16 ( mpWindow->PixelToLogic(Size(HITPIX,0)).Width() );
 
-            if (!mpView->PickObj(aPnt, mpView->getHitTolLog(), pObj, pPV))
+            SdrObject* pObj = mpView->PickObj(aPnt, mpView->getHitTolLog(), pPV);
+            if (!pObj)
             {
                 mpView->MarkObj(aPnt, nHitLog);
             }
@@ -192,15 +189,15 @@ bool FuConstruct::MouseButtonUp(const MouseEvent& rMEvt)
                 pSingleObj = mpView->GetMarkedObjectList().GetMark(0)->GetMarkedSdrObj();
             }
 
-            if (mpView->GetDragMode() == SDRDRAG_MOVE && mpView->IsRotateAllowed() &&
+            if (mpView->GetDragMode() == SdrDragMode::Move && mpView->IsRotateAllowed() &&
                 (mpViewShell->GetFrameView()->IsClickChangeRotation() ||
-                 (pSingleObj && pSingleObj->GetObjInventor()==E3dInventor)))
+                 (pSingleObj && pSingleObj->GetObjInventor()==SdrInventor::E3d)))
             {
-                mpView->SetDragMode(SDRDRAG_ROTATE);
+                mpView->SetDragMode(SdrDragMode::Rotate);
             }
             else
             {
-                mpView->SetDragMode(SDRDRAG_MOVE);
+                mpView->SetDragMode(SdrDragMode::Move);
             }
         }
     }
@@ -217,30 +214,16 @@ bool FuConstruct::MouseButtonUp(const MouseEvent& rMEvt)
     return bReturn;
 }
 
-/**
- * Process keyboard input
- * @returns sal_True if a KeyEvent is being processed, sal_False otherwise
- */
-bool FuConstruct::KeyInput(const KeyEvent& rKEvt)
-{
-    bool bReturn = false;
-
-    if ( !bReturn )
-        bReturn = FuDraw::KeyInput(rKEvt);
-
-    return bReturn;
-}
-
 void FuConstruct::Activate()
 {
-    mpView->SetEditMode(SDREDITMODE_CREATE);
+    mpView->SetEditMode(SdrViewEditMode::Create);
     FuDraw::Activate();
 }
 
 void FuConstruct::Deactivate()
 {
     FuDraw::Deactivate();
-    mpView->SetEditMode(SDREDITMODE_EDIT);
+    mpView->SetEditMode(SdrViewEditMode::Edit);
 }
 
 /**
@@ -327,25 +310,25 @@ void FuConstruct::SetStyleSheet( SfxItemSet& rAttr, SdrObject* pObj,
         const bool bForceFillStyle, const bool bForceNoFillStyle )
 {
     SdPage* pPage = static_cast<SdPage*>(mpView->GetSdrPageView()->GetPage());
-    if ( pPage->IsMasterPage() && pPage->GetPageKind() == PK_STANDARD &&
-         mpDoc->GetDocumentType() == DOCUMENT_TYPE_IMPRESS )
+    if ( pPage->IsMasterPage() && pPage->GetPageKind() == PageKind::Standard &&
+         mpDoc->GetDocumentType() == DocumentType::Impress )
     {
         /**********************************************
         * Objects was created on the slide master page
         ***********************************************/
         OUString aName( pPage->GetLayoutName() );
         sal_Int32 n = aName.indexOf(SD_LT_SEPARATOR) + strlen(SD_LT_SEPARATOR);
-        aName = aName.copy(0, n) + SD_RESSTR(STR_LAYOUT_BACKGROUNDOBJECTS);
-        SfxStyleSheet* pSheet = static_cast<SfxStyleSheet*>(pPage->GetModel()->
-                                                GetStyleSheetPool()->
-                                                Find(aName, SD_STYLE_FAMILY_MASTERPAGE));
+        aName = aName.copy(0, n) + STR_LAYOUT_BACKGROUNDOBJECTS;
+        SfxStyleSheet* pSheet(
+            static_cast< SfxStyleSheet* >(
+                pPage->getSdrModelFromSdrPage().GetStyleSheetPool()->Find(aName, SfxStyleFamily::Page)));
         DBG_ASSERT(pSheet, "StyleSheet missing");
         if (pSheet)
         {
             // applying style sheet for background objects
             pObj->SetStyleSheet(pSheet, false);
             SfxItemSet& rSet = pSheet->GetItemSet();
-            const XFillStyleItem& rFillStyle = static_cast<const XFillStyleItem&>(rSet.Get(XATTR_FILLSTYLE));
+            const XFillStyleItem& rFillStyle = rSet.Get(XATTR_FILLSTYLE);
             if ( bForceFillStyle )
             {
                 if (rFillStyle.GetValue() == drawing::FillStyle_NONE)
@@ -365,21 +348,21 @@ void FuConstruct::SetStyleSheet( SfxItemSet& rAttr, SdrObject* pObj,
         ************************************/
         if ( bForceNoFillStyle )
         {
-            OUString aName(SD_RESSTR(STR_POOLSHEET_OBJWITHOUTFILL));
-            SfxStyleSheet* pSheet = static_cast<SfxStyleSheet*>(pPage->GetModel()->
-                                         GetStyleSheetPool()->
-                                         Find(aName, SD_STYLE_FAMILY_GRAPHICS));
+            OUString aName(SdResId(STR_POOLSHEET_OBJWITHOUTFILL));
+            SfxStyleSheet* pSheet(
+                static_cast< SfxStyleSheet* >(
+                    pPage->getSdrModelFromSdrPage().GetStyleSheetPool()->Find(aName, SfxStyleFamily::Para)));
             DBG_ASSERT(pSheet, "Stylesheet missing");
             if (pSheet)
             {
                 pObj->SetStyleSheet(pSheet, false);
-                SfxItemSet aAttr(*mpView->GetDefaultAttr().Clone());
+                SfxItemSet aAttr(mpView->GetDefaultAttr());
                 aAttr.Put(pSheet->GetItemSet().Get(XATTR_FILLSTYLE));
                 pObj->SetMergedItemSet(aAttr);
             }
             else
             {
-                SfxItemSet aAttr(*mpView->GetDefaultAttr().Clone());
+                SfxItemSet aAttr(mpView->GetDefaultAttr());
                 rAttr.Put(XFillStyleItem(drawing::FillStyle_NONE));
                 pObj->SetMergedItemSet(aAttr);
             }

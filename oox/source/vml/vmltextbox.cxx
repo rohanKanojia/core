@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/vml/vmltextbox.hxx"
+#include <oox/vml/vmltextbox.hxx>
 
 #include <rtl/ustrbuf.hxx>
 #include <svx/unopage.hxx>
@@ -57,7 +57,7 @@ TextBox::TextBox(ShapeTypeModel& rTypeModel)
 
 void TextBox::appendPortion( const TextParagraphModel& rParagraph, const TextFontModel& rFont, const OUString& rText )
 {
-    maPortions.push_back( TextPortionModel( rParagraph, rFont, rText ) );
+    maPortions.emplace_back( rParagraph, rFont, rText );
 }
 
 const TextFontModel* TextBox::getFirstFont() const
@@ -68,30 +68,44 @@ const TextFontModel* TextBox::getFirstFont() const
 OUString TextBox::getText() const
 {
     OUStringBuffer aBuffer;
-    for( PortionVector::const_iterator aIt = maPortions.begin(), aEnd = maPortions.end(); aIt != aEnd; ++aIt )
-        aBuffer.append( aIt->maText );
+    for (auto const& portion : maPortions)
+        aBuffer.append( portion.maText );
     return aBuffer.makeStringAndClear();
 }
 
 void TextBox::convert(const uno::Reference<drawing::XShape>& xShape) const
 {
     uno::Reference<text::XTextAppend> xTextAppend(xShape, uno::UNO_QUERY);
-    for (PortionVector::const_iterator aIt = maPortions.begin(), aEnd = maPortions.end(); aIt != aEnd; ++aIt)
+    for (auto const& portion : maPortions)
     {
         beans::PropertyValue aPropertyValue;
         std::vector<beans::PropertyValue> aPropVec;
-        const TextParagraphModel& rParagraph = aIt->maParagraph;
-        const TextFontModel& rFont = aIt->maFont;
+        const TextParagraphModel& rParagraph = portion.maParagraph;
+        const TextFontModel& rFont = portion.maFont;
+        if (rFont.moName.has())
+        {
+            aPropertyValue.Name = "CharFontName";
+            aPropertyValue.Value <<= rFont.moName.get();
+            aPropVec.push_back(aPropertyValue);
+
+            aPropertyValue.Name = "CharFontNameAsian";
+            aPropertyValue.Value <<= rFont.moNameAsian.get();
+            aPropVec.push_back(aPropertyValue);
+
+            aPropertyValue.Name = "CharFontNameComplex";
+            aPropertyValue.Value <<= rFont.moNameComplex.get();
+            aPropVec.push_back(aPropertyValue);
+        }
         if (rFont.mobBold.has())
         {
             aPropertyValue.Name = "CharWeight";
-            aPropertyValue.Value = uno::makeAny(rFont.mobBold.get() ? awt::FontWeight::BOLD : awt::FontWeight::NORMAL);
+            aPropertyValue.Value <<= rFont.mobBold.get() ? awt::FontWeight::BOLD : awt::FontWeight::NORMAL;
             aPropVec.push_back(aPropertyValue);
         }
         if (rFont.monSize.has())
         {
             aPropertyValue.Name = "CharHeight";
-            aPropertyValue.Value = uno::makeAny(double(rFont.monSize.get()) / 2.);
+            aPropertyValue.Value <<= double(rFont.monSize.get()) / 2.;
             aPropVec.push_back(aPropertyValue);
         }
         if (rFont.monSpacing.has())
@@ -100,7 +114,7 @@ void TextBox::convert(const uno::Reference<drawing::XShape>& xShape) const
             // Value is not converted to mm100: SvxKerningItem::PutValue() gets
             // called with nMemberId = 0, so no mm100 -> twips conversion will
             // be done there.
-            aPropertyValue.Value = uno::makeAny(sal_Int16(rFont.monSpacing.get()));
+            aPropertyValue.Value <<= sal_Int16(rFont.monSpacing.get());
             aPropVec.push_back(aPropertyValue);
         }
         if (rParagraph.moParaAdjust.has())
@@ -112,16 +126,16 @@ void TextBox::convert(const uno::Reference<drawing::XShape>& xShape) const
                 eAdjust = style::ParagraphAdjust_RIGHT;
 
             aPropertyValue.Name = "ParaAdjust";
-            aPropertyValue.Value = uno::makeAny(eAdjust);
+            aPropertyValue.Value <<= eAdjust;
             aPropVec.push_back(aPropertyValue);
         }
         if (rFont.moColor.has())
         {
             aPropertyValue.Name = "CharColor";
-            aPropertyValue.Value = uno::makeAny(rFont.moColor.get().toUInt32(16));
+            aPropertyValue.Value <<= rFont.moColor.get().toUInt32(16);
             aPropVec.push_back(aPropertyValue);
         }
-        xTextAppend->appendTextPortion(aIt->maText, comphelper::containerToSequence(aPropVec));
+        xTextAppend->appendTextPortion(portion.maText, comphelper::containerToSequence(aPropVec));
     }
 
     // Remove the last character of the shape text, if it would be a newline.

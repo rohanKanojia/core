@@ -332,7 +332,7 @@ public:
     virtual OUString SAL_CALL getFirstName()
         throw(RuntimeException);
     virtual OUString SAL_CALL getLastName() throw(RuntimeException)
-        { return OUString( OUString("Meyer") ); }
+        { return OUString("Meyer"); }
     virtual sal_Int16 SAL_CALL getAge() throw(RuntimeException)
         { return m_nMarkusAge; }
     virtual sal_Int16 SAL_CALL getChildrenCount() throw(RuntimeException)
@@ -482,7 +482,7 @@ void ImplIntroTest::setPropertyValue( const OUString& aPropertyName, const Any& 
         PropertyChangeEvent aEvt;
         aEvt.Source = (OWeakObject*)this;
         aEvt.PropertyName = aPropertyName;
-        aEvt.PropertyHandle = 0L;
+        aEvt.PropertyHandle = 0;
         aPropChangeListener->propertyChange( aEvt );
     }
     if( aVetoPropChangeListener.is() && aPropertyName == aVetoPropChangeListenerStr )
@@ -490,7 +490,7 @@ void ImplIntroTest::setPropertyValue( const OUString& aPropertyName, const Any& 
         PropertyChangeEvent aEvt;
         aEvt.Source = (OWeakObject*)this;
         aEvt.PropertyName = aVetoPropChangeListenerStr;
-        aEvt.PropertyHandle = 0L;
+        aEvt.PropertyHandle = 0;
         aVetoPropChangeListener->vetoableChange( aEvt );
     }
 
@@ -521,7 +521,7 @@ Any ImplIntroTest::getPropertyValue( const OUString& PropertyName )
 OUString ImplIntroTest::getFirstName()
     throw(RuntimeException)
 {
-    return OUString( OUString("Markus") );
+    return OUString("Markus");
 }
 
 void ImplIntroTest::writeln( const OUString& Text )
@@ -745,21 +745,21 @@ static sal_Bool test_introsp( Reference< XMultiServiceFactory > xMgr,
         "Meyer",
         "33",
         "3",
-        "Wert wurde nicht modifiziert",
-        "Wert wurde nicht modifiziert",
+        "Value has not been modified",
+        "Value has not been modified",
         "315",
-        "Wert wurde nicht modifiziert",
+        "Value has not been modified",
         "42",
         "112",
         "99",
-        "Wert wurde nicht modifiziert",
-        "Wert wurde nicht modifiziert",
-        "Wert wurde nicht modifiziert",
-        "Wert wurde nicht modifiziert",
-        "Wert wurde nicht modifiziert",
+        "Value has not been modified",
+        "Value has not been modified",
+        "Value has not been modified",
+        "Value has not been modified",
+        "Value has not been modified",
         "10",
-        "Wert wurde nicht modifiziert"
-        "Wert wurde nicht modifiziert"
+        "Value has not been modified",
+        "Value has not been modified",
     };
 
     char const * pDemandedPropTypes[] =
@@ -859,7 +859,7 @@ static sal_Bool test_introsp( Reference< XMultiServiceFactory > xMgr,
 
     // XExactName
     Reference< XExactName > xExactName( xAccess, UNO_QUERY );
-    OSL_ENSURE( xExactName.is(), "Introspection unterstuetzt kein ExactName" );
+    OSL_ENSURE( xExactName.is(), "Introspection doesn't support ExactName" );
 
     // loop over all concept combinations
     for( sal_Int32 nConcepts = 0 ; nConcepts < 16 ; nConcepts++ )
@@ -881,10 +881,10 @@ static sal_Bool test_introsp( Reference< XMultiServiceFactory > xMgr,
 
             sal_Int32 nLen = aRetSeq.getLength();
 
-            aErrorStr  = "Expected to find ";
-            aErrorStr += OString::valueOf( nDemandedPropCount );
-            aErrorStr += " properties but found ";
-            aErrorStr += OString::valueOf( nLen );
+            aErrorStr = "Expected to find "
+                      + OString::valueOf( nDemandedPropCount )
+                      + " properties but found "
+                      + OString::valueOf( nLen );
             OSL_ENSURE( nLen == nDemandedPropCount, aErrorStr.getStr() );
 
             const Property* pProps = aRetSeq.getConstArray();
@@ -909,23 +909,23 @@ static sal_Bool test_introsp( Reference< XMultiServiceFactory > xMgr,
                 OString aNameStr( aPropName.getStr(), aPropName.getLength(), RTL_TEXTENCODING_ASCII_US );
 
                 OString aDemandedName = pPropertyDefs[ iDemanded ].pName;
-                aErrorStr  = "Expected property \"";
-                aErrorStr += aDemandedName;
-                aErrorStr += "\", found \"";
-                aErrorStr += aNameStr;
-                aErrorStr += "\"";
+                aErrorStr = "Expected property \""
+                          + aDemandedName
+                          + "\", found \""
+                          + aNameStr
+                          + "\"";
                 OSL_ENSURE( aNameStr == aDemandedName, aErrorStr.getStr() );
 
                 Type aPropType = aProp.Type;
                 OString aTypeNameStr( OUStringToOString(aPropType.getTypeName(), RTL_TEXTENCODING_ASCII_US) );
                 OString aDemandedTypeNameStr = pDemandedPropTypes[ iDemanded ];
-                aErrorStr  = "Property \"";
-                aErrorStr += aDemandedName;
-                aErrorStr += "\", expected type >";
-                aErrorStr += aDemandedTypeNameStr;
-                aErrorStr += "< found type >";
-                aErrorStr += aTypeNameStr;
-                aErrorStr += "<";
+                aErrorStr = "Property \""
+                          + aDemandedName
+                          + "\", expected type >"
+                          + aDemandedTypeNameStr
+                          + "< found type >"
+                          + aTypeNameStr
+                          + "<";
                 OSL_ENSURE( aTypeNameStr == aDemandedTypeNameStr, aErrorStr.getStr() );
 
                 // read and report value of property
@@ -933,13 +933,13 @@ static sal_Bool test_introsp( Reference< XMultiServiceFactory > xMgr,
 
                 OString aValStr = OUStringToOString( AnyToString( aPropVal, sal_False, xMgr ), RTL_TEXTENCODING_ASCII_US );
                 OString aDemandedValStr = pDemandedPropVals[ iDemanded ];
-                aErrorStr  = "Property \"";
-                aErrorStr += aDemandedName;
-                aErrorStr += "\", expected val >";
-                aErrorStr += aDemandedValStr;
-                aErrorStr += "< found val >";
-                aErrorStr += aValStr;
-                aErrorStr += "<";
+                aErrorStr = "Property \""
+                          + aDemandedName
+                          + "\", expected val >"
+                          + aDemandedValStr
+                          + "< found val >"
+                          + aValStr
+                          + "<";
                 OSL_ENSURE( aValStr == aDemandedValStr, aErrorStr.getStr() );
 
                 // check value and modify it according to its type
@@ -991,11 +991,11 @@ static sal_Bool test_introsp( Reference< XMultiServiceFactory > xMgr,
                     OUString aExactName = xExactName->getExactName( aUpperUStr );
                     if( aExactName != aPropName )
                     {
-                        aErrorStr  = "Property \"";
-                        aErrorStr += OUStringToOString( aPropName, RTL_TEXTENCODING_ASCII_US );
-                        aErrorStr += "\", not found as \"";
-                        aErrorStr += OUStringToOString(aUpperUStr, RTL_TEXTENCODING_ASCII_US );
-                        aErrorStr += "\" using XExactName";
+                        aErrorStr = "Property \""
+                                  + OUStringToOString( aPropName, RTL_TEXTENCODING_ASCII_US )
+                                  + "\", not found as \""
+                                  + OUStringToOString(aUpperUStr, RTL_TEXTENCODING_ASCII_US )
+                                  + "\" using XExactName";
                         OSL_ENSURE( sal_False, aErrorStr.getStr() );
                     }
                 }
@@ -1021,36 +1021,36 @@ static sal_Bool test_introsp( Reference< XMultiServiceFactory > xMgr,
                     OUString aStr = AnyToString( aPropVal, sal_False, xMgr );
                     OString aModifiedValStr = OUStringToOString( aStr, RTL_TEXTENCODING_ASCII_US );
                     OString aDemandedModifiedValStr = pDemandedModifiedPropVals[ i ];
-                    aErrorStr  = "Property \"";
-                    aErrorStr += aDemandedName;
-                    aErrorStr += "\", expected modified val >";
-                    aErrorStr += aDemandedModifiedValStr;
-                    aErrorStr += "< found val >";
-                    aErrorStr += aModifiedValStr;
-                    aErrorStr += "<";
+                    aErrorStr = "Property \""
+                              + aDemandedName
+                              + "\", expected modified val >"
+                              + aDemandedModifiedValStr
+                              + "< found val >"
+                              + aModifiedValStr
+                              + "<";
                     OSL_ENSURE( aModifiedValStr == aDemandedModifiedValStr, aErrorStr.getStr() );
                 }
 
                 // check whether all properties can be found individually
-                aErrorStr  = "property \"";
-                aErrorStr += aDemandedName;
-                aErrorStr += "\" not found with hasProperty()";
+                aErrorStr = "property \""
+                          + aDemandedName
+                          + "\" not found with hasProperty()";
                 OUString aWDemandedName = OStringToOUString(aDemandedName, RTL_TEXTENCODING_ASCII_US );
                 sal_Bool bProperty = xAccess->hasProperty( aWDemandedName, nConcepts );
                 OSL_ENSURE( bProperty, aErrorStr.getStr() );
 
-                aErrorStr  = "property \"";
-                aErrorStr += aDemandedName;
-                aErrorStr += "\" not equal to same Property in sequence returned by getProperties()";
+                aErrorStr = "property \""
+                          + aDemandedName
+                          + "\" not equal to same Property in sequence returned by getProperties()";
                 try
                 {
                     Property aGetProp = xAccess->getProperty( aWDemandedName, nConcepts );
                 }
                 catch (const RuntimeException &)
                 {
-                    aErrorStr  = "property \"";
-                    aErrorStr += aDemandedName;
-                    aErrorStr += "\", exception was thrown when trying getProperty()";
+                    aErrorStr = "property \""
+                              + aDemandedName
+                              + "\", exception was thrown when trying getProperty()";
                     OSL_ENSURE( sal_False, aErrorStr.getStr() );
                 }
 
@@ -1061,12 +1061,12 @@ static sal_Bool test_introsp( Reference< XMultiServiceFactory > xMgr,
     // loop over all concept combinations
     for( sal_Int32 nConcepts = 0 ; nConcepts < 128 ; nConcepts++ )
     {
-        // Das 2^6-Bit steht fuer "den Rest"
+        // The 2^6th bit stands for "the rest"
         sal_Int32 nRealConcepts = nConcepts;
         if( nConcepts & 0x40 )
             nRealConcepts |= (0xFFFFFFFF - 0x3F);
 
-        // Wieviele Methoden sollten es sein
+        // Count the number of methods there should be
         sal_Int32 nDemandedMethCount = 0;
         sal_Int32 iList = 0;
         while( pMethodDefs[ iList ].pName )
@@ -1076,14 +1076,14 @@ static sal_Bool test_introsp( Reference< XMultiServiceFactory > xMgr,
             iList++;
         }
 
-        // Methoden-Array ausgeben
+        // Output the method array.
         Sequence< Reference< XIdlMethod > > aMethodSeq = xAccess->getMethods( nRealConcepts );
         sal_Int32 nLen = aMethodSeq.getLength();
 
-        aErrorStr  = "Expected to find ";
-        aErrorStr += OString::valueOf( nDemandedMethCount );
-        aErrorStr += " methods but found ";
-        aErrorStr += OString::valueOf( nLen );
+        aErrorStr = "Expected to find "
+                  + OString::valueOf( nDemandedMethCount )
+                  + " methods but found "
+                  + OString::valueOf( nLen );
         OSL_ENSURE( nLen == nDemandedMethCount, aErrorStr.getStr() );
 
         const Reference< XIdlMethod >* pMethods = aMethodSeq.getConstArray();
@@ -1092,14 +1092,12 @@ static sal_Bool test_introsp( Reference< XMultiServiceFactory > xMgr,
 
         for( i = 0 ; i < nLen ; i++ )
         {
-            // Methode ansprechen
             const Reference< XIdlMethod >& rxMethod = pMethods[i];
 
-            // Methode ausgeben
             OUString aMethName = rxMethod->getName();
             OString aNameStr = OUStringToOString(aMethName, RTL_TEXTENCODING_ASCII_US );
 
-            // Naechste Passende Methode in der Liste suchen
+            // locate the next matching method in the list.
             while( pMethodDefs[ iList ].pName )
             {
                 if( pMethodDefs[ iList ].nConcept & nRealConcepts )
@@ -1109,24 +1107,24 @@ static sal_Bool test_introsp( Reference< XMultiServiceFactory > xMgr,
             OString aDemandedName = pMethodDefs[ iList ].pName;
             iList++;
 
-            aErrorStr  = "Expected method \"";
-            aErrorStr += aDemandedName;
-            aErrorStr += "\", found \"";
-            aErrorStr += aNameStr;
-            aErrorStr += "\"";
+            aErrorStr = "Expected method \""
+                      + aDemandedName
+                      + "\", found \""
+                      + aNameStr
+                      + "\"";
             OSL_ENSURE( aNameStr == aDemandedName, aErrorStr.getStr() );
 
-            // Checken, ob alle Methoden auch einzeln gefunden werden
-            aErrorStr  = "method \"";
-            aErrorStr += aDemandedName;
-            aErrorStr += "\" not found with hasMethod()";
+            // Check that the method is really there with hasMethod.
+            aErrorStr = "method \""
+                      + aDemandedName
+                      + "\" not found with hasMethod()";
             OUString aWDemandedName = OStringToOUString(aDemandedName, RTL_TEXTENCODING_ASCII_US );
             sal_Bool bMethod = xAccess->hasMethod( aWDemandedName, nRealConcepts );
             OSL_ENSURE( bMethod, aErrorStr.getStr() );
 
-            aErrorStr  = "method \"";
-            aErrorStr += aDemandedName;
-            aErrorStr += "\" not equal to same method in sequence returned by getMethods()";
+            aErrorStr = "method \""
+                      + aDemandedName
+                      + "\" not equal to same method in sequence returned by getMethods()";
             try
             {
                 Reference< XIdlMethod > xGetMethod = xAccess->getMethod( aWDemandedName, nRealConcepts );
@@ -1134,9 +1132,9 @@ static sal_Bool test_introsp( Reference< XMultiServiceFactory > xMgr,
             }
             catch (const RuntimeException &)
             {
-                aErrorStr  = "method \"";
-                aErrorStr += aDemandedName;
-                aErrorStr += "\", exception was thrown when trying getMethod()";
+                aErrorStr = "method \""
+                          + aDemandedName
+                          + "\", exception was thrown when trying getMethod()";
                 OSL_ENSURE( sal_False, aErrorStr.getStr() );
             }
         }
@@ -1149,10 +1147,7 @@ static sal_Bool test_introsp( Reference< XMultiServiceFactory > xMgr,
     const Type* pListeners = aClassSeq.getConstArray();
     for( sal_Int32 i = 0 ; i < nLen ; i++ )
     {
-        // Methode ansprechen
         const Type& aListenerType = pListeners[i];
-
-        // get name
         OUString aListenerClassName = aListenerType.getTypeName();
     }
 
@@ -1195,11 +1190,7 @@ SAL_IMPLEMENT_MAIN()
     }
     catch (const Exception & rExc)
     {
-        OSL_FAIL( "### exception occurred!" );
-        OString aMsg( OUStringToOString( rExc.Message, RTL_TEXTENCODING_ASCII_US ) );
-        OSL_TRACE( "### exception occurred: " );
-        OSL_TRACE( "%s", aMsg.getStr() );
-        OSL_TRACE( "\n" );
+        DBG_UNHANDLED_EXCEPTION("stoc", "### exception occurred: " << rExc );
     }
 
     Reference< XComponent >( xMgr, UNO_QUERY )->dispose();

@@ -27,11 +27,10 @@ namespace sdr
 {
     namespace overlay
     {
-        class OverlayLineStriped : public OverlayObjectWithBasePosition
+        class OverlayLineStriped final : public OverlayObjectWithBasePosition
         {
-        protected:
             // second position in pixel
-            basegfx::B2DPoint                       maSecondPosition;
+            basegfx::B2DPoint const                       maSecondPosition;
 
             // geometry creation for OverlayObject
             virtual drawinglayer::primitive2d::Primitive2DContainer createOverlayObjectPrimitive2DSequence() override;
@@ -40,7 +39,7 @@ namespace sdr
             OverlayLineStriped(
                 const basegfx::B2DPoint& rBasePos,
                 const basegfx::B2DPoint& rSecondPos);
-            virtual ~OverlayLineStriped();
+            virtual ~OverlayLineStriped() override;
 
             // change second position
             const basegfx::B2DPoint& getSecondPosition() const { return maSecondPosition; }

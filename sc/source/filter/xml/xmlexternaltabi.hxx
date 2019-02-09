@@ -20,125 +20,111 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_XML_XMLEXTERNALTABI_HXX
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLEXTERNALTABI_HXX
 
-#include <xmloff/xmlictxt.hxx>
 #include <rtl/ustrbuf.hxx>
+#include "importcontext.hxx"
+
+namespace sax_fastparser { class FastAttributeList; }
 
 class ScXMLImport;
 struct ScXMLExternalTabData;
 
-class ScXMLExternalRefTabSourceContext : public SvXMLImportContext
+class ScXMLExternalRefTabSourceContext : public ScXMLImportContext
 {
 public:
-    ScXMLExternalRefTabSourceContext( ScXMLImport& rImport, sal_uInt16 nPrefix,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLExternalRefTabSourceContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScXMLExternalTabData& rRefInfo );
 
-    virtual ~ScXMLExternalRefTabSourceContext();
+    virtual ~ScXMLExternalRefTabSourceContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 
-    virtual void EndElement() override;
 private:
     ScXMLImport&            mrScImport;
     ScXMLExternalTabData&   mrExternalRefInfo;
 
     OUString         maRelativeUrl;
-    OUString         maTableName;
     OUString         maFilterName;
     OUString         maFilterOptions;
 };
 
-class ScXMLExternalRefRowsContext : public SvXMLImportContext
+class ScXMLExternalRefRowsContext : public ScXMLImportContext
 {
 public:
-    ScXMLExternalRefRowsContext( ScXMLImport& rImport, sal_uInt16 nPrefix,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLExternalRefRowsContext( ScXMLImport& rImport,
                         ScXMLExternalTabData& rRefInfo );
 
-    virtual ~ScXMLExternalRefRowsContext();
+    virtual ~ScXMLExternalRefRowsContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual css::uno::Reference< XFastContextHandler > SAL_CALL createFastChildContext(
+                        sal_Int32 nElement,
+                        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void EndElement() override;
 private:
     ScXMLImport&            mrScImport;
     ScXMLExternalTabData&   mrExternalRefInfo;
 };
 
-class ScXMLExternalRefRowContext : public SvXMLImportContext
+class ScXMLExternalRefRowContext : public ScXMLImportContext
 {
 public:
-    ScXMLExternalRefRowContext( ScXMLImport& rImport, sal_uInt16 nPrefix,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLExternalRefRowContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScXMLExternalTabData& rRefInfo );
 
-    virtual ~ScXMLExternalRefRowContext();
+    virtual ~ScXMLExternalRefRowContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 
-    virtual void EndElement() override;
+    virtual css::uno::Reference< XFastContextHandler > SAL_CALL createFastChildContext(
+                                        sal_Int32 nElement,
+                                        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+
 private:
     ScXMLImport&            mrScImport;
     ScXMLExternalTabData&   mrExternalRefInfo;
     sal_Int32               mnRepeatRowCount;
 };
 
-class ScXMLExternalRefCellContext : public SvXMLImportContext
+class ScXMLExternalRefCellContext : public ScXMLImportContext
 {
 public:
-    ScXMLExternalRefCellContext( ScXMLImport& rImport, sal_uInt16 nPrefix,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLExternalRefCellContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScXMLExternalTabData& rRefInfo );
 
-    virtual ~ScXMLExternalRefCellContext();
+    virtual ~ScXMLExternalRefCellContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 
-    virtual void EndElement() override;
+    virtual css::uno::Reference< XFastContextHandler > SAL_CALL createFastChildContext(
+                        sal_Int32 nElement,
+                        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
     void SetCellString(const OUString& rStr);
 
 private:
     ScXMLImport&            mrScImport;
     ScXMLExternalTabData&   mrExternalRefInfo;
-    OUString         maCellString;
+    OUString                maCellString;
     double                  mfCellValue;
     sal_Int32               mnRepeatCount;
     sal_Int32               mnNumberFormat;
-    sal_Int16               mnCellType;
+    sal_Int16               mnCellType; // TODO: import to document core
     bool                    mbIsNumeric;
     bool                    mbIsEmpty;
 };
 
-class ScXMLExternalRefCellTextContext : public SvXMLImportContext
+class ScXMLExternalRefCellTextContext : public ScXMLImportContext
 {
 public:
-    ScXMLExternalRefCellTextContext( ScXMLImport& rImport, sal_uInt16 nPrefix,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLExternalRefCellTextContext( ScXMLImport& rImport,
                         ScXMLExternalRefCellContext& rParent );
 
-    virtual ~ScXMLExternalRefCellTextContext();
+    virtual ~ScXMLExternalRefCellTextContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
-
-    virtual void Characters(const OUString& rChar) override;
-
-    virtual void EndElement() override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
+    virtual void SAL_CALL characters( const OUString& rChars ) override;
 
 private:
     ScXMLExternalRefCellContext& mrParent;

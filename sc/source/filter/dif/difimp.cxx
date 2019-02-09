@@ -17,21 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <math.h>
-
 #include <svl/zforlist.hxx>
 #include <osl/diagnose.h>
-#include "attrib.hxx"
-#include "dif.hxx"
-#include "docpool.hxx"
-#include "document.hxx"
-#include "filter.hxx"
-#include "fprogressbar.hxx"
-#include "ftools.hxx"
-#include "patattr.hxx"
-#include "scerrors.hxx"
-#include "scitems.hxx"
-#include "stringutil.hxx"
+#include <dif.hxx>
+#include <docpool.hxx>
+#include <document.hxx>
+#include <fprogressbar.hxx>
+#include <ftools.hxx>
+#include <patattr.hxx>
+#include <scerrors.hxx>
+#include <scitems.hxx>
+#include <stringutil.hxx>
+#include <table.hxx>
 #include <memory>
 
 const sal_Unicode pKeyTABLE[]   = { 'T', 'A', 'B', 'L', 'E', 0 };
@@ -47,12 +44,10 @@ const sal_Unicode pKeyNA[]      = { 'N', 'A', 0 };
 const sal_Unicode pKeyV[]       = { 'V', 0 };
 const sal_Unicode pKey1_0[]     = { '1', ',', '0', 0 };
 
-FltError ScFormatFilterPluginImpl::ScImportDif( SvStream& rIn, ScDocument* pDoc, const ScAddress& rInsPos,
-                        const rtl_TextEncoding eVon, sal_uInt32 nDifOption )
+ErrCode ScFormatFilterPluginImpl::ScImportDif(SvStream& rIn, ScDocument* pDoc, const ScAddress& rInsPos,
+                        const rtl_TextEncoding eVon )
 {
-    DifParser   aDifParser( rIn, nDifOption, *pDoc, eVon );
-
-    const bool bPlain = aDifParser.IsPlain();
+    DifParser   aDifParser( rIn, *pDoc, eVon );
 
     SCTAB       nBaseTab = rInsPos.Tab();
 
@@ -60,7 +55,7 @@ FltError ScFormatFilterPluginImpl::ScImportDif( SvStream& rIn, ScDocument* pDoc,
     bool        bSyntErrWarn = false;
     bool        bOverflowWarn = false;
 
-    OUString&   aData = aDifParser.aData;
+    OUStringBuffer& rData = aDifParser.m_aData;
 
     rIn.Seek( 0 );
 
@@ -72,7 +67,7 @@ FltError ScFormatFilterPluginImpl::ScImportDif( SvStream& rIn, ScDocument* pDoc,
 
         aPrgrsBar.Progress();
 
-        const bool bData = !aData.isEmpty();
+        const bool bData = !rData.isEmpty();
 
         switch( eTopic )
         {
@@ -81,7 +76,7 @@ FltError ScFormatFilterPluginImpl::ScImportDif( SvStream& rIn, ScDocument* pDoc,
                 if( aDifParser.nVector != 0 || aDifParser.nVal != 1 )
                     bSyntErrWarn = true;
                 if( bData )
-                    pDoc->RenameTab( nBaseTab, aData );
+                    pDoc->RenameTab(nBaseTab, rData.toString());
             }
                 break;
             case T_VECTORS:
@@ -126,21 +121,23 @@ FltError ScFormatFilterPluginImpl::ScImportDif( SvStream& rIn, ScDocument* pDoc,
 
         SCCOL               nColCnt = SCCOL_MAX;
         SCROW               nRowCnt = rInsPos.Row();
-        DifAttrCache        aAttrCache( bPlain );
+        DifAttrCache        aAttrCache;
 
-        DATASET             eAkt = D_UNKNOWN;
+        DATASET             eCurrent = D_UNKNOWN;
 
         ScSetStringParam aStrParam; // used to set string value without number detection.
         aStrParam.setTextInput();
 
-        while( eAkt != D_EOD )
+        while( eCurrent != D_EOD )
         {
-            eAkt = aDifParser.GetNextDataset();
+            eCurrent = aDifParser.GetNextDataset();
 
             aPrgrsBar.Progress();
             ScAddress aPos(nColCnt, nRowCnt, nBaseTab);
 
-            switch( eAkt )
+            OUString aData = rData.toString();
+
+            switch( eCurrent )
             {
                 case D_BOT:
                     if( nColCnt < SCCOL_MAX )
@@ -160,18 +157,14 @@ FltError ScFormatFilterPluginImpl::ScImportDif( SvStream& rIn, ScDocument* pDoc,
                         if( DifParser::IsV( aData.getStr() ) )
                         {
                             pDoc->SetValue(aPos, aDifParser.fVal);
-                            if( !bPlain )
-                                aAttrCache.SetNumFormat( nColCnt, nRowCnt,
+                            aAttrCache.SetNumFormat( nColCnt, nRowCnt,
                                     aDifParser.nNumFormat );
                         }
                         else if( aData == pKeyTRUE || aData == pKeyFALSE )
                         {
                             pDoc->SetValue(aPos, aDifParser.fVal);
-                            if( bPlain )
-                                aAttrCache.SetLogical( nColCnt, nRowCnt );
-                            else
-                                aAttrCache.SetNumFormat( nColCnt, nRowCnt,
-                                    aDifParser.nNumFormat );
+                            aAttrCache.SetNumFormat( nColCnt, nRowCnt,
+                                aDifParser.nNumFormat );
                         }
                         else if( aData == pKeyNA || aData == pKeyERROR  )
                         {
@@ -217,25 +210,25 @@ FltError ScFormatFilterPluginImpl::ScImportDif( SvStream& rIn, ScDocument* pDoc,
         aAttrCache.Apply( *pDoc, nBaseTab );
     }
     else
-        return eERR_FORMAT;
+        return SCERR_IMPORT_FORMAT;
 
     if( bSyntErrWarn )
 
-        // FIXME: Add proper Warnung!
-        return eERR_RNGOVRFLW;
+        // FIXME: Add proper warning!
+        return SCWARN_IMPORT_RANGE_OVERFLOW;
 
     else if( bOverflowWarn )
-        return eERR_RNGOVRFLW;
+        return SCWARN_IMPORT_RANGE_OVERFLOW;
     else
-        return eERR_OK;
+        return ERRCODE_NONE;
 }
 
-DifParser::DifParser( SvStream& rNewIn, const sal_uInt32 nOption, ScDocument& rDoc, rtl_TextEncoding e )
+DifParser::DifParser( SvStream& rNewIn, const ScDocument& rDoc, rtl_TextEncoding eCharSet )
     : fVal(0.0)
     , nVector(0)
     , nVal(0)
     , nNumFormat(0)
-    , eCharSet(e)
+    , pNumFormatter(rDoc.GetFormatTable())
     , rIn(rNewIn)
 {
     if ( rIn.GetStreamCharSet() != eCharSet )
@@ -244,13 +237,6 @@ DifParser::DifParser( SvStream& rNewIn, const sal_uInt32 nOption, ScDocument& rD
         rIn.SetStreamCharSet( eCharSet );
     }
     rIn.StartReadingUnicodeText( eCharSet );
-
-    bPlain = ( nOption == SC_DIFOPT_PLAIN );
-
-    if( bPlain )
-        pNumFormatter = nullptr;
-    else
-        pNumFormatter = rDoc.GetFormatTable();
 }
 
 TOPIC DifParser::GetNextTopic()
@@ -371,9 +357,9 @@ TOPIC DifParser::GetNextTopic()
                 OSL_ENSURE( aLine.getLength() >= 2,
                     "+GetNextTopic(): <String> is too short!" );
                 if( aLine.getLength() > 2 )
-                    aData = aLine.copy( 1, aLine.getLength() - 2 );
+                    m_aData.append(aLine.copy(1, aLine.getLength() - 2));
                 else
-                    aData.clear();
+                    m_aData.truncate();
                 eS = S_END;
                 break;
             case S_END:
@@ -382,7 +368,7 @@ TOPIC DifParser::GetNextTopic()
             case S_UNKNOWN:
                 // skip 2 lines
                 ReadNextLine( aLine );
-                // fall-through
+                [[fallthrough]];
             case S_ERROR_L2:                // error happened in line 2
                 // skip 1 line
                 ReadNextLine( aLine );
@@ -396,42 +382,34 @@ TOPIC DifParser::GetNextTopic()
     return eRet;
 }
 
-static void lcl_DeEscapeQuotesDif( OUString& rString )
+static void lcl_DeEscapeQuotesDif(OUStringBuffer& rString)
 {
     //  Special handling for DIF import: Escaped (duplicated) quotes are resolved.
     //  Single quote characters are left in place because older versions didn't
     //  escape quotes in strings (and Excel doesn't when using the clipboard).
     //  The quotes around the string are removed before this function is called.
 
-    rString = rString.replaceAll("\"\"", "\"");
+    rString = rString.toString().replaceAll("\"\"", "\"");
 }
 
 // Determine if passed in string is numeric data and set fVal/nNumFormat if so
 DATASET DifParser::GetNumberDataset( const sal_Unicode* pPossibleNumericData )
 {
     DATASET eRet = D_SYNT_ERROR;
-    if( bPlain )
+
+    OSL_ENSURE( pNumFormatter, "-DifParser::GetNumberDataset(): No Formatter, more fun!" );
+    OUString aTestVal( pPossibleNumericData );
+    sal_uInt32 nFormat = 0;
+    double fTmpVal;
+    if( pNumFormatter->IsNumberFormat( aTestVal, nFormat, fTmpVal ) )
     {
-        if( ScanFloatVal( pPossibleNumericData ) )
-            eRet = D_NUMERIC;
-        else
-            eRet = D_SYNT_ERROR;
+        fVal = fTmpVal;
+        nNumFormat = nFormat;
+        eRet = D_NUMERIC;
     }
     else
-    {   // ...and for punishment, with number formatting...
-        OSL_ENSURE( pNumFormatter, "-DifParser::GetNextDataset(): No Formatter, more fun!" );
-        OUString aTestVal( pPossibleNumericData );
-        sal_uInt32 nFormat = 0;
-        double fTmpVal;
-        if( pNumFormatter->IsNumberFormat( aTestVal, nFormat, fTmpVal ) )
-        {
-            fVal = fTmpVal;
-            nNumFormat = nFormat;
-            eRet = D_NUMERIC;
-        }
-        else
-            eRet = D_SYNT_ERROR;
-    }
+        eRet = D_SYNT_ERROR;
+
     return eRet;
 }
 
@@ -453,30 +431,30 @@ bool DifParser::ReadNextLine( OUString& rStr )
 // a valid data record structure
 bool DifParser::LookAhead()
 {
-    const sal_Unicode* pAktBuffer;
+    const sal_Unicode* pCurrentBuffer;
     bool bValidStructure = false;
 
     OSL_ENSURE( aLookAheadLine.isEmpty(), "*DifParser::LookAhead(): LookAhead called twice in a row" );
     rIn.ReadUniOrByteStringLine( aLookAheadLine, rIn.GetStreamCharSet() );
 
-    pAktBuffer = aLookAheadLine.getStr();
+    pCurrentBuffer = aLookAheadLine.getStr();
 
-    switch( *pAktBuffer )
+    switch( *pCurrentBuffer )
     {
         case '-':                   // Special Datatype
-            pAktBuffer++;
+            pCurrentBuffer++;
 
-            if( Is1_0( pAktBuffer ) )
+            if( Is1_0( pCurrentBuffer ) )
             {
                 bValidStructure = true;
             }
             break;
         case '0':                   // Numeric Data
-            pAktBuffer++;
-            if( *pAktBuffer == ',' )
+            pCurrentBuffer++;
+            if( *pCurrentBuffer == ',' )
             {
-                pAktBuffer++;
-                bValidStructure = ( GetNumberDataset(pAktBuffer) != D_SYNT_ERROR );
+                pCurrentBuffer++;
+                bValidStructure = ( GetNumberDataset(pCurrentBuffer) != D_SYNT_ERROR );
             }
             break;
         case '1':                   // String Data
@@ -493,18 +471,18 @@ DATASET DifParser::GetNextDataset()
 {
     DATASET eRet = D_UNKNOWN;
     OUString aLine;
-    const sal_Unicode* pAktBuffer;
+    const sal_Unicode* pCurrentBuffer;
 
     ReadNextLine( aLine );
 
-    pAktBuffer = aLine.getStr();
+    pCurrentBuffer = aLine.getStr();
 
-    switch( *pAktBuffer )
+    switch( *pCurrentBuffer )
     {
         case '-':                   // Special Datatype
-            pAktBuffer++;
+            pCurrentBuffer++;
 
-            if( Is1_0( pAktBuffer ) )
+            if( Is1_0( pCurrentBuffer ) )
             {
                 ReadNextLine( aLine );
                 if( IsBOT( aLine.getStr() ) )
@@ -514,24 +492,23 @@ DATASET DifParser::GetNextDataset()
             }
             break;
         case '0':                   // Numeric Data
-            pAktBuffer++;           // value in fVal, 2. line in aData
-            if( *pAktBuffer == ',' )
+            pCurrentBuffer++;       // value in fVal, 2. line in m_aData
+            if( *pCurrentBuffer == ',' )
             {
-                pAktBuffer++;
-                eRet = GetNumberDataset(pAktBuffer);
+                pCurrentBuffer++;
+                eRet = GetNumberDataset(pCurrentBuffer);
                 OUString aTmpLine;
                 ReadNextLine( aTmpLine );
                 if ( eRet == D_SYNT_ERROR )
                 {   // for broken records write "#ERR: data" to cell
-                    OUStringBuffer aTmp("#ERR: ");
-                    aTmp.append(pAktBuffer).append(" (");
-                    aTmp.append(aTmpLine).append(')');
-                    aData = aTmp.makeStringAndClear();
+                    m_aData = "#ERR: ";
+                    m_aData.append(pCurrentBuffer).append(" (");
+                    m_aData.append(aTmpLine).append(')');
                     eRet = D_STRING;
                 }
                 else
                 {
-                    aData = aTmpLine;
+                    m_aData = aTmpLine;
                 }
             }
             break;
@@ -552,20 +529,20 @@ DATASET DifParser::GetNextDataset()
                         // Single line string
                         if( nLineLength >= 2 && pLine[nLineLength - 1] == '"' )
                         {
-                            aData = aLine.copy( 1, nLineLength - 2 );
-                            lcl_DeEscapeQuotesDif( aData );
+                            m_aData = aLine.copy( 1, nLineLength - 2 );
+                            lcl_DeEscapeQuotesDif(m_aData);
                             eRet = D_STRING;
                         }
                     }
                     else
                     {
                         // Multiline string
-                        aData = aLine.copy( 1 );
+                        m_aData = aLine.copy( 1 );
                         bool bContinue = true;
                         while ( bContinue )
                         {
-                            aData = aData + "\n";
-                            bContinue = !rIn.IsEof() && ReadNextLine( aLine );
+                            m_aData.append("\n");
+                            bContinue = !rIn.eof() && ReadNextLine( aLine );
                             if( bContinue )
                             {
                                 nLineLength = aLine.getLength();
@@ -575,12 +552,12 @@ DATASET DifParser::GetNextDataset()
                                     bContinue = !LookAhead();
                                     if( bContinue )
                                     {
-                                        aData = aData + aLine;
+                                        m_aData.append(aLine);
                                     }
                                     else if( pLine[nLineLength - 1] == '"' )
                                     {
-                                        aData = aData + aLine.copy(0, nLineLength -1 );
-                                        lcl_DeEscapeQuotesDif( aData );
+                                        m_aData.append(aLine.copy(0, nLineLength -1));
+                                        lcl_DeEscapeQuotesDif(m_aData);
                                         eRet = D_STRING;
                                     }
                                 }
@@ -595,7 +572,7 @@ DATASET DifParser::GetNextDataset()
     if( eRet == D_UNKNOWN )
         ReadNextLine( aLine );
 
-    if( rIn.IsEof() )
+    if( rIn.eof() )
         eRet = D_EOD;
 
     return eRet;
@@ -607,232 +584,31 @@ const sal_Unicode* DifParser::ScanIntVal( const sal_Unicode* pStart, sal_uInt32&
     while (*pStart == ' ' || *pStart == '\t')
         ++pStart;
 
-    sal_Unicode     cAkt = *pStart;
+    sal_Unicode     cCurrent = *pStart;
 
-    if( IsNumber( cAkt ) )
-        rRet = ( sal_uInt32 ) ( cAkt - '0' );
+    if( IsNumber( cCurrent ) )
+        rRet = static_cast<sal_uInt32>( cCurrent - '0' );
     else
         return nullptr;
 
     pStart++;
-    cAkt = *pStart;
+    cCurrent = *pStart;
 
-    while( IsNumber( cAkt ) && rRet < ( 0xFFFFFFFF / 10 ) )
+    while( IsNumber( cCurrent ) && rRet < ( 0xFFFFFFFF / 10 ) )
     {
         rRet *= 10;
-        rRet += ( sal_uInt32 ) ( cAkt - '0' );
+        rRet += static_cast<sal_uInt32>( cCurrent - '0' );
 
         pStart++;
-        cAkt = *pStart;
+        cCurrent = *pStart;
     }
 
     return pStart;
 }
 
-bool DifParser::ScanFloatVal( const sal_Unicode* pStart )
-{
-    bool                    bNeg = false;
-    double                      fFracPos = 1.0;
-    sal_Int32                   nExp = 0;
-    bool                    bExpNeg = false;
-    bool                    bExpOverflow = false;
-    static const sal_uInt16     nExpLimit = 4096;   // FIXME: has to be set more accurately!
-
-    sal_Unicode             cAkt;
-    bool                    bRet = false;
-
-    enum STATE { S_FIRST, S_PRE, S_POST, S_EXP_FIRST, S_EXP, S_END, S_FINDEND };
-
-    STATE   eS = S_FIRST;
-
-    double fNewVal = 0.0;
-
-    while( eS != S_END )
-    {
-        cAkt = *pStart;
-        switch( eS )
-        {
-            case S_FIRST:
-                if( IsNumber( cAkt ) )
-                {
-                    fNewVal *= 10;
-                    fNewVal += cAkt - '0';
-                    eS = S_PRE;
-                }
-                else
-                {
-                    switch( cAkt )
-                    {
-                        case ' ':
-                        case '\t':
-                        case '+':
-                            break;
-                        case '-':
-                            bNeg = !bNeg;
-                            break;
-                        case '.':
-                        case ',':
-                            eS = S_POST;
-                            fFracPos = 0.1;
-                            break;
-                        default:
-                            eS = S_END;
-                    }
-                }
-                break;
-            case S_PRE:
-                if( IsNumber( cAkt ) )
-                {
-                    fNewVal *= 10;
-                    fNewVal += cAkt - '0';
-                }
-                else
-                {
-                    switch( cAkt )
-                    {
-                        case '.':
-                        case ',':
-                            eS = S_POST;
-                            fFracPos = 0.1;
-                            break;
-                        case 'e':
-                        case 'E':
-                            eS = S_EXP;
-                            break;
-                        case 0x00:              // IsNumberEnding( cAkt )
-                            bRet = true;        // no
-                        default:                // break!
-                            eS = S_END;
-                    }
-                }
-                break;
-            case S_POST:
-                if( IsNumber( cAkt ) )
-                {
-                    fNewVal += fFracPos * ( cAkt - '0' );
-                    fFracPos /= 10.0;
-                }
-                else
-                {
-                    switch( cAkt )
-                    {
-                        case 'e':
-                        case 'E':
-                            eS = S_EXP_FIRST;
-                            break;
-                        case 0x00:              // IsNumberEnding( cAkt )
-                            bRet = true;        // no
-                        default:                // break!
-                            eS = S_END;
-                    }
-                }
-                break;
-            case S_EXP_FIRST:
-                if( IsNumber( cAkt ) )
-                {
-                    if( nExp < nExpLimit )
-                    {
-                        nExp *= 10;
-                        nExp += ( sal_uInt16 ) ( cAkt - '0' );
-                    }
-                    eS = S_EXP;
-                }
-                else
-                {
-                    switch( cAkt )
-                    {
-                        case '+':
-                            break;
-                        case '-':
-                            bExpNeg = !bExpNeg;
-                            break;
-                        default:
-                            eS = S_END;
-                    }
-                }
-                break;
-            case S_EXP:
-                if( IsNumber( cAkt ) )
-                {
-                    if( nExp < ( 0xFFFF / 10 ) )
-                    {
-                        nExp *= 10;
-                        nExp += ( sal_uInt16 ) ( cAkt - '0' );
-                    }
-                    else
-                    {
-                        bExpOverflow = true;
-                        eS = S_FINDEND;
-                    }
-                }
-                else
-                {
-                    bRet = IsNumberEnding( cAkt );
-                    eS = S_END;
-                }
-                break;
-            case S_FINDEND:
-                if( IsNumberEnding( cAkt ) )
-                {
-                    bRet = true;        // to continue parsing
-                    eS = S_END;
-                }
-                break;
-            // coverity[dead_error_begin] - following conditions exist to avoid compiler warning
-            case S_END:
-                OSL_FAIL( "DifParser::ScanFloatVal - unexpected state" );
-                break;
-            default:
-                OSL_FAIL( "DifParser::ScanFloatVal - missing enum" );
-        }
-        pStart++;
-    }
-
-    if( bRet )
-    {
-        if( bExpOverflow )
-            return false;       // FIXME: add special cases here
-
-        if( bNeg )
-            fNewVal *= 1.0;
-
-        if( bExpNeg )
-            nExp *= -1;
-
-        if( nExp != 0 )
-            fNewVal *= pow( 10.0, ( double ) nExp );
-        fVal = fNewVal;
-    }
-
-    return bRet;
-}
-
 DifColumn::DifColumn ()
-    : mpAkt(nullptr)
+    : mpCurrent(nullptr)
 {
-}
-
-void DifColumn::SetLogical( SCROW nRow )
-{
-    OSL_ENSURE( ValidRow(nRow), "*DifColumn::SetLogical(): Row too big!" );
-
-    if( mpAkt )
-    {
-        OSL_ENSURE( nRow > 0, "*DifColumn::SetLogical(): more cannot be zero!" );
-
-        nRow--;
-
-        if( mpAkt->nEnd == nRow )
-            mpAkt->nEnd++;
-        else
-            mpAkt = nullptr;
-    }
-    else
-    {
-        maEntries.push_back(ENTRY());
-        mpAkt = &maEntries.back();
-        mpAkt->nStart = mpAkt->nEnd = nRow;
-    }
 }
 
 void DifColumn::SetNumFormat( SCROW nRow, const sal_uInt32 nNumFormat )
@@ -841,15 +617,15 @@ void DifColumn::SetNumFormat( SCROW nRow, const sal_uInt32 nNumFormat )
 
     if( nNumFormat > 0 )
     {
-        if(mpAkt)
+        if(mpCurrent)
         {
             OSL_ENSURE( nRow > 0,
                 "*DifColumn::SetNumFormat(): more cannot be zero!" );
-            OSL_ENSURE( nRow > mpAkt->nEnd,
+            OSL_ENSURE( nRow > mpCurrent->nEnd,
                 "*DifColumn::SetNumFormat(): start from scratch?" );
 
-            if( mpAkt->nNumFormat == nNumFormat && mpAkt->nEnd == nRow - 1 )
-                mpAkt->nEnd = nRow;
+            if( mpCurrent->nNumFormat == nNumFormat && mpCurrent->nEnd == nRow - 1 )
+                mpCurrent->nEnd = nRow;
             else
                 NewEntry( nRow, nNumFormat );
         }
@@ -857,22 +633,16 @@ void DifColumn::SetNumFormat( SCROW nRow, const sal_uInt32 nNumFormat )
             NewEntry(nRow,nNumFormat );
     }
     else
-        mpAkt = nullptr;
+        mpCurrent = nullptr;
 }
 
 void DifColumn::NewEntry( const SCROW nPos, const sal_uInt32 nNumFormat )
 {
-    maEntries.push_back(ENTRY());
-    mpAkt = &maEntries.back();
-    mpAkt->nStart = mpAkt->nEnd = nPos;
-    mpAkt->nNumFormat = nNumFormat;
+    maEntries.emplace_back();
+    mpCurrent = &maEntries.back();
+    mpCurrent->nStart = mpCurrent->nEnd = nPos;
+    mpCurrent->nNumFormat = nNumFormat;
 
-}
-
-void DifColumn::Apply( ScDocument& rDoc, const SCCOL nCol, const SCTAB nTab, const ScPatternAttr& rPattAttr )
-{
-    for (std::vector<ENTRY>::const_iterator it = maEntries.begin(); it != maEntries.end(); ++it)
-        rDoc.ApplyPatternAreaTab( nCol, it->nStart, nCol, it->nEnd, nTab, rPattAttr );
 }
 
 void DifColumn::Apply( ScDocument& rDoc, const SCCOL nCol, const SCTAB nTab )
@@ -880,88 +650,43 @@ void DifColumn::Apply( ScDocument& rDoc, const SCCOL nCol, const SCTAB nTab )
     ScPatternAttr aAttr( rDoc.GetPool() );
     SfxItemSet &rItemSet = aAttr.GetItemSet();
 
-    for (std::vector<ENTRY>::const_iterator it = maEntries.begin(); it != maEntries.end(); ++it)
+    for (const auto& rEntry : maEntries)
     {
-        OSL_ENSURE( it->nNumFormat > 0,
+        OSL_ENSURE( rEntry.nNumFormat > 0,
             "+DifColumn::Apply(): Number format must not be 0!" );
 
-        rItemSet.Put( SfxUInt32Item( ATTR_VALUE_FORMAT, it->nNumFormat ) );
+        rItemSet.Put( SfxUInt32Item( ATTR_VALUE_FORMAT, rEntry.nNumFormat ) );
 
-        rDoc.ApplyPatternAreaTab( nCol, it->nStart, nCol, it->nEnd, nTab, aAttr );
+        rDoc.ApplyPatternAreaTab( nCol, rEntry.nStart, nCol, rEntry.nEnd, nTab, aAttr );
 
         rItemSet.ClearItem();
     }
 }
 
-DifAttrCache::DifAttrCache( const bool bNewPlain )
+DifAttrCache::DifAttrCache()
 {
-    bPlain = bNewPlain;
-    ppCols = new DifColumn *[ MAXCOL + 1 ];
-    for( SCCOL nCnt = 0 ; nCnt <= MAXCOL ; nCnt++ )
-        ppCols[ nCnt ] = nullptr;
 }
 
 DifAttrCache::~DifAttrCache()
 {
-    for( SCCOL nCnt = 0 ; nCnt <= MAXCOL ; nCnt++ )
-    {
-        if( ppCols[ nCnt ] )
-            delete ppCols[ nCnt ];
-    }
-
-    delete[] ppCols;
-}
-
-void DifAttrCache::SetLogical( const SCCOL nCol, const SCROW nRow )
-{
-    OSL_ENSURE( ValidCol(nCol), "-DifAttrCache::SetLogical(): Col too big!" );
-    OSL_ENSURE( bPlain, "*DifAttrCache::SetLogical(): has to be Plain!" );
-
-    if( !ppCols[ nCol ] )
-        ppCols[ nCol ] = new DifColumn;
-
-    ppCols[ nCol ]->SetLogical( nRow );
 }
 
 void DifAttrCache::SetNumFormat( const SCCOL nCol, const SCROW nRow, const sal_uInt32 nNumFormat )
 {
     OSL_ENSURE( ValidCol(nCol), "-DifAttrCache::SetNumFormat(): Col too big!" );
-    OSL_ENSURE( !bPlain, "*DifAttrCache::SetNumFormat(): should not be Plain!" );
 
-    if( !ppCols[ nCol ] )
-        ppCols[ nCol ] = new DifColumn;
+    if( !maColMap.count(nCol) )
+        maColMap[ nCol ].reset( new DifColumn );
 
-    ppCols[ nCol ]->SetNumFormat( nRow, nNumFormat );
+    maColMap[ nCol ]->SetNumFormat( nRow, nNumFormat );
 }
 
 void DifAttrCache::Apply( ScDocument& rDoc, SCTAB nTab )
 {
-    if( bPlain )
+    for( SCCOL nCol : rDoc.GetColumnsRange(nTab, 0, MAXCOL) )
     {
-        std::unique_ptr<ScPatternAttr> pPatt;
-
-        for( SCCOL nCol = 0 ; nCol <= MAXCOL ; nCol++ )
-        {
-            if( ppCols[ nCol ] )
-            {
-                if( !pPatt )
-                {
-                    pPatt.reset(new ScPatternAttr( rDoc.GetPool() ));
-                    pPatt->GetItemSet().Put( SfxUInt32Item( ATTR_VALUE_FORMAT,
-                        rDoc.GetFormatTable()->GetStandardFormat( css::util::NumberFormat::LOGICAL ) ) );
-                }
-
-                ppCols[ nCol ]->Apply( rDoc, nCol, nTab, *pPatt );
-            }
-        }
-    }
-    else
-    {
-        for( SCCOL nCol = 0 ; nCol <= MAXCOL ; nCol++ )
-        {
-            if( ppCols[ nCol ] )
-                ppCols[ nCol ]->Apply( rDoc, nCol, nTab );
-        }
+        if( maColMap.count(nCol) )
+            maColMap[ nCol ]->Apply( rDoc, nCol, nTab );
     }
 }
 

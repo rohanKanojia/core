@@ -32,7 +32,7 @@ $(eval $(call gb_Library_use_libraries,unoxml,\
     cppuhelper \
     cppu \
     sal \
-	$(gb_UWINAPI) \
+    xo \
 ))
 
 $(eval $(call gb_Library_use_externals,unoxml,\
@@ -72,6 +72,11 @@ $(eval $(call gb_Library_add_exception_objects,unoxml,\
     unoxml/source/events/uievent \
     unoxml/source/events/mouseevent \
     unoxml/source/service/services \
+))
+
+$(eval $(call gb_Library_set_include,unoxml,\
+	        -I$(SRCDIR)/unoxml/inc \
+			        $$(INCLUDE) \
 ))
 
 # vim: set noet sw=4 ts=4:

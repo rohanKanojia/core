@@ -20,44 +20,46 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_UI_UNO_DBTYPEWIZDLGSETUP_HXX
 #define INCLUDED_DBACCESS_SOURCE_UI_UNO_DBTYPEWIZDLGSETUP_HXX
 
-#include "unoadmin.hxx"
+#include <unoadmin.hxx>
+
+#include <comphelper/proparrhlp.hxx>
 
 namespace dbaui
 {
-// ODBTypeWizDialogSetup
-class ODBTypeWizDialogSetup
+class ODBTypeWizDialogSetup final
         :public ODatabaseAdministrationDialog
         ,public ::comphelper::OPropertyArrayUsageHelper< ODBTypeWizDialogSetup >
 {
     bool        m_bOpenDatabase;
     bool        m_bStartTableWizard;
 
-protected:
     explicit ODBTypeWizDialogSetup(const css::uno::Reference< css::uno::XComponentContext >& _rxORB);
 
 public:
     // XTypeProvider
-    virtual css::uno::Sequence<sal_Int8> SAL_CALL getImplementationId(  ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence<sal_Int8> SAL_CALL getImplementationId(  ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
 
     // XServiceInfo - static methods
-    static css::uno::Sequence< OUString > getSupportedServiceNames_Static() throw( css::uno::RuntimeException );
-    static OUString getImplementationName_Static() throw( css::uno::RuntimeException );
+    /// @throws css::uno::RuntimeException
+    static css::uno::Sequence< OUString > getSupportedServiceNames_Static();
+    /// @throws css::uno::RuntimeException
+    static OUString getImplementationName_Static();
     static css::uno::Reference< css::uno::XInterface >
-            SAL_CALL Create(const css::uno::Reference< css::lang::XMultiServiceFactory >&);
+            Create(const css::uno::Reference< css::lang::XMultiServiceFactory >&);
 
     // XPropertySet
-    virtual css::uno::Reference< css::beans::XPropertySetInfo>  SAL_CALL getPropertySetInfo() throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::beans::XPropertySetInfo>  SAL_CALL getPropertySetInfo() override;
     virtual ::cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
 
     // OPropertyArrayUsageHelper
     virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
-protected:
-// OGenericUnoDialog overridables
-    virtual VclPtr<Dialog> createDialog(vcl::Window* _pParent) override;
+private:
+    // OGenericUnoDialog overridables
+    virtual svt::OGenericUnoDialog::Dialog createDialog(const css::uno::Reference<css::awt::XWindow>& rParent) override;
     virtual void executedDialog(sal_Int16 _nExecutionResult) override;
 };
 

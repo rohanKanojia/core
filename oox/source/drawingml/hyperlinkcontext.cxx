@@ -21,11 +21,13 @@
 
 #include <com/sun/star/xml/sax/XFastContextHandler.hpp>
 
-#include <osl/diagnose.h>
-#include "oox/helper/propertymap.hxx"
-#include "oox/core/relations.hxx"
-#include "oox/core/xmlfilterbase.hxx"
-#include "drawingml/embeddedwavaudiofile.hxx"
+#include <oox/helper/propertymap.hxx>
+#include <oox/core/relations.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
+#include <drawingml/embeddedwavaudiofile.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star::uno;
@@ -34,7 +36,7 @@ using namespace ::com::sun::star::xml::sax;
 namespace oox {
 namespace drawingml {
 
-HyperLinkContext::HyperLinkContext( ContextHandler2Helper& rParent,
+HyperLinkContext::HyperLinkContext( ContextHandler2Helper const & rParent,
         const AttributeList& rAttribs, PropertyMap& aProperties )
     : ContextHandler2( rParent )
     , maProperties(aProperties)
@@ -43,11 +45,9 @@ HyperLinkContext::HyperLinkContext( ContextHandler2Helper& rParent,
     OUString aRelId = rAttribs.getString( R_TOKEN( id ) ).get();
     if ( !aRelId.isEmpty() )
     {
-        OSL_TRACE("OOX: URI rId %s", OUStringToOString (aRelId, RTL_TEXTENCODING_UTF8).pData->buffer);
         sHref = getRelations().getExternalTargetFromRelId( aRelId );
         if( !sHref.isEmpty() )
         {
-            OSL_TRACE("OOX: URI href %s", OUStringToOString (sHref, RTL_TEXTENCODING_UTF8).pData->buffer);
             sURL = getFilter().getAbsoluteUrl( sHref );
         }
         else
@@ -94,8 +94,7 @@ HyperLinkContext::HyperLinkContext( ContextHandler2Helper& rParent,
                 if ( aPPAct.match( sJump, nIndex + 1 ) )
                 {
                     OUString aDestination( aPPAct.copy( nIndex + 1 + sJump.getLength() ) );
-                    sURL = sURL.concat( "#action?jump=" );
-                    sURL = sURL.concat( aDestination );
+                    sURL += "#action?jump=" + aDestination;
                 }
             }
             else if ( aPPAction.match( sHlinksldjump ) )

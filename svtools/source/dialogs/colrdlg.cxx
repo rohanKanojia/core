@@ -29,7 +29,8 @@
 #include <toolkit/helper/vclunohelper.hxx>
 
 #include <svtools/colrdlg.hxx>
-#include <vcl/window.hxx>
+#include <vcl/weld.hxx>
+#include <osl/diagnose.h>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
@@ -37,29 +38,25 @@ using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::ui::dialogs;
 
 
-SvColorDialog::SvColorDialog( vcl::Window* pWindow )
-: mpParent( pWindow )
-, meMode( svtools::ColorPickerMode_SELECT )
+SvColorDialog::SvColorDialog()
+    : meMode(svtools::ColorPickerMode::Select)
 {
 }
 
 SvColorDialog::~SvColorDialog()
 {
 }
-
 void SvColorDialog::SetColor( const Color& rColor )
 {
     maColor = rColor;
 }
 
-
-void SvColorDialog::SetMode( sal_Int16 eMode )
+void SvColorDialog::SetMode( svtools::ColorPickerMode eMode )
 {
     meMode = eMode;
 }
 
-
-short SvColorDialog::Execute()
+short SvColorDialog::Execute(weld::Window* pParent)
 {
     short ret = 0;
     try
@@ -67,16 +64,18 @@ short SvColorDialog::Execute()
         const OUString sColor( "Color" );
         Reference< XComponentContext > xContext( ::comphelper::getProcessComponentContext() );
 
-        Reference< css::awt::XWindow > xParent( VCLUnoHelper::GetInterface( mpParent ) );
+        Reference<css::awt::XWindow> xParent;
+        if (pParent)
+            xParent = pParent->GetXWindow();
 
         Reference< XExecutableDialog > xDialog = css::cui::ColorPicker::createWithParent(xContext, xParent);
         Reference< XPropertyAccess > xPropertyAccess( xDialog, UNO_QUERY_THROW );
 
         Sequence< PropertyValue > props( 2 );
         props[0].Name = sColor;
-        props[0].Value <<= (sal_Int32) maColor.GetColor();
+        props[0].Value <<= maColor;
         props[1].Name = "Mode";
-        props[1].Value <<= (sal_Int16) meMode;
+        props[1].Value <<= static_cast<sal_Int16>(meMode);
 
         xPropertyAccess->setPropertyValues( props );
 
@@ -87,14 +86,9 @@ short SvColorDialog::Execute()
             props = xPropertyAccess->getPropertyValues();
             for( sal_Int32 n = 0; n < props.getLength(); n++ )
             {
-                if( props[n].Name.equals( sColor ) )
+                if( props[n].Name == sColor )
                 {
-                    sal_Int32 nColor = 0;
-                    if( props[n].Value >>= nColor )
-                    {
-                        maColor.SetColor( nColor );
-                    }
-
+                    props[n].Value >>= maColor;
                 }
             }
         }

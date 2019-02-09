@@ -21,7 +21,7 @@
 #define INCLUDED_SVTOOLS_SOURCE_UNO_UNOGRIDCOLUMNFACADE_HXX
 
 #include <svtools/table/tablemodel.hxx>
-#include "table/tablecontrol.hxx"
+#include <table/tablecontrol.hxx>
 
 #include <com/sun/star/awt/grid/XGridColumn.hpp>
 #include <com/sun/star/style/VerticalAlignment.hpp>
@@ -45,7 +45,7 @@ namespace svt { namespace table
             UnoControlTableModel const & i_owner,
             css::uno::Reference< css::awt::grid::XGridColumn > const & i_gridColumn
         );
-        virtual ~UnoGridColumnFacade();
+        virtual ~UnoGridColumnFacade() override;
         UnoGridColumnFacade(const UnoGridColumnFacade&) = delete;
         UnoGridColumnFacade& operator=(const UnoGridColumnFacade&) = delete;
 

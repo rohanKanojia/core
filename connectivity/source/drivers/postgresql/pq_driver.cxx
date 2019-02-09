@@ -39,6 +39,8 @@
 #include <cppuhelper/compbase.hxx>
 #include <cppuhelper/implementationentry.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <com/sun/star/lang/XSingleComponentFactory.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
 #include "pq_driver.hxx"
 
@@ -60,7 +62,6 @@ using com::sun::star::uno::Any;
 using com::sun::star::beans::PropertyValue;
 
 using com::sun::star::sdbc::XConnection;
-using com::sun::star::sdbc::SQLException;
 using com::sun::star::sdbc::DriverPropertyInfo;
 
 using com::sun::star::sdbcx::XTablesSupplier;
@@ -69,19 +70,18 @@ using com::sun::star::sdbcx::XTablesSupplier;
 namespace pq_sdbc_driver
 {
 
-OUString DriverGetImplementationName()
+static OUString DriverGetImplementationName()
 {
     return OUString( "org.openoffice.comp.connectivity.pq.Driver.noext" );
 }
 
-Sequence< OUString > DriverGetSupportedServiceNames()
+static Sequence< OUString > DriverGetSupportedServiceNames()
 {
     return Sequence< OUString > { "com.sun.star.sdbc.Driver" };
 }
 
 Reference< XConnection > Driver::connect(
     const OUString& url,const Sequence< PropertyValue >& info )
-    throw (SQLException, RuntimeException, std::exception)
 {
     if( ! acceptsURL( url ) )  // XDriver spec tells me to do so ...
         return Reference< XConnection > ();
@@ -97,45 +97,39 @@ Reference< XConnection > Driver::connect(
 }
 
 sal_Bool Driver::acceptsURL( const OUString& url )
-    throw (SQLException, RuntimeException, std::exception)
 {
     return url.startsWith( "sdbc:postgresql:" );
 }
 
 Sequence< DriverPropertyInfo > Driver::getPropertyInfo(
-    const OUString& url,const Sequence< PropertyValue >& info )
-    throw (SQLException, RuntimeException, std::exception)
+    const OUString&,const Sequence< PropertyValue >& )
 {
-    (void)url; (void)info;
     return Sequence< DriverPropertyInfo > ();
 }
 
-sal_Int32  Driver::getMajorVersion(  ) throw (RuntimeException, std::exception)
+sal_Int32  Driver::getMajorVersion(  )
 {
     return PQ_SDBC_MAJOR;
 }
 
 
-sal_Int32 Driver::getMinorVersion(  ) throw (RuntimeException, std::exception)
+sal_Int32 Driver::getMinorVersion(  )
 {
     return PQ_SDBC_MINOR;
 }
 
     // XServiceInfo
 OUString SAL_CALL Driver::getImplementationName()
-    throw(::com::sun::star::uno::RuntimeException, std::exception)
 {
     return DriverGetImplementationName();
 }
 
 sal_Bool Driver::supportsService(const OUString& ServiceName)
-    throw(::com::sun::star::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 Sequence< OUString > Driver::getSupportedServiceNames()
-    throw(::com::sun::star::uno::RuntimeException, std::exception)
 {
     return DriverGetSupportedServiceNames();
 }
@@ -149,20 +143,18 @@ void Driver::disposing()
 
 Reference< XTablesSupplier > Driver::getDataDefinitionByConnection(
     const Reference< XConnection >& connection )
-        throw (SQLException, RuntimeException, std::exception)
 {
      return Reference< XTablesSupplier >( connection , UNO_QUERY );
 }
 
 Reference< XTablesSupplier > Driver::getDataDefinitionByURL(
     const OUString& url, const Sequence< PropertyValue >& info )
-        throw (SQLException, RuntimeException, std::exception)
 {
     return Reference< XTablesSupplier > ( connect( url, info ), UNO_QUERY );
 }
 
 
-Reference< XInterface > DriverCreateInstance( const Reference < XComponentContext > & ctx )
+static Reference< XInterface > DriverCreateInstance( const Reference < XComponentContext > & ctx )
 {
     Reference< XInterface >  ret = * new Driver( ctx );
     return ret;
@@ -179,7 +171,7 @@ public:
         cppu::ComponentFactoryFunc fptr,
         const Sequence< OUString > & serviceNames,
         const Reference< XComponentContext > & defaultContext) :
-        cppu::WeakComponentImplHelper< XSingleComponentFactory, XServiceInfo >( this->m_mutex ),
+        cppu::WeakComponentImplHelper< XSingleComponentFactory, XServiceInfo >( m_mutex ),
         m_create( fptr ),
         m_serviceNames( serviceNames ),
         m_implName( rImplementationName_ ),
@@ -189,29 +181,24 @@ public:
 
     // XSingleComponentFactory
     virtual Reference< XInterface > SAL_CALL createInstanceWithContext(
-        Reference< XComponentContext > const & xContext )
-        throw (Exception, RuntimeException, std::exception) override;
+        Reference< XComponentContext > const & xContext ) override;
     virtual Reference< XInterface > SAL_CALL createInstanceWithArgumentsAndContext(
         Sequence< Any > const & rArguments,
-        Reference< XComponentContext > const & xContext )
-        throw (Exception, RuntimeException, std::exception) override;
+        Reference< XComponentContext > const & xContext ) override;
 
     // XServiceInfo
-    OUString SAL_CALL getImplementationName()
-        throw(::com::sun::star::uno::RuntimeException, std::exception) override
+    OUString SAL_CALL getImplementationName() override
     {
         return m_implName;
     }
-    sal_Bool SAL_CALL supportsService(const OUString& ServiceName)
-        throw(::com::sun::star::uno::RuntimeException, std::exception) override
+    sal_Bool SAL_CALL supportsService(const OUString& ServiceName) override
     {
         for( int i = 0 ; i < m_serviceNames.getLength() ; i ++ )
             if( m_serviceNames[i] == ServiceName )
-                return sal_True;
-        return sal_False;
+                return true;
+        return false;
     }
-    Sequence< OUString > SAL_CALL getSupportedServiceNames()
-        throw(::com::sun::star::uno::RuntimeException, std::exception) override
+    Sequence< OUString > SAL_CALL getSupportedServiceNames() override
     {
         return m_serviceNames;
     }
@@ -228,16 +215,13 @@ private:
 };
 
 Reference< XInterface > OOneInstanceComponentFactory::createInstanceWithArgumentsAndContext(
-    Sequence< Any > const &rArguments, const Reference< XComponentContext > & ctx )
-    throw( RuntimeException, Exception, std::exception )
+    Sequence< Any > const &, const Reference< XComponentContext > & ctx )
 {
-    (void)rArguments;
     return createInstanceWithContext( ctx );
 }
 
 Reference< XInterface > OOneInstanceComponentFactory::createInstanceWithContext(
     const Reference< XComponentContext > & ctx )
-    throw( RuntimeException, Exception, std::exception )
 {
     if( ! m_theInstance.is() )
     {
@@ -270,7 +254,7 @@ void OOneInstanceComponentFactory::disposing()
 //  Reference< XSingleComponentFactory > createOneInstanceComponentFactory(
 //      cppu::ComponentFactoryFunc fptr,
 //      OUString const & rImplementationName,
-//      ::com::sun::star::uno::Sequence< OUString > const & rServiceNames,
+//      css::uno::Sequence< OUString > const & rServiceNames,
 //      rtl_ModuleCount * pModCount = 0 )
 //
 //  {
@@ -292,7 +276,7 @@ static const struct cppu::ImplementationEntry g_entries[] =
 extern "C"
 {
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL postgresql_sdbc_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * postgresql_sdbc_component_getFactory(
     const sal_Char * pImplName, void * pServiceManager, void * )
 {
     // need to extract the defaultcontext, because the way, sdbc
@@ -300,9 +284,9 @@ SAL_DLLPUBLIC_EXPORT void * SAL_CALL postgresql_sdbc_component_getFactory(
     // XSingleComponentFactory interface ...
     void * pRet = nullptr;
     Reference< XSingleComponentFactory > xFactory;
-    Reference< com::sun::star::lang::XMultiServiceFactory > xSmgr(
+    Reference< css::lang::XMultiServiceFactory > xSmgr(
         static_cast< XInterface * >(pServiceManager),
-        com::sun::star::uno::UNO_QUERY_THROW );
+        css::uno::UNO_QUERY_THROW );
 
     for( sal_Int32 i = 0 ; g_entries[i].create ; i ++ )
     {

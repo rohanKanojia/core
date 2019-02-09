@@ -27,7 +27,7 @@
 #include <svx/xdef.hxx>
 #include <svx/xflhtit.hxx>
 #include <svx/unomid.hxx>
-#include "svx/unofill.hxx"
+#include <svx/unofill.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::cppu;
@@ -36,16 +36,15 @@ class SvxUnoHatchTable : public SvxUnoNameItemTable
 {
 public:
     explicit SvxUnoHatchTable( SdrModel* pModel ) throw();
-    virtual ~SvxUnoHatchTable() throw();
 
-    virtual NameOrIndex* createItem() const throw() override;
+    virtual NameOrIndex* createItem() const override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  ) throw( uno::RuntimeException, std::exception ) override;
-    virtual uno::Sequence<  OUString > SAL_CALL getSupportedServiceNames(  ) throw( uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual uno::Sequence<  OUString > SAL_CALL getSupportedServiceNames(  ) override;
 
     // XElementAccess
-    virtual uno::Type SAL_CALL getElementType(  ) throw( uno::RuntimeException, std::exception) override;
+    virtual uno::Type SAL_CALL getElementType(  ) override;
 };
 
 SvxUnoHatchTable::SvxUnoHatchTable( SdrModel* pModel ) throw()
@@ -53,30 +52,24 @@ SvxUnoHatchTable::SvxUnoHatchTable( SdrModel* pModel ) throw()
 {
 }
 
-SvxUnoHatchTable::~SvxUnoHatchTable() throw()
-{
-}
-
-OUString SAL_CALL SvxUnoHatchTable::getImplementationName() throw( uno::RuntimeException, std::exception )
+OUString SAL_CALL SvxUnoHatchTable::getImplementationName()
 {
     return OUString("SvxUnoHatchTable");
 }
 
 uno::Sequence< OUString > SAL_CALL SvxUnoHatchTable::getSupportedServiceNames(  )
-    throw( uno::RuntimeException, std::exception )
 {
     uno::Sequence<OUString> aSNS { "com.sun.star.drawing.HatchTable" };
     return aSNS;
 }
 
-NameOrIndex* SvxUnoHatchTable::createItem() const throw()
+NameOrIndex* SvxUnoHatchTable::createItem() const
 {
     return new XFillHatchItem();
 }
 
 // XElementAccess
 uno::Type SAL_CALL SvxUnoHatchTable::getElementType(  )
-    throw( uno::RuntimeException, std::exception )
 {
     return cppu::UnoType<drawing::Hatch>::get();
 }
@@ -84,7 +77,7 @@ uno::Type SAL_CALL SvxUnoHatchTable::getElementType(  )
 /**
  * Create a hatchtable
  */
-uno::Reference< uno::XInterface > SAL_CALL SvxUnoHatchTable_createInstance( SdrModel* pModel )
+uno::Reference< uno::XInterface > SvxUnoHatchTable_createInstance( SdrModel* pModel )
 {
     return *new SvxUnoHatchTable(pModel);
 }

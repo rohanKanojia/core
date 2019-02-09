@@ -19,19 +19,14 @@
 
 #include "xmlstyle.hxx"
 #include "xmlexprt.hxx"
-#include "xmlimprt.hxx"
 
-#include "XMLConverter.hxx"
-#include "rangeutl.hxx"
-#include "unonames.hxx"
+#include <rangeutl.hxx>
+#include <unonames.hxx>
 
+#include <o3tl/safeint.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltypes.hxx>
 #include <xmloff/families.hxx>
-#include <xmloff/xmlnumfe.hxx>
-#include <xmloff/xmlnumfi.hxx>
-#include <xmloff/nmspmap.hxx>
-#include <xmloff/attrlist.hxx>
 #include <xmloff/contextid.hxx>
 #include <xmloff/txtprmap.hxx>
 #include <sax/tools/converter.hxx>
@@ -40,14 +35,16 @@
 #include <com/sun/star/table/CellVertJustify2.hpp>
 #include <com/sun/star/table/CellHoriJustify.hpp>
 #include <com/sun/star/table/CellJustifyMethod.hpp>
-#include <com/sun/star/table/TableBorder.hpp>
 #include <com/sun/star/table/BorderLine2.hpp>
 #include <com/sun/star/sheet/XSheetConditionalEntry.hpp>
 #include <com/sun/star/sheet/XSheetCondition.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/XPropertyState.hpp>
+#include <com/sun/star/container/XIndexAccess.hpp>
 #include <comphelper/extract.hxx>
 
 #include <rtl/ustrbuf.hxx>
+#include <osl/diagnose.h>
 
 using namespace com::sun::star;
 using namespace ::xmloff::token;
@@ -235,11 +232,9 @@ void ScXMLCellExportPropertyMapper::ContextFilter(
     XMLPropertyState* pParaAdjust = nullptr;
     XMLPropertyState* pParaAdjustLast = nullptr;
 
-    ::std::vector< XMLPropertyState >::iterator aEndIter(rProperties.end());
-    for( ::std::vector< XMLPropertyState >::iterator aIter = rProperties.begin();
-         aIter != aEndIter; ++aIter )
+    for( auto& rProperty : rProperties )
     {
-        XMLPropertyState* propertyState = &(*aIter);
+        XMLPropertyState* propertyState = &rProperty;
         if (propertyState->mnIndex != -1)
         {
             switch( getPropertySetMapper()->GetEntryContextId( propertyState->mnIndex ) )
@@ -620,25 +615,23 @@ void ScXMLAutoStylePoolP::exportStyleAttributes(
     SvXMLAutoStylePoolP::exportStyleAttributes( rAttrList, nFamily, rProperties, rPropExp, rUnitConverter, rNamespaceMap );
     if (nFamily == XML_STYLE_FAMILY_TABLE_CELL)
     {
-        ::std::vector< XMLPropertyState >::const_iterator i(rProperties.begin());
-        ::std::vector< XMLPropertyState >::const_iterator endi(rProperties.end());
-        for(; i != endi; ++i)
+        for(const auto& rProperty : rProperties)
         {
             rtl::Reference< XMLPropertySetMapper > aPropMapper(rScXMLExport.GetCellStylesPropertySetMapper());
-            sal_Int16 nContextID(aPropMapper->GetEntryContextId(i->mnIndex));
+            sal_Int16 nContextID(aPropMapper->GetEntryContextId(rProperty.mnIndex));
             switch (nContextID)
             {
                 case CTF_SC_NUMBERFORMAT :
                 {
                     sal_Int32 nNumberFormat = 0;
-                    if (i->maValue >>= nNumberFormat)
+                    if (rProperty.maValue >>= nNumberFormat)
                     {
                         OUString sAttrValue(rScXMLExport.getDataStyleName(nNumberFormat));
                         if (!sAttrValue.isEmpty())
                         {
                             GetExport().AddAttribute(
-                                aPropMapper->GetEntryNameSpace(i->mnIndex),
-                                aPropMapper->GetEntryXMLName(i->mnIndex),
+                                aPropMapper->GetEntryNameSpace(rProperty.mnIndex),
+                                aPropMapper->GetEntryXMLName(rProperty.mnIndex),
                                 sAttrValue );
                         }
                     }
@@ -649,22 +642,20 @@ void ScXMLAutoStylePoolP::exportStyleAttributes(
     }
     else if (nFamily == XML_STYLE_FAMILY_TABLE_TABLE)
     {
-        ::std::vector< XMLPropertyState >::const_iterator i(rProperties.begin());
-        ::std::vector< XMLPropertyState >::const_iterator endi(rProperties.end());
-        for(; i != endi; ++i)
+        for(const auto& rProperty : rProperties)
         {
             rtl::Reference< XMLPropertySetMapper > aPropMapper(rScXMLExport.GetTableStylesPropertySetMapper());
-            sal_Int16 nContextID(aPropMapper->GetEntryContextId(i->mnIndex));
+            sal_Int16 nContextID(aPropMapper->GetEntryContextId(rProperty.mnIndex));
             switch (nContextID)
             {
                 case CTF_SC_MASTERPAGENAME :
                 {
                     OUString sName;
-                    if (i->maValue >>= sName)
+                    if (rProperty.maValue >>= sName)
                     {
                         GetExport().AddAttribute(
-                            aPropMapper->GetEntryNameSpace(i->mnIndex),
-                            aPropMapper->GetEntryXMLName(i->mnIndex),
+                            aPropMapper->GetEntryNameSpace(rProperty.mnIndex),
+                            aPropMapper->GetEntryXMLName(rProperty.mnIndex),
                             GetExport().EncodeStyleName( sName ));
                     }
                 }
@@ -686,20 +677,17 @@ void ScXMLAutoStylePoolP::exportStyleContent(
     SvXMLAutoStylePoolP::exportStyleContent( rHandler, nFamily, rProperties, rPropExp, rUnitConverter, rNamespaceMap );
     if (nFamily == XML_STYLE_FAMILY_TABLE_CELL)
     {
-        bool bNotFound = true;
-        ::std::vector< XMLPropertyState >::const_iterator i(rProperties.begin());
-        ::std::vector< XMLPropertyState >::const_iterator endi(rProperties.end());
-        for(; i != endi && bNotFound; ++i)
+        for(const auto& rProperty : rProperties)
         {
-            if (i->mnIndex != -1)
+            if (rProperty.mnIndex != -1)
             {
-                sal_Int16 nContextID = rScXMLExport.GetCellStylesPropertySetMapper()->GetEntryContextId(i->mnIndex);
+                sal_Int16 nContextID = rScXMLExport.GetCellStylesPropertySetMapper()->GetEntryContextId(rProperty.mnIndex);
                 switch (nContextID)
                 {
                     case CTF_SC_MAP :
                     {
-                        uno::Reference<container::XIndexAccess> xIndex( i->maValue, uno::UNO_QUERY );
-                           if ( xIndex.is() )
+                        uno::Reference<container::XIndexAccess> xIndex( rProperty.maValue, uno::UNO_QUERY );
+                        if ( xIndex.is() )
                         {
                             sal_Int32 nConditionCount(xIndex->getCount());
                             for (sal_Int32 nCondition = 0; nCondition < nConditionCount; ++nCondition)
@@ -716,9 +704,9 @@ void ScXMLAutoStylePoolP::exportStyleContent(
                                         {
                                             if (aOperator == sheet::ConditionOperator_FORMULA)
                                             {
-                                                OUString sCondition("is-true-formula(");
-                                                sCondition += xSheetCondition->getFormula1();
-                                                sCondition += ")";
+                                                OUString sCondition = "is-true-formula("
+                                                                    + xSheetCondition->getFormula1()
+                                                                    + ")";
                                                 rScXMLExport.AddAttribute(XML_NAMESPACE_STYLE, XML_CONDITION, sCondition);
                                                 rScXMLExport.AddAttribute(XML_NAMESPACE_STYLE, XML_APPLY_STYLE_NAME, rScXMLExport.EncodeStyleName( sStyleName ));
                                                 OUString sOUBaseAddress;
@@ -738,10 +726,10 @@ void ScXMLAutoStylePoolP::exportStyleContent(
                                                         sCondition = "cell-content-is-between(";
                                                     else
                                                         sCondition = "cell-content-is-not-between(";
-                                                    sCondition += xSheetCondition->getFormula1();
-                                                    sCondition += ",";
-                                                    sCondition += xSheetCondition->getFormula2();
-                                                    sCondition += ")";
+                                                    sCondition += xSheetCondition->getFormula1()
+                                                                + ","
+                                                                + xSheetCondition->getFormula2()
+                                                                + ")";
                                                 }
                                                 else
                                                 {
@@ -833,9 +821,8 @@ void ScXMLStyleExport::exportStyleContent( const css::uno::Reference<css::style:
 
 ScXMLStyleExport::ScXMLStyleExport(
         SvXMLExport& rExp,
-        const OUString& rPoolStyleName,
         SvXMLAutoStylePoolP *pAutoStyleP )
-    : XMLStyleExport(rExp, rPoolStyleName, pAutoStyleP)
+    : XMLStyleExport(rExp, pAutoStyleP)
 {
 }
 
@@ -972,7 +959,7 @@ bool XmlScPropHdl_CellProtection::importXML(
     if (!rValue.hasValue())
     {
         aCellProtection.IsHidden = false;
-        aCellProtection.IsLocked = sal_True;
+        aCellProtection.IsLocked = true;
         aCellProtection.IsFormulaHidden = false;
         aCellProtection.IsPrintHidden = false;
         bDefault = true;
@@ -989,9 +976,9 @@ bool XmlScPropHdl_CellProtection::importXML(
         }
         else if (IsXMLToken(rStrImpValue, XML_HIDDEN_AND_PROTECTED))
         {
-            aCellProtection.IsFormulaHidden = sal_True;
-            aCellProtection.IsHidden = sal_True;
-            aCellProtection.IsLocked = sal_True;
+            aCellProtection.IsFormulaHidden = true;
+            aCellProtection.IsHidden = true;
+            aCellProtection.IsLocked = true;
             rValue <<= aCellProtection;
             bRetval = true;
         }
@@ -999,13 +986,13 @@ bool XmlScPropHdl_CellProtection::importXML(
         {
             aCellProtection.IsFormulaHidden = false;
             aCellProtection.IsHidden = false;
-            aCellProtection.IsLocked = sal_True;
+            aCellProtection.IsLocked = true;
             rValue <<= aCellProtection;
             bRetval = true;
         }
         else if (IsXMLToken(rStrImpValue, XML_FORMULA_HIDDEN))
         {
-            aCellProtection.IsFormulaHidden = sal_True;
+            aCellProtection.IsFormulaHidden = true;
             aCellProtection.IsHidden = false;
             aCellProtection.IsLocked = false;
             rValue <<= aCellProtection;
@@ -1013,7 +1000,7 @@ bool XmlScPropHdl_CellProtection::importXML(
         }
         else
         {
-            sal_Int16 i(0);
+            sal_Int32 i(0);
             while (i < rStrImpValue.getLength() && rStrImpValue[i] != ' ')
                 ++i;
             OUString sFirst(rStrImpValue.copy(0, i));
@@ -1022,9 +1009,9 @@ bool XmlScPropHdl_CellProtection::importXML(
             aCellProtection.IsHidden = false;
             aCellProtection.IsLocked = false;
             if ((IsXMLToken(sFirst, XML_PROTECTED)) || (IsXMLToken(sSecond, XML_PROTECTED)))
-                aCellProtection.IsLocked = sal_True;
+                aCellProtection.IsLocked = true;
             if ((IsXMLToken(sFirst, XML_FORMULA_HIDDEN)) || (IsXMLToken(sSecond, XML_FORMULA_HIDDEN)))
-                aCellProtection.IsFormulaHidden = sal_True;
+                aCellProtection.IsFormulaHidden = true;
             rValue <<= aCellProtection;
             bRetval = true;
         }
@@ -1105,7 +1092,7 @@ bool XmlScPropHdl_PrintContent::importXML(
     if (!rValue.hasValue())
     {
         aCellProtection.IsHidden = false;
-        aCellProtection.IsLocked = sal_True;
+        aCellProtection.IsLocked = true;
         aCellProtection.IsFormulaHidden = false;
         aCellProtection.IsPrintHidden = false;
         bDefault = true;
@@ -1349,8 +1336,7 @@ bool XmlScPropHdl_HoriJustifySource::importXML(
     }
     else if (IsXMLToken(rStrImpValue, XML_VALUE_TYPE))
     {
-        table::CellHoriJustify nValue(table::CellHoriJustify_STANDARD);
-        rValue <<= nValue;
+        rValue <<= table::CellHoriJustify_STANDARD;
         bRetval = true;
     }
 
@@ -1410,8 +1396,7 @@ bool XmlScPropHdl_HoriJustifyRepeat::importXML(
     }
     else if (IsXMLToken(rStrImpValue, XML_TRUE))
     {
-        table::CellHoriJustify nValue = table::CellHoriJustify_REPEAT;
-        rValue <<= nValue;
+        rValue <<= table::CellHoriJustify_REPEAT;
         bRetval = true;
     }
 
@@ -1535,9 +1520,8 @@ bool XmlScPropHdl_RotateAngle::importXML(
     bool bRetval(false);
 
     sal_Int32 nValue;
-    if (::sax::Converter::convertNumber(nValue, rStrImpValue))
+    if (::sax::Converter::convertNumber(nValue, rStrImpValue) && !o3tl::checked_multiply<sal_Int32>(nValue, 100, nValue))
     {
-        nValue *= 100;
         rValue <<= nValue;
         bRetval = true;
     }
@@ -1555,9 +1539,7 @@ bool XmlScPropHdl_RotateAngle::exportXML(
 
     if(rValue >>= nVal)
     {
-        OUStringBuffer sValue;
-        ::sax::Converter::convertNumber(sValue, sal_Int32(nVal / 100));
-        rStrExpValue = sValue.makeStringAndClear();
+        rStrExpValue = OUString::number(nVal / 100);
         bRetval = true;
     }
 

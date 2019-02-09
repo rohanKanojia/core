@@ -16,66 +16,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <unotools/resmgr.hxx>
+#include <core_resource.hxx>
 
-#include "core_resource.hxx"
-
-#include <tools/resmgr.hxx>
-
-// ---- needed as long as we have no contexts for components ---
-#include <vcl/svapp.hxx>
-#include <vcl/settings.hxx>
-#include <rtl/instance.hxx>
-#include <svl/solar.hrc>
-
-
-namespace formula
+OUString ForResId(const char *pId)
 {
-
-
-    //= ResourceManager
-
-    namespace
-    {
-        // access safety
-        struct theResourceManagerMutex : public rtl::Static< osl::Mutex, theResourceManagerMutex > {};
-    }
-    sal_Int32       ResourceManager::s_nClients = 0;
-    ResMgr*         ResourceManager::m_pImpl = nullptr;
-
-
-    void ResourceManager::ensureImplExists()
-    {
-        if (m_pImpl)
-            return;
-
-        m_pImpl = ResMgr::CreateResMgr("for", Application::GetSettings().GetUILanguageTag());
-    }
-
-
-    void ResourceManager::registerClient()
-    {
-        ::osl::MutexGuard aGuard(theResourceManagerMutex::get());
-        ++s_nClients;
-    }
-
-
-    void ResourceManager::revokeClient()
-    {
-        ::osl::MutexGuard aGuard(theResourceManagerMutex::get());
-        if (!--s_nClients && m_pImpl)
-        {
-            delete m_pImpl;
-            m_pImpl = nullptr;
-        }
-    }
-    ResMgr* ResourceManager::getResManager()
-    {
-        ensureImplExists();
-        return m_pImpl;
-    }
-
-
-} // formula
-
+    return Translate::get(pId, Translate::Create("for"));
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -20,6 +20,7 @@
 #ifndef INCLUDED_EDITENG_SOURCE_EDITENG_EEHTML_HXX
 #define INCLUDED_EDITENG_SOURCE_EDITENG_EEHTML_HXX
 
+#include <memory>
 #include <editdoc.hxx>
 #include <svtools/parhtml.hxx>
 
@@ -35,28 +36,29 @@ class EditHTMLParser : public HTMLParser
 {
     using HTMLParser::CallParser;
 private:
-    OUStringBuffer maStyleSource;
+    OUStringBuffer          maStyleSource;
     EditSelection           aCurSel;
     OUString                aBaseURL;
-    EditEngine* mpEditEngine;
-    AnchorInfo*             pCurAnchor;
+    EditEngine*             mpEditEngine;
+    std::unique_ptr<AnchorInfo>
+                            pCurAnchor;
 
     bool                    bInPara:1;
     bool                    bWasInPara:1; // Remember bInPara before HeadingStart, because afterwards it will be gone.
     bool                    bFieldsInserted:1;
     bool                    bInTitle:1;
 
-    sal_uInt8                   nInTable;
-    sal_uInt8                   nInCell;
-    sal_uInt8                   nDefListLevel;
+    sal_uInt8               nInTable;
+    sal_uInt8               nInCell;
+    sal_uInt8               nDefListLevel;
 
     void                    StartPara( bool bReal );
-    void                    EndPara( bool bReal );
+    void                    EndPara();
     void                    AnchorStart();
     void                    AnchorEnd();
-    void                    HeadingStart( int nToken );
-    void                    HeadingEnd( int nToken );
-    void                    SkipGroup( int nEndToken );
+    void                    HeadingStart( HtmlTokenId nToken );
+    void                    HeadingEnd();
+    void                    SkipGroup( HtmlTokenId nEndToken );
     bool                    ThrowAwayBlank();
     bool                    HasTextInCurrentPara();
 
@@ -66,11 +68,11 @@ private:
     void                    ImpSetStyleSheet( sal_uInt16 nHeadingLevel );
 
 protected:
-    virtual void            NextToken( int nToken ) override;
+    virtual void            NextToken( HtmlTokenId nToken ) override;
 
 public:
     EditHTMLParser(SvStream& rIn, const OUString& rBaseURL, SvKeyValueIterator* pHTTPHeaderAttrs);
-    virtual ~EditHTMLParser();
+    virtual ~EditHTMLParser() override;
 
     SvParserState CallParser(EditEngine* pEE, const EditPaM& rPaM);
 

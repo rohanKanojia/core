@@ -17,24 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "paramdialog.hxx"
-#include "dbu_dlg.hrc"
-#include "commontypes.hxx"
-#include "moduledbu.hxx"
+#include <core_resource.hxx>
+#include <paramdialog.hxx>
+#include <dbu_dlg.hxx>
+#include <strings.hrc>
+#include <strings.hxx>
+#include <commontypes.hxx>
 #include <com/sun/star/util/NumberFormatter.hpp>
 #include <com/sun/star/sdbc/DataType.hpp>
-#include <comphelper/processfactory.hxx>
+#include <comphelper/types.hxx>
 #include <connectivity/dbtools.hxx>
-#include "dbustrings.hrc"
+#include <stringconstants.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
 #include <osl/diagnose.h>
 #include <tools/diagnose_ex.h>
-#include "localresaccess.hxx"
 #include <unotools/syslocale.hxx>
-
-#define EF_VISITED      0x0001
-#define EF_DIRTY        0x0002
 
 namespace dbaui
 {
@@ -51,21 +49,20 @@ namespace dbaui
 
 
     OParameterDialog::OParameterDialog(
-            vcl::Window* pParent, const Reference< XIndexAccess > & rParamContainer,
+            weld::Window* pParent, const Reference< XIndexAccess > & rParamContainer,
             const Reference< XConnection > & _rxConnection, const Reference< XComponentContext >& rxContext)
-        :ModalDialog( pParent, "Parameters", "dbaccess/ui/parametersdialog.ui")
-        ,m_nCurrentlySelected(LISTBOX_ENTRY_NOTFOUND)
-        ,m_xConnection(_rxConnection)
-        ,m_aPredicateInput( rxContext, _rxConnection, getParseContext() )
-        ,m_bNeedErrorOnCurrent(true)
+        : GenericDialogController(pParent, "dbaccess/ui/parametersdialog.ui", "Parameters")
+        , m_nCurrentlySelected(-1)
+        , m_xConnection(_rxConnection)
+        , m_aPredicateInput( rxContext, _rxConnection, getParseContext() )
+        , m_bNeedErrorOnCurrent(true)
+        , m_xAllParams(m_xBuilder->weld_tree_view("allParamTreeview"))
+        , m_xParam(m_xBuilder->weld_entry("paramEntry"))
+        , m_xTravelNext(m_xBuilder->weld_button("next"))
+        , m_xOKBtn(m_xBuilder->weld_button("ok"))
+        , m_xCancelBtn(m_xBuilder->weld_button("cancel"))
     {
-        get(m_pAllParams, "allParamTreeview");
-        get(m_pParam, "paramEntry");
-        get(m_pTravelNext, "next");
-        get(m_pOKBtn, "ok");
-        get(m_pCancelBtn, "cancel");
-
-        set_height_request(200);
+        m_xAllParams->set_size_request(-1, m_xAllParams->get_height_rows(10));
 
         if (rxContext.is())
             m_xFormatter.set( NumberFormatter::create( rxContext ), UNO_QUERY_THROW);
@@ -93,9 +90,9 @@ namespace dbaui
                 if(!xParamAsSet.is())
                     continue;
                 pValues->Name = ::comphelper::getString(xParamAsSet->getPropertyValue(PROPERTY_NAME));
-                m_pAllParams->InsertEntry(pValues->Name);
+                m_xAllParams->append_text(pValues->Name);
 
-                m_aVisitedParams.push_back(0);
+                m_aVisitedParams.push_back(VisitFlags::NONE);
                     // not visited, not dirty
             }
 
@@ -103,70 +100,59 @@ namespace dbaui
         }
         catch(Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
 
         Construct();
 
-        m_aResetVisitFlag.SetTimeoutHdl(LINK(this, OParameterDialog, OnVisitedTimeout));
+        m_aResetVisitFlag.SetInvokeHandler(LINK(this, OParameterDialog, OnVisitedTimeout));
     }
 
     OParameterDialog::~OParameterDialog()
     {
-        disposeOnce();
-    }
-
-    void OParameterDialog::dispose()
-    {
         if (m_aResetVisitFlag.IsActive())
             m_aResetVisitFlag.Stop();
-        m_pAllParams.clear();
-        m_pParam.clear();
-        m_pTravelNext.clear();
-        m_pOKBtn.clear();
-        m_pCancelBtn.clear();
-        ModalDialog::dispose();
     }
 
     void OParameterDialog::Construct()
     {
-        m_pAllParams->SetSelectHdl(LINK(this, OParameterDialog, OnEntryListBoxSelected));
-        m_pParam->SetLoseFocusHdl(LINK(this, OParameterDialog, OnValueLoseFocusHdl));
-        m_pParam->SetModifyHdl(LINK(this, OParameterDialog, OnValueModified));
-        m_pTravelNext->SetClickHdl(LINK(this, OParameterDialog, OnButtonClicked));
-        m_pOKBtn->SetClickHdl(LINK(this, OParameterDialog, OnButtonClicked));
-        m_pCancelBtn->SetClickHdl(LINK(this, OParameterDialog, OnButtonClicked));
+        m_xAllParams->connect_changed(LINK(this, OParameterDialog, OnEntryListBoxSelected));
+        m_xParam->connect_focus_out(LINK(this, OParameterDialog, OnValueLoseFocusHdl));
+        m_xParam->connect_changed(LINK(this, OParameterDialog, OnValueModified));
+        m_xTravelNext->connect_clicked(LINK(this, OParameterDialog, OnButtonClicked));
+        m_xOKBtn->connect_clicked(LINK(this, OParameterDialog, OnButtonClicked));
+        m_xCancelBtn->connect_clicked(LINK(this, OParameterDialog, OnButtonClicked));
 
-        if (m_pAllParams->GetEntryCount())
+        if (m_xAllParams->n_children())
         {
-            m_pAllParams->SelectEntryPos(0);
+            m_xAllParams->select(0);
             OnEntrySelected();
 
-            if (m_pAllParams->GetEntryCount() == 1)
+            if (m_xAllParams->n_children() == 1)
             {
-                m_pTravelNext->Enable(false);
+                m_xTravelNext->set_sensitive(false);
             }
 
-            if (m_pAllParams->GetEntryCount() > 1)
+            if (m_xAllParams->n_children() > 1)
             {
-                m_pOKBtn->SetStyle(m_pOKBtn->GetStyle() & ~WB_DEFBUTTON);
-                m_pTravelNext->SetStyle(m_pTravelNext->GetStyle() | WB_DEFBUTTON);
+                m_xOKBtn->set_has_default(false);
+                m_xTravelNext->set_has_default(true);
             }
         }
 
-        m_pParam->GrabFocus();
+        m_xParam->grab_focus();
     }
 
-    IMPL_LINK_NOARG_TYPED(OParameterDialog, OnValueLoseFocusHdl, Control&, void)
+    IMPL_LINK_NOARG(OParameterDialog, OnValueLoseFocusHdl, weld::Widget&, void)
     {
         OnValueLoseFocus();
     }
 
     bool OParameterDialog::OnValueLoseFocus()
     {
-        if (m_nCurrentlySelected != LISTBOX_ENTRY_NOTFOUND)
+        if (m_nCurrentlySelected != -1)
         {
-            if ( ( m_aVisitedParams[ m_nCurrentlySelected ] & EF_DIRTY ) == 0 )
+            if ( !( m_aVisitedParams[ m_nCurrentlySelected ] & VisitFlags::Dirty ) )
                 // nothing to do, the value isn't dirty
                 return false;
         }
@@ -177,14 +163,14 @@ namespace dbaui
         {
             if (m_xConnection.is() && m_xFormatter.is())
             {
-                OUString sParamValue( m_pParam->GetText() );
+                OUString sParamValue(m_xParam->get_text());
                 bool bValid = m_aPredicateInput.normalizePredicateString( sParamValue, xParamAsSet );
-                m_pParam->SetText( sParamValue );
+                m_xParam->set_text(sParamValue);
                 if ( bValid )
                 {
                     // with this the value isn't dirty anymore
-                    if (m_nCurrentlySelected != LISTBOX_ENTRY_NOTFOUND)
-                        m_aVisitedParams[m_nCurrentlySelected] &= ~EF_DIRTY;
+                    if (m_nCurrentlySelected != -1)
+                        m_aVisitedParams[m_nCurrentlySelected] &= ~VisitFlags::Dirty;
                 }
                 else
                 {
@@ -198,13 +184,16 @@ namespace dbaui
                     }
                     catch(Exception&)
                     {
-                        DBG_UNHANDLED_EXCEPTION();
+                        DBG_UNHANDLED_EXCEPTION("dbaccess");
                     }
 
-                    OUString sMessage(ModuleRes(STR_COULD_NOT_CONVERT_PARAM));
+                    OUString sMessage(DBA_RES(STR_COULD_NOT_CONVERT_PARAM));
                     sMessage = sMessage.replaceAll( "$name$", sName );
-                    ScopedVclPtrInstance<MessageDialog>::Create(nullptr, sMessage)->Execute();
-                    m_pParam->GrabFocus();
+                    std::unique_ptr<weld::MessageDialog> xDialog(Application::CreateMessageDialog(nullptr,
+                                                                 VclMessageType::Warning, VclButtonsType::Ok,
+                                                                 sMessage));
+                    xDialog->run();
+                    m_xParam->grab_focus();
                     return true;
                 }
             }
@@ -213,17 +202,16 @@ namespace dbaui
         return false;
     }
 
-    IMPL_LINK_TYPED(OParameterDialog, OnButtonClicked, Button*, pButton, void)
+    IMPL_LINK(OParameterDialog, OnButtonClicked, weld::Button&, rButton, void)
     {
-        if (m_pCancelBtn == pButton)
+        if (m_xCancelBtn.get() == &rButton)
         {
             // no interpreting of the given values anymore ....
-            m_pParam->SetLoseFocusHdl(Link<Control&,void>()); // no direct call from the control anymore ...
+            m_xParam->connect_focus_out(Link<weld::Widget&, void>()); // no direct call from the control anymore ...
             m_bNeedErrorOnCurrent = false;      // in case of any indirect calls -> no error message
-            m_pCancelBtn->SetClickHdl(Link<Button*,void>());
-            m_pCancelBtn->Click();
+            m_xDialog->response(RET_CANCEL);
         }
-        else if (m_pOKBtn == pButton)
+        else if (m_xOKBtn.get() == &rButton)
         {
             // transfer the current values into the Any
             if (OnEntrySelected())
@@ -248,36 +236,34 @@ namespace dbaui
 
                         OUString sValue;
                         pValues->Value >>= sValue;
-                        pValues->Value <<= m_aPredicateInput.getPredicateValue( sValue, xParamAsSet );
+                        pValues->Value = m_aPredicateInput.getPredicateValue( sValue, xParamAsSet );
                     }
                 }
                 catch(Exception&)
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    DBG_UNHANDLED_EXCEPTION("dbaccess");
                 }
 
             }
-            // to close the dialog (which is more code than a simple EndDialog)
-            m_pOKBtn->SetClickHdl(Link<Button*,void>());
-            m_pOKBtn->Click();
+            m_xDialog->response(RET_OK);
         }
-        else if (m_pTravelNext == pButton)
+        else if (m_xTravelNext.get() == &rButton)
         {
-            if (sal_Int32 nCount = m_pAllParams->GetEntryCount())
+            if (sal_Int32 nCount = m_xAllParams->n_children())
             {
-                sal_Int32 nCurrent = m_pAllParams->GetSelectEntryPos();
+                sal_Int32 nCurrent = m_xAllParams->get_selected_index();
                 OSL_ENSURE(static_cast<size_t>(nCount) == m_aVisitedParams.size(), "OParameterDialog::OnButtonClicked : inconsistent lists !");
 
                 // search the next entry in list we haven't visited yet
                 sal_Int32 nNext = (nCurrent + 1) % nCount;
-                while ((nNext != nCurrent) && ( m_aVisitedParams[nNext] & EF_VISITED ))
+                while ((nNext != nCurrent) && ( m_aVisitedParams[nNext] & VisitFlags::Visited ))
                     nNext = (nNext + 1) % nCount;
 
-                if ( m_aVisitedParams[nNext] & EF_VISITED )
+                if ( m_aVisitedParams[nNext] & VisitFlags::Visited )
                     // there is no such "not visited yet" entry -> simply take the next one
                     nNext = (nCurrent + 1) % nCount;
 
-                m_pAllParams->SelectEntryPos(nNext);
+                m_xAllParams->select(nNext);
                 OnEntrySelected();
                 m_bNeedErrorOnCurrent = true;
                     // we're are out of the complex web :) of direct and indirect calls to OnValueLoseFocus now,
@@ -287,7 +273,7 @@ namespace dbaui
         }
     }
 
-    IMPL_LINK_NOARG_TYPED(OParameterDialog, OnEntryListBoxSelected, ListBox&, void)
+    IMPL_LINK_NOARG(OParameterDialog, OnEntryListBoxSelected, weld::TreeView&, void)
     {
         OnEntrySelected();
     }
@@ -300,28 +286,28 @@ namespace dbaui
             m_aResetVisitFlag.Stop();
         }
         // save the old values
-        if (m_nCurrentlySelected != LISTBOX_ENTRY_NOTFOUND)
+        if (m_nCurrentlySelected != -1)
         {
             // do the transformation of the current text
             if (OnValueLoseFocus())
             {   // there was an error interpreting the text
-                m_pAllParams->SelectEntryPos(m_nCurrentlySelected);
+                m_xAllParams->select(m_nCurrentlySelected);
                 return true;
             }
 
-            m_aFinalValues[m_nCurrentlySelected].Value <<= OUString(m_pParam->GetText());
+            m_aFinalValues[m_nCurrentlySelected].Value <<= m_xParam->get_text();
         }
 
         // initialize the controls with the new values
-        sal_Int32 nSelected = m_pAllParams->GetSelectEntryPos();
-        OSL_ENSURE(nSelected != LISTBOX_ENTRY_NOTFOUND, "OParameterDialog::OnEntrySelected : no current entry !");
+        sal_Int32 nSelected = m_xAllParams->get_selected_index();
+        OSL_ENSURE(nSelected != -1, "OParameterDialog::OnEntrySelected : no current entry !");
 
-        m_pParam->SetText(::comphelper::getString(m_aFinalValues[nSelected].Value));
+        m_xParam->set_text(::comphelper::getString(m_aFinalValues[nSelected].Value));
         m_nCurrentlySelected = nSelected;
 
         // with this the value isn't dirty
         OSL_ENSURE(static_cast<size_t>(m_nCurrentlySelected) < m_aVisitedParams.size(), "OParameterDialog::OnEntrySelected : invalid current entry !");
-        m_aVisitedParams[m_nCurrentlySelected] &= ~EF_DIRTY;
+        m_aVisitedParams[m_nCurrentlySelected] &= ~VisitFlags::Dirty;
 
         m_aResetVisitFlag.SetTimeout(1000);
         m_aResetVisitFlag.Start();
@@ -329,57 +315,38 @@ namespace dbaui
         return false;
     }
 
-    IMPL_LINK_NOARG_TYPED(OParameterDialog, OnVisitedTimeout, Timer*, void)
+    IMPL_LINK_NOARG(OParameterDialog, OnVisitedTimeout, Timer*, void)
     {
-        OSL_ENSURE(m_nCurrentlySelected != LISTBOX_ENTRY_NOTFOUND, "OParameterDialog::OnVisitedTimeout : invalid call !");
+        OSL_ENSURE(m_nCurrentlySelected != -1, "OParameterDialog::OnVisitedTimeout : invalid call !");
 
         // mark the currently selected entry as visited
         OSL_ENSURE(static_cast<size_t>(m_nCurrentlySelected) < m_aVisitedParams.size(), "OParameterDialog::OnVisitedTimeout : invalid entry !");
-        m_aVisitedParams[m_nCurrentlySelected] |= EF_VISITED;
+        m_aVisitedParams[m_nCurrentlySelected] |= VisitFlags::Visited;
 
         // was it the last "not visited yet" entry ?
-        ByteVector::const_iterator aIter;
-        for (   aIter = m_aVisitedParams.begin();
-                aIter < m_aVisitedParams.end();
-                ++aIter
-            )
+        bool bVisited = false;
+        for (auto const& visitedParam : m_aVisitedParams)
         {
-            if (((*aIter) & EF_VISITED) == 0)
+            if (!(visitedParam & VisitFlags::Visited))
+            {
+                bVisited = true;
                 break;
+            }
         }
-        if (aIter == m_aVisitedParams.end())
-        {   // yes, there isn't another one -> change the "default button"
-            m_pTravelNext->SetStyle(m_pTravelNext->GetStyle() & ~WB_DEFBUTTON);
-            m_pOKBtn->SetStyle(m_pOKBtn->GetStyle() | WB_DEFBUTTON);
 
-            // set to focus to one of the buttons temporary (with this their "default"-state is really updated)
-            vcl::Window* pOldFocus = Application::GetFocusWindow();
-
-            // if the old focus window is the value edit do some preparations ...
-            Selection aSel;
-            if (pOldFocus == m_pParam)
-            {
-                m_pParam->SetLoseFocusHdl(Link<Control&,void>());
-                aSel = m_pParam->GetSelection();
-            }
-            m_pTravelNext->GrabFocus();
-            if (pOldFocus)
-                pOldFocus->GrabFocus();
-
-            // restore the settings for the value edit
-            if (pOldFocus == m_pParam)
-            {
-                m_pParam->SetLoseFocusHdl(LINK(this, OParameterDialog, OnValueLoseFocusHdl));
-                m_pParam->SetSelection(aSel);
-            }
+        if (!bVisited)
+        {
+            // yes, there isn't another one -> change the "default button"
+            m_xTravelNext->set_has_default(false);
+            m_xOKBtn->set_has_default(true);
         }
     }
 
-    IMPL_LINK_NOARG_TYPED(OParameterDialog, OnValueModified, Edit&, void)
+    IMPL_LINK_NOARG(OParameterDialog, OnValueModified, weld::Entry&, void)
     {
         // mark the currently selected entry as dirty
         OSL_ENSURE(static_cast<size_t>(m_nCurrentlySelected) < m_aVisitedParams.size(), "OParameterDialog::OnValueModified : invalid entry !");
-        m_aVisitedParams[m_nCurrentlySelected] |= EF_DIRTY;
+        m_aVisitedParams[m_nCurrentlySelected] |= VisitFlags::Dirty;
 
         m_bNeedErrorOnCurrent = true;
     }

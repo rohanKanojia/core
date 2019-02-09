@@ -20,8 +20,6 @@
 #ifndef INCLUDED_FRAMEWORK_INC_DISPATCH_CLOSEDISPATCHER_HXX
 #define INCLUDED_FRAMEWORK_INC_DISPATCH_CLOSEDISPATCHER_HXX
 
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
 #include <stdtypes.h>
 #include <general.h>
 
@@ -37,6 +35,7 @@
 
 #include <memory>
 #include <cppuhelper/implbase.hxx>
+#include <cppuhelper/weakref.hxx>
 #include <vcl/evntpost.hxx>
 #include <vcl/vclptr.hxx>
 
@@ -127,7 +126,7 @@ class CloseDispatcher : public  ::cppu::WeakImplHelper<
                         const OUString&                                           sTarget);
 
         /** @short  does nothing real. */
-        virtual ~CloseDispatcher();
+        virtual ~CloseDispatcher() override;
 
     // uno interface
 
@@ -136,19 +135,19 @@ class CloseDispatcher : public  ::cppu::WeakImplHelper<
         // XNotifyingDispatch
         virtual void SAL_CALL dispatchWithNotification( const css::util::URL&                                             aURL      ,
                                                         const css::uno::Sequence< css::beans::PropertyValue >&            lArguments,
-                                                        const css::uno::Reference< css::frame::XDispatchResultListener >& xListener ) throw(css::uno::RuntimeException, std::exception) override;
+                                                        const css::uno::Reference< css::frame::XDispatchResultListener >& xListener ) override;
 
         // XDispatch
         virtual void SAL_CALL dispatch            ( const css::util::URL&                                     aURL      ,
-                                                    const css::uno::Sequence< css::beans::PropertyValue >&    lArguments) throw(css::uno::RuntimeException, std::exception) override;
+                                                    const css::uno::Sequence< css::beans::PropertyValue >&    lArguments) override;
         virtual void SAL_CALL addStatusListener   ( const css::uno::Reference< css::frame::XStatusListener >& xListener ,
-                                                    const css::util::URL&                                     aURL      ) throw(css::uno::RuntimeException, std::exception) override;
+                                                    const css::util::URL&                                     aURL      ) override;
         virtual void SAL_CALL removeStatusListener( const css::uno::Reference< css::frame::XStatusListener >& xListener ,
-                                                    const css::util::URL&                                     aURL      ) throw(css::uno::RuntimeException, std::exception) override;
+                                                    const css::util::URL&                                     aURL      ) override;
 
         // XDispatchInformationProvider
-        virtual css::uno::Sequence< sal_Int16 >                       SAL_CALL getSupportedCommandGroups         (                         ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< css::frame::DispatchInformation > SAL_CALL getConfigurableDispatchInformation( sal_Int16 nCommandGroup ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< sal_Int16 >                       SAL_CALL getSupportedCommandGroups         (                         ) override;
+        virtual css::uno::Sequence< css::frame::DispatchInformation > SAL_CALL getConfigurableDispatchInformation( sal_Int16 nCommandGroup ) override;
 
     // internal helper
 
@@ -160,18 +159,15 @@ class CloseDispatcher : public  ::cppu::WeakImplHelper<
                     asynchronous. Otherwise our callis kill its own environment
                     during they call us...
         */
-        DECL_LINK_TYPED( impl_asyncCallback, LinkParamNone*, void );
+        DECL_LINK( impl_asyncCallback, LinkParamNone*, void );
 
         /** @short  prepare m_xCloseFrame so it should be closeable without problems.
 
-            @descr  Thats needed to be sure, that the document can't disagree
+            @descr  That's needed to be sure, that the document can't disagree
                     later with e.g. an office termination.
                     The problem: Closing of documents can show UI. If the user
                     ignores it and open/close other documents, we can't know
                     which state the office has after closing of this frame.
-
-            @param  bAllowSuspend
-                    force calling of XController->suspend().
 
             @param  bCloseAllOtherViewsToo
                     if there are other top level frames, which
@@ -182,10 +178,9 @@ class CloseDispatcher : public  ::cppu::WeakImplHelper<
             @return [boolean]
                     sal_True if closing was successfully.
          */
-        bool implts_prepareFrameForClosing(const css::uno::Reference< css::frame::XFrame >& xFrame                ,
-                                                     bool                                   bAllowSuspend         ,
-                                                     bool                                   bCloseAllOtherViewsToo,
-                                                     bool&                                  bControllerSuspended  );
+        bool implts_prepareFrameForClosing(const css::uno::Reference< css::frame::XFrame >& xFrame,
+                                           bool                                   bCloseAllOtherViewsToo,
+                                           bool&                                  bControllerSuspended  );
 
         /** @short  close the member m_xCloseFrame.
 
@@ -251,7 +246,7 @@ class CloseDispatcher : public  ::cppu::WeakImplHelper<
                     has to be closed itself (target=_self) ... sometimes its parent frame
                     has to be closed - BUT(!) it means a parent frame containing a top level
                     window. _top can't be used then for dispatch - because it address TopFrames
-                    not frames containg top level windows. So normally _magic (which btw does not
+                    not frames containing top level windows. So normally _magic (which btw does not
                     exists at the moment .-) ) should be used. So we interpret target=<empty>
                     as _magic !
 

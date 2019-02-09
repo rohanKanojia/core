@@ -1,9 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
-  <requires lib="LibreOffice" version="1.0"/>
+<!-- Generated with glade 3.20.2 -->
+<interface domain="sw">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkAdjustment" id="adjustment1">
+    <property name="lower">1</property>
+    <property name="upper">99</property>
+    <property name="value">1</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkAdjustment" id="adjustment2">
+    <property name="lower">1</property>
+    <property name="upper">99</property>
+    <property name="value">1</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkAdjustment" id="adjustment3">
     <property name="lower">1</property>
     <property name="upper">99</property>
     <property name="value">1</property>
@@ -13,7 +26,10 @@
   <object class="GtkDialog" id="SortDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Sort</property>
+    <property name="title" translatable="yes" context="sortdialog|SortDialog">Sort</property>
+    <property name="modal">True</property>
+    <property name="default_width">0</property>
+    <property name="default_height">0</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
@@ -41,7 +57,7 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="button2">
+              <object class="GtkButton" id="cancel">
                 <property name="label">gtk-cancel</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
@@ -108,7 +124,7 @@
                           <object class="GtkLabel" id="column">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">Column</property>
+                            <property name="label" translatable="yes" context="sortdialog|column">Column</property>
                             <accessibility>
                               <relation type="label-for" target="colsb1"/>
                               <relation type="label-for" target="colsb2"/>
@@ -124,7 +140,7 @@
                           <object class="GtkLabel" id="keytype">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">Key type</property>
+                            <property name="label" translatable="yes" context="sortdialog|keytype">Key type</property>
                             <accessibility>
                               <relation type="label-for" target="typelb1"/>
                               <relation type="label-for" target="typelb2"/>
@@ -140,7 +156,7 @@
                           <object class="GtkLabel" id="order">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">Order</property>
+                            <property name="label" translatable="yes" context="sortdialog|order">Order</property>
                           </object>
                           <packing>
                             <property name="left_attach">3</property>
@@ -154,15 +170,17 @@
                             <property name="row_spacing">6</property>
                             <child>
                               <object class="GtkRadioButton" id="up1">
-                                <property name="label" translatable="yes">Ascending</property>
+                                <property name="label" translatable="yes" context="sortdialog|up1">Ascending</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
-                                <property name="yalign">0.50999999046325684</property>
                                 <property name="active">True</property>
                                 <property name="draw_indicator">True</property>
-                                <property name="group">down1</property>
+                                <accessibility>
+                                  <relation type="member-of" target="key1"/>
+                                </accessibility>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -171,14 +189,18 @@
                             </child>
                             <child>
                               <object class="GtkRadioButton" id="down1">
-                                <property name="label" translatable="yes">Descending</property>
+                                <property name="label" translatable="yes" context="sortdialog|down1">Descending</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="active">True</property>
                                 <property name="draw_indicator">True</property>
                                 <property name="group">up1</property>
+                                <accessibility>
+                                  <relation type="member-of" target="key1"/>
+                                </accessibility>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -198,14 +220,17 @@
                             <property name="row_spacing">6</property>
                             <child>
                               <object class="GtkRadioButton" id="up2">
-                                <property name="label" translatable="yes">Ascending</property>
+                                <property name="label" translatable="yes" context="sortdialog|up2">Ascending</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="active">True</property>
                                 <property name="draw_indicator">True</property>
-                                <property name="group">down2</property>
+                                <accessibility>
+                                  <relation type="member-of" target="key2"/>
+                                </accessibility>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -214,14 +239,18 @@
                             </child>
                             <child>
                               <object class="GtkRadioButton" id="down2">
-                                <property name="label" translatable="yes">Descending</property>
+                                <property name="label" translatable="yes" context="sortdialog|down2">Descending</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="active">True</property>
                                 <property name="draw_indicator">True</property>
                                 <property name="group">up2</property>
+                                <accessibility>
+                                  <relation type="member-of" target="key2"/>
+                                </accessibility>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -241,14 +270,17 @@
                             <property name="row_spacing">6</property>
                             <child>
                               <object class="GtkRadioButton" id="up3">
-                                <property name="label" translatable="yes">Ascending</property>
+                                <property name="label" translatable="yes" context="sortdialog|up3">Ascending</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="active">True</property>
                                 <property name="draw_indicator">True</property>
-                                <property name="group">down3</property>
+                                <accessibility>
+                                  <relation type="member-of" target="key3"/>
+                                </accessibility>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -257,14 +289,18 @@
                             </child>
                             <child>
                               <object class="GtkRadioButton" id="down3">
-                                <property name="label" translatable="yes">Descending</property>
+                                <property name="label" translatable="yes" context="sortdialog|down3">Descending</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="active">True</property>
                                 <property name="draw_indicator">True</property>
                                 <property name="group">up3</property>
+                                <accessibility>
+                                  <relation type="member-of" target="key3"/>
+                                </accessibility>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -279,10 +315,11 @@
                         </child>
                         <child>
                           <object class="GtkCheckButton" id="key1">
-                            <property name="label" translatable="yes">Key 1</property>
+                            <property name="label" translatable="yes" context="sortdialog|key1">Key 1</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
+                            <property name="use_underline">True</property>
                             <property name="valign">center</property>
                             <property name="xalign">0</property>
                             <property name="active">True</property>
@@ -295,10 +332,11 @@
                         </child>
                         <child>
                           <object class="GtkCheckButton" id="key2">
-                            <property name="label" translatable="yes">Key 2</property>
+                            <property name="label" translatable="yes" context="sortdialog|key2">Key 2</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
+                            <property name="use_underline">True</property>
                             <property name="valign">center</property>
                             <property name="xalign">0</property>
                             <property name="draw_indicator">True</property>
@@ -310,10 +348,11 @@
                         </child>
                         <child>
                           <object class="GtkCheckButton" id="key3">
-                            <property name="label" translatable="yes">Key 3</property>
+                            <property name="label" translatable="yes" context="sortdialog|key3">Key 3</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
+                            <property name="use_underline">True</property>
                             <property name="valign">center</property>
                             <property name="xalign">0.0099999997764825821</property>
                             <property name="draw_indicator">True</property>
@@ -328,10 +367,11 @@
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="valign">center</property>
-                            <property name="invisible_char">•</property>
+                            <property name="activates_default">True</property>
                             <property name="adjustment">adjustment1</property>
                             <accessibility>
                               <relation type="labelled-by" target="column"/>
+                              <relation type="member-of" target="key1"/>
                             </accessibility>
                           </object>
                           <packing>
@@ -344,10 +384,11 @@
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="valign">center</property>
-                            <property name="invisible_char">•</property>
-                            <property name="adjustment">adjustment1</property>
+                            <property name="activates_default">True</property>
+                            <property name="adjustment">adjustment2</property>
                             <accessibility>
                               <relation type="labelled-by" target="column"/>
+                              <relation type="member-of" target="key2"/>
                             </accessibility>
                           </object>
                           <packing>
@@ -360,10 +401,11 @@
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="valign">center</property>
-                            <property name="invisible_char">•</property>
-                            <property name="adjustment">adjustment1</property>
+                            <property name="activates_default">True</property>
+                            <property name="adjustment">adjustment3</property>
                             <accessibility>
                               <relation type="labelled-by" target="column"/>
+                              <relation type="member-of" target="key3"/>
                             </accessibility>
                           </object>
                           <packing>
@@ -372,15 +414,20 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkComboBox" id="typelb1">
+                          <object class="GtkComboBoxText" id="typelb1">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="valign">center</property>
                             <property name="hexpand">True</property>
-                            <property name="entry_text_column">0</property>
                             <accessibility>
                               <relation type="labelled-by" target="keytype"/>
+                              <relation type="member-of" target="key1"/>
                             </accessibility>
+                            <child internal-child="accessible">
+                              <object class="AtkObject" id="typelb1-atkobject">
+                                <property name="AtkObject::accessible-name" translatable="yes" context="sortdialog|typelb1-atkobject">Key type</property>
+                              </object>
+                            </child>
                           </object>
                           <packing>
                             <property name="left_attach">2</property>
@@ -388,16 +435,21 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkComboBox" id="typelb2">
+                          <object class="GtkComboBoxText" id="typelb2">
                             <property name="width_request">130</property>
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="valign">center</property>
                             <property name="hexpand">True</property>
-                            <property name="button_sensitivity">off</property>
                             <accessibility>
                               <relation type="labelled-by" target="keytype"/>
+                              <relation type="member-of" target="key2"/>
                             </accessibility>
+                            <child internal-child="accessible">
+                              <object class="AtkObject" id="typelb2-atkobject">
+                                <property name="AtkObject::accessible-name" translatable="yes" context="sortdialog|typelb2-atkobject">Key type</property>
+                              </object>
+                            </child>
                           </object>
                           <packing>
                             <property name="left_attach">2</property>
@@ -405,14 +457,20 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkComboBox" id="typelb3">
+                          <object class="GtkComboBoxText" id="typelb3">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="valign">center</property>
                             <property name="hexpand">True</property>
                             <accessibility>
                               <relation type="labelled-by" target="keytype"/>
+                              <relation type="member-of" target="key3"/>
                             </accessibility>
+                            <child internal-child="accessible">
+                              <object class="AtkObject" id="typelb3-atkobject">
+                                <property name="AtkObject::accessible-name" translatable="yes" context="sortdialog|typelb3-atkobject">Key type</property>
+                              </object>
+                            </child>
                           </object>
                           <packing>
                             <property name="left_attach">2</property>
@@ -430,8 +488,8 @@
                   <object class="GtkLabel" id="1">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="label" translatable="yes" context="sortdialog|1">Sort Criteria</property>
                     <property name="xalign">0.56000000238418579</property>
-                    <property name="label" translatable="yes">Sort Criteria</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -470,14 +528,14 @@
                             <property name="row_spacing">10</property>
                             <child>
                               <object class="GtkRadioButton" id="columns">
-                                <property name="label" translatable="yes">Columns</property>
+                                <property name="label" translatable="yes" context="sortdialog|columns">Columns</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="active">True</property>
                                 <property name="draw_indicator">True</property>
-                                <property name="group">rows</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -486,12 +544,12 @@
                             </child>
                             <child>
                               <object class="GtkRadioButton" id="rows">
-                                <property name="label" translatable="yes">Rows</property>
+                                <property name="label" translatable="yes" context="sortdialog|rows">Rows</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
-                                <property name="active">True</property>
                                 <property name="draw_indicator">True</property>
                                 <property name="group">columns</property>
                               </object>
@@ -508,7 +566,7 @@
                       <object class="GtkLabel" id="label3">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Direction</property>
+                        <property name="label" translatable="yes" context="sortdialog|label3">Direction</property>
                         <attributes>
                           <attribute name="weight" value="bold"/>
                         </attributes>
@@ -541,14 +599,14 @@
                             <property name="row_spacing">10</property>
                             <child>
                               <object class="GtkRadioButton" id="tabs">
-                                <property name="label" translatable="yes">Tabs</property>
+                                <property name="label" translatable="yes" context="sortdialog|tabs">Tabs</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="active">True</property>
                                 <property name="draw_indicator">True</property>
-                                <property name="group">character</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -558,12 +616,12 @@
                             </child>
                             <child>
                               <object class="GtkRadioButton" id="character">
-                                <property name="label" translatable="yes">Character </property>
+                                <property name="label" translatable="yes" context="sortdialog|character">Character </property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
-                                <property name="active">True</property>
                                 <property name="draw_indicator">True</property>
                                 <property name="group">tabs</property>
                                 <accessibility>
@@ -586,8 +644,10 @@
                                   <object class="GtkEntry" id="separator">
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
-                                    <property name="invisible_char">•</property>
+                                    <property name="max_length">1</property>
+                                    <property name="activates_default">True</property>
                                     <property name="width_chars">1</property>
+                                    <property name="max_width_chars">1</property>
                                     <accessibility>
                                       <relation type="labelled-by" target="character"/>
                                     </accessibility>
@@ -599,12 +659,13 @@
                                 </child>
                                 <child>
                                   <object class="GtkButton" id="delimpb">
-                                    <property name="label" translatable="yes">Select...</property>
+                                    <property name="label" translatable="yes" context="sortdialog|delimpb">Select...</property>
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">True</property>
                                     <accessibility>
                                       <relation type="labelled-by" target="character"/>
+                                      <relation type="member-of" target="character"/>
                                     </accessibility>
                                   </object>
                                   <packing>
@@ -626,7 +687,7 @@
                       <object class="GtkLabel" id="label4">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Separator</property>
+                        <property name="label" translatable="yes" context="sortdialog|label4">Separator</property>
                         <attributes>
                           <attribute name="weight" value="bold"/>
                         </attributes>
@@ -665,9 +726,15 @@
                         <property name="top_padding">6</property>
                         <property name="left_padding">12</property>
                         <child>
-                          <object class="svxcorelo-SvxLanguageBox" id="langlb">
+                          <object class="GtkComboBoxText" id="langlb">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
+                            <property name="has_entry">True</property>
+                            <child internal-child="entry">
+                              <object class="GtkEntry">
+                                <property name="can_focus">True</property>
+                              </object>
+                            </child>
                           </object>
                         </child>
                       </object>
@@ -676,7 +743,7 @@
                       <object class="GtkLabel" id="label1">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Language</property>
+                        <property name="label" translatable="yes" context="sortdialog|label1">Language</property>
                         <attributes>
                           <attribute name="weight" value="bold"/>
                         </attributes>
@@ -702,9 +769,10 @@
                         <property name="left_padding">12</property>
                         <child>
                           <object class="GtkCheckButton" id="matchcase">
-                            <property name="label" translatable="yes">Match case</property>
+                            <property name="label" translatable="yes" context="sortdialog|matchcase">Match case</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
+                            <property name="use_underline">True</property>
                             <property name="receives_default">False</property>
                             <property name="xalign">0</property>
                             <property name="draw_indicator">True</property>
@@ -716,7 +784,7 @@
                       <object class="GtkLabel" id="label2">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Setting</property>
+                        <property name="label" translatable="yes" context="sortdialog|label2">Setting</property>
                         <attributes>
                           <attribute name="weight" value="bold"/>
                         </attributes>
@@ -745,9 +813,12 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">button2</action-widget>
-      <action-widget response="0">help</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
+    <child>
+      <placeholder/>
+    </child>
   </object>
 </interface>

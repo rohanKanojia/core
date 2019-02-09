@@ -19,9 +19,8 @@
 
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 
-#include "DrawViewShell.hxx"
-#include <comphelper/lok.hxx>
-#include <vcl/msgbox.hxx>
+#include <DrawViewShell.hxx>
+#include <vcl/weld.hxx>
 #include <svl/urlbmk.hxx>
 #include <svx/svdpagv.hxx>
 #include <svx/svdundo.hxx>
@@ -40,26 +39,25 @@
 #include <editeng/editview.hxx>
 #include <vcl/cursor.hxx>
 
-#include "app.hrc"
-#include "glob.hrc"
-#include "strings.hrc"
-#include "res_bmp.hrc"
-#include "DrawDocShell.hxx"
-#include "drawdoc.hxx"
-#include "Window.hxx"
-#include "fupoor.hxx"
-#include "fusnapln.hxx"
-#include "sdmod.hxx"
-#include "Ruler.hxx"
-#include "sdresid.hxx"
-#include "GraphicViewShell.hxx"
-#include "sdpage.hxx"
-#include "slideshow.hxx"
-#include "anminfo.hxx"
-#include "sdpopup.hxx"
-#include "drawview.hxx"
+#include <app.hrc>
+#include <strings.hrc>
+
+#include <DrawDocShell.hxx>
+#include <drawdoc.hxx>
+#include <Window.hxx>
+#include <fupoor.hxx>
+#include <fusnapln.hxx>
+#include <sdmod.hxx>
+#include <Ruler.hxx>
+#include <sdresid.hxx>
+#include <GraphicViewShell.hxx>
+#include <sdpage.hxx>
+#include <slideshow.hxx>
+#include <anminfo.hxx>
+#include <sdpopup.hxx>
+#include <drawview.hxx>
 #include <svx/bmpmask.hxx>
-#include "LayerTabBar.hxx"
+#include <LayerTabBar.hxx>
 
 #include <svx/svditer.hxx>
 
@@ -75,7 +73,7 @@ using namespace ::com::sun::star::drawing;
 
 void DrawViewShell::DeleteActualPage()
 {
-    sal_uInt16          nPage = maTabControl->GetCurPageId() - 1;
+    sal_uInt16          nPage = maTabControl->GetCurPagePos();
 
     mpDrawView->SdrEndTextEdit();
 
@@ -101,15 +99,25 @@ void DrawViewShell::DeleteActualLayer()
     }
 
     SdrLayerAdmin& rAdmin = GetDoc()->GetLayerAdmin();
-    const OUString& rName = GetLayerTabControl()->GetPageText(GetLayerTabControl()->GetCurPageId());
-    OUString aString(SD_RESSTR(STR_ASK_DELETE_LAYER));
+    sal_uInt16 nId = GetLayerTabControl()->GetCurPageId();
+    const OUString& rName = GetLayerTabControl()->GetLayerName(nId);
+    if(LayerTabBar::IsRealNameOfStandardLayer(rName))
+    {
+        assert(false && "Standard layer may not be deleted.");
+        return;
+    }
+    const OUString& rDisplayName(GetLayerTabControl()->GetPageText(nId));
+    OUString aString(SdResId(STR_ASK_DELETE_LAYER));
 
     // replace placeholder
-    aString = aString.replaceFirst("$", rName);
+    aString = aString.replaceFirst("$", rDisplayName);
 
-    if (ScopedVclPtr<QueryBox>::Create(GetActiveWindow(), WB_YES_NO, aString)->Execute() == RET_YES)
+    std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                   VclMessageType::Question, VclButtonsType::YesNo,
+                                                   aString));
+    if (xQueryBox->run() == RET_YES)
     {
-        const SdrLayer* pLayer = rAdmin.GetLayer(rName, false);
+        const SdrLayer* pLayer = rAdmin.GetLayer(rName);
         mpDrawView->DeleteLayer( pLayer->GetName() );
 
         /* in order to redraw TabBar and Window; should be initiated later on by
@@ -147,23 +155,23 @@ bool DrawViewShell::KeyInput (const KeyEvent& rKEvt, ::sd::Window* pWin)
                 GetView()->SdrEndTextEdit();
 
                 // look for a new candidate, a successor of pOldObj
-                SdrObjListIter aIter(*pActualPage, IM_DEEPNOGROUPS);
+                SdrObjListIter aIter(pActualPage, SdrIterMode::DeepNoGroups);
                 bool bDidVisitOldObject(false);
 
                 while(aIter.IsMore() && !pCandidate)
                 {
                     SdrObject* pObj = aIter.Next();
 
-                    if(pObj && dynamic_cast< const SdrTextObj *>( pObj ) !=  nullptr)
+                    if(auto pSdrTextObj = dynamic_cast<SdrTextObj *>( pObj ))
                     {
-                        sal_uInt32 nInv(pObj->GetObjInventor());
-                        sal_uInt16 nKnd(pObj->GetObjIdentifier());
+                        SdrInventor nInv(pObj->GetObjInventor());
+                        sal_uInt16  nKnd(pObj->GetObjIdentifier());
 
-                        if(SdrInventor == nInv &&
+                        if(SdrInventor::Default == nInv &&
                             (OBJ_TITLETEXT == nKnd || OBJ_OUTLINETEXT == nKnd || OBJ_TEXT == nKnd)
                             && bDidVisitOldObject)
                         {
-                            pCandidate = static_cast<SdrTextObj*>(pObj);
+                            pCandidate = pSdrTextObj;
                         }
 
                         if(pObj == pOldObj)
@@ -230,11 +238,11 @@ void DrawViewShell::StartRulerDrag (
         SdrHelpLineKind eKind;
 
         if ( rMEvt.IsMod1() )
-            eKind = SDRHELPLINE_POINT;
+            eKind = SdrHelpLineKind::Point;
         else if ( rRuler.IsHorizontal() )
-            eKind = SDRHELPLINE_HORIZONTAL;
+            eKind = SdrHelpLineKind::Horizontal;
         else
-            eKind = SDRHELPLINE_VERTICAL;
+            eKind = SdrHelpLineKind::Vertical;
 
         mpDrawView->BegDragHelpLine(aWPos, eKind);
         mbIsRulerDrag = true;
@@ -245,8 +253,7 @@ void DrawViewShell::StartRulerDrag (
 //else the corresponding entry is set false .
 void DrawViewShell::FreshNavigatrEntry()
 {
-    sal_uInt16 nId = SID_NAVIGATOR;
-    SfxChildWindow* pWindow = GetViewFrame()->GetChildWindow( nId );
+    SfxChildWindow* pWindow = GetViewFrame()->GetChildWindow( SID_NAVIGATOR );
     if( pWindow )
     {
         SdNavigatorWin* pNavWin = static_cast<SdNavigatorWin*>( pWindow->GetContextWindow( SD_MOD() ) );
@@ -257,8 +264,7 @@ void DrawViewShell::FreshNavigatrEntry()
 
 void DrawViewShell::FreshNavigatrTree()
 {
-    sal_uInt16 nId = SID_NAVIGATOR;
-    SfxChildWindow* pWindow = GetViewFrame()->GetChildWindow( nId );
+    SfxChildWindow* pWindow = GetViewFrame()->GetChildWindow( SID_NAVIGATOR );
     if( pWindow )
     {
         SdNavigatorWin* pNavWin = static_cast<SdNavigatorWin*>( pWindow->GetContextWindow( SD_MOD() ) );
@@ -270,6 +276,9 @@ void DrawViewShell::FreshNavigatrTree()
 void DrawViewShell::MouseButtonDown(const MouseEvent& rMEvt,
     ::sd::Window* pWin)
 {
+    mbMouseButtonDown = true;
+    mbMouseSelecting = false;
+
     // We have to check if a context menu is shown and we have an UI
     // active inplace client. In that case we have to ignore the mouse
     // button down event. Otherwise we would crash (context menu has been
@@ -301,11 +310,14 @@ void DrawViewShell::MouseButtonDown(const MouseEvent& rMEvt,
 
 void DrawViewShell::MouseMove(const MouseEvent& rMEvt, ::sd::Window* pWin)
 {
+    if ( IsMouseButtonDown() )
+        mbMouseSelecting = true;
+
     if ( !IsInputLocked() )
     {
         if ( mpDrawView->IsAction() )
         {
-            Rectangle aOutputArea(Point(0,0), GetActiveWindow()->GetOutputSizePixel());
+            ::tools::Rectangle aOutputArea(Point(0,0), GetActiveWindow()->GetOutputSizePixel());
 
             if ( !aOutputArea.IsInside(rMEvt.GetPosPixel()) )
             {
@@ -313,7 +325,7 @@ void DrawViewShell::MouseMove(const MouseEvent& rMEvt, ::sd::Window* pWin)
 
                 if (mpContentWindow.get() != nullptr)
                 {
-                    aOutputArea = Rectangle(Point(0,0),
+                    aOutputArea = ::tools::Rectangle(Point(0,0),
                         mpContentWindow->GetOutputSizePixel());
 
                     Point aPos = mpContentWindow->GetPointerPosPixel();
@@ -342,14 +354,8 @@ void DrawViewShell::MouseMove(const MouseEvent& rMEvt, ::sd::Window* pWin)
         // is needed it is necessary to set it here.
         if (GetDoc())
         {
-            svtools::ColorConfig aColorConfig;
-            Color aFillColor;
-
-            aFillColor = Color( aColorConfig.GetColorValue( svtools::APPBACKGROUND ).nColor );
-            if (comphelper::LibreOfficeKit::isActive())
-                aFillColor = COL_TRANSPARENT;
-
-            mpDrawView->SetApplicationBackgroundColor(aFillColor);
+            ConfigureAppBackgroundColor();
+            mpDrawView->SetApplicationBackgroundColor( mnAppBackgroundColor );
         }
 
         ViewShell::MouseMove(rMEvt, pWin);
@@ -357,7 +363,7 @@ void DrawViewShell::MouseMove(const MouseEvent& rMEvt, ::sd::Window* pWin)
         if( !mbMousePosFreezed )
             maMousePos = rMEvt.GetPosPixel();
 
-        Rectangle aRect;
+        ::tools::Rectangle aRect;
 
         if ( mbIsRulerDrag )
         {
@@ -372,7 +378,7 @@ void DrawViewShell::MouseMove(const MouseEvent& rMEvt, ::sd::Window* pWin)
         }
         else
         {
-            aRect = Rectangle(maMousePos, maMousePos);
+            aRect = ::tools::Rectangle(maMousePos, maMousePos);
         }
 
         ShowMousePosInfo(aRect, pWin);
@@ -407,22 +413,24 @@ void DrawViewShell::MouseMove(const MouseEvent& rMEvt, ::sd::Window* pWin)
                 }
             }
 
-            pBmpMask->SetColor( Color( (sal_uInt8) ( nRed / fDiv + .5 ),
-                                 (sal_uInt8) ( nGreen / fDiv + .5 ),
-                                 (sal_uInt8) ( nBlue / fDiv + .5 ) ) );
+            pBmpMask->SetColor( Color( static_cast<sal_uInt8>( nRed / fDiv + .5 ),
+                                 static_cast<sal_uInt8>( nGreen / fDiv + .5 ),
+                                 static_cast<sal_uInt8>( nBlue / fDiv + .5 ) ) );
         }
     }
 }
 
 void DrawViewShell::MouseButtonUp(const MouseEvent& rMEvt, ::sd::Window* pWin)
 {
+    mbMouseButtonDown = false;
+
     if ( !IsInputLocked() )
     {
         bool bIsSetPageOrg = mpDrawView->IsSetPageOrg();
 
         if (mbIsRulerDrag)
         {
-            Rectangle aOutputArea(Point(0,0), GetActiveWindow()->GetOutputSizePixel());
+            ::tools::Rectangle aOutputArea(Point(0,0), GetActiveWindow()->GetOutputSizePixel());
 
             if (aOutputArea.IsInside(rMEvt.GetPosPixel()))
             {
@@ -435,7 +443,7 @@ void DrawViewShell::MouseButtonUp(const MouseEvent& rMEvt, ::sd::Window* pWin)
             {
                 mpDrawView->BrkAction();
                 SdPage* pPage = static_cast<SdPage*>( mpDrawView->GetSdrPageView()->GetPage() );
-                Point aOrg(pPage->GetLftBorder(), pPage->GetUppBorder());
+                Point aOrg(pPage->GetLeftBorder(), pPage->GetUpperBorder());
                 mpDrawView->GetSdrPageView()->SetPageOrigin(aOrg);
                 GetViewFrame()->GetBindings().Invalidate(SID_RULER_NULL_OFFSET);
             }
@@ -453,6 +461,7 @@ void DrawViewShell::MouseButtonUp(const MouseEvent& rMEvt, ::sd::Window* pWin)
         //else the corresponding entry is set false .
         FreshNavigatrTree();
     }
+    mbMouseSelecting = false;
 }
 
 void DrawViewShell::Command(const CommandEvent& rCEvt, ::sd::Window* pWin)
@@ -501,7 +510,7 @@ void DrawViewShell::Command(const CommandEvent& rCEvt, ::sd::Window* pWin)
                         ( aDataHelper.HasFormat( SotClipboardFormatId::UNIFORMRESOURCELOCATOR ) &&
                           aDataHelper.GetINetBookmark( SotClipboardFormatId::UNIFORMRESOURCELOCATOR, aINetBookmark ) ) )
                     {
-                        InsertURLField( aINetBookmark.GetURL(), aINetBookmark.GetDescription(), "", nullptr );
+                        InsertURLField( aINetBookmark.GetURL(), aINetBookmark.GetDescription(), "" );
                     }
                 }
             }
@@ -514,8 +523,8 @@ void DrawViewShell::Command(const CommandEvent& rCEvt, ::sd::Window* pWin)
             // is there a snap object under the cursor?
             SdrPageView* pPV;
             Point   aMPos = pWin->PixelToLogic( maMousePos );
-            sal_uInt16  nHitLog = (sal_uInt16) GetActiveWindow()->PixelToLogic(
-                Size(FuPoor::HITPIX, 0 ) ).Width();
+            sal_uInt16  nHitLog = static_cast<sal_uInt16>(GetActiveWindow()->PixelToLogic(
+                Size(FuPoor::HITPIX, 0 ) ).Width());
             sal_uInt16  nHelpLine;
             // for glue points
             SdrObject*  pObj = nullptr;
@@ -556,15 +565,15 @@ void DrawViewShell::Command(const CommandEvent& rCEvt, ::sd::Window* pWin)
                 //fdo#44998 if the outliner has captured the mouse events release the lock
                 //so the SdFieldPopup can get them
                 pOLV->ReleaseMouse();
-                SdFieldPopup aFieldPopup( pFldItem->GetField(), eLanguage );
+                ScopedVclPtrInstance<SdFieldPopup> aFieldPopup( pFldItem->GetField(), eLanguage );
 
                 if ( rCEvt.IsMouseEvent() )
                     aMPos = rCEvt.GetMousePosPixel();
                 else
                     aMPos = Point( 20, 20 );
-                aFieldPopup.Execute( pWin, aMPos );
+                aFieldPopup->Execute( pWin, aMPos );
 
-                std::unique_ptr<SvxFieldData> pField(aFieldPopup.GetField());
+                std::unique_ptr<SvxFieldData> pField(aFieldPopup->GetField());
                 if( pField )
                 {
                     SvxFieldItem aFieldItem( *pField, EE_FEATURE_FIELD );
@@ -625,11 +634,12 @@ void DrawViewShell::Command(const CommandEvent& rCEvt, ::sd::Window* pWin)
                                     GetActiveWindow()->ReleaseMouse();
                                     LockInput();
                                     pOutlinerView->ExecuteSpellPopup(aPos, &aLink);
+                                    pOutlinerView->GetEditView().Invalidate();
                                     UnlockInput();
                                 }
                                 else
                                 {
-                                    if( (pObj->GetObjInventor() == SdrInventor) && (pObj->GetObjIdentifier() == OBJ_TABLE) )
+                                    if( (pObj->GetObjInventor() == SdrInventor::Default) && (pObj->GetObjIdentifier() == OBJ_TABLE) )
                                     {
                                         aPopupId = "tabletext";
                                     }
@@ -642,17 +652,14 @@ void DrawViewShell::Command(const CommandEvent& rCEvt, ::sd::Window* pWin)
                         }
                         else
                         {
-                            sal_uInt32 nInv = pObj->GetObjInventor();
-                            sal_uInt16 nId = pObj->GetObjIdentifier();
+                            SdrInventor nInv = pObj->GetObjInventor();
+                            sal_uInt16  nId  = pObj->GetObjIdentifier();
 
-                            if (nInv == SdrInventor)
+                            if (nInv == SdrInventor::Default)
                             {
                                 switch ( nId )
                                 {
                                     case OBJ_OUTLINETEXT:
-                                        aPopupId = "outlinetext";
-                                        break;
-
                                     case OBJ_CAPTION:
                                     case OBJ_TITLETEXT:
                                     case OBJ_TEXT:
@@ -708,9 +715,9 @@ void DrawViewShell::Command(const CommandEvent& rCEvt, ::sd::Window* pWin)
                                         break;
                                 }
                             }
-                            else if( nInv == E3dInventor )
+                            else if( nInv == SdrInventor::E3d )
                             {
-                                if( nId == E3D_POLYSCENE_ID || nId == E3D_SCENE_ID )
+                                if( nId == E3D_SCENE_ID )
                                 {
                                     if( !mpDrawView->IsGroupEntered() )
                                         aPopupId = "3dscene";
@@ -720,7 +727,7 @@ void DrawViewShell::Command(const CommandEvent& rCEvt, ::sd::Window* pWin)
                                 else
                                     aPopupId = "3dobject";
                             }
-                            else if( nInv == FmFormInventor )
+                            else if( nInv == SdrInventor::FmForm )
                             {
                                 aPopupId = "form";
                             }
@@ -759,19 +766,19 @@ void DrawViewShell::Command(const CommandEvent& rCEvt, ::sd::Window* pWin)
                     //middle of the bounding rect if something is marked
                     if( mpDrawView->AreObjectsMarked() && mpDrawView->GetMarkedObjectList().GetMarkCount() >= 1 )
                     {
-                        Rectangle aMarkRect;
+                        ::tools::Rectangle aMarkRect;
                         mpDrawView->GetMarkedObjectList().TakeBoundRect(nullptr,aMarkRect);
                         aMenuPos = GetActiveWindow()->LogicToPixel( aMarkRect.Center() );
 
                         //move the point into the visible window area
                         if( aMenuPos.X() < 0 )
-                            aMenuPos.X() = 0;
+                            aMenuPos.setX( 0 );
                         if( aMenuPos.Y() < 0 )
-                            aMenuPos.Y() = 0;
+                            aMenuPos.setY( 0 );
                         if( aMenuPos.X() > GetActiveWindow()->GetSizePixel().Width() )
-                            aMenuPos.X() = GetActiveWindow()->GetSizePixel().Width();
+                            aMenuPos.setX( GetActiveWindow()->GetSizePixel().Width() );
                         if( aMenuPos.Y() > GetActiveWindow()->GetSizePixel().Height() )
-                            aMenuPos.Y() = GetActiveWindow()->GetSizePixel().Height();
+                            aMenuPos.setY( GetActiveWindow()->GetSizePixel().Height() );
                     }
 
                     //open context menu at that point
@@ -787,15 +794,15 @@ void DrawViewShell::Command(const CommandEvent& rCEvt, ::sd::Window* pWin)
     }
 }
 
-void DrawViewShell::ShowMousePosInfo(const Rectangle& rRect,
-    ::sd::Window* pWin)
+void DrawViewShell::ShowMousePosInfo(const ::tools::Rectangle& rRect,
+    ::sd::Window const * pWin)
 {
     if (mbHasRulers && pWin )
     {
         RulerLine   pHLines[2];
         RulerLine   pVLines[2];
-        long        nHOffs = 0L;
-        long        nVOffs = 0L;
+        long        nHOffs = 0;
+        long        nVOffs = 0;
         sal_uInt16      nCnt;
 
         if (mpHorizontalRuler.get() != nullptr)
@@ -819,15 +826,11 @@ void DrawViewShell::ShowMousePosInfo(const Rectangle& rRect,
         nCnt = 1;
         pHLines[0].nPos = rRect.Left() - nHOffs;
         pVLines[0].nPos = rRect.Top()  - nVOffs;
-        pHLines[0].nStyle = 0;
-        pVLines[0].nStyle = 0;
 
         if ( rRect.Right() != rRect.Left() || rRect.Bottom() != rRect.Top() )
         {
             pHLines[1].nPos = rRect.Right()  - nHOffs;
             pVLines[1].nPos = rRect.Bottom() - nVOffs;
-            pHLines[1].nStyle = 0;
-            pVLines[1].nStyle = 0;
             nCnt++;
         }
 
@@ -841,10 +844,11 @@ void DrawViewShell::ShowMousePosInfo(const Rectangle& rRect,
     OSL_ASSERT (GetViewShell()!=nullptr);
     if ( !GetViewShell()->GetUIActiveClient() )
     {
-        SfxItemSet aSet(GetPool(), SID_CONTEXT, SID_CONTEXT,
-                                   SID_ATTR_POSITION, SID_ATTR_POSITION,
-                                   SID_ATTR_SIZE, SID_ATTR_SIZE,
-                                   0);
+        SfxItemSet aSet(
+            GetPool(),
+            svl::Items<
+                SID_CONTEXT, SID_CONTEXT,
+                SID_ATTR_POSITION, SID_ATTR_SIZE>{});
 
         GetStatusBarState(aSet);
 
@@ -876,34 +880,34 @@ void DrawViewShell::ShowSnapLineContextMenu (
     const Point& rMouseLocation)
 {
     const SdrHelpLine& rHelpLine (rPageView.GetHelpLines()[nSnapLineIndex]);
-    std::unique_ptr<PopupMenu> pMenu (new PopupMenu ());
+    ScopedVclPtrInstance<PopupMenu> pMenu;
 
-    if (rHelpLine.GetKind() == SDRHELPLINE_POINT)
+    if (rHelpLine.GetKind() == SdrHelpLineKind::Point)
     {
         pMenu->InsertItem(
             SID_SET_SNAPITEM,
-            SD_RESSTR(STR_POPUP_EDIT_SNAPPOINT));
+            SdResId(STR_POPUP_EDIT_SNAPPOINT));
         pMenu->InsertSeparator();
         pMenu->InsertItem(
             SID_DELETE_SNAPITEM,
-            SD_RESSTR(STR_POPUP_DELETE_SNAPPOINT));
+            SdResId(STR_POPUP_DELETE_SNAPPOINT));
     }
     else
     {
         pMenu->InsertItem(
             SID_SET_SNAPITEM,
-            SD_RESSTR(STR_POPUP_EDIT_SNAPLINE));
+            SdResId(STR_POPUP_EDIT_SNAPLINE));
         pMenu->InsertSeparator();
         pMenu->InsertItem(
             SID_DELETE_SNAPITEM,
-            SD_RESSTR(STR_POPUP_DELETE_SNAPLINE));
+            SdResId(STR_POPUP_DELETE_SNAPLINE));
     }
 
     pMenu->RemoveDisabledEntries(false);
 
     const sal_uInt16 nResult = pMenu->Execute(
         GetActiveWindow(),
-        Rectangle(rMouseLocation, Size(10,10)),
+        ::tools::Rectangle(rMouseLocation, Size(10,10)),
         PopupMenuFlags::ExecuteDown);
     switch (nResult)
     {

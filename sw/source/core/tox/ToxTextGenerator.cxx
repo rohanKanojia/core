@@ -19,27 +19,31 @@
 
 #include <ToxTextGenerator.hxx>
 
-#include "chpfld.hxx"
-#include "cntfrm.hxx"
-#include "fchrfmt.hxx"
-#include "doc.hxx"
+#include <chpfld.hxx>
+#include <cntfrm.hxx>
+#include <txtfrm.hxx>
+#include <rootfrm.hxx>
+#include <ndindex.hxx>
+#include <fchrfmt.hxx>
+#include <doc.hxx>
 #include <IDocumentLayoutAccess.hxx>
 #include <IDocumentStylePoolAccess.hxx>
-#include "fmtinfmt.hxx"
-#include "ndtxt.hxx"
-#include "pagedesc.hxx"
-#include "tox.hxx"
-#include "txmsrt.hxx"
-#include "fmtautofmt.hxx"
-#include "DocumentSettingManager.hxx"
-#include "SwStyleNameMapper.hxx"
-#include "swatrset.hxx"
-#include "ToxWhitespaceStripper.hxx"
-#include "ToxLinkProcessor.hxx"
-#include "ToxTabStopTokenHandler.hxx"
-#include "txatbase.hxx"
+#include <fmtinfmt.hxx>
+#include <ndtxt.hxx>
+#include <pagedesc.hxx>
+#include <tox.hxx>
+#include <txmsrt.hxx>
+#include <fmtautofmt.hxx>
+#include <DocumentSettingManager.hxx>
+#include <SwStyleNameMapper.hxx>
+#include <swatrset.hxx>
+#include <ToxWhitespaceStripper.hxx>
+#include <ToxLinkProcessor.hxx>
+#include <ToxTabStopTokenHandler.hxx>
+#include <txatbase.hxx>
+#include <modeltoviewhelper.hxx>
 
-#include "svl/itemiter.hxx"
+#include <svl/itemiter.hxx>
 
 #include <cassert>
 #include <memory>
@@ -62,7 +66,9 @@ bool sortTabHasNoToxSourcesOrFirstToxSourceHasNoNode(const SwTOXSortTabBase& sor
 namespace sw {
 
 OUString
-ToxTextGenerator::GetNumStringOfFirstNode( const SwTOXSortTabBase& rBase, bool bUsePrefix, sal_uInt8 nLevel )
+ToxTextGenerator::GetNumStringOfFirstNode(const SwTOXSortTabBase& rBase,
+        bool bUsePrefix, sal_uInt8 nLevel,
+        SwRootFrame const*const pLayout)
 {
     if (sortTabHasNoToxSourcesOrFirstToxSourceHasNoNode(rBase)) {
         return OUString();
@@ -77,6 +83,10 @@ ToxTextGenerator::GetNumStringOfFirstNode( const SwTOXSortTabBase& rBase, bool b
     if (!pNd) {
         return sRet;
     }
+    if (pLayout && pLayout->IsHideRedlines())
+    {   // note: pNd could be any node, since it could be Sequence etc.
+        pNd = sw::GetParaPropsNode(*pLayout, SwNodeIndex(*pNd));
+    }
 
     const SwNumRule* pRule = pNd->GetNumRule();
     if (!pRule) {
@@ -84,7 +94,11 @@ ToxTextGenerator::GetNumStringOfFirstNode( const SwTOXSortTabBase& rBase, bool b
     }
 
     if (pNd->GetActualListLevel() < MAXLEVEL) {
-        sRet = pNd->GetNumString(bUsePrefix, nLevel);
+        sRet = pNd->GetNumString(bUsePrefix, nLevel, pLayout);
+    }
+
+    if (!sRet.isEmpty()) {
+        sRet += " ";// Makes sure spacing is done only when there is outline numbering
     }
 
     return sRet;
@@ -92,18 +106,18 @@ ToxTextGenerator::GetNumStringOfFirstNode( const SwTOXSortTabBase& rBase, bool b
 
 
 ToxTextGenerator::ToxTextGenerator(const SwForm& toxForm,
-        std::shared_ptr<ToxTabStopTokenHandler> tabStopHandler)
+        std::shared_ptr<ToxTabStopTokenHandler> const & tabStopHandler)
 : mToxForm(toxForm),
   mLinkProcessor(new ToxLinkProcessor()),
   mTabStopTokenHandler(tabStopHandler)
-{;}
+{}
 
 ToxTextGenerator::~ToxTextGenerator()
-{;}
+{}
 
 OUString
-ToxTextGenerator::HandleChapterToken(const SwTOXSortTabBase& rBase, const SwFormToken& aToken,
-        SwDoc* pDoc) const
+ToxTextGenerator::HandleChapterToken(const SwTOXSortTabBase& rBase,
+        const SwFormToken& aToken, SwRootFrame const*const pLayout) const
 {
     if (sortTabHasNoToxSourcesOrFirstToxSourceHasNoNode(rBase)) {
         return OUString();
@@ -116,17 +130,18 @@ ToxTextGenerator::HandleChapterToken(const SwTOXSortTabBase& rBase, const SwForm
     }
 
     // #i53420#
-    const SwContentFrame* contentFrame = contentNode->getLayoutFrame(pDoc->getIDocumentLayoutAccess().GetCurrentLayout());
+    const SwContentFrame* contentFrame = contentNode->getLayoutFrame(pLayout);
     if (!contentFrame) {
         return OUString();
     }
 
-    return GenerateTextForChapterToken(aToken, contentFrame, contentNode);
+    return GenerateTextForChapterToken(aToken, contentFrame, contentNode, pLayout);
 }
 
 OUString
 ToxTextGenerator::GenerateTextForChapterToken(const SwFormToken& chapterToken, const SwContentFrame* contentFrame,
-        const SwContentNode *contentNode) const
+        const SwContentNode *contentNode,
+        SwRootFrame const*const pLayout) const
 {
     OUString retval;
 
@@ -137,14 +152,14 @@ ToxTextGenerator::GenerateTextForChapterToken(const SwFormToken& chapterToken, c
     // continue to support CF_NUMBER and CF_NUM_TITLE in order to handle ODF 1.0/1.1 written by OOo 3.x
     // in the same way as OOo 2.x would handle them.
     if (CF_NUM_NOPREPST_TITLE == chapterToken.nChapterFormat || CF_NUMBER == chapterToken.nChapterFormat) {
-        retval += aField.GetNumber(); // get the string number without pre/postfix
+        retval += aField.GetNumber(pLayout); // get the string number without pre/postfix
     }
     else if (CF_NUMBER_NOPREPST == chapterToken.nChapterFormat || CF_NUM_TITLE == chapterToken.nChapterFormat) {
-        retval += aField.GetNumber();
+        retval += aField.GetNumber(pLayout);
         retval += " ";
-        retval += aField.GetTitle();
+        retval += aField.GetTitle(pLayout);
     } else if (CF_TITLE == chapterToken.nChapterFormat) {
-        retval += aField.GetTitle();
+        retval += aField.GetTitle(pLayout);
     }
     return retval;
 }
@@ -152,8 +167,9 @@ ToxTextGenerator::GenerateTextForChapterToken(const SwFormToken& chapterToken, c
 // Add parameter <_TOXSectNdIdx> and <_pDefaultPageDesc> in order to control,
 // which page description is used, no appropriate one is found.
 void
-ToxTextGenerator::GenerateText(SwDoc* pDoc, const std::vector<SwTOXSortTabBase*> &entries,
-        sal_uInt16 indexOfEntryToProcess, sal_uInt16 numberOfEntriesToProcess)
+ToxTextGenerator::GenerateText(SwDoc* pDoc, const std::vector<std::unique_ptr<SwTOXSortTabBase>> &entries,
+        sal_uInt16 indexOfEntryToProcess, sal_uInt16 numberOfEntriesToProcess,
+        SwRootFrame const*const pLayout)
 {
     // pTOXNd is only set at the first mark
     SwTextNode* pTOXNd = const_cast<SwTextNode*>(entries.at(indexOfEntryToProcess)->pTOXNd);
@@ -169,25 +185,25 @@ ToxTextGenerator::GenerateText(SwDoc* pDoc, const std::vector<SwTOXSortTabBase*>
         sal_uInt16 nLvl = rBase.GetLevel();
         OSL_ENSURE( nLvl < mToxForm.GetFormMax(), "invalid FORM_LEVEL");
 
-        SvxTabStopItem aTStops( 0, 0, SVX_TAB_ADJUST_DEFAULT, RES_PARATR_TABSTOP );
+        SvxTabStopItem aTStops( 0, 0, SvxTabAdjust::Default, RES_PARATR_TABSTOP );
         // create an enumerator
         // #i21237#
         SwFormTokens aPattern = mToxForm.GetPattern(nLvl);
-        SwFormTokens::iterator aIt = aPattern.begin();
         // remove text from node
-        while(aIt != aPattern.end()) // #i21237#
+        for(const auto& aToken : aPattern) // #i21237#
         {
-            SwFormToken aToken = *aIt; // #i21237#
             sal_Int32 nStartCharStyle = rText.getLength();
             switch( aToken.eTokenType )
             {
             case TOKEN_ENTRY_NO:
                 // for TOC numbering
-                rText += GetNumStringOfFirstNode( rBase, aToken.nChapterFormat == CF_NUMBER, static_cast<sal_uInt8>(aToken.nOutlineLevel - 1) ) ;
+                rText += GetNumStringOfFirstNode(rBase,
+                    aToken.nChapterFormat == CF_NUMBER,
+                    static_cast<sal_uInt8>(aToken.nOutlineLevel - 1), pLayout);
                 break;
 
             case TOKEN_ENTRY_TEXT: {
-                HandledTextToken htt = HandleTextToken(rBase, pDoc->GetAttrPool());
+                HandledTextToken htt = HandleTextToken(rBase, pDoc->GetAttrPool(), pLayout);
                 ApplyHandledTextToken(htt, *pTOXNd);
             }
                 break;
@@ -195,10 +211,9 @@ ToxTextGenerator::GenerateText(SwDoc* pDoc, const std::vector<SwTOXSortTabBase*>
             case TOKEN_ENTRY:
                 {
                     // for TOC numbering
-                    rText += GetNumStringOfFirstNode( rBase, true, MAXLEVEL );
-                    SwIndex aIdx( pTOXNd, rText.getLength() );
-                    ToxWhitespaceStripper stripper(rBase.GetText().sText);
-                    pTOXNd->InsertText(stripper.GetStrippedString(), aIdx);
+                    rText += GetNumStringOfFirstNode(rBase, true, MAXLEVEL, pLayout);
+                    HandledTextToken htt = HandleTextToken(rBase, pDoc->GetAttrPool(), pLayout);
+                    ApplyHandledTextToken(htt, *pTOXNd);
                 }
                 break;
 
@@ -219,7 +234,7 @@ ToxTextGenerator::GenerateText(SwDoc* pDoc, const std::vector<SwTOXSortTabBase*>
                 break;
 
             case TOKEN_CHAPTER_INFO:
-                rText += HandleChapterToken(rBase, aToken, pDoc);
+                rText += HandleChapterToken(rBase, aToken, pLayout);
                 break;
 
             case TOKEN_LINK_START:
@@ -232,9 +247,9 @@ ToxTextGenerator::GenerateText(SwDoc* pDoc, const std::vector<SwTOXSortTabBase*>
 
             case TOKEN_AUTHORITY:
                 {
-                    ToxAuthorityField eField = (ToxAuthorityField)aToken.nAuthorityField;
+                    ToxAuthorityField eField = static_cast<ToxAuthorityField>(aToken.nAuthorityField);
                     SwIndex aIdx( pTOXNd, rText.getLength() );
-                    rBase.FillText( *pTOXNd, aIdx, static_cast<sal_uInt16>(eField) );
+                    rBase.FillText( *pTOXNd, aIdx, static_cast<sal_uInt16>(eField), pLayout );
                 }
                 break;
             case TOKEN_END: break;
@@ -255,8 +270,6 @@ ToxTextGenerator::GenerateText(SwDoc* pDoc, const std::vector<SwTOXSortTabBase*>
                         rText.getLength(), SetAttrMode::DONTEXPAND );
                 }
             }
-
-            ++aIt; // #i21237#
         }
 
         pTOXNd->SetAttr( aTStops );
@@ -279,7 +292,7 @@ ToxTextGenerator::CollectAttributesForTox(const SwTextAttr& hint, SwAttrPool& po
             pItem->Which() == RES_CHRATR_POSTURE ||
             pItem->Which() == RES_CHRATR_CJK_POSTURE ||
             pItem->Which() == RES_CHRATR_CTL_POSTURE) {
-            SfxPoolItem* clonedItem = pItem->Clone();
+            std::unique_ptr<SfxPoolItem> clonedItem(pItem->Clone());
             retval->Put(*clonedItem);
         }
         if (aIter.IsAtEnd()) {
@@ -290,31 +303,98 @@ ToxTextGenerator::CollectAttributesForTox(const SwTextAttr& hint, SwAttrPool& po
     return retval;
 }
 
+void ToxTextGenerator::GetAttributesForNode(
+    ToxTextGenerator::HandledTextToken & rResult,
+    sal_Int32 & rOffset,
+    SwTextNode const& rNode,
+    ToxWhitespaceStripper const& rStripper,
+    SwAttrPool & rPool,
+    SwRootFrame const*const pLayout)
+{
+    // note: this *must* use the same flags as SwTextNode::GetExpandText()
+    // or indexes will be off!
+    ExpandMode eMode = ExpandMode::ExpandFields;
+    if (pLayout && pLayout->IsHideRedlines())
+    {
+        eMode |= ExpandMode::HideDeletions;
+    }
+    ModelToViewHelper aConversionMap(rNode, pLayout, eMode);
+    if (SwpHints const*const pHints = rNode.GetpSwpHints())
+    {
+        for (size_t i = 0; i < pHints->Count(); ++i)
+        {
+            const SwTextAttr* pHint = pHints->Get(i);
+            std::shared_ptr<SfxItemSet> attributesToClone =
+                CollectAttributesForTox(*pHint, rPool);
+            if (attributesToClone->Count() <= 0) {
+                continue;
+            }
+
+            // sw_redlinehide: due to the ... interesting ... multi-level index
+            // mapping going on here, can't use the usual merged attr iterators :(
+
+            sal_Int32 const nStart(aConversionMap.ConvertToViewPosition(pHint->GetStart()));
+            sal_Int32 const nEnd(aConversionMap.ConvertToViewPosition(*pHint->GetAnyEnd()));
+            if (nStart != nEnd) // might be in delete redline, and useless anyway
+            {
+                std::unique_ptr<SwFormatAutoFormat> pClone(
+                    static_cast<SwFormatAutoFormat*>(pHint->GetAutoFormat().Clone()));
+                pClone->SetStyleHandle(attributesToClone);
+                rResult.autoFormats.push_back(std::move(pClone));
+                // note the rStripper is on the whole merged text, so need rOffset
+                rResult.startPositions.push_back(
+                    rStripper.GetPositionInStrippedString(rOffset + nStart));
+                rResult.endPositions.push_back(
+                    rStripper.GetPositionInStrippedString(rOffset + nEnd));
+            }
+        }
+    }
+    rOffset += aConversionMap.getViewText().getLength();
+}
+
 ToxTextGenerator::HandledTextToken
-ToxTextGenerator::HandleTextToken(const SwTOXSortTabBase& source, SwAttrPool& pool)
+ToxTextGenerator::HandleTextToken(const SwTOXSortTabBase& source,
+        SwAttrPool& pool, SwRootFrame const*const pLayout)
 {
     HandledTextToken result;
     ToxWhitespaceStripper stripper(source.GetText().sText);
     result.text = stripper.GetStrippedString();
 
-    const SwTextNode* pSrc = source.aTOXSources.at(0).pNd->GetTextNode();
-    if (!pSrc->HasHints()) {
+    // FIXME: there is a pre-existing problem that the index mapping of the
+    // attributes only works if the paragraph is fully selected
+    if (!source.IsFullPara() || source.aTOXSources.empty())
+        return result;
+
+    const SwTextNode* pSrc = source.aTOXSources.front().pNd->GetTextNode();
+    if (!pSrc)
+    {
         return result;
     }
-    const SwpHints& hints = pSrc->GetSwpHints();
-    for (size_t i = 0; i < hints.Count(); ++i) {
-        const SwTextAttr* hint = hints.Get(i);
-        std::shared_ptr<SfxItemSet> attributesToClone = CollectAttributesForTox(*hint, pool);
-        if (attributesToClone->Count() <= 0) {
-            continue;
-        }
-        SwFormatAutoFormat* clone = static_cast<SwFormatAutoFormat*>(hint->GetAutoFormat().Clone());
-        clone->SetStyleHandle(attributesToClone);
 
-        result.autoFormats.push_back(clone);
-        result.startPositions.push_back(stripper.GetPositionInStrippedString(hint->GetStart()));
-        result.endPositions.push_back(stripper.GetPositionInStrippedString(*hint->GetAnyEnd()));
+    sal_Int32 nOffset(0);
+    GetAttributesForNode(result, nOffset, *pSrc, stripper, pool, pLayout);
+    if (pLayout && pLayout->IsHideRedlines())
+    {
+        if (SwTextFrame const*const pFrame = static_cast<SwTextFrame*>(pSrc->getLayoutFrame(pLayout)))
+        {
+            if (sw::MergedPara const*const pMerged = pFrame->GetMergedPara())
+            {
+                // pSrc already copied above
+                assert(pSrc == pMerged->pParaPropsNode);
+                for (sal_uLong i = pSrc->GetIndex() + 1;
+                     i <= pMerged->pLastNode->GetIndex(); ++i)
+                {
+                    SwNode *const pTmp(pSrc->GetNodes()[i]);
+                    if (pTmp->GetRedlineMergeFlag() == SwNode::Merge::NonFirst)
+                    {
+                        GetAttributesForNode(result, nOffset,
+                                *pTmp->GetTextNode(), stripper, pool, pLayout);
+                    }
+                }
+            }
+        }
     }
+
     return result;
 }
 
@@ -334,18 +414,18 @@ ToxTextGenerator::ApplyHandledTextToken(const HandledTextToken& htt, SwTextNode&
 /*static*/ OUString
 ToxTextGenerator::ConstructPageNumberPlaceholder(size_t numberOfToxSources)
 {
-    OUString retval;
     if (numberOfToxSources == 0) {
-        return retval;
+        return OUString();
     }
+    OUStringBuffer retval;
     // Place holder for the PageNumber; we only respect the first one
-    retval += OUString(C_NUM_REPL);
+    retval.append(C_NUM_REPL);
     for (size_t i = 1; i < numberOfToxSources; ++i) {
-        retval += S_PAGE_DELI;
-        retval += OUString(C_NUM_REPL);
+        retval.append(S_PAGE_DELI);
+        retval.append(C_NUM_REPL);
     }
-    retval += OUString(C_END_PAGE_NUM);
-    return retval;
+    retval.append(C_END_PAGE_NUM);
+    return retval.makeStringAndClear();
 }
 
 /*virtual*/ SwChapterField
@@ -359,7 +439,7 @@ ToxTextGenerator::ObtainChapterField(SwChapterFieldType* chapterFieldType,
     SwChapterField retval(chapterFieldType, chapterToken->nChapterFormat);
     retval.SetLevel(static_cast<sal_uInt8>(chapterToken->nOutlineLevel - 1));
     // #i53420#
-    retval.ChangeExpansion(contentFrame, contentNode, true);
+    retval.ChangeExpansion(*contentFrame, contentNode, true);
     return retval;
 }
 } // end namespace sw

@@ -23,37 +23,30 @@
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <cppuhelper/implbase.hxx>
 
+namespace com { namespace sun { namespace star { namespace container { class XNameAccess; } } } }
+
 class ScDocument;
 
 class XMLCodeNameProvider : public ::cppu::WeakImplHelper< css::container::XNameAccess >
 {
-    ScDocument* mpDoc;
-    OUString msDocName;
-    OUString msCodeNameProp;
+    ScDocument* const mpDoc;
 
     static bool _getCodeName( const css::uno::Any& aAny,
                            OUString& rCodeName );
 
 public:
     explicit XMLCodeNameProvider(ScDocument* pDoc);
-    virtual ~XMLCodeNameProvider();
+    virtual ~XMLCodeNameProvider() override;
 
-    virtual sal_Bool SAL_CALL hasByName( const OUString& aName )
-        throw (css::uno::RuntimeException, std::exception ) override;
+    virtual sal_Bool SAL_CALL hasByName( const OUString& aName ) override;
 
-    virtual css::uno::Any SAL_CALL getByName( const OUString& aName )
-        throw (css::container::NoSuchElementException,
-               css::lang::WrappedTargetException,
-               css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL getByName( const OUString& aName ) override;
 
-    virtual css::uno::Sequence< OUString > SAL_CALL getElementNames(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getElementNames(  ) override;
 
-    virtual css::uno::Type SAL_CALL getElementType(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Type SAL_CALL getElementType(  ) override;
 
-    virtual sal_Bool SAL_CALL hasElements()
-        throw (css::uno::RuntimeException, std::exception ) override;
+    virtual sal_Bool SAL_CALL hasElements() override;
 
     static void set( const css::uno::Reference< css::container::XNameAccess>& xNameAccess, ScDocument *pDoc );
 };

@@ -29,21 +29,25 @@
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
 #include <com/sun/star/accessibility/XAccessibleText.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <cppuhelper/implbase.hxx>
-#include <osl/mutex.hxx>
+#include <cppuhelper/weakref.hxx>
 #include <rtl/ref.hxx>
+#include <sal/log.hxx>
 
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
 #include <vcl/menu.hxx>
 #include <vcl/toolbox.hxx>
 
+#include <unx/gtk/gtkdata.hxx>
 #include "atkwrapper.hxx"
 #include "atkutil.hxx"
 
 #include <gtk/gtk.h>
 #include <config_version.h>
 
+#include <cassert>
 #include <set>
 
 using namespace ::com::sun::star;
@@ -62,7 +66,7 @@ static guint focus_notify_handler = 0;
 
 extern "C" {
 
-static gint
+static gboolean
 atk_wrapper_focus_idle_handler (gpointer data)
 {
     SolarMutexGuard aGuard;
@@ -90,7 +94,14 @@ atk_wrapper_focus_idle_handler (gpointer data)
                     wrapper_obj->mpText.set(wrapper_obj->mpContext, css::uno::UNO_QUERY);
                     if ( wrapper_obj->mpText.is() )
                     {
-                        gint caretPos = wrapper_obj->mpText->getCaretPosition();
+                        gint caretPos = -1;
+
+                        try {
+                            caretPos = wrapper_obj->mpText->getCaretPosition();
+                        }
+                        catch(const uno::Exception&) {
+                            g_warning( "Exception in getCaretPosition()" );
+                        }
 
                         if ( caretPos != -1 )
                         {
@@ -104,7 +115,7 @@ atk_wrapper_focus_idle_handler (gpointer data)
         }
     }
 
-    return FALSE;
+    return false;
 }
 
 } // extern "C"
@@ -131,50 +142,60 @@ class DocumentFocusListener :
     std::set< uno::Reference< uno::XInterface > > m_aRefList;
 
 public:
+    /// @throws lang::IndexOutOfBoundsException
+    /// @throws uno::RuntimeException
     void attachRecursive(
         const uno::Reference< accessibility::XAccessible >& xAccessible
-    ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException);
+    );
 
+    /// @throws lang::IndexOutOfBoundsException
+    /// @throws uno::RuntimeException
     void attachRecursive(
         const uno::Reference< accessibility::XAccessible >& xAccessible,
         const uno::Reference< accessibility::XAccessibleContext >& xContext
-    ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException);
+    );
 
+    /// @throws lang::IndexOutOfBoundsException
+    /// @throws uno::RuntimeException
     void attachRecursive(
         const uno::Reference< accessibility::XAccessible >& xAccessible,
         const uno::Reference< accessibility::XAccessibleContext >& xContext,
         const uno::Reference< accessibility::XAccessibleStateSet >& xStateSet
-    ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException);
+    );
 
+    /// @throws lang::IndexOutOfBoundsException
+    /// @throws uno::RuntimeException
     void detachRecursive(
         const uno::Reference< accessibility::XAccessible >& xAccessible
-    ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException);
+    );
 
+    /// @throws lang::IndexOutOfBoundsException
+    /// @throws uno::RuntimeException
     void detachRecursive(
-        const uno::Reference< accessibility::XAccessible >& xAccessible,
         const uno::Reference< accessibility::XAccessibleContext >& xContext
-    ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException);
+    );
 
+    /// @throws lang::IndexOutOfBoundsException
+    /// @throws uno::RuntimeException
     void detachRecursive(
-        const uno::Reference< accessibility::XAccessible >& xAccessible,
         const uno::Reference< accessibility::XAccessibleContext >& xContext,
         const uno::Reference< accessibility::XAccessibleStateSet >& xStateSet
-    ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException);
+    );
 
-    static uno::Reference< accessibility::XAccessible > getAccessible(const lang::EventObject& aEvent )
-        throw (lang::IndexOutOfBoundsException, uno::RuntimeException);
+    /// @throws lang::IndexOutOfBoundsException
+    /// @throws uno::RuntimeException
+    static uno::Reference< accessibility::XAccessible > getAccessible(const lang::EventObject& aEvent );
 
     // XEventListener
-    virtual void disposing( const lang::EventObject& Source ) throw (uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing( const lang::EventObject& Source ) override;
 
     // XAccessibleEventListener
-    virtual void notifyEvent( const accessibility::AccessibleEventObject& aEvent ) throw( uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL notifyEvent( const accessibility::AccessibleEventObject& aEvent ) override;
 };
 
 /*****************************************************************************/
 
 void DocumentFocusListener::disposing( const lang::EventObject& aEvent )
-    throw (uno::RuntimeException, std::exception)
 {
 
     // Unref the object here, but do not remove as listener since the object
@@ -187,7 +208,6 @@ void DocumentFocusListener::disposing( const lang::EventObject& aEvent )
 /*****************************************************************************/
 
 void DocumentFocusListener::notifyEvent( const accessibility::AccessibleEventObject& aEvent )
-    throw( uno::RuntimeException, std::exception )
 {
     try {
         switch( aEvent.EventId )
@@ -199,8 +219,9 @@ void DocumentFocusListener::notifyEvent( const accessibility::AccessibleEventObj
 
                 if( accessibility::AccessibleStateType::FOCUSED == nState )
                     atk_wrapper_focus_tracker_notify_when_idle( getAccessible(aEvent) );
+
+                break;
             }
-            break;
 
             case accessibility::AccessibleEventId::CHILD:
             {
@@ -210,12 +231,13 @@ void DocumentFocusListener::notifyEvent( const accessibility::AccessibleEventObj
 
                 if( (aEvent.NewValue >>= xChild) && xChild.is() )
                     attachRecursive(xChild);
+
+                break;
             }
-            break;
 
             case accessibility::AccessibleEventId::INVALIDATE_ALL_CHILDREN:
-            g_warning( "Invalidate all children called\n" );
-            break;
+                SAL_INFO("vcl.a11y", "Invalidate all children called");
+                break;
 
             default:
                 break;
@@ -230,7 +252,6 @@ void DocumentFocusListener::notifyEvent( const accessibility::AccessibleEventObj
 /*****************************************************************************/
 
 uno::Reference< accessibility::XAccessible > DocumentFocusListener::getAccessible(const lang::EventObject& aEvent )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException)
 {
     uno::Reference< accessibility::XAccessible > xAccessible(aEvent.Source, uno::UNO_QUERY);
 
@@ -259,7 +280,7 @@ uno::Reference< accessibility::XAccessible > DocumentFocusListener::getAccessibl
 
 void DocumentFocusListener::attachRecursive(
     const uno::Reference< accessibility::XAccessible >& xAccessible
-) throw (lang::IndexOutOfBoundsException, uno::RuntimeException)
+)
 {
     uno::Reference< accessibility::XAccessibleContext > xContext =
         xAccessible->getAccessibleContext();
@@ -273,7 +294,7 @@ void DocumentFocusListener::attachRecursive(
 void DocumentFocusListener::attachRecursive(
     const uno::Reference< accessibility::XAccessible >& xAccessible,
     const uno::Reference< accessibility::XAccessibleContext >& xContext
-)  throw (lang::IndexOutOfBoundsException, uno::RuntimeException)
+)
 {
     uno::Reference< accessibility::XAccessibleStateSet > xStateSet =
         xContext->getAccessibleStateSet();
@@ -288,7 +309,7 @@ void DocumentFocusListener::attachRecursive(
     const uno::Reference< accessibility::XAccessible >& xAccessible,
     const uno::Reference< accessibility::XAccessibleContext >& xContext,
     const uno::Reference< accessibility::XAccessibleStateSet >& xStateSet
-) throw (lang::IndexOutOfBoundsException, uno::RuntimeException)
+)
 {
     if( xStateSet->contains(accessibility::AccessibleStateType::FOCUSED ) )
         atk_wrapper_focus_tracker_notify_when_idle( xAccessible );
@@ -300,7 +321,7 @@ void DocumentFocusListener::attachRecursive(
         return;
 
     // If not already done, add the broadcaster to the list and attach as listener.
-    uno::Reference< uno::XInterface > xInterface = xBroadcaster;
+    const uno::Reference< uno::XInterface >& xInterface = xBroadcaster;
     if( m_aRefList.insert(xInterface).second )
     {
         xBroadcaster->addAccessibleEventListener(static_cast< accessibility::XAccessibleEventListener *>(this));
@@ -323,36 +344,34 @@ void DocumentFocusListener::attachRecursive(
 
 void DocumentFocusListener::detachRecursive(
     const uno::Reference< accessibility::XAccessible >& xAccessible
-) throw (lang::IndexOutOfBoundsException, uno::RuntimeException)
+)
 {
     uno::Reference< accessibility::XAccessibleContext > xContext =
         xAccessible->getAccessibleContext();
 
     if( xContext.is() )
-        detachRecursive(xAccessible, xContext);
+        detachRecursive(xContext);
 }
 
 /*****************************************************************************/
 
 void DocumentFocusListener::detachRecursive(
-    const uno::Reference< accessibility::XAccessible >& xAccessible,
     const uno::Reference< accessibility::XAccessibleContext >& xContext
-)  throw (lang::IndexOutOfBoundsException, uno::RuntimeException)
+)
 {
     uno::Reference< accessibility::XAccessibleStateSet > xStateSet =
         xContext->getAccessibleStateSet();
 
     if( xStateSet.is() )
-        detachRecursive(xAccessible, xContext, xStateSet);
+        detachRecursive(xContext, xStateSet);
 }
 
 /*****************************************************************************/
 
 void DocumentFocusListener::detachRecursive(
-    const uno::Reference< accessibility::XAccessible >&,
     const uno::Reference< accessibility::XAccessibleContext >& xContext,
     const uno::Reference< accessibility::XAccessibleStateSet >& xStateSet
-) throw (lang::IndexOutOfBoundsException, uno::RuntimeException)
+)
 {
     uno::Reference< accessibility::XAccessibleEventBroadcaster > xBroadcaster =
         uno::Reference< accessibility::XAccessibleEventBroadcaster >(xContext, uno::UNO_QUERY);
@@ -416,9 +435,10 @@ static void notify_toolbox_item_focus(ToolBox *pToolBox)
     if( ! xContext.is() )
         return;
 
-    sal_Int32 nPos = pToolBox->GetItemPos( pToolBox->GetHighlightItemId() );
-    if( nPos != TOOLBOX_ITEM_NOTFOUND )
+    ToolBox::ImplToolItems::size_type nPos = pToolBox->GetItemPos( pToolBox->GetHighlightItemId() );
+    if( nPos != ToolBox::ITEM_NOTFOUND )
         atk_wrapper_focus_tracker_notify_when_idle( xContext->getAccessibleChild( nPos ) );
+            //TODO: ToolBox::ImplToolItems::size_type -> sal_Int32
 }
 
 static void handle_toolbox_highlight(vcl::Window *pWindow)
@@ -436,7 +456,7 @@ static void handle_toolbox_highlight(vcl::Window *pWindow)
     notify_toolbox_item_focus(pToolBox);
 }
 
-static void handle_toolbox_highlightoff(vcl::Window *pWindow)
+static void handle_toolbox_highlightoff(vcl::Window const *pWindow)
 {
     ToolBox* pToolBoxParent = dynamic_cast< ToolBox* >( pWindow->GetParent() );
 
@@ -467,7 +487,7 @@ static void create_wrapper_for_child(
 static void handle_toolbox_buttonchange(VclWindowEvent const *pEvent)
 {
     vcl::Window* pWindow = pEvent->GetWindow();
-    sal_Int32 index = (sal_Int32)reinterpret_cast<sal_IntPtr>(pEvent->GetData());
+    sal_Int32 index = static_cast<sal_Int32>(reinterpret_cast<sal_IntPtr>(pEvent->GetData()));
 
     if( pWindow && pWindow->IsReallyVisible() )
     {
@@ -481,24 +501,48 @@ static void handle_toolbox_buttonchange(VclWindowEvent const *pEvent)
 
 /*****************************************************************************/
 
-static std::set< VclPtr<vcl::Window> > g_aWindowList;
+namespace {
+
+struct WindowList {
+    ~WindowList() { assert(list.empty()); };
+        // needs to be empty already on DeInitVCL, but at least check it's empty
+        // on exit
+
+    std::set< VclPtr<vcl::Window> > list;
+};
+
+WindowList g_aWindowList;
+
+}
+
+DocumentFocusListener & GtkSalData::GetDocumentFocusListener()
+{
+    if (!m_pDocumentFocusListener)
+    {
+        m_pDocumentFocusListener = new DocumentFocusListener;
+        m_xDocumentFocusListener.set(m_pDocumentFocusListener);
+    }
+    return *m_pDocumentFocusListener;
+}
 
 static void handle_get_focus(::VclWindowEvent const * pEvent)
 {
-    static rtl::Reference< DocumentFocusListener > aDocumentFocusListener =
-        new DocumentFocusListener();
+    GtkSalData *const pSalData(GetGtkSalData());
+    assert(pSalData);
+
+    DocumentFocusListener & rDocumentFocusListener(pSalData->GetDocumentFocusListener());
 
     vcl::Window *pWindow = pEvent->GetWindow();
 
-    // The menu bar is handled through VCLEVENT_MENU_HIGHLIGHTED
-    if( ! pWindow || !pWindow->IsReallyVisible() || pWindow->GetType() == WINDOW_MENUBARWINDOW )
+    // The menu bar is handled through VclEventId::MenuHighlightED
+    if( ! pWindow || !pWindow->IsReallyVisible() || pWindow->GetType() == WindowType::MENUBARWINDOW )
         return;
 
-    // ToolBoxes are handled through VCLEVENT_TOOLBOX_HIGHLIGHT
-    if( pWindow->GetType() == WINDOW_TOOLBOX )
+    // ToolBoxes are handled through VclEventId::ToolboxHighlight
+    if( pWindow->GetType() == WindowType::TOOLBOX )
         return;
 
-    if( pWindow->GetType() == WINDOW_TABCONTROL )
+    if( pWindow->GetType() == WindowType::TABCONTROL )
     {
         handle_tabpage_activated( pWindow );
         return;
@@ -526,18 +570,18 @@ static void handle_get_focus(::VclWindowEvent const * pEvent)
  * need to add listeners to the children instead of re-using the tabpage stuff
  */
     if( xStateSet->contains(accessibility::AccessibleStateType::FOCUSED) &&
-        ( pWindow->GetType() != WINDOW_TREELISTBOX ) )
+        ( pWindow->GetType() != WindowType::TREELISTBOX ) )
     {
         atk_wrapper_focus_tracker_notify_when_idle( xAccessible );
     }
     else
     {
-        if( g_aWindowList.find(pWindow) == g_aWindowList.end() )
+        if( g_aWindowList.list.find(pWindow) == g_aWindowList.list.end() )
         {
-            g_aWindowList.insert(pWindow);
+            g_aWindowList.list.insert(pWindow);
             try
             {
-                aDocumentFocusListener->attachRecursive(xAccessible, xContext, xStateSet);
+                rDocumentFocusListener.attachRecursive(xAccessible, xContext, xStateSet);
             }
             catch (const uno::Exception&)
             {
@@ -577,66 +621,66 @@ static void handle_menu_highlighted(::VclMenuEvent const * pEvent)
 
 /*****************************************************************************/
 
-void WindowEventHandler(void *, VclSimpleEvent& rEvent)
+static void WindowEventHandler(void *, VclSimpleEvent& rEvent)
 {
     try
     {
         switch (rEvent.GetId())
         {
-        case VCLEVENT_WINDOW_SHOW:
+        case VclEventId::WindowShow:
             break;
-        case VCLEVENT_WINDOW_HIDE:
+        case VclEventId::WindowHide:
             break;
-        case VCLEVENT_WINDOW_CLOSE:
+        case VclEventId::WindowClose:
             break;
-        case VCLEVENT_WINDOW_GETFOCUS:
+        case VclEventId::WindowGetFocus:
             handle_get_focus(static_cast< ::VclWindowEvent const * >(&rEvent));
             break;
-        case VCLEVENT_WINDOW_LOSEFOCUS:
+        case VclEventId::WindowLoseFocus:
             break;
-        case VCLEVENT_WINDOW_MINIMIZE:
+        case VclEventId::WindowMinimize:
             break;
-        case VCLEVENT_WINDOW_NORMALIZE:
+        case VclEventId::WindowNormalize:
             break;
-        case VCLEVENT_WINDOW_KEYINPUT:
-        case VCLEVENT_WINDOW_KEYUP:
-        case VCLEVENT_WINDOW_COMMAND:
-        case VCLEVENT_WINDOW_MOUSEMOVE:
+        case VclEventId::WindowKeyInput:
+        case VclEventId::WindowKeyUp:
+        case VclEventId::WindowCommand:
+        case VclEventId::WindowMouseMove:
             break;
 
-        case VCLEVENT_MENU_HIGHLIGHT:
+        case VclEventId::MenuHighlight:
             if (const VclMenuEvent* pMenuEvent = dynamic_cast<const VclMenuEvent*>(&rEvent))
             {
                 handle_menu_highlighted(pMenuEvent);
             }
             else if (const VclAccessibleEvent* pAccEvent = dynamic_cast<const VclAccessibleEvent*>(&rEvent))
             {
-                uno::Reference< accessibility::XAccessible > xAccessible = pAccEvent->GetAccessible();
+                const uno::Reference< accessibility::XAccessible >& xAccessible = pAccEvent->GetAccessible();
                 if (xAccessible.is())
                     atk_wrapper_focus_tracker_notify_when_idle(xAccessible);
             }
             break;
 
-        case VCLEVENT_TOOLBOX_HIGHLIGHT:
+        case VclEventId::ToolboxHighlight:
             handle_toolbox_highlight(static_cast< ::VclWindowEvent const * >(&rEvent)->GetWindow());
             break;
 
-        case VCLEVENT_TOOLBOX_BUTTONSTATECHANGED:
+        case VclEventId::ToolboxButtonStateChanged:
             handle_toolbox_buttonchange(static_cast< ::VclWindowEvent const * >(&rEvent));
             break;
 
-        case VCLEVENT_OBJECT_DYING:
-            g_aWindowList.erase( static_cast< ::VclWindowEvent const * >(&rEvent)->GetWindow() );
-            // fallthrough intentional !
-        case VCLEVENT_TOOLBOX_HIGHLIGHTOFF:
+        case VclEventId::ObjectDying:
+            g_aWindowList.list.erase( static_cast< ::VclWindowEvent const * >(&rEvent)->GetWindow() );
+            [[fallthrough]];
+        case VclEventId::ToolboxHighlightOff:
             handle_toolbox_highlightoff(static_cast< ::VclWindowEvent const * >(&rEvent)->GetWindow());
             break;
 
-        case VCLEVENT_TABPAGE_ACTIVATE:
+        case VclEventId::TabpageActivate:
             handle_tabpage_activated(static_cast< ::VclWindowEvent const * >(&rEvent)->GetWindow());
             break;
 
-        case VCLEVENT_COMBOBOX_SETTEXT:
+        case VclEventId::ComboboxSetText:
             // This looks quite strange to me. Stumbled over this when fixing #i104290#.
             // This kicked in when leaving the combobox in the toolbar, after that the events worked.
             // I guess this was a try to work around missing combobox events, which didn't do the full job, and shouldn't be necessary anymore.
@@ -739,7 +783,7 @@ ooo_atk_util_get_type()
             nullptr
         } ;
 
-        type = g_type_register_static (parent_type, "OOoUtil", &typeInfo, (GTypeFlags)0) ;
+        type = g_type_register_static (parent_type, "OOoUtil", &typeInfo, GTypeFlags(0)) ;
   }
 
   return type;

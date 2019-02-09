@@ -22,9 +22,6 @@
 
 #include "futext.hxx"
 
-#include <svl/itemset.hxx>
-#include <memory>
-
 namespace sd {
 
 class DrawViewShell;
@@ -43,14 +40,14 @@ public:
     virtual void Activate() override;
     virtual void Deactivate() override;
 
-    static void GetMenuState( DrawViewShell& rDrawViewShell, SfxItemSet &rSet );
+    static void GetMenuState( DrawViewShell const & rDrawViewShell, SfxItemSet &rSet );
 
 private:
     FuFormatPaintBrush ( ViewShell* pViewSh, ::sd::Window* pWin, ::sd::View* pView, SdDrawDocument* pDoc, SfxRequest& rReq);
 
     void DoExecute( SfxRequest& rReq ) override;
 
-    bool HasContentForThisType( sal_uInt32 nObjectInventor, sal_uInt16 nObjectIdentifier ) const;
+    bool HasContentForThisType( SdrInventor nObjectInventor, sal_uInt16 nObjectIdentifier ) const;
     void Paste( bool, bool );
 
     void implcancel();

@@ -17,17 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <comphelper/processfactory.hxx>
 #include <svl/zforlist.hxx>
 #include <editeng/editeng.hxx>
+#include <osl/diagnose.h>
 
-#include "poolhelp.hxx"
-#include "document.hxx"
-#include "docpool.hxx"
-#include "stlpool.hxx"
+#include <poolhelp.hxx>
+#include <document.hxx>
+#include <docpool.hxx>
+#include <stlpool.hxx>
 
 ScPoolHelper::ScPoolHelper( ScDocument* pSourceDoc )
-:pFormTable(nullptr)
-,pEditPool(nullptr)
+:pEditPool(nullptr)
 ,pEnginePool(nullptr)
 ,m_pSourceDoc(pSourceDoc)
 {
@@ -42,7 +43,7 @@ ScPoolHelper::~ScPoolHelper()
 {
     SfxItemPool::Free(pEnginePool);
     SfxItemPool::Free(pEditPool);
-    delete pFormTable;
+    pFormTable.reset();
     mxStylePool.clear();
     SfxItemPool::Free(pDocPool);
 }
@@ -51,9 +52,8 @@ SfxItemPool*        ScPoolHelper::GetEditPool() const
     if ( !pEditPool )
     {
         pEditPool = EditEngine::CreatePool();
-        pEditPool->SetDefaultMetric( SFX_MAPUNIT_100TH_MM );
+        pEditPool->SetDefaultMetric( MapUnit::Map100thMM );
         pEditPool->FreezeIdRanges();
-        pEditPool->SetFileFormatVersion( SOFFICE_FILEFORMAT_50 );   // used in ScGlobal::EETextObjEqual
     }
     return pEditPool;
 }
@@ -62,7 +62,7 @@ SfxItemPool*        ScPoolHelper::GetEnginePool() const
     if ( !pEnginePool )
     {
         pEnginePool = EditEngine::CreatePool();
-        pEnginePool->SetDefaultMetric( SFX_MAPUNIT_100TH_MM );
+        pEnginePool->SetDefaultMetric( MapUnit::Map100thMM );
         pEnginePool->FreezeIdRanges();
     } // ifg ( pEnginePool )
     return pEnginePool;
@@ -71,38 +71,36 @@ SvNumberFormatter*  ScPoolHelper::GetFormTable() const
 {
     if (!pFormTable)
         pFormTable = CreateNumberFormatter();
-    return pFormTable;
-}
-
-void ScPoolHelper::UseDocOptions() const
-{
-    if (pFormTable)
-    {
-        sal_uInt16 d,m,y;
-        aOpt.GetDate( d,m,y );
-        pFormTable->ChangeNullDate( d,m,y );
-        pFormTable->ChangeStandardPrec( (sal_uInt16)aOpt.GetStdPrecision() );
-        pFormTable->SetYear2000( aOpt.GetYear2000() );
-    }
+    return pFormTable.get();
 }
 
 void ScPoolHelper::SetFormTableOpt(const ScDocOptions& rOpt)
 {
     aOpt = rOpt;
-    UseDocOptions();        // #i105512# if the number formatter exists, update its settings
+    // #i105512# if the number formatter exists, update its settings
+    if (pFormTable)
+    {
+        sal_uInt16 d,m;
+        sal_Int16 y;
+        aOpt.GetDate( d,m,y );
+        pFormTable->ChangeNullDate( d,m,y );
+        pFormTable->ChangeStandardPrec( aOpt.GetStdPrecision() );
+        pFormTable->SetYear2000( aOpt.GetYear2000() );
+    }
 }
 
-SvNumberFormatter* ScPoolHelper::CreateNumberFormatter() const
+std::unique_ptr<SvNumberFormatter> ScPoolHelper::CreateNumberFormatter() const
 {
-    SvNumberFormatter* p = nullptr;
+    std::unique_ptr<SvNumberFormatter> p;
     {
         osl::MutexGuard aGuard(&maMtxCreateNumFormatter);
-        p = new SvNumberFormatter(comphelper::getProcessComponentContext(), ScGlobal::eLnge);
+        p.reset(new SvNumberFormatter(comphelper::getProcessComponentContext(), LANGUAGE_SYSTEM));
     }
     p->SetColorLink( LINK(m_pSourceDoc, ScDocument, GetUserDefinedColor) );
     p->SetEvalDateFormat(NF_EVALDATEFORMAT_INTL_FORMAT);
 
-    sal_uInt16 d,m,y;
+    sal_uInt16 d,m;
+    sal_Int16 y;
     aOpt.GetDate(d, m, y);
     p->ChangeNullDate(d, m, y);
     p->ChangeStandardPrec(aOpt.GetStdPrecision());

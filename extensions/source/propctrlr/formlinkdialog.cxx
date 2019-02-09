@@ -21,20 +21,17 @@
 #include "formlinkdialog.hxx"
 
 #include "modulepcr.hxx"
-#include "formresid.hrc"
+#include <strings.hrc>
 #include "formstrings.hxx"
 #include <sal/log.hxx>
 #include <vcl/combobox.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/waitobj.hxx>
 #include <vcl/tabpage.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/builderfactory.hxx>
-#include <svtools/localresaccess.hxx>
 #include <connectivity/dbtools.hxx>
 #include <connectivity/dbexception.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
-#include <comphelper/processfactory.hxx>
 #include <comphelper/sequence.hxx>
 
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
@@ -73,10 +70,10 @@ namespace pcr
 
     public:
         explicit FieldLinkRow( vcl::Window* _pParent );
-        virtual ~FieldLinkRow();
+        virtual ~FieldLinkRow() override;
         virtual void dispose() override;
 
-        inline void         SetLinkChangeHandler( const Link<FieldLinkRow&,void>& _rHdl ) { m_aLinkChangeHandler = _rHdl; }
+        void         SetLinkChangeHandler( const Link<FieldLinkRow&,void>& _rHdl ) { m_aLinkChangeHandler = _rHdl; }
 
         enum LinkParticipant
         {
@@ -92,7 +89,7 @@ namespace pcr
         void    fillList( LinkParticipant _eWhich, const Sequence< OUString >& _rFieldNames );
 
     private:
-        DECL_LINK_TYPED( OnFieldNameChanged, Edit&, void );
+        DECL_LINK( OnFieldNameChanged, Edit&, void );
     };
 
 
@@ -123,7 +120,7 @@ namespace pcr
 
     void FieldLinkRow::fillList( LinkParticipant _eWhich, const Sequence< OUString >& _rFieldNames )
     {
-        ComboBox* pBox = ( _eWhich == eDetailField ) ? m_pDetailColumn : m_pMasterColumn;
+        ComboBox* pBox = ( _eWhich == eDetailField ) ? m_pDetailColumn.get() : m_pMasterColumn.get();
 
         const OUString* pFieldName    = _rFieldNames.getConstArray();
         const OUString* pFieldNameEnd = pFieldName + _rFieldNames.getLength();
@@ -142,12 +139,12 @@ namespace pcr
 
     void FieldLinkRow::SetFieldName( LinkParticipant _eWhich, const OUString& _rName )
     {
-        ComboBox* pBox = ( _eWhich == eDetailField ) ? m_pDetailColumn : m_pMasterColumn;
+        ComboBox* pBox = ( _eWhich == eDetailField ) ? m_pDetailColumn.get() : m_pMasterColumn.get();
         pBox->SetText( _rName );
     }
 
 
-    IMPL_LINK_NOARG_TYPED( FieldLinkRow, OnFieldNameChanged, Edit&, void )
+    IMPL_LINK_NOARG( FieldLinkRow, OnFieldNameChanged, Edit&, void )
     {
         m_aLinkChangeHandler.Call( *this );
     }
@@ -222,18 +219,18 @@ namespace pcr
     void FormLinkDialog::commitLinkPairs()
     {
         // collect the field lists from the rows
-        ::std::vector< OUString > aDetailFields; aDetailFields.reserve( 4 );
-        ::std::vector< OUString > aMasterFields; aMasterFields.reserve( 4 );
+        std::vector< OUString > aDetailFields; aDetailFields.reserve( 4 );
+        std::vector< OUString > aMasterFields; aMasterFields.reserve( 4 );
 
         const FieldLinkRow* aRows[] = {
             m_aRow1.get(), m_aRow2.get(), m_aRow3.get(), m_aRow4.get()
         };
 
-        for ( sal_Int32 i = 0; i < 4; ++i )
+        for (const FieldLinkRow* aRow : aRows)
         {
             OUString sDetailField, sMasterField;
-            aRows[ i ]->GetFieldName( FieldLinkRow::eDetailField, sDetailField );
-            aRows[ i ]->GetFieldName( FieldLinkRow::eMasterField, sMasterField );
+            aRow->GetFieldName( FieldLinkRow::eDetailField, sDetailField );
+            aRow->GetFieldName( FieldLinkRow::eMasterField, sMasterField );
             if ( sDetailField.isEmpty() && sMasterField.isEmpty() )
                 continue;
 
@@ -280,10 +277,10 @@ namespace pcr
         FieldLinkRow* aRows[] = {
             m_aRow1.get(), m_aRow2.get(), m_aRow3.get(), m_aRow4.get()
         };
-        for ( sal_Int32 i = 0; i < 4 ; ++i )
+        for (FieldLinkRow* aRow : aRows)
         {
-            aRows[i]->fillList( FieldLinkRow::eDetailField, sDetailFields );
-            aRows[i]->fillList( FieldLinkRow::eMasterField, sMasterFields );
+            aRow->fillList( FieldLinkRow::eDetailField, sDetailFields );
+            aRow->fillList( FieldLinkRow::eMasterField, sMasterFields );
         }
 
     }
@@ -297,7 +294,7 @@ namespace pcr
         {
             if ( m_sDetailLabel.isEmpty() )
             {
-                m_sDetailLabel = PcrRes(STR_DETAIL_FORM).toString();
+                m_sDetailLabel = PcrRes(STR_DETAIL_FORM);
             }
             sDetailType = m_sDetailLabel;
         }
@@ -309,7 +306,7 @@ namespace pcr
         {
             if ( m_sMasterLabel.isEmpty() )
             {
-                m_sMasterLabel = PcrRes(STR_MASTER_FORM).toString();
+                m_sMasterLabel = PcrRes(STR_MASTER_FORM);
             }
             sMasterType = m_sMasterLabel;
         }
@@ -451,7 +448,7 @@ namespace pcr
         {
             OUString sErrorMessage;
             {
-                sErrorMessage = PcrRes(STR_ERROR_RETRIEVING_COLUMNS).toString();
+                sErrorMessage = PcrRes(STR_ERROR_RETRIEVING_COLUMNS);
                 sErrorMessage = sErrorMessage.replaceFirst("#", sCommand);
             }
 
@@ -472,7 +469,7 @@ namespace pcr
             _rxConnection.set(_rxFormProps->getPropertyValue(PROPERTY_ACTIVE_CONNECTION),UNO_QUERY);
 
         if ( !_rxConnection.is() )
-            _rxConnection = ::dbtools::connectRowset( Reference< XRowSet >( _rxFormProps, UNO_QUERY ), m_xContext, true );
+            _rxConnection = ::dbtools::connectRowset( Reference< XRowSet >( _rxFormProps, UNO_QUERY ), m_xContext );
     }
 
 
@@ -591,16 +588,11 @@ namespace pcr
 
         try
         {
-            bool bEnable = true;
-
             // only show the button when both forms are based on the same data source
-            if ( bEnable )
-            {
-                OUString sMasterDS, sDetailDS;
-                xMasterFormProps->getPropertyValue( PROPERTY_DATASOURCE ) >>= sMasterDS;
-                xDetailFormProps->getPropertyValue( PROPERTY_DATASOURCE ) >>= sDetailDS;
-                bEnable = ( sMasterDS == sDetailDS );
-            }
+            OUString sMasterDS, sDetailDS;
+            xMasterFormProps->getPropertyValue( PROPERTY_DATASOURCE ) >>= sMasterDS;
+            xDetailFormProps->getPropertyValue( PROPERTY_DATASOURCE ) >>= sDetailDS;
+            bool bEnable = ( sMasterDS == sDetailDS );
 
             // only show the button when the connection supports relations
             if ( bEnable )
@@ -658,19 +650,19 @@ namespace pcr
     }
 
 
-    IMPL_LINK_NOARG_TYPED( FormLinkDialog, OnSuggest, Button*, void )
+    IMPL_LINK_NOARG( FormLinkDialog, OnSuggest, Button*, void )
     {
         initializeFieldRowsFrom( m_aRelationDetailColumns, m_aRelationMasterColumns );
     }
 
 
-    IMPL_LINK_NOARG_TYPED( FormLinkDialog, OnFieldChanged, FieldLinkRow&, void )
+    IMPL_LINK_NOARG( FormLinkDialog, OnFieldChanged, FieldLinkRow&, void )
     {
         updateOkButton();
     }
 
 
-    IMPL_LINK_NOARG_TYPED( FormLinkDialog, OnInitialize, void*, void )
+    IMPL_LINK_NOARG( FormLinkDialog, OnInitialize, void*, void )
     {
         initializeColumnLabels();
         initializeFieldLists();

@@ -23,7 +23,8 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
 #include "xmlEnums.hxx"
-#include "xmlstrings.hrc"
+#include <stringconstants.hxx>
+#include <strings.hxx>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
 
@@ -66,7 +67,7 @@ OXMLConnectionResource::OXMLConnectionResource( ODBFilter& rImport,
                 }
                 catch(const Exception&)
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    DBG_UNHANDLED_EXCEPTION("dbaccess");
                 }
                 break;
             case XML_TOK_TYPE:

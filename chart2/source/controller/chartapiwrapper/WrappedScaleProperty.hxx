@@ -19,18 +19,19 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_CHARTAPIWRAPPER_WRAPPEDSCALEPROPERTY_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_CHARTAPIWRAPPER_WRAPPEDSCALEPROPERTY_HXX
 
-#include "WrappedProperty.hxx"
-#include "Chart2ModelContact.hxx"
+#include <WrappedProperty.hxx>
 
 #include <memory>
 #include <vector>
+
+namespace chart { namespace wrapper { class Chart2ModelContact; } }
 
 namespace chart
 {
 namespace wrapper
 {
 
-class WrappedScaleProperty : public WrappedProperty
+class WrappedScaleProperty final : public WrappedProperty
 {
 public:
     enum tScaleProperty
@@ -53,25 +54,27 @@ public:
         , SCALE_PROP_REVERSEDIRECTION
     };
 
-public:
-    WrappedScaleProperty( tScaleProperty eScaleProperty, std::shared_ptr< Chart2ModelContact > spChart2ModelContact );
-    virtual ~WrappedScaleProperty();
+    WrappedScaleProperty(tScaleProperty eScaleProperty, const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact);
+    virtual ~WrappedScaleProperty() override;
 
-    static void addWrappedProperties( std::vector< WrappedProperty* >& rList, const std::shared_ptr< Chart2ModelContact >& spChart2ModelContact );
+    static void addWrappedProperties( std::vector< std::unique_ptr<WrappedProperty> >& rList, const std::shared_ptr< Chart2ModelContact >& spChart2ModelContact );
 
-    virtual void setPropertyValue( const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    virtual void setPropertyValue( const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const override;
 
-    virtual css::uno::Any getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    virtual css::uno::Any getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const override;
 
-protected: //methods
-    void setPropertyValue( tScaleProperty eScaleProperty, const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException);
-    css::uno::Any getPropertyValue( tScaleProperty eScaleProperty, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException);
+private:
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws css::beans::PropertyVetoException
+    /// @throws css::lang::IllegalArgumentException
+    /// @throws css::lang::WrappedTargetException
+    /// @throws css::uno::RuntimeException
+    void setPropertyValue( tScaleProperty eScaleProperty, const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const;
+    /// @throws css::beans::UnknownPropertyException
+    /// @throws css::lang::WrappedTargetException
+    /// @throws css::uno::RuntimeException
+    css::uno::Any getPropertyValue( tScaleProperty eScaleProperty, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const;
 
-private: //member
     std::shared_ptr< Chart2ModelContact >   m_spChart2ModelContact;
     tScaleProperty          m_eScaleProperty;
 

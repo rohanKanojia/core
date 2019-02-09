@@ -26,6 +26,7 @@
 #include <com/sun/star/awt/XControlContainer.hpp>
 #include <svx/svxdllapi.h>
 #include <svx/svdorect.hxx>
+#include <memory>
 
 
 // Forward declaration
@@ -45,7 +46,7 @@ class SVX_DLLPUBLIC SdrUnoObj : public SdrRectObj
     friend class                SdrPageView;
     friend class                SdrControlEventListenerImpl;
 
-    SdrUnoObjDataHolder*        m_pImpl;
+    std::unique_ptr<SdrUnoObjDataHolder>        m_pImpl;
 
     OUString                    aUnoControlModelTypeName;
     OUString                    aUnoControlTypeName;
@@ -58,20 +59,23 @@ private:
     SVX_DLLPRIVATE void CreateUnoControlModel(const OUString& rModelName,
         const css::uno::Reference< css::lang::XMultiServiceFactory >& rxSFac );
 
+protected:
+    // protected destructor
+    virtual ~SdrUnoObj() override;
+
 public:
-
-    explicit SdrUnoObj(const OUString& rModelName);
-    SdrUnoObj(const OUString& rModelName,
+    explicit SdrUnoObj(
+        SdrModel& rSdrModel,
+        const OUString& rModelName);
+    SdrUnoObj(
+        SdrModel& rSdrModel,
+        const OUString& rModelName,
         const css::uno::Reference< css::lang::XMultiServiceFactory >& rxSFac);
-    virtual ~SdrUnoObj();
-
-    virtual void SetPage(SdrPage* pNewPage) override;
-    virtual void SetModel(SdrModel* pModel) override;
 
     virtual void TakeObjInfo(SdrObjTransformInfoRec& rInfo) const override;
     virtual sal_uInt16 GetObjIdentifier() const override;
 
-    virtual SdrUnoObj* Clone() const override;
+    virtual SdrUnoObj* CloneSdrObject(SdrModel& rTargetModel) const override;
     SdrUnoObj& operator= (const SdrUnoObj& rObj);
     virtual void NbcResize(const Point& rRef, const Fraction& xFact, const Fraction& yFact) override;
     virtual void NbcSetLayer(SdrLayerID nLayer) override;
@@ -79,16 +83,12 @@ public:
     // SpecialDrag support
     virtual bool hasSpecialDrag() const override;
 
-    // FullDrag support
-    virtual bool supportsFullDrag() const override;
-    virtual SdrObject* getFullDragClone() const override;
-
     virtual OUString TakeObjNameSingul() const override;
     virtual OUString TakeObjNamePlural() const override;
 
     virtual void SetContextWritingMode( const sal_Int16 _nContextWritingMode ) override;
 
-    css::uno::Reference< css::awt::XControlModel > GetUnoControlModel() const {return xUnoControlModel;}
+    const css::uno::Reference< css::awt::XControlModel >& GetUnoControlModel() const {return xUnoControlModel;}
     css::uno::Reference< css::awt::XControl > GetUnoControl(const SdrView& _rView, const OutputDevice& _rOut) const;
 
     /** Retrieves a temporary XControl instance for a given output device
@@ -127,7 +127,7 @@ public:
 
 protected:
     // SdrObject overridables
-    virtual sdr::contact::ViewContact* CreateObjectSpecificViewContact() override;
+    virtual std::unique_ptr<sdr::contact::ViewContact> CreateObjectSpecificViewContact() override;
 
 private:
     /** Retrieves the typed ViewContact for the object

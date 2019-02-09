@@ -22,7 +22,6 @@
 
 #include "fupoor.hxx"
 
-#include <math.h>
 #include <vector>
 
 namespace basegfx {
@@ -42,7 +41,7 @@ public:
     virtual void DoExecute( SfxRequest& rReq ) override;
 
 private:
-    typedef ::std::vector< ::basegfx::B2DPolyPolygon* > B2DPolyPolygonList_impl;
+    typedef ::std::vector< ::basegfx::B2DPolyPolygon > B2DPolyPolygonList_impl;
 
     FuMorph (
         ViewShell* pViewSh,
@@ -58,13 +57,13 @@ private:
         const SdrObject* pObj2
     );
 
-    static ::basegfx::B2DPolyPolygon* ImpCreateMorphedPolygon(
+    static ::basegfx::B2DPolyPolygon ImpCreateMorphedPolygon(
         const ::basegfx::B2DPolyPolygon& rPolyPolyStart,
         const ::basegfx::B2DPolyPolygon& rPolyPolyEnd,
         double fMorphingFactor
     );
 
-    static bool ImpMorphPolygons(
+    static void ImpMorphPolygons(
         const ::basegfx::B2DPolyPolygon& rPolyPoly1,
         const ::basegfx::B2DPolyPolygon& rPolyPoly2,
         const sal_uInt16 nSteps,

@@ -1,4 +1,4 @@
-/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -17,14 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "osl/file.hxx"
-#include "osl/detail/file.h"
+#include <osl/file.hxx>
+#include <osl/detail/file.h>
 
-#include "osl/diagnose.h"
-#include "osl/thread.h"
+#include <osl/diagnose.h>
+#include <osl/thread.h>
 #include <osl/signal.h>
-#include "rtl/alloc.h"
+#include <rtl/alloc.h>
 #include <rtl/string.hxx>
+#include <sal/log.hxx>
 
 #include "system.hxx"
 #include "file_impl.hxx"
@@ -33,6 +34,7 @@
 #include "file_url.hxx"
 #include "uunxapi.hxx"
 #include "readwrite_helper.hxx"
+#include "unixerrnostring.hxx"
 
 #include <sys/types.h>
 #include <errno.h>
@@ -45,6 +47,7 @@
 #include <sys/mman.h>
 
 #include <algorithm>
+#include <cassert>
 
 #ifdef ANDROID
 #include <osl/detail/android-bootstrap.h>
@@ -90,11 +93,11 @@ DirectoryItem_Impl::~DirectoryItem_Impl()
 
 void * DirectoryItem_Impl::operator new(size_t n)
 {
-    return rtl_allocateMemory(n);
+    return malloc(n);
 }
 void DirectoryItem_Impl::operator delete(void * p)
 {
-    rtl_freeMemory(p);
+    free(p);
 }
 
 void DirectoryItem_Impl::acquire()
@@ -103,7 +106,7 @@ void DirectoryItem_Impl::acquire()
 }
 void DirectoryItem_Impl::release()
 {
-    if (0 == --m_RefCount)
+    if (--m_RefCount == 0)
         delete this;
 }
 
@@ -143,13 +146,13 @@ oslFileError SAL_CALL osl_openDirectory(rtl_uString* ustrDirectoryURL, oslDirect
 
     char path[PATH_MAX];
 
-    if ((nullptr == ustrDirectoryURL) || (0 == ustrDirectoryURL->length) || (nullptr == pDirectory))
+    if ((ustrDirectoryURL == nullptr) || (ustrDirectoryURL->length == 0) || (pDirectory == nullptr))
         return osl_File_E_INVAL;
 
     /* convert file URL to system path */
     eRet = osl_getSystemPathFromFileURL_Ex(ustrDirectoryURL, &ustrSystemPath);
 
-    if( osl_File_E_None != eRet )
+    if( eRet != osl_File_E_None )
         return eRet;
 
     osl_systemPathRemoveSeparator(ustrSystemPath);
@@ -168,7 +171,7 @@ oslFileError SAL_CALL osl_openDirectory(rtl_uString* ustrDirectoryURL, oslDirect
 
             if( pdir )
             {
-                oslDirectoryImpl* pDirImpl = (oslDirectoryImpl*) rtl_allocateMemory( sizeof(oslDirectoryImpl) );
+                oslDirectoryImpl* pDirImpl = (oslDirectoryImpl*) malloc( sizeof(oslDirectoryImpl) );
 
                 if( pDirImpl )
                     {
@@ -194,8 +197,10 @@ oslFileError SAL_CALL osl_openDirectory(rtl_uString* ustrDirectoryURL, oslDirect
 
             if( pdir )
             {
+                SAL_INFO("sal.file", "opendir(" << path << ") => " << pdir);
+
                 /* create and initialize impl structure */
-                oslDirectoryImpl* pDirImpl = static_cast<oslDirectoryImpl*>(rtl_allocateMemory( sizeof(oslDirectoryImpl) ));
+                oslDirectoryImpl* pDirImpl = static_cast<oslDirectoryImpl*>(malloc( sizeof(oslDirectoryImpl) ));
 
                 if( pDirImpl )
                 {
@@ -207,53 +212,56 @@ oslFileError SAL_CALL osl_openDirectory(rtl_uString* ustrDirectoryURL, oslDirect
                     *pDirectory = static_cast<oslDirectory>(pDirImpl);
                     return osl_File_E_None;
                 }
-                else
-                {
-                    errno = ENOMEM;
-                    closedir( pdir );
-                }
+                errno = ENOMEM;
+                closedir( pdir );
             }
             else
             {
-#ifdef DEBUG_OSL_FILE
-                perror ("osl_openDirectory"); fprintf (stderr, path);
-#endif
+                int e = errno;
+                SAL_INFO("sal.file", "opendir(" << path << "): " << UnixErrnoString(e));
+                // Restore errno after possible modification by SAL_INFO above
+                errno = e;
             }
         }
     }
 
     rtl_uString_release( ustrSystemPath );
 
-    return oslTranslateFileError(OSL_FET_ERROR, errno);
+    return oslTranslateFileError(errno);
 }
 
-oslFileError SAL_CALL osl_closeDirectory( oslDirectory Directory )
+oslFileError SAL_CALL osl_closeDirectory(oslDirectory pDirectory)
 {
-    oslDirectoryImpl* pDirImpl = static_cast<oslDirectoryImpl*>(Directory);
+    SAL_WARN_IF(!pDirectory, "sal.file", "pDirectory is nullptr");
+    oslDirectoryImpl* pDirImpl = static_cast<oslDirectoryImpl*>(pDirectory);
     oslFileError err = osl_File_E_None;
 
-    OSL_ASSERT( Directory );
-
-    if( nullptr == pDirImpl )
+    if (!pDirImpl)
         return osl_File_E_INVAL;
 
 #ifdef ANDROID
-    if( pDirImpl->eKind == oslDirectoryImpl::KIND_ASSETS )
+    if (pDirImpl->eKind == oslDirectoryImpl::KIND_ASSETS)
     {
-        if (lo_apk_closedir( pDirImpl->pApkDirStruct ))
+        if (lo_apk_closedir(pDirImpl->pApkDirStruct))
             err = osl_File_E_IO;
     }
     else
 #endif
     {
-        if( closedir( pDirImpl->pDirStruct ) )
-            err = oslTranslateFileError(OSL_FET_ERROR, errno);
+        if (closedir( pDirImpl->pDirStruct) != 0)
+        {
+            int e = errno;
+            SAL_INFO("sal.file", "closedir(" << pDirImpl->pDirStruct << "): " << UnixErrnoString(e));
+            err = oslTranslateFileError(e);
+        }
+        else
+            SAL_INFO("sal.file", "closedir(" << pDirImpl->pDirStruct << "): OK");
     }
 
     /* cleanup members */
-    rtl_uString_release( pDirImpl->ustrPath );
+    rtl_uString_release(pDirImpl->ustrPath);
 
-    rtl_freeMemory( pDirImpl );
+    free(pDirImpl);
 
     return err;
 }
@@ -265,74 +273,73 @@ oslFileError SAL_CALL osl_closeDirectory( oslDirectory Directory )
  * on request
  *********************************************/
 
-static struct dirent* osl_readdir_impl_(DIR* pdir, bool bFilterLocalAndParentDir)
+static struct dirent* osl_readdir_impl_(DIR* pdir)
 {
     struct dirent* pdirent;
 
     while ((pdirent = readdir(pdir)) != nullptr)
     {
-        if (bFilterLocalAndParentDir &&
-            ((0 == strcmp(pdirent->d_name, ".")) || (0 == strcmp(pdirent->d_name, ".."))))
+        if ((strcmp(pdirent->d_name, ".") == 0) || (strcmp(pdirent->d_name, "..") == 0))
             continue;
-        else
-            break;
+        break;
     }
 
     return pdirent;
 }
 
-oslFileError SAL_CALL osl_getNextDirectoryItem(oslDirectory Directory, oslDirectoryItem* pItem, SAL_UNUSED_PARAMETER sal_uInt32 /*uHint*/)
+oslFileError SAL_CALL osl_getNextDirectoryItem(oslDirectory pDirectory,
+        oslDirectoryItem* pItem, SAL_UNUSED_PARAMETER sal_uInt32 /*uHint*/)
 {
-    oslDirectoryImpl* pDirImpl     = static_cast<oslDirectoryImpl*>(Directory);
-    rtl_uString*      ustrFileName = nullptr;
-    rtl_uString*      ustrFilePath = nullptr;
-    struct dirent*    pEntry;
+    SAL_WARN_IF(!pDirectory, "sal.file", "pDirectory is nullptr");
+    SAL_WARN_IF(!pItem, "sal.file", "pItem is nullptr");
 
-    OSL_ASSERT(Directory);
-    OSL_ASSERT(pItem);
+    oslDirectoryImpl* pDirImpl = static_cast<oslDirectoryImpl*>(pDirectory);
+    rtl_uString* ustrFileName = nullptr;
+    rtl_uString* ustrFilePath = nullptr;
+    struct dirent* pEntry;
 
-    if ((nullptr == Directory) || (nullptr == pItem))
+    if ((pDirectory == nullptr) || (pItem == nullptr))
         return osl_File_E_INVAL;
 
 #ifdef ANDROID
-    if( pDirImpl->eKind == oslDirectoryImpl::KIND_ASSETS )
+    if(pDirImpl->eKind == oslDirectoryImpl::KIND_ASSETS)
     {
         pEntry = lo_apk_readdir(pDirImpl->pApkDirStruct);
     }
     else
 #endif
     {
-        pEntry = osl_readdir_impl_(pDirImpl->pDirStruct, true);
+        pEntry = osl_readdir_impl_(pDirImpl->pDirStruct);
     }
 
-    if (nullptr == pEntry)
+    if (!pEntry)
         return osl_File_E_NOENT;
 
 #if defined(MACOSX)
 
     // convert decomposed filename to precomposed unicode
     char composed_name[BUFSIZ];
-    CFMutableStringRef strRef = CFStringCreateMutable (nullptr, 0 );
-    CFStringAppendCString( strRef, pEntry->d_name, kCFStringEncodingUTF8 );  //UTF8 is default on Mac OSX
-    CFStringNormalize( strRef, kCFStringNormalizationFormC );
-    CFStringGetCString( strRef, composed_name, BUFSIZ, kCFStringEncodingUTF8 );
-    CFRelease( strRef );
-    rtl_string2UString( &ustrFileName, composed_name, strlen( composed_name),
-    osl_getThreadTextEncoding(), OSTRING_TO_OUSTRING_CVTFLAGS );
+    CFMutableStringRef strRef = CFStringCreateMutable(nullptr, 0 );
+    CFStringAppendCString(strRef, pEntry->d_name, kCFStringEncodingUTF8);  // UTF8 is default on Mac OSX
+    CFStringNormalize(strRef, kCFStringNormalizationFormC);
+    CFStringGetCString(strRef, composed_name, BUFSIZ, kCFStringEncodingUTF8);
+    CFRelease(strRef);
+    rtl_string2UString(&ustrFileName, composed_name, strlen(composed_name),
+                       osl_getThreadTextEncoding(), OSTRING_TO_OUSTRING_CVTFLAGS);
 
 #else  // not MACOSX
     /* convert file name to unicode */
-    rtl_string2UString( &ustrFileName, pEntry->d_name, strlen( pEntry->d_name ),
-        osl_getThreadTextEncoding(), OSTRING_TO_OUSTRING_CVTFLAGS );
-    OSL_ASSERT(ustrFileName != nullptr);
+    rtl_string2UString(&ustrFileName, pEntry->d_name, strlen(pEntry->d_name),
+                       osl_getThreadTextEncoding(), OSTRING_TO_OUSTRING_CVTFLAGS);
+    assert(ustrFileName);
 
 #endif
 
     osl_systemPathMakeAbsolutePath(pDirImpl->ustrPath, ustrFileName, &ustrFilePath);
-    rtl_uString_release( ustrFileName );
+    rtl_uString_release(ustrFileName);
 
-    DirectoryItem_Impl * pImpl = static_cast< DirectoryItem_Impl* >(*pItem);
-    if (nullptr != pImpl)
+    DirectoryItem_Impl* pImpl = static_cast< DirectoryItem_Impl* >(*pItem);
+    if (pImpl)
     {
         pImpl->release();
         pImpl = nullptr;
@@ -343,29 +350,28 @@ oslFileError SAL_CALL osl_getNextDirectoryItem(oslDirectory Directory, oslDirect
     pImpl = new DirectoryItem_Impl(ustrFilePath);
 #endif /* _DIRENT_HAVE_D_TYPE */
     *pItem = pImpl;
-    rtl_uString_release( ustrFilePath );
+    rtl_uString_release(ustrFilePath);
 
     return osl_File_E_None;
 }
 
-oslFileError SAL_CALL osl_getDirectoryItem( rtl_uString* ustrFileURL, oslDirectoryItem* pItem )
+oslFileError SAL_CALL osl_getDirectoryItem(rtl_uString* ustrFileURL, oslDirectoryItem* pItem)
 {
     rtl_uString* ustrSystemPath = nullptr;
-    oslFileError osl_error      = osl_File_E_INVAL;
+    oslFileError osl_error = osl_File_E_INVAL;
 
-    OSL_ASSERT((nullptr != ustrFileURL) && (nullptr != pItem));
-    if ((nullptr == ustrFileURL) || (0 == ustrFileURL->length) || (nullptr == pItem))
+    if ((!ustrFileURL) || (ustrFileURL->length == 0) || (!pItem))
         return osl_File_E_INVAL;
 
     osl_error = osl_getSystemPathFromFileURL_Ex(ustrFileURL, &ustrSystemPath);
-    if (osl_File_E_None != osl_error)
+    if (osl_error != osl_File_E_None)
         return osl_error;
 
     osl_systemPathRemoveSeparator(ustrSystemPath);
 
-    if (-1 == access_u(ustrSystemPath, F_OK))
+    if (access_u(ustrSystemPath, F_OK) == -1)
     {
-        osl_error = oslTranslateFileError(OSL_FET_ERROR, errno);
+        osl_error = oslTranslateFileError(errno);
     }
     else
     {
@@ -379,7 +385,7 @@ oslFileError SAL_CALL osl_getDirectoryItem( rtl_uString* ustrFileURL, oslDirecto
 oslFileError SAL_CALL osl_acquireDirectoryItem( oslDirectoryItem Item )
 {
     DirectoryItem_Impl * pImpl = static_cast< DirectoryItem_Impl* >(Item);
-    if (nullptr == pImpl)
+    if (pImpl == nullptr)
         return osl_File_E_INVAL;
 
     pImpl->acquire();
@@ -389,7 +395,7 @@ oslFileError SAL_CALL osl_acquireDirectoryItem( oslDirectoryItem Item )
 oslFileError SAL_CALL osl_releaseDirectoryItem( oslDirectoryItem Item )
 {
     DirectoryItem_Impl * pImpl = static_cast< DirectoryItem_Impl* >(Item);
-    if (nullptr == pImpl)
+    if (pImpl == nullptr)
         return osl_File_E_INVAL;
 
     pImpl->release();
@@ -408,7 +414,8 @@ oslFileError osl_createDirectoryWithFlags(
     char path[PATH_MAX];
     oslFileError eRet;
 
-    OSL_ASSERT( ustrDirectoryURL );
+    SAL_WARN_IF((!ustrDirectoryURL) || (ustrDirectoryURL->length == 0),
+                "sal.file", "Invalid directory URL");
 
     /* convert directory url to system path */
     eRet = FileURLToPath( path, PATH_MAX, ustrDirectoryURL );
@@ -417,7 +424,7 @@ oslFileError osl_createDirectoryWithFlags(
 
 #ifdef MACOSX
     if ( macxp_resolveAlias( path, PATH_MAX ) != 0 )
-      return oslTranslateFileError( OSL_FET_ERROR, errno );
+      return oslTranslateFileError( errno );
 #endif/* MACOSX */
 
     return osl_psz_createDirectory( path, flags );
@@ -428,7 +435,8 @@ oslFileError SAL_CALL osl_removeDirectory( rtl_uString* ustrDirectoryURL )
     char path[PATH_MAX];
     oslFileError eRet;
 
-    OSL_ASSERT( ustrDirectoryURL );
+    SAL_WARN_IF((!ustrDirectoryURL) || (ustrDirectoryURL->length == 0),
+                "sal.file", "Invalid directory URL");
 
     /* convert directory url to system path */
     eRet = FileURLToPath( path, PATH_MAX, ustrDirectoryURL );
@@ -437,7 +445,7 @@ oslFileError SAL_CALL osl_removeDirectory( rtl_uString* ustrDirectoryURL )
 
 #ifdef MACOSX
     if ( macxp_resolveAlias( path, PATH_MAX ) != 0 )
-      return oslTranslateFileError( OSL_FET_ERROR, errno );
+      return oslTranslateFileError( errno );
 #endif/* MACOSX */
 
     return osl_psz_removeDirectory( path );
@@ -463,8 +471,11 @@ oslFileError osl_psz_createDirectory(char const * pszPath, sal_uInt32 flags)
     if ( nRet < 0 )
     {
         nRet=errno;
-        return oslTranslateFileError(OSL_FET_ERROR, nRet);
+        SAL_INFO("sal.file", "mkdir(" << pszPath << ",0" << std::oct << mode << std::dec << "): " << UnixErrnoString(nRet));
+        return oslTranslateFileError(nRet);
     }
+    else
+        SAL_INFO("sal.file", "mkdir(" << pszPath << ",0" << std::oct << mode << std::dec << "): OK");
 
     return osl_File_E_None;
 }
@@ -478,8 +489,11 @@ static oslFileError osl_psz_removeDirectory( const sal_Char* pszPath )
     if ( nRet < 0 )
     {
         nRet=errno;
-        return oslTranslateFileError(OSL_FET_ERROR, nRet);
+        SAL_INFO("sal.file", "rmdir(" << pszPath << "): " << UnixErrnoString(nRet));
+        return oslTranslateFileError(nRet);
     }
+    else
+        SAL_INFO("sal.file", "rmdir(" << pszPath << "): OK");
 
     return osl_File_E_None;
 }
@@ -493,8 +507,7 @@ static int path_make_parent(sal_Unicode* path)
         *(path + i) = 0;
         return i;
     }
-    else
-        return 0;
+    return 0;
 }
 
 static int create_dir_with_callback(
@@ -502,13 +515,11 @@ static int create_dir_with_callback(
     oslDirectoryCreationCallbackFunc aDirectoryCreationCallbackFunc,
     void* pData)
 {
-    int mode = S_IRWXU | S_IRWXG | S_IRWXO;
-
-    if (osl::mkdir(directory_path, mode) == 0)
+    if (osl::mkdir(directory_path, S_IRWXU | S_IRWXG | S_IRWXO) == 0)
     {
         if (aDirectoryCreationCallbackFunc)
         {
-            rtl::OUString url;
+            OUString url;
             osl::FileBase::getFileURLFromSystemPath(directory_path, url);
             aDirectoryCreationCallbackFunc(pData, url.pData);
         }
@@ -522,7 +533,7 @@ static oslFileError create_dir_recursively_(
     oslDirectoryCreationCallbackFunc aDirectoryCreationCallbackFunc,
     void* pData)
 {
-    OSL_PRECOND((rtl_ustr_getLength(dir_path) > 0) && ((dir_path + (rtl_ustr_getLength(dir_path) - 1)) != (dir_path + rtl_ustr_lastIndexOfChar(dir_path, '/'))), \
+    OSL_PRECOND((rtl_ustr_getLength(dir_path) > 0) && ((dir_path + (rtl_ustr_getLength(dir_path) - 1)) != (dir_path + rtl_ustr_lastIndexOfChar(dir_path, '/'))),
     "Path must not end with a slash");
 
     int native_err = create_dir_with_callback(
@@ -532,7 +543,7 @@ static oslFileError create_dir_recursively_(
         return osl_File_E_None;
 
     if (native_err != ENOENT)
-        return oslTranslateFileError(OSL_FET_ERROR, native_err);
+        return oslTranslateFileError(native_err);
 
     // we step back until '/a_dir' at maximum because
     // we should get an error unequal ENOENT when
@@ -543,7 +554,7 @@ static oslFileError create_dir_recursively_(
     oslFileError osl_error = create_dir_recursively_(
         dir_path, aDirectoryCreationCallbackFunc, pData);
 
-    if (osl_File_E_None != osl_error)
+    if (osl_error != osl_File_E_None && osl_error != osl_File_E_EXIST)
         return osl_error;
 
        dir_path[pos] = '/';
@@ -559,7 +570,7 @@ oslFileError SAL_CALL osl_createDirectoryPath(
     if (aDirectoryUrl == nullptr)
         return osl_File_E_INVAL;
 
-    rtl::OUString sys_path;
+    OUString sys_path;
     oslFileError osl_error = osl_getSystemPathFromFileURL_Ex(aDirectoryUrl, &sys_path.pData);
 
     if (osl_error != osl_File_E_None)
@@ -572,7 +583,7 @@ oslFileError SAL_CALL osl_createDirectoryPath(
     return create_dir_recursively_(sys_path.pData->buffer, aDirectoryCreationCallbackFunc, pData);
 }
 
-static oslFileError osl_psz_removeFile(const sal_Char* pszPath);
+static oslFileError osl_unlinkFile(const sal_Char* pszPath);
 static oslFileError osl_psz_copyFile(const sal_Char* pszPath, const sal_Char* pszDestPath, bool preserveMetadata);
 static oslFileError osl_psz_moveFile(const sal_Char* pszPath, const sal_Char* pszDestPath);
 
@@ -588,8 +599,8 @@ oslFileError SAL_CALL osl_moveFile( rtl_uString* ustrFileURL, rtl_uString* ustrD
     char destPath[PATH_MAX];
     oslFileError eRet;
 
-    OSL_ASSERT( ustrFileURL );
-    OSL_ASSERT( ustrDestURL );
+    SAL_WARN_IF((!ustrFileURL) || (ustrFileURL->length == 0), "sal.file", "Invalid source file URL");
+    SAL_WARN_IF((!ustrDestURL) || (ustrDestURL->length == 0), "sal.file", "Invalid destination file URL");
 
     /* convert source url to system path */
     eRet = FileURLToPath( srcPath, PATH_MAX, ustrFileURL );
@@ -603,10 +614,15 @@ oslFileError SAL_CALL osl_moveFile( rtl_uString* ustrFileURL, rtl_uString* ustrD
 
 #ifdef MACOSX
     if ( macxp_resolveAlias( srcPath, PATH_MAX ) != 0 || macxp_resolveAlias( destPath, PATH_MAX ) != 0 )
-      return oslTranslateFileError( OSL_FET_ERROR, errno );
+      return oslTranslateFileError( errno );
 #endif/* MACOSX */
 
     return oslDoMoveFile( srcPath, destPath );
+}
+
+oslFileError SAL_CALL osl_replaceFile(rtl_uString* ustrFileURL, rtl_uString* ustrDestURL)
+{
+    return osl_moveFile(ustrFileURL, ustrDestURL);
 }
 
 oslFileError SAL_CALL osl_copyFile( rtl_uString* ustrFileURL, rtl_uString* ustrDestURL )
@@ -615,8 +631,8 @@ oslFileError SAL_CALL osl_copyFile( rtl_uString* ustrFileURL, rtl_uString* ustrD
     char destPath[PATH_MAX];
     oslFileError eRet;
 
-    OSL_ASSERT( ustrFileURL );
-    OSL_ASSERT( ustrDestURL );
+    SAL_WARN_IF((!ustrFileURL) || (ustrFileURL->length == 0), "sal.file", "Invalid source file URL");
+    SAL_WARN_IF((!ustrDestURL) || (ustrDestURL->length == 0), "sal.file", "Invalid destination file URL");
 
     /* convert source url to system path */
     eRet = FileURLToPath( srcPath, PATH_MAX, ustrFileURL );
@@ -630,81 +646,78 @@ oslFileError SAL_CALL osl_copyFile( rtl_uString* ustrFileURL, rtl_uString* ustrD
 
 #ifdef MACOSX
     if ( macxp_resolveAlias( srcPath, PATH_MAX ) != 0 || macxp_resolveAlias( destPath, PATH_MAX ) != 0 )
-      return oslTranslateFileError( OSL_FET_ERROR, errno );
+      return oslTranslateFileError( errno );
 #endif/* MACOSX */
 
     return osl_psz_copyFile( srcPath, destPath, false );
 }
 
-oslFileError SAL_CALL osl_removeFile( rtl_uString* ustrFileURL )
+oslFileError SAL_CALL osl_removeFile(rtl_uString* ustrFileURL)
 {
     char path[PATH_MAX];
     oslFileError eRet;
 
-    OSL_ASSERT( ustrFileURL );
+    SAL_WARN_IF(!ustrFileURL || ustrFileURL->length == 0, "sal.file", "Invalid file URL");
 
     /* convert file url to system path */
-    eRet = FileURLToPath( path, PATH_MAX, ustrFileURL );
-    if( eRet != osl_File_E_None )
+    eRet = FileURLToPath(path, PATH_MAX, ustrFileURL);
+    if (eRet != osl_File_E_None)
         return eRet;
 
 #ifdef MACOSX
-    if ( macxp_resolveAlias( path, PATH_MAX ) != 0 )
-      return oslTranslateFileError( OSL_FET_ERROR, errno );
+    if (macxp_resolveAlias(path, PATH_MAX) != 0)
+      return oslTranslateFileError(errno);
 #endif/* MACOSX */
 
-    return osl_psz_removeFile( path );
+    return osl_unlinkFile(path);
 }
 
-static oslFileError oslDoMoveFile( const sal_Char* pszPath, const sal_Char* pszDestPath)
+static oslFileError oslDoMoveFile(const sal_Char* pszPath, const sal_Char* pszDestPath)
 {
     oslFileError tErr = osl_psz_moveFile(pszPath,pszDestPath);
-    if ( tErr == osl_File_E_None )
+    if (tErr == osl_File_E_None)
+        return tErr;
+
+    if (tErr != osl_File_E_XDEV)
+        return tErr;
+
+    tErr = osl_psz_copyFile(pszPath,pszDestPath, true);
+
+    if (tErr != osl_File_E_None)
     {
+        osl_unlinkFile(pszDestPath);
         return tErr;
     }
 
-    if ( tErr != osl_File_E_XDEV )
-    {
-        return tErr;
-    }
-
-    tErr=osl_psz_copyFile(pszPath,pszDestPath, true);
-
-    if ( tErr != osl_File_E_None )
-    {
-        osl_psz_removeFile(pszDestPath);
-        return tErr;
-    }
-
-    tErr=osl_psz_removeFile(pszPath);
+    tErr = osl_unlinkFile(pszPath);
 
     return tErr;
 }
 
-static oslFileError osl_psz_removeFile( const sal_Char* pszPath )
+static oslFileError osl_unlinkFile(const sal_Char* pszPath)
 {
     int nRet=0;
     struct stat aStat;
 
     nRet = lstat_c(pszPath,&aStat);
-    if ( nRet < 0 )
+    if (nRet < 0)
     {
         nRet=errno;
-        return oslTranslateFileError(OSL_FET_ERROR, nRet);
+        return oslTranslateFileError(nRet);
     }
 
-    if ( S_ISDIR(aStat.st_mode) )
-    {
+    if (S_ISDIR(aStat.st_mode))
         return osl_File_E_ISDIR;
-    }
 
     nRet = unlink(pszPath);
-    if ( nRet < 0 )
+    if (nRet < 0)
     {
         nRet=errno;
-        return oslTranslateFileError(OSL_FET_ERROR, nRet);
+        SAL_INFO("sal.file", "unlink(" << pszPath << "): " << UnixErrnoString(nRet));
+        return oslTranslateFileError(nRet);
     }
+    else
+        SAL_INFO("sal.file", "unlink(" << pszPath << "): OK");
 
     return osl_File_E_None;
 }
@@ -715,11 +728,14 @@ static oslFileError osl_psz_moveFile(const sal_Char* pszPath, const sal_Char* ps
 
     nRet = rename(pszPath,pszDestPath);
 
-    if ( nRet < 0 )
+    if (nRet < 0)
     {
         nRet=errno;
-        return oslTranslateFileError(OSL_FET_ERROR, nRet);
+        SAL_INFO("sal.file", "rename(" << pszPath << "," << pszDestPath << "): " << UnixErrnoString(nRet));
+        return oslTranslateFileError(nRet);
     }
+    else
+        SAL_INFO("sal.file", "rename(" << pszPath << "," << pszDestPath << "): OK");
 
     return osl_File_E_None;
 }
@@ -740,57 +756,53 @@ static oslFileError osl_psz_copyFile( const sal_Char* pszPath, const sal_Char* p
     /* mfe: does the source file really exists? */
     nRet = lstat_c(pszPath,&aFileStat);
 
-    if ( nRet < 0 )
+    if (nRet < 0)
     {
         nRet=errno;
-        return oslTranslateFileError(OSL_FET_ERROR, nRet);
+        return oslTranslateFileError(nRet);
     }
 
-    /* mfe: we do only copy files here! */
-    if ( S_ISDIR(aFileStat.st_mode) )
-    {
+    /* we do only copy files here */
+    if (S_ISDIR(aFileStat.st_mode))
         return osl_File_E_ISDIR;
-    }
 
-    nSourceSize=(size_t)aFileStat.st_size;
-    nMode=aFileStat.st_mode;
-    nAcTime=aFileStat.st_atime;
-    nModTime=aFileStat.st_mtime;
-    nUID=aFileStat.st_uid;
-    nGID=aFileStat.st_gid;
+    nSourceSize = static_cast< size_t >(aFileStat.st_size);
+    nMode = aFileStat.st_mode;
+    nAcTime = aFileStat.st_atime;
+    nModTime = aFileStat.st_mtime;
+    nUID = aFileStat.st_uid;
+    nGID = aFileStat.st_gid;
 
     nRet = stat_c(pszDestPath,&aFileStat);
-    if ( nRet < 0 )
+    if (nRet < 0)
     {
         nRet=errno;
 
-        if ( nRet == ENOENT )
-        {
+#ifdef IOS
+        // Checking for nonexistent files at least in the iCloud cache directory (like
+        // "/private/var/mobile/Library/Mobile Documents/com~apple~CloudDocs/helloodt0.odt" fails
+        // with EPERM, not ENOENT.
+        if (nRet == EPERM)
             DestFileExists=0;
-        }
+#endif
+
+        if (nRet == ENOENT)
+            DestFileExists=0;
     }
 
     /* mfe: the destination file must not be a directory! */
-    if ( nRet == 0 && S_ISDIR(aFileStat.st_mode) )
-    {
+    if (nRet == 0 && S_ISDIR(aFileStat.st_mode))
         return osl_File_E_ISDIR;
-    }
-    else
-    {
-        /* mfe: file does not exists or is no dir */
-    }
 
-    tErr = oslDoCopy(pszPath,pszDestPath,nMode,nSourceSize,DestFileExists);
+    /* mfe: file does not exists or is no dir */
 
-    if ( tErr != osl_File_E_None )
-    {
+    tErr = oslDoCopy(pszPath, pszDestPath, nMode, nSourceSize, DestFileExists);
+
+    if (tErr != osl_File_E_None)
         return tErr;
-    }
 
     if (preserveMetadata)
-    {
-        attemptChangeMetadata(pszDestPath,nMode,nAcTime,nModTime,nUID,nGID);
-    }
+        attemptChangeMetadata(pszDestPath, nMode, nAcTime, nModTime, nUID, nGID);
 
     return tErr;
 }
@@ -799,27 +811,30 @@ static oslFileError oslDoCopy(const sal_Char* pszSourceFileName, const sal_Char*
 {
     int      nRet=0;
 
-    rtl::OString tmpDestFile;
+    OString tmpDestFile;
     if ( DestFileExists )
     {
         //TODO: better pick a temp file name instead of adding .osl-tmp:
         // use the destination file to avoid EXDEV /* Cross-device link */
-        tmpDestFile = rtl::OString(pszDestFileName) + ".osl-tmp";
+        tmpDestFile = OString(pszDestFileName) + ".osl-tmp";
         if (rename(pszDestFileName, tmpDestFile.getStr()) != 0)
         {
-            if (errno == ENOENT)
+            int e = errno;
+            SAL_INFO("sal.file", "rename(" << pszDestFileName << ", " << tmpDestFile
+                     << "): " << UnixErrnoString(e));
+            if (e == ENOENT)
             {
                 DestFileExists = 0;
             }
             else
             {
-                int e = errno;
-                SAL_INFO(
-                    "sal.osl",
-                    "rename(" << pszDestFileName << ", " << tmpDestFile
-                        << ") failed with errno " << e);
                 return osl_File_E_EXIST; // for want of a better error code
             }
+        }
+        else
+        {
+            SAL_INFO("sal.file", "rename(" << pszDestFileName << ", " << tmpDestFile
+                     << "): OK");
         }
     }
 
@@ -842,20 +857,27 @@ static oslFileError oslDoCopy(const sal_Char* pszSourceFileName, const sal_Char*
 
     if ( nRet > 0 && DestFileExists == 1 )
     {
-        unlink(pszDestFileName);
+        if (unlink(pszDestFileName) != 0)
+        {
+            int e = errno;
+            SAL_INFO("sal.file", "unlink(" << pszDestFileName << "): " << UnixErrnoString(e));
+        }
+        else
+            SAL_INFO("sal.file", "unlink(" << pszDestFileName << "): OK");
+
         if (rename(tmpDestFile.getStr(), pszDestFileName) != 0)
         {
             int e = errno;
-            SAL_WARN(
-                "sal.osl",
-                "rename(" << tmpDestFile << ", " << pszDestFileName
-                << ") failed with errno " << e);
+            SAL_INFO("sal.file", "rename(" << tmpDestFile << ", " << pszDestFileName
+                     << "): " << UnixErrnoString(e));
         }
+        else
+            SAL_INFO("sal.file", "rename(" << tmpDestFile << ", " << pszDestFileName << "): OK");
     }
 
     if ( nRet > 0 )
     {
-        return oslTranslateFileError(OSL_FET_ERROR, nRet);
+        return oslTranslateFileError(nRet);
     }
 
     if ( DestFileExists == 1 )
@@ -877,9 +899,10 @@ void attemptChangeMetadata( const sal_Char* pszFileName, mode_t nMode, time_t nA
 #endif
     {
         int e = errno;
-        SAL_INFO(
-            "sal.osl", "chmod(" << pszFileName << ") failed with errno " << e);
+        SAL_INFO("sal.file", "chmod(" << pszFileName << ",0" << std::oct << nMode << std::dec <<"): " << UnixErrnoString(e));
     }
+    else
+        SAL_INFO("sal.file", "chmod(" << pszFileName << ",0" << std::oct << nMode << std::dec <<"): OK");
 
     // No way to change utime of a symlink itself:
     if (!S_ISLNK(nMode))
@@ -889,9 +912,7 @@ void attemptChangeMetadata( const sal_Char* pszFileName, mode_t nMode, time_t nA
         if ( utime(pszFileName,&aTimeBuffer) < 0 )
         {
             int e = errno;
-            SAL_INFO(
-                "sal.osl",
-                "utime(" << pszFileName << ") failed with errno " << e);
+            SAL_INFO("sal.file", "utime(" << pszFileName << "): errno " << e);
         }
     }
 
@@ -902,9 +923,10 @@ void attemptChangeMetadata( const sal_Char* pszFileName, mode_t nMode, time_t nA
     if ( lchown(pszFileName,nUID,nGID) < 0 )
     {
         int e = errno;
-        SAL_INFO(
-            "sal.osl", "lchown(" << pszFileName << ") failed with errno " << e);
+        SAL_INFO("sal.file", "lchown(" << pszFileName << "): errno " << e);
     }
+    else
+        SAL_INFO("sal.file", "lchown(" << pszFileName << "): OK");
 }
 
 static int oslDoCopyLink(const sal_Char* pszSourceFileName, const sal_Char* pszDestFileName)
@@ -924,8 +946,8 @@ static int oslDoCopyLink(const sal_Char* pszSourceFileName, const sal_Char* pszD
         nRet=errno;
         return nRet;
     }
-    else
-        pszLinkContent[ nRet ] = 0;
+
+    pszLinkContent[ nRet ] = 0;
 
     nRet = symlink(pszLinkContent,pszDestFileName);
 
@@ -958,9 +980,12 @@ static int oslDoCopyFile(const sal_Char* pszSourceFileName, const sal_Char* pszD
     if ( DestFileFD < 0 )
     {
         nRet=errno;
+        SAL_INFO("sal.file", "open(" << pszDestFileName << ",O_WRONLY|O_CREAT,0" << std::oct << mode << std::dec << "): " << UnixErrnoString(nRet));
         osl_closeFile(SourceFileFH);
         return nRet;
     }
+    else
+        SAL_INFO("sal.file", "open(" << pszDestFileName << ",O_WRONLY|O_CREAT,0" << std::oct << mode << std::dec << "): OK");
 
     size_t nRemains = nSourceSize;
 
@@ -982,7 +1007,7 @@ static int oslDoCopyFile(const sal_Char* pszSourceFileName, const sal_Char* pszD
                 break;
 
             // We know nRead <= nToRead, so it must fit in a size_t
-            nRemains -= (size_t) nRead;
+            nRemains -= static_cast<size_t>(nRead);
         }
         while( nRemains );
     }
@@ -996,8 +1021,15 @@ static int oslDoCopyFile(const sal_Char* pszSourceFileName, const sal_Char* pszD
     }
 
     osl_closeFile( SourceFileFH );
-    if ( close( DestFileFD ) == -1 && nRet == 0 )
-        nRet = errno;
+    if ( close( DestFileFD ) == -1 )
+    {
+        int e = errno;
+        SAL_INFO("sal.file", "close(" << DestFileFD << "): " << UnixErrnoString(e));
+        if ( nRet == 0 )
+            nRet = e;
+    }
+    else
+        SAL_INFO("sal.file", "close(" << DestFileFD << "): OK");
 
     return nRet;
 }

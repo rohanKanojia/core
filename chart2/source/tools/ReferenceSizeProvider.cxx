@@ -17,17 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ReferenceSizeProvider.hxx"
-#include "RelativeSizeHelper.hxx"
-#include "ChartModelHelper.hxx"
-#include "DiagramHelper.hxx"
-#include "macros.hxx"
-#include "AxisHelper.hxx"
-#include "DataSeriesHelper.hxx"
+#include <ReferenceSizeProvider.hxx>
+#include <RelativeSizeHelper.hxx>
+#include <ChartModelHelper.hxx>
+#include <DiagramHelper.hxx>
+#include <AxisHelper.hxx>
 
 #include <com/sun/star/chart2/XTitled.hpp>
 #include <com/sun/star/chart2/XTitle.hpp>
 #include <com/sun/star/chart2/XDataSeries.hpp>
+#include <tools/diagnose_ex.h>
 
 #include <vector>
 
@@ -84,9 +83,9 @@ void ReferenceSizeProvider::setValuesAtTitle(
 
         setValuesAtPropertySet( xTitleProp, /* bAdaptFontSizes = */ false );
     }
-    catch (const uno::Exception& ex)
+    catch (const uno::Exception&)
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
@@ -95,13 +94,12 @@ void ReferenceSizeProvider::setValuesAtAllDataSeries()
     Reference< XDiagram > xDiagram( ChartModelHelper::findDiagram( m_xChartDoc ));
 
     // DataSeries/Points
-    ::std::vector< Reference< XDataSeries > > aSeries(
+    std::vector< Reference< XDataSeries > > aSeries(
         DiagramHelper::getDataSeriesFromDiagram( xDiagram ));
 
-    for( ::std::vector< Reference< XDataSeries > >::const_iterator aIt( aSeries.begin());
-         aIt != aSeries.end(); ++aIt )
+    for (auto const& elem : aSeries)
     {
-        Reference< beans::XPropertySet > xSeriesProp( *aIt, uno::UNO_QUERY );
+        Reference< beans::XPropertySet > xSeriesProp(elem, uno::UNO_QUERY );
         if( xSeriesProp.is())
         {
             // data points
@@ -112,12 +110,12 @@ void ReferenceSizeProvider::setValuesAtAllDataSeries()
                 {
                     for( sal_Int32 i=0; i< aPointIndexes.getLength(); ++i )
                         setValuesAtPropertySet(
-                            (*aIt)->getDataPointByIndex( aPointIndexes[i] ) );
+                            elem->getDataPointByIndex( aPointIndexes[i] ) );
                 }
             }
-            catch (const uno::Exception& ex)
+            catch (const uno::Exception&)
             {
-                ASSERT_EXCEPTION( ex );
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
 
             //it is important to correct the datapoint properties first as they do reference the series properties
@@ -144,7 +142,7 @@ void ReferenceSizeProvider::setValuesAtPropertySet(
         if( useAutoScale())
         {
             if( ! bHasOldRefSize )
-                xProp->setPropertyValue( aRefSizeName, uno::makeAny( aRefSize ));
+                xProp->setPropertyValue( aRefSizeName, uno::Any( aRefSize ));
         }
         else
         {
@@ -158,9 +156,9 @@ void ReferenceSizeProvider::setValuesAtPropertySet(
             }
         }
     }
-    catch (const uno::Exception& ex)
+    catch (const uno::Exception&)
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
@@ -168,14 +166,13 @@ void ReferenceSizeProvider::getAutoResizeFromPropSet(
     const Reference< beans::XPropertySet > & xProp,
     ReferenceSizeProvider::AutoResizeState & rInOutState )
 {
-    static const char aRefSizeName[] = "ReferencePageSize";
     AutoResizeState eSingleState = AUTO_RESIZE_UNKNOWN;
 
     if( xProp.is())
     {
         try
         {
-            if( xProp->getPropertyValue( aRefSizeName ).hasValue())
+            if( xProp->getPropertyValue( "ReferencePageSize" ).hasValue())
                 eSingleState = AUTO_RESIZE_YES;
             else
                 eSingleState = AUTO_RESIZE_NO;
@@ -267,13 +264,12 @@ ReferenceSizeProvider::AutoResizeState ReferenceSizeProvider::getAutoResizeState
     }
 
     // DataSeries/Points
-    ::std::vector< Reference< XDataSeries > > aSeries(
+    std::vector< Reference< XDataSeries > > aSeries(
         DiagramHelper::getDataSeriesFromDiagram( xDiagram ));
 
-    for( ::std::vector< Reference< XDataSeries > >::const_iterator aIt( aSeries.begin());
-         aIt != aSeries.end(); ++aIt )
+    for (auto const& elem : aSeries)
     {
-        Reference< beans::XPropertySet > xSeriesProp( *aIt, uno::UNO_QUERY );
+        Reference< beans::XPropertySet > xSeriesProp(elem, uno::UNO_QUERY);
         if( xSeriesProp.is())
         {
             getAutoResizeFromPropSet( xSeriesProp, eResult );
@@ -289,15 +285,15 @@ ReferenceSizeProvider::AutoResizeState ReferenceSizeProvider::getAutoResizeState
                     for( sal_Int32 i=0; i< aPointIndexes.getLength(); ++i )
                     {
                         getAutoResizeFromPropSet(
-                            (*aIt)->getDataPointByIndex( aPointIndexes[i] ), eResult );
+                            elem->getDataPointByIndex( aPointIndexes[i] ), eResult );
                         if( eResult == AUTO_RESIZE_AMBIGUOUS )
                             return eResult;
                     }
                 }
             }
-            catch (const uno::Exception& ex)
+            catch (const uno::Exception&)
             {
-                ASSERT_EXCEPTION( ex );
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
         }
     }

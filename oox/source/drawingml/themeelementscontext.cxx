@@ -17,17 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/themeelementscontext.hxx"
-#include "drawingml/clrschemecontext.hxx"
-#include "oox/drawingml/lineproperties.hxx"
-#include "drawingml/linepropertiescontext.hxx"
-#include "oox/drawingml/fillproperties.hxx"
-#include "drawingml/fillpropertiesgroupcontext.hxx"
-#include "drawingml/textcharacterproperties.hxx"
-#include "oox/drawingml/theme.hxx"
-#include "oox/helper/attributelist.hxx"
+#include <drawingml/themeelementscontext.hxx>
+#include <drawingml/clrschemecontext.hxx>
+#include <drawingml/lineproperties.hxx>
+#include <drawingml/linepropertiescontext.hxx>
+#include <drawingml/fillproperties.hxx>
+#include <drawingml/misccontexts.hxx>
+#include <drawingml/textcharacterproperties.hxx>
+#include <oox/drawingml/theme.hxx>
+#include <oox/helper/attributelist.hxx>
 #include "effectproperties.hxx"
 #include "effectpropertiescontext.hxx"
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star::uno;
@@ -39,14 +41,14 @@ namespace drawingml {
 class FillStyleListContext : public ContextHandler2
 {
 public:
-    FillStyleListContext( ContextHandler2Helper& rParent, FillStyleList& rFillStyleList );
+    FillStyleListContext( ContextHandler2Helper const & rParent, FillStyleList& rFillStyleList );
     virtual ContextHandlerRef onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs ) override;
 
 private:
     FillStyleList& mrFillStyleList;
 };
 
-FillStyleListContext::FillStyleListContext( ContextHandler2Helper& rParent, FillStyleList& rFillStyleList ) :
+FillStyleListContext::FillStyleListContext( ContextHandler2Helper const & rParent, FillStyleList& rFillStyleList ) :
     ContextHandler2( rParent ),
     mrFillStyleList( rFillStyleList )
 {
@@ -62,7 +64,7 @@ ContextHandlerRef FillStyleListContext::onCreateContext( sal_Int32 nElement, con
         case A_TOKEN( blipFill ):
         case A_TOKEN( pattFill ):
         case A_TOKEN( grpFill ):
-            mrFillStyleList.push_back( FillPropertiesPtr( new FillProperties ) );
+            mrFillStyleList.push_back( std::make_shared<FillProperties>( ) );
             return FillPropertiesContext::createFillContext( *this, nElement, rAttribs, *mrFillStyleList.back() );
     }
     return nullptr;
@@ -71,14 +73,14 @@ ContextHandlerRef FillStyleListContext::onCreateContext( sal_Int32 nElement, con
 class LineStyleListContext : public ContextHandler2
 {
 public:
-    LineStyleListContext( ContextHandler2Helper& rParent, LineStyleList& rLineStyleList );
+    LineStyleListContext( ContextHandler2Helper const & rParent, LineStyleList& rLineStyleList );
     virtual ContextHandlerRef onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs ) override;
 
 private:
     LineStyleList& mrLineStyleList;
 };
 
-LineStyleListContext::LineStyleListContext( ContextHandler2Helper& rParent, LineStyleList& rLineStyleList ) :
+LineStyleListContext::LineStyleListContext( ContextHandler2Helper const & rParent, LineStyleList& rLineStyleList ) :
     ContextHandler2( rParent ),
     mrLineStyleList( rLineStyleList )
 {
@@ -89,7 +91,7 @@ ContextHandlerRef LineStyleListContext::onCreateContext( sal_Int32 nElement, con
     switch( nElement )
     {
         case A_TOKEN( ln ):
-            mrLineStyleList.push_back( LinePropertiesPtr( new LineProperties ) );
+            mrLineStyleList.push_back( std::make_shared<LineProperties>( ) );
             return new LinePropertiesContext( *this, rAttribs, *mrLineStyleList.back() );
     }
     return nullptr;
@@ -98,14 +100,14 @@ ContextHandlerRef LineStyleListContext::onCreateContext( sal_Int32 nElement, con
 class EffectStyleListContext : public ContextHandler2
 {
 public:
-    EffectStyleListContext( ContextHandler2Helper& rParent, EffectStyleList& rEffectStyleList );
+    EffectStyleListContext( ContextHandler2Helper const & rParent, EffectStyleList& rEffectStyleList );
     virtual ContextHandlerRef onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs ) override;
 
 private:
     EffectStyleList& mrEffectStyleList;
 };
 
-EffectStyleListContext::EffectStyleListContext( ContextHandler2Helper& rParent, EffectStyleList& rEffectStyleList ) :
+EffectStyleListContext::EffectStyleListContext( ContextHandler2Helper const & rParent, EffectStyleList& rEffectStyleList ) :
     ContextHandler2( rParent ),
     mrEffectStyleList( rEffectStyleList )
 {
@@ -116,7 +118,7 @@ ContextHandlerRef EffectStyleListContext::onCreateContext( sal_Int32 nElement, c
     switch( nElement )
     {
         case A_TOKEN( effectStyle ):
-            mrEffectStyleList.push_back( EffectPropertiesPtr( new EffectProperties ) );
+            mrEffectStyleList.push_back( std::make_shared<EffectProperties>( ) );
             return this;
 
         case A_TOKEN( effectLst ):  // CT_EffectList
@@ -130,7 +132,7 @@ ContextHandlerRef EffectStyleListContext::onCreateContext( sal_Int32 nElement, c
 class FontSchemeContext : public ContextHandler2
 {
 public:
-    FontSchemeContext( ContextHandler2Helper& rParent, FontScheme& rFontScheme );
+    FontSchemeContext( ContextHandler2Helper const & rParent, FontScheme& rFontScheme );
     virtual ContextHandlerRef onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs ) override;
     virtual void onEndElement() override;
 
@@ -139,7 +141,7 @@ private:
     TextCharacterPropertiesPtr mxCharProps;
 };
 
-FontSchemeContext::FontSchemeContext( ContextHandler2Helper& rParent, FontScheme& rFontScheme ) :
+FontSchemeContext::FontSchemeContext( ContextHandler2Helper const & rParent, FontScheme& rFontScheme ) :
     ContextHandler2( rParent ),
     mrFontScheme( rFontScheme )
 {
@@ -185,7 +187,7 @@ void FontSchemeContext::onEndElement()
     }
 }
 
-ThemeElementsContext::ThemeElementsContext( ContextHandler2Helper& rParent, Theme& rTheme ) :
+ThemeElementsContext::ThemeElementsContext( ContextHandler2Helper const & rParent, Theme& rTheme ) :
     ContextHandler2( rParent ),
     mrTheme( rTheme )
 {

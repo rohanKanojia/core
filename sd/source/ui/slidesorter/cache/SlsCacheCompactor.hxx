@@ -63,7 +63,7 @@ public:
 
 protected:
     BitmapCache& mrCache;
-    sal_Int32 mnMaximalCacheSize;
+    sal_Int32 const mnMaximalCacheSize;
 
     CacheCompactor(
         BitmapCache& rCache,
@@ -75,12 +75,12 @@ protected:
     virtual void Run() = 0;
 
 private:
-    /** This timer is used to collect calles to RequestCompaction() and
+    /** This timer is used to collect calls to RequestCompaction() and
         eventually call Run().
     */
     Timer maCompactionTimer;
     bool mbIsCompactionRunning;
-    DECL_LINK_TYPED(CompactionCallback, Timer *, void);
+    DECL_LINK(CompactionCallback, Timer *, void);
 };
 
 } } } // end of namespace ::sd::slidesorter::cache

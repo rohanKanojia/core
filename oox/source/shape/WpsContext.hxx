@@ -10,33 +10,44 @@
 #ifndef INCLUDED_OOX_SOURCE_SHAPE_WPSCONTEXT_HXX
 #define INCLUDED_OOX_SOURCE_SHAPE_WPSCONTEXT_HXX
 
-#include "oox/core/contexthandler2.hxx"
-#include "oox/drawingml/shape.hxx"
+#include <oox/core/contexthandler2.hxx>
+#include <oox/drawingml/shapecontext.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
+
+namespace com
+{
+namespace sun
+{
+namespace star
+{
+namespace drawing
+{
+class XShape;
+}
+}
+}
+}
 
 namespace oox
 {
 namespace shape
 {
-
 /// Wps is the drawingML equivalent of v:shape.
-class WpsContext : public oox::core::ContextHandler2
+class WpsContext final : public oox::drawingml::ShapeContext
 {
 public:
-    WpsContext(oox::core::ContextHandler2Helper& rParent, css::uno::Reference<css::drawing::XShape> xShape);
-    virtual ~WpsContext();
+    WpsContext(oox::core::ContextHandler2Helper const& rParent,
+               css::uno::Reference<css::drawing::XShape> xShape,
+               oox::drawingml::ShapePtr const& pMasterShapePtr,
+               oox::drawingml::ShapePtr const& pShapePtr);
+    ~WpsContext() override;
 
-    virtual oox::core::ContextHandlerRef onCreateContext(sal_Int32 nElementToken, const oox::AttributeList& rAttribs) override;
+    oox::core::ContextHandlerRef onCreateContext(sal_Int32 nElementToken,
+                                                 const oox::AttributeList& rAttribs) override;
 
-    const oox::drawingml::ShapePtr& getShape()
-    {
-        return mpShape;
-    }
-
-protected:
-    oox::drawingml::ShapePtr mpShape;
+private:
     css::uno::Reference<css::drawing::XShape> mxShape;
 };
-
 }
 }
 

@@ -20,7 +20,6 @@
 #ifndef INCLUDED_SC_INC_TEXTUNO_HXX
 #define INCLUDED_SC_INC_TEXTUNO_HXX
 
-#include "global.hxx"
 #include "address.hxx"
 #include <editeng/unotext.hxx>
 #include <svl/lstner.hxx>
@@ -29,9 +28,9 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
 #include <cppuhelper/implbase.hxx>
+#include <cppuhelper/weakref.hxx>
 
 #include <rtl/ref.hxx>
-#include "scdllapi.h"
 
 #include <memory>
 
@@ -39,7 +38,6 @@ class EditEngine;
 class EditTextObject;
 class SvxEditEngineForwarder;
 class ScDocShell;
-class ScAddress;
 class ScCellObj;
 class ScSimpleEditSource;
 class ScCellEditSource;
@@ -64,44 +62,39 @@ private:
     rtl::Reference<ScHeaderFooterTextObj> mxCenterText;
     rtl::Reference<ScHeaderFooterTextObj> mxRightText;
 
-    ScHeaderFooterContentObj(); // disabled
-
 public:
-    ScHeaderFooterContentObj( const EditTextObject* pLeft,
-                              const EditTextObject* pCenter,
-                              const EditTextObject* pRight );
-    virtual                 ~ScHeaderFooterContentObj();
+                            ScHeaderFooterContentObj();
+    virtual                 ~ScHeaderFooterContentObj() override;
 
                             // for ScPageHFItem (using getImplementation)
     const EditTextObject* GetLeftEditObject() const;
     const EditTextObject* GetCenterEditObject() const;
     const EditTextObject* GetRightEditObject() const;
 
+    void Init( const EditTextObject* pLeft,
+                              const EditTextObject* pCenter,
+                              const EditTextObject* pRight);
+
                             // XHeaderFooterContent
     virtual css::uno::Reference< css::text::XText > SAL_CALL
-                            getLeftText() throw(css::uno::RuntimeException, std::exception) override;
+                            getLeftText() override;
     virtual css::uno::Reference< css::text::XText > SAL_CALL
-                            getCenterText() throw(css::uno::RuntimeException, std::exception) override;
+                            getCenterText() override;
     virtual css::uno::Reference< css::text::XText > SAL_CALL
-                            getRightText() throw(css::uno::RuntimeException, std::exception) override;
+                            getRightText() override;
 
                             // XUnoTunnel
     virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence<
-                                    sal_Int8 >& aIdentifier )
-                                throw(css::uno::RuntimeException, std::exception) override;
+                                    sal_Int8 >& aIdentifier ) override;
 
     static const css::uno::Sequence<sal_Int8>& getUnoTunnelId();
     static rtl::Reference<ScHeaderFooterContentObj> getImplementation(const css::uno::Reference<css::sheet::XHeaderFooterContent>& rObj);
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-                                throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-                                throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-                                throw(css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
-    virtual void dispose();
 };
 
 //  ScHeaderFooterTextData: shared data between sub objects of a ScHeaderFooterTextObj
@@ -110,31 +103,29 @@ class ScHeaderFooterTextData
 {
 private:
     std::unique_ptr<EditTextObject> mpTextObj;
-    rtl::Reference<ScHeaderFooterContentObj> rContentObj;
-    ScHeaderFooterPart          nPart;
-    ScEditEngineDefaulter*      pEditEngine;
-    SvxEditEngineForwarder*     pForwarder;
+    css::uno::WeakReference<css::sheet::XHeaderFooterContent> xContentObj;
+    ScHeaderFooterPart const          nPart;
+    std::unique_ptr<ScEditEngineDefaulter>  pEditEngine;
+    std::unique_ptr<SvxEditEngineForwarder> pForwarder;
     bool                        bDataValid;
 
 public:
     ScHeaderFooterTextData(const ScHeaderFooterTextData&) = delete;
     const ScHeaderFooterTextData& operator=(const ScHeaderFooterTextData&) = delete;
     ScHeaderFooterTextData(
-        rtl::Reference<ScHeaderFooterContentObj> const & rContent, ScHeaderFooterPart nP, const EditTextObject* pTextObj);
+        css::uno::WeakReference<css::sheet::XHeaderFooterContent> const & xContent, ScHeaderFooterPart nP, const EditTextObject* pTextObj);
     ~ScHeaderFooterTextData();
 
                             // helper functions
     SvxTextForwarder*       GetTextForwarder();
     void UpdateData();
     void UpdateData(EditEngine& rEditEngine);
-    ScEditEngineDefaulter*  GetEditEngine() { GetTextForwarder(); return pEditEngine; }
+    ScEditEngineDefaulter*  GetEditEngine() { GetTextForwarder(); return pEditEngine.get(); }
 
     ScHeaderFooterPart      GetPart() const         { return nPart; }
-    rtl::Reference<ScHeaderFooterContentObj> GetContentObj() const { return rContentObj; }
+    const css::uno::Reference<css::sheet::XHeaderFooterContent> GetContentObj() const { return xContentObj; }
 
     const EditTextObject* GetTextObject() const { return mpTextObj.get(); }
-
-    void dispose() { rContentObj.clear(); }
 };
 
 /**
@@ -158,8 +149,8 @@ private:
 
 public:
     ScHeaderFooterTextObj(
-        rtl::Reference<ScHeaderFooterContentObj> const & rContent, ScHeaderFooterPart nP, const EditTextObject* pTextObj);
-    virtual ~ScHeaderFooterTextObj();
+        const css::uno::WeakReference<css::sheet::XHeaderFooterContent>& xContent, ScHeaderFooterPart nP, const EditTextObject* pTextObj);
+    virtual ~ScHeaderFooterTextObj() override;
 
     const EditTextObject* GetTextObject() const;
     const SvxUnoText&       GetUnoText();
@@ -169,67 +160,52 @@ public:
                             // XText
     virtual void SAL_CALL   insertTextContent( const css::uno::Reference< css::text::XTextRange >& xRange,
                                 const css::uno::Reference< css::text::XTextContent >& xContent,
-                                sal_Bool bAbsorb )
-                                    throw(css::lang::IllegalArgumentException,
-                                    css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL   removeTextContent( const css::uno::Reference< css::text::XTextContent >& xContent )
-                                    throw(css::container::NoSuchElementException,
-                                            css::uno::RuntimeException, std::exception) override;
+                                sal_Bool bAbsorb ) override;
+    virtual void SAL_CALL   removeTextContent( const css::uno::Reference< css::text::XTextContent >& xContent ) override;
 
                             // XSimpleText
     virtual css::uno::Reference< css::text::XTextCursor > SAL_CALL
-                            createTextCursor() throw(css::uno::RuntimeException, std::exception) override;
+                            createTextCursor() override;
     virtual css::uno::Reference< css::text::XTextCursor > SAL_CALL
-                            createTextCursorByRange( const css::uno::Reference< css::text::XTextRange >& aTextPosition )
-                                    throw(css::uno::RuntimeException, std::exception) override;
+                            createTextCursorByRange( const css::uno::Reference< css::text::XTextRange >& aTextPosition ) override;
     virtual void SAL_CALL   insertString( const css::uno::Reference< css::text::XTextRange >& xRange,
-                                        const OUString& aString, sal_Bool bAbsorb )
-                                    throw(css::uno::RuntimeException, std::exception) override;
+                                        const OUString& aString, sal_Bool bAbsorb ) override;
     virtual void SAL_CALL   insertControlCharacter( const css::uno::Reference< css::text::XTextRange >& xRange,
-                                        sal_Int16 nControlCharacter, sal_Bool bAbsorb )
-                                    throw(css::lang::IllegalArgumentException,
-                                        css::uno::RuntimeException, std::exception) override;
+                                        sal_Int16 nControlCharacter, sal_Bool bAbsorb ) override;
 
                             // XTextRange
     virtual css::uno::Reference< css::text::XText > SAL_CALL
-                            getText() throw(css::uno::RuntimeException, std::exception) override;
+                            getText() override;
     virtual css::uno::Reference< css::text::XTextRange > SAL_CALL
-                            getStart() throw(css::uno::RuntimeException, std::exception) override;
+                            getStart() override;
     virtual css::uno::Reference< css::text::XTextRange > SAL_CALL
-                            getEnd() throw(css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getString() throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL   setString( const OUString& aString )
-                                    throw(css::uno::RuntimeException, std::exception) override;
+                            getEnd() override;
+    virtual OUString SAL_CALL getString() override;
+    virtual void SAL_CALL   setString( const OUString& aString ) override;
 
                             // XTextRangeMover
     virtual void SAL_CALL   moveTextRange( const css::uno::Reference< css::text::XTextRange >& xRange,
-                                        sal_Int16 nParagraphs )
-                                    throw(css::uno::RuntimeException, std::exception) override;
+                                        sal_Int16 nParagraphs ) override;
 
                             // XEnumerationAccess
     virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL
-                            createEnumeration() throw(css::uno::RuntimeException, std::exception) override;
+                            createEnumeration() override;
 
                             // XElementAccess
-    virtual css::uno::Type SAL_CALL getElementType()
-                                throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasElements() throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Type SAL_CALL getElementType() override;
+    virtual sal_Bool SAL_CALL hasElements() override;
 
                             // XTextFieldsSupplier
     virtual css::uno::Reference< css::container::XEnumerationAccess > SAL_CALL
-                            getTextFields() throw(css::uno::RuntimeException, std::exception) override;
+                            getTextFields() override;
     virtual css::uno::Reference< css::container::XNameAccess > SAL_CALL
-                            getTextFieldMasters() throw(css::uno::RuntimeException, std::exception) override;
+                            getTextFieldMasters() override;
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-                                throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-                                throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-                                throw(css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
-    virtual void dispose() { aTextData.dispose(); }
 };
 
 //  derived cursor objects for getImplementation and getText/getStart/getEnd
@@ -238,26 +214,29 @@ public:
 
 class ScCellTextCursor : public SvxUnoTextCursor
 {
-    ScCellObj&              rTextObj;
+    rtl::Reference<ScCellObj> mxTextObj;
 
 public:
-                            ScCellTextCursor(const ScCellTextCursor& rOther);
                             ScCellTextCursor(ScCellObj& rText);
-        virtual                                 ~ScCellTextCursor() throw();
+        virtual             ~ScCellTextCursor() throw() override;
 
-    ScCellObj&              GetCellObj() const  { return rTextObj; }
+    ScCellTextCursor(ScCellTextCursor const &) = default;
+    ScCellTextCursor(ScCellTextCursor &&) = default;
+    ScCellTextCursor & operator =(ScCellTextCursor const &) = delete; // due to SvxUnoTextCursor
+    ScCellTextCursor & operator =(ScCellTextCursor &&) = delete; // due to SvxUnoTextCursor
+
+    ScCellObj&              GetCellObj() const  { return *mxTextObj; }
 
                             // SvxUnoTextCursor methods reimplemented here:
     virtual css::uno::Reference< css::text::XText > SAL_CALL
-                            getText() throw(css::uno::RuntimeException, std::exception) override;
+                            getText() override;
     virtual css::uno::Reference< css::text::XTextRange > SAL_CALL
-                            getStart() throw(css::uno::RuntimeException, std::exception) override;
+                            getStart() override;
     virtual css::uno::Reference< css::text::XTextRange > SAL_CALL
-                            getEnd() throw(css::uno::RuntimeException, std::exception) override;
+                            getEnd() override;
 
                             // XUnoTunnel
-    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier )
-                                throw(css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
 
     static const css::uno::Sequence<sal_Int8>& getUnoTunnelId();
     static ScCellTextCursor* getImplementation(const css::uno::Reference< css::uno::XInterface>& rObj);
@@ -266,24 +245,27 @@ public:
 class ScHeaderFooterTextCursor : public SvxUnoTextCursor
 {
 private:
-    ScHeaderFooterTextObj&  rTextObj;
+    rtl::Reference<ScHeaderFooterTextObj> rTextObj;
 
 public:
-                            ScHeaderFooterTextCursor(const ScHeaderFooterTextCursor& rOther);
-                            ScHeaderFooterTextCursor(ScHeaderFooterTextObj& rText);
-        virtual                                 ~ScHeaderFooterTextCursor() throw();
+                            ScHeaderFooterTextCursor(rtl::Reference<ScHeaderFooterTextObj> const & rText);
+        virtual             ~ScHeaderFooterTextCursor() throw() override;
+
+    ScHeaderFooterTextCursor(ScHeaderFooterTextCursor const &) = default;
+    ScHeaderFooterTextCursor(ScHeaderFooterTextCursor &&) = default;
+    ScHeaderFooterTextCursor & operator =(ScHeaderFooterTextCursor const &) = delete; // due to SvxUnoTextCursor
+    ScHeaderFooterTextCursor & operator =(ScHeaderFooterTextCursor &&) = delete; // due to SvxUnoTextCursor
 
                             // SvxUnoTextCursor methods reimplemented here:
     virtual css::uno::Reference< css::text::XText > SAL_CALL
-                            getText() throw(css::uno::RuntimeException, std::exception) override;
+                            getText() override;
     virtual css::uno::Reference< css::text::XTextRange > SAL_CALL
-                            getStart() throw(css::uno::RuntimeException, std::exception) override;
+                            getStart() override;
     virtual css::uno::Reference< css::text::XTextRange > SAL_CALL
-                            getEnd() throw(css::uno::RuntimeException, std::exception) override;
+                            getEnd() override;
 
                             // XUnoTunnel
-    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier )
-                                throw(css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
 
     static const css::uno::Sequence<sal_Int8>& getUnoTunnelId();
     static ScHeaderFooterTextCursor* getImplementation(const css::uno::Reference<css::uno::XInterface>& rObj);
@@ -295,22 +277,25 @@ private:
     css::uno::Reference< css::text::XText > xParentText;
 
 public:
-                            ScDrawTextCursor(const ScDrawTextCursor& rOther);
                             ScDrawTextCursor( const css::uno::Reference< css::text::XText >& xParent,
                                             const SvxUnoTextBase& rText );
-    virtual                  ~ScDrawTextCursor() throw();
+    virtual                  ~ScDrawTextCursor() throw() override;
+
+    ScDrawTextCursor(ScDrawTextCursor const &) = default;
+    ScDrawTextCursor(ScDrawTextCursor &&) = default;
+    ScDrawTextCursor & operator =(ScDrawTextCursor const &) = delete; // due to SvxUnoTextCursor
+    ScDrawTextCursor & operator =(ScDrawTextCursor &&) = delete; // due to SvxUnoTextCursor
 
                             // SvxUnoTextCursor methods reimplemented here:
     virtual css::uno::Reference< css::text::XText > SAL_CALL
-                            getText() throw(css::uno::RuntimeException, std::exception) override;
+                            getText() override;
     virtual css::uno::Reference< css::text::XTextRange > SAL_CALL
-                            getStart() throw(css::uno::RuntimeException, std::exception) override;
+                            getStart() override;
     virtual css::uno::Reference< css::text::XTextRange > SAL_CALL
-                            getEnd() throw(css::uno::RuntimeException, std::exception) override;
+                            getEnd() override;
 
                             // XUnoTunnel
-    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier )
-                                throw(css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
 
     static const css::uno::Sequence<sal_Int8>& getUnoTunnelId();
     static ScDrawTextCursor* getImplementation(const css::uno::Reference<css::uno::XInterface>& rObj);
@@ -323,26 +308,26 @@ public:
 
 class ScSimpleEditSourceHelper
 {
-    ScEditEngineDefaulter*  pEditEngine;
-    SvxEditEngineForwarder* pForwarder;
-    ScSimpleEditSource*     pOriginalSource;
+    std::unique_ptr<ScEditEngineDefaulter>  pEditEngine;
+    std::unique_ptr<SvxEditEngineForwarder> pForwarder;
+    std::unique_ptr<ScSimpleEditSource>     pOriginalSource;
 
 public:
             ScSimpleEditSourceHelper();
             ~ScSimpleEditSourceHelper();
 
-    ScSimpleEditSource* GetOriginalSource() const   { return pOriginalSource; }
-    ScEditEngineDefaulter* GetEditEngine() const    { return pEditEngine; }
+    ScSimpleEditSource* GetOriginalSource() const   { return pOriginalSource.get(); }
+    ScEditEngineDefaulter* GetEditEngine() const    { return pEditEngine.get(); }
 };
 
 class ScEditEngineTextObj : public ScSimpleEditSourceHelper, public SvxUnoText
 {
 public:
                         ScEditEngineTextObj();
-        virtual                         ~ScEditEngineTextObj() throw();
+        virtual         ~ScEditEngineTextObj() throw() override;
 
     void                SetText( const EditTextObject& rTextObject );
-    EditTextObject*     CreateTextObject();
+    std::unique_ptr<EditTextObject> CreateTextObject();
 };
 
 //  ScCellTextData: shared data between sub objects of a cell text object
@@ -351,28 +336,25 @@ class ScCellTextData : public SfxListener
 {
 protected:
     ScDocShell*             pDocShell;
-    ScAddress               aCellPos;
-    ScFieldEditEngine*      pEditEngine;
-    SvxEditEngineForwarder* pForwarder;
-    ScCellEditSource* pOriginalSource;
+    ScAddress const               aCellPos;
+    std::unique_ptr<ScFieldEditEngine> pEditEngine;
+    std::unique_ptr<SvxEditEngineForwarder> pForwarder;
+    std::unique_ptr<ScCellEditSource> pOriginalSource;
     bool                    bDataValid;
     bool                    bInUpdate;
     bool                    bDirty;
     bool                    bDoUpdate;
 
-protected:
-    virtual void            GetCellText(const ScAddress& rCellPos, OUString& rText);
-
 public:
                             ScCellTextData(ScDocShell* pDocSh, const ScAddress& rP);
-    virtual                 ~ScCellTextData();
+    virtual                 ~ScCellTextData() override;
 
     virtual void            Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
                             // helper functions for ScSharedCellEditSource:
     virtual SvxTextForwarder* GetTextForwarder();
     void                    UpdateData();
-    ScFieldEditEngine*      GetEditEngine() { GetTextForwarder(); return pEditEngine; }
+    ScFieldEditEngine*      GetEditEngine() { GetTextForwarder(); return pEditEngine.get(); }
 
     ScCellEditSource* GetOriginalSource();        // used as argument for SvxUnoText ctor
 
@@ -387,8 +369,8 @@ public:
 class ScCellTextObj : public ScCellTextData, public SvxUnoText
 {
 public:
-                ScCellTextObj(ScDocShell* pDocSh, const ScAddress& rP);
-        virtual         ~ScCellTextObj() throw();
+                 ScCellTextObj(ScDocShell* pDocSh, const ScAddress& rP);
+        virtual  ~ScCellTextObj() throw() override;
 };
 
 #endif

@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SC_INC_INPUTOPT_HXX
 #define INCLUDED_SC_INC_INPUTOPT_HXX
 
-#include <scdllapi.h>
+#include "scdllapi.h"
 #include <unotools/configitem.hxx>
 
 class SC_DLLPUBLIC ScInputOptions
@@ -41,8 +41,6 @@ private:
 
 public:
                 ScInputOptions();
-                ScInputOptions( const ScInputOptions& rCpy );
-                ~ScInputOptions();
 
     void        SetDefaults();
 
@@ -70,8 +68,6 @@ public:
     bool        GetReplaceCellsWarn() const     { return bReplCellsWarn; }
     void        SetLegacyCellSelection(bool bSet)   { bLegacyCellSelection = bSet; }
     bool        GetLegacyCellSelection() const      { return bLegacyCellSelection; }
-
-    const ScInputOptions&   operator=   ( const ScInputOptions& rOpt );
 };
 
 // CfgItem for input options

@@ -17,10 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "view/SlsTheme.hxx"
-#include "SlsResource.hxx"
-#include "controller/SlsProperties.hxx"
-#include "sdresid.hxx"
+#include <bitmaps.hlst>
+#include <view/SlsTheme.hxx>
+#include <controller/SlsProperties.hxx>
 #include <tools/color.hxx>
 #include <vcl/outdev.hxx>
 #include <vcl/image.hxx>
@@ -28,31 +27,31 @@
 #include <vcl/settings.hxx>
 
 #include <svtools/colorcfg.hxx>
+#include <osl/diagnose.h>
 
 namespace sd { namespace slidesorter { namespace view {
 
-const static ColorData Black = 0x000000;
-const static ColorData White = 0xffffff;
+const static Color Black = Color(0x000000);
+const static Color White = Color(0xffffff);
 
-ColorData ChangeLuminance (const ColorData aColorData, const int nValue)
+static Color ChangeLuminance (Color aColor, const int nValue)
 {
-    Color aColor (aColorData);
     if (nValue > 0)
         aColor.IncreaseLuminance(nValue);
     else
         aColor.DecreaseLuminance(-nValue);
-    return aColor.GetColor();
+    return aColor;
 }
 
-ColorData HGBAdapt (
-    const ColorData aColorData,
+static Color HGBAdapt (
+    const Color aColor,
     const sal_Int32 nNewSaturation,
     const sal_Int32 nNewBrightness)
 {
     sal_uInt16 nHue (0);
     sal_uInt16 nSaturation (0);
     sal_uInt16 nBrightness (0);
-    Color(aColorData).RGBtoHSB(nHue, nSaturation, nBrightness);
+    aColor.RGBtoHSB(nHue, nSaturation, nBrightness);
     return Color::HSBtoRGB(
         nHue,
         nNewSaturation>=0 ? nNewSaturation : nSaturation,
@@ -60,24 +59,19 @@ ColorData HGBAdapt (
 }
 
 Theme::Theme (const std::shared_ptr<controller::Properties>& rpProperties)
-    : maBackgroundColor(rpProperties->GetBackgroundColor().GetColor()),
-      maPageBackgroundColor(COL_WHITE),
+    : maBackgroundColor(rpProperties->GetBackgroundColor()),
       maGradients(),
       maIcons(),
       maColor()
 {
-    {
-        LocalResource aResource (RID_SLIDESORTER_ICONS);
-
-        maColor.resize(_ColorType_Size_);
-        maColor[Color_Background] = maBackgroundColor;
-        maColor[Color_PageNumberDefault] = 0x0808080;
-        maColor[Color_PageNumberHover] = 0x4c4c4c;
-        maColor[Color_PageNumberHighContrast] = White;
-        maColor[Color_PageNumberBrightBackground] = 0x333333;
-        maColor[Color_PageNumberDarkBackground] = 0xcccccc;
-        maColor[Color_PreviewBorder] = 0x949599;
-    }
+    maColor.resize(ColorType_Size_);
+    maColor[Color_Background] = maBackgroundColor;
+    maColor[Color_PageNumberDefault] = Color(0x0808080);
+    maColor[Color_PageNumberHover] = Color(0x4c4c4c);
+    maColor[Color_PageNumberHighContrast] = White;
+    maColor[Color_PageNumberBrightBackground] = Color(0x333333);
+    maColor[Color_PageNumberDarkBackground] = Color(0xcccccc);
+    maColor[Color_PreviewBorder] = Color(0x949599);
 
     Update(rpProperties);
 }
@@ -85,17 +79,16 @@ Theme::Theme (const std::shared_ptr<controller::Properties>& rpProperties)
 void Theme::Update (const std::shared_ptr<controller::Properties>& rpProperties)
 {
     // Set up colors.
-    maBackgroundColor = rpProperties->GetBackgroundColor().GetColor();
-    maPageBackgroundColor = svtools::ColorConfig().GetColorValue(svtools::DOCCOLOR).nColor;
+    maBackgroundColor = rpProperties->GetBackgroundColor();
 
     maColor[Color_Background] = maBackgroundColor;
 
-    maGradients.resize(_GradientColorType_Size_);
+    maGradients.resize(GradientColorType_Size_);
 
     maColor[Color_Background] = maBackgroundColor;
-    const ColorData aSelectionColor (rpProperties->GetSelectionColor().GetColor());
+    const Color aSelectionColor (rpProperties->GetSelectionColor());
     maColor[Color_Selection] = aSelectionColor;
-    if (Color(aSelectionColor).IsBright())
+    if (aSelectionColor.IsBright())
         maColor[Color_PageCountFontColor] = Black;
     else
         maColor[Color_PageCountFontColor] = White;
@@ -118,8 +111,7 @@ void Theme::Update (const std::shared_ptr<controller::Properties>& rpProperties)
     // Set up icons.
     if (maIcons.empty())
     {
-        LocalResource aResource (RID_SLIDESORTER_ICONS);
-        maIcons.resize(_IconType_Size_);
+        maIcons.resize(IconType_Size_);
 
         InitializeIcon(Icon_RawShadow, IMAGE_SHADOW);
         InitializeIcon(Icon_RawInsertShadow, IMAGE_INSERT_SHADOW);
@@ -156,7 +148,7 @@ std::shared_ptr<vcl::Font> Theme::GetFont (
     if (pFont)
     {
         // Transform the point size to pixel size.
-        const MapMode aFontMapMode (MAP_POINT);
+        const MapMode aFontMapMode (MapUnit::MapPoint);
         const Size aFontSize (rDevice.LogicToPixel(pFont->GetFontSize(), aFontMapMode));
 
         // Transform the font size to the logical coordinates of the device.
@@ -166,15 +158,15 @@ std::shared_ptr<vcl::Font> Theme::GetFont (
     return pFont;
 }
 
-ColorData Theme::GetColor (const ColorType eType)
+Color Theme::GetColor (const ColorType eType)
 {
-    if (eType>=0 && sal_uInt32(eType)<maColor.size())
+    if (sal_uInt32(eType)<maColor.size())
         return maColor[eType];
     else
-        return 0;
+        return Color(0);
 }
 
-ColorData Theme::GetGradientColor (
+Color Theme::GetGradientColor (
     const GradientColorType eType,
     const GradientColorClass eClass)
 {
@@ -182,18 +174,17 @@ ColorData Theme::GetGradientColor (
 
     switch (eClass)
     {
-        case Border1: return rDescriptor.maBorderColor1;
-        case Border2: return rDescriptor.maBorderColor2;
-        case Fill1: return rDescriptor.maFillColor1;
-        case Fill2: return rDescriptor.maFillColor2;
-        default: OSL_ASSERT(false); // fall through
-        case Base: return rDescriptor.maBaseColor;
+        case GradientColorClass::Border1: return rDescriptor.maBorderColor1;
+        case GradientColorClass::Border2: return rDescriptor.maBorderColor2;
+        case GradientColorClass::Fill1: return rDescriptor.maFillColor1;
+        case GradientColorClass::Fill2: return rDescriptor.maFillColor2;
     }
+    return Color(0);
 }
 
 void Theme::SetGradient (
     const GradientColorType eType,
-    const ColorData aBaseColor,
+    const Color aBaseColor,
     const sal_Int32 nSaturationOverride,
     const sal_Int32 nBrightnessOverride,
     const sal_Int32 nFillStartOffset,
@@ -203,11 +194,7 @@ void Theme::SetGradient (
 {
     GradientDescriptor& rGradient (GetGradient(eType));
 
-    rGradient.maBaseColor = aBaseColor;
-
-    rGradient.mnSaturationOverride = nSaturationOverride;
-    rGradient.mnBrightnessOverride = nBrightnessOverride;
-    const ColorData aColor (nSaturationOverride>=0 || nBrightnessOverride>=0
+    const Color aColor (nSaturationOverride>=0 || nBrightnessOverride>=0
         ? HGBAdapt(aBaseColor, nSaturationOverride, nBrightnessOverride)
         : aBaseColor);
 
@@ -215,16 +202,11 @@ void Theme::SetGradient (
     rGradient.maFillColor2 = ChangeLuminance(aColor, nFillEndOffset);
     rGradient.maBorderColor1 = ChangeLuminance(aColor, nBorderStartOffset);
     rGradient.maBorderColor2 = ChangeLuminance(aColor, nBorderEndOffset);
-
-    rGradient.mnFillOffset1 = nFillStartOffset;
-    rGradient.mnFillOffset2 = nFillEndOffset;
-    rGradient.mnBorderOffset1 = nBorderStartOffset;
-    rGradient.mnBorderOffset2 = nBorderEndOffset;
 }
 
 const BitmapEx& Theme::GetIcon (const IconType eType)
 {
-    if (eType>=0 && size_t(eType)<maIcons.size())
+    if (size_t(eType)<maIcons.size())
         return maIcons[eType];
     else
     {
@@ -235,7 +217,7 @@ const BitmapEx& Theme::GetIcon (const IconType eType)
 
 Theme::GradientDescriptor& Theme::GetGradient (const GradientColorType eType)
 {
-    if (eType>=0 && size_t(eType)<maGradients.size())
+    if (size_t(eType)<maGradients.size())
         return maGradients[eType];
     else
     {
@@ -244,11 +226,11 @@ Theme::GradientDescriptor& Theme::GetGradient (const GradientColorType eType)
     }
 }
 
-void Theme::InitializeIcon (const IconType eType, sal_uInt16 nResourceId)
+void Theme::InitializeIcon(const IconType eType, const OUString& rResourceId)
 {
-    if (eType>=0 && size_t(eType)<maIcons.size())
+    if (size_t(eType)<maIcons.size())
     {
-        const BitmapEx aIcon (Image(SdResId(nResourceId)).GetBitmapEx());
+        const BitmapEx aIcon(rResourceId);
         maIcons[eType] = aIcon;
     }
     else

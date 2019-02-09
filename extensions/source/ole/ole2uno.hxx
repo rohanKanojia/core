@@ -20,16 +20,10 @@
 #ifndef INCLUDED_EXTENSIONS_SOURCE_OLE_OLE2UNO_HXX
 #define INCLUDED_EXTENSIONS_SOURCE_OLE_OLE2UNO_HXX
 
-
-#ifdef _MSC_VER
-#pragma once
-#endif
-
-#include <wincrap.hxx>
+#include "wincrap.hxx"
 
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
-#include <com/sun/star/script/XInvocation.hpp>
 #include <com/sun/star/registry/XRegistryKey.hpp>
 #include <com/sun/star/bridge/XBridgeSupplier2.hpp>
 #include <com/sun/star/bridge/ModelDependent.hpp>
@@ -48,15 +42,11 @@
 #define UNO_2_OLE_EXCEPTIONCODE 1001
 using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::script;
 using namespace com::sun::star::registry;
 using namespace com::sun::star::reflection;
 using namespace com::sun::star::beans;
 using namespace osl;
 using namespace std;
-
-namespace ole_adapter
-{
 
 VARTYPE getVarType( const Any& val);
 /* creates a Type object for a given type name.
@@ -79,9 +69,6 @@ public:
 
 
 Mutex* getBridgeMutex();
-
-} // end namespace
-
 
 #endif // INCLUDED_EXTENSIONS_SOURCE_OLE_OLE2UNO_HXX
 

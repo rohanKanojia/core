@@ -33,14 +33,14 @@ namespace sd{
     {
     protected:
         std::string name;
-        uint port;
+        uint const port;
 
     public:
         explicit ZeroconfService(const std::string& aname, uint aport)
             :name(aname), port(aport){}
         virtual ~ZeroconfService(){}
 
-        std::string getName() const {return name;}
+        const std::string& getName() const {return name;}
         void setName(const char * n) {name = n;}
 
         // Clean up the service when closing

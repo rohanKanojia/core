@@ -20,22 +20,25 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_FRAME_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_FRAME_HXX
 
-#include <vector>
 #include <drawinglayer/primitive2d/baseprimitive2d.hxx>
 #include <drawinglayer/processor2d/baseprocessor2d.hxx>
 #include <editeng/borderline.hxx>
-#include "swtypes.hxx"
-#include "swrect.hxx"
-#include "calbck.hxx"
+#include <swtypes.hxx>
+#include <swrect.hxx>
+#include <calbck.hxx>
 #include <svl/SfxBroadcaster.hxx>
 #include <o3tl/typed_flags_set.hxx>
-#include "IDocumentDrawModelAccess.hxx"
-
+#include <IDocumentDrawModelAccess.hxx>
 #include <com/sun/star/style/TabStop.hpp>
+#include <basegfx/matrix/b2dhommatrix.hxx>
+#include <vcl/outdev.hxx>
+
+#include <memory>
 
 class SwLayoutFrame;
 class SwRootFrame;
 class SwPageFrame;
+class SwBodyFrame;
 class SwFlyFrame;
 class SwSectionFrame;
 class SwFootnoteFrame;
@@ -46,13 +49,12 @@ class SwFlowFrame;
 class SwContentFrame;
 class SfxPoolItem;
 class SwAttrSet;
-class SwViewShell;
 class Color;
 class SwBorderAttrs;
 class SwCache;
 class SvxBrushItem;
-class XFillStyleItem;
-class XFillGradientItem;
+class SvxFormatBreakItem;
+class SwFormatPageDesc;
 class SwSelectionList;
 struct SwPosition;
 struct SwCursorMoveState;
@@ -61,6 +63,7 @@ class SwPrintData;
 class SwSortedObjs;
 class SwAnchoredObject;
 typedef struct _xmlTextWriter *xmlTextWriterPtr;
+enum class SvxFrameDirection;
 
 // Each FrameType is represented here as a bit.
 // The bits must be set in a way that it can be determined with masking of
@@ -114,11 +117,174 @@ enum MakePageType
     MAKEPAGE_NOSECTION  // Don't create section frames
 };
 
-//UUUU
 namespace drawinglayer { namespace attribute {
     class SdrAllFillAttributesHelper;
     typedef std::shared_ptr< SdrAllFillAttributesHelper > SdrAllFillAttributesHelperPtr;
 }}
+
+/// Helper class to isolate geometry-defining members of SwFrame
+/// and to control their accesses. Moved to own class to have no
+/// hidden accesses to 'private' members anymore.
+///
+/// Added most important flags about the state of this geometric
+/// information and if it is valid or not
+class SW_DLLPUBLIC SwFrameAreaDefinition
+{
+private:
+    // The absolute position and size of the SwFrame in the document.
+    // This values are set by the layouter implementations
+    SwRect  maFrameArea;
+
+    // The 'inner' Frame Area defined by a SwRect relative to FrameArea:
+    // When identical to FrameArea, Pos() will be (0, 0) and Size identical.
+    SwRect  maFramePrintArea;
+
+    // bitfield
+    bool mbFrameAreaPositionValid   : 1;
+    bool mbFrameAreaSizeValid       : 1;
+    bool mbFramePrintAreaValid      : 1;
+
+    // #i65250#
+    // frame ID is now in general available - used for layout loop control
+    static sal_uInt32 mnLastFrameId;
+    const  sal_uInt32 mnFrameId;
+
+protected:
+    // write access to mb*Valid flags
+    void setFrameAreaPositionValid(bool bNew);
+    void setFrameAreaSizeValid(bool bNew);
+    void setFramePrintAreaValid(bool bNew);
+
+public:
+    SwFrameAreaDefinition();
+    virtual ~SwFrameAreaDefinition();
+
+    // read access to mb*Valid flags
+    bool isFrameAreaPositionValid() const { return mbFrameAreaPositionValid; }
+    bool isFrameAreaSizeValid() const { return mbFrameAreaSizeValid; }
+    bool isFramePrintAreaValid() const { return mbFramePrintAreaValid; }
+
+    // syntactic sugar: test whole FrameAreaDefinition
+    bool isFrameAreaDefinitionValid() const { return isFrameAreaPositionValid() && isFrameAreaSizeValid() && isFramePrintAreaValid(); }
+
+    // #i65250#
+    sal_uInt32 GetFrameId() const { return mnFrameId; }
+
+    // read accesses to FrameArea definitions - only const access allowed.
+    // Do *not* const_cast results, it is necessary to track changes. use
+    // the below offered WriteAccess helper classes instead
+    const SwRect& getFrameArea() const { return maFrameArea; }
+    const SwRect& getFramePrintArea() const { return maFramePrintArea; }
+
+    // helper class(es) for FrameArea manipulation. These
+    // have to be used to apply changes to FrameAreas. They hold a copy of the
+    // SwRect for manipulation. It gets written back at destruction. Thus, this
+    // mechanism depends on scope usage, take care. It prevents errors using
+    // different instances of SwFrame in get/set methods which is more safe
+    class FrameAreaWriteAccess : public SwRect
+    {
+    private:
+        SwFrameAreaDefinition&        mrTarget;
+
+        FrameAreaWriteAccess(const FrameAreaWriteAccess&) = delete;
+        FrameAreaWriteAccess& operator=(const FrameAreaWriteAccess&) = delete;
+
+    public:
+        FrameAreaWriteAccess(SwFrameAreaDefinition& rTarget) : SwRect(rTarget.getFrameArea()), mrTarget(rTarget) {}
+        ~FrameAreaWriteAccess();
+        void setSwRect(const SwRect& rNew) { *reinterpret_cast< SwRect* >(this) = rNew; }
+    };
+
+    // same helper for FramePrintArea
+    class FramePrintAreaWriteAccess : public SwRect
+    {
+    private:
+        SwFrameAreaDefinition&        mrTarget;
+
+        FramePrintAreaWriteAccess(const FramePrintAreaWriteAccess&) = delete;
+        FramePrintAreaWriteAccess& operator=(const FramePrintAreaWriteAccess&) = delete;
+
+    public:
+        FramePrintAreaWriteAccess(SwFrameAreaDefinition& rTarget) : SwRect(rTarget.getFramePrintArea()), mrTarget(rTarget) {}
+        ~FramePrintAreaWriteAccess();
+        void setSwRect(const SwRect& rNew) { *reinterpret_cast< SwRect* >(this) = rNew; }
+    };
+
+    // RotateFlyFrame3 - Support for Transformations
+    // Hand out the Transformations for the current FrameAreaDefinition
+    // for the FrameArea and FramePrintArea.
+    // FramePrintArea is not relative to FrameArea in this
+    // transformation representation (to make it easier to use and understand).
+    // There is no 'set' method since SwFrame is a layout object. For
+    // some cases rotation will be included (used for SwGrfNode in inner
+    // SwFrame of a SwFlyFrame)
+    virtual basegfx::B2DHomMatrix getFrameAreaTransformation() const;
+    virtual basegfx::B2DHomMatrix getFramePrintAreaTransformation() const;
+
+    // RotateFlyFrame3 - Support for Transformations
+    // Modify current transformations by applying given translation
+    virtual void transform_translate(const Point& rOffset);
+};
+
+/// RotateFlyFrame3: Helper class when you want to make your SwFrame derivate
+/// transformable. It provides some tooling to do so. To use, add as member
+/// (see e.g. SwFlyFreeFrame which uses 'std::unique_ptr< TransformableSwFrame >')
+class SW_DLLPUBLIC TransformableSwFrame
+{
+private:
+    // The SwFrameAreaDefinition to work on
+    SwFrameAreaDefinition&  mrSwFrameAreaDefinition;
+
+    // FrameAreaTransformation and FramePrintAreaTransformation
+    // !identity when needed (translate/scale is used (e.g. rotation))
+    basegfx::B2DHomMatrix   maFrameAreaTransformation;
+    basegfx::B2DHomMatrix   maFramePrintAreaTransformation;
+
+public:
+    TransformableSwFrame(SwFrameAreaDefinition& rSwFrameAreaDefinition)
+    :   mrSwFrameAreaDefinition(rSwFrameAreaDefinition),
+        maFrameAreaTransformation(),
+        maFramePrintAreaTransformation()
+    {
+    }
+
+    // get SwFrameArea in transformation form
+    const basegfx::B2DHomMatrix& getLocalFrameAreaTransformation() const
+    {
+        return maFrameAreaTransformation;
+    }
+
+    // get SwFramePrintArea in transformation form
+    const basegfx::B2DHomMatrix& getLocalFramePrintAreaTransformation() const
+    {
+        return maFramePrintAreaTransformation;
+    }
+
+    // Helpers to re-create the untransformed SwRect(s) originally
+    // in the SwFrameAreaDefinition, based on the current Transformations.
+    SwRect getUntransformedFrameArea() const;
+    SwRect getUntransformedFramePrintArea() const;
+
+    // Helper method to re-create FrameAreaTransformations based on the
+    // current FrameAreaDefinition transformed by given rotation and Center
+    void createFrameAreaTransformations(
+        double fRotation,
+        const basegfx::B2DPoint& rCenter);
+
+    // Tooling method to reset the SwRect(s) in the current
+    // SwFrameAreaDefinition which are already adapted to
+    // Transformation back to the untransformed state, using
+    // the getUntransformedFrame*Area calls above when needed.
+    // Only the SwRect(s) are changed back, not the transformations.
+    void restoreFrameAreas();
+
+    // Re-Creates the SwRect(s) as BoundAreas based on the current
+    // set Transformations.
+    void adaptFrameAreasToTransformations();
+
+    // Modify current definitions by applying the given transformation
+    void transform(const basegfx::B2DHomMatrix& aTransform);
+};
 
 /**
  * Base class of the Writer layout elements.
@@ -127,16 +293,17 @@ namespace drawinglayer { namespace attribute {
  * level: pages, headers, footers, etc. (Inside a paragraph SwLinePortion
  * instances are used.)
  */
-class SW_DLLPUBLIC SwFrame: public SwClient, public SfxBroadcaster
+class SW_DLLPUBLIC SwFrame : public SwFrameAreaDefinition, public SwClient, public SfxBroadcaster
 {
     // the hidden Frame
     friend class SwFlowFrame;
     friend class SwLayoutFrame;
     friend class SwLooping;
+    friend class SwDeletionChecker; // for GetDep()
 
     // voids lower during creation of a column
     friend SwFrame *SaveContent( SwLayoutFrame *, SwFrame* pStart );
-    friend void   RestoreContent( SwFrame *, SwLayoutFrame *, SwFrame *pSibling, bool bGrow );
+    friend void   RestoreContent( SwFrame *, SwLayoutFrame *, SwFrame *pSibling );
 
     // for validating a mistakenly invalidated one in SwContentFrame::MakeAll
     friend void ValidateSz( SwFrame *pFrame );
@@ -148,21 +315,17 @@ class SW_DLLPUBLIC SwFrame: public SwClient, public SfxBroadcaster
     // cache for (border) attributes
     static SwCache *mpCache;
 
-    bool mbIfAccTableShouldDisposing;
-    bool mbInDtor;
-
-    // #i65250#
-    // frame ID is now in general available - used for layout loop control
-    static sal_uInt32 mnLastFrameId;
-    const  sal_uInt32 mnFrameId;
-
     SwRootFrame   *mpRoot;
     SwLayoutFrame *mpUpper;
     SwFrame       *mpNext;
     SwFrame       *mpPrev;
 
-    SwFrame *_FindNext();
-    SwFrame *_FindPrev();
+    // sw_redlinehide: hide these dangerous SwClient functions
+    using SwClient::GetRegisteredInNonConst;
+    using SwClient::GetRegisteredIn;
+
+    SwFrame *FindNext_();
+    SwFrame *FindPrev_();
 
     /** method to determine next content frame in the same environment
         for a flow frame (content frame, table frame, section frame)
@@ -191,7 +354,7 @@ class SW_DLLPUBLIC SwFrame: public SwClient, public SfxBroadcaster
         @return SwContentFrame*
         pointer to the found next content frame. It's NULL, if none exists.
     */
-    SwContentFrame* _FindNextCnt( const bool _bInSameFootnote = false );
+    SwContentFrame* FindNextCnt_( const bool _bInSameFootnote );
 
     /** method to determine previous content frame in the same environment
         for a flow frame (content frame, table frame, section frame)
@@ -218,10 +381,10 @@ class SW_DLLPUBLIC SwFrame: public SwClient, public SfxBroadcaster
         @return SwContentFrame*
         pointer to the found previous content frame. It's NULL, if none exists.
     */
-    SwContentFrame* _FindPrevCnt();
+    SwContentFrame* FindPrevCnt_();
 
-    void _UpdateAttrFrame( const SfxPoolItem*, const SfxPoolItem*, sal_uInt8 & );
-    SwFrame* _GetIndNext();
+    void UpdateAttrFrame( const SfxPoolItem*, const SfxPoolItem*, sal_uInt8 & );
+    SwFrame* GetIndNext_();
     void SetDirFlags( bool bVert );
 
     const SwLayoutFrame* ImplGetNextLayoutLeaf( bool bFwd ) const;
@@ -229,15 +392,10 @@ class SW_DLLPUBLIC SwFrame: public SwClient, public SfxBroadcaster
     SwPageFrame* ImplFindPageFrame();
 
 protected:
-    SwSortedObjs* mpDrawObjs;    // draw objects, can be 0
-
-    SwRect  maFrame;   // absolute position in document and size of the Frame
-    SwRect  maPrt;   // position relatively to Frame and size of PrtArea
-
+    std::unique_ptr<SwSortedObjs> m_pDrawObjs; // draw objects, can be null
     SwFrameType mnFrameType;  //Who am I?
 
-    bool mbReverse     : 1; // Next line above/at the right side instead
-                                 // under/at the left side of the previous line
+    bool mbInDtor      : 1;
     bool mbInvalidR2L  : 1;
     bool mbDerivedR2L  : 1;
     bool mbRightToLeft : 1;
@@ -247,15 +405,14 @@ protected:
 
     bool mbVertLR      : 1;
 
-    bool mbValidPos      : 1;
-    bool mbValidPrtArea  : 1;
-    bool mbValidSize     : 1;
     bool mbValidLineNum  : 1;
     bool mbFixSize       : 1;
+
     // if true, frame will be painted completely even content was changed
     // only partially. For ContentFrames a border (from Action) will exclusively
     // painted if <mbCompletePaint> is true.
     bool mbCompletePaint : 1;
+
     bool mbRetouche      : 1; // frame is responsible for retouching
 
     bool mbInfInvalid    : 1;  // InfoFlags are invalid
@@ -273,7 +430,7 @@ protected:
     void ColUnlock()    { mbColLocked = false; }
 
     virtual void DestroyImpl();
-    virtual ~SwFrame();
+    virtual ~SwFrame() override;
 
     // Only used by SwRootFrame Ctor to get 'this' into mpRoot...
     void setRootFrame( SwRootFrame* pRoot ) { mpRoot = pRoot; }
@@ -281,7 +438,7 @@ protected:
     SwPageFrame *InsertPage( SwPageFrame *pSibling, bool bFootnote );
     void PrepareMake(vcl::RenderContext* pRenderContext);
     void OptPrepareMake();
-    void MakePos();
+    virtual void MakePos();
     // Format next frame of table frame to assure keeping attributes.
     // In case of nested tables method <SwFrame::MakeAll()> is called to
     // avoid formatting of superior table frame.
@@ -295,12 +452,14 @@ protected:
     virtual SwTwips ShrinkFrame( SwTwips, bool bTst = false, bool bInfo = false ) = 0;
     virtual SwTwips GrowFrame  ( SwTwips, bool bTst = false, bool bInfo = false ) = 0;
 
+    /// use these so we can grep for SwFrame's GetRegisteredIn accesses
+    /// beware that SwTextFrame may return sw::WriterMultiListener
     SwModify        *GetDep()       { return GetRegisteredInNonConst(); }
     const SwModify  *GetDep() const { return GetRegisteredIn(); }
 
     SwFrame( SwModify*, SwFrame* );
 
-    void CheckDir( sal_uInt16 nDir, bool bVert, bool bOnlyBiDi, bool bBrowse );
+    void CheckDir( SvxFrameDirection nDir, bool bVert, bool bOnlyBiDi, bool bBrowse );
 
     /** enumeration for the different invalidations
         #i28701#
@@ -313,7 +472,7 @@ protected:
     /** method to determine, if an invalidation is allowed.
         #i28701
     */
-    virtual bool _InvalidationAllowed( const InvalidationType _nInvalid ) const;
+    virtual bool InvalidationAllowed( const InvalidationType _nInvalid ) const;
 
     /** method to perform additional actions on an invalidation
 
@@ -321,11 +480,11 @@ protected:
         Method has *only* to contain actions, which has to be performed on
         *every* assignment of the corresponding flag to <false>.
     */
-    virtual void _ActionOnInvalidation( const InvalidationType _nInvalid );
+    virtual void ActionOnInvalidation( const InvalidationType _nInvalid );
 
     // draw shadow and borders
     void PaintShadow( const SwRect&, SwRect&, const SwBorderAttrs& ) const;
-    virtual void  Modify( const SfxPoolItem*, const SfxPoolItem* ) override;
+    virtual void Modify( const SfxPoolItem*, const SfxPoolItem* ) override;
 
     virtual const IDocumentDrawModelAccess& getIDocumentDrawModelAccess( );
 
@@ -359,16 +518,16 @@ public:
 
     // For internal use only - who ignores this will be put in a sack and has
     // to stay there for two days
-    // Does special treatment for _Get[Next|Prev]Leaf() (for tables).
+    // Does special treatment for Get_[Next|Prev]Leaf() (for tables).
     SwLayoutFrame *GetLeaf( MakePageType eMakePage, bool bFwd );
     SwLayoutFrame *GetNextLeaf   ( MakePageType eMakePage );
     SwLayoutFrame *GetNextFootnoteLeaf( MakePageType eMakePage );
     SwLayoutFrame *GetNextSctLeaf( MakePageType eMakePage );
-    SwLayoutFrame *GetNextCellLeaf( MakePageType eMakePage );
-    SwLayoutFrame *GetPrevLeaf   ( MakePageType eMakeFootnote = MAKEPAGE_FTN );
-    SwLayoutFrame *GetPrevFootnoteLeaf( MakePageType eMakeFootnote = MAKEPAGE_FTN );
-    SwLayoutFrame *GetPrevSctLeaf( MakePageType eMakeFootnote = MAKEPAGE_FTN );
-    SwLayoutFrame *GetPrevCellLeaf( MakePageType eMakeFootnote = MAKEPAGE_FTN );
+    SwLayoutFrame *GetNextCellLeaf();
+    SwLayoutFrame *GetPrevLeaf   ();
+    SwLayoutFrame *GetPrevFootnoteLeaf( MakePageType eMakeFootnote );
+    SwLayoutFrame *GetPrevSctLeaf();
+    SwLayoutFrame *GetPrevCellLeaf();
     const SwLayoutFrame *GetLeaf ( MakePageType eMakePage, bool bFwd,
                                  const SwFrame *pAnch ) const;
 
@@ -381,25 +540,27 @@ public:
     // work with chain of FlyFrames
     void  AppendFly( SwFlyFrame *pNew );
     void  RemoveFly( SwFlyFrame *pToRemove );
-    const SwSortedObjs *GetDrawObjs() const { return mpDrawObjs; }
-          SwSortedObjs *GetDrawObjs()         { return mpDrawObjs; }
+    const SwSortedObjs *GetDrawObjs() const { return m_pDrawObjs.get(); }
+          SwSortedObjs *GetDrawObjs()       { return m_pDrawObjs.get(); }
     // #i28701# - change purpose of method and adjust its name
     void InvalidateObjs( const bool _bNoInvaOfAsCharAnchoredObjs = true );
 
-    virtual void PaintBorder( const SwRect&, const SwPageFrame *pPage,
-                              const SwBorderAttrs & ) const;
-    void PaintBaBo( const SwRect&, const SwPageFrame *pPage = nullptr,
+    virtual void PaintSwFrameShadowAndBorder(
+        const SwRect&,
+        const SwPageFrame* pPage,
+        const SwBorderAttrs&) const;
+    void PaintBaBo( const SwRect&, const SwPageFrame *pPage,
                     const bool bOnlyTextBackground = false) const;
-    void PaintBackground( const SwRect&, const SwPageFrame *pPage,
+    void PaintSwFrameBackground( const SwRect&, const SwPageFrame *pPage,
                           const SwBorderAttrs &,
                           const bool bLowerMode = false,
                           const bool bLowerBorder = false,
                           const bool bOnlyTextBackground = false ) const;
     void PaintBorderLine( const SwRect&, const SwRect&, const SwPageFrame*,
                           const Color *pColor,
-                          const editeng::SvxBorderStyle = css::table::BorderLineStyle::SOLID ) const;
+                          const SvxBorderLineStyle = SvxBorderLineStyle::SOLID ) const;
 
-    drawinglayer::processor2d::BaseProcessor2D * CreateProcessor2D( ) const;
+    std::unique_ptr<drawinglayer::processor2d::BaseProcessor2D> CreateProcessor2D( ) const;
     void ProcessPrimitives( const drawinglayer::primitive2d::Primitive2DContainer& rSequence ) const;
 
     // retouch, not in the area of the given Rect!
@@ -410,18 +571,19 @@ public:
         const SvxBrushItem*& rpBrush,
         const Color*& rpColor,
         SwRect &rOrigRect,
-        bool bLowerMode ) const;
+        bool bLowerMode,
+        bool bConsiderTextBox ) const;
 
     inline void SetCompletePaint() const;
     inline void ResetCompletePaint() const;
-    inline bool IsCompletePaint() const { return mbCompletePaint; }
+    bool IsCompletePaint() const { return mbCompletePaint; }
 
     inline void SetRetouche() const;
     inline void ResetRetouche() const;
-    inline bool IsRetouche() const { return mbRetouche; }
+    bool IsRetouche() const { return mbRetouche; }
 
     void SetInfFlags();
-    inline void InvalidateInfFlags() { mbInfInvalid = true; }
+    void InvalidateInfFlags() { mbInfInvalid = true; }
     inline bool IsInDocBody() const;    // use InfoFlags, determine flags
     inline bool IsInFootnote() const;        // if necessary
     inline bool IsInTab() const;
@@ -438,18 +600,13 @@ public:
 
     bool IsInBalancedSection() const;
 
-    inline bool IsReverse() const { return mbReverse; }
     inline bool IsVertical() const;
-
     inline bool IsVertLR() const;
-    inline bool GetVerticalFlag() const { return mbVertical; }
 
-    inline void SetDerivedVert( bool bNew ){ mbDerivedVert = bNew; }
-    inline void SetInvalidVert( bool bNew) { mbInvalidVert = bNew; }
+    void SetDerivedVert( bool bNew ){ mbDerivedVert = bNew; }
+    void SetInvalidVert( bool bNew) { mbInvalidVert = bNew; }
     inline bool IsRightToLeft() const;
-    inline bool GetRightToLeftFlag() const { return mbRightToLeft; }
-    inline void SetDerivedR2L( bool bNew ) { mbDerivedR2L  = bNew; }
-    inline void SetInvalidR2L( bool bNew ) { mbInvalidR2L  = bNew; }
+    void SetDerivedR2L( bool bNew ) { mbDerivedR2L  = bNew; }
 
     void CheckDirChange();
     // returns upper left frame position for LTR and
@@ -460,12 +617,12 @@ public:
 
         method replaced 'old' method <bool IsMoveable() const>.
         Determines, if frame is moveable in given environment. if no environment
-        is given (parameter _pLayoutFrame == 0L), the movability in the actual
-        environment (<this->GetUpper()) is checked.
+        is given (parameter _pLayoutFrame == 0), the movability in the actual
+        environment (<GetUpper()) is checked.
 
         @param _pLayoutFrame
         input parameter - given environment (layout frame), in which the movability
-        will be checked. If not set ( == 0L ), actual environment is taken.
+        will be checked. If not set ( == 0 ), actual environment is taken.
 
         @return boolean, indicating, if frame is moveable in given environment
     */
@@ -481,9 +638,13 @@ public:
 
     void ReinitializeFrameSizeAttrFlags();
 
+    /// WARNING: this may not return correct RES_PAGEDESC/RES_BREAK items for
+    /// SwTextFrame, use GetBreakItem()/GetPageDescItem() instead
     const SwAttrSet *GetAttrSet() const;
+    virtual const SvxFormatBreakItem& GetBreakItem() const;
+    virtual const SwFormatPageDesc& GetPageDescItem() const;
 
-    inline bool HasFixSize() const { return mbFixSize; }
+    bool HasFixSize() const { return mbFixSize; }
 
     // check all pages (starting from the given) and correct them if needed
     static void CheckPageDescs( SwPageFrame *pStart, bool bNotifyFields = true, SwPageFrame** ppPrev = nullptr);
@@ -501,6 +662,7 @@ public:
     SwFootnoteFrame       *ImplFindFootnoteFrame();
     SwFlyFrame            *ImplFindFlyFrame();
     SwSectionFrame        *ImplFindSctFrame();
+    const SwBodyFrame     *ImplFindBodyFrame() const;
     SwFrame               *FindFooterOrHeader();
     SwFrame               *GetLower();
     const SwFrame         *GetNext()  const { return mpNext; }
@@ -523,6 +685,7 @@ public:
     inline const SwFootnoteFrame  *FindFootnoteFrame() const;
     inline const SwFlyFrame  *FindFlyFrame() const;
     inline const SwSectionFrame *FindSctFrame() const;
+    inline const SwBodyFrame    *FindBodyFrame() const;
     inline const SwFrame     *FindNext() const;
     // #i27138# - add parameter <_bInSameFootnote>
     const SwContentFrame* FindNextCnt( const bool _bInSameFootnote = false ) const;
@@ -534,12 +697,12 @@ public:
     const SwContentFrame* FindPrevCnt() const;
 
     // #i79774#
-    SwFrame* _GetIndPrev() const;
+    SwFrame* GetIndPrev_() const;
     SwFrame* GetIndPrev() const
-        { return ( mpPrev || !IsInSct() ) ? mpPrev : _GetIndPrev(); }
+        { return ( mpPrev || !IsInSct() ) ? mpPrev : GetIndPrev_(); }
 
     SwFrame* GetIndNext()
-        { return ( mpNext || !IsInSct() ) ? mpNext : _GetIndNext(); }
+        { return ( mpNext || !IsInSct() ) ? mpNext : GetIndNext_(); }
     const SwFrame* GetIndNext() const { return const_cast<SwFrame*>(this)->GetIndNext(); }
 
     sal_uInt16 GetPhyPageNum() const;   // page number without offset
@@ -556,86 +719,72 @@ public:
     virtual void Calc(vcl::RenderContext* pRenderContext) const; // here might be "formatted"
     inline void OptCalc() const;    // here we assume (for optimization) that
                                     // the predecessors are already formatted
-
     Point   GetRelPos() const;
-    const  SwRect &Frame() const { return maFrame; }
-    const  SwRect &Prt() const { return maPrt; }
 
     // PaintArea is the area where content might be displayed.
     // The margin of a page or the space between columns belongs to it.
-    const SwRect PaintArea() const;
+    const SwRect GetPaintArea() const;
+
     // UnionFrame is the union of Frame- and PrtArea, normally identical
     // to the FrameArea except in case of negative Prt margins.
     const SwRect UnionFrame( bool bBorder = false ) const;
 
-    // HACK: Here we exceptionally allow direct access to members.
-    // This should not delude into changing those value randomly; it is the
-    // only option to circumvent compiler problems (same method with public
-    // and protected).
-    SwRect &Frame() { return maFrame; }
-    SwRect &Prt() { return maPrt; }
-
     virtual Size ChgSize( const Size& aNewSize );
 
     virtual void Cut() = 0;
-    //Add a method to change the acc table dispose state.
-    void SetAccTableDispose(bool bDispose) { mbIfAccTableShouldDisposing = bDispose;}
     virtual void Paste( SwFrame* pParent, SwFrame* pSibling = nullptr ) = 0;
 
     void ValidateLineNum() { mbValidLineNum = true; }
 
-    bool GetValidPosFlag()    const { return mbValidPos; }
-    bool GetValidPrtAreaFlag()const { return mbValidPrtArea; }
-    bool GetValidSizeFlag()   const { return mbValidSize; }
     bool GetValidLineNumFlag()const { return mbValidLineNum; }
-    bool IsValid() const { return mbValidPos && mbValidSize && mbValidPrtArea; }
 
     // Only invalidate Frame
-    // #i28701# - add call to method <_ActionOnInvalidation(..)>
+    // #i28701# - add call to method <ActionOnInvalidation(..)>
     //            for all invalidation methods.
-    // #i28701# - use method <_InvalidationAllowed(..)> to
+    // #i28701# - use method <InvalidationAllowed(..)> to
     //            decide, if invalidation will to be performed or not.
     // #i26945# - no additional invalidation, if it's already
     //            invalidate.
-    void _InvalidateSize()
+    void InvalidateSize_()
     {
-        if ( mbValidSize && _InvalidationAllowed( INVALID_SIZE ) )
+        if ( isFrameAreaSizeValid() && InvalidationAllowed( INVALID_SIZE ) )
         {
-            mbValidSize = false;
-            _ActionOnInvalidation( INVALID_SIZE );
+            setFrameAreaSizeValid(false);
+            ActionOnInvalidation( INVALID_SIZE );
         }
     }
-    void _InvalidatePrt()
+    void InvalidatePrt_()
     {
-        if ( mbValidPrtArea && _InvalidationAllowed( INVALID_PRTAREA ) )
+        if ( isFramePrintAreaValid() && InvalidationAllowed( INVALID_PRTAREA ) )
         {
-            mbValidPrtArea = false;
-            _ActionOnInvalidation( INVALID_PRTAREA );
+            setFramePrintAreaValid(false);
+            ActionOnInvalidation( INVALID_PRTAREA );
         }
     }
-    void _InvalidatePos()
+    void InvalidatePos_()
     {
-        if ( mbValidPos && _InvalidationAllowed( INVALID_POS ) )
+        if ( isFrameAreaPositionValid() && InvalidationAllowed( INVALID_POS ) )
         {
-            mbValidPos = false;
-            _ActionOnInvalidation( INVALID_POS );
+            setFrameAreaPositionValid(false);
+            ActionOnInvalidation( INVALID_POS );
         }
     }
-    void _InvalidateLineNum()
+    void InvalidateLineNum_()
     {
-        if ( mbValidLineNum && _InvalidationAllowed( INVALID_LINENUM ) )
+        if ( mbValidLineNum && InvalidationAllowed( INVALID_LINENUM ) )
         {
             mbValidLineNum = false;
-            _ActionOnInvalidation( INVALID_LINENUM );
+            ActionOnInvalidation( INVALID_LINENUM );
         }
     }
-    void _InvalidateAll()
+    void InvalidateAll_()
     {
-        if ( ( mbValidSize || mbValidPrtArea || mbValidPos ) &&
-             _InvalidationAllowed( INVALID_ALL ) )
+        if ( ( isFrameAreaSizeValid() || isFramePrintAreaValid() || isFrameAreaPositionValid() ) && InvalidationAllowed( INVALID_ALL ) )
         {
-            mbValidSize = mbValidPrtArea = mbValidPos = false;
-            _ActionOnInvalidation( INVALID_ALL );
+            setFrameAreaSizeValid(false);
+            setFrameAreaPositionValid(false);
+            setFramePrintAreaValid(false);
+            ActionOnInvalidation( INVALID_ALL );
         }
     }
     // also notify page at the same time
@@ -650,7 +799,7 @@ public:
     void ImplInvalidateLineNum();
 
     inline void InvalidateNextPos( bool bNoFootnote = false );
-    void ImplInvalidateNextPos( bool bNoFootnote = false );
+    void ImplInvalidateNextPos( bool bNoFootnote );
 
     /** method to invalidate printing area of next frame
         #i11859#
@@ -664,8 +813,8 @@ public:
     virtual bool    GetCursorOfst( SwPosition *, Point&,
                                  SwCursorMoveState* = nullptr, bool bTestBackground = false ) const;
     virtual bool    GetCharRect( SwRect &, const SwPosition&,
-                                 SwCursorMoveState* = nullptr ) const;
-    virtual void Paint( vcl::RenderContext& rRenderContext, SwRect const&,
+                                 SwCursorMoveState* = nullptr, bool bAllowFarAway = true ) const;
+    virtual void PaintSwFrame( vcl::RenderContext& rRenderContext, SwRect const&,
                         SwPrintData const*const pPrintData = nullptr ) const;
 
     // HACK: shortcut between frame and formatting
@@ -710,7 +859,7 @@ public:
     bool IsProtected() const;
 
     bool IsColLocked()  const { return mbColLocked; }
-    bool IsDeleteForbidden()  const { return mbForbidDelete; }
+    virtual bool IsDeleteForbidden() const { return mbForbidDelete; }
 
     /// this is the only way to delete a SwFrame instance
     static void DestroyFrame(SwFrame *const pFrame);
@@ -723,7 +872,6 @@ public:
     long GetLeftMargin() const;
     long GetRightMargin() const;
     void SetTopBottomMargins( long, long );
-    void SetBottomTopMargins( long, long );
     void SetLeftRightMargins( long, long );
     void SetRightLeftMargins( long, long );
     long GetPrtLeft() const;
@@ -733,16 +881,11 @@ public:
     bool SetMinLeft( long );
     bool SetMaxBottom( long );
     bool SetMaxRight( long );
-    bool SetMinTop( long );
     void MakeBelowPos( const SwFrame*, const SwFrame*, bool );
-    void MakeUpperPos( const SwFrame*, const SwFrame*, bool );
     void MakeLeftPos( const SwFrame*, const SwFrame*, bool );
     void MakeRightPos( const SwFrame*, const SwFrame*, bool );
-    inline bool IsNeighbourFrame() const
+    bool IsNeighbourFrame() const
         { return bool(GetType() & FRM_NEIGHBOUR); }
-
-    // #i65250#
-    inline sal_uInt32 GetFrameId() const { return mnFrameId; }
 
     // NEW TABLES
     // Some functions for covered/covering table cells. This way unnecessary
@@ -759,13 +902,13 @@ public:
     void ForbidDelete()      { mbForbidDelete = true; }
     void AllowDelete()    { mbForbidDelete = false; }
 
-    //UUUU
     drawinglayer::attribute::SdrAllFillAttributesHelperPtr getSdrAllFillAttributesHelper() const;
     bool supportsFullDrawingLayerFillAttributeSet() const;
 
 public:
     // if writer is NULL, dumps the layout structure as XML in layout.xml
     virtual void dumpAsXml(xmlTextWriterPtr writer = nullptr) const;
+    void dumpTopMostAsXml(xmlTextWriterPtr writer = nullptr) const;
     void dumpInfosAsXml(xmlTextWriterPtr writer) const;
     virtual void dumpAsXmlAttributes(xmlTextWriterPtr writer) const;
     void dumpChildrenAsXml(xmlTextWriterPtr writer) const;
@@ -856,18 +999,24 @@ inline const SwLayoutFrame *SwFrame::GetPrevLayoutLeaf() const
 
 inline void SwFrame::InvalidateSize()
 {
-    if ( mbValidSize )
+    if ( isFrameAreaSizeValid() )
+    {
         ImplInvalidateSize();
+    }
 }
 inline void SwFrame::InvalidatePrt()
 {
-    if ( mbValidPrtArea )
+    if ( isFramePrintAreaValid() )
+    {
         ImplInvalidatePrt();
+    }
 }
 inline void SwFrame::InvalidatePos()
 {
-    if ( mbValidPos )
+    if ( isFrameAreaPositionValid() )
+    {
         ImplInvalidatePos();
+    }
 }
 inline void SwFrame::InvalidateLineNum()
 {
@@ -876,14 +1025,19 @@ inline void SwFrame::InvalidateLineNum()
 }
 inline void SwFrame::InvalidateAll()
 {
-    if ( _InvalidationAllowed( INVALID_ALL ) )
+    if ( InvalidationAllowed( INVALID_ALL ) )
     {
-        if ( mbValidPrtArea && mbValidSize && mbValidPos  )
+        if ( isFrameAreaDefinitionValid()  )
+        {
             ImplInvalidatePos();
-        mbValidPrtArea = mbValidSize = mbValidPos = false;
+        }
+
+        setFrameAreaSizeValid(false);
+        setFrameAreaPositionValid(false);
+        setFramePrintAreaValid(false);
 
         // #i28701#
-        _ActionOnInvalidation( INVALID_ALL );
+        ActionOnInvalidation( INVALID_ALL );
     }
 }
 inline void SwFrame::InvalidateNextPos( bool bNoFootnote )
@@ -896,8 +1050,10 @@ inline void SwFrame::InvalidateNextPos( bool bNoFootnote )
 
 inline void SwFrame::OptCalc() const
 {
-    if ( !mbValidPos || !mbValidPrtArea || !mbValidSize )
+    if ( !isFrameAreaPositionValid() || !isFramePrintAreaValid() || !isFrameAreaSizeValid() )
+    {
         const_cast<SwFrame*>(this)->OptPrepareMake();
+    }
 }
 inline const SwPageFrame *SwFrame::FindPageFrame() const
 {
@@ -932,6 +1088,11 @@ inline SwSectionFrame *SwFrame::FindSctFrame()
     return IsInSct() ? ImplFindSctFrame() : nullptr;
 }
 
+inline const SwBodyFrame *SwFrame::FindBodyFrame() const
+{
+    return IsInDocBody() ? ImplFindBodyFrame() : nullptr;
+}
+
 inline const SwTabFrame *SwFrame::FindTabFrame() const
 {
     return IsInTab() ? const_cast<SwFrame*>(this)->ImplFindTabFrame() : nullptr;
@@ -953,28 +1114,28 @@ inline SwFrame *SwFrame::FindNext()
     if ( mpNext )
         return mpNext;
     else
-        return _FindNext();
+        return FindNext_();
 }
 inline const SwFrame *SwFrame::FindNext() const
 {
     if ( mpNext )
         return mpNext;
     else
-        return const_cast<SwFrame*>(this)->_FindNext();
+        return const_cast<SwFrame*>(this)->FindNext_();
 }
 inline SwFrame *SwFrame::FindPrev()
 {
     if ( mpPrev && !mpPrev->IsSctFrame() )
         return mpPrev;
     else
-        return _FindPrev();
+        return FindPrev_();
 }
 inline const SwFrame *SwFrame::FindPrev() const
 {
     if ( mpPrev && !mpPrev->IsSctFrame() )
         return mpPrev;
     else
-        return const_cast<SwFrame*>(this)->_FindPrev();
+        return const_cast<SwFrame*>(this)->FindPrev_();
 }
 
 inline bool SwFrame::IsLayoutFrame() const
@@ -1066,24 +1227,23 @@ inline bool SwFrame::IsAccessibleFrame() const
 class SwFrameDeleteGuard
 {
 private:
-    SwFrame *m_pFrame;
-    bool m_bOldDeleteAllowed;
+    SwFrame *m_pForbidFrame;
 public:
     //Flag pFrame for SwFrameDeleteGuard lifetime that we shouldn't delete
     //it in e.g. SwSectionFrame::MergeNext etc because we will need it
     //again after the SwFrameDeleteGuard dtor
     explicit SwFrameDeleteGuard(SwFrame* pFrame)
-        : m_pFrame(pFrame)
+        : m_pForbidFrame((pFrame && !pFrame->IsDeleteForbidden()) ?
+            pFrame : nullptr)
     {
-        m_bOldDeleteAllowed = m_pFrame && !m_pFrame->IsDeleteForbidden();
-        if (m_bOldDeleteAllowed)
-            m_pFrame->ForbidDelete();
+        if (m_pForbidFrame)
+            m_pForbidFrame->ForbidDelete();
     }
 
     ~SwFrameDeleteGuard()
     {
-        if (m_bOldDeleteAllowed)
-            m_pFrame->AllowDelete();
+        if (m_pForbidFrame)
+            m_pForbidFrame->AllowDelete();
     }
 };
 
@@ -1102,6 +1262,7 @@ struct SwRectFnCollection
     SwRectGet     fnGetWidth;
     SwRectGet     fnGetHeight;
     SwRectPoint   fnGetPos;
+    SwRectSize    fnGetSize;
 
     SwRectSet     fnSetTop;
     SwRectSet     fnSetBottom;
@@ -1132,6 +1293,8 @@ struct SwRectFnCollection
     SwFrameGet      fnGetPrtRight;
     SwRectDist      fnTopDist;
     SwRectDist      fnBottomDist;
+    SwRectDist      fnLeftDist;
+    SwRectDist      fnRightDist;
     SwFrameMax      fnSetLimit;
     SwRectMax       fnOverStep;
 
@@ -1139,6 +1302,7 @@ struct SwRectFnCollection
     SwFrameMakePos  fnMakePos;
     SwOperator      fnXDiff;
     SwOperator      fnYDiff;
+    SwOperator      fnXInc;
     SwOperator      fnYInc;
 
     SwRectSetTwice  fnSetLeftAndWidth;
@@ -1147,31 +1311,92 @@ struct SwRectFnCollection
 
 typedef SwRectFnCollection* SwRectFn;
 
-extern SwRectFn fnRectHori, fnRectVert, fnRectB2T, fnRectVL2R, fnRectVertL2R;
-#define SWRECTFN( pFrame )    bool bVert = pFrame->IsVertical(); \
-                            bool bRev = pFrame->IsReverse(); \
-                            bool bVertL2R = pFrame->IsVertLR(); \
-                            SwRectFn fnRect = bVert ? \
-                                ( bRev ? fnRectVL2R : ( bVertL2R ? fnRectVertL2R : fnRectVert ) ): \
-                                ( bRev ? fnRectB2T : fnRectHori );
-#define SWRECTFNX( pFrame )   bool bVertX = pFrame->IsVertical(); \
-                            bool bRevX = pFrame->IsReverse(); \
-                            bool bVertL2RX = pFrame->IsVertLR(); \
-                            SwRectFn fnRectX = bVertX ? \
-                                ( bRevX ? fnRectVL2R : ( bVertL2RX ? fnRectVertL2R : fnRectVert ) ): \
-                                ( bRevX ? fnRectB2T : fnRectHori );
-#define SWREFRESHFN( pFrame ) { if( bVert != pFrame->IsVertical() || \
-                                  bRev  != pFrame->IsReverse() ) \
-                                bVert = pFrame->IsVertical(); \
-                                bRev = pFrame->IsReverse(); \
-                                bVertL2R = pFrame->IsVertLR(); \
-                                fnRect = bVert ? \
-                                    ( bRev ? fnRectVL2R : ( bVertL2R ? fnRectVertL2R : fnRectVert ) ): \
-                                    ( bRev ? fnRectB2T : fnRectHori ); }
+// This class allows to use proper methods regardless of orientation (LTR/RTL, horizontal or vertical)
+extern SwRectFn fnRectHori, fnRectVert, fnRectVertL2R;
+class SwRectFnSet {
+public:
+    explicit SwRectFnSet(const SwFrame *pFrame)
+        : m_bVert(pFrame->IsVertical())
+        , m_bVertL2R(pFrame->IsVertLR())
+    {
+        m_fnRect = m_bVert ? (m_bVertL2R ? fnRectVertL2R : fnRectVert) : fnRectHori;
+    }
 
-#define POS_DIFF( aFrame1, aFrame2 ) \
-            ( (aFrame1.*fnRect->fnGetTop)() != (aFrame2.*fnRect->fnGetTop)() || \
-            (aFrame1.*fnRect->fnGetLeft)() != (aFrame2.*fnRect->fnGetLeft)() )
+    void Refresh(const SwFrame *pFrame)
+    {
+        m_bVert = pFrame->IsVertical();
+        m_bVertL2R = pFrame->IsVertLR();
+        m_fnRect = m_bVert ? (m_bVertL2R ? fnRectVertL2R : fnRectVert) : fnRectHori;
+    }
+
+    bool IsVert() const    { return m_bVert; }
+    bool IsVertL2R() const { return m_bVertL2R; }
+    SwRectFn FnRect() const { return m_fnRect; }
+
+    bool PosDiff(const SwRect &rRect1, const SwRect &rRect2) const
+    {
+        return ((rRect1.*m_fnRect->fnGetTop)() != (rRect2.*m_fnRect->fnGetTop)()
+            || (rRect1.*m_fnRect->fnGetLeft)() != (rRect2.*m_fnRect->fnGetLeft)());
+    }
+
+    long  GetTop   (const SwRect& rRect) const { return (rRect.*m_fnRect->fnGetTop)   (); }
+    long  GetBottom(const SwRect& rRect) const { return (rRect.*m_fnRect->fnGetBottom)(); }
+    long  GetLeft  (const SwRect& rRect) const { return (rRect.*m_fnRect->fnGetLeft)  (); }
+    long  GetRight (const SwRect& rRect) const { return (rRect.*m_fnRect->fnGetRight) (); }
+    long  GetWidth (const SwRect& rRect) const { return (rRect.*m_fnRect->fnGetWidth) (); }
+    long  GetHeight(const SwRect& rRect) const { return (rRect.*m_fnRect->fnGetHeight)(); }
+    Point GetPos   (const SwRect& rRect) const { return (rRect.*m_fnRect->fnGetPos)   (); }
+    Size  GetSize  (const SwRect& rRect) const { return (rRect.*m_fnRect->fnGetSize)  (); }
+
+    void SetTop   (SwRect& rRect, long nNew) const { (rRect.*m_fnRect->fnSetTop)   (nNew); }
+    void SetBottom(SwRect& rRect, long nNew) const { (rRect.*m_fnRect->fnSetBottom)(nNew); }
+    void SetLeft  (SwRect& rRect, long nNew) const { (rRect.*m_fnRect->fnSetLeft)  (nNew); }
+    void SetRight (SwRect& rRect, long nNew) const { (rRect.*m_fnRect->fnSetRight) (nNew); }
+    void SetWidth (SwRect& rRect, long nNew) const { (rRect.*m_fnRect->fnSetWidth) (nNew); }
+    void SetHeight(SwRect& rRect, long nNew) const { (rRect.*m_fnRect->fnSetHeight)(nNew); }
+
+    void SubTop   (SwRect& rRect, long nNew) const { (rRect.*m_fnRect->fnSubTop)   (nNew); }
+    void AddBottom(SwRect& rRect, long nNew) const { (rRect.*m_fnRect->fnAddBottom)(nNew); }
+    void SubLeft  (SwRect& rRect, long nNew) const { (rRect.*m_fnRect->fnSubLeft)  (nNew); }
+    void AddRight (SwRect& rRect, long nNew) const { (rRect.*m_fnRect->fnAddRight) (nNew); }
+    void AddWidth (SwRect& rRect, long nNew) const { (rRect.*m_fnRect->fnAddWidth) (nNew); }
+    void AddHeight(SwRect& rRect, long nNew) const { (rRect.*m_fnRect->fnAddHeight)(nNew); }
+
+    void SetPosX(SwRect& rRect, long nNew) const { (rRect.*m_fnRect->fnSetPosX)(nNew); }
+    void SetPosY(SwRect& rRect, long nNew) const { (rRect.*m_fnRect->fnSetPosY)(nNew); }
+
+    long  GetTopMargin   (const SwFrame& rFrame) const { return (rFrame.*m_fnRect->fnGetTopMargin)   (); }
+    long  GetBottomMargin(const SwFrame& rFrame) const { return (rFrame.*m_fnRect->fnGetBottomMargin)(); }
+    long  GetLeftMargin  (const SwFrame& rFrame) const { return (rFrame.*m_fnRect->fnGetLeftMargin)  (); }
+    long  GetRightMargin (const SwFrame& rFrame) const { return (rFrame.*m_fnRect->fnGetRightMargin) (); }
+    void  SetXMargins(SwFrame& rFrame, long nLeft, long nRight) const { (rFrame.*m_fnRect->fnSetXMargins)(nLeft, nRight); }
+    void  SetYMargins(SwFrame& rFrame, long nTop, long nBottom) const { (rFrame.*m_fnRect->fnSetYMargins)(nTop, nBottom); }
+    long  GetPrtTop      (const SwFrame& rFrame) const { return (rFrame.*m_fnRect->fnGetPrtTop)      (); }
+    long  GetPrtBottom   (const SwFrame& rFrame) const { return (rFrame.*m_fnRect->fnGetPrtBottom)   (); }
+    long  GetPrtLeft     (const SwFrame& rFrame) const { return (rFrame.*m_fnRect->fnGetPrtLeft)     (); }
+    long  GetPrtRight    (const SwFrame& rFrame) const { return (rFrame.*m_fnRect->fnGetPrtRight)    (); }
+    long  TopDist   (const SwRect& rRect, long nPos) const { return (rRect.*m_fnRect->fnTopDist)    (nPos); }
+    long  BottomDist(const SwRect& rRect, long nPos) const { return (rRect.*m_fnRect->fnBottomDist) (nPos); }
+    long  LeftDist   (const SwRect& rRect, long nPos) const { return (rRect.*m_fnRect->fnLeftDist)    (nPos); }
+    long  RightDist   (const SwRect& rRect, long nPos) const { return (rRect.*m_fnRect->fnRightDist)    (nPos); }
+    void  SetLimit (SwFrame& rFrame, long nNew) const { (rFrame.*m_fnRect->fnSetLimit) (nNew); }
+    bool  OverStep  (const SwRect& rRect, long nPos) const { return (rRect.*m_fnRect->fnOverStep)   (nPos); }
+
+    void SetPos(SwRect& rRect, const Point& rNew) const { (rRect.*m_fnRect->fnSetPos)(rNew); }
+    void MakePos(SwFrame& rFrame, const SwFrame* pUp, const SwFrame* pPrv, bool bNotify) const { (rFrame.*m_fnRect->fnMakePos)(pUp, pPrv, bNotify); }
+    long XDiff(long n1, long n2) const { return (m_fnRect->fnXDiff) (n1, n2); }
+    long YDiff(long n1, long n2) const { return (m_fnRect->fnYDiff) (n1, n2); }
+    long XInc (long n1, long n2) const { return (m_fnRect->fnXInc)  (n1, n2); }
+    long YInc (long n1, long n2) const { return (m_fnRect->fnYInc)  (n1, n2); }
+
+    void SetLeftAndWidth(SwRect& rRect, long nLeft, long nWidth) const { (rRect.*m_fnRect->fnSetLeftAndWidth)(nLeft, nWidth); }
+    void SetTopAndHeight(SwRect& rRect, long nTop, long nHeight) const { (rRect.*m_fnRect->fnSetTopAndHeight)(nTop, nHeight); }
+
+private:
+    bool m_bVert;
+    bool m_bVertL2R;
+    SwRectFn m_fnRect;
+};
 
 #endif
 

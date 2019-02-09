@@ -21,6 +21,7 @@
 #include "mdrivermanager.hxx"
 
 #include <cppuhelper/factory.hxx>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
@@ -29,7 +30,7 @@ extern "C"
 {
 
 
-SAL_DLLPUBLIC_EXPORT void* SAL_CALL sdbc2_component_getFactory(const sal_Char* _pImplName, void * _pServiceManager, void* /*_pRegistryKey*/)
+SAL_DLLPUBLIC_EXPORT void* sdbc2_component_getFactory(const sal_Char* _pImplName, void * _pServiceManager, void* /*_pRegistryKey*/)
 {
     void* pRet = nullptr;
 

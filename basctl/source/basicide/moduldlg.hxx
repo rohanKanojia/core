@@ -21,12 +21,13 @@
 #define INCLUDED_BASCTL_SOURCE_BASICIDE_MODULDLG_HXX
 
 #include <bastype2.hxx>
-#include <svtools/svtabbx.hxx>
+#include <vcl/svtabbx.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/tabctrl.hxx>
 #include <vcl/tabdlg.hxx>
 #include <vcl/tabpage.hxx>
+#include <vcl/weld.hxx>
 #include <com/sun/star/task/XInteractionHandler.hpp>
 
 class SvxPasswordDialog;
@@ -34,70 +35,61 @@ class SvxPasswordDialog;
 namespace basctl
 {
 
-namespace ObjectMode
+enum class ObjectMode
 {
-    enum Mode
-    {
-        Library = 1,
-        Module  = 2,
-        Dialog  = 3,
-        Method  = 4,
-    };
-}
+    Library = 1,
+    Module  = 2,
+    Dialog  = 3,
+};
 
-class NewObjectDialog : public ModalDialog
+class NewObjectDialog : public weld::GenericDialogController
 {
 private:
-    VclPtr<Edit>           m_pEdit;
-    VclPtr<OKButton>       m_pOKButton;
+    std::unique_ptr<weld::Entry> m_xEdit;
+    std::unique_ptr<weld::Button> m_xOKButton;
+    bool m_bCheckName;
 
-    DECL_LINK_TYPED(OkButtonHandler, Button*, void);
+    DECL_LINK(OkButtonHandler, weld::Button&, void);
 public:
-    NewObjectDialog (vcl::Window* pParent, ObjectMode::Mode, bool bCheckName = false);
-    virtual ~NewObjectDialog();
-    virtual void dispose() override;
-    OUString GetObjectName() const { return m_pEdit->GetText(); }
-    void SetObjectName( const OUString& rName )
+    NewObjectDialog(weld::Window* pParent, ObjectMode, bool bCheckName = false);
+    OUString GetObjectName() const { return m_xEdit->get_text(); }
+    void SetObjectName(const OUString& rName)
     {
-        m_pEdit->SetText( rName );
-        m_pEdit->SetSelection(Selection( 0, rName.getLength()));
+        m_xEdit->set_text(rName);
+        m_xEdit->select_region(0, -1);
     }
 };
 
-class GotoLineDialog : public ModalDialog
+class GotoLineDialog : public weld::GenericDialogController
 {
-    VclPtr<Edit>           m_pEdit;
-    VclPtr<OKButton>       m_pOKButton;
-    DECL_LINK_TYPED(OkButtonHandler, Button*, void);
+    std::unique_ptr<weld::Entry> m_xEdit;
+    std::unique_ptr<weld::Button> m_xOKButton;
+    DECL_LINK(OkButtonHandler, weld::Button&, void);
 public:
-    explicit GotoLineDialog(vcl::Window * pParent);
-    virtual ~GotoLineDialog();
-    virtual void dispose() override;
+    explicit GotoLineDialog(weld::Window* pParent);
+    virtual ~GotoLineDialog() override;
     sal_Int32 GetLineNumber() const;
 };
 
-class ExportDialog : public ModalDialog
+class ExportDialog : public weld::GenericDialogController
 {
 private:
-    VclPtr<RadioButton>    m_pExportAsPackageButton;
-    VclPtr<OKButton>       m_pOKButton;
+    bool m_bExportAsPackage;
 
-    bool            mbExportAsPackage;
+    std::unique_ptr<weld::RadioButton> m_xExportAsPackageButton;
+    std::unique_ptr<weld::Button> m_xOKButton;
 
-    DECL_LINK_TYPED(OkButtonHandler, Button*, void);
+    DECL_LINK(OkButtonHandler, weld::Button&, void);
 
 public:
-    explicit ExportDialog( vcl::Window * pParent );
-    virtual ~ExportDialog();
-    virtual void dispose() override;
+    explicit ExportDialog(weld::Window * pParent);
+    virtual ~ExportDialog() override;
 
-    bool isExportAsPackage () const { return mbExportAsPackage; }
+    bool isExportAsPackage () const { return m_bExportAsPackage; }
 };
 
-
-class ExtTreeListBox : public TreeListBox
+class ExtTreeListBox final : public TreeListBox
 {
-protected:
     virtual bool    EditingEntry( SvTreeListEntry* pEntry, Selection& rSel  ) override;
     virtual bool    EditedEntry( SvTreeListEntry* pEntry, const OUString& rNewText ) override;
 
@@ -108,7 +100,7 @@ protected:
                         SvTreeListEntry*& rpNewParent, sal_uLong& rNewChildPos ) override;
     virtual TriState    NotifyCopying( SvTreeListEntry* pTarget, SvTreeListEntry* pEntry,
                         SvTreeListEntry*& rpNewParent, sal_uLong& rNewChildPos ) override;
-    TriState            NotifyCopyingMoving( SvTreeListEntry* pTarget, SvTreeListEntry* pEntry,
+    TriState            NotifyCopyingMoving( SvTreeListEntry* pTarget, SvTreeListEntry const * pEntry,
                         SvTreeListEntry*& rpNewParent, sal_uLong& rNewChildPos, bool bMove );
 
 public:
@@ -118,14 +110,14 @@ public:
 class CheckBox : public SvTabListBox
 {
 private:
-    ObjectMode::Mode    eMode;
-    SvLBoxButtonData*   pCheckButton;
+    ObjectMode          eMode;
+    std::unique_ptr<SvLBoxButtonData> pCheckButton;
     ScriptDocument      m_aDocument;
     void                Init();
 
 public:
     CheckBox(vcl::Window* pParent, WinBits nStyle);
-    virtual ~CheckBox();
+    virtual ~CheckBox() override;
     virtual void    dispose() override;
 
     SvTreeListEntry*    DoInsertEntry( const OUString& rStr, sal_uLong nPos = LISTBOX_APPEND );
@@ -140,29 +132,28 @@ public:
 
     void            SetDocument( const ScriptDocument& rDocument ) { m_aDocument = rDocument; }
 
-    void            SetMode (ObjectMode::Mode);
+    void            SetMode(ObjectMode);
 };
 
-class LibDialog: public ModalDialog
+class LibDialog : public weld::GenericDialogController
 {
 private:
-    VclPtr<VclFrame>       m_pStorageFrame;
-    VclPtr<CheckBox>       m_pLibBox;
-    VclPtr< ::CheckBox>       m_pReferenceBox;
-    VclPtr< ::CheckBox>       m_pReplaceBox;
+    std::unique_ptr<weld::Frame> m_xStorageFrame;
+    std::unique_ptr<weld::TreeView> m_xLibBox;
+    std::unique_ptr<weld::CheckButton> m_xReferenceBox;
+    std::unique_ptr<weld::CheckButton> m_xReplaceBox;
 
 public:
-    explicit LibDialog(vcl::Window* pParent);
-    virtual ~LibDialog();
-    virtual void dispose() override;
+    explicit LibDialog(weld::Window* pParent);
+    virtual ~LibDialog() override;
 
     void            SetStorageName( const OUString& rName );
 
-    CheckBox&       GetLibBox()                 { return *m_pLibBox; }
-    bool            IsReference() const         { return m_pReferenceBox->IsChecked(); }
-    bool            IsReplace() const           { return m_pReplaceBox->IsChecked(); }
+    weld::TreeView& GetLibBox()                 { return *m_xLibBox; }
+    bool            IsReference() const         { return m_xReferenceBox->get_active(); }
+    bool            IsReplace() const           { return m_xReplaceBox->get_active(); }
 
-    void            EnableReference (bool b)    { m_pReferenceBox->Enable(b); }
+    void            EnableReference (bool b)    { m_xReferenceBox->set_sensitive(b); }
 };
 
 class OrganizeDialog : public TabDialog
@@ -172,26 +163,23 @@ private:
     EntryDescriptor    m_aCurEntry;
 
 public:
-    OrganizeDialog( vcl::Window* pParent, sal_Int16 tabId, EntryDescriptor& rDesc );
-    virtual ~OrganizeDialog();
+    OrganizeDialog( vcl::Window* pParent, sal_Int16 tabId, EntryDescriptor const & rDesc );
+    virtual ~OrganizeDialog() override;
     virtual void    dispose() override;
 
-    virtual short   Execute() override;
-
-    DECL_LINK_TYPED( ActivatePageHdl, TabControl*, void );
+    DECL_LINK( ActivatePageHdl, TabControl*, void );
 };
 
-class ObjectPage: public TabPage
+class ObjectPage final : public TabPage
 {
-protected:
     VclPtr<ExtTreeListBox>     m_pBasicBox;
     VclPtr<PushButton>         m_pEditButton;
     VclPtr<PushButton>         m_pNewModButton;
     VclPtr<PushButton>         m_pNewDlgButton;
     VclPtr<PushButton>         m_pDelButton;
 
-    DECL_LINK_TYPED( BasicBoxHighlightHdl, SvTreeListBox*, void );
-    DECL_LINK_TYPED( ButtonHdl, Button *, void );
+    DECL_LINK( BasicBoxHighlightHdl, SvTreeListBox*, void );
+    DECL_LINK( ButtonHdl, Button *, void );
     void                CheckButtons();
     bool                GetSelection( ScriptDocument& rDocument, OUString& rLibName );
     void                DeleteCurrent();
@@ -205,18 +193,17 @@ protected:
     virtual void        DeactivatePage() override;
 
 public:
-    ObjectPage(vcl::Window* pParent, const OString& rName, sal_uInt16 nMode);
-    virtual ~ObjectPage();
+    ObjectPage(vcl::Window* pParent, const OString& rName, BrowseMode nMode);
+    virtual ~ObjectPage() override;
     virtual void dispose() override;
 
-    void                SetCurrentEntry( EntryDescriptor& rDesc );
+    void                SetCurrentEntry( EntryDescriptor const & rDesc );
     void                SetTabDlg( TabDialog* p ) { pTabDlg = p;}
 };
 
 
-class LibPage: public TabPage
+class LibPage final : public TabPage
 {
-protected:
     VclPtr<ListBox>            m_pBasicsBox;
     VclPtr<CheckBox>           m_pLibBox;
     VclPtr<PushButton>         m_pEditButton;
@@ -229,10 +216,10 @@ protected:
     ScriptDocument      m_aCurDocument;
     LibraryLocation     m_eCurLocation;
 
-    DECL_LINK_TYPED( TreeListHighlightHdl, SvTreeListBox *, void );
-    DECL_LINK_TYPED( BasicSelectHdl, ListBox&, void );
-    DECL_LINK_TYPED( ButtonHdl, Button *, void );
-    DECL_LINK_TYPED( CheckPasswordHdl, SvxPasswordDialog *, bool );
+    DECL_LINK( TreeListHighlightHdl, SvTreeListBox *, void );
+    DECL_LINK( BasicSelectHdl, ListBox&, void );
+    DECL_LINK( ButtonHdl, Button *, void );
+    DECL_LINK( CheckPasswordHdl, SvxPasswordDialog *, bool );
     void                CheckButtons();
     void                DeleteCurrent();
     void                NewLib();
@@ -254,17 +241,21 @@ protected:
 
 public:
     explicit LibPage(vcl::Window* pParent);
-    virtual             ~LibPage();
+    virtual             ~LibPage() override;
     virtual void        dispose() override;
 
     void                SetTabDlg( TabDialog* p ) { pTabDlg = p;}
 };
 
 // Helper functions
-SbModule* createModImpl( vcl::Window* pWin, const ScriptDocument& rDocument,
-    TreeListBox& rBasicBox, const OUString& rLibName, const OUString& aModName, bool bMain = false );
-void createLibImpl( vcl::Window* pWin, const ScriptDocument& rDocument,
-                    CheckBox* pLibBox, TreeListBox* pBasicBox );
+SbModule* createModImpl(weld::Window* pWin, const ScriptDocument& rDocument,
+                        SbTreeListBox& rBasicBox, const OUString& rLibName, const OUString& aModName, bool bMain);
+SbModule* createModImpl(weld::Window* pWin, const ScriptDocument& rDocument,
+                        TreeListBox& rBasicBox, const OUString& rLibName, bool bMain);
+void createLibImpl(weld::Window* pWin, const ScriptDocument& rDocument,
+                   CheckBox* pLibBox, TreeListBox* pBasicBox);
+void createLibImpl(weld::Window* pWin, const ScriptDocument& rDocument,
+                   CheckBox* pLibBox, SbTreeListBox* pBasicBox);
 
 } // namespace basctl
 

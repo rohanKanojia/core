@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "java/sql/Ref.hxx"
-#include "java/tools.hxx"
+#include <java/sql/Ref.hxx>
+#include <java/tools.hxx>
 using namespace connectivity;
 
 //************ Class: java.sql.Ref
@@ -43,7 +43,7 @@ jclass java_sql_Ref::getMyClass() const
     return theClass;
 }
 
-OUString SAL_CALL java_sql_Ref::getBaseTypeName(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception)
+OUString SAL_CALL java_sql_Ref::getBaseTypeName(  )
 {
     static jmethodID mID(nullptr);
     return callStringMethod("getBaseTypeName",mID);

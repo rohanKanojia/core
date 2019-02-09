@@ -28,10 +28,10 @@ namespace connectivity
         public:
             Keys(Table* pTable,
                  ::osl::Mutex& rMutex,
-                 const ::connectivity::TStringVector& rNames);
+                 const ::std::vector< OUString>& rNames);
 
         // OKeysHelper / XDrop
-        void dropObject(sal_Int32 nPosition, const ::rtl::OUString& sName) override;
+        void dropObject(sal_Int32 nPosition, const OUString& sName) override;
 
         };
     }

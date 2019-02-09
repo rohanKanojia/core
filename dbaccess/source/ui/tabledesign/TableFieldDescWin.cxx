@@ -19,13 +19,14 @@
 
 #include "TableFieldDescWin.hxx"
 #include <osl/diagnose.h>
-#include "FieldDescriptions.hxx"
-#include "dbu_tbl.hrc"
-#include "TableDesignHelpBar.hxx"
+#include <FieldDescriptions.hxx>
+#include <strings.hrc>
+#include <TableDesignHelpBar.hxx>
+#include <vcl/event.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/settings.hxx>
-#include "dbaccess_helpid.hrc"
-#include "moduledbu.hxx"
+#include <helpids.h>
+#include <core_resource.hxx>
 
 #define STANDARD_MARGIN                  6
 #define DETAILS_HEADER_HEIGHT           25
@@ -49,8 +50,8 @@ OTableFieldDescWin::OTableFieldDescWin( vcl::Window* pParent)
     , m_eChildFocus(NONE)
 {
     // Header
-    m_pHeader = VclPtr<FixedText>::Create( this, WB_CENTER | WB_INFO );
-    m_pHeader->SetText( OUString(ModuleRes(STR_TAB_PROPERTIES)) );
+    m_pHeader = VclPtr<FixedText>::Create( this, WB_CENTER );
+    m_pHeader->SetText(DBA_RES(STR_TAB_PROPERTIES));
     m_pHeader->Show();
 
     // HelpBar
@@ -102,7 +103,7 @@ void OTableFieldDescWin::SaveData( OFieldDescription* pFieldDescr )
     getGenPage()->SaveData( pFieldDescr );
 }
 
-void OTableFieldDescWin::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rRect*/)
+void OTableFieldDescWin::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& /*rRect*/)
 {
     // 3D-line at the top window border
     const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
@@ -209,7 +210,7 @@ IClipboardTest* OTableFieldDescWin::getActiveChild() const
             pTest = getGenPage();
             break;
         default:
-            pTest = getHelpBar();
+            pTest = m_pHelpBar;
             break;
     }
     return pTest;
@@ -262,7 +263,6 @@ void OTableFieldDescWin::LoseFocus()
 
 bool OTableFieldDescWin::PreNotify( NotifyEvent& rNEvt )
 {
-    bool bHandled = false;
     if (rNEvt.GetType() == MouseNotifyEvent::GETFOCUS)
     {
         if( getGenPage() && getGenPage()->HasChildPathFocus() )
@@ -270,7 +270,7 @@ bool OTableFieldDescWin::PreNotify( NotifyEvent& rNEvt )
         else
             m_eChildFocus = HELP;
     }
-    return bHandled || TabPage::PreNotify(rNEvt);
+    return TabPage::PreNotify(rNEvt);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -20,26 +20,20 @@
 #ifndef INCLUDED_SC_INC_COLCONTAINER_HXX
 #define INCLUDED_SC_INC_COLCONTAINER_HXX
 
-
 #include "types.hxx"
-#include "address.hxx"
+#include "column.hxx"
 
+#include <memory>
 #include <vector>
 
-
-class ScColumn;
-class ScDocument;
 class ScColContainer
 {
-public:
-    typedef std::vector<ScColumn*> ScColumnVector;
-private:
+    typedef std::vector<std::unique_ptr<ScColumn>> ScColumnVector;
     ScColumnVector    aCols;
-    ScDocument*       pDocument;
+
 public:
-    ScColContainer( ScDocument* pDoc );
-    ScColContainer( ScDocument* pDoc, const size_t nSize );
-    ~ScColContainer();
+    ScColContainer( const size_t nSize );
+    ~ScColContainer() COVERITY_NOEXCEPT_FALSE;
 
     const ScColumn& operator[] ( const size_t nIndex ) const
     {
@@ -56,10 +50,29 @@ public:
         return static_cast<SCCOL>( aCols.size() );
     }
 
-    void CreateCol( SCCOL nColIdx, SCTAB nTab );
-    void DeleteLastCols( SCSIZE nCols );
-    bool ColumnExists( SCCOL nColIdx ) const;
+    bool empty() const
+    {
+        return aCols.empty();
+    }
+
+    void resize( const size_t aNewSize );
+
     void Clear();
+
+    const ScColumn& back() const
+    {
+        assert(aCols.size() > 0);
+        return *aCols.back();
+    }
+
+    ScColumn& back()
+    {
+        assert(aCols.size() > 0);
+        return *aCols.back();
+    }
+
+    ScColumnVector::const_iterator begin() const { return aCols.begin(); }
+    ScColumnVector::const_iterator end() const { return aCols.end(); }
 };
 
 

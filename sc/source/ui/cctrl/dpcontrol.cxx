@@ -17,17 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dpcontrol.hxx"
+#include <dpcontrol.hxx>
 
 #include <vcl/outdev.hxx>
 #include <vcl/settings.hxx>
-#include "global.hxx"
-#include "scitems.hxx"
-#include "document.hxx"
-#include "docpool.hxx"
-#include "patattr.hxx"
+#include <global.hxx>
+#include <scitems.hxx>
+#include <document.hxx>
+#include <docpool.hxx>
+#include <patattr.hxx>
 
-ScDPFieldButton::ScDPFieldButton(OutputDevice* pOutDev, const StyleSettings* pStyle, const Fraction* pZoomX, const Fraction* pZoomY, ScDocument* pDoc) :
+ScDPFieldButton::ScDPFieldButton(OutputDevice* pOutDev, const StyleSettings* pStyle, const Fraction* pZoomY, ScDocument* pDoc) :
     mpDoc(pDoc),
     mpOutDev(pOutDev),
     mpStyle(pStyle),
@@ -37,11 +37,6 @@ ScDPFieldButton::ScDPFieldButton(OutputDevice* pOutDev, const StyleSettings* pSt
     mbPopupPressed(false),
     mbPopupLeft(false)
 {
-    if (pZoomX)
-        maZoomX = *pZoomX;
-    else
-        maZoomX = Fraction(1, 1);
-
     if (pZoomY)
         maZoomY = *pZoomY;
     else
@@ -64,7 +59,7 @@ void ScDPFieldButton::setBoundingBox(const Point& rPos, const Size& rSize, bool 
     if (bLayoutRTL)
     {
         // rPos is the logical-left position, adjust maPos to visual-left (inside the cell border)
-        maPos.X() -= maSize.Width() - 1;
+        maPos.AdjustX( -(maSize.Width() - 1) );
     }
 }
 
@@ -98,15 +93,15 @@ void ScDPFieldButton::draw()
     if (mbBaseButton)
     {
         // Background
-        Rectangle aRect(maPos, maSize);
+        tools::Rectangle aRect(maPos, maSize);
         mpOutDev->SetLineColor(mpStyle->GetFaceColor());
         mpOutDev->SetFillColor(mpStyle->GetFaceColor());
         mpOutDev->DrawRect(aRect);
 
         // Border lines
         mpOutDev->SetLineColor(mpStyle->GetLightColor());
-        mpOutDev->DrawLine(Point(maPos), Point(maPos.X(), maPos.Y()+maSize.Height()-1));
-        mpOutDev->DrawLine(Point(maPos), Point(maPos.X()+maSize.Width()-1, maPos.Y()));
+        mpOutDev->DrawLine(maPos, Point(maPos.X(), maPos.Y()+maSize.Height()-1));
+        mpOutDev->DrawLine(maPos, Point(maPos.X()+maSize.Width()-1, maPos.Y()));
 
         mpOutDev->SetLineColor(mpStyle->GetShadowColor());
         mpOutDev->DrawLine(Point(maPos.X(), maPos.Y()+maSize.Height()-1),
@@ -121,7 +116,7 @@ void ScDPFieldButton::draw()
         {
             //  use ScPatternAttr::GetFont only for font size
             vcl::Font aAttrFont;
-            static_cast<const ScPatternAttr&>(mpDoc->GetPool()->GetDefaultItem(ATTR_PATTERN)).
+            mpDoc->GetPool()->GetDefaultItem(ATTR_PATTERN).
                 GetFont( aAttrFont, SC_AUTOCOL_BLACK, mpOutDev, &maZoomY );
             aTextFont.SetFontSize( aAttrFont.GetFontSize() );
         }
@@ -145,9 +140,9 @@ void ScDPFieldButton::draw()
 
 void ScDPFieldButton::getPopupBoundingBox(Point& rPos, Size& rSize) const
 {
-    sal_Int32 nScaleFactor = mpOutDev->GetDPIScaleFactor();
+    float fScaleFactor = mpOutDev->GetDPIScaleFactor();
 
-    long nMaxSize = 18L * nScaleFactor; // Button max size in either dimension
+    long nMaxSize = 18 * fScaleFactor; // Button max size in either dimension
 
     long nW = std::min(maSize.getWidth() / 2, nMaxSize);
     long nH = std::min(maSize.getHeight(),    nMaxSize);
@@ -170,13 +165,13 @@ void ScDPFieldButton::drawPopupButton()
     Size aSize;
     getPopupBoundingBox(aPos, aSize);
 
-    sal_Int32 nScaleFactor = mpOutDev->GetDPIScaleFactor();
+    float fScaleFactor = mpOutDev->GetDPIScaleFactor();
 
     // Background & outer black border
     mpOutDev->SetLineColor(COL_BLACK);
     Color aBackgroundColor = mbPopupPressed ? mpStyle->GetShadowColor() : mpStyle->GetFaceColor();
     mpOutDev->SetFillColor(aBackgroundColor);
-    mpOutDev->DrawRect(Rectangle(aPos, aSize));
+    mpOutDev->DrawRect(tools::Rectangle(aPos, aSize));
 
     // the arrowhead
     Color aArrowColor = mbHasHiddenMember ? mpStyle->GetHighlightLinkColor() : mpStyle->GetButtonTextColor();
@@ -185,7 +180,7 @@ void ScDPFieldButton::drawPopupButton()
 
     Point aCenter(aPos.X() + (aSize.Width() / 2), aPos.Y() + (aSize.Height() / 2));
 
-    Size aArrowSize(4 * nScaleFactor, 2 * nScaleFactor);
+    Size aArrowSize(4 * fScaleFactor, 2 * fScaleFactor);
 
     tools::Polygon aPoly(3);
     aPoly.SetPoint(Point(aCenter.X() - aArrowSize.Width(), aCenter.Y() - aArrowSize.Height()), 0);
@@ -196,9 +191,9 @@ void ScDPFieldButton::drawPopupButton()
     if (mbHasHiddenMember)
     {
         // tiny little box to display in presence of hidden member(s).
-        Point aBoxPos(aPos.X() + aSize.Width() - 5 * nScaleFactor, aPos.Y() + aSize.Height() - 5 * nScaleFactor);
-        Size aBoxSize(3 * nScaleFactor, 3 * nScaleFactor);
-        mpOutDev->DrawRect(Rectangle(aBoxPos, aBoxSize));
+        Point aBoxPos(aPos.X() + aSize.Width() - 5 * fScaleFactor, aPos.Y() + aSize.Height() - 5 * fScaleFactor);
+        Size aBoxSize(3 * fScaleFactor, 3 * fScaleFactor);
+        mpOutDev->DrawRect(tools::Rectangle(aBoxPos, aBoxSize));
     }
 }
 

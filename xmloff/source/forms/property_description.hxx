@@ -20,13 +20,12 @@
 #ifndef INCLUDED_XMLOFF_SOURCE_FORMS_PROPERTY_DESCRIPTION_HXX
 #define INCLUDED_XMLOFF_SOURCE_FORMS_PROPERTY_DESCRIPTION_HXX
 
-#include "forms/property_handler.hxx"
+#include <forms/property_handler.hxx>
 #include "property_group.hxx"
 
 #include <xmloff/xmltoken.hxx>
 
 #include <vector>
-#include <list>
 
 namespace xmloff
 {
@@ -113,7 +112,7 @@ namespace xmloff
     typedef ::std::vector< const PropertyDescription* > PropertyDescriptionList;
 
     //= PropertyGroups
-    typedef ::std::list< PropertyDescriptionList >  PropertyGroups;
+    typedef ::std::vector< PropertyDescriptionList >  PropertyGroups;
 
 } // namespace xmloff
 

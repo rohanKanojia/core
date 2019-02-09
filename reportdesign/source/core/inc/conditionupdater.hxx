@@ -20,7 +20,7 @@
 #ifndef INCLUDED_REPORTDESIGN_SOURCE_CORE_INC_CONDITIONUPDATER_HXX
 #define INCLUDED_REPORTDESIGN_SOURCE_CORE_INC_CONDITIONUPDATER_HXX
 
-#include "conditionalexpression.hxx"
+#include <conditionalexpression.hxx>
 
 #include <com/sun/star/beans/PropertyChangeEvent.hpp>
 #include <com/sun/star/report/XReportControlModel.hpp>
@@ -42,7 +42,7 @@ namespace rptui
 
     private:
         /// does late initializations, return whether or not successful
-        bool impl_lateInit_nothrow();
+        void impl_lateInit_nothrow();
 
         void impl_adjustFormatConditions_nothrow(
             const css::uno::Reference< css::report::XReportControlModel >& _rxRptControlModel,

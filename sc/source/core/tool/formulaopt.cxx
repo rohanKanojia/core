@@ -7,44 +7,25 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <ctype.h>
-
 #include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/lang/Locale.hpp>
-#include <com/sun/star/i18n/LocaleDataItem.hpp>
 #include <osl/diagnose.h>
-
-#include "formulaopt.hxx"
-#include "miscuno.hxx"
-#include "global.hxx"
-#include "formulagroup.hxx"
+#include <sal/log.hxx>
+#include <unotools/localedatawrapper.hxx>
+#include <formulaopt.hxx>
+#include <miscuno.hxx>
+#include <global.hxx>
+#include <formulagroup.hxx>
+#include <sc.hrc>
 
 using namespace utl;
 using namespace com::sun::star::uno;
 namespace lang = ::com::sun::star::lang;
-using ::com::sun::star::i18n::LocaleDataItem;
 
 
 ScFormulaOptions::ScFormulaOptions()
 {
     SetDefaults();
-}
-
-ScFormulaOptions::ScFormulaOptions( const ScFormulaOptions& rCpy ) :
-    bUseEnglishFuncName ( rCpy.bUseEnglishFuncName ),
-    eFormulaGrammar     ( rCpy.eFormulaGrammar ),
-    aCalcConfig(rCpy.aCalcConfig),
-    mbWriteCalcConfig   (rCpy.mbWriteCalcConfig),
-    aFormulaSepArg      ( rCpy.aFormulaSepArg ),
-    aFormulaSepArrayRow ( rCpy.aFormulaSepArrayRow ),
-    aFormulaSepArrayCol ( rCpy.aFormulaSepArrayCol ),
-    meOOXMLRecalc       ( rCpy.meOOXMLRecalc ),
-    meODFRecalc         ( rCpy.meODFRecalc )
-{
-}
-
-ScFormulaOptions::~ScFormulaOptions()
-{
 }
 
 void ScFormulaOptions::SetDefaults()
@@ -81,7 +62,7 @@ void ScFormulaOptions::GetDefaultFormulaSeparators(
         // the old separator set.
         return;
 
-    const LocaleDataWrapper& rLocaleData = GetLocaleDataWrapper();
+    const LocaleDataWrapper& rLocaleData = *ScGlobal::pLocaleData;
     const OUString& rDecSep  = rLocaleData.getNumDecimalSep();
     const OUString& rListSep = rLocaleData.getListSep();
 
@@ -91,13 +72,19 @@ void ScFormulaOptions::GetDefaultFormulaSeparators(
 
     sal_Unicode cDecSep  = rDecSep[0];
     sal_Unicode cListSep = rListSep[0];
+    sal_Unicode cDecSepAlt = rLocaleData.getNumDecimalSepAlt().toChar();    // usually 0 (empty)
 
     // Excel by default uses system's list separator as the parameter
     // separator, which in English locales is a comma.  However, OOo's list
     // separator value is set to ';' for all English locales.  Because of this
     // discrepancy, we will hardcode the separator value here, for now.
-    if (cDecSep == '.')
+    // Similar for decimal separator alternative.
+    // However, if the decimal separator alternative is '.' and the decimal
+    // separator is ',' this makes no sense, fall back to ';' in that case.
+    if (cDecSep == '.' || (cDecSepAlt == '.' && cDecSep != ','))
         cListSep = ',';
+    else if (cDecSep == ',' && cDecSepAlt == '.')
+        cListSep = ';';
 
     // Special case for de_CH locale.
     if (rLocale.Language == "de" && rLocale.Country == "CH")
@@ -119,25 +106,6 @@ void ScFormulaOptions::GetDefaultFormulaSeparators(
     rSepArrayRow = ";";
 }
 
-const LocaleDataWrapper& ScFormulaOptions::GetLocaleDataWrapper()
-{
-    return *ScGlobal::pLocaleData;
-}
-
-ScFormulaOptions& ScFormulaOptions::operator=( const ScFormulaOptions& rCpy )
-{
-    bUseEnglishFuncName = rCpy.bUseEnglishFuncName;
-    eFormulaGrammar     = rCpy.eFormulaGrammar;
-    aCalcConfig = rCpy.aCalcConfig;
-    mbWriteCalcConfig = rCpy.mbWriteCalcConfig;
-    aFormulaSepArg      = rCpy.aFormulaSepArg;
-    aFormulaSepArrayRow = rCpy.aFormulaSepArrayRow;
-    aFormulaSepArrayCol = rCpy.aFormulaSepArrayCol;
-    meOOXMLRecalc       = rCpy.meOOXMLRecalc;
-    meODFRecalc         = rCpy.meODFRecalc;
-    return *this;
-}
-
 bool ScFormulaOptions::operator==( const ScFormulaOptions& rOpt ) const
 {
     return bUseEnglishFuncName == rOpt.bUseEnglishFuncName
@@ -156,15 +124,9 @@ bool ScFormulaOptions::operator!=( const ScFormulaOptions& rOpt ) const
     return !(operator==(rOpt));
 }
 
-ScTpFormulaItem::ScTpFormulaItem( sal_uInt16 nWhichP, const ScFormulaOptions& rOpt ) :
-    SfxPoolItem ( nWhichP ),
+ScTpFormulaItem::ScTpFormulaItem( const ScFormulaOptions& rOpt ) :
+    SfxPoolItem ( SID_SCFORMULAOPTIONS ),
     theOptions  ( rOpt )
-{
-}
-
-ScTpFormulaItem::ScTpFormulaItem( const ScTpFormulaItem& rItem ) :
-    SfxPoolItem ( rItem ),
-    theOptions  ( rItem.theOptions )
 {
 }
 
@@ -202,34 +164,24 @@ SfxPoolItem* ScTpFormulaItem::Clone( SfxItemPool * ) const
 #define SCFORMULAOPT_OPENCL_SUBSET_ONLY  12
 #define SCFORMULAOPT_OPENCL_MIN_SIZE     13
 #define SCFORMULAOPT_OPENCL_SUBSET_OPS   14
-#define SCFORMULAOPT_COUNT               15
 
 Sequence<OUString> ScFormulaCfg::GetPropertyNames()
 {
-    static const char* aPropNames[] =
-    {
-        "Syntax/Grammar",                // SCFORMULAOPT_GRAMMAR
-        "Syntax/EnglishFunctionName",    // SCFORMULAOPT_ENGLISH_FUNCNAME
-        "Syntax/SeparatorArg",           // SCFORMULAOPT_SEP_ARG
-        "Syntax/SeparatorArrayRow",      // SCFORMULAOPT_SEP_ARRAY_ROW
-        "Syntax/SeparatorArrayCol",      // SCFORMULAOPT_SEP_ARRAY_COL
-        "Syntax/StringRefAddressSyntax", // SCFORMULAOPT_STRING_REF_SYNTAX
-        "Syntax/StringConversion",       // SCFORMULAOPT_STRING_CONVERSION
-        "Syntax/EmptyStringAsZero",      // SCFORMULAOPT_EMPTY_OUSTRING_AS_ZERO
-        "Load/OOXMLRecalcMode",          // SCFORMULAOPT_OOXML_RECALC
-        "Load/ODFRecalcMode",            // SCFORMULAOPT_ODF_RECALC
-        "Calculation/OpenCLAutoSelect",  // SCFORMULAOPT_OPENCL_AUTOSELECT
-        "Calculation/OpenCLDevice",      // SCFORMULAOPT_OPENCL_DEVICE
-        "Calculation/OpenCLSubsetOnly",  // SCFORMULAOPT_OPENCL_SUBSET_ONLY
-        "Calculation/OpenCLMinimumDataSize",  // SCFORMULAOPT_OPENCL_MIN_SIZE
-        "Calculation/OpenCLSubsetOpCodes",    // SCFORMULAOPT_OPENCL_SUBSET_OPS
-    };
-    Sequence<OUString> aNames(SCFORMULAOPT_COUNT);
-    OUString* pNames = aNames.getArray();
-    for (int i = 0; i < SCFORMULAOPT_COUNT; ++i)
-        pNames[i] = OUString::createFromAscii(aPropNames[i]);
-
-    return aNames;
+    return {"Syntax/Grammar",                       // SCFORMULAOPT_GRAMMAR
+            "Syntax/EnglishFunctionName",           // SCFORMULAOPT_ENGLISH_FUNCNAME
+            "Syntax/SeparatorArg",                  // SCFORMULAOPT_SEP_ARG
+            "Syntax/SeparatorArrayRow",             // SCFORMULAOPT_SEP_ARRAY_ROW
+            "Syntax/SeparatorArrayCol",             // SCFORMULAOPT_SEP_ARRAY_COL
+            "Syntax/StringRefAddressSyntax",        // SCFORMULAOPT_STRING_REF_SYNTAX
+            "Syntax/StringConversion",              // SCFORMULAOPT_STRING_CONVERSION
+            "Syntax/EmptyStringAsZero",             // SCFORMULAOPT_EMPTY_OUSTRING_AS_ZERO
+            "Load/OOXMLRecalcMode",                 // SCFORMULAOPT_OOXML_RECALC
+            "Load/ODFRecalcMode",                   // SCFORMULAOPT_ODF_RECALC
+            "Calculation/OpenCLAutoSelect",         // SCFORMULAOPT_OPENCL_AUTOSELECT
+            "Calculation/OpenCLDevice",             // SCFORMULAOPT_OPENCL_DEVICE
+            "Calculation/OpenCLSubsetOnly",         // SCFORMULAOPT_OPENCL_SUBSET_ONLY
+            "Calculation/OpenCLMinimumDataSize",    // SCFORMULAOPT_OPENCL_MIN_SIZE
+            "Calculation/OpenCLSubsetOpCodes"};     // SCFORMULAOPT_OPENCL_SUBSET_OPS
 }
 
 ScFormulaCfg::PropsToIds ScFormulaCfg::GetPropNamesToId()
@@ -260,7 +212,7 @@ ScFormulaCfg::PropsToIds ScFormulaCfg::GetPropNamesToId()
 }
 
 ScFormulaCfg::ScFormulaCfg() :
-    ConfigItem( OUString( CFGPATH_FORMULA ) )
+    ConfigItem( CFGPATH_FORMULA )
 {
     Sequence<OUString> aNames = GetPropertyNames();
     UpdateFromProperties( aNames );
@@ -292,7 +244,7 @@ void ScFormulaCfg::UpdateFromProperties( const Sequence<OUString>& aNames )
                     do
                     {
                         if (!(pValues[nProp] >>= nIntVal))
-                            // extractino failed.
+                            // extracting failed.
                             break;
 
                         switch (nIntVal)

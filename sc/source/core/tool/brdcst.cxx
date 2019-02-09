@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "brdcst.hxx"
+#include <brdcst.hxx>
 
-ScHint::ScHint( sal_uInt32 n, const ScAddress& a ) :
-    SfxSimpleHint(n), aAddress(a) {}
+ScHint::ScHint( SfxHintId n, const ScAddress& a ) :
+    SfxHint(n), aAddress(a) {}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

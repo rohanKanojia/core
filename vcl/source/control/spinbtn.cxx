@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/rcid.h>
 #include <vcl/event.hxx>
 #include <vcl/spin.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/vclevent.hxx>
 
-#include "spin.hxx"
+#include <spin.hxx>
 
 void SpinButton::ImplInit( vcl::Window* pParent, WinBits nStyle )
 {
@@ -36,8 +36,8 @@ void SpinButton::ImplInit( vcl::Window* pParent, WinBits nStyle )
     mnValue     = 0;
     mnValueStep = 1;
 
-    maRepeatTimer.SetTimeout(GetSettings().GetMouseSettings().GetButtonStartRepeat());
-    maRepeatTimer.SetTimeoutHdl(LINK(this, SpinButton, ImplTimeout));
+    maRepeatTimer.SetTimeout(MouseSettings::GetButtonStartRepeat());
+    maRepeatTimer.SetInvokeHandler(LINK(this, SpinButton, ImplTimeout));
 
     mbRepeat = 0 != (nStyle & WB_REPEAT);
 
@@ -50,15 +50,15 @@ void SpinButton::ImplInit( vcl::Window* pParent, WinBits nStyle )
 }
 
 SpinButton::SpinButton( vcl::Window* pParent, WinBits nStyle )
-    : Control(WINDOW_SPINBUTTON)
+    : Control(WindowType::SPINBUTTON)
     , mbUpperIsFocused(false)
 {
     ImplInit(pParent, nStyle);
 }
 
-IMPL_LINK_TYPED(SpinButton, ImplTimeout, Timer*, pTimer, void)
+IMPL_LINK(SpinButton, ImplTimeout, Timer*, pTimer, void)
 {
-    if (pTimer->GetTimeout() == GetSettings().GetMouseSettings().GetButtonStartRepeat())
+    if (pTimer->GetTimeout() == MouseSettings::GetButtonStartRepeat())
     {
         pTimer->SetTimeout( GetSettings().GetMouseSettings().GetButtonRepeat() );
         pTimer->Start();
@@ -82,7 +82,7 @@ void SpinButton::Up()
         ImplMoveFocus(true);
     }
 
-    ImplCallEventListenersAndHandler(VCLEVENT_SPINBUTTON_UP, nullptr );
+    ImplCallEventListenersAndHandler(VclEventId::SpinbuttonUp, nullptr );
 }
 
 void SpinButton::Down()
@@ -95,7 +95,7 @@ void SpinButton::Down()
         ImplMoveFocus(false);
     }
 
-    ImplCallEventListenersAndHandler(VCLEVENT_SPINBUTTON_DOWN, nullptr );
+    ImplCallEventListenersAndHandler(VclEventId::SpinbuttonDown, nullptr );
 }
 
 void SpinButton::Resize()
@@ -103,17 +103,16 @@ void SpinButton::Resize()
     Control::Resize();
 
     Size aSize(GetOutputSizePixel());
-    Point aTmpPoint;
-    Rectangle aRect(aTmpPoint, aSize);
+    tools::Rectangle aRect(Point(), aSize);
     if (mbHorz)
     {
-        maLowerRect = Rectangle(0, 0, aSize.Width() / 2, aSize.Height() - 1);
-        maUpperRect = Rectangle(maLowerRect.TopRight(), aRect.BottomRight());
+        maLowerRect = tools::Rectangle(0, 0, aSize.Width() / 2, aSize.Height() - 1);
+        maUpperRect = tools::Rectangle(maLowerRect.TopRight(), aRect.BottomRight());
     }
     else
     {
-        maUpperRect = Rectangle(0, 0, aSize.Width() - 1, aSize.Height() / 2);
-        maLowerRect = Rectangle(maUpperRect.BottomLeft(), aRect.BottomRight());
+        maUpperRect = tools::Rectangle(0, 0, aSize.Width() - 1, aSize.Height() / 2);
+        maLowerRect = tools::Rectangle(maUpperRect.BottomLeft(), aRect.BottomRight());
     }
 
     ImplCalcFocusRect(ImplIsUpperEnabled() || !ImplIsLowerEnabled());
@@ -142,17 +141,17 @@ void SpinButton::Draw(OutputDevice* pDev, const Point& rPos, const Size& rSize, 
         pDev->SetSettings( aSettings );
     }
 
-    Rectangle   aRect( Point( 0, 0 ), aSize );
-    Rectangle aLowerRect, aUpperRect;
+    tools::Rectangle   aRect( Point( 0, 0 ), aSize );
+    tools::Rectangle aLowerRect, aUpperRect;
     if ( mbHorz )
     {
-        aLowerRect = Rectangle( 0, 0, aSize.Width()/2, aSize.Height()-1 );
-        aUpperRect = Rectangle( aLowerRect.TopRight(), aRect.BottomRight() );
+        aLowerRect = tools::Rectangle( 0, 0, aSize.Width()/2, aSize.Height()-1 );
+        aUpperRect = tools::Rectangle( aLowerRect.TopRight(), aRect.BottomRight() );
     }
     else
     {
-        aUpperRect = Rectangle( 0, 0, aSize.Width()-1, aSize.Height()/2 );
-        aLowerRect = Rectangle( aUpperRect.BottomLeft(), aRect.BottomRight() );
+        aUpperRect = tools::Rectangle( 0, 0, aSize.Width()-1, aSize.Height()/2 );
+        aLowerRect = tools::Rectangle( aUpperRect.BottomLeft(), aRect.BottomRight() );
     }
 
     aUpperRect += aPos;
@@ -164,7 +163,7 @@ void SpinButton::Draw(OutputDevice* pDev, const Point& rPos, const Size& rSize, 
     pDev->Pop();
 }
 
-void SpinButton::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rRect*/)
+void SpinButton::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& /*rRect*/)
 {
     HideFocus();
 
@@ -207,7 +206,7 @@ void SpinButton::MouseButtonUp( const MouseEvent& )
     if ( mbRepeat )
     {
         maRepeatTimer.Stop();
-        maRepeatTimer.SetTimeout(GetSettings().GetMouseSettings().GetButtonStartRepeat() );
+        maRepeatTimer.SetTimeout(MouseSettings::GetButtonStartRepeat() );
     }
 
     if ( mbUpperIn )
@@ -323,7 +322,7 @@ void SpinButton::StateChanged( StateChangedType nType )
             if ( maRepeatTimer.IsActive() )
             {
                 maRepeatTimer.Stop();
-                maRepeatTimer.SetTimeout( GetSettings().GetMouseSettings().GetButtonStartRepeat() );
+                maRepeatTimer.SetTimeout( MouseSettings::GetButtonStartRepeat() );
             }
             mbRepeat = bNewRepeat;
         }
@@ -420,14 +419,14 @@ void SpinButton::ImplCalcFocusRect( bool _bUpper )
 {
     maFocusRect = _bUpper ? maUpperRect : maLowerRect;
     // inflate by some pixels
-    maFocusRect.Left() += 2;
-    maFocusRect.Top() += 2;
-    maFocusRect.Right() -= 2;
-    maFocusRect.Bottom() -= 2;
+    maFocusRect.AdjustLeft(2 );
+    maFocusRect.AdjustTop(2 );
+    maFocusRect.AdjustRight( -2 );
+    maFocusRect.AdjustBottom( -2 );
     mbUpperIsFocused = _bUpper;
 }
 
-Rectangle* SpinButton::ImplFindPartRect( const Point& rPt )
+tools::Rectangle* SpinButton::ImplFindPartRect( const Point& rPt )
 {
     if( maUpperRect.IsInside( rPt ) )
         return &maUpperRect;
@@ -446,11 +445,11 @@ bool SpinButton::PreNotify( NotifyEvent& rNEvt )
         if (!pMouseEvt->GetButtons() && !pMouseEvt->IsSynthetic() && !pMouseEvt->IsModifierChanged())
         {
             // trigger redraw if mouse over state has changed
-            if (IsNativeControlSupported(CTRL_SPINBOX, PART_ENTIRE_CONTROL) ||
-                IsNativeControlSupported(CTRL_SPINBOX, PART_ALL_BUTTONS) )
+            if (IsNativeControlSupported(ControlType::Spinbox, ControlPart::Entire) ||
+                IsNativeControlSupported(ControlType::Spinbox, ControlPart::AllButtons) )
             {
-                Rectangle* pRect = ImplFindPartRect( GetPointerPosPixel() );
-                Rectangle* pLastRect = ImplFindPartRect( GetLastPointerPosPixel() );
+                tools::Rectangle* pRect = ImplFindPartRect( GetPointerPosPixel() );
+                tools::Rectangle* pLastRect = ImplFindPartRect( GetLastPointerPosPixel() );
                 if (pRect != pLastRect || (pMouseEvt->IsLeaveWindow() || pMouseEvt->IsEnterWindow()))
                 {
                     vcl::Region aRgn(GetActiveClipRegion());

@@ -21,11 +21,9 @@
 #define INCLUDED_DBACCESS_SOURCE_UI_INC_DBWIZ_HXX
 
 #include <sfx2/tabdlg.hxx>
-#include "dsntypes.hxx"
+#include <dsntypes.hxx>
 #include "IItemSetHelper.hxx"
-#include <comphelper/uno3.hxx>
 #include <svtools/wizardmachine.hxx>
-#include "moduledbu.hxx"
 #include <memory>
 
 namespace com { namespace sun { namespace star {
@@ -52,12 +50,11 @@ class OGeneralPage;
 class ODbDataSourceAdministrationHelper;
 /** tab dialog for administrating the office wide registered data sources
 */
-class ODbTypeWizDialog : public svt::OWizardMachine , public IItemSetHelper, public IDatabaseSettingsDialog,public dbaui::OModuleClient
+class ODbTypeWizDialog : public svt::OWizardMachine , public IItemSetHelper, public IDatabaseSettingsDialog
 {
 private:
-    OModuleClient           m_aModuleClient;
-    ::std::unique_ptr<ODbDataSourceAdministrationHelper>  m_pImpl;
-    SfxItemSet*             m_pOutSet;
+    std::unique_ptr<ODbDataSourceAdministrationHelper>  m_pImpl;
+    std::unique_ptr<SfxItemSet> m_pOutSet;
     ::dbaccess::ODsnTypeCollection*
                             m_pCollection;  /// the DSN type collection instance
     OUString                m_eType;
@@ -67,11 +64,11 @@ public:
         after the dialog has been destroyed
     */
     ODbTypeWizDialog(vcl::Window* pParent
-        ,SfxItemSet* _pItems
+        ,SfxItemSet const * _pItems
         ,const css::uno::Reference< css::uno::XComponentContext >& _rxORB
         ,const css::uno::Any& _aDataSourceName
         );
-    virtual ~ODbTypeWizDialog();
+    virtual ~ODbTypeWizDialog() override;
     virtual void dispose() override;
 
     virtual const SfxItemSet* getOutputSet() const override;
@@ -79,7 +76,7 @@ public:
 
     // forwards to ODbDataSourceAdministrationHelper
     virtual css::uno::Reference< css::uno::XComponentContext > getORB() const override;
-    virtual ::std::pair< css::uno::Reference< css::sdbc::XConnection >,sal_Bool> createConnection() override;
+    virtual std::pair< css::uno::Reference< css::sdbc::XConnection >,bool> createConnection() override;
     virtual css::uno::Reference< css::sdbc::XDriver > getDriver() override;
     virtual OUString getDatasourceType(const SfxItemSet& _rSet) const override;
     virtual void clearPassword() override;
@@ -96,17 +93,8 @@ protected:
                         getPageController( TabPage* _pCurrentPage ) const override;
     virtual bool        onFinish() override;
 
-protected:
-
-    enum ApplyResult
-    {
-        AR_LEAVE_MODIFIED,      // something was modified and has successfully been committed
-        AR_LEAVE_UNCHANGED,     // no changes were made
-        AR_KEEP                 // don't leave the page (e.g. because an error occurred)
-    };
-
 private:
-    DECL_LINK_TYPED(OnTypeSelected, OGeneralPage&, void);
+    DECL_LINK(OnTypeSelected, OGeneralPage&, void);
 };
 
 }   // namespace dbaui

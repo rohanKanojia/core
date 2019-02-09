@@ -21,10 +21,10 @@
 
 #include <com/sun/star/util/Date.hpp>
 
-#include "optuno.hxx"
-#include "miscuno.hxx"
-#include "unonames.hxx"
-#include "docoptio.hxx"
+#include <optuno.hxx>
+#include <miscuno.hxx>
+#include <unonames.hxx>
+#include <docoptio.hxx>
 
 using namespace com::sun::star;
 
@@ -81,7 +81,7 @@ bool ScDocOptionsHelper::setPropertyValue( ScDocOptions& rOptions,
         {
             sal_Int32 nIntVal = 0;
             if ( aValue >>= nIntVal )
-                rOptions.SetIterCount( (sal_uInt16)nIntVal );
+                rOptions.SetIterCount( static_cast<sal_uInt16>(nIntVal) );
         }
         break;
         case PROP_UNO_ITEREPSILON :
@@ -137,48 +137,49 @@ uno::Any ScDocOptionsHelper::getPropertyValue(
     switch( pEntry->nWID )
     {
         case PROP_UNO_CALCASSHOWN :
-            ScUnoHelpFunctions::SetBoolInAny( aRet, rOptions.IsCalcAsShown() );
+            aRet <<= rOptions.IsCalcAsShown();
         break;
         case PROP_UNO_DEFTABSTOP :
-            aRet <<= (sal_Int16)( rOptions.GetTabDistance() );
+            aRet <<= static_cast<sal_Int16>( rOptions.GetTabDistance() );
         break;
         case PROP_UNO_IGNORECASE :
-            ScUnoHelpFunctions::SetBoolInAny( aRet, rOptions.IsIgnoreCase() );
+            aRet <<= rOptions.IsIgnoreCase();
         break;
         case PROP_UNO_ITERENABLED:
-        ScUnoHelpFunctions::SetBoolInAny( aRet, rOptions.IsIter() );
+            aRet <<= rOptions.IsIter();
         break;
         case PROP_UNO_ITERCOUNT:
-            aRet <<= (sal_Int32)( rOptions.GetIterCount() );
+            aRet <<= static_cast<sal_Int32>( rOptions.GetIterCount() );
         break;
         case PROP_UNO_ITEREPSILON:
-            aRet <<= (double)( rOptions.GetIterEps() );
+            aRet <<= rOptions.GetIterEps();
         break;
         case PROP_UNO_LOOKUPLABELS:
-            ScUnoHelpFunctions::SetBoolInAny( aRet, rOptions.IsLookUpColRowNames() );
+            aRet <<= rOptions.IsLookUpColRowNames();
         break;
         case PROP_UNO_MATCHWHOLE:
-            ScUnoHelpFunctions::SetBoolInAny( aRet, rOptions.IsMatchWholeCell() );
+            aRet <<= rOptions.IsMatchWholeCell();
         break;
         case PROP_UNO_NULLDATE:
         {
-            sal_uInt16 nD, nM, nY;
+            sal_uInt16 nD, nM;
+            sal_Int16 nY;
             rOptions.GetDate( nD, nM, nY );
             util::Date aDate( nD, nM, nY );
             aRet <<= aDate;
         }
         break;
         case PROP_UNO_SPELLONLINE:
-            ScUnoHelpFunctions::SetBoolInAny( aRet, rOptions.IsAutoSpell() );
+            aRet <<= rOptions.IsAutoSpell();
         break;
         case PROP_UNO_STANDARDDEC :
-            aRet <<= (sal_Int16)( rOptions.GetStdPrecision() );
+            aRet <<= static_cast<sal_Int16>( rOptions.GetStdPrecision() );
         break;
         case PROP_UNO_REGEXENABLED:
-            ScUnoHelpFunctions::SetBoolInAny( aRet, rOptions.IsFormulaRegexEnabled() );
+            aRet <<= rOptions.IsFormulaRegexEnabled();
         break;
         case PROP_UNO_WILDCARDSENABLED:
-            ScUnoHelpFunctions::SetBoolInAny( aRet, rOptions.IsFormulaWildcardsEnabled() );
+            aRet <<= rOptions.IsFormulaWildcardsEnabled();
         break;
         default:;
     }
@@ -197,9 +198,6 @@ ScDocOptionsObj::~ScDocOptionsObj()
 
 void SAL_CALL ScDocOptionsObj::setPropertyValue(
                         const OUString& aPropertyName, const uno::Any& aValue )
-                throw(beans::UnknownPropertyException, beans::PropertyVetoException,
-                        lang::IllegalArgumentException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -210,8 +208,6 @@ void SAL_CALL ScDocOptionsObj::setPropertyValue(
 }
 
 uno::Any SAL_CALL ScDocOptionsObj::getPropertyValue( const OUString& aPropertyName )
-                throw(beans::UnknownPropertyException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 

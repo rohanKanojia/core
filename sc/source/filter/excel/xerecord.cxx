@@ -17,9 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xerecord.hxx"
-#include "xeroot.hxx"
+#include <xerecord.hxx>
+#include <xeroot.hxx>
+#include <xltools.hxx>
 
+#include <oox/token/tokens.hxx>
+#include <oox/export/utils.hxx>
 #include <osl/diagnose.h>
 
 using namespace ::oox;
@@ -124,7 +127,7 @@ void XclExpXmlEndSingleElementRecord::SaveXml( XclExpXmlStream& rStrm )
     rStrm.GetCurrentStream()->write( "/>" );
 }
 
-XclExpRecord::XclExpRecord( sal_uInt16 nRecId, sal_Size nRecSize ) :
+XclExpRecord::XclExpRecord( sal_uInt16 nRecId, std::size_t nRecSize ) :
     mnRecSize( nRecSize ),
     mnRecId( nRecId )
 {
@@ -134,7 +137,7 @@ XclExpRecord::~XclExpRecord()
 {
 }
 
-void XclExpRecord::SetRecHeader( sal_uInt16 nRecId, sal_Size nRecSize )
+void XclExpRecord::SetRecHeader( sal_uInt16 nRecId, std::size_t nRecSize )
 {
     SetRecId( nRecId );
     SetRecSize( nRecSize );
@@ -164,7 +167,7 @@ void XclExpValueRecord<double>::SaveXml( XclExpXmlStream& rStrm )
 
 void XclExpBoolRecord::WriteBody( XclExpStream& rStrm )
 {
-    rStrm << (static_cast< sal_uInt16 >( mbValue ? 1 : 0 ));
+    rStrm << static_cast< sal_uInt16 >( mbValue ? 1 : 0 );
 }
 
 void XclExpBoolRecord::SaveXml( XclExpXmlStream& rStrm )
@@ -174,17 +177,17 @@ void XclExpBoolRecord::SaveXml( XclExpXmlStream& rStrm )
 
     rStrm.WriteAttributes(
             // HACK: HIDEOBJ (excdoc.cxx) should be its own object to handle XML_showObjects
-            mnAttribute, mnAttribute == XML_showObjects ? "all" : XclXmlUtils::ToPsz( mbValue ),
+            mnAttribute, mnAttribute == XML_showObjects ? "all" : ToPsz( mbValue ),
             FSEND );
 }
 
-XclExpDummyRecord::XclExpDummyRecord( sal_uInt16 nRecId, const void* pRecData, sal_Size nRecSize ) :
+XclExpDummyRecord::XclExpDummyRecord( sal_uInt16 nRecId, const void* pRecData, std::size_t nRecSize ) :
     XclExpRecord( nRecId )
 {
     SetData( pRecData, nRecSize );
 }
 
-void XclExpDummyRecord::SetData( const void* pRecData, sal_Size nRecSize )
+void XclExpDummyRecord::SetData( const void* pRecData, std::size_t nRecSize )
 {
     mpData = pRecData;
     SetRecSize( pRecData ? nRecSize : 0 );
@@ -197,7 +200,7 @@ void XclExpDummyRecord::WriteBody( XclExpStream& rStrm )
 
 // Future records =============================================================
 
-XclExpFutureRecord::XclExpFutureRecord( XclFutureRecType eRecType, sal_uInt16 nRecId, sal_Size nRecSize ) :
+XclExpFutureRecord::XclExpFutureRecord( XclFutureRecType eRecType, sal_uInt16 nRecId, std::size_t nRecSize ) :
     XclExpRecord( nRecId, nRecSize ),
     meRecType( eRecType )
 {

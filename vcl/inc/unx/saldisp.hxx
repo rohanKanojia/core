@@ -28,13 +28,17 @@ class   SalXLib;
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/extensions/Xrender.h>
+#include <epoxy/glx.h>
 
+#include <rtl/string.hxx>
 #include <unx/salunx.h>
 #include <unx/saltype.h>
+#include <vcl/opengl/OpenGLContext.hxx>
 #include <vcl/salgtype.hxx>
 #include <vcl/ptrstyle.hxx>
 #include <sal/types.h>
 #include <osl/mutex.h>
+#include <cassert>
 #include <list>
 #include <unordered_map>
 #include <vector>
@@ -65,14 +69,11 @@ typedef enum  {
 
 extern "C" srv_vendor_t sal_GetServerVendor( Display *p_display );
 
-// MSB/Bigendian view (SalColor == RGB, r=0xFF0000, g=0xFF00, b=0xFF)
+// MSB/Bigendian view (Color == RGB, r=0xFF0000, g=0xFF00, b=0xFF)
 
-enum SalRGB { RGB,  RBG,
+enum class SalRGB { RGB,  RBG,
               GBR,  GRB,
               BGR,  BRG,
-              RGBA, RBGA,
-              GBRA, GRBA,
-              BGRA, BRGA,
               otherSalRGB };
 
 class SalVisual : public XVisualInfo
@@ -86,24 +87,40 @@ class SalVisual : public XVisualInfo
     int             nBlueBits_;
 public:
                             SalVisual();
-                            ~SalVisual();
                             SalVisual( const XVisualInfo* pXVI );
 
-    inline  VisualID        GetVisualId() const { return visualid; }
-    inline  Visual         *GetVisual() const { return visual; }
-    inline  int             GetClass() const { return c_class; }
-    inline  int             GetDepth() const { return depth; }
+    VisualID        GetVisualId() const { return visualid; }
+    Visual         *GetVisual() const { return visual; }
+    int             GetClass() const { return c_class; }
+    int             GetDepth() const { return depth; }
 
-            Pixel           GetTCPixel( SalColor nColor ) const;
-            SalColor        GetTCColor( Pixel nPixel ) const;
+            Pixel           GetTCPixel( Color nColor ) const;
+            Color           GetTCColor( Pixel nPixel ) const;
+};
+
+// A move-only flag, used by SalColormap to track ownership of its m_aVisual.visual:
+struct OwnershipFlag {
+    bool owner = false;
+
+    OwnershipFlag() = default;
+
+    OwnershipFlag(OwnershipFlag && other) noexcept: owner(other.owner) { other.owner = false; }
+
+    OwnershipFlag & operator =(OwnershipFlag && other) noexcept {
+        assert(&other != this);
+        owner = other.owner;
+        other.owner = false;
+        return *this;
+    }
 };
 
 class SalColormap
 {
     const SalDisplay*       m_pDisplay;
     Colormap                m_hColormap;
-    std::vector<SalColor>   m_aPalette;         // Pseudocolor
+    std::vector<Color>      m_aPalette;         // Pseudocolor
     SalVisual               m_aVisual;
+    OwnershipFlag           m_aVisualOwnership;
     std::vector<sal_uInt16>     m_aLookupTable;     // Pseudocolor: 12bit reduction
     Pixel                   m_nWhitePixel;
     Pixel                   m_nBlackPixel;
@@ -118,16 +135,20 @@ public:
                  SalX11Screen       nXScreen );
     SalColormap( sal_uInt16         nDepth );
     SalColormap();
+
     ~SalColormap();
 
-    inline  Colormap            GetXColormap() const { return m_hColormap; }
-    inline  const SalDisplay*   GetDisplay() const { return m_pDisplay; }
+    SalColormap(SalColormap &&) = default;
+    SalColormap & operator =(SalColormap &&) = default;
+
+    Colormap            GetXColormap() const { return m_hColormap; }
+    const SalDisplay*   GetDisplay() const { return m_pDisplay; }
     inline  Display*            GetXDisplay() const;
-    inline  const SalVisual&    GetVisual() const { return m_aVisual; }
-    inline  Visual*             GetXVisual() const { return m_aVisual.GetVisual(); }
-    inline  Pixel               GetWhitePixel() const { return m_nWhitePixel; }
-    inline  Pixel               GetBlackPixel() const { return m_nBlackPixel; }
-    inline  Pixel               GetUsed() const { return m_nUsed; }
+    const SalVisual&    GetVisual() const { return m_aVisual; }
+    Visual*             GetXVisual() const { return m_aVisual.GetVisual(); }
+    Pixel               GetWhitePixel() const { return m_nWhitePixel; }
+    Pixel               GetBlackPixel() const { return m_nBlackPixel; }
+    Pixel               GetUsed() const { return m_nUsed; }
 
     bool            GetXPixels( XColor  &rColor,
                                     int      r,
@@ -137,9 +158,11 @@ public:
                                            int      r,
                                            int      g,
                                            int      b ) const;
-    Pixel           GetPixel( SalColor nColor ) const;
-    SalColor        GetColor( Pixel nPixel ) const;
+    Pixel           GetPixel( Color nColor ) const;
+    Color           GetColor( Pixel nPixel ) const;
 };
+
+class SalI18N_InputMethod;
 
 typedef int(*YieldFunc)(int fd, void* data);
 
@@ -149,20 +172,22 @@ protected:
     timeval         m_aTimeout;
     sal_uLong       m_nTimeoutMS;
     int             m_pTimeoutFDS[2];
-    bool            blockIdleTimeout;
 
     int             nFDs_;
     fd_set          aReadFDS_;
     fd_set          aExceptionFDS_;
+
+    Display             *m_pDisplay;
+    std::unique_ptr<SalI18N_InputMethod> m_pInputMethod;
 
 public:
     SalXLib();
     virtual         ~SalXLib();
     virtual void    Init();
 
-    virtual SalYieldResult Yield( bool bWait, bool bHandleAllCurrentEvents );
+    virtual bool    Yield( bool bWait, bool bHandleAllCurrentEvents );
     virtual void    Wakeup();
-    virtual void    PostUserEvent();
+    void            TriggerUserEventProcessing();
 
     virtual void    Insert( int fd, void* data,
                             YieldFunc   pending,
@@ -173,16 +198,35 @@ public:
     virtual void    StartTimer( sal_uLong nMS );
     virtual void    StopTimer();
 
-    bool            CheckTimeout( bool bExecuteTimers = true );
+    virtual bool    CheckTimeout( bool bExecuteTimers = true );
+
+    SalI18N_InputMethod* GetInputMethod() const { return m_pInputMethod.get(); }
+    Display*             GetDisplay() const { return m_pDisplay; }
 };
 
-class SalI18N_InputMethod;
 class SalI18N_KeyboardExtension;
 class AttributeProvider;
 
 extern "C" {
     typedef Bool(*X_if_predicate)(Display*,XEvent*,XPointer);
 }
+
+class VCLPLUG_GEN_PUBLIC GLX11Window : public GLWindow
+{
+public:
+    Display*           dpy;
+    int                screen;
+    Window             win;
+    XVisualInfo*       vi;
+    GLXContext         ctx;
+    OString            GLXExtensions;
+
+    bool HasGLXExtension(const char* name) const;
+
+    GLX11Window();
+    virtual bool Synchronize(bool bOnoff) const override;
+    virtual ~GLX11Window() override;
+};
 
 class VCLPLUG_GEN_PUBLIC SalDisplay : public SalGenericDisplay
 {
@@ -232,16 +276,13 @@ public:
 
 protected:
     SalXLib        *pXLib_;
-    SalI18N_InputMethod         *mpInputMethod;
     SalI18N_KeyboardExtension   *mpKbdExtension;
-
-    AttributeProvider           *mpFactory;
 
     Display        *pDisp_;             // X Display
 
     SalX11Screen                 m_nXDefaultScreen;
     std::vector< ScreenData >    m_aScreens;
-    ScreenData      m_aInvalidScreenData;
+    ScreenData const      m_aInvalidScreenData;
     Pair            aResolution_;       // [dpi]
     sal_uLong       nMaxRequestSize_;   // [byte]
 
@@ -254,15 +295,14 @@ protected:
     // Keyboard
     bool            bNumLockFromXS_;    // Num Lock handled by X Server
     int             nNumLockIndex_;     // modifier index in modmap
-    int             nNumLockMask_;      // keyevent state mask for
     KeySym          nShiftKeySym_;      // first shift modifier
     KeySym          nCtrlKeySym_;       // first control modifier
     KeySym          nMod1KeySym_;       // first mod1 modifier
 
-    vcl_sal::WMAdaptor* m_pWMAdaptor;
+    std::unique_ptr<vcl_sal::WMAdaptor> m_pWMAdaptor;
 
     bool            m_bXinerama;
-    std::vector< Rectangle > m_aXineramaScreens;
+    std::vector< tools::Rectangle > m_aXineramaScreens;
     std::vector< int > m_aXineramaScreenIndexMap;
     std::list<SalObject*> m_aSalObjects;
 
@@ -278,14 +318,14 @@ protected:
 
     void            doDestruct();
     void            addXineramaScreenUnique( int i, long i_nX, long i_nY, long i_nWidth, long i_nHeight );
+    Time            GetEventTimeImpl( bool bAlwaysReget = false ) const;
 public:
-    static bool BestVisual( Display     *pDisp,
-                                int          nScreen,
-                                XVisualInfo &rVI );
+    static bool BestOpenGLVisual(Display* pDisplay, int nScreen, XVisualInfo& rVI);
+    static bool BestVisual(Display *pDisp, int nScreen, XVisualInfo &rVI);
 
                     SalDisplay( Display* pDisp );
 
-    virtual        ~SalDisplay();
+    virtual        ~SalDisplay() override;
 
     void            Init();
 
@@ -303,7 +343,7 @@ public:
     OUString        GetKeyName( sal_uInt16 nKeyCode ) const;
     sal_uInt16      GetKeyCode( KeySym keysym, char*pcPrintable ) const;
     KeySym          GetKeySym( XKeyEvent      *pEvent,
-                               unsigned char  *pPrintable,
+                               char           *pPrintable,
                                int            *pLen,
                                KeySym         *pUnmodifiedKeySym,
                                Status         *pStatus,
@@ -324,10 +364,9 @@ public:
 
     ::Window         GetDrawable( SalX11Screen nXScreen ) const { return getDataForScreen( nXScreen ).m_aRefWindow; }
     Display        *GetDisplay() const { return pDisp_; }
-    SalX11Screen    GetDefaultXScreen() const { return m_nXDefaultScreen; }
+    const SalX11Screen& GetDefaultXScreen() const { return m_nXDefaultScreen; }
     const Size&     GetScreenSize( SalX11Screen nXScreen ) const { return getDataForScreen( nXScreen ).m_aSize; }
     srv_vendor_t    GetServerVendor() const { return meServerVendor; }
-    void            SetServerVendor() { meServerVendor = sal_GetServerVendor(pDisp_); }
     bool            IsDisplay() const { return !!pXLib_; }
     GC              GetCopyGC( SalX11Screen nXScreen ) const { return getDataForScreen(nXScreen).m_aCopyGC; }
     Pixmap          GetInvert50( SalX11Screen nXScreen ) const { return getDataForScreen(nXScreen).m_hInvert50; }
@@ -336,30 +375,28 @@ public:
     RenderEntryMap&       GetRenderEntries( SalX11Screen nXScreen ) const { return getDataForScreen(nXScreen).m_aRenderData; }
     const Pair     &GetResolution() const { return aResolution_; }
     sal_uLong       GetMaxRequestSize() const { return nMaxRequestSize_; }
-    Time            GetLastUserEventTime( bool bAlwaysReget = false ) const;
+    Time            GetLastUserEventTime() const { return GetEventTimeImpl(); }
+    // this is an equivalent of gdk_x11_get_server_time()
+    Time            GetX11ServerTime() const { return GetEventTimeImpl( true ); }
 
     bool            XIfEventWithTimeout( XEvent*, XPointer, X_if_predicate ) const;
     SalXLib*        GetXLib() const { return pXLib_; }
 
-    SalI18N_InputMethod*        GetInputMethod()  const { return mpInputMethod;  }
+    SalI18N_InputMethod*        GetInputMethod()  const { return pXLib_->GetInputMethod();  }
     SalI18N_KeyboardExtension*  GetKbdExtension() const { return mpKbdExtension; }
-    void            SetInputMethod( SalI18N_InputMethod *pInputMethod )
-    { mpInputMethod = pInputMethod; }
     void            SetKbdExtension(SalI18N_KeyboardExtension *pKbdExtension)
     { mpKbdExtension = pKbdExtension; }
-    ::vcl_sal::WMAdaptor* getWMAdaptor() const { return m_pWMAdaptor; }
+    ::vcl_sal::WMAdaptor* getWMAdaptor() const { return m_pWMAdaptor.get(); }
     bool            IsXinerama() const { return m_bXinerama; }
-    const std::vector< Rectangle >& GetXineramaScreens() const { return m_aXineramaScreens; }
+    const std::vector< tools::Rectangle >& GetXineramaScreens() const { return m_aXineramaScreens; }
     ::Window        GetRootWindow( SalX11Screen nXScreen ) const
             { return getDataForScreen( nXScreen ).m_aRoot; }
     unsigned int GetXScreenCount() const { return m_aScreens.size(); }
 
-    const std::list< SalFrame* >& getFrames() const { return m_aFrames; }
+    const SalFrameSet& getFrames() const { return m_aFrames; }
     bool            IsNumLockFromXS() const { return bNumLockFromXS_; }
 
     std::list< SalObject* >& getSalObjects() { return m_aSalObjects; }
-
-    virtual void    PostUserEvent() override = 0;
 };
 
 inline  Display *SalColormap::GetXDisplay() const
@@ -369,14 +406,14 @@ class VCLPLUG_GEN_PUBLIC SalX11Display : public SalDisplay
 {
 public:
              SalX11Display( Display* pDisp );
-    virtual ~SalX11Display();
+    virtual ~SalX11Display() override;
 
     virtual bool        Dispatch( XEvent *pEvent ) override;
     virtual void        Yield();
-    virtual void        PostUserEvent() override;
+    virtual void        TriggerUserEventProcessing() override;
 
     bool                IsEvent();
-    void                SetupInput( SalI18N_InputMethod *pInputMethod );
+    void                SetupInput();
 };
 
 namespace vcl_sal {
@@ -385,7 +422,7 @@ namespace vcl_sal {
         const OUString& pLang,
         KeySym nSymbol );
 
-    inline SalDisplay *getSalDisplay(SalGenericData const * data)
+    inline SalDisplay *getSalDisplay(GenericUnixSalData const * data)
     {
         assert(data != nullptr);
         assert(data->GetType() != SAL_DATA_GTK3);

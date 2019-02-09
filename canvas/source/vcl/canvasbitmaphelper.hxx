@@ -20,7 +20,7 @@
 #ifndef INCLUDED_CANVAS_SOURCE_VCL_CANVASBITMAPHELPER_HXX
 #define INCLUDED_CANVAS_SOURCE_VCL_CANVASBITMAPHELPER_HXX
 
-#include <canvashelper.hxx>
+#include "canvashelper.hxx"
 #include <canvas/vclwrapper.hxx>
 
 #include <vcl/bitmapex.hxx>
@@ -82,8 +82,6 @@ namespace vclcanvas
 
         css::geometry::IntegerSize2D getSize();
 
-        void queryBitmapCanvas();
-
         css::uno::Reference< css::rendering::XBitmap >
             getScaledBitmap( const css::geometry::RealSize2D&  newSize,
                              bool                                           beFast );
@@ -91,14 +89,6 @@ namespace vclcanvas
         css::uno::Sequence< sal_Int8 >
             getData( css::rendering::IntegerBitmapLayout&      bitmapLayout,
                      const css::geometry::IntegerRectangle2D&  rect );
-
-        void setData( const css::uno::Sequence< sal_Int8 >&        data,
-                      const css::rendering::IntegerBitmapLayout&   bitmapLayout,
-                      const css::geometry::IntegerRectangle2D&     rect );
-
-        void setPixel( const css::uno::Sequence< sal_Int8 >&       color,
-                       const css::rendering::IntegerBitmapLayout&  bitmapLayout,
-                       const css::geometry::IntegerPoint2D&        pos );
 
         css::uno::Sequence< sal_Int8 >
             getPixel( css::rendering::IntegerBitmapLayout& bitmapLayout,
@@ -110,8 +100,6 @@ namespace vclcanvas
         BitmapEx getBitmap() const;
 
     private:
-
-        void setBitmap( const BitmapEx& rBitmap );
 
         BitmapBackBufferSharedPtr   mpBackBuffer;
         OutDevProviderSharedPtr     mpOutDevReference;

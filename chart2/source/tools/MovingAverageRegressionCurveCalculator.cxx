@@ -17,14 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "MovingAverageRegressionCurveCalculator.hxx"
-#include "RegressionCalculationHelper.hxx"
-#include "ResId.hxx"
-#include "Strings.hrc"
-#include "macros.hxx"
+#include <MovingAverageRegressionCurveCalculator.hxx>
+#include <RegressionCalculationHelper.hxx>
+#include <ResId.hxx>
+#include <strings.hrc>
 
 #include <rtl/math.hxx>
-#include <rtl/ustrbuf.hxx>
 
 using namespace ::com::sun::star;
 
@@ -41,7 +39,6 @@ MovingAverageRegressionCurveCalculator::~MovingAverageRegressionCurveCalculator(
 void SAL_CALL MovingAverageRegressionCurveCalculator::recalculateRegression(
     const uno::Sequence< double >& aXValues,
     const uno::Sequence< double >& aYValues )
-    throw (uno::RuntimeException, std::exception)
 {
     ::rtl::math::setNan( & m_fCorrelationCoeffitient );
 
@@ -73,8 +70,6 @@ void SAL_CALL MovingAverageRegressionCurveCalculator::recalculateRegression(
 }
 
 double SAL_CALL MovingAverageRegressionCurveCalculator::getCurveValue( double /*x*/ )
-    throw (lang::IllegalArgumentException,
-           uno::RuntimeException, std::exception)
 {
     double fResult;
     rtl::math::setNan(&fResult);
@@ -86,8 +81,6 @@ uno::Sequence< geometry::RealPoint2D > SAL_CALL MovingAverageRegressionCurveCalc
     const uno::Reference< chart2::XScaling >& /*xScalingX*/,
     const uno::Reference< chart2::XScaling >& /*xScalingY*/,
     sal_Bool /*bMaySkipPointsInCalculation*/ )
-    throw (lang::IllegalArgumentException,
-           uno::RuntimeException, std::exception)
 {
     uno::Sequence< geometry::RealPoint2D > aResult( aYList.size() );
 
@@ -101,9 +94,9 @@ uno::Sequence< geometry::RealPoint2D > SAL_CALL MovingAverageRegressionCurveCalc
 
 OUString MovingAverageRegressionCurveCalculator::ImplGetRepresentation(
     const uno::Reference< util::XNumberFormatter >& /*xNumFormatter*/,
-    ::sal_Int32 /*nNumberFormatKey*/ ) const
+    sal_Int32 /*nNumberFormatKey*/, sal_Int32* /*pFormulaLength = nullptr */ ) const
 {
-    return SCH_RESSTR( STR_OBJECT_MOVING_AVERAGE_WITH_PARAMETERS );
+    return SchResId( STR_OBJECT_MOVING_AVERAGE_WITH_PARAMETERS );
 }
 
 } //  namespace chart

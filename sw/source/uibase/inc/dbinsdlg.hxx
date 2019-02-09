@@ -21,7 +21,6 @@
 #define INCLUDED_SW_SOURCE_UIBASE_INC_DBINSDLG_HXX
 
 #include <vcl/button.hxx>
-#include <vcl/group.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/edit.hxx>
 #include <vcl/layout.hxx>
@@ -29,7 +28,7 @@
 #include <svtools/svmedit.hxx>
 #include <sfx2/basedlgs.hxx>
 #include <unotools/configitem.hxx>
-#include <numfmtlb.hxx>
+#include "numfmtlb.hxx"
 #include <swdbdata.hxx>
 #include <com/sun/star/uno/Reference.h>
 #include <com/sun/star/uno/Sequence.h>
@@ -78,10 +77,8 @@ struct SwInsDBColumn
     bool operator<( const SwInsDBColumn& rCmp ) const;
 };
 
-class SwInsDBColumns : public o3tl::sorted_vector<SwInsDBColumn*, o3tl::less_ptr_to<SwInsDBColumn> >
+class SwInsDBColumns : public o3tl::sorted_vector<std::unique_ptr<SwInsDBColumn>, o3tl::less_uniqueptr_to<SwInsDBColumn> >
 {
-public:
-    ~SwInsDBColumns() { DeleteAndDestroyAll(); }
 };
 
 class SwInsertDBColAutoPilot : public SfxModalDialog, public utl::ConfigItem
@@ -123,26 +120,25 @@ class SwInsertDBColAutoPilot : public SfxModalDialog, public utl::ConfigItem
     const SwDBData  aDBData;
 
     Link<ListBox&,void>    aOldNumFormatLnk;
-    OUString        sNoTmpl;
+    OUString const  sNoTmpl;
 
     SwView*         pView;
-    SwTableAutoFormat* pTAutoFormat;
+    std::unique_ptr<SwTableAutoFormat> m_xTAutoFormat;
 
-    SfxItemSet*     pTableSet;
-    SwTableRep*     pRep;
+    std::unique_ptr<SfxItemSet>  pTableSet;
+    std::unique_ptr<SwTableRep>  pRep;
     sal_Int32       nGBFormatLen;
 
-    DECL_LINK_TYPED( PageHdl, Button*, void );
-    DECL_LINK_TYPED( AutoFormatHdl, Button*, void );
-    DECL_LINK_TYPED( TableFormatHdl, Button*, void );
-    DECL_LINK_TYPED( DBFormatHdl, Button*, void );
-    DECL_LINK_TYPED( TableToFromHdl, Button*, void );
-    DECL_LINK_TYPED( SelectHdl, ListBox&, void );
-    DECL_LINK_TYPED( DblClickHdl, ListBox&, void );
-    DECL_LINK_TYPED( HeaderHdl, Button*, void );
+    DECL_LINK( PageHdl, Button*, void );
+    DECL_LINK( AutoFormatHdl, Button*, void );
+    DECL_LINK( TableFormatHdl, Button*, void );
+    DECL_LINK( DBFormatHdl, Button*, void );
+    DECL_LINK( TableToFromHdl, Button*, void );
+    DECL_LINK( SelectHdl, ListBox&, void );
+    DECL_LINK( DblClickHdl, ListBox&, void );
+    DECL_LINK( HeaderHdl, Button*, void );
 
     bool SplitTextToColArr( const OUString& rText, DB_Columns& rColArr, bool bInsField );
-        using SfxModalDialog::Notify;
     virtual void Notify( const css::uno::Sequence< OUString >& aPropertyNames ) override;
     virtual void            ImplCommit() override;
     void                    Load();
@@ -152,17 +148,17 @@ class SwInsertDBColAutoPilot : public SfxModalDialog, public utl::ConfigItem
 
 public:
     SwInsertDBColAutoPilot( SwView& rView,
-        css::uno::Reference< css::sdbc::XDataSource> rxSource,
-        css::uno::Reference<css::sdbcx::XColumnsSupplier>,
+        css::uno::Reference< css::sdbc::XDataSource> const & rxSource,
+        css::uno::Reference<css::sdbcx::XColumnsSupplier> const & xColSupp,
         const SwDBData& rData  );
 
-    virtual ~SwInsertDBColAutoPilot();
+    virtual ~SwInsertDBColAutoPilot() override;
     virtual void dispose() override;
 
     void DataToDoc( const css::uno::Sequence< css::uno::Any >& rSelection,
-        css::uno::Reference< css::sdbc::XDataSource> rxSource,
-        css::uno::Reference< css::sdbc::XConnection> xConnection,
-        css::uno::Reference< css::sdbc::XResultSet > xResultSet);
+        css::uno::Reference< css::sdbc::XDataSource> const & rxSource,
+        css::uno::Reference< css::sdbc::XConnection> const & xConnection,
+        css::uno::Reference< css::sdbc::XResultSet > const & xResultSet);
 
 };
 

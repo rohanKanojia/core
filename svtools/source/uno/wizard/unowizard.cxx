@@ -20,6 +20,7 @@
 
 #include "wizardshell.hxx"
 
+#include <com/sun/star/container/NoSuchElementException.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
@@ -27,9 +28,12 @@
 #include <com/sun/star/ui/dialogs/XWizard.hpp>
 #include <com/sun/star/ui/dialogs/XWizardController.hpp>
 #include <com/sun/star/ui/dialogs/WizardButton.hpp>
+#include <com/sun/star/util/InvalidStateException.hpp>
 
+#include <comphelper/proparrhlp.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <svtools/genericunodialog.hxx>
+#include <toolkit/helper/vclunohelper.hxx>
 #include <tools/diagnose_ex.h>
 #include <rtl/ref.hxx>
 #include <rtl/strbuf.hxx>
@@ -65,23 +69,19 @@ namespace {
 
     namespace WizardButton = css::ui::dialogs::WizardButton;
 
-
-    namespace
+    WizardButtonFlags lcl_convertWizardButtonToWZB( const sal_Int16 i_nWizardButton )
     {
-        WizardButtonFlags lcl_convertWizardButtonToWZB( const sal_Int16 i_nWizardButton )
+        switch ( i_nWizardButton )
         {
-            switch ( i_nWizardButton )
-            {
-            case WizardButton::NONE:        return WizardButtonFlags::NONE;
-            case WizardButton::NEXT:        return WizardButtonFlags::NEXT;
-            case WizardButton::PREVIOUS:    return WizardButtonFlags::PREVIOUS;
-            case WizardButton::FINISH:      return WizardButtonFlags::FINISH;
-            case WizardButton::CANCEL:      return WizardButtonFlags::CANCEL;
-            case WizardButton::HELP:        return WizardButtonFlags::HELP;
-            }
-            OSL_FAIL( "lcl_convertWizardButtonToWZB: invalid WizardButton constant!" );
-            return WizardButtonFlags::NONE;
+        case WizardButton::NONE:        return WizardButtonFlags::NONE;
+        case WizardButton::NEXT:        return WizardButtonFlags::NEXT;
+        case WizardButton::PREVIOUS:    return WizardButtonFlags::PREVIOUS;
+        case WizardButton::FINISH:      return WizardButtonFlags::FINISH;
+        case WizardButton::CANCEL:      return WizardButtonFlags::CANCEL;
+        case WizardButton::HELP:        return WizardButtonFlags::HELP;
         }
+        OSL_FAIL( "lcl_convertWizardButtonToWZB: invalid WizardButton constant!" );
+        return WizardButtonFlags::NONE;
     }
 
     typedef ::cppu::ImplInheritanceHelper  <   ::svt::OGenericUnoDialog
@@ -96,44 +96,43 @@ namespace {
         explicit Wizard( const css::uno::Reference< css::uno::XComponentContext >& i_rContext );
 
         // lang::XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() throw(css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getImplementationName() override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
         // beans::XPropertySet
-        virtual css::uno::Reference< beans::XPropertySetInfo >  SAL_CALL getPropertySetInfo() throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< beans::XPropertySetInfo >  SAL_CALL getPropertySetInfo() override;
         virtual ::cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
 
         // OPropertyArrayUsageHelper
         virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
 
         // ui::dialogs::XWizard
-        virtual OUString SAL_CALL getHelpURL() throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL setHelpURL( const OUString& _helpurl ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Reference< awt::XWindow > SAL_CALL getDialogWindow() throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Reference< ui::dialogs::XWizardPage > SAL_CALL getCurrentPage(  ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL enableButton( ::sal_Int16 WizardButton, sal_Bool Enable ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL setDefaultButton( ::sal_Int16 WizardButton ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL travelNext(  ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL travelPrevious(  ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL enablePage( ::sal_Int16 PageID, sal_Bool Enable ) throw (container::NoSuchElementException, util::InvalidStateException, css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL updateTravelUI(  ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL advanceTo( ::sal_Int16 PageId ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL goBackTo( ::sal_Int16 PageId ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL activatePath( ::sal_Int16 PathIndex, sal_Bool Final ) throw (container::NoSuchElementException, util::InvalidStateException, css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getHelpURL() override;
+        virtual void SAL_CALL setHelpURL( const OUString& _helpurl ) override;
+        virtual css::uno::Reference< awt::XWindow > SAL_CALL getDialogWindow() override;
+        virtual css::uno::Reference< ui::dialogs::XWizardPage > SAL_CALL getCurrentPage(  ) override;
+        virtual void SAL_CALL enableButton( ::sal_Int16 WizardButton, sal_Bool Enable ) override;
+        virtual void SAL_CALL setDefaultButton( ::sal_Int16 WizardButton ) override;
+        virtual sal_Bool SAL_CALL travelNext(  ) override;
+        virtual sal_Bool SAL_CALL travelPrevious(  ) override;
+        virtual void SAL_CALL enablePage( ::sal_Int16 PageID, sal_Bool Enable ) override;
+        virtual void SAL_CALL updateTravelUI(  ) override;
+        virtual sal_Bool SAL_CALL advanceTo( ::sal_Int16 PageId ) override;
+        virtual sal_Bool SAL_CALL goBackTo( ::sal_Int16 PageId ) override;
+        virtual void SAL_CALL activatePath( ::sal_Int16 PathIndex, sal_Bool Final ) override;
 
         // ui::dialogs::XExecutableDialog
-        virtual void SAL_CALL setTitle( const OUString& aTitle ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual ::sal_Int16 SAL_CALL execute(  ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL setTitle( const OUString& aTitle ) override;
+        virtual ::sal_Int16 SAL_CALL execute(  ) override;
 
         // lang::XInitialization
-        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
    protected:
-        virtual ~Wizard();
+        virtual ~Wizard() override;
 
     protected:
-        virtual VclPtr<Dialog> createDialog( vcl::Window* _pParent ) override;
-        virtual void destroyDialog() override;
+        virtual OGenericUnoDialog::Dialog createDialog(const css::uno::Reference<css::awt::XWindow>& rParent) override;
 
     private:
         css::uno::Sequence< css::uno::Sequence< sal_Int16 > >         m_aWizardSteps;
@@ -146,70 +145,74 @@ namespace {
     {
     }
 
+    OUString lcl_getHelpURL( const OString& sHelpId )
+    {
+        OUStringBuffer aBuffer;
+        OUString aTmp(
+            OStringToOUString( sHelpId, RTL_TEXTENCODING_UTF8 ) );
+        INetURLObject aHID( aTmp );
+        if ( aHID.GetProtocol() == INetProtocol::NotValid )
+            aBuffer.append( INET_HID_SCHEME );
+        aBuffer.append( aTmp );
+        return aBuffer.makeStringAndClear();
+    }
 
     Wizard::~Wizard()
     {
-        // we do this here cause the base class' call to destroyDialog won't reach us anymore : we're within an dtor,
-        // so this virtual-method-call the base class does does not work, we're already dead then ...
-        if ( m_pDialog )
+        if (m_aDialog)
         {
             ::osl::MutexGuard aGuard( m_aMutex );
-            if ( m_pDialog )
+            if (m_aDialog)
+            {
+                m_sHelpURL = lcl_getHelpURL(m_aDialog.get_help_id());
                 destroyDialog();
+            }
         }
     }
 
-
-    namespace
+    void lcl_checkPaths( const Sequence< Sequence< sal_Int16 > >& i_rPaths, const Reference< XInterface >& i_rContext )
     {
-        void lcl_checkPaths( const Sequence< Sequence< sal_Int16 > >& i_rPaths, const Reference< XInterface >& i_rContext )
+        // need at least one path
+        if ( i_rPaths.getLength() == 0 )
+            throw IllegalArgumentException( OUString(), i_rContext, 2 );
+
+        // each path must be of length 1, at least
+        for ( sal_Int32 i = 0; i < i_rPaths.getLength(); ++i )
         {
-            // need at least one path
-            if ( i_rPaths.getLength() == 0 )
+            if ( i_rPaths[i].getLength() == 0 )
                 throw IllegalArgumentException( OUString(), i_rContext, 2 );
 
-            // each path must be of length 1, at least
-            for ( sal_Int32 i = 0; i < i_rPaths.getLength(); ++i )
+            // page IDs must be in ascending order
+            sal_Int16 nPreviousPageID = i_rPaths[i][0];
+            for ( sal_Int32 j=1; j<i_rPaths[i].getLength(); ++j )
             {
-                if ( i_rPaths[i].getLength() == 0 )
-                    throw IllegalArgumentException( OUString(), i_rContext, 2 );
-
-                // page IDs must be in ascending order
-                sal_Int16 nPreviousPageID = i_rPaths[i][0];
-                for ( sal_Int32 j=1; j<i_rPaths[i].getLength(); ++j )
+                if ( i_rPaths[i][j] <= nPreviousPageID )
                 {
-                    if ( i_rPaths[i][j] <= nPreviousPageID )
-                    {
-                        OStringBuffer message;
-                        message.append( "Path " );
-                        message.append( i );
-                        message.append( ": invalid page ID sequence - each page ID must be greater than the previous one." );
-                        throw IllegalArgumentException(
-                            OStringToOUString( message.makeStringAndClear(), RTL_TEXTENCODING_ASCII_US ),
-                            i_rContext, 2 );
-                    }
-                    nPreviousPageID = i_rPaths[i][j];
-                }
-            }
-
-            // if we have one path, that's okay
-            if ( i_rPaths.getLength() == 1 )
-                return;
-
-            // if we have multiple paths, they must start with the same page id
-            const sal_Int16 nFirstPageId = i_rPaths[0][0];
-            for ( sal_Int32 i = 0; i < i_rPaths.getLength(); ++i )
-            {
-                if ( i_rPaths[i][0] != nFirstPageId )
                     throw IllegalArgumentException(
-                        "All paths must start with the same page id.",
+                        "Path " + OUString::number(i)
+                        + ": invalid page ID sequence - each page ID must be greater than the previous one.",
                         i_rContext, 2 );
+                }
+                nPreviousPageID = i_rPaths[i][j];
             }
+        }
+
+        // if we have one path, that's okay
+        if ( i_rPaths.getLength() == 1 )
+            return;
+
+        // if we have multiple paths, they must start with the same page id
+        const sal_Int16 nFirstPageId = i_rPaths[0][0];
+        for ( sal_Int32 i = 0; i < i_rPaths.getLength(); ++i )
+        {
+            if ( i_rPaths[i][0] != nFirstPageId )
+                throw IllegalArgumentException(
+                    "All paths must start with the same page id.",
+                    i_rContext, 2 );
         }
     }
 
-
-    void SAL_CALL Wizard::initialize( const Sequence< Any >& i_Arguments ) throw (Exception, RuntimeException, std::exception)
+    void SAL_CALL Wizard::initialize( const Sequence< Any >& i_Arguments )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         if ( m_bInitialized )
@@ -250,52 +253,28 @@ namespace {
             return OUStringToOString( _rHelpURL, RTL_TEXTENCODING_UTF8 );
     }
 
-
-    OUString lcl_getHelpURL( const OString& sHelpId )
+    svt::OGenericUnoDialog::Dialog Wizard::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
     {
-        OUStringBuffer aBuffer;
-        OUString aTmp(
-            OStringToOUString( sHelpId, RTL_TEXTENCODING_UTF8 ) );
-        INetURLObject aHID( aTmp );
-        if ( aHID.GetProtocol() == INetProtocol::NotValid )
-            aBuffer.append( INET_HID_SCHEME );
-        aBuffer.append( aTmp.getStr() );
-        return aBuffer.makeStringAndClear();
-    }
-
-
-    VclPtr<Dialog> Wizard::createDialog( vcl::Window* i_pParent )
-    {
-        VclPtrInstance<WizardShell> pDialog( i_pParent, m_xController, m_aWizardSteps );
+        VclPtrInstance<WizardShell> pDialog(VCLUnoHelper::GetWindow(rParent), m_xController, m_aWizardSteps);
         pDialog->SetHelpId(  lcl_getHelpId( m_sHelpURL ) );
         pDialog->setTitleBase( m_sTitle );
-        return pDialog.get();
+        return OGenericUnoDialog::Dialog(pDialog);
     }
 
-
-    void Wizard::destroyDialog()
-    {
-        if ( m_pDialog )
-            m_sHelpURL = lcl_getHelpURL( m_pDialog->GetHelpId() );
-
-        Wizard_Base::destroyDialog();
-    }
-
-
-    OUString SAL_CALL Wizard::getImplementationName() throw(RuntimeException, std::exception)
+    OUString SAL_CALL Wizard::getImplementationName()
     {
         return OUString("com.sun.star.comp.svtools.uno.Wizard");
     }
 
 
-    Sequence< OUString > SAL_CALL Wizard::getSupportedServiceNames() throw(RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL Wizard::getSupportedServiceNames()
     {
         Sequence< OUString > aServices { "com.sun.star.ui.dialogs.Wizard" };
         return aServices;
     }
 
 
-    Reference< XPropertySetInfo > SAL_CALL Wizard::getPropertySetInfo() throw(RuntimeException, std::exception)
+    Reference< XPropertySetInfo > SAL_CALL Wizard::getPropertySetInfo()
     {
         return createPropertySetInfo( getInfoHelper() );
     }
@@ -315,94 +294,94 @@ namespace {
     }
 
 
-    OUString SAL_CALL Wizard::getHelpURL() throw (RuntimeException, std::exception)
+    OUString SAL_CALL Wizard::getHelpURL()
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        if ( !m_pDialog )
+        if (!m_aDialog)
             return m_sHelpURL;
 
-        return lcl_getHelpURL( m_pDialog->GetHelpId() );
+        return lcl_getHelpURL(m_aDialog.get_help_id());
     }
 
 
-    void SAL_CALL Wizard::setHelpURL( const OUString& i_HelpURL ) throw (RuntimeException, std::exception)
+    void SAL_CALL Wizard::setHelpURL( const OUString& i_HelpURL )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        if ( !m_pDialog )
+        if (!m_aDialog)
             m_sHelpURL = i_HelpURL;
         else
-            m_pDialog->SetHelpId( lcl_getHelpId( i_HelpURL ) );
+            m_aDialog.set_help_id(lcl_getHelpId(i_HelpURL));
     }
 
 
-    Reference< XWindow > SAL_CALL Wizard::getDialogWindow() throw (RuntimeException, std::exception)
+    Reference< XWindow > SAL_CALL Wizard::getDialogWindow()
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        ENSURE_OR_RETURN( m_pDialog, "Wizard::getDialogWindow: illegal call (execution did not start, yet)!", nullptr );
-        return Reference< XWindow >( m_pDialog->GetComponentInterface(), UNO_QUERY );
+        ENSURE_OR_RETURN( m_aDialog.m_xVclDialog, "Wizard::getDialogWindow: illegal call (execution did not start, yet)!", nullptr );
+        return Reference< XWindow >( m_aDialog.m_xVclDialog->GetComponentInterface(), UNO_QUERY );
     }
 
 
-    void SAL_CALL Wizard::enableButton( ::sal_Int16 i_WizardButton, sal_Bool i_Enable ) throw (RuntimeException, std::exception)
+    void SAL_CALL Wizard::enableButton( ::sal_Int16 i_WizardButton, sal_Bool i_Enable )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_pDialog.get() );
+        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_aDialog.m_xVclDialog.get() );
         ENSURE_OR_RETURN_VOID( pWizardImpl, "Wizard::enableButtons: invalid dialog implementation!" );
 
         pWizardImpl->enableButtons( lcl_convertWizardButtonToWZB( i_WizardButton ), i_Enable );
     }
 
 
-    void SAL_CALL Wizard::setDefaultButton( ::sal_Int16 i_WizardButton ) throw (RuntimeException, std::exception)
+    void SAL_CALL Wizard::setDefaultButton( ::sal_Int16 i_WizardButton )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_pDialog.get() );
+        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_aDialog.m_xVclDialog.get() );
         ENSURE_OR_RETURN_VOID( pWizardImpl, "Wizard::setDefaultButton: invalid dialog implementation!" );
 
         pWizardImpl->defaultButton( lcl_convertWizardButtonToWZB( i_WizardButton ) );
     }
 
 
-    sal_Bool SAL_CALL Wizard::travelNext(  ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL Wizard::travelNext(  )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_pDialog.get() );
+        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_aDialog.m_xVclDialog.get() );
         ENSURE_OR_RETURN_FALSE( pWizardImpl, "Wizard::travelNext: invalid dialog implementation!" );
 
         return pWizardImpl->travelNext();
     }
 
 
-    sal_Bool SAL_CALL Wizard::travelPrevious(  ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL Wizard::travelPrevious(  )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_pDialog.get() );
+        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_aDialog.m_xVclDialog.get() );
         ENSURE_OR_RETURN_FALSE( pWizardImpl, "Wizard::travelPrevious: invalid dialog implementation!" );
 
         return pWizardImpl->travelPrevious();
     }
 
 
-    void SAL_CALL Wizard::enablePage( ::sal_Int16 i_PageID, sal_Bool i_Enable ) throw (NoSuchElementException, InvalidStateException, RuntimeException, std::exception)
+    void SAL_CALL Wizard::enablePage( ::sal_Int16 i_PageID, sal_Bool i_Enable )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_pDialog.get() );
+        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_aDialog.m_xVclDialog.get() );
         ENSURE_OR_RETURN_VOID( pWizardImpl, "Wizard::enablePage: invalid dialog implementation!" );
 
         if ( !pWizardImpl->knowsPage( i_PageID ) )
@@ -415,55 +394,55 @@ namespace {
     }
 
 
-    void SAL_CALL Wizard::updateTravelUI(  ) throw (RuntimeException, std::exception)
+    void SAL_CALL Wizard::updateTravelUI(  )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_pDialog.get() );
+        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_aDialog.m_xVclDialog.get() );
         ENSURE_OR_RETURN_VOID( pWizardImpl, "Wizard::updateTravelUI: invalid dialog implementation!" );
 
         pWizardImpl->updateTravelUI();
     }
 
 
-    sal_Bool SAL_CALL Wizard::advanceTo( ::sal_Int16 i_PageId ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL Wizard::advanceTo( ::sal_Int16 i_PageId )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_pDialog.get() );
+        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_aDialog.m_xVclDialog.get() );
         ENSURE_OR_RETURN_FALSE( pWizardImpl, "Wizard::advanceTo: invalid dialog implementation!" );
 
         return pWizardImpl->advanceTo( i_PageId );
     }
 
 
-    sal_Bool SAL_CALL Wizard::goBackTo( ::sal_Int16 i_PageId ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL Wizard::goBackTo( ::sal_Int16 i_PageId )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_pDialog.get() );
+        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_aDialog.m_xVclDialog.get() );
         ENSURE_OR_RETURN_FALSE( pWizardImpl, "Wizard::goBackTo: invalid dialog implementation!" );
 
         return pWizardImpl->goBackTo( i_PageId );
     }
 
 
-    Reference< XWizardPage > SAL_CALL Wizard::getCurrentPage(  ) throw (RuntimeException, std::exception)
+    Reference< XWizardPage > SAL_CALL Wizard::getCurrentPage(  )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_pDialog.get() );
+        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_aDialog.m_xVclDialog.get() );
         ENSURE_OR_RETURN( pWizardImpl, "Wizard::getCurrentPage: invalid dialog implementation!", Reference< XWizardPage >() );
 
         return pWizardImpl->getCurrentWizardPage();
     }
 
 
-    void SAL_CALL Wizard::activatePath( ::sal_Int16 i_PathIndex, sal_Bool i_Final ) throw (NoSuchElementException, InvalidStateException, RuntimeException, std::exception)
+    void SAL_CALL Wizard::activatePath( ::sal_Int16 i_PathIndex, sal_Bool i_Final )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -471,28 +450,28 @@ namespace {
         if ( ( i_PathIndex < 0 ) || ( i_PathIndex >= m_aWizardSteps.getLength() ) )
             throw NoSuchElementException( OUString(), *this );
 
-        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_pDialog.get() );
+        WizardShell* pWizardImpl = dynamic_cast< WizardShell* >( m_aDialog.m_xVclDialog.get() );
         ENSURE_OR_RETURN_VOID( pWizardImpl, "Wizard::activatePath: invalid dialog implementation!" );
 
         pWizardImpl->activatePath( i_PathIndex, i_Final );
     }
 
 
-    void SAL_CALL Wizard::setTitle( const OUString& i_Title ) throw (RuntimeException, std::exception)
+    void SAL_CALL Wizard::setTitle( const OUString& i_Title )
     {
         // simply disambiguate
         Wizard_Base::OGenericUnoDialog::setTitle( i_Title );
     }
 
 
-    ::sal_Int16 SAL_CALL Wizard::execute(  ) throw (RuntimeException, std::exception)
+    ::sal_Int16 SAL_CALL Wizard::execute(  )
     {
         return Wizard_Base::OGenericUnoDialog::execute();
     }
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_svtools_uno_Wizard_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)

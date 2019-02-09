@@ -18,10 +18,11 @@
  */
 
 #include <i18nutil/oneToOneMapping.hxx>
+#include <string.h>
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18nutil {
 
-oneToOneMapping::oneToOneMapping( OneToOneMappingTable_t *rpTable, const size_t rnBytes, const size_t rnUnitSize )
+oneToOneMapping::oneToOneMapping( OneToOneMappingTable_t const *rpTable, const size_t rnBytes, const size_t rnUnitSize )
     : mpTable( rpTable ),
       mnSize( rnBytes / rnUnitSize )
 {
@@ -49,14 +50,14 @@ sal_Unicode oneToOneMapping::find(const sal_Unicode nKey) const
                 return mpTable[current].second;
 
             if( bottom > top )
-                return sal_Unicode( nKey );
+                return nKey;
         }
     }
     else
-        return sal_Unicode( nKey );
+        return nKey;
 }
 
-oneToOneMappingWithFlag::oneToOneMappingWithFlag( UnicodePairWithFlag *rpTableWF, const size_t rnSize, const UnicodePairFlag rnFlag )
+oneToOneMappingWithFlag::oneToOneMappingWithFlag( UnicodePairWithFlag const *rpTableWF, const size_t rnSize, const UnicodePairFlag rnFlag )
     : oneToOneMapping( nullptr, rnSize, sizeof(UnicodePairWithFlag) ),
       mpTableWF ( rpTableWF ),
       mnFlag    ( rnFlag ),
@@ -67,11 +68,6 @@ oneToOneMappingWithFlag::oneToOneMappingWithFlag( UnicodePairWithFlag *rpTableWF
 
 oneToOneMappingWithFlag::~oneToOneMappingWithFlag()
 {
-    if( mbHasIndex )
-    {
-        for (size_t i = 0; i < SAL_N_ELEMENTS(mpIndex); ++i)
-            delete [] mpIndex[i];
-    }
 }
 
 void oneToOneMappingWithFlag::makeIndex()
@@ -80,9 +76,6 @@ void oneToOneMappingWithFlag::makeIndex()
     {
         int current = -1;
 
-        for (size_t i = 0; i < SAL_N_ELEMENTS(mpIndex); ++i)
-            mpIndex[i] = nullptr;
-
         for( size_t k = 0; k < mnSize; k++ )
         {
             const int high = (mpTableWF[k].first >> 8) & 0xFF;
@@ -90,7 +83,7 @@ void oneToOneMappingWithFlag::makeIndex()
             if( high != current )
             {
                 current = high;
-                mpIndex[high] = new UnicodePairWithFlag*[256];
+                mpIndex[high].reset(new UnicodePairWithFlag const *[256]);
 
                 for (int j = 0; j < 256; ++j)
                     mpIndex[high][j] = nullptr;
@@ -117,7 +110,7 @@ sal_Unicode oneToOneMappingWithFlag::find( const sal_Unicode nKey ) const
                 mpIndex[high][low]->flag & mnFlag )
                 return mpIndex[high][low]->second;
             else
-                return sal_Unicode( nKey );
+                return nKey;
         }
         else
         {
@@ -136,19 +129,19 @@ sal_Unicode oneToOneMappingWithFlag::find( const sal_Unicode nKey ) const
                     if( mpTableWF[current].flag & mnFlag )
                         return mpTableWF[current].second;
                     else
-                        return sal_Unicode( nKey );
+                        return nKey;
                 }
 
                 if( bottom > top )
-                    return sal_Unicode( nKey );
+                    return nKey;
             }
         }
     }
     else
-        return sal_Unicode( nKey );
+        return nKey;
 }
 
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -128,7 +128,7 @@ public class OOoBean
         { /* impossible here */ }
     }
 
-    /** Sets the timeout for methods which launch OOo in milli seconds.
+    /** Sets the timeout for methods which launch OOo in milliseconds.
 
         This method does not need a connection to an OOo instance.
      */
@@ -137,7 +137,7 @@ public class OOoBean
         nOOoStartTimeOut = nMilliSecs;
     }
 
-    /** Sets the timeout for normal OOO methods calls in milli seconds.
+    /** Sets the timeout for normal OOO methods calls in milliseconds.
 
         This method does not need a connection to an OOo instance.
      */
@@ -629,7 +629,7 @@ public class OOoBean
                             if ( aFrame != null && xOldController != null )
                                 if (!xOldController.suspend(true))
                                     throw new com.sun.star.util.CloseVetoException(
-                                            "Dokument is still being used and cannot be closed.", this);
+                                            "Document is still being used and cannot be closed.", this);
 
                         }
                         catch (java.lang.IllegalStateException exp)
@@ -1035,7 +1035,7 @@ xLayoutManager.showElement("private:resource/menubar/menubar");
     }
 
 
-    /** Applies all tool visiblities to the real thing.
+    /** Applies all tool visibilities to the real thing.
 
         @deprecated Clients should use the service com.sun.star.frame.LayoutManager,
         which can be obtained from a frame, to control toolbars. See also
@@ -1349,7 +1349,8 @@ xLayoutManager.showElement("private:resource/menubar/menubar");
             new com.sun.star.beans.PropertyValue[ nNumArgs + 1 ];
 
         // copy current arguments
-        System.arraycopy(aArguments, 0, aExtendedArguments, 0, nNumArgs);
+        if (aArguments != null)
+            System.arraycopy(aArguments, 0, aExtendedArguments, 0, nNumArgs);
 
         // add new argument
         aExtendedArguments[ nNumArgs ] = aArgument;

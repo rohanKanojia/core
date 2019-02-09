@@ -21,6 +21,8 @@ $(eval $(call gb_Library_Library,svl))
 
 $(eval $(call gb_Library_use_externals,svl,\
     boost_headers \
+    $(if $(filter LINUX MACOSX ANDROID %BSD SOLARIS HAIKU,$(OS)), \
+        curl) \
     icu_headers \
     icuuc \
     mdds_headers \
@@ -46,6 +48,20 @@ $(eval $(call gb_Library_add_defs,svl,\
     -DSVL_DLLIMPLEMENTATION \
 ))
 
+ifeq ($(TLS),NSS)
+$(eval $(call gb_Library_use_externals,svl,\
+       plc4 \
+       nss3 \
+))
+else
+ifeq ($(TLS),OPENSSL)
+$(eval $(call gb_Library_use_externals,svl,\
+    openssl \
+    openssl_headers \
+))
+endif
+endif
+
 $(eval $(call gb_Library_use_libraries,svl,\
     basegfx \
     comphelper \
@@ -60,8 +76,43 @@ $(eval $(call gb_Library_use_libraries,svl,\
     tl \
     ucbhelper \
     utl \
-	$(gb_UWINAPI) \
 ))
+
+$(eval $(call gb_Library_use_system_win32_libs,svl,\
+    advapi32 \
+    crypt32 \
+    gdi32 \
+    gdiplus \
+    imm32 \
+    mpr \
+    ole32 \
+    shell32 \
+    usp10 \
+    uuid \
+    version \
+    winspool \
+    setupapi \
+    shlwapi \
+))
+
+ifeq ($(OS),WNT)
+$(eval $(call gb_Library_add_defs,svl,\
+    -DSVL_CRYPTO_MSCRYPTO \
+))
+$(eval $(call gb_Library_use_system_win32_libs,svl,\
+    crypt32 \
+))
+else
+ifneq (,$(filter DESKTOP,$(BUILD_TYPE))$(filter ANDROID,$(OS)))
+$(eval $(call gb_Library_add_defs,svl,\
+    -DSVL_CRYPTO_NSS \
+))
+$(eval $(call gb_Library_use_externals,svl,\
+    nss3 \
+    plc4 \
+))
+endif # BUILD_TYPE=DESKTOP
+endif
 
 $(eval $(call gb_Library_add_exception_objects,svl,\
     svl/source/config/asiancfg \
@@ -69,13 +120,11 @@ $(eval $(call gb_Library_add_exception_objects,svl,\
     svl/source/config/ctloptions \
     svl/source/config/itemholder2 \
     svl/source/config/languageoptions \
+    svl/source/crypto/cryptosign \
     svl/source/filepicker/pickerhistory \
-    svl/source/filerec/filerec \
     svl/source/items/aeitem \
     svl/source/items/cenumitm \
     svl/source/items/cintitem \
-    svl/source/items/cntwall \
-    svl/source/items/ctypeitm \
     svl/source/items/custritm \
     svl/source/items/flagitem \
     svl/source/items/globalnameitem \
@@ -100,10 +149,10 @@ $(eval $(call gb_Library_add_exception_objects,svl,\
     svl/source/items/sitem \
     svl/source/items/slstitm \
     svl/source/items/srchitem \
+    svl/source/items/stringio \
     svl/source/items/stritem \
     svl/source/items/style \
     svl/source/items/stylepool \
-    svl/source/items/szitem \
     svl/source/items/visitem \
     svl/source/items/whiter \
     svl/source/misc/PasswordHelper \
@@ -147,7 +196,6 @@ ifeq ($(OS),WNT)
 $(eval $(call gb_Library_add_exception_objects,svl,\
     svl/source/svdde/ddecli \
     svl/source/svdde/ddedata \
-    svl/source/svdde/ddeinf \
     svl/source/svdde/ddestrg \
     svl/source/svdde/ddesvr \
 ))

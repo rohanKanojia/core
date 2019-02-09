@@ -57,24 +57,18 @@
  * @file
  * Table cell style. Number format, string value, and so on...
  ************************************************************************/
-#include "xfcellstyle.hxx"
-#include "xfborders.hxx"
-#include "xffont.hxx"
-#include "xfbgimage.hxx"
+#include <xfilter/xfcellstyle.hxx>
+#include <xfilter/xfborders.hxx>
+#include <xfilter/xffont.hxx>
+#include <xfilter/xfbgimage.hxx>
 
 XFCellStyle::XFCellStyle()
-{
-    m_eHoriAlign = enumXFAlignNone;
-    m_eVertAlign = enumXFAlignNone;
-    m_fTextIndent = 0;
-    m_pBorders = nullptr;
-    m_pBackImage = nullptr;
-    m_bWrapText = false;
-}
+    : m_eHoriAlign(enumXFAlignNone)
+    , m_eVertAlign(enumXFAlignNone)
+{}
 
 XFCellStyle::~XFCellStyle()
 {
-    delete m_pBorders;
 }
 
 void XFCellStyle::SetPadding(double left, double right,double top, double bottom)
@@ -89,21 +83,19 @@ void XFCellStyle::SetPadding(double left, double right,double top, double bottom
         m_aPadding.SetBottom( bottom );
 }
 
-void    XFCellStyle::SetBackColor(XFColor& color)
+void    XFCellStyle::SetBackColor(XFColor const & color)
 {
     m_aBackColor = color;
 }
 
-void    XFCellStyle::SetBackImage(XFBGImage *pImage)
+void    XFCellStyle::SetBackImage(std::unique_ptr<XFBGImage>& rImage)
 {
-    delete m_pBackImage;
-    m_pBackImage = pImage;
+    m_xBackImage = std::move(rImage);
 }
 
 void    XFCellStyle::SetBorders(XFBorders *pBorders)
 {
-    delete m_pBorders;
-    m_pBorders = pBorders;
+    m_pBorders.reset( pBorders );
 }
 
 enumXFStyle XFCellStyle::GetStyleFamily()
@@ -130,8 +122,6 @@ bool    XFCellStyle::Equal(IXFStyle *pStyle)
 
     if( m_strParentStyleName != pOther->m_strParentStyleName )
         return false;
-    if( m_fTextIndent != pOther->m_fTextIndent )
-        return false;
 
     //align:
     if( m_eHoriAlign != pOther->m_eHoriAlign )
@@ -149,10 +139,6 @@ bool    XFCellStyle::Equal(IXFStyle *pStyle)
         return false;
     //padding:
     if( m_aPadding != pOther->m_aPadding )
-        return false;
-
-    //wrap:
-    if( m_bWrapText != pOther->m_bWrapText )
         return false;
 
     //font:
@@ -178,16 +164,16 @@ bool    XFCellStyle::Equal(IXFStyle *pStyle)
         return false;
 
     //if there is backimage
-    if( m_pBackImage )
+    if (m_xBackImage)
     {
-        if( !pOther->m_pBackImage )
+        if( !pOther->m_xBackImage )
             return false;
-        if( !m_pBackImage->Equal(pOther) )
+        if( !m_xBackImage->Equal(pOther) )
             return false;
     }
     else
     {
-        if( pOther->m_pBackImage )
+        if( pOther->m_xBackImage )
             return false;
     }
 
@@ -216,11 +202,6 @@ void XFCellStyle::ToXml(IXFStream *pStrm)
     //Paragraph properties:
     pAttrList->Clear();
 
-    //text indent:
-    if( m_fTextIndent>FLOAT_MIN )
-    {
-        pAttrList->AddAttribute("fo:text-indent", OUString::number(m_fTextIndent) + "cm" );
-    }
     //padding:
     m_aPadding.ToXml(pStrm);
     //margin:
@@ -235,10 +216,6 @@ void XFCellStyle::ToXml(IXFStream *pStrm)
     if( m_eVertAlign != enumXFAlignNone )
         pAttrList->AddAttribute( "fo:vertical-align", GetAlignName(m_eVertAlign) );
 
-    //wrap text:
-    if( m_bWrapText )
-        pAttrList->AddAttribute( "fo:wrap-option", "wrap" );
-
     //shadow:
     m_aShadow.ToXml(pStrm);
     //borders:
@@ -246,7 +223,7 @@ void XFCellStyle::ToXml(IXFStream *pStrm)
         m_pBorders->ToXml(pStrm);
 
     //background color:
-    if( m_aBackColor.IsValid() && !m_pBackImage )
+    if( m_aBackColor.IsValid() && !m_xBackImage )
     {
         pAttrList->AddAttribute("fo:background-color", m_aBackColor.ToString() );
     }
@@ -256,8 +233,8 @@ void XFCellStyle::ToXml(IXFStream *pStrm)
 
     pStrm->StartElement("style:properties");
 
-    if( m_pBackImage )
-        m_pBackImage->ToXml(pStrm);
+    if( m_xBackImage )
+        m_xBackImage->ToXml(pStrm);
 
     pStrm->EndElement("style:properties");
 

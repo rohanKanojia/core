@@ -17,16 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/registry/XRegistryKey.hpp>
+#include <cppuhelper/factory.hxx>
 #include <rtl/ustring.hxx>
 
 #include <sfx2/sfxmodelfactory.hxx>
 
 #include "register.hxx"
-#include "smdll.hxx"
-#include "document.hxx"
-#include "unomodel.hxx"
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -34,7 +30,7 @@ using namespace ::com::sun::star::lang;
 
 extern "C" {
 
-SAL_DLLPUBLIC_EXPORT void* SAL_CALL sm_component_getFactory( const sal_Char* pImplementationName,
+SAL_DLLPUBLIC_EXPORT void* sm_component_getFactory( const sal_Char* pImplementationName,
                                      void* pServiceManager,
                                      void* /*pRegistryKey*/ )
 {
@@ -50,28 +46,7 @@ SAL_DLLPUBLIC_EXPORT void* SAL_CALL sm_component_getFactory( const sal_Char* pIm
         Reference< XSingleServiceFactory >   xFactory                                                                                                ;
         Reference< XMultiServiceFactory >    xServiceManager( static_cast< XMultiServiceFactory* >( pServiceManager ) ) ;
 
-        if( SmXMLImport_getImplementationName().equalsAscii( pImplementationName ))
-        {
-            xFactory = ::cppu::createSingleFactory( xServiceManager,
-            SmXMLImport_getImplementationName(),
-            SmXMLImport_createInstance,
-            SmXMLImport_getSupportedServiceNames() );
-        }
-        else if( SmXMLImportMeta_getImplementationName().equalsAscii( pImplementationName ))
-        {
-            xFactory = ::cppu::createSingleFactory( xServiceManager,
-            SmXMLImportMeta_getImplementationName(),
-            SmXMLImportMeta_createInstance,
-            SmXMLImportMeta_getSupportedServiceNames() );
-        }
-        else if( SmXMLImportSettings_getImplementationName().equalsAscii( pImplementationName ))
-        {
-            xFactory = ::cppu::createSingleFactory( xServiceManager,
-            SmXMLImportSettings_getImplementationName(),
-            SmXMLImportSettings_createInstance,
-            SmXMLImportSettings_getSupportedServiceNames() );
-        }
-        else if( SmDocument_getImplementationName().equalsAscii( pImplementationName ))
+        if (SmDocument_getImplementationName().equalsAscii(pImplementationName))
         {
             xFactory = ::sfx2::createSfxModelFactory( xServiceManager,
             SmDocument_getImplementationName(),

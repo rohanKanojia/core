@@ -57,7 +57,7 @@
  * @file
  * Line object.
  ************************************************************************/
-#include "xfdrawline.hxx"
+#include <xfilter/xfdrawline.hxx>
 
 XFDrawLine::XFDrawLine()
 {
@@ -103,14 +103,14 @@ void XFDrawLine::ToXml(IXFStream *pStrm)
 
     //transform
     OUString   strTransform;
-    if( m_nFlag&XFDRAWOBJECT_FLAG_ROTATE )
+    if( m_nDrawFlag&XFDRAWOBJECT_FLAG_ROTATE )
         strTransform = "rotate (" + OUString::number(m_fRotate) + ") ";
-    if( m_nFlag&XFDRAWOBJECT_FLAG_TRANLATE )
+    if( m_nDrawFlag&XFDRAWOBJECT_FLAG_TRANSLATE )
         strTransform += "translate (" + OUString::number(m_aRotatePoint.GetX()) + "cm " + OUString::number(m_aRotatePoint.GetY()) + "cm) ";
-    if( m_nFlag&XFDRAWOBJECT_FLAG_SKEWX )
-        strTransform += "skewX (" + OUString::number(m_fSkewX) + " ";
-    if( m_nFlag&XFDRAWOBJECT_FLAG_SKEWY )
-        strTransform += "skewY (" + OUString::number(m_fSkewY) + " ";
+    if( m_nDrawFlag&XFDRAWOBJECT_FLAG_SKEWX )
+        strTransform += "skewX (" + OUString::number(0) + " ";
+    if( m_nDrawFlag&XFDRAWOBJECT_FLAG_SKEWY )
+        strTransform += "skewY (" + OUString::number(0) + " ";
     strTransform = strTransform.trim();
 
     if( !strTransform.isEmpty() )

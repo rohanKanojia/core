@@ -31,59 +31,47 @@
 using namespace utl;
 using namespace com::sun::star::uno;
 
-static inline LanguageType lcl_LanguageOfType(sal_Int16 nType, sal_Int16 eWestern, sal_Int16 eCJK, sal_Int16 eCTL)
+static LanguageType lcl_LanguageOfType(sal_Int16 nType, LanguageType eWestern, LanguageType eCJK, LanguageType eCTL)
 {
-    return LanguageType(
-                nType < FONT_STANDARD_CJK ? eWestern :
-                    nType >= FONT_STANDARD_CTL ? eCTL : eCJK);
+    return nType < FONT_STANDARD_CJK
+           ? eWestern
+           : nType >= FONT_STANDARD_CTL ? eCTL : eCJK;
 }
 
-Sequence<OUString> SwStdFontConfig::GetPropertyNames()
+Sequence<OUString> const & SwStdFontConfig::GetPropertyNames()
 {
-    Sequence<OUString> aNames;
-    if(!aNames.getLength())
-    {
-        static const char* aPropNames[] =
-        {
-            "DefaultFont/Standard",    // 0
-            "DefaultFont/Heading",     // 1
-            "DefaultFont/List",        // 2
-            "DefaultFont/Caption",     // 3
-            "DefaultFont/Index",       // 4
-            "DefaultFontCJK/Standard", // 5
-            "DefaultFontCJK/Heading",  // 6
-            "DefaultFontCJK/List",     // 7
-            "DefaultFontCJK/Caption",  // 8
-            "DefaultFontCJK/Index",    // 9
-            "DefaultFontCTL/Standard", // 10
-            "DefaultFontCTL/Heading",  // 11
-            "DefaultFontCTL/List",     // 12
-            "DefaultFontCTL/Caption",  // 13
-            "DefaultFontCTL/Index",    // 14
-            "DefaultFont/StandardHeight",    // 15
-            "DefaultFont/HeadingHeight",     // 16
-            "DefaultFont/ListHeight",        // 17
-            "DefaultFont/CaptionHeight",     // 18
-            "DefaultFont/IndexHeight",       // 19
-            "DefaultFontCJK/StandardHeight", // 20
-            "DefaultFontCJK/HeadingHeight",  // 21
-            "DefaultFontCJK/ListHeight",     // 22
-            "DefaultFontCJK/CaptionHeight",  // 23
-            "DefaultFontCJK/IndexHeight",    // 24
-            "DefaultFontCTL/StandardHeight", // 25
-            "DefaultFontCTL/HeadingHeight",  // 26
-            "DefaultFontCTL/ListHeight",     // 27
-            "DefaultFontCTL/CaptionHeight",  // 28
-            "DefaultFontCTL/IndexHeight"     // 29
-        };
-        const int nCount = sizeof(aPropNames)/sizeof(const char*);
-        aNames.realloc(nCount);
-        OUString* pNames = aNames.getArray();
-        for(int i = 0; i < nCount; i++)
-        {
-            pNames[i] = OUString::createFromAscii(aPropNames[i]);
-        }
-    }
+    static Sequence<OUString> aNames {
+        "DefaultFont/Standard",    // 0
+        "DefaultFont/Heading",     // 1
+        "DefaultFont/List",        // 2
+        "DefaultFont/Caption",     // 3
+        "DefaultFont/Index",       // 4
+        "DefaultFontCJK/Standard", // 5
+        "DefaultFontCJK/Heading",  // 6
+        "DefaultFontCJK/List",     // 7
+        "DefaultFontCJK/Caption",  // 8
+        "DefaultFontCJK/Index",    // 9
+        "DefaultFontCTL/Standard", // 10
+        "DefaultFontCTL/Heading",  // 11
+        "DefaultFontCTL/List",     // 12
+        "DefaultFontCTL/Caption",  // 13
+        "DefaultFontCTL/Index",    // 14
+        "DefaultFont/StandardHeight",    // 15
+        "DefaultFont/HeadingHeight",     // 16
+        "DefaultFont/ListHeight",        // 17
+        "DefaultFont/CaptionHeight",     // 18
+        "DefaultFont/IndexHeight",       // 19
+        "DefaultFontCJK/StandardHeight", // 20
+        "DefaultFontCJK/HeadingHeight",  // 21
+        "DefaultFontCJK/ListHeight",     // 22
+        "DefaultFontCJK/CaptionHeight",  // 23
+        "DefaultFontCJK/IndexHeight",    // 24
+        "DefaultFontCTL/StandardHeight", // 25
+        "DefaultFontCTL/HeadingHeight",  // 26
+        "DefaultFontCTL/ListHeight",     // 27
+        "DefaultFontCTL/CaptionHeight",  // 28
+        "DefaultFontCTL/IndexHeight"     // 29
+    };
     return aNames;
 }
 
@@ -92,12 +80,12 @@ SwStdFontConfig::SwStdFontConfig() :
 {
     SvtLinguOptions aLinguOpt;
 
-    if (!utl::ConfigManager::IsAvoidConfig())
+    if (!utl::ConfigManager::IsFuzzing())
         SvtLinguConfig().GetOptions( aLinguOpt );
 
-    sal_Int16   eWestern = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage, css::i18n::ScriptType::LATIN),
-                eCJK = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CJK, css::i18n::ScriptType::ASIAN),
-                eCTL = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CTL, css::i18n::ScriptType::COMPLEX);
+    LanguageType eWestern = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage, css::i18n::ScriptType::LATIN),
+                 eCJK = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CJK, css::i18n::ScriptType::ASIAN),
+                 eCTL = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CTL, css::i18n::ScriptType::COMPLEX);
 
     for(sal_Int16 i = 0; i < DEF_FONT_COUNT; i++)
     {
@@ -141,9 +129,9 @@ void SwStdFontConfig::ImplCommit()
 
     SvtLinguConfig().GetOptions( aLinguOpt );
 
-    sal_Int16   eWestern = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage, css::i18n::ScriptType::LATIN),
-                eCJK = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CJK, css::i18n::ScriptType::ASIAN),
-                eCTL = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CTL, css::i18n::ScriptType::COMPLEX);
+    LanguageType eWestern = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage, css::i18n::ScriptType::LATIN),
+                 eCJK = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CJK, css::i18n::ScriptType::ASIAN),
+                 eCTL = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CTL, css::i18n::ScriptType::COMPLEX);
 
     for(sal_uInt16 nProp = 0;
         nProp < sal::static_int_cast< sal_uInt16, sal_Int32 >( aNames.getLength() );
@@ -152,7 +140,7 @@ void SwStdFontConfig::ImplCommit()
         if( nProp < DEF_FONT_COUNT )
         {
             if(GetDefaultFor(nProp, lcl_LanguageOfType(nProp, eWestern, eCJK, eCTL)) != sDefaultFonts[nProp])
-                pValues[nProp] <<= OUString(sDefaultFonts[nProp]);
+                pValues[nProp] <<= sDefaultFonts[nProp];
         }
         else
         {
@@ -172,12 +160,12 @@ bool SwStdFontConfig::IsFontDefault(sal_uInt16 nFontType) const
     bool bSame = false;
     SvtLinguOptions aLinguOpt;
 
-    if (!utl::ConfigManager::IsAvoidConfig())
+    if (!utl::ConfigManager::IsFuzzing())
         SvtLinguConfig().GetOptions(aLinguOpt);
 
-    sal_Int16   eWestern = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage, css::i18n::ScriptType::LATIN),
-                eCJK = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CJK, css::i18n::ScriptType::ASIAN),
-                eCTL = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CTL, css::i18n::ScriptType::COMPLEX);
+    LanguageType eWestern = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage, css::i18n::ScriptType::LATIN),
+                 eCJK = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CJK, css::i18n::ScriptType::ASIAN),
+                 eCTL = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CTL, css::i18n::ScriptType::COMPLEX);
 
     OUString sDefFont(GetDefaultFor(FONT_STANDARD, eWestern));
     OUString sDefFontCJK(GetDefaultFor(FONT_STANDARD_CJK, eCJK));
@@ -286,12 +274,12 @@ void SwStdFontConfig::ChangeInt( sal_uInt16 nFontType, sal_Int32 nHeight )
     if( nFontType < DEF_FONT_COUNT && nDefaultFontHeight[nFontType] != nHeight)
     {
         SvtLinguOptions aLinguOpt;
-        if (!utl::ConfigManager::IsAvoidConfig())
+        if (!utl::ConfigManager::IsFuzzing())
             SvtLinguConfig().GetOptions( aLinguOpt );
 
-        sal_Int16 eWestern = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage, css::i18n::ScriptType::LATIN),
-                  eCJK = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CJK, css::i18n::ScriptType::ASIAN),
-                  eCTL = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CTL, css::i18n::ScriptType::COMPLEX);
+        LanguageType eWestern = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage, css::i18n::ScriptType::LATIN),
+                     eCJK = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CJK, css::i18n::ScriptType::ASIAN),
+                     eCTL = MsLangId::resolveSystemLanguageByScriptType(aLinguOpt.nDefaultLanguage_CTL, css::i18n::ScriptType::COMPLEX);
 
         // #i92090# default height value sets back to -1
         const sal_Int32 nDefaultHeight = GetDefaultHeightFor(nFontType, lcl_LanguageOfType(nFontType, eWestern, eCJK, eCTL));

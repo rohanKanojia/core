@@ -22,9 +22,6 @@
 
 #include <sal/config.h>
 
-#include <set>
-#include <vector>
-
 #include <unotools/sharedunocomponent.hxx>
 
 namespace com { namespace sun { namespace star {
@@ -35,10 +32,6 @@ namespace com { namespace sun { namespace star {
 
 namespace dbaui
 {
-
-    typedef std::set<OUString> StringBag;
-    typedef std::vector<sal_Int8> ByteVector;
-    typedef std::vector<OUString> StringArray;
 
     typedef ::utl::SharedUNOComponent< css::sdbc::XConnection > SharedConnection;
 

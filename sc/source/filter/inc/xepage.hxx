@@ -42,7 +42,7 @@ private:
     virtual void        WriteBody( XclExpStream& rStrm ) override;
 
 private:
-    OUString            maHdrString;        /// Header or footer contents.
+    OUString const      maHdrString;        /// Header or footer contents.
 };
 
 // General page settings ------------------------------------------------------
@@ -83,7 +83,7 @@ private:
 
 private:
     const ScfUInt16Vec& mrPageBreaks;       /// Page settings data of current sheet.
-    sal_uInt16          mnMaxPos;           /// Maximum row/column for BIFF8 page breaks.
+    sal_uInt16 const    mnMaxPos;           /// Maximum row/column for BIFF8 page breaks.
 };
 
 // Page settings ==============================================================
@@ -96,7 +96,7 @@ public:
     explicit            XclExpPageSettings( const XclExpRoot& rRoot );
 
     /** Returns read-only access to the page data. */
-    inline const XclPageData& GetPageData() const { return maData; }
+    const XclPageData& GetPageData() const { return maData; }
 
     /** Writes all page settings records to the stream. */
     virtual void        Save( XclExpStream& rStrm ) override;

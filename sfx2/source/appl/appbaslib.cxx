@@ -19,23 +19,20 @@
 
 #include <config_features.h>
 
-#include "appbaslib.hxx"
+#include <appbaslib.hxx>
 
 #include <sfx2/sfxuno.hxx>
-#include "sfxtypes.hxx"
+#include <sfxtypes.hxx>
 #include <sfx2/app.hxx>
 
 #include <basic/basmgr.hxx>
 #include <tools/diagnose_ex.h>
-#include <comphelper/processfactory.hxx>
 #include <cppuhelper/weak.hxx>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::script;
 using namespace ::com::sun::star::embed;
-using ::osl::MutexGuard;
-using ::osl::Mutex;
 
 
 SfxBasicManagerHolder::SfxBasicManagerHolder()
@@ -47,8 +44,7 @@ void SfxBasicManagerHolder::Notify(SfxBroadcaster& rBC, SfxHint const& rHint)
 {
     if (!mpBasicManager || &rBC != mpBasicManager)
         return;
-    SfxSimpleHint const*const pSimpleHint(dynamic_cast<SfxSimpleHint const*>(&rHint));
-    if (pSimpleHint && SFX_HINT_DYING == pSimpleHint->GetId())
+    if (SfxHintId::Dying == rHint.GetId())
     {
         mpBasicManager = nullptr;
         mxBasicContainer.clear();
@@ -70,18 +66,18 @@ void SfxBasicManagerHolder::reset( BasicManager* _pBasicManager )
     // @see basic::BasicManagerRepository::getDocumentBasicManager
     mpBasicManager = _pBasicManager;
 
-    if ( mpBasicManager )
+    if ( !mpBasicManager )
+        return;
+
+    StartListening(*mpBasicManager);
+    try
     {
-        StartListening(*mpBasicManager);
-        try
-        {
-            mxBasicContainer.set( mpBasicManager->GetScriptLibraryContainer(), UNO_QUERY_THROW );
-            mxDialogContainer.set( mpBasicManager->GetDialogLibraryContainer(), UNO_QUERY_THROW  );
-        }
-        catch( const Exception& )
-        {
-            DBG_UNHANDLED_EXCEPTION();
-        }
+        mxBasicContainer.set( mpBasicManager->GetScriptLibraryContainer(), UNO_QUERY_THROW );
+        mxDialogContainer.set( mpBasicManager->GetDialogLibraryContainer(), UNO_QUERY_THROW  );
+    }
+    catch( const Exception& )
+    {
+        DBG_UNHANDLED_EXCEPTION("sfx.appl");
     }
 #endif
 }
@@ -99,7 +95,7 @@ void SfxBasicManagerHolder::storeAllLibraries()
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("sfx.appl");
     }
 #endif
 }
@@ -118,7 +114,7 @@ void SfxBasicManagerHolder::setStorage( const Reference< XStorage >& _rxStorage 
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("sfx.appl");
     }
 #endif
 }
@@ -168,7 +164,7 @@ bool SfxBasicManagerHolder::LegacyPsswdBinaryLimitExceeded( std::vector< OUStrin
 }
 
 // Service for application library container
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_sfx2_ApplicationDialogLibraryContainer_get_implementation(
     css::uno::XComponentContext *,
     css::uno::Sequence<css::uno::Any> const &)
@@ -180,7 +176,7 @@ com_sun_star_comp_sfx2_ApplicationDialogLibraryContainer_get_implementation(
 }
 
 // Service for application library container
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_sfx2_ApplicationScriptLibraryContainer_get_implementation(
     css::uno::XComponentContext *,
     css::uno::Sequence<css::uno::Any> const &)

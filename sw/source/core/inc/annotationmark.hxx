@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_ANNOTATIONMARK_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_ANNOTATIONMARK_HXX
 
-#include <bookmrk.hxx>
+#include "bookmrk.hxx"
 #include <rtl/ustring.hxx>
 
 class SwFormatField;
@@ -34,9 +34,9 @@ namespace sw { namespace mark
             const SwPaM& rPaM,
             const OUString& rName );
 
-        virtual ~AnnotationMark();
+        virtual ~AnnotationMark() override;
 
-        virtual void InitDoc(SwDoc* const io_Doc) override;
+        virtual void InitDoc(SwDoc* const io_Doc, sw::mark::InsertMode eMode) override;
 
         const SwFormatField* GetAnnotationFormatField() const;
     };

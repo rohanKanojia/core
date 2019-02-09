@@ -17,31 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <set>
 
-#include "indexdialog.hxx"
-#include "dbu_dlg.hrc"
-#include "dbaccess_helpid.hrc"
-#include "indexfieldscontrol.hxx"
-#include "indexcollection.hxx"
-#include <vcl/layout.hxx>
-#include <vcl/settings.hxx>
+#include <core_resource.hxx>
+#include <indexdialog.hxx>
+#include <dbu_dlg.hxx>
+#include <strings.hrc>
+#include <bitmaps.hlst>
+#include <indexfieldscontrol.hxx>
+#include <indexcollection.hxx>
 #include <vcl/builderfactory.hxx>
+#include <vcl/settings.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 #include <com/sun/star/sdb/SQLContext.hpp>
-#include "UITools.hxx"
+#include <UITools.hxx>
 #include <svtools/imgdef.hxx>
-#include "svtools/treelistentry.hxx"
-#include "browserids.hxx"
+#include <vcl/treelistentry.hxx>
+#include <browserids.hxx>
 #include <connectivity/dbtools.hxx>
 #include <osl/diagnose.h>
-
-const char INDEX_NEW_CMD[] = ".index:createNew";
-const char INDEX_DROP_CMD[] = ".index:dropCurrent";
-const char INDEX_RENAME_CMD[] = ".index:renameCurrent";
-const char INDEX_SAVE_CMD[] = ".index:saveCurrent";
-const char INDEX_RESET_CMD[] = ".index:resetCurrent";
 
 namespace dbaui
 {
@@ -54,35 +51,34 @@ namespace dbaui
     using namespace ::dbtools;
 
     // helper
-    bool operator ==(const OIndexField& _rLHS, const OIndexField& _rRHS)
+    static bool operator ==(const OIndexField& _rLHS, const OIndexField& _rRHS)
     {
         return  (_rLHS.sFieldName == _rRHS.sFieldName)
             &&  (_rLHS.bSortAscending == _rRHS.bSortAscending);
     }
 
-    bool operator !=(const OIndexField& _rLHS, const OIndexField& _rRHS)
+    static bool operator !=(const OIndexField& _rLHS, const OIndexField& _rRHS)
     {
         return !(_rLHS == _rRHS);
     }
 
-    bool operator ==(const IndexFields& _rLHS, const IndexFields& _rRHS)
+    static bool operator ==(const IndexFields& _rLHS, const IndexFields& _rRHS)
     {
         if (_rLHS.size() != _rRHS.size())
             return false;
 
-        IndexFields::const_iterator aLeft = _rLHS.begin();
-        IndexFields::const_iterator aLeftEnd = _rLHS.end();
         IndexFields::const_iterator aRight = _rRHS.begin();
-        for (; aLeft != aLeftEnd; ++aLeft, ++aRight)
+        for (auto const& left : _rLHS)
         {
-            if (*aLeft != *aRight)
+            if (left != *aRight)
                 return false;
+            ++aRight;
         }
 
         return true;
     }
 
-    bool operator !=(const IndexFields& _rLHS, const IndexFields& _rRHS)
+    static bool operator !=(const IndexFields& _rLHS, const IndexFields& _rRHS)
     {
         return !(_rLHS == _rRHS);
     }
@@ -145,7 +141,7 @@ namespace dbaui
     void DbaIndexList::SelectNoHandlerCall( SvTreeListEntry* _pEntry )
     {
         disableSelectHandler();
-        Select(_pEntry, true);
+        Select(_pEntry );
         enableSelectHandler();
     }
 
@@ -165,21 +161,20 @@ namespace dbaui
     DbaIndexDialog::DbaIndexDialog( vcl::Window* _pParent, const Sequence< OUString >& _rFieldNames,
                                     const Reference< XNameAccess >& _rxIndexes,
                                     const Reference< XConnection >& _rxConnection,
-                                    const Reference< XComponentContext >& _rxContext,sal_Int32 _nMaxColumnsInIndex)
+                                    const Reference< XComponentContext >& _rxContext)
         :ModalDialog( _pParent, "IndexDesignDialog", "dbaccess/ui/indexdesigndialog.ui")
         ,m_xConnection(_rxConnection)
-        ,m_pIndexes(nullptr)
         ,m_pPreviousSelection(nullptr)
         ,m_bEditAgain(false)
         ,m_xContext(_rxContext)
     {
         get(m_pActions, "ACTIONS");
 
-        mnNewCmdId = m_pActions->GetItemId(INDEX_NEW_CMD);
-        mnDropCmdId = m_pActions->GetItemId(INDEX_DROP_CMD);
-        mnRenameCmdId = m_pActions->GetItemId(INDEX_RENAME_CMD);
-        mnSaveCmdId = m_pActions->GetItemId(INDEX_SAVE_CMD);
-        mnResetCmdId = m_pActions->GetItemId(INDEX_RESET_CMD);
+        mnNewCmdId = m_pActions->GetItemId(".index:createNew");
+        mnDropCmdId = m_pActions->GetItemId(".index:dropCurrent");
+        mnRenameCmdId = m_pActions->GetItemId(".index:renameCurrent");
+        mnSaveCmdId = m_pActions->GetItemId(".index:saveCurrent");
+        mnResetCmdId = m_pActions->GetItemId(".index:resetCurrent");
 
         maScNewCmdImg = m_pActions->GetItemImage(mnNewCmdId);
         maScDropCmdImg = m_pActions->GetItemImage(mnDropCmdId);
@@ -193,7 +188,7 @@ namespace dbaui
         maLcResetCmdImg = get<FixedImage>("image5")->GetImage();
 
         get(m_pIndexList, "INDEX_LIST");
-        Size aSize(LogicToPixel(Size(70, 97), MAP_APPFONT));
+        Size aSize(LogicToPixel(Size(70, 97), MapMode(MapUnit::MapAppFont)));
         m_pIndexList->set_width_request(aSize.Width());
         m_pIndexList->set_height_request(aSize.Height());
         get(m_pIndexDetails, "INDEX_DETAILS");
@@ -202,7 +197,7 @@ namespace dbaui
         get(m_pUnique, "UNIQUE");
         get(m_pFieldsLabel, "FIELDS_LABEL");
         get(m_pFields, "FIELDS");
-        aSize = LogicToPixel(Size(128, 61), MAP_APPFONT);
+        aSize = LogicToPixel(Size(128, 61), MapMode(MapUnit::MapAppFont));
         m_pFields->set_width_request(aSize.Width());
         m_pFields->set_height_request(aSize.Height());
         get(m_pClose, "close");
@@ -211,23 +206,23 @@ namespace dbaui
 
         m_pIndexList->SetSelectHdl(LINK(this, DbaIndexDialog, OnIndexSelected));
         m_pIndexList->SetEndEditHdl(LINK(this, DbaIndexDialog, OnEntryEdited));
-        m_pIndexList->SetSelectionMode(SINGLE_SELECTION);
+        m_pIndexList->SetSelectionMode(SelectionMode::Single);
         m_pIndexList->SetHighlightRange();
         m_pIndexList->setConnection(m_xConnection);
 
         m_pFields->SetSizePixel(Size(300, 100));
-        m_pFields->Init(_rFieldNames, _nMaxColumnsInIndex, ::dbtools::getBooleanDataSourceSetting( m_xConnection, "AddIndexAppendix" ));
+        m_pFields->Init(_rFieldNames, ::dbtools::getBooleanDataSourceSetting( m_xConnection, "AddIndexAppendix" ));
 
         setToolBox(m_pActions);
 
-        m_pIndexes = new OIndexCollection();
+        m_pIndexes.reset(new OIndexCollection());
         try
         {
             m_pIndexes->attach(_rxIndexes);
         }
         catch(SQLException& e)
         {
-            ::dbaui::showError(SQLExceptionInfo(e),_pParent,_rxContext);
+            ::dbtools::showError(SQLExceptionInfo(e),VCLUnoHelper::GetInterface(_pParent),_rxContext);
         }
         catch(Exception&)
         {
@@ -242,18 +237,16 @@ namespace dbaui
         m_pClose->SetClickHdl(LINK(this, DbaIndexDialog, OnCloseDialog));
 
         // if all of the indexes have an empty description, we're not interested in displaying it
-        Indexes::const_iterator aCheck;
-
-        for (   aCheck = m_pIndexes->begin();
-                aCheck != m_pIndexes->end();
-                ++aCheck
-            )
+        bool bFound = false;
+        for (auto const& check : *m_pIndexes)
         {
-            if (!aCheck->sDescription.isEmpty())
+            if (!check.sDescription.isEmpty())
+            {
+                bFound = true;
                 break;
+            }
         }
-
-        if (aCheck == m_pIndexes->end())
+        if (!bFound)
         {
             // hide the controls which are necessary for the description
             m_pDescription->Hide();
@@ -287,20 +280,20 @@ namespace dbaui
 
     void DbaIndexDialog::fillIndexList()
     {
-        Image aPKeyIcon(ModuleRes( IMG_PKEYICON ));
+        Image aPKeyIcon(StockImage::Yes, BMP_PKEYICON);
         // fill the list with the index names
         m_pIndexList->Clear();
-        Indexes::const_iterator aIndexLoop = m_pIndexes->begin();
-        Indexes::const_iterator aEnd = m_pIndexes->end();
-        for (; aIndexLoop != aEnd; ++aIndexLoop)
+        sal_Int32 nPos = 0;
+        for (auto const& indexLoop : *m_pIndexes)
         {
             SvTreeListEntry* pNewEntry = nullptr;
-            if (aIndexLoop->bPrimaryKey)
-                pNewEntry = m_pIndexList->InsertEntry(aIndexLoop->sName, aPKeyIcon, aPKeyIcon);
+            if (indexLoop.bPrimaryKey)
+                pNewEntry = m_pIndexList->InsertEntry(indexLoop.sName, aPKeyIcon, aPKeyIcon);
             else
-                pNewEntry = m_pIndexList->InsertEntry(aIndexLoop->sName);
+                pNewEntry = m_pIndexList->InsertEntry(indexLoop.sName);
 
-            pNewEntry->SetUserData(reinterpret_cast< void* >(sal_Int32(aIndexLoop - m_pIndexes->begin())));
+            pNewEntry->SetUserData(reinterpret_cast< void* >(nPos));
+            ++nPos;
         }
 
         OnIndexSelected(*m_pIndexList);
@@ -314,7 +307,7 @@ namespace dbaui
     void DbaIndexDialog::dispose()
     {
         setToolBox(nullptr);
-        delete m_pIndexes;
+        m_pIndexes.reset();
         m_pActions.clear();
         m_pIndexList.clear();
         m_pIndexDetails.clear();
@@ -327,7 +320,7 @@ namespace dbaui
         ModalDialog::dispose();
     }
 
-    bool DbaIndexDialog::implCommit(SvTreeListEntry* _pEntry)
+    bool DbaIndexDialog::implCommit(SvTreeListEntry const * _pEntry)
     {
         OSL_ENSURE(_pEntry, "DbaIndexDialog::implCommit: invalid entry!");
 
@@ -353,7 +346,7 @@ namespace dbaui
         updateToolbox();
 
         if (aExceptionInfo.isValid())
-            showError(aExceptionInfo, this, m_xContext);
+            showError(aExceptionInfo, VCLUnoHelper::GetInterface(this), m_xContext);
         else
         {
             m_pUnique->SaveValue();
@@ -371,13 +364,12 @@ namespace dbaui
 
         // get a new unique name for the new index
         OUString sNewIndexName;
-        const OUString sNewIndexNameBase(ModuleRes(STR_LOGICAL_INDEX_NAME));
+        const OUString sNewIndexNameBase(DBA_RES(STR_LOGICAL_INDEX_NAME));
         sal_Int32 i;
 
         for ( i = 1; i < 0x7FFFFFFF; ++i )
         {
-            sNewIndexName = sNewIndexNameBase;
-            sNewIndexName += OUString::number(i);
+            sNewIndexName = sNewIndexNameBase + OUString::number(i);
             if (m_pIndexes->end() == m_pIndexes->find(sNewIndexName))
                 break;
         }
@@ -396,7 +388,7 @@ namespace dbaui
         for (SvTreeListEntry* pAdjust = m_pIndexList->First(); pAdjust; pAdjust = m_pIndexList->Next(pAdjust))
         {
             Indexes::const_iterator aAfterInsertPos = m_pIndexes->find(m_pIndexList->GetEntryText(pAdjust));
-            OSL_ENSURE(aAfterInsertPos != m_pIndexes->end(), "DbaIndexDialog::OnNewIndex: problems with on of the entries!");
+            OSL_ENSURE(aAfterInsertPos != m_pIndexes->end(), "DbaIndexDialog::OnNewIndex: problems with one of the entries!");
             pAdjust->SetUserData(reinterpret_cast< void* >(sal_Int32(aAfterInsertPos - m_pIndexes->begin())));
         }
 
@@ -417,10 +409,12 @@ namespace dbaui
             // let the user confirm the drop
             if (_bConfirm)
             {
-                OUString sConfirm(ModuleRes(STR_CONFIRM_DROP_INDEX));
+                OUString sConfirm(DBA_RES(STR_CONFIRM_DROP_INDEX));
                 sConfirm = sConfirm.replaceFirst("$name$", m_pIndexList->GetEntryText(pSelected));
-                ScopedVclPtrInstance< MessageDialog > aConfirm(this, sConfirm, VCL_MESSAGE_QUESTION, VCL_BUTTONS_YES_NO);
-                if (RET_YES != aConfirm->Execute())
+                std::unique_ptr<weld::MessageDialog> xConfirm(Application::CreateMessageDialog(GetFrameWeld(),
+                                                              VclMessageType::Question, VclButtonsType::YesNo,
+                                                              sConfirm));
+                if (RET_YES != xConfirm->run())
                     return;
             }
 
@@ -432,7 +426,7 @@ namespace dbaui
         }
     }
 
-    bool DbaIndexDialog::implDropIndex(SvTreeListEntry* _pEntry, bool _bRemoveFromCollection)
+    bool DbaIndexDialog::implDropIndex(SvTreeListEntry const * _pEntry, bool _bRemoveFromCollection)
     {
         // do the drop
         Indexes::iterator aDropPos = m_pIndexes->begin() + reinterpret_cast<sal_IntPtr>(_pEntry->GetUserData());
@@ -452,7 +446,7 @@ namespace dbaui
         catch(SQLException& e) { aExceptionInfo = SQLExceptionInfo(e); }
 
         if (aExceptionInfo.isValid())
-            showError(aExceptionInfo, this, m_xContext);
+            showError(aExceptionInfo, VCLUnoHelper::GetInterface(this), m_xContext);
         else if (bSuccess && _bRemoveFromCollection)
         {
             SvTreeList* pModel = m_pIndexList->GetModel();
@@ -466,7 +460,7 @@ namespace dbaui
             for (SvTreeListEntry* pAdjust = m_pIndexList->First(); pAdjust; pAdjust = m_pIndexList->Next(pAdjust))
             {
                 Indexes::const_iterator aAfterDropPos = m_pIndexes->find(m_pIndexList->GetEntryText(pAdjust));
-                OSL_ENSURE(aAfterDropPos != m_pIndexes->end(), "DbaIndexDialog::OnDropIndex: problems with on of the remaining entries!");
+                OSL_ENSURE(aAfterDropPos != m_pIndexes->end(), "DbaIndexDialog::OnDropIndex: problems with one of the remaining entries!");
                 pAdjust->SetUserData(reinterpret_cast< void* >(sal_Int32(aAfterDropPos - m_pIndexes->begin())));
             }
 
@@ -533,7 +527,7 @@ namespace dbaui
         catch(SQLException& e) { aExceptionInfo = SQLExceptionInfo(e); }
 
         if (aExceptionInfo.isValid())
-            showError(aExceptionInfo, this, m_xContext);
+            showError(aExceptionInfo, VCLUnoHelper::GetInterface(this), m_xContext);
         else
             m_pIndexList->SetEntryText(pSelected, aResetPos->sName);
 
@@ -541,7 +535,7 @@ namespace dbaui
         updateToolbox();
     }
 
-    IMPL_LINK_NOARG_TYPED( DbaIndexDialog, OnIndexAction, ToolBox*, void )
+    IMPL_LINK_NOARG( DbaIndexDialog, OnIndexAction, ToolBox*, void )
     {
         sal_uInt16 nClicked = m_pActions->GetCurItemId();
         if (nClicked == mnNewCmdId)
@@ -556,7 +550,7 @@ namespace dbaui
             OnResetIndex();
     }
 
-    IMPL_LINK_NOARG_TYPED( DbaIndexDialog, OnCloseDialog, Button*, void )
+    IMPL_LINK_NOARG( DbaIndexDialog, OnCloseDialog, Button*, void )
     {
         if (m_pIndexList->IsEditingActive())
         {
@@ -581,9 +575,9 @@ namespace dbaui
 
             if (aSelected->isModified() || aSelected->isNew())
             {
-                ScopedVclPtrInstance<MessageDialog> aQuestion(this, "SaveIndexDialog",
-                                                              "dbaccess/ui/saveindexdialog.ui" );
-                nResponse = aQuestion->Execute();
+                std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(GetFrameWeld(), "dbaccess/ui/saveindexdialog.ui"));
+                std::unique_ptr<weld::MessageDialog> xQuery(xBuilder->weld_message_dialog("SaveIndexDialog"));
+                nResponse = xQuery->run();
             }
         }
 
@@ -602,14 +596,14 @@ namespace dbaui
         EndDialog(RET_OK);
     }
 
-    IMPL_LINK_TYPED( DbaIndexDialog, OnEditIndexAgain, void*, p, void )
+    IMPL_LINK( DbaIndexDialog, OnEditIndexAgain, void*, p, void )
     {
         SvTreeListEntry* _pEntry = static_cast<SvTreeListEntry*>(p);
         m_bEditAgain = false;
         m_pIndexList->EditEntry(_pEntry);
     }
 
-    IMPL_LINK_TYPED( DbaIndexDialog, OnEntryEdited, SvTreeListEntry*, _pEntry, bool )
+    IMPL_LINK( DbaIndexDialog, OnEntryEdited, SvTreeListEntry*, _pEntry, bool )
     {
         Indexes::iterator aPosition = m_pIndexes->begin() + reinterpret_cast<sal_IntPtr>(_pEntry->GetUserData());
 
@@ -621,10 +615,12 @@ namespace dbaui
         Indexes::const_iterator aSameName = m_pIndexes->find(sNewName);
         if ((aSameName != aPosition) && (m_pIndexes->end() != aSameName))
         {
-            OUString sError(ModuleRes(STR_INDEX_NAME_ALREADY_USED));
+            OUString sError(DBA_RES(STR_INDEX_NAME_ALREADY_USED));
             sError = sError.replaceFirst("$name$", sNewName);
-            ScopedVclPtrInstance< MessageDialog > aError(this, sError);
-            aError->Execute();
+            std::unique_ptr<weld::MessageDialog> xError(Application::CreateMessageDialog(GetFrameWeld(),
+                                                        VclMessageType::Warning, VclButtonsType::Ok,
+                                                        sError));
+            xError->run();
 
             updateToolbox();
             m_bEditAgain = true;
@@ -682,32 +678,33 @@ namespace dbaui
     bool DbaIndexDialog::implCheckPlausibility(const Indexes::const_iterator& _rPos)
     {
         // need at least one field
-        if (0 == _rPos->aFields.size())
+        if (_rPos->aFields.empty())
         {
-            ScopedVclPtrInstance< MessageDialog > aError(this, ModuleRes(STR_NEED_INDEX_FIELDS));
-            aError->Execute();
+            std::unique_ptr<weld::MessageDialog> xError(Application::CreateMessageDialog(GetFrameWeld(),
+                                                        VclMessageType::Warning, VclButtonsType::Ok,
+                                                        DBA_RES(STR_NEED_INDEX_FIELDS)));
+            xError->run();
             m_pFields->GrabFocus();
             return false;
         }
 
         // no double fields
         std::set< OUString > aExistentFields;
-        for (   IndexFields::const_iterator aFieldCheck = _rPos->aFields.begin();
-                aFieldCheck != _rPos->aFields.end();
-                ++aFieldCheck
-            )
+        for (auto const& fieldCheck : _rPos->aFields)
         {
-            if (aExistentFields.end() != aExistentFields.find(aFieldCheck->sFieldName))
+            if (aExistentFields.end() != aExistentFields.find(fieldCheck.sFieldName))
             {
                 // a column is specified twice ... won't work anyway, so prevent this here and now
-                OUString sMessage(ModuleRes(STR_INDEXDESIGN_DOUBLE_COLUMN_NAME));
-                sMessage = sMessage.replaceFirst("$name$", aFieldCheck->sFieldName);
-                ScopedVclPtrInstance< MessageDialog > aError(this, sMessage);
-                aError->Execute();
+                OUString sMessage(DBA_RES(STR_INDEXDESIGN_DOUBLE_COLUMN_NAME));
+                sMessage = sMessage.replaceFirst("$name$", fieldCheck.sFieldName);
+                std::unique_ptr<weld::MessageDialog> xError(Application::CreateMessageDialog(GetFrameWeld(),
+                                                            VclMessageType::Warning, VclButtonsType::Ok,
+                                                            sMessage));
+                xError->run();
                 m_pFields->GrabFocus();
                 return false;
             }
-            aExistentFields.insert(aFieldCheck->sFieldName);
+            aExistentFields.insert(fieldCheck.sFieldName);
         }
 
         return true;
@@ -730,11 +727,11 @@ namespace dbaui
         return true;
     }
 
-    IMPL_LINK_NOARG_TYPED( DbaIndexDialog, OnModifiedClick, Button*, void )
+    IMPL_LINK_NOARG( DbaIndexDialog, OnModifiedClick, Button*, void )
     {
         OnModified(*m_pFields);
     }
-    IMPL_LINK_NOARG_TYPED( DbaIndexDialog, OnModified, IndexFieldsControl&, void )
+    IMPL_LINK_NOARG( DbaIndexDialog, OnModified, IndexFieldsControl&, void )
     {
         OSL_ENSURE(m_pPreviousSelection, "DbaIndexDialog, OnModified: invalid call!");
         Indexes::iterator aPosition = m_pIndexes->begin() + reinterpret_cast<sal_IntPtr>(m_pPreviousSelection->GetUserData());
@@ -772,7 +769,7 @@ namespace dbaui
         }
     }
 
-    IMPL_LINK_NOARG_TYPED( DbaIndexDialog, OnIndexSelected, DbaIndexList&, void )
+    IMPL_LINK_NOARG( DbaIndexDialog, OnIndexSelected, DbaIndexList&, void )
     {
         m_pIndexList->EndSelection();
 

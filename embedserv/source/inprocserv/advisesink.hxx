@@ -20,7 +20,15 @@
 #ifndef INCLUDED_EMBEDSERV_SOURCE_INPROCSERV_ADVISESINK_HXX
 #define INCLUDED_EMBEDSERV_SOURCE_INPROCSERV_ADVISESINK_HXX
 
+#include <sal/config.h>
+
+#include <memory>
+
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
+#include <objidl.h>
 #include "smartpointer.hxx"
 
 namespace inprocserv {
@@ -33,7 +41,7 @@ protected:
     ComSmart< IAdviseSink > m_pListener;
     DWORD m_nListenerID;
 
-    FORMATETC* m_pFormatEtc;
+    std::unique_ptr<FORMATETC> m_pFormatEtc;
     DWORD m_nAspect;
 
     DWORD m_nRegID;
@@ -66,24 +74,24 @@ public:
     DWORD GetDataAdviseFlag() { return m_nDataRegFlag; }
     DWORD GetViewAdviseFlag() { return m_nViewRegFlag; }
 
-    FORMATETC* GetFormatEtc() { return m_pFormatEtc; }
+    FORMATETC* GetFormatEtc() { return m_pFormatEtc.get(); }
     DWORD GetAspect() { return m_nAspect; }
     ComSmart< IAdviseSink >& GetOrigAdvise() { return m_pListener; }
-    void DisconnectOrigAdvise() { m_pListener = NULL; }
+    void DisconnectOrigAdvise() { m_pListener = nullptr; }
 
     void SetClosed() { m_bClosed = TRUE; }
     void UnsetClosed() { m_bClosed = FALSE; }
     BOOL IsClosed() { return m_bClosed; }
 
-    STDMETHODIMP QueryInterface(REFIID, void**);
-    STDMETHODIMP_(ULONG) AddRef();
-    STDMETHODIMP_(ULONG) Release();
+    STDMETHODIMP QueryInterface(REFIID, void**) override;
+    STDMETHODIMP_(ULONG) AddRef() override;
+    STDMETHODIMP_(ULONG) Release() override;
 
-    STDMETHODIMP_(void)  OnDataChange(LPFORMATETC, LPSTGMEDIUM);
-    STDMETHODIMP_(void)  OnViewChange(DWORD, LONG);
-    STDMETHODIMP_(void)  OnRename(LPMONIKER);
-    STDMETHODIMP_(void)  OnSave();
-    STDMETHODIMP_(void)  OnClose();
+    STDMETHODIMP_(void)  OnDataChange(LPFORMATETC, LPSTGMEDIUM) override;
+    STDMETHODIMP_(void)  OnViewChange(DWORD, LONG) override;
+    STDMETHODIMP_(void)  OnRename(LPMONIKER) override;
+    STDMETHODIMP_(void)  OnSave() override;
+    STDMETHODIMP_(void)  OnClose() override;
 };
 
 }; // namespace advisesink

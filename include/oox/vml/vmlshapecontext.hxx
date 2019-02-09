@@ -20,7 +20,13 @@
 #ifndef INCLUDED_OOX_VML_VMLSHAPECONTEXT_HXX
 #define INCLUDED_OOX_VML_VMLSHAPECONTEXT_HXX
 
+#include <oox/core/contexthandler.hxx>
 #include <oox/core/contexthandler2.hxx>
+#include <oox/helper/helper.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+
+namespace oox { class AttributeList; }
 
 namespace oox {
 namespace vml {
@@ -43,7 +49,7 @@ class ShapeLayoutContext : public ::oox::core::ContextHandler2
 {
 public:
     explicit            ShapeLayoutContext(
-                            ::oox::core::ContextHandler2Helper& rParent,
+                            ::oox::core::ContextHandler2Helper const & rParent,
                             Drawing& rDrawing );
 
     virtual ::oox::core::ContextHandlerRef
@@ -58,7 +64,7 @@ class ClientDataContext : public ::oox::core::ContextHandler2
 {
 public:
     explicit            ClientDataContext(
-                            ::oox::core::ContextHandler2Helper& rParent,
+                            ::oox::core::ContextHandler2Helper const & rParent,
                             ClientData& rClientData,
                             const AttributeList& rAttribs );
 
@@ -78,13 +84,13 @@ class ShapeContextBase : public ::oox::core::ContextHandler2
 public:
     static ::oox::core::ContextHandlerRef
                         createShapeContext(
-                            ::oox::core::ContextHandler2Helper& rParent,
+                            ::oox::core::ContextHandler2Helper const & rParent,
                             ShapeContainer& rShapes,
                             sal_Int32 nElement,
                             const AttributeList& rAttribs );
 
 protected:
-    explicit            ShapeContextBase( ::oox::core::ContextHandler2Helper& rParent );
+    explicit            ShapeContextBase( ::oox::core::ContextHandler2Helper const & rParent );
 };
 
 
@@ -92,8 +98,8 @@ class ShapeTypeContext : public ShapeContextBase
 {
 public:
     explicit            ShapeTypeContext(
-                            ::oox::core::ContextHandler2Helper& rParent,
-                            ShapeType& rShapeType,
+                            ::oox::core::ContextHandler2Helper const & rParent,
+                            std::shared_ptr<ShapeType> const& pShapeType,
                             const AttributeList& rAttribs );
 
     virtual ::oox::core::ContextHandlerRef
@@ -107,6 +113,7 @@ private:
     OptValue< OUString > decodeFragmentPath( const AttributeList& rAttribs, sal_Int32 nToken ) const;
 
 private:
+    std::shared_ptr<ShapeType> m_pShapeType;
     ShapeTypeModel&     mrTypeModel;
 };
 
@@ -114,10 +121,8 @@ private:
 class ShapeContext : public ShapeTypeContext
 {
 public:
-    explicit            ShapeContext(
-                            ::oox::core::ContextHandler2Helper& rParent,
-                            ShapeBase& rShape,
-                            const AttributeList& rAttribs );
+    explicit ShapeContext(::oox::core::ContextHandler2Helper const& rParent,
+                          const std::shared_ptr<ShapeBase>& pShape, const AttributeList& rAttribs);
 
     virtual ::oox::core::ContextHandlerRef
                         onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs ) override;
@@ -147,10 +152,9 @@ private:
 class GroupShapeContext : public ShapeContext
 {
 public:
-    explicit            GroupShapeContext(
-                            ::oox::core::ContextHandler2Helper& rParent,
-                            GroupShape& rShape,
-                            const AttributeList& rAttribs );
+    explicit GroupShapeContext(::oox::core::ContextHandler2Helper const& rParent,
+                               const std::shared_ptr<GroupShape>& pShape,
+                               const AttributeList& rAttribs);
 
     virtual ::oox::core::ContextHandlerRef
                         onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs ) override;
@@ -163,13 +167,21 @@ private:
 class RectangleShapeContext : public ShapeContext
 {
 public:
-    explicit            RectangleShapeContext(
-                            ::oox::core::ContextHandler2Helper& rParent,
-                            const AttributeList& rAttribs,
-                            RectangleShape& rShape );
+    explicit RectangleShapeContext(::oox::core::ContextHandler2Helper const& rParent,
+                                   const AttributeList& rAttribs,
+                                   const std::shared_ptr<RectangleShape>& pShape);
 
     virtual ::oox::core::ContextHandlerRef
                         onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs ) override;
+};
+
+class ControlShapeContext : public ShapeContextBase
+{
+public:
+    explicit            ControlShapeContext(
+                            ::oox::core::ContextHandler2Helper const & rParent,
+                            ShapeContainer& rShapes,
+                            const AttributeList& rAttribs );
 };
 
 

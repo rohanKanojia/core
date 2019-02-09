@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<interface domain="cui">
+  <requires lib="gtk+" version="3.18"/>
   <requires lib="LibreOffice" version="1.0"/>
   <object class="GtkBox" id="HyperlinkInternetPage">
     <property name="visible">True</property>
@@ -39,8 +39,7 @@
                     <property name="column_spacing">12</property>
                     <child>
                       <object class="GtkRadioButton" id="linktyp_internet">
-                        <property name="label" translatable="yes">_Web</property>
-                        <property name="use_action_appearance">False</property>
+                        <property name="label" translatable="yes" context="hyperlinkinternetpage|linktyp_internet">_Web</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -56,8 +55,7 @@
                     </child>
                     <child>
                       <object class="GtkRadioButton" id="linktyp_ftp">
-                        <property name="label" translatable="yes">_FTP</property>
-                        <property name="use_action_appearance">False</property>
+                        <property name="label" translatable="yes" context="hyperlinkinternetpage|linktyp_ftp">_FTP</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -83,7 +81,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="halign">start</property>
-                    <property name="label" translatable="yes">_URL:</property>
+                    <property name="label" translatable="yes" context="hyperlinkinternetpage|target_label">_URL:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">target</property>
                     <property name="xalign">0</property>
@@ -98,7 +96,6 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="hexpand">True</property>
-                    <property name="invisible_char">•</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
@@ -110,7 +107,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="halign">start</property>
-                    <property name="label" translatable="yes">_Login name:</property>
+                    <property name="label" translatable="yes" context="hyperlinkinternetpage|login_label">_Login name:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">login</property>
                     <property name="xalign">0</property>
@@ -125,7 +122,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="halign">start</property>
-                    <property name="label" translatable="yes">_Password:</property>
+                    <property name="label" translatable="yes" context="hyperlinkinternetpage|password_label">_Password:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">password</property>
                     <property name="xalign">0</property>
@@ -140,7 +137,6 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="hexpand">True</property>
-                    <property name="invisible_char">•</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
@@ -152,7 +148,6 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="hexpand">True</property>
-                    <property name="invisible_char">•</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
@@ -161,8 +156,7 @@
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="anonymous">
-                    <property name="label" translatable="yes">Anonymous _user</property>
-                    <property name="use_action_appearance">False</property>
+                    <property name="label" translatable="yes" context="hyperlinkinternetpage|anonymous">Anonymous _user</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -189,7 +183,7 @@
           <object class="GtkLabel" id="label2">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Hyperlink Type</property>
+            <property name="label" translatable="yes" context="hyperlinkinternetpage|label2">Hyperlink Type</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -227,7 +221,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="halign">start</property>
-                    <property name="label" translatable="yes">F_rame:</property>
+                    <property name="label" translatable="yes" context="hyperlinkinternetpage|frame_label">F_rame:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">frame</property>
                     <property name="xalign">0</property>
@@ -242,7 +236,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="halign">start</property>
-                    <property name="label" translatable="yes">Te_xt:</property>
+                    <property name="label" translatable="yes" context="hyperlinkinternetpage|indication_label">Te_xt:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">indication</property>
                     <property name="xalign">0</property>
@@ -257,7 +251,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="halign">start</property>
-                    <property name="label" translatable="yes">N_ame:</property>
+                    <property name="label" translatable="yes" context="hyperlinkinternetpage|name_label">Na_me:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">name</property>
                     <property name="xalign">0</property>
@@ -271,7 +265,6 @@
                   <object class="GtkEntry" id="indication">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
-                    <property name="invisible_char">•</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
@@ -282,7 +275,6 @@
                   <object class="GtkEntry" id="name">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
-                    <property name="invisible_char">•</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
@@ -300,7 +292,7 @@
                       <object class="GtkLabel" id="form_label">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">F_orm:</property>
+                        <property name="label" translatable="yes" context="hyperlinkinternetpage|form_label">F_orm:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">form</property>
                         <property name="xalign">0</property>
@@ -323,11 +315,10 @@
                     </child>
                     <child>
                       <object class="GtkButton" id="script">
-                        <property name="use_action_appearance">False</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
-                        <property name="tooltip_text" translatable="yes">Events</property>
+                        <property name="tooltip_text" translatable="yes" context="hyperlinkinternetpage|script|tooltip_text">Events</property>
                       </object>
                       <packing>
                         <property name="left_attach">3</property>
@@ -365,7 +356,7 @@
           <object class="GtkLabel" id="label1">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Further Settings</property>
+            <property name="label" translatable="yes" context="hyperlinkinternetpage|label1">Further Settings</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>

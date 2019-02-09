@@ -9,45 +9,51 @@
  * This file incorporates work covered by the following license notice:
  */
 
-#include "PivotLayoutTreeListData.hxx"
-#include "PivotLayoutDialog.hxx"
+#include <memory>
+#include <PivotLayoutTreeListData.hxx>
+#include <PivotLayoutDialog.hxx>
 
 #include <vcl/builderfactory.hxx>
-#include <svtools/treelistentry.hxx>
-#include "pivot.hxx"
-#include "scabstdlg.hxx"
-
-using namespace std;
+#include <vcl/treelistentry.hxx>
+#include <pivot.hxx>
+#include <scabstdlg.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
 
 VCL_BUILDER_FACTORY_ARGS(ScPivotLayoutTreeListData,
-                         WB_BORDER | WB_TABSTOP | WB_CLIPCHILDREN |
-                         WB_FORCE_MAKEVISIBLE)
+                         WB_BORDER | WB_TABSTOP | WB_CLIPCHILDREN)
 
 namespace
 {
 
-OUString lclGetFunctionMaskName(const sal_uInt16 nFunctionMask)
+OUString lclGetFunctionMaskName(const PivotFunc nFunctionMask)
 {
+    const char* pStrId = nullptr;
     switch (nFunctionMask)
     {
-        case PIVOT_FUNC_SUM:       return OUString("Sum");
-        case PIVOT_FUNC_COUNT:     return OUString("Count");
-        case PIVOT_FUNC_AVERAGE:   return OUString("Mean");
-        case PIVOT_FUNC_MAX:       return OUString("Max");
-        case PIVOT_FUNC_MIN:       return OUString("Min");
-        case PIVOT_FUNC_PRODUCT:   return OUString("Product");
-        case PIVOT_FUNC_COUNT_NUM: return OUString("Count");
-        case PIVOT_FUNC_STD_DEV:   return OUString("StDev");
-        case PIVOT_FUNC_STD_DEVP:  return OUString("StDevP");
-        case PIVOT_FUNC_STD_VAR:   return OUString("Var");
-        case PIVOT_FUNC_STD_VARP:  return OUString("VarP");
+        case PivotFunc::Sum:        pStrId = STR_FUN_TEXT_SUM;      break;
+        case PivotFunc::Count:      pStrId = STR_FUN_TEXT_COUNT;    break;
+        case PivotFunc::Average:    pStrId = STR_FUN_TEXT_AVG;      break;
+        case PivotFunc::Median:     pStrId = STR_FUN_TEXT_MEDIAN;   break;
+        case PivotFunc::Max:        pStrId = STR_FUN_TEXT_MAX;      break;
+        case PivotFunc::Min:        pStrId = STR_FUN_TEXT_MIN;      break;
+        case PivotFunc::Product:    pStrId = STR_FUN_TEXT_PRODUCT;  break;
+        case PivotFunc::CountNum:   pStrId = STR_FUN_TEXT_COUNT;    break;
+        case PivotFunc::StdDev:     pStrId = STR_FUN_TEXT_STDDEV;   break;
+        case PivotFunc::StdDevP:    pStrId = STR_FUN_TEXT_STDDEV;   break;
+        case PivotFunc::StdVar:     pStrId = STR_FUN_TEXT_VAR;      break;
+        case PivotFunc::StdVarP:    pStrId = STR_FUN_TEXT_VAR;      break;
         default:
+            assert(false);
             break;
     }
-    return OUString();
+    if (pStrId)
+        return ScResId(pStrId);
+    else
+        return OUString();
 }
 
-OUString lclCreateDataItemName(const sal_uInt16 nFunctionMask, const OUString& rName, const sal_uInt8 nDuplicationCount)
+OUString lclCreateDataItemName(const PivotFunc nFunctionMask, const OUString& rName, const sal_uInt8 nDuplicationCount)
 {
     OUString aBuffer = lclGetFunctionMaskName(nFunctionMask) + " - " + rName;
     if(nDuplicationCount > 0)
@@ -61,7 +67,9 @@ OUString lclCreateDataItemName(const sal_uInt16 nFunctionMask, const OUString& r
 
 ScPivotLayoutTreeListData::ScPivotLayoutTreeListData(vcl::Window* pParent, WinBits nBits) :
     ScPivotLayoutTreeListBase(pParent, nBits, DATA_LIST)
-{}
+{
+    SetForceMakeVisible(true);
+}
 
 ScPivotLayoutTreeListData::~ScPivotLayoutTreeListData()
 {}
@@ -76,7 +84,7 @@ bool ScPivotLayoutTreeListData::DoubleClickHdl()
 
     ScAbstractDialogFactory* pFactory = ScAbstractDialogFactory::Create();
 
-    std::unique_ptr<AbstractScDPFunctionDlg> pDialog(
+    ScopedVclPtr<AbstractScDPFunctionDlg> pDialog(
         pFactory->CreateScDPFunctionDlg(this, mpParent->GetLabelDataVector(), rCurrentLabelData, rCurrentFunctionData));
 
     if (pDialog->Execute() == RET_OK)
@@ -106,11 +114,8 @@ void ScPivotLayoutTreeListData::FillDataField(ScPivotFieldVector& rDataFields)
     Clear();
     maDataItemValues.clear();
 
-    ScPivotFieldVector::iterator it;
-    for (it = rDataFields.begin(); it != rDataFields.end(); ++it)
+    for (ScPivotField& rField : rDataFields)
     {
-        ScPivotField& rField = *it;
-
         if (rField.nCol == PIVOT_DATA_FIELD)
             continue;
 
@@ -137,7 +142,7 @@ void ScPivotLayoutTreeListData::FillDataField(ScPivotFieldVector& rDataFields)
     }
 }
 
-void ScPivotLayoutTreeListData::PushDataFieldNames(vector<ScDPName>& rDataFieldNames)
+void ScPivotLayoutTreeListData::PushDataFieldNames(std::vector<ScDPName>& rDataFieldNames)
 {
     SvTreeListEntry* pLoopEntry;
     for (pLoopEntry = First(); pLoopEntry != nullptr; pLoopEntry = Next(pLoopEntry))
@@ -159,7 +164,7 @@ void ScPivotLayoutTreeListData::PushDataFieldNames(vector<ScDPName>& rDataFieldN
                             pEachItemValue->maFunctionData.mnDupCount);
         }
 
-        rDataFieldNames.push_back(ScDPName(rLabelData.maName, sLayoutName, rLabelData.mnDupCount));
+        rDataFieldNames.emplace_back(rLabelData.maName, sLayoutName, rLabelData.mnDupCount);
     }
 }
 
@@ -167,7 +172,7 @@ void ScPivotLayoutTreeListData::InsertEntryForSourceTarget(SvTreeListEntry* pSou
 {
     ScItemValue* pItemValue = static_cast<ScItemValue*>(pSource->GetUserData());
 
-    if(mpParent->IsDataElement(pItemValue->maFunctionData.mnCol))
+    if (mpParent->IsDataElement(pItemValue->maFunctionData.mnCol))
         return;
 
     if (HasEntry(pSource))
@@ -192,10 +197,10 @@ void ScPivotLayoutTreeListData::InsertEntryForItem(ScItemValue* pItemValue, sal_
 
     ScPivotFuncData& rFunctionData = pDataItemValue->maFunctionData;
 
-    if (rFunctionData.mnFuncMask == PIVOT_FUNC_NONE ||
-        rFunctionData.mnFuncMask == PIVOT_FUNC_AUTO)
+    if (rFunctionData.mnFuncMask == PivotFunc::NONE ||
+        rFunctionData.mnFuncMask == PivotFunc::Auto)
     {
-        rFunctionData.mnFuncMask = PIVOT_FUNC_SUM;
+        rFunctionData.mnFuncMask = PivotFunc::Sum;
     }
 
     AdjustDuplicateCount(pDataItemValue);

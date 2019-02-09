@@ -22,9 +22,8 @@
 
 #include <toolkit/controls/unocontrols.hxx>
 #include <toolkit/controls/unocontrolmodel.hxx>
-#include <toolkit/helper/servicenames.hxx>
 
-#include <com/sun/star/util/XNumberFormatter.hpp>
+namespace com { namespace sun { namespace star { namespace util { class XNumberFormatter; } } } }
 
 
 namespace toolkit
@@ -33,30 +32,8 @@ namespace toolkit
 
     // = UnoControlFormattedFieldModel
 
-    class UnoControlFormattedFieldModel : public UnoControlModel
+    class UnoControlFormattedFieldModel final : public UnoControlModel
     {
-    protected:
-        css::uno::Any      ImplGetDefaultValue( sal_uInt16 nPropId ) const override;
-        ::cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
-        css::uno::Any      m_aCachedFormat;
-        bool                            m_bRevokedAsClient;
-        bool                            m_bSettingValueAndText;
-        css::uno::Reference< css::util::XNumberFormatter >
-                                        m_xCachedFormatter;
-
-    protected:
-        sal_Bool SAL_CALL convertFastPropertyValue(
-                    css::uno::Any& rConvertedValue,
-                    css::uno::Any& rOldValue,
-                    sal_Int32 nPropId,
-                    const css::uno::Any& rValue
-                ) throw (css::lang::IllegalArgumentException, std::exception) override;
-
-        void SAL_CALL setFastPropertyValue_NoBroadcast(
-                    sal_Int32 nHandle,
-                    const css::uno::Any& rValue
-                ) throw (css::uno::Exception, std::exception) override;
-
     public:
         UnoControlFormattedFieldModel( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
         UnoControlFormattedFieldModel( const UnoControlFormattedFieldModel& rModel )
@@ -66,30 +43,28 @@ namespace toolkit
         {
         }
 
-        UnoControlModel*    Clone() const override { return new UnoControlFormattedFieldModel( *this ); }
+        rtl::Reference<UnoControlModel> Clone() const override { return new UnoControlFormattedFieldModel( *this ); }
 
         // css::io::XPersistObject
-        OUString SAL_CALL getServiceName() throw(css::uno::RuntimeException, std::exception) override;
+        OUString SAL_CALL getServiceName() override;
 
         // css::beans::XMultiPropertySet
-        css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) throw(css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) override;
 
 
         // css::lang::XServiceInfo
-        OUString SAL_CALL getImplementationName()
-            throw (css::uno::RuntimeException, std::exception) override;
+        OUString SAL_CALL getImplementationName() override;
 
-        css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-            throw (css::uno::RuntimeException, std::exception) override;
+        css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
 
-    protected:
-        virtual ~UnoControlFormattedFieldModel();
+    private:
+        virtual ~UnoControlFormattedFieldModel() override;
 
         // XComponent
-        void SAL_CALL dispose(  ) throw(css::uno::RuntimeException, std::exception) override;
+        void SAL_CALL dispose() override;
 
         // XPropertySet
-        void SAL_CALL setPropertyValues( const css::uno::Sequence< OUString >& PropertyNames, const css::uno::Sequence< css::uno::Any >& Values ) throw(css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+        void SAL_CALL setPropertyValues( const css::uno::Sequence< OUString >& PropertyNames, const css::uno::Sequence< css::uno::Any >& Values ) override;
 
         // UnoControlModel
         virtual void ImplNormalizePropertySequence(
@@ -98,10 +73,29 @@ namespace toolkit
                         css::uno::Any*     _pValues,       /// the values of the properties to set
                         sal_Int32*                      _pValidHandles  /// pointer to the valid handles, allowed to be adjusted
                     )   const override;
-    private:
         void    impl_updateTextFromValue_nothrow();
         void    impl_updateCachedFormatter_nothrow();
         void    impl_updateCachedFormatKey_nothrow();
+
+        css::uno::Any      ImplGetDefaultValue( sal_uInt16 nPropId ) const override;
+        ::cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
+        sal_Bool SAL_CALL convertFastPropertyValue(
+                    css::uno::Any& rConvertedValue,
+                    css::uno::Any& rOldValue,
+                    sal_Int32 nPropId,
+                    const css::uno::Any& rValue
+                ) override;
+
+        void SAL_CALL setFastPropertyValue_NoBroadcast(
+                    sal_Int32 nHandle,
+                    const css::uno::Any& rValue
+                ) override;
+
+        css::uno::Any      m_aCachedFormat;
+        bool               m_bRevokedAsClient;
+        bool               m_bSettingValueAndText;
+        css::uno::Reference< css::util::XNumberFormatter >
+                           m_xCachedFormatter;
     };
 
 
@@ -114,14 +108,12 @@ namespace toolkit
         OUString     GetComponentServiceName() override;
 
         // css::awt::XTextListener
-        void SAL_CALL textChanged( const css::awt::TextEvent& rEvent ) throw(css::uno::RuntimeException, std::exception) override;
+        void SAL_CALL textChanged( const css::awt::TextEvent& rEvent ) override;
 
         // css::lang::XServiceInfo
-        OUString SAL_CALL getImplementationName()
-            throw (css::uno::RuntimeException, std::exception) override;
+        OUString SAL_CALL getImplementationName() override;
 
-        css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-            throw (css::uno::RuntimeException, std::exception) override;
+        css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
     };
 
 

@@ -17,44 +17,42 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
-#include <vcl/msgbox.hxx>
+#include <scitems.hxx>
 #include <vcl/settings.hxx>
 #include <comphelper/lok.hxx>
 
-#include "gridwin.hxx"
-#include "tabvwsh.hxx"
-#include "docsh.hxx"
-#include "viewdata.hxx"
-#include "pivot.hxx"
-#include "uiitems.hxx"
-#include "scresid.hxx"
-#include "sc.hrc"
-#include "globstr.hrc"
-#include "pagedata.hxx"
-#include "dpobject.hxx"
-#include "dpsave.hxx"
-#include "dpoutput.hxx"
-#include "dpshttab.hxx"
-#include "dbdocfun.hxx"
-#include "checklistmenu.hxx"
-#include "dpcontrol.hxx"
-#include "checklistmenu.hrc"
-#include "strload.hxx"
-#include "userlist.hxx"
-#include "scabstdlg.hxx"
-#include "spellcheckcontext.hxx"
+#include <gridwin.hxx>
+#include <tabvwsh.hxx>
+#include <docsh.hxx>
+#include <viewdata.hxx>
+#include <pivot.hxx>
+#include <uiitems.hxx>
+#include <scresid.hxx>
+#include <sc.hrc>
+#include <globstr.hrc>
+#include <strings.hrc>
+#include <pagedata.hxx>
+#include <dpobject.hxx>
+#include <dpsave.hxx>
+#include <dpoutput.hxx>
+#include <dpshttab.hxx>
+#include <dbdocfun.hxx>
+#include <checklistmenu.hxx>
+#include <dpcontrol.hxx>
+#include <userlist.hxx>
+#include <scabstdlg.hxx>
+#include <spellcheckcontext.hxx>
 
 #include <com/sun/star/sheet/DataPilotFieldOrientation.hpp>
 
 #include <unordered_map>
+#include <memory>
 #include <vector>
 
 using namespace css;
 using namespace css::sheet;
 using css::sheet::DataPilotFieldOrientation;
 using std::vector;
-using std::unique_ptr;
 
 DataPilotFieldOrientation ScGridWindow::GetDPFieldOrientation( SCCOL nCol, SCROW nRow ) const
 {
@@ -64,7 +62,7 @@ DataPilotFieldOrientation ScGridWindow::GetDPFieldOrientation( SCCOL nCol, SCROW
     if (!pDPObj)
         return DataPilotFieldOrientation_HIDDEN;
 
-    sal_uInt16 nOrient = DataPilotFieldOrientation_HIDDEN;
+    DataPilotFieldOrientation nOrient = DataPilotFieldOrientation_HIDDEN;
 
     // Check for page field first.
     if (nCol > 0)
@@ -89,7 +87,7 @@ DataPilotFieldOrientation ScGridWindow::GetDPFieldOrientation( SCCOL nCol, SCROW
         bool bIsDataLayout = false;
         OUString aFieldName = pDPObj->GetDimName(nField, bIsDataLayout);
         if (!aFieldName.isEmpty() && !bIsDataLayout)
-            return static_cast<DataPilotFieldOrientation>(nOrient);
+            return nOrient;
     }
 
     return DataPilotFieldOrientation_HIDDEN;
@@ -116,7 +114,7 @@ bool ScGridWindow::DoAutoFilterButton( SCCOL nCol, SCROW nRow, const MouseEvent&
     aDiffPix -= aScrPos;
     bool bLayoutRTL = pDoc->IsLayoutRTL( nTab );
     if ( bLayoutRTL )
-        aDiffPix.X() = -aDiffPix.X();
+        aDiffPix.setX( -aDiffPix.X() );
 
     long nSizeX, nSizeY;
     pViewData->GetMergeSizePixel( nCol, nRow, nSizeX, nSizeY );
@@ -125,13 +123,13 @@ bool ScGridWindow::DoAutoFilterButton( SCCOL nCol, SCROW nRow, const MouseEvent&
     Size aScrSize(nSizeX-1, nSizeY-1);
 
     // Check if the mouse cursor is clicking on the popup arrow box.
-    mpFilterButton.reset(new ScDPFieldButton(this, &GetSettings().GetStyleSettings(), &pViewData->GetZoomX(), &pViewData->GetZoomY(), pDoc));
+    mpFilterButton.reset(new ScDPFieldButton(this, &GetSettings().GetStyleSettings(), &pViewData->GetZoomY(), pDoc));
     mpFilterButton->setBoundingBox(aScrPos, aScrSize, bLayoutRTL);
     mpFilterButton->setPopupLeft(bLayoutRTL);   // #i114944# AutoFilter button is left-aligned in RTL
     Point aPopupPos;
     Size aPopupSize;
     mpFilterButton->getPopupBoundingBox(aPopupPos, aPopupSize);
-    Rectangle aRect(aPopupPos, aPopupSize);
+    tools::Rectangle aRect(aPopupPos, aPopupSize);
     if (aRect.IsInside(rMEvt.GetPosPixel()))
     {
         if ( DoPageFieldSelection( nCol, nRow ) )
@@ -159,7 +157,7 @@ void ScGridWindow::DoPushPivotButton( SCCOL nCol, SCROW nRow, const MouseEvent& 
 
     if (pDPObj)
     {
-        sal_uInt16 nOrient = DataPilotFieldOrientation_HIDDEN;
+        DataPilotFieldOrientation nOrient = DataPilotFieldOrientation_HIDDEN;
         ScAddress aPos( nCol, nRow, nTab );
         ScAddress aDimPos = aPos;
         if (!bButton && bPopup && aDimPos.Col() > 0)
@@ -201,16 +199,14 @@ void ScGridWindow::DoPushPivotButton( SCCOL nCol, SCROW nRow, const MouseEvent& 
             }
 
             SfxItemSet aArgSet( pViewData->GetViewShell()->GetPool(),
-                                        SCITEM_QUERYDATA, SCITEM_QUERYDATA );
+                                        svl::Items<SCITEM_QUERYDATA, SCITEM_QUERYDATA>{} );
             aArgSet.Put( ScQueryItem( SCITEM_QUERYDATA, pViewData, &aQueryParam ) );
 
             ScAbstractDialogFactory* pFact = ScAbstractDialogFactory::Create();
-            OSL_ENSURE(pFact, "ScAbstractFactory create fail!");
 
-            const std::unique_ptr<AbstractScPivotFilterDlg> pDlg(
+            ScopedVclPtr<AbstractScPivotFilterDlg> pDlg(
                 pFact->CreateScPivotFilterDlg(
                     pViewData->GetViewShell()->GetDialogParent(), aArgSet, nSrcTab));
-            OSL_ENSURE(pDlg, "Dialog create fail!");
             if ( pDlg->Execute() == RET_OK )
             {
                 ScSheetSourceDesc aNewDesc(pDoc);
@@ -246,8 +242,8 @@ void ScGridWindow::DPTestMouse( const MouseEvent& rMEvt, bool bMove )
     bool bTimer = false;
     Point aPixel = rMEvt.GetPosPixel();
 
-    SCsCOL nDx = 0;
-    SCsROW nDy = 0;
+    SCCOL nDx = 0;
+    SCROW nDy = 0;
     if ( aPixel.X() < 0 )
         nDx = -1;
     if ( aPixel.Y() < 0 )
@@ -259,7 +255,7 @@ void ScGridWindow::DPTestMouse( const MouseEvent& rMEvt, bool bMove )
         nDy = 1;
     if ( nDx != 0 || nDy != 0 )
     {
-        UpdateDragRect( false, Rectangle() );
+        UpdateDragRect( false, tools::Rectangle() );
 
         if ( nDx  != 0)
             pViewData->GetView()->ScrollX( nDx, WhichH(eWhich) );
@@ -269,8 +265,8 @@ void ScGridWindow::DPTestMouse( const MouseEvent& rMEvt, bool bMove )
         bTimer = true;
     }
 
-    SCsCOL  nPosX;
-    SCsROW  nPosY;
+    SCCOL  nPosX;
+    SCROW  nPosY;
     pViewData->GetPosFromPixel( aPixel.X(), aPixel.Y(), eWhich, nPosX, nPosY );
     bool    bMouseLeft;
     bool    bMouseTop;
@@ -278,8 +274,8 @@ void ScGridWindow::DPTestMouse( const MouseEvent& rMEvt, bool bMove )
 
     ScAddress aPos( nPosX, nPosY, pViewData->GetTabNo() );
 
-    Rectangle aPosRect;
-    sal_uInt16 nOrient;
+    tools::Rectangle aPosRect;
+    DataPilotFieldOrientation nOrient;
     long nDimPos;
     bool bHasRange = pDragDPObj->GetHeaderDrag( aPos, bMouseLeft, bMouseTop, nDPField,
                                                 aPosRect, nOrient, nDimPos );
@@ -302,6 +298,7 @@ void ScGridWindow::DPTestMouse( const MouseEvent& rMEvt, bool bMove )
                 case DataPilotFieldOrientation_ROW:    ePointer = PointerStyle::PivotRow; break;
                 case DataPilotFieldOrientation_PAGE:
                 case DataPilotFieldOrientation_DATA:   ePointer = PointerStyle::PivotField;   break;
+                default: break;
             }
         SetPointer( ePointer );
     }
@@ -363,7 +360,7 @@ bool ScGridWindow::DPTestFieldPopupArrow(
     Point aPopupPos;
     Size aPopupSize;
     aBtn.getPopupBoundingBox(aPopupPos, aPopupSize);
-    Rectangle aRect(aPopupPos, aPopupSize);
+    tools::Rectangle aRect(aPopupPos, aPopupSize);
     if (aRect.IsInside(rMEvt.GetPosPixel()))
     {
         // Mouse cursor inside the popup arrow box.  Launch the field menu.
@@ -402,21 +399,27 @@ class PopupSortAction : public ScMenuFloatingWindow::Action
 public:
     enum SortType { ASCENDING, DESCENDING, CUSTOM };
 
-    explicit PopupSortAction(const ScAddress& rPos, SortType eType, sal_uInt16 nUserListIndex, ScTabViewShell* pViewShell) :
-        maPos(rPos), meType(eType), mnUserListIndex(nUserListIndex), mpViewShell(pViewShell) {}
+    explicit PopupSortAction(ScDPObject* pDPObject, long nDimIndex, SortType eType,
+                             sal_uInt16 nUserListIndex, ScTabViewShell* pViewShell)
+        : mpDPObject(pDPObject)
+        , mnDimIndex(nDimIndex)
+        , meType(eType)
+        , mnUserListIndex(nUserListIndex)
+        , mpViewShell(pViewShell)
+    {}
 
     virtual void execute() override
     {
         switch (meType)
         {
             case ASCENDING:
-                mpViewShell->DataPilotSort(maPos, true);
+                mpViewShell->DataPilotSort(mpDPObject, mnDimIndex, true);
             break;
             case DESCENDING:
-                mpViewShell->DataPilotSort(maPos, false);
+                mpViewShell->DataPilotSort(mpDPObject, mnDimIndex, false);
             break;
             case CUSTOM:
-                mpViewShell->DataPilotSort(maPos, true, &mnUserListIndex);
+                mpViewShell->DataPilotSort(mpDPObject, mnDimIndex, true, &mnUserListIndex);
             break;
             default:
                 ;
@@ -424,20 +427,30 @@ public:
     }
 
 private:
-    ScAddress       maPos;
-    SortType        meType;
+    ScDPObject* const     mpDPObject;
+    long const            mnDimIndex;
+    SortType const        meType;
     sal_uInt16      mnUserListIndex;
     ScTabViewShell* mpViewShell;
 };
 
 }
 
-void ScGridWindow::DPLaunchFieldPopupMenu(
-    const Point& rScrPos, const Size& rScrSize, const ScAddress& rPos, ScDPObject* pDPObj)
+void ScGridWindow::DPLaunchFieldPopupMenu(const Point& rScreenPosition, const Size& rScreenSize,
+                                          const ScAddress& rAddress, ScDPObject* pDPObject)
 {
-    unique_ptr<DPFieldPopupData> pDPData(new DPFieldPopupData);
-    sal_uInt16 nOrient;
-    pDPData->mnDim = pDPObj->GetHeaderDim(rPos, nOrient);
+    DataPilotFieldOrientation nOrient;
+    long nDimIndex = pDPObject->GetHeaderDim(rAddress, nOrient);
+
+    DPLaunchFieldPopupMenu(rScreenPosition, rScreenSize, nDimIndex, pDPObject);
+}
+
+void ScGridWindow::DPLaunchFieldPopupMenu(const Point& rScrPos, const Size& rScrSize,
+                                          long nDimIndex, ScDPObject* pDPObj)
+{
+    std::unique_ptr<DPFieldPopupData> pDPData(new DPFieldPopupData);
+    pDPData->mnDim = nDimIndex;
+    pDPObj->GetSource();
 
     bool bIsDataLayout;
     OUString aDimName = pDPObj->GetDimName(pDPData->mnDim, bIsDataLayout);
@@ -457,7 +470,7 @@ void ScGridWindow::DPLaunchFieldPopupMenu(
     mpDPFieldPopup.disposeAndClear();
     mpDPFieldPopup.reset(VclPtr<ScCheckListMenuWindow>::Create(this, pViewData->GetDocument()));
     mpDPFieldPopup->setName("DataPilot field member popup");
-    mpDPFieldPopup->setExtendedData(pDPData.release());
+    mpDPFieldPopup->setExtendedData(std::move(pDPData));
     mpDPFieldPopup->setOKAction(new DPFieldPopupOKAction(this));
     {
         // Populate field members.
@@ -469,7 +482,7 @@ void ScGridWindow::DPLaunchFieldPopupMenu(
             OUString aName = rMem.getDisplayName();
             if (aName.isEmpty())
                 // Use special string for an empty name.
-                mpDPFieldPopup->addMember(ScGlobal::GetRscString(STR_EMPTYDATA), rMem.mbVisible);
+                mpDPFieldPopup->addMember(ScResId(STR_EMPTYDATA), rMem.mbVisible);
             else
                 mpDPFieldPopup->addMember(rMem.getDisplayName(), rMem.mbVisible);
         }
@@ -494,27 +507,27 @@ void ScGridWindow::DPLaunchFieldPopupMenu(
         // Populate the menus.
         ScTabViewShell* pViewShell = pViewData->GetViewShell();
         mpDPFieldPopup->addMenuItem(
-            SC_STRLOAD(RID_POPUP_FILTER, STR_MENU_SORT_ASC),
-            new PopupSortAction(rPos, PopupSortAction::ASCENDING, 0, pViewShell));
+            ScResId(STR_MENU_SORT_ASC),
+            new PopupSortAction(pDPObj, nDimIndex, PopupSortAction::ASCENDING, 0, pViewShell));
         mpDPFieldPopup->addMenuItem(
-            SC_STRLOAD(RID_POPUP_FILTER, STR_MENU_SORT_DESC),
-            new PopupSortAction(rPos, PopupSortAction::DESCENDING, 0, pViewShell));
+            ScResId(STR_MENU_SORT_DESC),
+            new PopupSortAction(pDPObj, nDimIndex, PopupSortAction::DESCENDING, 0, pViewShell));
         ScMenuFloatingWindow* pSubMenu = mpDPFieldPopup->addSubMenuItem(
-            SC_STRLOAD(RID_POPUP_FILTER, STR_MENU_SORT_CUSTOM), !aUserSortNames.empty());
+            ScResId(STR_MENU_SORT_CUSTOM), !aUserSortNames.empty());
 
-        if (pSubMenu && !aUserSortNames.empty())
+        if (pSubMenu)
         {
             size_t n = aUserSortNames.size();
             for (size_t i = 0; i < n; ++i)
             {
                 pSubMenu->addMenuItem(
                     aUserSortNames[i],
-                    new PopupSortAction(rPos, PopupSortAction::CUSTOM, static_cast<sal_uInt16>(i), pViewShell));
+                    new PopupSortAction(pDPObj, nDimIndex, PopupSortAction::CUSTOM, sal_uInt16(i), pViewShell));
             }
         }
     }
 
-    Rectangle aCellRect(rScrPos, rScrSize);
+    tools::Rectangle aCellRect(rScrPos, rScrSize);
 
     mpDPFieldPopup->SetPopupModeEndHdl( LINK(this, ScGridWindow, PopupModeEndHdl) );
     ScCheckListMenuWindow::Config aConfig;
@@ -526,7 +539,7 @@ void ScGridWindow::DPLaunchFieldPopupMenu(
 
 void ScGridWindow::UpdateDPFromFieldPopupMenu()
 {
-    typedef std::unordered_map<OUString, OUString, OUStringHash> MemNameMapType;
+    typedef std::unordered_map<OUString, OUString> MemNameMapType;
 
     if (!mpDPFieldPopup)
         return;
@@ -547,37 +560,31 @@ void ScGridWindow::UpdateDPFromFieldPopupMenu()
     // Build a map of layout names to original names.
     const ScDPLabelData& rLabelData = pDPData->maLabels;
     MemNameMapType aMemNameMap;
-    for (vector<ScDPLabelData::Member>::const_iterator itr = rLabelData.maMembers.begin(), itrEnd = rLabelData.maMembers.end();
-           itr != itrEnd; ++itr)
-        aMemNameMap.insert(MemNameMapType::value_type(itr->maLayoutName, itr->maName));
+    for (const auto& rMember : rLabelData.maMembers)
+        aMemNameMap.emplace(rMember.maLayoutName, rMember.maName);
 
     // The raw result may contain a mixture of layout names and original names.
     ScCheckListMenuWindow::ResultType aRawResult;
     mpDPFieldPopup->getResult(aRawResult);
 
-    ScCheckListMenuWindow::ResultType aResult;
-    ScCheckListMenuWindow::ResultType::const_iterator itr = aRawResult.begin(), itrEnd = aRawResult.end();
-    for (; itr != itrEnd; ++itr)
+    std::unordered_map<OUString, bool> aResult;
+    for (const auto& rItem : aRawResult)
     {
-        MemNameMapType::const_iterator itrNameMap = aMemNameMap.find(itr->first);
+        MemNameMapType::const_iterator itrNameMap = aMemNameMap.find(rItem.aName);
         if (itrNameMap == aMemNameMap.end())
         {
             // This is an original member name.  Use it as-is.
-            OUString aName = itr->first;
-            if (aName.equals(ScGlobal::GetRscString(STR_EMPTYDATA)))
+            OUString aName = rItem.aName;
+            if (aName == ScResId(STR_EMPTYDATA))
                 // Translate the special empty name into an empty string.
                 aName.clear();
 
-            aResult.insert(
-                ScCheckListMenuWindow::ResultType::value_type(
-                    aName, itr->second));
+            aResult.emplace(aName, rItem.bValid);
         }
         else
         {
             // This is a layout name.  Get the original member name and use it.
-            aResult.insert(
-                ScCheckListMenuWindow::ResultType::value_type(
-                    itrNameMap->second, itr->second));
+            aResult.emplace(itrNameMap->second, rItem.bValid);
         }
     }
     pDim->UpdateMemberVisibility(aResult);
@@ -588,8 +595,6 @@ void ScGridWindow::UpdateDPFromFieldPopupMenu()
 
 bool ScGridWindow::UpdateVisibleRange()
 {
-    ScDocument& rDoc = pViewData->GetDocShell()->GetDocument();
-
     SCCOL nPosX = 0;
     SCROW nPosY = 0;
     SCCOL nXRight = MAXCOL;
@@ -599,6 +604,7 @@ bool ScGridWindow::UpdateVisibleRange()
     {
         // entire table in the tiled rendering case
         SCTAB nTab = pViewData->GetTabNo();
+        ScDocument const& rDoc = *pViewData->GetDocument();
         SCCOL nEndCol = 0;
         SCROW nEndRow = 0;
 
@@ -642,7 +648,7 @@ void ScGridWindow::DPMouseButtonUp( const MouseEvent& rMEvt )
     SetPointer( Pointer( PointerStyle::Arrow ) );
 }
 
-void ScGridWindow::UpdateDragRect( bool bShowRange, const Rectangle& rPosRect )
+void ScGridWindow::UpdateDragRect( bool bShowRange, const tools::Rectangle& rPosRect )
 {
     SCCOL nStartX = ( rPosRect.Left()   >= 0 ) ? static_cast<SCCOL>(rPosRect.Left())   : SCCOL_MAX;
     SCROW nStartY = ( rPosRect.Top()    >= 0 ) ? static_cast<SCROW>(rPosRect.Top())    : SCROW_MAX;
@@ -689,13 +695,13 @@ sal_uInt16 ScGridWindow::HitPageBreak( const Point& rMouse, ScRange* pSource,
 
         long nMouseX = rMouse.X();
         long nMouseY = rMouse.Y();
-        SCsCOL nPosX;
-        SCsROW nPosY;
+        SCCOL nPosX;
+        SCROW nPosY;
         pViewData->GetPosFromPixel( nMouseX, nMouseY, eWhich, nPosX, nPosY );
         Point aTL = pViewData->GetScrPos( nPosX, nPosY, eWhich );
         Point aBR = pViewData->GetScrPos( nPosX+1, nPosY+1, eWhich );
 
-        //  Horizontal more  tolerances as as for vertical, because there is more space
+        //  Horizontal more tolerances as for vertical, because there is more space
         if ( nMouseX <= aTL.X() + 4 )
         {
             bHori = true;
@@ -812,8 +818,8 @@ void ScGridWindow::PagebreakMove( const MouseEvent& rMEvt, bool bUp )
 
     bool bTimer = false;
     Point aPos = rMEvt.GetPosPixel();
-    SCsCOL nDx = 0;
-    SCsROW nDy = 0;
+    SCCOL nDx = 0;
+    SCROW nDy = 0;
     if ( aPos.X() < 0 ) nDx = -1;
     if ( aPos.Y() < 0 ) nDy = -1;
     Size aSize = GetOutputSizePixel();
@@ -860,8 +866,8 @@ void ScGridWindow::PagebreakMove( const MouseEvent& rMEvt, bool bUp )
     // from here new
 
     // Searching for a position between the cells (before nPosX / nPosY)
-    SCsCOL nPosX;
-    SCsROW nPosY;
+    SCCOL nPosX;
+    SCROW nPosY;
     pViewData->GetPosFromPixel( aPos.X(), aPos.Y(), eWhich, nPosX, nPosY );
     bool bLeft, bTop;
     pViewData->GetMouseQuadrant( aPos, eWhich, nPosX, nPosY, bLeft, bTop );
@@ -877,7 +883,7 @@ void ScGridWindow::PagebreakMove( const MouseEvent& rMEvt, bool bUp )
         if ( nPagebreakMouse == SC_PD_BREAK_H )
         {
             if ( nPosX > aPagebreakSource.aStart.Col() &&
-                 nPosX <= aPagebreakSource.aEnd.Col() + 1 )     // ans Ende ist auch erlaubt
+                 nPosX <= aPagebreakSource.aEnd.Col() + 1 )     // to the end is also allowed
             {
                 bToEnd = ( nPosX == aPagebreakSource.aEnd.Col() + 1 );
                 aDrawRange.aStart.SetCol( nPosX );
@@ -889,7 +895,7 @@ void ScGridWindow::PagebreakMove( const MouseEvent& rMEvt, bool bUp )
         else
         {
             if ( nPosY > aPagebreakSource.aStart.Row() &&
-                 nPosY <= aPagebreakSource.aEnd.Row() + 1 )     // ans Ende ist auch erlaubt
+                 nPosY <= aPagebreakSource.aEnd.Row() + 1 )     //  to the end is also allowed
             {
                 bToEnd = ( nPosY == aPagebreakSource.aEnd.Row() + 1 );
                 aDrawRange.aStart.SetRow( nPosY );
@@ -960,14 +966,14 @@ void ScGridWindow::PagebreakMove( const MouseEvent& rMEvt, bool bUp )
             {
                 if (bUndo)
                 {
-                    OUString aUndo = ScGlobal::GetRscString( STR_UNDO_DRAG_BREAK );
-                    pDocSh->GetUndoManager()->EnterListAction( aUndo, aUndo );
+                    OUString aUndo = ScResId( STR_UNDO_DRAG_BREAK );
+                    pDocSh->GetUndoManager()->EnterListAction( aUndo, aUndo, 0, pViewData->GetViewShell()->GetViewShellId() );
                 }
 
                 bool bGrow = !bHide && nNew > nPagebreakBreak;
                 if ( bColumn )
                 {
-                    if (rDoc.HasColBreak(static_cast<SCCOL>(nPagebreakBreak), nTab) & BREAK_MANUAL)
+                    if (rDoc.HasColBreak(static_cast<SCCOL>(nPagebreakBreak), nTab) & ScBreakType::Manual)
                     {
                         ScAddress aOldAddr( static_cast<SCCOL>(nPagebreakBreak), nPosY, nTab );
                         pViewFunc->DeletePageBreak( true, true, &aOldAddr, false );
@@ -980,7 +986,7 @@ void ScGridWindow::PagebreakMove( const MouseEvent& rMEvt, bool bUp )
                     if ( bGrow )
                     {
                         // change last break to hard, and change scaleing
-                        bool bManualBreak = (rDoc.HasColBreak(static_cast<SCCOL>(nPagebreakPrev), nTab) & BREAK_MANUAL);
+                        bool bManualBreak(rDoc.HasColBreak(static_cast<SCCOL>(nPagebreakPrev), nTab) & ScBreakType::Manual);
                         if ( static_cast<SCCOL>(nPagebreakPrev) > aPagebreakSource.aStart.Col() && !bManualBreak )
                         {
                             ScAddress aPrev( static_cast<SCCOL>(nPagebreakPrev), nPosY, nTab );
@@ -994,7 +1000,7 @@ void ScGridWindow::PagebreakMove( const MouseEvent& rMEvt, bool bUp )
                 }
                 else
                 {
-                    if (rDoc.HasRowBreak(nPagebreakBreak, nTab) & BREAK_MANUAL)
+                    if (rDoc.HasRowBreak(nPagebreakBreak, nTab) & ScBreakType::Manual)
                     {
                         ScAddress aOldAddr( nPosX, nPagebreakBreak, nTab );
                         pViewFunc->DeletePageBreak( false, true, &aOldAddr, false );
@@ -1007,7 +1013,7 @@ void ScGridWindow::PagebreakMove( const MouseEvent& rMEvt, bool bUp )
                     if ( bGrow )
                     {
                         // change last break to hard, and change scaleing
-                        bool bManualBreak = (rDoc.HasRowBreak(nPagebreakPrev, nTab) & BREAK_MANUAL);
+                        bool bManualBreak(rDoc.HasRowBreak(nPagebreakPrev, nTab) & ScBreakType::Manual);
                         if ( nPagebreakPrev > aPagebreakSource.aStart.Row() && !bManualBreak )
                         {
                             ScAddress aPrev( nPosX, nPagebreakPrev, nTab );

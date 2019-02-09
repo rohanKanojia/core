@@ -18,80 +18,62 @@
  */
 
 #include <tools/urlobj.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/weld.hxx>
 #include <unotools/pathoptions.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/module.hxx>
 #include <sfx2/filedlghelper.hxx>
-#include "com/sun/star/ui/dialogs/TemplateDescription.hpp"
+#include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 
-#include <cuires.hrc>
-#include "helpid.hrc"
+#include <strings.hrc>
 
-#include "svx/xattr.hxx"
+#include <svx/xattr.hxx>
 #include <svx/xpool.hxx>
 #include <svx/xtable.hxx>
 
-#include "svx/drawitem.hxx"
-#include "cuitabline.hxx"
-#include "dlgname.hxx"
-#include "defdlgname.hxx"
+#include <svx/drawitem.hxx>
+#include <cuitabline.hxx>
+#include <dlgname.hxx>
+#include <defdlgname.hxx>
 #include <svx/svxdlg.hxx>
 #include <dialmgr.hxx>
-#include "svx/dlgutil.hxx"
+#include <svx/dlgutil.hxx>
 #include <svx/dialmgr.hxx>
 #include <svx/dialogs.hrc>
+#include <svx/strings.hrc>
+#include <cuitabarea.hxx>
 
 #define XOUT_WIDTH    150
 
 using namespace com::sun::star;
 
 
-SvxLineDefTabPage::SvxLineDefTabPage
-(
-    vcl::Window* pParent,
-    const SfxItemSet& rInAttrs
-) :
-
-    SfxTabPage( pParent
-              , "LineStylePage"
-              , "cui/ui/linestyletabpage.ui"
-              , &rInAttrs ),
-    rOutAttrs       ( rInAttrs ),
-    bObjSelected    ( false ),
-
-    aXLStyle            ( drawing::LineStyle_DASH ),
-    aXWidth             ( XOUT_WIDTH ),
-    aXDash              ( OUString(), XDash( css::drawing::DashStyle_RECT, 3, 7, 2, 40, 15 ) ),
-    aXColor             ( OUString(), COL_BLACK ),
-    aXLineAttr          ( rInAttrs.GetPool() ),
-    rXLSet              ( aXLineAttr.GetItemSet() ),
-    pnDashListState(nullptr),
-    pPageType(nullptr),
-    nDlgType(0),
-    pPosDashLb(nullptr)
+SvxLineDefTabPage::SvxLineDefTabPage(TabPageParent pParent, const SfxItemSet& rInAttrs)
+    : SfxTabPage(pParent, "cui/ui/linestyletabpage.ui", "LineStylePage", &rInAttrs)
+    , rOutAttrs(rInAttrs)
+    , aXLineAttr(rInAttrs.GetPool())
+    , rXLSet(aXLineAttr.GetItemSet())
+    , pnDashListState(nullptr)
+    , pPageType(nullptr)
+    , nDlgType(0)
+    , pPosDashLb(nullptr)
+    , m_xLbLineStyles(new SvxLineLB(m_xBuilder->weld_combo_box("LB_LINESTYLES")))
+    , m_xLbType1(m_xBuilder->weld_combo_box("LB_TYPE_1"))
+    , m_xLbType2(m_xBuilder->weld_combo_box("LB_TYPE_2"))
+    , m_xNumFldNumber1(m_xBuilder->weld_spin_button("NUM_FLD_1"))
+    , m_xNumFldNumber2(m_xBuilder->weld_spin_button("NUM_FLD_2"))
+    , m_xMtrLength1(m_xBuilder->weld_metric_spin_button("MTR_FLD_LENGTH_1", FieldUnit::CM))
+    , m_xMtrLength2(m_xBuilder->weld_metric_spin_button("MTR_FLD_LENGTH_2", FieldUnit::CM))
+    , m_xMtrDistance(m_xBuilder->weld_metric_spin_button("MTR_FLD_DISTANCE", FieldUnit::CM))
+    , m_xCbxSynchronize(m_xBuilder->weld_check_button("CBX_SYNCHRONIZE"))
+    , m_xBtnAdd(m_xBuilder->weld_button("BTN_ADD"))
+    , m_xBtnModify(m_xBuilder->weld_button("BTN_MODIFY"))
+    , m_xBtnDelete(m_xBuilder->weld_button("BTN_DELETE"))
+    , m_xBtnLoad(m_xBuilder->weld_button("BTN_LOAD"))
+    , m_xBtnSave(m_xBuilder->weld_button("BTN_SAVE"))
+    , m_xCtlPreview(new weld::CustomWeld(*m_xBuilder, "CTL_PREVIEW", m_aCtlPreview))
 {
-
-   get(m_pLbLineStyles   ,"LB_LINESTYLES");
-   get(m_pLbType1        ,"LB_TYPE_1");
-   get(m_pLbType2        ,"LB_TYPE_2");
-   get(m_pNumFldNumber1  ,"NUM_FLD_1");
-   get(m_pNumFldNumber2  ,"NUM_FLD_2");
-   get(m_pMtrLength1     ,"MTR_FLD_LENGTH_1");
-   m_pMtrLength1->SetCustomUnitText("%");
-   get(m_pMtrLength2     ,"MTR_FLD_LENGTH_2");
-   m_pMtrLength2->SetCustomUnitText("%");
-   get(m_pMtrDistance    ,"MTR_FLD_DISTANCE");
-   m_pMtrDistance->SetCustomUnitText("%");
-   get(m_pCbxSynchronize ,"CBX_SYNCHRONIZE");
-   get(m_pBtnAdd         ,"BTN_ADD");
-   get(m_pBtnModify      ,"BTN_MODIFY");
-   get(m_pBtnDelete      ,"BTN_DELETE");
-   get(m_pBtnLoad        ,"BTN_LOAD");
-   get(m_pBtnSave        ,"BTN_SAVE");
-   get(m_pCtlPreview     ,"CTL_PREVIEW");
-
     // this page needs ExchangeSupport
     SetExchangeSupport();
 
@@ -100,54 +82,54 @@ SvxLineDefTabPage::SvxLineDefTabPage
 
     switch ( eFUnit )
     {
-        case FUNIT_M:
-        case FUNIT_KM:
-            eFUnit = FUNIT_MM;
+        case FieldUnit::M:
+        case FieldUnit::KM:
+            eFUnit = FieldUnit::MM;
             break;
         default: ; //prevent warning
     }
-    SetFieldUnit( *m_pMtrDistance, eFUnit );
-    SetFieldUnit( *m_pMtrLength1, eFUnit );
-    SetFieldUnit( *m_pMtrLength2, eFUnit );
+    SetFieldUnit(*m_xMtrDistance, eFUnit);
+    SetFieldUnit(*m_xMtrLength1, eFUnit);
+    SetFieldUnit(*m_xMtrLength2, eFUnit);
 
     // determine PoolUnit
     SfxItemPool* pPool = rOutAttrs.GetPool();
-    DBG_ASSERT( pPool, "Wo ist der Pool?" );
+    DBG_ASSERT( pPool, "Where is the pool?" );
     ePoolUnit = pPool->GetMetric( SID_ATTR_LINE_WIDTH );
 
-    rXLSet.Put( aXLStyle );
-    rXLSet.Put( aXWidth );
-    rXLSet.Put( aXDash );
-    rXLSet.Put( aXColor );
+    rXLSet.Put( XLineStyleItem(drawing::LineStyle_DASH) );
+    rXLSet.Put( XLineWidthItem(XOUT_WIDTH) );
+    rXLSet.Put( XLineDashItem( OUString(), XDash( css::drawing::DashStyle_RECT, 3, 7, 2, 40, 15 ) ) );
+    rXLSet.Put( XLineColorItem(OUString(), COL_BLACK) );
 
     // #i34740#
-    m_pCtlPreview->SetLineAttributes(aXLineAttr.GetItemSet());
+    m_aCtlPreview.SetLineAttributes(aXLineAttr.GetItemSet());
 
-    m_pBtnAdd->SetClickHdl( LINK( this, SvxLineDefTabPage, ClickAddHdl_Impl ) );
-    m_pBtnModify->SetClickHdl( LINK( this, SvxLineDefTabPage, ClickModifyHdl_Impl ) );
-    m_pBtnDelete->SetClickHdl( LINK( this, SvxLineDefTabPage, ClickDeleteHdl_Impl ) );
-    m_pBtnLoad->SetClickHdl( LINK( this, SvxLineDefTabPage, ClickLoadHdl_Impl ) );
-    m_pBtnSave->SetClickHdl( LINK( this, SvxLineDefTabPage, ClickSaveHdl_Impl ) );
+    m_xBtnAdd->connect_clicked(LINK(this, SvxLineDefTabPage, ClickAddHdl_Impl));
+    m_xBtnModify->connect_clicked(LINK(this, SvxLineDefTabPage, ClickModifyHdl_Impl));
+    m_xBtnDelete->connect_clicked(LINK(this, SvxLineDefTabPage, ClickDeleteHdl_Impl));
+    m_xBtnLoad->connect_clicked(LINK(this, SvxLineDefTabPage, ClickLoadHdl_Impl));
+    m_xBtnSave->connect_clicked(LINK(this, SvxLineDefTabPage, ClickSaveHdl_Impl));
 
-    m_pNumFldNumber1->SetModifyHdl( LINK( this, SvxLineDefTabPage, ChangeNumber1Hdl_Impl ) );
-    m_pNumFldNumber2->SetModifyHdl( LINK( this, SvxLineDefTabPage, ChangeNumber2Hdl_Impl ) );
-    m_pLbLineStyles->SetSelectHdl( LINK( this, SvxLineDefTabPage, SelectLinestyleListBoxHdl_Impl ) );
+    m_xNumFldNumber1->connect_value_changed(LINK(this, SvxLineDefTabPage, ChangeNumber1Hdl_Impl));
+    m_xNumFldNumber2->connect_value_changed(LINK(this, SvxLineDefTabPage, ChangeNumber2Hdl_Impl));
+    m_xLbLineStyles->connect_changed(LINK(this, SvxLineDefTabPage, SelectLinestyleListBoxHdl_Impl));
 
     // #i122042# switch off default adding of 'none' and 'solid' entries
     // for this ListBox; we want to select only editable/dashed styles
-    m_pLbLineStyles->setAddStandardFields(false);
+    m_xLbLineStyles->setAddStandardFields(false);
 
     // absolute (in mm) or relative (in %)
-    m_pCbxSynchronize->SetClickHdl(  LINK( this, SvxLineDefTabPage, ChangeMetricHdl_Impl ) );
+    m_xCbxSynchronize->connect_toggled(LINK(this, SvxLineDefTabPage, ChangeMetricHdl_Impl));
 
     // preview must be updated when there's something changed
-    Link<ListBox&, void> aLink = LINK( this, SvxLineDefTabPage, SelectTypeListBoxHdl_Impl );
-    m_pLbType1->SetSelectHdl( aLink );
-    m_pLbType2->SetSelectHdl( aLink );
-    Link<Edit&,void> aLink2 = LINK( this, SvxLineDefTabPage, ChangePreviewHdl_Impl );
-    m_pMtrLength1->SetModifyHdl( aLink2 );
-    m_pMtrLength2->SetModifyHdl( aLink2 );
-    m_pMtrDistance->SetModifyHdl( aLink2 );
+    Link<weld::ComboBox&, void> aLink = LINK(this, SvxLineDefTabPage, SelectTypeListBoxHdl_Impl);
+    m_xLbType1->connect_changed(aLink);
+    m_xLbType2->connect_changed(aLink);
+    Link<weld::MetricSpinButton&,void> aLink2 = LINK( this, SvxLineDefTabPage, ChangePreviewHdl_Impl );
+    m_xMtrLength1->connect_value_changed(aLink2);
+    m_xMtrLength2->connect_value_changed(aLink2);
+    m_xMtrDistance->connect_value_changed(aLink2);
 
     pDashList = nullptr;
 }
@@ -159,30 +141,16 @@ SvxLineDefTabPage::~SvxLineDefTabPage()
 
 void SvxLineDefTabPage::dispose()
 {
-    m_pLbLineStyles.clear();
-    m_pLbType1.clear();
-    m_pLbType2.clear();
-    m_pNumFldNumber1.clear();
-    m_pNumFldNumber2.clear();
-    m_pMtrLength1.clear();
-    m_pMtrLength2.clear();
-    m_pMtrDistance.clear();
-    m_pCbxSynchronize.clear();
-    m_pBtnAdd.clear();
-    m_pBtnModify.clear();
-    m_pBtnDelete.clear();
-    m_pBtnLoad.clear();
-    m_pBtnSave.clear();
-    m_pCtlPreview.clear();
+    m_xCtlPreview.reset();
+    m_xLbLineStyles.reset();
     SfxTabPage::dispose();
 }
 
 void SvxLineDefTabPage::Construct()
 {
     // Line style fill; do *not* add default fields here
-    m_pLbLineStyles->Fill( pDashList );
+    m_xLbLineStyles->Fill( pDashList );
 }
-
 
 void SvxLineDefTabPage::ActivatePage( const SfxItemSet& )
 {
@@ -191,77 +159,73 @@ void SvxLineDefTabPage::ActivatePage( const SfxItemSet& )
         // ActivatePage() is called before the dialog receives PageCreated() !!!
         if( pDashList.is() )
         {
-            if( *pPageType == 1 &&
-                *pPosDashLb != LISTBOX_ENTRY_NOTFOUND )
+            if (*pPageType == PageType::Gradient &&
+                *pPosDashLb != -1)
             {
-                m_pLbLineStyles->SelectEntryPos( *pPosDashLb );
+                m_xLbLineStyles->set_active(*pPosDashLb);
             }
             // so that a possibly existing line style is discarded
             SelectLinestyleHdl_Impl( nullptr );
 
             // determining (and possibly cutting) the name
             // and displaying it in the GroupBox
-//             OUString        aString( CUI_RES( RID_SVXSTR_TABLE ) );
+//             OUString        aString( CuiResId( RID_SVXSTR_TABLE ) );
 //             aString         += ": ";
             INetURLObject   aURL( pDashList->GetPath() );
 
             aURL.Append( pDashList->GetName() );
             DBG_ASSERT( aURL.GetProtocol() != INetProtocol::NotValid, "invalid URL" );
 
-            *pPageType = 0; // 2
+            *pPageType = PageType::Area; // 2
             *pPosDashLb = LISTBOX_ENTRY_NOTFOUND;
         }
     }
 }
 
 
-SfxTabPage::sfxpg SvxLineDefTabPage::DeactivatePage( SfxItemSet* _pSet )
+DeactivateRC SvxLineDefTabPage::DeactivatePage( SfxItemSet* _pSet )
 {
     CheckChanges_Impl();
 
     if( _pSet )
         FillItemSet( _pSet );
 
-    return LEAVE_PAGE;
+    return DeactivateRC::LeavePage;
 }
-
 
 void SvxLineDefTabPage::CheckChanges_Impl()
 {
     // is here used to NOT lose changes
     //css::drawing::DashStyle eXDS;
 
-    if( m_pNumFldNumber1->IsValueChangedFromSaved() ||
-        m_pMtrLength1->IsValueChangedFromSaved() ||
-        m_pLbType1->IsValueChangedFromSaved() ||
-        m_pNumFldNumber2->IsValueChangedFromSaved() ||
-        m_pMtrLength2->IsValueChangedFromSaved() ||
-        m_pLbType2->IsValueChangedFromSaved() ||
-        m_pMtrDistance->IsValueChangedFromSaved() )
+    if( m_xNumFldNumber1->get_value_changed_from_saved() ||
+        m_xMtrLength1->get_value_changed_from_saved() ||
+        m_xLbType1->get_value_changed_from_saved() ||
+        m_xNumFldNumber2->get_value_changed_from_saved() ||
+        m_xMtrLength2->get_value_changed_from_saved() ||
+        m_xLbType2->get_value_changed_from_saved() ||
+        m_xMtrDistance->get_value_changed_from_saved() )
     {
-        ResMgr& rMgr = CUI_MGR();
-        Image aWarningBoxImage = WarningBox::GetStandardImage();
-        ScopedVclPtrInstance<SvxMessDialog> aMessDlg( GetParentDialog(),
-                                                      SVX_RESSTR( RID_SVXSTR_LINESTYLE ),
-                                                      OUString( ResId( RID_SVXSTR_ASK_CHANGE_LINESTYLE, rMgr ) ),
-                                                      &aWarningBoxImage );
-        DBG_ASSERT(aMessDlg, "Dialog creation failed!");
-        aMessDlg->SetButtonText( MESS_BTN_1, OUString( ResId( RID_SVXSTR_CHANGE, rMgr ) ) );
-        aMessDlg->SetButtonText( MESS_BTN_2, OUString( ResId( RID_SVXSTR_ADD, rMgr ) ) );
+        std::unique_ptr<weld::MessageDialog> xMessDlg(Application::CreateMessageDialog(GetDialogFrameWeld(),
+                                                      VclMessageType::Warning, VclButtonsType::Cancel,
+                                                      CuiResId(RID_SVXSTR_ASK_CHANGE_LINESTYLE)));
+        xMessDlg->set_title(SvxResId(RID_SVXSTR_LINESTYLE));
+        xMessDlg->add_button(CuiResId(RID_SVXSTR_CHANGE), RET_BTN_1);
+        xMessDlg->add_button(CuiResId(RID_SVXSTR_ADD), RET_BTN_2);
 
-        short nRet = aMessDlg->Execute();
+        short nRet = xMessDlg->run();
 
         switch( nRet )
         {
             case RET_BTN_1:
             {
-                ClickModifyHdl_Impl( nullptr );
+                ClickModifyHdl_Impl(*m_xBtnModify);
             }
             break;
 
             case RET_BTN_2:
             {
-                ClickAddHdl_Impl( nullptr );
+                ClickAddHdl_Impl(*m_xBtnAdd);
             }
             break;
 
@@ -270,9 +234,8 @@ void SvxLineDefTabPage::CheckChanges_Impl()
         }
     }
 
-
-    sal_Int32 nPos = m_pLbLineStyles->GetSelectEntryPos();
-    if( nPos != LISTBOX_ENTRY_NOTFOUND )
+    int nPos = m_xLbLineStyles->get_active();
+    if (nPos != -1)
     {
         *pPosDashLb = nPos;
     }
@@ -283,11 +246,11 @@ bool SvxLineDefTabPage::FillItemSet( SfxItemSet* rAttrs )
 {
     if( nDlgType == 0 ) // line dialog
     {
-        if( *pPageType == 2 )
+        if( *pPageType == PageType::Hatch )
         {
             FillDash_Impl();
 
-            OUString aString( m_pLbLineStyles->GetSelectEntry() );
+            OUString aString(m_xLbLineStyles->get_active_text());
             rAttrs->Put( XLineStyleItem( drawing::LineStyle_DASH ) );
             rAttrs->Put( XLineDashItem( aString, aDash ) );
         }
@@ -300,25 +263,23 @@ void SvxLineDefTabPage::Reset( const SfxItemSet* rAttrs )
 {
     if( rAttrs->GetItemState( GetWhich( XATTR_LINESTYLE ) ) != SfxItemState::DONTCARE )
     {
-        drawing::LineStyle eXLS = (drawing::LineStyle) static_cast<const XLineStyleItem&>( rAttrs->Get( GetWhich( XATTR_LINESTYLE ) ) ).GetValue();
+        drawing::LineStyle eXLS = static_cast<const XLineStyleItem&>( rAttrs->Get( GetWhich( XATTR_LINESTYLE ) ) ).GetValue();
 
         switch( eXLS )
         {
             case drawing::LineStyle_NONE:
             case drawing::LineStyle_SOLID:
-                m_pLbLineStyles->SelectEntryPos( 0 );
+                m_xLbLineStyles->set_active(0);
                 break;
-
             case drawing::LineStyle_DASH:
             {
-                const XLineDashItem& rDashItem = static_cast<const XLineDashItem&>( rAttrs->Get( XATTR_LINEDASH ) );
+                const XLineDashItem& rDashItem = rAttrs->Get( XATTR_LINEDASH );
                 aDash = rDashItem.GetDashValue();
 
-                m_pLbLineStyles->SetNoSelection();
-                m_pLbLineStyles->SelectEntry( rDashItem.GetName() );
-            }
+                m_xLbLineStyles->set_active(-1);
+                m_xLbLineStyles->set_active_text(rDashItem.GetName());
                 break;
-
+            }
             default:
                 break;
         }
@@ -328,37 +289,34 @@ void SvxLineDefTabPage::Reset( const SfxItemSet* rAttrs )
     // determine button state
     if( pDashList->Count() )
     {
-        m_pBtnModify->Enable();
-        m_pBtnDelete->Enable();
-        m_pBtnSave->Enable();
+        m_xBtnModify->set_sensitive(true);
+        m_xBtnDelete->set_sensitive(true);
+        m_xBtnSave->set_sensitive(true);
     }
     else
     {
-        m_pBtnModify->Disable();
-        m_pBtnDelete->Disable();
-        m_pBtnSave->Disable();
+        m_xBtnModify->set_sensitive(false);
+        m_xBtnDelete->set_sensitive(false);
+        m_xBtnSave->set_sensitive(false);
     }
 }
 
-
-VclPtr<SfxTabPage> SvxLineDefTabPage::Create( vcl::Window* pWindow, const SfxItemSet* rOutAttrs )
+VclPtr<SfxTabPage> SvxLineDefTabPage::Create(TabPageParent pParent, const SfxItemSet* rOutAttrs )
 {
-    return VclPtr<SvxLineDefTabPage>::Create( pWindow, *rOutAttrs );
+    return VclPtr<SvxLineDefTabPage>::Create(pParent, *rOutAttrs);
 }
 
-
-IMPL_LINK_TYPED( SvxLineDefTabPage, SelectLinestyleListBoxHdl_Impl, ListBox&, rListBox, void )
+IMPL_LINK(SvxLineDefTabPage, SelectLinestyleListBoxHdl_Impl, weld::ComboBox&, rListBox, void)
 {
     SelectLinestyleHdl_Impl(&rListBox);
 }
 
-void SvxLineDefTabPage::SelectLinestyleHdl_Impl(ListBox* p)
+void SvxLineDefTabPage::SelectLinestyleHdl_Impl(const weld::ComboBox* p)
 {
     if(pDashList->Count())
     {
-        int nTmp = m_pLbLineStyles->GetSelectEntryPos();
-
-        if(LISTBOX_ENTRY_NOTFOUND == nTmp)
+        int nTmp = m_xLbLineStyles->get_active();
+        if (nTmp == -1)
         {
             OSL_ENSURE(false, "OOps, non-existent LineDash selected (!)");
             nTmp = 1;
@@ -371,171 +329,164 @@ void SvxLineDefTabPage::SelectLinestyleHdl_Impl(ListBox* p)
         rXLSet.Put( XLineDashItem( OUString(), aDash ) );
 
         // #i34740#
-        m_pCtlPreview->SetLineAttributes(aXLineAttr.GetItemSet());
-
-        m_pCtlPreview->Invalidate();
+        m_aCtlPreview.SetLineAttributes(aXLineAttr.GetItemSet());
+        m_aCtlPreview.Invalidate();
 
         // Is not set before, in order to take the new style
         // only if there was an entry selected in the ListBox.
         // If it was called via Reset(), then p is == NULL
         if( p )
-            *pPageType = 2;
+            *pPageType = PageType::Hatch;
     }
 }
 
-
-IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ChangePreviewHdl_Impl, Edit&, void)
+IMPL_LINK_NOARG(SvxLineDefTabPage, ChangePreviewHdl_Impl, weld::MetricSpinButton&, void)
 {
     FillDash_Impl();
-    m_pCtlPreview->Invalidate();
+    m_aCtlPreview.Invalidate();
 }
 
-IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ChangeNumber1Hdl_Impl, Edit&, void)
+IMPL_LINK_NOARG(SvxLineDefTabPage, ChangeNumber1Hdl_Impl, weld::SpinButton&, void)
 {
-    if( m_pNumFldNumber1->GetValue() == 0L )
+    if (m_xNumFldNumber1->get_value() == 0)
     {
-        m_pNumFldNumber2->SetMin( 1L );
-        m_pNumFldNumber2->SetFirst( 1L );
+        m_xNumFldNumber2->set_min(1);
     }
     else
     {
-        m_pNumFldNumber2->SetMin( 0L );
-        m_pNumFldNumber2->SetFirst( 0L );
+        m_xNumFldNumber2->set_min(0);
     }
 
-    ChangePreviewHdl_Impl( *m_pMtrLength1 );
+    ChangePreviewHdl_Impl(*m_xMtrLength1);
 }
 
-
-IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ChangeNumber2Hdl_Impl, Edit&, void)
+IMPL_LINK_NOARG(SvxLineDefTabPage, ChangeNumber2Hdl_Impl, weld::SpinButton&, void)
 {
-    if( m_pNumFldNumber2->GetValue() == 0L )
+    if (m_xNumFldNumber2->get_value() == 0)
     {
-        m_pNumFldNumber1->SetMin( 1L );
-        m_pNumFldNumber1->SetFirst( 1L );
+        m_xNumFldNumber1->set_min(1);
     }
     else
     {
-        m_pNumFldNumber1->SetMin( 0L );
-        m_pNumFldNumber1->SetFirst( 0L );
+        m_xNumFldNumber1->set_min(0);
     }
 
-    ChangePreviewHdl_Impl( *m_pMtrLength1 );
+    ChangePreviewHdl_Impl(*m_xMtrLength1);
 }
 
-
-IMPL_LINK_TYPED( SvxLineDefTabPage, ChangeMetricHdl_Impl, Button*, p, void )
+IMPL_LINK( SvxLineDefTabPage, ChangeMetricHdl_Impl, weld::ToggleButton&, r, void)
 {
-    if( !m_pCbxSynchronize->IsChecked() && m_pMtrLength1->GetUnit() != eFUnit )
+    ChangeMetricHdl_Impl(&r);
+}
+
+void SvxLineDefTabPage::ChangeMetricHdl_Impl(const weld::ToggleButton* p)
+{
+    if( !m_xCbxSynchronize->get_active() && m_xMtrLength1->get_unit() != eFUnit )
     {
         long nTmp1, nTmp2, nTmp3;
 
         // was changed with Control
         if( p )
         {
-            nTmp1 = GetCoreValue( *m_pMtrLength1, ePoolUnit ) * XOUT_WIDTH / 100;
-            nTmp2 = GetCoreValue( *m_pMtrLength2, ePoolUnit ) * XOUT_WIDTH / 100;
-            nTmp3 = GetCoreValue( *m_pMtrDistance, ePoolUnit ) * XOUT_WIDTH / 100;
+            nTmp1 = GetCoreValue( *m_xMtrLength1, ePoolUnit ) * XOUT_WIDTH / 100;
+            nTmp2 = GetCoreValue( *m_xMtrLength2, ePoolUnit ) * XOUT_WIDTH / 100;
+            nTmp3 = GetCoreValue( *m_xMtrDistance, ePoolUnit ) * XOUT_WIDTH / 100;
         }
         else
         {
-            nTmp1 = GetCoreValue( *m_pMtrLength1, ePoolUnit );
-            nTmp2 = GetCoreValue( *m_pMtrLength2, ePoolUnit );
-            nTmp3 = GetCoreValue( *m_pMtrDistance, ePoolUnit );
+            nTmp1 = GetCoreValue( *m_xMtrLength1, ePoolUnit );
+            nTmp2 = GetCoreValue( *m_xMtrLength2, ePoolUnit );
+            nTmp3 = GetCoreValue( *m_xMtrDistance, ePoolUnit );
         }
-        m_pMtrLength1->SetDecimalDigits( 2 );
-        m_pMtrLength2->SetDecimalDigits( 2 );
-        m_pMtrDistance->SetDecimalDigits( 2 );
+        m_xMtrLength1->set_digits(2);
+        m_xMtrLength2->set_digits(2);
+        m_xMtrDistance->set_digits(2);
 
         // adjust metric
-        m_pMtrLength1->SetUnit( eFUnit );
-        m_pMtrLength2->SetUnit( eFUnit );
-        m_pMtrDistance->SetUnit( eFUnit );
+        m_xMtrLength1->set_unit(eFUnit);
+        m_xMtrLength2->set_unit(eFUnit);
+        m_xMtrDistance->set_unit(eFUnit);
 
-        SetMetricValue( *m_pMtrLength1, nTmp1, ePoolUnit );
-        SetMetricValue( *m_pMtrLength2, nTmp2, ePoolUnit );
-        SetMetricValue( *m_pMtrDistance, nTmp3, ePoolUnit );
+        SetMetricValue( *m_xMtrLength1, nTmp1, ePoolUnit );
+        SetMetricValue( *m_xMtrLength2, nTmp2, ePoolUnit );
+        SetMetricValue( *m_xMtrDistance, nTmp3, ePoolUnit );
     }
-    else if( m_pCbxSynchronize->IsChecked() && m_pMtrLength1->GetUnit() != FUNIT_PERCENT )
+    else if( m_xCbxSynchronize->get_active() && m_xMtrLength1->get_unit() != FieldUnit::PERCENT )
     {
         long nTmp1, nTmp2, nTmp3;
 
         // was changed with Control
         if( p )
         {
-            nTmp1 = GetCoreValue( *m_pMtrLength1, ePoolUnit ) * 100 / XOUT_WIDTH;
-            nTmp2 = GetCoreValue( *m_pMtrLength2, ePoolUnit ) * 100 / XOUT_WIDTH;
-            nTmp3 = GetCoreValue( *m_pMtrDistance, ePoolUnit ) * 100 / XOUT_WIDTH;
+            nTmp1 = GetCoreValue( *m_xMtrLength1, ePoolUnit ) * 100 / XOUT_WIDTH;
+            nTmp2 = GetCoreValue( *m_xMtrLength2, ePoolUnit ) * 100 / XOUT_WIDTH;
+            nTmp3 = GetCoreValue( *m_xMtrDistance, ePoolUnit ) * 100 / XOUT_WIDTH;
         }
         else
         {
-            nTmp1 = GetCoreValue( *m_pMtrLength1, ePoolUnit );
-            nTmp2 = GetCoreValue( *m_pMtrLength2, ePoolUnit );
-            nTmp3 = GetCoreValue( *m_pMtrDistance, ePoolUnit );
+            nTmp1 = GetCoreValue( *m_xMtrLength1, ePoolUnit );
+            nTmp2 = GetCoreValue( *m_xMtrLength2, ePoolUnit );
+            nTmp3 = GetCoreValue( *m_xMtrDistance, ePoolUnit );
         }
 
-        m_pMtrLength1->SetDecimalDigits( 0 );
-        m_pMtrLength2->SetDecimalDigits( 0 );
-        m_pMtrDistance->SetDecimalDigits( 0 );
+        m_xMtrLength1->set_digits(0);
+        m_xMtrLength2->set_digits(0);
+        m_xMtrDistance->set_digits(0);
 
-        m_pMtrLength1->SetUnit( FUNIT_PERCENT );
-        m_pMtrLength2->SetUnit( FUNIT_PERCENT );
-        m_pMtrDistance->SetUnit( FUNIT_PERCENT );
+        m_xMtrLength1->set_unit(FieldUnit::PERCENT);
+        m_xMtrLength2->set_unit(FieldUnit::PERCENT);
+        m_xMtrDistance->set_unit(FieldUnit::PERCENT);
 
-        SetMetricValue( *m_pMtrLength1, nTmp1, ePoolUnit );
-        SetMetricValue( *m_pMtrLength2, nTmp2, ePoolUnit );
-        SetMetricValue( *m_pMtrDistance, nTmp3, ePoolUnit );
+        SetMetricValue( *m_xMtrLength1, nTmp1, ePoolUnit );
+        SetMetricValue( *m_xMtrLength2, nTmp2, ePoolUnit );
+        SetMetricValue( *m_xMtrDistance, nTmp3, ePoolUnit );
 
     }
     SelectTypeHdl_Impl( nullptr );
 }
 
-
-IMPL_LINK_TYPED( SvxLineDefTabPage, SelectTypeListBoxHdl_Impl, ListBox&, rListBox, void )
+IMPL_LINK( SvxLineDefTabPage, SelectTypeListBoxHdl_Impl, weld::ComboBox&, rListBox, void )
 {
     SelectTypeHdl_Impl(&rListBox);
 }
 
-void  SvxLineDefTabPage::SelectTypeHdl_Impl(ListBox* p)
+void  SvxLineDefTabPage::SelectTypeHdl_Impl(const weld::ComboBox* p)
 {
-    if ( p == m_pLbType1 || !p )
+    if (p == m_xLbType1.get() || !p)
     {
-        if ( m_pLbType1->GetSelectEntryPos() == 0 )
+        if (m_xLbType1->get_active() == 0)
         {
-            m_pMtrLength1->Disable();
-            m_pMtrLength1->SetText( "" );
+            m_xMtrLength1->set_sensitive(false);
+            m_xMtrLength1->set_text("");
         }
-        else if ( !m_pMtrLength1->IsEnabled() )
+        else if (!m_xMtrLength1->get_sensitive())
         {
-            m_pMtrLength1->Enable();
-            m_pMtrLength1->Reformat();
+            m_xMtrLength1->set_sensitive(true);
+            m_xMtrLength1->reformat();
         }
     }
 
-    if ( p == m_pLbType2 || !p )
+    if (p == m_xLbType2.get() || !p)
     {
-        if ( m_pLbType2->GetSelectEntryPos() == 0 )
+        if (m_xLbType2->get_active() == 0)
         {
-            m_pMtrLength2->Disable();
-            m_pMtrLength2->SetText( "" );
+            m_xMtrLength2->set_sensitive(false);
+            m_xMtrLength2->set_text("");
         }
-        else if ( !m_pMtrLength2->IsEnabled() )
+        else if (!m_xMtrLength2->get_sensitive())
         {
-            m_pMtrLength2->Enable();
-            m_pMtrLength2->Reformat();
+            m_xMtrLength2->set_sensitive(true);
+            m_xMtrLength2->reformat();
         }
     }
-    ChangePreviewHdl_Impl( *m_pMtrLength1 );
+    ChangePreviewHdl_Impl(*m_xMtrLength1);
 }
 
-
-IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickAddHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxLineDefTabPage, ClickAddHdl_Impl, weld::Button&, void)
 {
-    ResMgr& rMgr = CUI_MGR();
-    OUString aNewName( SVX_RES( RID_SVXSTR_LINESTYLE ) );
-    OUString aDesc( ResId( RID_SVXSTR_DESC_LINESTYLE, rMgr ) );
+    OUString aNewName(SvxResId(RID_SVXSTR_LINESTYLE));
+    OUString aDesc(CuiResId(RID_SVXSTR_DESC_LINESTYLE));
     OUString aName;
-    XDashEntry* pEntry;
 
     long nCount = pDashList->Count();
     long j = 1;
@@ -543,9 +494,7 @@ IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickAddHdl_Impl, Button*, void)
 
     while ( !bDifferent )
     {
-        aName = aNewName;
-        aName += " ";
-        aName += OUString::number( j++ );
+        aName = aNewName + " " + OUString::number( j++ );
         bDifferent = true;
 
         for ( long i = 0; i < nCount && bDifferent; i++ )
@@ -554,9 +503,7 @@ IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickAddHdl_Impl, Button*, void)
     }
 
     SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-    DBG_ASSERT(pFact, "Dialog creation failed!");
-    std::unique_ptr<AbstractSvxNameDialog> pDlg(pFact->CreateSvxNameDialog( GetParentDialog(), aName, aDesc ));
-    DBG_ASSERT(pDlg, "Dialog creation failed!");
+    ScopedVclPtr<AbstractSvxNameDialog> pDlg(pFact->CreateSvxNameDialog(GetDialogFrameWeld(), aName, aDesc));
     bool bLoop = true;
 
     while ( bLoop && pDlg->Execute() == RET_OK )
@@ -575,63 +522,54 @@ IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickAddHdl_Impl, Button*, void)
             bLoop = false;
             FillDash_Impl();
 
-            pEntry = new XDashEntry( aDash, aName );
-
             long nDashCount = pDashList->Count();
-            pDashList->Insert( pEntry, nDashCount );
-            const Bitmap aBitmap = pDashList->GetUiBitmap( nDashCount );
-            m_pLbLineStyles->Append( *pEntry, pDashList->GetUiBitmap( nDashCount ) );
+            pDashList->Insert( std::make_unique<XDashEntry>(aDash, aName), nDashCount );
+            m_xLbLineStyles->Append( *pDashList->GetDash(nDashCount), pDashList->GetUiBitmap(nDashCount) );
 
-            m_pLbLineStyles->SelectEntryPos( m_pLbLineStyles->GetEntryCount() - 1 );
+            m_xLbLineStyles->set_active(m_xLbLineStyles->get_count() - 1);
 
             *pnDashListState |= ChangeType::MODIFIED;
 
-            *pPageType = 2;
+            *pPageType = PageType::Hatch;
 
             // save values for changes recognition (-> method)
-            m_pNumFldNumber1->SaveValue();
-            m_pMtrLength1->SaveValue();
-            m_pLbType1->SaveValue();
-            m_pNumFldNumber2->SaveValue();
-            m_pMtrLength2->SaveValue();
-            m_pLbType2->SaveValue();
-            m_pMtrDistance->SaveValue();
+            m_xNumFldNumber1->save_value();
+            m_xMtrLength1->save_value();
+            m_xLbType1->save_value();
+            m_xNumFldNumber2->save_value();
+            m_xMtrLength2->save_value();
+            m_xLbType2->save_value();
+            m_xMtrDistance->save_value();
         }
         else
         {
-            ScopedVclPtrInstance<MessageDialog> aBox( GetParentDialog()
-                                                      ,"DuplicateNameDialog"
-                                                      ,"cui/ui/queryduplicatedialog.ui" );
-            aBox->Execute();
+            std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(GetDialogFrameWeld(), "cui/ui/queryduplicatedialog.ui"));
+            std::unique_ptr<weld::MessageDialog> xBox(xBuilder->weld_message_dialog("DuplicateNameDialog"));
+            xBox->run();
         }
     }
-    pDlg.reset();
+    pDlg.disposeAndClear();
 
     // determine button state
     if ( pDashList->Count() )
     {
-        m_pBtnModify->Enable();
-        m_pBtnDelete->Enable();
-        m_pBtnSave->Enable();
+        m_xBtnModify->set_sensitive(true);
+        m_xBtnDelete->set_sensitive(true);
+        m_xBtnSave->set_sensitive(true);
     }
 }
 
-
-IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickModifyHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxLineDefTabPage, ClickModifyHdl_Impl, weld::Button&, void)
 {
-    sal_Int32 nPos = m_pLbLineStyles->GetSelectEntryPos();
-
-    if( nPos != LISTBOX_ENTRY_NOTFOUND )
+    int nPos = m_xLbLineStyles->get_active();
+    if (nPos != -1)
     {
-        ResMgr& rMgr = CUI_MGR();
-        OUString aDesc( ResId( RID_SVXSTR_DESC_LINESTYLE, rMgr ) );
+        OUString aDesc(CuiResId(RID_SVXSTR_DESC_LINESTYLE));
         OUString aName( pDashList->GetDash( nPos )->GetName() );
         OUString aOldName = aName;
 
         SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-        DBG_ASSERT(pFact, "Dialog creation failed!");
-        std::unique_ptr<AbstractSvxNameDialog> pDlg(pFact->CreateSvxNameDialog( GetParentDialog(), aName, aDesc ));
-        DBG_ASSERT(pDlg, "Dialog creation failed!");
+        ScopedVclPtr<AbstractSvxNameDialog> pDlg(pFact->CreateSvxNameDialog(GetDialogFrameWeld(), aName, aDesc));
 
         long nCount = pDashList->Count();
         bool bLoop = true;
@@ -653,82 +591,75 @@ IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickModifyHdl_Impl, Button*, void)
                 bLoop = false;
                 FillDash_Impl();
 
-                XDashEntry* pEntry = new XDashEntry( aDash, aName );
+                pDashList->Replace(std::make_unique<XDashEntry>(aDash, aName), nPos);
+                m_xLbLineStyles->Modify(*pDashList->GetDash(nPos), nPos, pDashList->GetUiBitmap(nPos));
 
-                delete pDashList->Replace( pEntry, nPos );
-                m_pLbLineStyles->Modify( *pEntry, nPos, pDashList->GetUiBitmap( nPos ) );
-
-                m_pLbLineStyles->SelectEntryPos( nPos );
+                m_xLbLineStyles->set_active(nPos);
 
                 *pnDashListState |= ChangeType::MODIFIED;
 
-                *pPageType = 2;
+                *pPageType = PageType::Hatch;
 
                 // save values for changes recognition (-> method)
-                m_pNumFldNumber1->SaveValue();
-                m_pMtrLength1->SaveValue();
-                m_pLbType1->SaveValue();
-                m_pNumFldNumber2->SaveValue();
-                m_pMtrLength2->SaveValue();
-                m_pLbType2->SaveValue();
-                m_pMtrDistance->SaveValue();
+                m_xNumFldNumber1->save_value();
+                m_xMtrLength1->save_value();
+                m_xLbType1->save_value();
+                m_xNumFldNumber2->save_value();
+                m_xMtrLength2->save_value();
+                m_xLbType2->save_value();
+                m_xMtrDistance->save_value();
             }
             else
             {
-                ScopedVclPtrInstance<MessageDialog> aBox( GetParentDialog()
-                                                          ,"DuplicateNameDialog"
-                                                          ,"cui/ui/queryduplicatedialog.ui" );
-                aBox->Execute();
+                std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(GetDialogFrameWeld(), "cui/ui/queryduplicatedialog.ui"));
+                std::unique_ptr<weld::MessageDialog> xBox(xBuilder->weld_message_dialog("DuplicateNameDialog"));
+                xBox->run();
             }
         }
     }
 }
 
-
-IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickDeleteHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxLineDefTabPage, ClickDeleteHdl_Impl, weld::Button&, void)
 {
-    sal_Int32 nPos = m_pLbLineStyles->GetSelectEntryPos();
-
-    if ( nPos != LISTBOX_ENTRY_NOTFOUND )
+    int nPos = m_xLbLineStyles->get_active();
+    if (nPos != -1)
     {
-        ScopedVclPtrInstance<MessageDialog> aQueryBox( GetParentDialog()
-                                                       ,"AskDelLineStyleDialog"
-                                                       ,"cui/ui/querydeletelinestyledialog.ui" );
-
-        if ( aQueryBox->Execute() == RET_YES )
+        std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(GetDialogFrameWeld(), "cui/ui/querydeletelinestyledialog.ui"));
+        std::unique_ptr<weld::MessageDialog> xQueryBox(xBuilder->weld_message_dialog("AskDelLineStyleDialog"));
+        if (xQueryBox->run() == RET_YES)
         {
-            delete pDashList->Remove( nPos );
-            m_pLbLineStyles->RemoveEntry( nPos );
-            m_pLbLineStyles->SelectEntryPos( 0 );
+            pDashList->Remove(nPos);
+            m_xLbLineStyles->remove(nPos);
+            m_xLbLineStyles->set_active(0);
 
             SelectLinestyleHdl_Impl( nullptr );
-            *pPageType = 0; // style should not be taken
+            *pPageType = PageType::Area; // style should not be taken
 
             *pnDashListState |= ChangeType::MODIFIED;
 
-            ChangePreviewHdl_Impl( *m_pMtrLength1 );
+            ChangePreviewHdl_Impl( *m_xMtrLength1 );
         }
     }
 
     // determine button state
     if ( !pDashList->Count() )
     {
-        m_pBtnModify->Disable();
-        m_pBtnDelete->Disable();
-        m_pBtnSave->Disable();
+        m_xBtnModify->set_sensitive(false);
+        m_xBtnDelete->set_sensitive(false);
+        m_xBtnSave->set_sensitive(false);
     }
 }
 
-
-IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickLoadHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxLineDefTabPage, ClickLoadHdl_Impl, weld::Button&, void)
 {
     sal_uInt16 nReturn = RET_YES;
 
     if ( *pnDashListState & ChangeType::MODIFIED )
     {
-        nReturn = ScopedVclPtrInstance<MessageDialog>::Create( GetParentDialog()
-                                ,"AskSaveList"
-                                ,"cui/ui/querysavelistdialog.ui")->Execute();
+        std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(GetDialogFrameWeld(), "cui/ui/querysavelistdialog.ui"));
+        std::unique_ptr<weld::MessageDialog> xBox(xBuilder->weld_message_dialog("AskSaveList"));
+
+        nReturn = xBox->run();
 
         if ( nReturn == RET_YES )
             pDashList->Save();
@@ -736,7 +667,8 @@ IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickLoadHdl_Impl, Button*, void)
 
     if ( nReturn != RET_CANCEL )
     {
-        ::sfx2::FileDialogHelper aDlg( css::ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE, 0 );
+        ::sfx2::FileDialogHelper aDlg(css::ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE,
+                                      FileDialogFlags::NONE, GetDialogFrameWeld());
         OUString aStrFilterType( "*.sod" );
         aDlg.AddFilter( aStrFilterType, aStrFilterType );
         OUString aPalettePath(SvtPathOptions().GetPalettePath());
@@ -749,7 +681,7 @@ IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickLoadHdl_Impl, Button*, void)
         while (nIndex >= 0);
 
         INetURLObject aFile(aLastDir);
-        aDlg.SetDisplayDirectory( aFile.GetMainURL( INetURLObject::NO_DECODE ) );
+        aDlg.SetDisplayDirectory( aFile.GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
 
         if( aDlg.Execute() == ERRCODE_NONE )
         {
@@ -759,16 +691,16 @@ IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickLoadHdl_Impl, Button*, void)
             aPathURL.removeSegment();
             aPathURL.removeFinalSlash();
 
-            XDashListRef pDshLst = XPropertyList::AsDashList(XPropertyList::CreatePropertyList( XDASH_LIST, aPathURL.GetMainURL( INetURLObject::NO_DECODE ), "" ));
+            XDashListRef pDshLst = XPropertyList::AsDashList(XPropertyList::CreatePropertyList( XPropertyListType::Dash, aPathURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), "" ));
             pDshLst->SetName( aURL.getName() );
 
             if( pDshLst->Load() )
             {
                 pDashList = pDshLst;
-                static_cast<SvxLineTabDialog*>( GetParentDialog() )->SetNewDashList( pDashList );
+                static_cast<SvxLineTabDialog*>(GetDialogController())->SetNewDashList( pDashList );
 
-                m_pLbLineStyles->Clear();
-                m_pLbLineStyles->Fill( pDashList );
+                m_xLbLineStyles->clear();
+                m_xLbLineStyles->Fill( pDashList );
                 Reset( &rOutAttrs );
 
                 pDashList->SetName( aURL.getName() );
@@ -777,32 +709,32 @@ IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickLoadHdl_Impl, Button*, void)
                 *pnDashListState &= ~ChangeType::MODIFIED;
             }
             else
-                //aIStream.Close();
-                ScopedVclPtrInstance<MessageDialog>::Create( GetParentDialog()
-                              ,"NoLoadedFileDialog"
-                              ,"cui/ui/querynoloadedfiledialog.ui")->Execute();
+            {
+                std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(GetDialogFrameWeld(), "cui/ui/querynoloadedfiledialog.ui"));
+                std::unique_ptr<weld::MessageDialog> xBox(xBuilder->weld_message_dialog("NoLoadedFileDialog"));
+                xBox->run();
+            }
         }
     }
 
     // determine button state
     if ( pDashList->Count() )
     {
-        m_pBtnModify->Enable();
-        m_pBtnDelete->Enable();
-        m_pBtnSave->Enable();
+        m_xBtnModify->set_sensitive(true);
+        m_xBtnDelete->set_sensitive(true);
+        m_xBtnSave->set_sensitive(true);
     }
     else
     {
-        m_pBtnModify->Disable();
-        m_pBtnDelete->Disable();
-        m_pBtnSave->Disable();
+        m_xBtnModify->set_sensitive(false);
+        m_xBtnDelete->set_sensitive(false);
+        m_xBtnSave->set_sensitive(false);
     }
 }
 
-
-IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickSaveHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxLineDefTabPage, ClickSaveHdl_Impl, weld::Button&, void)
 {
-    ::sfx2::FileDialogHelper aDlg( css::ui::dialogs::TemplateDescription::FILESAVE_SIMPLE, 0 );
+    ::sfx2::FileDialogHelper aDlg(css::ui::dialogs::TemplateDescription::FILESAVE_SIMPLE, FileDialogFlags::NONE, GetDialogFrameWeld());
     OUString aStrFilterType( "*.sod" );
     aDlg.AddFilter( aStrFilterType, aStrFilterType );
 
@@ -826,7 +758,7 @@ IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickSaveHdl_Impl, Button*, void)
             aFile.SetExtension( "sod" );
     }
 
-    aDlg.SetDisplayDirectory( aFile.GetMainURL( INetURLObject::NO_DECODE ) );
+    aDlg.SetDisplayDirectory( aFile.GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
     if ( aDlg.Execute() == ERRCODE_NONE )
     {
         INetURLObject aURL( aDlg.GetPath() );
@@ -836,74 +768,70 @@ IMPL_LINK_NOARG_TYPED(SvxLineDefTabPage, ClickSaveHdl_Impl, Button*, void)
         aPathURL.removeFinalSlash();
 
         pDashList->SetName( aURL.getName() );
-        pDashList->SetPath( aPathURL.GetMainURL( INetURLObject::NO_DECODE ) );
+        pDashList->SetPath( aPathURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
 
         if( pDashList->Save() )
         {
-            *pnDashListState |= ChangeType::SAVED;
             *pnDashListState &= ~ChangeType::MODIFIED;
         }
         else
         {
-            ScopedVclPtrInstance<MessageDialog>::Create( GetParentDialog()
-                         ,"NoSaveFileDialog"
-                         ,"cui/ui/querynosavefiledialog.ui")->Execute();
+            std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(GetDialogFrameWeld(), "cui/ui/querynosavefiledialog.ui"));
+            std::unique_ptr<weld::MessageDialog> xBox(xBuilder->weld_message_dialog("NoSaveFileDialog"));
+            xBox->run();
         }
     }
 }
-
 
 void SvxLineDefTabPage::FillDash_Impl()
 {
     css::drawing::DashStyle eXDS;
 
-    if( m_pCbxSynchronize->IsChecked() )
+    if (m_xCbxSynchronize->get_active())
         eXDS = css::drawing::DashStyle_RECTRELATIVE;
     else
         eXDS = css::drawing::DashStyle_RECT;
 
     aDash.SetDashStyle( eXDS );
-    aDash.SetDots( (sal_uInt8) m_pNumFldNumber1->GetValue() );
-    aDash.SetDotLen( m_pLbType1->GetSelectEntryPos() == 0 ? 0 : GetCoreValue( *m_pMtrLength1, ePoolUnit ) );
-    aDash.SetDashes( (sal_uInt8) m_pNumFldNumber2->GetValue() );
-    aDash.SetDashLen( m_pLbType2->GetSelectEntryPos() == 0 ? 0 : GetCoreValue( *m_pMtrLength2, ePoolUnit ) );
-    aDash.SetDistance( GetCoreValue( *m_pMtrDistance, ePoolUnit ) );
+    aDash.SetDots( static_cast<sal_uInt8>(m_xNumFldNumber1->get_value()) );
+    aDash.SetDotLen( m_xLbType1->get_active() == 0 ? 0 : GetCoreValue( *m_xMtrLength1, ePoolUnit ) );
+    aDash.SetDashes( static_cast<sal_uInt8>(m_xNumFldNumber2->get_value()) );
+    aDash.SetDashLen( m_xLbType2->get_active() == 0 ? 0 : GetCoreValue( *m_xMtrLength2, ePoolUnit ) );
+    aDash.SetDistance( GetCoreValue( *m_xMtrDistance, ePoolUnit ) );
 
     rXLSet.Put( XLineDashItem( OUString(), aDash ) );
 
     // #i34740#
-    m_pCtlPreview->SetLineAttributes(aXLineAttr.GetItemSet());
+    m_aCtlPreview.SetLineAttributes(aXLineAttr.GetItemSet());
 }
-
 
 void SvxLineDefTabPage::FillDialog_Impl()
 {
     css::drawing::DashStyle eXDS = aDash.GetDashStyle(); // css::drawing::DashStyle_RECT, css::drawing::DashStyle_ROUND
     if( eXDS == css::drawing::DashStyle_RECTRELATIVE )
-        m_pCbxSynchronize->Check();
+        m_xCbxSynchronize->set_active(true);
     else
-        m_pCbxSynchronize->Check( false );
+        m_xCbxSynchronize->set_active(false);
 
-    m_pNumFldNumber1->SetValue( aDash.GetDots() );
-    SetMetricValue( *m_pMtrLength1, aDash.GetDotLen(), ePoolUnit );
-    m_pLbType1->SelectEntryPos( aDash.GetDotLen() == 0 ? 0 : 1 );
-    m_pNumFldNumber2->SetValue( aDash.GetDashes() );
-    SetMetricValue( *m_pMtrLength2, aDash.GetDashLen(), ePoolUnit );
-    m_pLbType2->SelectEntryPos( aDash.GetDashLen() == 0 ? 0 : 1 );
-    SetMetricValue( *m_pMtrDistance, aDash.GetDistance(), ePoolUnit );
+    m_xNumFldNumber1->set_value(aDash.GetDots());
+    SetMetricValue( *m_xMtrLength1, aDash.GetDotLen(), ePoolUnit );
+    m_xLbType1->set_active(aDash.GetDotLen() == 0 ? 0 : 1);
+    m_xNumFldNumber2->set_value(aDash.GetDashes());
+    SetMetricValue( *m_xMtrLength2, aDash.GetDashLen(), ePoolUnit );
+    m_xLbType2->set_active(aDash.GetDashLen() == 0 ? 0 : 1);
+    SetMetricValue( *m_xMtrDistance, aDash.GetDistance(), ePoolUnit );
 
-    ChangeMetricHdl_Impl( nullptr );
+    ChangeMetricHdl_Impl(nullptr);
 
     // save values for changes recognition (-> method)
-    m_pNumFldNumber1->SaveValue();
-    m_pMtrLength1->SaveValue();
-    m_pLbType1->SaveValue();
-    m_pNumFldNumber2->SaveValue();
-    m_pMtrLength2->SaveValue();
-    m_pLbType2->SaveValue();
-    m_pMtrDistance->SaveValue();
+    m_xNumFldNumber1->save_value();
+    m_xMtrLength1->save_value();
+    m_xLbType1->save_value();
+    m_xNumFldNumber2->save_value();
+    m_xMtrLength2->save_value();
+    m_xLbType2->save_value();
+    m_xMtrDistance->save_value();
 }
-
 
 void SvxLineDefTabPage::DataChanged( const DataChangedEvent& rDCEvt )
 {
@@ -911,10 +839,10 @@ void SvxLineDefTabPage::DataChanged( const DataChangedEvent& rDCEvt )
 
     if ( (rDCEvt.GetType() == DataChangedEventType::SETTINGS) && (rDCEvt.GetFlags() & AllSettingsFlags::STYLE) )
     {
-        sal_Int32 nOldSelect = m_pLbLineStyles->GetSelectEntryPos();
-        m_pLbLineStyles->Clear();
-        m_pLbLineStyles->Fill( pDashList );
-        m_pLbLineStyles->SelectEntryPos( nOldSelect );
+        auto nOldSelect = m_xLbLineStyles->get_active();
+        m_xLbLineStyles->clear();
+        m_xLbLineStyles->Fill(pDashList);
+        m_xLbLineStyles->set_active(nOldSelect);
     }
 }
 

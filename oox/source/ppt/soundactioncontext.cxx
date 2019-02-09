@@ -17,14 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/ppt/soundactioncontext.hxx"
+#include <oox/ppt/soundactioncontext.hxx>
 
-#include "comphelper/anytostring.hxx"
-#include "cppuhelper/exc_hlp.hxx"
+#include <cppuhelper/exc_hlp.hxx>
 
-#include "oox/helper/attributelist.hxx"
-#include "oox/helper/propertymap.hxx"
-#include "drawingml/embeddedwavaudiofile.hxx"
+#include <oox/helper/attributelist.hxx>
+#include <oox/helper/propertymap.hxx>
+#include <drawingml/embeddedwavaudiofile.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <avmedia/mediaitem.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star::xml::sax;
@@ -32,7 +36,7 @@ using namespace ::com::sun::star::uno;
 
 namespace oox { namespace ppt {
 
-    SoundActionContext::SoundActionContext( FragmentHandler2& rParent, PropertyMap & aProperties ) throw()
+    SoundActionContext::SoundActionContext( FragmentHandler2 const & rParent, PropertyMap & aProperties ) throw()
     : FragmentHandler2( rParent )
     , maSlideProperties( aProperties )
     , mbHasStartSound( false )
@@ -52,16 +56,20 @@ namespace oox { namespace ppt {
             if( mbHasStartSound )
             {
                 OUString url;
-                // TODO this is very wrong
                 if ( !msSndName.isEmpty() )
                 {
-                    // try the builtIn version
-                    url = msSndName;
+                    Reference<css::io::XInputStream>
+                        xInputStream = getFilter().openInputStream(msSndName);
+                    if (xInputStream.is())
+                    {
+                        ::avmedia::EmbedMedia(getFilter().getModel(), msSndName, url, xInputStream);
+                        xInputStream->closeInput();
+                    }
                 }
                 if ( !url.isEmpty() )
                 {
                     maSlideProperties.setProperty( PROP_Sound, url);
-                    maSlideProperties.setProperty( PROP_SoundOn, sal_True);
+                    maSlideProperties.setProperty( PROP_SoundOn, true);
                 }
             }
         }

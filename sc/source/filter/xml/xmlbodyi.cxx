@@ -17,11 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <cstdio>
-
-#include "document.hxx"
-#include "docuno.hxx"
-#include "sheetdata.hxx"
+#include <document.hxx>
+#include <docuno.hxx>
+#include <sheetdata.hxx>
 
 #include "xmlbodyi.hxx"
 #include "xmltabi.hxx"
@@ -30,26 +28,26 @@
 #include "xmlimprt.hxx"
 #include "xmldpimp.hxx"
 #include "xmlcvali.hxx"
-#include "xmlstyli.hxx"
 #include "xmllabri.hxx"
+#include "xmlmappingi.hxx"
 #include "XMLConsolidationContext.hxx"
 #include "XMLDDELinksContext.hxx"
 #include "XMLCalculationSettingsContext.hxx"
 #include "XMLTrackedChangesContext.hxx"
+#include "XMLChangeTrackingImportHelper.hxx"
 #include "XMLEmptyContext.hxx"
 #include "XMLDetectiveContext.hxx"
-#include "scerrors.hxx"
-#include "tabprotection.hxx"
+#include <scerrors.hxx>
+#include <tabprotection.hxx>
 #include "datastreamimport.hxx"
+#include <sax/fastattribs.hxx>
 
-#include <xmloff/xmltkmap.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
-#include <xmloff/nmspmap.hxx>
 
-#include <sax/tools/converter.hxx>
-#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
+#include <comphelper/base64.hxx>
 #include <sal/types.h>
+#include <sal/log.hxx>
 
 #include <memory>
 
@@ -57,10 +55,8 @@ using namespace com::sun::star;
 using namespace xmloff::token;
 
 ScXMLBodyContext::ScXMLBodyContext( ScXMLImport& rImport,
-                                              sal_uInt16 nPrfx,
-                                                   const OUString& rLName,
-                                              const uno::Reference<xml::sax::XAttributeList>& xAttrList ) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+                                    const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList ) :
+    ScXMLImportContext( rImport ),
     sPassword(),
     meHash1(PASSHASH_SHA1),
     meHash2(PASSHASH_UNSPECIFIED),
@@ -74,7 +70,7 @@ ScXMLBodyContext::ScXMLBodyContext( ScXMLImport& rImport,
         // ODF 1.1 and earlier => GRAM_PODF; ODF 1.2 and later => GRAM_ODFF;
         // no version => earlier than 1.2 => GRAM_PODF.
         formula::FormulaGrammar::Grammar eGrammar = formula::FormulaGrammar::GRAM_ODFF;
-        OUString aVer( rImport.GetODFVersion());
+        const OUString& aVer( rImport.GetODFVersion());
         sal_Int32 nLen = aVer.getLength();
         SAL_INFO("sc.filter", "ScXMLBodyContext ODFVersion: nLen: " << nLen << " str : " << aVer);
         if (!nLen)
@@ -91,30 +87,27 @@ ScXMLBodyContext::ScXMLBodyContext( ScXMLImport& rImport,
         pDoc->SetStorageGrammar( eGrammar);
     }
 
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
-    {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
+    if ( !rAttrList.is() )
+        return;
 
-        if (nPrefix == XML_NAMESPACE_TABLE)
+    for (auto &it : *rAttrList)
+    {
+        sal_Int32 nToken = it.getToken();
+        if( NAMESPACE_TOKEN( XML_NAMESPACE_TABLE ) == ( nToken & NMSP_MASK ) )
         {
-            if (IsXMLToken(aLocalName, XML_STRUCTURE_PROTECTED))
-                bProtected = IsXMLToken(sValue, XML_TRUE);
-            else if (IsXMLToken(aLocalName, XML_PROTECTION_KEY))
-                sPassword = sValue;
-            else if (IsXMLToken(aLocalName, XML_PROTECTION_KEY_DIGEST_ALGORITHM))
-                meHash1 = ScPassHashHelper::getHashTypeFromURI(sValue);
-            else if (IsXMLToken(aLocalName, XML_PROTECTION_KEY_DIGEST_ALGORITHM_2))
-                meHash2 = ScPassHashHelper::getHashTypeFromURI(sValue);
+            const sal_Int32 nLocalToken = nToken & TOKEN_MASK;
+            if( nLocalToken == XML_STRUCTURE_PROTECTED )
+                bProtected = IsXMLToken( it, XML_TRUE );
+            else if ( nLocalToken == XML_PROTECTION_KEY )
+                sPassword = it.toString();
+            else if (  nLocalToken == XML_PROTECTION_KEY_DIGEST_ALGORITHM )
+                meHash1 = ScPassHashHelper::getHashTypeFromURI( it.toString() );
+            else if (  nLocalToken == XML_PROTECTION_KEY_DIGEST_ALGORITHM_2 )
+                meHash2 = ScPassHashHelper::getHashTypeFromURI( it.toString() );
         }
-        else if(nPrefix == XML_NAMESPACE_LO_EXT)
+        else if ( nToken == XML_ELEMENT( LO_EXT, XML_PROTECTION_KEY_DIGEST_ALGORITHM_2 ) )
         {
-            if (IsXMLToken(aLocalName, XML_PROTECTION_KEY_DIGEST_ALGORITHM_2))
-                meHash2 = ScPassHashHelper::getHashTypeFromURI(sValue);
+            meHash2 = ScPassHashHelper::getHashTypeFromURI( it.toString() );
         }
     }
 }
@@ -123,9 +116,9 @@ ScXMLBodyContext::~ScXMLBodyContext()
 {
 }
 
-SvXMLImportContext *ScXMLBodyContext::CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+        ScXMLBodyContext::createFastChildContext( sal_Int32 nElement,
+        const uno::Reference< xml::sax::XFastAttributeList > & xAttrList )
 {
     ScSheetSaveData* pSheetData = ScModelObj::getImplementation(GetScImport().GetModel())->GetSheetSaveData();
     if ( pSheetData && pSheetData->HasStartPos() )
@@ -136,74 +129,73 @@ SvXMLImportContext *ScXMLBodyContext::CreateChildContext( sal_uInt16 nPrefix,
     }
 
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetBodyElemTokenMap();
-    switch( rTokenMap.Get( nPrefix, rLocalName ) )
+    switch( nElement )
     {
-    case XML_TOK_BODY_TRACKED_CHANGES :
+    case XML_ELEMENT( TABLE, XML_TRACKED_CHANGES ):
         pChangeTrackingImportHelper = GetScImport().GetChangeTrackingImportHelper();
         if (pChangeTrackingImportHelper)
-            pContext = new ScXMLTrackedChangesContext( GetScImport(), nPrefix, rLocalName, xAttrList, pChangeTrackingImportHelper);
+            pContext = new ScXMLTrackedChangesContext( GetScImport(), pAttribList, pChangeTrackingImportHelper);
         break;
-    case XML_TOK_BODY_CALCULATION_SETTINGS :
-        pContext = new ScXMLCalculationSettingsContext( GetScImport(), nPrefix, rLocalName, xAttrList );
+    case XML_ELEMENT( TABLE, XML_CALCULATION_SETTINGS ):
+        pContext = new ScXMLCalculationSettingsContext( GetScImport(), pAttribList );
         bHadCalculationSettings = true;
         break;
-    case XML_TOK_BODY_CONTENT_VALIDATIONS :
-        pContext = new ScXMLContentValidationsContext( GetScImport(), nPrefix, rLocalName, xAttrList );
+    case XML_ELEMENT( TABLE, XML_CONTENT_VALIDATIONS ):
+        pContext = new ScXMLContentValidationsContext( GetScImport() );
         break;
-    case XML_TOK_BODY_LABEL_RANGES:
-        pContext = new ScXMLLabelRangesContext( GetScImport(), nPrefix, rLocalName, xAttrList );
+    case XML_ELEMENT( TABLE, XML_LABEL_RANGES ):
+        pContext = new ScXMLLabelRangesContext( GetScImport() );
         break;
-    case XML_TOK_BODY_TABLE:
+    case XML_ELEMENT( TABLE, XML_TABLE ):
         if (GetScImport().GetTables().GetCurrentSheet() >= MAXTAB)
         {
             GetScImport().SetRangeOverflowType(SCWARN_IMPORT_SHEET_OVERFLOW);
-            pContext = new ScXMLEmptyContext(GetScImport(), nPrefix, rLocalName);
+            pContext = new ScXMLEmptyContext(GetScImport() );
         }
         else
         {
-            pContext = new ScXMLTableContext( GetScImport(),nPrefix, rLocalName,
-                                              xAttrList );
+            pContext = new ScXMLTableContext( GetScImport(), pAttribList );
         }
         break;
-    case XML_TOK_BODY_NAMED_EXPRESSIONS:
+    case XML_ELEMENT( TABLE, XML_NAMED_EXPRESSIONS ):
         pContext = new ScXMLNamedExpressionsContext (
-            GetScImport(), nPrefix, rLocalName, xAttrList,
+            GetScImport(),
             new ScXMLNamedExpressionsContext::GlobalInserter(GetScImport()) );
         break;
-    case XML_TOK_BODY_DATABASE_RANGES:
-        pContext = new ScXMLDatabaseRangesContext ( GetScImport(), nPrefix, rLocalName,
-                                                        xAttrList );
+    case XML_ELEMENT( TABLE, XML_DATABASE_RANGES ):
+        pContext = new ScXMLDatabaseRangesContext ( GetScImport() );
         break;
-    case XML_TOK_BODY_DATABASE_RANGE:
-        pContext = new ScXMLDatabaseRangeContext ( GetScImport(), nPrefix, rLocalName,
-                                                        xAttrList );
+    case XML_ELEMENT( CALC_EXT, XML_DATA_MAPPINGS ):
+        pContext = new ScXMLMappingsContext(GetScImport());
         break;
-    case XML_TOK_BODY_DATA_PILOT_TABLES:
-        pContext = new ScXMLDataPilotTablesContext ( GetScImport(), nPrefix, rLocalName,
-                                                        xAttrList );
+    case XML_ELEMENT( TABLE, XML_DATABASE_RANGE ):
+        pContext = new ScXMLDatabaseRangeContext ( GetScImport(),
+                                                        pAttribList );
         break;
-    case XML_TOK_BODY_CONSOLIDATION:
-        pContext = new ScXMLConsolidationContext ( GetScImport(), nPrefix, rLocalName,
-                                                        xAttrList );
+    case XML_ELEMENT( TABLE, XML_DATA_PILOT_TABLES ):
+        pContext = new ScXMLDataPilotTablesContext ( GetScImport() );
         break;
-    case XML_TOK_BODY_DDE_LINKS:
-        pContext = new ScXMLDDELinksContext ( GetScImport(), nPrefix, rLocalName,
-                                                        xAttrList );
+    case XML_ELEMENT( TABLE, XML_CONSOLIDATION ):
+        pContext = new ScXMLConsolidationContext ( GetScImport(), pAttribList );
         break;
-    case XML_TOK_BODY_DATA_STREAM_SOURCE:
-        pContext = new ScXMLDataStreamContext(GetScImport(), nPrefix, rLocalName, xAttrList);
+    case XML_ELEMENT( TABLE, XML_DDE_LINKS ):
+        pContext = new ScXMLDDELinksContext ( GetScImport() );
+        break;
+    case XML_ELEMENT( CALC_EXT, XML_DATA_STREAM_SOURCE ):
+        pContext = new ScXMLDataStreamContext(GetScImport(), pAttribList);
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLocalName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLBodyContext::Characters( const OUString& )
+void SAL_CALL ScXMLBodyContext::characters(const OUString &)
 {
     ScSheetSaveData* pSheetData = ScModelObj::getImplementation(GetScImport().GetModel())->GetSheetSaveData();
     if ( pSheetData && pSheetData->HasStartPos() )
@@ -215,7 +207,7 @@ void ScXMLBodyContext::Characters( const OUString& )
     // otherwise ignore
 }
 
-void ScXMLBodyContext::EndElement()
+void SAL_CALL ScXMLBodyContext::endFastElement(sal_Int32 nElement)
 {
     ScSheetSaveData* pSheetData = ScModelObj::getImplementation(GetScImport().GetModel())->GetSheetSaveData();
     if ( pSheetData && pSheetData->HasStartPos() )
@@ -236,8 +228,8 @@ void ScXMLBodyContext::EndElement()
     if (!bHadCalculationSettings)
     {
         // #111055#; set calculation settings defaults if there is no calculation settings element
-        ScXMLCalculationSettingsContext aContext( GetScImport(), XML_NAMESPACE_TABLE, GetXMLToken(XML_CALCULATION_SETTINGS), nullptr );
-        aContext.EndElement();
+        rtl::Reference<ScXMLCalculationSettingsContext> pContext( new ScXMLCalculationSettingsContext(GetScImport(), nullptr) );
+        pContext->endFastElement( nElement );
     }
 
     ScXMLImport::MutexGuard aGuard(GetScImport());
@@ -270,7 +262,7 @@ void ScXMLBodyContext::EndElement()
             uno::Sequence<sal_Int8> aPass;
             if (!sPassword.isEmpty())
             {
-                ::sax::Converter::decodeBase64(aPass, sPassword);
+                ::comphelper::Base64::decode(aPass, sPassword);
                 pProtection->setPasswordHash(aPass, meHash1, meHash2);
             }
 

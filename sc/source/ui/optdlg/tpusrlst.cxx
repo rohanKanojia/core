@@ -20,23 +20,24 @@
 #undef SC_DLLIMPLEMENTATION
 
 #include <comphelper/string.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 
-#include "global.hxx"
-#include "document.hxx"
-#include "tabvwsh.hxx"
-#include "viewdata.hxx"
-#include "uiitems.hxx"
-#include "userlist.hxx"
-#include "rangeutl.hxx"
-#include "crdlg.hxx"
-#include "scresid.hxx"
-#include "sc.hrc"
-#include "globstr.hrc"
-#include "tpusrlst.hxx"
+#include <global.hxx>
+#include <document.hxx>
+#include <tabvwsh.hxx>
+#include <viewdata.hxx>
+#include <uiitems.hxx>
+#include <userlist.hxx>
+#include <rangeutl.hxx>
+#include <crdlg.hxx>
+#include <sc.hrc>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <tpusrlst.hxx>
+#include <scui_def.hxx>
 
-#define CR  (sal_Unicode)13
-#define LF  (sal_Unicode)10
+#define CR  u'\x000D'
+#define LF  u'\x000A'
 
 static const sal_Unicode cDelimiter = ',';
 
@@ -48,12 +49,11 @@ ScTpUserLists::ScTpUserLists( vcl::Window*               pParent,
     :   SfxTabPage      ( pParent,
                           "OptSortLists", "modules/scalc/ui/optsortlists.ui",
                           &rCoreAttrs ),
-        aStrQueryRemove ( ScGlobal::GetRscString( STR_QUERYREMOVE ) ),
-        aStrCopyList    ( ScGlobal::GetRscString( STR_COPYLIST ) ),
-        aStrCopyFrom    ( ScGlobal::GetRscString( STR_COPYFROM ) ),
-        aStrCopyErr     ( ScGlobal::GetRscString( STR_COPYERR ) ),
+        aStrQueryRemove ( ScResId( STR_QUERYREMOVE ) ),
+        aStrCopyList    ( ScResId( STR_COPYLIST ) ),
+        aStrCopyFrom    ( ScResId( STR_COPYFROM ) ),
+        aStrCopyErr     ( ScResId( STR_COPYERR ) ),
         nWhichUserLists ( GetWhich( SID_SCUSERLISTS ) ),
-        pUserLists      ( nullptr ),
         pDoc            ( nullptr ),
         pViewData       ( nullptr ),
         bModifyMode     ( false ),
@@ -86,7 +86,7 @@ ScTpUserLists::~ScTpUserLists()
 
 void ScTpUserLists::dispose()
 {
-    delete pUserLists;
+    pUserLists.reset();
     mpFtLists.clear();
     mpLbLists.clear();
     mpFtEntries.clear();
@@ -149,9 +149,9 @@ void ScTpUserLists::Init()
 
 }
 
-VclPtr<SfxTabPage> ScTpUserLists::Create( vcl::Window* pParent, const SfxItemSet* rAttrSet )
+VclPtr<SfxTabPage> ScTpUserLists::Create( TabPageParent pParent, const SfxItemSet* rAttrSet )
 {
-    return VclPtr<ScTpUserLists>::Create( pParent, *rAttrSet );
+    return VclPtr<ScTpUserLists>::Create( pParent.pParent, *rAttrSet );
 }
 
 void ScTpUserLists::Reset( const SfxItemSet* rCoreAttrs )
@@ -165,7 +165,7 @@ void ScTpUserLists::Reset( const SfxItemSet* rCoreAttrs )
     if ( pCoreList )
     {
         if ( !pUserLists )
-            pUserLists = new ScUserList( *pCoreList );
+            pUserLists.reset( new ScUserList( *pCoreList ) );
         else
             *pUserLists = *pCoreList;
 
@@ -176,7 +176,7 @@ void ScTpUserLists::Reset( const SfxItemSet* rCoreAttrs )
         }
     }
     else if ( !pUserLists )
-        pUserLists = new ScUserList;
+        pUserLists.reset( new ScUserList );
 
     mpEdCopyFrom->SetText( aStrSelectedArea );
 
@@ -206,8 +206,8 @@ void ScTpUserLists::Reset( const SfxItemSet* rCoreAttrs )
 
 bool ScTpUserLists::FillItemSet( SfxItemSet* rCoreAttrs )
 {
-    // Modifikationen noch nicht uebernommen?
-    // -> Click auf Add-Button simulieren
+    // Changes aren't saved?
+    // -> simulate click of Add-Button
 
     if ( bModifyMode || bCancelMode )
         BtnClickHdl( mpBtnAdd );
@@ -243,12 +243,12 @@ bool ScTpUserLists::FillItemSet( SfxItemSet* rCoreAttrs )
     return bDataModified;
 }
 
-SfxTabPage::sfxpg ScTpUserLists::DeactivatePage( SfxItemSet* pSetP )
+DeactivateRC ScTpUserLists::DeactivatePage( SfxItemSet* pSetP )
 {
     if ( pSetP )
         FillItemSet( pSetP );
 
-    return LEAVE_PAGE;
+    return DeactivateRC::LeavePage;
 }
 
 size_t ScTpUserLists::UpdateUserListBox()
@@ -278,16 +278,16 @@ void ScTpUserLists::UpdateEntries( size_t nList )
     {
         const ScUserListData& rList = (*pUserLists)[nList];
         std::size_t nSubCount = rList.GetSubCount();
-        OUString          aEntryListStr;
+        OUStringBuffer aEntryListStr;
 
         for ( size_t i=0; i<nSubCount; i++ )
         {
             if ( i!=0 )
-                aEntryListStr += OUStringLiteral1<CR>();
-            aEntryListStr += rList.GetSubStr(i);
+                aEntryListStr.append(CR);
+            aEntryListStr.append(rList.GetSubStr(i));
         }
 
-        mpEdEntries->SetText(convertLineEnd(aEntryListStr, GetSystemLineEnd()));
+        mpEdEntries->SetText(convertLineEnd(aEntryListStr.makeStringAndClear(), GetSystemLineEnd()));
     }
     else
     {
@@ -297,32 +297,32 @@ void ScTpUserLists::UpdateEntries( size_t nList )
 
 void ScTpUserLists::MakeListStr( OUString& rListStr )
 {
-    OUString  aStr;
+    if (rListStr.isEmpty())
+        return;
 
-    sal_Int32 nToken = comphelper::string::getTokenCount(rListStr, LF);
+    OUStringBuffer aStr;
 
-    for(sal_Int32 i=0; i<nToken; i++)
+    for(sal_Int32 nIdx=0; nIdx>=0;)
     {
-        OUString aString = comphelper::string::strip(rListStr.getToken(i, LF), ' ');
-        aStr += aString;
-        aStr += OUStringLiteral1<cDelimiter>();
+        aStr.append(comphelper::string::strip(rListStr.getToken(0, LF, nIdx), ' '));
+        aStr.append(cDelimiter);
     }
 
-    aStr = comphelper::string::strip(aStr, cDelimiter);
+    aStr.strip(cDelimiter);
     sal_Int32 nLen = aStr.getLength();
 
     rListStr.clear();
 
-    // Alle Doppelten cDelimiter entfernen:
+    // delete all duplicates of cDelimiter
     sal_Int32 c = 0;
     while ( c < nLen )
     {
-        rListStr += OUString(aStr[c]);
+        rListStr += OUStringLiteral1(aStr[c]);
         ++c;
 
         if ((c < nLen) && (aStr[c] == cDelimiter))
         {
-            rListStr += OUString(aStr[c]);
+            rListStr += OUStringLiteral1(aStr[c]);
 
             while ((c < nLen) && (aStr[c] == cDelimiter))
                 ++c;
@@ -336,7 +336,7 @@ void ScTpUserLists::AddNewList( const OUString& rEntriesStr )
     OUString theEntriesStr( rEntriesStr );
 
     if ( !pUserLists )
-        pUserLists = new ScUserList;
+        pUserLists.reset( new ScUserList );
 
     MakeListStr( theEntriesStr );
 
@@ -357,7 +357,8 @@ void ScTpUserLists::CopyListFromArea( const ScRefAddress& rStartPos,
 
     if ( (nStartCol != nEndCol) && (nStartRow != nEndRow) )
     {
-        nCellDir = ScopedVclPtr<ScColOrRowDlg>::Create( this, aStrCopyList, aStrCopyFrom )->Execute();
+        ScColOrRowDlg aDialog(GetFrameWeld(), aStrCopyList, aStrCopyFrom);
+        nCellDir = aDialog.run();
     }
     else if ( nStartCol != nEndCol )
         nCellDir = SCRET_ROWS;
@@ -367,61 +368,60 @@ void ScTpUserLists::CopyListFromArea( const ScRefAddress& rStartPos,
     if ( nCellDir != RET_CANCEL )
     {
         bool bValueIgnored = false;
-        OUString  aStrList;
-        OUString  aStrField;
 
         if ( nCellDir == SCRET_COLS )
         {
             for ( SCCOL col=nStartCol; col<=nEndCol; col++ )
             {
+                OUStringBuffer aStrList;
                 for ( SCROW row=nStartRow; row<=nEndRow; row++ )
                 {
                     if ( pDoc->HasStringData( col, row, nTab ) )
                     {
-                        aStrField = pDoc->GetString(col, row, nTab);
+                        OUString aStrField = pDoc->GetString(col, row, nTab);
 
                         if ( !aStrField.isEmpty() )
                         {
-                            aStrList += aStrField;
-                            aStrList += "\n";
+                            aStrList.append(aStrField).append("\n");
                         }
                     }
                     else
                         bValueIgnored = true;
                 }
                 if ( !aStrList.isEmpty() )
-                    AddNewList( aStrList );
-                aStrList.clear();
+                    AddNewList( aStrList.makeStringAndClear() );
             }
         }
         else
         {
             for ( SCROW row=nStartRow; row<=nEndRow; row++ )
             {
+                OUStringBuffer aStrList;
                 for ( SCCOL col=nStartCol; col<=nEndCol; col++ )
                 {
                     if ( pDoc->HasStringData( col, row, nTab ) )
                     {
-                        aStrField = pDoc->GetString(col, row, nTab);
+                        OUString aStrField = pDoc->GetString(col, row, nTab);
 
                         if ( !aStrField.isEmpty() )
                         {
-                            aStrList += aStrField;
-                            aStrList += "\n";
+                            aStrList.append(aStrField).append("\n");
                         }
                     }
                     else
                         bValueIgnored = true;
                 }
                 if ( !aStrList.isEmpty() )
-                    AddNewList( aStrList );
-                aStrList.clear();
+                    AddNewList( aStrList.makeStringAndClear() );
             }
         }
 
         if ( bValueIgnored )
         {
-            ScopedVclPtr<InfoBox>::Create( this, aStrCopyErr )->Execute();
+            std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                          VclMessageType::Info, VclButtonsType::Ok,
+                                                          aStrCopyErr));
+            xInfoBox->run();
         }
     }
 
@@ -453,11 +453,11 @@ void ScTpUserLists::RemoveList( size_t nList )
 
 // Handler:
 
-IMPL_LINK_TYPED( ScTpUserLists, LbSelectHdl, ListBox&, rLb, void )
+IMPL_LINK( ScTpUserLists, LbSelectHdl, ListBox&, rLb, void )
 {
     if ( &rLb == mpLbLists )
     {
-        sal_Int32 nSelPos = mpLbLists->GetSelectEntryPos();
+        sal_Int32 nSelPos = mpLbLists->GetSelectedEntryPos();
         if ( nSelPos != LISTBOX_ENTRY_NOTFOUND )
         {
             if ( !mpFtEntries->IsEnabled() )  mpFtEntries->Enable();
@@ -474,14 +474,14 @@ IMPL_LINK_TYPED( ScTpUserLists, LbSelectHdl, ListBox&, rLb, void )
     }
 }
 
-IMPL_LINK_TYPED( ScTpUserLists, BtnClickHdl, Button*, pBtn, void )
+IMPL_LINK( ScTpUserLists, BtnClickHdl, Button*, pBtn, void )
 {
     if ( pBtn == mpBtnNew || pBtn == mpBtnDiscard )
     {
         if ( !bCancelMode )
         {
             nCancelPos = ( mpLbLists->GetEntryCount() > 0 )
-                            ? mpLbLists->GetSelectEntryPos()
+                            ? mpLbLists->GetSelectedEntryPos()
                             : 0;
             mpLbLists->SetNoSelection();
             mpFtLists->Disable();
@@ -509,7 +509,7 @@ IMPL_LINK_TYPED( ScTpUserLists, BtnClickHdl, Button*, pBtn, void )
             if ( mpLbLists->GetEntryCount() > 0 )
             {
                 mpLbLists->SelectEntryPos( nCancelPos );
-                LbSelectHdl( *mpLbLists.get() );
+                LbSelectHdl( *mpLbLists );
                 mpFtLists->Enable();
                 mpLbLists->Enable();
             }
@@ -546,7 +546,7 @@ IMPL_LINK_TYPED( ScTpUserLists, BtnClickHdl, Button*, pBtn, void )
                 AddNewList( theEntriesStr );
                 UpdateUserListBox();
                 mpLbLists->SelectEntryPos( mpLbLists->GetEntryCount()-1 );
-                LbSelectHdl( *mpLbLists.get() );
+                LbSelectHdl( *mpLbLists );
                 mpFtLists->Enable();
                 mpLbLists->Enable();
             }
@@ -555,7 +555,7 @@ IMPL_LINK_TYPED( ScTpUserLists, BtnClickHdl, Button*, pBtn, void )
                 if ( mpLbLists->GetEntryCount() > 0 )
                 {
                     mpLbLists->SelectEntryPos( nCancelPos );
-                    LbSelectHdl( *mpLbLists.get() );
+                    LbSelectHdl( *mpLbLists );
                     mpLbLists->Enable();
                     mpLbLists->Enable();
                 }
@@ -570,7 +570,7 @@ IMPL_LINK_TYPED( ScTpUserLists, BtnClickHdl, Button*, pBtn, void )
         }
         else // if ( bModifyMode )
         {
-            sal_Int32 nSelList = mpLbLists->GetSelectEntryPos();
+            sal_Int32 nSelList = mpLbLists->GetSelectedEntryPos();
 
             OSL_ENSURE( nSelList != LISTBOX_ENTRY_NOTFOUND, "Modify without List :-/" );
 
@@ -583,7 +583,7 @@ IMPL_LINK_TYPED( ScTpUserLists, BtnClickHdl, Button*, pBtn, void )
             else
             {
                 mpLbLists->SelectEntryPos( 0 );
-                LbSelectHdl( *mpLbLists.get() );
+                LbSelectHdl( *mpLbLists );
             }
 
             mpBtnNew->Show();
@@ -610,16 +610,17 @@ IMPL_LINK_TYPED( ScTpUserLists, BtnClickHdl, Button*, pBtn, void )
     {
         if ( mpLbLists->GetEntryCount() > 0 )
         {
-            sal_Int32 nRemovePos   = mpLbLists->GetSelectEntryPos();
-            OUString aMsg         ( aStrQueryRemove.getToken( 0, '#' ) );
+            sal_Int32 nRemovePos   = mpLbLists->GetSelectedEntryPos();
+            OUString aMsg = aStrQueryRemove.getToken( 0, '#' )
+                          + mpLbLists->GetEntry( nRemovePos )
+                          + aStrQueryRemove.getToken( 1, '#' );
 
-            aMsg += mpLbLists->GetEntry( nRemovePos );
-            aMsg += aStrQueryRemove.getToken( 1, '#' );
+            std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                           VclMessageType::Question, VclButtonsType::YesNo,
+                                                           aMsg));
+            xQueryBox->set_default_response(RET_YES);
 
-            if ( RET_YES == ScopedVclPtr<QueryBox>::Create( this,
-                                      WinBits( WB_YES_NO | WB_DEF_YES ),
-                                      aMsg
-                                     )->Execute() )
+            if (RET_YES == xQueryBox->run())
             {
                 RemoveList( nRemovePos );
                 UpdateUserListBox();
@@ -630,7 +631,7 @@ IMPL_LINK_TYPED( ScTpUserLists, BtnClickHdl, Button*, pBtn, void )
                         ( nRemovePos >= mpLbLists->GetEntryCount() )
                             ? mpLbLists->GetEntryCount()-1
                             : nRemovePos );
-                    LbSelectHdl( *mpLbLists.get() );
+                    LbSelectHdl( *mpLbLists );
                 }
                 else
                 {
@@ -687,7 +688,7 @@ IMPL_LINK_TYPED( ScTpUserLists, BtnClickHdl, Button*, pBtn, void )
             CopyListFromArea( theStartPos, theEndPos );
             UpdateUserListBox();
             mpLbLists->SelectEntryPos( mpLbLists->GetEntryCount()-1 );
-            LbSelectHdl( *mpLbLists.get() );
+            LbSelectHdl( *mpLbLists );
             mpEdCopyFrom->SetText( theAreaStr );
             mpEdCopyFrom->Disable();
             mpBtnCopy->Disable();
@@ -695,16 +696,18 @@ IMPL_LINK_TYPED( ScTpUserLists, BtnClickHdl, Button*, pBtn, void )
         }
         else
         {
-            ScopedVclPtr<MessageDialog>::Create(this,
-                      ScGlobal::GetRscString( STR_INVALID_TABREF )
-                    )->Execute();
+            std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(GetFrameWeld(),
+                        VclMessageType::Warning, VclButtonsType::Ok,
+                        ScResId(STR_INVALID_TABREF)));
+
+            xBox->run();
             mpEdCopyFrom->GrabFocus();
             mpEdCopyFrom->SetSelection( Selection( 0, SELECTION_MAX ) );
         }
     }
 }
 
-IMPL_LINK_TYPED( ScTpUserLists, EdEntriesModHdl, Edit&, rEd, void )
+IMPL_LINK( ScTpUserLists, EdEntriesModHdl, Edit&, rEd, void )
 {
     if ( &rEd != mpEdEntries )
         return;

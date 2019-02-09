@@ -22,6 +22,7 @@
 
 #include <comphelper/anytostring.hxx>
 #include <cppuhelper/exc_hlp.hxx>
+#include <sal/log.hxx>
 
 #include <basegfx/point/b2dpoint.hxx>
 #include <basegfx/vector/b2dvector.hxx>
@@ -30,7 +31,7 @@
 #include <com/sun/star/presentation/XSlideShowView.hpp>
 
 #include "pointersymbol.hxx"
-#include "eventmultiplexer.hxx"
+#include <eventmultiplexer.hxx>
 
 #include <algorithm>
 
@@ -70,24 +71,24 @@ PointerSymbol::PointerSymbol( uno::Reference<rendering::XBitmap> const &   xBitm
 
 void PointerSymbol::setVisible( const bool bVisible )
 {
-    if( mbVisible != bVisible )
+    if( mbVisible == bVisible )
+        return;
+
+    mbVisible = bVisible;
+
+    for( const auto& rView : maViews )
     {
-        mbVisible = bVisible;
-
-        for( const auto& rView : maViews )
+        if( rView.second )
         {
-            if( rView.second )
-            {
-                if( bVisible )
-                    rView.second->show();
-                else
-                    rView.second->hide();
-            }
+            if( bVisible )
+                rView.second->show();
+            else
+                rView.second->hide();
         }
-
-        // sprites changed, need a screen update for this frame.
-        mrScreenUpdater.requestImmediateUpdate();
     }
+
+    // sprites changed, need a screen update for this frame.
+    mrScreenUpdater.requestImmediateUpdate();
 }
 
 basegfx::B2DPoint PointerSymbol::calcSpritePos(UnoViewSharedPtr const & rView) const
@@ -125,12 +126,10 @@ void PointerSymbol::viewAdded( const UnoViewSharedPtr& rView )
     }
     catch( uno::Exception& )
     {
-        OSL_FAIL( OUStringToOString(
-                        comphelper::anyToString( cppu::getCaughtException() ),
-                        RTL_TEXTENCODING_UTF8 ).getStr() );
+        SAL_WARN( "slideshow", comphelper::anyToString( cppu::getCaughtException() ) );
     }
 
-    maViews.push_back( ViewsVecT::value_type( rView, sprite ) );
+    maViews.emplace_back( rView, sprite );
 }
 
 void PointerSymbol::viewRemoved( const UnoViewSharedPtr& rView )
@@ -177,20 +176,20 @@ void PointerSymbol::viewsChanged()
 
 void PointerSymbol::viewsChanged(const geometry::RealPoint2D pos)
 {
-    if( pos.X != maPos.X || pos.Y != maPos.Y )
-    {
-        maPos = pos;
+    if( pos.X == maPos.X && pos.Y == maPos.Y )
+        return;
 
-        // reposition sprites on all views
-        for( const auto& rView : maViews )
+    maPos = pos;
+
+    // reposition sprites on all views
+    for( const auto& rView : maViews )
+    {
+        if( rView.second )
         {
-            if( rView.second )
-            {
-                rView.second->movePixel(
-                    calcSpritePos( rView.first ) );
-                mrScreenUpdater.notifyUpdate();
-                mrScreenUpdater.commitUpdates();
-            }
+            rView.second->movePixel(
+                calcSpritePos( rView.first ) );
+            mrScreenUpdater.notifyUpdate();
+            mrScreenUpdater.commitUpdates();
         }
     }
 }

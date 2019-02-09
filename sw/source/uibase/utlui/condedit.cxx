@@ -34,9 +34,9 @@ ConditionEdit::ConditionEdit(vcl::Window* pParent, WinBits nStyle)
 {
 }
 
-VCL_BUILDER_DECL_FACTORY(ConditionEdit)
+extern "C" SAL_DLLPUBLIC_EXPORT void makeConditionEdit(VclPtr<vcl::Window> & rRet, VclPtr<vcl::Window> & pParent, VclBuilder::stringmap & rMap)
 {
-    VclBuilder::ensureDefaultWidthChars(rMap);
+    BuilderUtils::ensureDefaultWidthChars(rMap);
     rRet = VclPtr<ConditionEdit>::Create(pParent, WB_LEFT|WB_VCENTER|WB_BORDER|WB_3DLOOK);
 }
 
@@ -58,7 +58,7 @@ sal_Int8 ConditionEdit::ExecuteDrop( const ExecuteDropEvent& rEvt )
     {
         TransferableDataHelper aData( rEvt.maDropEvent.Transferable );
 
-            DataFlavorExVector& rVector = aData.GetDataFlavorExVector();
+            const DataFlavorExVector& rVector = aData.GetDataFlavorExVector();
             if(OColumnTransferable::canExtractColumnDescriptor(rVector, ColumnTransferFormatFlags::COLUMN_DESCRIPTOR))
             {
                 ODataAccessDescriptor aColDesc = OColumnTransferable::extractColumnDescriptor(
@@ -71,11 +71,11 @@ sal_Int8 ConditionEdit::ExecuteDrop( const ExecuteDropEvent& rEvt )
                 sDBName += sTmp;
                 sDBName += ".";
 
-                aColDesc[daCommand] >>= sTmp;
+                aColDesc[DataAccessDescriptorProperty::Command] >>= sTmp;
                 sDBName += sTmp;
                 sDBName += ".";
 
-                aColDesc[daColumnName] >>= sTmp;
+                aColDesc[DataAccessDescriptorProperty::ColumnName] >>= sTmp;
                 sDBName += sTmp;
                 if (bBrackets)
                     sDBName += "]";

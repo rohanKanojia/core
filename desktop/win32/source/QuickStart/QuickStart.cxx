@@ -19,40 +19,53 @@
 
 // QuickStart.cpp : Defines the entry point for the application.
 
+#include <sal/config.h>
 
-#include "StdAfx.h"
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <shellapi.h>
+
 #include "resource.h"
 #include <systools/win32/uwinapi.h>
 #include <systools/win32/qswin32.h>
-#include <stdio.h>
 
-bool SofficeRuns()
+#include <stdio.h>
+#include <stdlib.h>
+#include <malloc.h>
+#include <memory.h>
+
+static bool SofficeRuns()
 {
     // check for soffice by searching the communication window
-    return ( FindWindowEx( NULL, NULL, QUICKSTART_CLASSNAME, NULL ) == NULL ) ? false : true;
+    return FindWindowExW( nullptr, nullptr, QUICKSTART_CLASSNAME, nullptr ) != nullptr;
 }
 
-bool launchSoffice( )
+static bool launchSoffice( )
 {
     if ( !SofficeRuns() )
     {
-        char filename[_MAX_PATH + 1];
+        wchar_t filename[_MAX_PATH + 1];
 
         filename[_MAX_PATH] = 0;
-        GetModuleFileName( NULL, filename, _MAX_PATH ); // soffice resides in the same dir
-        char *p = strrchr( filename, '\\' );
+        GetModuleFileNameW( nullptr, filename, _MAX_PATH ); // soffice resides in the same dir
+        wchar_t *p = wcsrchr( filename, L'\\' );
         if ( !p )
             return false;
 
-        strncpy( p+1, "soffice.exe", _MAX_PATH - (p+1 - filename) );
+        wcsncpy( p+1, L"soffice.exe", _MAX_PATH - (p+1 - filename) );
 
-        char imagename[_MAX_PATH + 1];
+        wchar_t imagename[_MAX_PATH + 1];
 
         imagename[_MAX_PATH] = 0;
-        _snprintf(imagename, _MAX_PATH, "\"%s\" --quickstart", filename );
+        _snwprintf(imagename, _MAX_PATH, L"\"%s\" --quickstart", filename );
 
-        UINT ret = WinExec( imagename, SW_SHOW );
-        if ( ret < 32 )
+        STARTUPINFOW aStartupInfo;
+        ZeroMemory(&aStartupInfo, sizeof(aStartupInfo));
+        aStartupInfo.cb = sizeof(aStartupInfo);
+        aStartupInfo.wShowWindow = SW_SHOW;
+        PROCESS_INFORMATION aProcessInfo;
+        BOOL bSuccess = CreateProcessW(filename, imagename, nullptr, nullptr, TRUE, 0, nullptr, nullptr, &aStartupInfo, &aProcessInfo);
+        if ( !bSuccess )
             return false;
 
         return true;
@@ -61,23 +74,23 @@ bool launchSoffice( )
         return true;
 }
 
-int APIENTRY WinMain(HINSTANCE /*hInstance*/,
-                     HINSTANCE /*hPrevInstance*/,
-                     LPSTR     /*lpCmdLine*/,
-                     int       /*nCmdShow*/)
+int APIENTRY wWinMain(HINSTANCE /*hInstance*/,
+                      HINSTANCE /*hPrevInstance*/,
+                      LPWSTR    /*lpCmdLine*/,
+                      int       /*nCmdShow*/)
 {
     // Look for --killtray argument
 
     for ( int i = 1; i < __argc; i++ )
     {
-        if ( 0 == strcmp( __argv[i], "--killtray" ) )
+        if ( 0 == wcscmp( __wargv[i], L"--killtray" ) )
         {
-            HWND hwndTray = FindWindow( QUICKSTART_CLASSNAME, NULL );
+            HWND hwndTray = FindWindowW( QUICKSTART_CLASSNAME, nullptr );
 
             if ( hwndTray )
             {
-                UINT uMsgKillTray = RegisterWindowMessage( SHUTDOWN_QUICKSTART_MESSAGE );
-                SendMessage( hwndTray, uMsgKillTray, 0, 0 );
+                UINT uMsgKillTray = RegisterWindowMessageW( SHUTDOWN_QUICKSTART_MESSAGE );
+                SendMessageW( hwndTray, uMsgKillTray, 0, 0 );
             }
 
             return 0;

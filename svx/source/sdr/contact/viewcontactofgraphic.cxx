@@ -29,8 +29,6 @@
 #include <svx/sdr/contact/objectcontact.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <sdr/primitive2d/sdrgrafprimitive2d.hxx>
-#include "svx/svdstr.hrc"
-#include <svdglob.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
@@ -45,7 +43,8 @@
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <drawinglayer/primitive2d/sdrdecompositiontools2d.hxx>
 
-#include "eventhandler.hxx"
+#include <eventhandler.hxx>
+#include <bitmaps.hlst>
 
 namespace sdr
 {
@@ -68,17 +67,6 @@ namespace sdr
 
         ViewContactOfGraphic::~ViewContactOfGraphic()
         {
-        }
-
-        void ViewContactOfGraphic::flushGraphicObjects()
-        {
-            // #i102380# The graphic is swapped out. To let that have an effect ist is necessary to
-            // delete copies of the GraphicObject which are not swapped out and have no SwapHandler set
-            // (this is what happens when the GraphicObject gets copied to a SdrGrafPrimitive2D). This
-            // is best achieved for the VC by clearing the local decomposition cache. It would be possible
-            // to also do this for the VOC cache, but that VOCs exist exactly express that the object
-            // gets visualised, so this would be wrong.
-            flushViewIndependentPrimitive2DSequence();
         }
 
         drawinglayer::primitive2d::Primitive2DContainer ViewContactOfGraphic::createVIP2DSForPresObj(
@@ -106,13 +94,13 @@ namespace sdr
             // safe to assume 100th mm as target.
             Size aPrefSize(GetGrafObject().GetGrafPrefSize());
 
-            if(MAP_PIXEL == GetGrafObject().GetGrafPrefMapMode().GetMapUnit())
+            if(MapUnit::MapPixel == GetGrafObject().GetGrafPrefMapMode().GetMapUnit())
             {
-                aPrefSize = Application::GetDefaultDevice()->PixelToLogic(aPrefSize, MAP_100TH_MM);
+                aPrefSize = Application::GetDefaultDevice()->PixelToLogic(aPrefSize, MapMode(MapUnit::Map100thMM));
             }
             else
             {
-                aPrefSize = OutputDevice::LogicToLogic(aPrefSize, GetGrafObject().GetGrafPrefMapMode(), MAP_100TH_MM);
+                aPrefSize = OutputDevice::LogicToLogic(aPrefSize, GetGrafObject().GetGrafPrefMapMode(), MapMode(MapUnit::Map100thMM));
             }
 
             // decompose object matrix to get single values
@@ -127,8 +115,8 @@ namespace sdr
             {
                 // create the EmptyPresObj fallback visualisation. The fallback graphic
                 // is already provided in rGraphicObject in this case, use it
-                aSmallerMatrix = basegfx::tools::createScaleTranslateB2DHomMatrix(aPrefSize.getWidth(), aPrefSize.getHeight(), fOffsetX, fOffsetY);
-                aSmallerMatrix = basegfx::tools::createShearXRotateTranslateB2DHomMatrix(fShearX, fRotate, aTranslate)
+                aSmallerMatrix = basegfx::utils::createScaleTranslateB2DHomMatrix(aPrefSize.getWidth(), aPrefSize.getHeight(), fOffsetX, fOffsetY);
+                aSmallerMatrix = basegfx::utils::createShearXRotateTranslateB2DHomMatrix(fShearX, fRotate, aTranslate)
                     * aSmallerMatrix;
 
                 const GraphicObject& rGraphicObject = GetGrafObject().GetGraphicObject();
@@ -166,7 +154,7 @@ namespace sdr
                 // create a surrounding frame when no linestyle given
                 const Color aColor(Application::GetSettings().GetStyleSettings().GetShadowColor());
                 const basegfx::BColor aBColor(aColor.getBColor());
-                basegfx::B2DPolygon aOutline(basegfx::tools::createUnitPolygon());
+                basegfx::B2DPolygon aOutline(basegfx::utils::createUnitPolygon());
                 aOutline.transform(rObjectMatrix);
 
                 xRetval.push_back(
@@ -192,19 +180,19 @@ namespace sdr
             aTranslate.setY(aTranslate.getY() + fDistance);
 
             // draw a draft bitmap
-            const Bitmap aDraftBitmap(ResId(BMAP_GrafikEi, *ImpGetResMgr()));
+            const BitmapEx aDraftBitmap(BMAP_GrafikEi);
 
             if(!aDraftBitmap.IsEmpty())
             {
                 Size aPrefSize(aDraftBitmap.GetPrefSize());
 
-                if(MAP_PIXEL == aDraftBitmap.GetPrefMapMode().GetMapUnit())
+                if(MapUnit::MapPixel == aDraftBitmap.GetPrefMapMode().GetMapUnit())
                 {
-                    aPrefSize = Application::GetDefaultDevice()->PixelToLogic(aDraftBitmap.GetSizePixel(), MAP_100TH_MM);
+                    aPrefSize = Application::GetDefaultDevice()->PixelToLogic(aDraftBitmap.GetSizePixel(), MapMode(MapUnit::Map100thMM));
                 }
                 else
                 {
-                    aPrefSize = OutputDevice::LogicToLogic(aPrefSize, aDraftBitmap.GetPrefMapMode(), MAP_100TH_MM);
+                    aPrefSize = OutputDevice::LogicToLogic(aPrefSize, aDraftBitmap.GetPrefMapMode(), MapMode(MapUnit::Map100thMM));
                 }
 
                 const double fBitmapScaling(2.0);
@@ -216,14 +204,13 @@ namespace sdr
                     && basegfx::fTools::lessOrEqual(fWidth, aScale.getX())
                     && basegfx::fTools::lessOrEqual(fHeight, aScale.getY()))
                 {
-                    const basegfx::B2DHomMatrix aBitmapMatrix(basegfx::tools::createScaleShearXRotateTranslateB2DHomMatrix(
+                    const basegfx::B2DHomMatrix aBitmapMatrix(basegfx::utils::createScaleShearXRotateTranslateB2DHomMatrix(
                         fWidth, fHeight, fShearX, fRotate, aTranslate.getX(), aTranslate.getY()));
 
                     xRetval.push_back(
                         drawinglayer::primitive2d::Primitive2DReference(
                             new drawinglayer::primitive2d::BitmapPrimitive2D(
-                                BitmapEx(aDraftBitmap),
-                                aBitmapMatrix)));
+                                aDraftBitmap, aBitmapMatrix)));
 
                     // consume bitmap size in X
                     aScale.setX(std::max(0.0, aScale.getX() - (fWidth + fDistance)));
@@ -240,7 +227,7 @@ namespace sdr
                 aDraftText += " ...";
             }
 
-            if (!aDraftText.isEmpty() && GetGrafObject().GetModel())
+            if (!aDraftText.isEmpty())
             {
                 // #i103255# Goal is to produce TextPrimitives which hold the given text as
                 // BlockText in the available space. It would be very tricky to do
@@ -252,23 +239,22 @@ namespace sdr
                 // needed and can be deleted.
 
                 // create temp RectObj as TextObj and set needed attributes
-                SdrRectObj aRectObj(OBJ_TEXT);
-                aRectObj.SetModel(GetGrafObject().GetModel());
-                aRectObj.NbcSetText(aDraftText);
-                aRectObj.SetMergedItem(SvxColorItem(Color(COL_LIGHTRED), EE_CHAR_COLOR));
+                SdrRectObj* pRectObj(new SdrRectObj(GetGrafObject().getSdrModelFromSdrObject(), OBJ_TEXT));
+                pRectObj->NbcSetText(aDraftText);
+                pRectObj->SetMergedItem(SvxColorItem(COL_LIGHTRED, EE_CHAR_COLOR));
 
                 // get SdrText and OPO
-                SdrText* pSdrText = aRectObj.getText(0);
-                OutlinerParaObject* pOPO = aRectObj.GetOutlinerParaObject();
+                SdrText* pSdrText(pRectObj->getText(0));
+                OutlinerParaObject* pOPO(pRectObj->GetOutlinerParaObject());
 
                 if(pSdrText && pOPO)
                 {
                     // directly use the remaining space as TextRangeTransform
-                    const basegfx::B2DHomMatrix aTextRangeTransform(basegfx::tools::createScaleShearXRotateTranslateB2DHomMatrix(
+                    const basegfx::B2DHomMatrix aTextRangeTransform(basegfx::utils::createScaleShearXRotateTranslateB2DHomMatrix(
                         aScale, fShearX, fRotate, aTranslate));
 
                     // directly create temp SdrBlockTextPrimitive2D
-                    css::uno::Reference< drawinglayer::primitive2d::SdrBlockTextPrimitive2D > xBlockTextPrimitive(new drawinglayer::primitive2d::SdrBlockTextPrimitive2D(
+                    rtl::Reference< drawinglayer::primitive2d::SdrBlockTextPrimitive2D > xBlockTextPrimitive(new drawinglayer::primitive2d::SdrBlockTextPrimitive2D(
                         pSdrText,
                         *pOPO,
                         aTextRangeTransform,
@@ -283,10 +269,12 @@ namespace sdr
                     // decompose immediately with neutral ViewInformation. This will
                     // layout the text to more simple TextPrimitives from drawinglayer
                     const drawinglayer::geometry::ViewInformation2D aViewInformation2D;
-
-                    drawinglayer::primitive2d::Primitive2DContainer aDecomposition(xBlockTextPrimitive->get2DDecomposition(aViewInformation2D));
-                    xRetval.insert(xRetval.end(), aDecomposition.begin(), aDecomposition.end());
+                    xBlockTextPrimitive->get2DDecomposition(xRetval, aViewInformation2D);
                 }
+
+                // always use SdrObject::Free(...) for SdrObjects (!)
+                SdrObject* pTemp(pRectObj);
+                SdrObject::Free(pTemp);
             }
 
             return xRetval;
@@ -299,17 +287,17 @@ namespace sdr
 
             // create and fill GraphicAttr
             GraphicAttr aLocalGrafInfo;
-            const sal_uInt16 nTrans(static_cast<const SdrGrafTransparenceItem&>(rItemSet.Get(SDRATTR_GRAFTRANSPARENCE)).GetValue());
-            const SdrGrafCropItem& rCrop(static_cast<const SdrGrafCropItem&>(rItemSet.Get(SDRATTR_GRAFCROP)));
-            aLocalGrafInfo.SetLuminance(static_cast<const SdrGrafLuminanceItem&>(rItemSet.Get(SDRATTR_GRAFLUMINANCE)).GetValue());
-            aLocalGrafInfo.SetContrast(static_cast<const SdrGrafContrastItem&>(rItemSet.Get(SDRATTR_GRAFCONTRAST)).GetValue());
-            aLocalGrafInfo.SetChannelR(static_cast<const SdrGrafRedItem&>(rItemSet.Get(SDRATTR_GRAFRED)).GetValue());
-            aLocalGrafInfo.SetChannelG(static_cast<const SdrGrafGreenItem&>(rItemSet.Get(SDRATTR_GRAFGREEN)).GetValue());
-            aLocalGrafInfo.SetChannelB(static_cast<const SdrGrafBlueItem&>(rItemSet.Get(SDRATTR_GRAFBLUE)).GetValue());
-            aLocalGrafInfo.SetGamma(static_cast<const SdrGrafGamma100Item&>(rItemSet.Get(SDRATTR_GRAFGAMMA)).GetValue() * 0.01);
-            aLocalGrafInfo.SetTransparency((sal_uInt8)::basegfx::fround(std::min(nTrans, (sal_uInt16)100) * 2.55));
-            aLocalGrafInfo.SetInvert(static_cast<const SdrGrafInvertItem&>(rItemSet.Get(SDRATTR_GRAFINVERT)).GetValue());
-            aLocalGrafInfo.SetDrawMode(static_cast<const SdrGrafModeItem&>(rItemSet.Get(SDRATTR_GRAFMODE)).GetValue());
+            const sal_uInt16 nTrans(rItemSet.Get(SDRATTR_GRAFTRANSPARENCE).GetValue());
+            const SdrGrafCropItem& rCrop(rItemSet.Get(SDRATTR_GRAFCROP));
+            aLocalGrafInfo.SetLuminance(rItemSet.Get(SDRATTR_GRAFLUMINANCE).GetValue());
+            aLocalGrafInfo.SetContrast(rItemSet.Get(SDRATTR_GRAFCONTRAST).GetValue());
+            aLocalGrafInfo.SetChannelR(rItemSet.Get(SDRATTR_GRAFRED).GetValue());
+            aLocalGrafInfo.SetChannelG(rItemSet.Get(SDRATTR_GRAFGREEN).GetValue());
+            aLocalGrafInfo.SetChannelB(rItemSet.Get(SDRATTR_GRAFBLUE).GetValue());
+            aLocalGrafInfo.SetGamma(rItemSet.Get(SDRATTR_GRAFGAMMA).GetValue() * 0.01);
+            aLocalGrafInfo.SetTransparency(static_cast<sal_uInt8>(::basegfx::fround(std::min(nTrans, sal_uInt16(100)) * 2.55)));
+            aLocalGrafInfo.SetInvert(rItemSet.Get(SDRATTR_GRAFINVERT).GetValue());
+            aLocalGrafInfo.SetDrawMode(rItemSet.Get(SDRATTR_GRAFMODE).GetValue());
             aLocalGrafInfo.SetCrop(rCrop.GetLeft(), rCrop.GetTop(), rCrop.GetRight(), rCrop.GetBottom());
 
             // we have content if graphic is not completely transparent
@@ -322,14 +310,10 @@ namespace sdr
 
             // take unrotated snap rect for position and size. Directly use model data, not getBoundRect() or getSnapRect()
             // which will use the primitive data we just create in the near future
-            Rectangle rRectangle = GetGrafObject().GetGeoRect();
-            // Hack for calc, transform position of object according
-            // to current zoom so as objects relative position to grid
-            // appears stable
-            rRectangle += GetGrafObject().GetGridOffset();
+            const tools::Rectangle aRectangle(GetGrafObject().GetGeoRect());
             const ::basegfx::B2DRange aObjectRange(
-                rRectangle.Left(), rRectangle.Top(),
-                rRectangle.Right(), rRectangle.Bottom());
+                aRectangle.Left(), aRectangle.Top(),
+                aRectangle.Right(), aRectangle.Bottom());
 
             // look for mirroring
             const GeoStat& rGeoStat(GetGrafObject().GetGeoStat());
@@ -360,7 +344,7 @@ namespace sdr
             // fill object matrix
             const double fShearX(rGeoStat.nShearAngle ? tan((36000 - rGeoStat.nShearAngle) * F_PI18000) : 0.0);
             const double fRotate(nRotationAngle ? (36000 - nRotationAngle) * F_PI18000 : 0.0);
-            const basegfx::B2DHomMatrix aObjectMatrix(basegfx::tools::createScaleShearXRotateTranslateB2DHomMatrix(
+            const basegfx::B2DHomMatrix aObjectMatrix(basegfx::utils::createScaleShearXRotateTranslateB2DHomMatrix(
                 aObjectRange.getWidth(), aObjectRange.getHeight(),
                 fShearX, fRotate,
                 aObjectRange.getMinX(), aObjectRange.getMinY()));
@@ -378,7 +362,7 @@ namespace sdr
             else if(visualisationUsesDraft())
             {
                 // #i102380# The graphic is swapped out. To not force a swap-in here, there is a mechanism
-                // which shows a swapped-out-visualisation (which gets created here now) and an asynchronious
+                // which shows a swapped-out-visualisation (which gets created here now) and an asynchronous
                 // visual update mechanism for swapped-out graphics when they were loaded (see AsynchGraphicLoadingEvent
                 // and ViewObjectContactOfGraphic implementation). Not forcing the swap-in here allows faster
                 // (non-blocking) processing here and thus in the effect e.g. fast scrolling through pages
@@ -420,16 +404,9 @@ namespace sdr
 
             // draft when swapped out
             const GraphicObject& rGraphicObject = GetGrafObject().GetGraphicObject();
-            static bool bAllowReplacements(true);
-
-            if(rGraphicObject.IsSwappedOut() && bAllowReplacements)
-                return true;
 
             // draft when no graphic
-            if(GRAPHIC_NONE == rGraphicObject.GetType() || GRAPHIC_DEFAULT == rGraphicObject.GetType())
-               return true;
-
-            return false;
+            return GraphicType::NONE == rGraphicObject.GetType() || GraphicType::Default == rGraphicObject.GetType();
         }
 
     } // end of namespace contact

@@ -17,13 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <cppuhelper/interfacecontainer.h>
 #include <osl/diagnose.h>
-#include <FPServiceInfo.hxx>
+#include "FPServiceInfo.hxx"
 #include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 #include "SalAquaPicker.hxx"
@@ -40,15 +41,10 @@
 #pragma mark DEFINES
 #define kSetHideExtensionStateKey @"NSNavLastUserSetHideExtensionButtonState"
 
-
-// namespace directives
-
-
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::uno;
 
-// constructor
 SalAquaPicker::SalAquaPicker()
 : m_pDialog(nullptr)
 , m_pControlHelper(new ControlHelper())
@@ -70,7 +66,7 @@ SalAquaPicker::~SalAquaPicker()
     [pool release];
 }
 
-void SAL_CALL SalAquaPicker::implInitialize()
+void SalAquaPicker::implInitialize()
 {
     SolarMutexGuard aGuard;
 
@@ -82,18 +78,18 @@ void SAL_CALL SalAquaPicker::implInitialize()
     {
         case NAVIGATIONSERVICES_OPEN:
             m_pDialog = [NSOpenPanel openPanel];
-            [(NSOpenPanel*)m_pDialog setCanChooseDirectories:NO];
-            [(NSOpenPanel*)m_pDialog setCanChooseFiles:YES];
+            [static_cast<NSOpenPanel*>(m_pDialog) setCanChooseDirectories:NO];
+            [static_cast<NSOpenPanel*>(m_pDialog) setCanChooseFiles:YES];
             break;
 
         case NAVIGATIONSERVICES_SAVE:
             m_pDialog = [NSSavePanel savePanel];
-            [(NSSavePanel*)m_pDialog setCanSelectHiddenExtension:NO]; //changed for issue #102102
+            [m_pDialog setCanSelectHiddenExtension:NO]; //changed for issue #102102
             /* I would have loved to use
              * [(NSSavePanel*)m_pDialog setExtensionHidden:YES];
              * here but unfortunately this
              * a) only works when the dialog is already displayed because it seems to act on the corresponding checkbox (that we don't show but that doesn't matter)
-             * b) Mac OS X saves this setting on an application-based level which means that the last state is always being restored again when the app runs for the next time
+             * b) macOS saves this setting on an application-based level which means that the last state is always being restored again when the app runs for the next time
              *
              * So the only reliable way seems to be using the NSUserDefaults object because that is where that value is stored and
              * to just overwrite it if it has the wrong value.
@@ -109,8 +105,8 @@ void SAL_CALL SalAquaPicker::implInitialize()
 
         case NAVIGATIONSERVICES_DIRECTORY:
             m_pDialog = [NSOpenPanel openPanel];
-            [(NSOpenPanel*)m_pDialog setCanChooseDirectories:YES];
-            [(NSOpenPanel*)m_pDialog setCanChooseFiles:NO];
+            [static_cast<NSOpenPanel*>(m_pDialog) setCanChooseDirectories:YES];
+            [static_cast<NSOpenPanel*>(m_pDialog) setCanChooseFiles:NO];
             break;
 
         default:
@@ -118,7 +114,7 @@ void SAL_CALL SalAquaPicker::implInitialize()
     }
 
     if (m_pDialog != nil) {
-        [(NSOpenPanel*)m_pDialog setCanCreateDirectories:YES];
+        [static_cast<NSOpenPanel*>(m_pDialog) setCanCreateDirectories:YES];
         //Retain the dialog instance or it will go away immediately
         [m_pDialog retain];
     }
@@ -157,7 +153,7 @@ int SalAquaPicker::run()
         case NAVIGATIONSERVICES_DIRECTORY:
         case NAVIGATIONSERVICES_OPEN:
             [m_pDialog setDirectoryURL:startDirectory];
-            retVal = [(NSOpenPanel*)m_pDialog runModal];
+            retVal = [static_cast<NSOpenPanel*>(m_pDialog) runModal];
             break;
         case NAVIGATIONSERVICES_SAVE:
             [m_pDialog setDirectoryURL:startDirectory];
@@ -169,7 +165,10 @@ int SalAquaPicker::run()
             break;
     }
 
+    SAL_WNODEPRECATED_DECLARATIONS_PUSH
+        //TODO: 10.13 NSFileHandlingPanelOKButton
     if (retVal == NSFileHandlingPanelOKButton) {
+    SAL_WNODEPRECATED_DECLARATIONS_POP
         NSURL* pDir = [m_pDialog directoryURL];
         if (pDir) {
             implsetDisplayDirectory([pDir OUStringForInfo:FULLPATH]);
@@ -185,13 +184,12 @@ int SalAquaPicker::runandwaitforresult()
 {
     SolarMutexGuard aGuard;
 
-    int status = this->run();
+    int status = run();
 
     return status;
 }
 
-void SAL_CALL SalAquaPicker::implsetDisplayDirectory( const rtl::OUString& aDirectory )
-    throw( lang::IllegalArgumentException, uno::RuntimeException )
+void SalAquaPicker::implsetDisplayDirectory( const OUString& aDirectory )
 {
     SolarMutexGuard aGuard;
 
@@ -200,12 +198,12 @@ void SAL_CALL SalAquaPicker::implsetDisplayDirectory( const rtl::OUString& aDire
     }
 }
 
-rtl::OUString SAL_CALL SalAquaPicker::implgetDisplayDirectory() throw( uno::RuntimeException )
+OUString const & SalAquaPicker::implgetDisplayDirectory()
 {
     return m_sDisplayDirectory;
 }
 
-void SAL_CALL SalAquaPicker::implsetTitle( const rtl::OUString& aTitle ) throw( uno::RuntimeException )
+void SalAquaPicker::implsetTitle( const OUString& aTitle )
 {
     SolarMutexGuard aGuard;
 

@@ -24,13 +24,8 @@
 
 using com::sun::star::uno::Sequence;
 using com::sun::star::uno::Reference;
-using com::sun::star::uno::XInterface;
 using com::sun::star::uno::Any;
-using com::sun::star::uno::TypeClass;
 using com::sun::star::uno::RuntimeException;
-using com::sun::star::uno::XComponentContext;
-using com::sun::star::lang::XSingleServiceFactory;
-using com::sun::star::script::XTypeConverter;
 using com::sun::star::script::XInvocation2;
 
 namespace pyuno
@@ -48,18 +43,16 @@ typedef struct
     PyUNO_callable_Internals* members;
 } PyUNO_callable;
 
-void PyUNO_callable_del (PyObject* self)
+static void PyUNO_callable_del (PyObject* self)
 {
     PyUNO_callable* me;
 
     me = reinterpret_cast<PyUNO_callable*>(self);
     delete me->members;
     PyObject_Del (self);
-
-    return;
 }
 
-PyObject* PyUNO_callable_call(
+static PyObject* PyUNO_callable_call(
     PyObject* self, PyObject* args, SAL_UNUSED_PARAMETER PyObject*)
 {
     PyUNO_callable* me;
@@ -86,7 +79,7 @@ PyObject* PyUNO_callable_call(
         else
         {
             aParams.realloc (1);
-            aParams [0] <<= any_params;
+            aParams [0] = any_params;
         }
 
         {
@@ -228,9 +221,7 @@ static PyTypeObject PyUNO_callable_Type =
     nullptr,
     nullptr,
     nullptr
-#if PY_VERSION_HEX >= 0x02060000
     , 0
-#endif
 #if PY_VERSION_HEX >= 0x03040000
     , nullptr
 #endif

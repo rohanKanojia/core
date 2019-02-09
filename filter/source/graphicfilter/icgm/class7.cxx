@@ -18,9 +18,9 @@
  */
 
 
-#include <main.hxx>
-#include <chart.hxx>
-#include <outact.hxx>
+#include "main.hxx"
+#include "chart.hxx"
+#include "outact.hxx"
 
 
 void CGM::ImplDoClass7()
@@ -30,9 +30,13 @@ void CGM::ImplDoClass7()
         case 0x01 : /*Message */break;
         case 0x02 :
         {
-            sal_uInt8*  pAppData = mpSource + 12;
+            if (mpEndValidSource - mpSource < 12)
+                throw css::uno::Exception("attempt to read past end of input", nullptr);
+
             sal_uInt16* pTemp = reinterpret_cast<sal_uInt16*>(mpSource);
             sal_uInt16 nOpcode = pTemp[ 4 ];
+
+            sal_uInt8* pAppData = mpSource + 12;
 
             if ( mpChart || ( nOpcode == 0 ) )
             {
@@ -40,8 +44,11 @@ void CGM::ImplDoClass7()
                 {
                     case 0x000 : /*AppData - Beginning of File Opcodes*/
                     {
+                        if (mpEndValidSource - pAppData < 4)
+                            throw css::uno::Exception("attempt to read past end of input", nullptr);
+
                         if ( mpChart == nullptr )
-                            mpChart = new CGMChart;
+                            mpChart.reset( new CGMChart );
                         mpChart->mnCurrentFileType = pAppData[ 3 ];
                     }
                     break;
@@ -55,7 +62,7 @@ void CGM::ImplDoClass7()
                     case 0x1FC : /*AppData - BOCHTDATA */break;
                     case 0x1FD : /*AppData - EOCHTDATA*/
                     {
-                        mpOutAct->DrawChart();
+                        // mpOutAct->DrawChart();
                     }
                     break;
                     case 0x200 : /*AppData - BOSYMGROUP */break;
@@ -68,6 +75,9 @@ void CGM::ImplDoClass7()
                     case 0x262 : /*AppData - ENDGROUP */break;
                     case 0x264 : /*AppData - DATANODE*/
                     {
+                        if (static_cast<size_t>(mpEndValidSource - pAppData) < sizeof(DataNode))
+                            throw css::uno::Exception("attempt to read past end of input", nullptr);
+
                         mpChart->mDataNode[ 0 ] = *reinterpret_cast<DataNode*>( pAppData );
                         sal_Int8 nZoneEnum = mpChart->mDataNode[ 0 ].nZoneEnum;
                         if ( nZoneEnum && ( nZoneEnum <= 6 ) )
@@ -76,25 +86,25 @@ void CGM::ImplDoClass7()
                     break;
                     case 0x2BE : /*AppData - SHWSLIDEREC*/
                     {
-                        if ( mnMode & CGM_EXPORT_IMPRESS )
+                        if (mpEndValidSource - pAppData < 16)
+                            throw css::uno::Exception("attempt to read past end of input", nullptr);
+
+                        if ( pAppData[ 16 ] == 0 )      // a blank template ?
                         {
-                            if ( pAppData[ 16 ] == 0 )      // a blank template ?
+                            if ( pAppData[ 2 ] == 46 )
                             {
-                                if ( pAppData[ 2 ] == 46 )
-                                {
-                                    // this starts the document -> maybe we could insert a new document
-                                }
-                                else if ( pAppData[ 2 ] & 0x80 )
-                                {
-                                    // this is a template
-                                }
-                                else
-                                {
-                                    mpOutAct->InsertPage();
-                                }
+                                // this starts the document -> maybe we could insert a new document
                             }
-                            mpChart->ResetAnnotation();
+                            else if ( pAppData[ 2 ] & 0x80 )
+                            {
+                                // this is a template
+                            }
+                            else
+                            {
+                                mpOutAct->InsertPage();
+                            }
                         }
+                        mpChart->ResetAnnotation();
                     }
                     break;
                     case 0x2C0 : /*AppData - SHWKEYTABLE */break;
@@ -104,11 +114,14 @@ void CGM::ImplDoClass7()
                     case 0x2CA : /*AppData - SHWAPP */break;
                     case 0x320 : /*AppData - TEXT*/
                     {
-                        TextEntry* pTextEntry = new TextEntry;
-                        pTextEntry->nTypeOfText = *(reinterpret_cast<sal_uInt16*>( pAppData ) );
-                        pTextEntry->nRowOrLineNum = *(reinterpret_cast<sal_uInt16*>( pAppData + 2 ) );
-                        pTextEntry->nColumnNum = *(reinterpret_cast<sal_uInt16*>( pAppData + 4 ) );
-                        sal_uInt16 nAttributes = *( reinterpret_cast<sal_uInt16*>( pAppData + 6 ) );
+                        if (mpEndValidSource - pAppData < 9)
+                            throw css::uno::Exception("attempt to read past end of input", nullptr);
+
+                        std::unique_ptr<TextEntry> pTextEntry(new TextEntry);
+                        pTextEntry->nTypeOfText = *reinterpret_cast<sal_uInt16*>( pAppData );
+                        pTextEntry->nRowOrLineNum = *reinterpret_cast<sal_uInt16*>( pAppData + 2 );
+                        pTextEntry->nColumnNum = *reinterpret_cast<sal_uInt16*>( pAppData + 4 );
+                        sal_uInt16 nAttributes = *reinterpret_cast<sal_uInt16*>( pAppData + 6 );
                         pTextEntry->nZoneSize = nAttributes & 0xff;
                         pTextEntry->nLineType = ( nAttributes >> 8 ) & 0xf;
                         nAttributes >>= 12;
@@ -119,7 +132,7 @@ void CGM::ImplDoClass7()
                         memcpy( pTextEntry->pText, pAppData, nLen );
                         pAppData += nLen;
 
-                        mpChart->InsertTextEntry( pTextEntry );
+                        mpChart->InsertTextEntry( std::move(pTextEntry) );
                     }
                     break;
                     case 0x321 : /*AppData - IOC_TABS */break;

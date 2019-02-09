@@ -18,18 +18,18 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <algorithm>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/point/b2dpoint.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <com/sun/star/rendering/CompositeOperation.hpp>
 #include <com/sun/star/rendering/PathCapType.hpp>
 #include <com/sun/star/rendering/PathJoinType.hpp>
 #include <com/sun/star/rendering/RepaintResult.hpp>
 #include <com/sun/star/rendering/TexturingMode.hpp>
-#include <comphelper/sequence.hxx>
 #include <rtl/math.hxx>
 #include <tools/diagnose_ex.h>
 
@@ -86,7 +86,7 @@ namespace dxcanvas
             GraphicsSharedPtr pGraphics( mpTarget->getGraphics() );
 
             Gdiplus::Color aClearColor = hasAlpha() ?
-                Gdiplus::Color( 0,255,255,255 ) : Gdiplus::Color((Gdiplus::ARGB)Gdiplus::Color::White);
+                Gdiplus::Color( 0,255,255,255 ) : Gdiplus::Color(Gdiplus::ARGB(Gdiplus::Color::White));
 
             ENSURE_OR_THROW(
                 Gdiplus::Ok == pGraphics->SetCompositingMode(
@@ -122,7 +122,7 @@ namespace dxcanvas
                                mpTarget->hasAlpha() );
         }
 
-        return uno::Reference< rendering::XCachedPrimitive >(NULL);
+        return uno::Reference< rendering::XCachedPrimitive >(nullptr);
     }
 
     void BitmapCanvasHelper::copyRect( const rendering::XCanvas*                            /*pCanvas*/,
@@ -160,9 +160,6 @@ namespace dxcanvas
         ENSURE_OR_THROW( mpTarget,
                           "::dxcanvas::BitmapCanvasHelper::getData(): disposed" );
 
-        if( !mpTarget )
-            return uno::Sequence< sal_Int8 >();
-
         bitmapLayout = getMemoryLayout();
         return mpTarget->getData(bitmapLayout,rect);
     }
@@ -176,9 +173,6 @@ namespace dxcanvas
         ENSURE_OR_THROW( mpTarget,
                           "::dxcanvas::BitmapCanvasHelper::setData(): disposed" );
 
-        if( !mpTarget )
-            return;
-
         mpTarget->setData(data,bitmapLayout,rect);
     }
 
@@ -191,9 +185,6 @@ namespace dxcanvas
         ENSURE_OR_THROW( mpTarget,
                           "::dxcanvas::BitmapCanvasHelper::setPixel(): disposed" );
 
-        if( !mpTarget )
-            return;
-
         mpTarget->setPixel(color,bitmapLayout,pos);
     }
 
@@ -204,9 +195,6 @@ namespace dxcanvas
 
         ENSURE_OR_THROW( mpTarget,
                           "::dxcanvas::BitmapCanvasHelper::getPixel(): disposed" );
-
-        if( !mpTarget )
-            return uno::Sequence< sal_Int8 >();
 
         bitmapLayout = getMemoryLayout();
         return mpTarget->getPixel(bitmapLayout,pos);

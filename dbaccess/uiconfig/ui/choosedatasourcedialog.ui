@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<interface domain="dba">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="ChooseDataSourceDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Data Source</property>
+    <property name="title" translatable="yes" context="choosedatasourcedialog|ChooseDataSourceDialog">Data Source</property>
     <property name="resizable">False</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
@@ -64,7 +64,7 @@
             </child>
             <child>
               <object class="GtkButton" id="organize">
-                <property name="label" translatable="yes">Or_ganize...</property>
+                <property name="label" translatable="yes" context="choosedatasourcedialog|organize">Or_ganize...</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
                 <property name="no_show_all">True</property>
@@ -97,7 +97,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">Choose a data source:</property>
+                <property name="label" translatable="yes" context="choosedatasourcedialog|label1">Choose a data source:</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">treeview:border</property>
               </object>
@@ -112,6 +112,7 @@
                 <property name="can_focus">True</property>
                 <property name="hexpand">True</property>
                 <property name="vexpand">True</property>
+                <property name="show_expanders">False</property>
                 <child internal-child="selection">
                   <object class="GtkTreeSelection" id="treeview-selection1"/>
                 </child>
@@ -131,8 +132,9 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">cancel</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
   </object>
 </interface>

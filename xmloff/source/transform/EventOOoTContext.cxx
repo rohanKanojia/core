@@ -35,18 +35,17 @@ using namespace ::com::sun::star::xml::sax;
 using namespace ::xmloff::token;
 
 class XMLTransformerOOoEventMap_Impl:
-    public std::unordered_map< OUString, NameKey_Impl, OUStringHash >
+    public std::unordered_map< OUString, NameKey_Impl >
 {
 public:
 
-    void AddMap( XMLTransformerEventMapEntry *pInit );
+    void AddMap( XMLTransformerEventMapEntry const *pInit );
 
-    XMLTransformerOOoEventMap_Impl( XMLTransformerEventMapEntry *pInit,
-                                       XMLTransformerEventMapEntry *pInit2  );
-    ~XMLTransformerOOoEventMap_Impl();
+    XMLTransformerOOoEventMap_Impl( XMLTransformerEventMapEntry const *pInit,
+                                       XMLTransformerEventMapEntry const *pInit2  );
 };
 
-void XMLTransformerOOoEventMap_Impl::AddMap( XMLTransformerEventMapEntry *pInit )
+void XMLTransformerOOoEventMap_Impl::AddMap( XMLTransformerEventMapEntry const *pInit )
 {
     XMLTransformerOOoEventMap_Impl::key_type aKey;
     XMLTransformerOOoEventMap_Impl::mapped_type aData;
@@ -71,17 +70,13 @@ void XMLTransformerOOoEventMap_Impl::AddMap( XMLTransformerEventMapEntry *pInit 
 }
 
 XMLTransformerOOoEventMap_Impl::XMLTransformerOOoEventMap_Impl(
-        XMLTransformerEventMapEntry *pInit,
-        XMLTransformerEventMapEntry *pInit2 )
+        XMLTransformerEventMapEntry const *pInit,
+        XMLTransformerEventMapEntry const *pInit2 )
 {
     if( pInit )
         AddMap( pInit );
     if( pInit2 )
         AddMap( pInit2 );
-}
-
-XMLTransformerOOoEventMap_Impl::~XMLTransformerOOoEventMap_Impl()
-{
 }
 
 XMLEventOOoTransformerContext::XMLEventOOoTransformerContext(
@@ -116,7 +111,7 @@ sal_uInt16 XMLEventOOoTransformerContext::GetEventName(
         OUString& rNewName,
            XMLTransformerOOoEventMap_Impl& rMap )
 {
-    XMLTransformerOOoEventMap_Impl::key_type aKey( rName );
+    const XMLTransformerOOoEventMap_Impl::key_type& aKey( rName );
     XMLTransformerOOoEventMap_Impl::const_iterator aIter = rMap.find( aKey );
     if( aIter == rMap.end() )
     {
@@ -175,9 +170,9 @@ void XMLEventOOoTransformerContext::StartElement(
                     OUString aAttrValue( rAttrValue );
                     sal_uInt16 nValPrefix =
                         static_cast<sal_uInt16>((*aIter).second.m_nParam1);
-                    if( GetTransformer().AddNamespacePrefix( aAttrValue,
-                                                             nValPrefix ) )
-                        pMutableAttrList->SetValueByIndex( i, aAttrValue );
+                    GetTransformer().AddNamespacePrefix( aAttrValue,
+                                                             nValPrefix );
+                    pMutableAttrList->SetValueByIndex( i, aAttrValue );
                 }
                 break;
             case XML_ATACTION_MACRO_LOCATION:
@@ -214,8 +209,7 @@ void XMLEventOOoTransformerContext::StartElement(
     if( m_bPersistent )
         XMLPersElemContentTContext::StartElement( xAttrList );
     else
-        GetTransformer().GetDocHandler()->startElement( GetExportQName(),
-                                                        xAttrList );
+        GetTransformer().GetDocHandler()->startElement( GetExportQName(), xAttrList );
 }
 
 void XMLEventOOoTransformerContext::EndElement()

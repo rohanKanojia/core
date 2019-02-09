@@ -51,7 +51,7 @@ namespace comphelper
     }
 
 
-    Any SAL_CALL OPropertyStateContainer::queryInterface( const Type& _rType ) throw (RuntimeException, std::exception)
+    Any SAL_CALL OPropertyStateContainer::queryInterface( const Type& _rType )
     {
         Any aReturn = OPropertyContainer::queryInterface( _rType );
         if ( !aReturn.hasValue() )
@@ -76,13 +76,13 @@ namespace comphelper
     }
 
 
-    PropertyState SAL_CALL OPropertyStateContainer::getPropertyState( const OUString& _rPropertyName ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    PropertyState SAL_CALL OPropertyStateContainer::getPropertyState( const OUString& _rPropertyName )
     {
         return getPropertyStateByHandle( getHandleForName( _rPropertyName ) );
     }
 
 
-    Sequence< PropertyState > SAL_CALL OPropertyStateContainer::getPropertyStates( const Sequence< OUString >& _rPropertyNames ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    Sequence< PropertyState > SAL_CALL OPropertyStateContainer::getPropertyStates( const Sequence< OUString >& _rPropertyNames )
     {
         sal_Int32 nProperties = _rPropertyNames.getLength();
         Sequence< PropertyState> aStates( nProperties );
@@ -119,7 +119,7 @@ namespace comphelper
                 OSL_ENSURE( pAllProperties->Name.compareTo( (pAllProperties + 1)->Name ) < 0,
                     "OPropertyStateContainer::getPropertyStates: all-properties not sorted!" );
 #endif
-            if ( pAllProperties->Name.equals( *pLookup ) )
+            if ( pAllProperties->Name == *pLookup )
             {
                 *pStates++ = getPropertyState( *pLookup );
                 ++pLookup;
@@ -135,13 +135,13 @@ namespace comphelper
     }
 
 
-    void SAL_CALL OPropertyStateContainer::setPropertyToDefault( const OUString& _rPropertyName ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    void SAL_CALL OPropertyStateContainer::setPropertyToDefault( const OUString& _rPropertyName )
     {
         setPropertyToDefaultByHandle( getHandleForName( _rPropertyName ) );
     }
 
 
-    Any SAL_CALL OPropertyStateContainer::getPropertyDefault( const OUString& _rPropertyName ) throw (UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception)
+    Any SAL_CALL OPropertyStateContainer::getPropertyDefault( const OUString& _rPropertyName )
     {
         Any aDefault;
         getPropertyDefaultByHandle( getHandleForName( _rPropertyName ), aDefault );
@@ -149,11 +149,13 @@ namespace comphelper
     }
 
 
-    PropertyState OPropertyStateContainer::getPropertyStateByHandle( sal_Int32 _nHandle )
+    PropertyState OPropertyStateContainer::getPropertyStateByHandle( sal_Int32 _nHandle ) const
     {
         // simply compare the current and the default value
-        Any aCurrentValue; getFastPropertyValue( aCurrentValue, _nHandle );
-        Any aDefaultValue; getPropertyDefaultByHandle( _nHandle, aDefaultValue );
+        Any aCurrentValue;
+        getFastPropertyValue( aCurrentValue, _nHandle );
+        Any aDefaultValue;
+        getPropertyDefaultByHandle( _nHandle, aDefaultValue );
 
         bool bEqual = uno_type_equalData(
                 const_cast< void* >( aCurrentValue.getValue() ), aCurrentValue.getValueType().getTypeLibType(),

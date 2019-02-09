@@ -20,6 +20,9 @@
 #ifndef INCLUDED_SHELL_SOURCE_BACKENDS_LOCALEBE_LOCALEBACKEND_HXX
 #define INCLUDED_SHELL_SOURCE_BACKENDS_LOCALEBE_LOCALEBACKEND_HXX
 
+#include <sal/config.h>
+
+#include <com/sun/star/beans/Optional.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <cppuhelper/implbase.hxx>
@@ -29,9 +32,10 @@
 namespace uno = css::uno ;
 namespace lang = css::lang ;
 
-class LocaleBackend : public ::cppu::WeakImplHelper <
+class LocaleBackend final : public ::cppu::WeakImplHelper <
         css::beans::XPropertySet,
-        lang::XServiceInfo > {
+        lang::XServiceInfo >
+{
 
     public:
 
@@ -39,82 +43,59 @@ class LocaleBackend : public ::cppu::WeakImplHelper <
 
         // XServiceInfo
         virtual OUString SAL_CALL
-            getImplementationName(  )
-                throw (uno::RuntimeException, std::exception) override ;
+            getImplementationName(  ) override ;
 
         virtual sal_Bool SAL_CALL
-            supportsService( const OUString& aServiceName )
-                throw (uno::RuntimeException, std::exception) override ;
+            supportsService( const OUString& aServiceName ) override ;
 
         virtual uno::Sequence<OUString> SAL_CALL
-            getSupportedServiceNames(  )
-                throw (uno::RuntimeException, std::exception) override ;
+            getSupportedServiceNames(  ) override ;
 
         /**
           Provides the implementation name.
 
           @return   implementation name
           */
-        static OUString SAL_CALL getBackendName() ;
+        static OUString getBackendName() ;
         /**
           Provides the supported services names
 
           @return   service names
           */
-        static uno::Sequence<OUString> SAL_CALL getBackendServiceNames() ;
+        static uno::Sequence<OUString> getBackendServiceNames() ;
 
         // XPropertySet
         virtual css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL
-        getPropertySetInfo() throw (css::uno::RuntimeException, std::exception) override
+        getPropertySetInfo() override
         { return css::uno::Reference< css::beans::XPropertySetInfo >(); }
 
         virtual void SAL_CALL setPropertyValue(
-            OUString const &, css::uno::Any const &)
-            throw (
-                css::beans::UnknownPropertyException,
-                css::beans::PropertyVetoException,
-                css::lang::IllegalArgumentException,
-                css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+            OUString const &, css::uno::Any const &) override;
 
         virtual css::uno::Any SAL_CALL getPropertyValue(
-            OUString const & PropertyName)
-            throw (
-                css::beans::UnknownPropertyException,
-                css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+            OUString const & PropertyName) override;
 
         virtual void SAL_CALL addPropertyChangeListener(
             OUString const &,
-            css::uno::Reference< css::beans::XPropertyChangeListener > const &)
-            throw (
-                css::beans::UnknownPropertyException,
-                css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override
+            css::uno::Reference< css::beans::XPropertyChangeListener > const &) override
         {}
 
         virtual void SAL_CALL removePropertyChangeListener(
             OUString const &,
-            css::uno::Reference< css::beans::XPropertyChangeListener > const &)
-            throw (
-                css::beans::UnknownPropertyException,
-                css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override
+            css::uno::Reference< css::beans::XPropertyChangeListener > const &) override
         {}
 
         virtual void SAL_CALL addVetoableChangeListener(
             OUString const &,
-            css::uno::Reference< css::beans::XVetoableChangeListener > const &)
-            throw (
-                css::beans::UnknownPropertyException,
-                css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override
+            css::uno::Reference< css::beans::XVetoableChangeListener > const &) override
         {}
 
         virtual void SAL_CALL removeVetoableChangeListener(
             OUString const &,
-            css::uno::Reference< css::beans::XVetoableChangeListener > const &)
-            throw (
-                css::beans::UnknownPropertyException,
-                css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override
+            css::uno::Reference< css::beans::XVetoableChangeListener > const &) override
         {}
 
-    protected:
+    private:
         /**
           Service constructor from a service factory.
 
@@ -123,17 +104,16 @@ class LocaleBackend : public ::cppu::WeakImplHelper <
         LocaleBackend();
 
         /** Destructor */
-        virtual ~LocaleBackend() ;
+        virtual ~LocaleBackend() override ;
 
-    private:
         // Returns the user locale
-        static OUString getLocale();
+        static css::beans::Optional<css::uno::Any> getLocale();
 
         // Returns the user UI locale
-        static OUString getUILocale();
+        static css::beans::Optional<css::uno::Any> getUILocale();
 
         // Returns the system default locale
-        static OUString getSystemLocale();
+        static css::beans::Optional<css::uno::Any> getSystemLocale();
 } ;
 
 

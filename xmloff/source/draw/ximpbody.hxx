@@ -29,9 +29,7 @@
 
 class SdXMLDrawPageContext : public SdXMLGenericPageContext
 {
-    OUString               maContextName;
     OUString               maMasterPageName;
-    OUString               maStyleName;
     OUString               maHREF;
 
     bool                   mbHadSMILNodes;
@@ -40,10 +38,10 @@ public:
     SdXMLDrawPageContext( SdXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes);
-    virtual ~SdXMLDrawPageContext();
+        css::uno::Reference< css::drawing::XShapes > const & rShapes);
+    virtual ~SdXMLDrawPageContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
     virtual void EndElement() override;
@@ -59,9 +57,9 @@ class SdXMLBodyContext : public SvXMLImportContext
 
 public:
     SdXMLBodyContext( SdXMLImport& rImport, const OUString& rLocalName );
-    virtual ~SdXMLBodyContext();
+    virtual ~SdXMLBodyContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
 };

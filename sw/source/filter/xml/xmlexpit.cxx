@@ -19,11 +19,13 @@
 
 #include "xmlexpit.hxx"
 
+#include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
 #include <sax/tools/converter.hxx>
 #include <svl/itempool.hxx>
 #include <svl/poolitem.hxx>
 #include <svl/itemset.hxx>
+#include <utility>
 #include <xmloff/xmluconv.hxx>
 #include <xmloff/attrlist.hxx>
 #include <xmloff/nmspmap.hxx>
@@ -33,9 +35,9 @@
 #include <editeng/xmlcnitm.hxx>
 #include <xmloff/xmlexp.hxx>
 #include <xmloff/xmlprhdl.hxx>
-#include <editeng/memberids.hrc>
-#include "hintids.hxx"
-#include "unomid.h"
+#include <editeng/memberids.h>
+#include <hintids.hxx>
+#include <unomid.h>
 #include <svx/unomid.hxx>
 #include <editeng/lrspitem.hxx>
 #include <editeng/ulspitem.hxx>
@@ -44,14 +46,14 @@
 #include <editeng/formatbreakitem.hxx>
 #include <editeng/keepitem.hxx>
 #include <editeng/brushitem.hxx>
-#include "fmtpdsc.hxx"
-#include "fmtornt.hxx"
-#include "fmtfsize.hxx"
+#include <fmtpdsc.hxx>
+#include <fmtornt.hxx>
+#include <fmtfsize.hxx>
 
-#include "fmtlsplt.hxx"
+#include <fmtlsplt.hxx>
 #include "xmlithlp.hxx"
 
-#include "fmtrowsplt.hxx"
+#include <fmtrowsplt.hxx>
 
 using ::editeng::SvxBorderLine;
 using namespace ::com::sun::star;
@@ -64,7 +66,6 @@ void SvXMLExportItemMapper::exportXML( const SvXMLExport& rExport,
                                 const SfxItemSet& rSet,
                                 const SvXMLUnitConverter& rUnitConverter,
                                 const SvXMLNamespaceMap& rNamespaceMap,
-                                SvXmlExportFlags nFlags,
                                 std::vector<sal_uInt16> *pIndexArray ) const
 {
     const sal_uInt16 nCount = mrMapEntries->getCount();
@@ -72,13 +73,12 @@ void SvXMLExportItemMapper::exportXML( const SvXMLExport& rExport,
 
     while( nIndex < nCount )
     {
-        SvXMLItemMapEntry& rEntry = mrMapEntries->getByIndex( nIndex );
+        SvXMLItemMapEntry const & rEntry = mrMapEntries->getByIndex( nIndex );
 
         // we have a valid map entry here, so lets use it...
         if( 0 == (rEntry.nMemberId & MID_SW_FLAG_NO_ITEM_EXPORT) )
         {
-            const SfxPoolItem* pItem = GetItem( rSet, rEntry.nWhichId,
-                                                nFlags );
+            const SfxPoolItem* pItem = GetItem( rSet, rEntry.nWhichId );
             // do we have an item?
             if(pItem)
             {
@@ -93,14 +93,13 @@ void SvXMLExportItemMapper::exportXML( const SvXMLExport& rExport,
                 else
                 {
                     exportXML( rExport, rAttrList, *pItem, rEntry, rUnitConverter,
-                                  rNamespaceMap, nFlags, &rSet );
+                                  rNamespaceMap, &rSet );
                 }
             }
         }
         else
         {
-            handleNoItem( rAttrList, rEntry, rUnitConverter, rNamespaceMap,
-                          rSet );
+            OSL_FAIL( "no item not handled in xml export" );
         }
         nIndex++;
     }
@@ -112,7 +111,6 @@ void SvXMLExportItemMapper::exportXML( const SvXMLExport& rExport,
                                  const SvXMLItemMapEntry& rEntry,
                                  const SvXMLUnitConverter& rUnitConverter,
                                  const SvXMLNamespaceMap& rNamespaceMap,
-                                 SvXmlExportFlags /*nFlags*/,
                                  const SfxItemSet *pSet ) const
 {
     if( 0 != (rEntry.nMemberId & MID_SW_FLAG_SPECIAL_ITEM_EXPORT) )
@@ -136,7 +134,7 @@ void SvXMLExportItemMapper::exportXML( const SvXMLExport& rExport,
                 OUStringBuffer aOut;
                 const SfxBoolItem* pSplit = dynamic_cast<const SfxBoolItem*>( &rItem );
                 assert(pSplit && "Wrong Which-ID");
-                const unsigned int eEnum = (pSplit && pSplit->GetValue()) ? 1 : 0;
+                const sal_uInt16 eEnum = (pSplit && pSplit->GetValue()) ? 1 : 0;
                 SvXMLUnitConverter::convertEnum( aOut, eEnum, aXML_KeepTogetherType );
                 aValue = aOut.makeStringAndClear();
             }
@@ -149,7 +147,7 @@ void SvXMLExportItemMapper::exportXML( const SvXMLExport& rExport,
         }
         if( dynamic_cast<const SvXMLAttrContainerItem*>( &rItem) !=  nullptr )
         {
-            SvXMLNamespaceMap *pNewNamespaceMap = nullptr;
+            std::unique_ptr<SvXMLNamespaceMap> pNewNamespaceMap;
             const SvXMLNamespaceMap *pNamespaceMap = &rNamespaceMap;
 
             const SvXMLAttrContainerItem *pUnknown =
@@ -171,9 +169,9 @@ void SvXMLExportItemMapper::exportXML( const SvXMLExport& rExport,
                     {
                         if( !pNewNamespaceMap )
                         {
-                            pNewNamespaceMap =
-                                        new SvXMLNamespaceMap( rNamespaceMap );
-                            pNamespaceMap = pNewNamespaceMap;
+                            pNewNamespaceMap.reset(
+                                        new SvXMLNamespaceMap( rNamespaceMap ));
+                            pNamespaceMap = pNewNamespaceMap.get();
                         }
                         pNewNamespaceMap->Add( sPrefix, sNamespace );
 
@@ -190,8 +188,6 @@ void SvXMLExportItemMapper::exportXML( const SvXMLExport& rExport,
                                             pUnknown->GetAttrValue(i) );
                 }
             }
-
-            delete pNewNamespaceMap;
         }
         else
         {
@@ -228,11 +224,11 @@ void SvXMLExportItemMapper::exportElementItems(
     for( size_t nIndex = 0; nIndex < nCount; ++nIndex )
     {
         const sal_uInt16 nElement = rIndexArray[ nIndex ];
-        SvXMLItemMapEntry& rEntry = mrMapEntries->getByIndex( nElement );
+        SvXMLItemMapEntry const & rEntry = mrMapEntries->getByIndex( nElement );
         OSL_ENSURE( 0 != (rEntry.nMemberId & MID_SW_FLAG_ELEMENT_ITEM_EXPORT),
                     "wrong mid flag!" );
 
-        const SfxPoolItem* pItem = GetItem( rSet, rEntry.nWhichId, nFlags );
+        const SfxPoolItem* pItem = GetItem( rSet, rEntry.nWhichId );
         // do we have an item?
         if(pItem)
         {
@@ -248,29 +244,18 @@ void SvXMLExportItemMapper::exportElementItems(
 }
 
 /** returns the item with the given WhichId from the given ItemSet if its
-    set or its default item if its not set and the SvXmlExportFlags::DEEP
-    is set in the flags
+    set
 */
 const SfxPoolItem* SvXMLExportItemMapper::GetItem( const SfxItemSet& rSet,
-                                                   sal_uInt16 nWhichId,
-                                                   SvXmlExportFlags nFlags )
+                                                   sal_uInt16 nWhichId)
 {
     // first get item from itemset
     const SfxPoolItem* pItem;
-    SfxItemState eState =
-        rSet.GetItemState( nWhichId,
-                           bool( nFlags & SvXmlExportFlags::DEEP ),
-                           &pItem );
+    SfxItemState eState = rSet.GetItemState( nWhichId, false, &pItem );
 
     if( SfxItemState::SET == eState )
     {
         return pItem;
-    }
-    else if( (nFlags & SvXmlExportFlags::DEFAULTS) &&
-              SFX_WHICH_MAX > nWhichId )
-    {
-        // if its not set, try the pool if we export defaults
-        return &rSet.GetPool()->GetDefaultItem(nWhichId);
     }
     else
     {
@@ -280,7 +265,7 @@ const SfxPoolItem* SvXMLExportItemMapper::GetItem( const SfxItemSet& rSet,
 
 SvXMLExportItemMapper::SvXMLExportItemMapper( SvXMLItemMapEntriesRef rMapEntries )
 {
-    mrMapEntries = rMapEntries;
+    mrMapEntries = std::move(rMapEntries);
 }
 
 SvXMLExportItemMapper::~SvXMLExportItemMapper()
@@ -290,27 +275,21 @@ SvXMLExportItemMapper::~SvXMLExportItemMapper()
 void SvXMLExportItemMapper::exportXML( SvXMLExport& rExport,
                     const SfxItemSet& rSet,
                     const SvXMLUnitConverter& rUnitConverter,
-                    XMLTokenEnum ePropToken,
-                    SvXmlExportFlags nFlags ) const
+                    XMLTokenEnum ePropToken ) const
 {
     std::vector<sal_uInt16> aIndexArray;
 
     exportXML( rExport, rExport.GetAttrList(), rSet, rUnitConverter,
-               rExport.GetNamespaceMap(), nFlags, &aIndexArray );
+               rExport.GetNamespaceMap(), &aIndexArray );
 
-    if( rExport.GetAttrList().getLength() > 0L ||
-        (nFlags & SvXmlExportFlags::EMPTY) ||
-        !aIndexArray.empty() )
+    if( rExport.GetAttrList().getLength() > 0 || !aIndexArray.empty() )
     {
-        if( (nFlags & SvXmlExportFlags::IGN_WS) )
-        {
-            rExport.IgnorableWhitespace();
-        }
+        rExport.IgnorableWhitespace();
 
         SvXMLElementExport aElem( rExport, XML_NAMESPACE_STYLE, ePropToken,
                                   false, false );
         exportElementItems( rExport, rUnitConverter,
-                            rSet, nFlags, aIndexArray );
+                            rSet, SvXmlExportFlags::IGN_WS, aIndexArray );
     }
 }
 
@@ -324,17 +303,6 @@ void SvXMLExportItemMapper::handleSpecialItem( SvXMLAttributeList& /*rAttrList*/
                                     const SfxItemSet* /*pSet*/ /* = NULL */ ) const
 {
     OSL_FAIL( "special item not handled in xml export" );
-}
-
-/** this method is called for every item that has the
-    MID_SW_FLAG_NO_ITEM_EXPORT flag set */
-void SvXMLExportItemMapper::handleNoItem( SvXMLAttributeList& /*rAttrList*/,
-                               const SvXMLItemMapEntry& /*rEntry*/,
-                               const SvXMLUnitConverter& /*rUnitConverter*/,
-                               const SvXMLNamespaceMap& /*rNamespaceMap*/,
-                               const SfxItemSet& /*rSet*/ )
-{
-    OSL_FAIL( "no item not handled in xml export" );
 }
 
 /** this method is called for every item that has the
@@ -355,13 +323,13 @@ static bool lcl_isOdfDoubleLine( const SvxBorderLine* pLine )
     bool bIsOdfDouble = false;
     switch (pLine->GetBorderLineStyle())
     {
-        case table::BorderLineStyle::DOUBLE:
-        case table::BorderLineStyle::THINTHICK_SMALLGAP:
-        case table::BorderLineStyle::THINTHICK_MEDIUMGAP:
-        case table::BorderLineStyle::THINTHICK_LARGEGAP:
-        case table::BorderLineStyle::THICKTHIN_SMALLGAP:
-        case table::BorderLineStyle::THICKTHIN_MEDIUMGAP:
-        case table::BorderLineStyle::THICKTHIN_LARGEGAP:
+        case SvxBorderLineStyle::DOUBLE:
+        case SvxBorderLineStyle::THINTHICK_SMALLGAP:
+        case SvxBorderLineStyle::THINTHICK_MEDIUMGAP:
+        case SvxBorderLineStyle::THINTHICK_LARGEGAP:
+        case SvxBorderLineStyle::THICKTHIN_SMALLGAP:
+        case SvxBorderLineStyle::THICKTHIN_MEDIUMGAP:
+        case SvxBorderLineStyle::THICKTHIN_LARGEGAP:
             bIsOdfDouble = true;
             break;
         default:
@@ -500,19 +468,19 @@ bool SvXMLExportItemMapper::QueryXMLValue(
                 sal_Int32 nX = 1, nY = 1;
                 switch( pShadow->GetLocation() )
                 {
-                    case SVX_SHADOW_TOPLEFT:
+                    case SvxShadowLocation::TopLeft:
                         nX = -1;
                         nY = -1;
                         break;
-                    case SVX_SHADOW_TOPRIGHT:
+                    case SvxShadowLocation::TopRight:
                         nY = -1;
                         break;
-                    case SVX_SHADOW_BOTTOMLEFT:
+                    case SvxShadowLocation::BottomLeft:
                         nX = -1;
                         break;
-                    case SVX_SHADOW_BOTTOMRIGHT:
+                    case SvxShadowLocation::BottomRight:
                         break;
-                    case SVX_SHADOW_NONE:
+                    case SvxShadowLocation::NONE:
                     default:
                         rValue = GetXMLToken(XML_NONE);
                         return true;
@@ -521,7 +489,7 @@ bool SvXMLExportItemMapper::QueryXMLValue(
                 nX *= pShadow->GetWidth();
                 nY *= pShadow->GetWidth();
 
-                ::sax::Converter::convertColor(aOut, pShadow->GetColor().GetColor());
+                ::sax::Converter::convertColor(aOut, pShadow->GetColor());
                 aOut.append( ' ' );
                 rUnitConverter.convertMeasureToXML( aOut, nX );
                 aOut.append( ' ' );
@@ -733,46 +701,46 @@ bool SvXMLExportItemMapper::QueryXMLValue(
                             bool bNoBorder = false;
                             switch (pLine->GetBorderLineStyle())
                             {
-                                case table::BorderLineStyle::SOLID:
+                                case SvxBorderLineStyle::SOLID:
                                     eStyle = XML_SOLID;
                                     break;
-                                case table::BorderLineStyle::DOTTED:
+                                case SvxBorderLineStyle::DOTTED:
                                     eStyle = XML_DOTTED;
                                     break;
-                                case table::BorderLineStyle::DASHED:
+                                case SvxBorderLineStyle::DASHED:
                                     eStyle = XML_DASHED;
                                     break;
-                                case table::BorderLineStyle::FINE_DASHED:
+                                case SvxBorderLineStyle::FINE_DASHED:
                                     eStyle = XML_FINE_DASHED;
                                     break;
-                                case table::BorderLineStyle::DASH_DOT:
+                                case SvxBorderLineStyle::DASH_DOT:
                                     eStyle = XML_DASH_DOT;
                                     break;
-                                case table::BorderLineStyle::DASH_DOT_DOT:
+                                case SvxBorderLineStyle::DASH_DOT_DOT:
                                     eStyle = XML_DASH_DOT_DOT;
                                     break;
-                                case table::BorderLineStyle::DOUBLE_THIN:
+                                case SvxBorderLineStyle::DOUBLE_THIN:
                                     eStyle = XML_DOUBLE_THIN;
                                     break;
-                                case table::BorderLineStyle::DOUBLE:
-                                case table::BorderLineStyle::THINTHICK_SMALLGAP:
-                                case table::BorderLineStyle::THINTHICK_MEDIUMGAP:
-                                case table::BorderLineStyle::THINTHICK_LARGEGAP:
-                                case table::BorderLineStyle::THICKTHIN_SMALLGAP:
-                                case table::BorderLineStyle::THICKTHIN_MEDIUMGAP:
-                                case table::BorderLineStyle::THICKTHIN_LARGEGAP:
+                                case SvxBorderLineStyle::DOUBLE:
+                                case SvxBorderLineStyle::THINTHICK_SMALLGAP:
+                                case SvxBorderLineStyle::THINTHICK_MEDIUMGAP:
+                                case SvxBorderLineStyle::THINTHICK_LARGEGAP:
+                                case SvxBorderLineStyle::THICKTHIN_SMALLGAP:
+                                case SvxBorderLineStyle::THICKTHIN_MEDIUMGAP:
+                                case SvxBorderLineStyle::THICKTHIN_LARGEGAP:
                                     eStyle = XML_DOUBLE;
                                     break;
-                                case table::BorderLineStyle::EMBOSSED:
+                                case SvxBorderLineStyle::EMBOSSED:
                                     eStyle = XML_RIDGE;
                                     break;
-                                case table::BorderLineStyle::ENGRAVED:
+                                case SvxBorderLineStyle::ENGRAVED:
                                     eStyle = XML_GROOVE;
                                     break;
-                                case table::BorderLineStyle::INSET:
+                                case SvxBorderLineStyle::INSET:
                                     eStyle = XML_INSET;
                                     break;
-                                case table::BorderLineStyle::OUTSET:
+                                case SvxBorderLineStyle::OUTSET:
                                     eStyle = XML_OUTSET;
                                     break;
                                 default:
@@ -788,7 +756,7 @@ bool SvXMLExportItemMapper::QueryXMLValue(
                                 aOut.append( GetXMLToken( eStyle ) );
                                 aOut.append( ' ' );
                                 ::sax::Converter::convertColor(aOut,
-                                        pLine->GetColor().GetColor());
+                                        pLine->GetColor());
                             }
                         }
                         else
@@ -839,20 +807,20 @@ bool SvXMLExportItemMapper::QueryXMLValue(
         {
             const SvxFormatBreakItem& rFormatBreak = dynamic_cast<const SvxFormatBreakItem&>(rItem);
 
-            unsigned int eEnum = 0;
+            sal_uInt16 eEnum = 0;
 
             switch( nMemberId )
             {
             case MID_BREAK_BEFORE:
-                switch (rFormatBreak.GetValue())
+                switch (rFormatBreak.GetBreak())
                 {
-                    case SVX_BREAK_COLUMN_BEFORE:
+                    case SvxBreak::ColumnBefore:
                         eEnum = 1;
                         break;
-                    case SVX_BREAK_PAGE_BEFORE:
+                    case SvxBreak::PageBefore:
                         eEnum = 2;
                         break;
-                    case SVX_BREAK_NONE:
+                    case SvxBreak::NONE:
                         eEnum = 0;
                         break;
                     default:
@@ -860,15 +828,15 @@ bool SvXMLExportItemMapper::QueryXMLValue(
                 }
                 break;
             case MID_BREAK_AFTER:
-                switch (rFormatBreak.GetValue())
+                switch (rFormatBreak.GetBreak())
                 {
-                    case SVX_BREAK_COLUMN_AFTER:
+                    case SvxBreak::ColumnAfter:
                         eEnum = 1;
                         break;
-                    case SVX_BREAK_PAGE_AFTER:
+                    case SvxBreak::PageAfter:
                         eEnum = 2;
                         break;
-                    case SVX_BREAK_NONE:
+                    case SvxBreak::NONE:
                         eEnum = 0;
                         break;
                     default:
@@ -911,21 +879,9 @@ bool SvXMLExportItemMapper::QueryXMLValue(
                     else
                     {
                         ::sax::Converter::convertColor(aOut,
-                                rBrush.GetColor().GetColor());
+                                rBrush.GetColor());
                     }
                     bOk = true;
-                    break;
-
-                case MID_GRAPHIC_LINK:
-                    if (rBrush.GetGraphicPos() != GPOS_NONE)
-                    {
-                        uno::Any aAny;
-                        rBrush.QueryValue( aAny, MID_GRAPHIC_URL );
-                        OUString sTmp;
-                        aAny >>= sTmp;
-                        aOut.append( sTmp );
-                        bOk = true;
-                    }
                     break;
 
                 case MID_GRAPHIC_POSITION:
@@ -1019,7 +975,7 @@ bool SvXMLExportItemMapper::QueryXMLValue(
                 {
                     // #i114163# positiveInteger only!
                     sal_Int32 const number(oNumOffset.get());
-                    ::sax::Converter::convertNumber(aOut, number);
+                    aOut.append(number);
                 }
                 else
                 {
@@ -1106,7 +1062,7 @@ bool SvXMLExportItemMapper::QueryXMLValue(
             bOk = rItem.QueryValue( aAny );
             if( bOk )
             {
-                const XMLPropertyHandler* pWritingModeHandler =
+                std::unique_ptr<XMLPropertyHandler> pWritingModeHandler =
                     XMLPropertyHandlerFactory::CreatePropertyHandler(
                         XML_TYPE_TEXT_WRITING_MODE_WITH_DEFAULT );
                 OUString sValue;
@@ -1114,8 +1070,6 @@ bool SvXMLExportItemMapper::QueryXMLValue(
                                                       rUnitConverter );
                 if( bOk )
                     aOut.append( sValue );
-
-                delete pWritingModeHandler;
             }
         }
         break;

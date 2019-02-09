@@ -20,14 +20,13 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_UI_DLG_DSSELECT_HXX
 #define INCLUDED_DBACCESS_SOURCE_UI_DLG_DSSELECT_HXX
 
-#include "dsntypes.hxx"
+#include <dsntypes.hxx>
 #include "odbcconfig.hxx"
-#include "commontypes.hxx"
+#include <commontypes.hxx>
 
 #include <vcl/dialog.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/button.hxx>
-#include <vcl/group.hxx>
 #include <vcl/fixed.hxx>
 #include <rtl/ustring.hxx>
 
@@ -38,24 +37,23 @@ namespace dbaui
 {
 
 // ODatasourceSelector
-class ODatasourceSelectDialog : public ModalDialog
+class ODatasourceSelectDialog final : public ModalDialog
 {
-protected:
     VclPtr<ListBox>        m_pDatasource;
     VclPtr<OKButton>       m_pOk;
     VclPtr<CancelButton>   m_pCancel;
 #ifdef HAVE_ODBC_ADMINISTRATION
     VclPtr<PushButton>     m_pManageDatasources;
-    ::std::unique_ptr< OOdbcManagement >
+    std::unique_ptr< OOdbcManagement >
     m_pODBCManagement;
 #endif
 
 public:
-    ODatasourceSelectDialog( vcl::Window* _pParent, const StringBag& _rDatasources );
-    virtual ~ODatasourceSelectDialog();
+    ODatasourceSelectDialog( vcl::Window* _pParent, const std::set<OUString>& _rDatasources );
+    virtual ~ODatasourceSelectDialog() override;
     virtual void dispose() override;
     OUString GetSelected() const {
-        return m_pDatasource->GetSelectEntry();
+        return m_pDatasource->GetSelectedEntry();
     }
     void     Select( const OUString& _rEntry ) {
         m_pDatasource->SelectEntry(_rEntry);
@@ -63,13 +61,13 @@ public:
 
     virtual bool    Close() override;
 
-protected:
-    DECL_LINK_TYPED( ListDblClickHdl, ListBox&, void );
+private:
+    DECL_LINK( ListDblClickHdl, ListBox&, void );
 #ifdef HAVE_ODBC_ADMINISTRATION
-    DECL_LINK_TYPED(ManageClickHdl, Button*, void);
-    DECL_LINK_TYPED( ManageProcessFinished, void*, void );
+    DECL_LINK(ManageClickHdl, Button*, void);
+    DECL_LINK( ManageProcessFinished, void*, void );
 #endif
-    void fillListBox(const StringBag& _rDatasources);
+    void fillListBox(const std::set<OUString>& _rDatasources);
 };
 
 }   // namespace dbaui

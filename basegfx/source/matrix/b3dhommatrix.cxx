@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <rtl/instance.hxx>
 #include <basegfx/matrix/b3dhommatrix.hxx>
 #include <hommatrixtemplate.hxx>
 #include <basegfx/vector/b3dvector.hxx>
+#include <memory>
 
 namespace basegfx
 {
@@ -29,28 +29,17 @@ namespace basegfx
     {
     };
 
-    namespace { struct IdentityMatrix : public rtl::Static< B3DHomMatrix::ImplType,
-                                                            IdentityMatrix > {}; }
+    B3DHomMatrix::B3DHomMatrix() = default;
 
-    B3DHomMatrix::B3DHomMatrix() :
-        mpImpl( IdentityMatrix::get() ) // use common identity matrix
-    {
-    }
+    B3DHomMatrix::B3DHomMatrix(const B3DHomMatrix&) = default;
 
-    B3DHomMatrix::B3DHomMatrix(const B3DHomMatrix& rMat) :
-        mpImpl(rMat.mpImpl)
-    {
-    }
+    B3DHomMatrix::B3DHomMatrix(B3DHomMatrix&&) = default;
 
-    B3DHomMatrix::~B3DHomMatrix()
-    {
-    }
+    B3DHomMatrix::~B3DHomMatrix() = default;
 
-    B3DHomMatrix& B3DHomMatrix::operator=(const B3DHomMatrix& rMat)
-    {
-        mpImpl = rMat.mpImpl;
-        return *this;
-    }
+    B3DHomMatrix& B3DHomMatrix::operator=(const B3DHomMatrix&) = default;
+
+    B3DHomMatrix& B3DHomMatrix::operator=(B3DHomMatrix&&) = default;
 
     double B3DHomMatrix::get(sal_uInt16 nRow, sal_uInt16 nColumn) const
     {
@@ -69,33 +58,24 @@ namespace basegfx
 
     bool B3DHomMatrix::isIdentity() const
     {
-        if(mpImpl.same_object(IdentityMatrix::get()))
-            return true;
-
         return mpImpl->isIdentity();
     }
 
     void B3DHomMatrix::identity()
     {
-        mpImpl = IdentityMatrix::get();
+        *mpImpl = Impl3DHomMatrix();
     }
 
-    bool B3DHomMatrix::invert()
+    void B3DHomMatrix::invert()
     {
         Impl3DHomMatrix aWork(*mpImpl);
-        sal_uInt16* pIndex = new sal_uInt16[Impl3DHomMatrix_Base::getEdgeLength()];
+        std::unique_ptr<sal_uInt16[]> pIndex( new sal_uInt16[Impl3DHomMatrix_Base::getEdgeLength()] );
         sal_Int16 nParity;
 
-        if(aWork.ludcmp(pIndex, nParity))
+        if(aWork.ludcmp(pIndex.get(), nParity))
         {
-            mpImpl->doInvert(aWork, pIndex);
-            delete[] pIndex;
-
-            return true;
+            mpImpl->doInvert(aWork, pIndex.get());
         }
-
-        delete[] pIndex;
-        return false;
     }
 
     double B3DHomMatrix::determinant() const
@@ -137,9 +117,20 @@ namespace basegfx
 
     B3DHomMatrix& B3DHomMatrix::operator*=(const B3DHomMatrix& rMat)
     {
-        if(!rMat.isIdentity())
+        if(rMat.isIdentity())
+        {
+            // multiply with identity, no change -> nothing to do
+        }
+        else if(isIdentity())
+        {
+            // we are identity, result will be rMat -> assign
+            *this = rMat;
+        }
+        else
+        {
+            // multiply
             mpImpl->doMulMatrix(*rMat.mpImpl);
-
+        }
         return *this;
     }
 
@@ -204,6 +195,11 @@ namespace basegfx
         }
     }
 
+    void B3DHomMatrix::rotate(const B3DTuple& rRotation)
+    {
+        rotate(rRotation.getX(), rRotation.getY(), rRotation.getZ());
+    }
+
     void B3DHomMatrix::translate(double fX, double fY, double fZ)
     {
         if(!fTools::equalZero(fX) || !fTools::equalZero(fY) || !fTools::equalZero(fZ))
@@ -216,6 +212,11 @@ namespace basegfx
 
             mpImpl->doMulMatrix(aTransMat);
         }
+    }
+
+    void B3DHomMatrix::translate(const B3DTuple& rRotation)
+    {
+        translate(rRotation.getX(), rRotation.getY(), rRotation.getZ());
     }
 
     void B3DHomMatrix::scale(double fX, double fY, double fZ)
@@ -232,6 +233,11 @@ namespace basegfx
 
             mpImpl->doMulMatrix(aScaleMat);
         }
+    }
+
+    void B3DHomMatrix::scale(const B3DTuple& rRotation)
+    {
+        scale(rRotation.getX(), rRotation.getY(), rRotation.getZ());
     }
 
     void B3DHomMatrix::shearXY(double fSx, double fSy)
@@ -351,7 +357,7 @@ namespace basegfx
         aVUV.normalize();
         aVPN.normalize();
 
-        // build x-axis as perpendicular fron aVUV and aVPN
+        // build x-axis as perpendicular from aVUV and aVPN
         B3DVector aRx(aVUV.getPerpendicular(aVPN));
         aRx.normalize();
 
@@ -374,15 +380,15 @@ namespace basegfx
         mpImpl->doMulMatrix(aOrientationMat);
     }
 
-    bool B3DHomMatrix::decompose(B3DTuple& rScale, B3DTuple& rTranslate, B3DTuple& rRotate, B3DTuple& rShear) const
+    void B3DHomMatrix::decompose(B3DTuple& rScale, B3DTuple& rTranslate, B3DTuple& rRotate, B3DTuple& rShear) const
     {
         // when perspective is used, decompose is not made here
         if(!mpImpl->isLastLineDefault())
-            return false;
+            return;
 
         // If determinant is zero, decomposition is not possible
-        if(0.0 == determinant())
-            return false;
+        if(determinant() == 0.0)
+            return;
 
         // isolate translation
         rTranslate.setX(mpImpl->get(0, 3));
@@ -466,7 +472,7 @@ namespace basegfx
 
         if(!fTools::equalZero(fShearY))
         {
-            // coverity[copy_paste_error] - this is correct getZ, not getY
+            // coverity[copy_paste_error : FALSE] - this is correct getZ, not getY
             rShear.setY(rShear.getY() / rScale.getZ());
         }
 
@@ -534,8 +540,6 @@ namespace basegfx
             // correct rotate values
             rRotate.correctValues();
         }
-
-        return true;
     }
 } // end of namespace basegfx
 

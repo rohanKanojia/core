@@ -24,22 +24,20 @@
 #include <svtools/brwhead.hxx>
 #include <vcl/timer.hxx>
 #include <vcl/image.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
+#include <memory>
 #include <vector>
 
 
 #define MIN_COLUMNWIDTH  2
 
-typedef ::std::vector< Rectangle* > RectangleList;
-
 
 class ButtonFrame
 {
-    Rectangle   aRect;
-    Rectangle   aInnerRect;
-    OUString    aText;
-    bool        bPressed;
-    bool        m_bDrawDisabled;
+    tools::Rectangle const   aRect;
+    tools::Rectangle const   aInnerRect;
+    OUString const    aText;
+    bool const        m_bDrawDisabled;
 
 public:
                ButtonFrame( const Point& rPt, const Size& rSz,
@@ -49,7 +47,6 @@ public:
                 ,aInnerRect( Point( aRect.Left()+1, aRect.Top()+1 ),
                             Size( aRect.GetWidth()-2, aRect.GetHeight()-2 ) )
                 ,aText(rText)
-                ,bPressed(false)
                 ,m_bDrawDisabled(_bDrawDisabled)
             {
             }
@@ -58,9 +55,9 @@ public:
 };
 
 
-class BrowserColumn
+class BrowserColumn final
 {
-    sal_uInt16          _nId;
+    sal_uInt16 const    _nId;
     sal_uLong           _nOriginalWidth;
     sal_uLong           _nWidth;
     OUString            _aTitle;
@@ -69,7 +66,7 @@ class BrowserColumn
 public:
                         BrowserColumn( sal_uInt16 nItemId,
                                         const OUString& rTitle, sal_uLong nWidthPixel, const Fraction& rCurrentZoom );
-    virtual            ~BrowserColumn();
+                        ~BrowserColumn();
 
     sal_uInt16          GetId() const { return _nId; }
 
@@ -79,7 +76,7 @@ public:
     bool                IsFrozen() const { return _bFrozen; }
     void                Freeze() { _bFrozen = true; }
 
-    void                Draw( BrowseBox& rBox, OutputDevice& rDev,
+    void                Draw( BrowseBox const & rBox, OutputDevice& rDev,
                               const Point& rPos  );
 
     void                SetWidth(sal_uLong nNewWidthPixel, const Fraction& rCurrentZoom);
@@ -103,10 +100,9 @@ public:
 
     OUString        aRealRowCount;  // to show in VScrollBar
 
-    RectangleList   aInvalidRegion; // invalidated Rectangles during !UpdateMode
+    std::vector<tools::Rectangle> aInvalidRegion; // invalidated Rectangles during !UpdateMode
     bool            bInPaint;       // TRUE while in Paint
     bool            bInCommand;     // TRUE while in Command
-    bool            bNoScrollBack;  // only scroll forward
     bool            bNoHScroll;     // no horizontal scrollbar
     bool            bNoVScroll;     // no vertical scrollbar
     bool            bAutoHScroll;   // autohide horizontaler Scrollbar
@@ -117,7 +113,6 @@ public:
     bool            bUpdateOnUnlock;  // Update() while locked
     bool            bInUpdateScrollbars;  // prevents recursions
     bool            bHadRecursion;        // a recursion occurred
-    bool            bOwnDataChangedHdl;   // don't change colors in DataChanged
     bool            bCallingDropCallback; // we're in a callback to AcceptDrop or ExecuteDrop currently
     sal_uInt16          nUpdateLock;    // lock count, don't call Control::Update()!
     short           nCursorHidden;  // new counter for DoHide/ShowCursor
@@ -127,16 +122,16 @@ public:
 
 public:
                     explicit BrowserDataWin( BrowseBox* pParent );
-    virtual         ~BrowserDataWin();
+    virtual         ~BrowserDataWin() override;
     virtual void    dispose() override;
 
     virtual void    DataChanged( const DataChangedEvent& rDCEvt ) override;
-    virtual void    Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void    Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
     virtual void    RequestHelp( const HelpEvent& rHEvt ) override;
     virtual void    Command( const CommandEvent& rEvt ) override;
     virtual void    MouseButtonDown( const MouseEvent& rEvt ) override;
     virtual void    MouseMove( const MouseEvent& rEvt ) override;
-                    DECL_LINK_TYPED( RepeatedMouseMove, Timer *, void );
+                    DECL_LINK( RepeatedMouseMove, Timer *, void );
 
     virtual void    MouseButtonUp( const MouseEvent& rEvt ) override;
     virtual void    KeyInput( const KeyEvent& rEvt ) override;
@@ -162,9 +157,8 @@ public:
     void            Update();
     void            DoOutstandingInvalidations();
     void            Invalidate( InvalidateFlags nFlags = InvalidateFlags::NONE ) override;
-    void            Invalidate( const Rectangle& rRect, InvalidateFlags nFlags = InvalidateFlags::NONE ) override;
-    void            Invalidate( const vcl::Region& rRegion, InvalidateFlags nFlags = InvalidateFlags::NONE ) override
-                    { Control::Invalidate( rRegion, nFlags ); }
+    void            Invalidate( const tools::Rectangle& rRect, InvalidateFlags nFlags = InvalidateFlags::NONE ) override;
+    using Control::Invalidate;
 
 protected:
     void            StartRowDividerDrag( const Point& _rStartPos );
@@ -184,7 +178,7 @@ public:
                         _nLastPos( ULONG_MAX ),
                         _pDataWin( pDataWin )
                     {}
-   virtual          ~BrowserScrollBar();
+   virtual          ~BrowserScrollBar() override;
    virtual void     dispose() override;
                     //ScrollBar( vcl::Window* pParent, const ResId& rResId );
 
@@ -193,8 +187,7 @@ public:
 };
 
 
-void InitSettings_Impl( vcl::Window *pWin,
-         bool bFont = true, bool bForeground = true );
+void InitSettings_Impl( vcl::Window *pWin );
 
 
 #endif

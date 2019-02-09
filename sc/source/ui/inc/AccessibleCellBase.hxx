@@ -21,8 +21,7 @@
 #define INCLUDED_SC_SOURCE_UI_INC_ACCESSIBLECELLBASE_HXX
 
 #include "AccessibleContextBase.hxx"
-#include "global.hxx"
-#include "address.hxx"
+#include <address.hxx>
 #include <com/sun/star/accessibility/XAccessibleValue.hpp>
 #include <cppuhelper/implbase1.hxx>
 
@@ -41,17 +40,15 @@ public:
         const ScAddress& rCellAddress,
         sal_Int32 nIndex);
 protected:
-    virtual ~ScAccessibleCellBase();
+    virtual ~ScAccessibleCellBase() override;
 public:
 
-    virtual bool SAL_CALL isVisible()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual bool isVisible() override;
 
     ///=====  XInterface  =====================================================
 
     virtual css::uno::Any SAL_CALL queryInterface(
-        css::uno::Type const & rType )
-        throw (css::uno::RuntimeException, std::exception) override;
+        css::uno::Type const & rType ) override;
 
     virtual void SAL_CALL acquire() throw () override;
 
@@ -59,91 +56,78 @@ public:
 
     ///=====  XAccessibleComponent  ============================================
 
-    virtual sal_Int32 SAL_CALL getForeground(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL getForeground(  ) override;
 
-    virtual sal_Int32 SAL_CALL getBackground(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL getBackground(  ) override;
 
     ///=====  XAccessibleContext  ==============================================
 
     /// Return this objects index among the parents children.
     virtual sal_Int32 SAL_CALL
-        getAccessibleIndexInParent()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getAccessibleIndexInParent() override;
 
 protected:
     /// Return this object's description.
-    virtual OUString SAL_CALL
-        createAccessibleDescription()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString
+        createAccessibleDescription() override;
 
     /// Return the object's current name.
-    virtual OUString SAL_CALL
-        createAccessibleName()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString
+        createAccessibleName() override;
 
 public:
     ///=====  XAccessibleValue  ================================================
 
     virtual css::uno::Any SAL_CALL
-        getCurrentValue()
-        throw (css::uno::RuntimeException,
-               std::exception) override;
+        getCurrentValue() override;
 
     virtual sal_Bool SAL_CALL
-        setCurrentValue( const css::uno::Any& aNumber )
-        throw (css::uno::RuntimeException, std::exception) override;
+        setCurrentValue( const css::uno::Any& aNumber ) override;
 
     virtual css::uno::Any SAL_CALL
-        getMaximumValue(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+        getMaximumValue(  ) override;
 
     virtual css::uno::Any SAL_CALL
-        getMinimumValue(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+        getMinimumValue(  ) override;
 
     ///=====  XServiceInfo  ====================================================
 
     /** Returns an identifier for the implementation of this object.
     */
     virtual OUString SAL_CALL
-        getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getImplementationName() override;
 
     ///=====  XTypeProvider  ===================================================
 
     /// returns the possible types
     virtual css::uno::Sequence< css::uno::Type > SAL_CALL
-        getTypes()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getTypes() override;
 
     /** Returns a implementation id.
     */
     virtual css::uno::Sequence<sal_Int8> SAL_CALL
-        getImplementationId()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getImplementationId() override;
 
 protected:
     ScAddress maCellAddress;
 
     ScDocument* mpDoc;
 
-    sal_Int32 mnIndex;
+    sal_Int32 const mnIndex;
 
 private:
     virtual bool IsEditable(
         const css::uno::Reference<css::accessibility::XAccessibleStateSet>& rxParentStates);
 protected:
-    OUString SAL_CALL GetNote()
-        throw (css::uno::RuntimeException);
+    /// @throw css::uno::RuntimeException
+    OUString GetNote();
 
-    OUString SAL_CALL GetAllDisplayNote()
-        throw (css::uno::RuntimeException, std::exception);
-    OUString SAL_CALL getShadowAttrs()
-        throw (css::uno::RuntimeException, std::exception);
-    OUString SAL_CALL getBorderAttrs()
-        throw (css::uno::RuntimeException, std::exception);
+    /// @throw css::uno::RuntimeException
+    OUString GetAllDisplayNote();
+    /// @throw css::uno::RuntimeException
+    OUString getShadowAttrs();
+    /// @throw css::uno::RuntimeException
+    OUString getBorderAttrs();
 public:
     const ScAddress& GetCellAddress() const { return maCellAddress; }
 };

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 
@@ -26,10 +26,13 @@
 #include <sal/log.hxx>
 #include <salhelper/simplereferenceobject.hxx>
 #include <cppuhelper/weak.hxx>
+#include <cppuhelper/queryinterface.hxx>
 
 #include <cppuhelper/implbase.hxx>
 #include <com/sun/star/ucb/CheckinArgument.hpp>
 #include <com/sun/star/ucb/ContentCreationError.hpp>
+#include <com/sun/star/ucb/ContentCreationException.hpp>
+#include <com/sun/star/ucb/IllegalIdentifierException.hpp>
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <com/sun/star/ucb/XCommandInfo.hpp>
 #include <com/sun/star/ucb/XCommandProcessor.hpp>
@@ -80,22 +83,16 @@ class EmptyInputStream : public ::cppu::WeakImplHelper< XInputStream >
 {
 public:
     virtual sal_Int32 SAL_CALL readBytes(
-        Sequence< sal_Int8 > & data, sal_Int32 nBytesToRead )
-        throw (IOException, RuntimeException, std::exception) override;
+        Sequence< sal_Int8 > & data, sal_Int32 nBytesToRead ) override;
     virtual sal_Int32 SAL_CALL readSomeBytes(
-        Sequence< sal_Int8 > & data, sal_Int32 nMaxBytesToRead )
-        throw (IOException, RuntimeException, std::exception) override;
-    virtual void SAL_CALL skipBytes( sal_Int32 nBytesToSkip )
-        throw (IOException, RuntimeException, std::exception) override;
-    virtual sal_Int32 SAL_CALL available()
-        throw (IOException, RuntimeException, std::exception) override;
-    virtual void SAL_CALL closeInput()
-        throw (IOException, RuntimeException, std::exception) override;
+        Sequence< sal_Int8 > & data, sal_Int32 nMaxBytesToRead ) override;
+    virtual void SAL_CALL skipBytes( sal_Int32 nBytesToSkip ) override;
+    virtual sal_Int32 SAL_CALL available() override;
+    virtual void SAL_CALL closeInput() override;
 };
 
 sal_Int32 EmptyInputStream::readBytes(
     Sequence< sal_Int8 > & data, sal_Int32 )
-    throw (IOException, RuntimeException, std::exception)
 {
     data.realloc( 0 );
     return 0;
@@ -103,25 +100,21 @@ sal_Int32 EmptyInputStream::readBytes(
 
 sal_Int32 EmptyInputStream::readSomeBytes(
     Sequence< sal_Int8 > & data, sal_Int32 )
-    throw (IOException, RuntimeException, std::exception)
 {
     data.realloc( 0 );
     return 0;
 }
 
 void EmptyInputStream::skipBytes( sal_Int32 )
-    throw (IOException, RuntimeException, std::exception)
 {
 }
 
 sal_Int32 EmptyInputStream::available()
-    throw (IOException, RuntimeException, std::exception)
 {
     return 0;
 }
 
 void EmptyInputStream::closeInput()
-    throw (IOException, RuntimeException, std::exception)
 {
 }
 
@@ -139,20 +132,17 @@ public:
         : m_rContent( rContent ) {}
 
     // XInterface
-    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type & rType )
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type & rType ) override;
     virtual void SAL_CALL acquire()
         throw() override;
     virtual void SAL_CALL release()
         throw() override;
 
     // XContentEventListener
-    virtual void SAL_CALL contentEvent( const ContentEvent& evt )
-        throw( RuntimeException, std::exception ) override;
+    virtual void SAL_CALL contentEvent( const ContentEvent& evt ) override;
 
     // XEventListener ( base of XContentEventListener )
-    virtual void SAL_CALL disposing( const EventObject& Source )
-        throw( RuntimeException, std::exception ) override;
+    virtual void SAL_CALL disposing( const EventObject& Source ) override;
 };
 
 
@@ -181,12 +171,12 @@ public:
                   const Reference< XContent >& rContent,
                   const Reference< XCommandEnvironment >& rEnv );
 
-    virtual ~Content_Impl();
+    virtual ~Content_Impl() override;
 
     const OUString&           getURL() const;
     Reference< XContent >          getContent();
     Reference< XCommandProcessor > getCommandProcessor();
-    Reference< XComponentContext > getComponentContext()
+    Reference< XComponentContext > const & getComponentContext() const
     { assert(m_xCtx.is()); return m_xCtx; }
 
     Any  executeCommand( const Command& rCommand );
@@ -201,10 +191,10 @@ public:
 
 // Helpers.
 
-
+/// @throws ContentCreationException
+/// @throws RuntimeException
 static void ensureContentProviderForURL( const Reference< XUniversalContentBroker >& rBroker,
                                          const OUString & rURL )
-    throw ( ContentCreationException, RuntimeException )
 {
     Reference< XContentProvider > xProv
         = rBroker->queryContentProvider( rURL );
@@ -217,11 +207,11 @@ static void ensureContentProviderForURL( const Reference< XUniversalContentBroke
     }
 }
 
-
+/// @throws ContentCreationException
+/// @throws RuntimeException
 static Reference< XContentIdentifier > getContentIdentifierThrow(
                                     const Reference< XUniversalContentBroker > & rBroker,
                                     const OUString & rURL)
-    throw (ContentCreationException, RuntimeException)
 {
     Reference< XContentIdentifier > xId
         = rBroker->createContentIdentifier( rURL );
@@ -239,18 +229,19 @@ static Reference< XContentIdentifier > getContentIdentifierThrow(
     return xId;
 }
 
+/// @throws RuntimeException
 static Reference< XContentIdentifier > getContentIdentifierNoThrow(
                                     const Reference< XUniversalContentBroker > & rBroker,
                                     const OUString & rURL)
-    throw (RuntimeException)
 {
     return rBroker->createContentIdentifier(rURL);
 }
 
+/// @throws ContentCreationException
+/// @throws RuntimeException
 static Reference< XContent > getContentThrow(
                                     const Reference< XUniversalContentBroker > & rBroker,
                                     const Reference< XContentIdentifier > & xId)
-    throw ( ContentCreationException, RuntimeException )
 {
     Reference< XContent > xContent;
     OUString msg;
@@ -277,11 +268,10 @@ static Reference< XContent > getContentThrow(
     return xContent;
 }
 
-
+/// @throws RuntimeException
 static Reference< XContent > getContentNoThrow(
                                     const Reference< XUniversalContentBroker > & rBroker,
                                     const Reference< XContentIdentifier > & xId)
-    throw ( RuntimeException )
 {
     Reference< XContent > xContent;
     try
@@ -290,7 +280,7 @@ static Reference< XContent > getContentNoThrow(
     }
     catch ( IllegalIdentifierException const & e )
     {
-        SAL_WARN("ucbhelper", "getContentNoThrow: exception: " << e.Message);
+        SAL_WARN("ucbhelper", "getContentNoThrow: " << e);
     }
 
     return xContent;
@@ -309,7 +299,6 @@ Content::Content()
 Content::Content( const OUString& rURL,
                   const Reference< XCommandEnvironment >& rEnv,
                   const Reference< XComponentContext >& rCtx )
-    throw ( ContentCreationException, RuntimeException )
 {
     Reference< XUniversalContentBroker > pBroker(
         UniversalContentBroker::create( rCtx ) );
@@ -326,7 +315,6 @@ Content::Content( const OUString& rURL,
 Content::Content( const Reference< XContent >& rContent,
                   const Reference< XCommandEnvironment >& rEnv,
                   const Reference< XComponentContext >& rCtx )
-    throw ( ContentCreationException, RuntimeException )
 {
     m_xImpl = new Content_Impl( rCtx, rContent, rEnv );
 }
@@ -337,6 +325,10 @@ Content::Content( const Content& rOther )
     m_xImpl = rOther.m_xImpl;
 }
 
+Content::Content( Content&& rOther )
+{
+    m_xImpl = std::move(rOther.m_xImpl);
+}
 
 // static
 bool Content::create( const OUString& rURL,
@@ -374,6 +366,11 @@ Content& Content::operator=( const Content& rOther )
     return *this;
 }
 
+Content& Content::operator=( Content&& rOther )
+{
+    m_xImpl = std::move(rOther.m_xImpl);
+    return *this;
+}
 
 Reference< XContent > Content::get() const
 {
@@ -401,7 +398,6 @@ void Content::setCommandEnvironment(
 
 
 Reference< XCommandInfo > Content::getCommands()
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     Command aCommand;
     aCommand.Name     = "getCommandInfo";
@@ -417,7 +413,6 @@ Reference< XCommandInfo > Content::getCommands()
 
 
 Reference< XPropertySetInfo > Content::getProperties()
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     Command aCommand;
     aCommand.Name     = "getPropertySetInfo";
@@ -433,7 +428,6 @@ Reference< XPropertySetInfo > Content::getProperties()
 
 
 Any Content::getPropertyValue( const OUString& rPropertyName )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     Sequence<OUString> aNames { rPropertyName };
 
@@ -444,7 +438,6 @@ Any Content::getPropertyValue( const OUString& rPropertyName )
 
 Any Content::setPropertyValue( const OUString& rName,
                                 const Any& rValue )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     Sequence<OUString> aNames { rName };
 
@@ -458,7 +451,6 @@ Any Content::setPropertyValue( const OUString& rName,
 
 Sequence< Any > Content::getPropertyValues(
                             const Sequence< OUString >& rPropertyNames )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     Reference< XRow > xRow = getPropertyValuesInterface( rPropertyNames );
 
@@ -479,7 +471,6 @@ Sequence< Any > Content::getPropertyValues(
 
 Reference< XRow > Content::getPropertyValuesInterface(
                             const Sequence< OUString >& rPropertyNames )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     sal_Int32 nCount = rPropertyNames.getLength();
     Sequence< Property > aProps( nCount );
@@ -513,15 +504,13 @@ Reference< XRow > Content::getPropertyValuesInterface(
 Sequence< Any > Content::setPropertyValues(
                             const Sequence< OUString >& rPropertyNames,
                                 const Sequence< Any >& rValues )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     if ( rPropertyNames.getLength() != rValues.getLength() )
     {
         ucbhelper::cancelCommandExecution(
             makeAny( IllegalArgumentException(
-                        OUString(
-                            "Length of property names sequence and value "
-                            "sequence are unequal!" ),
+                        "Length of property names sequence and value "
+                        "sequence are unequal!",
                         get(),
                         -1 ) ),
             m_xImpl->getEnvironment() );
@@ -560,7 +549,6 @@ Sequence< Any > Content::setPropertyValues(
 
 Any Content::executeCommand( const OUString& rCommandName,
                              const Any& rCommandArgument )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     Command aCommand;
     aCommand.Name     = rCommandName;
@@ -573,7 +561,6 @@ Any Content::executeCommand( const OUString& rCommandName,
 
 Any Content::createCursorAny( const Sequence< OUString >& rPropertyNames,
                               ResultSetInclude eMode )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     sal_Int32 nCount = rPropertyNames.getLength();
     Sequence< Property > aProps( nCount );
@@ -607,7 +594,6 @@ Any Content::createCursorAny( const Sequence< OUString >& rPropertyNames,
 Reference< XResultSet > Content::createCursor(
                             const Sequence< OUString >& rPropertyNames,
                             ResultSetInclude eMode )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     Any aCursorAny = createCursorAny( rPropertyNames, eMode );
 
@@ -637,7 +623,6 @@ Reference< XResultSet > Content::createCursor(
 Reference< XDynamicResultSet > Content::createDynamicCursor(
                             const Sequence< OUString >& rPropertyNames,
                             ResultSetInclude eMode )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     Reference< XDynamicResultSet > aResult;
     createCursorAny( rPropertyNames, eMode ) >>= aResult;
@@ -653,7 +638,6 @@ Reference< XResultSet > Content::createSortedCursor(
                             const Sequence< NumberedSortingInfo >& rSortInfo,
                             const Reference< XAnyCompareFactory >& rAnyCompareFactory,
                             ResultSetInclude eMode )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     Reference< XResultSet > aResult;
     Reference< XDynamicResultSet > aDynSet;
@@ -676,7 +660,7 @@ Reference< XResultSet > Content::createSortedCursor(
                                                               rAnyCompareFactory );
         }
 
-        OSL_ENSURE( aDynResult.is(), "Content::createSortedCursor - no sorted cursor!\n" );
+        OSL_ENSURE( aDynResult.is(), "Content::createSortedCursor - no sorted cursor!" );
 
         if( aDynResult.is() )
             aResult = aDynResult->getStaticResultSet();
@@ -701,7 +685,6 @@ Reference< XResultSet > Content::createSortedCursor(
 
 
 Reference< XInputStream > Content::openStream()
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     if ( !isDocument() )
         return Reference< XInputStream >();
@@ -726,7 +709,6 @@ Reference< XInputStream > Content::openStream()
 
 
 Reference< XInputStream > Content::openStreamNoLock()
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     if ( !isDocument() )
         return Reference< XInputStream >();
@@ -751,7 +733,6 @@ Reference< XInputStream > Content::openStreamNoLock()
 
 
 Reference< XStream > Content::openWriteableStream()
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     if ( !isDocument() )
         return Reference< XStream >();
@@ -776,7 +757,6 @@ Reference< XStream > Content::openWriteableStream()
 
 
 Reference< XStream > Content::openWriteableStreamNoLock()
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     if ( !isDocument() )
         return Reference< XStream >();
@@ -801,7 +781,6 @@ Reference< XStream > Content::openWriteableStreamNoLock()
 
 
 bool Content::openStream( const Reference< XActiveDataSink >& rSink )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     if ( !isDocument() )
         return false;
@@ -824,7 +803,6 @@ bool Content::openStream( const Reference< XActiveDataSink >& rSink )
 
 
 bool Content::openStream( const Reference< XOutputStream >& rStream )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     if ( !isDocument() )
         return false;
@@ -848,7 +826,6 @@ bool Content::openStream( const Reference< XOutputStream >& rStream )
 
 void Content::writeStream( const Reference< XInputStream >& rStream,
                            bool bReplaceExisting )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     InsertCommandArgument aArg;
     aArg.Data            = rStream.is() ? rStream : new EmptyInputStream;
@@ -866,7 +843,6 @@ void Content::writeStream( const Reference< XInputStream >& rStream,
 
 
 Sequence< ContentInfo > Content::queryCreatableContentsInfo()
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     // First, try it using "CreatableContentsInfo" property -> the "new" way.
     Sequence< ContentInfo > aInfo;
@@ -890,7 +866,6 @@ bool Content::insertNewContent( const OUString& rContentType,
                                         rPropertyNames,
                                     const Sequence< Any >& rPropertyValues,
                                     Content& rNewContent )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     return insertNewContent( rContentType,
                              rPropertyNames,
@@ -906,7 +881,6 @@ bool Content::insertNewContent( const OUString& rContentType,
                                     const Sequence< Any >& rPropertyValues,
                                     const Reference< XInputStream >& rData,
                                     Content& rNewContent )
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     if ( rContentType.isEmpty() )
         return false;
@@ -956,7 +930,7 @@ bool Content::insertNewContent( const OUString& rContentType,
                                 makeAny(
                                     InsertCommandArgument(
                                         rData.is() ? rData : new EmptyInputStream,
-                                        sal_False /* ReplaceExisting */ ) ) );
+                                        false /* ReplaceExisting */ ) ) );
     aNewContent.m_xImpl->inserted();
 
     rNewContent = aNewContent;
@@ -964,7 +938,7 @@ bool Content::insertNewContent( const OUString& rContentType,
 }
 
 
-bool Content::transferContent( const Content& rSourceContent,
+void Content::transferContent( const Content& rSourceContent,
                                    InsertOperation eOperation,
                                    const OUString & rTitle,
                                    const sal_Int32 nNameClashAction,
@@ -972,8 +946,7 @@ bool Content::transferContent( const Content& rSourceContent,
                                    bool bMajorVersion,
                                    const OUString & rVersionComment,
                                    OUString* pResultURL,
-                                   const OUString & rDocumentId )
-    throw( CommandAbortedException, RuntimeException, Exception )
+                                   const OUString & rDocumentId ) const
 {
     Reference< XUniversalContentBroker > pBroker(
         UniversalContentBroker::create( m_xImpl->getComponentContext() ) );
@@ -985,19 +958,15 @@ bool Content::transferContent( const Content& rSourceContent,
     bool bCheckIn = false;
     switch ( eOperation )
     {
-        case InsertOperation_COPY:
+        case InsertOperation::Copy:
             eTransOp = TransferCommandOperation_COPY;
             break;
 
-        case InsertOperation_MOVE:
+        case InsertOperation::Move:
             eTransOp = TransferCommandOperation_MOVE;
             break;
 
-        case InsertOperation_LINK:
-            eTransOp = TransferCommandOperation_LINK;
-            break;
-
-        case InsertOperation_CHECKIN:
+        case InsertOperation::Checkin:
             eTransOp = TransferCommandOperation_COPY;
             sCommand = "checkin";
             bCheckIn = true;
@@ -1029,12 +998,10 @@ bool Content::transferContent( const Content& rSourceContent,
     Any aRet = pBroker->execute( aCommand, 0, m_xImpl->getEnvironment() );
     if ( pResultURL != nullptr )
         aRet >>= *pResultURL;
-    return true;
 }
 
 
 bool Content::isFolder()
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     bool bFolder = false;
     if ( getPropertyValue("IsFolder")
@@ -1043,8 +1010,7 @@ bool Content::isFolder()
 
      ucbhelper::cancelCommandExecution(
          makeAny( UnknownPropertyException(
-                    OUString(
-                        "Unable to retrieve value of property 'IsFolder'!" ),
+                    "Unable to retrieve value of property 'IsFolder'!",
                     get() ) ),
          m_xImpl->getEnvironment() );
 
@@ -1059,7 +1025,6 @@ bool Content::isFolder()
 SAL_WNOUNREACHABLE_CODE_PUSH
 
 bool Content::isDocument()
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     bool bDoc = false;
     if ( getPropertyValue("IsDocument")
@@ -1068,8 +1033,7 @@ bool Content::isDocument()
 
      ucbhelper::cancelCommandExecution(
          makeAny( UnknownPropertyException(
-                    OUString(
-                        "Unable to retrieve value of property 'IsDocument'!" ),
+                    "Unable to retrieve value of property 'IsDocument'!",
                     get() ) ),
          m_xImpl->getEnvironment() );
 
@@ -1081,7 +1045,6 @@ bool Content::isDocument()
 SAL_WNOUNREACHABLE_CODE_POP
 
 void Content::lock()
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
     Command aCommand;
     aCommand.Name     = "lock";
@@ -1092,7 +1055,6 @@ void Content::lock()
 }
 
 void Content::unlock()
-    throw( CommandAbortedException, RuntimeException, Exception )
 {
 
     Command aCommand;
@@ -1339,11 +1301,10 @@ void SAL_CALL ContentEventListener_Impl::release()
 }
 
 css::uno::Any SAL_CALL ContentEventListener_Impl::queryInterface( const css::uno::Type & rType )
-    throw( css::uno::RuntimeException, std::exception )
 {
     css::uno::Any aRet = cppu::queryInterface( rType,
-                                               (static_cast< XContentEventListener* >(this)),
-                                               (static_cast< XEventListener* >(this))
+                                               static_cast< XContentEventListener* >(this),
+                                               static_cast< XEventListener* >(this)
                                                );
     return aRet.hasValue() ? aRet : OWeakObject::queryInterface( rType );
 }
@@ -1353,7 +1314,6 @@ css::uno::Any SAL_CALL ContentEventListener_Impl::queryInterface( const css::uno
 
 // virtual
 void SAL_CALL ContentEventListener_Impl::contentEvent( const ContentEvent& evt )
-    throw( RuntimeException, std::exception )
 {
     if ( evt.Source == m_rContent.m_xContent )
     {
@@ -1379,7 +1339,6 @@ void SAL_CALL ContentEventListener_Impl::contentEvent( const ContentEvent& evt )
 
 // virtual
 void SAL_CALL ContentEventListener_Impl::disposing( const EventObject& Source )
-    throw( RuntimeException, std::exception )
 {
     m_rContent.disposing(Source);
 }

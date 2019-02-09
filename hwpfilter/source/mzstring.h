@@ -82,30 +82,24 @@ class MzString
 {
     public:
         MzString();                               // Create an empty string
-// if len = 0, len becomes s.length)
-        MzString(MzString const &s, int len = 0);
         ~MzString();
 
         int       length() const;
         const char*   c_str() const;
         operator  char*()         { return const_cast<char *>(c_str()); }
 
-// If it is not possible to use the constructor with an initial
-// allocation size, use the following member to set the size.
-        bool      resize(int len);
-
 // Assignment
-        MzString  &operator = (MzString &s);
+        MzString  &operator = (const MzString &s);
         MzString  &operator = (const char *s);
 
 // Appending
 
         MzString  &operator << (const char *);
         MzString  &operator << (char);
-        MzString  &operator << (unsigned char c)  { return *this<<(char)c; }
+        MzString  &operator << (unsigned char c)  { return *this<<static_cast<char>(c); }
         MzString  &operator << (int);
         MzString  &operator << (long);
-        MzString  &operator << (short i)      { return *this<<(int)i; }
+        MzString  &operator << (short i)      { return *this<<static_cast<int>(i); }
         MzString  &operator << (MzString const &);
 /* MzString &operator << (MzString *s)  { return *this<<*s; }
 

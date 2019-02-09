@@ -18,11 +18,11 @@
  */
 
 #include <vcl/strhelper.hxx>
-#include "sal/alloca.h"
+#include <sal/alloca.h>
 
-namespace psp {
+namespace  {
 
-inline bool isSpace( sal_Unicode cChar )
+bool isSpace( sal_Unicode cChar )
 {
     return
         cChar == ' '    || cChar == '\t'    ||
@@ -30,12 +30,12 @@ inline bool isSpace( sal_Unicode cChar )
         cChar == 0x0c   || cChar == 0x0b;
 }
 
-inline bool isProtect( sal_Unicode cChar )
+bool isProtect( sal_Unicode cChar )
 {
     return cChar == '`' || cChar == '\'' || cChar == '"';
 }
 
-inline void CopyUntil( char*& pTo, const char*& pFrom, char cUntil, bool bIncludeUntil = false )
+void CopyUntil( char*& pTo, const char*& pFrom, char cUntil, bool bIncludeUntil = false )
 {
     do
     {
@@ -66,7 +66,7 @@ inline void CopyUntil( char*& pTo, const char*& pFrom, char cUntil, bool bInclud
         pFrom++;
 }
 
-inline void CopyUntil( sal_Unicode*& pTo, const sal_Unicode*& pFrom, sal_Unicode cUntil, bool bIncludeUntil = false )
+void CopyUntil( sal_Unicode*& pTo, const sal_Unicode*& pFrom, sal_Unicode cUntil, bool bIncludeUntil = false )
 {
     do
     {
@@ -96,6 +96,10 @@ inline void CopyUntil( sal_Unicode*& pTo, const sal_Unicode*& pFrom, sal_Unicode
     if( *pFrom )
         pFrom++;
 }
+
+}
+
+namespace psp {
 
 OUString GetCommandLineToken( int nToken, const OUString& rLine )
 {
@@ -296,9 +300,12 @@ OUString WhitespaceToSpace( const OUString& rLine, bool bProtect )
     *pLeap = 0;
 
     // there might be a space at beginning or end
-    pLeap--;
-    if( *pLeap == ' ' )
-        *pLeap = 0;
+    if (pLeap > pBuffer)
+    {
+        pLeap--;
+        if( *pLeap == ' ' )
+            *pLeap = 0;
+    }
 
     return OUString(*pBuffer == ' ' ? pBuffer+1 : pBuffer);
 }

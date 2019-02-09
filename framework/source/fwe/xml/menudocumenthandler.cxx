@@ -22,8 +22,8 @@
 
 #include <xml/menudocumenthandler.hxx>
 #include <framework/menuconfiguration.hxx>
-#include <framework/addonmenu.hxx>
 
+#include <com/sun/star/xml/sax/SAXException.hpp>
 #include <com/sun/star/xml/sax/XExtendedDocumentHandler.hpp>
 #include <com/sun/star/lang/XSingleComponentFactory.hpp>
 #include <com/sun/star/ui/ItemType.hpp>
@@ -79,10 +79,6 @@ static const char ITEM_DESCRIPTOR_LABEL[]       = "Label";
 static const char ITEM_DESCRIPTOR_TYPE[]        = "Type";
 static const char ITEM_DESCRIPTOR_STYLE[]       = "Style";
 
-// special popup menus (filled during runtime) must be saved as an empty popup menu or menuitem!!!
-static const char ADDDIRECT_CMD[]               = ".uno:AddDirect";
-static const char AUTOPILOTMENU_CMD[]           = ".uno:AutoPilotMenu";
-
 //  using namespaces
 
 using namespace ::com::sun::star::uno;
@@ -107,7 +103,7 @@ const MenuStyleItem MenuItemStyles[ ] = {
     { css::ui::ItemStyle::RADIO_CHECK, ATTRIBUTE_ITEMSTYLE_RADIO }
 };
 
-sal_Int32 nMenuStyleItemEntries = SAL_N_ELEMENTS(MenuItemStyles);
+sal_Int32 const nMenuStyleItemEntries = SAL_N_ELEMENTS(MenuItemStyles);
 
 static void ExtractMenuParameters( const Sequence< PropertyValue >& rProp,
                                    OUString&                       rCommandURL,
@@ -150,8 +146,6 @@ static void ExtractMenuParameters( const Sequence< PropertyValue >& rProp,
 // Base class implementation
 
 ReadMenuDocumentHandlerBase::ReadMenuDocumentHandlerBase() :
-    m_xLocator( nullptr ),
-    m_xReader( nullptr ),
     m_aType( ITEM_DESCRIPTOR_TYPE ),
     m_aLabel( ITEM_DESCRIPTOR_LABEL ),
     m_aContainer( ITEM_DESCRIPTOR_CONTAINER ),
@@ -167,19 +161,16 @@ ReadMenuDocumentHandlerBase::~ReadMenuDocumentHandlerBase()
 
 void SAL_CALL ReadMenuDocumentHandlerBase::ignorableWhitespace(
     const OUString& )
-throw( SAXException, RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL ReadMenuDocumentHandlerBase::processingInstruction(
     const OUString& /*aTarget*/, const OUString& /*aData*/ )
-throw( SAXException, RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL ReadMenuDocumentHandlerBase::setDocumentLocator(
     const Reference< XLocator > &xLocator)
-throw(  SAXException, RuntimeException, std::exception )
 {
     m_xLocator = xLocator;
 }
@@ -230,12 +221,10 @@ OReadMenuDocumentHandler::~OReadMenuDocumentHandler()
 }
 
 void SAL_CALL OReadMenuDocumentHandler::startDocument()
-    throw ( SAXException, RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL OReadMenuDocumentHandler::endDocument()
-    throw( SAXException, RuntimeException, std::exception )
 {
     if ( m_nElementDepth > 0 )
     {
@@ -247,7 +236,6 @@ void SAL_CALL OReadMenuDocumentHandler::endDocument()
 
 void SAL_CALL OReadMenuDocumentHandler::startElement(
     const OUString& aName, const Reference< XAttributeList > &xAttrList )
-throw( SAXException, RuntimeException, std::exception )
 {
     if ( m_eReaderMode != ReaderMode::None )
     {
@@ -272,12 +260,10 @@ throw( SAXException, RuntimeException, std::exception )
 }
 
 void SAL_CALL OReadMenuDocumentHandler::characters(const OUString&)
-throw(  SAXException, RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL OReadMenuDocumentHandler::endElement( const OUString& aName )
-    throw( SAXException, RuntimeException, std::exception )
 {
     if ( m_eReaderMode != ReaderMode::None )
     {
@@ -319,18 +305,15 @@ OReadMenuBarHandler::~OReadMenuBarHandler()
 }
 
 void SAL_CALL OReadMenuBarHandler::startDocument()
-    throw ( SAXException, RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL OReadMenuBarHandler::endDocument()
-    throw( SAXException, RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL OReadMenuBarHandler::startElement(
     const OUString& rName, const Reference< XAttributeList > &xAttrList )
-throw( SAXException, RuntimeException, std::exception )
 {
     if ( m_bMenuMode )
     {
@@ -362,7 +345,7 @@ throw( SAXException, RuntimeException, std::exception )
             for ( sal_Int16 i=0; i< xAttrList->getLength(); i++ )
             {
                 OUString aName = xAttrList->getNameByIndex( i );
-                OUString aValue = xAttrList->getValueByIndex( i );
+                const OUString aValue = xAttrList->getValueByIndex( i );
                 if ( aName == ATTRIBUTE_ID )
                     aCommandId = aValue;
                 else if ( aName == ATTRIBUTE_LABEL )
@@ -371,11 +354,10 @@ throw( SAXException, RuntimeException, std::exception )
                     aHelpId = aValue;
                 else if ( aName == ATTRIBUTE_STYLE )
                 {
-                    OUString aTemp( aValue );
                     sal_Int32 nIndex = 0;
                     do
                     {
-                        OUString aToken = aTemp.getToken( 0, '+', nIndex );
+                        OUString aToken = aValue.getToken( 0, '+', nIndex );
                         if ( !aToken.isEmpty() )
                         {
                             if ( aToken == ATTRIBUTE_ITEMSTYLE_TEXT )
@@ -418,12 +400,10 @@ throw( SAXException, RuntimeException, std::exception )
 }
 
 void SAL_CALL OReadMenuBarHandler::characters(const OUString&)
-throw(  SAXException, RuntimeException, std::exception )
 {
 }
 
 void OReadMenuBarHandler::endElement( const OUString& aName )
-    throw( SAXException, RuntimeException, std::exception )
 {
     if ( m_bMenuMode )
     {
@@ -460,18 +440,15 @@ OReadMenuHandler::~OReadMenuHandler()
 }
 
 void SAL_CALL OReadMenuHandler::startDocument()
-    throw ( SAXException, RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL OReadMenuHandler::endDocument()
-    throw( SAXException, RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL OReadMenuHandler::startElement(
     const OUString& aName, const Reference< XAttributeList > &xAttrList )
-throw( SAXException, RuntimeException, std::exception )
 {
     if ( m_bMenuPopupMode )
     {
@@ -494,12 +471,10 @@ throw( SAXException, RuntimeException, std::exception )
 }
 
 void SAL_CALL OReadMenuHandler::characters(const OUString&)
-throw(  SAXException, RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL OReadMenuHandler::endElement( const OUString& aName )
-    throw( SAXException, RuntimeException, std::exception )
 {
     if ( m_bMenuPopupMode )
     {
@@ -538,18 +513,15 @@ OReadMenuPopupHandler::~OReadMenuPopupHandler()
 }
 
 void SAL_CALL OReadMenuPopupHandler::startDocument()
-    throw ( SAXException, RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL OReadMenuPopupHandler::endDocument()
-    throw( SAXException, RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL OReadMenuPopupHandler::startElement(
     const OUString& rName, const Reference< XAttributeList > &xAttrList )
-throw( SAXException, RuntimeException, std::exception )
 {
     ++m_nElementDepth;
 
@@ -573,7 +545,7 @@ throw( SAXException, RuntimeException, std::exception )
         for ( sal_Int16 i=0; i< xAttrList->getLength(); i++ )
         {
             OUString aName = xAttrList->getNameByIndex( i );
-            OUString aValue = xAttrList->getValueByIndex( i );
+            const OUString aValue = xAttrList->getValueByIndex( i );
             if ( aName == ATTRIBUTE_ID )
                 aCommandId = aValue;
             else if ( aName == ATTRIBUTE_LABEL )
@@ -582,11 +554,10 @@ throw( SAXException, RuntimeException, std::exception )
                 aHelpId = aValue;
             else if ( aName == ATTRIBUTE_STYLE )
             {
-                OUString aTemp( aValue );
                 sal_Int32 nIndex = 0;
                 do
                 {
-                    OUString aToken = aTemp.getToken( 0, '+', nIndex );
+                    OUString aToken = aValue.getToken( 0, '+', nIndex );
                     if ( !aToken.isEmpty() )
                     {
                         if ( aToken == ATTRIBUTE_ITEMSTYLE_TEXT )
@@ -630,7 +601,7 @@ throw( SAXException, RuntimeException, std::exception )
         for ( sal_Int16 i=0; i< xAttrList->getLength(); i++ )
         {
             OUString aName = xAttrList->getNameByIndex( i );
-            OUString aValue = xAttrList->getValueByIndex( i );
+            const OUString aValue = xAttrList->getValueByIndex( i );
             if ( aName == ATTRIBUTE_ID )
                 aCommandId = aValue;
             else if ( aName == ATTRIBUTE_LABEL )
@@ -639,11 +610,10 @@ throw( SAXException, RuntimeException, std::exception )
                 aHelpId = aValue;
             else if ( aName == ATTRIBUTE_STYLE )
             {
-                OUString aTemp( aValue );
                 sal_Int32 nIndex = 0;
                 do
                 {
-                    OUString aToken = aTemp.getToken( 0, '+', nIndex );
+                    OUString aToken = aValue.getToken( 0, '+', nIndex );
                     if ( !aToken.isEmpty() )
                     {
                         if ( aToken == ATTRIBUTE_ITEMSTYLE_TEXT )
@@ -689,12 +659,10 @@ throw( SAXException, RuntimeException, std::exception )
 }
 
 void SAL_CALL OReadMenuPopupHandler::characters(const OUString&)
-throw(  SAXException, RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL OReadMenuPopupHandler::endElement( const OUString& aName )
-    throw( SAXException, RuntimeException, std::exception )
 {
     --m_nElementDepth;
     if ( m_bMenuMode )
@@ -759,10 +727,8 @@ OWriteMenuDocumentHandler::~OWriteMenuDocumentHandler()
 }
 
 void OWriteMenuDocumentHandler::WriteMenuDocument()
-throw ( SAXException, RuntimeException )
 {
-    ::comphelper::AttributeList* pList = new ::comphelper::AttributeList;
-    Reference< XAttributeList > rList( static_cast<XAttributeList *>(pList) , UNO_QUERY );
+    rtl::Reference<::comphelper::AttributeList> pList = new ::comphelper::AttributeList;
 
     m_xWriteDocumentHandler->startDocument();
 
@@ -788,7 +754,7 @@ throw ( SAXException, RuntimeException )
         aRootElement = ELEMENT_NS_MENUBAR;
     else
         aRootElement = ELEMENT_NS_MENUPOPUP;
-    m_xWriteDocumentHandler->startElement( aRootElement, pList );
+    m_xWriteDocumentHandler->startElement( aRootElement, pList.get() );
     m_xWriteDocumentHandler->ignorableWhitespace( OUString() );
 
     WriteMenu( m_xMenuBarContainer );
@@ -800,7 +766,6 @@ throw ( SAXException, RuntimeException )
 }
 
 void OWriteMenuDocumentHandler::WriteMenu( const Reference< XIndexAccess >& rMenuContainer )
-throw ( SAXException, RuntimeException )
 {
     sal_Int32  nItemCount = rMenuContainer->getCount();
     bool   bSeparator = false;
@@ -822,13 +787,7 @@ throw ( SAXException, RuntimeException )
             ExtractMenuParameters( aProps, aCommandURL, aLabel, aHelpURL, xSubMenu, nType, nItemBits );
             if ( xSubMenu.is() )
             {
-                if ( aCommandURL == ADDDIRECT_CMD ||
-                    aCommandURL == AUTOPILOTMENU_CMD )
-                {
-                    WriteMenuItem( aCommandURL, aLabel, aHelpURL, nItemBits );
-                    bSeparator = false;
-                }
-                else if ( !aCommandURL.isEmpty() && !AddonPopupMenu::IsCommandURLPrefix( aCommandURL ))
+                if ( !aCommandURL.isEmpty() )
                 {
                     ::comphelper::AttributeList* pListMenu = new ::comphelper::AttributeList;
                     Reference< XAttributeList > xListMenu( static_cast<XAttributeList *>(pListMenu) , UNO_QUERY );
@@ -903,7 +862,7 @@ void OWriteMenuDocumentHandler::WriteMenuItem( const OUString& aCommandURL, cons
     }
     if ( nStyle > 0 )
     {
-        OUString aValue;
+        OUStringBuffer aValue;
         const MenuStyleItem* pStyle = MenuItemStyles;
 
         for ( sal_Int32 nIndex = 0; nIndex < nMenuStyleItemEntries; ++nIndex, ++pStyle )
@@ -911,13 +870,13 @@ void OWriteMenuDocumentHandler::WriteMenuItem( const OUString& aCommandURL, cons
             if ( nStyle & pStyle->nBit )
             {
                 if ( !aValue.isEmpty() )
-                    aValue = aValue.concat( "+" );
-                aValue += OUString::createFromAscii( pStyle->attrName );
+                    aValue.append("+");
+                aValue.appendAscii( pStyle->attrName );
             }
         }
         pList->AddAttribute( ATTRIBUTE_NS_STYLE,
                                 m_aAttributeType,
-                                aValue );
+                                aValue.makeStringAndClear() );
     }
 
     m_xWriteDocumentHandler->ignorableWhitespace( OUString() );

@@ -17,22 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "com/sun/star/container/XNameAccess.hpp"
-#include "com/sun/star/container/XNameContainer.hpp"
-#include "com/sun/star/drawing/ColorTable.hpp"
-#include "com/sun/star/lang/XMultiServiceFactory.hpp"
-#include "com/sun/star/uno/Any.hxx"
-#include "com/sun/star/uno/Reference.hxx"
-#include "com/sun/star/uno/RuntimeException.hpp"
-#include "com/sun/star/uno/Sequence.hxx"
-#include "comphelper/processfactory.hxx"
-#include "rtl/ustring.h"
-#include "rtl/ustring.hxx"
+#include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/drawing/ColorTable.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <comphelper/processfactory.hxx>
+#include <rtl/ustring.h>
+#include <rtl/ustring.hxx>
+#include <rtl/ustrbuf.hxx>
 #include <vcl/svapp.hxx>
 
-#include <lookupcolorname.hxx>
+#include "lookupcolorname.hxx"
 #include <unordered_map>
 
 namespace {
@@ -58,19 +59,20 @@ ColorNameMap::ColorNameMap() {
     try
     {
         // Create color table in which to look up the given color.
-            css::uno::Reference< css::container::XNameContainer > xColorTable =
-                 css::drawing::ColorTable::create( comphelper::getProcessComponentContext() );
+        css::uno::Reference< css::container::XNameContainer > xColorTable =
+             css::drawing::ColorTable::create( comphelper::getProcessComponentContext() );
 
         // Get list of color names in order to iterate over the color table.
 
         // Lock the solar mutex here as workaround for missing lock in
         // called function.
         SolarMutexGuard aGuard;
-        aNames = xNA->getElementNames();
+        xNA = xColorTable;
+        aNames = xColorTable->getElementNames();
     }
     catch (css::uno::RuntimeException const&)
     {
-        // When an exception occurred then whe have an empty name sequence
+        // When an exception occurred then we have an empty name sequence
         // and the loop below is not entered.
     }
 
@@ -81,7 +83,7 @@ ColorNameMap::ColorNameMap() {
             // Get the numerical value for the i-th color name.
             try
             {
-                css::uno::Any aColor (xNA->getByName (aNames[i]));
+                css::uno::Any aColor = xNA->getByName(aNames[i]);
                 long nColor = 0;
                 aColor >>= nColor;
                 map_[nColor] = aNames[i];

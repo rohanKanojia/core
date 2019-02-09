@@ -24,12 +24,14 @@
 #include <X11/Xutil.h>
 #include <X11/extensions/Xrender.h>
 
-#include "unx/saltype.h"
-#include "unx/x11/x11gdiimpl.h"
+#include <unx/saltype.h>
+#include <unx/x11/x11gdiimpl.h>
 
-#include "salgdiimpl.hxx"
+#include <salgdiimpl.hxx>
 
 #include <basegfx/polygon/b2dtrapezoid.hxx>
+#include <basegfx/polygon/b2dpolygontriangulator.hxx>
+#include <ControlCacheKey.hxx>
 
 /* From <X11/Intrinsic.h> */
 typedef unsigned long Pixel;
@@ -45,13 +47,12 @@ class X11SalGraphicsImpl : public SalGraphicsImpl, public X11GraphicsImpl
 private:
     X11SalGraphics& mrParent;
 
-    SalColor mnBrushColor;
+    Color mnBrushColor;
     GC mpBrushGC;      // Brush attributes
     Pixel mnBrushPixel;
 
     bool mbPenGC : 1;        // is Pen GC valid
     bool mbBrushGC : 1;      // is Brush GC valid
-    bool mbMonoGC : 1;       // is Mono GC valid
     bool mbCopyGC : 1;       // is Copy GC valid
     bool mbInvertGC : 1;     // is Invert GC valid
     bool mbInvert50GC : 1;   // is Invert50 GC valid
@@ -62,7 +63,7 @@ private:
     bool mbXORMode : 1;      // is ROP XOR Mode set
 
     GC mpPenGC;        // Pen attributes
-    SalColor mnPenColor;
+    Color mnPenColor;
     Pixel mnPenPixel;
 
 
@@ -85,7 +86,7 @@ private:
     GC GetInvertGC();
     GC GetInvert50GC();
 
-    void DrawLines( sal_uIntPtr              nPoints,
+    void DrawLines( sal_uInt32              nPoints,
                                const SalPolyLine &rPoints,
                                GC                 pGC,
                                bool bClose
@@ -93,6 +94,10 @@ private:
 
     XID GetXRenderPicture();
     bool drawFilledTrapezoids( const basegfx::B2DTrapezoid*, int nTrapCount, double fTransparency );
+    bool drawFilledTriangles(
+        const basegfx::B2DHomMatrix& rObjectToDevice,
+        const basegfx::triangulator::B2DTriangleVector& rTriangles,
+        double fTransparency);
 
     long GetGraphicsHeight() const;
 
@@ -108,7 +113,7 @@ public:
 
     virtual void freeResources() override;
 
-    virtual ~X11SalGraphicsImpl();
+    virtual ~X11SalGraphicsImpl() override;
 
     virtual bool setClipRegion( const vcl::Region& ) override;
     //
@@ -126,14 +131,14 @@ public:
     virtual void SetLineColor() override;
 
     // set the line color to a specific color
-    virtual void SetLineColor( SalColor nSalColor ) override;
+    virtual void SetLineColor( Color nColor ) override;
 
     // set the fill color to transparent (= don't fill)
     virtual void SetFillColor() override;
 
     // set the fill color to a specific color, shapes will be
     // filled accordingly
-    virtual void SetFillColor( SalColor nSalColor ) override;
+    virtual void SetFillColor( Color nColor ) override;
 
     // enable/disable XOR drawing
     virtual void SetXORMode( bool bSet, bool bInvertOnly ) override;
@@ -146,7 +151,7 @@ public:
 
     // draw --> LineColor and FillColor and RasterOp and ClipRegion
     virtual void drawPixel( long nX, long nY ) override;
-    virtual void drawPixel( long nX, long nY, SalColor nSalColor ) override;
+    virtual void drawPixel( long nX, long nY, Color nColor ) override;
 
     virtual void drawLine( long nX1, long nY1, long nX2, long nY2 ) override;
 
@@ -157,37 +162,44 @@ public:
     virtual void drawPolygon( sal_uInt32 nPoints, const SalPoint* pPtAry ) override;
 
     virtual void drawPolyPolygon( sal_uInt32 nPoly, const sal_uInt32* pPoints, PCONSTSALPOINT* pPtAry ) override;
-    virtual bool drawPolyPolygon( const basegfx::B2DPolyPolygon&, double fTransparency ) override;
+
+    virtual bool drawPolyPolygon(
+                const basegfx::B2DHomMatrix& rObjectToDevice,
+                const basegfx::B2DPolyPolygon&,
+                double fTransparency) override;
 
     virtual bool drawPolyLine(
+                const basegfx::B2DHomMatrix& rObjectToDevice,
                 const basegfx::B2DPolygon&,
                 double fTransparency,
                 const basegfx::B2DVector& rLineWidths,
                 basegfx::B2DLineJoin,
-                css::drawing::LineCap) override;
+                css::drawing::LineCap,
+                double fMiterMinimumAngle,
+                bool bPixelSnapHairline) override;
 
     virtual bool drawPolyLineBezier(
                 sal_uInt32 nPoints,
                 const SalPoint* pPtAry,
-                const sal_uInt8* pFlgAry ) override;
+                const PolyFlags* pFlgAry ) override;
 
     virtual bool drawPolygonBezier(
                 sal_uInt32 nPoints,
                 const SalPoint* pPtAry,
-                const sal_uInt8* pFlgAry ) override;
+                const PolyFlags* pFlgAry ) override;
 
     virtual bool drawPolyPolygonBezier(
                 sal_uInt32 nPoly,
                 const sal_uInt32* pPoints,
                 const SalPoint* const* pPtAry,
-                const sal_uInt8* const* pFlgAry ) override;
+                const PolyFlags* const* pFlgAry ) override;
 
     // CopyArea --> No RasterOp, but ClipRegion
     virtual void copyArea(
                 long nDestX, long nDestY,
                 long nSrcX, long nSrcY,
                 long nSrcWidth, long nSrcHeight,
-                sal_uInt16 nFlags ) override;
+                bool bWindowInvalidate ) override;
 
     // CopyBits and DrawBitmap --> RasterOp and ClipRegion
     // CopyBits() --> pSrcGraphics == NULL, then CopyBits on same Graphics
@@ -203,11 +215,11 @@ public:
     virtual void drawMask(
                 const SalTwoRect& rPosAry,
                 const SalBitmap& rSalBitmap,
-                SalColor nMaskColor ) override;
+                Color nMaskColor ) override;
 
-    virtual SalBitmap* getBitmap( long nX, long nY, long nWidth, long nHeight ) override;
+    virtual std::shared_ptr<SalBitmap> getBitmap( long nX, long nY, long nWidth, long nHeight ) override;
 
-    virtual SalColor getPixel( long nX, long nY ) override;
+    virtual Color getPixel( long nX, long nY ) override;
 
     // invert --> ClipRegion (only Windows or VirDevs)
     virtual void invert(
@@ -277,7 +289,7 @@ public:
     // implementation of X11GraphicsImpl
 
     void Init() override;
-    bool FillPixmapFromScreen( X11Pixmap* pPixmap, int nX, int nY ) override;
+    void FillPixmapFromScreen( X11Pixmap* pPixmap, int nX, int nY ) override;
     bool RenderPixmapToScreen( X11Pixmap* pPixmap, X11Pixmap* pMask, int nX, int nY ) override;
 
     virtual bool TryRenderCachedNativeControl(ControlCacheKey& rControlCacheKey,

@@ -24,17 +24,16 @@
 
 #include <rtl/strbuf.hxx>
 
-#include <osl/diagnose.h>
 
 #include <typelib/typedescription.hxx>
 
+#include <com/sun/star/beans/UnknownPropertyException.hpp>
 #include <com/sun/star/beans/XMaterialHolder.hpp>
 
 #include "pyuno_impl.hxx"
 
 using com::sun::star::uno::Sequence;
 using com::sun::star::uno::Reference;
-using com::sun::star::uno::XInterface;
 using com::sun::star::uno::Any;
 using com::sun::star::uno::makeAny;
 using com::sun::star::uno::UNO_QUERY;
@@ -42,14 +41,13 @@ using com::sun::star::uno::TypeClass;
 using com::sun::star::uno::RuntimeException;
 using com::sun::star::uno::Exception;
 using com::sun::star::lang::XSingleServiceFactory;
-using com::sun::star::lang::XUnoTunnel;
 using com::sun::star::script::XInvocation2;
 using com::sun::star::beans::XMaterialHolder;
 
 namespace pyuno
 {
 
-void PyUNOStruct_del( PyObject* self )
+static void PyUNOStruct_del( PyObject* self )
 {
     PyUNO *me = reinterpret_cast<PyUNO*>( self );
     {
@@ -59,7 +57,7 @@ void PyUNOStruct_del( PyObject* self )
     PyObject_Del( self );
 }
 
-PyObject *PyUNOStruct_str( PyObject *self )
+static PyObject *PyUNOStruct_str( PyObject *self )
 {
     PyUNO *me = reinterpret_cast<PyUNO*>( self );
     OStringBuffer buf;
@@ -76,7 +74,7 @@ PyObject *PyUNOStruct_str( PyObject *self )
     return PyStr_FromString( buf.getStr());
 }
 
-PyObject *PyUNOStruct_repr( PyObject *self )
+static PyObject *PyUNOStruct_repr( PyObject *self )
 {
     PyUNO *me = reinterpret_cast<PyUNO*>( self );
     PyObject *ret = nullptr;
@@ -101,7 +99,7 @@ PyObject *PyUNOStruct_repr( PyObject *self )
     return ret;
 }
 
-PyObject* PyUNOStruct_dir( PyObject *self )
+static PyObject* PyUNOStruct_dir( PyObject *self )
 {
     PyUNO *me = reinterpret_cast<PyUNO*>( self );
 
@@ -124,7 +122,7 @@ PyObject* PyUNOStruct_dir( PyObject *self )
     return member_list;
 }
 
-PyObject* PyUNOStruct_getattr( PyObject* self, char* name )
+static PyObject* PyUNOStruct_getattr( PyObject* self, char* name )
 {
     PyUNO *me = reinterpret_cast<PyUNO*>( self );
 
@@ -190,7 +188,7 @@ PyObject* PyUNOStruct_getattr( PyObject* self, char* name )
     return nullptr;
 }
 
-int PyUNOStruct_setattr (PyObject* self, char* name, PyObject* value)
+static int PyUNOStruct_setattr (PyObject* self, char* name, PyObject* value)
 {
     PyUNO* me;
 
@@ -342,9 +340,7 @@ static PyTypeObject PyUNOStructType =
     nullptr,
     nullptr,
     nullptr
-#if PY_VERSION_HEX >= 0x02060000
     , 0
-#endif
 #if PY_VERSION_HEX >= 0x03040000
     , nullptr
 #endif
@@ -369,10 +365,7 @@ PyRef PyUNOStruct_new (
     {
         PyThreadDetach antiguard;
         xInvocation.set(
-            ssf->createInstanceWithArguments( Sequence<Any>( &targetInterface, 1 ) ), UNO_QUERY );
-        OSL_ASSERT( xInvocation.is() );
-        if( !xInvocation.is() )
-            throw RuntimeException("XInvocation2 not implemented, cannot interact with object");
+            ssf->createInstanceWithArguments( Sequence<Any>( &targetInterface, 1 ) ), css::uno::UNO_QUERY_THROW );
     }
     if( !Py_IsInitialized() )
         throw RuntimeException();
@@ -380,7 +373,7 @@ PyRef PyUNOStruct_new (
     PyUNO* self = PyObject_New (PyUNO, &PyUNOStructType);
     if (self == nullptr)
         return PyRef(); // == error
-    self->members = new PyUNOInternals();
+    self->members = new PyUNOInternals;
     self->members->xInvocation = xInvocation;
     self->members->wrappedObject = targetInterface;
     return PyRef( reinterpret_cast<PyObject*>(self), SAL_NO_ACQUIRE );

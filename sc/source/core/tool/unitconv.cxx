@@ -19,26 +19,20 @@
 
 #include <com/sun/star/uno/Sequence.hxx>
 
-#include "unitconv.hxx"
-#include "global.hxx"
-#include "viewopti.hxx"
+#include <unitconv.hxx>
+#include <global.hxx>
+#include <viewopti.hxx>
 
 using namespace utl;
 using namespace com::sun::star::uno;
 
-const sal_Unicode cDelim = 0x01;        // Delimiter zwischen From und To
+const sal_Unicode cDelim = 0x01;        // delimiter between From and To
 
 // ScUnitConverterData
 ScUnitConverterData::ScUnitConverterData(
     const OUString& rFromUnit, const OUString& rToUnit, double fValue ) :
     maIndexString(BuildIndexString(rFromUnit, rToUnit)),
     mfValue(fValue) {}
-
-ScUnitConverterData::ScUnitConverterData( const ScUnitConverterData& r ) :
-    maIndexString(r.maIndexString),
-    mfValue(r.mfValue) {}
-
-ScUnitConverterData::~ScUnitConverterData() {}
 
 OUString ScUnitConverterData::BuildIndexString(
     const OUString& rFromUnit, const OUString& rToUnit )
@@ -60,11 +54,10 @@ ScUnitConverter::ScUnitConverter()
     // read from configuration - "convert.ini" is no longer used
     //TODO: config item as member to allow change of values
 
-    ScLinkConfigItem aConfigItem( OUString( CFGPATH_UNIT ) );
+    ScLinkConfigItem aConfigItem( CFGPATH_UNIT );
 
     // empty node name -> use the config item's path itself
-    OUString aEmptyString;
-    Sequence<OUString> aNodeNames = aConfigItem.GetNodeNames( aEmptyString );
+    Sequence<OUString> aNodeNames = aConfigItem.GetNodeNames( "" );
 
     long nNodeCount = aNodeNames.getLength();
     if ( nNodeCount )

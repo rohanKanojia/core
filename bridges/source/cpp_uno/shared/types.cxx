@@ -18,10 +18,10 @@
  */
 
 
-#include "bridges/cpp_uno/shared/types.hxx"
+#include <types.hxx>
 
-#include "typelib/typeclass.h"
-#include "typelib/typedescription.h"
+#include <typelib/typeclass.h>
+#include <typelib/typedescription.h>
 
 namespace bridges { namespace cpp_uno { namespace shared {
 

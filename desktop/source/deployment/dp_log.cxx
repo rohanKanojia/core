@@ -18,23 +18,29 @@
  */
 
 
-#include "dp_misc.h"
+#include <dp_misc.h>
+#include <dp_services.hxx>
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
 #include <osl/time.h>
 #include <osl/thread.h>
 #include <cppuhelper/compbase.hxx>
 #include <comphelper/anytostring.hxx>
 #include <comphelper/servicedecl.hxx>
 #include <comphelper/unwrapargs.hxx>
+#include <comphelper/logging.hxx>
 #include <com/sun/star/deployment/DeploymentException.hpp>
+#include <com/sun/star/logging/LogLevel.hpp>
 #include <com/sun/star/ucb/XProgressHandler.hpp>
 #include <com/sun/star/ucb/SimpleFileAccess.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/io/XSeekable.hpp>
 #include <stdio.h>
-
+#include <boost/optional.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
+using namespace ::com::sun::star::logging;
 
 namespace dp_log {
 
@@ -43,22 +49,20 @@ typedef ::cppu::WeakComponentImplHelper<ucb::XProgressHandler> t_log_helper;
 
 class ProgressLogImpl : public ::dp_misc::MutexHolder, public t_log_helper
 {
-    Reference<io::XOutputStream> m_xLogFile;
-    sal_Int32 m_log_level;
-    void log_write( OString const & text );
+    std::unique_ptr<comphelper::EventLogger> m_logger;
 
 protected:
     virtual void SAL_CALL disposing() override;
-    virtual ~ProgressLogImpl();
+    virtual ~ProgressLogImpl() override;
 
 public:
     ProgressLogImpl( Sequence<Any> const & args,
                      Reference<XComponentContext> const & xContext );
 
     // XProgressHandler
-    virtual void SAL_CALL push( Any const & Status ) throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL update( Any const & Status ) throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL pop() throw (RuntimeException, std::exception) override;
+    virtual void SAL_CALL push( Any const & Status ) override;
+    virtual void SAL_CALL update( Any const & Status ) override;
+    virtual void SAL_CALL pop() override;
 };
 
 
@@ -69,124 +73,52 @@ ProgressLogImpl::~ProgressLogImpl()
 
 void ProgressLogImpl::disposing()
 {
-    try {
-        if (m_xLogFile.is()) {
-            m_xLogFile->closeOutput();
-            m_xLogFile.clear();
-        }
-    }
-    catch (const Exception & exc) {
-        (void) exc;
-        OSL_FAIL( OUStringToOString(
-                        exc.Message, RTL_TEXTENCODING_UTF8 ).getStr() );
-    }
 }
 
 
 ProgressLogImpl::ProgressLogImpl(
-    Sequence<Any> const & args,
+    Sequence<Any> const & /* args */,
     Reference<XComponentContext> const & xContext )
-    : t_log_helper( getMutex() ),
-      m_log_level( 0 )
+    : t_log_helper( getMutex() )
 {
-    OUString log_file;
-    boost::optional< Reference<task::XInteractionHandler> > interactionHandler;
-    comphelper::unwrapArgs( args, log_file, interactionHandler );
-
-    Reference<ucb::XSimpleFileAccess3> xSimpleFileAccess( ucb::SimpleFileAccess::create(xContext) );
-    // optional ia handler:
-    if (interactionHandler)
-        xSimpleFileAccess->setInteractionHandler( *interactionHandler );
-
-    m_xLogFile.set(
-        xSimpleFileAccess->openFileWrite( log_file ), UNO_QUERY_THROW );
-    Reference<io::XSeekable> xSeekable( m_xLogFile, UNO_QUERY_THROW );
-    xSeekable->seek( xSeekable->getLength() );
-
-    // write log stamp
-    OStringBuffer buf;
-    buf.append( "###### Progress log entry " );
-    TimeValue m_start_time, tLocal;
-    oslDateTime date_time;
-    if (osl_getSystemTime( &m_start_time ) &&
-        osl_getLocalTimeFromSystemTime( &m_start_time, &tLocal ) &&
-        osl_getDateTimeFromTimeValue( &tLocal, &date_time ))
-    {
-        char ar[ 128 ];
-        snprintf(
-            ar, sizeof (ar),
-            "%04d-%02d-%02d %02d:%02d:%02d ",
-            date_time.Year, date_time.Month, date_time.Day,
-            date_time.Hours, date_time.Minutes, date_time.Seconds );
-        buf.append( ar );
-    }
-    buf.append( "######\n" );
-    log_write( buf.makeStringAndClear() );
-}
-
-
-void ProgressLogImpl::log_write( OString const & text )
-{
-    try {
-        if (m_xLogFile.is()) {
-            m_xLogFile->writeBytes(
-                Sequence< sal_Int8 >(
-                    reinterpret_cast< sal_Int8 const * >(text.getStr()),
-                    text.getLength() ) );
-        }
-    }
-    catch (const io::IOException & exc) {
-        (void) exc;
-        OSL_FAIL( OUStringToOString(
-                        exc.Message, RTL_TEXTENCODING_UTF8 ).getStr() );
-    }
+    // Use the logger created by unopkg app
+    m_logger.reset(new comphelper::EventLogger(xContext, "unopkg"));
 }
 
 // XProgressHandler
 
 void ProgressLogImpl::push( Any const & Status )
-    throw (RuntimeException, std::exception)
 {
     update( Status );
-    OSL_ASSERT( m_log_level >= 0 );
-    ++m_log_level;
 }
 
-
 void ProgressLogImpl::update( Any const & Status )
-    throw (RuntimeException, std::exception)
 {
     if (! Status.hasValue())
         return;
 
     OUStringBuffer buf;
-    OSL_ASSERT( m_log_level >= 0 );
-    for ( sal_Int32 n = 0; n < m_log_level; ++n )
-        buf.append( ' ' );
 
     OUString msg;
+    sal_Int32 logLevel = LogLevel::INFO;
     if (Status >>= msg) {
         buf.append( msg );
     }
     else {
-        buf.append( "ERROR: " );
+        logLevel = LogLevel::SEVERE;
         buf.append( ::comphelper::anyToString(Status) );
     }
-    buf.append( "\n" );
-    log_write( OUStringToOString(
-                   buf.makeStringAndClear(), osl_getThreadTextEncoding() ) );
+    m_logger->log(logLevel, buf.makeStringAndClear());
 }
 
 
-void ProgressLogImpl::pop() throw (RuntimeException, std::exception)
+void ProgressLogImpl::pop()
 {
-    OSL_ASSERT( m_log_level > 0 );
-    --m_log_level;
 }
 
 namespace sdecl = comphelper::service_decl;
-sdecl::class_<ProgressLogImpl, sdecl::with_args<true> > servicePLI;
-extern sdecl::ServiceDecl const serviceDecl(
+sdecl::class_<ProgressLogImpl, sdecl::with_args<true> > const servicePLI;
+sdecl::ServiceDecl const serviceDecl(
     servicePLI,
     // a private one:
     "com.sun.star.comp.deployment.ProgressLog",

@@ -18,7 +18,6 @@
  */
 
 #include <svx/sdr/contact/viewcontactofe3dscene.hxx>
-#include <svx/polysc3d.hxx>
 #include <svx/sdr/contact/displayinfo.hxx>
 #include <svx/sdr/contact/viewobjectcontact.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
@@ -43,7 +42,7 @@ void createSubPrimitive3DVector(
     const sdr::contact::ViewContact& rCandidate,
     drawinglayer::primitive3d::Primitive3DContainer& o_rAllTarget,
     drawinglayer::primitive3d::Primitive3DContainer* o_pVisibleTarget,
-    const SetOfByte* pVisibleLayerSet,
+    const SdrLayerIDSet* pVisibleSdrLayerIDSet,
     const bool bTestSelectedVisibility)
 {
     const sdr::contact::ViewContactOfE3dScene* pViewContactOfE3dScene = dynamic_cast< const sdr::contact::ViewContactOfE3dScene* >(&rCandidate);
@@ -59,13 +58,13 @@ void createSubPrimitive3DVector(
             drawinglayer::primitive3d::Primitive3DContainer aNewVisibleTarget;
 
             // add children recursively
-            for(sal_uInt32 a(0L); a < nChildrenCount; a++)
+            for(sal_uInt32 a(0); a < nChildrenCount; a++)
             {
                 createSubPrimitive3DVector(
                     rCandidate.GetViewContact(a),
                     aNewAllTarget,
                     o_pVisibleTarget ? &aNewVisibleTarget : nullptr,
-                    pVisibleLayerSet,
+                    pVisibleSdrLayerIDSet,
                     bTestSelectedVisibility);
             }
 
@@ -103,13 +102,13 @@ void createSubPrimitive3DVector(
                     // test visibility. Primitive is visible when both tests are true (AND)
                     bool bVisible(true);
 
-                    if(pVisibleLayerSet)
+                    if(pVisibleSdrLayerIDSet)
                     {
                         // test layer visibility
                         const E3dObject& rE3dObject = pViewContactOfE3d->GetE3dObject();
                         const SdrLayerID aLayerID(rE3dObject.GetLayer());
 
-                        bVisible = pVisibleLayerSet->IsSet(aLayerID);
+                        bVisible = pVisibleSdrLayerIDSet->IsSet(aLayerID);
                     }
 
                     if(bVisible && bTestSelectedVisibility)
@@ -174,9 +173,9 @@ void ViewContactOfE3dScene::createViewInformation3D(const basegfx::B3DRange& rCo
     {
         // calculate orientation from VRP, VPN and VUV
         const B3dCamera& rSceneCamera = GetE3dScene().GetCameraSet();
-        const basegfx::B3DPoint aVRP(rSceneCamera.GetVRP());
-        const basegfx::B3DVector aVPN(rSceneCamera.GetVPN());
-        const basegfx::B3DVector aVUV(rSceneCamera.GetVUV());
+        const basegfx::B3DPoint& aVRP(rSceneCamera.GetVRP());
+        const basegfx::B3DVector& aVPN(rSceneCamera.GetVPN());
+        const basegfx::B3DVector& aVUV(rSceneCamera.GetVUV());
 
         aOrientation.orientation(aVRP, aVPN, aVUV);
     }
@@ -245,11 +244,8 @@ void ViewContactOfE3dScene::createViewInformation3D(const basegfx::B3DRange& rCo
 void ViewContactOfE3dScene::createObjectTransformation()
 {
     // create 2d Object Transformation from relative point in 2d scene to world
-    Rectangle aRectangle = GetE3dScene().GetSnapRect();
-    // Hack for calc, transform position of object according
-    // to current zoom so as objects relative position to grid
-    // appears stable
-    aRectangle += GetE3dScene().GetGridOffset();
+    const tools::Rectangle aRectangle(GetE3dScene().GetSnapRect());
+
     maObjectTransformation.set(0, 0, aRectangle.getWidth());
     maObjectTransformation.set(1, 1, aRectangle.getHeight());
     maObjectTransformation.set(0, 2, aRectangle.Left());
@@ -269,7 +265,7 @@ void ViewContactOfE3dScene::createSdrLightingAttribute()
 }
 
 drawinglayer::primitive2d::Primitive2DContainer ViewContactOfE3dScene::createScenePrimitive2DSequence(
-    const SetOfByte* pLayerVisibility) const
+    const SdrLayerIDSet* pLayerVisibility) const
 {
     drawinglayer::primitive2d::Primitive2DContainer xRetval;
     const sal_uInt32 nChildrenCount(GetObjectCount());
@@ -287,7 +283,7 @@ drawinglayer::primitive2d::Primitive2DContainer ViewContactOfE3dScene::createSce
         // a 3D transformPrimitive for the start scene. While this is theoretically not
         // a bad thing, for historical reasons the transformation of the outmost scene
         // is seen as part of the ViewTransformation (see text in createViewInformation3D)
-        for(sal_uInt32 a(0L); a < nChildrenCount; a++)
+        for(sal_uInt32 a(0); a < nChildrenCount; a++)
         {
             createSubPrimitive3DVector(
                 GetViewContact(a),
@@ -430,7 +426,7 @@ drawinglayer::primitive3d::Primitive3DContainer ViewContactOfE3dScene::getAllPri
     // a 3D transformPrimitive for the start scene. While this is theoretically not
     // a bad thing, for historical reasons the transformation of the outmost scene
     // is seen as part of the ViewTransformation (see text in createViewInformation3D)
-    for(sal_uInt32 a(0L); a < nChildrenCount; a++)
+    for(sal_uInt32 a(0); a < nChildrenCount; a++)
     {
         createSubPrimitive3DVector(GetViewContact(a), aAllPrimitive3DContainer, nullptr, nullptr, false);
     }

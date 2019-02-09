@@ -19,7 +19,7 @@
 
 
 #include <sfx2/sfxsids.hrc>
-#include "sorgitm.hxx"
+#include <sorgitm.hxx>
 #include <osl/diagnose.h>
 #include <typeinfo>
 
@@ -30,21 +30,6 @@ SfxScriptOrganizerItem::SfxScriptOrganizerItem() :
 
     SfxStringItem()
 
-{
-}
-
-
-SfxScriptOrganizerItem::SfxScriptOrganizerItem( const SfxScriptOrganizerItem& rItem ) :
-
-    SfxStringItem( rItem ),
-
-    aLanguage( rItem.aLanguage )
-
-{
-}
-
-
-SfxScriptOrganizerItem::~SfxScriptOrganizerItem()
 {
 }
 

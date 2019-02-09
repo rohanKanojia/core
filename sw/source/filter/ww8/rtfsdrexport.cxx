@@ -18,40 +18,45 @@
  */
 
 #include "rtfsdrexport.hxx"
+#include <memory>
 #include "rtfattributeoutput.hxx"
 #include <svtools/rtfkeywd.hxx>
+#include <svtools/unitconv.hxx>
 #include <filter/msfilter/rtfutil.hxx>
 #include <editeng/editobj.hxx>
+#include <editeng/editids.hrc>
+#include <editeng/fontitem.hxx>
+#include <editeng/fhgtitem.hxx>
 #include <svx/svdotext.hxx>
 #include <svx/unoapi.hxx>
 #include <vcl/cvtgrf.hxx>
 #include <textboxhelper.hxx>
 #include <dcontact.hxx>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 #include <algorithm>
+#include "rtfexport.hxx"
 
 using namespace css;
 
 RtfSdrExport::RtfSdrExport(RtfExport& rExport)
-    : EscherEx(EscherExGlobalRef(new EscherExGlobal), nullptr),
-      m_rExport(rExport),
-      m_rAttrOutput(static_cast<RtfAttributeOutput&>(m_rExport.AttrOutput())),
-      m_pSdrObject(nullptr),
-      m_nShapeType(ESCHER_ShpInst_Nil),
-      m_nShapeFlags(0) ,
-      m_aShapeStyle(200),
-      m_pShapeTypeWritten(new bool[ ESCHER_ShpInst_COUNT ]),
-      m_aTextBoxes(SwTextBoxHelper::findTextBoxes(m_rExport.m_pDoc))
+    : EscherEx(std::make_shared<EscherExGlobal>(), nullptr)
+    , m_rExport(rExport)
+    , m_rAttrOutput(static_cast<RtfAttributeOutput&>(m_rExport.AttrOutput()))
+    , m_pSdrObject(nullptr)
+    , m_nShapeType(ESCHER_ShpInst_Nil)
+    , m_nShapeFlags(ShapeFlag::NONE)
+    , m_aShapeStyle(200)
+    , m_pShapeTypeWritten(new bool[ESCHER_ShpInst_COUNT])
 {
     mnGroupLevel = 1;
-    memset(m_pShapeTypeWritten, 0, ESCHER_ShpInst_COUNT * sizeof(bool));
+    memset(m_pShapeTypeWritten.get(), 0, ESCHER_ShpInst_COUNT * sizeof(bool));
 }
 
 RtfSdrExport::~RtfSdrExport()
 {
     delete mpOutStrm;
     mpOutStrm = nullptr;
-    delete[] m_pShapeTypeWritten;
-    m_pShapeTypeWritten = nullptr;
 }
 
 void RtfSdrExport::OpenContainer(sal_uInt16 nEscherContainer, int nRecInstance)
@@ -61,8 +66,7 @@ void RtfSdrExport::OpenContainer(sal_uInt16 nEscherContainer, int nRecInstance)
     if (nEscherContainer == ESCHER_SpContainer)
     {
         m_nShapeType = ESCHER_ShpInst_Nil;
-        if (!m_aShapeStyle.isEmpty())
-            m_aShapeStyle.makeStringAndClear();
+        m_aShapeStyle.setLength(0);
         m_aShapeStyle.ensureCapacity(200);
         m_aShapeProps.clear();
     }
@@ -83,30 +87,30 @@ void RtfSdrExport::CloseContainer()
     EscherEx::CloseContainer();
 }
 
-sal_uInt32 RtfSdrExport::EnterGroup(const OUString& /*rShapeName*/, const Rectangle* /*pRect*/)
+sal_uInt32 RtfSdrExport::EnterGroup(const OUString& /*rShapeName*/,
+                                    const tools::Rectangle* /*pRect*/)
 {
+    m_bInGroup = true;
     return GenerateShapeId();
 }
 
-void RtfSdrExport::LeaveGroup()
-{
-    /* noop */
-}
+void RtfSdrExport::LeaveGroup() { m_bInGroup = false; }
 
-void RtfSdrExport::AddShape(sal_uInt32 nShapeType, sal_uInt32 nShapeFlags, sal_uInt32 /*nShapeId*/)
+void RtfSdrExport::AddShape(sal_uInt32 nShapeType, ShapeFlag nShapeFlags, sal_uInt32 /*nShapeId*/)
 {
     m_nShapeType = nShapeType;
     m_nShapeFlags = nShapeFlags;
 }
 
-inline sal_uInt16 impl_GetUInt16(const sal_uInt8*& pVal)
+static sal_uInt16 impl_GetUInt16(const sal_uInt8*& pVal)
 {
     sal_uInt16 nRet = *pVal++;
     nRet += (*pVal++) << 8;
     return nRet;
 }
 
-inline sal_Int32 impl_GetPointComponent(const sal_uInt8*& pVal, sal_Size& rVerticesPos, sal_uInt16 nPointSize)
+static sal_Int32 impl_GetPointComponent(const sal_uInt8*& pVal, std::size_t& rVerticesPos,
+                                        sal_uInt16 nPointSize)
 {
     sal_Int32 nRet = 0;
     if ((nPointSize == 0xfff0) || (nPointSize == 4))
@@ -131,7 +135,7 @@ inline sal_Int32 impl_GetPointComponent(const sal_uInt8*& pVal, sal_Size& rVerti
     return nRet;
 }
 
-void RtfSdrExport::Commit(EscherPropertyContainer& rProps, const Rectangle& rRect)
+void RtfSdrExport::Commit(EscherPropertyContainer& rProps, const tools::Rectangle& rRect)
 {
     if (m_nShapeType == ESCHER_ShpInst_Nil)
         return;
@@ -143,282 +147,322 @@ void RtfSdrExport::Commit(EscherPropertyContainer& rProps, const Rectangle& rRec
 
     // properties
     const EscherProperties& rOpts = rProps.GetOpts();
-    for (EscherProperties::const_iterator it = rOpts.begin(); it != rOpts.end(); ++it)
+    for (const auto& rOpt : rOpts)
     {
-        sal_uInt16 nId = (it->nPropId & 0x0FFF);
+        sal_uInt16 nId = (rOpt.nPropId & 0x0FFF);
 
         switch (nId)
         {
-        case ESCHER_Prop_WrapText:
-        {
-            int nWrapType = 0;
-            switch (it->nPropValue)
+            case ESCHER_Prop_WrapText:
             {
-            case ESCHER_WrapSquare:
-                nWrapType = 2;
-                break;
-            case ESCHER_WrapByPoints:
-                nWrapType = 4;
-                break;
-            case ESCHER_WrapNone:
-                nWrapType = 3;
-                break;
-            case ESCHER_WrapTopBottom:
-                nWrapType = 1;
-                break;
-            case ESCHER_WrapThrough:
-                nWrapType = 5;
-                break;
+                int nWrapType = 0;
+                switch (rOpt.nPropValue)
+                {
+                    case ESCHER_WrapSquare:
+                        nWrapType = 2;
+                        break;
+                    case ESCHER_WrapByPoints:
+                        nWrapType = 4;
+                        break;
+                    case ESCHER_WrapNone:
+                        nWrapType = 3;
+                        break;
+                    case ESCHER_WrapTopBottom:
+                        nWrapType = 1;
+                        break;
+                    case ESCHER_WrapThrough:
+                        nWrapType = 5;
+                        break;
+                }
+                if (nWrapType)
+                    m_aShapeStyle.append(OOO_STRING_SVTOOLS_RTF_SHPWR)
+                        .append(static_cast<sal_Int32>(nWrapType));
             }
-            if (nWrapType)
-                m_aShapeStyle.append(OOO_STRING_SVTOOLS_RTF_SHPWR).append((sal_Int32)nWrapType);
-        }
-        break;
-        case ESCHER_Prop_fillColor:
-            m_aShapeProps.insert(std::pair<OString,OString>("fillColor", OString::number(it->nPropValue)));
             break;
-        case ESCHER_Prop_fillBackColor:
-            m_aShapeProps.insert(std::pair<OString,OString>("fillBackColor", OString::number(it->nPropValue)));
-            break;
-        case ESCHER_Prop_AnchorText:
-            m_aShapeProps.insert(std::pair<OString,OString>("anchorText", OString::number(it->nPropValue)));
-            break;
-        case ESCHER_Prop_fNoFillHitTest:
-            if (it->nPropValue)
-                m_aShapeProps.insert(std::pair<OString,OString>("fNoFillHitTest", OString::number(1)));
-            break;
-        case ESCHER_Prop_fNoLineDrawDash:
-            // for some reason the value is set to 0x90000 if lines are switched off
-            if (it->nPropValue == 0x90000)
-                m_aShapeProps.insert(std::pair<OString,OString>("fLine", OString::number(0)));
-            break;
-        case ESCHER_Prop_lineColor:
-            m_aShapeProps.insert(std::pair<OString,OString>("lineColor", OString::number(it->nPropValue)));
-            break;
-        case ESCHER_Prop_lineBackColor:
-            m_aShapeProps.insert(std::pair<OString,OString>("lineBackColor", OString::number(it->nPropValue)));
-            break;
-        case ESCHER_Prop_lineJoinStyle:
-            m_aShapeProps.insert(std::pair<OString,OString>("lineJoinStyle", OString::number(it->nPropValue)));
-            break;
-        case ESCHER_Prop_fshadowObscured:
-            if (it->nPropValue)
-                m_aShapeProps.insert(std::pair<OString,OString>("fshadowObscured", "1"));
-            break;
-        case ESCHER_Prop_geoLeft:
-        case ESCHER_Prop_geoTop:
-        {
-            sal_uInt32 nLeft = 0, nTop = 0;
+            case ESCHER_Prop_fillColor:
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("fillColor", OString::number(rOpt.nPropValue)));
+                break;
+            case ESCHER_Prop_fillBackColor:
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("fillBackColor", OString::number(rOpt.nPropValue)));
+                break;
+            case ESCHER_Prop_AnchorText:
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("anchorText", OString::number(rOpt.nPropValue)));
+                break;
+            case ESCHER_Prop_fNoFillHitTest:
+                if (rOpt.nPropValue)
+                    m_aShapeProps.insert(
+                        std::pair<OString, OString>("fNoFillHitTest", OString::number(1)));
+                break;
+            case ESCHER_Prop_fNoLineDrawDash:
+                // for some reason the value is set to 0x90000 if lines are switched off
+                if (rOpt.nPropValue == 0x90000)
+                    m_aShapeProps.insert(std::pair<OString, OString>("fLine", OString::number(0)));
+                break;
+            case ESCHER_Prop_lineColor:
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("lineColor", OString::number(rOpt.nPropValue)));
+                break;
+            case ESCHER_Prop_lineBackColor:
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("lineBackColor", OString::number(rOpt.nPropValue)));
+                break;
+            case ESCHER_Prop_lineJoinStyle:
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("lineJoinStyle", OString::number(rOpt.nPropValue)));
+                break;
+            case ESCHER_Prop_fshadowObscured:
+                if (rOpt.nPropValue)
+                    m_aShapeProps.insert(std::pair<OString, OString>("fshadowObscured", "1"));
+                break;
+            case ESCHER_Prop_geoLeft:
+            case ESCHER_Prop_geoTop:
+            {
+                sal_uInt32 nLeft = 0;
+                sal_uInt32 nTop = 0;
 
-            if (nId == ESCHER_Prop_geoLeft)
-            {
-                nLeft = it->nPropValue;
-                rProps.GetOpt(ESCHER_Prop_geoTop, nTop);
+                if (nId == ESCHER_Prop_geoLeft)
+                {
+                    nLeft = rOpt.nPropValue;
+                    rProps.GetOpt(ESCHER_Prop_geoTop, nTop);
+                }
+                else
+                {
+                    nTop = rOpt.nPropValue;
+                    rProps.GetOpt(ESCHER_Prop_geoLeft, nLeft);
+                }
+
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("geoLeft", OString::number(sal_Int32(nLeft))));
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("geoTop", OString::number(sal_Int32(nTop))));
             }
-            else
+            break;
+
+            case ESCHER_Prop_geoRight:
+            case ESCHER_Prop_geoBottom:
             {
-                nTop = it->nPropValue;
+                sal_uInt32 nLeft = 0;
+                sal_uInt32 nRight = 0;
+                sal_uInt32 nTop = 0;
+                sal_uInt32 nBottom = 0;
                 rProps.GetOpt(ESCHER_Prop_geoLeft, nLeft);
-            }
+                rProps.GetOpt(ESCHER_Prop_geoTop, nTop);
 
-            m_aShapeProps.insert(std::pair<OString,OString>("geoLeft",
-                                 OString::number(sal_Int32(nLeft))));
-            m_aShapeProps.insert(std::pair<OString,OString>("geoTop",
-                                 OString::number(sal_Int32(nTop))));
-        }
-        break;
-
-        case ESCHER_Prop_geoRight:
-        case ESCHER_Prop_geoBottom:
-        {
-            sal_uInt32 nLeft = 0, nRight = 0, nTop = 0, nBottom = 0;
-            rProps.GetOpt(ESCHER_Prop_geoLeft, nLeft);
-            rProps.GetOpt(ESCHER_Prop_geoTop, nTop);
-
-            if (nId == ESCHER_Prop_geoRight)
-            {
-                nRight = it->nPropValue;
-                rProps.GetOpt(ESCHER_Prop_geoBottom, nBottom);
-            }
-            else
-            {
-                nBottom = it->nPropValue;
-                rProps.GetOpt(ESCHER_Prop_geoRight, nRight);
-            }
-
-            m_aShapeProps.insert(std::pair<OString,OString>("geoRight",
-                                 OString::number(sal_Int32(nRight) - sal_Int32(nLeft))));
-            m_aShapeProps.insert(std::pair<OString,OString>("geoBottom",
-                                 OString::number(sal_Int32(nBottom) - sal_Int32(nTop))));
-        }
-        break;
-        case ESCHER_Prop_pVertices:
-        case ESCHER_Prop_pSegmentInfo:
-        {
-            EscherPropSortStruct aVertices;
-            EscherPropSortStruct aSegments;
-
-            if (rProps.GetOpt(ESCHER_Prop_pVertices, aVertices) &&
-                    rProps.GetOpt(ESCHER_Prop_pSegmentInfo, aSegments) &&
-                    aVertices.nPropSize >= 6 && aSegments.nPropSize >= 6)
-            {
-                const sal_uInt8* pVerticesIt = aVertices.pBuf + 6;
-                sal_Size nVerticesPos = 6;
-                const sal_uInt8* pSegmentIt = aSegments.pBuf;
-
-                OStringBuffer aSegmentInfo(512);
-                OStringBuffer aVerticies(512);
-
-                sal_uInt16 nPointSize = aVertices.pBuf[4] + (aVertices.pBuf[5] << 8);
-
-                // number of segments
-                sal_uInt16 nSegments = impl_GetUInt16(pSegmentIt);
-                sal_Int32 nVertices = 0;
-                aSegmentInfo.append("2;").append((sal_Int32)nSegments);
-                pSegmentIt += 4;
-
-                for (; nSegments; --nSegments)
+                if (nId == ESCHER_Prop_geoRight)
                 {
-                    sal_uInt16 nSeg = impl_GetUInt16(pSegmentIt);
+                    nRight = rOpt.nPropValue;
+                    rProps.GetOpt(ESCHER_Prop_geoBottom, nBottom);
+                }
+                else
+                {
+                    nBottom = rOpt.nPropValue;
+                    rProps.GetOpt(ESCHER_Prop_geoRight, nRight);
+                }
 
-                    // The segment type is stored in the upper 3 bits
-                    // and segment count is stored in the lower 13
-                    // bits.
-                    unsigned char nSegmentType = (nSeg & 0xE000) >> 13;
-                    unsigned short nSegmentCount = nSeg & 0x03FF;
+                m_aShapeProps.insert(std::pair<OString, OString>(
+                    "geoRight", OString::number(sal_Int32(nRight) - sal_Int32(nLeft))));
+                m_aShapeProps.insert(std::pair<OString, OString>(
+                    "geoBottom", OString::number(sal_Int32(nBottom) - sal_Int32(nTop))));
+            }
+            break;
+            case ESCHER_Prop_pVertices:
+            case ESCHER_Prop_pSegmentInfo:
+            {
+                EscherPropSortStruct aVertices;
+                EscherPropSortStruct aSegments;
 
-                    aSegmentInfo.append(';').append((sal_Int32)nSeg);
-                    switch (nSegmentType)
+                if (rProps.GetOpt(ESCHER_Prop_pVertices, aVertices)
+                    && rProps.GetOpt(ESCHER_Prop_pSegmentInfo, aSegments)
+                    && aVertices.nProp.size() >= 6 && aSegments.nProp.size() >= 6)
+                {
+                    const sal_uInt8* pVerticesIt = &aVertices.nProp[0] + 6;
+                    std::size_t nVerticesPos = 6;
+                    const sal_uInt8* pSegmentIt = &aSegments.nProp[0];
+
+                    OStringBuffer aSegmentInfo(512);
+                    OStringBuffer aVerticies(512);
+
+                    sal_uInt16 nPointSize = aVertices.nProp[4] + (aVertices.nProp[5] << 8);
+
+                    // number of segments
+                    sal_uInt16 nSegments = impl_GetUInt16(pSegmentIt);
+                    sal_Int32 nVertices = 0;
+                    aSegmentInfo.append("2;").append(static_cast<sal_Int32>(nSegments));
+                    pSegmentIt += 4;
+
+                    for (; nSegments; --nSegments)
                     {
-                    case msopathLineTo:
-                        for (unsigned short i = 0; i < nSegmentCount; ++i)
+                        sal_uInt16 nSeg = impl_GetUInt16(pSegmentIt);
+
+                        // The segment type is stored in the upper 3 bits
+                        // and segment count is stored in the lower 13
+                        // bits.
+                        unsigned char nSegmentType = (nSeg & 0xE000) >> 13;
+                        unsigned short nSegmentCount = nSeg & 0x03FF;
+
+                        aSegmentInfo.append(';').append(static_cast<sal_Int32>(nSeg));
+                        switch (nSegmentType)
                         {
-                            sal_Int32 nX = impl_GetPointComponent(pVerticesIt, nVerticesPos, nPointSize);
-                            sal_Int32 nY = impl_GetPointComponent(pVerticesIt, nVerticesPos, nPointSize);
-                            aVerticies.append(";(").append(nX).append(",").append(nY).append(")");
-                            nVertices ++;
-                        }
-                        break;
-                    case msopathMoveTo:
-                    {
-                        sal_Int32 nX = impl_GetPointComponent(pVerticesIt, nVerticesPos, nPointSize);
-                        sal_Int32 nY = impl_GetPointComponent(pVerticesIt, nVerticesPos, nPointSize);
-                        aVerticies.append(";(").append(nX).append(",").append(nY).append(")");
-                        nVertices++;
-                        break;
-                    }
-                    case msopathCurveTo:
-                        for (unsigned short j = 0; j < nSegmentCount; ++j)
-                        {
-                            for (int i = 0; i < 3; i++)
+                            case msopathLineTo:
+                                for (unsigned short i = 0; i < nSegmentCount; ++i)
+                                {
+                                    sal_Int32 nX = impl_GetPointComponent(pVerticesIt, nVerticesPos,
+                                                                          nPointSize);
+                                    sal_Int32 nY = impl_GetPointComponent(pVerticesIt, nVerticesPos,
+                                                                          nPointSize);
+                                    aVerticies.append(";(")
+                                        .append(nX)
+                                        .append(",")
+                                        .append(nY)
+                                        .append(")");
+                                    nVertices++;
+                                }
+                                break;
+                            case msopathMoveTo:
                             {
-                                sal_Int32 nX = impl_GetPointComponent(pVerticesIt, nVerticesPos, nPointSize);
-                                sal_Int32 nY = impl_GetPointComponent(pVerticesIt, nVerticesPos, nPointSize);
-                                aVerticies.append(";(").append(nX).append(",").append(nY).append(")");
-                                nVertices ++;
+                                sal_Int32 nX
+                                    = impl_GetPointComponent(pVerticesIt, nVerticesPos, nPointSize);
+                                sal_Int32 nY
+                                    = impl_GetPointComponent(pVerticesIt, nVerticesPos, nPointSize);
+                                aVerticies.append(";(").append(nX).append(",").append(nY).append(
+                                    ")");
+                                nVertices++;
+                                break;
                             }
+                            case msopathCurveTo:
+                                for (unsigned short j = 0; j < nSegmentCount; ++j)
+                                {
+                                    for (int i = 0; i < 3; i++)
+                                    {
+                                        sal_Int32 nX = impl_GetPointComponent(
+                                            pVerticesIt, nVerticesPos, nPointSize);
+                                        sal_Int32 nY = impl_GetPointComponent(
+                                            pVerticesIt, nVerticesPos, nPointSize);
+                                        aVerticies.append(";(")
+                                            .append(nX)
+                                            .append(",")
+                                            .append(nY)
+                                            .append(")");
+                                        nVertices++;
+                                    }
+                                }
+                                break;
+                            case msopathEscape:
+                            {
+                                // If the segment type is msopathEscape, the lower 13 bits are
+                                // divided in a 5 bit escape code and 8 bit
+                                // vertex count (not segment count!)
+                                unsigned char nVertexCount = nSegmentCount & 0x00FF;
+                                nVerticesPos += nVertexCount;
+                                break;
+                            }
+                            case msopathClientEscape:
+                            case msopathClose:
+                            case msopathEnd:
+                                break;
+                            default:
+                                SAL_WARN("sw.rtf", "Totally b0rked");
+                                break;
                         }
-                        break;
-                    case msopathEscape:
-                    {
-                        // If the segment type is msopathEscape, the lower 13 bits are
-                        // divided in a 5 bit escape code and 8 bit
-                        // vertex count (not segment count!)
-                        unsigned char nVertexCount = nSegmentCount & 0x00FF;
-                        nVerticesPos += nVertexCount;
-                        break;
                     }
-                    case msopathClientEscape:
-                    case msopathClose:
-                    case msopathEnd:
-                        break;
-                    default:
-                        SAL_WARN("oox", "Totally b0rked\n");
-                        break;
-                    }
-                }
 
-                if (!aVerticies.isEmpty())
-                {
-                    // We know the number of vertices at the end only, so we have to prepend them here.
-                    m_aShapeProps.insert(std::pair<OString,OString>("pVerticies", "8;" + OString::number(nVertices) + aVerticies.makeStringAndClear()));
+                    if (!aVerticies.isEmpty())
+                    {
+                        // We know the number of vertices at the end only, so we have to prepend them here.
+                        m_aShapeProps.insert(std::pair<OString, OString>(
+                            "pVerticies",
+                            "8;" + OString::number(nVertices) + aVerticies.makeStringAndClear()));
+                    }
+                    if (!aSegmentInfo.isEmpty())
+                        m_aShapeProps.insert(std::pair<OString, OString>(
+                            "pSegmentInfo", aSegmentInfo.makeStringAndClear()));
                 }
-                if (!aSegmentInfo.isEmpty())
-                    m_aShapeProps.insert(std::pair<OString,OString>("pSegmentInfo", aSegmentInfo.makeStringAndClear()));
+                else
+                    SAL_INFO(
+                        "sw.rtf",
+                        OSL_THIS_FUNC
+                            << ": unhandled shape path, missing either pVertices or pSegmentInfo");
             }
-            else
-                SAL_INFO("sw.rtf", OSL_THIS_FUNC << ": unhandled shape path, missing either pVertices or pSegmentInfo");
-        }
-        break;
-        case ESCHER_Prop_shapePath:
-            // noop, we use pSegmentInfo instead
             break;
-        case ESCHER_Prop_fFillOK:
-            if (!it->nPropValue)
-                m_aShapeProps.insert(std::pair<OString,OString>("fFillOK", "0"));
+            case ESCHER_Prop_shapePath:
+                // noop, we use pSegmentInfo instead
+                break;
+            case ESCHER_Prop_fFillOK:
+                if (!rOpt.nPropValue)
+                    m_aShapeProps.insert(std::pair<OString, OString>("fFillOK", "0"));
+                break;
+            case ESCHER_Prop_dxTextLeft:
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("dxTextLeft", OString::number(rOpt.nPropValue)));
+                break;
+            case ESCHER_Prop_dyTextTop:
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("dyTextTop", OString::number(rOpt.nPropValue)));
+                break;
+            case ESCHER_Prop_dxTextRight:
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("dxTextRight", OString::number(rOpt.nPropValue)));
+                break;
+            case ESCHER_Prop_dyTextBottom:
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("dyTextBottom", OString::number(rOpt.nPropValue)));
+                break;
+            case ESCHER_Prop_FitTextToShape:
+                // Size text to fit shape size: not supported by RTF
+                break;
+            case ESCHER_Prop_adjustValue:
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("adjustValue", OString::number(rOpt.nPropValue)));
+                break;
+            case ESCHER_Prop_txflTextFlow:
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("txflTextFlow", OString::number(rOpt.nPropValue)));
+                break;
+            case ESCHER_Prop_fillType:
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("fillType", OString::number(rOpt.nPropValue)));
+                break;
+            case ESCHER_Prop_fillOpacity:
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("fillOpacity", OString::number(rOpt.nPropValue)));
+                break;
+            case ESCHER_Prop_fillBlip:
+            {
+                OStringBuffer aBuf;
+                aBuf.append('{')
+                    .append(OOO_STRING_SVTOOLS_RTF_PICT)
+                    .append(OOO_STRING_SVTOOLS_RTF_PNGBLIP)
+                    .append(SAL_NEWLINE_STRING);
+                int nHeaderSize
+                    = 25; // The first bytes are WW8-specific, we're only interested in the PNG
+                aBuf.append(msfilter::rtfutil::WriteHex(&rOpt.nProp[0] + nHeaderSize,
+                                                        rOpt.nProp.size() - nHeaderSize));
+                aBuf.append('}');
+                m_aShapeProps.insert(
+                    std::pair<OString, OString>("fillBlip", aBuf.makeStringAndClear()));
+            }
             break;
-        case ESCHER_Prop_dxTextLeft:
-            m_aShapeProps.insert(std::pair<OString,OString>("dxTextLeft", OString::number(it->nPropValue)));
-            break;
-        case ESCHER_Prop_dyTextTop:
-            m_aShapeProps.insert(std::pair<OString,OString>("dyTextTop", OString::number(it->nPropValue)));
-            break;
-        case ESCHER_Prop_dxTextRight:
-            m_aShapeProps.insert(std::pair<OString,OString>("dxTextRight", OString::number(it->nPropValue)));
-            break;
-        case ESCHER_Prop_dyTextBottom:
-            m_aShapeProps.insert(std::pair<OString,OString>("dyTextBottom", OString::number(it->nPropValue)));
-            break;
-        case ESCHER_Prop_FitTextToShape:
-            // Size text to fit shape size: not supported by RTF
-            break;
-        case ESCHER_Prop_adjustValue:
-            m_aShapeProps.insert(std::pair<OString,OString>("adjustValue", OString::number(it->nPropValue)));
-            break;
-        case ESCHER_Prop_txflTextFlow:
-            m_aShapeProps.insert(std::pair<OString,OString>("txflTextFlow", OString::number(it->nPropValue)));
-            break;
-        case ESCHER_Prop_fillType:
-            m_aShapeProps.insert(std::pair<OString,OString>("fillType", OString::number(it->nPropValue)));
-            break;
-        case ESCHER_Prop_fillOpacity:
-            m_aShapeProps.insert(std::pair<OString,OString>("fillOpacity", OString::number(it->nPropValue)));
-            break;
-        case ESCHER_Prop_fillBlip:
-        {
-            OStringBuffer aBuf;
-            aBuf.append('{').append(OOO_STRING_SVTOOLS_RTF_PICT).append(OOO_STRING_SVTOOLS_RTF_PNGBLIP).append(SAL_NEWLINE_STRING);
-            int nHeaderSize = 25; // The first bytes are WW8-specific, we're only interested in the PNG
-            aBuf.append(RtfAttributeOutput::WriteHex(it->pBuf + nHeaderSize, it->nPropSize - nHeaderSize));
-            aBuf.append('}');
-            m_aShapeProps.insert(std::pair<OString,OString>("fillBlip", aBuf.makeStringAndClear()));
-        }
-        break;
-        default:
-            SAL_INFO("sw.rtf", OSL_THIS_FUNC << ": unhandled property: " << nId << " (value: " << it->nPropValue << ")");
-            break;
+            default:
+                SAL_INFO("sw.rtf", OSL_THIS_FUNC << ": unhandled property: " << nId
+                                                 << " (value: " << rOpt.nPropValue << ")");
+                break;
         }
     }
 }
 
-void RtfSdrExport::AddLineDimensions(const Rectangle& rRectangle)
+void RtfSdrExport::AddLineDimensions(const tools::Rectangle& rRectangle)
 {
     // We get the position relative to (the current?) character
-    m_aShapeProps.insert(std::pair<OString,OString>("posrelh", "3"));
+    m_aShapeProps.insert(std::pair<OString, OString>("posrelh", "3"));
 
-    switch (m_nShapeFlags & 0xC0)
-    {
-    case 0x40:
-        m_aShapeProps.insert(std::pair<OString,OString>("fFlipV", "1"));
-        break;
-    case 0x80:
-        m_aShapeProps.insert(std::pair<OString,OString>("fFlipH", "1"));
-        break;
-    case 0xC0:
-        m_aShapeProps.insert(std::pair<OString,OString>("fFlipV", "1"));
-        m_aShapeProps.insert(std::pair<OString,OString>("fFlipH", "1"));
-        break;
-    }
+    if (m_nShapeFlags & ShapeFlag::FlipV)
+        m_aShapeProps.insert(std::pair<OString, OString>("fFlipV", "1"));
+
+    if (m_nShapeFlags & ShapeFlag::FlipH)
+        m_aShapeProps.insert(std::pair<OString, OString>("fFlipH", "1"));
 
     // the actual dimensions
     m_aShapeStyle.append(OOO_STRING_SVTOOLS_RTF_SHPLEFT).append(rRectangle.Left());
@@ -427,10 +471,11 @@ void RtfSdrExport::AddLineDimensions(const Rectangle& rRectangle)
     m_aShapeStyle.append(OOO_STRING_SVTOOLS_RTF_SHPBOTTOM).append(rRectangle.Bottom());
 }
 
-void RtfSdrExport::AddRectangleDimensions(OStringBuffer& rBuffer, const Rectangle& rRectangle)
+void RtfSdrExport::AddRectangleDimensions(OStringBuffer& rBuffer,
+                                          const tools::Rectangle& rRectangle)
 {
     // We get the position relative to (the current?) character
-    m_aShapeProps.insert(std::pair<OString,OString>("posrelh", "3"));
+    m_aShapeProps.insert(std::pair<OString, OString>("posrelh", "3"));
 
     rBuffer.append(OOO_STRING_SVTOOLS_RTF_SHPLEFT).append(rRectangle.Left());
     rBuffer.append(OOO_STRING_SVTOOLS_RTF_SHPTOP).append(rRectangle.Top());
@@ -442,37 +487,49 @@ extern const char* pShapeTypes[];
 
 static void lcl_AppendSP(OStringBuffer& rRunText, const char cName[], const OString& rValue)
 {
-    rRunText.append('{').append(OOO_STRING_SVTOOLS_RTF_SP)
-    .append('{').append(OOO_STRING_SVTOOLS_RTF_SN " ").append(cName).append('}')
-    .append('{').append(OOO_STRING_SVTOOLS_RTF_SV " ").append(rValue).append('}')
-    .append('}');
+    rRunText.append('{')
+        .append(OOO_STRING_SVTOOLS_RTF_SP)
+        .append('{')
+        .append(OOO_STRING_SVTOOLS_RTF_SN " ")
+        .append(cName)
+        .append('}')
+        .append('{')
+        .append(OOO_STRING_SVTOOLS_RTF_SV " ")
+        .append(rValue)
+        .append('}')
+        .append('}');
 }
 
 void RtfSdrExport::impl_writeGraphic()
 {
     // Get the Graphic object from the Sdr one.
-    uno::Reference<drawing::XShape> xShape = GetXShapeForSdrObject(const_cast<SdrObject*>(m_pSdrObject));
+    uno::Reference<drawing::XShape> xShape
+        = GetXShapeForSdrObject(const_cast<SdrObject*>(m_pSdrObject));
     uno::Reference<beans::XPropertySet> xPropertySet(xShape, uno::UNO_QUERY);
-    OUString sGraphicURL;
+
+    uno::Reference<graphic::XGraphic> xGraphic;
+
+    Graphic aGraphic;
+
     try
     {
-        xPropertySet->getPropertyValue("GraphicURL") >>= sGraphicURL;
+        xPropertySet->getPropertyValue("Graphic") >>= xGraphic;
     }
-    catch (beans::UnknownPropertyException& rException)
+    catch (beans::UnknownPropertyException const&)
     {
-        // ATM groupshapes are not supported, just make sure we don't crash on them.
-        SAL_WARN("sw.rtf", "failed. Message: " << rException.Message);
-        return;
+        DBG_UNHANDLED_EXCEPTION("sw.rtf");
     }
-    OString aURLBS(OUStringToOString(sGraphicURL, RTL_TEXTENCODING_UTF8));
-    Graphic aGraphic = GraphicObject(aURLBS.copy(RTL_CONSTASCII_LENGTH("vnd.sun.star.GraphicObject:"))).GetTransformedGraphic();
+
+    if (xGraphic.is())
+    {
+        aGraphic = Graphic(xGraphic);
+    }
 
     // Export it to a stream.
     SvMemoryStream aStream;
-    GraphicConverter::Export(aStream, aGraphic, ConvertDataFormat::PNG);
-    aStream.Seek(STREAM_SEEK_TO_END);
-    sal_uInt32 nSize = aStream.Tell();
-    const sal_uInt8* pGraphicAry = static_cast<sal_uInt8 const*>(aStream.GetData());
+    (void)GraphicConverter::Export(aStream, aGraphic, ConvertDataFormat::PNG);
+    sal_uInt32 nSize = aStream.TellEnd();
+    auto pGraphicAry = static_cast<sal_uInt8 const*>(aStream.GetData());
 
     Size aMapped(aGraphic.GetPrefSize());
 
@@ -480,10 +537,12 @@ void RtfSdrExport::impl_writeGraphic()
     RtfStringBuffer aBuf;
     aBuf->append('{').append(OOO_STRING_SVTOOLS_RTF_PICT).append(OOO_STRING_SVTOOLS_RTF_PNGBLIP);
     aBuf->append(OOO_STRING_SVTOOLS_RTF_PICW).append(sal_Int32(aMapped.Width()));
-    aBuf->append(OOO_STRING_SVTOOLS_RTF_PICH).append(sal_Int32(aMapped.Height())).append(SAL_NEWLINE_STRING);
-    aBuf->append(RtfAttributeOutput::WriteHex(pGraphicAry, nSize));
+    aBuf->append(OOO_STRING_SVTOOLS_RTF_PICH)
+        .append(sal_Int32(aMapped.Height()))
+        .append(SAL_NEWLINE_STRING);
+    aBuf->append(msfilter::rtfutil::WriteHex(pGraphicAry, nSize));
     aBuf->append('}');
-    m_aShapeProps.insert(std::pair<OString,OString>("pib", aBuf.makeStringAndClear()));
+    m_aShapeProps.insert(std::pair<OString, OString>("pib", aBuf.makeStringAndClear()));
 }
 
 sal_Int32 RtfSdrExport::StartShape()
@@ -491,12 +550,15 @@ sal_Int32 RtfSdrExport::StartShape()
     if (m_nShapeType == ESCHER_ShpInst_Nil)
         return -1;
 
-    m_aShapeProps.insert(std::pair<OString,OString>("shapeType", OString::number(m_nShapeType)));
+    m_aShapeProps.insert(std::pair<OString, OString>("shapeType", OString::number(m_nShapeType)));
     if (ESCHER_ShpInst_PictureFrame == m_nShapeType)
         impl_writeGraphic();
 
     m_rAttrOutput.RunText().append('{').append(OOO_STRING_SVTOOLS_RTF_SHP);
-    m_rAttrOutput.RunText().append('{').append(OOO_STRING_SVTOOLS_RTF_IGNORE).append(OOO_STRING_SVTOOLS_RTF_SHPINST);
+    m_rAttrOutput.RunText()
+        .append('{')
+        .append(OOO_STRING_SVTOOLS_RTF_IGNORE)
+        .append(OOO_STRING_SVTOOLS_RTF_SHPINST);
 
     m_rAttrOutput.RunText().append(m_aShapeStyle.makeStringAndClear());
     // Ignore \shpbxpage, \shpbxmargin, and \shpbxcolumn, in favor of the posrelh property.
@@ -504,24 +566,38 @@ sal_Int32 RtfSdrExport::StartShape()
     // Ignore \shpbypage, \shpbymargin, and \shpbycolumn, in favor of the posrelh property.
     m_rAttrOutput.RunText().append(OOO_STRING_SVTOOLS_RTF_SHPBYIGNORE);
 
-    for (std::map<OString,OString>::reverse_iterator i = m_aShapeProps.rbegin(); i != m_aShapeProps.rend(); ++i)
-        lcl_AppendSP(m_rAttrOutput.RunText(), (*i).first.getStr(), (*i).second);
+    // Write ZOrder.
+    if (!m_bInGroup)
+    {
+        // Order inside the group shape is not relevant for the flat shape list
+        // we write.
+        m_rAttrOutput.RunText().append(OOO_STRING_SVTOOLS_RTF_SHPZ);
+        m_rAttrOutput.RunText().append(OString::number(m_pSdrObject->GetOrdNum()));
+    }
 
-    lcl_AppendSP(m_rAttrOutput.RunText(), "wzDescription", msfilter::rtfutil::OutString(m_pSdrObject->GetDescription(), m_rExport.m_eCurrentEncoding));
-    lcl_AppendSP(m_rAttrOutput.RunText(), "wzName", msfilter::rtfutil::OutString(m_pSdrObject->GetTitle(), m_rExport.m_eCurrentEncoding));
+    for (auto it = m_aShapeProps.rbegin(); it != m_aShapeProps.rend(); ++it)
+        lcl_AppendSP(m_rAttrOutput.RunText(), (*it).first.getStr(), (*it).second);
+
+    lcl_AppendSP(m_rAttrOutput.RunText(), "wzDescription",
+                 msfilter::rtfutil::OutString(m_pSdrObject->GetDescription(),
+                                              m_rExport.GetCurrentEncoding()));
+    lcl_AppendSP(
+        m_rAttrOutput.RunText(), "wzName",
+        msfilter::rtfutil::OutString(m_pSdrObject->GetName(), m_rExport.GetCurrentEncoding()));
 
     // now check if we have some text
     const SwFrameFormat* pShape = FindFrameFormat(m_pSdrObject);
     if (pShape)
     {
-        if (SwFrameFormat* pTextBox = SwTextBoxHelper::findTextBox(pShape))
+        if (SwFrameFormat* pTextBox
+            = SwTextBoxHelper::getOtherTextBoxFormat(pShape, RES_DRAWFRMFMT))
         {
             ww8::Frame* pFrame = nullptr;
-            for (ww8::FrameIter it = m_rExport.m_aFrames.begin(); it != m_rExport.m_aFrames.end(); ++it)
+            for (auto& rFrame : m_rExport.m_aFrames)
             {
-                if (pTextBox == &it->GetFrameFormat())
+                if (pTextBox == &rFrame.GetFrameFormat())
                 {
-                    pFrame = &(*it);
+                    pFrame = &rFrame;
                     break;
                 }
             }
@@ -532,7 +608,7 @@ sal_Int32 RtfSdrExport::StartShape()
         }
     }
 
-    const SdrTextObj* pTextObj = dynamic_cast<const SdrTextObj*>(m_pSdrObject);
+    auto pTextObj = dynamic_cast<const SdrTextObj*>(m_pSdrObject);
     if (pTextObj)
     {
         const OutlinerParaObject* pParaObj = nullptr;
@@ -545,7 +621,7 @@ sal_Int32 RtfSdrExport::StartShape()
         */
         if (pTextObj->IsTextEditActive())
         {
-            pOwnedParaObj.reset(pTextObj->GetEditOutlinerParaObject());
+            pOwnedParaObj = pTextObj->GetEditOutlinerParaObject();
             pParaObj = pOwnedParaObj.get();
         }
         else
@@ -556,7 +632,47 @@ sal_Int32 RtfSdrExport::StartShape()
         if (pParaObj)
         {
             // this is reached only in case some text is attached to the shape
-            WriteOutliner(*pParaObj, TXT_HFTXTBOX);
+            // Watermark or TextBox?
+            if (pTextObj->TakeObjNameSingul().match("Text Frame"))
+                WriteOutliner(*pParaObj, TXT_HFTXTBOX);
+            else
+            {
+                const EditTextObject& rEditObj = pParaObj->GetTextObject();
+                const SfxItemSet& rItemSet = rEditObj.GetParaAttribs(0);
+
+                lcl_AppendSP(m_rAttrOutput.RunText(), "gtextUNICODE",
+                             msfilter::rtfutil::OutString(rEditObj.GetText(0),
+                                                          m_rExport.GetCurrentEncoding()));
+
+                auto pFontFamily
+                    = static_cast<const SvxFontItem*>(rItemSet.GetItem(SID_ATTR_CHAR_FONT));
+                if (pFontFamily)
+                {
+                    lcl_AppendSP(m_rAttrOutput.RunText(), "gtextFont",
+                                 msfilter::rtfutil::OutString(pFontFamily->GetFamilyName(),
+                                                              m_rExport.GetCurrentEncoding()));
+                }
+
+                auto pFontHeight = static_cast<const SvxFontHeightItem*>(
+                    rItemSet.GetItem(SID_ATTR_CHAR_FONTHEIGHT));
+                if (pFontHeight)
+                {
+                    long nFontHeight = TransformMetric(pFontHeight->GetHeight(), FieldUnit::TWIP,
+                                                       FieldUnit::POINT);
+                    lcl_AppendSP(
+                        m_rAttrOutput.RunText(), "gtextSize",
+                        msfilter::rtfutil::OutString(OUString::number(nFontHeight * RTF_MULTIPLIER),
+                                                     m_rExport.GetCurrentEncoding()));
+                }
+
+                // RTF angle: 0-360 * 2^16  clockwise
+                // LO  angle: 0-360 * 100   counter-clockwise
+                sal_Int32 nRotation
+                    = -1 * pTextObj->GetGeoStat().nRotationAngle * RTF_MULTIPLIER / 100;
+                lcl_AppendSP(m_rAttrOutput.RunText(), "rotation",
+                             msfilter::rtfutil::OutString(OUString::number(nRotation),
+                                                          m_rExport.GetCurrentEncoding()));
+            }
         }
     }
 
@@ -583,7 +699,7 @@ void RtfSdrExport::WriteOutliner(const OutlinerParaObject& rParaObj, TextTypes e
         rtl_TextEncoding eChrSet = aAttrIter.GetNodeCharSet();
 
         OUString aStr(rEditObj.GetText(n));
-        sal_Int32 nAktPos = 0;
+        sal_Int32 nCurrentPos = 0;
         const sal_Int32 nEnd = aStr.getLength();
 
         aAttrIter.OutParaAttr(false);
@@ -595,25 +711,24 @@ void RtfSdrExport::WriteOutliner(const OutlinerParaObject& rParaObj, TextTypes e
             const sal_Int32 nNextAttr = std::min(aAttrIter.WhereNext(), nEnd);
             rtl_TextEncoding eNextChrSet = aAttrIter.GetNextCharSet();
 
-            aAttrIter.OutAttr(nAktPos);
+            aAttrIter.OutAttr(nCurrentPos);
             m_rAttrOutput.RunText().append('{');
             m_rAttrOutput.RunText().append(m_rAttrOutput.Styles().makeStringAndClear());
             m_rAttrOutput.RunText().append(m_rAttrOutput.StylesEnd().makeStringAndClear());
             m_rAttrOutput.RunText().append(SAL_NEWLINE_STRING);
-            bool bTextAtr = aAttrIter.IsTextAttr(nAktPos);
+            bool bTextAtr = aAttrIter.IsTextAttr(nCurrentPos);
             if (!bTextAtr)
             {
-                OUString aOut(aStr.copy(nAktPos, nNextAttr - nAktPos));
+                OUString aOut(aStr.copy(nCurrentPos, nNextAttr - nCurrentPos));
                 m_rAttrOutput.RunText().append(msfilter::rtfutil::OutString(aOut, eChrSet));
             }
 
             m_rAttrOutput.RunText().append('}');
 
-            nAktPos = nNextAttr;
+            nCurrentPos = nNextAttr;
             eChrSet = eNextChrSet;
             aAttrIter.NextPos();
-        }
-        while (nAktPos < nEnd);
+        } while (nCurrentPos < nEnd);
         if (bShape || n + 1 < nPara)
             m_rAttrOutput.RunText().append(OOO_STRING_SVTOOLS_RTF_PAR);
     }
@@ -640,7 +755,7 @@ void RtfSdrExport::AddSdrObject(const SdrObject& rObj)
 
 bool RtfSdrExport::isTextBox(const SwFrameFormat& rFrameFormat)
 {
-    return m_aTextBoxes.find(&rFrameFormat) != m_aTextBoxes.end();
+    return SwTextBoxHelper::isTextBox(&rFrameFormat, RES_FLYFRMFMT);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

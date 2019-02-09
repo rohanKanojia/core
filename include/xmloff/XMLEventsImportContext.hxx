@@ -23,11 +23,8 @@
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
 #include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/Sequence.hxx>
 #include <xmloff/xmlictxt.hxx>
-#include <xmloff/xmlevent.hxx>
 
-#include <map>
 #include <vector>
 
 namespace com { namespace sun { namespace star {
@@ -36,6 +33,8 @@ namespace com { namespace sun { namespace star {
     namespace container { class XNameReplace; }
     namespace document { class XEventsSupplier; }
 } } }
+
+namespace com { namespace sun { namespace star { namespace uno { template <class E> class Sequence; } } } }
 
 typedef ::std::pair<
             OUString,
@@ -53,10 +52,10 @@ typedef ::std::vector< EventNameValuesPair > EventsVector;
  */
 class XMLOFF_DLLPUBLIC XMLEventsImportContext : public SvXMLImportContext
 {
-protected:
     // the event XNameReplace; may be empty
     css::uno::Reference<css::container::XNameReplace> xEvents;
 
+protected:
     // if no XNameReplace is given, use this vector to collect events
     EventsVector aCollectEvents;
 
@@ -80,7 +79,7 @@ public:
         const OUString& rLocalName,
         const css::uno::Reference<css::container::XNameReplace> & xNameRepl);
 
-    virtual ~XMLEventsImportContext();
+    virtual ~XMLEventsImportContext() override;
 
     void AddEventValues(
         const OUString& rEventName,
@@ -109,7 +108,7 @@ protected:
 
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList ) override;

@@ -29,16 +29,17 @@ $(eval $(call gb_CppunitTest_use_libraries,editeng_core, \
     salhelper \
     sax \
     sot \
+    sfx \
     svl \
     svt \
     test \
     tk \
     tl \
     ucbhelper \
+    unotest \
     utl \
     vcl \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_externals,editeng_core,\
@@ -48,14 +49,11 @@ $(eval $(call gb_CppunitTest_use_externals,editeng_core,\
 ))
 
 $(eval $(call gb_CppunitTest_set_include,editeng_core,\
-    -I$(SRCDIR)/editeng/source \
+    -I$(SRCDIR)/editeng/inc \
     $$(INCLUDE) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,editeng_core,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,editeng_core))
 
 $(eval $(call gb_CppunitTest_use_ure,editeng_core))
 $(eval $(call gb_CppunitTest_use_vcl,editeng_core))
@@ -70,8 +68,11 @@ $(eval $(call gb_CppunitTest_use_components,editeng_core,\
     ucb/source/core/ucb1 \
     ucb/source/ucp/file/ucpfile1 \
     unoxml/source/service/unoxml \
+	sax/source/expatwrap/expwrap \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,editeng_core))
+
+$(eval $(call gb_CppunitTest_use_more_fonts,editeng_core))
 
 # vim: set noet sw=4 ts=4:

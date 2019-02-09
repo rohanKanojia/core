@@ -16,23 +16,20 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#ifndef INCLUDED_SVTOOLS_FILEVIEW_HXX
-#define INCLUDED_SVTOOLS_FILEVIEW_HXX
+#ifndef INCLUDED_VCL_FILEVIEW_HXX
+#define INCLUDED_VCL_FILEVIEW_HXX
 
+#include <memory>
 #include <svtools/svtdllapi.h>
 #include <com/sun/star/uno/Sequence.h>
-#include <com/sun/star/ucb/XContent.hpp>
 #include <vcl/ctrl.hxx>
-#include <vcl/image.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/button.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
 #include <rtl/ustring.hxx>
+
+namespace com :: sun :: star :: ucb { class XContent; }
 
 // class SvtFileView -----------------------------------------------------
 
-class ViewTabListBox_Impl;
 class SvtFileView_Impl;
 class SvTreeListEntry;
 class HeaderBar;
@@ -70,19 +67,18 @@ struct FileViewAsyncAction
 class SVT_DLLPUBLIC SvtFileView : public Control
 {
 private:
-    SvtFileView_Impl*              mpImp;
-    bool                           bSortColumn;
-    css::uno::Sequence< OUString > mpBlackList;
+    std::unique_ptr<SvtFileView_Impl> mpImpl;
+    css::uno::Sequence< OUString >    mpBlackList;
 
-    DECL_DLLPRIVATE_LINK_TYPED( HeaderSelect_Impl, HeaderBar*, void );
-    DECL_DLLPRIVATE_LINK_TYPED( HeaderEndDrag_Impl, HeaderBar*, void );
+    DECL_DLLPRIVATE_LINK( HeaderSelect_Impl, HeaderBar*, void );
+    DECL_DLLPRIVATE_LINK( HeaderEndDrag_Impl, HeaderBar*, void );
 
 protected:
     virtual void GetFocus() override;
 
 public:
     SvtFileView( vcl::Window* pParent, WinBits nBits, bool bOnlyFolder, bool bMultiSelection, bool bShowType = true );
-    virtual ~SvtFileView();
+    virtual ~SvtFileView() override;
     virtual void dispose() override;
 
     virtual Size GetOptimalSize() const override;
@@ -90,7 +86,7 @@ public:
     void                    SetViewMode( FileViewMode eMode );
 
     const OUString&         GetViewURL() const;
-    static OUString         GetURL( SvTreeListEntry* pEntry );
+    static OUString         GetURL( SvTreeListEntry const * pEntry );
     OUString                GetCurrentURL() const;
 
     bool                    GetParentURL( OUString& _rParentURL ) const;
@@ -100,7 +96,6 @@ public:
     const OString&          GetHelpId( ) const;
     void                    SetSizePixel( const Size& rNewSize ) override;
     virtual void            SetPosSizePixel( const Point& rNewPos, const Size& rNewSize ) override;
-    void                    SetSortColumn( bool bValue ) { bSortColumn = bValue; }
 
     /** initialize the view with the content of a folder given by URL, and apply an immediate filter
 
@@ -121,8 +116,7 @@ public:
 
     /** initializes the view with the content of a folder given by an UCB content
     */
-    bool                    Initialize( const css::uno::Reference< css::ucb::XContent>& _xContent,
-                                        const OUString& rFilter );
+    bool                    Initialize( const css::uno::Reference< css::ucb::XContent>& _xContent );
 
     /** reads the current content of the current folder again, and applies the given filter to it
 
@@ -192,7 +186,7 @@ protected:
 
 struct SvtContentEntry
 {
-    bool     mbIsFolder;
+    bool const     mbIsFolder;
     OUString maURL;
 
     SvtContentEntry( const OUString& rURL, bool bIsFolder ) :
@@ -207,27 +201,24 @@ namespace svtools {
 
 enum QueryDeleteResult_Impl
 {
-    QUERYDELETE_CANCEL = RET_CANCEL,
     QUERYDELETE_YES = RET_YES,
-    QUERYDELETE_NO = RET_NO,
-    QUERYDELETE_ALL = -1
+    QUERYDELETE_ALL = 101
 };
 
-class SVT_DLLPUBLIC QueryDeleteDlg_Impl : public MessageDialog
+class SVT_DLLPUBLIC QueryDeleteDlg_Impl :  public weld::MessageDialogController
 {
 private:
-    VclPtr<PushButton> m_pAllButton;
+    std::unique_ptr<weld::Button> m_xAllButton;
 public:
 
-    QueryDeleteDlg_Impl(vcl::Window* pParent, const OUString& rName);
-    virtual ~QueryDeleteDlg_Impl();
-    virtual void dispose() override;
+    QueryDeleteDlg_Impl(weld::Widget* pParent, const OUString& rName);
+    virtual ~QueryDeleteDlg_Impl() override;
 
-    void EnableAllButton() { m_pAllButton->Enable(); }
+    void EnableAllButton() { m_xAllButton->set_sensitive(true); }
 };
 
 }
 
-#endif // INCLUDED_SVTOOLS_FILEVIEW_HXX
+#endif // INCLUDED_VCL_FILEVIEW_HXX
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

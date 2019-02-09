@@ -17,23 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "WTypeSelect.hxx"
-#include "dbustrings.hrc"
+#include <WTypeSelect.hxx>
+#include <stringconstants.hxx>
+#include <bitmaps.hlst>
 #include <tools/diagnose_ex.h>
 #include <osl/diagnose.h>
-#include "FieldDescriptions.hxx"
-#include "WCopyTable.hxx"
-#include "dbaccess_helpid.hrc"
-#include "dbu_misc.hrc"
+#include <FieldDescriptions.hxx>
+#include <WCopyTable.hxx>
+#include <strings.hrc>
 #include <tools/stream.hxx>
 #include <svtools/svparser.hxx>
-#include "UITools.hxx"
-#include "sqlmessage.hxx"
-#include "FieldControls.hxx"
+#include <UITools.hxx>
+#include <core_resource.hxx>
+#include <sqlmessage.hxx>
+#include <FieldControls.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/builderfactory.hxx>
 
-#include "dbaccess_slotid.hrc"
+#include <dbaccess_slotid.hrc>
 
 using namespace ::dbaui;
 using namespace ::com::sun::star::uno;
@@ -43,8 +44,8 @@ using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::sdbc;
 
 // OWizTypeSelectControl
-OWizTypeSelectControl::OWizTypeSelectControl(vcl::Window* pParent, vcl::Window* pParentTabPage, OTableDesignHelpBar* pHelpBar)
-    : OFieldDescControl(pParent, pHelpBar)
+OWizTypeSelectControl::OWizTypeSelectControl(vcl::Window* pParent, vcl::Window* pParentTabPage)
+    : OFieldDescControl(pParent, nullptr)
 {
     m_pParentTabPage = pParentTabPage;
 }
@@ -90,14 +91,13 @@ void OWizTypeSelectControl::DeactivateAggregate( EControlType eType )
 
 void OWizTypeSelectControl::CellModified(long nRow, sal_uInt16 nColId )
 {
-    OSL_ENSURE(nRow == -1,"nRow muss -1 sein!");
-    (void)nRow;
+    OSL_ENSURE(nRow == -1,"nRow must be -1!");
 
     MultiListBox *pListBox = static_cast<OWizTypeSelect*>(m_pParentTabPage.get())->m_pColumnNames;
 
     OFieldDescription* pCurFieldDescr = getCurrentFieldDescData();
 
-    const sal_Int32 nPos = pListBox->GetEntryPos( OUString( pCurFieldDescr->GetName() ) );
+    const sal_Int32 nPos = pListBox->GetEntryPos( pCurFieldDescr->GetName() );
     pCurFieldDescr = static_cast< OFieldDescription* >( pListBox->GetEntryData( nPos ) );
     OSL_ENSURE( pCurFieldDescr, "OWizTypeSelectControl::CellModified: Columnname/type not found in the listbox!" );
     if ( !pCurFieldDescr )
@@ -132,13 +132,13 @@ void OWizTypeSelectControl::CellModified(long nRow, sal_uInt16 nColId )
 
                 }
                 else
-                    bDoubleName =  ((pListBox->GetEntryPos(OUString(sNewName)) != LISTBOX_ENTRY_NOTFOUND)
+                    bDoubleName =  ((pListBox->GetEntryPos(sNewName) != LISTBOX_ENTRY_NOTFOUND)
                                     || ( pWiz->shouldCreatePrimaryKey()
                                         &&  pWiz->getPrimaryKeyName() == sNewName) );
 
                 if ( bDoubleName )
                 {
-                    OUString strMessage = ModuleRes(STR_TABLEDESIGN_DUPLICATE_NAME);
+                    OUString strMessage = DBA_RES(STR_TABLEDESIGN_DUPLICATE_NAME);
                     strMessage = strMessage.replaceFirst("$column$", sNewName);
                     pWiz->showError(strMessage);
                     pCurFieldDescr->SetName(sName);
@@ -152,15 +152,13 @@ void OWizTypeSelectControl::CellModified(long nRow, sal_uInt16 nColId )
                 static_cast<OWizTypeSelect*>(m_pParentTabPage.get())->setDuplicateName(false);
 
                 // now we change the name
-                OCopyTableWizard::TNameMapping::iterator aIter = pWiz->m_mNameMapping.begin();
-                OCopyTableWizard::TNameMapping::const_iterator aEnd  = pWiz->m_mNameMapping.end();
 
                 ::comphelper::UStringMixEqual aCase(bCase);
-                for(;aIter != aEnd;++aIter)
+                for (auto & elem : pWiz->m_mNameMapping)
                 {
-                    if ( aCase(aIter->second,sName) )
+                    if ( aCase(elem.second,sName) )
                     {
-                        aIter->second = sNewName;
+                        elem.second = sNewName;
                         break;
                     }
                 }
@@ -216,7 +214,6 @@ OUString OWizTypeSelectControl::getAutoIncrementValue() const
     return static_cast<OWizTypeSelect*>(m_pParentTabPage.get())->m_sAutoIncrementValue;
 }
 
-#define IMG_PRIMARY_KEY 1
 OWizTypeSelect::OWizTypeSelect( vcl::Window* pParent, SvStream* _pStream )
                :OWizardPage( pParent, "TypeSelect", "dbaccess/ui/typeselectpage.ui")
                ,m_pTypeControl(VclPtr<OWizTypeSelectControl>::Create(get<VclVBox>("control_container"), this) )
@@ -235,10 +232,7 @@ OWizTypeSelect::OWizTypeSelect( vcl::Window* pParent, SvStream* _pStream )
 
     m_pColumnNames->SetSelectHdl(LINK(this,OWizTypeSelect,ColumnSelectHdl));
 
-    ModuleRes aModuleRes(IMG_JOINS);
-    ImageList aImageList(aModuleRes);
-    m_imgPKey = aImageList.GetImage(IMG_PRIMARY_KEY);
-
+    m_imgPKey = Image(StockImage::Yes, BMP_PRIMARY_KEY);
 
     m_pTypeControl->Show();
     m_pTypeControl->Init();
@@ -255,7 +249,7 @@ OWizTypeSelect::OWizTypeSelect( vcl::Window* pParent, SvStream* _pStream )
     }
     catch(const Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -278,18 +272,18 @@ void OWizTypeSelect::dispose()
 
 OUString OWizTypeSelect::GetTitle() const
 {
-    return ModuleRes(STR_WIZ_TYPE_SELECT_TITEL);
+    return DBA_RES(STR_WIZ_TYPE_SELECT_TITEL);
 }
 
-IMPL_LINK_NOARG_TYPED( OWizTypeSelect, ColumnSelectHdl, ListBox&, void )
+IMPL_LINK_NOARG( OWizTypeSelect, ColumnSelectHdl, ListBox&, void )
 {
-    OUString aColumnName( m_pColumnNames->GetSelectEntry() );
+    OUString aColumnName( m_pColumnNames->GetSelectedEntry() );
 
     OFieldDescription* pField = static_cast<OFieldDescription*>(m_pColumnNames->GetEntryData(m_pColumnNames->GetEntryPos(aColumnName)));
     if(pField)
         m_pTypeControl->DisplayData(pField);
 
-    m_pTypeControl->Enable(m_pColumnNames->GetSelectEntryCount() == 1 );
+    m_pTypeControl->Enable(m_pColumnNames->GetSelectedEntryCount() == 1 );
 }
 
 void OWizTypeSelect::Reset()
@@ -303,14 +297,12 @@ void OWizTypeSelect::Reset()
     m_pParent->CheckColumns(nBreakPos);
 
     const ODatabaseExport::TColumnVector& rDestColumns = m_pParent->getDestVector();
-    ODatabaseExport::TColumnVector::const_iterator aIter = rDestColumns.begin();
-    ODatabaseExport::TColumnVector::const_iterator aEnd = rDestColumns.end();
-    for(;aIter != aEnd;++aIter)
+    for (auto const& column : rDestColumns)
     {
-        const sal_Int32 nPos = (*aIter)->second->IsPrimaryKey()
-            ? m_pColumnNames->InsertEntry((*aIter)->first, m_imgPKey )
-            : m_pColumnNames->InsertEntry((*aIter)->first);
-        m_pColumnNames->SetEntryData(nPos,(*aIter)->second);
+        const sal_Int32 nPos = column->second->IsPrimaryKey()
+            ? m_pColumnNames->InsertEntry(column->first, m_imgPKey )
+            : m_pColumnNames->InsertEntry(column->first);
+        m_pColumnNames->SetEntryData(nPos,column->second);
     }
     m_bFirstTime = false;
 }
@@ -328,7 +320,7 @@ void OWizTypeSelect::ActivatePage( )
 
 bool OWizTypeSelect::LeavePage()
 {
-    OUString aColumnName( m_pColumnNames->GetSelectEntry() );
+    OUString aColumnName( m_pColumnNames->GetSelectedEntry() );
 
     bool bDuplicateName = false;
     OFieldDescription* pField = static_cast<OFieldDescription*>(m_pColumnNames->GetEntryData(m_pColumnNames->GetEntryPos(aColumnName)));
@@ -348,11 +340,20 @@ void OWizTypeSelect::EnableAuto(bool bEnable)
     m_pAutoType->Show(bEnable);
 }
 
-IMPL_LINK_NOARG_TYPED( OWizTypeSelect, ButtonClickHdl, Button *, void )
+IMPL_LINK_NOARG( OWizTypeSelect, ButtonClickHdl, Button *, void )
 {
     sal_Int32 nBreakPos;
     m_pParent->CheckColumns(nBreakPos);
-    fillColumnList(m_pAutoEt->GetText().toInt32());
+
+    // fill column list
+    sal_uInt32 nRows = m_pAutoEt->GetText().toInt32();
+    if(m_pParserStream)
+    {
+        sal_uInt64 const nTell = m_pParserStream->Tell(); // might change seek position of stream
+
+        createReaderAndCallParser(nRows);
+        m_pParserStream->Seek(nTell);
+    }
 
     ActivatePage();
 }
@@ -370,11 +371,11 @@ void OWizTypeSelectList::dispose()
 
 bool OWizTypeSelectList::IsPrimaryKeyAllowed() const
 {
-    const sal_Int32 nCount = GetSelectEntryCount();
+    const sal_Int32 nCount = GetSelectedEntryCount();
 
     for( sal_Int32 j = 0; m_bPKey && j < nCount; ++j )
     {
-        OFieldDescription* pField = static_cast<OFieldDescription*>(GetEntryData(GetSelectEntryPos(j)));
+        OFieldDescription* pField = static_cast<OFieldDescription*>(GetEntryData(GetSelectedEntryPos(j)));
         if(!pField || pField->getTypeInfo()->nSearchType == ColumnSearch::NONE)
             return false;
     }
@@ -423,7 +424,8 @@ bool OWizTypeSelectList::PreNotify( NotifyEvent& rEvt )
             if (pComEvt->IsMouseEvent())
                 ptWhere = pComEvt->GetMousePosPixel();
 
-            PopupMenu aContextMenu(ModuleRes(RID_SBA_RTF_PKEYPOPUP));
+            VclBuilder aBuilder(nullptr, VclBuilderContainer::getUIRootDir(), "dbaccess/ui/keymenu.ui", "");
+            VclPtr<PopupMenu> aContextMenu(aBuilder.get_menu("menu"));
             // Should primary key checkbox be checked?
             const sal_Int32 nCount = GetEntryCount();
             bool bCheckOk = false;
@@ -443,31 +445,27 @@ bool OWizTypeSelectList::PreNotify( NotifyEvent& rEvt )
             }
 
             if (bCheckOk)
-                aContextMenu.CheckItem( SID_TABLEDESIGN_TABED_PRIMARYKEY );
+                aContextMenu->CheckItem("primarykey");
 
-            switch( aContextMenu.Execute( this, ptWhere ) )
+            if (aContextMenu->Execute(this, ptWhere))
             {
-                case SID_TABLEDESIGN_TABED_PRIMARYKEY:
+                for (sal_Int32 j = 0 ; j < nCount ; ++j)
                 {
-                    for(sal_Int32 j = 0 ; j < nCount ; ++j)
+                    OFieldDescription* pFieldDescr = static_cast<OFieldDescription*>(GetEntryData(j));
+                    if( pFieldDescr )
                     {
-                        OFieldDescription* pFieldDescr = static_cast<OFieldDescription*>(GetEntryData(j));
-                        if( pFieldDescr )
+                        if(!bCheckOk && IsEntryPosSelected(j))
                         {
-                            if(!bCheckOk && IsEntryPosSelected(j))
-                            {
-                                setPrimaryKey(pFieldDescr,j,true);
-                                SelectEntryPos(j);
-                            }
-                            else
-                            {
-                                setPrimaryKey(pFieldDescr,j);
-                            }
+                            setPrimaryKey(pFieldDescr,j,true);
+                            SelectEntryPos(j);
+                        }
+                        else
+                        {
+                            setPrimaryKey(pFieldDescr,j);
                         }
                     }
-                    GetSelectHdl().Call(*this);
                 }
-                break;
+                GetSelectHdl().Call(*this);
             }
             bDone = true;
         }
@@ -476,23 +474,6 @@ bool OWizTypeSelectList::PreNotify( NotifyEvent& rEvt )
         break;
     }
     return bDone || MultiListBox::PreNotify(rEvt);
-}
-
-void OWizTypeSelect::fillColumnList(sal_uInt32 nRows)
-{
-    if(m_pParserStream)
-    {
-        sal_Size nTell = m_pParserStream->Tell(); // might change seek position of stream
-
-        SvParser *pReader = createReader(nRows);
-        if(pReader)
-        {
-            pReader->AddFirstRef();
-            pReader->CallParser();
-            pReader->ReleaseRef();
-        }
-        m_pParserStream->Seek(nTell);
-    }
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

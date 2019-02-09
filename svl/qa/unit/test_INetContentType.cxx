@@ -41,21 +41,21 @@ void Test::testBad() {
     OUString in("foo=bar");
     CPPUNIT_ASSERT_EQUAL(
         static_cast<sal_Unicode const *>(nullptr),
-        INetMIME::scanContentType(in.getStr(), in.getStr() + in.getLength()));
+        INetMIME::scanContentType(in));
     OUString t;
     OUString s;
     INetContentTypeParameterList ps;
     CPPUNIT_ASSERT(!INetContentTypes::parse(in, t, s, &ps));
     CPPUNIT_ASSERT(t.isEmpty());
     CPPUNIT_ASSERT(s.isEmpty());
-    CPPUNIT_ASSERT(ps.end() == ps.find("foo"));
+    CPPUNIT_ASSERT(bool(ps.end() == ps.find("foo")));
 }
 
 void Test::testFull() {
     OUString in("foo/bar;baz=boz");
     CPPUNIT_ASSERT_EQUAL(
         in.getStr() + in.getLength(),
-        INetMIME::scanContentType(in.getStr(), in.getStr() + in.getLength()));
+        INetMIME::scanContentType(in));
     OUString t;
     OUString s;
     INetContentTypeParameterList ps;
@@ -71,14 +71,14 @@ void Test::testFollow() {
     OUString in("foo/bar;baz=boz;base64,");
     CPPUNIT_ASSERT_EQUAL(
         in.getStr() + std::strlen("foo/bar;baz=boz"),
-        INetMIME::scanContentType(in.getStr(), in.getStr() + in.getLength()));
+        INetMIME::scanContentType(in));
     OUString t;
     OUString s;
     INetContentTypeParameterList ps;
     CPPUNIT_ASSERT(!INetContentTypes::parse(in, t, s));
     CPPUNIT_ASSERT(t.isEmpty());
     CPPUNIT_ASSERT(s.isEmpty());
-    CPPUNIT_ASSERT(ps.end() == ps.find("baz"));
+    CPPUNIT_ASSERT(bool(ps.end() == ps.find("baz")));
 }
 
 CPPUNIT_TEST_SUITE_REGISTRATION(Test);

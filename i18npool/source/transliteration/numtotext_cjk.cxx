@@ -22,7 +22,7 @@
 #include <numtotext_cjk.hxx>
 #include <bullet.h>
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 #define TRANSLITERATION_NUMTOTEXT( name, number ) \
 NumToText##name::NumToText##name() \
@@ -60,7 +60,7 @@ TRANSLITERATION_NUMTOTEXT( KanjiShortModern_ja_JP, NATNUM7)
 NumToText##name::NumToText##name() \
 { \
         table = _table;\
-        tableSize = sizeof(_table) / sizeof(sal_Unicode); \
+        tableSize = SAL_N_ELEMENTS(_table); \
         recycleSymbol = recycle; \
         transliterationName = "NumToText"#name; \
         implementationName = "com.sun.star.i18n.Transliteration.NumToText"#name; \
@@ -80,6 +80,6 @@ TRANSLITERATION_NUMTOTEXT ( HangulCircledSyllable_ko, table_HangulCircledSyllabl
 
 #undef TRANSLITERATION_NUMTOTEXT
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

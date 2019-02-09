@@ -59,7 +59,7 @@
 #include "lwpsdwfileloader.hxx"
 #include "lwpsdwgrouploaderv0102.hxx"
 
-#include "xfilter/xfframe.hxx"
+#include <xfilter/xfframe.hxx>
 
 LwpSdwFileLoader::LwpSdwFileLoader(SvStream* pStream, LwpGraphicObject* pGraphicObj)
     : m_pStream(pStream)
@@ -79,12 +79,12 @@ LwpSdwFileLoader::~LwpSdwFileLoader()
 void LwpSdwFileLoader::CreateDrawObjects(std::vector< rtl::Reference<XFFrame> >* pDrawObjVector)
 {
     unsigned char BinSignature[2];
-    m_pStream->Read(BinSignature,2);
+    m_pStream->ReadBytes(BinSignature, 2);
 
     if (BinSignature[0] == 'S' && BinSignature[1] == 'M')
     {
         unsigned short nVersion;
-        m_pStream->Read(&nVersion,2);
+        m_pStream->ReadUInt16(nVersion);
 
         m_pStream->Seek(0);
         if (nVersion<0x0102)

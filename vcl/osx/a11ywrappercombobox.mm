@@ -18,7 +18,7 @@
  */
 
 
-#include "osx/salinst.h"
+#include <osx/salinst.h>
 
 #include "a11ywrappercombobox.h"
 #include "a11yrolehelper.h"
@@ -56,7 +56,7 @@ using namespace ::com::sun::star::uno;
             NSEnumerator * enumerator = [ elementChildren objectEnumerator ];
             id child;
             while ( ( child = [ enumerator nextObject ] ) ) {
-                AquaA11yWrapper * element = ( AquaA11yWrapper * ) child;
+                AquaA11yWrapper * element = static_cast<AquaA11yWrapper *>(child);
                 if ( [ [ AquaA11yRoleHelper getNativeRoleFrom: [ element accessibleContext ] ] isEqualToString: NSAccessibilityTextAreaRole ] ) {
                     textArea = element;
                     break;

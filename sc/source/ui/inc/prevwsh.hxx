@@ -20,14 +20,13 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_PREVWSH_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_PREVWSH_HXX
 
-class ScrollBar;
+#include <types.hxx>
+#include <scdllapi.h>
 
-#include "address.hxx"
-#include <sfx2/viewfac.hxx>
 #include <sfx2/viewsh.hxx>
 #include <sfx2/zoomitem.hxx>
 
-#include "shellids.hxx"
+#include <shellids.hxx>
 
 class ScDocument;
 class ScDocShell;
@@ -35,6 +34,7 @@ class ScPreview;
 struct ScHeaderFieldData;
 class ScPreviewLocationData;
 class CommandEvent;
+class SfxViewFactory;
 
 class SC_DLLPUBLIC ScPreviewShell: public SfxViewShell
 {
@@ -46,26 +46,24 @@ class SC_DLLPUBLIC ScPreviewShell: public SfxViewShell
     VclPtr<ScrollBar>      pVerScroll;
     VclPtr<vcl::Window>    pCorner;
 
-    css::uno::Sequence< css::beans::PropertyValue > aSourceData;  // ViewData
     TriState        nSourceDesignMode;      // form design mode from TabView
     SvxZoomType     eZoom;
     long            nMaxVertPos;
 
-    SfxBroadcaster* pAccessibilityBroadcaster;
+    std::unique_ptr<SfxBroadcaster> pAccessibilityBroadcaster;
     bool            GetPageSize( Size& aPageSize );
 private:
     void            Construct( vcl::Window* pParent );
-    DECL_LINK_TYPED( ScrollHandler, ScrollBar*, void );
-    DECL_LINK_TYPED( CloseHdl, SystemWindow&, void);
+    DECL_LINK( ScrollHandler, ScrollBar*, void );
+    DECL_LINK( CloseHdl, SystemWindow&, void);
     void            DoScroll( sal_uInt16 nMode );
     void            ExitPreview();
 
 protected:
     virtual void    Activate(bool bMDI) override;
-    virtual void    Deactivate(bool bMDI) override;
-    virtual void    AdjustPosSizePixel( const Point &rPos, const Size &rSize ) override;
+    void            AdjustPosSizePixel( const Point &rPos, const Size &rSize );
 
-    virtual void    InnerResizePixel( const Point &rOfs, const Size &rSize ) override;
+    virtual void    InnerResizePixel( const Point &rOfs, const Size &rSize, bool inplaceEditModeChange ) override;
     virtual void    OuterResizePixel( const Point &rOfs, const Size &rSize ) override;
 
     virtual void    WriteUserData(OUString &, bool bBrowse = false) override;
@@ -86,12 +84,12 @@ public:
                     ScPreviewShell( SfxViewFrame*           pViewFrame,
                                     SfxViewShell*           pOldSh );
 
-    virtual         ~ScPreviewShell();
+    virtual         ~ScPreviewShell() override;
 
     void            InitStartTable(SCTAB nTab);
 
     void            UpdateScrollBars();
-    void            UpdateNeededScrollBars(bool bFromZoom = false);
+    void            UpdateNeededScrollBars(bool bFromZoom);
     bool            ScrollCommand( const CommandEvent& rCEvt );
 
     void            Execute( SfxRequest& rReq );
@@ -106,7 +104,7 @@ public:
     virtual SfxPrinter*     GetPrinter( bool bCreate = false ) override;
     virtual sal_uInt16      SetPrinter( SfxPrinter* pNewPrinter, SfxPrinterChangeFlags nDiffFlags = SFX_PRINTER_ALL ) override;
     virtual bool            HasPrintOptionsPage() const override;
-    virtual VclPtr<SfxTabPage> CreatePrintOptionsPage( vcl::Window *pParent, const SfxItemSet &rOptions ) override;
+    virtual VclPtr<SfxTabPage> CreatePrintOptionsPage(TabPageParent pParent, const SfxItemSet &rOptions) override;
 
     void            AddAccessibilityObject( SfxListener& rObject );
     void            RemoveAccessibilityObject( SfxListener& rObject );

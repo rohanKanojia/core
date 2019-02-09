@@ -28,8 +28,8 @@ namespace sd { namespace slidesorter {
 class SlideSorter;
 } }
 
-class SdDrawDocument;
 class SdrPage;
+class SdPage;
 
 namespace sd { namespace slidesorter { namespace controller {
 
@@ -37,11 +37,11 @@ namespace sd { namespace slidesorter { namespace controller {
     StartObservation() and EndObservation().  When the later is called
     the selection is set to just the newly inserted pages.
 */
-class SelectionObserver
+class SelectionObserver final
 {
 public:
     SelectionObserver (SlideSorter& rSlideSorter);
-    virtual ~SelectionObserver();
+    ~SelectionObserver();
 
     void NotifyPageEvent (const SdrPage* pPage);
     void StartObservation();
@@ -56,8 +56,8 @@ public:
     class Context
     {
     public:
-        Context (SlideSorter& rSlideSorter);
-        ~Context();
+        Context (SlideSorter const & rSlideSorter);
+        ~Context() COVERITY_NOEXCEPT_FALSE;
         void Abort();
     private:
         std::shared_ptr<SelectionObserver> mpSelectionObserver;
@@ -65,10 +65,10 @@ public:
 
 private:
     SlideSorter& mrSlideSorter;
-    bool mbIsOvservationActive;
+    bool mbIsObservationActive;
+    bool mbPageEventOccurred;
 
     ::std::vector<const SdPage*> maInsertedPages;
-    ::std::vector<sal_Int32> maDeletedPages;
 };
 
 } } } // end of namespace ::sd::slidesorter::controller

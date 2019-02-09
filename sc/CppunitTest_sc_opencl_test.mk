@@ -50,7 +50,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sc_opencl_test, \
     utl \
     vcl \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sc_opencl_test,\
@@ -61,8 +60,9 @@ $(eval $(call gb_CppunitTest_set_include,sc_opencl_test,\
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sc_opencl_test,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sc_opencl_test))
@@ -100,9 +100,11 @@ $(eval $(call gb_CppunitTest_use_components,sc_opencl_test,\
     ucb/source/core/ucb1 \
     ucb/source/ucp/file/ucpfile1 \
     ucb/source/ucp/tdoc/ucptdoc1 \
+	uui/util/uui \
     unotools/util/utl \
     unoxml/source/rdf/unordf \
     unoxml/source/service/unoxml \
+    vcl/vcl.common \
     xmloff/util/xo \
 ))
 

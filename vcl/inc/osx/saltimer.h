@@ -20,27 +20,55 @@
 #ifndef INCLUDED_VCL_INC_OSX_SALTIMER_H
 #define INCLUDED_VCL_INC_OSX_SALTIMER_H
 
-#include "premac.h"
+#include <premac.h>
 #include <Cocoa/Cocoa.h>
-#include "postmac.h"
+#include <postmac.h>
 
-#include "saltimer.hxx"
+#include <saltimer.hxx>
 
-class AquaSalTimer : public SalTimer
+/**
+ * if NO == bAtStart, then it has to be run in the main thread,
+ * e.g. via performSelectorOnMainThread!
+ **/
+void ImplNSAppPostEvent( short nEventId, BOOL bAtStart, int nUserData = 0 );
+
+class ReleasePoolHolder
 {
-  public:
+    NSAutoreleasePool* mpPool;
 
+public:
+    ReleasePoolHolder() : mpPool( [[NSAutoreleasePool alloc] init] ) {}
+    ~ReleasePoolHolder() { [mpPool release]; }
+};
+
+class AquaSalTimer final : public SalTimer, protected VersionedEvent
+{
+    NSTimer    *m_pRunningTimer;
+    bool        m_bDirectTimeout;    ///< timeout can be processed directly
+
+    void queueDispatchTimerEvent( bool bAtStart );
+    void callTimerCallback();
+
+public:
     AquaSalTimer();
-    virtual ~AquaSalTimer();
+    virtual ~AquaSalTimer() override;
 
     void Start( sal_uLong nMS ) override;
     void Stop() override;
 
-    static void handleStartTimerEvent( NSEvent* pEvent );
+    void handleStartTimerEvent( NSEvent* pEvent );
+    bool handleDispatchTimerEvent( NSEvent* pEvent );
+    void handleTimerElapsed();
+    void handleWindowShouldClose();
 
-    static NSTimer* pRunningTimer;
-    static bool bDispatchTimer;
+    bool IsTimerElapsed() const;
+    inline bool IsDirectTimeout() const;
 };
+
+inline bool AquaSalTimer::IsDirectTimeout() const
+{
+    return m_bDirectTimeout;
+}
 
 #endif // INCLUDED_VCL_INC_OSX_SALTIMER_H
 

@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <SpellAttrib.hxx>
+#include "SpellAttrib.hxx"
 #include <vcl/font.hxx>
-#include <com/sun/star/linguistic2/XSpellAlternatives.hpp>
+
 using namespace svx;
 using namespace com::sun::star::linguistic2;
 using namespace com::sun::star::uno;
@@ -32,27 +32,15 @@ SpellErrorAttrib::SpellErrorAttrib( const SpellErrorDescription& rDesc ) :
 }
 
 
-SpellErrorAttrib::SpellErrorAttrib( const SpellErrorAttrib& rAttr ) :
-    TextAttrib(TEXTATTR_SPELL_ERROR),
-    m_aSpellErrorDescription( rAttr.m_aSpellErrorDescription )
-{
-}
-
-
-SpellErrorAttrib::~SpellErrorAttrib()
-{
-}
-
-
 void SpellErrorAttrib::SetFont( vcl::Font&  ) const
 {
     //this attribute doesn't have a visual effect
 }
 
 
-TextAttrib*     SpellErrorAttrib::Clone() const
+std::unique_ptr<TextAttrib> SpellErrorAttrib::Clone() const
 {
-    return new SpellErrorAttrib(*this);
+    return std::unique_ptr<TextAttrib>(new SpellErrorAttrib(*this));
 }
 
 
@@ -70,27 +58,15 @@ SpellLanguageAttrib::SpellLanguageAttrib(LanguageType eLang) :
 }
 
 
-SpellLanguageAttrib::SpellLanguageAttrib( const SpellLanguageAttrib& rAttr ) :
-    TextAttrib(TEXTATTR_SPELL_LANGUAGE),
-    m_eLanguage(rAttr.m_eLanguage)
-{
-}
-
-
-SpellLanguageAttrib::~SpellLanguageAttrib()
-{
-}
-
-
 void SpellLanguageAttrib::SetFont( vcl::Font&  ) const
 {
     //no visual effect
 }
 
 
-TextAttrib* SpellLanguageAttrib::Clone() const
+std::unique_ptr<TextAttrib> SpellLanguageAttrib::Clone() const
 {
-    return new SpellLanguageAttrib(*this);
+    return std::unique_ptr<TextAttrib>(new SpellLanguageAttrib(*this));
 }
 
 
@@ -108,27 +84,15 @@ SpellBackgroundAttrib::SpellBackgroundAttrib(const Color& rCol) :
 }
 
 
-SpellBackgroundAttrib::SpellBackgroundAttrib( const SpellBackgroundAttrib& rAttr ) :
-    TextAttrib(TEXTATTR_SPELL_BACKGROUND),
-    m_aBackgroundColor(rAttr.m_aBackgroundColor)
-{
-}
-
-
-SpellBackgroundAttrib::~SpellBackgroundAttrib()
-{
-}
-
-
 void SpellBackgroundAttrib::SetFont( vcl::Font& rFont ) const
 {
     rFont.SetFillColor(m_aBackgroundColor);
 }
 
 
-TextAttrib* SpellBackgroundAttrib::Clone() const
+std::unique_ptr<TextAttrib> SpellBackgroundAttrib::Clone() const
 {
-    return new SpellBackgroundAttrib(*this);
+    return std::unique_ptr<TextAttrib>(new SpellBackgroundAttrib(*this));
 }
 
 

@@ -20,8 +20,8 @@
 #ifndef INCLUDED_XMLOFF_XMLERROR_HXX
 #define INCLUDED_XMLOFF_XMLERROR_HXX
 
-#include <com/sun/star/xml/sax/SAXParseException.hpp>
 #include <sal/types.h>
+#include <rtl/ustring.hxx>
 #include <o3tl/typed_flags_set.hxx>
 
 #include <vector>
@@ -131,8 +131,8 @@ public:
      * throw a SAXParseException that describes the first error that matches
      * the given mask
      */
-    void ThrowErrorAsSAXException( sal_Int32 nIdMask )
-        throw( css::xml::sax::SAXParseException );
+    /// @throws css::xml::sax::SAXParseException
+    void ThrowErrorAsSAXException( sal_Int32 nIdMask );
 };
 
 #endif

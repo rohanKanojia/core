@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.0 -->
-  <!-- interface-requires LibreOffice 1.0 -->
+<!-- Generated with glade 3.22.1 -->
+<interface domain="sw">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkAdjustment" id="adjustment1">
     <property name="lower">0.5</property>
     <property name="upper">999.99000000000001</property>
@@ -16,7 +16,6 @@
     <property name="page_increment">10</property>
   </object>
   <object class="GtkAdjustment" id="adjustment3">
-    <property name="lower">0.25</property>
     <property name="upper">9</property>
     <property name="value">0.25</property>
     <property name="step_increment">1</property>
@@ -63,7 +62,7 @@
                 <property name="column_spacing">12</property>
                 <child>
                   <object class="GtkRadioButton" id="maxheightpage">
-                    <property name="label" translatable="yes">_Not larger than page area</property>
+                    <property name="label" translatable="yes" context="footnoteareapage|maxheightpage">_Not larger than page area</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -77,13 +76,12 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
+                    <property name="width">2</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkRadioButton" id="maxheight">
-                    <property name="label" translatable="yes">Maximum footnote _height</property>
+                    <property name="label" translatable="yes" context="footnoteareapage|maxheight">Maximum footnote _height</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -93,14 +91,12 @@
                     <property name="draw_indicator">True</property>
                     <property name="group">maxheightpage</property>
                     <accessibility>
-                      <relation type="label-for" target="maxheightsb:0.00cm"/>
+                      <relation type="label-for" target="maxheightsb"/>
                     </accessibility>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -108,44 +104,36 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="hexpand">True</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">Space to text</property>
+                    <property name="label" translatable="yes" context="footnoteareapage|label3">Space to text</property>
                     <property name="use_underline">True</property>
-                    <property name="mnemonic_widget">spacetotext:0.00cm</property>
+                    <property name="mnemonic_widget">spacetotext</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkSpinButton" id="spacetotext:0.00cm">
+                  <object class="GtkSpinButton" id="spacetotext">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="halign">start</property>
                     <property name="hexpand">True</property>
-                    <property name="invisible_char">●</property>
-                    <property name="invisible_char_set">True</property>
                     <property name="adjustment">adjustment2</property>
                     <property name="digits">2</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkSpinButton" id="maxheightsb:0.00cm">
+                  <object class="GtkSpinButton" id="maxheightsb">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="halign">start</property>
                     <property name="hexpand">True</property>
-                    <property name="invisible_char">●</property>
-                    <property name="invisible_char_set">True</property>
                     <property name="adjustment">adjustment1</property>
                     <property name="digits">2</property>
                     <accessibility>
@@ -155,12 +143,7 @@
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
-                </child>
-                <child>
-                  <placeholder/>
                 </child>
               </object>
             </child>
@@ -170,7 +153,7 @@
           <object class="GtkLabel" id="label1">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Footnote Area</property>
+            <property name="label" translatable="yes" context="footnoteareapage|label1">Footnote Area</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -209,16 +192,14 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="hexpand">True</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Position</property>
+                    <property name="label" translatable="yes" context="footnoteareapage|label4">_Position</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">position</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -226,16 +207,14 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="hexpand">True</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Style</property>
+                    <property name="label" translatable="yes" context="footnoteareapage|label5">_Style</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">style</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -243,16 +222,14 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="hexpand">True</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Thickness</property>
+                    <property name="label" translatable="yes" context="footnoteareapage|label6">_Thickness</property>
                     <property name="use_underline">True</property>
-                    <property name="mnemonic_widget">thickness:0.00pt</property>
+                    <property name="mnemonic_widget">thickness</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -260,16 +237,14 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="hexpand">True</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Color</property>
+                    <property name="label" translatable="yes" context="footnoteareapage|label7">_Color</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">color</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">3</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -277,16 +252,14 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="hexpand">True</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Length</property>
+                    <property name="label" translatable="yes" context="footnoteareapage|label8">_Length</property>
                     <property name="use_underline">True</property>
-                    <property name="mnemonic_widget">length:0%</property>
+                    <property name="mnemonic_widget">length</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">4</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -294,16 +267,14 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="hexpand">True</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Spacing to footnote contents</property>
+                    <property name="label" translatable="yes" context="footnoteareapage|label9">_Spacing to footnote contents</property>
                     <property name="use_underline">True</property>
-                    <property name="mnemonic_widget">spacingtocontents:0.00cm</property>
+                    <property name="mnemonic_widget">spacingtocontents</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">5</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -312,98 +283,90 @@
                     <property name="can_focus">False</property>
                     <property name="halign">start</property>
                     <property name="hexpand">True</property>
-                    <property name="entry_text_column">0</property>
-                    <property name="id_column">1</property>
                     <items>
-                      <item translatable="yes">Left</item>
-                      <item translatable="yes">Centered</item>
-                      <item translatable="yes">Right</item>
+                      <item translatable="yes" context="footnoteareapage|position">Left</item>
+                      <item translatable="yes" context="footnoteareapage|position">Centered</item>
+                      <item translatable="yes" context="footnoteareapage|position">Right</item>
                     </items>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
-                  <object class="svtlo-LineListBox" id="style">
+                  <object class="GtkMenuButton" id="style">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">False</property>
                     <property name="halign">start</property>
                     <property name="hexpand">True</property>
+                    <property name="xalign">0</property>
+                    <child>
+                      <placeholder/>
+                    </child>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
-                  <object class="svtlo-ColorListBox" id="color">
+                  <object class="GtkMenuButton" id="color">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">False</property>
                     <property name="halign">start</property>
                     <property name="hexpand">True</property>
+                    <property name="xalign">0</property>
+                    <child>
+                      <placeholder/>
+                    </child>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">3</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkSpinButton" id="length:0%">
+                  <object class="GtkSpinButton" id="length">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="halign">start</property>
                     <property name="hexpand">True</property>
-                    <property name="invisible_char">●</property>
                     <property name="adjustment">adjustment4</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">4</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkSpinButton" id="spacingtocontents:0.00cm">
+                  <object class="GtkSpinButton" id="spacingtocontents">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="halign">start</property>
                     <property name="hexpand">True</property>
-                    <property name="invisible_char">●</property>
                     <property name="adjustment">adjustment5</property>
                     <property name="digits">2</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">5</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkSpinButton" id="thickness:0.00pt">
+                  <object class="GtkSpinButton" id="thickness">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="halign">start</property>
                     <property name="hexpand">True</property>
-                    <property name="invisible_char">●</property>
-                    <property name="invisible_char_set">True</property>
                     <property name="adjustment">adjustment3</property>
                     <property name="digits">2</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
               </object>
@@ -414,7 +377,7 @@
           <object class="GtkLabel" id="label2">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Separator Line</property>
+            <property name="label" translatable="yes" context="footnoteareapage|label2">Separator Line</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -430,14 +393,14 @@
   </object>
   <object class="GtkSizeGroup" id="sizegroup1">
     <widgets>
-      <widget name="spacetotext:0.00cm"/>
-      <widget name="maxheightsb:0.00cm"/>
+      <widget name="spacetotext"/>
+      <widget name="maxheightsb"/>
       <widget name="position"/>
       <widget name="style"/>
       <widget name="color"/>
-      <widget name="length:0%"/>
-      <widget name="spacingtocontents:0.00cm"/>
-      <widget name="thickness:0.00pt"/>
+      <widget name="length"/>
+      <widget name="spacingtocontents"/>
+      <widget name="thickness"/>
     </widgets>
   </object>
 </interface>

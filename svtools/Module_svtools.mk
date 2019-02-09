@@ -21,11 +21,11 @@ $(eval $(call gb_Module_Module,svtools))
 
 $(eval $(call gb_Module_add_targets,svtools,\
     Library_svt \
+    UIConfig_svt \
 ))
 
 $(eval $(call gb_Module_add_l10n_targets,svtools,\
-    AllLangResTarget_svt \
-    UIConfig_svt \
+    AllLangMoTarget_svt \
 ))
 
 $(eval $(call gb_Module_add_check_targets,svtools,\
@@ -33,7 +33,7 @@ $(eval $(call gb_Module_add_check_targets,svtools,\
     CppunitTest_svtools_html \
 ))
 
-ifeq ($(CROSS_COMPILING),)
+ifeq ($(CROSS_COMPILING)$(DISABLE_DYNLOADING),)
 
 ifneq ($(OS),WNT)
 $(eval $(call gb_Module_add_targets,svtools,\
@@ -48,6 +48,11 @@ $(eval $(call gb_Module_add_subsequentcheck_targets,svtools,\
     JunitTest_svtools_unoapi \
 ))
 endif
+
+# screenshots
+$(eval $(call gb_Module_add_screenshot_targets,svtools,\
+    CppunitTest_svtools_dialogs_test \
+))
 
 #todo: javapatchres
 #todo: jpeg on mac in svtools/util/makefile.mk

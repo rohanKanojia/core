@@ -43,20 +43,18 @@ protected:
     virtual void    KeyInput( const KeyEvent&  ) override;
 };
 
-class SwInputWindow : public ToolBox
+class SwInputWindow final : public ToolBox
 {
 friend class InputEdit;
 
     VclPtr<Edit>        aPos;
     VclPtr<InputEdit>   aEdit;
-    PopupMenu       aPopMenu;
-    SwFieldMgr*       pMgr;
+    std::unique_ptr<SwFieldMgr> pMgr;
     SwWrtShell*     pWrtShell;
     SwView*         pView;
-    OUString        aAktTableName, sOldFormula;
+    OUString        aCurrentTableName, sOldFormula;
 
     bool            bFirst : 1;  // initialisations at first call
-    bool            bActive : 1; // for hide/show when switching documents
     bool            bIsTable : 1;
     bool            bDelSel : 1;
     bool            m_bDoesUndo : 1;
@@ -66,28 +64,25 @@ friend class InputEdit;
     void CleanupUglyHackWithUndo();
 
     void DelBoxContent();
-    DECL_LINK_TYPED( ModifyHdl, Edit&, void );
+    DECL_LINK( ModifyHdl, Edit&, void );
 
     using Window::IsActive;
 
-protected:
     virtual void    Resize() override;
     virtual void    Click() override;
-    DECL_LINK_TYPED( MenuHdl, Menu *, bool );
-    DECL_LINK_TYPED( DropdownClickHdl, ToolBox*, void );
+    DECL_LINK( MenuHdl, Menu *, bool );
+    DECL_LINK( DropdownClickHdl, ToolBox*, void );
     void            ApplyFormula();
     void            CancelFormula();
 
 public:
-                    SwInputWindow( vcl::Window* pParent );
-    virtual         ~SwInputWindow();
+    SwInputWindow(vcl::Window* pParent, SfxDispatcher const * pDispatcher);
+    virtual         ~SwInputWindow() override;
     virtual void    dispose() override;
-
-    virtual void    DataChanged( const DataChangedEvent& rDCEvt ) override;
 
     void            ShowWin();
 
-    DECL_LINK_TYPED( SelTableCellsNotify, SwWrtShell&, void );
+    DECL_LINK( SelTableCellsNotify, SwWrtShell&, void );
 
     void            SetFormula( const OUString& rFormula );
     const SwView*   GetView() const{return pView;}
@@ -99,9 +94,9 @@ class SwInputChild : public SfxChildWindow
 public:
     SwInputChild( vcl::Window* ,
                         sal_uInt16 nId,
-                        SfxBindings*,
+                        SfxBindings const *,
                         SfxChildWinInfo*  );
-    virtual ~SwInputChild();
+    virtual ~SwInputChild() override;
     SFX_DECL_CHILDWINDOW_WITHID( SwInputChild );
     void            SetFormula( const OUString& rFormula )
                     { static_cast<SwInputWindow*>(GetWindow())->SetFormula( rFormula ); }

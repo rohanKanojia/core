@@ -57,11 +57,10 @@
  * @file
  * Border object,now only used by paragraph object.
  ************************************************************************/
-#include "xfborders.hxx"
+#include <xfilter/xfborders.hxx>
 
 XFBorder::XFBorder()
 {
-    m_fOffset = 0;
     m_bDouble = false;
     m_bSameWidth = false;
     m_fWidthInner = 0;
@@ -69,7 +68,7 @@ XFBorder::XFBorder()
     m_fWidthOuter = 0;
 }
 
-void    XFBorder::SetColor(XFColor& color)
+void    XFBorder::SetColor(XFColor const & color)
 {
     m_aColor = color;
 }
@@ -152,10 +151,8 @@ OUString   XFBorder::ToString()
     return str;
 }
 
-bool operator==(XFBorder& b1, XFBorder& b2)
+bool operator==(XFBorder const & b1, XFBorder const & b2)
 {
-    if( b1.m_fOffset != b2.m_fOffset )
-        return false;
     if( b1.m_bDouble != b2.m_bDouble )
         return false;
     if( !b1.m_bDouble )
@@ -178,14 +175,14 @@ bool operator==(XFBorder& b1, XFBorder& b2)
     return true;
 }
 
-bool operator!=(XFBorder& b1, XFBorder& b2)
+bool operator!=(XFBorder const & b1, XFBorder const & b2)
 {
     return !(b1 == b2);
 }
 
 //XFBorders:
 
-void    XFBorders::SetColor(enumXFBorder side, XFColor& color)
+void    XFBorders::SetColor(enumXFBorder side, XFColor const & color)
 {
     switch(side)
     {
@@ -311,7 +308,7 @@ void    XFBorders::SetWidthOuter(enumXFBorder side, double outer)
     }
 }
 
-bool    operator ==(XFBorders& b1, XFBorders& b2)
+bool    operator ==(XFBorders const & b1, XFBorders const & b2)
 {
     if( b1.m_aBorderLeft != b2.m_aBorderLeft )
         return false;
@@ -324,7 +321,7 @@ bool    operator ==(XFBorders& b1, XFBorders& b2)
     return true;
 }
 
-bool operator!=(XFBorders& b1, XFBorders& b2)
+bool operator!=(XFBorders const & b1, XFBorders const & b2)
 {
     return !(b1 == b2);
 }

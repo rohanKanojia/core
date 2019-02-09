@@ -17,14 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ItemConverter.hxx"
-#include "macros.hxx"
+#include <ItemConverter.hxx>
 #include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <osl/diagnose.h>
-#include <svl/itemprop.hxx>
+#include <svl/itempool.hxx>
 #include <svl/itemiter.hxx>
 #include <svl/whiter.hxx>
 #include <svx/svxids.hrc>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 
@@ -34,9 +36,7 @@ ItemConverter::ItemConverter(
     const uno::Reference< beans::XPropertySet > & rPropertySet,
     SfxItemPool& rItemPool ) :
         m_xPropertySet( rPropertySet ),
-        m_xPropertySetInfo( nullptr ),
-        m_rItemPool( rItemPool ),
-        m_bIsValid( true )
+        m_rItemPool( rItemPool )
 {
     resetPropertySet( m_xPropertySet );
 }
@@ -69,12 +69,8 @@ SfxItemSet ItemConverter::CreateEmptyItemSet() const
     return SfxItemSet( GetItemPool(), GetWhichPairs() );
 }
 
-void ItemConverter::_disposing( const lang::EventObject& rSource )
+void ItemConverter::_disposing( const lang::EventObject& )
 {
-    if( rSource.Source == m_xPropertySet )
-    {
-        m_bIsValid = false;
-    }
 }
 
 void ItemConverter::FillItemSet( SfxItemSet & rOutItemSet ) const
@@ -89,9 +85,9 @@ void ItemConverter::FillItemSet( SfxItemSet & rOutItemSet ) const
 
     while( (*pRanges) != 0)
     {
-        sal_uInt16 nBeg = (*pRanges);
+        sal_uInt16 nBeg = *pRanges;
         ++pRanges;
-        sal_uInt16 nEnd = (*pRanges);
+        sal_uInt16 nEnd = *pRanges;
         ++pRanges;
 
         OSL_ASSERT( nBeg <= nEnd );
@@ -100,37 +96,27 @@ void ItemConverter::FillItemSet( SfxItemSet & rOutItemSet ) const
             if( GetItemProperty( nWhich, aProperty ))
             {
                 // put the Property into the itemset
-                SfxPoolItem * pItem = rPool.GetDefaultItem( nWhich ).Clone();
+                std::unique_ptr<SfxPoolItem> pItem(rPool.GetDefaultItem( nWhich ).Clone());
 
                 if( pItem )
                 {
                     try
                     {
-                        if( ! pItem->PutValue( m_xPropertySet->getPropertyValue( aProperty.first ),
+                        if( pItem->PutValue( m_xPropertySet->getPropertyValue( aProperty.first ),
                                                aProperty.second // nMemberId
                                 ))
                         {
-                            delete pItem;
-                        }
-                        else
-                        {
-                            rOutItemSet.Put( *pItem, nWhich );
-                            delete pItem;
+                            pItem->SetWhich(nWhich);
+                            rOutItemSet.Put( *pItem );
                         }
                     }
                     catch( const beans::UnknownPropertyException &ex )
                     {
-                        delete pItem;
-                        (void)ex;
-                        OSL_FAIL(
-                                    OUStringToOString(
-                                        ex.Message +
-                                        " - unknown Property: " + aProperty.first,
-                                        RTL_TEXTENCODING_ASCII_US ).getStr());
+                        SAL_WARN( "chart2", ex << " - unknown Property: " << aProperty.first);
                     }
-                    catch( const uno::Exception &ex )
+                    catch( const uno::Exception & )
                     {
-                        ASSERT_EXCEPTION( ex );
+                        DBG_UNHANDLED_EXCEPTION("chart2");
                     }
                 }
             }
@@ -140,9 +126,9 @@ void ItemConverter::FillItemSet( SfxItemSet & rOutItemSet ) const
                 {
                     FillSpecialItem( nWhich, rOutItemSet );
                 }
-                catch( const uno::Exception &ex )
+                catch( const uno::Exception & )
                 {
-                    ASSERT_EXCEPTION( ex );
+                    DBG_UNHANDLED_EXCEPTION("chart2");
                 }
             }
         }
@@ -151,14 +137,12 @@ void ItemConverter::FillItemSet( SfxItemSet & rOutItemSet ) const
 
 void ItemConverter::FillSpecialItem(
     sal_uInt16 /*nWhichId*/, SfxItemSet & /*rOutItemSet*/ ) const
-    throw (uno::Exception, std::exception)
 {
     OSL_FAIL( "ItemConverter: Unhandled special item found!" );
 }
 
 bool ItemConverter::ApplySpecialItem(
     sal_uInt16 /*nWhichId*/, const SfxItemSet & /*rItemSet*/ )
-    throw( uno::Exception )
 {
     OSL_FAIL( "ItemConverter: Unhandled special item found!" );
     return false;
@@ -192,18 +176,11 @@ bool ItemConverter::ApplyItemSet( const SfxItemSet & rItemSet )
                 }
                 catch( const beans::UnknownPropertyException &ex )
                 {
-                    (void)ex;
-                    OSL_FAIL(
-                                OUStringToOString(
-                                    ex.Message +
-                                    " - unknown Property: " + aProperty.first,
-                                    RTL_TEXTENCODING_ASCII_US).getStr());
+                    SAL_WARN( "chart2", ex << " - unknown Property: " << aProperty.first);
                 }
                 catch( const uno::Exception &ex )
                 {
-                    (void)ex;
-                    OSL_FAIL( OUStringToOString(
-                                    ex.Message, RTL_TEXTENCODING_ASCII_US ).getStr());
+                    SAL_WARN( "chart2", ex );
                 }
             }
             else
@@ -230,7 +207,7 @@ void ItemConverter::InvalidateUnequalItems( SfxItemSet  &rDestSet, const SfxItem
         {
             if (rSourceSet.Get(nWhich) != rDestSet.Get(nWhich))
             {
-                if( SID_CHAR_DLG_PREVIEW_STRING != nWhich )
+                if( nWhich != SID_CHAR_DLG_PREVIEW_STRING )
                 {
                     rDestSet.InvalidateItem(nWhich);
                 }

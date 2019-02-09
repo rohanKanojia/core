@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -197,7 +198,7 @@ public class DocumentView extends    JFrame
 
     /**
      * Create the view frame for showing the office documents on demand.
-     * Dependend from given command line parameter we create
+     * Depending on given command line parameter we create
      * an office XFrame and initialize it with a window. This
      * window can be a pure toolkit window (means toolkit of office!)
      * or a plugged java canvas - office window combination.
@@ -205,7 +206,7 @@ public class DocumentView extends    JFrame
     public void createFrame()
     {
         // create view frame (as a XFrame!) here
-        // Look for right view mode setted by user command line parameter.
+        // Look for right view mode set by user command line parameter.
         // First try to get a new unambigous frame name from our global ViewContainer.
         if(ViewContainer.mbInplace)
         {
@@ -358,7 +359,7 @@ public class DocumentView extends    JFrame
 
     /**
      * callback from our internal saved frame
-     * which wish to die. Its not necessary to remove listener connections
+     * which wish to die. It's not necessary to remove listener connections
      * here. Because the broadcaster do it automatically.
      * We have to release all references to him only.
      *
@@ -423,3 +424,5 @@ public class DocumentView extends    JFrame
         }
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

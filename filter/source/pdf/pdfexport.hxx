@@ -44,7 +44,8 @@ private:
     bool                mbUseTaggedPDF;
     sal_Int32           mnPDFTypeSelection;
     bool                mbExportNotes;
-    bool                mbViewPDF;
+    bool                mbExportPlaceholders;
+    bool                mbUseReferenceXObject;
     bool                mbExportNotesPages;
     bool                mbExportOnlyNotesPages;
     bool                mbUseTransitionEffects;
@@ -64,6 +65,8 @@ private:
     sal_Int32           mnProgressValue;
     bool                mbRemoveTransparencies;
 
+    bool                mbIsRedactMode;
+
     OUString            msWatermark;
 
     // these variable are here only to have a location in filter/pdf to set the default
@@ -80,7 +83,6 @@ private:
     sal_Int32           mnZoom;
     sal_Int32           mnInitialPage;
     sal_Int32           mnPDFPageLayout;
-    bool                mbFirstPageLeft;
 
     bool                mbEncrypt;
     bool                mbRestrictPermissions;
@@ -94,7 +96,7 @@ private:
     sal_Int32           mnDefaultLinkAction;
     bool                mbConvertOOoTargetToPDFTarget;
     bool                mbExportBmkToDest;
-    bool                ImplExportPage( vcl::PDFWriter& rWriter, vcl::PDFExtOutDevData& rPDFExtOutDevData,
+    void                ImplExportPage( vcl::PDFWriter& rWriter, vcl::PDFExtOutDevData& rPDFExtOutDevData,
                                         const GDIMetaFile& rMtf );
 
     bool                mbSignPDF;
@@ -116,7 +118,7 @@ public:
                         ~PDFExport();
 
     bool                ExportSelection( vcl::PDFWriter& rPDFWriter,
-                                    Reference< css::view::XRenderable >& rRenderable,
+                                    Reference< css::view::XRenderable > const & rRenderable,
                                     const Any& rSelection,
                                     const StringRangeEnumerator& rRangeEnum,
                                     Sequence< PropertyValue >& rRenderOptions,

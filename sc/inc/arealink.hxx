@@ -20,21 +20,18 @@
 #ifndef INCLUDED_SC_INC_AREALINK_HXX
 #define INCLUDED_SC_INC_AREALINK_HXX
 
-#include "global.hxx"
 #include "refreshtimer.hxx"
 #include "address.hxx"
 #include <sfx2/lnkbase.hxx>
 #include "scdllapi.h"
-#include <memory>
 
 class SfxObjectShell;
-struct AreaLink_Impl;
-class Dialog;
+class ScDocShell;
 
 class SC_DLLPUBLIC ScAreaLink : public ::sfx2::SvBaseLink, public ScRefreshTimer
 {
 private:
-    std::unique_ptr<AreaLink_Impl> pImpl;
+    ScDocShell*     m_pDocSh;
     OUString        aFileName;
     OUString        aFilterName;
     OUString        aOptions;
@@ -43,19 +40,19 @@ private:
     bool            bAddUndo;
     bool            bInCreate;
     bool            bDoInsert;      // is set to FALSE for first update
-    static bool FindExtRange( ScRange& rRange, ScDocument* pSrcDoc, const OUString& rAreaName );
+    static bool FindExtRange( ScRange& rRange, const ScDocument* pSrcDoc, const OUString& rAreaName );
 
 public:
     ScAreaLink( SfxObjectShell* pShell, const OUString& rFile,
                     const OUString& rFilter, const OUString& rOpt,
                     const OUString& rArea, const ScRange& rDest, sal_uLong nRefresh );
-    virtual ~ScAreaLink();
+    virtual ~ScAreaLink() override;
 
     virtual void Closed() override;
     virtual ::sfx2::SvBaseLink::UpdateResult DataChanged(
         const OUString& rMimeType, const css::uno::Any & rValue ) override;
 
-    virtual void    Edit( vcl::Window*, const Link<SvBaseLink&,void>& rEndEditHdl ) override;
+    virtual void    Edit(weld::Window*, const Link<SvBaseLink&,void>& rEndEditHdl) override;
 
     bool    Refresh( const OUString& rNewFile, const OUString& rNewFilter,
                     const OUString& rNewArea, sal_uLong nNewRefresh );
@@ -75,8 +72,7 @@ public:
     const OUString& GetSource() const       { return aSourceArea;   }
     const ScRange&  GetDestArea() const     { return aDestArea;     }
 
-    DECL_LINK_TYPED( RefreshHdl, Timer*, void );
-    DECL_LINK_TYPED( AreaEndEditHdl, Dialog&, void );
+    DECL_LINK( RefreshHdl, Timer*, void );
 };
 
 #endif

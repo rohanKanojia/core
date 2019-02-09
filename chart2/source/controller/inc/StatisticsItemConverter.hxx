@@ -19,13 +19,9 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_INC_STATISTICSITEMCONVERTER_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_STATISTICSITEMCONVERTER_HXX
 
-#include <com/sun/star/frame/XModel.hpp>
-
 #include "ItemConverter.hxx"
-#include "GraphicPropertyItemConverter.hxx"
-#include "NumberFormatterWrapper.hxx"
 
-#include <vector>
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
 
 namespace chart
 {
@@ -39,16 +35,14 @@ public:
         const css::uno::Reference< css::frame::XModel > & xChartModel,
         const css::uno::Reference< css::beans::XPropertySet > & rPropertySet,
         SfxItemPool& rItemPool );
-    virtual ~StatisticsItemConverter();
+    virtual ~StatisticsItemConverter() override;
 
 protected:
     virtual const sal_uInt16 * GetWhichPairs() const override;
     virtual bool GetItemProperty( tWhichIdType nWhichId, tPropertyNameWithMemberId & rOutProperty ) const override;
 
-    virtual void FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const
-        throw( css::uno::Exception ) override;
-    virtual bool ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet )
-        throw( css::uno::Exception ) override;
+    virtual void FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const override;
+    virtual bool ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet ) override;
 
 private:
     css::uno::Reference< css::frame::XModel >  m_xModel;

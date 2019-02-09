@@ -20,6 +20,8 @@ $(eval $(call gb_CppunitTest_use_libraries,desktop_lib, \
 	cppu \
 	cppuhelper \
 	sal \
+	sc \
+	scfilt \
 	sfx \
 	sofficeapp \
 	subsequenttest \
@@ -27,8 +29,8 @@ $(eval $(call gb_CppunitTest_use_libraries,desktop_lib, \
 	test \
 	unotest \
 	utl \
+	tl \
 	vcl \
-    $(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_externals,desktop_lib, \
@@ -41,45 +43,33 @@ $(eval $(call gb_CppunitTest_set_include,desktop_lib,\
     $$(INCLUDE) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,desktop_lib,\
-	offapi \
-	udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,desktop_lib))
 
 $(eval $(call gb_CppunitTest_use_ure,desktop_lib))
 
 $(eval $(call gb_CppunitTest_use_vcl,desktop_lib))
 
-$(eval $(call gb_CppunitTest_use_components,desktop_lib,\
-    comphelper/util/comphelp \
-    configmgr/source/configmgr \
-    dtrans/util/mcnttype \
-    filter/source/config/cache/filterconfig1 \
-    filter/source/storagefilterdetect/storagefd \
-    framework/util/fwk \
-    i18npool/util/i18npool \
-    package/source/xstor/xstor \
-    package/util/package2 \
-    sax/source/expatwrap/expwrap \
-    sfx2/util/sfx \
-    svl/source/fsstor/fsstorage \
-    svtools/util/svt \
-    sw/util/sw \
-    sw/util/swd \
-    sc/util/sc \
-    sc/util/scd \
-    sd/util/sd \
-    sd/util/sdd \
-    toolkit/util/tk \
-    ucb/source/core/ucb1 \
-    ucb/source/ucp/file/ucpfile1 \
-    unoxml/source/service/unoxml \
-    xmloff/util/xo \
-    i18npool/source/search/i18nsearch \
-    filter/source/graphic/graphicfilter \
-    linguistic/source/lng \
-))
+$(eval $(call gb_CppunitTest_use_rdb,desktop_lib,services))
 
 $(eval $(call gb_CppunitTest_use_configuration,desktop_lib))
+
+$(eval $(call gb_CppunitTest_use_more_fonts,desktop_lib))
+
+$(eval $(call gb_CppunitTest_use_packages,desktop_lib, \
+    scripting_scriptbindinglib \
+    wizards_basicshare \
+    wizards_basicsrvaccess2base \
+    wizards_basicsrvdepot \
+    wizards_basicsrveuro \
+    wizards_basicsrvform \
+    wizards_basicsrvgimmicks \
+    wizards_basicsrvimport \
+    wizards_basicsrvtemplate \
+    wizards_basicsrvtools \
+))
+
+$(eval $(call gb_CppunitTest_use_uiconfigs,desktop_lib, \
+    modules/swriter \
+))
 
 # vim: set noet sw=4 ts=4:

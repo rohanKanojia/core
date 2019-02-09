@@ -21,8 +21,8 @@
 #define INCLUDED_OOX_SOURCE_PPT_COMMONBEHAVIORCONTEXT_HXX
 
 #include <rtl/ustring.hxx>
-#include "oox/ppt/timenodelistcontext.hxx"
-#include "oox/ppt/animationspersist.hxx"
+#include <oox/ppt/timenodelistcontext.hxx>
+#include <oox/ppt/animationspersist.hxx>
 #include <oox/ppt/pptfilterhelpers.hxx>
 #include "conditioncontext.hxx"
 
@@ -31,19 +31,18 @@ namespace oox { namespace ppt {
     struct Attribute
     {
         OUString   name;
-        MS_AttributeNames type;
+        AnimationAttributeEnum type;
     };
 
     /** CT_TLCommonBehaviorData */
     class CommonBehaviorContext
-        : public TimeNodeContext
+        : public ::oox::core::FragmentHandler2
     {
     public:
-        CommonBehaviorContext( ::oox::core::FragmentHandler2& rParent,
-             const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttribs,
+        CommonBehaviorContext( ::oox::core::FragmentHandler2 const & rParent,
              const TimeNodePtr & pNode );
         virtual ~CommonBehaviorContext( )
-            throw( );
+            throw( ) override;
 
         virtual void onEndElement() override;
 
@@ -54,8 +53,9 @@ namespace oox { namespace ppt {
     private:
         bool              mbInAttrList;
         bool              mbIsInAttrName;
-        std::list< Attribute > maAttributes;
+        std::vector< Attribute > maAttributes;
         OUString   msCurrentAttribute;
+        const TimeNodePtr& mpNode;
     };
 
 } }

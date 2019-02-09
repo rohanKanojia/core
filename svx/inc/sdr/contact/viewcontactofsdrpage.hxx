@@ -36,7 +36,7 @@ protected:
 
 public:
     explicit ViewContactOfPageSubObject(ViewContactOfSdrPage& rParentViewContactOfSdrPage);
-    virtual ~ViewContactOfPageSubObject();
+    virtual ~ViewContactOfPageSubObject() override;
 
     virtual ViewContact* GetParentContact() const override;
     const SdrPage& getPage() const;
@@ -50,7 +50,7 @@ protected:
 
 public:
     explicit ViewContactOfPageBackground(ViewContactOfSdrPage& rParentViewContactOfSdrPage);
-    virtual ~ViewContactOfPageBackground();
+    virtual ~ViewContactOfPageBackground() override;
 };
 
 class ViewContactOfPageShadow : public ViewContactOfPageSubObject
@@ -61,7 +61,7 @@ protected:
 
 public:
     explicit ViewContactOfPageShadow(ViewContactOfSdrPage& rParentViewContactOfSdrPage);
-    virtual ~ViewContactOfPageShadow();
+    virtual ~ViewContactOfPageShadow() override;
 };
 
 class ViewContactOfPageFill : public ViewContactOfPageSubObject
@@ -72,7 +72,7 @@ protected:
 
 public:
     explicit ViewContactOfPageFill(ViewContactOfSdrPage& rParentViewContactOfSdrPage);
-    virtual ~ViewContactOfPageFill();
+    virtual ~ViewContactOfPageFill() override;
 };
 
 class ViewContactOfMasterPage : public ViewContactOfPageSubObject
@@ -83,7 +83,7 @@ protected:
 
 public:
     explicit ViewContactOfMasterPage(ViewContactOfSdrPage& rParentViewContactOfSdrPage);
-    virtual ~ViewContactOfMasterPage();
+    virtual ~ViewContactOfMasterPage() override;
 };
 
 class ViewContactOfOuterPageBorder : public ViewContactOfPageSubObject
@@ -94,7 +94,7 @@ protected:
 
 public:
     explicit ViewContactOfOuterPageBorder(ViewContactOfSdrPage& rParentViewContactOfSdrPage);
-    virtual ~ViewContactOfOuterPageBorder();
+    virtual ~ViewContactOfOuterPageBorder() override;
 };
 
 class ViewContactOfInnerPageBorder : public ViewContactOfPageSubObject
@@ -105,7 +105,7 @@ protected:
 
 public:
     explicit ViewContactOfInnerPageBorder(ViewContactOfSdrPage& rParentViewContactOfSdrPage);
-    virtual ~ViewContactOfInnerPageBorder();
+    virtual ~ViewContactOfInnerPageBorder() override;
 };
 
 /**
@@ -123,40 +123,36 @@ protected:
 
 public:
     explicit ViewContactOfPageHierarchy(ViewContactOfSdrPage& rParentViewContactOfSdrPage);
-    virtual ~ViewContactOfPageHierarchy();
+    virtual ~ViewContactOfPageHierarchy() override;
 
     virtual sal_uInt32 GetObjectCount() const override;
     virtual ViewContact& GetViewContact(sal_uInt32 nIndex) const override;
 };
 
-class ViewContactOfGrid : public ViewContactOfPageSubObject
+class ViewContactOfGrid final : public ViewContactOfPageSubObject
 {
-protected:
-    // bitfield
-    bool                                        mbFront : 1;
+    bool const                                        mbFront : 1;
 
     virtual ViewObjectContact& CreateObjectSpecificViewObjectContact(ObjectContact& rObjectContact) override;
     virtual drawinglayer::primitive2d::Primitive2DContainer createViewIndependentPrimitive2DSequence() const override;
 
 public:
     ViewContactOfGrid(ViewContactOfSdrPage& rParentViewContactOfSdrPage, bool bFront);
-    virtual ~ViewContactOfGrid();
+    virtual ~ViewContactOfGrid() override;
 
     bool getFront() const { return mbFront; }
 };
 
-class ViewContactOfHelplines : public ViewContactOfPageSubObject
+class ViewContactOfHelplines final : public ViewContactOfPageSubObject
 {
-protected:
-    // bitfield
-    bool                                        mbFront : 1;
+    bool const                                        mbFront : 1;
 
     virtual ViewObjectContact& CreateObjectSpecificViewObjectContact(ObjectContact& rObjectContact) override;
     virtual drawinglayer::primitive2d::Primitive2DContainer createViewIndependentPrimitive2DSequence() const override;
 
 public:
     ViewContactOfHelplines(ViewContactOfSdrPage& rParentViewContactOfSdrPage, bool bFront);
-    virtual ~ViewContactOfHelplines();
+    virtual ~ViewContactOfHelplines() override;
 
     bool getFront() const { return mbFront; }
 };
@@ -195,7 +191,7 @@ public:
 
     // basic constructor, used from SdrPage.
     explicit ViewContactOfSdrPage(SdrPage& rObj);
-    virtual ~ViewContactOfSdrPage();
+    virtual ~ViewContactOfSdrPage() override;
 
     // Access to possible sub-hierarchy
     virtual sal_uInt32 GetObjectCount() const override;

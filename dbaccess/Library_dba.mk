@@ -11,8 +11,10 @@ $(eval $(call gb_Library_Library,dba))
 
 $(eval $(call gb_Library_set_include,dba,\
     $$(INCLUDE) \
+	-I$(SRCDIR)/dbaccess/inc \
 	-I$(SRCDIR)/dbaccess/source/inc \
 	-I$(SRCDIR)/dbaccess/source/core/inc \
+	-I$(SRCDIR)/dbaccess/source/filter/hsqldb \
 	-I$(WORKDIR)/YaccTarget/connectivity/source/parse \
 ))
 
@@ -30,6 +32,7 @@ $(eval $(call gb_Library_use_libraries,dba,\
     comphelper \
     cppu \
     cppuhelper \
+	dbahsql \
     dbtools \
     fwe \
     i18nlangtag \
@@ -46,7 +49,6 @@ $(eval $(call gb_Library_use_libraries,dba,\
     utl \
     vcl \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_set_componentfile,dba,dbaccess/util/dba))
@@ -115,10 +117,10 @@ $(eval $(call gb_Library_add_exception_objects,dba,\
     dbaccess/source/core/misc/DatabaseDataProvider \
     dbaccess/source/core/misc/dsntypes \
     dbaccess/source/core/misc/objectnameapproval \
+    dbaccess/source/core/misc/migrwarndlg \
     dbaccess/source/core/misc/PropertyForward \
     dbaccess/source/core/misc/sdbcoretools \
     dbaccess/source/core/misc/services \
-    dbaccess/source/core/misc/userinformation \
     dbaccess/source/core/misc/veto \
     dbaccess/source/core/recovery/dbdocrecovery \
     dbaccess/source/core/recovery/settingsimport \

@@ -18,10 +18,11 @@
  */
 
 #include "ColumnPeer.hxx"
-#include "ColumnControlWindow.hxx"
+#include <ColumnControlWindow.hxx>
 #include <vcl/svapp.hxx>
-#include "dbustrings.hrc"
-#include "FieldDescriptions.hxx"
+#include <stringconstants.hxx>
+#include <strings.hxx>
+#include <FieldDescriptions.hxx>
 
 namespace dbaui
 {
@@ -86,7 +87,7 @@ void OColumnPeer::setColumn(const Reference< XPropertySet>& _xColumn)
 
             m_pActFieldDescr = new OFieldDescription(_xColumn,true);
             // search for type
-            OUString sCreateParam("x");
+            OUString const sCreateParam("x");
             bool bForce;
             TOTypeInfoSP pTypeInfo = ::dbaui::getTypeInfoFromType(*pFieldControl->getTypeInfo(),nType,sTypeName,sCreateParam,nPrecision,nScale,bAutoIncrement,bForce);
             if ( !pTypeInfo.get() )
@@ -107,7 +108,7 @@ void OColumnPeer::setConnection(const Reference< XConnection>& _xCon)
         pFieldControl->setConnection(_xCon);
 }
 
-void OColumnPeer::setProperty( const OUString& _rPropertyName, const Any& Value) throw( RuntimeException, std::exception )
+void OColumnPeer::setProperty( const OUString& _rPropertyName, const Any& Value)
 {
     SolarMutexGuard aGuard;
 
@@ -125,7 +126,7 @@ void OColumnPeer::setProperty( const OUString& _rPropertyName, const Any& Value)
         VCLXWindow::setProperty(_rPropertyName,Value);
 }
 
-Any OColumnPeer::getProperty( const OUString& _rPropertyName ) throw( RuntimeException, std::exception )
+Any OColumnPeer::getProperty( const OUString& _rPropertyName )
 {
     Any aProp;
     VclPtr< OFieldDescControl > pFieldControl = GetAs< OFieldDescControl >();

@@ -20,9 +20,10 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_CACHE_SLSGENERICPAGECACHE_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_CACHE_SLSGENERICPAGECACHE_HXX
 
-#include "SlideSorter.hxx"
 #include "SlsRequestQueue.hxx"
 #include <memory>
+
+#include <vcl/bitmapex.hxx>
 
 namespace sd { namespace slidesorter { namespace cache {
 
@@ -34,7 +35,7 @@ class QueueProcessor;
 class GenericPageCache
 {
 public:
-    /** The page chache is created with a reference to the SlideSorter and
+    /** The page cache is created with a reference to the SlideSorter and
         thus has access to both view and model.  This allows the cache to
         fill itself with requests for all pages or just the visible ones.
         @param rPreviewSize
@@ -77,14 +78,14 @@ public:
             Returns a bitmap that is either empty, contains a scaled (up or
             down) version or is the requested bitmap.
     */
-    Bitmap GetPreviewBitmap (
+    BitmapEx GetPreviewBitmap (
         const CacheKey aKey,
         const bool bResize);
-    Bitmap GetMarkedPreviewBitmap (
+    BitmapEx GetMarkedPreviewBitmap (
         const CacheKey aKey);
     void SetMarkedPreviewBitmap (
         const CacheKey aKey,
-        const Bitmap& rMarkedBitmap);
+        const BitmapEx& rMarkedBitmap);
 
     /** When the requested preview bitmap does not yet exist or is not
         up-to-date then the rendering of one is scheduled.  Otherwise this
@@ -100,13 +101,13 @@ public:
     */
     void RequestPreviewBitmap (
         const CacheKey aKey,
-        const bool bMayBeUpToDate = true);
+        const bool bMayBeUpToDate);
 
     /** Tell the cache to replace the bitmap associated with the given
         request data with a new one that reflects recent changes in the
         content of the page object.
         @return
-            When the key is kown then return <TRUE/>.
+            When the key is known then return <TRUE/>.
     */
     bool InvalidatePreviewBitmap (const CacheKey aKey);
 

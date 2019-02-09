@@ -19,7 +19,7 @@
 
 
 #include "HTerminateListener.hxx"
-#include "hsqldb/HDriver.hxx"
+#include <hsqldb/HDriver.hxx>
 
 
 namespace connectivity
@@ -27,24 +27,20 @@ namespace connectivity
 
     using namespace hsqldb;
     using namespace ::com::sun::star::uno;
-    using namespace ::com::sun::star::frame;
     using namespace ::com::sun::star::lang;
 
 // XEventListener
 void SAL_CALL OConnectionController::disposing( const EventObject& /*Source*/ )
-throw( RuntimeException, std::exception )
 {
 }
 
 // XTerminateListener
 void SAL_CALL OConnectionController::queryTermination( const EventObject& /*aEvent*/ )
-throw( TerminationVetoException, RuntimeException, std::exception )
 {
     m_pDriver->flushConnections();
 }
 
 void SAL_CALL OConnectionController::notifyTermination( const EventObject& /*aEvent*/ )
-throw( RuntimeException, std::exception )
 {
     m_pDriver->shutdownConnections();
 }

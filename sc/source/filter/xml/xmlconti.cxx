@@ -19,10 +19,7 @@
 
 #include "xmlconti.hxx"
 #include "xmlimprt.hxx"
-#include "global.hxx"
-#include "document.hxx"
 
-#include <xmloff/xmltkmap.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltoken.hxx>
@@ -32,9 +29,8 @@ using namespace xmloff::token;
 ScXMLContentContext::ScXMLContentContext( ScXMLImport& rImport,
                                       sal_uInt16 nPrfx,
                                       const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */,
                                       OUStringBuffer& sTempValue) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport, nPrfx, rLName ),
     sOUText(),
     sValue(sTempValue)
 {
@@ -44,7 +40,7 @@ ScXMLContentContext::~ScXMLContentContext()
 {
 }
 
-SvXMLImportContext *ScXMLContentContext::CreateChildContext( sal_uInt16 nPrefix,
+SvXMLImportContextRef ScXMLContentContext::CreateChildContext( sal_uInt16 nPrefix,
                                             const OUString& rLName,
                                             const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
 {
@@ -69,7 +65,7 @@ SvXMLImportContext *ScXMLContentContext::CreateChildContext( sal_uInt16 nPrefix,
             sOUText.append(' ');
     }
 
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );;
+    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
 }
 
 void ScXMLContentContext::Characters( const OUString& rChars )

@@ -46,7 +46,7 @@ SvxViewLayoutItem::SvxViewLayoutItem
 
 
 SvxViewLayoutItem::SvxViewLayoutItem( const SvxViewLayoutItem& rOrig )
-:   SfxUInt16Item( rOrig.Which(), rOrig.GetValue() ),
+:   SfxUInt16Item( rOrig ),
     mbBookMode( rOrig.IsBookMode() )
 {
 }
@@ -63,21 +63,9 @@ SfxPoolItem* SvxViewLayoutItem::Clone( SfxItemPool * /*pPool*/ ) const
 }
 
 
-SfxPoolItem* SvxViewLayoutItem::Create( SvStream& /*rStrm*/, sal_uInt16 /*nVersion*/ ) const
-{
-    return nullptr;
-}
-
-
-SvStream& SvxViewLayoutItem::Store( SvStream& rStrm, sal_uInt16 /*nItemVersion*/ ) const
-{
-    return rStrm;
-}
-
-
 bool SvxViewLayoutItem::operator==( const SfxPoolItem& rAttr ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==(rAttr), "unequal types" );
+    assert(SfxPoolItem::operator==(rAttr));
 
     const SvxViewLayoutItem& rItem = static_cast<const SvxViewLayoutItem&>(rAttr);
 
@@ -101,7 +89,7 @@ bool SvxViewLayoutItem::QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId ) c
         }
         break;
 
-        case MID_VIEWLAYOUT_COLUMNS : rVal <<= (sal_Int32) GetValue(); break;
+        case MID_VIEWLAYOUT_COLUMNS : rVal <<= static_cast<sal_Int32>(GetValue()); break;
         case MID_VIEWLAYOUT_BOOKMODE: rVal <<= mbBookMode; break;
         default:
             OSL_FAIL("svx::SvxViewLayoutItem::QueryValue(), Wrong MemberId!");
@@ -141,7 +129,7 @@ bool SvxViewLayoutItem::PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId
 
                 if ( bAllConverted && nConvertedCount == VIEWLAYOUT_PARAMS )
                 {
-                    SetValue( (sal_uInt16)nColumns );
+                    SetValue( static_cast<sal_uInt16>(nColumns) );
                     mbBookMode = bBookMode;
                     return true;
                 }
@@ -155,7 +143,7 @@ bool SvxViewLayoutItem::PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId
             sal_Int32 nVal = 0;
             if ( rVal >>= nVal )
             {
-                SetValue( (sal_uInt16)nVal );
+                SetValue( static_cast<sal_uInt16>(nVal) );
                 return true;
             }
             else

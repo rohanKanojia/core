@@ -17,31 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "hintids.hxx"
+#include <hintids.hxx>
 #include <sfx2/objface.hxx>
 #include <sfx2/app.hxx>
 #include <svl/srchitem.hxx>
 #include <basic/sbxvar.hxx>
 #include <svx/svxids.hrc>
 
-#include "swtypes.hxx"
-#include "cmdid.h"
-#include "view.hxx"
-#include "wtextsh.hxx"
-#include "basesh.hxx"
-#include "globals.hrc"
-#include "popup.hrc"
-#include "shells.hrc"
-#include "web.hrc"
+#include <swtypes.hxx>
+#include <cmdid.h>
+#include <view.hxx>
+#include <wtextsh.hxx>
+#include <basesh.hxx>
+#include <globals.hrc>
 
 #include <unomid.h>
 
 #include <sfx2/request.hxx>
     // needed for -fsanitize=function visibility of typeinfo for functions of
     // type void(SfxShell*,SfxRequest&) defined in swslots.hxx
-#define SwWebTextShell
+#define ShellClass_SwWebTextShell
 #include <sfx2/msg.hxx>
-#include "swslots.hxx"
+#include <swslots.hxx>
 
 SFX_IMPL_INTERFACE(SwWebTextShell, SwBaseShell)
 
@@ -49,7 +46,7 @@ void SwWebTextShell::InitInterface_Impl()
 {
     GetStaticInterface()->RegisterPopupMenu("text");
 
-    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, RID_TEXT_TOOLBOX);
+    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, SfxVisibilityFlags::Invisible, ToolbarId::Text_Toolbox_Sw);
 
     GetStaticInterface()->RegisterChildWindow(FN_EDIT_FORMULA);
     GetStaticInterface()->RegisterChildWindow(FN_INSERT_FIELD);
@@ -59,7 +56,6 @@ void SwWebTextShell::InitInterface_Impl()
 SwWebTextShell::SwWebTextShell(SwView &_rView) :
     SwTextShell(_rView)
 {
-    SetHelpId(SW_WEBTEXTSHELL);
 }
 
 SwWebTextShell::~SwWebTextShell()

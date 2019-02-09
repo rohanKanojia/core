@@ -30,9 +30,10 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlexp.hxx>
 #include <xmloff/xmlimp.hxx>
+#include <xmloff/xmlement.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/ustring.hxx>
-#include <tools/debug.hxx>
+#include <sal/log.hxx>
 #include <xmloff/xmltkmap.hxx>
 
 using namespace ::com::sun::star;
@@ -49,10 +50,9 @@ enum SvXMLTokenMapAttrs
     XML_TOK_DASH_DOTS2,
     XML_TOK_DASH_DOTS2LEN,
     XML_TOK_DASH_DISTANCE,
-    XML_TOK_DASH_END=XML_TOK_UNKNOWN
 };
 
-static SvXMLTokenMapEntry aDashStyleAttrTokenMap[] =
+static const SvXMLTokenMapEntry aDashStyleAttrTokenMap[] =
 {
     { XML_NAMESPACE_DRAW, XML_NAME,             XML_TOK_DASH_NAME },
     { XML_NAMESPACE_DRAW, XML_DISPLAY_NAME,     XML_TOK_DASH_DISPLAY_NAME },
@@ -65,13 +65,13 @@ static SvXMLTokenMapEntry aDashStyleAttrTokenMap[] =
     XML_TOKEN_MAP_END
 };
 
-SvXMLEnumMapEntry const pXML_DashStyle_Enum[] =
+SvXMLEnumMapEntry<drawing::DashStyle> const pXML_DashStyle_Enum[] =
 {
     { XML_RECT,         drawing::DashStyle_RECT },
     { XML_ROUND,        drawing::DashStyle_ROUND },
     { XML_RECT,         drawing::DashStyle_RECTRELATIVE },
     { XML_ROUND,        drawing::DashStyle_ROUNDRELATIVE },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::DashStyle(0) }
 };
 
 // Import
@@ -128,15 +128,11 @@ void XMLDashStyleImport::importXML(
             break;
         case XML_TOK_DASH_STYLE:
             {
-                sal_uInt16 eValue;
-                if( SvXMLUnitConverter::convertEnum( eValue, rStrValue, pXML_DashStyle_Enum ) )
-                {
-                    aLineDash.Style = (drawing::DashStyle) eValue;
-                }
+                SvXMLUnitConverter::convertEnum( aLineDash.Style, rStrValue, pXML_DashStyle_Enum );
             }
             break;
         case XML_TOK_DASH_DOTS1:
-            aLineDash.Dots = (sal_Int16)rStrValue.toInt32();
+            aLineDash.Dots = static_cast<sal_Int16>(rStrValue.toInt32());
             break;
 
         case XML_TOK_DASH_DOTS1LEN:
@@ -155,7 +151,7 @@ void XMLDashStyleImport::importXML(
             break;
 
         case XML_TOK_DASH_DOTS2:
-            aLineDash.Dashes = (sal_Int16)rStrValue.toInt32();
+            aLineDash.Dashes = static_cast<sal_Int16>(rStrValue.toInt32());
             break;
 
         case XML_TOK_DASH_DOTS2LEN:
@@ -216,12 +212,10 @@ XMLDashStyleExport::~XMLDashStyleExport()
 {
 }
 
-bool XMLDashStyleExport::exportXML(
+void XMLDashStyleExport::exportXML(
     const OUString& rStrName,
     const uno::Any& rValue )
 {
-    bool bRet = false;
-
     SvXMLUnitConverter & rUnitConverter = rExport.GetMM100UnitConverter();
 
     drawing::LineDash aLineDash;
@@ -312,7 +306,6 @@ bool XMLDashStyleExport::exportXML(
                                       true, false );
         }
     }
-    return bRet;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

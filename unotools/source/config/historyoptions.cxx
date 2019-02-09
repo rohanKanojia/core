@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/file.hxx>
 #include <sal/log.hxx>
 #include <unotools/historyoptions.hxx>
 #include <unotools/configmgr.hxx>
@@ -31,12 +30,15 @@
 
 #include "itemholder1.hxx"
 
+#include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <comphelper/configurationhelper.hxx>
 #include <comphelper/processfactory.hxx>
+#include <tools/diagnose_ex.h>
+#include <boost/optional.hpp>
 
 using namespace ::std;
 using namespace ::utl;
@@ -52,12 +54,6 @@ namespace {
     static const ::sal_Int32 s_nOffsetPassword          = 3;
     static const ::sal_Int32 s_nOffsetThumbnail         = 4;
 
-    const char s_sCommonHistory[] = "org.openoffice.Office.Common/History";
-    const char s_sHistories[] = "org.openoffice.Office.Histories/Histories";
-    const char s_sPickListSize[] = "PickListSize";
-    const char s_sHelpBookmarksSize[] = "HelpBookmarkSize";
-    const char s_sPickList[] = "PickList";
-    const char s_sHelpBookmarks[] = "HelpBookmarks";
     const char s_sItemList[] = "ItemList";
     const char s_sOrderList[] = "OrderList";
     const char s_sHistoryItemRef[] = "HistoryItemRef";
@@ -74,10 +70,9 @@ class SvtHistoryOptions_Impl
 {
 public:
     SvtHistoryOptions_Impl();
-    ~SvtHistoryOptions_Impl();
 
     /// Returns the maximum size of the internal lists, ie. the capacity not the size.
-    sal_uInt32 GetCapacity(EHistoryType eHistory);
+    sal_uInt32 GetCapacity(EHistoryType eHistory) const;
 
     /// Clear the specified history list.
     void Clear(EHistoryType eHistory);
@@ -87,7 +82,7 @@ public:
 
     void AppendItem(EHistoryType eHistory,
         const OUString& sURL, const OUString& sFilter, const OUString& sTitle,
-        const OUString& sPassword, const boost::optional<OUString>& sThumbnail);
+        const boost::optional<OUString>& sThumbnail);
 
     void DeleteItem(EHistoryType eHistory, const OUString& sURL);
 
@@ -109,31 +104,26 @@ SvtHistoryOptions_Impl::SvtHistoryOptions_Impl()
         m_xCfg.set(
             ::comphelper::ConfigurationHelper::openConfig(
                 ::comphelper::getProcessComponentContext(),
-                s_sHistories,
+                "org.openoffice.Office.Histories/Histories",
                 ::comphelper::EConfigurationModes::Standard),
             uno::UNO_QUERY);
 
         m_xCommonXCU.set(
             ::comphelper::ConfigurationHelper::openConfig(
                 ::comphelper::getProcessComponentContext(),
-                s_sCommonHistory,
+                "org.openoffice.Office.Common/History",
                 ::comphelper::EConfigurationModes::Standard),
             uno::UNO_QUERY);
     }
-    catch(const uno::Exception& ex)
+    catch(const uno::Exception&)
     {
+        DBG_UNHANDLED_EXCEPTION("unotools.config");
         m_xCfg.clear();
         m_xCommonXCU.clear();
-
-        SAL_WARN("unotools.config", "Caught unexpected: " << ex.Message);
     }
 }
 
-SvtHistoryOptions_Impl::~SvtHistoryOptions_Impl()
-{
-}
-
-sal_uInt32 SvtHistoryOptions_Impl::GetCapacity(EHistoryType eHistory)
+sal_uInt32 SvtHistoryOptions_Impl::GetCapacity(EHistoryType eHistory) const
 {
     uno::Reference<beans::XPropertySet> xListAccess(m_xCommonXCU, uno::UNO_QUERY);
 
@@ -147,20 +137,20 @@ sal_uInt32 SvtHistoryOptions_Impl::GetCapacity(EHistoryType eHistory)
         switch (eHistory)
         {
         case ePICKLIST:
-            xListAccess->getPropertyValue(s_sPickListSize) >>= nSize;
+            xListAccess->getPropertyValue("PickListSize") >>= nSize;
             break;
 
         case eHELPBOOKMARKS:
-            xListAccess->getPropertyValue(s_sHelpBookmarksSize) >>= nSize;
+            xListAccess->getPropertyValue("HelpBookmarkSize") >>= nSize;
             break;
 
         default:
             break;
         }
     }
-    catch (const uno::Exception& ex)
+    catch (const uno::Exception&)
     {
-        SAL_WARN("unotools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("unotools.config");
     }
 
     return nSize;
@@ -175,20 +165,20 @@ uno::Reference<container::XNameAccess> SvtHistoryOptions_Impl::GetListAccess(EHi
         switch (eHistory)
         {
         case ePICKLIST:
-            m_xCfg->getByName(s_sPickList) >>= xListAccess;
+            m_xCfg->getByName("PickList") >>= xListAccess;
             break;
 
         case eHELPBOOKMARKS:
-            m_xCfg->getByName(s_sHelpBookmarks) >>= xListAccess;
+            m_xCfg->getByName("HelpBookmarks") >>= xListAccess;
             break;
 
         default:
             break;
         }
     }
-    catch (const uno::Exception& ex)
+    catch (const uno::Exception&)
     {
-        SAL_WARN("unotools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("unotools.config");
     }
 
     return xListAccess;
@@ -225,9 +215,9 @@ void SvtHistoryOptions_Impl::impl_truncateList(EHistoryType eHistory, sal_uInt32
             ::comphelper::ConfigurationHelper::flush(m_xCfg);
         }
     }
-    catch(const uno::Exception& ex)
+    catch(const uno::Exception&)
     {
-        SAL_WARN("unotools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("unotools.config");
     }
 }
 
@@ -258,22 +248,10 @@ void SvtHistoryOptions_Impl::Clear( EHistoryType eHistory )
 
         ::comphelper::ConfigurationHelper::flush(m_xCfg);
     }
-    catch(const uno::Exception& ex)
+    catch(const uno::Exception&)
     {
-        SAL_WARN("unotools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("unotools.config");
     }
-}
-
-static bool lcl_fileOpenable(const OUString &rURL)
-{
-    osl::File aRecentFile(rURL);
-    if(!aRecentFile.open(osl_File_OpenFlag_Read))
-    {
-        aRecentFile.close();
-        return true;
-    }
-    else
-        return false;
 }
 
 Sequence< Sequence<PropertyValue> > SvtHistoryOptions_Impl::GetList(EHistoryType eHistory)
@@ -298,9 +276,9 @@ Sequence< Sequence<PropertyValue> > SvtHistoryOptions_Impl::GetList(EHistoryType
         xListAccess->getByName(s_sItemList)  >>= xItemList;
         xListAccess->getByName(s_sOrderList) >>= xOrderList;
     }
-    catch(const uno::Exception& ex)
+    catch(const uno::Exception&)
     {
-        SAL_WARN("unotools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("unotools.config");
     }
 
     const sal_Int32 nLength = xOrderList->getElementNames().getLength();
@@ -316,24 +294,16 @@ Sequence< Sequence<PropertyValue> > SvtHistoryOptions_Impl::GetList(EHistoryType
             xOrderList->getByName(OUString::number(nItem)) >>= xSet;
             xSet->getPropertyValue(s_sHistoryItemRef) >>= sUrl;
 
-            // Check if file is openable, but for performance reasons try to
-            // only do so for files on a local filesystem.  For Windows,
-            // checking for "file:///" nicely filters out UNC paths (that only
-            // have two slashes), but of course misses to filter out remote
-            // mounts on Unix-like systems:
-            if (!sUrl.startsWith("file:///") || lcl_fileOpenable(sUrl))
-            {
-                xItemList->getByName(sUrl) >>= xSet;
-                seqProperties[s_nOffsetURL  ].Value <<= sUrl;
+            xItemList->getByName(sUrl) >>= xSet;
+            seqProperties[s_nOffsetURL  ].Value <<= sUrl;
 
-                xSet->getPropertyValue(s_sFilter)   >>= seqProperties[s_nOffsetFilter   ].Value;
-                xSet->getPropertyValue(s_sTitle)    >>= seqProperties[s_nOffsetTitle    ].Value;
-                xSet->getPropertyValue(s_sPassword) >>= seqProperties[s_nOffsetPassword ].Value;
-                xSet->getPropertyValue(s_sThumbnail)>>= seqProperties[s_nOffsetThumbnail].Value;
-                aRet[nCount++] = seqProperties;
-            }
+            seqProperties[s_nOffsetFilter   ].Value = xSet->getPropertyValue(s_sFilter);
+            seqProperties[s_nOffsetTitle    ].Value = xSet->getPropertyValue(s_sTitle);
+            seqProperties[s_nOffsetPassword ].Value = xSet->getPropertyValue(s_sPassword);
+            seqProperties[s_nOffsetThumbnail].Value = xSet->getPropertyValue(s_sThumbnail);
+            aRet[nCount++] = seqProperties;
         }
-        catch(const uno::Exception& ex)
+        catch(const uno::Exception&)
         {
             // <https://bugs.libreoffice.org/show_bug.cgi?id=46074>
             // "FILEOPEN: No Recent Documents..." discusses a problem
@@ -342,7 +312,7 @@ Sequence< Sequence<PropertyValue> > SvtHistoryOptions_Impl::GetList(EHistoryType
             // ignore such corrupted individual items here, so that at
             // least newly added items are successfully reported back
             // from this function:
-            SAL_WARN("unotools.config", "Caught unexpected: " << ex.Message);
+            DBG_UNHANDLED_EXCEPTION("unotools.config");
         }
     }
     assert(nCount <= nLength);
@@ -352,7 +322,7 @@ Sequence< Sequence<PropertyValue> > SvtHistoryOptions_Impl::GetList(EHistoryType
 
 void SvtHistoryOptions_Impl::AppendItem(EHistoryType eHistory,
         const OUString& sURL, const OUString& sFilter, const OUString& sTitle,
-        const OUString& sPassword, const boost::optional<OUString>& sThumbnail)
+        const boost::optional<OUString>& sThumbnail)
 {
     uno::Reference<container::XNameAccess> xListAccess(GetListAccess(eHistory));
     if (!xListAccess.is())
@@ -468,15 +438,15 @@ void SvtHistoryOptions_Impl::AppendItem(EHistoryType eHistory,
             xSet.set(xInst, uno::UNO_QUERY);
             xSet->setPropertyValue(s_sFilter, uno::makeAny(sFilter));
             xSet->setPropertyValue(s_sTitle, uno::makeAny(sTitle));
-            xSet->setPropertyValue(s_sPassword, uno::makeAny(sPassword));
+            xSet->setPropertyValue(s_sPassword, uno::makeAny(OUString()));
             xSet->setPropertyValue(s_sThumbnail, uno::makeAny(sThumbnail.get_value_or(OUString())));
 
             ::comphelper::ConfigurationHelper::flush(m_xCfg);
         }
     }
-    catch(const uno::Exception& ex)
+    catch(const uno::Exception&)
     {
-        SAL_WARN("unotools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("unotools.config");
     }
 }
 
@@ -538,88 +508,66 @@ void SvtHistoryOptions_Impl::DeleteItem(EHistoryType eHistory, const OUString& s
 
         ::comphelper::ConfigurationHelper::flush(m_xCfg);
     }
-    catch (const uno::Exception& ex)
+    catch (const uno::Exception&)
     {
-        SAL_WARN("unotools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("unotools.config");
     }
 }
 
-// initialize static member
-// DON'T DO IT IN YOUR HEADER!
-// see definition for further information
+namespace {
 
-SvtHistoryOptions_Impl*  SvtHistoryOptions::m_pDataContainer = nullptr;
-sal_Int32     SvtHistoryOptions::m_nRefCount  = 0;
+std::weak_ptr<SvtHistoryOptions_Impl> g_pHistoryOptions;
 
-// constructor
+}
 
 SvtHistoryOptions::SvtHistoryOptions()
 {
     MutexGuard aGuard(theHistoryOptionsMutex::get());
 
-    // Increase our refcount ...
-    ++m_nRefCount;
-    // ... and initialize our data container only if it not already exist!
-    if( m_pDataContainer == nullptr )
+    m_pImpl = g_pHistoryOptions.lock();
+    if( !m_pImpl )
     {
-        m_pDataContainer = new SvtHistoryOptions_Impl;
-
-        ItemHolder1::holdConfigItem(E_HISTORYOPTIONS);
+        m_pImpl = std::make_shared<SvtHistoryOptions_Impl>();
+        g_pHistoryOptions = m_pImpl;
+        ItemHolder1::holdConfigItem(EItem::HistoryOptions);
     }
 }
-
-// destructor
 
 SvtHistoryOptions::~SvtHistoryOptions()
 {
     MutexGuard aGuard(theHistoryOptionsMutex::get());
 
-    // Decrease our refcount.
-    --m_nRefCount;
-    // If last instance was deleted ...
-    // we must destroy our static data container!
-    if( m_nRefCount <= 0 )
-    {
-        delete m_pDataContainer;
-        m_pDataContainer = nullptr;
-    }
-}
-
-sal_uInt32 SvtHistoryOptions::GetSize( EHistoryType eHistory ) const
-{
-    MutexGuard aGuard(theHistoryOptionsMutex::get());
-
-    return m_pDataContainer->GetCapacity(eHistory);
+    m_pImpl.reset();
 }
 
 void SvtHistoryOptions::Clear( EHistoryType eHistory )
 {
     MutexGuard aGuard(theHistoryOptionsMutex::get());
 
-    m_pDataContainer->Clear( eHistory );
+    m_pImpl->Clear( eHistory );
 }
 
 Sequence< Sequence< PropertyValue > > SvtHistoryOptions::GetList( EHistoryType eHistory ) const
 {
     MutexGuard aGuard(theHistoryOptionsMutex::get());
 
-    return m_pDataContainer->GetList( eHistory );
+    return m_pImpl->GetList( eHistory );
 }
 
 void SvtHistoryOptions::AppendItem(EHistoryType eHistory,
         const OUString& sURL, const OUString& sFilter, const OUString& sTitle,
-        const OUString& sPassword, const boost::optional<OUString>& sThumbnail)
+        const boost::optional<OUString>& sThumbnail)
 {
     MutexGuard aGuard(theHistoryOptionsMutex::get());
 
-    m_pDataContainer->AppendItem(eHistory, sURL, sFilter, sTitle, sPassword, sThumbnail);
+    m_pImpl->AppendItem(eHistory, sURL, sFilter, sTitle, sThumbnail);
 }
 
 void SvtHistoryOptions::DeleteItem(EHistoryType eHistory, const OUString& sURL)
 {
     MutexGuard aGuard(theHistoryOptionsMutex::get());
 
-    m_pDataContainer->DeleteItem(eHistory, sURL);
+    m_pImpl->DeleteItem(eHistory, sURL);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

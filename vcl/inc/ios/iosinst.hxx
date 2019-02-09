@@ -33,13 +33,13 @@ class IosSalFrame;
 class IosSalInstance : public SvpSalInstance
 {
 public:
-    IosSalInstance( SalYieldMutex *pMutex );
+    IosSalInstance( std::unique_ptr<SalYieldMutex> pMutex );
     virtual ~IosSalInstance();
     static IosSalInstance *getInstance();
 
     virtual SalSystem* CreateSalSystem() override;
 
-    void GetWorkArea( Rectangle& rRect );
+    void GetWorkArea( tools::Rectangle& rRect );
     SalFrame* CreateFrame( SalFrame* pParent, SalFrameStyleFlags nStyle ) override;
     SalFrame* CreateChildFrame( SystemParentData* pParent, SalFrameStyleFlags nStyle ) override;
 };

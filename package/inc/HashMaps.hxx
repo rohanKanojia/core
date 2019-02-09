@@ -19,38 +19,23 @@
 #ifndef INCLUDED_PACKAGE_INC_HASHMAPS_HXX
 #define INCLUDED_PACKAGE_INC_HASHMAPS_HXX
 
-#include <ZipEntry.hxx>
+#include "ZipEntry.hxx"
 #include <rtl/ref.hxx>
 #include <unordered_map>
 
-struct eqFunc
-{
-    bool operator()( const OUString &r1,
-                         const OUString &r2) const
-    {
-        return r1 == r2;
-    }
-};
+#include <memory>
 
 class ZipPackageFolder;
-namespace com { namespace sun { namespace star { namespace packages {
-class ContentInfo;
-} } } }
+struct ZipContentInfo;
 
 typedef std::unordered_map < OUString,
-                        ZipPackageFolder *,
-                        OUStringHash,
-                        eqFunc > FolderHash;
+                        ZipPackageFolder * > FolderHash;
 
 typedef std::unordered_map < OUString,
-                        rtl::Reference < css::packages::ContentInfo >,
-                        OUStringHash,
-                        eqFunc > ContentHash;
+                        std::unique_ptr<ZipContentInfo> > ContentHash;
 
 typedef std::unordered_map < OUString,
-                        ZipEntry,
-                        OUStringHash,
-                        eqFunc > EntryHash;
+                        ZipEntry > EntryHash;
 
 #endif
 

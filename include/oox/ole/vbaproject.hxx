@@ -20,27 +20,35 @@
 #ifndef INCLUDED_OOX_OLE_VBAPROJECT_HXX
 #define INCLUDED_OOX_OLE_VBAPROJECT_HXX
 
+#include <functional>
 #include <map>
-#include <com/sun/star/uno/XInterface.hpp>
-#include <oox/helper/refvector.hxx>
-#include <oox/helper/storagebase.hxx>
+
+#include <com/sun/star/uno/Reference.hxx>
 #include <oox/dllapi.h>
-#include <oox/ole/vbamodule.hxx>
+#include <oox/helper/refmap.hxx>
+#include <oox/helper/refvector.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 namespace com { namespace sun { namespace star {
     namespace container { class XNameContainer; }
-    namespace document { class XEventsSupplier; }
     namespace frame { class XModel; }
     namespace script { class XLibraryContainer; }
     namespace script { namespace vba { class XVBAMacroResolver; } }
     namespace uno { class XComponentContext; }
+    namespace uno { class XInterface; }
+    namespace io { class XInputStream; }
 } } }
 
-namespace oox { class GraphicHelper; }
+namespace oox {
+    class GraphicHelper;
+    class StorageBase;
+}
 
 namespace oox {
 namespace ole {
 
+class VbaModule;
 
 class OOX_DLLPUBLIC VbaFilterConfig
 {
@@ -97,7 +105,7 @@ private:
     virtual void        attachMacro( const OUString& rScriptUrl ) = 0;
 
 private:
-    OUString     maMacroName;
+    OUString const maMacroName;
 };
 
 typedef std::shared_ptr< VbaMacroAttacherBase > VbaMacroAttacherRef;
@@ -123,22 +131,22 @@ public:
     bool                importVbaProject(
                             StorageBase& rVbaPrjStrg );
 
+    /// Imports VBA data for a VBA project, e.g. word/vbaData.xml.
+    void                importVbaData(const css::uno::Reference<css::io::XInputStream>& xInputStream);
+
     /** Reads vba module related information from the project streams */
     void                readVbaModules( StorageBase& rVbaPrjStrg );
     /** Imports (and creates) vba modules and user forms from the vba project records previously read.
       Note: ( expects that readVbaModules was already called ) */
-    void                importModulesAndForms( StorageBase& rVbaPrjStrg, const GraphicHelper& rGraphicHelper, bool bDefaultColorBgr = true );
+    void                importModulesAndForms( StorageBase& rVbaPrjStrg, const GraphicHelper& rGraphicHelper );
     /** Registers a macro attacher object. For details, see description of the
         VbaMacroAttacherBase class. */
     void                registerMacroAttacher( const VbaMacroAttacherRef& rxAttacher );
 
-    /** Returns true, if the document contains at least one code module. */
-    bool                hasModules() const;
+    /** Attaches VBA macros to objects registered via registerMacroAttacher(). */
+    void                attachMacros();
 
-    /** Returns true, if the document contains at least one dialog. */
-    bool                hasDialogs() const;
-
-    void                setOleOverridesSink( css::uno::Reference< css::container::XNameContainer >&  rxOleOverridesSink ){ mxOleOverridesSink = rxOleOverridesSink; }
+    void                setOleOverridesSink( css::uno::Reference< css::container::XNameContainer > const & rxOleOverridesSink ){ mxOleOverridesSink = rxOleOverridesSink; }
 
 protected:
     /** Registers a dummy module that will be created when the VBA project is
@@ -155,24 +163,20 @@ private:
     /** Returns the Basic or dialog library container. */
     css::uno::Reference< css::script::XLibraryContainer >
                         getLibraryContainer( sal_Int32 nPropId );
-    /** Opens a Basic or dialog library (creates missing if specified). */
+    /** Opens a Basic or dialog library, creates missing if not found. */
     css::uno::Reference< css::container::XNameContainer >
-                        openLibrary( sal_Int32 nPropId, bool bCreateMissing );
+                        openLibrary( sal_Int32 nPropId );
     /** Creates and returns the Basic library of the document used for import. */
-    css::uno::Reference< css::container::XNameContainer >
+    css::uno::Reference< css::container::XNameContainer > const &
                         createBasicLibrary();
     /** Creates and returns the dialog library of the document used for import. */
-    css::uno::Reference< css::container::XNameContainer >
+    css::uno::Reference< css::container::XNameContainer > const &
                         createDialogLibrary();
 
     /** Imports the VBA code modules and forms. */
     void                importVba(
                             StorageBase& rVbaPrjStrg,
-                            const GraphicHelper& rGraphicHelper,
-                            bool bDefaultColorBgr );
-
-    /** Attaches VBA macros to objects registered via registerMacroAttacher(). */
-    void                attachMacros();
+                            const GraphicHelper& rGraphicHelper );
 
     /** Copies the entire VBA project storage to the passed document model. */
     void                copyStorage( StorageBase& rVbaPrjStrg );
@@ -194,7 +198,7 @@ private:
     OUString            maPrjName;          ///< Name of the VBA project.
     css::uno::Reference< css::container::XNameContainer >
                         mxOleOverridesSink;
-    typedef RefMap< rtl::OUString, VbaModule > VbaModuleMap;
+    typedef RefMap< OUString, VbaModule > VbaModuleMap;
     VbaModuleMap        maModules;
     VbaModuleMap        maModulesByStrm;
 };

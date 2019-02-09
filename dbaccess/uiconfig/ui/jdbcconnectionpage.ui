@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
-  <requires lib="LibreOffice" version="1.0"/>
+<!-- Generated with glade 3.22.1 -->
+<interface domain="dba">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkBox" id="JDBCConnectionPage">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -17,7 +16,7 @@
         <property name="can_focus">False</property>
         <property name="halign">start</property>
         <property name="margin_bottom">6</property>
-        <property name="label" translatable="yes">Set Up a Connection to a JDBC Database</property>
+        <property name="label" translatable="yes" context="jdbcconnectionpage|header">Set Up a Connection to a JDBC Database</property>
         <attributes>
           <attribute name="weight" value="bold"/>
         </attributes>
@@ -32,10 +31,10 @@
       <object class="GtkLabel" id="helptext">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="xalign">0</property>
-        <property name="label" translatable="yes">Please enter the required information to connect to a JDBC database. Please contact your system administrator if you are unsure about the following settings.</property>
+        <property name="label" translatable="yes" context="jdbcconnectionpage|helptext">Please enter the required information to connect to a JDBC database. Please contact your system administrator if you are unsure about the following settings.</property>
         <property name="wrap">True</property>
         <property name="max_width_chars">60</property>
+        <property name="xalign">0</property>
       </object>
       <packing>
         <property name="expand">False</property>
@@ -54,7 +53,7 @@
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="halign">start</property>
-            <property name="label" translatable="yes">Path to the dBASE files:</property>
+            <property name="label" translatable="yes" context="jdbcconnectionpage|browseurllabel">Path to the dBASE files:</property>
             <property name="use_underline">True</property>
             <property name="mnemonic_widget">browseurl</property>
           </object>
@@ -64,21 +63,8 @@
           </packing>
         </child>
         <child>
-          <object class="dbulo-ConnectionURLEdit" id="browseurl">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="hexpand">True</property>
-            <property name="invisible_char">•</property>
-          </object>
-          <packing>
-            <property name="left_attach">0</property>
-            <property name="top_attach">1</property>
-          </packing>
-        </child>
-        <child>
           <object class="GtkButton" id="create">
-            <property name="label" translatable="yes">_Create New</property>
-            <property name="use_action_appearance">False</property>
+            <property name="label" translatable="yes" context="jdbcconnectionpage|create">_Create New</property>
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
@@ -91,8 +77,7 @@
         </child>
         <child>
           <object class="GtkButton" id="browse">
-            <property name="label" translatable="yes">_Browse…</property>
-            <property name="use_action_appearance">False</property>
+            <property name="label" translatable="yes" context="jdbcconnectionpage|browse">_Browse…</property>
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
@@ -100,6 +85,38 @@
           </object>
           <packing>
             <property name="left_attach">1</property>
+            <property name="top_attach">1</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkGrid">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <child>
+              <object class="GtkEntry" id="browseurl">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="hexpand">True</property>
+                <property name="activates_default">True</property>
+              </object>
+              <packing>
+                <property name="left_attach">1</property>
+                <property name="top_attach">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="browselabel">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">0</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="left_attach">0</property>
             <property name="top_attach">1</property>
           </packing>
         </child>
@@ -123,7 +140,7 @@
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="halign">start</property>
-            <property name="label" translatable="yes">JDBC d_river class:</property>
+            <property name="label" translatable="yes" context="jdbcconnectionpage|jdbcLabel">JDBC d_river class:</property>
             <property name="use_underline">True</property>
             <property name="mnemonic_widget">jdbcEntry</property>
           </object>
@@ -144,6 +161,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="hexpand">True</property>
+                <property name="activates_default">True</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -153,8 +171,7 @@
             </child>
             <child>
               <object class="GtkButton" id="jdbcButton">
-                <property name="label" translatable="yes">_Test Class</property>
-                <property name="use_action_appearance">False</property>
+                <property name="label" translatable="yes" context="jdbcconnectionpage|jdbcButton">_Test Class</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>

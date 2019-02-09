@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "formnavigation.hxx"
-#include "urltransformer.hxx"
-#include "controlfeatureinterception.hxx"
-#include "frm_strings.hxx"
+#include <formnavigation.hxx>
+#include <urltransformer.hxx>
+#include <controlfeatureinterception.hxx>
+#include <frm_strings.hxx>
 
 #include <com/sun/star/form/runtime/FormFeature.hpp>
 
@@ -52,7 +52,7 @@ namespace frm
     }
 
 
-    void SAL_CALL OFormNavigationHelper::dispose( ) throw( RuntimeException )
+    void OFormNavigationHelper::dispose( )
     {
         m_pFeatureInterception->dispose();
         disconnectDispatchers();
@@ -77,38 +77,35 @@ namespace frm
     }
 
 
-    void SAL_CALL OFormNavigationHelper::registerDispatchProviderInterceptor( const Reference< XDispatchProviderInterceptor >& _rxInterceptor ) throw (RuntimeException, std::exception)
+    void SAL_CALL OFormNavigationHelper::registerDispatchProviderInterceptor( const Reference< XDispatchProviderInterceptor >& _rxInterceptor )
     {
         m_pFeatureInterception->registerDispatchProviderInterceptor( _rxInterceptor );
         interceptorsChanged();
     }
 
 
-    void SAL_CALL OFormNavigationHelper::releaseDispatchProviderInterceptor( const Reference< XDispatchProviderInterceptor >& _rxInterceptor ) throw (RuntimeException, std::exception)
+    void SAL_CALL OFormNavigationHelper::releaseDispatchProviderInterceptor( const Reference< XDispatchProviderInterceptor >& _rxInterceptor )
     {
         m_pFeatureInterception->releaseDispatchProviderInterceptor( _rxInterceptor );
         interceptorsChanged();
     }
 
 
-    void SAL_CALL OFormNavigationHelper::statusChanged( const FeatureStateEvent& _rState ) throw (RuntimeException, std::exception)
+    void SAL_CALL OFormNavigationHelper::statusChanged( const FeatureStateEvent& _rState )
     {
-        for (   FeatureMap::iterator aFeature = m_aSupportedFeatures.begin();
-                aFeature != m_aSupportedFeatures.end();
-                ++aFeature
-            )
+        for (auto & feature : m_aSupportedFeatures)
         {
-            if ( aFeature->second.aURL.Main == _rState.FeatureURL.Main )
+            if ( feature.second.aURL.Main == _rState.FeatureURL.Main )
             {
-                if  (  ( aFeature->second.bCachedState != bool(_rState.IsEnabled) )
-                    || ( aFeature->second.aCachedAdditionalState != _rState.State )
+                if  (  ( feature.second.bCachedState != bool(_rState.IsEnabled) )
+                    || ( feature.second.aCachedAdditionalState != _rState.State )
                     )
                 {
                     // change the cached state
-                    aFeature->second.bCachedState           = _rState.IsEnabled;
-                    aFeature->second.aCachedAdditionalState = _rState.State;
+                    feature.second.bCachedState           = _rState.IsEnabled;
+                    feature.second.aCachedAdditionalState = _rState.State;
                     // tell derivees what happened
-                    featureStateChanged( aFeature->first, _rState.IsEnabled );
+                    featureStateChanged( feature.first, _rState.IsEnabled );
                 }
                 return;
             }
@@ -119,25 +116,22 @@ namespace frm
     }
 
 
-    void SAL_CALL OFormNavigationHelper::disposing( const EventObject& _rSource ) throw (RuntimeException, std::exception)
+    void SAL_CALL OFormNavigationHelper::disposing( const EventObject& _rSource )
     {
         // was it one of our external dispatchers?
         if ( m_nConnectedFeatures )
         {
-            for (   FeatureMap::iterator aFeature = m_aSupportedFeatures.begin();
-                    aFeature != m_aSupportedFeatures.end();
-                    ++aFeature
-                )
+            for (auto & feature : m_aSupportedFeatures)
             {
-                if ( aFeature->second.xDispatcher == _rSource.Source )
+                if ( feature.second.xDispatcher == _rSource.Source )
                 {
-                    aFeature->second.xDispatcher->removeStatusListener( static_cast< XStatusListener* >( this ), aFeature->second.aURL );
-                    aFeature->second.xDispatcher = nullptr;
-                    aFeature->second.bCachedState = false;
-                    aFeature->second.aCachedAdditionalState.clear();
+                    feature.second.xDispatcher->removeStatusListener( static_cast< XStatusListener* >( this ), feature.second.aURL );
+                    feature.second.xDispatcher = nullptr;
+                    feature.second.bCachedState = false;
+                    feature.second.aCachedAdditionalState.clear();
                     --m_nConnectedFeatures;
 
-                    featureStateChanged( aFeature->first, false );
+                    featureStateChanged( feature.first, false );
                     break;
                 }
             }
@@ -160,29 +154,26 @@ namespace frm
         Reference< XDispatch >  xNewDispatcher;
         Reference< XDispatch >  xCurrentDispatcher;
 
-        for (   FeatureMap::iterator aFeature = m_aSupportedFeatures.begin();
-                aFeature != m_aSupportedFeatures.end();
-                ++aFeature
-            )
+        for (auto & feature : m_aSupportedFeatures)
         {
-            xNewDispatcher = queryDispatch( aFeature->second.aURL );
-            xCurrentDispatcher = aFeature->second.xDispatcher;
+            xNewDispatcher = queryDispatch( feature.second.aURL );
+            xCurrentDispatcher = feature.second.xDispatcher;
             if ( xNewDispatcher != xCurrentDispatcher )
             {
                 // the dispatcher for this particular URL changed
                 if ( xCurrentDispatcher.is() )
-                    xCurrentDispatcher->removeStatusListener( static_cast< XStatusListener* >( this ), aFeature->second.aURL );
+                    xCurrentDispatcher->removeStatusListener( static_cast< XStatusListener* >( this ), feature.second.aURL );
 
-                xCurrentDispatcher = aFeature->second.xDispatcher = xNewDispatcher;
+                xCurrentDispatcher = feature.second.xDispatcher = xNewDispatcher;
 
                 if ( xCurrentDispatcher.is() )
-                    xCurrentDispatcher->addStatusListener( static_cast< XStatusListener* >( this ), aFeature->second.aURL );
+                    xCurrentDispatcher->addStatusListener( static_cast< XStatusListener* >( this ), feature.second.aURL );
             }
 
             if ( xCurrentDispatcher.is() )
                 ++m_nConnectedFeatures;
             else
-                aFeature->second.bCachedState = false;
+                feature.second.bCachedState = false;
         }
 
         // notify derivee that (potentially) all features changed their state
@@ -202,18 +193,15 @@ namespace frm
 
         m_nConnectedFeatures = 0;
 
-        for (   FeatureMap::iterator aFeature = m_aSupportedFeatures.begin();
-                aFeature != m_aSupportedFeatures.end();
-                ++aFeature
-            )
+        for (auto & feature : m_aSupportedFeatures)
         {
-            aFeature->second.bCachedState = false;
-            aFeature->second.aCachedAdditionalState.clear();
-            aFeature->second.xDispatcher = queryDispatch( aFeature->second.aURL );
-            if ( aFeature->second.xDispatcher.is() )
+            feature.second.bCachedState = false;
+            feature.second.aCachedAdditionalState.clear();
+            feature.second.xDispatcher = queryDispatch( feature.second.aURL );
+            if ( feature.second.xDispatcher.is() )
             {
                 ++m_nConnectedFeatures;
-                aFeature->second.xDispatcher->addStatusListener( static_cast< XStatusListener* >( this ), aFeature->second.aURL );
+                feature.second.xDispatcher->addStatusListener( static_cast< XStatusListener* >( this ), feature.second.aURL );
             }
         }
 
@@ -226,17 +214,14 @@ namespace frm
     {
         if ( m_nConnectedFeatures )
         {
-            for (   FeatureMap::iterator aFeature = m_aSupportedFeatures.begin();
-                    aFeature != m_aSupportedFeatures.end();
-                    ++aFeature
-                )
+            for (auto & feature : m_aSupportedFeatures)
             {
-                if ( aFeature->second.xDispatcher.is() )
-                    aFeature->second.xDispatcher->removeStatusListener( static_cast< XStatusListener* >( this ), aFeature->second.aURL );
+                if ( feature.second.xDispatcher.is() )
+                    feature.second.xDispatcher->removeStatusListener( static_cast< XStatusListener* >( this ), feature.second.aURL );
 
-                aFeature->second.xDispatcher = nullptr;
-                aFeature->second.bCachedState = false;
-                aFeature->second.aCachedAdditionalState.clear();
+                feature.second.xDispatcher = nullptr;
+                feature.second.bCachedState = false;
+                feature.second.aCachedAdditionalState.clear();
             }
 
             m_nConnectedFeatures = 0;
@@ -257,20 +242,17 @@ namespace frm
 
             OFormNavigationMapper aUrlMapper( m_xORB );
 
-            for (   ::std::vector< sal_Int16 >::const_iterator aLoop = aFeatureIds.begin();
-                    aLoop != aFeatureIds.end();
-                    ++aLoop
-                )
+            for (auto const& feature : aFeatureIds)
             {
                 FeatureInfo aFeatureInfo;
 
                 bool bKnownId =
-                    aUrlMapper.getFeatureURL( *aLoop, aFeatureInfo.aURL );
+                    aUrlMapper.getFeatureURL( feature, aFeatureInfo.aURL );
                 DBG_ASSERT( bKnownId, "OFormNavigationHelper::initializeSupportedFeatures: unknown feature id!" );
 
                 if ( bKnownId )
                     // add to our map
-                    m_aSupportedFeatures.insert( FeatureMap::value_type( *aLoop, aFeatureInfo ) );
+                    m_aSupportedFeatures.emplace( feature, aFeatureInfo );
             }
         }
     }
@@ -332,7 +314,7 @@ namespace frm
         if ( m_aSupportedFeatures.end() != aInfo )
             aInfo->second.aCachedAdditionalState >>= bState;
 
-        return (bool)bState;
+        return bState;
     }
 
 

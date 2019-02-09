@@ -22,12 +22,14 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltoken.hxx>
 #include "txtparai.hxx"
-#include "txtlists.hxx"
+#include <txtlists.hxx>
 #include "XMLTextListBlockContext.hxx"
 #include <xmloff/txtimp.hxx>
 #include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/style/XStyle.hpp>
 #include <xmloff/xmlnumi.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "XMLTextListItemContext.hxx"
 
 
@@ -49,7 +51,6 @@ XMLTextListItemContext::XMLTextListItemContext(
       mnSubListCount( 0 ),
       mxNumRulesOverride()
 {
-    static const char s_NumberingRules[] = "NumberingRules";
     sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
     for( sal_Int16 i=0; i < nAttrCount; i++ )
     {
@@ -65,12 +66,12 @@ XMLTextListItemContext::XMLTextListItemContext(
         {
             sal_Int32 nTmp = rValue.toInt32();
             if( nTmp >= 0 && nTmp <= SHRT_MAX )
-                nStartValue = (sal_Int16)nTmp;
+                nStartValue = static_cast<sal_Int16>(nTmp);
         }
         else if ( nPrefix == XML_NAMESPACE_TEXT &&
                   IsXMLToken( aLocalName, XML_STYLE_OVERRIDE ) )
         {
-            const OUString sListStyleOverrideName = rValue;
+            const OUString& sListStyleOverrideName = rValue;
             if ( !sListStyleOverrideName.isEmpty() )
             {
                 OUString sDisplayStyleName(
@@ -85,7 +86,7 @@ XMLTextListItemContext::XMLTextListItemContext(
                     aAny >>= xStyle;
 
                     uno::Reference< beans::XPropertySet > xPropSet( xStyle, UNO_QUERY );
-                    aAny = xPropSet->getPropertyValue(s_NumberingRules);
+                    aAny = xPropSet->getPropertyValue("NumberingRules");
                     aAny >>= mxNumRulesOverride;
                 }
                 else
@@ -107,7 +108,6 @@ XMLTextListItemContext::XMLTextListItemContext(
         else if ( (XML_NAMESPACE_XML == nPrefix) &&
              IsXMLToken(aLocalName, XML_ID)   )
         {
-            (void) rValue;
 //FIXME: there is no UNO API for list items
         }
     }
@@ -130,7 +130,7 @@ void XMLTextListItemContext::EndElement()
     rTxtImport.GetTextListHelper().SetListItem( nullptr );
 }
 
-SvXMLImportContext *XMLTextListItemContext::CreateChildContext(
+SvXMLImportContextRef XMLTextListItemContext::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< xml::sax::XAttributeList > & xAttrList )
@@ -143,6 +143,7 @@ SvXMLImportContext *XMLTextListItemContext::CreateChildContext(
     {
     case XML_TOK_TEXT_H:
         bHeading = true;
+        [[fallthrough]];
     case XML_TOK_TEXT_P:
         pContext = new XMLParaContext( GetImport(),
                                        nPrefix, rLocalName,

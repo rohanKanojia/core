@@ -39,12 +39,12 @@ struct ParsedAddrSpec
 
     bool isValid() const { return isPoorlyValid() && m_bAtFound; }
 
-    inline void reset();
+    void reset();
 
-    inline void finish();
+    void finish();
 };
 
-inline void ParsedAddrSpec::reset()
+void ParsedAddrSpec::reset()
 {
     m_pBegin = nullptr;
     m_pEnd = nullptr;
@@ -53,7 +53,7 @@ inline void ParsedAddrSpec::reset()
     m_bReparse = false;
 }
 
-inline void ParsedAddrSpec::finish()
+void ParsedAddrSpec::finish()
 {
     if (isPoorlyValid())
         m_eLastElem = ELEMENT_END;
@@ -97,7 +97,7 @@ class SvAddressParser_Impl
 
     inline void reset();
 
-    inline void addTokenToAddrSpec(ElementType eTokenElem);
+    void addTokenToAddrSpec(ElementType eTokenElem);
 
     inline void addTokenToRealName();
 
@@ -136,7 +136,7 @@ inline void SvAddressParser_Impl::reset()
     m_eType = TOKEN_ATOM;
 }
 
-inline void SvAddressParser_Impl::addTokenToAddrSpec(ElementType eTokenElem)
+void SvAddressParser_Impl::addTokenToAddrSpec(ElementType eTokenElem)
 {
     if (!m_pAddrSpec->m_pBegin)
         m_pAddrSpec->m_pBegin = m_pCurTokenBegin;
@@ -629,7 +629,7 @@ SvAddressParser_Impl::SvAddressParser_Impl(SvAddressParser * pParser,
                         aTheAddrSpec = reparse(m_pAddrSpec->m_pBegin, m_pAddrSpec->m_pEnd, true);
                     else
                     {
-                        sal_Int32 nLen = ( m_pAddrSpec->m_pEnd - m_pAddrSpec->m_pBegin);
+                        sal_Int32 nLen = m_pAddrSpec->m_pEnd - m_pAddrSpec->m_pBegin;
                         if (nLen == rInput.getLength())
                             aTheAddrSpec = rInput;
                         else
@@ -656,15 +656,14 @@ SvAddressParser_Impl::SvAddressParser_Impl(SvAddressParser * pParser,
                         aTheRealName = reparse(m_pRealNameBegin, m_pRealNameEnd, false);
                     else
                     {
-                        sal_Int32 nLen = (m_pRealNameContentEnd - m_pRealNameContentBegin);
+                        sal_Int32 nLen = m_pRealNameContentEnd - m_pRealNameContentBegin;
                         if (nLen == rInput.getLength())
                             aTheRealName = rInput;
                         else
                             aTheRealName = rInput.copy( (m_pRealNameContentBegin - rInput.getStr()), nLen);
                     }
                     if (pParser->m_bHasFirst)
-                        pParser->m_aRest.push_back(new SvAddressEntry_Impl( aTheAddrSpec,
-                                                                            aTheRealName) );
+                        pParser->m_aRest.emplace_back( aTheAddrSpec, aTheRealName );
                     else
                     {
                         pParser->m_bHasFirst = true;
@@ -729,9 +728,6 @@ SvAddressParser::SvAddressParser(const OUString& rInput)
 
 SvAddressParser::~SvAddressParser()
 {
-    for ( size_t i = m_aRest.size(); i > 0; )
-        delete m_aRest[ --i ];
-    m_aRest.clear();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

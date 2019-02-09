@@ -34,7 +34,6 @@ namespace drawinglayer
             OUString                                    maStyleName;        // Font Style Name
             sal_uInt16                                  mnWeight;           // Font weight
 
-            /// bitfield
             bool                                        mbSymbol : 1;       // Symbol Font Flag
             bool                                        mbVertical : 1;     // Vertical Text Flag
             bool                                        mbItalic : 1;       // Italic Flag
@@ -135,20 +134,15 @@ namespace drawinglayer
         {
         }
 
-        FontAttribute::FontAttribute(const FontAttribute& rCandidate)
-        :   mpFontAttribute(rCandidate.mpFontAttribute)
-        {
-        }
+        FontAttribute::FontAttribute(const FontAttribute&) = default;
 
-        FontAttribute::~FontAttribute()
-        {
-        }
+        FontAttribute::FontAttribute(FontAttribute&&) = default;
 
-        FontAttribute& FontAttribute::operator=(const FontAttribute& rCandidate)
-        {
-            mpFontAttribute = rCandidate.mpFontAttribute;
-            return *this;
-        }
+        FontAttribute::~FontAttribute() = default;
+
+        FontAttribute& FontAttribute::operator=(const FontAttribute&) = default;
+
+        FontAttribute& FontAttribute::operator=(FontAttribute&&) = default;
 
         bool FontAttribute::operator==(const FontAttribute& rCandidate) const
         {

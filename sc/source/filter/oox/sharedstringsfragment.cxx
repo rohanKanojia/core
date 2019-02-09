@@ -17,10 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sharedstringsfragment.hxx"
+#include <sharedstringsfragment.hxx>
+#include <biffhelper.hxx>
 
-#include "richstringcontext.hxx"
-#include "sharedstringsbuffer.hxx"
+#include <richstringcontext.hxx>
+#include <sharedstringsbuffer.hxx>
+#include <oox/token/namespaces.hxx>
 
 namespace oox {
 namespace xls {

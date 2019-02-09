@@ -18,6 +18,7 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <cassert>
 
@@ -153,7 +154,7 @@ EWorkingMode TransactionManager::getWorkingMode() const
 
     @param      "eMode"     ,used to enable/disable throwing exceptions automatically for rejected calls
 *//*-*****************************************************************************************************/
-void  TransactionManager::registerTransaction( EExceptionMode eMode ) throw( css::uno::RuntimeException, css::lang::DisposedException )
+void  TransactionManager::registerTransaction( EExceptionMode eMode )
 {
     ::osl::MutexGuard aAccessGuard( m_aAccessLock );
     switch( m_eWorkingMode )
@@ -164,7 +165,7 @@ void  TransactionManager::registerTransaction( EExceptionMode eMode ) throw( css
             // Help programmer to find out, why this exception is thrown!
             SAL_WARN( "fwk", "TransactionManager...: Owner instance not correctly initialized yet. Call was rejected! Normally it's an algorithm error ... wrong use of class!" );
             //ATTENTION: temp. disabled - till all bad code positions are detected and changed! */
-            // throw css::uno::RuntimeException( "TransactionManager...\nOwner instance not right initialized yet. Call was rejected! Normally it's an algorithm error... wrong using of class!\n", css::uno::Reference< css::uno::XInterface >() );
+            // throw css::uno::RuntimeException( "TransactionManager.: Owner instance not right initialized yet. Call was rejected! Normally it's an algorithm error... wrong using of class!\n", css::uno::Reference< css::uno::XInterface >() );
         }
         break;
     case E_WORK:
@@ -174,13 +175,13 @@ void  TransactionManager::registerTransaction( EExceptionMode eMode ) throw( css
         {
             // Help programmer to find out, why this exception is thrown!
             SAL_WARN( "fwk", "TransactionManager...: Owner instance stand in close method. Call was rejected!" );
-            throw css::lang::DisposedException( "TransactionManager...\nOwner instance stand in close method. Call was rejected!" );
+            throw css::lang::DisposedException( "TransactionManager: Owner instance stand in close method. Call was rejected!" );
         }
         break;
     case E_CLOSE:
         // Help programmer to find out, why this exception is thrown!
         SAL_WARN( "fwk", "TransactionManager...: Owner instance already closed. Call was rejected!" );
-        throw css::lang::DisposedException( "TransactionManager...\nOwner instance already closed. Call was rejected!" );
+        throw css::lang::DisposedException( "TransactionManager: Owner instance already closed. Call was rejected!" );
     }
 
     // Register this new transaction.
@@ -198,7 +199,7 @@ void  TransactionManager::registerTransaction( EExceptionMode eMode ) throw( css
 
     @seealso    method registerTransaction()
 *//*-*****************************************************************************************************/
-void  TransactionManager::unregisterTransaction() throw( css::uno::RuntimeException, css::lang::DisposedException )
+void  TransactionManager::unregisterTransaction()
 {
     // This call could not rejected!
     // Safe access to internal member.

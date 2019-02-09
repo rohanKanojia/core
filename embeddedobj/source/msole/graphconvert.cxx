@@ -27,21 +27,21 @@
 #include <com/sun/star/graphic/XGraphicProvider.hpp>
 #include <com/sun/star/graphic/XGraphic.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <osl/mutex.hxx>
 #include <unotools/streamwrap.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/seqstream.hxx>
 #include <tools/stream.hxx>
 #include <vcl/graphicfilter.hxx>
 
+#include "graphconvert.hxx"
 #include "mtnotification.hxx"
-#include "oleembobj.hxx"
+#include <oleembobj.hxx>
 
 
 using namespace ::com::sun::star;
 
 
-sal_Bool ConvertBufferToFormat( void* pBuf,
+bool ConvertBufferToFormat( void* pBuf,
                                 sal_uInt32 nBufSize,
                                 const OUString& aMimeType,
                                 uno::Any& aResult )
@@ -53,14 +53,14 @@ sal_Bool ConvertBufferToFormat( void* pBuf,
         SvMemoryStream aMemoryStream(pBuf, nBufSize, StreamMode::READ);
         GraphicFilter& rFilter = GraphicFilter::GetGraphicFilter();
         sal_uInt16 nRetFormat = 0;
-        if (rFilter.CanImportGraphic(OUString(), aMemoryStream, GRFILTER_FORMAT_DONTKNOW, &nRetFormat) == GRFILTER_OK &&
+        if (rFilter.CanImportGraphic(OUString(), aMemoryStream, GRFILTER_FORMAT_DONTKNOW, &nRetFormat) == ERRCODE_NONE &&
                 rFilter.GetImportFormatMediaType(nRetFormat) == aMimeType)
         {
-            aResult <<= uno::Sequence< sal_Int8 >( reinterpret_cast< const sal_Int8* >( aMemoryStream.GetData() ), aMemoryStream.Seek( STREAM_SEEK_TO_END ) );
-            return sal_True;
+            aResult <<= uno::Sequence< sal_Int8 >( static_cast< const sal_Int8* >( aMemoryStream.GetData() ), aMemoryStream.TellEnd() );
+            return true;
         }
 
-        uno::Sequence < sal_Int8 > aData( (sal_Int8*)pBuf, nBufSize );
+        uno::Sequence < sal_Int8 > aData( static_cast<sal_Int8*>(pBuf), nBufSize );
         uno::Reference < io::XInputStream > xIn = new comphelper::SequenceInputStream( aData );
         try
         {
@@ -80,15 +80,15 @@ sal_Bool ConvertBufferToFormat( void* pBuf,
                 aOutMediaProperties[1].Value <<= aMimeType;
 
                 xGraphicProvider->storeGraphic( xGraphic, aOutMediaProperties );
-                aResult <<= uno::Sequence< sal_Int8 >( reinterpret_cast< const sal_Int8* >( aNewStream.GetData() ), aNewStream.Seek( STREAM_SEEK_TO_END ) );
-                return sal_True;
+                aResult <<= uno::Sequence< sal_Int8 >( static_cast< const sal_Int8* >( aNewStream.GetData() ), aNewStream.TellEnd() );
+                return true;
             }
         }
         catch (const uno::Exception&)
         {}
     }
 
-    return sal_False;
+    return false;
 }
 
 
@@ -101,7 +101,7 @@ MainThreadNotificationRequest::MainThreadNotificationRequest( const ::rtl::Refer
 , m_nAspect( nAspect )
 {}
 
-void SAL_CALL MainThreadNotificationRequest::notify (const uno::Any& ) throw (uno::RuntimeException)
+void SAL_CALL MainThreadNotificationRequest::notify (const uno::Any& )
 {
     if ( m_pObject )
     {
@@ -116,7 +116,7 @@ void SAL_CALL MainThreadNotificationRequest::notify (const uno::Any& ) throw (un
                 else if ( m_nAspect == embed::Aspects::MSOLE_CONTENT )
                     m_pObject->OnViewChanged_Impl();
                 else if ( m_nAspect == embed::Aspects::MSOLE_ICON )
-                    m_pObject->OnIconChanged_Impl();
+                    OleEmbeddedObject::OnIconChanged_Impl();
             }
         }
         catch( const uno::Exception& )

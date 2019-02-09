@@ -20,19 +20,20 @@
 #include <memory>
 #include <utility>
 
+#include <sal/log.hxx>
 #include <sfx2/objsh.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/builderfactory.hxx>
-#include <osl/mutex.hxx>
 
-#include <cuires.hrc>
-#include "scriptdlg.hxx"
+#include <strings.hrc>
+#include <bitmaps.hlst>
+#include <scriptdlg.hxx>
 #include <dialmgr.hxx>
-#include "selector.hxx"
+#include <cfgutil.hxx>
 
 #include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/frame/XDesktop.hpp>
+#include <com/sun/star/script/provider/ScriptFrameworkErrorException.hpp>
 #include <com/sun/star/script/provider/XScriptProviderSupplier.hpp>
 #include <com/sun/star/script/provider/XScriptProvider.hpp>
 #include <com/sun/star/script/browse/BrowseNodeTypes.hpp>
@@ -47,17 +48,12 @@
 #include <com/sun/star/script/XInvocation.hpp>
 #include <com/sun/star/document/XEmbeddedScripts.hpp>
 
-#include <cppuhelper/implbase1.hxx>
 #include <comphelper/documentinfo.hxx>
-#include <comphelper/uno3.hxx>
 #include <comphelper/processfactory.hxx>
-#include <comphelper/broadcasthelper.hxx>
-#include <comphelper/propertycontainer.hxx>
-#include <comphelper/proparrhlp.hxx>
 
 #include <basic/sbx.hxx>
 #include <svtools/imagemgr.hxx>
-#include "svtools/treelistentry.hxx"
+#include <vcl/treelistentry.hxx>
 #include <tools/urlobj.hxx>
 #include <vector>
 #include <algorithm>
@@ -68,29 +64,27 @@ using namespace css::script;
 using namespace css::frame;
 using namespace css::document;
 
-void ShowErrorDialog( const Any& aException )
+static void ShowErrorDialog( const Any& aException )
 {
-    std::unique_ptr<SvxScriptErrorDialog> pDlg(new SvxScriptErrorDialog( nullptr, aException ));
+    ScopedVclPtrInstance<SvxScriptErrorDialog> pDlg( aException );
     pDlg->Execute();
 }
 
 SFTreeListBox::SFTreeListBox(vcl::Window* pParent)
     : SvTreeListBox(pParent)
-    , m_hdImage(CUI_RES(RID_CUIIMG_HARDDISK))
-    , m_libImage(CUI_RES(RID_CUIIMG_LIB))
-    , m_macImage(CUI_RES(RID_CUIIMG_MACRO))
-    , m_docImage(CUI_RES(RID_CUIIMG_DOC))
-    , m_sMyMacros(CUI_RESSTR(RID_SVXSTR_MYMACROS))
-    , m_sProdMacros(CUI_RESSTR(RID_SVXSTR_PRODMACROS))
+    , m_hdImage(StockImage::Yes, RID_CUIBMP_HARDDISK)
+    , m_libImage(StockImage::Yes, RID_CUIBMP_LIB)
+    , m_macImage(StockImage::Yes, RID_CUIBMP_MACRO)
+    , m_docImage(StockImage::Yes, RID_CUIBMP_DOC)
+    , m_sMyMacros(CuiResId(RID_SVXSTR_MYMACROS))
+    , m_sProdMacros(CuiResId(RID_SVXSTR_PRODMACROS))
 {
-    SetSelectionMode( SINGLE_SELECTION );
+    SetSelectionMode( SelectionMode::Single );
 
     SetStyle( GetStyle() | WB_CLIPCHILDREN | WB_HSCROLL |
                    WB_HASBUTTONS | WB_HASBUTTONSATROOT | WB_HIDESELECTION |
                    WB_HASLINES | WB_HASLINESATROOT | WB_TABSTOP );
     SetNodeDefaultImages();
-
-    nMode = 0xFF;    // everything
 }
 
 VCL_BUILDER_FACTORY(SFTreeListBox)
@@ -131,7 +125,7 @@ void SFTreeListBox::deleteTree( SvTreeListEntry* pEntry )
     pEntry = FirstChild( pEntry );
     while ( pEntry )
     {
-        SvTreeListEntry* pNextEntry = NextSibling( pEntry );
+        SvTreeListEntry* pNextEntry = pEntry->NextSibling();
         deleteTree( pEntry );
         GetModel()->Remove( pEntry );
         pEntry = pNextEntry;
@@ -147,7 +141,7 @@ void SFTreeListBox::deleteAllTree()
     {
         while ( pEntry )
         {
-            SvTreeListEntry* pNextEntry = NextSibling( pEntry ) ;
+            SvTreeListEntry* pNextEntry = pEntry->NextSibling();
             deleteTree( pEntry );
             GetModel()->Remove( pEntry );
             pEntry = pNextEntry;
@@ -168,7 +162,7 @@ void SFTreeListBox::Init( const OUString& language  )
     Sequence< Reference< browse::XBrowseNode > > children;
 
     OUString userStr("user");
-    OUString shareStr("share");
+    OUString const shareStr("share");
 
     try
     {
@@ -184,9 +178,7 @@ void SFTreeListBox::Init( const OUString& language  )
     }
     catch( Exception& e )
     {
-        OSL_TRACE("Exception getting root browse node from factory: %s",
-            OUStringToOString(
-                e.Message , RTL_TEXTENCODING_ASCII_US ).pData->buffer );
+        SAL_WARN("cui.dialogs", "Exception getting root browse node from factory: " << e );
         // TODO exception handling
     }
 
@@ -196,10 +188,10 @@ void SFTreeListBox::Init( const OUString& language  )
         bool app = false;
         OUString uiName = children[ n ]->getName();
         OUString factoryURL;
-        if ( uiName.equals( userStr ) || uiName.equals( shareStr ) )
+        if ( uiName == userStr || uiName == shareStr )
         {
             app = true;
-            if ( uiName.equals( userStr ) )
+            if ( uiName == userStr )
             {
                 uiName = m_sMyMacros;
             }
@@ -237,19 +229,18 @@ void SFTreeListBox::Init( const OUString& language  )
             }
         }
 
-        OUString lang( language );
         Reference< browse::XBrowseNode > langEntries =
-            getLangNodeFromRootNode( children[ n ], lang );
+            getLangNodeFromRootNode( children[ n ], language );
 
-        insertEntry( uiName, app ? RID_CUIIMG_HARDDISK : RID_CUIIMG_DOC,
-            nullptr, true, std::unique_ptr< SFEntry >(new SFEntry( OBJTYPE_SFROOT, langEntries, xDocumentModel )), factoryURL );
+        insertEntry( uiName, app ? OUStringLiteral(RID_CUIBMP_HARDDISK) : OUStringLiteral(RID_CUIBMP_DOC),
+            nullptr, true, std::make_unique< SFEntry >( langEntries, xDocumentModel ), factoryURL );
     }
 
     SetUpdateMode( true );
 }
 
 Reference< XInterface  >
-SFTreeListBox::getDocumentModel( Reference< XComponentContext >& xCtx, OUString& docName )
+SFTreeListBox::getDocumentModel( Reference< XComponentContext > const & xCtx, OUString const & docName )
 {
     Reference< XInterface > xModel;
     Reference< frame::XDesktop2 > desktop  = frame::Desktop::create(xCtx);
@@ -265,7 +256,7 @@ SFTreeListBox::getDocumentModel( Reference< XComponentContext >& xCtx, OUString&
         if ( model.is() )
         {
             OUString sTdocUrl = ::comphelper::DocumentInfo::getDocumentTitle( model );
-            if( sTdocUrl.equals( docName ) )
+            if( sTdocUrl == docName )
             {
                 xModel = model;
                 break;
@@ -276,7 +267,7 @@ SFTreeListBox::getDocumentModel( Reference< XComponentContext >& xCtx, OUString&
 }
 
 Reference< browse::XBrowseNode >
-SFTreeListBox::getLangNodeFromRootNode( Reference< browse::XBrowseNode >& rootNode, OUString& language )
+SFTreeListBox::getLangNodeFromRootNode( Reference< browse::XBrowseNode > const & rootNode, OUString const & language )
 {
     Reference< browse::XBrowseNode > langNode;
 
@@ -285,7 +276,7 @@ SFTreeListBox::getLangNodeFromRootNode( Reference< browse::XBrowseNode >& rootNo
         Sequence < Reference< browse::XBrowseNode > > children = rootNode->getChildNodes();
         for ( sal_Int32 n = 0; n < children.getLength(); n++ )
         {
-            if ( children[ n ]->getName().equals( language ) )
+            if ( children[ n ]->getName() == language )
             {
                 langNode = children[ n ];
                 break;
@@ -300,7 +291,7 @@ SFTreeListBox::getLangNodeFromRootNode( Reference< browse::XBrowseNode >& rootNo
     return langNode;
 }
 
-void SFTreeListBox:: RequestSubEntries( SvTreeListEntry* pRootEntry, Reference< css::script::browse::XBrowseNode >& node,
+void SFTreeListBox:: RequestSubEntries( SvTreeListEntry* pRootEntry, Reference< css::script::browse::XBrowseNode > const & node,
                                        Reference< XModel >& model )
 {
     if (! node.is() )
@@ -323,15 +314,11 @@ void SFTreeListBox:: RequestSubEntries( SvTreeListEntry* pRootEntry, Reference< 
         OUString name( children[ n ]->getName() );
         if (  children[ n ]->getType() !=  browse::BrowseNodeTypes::SCRIPT)
         {
-            insertEntry( name, RID_CUIIMG_LIB, pRootEntry, true, std::unique_ptr< SFEntry >(new SFEntry( OBJTYPE_SCRIPTCONTAINER, children[ n ],model )));
+            insertEntry(name, RID_CUIBMP_LIB, pRootEntry, true, std::make_unique< SFEntry >( children[ n ],model));
         }
         else
         {
-            if ( children[ n ]->getType() == browse::BrowseNodeTypes::SCRIPT )
-            {
-                insertEntry( name, RID_CUIIMG_MACRO, pRootEntry, false, std::unique_ptr< SFEntry >(new SFEntry( OBJTYPE_METHOD, children[ n ],model )));
-
-            }
+            insertEntry(name, RID_CUIBMP_MACRO, pRootEntry, false, std::make_unique< SFEntry >( children[ n ],model));
         }
     }
 }
@@ -342,11 +329,11 @@ bool SFTreeListBox::ExpandingHdl()
 }
 
 SvTreeListEntry * SFTreeListBox::insertEntry(
-    OUString const & rText, sal_uInt16 nBitmap, SvTreeListEntry * pParent,
+    OUString const & rText, OUString const & rBitmap, SvTreeListEntry * pParent,
     bool bChildrenOnDemand, std::unique_ptr< SFEntry > && aUserData, const OUString& factoryURL )
 {
     SvTreeListEntry * p;
-    if( nBitmap == RID_CUIIMG_DOC && !factoryURL.isEmpty() )
+    if (rBitmap == RID_CUIBMP_DOC && !factoryURL.isEmpty())
     {
         Image aImage = SvFileInformationManager::GetFileImage( INetURLObject(factoryURL) );
         p = InsertEntry(
@@ -355,36 +342,36 @@ SvTreeListEntry * SFTreeListBox::insertEntry(
     }
     else
     {
-        p = insertEntry( rText, nBitmap, pParent, bChildrenOnDemand, std::move(aUserData) );
+        p = insertEntry(rText, rBitmap, pParent, bChildrenOnDemand, std::move(aUserData));
     }
     return p;
 }
 
 SvTreeListEntry * SFTreeListBox::insertEntry(
-    OUString const & rText, sal_uInt16 nBitmap, SvTreeListEntry * pParent,
+    OUString const & rText, const OUString &rBitmap, SvTreeListEntry * pParent,
     bool bChildrenOnDemand, std::unique_ptr< SFEntry > && aUserData )
 {
     Image aImage;
-    if( nBitmap == RID_CUIIMG_HARDDISK )
+    if (rBitmap == RID_CUIBMP_HARDDISK)
     {
         aImage = m_hdImage;
     }
-    else if( nBitmap == RID_CUIIMG_LIB )
+    else if (rBitmap == RID_CUIBMP_LIB)
     {
         aImage = m_libImage;
     }
-    else if( nBitmap == RID_CUIIMG_MACRO )
+    else if (rBitmap == RID_CUIBMP_MACRO)
     {
         aImage = m_macImage;
     }
-    else if( nBitmap == RID_CUIIMG_DOC )
+    else if (rBitmap == RID_CUIBMP_DOC)
     {
         aImage = m_docImage;
     }
     SvTreeListEntry * p = InsertEntry(
         rText, aImage, aImage, pParent, bChildrenOnDemand, TREELIST_APPEND,
         aUserData.release()); // XXX possible leak
-   return p;
+    return p;
 }
 
 void SFTreeListBox::RequestingChildren( SvTreeListEntry* pEntry )
@@ -411,45 +398,32 @@ void SFTreeListBox::ExpandedHdl()
 {
 }
 
-
 // CuiInputDialog ------------------------------------------------------------
-
-CuiInputDialog::CuiInputDialog(vcl::Window * pParent, InputDialogMode nMode )
-    : ModalDialog(pParent, "NewLibDialog",
-        "cui/ui/newlibdialog.ui")
+CuiInputDialog::CuiInputDialog(weld::Window * pParent, InputDialogMode nMode)
+    : GenericDialogController(pParent, "cui/ui/newlibdialog.ui", "NewLibDialog")
+    , m_xEdit(m_xBuilder->weld_entry("entry"))
 {
-    get(m_pEdit, "entry");
-    m_pEdit->GrabFocus();
+    m_xEdit->grab_focus();
 
-    FixedText *pNewLibFT = get<FixedText>("newlibft");
+    std::unique_ptr<weld::Label> xNewLibFT(m_xBuilder->weld_label("newlibft"));
 
     if ( nMode == InputDialogMode::NEWMACRO )
     {
-        pNewLibFT->Hide();
-        FixedText *pNewMacroFT = get<FixedText>("newmacroft");
-        pNewMacroFT->Show();
-        SetText(get<FixedText>("altmacrotitle")->GetText());
+        xNewLibFT->hide();
+        std::unique_ptr<weld::Label> xNewMacroFT(m_xBuilder->weld_label("newmacroft"));
+        xNewMacroFT->show();
+        std::unique_ptr<weld::Label> xAltTitle(m_xBuilder->weld_label("altmacrotitle"));
+        m_xDialog->set_title(xAltTitle->get_label());
     }
     else if ( nMode == InputDialogMode::RENAME )
     {
-        pNewLibFT->Hide();
-        FixedText *pRenameFT = get<FixedText>("renameft");
-        pRenameFT->Show();
-        SetText(get<FixedText>("altrenametitle")->GetText());
+        xNewLibFT->hide();
+        std::unique_ptr<weld::Label> xRenameFT(m_xBuilder->weld_label("renameft"));
+        xRenameFT->show();
+        std::unique_ptr<weld::Label> xAltTitle(m_xBuilder->weld_label("altrenametitle"));
+        m_xDialog->set_title(xAltTitle->get_label());
     }
 }
-
-CuiInputDialog::~CuiInputDialog()
-{
-    disposeOnce();
-}
-
-void CuiInputDialog::dispose()
-{
-    m_pEdit.clear();
-    ModalDialog::dispose();
-}
-
 
 // ScriptOrgDialog ------------------------------------------------------------
 
@@ -457,15 +431,15 @@ SvxScriptOrgDialog::SvxScriptOrgDialog( vcl::Window* pParent, const OUString& la
     : SfxModalDialog(pParent, "ScriptOrganizerDialog",
         "cui/ui/scriptorganizer.ui")
     , m_sLanguage(language)
-    , m_delErrStr(CUI_RESSTR(RID_SVXSTR_DELFAILED))
-    , m_delErrTitleStr(CUI_RESSTR(RID_SVXSTR_DELFAILED_TITLE))
-    , m_delQueryStr(CUI_RES(RID_SVXSTR_DELQUERY))
-    , m_delQueryTitleStr(CUI_RESSTR(RID_SVXSTR_DELQUERY_TITLE))
-    , m_createErrStr(CUI_RESSTR(RID_SVXSTR_CREATEFAILED))
-    , m_createDupStr(CUI_RESSTR(RID_SVXSTR_CREATEFAILEDDUP))
-    , m_createErrTitleStr(CUI_RESSTR(RID_SVXSTR_CREATEFAILED_TITLE))
-    , m_renameErrStr(CUI_RESSTR(RID_SVXSTR_RENAMEFAILED))
-    , m_renameErrTitleStr(CUI_RESSTR(RID_SVXSTR_RENAMEFAILED_TITLE))
+    , m_delErrStr(CuiResId(RID_SVXSTR_DELFAILED))
+    , m_delErrTitleStr(CuiResId(RID_SVXSTR_DELFAILED_TITLE))
+    , m_delQueryStr(CuiResId(RID_SVXSTR_DELQUERY))
+    , m_delQueryTitleStr(CuiResId(RID_SVXSTR_DELQUERY_TITLE))
+    , m_createErrStr(CuiResId(RID_SVXSTR_CREATEFAILED))
+    , m_createDupStr(CuiResId(RID_SVXSTR_CREATEFAILEDDUP))
+    , m_createErrTitleStr(CuiResId(RID_SVXSTR_CREATEFAILED_TITLE))
+    , m_renameErrStr(CuiResId(RID_SVXSTR_RENAMEFAILED))
+    , m_renameErrTitleStr(CuiResId(RID_SVXSTR_RENAMEFAILED_TITLE))
 {
     get(m_pScriptsBox, "scripts");
     get(m_pRunButton, "run");
@@ -530,21 +504,16 @@ short SvxScriptOrgDialog::Execute()
                                         ( pDoc->GetModel(), UNO_QUERY );
         if ( xSPS.is() )
         {
-            Reference< provider::XScriptProvider > ScriptProvider =
             xSPS->getScriptProvider();
         }
 
         pDoc = SfxObjectShell::GetNext(*pDoc);
     }
 
-    vcl::Window* pPrevDlgParent = Application::GetDefDialogParent();
-    Application::SetDefDialogParent( this );
-    short nRet = ModalDialog::Execute();
-    Application::SetDefDialogParent( pPrevDlgParent );
-    return nRet;
+    return ModalDialog::Execute();
 }
 
-void SvxScriptOrgDialog::CheckButtons( Reference< browse::XBrowseNode >& node )
+void SvxScriptOrgDialog::CheckButtons( Reference< browse::XBrowseNode > const & node )
 {
     if ( node.is() )
     {
@@ -622,7 +591,7 @@ void SvxScriptOrgDialog::CheckButtons( Reference< browse::XBrowseNode >& node )
     }
 }
 
-IMPL_LINK_TYPED( SvxScriptOrgDialog, ScriptSelectHdl, SvTreeListBox *, pBox, void )
+IMPL_LINK( SvxScriptOrgDialog, ScriptSelectHdl, SvTreeListBox *, pBox, void )
 {
     if ( !pBox->IsSelected( pBox->GetHdlEntry() ) )
     {
@@ -641,12 +610,12 @@ IMPL_LINK_TYPED( SvxScriptOrgDialog, ScriptSelectHdl, SvTreeListBox *, pBox, voi
     Reference< browse::XBrowseNode > node;
     if ( userData )
     {
-              node = userData->GetNode();
+        node = userData->GetNode();
         CheckButtons( node );
     }
 }
 
-IMPL_LINK_TYPED( SvxScriptOrgDialog, ButtonHdl, Button *, pButton, void )
+IMPL_LINK( SvxScriptOrgDialog, ButtonHdl, Button *, pButton, void )
 {
     if ( pButton == m_pCloseButton )
     {
@@ -726,30 +695,25 @@ IMPL_LINK_TYPED( SvxScriptOrgDialog, ButtonHdl, Button *, pButton, void )
                             mspNode->getScript( scriptURL ), UNO_QUERY_THROW );
 
                             const Sequence< Any > args(0);
-                            Any aRet;
                             Sequence< sal_Int16 > outIndex;
                             Sequence< Any > outArgs( 0 );
-                            aRet = xScript->invoke( args, outIndex, outArgs );
+                            xScript->invoke( args, outIndex, outArgs );
                         }
                         catch ( reflection::InvocationTargetException& ite )
                         {
-                            css::uno::Any a = makeAny(ite);
-                            ShowErrorDialog(a);
+                            ShowErrorDialog(css::uno::Any(ite));
                         }
                         catch ( provider::ScriptFrameworkErrorException& ite )
                         {
-                            css::uno::Any a = makeAny(ite);
-                            ShowErrorDialog(a);
+                            ShowErrorDialog(css::uno::Any(ite));
                         }
                         catch ( RuntimeException& re )
                         {
-                            css::uno::Any a = makeAny(re);
-                            ShowErrorDialog(a);
+                            ShowErrorDialog(css::uno::Any(re));
                         }
                         catch ( Exception& e )
                         {
-                            css::uno::Any a = makeAny(e);
-                            ShowErrorDialog(a);
+                            ShowErrorDialog(css::uno::Any(e));
                         }
                     }
                     StoreCurrentSelection();
@@ -772,8 +736,7 @@ IMPL_LINK_TYPED( SvxScriptOrgDialog, ButtonHdl, Button *, pButton, void )
                         }
                         catch( Exception& e )
                         {
-                            OSL_TRACE("Caught exception trying to invoke %s", OUStringToOString( e.Message, RTL_TEXTENCODING_ASCII_US ).pData->buffer );
-
+                            SAL_WARN("cui.dialogs", "Caught exception trying to invoke " << e );
                         }
                     }
                 }
@@ -794,7 +757,7 @@ IMPL_LINK_TYPED( SvxScriptOrgDialog, ButtonHdl, Button *, pButton, void )
     }
 }
 
-Reference< browse::XBrowseNode > SvxScriptOrgDialog::getBrowseNode( SvTreeListEntry* pEntry )
+Reference< browse::XBrowseNode > SvxScriptOrgDialog::getBrowseNode( SvTreeListEntry const * pEntry )
 {
     Reference< browse::XBrowseNode > node;
     if ( pEntry )
@@ -809,7 +772,7 @@ Reference< browse::XBrowseNode > SvxScriptOrgDialog::getBrowseNode( SvTreeListEn
     return node;
 }
 
-Reference< XModel > SvxScriptOrgDialog::getModel( SvTreeListEntry* pEntry )
+Reference< XModel > SvxScriptOrgDialog::getModel( SvTreeListEntry const * pEntry )
 {
     Reference< XModel > model;
     if ( pEntry )
@@ -899,26 +862,27 @@ void SvxScriptOrgDialog::createEntry( SvTreeListEntry* pEntry )
             }
         }
 
-        ScopedVclPtrInstance< CuiInputDialog > xNewDlg( static_cast<vcl::Window*>(this), nMode );
-        xNewDlg->SetObjectName( aNewName );
+        CuiInputDialog aNewDlg(GetFrameWeld(), nMode);
+        aNewDlg.SetObjectName(aNewName);
 
         do
         {
-            if ( xNewDlg->Execute() && !xNewDlg->GetObjectName().isEmpty() )
+            if (aNewDlg.run() && !aNewDlg.GetObjectName().isEmpty())
             {
-                OUString aUserSuppliedName = xNewDlg->GetObjectName();
+                OUString aUserSuppliedName = aNewDlg.GetObjectName();
                 bValid = true;
                 for( sal_Int32 index = 0; index < childNodes.getLength(); index++ )
                 {
                     if (aUserSuppliedName+extn == childNodes[index]->getName())
                     {
                         bValid = false;
-                        OUString aError( m_createErrStr );
-                        aError += m_createDupStr;
-                        ScopedVclPtrInstance< MessageDialog > aErrorBox(static_cast<vcl::Window*>(this), aError);
-                        aErrorBox->SetText( m_createErrTitleStr );
-                        aErrorBox->Execute();
-                        xNewDlg->SetObjectName( aNewName );
+                        OUString aError = m_createErrStr + m_createDupStr;
+
+                        std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                                       VclMessageType::Warning, VclButtonsType::Ok, aError));
+                        xErrorBox->set_title(m_createErrTitleStr);
+                        xErrorBox->run();
+                        aNewDlg.SetObjectName(aNewName);
                         break;
                     }
                 }
@@ -951,9 +915,7 @@ void SvxScriptOrgDialog::createEntry( SvTreeListEntry* pEntry )
         }
         catch( Exception& e )
         {
-            OSL_TRACE("Caught exception trying to Create %s",
-                OUStringToOString(
-                    e.Message, RTL_TEXTENCODING_ASCII_US ).pData->buffer );
+            SAL_WARN("cui.dialogs", "Caught exception trying to Create " << e );
         }
     }
     if ( aChildNode.is() )
@@ -972,12 +934,12 @@ void SvxScriptOrgDialog::createEntry( SvTreeListEntry* pEntry )
         if ( aChildNode->getType() == browse::BrowseNodeTypes::SCRIPT )
         {
             pNewEntry = m_pScriptsBox->insertEntry( aChildName,
-                    RID_CUIIMG_MACRO, pEntry, false, std::unique_ptr< SFEntry >(new SFEntry( OBJTYPE_METHOD, aChildNode,xDocumentModel ) ) );
+                    RID_CUIBMP_MACRO, pEntry, false, std::make_unique< SFEntry >( aChildNode,xDocumentModel ) );
         }
         else
         {
             pNewEntry = m_pScriptsBox->insertEntry( aChildName,
-                RID_CUIIMG_LIB, pEntry, false, std::unique_ptr< SFEntry >(new SFEntry( OBJTYPE_SCRIPTCONTAINER, aChildNode,xDocumentModel ) ) );
+                RID_CUIBMP_LIB, pEntry, false, std::make_unique< SFEntry >( aChildNode,xDocumentModel ) );
 
             // If the Parent is not loaded then set to
             // loaded, this will prevent RequestingChildren ( called
@@ -997,9 +959,10 @@ void SvxScriptOrgDialog::createEntry( SvTreeListEntry* pEntry )
     {
         //ISSUE L10N & message from exception?
         OUString aError( m_createErrStr );
-        ScopedVclPtrInstance< MessageDialog > aErrorBox(static_cast<vcl::Window*>(this), aError);
-        aErrorBox->SetText( m_createErrTitleStr );
-        aErrorBox->Execute();
+        std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                       VclMessageType::Warning, VclButtonsType::Ok, aError));
+        xErrorBox->set_title(m_createErrTitleStr);
+        xErrorBox->run();
     }
 }
 
@@ -1014,32 +977,17 @@ void SvxScriptOrgDialog::renameEntry( SvTreeListEntry* pEntry )
     {
         OUString aNewName = node->getName();
         sal_Int32 extnPos = aNewName.lastIndexOf( '.' );
-        OUString extn;
         if(extnPos>0)
         {
-            extn = aNewName.copy(extnPos);
             aNewName = aNewName.copy(0,extnPos);
         }
-        ScopedVclPtrInstance< CuiInputDialog > xNewDlg( static_cast<vcl::Window*>(this), InputDialogMode::RENAME );
-        xNewDlg->SetObjectName( aNewName );
+        CuiInputDialog aNewDlg(GetFrameWeld(), InputDialogMode::RENAME);
+        aNewDlg.SetObjectName(aNewName);
 
-        bool bValid;
-        do
-        {
-            if ( xNewDlg->Execute() && !xNewDlg->GetObjectName().isEmpty() )
-            {
-                OUString aUserSuppliedName = xNewDlg->GetObjectName();
-                bValid = true;
-                if( bValid )
-                    aNewName = aUserSuppliedName;
-            }
-            else
-            {
-                // user hit cancel or hit OK with nothing in the editbox
-                return;
-            }
-        }
-        while ( !bValid );
+        if (!aNewDlg.run() || aNewDlg.GetObjectName().isEmpty())
+            return; // user hit cancel or hit OK with nothing in the editbox
+
+        aNewName = aNewDlg.GetObjectName();
 
         Sequence< Any > args( 1 );
         args[ 0 ] <<= aNewName;
@@ -1055,9 +1003,7 @@ void SvxScriptOrgDialog::renameEntry( SvTreeListEntry* pEntry )
         }
         catch( Exception& e )
         {
-            OSL_TRACE("Caught exception trying to Rename %s",
-                OUStringToOString(
-                    e.Message, RTL_TEXTENCODING_ASCII_US ).pData->buffer );
+            SAL_WARN("cui.dialogs", "Caught exception trying to Rename " << e );
         }
     }
     if ( aChildNode.is() )
@@ -1071,9 +1017,10 @@ void SvxScriptOrgDialog::renameEntry( SvTreeListEntry* pEntry )
     {
         //ISSUE L10N & message from exception?
         OUString aError( m_renameErrStr );
-        ScopedVclPtrInstance< MessageDialog > aErrorBox(static_cast<vcl::Window*>(this), aError);
-        aErrorBox->SetText( m_renameErrTitleStr );
-        aErrorBox->Execute();
+        std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                       VclMessageType::Warning, VclButtonsType::Ok, aError));
+        xErrorBox->set_title(m_renameErrTitleStr);
+        xErrorBox->run();
     }
 }
 void SvxScriptOrgDialog::deleteEntry( SvTreeListEntry* pEntry )
@@ -1082,9 +1029,10 @@ void SvxScriptOrgDialog::deleteEntry( SvTreeListEntry* pEntry )
     Reference< browse::XBrowseNode > node = getBrowseNode( pEntry );
     // ISSUE L10N string & can we centre list?
     OUString aQuery = m_delQueryStr + getListOfChildren( node, 0 );
-    VclPtrInstance< MessageDialog > aQueryBox(static_cast<vcl::Window*>(this), aQuery, VCL_MESSAGE_QUESTION, VCL_BUTTONS_YES_NO);
-    aQueryBox->SetText( m_delQueryTitleStr );
-    if ( aQueryBox->Execute() == RET_NO )
+    std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                   VclMessageType::Question, VclButtonsType::YesNo, aQuery));
+    xQueryBox->set_title(m_delQueryTitleStr);
+    if (xQueryBox->run() == RET_NO)
     {
         return;
     }
@@ -1103,9 +1051,7 @@ void SvxScriptOrgDialog::deleteEntry( SvTreeListEntry* pEntry )
         }
         catch( Exception& e )
         {
-            OSL_TRACE("Caught exception trying to delete %s",
-                OUStringToOString(
-                    e.Message, RTL_TEXTENCODING_ASCII_US ).pData->buffer );
+            SAL_WARN("cui.dialogs", "Caught exception trying to delete " << e );
         }
     }
 
@@ -1117,15 +1063,16 @@ void SvxScriptOrgDialog::deleteEntry( SvTreeListEntry* pEntry )
     else
     {
         //ISSUE L10N & message from exception?
-        ScopedVclPtrInstance< MessageDialog > aErrorBox(static_cast<vcl::Window*>(this), m_delErrStr);
-        aErrorBox->SetText( m_delErrTitleStr );
-        aErrorBox->Execute();
+        std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                       VclMessageType::Warning, VclButtonsType::Ok, m_delErrStr));
+        xErrorBox->set_title(m_delErrTitleStr);
+        xErrorBox->run();
     }
 
 }
 
-bool SvxScriptOrgDialog::getBoolProperty( Reference< beans::XPropertySet >& xProps,
-                OUString& propName )
+bool SvxScriptOrgDialog::getBoolProperty( Reference< beans::XPropertySet > const & xProps,
+                OUString const & propName )
 {
     bool result = false;
     try
@@ -1141,12 +1088,12 @@ bool SvxScriptOrgDialog::getBoolProperty( Reference< beans::XPropertySet >& xPro
 
 OUString SvxScriptOrgDialog::getListOfChildren( const Reference< browse::XBrowseNode >& node, int depth )
 {
-    OUString result = "\n";
+    OUStringBuffer result = "\n";
     for( int i=0;i<=depth;i++ )
     {
-        result += "\t";
+        result.append("\t");
     }
-    result += node->getName();
+    result.append(node->getName());
 
     try
     {
@@ -1156,7 +1103,7 @@ OUString SvxScriptOrgDialog::getListOfChildren( const Reference< browse::XBrowse
                 = node->getChildNodes();
             for ( sal_Int32 n = 0; n < children.getLength(); n++ )
             {
-                result += getListOfChildren( children[ n ] , depth+1 );
+                result.append( getListOfChildren( children[ n ] , depth+1 ) );
             }
         }
     }
@@ -1165,7 +1112,7 @@ OUString SvxScriptOrgDialog::getListOfChildren( const Reference< browse::XBrowse
         // ignore, will return an empty string
     }
 
-    return result;
+    return result.makeStringAndClear();
 }
 
 Selection_hash SvxScriptOrgDialog::m_lastSelection;
@@ -1206,7 +1153,7 @@ void SvxScriptOrgDialog::RestorePreviousSelection()
                 pEntry = pTmpEntry;
                 break;
             }
-            pTmpEntry = SvTreeListBox::NextSibling( pTmpEntry );
+            pTmpEntry = pTmpEntry->NextSibling();
         }
         if ( !pTmpEntry )
             break;
@@ -1214,6 +1161,8 @@ void SvxScriptOrgDialog::RestorePreviousSelection()
     }
     m_pScriptsBox->SetCurEntry( pEntry );
 }
+
+namespace {
 
 OUString ReplaceString(
     const OUString& source,
@@ -1248,18 +1197,12 @@ OUString FormatErrorString(
 
     if ( !type.isEmpty() )
     {
-        result += "\n\n" +
-                  OUString(CUI_RES(RID_SVXSTR_ERROR_TYPE_LABEL)) +
-                  " " +
-                  type;
+        result += "\n\n" + CuiResId(RID_SVXSTR_ERROR_TYPE_LABEL) + " " + type;
     }
 
     if ( !message.isEmpty() )
     {
-        result += "\n\n" +
-                  OUString(CUI_RES(RID_SVXSTR_ERROR_MESSAGE_LABEL)) +
-                  " " +
-                  message;
+        result += "\n\n" + CuiResId(RID_SVXSTR_ERROR_MESSAGE_LABEL) + " " + message;
     }
 
     return result;
@@ -1268,7 +1211,7 @@ OUString FormatErrorString(
 OUString GetErrorMessage(
     const provider::ScriptErrorRaisedException& eScriptError )
 {
-    OUString unformatted = CUI_RES( RID_SVXSTR_ERROR_AT_LINE );
+    OUString unformatted = CuiResId( RID_SVXSTR_ERROR_AT_LINE );
 
     OUString unknown("UNKNOWN");
     OUString language = unknown;
@@ -1277,29 +1220,29 @@ OUString GetErrorMessage(
     OUString type = "";
     OUString message = eScriptError.Message;
 
-        if ( !eScriptError.language.isEmpty() )
-        {
-            language = eScriptError.language;
-        }
+    if ( !eScriptError.language.isEmpty() )
+    {
+        language = eScriptError.language;
+    }
 
-        if ( !eScriptError.scriptName.isEmpty() )
-        {
-            script = eScriptError.scriptName;
-        }
+    if ( !eScriptError.scriptName.isEmpty() )
+    {
+        script = eScriptError.scriptName;
+    }
 
-        if ( !eScriptError.Message.isEmpty() )
-        {
-            message = eScriptError.Message;
-        }
-        if ( eScriptError.lineNum != -1 )
-        {
-            line = OUString::number( eScriptError.lineNum );
-            unformatted = CUI_RES( RID_SVXSTR_ERROR_AT_LINE );
-        }
-        else
-        {
-            unformatted = CUI_RES( RID_SVXSTR_ERROR_RUNNING );
-        }
+    if ( !eScriptError.Message.isEmpty() )
+    {
+        message = eScriptError.Message;
+    }
+    if ( eScriptError.lineNum != -1 )
+    {
+        line = OUString::number( eScriptError.lineNum );
+        unformatted = CuiResId( RID_SVXSTR_ERROR_AT_LINE );
+    }
+    else
+    {
+        unformatted = CuiResId( RID_SVXSTR_ERROR_RUNNING );
+    }
 
     return FormatErrorString(
         unformatted, language, script, line, type, message );
@@ -1308,7 +1251,7 @@ OUString GetErrorMessage(
 OUString GetErrorMessage(
     const provider::ScriptExceptionRaisedException& eScriptException )
 {
-    OUString unformatted = CUI_RES( RID_SVXSTR_EXCEPTION_AT_LINE );
+    OUString unformatted = CuiResId( RID_SVXSTR_EXCEPTION_AT_LINE );
 
     OUString unknown("UNKNOWN");
     OUString language = unknown;
@@ -1334,11 +1277,11 @@ OUString GetErrorMessage(
     if ( eScriptException.lineNum != -1 )
     {
         line = OUString::number( eScriptException.lineNum );
-        unformatted = CUI_RES( RID_SVXSTR_EXCEPTION_AT_LINE );
+        unformatted = CuiResId( RID_SVXSTR_EXCEPTION_AT_LINE );
     }
     else
     {
-        unformatted = CUI_RES( RID_SVXSTR_EXCEPTION_RUNNING );
+        unformatted = CuiResId( RID_SVXSTR_EXCEPTION_RUNNING );
     }
 
     if ( !eScriptException.exceptionType.isEmpty() )
@@ -1353,7 +1296,7 @@ OUString GetErrorMessage(
 OUString GetErrorMessage(
     const provider::ScriptFrameworkErrorException& sError )
 {
-    OUString unformatted = CUI_RES( RID_SVXSTR_FRAMEWORK_ERROR_RUNNING );
+    OUString unformatted = CuiResId( RID_SVXSTR_FRAMEWORK_ERROR_RUNNING );
 
     OUString language("UNKNOWN");
 
@@ -1371,8 +1314,8 @@ OUString GetErrorMessage(
     }
     if ( sError.errorType == provider::ScriptFrameworkErrorType::NOTSUPPORTED )
     {
-        message = OUString(
-            CUI_RES(  RID_SVXSTR_ERROR_LANG_NOT_SUPPORTED ) );
+        message =
+            CuiResId(  RID_SVXSTR_ERROR_LANG_NOT_SUPPORTED );
         message = ReplaceString(message, "%LANGUAGENAME", language );
 
     }
@@ -1382,24 +1325,6 @@ OUString GetErrorMessage(
     }
     return FormatErrorString(
         unformatted, language, script, OUString(), OUString(), message );
-}
-
-OUString GetErrorMessage( const RuntimeException& re )
-{
-    Type t = cppu::UnoType<decltype(re)>::get();
-    OUString message = t.getTypeName();
-    message += re.Message;
-
-    return message;
-}
-
-OUString GetErrorMessage( const Exception& e )
-{
-    Type t = cppu::UnoType<decltype(e)>::get();
-    OUString message = t.getTypeName();
-    message += e.Message;
-
-    return message;
 }
 
 OUString GetErrorMessage( const css::uno::Any& aException )
@@ -1439,20 +1364,18 @@ OUString GetErrorMessage( const css::uno::Any& aException )
 
     }
     // unknown exception
+    auto msg = aException.getValueTypeName();
     Exception e;
-    RuntimeException rte;
-    if ( aException >>= rte )
+    if ( (aException >>= e) && !e.Message.isEmpty() )
     {
-        return GetErrorMessage( rte );
+        msg += ": " + e.Message;
     }
-
-    aException >>= e;
-    return GetErrorMessage( e );
+    return msg;
+}
 
 }
 
-SvxScriptErrorDialog::SvxScriptErrorDialog(
-    vcl::Window* , css::uno::Any aException )
+SvxScriptErrorDialog::SvxScriptErrorDialog( css::uno::Any const & aException )
     : m_sMessage()
 {
     SolarMutexGuard aGuard;
@@ -1476,7 +1399,7 @@ short SvxScriptErrorDialog::Execute()
     return 0;
 }
 
-IMPL_STATIC_LINK_TYPED( SvxScriptErrorDialog, ShowDialog, void*, p, void )
+IMPL_STATIC_LINK( SvxScriptErrorDialog, ShowDialog, void*, p, void )
 {
     OUString* pMessage = static_cast<OUString*>(p);
     OUString message;
@@ -1487,12 +1410,13 @@ IMPL_STATIC_LINK_TYPED( SvxScriptErrorDialog, ShowDialog, void*, p, void )
     }
     else
     {
-        message = OUString( CUI_RES( RID_SVXSTR_ERROR_TITLE ) );
+        message = CuiResId( RID_SVXSTR_ERROR_TITLE );
     }
 
-    ScopedVclPtrInstance<MessageDialog> pBox( nullptr, message, VCL_MESSAGE_WARNING );
-    pBox->SetText( CUI_RES( RID_SVXSTR_ERROR_TITLE ) );
-    pBox->Execute();
+    std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(nullptr,
+                                              VclMessageType::Warning, VclButtonsType::Ok, message));
+    xBox->set_title(CuiResId(RID_SVXSTR_ERROR_TITLE));
+    xBox->run();
 
     delete pMessage;
 }

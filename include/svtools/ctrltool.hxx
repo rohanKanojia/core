@@ -24,7 +24,7 @@
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
 #include <vcl/metric.hxx>
-#include <tools/solar.h>
+#include <vcl/vclptr.hxx>
 
 #include <vector>
 #include <memory>
@@ -68,7 +68,7 @@ the printer. Because if two different device fonts (one for the printer and
 one for the screen) exist, the ones from the "pDevice" are preferred.
 
 The third parameter governs whether only scalable or all fonts shall be queried.
-With sal_True Bitmap-Schriften will also be queried.
+With sal_True bitmap fonts will also be queried.
 With sal_False vectorized and scalable fonts will be queried.
 
 --------------------------------------------------------------------------
@@ -127,9 +127,6 @@ You should thus not reference the array after the next method call on the
 FontList.
 */
 
-
-#define FONTLIST_FONTINFO_NOTFOUND  ((sal_uInt16)0xFFFF)
-
 class SVT_DLLPUBLIC FontList
 {
 private:
@@ -137,7 +134,6 @@ private:
 
     OUString                maMapBoth;
     OUString                maMapPrinterOnly;
-    OUString                maMapScreenOnly;
     OUString                maMapStyleNotAvailable;
     mutable OUString        maMapNotAvailable;
     OUString                maLight;
@@ -148,23 +144,22 @@ private:
     OUString                maBoldItalic;
     OUString                maBlack;
     OUString                maBlackItalic;
-    sal_IntPtr*             mpSizeAry;
+    mutable std::unique_ptr<sal_IntPtr[]>
+                            mpSizeAry;
     VclPtr<OutputDevice>    mpDev;
     VclPtr<OutputDevice>    mpDev2;
     std::vector<std::unique_ptr<ImplFontListNameInfo>> m_Entries;
 
-    SVT_DLLPRIVATE ImplFontListNameInfo*    ImplFind( const OUString& rSearchName, sal_uLong* pIndex ) const;
+    SVT_DLLPRIVATE ImplFontListNameInfo*    ImplFind( const OUString& rSearchName, sal_uInt32* pIndex ) const;
     SVT_DLLPRIVATE ImplFontListNameInfo*    ImplFindByName( const OUString& rStr ) const;
-    SVT_DLLPRIVATE void                 ImplInsertFonts( OutputDevice* pDev, bool bAll,
-                                             bool bInsertData );
+    SVT_DLLPRIVATE void                     ImplInsertFonts(OutputDevice* pDev, bool bInsertData);
 
 public:
                             FontList( OutputDevice* pDevice,
-                                      OutputDevice* pDevice2 = nullptr,
-                                      bool bAll = true );
+                                      OutputDevice* pDevice2 = nullptr);
                             ~FontList();
 
-    FontList*               Clone() const;
+    std::unique_ptr<FontList> Clone() const;
 
     OUString                GetFontMapText( const FontMetric& rFontMetric ) const;
 
@@ -182,11 +177,11 @@ public:
                                  FontItalic eItalic ) const;
 
     bool                    IsAvailable( const OUString& rName ) const;
-    sal_uInt16              GetFontNameCount() const
+    size_t GetFontNameCount() const
     {
-        return (sal_uInt16)m_Entries.size();
+        return m_Entries.size();
     }
-    const FontMetric&    GetFontName( sal_uInt16 nFont ) const;
+    const FontMetric& GetFontName(size_t nFont) const;
     sal_Handle              GetFirstFontMetric( const OUString& rName ) const;
     static sal_Handle           GetNextFontMetric( sal_Handle hFontMetric );
     static const FontMetric& GetFontMetric( sal_Handle hFontMetric );
@@ -203,19 +198,19 @@ class SVT_DLLPUBLIC FontSizeNames
 {
 private:
     const struct ImplFSNameItem*    mpArray;
-    sal_uLong                   mnElem;
+    sal_Int32                       mnElem;
 
 public:
                             FontSizeNames( LanguageType eLanguage /* = LANGUAGE_DONTKNOW */ );
 
-    sal_uLong               Count() const { return mnElem; }
+    sal_Int32               Count() const { return mnElem; }
     bool                    IsEmpty() const { return !mnElem; }
 
-    long                    Name2Size( const OUString& ) const;
-    OUString                Size2Name( long ) const;
+    sal_Int32               Name2Size( const OUString& ) const;
+    OUString                Size2Name( sal_Int32 ) const;
 
-    OUString                GetIndexName( sal_uLong nIndex ) const;
-    long                    GetIndexSize( sal_uLong nIndex ) const;
+    OUString                GetIndexName( sal_Int32 nIndex ) const;
+    sal_Int32               GetIndexSize( sal_Int32 nIndex ) const;
 };
 
 #endif // INCLUDED_SVTOOLS_CTRLTOOL_HXX

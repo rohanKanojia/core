@@ -20,10 +20,8 @@
 #define INCLUDED_SW_SOURCE_UIBASE_INC_UIBORDER_HXX
 
 #include <sfx2/basedlgs.hxx>
-namespace vcl { class Window; }
-class SfxItemSet;
 
-class SwBorderDlg : public SfxSingleTabDialog
+class SwBorderDlg : public SfxSingleTabDialogController
 {
 public:
 
@@ -32,8 +30,8 @@ public:
      // SW_BORDER_MODE_TABLE
      // SW_BORDER_MODE_FRAME
 
-     SwBorderDlg(vcl::Window* pParent, SfxItemSet& rSet, SwBorderModes nType);
-    virtual ~SwBorderDlg();
+    SwBorderDlg(weld::Window* pParent, SfxItemSet& rSet, SwBorderModes nType);
+    virtual ~SwBorderDlg() override;
 };
 
 #endif

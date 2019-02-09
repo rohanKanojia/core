@@ -22,76 +22,62 @@
 
 #include <vcl/dllapi.h>
 
-struct ImplSchedulerData;
+struct ImplSchedulerContext;
 
-enum class SchedulerPriority {
-    HIGHEST      = 0,
-    HIGH         = 1,
-    RESIZE       = 2,
-    REPAINT      = 3,
-    MEDIUM       = 3,
-    POST_PAINT   = 4,
-    DEFAULT_IDLE = 5,
-    LOW          = 6,
-    LOWER        = 7,
-    LOWEST       = 8
-};
-
-class VCL_DLLPUBLIC Scheduler
+class VCL_DLLPUBLIC Scheduler final
 {
-protected:
-    ImplSchedulerData*  mpSchedulerData;    /// Pointer to element in scheduler list
-    const sal_Char     *mpDebugName;        /// Useful for debugging
-    SchedulerPriority   mePriority;         /// Scheduler priority
-    bool                mbActive;           /// Currently in the scheduler
+    friend class SchedulerGuard;
+    friend class Task;
+    Scheduler() = delete;
 
-    // These should be constexpr static, when supported.
-    static const sal_uInt64 ImmediateTimeoutMs = 1;
+    static inline void UpdateSystemTimer( ImplSchedulerContext &rSchedCtx,
+                                          sal_uInt64 nMinPeriod,
+                                          bool bForce, sal_uInt64 nTime );
 
-    static void ImplStartTimer(sal_uInt64 nMS, bool bForce = false);
+    static void ImplStartTimer ( sal_uInt64 nMS, bool bForce, sal_uInt64 nTime );
 
-    friend struct ImplSchedulerData;
-    virtual void SetDeletionFlags();
-    /// Is this item ready to be dispatched at nTimeNow
-    virtual bool ReadyForSchedule( bool bTimerOnly, sal_uInt64 nTimeNow ) const = 0;
-    /// Schedule only when other timers and events are processed
-    virtual bool IsIdle() const = 0;
-    /**
-     * Adjust nMinPeriod downwards if we want to be notified before
-     * then, nTimeNow is the current time.
-     */
-    virtual sal_uInt64 UpdateMinPeriod( sal_uInt64 nMinPeriod, sal_uInt64 nTimeNow ) const = 0;
+    static void Lock( sal_uInt32 nLockCount = 1 );
+    static sal_uInt32 Unlock( bool bUnlockAll = false );
 
 public:
-    Scheduler( const sal_Char *pDebugName = nullptr );
-    Scheduler( const Scheduler& rScheduler );
-    virtual ~Scheduler();
+    static constexpr sal_uInt64 ImmediateTimeoutMs = 0;
+    static constexpr sal_uInt64 InfiniteTimeoutMs  = SAL_MAX_UINT64;
 
-    void SetPriority(SchedulerPriority ePriority) { mePriority = ePriority; }
-    SchedulerPriority GetPriority() const { return mePriority; }
+    static void       ImplDeInitScheduler();
 
-    void            SetDebugName( const sal_Char *pDebugName ) { mpDebugName = pDebugName; }
-    const char     *GetDebugName() { return mpDebugName; }
-
-    // Call handler
-    virtual void    Invoke() = 0;
-
-    virtual void    Start();
-    void            Stop();
-
-    bool            IsActive() const { return mbActive; }
-
-    Scheduler&      operator=( const Scheduler& rScheduler );
-    static void ImplDeInitScheduler();
-
-    // Process one pending Timer with highhest priority
-    static void CallbackTaskScheduling( bool ignore );
-    /// Calculate minimum timeout - and return its value.
-    static sal_uInt64 CalculateMinimumTimeout( bool &bHasActiveIdles );
+    /// Process one pending Timer with highhest priority
+    static void       CallbackTaskScheduling();
     /// Process one pending task ahead of time with highest priority.
-    static bool       ProcessTaskScheduling( bool bTimerOnly );
-    /// Process all events until we are idle
+    static bool       ProcessTaskScheduling();
+    /**
+     * Process all events until none is pending
+     *
+     * This can busy-lock, if some task or system event always generates new
+     * events when being processed. Most time it's called in unit tests to
+     * process all pending events. Internally it just calls
+     * Application::Reschedule( true ) until it fails.
+     *
+     * @see Application::Reschedule
+     */
     static void       ProcessEventsToIdle();
+
+    /**
+     * Wakes up the scheduler
+     *
+     * This doesn't handle any events! It just ensures the Scheduler is run as
+     * soon as possible by forcing the Scheduler timer to fire.
+     *
+     * Can be used for complex UpdateMinPeriod function, where the task is
+     * actually active but not ready and we want to skip the Task::Start()
+     * queue append for faster reaction.
+     */
+    static void       Wakeup();
+
+    /// Control the deterministic mode.  In this mode, two subsequent runs of
+    /// LibreOffice fire about the same amount idles.
+    static void       SetDeterministicMode(bool bDeterministic);
+    /// Return the current state of deterministic mode.
+    static bool       GetDeterministicMode();
 };
 
 #endif // INCLUDED_VCL_SCHEDULER_HXX

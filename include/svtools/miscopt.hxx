@@ -21,10 +21,13 @@
 
 #include <svtools/svtdllapi.h>
 #include <sal/types.h>
-#include <tools/link.hxx>
-#include <osl/mutex.hxx>
 #include <rtl/ustring.hxx>
 #include <unotools/options.hxx>
+#include <memory>
+
+namespace osl { class Mutex; }
+template <typename Arg, typename Ret> class Link;
+class LinkParamNone;
 
 /*-************************************************************************************************************
     @short          forward declaration to our private date container implementation
@@ -34,6 +37,7 @@
 *//*-*************************************************************************************************************/
 
 class SvtMiscOptions_Impl;
+enum class ToolBoxButtonSize;
 
 /*-************************************************************************************************************
     @short          collect information about misc group
@@ -45,19 +49,8 @@ class SvtMiscOptions_Impl;
 class SVT_DLLPUBLIC SvtMiscOptions: public utl::detail::Options
 {
     public:
-        /*-****************************************************************************************************
-            @short      standard constructor and destructor
-            @descr      This will initialize an instance with default values.
-                        We implement these class with a refcount mechanism! Every instance of this class increase it
-                        at create and decrease it at delete time - but all instances use the same data container!
-                        He is implemented as a static member ...
-
-            @seealso    member m_nRefCount
-            @seealso    member m_pDataContainer
-        *//*-*****************************************************************************************************/
-
          SvtMiscOptions();
-        virtual ~SvtMiscOptions();
+        virtual ~SvtMiscOptions() override;
 
         void        AddListenerLink( const Link<LinkParamNone*,void>& rLink );
         void        RemoveListenerLink( const Link<LinkParamNone*,void>& rLink );
@@ -72,6 +65,10 @@ class SVT_DLLPUBLIC SvtMiscOptions: public utl::detail::Options
 
         sal_Int16   GetSymbolsSize() const;
         void        SetSymbolsSize( sal_Int16 eSet );
+        ToolBoxButtonSize   GetSidebarIconSize() const;
+        void        SetSidebarIconSize( ToolBoxButtonSize eSet );
+        ToolBoxButtonSize   GetNotebookbarIconSize() const;
+        void        SetNotebookbarIconSize( ToolBoxButtonSize eSet );
         sal_Int16   GetCurrentSymbolsSize() const;
         bool        AreCurrentSymbolsLarge() const;
 
@@ -100,7 +97,7 @@ class SVT_DLLPUBLIC SvtMiscOptions: public utl::detail::Options
         /*-****************************************************************************************************
             @short      return a reference to a static mutex
             @descr      These class is partially threadsafe (for de-/initialization only).
-                        All access methods are'nt safe!
+                        All access methods aren't safe!
                         We create a static mutex only for one ime and use at different times.
             @return     A reference to a static mutex member.
         *//*-*****************************************************************************************************/
@@ -108,17 +105,7 @@ class SVT_DLLPUBLIC SvtMiscOptions: public utl::detail::Options
         SVT_DLLPRIVATE static ::osl::Mutex& GetInitMutex();
 
     private:
-
-        /*Attention
-
-            Don't initialize these static members in these headers!
-            a) Double defined symbols will be detected ...
-            b) and unresolved externals exist at linking time.
-            Do it in your source only.
-         */
-
-        static SvtMiscOptions_Impl* m_pDataContainer    ;
-        static sal_Int32                m_nRefCount         ;
+        std::shared_ptr<SvtMiscOptions_Impl> m_pImpl;
 
 };      // class SvtMiscOptions
 

@@ -20,7 +20,7 @@
 #ifndef INCLUDED_WINACCESSIBILITY_SOURCE_UACCCOM_UNOXWRAPPER_H
 #define INCLUDED_WINACCESSIBILITY_SOURCE_UACCCOM_UNOXWRAPPER_H
 
-#include "resource.h"       // main symbols
+#include "Resource.h"       // main symbols
 
 #include <com/sun/star/accessibility/XAccessible.hpp>
 
@@ -28,7 +28,7 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnon-virtual-dtor"
 #endif
-#include  "UAccCOM.h"
+#include  <UAccCOM.h>
 #if defined __clang__
 #pragma clang diagnostic pop
 #endif
@@ -38,19 +38,19 @@
  */
 class ATL_NO_VTABLE CUNOXWrapper : public IUNOXWrapper
 {
-public:
-    CUNOXWrapper()
-    {   }
+protected:
+    css::accessibility::XAccessible* pUNOInterface;
 
 public:
+    CUNOXWrapper() : pUNOInterface(nullptr)
+    {   }
+
     // IUNOXWrapper
-    STDMETHOD(put_XInterface)(hyper pXInterface);
-    STDMETHOD(put_XSubInterface)(hyper);
+    STDMETHOD(put_XInterface)(hyper pXInterface) override;
+    STDMETHOD(put_XSubInterface)(hyper) override;
 
 protected:
     ~CUNOXWrapper() {}
-
-    css::accessibility::XAccessible* pUNOInterface;
 };
 
 #endif // INCLUDED_WINACCESSIBILITY_SOURCE_UACCCOM_UNOXWRAPPER_H

@@ -24,7 +24,6 @@ use Cwd;
 use Data::Dumper;
 use File::Copy;
 use List::Util qw(shuffle);
-use installer::archivefiles;
 use installer::control;
 use installer::converter;
 use installer::copyproject;
@@ -459,21 +458,19 @@ sub run {
         @installer::globals::logfileinfo = ();  # new logfile array and new logfile name
         installer::logger::copy_globalinfo_into_logfile();
 
-        my $logminor = "";
-        $logminor = $installer::globals::minor;
-
         my $loglanguagestring = $$languagestringref;
         my $loglanguagestring_orig = $loglanguagestring;
         if (length($loglanguagestring) > $installer::globals::max_lang_length)
         {
             my $number_of_languages = installer::systemactions::get_number_of_langs($loglanguagestring);
-            chomp(my $shorter = `echo $loglanguagestring | $ENV{'MD5SUM'} | sed -e "s/ .*//g"`);
-            my $id = substr($shorter, 0, 8); # taking only the first 8 digits
+            #replace this in the same it was done in installer/windows/directory.pm
+            #chomp(my $shorter = `echo $loglanguagestring | $ENV{'MD5SUM'} | sed -e "s/ .*//g"`);
+            #my $id = substr($shorter, 0, 8); # taking only the first 8 digits
+            my $id = installer::windows::msiglobal::calculate_id($loglanguagestring, 8); # taking only the first 8 digits
             $loglanguagestring = "lang_" . $number_of_languages . "_id_" . $id;
         }
 
         $installer::globals::logfilename = "log_" . $installer::globals::build;
-        if ( $logminor ne "" ) { $installer::globals::logfilename .= "_" . $logminor; }
         $installer::globals::logfilename .= "_" . $loglanguagestring;
         $installer::globals::logfilename .= ".log";
         $loggingdir = $loggingdir . $loglanguagestring . $installer::globals::separator;
@@ -519,8 +516,14 @@ sub run {
                 if ( $installer::globals::updatedatabase )
                 {
                     ($uniquefilename, $revuniquefilename, $revshortfilename, $allupdatesequences, $allupdatecomponents, $allupdatefileorder, $allupdatecomponentorder, $shortdirname, $componentid, $componentidkeypath, $alloldproperties, $allupdatelastsequences, $allupdatediskids) = installer::windows::update::create_database_hashes($refdatabase);
-                    if ( $mergemodulesarrayref > -1 ) { installer::windows::update::readmergedatabase($mergemodulesarrayref, $languagestringref, $includepatharrayref); }
                 }
+            }
+
+            # Always analyze the merge module.
+            # We need to investigate the directory table in merge module to emit
+            # custom action for directory names that start with standard prefix
+            if ( $mergemodulesarrayref > -1 ) {
+                installer::windows::update::readmergedatabase($mergemodulesarrayref, $languagestringref, $includepatharrayref);
             }
         }
 
@@ -605,16 +608,6 @@ sub run {
         installer::scriptitems::make_filename_language_specific($filesinproductlanguageresolvedarrayref);
 
         ######################################################################################
-        # Unzipping files with flag ARCHIVE and putting all included files into the file list
-        ######################################################################################
-
-        installer::logger::print_message( "... analyzing files with flag ARCHIVE ...\n" );
-
-        my @additional_paths_from_zipfiles = ();
-
-        $filesinproductlanguageresolvedarrayref = installer::archivefiles::resolving_archive_flag($filesinproductlanguageresolvedarrayref, \@additional_paths_from_zipfiles, $languagestringref, $loggingdir);
-
-        ######################################################################################
         # Processing files with flag FILELIST and putting listed files into the file list
         ######################################################################################
 
@@ -639,6 +632,18 @@ sub run {
 
         installer::scpzipfiles::resolving_scpzip_replace_flag($filesinproductlanguageresolvedarrayref, $allvariableshashref, "File", $languagestringref);
 
+        #########################################################
+        # language dependent unix links part
+        #########################################################
+
+        installer::logger::print_message( "... analyzing unix links ...\n" );
+
+        my $unixlinksinproductlanguageresolvedarrayref = installer::scriptitems::resolving_all_languages_in_productlists($unixlinksinproductarrayref, $languagesarrayref);
+
+        installer::scriptitems::changing_name_of_language_dependent_keys($unixlinksinproductlanguageresolvedarrayref);
+
+        installer::scriptitems::get_Destination_Directory_For_Item_From_Directorylist($unixlinksinproductlanguageresolvedarrayref, $dirsinproductarrayref);
+
         ############################################
         # Collecting directories for epm list file
         ############################################
@@ -649,11 +654,10 @@ sub run {
         # 1. Looking for all destination paths in the files array
         # 2. Looking for directories with CREATE flag in the directory array
         # Advantage: Many paths are hidden in zip files, they are not defined in the setup script.
-        # It will be possible, that in the setup script only those directoies have to be defined,
+        # It will be possible, that in the setup script only those directories have to be defined,
         # that have a CREATE flag. All other directories are created, if they contain at least one file.
 
-        my ($directoriesforepmarrayref, $alldirectoryhash) = installer::scriptitems::collect_directories_from_filesarray($filesinproductlanguageresolvedarrayref);
-
+        my ($directoriesforepmarrayref, $alldirectoryhash) = installer::scriptitems::collect_directories_from_filesarray($filesinproductlanguageresolvedarrayref, $unixlinksinproductlanguageresolvedarrayref);
         ($directoriesforepmarrayref, $alldirectoryhash) = installer::scriptitems::collect_directories_with_create_flag_from_directoryarray($dirsinproductlanguageresolvedarrayref, $alldirectoryhash);
 
         #########################################################
@@ -691,18 +695,6 @@ sub run {
         $linksinproductlanguageresolvedarrayref = installer::scriptitems::remove_workstation_only_items($linksinproductlanguageresolvedarrayref);
 
         installer::scriptitems::resolve_links_with_flag_relative($linksinproductlanguageresolvedarrayref);
-
-        #########################################################
-        # language dependent unix links part
-        #########################################################
-
-        installer::logger::print_message( "... analyzing unix links ...\n" );
-
-        my $unixlinksinproductlanguageresolvedarrayref = installer::scriptitems::resolving_all_languages_in_productlists($unixlinksinproductarrayref, $languagesarrayref);
-
-        installer::scriptitems::changing_name_of_language_dependent_keys($unixlinksinproductlanguageresolvedarrayref);
-
-        installer::scriptitems::get_Destination_Directory_For_Item_From_Directorylist($unixlinksinproductlanguageresolvedarrayref, $dirsinproductarrayref);
 
         #########################################################
         # language dependent part for profiles and profileitems
@@ -795,6 +787,7 @@ sub run {
                 $modulesinproductlanguageresolvedarrayref = installer::scriptitems::remove_not_required_spellcheckerlanguage_modules($modulesinproductlanguageresolvedarrayref);
 
                 $filesinproductlanguageresolvedarrayref = installer::scriptitems::remove_not_required_spellcheckerlanguage_files($filesinproductlanguageresolvedarrayref);
+                $directoriesforepmarrayref = installer::scriptitems::remove_not_required_spellcheckerlanguage_files($directoriesforepmarrayref);
             }
 
             installer::scriptitems::changing_name_of_language_dependent_keys($modulesinproductlanguageresolvedarrayref);
@@ -816,7 +809,7 @@ sub run {
             @{$folderitemsinproductlanguageresolvedarrayref} = (); # no folderitems in languagepacks
 
             # Collecting the directories again, to include only the language specific directories
-            ($directoriesforepmarrayref, $alldirectoryhash) = installer::scriptitems::collect_directories_from_filesarray($filesinproductlanguageresolvedarrayref);
+            ($directoriesforepmarrayref, $alldirectoryhash) = installer::scriptitems::collect_directories_from_filesarray($filesinproductlanguageresolvedarrayref, $unixlinksinproductlanguageresolvedarrayref);
             ($directoriesforepmarrayref, $alldirectoryhash) = installer::scriptitems::collect_directories_with_create_flag_from_directoryarray($dirsinproductlanguageresolvedarrayref, $alldirectoryhash);
             @$directoriesforepmarrayref = sort { $a->{"HostName"} cmp $b->{"HostName"} } @$directoriesforepmarrayref;
 
@@ -837,7 +830,7 @@ sub run {
             @{$folderitemsinproductlanguageresolvedarrayref} = (); # no folderitems in helppacks
 
             # Collecting the directories again, to include only the language specific directories
-            ($directoriesforepmarrayref, $alldirectoryhash) = installer::scriptitems::collect_directories_from_filesarray($filesinproductlanguageresolvedarrayref);
+            ($directoriesforepmarrayref, $alldirectoryhash) = installer::scriptitems::collect_directories_from_filesarray($filesinproductlanguageresolvedarrayref, $unixlinksinproductlanguageresolvedarrayref);
             ($directoriesforepmarrayref, $alldirectoryhash) = installer::scriptitems::collect_directories_with_create_flag_from_directoryarray($dirsinproductlanguageresolvedarrayref, $alldirectoryhash);
             @$directoriesforepmarrayref = sort { $a->{"HostName"} cmp $b->{"HostName"} } @$directoriesforepmarrayref;
 
@@ -1162,7 +1155,14 @@ sub run {
                             {
                                 # ... now epm can be started, to create the installation sets
 
-                                installer::logger::print_message( "... starting unpatched epm ... \n" );
+                                if ( $installer::globals::is_special_epm )
+                                {
+                                       installer::logger::print_message( "... starting patched epm ... \n" );
+                                }
+                                else
+                                {
+                                       installer::logger::print_message( "... starting unpatched epm ... \n" );
+                                }
 
                                 if ( $installer::globals::call_epm ) { installer::epmfile::call_epm($epmexecutable, $completeepmfilename, $packagename, $includepatharrayref); }
 
@@ -1509,6 +1509,24 @@ sub run {
                 # Adding Windows Installer CustomActions
 
                 installer::windows::idtglobal::addcustomactions($languageidtdir, $windowscustomactionsarrayref, $filesinproductlanguageresolvedarrayref);
+
+                installer::logger::print_message( "... Analyze if custom action table must be patched with merge module directory names ...\n" );
+
+                my @customactions = ();
+                for my $e (keys %installer::globals::merge_directory_hash) {
+                    my $var;
+                    installer::logger::print_message( "... analyzing directory from merge module: $e\n");
+                    if (installer::windows::directory::has_standard_directory_prefix($e, \$var)) {
+                        installer::logger::print_message( "... emitting custom action to set the var $e to directory: $var\n");
+                        push(@customactions, installer::windows::idtglobal::emit_custom_action_for_standard_directory($e, $var));
+                    }
+                }
+
+                if (@customactions) {
+                    installer::logger::print_message( "... Patching custom action table with merge module directory names ...\n" );
+                    #print Dumper(@customactions);
+                    installer::windows::idtglobal::addcustomactions($languageidtdir, \@customactions, $filesinproductlanguageresolvedarrayref);
+                }
 
                 # Then the language specific msi database can be created
 

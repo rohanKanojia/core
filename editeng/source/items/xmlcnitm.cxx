@@ -17,11 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
+#include <climits>
 #include <com/sun/star/xml/AttributeData.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
+#include <o3tl/any.hxx>
 #include <xmloff/xmlcnimp.hxx>
 #include <xmloff/unoatrcn.hxx>
 #include <editeng/xmlcnitm.hxx>
+#include <tools/debug.hxx>
+#include <tools/solar.h>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::container;
@@ -30,21 +35,20 @@ using namespace ::com::sun::star::xml;
 
 
 SvXMLAttrContainerItem::SvXMLAttrContainerItem( sal_uInt16 _nWhich ) :
-    SfxPoolItem( _nWhich )
+    SfxPoolItem( _nWhich ),
+    pImpl( new SvXMLAttrContainerData )
 {
-    pImpl = new SvXMLAttrContainerData;
 }
 
 SvXMLAttrContainerItem::SvXMLAttrContainerItem(
                                         const SvXMLAttrContainerItem& rItem ) :
-    SfxPoolItem( rItem )
+    SfxPoolItem( rItem ),
+    pImpl( new SvXMLAttrContainerData( *rItem.pImpl ) )
 {
-    pImpl = new SvXMLAttrContainerData( *rItem.pImpl );
 }
 
 SvXMLAttrContainerItem::~SvXMLAttrContainerItem()
 {
-    delete pImpl;
 }
 
 bool SvXMLAttrContainerItem::operator==( const SfxPoolItem& rItem ) const
@@ -56,10 +60,10 @@ bool SvXMLAttrContainerItem::operator==( const SfxPoolItem& rItem ) const
 
 bool SvXMLAttrContainerItem::GetPresentation(
                     SfxItemPresentation /*ePresentation*/,
-                    SfxMapUnit /*eCoreMetric*/,
-                    SfxMapUnit /*ePresentationMetric*/,
+                    MapUnit /*eCoreMetric*/,
+                    MapUnit /*ePresentationMetric*/,
                     OUString & /*rText*/,
-                    const IntlWrapper * /*pIntlWrapper*/ ) const
+                    const IntlWrapper& /*rIntlWrapper*/ ) const
 {
     return false;
 }
@@ -72,30 +76,24 @@ sal_uInt16 SvXMLAttrContainerItem::GetVersion( sal_uInt16 /*nFileFormatVersion*/
 
 bool SvXMLAttrContainerItem::QueryValue( css::uno::Any& rVal, sal_uInt8 /*nMemberId*/ ) const
 {
-    Reference<XNameContainer> xContainer =
-        new SvUnoAttributeContainer( new SvXMLAttrContainerData( *pImpl ) );
+    Reference<XNameContainer> xContainer
+        = new SvUnoAttributeContainer(std::make_unique<SvXMLAttrContainerData>(*pImpl));
 
-    rVal.setValue( &xContainer, cppu::UnoType<XNameContainer>::get());
+    rVal <<= xContainer;
     return true;
 }
 
 bool SvXMLAttrContainerItem::PutValue( const css::uno::Any& rVal, sal_uInt8 /*nMemberId*/ )
 {
-    Reference<XInterface> xRef;
     SvUnoAttributeContainer* pContainer = nullptr;
 
-    if( rVal.getValue() != nullptr && rVal.getValueType().getTypeClass() == TypeClass_INTERFACE )
-    {
-        xRef = *static_cast<Reference<XInterface> const *>(rVal.getValue());
-        Reference<XUnoTunnel> xTunnel(xRef, UNO_QUERY);
-        if( xTunnel.is() )
-            pContainer = reinterpret_cast<SvUnoAttributeContainer*>((sal_uLong)xTunnel->getSomething(SvUnoAttributeContainer::getUnoTunnelId()));
-    }
+    Reference<XUnoTunnel> xTunnel(rVal, UNO_QUERY);
+    if( xTunnel.is() )
+        pContainer = reinterpret_cast<SvUnoAttributeContainer*>(static_cast<sal_uLong>(xTunnel->getSomething(SvUnoAttributeContainer::getUnoTunnelId())));
 
     if( pContainer )
     {
-        delete pImpl;
-        pImpl = new SvXMLAttrContainerData( * pContainer->GetContainerImpl() );
+        pImpl.reset( new SvXMLAttrContainerData( * pContainer->GetContainerImpl() ) );
     }
     else
     {
@@ -103,7 +101,7 @@ bool SvXMLAttrContainerItem::PutValue( const css::uno::Any& rVal, sal_uInt8 /*nM
 
         try
         {
-            Reference<XNameContainer> xContainer( xRef, UNO_QUERY );
+            Reference<XNameContainer> xContainer( rVal, UNO_QUERY );
             if( !xContainer.is() )
                 return false;
 
@@ -118,10 +116,10 @@ bool SvXMLAttrContainerItem::PutValue( const css::uno::Any& rVal, sal_uInt8 /*nM
                 const OUString aName( *pNames++ );
 
                 aAny = xContainer->getByName( aName );
-                if( aAny.getValue() == nullptr || aAny.getValueType() != cppu::UnoType<AttributeData>::get() )
+                auto pData = o3tl::tryAccess<AttributeData>(aAny);
+                if( !pData )
                     return false;
 
-                AttributeData const * pData = static_cast<AttributeData const *>(aAny.getValue());
                 sal_Int32 pos = aName.indexOf( ':' );
                 if( pos != -1 )
                 {
@@ -147,7 +145,7 @@ bool SvXMLAttrContainerItem::PutValue( const css::uno::Any& rVal, sal_uInt8 /*nM
             }
 
             if( nAttr == nCount )
-                pImpl = pNewImpl.release();
+                pImpl = std::move(pNewImpl);
             else
                 return false;
         }
@@ -175,7 +173,7 @@ bool SvXMLAttrContainerItem::AddAttr( const OUString& rPrefix,
 
 sal_uInt16 SvXMLAttrContainerItem::GetAttrCount() const
 {
-    return (sal_uInt16)pImpl->GetAttrCount();
+    return static_cast<sal_uInt16>(pImpl->GetAttrCount());
 }
 
 OUString SvXMLAttrContainerItem::GetAttrNamespace( sal_uInt16 i ) const

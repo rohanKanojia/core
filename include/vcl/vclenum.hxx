@@ -20,68 +20,179 @@
 #ifndef INCLUDED_VCL_VCLENUM_HXX
 #define INCLUDED_VCL_VCLENUM_HXX
 
-#include <rsc/rsc-vcl-shared-types.hxx>
 #include <sal/types.h>
-#include <tools/fontenum.hxx>
+#include <o3tl/typed_flags_set.hxx>
 
-enum ExtTimeFieldFormat { EXTTIMEF_24H_SHORT, EXTTIMEF_24H_LONG,
-                          EXTTIMEF_12H_SHORT, EXTTIMEF_12H_LONG,
-                          EXTTIMEF_DURATION_SHORT, EXTTIMEF_DURATION_LONG };
+enum class SelectionMode { NONE, Single, Range, Multiple };
 
-enum ExtDateFieldFormat { XTDATEF_SYSTEM_SHORT, XTDATEF_SYSTEM_SHORT_YY, XTDATEF_SYSTEM_SHORT_YYYY,
-                          XTDATEF_SYSTEM_LONG,
-                          XTDATEF_SHORT_DDMMYY, XTDATEF_SHORT_MMDDYY, XTDATEF_SHORT_YYMMDD,
-                          XTDATEF_SHORT_DDMMYYYY, XTDATEF_SHORT_MMDDYYYY, XTDATEF_SHORT_YYYYMMDD,
-                          XTDATEF_SHORT_YYMMDD_DIN5008, XTDATEF_SHORT_YYYYMMDD_DIN5008, ExtDateFieldFormat_FORCE_EQUAL_SIZE=SAL_MAX_ENUM };
+enum class TimeFieldFormat : sal_Int32 { F_NONE, F_SEC, F_SEC_CS };
 
-enum GradientStyle
+enum class MenuItemType { DONTKNOW, STRING, IMAGE, STRINGIMAGE, SEPARATOR };
+
+enum class MenuItemBits : sal_Int16
 {
-    GradientStyle_LINEAR = 0,
-    GradientStyle_AXIAL = 1,
-    GradientStyle_RADIAL = 2,
-    GradientStyle_ELLIPTICAL = 3,
-    GradientStyle_SQUARE = 4,
-    GradientStyle_RECT = 5,
-    GradientStyle_FORCE_EQUAL_SIZE = SAL_MAX_ENUM
+    NONE                = 0x0000,
+    CHECKABLE           = 0x0001,
+    RADIOCHECK          = 0x0002,
+    AUTOCHECK           = 0x0004,
+    HELP                = 0x0010,
+    POPUPSELECT         = 0x0020,
+    // These have been said to be a preliminary (sic) solution since 2007
+    NOSELECT            = 0x0040,
+    ICON                = 0x0080,
+    TEXT                = 0x0100,
+};
+namespace o3tl
+{
+    template<> struct typed_flags<MenuItemBits> : is_typed_flags<MenuItemBits, 0x1f7> {};
+}
+
+enum class ToolBoxItemBits
+{
+    NONE                = 0x0000,
+    CHECKABLE           = 0x0001,
+    RADIOCHECK          = 0x0002,
+    AUTOCHECK           = 0x0004,
+    LEFT                = 0x0008,
+    AUTOSIZE            = 0x0010,
+    DROPDOWN            = 0x0020,
+    REPEAT              = 0x0040,
+    DROPDOWNONLY        = 0x00a0, // 0x0080 | DROPDOWN
+    TEXT_ONLY           = 0x0100,
+    ICON_ONLY           = 0x0200
+};
+namespace o3tl
+{
+    template<> struct typed_flags<ToolBoxItemBits> : is_typed_flags<ToolBoxItemBits, 0x3ff> {};
+}
+
+enum class ToolBoxItemType { DONTKNOW, BUTTON, SPACE, SEPARATOR, BREAK };
+
+enum class ButtonType { SYMBOLONLY, TEXT, SYMBOLTEXT };
+
+enum class SymbolType : sal_uInt16
+{
+    DONTKNOW         = 0,
+    IMAGE            = 1,
+    ARROW_UP         = 2,
+    ARROW_DOWN       = 3,
+    ARROW_LEFT       = 4,
+    ARROW_RIGHT      = 5,
+    SPIN_UP          = 6,
+    SPIN_DOWN        = 7,
+    SPIN_LEFT        = 8,
+    SPIN_RIGHT       = 9,
+    FIRST            = 10,
+    LAST             = 11,
+    PREV             = 12,
+    NEXT             = 13,
+    PAGEUP           = 14,
+    PAGEDOWN         = 15,
+    PLAY             = 16,
+    STOP             = 19,
+    CLOSE            = 25,
+    ROLLUP           = 26,
+    ROLLDOWN         = 27,
+    CHECKMARK        = 28,
+    RADIOCHECKMARK   = 29,
+    FLOAT            = 31,
+    DOCK             = 32,
+    HIDE             = 33,
+    HELP             = 34,
+    PLUS             = 35,
+    MENU             = SymbolType::SPIN_DOWN
 };
 
-// to avoid conflicts with enum's declared otherwise
-#define HATCH_SINGLE            HatchStyle_SINGLE
-#define HATCH_DOUBLE            HatchStyle_DOUBLE
-#define HATCH_TRIPLE            HatchStyle_TRIPLE
 
-enum HatchStyle
+// Border styles for SetBorder()
+enum class WindowBorderStyle : sal_Int16
 {
-    HATCH_SINGLE = 0,
-    HATCH_DOUBLE = 1,
-    HATCH_TRIPLE = 2,
-    HatchStyle_FORCE_EQUAL_SIZE = SAL_MAX_ENUM
+    NONE              = 0x0000,
+    NORMAL            = 0x0001,
+    MONO              = 0x0002,
+    MENU              = 0x0010,
+    NWF               = 0x0020,
+    NOBORDER          = 0x1000,
+    REMOVEBORDER      = 0x2000
+};
+namespace o3tl
+{
+    template<> struct typed_flags<WindowBorderStyle> : is_typed_flags<WindowBorderStyle, 0x3033> {};
+}
+
+enum class WindowStateMask {
+    NONE             = 0x0000,
+    X                = 0x0001,
+    Y                = 0x0002,
+    Width            = 0x0004,
+    Height           = 0x0008,
+    State            = 0x0010,
+    Minimized        = 0x0020,
+    MaximizedX       = 0x0100,
+    MaximizedY       = 0x0200,
+    MaximizedWidth   = 0x0400,
+    MaximizedHeight  = 0x0800,
+    Pos              = X | Y,
+    All              = X | Y | Width | Height | MaximizedX | MaximizedY | MaximizedWidth | MaximizedHeight | State | Minimized
+};
+namespace o3tl
+{
+    template<> struct typed_flags<WindowStateMask> : is_typed_flags<WindowStateMask, 0x0f3f> {};
+}
+
+enum class TimeFormat
+{
+    Hour12, Hour24
 };
 
-// to avoid conflicts with enum's declared otherwise
-#define LINE_NONE               LineStyle_NONE
-#define LINE_SOLID              LineStyle_SOLID
-#define LINE_DASH               LineStyle_DASH
-
-enum LineStyle
+enum class ExtTimeFieldFormat
 {
-    LINE_NONE = 0,
-    LINE_SOLID = 1,
-    LINE_DASH = 2,
-    LineStyle_FORCE_EQUAL_SIZE = SAL_MAX_ENUM
+    Short24H, Long24H
 };
 
-enum RasterOp { ROP_OVERPAINT, ROP_XOR, ROP_0, ROP_1, ROP_INVERT };
+enum class ExtDateFieldFormat
+{
+    SystemShort, SystemShortYY, SystemShortYYYY,
+    SystemLong,
+    ShortDDMMYY, ShortMMDDYY, ShortYYMMDD,
+    ShortDDMMYYYY, ShortMMDDYYYY, ShortYYYYMMDD,
+    ShortYYMMDD_DIN5008, ShortYYYYMMDD_DIN5008,
+    FORCE_EQUAL_SIZE=SAL_MAX_ENUM
+};
 
-enum FontAutoHint { AUTOHINT_DONTKNOW, AUTOHINT_FALSE, AUTOHINT_TRUE };
+// this appears to be a direct copy of css::awt::GradientStyle
+enum class GradientStyle
+{
+    Linear = 0,
+    Axial = 1,
+    Radial = 2,
+    Elliptical = 3,
+    Square = 4,
+    Rect = 5,
+    FORCE_EQUAL_SIZE = SAL_MAX_ENUM
+};
 
-enum FontHinting { HINTING_DONTKNOW, HINTING_FALSE, HINTING_TRUE };
+enum class HatchStyle
+{
+    Single = 0,
+    Double = 1,
+    Triple = 2,
+    FORCE_EQUAL_SIZE = SAL_MAX_ENUM
+};
 
-enum FontHintStyle { HINT_NONE, HINT_SLIGHT, HINT_MEDIUM, HINT_FULL };
+enum class LineStyle
+{
+    NONE = 0,
+    Solid = 1,
+    Dash = 2,
+    FORCE_EQUAL_SIZE = SAL_MAX_ENUM
+};
+
+enum class RasterOp { OverPaint, Xor, N0, N1, Invert };
 
 typedef sal_uInt32 sal_UCS4;    // TODO: this should be moved to rtl
 
-enum OutDevSupportType { OutDevSupport_TransparentRect, OutDevSupport_B2DDraw };
+enum class OutDevSupportType { TransparentRect, B2DDraw };
 
 struct ItalicMatrix
 {
@@ -96,25 +207,26 @@ inline bool operator ==(const ItalicMatrix& a, const ItalicMatrix& b)
 
 inline bool operator !=(const ItalicMatrix& a, const ItalicMatrix& b)
 {
-    return a.xx != b.xx || a.xy != b.xy || a.yx != b.yx || a.yy != b.yy;
+    return !(a == b);
 }
 
-enum VclAlign
+enum class VclAlign
 {
-    VCL_ALIGN_FILL,
-    VCL_ALIGN_START,
-    VCL_ALIGN_END,
-    VCL_ALIGN_CENTER
+    Fill,
+    Start,
+    End,
+    Center
 };
 
-enum VclPackType
+enum class VclPackType
 {
-    VCL_PACK_START = 0,
-    VCL_PACK_END = 1
+    Start = 0,
+    End = 1,
+    LAST = End
 };
 
 // Return Values from Dialog::Execute
-//!!! bei Aenderungen /basic/source/runtime/methods.cxx msgbox anpassen
+//!!! in case of changes adjust /basic/source/runtime/methods.cxx msgbox
 
 enum VclResponseType
 {
@@ -124,11 +236,41 @@ enum VclResponseType
     RET_NO      = 3,
     RET_RETRY   = 4,
     RET_IGNORE  = 5,
-    RET_ACCEPT  = 6,
     RET_CLOSE   = 7,
-    RET_APPLY   = 8,
-    RET_NONE    = 9,
     RET_HELP    = 10
+};
+
+enum class VclButtonsType
+{
+    NONE,
+    Ok,
+    Close,
+    Cancel,
+    YesNo,
+    OkCancel
+};
+
+enum class VclMessageType
+{
+    Info,
+    Warning,
+    Question,
+    Error
+};
+
+enum class VclSizeGroupMode
+{
+    NONE,
+    Horizontal,
+    Vertical,
+    Both
+};
+
+enum class VclPolicyType
+{
+    ALWAYS,
+    AUTOMATIC,
+    NEVER
 };
 
 #endif // INCLUDED_VCL_VCLENUM_HXX

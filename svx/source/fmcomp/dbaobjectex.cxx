@@ -21,11 +21,9 @@
 #include <osl/diagnose.h>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
 #include <com/sun/star/sdb/XSQLQueryComposerFactory.hpp>
-#include "fmprop.hrc"
-#include <comphelper/extract.hxx>
+#include <fmprop.hxx>
 #include <sot/formats.hxx>
 #include <sot/exchange.hxx>
-#include <comphelper/propertysetinfo.hxx>
 
 
 namespace svx
@@ -41,13 +39,12 @@ namespace svx
     using namespace ::com::sun::star::sdbcx;
     using namespace ::com::sun::star::container;
     using namespace ::com::sun::star::datatransfer;
-    using namespace ::comphelper;
 
     OComponentTransferable::OComponentTransferable(const OUString& _rDatasourceOrLocation
             ,const Reference< XContent>& _xContent)
     {
         m_aDescriptor.setDataSource(_rDatasourceOrLocation);
-        m_aDescriptor[daComponent] <<= _xContent;
+        m_aDescriptor[DataAccessDescriptorProperty::Component] <<= _xContent;
     }
 
 
@@ -75,7 +72,7 @@ namespace svx
         try
         {
             Reference<XPropertySet> xProp;
-            m_aDescriptor[daComponent] >>= xProp;
+            m_aDescriptor[DataAccessDescriptorProperty::Component] >>= xProp;
             if ( xProp.is() )
                 xProp->getPropertyValue("IsForm") >>= bForm;
         }
@@ -89,7 +86,7 @@ namespace svx
     {
         const SotClipboardFormatId nFormatId = SotExchange::GetFormat(_rFlavor);
         if ( nFormatId == getDescriptorFormatId(true) || nFormatId == getDescriptorFormatId(false) )
-            return SetAny( makeAny( m_aDescriptor.createPropertyValueSequence() ), _rFlavor );
+            return SetAny( makeAny( m_aDescriptor.createPropertyValueSequence() ) );
 
         return false;
     }
@@ -97,17 +94,9 @@ namespace svx
 
     bool OComponentTransferable::canExtractComponentDescriptor(const DataFlavorExVector& _rFlavors, bool _bForm )
     {
-        DataFlavorExVector::const_iterator aEnd = _rFlavors.end();
-        for (   DataFlavorExVector::const_iterator aCheck = _rFlavors.begin();
-                aCheck != aEnd;
-                ++aCheck
-            )
-        {
-            if ( getDescriptorFormatId(_bForm) == aCheck->mnSotId )
-                return true;
-        }
-
-        return false;
+        SotClipboardFormatId nFormatId = getDescriptorFormatId(_bForm);
+        return std::any_of(_rFlavors.begin(), _rFlavors.end(),
+            [&nFormatId](const DataFlavorEx& rCheck) { return nFormatId == rCheck.mnSotId; });
     }
 
 

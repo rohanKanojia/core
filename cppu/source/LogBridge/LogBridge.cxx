@@ -18,17 +18,13 @@
  */
 
 
-#include "osl/mutex.hxx"
-#include "osl/thread.h"
-#include "osl/thread.hxx"
+#include <osl/mutex.hxx>
+#include <osl/thread.h>
+#include <osl/thread.hxx>
 #include <osl/diagnose.h>
-#include "uno/dispatcher.h"
-#include "typelib/typedescription.hxx"
 #include <cppu/Enterable.hxx>
-#include "cppu/helper/purpenv/Environment.hxx"
-#include "cppu/helper/purpenv/Mapping.hxx"
-#include "cppu/EnvDcp.hxx"
-#include "uno/environment.hxx"
+#include <cppu/helper/purpenv/Environment.hxx>
+#include <cppu/helper/purpenv/Mapping.hxx>
 #include <com/sun/star/uno/Type.hxx>
 #include <sal/log.hxx>
 
@@ -40,7 +36,7 @@ class LogBridge : public cppu::Enterable
     sal_Int32           m_count;
     oslThreadIdentifier m_threadId;
 
-    virtual  ~LogBridge();
+    virtual  ~LogBridge() override;
 
 public:
     explicit LogBridge();
@@ -51,7 +47,7 @@ public:
     virtual void v_enter() override;
     virtual void v_leave() override;
 
-    virtual bool v_isValid(rtl::OUString * pReason) override;
+    virtual bool v_isValid(OUString * pReason) override;
 };
 
 LogBridge::LogBridge()
@@ -108,7 +104,7 @@ void LogBridge::v_leave()
     m_mutex.release();
 }
 
-bool LogBridge::v_isValid(rtl::OUString * pReason)
+bool LogBridge::v_isValid(OUString * pReason)
 {
     bool result = m_count > 0;
     if (!result)
@@ -134,10 +130,7 @@ bool LogBridge::v_isValid(rtl::OUString * pReason)
         switch(_pTypeRef->eTypeClass)
         {
             case typelib_TypeClass_STRING:
-                {
-                    const ::rtl::OString sValue( ::rtl::OUStringToOString(*static_cast< ::rtl::OUString*>(pArg),osl_getThreadTextEncoding()));
-                    SAL_INFO("cppu.log", "" << sValue.getStr());
-                }
+                SAL_INFO("cppu.log", "" << *static_cast< OUString*>(pArg));
                 break;
             case typelib_TypeClass_BOOLEAN:
                SAL_INFO("cppu.log", "" << *static_cast<sal_Bool*>(pArg));
@@ -168,10 +161,7 @@ bool LogBridge::v_isValid(rtl::OUString * pReason)
                SAL_INFO("cppu.log", "" << *static_cast<double*>(pArg));
                 break;
             case typelib_TypeClass_TYPE:
-                {
-                    const ::rtl::OString sValue( ::rtl::OUStringToOString(static_cast<css::uno::Type*>(pArg)->getTypeName(),osl_getThreadTextEncoding()));
-                   SAL_INFO("cppu.log", "" << sValue.getStr());
-                }
+                SAL_INFO("cppu.log", "" << static_cast<css::uno::Type*>(pArg)->getTypeName());
                 break;
             case typelib_TypeClass_ANY:
                 if ( static_cast<uno_Any*>(pArg)->pData )
@@ -183,10 +173,7 @@ bool LogBridge::v_isValid(rtl::OUString * pReason)
                SAL_INFO("cppu.log", "exception");
                 break;
             case typelib_TypeClass_INTERFACE:
-                {
-                    const ::rtl::OString sValue( ::rtl::OUStringToOString(_pTypeRef->pTypeName,osl_getThreadTextEncoding()));
-                   SAL_INFO("cppu.log", "" << sValue.getStr() << "0x" << std::hex << pArg);
-                }
+                SAL_INFO("cppu.log", "" << _pTypeRef->pTypeName << "0x" << std::hex << pArg);
                 break;
             case typelib_TypeClass_VOID:
                SAL_INFO("cppu.log", "void");
@@ -198,7 +185,7 @@ bool LogBridge::v_isValid(rtl::OUString * pReason)
     }
 }
 
-void LogProbe(
+static void LogProbe(
     bool                                pre,
     SAL_UNUSED_PARAMETER void         * /*pThis*/,
     SAL_UNUSED_PARAMETER void         * /*pContext*/,
@@ -210,15 +197,15 @@ void LogProbe(
     void                              * pArgs[],
     uno_Any                          ** ppException )
 {
-    ::rtl::OString sTemp;
+    OString sTemp;
     if ( pMemberType && pMemberType->pTypeName )
-        sTemp = ::rtl::OUStringToOString(pMemberType->pTypeName,RTL_TEXTENCODING_ASCII_US);
+        sTemp = OUStringToOString(pMemberType->pTypeName,RTL_TEXTENCODING_ASCII_US);
     if ( pre  )
     {
-        SAL_INFO("cppu.log", "{ LogBridge () " << sTemp.getStr() );
+        SAL_INFO("cppu.log", "{ LogBridge () " << sTemp );
         if ( nParams )
         {
-           SAL_INFO("cppu.log", "\n| : ( LogBridge ");
+            SAL_INFO("cppu.log", "\n| : ( LogBridge ");
             for(sal_Int32 i = 0;i < nParams;++i)
             {
                 if ( i > 0 )
@@ -226,29 +213,28 @@ void LogProbe(
                 traceValue(pParams[i].pTypeRef,pArgs[i]);
 
             }
-           SAL_INFO("cppu.log", ")");
+            SAL_INFO("cppu.log", ")");
         } // if ( nParams )
-       SAL_INFO("cppu.log", "\n");
+        SAL_INFO("cppu.log", "\n");
     }
     else if ( !pre )
     {
-        SAL_INFO("cppu.log", "} LogBridge () " << sTemp.getStr());
+        SAL_INFO("cppu.log", "} LogBridge () " << sTemp);
         if ( ppException && *ppException )
         {
             SAL_INFO("cppu.log", " exception occurred : ");
             typelib_TypeDescription * pElementTypeDescr = nullptr;
             TYPELIB_DANGER_GET( &pElementTypeDescr, (*ppException)->pType );
-            const ::rtl::OString sValue( ::rtl::OUStringToOString(pElementTypeDescr->pTypeName,osl_getThreadTextEncoding()));
-           SAL_INFO("cppu.log", "" << sValue.getStr());
+            SAL_INFO("cppu.log", "" << pElementTypeDescr->pTypeName);
             TYPELIB_DANGER_RELEASE( pElementTypeDescr );
         }
         else if ( pReturnTypeRef )
         {
-           SAL_INFO("cppu.log", " return : ");
+            SAL_INFO("cppu.log", " return : ");
             traceValue(pReturnTypeRef,pReturn);
         } // if ( pReturn && pReturnTypeRef )
 
-       SAL_INFO("cppu.log", "\n");
+        SAL_INFO("cppu.log", "\n");
     }
 }
 
@@ -259,13 +245,13 @@ void LogProbe(
 
 #endif
 
-extern "C" void SAL_DLLPUBLIC_EXPORT SAL_CALL uno_initEnvironment(uno_Environment * pEnv)
+extern "C" void SAL_DLLPUBLIC_EXPORT uno_initEnvironment(uno_Environment * pEnv)
     SAL_THROW_EXTERN_C()
 {
     cppu::helper::purpenv::Environment_initWithEnterable(pEnv, new LogBridge());
 }
 
-extern "C" void SAL_DLLPUBLIC_EXPORT SAL_CALL uno_ext_getMapping(uno_Mapping     ** ppMapping,
+extern "C" void SAL_DLLPUBLIC_EXPORT uno_ext_getMapping(uno_Mapping     ** ppMapping,
                                    uno_Environment  * pFrom,
                                    uno_Environment  * pTo )
 {

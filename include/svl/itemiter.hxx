@@ -23,8 +23,6 @@
 #include <svl/itemset.hxx>
 
 class SfxPoolItem;
-class SfxItemSet;
-class SfxItemPool;
 
 class SVL_DLLPUBLIC SfxItemIter
 {
@@ -41,11 +39,11 @@ public:
     const SfxPoolItem* FirstItem()
     {
         m_nCurrent = m_nStart;
-        return m_rSet.m_nCount ? *(m_rSet.m_pItems + m_nCurrent) : nullptr;
+        return m_rSet.m_nCount ? *(m_rSet.m_pItems.get() + m_nCurrent) : nullptr;
     }
-    const SfxPoolItem* GetCurItem()
+    const SfxPoolItem* GetCurItem() const
     {
-        return m_rSet.m_nCount ? *(m_rSet.m_pItems + m_nCurrent) : nullptr;
+        return m_rSet.m_nCount ? *(m_rSet.m_pItems.get() + m_nCurrent) : nullptr;
     }
     const SfxPoolItem* NextItem();
 

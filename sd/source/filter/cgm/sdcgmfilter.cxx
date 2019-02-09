@@ -17,34 +17,33 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <osl/module.hxx>
 #include <tools/urlobj.hxx>
+#include <unotools/ucbstreamhelper.hxx>
 #include <svl/itemset.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/docfilt.hxx>
 #include <svx/xflclit.hxx>
 #include <svx/xfillit0.hxx>
 
-#include "sdpage.hxx"
-#include "drawdoc.hxx"
-#include "sdcgmfilter.hxx"
+#include <sddll.hxx>
+#include <sdpage.hxx>
+#include <drawdoc.hxx>
+#include <sdcgmfilter.hxx>
 
-#define CGM_IMPORT_CGM      0x00000001
-
-#define CGM_EXPORT_IMPRESS  0x00000100
-
-#define CGM_BIG_ENDIAN      0x00020000
+#include <DrawDocShell.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::task;
 using namespace ::com::sun::star::frame;
 
-typedef sal_uInt32 ( SAL_CALL *ImportCGMPointer )( OUString const &, Reference< XModel > const &, sal_uInt32, Reference< XStatusIndicator > const & );
+typedef sal_uInt32 ( *ImportCGMPointer )(SvStream&, Reference< XModel > const &, Reference< XStatusIndicator > const &);
 
 #ifdef DISABLE_DYNLOADING
 
-extern "C" sal_uInt32 ImportCGM( OUString const &, Reference< XModel > const &, sal_uInt32, Reference< XStatusIndicator > const & );
+extern "C" sal_uInt32 ImportCGM(SvStream&, Reference< XModel > const &, Reference< XStatusIndicator > const &);
 
 #endif
 
@@ -57,32 +56,42 @@ SdCGMFilter::~SdCGMFilter()
 {
 }
 
+namespace
+{
+    class CGMPointer
+    {
+        ImportCGMPointer m_pPointer;
+    public:
+        CGMPointer()
+        {
+#ifdef DISABLE_DYNLOADING
+            m_pPointer = ImportCGM;
+#else
+            m_pPointer = reinterpret_cast<ImportCGMPointer>(
+                SdFilter::GetLibrarySymbol("icg", "ImportCGM"));
+#endif
+        }
+        ImportCGMPointer get() { return m_pPointer; }
+    };
+}
+
 bool SdCGMFilter::Import()
 {
-#ifndef DISABLE_DYNLOADING
-    ::osl::Module* pLibrary = OpenLibrary( mrMedium.GetFilter()->GetUserData() );
-#endif
     bool        bRet = false;
 
-    if(
-#ifndef DISABLE_DYNLOADING
-       pLibrary &&
-#endif
-       mxModel.is() )
+    CGMPointer aPointer;
+    ImportCGMPointer FncImportCGM = aPointer.get();
+    if (FncImportCGM && mxModel.is())
     {
-#ifndef DISABLE_DYNLOADING
-        ImportCGMPointer FncImportCGM = reinterpret_cast< ImportCGMPointer >( pLibrary->getFunctionSymbol(  "ImportCGM" ) );
-#else
-        ImportCGMPointer FncImportCGM = ImportCGM;
-#endif
-        OUString aFileURL( mrMedium.GetURLObject().GetMainURL( INetURLObject::NO_DECODE ) );
+        OUString aFileURL( mrMedium.GetURLObject().GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
         sal_uInt32          nRetValue;
 
         if( mrDocument.GetPageCount() == 0 )
             mrDocument.CreateFirstPages();
 
         CreateStatusIndicator();
-        nRetValue = FncImportCGM( aFileURL, mxModel, CGM_IMPORT_CGM | CGM_BIG_ENDIAN | CGM_EXPORT_IMPRESS, mxStatusIndicator );
+        std::unique_ptr<SvStream> xIn(::utl::UcbStreamHelper::CreateStream(aFileURL, StreamMode::READ));
+        nRetValue = xIn ? FncImportCGM(*xIn, mxModel, mxStatusIndicator) : 0;
 
         if( nRetValue )
         {
@@ -91,21 +100,18 @@ bool SdCGMFilter::Import()
             if( ( nRetValue &~0xff000000 ) != 0xffffff )    // maybe the backgroundcolor is already white
             {                                               // so we must not set a master page
                 mrDocument.StopWorkStartupDelay();
-                SdPage* pSdPage = mrDocument.GetMasterSdPage(0, PK_STANDARD);
+                SdPage* pSdPage = mrDocument.GetMasterSdPage(0, PageKind::Standard);
 
                 if(pSdPage)
                 {
                     // set PageFill to given color
-                    const Color aColor((sal_uInt8)(nRetValue >> 16), (sal_uInt8)(nRetValue >> 8), (sal_uInt8)(nRetValue >> 16));
+                    const Color aColor(static_cast<sal_uInt8>(nRetValue >> 16), static_cast<sal_uInt8>(nRetValue >> 8), static_cast<sal_uInt8>(nRetValue >> 16));
                     pSdPage->getSdrPageProperties().PutItem(XFillColorItem(OUString(), aColor));
                     pSdPage->getSdrPageProperties().PutItem(XFillStyleItem(drawing::FillStyle_SOLID));
                 }
             }
         }
     }
-#ifndef DISABLE_DYNLOADING
-    delete pLibrary;
-#endif
     return bRet;
 }
 
@@ -113,6 +119,22 @@ bool SdCGMFilter::Export()
 {
     // No ExportCGM function exists(!)
     return false;
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT bool TestImportCGM(SvStream &rStream)
+{
+    SdDLL::Init();
+
+    ::sd::DrawDocShellRef xDocShRef = new ::sd::DrawDocShell(SfxObjectCreateMode::EMBEDDED, false, DocumentType::Impress);
+
+    CGMPointer aPointer;
+
+    xDocShRef->GetDoc()->EnableUndo(false);
+    bool bRet = aPointer.get()(rStream, xDocShRef->GetModel(), css::uno::Reference<css::task::XStatusIndicator>()) == 0;
+
+    xDocShRef->DoClose();
+
+    return bRet;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

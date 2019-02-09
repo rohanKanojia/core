@@ -17,8 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/ole/vbaproject.hxx"
+#include <oox/ole/vbaproject.hxx>
 
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/document/XStorageBasedDocument.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/embed/XTransactedObject.hpp>
@@ -30,24 +31,26 @@
 #include <com/sun/star/script/vba/XVBAMacroResolver.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <comphelper/configurationhelper.hxx>
-#include <comphelper/string.hxx>
+#include <comphelper/storagehelper.hxx>
 #include <osl/diagnose.h>
 #include <rtl/tencinfo.h>
 #include <rtl/ustrbuf.h>
-#include "oox/helper/binaryinputstream.hxx"
-#include "oox/helper/containerhelper.hxx"
-#include "oox/helper/propertyset.hxx"
-#include "oox/helper/textinputstream.hxx"
-#include "oox/ole/olestorage.hxx"
-#include "oox/ole/vbacontrol.hxx"
-#include "oox/ole/vbahelper.hxx"
-#include "oox/ole/vbainputstream.hxx"
-#include "oox/ole/vbamodule.hxx"
-#include "oox/token/properties.hxx"
+#include <sal/log.hxx>
+#include <oox/helper/binaryinputstream.hxx>
+#include <oox/helper/containerhelper.hxx>
+#include <oox/helper/propertyset.hxx>
+#include <oox/helper/textinputstream.hxx>
+#include <oox/ole/olestorage.hxx>
+#include <oox/ole/vbacontrol.hxx>
+#include <oox/ole/vbahelper.hxx>
+#include <oox/ole/vbainputstream.hxx>
+#include <oox/ole/vbamodule.hxx>
+#include <oox/token/properties.hxx>
 
 namespace oox {
 namespace ole {
 
+using namespace ::com::sun::star;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::embed;
@@ -164,7 +167,8 @@ bool VbaProject::importVbaProject( StorageBase& rVbaPrjStrg )
    GraphicHelper grfHlp( mxContext, xFrame, noStorage );
    importVbaProject( rVbaPrjStrg, grfHlp );
    // return true if something has been imported
-   return hasModules() || hasDialogs();
+   return (mxBasicLib.is() && mxBasicLib->hasElements()) ||
+          (mxDialogLib.is() && mxDialogLib->hasElements());
 }
 
 void VbaProject::importVbaProject( StorageBase& rVbaPrjStrg, const GraphicHelper& rGraphicHelper )
@@ -173,27 +177,29 @@ void VbaProject::importVbaProject( StorageBase& rVbaPrjStrg, const GraphicHelper
     {
         // load the code modules and forms
         if( isImportVba() )
-            importVba( rVbaPrjStrg, rGraphicHelper, true/*bDefaultColorBgr*/ );
+            importVba( rVbaPrjStrg, rGraphicHelper );
         // copy entire storage into model
         if( isExportVba() )
             copyStorage( rVbaPrjStrg );
     }
 }
 
+void VbaProject::importVbaData(const uno::Reference<io::XInputStream>& xInputStream)
+{
+    uno::Reference<document::XStorageBasedDocument> xStorageBasedDoc(mxDocModel, uno::UNO_QUERY);
+    uno::Reference<embed::XStorage> xDocStorage(xStorageBasedDoc->getDocumentStorage(), uno::UNO_QUERY);
+    {
+        const sal_Int32 nOpenMode = ElementModes::SEEKABLE | ElementModes::WRITE | ElementModes::TRUNCATE;
+        uno::Reference<io::XOutputStream> xDocStream(xDocStorage->openStreamElement("_MS_VBA_Macros_XML", nOpenMode), uno::UNO_QUERY);
+        comphelper::OStorageHelper::CopyInputToOutput(xInputStream, xDocStream);
+    }
+    uno::Reference<embed::XTransactedObject>(xDocStorage, uno::UNO_QUERY)->commit();
+}
+
 void VbaProject::registerMacroAttacher( const VbaMacroAttacherRef& rxAttacher )
 {
     OSL_ENSURE( rxAttacher.get(), "VbaProject::registerMacroAttacher - unexpected empty reference" );
     maMacroAttachers.push_back( rxAttacher );
-}
-
-bool VbaProject::hasModules() const
-{
-    return mxBasicLib.is() && mxBasicLib->hasElements();
-}
-
-bool VbaProject::hasDialogs() const
-{
-    return mxDialogLib.is() && mxDialogLib->hasElements();
 }
 
 // protected ------------------------------------------------------------------
@@ -217,41 +223,43 @@ Reference< XLibraryContainer > VbaProject::getLibraryContainer( sal_Int32 nPropI
     return xLibContainer;
 }
 
-Reference< XNameContainer > VbaProject::openLibrary( sal_Int32 nPropId, bool bCreateMissing )
+Reference< XNameContainer > VbaProject::openLibrary( sal_Int32 nPropId )
 {
     Reference< XNameContainer > xLibrary;
     try
     {
         Reference< XLibraryContainer > xLibContainer( getLibraryContainer( nPropId ), UNO_SET_THROW );
-        if( bCreateMissing && !xLibContainer->hasByName( maPrjName ) )
+        if( !xLibContainer->hasByName( maPrjName ) )
             xLibContainer->createLibrary( maPrjName );
         xLibrary.set( xLibContainer->getByName( maPrjName ), UNO_QUERY_THROW );
     }
     catch(const Exception& )
     {
     }
-    OSL_ENSURE( !bCreateMissing || xLibrary.is(), "VbaProject::openLibrary - cannot create library" );
+    OSL_ENSURE( xLibrary.is(), "VbaProject::openLibrary - cannot create library" );
     return xLibrary;
 }
 
-Reference< XNameContainer > VbaProject::createBasicLibrary()
+Reference< XNameContainer > const & VbaProject::createBasicLibrary()
 {
     if( !mxBasicLib.is() )
-        mxBasicLib = openLibrary( PROP_BasicLibraries, true );
+        mxBasicLib = openLibrary( PROP_BasicLibraries );
     return mxBasicLib;
 }
 
-Reference< XNameContainer > VbaProject::createDialogLibrary()
+Reference< XNameContainer > const & VbaProject::createDialogLibrary()
 {
     if( !mxDialogLib.is() )
-        mxDialogLib = openLibrary( PROP_DialogLibraries, true );
+        mxDialogLib = openLibrary( PROP_DialogLibraries );
     return mxDialogLib;
 }
 
-void VbaProject::importVba( StorageBase& rVbaPrjStrg, const GraphicHelper& rGraphicHelper, bool bDefaultColorBgr )
+void VbaProject::importVba( StorageBase& rVbaPrjStrg, const GraphicHelper& rGraphicHelper )
 {
     readVbaModules( rVbaPrjStrg );
-    importModulesAndForms(rVbaPrjStrg, rGraphicHelper, bDefaultColorBgr );
+    importModulesAndForms(rVbaPrjStrg, rGraphicHelper );
+    // attach macros to registered objects
+    attachMacros();
 }
 
 void VbaProject::readVbaModules( StorageBase& rVbaPrjStrg )
@@ -399,7 +407,7 @@ void VbaProject::readVbaModules( StorageBase& rVbaPrjStrg )
         try
         {
             Reference< XVBACompatibility > xVBACompat( getLibraryContainer( PROP_BasicLibraries ), UNO_QUERY_THROW );
-            xVBACompat->setVBACompatibilityMode( sal_True );
+            xVBACompat->setVBACompatibilityMode( true );
             xVBACompat->setProjectName( maPrjName );
 
         }
@@ -412,7 +420,7 @@ void VbaProject::readVbaModules( StorageBase& rVbaPrjStrg )
     }
 }
 
-void VbaProject::importModulesAndForms( StorageBase& rVbaPrjStrg, const GraphicHelper& rGraphicHelper, bool bDefaultColorBgr )
+void VbaProject::importModulesAndForms( StorageBase& rVbaPrjStrg, const GraphicHelper& rGraphicHelper )
 {
     StorageRef xVbaStrg = rVbaPrjStrg.openSubStorage( "VBA", false );
     OSL_ENSURE( xVbaStrg.get(), "VbaProject::importModulesAndForms - cannot open 'VBA' substorage" );
@@ -423,12 +431,12 @@ void VbaProject::importModulesAndForms( StorageBase& rVbaPrjStrg, const GraphicH
 
     // create empty dummy modules
     VbaModuleMap aDummyModules;
-    for( DummyModuleMap::iterator aIt = maDummyModules.begin(), aEnd = maDummyModules.end(); aIt != aEnd; ++aIt )
+    for (auto const& dummyModule : maDummyModules)
     {
-        OSL_ENSURE( !maModules.has( aIt->first ) && !aDummyModules.has( aIt->first ), "VbaProject::importVba - multiple modules with the same name" );
-        VbaModuleMap::mapped_type& rxModule = aDummyModules[ aIt->first ];
-        rxModule.reset( new VbaModule( mxContext, mxDocModel, aIt->first, eTextEnc, bExecutable ) );
-        rxModule->setType( aIt->second );
+        OSL_ENSURE( !maModules.has( dummyModule.first ) && !aDummyModules.has( dummyModule.first ), "VbaProject::importVba - multiple modules with the same name" );
+        VbaModuleMap::mapped_type& rxModule = aDummyModules[ dummyModule.first ];
+        rxModule.reset( new VbaModule( mxContext, mxDocModel, dummyModule.first, eTextEnc, bExecutable ) );
+        rxModule->setType( dummyModule.second );
     }
 
     /*  Now it is time to load the source code. All modules will be inserted
@@ -475,16 +483,16 @@ void VbaProject::importModulesAndForms( StorageBase& rVbaPrjStrg, const GraphicH
         storages that misses to mention a module for an existing form. */
     ::std::vector< OUString > aElements;
     rVbaPrjStrg.getElementNames( aElements );
-    for( ::std::vector< OUString >::iterator aIt = aElements.begin(), aEnd = aElements.end(); aIt != aEnd; ++aIt )
+    for (auto const& elem : aElements)
     {
         // try to open the element as storage
-        if( *aIt != "VBA" )
+        if( elem != "VBA" )
         {
-            StorageRef xSubStrg = rVbaPrjStrg.openSubStorage( *aIt, false );
+            StorageRef xSubStrg = rVbaPrjStrg.openSubStorage( elem, false );
             if( xSubStrg.get() ) try
             {
                 // resolve module name from storage name (which equals the module stream name)
-                VbaModule* pModule = maModulesByStrm.get( *aIt ).get();
+                VbaModule* pModule = maModulesByStrm.get( elem ).get();
                 OSL_ENSURE( pModule && (pModule->getType() == ModuleType::FORM),
                     "VbaProject::importVba - form substorage without form module" );
                 OUString aModuleName;
@@ -493,7 +501,7 @@ void VbaProject::importModulesAndForms( StorageBase& rVbaPrjStrg, const GraphicH
 
                 // create and import the form
                 Reference< XNameContainer > xDialogLib( createDialogLibrary(), UNO_SET_THROW );
-                VbaUserForm aForm( mxContext, mxDocModel, rGraphicHelper, bDefaultColorBgr );
+                VbaUserForm aForm( mxContext, mxDocModel, rGraphicHelper, true/*bDefaultColorBgr*/ );
                 aForm.importForm( xDialogLib, *xSubStrg, aModuleName, eTextEnc );
             }
             catch(const Exception& )
@@ -501,9 +509,6 @@ void VbaProject::importModulesAndForms( StorageBase& rVbaPrjStrg, const GraphicH
             }
         }
     }
-
-    // attach macros to registered objects
-    attachMacros();
 }
 
 void VbaProject::attachMacros()

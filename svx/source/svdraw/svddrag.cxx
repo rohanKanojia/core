@@ -20,18 +20,17 @@
 #include <svx/svdview.hxx>
 #include <svx/svddrag.hxx>
 
-void SdrDragStat::Clear(bool bLeaveOne)
+SdrDragStatUserData::~SdrDragStatUserData() = default;
+
+SdrDragStat::~SdrDragStat()
 {
-    while (!aPnts.empty()) {
-        delete aPnts.back();
-        aPnts.pop_back();
-    }
-    delete pUser;
-    pUser=nullptr;
-    aPnts.clear();
-    if (bLeaveOne) {
-        aPnts.push_back(new Point);
-    }
+}
+
+void SdrDragStat::Clear()
+{
+    mpUserData.reset();
+    mvPnts.clear();
+    mvPnts.emplace_back();
 }
 
 void SdrDragStat::Reset()
@@ -50,48 +49,38 @@ void SdrDragStat::Reset()
     pDragMethod=nullptr;
     bEndDragChangesAttributes=false;
     bEndDragChangesGeoAndAttributes=false;
+    mbEndDragChangesLayout=false;
     bMouseIsUp=false;
-    Clear(true);
-    aActionRect=Rectangle();
+    Clear();
+    aActionRect=tools::Rectangle();
 }
 
 void SdrDragStat::Reset(const Point& rPnt)
 {
     Reset();
-    Start()=rPnt;
+    mvPnts[0]=rPnt;
     aPos0=rPnt;
-    RealNow()=rPnt;
+    aRealNow=rPnt;
 }
 
 void SdrDragStat::NextMove(const Point& rPnt)
 {
-    aPos0=GetNow();
-    RealNow()=rPnt;
-    Point aBla=KorregPos(GetRealNow(),GetPrev());
-    Now()=aBla;
+    aPos0=mvPnts.back();
+    aRealNow=rPnt;
+    mvPnts.back()=rPnt;
 }
 
 void SdrDragStat::NextPoint()
 {
-    Point aPnt(GetNow());
-    aPnts.push_back(new Point(KorregPos(GetRealNow(),aPnt)));
-    Prev()=aPnt;
+    mvPnts.emplace_back(aRealNow);
 }
 
 void SdrDragStat::PrevPoint()
 {
-    if (aPnts.size()>=2) { // one has to remain at all times
-        Point* pPnt=aPnts[aPnts.size()-2];
-        aPnts.erase(aPnts.begin()+aPnts.size()-2);
-        delete pPnt;
-        Now()=KorregPos(GetRealNow(),GetPrev());
+    if (mvPnts.size()>1) { // one has to remain at all times
+        mvPnts.erase(mvPnts.begin()+mvPnts.size()-2);
+        mvPnts.back() = aRealNow;
     }
-}
-
-Point SdrDragStat::KorregPos(const Point& rNow, const Point& /*rPrev*/)
-{
-    Point aRet(rNow);
-    return aRet;
 }
 
 bool SdrDragStat::CheckMinMoved(const Point& rPnt)
@@ -107,7 +96,7 @@ bool SdrDragStat::CheckMinMoved(const Point& rPnt)
 
 Fraction SdrDragStat::GetXFact() const
 {
-    long nMul=GetNow().X()-aRef1.X();
+    long nMul=mvPnts.back().X()-aRef1.X();
     long nDiv=GetPrev().X()-aRef1.X();
     if (nDiv==0) nDiv=1;
     if (bHorFixed) { nMul=1; nDiv=1; }
@@ -116,24 +105,24 @@ Fraction SdrDragStat::GetXFact() const
 
 Fraction SdrDragStat::GetYFact() const
 {
-    long nMul=GetNow().Y()-aRef1.Y();
+    long nMul=mvPnts.back().Y()-aRef1.Y();
     long nDiv=GetPrev().Y()-aRef1.Y();
     if (nDiv==0) nDiv=1;
     if (bVerFixed) { nMul=1; nDiv=1; }
     return Fraction(nMul,nDiv);
 }
 
-void SdrDragStat::TakeCreateRect(Rectangle& rRect) const
+void SdrDragStat::TakeCreateRect(tools::Rectangle& rRect) const
 {
-    rRect=Rectangle(GetStart(),GetNow());
-    if (GetPointCount()>=2) {
-        Point aBtmRgt(GetPoint(1));
-        rRect.Right()=aBtmRgt.X();
-        rRect.Bottom()=aBtmRgt.Y();
+    rRect=tools::Rectangle(mvPnts[0], mvPnts.back());
+    if (mvPnts.size()>1) {
+        Point aBtmRgt(mvPnts[1]);
+        rRect.SetRight(aBtmRgt.X() );
+        rRect.SetBottom(aBtmRgt.Y() );
     }
     if (pView!=nullptr && pView->IsCreate1stPointAsCenter()) {
-        rRect.Top()+=rRect.Top()-rRect.Bottom();
-        rRect.Left()+=rRect.Left()-rRect.Right();
+        rRect.AdjustTop(rRect.Top()-rRect.Bottom() );
+        rRect.AdjustLeft(rRect.Left()-rRect.Right() );
     }
 }
 

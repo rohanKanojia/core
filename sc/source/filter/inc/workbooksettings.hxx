@@ -22,6 +22,9 @@
 
 #include "workbookhelper.hxx"
 
+namespace oox { class AttributeList; }
+namespace oox { class SequenceInputStream; }
+
 namespace com { namespace sun { namespace star { namespace util { struct Date; } } } }
 
 namespace oox {
@@ -30,8 +33,12 @@ namespace xls {
 /** Settings for workbook write protection. */
 struct FileSharingModel
 {
-    OUString     maUserName;             /// User who added the write protection password.
-    sal_uInt16          mnPasswordHash;         /// Hash value of the write protection password.
+    OUString            maUserName;             /// User who added the write protection password.
+    OUString            maAlgorithmName;        /// Algorithm name, "SHA-512", "SHA-1", ...
+    OUString            maHashValue;            /// Hash value computed by the algorithm, base-64 encoded
+    OUString            maSaltValue;            /// Salt value to be prepended to the password, base-64 encoded
+    sal_uInt32          mnSpinCount;            /// Spin count, iterations to run algorithm
+    sal_uInt16          mnPasswordHash;         /// Hash value of the write protection password. (unrelated to the above)
     bool                mbRecommendReadOnly;    /// True = recommend read-only mode on opening.
 
     explicit            FileSharingModel();
@@ -68,7 +75,6 @@ struct CalcSettingsModel
     bool                mbFullPrecision;        /// True = use full precision on calculation.
     bool                mbIterate;              /// True = allow circular references.
     bool                mbConcurrent;           /// True = concurrent calculation enabled.
-    bool                mbUseNlr;               /// True = use natural language references in formulas.
 
     explicit            CalcSettingsModel();
 };
@@ -98,7 +104,7 @@ public:
     /** Returns the show objects mode (considered a view setting in Calc). */
     sal_Int16           getApiShowObjectMode() const;
     /** Returns the nulldate of this workbook. */
-    css::util::Date     getNullDate() const;
+    css::util::Date const & getNullDate() const;
 
 private:
     /** Updates date mode and unit converter nulldate. */

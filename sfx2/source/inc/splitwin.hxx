@@ -35,10 +35,7 @@ struct SfxDock_Impl
     VclPtr<SfxDockingWindow> pWin;      // SplitWindow has this window
     bool              bNewLine;
     bool              bHide;     // SplitWindow had this window
-    long              nSize;
 };
-
-typedef std::vector<std::unique_ptr<SfxDock_Impl> > SfxDockArr_Impl;
 
 class SfxSplitWindow : public SplitWindow
 {
@@ -47,19 +44,19 @@ friend class SfxEmptySplitWin_Impl;
 private:
     SfxChildAlignment   eAlign;
     SfxWorkWindow*      pWorkWin;
-    SfxDockArr_Impl*    pDockArr;
-    bool                bLocked;
+    std::vector<std::unique_ptr<SfxDock_Impl> >
+                        maDockArr;
     bool                bPinned;
     VclPtr<SfxEmptySplitWin_Impl>  pEmptyWin;
     VclPtr<SfxDockingWindow>       pActive;
 
-    void                InsertWindow_Impl( SfxDock_Impl* pDockWin,
+    void                InsertWindow_Impl( SfxDock_Impl const * pDockWin,
                             const Size& rSize,
                             sal_uInt16 nLine,
                             sal_uInt16 nPos,
-                            bool bNewLine=false );
+                            bool bNewLine );
 
-    DECL_LINK_TYPED(    TimerHdl, Timer*, void );
+    DECL_LINK(    TimerHdl, Timer*, void );
     bool                CursorIsOverRect() const;
     void                SetPinned_Impl( bool );
     void                SetFadeIn_Impl( bool );
@@ -71,18 +68,16 @@ protected:
     virtual void        StartSplit() override;
     virtual void        SplitResize() override;
     virtual void        Split() override;
-    virtual void        Command ( const CommandEvent& rCEvt ) override;
     virtual void        MouseButtonDown ( const MouseEvent& ) override;
 
 public:
                         SfxSplitWindow( vcl::Window* pParent, SfxChildAlignment eAl,
-                            SfxWorkWindow *pW, bool bWithButtons,
-                            WinBits nBits = WB_BORDER | WB_SIZEABLE | WB_3DLOOK );
+                            SfxWorkWindow *pW, bool bWithButtons );
 
-                        virtual ~SfxSplitWindow();
+                        virtual ~SfxSplitWindow() override;
     virtual void        dispose() override;
 
-    void                ReleaseWindow_Impl(SfxDockingWindow *pWin, bool bSaveConfig=true);
+    void                ReleaseWindow_Impl(SfxDockingWindow const *pWin, bool bSaveConfig=true);
 
     void                InsertWindow( SfxDockingWindow* pDockWin,
                             const Size& rSize);
@@ -91,22 +86,20 @@ public:
                             const Size& rSize,
                             sal_uInt16 nLine,
                             sal_uInt16 nPos,
-                            bool bNewLine=false );
+                            bool bNewLine );
 
     void                MoveWindow( SfxDockingWindow* pDockWin,
                             const Size& rSize,
                             sal_uInt16 nLine,
                             sal_uInt16 nPos,
-                            bool bNewLine=false );
+                            bool bNewLine );
 
-    void                RemoveWindow( SfxDockingWindow* pDockWin, bool bHide=true);
+    void                RemoveWindow( SfxDockingWindow const * pDockWin, bool bHide=true);
 
     void                Lock( bool bLock=true )
                         {
-                            bLocked = bLock;
                             SetUpdateMode( !bLock );
                         }
-    using Window::IsLocked;
 
     bool                GetWindowPos( const SfxDockingWindow* pWindow,
                                       sal_uInt16& rLine, sal_uInt16& rPos ) const;
@@ -119,10 +112,9 @@ public:
 
     bool                IsPinned() const { return bPinned; }
     bool                IsFadeIn() const;
-    bool                IsAutoHide( bool bSelf = false ) const;
+    bool                IsAutoHide( bool bSelf ) const;
     SplitWindow*        GetSplitWindow();
 
-    virtual void        AutoHide() override;
     virtual void        FadeOut() override;
     virtual void        FadeIn() override;
     void                SetActiveWindow_Impl( SfxDockingWindow* pWin );

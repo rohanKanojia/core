@@ -18,18 +18,17 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <utility>
 
 #include <com/sun/star/util/DateTime.hpp>
 #include <com/sun/star/text/XTextTable.hpp>
 
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
-#include <comphelper/servicehelper.hxx>
 
 #include <pagedesc.hxx>
-#include "poolfmt.hxx"
+#include <poolfmt.hxx>
 #include <redline.hxx>
 #include <section.hxx>
 #include <unoprnms.hxx>
@@ -48,8 +47,8 @@
 
 using namespace ::com::sun::star;
 
-SwXRedlineText::SwXRedlineText(SwDoc* _pDoc, SwNodeIndex aIndex) :
-    SwXText(_pDoc, CURSOR_REDLINE),
+SwXRedlineText::SwXRedlineText(SwDoc* _pDoc, const SwNodeIndex& aIndex) :
+    SwXText(_pDoc, CursorType::Redline),
     aNodeIndex(aIndex)
 {
 }
@@ -60,7 +59,6 @@ const SwStartNode* SwXRedlineText::GetStartNode() const
 }
 
 uno::Any SwXRedlineText::queryInterface( const uno::Type& rType )
-    throw(uno::RuntimeException, std::exception)
 {
     uno::Any aRet;
 
@@ -83,7 +81,6 @@ uno::Any SwXRedlineText::queryInterface( const uno::Type& rType )
 }
 
 uno::Sequence<uno::Type> SwXRedlineText::getTypes()
-    throw(uno::RuntimeException, std::exception)
 {
     // SwXText::getTypes()
     uno::Sequence<uno::Type> aTypes = SwXText::getTypes();
@@ -97,21 +94,19 @@ uno::Sequence<uno::Type> SwXRedlineText::getTypes()
 }
 
 uno::Sequence<sal_Int8> SwXRedlineText::getImplementationId()
-    throw(uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 uno::Reference<text::XTextCursor> SwXRedlineText::createTextCursor()
-    throw( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
 
     SwPosition aPos(aNodeIndex);
     SwXTextCursor *const pXCursor =
-        new SwXTextCursor(*GetDoc(), this, CURSOR_REDLINE, aPos);
+        new SwXTextCursor(*GetDoc(), this, CursorType::Redline, aPos);
     auto& rUnoCursor(pXCursor->GetCursor());
-    rUnoCursor.Move(fnMoveForward, fnGoNode);
+    rUnoCursor.Move(fnMoveForward, GoInNode);
 
     // #101929# prevent a newly created text cursor from running inside a table
     // because table cells have their own XText.
@@ -147,39 +142,37 @@ uno::Reference<text::XTextCursor> SwXRedlineText::createTextCursor()
 
 uno::Reference<text::XTextCursor> SwXRedlineText::createTextCursorByRange(
     const uno::Reference<text::XTextRange> & aTextRange)
-        throw( uno::RuntimeException, std::exception )
 {
     uno::Reference<text::XTextCursor> xCursor = createTextCursor();
-    xCursor->gotoRange(aTextRange->getStart(), sal_False);
-    xCursor->gotoRange(aTextRange->getEnd(), sal_True);
+    xCursor->gotoRange(aTextRange->getStart(), false);
+    xCursor->gotoRange(aTextRange->getEnd(), true);
     return xCursor;
 }
 
 uno::Reference<container::XEnumeration> SwXRedlineText::createEnumeration()
-    throw( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     SwPaM aPam(aNodeIndex);
-    aPam.Move(fnMoveForward, fnGoNode);
+    aPam.Move(fnMoveForward, GoInNode);
     auto pUnoCursor(GetDoc()->CreateUnoCursor(*aPam.Start()));
-    return SwXParagraphEnumeration::Create(this, pUnoCursor, CURSOR_REDLINE);
+    return SwXParagraphEnumeration::Create(this, pUnoCursor, CursorType::Redline);
 }
 
-uno::Type SwXRedlineText::getElementType(  ) throw(uno::RuntimeException, std::exception)
+uno::Type SwXRedlineText::getElementType(  )
 {
     return cppu::UnoType<text::XTextRange>::get();
 }
 
-sal_Bool SwXRedlineText::hasElements(  ) throw(uno::RuntimeException, std::exception)
+sal_Bool SwXRedlineText::hasElements(  )
 {
-    return sal_True;    // we always have a content index
+    return true;    // we always have a content index
 }
 
 SwXRedlinePortion::SwXRedlinePortion(SwRangeRedline const& rRedline,
         SwUnoCursor const*const pPortionCursor,
         uno::Reference< text::XText > const& xParent, bool const bStart)
     : SwXTextPortion(pPortionCursor, xParent,
-            (bStart) ? PORTION_REDLINE_START : PORTION_REDLINE_END)
+            bStart ? PORTION_REDLINE_START : PORTION_REDLINE_END)
     , m_rRedline(rRedline)
 {
     SetCollapsed(!m_rRedline.HasMark());
@@ -187,21 +180,6 @@ SwXRedlinePortion::SwXRedlinePortion(SwRangeRedline const& rRedline,
 
 SwXRedlinePortion::~SwXRedlinePortion()
 {
-}
-
-static OUString lcl_RedlineTypeToOUString(RedlineType_t eType)
-{
-    OUString sRet;
-    switch(eType & nsRedlineType_t::REDLINE_NO_FLAG_MASK)
-    {
-        case nsRedlineType_t::REDLINE_INSERT: sRet = "Insert"; break;
-        case nsRedlineType_t::REDLINE_DELETE: sRet = "Delete"; break;
-        case nsRedlineType_t::REDLINE_FORMAT: sRet = "Format"; break;
-        case nsRedlineType_t::REDLINE_PARAGRAPH_FORMAT: sRet = "ParagraphFormat"; break;
-        case nsRedlineType_t::REDLINE_TABLE:  sRet = "TextTable"; break;
-        case nsRedlineType_t::REDLINE_FMTCOLL:sRet = "Style"; break;
-    }
-    return sRet;
 }
 
 static uno::Sequence<beans::PropertyValue> lcl_GetSuccessorProperties(const SwRangeRedline& rRedline)
@@ -221,13 +199,12 @@ static uno::Sequence<beans::PropertyValue> lcl_GetSuccessorProperties(const SwRa
         pValues[2].Name = UNO_NAME_REDLINE_COMMENT;
         pValues[2].Value <<= pNext->GetComment();
         pValues[3].Name = UNO_NAME_REDLINE_TYPE;
-        pValues[3].Value <<= lcl_RedlineTypeToOUString(pNext->GetType());
+        pValues[3].Value <<= nsRedlineType_t::SwRedlineTypeToOUString(pNext->GetType());
     }
     return aValues;
 }
 
 uno::Any SwXRedlinePortion::getPropertyValue( const OUString& rPropertyName )
-        throw(beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     Validate();
@@ -258,7 +235,7 @@ uno::Any SwXRedlinePortion::getPropertyValue( const OUString& rPropertyName )
     return aRet;
 }
 
-void SwXRedlinePortion::Validate() throw( uno::RuntimeException )
+void SwXRedlinePortion::Validate()
 {
     SwUnoCursor& rUnoCursor = GetCursor();
     //search for the redline
@@ -271,12 +248,12 @@ void SwXRedlinePortion::Validate() throw( uno::RuntimeException )
         throw uno::RuntimeException();
 }
 
-uno::Sequence< sal_Int8 > SAL_CALL SwXRedlinePortion::getImplementationId(  ) throw(uno::RuntimeException, std::exception)
+uno::Sequence< sal_Int8 > SAL_CALL SwXRedlinePortion::getImplementationId(  )
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
-uno::Any  SwXRedlinePortion::GetPropertyValue( const OUString& rPropertyName, const SwRangeRedline& rRedline ) throw()
+uno::Any  SwXRedlinePortion::GetPropertyValue( const OUString& rPropertyName, const SwRangeRedline& rRedline )
 {
     uno::Any aRet;
     if(rPropertyName == UNO_NAME_REDLINE_AUTHOR)
@@ -287,9 +264,11 @@ uno::Any  SwXRedlinePortion::GetPropertyValue( const OUString& rPropertyName, co
     }
     else if(rPropertyName == UNO_NAME_REDLINE_COMMENT)
         aRet <<= rRedline.GetComment();
+    else if(rPropertyName == UNO_NAME_REDLINE_DESCRIPTION)
+        aRet <<= const_cast<SwRangeRedline&>(rRedline).GetDescr();
     else if(rPropertyName == UNO_NAME_REDLINE_TYPE)
     {
-        aRet <<= lcl_RedlineTypeToOUString(rRedline.GetType());
+        aRet <<= nsRedlineType_t::SwRedlineTypeToOUString(rRedline.GetType());
     }
     else if(rPropertyName == UNO_NAME_REDLINE_SUCCESSOR_DATA)
     {
@@ -313,9 +292,9 @@ uno::Any  SwXRedlinePortion::GetPropertyValue( const OUString& rPropertyName, co
 }
 
 uno::Sequence< beans::PropertyValue > SwXRedlinePortion::CreateRedlineProperties(
-    const SwRangeRedline& rRedline, bool bIsStart ) throw()
+    const SwRangeRedline& rRedline, bool bIsStart )
 {
-    uno::Sequence< beans::PropertyValue > aRet(11);
+    uno::Sequence< beans::PropertyValue > aRet(12);
     const SwRedlineData* pNext = rRedline.GetRedlineData().Next();
     beans::PropertyValue* pRet = aRet.getArray();
 
@@ -326,8 +305,10 @@ uno::Sequence< beans::PropertyValue > SwXRedlinePortion::CreateRedlineProperties
     pRet[nPropIdx++].Value <<= rRedline.GetTimeStamp().GetUNODateTime();
     pRet[nPropIdx].Name = UNO_NAME_REDLINE_COMMENT;
     pRet[nPropIdx++].Value <<= rRedline.GetComment();
+    pRet[nPropIdx].Name = UNO_NAME_REDLINE_DESCRIPTION;
+    pRet[nPropIdx++].Value <<= const_cast<SwRangeRedline&>(rRedline).GetDescr();
     pRet[nPropIdx].Name = UNO_NAME_REDLINE_TYPE;
-    pRet[nPropIdx++].Value <<= lcl_RedlineTypeToOUString(rRedline.GetType());
+    pRet[nPropIdx++].Value <<= nsRedlineType_t::SwRedlineTypeToOUString(rRedline.GetType());
     pRet[nPropIdx].Name = UNO_NAME_REDLINE_IDENTIFIER;
     pRet[nPropIdx++].Value <<= OUString::number(
         sal::static_int_cast< sal_Int64 >( reinterpret_cast< sal_IntPtr >(&rRedline) ) );
@@ -363,7 +344,7 @@ uno::Sequence< beans::PropertyValue > SwXRedlinePortion::CreateRedlineProperties
 }
 
 SwXRedline::SwXRedline(SwRangeRedline& rRedline, SwDoc& rDoc) :
-    SwXText(&rDoc, CURSOR_REDLINE),
+    SwXText(&rDoc, CursorType::Redline),
     pDoc(&rDoc),
     pRedline(&rRedline)
 {
@@ -374,7 +355,7 @@ SwXRedline::~SwXRedline()
 {
 }
 
-uno::Reference< beans::XPropertySetInfo > SwXRedline::getPropertySetInfo(  ) throw(uno::RuntimeException, std::exception)
+uno::Reference< beans::XPropertySetInfo > SwXRedline::getPropertySetInfo(  )
 {
     static uno::Reference< beans::XPropertySetInfo >  xRef =
         aSwMapProvider.GetPropertySet(PROPERTY_MAP_REDLINE)->getPropertySetInfo();
@@ -382,8 +363,6 @@ uno::Reference< beans::XPropertySetInfo > SwXRedline::getPropertySetInfo(  ) thr
 }
 
 void SwXRedline::setPropertyValue( const OUString& rPropertyName, const uno::Any& aValue )
-    throw(beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException,
-        lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if(!pDoc)
@@ -400,6 +379,10 @@ void SwXRedline::setPropertyValue( const OUString& rPropertyName, const uno::Any
     {
         OUString sTmp; aValue >>= sTmp;
         pRedline->SetComment(sTmp);
+    }
+    else if(rPropertyName == UNO_NAME_REDLINE_DESCRIPTION)
+    {
+        SAL_WARN("sw.uno", "SwXRedline::setPropertyValue: can't set Description");
     }
     else if(rPropertyName == UNO_NAME_REDLINE_TYPE)
     {
@@ -419,7 +402,6 @@ void SwXRedline::setPropertyValue( const OUString& rPropertyName, const uno::Any
 }
 
 uno::Any SwXRedline::getPropertyValue( const OUString& rPropertyName )
-    throw(beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if(!pDoc)
@@ -435,14 +417,14 @@ uno::Any SwXRedline::getPropertyValue( const OUString& rPropertyName )
             pNode = &pRedline->GetNode(false);
         switch(pNode->GetNodeType())
         {
-            case ND_SECTIONNODE:
+            case SwNodeType::Section:
             {
                 SwSectionNode* pSectNode = pNode->GetSectionNode();
                 OSL_ENSURE(pSectNode, "No section node!");
                 xRet = SwXTextSections::GetObject( *pSectNode->GetSection().GetFormat() );
             }
             break;
-            case ND_TABLENODE :
+            case SwNodeType::Table :
             {
                 SwTableNode* pTableNode = pNode->GetTableNode();
                 OSL_ENSURE(pTableNode, "No table node!");
@@ -451,7 +433,7 @@ uno::Any SwXRedline::getPropertyValue( const OUString& rPropertyName )
                 xRet = SwXTextTables::GetObject( *pTableFormat );
             }
             break;
-            case ND_TEXTNODE :
+            case SwNodeType::Text :
             {
                 SwPosition* pPoint = nullptr;
                 if(bStart || !pRedline->HasMark())
@@ -491,25 +473,21 @@ uno::Any SwXRedline::getPropertyValue( const OUString& rPropertyName )
 void SwXRedline::addPropertyChangeListener(
     const OUString& /*aPropertyName*/,
     const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/ )
-        throw(beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
 }
 
 void SwXRedline::removePropertyChangeListener(
     const OUString& /*aPropertyName*/, const uno::Reference< beans::XPropertyChangeListener >& /*aListener*/ )
-        throw(beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
 }
 
 void SwXRedline::addVetoableChangeListener(
     const OUString& /*PropertyName*/, const uno::Reference< beans::XVetoableChangeListener >& /*aListener*/ )
-        throw(beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
 }
 
 void SwXRedline::removeVetoableChangeListener(
     const OUString& /*PropertyName*/, const uno::Reference< beans::XVetoableChangeListener >& /*aListener*/ )
-        throw(beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
 }
 
@@ -523,10 +501,9 @@ void SwXRedline::Modify( const SfxPoolItem* pOld, const SfxPoolItem *pNew)
     }
 }
 
-uno::Reference< container::XEnumeration >  SwXRedline::createEnumeration() throw( uno::RuntimeException, std::exception )
+uno::Reference< container::XEnumeration >  SwXRedline::createEnumeration()
 {
     SolarMutexGuard aGuard;
-    uno::Reference< container::XEnumeration > xRet;
     if(!pDoc)
         throw uno::RuntimeException();
 
@@ -534,24 +511,24 @@ uno::Reference< container::XEnumeration >  SwXRedline::createEnumeration() throw
     if(!pNodeIndex)
         return nullptr;
     SwPaM aPam(*pNodeIndex);
-    aPam.Move(fnMoveForward, fnGoNode);
+    aPam.Move(fnMoveForward, GoInNode);
     auto pUnoCursor(GetDoc()->CreateUnoCursor(*aPam.Start()));
-    return SwXParagraphEnumeration::Create(this, pUnoCursor, CURSOR_REDLINE);
+    return SwXParagraphEnumeration::Create(this, pUnoCursor, CursorType::Redline);
 }
 
-uno::Type SwXRedline::getElementType(  ) throw(uno::RuntimeException, std::exception)
+uno::Type SwXRedline::getElementType(  )
 {
     return cppu::UnoType<text::XTextRange>::get();
 }
 
-sal_Bool SwXRedline::hasElements(  ) throw(uno::RuntimeException, std::exception)
+sal_Bool SwXRedline::hasElements(  )
 {
     if(!pDoc)
         throw uno::RuntimeException();
     return nullptr != pRedline->GetContentIdx();
 }
 
-uno::Reference< text::XTextCursor >  SwXRedline::createTextCursor() throw( uno::RuntimeException, std::exception )
+uno::Reference< text::XTextCursor >  SwXRedline::createTextCursor()
 {
     SolarMutexGuard aGuard;
     if(!pDoc)
@@ -559,43 +536,40 @@ uno::Reference< text::XTextCursor >  SwXRedline::createTextCursor() throw( uno::
 
     uno::Reference< text::XTextCursor >     xRet;
     SwNodeIndex* pNodeIndex = pRedline->GetContentIdx();
-    if(pNodeIndex)
-    {
-        SwPosition aPos(*pNodeIndex);
-        SwXTextCursor *const pXCursor =
-            new SwXTextCursor(*pDoc, this, CURSOR_REDLINE, aPos);
-        auto& rUnoCursor(pXCursor->GetCursor());
-        rUnoCursor.Move(fnMoveForward, fnGoNode);
-
-        // is here a table?
-        SwTableNode* pTableNode = rUnoCursor.GetNode().FindTableNode();
-        SwContentNode* pCont = nullptr;
-        while( pTableNode )
-        {
-            rUnoCursor.GetPoint()->nNode = *pTableNode->EndOfSectionNode();
-            pCont = GetDoc()->GetNodes().GoNext(&rUnoCursor.GetPoint()->nNode);
-            pTableNode = pCont->FindTableNode();
-        }
-        if(pCont)
-            rUnoCursor.GetPoint()->nContent.Assign(pCont, 0);
-        xRet = static_cast<text::XWordCursor*>(pXCursor);
-    }
-    else
+    if(!pNodeIndex)
     {
         throw uno::RuntimeException();
     }
+
+    SwPosition aPos(*pNodeIndex);
+    SwXTextCursor *const pXCursor =
+        new SwXTextCursor(*pDoc, this, CursorType::Redline, aPos);
+    auto& rUnoCursor(pXCursor->GetCursor());
+    rUnoCursor.Move(fnMoveForward, GoInNode);
+
+    // is here a table?
+    SwTableNode* pTableNode = rUnoCursor.GetNode().FindTableNode();
+    SwContentNode* pCont = nullptr;
+    while( pTableNode )
+    {
+        rUnoCursor.GetPoint()->nNode = *pTableNode->EndOfSectionNode();
+        pCont = GetDoc()->GetNodes().GoNext(&rUnoCursor.GetPoint()->nNode);
+        pTableNode = pCont->FindTableNode();
+    }
+    if(pCont)
+        rUnoCursor.GetPoint()->nContent.Assign(pCont, 0);
+    xRet = static_cast<text::XWordCursor*>(pXCursor);
+
     return xRet;
 }
 
 uno::Reference< text::XTextCursor >  SwXRedline::createTextCursorByRange(
     const uno::Reference< text::XTextRange > & /*aTextPosition*/)
-        throw( uno::RuntimeException, std::exception )
 {
     throw uno::RuntimeException();
 }
 
 uno::Any SwXRedline::queryInterface( const uno::Type& rType )
-    throw(uno::RuntimeException, std::exception)
 {
     uno::Any aRet = SwXText::queryInterface(rType);
     if(!aRet.hasValue())
@@ -606,7 +580,6 @@ uno::Any SwXRedline::queryInterface( const uno::Type& rType )
 }
 
 uno::Sequence<uno::Type> SwXRedline::getTypes()
-    throw(uno::RuntimeException, std::exception)
 {
     uno::Sequence<uno::Type> aTypes = SwXText::getTypes();
     uno::Sequence<uno::Type> aBaseTypes = SwXRedlineBaseClass::getTypes();
@@ -620,7 +593,6 @@ uno::Sequence<uno::Type> SwXRedline::getTypes()
 }
 
 uno::Sequence<sal_Int8> SwXRedline::getImplementationId()
-    throw(uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }

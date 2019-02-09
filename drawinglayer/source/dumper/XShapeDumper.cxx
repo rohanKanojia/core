@@ -50,7 +50,6 @@ void dumpFillGradientAsElement(const css::awt::Gradient& rGradient, xmlTextWrite
 void dumpFillHatchAsElement(const css::drawing::Hatch& rHatch, xmlTextWriterPtr xmlWriter);
 void dumpFillBackgroundAsAttribute(bool bBackground, xmlTextWriterPtr xmlWriter);
 void dumpFillBitmapAsElement(const css::uno::Reference<css::awt::XBitmap>& xBitmap, xmlTextWriterPtr xmlWriter);
-void dumpFillBitmapURLAsAttribute(const OUString& sBitmapURL, xmlTextWriterPtr xmlWriter);
 void dumpFillBitmapPositionOffsetXAsAttribute(sal_Int32 aBitmapPositionOffsetX, xmlTextWriterPtr xmlWriter);
 void dumpFillBitmapPositionOffsetYAsAttribute(sal_Int32 aBitmapPositionOffsetY, xmlTextWriterPtr xmlWriter);
 void dumpFillBitmapOffsetXAsAttribute(sal_Int32 aBitmapOffsetX, xmlTextWriterPtr xmlWriter);
@@ -203,7 +202,7 @@ void dumpFillStyleAsAttribute(drawing::FillStyle eFillStyle, xmlTextWriterPtr xm
 
 void dumpFillColorAsAttribute(sal_Int32 aColor, xmlTextWriterPtr xmlWriter)
 {
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("fillColor"), "%06x", (unsigned int) aColor);
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("fillColor"), "%06x", static_cast<unsigned int>(aColor));
 }
 
 void dumpFillTransparenceAsAttribute(sal_Int32 aTransparence, xmlTextWriterPtr xmlWriter)
@@ -243,15 +242,15 @@ void dumpGradientProperty(const awt::Gradient& rGradient, xmlTextWriterPtr xmlWr
         default:
             break;
     }
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("startColor"), "%06x", (unsigned int) rGradient.StartColor);
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("endColor"), "%06x", (unsigned int) rGradient.EndColor);
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("angle"), "%" SAL_PRIdINT32, (sal_Int32) rGradient.Angle);
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("border"), "%" SAL_PRIdINT32, (sal_Int32) rGradient.Border);
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("xOffset"), "%" SAL_PRIdINT32, (sal_Int32) rGradient.XOffset);
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("yOffset"), "%" SAL_PRIdINT32, (sal_Int32) rGradient.YOffset);
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("startIntensity"), "%" SAL_PRIdINT32, (sal_Int32) rGradient.StartIntensity);
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("endIntensity"), "%" SAL_PRIdINT32, (sal_Int32) rGradient.EndIntensity);
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("stepCount"), "%" SAL_PRIdINT32, (sal_Int32) rGradient.StepCount);
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("startColor"), "%06x", static_cast<unsigned int>(rGradient.StartColor));
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("endColor"), "%06x", static_cast<unsigned int>(rGradient.EndColor));
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("angle"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(rGradient.Angle));
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("border"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(rGradient.Border));
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("xOffset"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(rGradient.XOffset));
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("yOffset"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(rGradient.YOffset));
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("startIntensity"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(rGradient.StartIntensity));
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("endIntensity"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(rGradient.EndIntensity));
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("stepCount"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(rGradient.StepCount));
 }
 
 void dumpFillTransparenceGradientAsElement(const awt::Gradient& rTranspGrad, xmlTextWriterPtr xmlWriter)
@@ -291,9 +290,9 @@ void dumpFillHatchAsElement(const drawing::Hatch& rHatch, xmlTextWriterPtr xmlWr
         default:
             break;
     }
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("color"), "%06x", (unsigned int) rHatch.Color);
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("distance"), "%" SAL_PRIdINT32, (sal_Int32) rHatch.Distance);
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("angle"), "%" SAL_PRIdINT32, (sal_Int32) rHatch.Angle);
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("color"), "%06x", static_cast<unsigned int>(rHatch.Color));
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("distance"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(rHatch.Distance));
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("angle"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(rHatch.Angle));
     xmlTextWriterEndElement( xmlWriter );
 }
 
@@ -315,12 +314,6 @@ void dumpFillBitmapAsElement(const uno::Reference<awt::XBitmap>& xBitmap, xmlTex
         xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("height"), "%" SAL_PRIdINT32, aSize.Height);
     }
     xmlTextWriterEndElement( xmlWriter );
-}
-
-void dumpFillBitmapURLAsAttribute(const OUString& sBitmapURL, xmlTextWriterPtr xmlWriter)
-{
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("fillBitmapURL"), "%s",
-        OUStringToOString(sBitmapURL, RTL_TEXTENCODING_UTF8).getStr());
 }
 
 void dumpFillBitmapPositionOffsetXAsAttribute(sal_Int32 aBitmapPositionOffsetX, xmlTextWriterPtr xmlWriter)
@@ -473,11 +466,11 @@ void dumpLineDashAsElement(const drawing::LineDash& rLineDash, xmlTextWriterPtr 
         default:
             break;
     }
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("dots"), "%" SAL_PRIdINT32, (sal_Int32) rLineDash.Dots);
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("dotLen"), "%" SAL_PRIdINT32, (sal_Int32) rLineDash.DotLen);
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("dashes"), "%" SAL_PRIdINT32, (sal_Int32) rLineDash.Dashes);
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("dashLen"), "%" SAL_PRIdINT32, (sal_Int32) rLineDash.DashLen);
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("distance"), "%" SAL_PRIdINT32, (sal_Int32) rLineDash.Distance);
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("dots"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(rLineDash.Dots));
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("dotLen"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(rLineDash.DotLen));
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("dashes"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(rLineDash.Dashes));
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("dashLen"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(rLineDash.DashLen));
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("distance"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(rLineDash.Distance));
     xmlTextWriterEndElement( xmlWriter );
 }
 
@@ -489,7 +482,7 @@ void dumpLineDashNameAsAttribute(const OUString& sLineDashName, xmlTextWriterPtr
 
 void dumpLineColorAsAttribute(sal_Int32 aLineColor, xmlTextWriterPtr xmlWriter)
 {
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("lineColor"), "%06x", (unsigned int) aLineColor);
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("lineColor"), "%06x", static_cast<unsigned int>(aLineColor));
 }
 
 void dumpLineTransparenceAsAttribute(sal_Int32 aLineTransparence, xmlTextWriterPtr xmlWriter)
@@ -695,7 +688,7 @@ void dumpCharHeightAsAttribute(float fHeight, xmlTextWriterPtr xmlWriter)
 
 void dumpCharColorAsAttribute(sal_Int32 aColor, xmlTextWriterPtr xmlWriter)
 {
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("fontColor"), "%06x", (unsigned int) aColor);
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("fontColor"), "%06x", static_cast<unsigned int>(aColor));
 }
 
 
@@ -945,7 +938,7 @@ void dumpShadowAsAttribute(bool bShadow, xmlTextWriterPtr xmlWriter)
 
 void dumpShadowColorAsAttribute(sal_Int32 aShadowColor, xmlTextWriterPtr xmlWriter)
 {
-    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("shadowColor"), "%06x", (unsigned int) aShadowColor);
+    xmlTextWriterWriteFormatAttribute(xmlWriter, BAD_CAST("shadowColor"), "%06x", static_cast<unsigned int>(aShadowColor));
 }
 
 void dumpShadowTransparenceAsAttribute(sal_Int32 aShadowTransparence, xmlTextWriterPtr xmlWriter)
@@ -1451,12 +1444,6 @@ void dumpFillPropertiesService(const uno::Reference< beans::XPropertySet >& xPro
             dumpFillBitmapAsElement(xBitmap, xmlWriter);
     }
     {
-        uno::Any anotherAny = xPropSet->getPropertyValue("FillBitmapURL");
-        OUString sBitmapURL;
-        if(anotherAny >>= sBitmapURL)
-            dumpFillBitmapURLAsAttribute(sBitmapURL, xmlWriter);
-    }
-    {
         uno::Any anotherAny = xPropSet->getPropertyValue("FillBitmapPositionOffsetX");
         sal_Int32 aBitmapPositionOffsetX = sal_Int32();
         if(anotherAny >>= aBitmapPositionOffsetX)
@@ -1809,7 +1796,6 @@ void dumpXShape(const uno::Reference< drawing::XShape >& xShape, xmlTextWriterPt
 {
     xmlTextWriterStartElement( xmlWriter, BAD_CAST( "XShape" ) );
     uno::Reference< beans::XPropertySet > xPropSet(xShape, uno::UNO_QUERY_THROW);
-    uno::Reference<beans::XPropertySetInfo> xPropSetInfo = xPropSet->getPropertySetInfo();
     OUString aName;
     m_bNameDumped = false;
 
@@ -1826,13 +1812,10 @@ void dumpXShape(const uno::Reference< drawing::XShape >& xShape, xmlTextWriterPt
     if(xInfo->hasPropertyByName("Name"))
     {
         uno::Any aAny = xPropSet->getPropertyValue("Name");
-        if (aAny >>= aName)
+        if ((aAny >>= aName) && !aName.isEmpty())
         {
-            if (!aName.isEmpty())
-            {
-                xmlTextWriterWriteFormatAttribute( xmlWriter, BAD_CAST("name"), "%s", OUStringToOString(aName, RTL_TEXTENCODING_UTF8).getStr());
-                m_bNameDumped = true;
-            }
+            xmlTextWriterWriteFormatAttribute( xmlWriter, BAD_CAST("name"), "%s", OUStringToOString(aName, RTL_TEXTENCODING_UTF8).getStr());
+            m_bNameDumped = true;
         }
     }
 

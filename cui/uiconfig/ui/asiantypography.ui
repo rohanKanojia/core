@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<interface domain="cui">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkFrame" id="AsianTypography">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -22,10 +22,11 @@
             <property name="spacing">6</property>
             <child>
               <object class="GtkCheckButton" id="checkForbidList">
-                <property name="label" translatable="yes">Apply list of forbidden characters to the beginning and end of lines</property>
+                <property name="label" translatable="yes" context="asiantypography|checkForbidList">Apply list of forbidden characters to the beginning and end of lines</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
+                <property name="use_underline">True</property>
                 <property name="xalign">0</property>
                 <property name="inconsistent">True</property>
                 <property name="draw_indicator">True</property>
@@ -38,10 +39,11 @@
             </child>
             <child>
               <object class="GtkCheckButton" id="checkHangPunct">
-                <property name="label" translatable="yes">Allow hanging punctuation</property>
+                <property name="label" translatable="yes" context="asiantypography|checkHangPunct">Allow hanging punctuation</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
+                <property name="use_underline">True</property>
                 <property name="xalign">0</property>
                 <property name="inconsistent">True</property>
                 <property name="draw_indicator">True</property>
@@ -54,10 +56,11 @@
             </child>
             <child>
               <object class="GtkCheckButton" id="checkApplySpacing">
-                <property name="label" translatable="yes">Apply spacing between Asian, Latin and complex text</property>
+                <property name="label" translatable="yes" context="asiantypography|checkApplySpacing">Apply spacing between Asian and non-Asian text</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
+                <property name="use_underline">True</property>
                 <property name="xalign">0</property>
                 <property name="inconsistent">True</property>
                 <property name="draw_indicator">True</property>
@@ -76,7 +79,7 @@
       <object class="GtkLabel" id="labelLineChange">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="label" translatable="yes">Line Change</property>
+        <property name="label" translatable="yes" context="asiantypography|labelLineChange">Line Change</property>
         <attributes>
           <attribute name="weight" value="bold"/>
         </attributes>

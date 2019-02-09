@@ -36,10 +36,10 @@ namespace stoc_impreg
 
 struct Link
 {
-    OUString m_name;
-    OUString m_target;
+    OUString const m_name;
+    OUString const m_target;
 
-    inline Link( OUString const & name, OUString const & target )
+    Link( OUString const & name, OUString const & target )
         : m_name( name )
         , m_target( target )
         {}
@@ -108,7 +108,7 @@ static void mergeKeys(
 
         if (xSource->getKeyType( name ) == registry::RegistryKeyType_KEY)
         {
-            // try to open exisiting dest key or create new one
+            // try to open existing dest key or create new one
             Reference< registry::XRegistryKey > xDestKey( xDest->createKey( name ) );
             Reference< registry::XRegistryKey > xSourceKey( xSource->openKey( name ) );
             mergeKeys( xDestKey, xSourceKey, links );

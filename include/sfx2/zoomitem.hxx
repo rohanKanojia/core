@@ -62,8 +62,6 @@ public:
 
     SvxZoomItem( SvxZoomType eZoomType = SvxZoomType::PERCENT,
                  sal_uInt16 nVal = 0, sal_uInt16 nWhich = SID_ATTR_ZOOM );
-    SvxZoomItem( const SvxZoomItem& );
-    virtual ~SvxZoomItem();
 
     void                    SetValueSet( SvxZoomEnableFlags nValues ) { nValueSet = nValues; }
     SvxZoomEnableFlags      GetValueSet() const { return nValueSet; }
@@ -72,8 +70,6 @@ public:
     void                    SetType( SvxZoomType eNewType ) { eType = eNewType; }
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual SfxPoolItem*    Create( SvStream& rStrm, sal_uInt16 nVersion ) const override;
-    virtual SvStream&       Store( SvStream& rStrm , sal_uInt16 nItemVersion ) const override;
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual bool            QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool            PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;

@@ -18,64 +18,44 @@
  */
 
 #include <math.h>
+#include <memory>
 #include "solver.h"
 
 
-double** mgcLinearSystemD::NewMatrix (int N)
+std::unique_ptr<std::unique_ptr<double[]>[]> mgcLinearSystemD::NewMatrix (int N)
 {
-  double** A = new double*[N];
-  if ( !A )
-    return nullptr;
+  std::unique_ptr<std::unique_ptr<double[]>[]> A(new std::unique_ptr<double[]>);
 
   for (int row = 0; row < N; row++)
   {
-    A[row] = new double[N];
-    if ( !A[row] )
-    {
-      for (int i = 0; i < row; i++)
-    delete[] A[i];
-      delete[] A;
-      return nullptr;
-    }
+    A[row].reset(new double[N]);
     for (int col = 0; col < N; col++)
       A[row][col] = 0;
   }
   return A;
 }
 
-void mgcLinearSystemD::DeleteMatrix (int N, double** A)
+std::unique_ptr<double[]> mgcLinearSystemD::NewVector (int N)
 {
-  for (int row = 0; row < N; row++)
-    delete[] A[row];
-  delete[] A;
-}
-
-double* mgcLinearSystemD::NewVector (int N)
-{
-  double* B = new double[N];
-  if ( !B )
-    return nullptr;
+  std::unique_ptr<double[]> B(new double[N]);
 
   for (int row = 0; row < N; row++)
     B[row] = 0;
   return B;
 }
 
-int mgcLinearSystemD::Solve (int n, double** a, double* b)
+bool mgcLinearSystemD::Solve (int n, std::unique_ptr<std::unique_ptr<double[]>[]> const & a, double* b)
 {
-  int* indxc = new int[n];
+  std::unique_ptr<int[]> indxc( new int[n] );
   if ( !indxc )
-    return 0;
-  int* indxr = new int[n];
+    return false;
+  std::unique_ptr<int[]> indxr( new int[n] );
   if ( !indxr ) {
-    delete[] indxc;
-    return 0;
+    return false;
   }
-  int* ipiv  = new int[n];
+  std::unique_ptr<int[]> ipiv( new int[n] );
   if ( !ipiv ) {
-    delete[] indxc;
-    delete[] indxr;
-    return 0;
+    return false;
   }
 
   int i, j, k;
@@ -93,34 +73,29 @@ int mgcLinearSystemD::Solve (int n, double** a, double* b)
     {
       if ( ipiv[j] != 1 )
       {
-    for (k = 0; k < n; k++)
-    {
-      if ( ipiv[k] == 0 )
-      {
-        if ( fabs(a[j][k]) >= big )
+        for (k = 0; k < n; k++)
         {
-          big = fabs(a[j][k]);
-          irow = j;
-          icol = k;
+          if ( ipiv[k] == 0 )
+          {
+            if ( fabs(a[j][k]) >= big )
+            {
+              big = fabs(a[j][k]);
+              irow = j;
+              icol = k;
+            }
+          }
+          else if ( ipiv[k] > 1 )
+          {
+            return false;
+          }
         }
-      }
-      else if ( ipiv[k] > 1 )
-      {
-        delete[] ipiv;
-        delete[] indxr;
-        delete[] indxc;
-        return 0;
-      }
-    }
       }
     }
     ipiv[icol]++;
 
     if ( irow != icol )
     {
-      double* rowptr = a[irow];
-      a[irow] = a[icol];
-      a[icol] = rowptr;
+      std::swap(a[irow], a[icol]);
 
       save = b[irow];
       b[irow] = b[icol];
@@ -131,10 +106,7 @@ int mgcLinearSystemD::Solve (int n, double** a, double* b)
     indxc[i] = icol;
     if ( a[icol][icol] == 0 )
     {
-      delete[] ipiv;
-      delete[] indxr;
-      delete[] indxc;
-      return 0;
+      return false;
     }
 
     double pivinv = 1/a[icol][icol];
@@ -162,17 +134,14 @@ int mgcLinearSystemD::Solve (int n, double** a, double* b)
     {
       for (k = 0; k < n; k++)
       {
-    save = a[k][indxr[j]];
-    a[k][indxr[j]] = a[k][indxc[j]];
-    a[k][indxc[j]] = save;
+        save = a[k][indxr[j]];
+        a[k][indxr[j]] = a[k][indxc[j]];
+        a[k][indxc[j]] = save;
       }
     }
   }
 
-  delete[] ipiv;
-  delete[] indxr;
-  delete[] indxc;
-  return 1;
+  return true;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

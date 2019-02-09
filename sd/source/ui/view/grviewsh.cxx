@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "GraphicViewShell.hxx"
-#include "LayerTabBar.hxx"
-#include "FrameView.hxx"
+#include <GraphicViewShell.hxx>
+#include <LayerTabBar.hxx>
+#include <FrameView.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <vcl/scrbar.hxx>
@@ -30,15 +30,13 @@
 namespace sd {
 
 GraphicViewShell::GraphicViewShell (
-    SfxViewFrame* pFrame,
     ViewShellBase& rViewShellBase,
     vcl::Window* pParentWindow,
     FrameView* pFrameView)
     : DrawViewShell (
-        pFrame,
         rViewShellBase,
         pParentWindow,
-        PK_STANDARD,
+        PageKind::Standard,
         pFrameView)
 {
     ConstructGraphicViewShell();
@@ -76,8 +74,8 @@ void GraphicViewShell::ArrangeGUIElements()
         Size aSize = mpLayerTabBar->GetSizePixel();
         const Size aFrameSize (GetViewFrame()->GetWindow().GetOutputSizePixel());
 
-        aSize.Height() = GetParentWindow()->GetFont().GetFontHeight() + 4;
-        aSize.Width() = aFrameSize.Width();
+        aSize.setHeight( GetParentWindow()->GetFont().GetFontHeight() + 4 );
+        aSize.setWidth( aFrameSize.Width() );
 
         Point aPos (0, maViewSize.Height() - aSize.Height());
 

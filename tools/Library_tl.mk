@@ -38,17 +38,17 @@ $(eval $(call gb_Library_use_libraries,tl,\
     i18nlangtag \
     cppu \
     sal \
-    sax \
-	$(gb_UWINAPI) \
 ))
 
 
 $(eval $(call gb_Library_add_exception_objects,tl,\
     tools/source/datetime/datetime \
     tools/source/datetime/datetimeutils \
+    tools/source/datetime/systemdatetime \
     tools/source/datetime/tdate \
     tools/source/datetime/ttime \
     tools/source/debug/debug \
+    tools/source/fsys/fileutil \
     tools/source/fsys/urlobj \
     tools/source/fsys/wldcrd \
     tools/source/generic/b3dtrans \
@@ -65,27 +65,28 @@ $(eval $(call gb_Library_add_exception_objects,tl,\
     tools/source/inet/inetmime \
     tools/source/inet/inetmsg \
     tools/source/inet/inetstrm \
-    tools/source/memtools/mempool \
     tools/source/memtools/multisel \
-    tools/source/memtools/unqidx \
     tools/source/misc/cpuid \
     tools/source/misc/extendapplicationenvironment \
-    tools/source/misc/getprocessworkingdir \
-    tools/source/misc/solarmutex \
-    tools/source/misc/toolsdll \
-    tools/source/rc/rc \
-    tools/source/rc/resary \
-    tools/source/rc/resmgr \
-    tools/source/ref/errinf \
     tools/source/ref/globname \
-    tools/source/ref/pstm \
     tools/source/ref/ref \
     tools/source/stream/stream \
-    tools/source/stream/strmsys \
     tools/source/stream/vcompat \
     tools/source/string/tenccvt \
     tools/source/zcodec/zcodec \
+    tools/source/xml/XmlWriter \
+    tools/source/xml/XmlWalker \
 ))
+
+ifeq ($(OS),WNT)
+$(eval $(call gb_Library_add_exception_objects,tl, \
+    tools/source/stream/strmwnt \
+))
+else
+$(eval $(call gb_Library_add_exception_objects,tl, \
+    tools/source/stream/strmunx \
+))
+endif
 
 $(eval $(call gb_Library_add_generated_exception_objects,tl,\
     CustomTarget/tools/string/reversemap \
@@ -94,6 +95,7 @@ $(eval $(call gb_Library_add_generated_exception_objects,tl,\
 $(eval $(call gb_Library_use_externals,tl,\
 	boost_headers \
 	zlib \
+	libxml2 \
 ))
 
 ifeq ($(OS),LINUX)
@@ -109,6 +111,7 @@ $(eval $(call gb_Library_use_system_win32_libs,tl,\
 	ole32 \
 	shell32 \
 	uuid \
+	winmm \
 ))
 
 endif

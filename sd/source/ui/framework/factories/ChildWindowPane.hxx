@@ -20,28 +20,25 @@
 #ifndef INCLUDED_SD_SOURCE_UI_FRAMEWORK_FACTORIES_CHILDWINDOWPANE_HXX
 #define INCLUDED_SD_SOURCE_UI_FRAMEWORK_FACTORIES_CHILDWINDOWPANE_HXX
 
-#include "framework/Pane.hxx"
-#include "PaneShells.hxx"
+#include <framework/Pane.hxx>
 
 #include <com/sun/star/lang/XEventListener.hpp>
-#include <com/sun/star/drawing/framework/XResourceId.hpp>
-#include <com/sun/star/awt/XWindow.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <comphelper/uno3.hxx>
 #include <memory>
 
-namespace {
+class SfxShell;
+
+namespace sd { class ViewShellBase; }
+namespace com { namespace sun { namespace star { namespace awt { class XWindow; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XResourceId; } } } } }
+
+namespace sd { namespace framework {
 
 typedef ::cppu::ImplInheritanceHelper <
     ::sd::framework::Pane,
     css::lang::XEventListener
     > ChildWindowPaneInterfaceBase;
-
-} // end of anonymous namespace.
-
-namespace sd { class ViewShellBase; }
-
-namespace sd { namespace framework {
 
 /** The ChildWindowPane listens to the child window and disposes itself when
     the child window becomes inaccessible.  This happens for instance when a
@@ -56,7 +53,7 @@ public:
         sal_uInt16 nChildWindowId,
         ViewShellBase& rViewShellBase,
         ::std::unique_ptr<SfxShell> && pShell);
-    virtual ~ChildWindowPane();
+    virtual ~ChildWindowPane() override;
 
     /** Hide the pane.  To make the pane visible again, call GetWindow().
     */
@@ -77,8 +74,7 @@ public:
         window pointer before forwarding the call to the base class.
     */
     virtual css::uno::Reference<css::awt::XWindow>
-        SAL_CALL getWindow()
-        throw (css::uno::RuntimeException, std::exception) override;
+        SAL_CALL getWindow() override;
 
     DECLARE_XINTERFACE()
     DECLARE_XTYPEPROVIDER()
@@ -86,11 +82,10 @@ public:
     // XEventListener
 
     virtual void SAL_CALL disposing(
-        const css::lang::EventObject& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& rEvent) override;
 
 private:
-    sal_uInt16 mnChildWindowId;
+    sal_uInt16 const mnChildWindowId;
     ViewShellBase& mrViewShellBase;
     ::std::unique_ptr<SfxShell> mpShell;
 

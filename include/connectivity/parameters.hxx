@@ -80,12 +80,6 @@ namespace dbtools
             /// the indices of inner parameters which need to be filled when this concrete parameter is set
             ::std::vector< sal_Int32 >  aInnerIndexes;
 
-            /// default ctor
-            ParameterMetaData()
-                :eType( ParameterClassification::FilledExternally )
-            {
-            }
-
             /// ctor with composer column
             ParameterMetaData( const css::uno::Reference< css::beans::XPropertySet >& _rxColumn )
                 :eType           ( ParameterClassification::FilledExternally )
@@ -153,7 +147,7 @@ namespace dbtools
                 void    clearAllParameterInformation();
 
         /// checks whether the parameter information are up-to-date
-        inline  bool    isUpToDate() const { return m_bUpToDate; }
+        bool    isUpToDate() const { return m_bUpToDate; }
 
         /** updates all parameter information represented by the instance
         */
@@ -237,8 +231,8 @@ namespace dbtools
         void clearParameters();
 
     private:
-        /// checkes whether the object is already initialized, and not yet disposed
-        inline  bool    isAlive() const { return m_xComponent.get().is() && m_xInnerParamUpdate.is(); }
+        /// checks whether the object is already initialized, and not yet disposed
+        bool    isAlive() const { return m_xComponent.get().is() && m_xInnerParamUpdate.is(); }
 
         /** creates a filter expression from a master-detail link where the detail denotes a column name
         */
@@ -302,13 +296,19 @@ namespace dbtools
                 the detail part denotes a column name. In such a case, an additional filter needs to be created,
                 containing a new parameter.
 
+            @param  _out_rAdditionalHavingComponents
+                the additional having clause components which are required for master-detail relationships where
+                the detail part denotes a column name. In such a case, an additional filter needs to be created,
+                containing a new parameter.
+
             @precond
                 <member>m_aMasterFields</member> and <member>m_aDetailFields</member> have the same length
         */
         void    classifyLinks(
                     const css::uno::Reference< css::container::XNameAccess >& _rxParentColumns,
                     const css::uno::Reference< css::container::XNameAccess >& _rxColumns,
-                    ::std::vector< OUString >& _out_rAdditionalFilterComponents
+                    ::std::vector< OUString >& _out_rAdditionalFilterComponents,
+                    ::std::vector< OUString >& _out_rAdditionalHavingComponents
                 );
 
         /** finalizes our <member>m_pOuterParameters</member> so that it can be used for
@@ -387,7 +387,7 @@ namespace dbtools
 
         /** retrieves the active connection of the database component
         */
-        bool    getConnection(
+        void    getConnection(
                     css::uno::Reference< css::sdbc::XConnection >& /* [out] */ _rxConnection
                 );
 

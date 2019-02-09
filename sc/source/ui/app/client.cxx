@@ -32,17 +32,16 @@
 #include <svx/svdograf.hxx>
 #include <svtools/embedhlp.hxx>
 
-#include "client.hxx"
-#include "tabvwsh.hxx"
-#include "docsh.hxx"
+#include <client.hxx>
+#include <tabvwsh.hxx>
+#include <docsh.hxx>
 #include <gridwin.hxx>
 
 using namespace com::sun::star;
 
-ScClient::ScClient( ScTabViewShell* pViewShell, vcl::Window* pDraw, SdrModel* pSdrModel, SdrOle2Obj* pObj ) :
+ScClient::ScClient( ScTabViewShell* pViewShell, vcl::Window* pDraw, SdrModel* pSdrModel, const SdrOle2Obj* pObj ) :
     SfxInPlaceClient( pViewShell, pDraw, pObj->GetAspect() ),
-    pModel( pSdrModel ),
-    pGrafEdit( nullptr )
+    pModel( pSdrModel )
 {
     SetObject( pObj->GetObjRef() );
 }
@@ -61,7 +60,7 @@ SdrOle2Obj* ScClient::GetDrawObj()
     for (sal_uInt16 nPNr=0; nPNr<nPages && !pOle2Obj; nPNr++)
     {
         SdrPage* pPage = pModel->GetPage(nPNr);
-        SdrObjListIter aIter( *pPage, IM_DEEPNOGROUPS );
+        SdrObjListIter aIter( pPage, SdrIterMode::DeepNoGroups );
         SdrObject* pObject = aIter.Next();
         while (pObject && !pOle2Obj)
         {
@@ -77,7 +76,7 @@ SdrOle2Obj* ScClient::GetDrawObj()
     return pOle2Obj;
 }
 
-void ScClient::RequestNewObjectArea( Rectangle& aLogicRect )
+void ScClient::RequestNewObjectArea( tools::Rectangle& aLogicRect )
 {
     SfxViewShell* pSfxViewSh = GetViewShell();
     ScTabViewShell* pViewSh = dynamic_cast<ScTabViewShell*>( pSfxViewSh  );
@@ -87,7 +86,7 @@ void ScClient::RequestNewObjectArea( Rectangle& aLogicRect )
         return;
     }
 
-    Rectangle aOldRect = GetObjArea();
+    tools::Rectangle aOldRect = GetObjArea();
     SdrOle2Obj*  pDrawObj = GetDrawObj();
     if ( pDrawObj )
     {
@@ -106,35 +105,35 @@ void ScClient::RequestNewObjectArea( Rectangle& aLogicRect )
         Size aSize = pPage->GetSize();
         if ( aSize.Width() < 0 )
         {
-            aPos.X() = aSize.Width() + 1;       // negative
-            aSize.Width() = -aSize.Width();     // positive
+            aPos.setX( aSize.Width() + 1 );       // negative
+            aSize.setWidth( -aSize.Width() );     // positive
         }
-        Rectangle aPageRect( aPos, aSize );
+        tools::Rectangle aPageRect( aPos, aSize );
 
         if (aLogicRect.Right() > aPageRect.Right())
         {
             long nDiff = aLogicRect.Right() - aPageRect.Right();
-            aLogicRect.Left() -= nDiff;
-            aLogicRect.Right() -= nDiff;
+            aLogicRect.AdjustLeft( -nDiff );
+            aLogicRect.AdjustRight( -nDiff );
         }
         if (aLogicRect.Bottom() > aPageRect.Bottom())
         {
             long nDiff = aLogicRect.Bottom() - aPageRect.Bottom();
-            aLogicRect.Top() -= nDiff;
-            aLogicRect.Bottom() -= nDiff;
+            aLogicRect.AdjustTop( -nDiff );
+            aLogicRect.AdjustBottom( -nDiff );
         }
 
         if (aLogicRect.Left() < aPageRect.Left())
         {
             long nDiff = aLogicRect.Left() - aPageRect.Left();
-            aLogicRect.Right() -= nDiff;
-            aLogicRect.Left() -= nDiff;
+            aLogicRect.AdjustRight( -nDiff );
+            aLogicRect.AdjustLeft( -nDiff );
         }
         if (aLogicRect.Top() < aPageRect.Top())
         {
             long nDiff = aLogicRect.Top() - aPageRect.Top();
-            aLogicRect.Bottom() -= nDiff;
-            aLogicRect.Top() -= nDiff;
+            aLogicRect.AdjustBottom( -nDiff );
+            aLogicRect.AdjustTop( -nDiff );
         }
     }
 }
@@ -153,7 +152,7 @@ void ScClient::ObjectAreaChanged()
     SdrOle2Obj* pDrawObj = GetDrawObj();
     if (pDrawObj)
     {
-        Rectangle aNewRectangle(GetScaledObjArea());
+        tools::Rectangle aNewRectangle(GetScaledObjArea());
 
         // #i118524# if sheared/rotated, center to non-rotated LogicRect
         pDrawObj->setSuppressSetVisAreaSize(true);
@@ -162,7 +161,7 @@ void ScClient::ObjectAreaChanged()
         {
             pDrawObj->SetLogicRect( aNewRectangle );
 
-            const Rectangle& rBoundRect = pDrawObj->GetCurrentBoundRect();
+            const tools::Rectangle& rBoundRect = pDrawObj->GetCurrentBoundRect();
             const Point aDelta(aNewRectangle.Center() - rBoundRect.Center());
 
             aNewRectangle.Move(aDelta.X(), aDelta.Y());
@@ -172,15 +171,9 @@ void ScClient::ObjectAreaChanged()
         pDrawObj->setSuppressSetVisAreaSize(false);
 
         //  set document modified (SdrModel::SetChanged is not used)
-        // TODO/LATER: is there a reason that this code is not executed in Draw?
-//        SfxViewShell* pSfxViewSh = GetViewShell();
-//        ScTabViewShell* pViewSh = dynamic_cast<ScTabViewShell*>( pSfxViewSh  );
-        if (pViewSh)
-            pViewSh->GetViewData().GetDocShell()->SetDrawModified();
+        pViewSh->GetViewData().GetDocShell()->SetDrawModified();
+        pViewSh->ScrollToObject(pDrawObj);
     }
-
-    if (pDrawObj)
-        pViewSh->ScrollToObject( pDrawObj );
 }
 
 void ScClient::ViewChanged()
@@ -202,22 +195,20 @@ void ScClient::ViewChanged()
         aSz = xObj->getVisualAreaSize( GetAspect() );
     } catch ( embed::NoVisualAreaSizeException& )
     {
-        OSL_FAIL("The visual area size must be available!\n");
+        OSL_FAIL("The visual area size must be available!");
     }
 
     MapUnit aMapUnit = VCLUnoHelper::UnoEmbed2VCLMapUnit( xObj->getMapUnit( GetAspect() ) );
-    Size aVisSize = OutputDevice::LogicToLogic( Size( aSz.Width, aSz.Height ), aMapUnit, MAP_100TH_MM );
+    Size aVisSize = OutputDevice::LogicToLogic(Size(aSz.Width, aSz.Height), MapMode(aMapUnit), MapMode(MapUnit::Map100thMM));
 
     // Take over position and size into document
     SdrOle2Obj* pDrawObj = GetDrawObj();
     if (pDrawObj)
     {
-        Rectangle aLogicRect = pDrawObj->GetLogicRect();
-        Fraction aFractX = GetScaleWidth();
-        Fraction aFractY = GetScaleHeight();
-        aFractX *= aVisSize.Width();
-        aFractY *= aVisSize.Height();
-        aVisSize = Size( (long) aFractX, (long) aFractY ); // Scaled for Draw model
+        tools::Rectangle aLogicRect = pDrawObj->GetLogicRect();
+        Fraction aFractX = GetScaleWidth() * aVisSize.Width();
+        Fraction aFractY = GetScaleHeight() * aVisSize.Height();
+        aVisSize = Size( static_cast<long>(aFractX), static_cast<long>(aFractY) ); // Scaled for Draw model
 
         //  pClientData->SetObjArea before pDrawObj->SetLogicRect, so that we don't
         //  calculate wrong scalings:

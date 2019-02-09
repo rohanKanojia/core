@@ -23,8 +23,7 @@
 #include <com/sun/star/presentation/AnimationEffect.hpp>
 #include <com/sun/star/presentation/AnimationSpeed.hpp>
 #include <com/sun/star/presentation/ClickAction.hpp>
-#include "sdundo.hxx"
-#include <svx/svdopath.hxx>
+#include <sdundo.hxx>
 #include <tools/color.hxx>
 
 class SdDrawDocument;
@@ -61,18 +60,14 @@ class SdAnimationPrmsUndoAction : public SdUndoAction
     Color           aNewDimColor;
     OUString        aOldSoundFile;
     OUString        aNewSoundFile;
-    SdrPathObj*     pOldPathObj;
-    SdrPathObj*     pNewPathObj;
     css::presentation::ClickAction     eOldClickAction;
     css::presentation::ClickAction     eNewClickAction;
     OUString        aOldBookmark;
     OUString        aNewBookmark;
     sal_uInt16          nOldVerb;
     sal_uInt16          nNewVerb;
-    sal_uLong           nOldPresOrder;
-    sal_uLong           nNewPresOrder;
 
-    bool            bInfoCreated;
+    bool const            bInfoCreated;
 
 public:
     SdAnimationPrmsUndoAction(SdDrawDocument* pTheDoc, SdrObject* pObj,
@@ -103,14 +98,10 @@ public:
         , eNewSecondEffect(css::presentation::AnimationEffect_NONE)
         , eOldSecondSpeed(css::presentation::AnimationSpeed_SLOW)
         , eNewSecondSpeed(css::presentation::AnimationSpeed_SLOW)
-        , pOldPathObj(nullptr)
-        , pNewPathObj(nullptr)
         , eOldClickAction(css::presentation::ClickAction_NONE)
         , eNewClickAction(css::presentation::ClickAction_NONE)
         , nOldVerb(0)
         , nNewVerb(0)
-        , nOldPresOrder(0)
-        , nNewPresOrder(0)
         , bInfoCreated(bCreated)
     {
     }
@@ -135,8 +126,6 @@ public:
             { aOldSoundFile = aTheOldSound; aNewSoundFile = aTheNewSound; }
         void SetPlayFull(bool bTheOldPlayFull, bool bTheNewPlayFull)
             { bOldPlayFull = bTheOldPlayFull; bNewPlayFull = bTheNewPlayFull; }
-        void SetPathObj(SdrPathObj* pTheOldPath, SdrPathObj* pTheNewPath)
-            { pOldPathObj = pTheOldPath; pNewPathObj = pTheNewPath; }
         void SetClickAction(css::presentation::ClickAction eTheOldAction, css::presentation::ClickAction eTheNewAction)
             { eOldClickAction = eTheOldAction; eNewClickAction = eTheNewAction; }
         void SetBookmark(const OUString& aTheOldBookmark, const OUString& aTheNewBookmark)
@@ -152,7 +141,7 @@ public:
         void SetSecondPlayFull(bool bTheOldPlayFull, bool bTheNewPlayFull)
             { bOldSecondPlayFull = bTheOldPlayFull; bNewSecondPlayFull = bTheNewPlayFull; }
 
-    virtual ~SdAnimationPrmsUndoAction();
+    virtual ~SdAnimationPrmsUndoAction() override;
     virtual void Undo() override;
     virtual void Redo() override;
 };

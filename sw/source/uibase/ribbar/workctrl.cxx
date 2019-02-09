@@ -18,13 +18,11 @@
  */
 
 #include <string>
-#include <comphelper/string.hxx>
 #include <i18nutil/unicode.hxx>
 #include <svl/eitem.hxx>
 #include <sfx2/htmlmode.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/bindings.hxx>
-#include <sfx2/imagemgr.hxx>
 #include <sfx2/msgpool.hxx>
 #include <swmodule.hxx>
 #include <view.hxx>
@@ -35,28 +33,30 @@
 #include <glosdoc.hxx>
 #include <gloslst.hxx>
 #include <workctrl.hxx>
-#include <workctrl.hrc>
+#include <strings.hrc>
 #include <cmdid.h>
-#include <helpid.h>
+#include <helpids.h>
 #include <wrtsh.hxx>
 #include <svl/imageitm.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/settings.hxx>
 #include <rtl/ustring.hxx>
-#include "swabstdlg.hxx"
-#include <misc.hrc>
+#include <swabstdlg.hxx>
 #include <sfx2/zoomitem.hxx>
 #include <vcl/svapp.hxx>
 #include <svx/dialmgr.hxx>
 #include <svx/dialogs.hrc>
+#include <svx/strings.hrc>
+#include <bitmaps.hlst>
+#include <toolkit/helper/vclunohelper.hxx>
+#include <svx/srchdlg.hxx>
+#include <com/sun/star/util/XURLTransformer.hpp>
 
 // Size check
 #define NAVI_ENTRIES 20
 #if NAVI_ENTRIES != NID_COUNT
 #error SwScrollNaviPopup-CTOR static array wrong size. Are new IDs added?
 #endif
-
-#define ZOOM_ENTRIES 9
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -69,15 +69,13 @@ SwTbxAutoTextCtrl::SwTbxAutoTextCtrl(
     sal_uInt16 nSlotId,
     sal_uInt16 nId,
     ToolBox& rTbx ) :
-    SfxToolBoxControl( nSlotId, nId, rTbx ),
-    pPopup(nullptr)
+    SfxToolBoxControl( nSlotId, nId, rTbx )
 {
     rTbx.SetItemBits( nId, ToolBoxItemBits::DROPDOWN | rTbx.GetItemBits( nId ) );
 }
 
 SwTbxAutoTextCtrl::~SwTbxAutoTextCtrl()
 {
-    DelPopup();
 }
 
 VclPtr<SfxPopupWindow> SwTbxAutoTextCtrl::CreatePopupWindow()
@@ -88,7 +86,7 @@ VclPtr<SfxPopupWindow> SwTbxAutoTextCtrl::CreatePopupWindow()
     {
         Link<Menu*,bool> aLnk = LINK(this, SwTbxAutoTextCtrl, PopupHdl);
 
-        pPopup = new PopupMenu;
+        ScopedVclPtrInstance<PopupMenu> pPopup;
         SwGlossaryList* pGlossaryList = ::GetGlossaryList();
         const size_t nGroupCount = pGlossaryList->GetGroupCount();
         for(size_t i = 1; i <= nGroupCount; ++i)
@@ -100,7 +98,7 @@ VclPtr<SfxPopupWindow> SwTbxAutoTextCtrl::CreatePopupWindow()
                 sal_uInt16 nIndex = static_cast<sal_uInt16>(100*i);
                 // but insert without extension
                 pPopup->InsertItem( i, sTitle);
-                PopupMenu* pSub = new PopupMenu;
+                VclPtrInstance<PopupMenu> pSub;
                 pSub->SetSelectHdl(aLnk);
                 pPopup->SetPopupMenu(i, pSub);
                 for(sal_uInt16 j = 0; j < nBlockCount; j++)
@@ -125,9 +123,7 @@ VclPtr<SfxPopupWindow> SwTbxAutoTextCtrl::CreatePopupWindow()
         pToolBox->SetItemDown( nId, false );
     }
     GetToolBox().EndSelection();
-    DelPopup();
     return nullptr;
-
 }
 
 void SwTbxAutoTextCtrl::StateChanged( sal_uInt16,
@@ -137,7 +133,7 @@ void SwTbxAutoTextCtrl::StateChanged( sal_uInt16,
     GetToolBox().EnableItem( GetId(), (GetItemState(pState) != SfxItemState::DISABLED) );
 }
 
-IMPL_STATIC_LINK_TYPED(SwTbxAutoTextCtrl, PopupHdl, Menu*, pMenu, bool)
+IMPL_STATIC_LINK(SwTbxAutoTextCtrl, PopupHdl, Menu*, pMenu, bool)
 {
     sal_uInt16 nId = pMenu->GetCurItemId();
 
@@ -150,7 +146,6 @@ IMPL_STATIC_LINK_TYPED(SwTbxAutoTextCtrl, PopupHdl, Menu*, pMenu, bool)
 
     SwGlossaryHdl* pGlosHdl = ::GetActiveView()->GetGlosHdl();
     SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-    OSL_ENSURE(pFact, "Dialog creation failed!");
     ::GlossarySetActGroup fnSetActGroup = pFact->SetGlossaryActGroupFunc();
     if ( fnSetActGroup )
         (*fnSetActGroup)( sGroup );
@@ -158,20 +153,6 @@ IMPL_STATIC_LINK_TYPED(SwTbxAutoTextCtrl, PopupHdl, Menu*, pMenu, bool)
     pGlosHdl->InsertGlossary(sShortName);
 
     return false;
-}
-
-void SwTbxAutoTextCtrl::DelPopup()
-{
-    if(pPopup)
-    {
-        for( sal_uInt16 i = 0; i < pPopup->GetItemCount(); i ++ )
-        {
-            PopupMenu* pSubPopup = pPopup->GetPopupMenu(pPopup->GetItemId(i));
-            delete pSubPopup;
-        }
-        delete pPopup;
-        pPopup = nullptr;
-    }
 }
 
 // Navigation-Popup
@@ -201,6 +182,33 @@ static sal_uInt16 aNavigationInsertIds[ NAVI_ENTRIES ] =
     NID_TABLE_FORMULA_ERROR,
     NID_NEXT
 };
+
+static OUStringLiteral const aNavigationImgIds[ NAVI_ENTRIES ] =
+{
+    // -- first line
+    RID_BMP_RIBBAR_TBL,
+    RID_BMP_RIBBAR_FRM,
+    RID_BMP_RIBBAR_GRF,
+    RID_BMP_RIBBAR_OLE,
+    RID_BMP_RIBBAR_PGE,
+    RID_BMP_RIBBAR_OUTL,
+    RID_BMP_RIBBAR_MARK,
+    RID_BMP_RIBBAR_DRW,
+    RID_BMP_RIBBAR_CTRL,
+    RID_BMP_RIBBAR_PREV,
+    // -- second line
+    RID_BMP_RIBBAR_REG,
+    RID_BMP_RIBBAR_BKM,
+    RID_BMP_RIBBAR_SEL,
+    RID_BMP_RIBBAR_FTN,
+    RID_BMP_RIBBAR_POSTIT,
+    RID_BMP_RIBBAR_REP,
+    RID_BMP_RIBBAR_ENTRY,
+    RID_BMP_RIBBAR_FORMULA,
+    RID_BMP_RIBBAR_ERROR,
+    RID_BMP_RIBBAR_NEXT
+};
+
 static const char* aNavigationHelpIds[ NAVI_ENTRIES ] =
 {
     // -- first line
@@ -227,15 +235,85 @@ static const char* aNavigationHelpIds[ NAVI_ENTRIES ] =
     HID_NID_NEXT
 };
 
+static const char* aNavigationStrIds[ NAVI_ENTRIES ] =
+{
+    // -- first line
+    ST_TBL,
+    ST_FRM,
+    ST_GRF,
+    ST_OLE,
+    ST_PGE,
+    ST_OUTL,
+    ST_MARK,
+    ST_DRW,
+    ST_CTRL,
+    STR_IMGBTN_PGE_UP,
+    // -- second line
+    ST_REG,
+    ST_BKM,
+    ST_SEL,
+    ST_FTN,
+    ST_POSTIT,
+    ST_SRCH_REP,
+    ST_INDEX_ENTRY,
+    ST_TABLE_FORMULA,
+    ST_TABLE_FORMULA_ERROR,
+    STR_IMGBTN_PGE_DOWN
+};
+
+// these are global strings
+static const char* STR_IMGBTN_ARY[] =
+{
+    nullptr,
+    nullptr,
+    STR_IMGBTN_TBL_DOWN,
+    STR_IMGBTN_FRM_DOWN,
+    STR_IMGBTN_PGE_DOWN,
+    STR_IMGBTN_DRW_DOWN,
+    STR_IMGBTN_CTRL_DOWN,
+    STR_IMGBTN_REG_DOWN,
+    STR_IMGBTN_BKM_DOWN,
+    STR_IMGBTN_GRF_DOWN,
+    STR_IMGBTN_OLE_DOWN,
+    STR_IMGBTN_OUTL_DOWN,
+    STR_IMGBTN_SEL_DOWN,
+    STR_IMGBTN_FTN_DOWN,
+    STR_IMGBTN_MARK_DOWN,
+    STR_IMGBTN_POSTIT_DOWN,
+    STR_IMGBTN_SRCH_REP_DOWN,
+    STR_IMGBTN_INDEX_ENTRY_DOWN,
+    STR_IMGBTN_TBLFML_DOWN,
+    STR_IMGBTN_TBLFML_ERR_DOWN,
+    nullptr,
+    nullptr,
+    STR_IMGBTN_TBL_UP,
+    STR_IMGBTN_FRM_UP,
+    STR_IMGBTN_PGE_UP,
+    STR_IMGBTN_DRW_UP,
+    STR_IMGBTN_CTRL_UP,
+    STR_IMGBTN_REG_UP,
+    STR_IMGBTN_BKM_UP,
+    STR_IMGBTN_GRF_UP,
+    STR_IMGBTN_OLE_UP,
+    STR_IMGBTN_OUTL_UP,
+    STR_IMGBTN_SEL_UP,
+    STR_IMGBTN_FTN_UP,
+    STR_IMGBTN_MARK_UP,
+    STR_IMGBTN_POSTIT_UP,
+    STR_IMGBTN_SRCH_REP_UP,
+    STR_IMGBTN_INDEX_ENTRY_UP,
+    STR_IMGBTN_TBLFML_UP,
+    STR_IMGBTN_TBLFML_ERR_UP
+};
+
 SwScrollNaviPopup::SwScrollNaviPopup(sal_uInt16 nId, const Reference< XFrame >& rFrame, vcl::Window *pParent)
     : SfxPopupWindow(nId, pParent, "FloatingNavigation",
-        "modules/swriter/ui/floatingnavigation.ui", rFrame),
-    aIList(SW_RES(IL_VALUES))
+        "modules/swriter/ui/floatingnavigation.ui", rFrame)
 {
     m_pToolBox = VclPtr<SwScrollNaviToolBox>::Create(get<vcl::Window>("box"), this, 0);
     get(m_pInfoField, "label");
 
-    sal_uInt16 i;
+    size_t i;
 
     m_pToolBox->SetHelpId(HID_NAVI_VS);
     m_pToolBox->SetLineCount( 2 );
@@ -243,32 +321,22 @@ SwScrollNaviPopup::SwScrollNaviPopup(sal_uInt16 nId, const Reference< XFrame >& 
     for( i = 0; i < NID_COUNT; i++)
     {
         sal_uInt16 nNaviId = aNavigationInsertIds[i];
-        OUString sText;
-        ToolBoxItemBits  nTbxBits = ToolBoxItemBits::NONE;
-        if((NID_PREV != nNaviId) && (NID_NEXT != nNaviId))
-        {
-            // -2, there's no string for Next/Prev
-            sal_uInt16 nResStr = ST_TBL - 2 + nNaviId - NID_START;
-            sText = SW_RESSTR(nResStr);
+        ToolBoxItemBits nTbxBits = ToolBoxItemBits::NONE;
+        if ((NID_PREV != nNaviId) && (NID_NEXT != nNaviId))
             nTbxBits = ToolBoxItemBits::CHECKABLE;
-        }
-        else
-        {
-            if (nNaviId == NID_PREV)
-                sText = SW_RESSTR(STR_IMGBTN_PGE_UP);
-            else if (nNaviId == NID_NEXT)
-                sText = SW_RESSTR(STR_IMGBTN_PGE_DOWN);
-        }
-        m_pToolBox->InsertItem(nNaviId, sText, nTbxBits);
-        m_pToolBox->SetHelpId( nNaviId, aNavigationHelpIds[i] );
+        m_pToolBox->InsertItem(nNaviId, Image(StockImage::Yes, aNavigationImgIds[i]),
+                              SwResId(aNavigationStrIds[i]), nTbxBits);
+        m_pToolBox->SetHelpId(nNaviId, aNavigationHelpIds[i]);
     }
-    ApplyImageList();
+
     m_pToolBox->InsertBreak(NID_COUNT/2);
 
-    // these are global strings
-    for( i = 0; i < 2 * NID_COUNT; i++)
+    for (i = 0; i < SAL_N_ELEMENTS(STR_IMGBTN_ARY); ++i)
     {
-        sQuickHelp[i] = SW_RESSTR(STR_IMGBTN_START + i);
+        const char* id = STR_IMGBTN_ARY[i];
+        if (!id)
+            continue;
+        sQuickHelp[i] = SwResId(id);
     }
 
     sal_uInt16 nItemId = SwView::GetMoveType();
@@ -278,6 +346,8 @@ SwScrollNaviPopup::SwScrollNaviPopup(sal_uInt16 nId, const Reference< XFrame >& 
     m_pToolBox->SetSelectHdl(LINK(this, SwScrollNaviPopup, SelectHdl));
     m_pToolBox->StartSelection();
     m_pToolBox->Show();
+
+    AddStatusListener(".uno:NavElement");
 }
 
 SwScrollNaviPopup::~SwScrollNaviPopup()
@@ -292,40 +362,15 @@ void SwScrollNaviPopup::dispose()
     SfxPopupWindow::dispose();
 }
 
-void SwScrollNaviPopup::DataChanged( const DataChangedEvent& rDCEvt )
-{
-    if ( (rDCEvt.GetType() == DataChangedEventType::SETTINGS) &&
-         (rDCEvt.GetFlags() & AllSettingsFlags::STYLE) )
-            ApplyImageList();
-
-    Window::DataChanged( rDCEvt );
-}
-
-void SwScrollNaviPopup::ApplyImageList()
-{
-    ImageList& rImgLst = aIList;
-    for(sal_uInt16 i = 0; i < NID_COUNT; i++)
-    {
-        sal_uInt16 nNaviId = aNavigationInsertIds[i];
-        m_pToolBox->SetItemImage(nNaviId, rImgLst.GetImage(nNaviId));
-    }
-}
-
-IMPL_LINK_TYPED(SwScrollNaviPopup, SelectHdl, ToolBox*, pSet, void)
+IMPL_LINK(SwScrollNaviPopup, SelectHdl, ToolBox*, pSet, void)
 {
     sal_uInt16 nSet = pSet->GetCurItemId();
     if( nSet != NID_PREV && nSet != NID_NEXT )
     {
-        SwView::SetMoveType(nSet);
-        m_pToolBox->SetItemText(NID_NEXT, sQuickHelp[nSet - NID_START]);
-        m_pToolBox->SetItemText(NID_PREV, sQuickHelp[nSet - NID_START + NID_COUNT]);
-        m_pInfoField->SetText(m_pToolBox->GetItemText(nSet));
-        // check the current button only
-        for(sal_uInt16 i = 0; i < NID_COUNT; i++)
-        {
-            sal_uInt16 nItemId = m_pToolBox->GetItemId( i );
-            m_pToolBox->CheckItem( nItemId, nItemId == nSet );
-        }
+        SwView::SetMoveType( nSet );
+        Sequence< PropertyValue > aArgs;
+        SfxToolBoxControl::Dispatch( Reference< XDispatchProvider >( GetFrame()->getController(), UNO_QUERY ),
+                                     ".uno:NavElement", aArgs );
     }
     else
     {
@@ -358,87 +403,91 @@ void SwScrollNaviToolBox::MouseButtonUp( const MouseEvent& rMEvt )
 
 void  SwScrollNaviToolBox::RequestHelp( const HelpEvent& rHEvt )
 {
-    SetItemText(NID_NEXT, SwScrollNaviPopup::GetQuickHelpText(true));
-    SetItemText(NID_PREV, SwScrollNaviPopup::GetQuickHelpText(false));
+    SetItemText(NID_NEXT, SwScrollNaviPopup::GetToolTip(true));
+    SetItemText(NID_PREV, SwScrollNaviPopup::GetToolTip(false));
     ToolBox::RequestHelp( rHEvt );
 }
 
-OUString SwScrollNaviPopup::GetQuickHelpText(bool bNext)
+OUString SwScrollNaviPopup::GetToolTip(bool bNext)
 {
-    sal_uInt16 nResId = STR_IMGBTN_START;
-    nResId += SwView::GetMoveType() - NID_START;
-    if(!bNext)
+    sal_uInt16 nResId = SwView::GetMoveType();
+    if (!bNext)
         nResId += NID_COUNT;
-    return SW_RESSTR(nResId);
+    const char* id = STR_IMGBTN_ARY[nResId - NID_START];
+    return id ? SwResId(id): OUString();
 }
 
-void SwHlpImageButton::RequestHelp( const HelpEvent& rHEvt )
+void SwScrollNaviPopup::statusChanged( const css::frame::FeatureStateEvent& rEvent )
 {
-
-    SetQuickHelpText(SwScrollNaviPopup::GetQuickHelpText(!bUp));
-
-    ImageButton::RequestHelp(rHEvt);
+    if ( rEvent.FeatureURL.Path == "NavElement" )
+    {
+        sal_uInt16 nSet = SwView::GetMoveType();
+        m_pToolBox->SetItemText( NID_NEXT, sQuickHelp[nSet - NID_START] );
+        m_pToolBox->SetItemText( NID_PREV, sQuickHelp[nSet - NID_START + NID_COUNT] );
+        m_pInfoField->SetText( m_pToolBox->GetItemText( nSet ) );
+        // check the current button only
+        for( ToolBox::ImplToolItems::size_type i = 0; i < NID_COUNT; i++ )
+        {
+            sal_uInt16 nItemId = m_pToolBox->GetItemId( i );
+            m_pToolBox->CheckItem( nItemId, nItemId == nSet );
+        }
+    }
 }
 
 class SwZoomBox_Impl : public ComboBox
 {
-    sal_uInt16          nSlotId;
-    bool            bRelease;
+    sal_uInt16 const nSlotId;
+    bool             bRelease;
 
 public:
     SwZoomBox_Impl(
         vcl::Window* pParent,
         sal_uInt16 nSlot );
-    virtual ~SwZoomBox_Impl();
 
 protected:
     virtual void    Select() override;
-    virtual bool    Notify( NotifyEvent& rNEvt ) override;
+    virtual bool    EventNotify( NotifyEvent& rNEvt ) override;
 
     void ReleaseFocus();
 
 };
 
-SwZoomBox_Impl::SwZoomBox_Impl(
-    vcl::Window* pParent,
-    sal_uInt16 nSlot ):
-    ComboBox( pParent, SW_RES(RID_PVIEW_ZOOM_LB)),
-    nSlotId(nSlot),
-    bRelease(true)
+SwZoomBox_Impl::SwZoomBox_Impl(vcl::Window* pParent, sal_uInt16 nSlot)
+    : ComboBox(pParent, WB_HIDE | WB_BORDER | WB_DROPDOWN | WB_AUTOHSCROLL)
+    , nSlotId(nSlot)
+    , bRelease(true)
 {
+    SetHelpId(HID_PVIEW_ZOOM_LB);
+    SetSizePixel(LogicToPixel(Size(30, 86), MapMode(MapUnit::MapAppFont)));
     EnableAutocomplete( false );
-    sal_uInt16 aZoomValues[] =
+    const char* const aZoomValues[] =
     { RID_SVXSTR_ZOOM_25 , RID_SVXSTR_ZOOM_50 ,
       RID_SVXSTR_ZOOM_75 , RID_SVXSTR_ZOOM_100 ,
       RID_SVXSTR_ZOOM_150 , RID_SVXSTR_ZOOM_200 ,
       RID_SVXSTR_ZOOM_WHOLE_PAGE, RID_SVXSTR_ZOOM_PAGE_WIDTH ,
       RID_SVXSTR_ZOOM_OPTIMAL_VIEW };
-    for(sal_uInt16 i = 0; i < ZOOM_ENTRIES ; i++)
+    for(const char* pZoomValue : aZoomValues)
     {
-        OUString sEntry = SVX_RESSTR( aZoomValues[i] );
+        OUString sEntry = SvxResId(pZoomValue);
         InsertEntry(sEntry);
     }
-
 }
-
-SwZoomBox_Impl::~SwZoomBox_Impl()
-{}
 
 void    SwZoomBox_Impl::Select()
 {
     if ( !IsTravelSelect() )
     {
-        OUString sEntry(comphelper::string::remove(GetText(), '%'));
+        OUString sEntry = GetText().replaceAll("%", "");
         SvxZoomItem aZoom(SvxZoomType::PERCENT,100);
-        if(sEntry == SVX_RESSTR( RID_SVXSTR_ZOOM_PAGE_WIDTH ) )
+        if(sEntry == SvxResId( RID_SVXSTR_ZOOM_PAGE_WIDTH ) )
             aZoom.SetType(SvxZoomType::PAGEWIDTH);
-        else if(sEntry == SVX_RESSTR( RID_SVXSTR_ZOOM_OPTIMAL_VIEW ) )
+        else if(sEntry == SvxResId( RID_SVXSTR_ZOOM_OPTIMAL_VIEW ) )
             aZoom.SetType(SvxZoomType::OPTIMAL);
-        else if(sEntry == SVX_RESSTR( RID_SVXSTR_ZOOM_WHOLE_PAGE) )
+        else if(sEntry == SvxResId( RID_SVXSTR_ZOOM_WHOLE_PAGE) )
             aZoom.SetType(SvxZoomType::WHOLEPAGE);
         else
         {
-            sal_uInt16 nZoom = (sal_uInt16)sEntry.toInt32();
+            sal_uInt16 nZoom = static_cast<sal_uInt16>(sEntry.toInt32());
             if(nZoom < MINZOOM)
                 nZoom = MINZOOM;
             if(nZoom > MAXZOOM)
@@ -456,7 +505,7 @@ void    SwZoomBox_Impl::Select()
     }
 }
 
-bool SwZoomBox_Impl::Notify( NotifyEvent& rNEvt )
+bool SwZoomBox_Impl::EventNotify( NotifyEvent& rNEvt )
 {
     bool bHandled = false;
 
@@ -490,7 +539,7 @@ bool SwZoomBox_Impl::Notify( NotifyEvent& rNEvt )
             SetText( GetSavedValue() );
     }
 
-    return bHandled || ComboBox::Notify( rNEvt );
+    return bHandled || ComboBox::EventNotify(rNEvt);
 }
 
 void SwZoomBox_Impl::ReleaseFocus()
@@ -549,44 +598,38 @@ VclPtr<vcl::Window> SwPreviewZoomControl::CreateItemWindow( vcl::Window *pParent
 
 class SwJumpToSpecificBox_Impl : public NumericField
 {
-    sal_uInt16          nSlotId;
+    sal_uInt16 const nSlotId;
 
 public:
-    SwJumpToSpecificBox_Impl(
-        vcl::Window* pParent,
-        sal_uInt16 nSlot );
-    virtual ~SwJumpToSpecificBox_Impl();
+    SwJumpToSpecificBox_Impl(vcl::Window* pParent, sal_uInt16 nSlot);
 
 protected:
     void            Select();
-    virtual bool    Notify( NotifyEvent& rNEvt ) SAL_OVERRIDE;
+    virtual bool    EventNotify( NotifyEvent& rNEvt ) override;
 };
 
-SwJumpToSpecificBox_Impl::SwJumpToSpecificBox_Impl(
-    vcl::Window* pParent,
-    sal_uInt16 nSlot ):
-    NumericField( pParent, SW_RES(RID_JUMP_TO_SPEC_PAGE)),
-    nSlotId(nSlot)
-{}
-
-SwJumpToSpecificBox_Impl::~SwJumpToSpecificBox_Impl()
-{}
+SwJumpToSpecificBox_Impl::SwJumpToSpecificBox_Impl(vcl::Window* pParent, sal_uInt16 nSlot)
+    : NumericField(pParent, WB_HIDE | WB_BORDER)
+    , nSlotId(nSlot)
+{
+    SetSizePixel(LogicToPixel(Size(16, 12), MapMode(MapUnit::MapAppFont)));
+}
 
 void SwJumpToSpecificBox_Impl::Select()
 {
     OUString sEntry(GetText());
     SfxUInt16Item aPageNum(nSlotId);
-    aPageNum.SetValue((sal_uInt16)sEntry.toInt32());
+    aPageNum.SetValue(static_cast<sal_uInt16>(sEntry.toInt32()));
     SfxObjectShell* pCurrentShell = SfxObjectShell::Current();
     pCurrentShell->GetDispatcher()->ExecuteList(nSlotId, SfxCallMode::ASYNCHRON,
             { &aPageNum });
 }
 
-bool SwJumpToSpecificBox_Impl::Notify( NotifyEvent& rNEvt )
+bool SwJumpToSpecificBox_Impl::EventNotify( NotifyEvent& rNEvt )
 {
     if ( rNEvt.GetType() == MouseNotifyEvent::KEYINPUT )
         Select();
-    return NumericField::Notify( rNEvt );
+    return NumericField::EventNotify(rNEvt);
 }
 
 SFX_IMPL_TOOLBOX_CONTROL( SwJumpToSpecificPageControl, SfxUInt16Item);
@@ -605,6 +648,448 @@ VclPtr<vcl::Window> SwJumpToSpecificPageControl::CreateItemWindow( vcl::Window *
 {
     VclPtrInstance<SwJumpToSpecificBox_Impl> pRet( pParent, GetSlotId() );
     return pRet.get();
+}
+
+class NavElementBox_Impl;
+class NavElementToolBoxControl : public svt::ToolboxController,
+                                 public lang::XServiceInfo
+{
+    public:
+        explicit NavElementToolBoxControl(
+            const css::uno::Reference< css::uno::XComponentContext >& rServiceManager );
+
+        // XInterface
+        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) override;
+        virtual void SAL_CALL acquire() throw () override;
+        virtual void SAL_CALL release() throw () override;
+
+        // XServiceInfo
+        virtual OUString SAL_CALL getImplementationName() override;
+        virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+
+        // XComponent
+        virtual void SAL_CALL dispose() override;
+
+        // XStatusListener
+        virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override;
+
+        // XToolbarController
+        virtual void SAL_CALL execute( sal_Int16 KeyModifier ) override;
+        virtual void SAL_CALL click() override;
+        virtual void SAL_CALL doubleClick() override;
+        virtual css::uno::Reference< css::awt::XWindow > SAL_CALL createPopupWindow() override;
+        virtual css::uno::Reference< css::awt::XWindow > SAL_CALL createItemWindow( const css::uno::Reference< css::awt::XWindow >& Parent ) override;
+
+        void dispatchCommand( const css::uno::Sequence< css::beans::PropertyValue >& rArgs );
+        using svt::ToolboxController::dispatchCommand;
+
+    private:
+        VclPtr<NavElementBox_Impl>           m_pBox;
+};
+
+class NavElementBox_Impl : public ListBox
+{
+public:
+                        NavElementBox_Impl( vcl::Window* pParent,
+                                             const uno::Reference< frame::XFrame >& _xFrame,
+                                             NavElementToolBoxControl& rCtrl );
+
+    void                Update();
+
+    virtual bool        EventNotify( NotifyEvent& rNEvt ) override;
+
+protected:
+    virtual void        Select() override;
+
+private:
+    NavElementToolBoxControl*                  m_pCtrl;
+    bool                                       m_bRelease;
+    uno::Reference< frame::XFrame >            m_xFrame;
+
+    void                ReleaseFocus_Impl();
+};
+
+NavElementBox_Impl::NavElementBox_Impl(
+    vcl::Window*                                      _pParent,
+    const uno::Reference< frame::XFrame >&            _xFrame,
+    NavElementToolBoxControl&                         _rCtrl ) :
+
+    ListBox( _pParent, WinBits( WB_DROPDOWN ) ),
+
+    m_pCtrl             ( &_rCtrl ),
+    m_bRelease          ( true ),
+    m_xFrame            ( _xFrame )
+{
+    SetSizePixel( Size( 150, 260 ) );
+
+    sal_uInt16 i;
+    for ( i = 0; i < NID_COUNT; i++ )
+    {
+        sal_uInt16 nNaviId = aNavigationInsertIds[i];
+        if ( ( NID_PREV != nNaviId ) && ( NID_NEXT != nNaviId ) )
+            InsertEntry( SwResId( aNavigationStrIds[i] ), Image( StockImage::Yes, aNavigationImgIds[i] ) );
+    }
+}
+
+void NavElementBox_Impl::ReleaseFocus_Impl()
+{
+    if ( !m_bRelease )
+    {
+        m_bRelease = true;
+        return;
+    }
+
+    if ( m_xFrame.is() && m_xFrame->getContainerWindow().is() )
+        m_xFrame->getContainerWindow()->setFocus();
+}
+
+void NavElementBox_Impl::Select()
+{
+    ListBox::Select();
+
+    if ( !IsTravelSelect() )
+    {
+        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::Empty );
+
+        sal_uInt16 nPos = GetSelectedEntryPos();
+        // adjust array index for Ids after NID_PREV in aNavigationInsertIds
+        if ( nPos >= NID_COUNT/2 - 1 )
+            ++nPos;
+
+        sal_uInt16 nMoveType = aNavigationInsertIds[nPos];
+        SwView::SetMoveType( nMoveType );
+
+        css::uno::Sequence< css::beans::PropertyValue > aArgs;
+
+        /*  #i33380# DR 2004-09-03 Moved the following line above the Dispatch() call.
+            This instance may be deleted in the meantime (i.e. when a dialog is opened
+            while in Dispatch()), accessing members will crash in this case. */
+        ReleaseFocus_Impl();
+
+        m_pCtrl->dispatchCommand( aArgs );
+    }
+}
+
+void NavElementBox_Impl::Update()
+{
+    sal_uInt16 nMoveType = SwView::GetMoveType();
+    for ( size_t i = 0; i < SAL_N_ELEMENTS( aNavigationInsertIds ); ++i )
+    {
+        if ( nMoveType == aNavigationInsertIds[i] )
+        {
+            const char* id = aNavigationStrIds[i];
+            OUString sText = SwResId( id );
+            SelectEntry( sText );
+            break;
+        }
+    }
+}
+
+bool NavElementBox_Impl::EventNotify( NotifyEvent& rNEvt )
+{
+    bool bHandled = false;
+
+    if ( rNEvt.GetType() == MouseNotifyEvent::KEYINPUT )
+    {
+        sal_uInt16 nCode = rNEvt.GetKeyEvent()->GetKeyCode().GetCode();
+
+        switch ( nCode )
+        {
+            case KEY_RETURN:
+            case KEY_TAB:
+            {
+                if ( KEY_TAB == nCode )
+                    m_bRelease = false;
+                else
+                    bHandled = true;
+                Select();
+                break;
+            }
+
+            case KEY_ESCAPE:
+                ReleaseFocus_Impl();
+                bHandled = true;
+                break;
+        }
+    }
+
+    return bHandled || ListBox::EventNotify( rNEvt );
+}
+
+NavElementToolBoxControl::NavElementToolBoxControl( const uno::Reference< uno::XComponentContext >& rxContext )
+ : svt::ToolboxController( rxContext,
+                           uno::Reference< frame::XFrame >(),
+                           ".uno:NavElement" ),
+   m_pBox( nullptr )
+{
+}
+
+// XInterface
+css::uno::Any SAL_CALL NavElementToolBoxControl::queryInterface( const css::uno::Type& aType )
+{
+    uno::Any a = ToolboxController::queryInterface( aType );
+    if ( a.hasValue() )
+        return a;
+
+    return ::cppu::queryInterface( aType, static_cast< lang::XServiceInfo* >( this ) );
+}
+
+void SAL_CALL NavElementToolBoxControl::acquire() throw ()
+{
+    ToolboxController::acquire();
+}
+
+void SAL_CALL NavElementToolBoxControl::release() throw ()
+{
+    ToolboxController::release();
+}
+
+// XServiceInfo
+sal_Bool SAL_CALL NavElementToolBoxControl::supportsService( const OUString& ServiceName )
+{
+    return cppu::supportsService( this, ServiceName );
+}
+
+OUString SAL_CALL NavElementToolBoxControl::getImplementationName()
+{
+    return OUString("lo.writer.NavElementToolBoxController");
+}
+
+uno::Sequence< OUString > SAL_CALL NavElementToolBoxControl::getSupportedServiceNames()
+{
+    uno::Sequence<OUString> aSNS { "com.sun.star.frame.ToolbarController" };
+    return aSNS;
+}
+
+// XComponent
+void SAL_CALL NavElementToolBoxControl::dispose()
+{
+    svt::ToolboxController::dispose();
+
+    SolarMutexGuard aSolarMutexGuard;
+    m_pBox.disposeAndClear();
+}
+
+// XStatusListener
+void SAL_CALL NavElementToolBoxControl::statusChanged( const frame::FeatureStateEvent& rEvent )
+{
+    if ( m_pBox )
+    {
+        SolarMutexGuard aSolarMutexGuard;
+        if ( rEvent.FeatureURL.Path == "NavElement" )
+        {
+            if ( rEvent.IsEnabled )
+            {
+                m_pBox->Enable();
+                m_pBox->Update();
+            }
+            else
+                m_pBox->Disable();
+        }
+    }
+}
+
+// XToolbarController
+void SAL_CALL NavElementToolBoxControl::execute( sal_Int16 /*KeyModifier*/ )
+{
+}
+
+void SAL_CALL NavElementToolBoxControl::click()
+{
+}
+
+void SAL_CALL NavElementToolBoxControl::doubleClick()
+{
+}
+
+uno::Reference< awt::XWindow > SAL_CALL NavElementToolBoxControl::createPopupWindow()
+{
+    return uno::Reference< awt::XWindow >();
+}
+
+uno::Reference< awt::XWindow > SAL_CALL NavElementToolBoxControl::createItemWindow(
+    const uno::Reference< awt::XWindow >& xParent )
+{
+    uno::Reference< awt::XWindow > xItemWindow;
+
+    VclPtr<vcl::Window> pParent = VCLUnoHelper::GetWindow( xParent );
+    if ( pParent )
+    {
+        SolarMutexGuard aSolarMutexGuard;
+        m_pBox = VclPtr<NavElementBox_Impl>::Create( pParent, m_xFrame, *this );
+        xItemWindow = VCLUnoHelper::GetInterface( m_pBox );
+    }
+
+    uno::Reference< util::XURLTransformer > xURLTransformer = getURLTransformer();
+
+    return xItemWindow;
+}
+
+void NavElementToolBoxControl::dispatchCommand(
+    const uno::Sequence< beans::PropertyValue >& rArgs )
+{
+    uno::Reference< frame::XDispatchProvider > xDispatchProvider( m_xFrame, uno::UNO_QUERY );
+    if ( xDispatchProvider.is() )
+    {
+        util::URL                               aURL;
+        uno::Reference< frame::XDispatch >      xDispatch;
+        uno::Reference< util::XURLTransformer > xURLTransformer = getURLTransformer();
+
+        aURL.Complete = ".uno:NavElement";
+        xURLTransformer->parseStrict( aURL );
+        xDispatch = xDispatchProvider->queryDispatch( aURL, OUString(), 0 );
+        if ( xDispatch.is() )
+            xDispatch->dispatch( aURL, rArgs );
+    }
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+lo_writer_NavElementToolBoxController_get_implementation(
+    css::uno::XComponentContext *rxContext,
+    css::uno::Sequence<css::uno::Any> const &)
+{
+    return cppu::acquire( new NavElementToolBoxControl( rxContext ) );
+}
+
+class PrevNextScrollToolboxController : public svt::ToolboxController,
+                                      public css::lang::XServiceInfo
+{
+public:
+    enum Type { PREVIOUS, NEXT };
+
+    PrevNextScrollToolboxController( const css::uno::Reference< css::uno::XComponentContext >& rxContext, Type eType );
+
+    // XInterface
+    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) override;
+    virtual void SAL_CALL acquire() throw () override;
+    virtual void SAL_CALL release() throw () override;
+
+    // XServiceInfo
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+
+    // XComponent
+    virtual void SAL_CALL dispose() override;
+
+    // XToolbarController
+    virtual void SAL_CALL execute( sal_Int16 /* KeyModifier */ ) override;
+    virtual void SAL_CALL click() override;
+
+    // XStatusListener
+    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
+
+private:
+    Type const                 meType;
+};
+
+PrevNextScrollToolboxController::PrevNextScrollToolboxController( const css::uno::Reference< css::uno::XComponentContext > & rxContext, Type eType )
+    : svt::ToolboxController( rxContext,
+            css::uno::Reference< css::frame::XFrame >(),
+            (eType == PREVIOUS) ? OUString( ".uno:ScrollToPrevious" ): OUString( ".uno:ScrollToNext" ) ),
+      meType( eType )
+{
+    addStatusListener(".uno:NavElement");
+}
+
+// XInterface
+css::uno::Any SAL_CALL PrevNextScrollToolboxController::queryInterface( const css::uno::Type& aType )
+{
+    css::uno::Any a = ToolboxController::queryInterface( aType );
+    if ( a.hasValue() )
+        return a;
+
+    return ::cppu::queryInterface( aType, static_cast< css::lang::XServiceInfo* >( this ) );
+}
+
+void SAL_CALL PrevNextScrollToolboxController::acquire() throw ()
+{
+    ToolboxController::acquire();
+}
+
+void SAL_CALL PrevNextScrollToolboxController::release() throw ()
+{
+    ToolboxController::release();
+}
+
+// XServiceInfo
+OUString SAL_CALL PrevNextScrollToolboxController::getImplementationName()
+{
+    return meType == PrevNextScrollToolboxController::PREVIOUS?
+        OUString( "lo.writer.PreviousScrollToolboxController" ) :
+        OUString( "lo.writer.NextScrollToolboxController" );
+}
+
+sal_Bool SAL_CALL PrevNextScrollToolboxController::supportsService( const OUString& ServiceName )
+{
+    return cppu::supportsService(this, ServiceName);
+}
+
+css::uno::Sequence< OUString > SAL_CALL PrevNextScrollToolboxController::getSupportedServiceNames()
+{
+    return { "com.sun.star.frame.ToolbarController" };
+}
+
+// XComponent
+void SAL_CALL PrevNextScrollToolboxController::dispose()
+{
+    SolarMutexGuard aSolarMutexGuard;
+
+    svt::ToolboxController::dispose();
+}
+
+// XToolbarController
+void SAL_CALL PrevNextScrollToolboxController::execute( sal_Int16 /* KeyModifier */ )
+{
+}
+
+void SAL_CALL PrevNextScrollToolboxController::click()
+{
+    uno::Sequence< beans::PropertyValue > rArgs;
+
+    uno::Reference< frame::XDispatchProvider > xDispatchProvider( m_xFrame, uno::UNO_QUERY );
+    if ( xDispatchProvider.is() )
+    {
+        util::URL                               aURL;
+        uno::Reference< frame::XDispatch >      xDispatch;
+        uno::Reference< util::XURLTransformer > xURLTransformer = getURLTransformer();
+
+        aURL.Complete = getCommandURL();
+        xURLTransformer->parseStrict( aURL );
+        xDispatch = xDispatchProvider->queryDispatch( aURL, OUString(), 0 );
+        if ( xDispatch.is() )
+            xDispatch->dispatch( aURL, rArgs );
+    }
+}
+
+// XStatusListener
+void SAL_CALL PrevNextScrollToolboxController::statusChanged( const css::frame::FeatureStateEvent& rEvent )
+{
+    if ( rEvent.FeatureURL.Path == "NavElement" )
+    {
+        ToolBox* pToolBox = nullptr;
+        sal_uInt16 nId = 0;
+        if ( getToolboxId( nId, &pToolBox ) )
+            pToolBox->SetQuickHelpText( nId, ( meType == PrevNextScrollToolboxController::PREVIOUS?SwScrollNaviPopup::GetToolTip( false ):
+                                                                                                   SwScrollNaviPopup::GetToolTip( true ) ) );
+    }
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+lo_writer_PreviousScrollToolboxController_get_implementation(
+    css::uno::XComponentContext *context,
+    css::uno::Sequence<css::uno::Any> const &)
+{
+    return cppu::acquire( new PrevNextScrollToolboxController( context, PrevNextScrollToolboxController::PREVIOUS ) );
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+lo_writer_NextScrollToolboxController_get_implementation(
+    css::uno::XComponentContext *context,
+    css::uno::Sequence<css::uno::Any> const &)
+{
+    return cppu::acquire( new PrevNextScrollToolboxController( context, PrevNextScrollToolboxController::NEXT ) );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

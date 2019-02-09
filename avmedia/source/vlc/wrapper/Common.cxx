@@ -6,15 +6,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#include "Common.hxx"
+#include <wrapper/Common.hxx>
 #include "SymbolLoader.hxx"
 
 namespace
 {
     const char AVMEDIA_NO_ERROR[] = "No error";
 
-    const char* ( *libvlc_get_version ) (void);
-    char *  ( * libvlc_errmsg ) (void);
+    const char* ( *libvlc_get_version ) ();
+    char *  ( * libvlc_errmsg ) ();
 }
 
 namespace avmedia
@@ -25,7 +25,7 @@ namespace wrapper
 {
 bool Common::LoadSymbols()
 {
-    ApiMap VLC_COMMON_API[] =
+    static ApiMap const VLC_COMMON_API[] =
     {
         SYM_MAP( libvlc_get_version ),
         SYM_MAP( libvlc_errmsg )

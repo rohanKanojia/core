@@ -1,8 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
-  <requires lib="LibreOffice" version="1.0"/>
+<!-- Generated with glade 3.22.1 -->
+<interface domain="sw">
+  <requires lib="gtk+" version="3.18"/>
+  <object class="GtkTreeStore" id="liststore1">
+    <columns>
+      <!-- column-name check -->
+      <column type="gboolean"/>
+      <!-- column-name text -->
+      <column type="gchararray"/>
+      <!-- column-name id -->
+      <column type="gchararray"/>
+      <!-- column-name checkvis1 -->
+      <column type="gboolean"/>
+    </columns>
+  </object>
   <object class="GtkBox" id="OptCaptionPage">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -46,10 +57,10 @@
                           <object class="GtkLabel" id="label7">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">1</property>
-                            <property name="label" translatable="yes">Category:</property>
+                            <property name="label" translatable="yes" context="optcaptionpage|label7">Category:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">category</property>
+                            <property name="xalign">1</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -60,10 +71,10 @@
                           <object class="GtkLabel" id="numberingft">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">1</property>
-                            <property name="label" translatable="yes">_Numbering:</property>
+                            <property name="label" translatable="yes" context="optcaptionpage|numberingft">_Numbering:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">numbering</property>
+                            <property name="xalign">1</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -74,10 +85,10 @@
                           <object class="GtkLabel" id="numseparatorft">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">1</property>
-                            <property name="label" translatable="yes">Numbering separator:</property>
+                            <property name="label" translatable="yes" context="optcaptionpage|numseparatorft">Numbering separator:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">numseparator</property>
+                            <property name="xalign">1</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -88,10 +99,10 @@
                           <object class="GtkLabel" id="separatorft">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">1</property>
-                            <property name="label" translatable="yes">Separator:</property>
+                            <property name="label" translatable="yes" context="optcaptionpage|separatorft">Separator:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">separator</property>
+                            <property name="xalign">1</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -102,10 +113,10 @@
                           <object class="GtkLabel" id="label18">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">1</property>
-                            <property name="label" translatable="yes">Position:</property>
+                            <property name="label" translatable="yes" context="optcaptionpage|label18">Position:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">position</property>
+                            <property name="xalign">1</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -130,7 +141,7 @@
                             <property name="can_focus">True</property>
                             <property name="valign">center</property>
                             <property name="hexpand">True</property>
-                            <property name="invisible_char">•</property>
+                            <property name="activates_default">True</property>
                           </object>
                           <packing>
                             <property name="left_attach">1</property>
@@ -143,8 +154,8 @@
                             <property name="can_focus">True</property>
                             <property name="valign">center</property>
                             <property name="hexpand">True</property>
-                            <property name="invisible_char">•</property>
-                            <property name="text" translatable="yes">. </property>
+                            <property name="activates_default">True</property>
+                            <property name="text" translatable="yes" context="optcaptionpage|numseparator">. </property>
                           </object>
                           <packing>
                             <property name="left_attach">1</property>
@@ -164,7 +175,7 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="swuilo-CaptionComboBox" id="category">
+                          <object class="GtkComboBoxText" id="category">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="valign">center</property>
@@ -173,6 +184,7 @@
                             <child internal-child="entry">
                               <object class="GtkEntry" id="comboboxtext-entry">
                                 <property name="can_focus">False</property>
+                                <property name="activates_default">True</property>
                               </object>
                             </child>
                           </object>
@@ -189,7 +201,7 @@
                   <object class="GtkLabel" id="label2">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Caption</property>
+                    <property name="label" translatable="yes" context="optcaptionpage|label2">Caption</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -226,10 +238,10 @@
                           <object class="GtkLabel" id="label4">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">1</property>
-                            <property name="label" translatable="yes">Level:</property>
+                            <property name="label" translatable="yes" context="optcaptionpage|label4">Level:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">level</property>
+                            <property name="xalign">1</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -240,10 +252,10 @@
                           <object class="GtkLabel" id="label6">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">1</property>
-                            <property name="label" translatable="yes">Separator:</property>
+                            <property name="label" translatable="yes" context="optcaptionpage|label6">Separator:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">chapseparator</property>
+                            <property name="xalign">1</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -256,7 +268,7 @@
                             <property name="can_focus">True</property>
                             <property name="valign">center</property>
                             <property name="hexpand">True</property>
-                            <property name="invisible_char">•</property>
+                            <property name="activates_default">True</property>
                           </object>
                           <packing>
                             <property name="left_attach">1</property>
@@ -270,7 +282,7 @@
                             <property name="valign">center</property>
                             <property name="hexpand">True</property>
                             <items>
-                              <item translatable="yes">None</item>
+                              <item translatable="yes" context="optcaptionpage|level">None</item>
                             </items>
                           </object>
                           <packing>
@@ -286,7 +298,7 @@
                   <object class="GtkLabel" id="label11">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Numbering Captions by Chapter</property>
+                    <property name="label" translatable="yes" context="optcaptionpage|label11">Numbering Captions by Chapter</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -323,10 +335,10 @@
                           <object class="GtkLabel" id="label3">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">1</property>
-                            <property name="label" translatable="yes">Character style:</property>
+                            <property name="label" translatable="yes" context="optcaptionpage|label3">Character style:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">charstyle</property>
+                            <property name="xalign">1</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -339,7 +351,7 @@
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
                             <items>
-                              <item translatable="yes">None</item>
+                              <item translatable="yes" context="optcaptionpage|charstyle">None</item>
                             </items>
                           </object>
                           <packing>
@@ -349,7 +361,7 @@
                         </child>
                         <child>
                           <object class="GtkCheckButton" id="applyborder">
-                            <property name="label" translatable="yes">Apply border and shadow</property>
+                            <property name="label" translatable="yes" context="optcaptionpage|applyborder">Apply border and shadow</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -371,7 +383,7 @@
                   <object class="GtkLabel" id="label10">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Category and Frame Format</property>
+                    <property name="label" translatable="yes" context="optcaptionpage|label10">Category and Frame Format</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -408,11 +420,56 @@
                     <property name="top_padding">6</property>
                     <property name="left_padding">12</property>
                     <child>
-                      <object class="svxcorelo-SvxCheckListBox" id="objects:border">
+                      <object class="GtkScrolledWindow">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <child internal-child="selection">
-                          <object class="GtkTreeSelection" id="Check List Box-selection1"/>
+                        <property name="can_focus">True</property>
+                        <property name="hexpand">True</property>
+                        <property name="vexpand">True</property>
+                        <property name="hscrollbar_policy">never</property>
+                        <property name="vscrollbar_policy">never</property>
+                        <property name="shadow_type">in</property>
+                        <child>
+                          <object class="GtkTreeView" id="objects">
+                            <property name="visible">True</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">True</property>
+                            <property name="hexpand">True</property>
+                            <property name="vexpand">True</property>
+                            <property name="model">liststore1</property>
+                            <property name="headers_visible">False</property>
+                            <property name="search_column">0</property>
+                            <property name="show_expanders">False</property>
+                            <child internal-child="selection">
+                              <object class="GtkTreeSelection" id="Macro Library List-selection1"/>
+                            </child>
+                            <child>
+                              <object class="GtkTreeViewColumn" id="treeviewcolumn2">
+                                <property name="resizable">True</property>
+                                <property name="spacing">6</property>
+                                <property name="alignment">0.5</property>
+                                <child>
+                                  <object class="GtkCellRendererToggle" id="cellrenderer2"/>
+                                  <attributes>
+                                    <attribute name="active">0</attribute>
+                                  </attributes>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkTreeViewColumn" id="treeviewcolumn1">
+                                <property name="resizable">True</property>
+                                <property name="spacing">6</property>
+                                <property name="sort_indicator">True</property>
+                                <property name="sort_column_id">0</property>
+                                <child>
+                                  <object class="GtkCellRendererText" id="cellrenderer1"/>
+                                  <attributes>
+                                    <attribute name="text">1</attribute>
+                                  </attributes>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
                         </child>
                       </object>
                     </child>
@@ -422,9 +479,9 @@
                   <object class="GtkLabel" id="label1">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">Add captions automatically
+                    <property name="label" translatable="yes" context="optcaptionpage|label1">Add captions automatically
 when inserting:</property>
+                    <property name="xalign">0</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -437,9 +494,28 @@ when inserting:</property>
               </packing>
             </child>
             <child>
-              <object class="swuilo-SwCaptionPreview" id="preview:border">
+              <object class="GtkScrolledWindow">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
+                <property name="can_focus">True</property>
+                <property name="halign">center</property>
+                <property name="valign">start</property>
+                <property name="hscrollbar_policy">never</property>
+                <property name="vscrollbar_policy">never</property>
+                <property name="shadow_type">in</property>
+                <child>
+                  <object class="GtkViewport">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <child>
+                      <object class="GtkDrawingArea" id="preview">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="halign">center</property>
+                        <property name="valign">start</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
               </object>
               <packing>
                 <property name="left_attach">0</property>
@@ -466,8 +542,8 @@ when inserting:</property>
                         <property name="can_focus">False</property>
                         <property name="halign">start</property>
                         <items>
-                          <item translatable="yes">Category first</item>
-                          <item translatable="yes">Numbering first</item>
+                          <item translatable="yes" context="optcaptionpage|captionorder">Category first</item>
+                          <item translatable="yes" context="optcaptionpage|captionorder">Numbering first</item>
                         </items>
                       </object>
                     </child>
@@ -477,7 +553,7 @@ when inserting:</property>
                   <object class="GtkLabel" id="label13">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Caption Order</property>
+                    <property name="label" translatable="yes" context="optcaptionpage|label13">Caption Order</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>

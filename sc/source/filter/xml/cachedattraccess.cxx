@@ -8,7 +8,7 @@
  */
 
 #include "cachedattraccess.hxx"
-#include "document.hxx"
+#include <document.hxx>
 
 ScXMLCachedRowAttrAccess::Cache::Cache() :
     mnTab(-1), mnRow1(-1), mnRow2(-1), mbValue(false) {}
@@ -21,29 +21,34 @@ bool ScXMLCachedRowAttrAccess::Cache::hasCache(sal_Int32 nTab, sal_Int32 nRow) c
 ScXMLCachedRowAttrAccess::ScXMLCachedRowAttrAccess(ScDocument* pDoc) :
     mpDoc(pDoc) {}
 
-bool ScXMLCachedRowAttrAccess::rowHidden(sal_Int32 nTab, sal_Int32 nRow)
+bool ScXMLCachedRowAttrAccess::rowHidden(sal_Int32 nTab, sal_Int32 nRow, sal_Int32& nEndRow)
 {
     if (!maHidden.hasCache(nTab, nRow))
     {
         SCROW nRow1, nRow2;
         maHidden.mbValue = mpDoc->RowHidden(
             static_cast<SCROW>(nRow), static_cast<SCTAB>(nTab), &nRow1, &nRow2);
+        maHidden.mnTab = nTab;
         maHidden.mnRow1 = static_cast<sal_Int32>(nRow1);
         maHidden.mnRow2 = static_cast<sal_Int32>(nRow2);
     }
+
+    nEndRow = maHidden.mnRow2;
     return maHidden.mbValue;
 }
 
-bool ScXMLCachedRowAttrAccess::rowFiltered(sal_Int32 nTab, sal_Int32 nRow)
+bool ScXMLCachedRowAttrAccess::rowFiltered(sal_Int32 nTab, sal_Int32 nRow, sal_Int32& nEndRow)
 {
     if (!maFiltered.hasCache(nTab, nRow))
     {
         SCROW nRow1, nRow2;
         maFiltered.mbValue = mpDoc->RowFiltered(
             static_cast<SCROW>(nRow), static_cast<SCTAB>(nTab), &nRow1, &nRow2);
+        maFiltered.mnTab = nTab;
         maFiltered.mnRow1 = static_cast<sal_Int32>(nRow1);
         maFiltered.mnRow2 = static_cast<sal_Int32>(nRow2);
     }
+    nEndRow = maFiltered.mnRow2;
     return maFiltered.mbValue;
 }
 

@@ -20,16 +20,15 @@
 
 #include <i18nlangtag/mslangid.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/event.hxx>
 
 namespace svx { namespace sidebar {
 
 LineWidthValueSet::LineWidthValueSet(vcl::Window* pParent)
     : ValueSet(pParent, WB_TABSTOP)
-    , pVDev(nullptr)
     , nSelItem(0)
     , bCusEnable(false)
 {
-    strUnit = new OUString[9];
 }
 
 void LineWidthValueSet::Resize()
@@ -44,19 +43,9 @@ LineWidthValueSet::~LineWidthValueSet()
     disposeOnce();
 }
 
-void LineWidthValueSet::dispose()
+void LineWidthValueSet::SetUnit(std::array<OUString,9> const & strUnits)
 {
-    pVDev.disposeAndClear();
-    delete[] strUnit;
-    ValueSet::dispose();
-}
-
-void LineWidthValueSet::SetUnit(OUString* str)
-{
-    for(int i = 0; i < 9; i++)
-    {
-        strUnit[i] = str[i];
-    }
+    maStrUnits = strUnits;
 }
 
 void LineWidthValueSet::SetSelItem(sal_uInt16 nSel)
@@ -86,7 +75,7 @@ void LineWidthValueSet::SetCusEnable(bool bEnable)
 
 void  LineWidthValueSet::UserDraw( const UserDrawEvent& rUDEvt )
 {
-    Rectangle aRect = rUDEvt.GetRect();
+    tools::Rectangle aRect = rUDEvt.GetRect();
     vcl::RenderContext* pDev = rUDEvt.GetRenderContext();
     sal_uInt16  nItemId = rUDEvt.GetItemId();
 
@@ -103,7 +92,7 @@ void  LineWidthValueSet::UserDraw( const UserDrawEvent& rUDEvt )
 
     vcl::Font aFont(OutputDevice::GetDefaultFont(DefaultFontType::UI_SANS, MsLangId::getSystemLanguage(), GetDefaultFontFlags::OnlyOne));
     Size aSize = aFont.GetFontSize();
-    aSize.Height() = nRectHeight*3/5;
+    aSize.setHeight( nRectHeight*3/5 );
     aFont.SetFontSize( aSize );
 
     Point aLineStart(aBLPos.X() + 5,            aBLPos.Y() + ( nRectHeight - nItemId )/2);
@@ -113,27 +102,26 @@ void  LineWidthValueSet::UserDraw( const UserDrawEvent& rUDEvt )
         Point aImgStart(aBLPos.X() + 5,         aBLPos.Y() + ( nRectHeight - 23 ) / 2);
         pDev->DrawImage(aImgStart, imgCus);
     //  Point aStart(aImgStart.X() + 14 + 20 , aBLPos.Y() + nRectHeight/6);
-        Rectangle aStrRect = aRect;
-        aStrRect.Top() += nRectHeight/6;
-        aStrRect.Bottom() -= nRectHeight/6;
-        aStrRect.Left() += imgCus.GetSizePixel().Width() + 20;
+        tools::Rectangle aStrRect = aRect;
+        aStrRect.AdjustTop(nRectHeight/6 );
+        aStrRect.AdjustBottom( -(nRectHeight/6) );
+        aStrRect.AdjustLeft(imgCus.GetSizePixel().Width() + 20 );
         if(bCusEnable)
             aFont.SetColor(GetSettings().GetStyleSettings().GetFieldTextColor());
         else
             aFont.SetColor(GetSettings().GetStyleSettings().GetDisableColor());
 
         pDev->SetFont(aFont);
-        pDev->DrawText(aStrRect, strUnit[ nItemId - 1 ], DrawTextFlags::EndEllipsis);
+        pDev->DrawText(aStrRect, maStrUnits[ nItemId - 1 ], DrawTextFlags::EndEllipsis);
     }
     else
     {
         if( nSelItem ==  nItemId )
         {
-            Color aBackColor(50,107,197);
-            Rectangle aBackRect = aRect;
-            aBackRect.Top() += 3;
-            aBackRect.Bottom() -= 2;
-            pDev->SetFillColor(aBackColor);
+            tools::Rectangle aBackRect = aRect;
+            aBackRect.AdjustTop(3 );
+            aBackRect.AdjustBottom( -2 );
+            pDev->SetFillColor(Color(50,107,197));
             pDev->DrawRect(aBackRect);
         }
         else
@@ -149,7 +137,7 @@ void  LineWidthValueSet::UserDraw( const UserDrawEvent& rUDEvt )
             aFont.SetColor(GetSettings().GetStyleSettings().GetFieldTextColor());
         pDev->SetFont(aFont);
         Point aStart(aBLPos.X() + nRectWidth * 7 / 9 , aBLPos.Y() + nRectHeight/6);
-        pDev->DrawText(aStart, strUnit[ nItemId - 1 ]);  //can't set DrawTextFlags::EndEllipsis here ,or the text will disappear
+        pDev->DrawText(aStart, maStrUnits[ nItemId - 1 ]);  //can't set DrawTextFlags::EndEllipsis here ,or the text will disappear
 
         //draw line
         if( nSelItem ==  nItemId )
@@ -173,7 +161,7 @@ void  LineWidthValueSet::UserDraw( const UserDrawEvent& rUDEvt )
 
 Size LineWidthValueSet::GetOptimalSize() const
 {
-    return LogicToPixel(Size(80, 12 * 9), MAP_APPFONT);
+    return LogicToPixel(Size(80, 12 * 9), MapMode(MapUnit::MapAppFont));
 }
 
 } } // end of namespace svx::sidebar

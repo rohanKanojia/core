@@ -24,9 +24,8 @@
 class SwRefPortion : public SwTextPortion
 {
 public:
-    inline  SwRefPortion(){ SetWhichPor( POR_REF ); }
+    SwRefPortion(){ SetWhichPor( PortionType::Ref ); }
     virtual void Paint( const SwTextPaintInfo &rInf ) const override;
-    OUTPUT_OPERATOR_OVERRIDE
 };
 
 class SwIsoRefPortion : public SwRefPortion
@@ -42,8 +41,6 @@ public:
 
     // Accessibility: pass information about this portion to the PortionHandler
     virtual void HandlePortion( SwPortionHandler& rPH ) const override;
-
-    OUTPUT_OPERATOR_OVERRIDE
 };
 
 #endif

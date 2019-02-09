@@ -27,7 +27,7 @@
 #include <sfx2/basedlgs.hxx>
 #include <sfx2/ctrlitem.hxx>
 #include <sfx2/childwin.hxx>
-#include "svx/fmtools.hxx"
+#include <svx/fmtools.hxx>
 
 
 class FmPropBrwMgr : public SfxChildWindow
@@ -40,10 +40,9 @@ public:
 class SfxBindings;
 class FmFormShell;
 
-class FmPropBrw : public SfxFloatingWindow, public SfxControllerItem
+class FmPropBrw final : public SfxFloatingWindow, public SfxControllerItem
 {
     bool            m_bInitialStateChange;
-    bool            m_bInStateChange;
     OUString        m_sLastActivePage;
     css::uno::Reference< css::uno::XComponentContext >
                     m_xInspectorContext;
@@ -62,12 +61,11 @@ class FmPropBrw : public SfxFloatingWindow, public SfxControllerItem
     css::uno::Reference< css::awt::XWindow >
                     m_xFrameContainerWindow;
 
-protected:
     virtual void StateChanged(sal_uInt16 nSID, SfxItemState eState, const SfxPoolItem* pState) override;
     virtual void FillInfo( SfxChildWinInfo& rInfo ) const override;
     virtual bool Close() override;
 
-    DECL_LINK_TYPED( OnAsyncGetFocus, void*, void );
+    DECL_LINK( OnAsyncGetFocus, void*, void );
 
     void implSetNewSelection( const InterfaceBag& _rSelection );
     void implDetachController();
@@ -82,15 +80,14 @@ public:
         vcl::Window* pParent,
         const SfxChildWinInfo* _pInfo
     );
-    virtual ~FmPropBrw();
+    virtual ~FmPropBrw() override;
     virtual void dispose() override;
 
     using SfxFloatingWindow::StateChanged;
 
-protected:
+private:
     virtual void        Resize() override;
 
-private:
     /** creates the PropertyBrowser (aka ObjectInspector) and plugs it into our frame
 
         This method ensures that a new component is created every time the XModel which

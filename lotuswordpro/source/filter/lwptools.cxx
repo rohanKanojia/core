@@ -58,7 +58,7 @@
  *  For LWP filter architecture prototype
  ************************************************************************/
 
-#include "lwptools.hxx"
+#include <lwptools.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <osl/process.h>
 #include <osl/thread.h>
@@ -93,7 +93,7 @@ void LwpTools::QuickReadUnicode(LwpObjectStream* pObjStrm,
 
         while(strlen)
         {
-            strlen>1023?len=1023 :len=strlen;
+            len = std::min(sal_uInt16(1023), strlen);
             len = pObjStrm->QuickRead(buf, len);
             buf[len] = '\0';
             strBuf.append( OUString(buf, len, aEncoding) );
@@ -197,9 +197,7 @@ bool LwpTools::IsUnicodePacked(LwpObjectStream* pObjStrm, sal_uInt16 len)
 
 bool LwpTools::isFileUrl(const OString &fileName)
 {
-    if (fileName.startsWith("file://") )
-        return true;
-    return false;
+    return fileName.startsWith("file://");
 }
 
 OUString LwpTools::convertToFileUrl(const OString &fileName)
@@ -224,7 +222,7 @@ OUString LwpTools::convertToFileUrl(const OString &fileName)
     return uUrlFileName;
 }
 
-OUString LwpTools::DateTimeToOUString(LtTm & dt)
+OUString LwpTools::DateTimeToOUString(const LtTm &dt)
 {
     OUString aResult = OUString::number(dt.tm_year) + "-" + OUString::number(dt.tm_mon) + "-" + OUString::number(dt.tm_mday) +
         "T" + OUString::number(dt.tm_hour) + ":" + OUString::number(dt.tm_min) + ":" + OUString::number(dt.tm_sec);
@@ -235,7 +233,7 @@ OUString LwpTools::DateTimeToOUString(LtTm & dt)
 /**
  * @descr   get the system date format
 */
-XFDateStyle* LwpTools::GetSystemDateStyle(bool bLongFormat)
+std::unique_ptr<XFDateStyle> LwpTools::GetSystemDateStyle(bool bLongFormat)
 {
     icu::DateFormat::EStyle style;
     if (bLongFormat)
@@ -253,24 +251,24 @@ XFDateStyle* LwpTools::GetSystemDateStyle(bool bLongFormat)
     UErrorCode status = U_ZERO_ERROR;
     UChar* pattern = nullptr;
 
-    nLengthNeed = udat_toPattern(reinterpret_cast<void **>(fmt),sal_False,nullptr,nLength,&status);
+    nLengthNeed = udat_toPattern(reinterpret_cast<void **>(fmt),false,nullptr,nLength,&status);
     if (status == U_BUFFER_OVERFLOW_ERROR)
     {
         status = U_ZERO_ERROR;
         nLength = nLengthNeed +1;
         pattern = static_cast<UChar*>(malloc(sizeof(UChar)*nLength));
-        udat_toPattern(reinterpret_cast<void **>(fmt),sal_False,pattern,nLength,&status);
+        udat_toPattern(reinterpret_cast<void **>(fmt),false,pattern,nLength,&status);
     }
     if (pattern == nullptr)
         return nullptr;
     // 3 parse pattern string,per icu date/time format syntax, there are 20 letters reserved
     // as patter letter,each represent a element in date/time and its repeat numbers represent
-    // different format: for exampel: M produces '1',MM produces '01', MMM produces 'Jan', MMMM produces 'Januaray'
+    // different format: for example: M produces '1',MM produces '01', MMM produces 'Jan', MMMM produces 'Januaray'
     // letter other than these letters is regard as text in the format, for example ','in 'Jan,2005'
     // we parse pattern string letter by letter and get the time format.
     UChar cSymbol;
     UChar cTmp;
-    XFDateStyle* pDateStyle = new XFDateStyle;
+    std::unique_ptr<XFDateStyle> pDateStyle(new XFDateStyle);
 
     for (int32_t i=0;i<nLengthNeed;)
     {
@@ -596,7 +594,6 @@ XFDateStyle* LwpTools::GetSystemDateStyle(bool bLongFormat)
             {
                 if ((cSymbol>='A' && cSymbol<='Z') || (cSymbol>='a' && cSymbol<='z') )
                 {
-                    delete pDateStyle;
                     return nullptr;
                 }
                 else//TEXT
@@ -630,7 +627,7 @@ XFDateStyle* LwpTools::GetSystemDateStyle(bool bLongFormat)
 /**
  * @descr   get the system time format
 */
-XFTimeStyle* LwpTools::GetSystemTimeStyle()
+std::unique_ptr<XFTimeStyle> LwpTools::GetSystemTimeStyle()
 {
     //1 get locale for system
     icu::Locale aLocale( LanguageTagIcu::getIcuLocale( Application::GetSettings().GetLanguageTag()));
@@ -654,13 +651,13 @@ XFTimeStyle* LwpTools::GetSystemTimeStyle()
         return nullptr;
     // 3 parse pattern string,per icu date/time format syntax, there are 20 letters reserved
     // as patter letter,each represent a element in date/time and its repeat numbers represent
-    // different format: for exampel: M produces '1',MM produces '01', MMM produces 'Jan', MMMM produces 'Januaray'
+    // different format: for example: M produces '1',MM produces '01', MMM produces 'Jan', MMMM produces 'Januaray'
     // letter other than these letters is regard as text in the format, for example ','in 'Jan,2005'
     // we parse pattern string letter by letter and get the time format.
     // for time format ,for there is not date info,we can only parse the letter representing time.
     UChar cSymbol;
     UChar cTmp;
-    XFTimeStyle* pTimeStyle = new XFTimeStyle;
+    std::unique_ptr<XFTimeStyle> pTimeStyle(new XFTimeStyle);
 
     for (int32_t i=0;i<nLengthNeed;)
     {
@@ -819,7 +816,6 @@ XFTimeStyle* LwpTools::GetSystemTimeStyle()
             {
                 if ((cSymbol>='A' && cSymbol<='Z') || (cSymbol>='a' && cSymbol<='z') )
                 {
-                    delete pTimeStyle;
                     return nullptr;
                 }
                 else//TEXT

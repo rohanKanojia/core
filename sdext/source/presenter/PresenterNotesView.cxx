@@ -40,7 +40,6 @@
 #include <com/sun/star/text/XTextRange.hpp>
 #include <com/sun/star/util/XChangesBatch.hpp>
 #include <com/sun/star/container/XChild.hpp>
-#include <boost/bind.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -111,14 +110,14 @@ PresenterNotesView::PresenterNotesView (
             mxParentWindow->addWindowListener(this);
             mxParentWindow->addPaintListener(this);
             mxParentWindow->addKeyListener(this);
-            mxParentWindow->setVisible(sal_True);
+            mxParentWindow->setVisible(true);
         }
 
         mpScrollBar = new PresenterVerticalScrollBar(
             rxComponentContext,
             mxParentWindow,
             mpPresenterController->GetPaintManager(),
-            ::boost::bind(&PresenterNotesView::SetTop, this, _1));
+            [this](double f) { return this->SetTop(f); });
         mpScrollBar->SetBackground(
             mpPresenterController->GetViewBackground(mxViewId->getResourceURL()));
 
@@ -197,10 +196,10 @@ void PresenterNotesView::CreateToolBar (
     // Create a new window as container of the tool bar.
     mxToolBarWindow = xPresenterHelper->createWindow(
         mxParentWindow,
-        sal_False,
-        sal_True,
-        sal_False,
-        sal_False);
+        false,
+        true,
+        false,
+        false);
     mxToolBarCanvas = xPresenterHelper->createSharedCanvas (
         Reference<rendering::XSpriteCanvas>(mxCanvas, UNO_QUERY),
         mxParentWindow,
@@ -229,8 +228,6 @@ void PresenterNotesView::SetSlide (const Reference<drawing::XDrawPage>& rxNotesP
     Reference<container::XIndexAccess> xIndexAccess (rxNotesPage, UNO_QUERY);
     if (xIndexAccess.is())
     {
-        OUString sText;
-
         // Iterate over all shapes and find the one that holds the text.
         sal_Int32 nCount (xIndexAccess->getCount());
         for (sal_Int32 nIndex=0; nIndex<nCount; ++nIndex)
@@ -239,13 +236,8 @@ void PresenterNotesView::SetSlide (const Reference<drawing::XDrawPage>& rxNotesP
             Reference<lang::XServiceName> xServiceName (
                 xIndexAccess->getByIndex(nIndex), UNO_QUERY);
             if (xServiceName.is()
-                && xServiceName->getServiceName().equals(sNotesShapeName))
+                && xServiceName->getServiceName() == sNotesShapeName)
             {
-                Reference<text::XTextRange> xText (xServiceName, UNO_QUERY);
-                if (xText.is())
-                {
-                    sText += xText->getString();
-                }
             }
             else
             {
@@ -254,13 +246,12 @@ void PresenterNotesView::SetSlide (const Reference<drawing::XDrawPage>& rxNotesP
                 if (xShapeDescriptor.is())
                 {
                     OUString sType (xShapeDescriptor->getShapeType());
-                    if (sType.equals(sNotesShapeName) || sType.equals(sTextShapeName))
+                    if (sType == sNotesShapeName || sType == sTextShapeName)
                     {
                         Reference<text::XTextRange> xText (
                             xIndexAccess->getByIndex(nIndex), UNO_QUERY);
                         if (xText.is())
                         {
-                            sText += xText->getString();
                             mpTextView->SetText(Reference<text::XText>(xText, UNO_QUERY));
                         }
                     }
@@ -283,7 +274,6 @@ void PresenterNotesView::SetSlide (const Reference<drawing::XDrawPage>& rxNotesP
 //-----  lang::XEventListener -------------------------------------------------
 
 void SAL_CALL PresenterNotesView::disposing (const lang::EventObject& rEventObject)
-    throw (RuntimeException, std::exception)
 {
     if (rEventObject.Source == mxParentWindow)
         mxParentWindow = nullptr;
@@ -291,37 +281,27 @@ void SAL_CALL PresenterNotesView::disposing (const lang::EventObject& rEventObje
 
 //----- XWindowListener -------------------------------------------------------
 
-void SAL_CALL PresenterNotesView::windowResized (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
+void SAL_CALL PresenterNotesView::windowResized (const awt::WindowEvent&)
 {
-    (void)rEvent;
     Layout();
 }
 
-void SAL_CALL PresenterNotesView::windowMoved (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterNotesView::windowMoved (const awt::WindowEvent&) {}
 
-void SAL_CALL PresenterNotesView::windowShown (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterNotesView::windowShown (const lang::EventObject&) {}
 
-void SAL_CALL PresenterNotesView::windowHidden (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterNotesView::windowHidden (const lang::EventObject&) {}
 
 //----- XPaintListener --------------------------------------------------------
 
 void SAL_CALL PresenterNotesView::windowPaint (const awt::PaintEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
-    ThrowIfDisposed();
+    if (rBHelper.bDisposed || rBHelper.bInDispose)
+    {
+        throw lang::DisposedException (
+            "PresenterNotesView object has already been disposed",
+            static_cast<uno::XWeak*>(this));
+    }
 
     if ( ! mbIsPresenterViewActive)
         return;
@@ -333,13 +313,11 @@ void SAL_CALL PresenterNotesView::windowPaint (const awt::PaintEvent& rEvent)
 //----- XResourceId -----------------------------------------------------------
 
 Reference<XResourceId> SAL_CALL PresenterNotesView::getResourceId()
-    throw (RuntimeException, std::exception)
 {
     return mxViewId;
 }
 
 sal_Bool SAL_CALL PresenterNotesView::isAnchorOnly()
-    throw (RuntimeException, std::exception)
 {
     return false;
 }
@@ -347,7 +325,6 @@ sal_Bool SAL_CALL PresenterNotesView::isAnchorOnly()
 //----- XDrawView -------------------------------------------------------------
 
 void SAL_CALL PresenterNotesView::setCurrentPage (const Reference<drawing::XDrawPage>& rxSlide)
-    throw (RuntimeException, std::exception)
 {
     // Get the associated notes page.
     mxCurrentNotesPage = nullptr;
@@ -365,7 +342,6 @@ void SAL_CALL PresenterNotesView::setCurrentPage (const Reference<drawing::XDraw
 }
 
 Reference<drawing::XDrawPage> SAL_CALL PresenterNotesView::getCurrentPage()
-    throw (RuntimeException, std::exception)
 {
     return nullptr;
 }
@@ -373,7 +349,6 @@ Reference<drawing::XDrawPage> SAL_CALL PresenterNotesView::getCurrentPage()
 //----- XKeyListener ----------------------------------------------------------
 
 void SAL_CALL PresenterNotesView::keyPressed (const awt::KeyEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
     switch (rEvent.KeyCode)
     {
@@ -414,11 +389,7 @@ void SAL_CALL PresenterNotesView::keyPressed (const awt::KeyEvent& rEvent)
     }
 }
 
-void SAL_CALL PresenterNotesView::keyReleased (const awt::KeyEvent& rEvent)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterNotesView::keyReleased (const awt::KeyEvent&) {}
 
 
 void PresenterNotesView::Layout()
@@ -435,7 +406,6 @@ void PresenterNotesView::Layout()
             mxToolBarWindow->setPosSize(0, aWindowBox.Height - nToolBarHeight,
                                         sal_Int32(aToolBarSize.Width + 0.5), nToolBarHeight,
                                         awt::PosSize::POSSIZE);
-            aNewTextBoundingBox.Y2 -= nToolBarHeight;
             mnSeparatorYLocation = aWindowBox.Height - nToolBarHeight - gnSpaceBelowSeparator;
             aNewTextBoundingBox.Y2 = mnSeparatorYLocation - gnSpaceAboveSeparator;
             // Place the close button.
@@ -600,7 +570,7 @@ void PresenterNotesView::PaintText (const awt::Rectangle& rUpdateBox)
 
     Reference<rendering::XSpriteCanvas> xSpriteCanvas (mxCanvas, UNO_QUERY);
     if (xSpriteCanvas.is())
-        xSpriteCanvas->updateScreen(sal_False);
+        xSpriteCanvas->updateScreen(false);
 }
 
 void PresenterNotesView::Invalidate()
@@ -659,11 +629,11 @@ void PresenterNotesView::ChangeFontSize (const sal_Int32 nSizeChange)
             std::shared_ptr<PresenterConfigurationAccess> pConfiguration (
                 mpPresenterController->GetTheme()->GetNodeForViewStyle(
                     sStyleName));
-            if (pConfiguration.get()==nullptr || ! pConfiguration->IsValid())
+            if (pConfiguration == nullptr || !pConfiguration->IsValid())
                 return;
 
             pConfiguration->GoToChild(OUString("Font"));
-            pConfiguration->SetProperty("Size", Any((sal_Int32)(nNewSize+0.5)));
+            pConfiguration->SetProperty("Size", Any(static_cast<sal_Int32>(nNewSize+0.5)));
             pConfiguration->CommitChanges();
         }
         catch (Exception&)
@@ -673,7 +643,7 @@ void PresenterNotesView::ChangeFontSize (const sal_Int32 nSizeChange)
     }
 }
 
-std::shared_ptr<PresenterTextView> PresenterNotesView::GetTextView() const
+const std::shared_ptr<PresenterTextView>& PresenterNotesView::GetTextView() const
 {
     return mpTextView;
 }
@@ -696,17 +666,6 @@ void PresenterNotesView::UpdateScrollBar()
 
         mpScrollBar->SetThumbSize(maTextBoundingBox.Y2 - maTextBoundingBox.Y1);
         mpScrollBar->CheckValues();
-    }
-}
-
-void PresenterNotesView::ThrowIfDisposed()
-    throw (css::lang::DisposedException)
-{
-    if (rBHelper.bDisposed || rBHelper.bInDispose)
-    {
-        throw lang::DisposedException (
-            "PresenterNotesView object has already been disposed",
-            static_cast<uno::XWeak*>(this));
     }
 }
 

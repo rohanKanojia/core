@@ -23,6 +23,8 @@
 #include <hints.hxx>
 #include <ndtxt.hxx>
 #include <swtypes.hxx>
+#include <vcl/outdev.hxx>
+#include <osl/diagnose.h>
 
 SwFormatChg::SwFormatChg( SwFormat* pFormat )
     : SwMsgPoolItem( RES_FMT_CHG ), pChangedFormat( pFormat )
@@ -44,8 +46,32 @@ SwDelText::SwDelText( sal_Int32 nS, sal_Int32 nL )
 {
 }
 
+namespace sw {
+
+MoveText::MoveText(SwTextNode *const pD, sal_Int32 const nD, sal_Int32 const nS, sal_Int32 const nL)
+    : pDestNode(pD), nDestStart(nD), nSourceStart(nS), nLen(nL)
+{
+}
+
+RedlineDelText::RedlineDelText(sal_Int32 const nS, sal_Int32 const nL)
+    : nStart(nS), nLen(nL)
+{
+}
+
+RedlineUnDelText::RedlineUnDelText(sal_Int32 const nS, sal_Int32 const nL)
+    : nStart(nS), nLen(nL)
+{
+}
+
+} // namespace sw
+
 SwUpdateAttr::SwUpdateAttr( sal_Int32 nS, sal_Int32 nE, sal_uInt16 nW )
-    : SwMsgPoolItem( RES_UPDATE_ATTR ), m_nStart( nS ), m_nEnd( nE ), m_nWhichAttr( nW ), m_aWhichFormatAttr()
+    : SwMsgPoolItem( RES_UPDATE_ATTR ), m_nStart( nS ), m_nEnd( nE ), m_nWhichAttr( nW )
+{
+}
+
+SwUpdateAttr::SwUpdateAttr( sal_Int32 nS, sal_Int32 nE, sal_uInt16 nW, std::vector<sal_uInt16> aW )
+    : SwMsgPoolItem( RES_UPDATE_ATTR ), m_nStart( nS ), m_nEnd( nE ), m_nWhichAttr( nW ), m_aWhichFmtAttrs( aW )
 {
 }
 
@@ -72,7 +98,7 @@ SwTableFormulaUpdate::SwTableFormulaUpdate( const SwTable* pNewTable )
 }
 
 SwAutoFormatGetDocNode::SwAutoFormatGetDocNode( const SwNodes* pNds )
-    : SwMsgPoolItem( RES_AUTOFMT_DOCNODE ), pContentNode( nullptr ), pNodes( pNds )
+    : SwMsgPoolItem( RES_AUTOFMT_DOCNODE ), pNodes( pNds )
 {
 }
 
@@ -226,9 +252,11 @@ sal_uInt16 GetWhichOfScript( sal_uInt16 nWhich, sal_uInt16 nScript )
             switch( nScript)
             {
             case i18n::ScriptType::COMPLEX:
-                ++pM;  // no break;
+                ++pM;
+                [[fallthrough]];
             case i18n::ScriptType::ASIAN:
-                ++pM;  // no break;
+                ++pM;
+                [[fallthrough]];
             default:
                 nRet = *pM;
             }

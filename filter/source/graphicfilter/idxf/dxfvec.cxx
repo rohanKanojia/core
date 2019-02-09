@@ -19,7 +19,7 @@
 
 
 #include <math.h>
-#include <dxfvec.hxx>
+#include "dxfvec.hxx"
 #include <tools/gen.hxx>
 
 
@@ -152,8 +152,8 @@ void DXFTransform::Transform(const DXFVector & rSrc, DXFVector & rTgt) const
 
 void DXFTransform::Transform(const DXFVector & rSrc, Point & rTgt) const
 {
-    rTgt.X()=(long)( rSrc.fx * aMX.fx + rSrc.fy * aMY.fx + rSrc.fz * aMZ.fx + aMP.fx + 0.5 );
-    rTgt.Y()=(long)( rSrc.fx * aMX.fy + rSrc.fy * aMY.fy + rSrc.fz * aMZ.fy + aMP.fy + 0.5 );
+    rTgt.setX(static_cast<long>( rSrc.fx * aMX.fx + rSrc.fy * aMY.fx + rSrc.fz * aMZ.fx + aMP.fx + 0.5 ) );
+    rTgt.setY(static_cast<long>( rSrc.fx * aMX.fy + rSrc.fy * aMY.fy + rSrc.fz * aMZ.fy + aMP.fy + 0.5 ) );
 }
 
 
@@ -205,12 +205,12 @@ LineInfo DXFTransform::Transform(const DXFLineInfo& aDXFLineInfo) const
     LineInfo aLineInfo;
 
     aLineInfo.SetStyle( aDXFLineInfo.eStyle );
-    aLineInfo.SetWidth( (sal_Int32) (aDXFLineInfo.fWidth * scale + 0.5) );
+    aLineInfo.SetWidth( 0 );
     aLineInfo.SetDashCount( static_cast< sal_uInt16 >( aDXFLineInfo.nDashCount ) );
-    aLineInfo.SetDashLen( (sal_Int32) (aDXFLineInfo.fDashLen * scale + 0.5) );
+    aLineInfo.SetDashLen( static_cast<sal_Int32>(aDXFLineInfo.fDashLen * scale + 0.5) );
     aLineInfo.SetDotCount( static_cast< sal_uInt16 >( aDXFLineInfo.nDotCount ) );
-    aLineInfo.SetDotLen( (sal_Int32) (aDXFLineInfo.fDotLen * scale + 0.5) );
-    aLineInfo.SetDistance( (sal_Int32) (aDXFLineInfo.fDistance * scale + 0.5) );
+    aLineInfo.SetDotLen( static_cast<sal_Int32>(aDXFLineInfo.fDotLen * scale + 0.5) );
+    aLineInfo.SetDistance( static_cast<sal_Int32>(aDXFLineInfo.fDistance * scale + 0.5) );
 
     if ( aLineInfo.GetDashCount() > 0 && aLineInfo.GetDashLen() == 0 )
         aLineInfo.SetDashLen(1);
@@ -221,18 +221,6 @@ LineInfo DXFTransform::Transform(const DXFLineInfo& aDXFLineInfo) const
     return aLineInfo;
 }
 
-sal_uInt32 DXFTransform::TransLineWidth(double fW) const
-{
-    double fex,fey;
-
-    fex=sqrt(aMX.fx*aMX.fx + aMX.fy*aMX.fy);
-    fey=sqrt(aMY.fx*aMY.fx + aMY.fy*aMY.fy);
-    // ###
-    // printf("fex=%f fey=%f\n", fex, fey);
-    return (sal_uInt32)(fabs(fW)*(fex+fey)/2.0+0.5);
-}
-
-
 double DXFTransform::CalcRotAngle() const
 {
     return atan2(aMX.fy,aMX.fx)/3.14159265359*180.0;
@@ -240,7 +228,7 @@ double DXFTransform::CalcRotAngle() const
 
 bool DXFTransform::Mirror() const
 {
-    if (aMZ.SProd(aMX*aMY)<0) return true; else return false;
+    return aMZ.SProd(aMX*aMY)<0;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

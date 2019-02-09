@@ -18,9 +18,7 @@
  */
 
 #include <comphelper/propertycontainer.hxx>
-#include <comphelper/property.hxx>
 #include <cppuhelper/typeprovider.hxx>
-#include <osl/diagnose.h>
 #include <uno/data.h>
 #include <com/sun/star/uno/genfunc.h>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
@@ -48,7 +46,7 @@ OPropertyContainer::~OPropertyContainer()
 }
 
 
-Sequence< Type > OPropertyContainer::getBaseTypes() throw (RuntimeException, std::exception)
+Sequence< Type > OPropertyContainer::getBaseTypes()
 {
     // just the types from our one and only base class
     ::cppu::OTypeCollection aTypes(
@@ -59,22 +57,14 @@ Sequence< Type > OPropertyContainer::getBaseTypes() throw (RuntimeException, std
     return aTypes.getTypes();
 }
 
-
-void SAL_CALL OPropertyContainer::setFastPropertyValue( sal_Int32 nHandle, const Any& rValue ) throw ( UnknownPropertyException, PropertyVetoException, IllegalArgumentException, WrappedTargetException, RuntimeException, std::exception)
-{
-    OPropertySetHelper::setFastPropertyValue( nHandle, rValue );
-}
-
-
 sal_Bool OPropertyContainer::convertFastPropertyValue(
-    Any& _rConvertedValue, Any& _rOldValue, sal_Int32 _nHandle, const Any& _rValue ) throw (IllegalArgumentException)
+    Any& _rConvertedValue, Any& _rOldValue, sal_Int32 _nHandle, const Any& _rValue )
 {
     return OPropertyContainerHelper::convertFastPropertyValue( _rConvertedValue, _rOldValue, _nHandle, _rValue );
 }
 
 
 void OPropertyContainer::setFastPropertyValue_NoBroadcast(sal_Int32 _nHandle, const Any& _rValue)
-    throw (Exception, std::exception)
 {
     OPropertyContainerHelper::setFastPropertyValue( _nHandle, _rValue );
 }

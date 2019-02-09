@@ -32,7 +32,7 @@ public:
     Properties();
     ~Properties();
 
-    /** Call this method after receiving a VCLEVENT_APPLICATION_DATACHANGED
+    /** Call this method after receiving a VclEventId::ApplicationDataChanged
         event.
     */
     void HandleDataChangeEvent();
@@ -81,22 +81,22 @@ public:
 
     /** Return the background color.
     */
-    Color GetBackgroundColor() const { return maBackgroundColor;}
+    const Color& GetBackgroundColor() const { return maBackgroundColor;}
     void SetBackgroundColor (const Color& rColor);
 
     /** Return the text color.
     */
-    Color GetTextColor() const { return maTextColor;}
+    const Color& GetTextColor() const { return maTextColor;}
     void SetTextColor (const Color& rColor);
 
     /** Return the color in which selections are to be painted.
     */
-    Color GetSelectionColor() const { return maSelectionColor;}
+    const Color& GetSelectionColor() const { return maSelectionColor;}
     void SetSelectionColor (const Color& rColor);
 
     /** Return the color used for highlighting e.g. the current slide.
     */
-    Color GetHighlightColor() const { return maHighlightColor;}
+    const Color& GetHighlightColor() const { return maHighlightColor;}
     void SetHighlightColor (const Color& rColor);
 
     /** The UI can be set to be read only independently from the model status.
@@ -104,12 +104,6 @@ public:
     */
     bool IsUIReadOnly() const { return mbIsUIReadOnly;}
     void SetUIReadOnly (const bool bIsUIReadOnly);
-
-    /** The mouse over effect (and whether a mouse motion starts a multi
-        selection or a drag-and-drop) can be triggered by just the preview
-        area or the whole page object area.
-    */
-    bool IsOnlyPreviewTriggersMouseOver() const { return mbIsOnlyPreviewTriggersMouseOver;}
 
 private:
     bool mbIsHighlightCurrentSlide;
@@ -123,8 +117,6 @@ private:
     Color maSelectionColor;
     Color maHighlightColor;
     bool mbIsUIReadOnly;
-    bool mbIsOnlyPreviewTriggersMouseOver;
-    bool mbIsHighContrastModeActive;
 };
 
 } } } // end of namespace ::sd::slidesorter::controller

@@ -34,7 +34,6 @@ namespace drawinglayer
             css::drawing::ProjectionMode   maProjectionMode;
             css::drawing::ShadeMode        maShadeMode;
 
-            // bitfield
             bool                           mbTwoSidedLighting : 1;
 
         public:
@@ -62,7 +61,6 @@ namespace drawinglayer
             }
 
             // data read access
-            double getDistance() const { return mfDistance; }
             double getShadowSlant() const { return mfShadowSlant; }
             css::drawing::ProjectionMode getProjectionMode() const { return maProjectionMode; }
             css::drawing::ShadeMode getShadeMode() const { return maShadeMode; }
@@ -70,7 +68,7 @@ namespace drawinglayer
 
             bool operator==(const ImpSdrSceneAttribute& rCandidate) const
             {
-                return (getDistance() == rCandidate.getDistance()
+                return (mfDistance == rCandidate.mfDistance
                     && getShadowSlant() == rCandidate.getShadowSlant()
                     && getProjectionMode() == rCandidate.getProjectionMode()
                     && getShadeMode() == rCandidate.getShadeMode()
@@ -100,25 +98,20 @@ namespace drawinglayer
         {
         }
 
-        SdrSceneAttribute::SdrSceneAttribute(const SdrSceneAttribute& rCandidate)
-        :   mpSdrSceneAttribute(rCandidate.mpSdrSceneAttribute)
-        {
-        }
+        SdrSceneAttribute::SdrSceneAttribute(const SdrSceneAttribute&) = default;
 
-        SdrSceneAttribute::~SdrSceneAttribute()
-        {
-        }
+        SdrSceneAttribute::SdrSceneAttribute(SdrSceneAttribute&&) = default;
+
+        SdrSceneAttribute::~SdrSceneAttribute() = default;
 
         bool SdrSceneAttribute::isDefault() const
         {
             return mpSdrSceneAttribute.same_object(theGlobalDefault::get());
         }
 
-        SdrSceneAttribute& SdrSceneAttribute::operator=(const SdrSceneAttribute& rCandidate)
-        {
-            mpSdrSceneAttribute = rCandidate.mpSdrSceneAttribute;
-            return *this;
-        }
+        SdrSceneAttribute& SdrSceneAttribute::operator=(const SdrSceneAttribute&) = default;
+
+        SdrSceneAttribute& SdrSceneAttribute::operator=(SdrSceneAttribute&&)  = default;
 
         bool SdrSceneAttribute::operator==(const SdrSceneAttribute& rCandidate) const
         {

@@ -19,16 +19,16 @@
 
 #include <AnnotationWin.hxx>
 
-#include <AnnotationMenuButton.hxx>
+#include "AnnotationMenuButton.hxx"
 #include <PostItMgr.hxx>
 
-#include <annotation.hrc>
-#include <popup.hrc>
+#include <strings.hrc>
 #include <cmdid.h>
 
 #include <vcl/menu.hxx>
 
 #include <svl/undo.hxx>
+#include <unotools/localedatawrapper.hxx>
 #include <unotools/syslocale.hxx>
 #include <svl/languageoptions.hxx>
 
@@ -40,7 +40,9 @@
 #include <editeng/outliner.hxx>
 #include <editeng/editeng.hxx>
 #include <editeng/editobj.hxx>
+#include <editeng/outlobj.hxx>
 
+#include <comphelper/lok.hxx>
 #include <docufld.hxx>
 #include <txtfld.hxx>
 #include <ndtxt.hxx>
@@ -50,22 +52,59 @@
 #include <doc.hxx>
 #include <IDocumentUndoRedo.hxx>
 #include <SwUndoField.hxx>
+#include <edtwin.hxx>
+#include "ShadowOverlayObject.hxx"
+#include "AnchorOverlayObject.hxx"
+#include "OverlayRanges.hxx"
+#include "SidebarTxtControl.hxx"
 
 #include <memory>
 
 namespace sw { namespace annotation {
 
 SwAnnotationWin::SwAnnotationWin( SwEditWin& rEditWin,
-                                  WinBits nBits,
                                   SwPostItMgr& aMgr,
-                                  SwPostItBits aBits,
                                   SwSidebarItem& rSidebarItem,
                                   SwFormatField* aField )
-    : SwSidebarWin( rEditWin, nBits, aMgr, aBits, rSidebarItem )
+    : Window(&rEditWin)
+    , maBuilder(nullptr, VclBuilderContainer::getUIRootDir(), "modules/swriter/ui/annotationmenu.ui", "")
+    , mrMgr(aMgr)
+    , mrView(rEditWin.GetView())
+    , mnEventId(nullptr)
+    , mpSidebarTextControl(nullptr)
+    , mpVScrollbar(nullptr)
+    , mpMetadataAuthor(nullptr)
+    , mpMetadataDate(nullptr)
+    , mpMenuButton(nullptr)
+    , mColorAnchor()
+    , mColorDark()
+    , mColorLight()
+    , mChangeColor()
+    , meSidebarPosition(sw::sidebarwindows::SidebarPosition::NONE)
+    , mPosSize()
+    , mAnchorRect()
+    , mPageBorder(0)
+    , mbAnchorRectChanged(false)
+    , mbMouseOver(false)
+    , mLayoutStatus(SwPostItHelper::INVISIBLE)
+    , mbReadonly(false)
+    , mbIsFollow(false)
+    , mrSidebarItem(rSidebarItem)
+    , mpAnchorFrame(rSidebarItem.maLayoutInfo.mpAnchorFrame)
     , mpFormatField(aField)
     , mpField( static_cast<SwPostItField*>(aField->GetField()))
     , mpButtonPopup(nullptr)
 {
+    mpShadow = sidebarwindows::ShadowOverlayObject::CreateShadowOverlayObject( mrView );
+    if ( mpShadow )
+    {
+        mpShadow->setVisible(false);
+    }
+
+    mrMgr.ConnectSidebarWinToFrame( *(mrSidebarItem.maLayoutInfo.mpAnchorFrame),
+                                  mrSidebarItem.GetFormatField(),
+                                  *this );
+
     if (SupportsDoubleBuffering())
         // When double-buffering, allow parents to paint on our area. That's
         // necessary when parents paint the complete buffer.
@@ -79,8 +118,60 @@ SwAnnotationWin::~SwAnnotationWin()
 
 void SwAnnotationWin::dispose()
 {
-    delete mpButtonPopup;
-    sw::sidebarwindows::SwSidebarWin::dispose();
+    mpButtonPopup.clear();
+    maBuilder.disposeBuilder();
+
+    if (IsDisposed())
+        return;
+
+    mrMgr.DisconnectSidebarWinFromFrame( *(mrSidebarItem.maLayoutInfo.mpAnchorFrame),
+                                       *this );
+
+    Disable();
+
+    if ( mpSidebarTextControl )
+    {
+        if ( mpOutlinerView )
+        {
+            mpOutlinerView->SetWindow( nullptr );
+        }
+    }
+    mpSidebarTextControl.disposeAndClear();
+
+    mpOutlinerView.reset();
+    mpOutliner.reset();
+
+    if (mpMetadataAuthor)
+    {
+        mpMetadataAuthor->RemoveEventListener( LINK( this, SwAnnotationWin, WindowEventListener ) );
+    }
+    mpMetadataAuthor.disposeAndClear();
+
+    if (mpMetadataDate)
+    {
+        mpMetadataDate->RemoveEventListener( LINK( this, SwAnnotationWin, WindowEventListener ) );
+    }
+    mpMetadataDate.disposeAndClear();
+
+    if (mpVScrollbar)
+    {
+        mpVScrollbar->RemoveEventListener( LINK( this, SwAnnotationWin, WindowEventListener ) );
+    }
+    mpVScrollbar.disposeAndClear();
+
+    RemoveEventListener( LINK( this, SwAnnotationWin, WindowEventListener ) );
+
+    mpAnchor.reset();
+    mpShadow.reset();
+
+    mpTextRangeOverlay.reset();
+
+    mpMenuButton.disposeAndClear();
+
+    if (mnEventId)
+        Application::RemoveUserEvent( mnEventId );
+
+    vcl::Window::dispose();
 }
 
 void SwAnnotationWin::SetPostItText()
@@ -94,25 +185,25 @@ void SwAnnotationWin::SetPostItText()
     //point .e.g. fdo#33599
     mpField = static_cast<SwPostItField*>(mpFormatField->GetField());
     OUString sNewText = mpField->GetPar2();
-    bool bTextUnchanged = sNewText.equals(Engine()->GetEditEngine().GetText());
+    bool bTextUnchanged = sNewText == mpOutliner->GetEditEngine().GetText();
     ESelection aOrigSelection(GetOutlinerView()->GetEditView().GetSelection());
 
     // get text from SwPostItField and insert into our textview
-    Engine()->SetModifyHdl( Link<LinkParamNone*,void>() );
-    Engine()->EnableUndo( false );
+    mpOutliner->SetModifyHdl( Link<LinkParamNone*,void>() );
+    mpOutliner->EnableUndo( false );
     if( mpField->GetTextObject() )
-        Engine()->SetText( *mpField->GetTextObject() );
+        mpOutliner->SetText( *mpField->GetTextObject() );
     else
     {
-        Engine()->Clear();
+        mpOutliner->Clear();
         GetOutlinerView()->SetAttribs(DefaultItem());
         GetOutlinerView()->InsertText(sNewText);
     }
 
-    Engine()->ClearModifyFlag();
-    Engine()->GetUndoManager().Clear();
-    Engine()->EnableUndo( true );
-    Engine()->SetModifyHdl( LINK( this, SwAnnotationWin, ModifyHdl ) );
+    mpOutliner->ClearModifyFlag();
+    mpOutliner->GetUndoManager().Clear();
+    mpOutliner->EnableUndo( true );
+    mpOutliner->SetModifyHdl( LINK( this, SwAnnotationWin, ModifyHdl ) );
     if (bTextUnchanged)
         GetOutlinerView()->GetEditView().SetSelection(aOrigSelection);
     if (bCursorVisible)
@@ -122,62 +213,72 @@ void SwAnnotationWin::SetPostItText()
 
 void SwAnnotationWin::UpdateData()
 {
-    if ( Engine()->IsModified() )
+    if ( mpOutliner->IsModified() )
     {
         IDocumentUndoRedo & rUndoRedo(
-            DocView().GetDocShell()->GetDoc()->GetIDocumentUndoRedo());
+            mrView.GetDocShell()->GetDoc()->GetIDocumentUndoRedo());
         std::unique_ptr<SwField> pOldField;
         if (rUndoRedo.DoesUndo())
         {
-            pOldField.reset(mpField->Copy());
+            pOldField = mpField->Copy();
         }
-        mpField->SetPar2(Engine()->GetEditEngine().GetText());
-        mpField->SetTextObject(Engine()->CreateParaObject());
+        mpField->SetPar2(mpOutliner->GetEditEngine().GetText());
+        mpField->SetTextObject(mpOutliner->CreateParaObject());
         if (rUndoRedo.DoesUndo())
         {
             SwTextField *const pTextField = mpFormatField->GetTextField();
             SwPosition aPosition( pTextField->GetTextNode() );
             aPosition.nContent = pTextField->GetStart();
             rUndoRedo.AppendUndo(
-                new SwUndoFieldFromDoc(aPosition, *pOldField, *mpField, nullptr, true));
+                std::make_unique<SwUndoFieldFromDoc>(aPosition, *pOldField, *mpField, nullptr, true));
         }
         // so we get a new layout of notes (anchor position is still the same and we would otherwise not get one)
-        Mgr().SetLayout();
+        mrMgr.SetLayout();
         // #i98686# if we have several views, all notes should update their text
         mpFormatField->Broadcast(SwFormatFieldHint( nullptr, SwFormatFieldHintWhich::CHANGED));
-        DocView().GetDocShell()->SetModified();
+        mrView.GetDocShell()->SetModified();
     }
-    Engine()->ClearModifyFlag();
-    Engine()->GetUndoManager().Clear();
+    mpOutliner->ClearModifyFlag();
+    mpOutliner->GetUndoManager().Clear();
 }
 
 void SwAnnotationWin::Delete()
 {
-    if (DocView().GetWrtShellPtr()->GotoField(*mpFormatField))
+    if (mrView.GetWrtShellPtr()->GotoField(*mpFormatField))
     {
-        SwSidebarWin::Delete();
+        if ( mrMgr.GetActiveSidebarWin() == this)
+        {
+            mrMgr.SetActiveSidebarWin(nullptr);
+            // if the note is empty, the previous line will send a delete event, but we are already there
+            if (mnEventId)
+            {
+                Application::RemoveUserEvent( mnEventId );
+                mnEventId = nullptr;
+            }
+        }
         // we delete the field directly, the Mgr cleans up the PostIt by listening
         GrabFocusToDocument();
-        DocView().GetWrtShellPtr()->DelRight();
+        mrView.GetWrtShellPtr()->ClearMark();
+        mrView.GetWrtShellPtr()->DelRight();
     }
 }
 
 void SwAnnotationWin::GotoPos()
 {
-    DocView().GetDocShell()->GetWrtShell()->GotoField(*mpFormatField);
+    mrView.GetDocShell()->GetWrtShell()->GotoField(*mpFormatField);
 }
 
 sal_uInt32 SwAnnotationWin::MoveCaret()
 {
     // if this is an answer, do not skip over all following ones, but insert directly behind the current one
     // but when just leaving a note, skip all following ones as well to continue typing
-    return Mgr().IsAnswer()
+    return mrMgr.IsAnswer()
            ? 1
            : 1 + CountFollowing();
 }
 
-//returns true, if there is another note right before this note
-bool SwAnnotationWin::CalcFollow()
+// returns a non-zero postit parent id, if exists, otherwise 0 for root comments
+sal_uInt32 SwAnnotationWin::CalcParent()
 {
     SwTextField* pTextField = mpFormatField->GetTextField();
     SwPosition aPosition( pTextField->GetTextNode() );
@@ -187,7 +288,13 @@ bool SwAnnotationWin::CalcFollow()
             aPosition.nContent.GetIndex() - 1,
             RES_TXTATR_ANNOTATION );
     const SwField* pField = pTextAttr ? pTextAttr->GetFormatField().GetField() : nullptr;
-    return pField && (pField->Which()== RES_POSTITFLD);
+    sal_uInt32 nParentId = 0;
+    if (pField && pField->Which() == SwFieldIds::Postit)
+    {
+        const SwPostItField* pPostItField = static_cast<const SwPostItField*>(pField);
+        nParentId = pPostItField->GetPostItId();
+    }
+    return nParentId;
 }
 
 // counts how many SwPostItField we have right after the current one
@@ -204,7 +311,7 @@ sal_uInt32 SwAnnotationWin::CountFollowing()
     SwField* pField = pTextAttr
                     ? const_cast<SwField*>(pTextAttr->GetFormatField().GetField())
                     : nullptr;
-    while ( pField && ( pField->Which()== RES_POSTITFLD ) )
+    while ( pField && ( pField->Which()== SwFieldIds::Postit ) )
     {
         aCount++;
         pTextAttr = pTextField->GetTextNode().GetTextAttrForCharAt(
@@ -219,27 +326,32 @@ sal_uInt32 SwAnnotationWin::CountFollowing()
 
 VclPtr<MenuButton> SwAnnotationWin::CreateMenuButton()
 {
-    mpButtonPopup = new PopupMenu(SW_RES(MN_ANNOTATION_BUTTON));
-    OUString aText = mpButtonPopup->GetItemText( FN_DELETE_NOTE_AUTHOR );
+    mpButtonPopup = maBuilder.get_menu("menu");
+    sal_uInt16 nByAuthorId = mpButtonPopup->GetItemId("deleteby");
+    OUString aText = mpButtonPopup->GetItemText(nByAuthorId);
     SwRewriter aRewriter;
     aRewriter.AddRule(UndoArg1,GetAuthor());
     aText = aRewriter.Apply(aText);
-    mpButtonPopup->SetItemText(FN_DELETE_NOTE_AUTHOR,aText);
+    mpButtonPopup->SetItemText(nByAuthorId, aText);
     VclPtrInstance<AnnotationMenuButton> pMenuButton( *this );
     pMenuButton->SetPopupMenu( mpButtonPopup );
     pMenuButton->Show();
     return pMenuButton;
 }
 
-void SwAnnotationWin::InitAnswer(OutlinerParaObject* pText)
+void SwAnnotationWin::InitAnswer(OutlinerParaObject const * pText)
 {
+    // If tiled annotations is off in lok case, skip adding additional reply text.
+    if (comphelper::LibreOfficeKit::isActive() && !comphelper::LibreOfficeKit::isTiledAnnotations())
+        return;
+
     //collect our old meta data
-    SwSidebarWin* pWin = Mgr().GetNextPostIt(KEY_PAGEUP, this);
+    SwAnnotationWin* pWin = mrMgr.GetNextPostIt(KEY_PAGEUP, this);
     const SvtSysLocale aSysLocale;
     const LocaleDataWrapper& rLocalData = aSysLocale.GetLocaleData();
     SwRewriter aRewriter;
     aRewriter.AddRule(UndoArg1, pWin->GetAuthor());
-    const OUString aText = aRewriter.Apply(SW_RESSTR(STR_REPLY))
+    const OUString aText = aRewriter.Apply(SwResId(STR_REPLY))
             + " (" + rLocalData.getDate( pWin->GetDate())
             + ", " + rLocalData.getTime( pWin->GetTime(), false)
             + "): \"";
@@ -254,7 +366,7 @@ void SwAnnotationWin::InitAnswer(OutlinerParaObject* pText)
     GetOutlinerView()->InsertText("\"\n");
 
     GetOutlinerView()->SetSelection(ESelection(0,0,EE_PARA_ALL,EE_TEXTPOS_ALL));
-    SfxItemSet aAnswerSet( DocView().GetDocShell()->GetPool() );
+    SfxItemSet aAnswerSet( mrView.GetDocShell()->GetPool() );
     aAnswerSet.Put(SvxFontHeightItem(200,80,EE_CHAR_FONTHEIGHT));
     aAnswerSet.Put(SvxPostureItem(ITALIC_NORMAL,EE_CHAR_ITALIC));
     GetOutlinerView()->SetAttribs(aAnswerSet);
@@ -265,27 +377,34 @@ void SwAnnotationWin::InitAnswer(OutlinerParaObject* pText)
     GetOutlinerView()->SetAttribs(DefaultItem());
     // lets insert an undo step so the initial text can be easily deleted
     // but do not use UpdateData() directly, would set modified state again and reentrance into Mgr
-    Engine()->SetModifyHdl( Link<LinkParamNone*,void>() );
+    mpOutliner->SetModifyHdl( Link<LinkParamNone*,void>() );
     IDocumentUndoRedo & rUndoRedo(
-        DocView().GetDocShell()->GetDoc()->GetIDocumentUndoRedo());
+        mrView.GetDocShell()->GetDoc()->GetIDocumentUndoRedo());
     std::unique_ptr<SwField> pOldField;
     if (rUndoRedo.DoesUndo())
     {
-        pOldField.reset(mpField->Copy());
+        pOldField = mpField->Copy();
     }
-    mpField->SetPar2(Engine()->GetEditEngine().GetText());
-    mpField->SetTextObject(Engine()->CreateParaObject());
+    mpField->SetPar2(mpOutliner->GetEditEngine().GetText());
+    mpField->SetTextObject(mpOutliner->CreateParaObject());
     if (rUndoRedo.DoesUndo())
     {
         SwTextField *const pTextField = mpFormatField->GetTextField();
         SwPosition aPosition( pTextField->GetTextNode() );
         aPosition.nContent = pTextField->GetStart();
         rUndoRedo.AppendUndo(
-            new SwUndoFieldFromDoc(aPosition, *pOldField, *mpField, nullptr, true));
+            std::make_unique<SwUndoFieldFromDoc>(aPosition, *pOldField, *mpField, nullptr, true));
     }
-    Engine()->SetModifyHdl( LINK( this, SwAnnotationWin, ModifyHdl ) );
-    Engine()->ClearModifyFlag();
-    Engine()->GetUndoManager().Clear();
+    mpOutliner->SetModifyHdl( LINK( this, SwAnnotationWin, ModifyHdl ) );
+    mpOutliner->ClearModifyFlag();
+    mpOutliner->GetUndoManager().Clear();
+}
+
+void SwAnnotationWin::UpdateText(const OUString& aText)
+{
+    mpOutliner->Clear();
+    GetOutlinerView()->InsertText(aText);
+    UpdateData();
 }
 
 SvxLanguageItem SwAnnotationWin::GetLanguage()
@@ -305,7 +424,7 @@ SvxLanguageItem SwAnnotationWin::GetLanguage()
 
 bool SwAnnotationWin::IsProtected()
 {
-    return SwSidebarWin::IsProtected() ||
+    return mbReadonly ||
            GetLayoutStatus() == SwPostItHelper::DELETED ||
            ( mpFormatField && mpFormatField->IsProtect() );
 }

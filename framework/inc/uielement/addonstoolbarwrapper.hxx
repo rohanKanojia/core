@@ -22,7 +22,6 @@
 
 #include <helper/uielementwrapperbase.hxx>
 
-#include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 
@@ -34,16 +33,16 @@ class AddonsToolBarWrapper : public UIElementWrapperBase
 {
     public:
         AddonsToolBarWrapper( const css::uno::Reference< css::uno::XComponentContext >& xContext );
-        virtual ~AddonsToolBarWrapper();
+        virtual ~AddonsToolBarWrapper() override;
 
         // XComponent
-        virtual void SAL_CALL dispose() throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL dispose() override;
 
         // XInitialization
-        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
         // XUIElement
-        virtual css::uno::Reference< css::uno::XInterface > SAL_CALL getRealInterface() throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::uno::XInterface > SAL_CALL getRealInterface() override;
 
         // cf. ToolbarLayoutManager
         void populateImages();

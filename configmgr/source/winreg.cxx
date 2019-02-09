@@ -9,15 +9,11 @@
  */
 
 #include <cwchar>
-#ifdef _MSC_VER
-#pragma warning(push, 1) /* disable warnings within system headers */
-#endif
+#include <memory>
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <msiquery.h>
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 
 #include <com/sun/star/uno/RuntimeException.hpp>
 #include <com/sun/star/uno/XInterface.hpp>
@@ -25,6 +21,7 @@
 #include <sal/log.hxx>
 #include <osl/file.h>
 #include <osl/file.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 #include "winreg.hxx"
 #include "writemodfile.hxx"
 
@@ -36,7 +33,9 @@ namespace {
 // This is not a generic registry reader. We assume the following structure:
 // Last element of Key becomes prop, first part is the path and optionally nodes,
 // when the node has oor:op attribute.
-// Values can be the following: Value (string) and Final (dword, optional)
+// Values can be the following: Value (string), Type (string, optional),
+// Final (dword, optional), External (dword, optional), ExternalBackend (string, optional),
+// Nil (dword, optional)
 //
 // For example the following registry setting:
 // [HKEY_LOCAL_MACHINE\SOFTWARE\Policies\LibreOffice\org.openoffice.UserProfile\Data\o]
@@ -66,18 +65,68 @@ namespace {
 //         </node>
 //     </node>
 // </item>
+//
+// Third example (property of an extensible group -> needs type):
+// [HKEY_LOCAL_MACHINE\SOFTWARE\Policies\LibreOffice\org.openoffice.Office.Jobs\Jobs\org.openoffice.Office.Jobs:Job['UpdateCheck']\Arguments\AutoCheckEnabled]
+// "Value"="false"
+// "Final"=dword:00000001
+// "Type"="xs:boolean"
+// becomes the following in configuration:
+// <item oor:path="/org.openoffice.Office.Jobs/Jobs/org.openoffice.Office.Jobs:Job['UpdateCheck']/Arguments">
+//     <prop oor:name="AutoCheckEnabled" oor:type="xs:boolean" oor:finalized="true">
+//         <value>false</value>
+//     </prop>
+// </item>
+//
+// External (component data) example:
+// [HKEY_CURRENT_USER\Software\Policies\LibreOffice\org.openoffice.UserProfile\Data\o]
+// "Value"="company"
+// "Final"=dword:00000001
+// "External"=dword:00000001
+// "ExternalBackend"="com.sun.star.configuration.backend.LdapUserProfileBe"
+// becomes the following in configuration:
+// <item oor:path="/org.openoffice.UserProfile/Data">
+//     <prop oor:name="o" oor:finalized="true">
+//         <value oor:external="com.sun.star.configuration.backend.LdapUserProfileBe company"/>
+//     </prop>
+// </item>
+//
+// Nil example:
+// Empty value (<value></value>) and nil value (<value xsi:nil="true"/>) are different.
+// In case of some path settings, the base path setting has to be cleared.
+// [HKEY_CURRENT_USER\Software\Policies\LibreOffice\org.openoffice.Office.Common\Path\Current\Work]
+// "Value"=""
+// "Final"=dword:00000001
+// "Nil"=dword:00000001
+// [HKEY_CURRENT_USER\Software\Policies\LibreOffice\org.openoffice.Office.Paths\Paths\org.openoffice.Office.Paths:NamedPath['Work']\WritePath]
+// "Value"="file:///H:/"
+// "Final"=dword:00000001
+// becomes the following in configuration:
+// <item oor:path="/org.openoffice.Office.Common/Path/Current">
+//     <prop oor:name="Work" oor:finalized="true">
+//         <value xsi:nil="true"/>
+//      </prop>
+// </item>
+// <item oor:path="/org.openoffice.Office.Paths/Paths/org.openoffice.Office.Paths:NamedPath['Work']">
+//     <prop oor:name="WritePath" oor:finalized="true">
+//         <value>file:///H:/</value>
+//     </prop>
+//  </item>
 
-void dumpWindowsRegistryKey(HKEY hKey, OUString aKeyName, TempFile &aFileHandle)
+void dumpWindowsRegistryKey(HKEY hKey, OUString const & aKeyName, TempFile &aFileHandle)
 {
     HKEY hCurKey;
 
-    if(RegOpenKeyExW(hKey, aKeyName.getStr(), 0, KEY_READ, &hCurKey) == ERROR_SUCCESS)
+    if(RegOpenKeyExW(
+           hKey, o3tl::toW(aKeyName.getStr()), 0,
+           KEY_READ, &hCurKey)
+       == ERROR_SUCCESS)
     {
         DWORD nSubKeys = 0;
         DWORD nValues = 0;
         DWORD nLongestValueNameLen, nLongestValueLen;
         // Query the number of subkeys
-        RegQueryInfoKeyW(hCurKey, NULL, NULL, NULL, &nSubKeys, NULL, NULL, &nValues, &nLongestValueNameLen, &nLongestValueLen, NULL, NULL);
+        RegQueryInfoKeyW(hCurKey, nullptr, nullptr, nullptr, &nSubKeys, nullptr, nullptr, &nValues, &nLongestValueNameLen, &nLongestValueLen, nullptr, nullptr);
         if(nSubKeys)
         {
             //Look for subkeys in this key
@@ -88,13 +137,13 @@ void dumpWindowsRegistryKey(HKEY hKey, OUString aKeyName, TempFile &aFileHandle)
                 DWORD buffSize=MAX_KEY_LENGTH;
                 OUString aSubkeyName;
                 //Get subkey name
-                RegEnumKeyExW(hCurKey, i, buffKeyName, &buffSize, NULL, NULL, NULL, NULL);
+                RegEnumKeyExW(hCurKey, i, buffKeyName, &buffSize, nullptr, nullptr, nullptr, nullptr);
 
                 //Make up full key name
                 if(aKeyName.isEmpty())
-                    aSubkeyName = aKeyName + OUString(buffKeyName);
+                    aSubkeyName = aKeyName + OUString(o3tl::toU(buffKeyName));
                 else
-                    aSubkeyName = aKeyName + "\\" + OUString(buffKeyName);
+                    aSubkeyName = aKeyName + "\\" + OUString(o3tl::toU(buffKeyName));
 
                 //Recursion, until no more subkeys are found
                 dumpWindowsRegistryKey(hKey, aSubkeyName, aFileHandle);
@@ -103,36 +152,68 @@ void dumpWindowsRegistryKey(HKEY hKey, OUString aKeyName, TempFile &aFileHandle)
         else if(nValues)
         {
             // No more subkeys, we are at a leaf
-            wchar_t* pValueName = new wchar_t[nLongestValueNameLen + 1];
-            wchar_t* pValue = new wchar_t[nLongestValueLen + 1];
+            auto pValueName = std::unique_ptr<wchar_t[]>(
+                new wchar_t[nLongestValueNameLen + 1]);
+            auto pValue = std::unique_ptr<wchar_t[]>(
+                new wchar_t[nLongestValueLen/sizeof(wchar_t) + 1]);
 
             bool bFinal = false;
+            bool bExternal = false;
+            bool bNil = false;
             OUString aValue;
+            OUString aType;
+            OUString aExternalBackend;
 
             for(DWORD i = 0; i < nValues; ++i)
             {
                 DWORD nValueNameLen = nLongestValueNameLen + 1;
                 DWORD nValueLen = nLongestValueLen + 1;
 
-                RegEnumValueW(hCurKey, i, pValueName, &nValueNameLen, NULL, NULL, (LPBYTE)pValue, &nValueLen);
-                const wchar_t wsValue[] = L"Value";
-                const wchar_t wsFinal[] = L"Final";
+                RegEnumValueW(hCurKey, i, pValueName.get(), &nValueNameLen, nullptr, nullptr, reinterpret_cast<LPBYTE>(pValue.get()), &nValueLen);
 
-                if(!wcscmp(pValueName, wsValue))
-                    aValue = OUString(pValue);
-                if(!wcscmp(pValueName, wsFinal) && *(DWORD*)pValue == 1)
-                    bFinal = true;
+                if (!wcscmp(pValueName.get(), L"Value"))
+                    aValue = o3tl::toU(pValue.get());
+                else if (!wcscmp(pValueName.get(), L"Type"))
+                    aType = o3tl::toU(pValue.get());
+                else if (!wcscmp(pValueName.get(), L"Final"))
+                {
+                    if (*reinterpret_cast<DWORD*>(pValue.get()) == 1)
+                        bFinal = true;
+                }
+                else if (!wcscmp(pValueName.get(), L"Nil"))
+                {
+                    if (*reinterpret_cast<DWORD*>(pValue.get()) == 1)
+                        bNil = true;
+                }
+                else if (!wcscmp(pValueName.get(), L"External"))
+                {
+                    if (*reinterpret_cast<DWORD*>(pValue.get()) == 1)
+                        bExternal = true;
+                }
+                else if (!wcscmp(pValueName.get(), L"ExternalBackend"))
+                    aExternalBackend = o3tl::toU(pValue.get());
             }
+            if (bExternal)
+            {
+                // type and external are mutually exclusive
+                aType.clear();
+
+                // Prepend backend, like in
+                // "com.sun.star.configuration.backend.LdapUserProfileBe company"
+                if (!aExternalBackend.isEmpty())
+                    aValue = aExternalBackend + " " + aValue;
+            }
+
             sal_Int32 aLastSeparator = aKeyName.lastIndexOf('\\');
             OUString aPathAndNodes = aKeyName.copy(0, aLastSeparator);
             OUString aProp = aKeyName.copy(aLastSeparator + 1);
             bool bHasNode = false;
             sal_Int32 nCloseNode = 0;
 
-            writeData(aFileHandle, "<item oor:path=\"");
-            for(sal_Int32 nIndex = 0;; ++nIndex)
+            aFileHandle.writeString("<item oor:path=\"");
+            for(sal_Int32 nIndex = 0;;)
             {
-                OUString aNextPathPart = aPathAndNodes.getToken(nIndex, '\\');
+                OUString aNextPathPart = aPathAndNodes.getToken(0, '\\', nIndex);
 
                 if(!aNextPathPart.isEmpty())
                 {
@@ -140,13 +221,13 @@ void dumpWindowsRegistryKey(HKEY hKey, OUString aKeyName, TempFile &aFileHandle)
                     {
                         bHasNode = true;
                         nCloseNode++;
-                        writeData(aFileHandle, "\"><node oor:name=\"");
+                        aFileHandle.writeString("\"><node oor:name=\"");
                         sal_Int32 nCommandSeparator = aNextPathPart.lastIndexOf('#');
                         if(nCommandSeparator != -1)
                         {
                             OUString aNodeOp = aNextPathPart.copy(nCommandSeparator + 1);
                             writeAttributeValue(aFileHandle, aNextPathPart.copy(0, nCommandSeparator - 1));
-                            writeData(aFileHandle, "\" oor:op=\"");
+                            aFileHandle.writeString("\" oor:op=\"");
                             writeAttributeValue(aFileHandle, aNodeOp);
                         }
                         else
@@ -156,29 +237,49 @@ void dumpWindowsRegistryKey(HKEY hKey, OUString aKeyName, TempFile &aFileHandle)
                     }
                     else
                     {
-                        writeAttributeValue(aFileHandle, "/" + aNextPathPart);
+                        writeAttributeValue(
+                            aFileHandle, OUString("/" + aNextPathPart));
                     }
                 }
                 else
                 {
-                    writeData(aFileHandle, "\">");
+                    aFileHandle.writeString("\">");
                     break;
                 }
             }
 
-            writeData(aFileHandle, "<prop oor:name=\"");
+            aFileHandle.writeString("<prop oor:name=\"");
             writeAttributeValue(aFileHandle, aProp);
-            writeData(aFileHandle, "\"");
+            aFileHandle.writeString("\"");
+            if(!aType.isEmpty())
+            {
+                aFileHandle.writeString(" oor:type=\"");
+                writeAttributeValue(aFileHandle, aType);
+                aFileHandle.writeString("\"");
+            }
             if(bFinal)
-                writeData(aFileHandle, " oor:finalized=\"true\"");
-            writeData(aFileHandle, "><value>");
-            writeValueContent(aFileHandle, aValue);
-            writeData(aFileHandle, "</value></prop>");
+                aFileHandle.writeString(" oor:finalized=\"true\"");
+            aFileHandle.writeString("><value");
+            if (aValue.isEmpty() && bNil)
+            {
+                aFileHandle.writeString(" xsi:nil=\"true\"/");
+            }
+            else if (bExternal)
+            {
+                aFileHandle.writeString(" oor:external=\"");
+                writeAttributeValue(aFileHandle, aValue);
+                aFileHandle.writeString("\"/");
+            }
+            else
+            {
+                aFileHandle.writeString(">");
+                writeValueContent(aFileHandle, aValue);
+                aFileHandle.writeString("</value");
+            }
+            aFileHandle.writeString("></prop>");
             for(; nCloseNode > 0; nCloseNode--)
-                writeData(aFileHandle, "</node>");
-            writeData(aFileHandle, "</item>\n");
-            delete[] pValueName;
-            delete[] pValue;
+                aFileHandle.writeString("</node>");
+            aFileHandle.writeString("</item>\n");
         }
         RegCloseKey(hCurKey);
     }
@@ -198,7 +299,7 @@ bool dumpWindowsRegistry(OUString* pFileURL, WinRegType eType)
     }
 
     TempFile aFileHandle;
-    switch (osl::FileBase::createTempFile(0, &aFileHandle.handle, pFileURL)) {
+    switch (osl::FileBase::createTempFile(nullptr, &aFileHandle.handle, pFileURL)) {
     case osl::FileBase::E_None:
         break;
     case osl::FileBase::E_ACCES:
@@ -211,14 +312,13 @@ bool dumpWindowsRegistry(OUString* pFileURL, WinRegType eType)
             "cannot create temporary file");
     }
     aFileHandle.url = *pFileURL;
-    writeData(
-        aFileHandle,
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<oor:items"
-            " xmlns:oor=\"http://openoffice.org/2001/registry\""
-            " xmlns:xs=\"http://www.w3.org/2001/XMLSchema\""
-            " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n");
+    aFileHandle.writeString(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<oor:items"
+        " xmlns:oor=\"http://openoffice.org/2001/registry\""
+        " xmlns:xs=\"http://www.w3.org/2001/XMLSchema\""
+        " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n");
     dumpWindowsRegistryKey(hKey, "", aFileHandle);
-    writeData(aFileHandle, "</oor:items>");
+    aFileHandle.writeString("</oor:items>");
     oslFileError e = aFileHandle.closeWithoutUnlink();
     if (e != osl_File_E_None)
         SAL_WARN("configmgr", "osl_closeFile failed with " << +e);

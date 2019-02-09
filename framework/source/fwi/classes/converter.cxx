@@ -45,7 +45,8 @@ std::vector<OUString> Converter::convert_seqOUString2OUStringList( const css::un
     std::vector<OUString> lDestination;
     sal_Int32 nCount = lSource.getLength();
 
-    for (sal_Int32 nItem=0; nItem<nCount; ++nItem )
+    lDestination.reserve(nCount);
+    for (sal_Int32 nItem = 0; nItem < nCount; ++nItem)
     {
         lDestination.push_back(lSource[nItem]);
     }
@@ -72,37 +73,37 @@ OUString Converter::convert_DateTime2ISO8601( const DateTime& aSource )
         sBuffer.append("00");
     else if (nYear<1000)
         sBuffer.append("0");
-    sBuffer.append( (sal_Int32)nYear );
+    sBuffer.append( nYear );
 
     sBuffer.append("-");
     // write month formatted as "MM"
     if (nMonth<10)
         sBuffer.append("0");
-    sBuffer.append( (sal_Int32)nMonth );
+    sBuffer.append( nMonth );
 
     sBuffer.append("-");
     // write day formatted as "DD"
     if (nDay<10)
         sBuffer.append("0");
-    sBuffer.append( (sal_Int32)nDay );
+    sBuffer.append( nDay );
 
     sBuffer.append("T");
     // write hours formatted as "hh"
     if (nHour<10)
         sBuffer.append("0");
-    sBuffer.append( (sal_Int32)nHour );
+    sBuffer.append( nHour );
 
     sBuffer.append(":");
     // write min formatted as "mm"
     if (nMin<10)
         sBuffer.append("0");
-    sBuffer.append( (sal_Int32)nMin );
+    sBuffer.append( nMin );
 
     sBuffer.append(":");
     // write sec formatted as "ss"
     if (nSec<10)
         sBuffer.append("0");
-    sBuffer.append( (sal_Int32)nSec );
+    sBuffer.append( nSec );
 
     sBuffer.append("Z");
 

@@ -20,14 +20,12 @@
 #ifndef INCLUDED_BASEGFX_POLYGON_B3DPOLYPOLYGONTOOLS_HXX
 #define INCLUDED_BASEGFX_POLYGON_B3DPOLYPOLYGONTOOLS_HXX
 
-#include <basegfx/point/b2dpoint.hxx>
-#include <basegfx/vector/b2dvector.hxx>
 #include <basegfx/numeric/ftools.hxx>
 #include <basegfx/point/b3dpoint.hxx>
-#include <com/sun/star/drawing/PolyPolygonShape3D.hpp>
-#include <vector>
 #include <basegfx/basegfxdllapi.h>
 
+
+namespace com { namespace sun { namespace star { namespace drawing { struct PolyPolygonShape3D; } } } }
 
 namespace basegfx
 {
@@ -35,7 +33,7 @@ namespace basegfx
     class B3DPolyPolygon;
     class B3DRange;
 
-    namespace tools
+    namespace utils
     {
         // B3DPolyPolygon tools
 
@@ -44,11 +42,11 @@ namespace basegfx
 
         /** Create a unit 3D line polyPolygon which defines a cube.
          */
-        BASEGFX_DLLPUBLIC B3DPolyPolygon createUnitCubePolyPolygon();
+        BASEGFX_DLLPUBLIC B3DPolyPolygon const & createUnitCubePolyPolygon();
 
         /** Create a unit 3D fill polyPolygon which defines a cube.
          */
-        BASEGFX_DLLPUBLIC B3DPolyPolygon createUnitCubeFillPolyPolygon();
+        BASEGFX_DLLPUBLIC B3DPolyPolygon const & createUnitCubeFillPolyPolygon();
 
         /** Create a 3D line polyPolygon from a B3DRange which defines a cube.
          */
@@ -64,7 +62,7 @@ namespace basegfx
             With VerStart, VerStop and hor range in cartesian may be specified to create a partial sphere only.
          */
         BASEGFX_DLLPUBLIC B3DPolyPolygon createUnitSpherePolyPolygon(
-            sal_uInt32 nHorSeg = 0L, sal_uInt32 nVerSeg = 0L,
+            sal_uInt32 nHorSeg, sal_uInt32 nVerSeg,
             double fVerStart = F_PI2, double fVerStop = -F_PI2,
             double fHorStart = 0.0, double fHorStop = F_2PI);
 
@@ -74,7 +72,7 @@ namespace basegfx
          */
         BASEGFX_DLLPUBLIC B3DPolyPolygon createSpherePolyPolygonFromB3DRange(
             const B3DRange& rRange,
-            sal_uInt32 nHorSeg = 0L, sal_uInt32 nVerSeg = 0L,
+            sal_uInt32 nHorSeg, sal_uInt32 nVerSeg,
             double fVerStart = F_PI2, double fVerStop = -F_PI2,
             double fHorStart = 0.0, double fHorStop = F_2PI);
 
@@ -82,7 +80,7 @@ namespace basegfx
             There is one extra, the bool bNormals defines if normals will be set, default is false
          */
         BASEGFX_DLLPUBLIC B3DPolyPolygon createUnitSphereFillPolyPolygon(
-            sal_uInt32 nHorSeg = 0L, sal_uInt32 nVerSeg = 0L,
+            sal_uInt32 nHorSeg, sal_uInt32 nVerSeg,
             bool bNormals = false,
             double fVerStart = F_PI2, double fVerStop = -F_PI2,
             double fHorStart = 0.0, double fHorStop = F_2PI);
@@ -92,7 +90,7 @@ namespace basegfx
          */
         BASEGFX_DLLPUBLIC B3DPolyPolygon createSphereFillPolyPolygonFromB3DRange(
             const B3DRange& rRange,
-            sal_uInt32 nHorSeg = 0L, sal_uInt32 nVerSeg = 0L,
+            sal_uInt32 nHorSeg, sal_uInt32 nVerSeg,
             bool bNormals = false,
             double fVerStart = F_PI2, double fVerStop = -F_PI2,
             double fHorStart = 0.0, double fHorStop = F_2PI);
@@ -121,19 +119,18 @@ namespace basegfx
          */
         BASEGFX_DLLPUBLIC B3DPolyPolygon applyDefaultTextureCoordinatesSphere( const B3DPolyPolygon& rCandidate, const B3DPoint& rCenter, bool bChangeX = true, bool bChangeY = true);
 
-        // isInside test for B3DPoint. On border is not inside as long as not true is given
-        // in bWithBorder flag. It is assumed that the orientations of the given polygon are correct.
-        BASEGFX_DLLPUBLIC bool isInside(const B3DPolyPolygon& rCandidate, const B3DPoint& rPoint, bool bWithBorder = false);
+        // isInside test for B3DPoint. On border is not inside.
+        // It is assumed that the orientations of the given polygon are correct.
+        BASEGFX_DLLPUBLIC bool isInside(const B3DPolyPolygon& rCandidate, const B3DPoint& rPoint);
 
         /// converters for css::drawing::PolyPolygonShape3D
         BASEGFX_DLLPUBLIC B3DPolyPolygon UnoPolyPolygonShape3DToB3DPolyPolygon(
-            const css::drawing::PolyPolygonShape3D& rPolyPolygonShape3DSource,
-            bool bCheckClosed = true);
+            const css::drawing::PolyPolygonShape3D& rPolyPolygonShape3DSource);
         BASEGFX_DLLPUBLIC void B3DPolyPolygonToUnoPolyPolygonShape3D(
             const B3DPolyPolygon& rPolyPolygonSource,
             css::drawing::PolyPolygonShape3D& rPolyPolygonShape3DRetval);
 
-    } // end of namespace tools
+    } // end of namespace utils
 } // end of namespace basegfx
 
 #endif // INCLUDED_BASEGFX_POLYGON_B3DPOLYPOLYGONTOOLS_HXX

@@ -22,6 +22,7 @@
 #include <osl/diagnose.h>
 #include <uno/data.h>
 #include <com/sun/star/uno/genfunc.h>
+#include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/beans/UnknownPropertyException.hpp>
 #include <rtl/ustrbuf.hxx>
@@ -41,7 +42,7 @@ using namespace ::com::sun::star::beans;
 namespace
 {
     // comparing two property descriptions
-    struct PropertyDescriptionHandleCompare : public ::std::binary_function< PropertyDescription, PropertyDescription, bool >
+    struct PropertyDescriptionHandleCompare
     {
         bool operator() (const PropertyDescription& x, const PropertyDescription& y) const
         {
@@ -49,14 +50,14 @@ namespace
         }
     };
     // comparing two property descriptions (by name)
-    struct PropertyDescriptionNameMatch : public ::std::unary_function< PropertyDescription, bool >
+    struct PropertyDescriptionNameMatch
     {
-        OUString m_rCompare;
+        OUString const m_rCompare;
         explicit PropertyDescriptionNameMatch( const OUString& _rCompare ) : m_rCompare( _rCompare ) { }
 
         bool operator() (const PropertyDescription& x ) const
         {
-            return x.aProperty.Name.equals(m_rCompare);
+            return x.aProperty.Name == m_rCompare;
         }
     };
 }
@@ -82,7 +83,7 @@ void OPropertyContainerHelper::registerProperty(const OUString& _rName, sal_Int3
         "OPropertyContainerHelper::registerProperty: you gave me nonsense : the pointer must be non-NULL");
 
     PropertyDescription aNewProp;
-    aNewProp.aProperty = Property( _rName, _nHandle, _rMemberType, (sal_Int16)_nAttributes );
+    aNewProp.aProperty = Property( _rName, _nHandle, _rMemberType, static_cast<sal_Int16>(_nAttributes) );
     aNewProp.eLocated = PropertyDescription::LocationType::DerivedClassRealType;
     aNewProp.aLocation.pDerivedClassMember = _pPointerToMember;
 
@@ -112,7 +113,7 @@ void OPropertyContainerHelper::registerMayBeVoidProperty(const OUString& _rName,
     _nAttributes |= PropertyAttribute::MAYBEVOID;
 
     PropertyDescription aNewProp;
-    aNewProp.aProperty = Property( _rName, _nHandle, _rExpectedType, (sal_Int16)_nAttributes );
+    aNewProp.aProperty = Property( _rName, _nHandle, _rExpectedType, static_cast<sal_Int16>(_nAttributes) );
     aNewProp.eLocated = PropertyDescription::LocationType::DerivedClassAnyType;
     aNewProp.aLocation.pDerivedClassMember = _pPointerToMember;
 
@@ -121,21 +122,21 @@ void OPropertyContainerHelper::registerMayBeVoidProperty(const OUString& _rName,
 
 
 void OPropertyContainerHelper::registerPropertyNoMember(const OUString& _rName, sal_Int32 _nHandle, sal_Int32 _nAttributes,
-        const Type& _rType, const void* _pInitialValue)
+        const Type& _rType, css::uno::Any const & _pInitialValue)
 {
     OSL_ENSURE(!_rType.equals(cppu::UnoType<Any>::get()),
         "OPropertyContainerHelper::registerPropertyNoMember : don't give my the type of an uno::Any ! Really can't handle this !");
-    OSL_ENSURE(_pInitialValue || ((_nAttributes & PropertyAttribute::MAYBEVOID) != 0),
-        "OPropertyContainerHelper::registerPropertyNoMember : you should not omit the initial value if the property can't be void! This will definitively crash later!");
+    OSL_ENSURE(
+        (_pInitialValue.isExtractableTo(_rType)
+         || (!_pInitialValue.hasValue()
+             && (_nAttributes & PropertyAttribute::MAYBEVOID) != 0)),
+        "bad initial value");
 
     PropertyDescription aNewProp;
-    aNewProp.aProperty = Property( _rName, _nHandle, _rType, (sal_Int16)_nAttributes );
+    aNewProp.aProperty = Property( _rName, _nHandle, _rType, static_cast<sal_Int16>(_nAttributes) );
     aNewProp.eLocated = PropertyDescription::LocationType::HoldMyself;
     aNewProp.aLocation.nOwnClassVectorIndex = m_aHoldProperties.size();
-    if (_pInitialValue)
-        m_aHoldProperties.push_back(Any(_pInitialValue, _rType));
-    else
-        m_aHoldProperties.push_back(Any());
+    m_aHoldProperties.push_back(_pInitialValue);
 
     implPushBackProperty(aNewProp);
 }
@@ -154,12 +155,11 @@ bool OPropertyContainerHelper::isRegisteredProperty( const OUString& _rName ) co
     // i.e. registered and revoked even though the XPropertySet has already been
     // accessed, a vector is not really the best data structure anymore ...
 
-    ConstPropertiesIterator pos = ::std::find_if(
+    return std::any_of(
         m_aProperties.begin(),
         m_aProperties.end(),
         PropertyDescriptionNameMatch( _rName )
     );
-    return pos != m_aProperties.end();
 }
 
 
@@ -188,7 +188,7 @@ void OPropertyContainerHelper::implPushBackProperty(const PropertyDescription& _
     }
 #endif
 
-    PropertiesIterator pos = ::std::lower_bound(
+    PropertiesIterator pos = std::lower_bound(
         m_aProperties.begin(), m_aProperties.end(),
         _rProp, ComparePropertyHandles() );
 
@@ -200,16 +200,13 @@ namespace
 {
     void lcl_throwIllegalPropertyValueTypeException( const PropertyDescription& _rProperty, const Any& _rValue )
     {
-        OUStringBuffer aErrorMessage;
-        aErrorMessage.append( "The given value cannot be converted to the required property type." );
-        aErrorMessage.append( "\n(property name \"" );
-        aErrorMessage.append( _rProperty.aProperty.Name );
-        aErrorMessage.append( "\", found value type \"" );
-        aErrorMessage.append( _rValue.getValueType().getTypeName() );
-        aErrorMessage.append( "\", required property type \"" );
-        aErrorMessage.append( _rProperty.aProperty.Type.getTypeName() );
-        aErrorMessage.append( "\")" );
-        throw IllegalArgumentException( aErrorMessage.makeStringAndClear(), nullptr, 4 );
+        throw IllegalArgumentException(
+            "The given value cannot be converted to the required property type."
+            " (property name \"" +  _rProperty.aProperty.Name
+            + "\", found value type \"" + _rValue.getValueType().getTypeName()
+            + "\", required property type \"" + _rProperty.aProperty.Type.getTypeName()
+            + "\")",
+            nullptr, 4 );
     }
 }
 
@@ -277,9 +274,9 @@ bool OPropertyContainerHelper::convertFastPropertyValue(
 
             if (PropertyDescription::LocationType::HoldMyself == aPos->eLocated)
             {
-                OSL_ENSURE(aPos->aLocation.nOwnClassVectorIndex < (sal_Int32)m_aHoldProperties.size(),
+                OSL_ENSURE(aPos->aLocation.nOwnClassVectorIndex < static_cast<sal_Int32>(m_aHoldProperties.size()),
                     "OPropertyContainerHelper::convertFastPropertyValue: invalid position !");
-                PropertyContainerIterator aIter = m_aHoldProperties.begin() + aPos->aLocation.nOwnClassVectorIndex;
+                auto aIter = m_aHoldProperties.begin() + aPos->aLocation.nOwnClassVectorIndex;
                 pPropContainer = &(*aIter);
             }
             else
@@ -360,7 +357,7 @@ bool OPropertyContainerHelper::convertFastPropertyValue(
 }
 
 
-bool OPropertyContainerHelper::setFastPropertyValue(sal_Int32 _nHandle, const Any& _rValue)
+void OPropertyContainerHelper::setFastPropertyValue(sal_Int32 _nHandle, const Any& _rValue)
 {
     // get the property somebody is asking for
     PropertiesIterator aPos = searchHandle(_nHandle);
@@ -369,7 +366,7 @@ bool OPropertyContainerHelper::setFastPropertyValue(sal_Int32 _nHandle, const An
         OSL_FAIL( "OPropertyContainerHelper::setFastPropertyValue: unknown handle!" );
         // should not happen if the derived class has built a correct property set info helper to be used by
         // our base class OPropertySetHelper
-        return false;
+        return;
     }
 
     bool bSuccess = true;
@@ -398,8 +395,6 @@ bool OPropertyContainerHelper::setFastPropertyValue(sal_Int32 _nHandle, const An
 
             break;
     }
-
-    return bSuccess;
 }
 
 void OPropertyContainerHelper::getFastPropertyValue(Any& _rValue, sal_Int32 _nHandle) const
@@ -417,7 +412,7 @@ void OPropertyContainerHelper::getFastPropertyValue(Any& _rValue, sal_Int32 _nHa
     switch (aPos->eLocated)
     {
         case PropertyDescription::LocationType::HoldMyself:
-            OSL_ENSURE(aPos->aLocation.nOwnClassVectorIndex < (sal_Int32)m_aHoldProperties.size(),
+            OSL_ENSURE(aPos->aLocation.nOwnClassVectorIndex < static_cast<sal_Int32>(m_aHoldProperties.size()),
                 "OPropertyContainerHelper::convertFastPropertyValue: invalid position !");
             _rValue = m_aHoldProperties[aPos->aLocation.nOwnClassVectorIndex];
             break;
@@ -436,7 +431,7 @@ OPropertyContainerHelper::PropertiesIterator OPropertyContainerHelper::searchHan
     PropertyDescription aHandlePropDesc;
     aHandlePropDesc.aProperty.Handle = _nHandle;
     // search a lower bound
-    PropertiesIterator aLowerBound = ::std::lower_bound(
+    PropertiesIterator aLowerBound = std::lower_bound(
         m_aProperties.begin(),
         m_aProperties.end(),
         aHandlePropDesc,
@@ -452,7 +447,7 @@ OPropertyContainerHelper::PropertiesIterator OPropertyContainerHelper::searchHan
 
 const Property& OPropertyContainerHelper::getProperty( const OUString& _rName ) const
 {
-    ConstPropertiesIterator pos = ::std::find_if(
+    ConstPropertiesIterator pos = std::find_if(
         m_aProperties.begin(),
         m_aProperties.end(),
         PropertyDescriptionNameMatch( _rName )
@@ -476,23 +471,23 @@ void OPropertyContainerHelper::describeProperties(Sequence< Property >& _rProps)
     {
         pOwnProps->Name = aLoop->aProperty.Name;
         pOwnProps->Handle = aLoop->aProperty.Handle;
-        pOwnProps->Attributes = (sal_Int16)aLoop->aProperty.Attributes;
+        pOwnProps->Attributes = static_cast<sal_Int16>(aLoop->aProperty.Attributes);
         pOwnProps->Type = aLoop->aProperty.Type;
     }
 
     // as our property vector is sorted by handles, not by name, we have to sort aOwnProps
-    ::std::sort(aOwnProps.getArray(), aOwnProps.getArray() + aOwnProps.getLength(), PropertyCompareByName());
+    std::sort(aOwnProps.begin(), aOwnProps.end(), PropertyCompareByName());
 
     // unfortunately the STL merge function does not allow the output range to overlap one of the input ranges,
     // so we need an extra sequence
     Sequence< Property > aOutput;
     aOutput.realloc(_rProps.getLength() + aOwnProps.getLength());
     // do the merge
-    ::std::merge(   _rProps.getConstArray(), _rProps.getConstArray() + _rProps.getLength(),         // input 1
-                    aOwnProps.getConstArray(), aOwnProps.getConstArray() + aOwnProps.getLength(),   // input 2
-                    aOutput.getArray(),                                                             // output
-                    PropertyCompareByName()                                                         // compare operator
-                );
+    std::merge(   _rProps.begin(), _rProps.end(),       // input 1
+                  aOwnProps.begin(), aOwnProps.end(),   // input 2
+                  aOutput.getArray(),                   // output
+                  PropertyCompareByName()               // compare operator
+              );
 
     // copy the output
     _rProps = aOutput;

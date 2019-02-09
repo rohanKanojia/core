@@ -19,7 +19,7 @@
 
 
 #include "animationpathmotionnode.hxx"
-#include "animationfactory.hxx"
+#include <animationfactory.hxx>
 
 namespace slideshow {
 namespace internal {
@@ -44,7 +44,7 @@ AnimationActivitySharedPtr AnimationPathMotionNode::createActivity() const
             mxPathMotionNode->getAdditive(),
             getShape(),
             getContext().mpSubsettableShapeManager,
-            getSlideSize() ),
+            getSlideSize(), 0 ),
         true );
 }
 

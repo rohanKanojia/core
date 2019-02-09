@@ -23,17 +23,18 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 
-#include "oox/ppt/pptshape.hxx"
-#include "oox/ppt/pptgraphicshapecontext.hxx"
-#include "oox/ppt/pptshapepropertiescontext.hxx"
-#include "oox/ppt/slidepersist.hxx"
-#include "drawingml/shapestylecontext.hxx"
-#include "oox/token/namespaces.hxx"
-#include "drawingml/fillpropertiesgroupcontext.hxx"
-#include "oox/drawingml/lineproperties.hxx"
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "drawingml/customshapegeometry.hxx"
-#include "drawingml/textbodycontext.hxx"
+#include <oox/ppt/pptshape.hxx>
+#include <oox/ppt/pptgraphicshapecontext.hxx>
+#include <oox/ppt/pptshapepropertiescontext.hxx>
+#include <oox/ppt/slidepersist.hxx>
+#include <drawingml/shapestylecontext.hxx>
+#include <drawingml/misccontexts.hxx>
+#include <drawingml/lineproperties.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <drawingml/customshapegeometry.hxx>
+#include <drawingml/textbodycontext.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
 #include <oox/token/tokens.hxx>
 
 using namespace oox::core;
@@ -47,7 +48,7 @@ using namespace ::com::sun::star::xml::sax;
 namespace oox { namespace ppt {
 
 // CT_Shape
-PPTGraphicShapeContext::PPTGraphicShapeContext( ContextHandler2Helper& rParent, const SlidePersistPtr& rSlidePersistPtr, oox::drawingml::ShapePtr pMasterShapePtr, oox::drawingml::ShapePtr pShapePtr )
+PPTGraphicShapeContext::PPTGraphicShapeContext( ContextHandler2Helper const & rParent, const SlidePersistPtr& rSlidePersistPtr, const oox::drawingml::ShapePtr& pMasterShapePtr, const oox::drawingml::ShapePtr& pShapePtr )
 : oox::drawingml::GraphicShapeContext( rParent, pMasterShapePtr, pShapePtr )
 , mpSlidePersistPtr( rSlidePersistPtr )
 {
@@ -122,6 +123,7 @@ ContextHandlerRef PPTGraphicShapeContext::onCreateContext( sal_Int32 aElementTok
                         case XML_sldImg :       // notes/notesmaster
                         case XML_pic :          // slide/layout
                             nFirstPlaceholder = nSubType;
+                            break;
                         default:
                             break;
                     }
@@ -162,7 +164,7 @@ ContextHandlerRef PPTGraphicShapeContext::onCreateContext( sal_Int32 aElementTok
                         case XML_pic :
                             bUseText = false;
                     }
-                    mpShapePtr->applyShapeReference( *pPlaceholder.get(), bUseText );
+                    mpShapePtr->applyShapeReference( *pPlaceholder, bUseText );
                     PPTShape* pPPTShape = dynamic_cast< PPTShape* >( pPlaceholder.get() );
                     if ( pPPTShape )
                         pPPTShape->setReferenced( true );

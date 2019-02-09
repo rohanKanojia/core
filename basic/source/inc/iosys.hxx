@@ -20,6 +20,7 @@
 #ifndef INCLUDED_BASIC_SOURCE_INC_IOSYS_HXX
 #define INCLUDED_BASIC_SOURCE_INC_IOSYS_HXX
 
+#include <memory>
 #include <tools/stream.hxx>
 #include <basic/sberrors.hxx>
 #include <o3tl/typed_flags_set.hxx>
@@ -47,24 +48,23 @@ namespace o3tl
 
 class SbiStream
 {
-    SvStream* pStrm;
+    std::unique_ptr<SvStream> pStrm;
     sal_uInt64  nExpandOnWriteTo;  // during writing access expand the stream to this size
     OString aLine;
     sal_uInt64  nLine;
     short  nLen;                    // buffer length
     SbiStreamFlags  nMode;
-    short  nChan;
-    SbError nError;
+    ErrCode nError;
     void   MapError();
 
 public:
     SbiStream();
    ~SbiStream();
-    SbError Open( short, const OString&, StreamMode, SbiStreamFlags, short );
-    SbError Close();
-    SbError Read(OString&, sal_uInt16 = 0, bool bForceReadingPerByte=false);
-    SbError Read( char& );
-    SbError Write( const OString& );
+    ErrCode const & Open( const OString&, StreamMode, SbiStreamFlags, short );
+    ErrCode const & Close();
+    ErrCode Read(OString&, sal_uInt16 = 0, bool bForceReadingPerByte=false);
+    ErrCode const & Read( char& );
+    ErrCode Write( const OString& );
 
     bool IsText() const     { return !bool(nMode & SbiStreamFlags::Binary); }
     bool IsRandom() const   { return bool(nMode & SbiStreamFlags::Random); }
@@ -76,7 +76,7 @@ public:
     sal_uInt64 GetLine() const            { return nLine;          }
     void SetExpandOnWriteTo( sal_uInt64 n ) { nExpandOnWriteTo = n;    }
     void ExpandFile();
-    SvStream* GetStrm()                { return pStrm;          }
+    SvStream* GetStrm()                { return pStrm.get();        }
 };
 
 class SbiIoSystem
@@ -86,13 +86,13 @@ class SbiIoSystem
     OString aIn;
     OUString aOut;
     short     nChan;
-    SbError   nError;
+    ErrCode   nError;
     void      ReadCon(OString&);
     void      WriteCon(const OUString&);
 public:
     SbiIoSystem();
-   ~SbiIoSystem();
-    SbError GetError();
+   ~SbiIoSystem() COVERITY_NOEXCEPT_FALSE;
+    ErrCode GetError();
     void  Shutdown();
     void  SetPrompt(const OString& r) { aPrompt = r; }
     void  SetChannel( short n  )       { nChan = n;   }

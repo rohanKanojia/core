@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/rc.h>
 #include <vcl/event.hxx>
 #include <vcl/decoview.hxx>
 #include <vcl/slider.hxx>
@@ -25,9 +24,9 @@
 
 #include "thumbpos.hxx"
 
-#define SLIDER_STATE_CHANNEL1_DOWN  ((sal_uInt16)0x0001)
-#define SLIDER_STATE_CHANNEL2_DOWN  ((sal_uInt16)0x0002)
-#define SLIDER_STATE_THUMB_DOWN     ((sal_uInt16)0x0004)
+#define SLIDER_STATE_CHANNEL1_DOWN  (sal_uInt16(0x0001))
+#define SLIDER_STATE_CHANNEL2_DOWN  (sal_uInt16(0x0002))
+#define SLIDER_STATE_THUMB_DOWN     (sal_uInt16(0x0004))
 
 #define SLIDER_THUMB_SIZE           9
 #define SLIDER_THUMB_HALFSIZE       4
@@ -54,12 +53,10 @@ void Slider::ImplInit( vcl::Window* pParent, WinBits nStyle )
     mnThumbPos          = 0;
     mnLineSize          = 1;
     mnPageSize          = 1;
-    mnDelta             = 0;
-    mnDragDraw          = 0;
     mnStateFlags        = 0;
-    meScrollType        = SCROLL_DONTKNOW;
+    meScrollType        = ScrollType::DontKnow;
     mbCalcSize          = true;
-    mbFullDrag          = true;
+    mbScrollTypeSet     = false;
 
     mpLinkedField       = nullptr;
 
@@ -70,7 +67,7 @@ void Slider::ImplInit( vcl::Window* pParent, WinBits nStyle )
 }
 
 Slider::Slider( vcl::Window* pParent, WinBits nStyle ) :
-    Control(WINDOW_SLIDER)
+    Control(WindowType::SLIDER)
 {
     ImplInit( pParent, nStyle );
 }
@@ -111,76 +108,76 @@ void Slider::ImplInitSettings()
 
 void Slider::ImplUpdateRects( bool bUpdate )
 {
-    Rectangle aOldThumbRect = maThumbRect;
+    tools::Rectangle aOldThumbRect = maThumbRect;
     bool bInvalidateAll = false;
 
     if ( mnThumbPixRange )
     {
         if ( GetStyle() & WB_HORZ )
         {
-            maThumbRect.Left()      = mnThumbPixPos-SLIDER_THUMB_HALFSIZE;
-            maThumbRect.Right()     = maThumbRect.Left()+SLIDER_THUMB_SIZE-1;
+            maThumbRect.SetLeft( mnThumbPixPos-SLIDER_THUMB_HALFSIZE );
+            maThumbRect.SetRight( maThumbRect.Left()+SLIDER_THUMB_SIZE-1 );
             if ( mnChannelPixOffset < maThumbRect.Left() )
             {
-                maChannel1Rect.Left()   = mnChannelPixOffset;
-                maChannel1Rect.Right()  = maThumbRect.Left()-1;
-                maChannel1Rect.Top()    = mnChannelPixTop;
-                maChannel1Rect.Bottom() = mnChannelPixBottom;
+                maChannel1Rect.SetLeft( mnChannelPixOffset );
+                maChannel1Rect.SetRight( maThumbRect.Left()-1 );
+                maChannel1Rect.SetTop( mnChannelPixTop );
+                maChannel1Rect.SetBottom( mnChannelPixBottom );
             }
             else
                 maChannel1Rect.SetEmpty();
             if ( mnChannelPixOffset+mnChannelPixRange-1 > maThumbRect.Right() )
             {
-                maChannel2Rect.Left()   = maThumbRect.Right()+1;
-                maChannel2Rect.Right()  = mnChannelPixOffset+mnChannelPixRange-1;
-                maChannel2Rect.Top()    = mnChannelPixTop;
-                maChannel2Rect.Bottom() = mnChannelPixBottom;
+                maChannel2Rect.SetLeft( maThumbRect.Right()+1 );
+                maChannel2Rect.SetRight( mnChannelPixOffset+mnChannelPixRange-1 );
+                maChannel2Rect.SetTop( mnChannelPixTop );
+                maChannel2Rect.SetBottom( mnChannelPixBottom );
             }
             else
                 maChannel2Rect.SetEmpty();
 
-            const Rectangle aControlRegion( Rectangle( Point(0,0), Size( SLIDER_THUMB_SIZE, 10 ) ) );
-            Rectangle aThumbBounds, aThumbContent;
-            if ( GetNativeControlRegion( CTRL_SLIDER, PART_THUMB_HORZ,
-                                         aControlRegion, ControlState::NONE, ImplControlValue(), OUString(),
+            const tools::Rectangle aControlRegion( tools::Rectangle( Point(0,0), Size( SLIDER_THUMB_SIZE, 10 ) ) );
+            tools::Rectangle aThumbBounds, aThumbContent;
+            if ( GetNativeControlRegion( ControlType::Slider, ControlPart::ThumbHorz,
+                                         aControlRegion, ControlState::NONE, ImplControlValue(),
                                          aThumbBounds, aThumbContent ) )
             {
-                maThumbRect.Left() = mnThumbPixPos - aThumbBounds.GetWidth()/2;
-                maThumbRect.Right() = maThumbRect.Left() + aThumbBounds.GetWidth() - 1;
+                maThumbRect.SetLeft( mnThumbPixPos - aThumbBounds.GetWidth()/2 );
+                maThumbRect.SetRight( maThumbRect.Left() + aThumbBounds.GetWidth() - 1 );
                 bInvalidateAll = true;
             }
         }
         else
         {
-            maThumbRect.Top()       = mnThumbPixPos-SLIDER_THUMB_HALFSIZE;
-            maThumbRect.Bottom()    = maThumbRect.Top()+SLIDER_THUMB_SIZE-1;
+            maThumbRect.SetTop( mnThumbPixPos-SLIDER_THUMB_HALFSIZE );
+            maThumbRect.SetBottom( maThumbRect.Top()+SLIDER_THUMB_SIZE-1 );
             if ( mnChannelPixOffset < maThumbRect.Top() )
             {
-                maChannel1Rect.Top()    = mnChannelPixOffset;
-                maChannel1Rect.Bottom() = maThumbRect.Top()-1;
-                maChannel1Rect.Left()   = mnChannelPixTop;
-                maChannel1Rect.Right()  = mnChannelPixBottom;
+                maChannel1Rect.SetTop( mnChannelPixOffset );
+                maChannel1Rect.SetBottom( maThumbRect.Top()-1 );
+                maChannel1Rect.SetLeft( mnChannelPixTop );
+                maChannel1Rect.SetRight( mnChannelPixBottom );
             }
             else
                 maChannel1Rect.SetEmpty();
             if ( mnChannelPixOffset+mnChannelPixRange-1 > maThumbRect.Bottom() )
             {
-                maChannel2Rect.Top()    = maThumbRect.Bottom()+1;
-                maChannel2Rect.Bottom() = mnChannelPixOffset+mnChannelPixRange-1;
-                maChannel2Rect.Left()   = mnChannelPixTop;
-                maChannel2Rect.Right()  = mnChannelPixBottom;
+                maChannel2Rect.SetTop( maThumbRect.Bottom()+1 );
+                maChannel2Rect.SetBottom( mnChannelPixOffset+mnChannelPixRange-1 );
+                maChannel2Rect.SetLeft( mnChannelPixTop );
+                maChannel2Rect.SetRight( mnChannelPixBottom );
             }
             else
                 maChannel2Rect.SetEmpty();
 
-            const Rectangle aControlRegion( Rectangle( Point(0,0), Size( 10, SLIDER_THUMB_SIZE ) ) );
-            Rectangle aThumbBounds, aThumbContent;
-            if ( GetNativeControlRegion( CTRL_SLIDER, PART_THUMB_VERT,
-                                         aControlRegion, ControlState::NONE, ImplControlValue(), OUString(),
+            const tools::Rectangle aControlRegion( tools::Rectangle( Point(0,0), Size( 10, SLIDER_THUMB_SIZE ) ) );
+            tools::Rectangle aThumbBounds, aThumbContent;
+            if ( GetNativeControlRegion( ControlType::Slider, ControlPart::ThumbVert,
+                                         aControlRegion, ControlState::NONE, ImplControlValue(),
                                          aThumbBounds, aThumbContent ) )
             {
-                maThumbRect.Top() = mnThumbPixPos - aThumbBounds.GetHeight()/2;
-                maThumbRect.Bottom() = maThumbRect.Top() + aThumbBounds.GetHeight() - 1;
+                maThumbRect.SetTop( mnThumbPixPos - aThumbBounds.GetHeight()/2 );
+                maThumbRect.SetBottom( maThumbRect.Top() + aThumbBounds.GetHeight() - 1 );
                 bInvalidateAll = true;
             }
         }
@@ -268,15 +265,15 @@ void Slider::ImplCalc( bool bUpdate )
         {
             nCalcWidth          = aSize.Width();
             nCalcHeight         = aSize.Height();
-            maThumbRect.Top()   = 0;
-            maThumbRect.Bottom()= aSize.Height()-1;
+            maThumbRect.SetTop( 0 );
+            maThumbRect.SetBottom( aSize.Height()-1 );
         }
         else
         {
             nCalcWidth          = aSize.Height();
             nCalcHeight         = aSize.Width();
-            maThumbRect.Left()  = 0;
-            maThumbRect.Right() = aSize.Width()-1;
+            maThumbRect.SetLeft( 0 );
+            maThumbRect.SetRight( aSize.Width()-1 );
         }
 
         if ( nCalcWidth >= SLIDER_THUMB_SIZE )
@@ -317,40 +314,44 @@ void Slider::ImplCalc( bool bUpdate )
 
 void Slider::ImplDraw(vcl::RenderContext& rRenderContext)
 {
+    // do missing calculations
+    if (mbCalcSize)
+        ImplCalc(false);
+
+    ControlPart nPart = (GetStyle() & WB_HORZ) ? ControlPart::TrackHorzArea : ControlPart::TrackVertArea;
+
+    if (rRenderContext.IsNativeControlSupported(ControlType::Slider, nPart))
+    {
+        ControlState nState = (IsEnabled() ? ControlState::ENABLED : ControlState::NONE);
+        nState |= (HasFocus() ? ControlState::FOCUSED : ControlState::NONE);
+
+        SliderValue aSliderValue;
+        aSliderValue.mnMin = mnMinRange;
+        aSliderValue.mnMax = mnMaxRange;
+        aSliderValue.mnCur = mnThumbPos;
+        aSliderValue.maThumbRect = maThumbRect;
+
+        if (IsMouseOver())
+        {
+            if (maThumbRect.IsInside(GetPointerPosPixel()))
+                aSliderValue.mnThumbState |= ControlState::ROLLOVER;
+        }
+
+        const tools::Rectangle aCtrlRegion(Point(0,0), GetOutputSizePixel());
+
+        if (rRenderContext.DrawNativeControl(ControlType::Slider, nPart, aCtrlRegion, nState, aSliderValue, OUString()))
+            return;
+    }
+
     DecorationView aDecoView(&rRenderContext);
     DrawButtonFlags nStyle;
     const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
     bool bEnabled = IsEnabled();
 
-    // do missing calculations
-    if (mbCalcSize)
-        ImplCalc(false);
-
-    ControlPart nPart = (GetStyle() & WB_HORZ) ? PART_TRACK_HORZ_AREA : PART_TRACK_VERT_AREA;
-    ControlState nState = (IsEnabled() ? ControlState::ENABLED : ControlState::NONE);
-    nState |= (HasFocus() ? ControlState::FOCUSED : ControlState::NONE);
-    SliderValue sldValue;
-
-    sldValue.mnMin = mnMinRange;
-    sldValue.mnMax = mnMaxRange;
-    sldValue.mnCur = mnThumbPos;
-    sldValue.maThumbRect = maThumbRect;
-
-    if (IsMouseOver())
-    {
-        if (maThumbRect.IsInside(GetPointerPosPixel()))
-            sldValue.mnThumbState |= ControlState::ROLLOVER;
-    }
-
-    const Rectangle aCtrlRegion(Point(0,0), GetOutputSizePixel());
-    bool bNativeOK = rRenderContext.DrawNativeControl(CTRL_SLIDER, nPart, aCtrlRegion, nState, sldValue, OUString());
-    if (bNativeOK)
-        return;
-
     if (!maChannel1Rect.IsEmpty())
     {
         long        nRectSize;
-        Rectangle   aRect = maChannel1Rect;
+        tools::Rectangle   aRect = maChannel1Rect;
         rRenderContext.SetLineColor(rStyleSettings.GetShadowColor());
         if (GetStyle() & WB_HORZ)
         {
@@ -376,12 +377,12 @@ void Slider::ImplDraw(vcl::RenderContext& rRenderContext)
 
         if (nRectSize > 1)
         {
-            aRect.Left()++;
-            aRect.Top()++;
+            aRect.AdjustLeft( 1 );
+            aRect.AdjustTop( 1 );
             if (GetStyle() & WB_HORZ)
-                aRect.Bottom()--;
+                aRect.AdjustBottom( -1 );
             else
-                aRect.Right()--;
+                aRect.AdjustRight( -1 );
             rRenderContext.SetLineColor();
             if (mnStateFlags & SLIDER_STATE_CHANNEL1_DOWN)
                 rRenderContext.SetFillColor(rStyleSettings.GetShadowColor());
@@ -394,7 +395,7 @@ void Slider::ImplDraw(vcl::RenderContext& rRenderContext)
     if (!maChannel2Rect.IsEmpty())
     {
         long nRectSize;
-        Rectangle aRect = maChannel2Rect;
+        tools::Rectangle aRect = maChannel2Rect;
         rRenderContext.SetLineColor(rStyleSettings.GetLightColor());
         if (GetStyle() & WB_HORZ)
         {
@@ -417,12 +418,12 @@ void Slider::ImplDraw(vcl::RenderContext& rRenderContext)
             else
                 rRenderContext.DrawLine(aRect.TopLeft(), Point(aRect.Left(), aRect.Bottom() - 1));
 
-            aRect.Right()--;
-            aRect.Bottom()--;
+            aRect.AdjustRight( -1 );
+            aRect.AdjustBottom( -1 );
             if (GetStyle() & WB_HORZ)
-                aRect.Top()++;
+                aRect.AdjustTop( 1 );
             else
-                aRect.Left()++;
+                aRect.AdjustLeft( 1 );
             rRenderContext.SetLineColor();
             if (mnStateFlags & SLIDER_STATE_CHANNEL2_DOWN)
                 rRenderContext.SetFillColor(rStyleSettings.GetShadowColor());
@@ -453,16 +454,16 @@ void Slider::ImplDraw(vcl::RenderContext& rRenderContext)
 bool Slider::ImplIsPageUp( const Point& rPos )
 {
     Size aSize = GetOutputSizePixel();
-    Rectangle aRect = maChannel1Rect;
+    tools::Rectangle aRect = maChannel1Rect;
     if ( GetStyle() & WB_HORZ )
     {
-        aRect.Top()     = 0;
-        aRect.Bottom()  = aSize.Height()-1;
+        aRect.SetTop( 0 );
+        aRect.SetBottom( aSize.Height()-1 );
     }
     else
     {
-        aRect.Left()    = 0;
-        aRect.Right()   = aSize.Width()-1;
+        aRect.SetLeft( 0 );
+        aRect.SetRight( aSize.Width()-1 );
     }
     return aRect.IsInside( rPos );
 }
@@ -470,16 +471,16 @@ bool Slider::ImplIsPageUp( const Point& rPos )
 bool Slider::ImplIsPageDown( const Point& rPos )
 {
     Size aSize = GetOutputSizePixel();
-    Rectangle aRect = maChannel2Rect;
+    tools::Rectangle aRect = maChannel2Rect;
     if ( GetStyle() & WB_HORZ )
     {
-        aRect.Top()     = 0;
-        aRect.Bottom()  = aSize.Height()-1;
+        aRect.SetTop( 0 );
+        aRect.SetBottom( aSize.Height()-1 );
     }
     else
     {
-        aRect.Left()    = 0;
-        aRect.Right()   = aSize.Width()-1;
+        aRect.SetLeft( 0 );
+        aRect.SetRight( aSize.Width()-1 );
     }
     return aRect.IsInside( rPos );
 }
@@ -491,11 +492,9 @@ long Slider::ImplSlide( long nNewPos, bool bCallEndSlide )
     long nDelta = mnThumbPos-nOldPos;
     if ( nDelta )
     {
-        mnDelta = nDelta;
         Slide();
         if ( bCallEndSlide )
             EndSlide();
-        mnDelta = 0;
     }
     return nDelta;
 }
@@ -506,23 +505,23 @@ long Slider::ImplDoAction( bool bCallEndSlide )
 
     switch ( meScrollType )
     {
-        case SCROLL_LINEUP:
+        case ScrollType::LineUp:
             nDelta = ImplSlide( mnThumbPos-mnLineSize, bCallEndSlide );
             break;
 
-        case SCROLL_LINEDOWN:
+        case ScrollType::LineDown:
             nDelta = ImplSlide( mnThumbPos+mnLineSize, bCallEndSlide );
             break;
 
-        case SCROLL_PAGEUP:
+        case ScrollType::PageUp:
             nDelta = ImplSlide( mnThumbPos-mnPageSize, bCallEndSlide );
             break;
 
-        case SCROLL_PAGEDOWN:
+        case ScrollType::PageDown:
             nDelta = ImplSlide( mnThumbPos+mnPageSize, bCallEndSlide );
             break;
 
-        case SCROLL_SET:
+        case ScrollType::Set:
             nDelta = ImplSlide( ImplCalcThumbPos( GetPointerPosPixel().X() ), bCallEndSlide );
             break;
         default:
@@ -539,7 +538,7 @@ void Slider::ImplDoMouseAction( const Point& rMousePos, bool bCallAction )
 
     switch ( meScrollType )
     {
-        case SCROLL_SET:
+        case ScrollType::Set:
         {
             const bool bUp = ImplIsPageUp( rMousePos ), bDown = ImplIsPageDown( rMousePos );
 
@@ -553,7 +552,7 @@ void Slider::ImplDoMouseAction( const Point& rMousePos, bool bCallAction )
             break;
         }
 
-        case SCROLL_PAGEUP:
+        case ScrollType::PageUp:
             if ( ImplIsPageUp( rMousePos ) )
             {
                 bAction = bCallAction;
@@ -563,7 +562,7 @@ void Slider::ImplDoMouseAction( const Point& rMousePos, bool bCallAction )
                 mnStateFlags &= ~SLIDER_STATE_CHANNEL1_DOWN;
             break;
 
-        case SCROLL_PAGEDOWN:
+        case ScrollType::PageDown:
             if ( ImplIsPageDown( rMousePos ) )
             {
                 bAction = bCallAction;
@@ -592,24 +591,24 @@ void Slider::ImplDoMouseAction( const Point& rMousePos, bool bCallAction )
 
 void Slider::ImplDoSlide( long nNewPos )
 {
-    if ( meScrollType != SCROLL_DONTKNOW )
+    if ( meScrollType != ScrollType::DontKnow )
         return;
 
-    meScrollType = SCROLL_DRAG;
+    meScrollType = ScrollType::Drag;
     ImplSlide( nNewPos, true );
-    meScrollType = SCROLL_DONTKNOW;
+    meScrollType = ScrollType::DontKnow;
 }
 
 void Slider::ImplDoSlideAction( ScrollType eScrollType )
 {
-    if ( (meScrollType != SCROLL_DONTKNOW) ||
-         (eScrollType == SCROLL_DONTKNOW) ||
-         (eScrollType == SCROLL_DRAG) )
+    if ( (meScrollType != ScrollType::DontKnow) ||
+         (eScrollType == ScrollType::DontKnow) ||
+         (eScrollType == ScrollType::Drag) )
         return;
 
     meScrollType = eScrollType;
     ImplDoAction( true );
-    meScrollType = SCROLL_DONTKNOW;
+    meScrollType = ScrollType::DontKnow;
 }
 
 void Slider::MouseButtonDown( const MouseEvent& rMEvt )
@@ -621,7 +620,7 @@ void Slider::MouseButtonDown( const MouseEvent& rMEvt )
 
         if ( maThumbRect.IsInside( rMousePos ) )
         {
-            meScrollType    = SCROLL_DRAG;
+            meScrollType    = ScrollType::Drag;
 
             // calculate additional values
             Point aCenterPos = maThumbRect.Center();
@@ -632,34 +631,34 @@ void Slider::MouseButtonDown( const MouseEvent& rMEvt )
         }
         else if ( ImplIsPageUp( rMousePos ) )
         {
-            if( GetStyle() & WB_SLIDERSET )
-                meScrollType = SCROLL_SET;
+            if( mbScrollTypeSet )
+                meScrollType = ScrollType::Set;
             else
             {
                 nTrackFlags = StartTrackingFlags::ButtonRepeat;
-                meScrollType = SCROLL_PAGEUP;
+                meScrollType = ScrollType::PageUp;
             }
         }
         else if ( ImplIsPageDown( rMousePos ) )
         {
-            if( GetStyle() & WB_SLIDERSET )
-                meScrollType = SCROLL_SET;
+            if( mbScrollTypeSet )
+                meScrollType = ScrollType::Set;
             else
             {
                 nTrackFlags = StartTrackingFlags::ButtonRepeat;
-                meScrollType = SCROLL_PAGEDOWN;
+                meScrollType = ScrollType::PageDown;
             }
         }
 
         // Shall we start Tracking?
-        if( meScrollType != SCROLL_DONTKNOW )
+        if( meScrollType != ScrollType::DontKnow )
         {
             // store Start position for cancel and EndScroll delta
             mnStartPos = mnThumbPos;
-            ImplDoMouseAction( rMousePos, meScrollType != SCROLL_SET );
+            ImplDoMouseAction( rMousePos, meScrollType != ScrollType::Set );
             Update();
 
-            if( meScrollType != SCROLL_SET )
+            if( meScrollType != ScrollType::Set )
                 StartTracking( nTrackFlags );
         }
     }
@@ -667,7 +666,7 @@ void Slider::MouseButtonDown( const MouseEvent& rMEvt )
 
 void Slider::MouseButtonUp( const MouseEvent& )
 {
-    if( SCROLL_SET == meScrollType )
+    if( ScrollType::Set == meScrollType )
     {
         // reset Button and PageRect state
         const sal_uInt16 nOldStateFlags = mnStateFlags;
@@ -679,7 +678,7 @@ void Slider::MouseButtonUp( const MouseEvent& )
             Invalidate(InvalidateFlags::NoChildren | InvalidateFlags::NoErase);
         }
         ImplDoAction( true );
-        meScrollType = SCROLL_DONTKNOW;
+        meScrollType = ScrollType::DontKnow;
     }
 }
 
@@ -699,37 +698,26 @@ void Slider::Tracking( const TrackingEvent& rTEvt )
         // on cancel, reset the previous Thumb position
         if ( rTEvt.IsTrackingCanceled() )
         {
-            long nOldPos = mnThumbPos;
             SetThumbPos( mnStartPos );
-            mnDelta = mnThumbPos-nOldPos;
             Slide();
         }
 
-        if ( meScrollType == SCROLL_DRAG )
+        if ( meScrollType == ScrollType::Drag )
         {
             // after dragging, recalculate to a rounded Thumb position
             ImplCalc();
             Update();
-
-            if ( !mbFullDrag && (mnStartPos != mnThumbPos) )
-            {
-                mnDelta = mnThumbPos-mnStartPos;
-                Slide();
-                mnDelta = 0;
-            }
         }
 
-        mnDelta = mnThumbPos-mnStartPos;
         EndSlide();
-        mnDelta = 0;
-        meScrollType = SCROLL_DONTKNOW;
+        meScrollType = ScrollType::DontKnow;
     }
     else
     {
         const Point rMousePos = rTEvt.GetMouseEvent().GetPosPixel();
 
         // special handling for dragging
-        if ( meScrollType == SCROLL_DRAG )
+        if ( meScrollType == ScrollType::Drag )
         {
             long nMovePix;
             Point aCenterPos = maThumbRect.Center();
@@ -752,11 +740,9 @@ void Slider::Tracking( const TrackingEvent& rTEvt )
                     ImplUpdateRects();
                     Update();
                     ImplUpdateLinkedField();
-                    if ( mbFullDrag && (nOldPos != mnThumbPos) )
+                    if ( nOldPos != mnThumbPos )
                     {
-                        mnDelta = mnThumbPos-nOldPos;
                         Slide();
-                        mnDelta = 0;
                     }
                 }
             }
@@ -785,20 +771,20 @@ void Slider::KeyInput( const KeyEvent& rKEvt )
 
             case KEY_LEFT:
             case KEY_UP:
-                ImplDoSlideAction( SCROLL_LINEUP );
+                ImplDoSlideAction( ScrollType::LineUp );
                 break;
 
             case KEY_RIGHT:
             case KEY_DOWN:
-                ImplDoSlideAction( SCROLL_LINEDOWN );
+                ImplDoSlideAction( ScrollType::LineDown );
                 break;
 
             case KEY_PAGEUP:
-                ImplDoSlideAction( SCROLL_PAGEUP );
+                ImplDoSlideAction( ScrollType::PageUp );
                 break;
 
             case KEY_PAGEDOWN:
-                ImplDoSlideAction( SCROLL_PAGEDOWN );
+                ImplDoSlideAction( ScrollType::PageDown );
                 break;
 
             default:
@@ -810,7 +796,7 @@ void Slider::KeyInput( const KeyEvent& rKEvt )
         Control::KeyInput( rKEvt );
 }
 
-void Slider::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rRect*/)
+void Slider::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& /*rRect*/)
 {
     ImplDraw(rRenderContext);
 }
@@ -824,48 +810,10 @@ void Slider::Resize()
     Invalidate(InvalidateFlags::NoChildren | InvalidateFlags::NoErase);
 }
 
-void Slider::SetLinkedField(VclPtr<NumericField> pField)
-{
-    if (mpLinkedField)
-    {
-        mpLinkedField->SetModifyHdl(Link<Edit&,void>());
-        mpLinkedField->SetUpHdl(Link<SpinField&,void>());
-        mpLinkedField->SetDownHdl(Link<SpinField&,void>());
-        mpLinkedField->SetFirstHdl(Link<SpinField&,void>());
-        mpLinkedField->SetLastHdl(Link<SpinField&,void>());
-        mpLinkedField->SetLoseFocusHdl(Link<Control&,void>());
-    }
-    mpLinkedField = pField;
-    if (mpLinkedField)
-    {
-        mpLinkedField->SetModifyHdl(LINK(this, Slider, LinkedFieldModifyHdl));
-        mpLinkedField->SetUpHdl(LINK(this, Slider, LinkedFieldSpinnerHdl));
-        mpLinkedField->SetDownHdl(LINK(this, Slider, LinkedFieldSpinnerHdl));
-        mpLinkedField->SetFirstHdl(LINK(this, Slider, LinkedFieldSpinnerHdl));
-        mpLinkedField->SetLastHdl(LINK(this, Slider, LinkedFieldSpinnerHdl));
-        mpLinkedField->SetLoseFocusHdl(LINK(this, Slider, LinkedFieldLoseFocusHdl));
-    }
-}
-
-IMPL_LINK_NOARG_TYPED(Slider, LinkedFieldSpinnerHdl, SpinField&, void)
+IMPL_LINK_NOARG(Slider, LinkedFieldModifyHdl, Edit&, void)
 {
     if (mpLinkedField)
         SetThumbPos(mpLinkedField->GetValue());
-}
-IMPL_LINK_NOARG_TYPED(Slider, LinkedFieldLoseFocusHdl, Control&, void)
-{
-    if (mpLinkedField)
-        SetThumbPos(mpLinkedField->GetValue());
-}
-IMPL_LINK_NOARG_TYPED(Slider, LinkedFieldModifyHdl, Edit&, void)
-{
-    if (mpLinkedField)
-        SetThumbPos(mpLinkedField->GetValue());
-}
-
-void Slider::RequestHelp( const HelpEvent& rHEvt )
-{
-    Control::RequestHelp( rHEvt );
 }
 
 void Slider::StateChanged( StateChangedType nType )
@@ -993,13 +941,13 @@ Size Slider::CalcWindowSizePixel()
     Size aSize;
     if ( GetStyle() & WB_HORZ )
     {
-        aSize.Width()   = nWidth;
-        aSize.Height()  = nHeight;
+        aSize.setWidth( nWidth );
+        aSize.setHeight( nHeight );
     }
     else
     {
-        aSize.Height()  = nWidth;
-        aSize.Width()   = nHeight;
+        aSize.setHeight( nWidth );
+        aSize.setWidth( nHeight );
     }
     return aSize;
 }

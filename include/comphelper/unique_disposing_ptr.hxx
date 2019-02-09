@@ -10,13 +10,15 @@
 #ifndef INCLUDED_COMPHELPER_UNIQUE_DISPOSING_PTR_HXX
 #define INCLUDED_COMPHELPER_UNIQUE_DISPOSING_PTR_HXX
 
+#include <memory>
 #include <cppuhelper/implbase.hxx>
 
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/frame/XDesktop.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
 
+#include <o3tl/deleter.hxx>
 #include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
 
 namespace comphelper
 {
@@ -24,16 +26,16 @@ namespace comphelper
 template<class T> class unique_disposing_ptr
 {
 private:
-    std::unique_ptr<T> m_xItem;
+    std::unique_ptr<T, o3tl::default_delete<T>> m_xItem;
     css::uno::Reference< css::frame::XTerminateListener> m_xTerminateListener;
 
     unique_disposing_ptr(const unique_disposing_ptr&) = delete;
     unique_disposing_ptr& operator=(const unique_disposing_ptr&) = delete;
 public:
-    unique_disposing_ptr( const css::uno::Reference< css::lang::XComponent > &rComponent, T * p = nullptr )
+    unique_disposing_ptr( const css::uno::Reference< css::lang::XComponent > &rComponent, T * p = nullptr, bool bComponent = false)
         : m_xItem(p)
     {
-        m_xTerminateListener = new TerminateListener(rComponent, *this);
+        m_xTerminateListener = new TerminateListener(rComponent, *this, bComponent);
     }
 
     virtual void reset(T * p = nullptr)
@@ -61,19 +63,24 @@ public:
         return static_cast< bool >(m_xItem);
     }
 
-    virtual ~unique_disposing_ptr()
+    virtual ~unique_disposing_ptr() COVERITY_NOEXCEPT_FALSE
     {
         reset();
     }
 private:
-    class TerminateListener : public ::cppu::WeakImplHelper< css::frame::XTerminateListener >
+    class TerminateListener : public ::cppu::WeakImplHelper< css::frame::XTerminateListener,
+                                            css::lang::XServiceInfo>
     {
     private:
         css::uno::Reference< css::lang::XComponent > m_xComponent;
         unique_disposing_ptr<T>& m_rItem;
+        bool const mbComponentDLL;
     public:
         TerminateListener(const css::uno::Reference< css::lang::XComponent > &rComponent,
-            unique_disposing_ptr<T>& rItem) : m_xComponent(rComponent), m_rItem(rItem)
+            unique_disposing_ptr<T>& rItem, bool bComponentDLL) :
+                    m_xComponent(rComponent),
+                    m_rItem(rItem),
+                    mbComponentDLL(bComponentDLL)
         {
             if (m_xComponent.is())
             {
@@ -85,7 +92,7 @@ private:
             }
         }
 
-        virtual ~TerminateListener()
+        virtual ~TerminateListener() override
         {
             if ( m_xComponent.is() )
             {
@@ -97,10 +104,8 @@ private:
             }
         }
 
-    private:
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& rEvt )
-            throw (css::uno::RuntimeException, std::exception) override
+        virtual void SAL_CALL disposing( const css::lang::EventObject& rEvt ) override
         {
             bool shutDown = (rEvt.Source == m_xComponent);
 
@@ -119,16 +124,31 @@ private:
         }
 
         // XTerminateListener
-        virtual void SAL_CALL queryTermination( const css::lang::EventObject& )
-            throw(css::frame::TerminationVetoException,
-                  css::uno::RuntimeException, std::exception) override
+        virtual void SAL_CALL queryTermination( const css::lang::EventObject& ) override
         {
         }
 
-        virtual void SAL_CALL notifyTermination( const css::lang::EventObject& rEvt )
-            throw (css::uno::RuntimeException, std::exception) override
+        virtual void SAL_CALL notifyTermination( const css::lang::EventObject& rEvt ) override
         {
             disposing(rEvt);
+        }
+
+        virtual OUString SAL_CALL getImplementationName() override
+        {
+            if (mbComponentDLL)
+                return OUString("com.sun.star.comp.ComponentDLLListener");
+            else
+                return OUString("com.sun.star.comp.DisposingTerminateListener");
+        }
+
+        virtual sal_Bool SAL_CALL supportsService(const OUString& /*rName*/) override
+        {
+            return false;
+        }
+
+        virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
+        {
+            return css::uno::Sequence<OUString>();
         }
    };
 };
@@ -141,8 +161,8 @@ template<class T> class unique_disposing_solar_mutex_reset_ptr
     : public unique_disposing_ptr<T>
 {
 public:
-    unique_disposing_solar_mutex_reset_ptr( const css::uno::Reference< css::lang::XComponent > &rComponent, T * p = nullptr )
-        : unique_disposing_ptr<T>(rComponent, p)
+    unique_disposing_solar_mutex_reset_ptr( const css::uno::Reference< css::lang::XComponent > &rComponent, T * p = nullptr, bool bComponent = false)
+        : unique_disposing_ptr<T>(rComponent, p, bComponent)
     {
     }
 
@@ -150,6 +170,12 @@ public:
     {
         SolarMutexGuard aGuard;
         unique_disposing_ptr<T>::reset(p);
+    }
+
+    virtual ~unique_disposing_solar_mutex_reset_ptr() override
+    {
+        if (unique_disposing_ptr<T>::get() && comphelper::SolarMutex::get())
+            reset();
     }
 };
 

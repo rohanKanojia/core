@@ -11,7 +11,9 @@
 #include <FrameControlsManager.hxx>
 #include <HeaderFooterWin.hxx>
 #include <PageBreakWin.hxx>
+#include <UnfloatTableButton.hxx>
 #include <pagefrm.hxx>
+#include <flyfrm.hxx>
 #include <viewopt.hxx>
 #include <view.hxx>
 #include <wrtsh.hxx>
@@ -28,22 +30,9 @@ SwFrameControlsManager::~SwFrameControlsManager()
 {
 }
 
-SwFrameControlsManager::SwFrameControlsManager( const SwFrameControlsManager& rCopy ) :
-    m_pEditWin( rCopy.m_pEditWin ),
-    m_aControls( rCopy.m_aControls )
-{
-}
-
 void SwFrameControlsManager::dispose()
 {
     m_aControls.clear();
-}
-
-const SwFrameControlsManager& SwFrameControlsManager::operator=( const SwFrameControlsManager& rCopy )
-{
-    m_pEditWin = rCopy.m_pEditWin;
-    m_aControls = rCopy.m_aControls;
-    return *this;
 }
 
 SwFrameControlPtr SwFrameControlsManager::GetControl( FrameControlType eType, const SwFrame* pFrame )
@@ -60,13 +49,10 @@ SwFrameControlPtr SwFrameControlsManager::GetControl( FrameControlType eType, co
 
 void SwFrameControlsManager::RemoveControls( const SwFrame* pFrame )
 {
-    map< FrameControlType, SwFrameControlPtrMap >::iterator pIt = m_aControls.begin();
-
-    while ( pIt != m_aControls.end() )
+    for ( auto& rEntry : m_aControls )
     {
-        SwFrameControlPtrMap& rMap = pIt->second;
+        SwFrameControlPtrMap& rMap = rEntry.second;
         rMap.erase(pFrame);
-        ++pIt;
     }
 }
 
@@ -78,33 +64,20 @@ void SwFrameControlsManager::RemoveControlsByType( FrameControlType eType, const
 
 void SwFrameControlsManager::HideControls( FrameControlType eType )
 {
-    SwFrameControlPtrMap::iterator pIt = m_aControls[eType].begin();
-    while ( pIt != m_aControls[eType].end() )
-    {
-        pIt->second->ShowAll( false );
-        ++pIt;
-    }
+    for ( const auto& rCtrl : m_aControls[eType] )
+        rCtrl.second->ShowAll( false );
 }
 
 void SwFrameControlsManager::SetReadonlyControls( bool bReadonly )
 {
-    map< FrameControlType, SwFrameControlPtrMap >::iterator pIt = m_aControls.begin();
-
-    while ( pIt != m_aControls.end() )
-    {
-        SwFrameControlPtrMap::iterator aCtrlIt = pIt->second.begin();
-        while ( aCtrlIt != pIt->second.end() )
-        {
-            aCtrlIt->second->SetReadonly( bReadonly );
-            ++aCtrlIt;
-        }
-        ++pIt;
-    }
+    for ( auto& rEntry : m_aControls )
+        for ( auto& rCtrl : rEntry.second )
+            rCtrl.second->SetReadonly( bReadonly );
 }
 
 void SwFrameControlsManager::SetHeaderFooterControl( const SwPageFrame* pPageFrame, FrameControlType eType, Point aOffset )
 {
-    OSL_ASSERT( eType == Header || eType == Footer );
+    assert( eType == Header || eType == Footer );
 
     // Check if we already have the control
     SwFrameControlPtr pControl;
@@ -126,7 +99,7 @@ void SwFrameControlsManager::SetHeaderFooterControl( const SwPageFrame* pPageFra
         pControl.swap( pNewControl );
     }
 
-    Rectangle aPageRect = m_pEditWin->LogicToPixel( pPageFrame->Frame().SVRect() );
+    tools::Rectangle aPageRect = m_pEditWin->LogicToPixel( pPageFrame->getFrameArea().SVRect() );
 
     SwHeaderFooterWin* pWin = dynamic_cast<SwHeaderFooterWin *>(pControl->GetWindow());
     assert( pWin != nullptr) ;
@@ -166,6 +139,39 @@ void SwFrameControlsManager::SetPageBreakControl( const SwPageFrame* pPageFrame 
         pControl->ShowAll( true );
 }
 
+void SwFrameControlsManager::SetUnfloatTableButton( const SwFlyFrame* pFlyFrame, bool bShow, Point aBottomRightPixel )
+{
+    if(pFlyFrame == nullptr)
+        return;
+
+    // Check if we already have the control
+    SwFrameControlPtr pControl;
+
+    SwFrameControlPtrMap& rControls = m_aControls[FloatingTable];
+
+    SwFrameControlPtrMap::iterator lb = rControls.lower_bound(pFlyFrame);
+    if (lb != rControls.end() && !(rControls.key_comp()(pFlyFrame, lb->first)))
+        pControl = lb->second;
+    else if (!bShow) // Do not create the control when it's not shown
+        return;
+    else
+    {
+        SwFrameControlPtr pNewControl( new SwFrameControl(
+                VclPtr<UnfloatTableButton>::Create( m_pEditWin, pFlyFrame ).get() ) );
+        const SwViewOption* pViewOpt = m_pEditWin->GetView().GetWrtShell().GetViewOptions();
+        pNewControl->SetReadonly( pViewOpt->IsReadonly() );
+
+        rControls.insert(lb, make_pair(pFlyFrame, pNewControl));
+
+        pControl.swap( pNewControl );
+    }
+
+    UnfloatTableButton* pButton = dynamic_cast<UnfloatTableButton*>(pControl->GetWindow());
+    assert(pButton != nullptr);
+    pButton->SetOffset(aBottomRightPixel);
+    pControl->ShowAll( bShow );
+}
+
 SwFrameMenuButtonBase::SwFrameMenuButtonBase( SwEditWin* pEditWin, const SwFrame* pFrame ) :
     MenuButton( pEditWin, WB_DIALOGCONTROL ),
     m_pEditWin( pEditWin ),
@@ -175,7 +181,13 @@ SwFrameMenuButtonBase::SwFrameMenuButtonBase( SwEditWin* pEditWin, const SwFrame
 
 const SwPageFrame* SwFrameMenuButtonBase::GetPageFrame()
 {
-    return static_cast< const SwPageFrame * >( m_pFrame );
+    if (m_pFrame->IsPageFrame())
+        return static_cast<const SwPageFrame*>( m_pFrame );
+
+    if (m_pFrame->IsFlyFrame())
+        return static_cast<const SwFlyFrame*>(m_pFrame)->GetAnchorFrame()->FindPageFrame();
+
+    return m_pFrame->FindPageFrame();
 }
 
 void SwFrameMenuButtonBase::dispose()

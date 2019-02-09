@@ -18,16 +18,14 @@
  */
 
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
 
 #include <cppcanvas/basegfxfactory.hxx>
-
-#include <comphelper/optional.hxx>
-#include <comphelper/make_shared_from_uno.hxx>
 
 #include <com/sun/star/rendering/XIntegerBitmap.hpp>
 #include <com/sun/star/rendering/IntegerBitmapLayout.hpp>
@@ -36,14 +34,14 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
 #include "slidechangebase.hxx"
-#include "transitionfactory.hxx"
+#include <transitionfactory.hxx>
 #include "transitionfactorytab.hxx"
 #include "transitiontools.hxx"
 #include "parametricpolypolygonfactory.hxx"
-#include "animationfactory.hxx"
+#include <animationfactory.hxx>
 #include "clippingfunctor.hxx"
 #include "combtransition.hxx"
-#include "tools.hxx"
+#include <tools.hxx>
 #include <memory>
 
 
@@ -95,7 +93,7 @@ class PluginSlideChange: public SlideChangeBase
     uno::Reference<presentation::XTransition> mxTransition;
     UnoViewSharedPtr mpView;
 
-    TransitionViewPair( uno::Reference<presentation::XTransition> xTransition, const UnoViewSharedPtr& rView )
+    TransitionViewPair( uno::Reference<presentation::XTransition> const & xTransition, const UnoViewSharedPtr& rView )
     {
         mxTransition = xTransition;
         mpView = rView;
@@ -152,16 +150,9 @@ public:
         mbSuccess = true;
     }
 
-    virtual ~PluginSlideChange()
+    virtual ~PluginSlideChange() override
     {
         mxFactory.clear();
-
-        for( const auto& pCurrView : maTransitions )
-        {
-            delete pCurrView;
-        }
-
-        maTransitions.clear();
     }
 
     bool addTransition( const UnoViewSharedPtr& rView )
@@ -174,7 +165,7 @@ public:
             getEnteringBitmap(ViewEntry(rView))->getXBitmap() );
 
         if( rTransition.is() )
-            maTransitions.push_back( new TransitionViewPair( rTransition, rView ) );
+            maTransitions.emplace_back( new TransitionViewPair( rTransition, rView ) );
         else
             return false;
 
@@ -196,7 +187,7 @@ public:
     // ViewEventHandler
     virtual void viewAdded( const UnoViewSharedPtr& rView ) override
     {
-        OSL_TRACE("PluginSlideChange viewAdded");
+        SAL_INFO("slideshow", "PluginSlideChange viewAdded");
         SlideChangeBase::viewAdded( rView );
 
         for( const auto& pCurrView : maTransitions )
@@ -205,57 +196,51 @@ public:
                 return;
         }
 
-        OSL_TRACE( "need to be added" );
+        SAL_INFO("slideshow", "need to be added" );
         addTransition( rView );
     }
 
     virtual void viewRemoved( const UnoViewSharedPtr& rView ) override
     {
-        OSL_TRACE("PluginSlideChange viewRemoved");
+        SAL_INFO("slideshow", "PluginSlideChange viewRemoved");
         SlideChangeBase::viewRemoved( rView );
 
-        ::std::vector< TransitionViewPair* >::const_iterator aEnd(maTransitions.end());
-        for( ::std::vector< TransitionViewPair* >::iterator aIter =maTransitions.begin();
-             aIter != aEnd;
-             ++aIter )
+        auto aIter = std::find_if(maTransitions.begin(), maTransitions.end(),
+            [&rView](const std::unique_ptr<TransitionViewPair>& rxTransition) { return rxTransition->mpView == rView; });
+        if (aIter != maTransitions.end())
         {
-            if( ( *aIter )->mpView == rView )
-            {
-                OSL_TRACE( "view removed" );
-                delete ( *aIter );
-                maTransitions.erase( aIter );
-                break;
-            }
+            SAL_INFO("slideshow", "view removed" );
+            maTransitions.erase( aIter );
         }
     }
 
     virtual void viewChanged( const UnoViewSharedPtr& rView ) override
     {
-        OSL_TRACE("PluginSlideChange viewChanged");
+        SAL_INFO("slideshow", "PluginSlideChange viewChanged");
         SlideChangeBase::viewChanged( rView );
 
         for( const auto& pCurrView : maTransitions )
         {
             if( pCurrView->mpView == rView )
             {
-                OSL_TRACE( "view changed" );
+                SAL_INFO("slideshow", "view changed" );
                 pCurrView->mxTransition->viewChanged( rView->getUnoView(),
                                                       getLeavingBitmap(ViewEntry(rView))->getXBitmap(),
                                                       getEnteringBitmap(ViewEntry(rView))->getXBitmap() );
             }
             else
-                OSL_TRACE( "view did not changed" );
+                SAL_INFO("slideshow", "view did not change" );
         }
     }
 
     virtual void viewsChanged() override
     {
-        OSL_TRACE("PluginSlideChange viewsChanged");
+        SAL_INFO("slideshow", "PluginSlideChange viewsChanged");
         SlideChangeBase::viewsChanged();
 
         for( const auto& pCurrView : maTransitions )
         {
-            OSL_TRACE( "view changed" );
+            SAL_INFO("slideshow", "view changed" );
             UnoViewSharedPtr pView = pCurrView->mpView;
             pCurrView->mxTransition->viewChanged( pView->getUnoView(),
                                                   getLeavingBitmap(ViewEntry(pView))->getXBitmap(),
@@ -265,13 +250,13 @@ public:
 
 private:
     // One transition object per view
-    std::vector< TransitionViewPair* > maTransitions;
+    std::vector< std::unique_ptr<TransitionViewPair> > maTransitions;
 
     // bool
     bool mbSuccess;
 
-    sal_Int16 mnTransitionType;
-    sal_Int16 mnTransitionSubType;
+    sal_Int16 const mnTransitionType;
+    sal_Int16 const mnTransitionSubType;
 
     uno::Reference<presentation::XTransitionFactory> mxFactory;
 };
@@ -487,7 +472,7 @@ public:
         double                                     t ) override;
 
 private:
-    RGBColor maFadeColor;
+    RGBColor const maFadeColor;
 };
 
 void CutSlideChange::prepareForRun(
@@ -687,7 +672,7 @@ NumberAnimationSharedPtr createPushWipeTransition(
     const SoundPlayerSharedPtr&                     pSoundPlayer )
 {
     boost::optional<SlideSharedPtr> leavingSlide; // no bitmap
-    if (leavingSlide_ && (*leavingSlide_).get() != nullptr)
+    if (leavingSlide_ && *leavingSlide_ != nullptr)
     {
         // opt: only page, if we've an
         // actual slide to move out here. We
@@ -941,7 +926,7 @@ NumberAnimationSharedPtr TransitionFactory::createSlideTransition(
             createPluginTransition(
                 nTransitionType,
                 nTransitionSubType,
-                comphelper::make_optional(pLeavingSlide),
+                boost::make_optional(pLeavingSlide),
                 pEnteringSlide,
                 rViewContainer,
                 rScreenUpdater,
@@ -962,11 +947,10 @@ NumberAnimationSharedPtr TransitionFactory::createSlideTransition(
         {
             default:
             case TransitionInfo::TRANSITION_INVALID:
-                OSL_TRACE(
+                SAL_WARN("slideshow",
                     "TransitionFactory::createSlideTransition(): "
-                    "Invalid type/subtype (%d/%d) combination encountered.",
-                    nTransitionType,
-                    nTransitionSubType );
+                    "Invalid type/subtype combination encountered."
+                    << nTransitionType << " " << nTransitionSubType );
                 return NumberAnimationSharedPtr();
 
 
@@ -1037,7 +1021,7 @@ NumberAnimationSharedPtr TransitionFactory::createSlideTransition(
                     case animations::TransitionType::PUSHWIPE:
                     {
                         return createPushWipeTransition(
-                            comphelper::make_optional(pLeavingSlide),
+                            boost::make_optional(pLeavingSlide),
                             pEnteringSlide,
                             rViewContainer,
                             rScreenUpdater,
@@ -1051,7 +1035,7 @@ NumberAnimationSharedPtr TransitionFactory::createSlideTransition(
                     case animations::TransitionType::SLIDEWIPE:
                     {
                         return createSlideWipeTransition(
-                            comphelper::make_optional(pLeavingSlide),
+                            boost::make_optional(pLeavingSlide),
                             pEnteringSlide,
                             rViewContainer,
                             rScreenUpdater,
@@ -1079,14 +1063,12 @@ NumberAnimationSharedPtr TransitionFactory::createSlideTransition(
 
                                 // TODO(F1): Implement toColor/fromColor fades
                             case animations::TransitionSubType::FADETOCOLOR:
-                                // FALLTHROUGH intended
                             case animations::TransitionSubType::FADEFROMCOLOR:
-                                // FALLTHROUGH intended
                             case animations::TransitionSubType::FADEOVERCOLOR:
                                 if (pLeavingSlide) {
                                     // only generate, if fade
                                     // effect really needs it.
-                                    leavingSlide.reset( pLeavingSlide );
+                                    leavingSlide = pLeavingSlide;
                                 }
                                 aFadeColor = rTransitionFadeColor;
                                 break;
@@ -1125,11 +1107,10 @@ NumberAnimationSharedPtr TransitionFactory::createSlideTransition(
 
     // No animation generated, maybe no table entry for given
     // transition?
-    OSL_TRACE(
+    SAL_WARN("slideshow",
         "TransitionFactory::createSlideTransition(): "
-        "Unknown type/subtype (%d/%d) combination encountered",
-        nTransitionType,
-        nTransitionSubType );
+        "Unknown type/subtype combination encountered "
+        << nTransitionType << " " << nTransitionSubType );
     OSL_FAIL(
         "TransitionFactory::createSlideTransition(): "
         "Unknown type/subtype combination encountered" );

@@ -21,7 +21,8 @@
 #define INCLUDED_SVTOOLS_SOURCE_UNO_UNOCONTROLTABLEMODEL_HXX
 
 #include <svtools/table/tablemodel.hxx>
-#include "table/tablecontrol.hxx"
+#include <svtools/table/tablesort.hxx>
+#include <table/tablecontrol.hxx>
 
 #include <com/sun/star/awt/grid/XGridControl.hpp>
 #include <com/sun/star/awt/grid/GridDataEvent.hpp>
@@ -52,7 +53,7 @@ namespace svt { namespace table
 
     public:
         UnoControlTableModel();
-        virtual ~UnoControlTableModel();
+        virtual ~UnoControlTableModel() override;
 
     public:
         // ITableModel overridables

@@ -18,6 +18,7 @@
  */
 
 
+#include <memory>
 #include <HelpCompiler.hxx>
 #include <BasCodeTagger.hxx>
 #include <limits.h>
@@ -29,6 +30,8 @@
 #include <libxslt/xsltutils.h>
 #include <osl/thread.hxx>
 #include <chrono>
+#include <rtl/character.hxx>
+#include <sal/log.hxx>
 
 static void impl_sleep( sal_uInt32 nSec )
 {
@@ -244,17 +247,17 @@ public:
     std::string documentId;
     std::string fileName;
     std::string title;
-    std::unique_ptr<HashSet> hidlist;
+    std::unique_ptr< std::vector<std::string> > hidlist;
     std::unique_ptr<Hashtable> keywords;
     std::unique_ptr<Stringtable> helptexts;
 private:
-    HashSet extendedHelpText;
+    std::vector<std::string> extendedHelpText;
 public:
     myparser(const std::string &indocumentId, const std::string &infileName,
         const std::string &intitle) : documentId(indocumentId), fileName(infileName),
         title(intitle)
     {
-        hidlist.reset(new HashSet);
+        hidlist.reset(new std::vector<std::string>);
         keywords.reset(new Hashtable);
         helptexts.reset(new Stringtable);
     }
@@ -284,7 +287,7 @@ std::string myparser::dump(xmlNodePtr node)
     return app;
 }
 
-void trim(std::string& str)
+static void trim(std::string& str)
 {
     std::string::size_type pos = str.find_last_not_of(' ');
     if(pos != std::string::npos)
@@ -323,20 +326,26 @@ void myparser::traverse( xmlNodePtr parentNode )
         else if (!strcmp(reinterpret_cast<const char*>(test->name), "bookmark"))
         {
             xmlChar *branchxml = xmlGetProp(test, reinterpret_cast<const xmlChar*>("branch"));
-            xmlChar *idxml = xmlGetProp(test, reinterpret_cast<const xmlChar*>("id"));
+            if (branchxml == nullptr) {
+                throw HelpProcessingException(
+                    HelpProcessingErrorClass::XmlParsing, "bookmark lacks branch attribute");
+            }
             std::string branch(reinterpret_cast<char*>(branchxml));
-            std::string anchor(reinterpret_cast<char*>(idxml));
             xmlFree (branchxml);
+            xmlChar *idxml = xmlGetProp(test, reinterpret_cast<const xmlChar*>("id"));
+            if (idxml == nullptr) {
+                throw HelpProcessingException(
+                    HelpProcessingErrorClass::XmlParsing, "bookmark lacks id attribute");
+            }
+            std::string anchor(reinterpret_cast<char*>(idxml));
             xmlFree (idxml);
-
-            std::string hid;
 
             if (branch.compare(0, 3, "hid") == 0)
             {
                 size_t index = branch.find('/');
                 if (index != std::string::npos)
                 {
-                    hid = branch.substr(1 + index);
+                    auto hid = branch.substr(1 + index);
                     // one shall serve as a documentId
                     if (documentId.empty())
                         documentId = hid;
@@ -417,11 +426,9 @@ void myparser::traverse( xmlNodePtr parentNode )
             {
                 //TODO: make these asserts and flush out all our broken help ids
                 SAL_WARN_IF(hidstr.empty(), "helpcompiler", "hid='' for text:" << text);
-                SAL_WARN_IF(!hidstr.empty() && extendedHelpText.empty(), "helpcompiler", "hid='.' with no hid bookmark branches for text:" << text);
-                HashSet::const_iterator aEnd = extendedHelpText.end();
-                for (HashSet::const_iterator iter = extendedHelpText.begin(); iter != aEnd; ++iter)
+                SAL_WARN_IF(!hidstr.empty() && extendedHelpText.empty(), "helpcompiler", "hid='.' with no hid bookmark branches in file: " << fileName + " for text: " << text);
+                for (const std::string& name : extendedHelpText)
                 {
-                    std::string name = *iter;
                     (*helptexts)[name] = text;
                 }
             }
@@ -432,8 +439,7 @@ void myparser::traverse( xmlNodePtr parentNode )
     }
 }
 
-bool HelpCompiler::compile()
-    throw (HelpProcessingException, BasicCodeTagger::TaggerException, std::exception)
+void HelpCompiler::compile()
 {
     // we now have the jaroutputstream, which will contain the document.
     // now determine the document as a dom tree in variable docResolved
@@ -451,7 +457,7 @@ bool HelpCompiler::compile()
         {
             std::stringstream aStrStream;
             aStrStream << "ERROR: file not existing: " << inputFile.native_file_string().c_str() << std::endl;
-            throw HelpProcessingException( HELPPROCESSING_GENERAL_ERROR, aStrStream.str() );
+            throw HelpProcessingException( HelpProcessingErrorClass::General, aStrStream.str() );
         }
     }
 
@@ -460,9 +466,9 @@ bool HelpCompiler::compile()
     std::string title;
     // returns a clone of the document with switch-cases resolved
     std::string appl = module.substr(1);
-    for (size_t i = 0; i < appl.length(); ++i)
+    for (char & i : appl)
     {
-        appl[i]=toupper(appl[i]);
+        i=rtl::toAsciiUpperCase(static_cast<unsigned char>(i));
     }
     xmlNodePtr docResolved = clone(xmlDocGetRootElement(docResolvedOrg), appl);
     myparser aparser(documentId, fileName, title);
@@ -478,9 +484,9 @@ bool HelpCompiler::compile()
 
     streamTable.dropappl();
     streamTable.appl_doc = docResolvedDoc;
-    streamTable.appl_hidlist = aparser.hidlist.release();
-    streamTable.appl_helptexts = aparser.helptexts.release();
-    streamTable.appl_keywords = aparser.keywords.release();
+    streamTable.appl_hidlist = std::move(aparser.hidlist);
+    streamTable.appl_helptexts = std::move(aparser.helptexts);
+    streamTable.appl_keywords = std::move(aparser.keywords);
 
     streamTable.document_id = documentId;
     streamTable.document_path = fileName;
@@ -491,27 +497,19 @@ bool HelpCompiler::compile()
     {
         if (fileName.compare(0, 6, "/text/") == 0)
         {
-            int len = strlen("/text/");
-            actMod = fileName.substr(len);
+            actMod = fileName.substr(strlen("/text/"));
             actMod = actMod.substr(0, actMod.find('/'));
         }
     }
     streamTable.document_module = actMod;
     xmlFreeDoc(docResolvedOrg);
-    return true;
 }
 
 namespace fs
 {
     rtl_TextEncoding getThreadTextEncoding()
     {
-        static bool bNeedsInit = true;
-        static rtl_TextEncoding nThreadTextEncoding;
-        if( bNeedsInit )
-        {
-            bNeedsInit = false;
-            nThreadTextEncoding = osl_getThreadTextEncoding();
-        }
+        static rtl_TextEncoding nThreadTextEncoding = osl_getThreadTextEncoding();
         return nThreadTextEncoding;
     }
 

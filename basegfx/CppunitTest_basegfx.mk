@@ -11,10 +11,7 @@ $(eval $(call gb_CppunitTest_CppunitTest,basegfx))
 
 $(eval $(call gb_CppunitTest_use_external,basegfx,boost_headers))
 
-$(eval $(call gb_CppunitTest_use_api,basegfx,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,basegfx))
 
 $(eval $(call gb_CppunitTest_use_libraries,basegfx,\
     basegfx \
@@ -22,11 +19,22 @@ $(eval $(call gb_CppunitTest_use_libraries,basegfx,\
     cppu \
     cppuhelper \
     sal \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,basegfx,\
-    basegfx/test/basegfx2d \
+    basegfx/test/B2DRangeTest \
+    basegfx/test/B2DPolyRangeTest \
+    basegfx/test/B2DHomMatrixTest \
+    basegfx/test/B2DPointTest \
+    basegfx/test/B2DPolygonTest \
+    basegfx/test/B2DPolygonToolsTest \
+    basegfx/test/B2DPolyPolygonTest \
+    basegfx/test/B1DRangeTest \
+    basegfx/test/B2XRangeTest \
+    basegfx/test/B2IBoxTest \
+    basegfx/test/B2DTupleTest \
+    basegfx/test/BColorTest \
+    basegfx/test/SvgPathImportExport \
     basegfx/test/basegfx3d \
     basegfx/test/boxclipper \
     basegfx/test/basegfxtools \

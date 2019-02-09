@@ -32,36 +32,33 @@
 #include <vcl/splitwin.hxx>
 #include <svl/eitem.hxx>
 #include <svl/stritem.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <tools/globname.hxx>
 #include <com/sun/star/awt/PosSize.hpp>
-#include <comphelper/processfactory.hxx>
-#include <vcl/msgbox.hxx>
 
-// due to pTopFrames
-#include "appdata.hxx"
+#include <appdata.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/event.hxx>
 #include <sfx2/unoctitm.hxx>
 #include <sfx2/frame.hxx>
-#include "arrdecl.hxx"
+#include <arrdecl.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/docfilt.hxx>
 #include <sfx2/frmdescr.hxx>
-#include "openflag.hxx"
+#include <openflag.hxx>
 #include <sfx2/viewsh.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/fcontnr.hxx>
 #include "impframe.hxx"
-#include "workwin.hxx"
+#include <workwin.hxx>
 #include <sfx2/sfxuno.hxx>
 #include <sfx2/msgpool.hxx>
-#include "objshimp.hxx"
+#include <objshimp.hxx>
 #include <sfx2/ipclient.hxx>
 #include <childwinimpl.hxx>
+#include <vector>
 
 #ifdef DBG_UTIL
 #include <sfx2/frmhtmlw.hxx>
@@ -69,24 +66,28 @@
 
 using namespace com::sun::star;
 
-static SfxFrameArr_Impl* pFramesArr_Impl=nullptr;
+static std::vector<SfxFrame*>* pFramesArr_Impl=nullptr;
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::container;
 
-SfxPoolItem* SfxUsrAnyItem::CreateDefault() { DBG_ASSERT(false, "No SfxUsrAnyItem factory available"); return nullptr; }
+SfxPoolItem* SfxUnoAnyItem::CreateDefault()
+{
+    return new SfxUnoAnyItem();
+}
 
 SfxPoolItem* SfxUnoFrameItem::CreateDefault()
 {
     return new SfxUnoFrameItem();
 }
+
 void SfxFrame::Construct_Impl()
 {
-    pImp = new SfxFrame_Impl;
+    pImpl.reset(new SfxFrame_Impl);
     if ( !pFramesArr_Impl )
-        pFramesArr_Impl = new SfxFrameArr_Impl;
+        pFramesArr_Impl = new std::vector<SfxFrame*>;
     pFramesArr_Impl->push_back( this );
 }
 
@@ -96,55 +97,41 @@ SfxFrame::~SfxFrame()
     RemoveTopFrame_Impl( this );
     pWindow.disposeAndClear();
 
-    SfxFrameArr_Impl::iterator it = std::find( pFramesArr_Impl->begin(), pFramesArr_Impl->end(), this );
+    auto it = std::find( pFramesArr_Impl->begin(), pFramesArr_Impl->end(), this );
     if ( it != pFramesArr_Impl->end() )
         pFramesArr_Impl->erase( it );
 
-    if ( pParentFrame )
-    {
-        pParentFrame->RemoveChildFrame_Impl( this );
-        pParentFrame = nullptr;
-    }
-
-    delete pImp->pDescr;
-
-    if ( pChildArr )
-    {
-        DBG_ASSERT( pChildArr->empty(), "Children are not removed!" );
-        delete pChildArr;
-    }
-
-    delete pImp;
+    delete pImpl->pDescr;
 }
 
 bool SfxFrame::DoClose()
 {
     // Actually, one more PrepareClose is still needed!
     bool bRet = false;
-    if ( !pImp->bClosing )
+    if ( !pImpl->bClosing )
     {
-        pImp->bClosing = true;
+        pImpl->bClosing = true;
         CancelTransfers();
 
         // now close frame; it will be deleted if this call is successful, so don't use any members after that!
         bRet = true;
         try
         {
-            Reference< XCloseable > xCloseable  ( pImp->xFrame, UNO_QUERY );
-            if ( (!GetCurrentDocument() || !GetCurrentDocument()->Get_Impl()->bDisposing ) && xCloseable.is())
-                xCloseable->close(sal_True);
-            else if ( pImp->xFrame.is() )
+            Reference< XCloseable > xCloseable  ( pImpl->xFrame, UNO_QUERY );
+            if (xCloseable.is())
+                xCloseable->close(true);
+            else if ( pImpl->xFrame.is() )
             {
-                Reference < XFrame > xFrame = pImp->xFrame;
+                Reference < XFrame > xFrame = pImpl->xFrame;
                 xFrame->setComponent( Reference < css::awt::XWindow >(), Reference < XController >() );
                 xFrame->dispose();
             }
             else
-                bRet = DoClose_Impl();
+                DoClose_Impl();
         }
         catch( css::util::CloseVetoException& )
         {
-            pImp->bClosing = false;
+            pImpl->bClosing = false;
             bRet = false;
         }
         catch( css::lang::DisposedException& )
@@ -155,36 +142,29 @@ bool SfxFrame::DoClose()
     return bRet;
 }
 
-bool SfxFrame::DoClose_Impl()
+void SfxFrame::DoClose_Impl()
 {
     SfxBindings* pBindings = nullptr;
-    if ( pImp->pCurrentViewFrame )
-        pBindings = &pImp->pCurrentViewFrame->GetBindings();
+    if ( pImpl->pCurrentViewFrame )
+        pBindings = &pImpl->pCurrentViewFrame->GetBindings();
 
     // For internal tasks Controllers and Tools must be cleared
-    if ( pImp->pWorkWin )
-        pImp->pWorkWin->DeleteControllers_Impl();
+    if ( pImpl->pWorkWin )
+        pImpl->pWorkWin->DeleteControllers_Impl();
 
-    if ( pImp->pCurrentViewFrame )
-        pImp->pCurrentViewFrame->Close();
+    if ( pImpl->pCurrentViewFrame )
+        pImpl->pCurrentViewFrame->Close();
 
-    if ( pImp->bOwnsBindings )
+    if ( pImpl->bOwnsBindings )
         DELETEZ( pBindings );
 
-    bool bRet = Close();
-    DBG_ASSERT( bRet, "Impossible state: frame closes, but controller refuses!");
-    return bRet;
+    Close();
 }
 
 bool SfxFrame::DocIsModified_Impl()
 {
-    if ( pImp->pCurrentViewFrame && pImp->pCurrentViewFrame->GetObjectShell() &&
-            pImp->pCurrentViewFrame->GetObjectShell()->IsModified() )
-        return true;
-    for( sal_uInt16 nPos = GetChildFrameCount(); nPos--; )
-        if( (*pChildArr)[ nPos ]->DocIsModified_Impl() )
-            return true;
-    return false;
+    return pImpl->pCurrentViewFrame && pImpl->pCurrentViewFrame->GetObjectShell() &&
+            pImpl->pCurrentViewFrame->GetObjectShell()->IsModified();
 }
 
 bool SfxFrame::PrepareClose_Impl( bool bUI )
@@ -192,9 +172,9 @@ bool SfxFrame::PrepareClose_Impl( bool bUI )
     bool bRet = true;
 
     // prevent recursive calls
-    if( !pImp->bPrepClosing )
+    if( !pImpl->bPrepClosing )
     {
-        pImp->bPrepClosing = true;
+        pImpl->bPrepClosing = true;
 
         SfxObjectShell* pCur = GetCurrentDocument() ;
         if( pCur )
@@ -208,7 +188,7 @@ bool SfxFrame::PrepareClose_Impl( bool bUI )
                 bOther = ( &pFrame->GetFrame() != this );
             }
 
-            SfxGetpApp()->NotifyEvent( SfxViewEventHint(SFX_EVENT_PREPARECLOSEVIEW, GlobalEventConfig::GetEventName( GlobalEventId::PREPARECLOSEVIEW ), pCur, GetController() ) );
+            SfxGetpApp()->NotifyEvent( SfxViewEventHint(SfxEventHintId::PrepareCloseView, GlobalEventConfig::GetEventName( GlobalEventId::PREPARECLOSEVIEW ), pCur, GetController() ) );
 
             if ( bOther )
                 // if there are other views only the current view of this frame must be asked
@@ -218,108 +198,57 @@ bool SfxFrame::PrepareClose_Impl( bool bUI )
                 bRet = pCur->PrepareClose( bUI );
         }
 
-        if ( bRet )
-        {
-            // if this frame has child frames, ask them too
-            for( sal_uInt16 nPos = GetChildFrameCount(); bRet && nPos--; )
-                bRet = (*pChildArr)[ nPos ]->PrepareClose_Impl( bUI );
-        }
-
-        pImp->bPrepClosing = false;
+        pImpl->bPrepClosing = false;
     }
 
-    if ( bRet && pImp->pWorkWin )
+    if ( bRet && pImpl->pWorkWin )
         // if closing was accepted by the component the UI subframes must be asked also
-        bRet = pImp->pWorkWin->PrepareClose_Impl();
+        bRet = pImpl->pWorkWin->PrepareClose_Impl();
 
     return bRet;
 }
 
 
-SfxFrame* SfxFrame::GetChildFrame( sal_uInt16 nPos ) const
-{
-    if ( pChildArr && pChildArr->size() > nPos )
-    {
-        DBG_ASSERT( nPos < pChildArr->size(), "Wrong Index!");
-        return (*pChildArr)[nPos];
-    }
-
-    return nullptr;
-}
-
-void SfxFrame::RemoveChildFrame_Impl( SfxFrame* pFrame )
-{
-    DBG_ASSERT( pChildArr, "Unknown Frame!");
-    SfxFrameArr_Impl::iterator it = std::find( pChildArr->begin(), pChildArr->end(), pFrame );
-    if ( it != pChildArr->end() )
-        pChildArr->erase( it );
-};
-
-SfxFrame& SfxFrame::GetTopFrame() const
-{
-    const SfxFrame* pParent = this;
-    while ( pParent->pParentFrame )
-        pParent = pParent->pParentFrame;
-    return *const_cast< SfxFrame* >( pParent );
-}
-
 bool SfxFrame::IsClosing_Impl() const
 {
-    return pImp->bClosing;
+    return pImpl->bClosing;
 }
 
 void SfxFrame::SetIsClosing_Impl()
 {
-    pImp->bClosing = true;
-}
-
-sal_uInt16 SfxFrame::GetChildFrameCount() const
-{
-    return pChildArr ? pChildArr->size() : 0;
+    pImpl->bClosing = true;
 }
 
 void SfxFrame::CancelTransfers()
 {
-    if( !pImp->bInCancelTransfers )
+    if( pImpl->bInCancelTransfers )
+        return;
+
+    pImpl->bInCancelTransfers = true;
+    SfxObjectShell* pObj = GetCurrentDocument();
+    if( pObj ) //&& !( pObj->Get_Impl()->nLoadedFlags & SfxLoadedFlags::ALL ))
     {
-        pImp->bInCancelTransfers = true;
-        SfxObjectShell* pObj = GetCurrentDocument();
-        if( pObj ) //&& !( pObj->Get_Impl()->nLoadedFlags & SfxLoadedFlags::ALL ))
+        SfxViewFrame* pFrm;
+        for( pFrm = SfxViewFrame::GetFirst( pObj );
+             pFrm && &pFrm->GetFrame() == this;
+             pFrm = SfxViewFrame::GetNext( *pFrm, pObj ) ) ;
+        // No more Frame in Document -> Cancel
+        if( !pFrm )
         {
-            SfxViewFrame* pFrm;
-            for( pFrm = SfxViewFrame::GetFirst( pObj );
-                 pFrm && &pFrm->GetFrame() == this;
-                 pFrm = SfxViewFrame::GetNext( *pFrm, pObj ) ) ;
-            // No more Frame in Document -> Cancel
-            if( !pFrm )
-            {
-                pObj->CancelTransfers();
-                GetCurrentDocument()->Broadcast( SfxSimpleHint(SFX_HINT_TITLECHANGED) );
-            }
+            pObj->CancelTransfers();
+            GetCurrentDocument()->Broadcast( SfxHint(SfxHintId::TitleChanged) );
         }
-
-        // First stop multiload Frames
-        sal_uInt16 nCount = GetChildFrameCount();
-        for( sal_uInt16 n = 0; n<nCount; n++ )
-            GetChildFrame( n )->CancelTransfers();
-
-        //  Check if StarOne-Loader should be canceled
-        SfxFrameWeakRef wFrame( this );
-        if (wFrame.Is())
-            pImp->bInCancelTransfers = false;
     }
+
+    //  Check if StarOne-Loader should be canceled
+    SfxFrameWeakRef wFrame( this );
+    if (wFrame.is())
+        pImpl->bInCancelTransfers = false;
 }
 
 SfxViewFrame* SfxFrame::GetCurrentViewFrame() const
 {
-    return pImp->pCurrentViewFrame;
-}
-
-SfxDispatcher* SfxFrame::GetDispatcher_Impl() const
-{
-    if ( pImp->pCurrentViewFrame )
-        return pImp->pCurrentViewFrame->GetDispatcher();
-    return GetParentFrame()->GetDispatcher_Impl();
+    return pImpl->pCurrentViewFrame;
 }
 
 bool SfxFrame::IsAutoLoadLocked_Impl() const
@@ -329,35 +258,30 @@ bool SfxFrame::IsAutoLoadLocked_Impl() const
     if ( !pObjSh || !pObjSh->IsAutoLoadLocked() )
         return false;
 
-    // Its children are locked?
-    for ( sal_uInt16 n = GetChildFrameCount(); n--; )
-        if ( !GetChildFrame(n)->IsAutoLoadLocked_Impl() )
-            return false;
-
     // otherwise allow AutoLoad
     return true;
 }
 
 SfxObjectShell* SfxFrame::GetCurrentDocument() const
 {
-    return pImp->pCurrentViewFrame ?
-            pImp->pCurrentViewFrame->GetObjectShell() :
+    return pImpl->pCurrentViewFrame ?
+            pImpl->pCurrentViewFrame->GetObjectShell() :
             nullptr;
 }
 
 void SfxFrame::SetCurrentViewFrame_Impl( SfxViewFrame *pFrame )
 {
-    pImp->pCurrentViewFrame = pFrame;
+    pImpl->pCurrentViewFrame = pFrame;
 }
 
-sal_uInt32 SfxFrame::GetFrameType() const
+bool SfxFrame::GetHasTitle() const
 {
-    return pImp->nType;
+    return pImpl->mbHasTitle;
 }
 
-void SfxFrame::SetFrameType_Impl( sal_uInt32 n )
+void SfxFrame::SetHasTitle( bool n )
 {
-    pImp->nType = n;
+    pImpl->mbHasTitle = n;
 }
 
 void SfxFrame::GetViewData_Impl()
@@ -369,37 +293,19 @@ void SfxFrame::GetViewData_Impl()
     SfxViewFrame* pViewFrame = GetCurrentViewFrame();
     if( pViewFrame && pViewFrame->GetViewShell() )
     {
-        const SfxMedium *pMed = GetCurrentDocument()->GetMedium();
-        bool bReadOnly = pMed->GetOpenMode() == SFX_STREAM_READONLY;
-        GetDescriptor()->SetReadOnly( bReadOnly );
-
         SfxItemSet *pSet = GetDescriptor()->GetArgs();
-        bool bGetViewData = false;
         if ( GetController().is() && pSet->GetItemState( SID_VIEW_DATA ) != SfxItemState::SET )
         {
             css::uno::Any aData = GetController()->getViewData();
-            pSet->Put( SfxUsrAnyItem( SID_VIEW_DATA, aData ) );
-            bGetViewData = true;
+            pSet->Put( SfxUnoAnyItem( SID_VIEW_DATA, aData ) );
         }
 
         if ( pViewFrame->GetCurViewId() )
-            pSet->Put( SfxUInt16Item( SID_VIEW_ID, pViewFrame->GetCurViewId() ) );
-        if ( pChildArr )
-        {
-            // For Framesets also the data from the ChildViews have to be processed
-            sal_uInt16 nCount = pChildArr->size();
-            for ( sal_uInt16 n=nCount; n>0; n--)
-            {
-                SfxFrame* pFrame = (*pChildArr)[n-1];
-                if ( bGetViewData )
-                    pFrame->GetDescriptor()->GetArgs()->ClearItem( SID_VIEW_DATA );
-                pFrame->GetViewData_Impl();
-            }
-        }
+            pSet->Put( SfxUInt16Item( SID_VIEW_ID, static_cast<sal_uInt16>(pViewFrame->GetCurViewId()) ) );
     }
 }
 
-void SfxFrame::UpdateDescriptor( SfxObjectShell *pDoc )
+void SfxFrame::UpdateDescriptor( SfxObjectShell const *pDoc )
 {
     // For PrepareForDoc_Impl frames, the descriptor of the updated
     // and new itemset to be initialized. All data fir restoring the view
@@ -412,19 +318,13 @@ void SfxFrame::UpdateDescriptor( SfxObjectShell *pDoc )
 
     assert(pDoc && "NULL-Document inserted ?!");
 
-    GetParentFrame();
     const SfxMedium *pMed = pDoc->GetMedium();
     GetDescriptor()->SetActualURL( pMed->GetOrigURL() );
-
-    const SfxBoolItem* pItem = SfxItemSet::GetItem<SfxBoolItem>(pMed->GetItemSet(), SID_EDITDOC, false);
-    bool bEditable = ( !pItem || pItem->GetValue() );
-
-    GetDescriptor()->SetEditable( bEditable );
 
     // Mark FileOpen parameter
     SfxItemSet* pItemSet = pMed->GetItemSet();
 
-    std::shared_ptr<const SfxFilter> pFilter = pMed->GetOrigFilter();
+    const std::shared_ptr<const SfxFilter>& pFilter = pMed->GetFilter();
     OUString aFilter;
     if ( pFilter )
         aFilter = pFilter->GetFilterName();
@@ -458,73 +358,41 @@ SfxFrameDescriptor* SfxFrame::GetDescriptor() const
     // Create a FrameDescriptor On Demand; if there is no TopLevel-Frame
     // will result in an error, as no valid link is created.
 
-    if ( !pImp->pDescr )
+    if ( !pImpl->pDescr )
     {
-        DBG_ASSERT( !GetParentFrame(), "No TopLevel-Frame, but no Descriptor!" );
-        pImp->pDescr = new SfxFrameDescriptor;
+        DBG_ASSERT( true, "No TopLevel-Frame, but no Descriptor!" );
+        pImpl->pDescr = new SfxFrameDescriptor;
         if ( GetCurrentDocument() )
-            pImp->pDescr->SetURL( GetCurrentDocument()->GetMedium()->GetOrigURL() );
+            pImpl->pDescr->SetURL( GetCurrentDocument()->GetMedium()->GetOrigURL() );
     }
-    return pImp->pDescr;
+    return pImpl->pDescr;
 }
 
 void SfxFrame::GetDefaultTargetList(TargetList& rList)
 {
     // An empty string for 'No Target'
-    rList.push_back( OUString() );
-    rList.push_back( OUString( "_top" ) );
-    rList.push_back( OUString( "_parent" ) );
-    rList.push_back( OUString( "_blank" ) );
-    rList.push_back( OUString( "_self" ) );
-}
-
-void SfxFrame::GetTargetList( TargetList& rList ) const
-{
-    if ( !GetParentFrame() )
-    {
-        SfxFrame::GetDefaultTargetList(rList);
-    }
-
-    SfxViewFrame* pView = GetCurrentViewFrame();
-    if( pView && pView->GetViewShell() && pChildArr )
-    {
-        sal_uInt16 nCount = pChildArr->size();
-        for ( sal_uInt16 n=0; n<nCount; n++)
-        {
-            SfxFrame* pFrame = (*pChildArr)[n];
-            pFrame->GetTargetList( rList );
-        }
-    }
-}
-
-bool SfxFrame::IsParent( SfxFrame *pFrame ) const
-{
-    SfxFrame *pParent = pParentFrame;
-    while ( pParent )
-    {
-        if ( pParent == pFrame )
-            return true;
-        pParent = pParent->pParentFrame;
-    }
-
-    return false;
+    rList.emplace_back( );
+    rList.emplace_back( "_top" );
+    rList.emplace_back( "_parent" );
+    rList.emplace_back( "_blank" );
+    rList.emplace_back( "_self" );
 }
 
 void SfxFrame::InsertTopFrame_Impl( SfxFrame* pFrame )
 {
-    SfxFrameArr_Impl& rArr = *SfxGetpApp()->Get_Impl()->pTopFrames;
+    auto& rArr = SfxGetpApp()->Get_Impl()->vTopFrames;
     rArr.push_back( pFrame );
 }
 
 void SfxFrame::RemoveTopFrame_Impl( SfxFrame* pFrame )
 {
-    SfxFrameArr_Impl& rArr = *SfxGetpApp()->Get_Impl()->pTopFrames;
-    SfxFrameArr_Impl::iterator it = std::find( rArr.begin(), rArr.end(), pFrame );
+    auto& rArr = SfxGetpApp()->Get_Impl()->vTopFrames;
+    auto it = std::find( rArr.begin(), rArr.end(), pFrame );
     if ( it != rArr.end() )
         rArr.erase( it );
 }
 
-SfxFrameItem::SfxFrameItem( sal_uInt16 nWhichId, SfxViewFrame *p )
+SfxFrameItem::SfxFrameItem( sal_uInt16 nWhichId, SfxViewFrame const *p )
     : SfxPoolItem( nWhichId ), pFrame( p ? &p->GetFrame() : nullptr )
 {
     wFrame = pFrame;
@@ -551,7 +419,7 @@ bool SfxFrameItem::operator==( const SfxPoolItem &rItem ) const
 SfxPoolItem* SfxFrameItem::Clone( SfxItemPool *) const
 {
     SfxFrameItem* pNew = new SfxFrameItem( wFrame);
-    pNew->SetFramePtr_Impl( pFrame );
+    pNew->pFrame = pFrame;
     return pNew;
 }
 
@@ -588,30 +456,34 @@ bool SfxFrameItem::PutValue( const css::uno::Any& rVal, sal_uInt8 )
     return false;
 }
 
+SfxUnoAnyItem::SfxUnoAnyItem()
+    : SfxPoolItem( 0 )
+{
+}
 
-SfxUsrAnyItem::SfxUsrAnyItem( sal_uInt16 nWhichId, const css::uno::Any& rAny )
+SfxUnoAnyItem::SfxUnoAnyItem( sal_uInt16 nWhichId, const css::uno::Any& rAny )
     : SfxPoolItem( nWhichId )
 {
     aValue = rAny;
 }
 
-bool SfxUsrAnyItem::operator==( const SfxPoolItem& /*rItem*/ ) const
+bool SfxUnoAnyItem::operator==( const SfxPoolItem& /*rItem*/ ) const
 {
     return false;
 }
 
-SfxPoolItem* SfxUsrAnyItem::Clone( SfxItemPool *) const
+SfxPoolItem* SfxUnoAnyItem::Clone( SfxItemPool *) const
 {
-    return new SfxUsrAnyItem( Which(), aValue );
+    return new SfxUnoAnyItem( *this );
 }
 
-bool SfxUsrAnyItem::QueryValue( css::uno::Any& rVal, sal_uInt8 /*nMemberId*/ ) const
+bool SfxUnoAnyItem::QueryValue( css::uno::Any& rVal, sal_uInt8 /*nMemberId*/ ) const
 {
     rVal = aValue;
     return true;
 }
 
-bool SfxUsrAnyItem::PutValue( const css::uno::Any& rVal, sal_uInt8 /*nMemberId*/ )
+bool SfxUnoAnyItem::PutValue( const css::uno::Any& rVal, sal_uInt8 /*nMemberId*/ )
 {
     aValue = rVal;
     return true;
@@ -636,7 +508,7 @@ bool SfxUnoFrameItem::operator==( const SfxPoolItem& i_rItem ) const
 
 SfxPoolItem* SfxUnoFrameItem::Clone( SfxItemPool* ) const
 {
-    return new SfxUnoFrameItem( Which(), m_xFrame );
+    return new SfxUnoFrameItem( *this );
 }
 
 bool SfxUnoFrameItem::QueryValue( css::uno::Any& rVal, sal_uInt8 /*nMemberId*/ ) const
@@ -650,66 +522,22 @@ bool SfxUnoFrameItem::PutValue( const css::uno::Any& rVal, sal_uInt8 /*nMemberId
     return ( rVal >>= m_xFrame );
 }
 
-SfxFrameIterator::SfxFrameIterator( const SfxFrame& rFrame, bool bRecur )
-    : pFrame( &rFrame )
-    , bRecursive( bRecur )
-{}
-
-SfxFrame* SfxFrameIterator::FirstFrame()
-{
-    // GetFirst starts the iteration at the first child frame
-    return pFrame->GetChildFrame( 0 );
-}
-
-SfxFrame* SfxFrameIterator::NextFrame( SfxFrame& rPrev )
-{
-    // If recursion is requested testing is done first on Children.
-    SfxFrame *pRet = nullptr;
-    if ( bRecursive )
-        pRet = rPrev.GetChildFrame( 0 );
-    if ( !pRet )
-    {
-        // In other case continue with the siblings of rPrev
-        pRet = NextSibling_Impl( rPrev );
-    }
-
-    return pRet;
-}
-
-
-SfxFrame* SfxFrameIterator::NextSibling_Impl( SfxFrame& rPrev )
-{
-    SfxFrame *pRet = nullptr;
-    if ( &rPrev != pFrame )
-    {
-        SfxFrameArr_Impl& rArr = *rPrev.pParentFrame->pChildArr;
-        SfxFrameArr_Impl::iterator it = std::find( rArr.begin(), rArr.end(), &rPrev );
-        if ( it != rArr.end() && (++it) != rArr.end() )
-            pRet = *it;
-
-        if ( !pRet && rPrev.pParentFrame->pParentFrame )
-            pRet = NextSibling_Impl( *rPrev.pParentFrame );
-    }
-
-    return pRet;
-}
-
 css::uno::Reference< css::frame::XController > SfxFrame::GetController() const
 {
-    if ( pImp->pCurrentViewFrame && pImp->pCurrentViewFrame->GetViewShell() )
-        return pImp->pCurrentViewFrame->GetViewShell()->GetController();
+    if ( pImpl->pCurrentViewFrame && pImpl->pCurrentViewFrame->GetViewShell() )
+        return pImpl->pCurrentViewFrame->GetViewShell()->GetController();
     else
         return css::uno::Reference< css::frame::XController > ();
 }
 
 const css::uno::Reference< css::frame::XFrame >&  SfxFrame::GetFrameInterface() const
 {
-    return pImp->xFrame;
+    return pImpl->xFrame;
 }
 
 void SfxFrame::SetFrameInterface_Impl( const css::uno::Reference< css::frame::XFrame >& rFrame )
 {
-    pImp->xFrame = rFrame;
+    pImpl->xFrame = rFrame;
     css::uno::Reference< css::frame::XDispatchRecorder > xRecorder;
     if ( !rFrame.is() && GetCurrentViewFrame() )
         GetCurrentViewFrame()->GetBindings().SetRecorder_Impl( xRecorder );
@@ -721,10 +549,8 @@ void SfxFrame::Appear()
     {
         GetCurrentViewFrame()->Show();
         GetWindow().Show();
-        pImp->xFrame->getContainerWindow()->setVisible( sal_True );
-        if ( pParentFrame )
-            pParentFrame->Appear();
-        Reference < css::awt::XTopWindow > xTopWindow( pImp->xFrame->getContainerWindow(), UNO_QUERY );
+        pImpl->xFrame->getContainerWindow()->setVisible( true );
+        Reference < css::awt::XTopWindow > xTopWindow( pImpl->xFrame->getContainerWindow(), UNO_QUERY );
         if ( xTopWindow.is() )
             xTopWindow->toFront();
     }
@@ -739,57 +565,48 @@ void SfxFrame::AppearWithUpdate()
 
 void SfxFrame::SetOwnsBindings_Impl( bool bSet )
 {
-    pImp->bOwnsBindings = bSet;
+    pImpl->bOwnsBindings = bSet;
 }
 
 bool SfxFrame::OwnsBindings_Impl() const
 {
-    return pImp->bOwnsBindings;
+    return pImpl->bOwnsBindings;
 }
 
 void SfxFrame::SetToolSpaceBorderPixel_Impl( const SvBorder& rBorder )
 {
-    pImp->aBorder = rBorder;
+    pImpl->aBorder = rBorder;
     SfxViewFrame *pF = GetCurrentViewFrame();
-    if ( pF )
-    {
-        Point aPos ( rBorder.Left(), rBorder.Top() );
-        Size aSize( GetWindow().GetOutputSizePixel() );
-        long nDeltaX = rBorder.Left() + rBorder.Right();
-        if ( aSize.Width() > nDeltaX )
-            aSize.Width() -= nDeltaX;
-        else
-            aSize.Width() = 0;
+    if ( !pF )
+        return;
 
-        long nDeltaY = rBorder.Top() + rBorder.Bottom();
-        if ( aSize.Height() > nDeltaY )
-            aSize.Height() -= nDeltaY;
-        else
-            aSize.Height() = 0;
+    Point aPos ( rBorder.Left(), rBorder.Top() );
+    Size aSize( GetWindow().GetOutputSizePixel() );
+    long nDeltaX = rBorder.Left() + rBorder.Right();
+    if ( aSize.Width() > nDeltaX )
+        aSize.AdjustWidth( -nDeltaX );
+    else
+        aSize.setWidth( 0 );
 
-        if ( GetParentFrame() )
-        {
-            bool bHasTools = rBorder.Left() != rBorder.Right() || rBorder.Top() != rBorder.Bottom();
-            pF->GetWindow().SetBorderStyle( bHasTools ? WindowBorderStyle::NORMAL : WindowBorderStyle::NOBORDER );
-        }
+    long nDeltaY = rBorder.Top() + rBorder.Bottom();
+    if ( aSize.Height() > nDeltaY )
+        aSize.AdjustHeight( -nDeltaY );
+    else
+        aSize.setHeight( 0 );
 
-        pF->GetWindow().SetPosSizePixel( aPos, aSize );
-    }
+    pF->GetWindow().SetPosSizePixel( aPos, aSize );
 }
 
-Rectangle SfxFrame::GetTopOuterRectPixel_Impl() const
+tools::Rectangle SfxFrame::GetTopOuterRectPixel_Impl() const
 {
     Size aSize( GetWindow().GetOutputSizePixel() );
-    Point aPoint;
-    return ( Rectangle ( aPoint, aSize ) );
+    return tools::Rectangle( Point(), aSize );
 }
 
 SfxWorkWindow* SfxFrame::GetWorkWindow_Impl() const
 {
-    if ( pImp->pWorkWin )
-        return pImp->pWorkWin;
-    else if ( pParentFrame )
-        return pParentFrame->GetWorkWindow_Impl();
+    if ( pImpl->pWorkWin )
+        return pImpl->pWorkWin;
     else
         return nullptr;
 }
@@ -834,12 +651,12 @@ void SfxFrame::CreateWorkWindow_Impl()
         }
     }
 
-    pImp->pWorkWin = new SfxFrameWorkWin_Impl( &pFrame->GetWindow(), this, pFrame );
+    pImpl->pWorkWin = new SfxWorkWindow( &pFrame->GetWindow(), this, pFrame );
 }
 
 void SfxFrame::GrabFocusOnComponent_Impl()
 {
-    if ( pImp->bReleasingComponent )
+    if ( pImpl->bReleasingComponent )
     {
         GetWindow().GrabFocus();
         return;
@@ -855,17 +672,12 @@ void SfxFrame::GrabFocusOnComponent_Impl()
 
 void SfxFrame::ReleasingComponent_Impl()
 {
-    pImp->bReleasingComponent = true;
+    pImpl->bReleasingComponent = true;
 }
 
 bool SfxFrame::IsInPlace() const
 {
-    return pImp->bInPlace;
-}
-
-void SfxFrame::SetInPlace_Impl( bool bSet )
-{
-    pImp->bInPlace = bSet;
+    return pImpl->bInPlace;
 }
 
 void SfxFrame::Resize()
@@ -907,12 +719,12 @@ void SfxFrame::Resize()
             // remains the same, setting the toolspace border at the ContainerEnvironment doesn't force a
             // resize on the IPEnvironment; without that no resize is called for the SfxViewFrame. So always
             // set the window size of the SfxViewFrame explicit.
-            SetToolSpaceBorderPixel_Impl( pImp->aBorder );
+            SetToolSpaceBorderPixel_Impl( pImpl->aBorder );
         }
     }
-    else if ( pImp->pCurrentViewFrame )
+    else if ( pImpl->pCurrentViewFrame )
     {
-        pImp->pCurrentViewFrame->GetWindow().SetSizePixel( GetWindow().GetOutputSizePixel() );
+        pImpl->pCurrentViewFrame->GetWindow().SetSizePixel( GetWindow().GetOutputSizePixel() );
     }
 
 }
@@ -926,18 +738,11 @@ SfxFrame* SfxFrame::GetFirst()
 
 SfxFrame* SfxFrame::GetNext( SfxFrame& rFrame )
 {
-    SfxFrameArr_Impl::iterator it = std::find( pFramesArr_Impl->begin(), pFramesArr_Impl->end(), &rFrame );
+    auto it = std::find( pFramesArr_Impl->begin(), pFramesArr_Impl->end(), &rFrame );
     if ( it != pFramesArr_Impl->end() && (++it) != pFramesArr_Impl->end() )
         return *it;
     else
         return nullptr;
-}
-
-const SfxPoolItem* SfxFrame::OpenDocumentSynchron( SfxItemSet& i_rSet, const Reference< XFrame >& i_rTargetFrame )
-{
-    i_rSet.Put( SfxUnoFrameItem( SID_FILLFRAME, i_rTargetFrame ) );
-    i_rSet.ClearItem( SID_TARGETNAME );
-    return SfxGetpApp()->GetDispatcher_Impl()->Execute( SID_OPENDOC, SfxCallMode::SYNCHRON, i_rSet );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

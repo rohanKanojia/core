@@ -21,9 +21,8 @@
 #define INCLUDED_SC_SOURCE_UI_INC_AUDITSH_HXX
 
 #include <sfx2/shell.hxx>
-#include <sfx2/module.hxx>
 
-#include "shellids.hxx"
+#include <shellids.hxx>
 
 class ScViewData;
 
@@ -42,9 +41,9 @@ private:
 
 public:
     ScAuditingShell(ScViewData* pData);
-    virtual ~ScAuditingShell();
+    virtual ~ScAuditingShell() override;
 
-    void Execute(SfxRequest& rReq);
+    void Execute(const SfxRequest& rReq);
     void GetState(SfxItemSet& rSet);
 };
 

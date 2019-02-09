@@ -18,11 +18,12 @@
  */
 
 #include "entrylisthelper.hxx"
-#include "FormComponent.hxx"
+#include <FormComponent.hxx>
 
 #include <osl/diagnose.h>
 #include <comphelper/sequence.hxx>
 #include <comphelper/property.hxx>
+#include <com/sun/star/form/binding/XListEntryTypedSource.hpp>
 #include <algorithm>
 
 
@@ -56,7 +57,7 @@ namespace frm
     }
 
 
-    void SAL_CALL OEntryListHelper::setListEntrySource( const Reference< XListEntrySource >& _rxSource ) throw (RuntimeException, std::exception)
+    void SAL_CALL OEntryListHelper::setListEntrySource( const Reference< XListEntrySource >& _rxSource )
     {
         ControlModelLock aLock( m_rControlModel );
 
@@ -69,84 +70,106 @@ namespace frm
     }
 
 
-    Reference< XListEntrySource > SAL_CALL OEntryListHelper::getListEntrySource(  ) throw (RuntimeException, std::exception)
+    Reference< XListEntrySource > SAL_CALL OEntryListHelper::getListEntrySource(  )
     {
         return m_xListSource;
     }
 
 
-    void SAL_CALL OEntryListHelper::entryChanged( const ListEntryEvent& _rEvent ) throw (RuntimeException, std::exception)
+    void SAL_CALL OEntryListHelper::entryChanged( const ListEntryEvent& _rEvent )
     {
         ControlModelLock aLock( m_rControlModel );
 
         OSL_ENSURE( _rEvent.Source == m_xListSource,
             "OEntryListHelper::entryChanged: where did this come from?" );
-        OSL_ENSURE( ( _rEvent.Position >= 0 ) && ( _rEvent.Position < (sal_Int32)m_aStringItems.size() ),
+        OSL_ENSURE( ( _rEvent.Position >= 0 ) && ( _rEvent.Position < static_cast<sal_Int32>(m_aStringItems.size()) ),
             "OEntryListHelper::entryChanged: invalid index!" );
         OSL_ENSURE( _rEvent.Entries.getLength() == 1,
             "OEntryListHelper::entryChanged: invalid string list!" );
 
         if  (   ( _rEvent.Position >= 0 )
-            &&  ( _rEvent.Position < (sal_Int32)m_aStringItems.size() )
+            &&  ( _rEvent.Position < static_cast<sal_Int32>(m_aStringItems.size()) )
             &&  ( _rEvent.Entries.getLength() > 0 )
             )
         {
             m_aStringItems[ _rEvent.Position ] = _rEvent.Entries[ 0 ];
+            if (m_aTypedItems.getLength())
+                m_aTypedItems = Sequence<Any>();    // doesn't match anymore
             stringItemListChanged( aLock );
         }
     }
 
 
-    void SAL_CALL OEntryListHelper::entryRangeInserted( const ListEntryEvent& _rEvent ) throw (RuntimeException, std::exception)
+    void SAL_CALL OEntryListHelper::entryRangeInserted( const ListEntryEvent& _rEvent )
     {
         ControlModelLock aLock( m_rControlModel );
 
         OSL_ENSURE( _rEvent.Source == m_xListSource,
             "OEntryListHelper::entryRangeInserted: where did this come from?" );
-        OSL_ENSURE( ( _rEvent.Position > 0 ) && ( _rEvent.Position < (sal_Int32)m_aStringItems.size() ) && ( _rEvent.Entries.getLength() > 0 ),
+        OSL_ENSURE( ( _rEvent.Position > 0 ) && ( _rEvent.Position < static_cast<sal_Int32>(m_aStringItems.size()) ) && ( _rEvent.Entries.getLength() > 0 ),
             "OEntryListHelper::entryRangeRemoved: invalid count and/or position!" );
 
         if  (   ( _rEvent.Position > 0 )
-            &&  ( _rEvent.Position < (sal_Int32)m_aStringItems.size() )
+            &&  ( _rEvent.Position < static_cast<sal_Int32>(m_aStringItems.size()) )
             &&  ( _rEvent.Entries.getLength() > 0 )
             )
         {
             m_aStringItems.insert(m_aStringItems.begin() + _rEvent.Position, _rEvent.Entries.begin(), _rEvent.Entries.end());
-
+            if (m_aTypedItems.getLength())
+                m_aTypedItems = Sequence<Any>();    // doesn't match anymore
             stringItemListChanged( aLock );
         }
     }
 
 
-    void SAL_CALL OEntryListHelper::entryRangeRemoved( const ListEntryEvent& _rEvent ) throw (RuntimeException, std::exception)
+    void SAL_CALL OEntryListHelper::entryRangeRemoved( const ListEntryEvent& _rEvent )
     {
         ControlModelLock aLock( m_rControlModel );
 
         OSL_ENSURE( _rEvent.Source == m_xListSource,
             "OEntryListHelper::entryRangeRemoved: where did this come from?" );
-        OSL_ENSURE( ( _rEvent.Position > 0 ) && ( _rEvent.Count > 0 ) && ( _rEvent.Position + _rEvent.Count <= (sal_Int32)m_aStringItems.size() ),
+        OSL_ENSURE( ( _rEvent.Position > 0 ) && ( _rEvent.Count > 0 ) && ( _rEvent.Position + _rEvent.Count <= static_cast<sal_Int32>(m_aStringItems.size()) ),
             "OEntryListHelper::entryRangeRemoved: invalid count and/or position!" );
 
         if  (   ( _rEvent.Position > 0 )
             &&  ( _rEvent.Count > 0 )
-            &&  ( _rEvent.Position + _rEvent.Count <= (sal_Int32)m_aStringItems.size() )
+            &&  ( _rEvent.Position + _rEvent.Count <= static_cast<sal_Int32>(m_aStringItems.size()) )
             )
         {
             m_aStringItems.erase(m_aStringItems.begin() + _rEvent.Position,
                                  m_aStringItems.begin() + _rEvent.Position + _rEvent.Count );
+            if (_rEvent.Position + _rEvent.Count <= m_aTypedItems.getLength())
+            {
+                Sequence<Any> aTmp( m_aTypedItems.getLength() - _rEvent.Count );
+                sal_Int32 nStop = _rEvent.Position;
+                sal_Int32 i = 0;
+                for ( ; i < nStop; ++i)
+                {
+                    aTmp[i] = m_aTypedItems[i];
+                }
+                nStop = aTmp.getLength();
+                for (sal_Int32 j = _rEvent.Position + _rEvent.Count; i < nStop; ++i, ++j)
+                {
+                    aTmp[i] = m_aTypedItems[j];
+                }
+                m_aTypedItems = aTmp;
+            }
+            else if (m_aTypedItems.getLength())
+            {
+                m_aTypedItems = Sequence<Any>();    // doesn't match anymore
+            }
             stringItemListChanged( aLock );
         }
     }
 
 
-    void SAL_CALL OEntryListHelper::allEntriesChanged( const EventObject& _rEvent ) throw (RuntimeException, std::exception)
+    void SAL_CALL OEntryListHelper::allEntriesChanged( const EventObject& _rEvent )
     {
         ControlModelLock aLock( m_rControlModel );
 
         OSL_ENSURE( _rEvent.Source == m_xListSource,
             "OEntryListHelper::allEntriesChanged: where did this come from?" );
 
-        Reference< XListEntrySource > xSource( _rEvent.Source, UNO_QUERY );
         if ( _rEvent.Source == m_xListSource )
         {
             impl_lock_refreshList( aLock );
@@ -155,21 +178,21 @@ namespace frm
 
     // XRefreshable
 
-    void SAL_CALL OEntryListHelper::addRefreshListener(const Reference<XRefreshListener>& _rxListener) throw(RuntimeException, std::exception)
+    void SAL_CALL OEntryListHelper::addRefreshListener(const Reference<XRefreshListener>& _rxListener)
     {
         if ( _rxListener.is() )
             m_aRefreshListeners.addInterface( _rxListener );
     }
 
 
-    void SAL_CALL OEntryListHelper::removeRefreshListener(const Reference<XRefreshListener>& _rxListener) throw(RuntimeException, std::exception)
+    void SAL_CALL OEntryListHelper::removeRefreshListener(const Reference<XRefreshListener>& _rxListener)
     {
         if ( _rxListener.is() )
             m_aRefreshListeners.removeInterface( _rxListener );
     }
 
 
-    void SAL_CALL OEntryListHelper::refresh() throw(RuntimeException, std::exception)
+    void SAL_CALL OEntryListHelper::refresh()
     {
         {
             ControlModelLock aLock( m_rControlModel );
@@ -184,10 +207,7 @@ namespace frm
     void OEntryListHelper::impl_lock_refreshList( ControlModelLock& _rInstanceLock )
     {
         if ( hasExternalListSource() )
-        {
-            comphelper::sequenceToContainer(m_aStringItems, m_xListSource->getAllListEntries());
-            stringItemListChanged( _rInstanceLock );
-        }
+            obtainListSourceEntries( _rInstanceLock );
         else
             refreshInternalEntryList();
     }
@@ -220,20 +240,6 @@ namespace frm
             m_xListSource->removeListEntryListener( this );
 
         m_xListSource.clear();
-
-        disconnectedExternalListSource();
-    }
-
-
-    void OEntryListHelper::connectedExternalListSource( )
-    {
-        // nothing to do here
-    }
-
-
-    void OEntryListHelper::disconnectedExternalListSource( )
-    {
-        // nothing to do here
     }
 
 
@@ -251,12 +257,26 @@ namespace frm
             // be notified when the list changes ...
             m_xListSource->addListEntryListener( this );
 
-            comphelper::sequenceToContainer( m_aStringItems, m_xListSource->getAllListEntries() );
-            stringItemListChanged( _rInstanceLock );
-
-            // let derivees react on the new list source
-            connectedExternalListSource();
+            obtainListSourceEntries( _rInstanceLock );
         }
+    }
+
+
+    void OEntryListHelper::obtainListSourceEntries( ControlModelLock& _rInstanceLock )
+    {
+        Reference< XListEntryTypedSource > xTyped;
+        xTyped.set( m_xListSource, UNO_QUERY);
+        if (xTyped.is())
+        {
+            comphelper::sequenceToContainer( m_aStringItems, xTyped->getAllListEntriesTyped( m_aTypedItems));
+        }
+        else
+        {
+            comphelper::sequenceToContainer( m_aStringItems, m_xListSource->getAllListEntries());
+            if (m_aTypedItems.getLength())
+                m_aTypedItems = Sequence<Any>();
+        }
+        stringItemListChanged( _rInstanceLock );
     }
 
 
@@ -277,6 +297,22 @@ namespace frm
         css::uno::Sequence<OUString> aTmp;
         OSL_VERIFY( _rValue >>= aTmp );
         comphelper::sequenceToContainer(m_aStringItems, aTmp);
+        if (m_aTypedItems.getLength())
+            m_aTypedItems = Sequence<Any>();    // doesn't match anymore
+        stringItemListChanged( _rInstanceLock );
+    }
+
+
+    void OEntryListHelper::setNewTypedItemList( const css::uno::Any& _rValue, ControlModelLock& _rInstanceLock )
+    {
+        OSL_PRECOND( !hasExternalListSource(), "OEntryListHelper::setNewTypedItemList: this should never have survived convertNewListSourceProperty!" );
+        if (!(_rValue >>= m_aTypedItems ))
+        {
+            OSL_VERIFY(false);
+            if (m_aTypedItems.getLength())
+                m_aTypedItems = Sequence<Any>();    // doesn't match anymore
+        }
+        // Sets both properties, assuming that TypedItemList belongs to StringItemList.
         stringItemListChanged( _rInstanceLock );
     }
 

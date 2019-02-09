@@ -11,6 +11,7 @@
 #include <test/bootstrapfixture.hxx>
 
 #include <vcl/svapp.hxx>
+#include <vcl/virdev.hxx>
 #include <sfx2/sfxmodelfactory.hxx>
 #include <smdll.hxx>
 
@@ -94,7 +95,7 @@ void Test::setUp()
 
 void Test::tearDown()
 {
-    xDocShRef.Clear();
+    xDocShRef.clear();
     BootstrapFixture::tearDown();
 }
 
@@ -228,8 +229,9 @@ void Test::SimpleOperators()
     parseandparseagain("coprod{a}", "Coproduct");
     parseandparseagain("int from {r_0} to {r_t} a", "Upper and lower bounds shown with integral (from & to)");
     ParseAndCheck("int csup {r_0} csub {r_t} a", "int csup { r _ 0 } csub { r _ t } a ", "Upper and lower bounds shown with integral (csub & csup)");
-//FIXME    ParseAndCheck("sum csup { size 8 { x - 1 } } csub { size 8 a } b ", "sum csup { size 8 { x - 1 } } csub { size 8 a } b ", "Sum with sized upper and lower bounds");
+    ParseAndCheck("sum csup { size 8 { x - 1 } } csub { size 8 a } b ", "sum csup { size 8 { x - 1 } } csub { size 8 a } b ", "Sum with sized upper and lower bounds");
     parseandparseagain("int{a}", "Integral");
+    parseandparseagain("intd_{1}^{2}{x dx}", "Dynamically-sized integral");
     parseandparseagain("iint{a}", "Double integral");
     parseandparseagain("iiint{a}", "Triple integral");
     parseandparseagain("sum from{3}b", "Lower bound shown with summation symbol");
@@ -430,18 +432,17 @@ void Test::SimpleSpecialChars()
 void Test::parseandparseagain(const char *formula, const char *test_name)
 {
     OUString output1, output2;
-    SmNode *pNode1, *pNode2;
 
     // parse 1
     OUString input = OUString::createFromAscii(formula);
-    pNode1 = SmParser().ParseExpression(input);
-    pNode1->Prepare(xDocShRef->GetFormat(), *xDocShRef);
-    SmNodeToTextVisitor(pNode1, output1);
+    auto pNode1 = SmParser().ParseExpression(input);
+    pNode1->Prepare(xDocShRef->GetFormat(), *xDocShRef, 0);
+    SmNodeToTextVisitor(pNode1.get(), output1);
 
     // parse 2
-    pNode2 = SmParser().ParseExpression(output1);
-    pNode2->Prepare(xDocShRef->GetFormat(), *xDocShRef);
-    SmNodeToTextVisitor(pNode2, output2);
+    auto pNode2 = SmParser().ParseExpression(output1);
+    pNode2->Prepare(xDocShRef->GetFormat(), *xDocShRef, 0);
+    SmNodeToTextVisitor(pNode2.get(), output2);
 
     // compare
     CPPUNIT_ASSERT_EQUAL_MESSAGE(test_name,
@@ -452,21 +453,17 @@ void Test::parseandparseagain(const char *formula, const char *test_name)
     std::unique_ptr<MockVisitor> mv(new MockVisitor);
     pNode1->Accept(mv.get());
     pNode2->Accept(mv.get());
-
-    delete pNode1;
-    delete pNode2;
 }
 
 void Test::ParseAndCheck(const char *formula, const char * expected, const char *test_name)
 {
     OUString sOutput;
-    SmNode *pNode;
 
     // parse
     OUString sInput = OUString::createFromAscii(formula);
-    pNode = SmParser().ParseExpression(sInput);
-    pNode->Prepare(xDocShRef->GetFormat(), *xDocShRef);
-    SmNodeToTextVisitor(pNode, sOutput);
+    auto pNode = SmParser().ParseExpression(sInput);
+    pNode->Prepare(xDocShRef->GetFormat(), *xDocShRef, 0);
+    SmNodeToTextVisitor(pNode.get(), sOutput);
 
     // compare
     OUString sExpected = OUString::createFromAscii(expected);
@@ -477,27 +474,24 @@ void Test::ParseAndCheck(const char *formula, const char * expected, const char 
     // auxiliary test for Accept()
     std::unique_ptr<MockVisitor> mv(new MockVisitor);
     pNode->Accept(mv.get());
-
-    delete pNode;
 }
 
 // Parse two formula commands and verify that they give the same output
 void Test::ParseAndCompare(const char *formula1, const char *formula2, const char *test_name)
 {
     OUString sOutput1, sOutput2;
-    SmNode *pNode1, *pNode2;
 
     // parse formula1
     OUString sInput1 = OUString(formula1, strlen(formula1), RTL_TEXTENCODING_UTF8);
-    pNode1 = SmParser().ParseExpression(sInput1);
-    pNode1->Prepare(xDocShRef->GetFormat(), *xDocShRef);
-    SmNodeToTextVisitor(pNode1, sOutput1);
+    auto pNode1 = SmParser().ParseExpression(sInput1);
+    pNode1->Prepare(xDocShRef->GetFormat(), *xDocShRef, 0);
+    SmNodeToTextVisitor(pNode1.get(), sOutput1);
 
     // parse formula2
     OUString sInput2 = OUString(formula2, strlen(formula2), RTL_TEXTENCODING_UTF8);
-    pNode2 = SmParser().ParseExpression(sInput2);
-    pNode2->Prepare(xDocShRef->GetFormat(), *xDocShRef);
-    SmNodeToTextVisitor(pNode2, sOutput2);
+    auto pNode2 = SmParser().ParseExpression(sInput2);
+    pNode2->Prepare(xDocShRef->GetFormat(), *xDocShRef, 0);
+    SmNodeToTextVisitor(pNode2.get(), sOutput2);
 
     CPPUNIT_ASSERT_EQUAL_MESSAGE(test_name, sOutput1, sOutput2);
 
@@ -505,22 +499,18 @@ void Test::ParseAndCompare(const char *formula1, const char *formula2, const cha
     std::unique_ptr<MockVisitor> mv(new MockVisitor);
     pNode1->Accept(mv.get());
     pNode2->Accept(mv.get());
-
-    delete pNode1;
-    delete pNode2;
 }
 
 void Test::testBinomInBinHor()
 {
     OUString sInput, sExpected;
-    SmNode* pTree;
 
     // set up a binom (table) node
     sInput += "binom a b + c";
-    pTree = SmParser().Parse(sInput);
-    pTree->Prepare(xDocShRef->GetFormat(), *xDocShRef);
+    auto pTree = SmParser().Parse(sInput);
+    pTree->Prepare(xDocShRef->GetFormat(), *xDocShRef, 0);
 
-    SmCursor aCursor(pTree, xDocShRef);
+    SmCursor aCursor(pTree.get(), xDocShRef.get());
     ScopedVclPtrInstance< VirtualDevice > pOutputDevice;
 
     // move forward (more than) enough places to be at the end
@@ -534,21 +524,18 @@ void Test::testBinomInBinHor()
 
     sExpected += " { { binom a b + c } + d } ";
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Binom Node in BinHor Node", sExpected, xDocShRef->GetText());
-
-    delete pTree;
 }
 
 void Test::testBinVerInUnary()
 {
     OUString sInput, sExpected;
-    SmNode* pTree;
 
     // set up a unary operator with operand
     sInput += "- 1";
-    pTree = SmParser().Parse(sInput);
-    pTree->Prepare(xDocShRef->GetFormat(), *xDocShRef);
+    auto pTree = SmParser().Parse(sInput);
+    pTree->Prepare(xDocShRef->GetFormat(), *xDocShRef, 0);
 
-    SmCursor aCursor(pTree, xDocShRef);
+    SmCursor aCursor(pTree.get(), xDocShRef.get());
     ScopedVclPtrInstance< VirtualDevice > pOutputDevice;
 
     // move forward (more than) enough places to be at the end
@@ -565,19 +552,15 @@ void Test::testBinVerInUnary()
 
     sExpected += " - { 1 over 2 } ";
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Binary Vertical in Unary Operator", sExpected, xDocShRef->GetText());
-
-    delete pTree;
 }
 
 void Test::testBinHorInSubSup()
 {
-    OUString sInput;
-
     // set up a blank formula
-    SmNode* pTree = SmParser().Parse(sInput);
-    pTree->Prepare(xDocShRef->GetFormat(), *xDocShRef);
+    auto pTree = SmParser().Parse(OUString());
+    pTree->Prepare(xDocShRef->GetFormat(), *xDocShRef, 0);
 
-    SmCursor aCursor(pTree, xDocShRef);
+    SmCursor aCursor(pTree.get(), xDocShRef.get());
     ScopedVclPtrInstance< VirtualDevice > pOutputDevice;
 
     // Insert an RSup expression with a BinHor for the exponent
@@ -594,18 +577,16 @@ void Test::testBinHorInSubSup()
 
     OUString sExpected = " { a ^ { b + c } + d } ";
     CPPUNIT_ASSERT_EQUAL_MESSAGE("BinHor in SubSup", sExpected, xDocShRef->GetText());
-
-    delete pTree;
 }
 
 void Test::testUnaryInMixedNumberAsNumerator()
 {
     // set up a unary operator
     OUString sInput = "- 1";
-    SmNode* pTree = SmParser().Parse(sInput);
-    pTree->Prepare(xDocShRef->GetFormat(), *xDocShRef);
+    auto pTree = SmParser().Parse(sInput);
+    pTree->Prepare(xDocShRef->GetFormat(), *xDocShRef, 0);
 
-    SmCursor aCursor(pTree, xDocShRef);
+    SmCursor aCursor(pTree.get(), xDocShRef.get());
     ScopedVclPtrInstance< VirtualDevice > pOutputDevice;
 
     // move forward (more than) enough places to be at the end
@@ -637,8 +618,6 @@ void Test::testUnaryInMixedNumberAsNumerator()
 
     OUString sExpected = " { 2 { - 1 over 2 } + 4 } ";
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Unary in mixed number as Numerator", sExpected, xDocShRef->GetText());
-
-    delete pTree;
 }
 
 void Test::testMiscEquivalent()
@@ -658,18 +637,21 @@ void Test::testMiscEquivalent()
     // check non-BMP Unicode char
     ParseAndCompare("{\xf0\x9d\x91\x8e}", "\xf0\x9d\x91\x8e", "non-BMP variable in brace");
     ParseAndCompare("{ \xf0\x9d\x91\x8e }", "\xf0\x9d\x91\x8e", "non-BMP variable in brace");
+
+    // tdf#88320
+    ParseAndCompare("A_1,B_2", "A_{1},B_2", "Comma between a digit and non-digit delimits subscript");
+
+    //tdf#97164
+    ParseAndCompare("100 %", "100\"%\"", "Percent symbol at the end");
 }
 
 void Test::testParser()
 {
-    char const* formula = "{ \xf0\x9d\x91\x8e }"; // non-BMP Unicode
-    char const* expected = "\xf0\x9d\x91\x8e";
-
     OUString sOutput;
-    OUString sInput = OUString(formula, strlen(formula), RTL_TEXTENCODING_UTF8);
-    OUString sExpected = OUString(expected, strlen(expected), RTL_TEXTENCODING_UTF8);
-    std::unique_ptr<SmNode> pNode(SmParser().ParseExpression(sInput));
-    pNode->Prepare(xDocShRef->GetFormat(), *xDocShRef);
+    OUString sInput(u"{ \U0001D44E }"); // non-BMP Unicode
+    OUString sExpected(u"\U0001D44E");
+    auto pNode = SmParser().ParseExpression(sInput);
+    pNode->Prepare(xDocShRef->GetFormat(), *xDocShRef, 0);
     SmNodeToTextVisitor(pNode.get(), sOutput);
     CPPUNIT_ASSERT_EQUAL(sExpected, sOutput);
 }

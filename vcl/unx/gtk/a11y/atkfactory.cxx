@@ -69,12 +69,12 @@ atk_noop_object_wrapper_get_type()
             nullptr
         } ;
 
-        type = g_type_register_static (ATK_TYPE_OBJECT, "OOoAtkNoOpObj", &typeInfo, (GTypeFlags)0) ;
+        type = g_type_register_static (ATK_TYPE_OBJECT, "OOoAtkNoOpObj", &typeInfo, GTypeFlags(0)) ;
   }
   return type;
 }
 
-AtkObject*
+static AtkObject*
 atk_noop_object_wrapper_new()
 {
   AtkObject *accessible;
@@ -104,18 +104,22 @@ wrapper_factory_create_accessible( GObject *obj )
 #if GTK_CHECK_VERSION(3,0,0)
     GtkWidget* pEventBox = gtk_widget_get_parent(GTK_WIDGET(obj));
 
-    // gail_container_real_remove_gtk tries to re-instanciate an accessible
+    // gail_container_real_remove_gtk tries to re-instantiate an accessible
     // for a widget that is about to vanish ..
     if (!pEventBox)
         return atk_noop_object_wrapper_new();
 
-    GtkWidget* pTopLevel = gtk_widget_get_parent(pEventBox);
+    GtkWidget* pTopLevelGrid = gtk_widget_get_parent(pEventBox);
+    if (!pTopLevelGrid)
+        return atk_noop_object_wrapper_new();
+
+    GtkWidget* pTopLevel = gtk_widget_get_parent(pTopLevelGrid);
     if (!pTopLevel)
         return atk_noop_object_wrapper_new();
 #else
     GtkWidget* pTopLevel = gtk_widget_get_parent(GTK_WIDGET(obj));
 
-    // gail_container_real_remove_gtk tries to re-instanciate an accessible
+    // gail_container_real_remove_gtk tries to re-instantiate an accessible
     // for a widget that is about to vanish ..
     if (!pTopLevel)
         return atk_noop_object_wrapper_new();
@@ -130,7 +134,7 @@ wrapper_factory_create_accessible( GObject *obj )
         vcl::Window* pWindow = pFrameWindow;
 
         // skip accessible objects already exposed by the frame objects
-        if( WINDOW_BORDERWINDOW == pWindow->GetType() )
+        if( WindowType::BORDERWINDOW == pWindow->GetType() )
             pWindow = pFrameWindow->GetAccessibleChildWindow(0);
 
         if( pWindow )
@@ -180,7 +184,7 @@ wrapper_factory_get_type()
 
     t = g_type_register_static (
         ATK_TYPE_OBJECT_FACTORY, "OOoAtkObjectWrapperFactory",
-        &tinfo, (GTypeFlags) 0);
+        &tinfo, GTypeFlags(0));
   }
 
   return t;

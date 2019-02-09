@@ -20,7 +20,7 @@
 #include <vcl/oldprintadaptor.hxx>
 #include <vcl/gdimtf.hxx>
 
-#include "com/sun/star/awt/Size.hpp"
+#include <com/sun/star/awt/Size.hpp>
 
 #include <vector>
 
@@ -44,21 +44,20 @@ namespace vcl
     };
 }
 
-OldStylePrintAdaptor::OldStylePrintAdaptor( const VclPtr< Printer >& i_xPrinter )
-    : PrinterController( i_xPrinter )
-    , mpData( new ImplOldStyleAdaptorData() )
+OldStylePrintAdaptor::OldStylePrintAdaptor(const VclPtr<Printer>& i_xPrinter, const VclPtr<vcl::Window>& i_xWindow)
+    : PrinterController(i_xPrinter, i_xWindow)
+    , mpData(new ImplOldStyleAdaptorData)
 {
 }
 
 OldStylePrintAdaptor::~OldStylePrintAdaptor()
 {
-    delete mpData;
 }
 
 void OldStylePrintAdaptor::StartPage()
 {
-    Size aPaperSize( getPrinter()->PixelToLogic( getPrinter()->GetPaperSizePixel(), MapMode( MAP_100TH_MM ) ) );
-    mpData->maPages.push_back( AdaptorPage() );
+    Size aPaperSize( getPrinter()->PixelToLogic( getPrinter()->GetPaperSizePixel(), MapMode( MapUnit::Map100thMM ) ) );
+    mpData->maPages.emplace_back( );
     mpData->maPages.back().maPageSize.Width = aPaperSize.getWidth();
     mpData->maPages.back().maPageSize.Height = aPaperSize.getHeight();
     getPrinter()->SetConnectMetaFile( &mpData->maPages.back().maPage );
@@ -88,11 +87,11 @@ Sequence< PropertyValue > OldStylePrintAdaptor::getPageParameters( int i_nPage )
     Sequence< PropertyValue > aRet( 1 );
     aRet[0].Name = "PageSize";
     if( i_nPage < int(mpData->maPages.size() ) )
-        aRet[0].Value = makeAny( mpData->maPages[i_nPage].maPageSize );
+        aRet[0].Value <<= mpData->maPages[i_nPage].maPageSize;
     else
     {
         awt::Size aEmpty( 0, 0  );
-        aRet[0].Value = makeAny( aEmpty );
+        aRet[0].Value <<= aEmpty;
     }
     return aRet;
 }

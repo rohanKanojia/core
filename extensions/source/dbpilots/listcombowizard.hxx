@@ -42,9 +42,8 @@ namespace dbp
         OUString          sLinkedListField;
     };
 
-    class OListComboWizard : public OControlWizard
+    class OListComboWizard final : public OControlWizard
     {
-    protected:
         OListComboSettings      m_aSettings;
         bool                m_bListBox : 1;
         bool                m_bHadDataSelection : 1;
@@ -60,7 +59,7 @@ namespace dbp
 
         bool isListBox() const { return m_bListBox; }
 
-    protected:
+    private:
         // OWizardMachine overridables
         virtual VclPtr<TabPage>     createPage( WizardState _nState ) override;
         virtual WizardState         determineNextState( WizardState _nCurrentState ) const override;
@@ -72,7 +71,6 @@ namespace dbp
 
         WizardState getFinalState() const { return isListBox() ? LCW_STATE_FIELDLINK : LCW_STATE_COMBODBFIELD; }
 
-    private:
         void implApplySettings();
     };
 
@@ -93,17 +91,16 @@ namespace dbp
         css::uno::Sequence< OUString >                      getTableFields();
     };
 
-    class OContentTableSelection : public OLCPage
+    class OContentTableSelection final : public OLCPage
     {
-    protected:
         VclPtr<ListBox>         m_pSelectTable;
 
     public:
         explicit OContentTableSelection( OListComboWizard* _pParent );
-        virtual ~OContentTableSelection();
+        virtual ~OContentTableSelection() override;
         virtual void dispose() override;
 
-    protected:
+    private:
         // TabPage overridables
         virtual void ActivatePage() override;
 
@@ -112,14 +109,12 @@ namespace dbp
         virtual bool        commitPage( ::svt::WizardTypes::CommitPageReason _eReason ) override;
         virtual bool        canAdvance() const override;
 
-    protected:
-        DECL_LINK_TYPED( OnTableDoubleClicked, ListBox&, void );
-        DECL_LINK_TYPED( OnTableSelected, ListBox&, void );
+        DECL_LINK( OnTableDoubleClicked, ListBox&, void );
+        DECL_LINK( OnTableSelected, ListBox&, void );
     };
 
-    class OContentFieldSelection : public OLCPage
+    class OContentFieldSelection final : public OLCPage
     {
-    protected:
         VclPtr<ListBox>         m_pSelectTableField;
         VclPtr<Edit>            m_pDisplayedField;
         VclPtr<FixedText>       m_pInfo;
@@ -127,15 +122,12 @@ namespace dbp
 
     public:
         explicit OContentFieldSelection( OListComboWizard* _pParent );
-        virtual ~OContentFieldSelection();
+        virtual ~OContentFieldSelection() override;
         virtual void dispose() override;
 
-    protected:
-        DECL_LINK_TYPED( OnFieldSelected, ListBox&, void );
-        DECL_LINK_TYPED( OnTableDoubleClicked, ListBox&, void );
-
-        // TabPage overridables
-        virtual void ActivatePage() override;
+    private:
+        DECL_LINK( OnFieldSelected, ListBox&, void );
+        DECL_LINK( OnTableDoubleClicked, ListBox&, void );
 
         // OWizardPage overridables
         virtual void        initializePage() override;
@@ -143,19 +135,18 @@ namespace dbp
         virtual bool        canAdvance() const override;
     };
 
-    class OLinkFieldsPage : public OLCPage
+    class OLinkFieldsPage final : public OLCPage
     {
-    protected:
         VclPtr<ComboBox>        m_pValueListField;
         VclPtr<ComboBox>        m_pTableField;
 
 
     public:
         explicit OLinkFieldsPage( OListComboWizard* _pParent );
-        virtual ~OLinkFieldsPage();
+        virtual ~OLinkFieldsPage() override;
         virtual void dispose() override;
 
-    protected:
+    private:
         // TabPage overridables
         virtual void ActivatePage() override;
 
@@ -164,11 +155,10 @@ namespace dbp
         virtual bool        commitPage( ::svt::WizardTypes::CommitPageReason _eReason ) override;
         virtual bool        canAdvance() const override;
 
-    private:
         void implCheckFinish();
 
-        DECL_LINK_TYPED(OnSelectionModified, Edit&, void);
-        DECL_LINK_TYPED(OnSelectionModifiedCombBox, ComboBox&, void);
+        DECL_LINK(OnSelectionModified, Edit&, void);
+        DECL_LINK(OnSelectionModifiedCombBox, ComboBox&, void);
     };
 
     class OComboDBFieldPage : public ODBFieldPage
@@ -177,8 +167,6 @@ namespace dbp
         explicit OComboDBFieldPage( OControlWizard* _pParent );
 
     protected:
-        OListComboSettings& getSettings() { return static_cast<OListComboWizard*>(getDialog())->getSettings(); }
-
         // TabPage overridables
         virtual void ActivatePage() override;
 

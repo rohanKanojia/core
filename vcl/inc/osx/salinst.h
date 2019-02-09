@@ -21,103 +21,105 @@
 #ifndef INCLUDED_VCL_INC_OSX_SALINST_H
 #define INCLUDED_VCL_INC_OSX_SALINST_H
 
+#include <sal/config.h>
+
+#include <condition_variable>
 #include <list>
+#include <mutex>
 
 #include <comphelper/solarmutex.hxx>
-#include <osl/conditn.h>
+#include <osl/conditn.hxx>
 #include <osl/thread.hxx>
 
 #ifdef MACOSX
-#include "osx/osxvcltypes.h"
+#include <osx/osxvcltypes.h>
 #endif
-#include "salinst.hxx"
+#include <salinst.hxx>
+
+#include <osx/runinmain.hxx>
+
+#include <salusereventlist.hxx>
 
 class AquaSalFrame;
+class SalFrame;
+class SalObject;
 class ApplicationEvent;
 class Image;
+enum class SalEvent;
+
+typedef void(^RuninmainBlock)(void);
 
 class SalYieldMutex : public comphelper::SolarMutex
 {
-    osl::Mutex m_mutex;
-    sal_uLong                                   mnCount;
-    oslThreadIdentifier                         mnThreadId;
+public:
+    OSX_RUNINMAIN_MEMBERS
+
+protected:
+    virtual void            doAcquire( sal_uInt32 nLockCount ) override;
+    virtual sal_uInt32      doRelease( bool bUnlockAll ) override;
 
 public:
-                                                SalYieldMutex();
-    virtual void                                acquire() override;
-    virtual void                                release() override;
-    virtual bool                                tryToAcquire() override;
-    sal_uLong                                   GetAcquireCount() const { return mnCount; }
-    oslThreadIdentifier                         GetThreadId() const { return mnThreadId; }
+    SalYieldMutex();
+    virtual ~SalYieldMutex() override;
+
+    virtual bool IsCurrentThread() const override;
 };
 
-class AquaSalInstance : public SalInstance
+class AquaSalInstance : public SalInstance, public SalUserEventList
 {
-    struct SalUserEvent
-    {
-        AquaSalFrame*   mpFrame;
-        void*           mpData;
-        sal_uInt16          mnType;
+    friend class AquaSalFrame;
 
-        SalUserEvent( AquaSalFrame* pFrame, void* pData, sal_uInt16 nType ) :
-            mpFrame( pFrame ), mpData( pData ), mnType( nType )
-        {}
-    };
+    bool RunInMainYield( bool bHandleAllCurrentEvents );
+
+    virtual void ProcessEvent( SalUserEvent aEvent ) override;
 
 public:
-    SalYieldMutex*                          mpSalYieldMutex;        // Sal-Yield-Mutex
+    virtual void TriggerUserEventProcessing() override;
+
     OUString                                maDefaultPrinter;
     oslThreadIdentifier                     maMainThread;
-    bool                                    mbWaitingYield;
     int                                     mnActivePrintJobs;
-    std::list< SalUserEvent >               maUserEvents;
     osl::Mutex                              maUserEventListMutex;
-    oslCondition                            maWaitingYieldCond;
+    osl::Condition                          maWaitingYieldCond;
+    bool                                    mbIsLiveResize;
+    bool                                    mbNoYieldLock;
+    bool                                    mbTimerProcessed;
 
-    typedef std::list<const ApplicationEvent*> AppEventList;
-    static AppEventList aAppEventList;
+    static std::list<const ApplicationEvent*> aAppEventList;
 
-public:
     AquaSalInstance();
-    virtual ~AquaSalInstance();
+    virtual ~AquaSalInstance() override;
+
+    virtual void AfterAppInit() override;
+    virtual bool SVMainHook(int *) override;
 
     virtual SalFrame*       CreateChildFrame( SystemParentData* pParent, SalFrameStyleFlags nStyle ) override;
     virtual SalFrame*       CreateFrame( SalFrame* pParent, SalFrameStyleFlags nStyle ) override;
     virtual void            DestroyFrame( SalFrame* pFrame ) override;
     virtual SalObject*      CreateObject( SalFrame* pParent, SystemWindowData* pWindowData,
-                                          bool bShow = true ) override;
+                                          bool bShow ) override;
     virtual void            DestroyObject( SalObject* pObject ) override;
-    virtual SalVirtualDevice* CreateVirtualDevice( SalGraphics* pGraphics,
+    virtual std::unique_ptr<SalVirtualDevice>
+                            CreateVirtualDevice( SalGraphics* pGraphics,
                                                    long &nDX, long &nDY,
                                                    DeviceFormat eFormat,
-                                                   const SystemGraphicsData *pData ) override;
+                                                   const SystemGraphicsData *pData = nullptr ) override;
     virtual SalInfoPrinter* CreateInfoPrinter( SalPrinterQueueInfo* pQueueInfo,
                                                ImplJobSetup* pSetupData ) override;
     virtual void            DestroyInfoPrinter( SalInfoPrinter* pPrinter ) override;
-    virtual SalPrinter*     CreatePrinter( SalInfoPrinter* pInfoPrinter ) override;
-    virtual void            DestroyPrinter( SalPrinter* pPrinter ) override;
+    virtual std::unique_ptr<SalPrinter> CreatePrinter( SalInfoPrinter* pInfoPrinter ) override;
     virtual void            GetPrinterQueueInfo( ImplPrnQueueList* pList ) override;
     virtual void            GetPrinterQueueState( SalPrinterQueueInfo* pInfo ) override;
-    virtual void            DeletePrinterQueueInfo( SalPrinterQueueInfo* pInfo ) override;
     virtual OUString        GetDefaultPrinter() override;
     virtual SalTimer*       CreateSalTimer() override;
-    virtual SalI18NImeStatus* CreateI18NImeStatus() override;
     virtual SalSystem*      CreateSalSystem() override;
-    virtual SalBitmap*      CreateSalBitmap() override;
-    virtual comphelper::SolarMutex* GetYieldMutex() override;
-    virtual sal_uLong       ReleaseYieldMutex() override;
-    virtual void            AcquireYieldMutex( sal_uLong nCount ) override;
-    virtual bool            CheckYieldMutex() override;
-    virtual SalYieldResult  DoYield(bool bWait, bool bHandleAllCurrentEvents,
-                                    sal_uLong nReleased) override;
+    virtual std::shared_ptr<SalBitmap> CreateSalBitmap() override;
+    virtual bool            DoYield(bool bWait, bool bHandleAllCurrentEvents) override;
     virtual bool            AnyInput( VclInputFlags nType ) override;
-    virtual SalMenu*        CreateMenu( bool bMenuBar, Menu* pVCLMenu ) override;
-    virtual void            DestroyMenu( SalMenu* ) override;
-    virtual SalMenuItem*    CreateMenuItem( const SalItemParams* pItemData ) override;
-    virtual void            DestroyMenuItem( SalMenuItem* ) override;
-    virtual SalSession*     CreateSalSession() override;
-    virtual void*           GetConnectionIdentifier( ConnectionIdentifierType& rReturnedType,
-                                                     int& rReturnedBytes ) override;
+    virtual std::unique_ptr<SalMenu>     CreateMenu( bool bMenuBar, Menu* pVCLMenu ) override;
+    virtual std::unique_ptr<SalMenuItem> CreateMenuItem( const SalItemParams & rItemData ) override;
+    virtual OpenGLContext*  CreateOpenGLContext() override;
+    virtual OUString        GetConnectionIdentifier() override;
     virtual void            AddToRecentDocumentList(const OUString& rFileUrl, const OUString& rMimeType,
                                                     const OUString& rDocumentService) override;
 
@@ -135,35 +137,21 @@ public:
     // this is needed to avoid duplicate open events through a) command line and b) NSApp's openFile
     static bool isOnCommandLine( const OUString& );
 
-    void wakeupYield();
-
- public:
-    friend class AquaSalFrame;
-
-    void PostUserEvent( AquaSalFrame* pFrame, sal_uInt16 nType, void* pData );
     void delayedSettingsChanged( bool bInvalidate );
 
-    bool isNSAppThread() const;
+    // Is this the NSAppThread?
+    virtual bool IsMainThread() const override;
 
     void startedPrintJob() { mnActivePrintJobs++; }
     void endedPrintJob() { mnActivePrintJobs--; }
 
     // event subtypes for NSApplicationDefined events
-    static const short AppExecuteSVMain   = 0x7fff;
-    static const short AppEndLoopEvent    = 1;
+    static const short AppExecuteSVMain   = 1;
     static const short AppStartTimerEvent = 10;
     static const short YieldWakeupEvent   = 20;
+    static const short DispatchTimerEvent = 30;
 
     static NSMenu* GetDynamicDockMenu();
-};
-
-// helper class: inverted solar guard
-class YieldMutexReleaser
-{
-    sal_uLong mnCount;
-    public:
-    YieldMutexReleaser();
-    ~YieldMutexReleaser();
 };
 
 CGImageRef CreateCGImage( const Image& );

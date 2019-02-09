@@ -36,9 +36,9 @@ AccessibleStringWrap::AccessibleStringWrap( OutputDevice& rDev, SvxFont& rFont, 
 {
 }
 
-void AccessibleStringWrap::GetCharacterBounds( sal_Int32 nIndex, Rectangle& rRect )
+void AccessibleStringWrap::GetCharacterBounds( sal_Int32 nIndex, tools::Rectangle& rRect )
 {
-    DBG_ASSERT(nIndex >= 0 && nIndex <= USHRT_MAX,
+    DBG_ASSERT(nIndex >= 0,
                "SvxAccessibleStringWrap::GetCharacterBounds: index value overflow");
 
     mrFont.SetPhysFont( &mrDev );
@@ -48,24 +48,24 @@ void AccessibleStringWrap::GetCharacterBounds( sal_Int32 nIndex, Rectangle& rRec
     {
         // create a caret bounding rect that has the height of the
         // current font and is one pixel wide.
-        rRect.Left() = mrDev.GetTextWidth(maText);
-        rRect.Top() = 0;
+        rRect.SetLeft( mrDev.GetTextWidth(maText) );
+        rRect.SetTop( 0 );
         rRect.SetSize( Size(mrDev.GetTextHeight(), 1) );
     }
     else
     {
         long aXArray[2];
-        mrDev.GetCaretPositions( maText, aXArray, static_cast< sal_uInt16 >(nIndex), 1 );
-        rRect.Left() = 0;
-        rRect.Top() = 0;
+        mrDev.GetCaretPositions( maText, aXArray, nIndex, 1 );
+        rRect.SetLeft( 0 );
+        rRect.SetTop( 0 );
         rRect.SetSize( Size(mrDev.GetTextHeight(), labs(aXArray[0] - aXArray[1])) );
-        rRect.Move( ::std::min(aXArray[0], aXArray[1]), 0 );
+        rRect.Move( std::min(aXArray[0], aXArray[1]), 0 );
     }
 
     if( mrFont.IsVertical() )
     {
         // #101701# Rotate to vertical
-        rRect = Rectangle( Point(-rRect.Top(), rRect.Left()),
+        rRect = tools::Rectangle( Point(-rRect.Top(), rRect.Left()),
                            Point(-rRect.Bottom(), rRect.Right()));
     }
 }
@@ -73,7 +73,7 @@ void AccessibleStringWrap::GetCharacterBounds( sal_Int32 nIndex, Rectangle& rRec
 sal_Int32 AccessibleStringWrap::GetIndexAtPoint( const Point& rPoint )
 {
     // search for character bounding box containing given point
-    Rectangle aRect;
+    tools::Rectangle aRect;
     sal_Int32 i, nLen = maText.getLength();
     for( i=0; i<nLen; ++i )
     {

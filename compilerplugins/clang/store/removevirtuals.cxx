@@ -11,7 +11,6 @@
 #include <string>
 #include <iostream>
 #include "plugin.hxx"
-#include "compat.hxx"
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <fcntl.h>
@@ -27,7 +26,7 @@
 namespace {
 
 class RemoveVirtuals:
-    public RecursiveASTVisitor<RemoveVirtuals>, public loplugin::RewritePlugin
+    public loplugin::FilteringRewritePlugin<RemoveVirtuals>
 {
 public:
     explicit RemoveVirtuals(InstantiationData const & data);
@@ -51,7 +50,7 @@ size_t getFilesize(const char* filename)
     return st.st_size;
 }
 
-RemoveVirtuals::RemoveVirtuals(InstantiationData const & data): RewritePlugin(data)
+RemoveVirtuals::RemoveVirtuals(InstantiationData const & data): FilteringRewritePlugin(data)
 {
     static const char sInputFile[] = SRCDIR "/result.txt";
     mmapFilesize = getFilesize(sInputFile);
@@ -75,7 +74,7 @@ std::string niceName(const CXXMethodDecl* functionDecl)
 {
     std::string s =
            functionDecl->getParent()->getQualifiedNameAsString() + "::"
-           + compat::getReturnType(*functionDecl).getAsString() + "-"
+           + functionDecl->getReturnType().getAsString() + "-"
            + functionDecl->getNameAsString() + "(";
     for (const ParmVarDecl *pParmVarDecl : functionDecl->params()) {
         s += pParmVarDecl->getType().getAsString();
@@ -97,8 +96,7 @@ bool RemoveVirtuals::VisitCXXMethodDecl( const CXXMethodDecl* functionDecl )
         return true;
     }
     // ignore stuff that forms part of the stable URE interface
-    if (isInUnoIncludeFile(compiler.getSourceManager().getSpellingLoc(
-                              functionDecl->getCanonicalDecl()->getNameInfo().getLoc()))) {
+    if (isInUnoIncludeFile(functionDecl)) {
         return true;
     }
 

@@ -18,17 +18,16 @@
  */
 
 #include "QTableWindow.hxx"
-#include "QueryTableView.hxx"
-#include "dbustrings.hrc"
+#include <QueryTableView.hxx>
+#include <stringconstants.hxx>
 #include <osl/diagnose.h>
-#include "dbaccess_helpid.hrc"
-#include "QueryDesignView.hxx"
-#include "browserids.hxx"
-#include "querycontroller.hxx"
+#include <helpids.h>
+#include <QueryDesignView.hxx>
+#include <browserids.hxx>
+#include <querycontroller.hxx>
 #include <vcl/image.hxx>
-#include "TableWindowListBox.hxx"
-#include "dbu_qry.hrc"
-#include "Query.hrc"
+#include <TableWindowListBox.hxx>
+#include <strings.hxx>
 #include <com/sun/star/sdbcx/XKeysSupplier.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
@@ -36,11 +35,9 @@
 #include <com/sun/star/sdbcx/KeyType.hpp>
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
 #include "TableFieldInfo.hxx"
-#include <comphelper/extract.hxx>
-#include <comphelper/string.hxx>
-#include <comphelper/uno3.hxx>
-#include "UITools.hxx"
-#include "svtools/treelistentry.hxx"
+#include <UITools.hxx>
+#include <vcl/treelistentry.hxx>
+#include <comphelper/types.hxx>
 
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdbcx;
@@ -49,14 +46,11 @@ using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::beans;
 using namespace dbaui;
 // class OQueryTableWindow
-OQueryTableWindow::OQueryTableWindow( vcl::Window* pParent, const TTableWindowData::value_type& pTabWinData, sal_Unicode* pszInitialAlias)
+OQueryTableWindow::OQueryTableWindow( vcl::Window* pParent, const TTableWindowData::value_type& pTabWinData)
     :OTableWindow( pParent, pTabWinData )
     ,m_nAliasNum(0)
 {
-    if (pszInitialAlias != nullptr)
-        m_strInitialAlias = OUString(pszInitialAlias);
-    else
-        m_strInitialAlias = GetAliasName();
+    m_strInitialAlias = GetAliasName();
 
     // if table name matches alias, do not pass to InitialAlias,
     // as the appending of a possible token could not succeed...
@@ -93,7 +87,7 @@ bool OQueryTableWindow::Init()
         sAliasName += "_" + OUString::number(m_nAliasNum);
     }
 
-    sAliasName = comphelper::string::remove(sAliasName, '"');
+    sAliasName = sAliasName.replaceAll("\"", "");
     SetAliasName(sAliasName);
         // SetAliasName passes it as WinName, hence it uses the base class
     // reset the title
@@ -141,7 +135,7 @@ void OQueryTableWindow::OnEntryDoubleClicked(SvTreeListEntry* pEntry)
     static_cast<OQueryTableView*>(getTableView())->InsertField(aInfo);
 }
 
-bool OQueryTableWindow::ExistsField(const OUString& strFieldName, OTableFieldDescRef& rInfo)
+bool OQueryTableWindow::ExistsField(const OUString& strFieldName, OTableFieldDescRef const & rInfo)
 {
     OSL_ENSURE(m_xListBox != nullptr, "OQueryTableWindow::ExistsField : doesn't have css::form::ListBox !");
     OSL_ENSURE(rInfo.is(),"OQueryTableWindow::ExistsField: invalid argument for OTableFieldDescRef!");
@@ -157,7 +151,7 @@ bool OQueryTableWindow::ExistsField(const OUString& strFieldName, OTableFieldDes
 
             while (pEntry)
             {
-                if (bCase(strFieldName,OUString(m_xListBox->GetEntryText(pEntry))))
+                if (bCase(strFieldName,m_xListBox->GetEntryText(pEntry)))
                 {
                     OTableFieldInfo* pInf = static_cast<OTableFieldInfo*>(pEntry->GetUserData());
                     assert(pInf && "OQueryTableWindow::ExistsField : field doesn't have FieldInfo !");
@@ -185,11 +179,6 @@ bool OQueryTableWindow::ExistsField(const OUString& strFieldName, OTableFieldDes
 bool OQueryTableWindow::ExistsAVisitedConn() const
 {
     return static_cast<const OQueryTableView*>(getTableView())->ExistsAVisitedConn(this);
-}
-
-void OQueryTableWindow::KeyInput( const KeyEvent& rEvt )
-{
-    OTableWindow::KeyInput( rEvt );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

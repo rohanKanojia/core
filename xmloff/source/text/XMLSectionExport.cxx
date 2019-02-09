@@ -18,32 +18,32 @@
  */
 
 #include "XMLSectionExport.hxx"
+#include <o3tl/any.hxx>
 #include <rtl/ustring.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <osl/diagnose.h>
 
 #include <vector>
 
 
-#include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/Locale.hpp>
 #include <com/sun/star/container/XIndexReplace.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/PropertyValues.hpp>
-#include <com/sun/star/beans/PropertyState.hpp>
 #include <com/sun/star/text/XText.hpp>
 #include <com/sun/star/text/XTextSection.hpp>
 #include <com/sun/star/text/SectionFileLink.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/text/XDocumentIndex.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
 #include <com/sun/star/text/BibliographyDataField.hpp>
 #include <com/sun/star/text/XTextFieldsSupplier.hpp>
 #include <com/sun/star/text/XChapterNumberingSupplier.hpp>
 #include <com/sun/star/text/ChapterFormat.hpp>
 
 #include <sax/tools/converter.hxx>
+#include <comphelper/base64.hxx>
 
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
@@ -52,7 +52,8 @@
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmlexp.hxx>
 #include <xmloff/xmltkmap.hxx>
-#include "txtflde.hxx"
+#include <xmloff/xmlement.hxx>
+#include <txtflde.hxx>
 
 
 using namespace ::com::sun::star;
@@ -64,75 +65,16 @@ using namespace ::xmloff::token;
 using ::com::sun::star::beans::XPropertySet;
 using ::com::sun::star::beans::PropertyValue;
 using ::com::sun::star::beans::PropertyValues;
-using ::com::sun::star::beans::PropertyState;
 using ::com::sun::star::container::XIndexReplace;
 using ::com::sun::star::container::XNameAccess;
 using ::com::sun::star::container::XNamed;
-using ::com::sun::star::lang::XServiceInfo;
 using ::com::sun::star::lang::Locale;
-using ::com::sun::star::uno::XInterface;
 
 
 XMLSectionExport::XMLSectionExport(
     SvXMLExport& rExp,
     XMLTextParagraphExport& rParaExp)
-:   sCondition("Condition")
-,   sCreateFromChapter("CreateFromChapter")
-,   sCreateFromEmbeddedObjects("CreateFromEmbeddedObjects")
-,   sCreateFromGraphicObjects("CreateFromGraphicObjects")
-,   sCreateFromLabels("CreateFromLabels")
-,   sCreateFromMarks("CreateFromMarks")
-,   sCreateFromOtherEmbeddedObjects("CreateFromOtherEmbeddedObjects")
-,   sCreateFromOutline("CreateFromOutline")
-,   sCreateFromStarCalc("CreateFromStarCalc")
-,   sCreateFromStarChart("CreateFromStarChart")
-,   sCreateFromStarDraw("CreateFromStarDraw")
-,   sCreateFromStarMath("CreateFromStarMath")
-,   sCreateFromTables("CreateFromTables")
-,   sCreateFromTextFrames("CreateFromTextFrames")
-,   sDdeCommandElement("DDECommandElement")
-,   sDdeCommandFile("DDECommandFile")
-,   sDdeCommandType("DDECommandType")
-,   sFileLink("FileLink")
-,   sIsCaseSensitive("IsCaseSensitive")
-,   sIsProtected("IsProtected")
-,   sIsVisible("IsVisible")
-,   sLabelCategory("LabelCategory")
-,   sLabelDisplayType("LabelDisplayType")
-,   sLevel("Level")
-,   sLevelFormat("LevelFormat")
-,   sLevelParagraphStyles("LevelParagraphStyles")
-,   sLinkRegion("LinkRegion")
-,   sMainEntryCharacterStyleName("MainEntryCharacterStyleName")
-,   sParaStyleHeading("ParaStyleHeading")
-,   sTitle("Title")
-,   sName("Name")
-,   sUseAlphabeticalSeparators("UseAlphabeticalSeparators")
-,   sUseCombinedEntries("UseCombinedEntries")
-,   sUseDash("UseDash")
-,   sUseKeyAsEntry("UseKeyAsEntry")
-,   sUseLevelFromSource("UseLevelFromSource")
-,   sUsePP("UsePP")
-,   sUseUpperCase("UseUpperCase")
-,   sIsCommaSeparated("IsCommaSeparated")
-,   sIsAutomaticUpdate("IsAutomaticUpdate")
-,   sIsRelativeTabstops("IsRelativeTabstops")
-,   sCreateFromLevelParagraphStyles("CreateFromLevelParagraphStyles")
-,   sDocumentIndex("DocumentIndex")
-,   sContentSection("ContentSection")
-,   sHeaderSection("HeaderSection")
-
-,   sTextSection("TextSection")
-,   sIsGlobalDocumentSection("IsGlobalDocumentSection")
-,   sProtectionKey("ProtectionKey")
-,   sSortAlgorithm("SortAlgorithm")
-,   sLocale("Locale")
-,   sUserIndexName("UserIndexName")
-
-,   sIsCurrentlyVisible("IsCurrentlyVisible")
-,   sHeadingStyleName("HeadingStyleName")
-
-,   rExport(rExp)
+:   rExport(rExp)
 ,   rParaExport(rParaExp)
 ,   bHeadingDummiesExported( false )
 {
@@ -187,7 +129,7 @@ void XMLSectionExport::ExportSectionStart(
 
 bool XMLSectionExport::GetIndex(
     const Reference<XTextSection> & rSection,
-    Reference<XDocumentIndex> & rIndex) const
+    Reference<XDocumentIndex> & rIndex)
 {
     // first, reset result
     bool bRet = false;
@@ -198,9 +140,9 @@ bool XMLSectionExport::GetIndex(
 
     // then check if this section happens to be inside an index
     if (xSectionPropSet->getPropertySetInfo()->
-                                    hasPropertyByName(sDocumentIndex))
+                                    hasPropertyByName("DocumentIndex"))
     {
-        Any aAny = xSectionPropSet->getPropertyValue(sDocumentIndex);
+        Any aAny = xSectionPropSet->getPropertyValue("DocumentIndex");
         Reference<XDocumentIndex> xDocumentIndex;
         aAny >>= xDocumentIndex;
 
@@ -209,7 +151,7 @@ bool XMLSectionExport::GetIndex(
         {
             // is the enclosing index identical with "our" section?
             Reference<XPropertySet> xIndexPropSet(xDocumentIndex, UNO_QUERY);
-            aAny = xIndexPropSet->getPropertyValue(sContentSection);
+            aAny = xIndexPropSet->getPropertyValue("ContentSection");
             Reference<XTextSection> xEnclosingSection;
             aAny >>= xEnclosingSection;
 
@@ -222,7 +164,7 @@ bool XMLSectionExport::GetIndex(
             // else: index header or regular section
 
             // is the enclosing index identical with the header section?
-            aAny = xIndexPropSet->getPropertyValue(sHeaderSection);
+            aAny = xIndexPropSet->getPropertyValue("HeaderSection");
             // now mis-named: contains header section
             aAny >>= xEnclosingSection;
 
@@ -380,7 +322,7 @@ void XMLSectionExport::ExportIndexHeaderStart(
 }
 
 
-SvXMLEnumStringMapEntry const aIndexTypeMap[] =
+SvXMLEnumStringMapEntry<SectionTypeEnum> const aIndexTypeMap[] =
 {
     ENUM_STRING_MAP_ENTRY( "com.sun.star.text.ContentIndex", TEXT_SECTION_TYPE_TOC ),
     ENUM_STRING_MAP_ENTRY( "com.sun.star.text.DocumentIndex", TEXT_SECTION_TYPE_ALPHABETICAL ),
@@ -389,7 +331,7 @@ SvXMLEnumStringMapEntry const aIndexTypeMap[] =
     ENUM_STRING_MAP_ENTRY( "com.sun.star.text.Bibliography", TEXT_SECTION_TYPE_BIBLIOGRAPHY ),
     ENUM_STRING_MAP_ENTRY( "com.sun.star.text.UserIndex", TEXT_SECTION_TYPE_USER ),
     ENUM_STRING_MAP_ENTRY( "com.sun.star.text.IllustrationsIndex", TEXT_SECTION_TYPE_ILLUSTRATION ),
-    ENUM_STRING_MAP_END()
+    { nullptr, 0, SectionTypeEnum(0) }
 };
 
 enum SectionTypeEnum XMLSectionExport::MapSectionType(
@@ -397,11 +339,7 @@ enum SectionTypeEnum XMLSectionExport::MapSectionType(
 {
     enum SectionTypeEnum eType = TEXT_SECTION_TYPE_UNKNOWN;
 
-    sal_uInt16 nTmp;
-    if (SvXMLUnitConverter::convertEnum(nTmp, rServiceName, aIndexTypeMap))
-    {
-        eType = (enum SectionTypeEnum)nTmp;
-    }
+    SvXMLUnitConverter::convertEnum(eType, rServiceName, aIndexTypeMap);
 
     // TODO: index header section types, etc.
 
@@ -421,7 +359,7 @@ void XMLSectionExport::ExportRegularSectionStart(
     Any aAny;
 
     // condition and display
-    aAny = xPropSet->getPropertyValue(sCondition);
+    aAny = xPropSet->getPropertyValue("Condition");
     OUString sCond;
     aAny >>= sCond;
     enum XMLTokenEnum eDisplay = XML_TOKEN_INVALID;
@@ -434,8 +372,8 @@ void XMLSectionExport::ExportRegularSectionStart(
         eDisplay = XML_CONDITION;
 
         // #97450# store hidden-status (of conditional sections only)
-        aAny = xPropSet->getPropertyValue(sIsCurrentlyVisible);
-        if (! *static_cast<sal_Bool const *>(aAny.getValue()))
+        aAny = xPropSet->getPropertyValue("IsCurrentlyVisible");
+        if (! *o3tl::doAccess<bool>(aAny))
         {
             GetExport().AddAttribute(XML_NAMESPACE_TEXT, XML_IS_HIDDEN,
                                      XML_TRUE);
@@ -445,26 +383,34 @@ void XMLSectionExport::ExportRegularSectionStart(
     {
         eDisplay = XML_NONE;
     }
-    aAny = xPropSet->getPropertyValue(sIsVisible);
-    if (! *static_cast<sal_Bool const *>(aAny.getValue()))
+    aAny = xPropSet->getPropertyValue("IsVisible");
+    if (! *o3tl::doAccess<bool>(aAny))
     {
         GetExport().AddAttribute(XML_NAMESPACE_TEXT, XML_DISPLAY, eDisplay);
     }
 
     // protect + protection key
-    aAny = xPropSet->getPropertyValue(sIsProtected);
-    if (*static_cast<sal_Bool const *>(aAny.getValue()))
+    aAny = xPropSet->getPropertyValue("IsProtected");
+    if (*o3tl::doAccess<bool>(aAny))
     {
         GetExport().AddAttribute(XML_NAMESPACE_TEXT, XML_PROTECTED, XML_TRUE);
     }
     Sequence<sal_Int8> aPassword;
-    xPropSet->getPropertyValue(sProtectionKey) >>= aPassword;
+    xPropSet->getPropertyValue("ProtectionKey") >>= aPassword;
     if (aPassword.getLength() > 0)
     {
         OUStringBuffer aBuffer;
-        ::sax::Converter::encodeBase64(aBuffer, aPassword);
+        ::comphelper::Base64::encode(aBuffer, aPassword);
+        // in ODF 1.0/1.1 the algorithm was left unspecified so we can write anything
         GetExport().AddAttribute(XML_NAMESPACE_TEXT, XML_PROTECTION_KEY,
                                  aBuffer.makeStringAndClear());
+        if (aPassword.getLength() == 32 && GetExport().getDefaultVersion() >= SvtSaveOptions::ODFVER_012)
+        {
+            // attribute exists in ODF 1.2 or later; default is SHA1 so no need to write that
+            GetExport().AddAttribute(XML_NAMESPACE_TEXT, XML_PROTECTION_KEY_DIGEST_ALGORITHM,
+                    // write the URL from ODF 1.2, not the W3C one
+                    "http://www.w3.org/2000/09/xmldsig#sha256");
+        }
     }
 
     // export element
@@ -473,11 +419,11 @@ void XMLSectionExport::ExportRegularSectionStart(
 
     // data source
     // unfortunately, we have to test all relevant strings for non-zero length
-    aAny = xPropSet->getPropertyValue(sFileLink);
+    aAny = xPropSet->getPropertyValue("FileLink");
     SectionFileLink aFileLink;
     aAny >>= aFileLink;
 
-    aAny = xPropSet->getPropertyValue(sLinkRegion);
+    aAny = xPropSet->getPropertyValue("LinkRegion");
     OUString sRegionName;
     aAny >>= sRegionName;
 
@@ -510,18 +456,18 @@ void XMLSectionExport::ExportRegularSectionStart(
     else
     {
         // check for DDE first
-        if (xPropSet->getPropertySetInfo()->hasPropertyByName(sDdeCommandFile))
+        if (xPropSet->getPropertySetInfo()->hasPropertyByName("DDECommandFile"))
         {
             // data source DDE
             // unfortunately, we have to test all relevant strings for
             // non-zero length
-            aAny = xPropSet->getPropertyValue(sDdeCommandFile);
+            aAny = xPropSet->getPropertyValue("DDECommandFile");
             OUString sApplication;
             aAny >>= sApplication;
-            aAny = xPropSet->getPropertyValue(sDdeCommandType);
+            aAny = xPropSet->getPropertyValue("DDECommandType");
             OUString sTopic;
             aAny >>= sTopic;
-            aAny = xPropSet->getPropertyValue(sDdeCommandElement);
+            aAny = xPropSet->getPropertyValue("DDECommandElement");
             OUString sItem;
             aAny >>= sItem;
 
@@ -536,8 +482,8 @@ void XMLSectionExport::ExportRegularSectionStart(
                 GetExport().AddAttribute(XML_NAMESPACE_OFFICE, XML_DDE_ITEM,
                                          sItem);
 
-                aAny = xPropSet->getPropertyValue(sIsAutomaticUpdate);
-                if (*static_cast<sal_Bool const *>(aAny.getValue()))
+                aAny = xPropSet->getPropertyValue("IsAutomaticUpdate");
+                if (*o3tl::doAccess<bool>(aAny))
                 {
                     GetExport().AddAttribute(XML_NAMESPACE_OFFICE,
                                              XML_AUTOMATIC_UPDATE, XML_TRUE);
@@ -565,25 +511,23 @@ void XMLSectionExport::ExportTableOfContentStart(
 
         // outline-level: 1..10
         sal_Int16 nLevel = sal_Int16();
-        if( rPropertySet->getPropertyValue(sLevel) >>= nLevel )
+        if( rPropertySet->getPropertyValue("Level") >>= nLevel )
         {
-            OUStringBuffer sBuffer;
-            ::sax::Converter::convertNumber(sBuffer, (sal_Int32)nLevel);
             GetExport().AddAttribute(XML_NAMESPACE_TEXT,
                                      XML_OUTLINE_LEVEL,
-                                     sBuffer.makeStringAndClear());
+                                     OUString::number(nLevel));
         }
 
         // use outline level
-        ExportBoolean(rPropertySet, sCreateFromOutline,
+        ExportBoolean(rPropertySet, "CreateFromOutline",
                           XML_USE_OUTLINE_LEVEL, true);
 
         // use index marks
-        ExportBoolean(rPropertySet, sCreateFromMarks,
+        ExportBoolean(rPropertySet, "CreateFromMarks",
                       XML_USE_INDEX_MARKS, true);
 
         // use level styles
-        ExportBoolean(rPropertySet, sCreateFromLevelParagraphStyles,
+        ExportBoolean(rPropertySet, "CreateFromLevelParagraphStyles",
                       XML_USE_INDEX_SOURCE_STYLES, false);
 
         ExportBaseIndexSource(TEXT_SECTION_TYPE_TOC, rPropertySet);
@@ -600,15 +544,15 @@ void XMLSectionExport::ExportObjectIndexStart(
 
     // scope for index source element
     {
-        ExportBoolean(rPropertySet, sCreateFromOtherEmbeddedObjects,
+        ExportBoolean(rPropertySet, "CreateFromOtherEmbeddedObjects",
                       XML_USE_OTHER_OBJECTS, false);
-        ExportBoolean(rPropertySet, sCreateFromStarCalc,
+        ExportBoolean(rPropertySet, "CreateFromStarCalc",
                       XML_USE_SPREADSHEET_OBJECTS, false);
-        ExportBoolean(rPropertySet, sCreateFromStarChart,
+        ExportBoolean(rPropertySet, "CreateFromStarChart",
                       XML_USE_CHART_OBJECTS, false);
-        ExportBoolean(rPropertySet, sCreateFromStarDraw,
+        ExportBoolean(rPropertySet, "CreateFromStarDraw",
                       XML_USE_DRAW_OBJECTS, false);
-        ExportBoolean(rPropertySet, sCreateFromStarMath,
+        ExportBoolean(rPropertySet, "CreateFromStarMath",
                       XML_USE_MATH_OBJECTS, false);
 
         ExportBaseIndexSource(TEXT_SECTION_TYPE_OBJECT, rPropertySet);
@@ -662,7 +606,7 @@ void XMLSectionExport::ExportAlphabeticalIndexStart(
 
         // style name (if present)
         Any aAny;
-        aAny = rPropertySet->getPropertyValue(sMainEntryCharacterStyleName);
+        aAny = rPropertySet->getPropertyValue("MainEntryCharacterStyleName");
         OUString sStyleName;
         aAny >>= sStyleName;
         if (!sStyleName.isEmpty())
@@ -673,25 +617,25 @@ void XMLSectionExport::ExportAlphabeticalIndexStart(
         }
 
         // other (boolean) attributes
-        ExportBoolean(rPropertySet, sIsCaseSensitive, XML_IGNORE_CASE,
+        ExportBoolean(rPropertySet, "IsCaseSensitive", XML_IGNORE_CASE,
                       false, true);
-        ExportBoolean(rPropertySet, sUseAlphabeticalSeparators,
+        ExportBoolean(rPropertySet, "UseAlphabeticalSeparators",
                       XML_ALPHABETICAL_SEPARATORS, false);
-        ExportBoolean(rPropertySet, sUseCombinedEntries, XML_COMBINE_ENTRIES,
+        ExportBoolean(rPropertySet, "UseCombinedEntries", XML_COMBINE_ENTRIES,
                       true);
-        ExportBoolean(rPropertySet, sUseDash, XML_COMBINE_ENTRIES_WITH_DASH,
+        ExportBoolean(rPropertySet, "UseDash", XML_COMBINE_ENTRIES_WITH_DASH,
                       false);
-        ExportBoolean(rPropertySet, sUseKeyAsEntry, XML_USE_KEYS_AS_ENTRIES,
+        ExportBoolean(rPropertySet, "UseKeyAsEntry", XML_USE_KEYS_AS_ENTRIES,
                       false);
-        ExportBoolean(rPropertySet, sUsePP, XML_COMBINE_ENTRIES_WITH_PP,
+        ExportBoolean(rPropertySet, "UsePP", XML_COMBINE_ENTRIES_WITH_PP,
                       true);
-        ExportBoolean(rPropertySet, sUseUpperCase, XML_CAPITALIZE_ENTRIES,
+        ExportBoolean(rPropertySet, "UseUpperCase", XML_CAPITALIZE_ENTRIES,
                       false);
-        ExportBoolean(rPropertySet, sIsCommaSeparated, XML_COMMA_SEPARATED,
+        ExportBoolean(rPropertySet, "IsCommaSeparated", XML_COMMA_SEPARATED,
                       false);
 
         // sort algorithm
-        aAny = rPropertySet->getPropertyValue(sSortAlgorithm);
+        aAny = rPropertySet->getPropertyValue("SortAlgorithm");
         OUString sAlgorithm;
         aAny >>= sAlgorithm;
         if (!sAlgorithm.isEmpty())
@@ -701,7 +645,7 @@ void XMLSectionExport::ExportAlphabeticalIndexStart(
         }
 
         // locale
-        aAny = rPropertySet->getPropertyValue(sLocale);
+        aAny = rPropertySet->getPropertyValue("Locale");
         Locale aLocale;
         aAny >>= aLocale;
         GetExport().AddLanguageTagAttributes( XML_NAMESPACE_FO, XML_NAMESPACE_STYLE, aLocale, true);
@@ -721,22 +665,22 @@ void XMLSectionExport::ExportUserIndexStart(
     // scope for table-of-content-source element
     {
         // bool attributes
-        ExportBoolean(rPropertySet, sCreateFromEmbeddedObjects,
+        ExportBoolean(rPropertySet, "CreateFromEmbeddedObjects",
                       XML_USE_OBJECTS, false);
-        ExportBoolean(rPropertySet, sCreateFromGraphicObjects,
+        ExportBoolean(rPropertySet, "CreateFromGraphicObjects",
                       XML_USE_GRAPHICS, false);
-        ExportBoolean(rPropertySet, sCreateFromMarks,
+        ExportBoolean(rPropertySet, "CreateFromMarks",
                       XML_USE_INDEX_MARKS, false);
-        ExportBoolean(rPropertySet, sCreateFromTables,
+        ExportBoolean(rPropertySet, "CreateFromTables",
                       XML_USE_TABLES, false);
-        ExportBoolean(rPropertySet, sCreateFromTextFrames,
+        ExportBoolean(rPropertySet, "CreateFromTextFrames",
                       XML_USE_FLOATING_FRAMES, false);
-        ExportBoolean(rPropertySet, sUseLevelFromSource,
+        ExportBoolean(rPropertySet, "UseLevelFromSource",
                       XML_COPY_OUTLINE_LEVELS, false);
-        ExportBoolean(rPropertySet, sCreateFromLevelParagraphStyles,
+        ExportBoolean(rPropertySet, "CreateFromLevelParagraphStyles",
                       XML_USE_INDEX_SOURCE_STYLES, false);
 
-        Any aAny = rPropertySet->getPropertyValue( sUserIndexName );
+        Any aAny = rPropertySet->getPropertyValue( "UserIndexName" );
         OUString sIndexName;
         aAny >>= sIndexName;
         GetExport().AddAttribute(XML_NAMESPACE_TEXT, XML_INDEX_NAME,
@@ -770,15 +714,15 @@ void XMLSectionExport::ExportBaseIndexStart(
     const Reference<XPropertySet> & rPropertySet)
 {
     // protect + protection key
-    Any aAny = rPropertySet->getPropertyValue(sIsProtected);
-    if (*static_cast<sal_Bool const *>(aAny.getValue()))
+    Any aAny = rPropertySet->getPropertyValue("IsProtected");
+    if (*o3tl::doAccess<bool>(aAny))
     {
         GetExport().AddAttribute(XML_NAMESPACE_TEXT, XML_PROTECTED, XML_TRUE);
     }
 
     // index name
     OUString sIndexName;
-    rPropertySet->getPropertyValue(sName) >>= sIndexName;
+    rPropertySet->getPropertyValue("Name") >>= sIndexName;
     if ( !sIndexName.isEmpty() )
     {
         GetExport().AddAttribute(XML_NAMESPACE_TEXT, XML_NAME, sIndexName);
@@ -814,16 +758,16 @@ void XMLSectionExport::ExportBaseIndexSource(
     if (eType != TEXT_SECTION_TYPE_BIBLIOGRAPHY)
     {
         // document or chapter index?
-        aAny = rPropertySet->getPropertyValue(sCreateFromChapter);
-        if (*static_cast<sal_Bool const *>(aAny.getValue()))
+        aAny = rPropertySet->getPropertyValue("CreateFromChapter");
+        if (*o3tl::doAccess<bool>(aAny))
         {
             GetExport().AddAttribute(XML_NAMESPACE_TEXT,
                                      XML_INDEX_SCOPE, XML_CHAPTER);
         }
 
         // tab-stops relative to margin?
-        aAny = rPropertySet->getPropertyValue(sIsRelativeTabstops);
-        if (! *static_cast<sal_Bool const *>(aAny.getValue()))
+        aAny = rPropertySet->getPropertyValue("IsRelativeTabstops");
+        if (! *o3tl::doAccess<bool>(aAny))
         {
             GetExport().AddAttribute(XML_NAMESPACE_TEXT,
                                      XML_RELATIVE_TAB_STOP_POSITION,
@@ -842,7 +786,7 @@ void XMLSectionExport::ExportBaseIndexSource(
     // scope for title template (all indices)
     {
         // header style name
-        aAny = rPropertySet->getPropertyValue(sParaStyleHeading);
+        aAny = rPropertySet->getPropertyValue("ParaStyleHeading");
         OUString sStyleName;
         aAny >>= sStyleName;
         GetExport().AddAttribute(XML_NAMESPACE_TEXT,
@@ -856,14 +800,14 @@ void XMLSectionExport::ExportBaseIndexSource(
                                            true, false);
 
         // title as element content
-        aAny = rPropertySet->getPropertyValue(sTitle);
+        aAny = rPropertySet->getPropertyValue("Title");
         OUString sTitleString;
         aAny >>= sTitleString;
         GetExport().Characters(sTitleString);
     }
 
     // export level templates (all indices)
-    aAny = rPropertySet->getPropertyValue(sLevelFormat);
+    aAny = rPropertySet->getPropertyValue("LevelFormat");
     Reference<XIndexReplace> xLevelTemplates;
     aAny >>= xLevelTemplates;
 
@@ -889,7 +833,7 @@ void XMLSectionExport::ExportBaseIndexSource(
     if ( (TEXT_SECTION_TYPE_TOC == eType) ||
          (TEXT_SECTION_TYPE_USER == eType)   )
     {
-        aAny = rPropertySet->getPropertyValue(sLevelParagraphStyles);
+        aAny = rPropertySet->getPropertyValue("LevelParagraphStyles");
         Reference<XIndexReplace> xLevelParagraphStyles;
         aAny >>= xLevelParagraphStyles;
         ExportLevelParagraphStyles(xLevelParagraphStyles);
@@ -919,15 +863,15 @@ void XMLSectionExport::ExportTableAndIllustrationIndexSourceAttributes(
     const Reference<XPropertySet> & rPropertySet)
 {
     // use caption
-    Any aAny = rPropertySet->getPropertyValue(sCreateFromLabels);
-    if (! *static_cast<sal_Bool const *>(aAny.getValue()))
+    Any aAny = rPropertySet->getPropertyValue("CreateFromLabels");
+    if (! *o3tl::doAccess<bool>(aAny))
     {
         GetExport().AddAttribute(XML_NAMESPACE_TEXT,
                                  XML_USE_CAPTION, XML_FALSE);
     }
 
     // sequence name
-    aAny = rPropertySet->getPropertyValue(sLabelCategory);
+    aAny = rPropertySet->getPropertyValue("LabelCategory");
     OUString sSequenceName;
     aAny >>= sSequenceName;
     GetExport().AddAttribute(XML_NAMESPACE_TEXT,
@@ -935,7 +879,7 @@ void XMLSectionExport::ExportTableAndIllustrationIndexSourceAttributes(
                              sSequenceName);
 
     // caption format
-    aAny = rPropertySet->getPropertyValue(sLabelDisplayType);
+    aAny = rPropertySet->getPropertyValue("LabelDisplayType");
     sal_Int16 nType = 0;
     aAny >>= nType;
     GetExport().AddAttribute(XML_NAMESPACE_TEXT,
@@ -1136,7 +1080,7 @@ enum TemplateParamEnum
     TOK_TPARAM_BIBLIOGRAPHY_DATA
 };
 
-SvXMLEnumStringMapEntry const aTemplateTypeMap[] =
+SvXMLEnumStringMapEntry<TemplateTypeEnum> const aTemplateTypeMap[] =
 {
     ENUM_STRING_MAP_ENTRY( "TokenEntryNumber",  TOK_TTYPE_ENTRY_NUMBER ),
     ENUM_STRING_MAP_ENTRY( "TokenEntryText",    TOK_TTYPE_ENTRY_TEXT ),
@@ -1147,10 +1091,10 @@ SvXMLEnumStringMapEntry const aTemplateTypeMap[] =
     ENUM_STRING_MAP_ENTRY( "TokenHyperlinkStart", TOK_TTYPE_HYPERLINK_START ),
     ENUM_STRING_MAP_ENTRY( "TokenHyperlinkEnd", TOK_TTYPE_HYPERLINK_END ),
     ENUM_STRING_MAP_ENTRY( "TokenBibliographyDataField", TOK_TTYPE_BIBLIOGRAPHY ),
-    ENUM_STRING_MAP_END()
+    { nullptr, 0, TemplateTypeEnum(0)}
 };
 
-SvXMLEnumStringMapEntry const aTemplateParamMap[] =
+SvXMLEnumStringMapEntry<TemplateParamEnum> const aTemplateParamMap[] =
 {
     ENUM_STRING_MAP_ENTRY( "TokenType",             TOK_TPARAM_TOKEN_TYPE ),
     ENUM_STRING_MAP_ENTRY( "CharacterStyleName",    TOK_TPARAM_CHAR_STYLE ),
@@ -1163,10 +1107,10 @@ SvXMLEnumStringMapEntry const aTemplateParamMap[] =
     ENUM_STRING_MAP_ENTRY( "ChapterFormat",         TOK_TPARAM_CHAPTER_FORMAT ),
     ENUM_STRING_MAP_ENTRY( "ChapterLevel",          TOK_TPARAM_CHAPTER_LEVEL ),//i53420
     ENUM_STRING_MAP_ENTRY( "BibliographyDataField", TOK_TPARAM_BIBLIOGRAPHY_DATA ),
-    ENUM_STRING_MAP_END()
+    { nullptr, 0, TemplateParamEnum(0)}
 };
 
-SvXMLEnumMapEntry const aBibliographyDataFieldMap[] =
+SvXMLEnumMapEntry<sal_Int16> const aBibliographyDataFieldMap[] =
 {
     { XML_ADDRESS,              BibliographyDataField::ADDRESS },
     { XML_ANNOTE,               BibliographyDataField::ANNOTE },
@@ -1253,7 +1197,7 @@ void XMLSectionExport::ExportIndexTemplateElement(
     sal_Int32 nCount = rValues.getLength();
     for(sal_Int32 i = 0; i<nCount; i++)
     {
-        sal_uInt16 nToken;
+        TemplateParamEnum nToken;
         if ( SvXMLUnitConverter::convertEnum( nToken, rValues[i].Name,
                                               aTemplateParamMap ) )
         {
@@ -1266,14 +1210,9 @@ void XMLSectionExport::ExportIndexTemplateElement(
             {
                 case TOK_TPARAM_TOKEN_TYPE:
                 {
-                    sal_uInt16 nTmp;
                     OUString sVal;
                     rValues[i].Value >>= sVal;
-                    if (SvXMLUnitConverter::convertEnum( nTmp, sVal,
-                                                         aTemplateTypeMap))
-                    {
-                        nTokenType = (enum TemplateTypeEnum)nTmp;
-                    }
+                    SvXMLUnitConverter::convertEnum( nTokenType, sVal, aTemplateTypeMap);
                     break;
                 }
 
@@ -1290,7 +1229,7 @@ void XMLSectionExport::ExportIndexTemplateElement(
 
                 case TOK_TPARAM_TAB_RIGHT_ALIGNED:
                     bRightAligned =
-                        *static_cast<sal_Bool const *>(rValues[i].Value.getValue());
+                        *o3tl::doAccess<bool>(rValues[i].Value);
                     break;
 
                 case TOK_TPARAM_TAB_POSITION:
@@ -1300,7 +1239,7 @@ void XMLSectionExport::ExportIndexTemplateElement(
 
                 // #i21237#
                 case TOK_TPARAM_TAB_WITH_TAB:
-                    bWithTabStop = *static_cast<sal_Bool const *>(rValues[i].Value.getValue());
+                    bWithTabStop = *o3tl::doAccess<bool>(rValues[i].Value);
                     bWithTabStopOK = true;
                     break;
 
@@ -1328,6 +1267,7 @@ void XMLSectionExport::ExportIndexTemplateElement(
 
     // convert type to token (and check validity) ...
     XMLTokenEnum eElement(XML_TOKEN_INVALID);
+    sal_uInt16 nNamespace(XML_NAMESPACE_TEXT);
     switch(nTokenType)
     {
         case TOK_TTYPE_ENTRY_TEXT:
@@ -1371,6 +1311,30 @@ void XMLSectionExport::ExportIndexTemplateElement(
         default:
             ; // unknown/unimplemented template
             break;
+    }
+
+    if (eType != TEXT_SECTION_TYPE_TOC)
+    {
+        switch (nTokenType)
+        {
+            case TOK_TTYPE_HYPERLINK_START:
+            case TOK_TTYPE_HYPERLINK_END:
+                if (SvtSaveOptions::ODFVER_012 < aODFVersion)
+                {
+                    assert(eType == TEXT_SECTION_TYPE_ILLUSTRATION
+                        || eType == TEXT_SECTION_TYPE_OBJECT
+                        || eType == TEXT_SECTION_TYPE_TABLE
+                        || eType == TEXT_SECTION_TYPE_USER);
+                    nNamespace = XML_NAMESPACE_LO_EXT;
+                }
+                else
+                {
+                    eElement = XML_TOKEN_INVALID; // not allowed in ODF <= 1.2
+                }
+                break;
+            default:
+                break;
+        }
     }
 
     //--->i90246
@@ -1527,7 +1491,7 @@ void XMLSectionExport::ExportIndexTemplateElement(
                                      OUString::number(nLevel));
         }
         // export template
-        SvXMLElementExport aTemplateElement(GetExport(), XML_NAMESPACE_TEXT,
+        SvXMLElementExport aTemplateElement(GetExport(), nNamespace,
                                             GetXMLToken(eElement),
                                             true, false)
             ;
@@ -1541,7 +1505,7 @@ void XMLSectionExport::ExportIndexTemplateElement(
 }
 
 void XMLSectionExport::ExportLevelParagraphStyles(
-    Reference<XIndexReplace> & xLevelParagraphStyles)
+    Reference<XIndexReplace> const & xLevelParagraphStyles)
 {
     // iterate over levels
     sal_Int32 nPLevelCount = xLevelParagraphStyles->getCount();
@@ -1556,12 +1520,10 @@ void XMLSectionExport::ExportLevelParagraphStyles(
         if (nNamesCount > 0)
         {
             // level attribute; we count 1..10; API 0..9
-            OUStringBuffer sBuf;
             sal_Int32 nLevelPlusOne = nLevel + 1;
-            ::sax::Converter::convertNumber(sBuf, nLevelPlusOne);
             GetExport().AddAttribute(XML_NAMESPACE_TEXT,
                                      XML_OUTLINE_LEVEL,
-                                     sBuf.makeStringAndClear());
+                                     OUString::number(nLevelPlusOne));
 
             // source styles element
             SvXMLElementExport aParaStyles(GetExport(),
@@ -1597,7 +1559,7 @@ void XMLSectionExport::ExportBoolean(
     OSL_ENSURE(eAttributeName != XML_TOKEN_INVALID, "Need attribute name");
 
     Any aAny = rPropSet->getPropertyValue(sPropertyName);
-    bool bTmp = *static_cast<sal_Bool const *>(aAny.getValue());
+    bool bTmp = *o3tl::doAccess<bool>(aAny);
 
     // value = value ^ bInvert
     // omit if value == default
@@ -1610,9 +1572,6 @@ void XMLSectionExport::ExportBoolean(
     }
 }
 
-const sal_Char sAPI_FieldMaster_Bibliography[] =
-                                "com.sun.star.text.FieldMaster.Bibliography";
-
 void XMLSectionExport::ExportBibliographyConfiguration(SvXMLExport& rExport)
 {
     // first: get field master (via text field supplier)
@@ -1620,7 +1579,7 @@ void XMLSectionExport::ExportBibliographyConfiguration(SvXMLExport& rExport)
                                                     UNO_QUERY );
     if ( xTextFieldsSupp.is() )
     {
-        const OUString sFieldMaster_Bibliography(sAPI_FieldMaster_Bibliography);
+        const OUString sFieldMaster_Bibliography("com.sun.star.text.FieldMaster.Bibliography");
 
         // get bibliography field master
         Reference<XNameAccess> xMasters =
@@ -1653,14 +1612,14 @@ void XMLSectionExport::ExportBibliographyConfiguration(SvXMLExport& rExport)
             rExport.AddAttribute(XML_NAMESPACE_TEXT, XML_SUFFIX, sTmp);
 
             aAny = xPropSet->getPropertyValue(sIsNumberEntries);
-            if (*static_cast<sal_Bool const *>(aAny.getValue()))
+            if (*o3tl::doAccess<bool>(aAny))
             {
                 rExport.AddAttribute(XML_NAMESPACE_TEXT,
                                      XML_NUMBERED_ENTRIES, XML_TRUE);
             }
 
             aAny = xPropSet->getPropertyValue(sIsSortByPosition);
-            if (! *static_cast<sal_Bool const *>(aAny.getValue()))
+            if (! *o3tl::doAccess<bool>(aAny))
             {
                 rExport.AddAttribute(XML_NAMESPACE_TEXT,
                                      XML_SORT_BY_POSITION, XML_FALSE);
@@ -1715,7 +1674,7 @@ void XMLSectionExport::ExportBibliographyConfiguration(SvXMLExport& rExport)
                     }
                     else if (rValue.Name == "IsSortAscending")
                     {
-                        bool bTmp = *static_cast<sal_Bool const *>(rValue.Value.getValue());
+                        bool bTmp = *o3tl::doAccess<bool>(rValue.Value);
                         rExport.AddAttribute(XML_NAMESPACE_TEXT,
                                              XML_SORT_ASCENDING,
                                              bTmp ? XML_TRUE : XML_FALSE);
@@ -1753,9 +1712,9 @@ bool XMLSectionExport::IsMuteSection(
             Reference<XPropertySet> xPropSet(aSection, UNO_QUERY);
             if (xPropSet.is())
             {
-                Any aAny = xPropSet->getPropertyValue(sIsGlobalDocumentSection);
+                Any aAny = xPropSet->getPropertyValue("IsGlobalDocumentSection");
 
-                if ( *static_cast<sal_Bool const *>(aAny.getValue()) )
+                if ( *o3tl::doAccess<bool>(aAny) )
                 {
                     Reference<XDocumentIndex> xIndex;
                     if (! GetIndex(rSection, xIndex))
@@ -1785,9 +1744,9 @@ bool XMLSectionExport::IsMuteSection(
     Reference<XPropertySet> xPropSet(rSection->getAnchor(), UNO_QUERY);
     if (xPropSet.is())
     {
-        if (xPropSet->getPropertySetInfo()->hasPropertyByName(sTextSection))
+        if (xPropSet->getPropertySetInfo()->hasPropertyByName("TextSection"))
         {
-            Any aAny = xPropSet->getPropertyValue(sTextSection);
+            Any aAny = xPropSet->getPropertyValue("TextSection");
             Reference<XTextSection> xSection;
             aAny >>= xSection;
 
@@ -1812,9 +1771,9 @@ bool XMLSectionExport::IsInSection(
     Reference<XPropertySet> xPropSet(rContent, UNO_QUERY);
     if (xPropSet.is())
     {
-        if (xPropSet->getPropertySetInfo()->hasPropertyByName(sTextSection))
+        if (xPropSet->getPropertySetInfo()->hasPropertyByName("TextSection"))
         {
-            Any aAny = xPropSet->getPropertyValue(sTextSection);
+            Any aAny = xPropSet->getPropertyValue("TextSection");
             Reference<XTextSection> xSection;
             aAny >>= xSection;
 
@@ -1862,7 +1821,7 @@ void XMLSectionExport::ExportMasterDocHeadingDummies()
         xChapterNumbering->getByIndex( nLevel ) >>= aProperties;
         for( sal_Int32 i = 0; i < aProperties.getLength(); i++ )
         {
-            if( aProperties[i].Name == sHeadingStyleName )
+            if( aProperties[i].Name == "HeadingStyleName" )
             {
                 aProperties[i].Value >>= sStyle;
                 break;

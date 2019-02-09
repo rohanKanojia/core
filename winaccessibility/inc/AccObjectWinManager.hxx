@@ -22,8 +22,10 @@
 
 #include <com/sun/star/accessibility/XAccessible.hpp>
 #include <map>
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
-#include <osl/mutex.hxx>
 #include <rtl/ref.hxx>
 #include "ResIDGenerator.hxx"
 
@@ -31,7 +33,7 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnon-virtual-dtor"
 #endif
-#include  "UAccCOM.h"
+#include  <UAccCOM.h>
 #if defined __clang__
 #pragma clang diagnostic pop
 #endif
@@ -78,7 +80,7 @@ private:
     AccObjectManagerAgent*   pAgent;
     ResIDGenerator ResIdGen;
 
-    AccObjectWinManager(AccObjectManagerAgent* Agent=NULL);
+    AccObjectWinManager(AccObjectManagerAgent* Agent=nullptr);
 
 private:
     long ImpleGenerateResID();
@@ -88,22 +90,22 @@ private:
 
     css::accessibility::XAccessible* GetAccDocByHWND(HWND hWnd);
 
-    void       DeleteAccListener( AccObject* pAccObj );
-    void       InsertAccChildNode(AccObject* pCurObj,AccObject* pParentObj,HWND pWnd);
-    void       DeleteAccChildNode(AccObject* pChild);
-    void       DeleteFromHwndXAcc(css::accessibility::XAccessible* pXAcc );
+    static void DeleteAccListener( AccObject* pAccObj );
+    static void InsertAccChildNode(AccObject* pCurObj,AccObject* pParentObj,HWND pWnd);
+    static void DeleteAccChildNode(AccObject* pChild);
+    void       DeleteFromHwndXAcc(css::accessibility::XAccessible const * pXAcc );
     int  UpdateAccSelection(css::accessibility::XAccessible* pXAcc);
 
     ::rtl::Reference<AccEventListener> CreateAccEventListener(
             css::accessibility::XAccessible* pXAcc);
 public:
     virtual ~AccObjectWinManager();
-    sal_Bool InsertAccObj( css::accessibility::XAccessible* pXAcc,css::accessibility::XAccessible* pParentXAcc,HWND pWnd);
-    sal_Bool InsertChildrenAccObj( css::accessibility::XAccessible* pXAcc,HWND pWnd=0);
+    bool InsertAccObj( css::accessibility::XAccessible* pXAcc,css::accessibility::XAccessible* pParentXAcc,HWND pWnd);
+    bool InsertChildrenAccObj( css::accessibility::XAccessible* pXAcc,HWND pWnd=nullptr);
     void DeleteAccObj( css::accessibility::XAccessible* pXAcc );
     void DeleteChildrenAccObj(css::accessibility::XAccessible* pAccObj);
 
-    sal_Bool NotifyAccEvent( css::accessibility::XAccessible* pXAcc,short state = 0 );
+    bool NotifyAccEvent( css::accessibility::XAccessible* pXAcc,short state = 0 );
 
     LPARAM Get_ToATInterface(HWND hWnd, long lParam, WPARAM wParam);
 
@@ -127,7 +129,7 @@ public:
     void  UpdateAccFocus( css::accessibility::XAccessible* newFocus );
     void  UpdateAction( css::accessibility::XAccessible* pXAcc );
 
-    sal_Bool IsContainer( css::accessibility::XAccessible* pAccessible );
+    static bool IsContainer( css::accessibility::XAccessible* pAccessible );
 
     IMAccessible* GetIMAccByXAcc( css::accessibility::XAccessible* pXAcc );
     IMAccessible* GetIAccessibleFromResID(long resID);
@@ -142,12 +144,12 @@ public:
 
     bool IsSpecialToolboItem(css::accessibility::XAccessible* pXAcc);
 
-    short GetRole(css::accessibility::XAccessible* pXAcc);
+    static short GetRole(css::accessibility::XAccessible* pXAcc);
 
     css::accessibility::XAccessible* GetAccDocByAccTopWin( css::accessibility::XAccessible* pXAcc );
     bool IsTopWinAcc( css::accessibility::XAccessible* pXAcc );
 
-    bool IsStateManageDescendant(css::accessibility::XAccessible* pAccessible);
+    static bool IsStateManageDescendant(css::accessibility::XAccessible* pAccessible);
 
 };
 #endif // INCLUDED_WINACCESSIBILITY_INC_ACCOBJECTWINMANAGER_HXX

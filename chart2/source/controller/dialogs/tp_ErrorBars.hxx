@@ -19,7 +19,7 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_DIALOGS_TP_ERRORBARS_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_DIALOGS_TP_ERRORBARS_HXX
 
-#include "res_ErrorBar.hxx"
+#include <res_ErrorBar.hxx>
 
 #include <sfx2/tabdlg.hxx>
 
@@ -29,14 +29,14 @@ namespace chart
 class ErrorBarsTabPage : public SfxTabPage
 {
 public:
-    ErrorBarsTabPage ( vcl::Window* pParent, const SfxItemSet& rInAttrs );
+    ErrorBarsTabPage(TabPageParent pParent, const SfxItemSet& rInAttrs);
 
     void SetAxisMinorStepWidthForErrorBarDecimals( double fMinorStepWidth );
     void SetErrorBarType( ErrorBarResources::tErrorBarType eNewType );
     void SetChartDocumentForRangeChoosing(
         const css::uno::Reference< css::chart2::XChartDocument > & xChartDocument );
 
-    static VclPtr<SfxTabPage> Create( vcl::Window* pParent, const SfxItemSet* rInAttrs );
+    static VclPtr<SfxTabPage> Create( TabPageParent pParent, const SfxItemSet* rInAttrs );
     virtual bool FillItemSet( SfxItemSet* rOutAttrs ) override;
     virtual void Reset( const SfxItemSet* rInAttrs ) override;
 

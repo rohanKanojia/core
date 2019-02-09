@@ -20,10 +20,15 @@
 #ifndef INCLUDED_OOX_DRAWINGML_GRAPHICSHAPECONTEXT_HXX
 #define INCLUDED_OOX_DRAWINGML_GRAPHICSHAPECONTEXT_HXX
 
-#include <oox/drawingml/shape.hxx>
-#include <oox/drawingml/shapecontext.hxx>
+#include <oox/core/contexthandler.hxx>
 #include <oox/dllapi.h>
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <oox/drawingml/shapecontext.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
+namespace oox { class AttributeList; }
+namespace oox { namespace core { class ContextHandler2Helper; } }
 namespace oox { namespace vml { struct OleObjectInfo; } }
 
 namespace oox { namespace drawingml {
@@ -31,7 +36,7 @@ namespace oox { namespace drawingml {
 class OOX_DLLPUBLIC GraphicShapeContext : public ShapeContext
 {
 public:
-    GraphicShapeContext( ::oox::core::ContextHandler2Helper& rParent, ShapePtr pMasterShapePtr, ShapePtr pShapePtr );
+    GraphicShapeContext( ::oox::core::ContextHandler2Helper const & rParent, const ShapePtr& pMasterShapePtr, const ShapePtr& pShapePtr );
 
     virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 };
@@ -40,22 +45,22 @@ public:
 class OOX_DLLPUBLIC GraphicalObjectFrameContext : public ShapeContext
 {
 public:
-    GraphicalObjectFrameContext( ::oox::core::ContextHandler2Helper& rParent, ShapePtr pMasterShapePtr, ShapePtr pShapePtr, bool bEmbedShapesInChart );
+    GraphicalObjectFrameContext( ::oox::core::ContextHandler2Helper& rParent, const ShapePtr& pMasterShapePtr, const ShapePtr& pShapePtr, bool bEmbedShapesInChart );
 
     virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
     virtual void onEndElement() override;
 
 private:
-    bool                mbEmbedShapesInChart;
-    ::oox::core::ContextHandler2Helper* mpParent;
+    bool const          mbEmbedShapesInChart;
+    ::oox::core::ContextHandler2Helper* const mpParent;
 };
 
 
 class OleObjectGraphicDataContext : public ShapeContext
 {
 public:
-    OleObjectGraphicDataContext( ::oox::core::ContextHandler2Helper& rParent, ShapePtr pShapePtr );
-    virtual ~OleObjectGraphicDataContext();
+    OleObjectGraphicDataContext( ::oox::core::ContextHandler2Helper const & rParent, const ShapePtr& pShapePtr );
+    virtual ~OleObjectGraphicDataContext() override;
     virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 
 private:
@@ -63,14 +68,12 @@ private:
 };
 
 
-class Diagram;
-
 class DiagramGraphicDataContext
     : public ShapeContext
 {
 public:
-    DiagramGraphicDataContext( ::oox::core::ContextHandler2Helper& rParent, ShapePtr pShapePtr );
-    virtual ~DiagramGraphicDataContext();
+    DiagramGraphicDataContext( ::oox::core::ContextHandler2Helper const & rParent, const ShapePtr& pShapePtr );
+    virtual ~DiagramGraphicDataContext() override;
     virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 
 private:
@@ -81,11 +84,13 @@ private:
 };
 
 
+struct ChartShapeInfo;
+
 class ChartGraphicDataContext : public ShapeContext
 {
 public:
     explicit            ChartGraphicDataContext(
-                            ::oox::core::ContextHandler2Helper& rParent,
+                            ::oox::core::ContextHandler2Helper const & rParent,
                             const ShapePtr& rxShape, bool bEmbedShapes );
 
     virtual ::oox::core::ContextHandlerRef

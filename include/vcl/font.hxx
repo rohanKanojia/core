@@ -23,12 +23,14 @@
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
 #include <vcl/dllapi.h>
-#include <i18nlangtag/languagetag.hxx>
 #include <tools/color.hxx>
-#include <tools/gen.hxx>
-#include <vcl/vclenum.hxx>
+#include <tools/fontenum.hxx>
+#include <i18nlangtag/lang.h>
 #include <vcl/fntstyle.hxx>
+#include <o3tl/cow_wrapper.hxx>
 
+class Size;
+class LanguageTag;
 class SvStream;
 #define FontAlign TextAlign
 
@@ -46,6 +48,7 @@ class VCL_DLLPUBLIC Font
 public:
     explicit            Font();
                         Font( const Font& ); // TODO make me explicit
+                        Font( Font&& );
     explicit            Font( const OUString& rFamilyName, const Size& );
     explicit            Font( const OUString& rFamilyName, const OUString& rStyleName, const Size& );
     explicit            Font( FontFamily eFamily, const Size& );
@@ -84,22 +87,11 @@ public:
 
     // Device dependent functions
     int                 GetQuality() const;
-    OUString            GetMapNames() const;
-
-    bool                IsBuiltInFont() const;
-    bool                CanEmbed() const;
-    bool                CanSubset() const;
-    bool                CanRotate() const;
 
     void                SetQuality(int);
     void                IncreaseQualityBy(int);
     void                DecreaseQualityBy(int);
     void                SetMapNames(OUString const &);
-
-    void                SetBuiltInFontFlag(bool);
-    void                SetEmbeddableFlag(bool);
-    void                SetSubsettableFlag(bool);
-    void                SetOrientationFlag(bool);
 
     // setting the color on the font is obsolete, the only remaining
     // valid use is for keeping backward compatibility with old MetaFiles
@@ -159,6 +151,7 @@ public:
     void                GetFontAttributes( FontAttributes& rAttrs ) const;
 
     Font&               operator=( const Font& );
+    Font&               operator=( Font&& );
     bool                operator==( const Font& ) const;
     bool                operator!=( const Font& rFont ) const
                             { return !(Font::operator==( rFont )); }
@@ -169,11 +162,22 @@ public:
 
     static Font identifyFont( const void* pBuffer, sal_uInt32 nLen );
 
-private:
-    ImplFont*           mpImplFont;
-    void                MakeUnique();
+    typedef o3tl::cow_wrapper< ImplFont > ImplType;
 
+    inline bool IsUnderlineAbove() const;
+
+private:
+    ImplType mpImplFont;
 };
+
+inline bool Font::IsUnderlineAbove() const
+{
+    if (!IsVertical())
+        return false;
+    // the underline is right for Japanese only
+    return (LANGUAGE_JAPANESE == GetLanguage()) ||
+           (LANGUAGE_JAPANESE == GetCJKContextLanguage());
+}
 
 }
 

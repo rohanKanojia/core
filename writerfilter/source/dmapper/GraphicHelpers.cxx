@@ -26,11 +26,17 @@
 #include <com/sun/star/text/HoriOrientation.hpp>
 #include <com/sun/star/text/VertOrientation.hpp>
 #include <com/sun/star/text/RelOrientation.hpp>
-#include <com/sun/star/text/WrapTextMode.hpp>
 
 #include <oox/drawingml/drawingmltypes.hxx>
+#include <sal/log.hxx>
+#include <unotools/resmgr.hxx>
+#include <vcl/settings.hxx>
+#include <vcl/svapp.hxx>
+#include <svx/dialmgr.hxx>
+#include <svx/strings.hrc>
 
 #include <iostream>
+#include <memory>
 
 namespace writerfilter {
 namespace dmapper {
@@ -40,11 +46,11 @@ using namespace com::sun::star;
 PositionHandler::PositionHandler( std::pair<OUString, OUString>& rPositionOffsets, std::pair<OUString, OUString>& rAligns ) :
 LoggedProperties("PositionHandler"),
 m_nOrient(text::VertOrientation::NONE),
+m_nRelation(text::RelOrientation::FRAME),
 m_nPosition(0),
 m_rPositionOffsets(rPositionOffsets),
 m_rAligns(rAligns)
 {
-    m_nRelation = text::RelOrientation::FRAME;
 }
 
 PositionHandler::~PositionHandler( )
@@ -58,53 +64,63 @@ void PositionHandler::lcl_attribute( Id aName, Value& rVal )
     {
         case NS_ooxml::LN_CT_PosV_relativeFrom:
             {
-                // TODO There are some other unhandled values
-                static const Id pVertRelValues[] =
+                switch ( nIntValue )
                 {
-                    NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromV_margin,
-                    NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromV_page,
-                    NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromV_paragraph,
-                    NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromV_line
-                };
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromV_margin:
+                        m_nRelation = text::RelOrientation::PAGE_PRINT_AREA;
+                        break;
 
-                static const sal_Int16 pVertRelations[] =
-                {
-                    text::RelOrientation::PAGE_PRINT_AREA,
-                    text::RelOrientation::PAGE_FRAME,
-                    text::RelOrientation::FRAME,
-                    text::RelOrientation::TEXT_LINE
-                };
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromV_page:
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromV_topMargin: // fallthrough intended
+                        m_nRelation =  text::RelOrientation::PAGE_FRAME;
+                        break;
 
-                for ( int i = 0; i < 4; i++ )
-                {
-                    if ( pVertRelValues[i] == sal_uInt32( nIntValue ) )
-                        m_nRelation = pVertRelations[i];
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromV_paragraph:
+                        m_nRelation = text::RelOrientation::FRAME;
+                        break;
+
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromV_line:
+                        m_nRelation = text::RelOrientation::TEXT_LINE;
+                        break;
+
+                    // TODO There are some other unhandled values
+                    default:
+                        SAL_WARN("writerfilter", "unhandled case (" << nIntValue << ") in NS_ooxml::LN_CT_PosV_relativeFrom");
                 }
             }
             break;
+
         case NS_ooxml::LN_CT_PosH_relativeFrom:
             {
-                // TODO There are some other unhandled values
-                static const Id pHoriRelValues[] =
+                switch ( nIntValue )
                 {
-                    NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromH_margin,
-                    NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromH_page,
-                    NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromH_column,
-                    NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromH_character
-                };
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromH_margin:
+                        m_nRelation = text::RelOrientation::PAGE_PRINT_AREA;
+                        break;
 
-                static const sal_Int16 pHoriRelations[] =
-                {
-                    text::RelOrientation::PAGE_PRINT_AREA,
-                    text::RelOrientation::PAGE_FRAME,
-                    text::RelOrientation::FRAME,
-                    text::RelOrientation::CHAR,
-                };
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromH_page:
+                        m_nRelation =  text::RelOrientation::PAGE_FRAME;
+                        break;
 
-                for ( int i = 0; i < 4; i++ )
-                {
-                    if ( pHoriRelValues[i] == sal_uInt32( nIntValue ) )
-                        m_nRelation = pHoriRelations[i];
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromH_column:
+                        m_nRelation = text::RelOrientation::FRAME;
+                        break;
+
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromH_character:
+                        m_nRelation = text::RelOrientation::CHAR;
+                        break;
+
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromH_leftMargin:
+                        m_nRelation = text::RelOrientation::PAGE_LEFT;
+                        break;
+
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromH_rightMargin:
+                        m_nRelation = text::RelOrientation::PAGE_RIGHT;
+                        break;
+
+                    // TODO There are some other unhandled values
+                    default:
+                        SAL_WARN("writerfilter", "unhandled case (" << nIntValue << ") in NS_ooxml::LN_CT_PosH_relativeFrom");
                 }
             }
             break;
@@ -124,9 +140,11 @@ void PositionHandler::lcl_sprm(Sprm& rSprm)
     {
         case NS_ooxml::LN_CT_PosH_posOffset:
             m_nPosition = oox::drawingml::convertEmuToHmm(m_rPositionOffsets.first.toInt32());
+            m_rPositionOffsets.first.clear();
             break;
         case NS_ooxml::LN_CT_PosV_posOffset:
             m_nPosition = oox::drawingml::convertEmuToHmm(m_rPositionOffsets.second.toInt32());
+            m_rPositionOffsets.second.clear();
             break;
         case NS_ooxml::LN_CT_PosH_align:
         {
@@ -141,6 +159,7 @@ void PositionHandler::lcl_sprm(Sprm& rSprm)
                 m_nOrient = text::HoriOrientation::INSIDE;
             else if (rAlign == "outside")
                 m_nOrient = text::HoriOrientation::OUTSIDE;
+            rAlign.clear();
             break;
         }
         case NS_ooxml::LN_CT_PosV_align:
@@ -156,6 +175,7 @@ void PositionHandler::lcl_sprm(Sprm& rSprm)
                 m_nOrient = text::VertOrientation::NONE;
             else if (rAlign == "outside")
                 m_nOrient = text::VertOrientation::NONE;
+            rAlign.clear();
             break;
         }
     }
@@ -203,11 +223,11 @@ void WrapHandler::lcl_sprm( Sprm& )
 {
 }
 
-sal_Int32 WrapHandler::getWrapMode( )
+text::WrapTextMode WrapHandler::getWrapMode( )
 {
     // The wrap values do not map directly to our wrap mode,
     // e.g. none in .docx actually means through in LO.
-    sal_Int32 nMode = text::WrapTextMode_THROUGHT;
+    text::WrapTextMode nMode = text::WrapTextMode_THROUGH;
 
     switch ( m_nType )
     {
@@ -234,7 +254,7 @@ sal_Int32 WrapHandler::getWrapMode( )
             break;
         case NS_ooxml::LN_Value_vml_wordprocessingDrawing_ST_WrapType_none:
         default:
-            nMode = text::WrapTextMode_THROUGHT;
+            nMode = text::WrapTextMode_THROUGH;
     }
 
     return nMode;
@@ -251,37 +271,53 @@ void GraphicZOrderHelper::addItem(uno::Reference<beans::XPropertySet> const& pro
 // added in the proper z-order, it is necessary to find the proper index.
 sal_Int32 GraphicZOrderHelper::findZOrder( sal_Int32 relativeHeight, bool bOldStyle )
 {
-    Items::const_iterator it = items.begin();
-    while( it != items.end())
-    {
-        // std::map is iterated sorted by key
-
-        // Old-style ordering differs in what should happen when there is already an item with the same z-order:
-        // we belong under it in case of new-style, but we belong below it in case of old-style.
-        bool bCond = bOldStyle ? (it->first > relativeHeight) : (it->first >= relativeHeight);
-
-        if( bCond )
-            break; // this is the first one higher, we belong right before it
-        else
-            ++it;
-    }
+    // std::map is iterated sorted by key
+    auto it = std::find_if(items.cbegin(), items.cend(),
+        [relativeHeight, bOldStyle](const Items::value_type& rItem) {
+            // Old-style ordering differs in what should happen when there is already an item with the same z-order:
+            // we belong under it in case of new-style, but we belong above it in case of old-style.
+            return bOldStyle ? (rItem.first > relativeHeight) : (rItem.first >= relativeHeight);
+        }
+    );
+    sal_Int32 itemZOrderOffset(0); // before the item
     if( it == items.end()) // we're topmost
     {
         if( items.empty())
             return 0;
-        sal_Int32 itemZOrder(0);
         --it;
-        if( it->second->getPropertyValue(getPropertyName( PROP_Z_ORDER )) >>= itemZOrder )
-            return itemZOrder + 1; // after the topmost
+        itemZOrderOffset = 1; // after the topmost
     }
-    else
-    {
+    // SwXFrame::getPropertyValue throws uno::RuntimeException
+    // when its GetFrameFormat() returns nullptr
+    try {
         sal_Int32 itemZOrder(0);
         if( it->second->getPropertyValue(getPropertyName( PROP_Z_ORDER )) >>= itemZOrder )
-            return itemZOrder; // before the item
+            return itemZOrder + itemZOrderOffset;
+    }
+    catch (const uno::RuntimeException&) {
+        SAL_WARN("writerfilter", "Exception when getting item z-order");
     }
     SAL_WARN( "writerfilter", "findZOrder() didn't find item z-order" );
     return 0; // this should not(?) happen
+}
+
+GraphicNamingHelper::GraphicNamingHelper()
+    : m_nCounter(0)
+{
+}
+
+OUString GraphicNamingHelper::NameGraphic(const OUString& rTemplate)
+{
+    OUString aRet = rTemplate;
+
+    if (aRet.isEmpty())
+    {
+        // Empty template: then auto-generate a unique name.
+        OUString aPrefix(SvxResId(STR_ObjNameSingulGRAF));
+        aRet += aPrefix + OUString::number(++m_nCounter);
+    }
+
+    return aRet;
 }
 
 } }

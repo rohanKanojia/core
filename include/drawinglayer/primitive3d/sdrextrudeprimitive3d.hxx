@@ -24,6 +24,7 @@
 
 #include <drawinglayer/primitive3d/sdrprimitive3d.hxx>
 #include <basegfx/polygon/b2dpolypolygon.hxx>
+#include <memory>
 
 
 namespace drawinglayer
@@ -55,11 +56,9 @@ namespace drawinglayer
             double                                      mfBackScale;
 
             /// decomposition data when ReducedLineGeometry is used, see get3DDecomposition
-            geometry::ViewInformation3D*                mpLastRLGViewInformation;
+            std::unique_ptr<geometry::ViewInformation3D> mpLastRLGViewInformation;
 
-            /// bitfield
             bool                                        mbSmoothNormals : 1; // Plane self
-            bool                                        mbSmoothHorizontalNormals : 1; // always
             bool                                        mbSmoothLids : 1; // Front/back
             bool                                        mbCharacterMode : 1;
             bool                                        mbCloseFront : 1;
@@ -87,12 +86,11 @@ namespace drawinglayer
                 double fDiagonal,
                 double fBackScale,
                 bool bSmoothNormals,
-                bool bSmoothHorizontalNormals,
                 bool bSmoothLids,
                 bool bCharacterMode,
                 bool bCloseFront,
                 bool bCloseBack);
-            virtual ~SdrExtrudePrimitive3D();
+            virtual ~SdrExtrudePrimitive3D() override;
 
             /// data read access
             const basegfx::B2DPolyPolygon& getPolyPolygon() const { return maPolyPolygon; }
@@ -100,7 +98,6 @@ namespace drawinglayer
             double getDiagonal() const { return mfDiagonal; }
             double getBackScale() const { return mfBackScale; }
             bool getSmoothNormals() const { return mbSmoothNormals; }
-            bool getSmoothHorizontalNormals() const { return mbSmoothHorizontalNormals; }
             bool getSmoothLids() const { return mbSmoothLids; }
             bool getCharacterMode() const { return mbCharacterMode; }
             bool getCloseFront() const { return mbCloseFront; }

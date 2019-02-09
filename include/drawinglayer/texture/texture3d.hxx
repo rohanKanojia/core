@@ -33,9 +33,8 @@ namespace drawinglayer
 {
     namespace texture
     {
-        class DRAWINGLAYER_DLLPUBLIC GeoTexSvxMono : public GeoTexSvx
+        class DRAWINGLAYER_DLLPUBLIC GeoTexSvxMono final : public GeoTexSvx
         {
-        protected:
             basegfx::BColor                             maSingleColor;
             double                                      mfOpacity;
 
@@ -60,27 +59,27 @@ namespace drawinglayer
         {
         protected:
             BitmapEx                                    maBitmapEx;
-            BitmapReadAccess*                           mpReadBitmap;
+            Bitmap                                      maBitmap;   // Bitmap held within maBitmapEx, to exist during mpReadBitmap scope
+            Bitmap::ScopedReadAccess                    mpReadBitmap;
             Bitmap                                      maTransparence;
-            BitmapReadAccess*                           mpReadTransparence;
+            Bitmap::ScopedReadAccess                    mpReadTransparence;
             basegfx::B2DPoint                           maTopLeft;
             basegfx::B2DVector                          maSize;
             double                                      mfMulX;
             double                                      mfMulY;
 
-            /// bitfield
             bool                                        mbIsAlpha : 1;
             bool                                        mbIsTransparent : 1;
 
             // helpers
             bool impIsValid(const basegfx::B2DPoint& rUV, sal_Int32& rX, sal_Int32& rY) const;
-            sal_uInt8 impGetTransparence(sal_Int32& rX, sal_Int32& rY) const;
+            sal_uInt8 impGetTransparence(sal_Int32 rX, sal_Int32 rY) const;
 
         public:
             GeoTexSvxBitmapEx(
                 const BitmapEx& rBitmapEx,
                 const basegfx::B2DRange& rRange);
-            virtual ~GeoTexSvxBitmapEx();
+            virtual ~GeoTexSvxBitmapEx() override;
 
             virtual void modifyBColor(const basegfx::B2DPoint& rUV, basegfx::BColor& rBColor, double& rfOpacity) const override;
             virtual void modifyOpacity(const basegfx::B2DPoint& rUV, double& rfOpacity) const override;
@@ -92,13 +91,11 @@ namespace drawinglayer
 {
     namespace texture
     {
-        class DRAWINGLAYER_DLLPUBLIC GeoTexSvxBitmapExTiled : public GeoTexSvxBitmapEx
+        class DRAWINGLAYER_DLLPUBLIC GeoTexSvxBitmapExTiled final : public GeoTexSvxBitmapEx
         {
-        protected:
             double                                      mfOffsetX;
             double                                      mfOffsetY;
 
-            /// bitfield
             bool                                        mbUseOffsetX : 1;
             bool                                        mbUseOffsetY : 1;
 
@@ -109,8 +106,8 @@ namespace drawinglayer
             GeoTexSvxBitmapExTiled(
                 const BitmapEx& rBitmapEx,
                 const basegfx::B2DRange& rRange,
-                double fOffsetX = 0.0,
-                double fOffsetY = 0.0);
+                double fOffsetX,
+                double fOffsetY);
 
             virtual void modifyBColor(const basegfx::B2DPoint& rUV, basegfx::BColor& rBColor, double& rfOpacity) const override;
             virtual void modifyOpacity(const basegfx::B2DPoint& rUV, double& rfOpacity) const override;
@@ -122,16 +119,14 @@ namespace drawinglayer
 {
     namespace texture
     {
-        class DRAWINGLAYER_DLLPUBLIC GeoTexSvxMultiHatch : public GeoTexSvx
+        class DRAWINGLAYER_DLLPUBLIC GeoTexSvxMultiHatch final : public GeoTexSvx
         {
-        protected:
             basegfx::BColor                 maColor;
             double                          mfLogicPixelSize;
-            GeoTexSvxHatch*                 mp0;
-            GeoTexSvxHatch*                 mp1;
-            GeoTexSvxHatch*                 mp2;
+            std::unique_ptr<GeoTexSvxHatch> mp0;
+            std::unique_ptr<GeoTexSvxHatch> mp1;
+            std::unique_ptr<GeoTexSvxHatch> mp2;
 
-            // bitfield
             bool                            mbFillBackground : 1;
 
             // helpers
@@ -139,7 +134,7 @@ namespace drawinglayer
 
         public:
             GeoTexSvxMultiHatch(const primitive3d::HatchTexturePrimitive3D& rPrimitive, double fLogicPixelSize);
-            virtual ~GeoTexSvxMultiHatch();
+            virtual ~GeoTexSvxMultiHatch() override;
             virtual void modifyBColor(const basegfx::B2DPoint& rUV, basegfx::BColor& rBColor, double& rfOpacity) const override;
             virtual void modifyOpacity(const basegfx::B2DPoint& rUV, double& rfOpacity) const override;
         };

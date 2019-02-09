@@ -20,8 +20,8 @@
 #ifndef INCLUDED_SLIDESHOW_SOURCE_ENGINE_SHAPES_DRAWSHAPESUBSETTING_HXX
 #define INCLUDED_SLIDESHOW_SOURCE_ENGINE_SHAPES_DRAWSHAPESUBSETTING_HXX
 
-#include "doctreenode.hxx"
-#include "attributableshape.hxx"
+#include <doctreenode.hxx>
+#include <attributableshape.hxx>
 
 
 class GDIMetaFile;
@@ -59,9 +59,9 @@ namespace slideshow
                 generated with verbose text comments switched on).
              */
             DrawShapeSubsetting( const DocTreeNode&                         rShapeSubset,
-                                 const ::std::shared_ptr< GDIMetaFile >&  rMtf );
+                                 ::std::shared_ptr< GDIMetaFile >   rMtf );
 
-            /// Forbid copy copstruction
+            /// Forbid copy construction
             DrawShapeSubsetting(const DrawShapeSubsetting&) = delete;
 
             /// Forbid copy assignment
@@ -84,7 +84,7 @@ namespace slideshow
 
 
             /// Return subset node for this shape
-            DocTreeNode                 getSubsetNode       () const;
+            const DocTreeNode&          getSubsetNode       () const;
 
             /// Get subset shape for given node, if any
             AttributableShapeSharedPtr  getSubsetShape      ( const DocTreeNode& rTreeNode ) const;
@@ -202,7 +202,7 @@ namespace slideshow
             typedef ::std::set< SubsetEntry >       ShapeSet;
 
             void ensureInitializedNodeTree() const;
-            void updateSubsetBounds( const SubsetEntry& rSubsetEntry );
+            void excludeSubset(sal_Int32 nExcludedStart, sal_Int32 nExcludedEnd);
             void updateSubsets();
             void initCurrentSubsets();
             void reset();
@@ -225,12 +225,6 @@ namespace slideshow
 
             /// the list of subset shapes spawned from this one.
             ShapeSet                            maSubsetShapes;
-
-            /// caches minimal subset index from maSubsetShapes
-            sal_Int32                           mnMinSubsetActionIndex;
-
-            /// caches maximal subset index from maSubsetShapes
-            sal_Int32                           mnMaxSubsetActionIndex;
 
             /** Current number of subsets to render (calculated from
                 maSubset and mnMin/MaxSubsetActionIndex).

@@ -27,7 +27,7 @@
 
 namespace basegfx
 {
-    namespace tools
+    namespace utils
     {
         // look for self-intersections and self-touches (points on an edge) in given polygon and add
         // extra points there. Result will have no touches or intersections on an edge, only on points
@@ -36,8 +36,7 @@ namespace basegfx
         // look for polypolygon-intersections and polypolygon-touches (point of poly A on an edge of poly B) in given tools::PolyPolygon and add
         // extra points there. Result will have no touches or intersections between contained polygons on an edge, only on points. For
         // convenience, the correction for self-intersections for each member polygon will be used, too.
-        // Changed: Self intersections are searched by default, but may be switched off by 2nd parameter.
-        BASEGFX_DLLPUBLIC B2DPolyPolygon addPointsAtCutsAndTouches(const B2DPolyPolygon& rCandidate, bool bSelfIntersections = true);
+        BASEGFX_DLLPUBLIC B2DPolyPolygon addPointsAtCutsAndTouches(const B2DPolyPolygon& rCandidate);
 
         // look for intersections of rCandidate with the edge from rStart to rEnd and add extra points there.
         // Points are only added in the range of the edge, not on the endless vector.
@@ -47,7 +46,7 @@ namespace basegfx
         // The mask polygon is assumed to be closed, even when it's not explicitly.
         BASEGFX_DLLPUBLIC B2DPolygon addPointsAtCuts(const B2DPolygon& rCandidate, const B2DPolyPolygon& rMask);
 
-    } // end of namespace tools
+    } // end of namespace utils
 } // end of namespace basegfx
 
 

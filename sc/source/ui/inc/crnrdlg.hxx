@@ -21,8 +21,7 @@
 #define INCLUDED_SC_SOURCE_UI_INC_CRNRDLG_HXX
 
 #include "anyrefdg.hxx"
-#include "rangelst.hxx"
-#include <vcl/fixed.hxx>
+#include <rangelst.hxx>
 #include <vcl/lstbox.hxx>
 
 #include <unordered_map>
@@ -35,7 +34,7 @@ class ScColRowNameRangesDlg : public ScAnyRefDlg
 public:
                     ScColRowNameRangesDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent,
                                  ScViewData*    ptrViewData );
-                    virtual ~ScColRowNameRangesDlg();
+                    virtual ~ScColRowNameRangesDlg() override;
     virtual void    dispose() override;
 
     virtual void    SetReference( const ScRange& rRef, ScDocument* pDoc ) override;
@@ -65,9 +64,9 @@ private:
     ScRangePairListRef  xColNameRanges;
     ScRangePairListRef  xRowNameRanges;
 
-    typedef std::unordered_map< OUString, ScRange, OUStringHash > NameRangeMap;
+    typedef std::unordered_map< OUString, ScRange > NameRangeMap;
     NameRangeMap    aRangeMap;
-    ScViewData*     pViewData;
+    ScViewData* const     pViewData;
     ScDocument*     pDoc;
     VclPtr<formula::RefEdit>       pEdActive;
     bool            bDlgLostFocus;
@@ -77,17 +76,17 @@ private:
     void UpdateRangeData    ( const ScRange& rRange, bool bColName );
     void SetColRowData( const ScRange& rLabelRange, bool bRef=false);
     void AdjustColRowData( const ScRange& rDataRange, bool bRef=false);
-    DECL_LINK_TYPED( CancelBtnHdl, Button*, void );
-    DECL_LINK_TYPED( OkBtnHdl, Button*, void );
-    DECL_LINK_TYPED( AddBtnHdl, Button*, void );
-    DECL_LINK_TYPED( RemoveBtnHdl, Button*, void );
-    DECL_LINK_TYPED( Range1SelectHdl, ListBox&, void );
-    DECL_LINK_TYPED( Range1DataModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( ColClickHdl, Button*, void );
-    DECL_LINK_TYPED( RowClickHdl, Button*, void );
-    DECL_LINK_TYPED( Range2DataModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( GetFocusHdl, Control&, void );
-    DECL_LINK_TYPED( LoseFocusHdl, Control&, void );
+    DECL_LINK( CancelBtnHdl, Button*, void );
+    DECL_LINK( OkBtnHdl, Button*, void );
+    DECL_LINK( AddBtnHdl, Button*, void );
+    DECL_LINK( RemoveBtnHdl, Button*, void );
+    DECL_LINK( Range1SelectHdl, ListBox&, void );
+    DECL_LINK( Range1DataModifyHdl, Edit&, void );
+    DECL_LINK( ColClickHdl, Button*, void );
+    DECL_LINK( RowClickHdl, Button*, void );
+    DECL_LINK( Range2DataModifyHdl, Edit&, void );
+    DECL_LINK( GetFocusHdl, Control&, void );
+    DECL_LINK( LoseFocusHdl, Control&, void );
 };
 
 #endif // INCLUDED_SC_SOURCE_UI_INC_CRNRDLG_HXX

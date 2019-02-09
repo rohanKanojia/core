@@ -20,8 +20,9 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_XML_XMLCELLRANGESOURCECONTEXT_HXX
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLCELLRANGESOURCECONTEXT_HXX
 
-#include <xmloff/xmlimp.hxx>
-#include "xmlimprt.hxx"
+#include "importcontext.hxx"
+
+namespace sax_fastparser { class FastAttributeList; }
 
 
 struct ScMyImpCellRangeSource
@@ -30,35 +31,22 @@ struct ScMyImpCellRangeSource
     OUString             sFilterName;
     OUString             sFilterOptions;
     OUString             sURL;
-    sal_Int32                   nColumns;
-    sal_Int32                   nRows;
-    sal_Int32                   nRefresh;
+    sal_Int32            nColumns;
+    sal_Int32            nRows;
+    sal_Int32            nRefresh;
 
-                                ScMyImpCellRangeSource();
+                               ScMyImpCellRangeSource();
 };
 
-class ScXMLCellRangeSourceContext : public SvXMLImportContext
+class ScXMLCellRangeSourceContext : public ScXMLImportContext
 {
-private:
-    const ScXMLImport&          GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport&                GetScImport()       { return static_cast<ScXMLImport&>(GetImport()); }
-
 public:
                                 ScXMLCellRangeSourceContext(
                                     ScXMLImport& rImport,
-                                    sal_uInt16 nPrfx,
-                                    const OUString& rLName,
-                                    const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList,
+                                    const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                     ScMyImpCellRangeSource* pCellRangeSource
                                     );
-    virtual                     ~ScXMLCellRangeSourceContext();
-
-    virtual SvXMLImportContext* CreateChildContext(
-                                    sal_uInt16 nPrefix,
-                                    const OUString& rLocalName,
-                                    const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList
-                                    ) override;
-    virtual void                EndElement() override;
+    virtual                     ~ScXMLCellRangeSourceContext() override;
 };
 
 #endif

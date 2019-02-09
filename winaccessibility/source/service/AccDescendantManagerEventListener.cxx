@@ -25,9 +25,9 @@
 
 #include <vcl/svapp.hxx>
 
-#include "AccDescendantManagerEventListener.hxx"
-#include "AccObjectManagerAgent.hxx"
-#include "unomsaaevent.hxx"
+#include <AccDescendantManagerEventListener.hxx>
+#include <AccObjectManagerAgent.hxx>
+#include <unomsaaevent.hxx>
 
 using namespace com::sun::star::uno;
 using namespace com::sun::star::accessibility;
@@ -46,7 +46,6 @@ AccDescendantManagerEventListener::~AccDescendantManagerEventListener()
  * @param AccessibleEventObject     the event object which contains information about event
  */
 void  AccDescendantManagerEventListener::notifyEvent( const css::accessibility::AccessibleEventObject& aEvent )
-throw (css::uno::RuntimeException)
 {
     SolarMutexGuard g;
 
@@ -97,8 +96,6 @@ void AccDescendantManagerEventListener::HandleChildChangedEvent(Any oldValue, An
             pAgent->NotifyAccEvent(UM_EVENT_CHILD_ADDED, pAcc);
 
         }
-        else
-        {}
     }
 
     if (oldValue >>= xChild)
@@ -111,8 +108,6 @@ void AccDescendantManagerEventListener::HandleChildChangedEvent(Any oldValue, An
             pAgent->DeleteChildrenAccObj( pAcc );
             pAgent->DeleteAccObj( pAcc );
         }
-        else
-        {}
     }
 
 }
@@ -188,7 +183,7 @@ bool AccDescendantManagerEventListener::NotifyChildEvent(short nWinEvent,const A
             XAccessible* pAcc = xChild.get();
             pAgent->NotifyAccEvent(nWinEvent, pAcc);
 
-            if (pAgent && pAgent->IsStateManageDescendant(m_xAccessible.get())
+            if (pAgent->IsStateManageDescendant(m_xAccessible.get())
                     && (nWinEvent == UM_EVENT_SELECTION_CHANGED_REMOVE))
             {
                 pAgent->DeleteAccObj( pAcc );

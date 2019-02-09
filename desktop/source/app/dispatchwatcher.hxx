@@ -21,7 +21,6 @@
 #define INCLUDED_DESKTOP_SOURCE_APP_DISPATCHWATCHER_HXX
 
 #include <cppuhelper/implbase.hxx>
-#include <com/sun/star/frame/XNotifyingDispatch.hpp>
 #include <com/sun/star/frame/XDispatchResultListener.hpp>
 
 #include "officeipcthread.hxx"
@@ -34,7 +33,7 @@ namespace desktop
 /*
     Class for controls dispatching of command URL through office command line. There
     are "dangerous" command URLs, that can result in a running office without UI. To prevent
-    this situation the implementation surveille all dispatches and looks for an open task if
+    this situation the implementation monitors all dispatches and looks for an open task if
     there is arose a problem. If there is none the office will be shutdown to prevent a
     running office without UI.
 */
@@ -53,37 +52,34 @@ class DispatchWatcher : public ::cppu::WeakImplHelper< css::frame::XDispatchResu
             REQUEST_CONVERSION,
             REQUEST_INFILTER,
             REQUEST_BATCHPRINT,
-            REQUEST_CAT
+            REQUEST_CAT,
+            REQUEST_SCRIPT_CAT
         };
 
         struct DispatchRequest
         {
-            RequestType     aRequestType;
-            OUString   aURL;
+            RequestType aRequestType;
+            OUString    aURL;
             boost::optional< OUString > aCwdUrl;
-            OUString   aPrinterName;  // also conversion params
-            OUString   aPreselectedFactory;
+            OUString    aPrinterName;  // also conversion params
+            OUString    aPreselectedFactory;
         };
 
         DispatchWatcher();
 
-        virtual ~DispatchWatcher();
+        virtual ~DispatchWatcher() override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source )
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
         // XDispachResultListener
-        virtual void SAL_CALL dispatchFinished( const css::frame::DispatchResultEvent& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL dispatchFinished( const css::frame::DispatchResultEvent& aEvent ) override;
 
         // execute new dispatch request
-        bool executeDispatchRequests( const std::vector<DispatchRequest>& aDispatches, bool bNoTerminate = false );
+        bool executeDispatchRequests( const std::vector<DispatchRequest>& aDispatches, bool bNoTerminate );
 
     private:
         osl::Mutex m_mutex;
-
-        std::unordered_map<OUString, sal_Int32, OUStringHash>
-            m_aRequestContainer;
 
         sal_Int16                   m_nRequestCount;
 };

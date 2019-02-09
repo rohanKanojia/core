@@ -33,8 +33,10 @@
  */
 namespace comphelper
 {
-    class COMPHELPER_DLLPUBLIC ChainablePropertySetInfo:
-        public ::cppu::WeakImplHelper< css::beans::XPropertySetInfo >
+    // workaround for incremental linking bugs in MSVC2015
+    class SAL_DLLPUBLIC_TEMPLATE ChainablePropertySetInfo_Base : public cppu::WeakImplHelper< css::beans::XPropertySetInfo > {};
+
+    class COMPHELPER_DLLPUBLIC ChainablePropertySetInfo : public ChainablePropertySetInfo_Base
     {
     public:
         ChainablePropertySetInfo( PropertyInfo const * pMap );
@@ -43,15 +45,12 @@ namespace comphelper
 
     private:
         virtual ~ChainablePropertySetInfo()
-            throw();
+            throw() override;
 
         // XPropertySetInfo
-        virtual css::uno::Sequence< css::beans::Property > SAL_CALL getProperties()
-            throw(css::uno::RuntimeException, std::exception) override;
-        virtual css::beans::Property SAL_CALL getPropertyByName( const OUString& aName )
-            throw(css::beans::UnknownPropertyException, css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL hasPropertyByName( const OUString& Name )
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< css::beans::Property > SAL_CALL getProperties() override;
+        virtual css::beans::Property SAL_CALL getPropertyByName( const OUString& aName ) override;
+        virtual sal_Bool SAL_CALL hasPropertyByName( const OUString& Name ) override;
 
         PropertyInfoHash                            maMap;
         css::uno::Sequence < css::beans::Property > maProperties;

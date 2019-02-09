@@ -26,19 +26,19 @@
 #include <rtl/instance.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/propertysequence.hxx>
 
 #include <sfx2/dockwin.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/dispatch.hxx>
-#include "workwin.hxx"
-#include "splitwin.hxx"
+#include <workwin.hxx>
+#include <splitwin.hxx>
 #include <sfx2/viewsh.hxx>
 #include <sfx2/sfxhelp.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/msgpool.hxx>
 
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
 #include <com/sun/star/lang/XSingleComponentFactory.hpp>
 #include <com/sun/star/awt/XWindow.hpp>
@@ -69,17 +69,15 @@ public:
                             SfxChildWindow* pChildWin ,
                             vcl::Window* pParent ,
                             WinBits nBits);
-    virtual             ~SfxTitleDockingWindow();
+    virtual             ~SfxTitleDockingWindow() override;
     virtual void        dispose() override;
 
     vcl::Window*        GetWrappedWindow() const { return m_pWrappedWindow; }
     void                SetWrappedWindow(vcl::Window* const pWindow);
 
     virtual void        StateChanged( StateChangedType nType ) override;
-    virtual bool        Notify( NotifyEvent& rNEvt ) override;
     virtual void        Resize() override;
     virtual void        Resizing( Size& rSize ) override;
-    virtual bool        Close() override;
 };
 
 namespace
@@ -139,18 +137,13 @@ SfxDockingWrapper::SfxDockingWrapper( vcl::Window* pParentWnd ,
 
     SfxDispatcher* pDispatcher = pBindings->GetDispatcher();
     uno::Reference< frame::XFrame > xFrame( pDispatcher->GetFrame()->GetFrame().GetFrameInterface(), uno::UNO_QUERY );
-    uno::Sequence< uno::Any > aArgs(2);
-    beans::PropertyValue      aPropValue;
-    aPropValue.Name  = "Frame";
-    aPropValue.Value = uno::makeAny( xFrame );
-    aArgs[0] <<= aPropValue;
-    aPropValue.Name  = "ResourceURL";
-
     // create a resource URL from the nId provided by the sfx2
-    OUString aResourceURL( aDockWindowResourceURL );
-    aResourceURL += OUString::number(nId);
-    aPropValue.Value = uno::makeAny( aResourceURL );
-    aArgs[1] <<= aPropValue;
+    OUString aResourceURL =  aDockWindowResourceURL + OUString::number(nId);
+    uno::Sequence<uno::Any> aArgs(comphelper::InitAnyPropertySequence(
+    {
+        {"Frame", uno::Any(xFrame)},
+        {"ResourceURL", uno::Any(aResourceURL)},
+    }));
 
     uno::Reference< awt::XWindow > xWindow;
     try
@@ -159,22 +152,22 @@ SfxDockingWrapper::SfxDockingWrapper( vcl::Window* pParentWnd ,
             xFactoryMgr->createInstanceWithArgumentsAndContext( aArgs, xContext ),
             uno::UNO_QUERY );
 
-        static uno::WeakReference< frame::XModuleManager2 >  m_xModuleManager;
+        static uno::WeakReference< frame::XModuleManager2 >  s_xModuleManager;
 
-        uno::Reference< frame::XModuleManager2 > xModuleManager( m_xModuleManager );
+        uno::Reference< frame::XModuleManager2 > xModuleManager( s_xModuleManager );
         if ( !xModuleManager.is() )
         {
             xModuleManager = frame::ModuleManager::create(xContext);
-            m_xModuleManager = xModuleManager;
+            s_xModuleManager = xModuleManager;
         }
 
-        static uno::WeakReference< container::XNameAccess > m_xWindowStateConfiguration;
+        static uno::WeakReference< container::XNameAccess > s_xWindowStateConfiguration;
 
-        uno::Reference< container::XNameAccess > xWindowStateConfiguration( m_xWindowStateConfiguration );
+        uno::Reference< container::XNameAccess > xWindowStateConfiguration( s_xWindowStateConfiguration );
         if ( !xWindowStateConfiguration.is() )
         {
             xWindowStateConfiguration = ui::theWindowStateConfiguration::get( xContext );
-            m_xWindowStateConfiguration = xWindowStateConfiguration;
+            s_xWindowStateConfiguration = xWindowStateConfiguration;
         }
 
         OUString sModuleIdentifier = xModuleManager->identify( xFrame );
@@ -199,7 +192,7 @@ SfxDockingWrapper::SfxDockingWrapper( vcl::Window* pParentWnd ,
     {
     }
 
-    vcl::Window* pContentWindow = VCLUnoHelper::GetWindow(xWindow);
+    VclPtr<vcl::Window> pContentWindow = VCLUnoHelper::GetWindow(xWindow);
     if ( pContentWindow )
         pContentWindow->SetStyle( pContentWindow->GetStyle() | WB_DIALOGCONTROL | WB_CHILDDLGCTRL );
     pTitleDockWindow->SetWrappedWindow(pContentWindow);
@@ -210,11 +203,10 @@ SfxDockingWrapper::SfxDockingWrapper( vcl::Window* pParentWnd ,
     SetHideNotDelete( true );
 }
 
-SfxChildWindow* SfxDockingWrapper::CreateImpl(vcl::Window *pParent, sal_uInt16 nId,
+std::unique_ptr<SfxChildWindow> SfxDockingWrapper::CreateImpl(vcl::Window *pParent, sal_uInt16 nId,
                                               SfxBindings *pBindings, SfxChildWinInfo* pInfo)
 {
-    SfxChildWindow *pWin = new SfxDockingWrapper(pParent, nId, pBindings, pInfo);
-    return pWin;
+    return std::make_unique<SfxDockingWrapper>(pParent, nId, pBindings, pInfo);
 }
 
 void SfxDockingWrapper::RegisterChildWindow (bool bVis, SfxModule *pMod, SfxChildWindowFlags nFlags)
@@ -223,10 +215,10 @@ void SfxDockingWrapper::RegisterChildWindow (bool bVis, SfxModule *pMod, SfxChil
     for (int i=0; i < NUM_OF_DOCKINGWINDOWS; i++ )
     {
         sal_uInt16 nID = sal_uInt16(SID_DOCKWIN_START+i);
-        SfxChildWinFactory *pFact = new SfxChildWinFactory( SfxDockingWrapper::CreateImpl, nID, 0xffff );
+        auto pFact = std::make_unique<SfxChildWinFactory>( SfxDockingWrapper::CreateImpl, nID, 0xffff );
         pFact->aInfo.nFlags |= nFlags;
         pFact->aInfo.bVisible = bVis;
-        SfxChildWindow::RegisterChildWindow(pMod, pFact);
+        SfxChildWindow::RegisterChildWindow(pMod, std::move(pFact));
     }
 }
 
@@ -266,11 +258,6 @@ void SfxTitleDockingWindow::SetWrappedWindow( vcl::Window* const pWindow )
     }
 }
 
-bool SfxTitleDockingWindow::Notify( NotifyEvent& rNEvt )
-{
-    return SfxDockingWindow::Notify( rNEvt );
-}
-
 void SfxTitleDockingWindow::StateChanged( StateChangedType nType )
 {
     if ( nType == StateChangedType::InitShow )
@@ -300,11 +287,6 @@ void SfxTitleDockingWindow::Resizing( Size &rSize )
         m_pWrappedWindow->SetSizePixel( GetOutputSizePixel() );
 }
 
-bool SfxTitleDockingWindow::Close()
-{
-    return SfxDockingWindow::Close();
-}
-
 namespace
 {
     struct ChildrenRegisteredMap : public rtl::Static< bool, ChildrenRegisteredMap > {};
@@ -312,10 +294,7 @@ namespace
 
 static bool lcl_checkDockingWindowID( sal_uInt16 nID )
 {
-    if (nID < SID_DOCKWIN_START || nID >= sal_uInt16(SID_DOCKWIN_START+NUM_OF_DOCKINGWINDOWS))
-        return false;
-    else
-        return true;
+    return !(nID < SID_DOCKWIN_START || nID >= sal_uInt16(SID_DOCKWIN_START+NUM_OF_DOCKINGWINDOWS));
 }
 
 static SfxWorkWindow* lcl_getWorkWindowFromXFrame( const uno::Reference< frame::XFrame >& rFrame )
@@ -346,23 +325,23 @@ static SfxWorkWindow* lcl_getWorkWindowFromXFrame( const uno::Reference< frame::
     The string rDockingWindowName MUST BE a valid ID! The ID is pre-defined by a certain slot range located
     in sfxsids.hrc (currently SID_DOCKWIN_START = 9800).
 */
-void SAL_CALL SfxDockingWindowFactory( const uno::Reference< frame::XFrame >& rFrame, const OUString& rDockingWindowName )
+void SfxDockingWindowFactory( const uno::Reference< frame::XFrame >& rFrame, const OUString& rDockingWindowName )
 {
     SolarMutexGuard aGuard;
     sal_uInt16 nID = sal_uInt16(rDockingWindowName.toInt32());
 
     // Check the range of the provided ID otherwise nothing will happen
-    if ( lcl_checkDockingWindowID( nID ))
+    if ( !lcl_checkDockingWindowID( nID ))
+        return;
+
+    SfxWorkWindow* pWorkWindow = lcl_getWorkWindowFromXFrame( rFrame );
+    if ( pWorkWindow )
     {
-        SfxWorkWindow* pWorkWindow = lcl_getWorkWindowFromXFrame( rFrame );
-        if ( pWorkWindow )
+        SfxChildWindow* pChildWindow = pWorkWindow->GetChildWindow_Impl(nID);
+        if ( !pChildWindow )
         {
-            SfxChildWindow* pChildWindow = pWorkWindow->GetChildWindow_Impl(nID);
-            if ( !pChildWindow )
-            {
-                // Register window at the workwindow child window list
-                pWorkWindow->SetChildWindow_Impl( nID, true, false );
-            }
+            // Register window at the workwindow child window list
+            pWorkWindow->SetChildWindow_Impl( nID, true, false );
         }
     }
 }
@@ -371,7 +350,7 @@ void SAL_CALL SfxDockingWindowFactory( const uno::Reference< frame::XFrame >& rF
     a special name. The string rDockingWindowName MUST BE a valid ID! The ID is pre-defined by a certain slot
     range located in sfxsids.hrc (currently SID_DOCKWIN_START = 9800).
 */
-bool SAL_CALL IsDockingWindowVisible( const uno::Reference< frame::XFrame >& rFrame, const OUString& rDockingWindowName )
+bool IsDockingWindowVisible( const uno::Reference< frame::XFrame >& rFrame, const OUString& rDockingWindowName )
 {
     SolarMutexGuard aGuard;
 
@@ -401,23 +380,22 @@ friend class SfxDockingWindow;
     bool                bConstructed;
     Size                aMinSize;
     VclPtr<SfxSplitWindow>  pSplitWin;
-    bool                bSplitable;
     Idle                aMoveIdle;
 
     // The following members are only valid in the time from startDocking to
     // EndDocking:
-    bool                bEndDocked;
     Size                aSplitSize;
     long                nHorizontalSize;
     long                nVerticalSize;
-    sal_uInt16              nLine;
-    sal_uInt16              nPos;
-    sal_uInt16              nDockLine;
-    sal_uInt16              nDockPos;
+    sal_uInt16          nLine;
+    sal_uInt16          nPos;
+    sal_uInt16          nDockLine;
+    sal_uInt16          nDockPos;
     bool                bNewLine;
     bool                bDockingPrevented;
-    OString aWinState;
+    OString             aWinState;
 
+    explicit            SfxDockingWindow_Impl(SfxDockingWindow *pBase);
     SfxChildAlignment   GetLastAlignment() const
                         { return eLastAlignment; }
     void                SetLastAlignment(SfxChildAlignment eAlign)
@@ -427,6 +405,25 @@ friend class SfxDockingWindow;
     void                SetDockAlignment(SfxChildAlignment eAlign)
                         { eDockAlignment = eAlign; }
 };
+
+SfxDockingWindow_Impl::SfxDockingWindow_Impl(SfxDockingWindow* pBase)
+    :eLastAlignment(SfxChildAlignment::NOALIGNMENT)
+    ,eDockAlignment(SfxChildAlignment::NOALIGNMENT)
+    ,bConstructed(false)
+    ,pSplitWin(nullptr)
+    ,nHorizontalSize(0)
+    ,nVerticalSize(0)
+    ,nLine(0)
+    ,nPos(0)
+    ,nDockLine(0)
+    ,nDockPos(0)
+    ,bNewLine(false)
+    ,bDockingPrevented(false)
+{
+    aMoveIdle.SetPriority(TaskPriority::RESIZE);
+    aMoveIdle.SetInvokeHandler(LINK(pBase,SfxDockingWindow,TimerHdl));
+    aMoveIdle.SetDebugName( "sfx::SfxDockingWindow_Impl aMoveIdle" );
+}
 
 /*  [Description]
 
@@ -438,39 +435,39 @@ void SfxDockingWindow::Resize()
 {
     DockingWindow::Resize();
     Invalidate();
-    if ( pImp && pImp->bConstructed && pMgr )
+    if ( !pImpl || !pImpl->bConstructed || !pMgr )
+        return;
+
+    if ( IsFloatingMode() )
     {
-        if ( IsFloatingMode() )
+        // start timer for saving window status information
+        pImpl->aMoveIdle.Start();
+    }
+    else
+    {
+        Size aSize( GetSizePixel() );
+        switch ( pImpl->GetDockAlignment() )
         {
-            // start timer for saving window status information
-            pImp->aMoveIdle.Start();
-        }
-        else
-        {
-            Size aSize( GetSizePixel() );
-            switch ( pImp->GetDockAlignment() )
-            {
-                case SfxChildAlignment::LEFT:
-                case SfxChildAlignment::FIRSTLEFT:
-                case SfxChildAlignment::LASTLEFT:
-                case SfxChildAlignment::RIGHT:
-                case SfxChildAlignment::FIRSTRIGHT:
-                case SfxChildAlignment::LASTRIGHT:
-                    pImp->nHorizontalSize = aSize.Width();
-                    pImp->aSplitSize = aSize;
-                    break;
-                case SfxChildAlignment::TOP:
-                case SfxChildAlignment::LOWESTTOP:
-                case SfxChildAlignment::HIGHESTTOP:
-                case SfxChildAlignment::BOTTOM:
-                case SfxChildAlignment::HIGHESTBOTTOM:
-                case SfxChildAlignment::LOWESTBOTTOM:
-                    pImp->nVerticalSize = aSize.Height();
-                    pImp->aSplitSize = aSize;
-                    break;
-                default:
-                    break;
-            }
+            case SfxChildAlignment::LEFT:
+            case SfxChildAlignment::FIRSTLEFT:
+            case SfxChildAlignment::LASTLEFT:
+            case SfxChildAlignment::RIGHT:
+            case SfxChildAlignment::FIRSTRIGHT:
+            case SfxChildAlignment::LASTRIGHT:
+                pImpl->nHorizontalSize = aSize.Width();
+                pImpl->aSplitSize = aSize;
+                break;
+            case SfxChildAlignment::TOP:
+            case SfxChildAlignment::LOWESTTOP:
+            case SfxChildAlignment::HIGHESTTOP:
+            case SfxChildAlignment::BOTTOM:
+            case SfxChildAlignment::HIGHESTBOTTOM:
+            case SfxChildAlignment::LOWESTBOTTOM:
+                pImpl->nVerticalSize = aSize.Height();
+                pImpl->aSplitSize = aSize;
+                break;
+            default:
+                break;
         }
     }
 }
@@ -485,13 +482,13 @@ void SfxDockingWindow::Resize()
 */
 bool SfxDockingWindow::PrepareToggleFloatingMode()
 {
-    if (!pImp || !pImp->bConstructed)
+    if (!pImpl || !pImpl->bConstructed)
         return true;
 
     if ( (Application::IsInModalMode() && IsFloatingMode()) || !pMgr )
         return false;
 
-    if ( pImp->bDockingPrevented )
+    if ( pImpl->bDockingPrevented )
         return false;
 
     if (!IsFloatingMode())
@@ -500,19 +497,19 @@ bool SfxDockingWindow::PrepareToggleFloatingMode()
         if ( CheckAlignment(GetAlignment(),SfxChildAlignment::NOALIGNMENT) != SfxChildAlignment::NOALIGNMENT )
             return false;
 
-        if ( pImp->pSplitWin )
+        if ( pImpl->pSplitWin )
         {
             // The DockingWindow is inside a SplitWindow and will be teared of.
-            pImp->pSplitWin->RemoveWindow(this/*, sal_False*/);
-            pImp->pSplitWin = nullptr;
+            pImpl->pSplitWin->RemoveWindow(this/*, sal_False*/);
+            pImpl->pSplitWin = nullptr;
         }
     }
     else if ( pMgr )
     {
-        pImp->aWinState = GetFloatingWindow()->GetWindowState();
+        pImpl->aWinState = GetFloatingWindow()->GetWindowState();
 
         // Test if it is allowed to dock,
-        if (CheckAlignment(GetAlignment(),pImp->GetLastAlignment()) == SfxChildAlignment::NOALIGNMENT)
+        if (CheckAlignment(GetAlignment(),pImpl->GetLastAlignment()) == SfxChildAlignment::NOALIGNMENT)
             return false;
 
         // Test, if the Workwindow allows for docking at the moment.
@@ -529,13 +526,13 @@ bool SfxDockingWindow::PrepareToggleFloatingMode()
     This virtual method of the DockingWindow class sets the internal data of
     the SfxDockingWindow and ensures the correct alignment on the parent window.
     Through PrepareToggleFloatMode and Initialize it is ensured that
-    pImp-> GetLastAlignment() always delivers an allowed alignment. If this
+    pImpl-> GetLastAlignment() always delivers an allowed alignment. If this
     method is overridden by a derived class, then first the
     SfxDockingWindow::ToggleFloatingMode() must be called.
 */
 void SfxDockingWindow::ToggleFloatingMode()
 {
-    if ( !pImp || !pImp->bConstructed || !pMgr )
+    if ( !pImpl || !pImpl->bConstructed || !pMgr )
         return;                                 // No Handler call
 
     // Remember old alignment and then switch.
@@ -544,67 +541,59 @@ void SfxDockingWindow::ToggleFloatingMode()
     SfxChildAlignment eLastAlign = GetAlignment();
 
     SfxWorkWindow *pWorkWin = pBindings->GetWorkWindow_Impl();
-    SfxChildIdentifier eIdent = SfxChildIdentifier::DOCKINGWINDOW;
-    if ( pImp->bSplitable )
-        eIdent = SfxChildIdentifier::SPLITWINDOW;
 
     if (IsFloatingMode())
     {
         SetAlignment(SfxChildAlignment::NOALIGNMENT);
-        if ( !pImp->aWinState.isEmpty() )
-            GetFloatingWindow()->SetWindowState( pImp->aWinState );
+        if ( !pImpl->aWinState.isEmpty() )
+            GetFloatingWindow()->SetWindowState( pImpl->aWinState );
         else
             GetFloatingWindow()->SetOutputSizePixel( GetFloatingSize() );
     }
     else
     {
-        if (pImp->GetDockAlignment() == eLastAlign)
+        if (pImpl->GetDockAlignment() == eLastAlign)
         {
             // If ToggleFloatingMode was called, but the DockAlignment still
             // is unchanged, then this means that it must have been a toggling
             // through DClick, so use last alignment
-            SetAlignment (pImp->GetLastAlignment());
-            if ( !pImp->bSplitable )
-                SetSizePixel( CalcDockingSize(GetAlignment()) );
+            SetAlignment (pImpl->GetLastAlignment());
         }
         else
         {
 
             // Toggling was triggered by dragging
-            pImp->nLine = pImp->nDockLine;
-            pImp->nPos = pImp->nDockPos;
-            SetAlignment (pImp->GetDockAlignment());
+            pImpl->nLine = pImpl->nDockLine;
+            pImpl->nPos = pImpl->nDockPos;
+            SetAlignment (pImpl->GetDockAlignment());
         }
 
-        if ( pImp->bSplitable )
-        {
-            // The DockingWindow is now in a SplitWindow
-            pImp->pSplitWin = pWorkWin->GetSplitWindow_Impl(GetAlignment());
+        // The DockingWindow is now in a SplitWindow
+        pImpl->pSplitWin = pWorkWin->GetSplitWindow_Impl(GetAlignment());
 
-            // The LastAlignment is still the last docked
-            SfxSplitWindow *pSplit = pWorkWin->GetSplitWindow_Impl(pImp->GetLastAlignment());
+        // The LastAlignment is still the last docked
+        SfxSplitWindow *pSplit = pWorkWin->GetSplitWindow_Impl(pImpl->GetLastAlignment());
 
-            DBG_ASSERT( pSplit, "LastAlignment is not correct!" );
-            if ( pSplit && pSplit != pImp->pSplitWin )
-                pSplit->ReleaseWindow_Impl(this);
-            if ( pImp->GetDockAlignment() == eLastAlign )
-                pImp->pSplitWin->InsertWindow( this, pImp->aSplitSize );
-            else
-                pImp->pSplitWin->InsertWindow( this, pImp->aSplitSize, pImp->nLine, pImp->nPos, pImp->bNewLine );
-            if ( !pImp->pSplitWin->IsFadeIn() )
-                pImp->pSplitWin->FadeIn();
-        }
+        DBG_ASSERT( pSplit, "LastAlignment is not correct!" );
+        if ( pSplit && pSplit != pImpl->pSplitWin )
+            pSplit->ReleaseWindow_Impl(this);
+        if ( pImpl->GetDockAlignment() == eLastAlign )
+            pImpl->pSplitWin->InsertWindow( this, pImpl->aSplitSize );
+        else
+            pImpl->pSplitWin->InsertWindow( this, pImpl->aSplitSize, pImpl->nLine, pImpl->nPos, pImpl->bNewLine );
+        if ( !pImpl->pSplitWin->IsFadeIn() )
+            pImpl->pSplitWin->FadeIn();
     }
 
     // Keep the old alignment for the next toggle; set it only now due to the
     // unregister SplitWindow!
-    pImp->SetLastAlignment(eLastAlign);
+    pImpl->SetLastAlignment(eLastAlign);
 
     // Reset DockAlignment, if EndDocking is still called
-    pImp->SetDockAlignment(GetAlignment());
+    pImpl->SetDockAlignment(GetAlignment());
 
     // Dock or undock SfxChildWindow correctly.
-    pWorkWin->ConfigChild_Impl( eIdent, SfxDockingConfig::TOGGLEFLOATMODE, pMgr->GetType() );
+    pWorkWin->ConfigChild_Impl( SfxChildIdentifier::SPLITWINDOW, SfxDockingConfig::TOGGLEFLOATMODE, pMgr->GetType() );
 }
 
 /*  [Description]
@@ -616,22 +605,19 @@ void SfxDockingWindow::ToggleFloatingMode()
 */
 void SfxDockingWindow::StartDocking()
 {
-    if ( !pImp || !pImp->bConstructed || !pMgr )
+    if ( !pImpl || !pImpl->bConstructed || !pMgr )
         return;
-    SfxChildIdentifier eIdent = SfxChildIdentifier::DOCKINGWINDOW;
-    if ( pImp->bSplitable )
-        eIdent = SfxChildIdentifier::SPLITWINDOW;
     SfxWorkWindow *pWorkWin = pBindings->GetWorkWindow_Impl();
-    pWorkWin->ConfigChild_Impl( eIdent, SfxDockingConfig::SETDOCKINGRECTS, pMgr->GetType() );
-    pImp->SetDockAlignment(GetAlignment());
+    pWorkWin->ConfigChild_Impl( SfxChildIdentifier::SPLITWINDOW, SfxDockingConfig::SETDOCKINGRECTS, pMgr->GetType() );
+    pImpl->SetDockAlignment(GetAlignment());
 
-    if ( pImp->pSplitWin )
+    if ( pImpl->pSplitWin )
     {
         // Get the current docking data
-        pImp->pSplitWin->GetWindowPos(this, pImp->nLine, pImp->nPos);
-        pImp->nDockLine = pImp->nLine;
-        pImp->nDockPos = pImp->nPos;
-        pImp->bNewLine = false;
+        pImpl->pSplitWin->GetWindowPos(this, pImpl->nLine, pImpl->nPos);
+        pImpl->nDockLine = pImpl->nLine;
+        pImpl->nDockPos = pImpl->nPos;
+        pImpl->bNewLine = false;
     }
 }
 
@@ -642,94 +628,45 @@ void SfxDockingWindow::StartDocking()
     is used, the behavior can be influenced by the derived classes (see below).
     This method should if possible not be overwritten.
 */
-bool SfxDockingWindow::Docking( const Point& rPos, Rectangle& rRect )
+bool SfxDockingWindow::Docking( const Point& rPos, tools::Rectangle& rRect )
 {
     if ( Application::IsInModalMode() )
         return true;
 
-    if ( !pImp || !pImp->bConstructed || !pMgr )
+    if ( !pImpl || !pImpl->bConstructed || !pMgr )
     {
         rRect.SetSize( Size() );
         return IsFloatingMode();
     }
 
     SfxWorkWindow *pWorkWin = pBindings->GetWorkWindow_Impl();
-    if ( pImp->bDockingPrevented || !pWorkWin->IsInternalDockingAllowed() )
+    if ( pImpl->bDockingPrevented || !pWorkWin->IsInternalDockingAllowed() )
         return false;
 
     bool bFloatMode = false;
 
-    if ( GetOuterRect().IsInside( rPos ) && !IsDockingPrevented() )
+    if ( GetOuterRect().IsInside( rPos ) )
     {
         // Mouse within OuterRect: calculate Alignment and Rectangle
         SfxChildAlignment eAlign = CalcAlignment(rPos, rRect);
         if (eAlign == SfxChildAlignment::NOALIGNMENT)
             bFloatMode = true;
-        pImp->SetDockAlignment(eAlign);
+        pImpl->SetDockAlignment(eAlign);
     }
     else
     {
         // Mouse is not within OuterRect: must be FloatingWindow
         // Is this allowed?
-        if (CheckAlignment(pImp->GetDockAlignment(),SfxChildAlignment::NOALIGNMENT) != SfxChildAlignment::NOALIGNMENT)
+        if (CheckAlignment(pImpl->GetDockAlignment(),SfxChildAlignment::NOALIGNMENT) != SfxChildAlignment::NOALIGNMENT)
             return false;
         bFloatMode = true;
-        if ( SfxChildAlignment::NOALIGNMENT != pImp->GetDockAlignment() )
+        if ( SfxChildAlignment::NOALIGNMENT != pImpl->GetDockAlignment() )
         {
             // Due to a bug the rRect may only be changed when the
             // alignment is changed!
-            pImp->SetDockAlignment(SfxChildAlignment::NOALIGNMENT);
+            pImpl->SetDockAlignment(SfxChildAlignment::NOALIGNMENT);
             rRect.SetSize(CalcDockingSize(SfxChildAlignment::NOALIGNMENT));
         }
-    }
-
-    if ( !pImp->bSplitable )
-    {
-        // For individually docked window the position is set through the
-        // alignment and the docking rectangle.
-        Size aSize = rRect.GetSize();
-        Point aPos;
-
-        switch ( pImp->GetDockAlignment() )
-        {
-            case SfxChildAlignment::LEFT:
-            case SfxChildAlignment::FIRSTLEFT:
-            case SfxChildAlignment::LASTLEFT:
-                aPos = aInnerRect.TopLeft();
-                if ( pImp->GetDockAlignment() == GetAlignment() )
-                    aPos.X() -= aSize.Width();
-                break;
-
-            case SfxChildAlignment::TOP:
-            case SfxChildAlignment::LOWESTTOP:
-            case SfxChildAlignment::HIGHESTTOP:
-                aPos = Point(aOuterRect.Left(), aInnerRect.Top());
-                if ( pImp->GetDockAlignment() == GetAlignment() )
-                    aPos.Y() -= aSize.Height();
-                break;
-
-            case SfxChildAlignment::RIGHT:
-            case SfxChildAlignment::FIRSTRIGHT:
-            case SfxChildAlignment::LASTRIGHT:
-                aPos = Point(aInnerRect.Right() - rRect.GetSize().Width(),
-                            aInnerRect.Top());
-                if ( pImp->GetDockAlignment() == GetAlignment() )
-                    aPos.X() += aSize.Width();
-                break;
-
-            case SfxChildAlignment::BOTTOM:
-            case SfxChildAlignment::HIGHESTBOTTOM:
-            case SfxChildAlignment::LOWESTBOTTOM:
-                aPos = Point(aOuterRect.Left(),
-                        aInnerRect.Bottom() - rRect.GetSize().Height());
-                if ( pImp->GetDockAlignment() == GetAlignment() )
-                    aPos.Y() += aSize.Height();
-                break;
-                     default:
-                         break;
-        }
-
-        rRect.SetPos(aPos);
     }
 
     return bFloatMode;
@@ -739,68 +676,62 @@ bool SfxDockingWindow::Docking( const Point& rPos, Rectangle& rRect )
     the parent window. If this method is overridden by a derived class, then
     SfxDockingWindow::EndDocking() must be called first.
 */
-void SfxDockingWindow::EndDocking( const Rectangle& rRect, bool bFloatMode )
+void SfxDockingWindow::EndDocking( const tools::Rectangle& rRect, bool bFloatMode )
 {
-    if ( !pImp || !pImp->bConstructed || IsDockingCanceled() || !pMgr )
+    if ( !pImpl || !pImpl->bConstructed || IsDockingCanceled() || !pMgr )
         return;
 
     SfxWorkWindow *pWorkWin = pBindings->GetWorkWindow_Impl();
-    bool bReArrange = false;
-    if ( pImp->bSplitable )
-    {
-        // If the alignment changes and the window is in a docked state in a
-        // SplitWindow, then it must be re-registered. If it is docked again,
-        // PrepareToggleFloatingMode() and ToggleFloatingMode() preform the
-        // re-registered
-        if ( !bFloatMode )
-            bReArrange = true;
-    }
+
+    // If the alignment changes and the window is in a docked state in a
+    // SplitWindow, then it must be re-registered. If it is docked again,
+    // PrepareToggleFloatingMode() and ToggleFloatingMode() perform the
+    // re-registered
+    bool bReArrange = !bFloatMode;
 
     if ( bReArrange )
     {
-        if ( GetAlignment() != pImp->GetDockAlignment() )
+        if ( GetAlignment() != pImpl->GetDockAlignment() )
         {
             // before Show() is called must the reassignment have been made,
             // therefore the base class can not be called
-            if ( IsFloatingMode() || !pImp->bSplitable )
+            if ( IsFloatingMode() )
                 Show( false, ShowFlags::NoFocusChange );
 
             // Set the size for toggling.
-            pImp->aSplitSize = rRect.GetSize();
+            pImpl->aSplitSize = rRect.GetSize();
             if ( IsFloatingMode() )
             {
                 SetFloatingMode( bFloatMode );
-                if ( IsFloatingMode() || !pImp->bSplitable )
+                if ( IsFloatingMode() )
                     Show( true, ShowFlags::NoFocusChange );
             }
             else
             {
-                pImp->pSplitWin->RemoveWindow(this,false);
-                pImp->nLine = pImp->nDockLine;
-                pImp->nPos = pImp->nDockPos;
-                pImp->pSplitWin->ReleaseWindow_Impl(this);
-                pImp->pSplitWin = pWorkWin->GetSplitWindow_Impl(pImp->GetDockAlignment());
-                pImp->pSplitWin->InsertWindow( this, pImp->aSplitSize, pImp->nDockLine, pImp->nDockPos, pImp->bNewLine );
-                if ( !pImp->pSplitWin->IsFadeIn() )
-                    pImp->pSplitWin->FadeIn();
+                pImpl->pSplitWin->RemoveWindow(this,false);
+                pImpl->nLine = pImpl->nDockLine;
+                pImpl->nPos = pImpl->nDockPos;
+                pImpl->pSplitWin->ReleaseWindow_Impl(this);
+                pImpl->pSplitWin = pWorkWin->GetSplitWindow_Impl(pImpl->GetDockAlignment());
+                pImpl->pSplitWin->InsertWindow( this, pImpl->aSplitSize, pImpl->nDockLine, pImpl->nDockPos, pImpl->bNewLine );
+                if ( !pImpl->pSplitWin->IsFadeIn() )
+                    pImpl->pSplitWin->FadeIn();
             }
         }
-        else if ( pImp->nLine != pImp->nDockLine || pImp->nPos != pImp->nDockPos || pImp->bNewLine )
+        else if ( pImpl->nLine != pImpl->nDockLine || pImpl->nPos != pImpl->nDockPos || pImpl->bNewLine )
         {
             // Moved within Splitwindows
-            if ( pImp->nLine != pImp->nDockLine )
-                pImp->aSplitSize = rRect.GetSize();
-            pImp->pSplitWin->MoveWindow( this, pImp->aSplitSize, pImp->nDockLine, pImp->nDockPos, pImp->bNewLine );
+            if ( pImpl->nLine != pImpl->nDockLine )
+                pImpl->aSplitSize = rRect.GetSize();
+            pImpl->pSplitWin->MoveWindow( this, pImpl->aSplitSize, pImpl->nDockLine, pImpl->nDockPos, pImpl->bNewLine );
         }
     }
     else
     {
-        pImp->bEndDocked = true;
         DockingWindow::EndDocking(rRect, bFloatMode);
-        pImp->bEndDocked = false;
     }
 
-    SetAlignment( IsFloatingMode() ? SfxChildAlignment::NOALIGNMENT : pImp->GetDockAlignment() );
+    SetAlignment( IsFloatingMode() ? SfxChildAlignment::NOALIGNMENT : pImpl->GetDockAlignment() );
 }
 
 /*  [Description]
@@ -824,89 +755,9 @@ SfxDockingWindow::SfxDockingWindow( SfxBindings *pBindinx, SfxChildWindow *pCW,
     vcl::Window* pParent, WinBits nWinBits) :
     DockingWindow (pParent, nWinBits),
     pBindings(pBindinx),
-    pMgr(pCW),
-    pImp(nullptr)
+    pMgr(pCW)
 {
-    if ( !GetHelpId().isEmpty() )
-    {
-        SetUniqueId( GetHelpId() );
-        SetHelpId("");
-    }
-    else
-    {
-        SfxViewFrame* pViewFrame = pBindings->GetDispatcher()->GetFrame();
-        SfxSlotPool* pSlotPool = pViewFrame->GetObjectShell()->GetModule()->GetSlotPool();
-        const SfxSlot* pSlot = pCW ? pSlotPool->GetSlot( pCW->GetType() ) : nullptr;
-        if ( pSlot )
-        {
-            OString aCmd("SFXDOCKINGWINDOW_");
-            aCmd += pSlot->GetUnoName();
-            SetUniqueId( aCmd );
-        }
-    }
-
-    pImp = new SfxDockingWindow_Impl;
-    pImp->bConstructed = false;
-    pImp->pSplitWin = nullptr;
-    pImp->bEndDocked = false;
-    pImp->bDockingPrevented = false;
-
-    pImp->bSplitable = true;
-
-    // Initially set to default, the alignment is set in the subclass
-    pImp->nLine = pImp->nDockLine = 0;
-    pImp->nPos  = pImp->nDockPos = 0;
-    pImp->bNewLine = false;
-    pImp->SetDockAlignment(SfxChildAlignment::NOALIGNMENT);
-    pImp->SetLastAlignment(SfxChildAlignment::NOALIGNMENT);
-    pImp->aMoveIdle.SetPriority(SchedulerPriority::RESIZE);
-    pImp->aMoveIdle.SetIdleHdl(LINK(this,SfxDockingWindow,TimerHdl));
-}
-
-/** Constructor for the SfxDockingWindow class. A SfxChildWindow will be
-    required because the docking is implemented in Sfx through SfxChildWindows.
-*/
-SfxDockingWindow::SfxDockingWindow( SfxBindings *pBindinx, SfxChildWindow *pCW,
-    vcl::Window* pParent, const ResId& rResId) :
-    DockingWindow(pParent, rResId),
-    pBindings(pBindinx),
-    pMgr(pCW),
-    pImp(nullptr)
-{
-    if ( !GetHelpId().isEmpty() )
-    {
-        SetUniqueId( GetHelpId() );
-        SetHelpId("");
-    }
-    else
-    {
-        SfxViewFrame* pViewFrame = pBindings->GetDispatcher()->GetFrame();
-        SfxSlotPool* pSlotPool = pViewFrame->GetObjectShell()->GetModule()->GetSlotPool();
-        const SfxSlot* pSlot = pCW ? pSlotPool->GetSlot( pCW->GetType() ) : nullptr;
-        if ( pSlot )
-        {
-            OString aCmd("SFXDOCKINGWINDOW_");
-            aCmd += pSlot->GetUnoName();
-            SetUniqueId( aCmd );
-        }
-    }
-
-    pImp = new SfxDockingWindow_Impl;
-    pImp->bConstructed = false;
-    pImp->pSplitWin = nullptr;
-    pImp->bEndDocked = false;
-    pImp->bDockingPrevented = false;
-
-    pImp->bSplitable = true;
-
-    // Initially set to default, the alignment is set in the subclass
-    pImp->nLine = pImp->nDockLine = 0;
-    pImp->nPos  = pImp->nDockPos = 0;
-    pImp->bNewLine = false;
-    pImp->SetDockAlignment(SfxChildAlignment::NOALIGNMENT);
-    pImp->SetLastAlignment(SfxChildAlignment::NOALIGNMENT);
-    pImp->aMoveIdle.SetPriority(SchedulerPriority::RESIZE);
-    pImp->aMoveIdle.SetIdleHdl(LINK(this,SfxDockingWindow,TimerHdl));
+    pImpl.reset(new SfxDockingWindow_Impl(this));
 }
 
 /** Constructor for the SfxDockingWindow class. A SfxChildWindow will be
@@ -917,42 +768,8 @@ SfxDockingWindow::SfxDockingWindow( SfxBindings *pBindinx, SfxChildWindow *pCW,
     : DockingWindow(pParent, rID, rUIXMLDescription)
     , pBindings(pBindinx)
     , pMgr(pCW)
-    , pImp(nullptr)
 {
-    if ( !GetHelpId().isEmpty() )
-    {
-        SetUniqueId( GetHelpId() );
-        SetHelpId("");
-    }
-    else
-    {
-        SfxViewFrame* pViewFrame = pBindings->GetDispatcher()->GetFrame();
-        SfxSlotPool* pSlotPool = pViewFrame->GetObjectShell()->GetModule()->GetSlotPool();
-        const SfxSlot* pSlot = pCW ? pSlotPool->GetSlot( pCW->GetType() ) : nullptr;
-        if ( pSlot )
-        {
-            OString aCmd("SFXDOCKINGWINDOW_");
-            aCmd += pSlot->GetUnoName();
-            SetUniqueId( aCmd );
-        }
-    }
-
-    pImp = new SfxDockingWindow_Impl;
-    pImp->bConstructed = false;
-    pImp->pSplitWin = nullptr;
-    pImp->bEndDocked = false;
-    pImp->bDockingPrevented = false;
-
-    pImp->bSplitable = true;
-
-    // Initially set to default, the alignment is set in the subclass
-    pImp->nLine = pImp->nDockLine = 0;
-    pImp->nPos  = pImp->nDockPos = 0;
-    pImp->bNewLine = false;
-    pImp->SetDockAlignment(SfxChildAlignment::NOALIGNMENT);
-    pImp->SetLastAlignment(SfxChildAlignment::NOALIGNMENT);
-    pImp->aMoveIdle.SetPriority(SchedulerPriority::RESIZE);
-    pImp->aMoveIdle.SetIdleHdl(LINK(this,SfxDockingWindow,TimerHdl));
+    pImpl.reset(new SfxDockingWindow_Impl(this));
 }
 
 /** Initialization of the SfxDockingDialog class via a SfxChildWinInfo.
@@ -964,23 +781,23 @@ void SfxDockingWindow::Initialize(SfxChildWinInfo *pInfo)
 {
     if ( !pMgr )
     {
-        pImp->SetDockAlignment( SfxChildAlignment::NOALIGNMENT );
-        pImp->bConstructed = true;
+        pImpl->SetDockAlignment( SfxChildAlignment::NOALIGNMENT );
+        pImpl->bConstructed = true;
         return;
     }
 
     if (pInfo && (pInfo->nFlags & SfxChildWindowFlags::FORCEDOCK))
-        pImp->bDockingPrevented = true;
+        pImpl->bDockingPrevented = true;
 
-    pImp->aSplitSize = GetOutputSizePixel();
+    pImpl->aSplitSize = GetOutputSizePixel();
     if ( !GetFloatingSize().Width() )
     {
         Size aMinSize( GetMinOutputSizePixel() );
-        SetFloatingSize( pImp->aSplitSize );
-        if ( pImp->aSplitSize.Width() < aMinSize.Width() )
-            pImp->aSplitSize.Width() = aMinSize.Width();
-        if ( pImp->aSplitSize.Height() < aMinSize.Height() )
-            pImp->aSplitSize.Height() = aMinSize.Height();
+        SetFloatingSize( pImpl->aSplitSize );
+        if ( pImpl->aSplitSize.Width() < aMinSize.Width() )
+            pImpl->aSplitSize.setWidth( aMinSize.Width() );
+        if ( pImpl->aSplitSize.Height() < aMinSize.Height() )
+            pImpl->aSplitSize.setHeight( aMinSize.Height() );
     }
 
     bool bVertHorzRead( false );
@@ -1009,11 +826,13 @@ void SfxDockingWindow::Initialize(SfxChildWinInfo *pInfo)
         if ( !aStr.isEmpty() )
         {
             // accept window state only if alignment is also set
-            pImp->aWinState = pInfo->aWinState;
+            pImpl->aWinState = pInfo->aWinState;
 
             // check for valid alignment
-            SfxChildAlignment eLocalAlignment = (SfxChildAlignment) (sal_uInt16) aStr.toInt32();
-            if ( pImp->bDockingPrevented )
+            SfxChildAlignment eLocalAlignment = static_cast<SfxChildAlignment>(static_cast<sal_uInt16>(aStr.toInt32()));
+            bool bIgnoreFloatConfig = (eLocalAlignment == SfxChildAlignment::NOALIGNMENT &&
+                                       !StyleSettings::GetDockingFloatsSupported());
+            if (pImpl->bDockingPrevented || bIgnoreFloatConfig)
                 // docking prevented, ignore old configuration and take alignment from default
                 aStr.clear();
             else
@@ -1032,7 +851,7 @@ void SfxDockingWindow::Initialize(SfxChildWinInfo *pInfo)
             if ( nPos != -1 )
             {
                 aStr = aStr.copy(nPos+1);
-                pImp->SetLastAlignment( (SfxChildAlignment) (sal_uInt16) aStr.toInt32() );
+                pImpl->SetLastAlignment( static_cast<SfxChildAlignment>(static_cast<sal_uInt16>(aStr.toInt32())) );
             }
 
             nPos = aStr.indexOf(',');
@@ -1041,13 +860,13 @@ void SfxDockingWindow::Initialize(SfxChildWinInfo *pInfo)
                 // get split size and position in SplitWindow
                 Point aPos;
                 aStr = aStr.copy(nPos+1);
-                if ( GetPosSizeFromString( aStr, aPos, pImp->aSplitSize ) )
+                if ( GetPosSizeFromString( aStr, aPos, pImpl->aSplitSize ) )
                 {
-                    pImp->nLine = pImp->nDockLine = (sal_uInt16) aPos.X();
-                    pImp->nPos  = pImp->nDockPos  = (sal_uInt16) aPos.Y();
-                    pImp->nVerticalSize = pImp->aSplitSize.Height();
-                    pImp->nHorizontalSize = pImp->aSplitSize.Width();
-                    if ( GetSplitSizeFromString( aStr, pImp->aSplitSize ))
+                    pImpl->nLine = pImpl->nDockLine = static_cast<sal_uInt16>(aPos.X());
+                    pImpl->nPos  = pImpl->nDockPos  = static_cast<sal_uInt16>(aPos.Y());
+                    pImpl->nVerticalSize = pImpl->aSplitSize.Height();
+                    pImpl->nHorizontalSize = pImpl->aSplitSize.Width();
+                    if ( GetSplitSizeFromString( aStr, pImpl->aSplitSize ))
                         bVertHorzRead = true;
                 }
             }
@@ -1059,8 +878,8 @@ void SfxDockingWindow::Initialize(SfxChildWinInfo *pInfo)
 
     if ( !bVertHorzRead )
     {
-        pImp->nVerticalSize = pImp->aSplitSize.Height();
-        pImp->nHorizontalSize = pImp->aSplitSize.Width();
+        pImpl->nVerticalSize = pImpl->aSplitSize.Height();
+        pImpl->nHorizontalSize = pImpl->aSplitSize.Width();
     }
 
     SfxWorkWindow *pWorkWin = pBindings->GetWorkWindow_Impl();
@@ -1077,16 +896,16 @@ void SfxDockingWindow::Initialize(SfxChildWinInfo *pInfo)
     }
 
     // detect floating mode
-    // toggeling mode will not execute code in handlers, because pImp->bConstructed is not set yet
+    // toggeling mode will not execute code in handlers, because pImpl->bConstructed is not set yet
     bool bFloatMode = IsFloatingMode();
-    if ( bFloatMode != ((GetAlignment() == SfxChildAlignment::NOALIGNMENT)) )
+    if ( bFloatMode != (GetAlignment() == SfxChildAlignment::NOALIGNMENT) )
     {
         bFloatMode = !bFloatMode;
         SetFloatingMode( bFloatMode );
         if ( bFloatMode )
         {
-            if ( !pImp->aWinState.isEmpty() )
-                GetFloatingWindow()->SetWindowState( pImp->aWinState );
+            if ( !pImpl->aWinState.isEmpty() )
+                GetFloatingWindow()->SetWindowState( pImpl->aWinState );
             else
                 GetFloatingWindow()->SetOutputSizePixel( GetFloatingSize() );
         }
@@ -1095,7 +914,7 @@ void SfxDockingWindow::Initialize(SfxChildWinInfo *pInfo)
     if ( IsFloatingMode() )
     {
         // validate last alignment
-        SfxChildAlignment eLastAlign = pImp->GetLastAlignment();
+        SfxChildAlignment eLastAlign = pImpl->GetLastAlignment();
         if ( eLastAlign == SfxChildAlignment::NOALIGNMENT)
             eLastAlign = CheckAlignment(eLastAlign, SfxChildAlignment::LEFT);
         if ( eLastAlign == SfxChildAlignment::NOALIGNMENT)
@@ -1104,38 +923,26 @@ void SfxDockingWindow::Initialize(SfxChildWinInfo *pInfo)
             eLastAlign = CheckAlignment(eLastAlign, SfxChildAlignment::TOP);
         if ( eLastAlign == SfxChildAlignment::NOALIGNMENT)
             eLastAlign = CheckAlignment(eLastAlign, SfxChildAlignment::BOTTOM);
-        pImp->SetLastAlignment(eLastAlign);
+        pImpl->SetLastAlignment(eLastAlign);
     }
     else
     {
         // docked window must have NOALIGNMENT as last alignment
-        pImp->SetLastAlignment(SfxChildAlignment::NOALIGNMENT);
+        pImpl->SetLastAlignment(SfxChildAlignment::NOALIGNMENT);
 
-        if ( pImp->bSplitable )
-        {
-            pImp->pSplitWin = pWorkWin->GetSplitWindow_Impl(GetAlignment());
-            pImp->pSplitWin->InsertWindow(this, pImp->aSplitSize);
-        }
-        else
-        {
-            //?????? Currently not supported
-            // Window is docked individually; size is calculated.
-            // It must therefore be initialized with the FloatingSize if
-            // someone relies on it that a reasonable size is set
-            SetSizePixel(GetFloatingSize());
-            SetSizePixel(CalcDockingSize(GetAlignment()));
-        }
+        pImpl->pSplitWin = pWorkWin->GetSplitWindow_Impl(GetAlignment());
+        pImpl->pSplitWin->InsertWindow(this, pImpl->aSplitSize);
     }
 
     // save alignment
-    pImp->SetDockAlignment( GetAlignment() );
+    pImpl->SetDockAlignment( GetAlignment() );
 }
 
 void SfxDockingWindow::Initialize_Impl()
 {
     if ( !pMgr )
     {
-        pImp->bConstructed = true;
+        pImpl->bConstructed = true;
         return;
     }
 
@@ -1164,12 +971,12 @@ void SfxDockingWindow::Initialize_Impl()
     if ( pFloatWin )
     {
         // initialize floating window
-        if ( pImp->aWinState.isEmpty() )
+        if ( pImpl->aWinState.isEmpty() )
             // window state never set before, get if from defaults
-            pImp->aWinState = pFloatWin->GetWindowState();
+            pImpl->aWinState = pFloatWin->GetWindowState();
 
         // trick: use VCL method SetWindowState to adjust position and size
-        pFloatWin->SetWindowState( pImp->aWinState );
+        pFloatWin->SetWindowState( pImpl->aWinState );
         Size aSize(pFloatWin->GetSizePixel());
 
         // remember floating size for calculating alignment and tracking rectangle
@@ -1178,7 +985,7 @@ void SfxDockingWindow::Initialize_Impl()
     }
 
     // allow calling of docking handlers
-    pImp->bConstructed = true;
+    pImpl->bConstructed = true;
 }
 
 /** Fills a SfxChildWinInfo with specific data from SfxDockingWindow,
@@ -1189,33 +996,31 @@ void SfxDockingWindow::Initialize_Impl()
 */
 void SfxDockingWindow::FillInfo(SfxChildWinInfo& rInfo) const
 {
-    if (!pMgr || !pImp)
+    if (!pMgr || !pImpl)
         return;
 
-    if (GetFloatingWindow() && pImp->bConstructed)
-        pImp->aWinState = GetFloatingWindow()->GetWindowState();
+    if (GetFloatingWindow() && pImpl->bConstructed)
+        pImpl->aWinState = GetFloatingWindow()->GetWindowState();
 
-    rInfo.aWinState = pImp->aWinState;
+    rInfo.aWinState = pImpl->aWinState;
     rInfo.aExtraString = "AL:(";
-    rInfo.aExtraString += OUString::number((sal_uInt16) GetAlignment());
+    rInfo.aExtraString += OUString::number(static_cast<sal_uInt16>(GetAlignment()));
     rInfo.aExtraString += ",";
-    rInfo.aExtraString += OUString::number ((sal_uInt16) pImp->GetLastAlignment());
-    if ( pImp->bSplitable )
-    {
-        Point aPos(pImp->nLine, pImp->nPos);
-        rInfo.aExtraString += ",";
-        rInfo.aExtraString += OUString::number( aPos.X() );
-        rInfo.aExtraString += "/";
-        rInfo.aExtraString += OUString::number( aPos.Y() );
-        rInfo.aExtraString += "/";
-        rInfo.aExtraString += OUString::number( pImp->nHorizontalSize );
-        rInfo.aExtraString += "/";
-        rInfo.aExtraString += OUString::number( pImp->nVerticalSize );
-        rInfo.aExtraString += ",";
-        rInfo.aExtraString += OUString::number( pImp->aSplitSize.Width() );
-        rInfo.aExtraString += ";";
-        rInfo.aExtraString += OUString::number( pImp->aSplitSize.Height() );
-    }
+    rInfo.aExtraString += OUString::number (static_cast<sal_uInt16>(pImpl->GetLastAlignment()));
+
+    Point aPos(pImpl->nLine, pImpl->nPos);
+    rInfo.aExtraString += ",";
+    rInfo.aExtraString += OUString::number( aPos.X() );
+    rInfo.aExtraString += "/";
+    rInfo.aExtraString += OUString::number( aPos.Y() );
+    rInfo.aExtraString += "/";
+    rInfo.aExtraString += OUString::number( pImpl->nHorizontalSize );
+    rInfo.aExtraString += "/";
+    rInfo.aExtraString += OUString::number( pImpl->nVerticalSize );
+    rInfo.aExtraString += ",";
+    rInfo.aExtraString += OUString::number( pImpl->aSplitSize.Width() );
+    rInfo.aExtraString += ";";
+    rInfo.aExtraString += OUString::number( pImpl->aSplitSize.Height() );
 
     rInfo.aExtraString += ")";
 }
@@ -1228,7 +1033,7 @@ SfxDockingWindow::~SfxDockingWindow()
 void SfxDockingWindow::dispose()
 {
     ReleaseChildWindow_Impl();
-    delete pImp; pImp = nullptr;
+    pImpl.reset();
     DockingWindow::dispose();
 }
 
@@ -1237,8 +1042,8 @@ void SfxDockingWindow::ReleaseChildWindow_Impl()
     if ( pMgr && pMgr->GetFrame() == pBindings->GetActiveFrame() )
         pBindings->SetActiveFrame( nullptr );
 
-    if ( pMgr && pImp->pSplitWin && pImp->pSplitWin->IsItemValid( GetType() ) )
-        pImp->pSplitWin->RemoveWindow(this);
+    if ( pMgr && pImpl->pSplitWin && pImpl->pSplitWin->IsItemValid( GetType() ) )
+        pImpl->pSplitWin->RemoveWindow(this);
 
     pMgr=nullptr;
 }
@@ -1254,40 +1059,31 @@ void SfxDockingWindow::ReleaseChildWindow_Impl()
 
     is overridden (see below).
 */
-SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& rRect)
+SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, tools::Rectangle& rRect)
 {
     // calculate hypothetical sizes for different modes
     Size aFloatingSize(CalcDockingSize(SfxChildAlignment::NOALIGNMENT));
-    Size aVerticalSize(CalcDockingSize(SfxChildAlignment::LEFT));
-    Size aHorizontalSize(CalcDockingSize(SfxChildAlignment::TOP));
 
     // check if docking is permitted
     SfxWorkWindow *pWorkWin = pBindings->GetWorkWindow_Impl();
     if ( !pWorkWin->IsDockingAllowed() )
     {
         rRect.SetSize( aFloatingSize );
-        return pImp->GetDockAlignment();
+        return pImpl->GetDockAlignment();
     }
 
     // calculate borders to shrink inner area before checking for intersection with tracking rectangle
     long nLRBorder, nTBBorder;
-    if ( pImp->bSplitable )
-    {
-        // take the smaller size of docked and floating mode
-        Size aSize = pImp->aSplitSize;
-        if ( GetFloatingSize().Height() < aSize.Height() )
-            aSize.Height() = GetFloatingSize().Height();
-        if ( GetFloatingSize().Width() < aSize.Width() )
-            aSize.Width() = GetFloatingSize().Width();
 
-        nLRBorder = aSize.Width();
-        nTBBorder = aSize.Height();
-    }
-    else
-    {
-        nLRBorder = aVerticalSize.Width();
-        nTBBorder = aHorizontalSize.Height();
-    }
+    // take the smaller size of docked and floating mode
+    Size aBorderTmp = pImpl->aSplitSize;
+    if ( GetFloatingSize().Height() < aBorderTmp.Height() )
+        aBorderTmp.setHeight( GetFloatingSize().Height() );
+    if ( GetFloatingSize().Width() < aBorderTmp.Width() )
+        aBorderTmp.setWidth( GetFloatingSize().Width() );
+
+    nLRBorder = aBorderTmp.Width();
+    nTBBorder = aBorderTmp.Height();
 
     // limit border to predefined constant values
     if ( nLRBorder > MAX_TOGGLEAREA_WIDTH )
@@ -1296,20 +1092,20 @@ SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& 
         nTBBorder = MAX_TOGGLEAREA_WIDTH;
 
     // shrink area for floating mode if possible
-    Rectangle aInRect = GetInnerRect();
+    tools::Rectangle aInRect = GetInnerRect();
     if ( aInRect.GetWidth() > nLRBorder )
-        aInRect.Left()   += nLRBorder/2;
+        aInRect.AdjustLeft(nLRBorder/2 );
     if ( aInRect.GetWidth() > nLRBorder )
-        aInRect.Right()  -= nLRBorder/2;
+        aInRect.AdjustRight( -(nLRBorder/2) );
     if ( aInRect.GetHeight() > nTBBorder )
-        aInRect.Top()    += nTBBorder/2;
+        aInRect.AdjustTop(nTBBorder/2 );
     if ( aInRect.GetHeight() > nTBBorder )
-        aInRect.Bottom() -= nTBBorder/2;
+        aInRect.AdjustBottom( -(nTBBorder/2) );
 
     // calculate alignment resulting from docking rectangle
     bool bBecomesFloating = false;
-    SfxChildAlignment eDockAlign = pImp->GetDockAlignment();
-    Rectangle aDockingRect( rRect );
+    SfxChildAlignment eDockAlign = pImpl->GetDockAlignment();
+    tools::Rectangle aDockingRect( rRect );
     if ( !IsFloatingMode() )
     {
         // don't use tracking rectangle for alignment check, because it will be too large
@@ -1323,7 +1119,7 @@ SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& 
     }
 
     Point aPos = aDockingRect.TopLeft();
-    Rectangle aIntersect = GetOuterRect().GetIntersection( aDockingRect );
+    tools::Rectangle aIntersect = GetOuterRect().GetIntersection( aDockingRect );
     if ( aIntersect.IsEmpty() )
         // docking rectangle completely outside docking area -> floating mode
         bBecomesFloating = true;
@@ -1331,13 +1127,13 @@ SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& 
     {
         // create a small test rect around the mouse position and use this one
         // instead of the passed rRect to not dock too easily or by accident
-        Rectangle aSmallDockingRect;
+        tools::Rectangle aSmallDockingRect;
         aSmallDockingRect.SetSize( Size( MAX_TOGGLEAREA_WIDTH, MAX_TOGGLEAREA_HEIGHT ) );
         Point aNewPos(rPos);
-        aNewPos.X() -= aSmallDockingRect.GetWidth()/2;
-        aNewPos.Y() -= aSmallDockingRect.GetHeight()/2;
-        aSmallDockingRect.SetPos(rPos);
-        Rectangle aIntersectRect = aInRect.GetIntersection( aSmallDockingRect );
+        aNewPos.AdjustX( -(aSmallDockingRect.GetWidth()/2) );
+        aNewPos.AdjustY( -(aSmallDockingRect.GetHeight()/2) );
+        aSmallDockingRect.SetPos(aNewPos);
+        tools::Rectangle aIntersectRect = aInRect.GetIntersection( aSmallDockingRect );
         if ( aIntersectRect == aSmallDockingRect )
             // docking rectangle completely inside (shrunk) inner area -> floating mode
             bBecomesFloating = true;
@@ -1345,7 +1141,7 @@ SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& 
 
     if ( bBecomesFloating )
     {
-        eDockAlign = CheckAlignment(pImp->GetDockAlignment(),SfxChildAlignment::NOALIGNMENT);
+        eDockAlign = CheckAlignment(pImpl->GetDockAlignment(),SfxChildAlignment::NOALIGNMENT);
     }
     else
     {
@@ -1404,7 +1200,7 @@ SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& 
             bool bForbidden = true;
             if ( aInPosTL.X() <= 0)
             {
-                eDockAlign = CheckAlignment(pImp->GetDockAlignment(),SfxChildAlignment::LEFT);
+                eDockAlign = CheckAlignment(pImpl->GetDockAlignment(),SfxChildAlignment::LEFT);
                 bForbidden = ( eDockAlign != SfxChildAlignment::LEFT &&
                                eDockAlign != SfxChildAlignment::FIRSTLEFT &&
                                eDockAlign != SfxChildAlignment::LASTLEFT );
@@ -1412,7 +1208,7 @@ SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& 
 
             if ( bForbidden && aInPosTL.Y() <= 0)
             {
-                eDockAlign = CheckAlignment(pImp->GetDockAlignment(),SfxChildAlignment::TOP);
+                eDockAlign = CheckAlignment(pImpl->GetDockAlignment(),SfxChildAlignment::TOP);
                 bForbidden = ( eDockAlign != SfxChildAlignment::TOP &&
                                eDockAlign != SfxChildAlignment::HIGHESTTOP &&
                                eDockAlign != SfxChildAlignment::LOWESTTOP );
@@ -1420,7 +1216,7 @@ SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& 
 
             if ( bForbidden && aInPosBR.X() >= aInSize.Width())
             {
-                eDockAlign = CheckAlignment(pImp->GetDockAlignment(),SfxChildAlignment::RIGHT);
+                eDockAlign = CheckAlignment(pImpl->GetDockAlignment(),SfxChildAlignment::RIGHT);
                 bForbidden = ( eDockAlign != SfxChildAlignment::RIGHT &&
                                eDockAlign != SfxChildAlignment::FIRSTRIGHT &&
                                eDockAlign != SfxChildAlignment::LASTRIGHT );
@@ -1428,7 +1224,7 @@ SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& 
 
             if ( bForbidden && aInPosBR.Y() >= aInSize.Height())
             {
-                eDockAlign = CheckAlignment(pImp->GetDockAlignment(),SfxChildAlignment::BOTTOM);
+                eDockAlign = CheckAlignment(pImpl->GetDockAlignment(),SfxChildAlignment::BOTTOM);
                 bForbidden = ( eDockAlign != SfxChildAlignment::BOTTOM &&
                                eDockAlign != SfxChildAlignment::HIGHESTBOTTOM &&
                                eDockAlign != SfxChildAlignment::LOWESTBOTTOM );
@@ -1436,7 +1232,7 @@ SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& 
 
             // the calculated alignment was rejected by the window -> take floating mode
             if ( bForbidden )
-                eDockAlign = CheckAlignment(pImp->GetDockAlignment(),SfxChildAlignment::NOALIGNMENT);
+                eDockAlign = CheckAlignment(pImpl->GetDockAlignment(),SfxChildAlignment::NOALIGNMENT);
         }
     }
 
@@ -1445,10 +1241,10 @@ SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& 
         // In the FloatingMode the tracking rectangle will get the floating
         // size. Due to a bug the rRect may only be changed when the
         // alignment is changed!
-        if ( eDockAlign != pImp->GetDockAlignment() )
+        if ( eDockAlign != pImpl->GetDockAlignment() )
             aDockingRect.SetSize( aFloatingSize );
     }
-    else if ( pImp->bSplitable )
+    else
     {
         sal_uInt16 nLine, nPos;
         SfxSplitWindow *pSplitWin = pWorkWin->GetSplitWindow_Impl(eDockAlign);
@@ -1456,35 +1252,35 @@ SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& 
         if ( pSplitWin->GetWindowPos( aPos, nLine, nPos ) )
         {
             // mouse over splitwindow, get line and position
-            pImp->nDockLine = nLine;
-            pImp->nDockPos = nPos;
-            pImp->bNewLine = false;
+            pImpl->nDockLine = nLine;
+            pImpl->nDockPos = nPos;
+            pImpl->bNewLine = false;
         }
         else
         {
             // mouse touches inner border -> create new line
-            if ( eDockAlign == GetAlignment() && pImp->pSplitWin &&
-                 pImp->nLine == pImp->pSplitWin->GetLineCount()-1 && pImp->pSplitWin->GetWindowCount(pImp->nLine) == 1 )
+            if ( eDockAlign == GetAlignment() && pImpl->pSplitWin &&
+                 pImpl->nLine == pImpl->pSplitWin->GetLineCount()-1 && pImpl->pSplitWin->GetWindowCount(pImpl->nLine) == 1 )
             {
                 // if this window is the only one in the last line, it can't be docked as new line in the same splitwindow
-                pImp->nDockLine = pImp->nLine;
-                pImp->nDockPos = pImp->nPos;
-                pImp->bNewLine = false;
+                pImpl->nDockLine = pImpl->nLine;
+                pImpl->nDockPos = pImpl->nPos;
+                pImpl->bNewLine = false;
             }
             else
             {
                 // create new line
-                pImp->nDockLine = pSplitWin->GetLineCount();
-                pImp->nDockPos = 0;
-                pImp->bNewLine = true;
+                pImpl->nDockLine = pSplitWin->GetLineCount();
+                pImpl->nDockPos = 0;
+                pImpl->bNewLine = true;
             }
         }
 
-        bool bChanged = pImp->nLine != pImp->nDockLine || pImp->nPos != pImp->nDockPos || eDockAlign != GetAlignment();
+        bool bChanged = pImpl->nLine != pImpl->nDockLine || pImpl->nPos != pImpl->nDockPos || eDockAlign != GetAlignment();
         if ( !bChanged && !IsFloatingMode() )
         {
             // window only slightly moved, no change of any property
-            rRect.SetSize( pImp->aSplitSize );
+            rRect.SetSize( pImpl->aSplitSize );
             rRect.SetPos( aDockingRect.TopLeft() );
             return eDockAlign;
         }
@@ -1495,11 +1291,11 @@ SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& 
         Size aInnerSize = GetInnerRect().GetSize();
         if ( eDockAlign == SfxChildAlignment::LEFT || eDockAlign == SfxChildAlignment::RIGHT )
         {
-            if ( pImp->bNewLine )
+            if ( pImpl->bNewLine )
             {
                 // set height to height of free area
-                aSize.Height() = aInnerSize.Height();
-                aSize.Width() = pImp->nHorizontalSize;
+                aSize.setHeight( aInnerSize.Height() );
+                aSize.setWidth( pImpl->nHorizontalSize );
                 if ( eDockAlign == SfxChildAlignment::LEFT )
                 {
                     aPoint = aInnerRect.TopLeft();
@@ -1507,23 +1303,23 @@ SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& 
                 else
                 {
                     aPoint = aInnerRect.TopRight();
-                    aPoint.X() -= aSize.Width();
+                    aPoint.AdjustX( -(aSize.Width()) );
                 }
             }
             else
             {
                 // get width from splitwindow
-                aSize.Width() = pSplitWin->GetLineSize(nLine);
-                aSize.Height() = pImp->aSplitSize.Height();
+                aSize.setWidth( pSplitWin->GetLineSize(nLine) );
+                aSize.setHeight( pImpl->aSplitSize.Height() );
             }
         }
         else
         {
-            if ( pImp->bNewLine )
+            if ( pImpl->bNewLine )
             {
                 // set width to width of free area
-                aSize.Width() = aInnerSize.Width();
-                aSize.Height() = pImp->nVerticalSize;
+                aSize.setWidth( aInnerSize.Width() );
+                aSize.setHeight( pImpl->nVerticalSize );
                 if ( eDockAlign == SfxChildAlignment::TOP )
                 {
                     aPoint = aInnerRect.TopLeft();
@@ -1531,65 +1327,19 @@ SfxChildAlignment SfxDockingWindow::CalcAlignment(const Point& rPos, Rectangle& 
                 else
                 {
                     aPoint = aInnerRect.BottomLeft();
-                    aPoint.Y() -= aSize.Height();
+                    aPoint.AdjustY( -(aSize.Height()) );
                 }
             }
             else
             {
                 // get height from splitwindow
-                aSize.Height() = pSplitWin->GetLineSize(nLine);
-                aSize.Width() = pImp->aSplitSize.Width();
+                aSize.setHeight( pSplitWin->GetLineSize(nLine) );
+                aSize.setWidth( pImpl->aSplitSize.Width() );
             }
         }
 
         aDockingRect.SetSize( aSize );
         aDockingRect.SetPos( aPoint );
-    }
-    else
-    {
-        // window can be docked, but outside our splitwindows
-        // tracking rectangle only needs to be modified if alignment was changed
-        if ( eDockAlign != pImp->GetDockAlignment() )
-        {
-            switch ( eDockAlign )
-            {
-                case SfxChildAlignment::LEFT:
-                case SfxChildAlignment::RIGHT:
-                case SfxChildAlignment::FIRSTLEFT:
-                    aDockingRect.SetPos( aInnerRect.TopLeft() );
-                    aDockingRect.SetSize( aVerticalSize );
-                    break;
-                case SfxChildAlignment::LASTLEFT:
-                case SfxChildAlignment::FIRSTRIGHT:
-                case SfxChildAlignment::LASTRIGHT:
-                {
-                    Point aPt( aInnerRect.TopRight() );
-                    aPt.X() -= aDockingRect.GetWidth();
-                    aDockingRect.SetPos( aPt );
-                    aDockingRect.SetSize( aVerticalSize );
-                    break;
-                }
-
-                case SfxChildAlignment::TOP:
-                case SfxChildAlignment::BOTTOM:
-                case SfxChildAlignment::LOWESTTOP:
-                    aDockingRect.SetPos( aInnerRect.TopLeft() );
-                    aDockingRect.SetSize( aHorizontalSize );
-                    break;
-                case SfxChildAlignment::HIGHESTTOP:
-                case SfxChildAlignment::LOWESTBOTTOM:
-                case SfxChildAlignment::HIGHESTBOTTOM:
-                {
-                    Point aPt( aInnerRect.BottomLeft() );
-                    aPt.Y() -= aDockingRect.GetHeight();
-                    aDockingRect.SetPos( aPt );
-                    aDockingRect.SetSize( aHorizontalSize );
-                    break;
-                }
-                        default:
-                            break;
-            }
-        }
     }
 
     rRect = aDockingRect;
@@ -1620,7 +1370,7 @@ Size SfxDockingWindow::CalcDockingSize(SfxChildAlignment eAlign)
         case SfxChildAlignment::HIGHESTTOP:
         case SfxChildAlignment::LOWESTBOTTOM:
         case SfxChildAlignment::HIGHESTBOTTOM:
-            aSize.Width() = aOuterRect.Right() - aOuterRect.Left();
+            aSize.setWidth( aOuterRect.Right() - aOuterRect.Left() );
             break;
         case SfxChildAlignment::LEFT:
         case SfxChildAlignment::RIGHT:
@@ -1628,7 +1378,7 @@ Size SfxDockingWindow::CalcDockingSize(SfxChildAlignment eAlign)
         case SfxChildAlignment::LASTLEFT:
         case SfxChildAlignment::FIRSTRIGHT:
         case SfxChildAlignment::LASTRIGHT:
-            aSize.Height() = aInnerRect.Bottom() - aInnerRect.Top();
+            aSize.setHeight( aInnerRect.Bottom() - aInnerRect.Top() );
             break;
         case SfxChildAlignment::NOALIGNMENT:
             break;
@@ -1667,51 +1417,8 @@ bool SfxDockingWindow::Close()
     return true;
 }
 
-/** Returns a boundary line to the docked edge and a frame when the Window is in
-    a docked state. In this way SVLOOK is considered.
-*/
-void SfxDockingWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rRect*/)
+void SfxDockingWindow::Paint(vcl::RenderContext&, const tools::Rectangle& /*rRect*/)
 {
-    if (pImp->bSplitable || IsFloatingMode())
-        return;
-
-    Rectangle aRect(Point(0, 0), GetOutputSizePixel());
-    switch (GetAlignment())
-    {
-        case SfxChildAlignment::TOP:
-        {
-            rRenderContext.DrawLine(aRect.BottomLeft(), aRect.BottomRight());
-            aRect.Bottom()--;
-            break;
-        }
-
-        case SfxChildAlignment::BOTTOM:
-        {
-            rRenderContext.DrawLine(aRect.TopLeft(), aRect.TopRight());
-            aRect.Top()++;
-            break;
-        }
-
-        case SfxChildAlignment::LEFT:
-        {
-            rRenderContext.DrawLine(aRect.TopRight(), aRect.BottomRight());
-            aRect.Right()--;
-            break;
-        }
-
-        case SfxChildAlignment::RIGHT:
-        {
-            rRenderContext.DrawLine(aRect.TopLeft(), aRect.BottomLeft());
-            aRect.Left()++;
-            break;
-        }
-
-        default:
-            break;
-    }
-
-    DecorationView aView(&rRenderContext);
-    aView.DrawFrame(aRect);
 }
 
 /** With this method, a minimal OutputSize be can set, that is queried in
@@ -1719,100 +1426,91 @@ void SfxDockingWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle
 */
 void SfxDockingWindow::SetMinOutputSizePixel( const Size& rSize )
 {
-    pImp->aMinSize = rSize;
+    pImpl->aMinSize = rSize;
     DockingWindow::SetMinOutputSizePixel( rSize );
 }
 
 /** Set the minimum size which is returned.*/
 const Size& SfxDockingWindow::GetMinOutputSizePixel() const
 {
-    return pImp->aMinSize;
+    return pImpl->aMinSize;
 }
 
-bool SfxDockingWindow::Notify( NotifyEvent& rEvt )
+bool SfxDockingWindow::EventNotify( NotifyEvent& rEvt )
 {
-    if ( !pImp )
-        return DockingWindow::Notify( rEvt );
+    if ( !pImpl )
+        return DockingWindow::EventNotify( rEvt );
 
     if ( rEvt.GetType() == MouseNotifyEvent::GETFOCUS )
     {
         if (pMgr != nullptr)
             pBindings->SetActiveFrame( pMgr->GetFrame() );
 
-        if ( pImp->pSplitWin )
-            pImp->pSplitWin->SetActiveWindow_Impl( this );
+        if ( pImpl->pSplitWin )
+            pImpl->pSplitWin->SetActiveWindow_Impl( this );
         else if (pMgr != nullptr)
             pMgr->Activate_Impl();
 
-        // In VCL Notify goes first to the window itself, also call the
+        // In VCL EventNotify goes first to the window itself, also call the
         // base class, otherwise the parent learns nothing
         // if ( rEvt.GetWindow() == this )  PB: #i74693# not necessary any longer
-        DockingWindow::Notify( rEvt );
+        DockingWindow::EventNotify( rEvt );
         return true;
     }
     else if( rEvt.GetType() == MouseNotifyEvent::KEYINPUT )
     {
         // First, allow KeyInput for Dialog functions
-        if ( !DockingWindow::Notify( rEvt ) && SfxViewShell::Current() )
+        if (!DockingWindow::EventNotify(rEvt) && SfxViewShell::Current())
+        {
             // then also for valid global accelerators.
             return SfxViewShell::Current()->GlobalKeyInput_Impl( *rEvt.GetKeyEvent() );
+        }
         return true;
     }
     else if ( rEvt.GetType() == MouseNotifyEvent::LOSEFOCUS && !HasChildPathFocus() )
     {
         pBindings->SetActiveFrame( nullptr );
-        if (pMgr != nullptr)
-            pMgr->Deactivate_Impl();
     }
 
-    return DockingWindow::Notify( rEvt );
-}
-
-
-SplitWindowItemFlags SfxDockingWindow::GetWinBits_Impl() const
-{
-    return SplitWindowItemFlags::NONE;
+    return DockingWindow::EventNotify( rEvt );
 }
 
 
 void SfxDockingWindow::SetItemSize_Impl( const Size& rSize )
 {
-    pImp->aSplitSize = rSize;
+    pImpl->aSplitSize = rSize;
 
     SfxWorkWindow *pWorkWin = pBindings->GetWorkWindow_Impl();
-    SfxChildIdentifier eIdent = SfxChildIdentifier::DOCKINGWINDOW;
-    if ( pImp->bSplitable )
-        eIdent = SfxChildIdentifier::SPLITWINDOW;
-    pWorkWin->ConfigChild_Impl( eIdent, SfxDockingConfig::ALIGNDOCKINGWINDOW, pMgr->GetType() );
+    pWorkWin->ConfigChild_Impl( SfxChildIdentifier::SPLITWINDOW, SfxDockingConfig::ALIGNDOCKINGWINDOW, pMgr->GetType() );
 }
 
 void SfxDockingWindow::Disappear_Impl()
 {
-    if ( pImp->pSplitWin && pImp->pSplitWin->IsItemValid( GetType() ) )
-        pImp->pSplitWin->RemoveWindow(this);
+    if ( pImpl->pSplitWin && pImpl->pSplitWin->IsItemValid( GetType() ) )
+        pImpl->pSplitWin->RemoveWindow(this);
 }
 
 void SfxDockingWindow::Reappear_Impl()
 {
-    if ( pImp->pSplitWin && !pImp->pSplitWin->IsItemValid( GetType() ) )
+    if ( pImpl->pSplitWin && !pImpl->pSplitWin->IsItemValid( GetType() ) )
     {
-        pImp->pSplitWin->InsertWindow( this, pImp->aSplitSize );
+        pImpl->pSplitWin->InsertWindow( this, pImpl->aSplitSize );
     }
 }
 
 bool SfxDockingWindow::IsAutoHide_Impl() const
 {
-    if ( pImp->pSplitWin )
-        return !pImp->pSplitWin->IsFadeIn();
+    if ( pImpl->pSplitWin )
+        return !pImpl->pSplitWin->IsFadeIn();
     else
         return false;
 }
 
 void SfxDockingWindow::AutoShow_Impl()
 {
-    if ( pImp->pSplitWin )
+    if ( pImpl->pSplitWin )
     {
-        pImp->pSplitWin->FadeIn();
+        pImpl->pSplitWin->FadeIn();
     }
 }
 
@@ -1826,23 +1524,20 @@ void SfxDockingWindow::StateChanged( StateChangedType nStateChange )
 
 void SfxDockingWindow::Move()
 {
-    if ( pImp )
-        pImp->aMoveIdle.Start();
+    if ( pImpl )
+        pImpl->aMoveIdle.Start();
 }
 
-IMPL_LINK_NOARG_TYPED(SfxDockingWindow, TimerHdl, Idle *, void)
+IMPL_LINK_NOARG(SfxDockingWindow, TimerHdl, Timer *, void)
 {
-    pImp->aMoveIdle.Stop();
+    pImpl->aMoveIdle.Stop();
     if ( IsReallyVisible() && IsFloatingMode() )
     {
         if( !GetFloatingWindow()->IsRollUp() )
             SetFloatingSize( GetOutputSizePixel() );
-        pImp->aWinState = GetFloatingWindow()->GetWindowState();
-        SfxChildIdentifier eIdent = SfxChildIdentifier::DOCKINGWINDOW;
-        if ( pImp->bSplitable )
-            eIdent = SfxChildIdentifier::SPLITWINDOW;
+        pImpl->aWinState = GetFloatingWindow()->GetWindowState();
         SfxWorkWindow *pWorkWin = pBindings->GetWorkWindow_Impl();
-        pWorkWin->ConfigChild_Impl( eIdent, SfxDockingConfig::ALIGNDOCKINGWINDOW, pMgr->GetType() );
+        pWorkWin->ConfigChild_Impl( SfxChildIdentifier::SPLITWINDOW, SfxDockingConfig::ALIGNDOCKINGWINDOW, pMgr->GetType() );
     }
 }
 

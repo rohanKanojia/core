@@ -21,9 +21,9 @@
 #include <svtools/inettbc.hxx>
 #include <svtools/imagemgr.hxx>
 
-#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
+#include <com/sun/star/ucb/CommandAbortedException.hpp>
 #include <com/sun/star/ucb/XDynamicResultSet.hpp>
 #include <com/sun/star/ucb/XContentAccess.hpp>
 #include <com/sun/star/util/DateTime.hpp>
@@ -32,6 +32,8 @@
 #include <comphelper/processfactory.hxx>
 #include <vcl/svapp.hxx>
 #include <osl/mutex.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
 namespace svt
 {
@@ -61,7 +63,6 @@ namespace svt
     using ::com::sun::star::ucb::CommandAbortedException;
     using ::com::sun::star::ucb::XContentAccess;
     using ::com::sun::star::ucb::XCommandEnvironment;
-    using ::com::sun::star::beans::XPropertySet;
     using ::com::sun::star::beans::PropertyValue;
     using ::com::sun::star::document::DocumentProperties;
     using ::ucbhelper::ResultSetInclude;
@@ -73,13 +74,11 @@ namespace svt
 
     FileViewContentEnumerator::FileViewContentEnumerator(
             const Reference< XCommandEnvironment >& _rxCommandEnv,
-            ContentData& _rContentToFill, ::osl::Mutex& _rContentMutex,
-            const IContentTitleTranslation* _pTranslator )
+            ContentData& _rContentToFill, ::osl::Mutex& _rContentMutex )
         :Thread                  ( "FileViewContentEnumerator" )
         ,m_rContent              ( _rContentToFill )
         ,m_rContentMutex         ( _rContentMutex  )
         ,m_xCommandEnv           ( _rxCommandEnv   )
-        ,m_pTranslator           ( _pTranslator    )
         ,m_pResultHandler        ( nullptr            )
         ,m_bCancelled            ( false           )
         ,m_rBlackList            ( css::uno::Sequence< OUString >() )
@@ -97,7 +96,6 @@ namespace svt
         ::osl::MutexGuard aGuard( m_aMutex );
         m_bCancelled = true;
         m_pResultHandler = nullptr;
-        m_pTranslator = nullptr;
         m_aFolder.aContent = ::ucbhelper::Content();
         m_aFolder.sURL.clear();
     }
@@ -137,7 +135,7 @@ namespace svt
 
     EnumerationResult FileViewContentEnumerator::enumerateFolderContent()
     {
-        EnumerationResult eResult = ERROR;
+        EnumerationResult eResult = EnumerationResult::ERROR;
         try
         {
 
@@ -176,8 +174,7 @@ namespace svt
                 }
 
                 Reference< XDynamicResultSet > xDynResultSet;
-                ResultSetInclude eInclude = INCLUDE_FOLDERS_AND_DOCUMENTS;
-                xDynResultSet = aFolder.aContent.createDynamicCursor( aProps, eInclude );
+                xDynResultSet = aFolder.aContent.createDynamicCursor( aProps, INCLUDE_FOLDERS_AND_DOCUMENTS );
 
                 if ( xDynResultSet.is() )
                     xResultSet = xDynResultSet->getStaticResultSet();
@@ -197,7 +194,6 @@ namespace svt
 
                 try
                 {
-                    SortingData_Impl* pData;
                     DateTime aDT;
 
                     bool bCancelled = false;
@@ -207,8 +203,6 @@ namespace svt
                         // don't show hidden files
                         if ( !bIsHidden || xRow->wasNull() )
                         {
-                            pData = nullptr;
-
                             aDT = xRow->getTimestamp( ROW_DATE_MOD );
                             bool bContainsDate = !xRow->wasNull();
                             if ( !bContainsDate )
@@ -230,7 +224,7 @@ namespace svt
                                     continue;
                             }
 
-                            pData = new SortingData_Impl;
+                            std::unique_ptr<SortingData_Impl> pData(new SortingData_Impl);
                             pData->maTargetURL = sRealURL;
 
                             pData->mbIsFolder = xRow->getBoolean( ROW_IS_FOLDER ) && !xRow->wasNull();
@@ -271,27 +265,9 @@ namespace svt
                                 pData->maType = SvFileInformationManager::GetFileDescription(
                                     INetURLObject( pData->maTargetURL ) );
 
-                            // replace names on demand
-                            {
-                                ::osl::MutexGuard aGuard( m_aMutex );
-                                if( m_pTranslator )
-                                {
-                                    OUString sNewTitle;
-                                    bool bTranslated = false;
-
-                                    if ( pData->mbIsFolder )
-                                        bTranslated = m_pTranslator->GetTranslation( pData->GetTitle(), sNewTitle );
-                                    else
-                                        bTranslated = implGetDocTitle( pData->maTargetURL, sNewTitle );
-
-                                    if ( bTranslated )
-                                        pData->ChangeTitle( sNewTitle );
-                                }
-                            }
-
                             {
                                 ::osl::MutexGuard aGuard( m_rContentMutex );
-                                m_rContent.push_back( pData );
+                                m_rContent.push_back( std::move(pData) );
                             }
                         }
 
@@ -300,7 +276,7 @@ namespace svt
                             bCancelled = m_bCancelled;
                         }
                     }
-                    eResult = SUCCESS;
+                    eResult = EnumerationResult::SUCCESS;
                 }
                 catch( CommandAbortedException& )
                 {
@@ -326,12 +302,12 @@ namespace svt
             ::osl::MutexGuard aGuard( m_aMutex );
             pHandler = m_pResultHandler;
             if ( m_bCancelled )
-                return ERROR;
+                return EnumerationResult::ERROR;
         }
 
         {
             ::osl::MutexGuard aGuard( m_rContentMutex );
-            if ( eResult != SUCCESS )
+            if ( eResult != EnumerationResult::SUCCESS )
                 // clear any "intermediate" and unfinished result
                 m_rContent.clear();
         }
@@ -348,45 +324,11 @@ namespace svt
 
         for (int i = 0; i < m_rBlackList.getLength() ; i++)
         {
-            if ( entryName.equals(  m_rBlackList[i] ) )
+            if ( entryName == m_rBlackList[i] )
                 return true;
         }
 
         return false;
-    }
-
-
-    bool FileViewContentEnumerator::implGetDocTitle( const OUString& _rTargetURL, OUString& _rRet ) const
-    {
-        bool bRet = false;
-
-        try
-        {
-            ::osl::MutexGuard aGuard( m_aMutex );
-            if (!m_xDocProps.is())
-            {
-                m_xDocProps.set(DocumentProperties::create(
-                            ::comphelper::getProcessComponentContext()));
-            }
-
-            assert(m_xDocProps.is());
-            if (!m_xDocProps.is())
-                return false;
-
-            m_xDocProps->loadFromMedium(_rTargetURL, Sequence<PropertyValue>());
-
-            OUString const sTitle(m_xDocProps->getTitle());
-            if (!sTitle.isEmpty())
-            {
-                _rRet = sTitle;
-                bRet = true;
-            }
-        }
-        catch ( const Exception& )
-        {
-        }
-
-        return bRet;
     }
 
 

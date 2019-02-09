@@ -20,9 +20,9 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_TABCONT_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_TABCONT_HXX
 
-#include "address.hxx"
+#include <types.hxx>
 #include <svtools/tabbar.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 
 class ScViewData;
 
@@ -37,12 +37,12 @@ private:
     sal_uInt16      nSelPageIdByMouse;      /// Selected page ID, if selected with mouse
     bool            bErrorShown;
 
-    void            DoDrag( const vcl::Region& rRegion );
+    void            DoDrag();
 
-    sal_uInt16          GetMaxId() const;
+    sal_uInt16      GetMaxId() const;
     SCTAB           GetPrivatDropPos(const Point& rPos );
 
-    DECL_LINK_TYPED(ShowPageList, const CommandEvent&, void);
+    DECL_LINK(ShowPageList, const CommandEvent&, void);
 
 protected:
     virtual void    Select() override;
@@ -64,7 +64,8 @@ protected:
 
 public:
                     ScTabControl( vcl::Window* pParent, ScViewData* pData );
-                    virtual ~ScTabControl();
+    virtual void    dispose() override;
+                    virtual ~ScTabControl() override;
 
     using TabBar::StartDrag;
 

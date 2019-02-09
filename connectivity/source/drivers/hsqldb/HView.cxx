@@ -18,10 +18,10 @@
  */
 
 
-#include "hsqldb/HView.hxx"
-#include "hsqldb/HTools.hxx"
+#include <hsqldb/HView.hxx>
+#include <hsqldb/HTools.hxx>
 
-#include "propertyids.hxx"
+#include <propertyids.hxx>
 
 #include <connectivity/dbexception.hxx>
 #include <connectivity/dbtools.hxx>
@@ -44,7 +44,6 @@ namespace connectivity { namespace hsqldb
     using ::com::sun::star::uno::Exception;
     using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Any;
-    using ::com::sun::star::sdbc::XDatabaseMetaData;
     using ::com::sun::star::sdbc::SQLException;
     using ::com::sun::star::sdbc::XConnection;
     using ::com::sun::star::lang::WrappedTargetException;
@@ -55,7 +54,7 @@ namespace connectivity { namespace hsqldb
 
     HView::HView( const Reference< XConnection >& _rxConnection, bool _bCaseSensitive,
         const OUString& _rSchemaName, const OUString& _rName )
-        :HView_Base( _bCaseSensitive, _rName, _rxConnection->getMetaData(), 0, OUString(), _rSchemaName, OUString() )
+        :HView_Base( _bCaseSensitive, _rName, _rxConnection->getMetaData(), OUString(), _rSchemaName, OUString() )
         ,m_xConnection( _rxConnection )
     {
     }
@@ -70,14 +69,14 @@ namespace connectivity { namespace hsqldb
     IMPLEMENT_FORWARD_XTYPEPROVIDER2( HView, HView_Base, HView_IBASE )
 
 
-    void SAL_CALL HView::alterCommand( const OUString& _rNewCommand ) throw (SQLException, RuntimeException, std::exception)
+    void SAL_CALL HView::alterCommand( const OUString& _rNewCommand )
     {
         // not really atomic ... as long as we do not have something like
         //   ALTER VIEW <name> TO <command>
         // in HSQL, we need to do it this way ...
         //
         // I can imagine scenarios where this fails, e.g. when dropping the view
-        // succeedes, re-creating it fails, some other thread alters a table which
+        // succeeds, re-creating it fails, some other thread alters a table which
         // the view was based on, and then we try to restore the view with the
         // original command, which then fails, too.
         //
@@ -131,9 +130,9 @@ namespace connectivity { namespace hsqldb
         }
         catch( const Exception& )
         {
+            DBG_UNHANDLED_EXCEPTION("connectivity.hsqldb");
             if ( bDropSucceeded )
                 xStatement->execute( sRestoreCommand );
-            DBG_UNHANDLED_EXCEPTION();
         }
     }
 
@@ -160,8 +159,8 @@ namespace connectivity { namespace hsqldb
         Reference< XResultSet > xResult( xStatement->executeQuery( aCommand.makeStringAndClear() ), UNO_QUERY_THROW );
         if ( !xResult->next() )
         {
-            // hmm. There is no view view the name as we know it. Can only mean some other instance
-            // dropped this view meanwhile ...
+            // hmm. There is no view the name as we know it. Can only mean some other instance
+            // dropped this view meanwhile...
             throw DisposedException();
         }
 
@@ -187,7 +186,7 @@ namespace connectivity { namespace hsqldb
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.hsqldb");
         }
 
         return sCommand;
@@ -211,7 +210,7 @@ namespace connectivity { namespace hsqldb
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.hsqldb");
         }
 
         return sCommand;

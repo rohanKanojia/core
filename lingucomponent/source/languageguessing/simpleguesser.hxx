@@ -23,16 +23,13 @@
 #include <string>
 #include <cstdlib>
 #include <vector>
-#include <guess.hxx>
+#include "guess.hxx"
 
 #define MAX_STRING_LENGTH_TO_ANALYSE 200
 
 using namespace std;
 
-/**
-@author Jocelyn Merand
-*/
-class SimpleGuesser{
+class SimpleGuesser final {
 public:
     /**inits the object with conf file "./conf.txt"*/
     SimpleGuesser();
@@ -94,11 +91,11 @@ public:
     /**
      * Load a new DB of fingerprints
      * @param const char* thePathOfConfFile self explaining
-     * @param const char* prefix is the path where the directory witch contains fingerprint files is stored
+     * @param const char* prefix is the path where the directory which contains fingerprint files is stored
     */
     void SetDBPath(const char* thePathOfConfFile, const char* prefix);
 
-protected:
+private:
 
     //Where typical fingerprints (n-gram tables) are stored
     void* h;

@@ -17,30 +17,30 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xiroot.hxx"
-#include "addincol.hxx"
-#include "document.hxx"
-#include "scextopt.hxx"
-#include "xltracer.hxx"
-#include "xihelper.hxx"
-#include "xiformula.hxx"
-#include "xilink.hxx"
-#include "xiname.hxx"
-#include "xistyle.hxx"
-#include "xicontent.hxx"
-#include "xiescher.hxx"
-#include "xipivot.hxx"
-#include "xipage.hxx"
-#include "xiview.hxx"
+#include <xiroot.hxx>
+#include <addincol.hxx>
+#include <colrowst.hxx>
+#include <document.hxx>
+#include <scextopt.hxx>
+#include <xihelper.hxx>
+#include <xiformula.hxx>
+#include <xilink.hxx>
+#include <xiname.hxx>
+#include <xistyle.hxx>
+#include <xicontent.hxx>
+#include <xiescher.hxx>
+#include <xipivot.hxx>
+#include <xipage.hxx>
+#include <xiview.hxx>
 
-#include "root.hxx"
-#include "excimp8.hxx"
-#include "documentimport.hxx"
+#include <root.hxx>
+#include <excimp8.hxx>
+#include <documentimport.hxx>
 
 // Global data ================================================================
 
 XclImpRootData::XclImpRootData( XclBiff eBiff, SfxMedium& rMedium,
-        tools::SvRef<SotStorage> xRootStrg, ScDocument& rDoc, rtl_TextEncoding eTextEnc ) :
+        const tools::SvRef<SotStorage>& xRootStrg, ScDocument& rDoc, rtl_TextEncoding eTextEnc ) :
     XclRootData( eBiff, rMedium, xRootStrg, rDoc, eTextEnc, false ),
     mxDocImport(new ScDocumentImport(rDoc)),
     mbHasCodePage( false ),
@@ -74,7 +74,7 @@ XclImpRoot::XclImpRoot( XclImpRootData& rImpRootData ) :
         mrImpData.mxCondFmtMgr.reset( new XclImpCondFormatManager( GetRoot() ) );
         mrImpData.mxValidMgr.reset( new XclImpValidationManager( GetRoot() ) );
         // TODO still in old RootData (deleted by RootData)
-        GetOldRoot().pAutoFilterBuffer = new XclImpAutoFilterBuffer;
+        GetOldRoot().pAutoFilterBuffer.reset( new XclImpAutoFilterBuffer );
         mrImpData.mxWebQueryBfr.reset( new XclImpWebQueryBuffer( GetRoot() ) );
         mrImpData.mxPTableMgr.reset( new XclImpPivotTableManager( GetRoot() ) );
         mrImpData.mxTabProtect.reset( new XclImpSheetProtectBuffer( GetRoot() ) );
@@ -169,13 +169,13 @@ XclImpXFRangeBuffer& XclImpRoot::GetXFRangeBuffer() const
     return *mrImpData.mxXFRangeBfr;
 }
 
-_ScRangeListTabs& XclImpRoot::GetPrintAreaBuffer() const
+ScRangeListTabs& XclImpRoot::GetPrintAreaBuffer() const
 {
     // TODO still in old RootData
     return *GetOldRoot().pPrintRanges;
 }
 
-_ScRangeListTabs& XclImpRoot::GetTitleAreaBuffer() const
+ScRangeListTabs& XclImpRoot::GetTitleAreaBuffer() const
 {
     // TODO still in old RootData
     return *GetOldRoot().pPrintTitles;

@@ -23,15 +23,9 @@ namespace dbaui
 {
 
     // OptionalBoolItem
-    OptionalBoolItem::OptionalBoolItem( sal_Int16 _nWhich )
+    OptionalBoolItem::OptionalBoolItem( sal_uInt16 _nWhich )
         :SfxPoolItem( _nWhich )
         ,m_aValue()
-    {
-    }
-
-    OptionalBoolItem::OptionalBoolItem( const OptionalBoolItem& _rSource )
-        :SfxPoolItem( _rSource )
-        ,m_aValue( _rSource.m_aValue )
     {
     }
 
@@ -41,10 +35,7 @@ namespace dbaui
         if ( !pCompare )
             return false;
 
-        if ( m_aValue == pCompare->m_aValue )
-            return true;
-
-        return false;
+        return m_aValue == pCompare->m_aValue;
     }
 
     SfxPoolItem* OptionalBoolItem::Clone( SfxItemPool* /*_pPool*/ ) const

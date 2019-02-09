@@ -22,12 +22,12 @@
 
 #include <sal/types.h>
 #include <xmloff/xmlement.hxx>
-#include "hintids.hxx"
+#include <hintids.hxx>
 #include <editeng/brushitem.hxx>
 
 namespace editeng { class SvxBorderLine; }
 
-struct SvXMLEnumMapEntry;
+template<typename EnumT> struct SvXMLEnumMapEntry;
 class SvXMLUnitConverter;
 class Color;
 
@@ -40,13 +40,13 @@ bool sw_frmitems_parseXMLBorder( const OUString& rValue,
                                       sal_uInt16& rNamedWidth,
                                       bool& rHasColor, Color& rColor );
 
-bool sw_frmitems_setXMLBorder( editeng::SvxBorderLine*& rpLine,
+bool sw_frmitems_setXMLBorder( std::unique_ptr<editeng::SvxBorderLine>& rpLine,
                                     bool bHasStyle, sal_uInt16 nStyle,
                                     bool bHasWidth, sal_uInt16 nWidth,
                                     sal_uInt16 nNamedWidth,
                                     bool bHasColor, const Color& rColor );
 
-void sw_frmitems_setXMLBorder( editeng::SvxBorderLine*& rpLine,
+void sw_frmitems_setXMLBorder( std::unique_ptr<editeng::SvxBorderLine>& rpLine,
                                 sal_uInt16 nWidth, sal_uInt16 nOutWidth,
                                 sal_uInt16 nInWidth, sal_uInt16 nDistance );
 
@@ -56,15 +56,15 @@ void sw_frmitems_MergeXMLHoriPos( SvxGraphicPosition& ePos,
 void sw_frmitems_MergeXMLVertPos( SvxGraphicPosition& ePos,
                                      SvxGraphicPosition eVert );
 
-extern const struct SvXMLEnumMapEntry psXML_BorderStyles[];
-extern const struct SvXMLEnumMapEntry psXML_NamedBorderWidths[];
-extern const struct SvXMLEnumMapEntry psXML_BrushRepeat[];
-extern const struct SvXMLEnumMapEntry psXML_BrushHoriPos[];
-extern const struct SvXMLEnumMapEntry psXML_BrushVertPos[];
-extern const struct SvXMLEnumMapEntry psXML_BreakType[];
-extern const struct SvXMLEnumMapEntry aXMLTableAlignMap[];
-extern const struct SvXMLEnumMapEntry aXMLTableVAlignMap[];
-extern const struct SvXMLEnumMapEntry aXML_KeepTogetherType[];
+extern const struct SvXMLEnumMapEntry<sal_uInt16> psXML_BorderStyles[];
+extern const struct SvXMLEnumMapEntry<sal_uInt16> psXML_NamedBorderWidths[];
+extern const struct SvXMLEnumMapEntry<SvxGraphicPosition> psXML_BrushRepeat[];
+extern const struct SvXMLEnumMapEntry<SvxGraphicPosition> psXML_BrushHoriPos[];
+extern const struct SvXMLEnumMapEntry<SvxGraphicPosition> psXML_BrushVertPos[];
+extern const struct SvXMLEnumMapEntry<sal_uInt16> psXML_BreakType[];
+extern const struct SvXMLEnumMapEntry<sal_Int16> aXMLTableAlignMap[];
+extern const struct SvXMLEnumMapEntry<sal_Int16> aXMLTableVAlignMap[];
+extern const struct SvXMLEnumMapEntry<sal_uInt16> aXML_KeepTogetherType[];
 
 #endif
 

@@ -21,20 +21,19 @@
 
 /// @cond INTERNAL
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <cstddef>
-#include <functional>
 #include <typeinfo>
 #include <unordered_set>
 
-#include <osl/diagnose.h>
-#include <osl/interlck.h>
-#include <osl/mutex.hxx>
-#include <rtl/instance.hxx>
-#include <sal/log.hxx>
-#include <sal/saldllapi.h>
-#include <sal/types.h>
+#include "osl/diagnose.h"
+#include "osl/interlck.h"
+#include "osl/mutex.hxx"
+#include "rtl/instance.hxx"
+#include "sal/log.hxx"
+#include "sal/saldllapi.h"
+#include "sal/types.h"
 
 namespace osl {
 namespace detail {
@@ -66,9 +65,6 @@ SAL_DLLPUBLIC void SAL_CALL osl_detail_ObjectRegistry_revokeObject(
 // that would break binary compatibility.
 #ifdef __clang__
 #pragma clang diagnostic push
-// Guard against slightly older clang versions that don't have
-// -Wreturn-type-c-linkage...
-#pragma clang diagnostic ignored "-Wunknown-pragmas"
 #pragma clang diagnostic ignored "-Wreturn-type-c-linkage"
 #endif
 
@@ -85,7 +81,7 @@ namespace osl {
 
 namespace detail {
 
-struct VoidPtrHash : ::std::unary_function<void const*, ::std::size_t> {
+struct VoidPtrHash {
     ::std::size_t operator()( void const* p ) const {
         ::std::size_t const d = static_cast< ::std::size_t >(
             reinterpret_cast< ::std::ptrdiff_t >(p) );
@@ -98,7 +94,7 @@ typedef ::std::unordered_set<void const*, VoidPtrHash > VoidPointerSet;
 struct ObjectRegistryData {
     ObjectRegistryData( ::std::type_info const& rTypeInfo )
         : m_pName(rTypeInfo.name()), m_nCount(0), m_addresses(),
-          m_bStoreAddresses(osl_detail_ObjectRegistry_storeAddresses(m_pName)){}
+          m_bStoreAddresses(osl_detail_ObjectRegistry_storeAddresses(m_pName)) {}
 
     char const* const m_pName;
     oslInterlockedCount m_nCount;
@@ -148,9 +144,9 @@ private:
 /** Helper class which indicates leaking object(s) of a particular class in
     non-pro builds; use e.g.
 
-    <pre>
+    @code{.cpp}
     class MyClass : private osl::DebugBase<MyClass> {...};
-    </pre>
+    @endcode
 
     Using the environment variable
 

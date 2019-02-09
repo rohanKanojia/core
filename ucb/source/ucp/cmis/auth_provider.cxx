@@ -22,8 +22,6 @@ using namespace std;
 
 namespace cmis
 {
-    css::uno::Reference< css::ucb::XCommandEnvironment>
-        AuthProvider::sm_xEnv;
     bool AuthProvider::authenticationQuery( string& username, string& password )
     {
         if ( m_xEnv.is() )
@@ -38,7 +36,7 @@ namespace cmis
                         m_sUrl, m_sBindingUrl, OUString(),
                         STD_TO_OUSTR( username ),
                         STD_TO_OUSTR( password ),
-                        OUString(), false, false );
+                        false, false );
                 xIH->handle( xRequest.get() );
 
                 rtl::Reference< ucbhelper::InteractionContinuation > xSelection
@@ -66,6 +64,18 @@ namespace cmis
         return false;
     }
 
+    css::uno::WeakReference< css::ucb::XCommandEnvironment> AuthProvider::sm_xEnv;
+
+    void AuthProvider::setXEnv(const css::uno::Reference< css::ucb::XCommandEnvironment>& xEnv )
+    {
+        sm_xEnv = xEnv;
+    }
+
+    css::uno::Reference< css::ucb::XCommandEnvironment> AuthProvider::getXEnv()
+    {
+        return sm_xEnv;
+    }
+
     char* AuthProvider::onedriveAuthCodeFallback( const char* url,
             const char* /*username*/,
             const char* /*password*/ )
@@ -88,6 +98,47 @@ namespace cmis
                 rtl::Reference< ucbhelper::AuthenticationFallbackRequest > xRequest
                     = new ucbhelper::AuthenticationFallbackRequest (
                             instructions, url_oustr );
+
+                xIH->handle( xRequest.get() );
+
+                rtl::Reference< ucbhelper::InteractionContinuation > xSelection
+                    = xRequest->getSelection();
+
+                if ( xSelection.is() )
+                {
+                    // Handler handled the request.
+                    const rtl::Reference< ucbhelper::InteractionAuthFallback >&
+                        xAuthFallback = xRequest->getAuthFallbackInter( );
+                    if ( xAuthFallback.is() )
+                    {
+                        OUString code = xAuthFallback->getCode( );
+                        return strdup( OUSTR_TO_STDSTR( code ).c_str( ) );
+                    }
+                }
+            }
+        }
+
+        return strdup( "" );
+    }
+
+    char* AuthProvider::gdriveAuthCodeFallback( const char* /*url*/,
+            const char* /*username*/,
+            const char* /*password*/ )
+    {
+        OUString instructions = "PIN:";
+        const css::uno::Reference<
+            css::ucb::XCommandEnvironment> xEnv = getXEnv( );
+
+        if ( xEnv.is() )
+        {
+            uno::Reference< task::XInteractionHandler > xIH
+                = xEnv->getInteractionHandler();
+
+            if ( xIH.is() )
+            {
+                rtl::Reference< ucbhelper::AuthenticationFallbackRequest > xRequest
+                    = new ucbhelper::AuthenticationFallbackRequest (
+                            instructions, "" );
 
                 xIH->handle( xRequest.get() );
 

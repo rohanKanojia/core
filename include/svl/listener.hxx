@@ -28,10 +28,13 @@ class SfxHint;
 
 class SVL_DLLPUBLIC SvtListener
 {
+    friend class SvtBroadcaster;
     typedef std::unordered_set<SvtBroadcaster*> BroadcastersType;
     BroadcastersType maBroadcasters;
 
     const SvtListener&  operator=(const SvtListener &) = delete;
+    // called from the SvtBroadcaster destructor
+    void BroadcasterDying( SvtBroadcaster& rBroadcaster );
 
 public:
     class SVL_DLLPUBLIC QueryBase
@@ -46,12 +49,13 @@ public:
 
     SvtListener();
     SvtListener( const SvtListener &r );
-    virtual ~SvtListener();
+    virtual ~SvtListener() COVERITY_NOEXCEPT_FALSE;
 
     bool StartListening( SvtBroadcaster& rBroadcaster );
     bool EndListening( SvtBroadcaster& rBroadcaster );
     void EndListeningAll();
 
+    /// Overwrites existing broadcasters with the ones from the specified listener
     void CopyAllBroadcasters( const SvtListener& r );
     bool HasBroadcaster() const;
 

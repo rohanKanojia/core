@@ -21,7 +21,8 @@
 #include <hintids.hxx>
 #include <i18nlangtag/lang.h>
 #include <i18nlangtag/languagetag.hxx>
-#include <vcl/msgbox.hxx>
+#include <o3tl/any.hxx>
+#include <tools/svlibrary.h>
 #include <svtools/parhtml.hxx>
 #include <sot/storage.hxx>
 #include <comphelper/classids.hxx>
@@ -51,11 +52,11 @@
 #include <swfltopt.hxx>
 #include <swerror.h>
 #include <swdll.hxx>
+#include <iodetect.hxx>
 #include <osl/module.hxx>
-#include <comphelper/processfactory.hxx>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/util/XMacroExpander.hpp>
 #include <rtl/bootstrap.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
 using namespace utl;
 using namespace com::sun::star::uno;
@@ -63,12 +64,13 @@ using namespace com::sun::star;
 
 SwRead ReadAscii = nullptr, ReadHTML = nullptr, ReadXML = nullptr;
 
-Reader* GetRTFReader();
-Reader* GetWW8Reader();
+static Reader* GetRTFReader();
+static Reader* GetWW8Reader();
+static Reader* GetDOCXReader();
 
 // Note: if editing, please don't forget to modify also the enum
-// ReaderWriterEnum and aFilterDetect in shellio.hxx
-SwReaderWriterEntry aReaderWriter[] =
+// ReaderWriterEnum and aFilterDetect in iodetect.hxx & iodetect.cxx
+static SwReaderWriterEntry aReaderWriter[] =
 {
     SwReaderWriterEntry( &::GetRTFReader, &::GetRTFWriter,  true  ),
     SwReaderWriterEntry( nullptr,               &::GetASCWriter,  false ),
@@ -79,7 +81,8 @@ SwReaderWriterEntry aReaderWriter[] =
     SwReaderWriterEntry( &::GetWW8Reader, nullptr,                true  ),
     SwReaderWriterEntry( nullptr,               &::GetXMLWriter,  true  ),
     SwReaderWriterEntry( nullptr,               &::GetASCWriter,  false ),
-    SwReaderWriterEntry( nullptr,               &::GetASCWriter,  true  )
+    SwReaderWriterEntry( nullptr,               &::GetASCWriter,  true  ),
+    SwReaderWriterEntry( &::GetDOCXReader,      nullptr,          true  )
 };
 
 Reader* SwReaderWriterEntry::GetReader()
@@ -107,7 +110,7 @@ SwRead SwGetReaderXML() // SW_DLLPUBLIC
         return ReadXML;
 }
 
-inline void _SetFltPtr( sal_uInt16 rPos, SwRead pReader )
+static void SetFltPtr( sal_uInt16 rPos, SwRead pReader )
 {
         aReaderWriter[ rPos ].pReader = pReader;
 }
@@ -116,19 +119,21 @@ namespace sw {
 
 Filters::Filters()
 {
-    _SetFltPtr( READER_WRITER_BAS, (ReadAscii = new AsciiReader) );
-    _SetFltPtr( READER_WRITER_HTML, (ReadHTML = new HTMLReader) );
-    _SetFltPtr( READER_WRITER_XML, (ReadXML = new XMLReader)  );
-    _SetFltPtr( READER_WRITER_TEXT_DLG, ReadAscii );
-    _SetFltPtr( READER_WRITER_TEXT, ReadAscii );
+    ReadAscii = new AsciiReader;
+    ReadHTML = new HTMLReader;
+    ReadXML = new XMLReader;
+    SetFltPtr( READER_WRITER_BAS, ReadAscii );
+    SetFltPtr( READER_WRITER_HTML, ReadHTML );
+    SetFltPtr( READER_WRITER_XML, ReadXML );
+    SetFltPtr( READER_WRITER_TEXT_DLG, ReadAscii );
+    SetFltPtr( READER_WRITER_TEXT, ReadAscii );
 }
 
 Filters::~Filters()
 {
     // kill Readers
-    for( sal_uInt16 n = 0; n < MAXFILTER; ++n )
+    for(SwReaderWriterEntry & rEntry : aReaderWriter)
     {
-        SwReaderWriterEntry& rEntry = aReaderWriter[n];
         if( rEntry.bDelReader && rEntry.pReader )
         {
             delete rEntry.pReader;
@@ -162,6 +167,11 @@ namespace SwReaderWriter {
 Reader* GetRtfReader()
 {
     return aReaderWriter[READER_WRITER_RTF].GetReader();
+}
+
+Reader* GetDOCXReader()
+{
+    return aReaderWriter[READER_WRITER_DOCX].GetReader();
 }
 
 void GetWriter( const OUString& rFltName, const OUString& rBaseURL, WriterRef& xRet )
@@ -234,17 +244,15 @@ bool StgWriter::IsStgWriter() const { return true; }
 </FilterFlags>
 */
 
-#define FILTER_OPTION_ROOT      OUString("Office.Writer/FilterFlags")
-
 SwFilterOptions::SwFilterOptions( sal_uInt16 nCnt, const sal_Char** ppNames,
-                                                                sal_uInt32* pValues )
-    : ConfigItem( FILTER_OPTION_ROOT )
+                                                                sal_uInt64* pValues )
+    : ConfigItem( "Office.Writer/FilterFlags" )
 {
     GetValues( nCnt, ppNames, pValues );
 }
 
 void SwFilterOptions::GetValues( sal_uInt16 nCnt, const sal_Char** ppNames,
-                                                                        sal_uInt32* pValues )
+                                                                        sal_uInt64* pValues )
 {
     Sequence<OUString> aNames( nCnt );
     OUString* pNames = aNames.getArray();
@@ -259,7 +267,7 @@ void SwFilterOptions::GetValues( sal_uInt16 nCnt, const sal_Char** ppNames,
         const Any* pAnyValues = aValues.getConstArray();
         for( n = 0; n < nCnt; ++n )
             pValues[ n ] = pAnyValues[ n ].hasValue()
-                                            ? *static_cast<sal_uInt32 const *>(pAnyValues[ n ].getValue())
+                                            ? *o3tl::doAccess<sal_uInt64>(pAnyValues[ n ])
                                             : 0;
     }
     else
@@ -274,13 +282,13 @@ void SwFilterOptions::Notify( const css::uno::Sequence< OUString >& ) {}
 
 void StgReader::SetFltName( const OUString& rFltNm )
 {
-    if( SW_STORAGE_READER & GetReaderType() )
+    if( SwReaderType::Storage & GetReaderType() )
         aFltName = rFltNm;
 }
 
-SwRelNumRuleSpaces::SwRelNumRuleSpaces( SwDoc& rDoc, bool bNDoc )
+SwRelNumRuleSpaces::SwRelNumRuleSpaces( SwDoc const & rDoc, bool bNDoc )
 {
-    pNumRuleTable = new SwNumRuleTable();
+    pNumRuleTable.reset(new SwNumRuleTable);
     pNumRuleTable->reserve(8);
     if( !bNDoc )
         pNumRuleTable->insert( pNumRuleTable->begin(),
@@ -290,10 +298,7 @@ SwRelNumRuleSpaces::SwRelNumRuleSpaces( SwDoc& rDoc, bool bNDoc )
 SwRelNumRuleSpaces::~SwRelNumRuleSpaces()
 {
     if( pNumRuleTable )
-    {
         pNumRuleTable->clear();
-        delete pNumRuleTable;
-    }
 }
 
 void CalculateFlySize(SfxItemSet& rFlySet, const SwNodeIndex& rAnchor,
@@ -303,7 +308,7 @@ void CalculateFlySize(SfxItemSet& rFlySet, const SwNodeIndex& rAnchor,
     if( SfxItemState::SET != rFlySet.GetItemState( RES_FRM_SIZE, true, &pItem ) ||
             MINFLY > static_cast<const SwFormatFrameSize*>(pItem)->GetWidth() )
     {
-        SwFormatFrameSize aSz(static_cast<const SwFormatFrameSize&>(rFlySet.Get(RES_FRM_SIZE)));
+        SwFormatFrameSize aSz(rFlySet.Get(RES_FRM_SIZE));
         if (pItem)
             aSz = static_cast<const SwFormatFrameSize&>(*pItem);
 
@@ -316,8 +321,7 @@ void CalculateFlySize(SfxItemSet& rFlySet, const SwNodeIndex& rAnchor,
         else
             nWidth = nPageWidth;
 
-        const SwNodeIndex* pSttNd = static_cast<const SwFormatContent&>(rFlySet.Get( RES_CNTNT )).
-                                                                GetContentIdx();
+        const SwNodeIndex* pSttNd = rFlySet.Get( RES_CNTNT ).GetContentIdx();
         if( pSttNd )
         {
             bool bOnlyOneNode = true;
@@ -362,7 +366,7 @@ void CalculateFlySize(SfxItemSet& rFlySet, const SwNodeIndex& rAnchor,
                 }
 
                 // consider border and distance to content
-                const SvxBoxItem& rBoxItem = static_cast<const SvxBoxItem&>(rFlySet.Get( RES_BOX ));
+                const SvxBoxItem& rBoxItem = rFlySet.Get( RES_BOX );
                 SvxBoxItemLine nLine = SvxBoxItemLine::LEFT;
                 for( int i = 0; i < 2; ++i )
                 {
@@ -383,9 +387,9 @@ void CalculateFlySize(SfxItemSet& rFlySet, const SwNodeIndex& rAnchor,
                 if( nMaxFrame < MINLAY )
                     nMaxFrame = MINLAY;
 
-                if( nWidth > (sal_uInt16)nMaxFrame )
+                if( nWidth > static_cast<sal_uInt16>(nMaxFrame) )
                     nWidth = nMaxFrame;
-                else if( nWidth > (sal_uInt16)nMinFrame )
+                else if( nWidth > static_cast<sal_uInt16>(nMinFrame) )
                     nWidth = nMinFrame;
             }
         }
@@ -411,7 +415,7 @@ namespace
 
 struct CharSetNameMap
 {
-    rtl_TextEncoding eCode;
+    rtl_TextEncoding const eCode;
     const sal_Char* pName;
 };
 
@@ -567,42 +571,33 @@ OUString NameFromCharSet(rtl_TextEncoding nChrSet)
 // The user data contains the options for the ascii import/export filter.
 // The format is:
 //      1. CharSet - as ascii chars
-//      2. LineEnd - as CR/LR/CRLF
+//      2. LineEnd - as CR/LF/CRLF
 //      3. Fontname
 //      4. Language
+//      5. Whether to include byte-order-mark - as true/false
 // the delimiter character is ","
 
 void SwAsciiOptions::ReadUserData( const OUString& rStr )
 {
     sal_Int32 nToken = 0;
-    int nCnt = 0;
-    do {
-        const OUString sToken = rStr.getToken( 0, ',', nToken );
-        if (!sToken.isEmpty())
-        {
-            switch( nCnt )
-            {
-            case 0:         // CharSet
-                eCharSet = CharSetFromName(sToken);
-                break;
-            case 1:         // LineEnd
-                if (sToken.equalsIgnoreAsciiCase("CRLF"))
-                    eCRLF_Flag = LINEEND_CRLF;
-                else if (sToken.equalsIgnoreAsciiCase("LF"))
-                    eCRLF_Flag = LINEEND_LF;
-                else
-                    eCRLF_Flag = LINEEND_CR;
-                break;
-            case 2:         // fontname
-                sFont = sToken;
-                break;
-            case 3:         // Language
-                nLanguage = LanguageTag::convertToLanguageTypeWithFallback( sToken );
-                break;
-            }
-        }
-        ++nCnt;
-    } while( -1 != nToken );
+    OUString sToken = rStr.getToken(0, ',', nToken); // 1. Charset name
+    if (!sToken.isEmpty())
+        eCharSet = CharSetFromName(sToken);
+    if (nToken >= 0 && !(sToken = rStr.getToken(0, ',', nToken)).isEmpty()) // 2. Line ending type
+    {
+        if (sToken.equalsIgnoreAsciiCase("CRLF"))
+            eCRLF_Flag = LINEEND_CRLF;
+        else if (sToken.equalsIgnoreAsciiCase("LF"))
+            eCRLF_Flag = LINEEND_LF;
+        else
+            eCRLF_Flag = LINEEND_CR;
+    }
+    if (nToken >= 0 && !(sToken = rStr.getToken(0, ',', nToken)).isEmpty()) // 3. Font name
+        sFont = sToken;
+    if (nToken >= 0 && !(sToken = rStr.getToken(0, ',', nToken)).isEmpty()) // 4. Language tag
+        nLanguage = LanguageTag::convertToLanguageTypeWithFallback(sToken);
+    if (nToken >= 0 && !(sToken = rStr.getToken(0, ',', nToken)).isEmpty()) // 5. Include BOM?
+        bIncludeBOM = !(sToken.equalsIgnoreAsciiCase("FALSE"));
 }
 
 void SwAsciiOptions::WriteUserData(OUString& rStr)
@@ -634,6 +629,17 @@ void SwAsciiOptions::WriteUserData(OUString& rStr)
         rStr += LanguageTag::convertToBcp47(nLanguage);
     }
     rStr += ",";
+
+    // 5. Whether to include byte-order-mark
+    if( bIncludeBOM )
+    {
+        rStr += "true";
+    }
+    else
+    {
+        rStr += "false";
+    }
+    rStr += ",";
 }
 
 #ifdef DISABLE_DYNLOADING
@@ -643,8 +649,9 @@ extern "C" {
     void ExportRTF( const OUString&, const OUString& rBaseURL, WriterRef& );
     Reader *ImportDOC();
     void ExportDOC( const OUString&, const OUString& rBaseURL, WriterRef& );
-    sal_uLong SaveOrDelMSVBAStorage_ww8( SfxObjectShell&, SotStorage&, sal_Bool, const OUString& );
-    sal_uLong GetSaveWarningOfMSVBAStorage_ww8( SfxObjectShell& );
+    Reader *ImportDOCX();
+    sal_uInt32 SaveOrDelMSVBAStorage_ww8( SfxObjectShell&, SotStorage&, sal_Bool, const OUString& );
+    sal_uInt32 GetSaveWarningOfMSVBAStorage_ww8( SfxObjectShell& );
 }
 
 #endif
@@ -707,30 +714,44 @@ void GetWW8Writer( const OUString& rFltName, const OUString& rBaseURL, WriterRef
 #endif
 }
 
-typedef sal_uLong ( SAL_CALL *SaveOrDel )( SfxObjectShell&, SotStorage&, sal_Bool, const OUString& );
-typedef sal_uLong ( SAL_CALL *GetSaveWarning )( SfxObjectShell& );
+Reader* GetDOCXReader()
+{
+#ifndef DISABLE_DYNLOADING
+    FnGetReader pFunction = reinterpret_cast<FnGetReader>( SwGlobals::getFilters().GetMswordLibSymbol( "ImportDOCX" ) );
 
-sal_uLong SaveOrDelMSVBAStorage( SfxObjectShell& rDoc, SotStorage& rStor, bool bSaveInto, const OUString& rStorageName )
+    if ( pFunction )
+        return (*pFunction)();
+
+    return nullptr;
+#else
+    return ImportDOCX();
+#endif
+}
+
+typedef sal_uInt32 ( *SaveOrDel )( SfxObjectShell&, SotStorage&, sal_Bool, const OUString& );
+typedef sal_uInt32 ( *GetSaveWarning )( SfxObjectShell& );
+
+ErrCode SaveOrDelMSVBAStorage( SfxObjectShell& rDoc, SotStorage& rStor, bool bSaveInto, const OUString& rStorageName )
 {
 #ifndef DISABLE_DYNLOADING
     SaveOrDel pFunction = reinterpret_cast<SaveOrDel>( SwGlobals::getFilters().GetMswordLibSymbol( "SaveOrDelMSVBAStorage_ww8" ) );
     if( pFunction )
-        return pFunction( rDoc, rStor, bSaveInto, rStorageName );
+        return ErrCode(pFunction( rDoc, rStor, bSaveInto, rStorageName ));
     return ERRCODE_NONE;
 #else
-    return SaveOrDelMSVBAStorage_ww8( rDoc, rStor, bSaveInto, rStorageName );
+    return ErrCode(SaveOrDelMSVBAStorage_ww8( rDoc, rStor, bSaveInto, rStorageName ));
 #endif
 }
 
-sal_uLong GetSaveWarningOfMSVBAStorage( SfxObjectShell &rDocS )
+ErrCode GetSaveWarningOfMSVBAStorage( SfxObjectShell &rDocS )
 {
 #ifndef DISABLE_DYNLOADING
     GetSaveWarning pFunction = reinterpret_cast<GetSaveWarning>( SwGlobals::getFilters().GetMswordLibSymbol( "GetSaveWarningOfMSVBAStorage_ww8" ) );
     if( pFunction )
-        return pFunction( rDocS );
+        return ErrCode(pFunction( rDocS ));
     return ERRCODE_NONE;
 #else
-    return GetSaveWarningOfMSVBAStorage_ww8( rDocS );
+    return ErrCode(GetSaveWarningOfMSVBAStorage_ww8( rDocS ));
 #endif
 }
 

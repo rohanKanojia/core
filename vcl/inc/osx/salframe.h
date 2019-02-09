@@ -26,11 +26,12 @@
 
 #include <vcl/sysdata.hxx>
 
-#include "osx/salmenu.h"
-#include "osx/saldata.hxx"
-#include "osx/osxvcltypes.h"
+#include <osx/salinst.h>
+#include <osx/salmenu.h>
+#include <osx/saldata.hxx>
+#include <osx/osxvcltypes.h>
 
-#include "salframe.hxx"
+#include <salframe.hxx>
 
 #include <vector>
 #include <utility>
@@ -41,7 +42,6 @@ class AquaSalFrame;
 class AquaSalTimer;
 class AquaSalInstance;
 class AquaSalMenu;
-class AquaBlinker;
 
 typedef struct SalFrame::SalPointerState SalPointerState;
 
@@ -81,18 +81,22 @@ public:
     PointerStyle                    mePointerStyle;         // currently active pointer style
 
     NSTrackingRectTag               mnTrackingRectTag;      // used to get enter/leave messages
+    NSRect                          maTrackingRect;
 
     CGMutablePathRef                mrClippingPath;         // used for "shaping"
     std::vector< CGRect >           maClippingRects;
 
-    std::list<AquaBlinker*>         maBlinkers;
-
-    Rectangle                       maInvalidRect;
+    tools::Rectangle                       maInvalidRect;
 
     InputContextFlags               mnICOptions;
 
     // To prevent display sleep during presentation
     IOPMAssertionID                 mnAssertionID;
+
+    NSRect                          maFrameRect;
+    NSRect                          maContentRect;
+
+    bool                            mbGeometryDidChange;
 
 public:
     /** Constructor
@@ -103,11 +107,11 @@ public:
     */
     AquaSalFrame( SalFrame* pParent, SalFrameStyleFlags salFrameStyle );
 
-    virtual ~AquaSalFrame();
+    virtual ~AquaSalFrame() override;
 
     virtual SalGraphics*        AcquireGraphics() override;
     virtual void                ReleaseGraphics( SalGraphics* pGraphics ) override;
-    virtual bool                PostEvent(ImplSVEvent* pData) override;
+    virtual bool                PostEvent(std::unique_ptr<ImplSVEvent> pData) override;
     virtual void                SetTitle( const OUString& rTitle ) override;
     virtual void                SetIcon( sal_uInt16 nIcon ) override;
     virtual void                SetRepresentedURL( const OUString& ) override;
@@ -118,19 +122,19 @@ public:
     virtual void                SetMaxClientSize( long nWidth, long nHeight ) override;
     virtual void                SetPosSize( long nX, long nY, long nWidth, long nHeight, sal_uInt16 nFlags ) override;
     virtual void                GetClientSize( long& rWidth, long& rHeight ) override;
-    virtual void                GetWorkArea( Rectangle& rRect ) override;
+    virtual void                GetWorkArea( tools::Rectangle& rRect ) override;
     virtual SalFrame*           GetParent() const override;
     virtual void                SetWindowState( const SalFrameState* pState ) override;
     virtual bool                GetWindowState( SalFrameState* pState ) override;
     virtual void                ShowFullScreen( bool bFullScreen, sal_Int32 nDisplay ) override;
     virtual void                StartPresentation( bool bStart ) override;
     virtual void                SetAlwaysOnTop( bool bOnTop ) override;
-    virtual void                ToTop( sal_uInt16 nFlags ) override;
+    virtual void                ToTop( SalFrameToTop nFlags ) override;
     virtual void                SetPointer( PointerStyle ePointerStyle ) override;
     virtual void                CaptureMouse( bool bMouse ) override;
     virtual void                SetPointerPos( long nX, long nY ) override;
     virtual void                Flush( void ) override;
-    virtual void                Flush( const Rectangle& ) override;
+    virtual void                Flush( const tools::Rectangle& ) override;
     virtual void                SetInputContext( SalInputContext* pContext ) override;
     virtual void                EndExtTextInput( EndExtTextInputFlags nFlags ) override;
     virtual OUString            GetKeyName( sal_uInt16 nKeyCode ) override;
@@ -161,10 +165,9 @@ public:
     void UpdateFrameGeometry();
 
     // trigger painting of the window
-    void SendPaintEvent( const Rectangle* pRect = NULL );
+    void SendPaintEvent( const tools::Rectangle* pRect = nullptr );
 
-    static bool isAlive( const AquaSalFrame* pFrame )
-    { return GetSalData()->maFrameCheck.find( pFrame ) != GetSalData()->maFrameCheck.end(); }
+    static inline bool isAlive( const AquaSalFrame* pFrame );
 
     static AquaSalFrame* GetCaptureFrame() { return s_pCaptureFrame; }
 
@@ -183,26 +186,35 @@ public:
     void VCLToCocoa( NSPoint& io_rPoint, bool bRelativeToScreen = true );
     void CocoaToVCL( NSPoint& io_Point, bool bRelativeToScreen = true );
 
-    NSCursor* getCurrentCursor() const;
+    NSCursor* getCurrentCursor();
 
     CGMutablePathRef getClipPath() const { return mrClippingPath; }
 
     // called by VCL_NSApplication to indicate screen settings have changed
     void screenParametersChanged();
 
- private: // methods
+protected:
+    SalEvent PreparePosSize(long nX, long nY, long nWidth, long nHeight, sal_uInt16 nFlags);
+
+private: // methods
     /** do things on initial show (like centering on parent or on screen)
     */
     void initShow();
 
     void initWindowAndView();
 
- private: // data
-    static AquaSalFrame*                   s_pCaptureFrame;
+private: // data
+    static AquaSalFrame*       s_pCaptureFrame;
 
     AquaSalFrame( const AquaSalFrame& ) = delete;
     AquaSalFrame& operator=(const AquaSalFrame&) = delete;
 };
+
+inline bool AquaSalFrame::isAlive( const AquaSalFrame* pFrame )
+{
+    AquaSalInstance *pInst = GetSalData()->mpInstance;
+    return pInst && pInst->isFrameAlive( pFrame );
+}
 
 #endif // INCLUDED_VCL_INC_OSX_SALFRAME_H
 

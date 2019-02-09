@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dlgedlist.hxx"
-#include "dlgedobj.hxx"
+#include <dlgedlist.hxx>
+#include <dlgedobj.hxx>
 
 namespace basctl
 {
@@ -34,12 +34,12 @@ DlgEdPropListenerImpl::~DlgEdPropListenerImpl()
 }
 
 // XEventListener
-void SAL_CALL DlgEdPropListenerImpl::disposing( const css::lang::EventObject& ) throw( css::uno::RuntimeException, std::exception)
+void SAL_CALL DlgEdPropListenerImpl::disposing( const css::lang::EventObject& )
 {
 }
 
 // XPropertyChangeListener
-void SAL_CALL DlgEdPropListenerImpl::propertyChange( const  css::beans::PropertyChangeEvent& evt ) throw( css::uno::RuntimeException, std::exception)
+void SAL_CALL DlgEdPropListenerImpl::propertyChange( const  css::beans::PropertyChangeEvent& evt )
 {
     rDlgEdObj._propertyChange( evt );
 }
@@ -55,24 +55,24 @@ DlgEdEvtContListenerImpl::~DlgEdEvtContListenerImpl()
 }
 
 // XEventListener
-void SAL_CALL DlgEdEvtContListenerImpl::disposing( const  css::lang::EventObject& ) throw( css::uno::RuntimeException, std::exception)
+void SAL_CALL DlgEdEvtContListenerImpl::disposing( const  css::lang::EventObject& )
 {
 }
 
 // XContainerListener
-void SAL_CALL DlgEdEvtContListenerImpl::elementInserted(const css::container::ContainerEvent& Event) throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL DlgEdEvtContListenerImpl::elementInserted(const css::container::ContainerEvent& /*Event*/)
 {
-    rDlgEdObj._elementInserted( Event );
+    rDlgEdObj._elementInserted();
 }
 
-void SAL_CALL DlgEdEvtContListenerImpl::elementReplaced(const css::container::ContainerEvent& Event) throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL DlgEdEvtContListenerImpl::elementReplaced(const css::container::ContainerEvent& /*Event*/)
 {
-    rDlgEdObj._elementReplaced( Event );
+    rDlgEdObj._elementReplaced();
 }
 
-void SAL_CALL DlgEdEvtContListenerImpl::elementRemoved(const css::container::ContainerEvent& Event) throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL DlgEdEvtContListenerImpl::elementRemoved(const css::container::ContainerEvent& /*Event*/)
 {
-    rDlgEdObj._elementRemoved( Event );
+    rDlgEdObj._elementRemoved();
 }
 
 } // namespace basctl

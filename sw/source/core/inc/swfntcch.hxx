@@ -19,8 +19,6 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_SWFNTCCH_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_SWFNTCCH_HXX
 
-#include <tools/mempool.hxx>
-
 #define NUM_DEFAULT_VALUES 39
 
 #include "swcache.hxx"
@@ -33,7 +31,7 @@ class SwFontCache : public SwCache
 {
 public:
 
-    inline SwFontCache() : SwCache(50
+    SwFontCache() : SwCache(50
 #ifdef DBG_UTIL
     , "Global AttributSet/Font-Cache pSwFontCache"
 #endif
@@ -49,24 +47,22 @@ class SwFontObj : public SwCacheObj
     friend class SwFontAccess;
 
 private:
-    SwFont aSwFont;
-    const SfxPoolItem* pDefaultArray[ NUM_DEFAULT_VALUES ];
+    SwFont m_aSwFont;
+    const SfxPoolItem* m_pDefaultArray[ NUM_DEFAULT_VALUES ];
 
 public:
-    DECL_FIXEDMEMPOOL_NEWDEL(SwFontObj)
-
     SwFontObj( const void* pOwner, SwViewShell *pSh );
 
-    virtual ~SwFontObj();
+    virtual ~SwFontObj() override;
 
-    inline       SwFont& GetFont()        { return aSwFont; }
-    inline const SwFont& GetFont() const  { return aSwFont; }
-    inline const SfxPoolItem** GetDefault() { return pDefaultArray; }
+    SwFont& GetFont()        { return m_aSwFont; }
+    const SwFont& GetFont() const  { return m_aSwFont; }
+    const SfxPoolItem** GetDefault() { return m_pDefaultArray; }
 };
 
 class SwFontAccess : public SwCacheAccess
 {
-    SwViewShell *pShell;
+    SwViewShell * const m_pShell;
 protected:
     virtual SwCacheObj *NewObj( ) override;
 

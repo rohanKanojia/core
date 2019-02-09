@@ -19,43 +19,49 @@
 
 #include <sfx2/dispatch.hxx>
 
-#include "tabvwsh.hxx"
-#include "uiitems.hxx"
-#include "dbdata.hxx"
-#include "rangenam.hxx"
-#include "rangeutl.hxx"
-#include "reffact.hxx"
-#include "document.hxx"
-#include "scresid.hxx"
+#include <tabvwsh.hxx>
+#include <uiitems.hxx>
+#include <dbdata.hxx>
+#include <rangenam.hxx>
+#include <rangeutl.hxx>
+#include <reffact.hxx>
+#include <document.hxx>
+#include <scresid.hxx>
 
-#include "globstr.hrc"
-#include "sc.hrc"
+#include <globstr.hrc>
+#include <strings.hrc>
 
-#include "consdlg.hxx"
-#include <vcl/msgbox.hxx>
+#include <consdlg.hxx>
+#include <vcl/fixed.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 
-#define INFOBOX(id) ScopedVclPtr<InfoBox>::Create(this, ScGlobal::GetRscString(id))->Execute()
+namespace
+{
+    void INFOBOX(weld::Window* pWindow, const char* id)
+    {
+        std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(pWindow,
+                                                      VclMessageType::Info, VclButtonsType::Ok,
+                                                      ScResId(id)));
+        xInfoBox->run();
+    }
+}
 
 class ScAreaData
 {
 public:
     ScAreaData()
-        : bIsDbArea(false)
     {
     }
 
-    ~ScAreaData() {}
-
-    void Set( const OUString& rName, const OUString& rArea, bool bDb )
-                {
-                    aStrName  = rName;
-                    aStrArea  = rArea;
-                    bIsDbArea = bDb;
-                }
+    void Set( const OUString& rName, const OUString& rArea )
+    {
+        aStrName  = rName;
+        aStrArea  = rArea;
+    }
 
     OUString  aStrName;
     OUString  aStrArea;
-    bool  bIsDbArea;
 };
 
 ScConsolidateDlg::ScConsolidateDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent,
@@ -72,7 +78,6 @@ ScConsolidateDlg::ScConsolidateDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::W
         pDoc            ( static_cast<ScTabViewShell*>(SfxViewShell::Current())->
                                 GetViewData().GetDocument() ),
         pRangeUtil      ( new ScRangeUtil ),
-        pAreaData       ( nullptr ),
         nAreaDataCount  ( 0 ),
         nWhichCons      ( rArgSet.GetPool()->GetWhich( SID_CONSOLIDATE ) ),
         bDlgLostFocus   ( false )
@@ -110,8 +115,8 @@ ScConsolidateDlg::~ScConsolidateDlg()
 
 void ScConsolidateDlg::dispose()
 {
-    delete [] pAreaData;
-    delete pRangeUtil;
+    pAreaData.reset();
+    pRangeUtil.reset();
     pLbFunc.clear();
     pLbConsAreas.clear();
     pLbDataArea.clear();
@@ -179,7 +184,7 @@ void ScConsolidateDlg::Init()
     const formula::FormulaGrammar::AddressConvention eConv = pDoc->GetAddressConvention();
     for ( i=0; i<theConsData.nDataAreaCount; i++ )
     {
-        const ScArea& rArea = *(theConsData.ppDataAreas[i] );
+        const ScArea& rArea = theConsData.pDataAreas[i];
         if ( rArea.nTab < pDoc->GetTableCount() )
         {
             aStr = ScRange( rArea.nColStart, rArea.nRowStart, rArea.nTab,
@@ -211,7 +216,7 @@ void ScConsolidateDlg::Init()
 
     if ( nAreaDataCount > 0 )
     {
-        pAreaData = new ScAreaData[nAreaDataCount];
+        pAreaData.reset( new ScAreaData[nAreaDataCount] );
 
         OUString aStrName;
         sal_uInt16 nAt = 0;
@@ -220,7 +225,7 @@ void ScConsolidateDlg::Init()
         while ( aIter.Next( aStrName, aRange ) )
         {
             OUString aStrArea(aRange.Format(ScRefFlags::ADDR_ABS_3D, pDoc, eConv));
-            pAreaData[nAt++].Set( aStrName, aStrArea, aIter.WasDBName() );
+            pAreaData[nAt++].Set( aStrName, aStrArea );
         }
     }
 
@@ -345,7 +350,7 @@ bool ScConsolidateDlg::VerifyEdit( formula::RefEdit* pEd )
 
 // Handler:
 
-IMPL_LINK_TYPED( ScConsolidateDlg, GetFocusHdl, Control&, rControl, void )
+IMPL_LINK( ScConsolidateDlg, GetFocusHdl, Control&, rControl, void )
 {
     if ( &rControl ==static_cast<Control*>(pEdDataArea) ||
          &rControl ==static_cast<Control*>(pEdDestArea))
@@ -362,7 +367,7 @@ IMPL_LINK_TYPED( ScConsolidateDlg, GetFocusHdl, Control&, rControl, void )
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ScConsolidateDlg, OkHdl, Button*, void)
+IMPL_LINK_NOARG(ScConsolidateDlg, OkHdl, Button*, void)
 {
     const sal_Int32 nDataAreaCount = pLbConsAreas->GetEntryCount();
 
@@ -376,29 +381,22 @@ IMPL_LINK_NOARG_TYPED(ScConsolidateDlg, OkHdl, Button*, void)
         if ( ScRangeUtil::IsAbsPos( aDestPosStr, pDoc, nTab, nullptr, &aDestAddress, eConv ) )
         {
             ScConsolidateParam  theOutParam( theConsData );
-            ScArea**            ppDataAreas = new ScArea*[nDataAreaCount];
-            ScArea*             pArea;
+            std::unique_ptr<ScArea[]> pDataAreas(new ScArea[nDataAreaCount]);
 
             for ( sal_Int32 i=0; i<nDataAreaCount; ++i )
             {
-                pArea = new ScArea;
                 ScRangeUtil::MakeArea( pLbConsAreas->GetEntry( i ),
-                                      *pArea, pDoc, nTab, eConv );
-                ppDataAreas[i] = pArea;
+                                      pDataAreas[i], pDoc, nTab, eConv );
             }
 
             theOutParam.nCol            = aDestAddress.Col();
             theOutParam.nRow            = aDestAddress.Row();
             theOutParam.nTab            = aDestAddress.Tab();
-            theOutParam.eFunction       = LbPosToFunc( pLbFunc->GetSelectEntryPos() );
+            theOutParam.eFunction       = LbPosToFunc( pLbFunc->GetSelectedEntryPos() );
             theOutParam.bByCol          = pBtnByCol->IsChecked();
             theOutParam.bByRow          = pBtnByRow->IsChecked();
             theOutParam.bReferenceData  = pBtnRefs->IsChecked();
-            theOutParam.SetAreas( ppDataAreas, nDataAreaCount );
-
-            for ( sal_Int32 i=0; i<nDataAreaCount; ++i )
-                delete ppDataAreas[i];
-            delete [] ppDataAreas;
+            theOutParam.SetAreas( std::move(pDataAreas), nDataAreaCount );
 
             ScConsolidateItem aOutItem( nWhichCons, &theOutParam );
 
@@ -411,7 +409,7 @@ IMPL_LINK_NOARG_TYPED(ScConsolidateDlg, OkHdl, Button*, void)
         }
         else
         {
-            INFOBOX( STR_INVALID_TABREF );
+            INFOBOX(GetFrameWeld(), STR_INVALID_TABREF);
             pEdDestArea->GrabFocus();
         }
     }
@@ -419,7 +417,7 @@ IMPL_LINK_NOARG_TYPED(ScConsolidateDlg, OkHdl, Button*, void)
         Close(); // no area defined -> Cancel
 }
 
-IMPL_LINK_TYPED( ScConsolidateDlg, ClickHdl, Button*, pBtn, void )
+IMPL_LINK( ScConsolidateDlg, ClickHdl, Button*, pBtn, void )
 {
     if ( pBtn == pBtnCancel )
         Close();
@@ -428,7 +426,7 @@ IMPL_LINK_TYPED( ScConsolidateDlg, ClickHdl, Button*, pBtn, void )
         if ( !pEdDataArea->GetText().isEmpty() )
         {
             OUString    aNewEntry( pEdDataArea->GetText() );
-            ScArea**    ppAreas = nullptr;
+            std::unique_ptr<ScArea[]> ppAreas;
             sal_uInt16      nAreaCount = 0;
             const formula::FormulaGrammar::AddressConvention eConv = pDoc->GetAddressConvention();
 
@@ -440,24 +438,17 @@ IMPL_LINK_TYPED( ScConsolidateDlg, ClickHdl, Button*, pBtn, void )
 
                 for ( sal_uInt16 i=0; i<nAreaCount; i++ )
                 {
-                    OUString aNewArea;
+                    const ScArea& rArea = ppAreas[i];
+                    OUString aNewArea = ScRange( rArea.nColStart, rArea.nRowStart, rArea.nTab,
+                            rArea.nColEnd, rArea.nRowEnd, rArea.nTab
+                            ).Format(ScRefFlags::RANGE_ABS_3D, pDoc, eConv);
 
-                    if ( ppAreas[i] )
+                    if ( pLbConsAreas->GetEntryPos( aNewArea )
+                         == LISTBOX_ENTRY_NOTFOUND )
                     {
-                        const ScArea& rArea = *(ppAreas[i]);
-                        aNewArea = ScRange( rArea.nColStart, rArea.nRowStart, rArea.nTab,
-                                rArea.nColEnd, rArea.nRowEnd, rArea.nTab
-                                ).Format(ScRefFlags::RANGE_ABS_3D, pDoc, eConv);
-
-                        if ( pLbConsAreas->GetEntryPos( aNewArea )
-                             == LISTBOX_ENTRY_NOTFOUND )
-                        {
-                            pLbConsAreas->InsertEntry( aNewArea );
-                        }
-                        delete ppAreas[i];
+                        pLbConsAreas->InsertEntry( aNewArea );
                     }
                 }
-                delete [] ppAreas;
             }
             else if ( VerifyEdit( pEdDataArea ) )
             {
@@ -466,28 +457,28 @@ IMPL_LINK_TYPED( ScConsolidateDlg, ClickHdl, Button*, pBtn, void )
                 if ( pLbConsAreas->GetEntryPos( aNewArea ) == LISTBOX_ENTRY_NOTFOUND )
                     pLbConsAreas->InsertEntry( aNewArea );
                 else
-                    INFOBOX( STR_AREA_ALREADY_INSERTED );
+                    INFOBOX(GetFrameWeld(), STR_AREA_ALREADY_INSERTED);
             }
             else
             {
-                INFOBOX( STR_INVALID_TABREF );
+                INFOBOX(GetFrameWeld(), STR_INVALID_TABREF);
                 pEdDataArea->GrabFocus();
             }
         }
     }
     else if ( pBtn == pBtnRemove )
     {
-        while ( pLbConsAreas->GetSelectEntryCount() )
-            pLbConsAreas->RemoveEntry( pLbConsAreas->GetSelectEntryPos() );
+        while ( pLbConsAreas->GetSelectedEntryCount() )
+            pLbConsAreas->RemoveEntry( pLbConsAreas->GetSelectedEntryPos() );
         pBtnRemove->Disable();
     }
 }
 
-IMPL_LINK_TYPED( ScConsolidateDlg, SelectHdl, ListBox&, rLb, void )
+IMPL_LINK( ScConsolidateDlg, SelectHdl, ListBox&, rLb, void )
 {
     if ( &rLb == pLbConsAreas )
     {
-        if ( pLbConsAreas->GetSelectEntryCount() > 0 )
+        if ( pLbConsAreas->GetSelectedEntryCount() > 0 )
             pBtnRemove->Enable();
         else
             pBtnRemove->Disable();
@@ -495,7 +486,7 @@ IMPL_LINK_TYPED( ScConsolidateDlg, SelectHdl, ListBox&, rLb, void )
     else if ( (&rLb == pLbDataArea) || (&rLb == pLbDestArea) )
     {
         Edit*   pEd = (&rLb == pLbDataArea) ? pEdDataArea : pEdDestArea;
-        const sal_Int32 nSelPos = rLb.GetSelectEntryPos();
+        const sal_Int32 nSelPos = rLb.GetSelectedEntryPos();
 
         if (    pRangeUtil
             && (nSelPos > 0)
@@ -524,7 +515,7 @@ IMPL_LINK_TYPED( ScConsolidateDlg, SelectHdl, ListBox&, rLb, void )
     }
 }
 
-IMPL_LINK_TYPED( ScConsolidateDlg, ModifyHdl, Edit&, rEd, void )
+IMPL_LINK( ScConsolidateDlg, ModifyHdl, Edit&, rEd, void )
 {
     if ( &rEd == pEdDataArea )
     {

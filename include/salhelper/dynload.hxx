@@ -20,10 +20,10 @@
 #ifndef INCLUDED_SALHELPER_DYNLOAD_HXX
 #define INCLUDED_SALHELPER_DYNLOAD_HXX
 
-#include <sal/types.h>
-#include <rtl/ustring.hxx>
-#include <osl/module.h>
-#include <salhelper/salhelperdllapi.h>
+#include "sal/types.h"
+#include "rtl/ustring.hxx"
+#include "osl/module.h"
+#include "salhelper/salhelperdllapi.h"
 
 namespace salhelper
 {
@@ -50,7 +50,7 @@ public:
     /// decrease the reference count and delete the last instance.
     sal_uInt32 SAL_CALL release();
 
-    /// returns a poiner to the initialized API function structure.
+    /// returns a pointer to the initialized API function structure.
     void* SAL_CALL getApi() const;
 
 protected:
@@ -72,7 +72,7 @@ protected:
     /// Destructor, try to unload the library.
     virtual ~ORealDynamicLoader();
 
-    /// points to  the structure with the initialzed API function pointers.
+    /// points to  the structure with the initialized API function pointers.
     void*                   m_pApi;
     /// stores the reference count.
     sal_uInt32              m_refCount;
@@ -89,7 +89,7 @@ protected:
 };
 
 
-/** The ODynmaicLoader provides a special load on call mechanism for dynamic libraries
+/** The ODynamicLoader provides a special load on call mechanism for dynamic libraries
     which support a C-API.
 
     The libraries must provide a struct with function pointers for all supported C functions.
@@ -111,7 +111,7 @@ public:
         m_pLoader = NULL;
     }
 
-    /** Constructor, loads the library if necessary otherwise the refernece count will
+    /** Constructor, loads the library if necessary otherwise the reference count will
         be increased.
 
         @param strModuleName specifies the library name.
@@ -143,11 +143,12 @@ public:
             m_pLoader->acquire();
     }
 
-    /// Destructor, decrease the reference count and unload the library if it is tha last instance.
+    /// Destructor, decrease the reference count and unload the library if it is the last instance.
     ~ODynamicLoader()
     {
         if( m_pLoader )
-            m_pLoader->release();
+            if (m_pLoader->release()==0)
+                m_pStaticLoader = NULL;
     }
 
     /// Assign operator
@@ -169,13 +170,13 @@ public:
         return (*this);
     }
 
-    /// returns a poiner to the initialized API function structure.
+    /// returns a pointer to the initialized API function structure.
     API* SAL_CALL getApi() const
     {
         return static_cast<API*>(m_pLoader->getApi());
     }
 
-    /// cast operator, which cast to a poiner with the initialized API function structure.
+    /// cast operator, which cast to a pointer with the initialized API function structure.
     API* SAL_CALL operator->() const
     {
         return static_cast<API*>(m_pLoader->getApi());

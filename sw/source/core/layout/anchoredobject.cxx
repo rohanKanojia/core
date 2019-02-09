@@ -29,6 +29,7 @@
 #include <sortedobjs.hxx>
 #include <pagefrm.hxx>
 #include <layouter.hxx>
+#include <pam.hxx>
 
 using namespace ::com::sun::star;
 
@@ -72,7 +73,7 @@ SwAnchoredObject::SwAnchoredObject() :
     mpPageFrame( nullptr ),
     maRelPos(),
     maLastCharRect(),
-    mnLastTopOfLine( 0L ),
+    mnLastTopOfLine( 0 ),
     mpVertPosOrientFrame( nullptr ),
     // --> #i28701#
     mbPositioningInProgress( false ),
@@ -163,17 +164,17 @@ void SwAnchoredObject::SetPageFrame( SwPageFrame* _pNewPageFrame )
 
 SwTwips SwAnchoredObject::GetRelCharX( const SwFrame* pFrame ) const
 {
-    return maLastCharRect.Left() - pFrame->Frame().Left();
+    return maLastCharRect.Left() - pFrame->getFrameArea().Left();
 }
 
 SwTwips SwAnchoredObject::GetRelCharY( const SwFrame* pFrame ) const
 {
-    return maLastCharRect.Bottom() - pFrame->Frame().Top();
+    return maLastCharRect.Bottom() - pFrame->getFrameArea().Top();
 }
 
 void SwAnchoredObject::AddLastCharY( long nDiff )
 {
-    maLastCharRect.Pos().Y() += nDiff;
+    maLastCharRect.Pos().AdjustY(nDiff );
 }
 
 void SwAnchoredObject::ResetLastCharRectHeight()
@@ -218,7 +219,7 @@ void SwAnchoredObject::CheckCharRectAndTopOfLine(
          GetAnchorFrame()->IsTextFrame() )
     {
         const SwFormatAnchor& rAnch = GetFrameFormat().GetAnchor();
-        if ( (rAnch.GetAnchorId() == FLY_AT_CHAR) &&
+        if ( (rAnch.GetAnchorId() == RndStdIds::FLY_AT_CHAR) &&
              rAnch.GetContentAnchor() )
         {
             // --> if requested, assure that anchor frame,
@@ -231,8 +232,8 @@ void SwAnchoredObject::CheckCharRectAndTopOfLine(
             const SwTextFrame& aAnchorCharFrame = *(FindAnchorCharFrame());
             if ( !_bCheckForParaPorInf || aAnchorCharFrame.HasPara() )
             {
-                _CheckCharRect( rAnch, aAnchorCharFrame );
-                _CheckTopOfLine( rAnch, aAnchorCharFrame );
+                CheckCharRect( rAnch, aAnchorCharFrame );
+                CheckTopOfLine( rAnch, aAnchorCharFrame );
             }
         }
     }
@@ -248,7 +249,7 @@ void SwAnchoredObject::CheckCharRectAndTopOfLine(
 
     improvement - add second parameter <_rAnchorCharFrame>
 */
-void SwAnchoredObject::_CheckCharRect( const SwFormatAnchor& _rAnch,
+void SwAnchoredObject::CheckCharRect( const SwFormatAnchor& _rAnch,
                                        const SwTextFrame& _rAnchorCharFrame )
 {
     // determine rectangle of anchor character. If not exist, abort operation
@@ -262,7 +263,7 @@ void SwAnchoredObject::_CheckCharRect( const SwFormatAnchor& _rAnch,
     {
         // check positioning and alignment for invalidation of position
         {
-            SWRECTFN( (&_rAnchorCharFrame) );
+            SwRectFnSet aRectFnSet(&_rAnchorCharFrame);
             // determine positioning and alignment
             SwFormatVertOrient aVert( GetFrameFormat().GetVertOrient() );
             SwFormatHoriOrient aHori( GetFrameFormat().GetHoriOrient() );
@@ -273,19 +274,15 @@ void SwAnchoredObject::_CheckCharRect( const SwFormatAnchor& _rAnch,
             // of anchor character has changed.
             const sal_Int16 eVertRelOrient = aVert.GetRelationOrient();
             if ( ( aHori.GetRelationOrient() == text::RelOrientation::CHAR &&
-                   (aCharRect.*fnRect->fnGetLeft)() !=
-                        (maLastCharRect.*fnRect->fnGetLeft)() ) ||
+                   aRectFnSet.GetLeft(aCharRect) != aRectFnSet.GetLeft(maLastCharRect) ) ||
                  ( eVertRelOrient == text::RelOrientation::CHAR &&
-                   ( (aCharRect.*fnRect->fnGetTop)() !=
-                        (maLastCharRect.*fnRect->fnGetTop)() ||
-                     (aCharRect.*fnRect->fnGetHeight)() !=
-                        (maLastCharRect.*fnRect->fnGetHeight)() ) ) ||
+                   ( aRectFnSet.GetTop(aCharRect) != aRectFnSet.GetTop(maLastCharRect) ||
+                     aRectFnSet.GetHeight(aCharRect) != aRectFnSet.GetHeight(maLastCharRect) ) ) ||
                  ( ( ( eVertRelOrient == text::RelOrientation::FRAME ) ||
                      ( eVertRelOrient == text::RelOrientation::PRINT_AREA ) ||
                      ( eVertRelOrient == text::RelOrientation::PAGE_FRAME ) ||
                      ( eVertRelOrient == text::RelOrientation::PAGE_PRINT_AREA ) ) &&
-                   ( (aCharRect.*fnRect->fnGetTop)() !=
-                        (maLastCharRect.*fnRect->fnGetTop)() ) ) )
+                   ( aRectFnSet.GetTop(aCharRect) != aRectFnSet.GetTop(maLastCharRect) ) ) )
             {
                 // #i26945#, #i35911# - unlock position of
                 // anchored object, if it isn't registered at the page,
@@ -312,10 +309,10 @@ void SwAnchoredObject::_CheckCharRect( const SwFormatAnchor& _rAnch,
 
     improvement - add second parameter <_rAnchorCharFrame>
 */
-void SwAnchoredObject::_CheckTopOfLine( const SwFormatAnchor& _rAnch,
+void SwAnchoredObject::CheckTopOfLine( const SwFormatAnchor& _rAnch,
                                         const SwTextFrame& _rAnchorCharFrame )
 {
-    SwTwips nTopOfLine = 0L;
+    SwTwips nTopOfLine = 0;
     if ( _rAnchorCharFrame.GetTopOfLine( nTopOfLine, *_rAnch.GetContentAnchor() ) )
     {
         if ( nTopOfLine != mnLastTopOfLine )
@@ -429,9 +426,9 @@ bool SwAnchoredObject::ConsiderObjWrapInfluenceOnObjPos() const
     else if ( rObjFormat.getIDocumentSettingAccess().get(DocumentSettingId::CONSIDER_WRAP_ON_OBJECT_POSITION) )
     {
         const SwFormatAnchor& rAnchor = rObjFormat.GetAnchor();
-        if ( ((rAnchor.GetAnchorId() == FLY_AT_CHAR) ||
-              (rAnchor.GetAnchorId() == FLY_AT_PARA)) &&
-             rObjFormat.GetSurround().GetSurround() != SURROUND_THROUGHT )
+        if ( ((rAnchor.GetAnchorId() == RndStdIds::FLY_AT_CHAR) ||
+              (rAnchor.GetAnchorId() == RndStdIds::FLY_AT_PARA)) &&
+             rObjFormat.GetSurround().GetSurround() != css::text::WrapTextMode_THROUGH )
         {
             // --> #i34520# - text also wraps around anchored
             // objects in the layer Hell - see the text formatting.
@@ -455,9 +452,8 @@ bool SwAnchoredObject::ConsiderObjWrapInfluenceOfOtherObjs() const
     const SwSortedObjs* pObjs = GetAnchorFrame()->GetDrawObjs();
     if ( pObjs->size() > 1 )
     {
-        for ( size_t i = 0; i < pObjs->size(); ++i )
+        for (SwAnchoredObject* pAnchoredObj : *pObjs)
         {
-            SwAnchoredObject* pAnchoredObj = (*pObjs)[i];
             if ( pAnchoredObj != this &&
                  pAnchoredObj->ConsiderObjWrapInfluenceOnObjPos() )
             {
@@ -549,7 +545,7 @@ bool SwAnchoredObject::HasClearedEnvironment() const
             const SwTextFrame* pTmpTextFrame = static_cast<const SwTextFrame*>(pTmpFrame);
             if ( pTmpTextFrame->IsUndersized() ||
                  ( pTmpTextFrame->GetFollow() &&
-                   pTmpTextFrame->GetFollow()->GetOfst() == 0 ) )
+                   pTmpTextFrame->GetFollow()->GetOfst() == TextFrameIndex(0)))
             {
                 bHasClearedEnvironment = true;
             }
@@ -580,9 +576,9 @@ const SwRect& SwAnchoredObject::GetObjRectWithSpaces() const
         const SvxLRSpaceItem& rLR = rFormat.GetLRSpace();
         {
             maObjRectWithSpaces.Top ( std::max( maObjRectWithSpaces.Top() - long(rUL.GetUpper()), 0L ));
-            maObjRectWithSpaces.Left( std::max( maObjRectWithSpaces.Left()- long(rLR.GetLeft()),  0L ));
-            maObjRectWithSpaces.SSize().Height() += rUL.GetLower();
-            maObjRectWithSpaces.SSize().Width()  += rLR.GetRight();
+            maObjRectWithSpaces.Left( std::max( maObjRectWithSpaces.Left()- rLR.GetLeft(),  0L ));
+            maObjRectWithSpaces.SSize().AdjustHeight(rUL.GetLower() );
+            maObjRectWithSpaces.SSize().AdjustWidth(rLR.GetRight() );
         }
 
         mbObjRectWithSpacesValid = true;
@@ -595,7 +591,7 @@ const SwRect& SwAnchoredObject::GetObjRectWithSpaces() const
 // --> #i68520#
 void SwAnchoredObject::SetObjTop( const SwTwips _nTop)
 {
-    const bool bTopChanged( _SetObjTop( _nTop ) );
+    const bool bTopChanged( SetObjTop_( _nTop ) );
     if ( bTopChanged )
     {
         mbObjRectWithSpacesValid = false;
@@ -604,7 +600,7 @@ void SwAnchoredObject::SetObjTop( const SwTwips _nTop)
 
 void SwAnchoredObject::SetObjLeft( const SwTwips _nLeft)
 {
-    const bool bLeftChanged( _SetObjLeft( _nLeft ) );
+    const bool bLeftChanged( SetObjLeft_( _nLeft ) );
     if ( bLeftChanged )
     {
         mbObjRectWithSpacesValid = false;
@@ -630,9 +626,9 @@ void SwAnchoredObject::UpdateObjInSortedList()
             {
                 const SwSortedObjs* pObjs = GetAnchorFrame()->GetDrawObjs();
                 // determine start index
-                for ( size_t i = 0; i < pObjs->size(); ++i )
+                for (auto it = pObjs->begin(); it != pObjs->end(); ++it)
                 {
-                    SwAnchoredObject* pAnchoredObj = (*pObjs)[i];
+                    SwAnchoredObject* pAnchoredObj = *it;
                     if ( pAnchoredObj->ConsiderObjWrapInfluenceOnObjPos() )
                         pAnchoredObj->InvalidateObjPosForConsiderWrapInfluence();
                     else
@@ -658,7 +654,7 @@ void SwAnchoredObject::UpdateObjInSortedList()
         AnchorFrame()->GetDrawObjs()->Update( *this );
         // update its position in the sorted object list of its page frame
         // note: as-character anchored object aren't registered at a page frame
-        if ( GetFrameFormat().GetAnchor().GetAnchorId() != FLY_AS_CHAR )
+        if ( GetFrameFormat().GetAnchor().GetAnchorId() != RndStdIds::FLY_AS_CHAR )
         {
             GetPageFrame()->GetSortedObjs()->Update( *this );
         }
@@ -717,11 +713,12 @@ SwTextFrame* SwAnchoredObject::FindAnchorCharFrame()
     if ( mpAnchorFrame )
     {
         const SwFormatAnchor& rAnch = GetFrameFormat().GetAnchor();
-        if ((rAnch.GetAnchorId() == FLY_AT_CHAR) ||
-            (rAnch.GetAnchorId() == FLY_AS_CHAR))
+        if ((rAnch.GetAnchorId() == RndStdIds::FLY_AT_CHAR) ||
+            (rAnch.GetAnchorId() == RndStdIds::FLY_AS_CHAR))
         {
-            pAnchorCharFrame = &(static_cast<SwTextFrame*>(AnchorFrame())->
-                        GetFrameAtOfst( rAnch.GetContentAnchor()->nContent.GetIndex() ));
+            SwTextFrame *const pFrame(static_cast<SwTextFrame*>(AnchorFrame()));
+            TextFrameIndex const nOffset(pFrame->MapModelToViewPos(*rAnch.GetContentAnchor()));
+            pAnchorCharFrame = &pFrame->GetFrameAtOfst(nOffset);
         }
     }
 
@@ -751,15 +748,21 @@ void SwAnchoredObject::SetTmpConsiderWrapInfluence( const bool _bTmpConsiderWrap
     }
 }
 
-
+void SwAnchoredObject::ClearTmpConsiderWrapInfluence()
+{
+    mbTmpConsiderWrapInfluence = false;
+    mbClearedEnvironment = false;
+    SetClearedEnvironment( false );
+    SwLayouter::RemoveObjForTmpConsiderWrapInfluence( *(GetFrameFormat().GetDoc()),
+                                                      *this );
+}
 void SwAnchoredObject::SetTmpConsiderWrapInfluenceOfOtherObjs()
 {
     const SwSortedObjs* pObjs = GetAnchorFrame()->GetDrawObjs();
     if ( pObjs->size() > 1 )
     {
-        for ( size_t i = 0; i < pObjs->size(); ++i )
+        for (SwAnchoredObject* pAnchoredObj : *pObjs)
         {
-            SwAnchoredObject* pAnchoredObj = (*pObjs)[i];
             if ( pAnchoredObj != this )
             {
                 pAnchoredObj->SetTmpConsiderWrapInfluence( true/*bTmpConsiderWrapInfluence*/ );
@@ -790,7 +793,7 @@ bool SwAnchoredObject::OverlapsPrevColumn() const
             SwRect aChkRect;
             while ( pTmpColFrame )
             {
-                aChkRect.Union( pTmpColFrame->Frame() );
+                aChkRect.Union( pTmpColFrame->getFrameArea() );
                 pTmpColFrame = pTmpColFrame->GetPrev();
             }
             bOverlapsPrevColumn = GetObjRect().IsOver( aChkRect );
@@ -810,10 +813,9 @@ Point SwAnchoredObject::GetRelPosToAnchorFrame() const
 {
     Point aRelPos;
 
-    OSL_ENSURE( GetAnchorFrame(),
-            "<SwAnchoredObject::GetRelPosToAnchorFrame()> - missing anchor frame." );
+    assert(GetAnchorFrame());
     aRelPos = GetObjRect().Pos();
-    aRelPos -= GetAnchorFrame()->Frame().Pos();
+    aRelPos -= GetAnchorFrame()->getFrameArea().Pos();
 
     return aRelPos;
 }
@@ -835,10 +837,8 @@ Point SwAnchoredObject::GetRelPosToPageFrame( const bool _bFollowTextFlow,
     Point aRelPos;
     _obRelToTableCell = false;
 
-    OSL_ENSURE( GetAnchorFrame(),
-            "<SwAnchoredObject::GetRelPosToPageFrame()> - missing anchor frame." );
-    OSL_ENSURE( GetAnchorFrame()->FindPageFrame(),
-            "<SwAnchoredObject::GetRelPosToPageFrame()> - missing page frame." );
+    assert(GetAnchorFrame());
+    assert(GetAnchorFrame()->FindPageFrame());
 
     aRelPos = GetObjRect().Pos();
     // --> #i33818# - search for cell frame, if object has to
@@ -858,12 +858,12 @@ Point SwAnchoredObject::GetRelPosToPageFrame( const bool _bFollowTextFlow,
     }
     if ( pFrame->IsCellFrame() )
     {
-        aRelPos -= ( pFrame->Frame().Pos() + pFrame->Prt().Pos() );
+        aRelPos -= pFrame->getFrameArea().Pos() + pFrame->getFramePrintArea().Pos();
         _obRelToTableCell = true;
     }
     else
     {
-        aRelPos -= pFrame->Frame().Pos();
+        aRelPos -= pFrame->getFrameArea().Pos();
     }
 
     return aRelPos;
@@ -896,7 +896,7 @@ Point SwAnchoredObject::GetRelPosToLine() const
     Point aRelPos;
 
     aRelPos = GetObjRect().Pos();
-    aRelPos.Y() -= GetLastTopOfLine();
+    aRelPos.AdjustY( -(GetLastTopOfLine()) );
 
     return aRelPos;
 }

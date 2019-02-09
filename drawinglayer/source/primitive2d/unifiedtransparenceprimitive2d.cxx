@@ -61,12 +61,12 @@ namespace drawinglayer
             return getChildren().getB2DRange( rViewInformation);
         }
 
-        Primitive2DContainer UnifiedTransparencePrimitive2D::get2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const
+        void UnifiedTransparencePrimitive2D::get2DDecomposition(Primitive2DDecompositionVisitor& rVisitor, const geometry::ViewInformation2D& rViewInformation) const
         {
             if(0.0 == getTransparence())
             {
                 // no transparence used, so just use the content
-                return getChildren();
+                getChildren(rVisitor);
             }
             else if(getTransparence() > 0.0 && getTransparence() < 1.0)
             {
@@ -87,7 +87,7 @@ namespace drawinglayer
                 // I will take the last one here. The small overhead of two primitives will only be
                 // used when UnifiedTransparencePrimitive2D is not handled directly.
                 const basegfx::B2DRange aPolygonRange(getChildren().getB2DRange(rViewInformation));
-                const basegfx::B2DPolygon aPolygon(basegfx::tools::createPolygonFromRect(aPolygonRange));
+                const basegfx::B2DPolygon aPolygon(basegfx::utils::createPolygonFromRect(aPolygonRange));
                 const basegfx::BColor aGray(getTransparence(), getTransparence(), getTransparence());
                 Primitive2DContainer aTransparenceContent(2);
 
@@ -95,13 +95,11 @@ namespace drawinglayer
                 aTransparenceContent[1] = Primitive2DReference(new PolygonHairlinePrimitive2D(aPolygon, aGray));
 
                 // create sub-transparence group with a gray-colored rectangular fill polygon
-                const Primitive2DReference xRefB(new TransparencePrimitive2D(getChildren(), aTransparenceContent));
-                return Primitive2DContainer { xRefB };
+                rVisitor.append(new TransparencePrimitive2D(getChildren(), aTransparenceContent));
             }
             else
             {
                 // completely transparent or invalid definition, add nothing
-                return Primitive2DContainer();
             }
         }
 

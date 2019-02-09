@@ -28,6 +28,7 @@
 #include "xmlfilterjar.hxx"
 
 #include <map>
+#include <memory>
 #include <vector>
 #include <stack>
 
@@ -56,43 +57,34 @@ struct Node
     PropertyMap maPropertyMap;
 };
 
-typedef std::vector< Node* > NodeVector;
-
 class TypeDetectionImporter : public cppu::WeakImplHelper < css::xml::sax::XDocumentHandler >
 {
 public:
     TypeDetectionImporter();
-    virtual ~TypeDetectionImporter();
+    virtual ~TypeDetectionImporter() override;
 
-    static void doImport( const css::uno::Reference< css::uno::XComponentContext >& rxContext, const css::uno::Reference < css::io::XInputStream >& xOS, XMLFilterVector& rFilters );
+    static void doImport( const css::uno::Reference< css::uno::XComponentContext >& rxContext, const css::uno::Reference < css::io::XInputStream >& xOS,
+                          std::vector< std::unique_ptr<filter_info_impl> >& rFilters );
 
-    virtual void SAL_CALL startDocument(  )
-        throw(css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL endDocument(  )
-        throw(css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL startElement( const OUString& aName, const css::uno::Reference< css::xml::sax::XAttributeList >& xAttribs )
-        throw(css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL endElement( const OUString& aName )
-        throw(css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL characters( const OUString& aChars )
-        throw(css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL ignorableWhitespace( const OUString& aWhitespaces )
-        throw(css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL processingInstruction( const OUString& aTarget, const OUString& aData )
-        throw(css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setDocumentLocator( const css::uno::Reference< css::xml::sax::XLocator >& xLocator )
-        throw(css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL startDocument(  ) override;
+    virtual void SAL_CALL endDocument(  ) override;
+    virtual void SAL_CALL startElement( const OUString& aName, const css::uno::Reference< css::xml::sax::XAttributeList >& xAttribs ) override;
+    virtual void SAL_CALL endElement( const OUString& aName ) override;
+    virtual void SAL_CALL characters( const OUString& aChars ) override;
+    virtual void SAL_CALL ignorableWhitespace( const OUString& aWhitespaces ) override;
+    virtual void SAL_CALL processingInstruction( const OUString& aTarget, const OUString& aData ) override;
+    virtual void SAL_CALL setDocumentLocator( const css::uno::Reference< css::xml::sax::XLocator >& xLocator ) override;
 
 private:
-    void fillFilterVector(  XMLFilterVector& rFilters );
-    filter_info_impl* createFilterForNode( Node * pNode );
+    void fillFilterVector(  std::vector< std::unique_ptr<filter_info_impl> >& rFilters );
+    std::unique_ptr<filter_info_impl> createFilterForNode( Node * pNode );
     Node* findTypeNode( const OUString& rType );
 
     std::stack< ImportState > maStack;
     PropertyMap maPropertyMap;
 
-    NodeVector maFilterNodes;
-    NodeVector maTypeNodes;
+    std::vector< std::unique_ptr<Node> > maFilterNodes;
+    std::vector< std::unique_ptr<Node> > maTypeNodes;
 
     OUString maValue;
     OUString maNodeName;

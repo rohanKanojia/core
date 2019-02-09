@@ -32,6 +32,7 @@
 #include "property_description.hxx"
 #include "property_meta_data.hxx"
 
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/text/XText.hpp>
 #include <com/sun/star/util/XCloneable.hpp>
 #include <com/sun/star/util/Duration.hpp>
@@ -45,11 +46,12 @@
 #include <tools/urlobj.hxx>
 #include <tools/diagnose_ex.h>
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
 #include <comphelper/extract.hxx>
 #include <comphelper/types.hxx>
+#include <comphelper/sequence.hxx>
 
 #include <algorithm>
-#include <functional>
 
 namespace xmloff
 {
@@ -82,14 +84,6 @@ namespace xmloff
         }
     };
 
-    template <class ELEMENT>
-    void pushBackSequenceElement(Sequence< ELEMENT >& _rContainer, const ELEMENT& _rElement)
-    {
-        sal_Int32 nLen = _rContainer.getLength();
-        _rContainer.realloc(nLen + 1);
-        _rContainer[nLen] = _rElement;
-    }
-
     //= OElementNameMap
     OElementNameMap::MapString2Element  OElementNameMap::s_sElementTranslations;
 
@@ -105,7 +99,7 @@ namespace xmloff
     {
         if ( s_sElementTranslations.empty() )
         {   // initialize
-            for (ElementType eType=(ElementType)0; eType<UNKNOWN; ++eType)
+            for (ElementType eType=ElementType(0); eType<UNKNOWN; ++eType)
                 s_sElementTranslations[OUString::createFromAscii(getElementName(eType))] = eType;
         }
         MapString2Element::const_iterator aPos = s_sElementTranslations.find(_rName);
@@ -168,7 +162,7 @@ namespace xmloff
         OPropertyImport::StartElement( _rxAttrList );
     }
 
-    SvXMLImportContext* OElementImport::CreateChildContext(sal_uInt16 _nPrefix, const OUString& _rLocalName,
+    SvXMLImportContextRef OElementImport::CreateChildContext(sal_uInt16 _nPrefix, const OUString& _rLocalName,
         const Reference< XAttributeList >& _rxAttrList)
     {
         if( token::IsXMLToken(_rLocalName, token::XML_EVENT_LISTENERS) && (XML_NAMESPACE_OFFICE == _nPrefix))
@@ -226,15 +220,11 @@ namespace xmloff
         // (We do this in the non-pro version only. Doing it all the time would be much to expensive)
         if ( m_xInfo.is() )
         {
-            PropertyValueArray::const_iterator aEnd = m_aValues.end();
-            for (   PropertyValueArray::iterator aCheck = m_aValues.begin();
-                    aCheck != aEnd;
-                    ++aCheck
-                )
+            for ( const auto& rCheck : m_aValues )
             {
-                OSL_ENSURE(m_xInfo->hasPropertyByName(aCheck->Name),
+                OSL_ENSURE(m_xInfo->hasPropertyByName(rCheck.Name),
                         OStringBuffer("OElementImport::implApplySpecificProperties: read a property (").
-                    append(OUStringToOString(aCheck->Name, RTL_TEXTENCODING_ASCII_US)).
+                    append(OUStringToOString(rCheck.Name, RTL_TEXTENCODING_ASCII_US)).
                     append(") which does not exist on the element!").getStr());
             }
         }
@@ -258,14 +248,12 @@ namespace xmloff
             Any* pValues = aValues.getArray();
             // copy
 
-            PropertyValueArray::iterator aEnd = m_aValues.end();
-            for (   PropertyValueArray::iterator aPropValues = m_aValues.begin();
-                    aPropValues != aEnd;
-                    ++aPropValues, ++pNames, ++pValues
-                )
+            for ( const auto& rPropValues : m_aValues )
             {
-                *pNames = aPropValues->Name;
-                *pValues = aPropValues->Value;
+                *pNames = rPropValues.Name;
+                *pValues = rPropValues.Value;
+                ++pNames;
+                ++pValues;
             }
 
             try
@@ -275,31 +263,27 @@ namespace xmloff
             }
             catch(const Exception&)
             {
+                DBG_UNHANDLED_EXCEPTION("xmloff.forms");
                 OSL_FAIL("OElementImport::implApplySpecificProperties: could not set the properties (using the XMultiPropertySet)!");
-                DBG_UNHANDLED_EXCEPTION();
             }
         }
 
         if (!bSuccess)
         {   // no XMultiPropertySet or setting all properties at once failed
-            PropertyValueArray::iterator aEnd = m_aValues.end();
-            for (   PropertyValueArray::iterator aPropValues = m_aValues.begin();
-                    aPropValues != aEnd;
-                    ++aPropValues
-                )
+            for ( const auto& rPropValues : m_aValues )
             {
                 // this try/catch here is expensive, but because this is just a fallback which should normally not be
                 // used it's acceptable this way ...
                 try
                 {
-                    m_xElement->setPropertyValue(aPropValues->Name, aPropValues->Value);
+                    m_xElement->setPropertyValue(rPropValues.Name, rPropValues.Value);
                 }
                 catch(const Exception&)
                 {
+                    DBG_UNHANDLED_EXCEPTION("xmloff.forms");
                     OSL_FAIL(OStringBuffer("OElementImport::implApplySpecificProperties: could not set the property \"").
-                        append(OUStringToOString(aPropValues->Name, RTL_TEXTENCODING_ASCII_US)).
+                        append(OUStringToOString(rPropValues.Name, RTL_TEXTENCODING_ASCII_US)).
                         append("\"!").getStr());
-                    DBG_UNHANDLED_EXCEPTION();
                 }
             }
         }
@@ -312,36 +296,28 @@ namespace xmloff
 
         Reference< XPropertyContainer > xDynamicProperties( m_xElement, UNO_QUERY );
 
-        PropertyValueArray::iterator aEnd = m_aGenericValues.end();
-        for (   PropertyValueArray::iterator aPropValues =
-                m_aGenericValues.begin();
-                aPropValues != aEnd;
-                ++aPropValues
-            )
+        // PropertyValueArray::iterator aEnd = m_aGenericValues.end();
+        for ( auto& rPropValues : m_aGenericValues )
         {
             // check property type for numeric types before setting
             // the property
             try
             {
                 // if such a property does not yet exist at the element, create it if necessary
-                const bool bExistentProperty = m_xInfo->hasPropertyByName( aPropValues->Name );
+                const bool bExistentProperty = m_xInfo->hasPropertyByName( rPropValues.Name );
                 if ( !bExistentProperty )
                 {
                     if ( !xDynamicProperties.is() )
                     {
-                    #if OSL_DEBUG_LEVEL > 0
-                        OString aMessage( "OElementImport::implApplyGenericProperties: encountered an unknown property (" );
-                        aMessage += OUStringToOString( aPropValues->Name, RTL_TEXTENCODING_ASCII_US );
-                        aMessage += "), but component is no PropertyBag!";
-                        OSL_FAIL( aMessage.getStr() );
-                    #endif
+                        SAL_WARN( "xmloff", "OElementImport::implApplyGenericProperties: encountered an unknown property ("
+                                    << rPropValues.Name << "), but component is no PropertyBag!");
                         continue;
                     }
 
                     xDynamicProperties->addProperty(
-                        aPropValues->Name,
+                        rPropValues.Name,
                         PropertyAttribute::BOUND | PropertyAttribute::REMOVABLE,
-                        aPropValues->Value
+                        rPropValues.Value
                     );
 
                     // re-fetch the PropertySetInfo
@@ -349,16 +325,16 @@ namespace xmloff
                 }
 
                 // determine the type of the value (source for the following conversion)
-                TypeClass eValueTypeClass = aPropValues->Value.getValueTypeClass();
+                TypeClass eValueTypeClass = rPropValues.Value.getValueTypeClass();
                 const bool bValueIsSequence = TypeClass_SEQUENCE == eValueTypeClass;
                 if ( bValueIsSequence )
                 {
-                    uno::Type aSimpleType( getSequenceElementType( aPropValues->Value.getValueType() ) );
+                    uno::Type aSimpleType( getSequenceElementType( rPropValues.Value.getValueType() ) );
                     eValueTypeClass = aSimpleType.getTypeClass();
                 }
 
                 // determine the type of the property (target for the following conversion)
-                const Property aProperty( m_xInfo->getPropertyByName( aPropValues->Name ) );
+                const Property aProperty( m_xInfo->getPropertyByName( rPropValues.Name ) );
                 TypeClass ePropTypeClass = aProperty.Type.getTypeClass();
                 const bool bPropIsSequence = TypeClass_SEQUENCE == ePropTypeClass;
                 if( bPropIsSequence )
@@ -383,7 +359,7 @@ namespace xmloff
                         "OElementImport::implApplyGenericProperties: conversion to sequences other than 'sequence< short >' not implemented, yet!" );
 
                     Sequence< Any > aXMLValueList;
-                    aPropValues->Value >>= aXMLValueList;
+                    rPropValues.Value >>= aXMLValueList;
                     Sequence< sal_Int16 > aPropertyValueList( aXMLValueList.getLength() );
 
                     const Any*       pXMLValue = aXMLValueList.getConstArray();
@@ -397,7 +373,7 @@ namespace xmloff
                         *pPropValue = static_cast< sal_Int16 >( nVal );
                     }
 
-                    aPropValues->Value <<= aPropertyValueList;
+                    rPropValues.Value <<= aPropertyValueList;
                 }
                 else if ( ePropTypeClass != eValueTypeClass )
                 {
@@ -406,30 +382,30 @@ namespace xmloff
                     case TypeClass_DOUBLE:
                     {
                         double nVal = 0;
-                        aPropValues->Value >>= nVal;
+                        rPropValues.Value >>= nVal;
                         switch( ePropTypeClass )
                         {
                         case TypeClass_BYTE:
-                            aPropValues->Value <<= static_cast< sal_Int8 >( nVal );
+                            rPropValues.Value <<= static_cast< sal_Int8 >( nVal );
                             break;
                         case TypeClass_SHORT:
-                            aPropValues->Value <<= static_cast< sal_Int16 >( nVal );
+                            rPropValues.Value <<= static_cast< sal_Int16 >( nVal );
                             break;
                         case TypeClass_UNSIGNED_SHORT:
-                            aPropValues->Value <<= static_cast< sal_uInt16 >( nVal );
+                            rPropValues.Value <<= static_cast< sal_uInt16 >( nVal );
                             break;
                         case TypeClass_LONG:
                         case TypeClass_ENUM:
-                            aPropValues->Value <<= static_cast< sal_Int32 >( nVal );
+                            rPropValues.Value <<= static_cast< sal_Int32 >( nVal );
                             break;
                         case TypeClass_UNSIGNED_LONG:
-                            aPropValues->Value <<= static_cast< sal_uInt32 >( nVal );
+                            rPropValues.Value <<= static_cast< sal_uInt32 >( nVal );
                             break;
                         case TypeClass_UNSIGNED_HYPER:
-                            aPropValues->Value <<= static_cast< sal_uInt64 >( nVal );
+                            rPropValues.Value <<= static_cast< sal_uInt64 >( nVal );
                             break;
                         case TypeClass_HYPER:
-                            aPropValues->Value <<= static_cast< sal_Int64 >( nVal );
+                            rPropValues.Value <<= static_cast< sal_Int64 >( nVal );
                             break;
                         default:
                             OSL_FAIL( "OElementImport::implImportGenericProperties: unsupported value type!" );
@@ -443,14 +419,14 @@ namespace xmloff
                     }
                 }
 
-                m_xElement->setPropertyValue( aPropValues->Name, aPropValues->Value );
+                m_xElement->setPropertyValue( rPropValues.Name, rPropValues.Value );
             }
             catch(const Exception&)
             {
+                DBG_UNHANDLED_EXCEPTION("xmloff.forms");
                 OSL_FAIL(OStringBuffer("OElementImport::EndElement: could not set the property \"").
-                    append(OUStringToOString(aPropValues->Name, RTL_TEXTENCODING_ASCII_US)).
+                    append(OUStringToOString(rPropValues.Name, RTL_TEXTENCODING_ASCII_US)).
                     append("\"!").getStr());
-                DBG_UNHANDLED_EXCEPTION();
             }
         }
     }
@@ -465,14 +441,12 @@ namespace xmloff
             return OUString(sUnnamedName);
         Sequence< OUString > aNames = m_xParentContainer->getElementNames();
 
-        OUString sReturn;
         const OUString* pNames = nullptr;
         const OUString* pNamesEnd = aNames.getConstArray() + aNames.getLength();
         for (sal_Int32 i=0; i<32768; ++i)   // the limit is nearly arbitrary ...
         {
             // assemble the new name (suggestion)
-            sReturn = sUnnamedName;
-            sReturn += OUString::number(i);
+            OUString sReturn = sUnnamedName + OUString::number(i);
             // check the existence (this is the bad performance part ....)
             for (pNames = aNames.getConstArray(); pNames<pNamesEnd; ++pNames)
             {
@@ -494,32 +468,11 @@ namespace xmloff
     {
         ENSURE_OR_RETURN( m_xInfo.is(), "OElementImport::impl_matchPropertyGroup: no property set info!", i_propertyGroups.end() );
 
-        for (   PropertyGroups::const_iterator group = i_propertyGroups.begin();
-                group != i_propertyGroups.end();
-                ++group
-            )
-        {
-            bool missingProp = false;
-            for (   PropertyDescriptionList::const_iterator prop = group->begin();
-                    prop != group->end();
-                    ++prop
-                )
-            {
-                if ( !m_xInfo->hasPropertyByName( (*prop)->propertyName ) )
-                {
-                    missingProp = true;
-                    break;
-                }
-            }
-
-            if ( missingProp )
-                // try next group
-                continue;
-
-            return group;
-        }
-
-        return i_propertyGroups.end();
+        return std::find_if(i_propertyGroups.cbegin(), i_propertyGroups.cend(), [&](const PropertyDescriptionList& rGroup) {
+            return std::all_of(rGroup.cbegin(), rGroup.cend(), [&](const PropertyDescription* prop) {
+                return m_xInfo->hasPropertyByName( prop->propertyName );
+            });
+        });
     }
 
     bool OElementImport::tryGenericAttribute( sal_uInt16 _nNamespaceKey, const OUString& _rLocalName, const OUString& _rValue )
@@ -552,21 +505,15 @@ namespace xmloff
                 }
 
                 PropertyValues aValues;
-                for (   PropertyDescriptionList::const_iterator propDesc = rProperties.begin();
-                        propDesc != rProperties.end();
-                        ++propDesc
-                    )
+                for ( const auto& propDesc : rProperties )
                 {
-                    aValues[ (*propDesc)->propertyId ] = Any();
+                    aValues[ propDesc->propertyId ] = Any();
                 }
                 if ( handler->getPropertyValues( _rValue, aValues ) )
                 {
-                    for (   PropertyDescriptionList::const_iterator propDesc = rProperties.begin();
-                            propDesc != rProperties.end();
-                            ++propDesc
-                        )
+                    for ( const auto& propDesc : rProperties )
                     {
-                        implPushBackPropertyValue( (*propDesc)->propertyName, aValues[ (*propDesc)->propertyId ] );
+                        implPushBackPropertyValue( propDesc->propertyName, aValues[ propDesc->propertyId ] );
                     }
                 }
             }
@@ -701,7 +648,7 @@ namespace xmloff
 
     bool OControlImport::handleAttribute(sal_uInt16 _nNamespaceKey, const OUString& _rLocalName, const OUString& _rValue)
     {
-        static const sal_Char* pLinkedCellAttributeName = OAttributeMetaData::getBindingAttributeName(BA_LINKED_CELL);
+        static const sal_Char* pLinkedCellAttributeName = OAttributeMetaData::getBindingAttributeName(BAFlags::LinkedCell);
 
         if (IsXMLToken(_rLocalName, XML_ID))
         {   // it's the control id
@@ -752,11 +699,11 @@ namespace xmloff
         if ( OElementImport::tryGenericAttribute( _nNamespaceKey, _rLocalName, _rValue ) )
             return true;
 
-        static const sal_Char* pValueAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCA_VALUE);
-        static const sal_Char* pCurrentValueAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCA_CURRENT_VALUE);
-        static const sal_Char* pMinValueAttributeName = OAttributeMetaData::getSpecialAttributeName(SCA_MIN_VALUE);
-        static const sal_Char* pMaxValueAttributeName = OAttributeMetaData::getSpecialAttributeName(SCA_MAX_VALUE);
-        static const sal_Char* pRepeatDelayAttributeName = OAttributeMetaData::getSpecialAttributeName( SCA_REPEAT_DELAY );
+        static const sal_Char* pValueAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCAFlags::Value);
+        static const sal_Char* pCurrentValueAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCAFlags::CurrentValue);
+        static const sal_Char* pMinValueAttributeName = OAttributeMetaData::getSpecialAttributeName(SCAFlags::MinValue);
+        static const sal_Char* pMaxValueAttributeName = OAttributeMetaData::getSpecialAttributeName(SCAFlags::MaxValue);
+        static const sal_Char* pRepeatDelayAttributeName = OAttributeMetaData::getSpecialAttributeName( SCAFlags::RepeatDelay );
 
         sal_Int32 nHandle = -1;
         if ( _rLocalName.equalsAscii( pValueAttributeName ) )
@@ -819,111 +766,108 @@ namespace xmloff
         // let the base class handle all the attributes
         OElementImport::StartElement(xAttributes);
 
-        if ( !m_aValueProperties.empty() && m_xElement.is())
+        if ( m_aValueProperties.empty() || !m_xElement.is())
+            return;
+
+        // get the property set info
+        if (!m_xInfo.is())
         {
-            // get the property set info
-            if (!m_xInfo.is())
-            {
-                OSL_FAIL("OControlImport::StartElement: no PropertySetInfo!");
-                return;
-            }
-
-            const sal_Char* pValueProperty = nullptr;
-            const sal_Char* pCurrentValueProperty = nullptr;
-            const sal_Char* pMinValueProperty = nullptr;
-            const sal_Char* pMaxValueProperty = nullptr;
-
-            bool bRetrievedValues = false;
-            bool bRetrievedValueLimits = false;
-
-            // get the class id of our element
-            sal_Int16 nClassId = FormComponentType::CONTROL;
-            m_xElement->getPropertyValue(PROPERTY_CLASSID) >>= nClassId;
-
-            // translate the value properties we collected in handleAttributes
-            PropertyValueArray::iterator aEnd = m_aValueProperties.end();
-            for (   PropertyValueArray::iterator aValueProps = m_aValueProperties.begin();
-                    aValueProps != aEnd;
-                    ++aValueProps
-                )
-            {
-                bool bSuccess = false;
-                switch (aValueProps->Handle)
-                {
-                    case PROPID_VALUE:
-                    case PROPID_CURRENT_VALUE:
-                    {
-                        // get the property names
-                        if (!bRetrievedValues)
-                        {
-                            getValuePropertyNames(m_eElementType, nClassId, pCurrentValueProperty, pValueProperty);
-                            if ( !pCurrentValueProperty && !pValueProperty )
-                            {
-                                SAL_WARN( "xmloff.forms", "OControlImport::StartElement: illegal value property names!" );
-                                break;
-                            }
-
-                            bRetrievedValues = true;
-                        }
-                        if ( PROPID_VALUE == aValueProps->Handle && !pValueProperty )
-                        {
-                            SAL_WARN( "xmloff.forms", "OControlImport::StartElement: the control does not have a value property!");
-                            break;
-                        }
-
-                        if ( PROPID_CURRENT_VALUE == aValueProps->Handle && !pCurrentValueProperty )
-                        {
-                            SAL_WARN( "xmloff.forms", "OControlImport::StartElement: the control does not have a current-value property!");
-                            break;
-                        }
-
-                        // transfer the name
-                        if (PROPID_VALUE == aValueProps->Handle)
-                            aValueProps->Name = OUString::createFromAscii(pValueProperty);
-                        else
-                            aValueProps->Name = OUString::createFromAscii(pCurrentValueProperty);
-                        bSuccess = true;
-                    }
-                    break;
-                    case PROPID_MIN_VALUE:
-                    case PROPID_MAX_VALUE:
-                    {
-                        // get the property names
-                        if (!bRetrievedValueLimits)
-                        {
-                            getValueLimitPropertyNames(nClassId, pMinValueProperty, pMaxValueProperty);
-                            if ( !pMinValueProperty || !pMaxValueProperty )
-                            {
-                                SAL_WARN( "xmloff.forms", "OControlImport::StartElement: illegal value limit property names!" );
-                                break;
-                            }
-
-                            bRetrievedValueLimits = true;
-                        }
-                        OSL_ENSURE((PROPID_MIN_VALUE != aValueProps->Handle) || pMinValueProperty,
-                            "OControlImport::StartElement: the control does not have a value property!");
-                        OSL_ENSURE((PROPID_MAX_VALUE != aValueProps->Handle) || pMaxValueProperty,
-                            "OControlImport::StartElement: the control does not have a current-value property!");
-
-                        // transfer the name
-                        if (PROPID_MIN_VALUE == aValueProps->Handle)
-                            aValueProps->Name = OUString::createFromAscii(pMinValueProperty);
-                        else
-                            aValueProps->Name = OUString::createFromAscii(pMaxValueProperty);
-                        bSuccess = true;
-                    }
-                    break;
-                }
-
-                if ( !bSuccess )
-                    continue;
-
-                // translate the value
-                implTranslateValueProperty(m_xInfo, *aValueProps);
-                // add the property to the base class' array
-                implPushBackPropertyValue(*aValueProps);
-            }
+            OSL_FAIL("OControlImport::StartElement: no PropertySetInfo!");
+            return;
         }
+
+        const sal_Char* pValueProperty = nullptr;
+        const sal_Char* pCurrentValueProperty = nullptr;
+        const sal_Char* pMinValueProperty = nullptr;
+        const sal_Char* pMaxValueProperty = nullptr;
+
+        bool bRetrievedValues = false;
+        bool bRetrievedValueLimits = false;
+
+        // get the class id of our element
+        sal_Int16 nClassId = FormComponentType::CONTROL;
+        m_xElement->getPropertyValue(PROPERTY_CLASSID) >>= nClassId;
+
+        // translate the value properties we collected in handleAttributes
+        for ( auto& rValueProps : m_aValueProperties )
+        {
+            bool bSuccess = false;
+            switch (rValueProps.Handle)
+            {
+                case PROPID_VALUE:
+                case PROPID_CURRENT_VALUE:
+                {
+                    // get the property names
+                    if (!bRetrievedValues)
+                    {
+                        getValuePropertyNames(m_eElementType, nClassId, pCurrentValueProperty, pValueProperty);
+                        if ( !pCurrentValueProperty && !pValueProperty )
+                        {
+                            SAL_WARN( "xmloff.forms", "OControlImport::StartElement: illegal value property names!" );
+                            break;
+                        }
+
+                        bRetrievedValues = true;
+                    }
+                    if ( PROPID_VALUE == rValueProps.Handle && !pValueProperty )
+                    {
+                        SAL_WARN( "xmloff.forms", "OControlImport::StartElement: the control does not have a value property!");
+                        break;
+                    }
+
+                    if ( PROPID_CURRENT_VALUE == rValueProps.Handle && !pCurrentValueProperty )
+                    {
+                        SAL_WARN( "xmloff.forms", "OControlImport::StartElement: the control does not have a current-value property!");
+                        break;
+                    }
+
+                    // transfer the name
+                    if (PROPID_VALUE == rValueProps.Handle)
+                        rValueProps.Name = OUString::createFromAscii(pValueProperty);
+                    else
+                        rValueProps.Name = OUString::createFromAscii(pCurrentValueProperty);
+                    bSuccess = true;
+                }
+                break;
+                case PROPID_MIN_VALUE:
+                case PROPID_MAX_VALUE:
+                {
+                    // get the property names
+                    if (!bRetrievedValueLimits)
+                    {
+                        getValueLimitPropertyNames(nClassId, pMinValueProperty, pMaxValueProperty);
+                        if ( !pMinValueProperty || !pMaxValueProperty )
+                        {
+                            SAL_WARN( "xmloff.forms", "OControlImport::StartElement: illegal value limit property names!" );
+                            break;
+                        }
+
+                        bRetrievedValueLimits = true;
+                    }
+                    OSL_ENSURE((PROPID_MIN_VALUE != rValueProps.Handle) || pMinValueProperty,
+                        "OControlImport::StartElement: the control does not have a value property!");
+                    OSL_ENSURE((PROPID_MAX_VALUE != rValueProps.Handle) || pMaxValueProperty,
+                        "OControlImport::StartElement: the control does not have a current-value property!");
+
+                    // transfer the name
+                    if (PROPID_MIN_VALUE == rValueProps.Handle)
+                        rValueProps.Name = OUString::createFromAscii(pMinValueProperty);
+                    else
+                        rValueProps.Name = OUString::createFromAscii(pMaxValueProperty);
+                    bSuccess = true;
+                }
+                break;
+            }
+
+            if ( !bSuccess )
+                continue;
+
+            // translate the value
+            implTranslateValueProperty(m_xInfo, rValueProps);
+            // add the property to the base class' array
+            implPushBackPropertyValue(rValueProps);
+        }
+
     }
 
     void OControlImport::implTranslateValueProperty(const Reference< XPropertySetInfo >& _rxPropInfo,
@@ -942,10 +886,10 @@ namespace xmloff
         if (TypeClass_ANY == aProp.Type.getTypeClass())
         {
             // we have exactly 2 properties where this type class is allowed:
-            OSL_ENSURE(
-                    _rPropValue.Name != PROPERTY_EFFECTIVE_VALUE
-                &&  _rPropValue.Name != PROPERTY_EFFECTIVE_DEFAULT,
-                "OControlImport::implTranslateValueProperty: invalid property type/name combination!");
+            SAL_WARN_IF(
+                    _rPropValue.Name == PROPERTY_EFFECTIVE_VALUE
+                ||  _rPropValue.Name == PROPERTY_EFFECTIVE_DEFAULT, "xmloff",
+                "OControlImport::implTranslateValueProperty: invalid property type/name combination, Any and " << _rPropValue.Name);
 
             // Both properties are allowed to have a double or a string value,
             // so first try to convert the string into a number
@@ -989,8 +933,8 @@ namespace xmloff
         }
         catch( const Exception& )
         {
+            DBG_UNHANDLED_EXCEPTION("xmloff.forms");
             OSL_FAIL( "OControlImport::EndElement: caught an exception while retrieving the class id!" );
-            DBG_UNHANDLED_EXCEPTION();
         }
 
         const sal_Char* pValueProperty = nullptr;
@@ -1002,19 +946,15 @@ namespace xmloff
                 // is the "value property" part of the sequence?
 
             // look up this property in our sequence
-            PropertyValueArray::iterator aEnd = m_aValues.end();
-            for (   PropertyValueArray::iterator aCheck = m_aValues.begin();
-                    ( aCheck != aEnd );
-                    ++aCheck
-                )
+            for ( const auto& rCheck : m_aValues )
             {
-                if ( aCheck->Name.equalsAscii( pDefaultValueProperty ) )
+                if ( rCheck.Name.equalsAscii( pDefaultValueProperty ) )
                     bRestoreValuePropertyValue = true;
-                else if ( aCheck->Name.equalsAscii( pValueProperty ) )
+                else if ( rCheck.Name.equalsAscii( pValueProperty ) )
                 {
                     bNonDefaultValuePropertyValue = true;
                     // we need to restore the value property we found here, nothing else
-                    aValuePropertyValue = aCheck->Value;
+                    aValuePropertyValue = rCheck.Value;
                 }
             }
 
@@ -1027,8 +967,8 @@ namespace xmloff
                 }
                 catch( const Exception& )
                 {
+                    DBG_UNHANDLED_EXCEPTION("xmloff.forms");
                     OSL_FAIL( "OControlImport::EndElement: caught an exception while retrieving the current value property!" );
-                    DBG_UNHANDLED_EXCEPTION();
                 }
             }
         }
@@ -1045,8 +985,8 @@ namespace xmloff
             }
             catch( const Exception& )
             {
+                DBG_UNHANDLED_EXCEPTION("xmloff.forms");
                 OSL_FAIL( "OControlImport::EndElement: caught an exception while restoring the value property!" );
-                DBG_UNHANDLED_EXCEPTION();
             }
         }
 
@@ -1129,21 +1069,27 @@ namespace xmloff
     bool OImagePositionImport::handleAttribute( sal_uInt16 _nNamespaceKey, const OUString& _rLocalName,
         const OUString& _rValue )
     {
-        if ( _rLocalName == GetXMLToken( XML_IMAGE_POSITION ) )
+        static const sal_Char* s_pImageDataAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCAFlags::ImageData);
+
+        if (_rLocalName.equalsAscii(s_pImageDataAttributeName))
+        {
+            m_xGraphic = m_rContext.getGlobalContext().loadGraphicByURL(_rValue);
+            return true;
+        }
+        else if ( _rLocalName == GetXMLToken( XML_IMAGE_POSITION ) )
         {
             OSL_VERIFY( PropertyConversion::convertString(
                 cppu::UnoType<decltype(m_nImagePosition)>::get(),
-                _rValue, OEnumMapper::getEnumMap( OEnumMapper::epImagePosition )
+                _rValue, aImagePositionMap
             ) >>= m_nImagePosition );
             m_bHaveImagePosition = true;
             return true;
         }
-
-        if ( _rLocalName == GetXMLToken( XML_IMAGE_ALIGN ) )
+        else if ( _rLocalName == GetXMLToken( XML_IMAGE_ALIGN ) )
         {
             OSL_VERIFY( PropertyConversion::convertString(
                 cppu::UnoType<decltype(m_nImageAlign)>::get(),
-                _rValue, OEnumMapper::getEnumMap( OEnumMapper::epImageAlign )
+                _rValue, aImageAlignMap
             ) >>= m_nImageAlign );
             return true;
         }
@@ -1155,6 +1101,13 @@ namespace xmloff
     {
         OControlImport::StartElement( _rxAttrList );
 
+        if (m_xGraphic.is())
+        {
+            PropertyValue aGraphicProperty;
+            aGraphicProperty.Name = PROPERTY_GRAPHIC;
+            aGraphicProperty.Value <<= m_xGraphic;
+            implPushBackPropertyValue(aGraphicProperty);
+        }
         if ( m_bHaveImagePosition )
         {
             sal_Int16 nUnoImagePosition = ImagePosition::Centered;
@@ -1175,8 +1128,7 @@ namespace xmloff
     //= OReferredControlImport
     OReferredControlImport::OReferredControlImport(
             OFormLayerXMLImport_Impl& _rImport, IEventAttacherManager& _rEventManager, sal_uInt16 _nPrefix, const OUString& _rName,
-            const Reference< XNameContainer >& _rxParentContainer,
-            OControlElement::ElementType )
+            const Reference< XNameContainer >& _rxParentContainer )
         :OControlImport(_rImport, _rEventManager, _nPrefix, _rName, _rxParentContainer)
     {
     }
@@ -1193,7 +1145,7 @@ namespace xmloff
     bool OReferredControlImport::handleAttribute(sal_uInt16 _nNamespaceKey, const OUString& _rLocalName,
         const OUString& _rValue)
     {
-        static const char * s_sReferenceAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCA_FOR);
+        static const char * s_sReferenceAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCAFlags::For);
         if (_rLocalName.equalsAscii(s_sReferenceAttributeName))
         {
             m_sReferringControls = _rValue;
@@ -1211,7 +1163,7 @@ namespace xmloff
 
     bool OPasswordImport::handleAttribute(sal_uInt16 _nNamespaceKey, const OUString& _rLocalName, const OUString& _rValue)
     {
-        static const char * s_sEchoCharAttributeName = OAttributeMetaData::getSpecialAttributeName(SCA_ECHO_CHAR);
+        static const char * s_sEchoCharAttributeName = OAttributeMetaData::getSpecialAttributeName(SCAFlags::EchoChar);
         if (_rLocalName.equalsAscii(s_sEchoCharAttributeName))
         {
             // need a special handling for the EchoChar property
@@ -1220,9 +1172,9 @@ namespace xmloff
             OSL_ENSURE(_rValue.getLength() == 1, "OPasswordImport::handleAttribute: invalid echo char attribute!");
                 // we ourself should not have written values other than of length 1
             if (_rValue.getLength() >= 1)
-                aEchoChar.Value <<= (sal_Int16)_rValue[0];
+                aEchoChar.Value <<= static_cast<sal_Int16>(_rValue[0]);
             else
-                aEchoChar.Value <<= (sal_Int16)0;
+                aEchoChar.Value <<= sal_Int16(0);
             implPushBackPropertyValue(aEchoChar);
             return true;
         }
@@ -1240,8 +1192,8 @@ namespace xmloff
     {
         // need special handling for the State & CurrentState properties:
         // they're stored as booleans, but expected to be int16 properties
-        static const sal_Char* pCurrentSelectedAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCA_CURRENT_SELECTED);
-        static const sal_Char* pSelectedAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCA_SELECTED);
+        static const sal_Char* pCurrentSelectedAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCAFlags::CurrentSelected);
+        static const sal_Char* pSelectedAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCAFlags::Selected);
         if  (  _rLocalName.equalsAscii( pCurrentSelectedAttributeName )
             || _rLocalName.equalsAscii( pSelectedAttributeName )
             )
@@ -1255,7 +1207,7 @@ namespace xmloff
                 // create and store a new PropertyValue
                 PropertyValue aNewValue;
                 aNewValue.Name = pProperty->sPropertyName;
-                aNewValue.Value <<= (sal_Int16)::cppu::any2bool(aBooleanValue);
+                aNewValue.Value <<= static_cast<sal_Int16>(::cppu::any2bool(aBooleanValue));
 
                 implPushBackPropertyValue(aNewValue);
             }
@@ -1274,8 +1226,8 @@ namespace xmloff
 
     bool OURLReferenceImport::handleAttribute(sal_uInt16 _nNamespaceKey, const OUString& _rLocalName, const OUString& _rValue)
     {
-        static const sal_Char* s_pTargetLocationAttributeName   = OAttributeMetaData::getCommonControlAttributeName( CCA_TARGET_LOCATION );
-        static const sal_Char* s_pImageDataAttributeName        = OAttributeMetaData::getCommonControlAttributeName( CCA_IMAGE_DATA );
+        static const sal_Char* s_pTargetLocationAttributeName   = OAttributeMetaData::getCommonControlAttributeName( CCAFlags::TargetLocation );
+        static const sal_Char* s_pImageDataAttributeName        = OAttributeMetaData::getCommonControlAttributeName( CCAFlags::ImageData );
 
         // need to make the URL absolute if
         // * it's the image-data attribute
@@ -1288,16 +1240,10 @@ namespace xmloff
                     )
                 );
 
-        if ( bMakeAbsolute && !_rValue.isEmpty() )
+        if (bMakeAbsolute && !_rValue.isEmpty())
         {
-            // make a global URL out of the local one
-            OUString sAdjustedValue;
-            // only resolve image related url
-            // we don't want say form url targets to be resolved
-            // using ResolveGraphicObjectURL
-            if ( _rLocalName.equalsAscii( s_pImageDataAttributeName ) )
-                sAdjustedValue = m_rContext.getGlobalContext().ResolveGraphicObjectURL( _rValue, false );
-            else
+            OUString sAdjustedValue = _rValue;
+            if (!_rLocalName.equalsAscii(s_pImageDataAttributeName))
                 sAdjustedValue = m_rContext.getGlobalContext().GetAbsoluteReference( _rValue );
             return OImagePositionImport::handleAttribute( _nNamespaceKey, _rLocalName, sAdjustedValue );
         }
@@ -1319,7 +1265,7 @@ namespace xmloff
         OURLReferenceImport::StartElement(_rxAttrList);
 
         // handle the target-frame attribute
-        simulateDefaultedAttribute(OAttributeMetaData::getCommonControlAttributeName(CCA_TARGET_FRAME), PROPERTY_TARGETFRAME, "_blank");
+        simulateDefaultedAttribute(OAttributeMetaData::getCommonControlAttributeName(CCAFlags::TargetFrame), PROPERTY_TARGETFRAME, "_blank");
     }
 
     //= OValueRangeImport
@@ -1333,7 +1279,7 @@ namespace xmloff
 
     bool OValueRangeImport::handleAttribute( sal_uInt16 _nNamespaceKey, const OUString& _rLocalName, const OUString& _rValue )
     {
-        if ( _rLocalName.equalsAscii( OAttributeMetaData::getSpecialAttributeName( SCA_STEP_SIZE ) ) )
+        if ( _rLocalName.equalsAscii( OAttributeMetaData::getSpecialAttributeName( SCAFlags::StepSize ) ) )
         {
             ::sax::Converter::convertNumber( m_nStepSizeValue, _rValue );
             return true;
@@ -1364,7 +1310,7 @@ namespace xmloff
         enableTrackAttributes();
     }
 
-    SvXMLImportContext* OTextLikeImport::CreateChildContext( sal_uInt16 _nPrefix, const OUString& _rLocalName,
+    SvXMLImportContextRef OTextLikeImport::CreateChildContext( sal_uInt16 _nPrefix, const OUString& _rLocalName,
         const Reference< XAttributeList >& _rxAttrList )
     {
         if ( ( XML_NAMESPACE_TEXT == _nPrefix ) && _rLocalName.equalsIgnoreAsciiCase("p") )
@@ -1413,15 +1359,15 @@ namespace xmloff
         // same XML element), though not all of them know this property.
         // So we have to do a check ...
         if (m_xElement.is() && m_xInfo.is() && m_xInfo->hasPropertyByName(PROPERTY_EMPTY_IS_NULL) )
-            simulateDefaultedAttribute(OAttributeMetaData::getDatabaseAttributeName(DA_CONVERT_EMPTY), PROPERTY_EMPTY_IS_NULL, "false");
+            simulateDefaultedAttribute(OAttributeMetaData::getDatabaseAttributeName(DAFlags::ConvertEmpty), PROPERTY_EMPTY_IS_NULL, "false");
     }
 
-    struct EqualHandle : public ::std::unary_function< PropertyValue, bool >
+    struct EqualHandle
     {
         const sal_Int32 m_nHandle;
         explicit EqualHandle( sal_Int32 _nHandle ) : m_nHandle( _nHandle ) { }
 
-        inline bool operator()( const PropertyValue& _rProp )
+        bool operator()( const PropertyValue& _rProp )
         {
             return _rProp.Handle == m_nHandle;
         }
@@ -1469,12 +1415,12 @@ namespace xmloff
         // since this is the default of this property, anyway.
     }
 
-    struct EqualName : public ::std::unary_function< PropertyValue, bool >
+    struct EqualName
     {
-        const OUString m_sName;
+        const OUString & m_sName;
         explicit EqualName( const OUString& _rName ) : m_sName( _rName ) { }
 
-        inline bool operator()( const PropertyValue& _rProp )
+        bool operator()( const PropertyValue& _rProp )
         {
             return _rProp.Name == m_sName;
         }
@@ -1488,7 +1434,7 @@ namespace xmloff
         PropertyValueArray::iterator aDefaultControlPropertyPos = ::std::find_if(
             m_aValues.begin(),
             m_aValues.end(),
-            EqualName( OUString( "DefaultControl"  ) )
+            EqualName( "DefaultControl" )
         );
         if ( aDefaultControlPropertyPos != m_aValues.end() )
         {
@@ -1522,8 +1468,8 @@ namespace xmloff
         {
             // delete the newline which has been imported erroneously
             // TODO (fs): stole this code somewhere - why don't we fix the text import??
-            m_xCursor->gotoEnd( sal_False );
-            m_xCursor->goLeft( 1, sal_True );
+            m_xCursor->gotoEnd( false );
+            m_xCursor->goLeft( 1, true );
             m_xCursor->setString( OUString() );
 
             // reset cursor
@@ -1549,17 +1495,15 @@ namespace xmloff
             enableTrackAttributes();
     }
 
-    SvXMLImportContext* OListAndComboImport::CreateChildContext(sal_uInt16 _nPrefix, const OUString& _rLocalName,
+    SvXMLImportContextRef OListAndComboImport::CreateChildContext(sal_uInt16 _nPrefix, const OUString& _rLocalName,
             const Reference< XAttributeList >& _rxAttrList)
     {
         // is it the "option" sub tag of a listbox ?
-        static const char s_sOptionElementName[] = "option";
-        if (s_sOptionElementName == _rLocalName)
+        if (_rLocalName == "option")
             return new OListOptionImport(GetImport(), _nPrefix, _rLocalName, this);
 
         // is it the "item" sub tag of a combobox ?
-        static const char s_sItemElementName[] = "item";
-        if (s_sItemElementName == _rLocalName)
+        if (_rLocalName == "item")
             return new OComboItemImport(GetImport(), _nPrefix, _rLocalName, this);
 
         // everything else
@@ -1577,10 +1521,10 @@ namespace xmloff
             // for the auto-completion
             // the attribute default does not equal the property default, so in case we did not read this attribute,
             // we have to simulate it
-            simulateDefaultedAttribute( OAttributeMetaData::getSpecialAttributeName( SCA_AUTOMATIC_COMPLETION ), PROPERTY_AUTOCOMPLETE, "false");
+            simulateDefaultedAttribute( OAttributeMetaData::getSpecialAttributeName( SCAFlags::AutoCompletion ), PROPERTY_AUTOCOMPLETE, "false");
 
             // same for the convert-empty-to-null attribute, which's default is different from the property default
-            simulateDefaultedAttribute( OAttributeMetaData::getDatabaseAttributeName( DA_CONVERT_EMPTY ), PROPERTY_EMPTY_IS_NULL, "false");
+            simulateDefaultedAttribute( OAttributeMetaData::getDatabaseAttributeName( DAFlags::ConvertEmpty ), PROPERTY_EMPTY_IS_NULL, "false");
         }
     }
 
@@ -1590,12 +1534,12 @@ namespace xmloff
         // the string item list
         PropertyValue aItemList;
         aItemList.Name = PROPERTY_STRING_ITEM_LIST;
-        aItemList.Value <<= m_aListSource;
+        aItemList.Value <<= comphelper::containerToSequence(m_aListSource);
         implPushBackPropertyValue(aItemList);
 
         if (OControlElement::LISTBOX == m_eElementType)
         {
-            OSL_ENSURE((m_aListSource.getLength() + m_nEmptyListItems) == (m_aValueList.getLength() + m_nEmptyValueItems),
+            OSL_ENSURE((m_aListSource.size() + m_nEmptyListItems) == (m_aValueList.size() + m_nEmptyValueItems),
                 "OListAndComboImport::EndElement: inconsistence between labels and values!");
 
             if ( !m_bEncounteredLSAttrib )
@@ -1603,20 +1547,20 @@ namespace xmloff
                 // the value sequence
                 PropertyValue aValueList;
                 aValueList.Name = PROPERTY_LISTSOURCE;
-                aValueList.Value <<= m_aValueList;
+                aValueList.Value <<= comphelper::containerToSequence(m_aValueList);
                 implPushBackPropertyValue(aValueList);
             }
 
             // the select sequence
             PropertyValue aSelected;
             aSelected.Name = PROPERTY_SELECT_SEQ;
-            aSelected.Value <<= m_aSelectedSeq;
+            aSelected.Value <<= comphelper::containerToSequence(m_aSelectedSeq);
             implPushBackPropertyValue(aSelected);
 
             // the default select sequence
             PropertyValue aDefaultSelected;
             aDefaultSelected.Name = PROPERTY_DEFAULT_SELECT_SEQ;
-            aDefaultSelected.Value <<= m_aDefaultSelectedSeq;
+            aDefaultSelected.Value <<= comphelper::containerToSequence(m_aDefaultSelectedSeq);
             implPushBackPropertyValue(aDefaultSelected);
         }
 
@@ -1644,7 +1588,7 @@ namespace xmloff
 
     bool OListAndComboImport::handleAttribute(sal_uInt16 _nNamespaceKey, const OUString& _rLocalName, const OUString& _rValue)
     {
-        static const sal_Char* pListSourceAttributeName = OAttributeMetaData::getDatabaseAttributeName(DA_LIST_SOURCE);
+        static const sal_Char* pListSourceAttributeName = OAttributeMetaData::getDatabaseAttributeName(DAFlags::ListSource);
         if ( _rLocalName.equalsAscii(pListSourceAttributeName) )
         {
             PropertyValue aListSource;
@@ -1669,19 +1613,19 @@ namespace xmloff
             return true;
         }
 
-        if ( _rLocalName.equalsAscii( OAttributeMetaData::getBindingAttributeName( BA_LIST_CELL_RANGE ) ) )
+        if ( _rLocalName.equalsAscii( OAttributeMetaData::getBindingAttributeName( BAFlags::ListCellRange ) ) )
         {
             m_sCellListSource = _rValue;
             return true;
         }
 
-        if ( _rLocalName.equalsAscii( OAttributeMetaData::getBindingAttributeName( BA_LIST_LINKING_TYPE ) ) )
+        if ( _rLocalName.equalsAscii( OAttributeMetaData::getBindingAttributeName( BAFlags::ListLinkingType ) ) )
         {
             sal_Int16 nLinkageType = 0;
             PropertyConversion::convertString(
                 ::cppu::UnoType<sal_Int16>::get(),
                 _rValue,
-                OEnumMapper::getEnumMap( OEnumMapper::epListLinkageType )
+                aListLinkageMap
             ) >>= nLinkageType;
 
             m_bLinkWithIndexes = ( nLinkageType != 0 );
@@ -1695,7 +1639,7 @@ namespace xmloff
     {
         OSL_ENSURE(!m_nEmptyListItems, "OListAndComboImport::implPushBackValue: label list is already done!");
         if (!m_nEmptyListItems)
-            pushBackSequenceElement(m_aListSource, _rLabel);
+            m_aListSource.push_back(_rLabel);
     }
 
     void OListAndComboImport::implPushBackValue(const OUString& _rValue)
@@ -1709,7 +1653,7 @@ namespace xmloff
                 // the first element of the sequence
                 // All other values in the file are invalid
 
-            pushBackSequenceElement( m_aValueList, _rValue );
+            m_aValueList.push_back( _rValue );
         }
     }
 
@@ -1725,20 +1669,20 @@ namespace xmloff
 
     void OListAndComboImport::implSelectCurrentItem()
     {
-        OSL_ENSURE((m_aListSource.getLength() + m_nEmptyListItems) == (m_aValueList.getLength() + m_nEmptyValueItems),
+        OSL_ENSURE((m_aListSource.size() + m_nEmptyListItems) == (m_aValueList.size() + m_nEmptyValueItems),
             "OListAndComboImport::implSelectCurrentItem: inconsistence between labels and values!");
 
-        sal_Int16 nItemNumber = (sal_Int16)(m_aListSource.getLength() - 1 + m_nEmptyListItems);
-        pushBackSequenceElement(m_aSelectedSeq, nItemNumber);
+        sal_Int16 nItemNumber = static_cast<sal_Int16>(m_aListSource.size() - 1 + m_nEmptyListItems);
+        m_aSelectedSeq.push_back(nItemNumber);
     }
 
     void OListAndComboImport::implDefaultSelectCurrentItem()
     {
-        OSL_ENSURE((m_aListSource.getLength() + m_nEmptyListItems) == (m_aValueList.getLength() + m_nEmptyValueItems),
+        OSL_ENSURE((m_aListSource.size() + m_nEmptyListItems) == (m_aValueList.size() + m_nEmptyValueItems),
             "OListAndComboImport::implDefaultSelectCurrentItem: inconsistence between labels and values!");
 
-        sal_Int16 nItemNumber = (sal_Int16)(m_aListSource.getLength() - 1 + m_nEmptyListItems);
-        pushBackSequenceElement(m_aDefaultSelectedSeq, nItemNumber);
+        sal_Int16 nItemNumber = static_cast<sal_Int16>(m_aListSource.size() - 1 + m_nEmptyListItems);
+        m_aDefaultSelectedSeq.push_back(nItemNumber);
     }
 
     //= OListOptionImport
@@ -1786,20 +1730,20 @@ namespace xmloff
 
         // the current-selected and selected
         const OUString sSelectedAttribute = rMap.GetQNameByKey(
-            GetPrefix(), OUString::createFromAscii(OAttributeMetaData::getCommonControlAttributeName(CCA_CURRENT_SELECTED)));
+            GetPrefix(), OUString::createFromAscii(OAttributeMetaData::getCommonControlAttributeName(CCAFlags::CurrentSelected)));
         const OUString sDefaultSelectedAttribute = rMap.GetQNameByKey(
-            GetPrefix(), OUString::createFromAscii(OAttributeMetaData::getCommonControlAttributeName(CCA_SELECTED)));
+            GetPrefix(), OUString::createFromAscii(OAttributeMetaData::getCommonControlAttributeName(CCAFlags::Selected)));
 
         // propagate the selected flag
         bool bSelected(false);
-        ::sax::Converter::convertBool(bSelected,
+        (void)::sax::Converter::convertBool(bSelected,
             _rxAttrList->getValueByName(sSelectedAttribute));
         if (bSelected)
             m_xListBoxImport->implSelectCurrentItem();
 
         // same for the default selected
         bool bDefaultSelected(false);
-        ::sax::Converter::convertBool(bDefaultSelected,
+        (void)::sax::Converter::convertBool(bDefaultSelected,
             _rxAttrList->getValueByName(sDefaultSelectedAttribute));
         if (bDefaultSelected)
             m_xListBoxImport->implDefaultSelectCurrentItem();
@@ -1818,7 +1762,7 @@ namespace xmloff
     void OComboItemImport::StartElement(const Reference< XAttributeList >& _rxAttrList)
     {
         const OUString sLabelAttributeName = GetImport().GetNamespaceMap().GetQNameByKey(
-            GetPrefix(), OUString::createFromAscii(OAttributeMetaData::getCommonControlAttributeName(CCA_LABEL)));
+            GetPrefix(), OUString::createFromAscii(OAttributeMetaData::getCommonControlAttributeName(CCAFlags::Label)));
         m_xListBoxImport->implPushBackLabel(_rxAttrList->getValueByName(sLabelAttributeName));
 
         SvXMLImportContext::StartElement(_rxAttrList);
@@ -1833,7 +1777,7 @@ namespace xmloff
         ,m_rEventManager(_rEventManager)
     {
     }
-    SvXMLImportContext* OColumnWrapperImport::CreateChildContext(sal_uInt16 _nPrefix, const OUString& _rLocalName,
+    SvXMLImportContextRef OColumnWrapperImport::CreateChildContext(sal_uInt16 _nPrefix, const OUString& _rLocalName,
         const Reference< XAttributeList >&)
     {
         OControlImport* pReturn = implCreateChildContext(_nPrefix, _rLocalName, OElementNameMap::getElementType(_rLocalName));
@@ -1911,7 +1855,7 @@ namespace xmloff
         enableTrackAttributes();
     }
 
-    SvXMLImportContext* OFormImport::CreateChildContext(sal_uInt16 _nPrefix, const OUString& _rLocalName,
+    SvXMLImportContextRef OFormImport::CreateChildContext(sal_uInt16 _nPrefix, const OUString& _rLocalName,
         const Reference< XAttributeList >& _rxAttrList)
     {
         if( token::IsXMLToken(_rLocalName, token::XML_FORM) )
@@ -1935,7 +1879,7 @@ namespace xmloff
         OFormImport_Base::StartElement(_rxAttrList);
 
         // handle the target-frame attribute
-        simulateDefaultedAttribute(OAttributeMetaData::getCommonControlAttributeName(CCA_TARGET_FRAME), PROPERTY_TARGETFRAME, "_blank");
+        simulateDefaultedAttribute(OAttributeMetaData::getCommonControlAttributeName(CCAFlags::TargetFrame), PROPERTY_TARGETFRAME, "_blank");
     }
 
     void OFormImport::EndElement()
@@ -2050,12 +1994,12 @@ namespace xmloff
             OUString sAttrName = _xAttrList->getNameByIndex( i );
             sal_uInt16 nPrefix = rMap.GetKeyByAttrName( sAttrName, &sLocalName );
 
-            if  (   ( nPrefix == OAttributeMetaData::getCommonControlAttributeNamespace( CCA_TARGET_LOCATION ) )
-                &&  ( sLocalName.equalsAscii( OAttributeMetaData::getCommonControlAttributeName( CCA_TARGET_LOCATION ) ) )
+            if  (   ( nPrefix == OAttributeMetaData::getCommonControlAttributeNamespace( CCAFlags::TargetLocation ) )
+                &&  ( sLocalName.equalsAscii( OAttributeMetaData::getCommonControlAttributeName( CCAFlags::TargetLocation ) ) )
                 )
             {
                 OUString sValue = _xAttrList->getValueByIndex( i );
-
+                sValue = _rImport.GetAbsoluteReference(sValue);
                 INetURLObject aURL(sValue);
                 if ( aURL.GetProtocol() == INetProtocol::File )
                     _xElement->setPropertyValue(PROPERTY_DATASOURCENAME,makeAny(sValue));
@@ -2096,7 +2040,7 @@ namespace xmloff
 
             case OControlElement::FRAME:
             case OControlElement::FIXED_TEXT:
-                return new OReferredControlImport(m_rFormImport, *this, _nPrefix, _rLocalName, m_xMeAsContainer, _eType);
+                return new OReferredControlImport(m_rFormImport, *this, _nPrefix, _rLocalName, m_xMeAsContainer);
 
             case OControlElement::GRID:
                 return new OGridImport(m_rFormImport, *this, _nPrefix, _rLocalName, m_xMeAsContainer, _eType);

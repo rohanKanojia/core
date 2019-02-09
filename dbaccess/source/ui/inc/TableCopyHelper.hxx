@@ -23,17 +23,16 @@
 #include "commontypes.hxx"
 #include <svx/dataaccessdescriptor.hxx>
 #include <sot/storage.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <com/sun/star/sdbc/XConnection.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
-#include <functional>
 
 class SvTreeListEntry;
 namespace dbaui
 {
     class OGenericUnoController;
-    /// unary_function Functor object for class DataFlavorExVector::value_type returntype is bool
-    struct TAppSupportedSotFunctor : ::std::unary_function<DataFlavorExVector::value_type,bool>
+    /// Functor object for class DataFlavorExVector::value_type returntype is bool
+    struct TAppSupportedSotFunctor
     {
         ElementType eEntryType;
         TAppSupportedSotFunctor(const ElementType& _eEntryType)
@@ -41,7 +40,7 @@ namespace dbaui
         {
         }
 
-        inline bool operator()(const DataFlavorExVector::value_type& _aType)
+        bool operator()(const DataFlavorExVector::value_type& _aType)
         {
             switch (_aType.mnSotId)
             {
@@ -123,7 +122,7 @@ namespace dbaui
             @param  _xConnection
                 The connection
         */
-        bool copyTagTable(  DropDescriptor& _rDesc,
+        bool copyTagTable(  DropDescriptor const & _rDesc,
                             bool _bCheck,
                             const SharedConnection& _xConnection);
 
@@ -154,9 +153,9 @@ namespace dbaui
         /// returns <TRUE/> if the clipboard supports a table format, otherwise <FALSE/>.
         static bool isTableFormat(const TransferableDataHelper& _rClipboard);
 
-        inline void                     SetTableNameForAppend( const OUString& _rDefaultTableName ) { m_sTableNameForAppend = _rDefaultTableName; }
-        inline void                     ResetTableNameForAppend() { SetTableNameForAppend( OUString() ); }
-        inline const OUString&   GetTableNameForAppend() const { return m_sTableNameForAppend ;}
+        void                     SetTableNameForAppend( const OUString& _rDefaultTableName ) { m_sTableNameForAppend = _rDefaultTableName; }
+        void                     ResetTableNameForAppend() { SetTableNameForAppend( OUString() ); }
+        const OUString&   GetTableNameForAppend() const { return m_sTableNameForAppend ;}
 
     private:
         /** pastes a table into the data source

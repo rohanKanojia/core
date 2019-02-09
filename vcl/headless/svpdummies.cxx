@@ -19,8 +19,8 @@
 
 #include <string.h>
 #include <rtl/ustrbuf.hxx>
-#include "headless/svpdummies.hxx"
-#include "headless/svpinst.hxx"
+#include <headless/svpdummies.hxx>
+#include <headless/svpinst.hxx>
 
 // SalObject
 SvpSalObject::SvpSalObject()
@@ -42,11 +42,6 @@ void SvpSalObject::SetPosSize( long, long, long, long ) {}
 void SvpSalObject::Show( bool ) {}
 const SystemEnvData* SvpSalObject::GetSystemData() const { return &m_aSystemChildData; }
 
-// SalI18NImeStatus
-SvpImeStatus::~SvpImeStatus() {}
-bool SvpImeStatus::canToggle() { return false; }
-void SvpImeStatus::toggle() {}
-
 // SalSystem
 SvpSalSystem::~SvpSalSystem() {}
 
@@ -55,16 +50,16 @@ unsigned int SvpSalSystem::GetDisplayScreenCount()
     return 1;
 }
 
-Rectangle SvpSalSystem::GetDisplayScreenPosSizePixel( unsigned int nScreen )
+tools::Rectangle SvpSalSystem::GetDisplayScreenPosSizePixel( unsigned int nScreen )
 {
-    Rectangle aRect;
+    tools::Rectangle aRect;
     if( nScreen == 0 )
-        aRect = Rectangle( Point(0,0), Size(VIRTUAL_DESKTOP_WIDTH,VIRTUAL_DESKTOP_HEIGHT) );
+        aRect = tools::Rectangle( Point(0,0), Size(VIRTUAL_DESKTOP_WIDTH,VIRTUAL_DESKTOP_HEIGHT) );
     return aRect;
 }
 
 int SvpSalSystem::ShowNativeDialog( const OUString&, const OUString&,
-                                    const std::list< OUString >&, int )
+                                    const std::vector< OUString >& )
 {
     return 0;
 }

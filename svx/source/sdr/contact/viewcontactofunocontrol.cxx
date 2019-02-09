@@ -21,16 +21,14 @@
 
 #include <sdr/contact/viewcontactofunocontrol.hxx>
 #include <sdr/contact/viewobjectcontactofunocontrol.hxx>
-#include <sdr/contact/objectcontactofpageview.hxx>
+#include <svx/sdr/contact/objectcontactofpageview.hxx>
 #include <svx/sdr/contact/displayinfo.hxx>
 #include <svx/svdouno.hxx>
 #include <svx/svdpagv.hxx>
 #include <svx/svdview.hxx>
 #include <svx/sdrpagewindow.hxx>
 
-#include <com/sun/star/awt/XWindow2.hpp>
-
-#include "svx/sdrpaintwindow.hxx"
+#include <svx/sdrpaintwindow.hxx>
 #include <tools/diagnose_ex.h>
 #include <vcl/pdfextoutdevdata.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
@@ -45,8 +43,6 @@ namespace sdr { namespace contact {
     using ::com::sun::star::uno::Reference;
     using ::com::sun::star::awt::XControlContainer;
     using ::com::sun::star::awt::XControlModel;
-    using ::com::sun::star::awt::XWindow2;
-    using ::com::sun::star::uno::Exception;
 
 
     //= ViewContactOfUnoControl
@@ -98,12 +94,7 @@ namespace sdr { namespace contact {
         // create range. Use model data directly, not getBoundRect()/getSnapRect; these will use
         // the primitive data themselves in the long run. Use SdrUnoObj's (which is a SdrRectObj)
         // call to GetGeoRect() to access SdrTextObj::aRect directly and without executing anything
-        Rectangle aRectangle(GetSdrUnoObj().GetGeoRect());
-        // Hack for calc, transform position of object according
-        // to current zoom so as objects relative position to grid
-        // appears stable
-        Point aGridOffset = GetSdrUnoObj().GetGridOffset();
-        aRectangle += aGridOffset;
+        const tools::Rectangle aRectangle(GetSdrUnoObj().GetGeoRect());
         const basegfx::B2DRange aRange(
             aRectangle.Left(), aRectangle.Top(),
             aRectangle.Right(), aRectangle.Bottom());

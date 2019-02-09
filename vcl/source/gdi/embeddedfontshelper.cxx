@@ -7,19 +7,22 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <memory>
 #include <config_folders.h>
 #include <config_eot.h>
 
 #include <osl/file.hxx>
 #include <rtl/bootstrap.hxx>
+#include <sal/log.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/embeddedfontshelper.hxx>
+#include <com/sun/star/io/XInputStream.hpp>
 
-#include "fontsubset.hxx"
-#include "outdev.h"
-#include "PhysicalFontCollection.hxx"
-#include "salgdi.hxx"
-#include "sft.hxx"
+#include <fontsubset.hxx>
+#include <outdev.h>
+#include <PhysicalFontCollection.hxx>
+#include <salgdi.hxx>
+#include <sft.hxx>
 
 
 #if ENABLE_EOT
@@ -143,7 +146,7 @@ bool EmbeddedFontsHelper::addEmbeddedFont( const uno::Reference< io::XInputStrea
     }
     if( !eot )
     {
-        sufficientFontRights = sufficientTTFRights( &fontData.front(), fontData.size(), EditingAllowed );
+        sufficientFontRights = sufficientTTFRights(fontData.data(), fontData.size(), FontRights::EditingAllowed);
     }
     if( !sufficientFontRights )
     {
@@ -188,19 +191,19 @@ void EmbeddedFontsHelper::activateFont( const OUString& fontName, const OUString
 bool EmbeddedFontsHelper::sufficientTTFRights( const void* data, long size, FontRights rights )
 {
     TrueTypeFont* font;
-    if( OpenTTFontBuffer( data, size, 0 /*TODO*/, &font ) == SF_OK )
+    if( OpenTTFontBuffer( data, size, 0 /*TODO*/, &font ) == SFErrCodes::Ok )
     {
         TTGlobalFontInfo info;
         GetTTGlobalFontInfo( font, &info );
         CloseTTFont( font );
-        // http://www.microsoft.com/typography/tt/ttf_spec/ttch02.doc
-        int copyright = info.typeFlags & TYPEFLAG_COPYRIGHT_MASK;
+        // https://www.microsoft.com/typography/otspec/os2.htm#fst
+        int copyright = info.typeFlags;
         switch( rights )
         {
-            case ViewingAllowed:
+            case FontRights::ViewingAllowed:
                 // Embedding not restricted completely.
                 return ( copyright & 0x02 ) != 0x02;
-            case EditingAllowed:
+            case FontRights::EditingAllowed:
                 // Font is installable or editable.
                 return copyright == 0 || ( copyright & 0x08 );
         }
@@ -209,7 +212,7 @@ bool EmbeddedFontsHelper::sufficientTTFRights( const void* data, long size, Font
 }
 
 OUString EmbeddedFontsHelper::fontFileUrl( const OUString& familyName, FontFamily family, FontItalic italic,
-    FontWeight weight, FontPitch pitch, rtl_TextEncoding, FontRights rights )
+    FontWeight weight, FontPitch pitch, FontRights rights )
 {
     OUString path = "${$BRAND_BASE_DIR/" LIBO_ETC_FOLDER "/" SAL_CONFIGFILE( "bootstrap") "::UserInstallation}";
     rtl::Bootstrap::expandMacros( path );
@@ -261,9 +264,8 @@ OUString EmbeddedFontsHelper::fontFileUrl( const OUString& familyName, FontFamil
     }
     if( selected != nullptr )
     {
-        FontSubsetInfo info;
         long size;
-        if( const void* data = graphics->GetEmbedFontData( selected, nullptr, nullptr, 0, info, &size ))
+        if (const void* data = graphics->GetEmbedFontData(selected, &size))
         {
             if( sufficientTTFRights( data, size, rights ))
             {

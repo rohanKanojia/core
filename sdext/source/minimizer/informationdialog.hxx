@@ -29,24 +29,34 @@
 #include <com/sun/star/text/XTextRange.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/awt/XItemEventBroadcaster.hpp>
-#include <com/sun/star/frame/XStorable.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/awt/PushButtonType.hpp>
 #include <com/sun/star/io/XStream.hpp>
 #include <cppuhelper/implbase.hxx>
 
+OUString InsertFixedText( UnoDialog& rInformationDialog, const OUString& rControlName, const OUString& rLabel,
+                                sal_Int32 nXPos, sal_Int32 nYPos, sal_Int32 nWidth, sal_Int32 nHeight, bool bMultiLine, sal_Int16 nTabIndex );
+
+OUString InsertImage( UnoDialog& rInformationDialog, const OUString& rControlName, const OUString& rURL,
+    sal_Int32 nPosX, sal_Int32 nPosY, sal_Int32 nWidth, sal_Int32 nHeight, bool bScale );
+
+OUString InsertCheckBox( UnoDialog& rInformationDialog, const OUString& rControlName,
+    const css::uno::Reference< css::awt::XItemListener >& rItemListener, const OUString& rLabel,
+    sal_Int32 nXPos, sal_Int32 nYPos, sal_Int32 nWidth, sal_Int16 nTabIndex );
+
+OUString InsertButton( UnoDialog& rInformationDialog, const OUString& rControlName,
+    css::uno::Reference< css::awt::XActionListener > const & xActionListener, sal_Int32 nXPos, sal_Int32 nYPos,
+    sal_Int32 nWidth, sal_Int16 nTabIndex, const OUString& rText );
 
 class InformationDialog : public UnoDialog, public ConfigurationAccess
 {
 public:
 
     InformationDialog( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
-            css::uno::Reference< css::frame::XFrame >& rxFrame, const OUString& rSaveAsURL,
-                bool& bOpenNewDocument, const sal_Int64& nSourceSize, const sal_Int64& nDestSize, const sal_Int64& nApproxDest );
+                       css::uno::Reference< css::frame::XFrame > const & rxFrame, const OUString& rSaveAsURL,
+                       bool& bOpenNewDocument, sal_Int64 nSourceSize, sal_Int64 nDestSize, sal_Int64 nApproxDest );
     ~InformationDialog();
 
     void                execute();
@@ -57,9 +67,9 @@ private:
 
     void InitDialog();
 
-    sal_Int64 mnSourceSize;
-    sal_Int64 mnDestSize;
-    sal_Int64 mnApproxSize;
+    sal_Int64 const mnSourceSize;
+    sal_Int64 const mnDestSize;
+    sal_Int64 const mnApproxSize;
     bool& mrbOpenNewDocument;
     const OUString& maSaveAsURL;
 };
@@ -67,13 +77,13 @@ private:
 class OKActionListener : public ::cppu::WeakImplHelper< css::awt::XActionListener >
 {
 public:
-    explicit OKActionListener( InformationDialog& rInformationDialog ) : mrInformationDialog( rInformationDialog ){}
+    explicit OKActionListener( UnoDialog& rDialog ) : mrDialog( rDialog ){}
 
-    virtual void SAL_CALL actionPerformed( const css::awt::ActionEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL actionPerformed( const css::awt::ActionEvent& Event ) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 private:
 
-    InformationDialog& mrInformationDialog;
+    UnoDialog& mrDialog;
 };
 
 #endif

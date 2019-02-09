@@ -598,9 +598,9 @@ sub write_idt_header
 }
 
 ##############################################################
-# Returning the name of the rranslation file for a
+# Returning the name of the translation file for a
 # given language.
-# Sample: "01" oder "en-US" -> "1033.txt"
+# Sample: "01" order "en-US" -> "1033.txt"
 ##############################################################
 
 sub get_languagefilename
@@ -1014,7 +1014,7 @@ sub set_custom_action
 
     # is the $exefilename a library that is included into the binary table
 
-    if ( $inbinarytable ) { $customaction_exefilename =~ s/\.//; }  # this is the entry in the binary table ("abc.dll" -> "abcdll")
+    if ( $inbinarytable ) { $customaction_exefilename =~ s/\.//g; }  # this is the entry in the binary table ("abc.dll" -> "abcdll")
 
     # is the $exefilename included into the product?
 
@@ -1084,9 +1084,8 @@ sub add_custom_action_to_install_table
 
         my $actionposition = 0;
 
-        if ( $position eq "end" ) { $actionposition = get_last_position_in_sequencetable($installtable) + 25; }
-        elsif ( $position =~ /^\s*behind_/ ) { $actionposition = get_position_in_sequencetable($position, $installtable) + 2; }
-        else { $actionposition = get_position_in_sequencetable($position, $installtable) - 2; }
+        if ( $position =~ /^\s*\d+\s*$/ ) { $actionposition = $position; }    # setting the position directly, number defined in scp2
+        else { $actionposition = "POSITIONTEMPLATE_" . $position; }
 
         my $line = $actionname . "\t" . $actioncondition . "\t" . $actionposition . "\n";
         push(@{$installtable}, $line);
@@ -1128,12 +1127,6 @@ sub add_custom_action_to_install_table
         # then the InstallE.idt.idt or InstallU.idt.idt
 
         $actioncondition =~ s/FEATURETEMPLATE/$feature/g;   # only execute Custom Action, if feature of the file is installed
-
-#       my $actionposition = 0;
-#       if ( $position eq "end" ) { $actionposition = get_last_position_in_sequencetable($installtable) + 25; }
-#       elsif ( $position =~ /^\s*behind_/ ) { $actionposition = get_position_in_sequencetable($position, $installtable) + 2; }
-#       else { $actionposition = get_position_in_sequencetable($position, $installtable) - 2; }
-#       my $line = $actionname . "\t" . $actioncondition . "\t" . $actionposition . "\n";
 
         my $positiontemplate = "";
         if ( $position =~ /^\s*\d+\s*$/ ) { $positiontemplate = $position; }    # setting the position directly, number defined in scp2
@@ -1839,6 +1832,31 @@ sub setbidiattributes
     installer::files::save_file($controlfilename, $controlfile);
     $infoline = "Set bidi support in idt file \"$controlfilename\" for language $onelanguage\n";
     push(@installer::globals::logfileinfo, $infoline);
+}
+
+###############################################
+# Emit custom action 51 for setting standard
+# directory variable. Reference to a hash is
+# returned, represented the custom action.
+# This can be passed in to addcustomaction
+# method.
+###############################################
+
+sub emit_custom_action_for_standard_directory
+{
+    my ($dir, $var) = @_;
+    my %action = ();
+
+    $action{'Name'} = $dir;
+    $action{'Typ'} = "51";
+    $action{'Source'} = $dir;
+    $action{'Target'} = "[$var]";
+    $action{'Styles'} = "NO_FILE";
+    $action{'Assignment1'} = '("AdminExecuteSequence", "", "CostInitialize")';
+    $action{'Assignment2'} = '("InstallExecuteSequence", "", "CostInitialize")';
+    $action{'Assignment3'} = '("InstallUISequence", "", "CostInitialize")';
+
+    return \%action;
 }
 
 1;

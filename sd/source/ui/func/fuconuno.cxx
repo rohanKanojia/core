@@ -17,7 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuconuno.hxx"
+#include <fuconuno.hxx>
+#include <rtl/ustring.hxx>
 #include <svl/aeitem.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
@@ -28,16 +29,16 @@
 
 #include <svx/dialogs.hrc>
 
-#include "app.hrc"
-#include "glob.hrc"
-#include "ViewShell.hxx"
-#include "View.hxx"
-#include "Window.hxx"
-#include "ViewShellBase.hxx"
-#include "ToolBarManager.hxx"
-#include "drawdoc.hxx"
-#include "sdresid.hxx"
-#include "res_bmp.hrc"
+#include <app.hrc>
+#include <strings.hrc>
+#include <ViewShell.hxx>
+#include <View.hxx>
+#include <Window.hxx>
+#include <ViewShellBase.hxx>
+#include <ToolBarManager.hxx>
+#include <drawdoc.hxx>
+#include <unokywds.hxx>
+
 
 namespace sd {
 
@@ -49,7 +50,7 @@ FuConstructUnoControl::FuConstructUnoControl (
     SdDrawDocument* pDoc,
     SfxRequest&     rReq)
     : FuConstruct(pViewSh, pWin, pView, pDoc, rReq)
-    , nInventor(0)
+    , nInventor(SdrInventor::Unknown)
     , nIdentifier(0)
 {
 }
@@ -70,12 +71,12 @@ void FuConstructUnoControl::DoExecute( SfxRequest& rReq )
     const SfxUInt32Item* pInventorItem = rReq.GetArg<SfxUInt32Item>(SID_FM_CONTROL_INVENTOR);
     const SfxUInt16Item* pIdentifierItem = rReq.GetArg<SfxUInt16Item>(SID_FM_CONTROL_IDENTIFIER);
     if( pInventorItem )
-        nInventor = pInventorItem->GetValue();
+        nInventor = static_cast<SdrInventor>(pInventorItem->GetValue());
     if( pIdentifierItem )
         nIdentifier = pIdentifierItem->GetValue();
 
     mpViewShell->GetViewShellBase().GetToolBarManager()->SetToolBar(
-        ToolBarManager::TBG_FUNCTION,
+        ToolBarManager::ToolBarGroup::Function,
         ToolBarManager::msDrawingObjectToolBar);
 }
 
@@ -94,18 +95,13 @@ bool FuConstructUnoControl::MouseButtonDown(const MouseEvent& rMEvt)
     return bReturn;
 }
 
-bool FuConstructUnoControl::MouseMove(const MouseEvent& rMEvt)
-{
-    return FuConstruct::MouseMove(rMEvt);
-}
-
 bool FuConstructUnoControl::MouseButtonUp(const MouseEvent& rMEvt)
 {
     bool bReturn = false;
 
     if ( mpView->IsCreateObj() && rMEvt.IsLeft() )
     {
-        mpView->EndCreateObj(SDRCREATE_FORCEEND);
+        mpView->EndCreateObj(SdrCreateCmd::ForceEnd);
         bReturn = true;
     }
 
@@ -117,15 +113,6 @@ bool FuConstructUnoControl::MouseButtonUp(const MouseEvent& rMEvt)
     return bReturn;
 }
 
-/**
- * Process keyboard input
- * @returns sal_True if a KeyEvent is being processed, sal_False otherwise
- */
-bool FuConstructUnoControl::KeyInput(const KeyEvent& rKEvt)
-{
-    return FuConstruct::KeyInput(rKEvt);
-}
-
 void FuConstructUnoControl::Activate()
 {
     mpView->SetCurrentObj( nIdentifier, nInventor );
@@ -135,7 +122,7 @@ void FuConstructUnoControl::Activate()
     mpWindow->SetPointer( aNewPointer );
 
     aOldLayer = mpView->GetActiveLayer();
-    mpView->SetActiveLayer( SD_RESSTR(STR_LAYER_CONTROLS) );
+    mpView->SetActiveLayer(sUNO_LayerName_controls);
 
     FuConstruct::Activate();
 }
@@ -147,13 +134,14 @@ void FuConstructUnoControl::Deactivate()
     mpWindow->SetPointer( aOldPointer );
 }
 
-SdrObject* FuConstructUnoControl::CreateDefaultObject(const sal_uInt16, const Rectangle& rRectangle)
+SdrObjectUniquePtr FuConstructUnoControl::CreateDefaultObject(const sal_uInt16, const ::tools::Rectangle& rRectangle)
 {
     // case SID_FM_CREATE_CONTROL:
 
-    SdrObject* pObj = SdrObjFactory::MakeNewObject(
-        mpView->GetCurrentObjInventor(), mpView->GetCurrentObjIdentifier(),
-        nullptr, mpDoc);
+    SdrObjectUniquePtr pObj(SdrObjFactory::MakeNewObject(
+        mpView->getSdrModelFromSdrView(),
+        mpView->GetCurrentObjInventor(),
+        mpView->GetCurrentObjIdentifier()));
 
     if(pObj)
     {

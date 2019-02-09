@@ -20,21 +20,19 @@
 #include <sal/config.h>
 
 #include <memory>
-#include <utility>
 
-#include "AccessibleTextHelper.hxx"
-#include "DrawViewWrapper.hxx"
+#include <AccessibleTextHelper.hxx>
+#include <DrawViewWrapper.hxx>
 
 #include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
 
 #include <svx/AccessibleTextHelper.hxx>
 #include <svx/unoshtxt.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/window.hxx>
 
+#include <com/sun/star/awt/XWindow.hpp>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
-#include <o3tl/make_unique.hxx>
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
 
@@ -47,19 +45,15 @@ namespace chart
 AccessibleTextHelper::AccessibleTextHelper(
     DrawViewWrapper * pDrawViewWrapper ) :
         impl::AccessibleTextHelper_Base( m_aMutex ),
-        m_pTextHelper( nullptr ),
         m_pDrawViewWrapper( pDrawViewWrapper )
 {}
 
 AccessibleTextHelper::~AccessibleTextHelper()
 {
-    delete m_pTextHelper;
 }
 
 // ____ XInitialization ____
 void SAL_CALL AccessibleTextHelper::initialize( const Sequence< uno::Any >& aArguments )
-    throw (uno::Exception,
-           uno::RuntimeException, std::exception)
 {
     OUString aCID;
     Reference< XAccessible > xEventSource;
@@ -79,9 +73,9 @@ void SAL_CALL AccessibleTextHelper::initialize( const Sequence< uno::Any >& aArg
 
     SolarMutexGuard aSolarGuard;
 
-    delete m_pTextHelper;
+    m_pTextHelper.reset();
 
-    vcl::Window* pWindow( VCLUnoHelper::GetWindow( xWindow ));
+    VclPtr<vcl::Window> pWindow( VCLUnoHelper::GetWindow( xWindow ));
     if( pWindow )
     {
         SdrView * pView = m_pDrawViewWrapper;
@@ -90,7 +84,7 @@ void SAL_CALL AccessibleTextHelper::initialize( const Sequence< uno::Any >& aArg
             SdrObject * pTextObj = m_pDrawViewWrapper->getNamedSdrObject( aCID );
             if( pTextObj )
             {
-                m_pTextHelper = new ::accessibility::AccessibleTextHelper(o3tl::make_unique<SvxTextEditSource>(*pTextObj, nullptr, *pView, *pWindow));
+                m_pTextHelper.reset( new ::accessibility::AccessibleTextHelper(std::make_unique<SvxTextEditSource>(*pTextObj, nullptr, *pView, *pWindow)) );
                 m_pTextHelper->SetEventSource( xEventSource );
             }
         }
@@ -101,7 +95,6 @@ void SAL_CALL AccessibleTextHelper::initialize( const Sequence< uno::Any >& aArg
 
 // ____ XAccessibleContext ____
 ::sal_Int32 SAL_CALL AccessibleTextHelper::getAccessibleChildCount()
-    throw (uno::RuntimeException, std::exception)
 {
     if( m_pTextHelper )
     {
@@ -112,8 +105,6 @@ void SAL_CALL AccessibleTextHelper::initialize( const Sequence< uno::Any >& aArg
 }
 
 Reference< XAccessible > SAL_CALL AccessibleTextHelper::getAccessibleChild( ::sal_Int32 i )
-    throw (lang::IndexOutOfBoundsException,
-           uno::RuntimeException, std::exception)
 {
     if( m_pTextHelper )
     {
@@ -124,57 +115,48 @@ Reference< XAccessible > SAL_CALL AccessibleTextHelper::getAccessibleChild( ::sa
 }
 
 Reference< XAccessible > SAL_CALL AccessibleTextHelper::getAccessibleParent()
-    throw (uno::RuntimeException, std::exception)
 {
     OSL_FAIL( "Not implemented in this helper" );
     return Reference< XAccessible >();
 }
 
 ::sal_Int32 SAL_CALL AccessibleTextHelper::getAccessibleIndexInParent()
-    throw (uno::RuntimeException, std::exception)
 {
     OSL_FAIL( "Not implemented in this helper" );
     return -1;
 }
 
 ::sal_Int16 SAL_CALL AccessibleTextHelper::getAccessibleRole()
-    throw (uno::RuntimeException, std::exception)
 {
     OSL_FAIL( "Not implemented in this helper" );
     return AccessibleRole::UNKNOWN;
 }
 
 OUString SAL_CALL AccessibleTextHelper::getAccessibleDescription()
-    throw (uno::RuntimeException, std::exception)
 {
     OSL_FAIL( "Not implemented in this helper" );
     return OUString();
 }
 
 OUString SAL_CALL AccessibleTextHelper::getAccessibleName()
-    throw (uno::RuntimeException, std::exception)
 {
     OSL_FAIL( "Not implemented in this helper" );
     return OUString();
 }
 
 Reference< XAccessibleRelationSet > SAL_CALL AccessibleTextHelper::getAccessibleRelationSet()
-    throw (uno::RuntimeException, std::exception)
 {
     OSL_FAIL( "Not implemented in this helper" );
     return Reference< XAccessibleRelationSet >();
 }
 
 Reference< XAccessibleStateSet > SAL_CALL AccessibleTextHelper::getAccessibleStateSet()
-    throw (uno::RuntimeException, std::exception)
 {
     OSL_FAIL( "Not implemented in this helper" );
     return Reference< XAccessibleStateSet >();
 }
 
 lang::Locale SAL_CALL AccessibleTextHelper::getLocale()
-    throw (IllegalAccessibleComponentStateException,
-           uno::RuntimeException, std::exception)
 {
     OSL_FAIL( "Not implemented in this helper" );
     return lang::Locale();

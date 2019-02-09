@@ -22,17 +22,16 @@
 #include <com/sun/star/ucb/XContent.hpp>
 #include <com/sun/star/sdbc/SQLWarning.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <connectivity/OSubComponent.hxx>
 #include <connectivity/CommonTools.hxx>
-#include "OTypeInfo.hxx"
+#include <OTypeInfo.hxx>
 #include <rtl/ustring.hxx>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
 #include <com/sun/star/ucb/XDynamicResultSet.hpp>
 #include <com/sun/star/uno/DeploymentException.hpp>
 #include <connectivity/sqlparse.hxx>
 #include <connectivity/sqliterator.hxx>
-#include "TConnection.hxx"
-#include "file/filedllapi.hxx"
+#include <TConnection.hxx>
+#include <file/filedllapi.hxx>
 #include <map>
 
 namespace connectivity
@@ -42,96 +41,88 @@ namespace connectivity
         class ODatabaseMetaData;
         class OFileDriver;
 
-        class OOO_DLLPUBLIC_FILE OConnection :
-                            public connectivity::OMetaConnection,
-                            public connectivity::OSubComponent<OConnection, connectivity::OMetaConnection>
+        class OOO_DLLPUBLIC_FILE OConnection : public connectivity::OMetaConnection
         {
-            friend class connectivity::OSubComponent<OConnection, connectivity::OMetaConnection>;
-
         protected:
 
             // Data attributes
 
-            ::com::sun::star::uno::WeakReference< ::com::sun::star::sdbcx::XTablesSupplier>         m_xCatalog;
+            css::uno::WeakReference< css::sdbcx::XTablesSupplier>         m_xCatalog;
 
             OUString                    m_aFilenameExtension;
             OFileDriver*                m_pDriver;      //  Pointer to the owning
                                                         //  driver object
-            ::com::sun::star::uno::Reference< ::com::sun::star::ucb::XDynamicResultSet >    m_xDir; // directory
-            ::com::sun::star::uno::Reference< ::com::sun::star::ucb::XContent>              m_xContent;
+            css::uno::Reference< css::ucb::XDynamicResultSet >    m_xDir; // directory
+            css::uno::Reference< css::ucb::XContent>              m_xContent;
 
-            bool                    m_bClosed;
             bool                    m_bAutoCommit;
             bool                    m_bReadOnly;
             bool                    m_bShowDeleted;
             bool                    m_bCaseSensitiveExtension;
             bool                    m_bCheckSQL92;
-            bool                        m_bDefaultTextEncoding;
+            bool                    m_bDefaultTextEncoding;
 
 
             void throwUrlNotValid(const OUString & _rsUrl,const OUString & _rsMessage);
 
-            virtual ~OConnection();
+            virtual ~OConnection() override;
         public:
 
             OConnection(OFileDriver*    _pDriver);
 
-            virtual void construct(const OUString& _rUrl, const ::com::sun::star::uno::Sequence< ::com::sun::star::beans::PropertyValue >& _rInfo )
-                throw( css::sdbc::SQLException,
-                       css::uno::RuntimeException,
-                       css::uno::DeploymentException,
-                       std::exception);
+            /// @throws css::sdbc::SQLException
+            /// @throws css::uno::RuntimeException
+            /// @throws css::uno::DeploymentException
+            virtual void construct(const OUString& _rUrl, const css::uno::Sequence< css::beans::PropertyValue >& _rInfo );
 
             // OComponentHelper
             virtual void SAL_CALL disposing() override;
-            // XInterface
-            virtual void SAL_CALL release() throw() override;
 
             // XServiceInfo
             DECLARE_SERVICE_INFO();
 
             // XConnection
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XStatement > SAL_CALL createStatement(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XPreparedStatement > SAL_CALL prepareStatement( const OUString& sql ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XPreparedStatement > SAL_CALL prepareCall( const OUString& sql ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual OUString SAL_CALL nativeSQL( const OUString& sql ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL setAutoCommit( sal_Bool autoCommit ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual sal_Bool SAL_CALL getAutoCommit(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL commit(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL rollback(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual sal_Bool SAL_CALL isClosed(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XDatabaseMetaData > SAL_CALL getMetaData(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL setReadOnly( sal_Bool readOnly ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual sal_Bool SAL_CALL isReadOnly(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL setCatalog( const OUString& catalog ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual OUString SAL_CALL getCatalog(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL setTransactionIsolation( sal_Int32 level ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual sal_Int32 SAL_CALL getTransactionIsolation(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::container::XNameAccess > SAL_CALL getTypeMap(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL setTypeMap( const ::com::sun::star::uno::Reference< ::com::sun::star::container::XNameAccess >& typeMap ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Reference< css::sdbc::XStatement > SAL_CALL createStatement(  ) override;
+            virtual css::uno::Reference< css::sdbc::XPreparedStatement > SAL_CALL prepareStatement( const OUString& sql ) override;
+            virtual css::uno::Reference< css::sdbc::XPreparedStatement > SAL_CALL prepareCall( const OUString& sql ) override;
+            virtual OUString SAL_CALL nativeSQL( const OUString& sql ) override;
+            virtual void SAL_CALL setAutoCommit( sal_Bool autoCommit ) override;
+            virtual sal_Bool SAL_CALL getAutoCommit(  ) override;
+            virtual void SAL_CALL commit(  ) override;
+            virtual void SAL_CALL rollback(  ) override;
+            virtual sal_Bool SAL_CALL isClosed(  ) override;
+            virtual css::uno::Reference< css::sdbc::XDatabaseMetaData > SAL_CALL getMetaData(  ) override;
+            virtual void SAL_CALL setReadOnly( sal_Bool readOnly ) override;
+            virtual sal_Bool SAL_CALL isReadOnly(  ) override;
+            virtual void SAL_CALL setCatalog( const OUString& catalog ) override;
+            virtual OUString SAL_CALL getCatalog(  ) override;
+            virtual void SAL_CALL setTransactionIsolation( sal_Int32 level ) override;
+            virtual sal_Int32 SAL_CALL getTransactionIsolation(  ) override;
+            virtual css::uno::Reference< css::container::XNameAccess > SAL_CALL getTypeMap(  ) override;
+            virtual void SAL_CALL setTypeMap( const css::uno::Reference< css::container::XNameAccess >& typeMap ) override;
             // XCloseable
-            virtual void SAL_CALL close(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL close(  ) override;
             // XWarningsSupplier
-            virtual ::com::sun::star::uno::Any SAL_CALL getWarnings(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL clearWarnings(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Any SAL_CALL getWarnings(  ) override;
+            virtual void SAL_CALL clearWarnings(  ) override;
             //XUnoTunnel
-            virtual sal_Int64 SAL_CALL getSomething( const ::com::sun::star::uno::Sequence< sal_Int8 >& aIdentifier ) throw (::com::sun::star::uno::RuntimeException, std::exception) override;
-            static ::com::sun::star::uno::Sequence< sal_Int8 > getUnoTunnelImplementationId();
+            virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
+            static css::uno::Sequence< sal_Int8 > getUnoTunnelImplementationId();
 
             // no interface methods
-            ::com::sun::star::uno::Reference< ::com::sun::star::ucb::XDynamicResultSet > getDir() const;
-            const ::com::sun::star::uno::Reference< ::com::sun::star::ucb::XContent>&  getContent() const { return m_xContent; }
+            css::uno::Reference< css::ucb::XDynamicResultSet > getDir() const;
+            const css::uno::Reference< css::ucb::XContent>&  getContent() const { return m_xContent; }
             // create a catalog or return the catalog already created
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::sdbcx::XTablesSupplier > createCatalog();
+            virtual css::uno::Reference< css::sdbcx::XTablesSupplier > createCatalog();
 
             bool                matchesExtension( const OUString& _rExt ) const;
 
-            inline const OUString&    getExtension()            const { return m_aFilenameExtension; }
-            inline bool         isCaseSensitveExtension()   const { return m_bCaseSensitiveExtension; }
-            inline OFileDriver*     getDriver()                 const { return m_pDriver; }
-            inline bool         showDeleted()               const { return m_bShowDeleted; }
-            inline bool         isCheckEnabled()            const { return m_bCheckSQL92; }
-            inline bool             isTextEncodingDefaulted()   const { return m_bDefaultTextEncoding; }
+            const OUString&    getExtension()            const { return m_aFilenameExtension; }
+            bool         isCaseSensitiveExtension()   const { return m_bCaseSensitiveExtension; }
+            OFileDriver*     getDriver()                 const { return m_pDriver; }
+            bool         showDeleted()               const { return m_bShowDeleted; }
+            bool         isCheckEnabled()            const { return m_bCheckSQL92; }
+            bool             isTextEncodingDefaulted()   const { return m_bDefaultTextEncoding; }
 
         public:
             struct GrantAccess

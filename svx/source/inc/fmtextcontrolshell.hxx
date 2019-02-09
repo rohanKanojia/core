@@ -21,7 +21,6 @@
 
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/awt/XTextComponent.hpp>
-#include <com/sun/star/frame/XStatusListener.hpp>
 #include <com/sun/star/awt/XFocusListener.hpp>
 #include <com/sun/star/awt/XMouseListener.hpp>
 #include <com/sun/star/form/runtime/XFormController.hpp>
@@ -74,7 +73,6 @@ namespace svx
     };
 
     class FmTextControlShell :public IFocusObserver
-                             ,public ISlotInvalidator
                              ,public IContextRequestObserver
     {
     private:
@@ -102,7 +100,7 @@ namespace svx
 
         // translating between "slots" of the framework and "features" of the active control
         typedef rtl::Reference<FmTextControlFeature> ControlFeature;
-        typedef ::std::map< SfxSlotId, ControlFeature, ::std::less< SfxSlotId > >   ControlFeatures;
+        typedef ::std::map< SfxSlotId, ControlFeature >   ControlFeatures;
         ControlFeatures                                             m_aControlFeatures;
 
         SfxViewFrame*                                               m_pViewFrame;
@@ -134,7 +132,9 @@ namespace svx
 
         /** notifies the instance that the design mode has changed
         */
-        void    designModeChanged( bool _bNewDesignMode );
+        void    designModeChanged();
+
+        void    Invalidate( SfxSlotId _nSlot );
 
     protected:
         // IFocusObserver
@@ -144,22 +144,18 @@ namespace svx
         // IContextRequestObserver
         virtual void    contextMenuRequested( const css::awt::MouseEvent& _rEvent ) override;
 
-        // ISlotInvalidator
-        virtual void    Invalidate( SfxSlotId _nSlot ) override;
-
-    protected:
         enum AttributeSet { eCharAttribs, eParaAttribs };
         void    executeAttributeDialog( AttributeSet _eSet, SfxRequest& _rReq );
         void    executeSelectAll( );
         void    executeClipboardSlot( SfxSlotId _nSlot );
 
     private:
-        inline  bool    isControllerListening() const { return !m_aControlObservers.empty(); }
+        bool    isControllerListening() const { return !m_aControlObservers.empty(); }
 
         FmTextControlFeature*
                         implGetFeatureDispatcher(
                             const css::uno::Reference< css::frame::XDispatchProvider >& _rxProvider,
-                            SfxApplication* _pApplication,
+                            SfxApplication const * _pApplication,
                             SfxSlotId _nSlot
                         );
 
@@ -174,7 +170,7 @@ namespace svx
         static void     transferFeatureStatesToItemSet(
                             ControlFeatures& _rDispatchers,
                             SfxAllItemSet& _rSet,
-                            bool _bTranslateLatin = false
+                            bool _bTranslateLatin
                         );
 
         /// to be called when a control has been activated
@@ -195,11 +191,7 @@ namespace svx
         */
         void    stopControllerListening( );
 
-        /** parses the given URL's Complete member, by calling XURLTransformer::parseString
-        */
-        void    impl_parseURL_nothrow( css::util::URL& _rURL );
-
-        DECL_LINK_TYPED( OnInvalidateClipboard, Timer*, void );
+        DECL_LINK( OnInvalidateClipboard, Timer*, void );
     };
 
 

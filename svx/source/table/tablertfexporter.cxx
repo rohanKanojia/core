@@ -33,12 +33,12 @@
 #include <editeng/postitem.hxx>
 #include <editeng/udlnitem.hxx>
 
-#include "cell.hxx"
-#include "celltypes.hxx"
-#include "svx/svdotable.hxx"
-#include "svx/svdoutl.hxx"
-#include "editeng/editeng.hxx"
-#include "editeng/outlobj.hxx"
+#include <cell.hxx>
+#include <celltypes.hxx>
+#include <svx/svdotable.hxx>
+#include <svx/svdoutl.hxx>
+#include <editeng/editeng.hxx>
+#include <editeng/outlobj.hxx>
 
 
 using namespace ::com::sun::star::uno;
@@ -60,7 +60,6 @@ private:
     SvStream& mrStrm;
     SdrTableObj& mrObj;
     Reference< XTable > mxTable;
-    const OUString msSize;
 };
 
 void SdrTableObj::ExportAsRTF( SvStream& rStrm, SdrTableObj& rObj )
@@ -69,17 +68,18 @@ void SdrTableObj::ExportAsRTF( SvStream& rStrm, SdrTableObj& rObj )
     aEx.Write();
 }
 
+static const OUStringLiteral gsSize( "Size" );
+
 SdrTableRtfExporter::SdrTableRtfExporter( SvStream& rStrm, SdrTableObj& rObj )
 : mrStrm( rStrm )
 , mrObj( rObj )
 , mxTable( rObj.getTable() )
-, msSize( "Size" )
 {
 }
 
-long HundMMToTwips( long nIn )
+static long HundMMToTwips( long nIn )
 {
-    long nRet = OutputDevice::LogicToLogic( nIn, MAP_100TH_MM, MAP_TWIP );
+    long nRet = OutputDevice::LogicToLogic( nIn, MapUnit::Map100thMM, MapUnit::MapTwip );
     return nRet;
 }
 
@@ -100,13 +100,12 @@ void SdrTableRtfExporter::Write()
     {
         Reference< XPropertySet > xSet( xColumns->getByIndex(nCol), UNO_QUERY_THROW );
         sal_Int32 nWidth = 0;
-        xSet->getPropertyValue( msSize ) >>= nWidth;
+        xSet->getPropertyValue( gsSize ) >>= nWidth;
         nPos += HundMMToTwips( nWidth );
         aColumnStart.push_back( nPos );
     }
-    catch( Exception& e )
+    catch( Exception& )
     {
-        (void)e;
         OSL_FAIL("SdrTableRtfExporter::Write(), exception caught!");
     }
 
@@ -119,9 +118,8 @@ void SdrTableRtfExporter::Write()
         Reference< XPropertySet > xRowSet( xRows->getByIndex(nRow), UNO_QUERY_THROW );
         WriteRow( xRowSet, nRow, aColumnStart );
     }
-    catch( Exception& e )
+    catch( Exception& )
     {
-        (void)e;
         OSL_FAIL("SdrTableRtfExporter::Write(), exception caught!");
     }
 
@@ -131,7 +129,7 @@ void SdrTableRtfExporter::Write()
 void SdrTableRtfExporter::WriteRow( const Reference< XPropertySet >& xRowSet, sal_Int32 nRow, const std::vector< sal_Int32 >& aColumnStart )
 {
     sal_Int32 nRowHeight = 0;
-    xRowSet->getPropertyValue( msSize ) >>= nRowHeight;
+    xRowSet->getPropertyValue( gsSize ) >>= nRowHeight;
 
     mrStrm.WriteCharPtr( OOO_STRING_SVTOOLS_RTF_TROWD ).WriteCharPtr( OOO_STRING_SVTOOLS_RTF_TRGAPH ).WriteCharPtr( "30" ).WriteCharPtr( OOO_STRING_SVTOOLS_RTF_TRLEFT ).WriteCharPtr( "-30" );
     mrStrm.WriteCharPtr( OOO_STRING_SVTOOLS_RTF_TRRH ).WriteCharPtr( OString::number(nRowHeight).getStr() );
@@ -146,7 +144,7 @@ void SdrTableRtfExporter::WriteRow( const Reference< XPropertySet >& xRowSet, sa
 
         mrStrm.WriteCharPtr( OOO_STRING_SVTOOLS_RTF_CELLX ).WriteCharPtr( OString::number(aColumnStart[nCol]).getStr() );
         if ( (nCol & 0x0F) == 0x0F )
-            mrStrm.WriteCharPtr( SAL_NEWLINE_STRING );        // Zeilen nicht zu lang werden lassen
+            mrStrm.WriteCharPtr( SAL_NEWLINE_STRING );        // prevent long lines
     }
     mrStrm.WriteCharPtr( OOO_STRING_SVTOOLS_RTF_PARD ).WriteCharPtr( OOO_STRING_SVTOOLS_RTF_PLAIN ).WriteCharPtr( OOO_STRING_SVTOOLS_RTF_INTBL ).WriteCharPtr( SAL_NEWLINE_STRING );
 
@@ -176,7 +174,7 @@ void SdrTableRtfExporter::WriteCell( sal_Int32 nCol, sal_Int32 nRow )
 
     OUString aContent;
 
-    OutlinerParaObject* pParaObj = xCell->GetEditOutlinerParaObject();
+    OutlinerParaObject* pParaObj = xCell->GetEditOutlinerParaObject().release();
     bool bOwnParaObj = pParaObj != nullptr;
 
     if( pParaObj == nullptr )
@@ -202,9 +200,9 @@ void SdrTableRtfExporter::WriteCell( sal_Int32 nCol, sal_Int32 nRow )
 
     const SfxItemSet& rCellSet = xCell->GetItemSet();
 
-    const SvxWeightItem&        rWeightItem     = static_cast<const SvxWeightItem&>   ( rCellSet.Get( EE_CHAR_WEIGHT ) );
-    const SvxPostureItem&       rPostureItem    = static_cast<const SvxPostureItem&>  ( rCellSet.Get( EE_CHAR_ITALIC ) );
-    const SvxUnderlineItem&     rUnderlineItem  = static_cast<const SvxUnderlineItem&>( rCellSet.Get( EE_CHAR_UNDERLINE ) );
+    const SvxWeightItem&        rWeightItem     = rCellSet.Get( EE_CHAR_WEIGHT );
+    const SvxPostureItem&       rPostureItem    = rCellSet.Get( EE_CHAR_ITALIC );
+    const SvxUnderlineItem&     rUnderlineItem  = rCellSet.Get( EE_CHAR_UNDERLINE );
 
     const sal_Char* pChar;
 

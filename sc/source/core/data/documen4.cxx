@@ -17,33 +17,33 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svl/intitem.hxx>
 #include <svl/zforlist.hxx>
+#include <svl/zformat.hxx>
 #include <formula/token.hxx>
+#include <sal/log.hxx>
+#include <unotools/configmgr.hxx>
 
-#include "document.hxx"
-#include "table.hxx"
-#include "globstr.hrc"
-#include "subtotal.hxx"
-#include "docoptio.hxx"
-#include "interpre.hxx"
-#include "markdata.hxx"
-#include "validat.hxx"
-#include "scitems.hxx"
-#include "stlpool.hxx"
-#include "poolhelp.hxx"
-#include "detdata.hxx"
-#include "patattr.hxx"
-#include "chgtrack.hxx"
-#include "progress.hxx"
-#include "paramisc.hxx"
-#include "compiler.hxx"
-#include "externalrefmgr.hxx"
-#include "colorscale.hxx"
-#include "attrib.hxx"
-#include "formulacell.hxx"
-#include "tokenarray.hxx"
-#include "scmatrix.hxx"
+#include <document.hxx>
+#include <table.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <subtotal.hxx>
+#include <docoptio.hxx>
+#include <markdata.hxx>
+#include <validat.hxx>
+#include <scitems.hxx>
+#include <stlpool.hxx>
+#include <poolhelp.hxx>
+#include <detdata.hxx>
+#include <patattr.hxx>
+#include <chgtrack.hxx>
+#include <progress.hxx>
+#include <paramisc.hxx>
+#include <compiler.hxx>
+#include <externalrefmgr.hxx>
+#include <attrib.hxx>
+#include <formulacell.hxx>
+#include <tokenarray.hxx>
 #include <tokenstringcontext.hxx>
 #include <memory>
 
@@ -110,7 +110,7 @@ bool ScDocument::Solver(SCCOL nFCol, SCROW nFRow, SCTAB nFTab,
             fBestX = fXPrev = fSaveVal;
 
             pFormula->Interpret();
-            bool bError = ( pFormula->GetErrCode() != 0 );
+            bool bError = ( pFormula->GetErrCode() != FormulaError::NONE );
             // bError always corresponds with fF
 
             fFPrev = pFormula->GetValue() - fTargetVal;
@@ -132,7 +132,7 @@ bool ScDocument::Solver(SCCOL nFCol, SCROW nFRow, SCTAB nFTab,
                 *pVCell = fX;
                 SetDirty( aVRange, false );
                 pFormula->Interpret();
-                bError = ( pFormula->GetErrCode() != 0 );
+                bError = ( pFormula->GetErrCode() != FormulaError::NONE );
                 fF = pFormula->GetValue() - fTargetVal;
 
                 if ( fF == fFPrev && !bError )
@@ -146,13 +146,13 @@ bool ScDocument::Solver(SCCOL nFCol, SCROW nFRow, SCTAB nFTab,
                     sal_uInt16 nHorIter = 0;
                     const double fHorStepAngle = 5.0;
                     const double fHorMaxAngle = 80.0;
-                    int nHorMaxIter = static_cast<int>( fHorMaxAngle / fHorStepAngle );
+                    int const nHorMaxIter = static_cast<int>( fHorMaxAngle / fHorStepAngle );
                     bool bDoneHorMove = false;
 
                     while ( !bDoneHorMove && !bHorMoveError && nHorIter++ < nHorMaxIter )
                     {
                         double fHorAngle = fHorStepAngle * static_cast<double>( nHorIter );
-                        double fHorTangent = ::rtl::math::tan( fHorAngle * F_PI / 180 );
+                        double fHorTangent = ::rtl::math::tan(basegfx::deg2rad(fHorAngle));
 
                         sal_uInt16 nIdx = 0;
                         while( nIdx++ < 2 && !bDoneHorMove )
@@ -166,7 +166,7 @@ bool ScDocument::Solver(SCCOL nFCol, SCROW nFRow, SCTAB nFTab,
                             *pVCell = fHorX;
                             SetDirty( aVRange, false );
                             pFormula->Interpret();
-                            bHorMoveError = ( pFormula->GetErrCode() != 0 );
+                            bHorMoveError = ( pFormula->GetErrCode() != FormulaError::NONE );
                             if ( bHorMoveError )
                                 break;
 
@@ -243,12 +243,12 @@ bool ScDocument::Solver(SCCOL nFCol, SCROW nFRow, SCTAB nFTab,
             pFormula->Interpret();
             if ( !bDoneIteration )
             {
-                SetError( nVCol, nVRow, nVTab, NOTAVAILABLE );
+                SetError( nVCol, nVRow, nVTab, FormulaError::NotAvailable );
             }
         }
         else
         {
-            SetError( nVCol, nVRow, nVTab, NOTAVAILABLE );
+            SetError( nVCol, nVRow, nVTab, FormulaError::NotAvailable );
         }
     }
     return bRet;
@@ -270,15 +270,18 @@ void ScDocument::InsertMatrixFormula(SCCOL nCol1, SCROW nRow1,
         SAL_WARN("sc", "ScDocument::InsertMatrixFormula: No table marked");
         return;
     }
+    if (utl::ConfigManager::IsFuzzing()) //just too slow
+        return;
+    assert( ValidColRow( nCol1, nRow1) && ValidColRow( nCol2, nRow2));
 
     SCTAB nTab1 = *rMark.begin();
 
     ScFormulaCell* pCell;
     ScAddress aPos( nCol1, nRow1, nTab1 );
     if (pArr)
-        pCell = new ScFormulaCell(this, aPos, *pArr, eGram, MM_FORMULA);
+        pCell = new ScFormulaCell(this, aPos, *pArr, eGram, ScMatrixMode::Formula);
     else
-        pCell = new ScFormulaCell( this, aPos, rFormula, eGram, MM_FORMULA );
+        pCell = new ScFormulaCell( this, aPos, rFormula, eGram, ScMatrixMode::Formula );
     pCell->SetMatColsRows( nCol2 - nCol1 + 1, nRow2 - nRow1 + 1 );
     ScMarkData::const_iterator itr = rMark.begin(), itrEnd = rMark.end();
     SCTAB nMax = static_cast<SCTAB>(maTabs.size());
@@ -297,7 +300,7 @@ void ScDocument::InsertMatrixFormula(SCCOL nCol1, SCROW nRow1,
             maTabs[*itr]->SetFormulaCell(
                 nCol1, nRow1,
                 new ScFormulaCell(
-                    *pCell, *this, ScAddress(nCol1, nRow1, *itr), SC_CLONECELL_STARTLISTENING));
+                    *pCell, *this, ScAddress(nCol1, nRow1, *itr), ScCloneFlags::StartListening));
     }
 
     ScAddress aBasePos(nCol1, nRow1, nTab1);
@@ -325,7 +328,7 @@ void ScDocument::InsertMatrixFormula(SCCOL nCol1, SCROW nRow1,
             *t->GetSingleRef() = aRefData;
         }
 
-        for (SCCOL nCol = nCol1; nCol <= nCol2; ++nCol)
+        for (SCCOL nCol : GetColumnsRange(nTab1, nCol1, nCol2))
         {
             for (SCROW nRow = nRow1; nRow <= nRow2; ++nRow)
             {
@@ -339,7 +342,7 @@ void ScDocument::InsertMatrixFormula(SCCOL nCol1, SCROW nRow1,
                 aRefData.SetAddress(aBasePos, aPos);
                 *t->GetSingleRef() = aRefData;
                 std::unique_ptr<ScTokenArray> pTokArr(aArr.Clone());
-                pCell = new ScFormulaCell(this, aPos, *pTokArr, eGram, MM_REFERENCE);
+                pCell = new ScFormulaCell(this, aPos, *pTokArr, eGram, ScMatrixMode::Reference);
                 pTab->SetFormulaCell(nCol, nRow, pCell);
             }
         }
@@ -352,6 +355,7 @@ void ScDocument::InsertTableOp(const ScTabOpParam& rParam,  // multiple (repeate
 {
     PutInOrder(nCol1, nCol2);
     PutInOrder(nRow1, nRow2);
+    assert( ValidColRow( nCol1, nRow1) && ValidColRow( nCol2, nRow2));
     SCTAB i, nTab1;
     SCCOL j;
     SCROW k;
@@ -392,7 +396,7 @@ void ScDocument::InsertTableOp(const ScTabOpParam& rParam,  // multiple (repeate
         aRef.Set( nCol1, nRow1, nTab1, false, true, true );
         aForString.append(aRef.GetRefString(this, nTab1));
         nCol1++;
-        nCol2 = std::min( nCol2, (SCCOL)(rParam.aRefFormulaEnd.Col() -
+        nCol2 = std::min( nCol2, static_cast<SCCOL>(rParam.aRefFormulaEnd.Col() -
                     rParam.aRefFormulaCell.Col() + nCol1 + 1));
     }
     else if (rParam.meMode == ScTabOpParam::Row) // row only
@@ -405,7 +409,7 @@ void ScDocument::InsertTableOp(const ScTabOpParam& rParam,  // multiple (repeate
         aRef.Set( nCol1, nRow1, nTab1, true, false, true );
         aForString.append(aRef.GetRefString(this, nTab1));
         nRow1++;
-        nRow2 = std::min( nRow2, (SCROW)(rParam.aRefFormulaEnd.Row() -
+        nRow2 = std::min( nRow2, static_cast<SCROW>(rParam.aRefFormulaEnd.Row() -
                     rParam.aRefFormulaCell.Row() + nRow1 + 1));
     }
     else // both
@@ -426,7 +430,7 @@ void ScDocument::InsertTableOp(const ScTabOpParam& rParam,  // multiple (repeate
     aForString.append(ScCompiler::GetNativeSymbol( ocClose ));
 
     ScFormulaCell aRefCell( this, ScAddress( nCol1, nRow1, nTab1 ), aForString.makeStringAndClear(),
-           formula::FormulaGrammar::GRAM_NATIVE, MM_NONE );
+           formula::FormulaGrammar::GRAM_NATIVE, ScMatrixMode::NONE );
     for( j = nCol1; j <= nCol2; j++ )
         for( k = nRow1; k <= nRow2; k++ )
             for (i = 0; i < static_cast<SCTAB>(maTabs.size()); i++)
@@ -435,7 +439,7 @@ void ScDocument::InsertTableOp(const ScTabOpParam& rParam,  // multiple (repeate
                 for (; itr != itrEnd && *itr < nMax; ++itr)
                 if( maTabs[*itr] )
                     maTabs[*itr]->SetFormulaCell(
-                        j, k, new ScFormulaCell(aRefCell, *this, ScAddress(j, k, *itr), SC_CLONECELL_STARTLISTENING));
+                        j, k, new ScFormulaCell(aRefCell, *this, ScAddress(j, k, *itr), ScCloneFlags::StartListening));
             }
 }
 
@@ -461,24 +465,25 @@ bool setCacheTableReferenced(formula::FormulaToken& rToken, ScExternalRefManager
              * have to be marked as well, if so. Mechanism would be
              * different. */
             OSL_FAIL("ScDocument::MarkUsedExternalReferences: implement the svExternalName case!");
+            break;
         default:
-            ;
+            break;
     }
     return false;
 }
 
 }
 
-bool ScDocument::MarkUsedExternalReferences( ScTokenArray& rArr, const ScAddress& rPos )
+bool ScDocument::MarkUsedExternalReferences( const ScTokenArray& rArr, const ScAddress& rPos )
 {
     if (!rArr.GetLen())
         return false;
 
     ScExternalRefManager* pRefMgr = nullptr;
-    rArr.Reset();
+    formula::FormulaTokenArrayPlainIterator aIter( rArr );
     formula::FormulaToken* t = nullptr;
     bool bAllMarked = false;
-    while (!bAllMarked && (t = rArr.GetNextReferenceOrName()) != nullptr)
+    while (!bAllMarked && (t = aIter.GetNextReferenceOrName()) != nullptr)
     {
         if (t->IsExternalRef())
         {
@@ -496,7 +501,8 @@ bool ScDocument::MarkUsedExternalReferences( ScTokenArray& rArr, const ScAddress
                 continue;
 
             ScTokenArray* pArray = pRangeData->GetCode();
-            for (t = pArray->First(); t; t = pArray->Next())
+            formula::FormulaTokenArrayPlainIterator aArrayIter(*pArray);
+            for (t = aArrayIter.First(); t; t = aArrayIter.Next())
             {
                 if (!t->IsExternalRef())
                     continue;
@@ -531,7 +537,7 @@ bool ScDocument::GetNextMarkedCell( SCCOL& rCol, SCROW& rRow, SCTAB nTab,
 
 void ScDocument::ReplaceStyle(const SvxSearchItem& rSearchItem,
                               SCCOL nCol, SCROW nRow, SCTAB nTab,
-                              ScMarkData& rMark)
+                              const ScMarkData& rMark)
 {
     if (nTab < static_cast<SCTAB>(maTabs.size()) && maTabs[nTab])
         maTabs[nTab]->ReplaceStyle(rSearchItem, nCol, nRow, rMark, true/*bIsUndoP*/);
@@ -604,78 +610,72 @@ bool ScDocument::GetSelectionFunction( ScSubTotalFunc eFunc,
     SCTAB nMax = static_cast<SCTAB>(maTabs.size());
     ScMarkData::const_iterator itr = aMark.begin(), itrEnd = aMark.end();
 
-    for (; itr != itrEnd && *itr < nMax && !aData.bError; ++itr)
+    for (; itr != itrEnd && *itr < nMax && !aData.getError(); ++itr)
         if (maTabs[*itr])
             maTabs[*itr]->UpdateSelectionFunction(aData, aMark);
 
-            //TODO: pass rMark to UpdateSelection Function !!!!!
-
-    if (!aData.bError)
-        switch (eFunc)
-        {
-            case SUBTOTAL_FUNC_SUM:
-                rResult = aData.nVal;
-                break;
-            case SUBTOTAL_FUNC_SELECTION_COUNT:
-                rResult = aData.nCount;
-                break;
-            case SUBTOTAL_FUNC_CNT:
-            case SUBTOTAL_FUNC_CNT2:
-                rResult = aData.nCount;
-                break;
-            case SUBTOTAL_FUNC_AVE:
-                if (aData.nCount)
-                    rResult = aData.nVal / (double) aData.nCount;
-                else
-                    aData.bError = true;
-                break;
-            case SUBTOTAL_FUNC_MAX:
-            case SUBTOTAL_FUNC_MIN:
-                if (aData.nCount)
-                    rResult = aData.nVal;
-                else
-                    aData.bError = true;
-                break;
-            default:
-            {
-                // added to avoid warnings
-            }
-        }
-
-    if (aData.bError)
+    rResult = aData.getResult();
+    if (aData.getError())
         rResult = 0.0;
 
-    return !aData.bError;
+    return !aData.getError();
 }
 
-double ScDocument::RoundValueAsShown( double fVal, sal_uInt32 nFormat ) const
+double ScDocument::RoundValueAsShown( double fVal, sal_uInt32 nFormat, const ScInterpreterContext* pContext ) const
 {
-    short nType;
-    if ( (nType = GetFormatTable()->GetType( nFormat )) != css::util::NumberFormat::DATE
-      && nType != css::util::NumberFormat::TIME && nType != css::util::NumberFormat::DATETIME )
+    const SvNumberFormatter* pFormatter = pContext ? pContext->GetFormatTable() : GetFormatTable();
+    const SvNumberformat* pFormat = pFormatter->GetEntry( nFormat );
+    SvNumFormatType nType;
+    if (pFormat && (nType = pFormat->GetMaskedType()) != SvNumFormatType::DATE
+            && nType != SvNumFormatType::TIME && nType != SvNumFormatType::DATETIME )
     {
         short nPrecision;
         if ((nFormat % SV_COUNTRY_LANGUAGE_OFFSET) != 0)
         {
-            nPrecision = (short)GetFormatTable()->GetFormatPrecision( nFormat );
+            sal_uInt16 nIdx = pFormat->GetSubformatIndex( fVal );
+            nPrecision = static_cast<short>(pFormat->GetFormatPrecision( nIdx ));
             switch ( nType )
             {
-                case css::util::NumberFormat::PERCENT:      // 0.41% == 0.0041
+                case SvNumFormatType::PERCENT:      // 0.41% == 0.0041
                     nPrecision += 2;
                     break;
-                case css::util::NumberFormat::SCIENTIFIC:   // 1.23e-3 == 0.00123
+                case SvNumFormatType::SCIENTIFIC:   // 1.23e-3 == 0.00123
                 {
+                    short nExp = 0;
                     if ( fVal > 0.0 )
-                        nPrecision = sal::static_int_cast<short>( nPrecision - (short)floor( log10( fVal ) ) );
+                        nExp = static_cast<short>(floor( log10( fVal ) ));
                     else if ( fVal < 0.0 )
-                        nPrecision = sal::static_int_cast<short>( nPrecision - (short)floor( log10( -fVal ) ) );
+                        nExp = static_cast<short>(floor( log10( -fVal ) ));
+                    nPrecision -= nExp;
+                    short nInteger = static_cast<short>(pFormat->GetFormatIntegerDigits( nIdx ));
+                    if ( nInteger > 1 ) // Engineering notation
+                    {
+                        short nIncrement = nExp % nInteger;
+                        if ( nIncrement != 0 )
+                        {
+                            nPrecision += nIncrement;
+                            if (nExp < 0 )
+                                nPrecision += nInteger;
+                        }
+                    }
                     break;
                 }
+                case SvNumFormatType::FRACTION:     // get value of fraction representation
+                {
+                    return pFormat->GetRoundFractionValue( fVal );
+                }
+                case SvNumFormatType::NUMBER:
+                case SvNumFormatType::CURRENCY:
+                {   // tdf#106253 Thousands divisors for format "0,"
+                    nPrecision -=  pFormat->GetThousandDivisorPrecision( nIdx );
+                    break;
+                }
+                default: break;
             }
         }
         else
         {
-            nPrecision = (short)GetDocOptions().GetStdPrecision();
+            nPrecision = static_cast<short>(GetDocOptions().GetStdPrecision());
             // #i115512# no rounding for automatic decimals
             if (nPrecision == static_cast<short>(SvNumberFormatter::UNLIMITED_PRECISION))
                 return fVal;
@@ -692,13 +692,13 @@ double ScDocument::RoundValueAsShown( double fVal, sal_uInt32 nFormat ) const
 
 // conditional formats and validation ranges
 
-sal_uLong ScDocument::AddCondFormat( ScConditionalFormat* pNew, SCTAB nTab )
+sal_uLong ScDocument::AddCondFormat( std::unique_ptr<ScConditionalFormat> pNew, SCTAB nTab )
 {
     if(!pNew)
         return 0;
 
     if(ValidTab(nTab) && nTab < static_cast<SCTAB>(maTabs.size()) && maTabs[nTab])
-        return maTabs[nTab]->AddCondFormat( pNew );
+        return maTabs[nTab]->AddCondFormat( std::move(pNew) );
 
     return 0;
 }
@@ -709,12 +709,15 @@ sal_uLong ScDocument::AddValidationEntry( const ScValidationData& rNew )
         return 0;                   // empty is always 0
 
     if (!pValidationList)
-        pValidationList = new ScValidationDataList;
+    {
+        ScMutationGuard aGuard(this, ScMutationGuardFlags::CORE);
+        pValidationList.reset(new ScValidationDataList);
+    }
 
     sal_uLong nMax = 0;
     for( ScValidationDataList::iterator it = pValidationList->begin(); it != pValidationList->end(); ++it )
     {
-        const ScValidationData* pData = *it;
+        const ScValidationData* pData = it->get();
         sal_uLong nKey = pData->GetKey();
         if ( pData->EqualEntries( rNew ) )
             return nKey;
@@ -725,9 +728,10 @@ sal_uLong ScDocument::AddValidationEntry( const ScValidationData& rNew )
     // might be called from ScPatternAttr::PutInPool; thus clone (real copy)
 
     sal_uLong nNewKey = nMax + 1;
-    ScValidationData* pInsert = rNew.Clone(this);
+    std::unique_ptr<ScValidationData> pInsert(rNew.Clone(this));
     pInsert->SetKey( nNewKey );
-    pValidationList->InsertNew( pInsert );
+    ScMutationGuard aGuard(this, ScMutationGuardFlags::CORE);
+    pValidationList->InsertNew( std::move(pInsert) );
     return nNewKey;
 }
 
@@ -741,7 +745,7 @@ const SfxPoolItem* ScDocument::GetEffItem(
         const SfxPoolItem* pItem;
         if ( rSet.GetItemState( ATTR_CONDITIONAL, true, &pItem ) == SfxItemState::SET )
         {
-            const std::vector<sal_uInt32>& rIndex = static_cast<const ScCondFormatItem&>(pPattern->GetItem(ATTR_CONDITIONAL)).GetCondFormatData();
+            const std::vector<sal_uInt32>& rIndex = pPattern->GetItem(ATTR_CONDITIONAL).GetCondFormatData();
             ScConditionalFormatList* pCondFormList = GetCondFormList( nTab );
             if (!rIndex.empty() && pCondFormList)
             {
@@ -753,11 +757,11 @@ const SfxPoolItem* ScDocument::GetEffItem(
                     {
                         ScAddress aPos(nCol, nRow, nTab);
                         ScRefCellValue aCell(const_cast<ScDocument&>(*this), aPos);
-                        OUString aStyle = pForm->GetCellStyle(aCell, aPos);
+                        const OUString& aStyle = pForm->GetCellStyle(aCell, aPos);
                         if (!aStyle.isEmpty())
                         {
-                            SfxStyleSheetBase* pStyleSheet = xPoolHelper->GetStylePool()->Find(
-                                    aStyle, SFX_STYLE_FAMILY_PARA );
+                            SfxStyleSheetBase* pStyleSheet = mxPoolHelper->GetStylePool()->Find(
+                                    aStyle, SfxStyleFamily::Para );
                             if ( pStyleSheet && pStyleSheet->GetItemSet().GetItemState(
                                         nWhich, true, &pItem ) == SfxItemState::SET )
                                 return pItem;
@@ -782,7 +786,7 @@ const SfxItemSet* ScDocument::GetCondResult( SCCOL nCol, SCROW nRow, SCTAB nTab 
     ScRefCellValue aCell(const_cast<ScDocument&>(*this), aPos);
     const ScPatternAttr* pPattern = GetPattern( nCol, nRow, nTab );
     const std::vector<sal_uInt32>& rIndex =
-        static_cast<const ScCondFormatItem&>(pPattern->GetItem(ATTR_CONDITIONAL)).GetCondFormatData();
+        pPattern->GetItem(ATTR_CONDITIONAL).GetCondFormatData();
 
     return GetCondResult(aCell, aPos, *pFormatList, rIndex);
 }
@@ -802,7 +806,7 @@ const SfxItemSet* ScDocument::GetCondResult(
         if (!aStyle.isEmpty())
         {
             SfxStyleSheetBase* pStyleSheet =
-                xPoolHelper->GetStylePool()->Find(aStyle, SFX_STYLE_FAMILY_PARA);
+                mxPoolHelper->GetStylePool()->Find(aStyle, SfxStyleFamily::Para);
 
             if (pStyleSheet)
                 return &pStyleSheet->GetItemSet();
@@ -818,7 +822,7 @@ ScConditionalFormat* ScDocument::GetCondFormat(
                             SCCOL nCol, SCROW nRow, SCTAB nTab ) const
 {
     sal_uInt32 nIndex = 0;
-    const std::vector<sal_uInt32>& rCondFormats = static_cast<const ScCondFormatItem*>(GetAttr(nCol, nRow, nTab, ATTR_CONDITIONAL))->GetCondFormatData();
+    const std::vector<sal_uInt32>& rCondFormats = GetAttr(nCol, nRow, nTab, ATTR_CONDITIONAL)->GetCondFormatData();
 
     if(!rCondFormats.empty())
         nIndex = rCondFormats[0];
@@ -873,21 +877,19 @@ bool ScDocument::HasDetectiveOperations() const
 void ScDocument::AddDetectiveOperation( const ScDetOpData& rData )
 {
     if (!pDetOpList)
-        pDetOpList = new ScDetOpList;
+        pDetOpList.reset(new ScDetOpList);
 
     pDetOpList->Append( new ScDetOpData( rData ) );
 }
 
 void ScDocument::ClearDetectiveOperations()
 {
-    delete pDetOpList;      // deletes also the entries
-    pDetOpList = nullptr;
+    pDetOpList.reset();      // deletes also the entries
 }
 
-void ScDocument::SetDetOpList(ScDetOpList* pNew)
+void ScDocument::SetDetOpList(std::unique_ptr<ScDetOpList> pNew)
 {
-    delete pDetOpList;      // deletes also the entries
-    pDetOpList = pNew;
+    pDetOpList = std::move(pNew);
 }
 
 // Comparison of Documents
@@ -900,7 +902,7 @@ void ScDocument::SetDetOpList(ScDetOpList* pNew)
 
 sal_uInt16 ScDocument::RowDifferences( SCROW nThisRow, SCTAB nThisTab,
                                     ScDocument& rOtherDoc, SCROW nOtherRow, SCTAB nOtherTab,
-                                    SCCOL nMaxCol, SCCOLROW* pOtherCols )
+                                    SCCOL nMaxCol, const SCCOLROW* pOtherCols )
 {
     sal_uLong nDif = 0;
     sal_uLong nUsed = 0;
@@ -938,7 +940,7 @@ sal_uInt16 ScDocument::RowDifferences( SCROW nThisRow, SCTAB nThisTab,
 
 sal_uInt16 ScDocument::ColDifferences( SCCOL nThisCol, SCTAB nThisTab,
                                     ScDocument& rOtherDoc, SCCOL nOtherCol, SCTAB nOtherTab,
-                                    SCROW nMaxRow, SCCOLROW* pOtherRows )
+                                    SCROW nMaxRow, const SCCOLROW* pOtherRows )
 {
 
     //TODO: optimize e.g. with iterator?
@@ -979,7 +981,7 @@ sal_uInt16 ScDocument::ColDifferences( SCCOL nThisCol, SCTAB nThisTab,
 
 void ScDocument::FindOrder( SCCOLROW* pOtherRows, SCCOLROW nThisEndRow, SCCOLROW nOtherEndRow,
                             bool bColumns, ScDocument& rOtherDoc, SCTAB nThisTab, SCTAB nOtherTab,
-                            SCCOLROW nEndCol, SCCOLROW* pTranslate, ScProgress* pProgress, sal_uLong nProAdd )
+                            SCCOLROW nEndCol, const SCCOLROW* pTranslate, ScProgress* pProgress, sal_uLong nProAdd )
 {
     //  bColumns=true: rows are columns and vice versa
 
@@ -1098,7 +1100,7 @@ void ScDocument::CompareDocument( ScDocument& rOtherDoc )
                 if (!rOtherDoc.IsScenario(nTemp))
                 {
                     rOtherDoc.GetName( nTemp, aOtherName );
-                    if ( aThisName.equals(aOtherName) )
+                    if ( aThisName == aOtherName )
                         nOtherTab = nTemp;
                 }
         }
@@ -1157,7 +1159,7 @@ void ScDocument::CompareDocument( ScDocument& rOtherDoc )
 
             OUString aTabName;
             GetName( nThisTab, aTabName );
-            OUString aTemplate = ScGlobal::GetRscString(STR_PROGRESS_COMPARING);
+            OUString aTemplate = ScResId(STR_PROGRESS_COMPARING);
             sal_Int32 nIndex = 0;
             OUStringBuffer aProText = aTemplate.getToken( 0, '#', nIndex );
             aProText.append(aTabName);
@@ -1242,7 +1244,7 @@ void ScDocument::CompareDocument( ScDocument& rOtherDoc )
                     //  combine
                     if ( nThisCol == nThisEndCol || ValidCol(static_cast<SCCOL>(pOtherCols[nThisCol+1])) )
                     {
-                        SCCOL nFirstNew = static_cast<SCCOL>(nThisCol);
+                        SCCOL nFirstNew = nThisCol;
                         while ( nFirstNew > 0 && pOtherCols[nFirstNew-1] > MAXCOL )
                             --nFirstNew;
                         SCCOL nDiff = nThisCol - nFirstNew;

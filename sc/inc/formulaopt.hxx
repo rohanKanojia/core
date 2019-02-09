@@ -13,10 +13,8 @@
 #include <map>
 #include <svl/poolitem.hxx>
 #include <unotools/configitem.hxx>
-#include <unotools/localedatawrapper.hxx>
 #include <formula/grammar.hxx>
 #include "scdllapi.h"
-#include "global.hxx"
 #include "calcconfig.hxx"
 
 class SC_DLLPUBLIC ScFormulaOptions
@@ -36,8 +34,6 @@ private:
 
 public:
     ScFormulaOptions();
-    ScFormulaOptions( const ScFormulaOptions& rCpy );
-    ~ScFormulaOptions();
 
     void SetDefaults();
 
@@ -55,13 +51,13 @@ public:
     bool GetWriteCalcConfig() const { return mbWriteCalcConfig; }
 
     void SetFormulaSepArg(const OUString& rSep) { aFormulaSepArg = rSep; }
-    OUString GetFormulaSepArg() const { return aFormulaSepArg; }
+    const OUString& GetFormulaSepArg() const { return aFormulaSepArg; }
 
     void SetFormulaSepArrayRow(const OUString& rSep) { aFormulaSepArrayRow = rSep; }
-    OUString GetFormulaSepArrayRow() const { return aFormulaSepArrayRow; }
+    const OUString& GetFormulaSepArrayRow() const { return aFormulaSepArrayRow; }
 
     void SetFormulaSepArrayCol(const OUString& rSep) { aFormulaSepArrayCol = rSep; }
-    OUString GetFormulaSepArrayCol() const { return aFormulaSepArrayCol; }
+    const OUString& GetFormulaSepArrayCol() const { return aFormulaSepArrayCol; }
 
     void SetOOXMLRecalcOptions( ScRecalcOptions eOpt ) { meOOXMLRecalc = eOpt; }
     ScRecalcOptions GetOOXMLRecalcOptions() const { return meOOXMLRecalc; }
@@ -73,9 +69,6 @@ public:
 
     static void GetDefaultFormulaSeparators(OUString& rSepArg, OUString& rSepArrayCol, OUString& rSepArrayRow);
 
-    static const LocaleDataWrapper& GetLocaleDataWrapper();
-
-    ScFormulaOptions&  operator=  ( const ScFormulaOptions& rCpy );
     bool               operator== ( const ScFormulaOptions& rOpt ) const;
     bool               operator!= ( const ScFormulaOptions& rOpt ) const;
 };
@@ -85,10 +78,13 @@ public:
 class SC_DLLPUBLIC ScTpFormulaItem : public SfxPoolItem
 {
 public:
-    ScTpFormulaItem( sal_uInt16 nWhich,
-                   const ScFormulaOptions& rOpt );
-    ScTpFormulaItem( const ScTpFormulaItem& rItem );
-    virtual ~ScTpFormulaItem();
+    ScTpFormulaItem( const ScFormulaOptions& rOpt );
+    virtual ~ScTpFormulaItem() override;
+
+    ScTpFormulaItem(ScTpFormulaItem const &) = default;
+    ScTpFormulaItem(ScTpFormulaItem &&) = default;
+    ScTpFormulaItem & operator =(ScTpFormulaItem const &) = delete; // due to SfxPoolItem
+    ScTpFormulaItem & operator =(ScTpFormulaItem &&) = delete; // due to SfxPoolItem
 
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
@@ -96,7 +92,7 @@ public:
     const ScFormulaOptions& GetFormulaOptions() const { return theOptions; }
 
 private:
-    ScFormulaOptions theOptions;
+    ScFormulaOptions const theOptions;
 };
 
 // config item

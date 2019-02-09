@@ -22,11 +22,12 @@
 
 #include <comphelper/interfacecontainer2.hxx>
 
-#include <com/sun/star/lang/XEventListener.hpp>
+#include <com/sun/star/lang/EventObject.hpp>
 #include <comphelper/comphelperdllapi.h>
 
 #include <memory>
 
+namespace com { namespace sun { namespace star { namespace lang { class XEventListener; } } } }
 
 namespace comphelper
 {
@@ -98,7 +99,7 @@ namespace comphelper
 
             @return
                 <TRUE/> if all listeners have been notified, <FALSE/> else. The latter can happen
-                if <member>implNotify</member> cancelles the notification loop.
+                if <member>implNotify</member> cancels the notification loop.
 
             @see implNotify
         */
@@ -169,12 +170,12 @@ namespace comphelper
         {
         }
 
-        inline void addListener( const css::uno::Reference< ListenerClass >& _rxListener )
+        void addListener( const css::uno::Reference< ListenerClass >& _rxListener )
         {
             OListenerContainer::impl_addListener( _rxListener.get() );
         }
 
-        inline void removeListener( const css::uno::Reference< ListenerClass >& _rxListener )
+        void removeListener( const css::uno::Reference< ListenerClass >& _rxListener )
         {
             OListenerContainer::impl_removeListener( _rxListener.get() );
         }
@@ -186,7 +187,7 @@ namespace comphelper
         using OListenerContainer::createIterator;
 
         /// typed notification
-        inline bool    notify( const EventClass& _rEvent, NotificationMethod _pNotify );
+        inline void    notify( const EventClass& _rEvent, NotificationMethod _pNotify );
 
     protected:
         virtual bool    implNotify(
@@ -203,12 +204,11 @@ namespace comphelper
 
 
     template< class LISTENER, class EVENT >
-    inline bool OSimpleListenerContainer< LISTENER, EVENT >::notify( const EventClass& _rEvent, NotificationMethod _pNotify )
+    inline void OSimpleListenerContainer< LISTENER, EVENT >::notify( const EventClass& _rEvent, NotificationMethod _pNotify )
     {
         m_pNotificationMethod = _pNotify;
-        bool bRet = OListenerContainer::impl_notify( _rEvent );
+        OListenerContainer::impl_notify( _rEvent );
         m_pNotificationMethod = nullptr;
-        return bRet;
     }
 
     //= OListenerContainerBase
@@ -224,21 +224,21 @@ namespace comphelper
         typedef EVENT       EventClass;
 
     public:
-        inline OListenerContainerBase( ::osl::Mutex& _rMutex ) : OListenerContainer( _rMutex )
+        OListenerContainerBase( ::osl::Mutex& _rMutex ) : OListenerContainer( _rMutex )
         {
         }
 
-        inline void addTypedListener( const css::uno::Reference< ListenerClass >& _rxListener )
+        void addTypedListener( const css::uno::Reference< ListenerClass >& _rxListener )
         {
             OListenerContainer::impl_addListener( _rxListener.get() );
         }
 
-        inline void removeTypedListener( const css::uno::Reference< ListenerClass >& _rxListener )
+        void removeTypedListener( const css::uno::Reference< ListenerClass >& _rxListener )
         {
             OListenerContainer::impl_removeListener( _rxListener.get() );
         }
 
-        inline bool notify( const EventClass& _rEvent )
+        bool notify( const EventClass& _rEvent )
         {
             return OListenerContainer::impl_notify( _rEvent );
         }

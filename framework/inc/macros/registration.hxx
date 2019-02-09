@@ -41,7 +41,7 @@ ________________________________________________________________________________
 #define IFFACTORY( CLASS )                                                                                                              \
     /* If searched name found ... */                                                                                                    \
     /* You can't add some statements before follow line ... Here can be an ELSE-statement! */                                           \
-    if ( CLASS::impl_getStaticImplementationName().equals( OUString::createFromAscii( pImplementationName ) ) )                  \
+    if ( CLASS::impl_getStaticImplementationName().equalsAscii( pImplementationName ) )                  \
     {                                                                                                                                   \
         /* ... then create right factory for this service.                                  */                                          \
         /* xFactory and xServiceManager are local variables of method which use this macro. */                                          \
@@ -49,10 +49,10 @@ ________________________________________________________________________________
     }
 
 //  public
-//  define method to instanciate new services
+//  define method to instantiate new services
 
 #define COMPONENTGETFACTORY( LIB, IFFACTORIES )                                                                                         \
-    extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL LIB##_component_getFactory( const sal_Char* pImplementationName,                      \
+    extern "C" SAL_DLLPUBLIC_EXPORT void* LIB##_component_getFactory( const sal_Char* pImplementationName,                      \
                                                             void*       pServiceManager     ,                                           \
                                                             void*     /*pRegistryKey*/      )                                           \
     {                                                                                                                                   \

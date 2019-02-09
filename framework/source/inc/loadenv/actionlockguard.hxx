@@ -31,7 +31,7 @@ namespace framework{
     @descr  This guard should be used to be sure, that any lock will be
             released. Otherwise the locked document can hinder the office on shutdown!
 */
-class ActionLockGuard
+class ActionLockGuard final
 {
 
     // member
@@ -61,21 +61,10 @@ class ActionLockGuard
         {
         }
 
-        /** @short  initialize new guard instance and lock the given resource immediately.
-
-            @param  xLock
-                    points to the outside resource, which should be locked.
-         */
-        ActionLockGuard(const css::uno::Reference< css::document::XActionLockable >& xLock)
-            : m_bActionLocked(false)
-        {
-            setResource(xLock);
-        }
-
         /** @short  release this guard instance and make sure, that no lock
                     will exist afterwards on the internal wrapped resource.
          */
-        virtual ~ActionLockGuard()
+        ~ActionLockGuard()
         {
             unlock();
         }
@@ -134,7 +123,7 @@ class ActionLockGuard
                 xLock->removeActionLock();
         }
 
-        /** @short  unlock the internal wrapped resource, if its not already done. */
+        /** @short  unlock the internal wrapped resource, if it's not already done. */
         void unlock()
         {
             osl::MutexGuard g(m_mutex);

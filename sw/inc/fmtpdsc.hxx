@@ -21,26 +21,21 @@
 
 #include <svl/poolitem.hxx>
 #include "swdllapi.h"
-#include <hintids.hxx>
-#include <format.hxx>
-#include <calbck.hxx>
+#include "hintids.hxx"
+#include "format.hxx"
+#include "calbck.hxx"
 #include <boost/optional.hpp>
-#include <pagedesc.hxx>
+#include "pagedesc.hxx"
 
-class SwPageDesc;
-class SwHistory;
-class SwPaM;
 class IntlWrapper;
-class SwEndNoteInfo;
 
 /** Pagedescriptor
  Client of SwPageDesc that is "described" by the attribute. */
 
 class SW_DLLPUBLIC SwFormatPageDesc : public SfxPoolItem, public SwClient
 {
-    ::boost::optional<sal_uInt16> oNumOffset;          ///< Offset page number.
-    sal_uInt16 nDescNameIdx;        ///< SW3-Reader: stringpool-index of style name.
-    SwModify* pDefinedIn;       /**< Points to the object in which the
+    ::boost::optional<sal_uInt16> m_oNumOffset;          ///< Offset page number.
+    SwModify* m_pDefinedIn;       /**< Points to the object in which the
                                  attribute was set (ContentNode/Format). */
 protected:
     virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem *pNew ) override;
@@ -50,36 +45,36 @@ public:
     SwFormatPageDesc( const SwPageDesc *pDesc = nullptr );
     SwFormatPageDesc( const SwFormatPageDesc &rCpy );
     SwFormatPageDesc &operator=( const SwFormatPageDesc &rCpy );
-    virtual ~SwFormatPageDesc();
+    virtual ~SwFormatPageDesc() override;
 
 
     /// "Pure virtual methods" of SfxPoolItem.
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper*    pIntl = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& rIntl ) const override;
     virtual bool QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
           SwPageDesc *GetPageDesc() { return static_cast<SwPageDesc*>(GetRegisteredIn()); }
     const SwPageDesc *GetPageDesc() const { return static_cast<const SwPageDesc*>(GetRegisteredIn()); }
 
-    ::boost::optional<sal_uInt16>  GetNumOffset() const        { return oNumOffset; }
-    void    SetNumOffset( const ::boost::optional<sal_uInt16>& oNum ) { oNumOffset = oNum; }
+    const ::boost::optional<sal_uInt16>&  GetNumOffset() const        { return m_oNumOffset; }
+    void    SetNumOffset( const ::boost::optional<sal_uInt16>& oNum ) { m_oNumOffset = oNum; }
 
     /// Query / set where attribute is anchored.
-    inline const SwModify* GetDefinedIn() const { return pDefinedIn; }
-    void ChgDefinedIn( const SwModify* pNew ) { pDefinedIn = const_cast<SwModify*>(pNew); }
+    const SwModify* GetDefinedIn() const { return m_pDefinedIn; }
+    void ChgDefinedIn( const SwModify* pNew ) { m_pDefinedIn = const_cast<SwModify*>(pNew); }
     void RegisterToPageDesc( SwPageDesc& );
     bool KnowsPageDesc() const;
     void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
 };
 
 inline const SwFormatPageDesc &SwAttrSet::GetPageDesc(bool bInP) const
-    { return static_cast<const SwFormatPageDesc&>(Get( RES_PAGEDESC,bInP)); }
+    { return Get( RES_PAGEDESC,bInP); }
 
 inline const SwFormatPageDesc &SwFormat::GetPageDesc(bool bInP) const
     { return m_aSet.GetPageDesc(bInP); }

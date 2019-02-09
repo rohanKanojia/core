@@ -7,25 +7,25 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <memory>
 #include <document.hxx>
 #include <clipcontext.hxx>
-#include <formulacell.hxx>
 #include <clipparam.hxx>
 #include <table.hxx>
 #include <tokenarray.hxx>
-#include <editutil.hxx>
 #include <listenercontext.hxx>
 #include <tokenstringcontext.hxx>
 #include <poolhelp.hxx>
 #include <bcaslot.hxx>
 #include <cellvalues.hxx>
 #include <docpool.hxx>
+#include <columniterator.hxx>
 
-#include "dociter.hxx"
-#include "patattr.hxx"
-#include <svl/whiter.hxx>
+#include <refupdatecontext.hxx>
+#include <sal/log.hxx>
 #include <editeng/colritem.hxx>
-#include "scitems.hxx"
+#include <scitems.hxx>
+#include <datamapper.hxx>
 
 // Add totally brand-new methods to this source file.
 
@@ -36,6 +36,21 @@ bool ScDocument::IsMerged( const ScAddress& rPos ) const
         return false;
 
     return pTab->IsMerged(rPos.Col(), rPos.Row());
+}
+
+sc::MultiDataCellState ScDocument::HasMultipleDataCells( const ScRange& rRange ) const
+{
+    if (rRange.aStart.Tab() != rRange.aEnd.Tab())
+        // Currently we only support a single-sheet range.
+        return sc::MultiDataCellState();
+
+    const ScTable* pTab = FetchTable(rRange.aStart.Tab());
+    if (!pTab)
+        return sc::MultiDataCellState(sc::MultiDataCellState::Empty);
+
+    const ScAddress& s = rRange.aStart;
+    const ScAddress& e = rRange.aEnd;
+    return pTab->HasMultipleDataCells(s.Col(), s.Row(), e.Col(), e.Row());
 }
 
 void ScDocument::DeleteBeforeCopyFromClip(
@@ -81,6 +96,10 @@ bool ScDocument::CopyOneCellFromClip(
     if (nDestColSize < nSrcColSize)
         return false;
 
+    if (pClipDoc->maTabs.size() > 1)
+        // Copying from multiple source sheets is not handled here.
+        return false;
+
     ScAddress aSrcPos = aClipRange.aStart;
 
     for (SCCOL nCol = aClipRange.aStart.Col(); nCol <= aClipRange.aEnd.Col(); ++nCol)
@@ -118,13 +137,16 @@ bool ScDocument::CopyOneCellFromClip(
     for (SCTAB i = rCxt.getTabStart(); i <= nTabEnd && i < static_cast<SCTAB>(maTabs.size()); ++i)
     {
         maTabs[i]->CopyOneCellFromClip(rCxt, nCol1, nRow1, nCol2, nRow2,  aClipRange.aStart.Row(), pSrcTab);
-        if (rCxt.getInsertFlag() & InsertDeleteFlags::ATTRIB)
-            for (SCROW nRow = nRow1; nRow <= nRow2; ++nRow)
-            {
-                maTabs[i]->CopyConditionalFormat(nCol1, nRow, nCol2, nRow, nCol1 - aClipRange.aStart.Col(),
-                        nRow - aClipRange.aStart.Row(), pSrcTab);
-            }
     }
+
+    sc::RefUpdateContext aRefCxt(*this);
+    aRefCxt.maRange = ScRange(nCol1, nRow1, rCxt.getTabStart(), nCol2, nRow2, nTabEnd);
+    aRefCxt.mnColDelta = nCol1 - aSrcPos.Col();
+    aRefCxt.mnRowDelta = nRow1 - aSrcPos.Row();
+    aRefCxt.mnTabDelta = rCxt.getTabStart() - aSrcPos.Tab();
+    // Only Copy&Paste, for Cut&Paste we already bailed out early.
+    aRefCxt.meMode = URM_COPY;
+    UpdateReference(aRefCxt, rCxt.getUndoDoc(), false);
 
     return true;
 }
@@ -161,9 +183,8 @@ std::set<Color> ScDocument::GetDocColors()
     std::set<Color> aDocColors;
     ScDocumentPool *pPool = GetPool();
     const sal_uInt16 pAttribs[] = {ATTR_BACKGROUND, ATTR_FONT_COLOR};
-    for (size_t i=0; i<SAL_N_ELEMENTS( pAttribs ); i++)
+    for (sal_uInt16 nAttrib : pAttribs)
     {
-        const sal_uInt16 nAttrib = pAttribs[i];
         const sal_uInt32 nCount = pPool->GetItemCount2(nAttrib);
         for (sal_uInt32 j=0; j<nCount; j++)
         {
@@ -171,7 +192,7 @@ std::set<Color> ScDocument::GetDocColors()
             if (pItem == nullptr)
                 continue;
             Color aColor( pItem->GetValue() );
-            if (COL_AUTO != aColor.GetColor())
+            if (COL_AUTO != aColor)
                 aDocColors.insert(aColor);
         }
     }
@@ -180,6 +201,7 @@ std::set<Color> ScDocument::GetDocColors()
 
 void ScDocument::SetCalcConfig( const ScCalcConfig& rConfig )
 {
+    ScMutationGuard aGuard(this, ScMutationGuardFlags::CORE);
     maCalcConfig = rConfig;
 }
 
@@ -223,6 +245,54 @@ void ScDocument::SwapNonEmpty( sc::TableValues& rValues )
     aEndCxt.purgeEmptyBroadcasters();
 }
 
+void ScDocument::PreprocessAllRangeNamesUpdate( const std::map<OUString, std::unique_ptr<ScRangeName>>& rRangeMap )
+{
+    // Update all existing names with new names.
+    // The prerequisites are that the name dialog preserves ScRangeData index
+    // for changes and does not reuse free index slots for new names.
+    // ScDocument::SetAllRangeNames() hereafter then will replace the
+    // ScRangeName containers of ScRangeData instances with empty
+    // ScRangeData::maNewName.
+    std::map<OUString, ScRangeName*> aRangeNameMap;
+    GetRangeNameMap( aRangeNameMap);
+    for (const auto& itTab : aRangeNameMap)
+    {
+        ScRangeName* pOldRangeNames = itTab.second;
+        if (!pOldRangeNames)
+            continue;
+
+        const auto& itNewTab( rRangeMap.find( itTab.first));
+        if (itNewTab == rRangeMap.end())
+            continue;
+
+        const ScRangeName* pNewRangeNames = itNewTab->second.get();
+        if (!pNewRangeNames)
+            continue;
+
+        for (ScRangeName::iterator it( pOldRangeNames->begin()), itEnd( pOldRangeNames->end());
+                it != itEnd; ++it)
+        {
+            ScRangeData* pOldData = it->second.get();
+            if (!pOldData)
+                continue;
+
+            const ScRangeData* pNewData = pNewRangeNames->findByIndex( pOldData->GetIndex());
+            if (pNewData)
+                pOldData->SetNewName( pNewData->GetName());
+        }
+    }
+
+    sc::EndListeningContext aEndListenCxt(*this);
+    sc::CompileFormulaContext aCompileCxt(this);
+
+    TableContainer::iterator it = maTabs.begin(), itEnd = maTabs.end();
+    for (; it != itEnd; ++it)
+    {
+        ScTable* p = it->get();
+        p->PreprocessRangeNameUpdate(aEndListenCxt, aCompileCxt);
+    }
+}
+
 void ScDocument::PreprocessRangeNameUpdate()
 {
     sc::EndListeningContext aEndListenCxt(*this);
@@ -231,7 +301,7 @@ void ScDocument::PreprocessRangeNameUpdate()
     TableContainer::iterator it = maTabs.begin(), itEnd = maTabs.end();
     for (; it != itEnd; ++it)
     {
-        ScTable* p = *it;
+        ScTable* p = it->get();
         p->PreprocessRangeNameUpdate(aEndListenCxt, aCompileCxt);
     }
 }
@@ -244,7 +314,7 @@ void ScDocument::PreprocessDBDataUpdate()
     TableContainer::iterator it = maTabs.begin(), itEnd = maTabs.end();
     for (; it != itEnd; ++it)
     {
-        ScTable* p = *it;
+        ScTable* p = it->get();
         p->PreprocessDBDataUpdate(aEndListenCxt, aCompileCxt);
     }
 }
@@ -256,14 +326,15 @@ void ScDocument::CompileHybridFormula()
     TableContainer::iterator it = maTabs.begin(), itEnd = maTabs.end();
     for (; it != itEnd; ++it)
     {
-        ScTable* p = *it;
+        ScTable* p = it->get();
         p->CompileHybridFormula(aStartListenCxt, aCompileCxt);
     }
 }
 
-void ScDocument::SharePooledResources( ScDocument* pSrcDoc )
+void ScDocument::SharePooledResources( const ScDocument* pSrcDoc )
 {
-    xPoolHelper = pSrcDoc->xPoolHelper;
+    ScMutationGuard aGuard(this, ScMutationGuardFlags::CORE);
+    mxPoolHelper = pSrcDoc->mxPoolHelper;
     mpCellStringPool = pSrcDoc->mpCellStringPool;
 }
 
@@ -301,6 +372,34 @@ void ScDocument::RegroupFormulaCells( SCTAB nTab, SCCOL nCol )
         return;
 
     pTab->RegroupFormulaCells(nCol);
+}
+
+void ScDocument::RegroupFormulaCells( const ScRange& rRange )
+{
+    for( SCTAB tab = rRange.aStart.Tab(); tab <= rRange.aEnd.Tab(); ++tab )
+        for( SCCOL col = rRange.aStart.Col(); col <= rRange.aEnd.Col(); ++col )
+            RegroupFormulaCells( tab, col );
+}
+
+void ScDocument::DelayFormulaGrouping( bool delay )
+{
+    if( delay )
+    {
+        if( pDelayedFormulaGrouping.get() == nullptr )
+            pDelayedFormulaGrouping.reset( new ScRange( ScAddress::INITIALIZE_INVALID ));
+    }
+    else
+    {
+        if( pDelayedFormulaGrouping.get() != nullptr && pDelayedFormulaGrouping->IsValid())
+            RegroupFormulaCells( *pDelayedFormulaGrouping );
+        pDelayedFormulaGrouping.reset();
+    }
+}
+
+void ScDocument::AddDelayedFormulaGroupingCell( const ScFormulaCell* cell )
+{
+    if( !pDelayedFormulaGrouping->In( cell->aPos ))
+        pDelayedFormulaGrouping->ExtendTo( cell->aPos );
 }
 
 void ScDocument::CollectAllAreaListeners(
@@ -391,13 +490,18 @@ void ScDocument::SetNeedsListeningGroups( const std::vector<ScAddress>& rPosArra
 
 namespace {
 
-class StartNeededListenersHandler : public std::unary_function<ScTable*, void>
+class StartNeededListenersHandler
 {
     std::shared_ptr<sc::StartListeningContext> mpCxt;
 public:
     explicit StartNeededListenersHandler( ScDocument& rDoc ) : mpCxt(new sc::StartListeningContext(rDoc)) {}
+    explicit StartNeededListenersHandler( ScDocument& rDoc, const std::shared_ptr<const sc::ColumnSet>& rpColSet ) :
+        mpCxt(new sc::StartListeningContext(rDoc))
+    {
+        mpCxt->setColumnSet( rpColSet);
+    }
 
-    void operator() (ScTable* p)
+    void operator() (const ScTableUniquePtr & p)
     {
         if (p)
             p->StartListeners(*mpCxt, false);
@@ -411,8 +515,16 @@ void ScDocument::StartNeededListeners()
     std::for_each(maTabs.begin(), maTabs.end(), StartNeededListenersHandler(*this));
 }
 
+void ScDocument::StartNeededListeners( const std::shared_ptr<const sc::ColumnSet>& rpColSet )
+{
+    std::for_each(maTabs.begin(), maTabs.end(), StartNeededListenersHandler(*this, rpColSet));
+}
+
 void ScDocument::StartAllListeners( const ScRange& rRange )
 {
+    if (IsClipOrUndo() || GetNoListening())
+        return;
+
     std::shared_ptr<sc::ColumnBlockPositionSet> pPosSet(new sc::ColumnBlockPositionSet(*this));
     sc::StartListeningContext aStartCxt(*this, pPosSet);
     sc::EndListeningContext aEndCxt(*this, pPosSet);
@@ -434,9 +546,445 @@ void ScDocument::finalizeOutlineImport()
     TableContainer::iterator it = maTabs.begin(), itEnd = maTabs.end();
     for (; it != itEnd; ++it)
     {
-        ScTable* p = *it;
+        ScTable* p = it->get();
         p->finalizeOutlineImport();
     }
+}
+
+bool ScDocument::FindRangeNamesReferencingSheet( sc::UpdatedRangeNames& rIndexes,
+        SCTAB nTokenTab, const sal_uInt16 nTokenIndex,
+        SCTAB nGlobalRefTab, SCTAB nLocalRefTab, SCTAB nOldTokenTab, SCTAB nOldTokenTabReplacement,
+        bool bSameDoc, int nRecursion) const
+{
+    if (nTokenTab < -1)
+    {
+        SAL_WARN("sc.core", "ScDocument::FindRangeNamesReferencingSheet - nTokenTab < -1 : " <<
+                nTokenTab << ", nTokenIndex " << nTokenIndex << " Fix the creator!");
+#if OSL_DEBUG_LEVEL > 0
+        const ScRangeData* pData = FindRangeNameBySheetAndIndex( nTokenTab, nTokenIndex);
+        SAL_WARN_IF( pData, "sc.core", "ScDocument::FindRangeNamesReferencingSheet - named expression is: " << pData->GetName());
+#endif
+        nTokenTab = -1;
+    }
+    SCTAB nRefTab = nGlobalRefTab;
+    if (nTokenTab == nOldTokenTab)
+    {
+        nTokenTab = nOldTokenTabReplacement;
+        nRefTab = nLocalRefTab;
+    }
+    else if (nTokenTab == nOldTokenTabReplacement)
+    {
+        nRefTab = nLocalRefTab;
+    }
+
+    if (rIndexes.isNameUpdated( nTokenTab, nTokenIndex))
+        return true;
+
+    ScRangeData* pData = FindRangeNameBySheetAndIndex( nTokenTab, nTokenIndex);
+    if (!pData)
+        return false;
+
+    ScTokenArray* pCode = pData->GetCode();
+    if (!pCode)
+        return false;
+
+    bool bRef = !bSameDoc;  // include every name used when copying to other doc
+    if (nRecursion < 126)   // whatever.. 42*3
+    {
+        formula::FormulaTokenArrayPlainIterator aIter(*pCode);
+        for (const formula::FormulaToken* p = aIter.First(); p; p = aIter.Next())
+        {
+            if (p->GetOpCode() == ocName)
+            {
+                bRef |= FindRangeNamesReferencingSheet( rIndexes, p->GetSheet(), p->GetIndex(),
+                        nGlobalRefTab, nLocalRefTab, nOldTokenTab, nOldTokenTabReplacement, bSameDoc, nRecursion+1);
+            }
+        }
+    }
+
+    if (!bRef)
+    {
+        SCTAB nPosTab = pData->GetPos().Tab();
+        if (nPosTab == nOldTokenTab)
+            nPosTab = nOldTokenTabReplacement;
+        bRef = pCode->ReferencesSheet( nRefTab, nPosTab);
+    }
+    if (bRef)
+        rIndexes.setUpdatedName( nTokenTab, nTokenIndex);
+
+    return bRef;
+}
+
+namespace {
+
+enum MightReferenceSheet
+{
+    UNKNOWN,
+    NONE,
+    CODE,
+    NAME
+};
+
+MightReferenceSheet mightRangeNameReferenceSheet( ScRangeData* pData, SCTAB nRefTab)
+{
+    ScTokenArray* pCode = pData->GetCode();
+    if (!pCode)
+        return MightReferenceSheet::NONE;
+
+    formula::FormulaTokenArrayPlainIterator aIter(*pCode);
+    for (const formula::FormulaToken* p = aIter.First(); p; p = aIter.Next())
+    {
+        if (p->GetOpCode() == ocName)
+            return MightReferenceSheet::NAME;
+    }
+
+    return pCode->ReferencesSheet( nRefTab, pData->GetPos().Tab()) ?
+        MightReferenceSheet::CODE : MightReferenceSheet::NONE;
+}
+
+ScRangeData* copyRangeName( const ScRangeData* pOldRangeData, ScDocument& rNewDoc, const ScDocument* pOldDoc,
+        const ScAddress& rNewPos, const ScAddress& rOldPos, bool bGlobalNamesToLocal,
+        SCTAB nOldSheet, const SCTAB nNewSheet, bool bSameDoc)
+{
+    ScAddress aRangePos( pOldRangeData->GetPos());
+    if (nNewSheet >= 0)
+        aRangePos.SetTab( nNewSheet);
+    ScRangeData* pRangeData = new ScRangeData(*pOldRangeData, &rNewDoc, &aRangePos);
+    pRangeData->SetIndex(0);    // needed for insert to assign a new index
+    ScTokenArray* pRangeNameToken = pRangeData->GetCode();
+    if (bSameDoc && nNewSheet >= 0)
+    {
+        if (bGlobalNamesToLocal && nOldSheet < 0)
+        {
+            nOldSheet = rOldPos.Tab();
+            if (rNewPos.Tab() <= nOldSheet)
+                // Sheet was inserted before and references already updated.
+                ++nOldSheet;
+        }
+        pRangeNameToken->AdjustSheetLocalNameReferences( nOldSheet, nNewSheet);
+    }
+    if (!bSameDoc)
+    {
+        pRangeNameToken->ReadjustAbsolute3DReferences(pOldDoc, &rNewDoc, pRangeData->GetPos(), true);
+        pRangeNameToken->AdjustAbsoluteRefs(pOldDoc, rOldPos, rNewPos, true);
+    }
+
+    bool bInserted;
+    if (nNewSheet < 0)
+        bInserted = rNewDoc.GetRangeName()->insert(pRangeData);
+    else
+        bInserted = rNewDoc.GetRangeName(nNewSheet)->insert(pRangeData);
+
+    return bInserted ? pRangeData : nullptr;
+}
+
+struct SheetIndex
+{
+    SCTAB const       mnSheet;
+    sal_uInt16 const  mnIndex;
+
+    SheetIndex( SCTAB nSheet, sal_uInt16 nIndex ) : mnSheet(nSheet < -1 ? -1 : nSheet), mnIndex(nIndex) {}
+    bool operator<( const SheetIndex& r ) const
+    {
+        // Ascending order sheet, index
+        if (mnSheet < r.mnSheet)
+            return true;
+        if (mnSheet == r.mnSheet)
+            return mnIndex < r.mnIndex;
+        return false;
+    }
+};
+typedef std::map< SheetIndex, SheetIndex > SheetIndexMap;
+
+ScRangeData* copyRangeNames( SheetIndexMap& rSheetIndexMap, std::vector<ScRangeData*>& rRangeDataVec,
+        const sc::UpdatedRangeNames& rReferencingNames, SCTAB nTab,
+        const ScRangeData* pOldRangeData, ScDocument& rNewDoc, const ScDocument* pOldDoc,
+        const ScAddress& rNewPos, const ScAddress& rOldPos, bool bGlobalNamesToLocal,
+        const SCTAB nOldSheet, const SCTAB nNewSheet, bool bSameDoc)
+{
+    ScRangeData* pRangeData = nullptr;
+    const ScRangeName* pOldRangeName = (nTab < 0 ? pOldDoc->GetRangeName() : pOldDoc->GetRangeName(nTab));
+    if (pOldRangeName)
+    {
+        const ScRangeName* pNewRangeName = (nNewSheet < 0 ? rNewDoc.GetRangeName() : rNewDoc.GetRangeName(nNewSheet));
+        sc::UpdatedRangeNames::NameIndicesType aSet( rReferencingNames.getUpdatedNames(nTab));
+        for (auto const & rIndex : aSet)
+        {
+            const ScRangeData* pCopyData = pOldRangeName->findByIndex(rIndex);
+            if (pCopyData)
+            {
+                // Match the original pOldRangeData to adapt the current
+                // token's values later. For that no check for an already
+                // copied name is needed as we only enter here if there was
+                // none.
+                if (pCopyData == pOldRangeData)
+                {
+                    pRangeData = copyRangeName( pCopyData, rNewDoc, pOldDoc, rNewPos, rOldPos,
+                            bGlobalNamesToLocal, nOldSheet, nNewSheet, bSameDoc);
+                    if (pRangeData)
+                    {
+                        rRangeDataVec.push_back(pRangeData);
+                        rSheetIndexMap.insert( std::make_pair( SheetIndex( nOldSheet, pCopyData->GetIndex()),
+                                    SheetIndex( nNewSheet, pRangeData->GetIndex())));
+                    }
+                }
+                else
+                {
+                    // First check if the name is already available as copy.
+                    const ScRangeData* pFoundData = pNewRangeName->findByUpperName( pCopyData->GetUpperName());
+                    if (pFoundData)
+                    {
+                        // Just add the resulting sheet/index mapping.
+                        rSheetIndexMap.insert( std::make_pair( SheetIndex( nOldSheet, pCopyData->GetIndex()),
+                                    SheetIndex( nNewSheet, pFoundData->GetIndex())));
+                    }
+                    else
+                    {
+                        ScRangeData* pTmpData = copyRangeName( pCopyData, rNewDoc, pOldDoc, rNewPos, rOldPos,
+                                bGlobalNamesToLocal, nOldSheet, nNewSheet, bSameDoc);
+                        if (pTmpData)
+                        {
+                            rRangeDataVec.push_back(pTmpData);
+                            rSheetIndexMap.insert( std::make_pair( SheetIndex( nOldSheet, pCopyData->GetIndex()),
+                                        SheetIndex( nNewSheet, pTmpData->GetIndex())));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return pRangeData;
+}
+
+}   // namespace
+
+bool ScDocument::CopyAdjustRangeName( SCTAB& rSheet, sal_uInt16& rIndex, ScRangeData*& rpRangeData,
+        ScDocument& rNewDoc, const ScAddress& rNewPos, const ScAddress& rOldPos, const bool bGlobalNamesToLocal,
+        const bool bUsedByFormula ) const
+{
+    const bool bSameDoc = (rNewDoc.GetPool() == const_cast<ScDocument*>(this)->GetPool());
+    if (bSameDoc && ((rSheet < 0 && !bGlobalNamesToLocal) || (rSheet >= 0 && rSheet != rOldPos.Tab())))
+        // Same doc and global name, if not copied to local name, or
+        // sheet-local name on other sheet stays the same.
+        return false;
+
+    // Ensure we don't fiddle with the references until exit.
+    const SCTAB nOldSheet = rSheet;
+    const sal_uInt16 nOldIndex = rIndex;
+
+    SAL_WARN_IF( !bSameDoc && nOldSheet >= 0 && nOldSheet != rOldPos.Tab(),
+            "sc.core", "adjustCopyRangeName - sheet-local name was on other sheet in other document");
+    /* TODO: can we do something about that? e.g. loop over sheets? */
+
+    OUString aRangeName;
+    ScRangeData* pOldRangeData = nullptr;
+
+    // XXX bGlobalNamesToLocal is also a synonym for copied sheet.
+    bool bInsertingBefore = (bGlobalNamesToLocal && bSameDoc && rNewPos.Tab() <= rOldPos.Tab());
+
+    // The Tab where an old local name is to be found or that a global name
+    // references. May differ below from nOldSheet if a sheet was inserted
+    // before the old position. Global names and local names other than on the
+    // old sheet or new sheet are already updated, local names on the old sheet
+    // or inserted sheet will be updated later. Confusing stuff. Watch out.
+    SCTAB nOldTab = (nOldSheet < 0 ? rOldPos.Tab() : nOldSheet);
+    if (bInsertingBefore)
+        // Sheet was already inserted before old position.
+        ++nOldTab;
+
+    // Search the name of the RangeName.
+    if (nOldSheet >= 0)
+    {
+        const ScRangeName* pNames = GetRangeName(nOldTab);
+        pOldRangeData = pNames ? pNames->findByIndex(nOldIndex) : nullptr;
+        if (!pOldRangeData)
+            return false;     // might be an error in the formula array
+        aRangeName = pOldRangeData->GetUpperName();
+    }
+    else
+    {
+        pOldRangeData = GetRangeName()->findByIndex(nOldIndex);
+        if (!pOldRangeData)
+            return false;     // might be an error in the formula array
+        aRangeName = pOldRangeData->GetUpperName();
+    }
+
+    // Find corresponding range name in new document.
+    // First search for local range name then global range names.
+    SCTAB nNewSheet = rNewPos.Tab();
+    ScRangeName* pNewNames = rNewDoc.GetRangeName(nNewSheet);
+    // Search local range names.
+    if (pNewNames)
+    {
+        rpRangeData = pNewNames->findByUpperName(aRangeName);
+    }
+    // Search global range names.
+    if (!rpRangeData && !bGlobalNamesToLocal)
+    {
+        nNewSheet = -1;
+        pNewNames = rNewDoc.GetRangeName();
+        if (pNewNames)
+            rpRangeData = pNewNames->findByUpperName(aRangeName);
+    }
+    // If no range name was found copy it.
+    if (!rpRangeData)
+    {
+        // Do not copy global name if it doesn't reference sheet or is not used
+        // by a formula copied to another document.
+        bool bEarlyBailOut = (nOldSheet < 0 && (bSameDoc || !bUsedByFormula));
+        MightReferenceSheet eMightReference = mightRangeNameReferenceSheet( pOldRangeData, nOldTab);
+        if (bEarlyBailOut && eMightReference == MightReferenceSheet::NONE)
+            return false;
+
+        if (eMightReference == MightReferenceSheet::NAME)
+        {
+            // Name these to clarify what is passed where.
+            const SCTAB nGlobalRefTab = nOldTab;
+            const SCTAB nLocalRefTab = (bInsertingBefore ? nOldTab-1 : nOldTab);
+            const SCTAB nOldTokenTab = (nOldSheet < 0 ? (bInsertingBefore ? nOldTab-1 : nOldTab) : nOldSheet);
+            const SCTAB nOldTokenTabReplacement = nOldTab;
+            sc::UpdatedRangeNames aReferencingNames;
+            FindRangeNamesReferencingSheet( aReferencingNames, nOldSheet, nOldIndex,
+                    nGlobalRefTab, nLocalRefTab, nOldTokenTab, nOldTokenTabReplacement, bSameDoc, 0);
+            if (bEarlyBailOut && aReferencingNames.isEmpty(-1) && aReferencingNames.isEmpty(nOldTokenTabReplacement))
+                return false;
+
+            SheetIndexMap aSheetIndexMap;
+            std::vector<ScRangeData*> aRangeDataVec;
+            if (!aReferencingNames.isEmpty(nOldTokenTabReplacement))
+            {
+                const SCTAB nTmpOldSheet = (nOldSheet < 0 ? nOldTab : nOldSheet);
+                nNewSheet = rNewPos.Tab();
+                rpRangeData = copyRangeNames( aSheetIndexMap, aRangeDataVec, aReferencingNames, nOldTab,
+                        pOldRangeData, rNewDoc, this, rNewPos, rOldPos,
+                        bGlobalNamesToLocal, nTmpOldSheet, nNewSheet, bSameDoc);
+            }
+            if ((bGlobalNamesToLocal || !bSameDoc) && !aReferencingNames.isEmpty(-1))
+            {
+                const SCTAB nTmpOldSheet = -1;
+                const SCTAB nTmpNewSheet = (bGlobalNamesToLocal ? rNewPos.Tab() : -1);
+                ScRangeData* pTmpData = copyRangeNames( aSheetIndexMap, aRangeDataVec, aReferencingNames, -1,
+                        pOldRangeData, rNewDoc, this, rNewPos, rOldPos,
+                        bGlobalNamesToLocal, nTmpOldSheet, nTmpNewSheet, bSameDoc);
+                if (!rpRangeData)
+                {
+                    rpRangeData = pTmpData;
+                    nNewSheet = nTmpNewSheet;
+                }
+            }
+
+            // Adjust copied nested names to new sheet/index.
+            for (auto & iRD : aRangeDataVec)
+            {
+                ScTokenArray* pCode = iRD->GetCode();
+                if (pCode)
+                {
+                    formula::FormulaTokenArrayPlainIterator aIter(*pCode);
+                    for (formula::FormulaToken* p = aIter.First(); p; p = aIter.Next())
+                    {
+                        if (p->GetOpCode() == ocName)
+                        {
+                            auto it = aSheetIndexMap.find( SheetIndex( p->GetSheet(), p->GetIndex()));
+                            if (it != aSheetIndexMap.end())
+                            {
+                                p->SetSheet( it->second.mnSheet);
+                                p->SetIndex( it->second.mnIndex);
+                            }
+                            else if (!bSameDoc)
+                            {
+                                SAL_WARN("sc.core","adjustCopyRangeName - mapping to new name in other doc missing");
+                                p->SetIndex(0);     // #NAME? error instead of arbitrary name.
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            nNewSheet = ((nOldSheet < 0 && !bGlobalNamesToLocal) ? -1 : rNewPos.Tab());
+            rpRangeData = copyRangeName( pOldRangeData, rNewDoc, this, rNewPos, rOldPos, bGlobalNamesToLocal,
+                    nOldSheet, nNewSheet, bSameDoc);
+        }
+    }
+    rSheet = nNewSheet;
+    rIndex = rpRangeData ? rpRangeData->GetIndex() : 0;     // 0 means not inserted
+    return true;
+}
+
+bool ScDocument::IsEditActionAllowed(
+    sc::ColRowEditAction eAction, SCTAB nTab, SCCOLROW nStart, SCCOLROW nEnd ) const
+{
+    const ScTable* pTab = FetchTable(nTab);
+    if (!pTab)
+        return false;
+
+    return pTab->IsEditActionAllowed(eAction, nStart, nEnd);
+}
+
+bool ScDocument::IsEditActionAllowed(
+    sc::ColRowEditAction eAction, const ScMarkData& rMark, SCCOLROW nStart, SCCOLROW nEnd ) const
+{
+    ScMarkData::const_iterator it = rMark.begin(), itEnd = rMark.end();
+    for (; it != itEnd; ++it)
+    {
+        if (!IsEditActionAllowed(eAction, *it, nStart, nEnd))
+            return false;
+    }
+
+    return true;
+}
+
+std::unique_ptr<sc::ColumnIterator> ScDocument::GetColumnIterator( SCTAB nTab, SCCOL nCol, SCROW nRow1, SCROW nRow2 ) const
+{
+    const ScTable* pTab = FetchTable(nTab);
+    if (!pTab)
+        return std::unique_ptr<sc::ColumnIterator>();
+
+    return pTab->GetColumnIterator(nCol, nRow1, nRow2);
+}
+
+bool ScDocument::EnsureFormulaCellResults( const ScRange& rRange, bool bSkipRunning )
+{
+    bool bAnyDirty = false;
+    for (SCTAB nTab = rRange.aStart.Tab(); nTab <= rRange.aEnd.Tab(); ++nTab)
+    {
+        ScTable* pTab = FetchTable(nTab);
+        if (!pTab)
+            continue;
+
+        bool bRet = pTab->EnsureFormulaCellResults(
+            rRange.aStart.Col(), rRange.aStart.Row(), rRange.aEnd.Col(), rRange.aEnd.Row(), bSkipRunning);
+        bAnyDirty = bAnyDirty || bRet;
+    }
+
+    return bAnyDirty;
+}
+
+sc::ExternalDataMapper& ScDocument::GetExternalDataMapper()
+{
+    if (!mpDataMapper)
+        mpDataMapper.reset(new sc::ExternalDataMapper(this));
+
+    return *mpDataMapper;
+}
+
+void ScDocument::StoreTabToCache(SCTAB nTab, SvStream& rStrm) const
+{
+    const ScTable* pTab = FetchTable(nTab);
+    if (!pTab)
+        return;
+
+    pTab->StoreToCache(rStrm);
+}
+
+void ScDocument::RestoreTabFromCache(SCTAB nTab, SvStream& rStrm)
+{
+    ScTable* pTab = FetchTable(nTab);
+    if (!pTab)
+        return;
+
+    pTab->RestoreFromCache(rStrm);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

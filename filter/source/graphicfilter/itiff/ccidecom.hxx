@@ -22,6 +22,8 @@
 
 #include <sal/types.h>
 #include <tools/solar.h>
+#include <array>
+#include <memory>
 
 #define CCI_OPTION_2D               1       // 2D compression (instead of 1D)
 #define CCI_OPTION_EOL              2       // There are EOL-Codes at the end of each line.
@@ -45,6 +47,16 @@ struct CCILookUpTableEntry {
 
 class SvStream;
 
+struct DecompressStatus
+{
+    bool m_bSuccess;
+    bool m_bBufferUnchanged;
+    DecompressStatus(bool bSuccess, bool bBufferUnchanged)
+        : m_bSuccess(bSuccess), m_bBufferUnchanged(bBufferUnchanged)
+    {
+    }
+};
+
 class CCIDecompressor {
 
 public:
@@ -54,7 +66,7 @@ public:
 
     void StartDecompression( SvStream & rIStream );
 
-    bool DecompressScanline(sal_uInt8 * pTarget, sal_uLong nTargetBits, bool bLastLine );
+    DecompressStatus DecompressScanline(sal_uInt8 * pTarget, sal_uLong nTargetBits, bool bLastLine);
 
 private:
 
@@ -64,7 +76,7 @@ private:
                     sal_uInt16 nHuffmanTableSize,
                     sal_uInt16 nMaxCodeBits);
 
-    bool ReadEOL( sal_uInt32 nMaxFillBits );
+    bool ReadEOL();
 
     bool Read2DTag();
 
@@ -80,15 +92,15 @@ private:
     static sal_uInt16 CountBits(const sal_uInt8 * pData, sal_uInt16 nDataSizeBits,
                      sal_uInt16 nBitPos, sal_uInt8 nBlackOrWhite);
 
-    void Read1DScanlineData(sal_uInt8 * pTarget, sal_uInt16 nTargetBits);
-
-    void Read2DScanlineData(sal_uInt8 * pTarget, sal_uInt16 nTargetBits);
+    //returns true if pTarget was unmodified
+    bool Read1DScanlineData(sal_uInt8 * pTarget, sal_uInt16 nTargetBits);
+    bool Read2DScanlineData(sal_uInt8 * pTarget, sal_uInt16 nTargetBits);
 
     bool bTableBad;
 
     bool bStatus;
 
-    sal_uInt8* pByteSwap;
+    std::unique_ptr<sal_uInt8[]> pByteSwap;
 
     SvStream * pIStream;
 
@@ -100,15 +112,15 @@ private:
 
     bool bFirstEOL;
 
-    CCILookUpTableEntry * pWhiteLookUp;
-    CCILookUpTableEntry * pBlackLookUp;
-    CCILookUpTableEntry * p2DModeLookUp;
-    CCILookUpTableEntry * pUncompLookUp;
+    std::array<CCILookUpTableEntry, 1<<13> pWhiteLookUp;
+    std::array<CCILookUpTableEntry, 1<<13> pBlackLookUp;
+    std::array<CCILookUpTableEntry, 1<<10> p2DModeLookUp;
+    std::array<CCILookUpTableEntry, 1<<11> pUncompLookUp;
 
     sal_uLong nInputBitsBuf;
     sal_uInt16 nInputBitsBufSize;
 
-    sal_uInt8 * pLastLine;
+    std::unique_ptr<sal_uInt8[]> pLastLine;
     sal_uLong nLastLineSize;
 };
 

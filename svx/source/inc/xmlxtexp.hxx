@@ -20,14 +20,14 @@
 #ifndef INCLUDED_SVX_SOURCE_INC_XMLXTEXP_HXX
 #define INCLUDED_SVX_SOURCE_INC_XMLXTEXP_HXX
 
-#include "xmloff/xmlexp.hxx"
+#include <xmloff/xmlexp.hxx>
 
 namespace com { namespace sun { namespace star {
     namespace frame { class XModel; }
     namespace uno { template<class X> class Reference; }
     namespace uno { class XInterface; }
     namespace container { class XNameContainer; }
-    namespace document { class XGraphicObjectResolver; }
+    namespace document { class XGraphicStorageHandler; }
     namespace xml { namespace sax { class XDocumentHandler; } }
 } } }
 
@@ -39,15 +39,15 @@ public:
         const OUString& rFileName,
         const css::uno::Reference< css::xml::sax::XDocumentHandler > & xHandler,
         const css::uno::Reference< css::container::XNameContainer > & xTable,
-        css::uno::Reference< css::document::XGraphicObjectResolver >& xGrfResolver);
+        css::uno::Reference<css::document::XGraphicStorageHandler> const & xGraphicStorageHandler);
 
-    virtual ~SvxXMLXTableExportComponent();
+    virtual ~SvxXMLXTableExportComponent() override;
 
+    /// @throws css::uno::RuntimeException
     static bool save( const OUString& rURL,
                       const css::uno::Reference< css::container::XNameContainer >& xTable,
                       const css::uno::Reference< css::embed::XStorage > &xStorage,
-                      OUString *pOptName )
-        throw (css::uno::RuntimeException, std::exception);
+                      OUString *pOptName );
 
     // methods without content:
     virtual void ExportAutoStyles_() override;

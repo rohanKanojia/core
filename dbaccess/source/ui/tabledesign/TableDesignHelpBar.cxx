@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TableDesignHelpBar.hxx"
-#include <tools/debug.hxx>
+#include <TableDesignHelpBar.hxx>
 #include <svtools/svmedit.hxx>
 #include <vcl/settings.hxx>
-#include "dbaccess_helpid.hrc"
+#include <vcl/event.hxx>
+#include <helpids.h>
 #include <memory>
 using namespace dbaui;
 #define STANDARD_MARGIN                 6
@@ -56,10 +56,10 @@ void OTableDesignHelpBar::SetHelpText( const OUString& rText )
 
 void OTableDesignHelpBar::Resize()
 {
-    // Abmessungen parent window
+    // parent window dimensions
     Size aOutputSize( GetOutputSizePixel() );
 
-    // TextWin anpassen
+    // adapt the TextWin
     if(m_pTextWin)
         m_pTextWin->SetPosSizePixel( Point(STANDARD_MARGIN+1, STANDARD_MARGIN+1),
             Size(aOutputSize.Width()-(2*STANDARD_MARGIN)-2,

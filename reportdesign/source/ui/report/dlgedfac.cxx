@@ -16,9 +16,9 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "dlgedfac.hxx"
-#include "uistrings.hrc"
-#include "RptObject.hxx"
+#include <dlgedfac.hxx>
+#include <strings.hxx>
+#include <RptObject.hxx>
 #include <RptDef.hxx>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
@@ -37,42 +37,44 @@ DlgEdFactory::DlgEdFactory()
 }
 
 
-DlgEdFactory::~DlgEdFactory()
+DlgEdFactory::~DlgEdFactory() COVERITY_NOEXCEPT_FALSE
 {
     SdrObjFactory::RemoveMakeObjectHdl( LINK(this, DlgEdFactory, MakeObject) );
 }
 
 
-IMPL_STATIC_LINK_TYPED(
-    DlgEdFactory, MakeObject, SdrObjFactory *, pObjFactory, void )
+IMPL_STATIC_LINK(
+    DlgEdFactory, MakeObject, SdrObjCreatorParams, aParams, SdrObject* )
 {
-    if ( pObjFactory->nInventor == ReportInventor )
+    SdrObject* pNewObj = nullptr;
+
+    if ( aParams.nInventor == SdrInventor::ReportDesign )
     {
-        switch( pObjFactory->nIdentifier )
+        switch( aParams.nObjIdentifier )
         {
             case OBJ_DLG_FIXEDTEXT:
-                    pObjFactory->pNewObj = new OUnoObject( SERVICE_FIXEDTEXT
+                    pNewObj = new OUnoObject(aParams.rSdrModel, SERVICE_FIXEDTEXT
                                                         ,OUString("com.sun.star.form.component.FixedText")
                                                         ,OBJ_DLG_FIXEDTEXT);
                     break;
             case OBJ_DLG_IMAGECONTROL:
-                    pObjFactory->pNewObj = new OUnoObject( SERVICE_IMAGECONTROL
+                    pNewObj = new OUnoObject(aParams.rSdrModel, SERVICE_IMAGECONTROL
                                                         ,OUString("com.sun.star.form.component.DatabaseImageControl")
                                                         ,OBJ_DLG_IMAGECONTROL);
                     break;
             case OBJ_DLG_FORMATTEDFIELD:
-                    pObjFactory->pNewObj = new OUnoObject( SERVICE_FORMATTEDFIELD
+                    pNewObj = new OUnoObject(aParams.rSdrModel, SERVICE_FORMATTEDFIELD
                                                         ,OUString("com.sun.star.form.component.FormattedField")
                                                         ,OBJ_DLG_FORMATTEDFIELD);
                     break;
             case OBJ_DLG_VFIXEDLINE:
             case OBJ_DLG_HFIXEDLINE:
                 {
-                    OUnoObject* pObj = new OUnoObject( SERVICE_FIXEDLINE
+                    OUnoObject* pObj = new OUnoObject(aParams.rSdrModel, SERVICE_FIXEDLINE
                                                         ,OUString("com.sun.star.awt.UnoControlFixedLineModel")
-                                                        ,pObjFactory->nIdentifier);
-                    pObjFactory->pNewObj = pObj;
-                    if ( pObjFactory->nIdentifier == OBJ_DLG_HFIXEDLINE )
+                                                        ,aParams.nObjIdentifier);
+                    pNewObj = pObj;
+                    if ( aParams.nObjIdentifier == OBJ_DLG_HFIXEDLINE )
                     {
                         uno::Reference<beans::XPropertySet> xProp = pObj->getAwtComponent();
                         xProp->setPropertyValue( PROPERTY_ORIENTATION, uno::makeAny(sal_Int32(0)) );
@@ -80,19 +82,20 @@ IMPL_STATIC_LINK_TYPED(
                 }
                 break;
             case OBJ_CUSTOMSHAPE:
-                pObjFactory->pNewObj = new OCustomShape(SERVICE_SHAPE);
+                pNewObj = new OCustomShape(aParams.rSdrModel, SERVICE_SHAPE);
                 break;
             case OBJ_DLG_SUBREPORT:
-                pObjFactory->pNewObj = new OOle2Obj(SERVICE_REPORTDEFINITION,OBJ_DLG_SUBREPORT);
+                pNewObj = new OOle2Obj(aParams.rSdrModel, SERVICE_REPORTDEFINITION, OBJ_DLG_SUBREPORT);
                 break;
             case OBJ_OLE2:
-                pObjFactory->pNewObj = new OOle2Obj(OUString("com.sun.star.chart2.ChartDocument"),OBJ_OLE2);
+                pNewObj = new OOle2Obj(aParams.rSdrModel, OUString("com.sun.star.chart2.ChartDocument"),OBJ_OLE2);
                 break;
             default:
                 OSL_FAIL("Unknown object id");
                 break;
         }
     }
+    return pNewObj;
 }
 
 }

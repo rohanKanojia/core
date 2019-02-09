@@ -20,7 +20,7 @@
 #include <comphelper/string.hxx>
 #include <editeng/eeitem.hxx>
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <editeng/editview.hxx>
 #include <editeng/flditem.hxx>
 #include <svx/hlnkitem.hxx>
@@ -31,22 +31,22 @@
 #include <sfx2/objface.hxx>
 #include <svl/stritem.hxx>
 
-#include "tabvwsh.hxx"
-#include "sc.hrc"
-#include "scmod.hxx"
-#include "impex.hxx"
-#include "editsh.hxx"
-#include "dociter.hxx"
-#include "inputhdl.hxx"
+#include <tabvwsh.hxx>
+#include <sc.hrc>
+#include <scmod.hxx>
+#include <impex.hxx>
+#include <editsh.hxx>
+#include <dociter.hxx>
+#include <inputhdl.hxx>
 #include <svx/srchdlg.hxx>
-#include "document.hxx"
+#include <document.hxx>
 #include <gridwin.hxx>
 
 OUString ScTabViewShell::GetSelectionText( bool bWholeWord )
 {
     OUString aStrSelection;
 
-    if ( pEditShell && pEditShell == GetMySubShell() )
+    if ( pEditShell && pEditShell.get() == GetMySubShell() )
     {
         aStrSelection = pEditShell->GetSelectionText( bWholeWord );
     }
@@ -97,7 +97,8 @@ OUString ScTabViewShell::GetSelectionText( bool bWholeWord )
             ScImportExport aObj( pDoc, aRange );
             aObj.SetFormulas( GetViewData().GetOptions().GetOption( VOPT_FORMULAS ) );
             OUString aExportOUString;
-            aObj.ExportString( aExportOUString );
+            /* TODO: STRING_TSVC under some circumstances? */
+            aObj.ExportString( aExportOUString, SotClipboardFormatId::STRING );
             aStrSelection = convertLineEnd(aExportOUString, LINEEND_CR);
 
             // replace Tab/CR with space, if for dialog or through Basic/SelectionTextExt,
@@ -107,7 +108,7 @@ OUString ScTabViewShell::GetSelectionText( bool bWholeWord )
 
             if ( bInFormatDialog || bWholeWord || aRange.aEnd.Row() == aRange.aStart.Row() )
             {
-                aStrSelection = aStrSelection.replaceAll(OUStringLiteral1<CHAR_CR>(), " ");
+                aStrSelection = aStrSelection.replaceAll("\r", " ");
                 aStrSelection = aStrSelection.replaceAll("\t", " ");
                 aStrSelection = comphelper::string::stripEnd(aStrSelection, ' ');
             }
@@ -120,7 +121,7 @@ OUString ScTabViewShell::GetSelectionText( bool bWholeWord )
 void ScTabViewShell::InsertURL( const OUString& rName, const OUString& rURL, const OUString& rTarget,
                                 sal_uInt16 nMode )
 {
-    SvxLinkInsertMode eMode = (SvxLinkInsertMode) nMode;
+    SvxLinkInsertMode eMode = static_cast<SvxLinkInsertMode>(nMode);
     bool bAsText = ( eMode != HLINK_BUTTON );       // default is now text
 
     if ( bAsText )
@@ -146,7 +147,7 @@ void ScTabViewShell::InsertURL( const OUString& rName, const OUString& rURL, con
     else
     {
         SC_MOD()->InputEnterHandler();
-        InsertURLButton( rName, rURL, rTarget );
+        InsertURLButton( rName, rURL, rTarget, nullptr );
     }
 }
 
@@ -164,7 +165,7 @@ static void lcl_SelectFieldAfterInsert( EditView& rView )
 
 void ScTabViewShell::InsertURLField( const OUString& rName, const OUString& rURL, const OUString& rTarget )
 {
-    SvxURLField aURLField( rURL, rName, SVXURLFORMAT_REPR );
+    SvxURLField aURLField( rURL, rName, SvxURLFormat::Repr );
     aURLField.SetTargetFrame( rTarget );
     SvxFieldItem aURLItem( aURLField, EE_FEATURE_FIELD );
 

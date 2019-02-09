@@ -20,28 +20,16 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_NAVIGATR_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_NAVIGATR_HXX
 
-#include <vcl/window.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/toolbox.hxx>
 #include <sfx2/ctrlitem.hxx>
+#include <svx/sidebar/PanelLayout.hxx>
 #include "sdtreelb.hxx"
-#include "pres.hxx"
-
-#define NAVSTATE_NONE           0x00000000
-
-#define NAVTLB_UPDATE           0x00000100
-
-#define NAVBTN_FIRST_ENABLED    0x00001000
-#define NAVBTN_FIRST_DISABLED   0x00002000
-#define NAVBTN_PREV_ENABLED     0x00004000
-#define NAVBTN_PREV_DISABLED    0x00008000
-
-#define NAVBTN_LAST_ENABLED     0x00010000
-#define NAVBTN_LAST_DISABLED    0x00020000
-#define NAVBTN_NEXT_ENABLED     0x00040000
-#define NAVBTN_NEXT_DISABLED    0x00080000
+#include <pres.hxx>
 
 // forward
+namespace vcl { class Window; }
+
 namespace sd {
 class DrawDocShell;
 class NavigatorChildWindow;
@@ -49,6 +37,22 @@ class NavigatorChildWindow;
 class Menu;
 class SdNavigatorControllerItem;
 class SdPageNameControllerItem;
+
+enum class NavState {
+    NONE               = 0x000000,
+    TableUpdate        = 0x000100,
+    BtnFirstEnabled    = 0x001000,
+    BtnFirstDisabled   = 0x002000,
+    BtnPrevEnabled     = 0x004000,
+    BtnPrevDisabled    = 0x008000,
+    BtnLastEnabled     = 0x010000,
+    BtnLastDisabled    = 0x020000,
+    BtnNextEnabled     = 0x040000,
+    BtnNextDisabled    = 0x080000,
+};
+namespace o3tl {
+    template<> struct typed_flags<NavState> : is_typed_flags<NavState, 0x0ff100> {};
+}
 
 class NavDocInfo
 {
@@ -63,8 +67,8 @@ public:
     bool    HasName() { return bName; }
     bool    IsActive() { return bActive; }
 
-    void    SetName( bool bOn = true ) { bName = bOn; }
-    void    SetActive( bool bOn = true ) { bActive = bOn; }
+    void    SetName( bool bOn ) { bName = bOn; }
+    void    SetActive( bool bOn ) { bActive = bOn; }
 
 private:
     friend class SdNavigatorWin;
@@ -73,8 +77,7 @@ private:
     ::sd::DrawDocShell* mpDocShell;
 };
 
-class SdNavigatorWin
-    : public vcl::Window
+class SD_DLLPUBLIC SdNavigatorWin : public PanelLayout
 {
 public:
     typedef ::std::function<void ()> UpdateRequestFunctor;
@@ -86,12 +89,9 @@ public:
             update is necessary.  When <FALSE/> the navigator will
             rely on others to trigger updates.
     */
-    SdNavigatorWin(
-        vcl::Window* pParent,
-        const SdResId& rSdResId,
-        SfxBindings* pBindings);
+    SdNavigatorWin(vcl::Window* pParent, SfxBindings* pBindings);
     void SetUpdateRequestFunctor(const UpdateRequestFunctor& rUpdateRequest);
-    virtual ~SdNavigatorWin();
+    virtual ~SdNavigatorWin() override;
     virtual void                dispose() override;
 
     virtual void                KeyInput( const KeyEvent& rKEvt ) override;
@@ -102,10 +102,10 @@ public:
     bool                        InsertFile(const OUString& rFileName);
 
     NavigatorDragType           GetNavigatorDragType();
+    VclPtr<SdPageObjsTLB> const & GetObjects();
 
 protected:
-    virtual void                Resize() override;
-    virtual bool                Notify(NotifyEvent& rNEvt) override;
+    virtual bool                EventNotify(NotifyEvent& rNEvt) override;
 
 private:
     friend class ::sd::NavigatorChildWindow;
@@ -116,39 +116,34 @@ private:
     VclPtr<SdPageObjsTLB>       maTlbObjects;
     VclPtr<ListBox>             maLbDocs;
 
-    Size                        maSize;
-    Size                        maMinSize;
     bool                        mbDocImported;
     OUString                    maDropFileName;
     NavigatorDragType           meDragType;
     std::vector<NavDocInfo>     maDocList;
     SfxBindings*                mpBindings;
-    SdNavigatorControllerItem*  mpNavigatorCtrlItem;
-    SdPageNameControllerItem*   mpPageNameCtrlItem;
-
-    ImageList                   maImageList;
+    std::unique_ptr<SdNavigatorControllerItem>  mpNavigatorCtrlItem;
+    std::unique_ptr<SdPageNameControllerItem>   mpPageNameCtrlItem;
 
     /** This flag controls whether all shapes or only the named shapes are
         shown.
     */
     //    bool                        mbShowAllShapes;
 
-    static sal_uInt16           GetDragTypeSdResId( NavigatorDragType eDT, bool bImage = false );
+    static const char*          GetDragTypeSdStrId(NavigatorDragType eDT);
+    static OUString             GetDragTypeSdBmpId(NavigatorDragType eDT);
     NavDocInfo*                 GetDocInfo();
 
-                                DECL_LINK_TYPED( SelectToolboxHdl, ToolBox *, void );
-                                DECL_LINK_TYPED( DropdownClickToolBoxHdl, ToolBox *, void );
-                                DECL_LINK_TYPED( ClickObjectHdl, SvTreeListBox*, bool );
-                                DECL_LINK_TYPED( SelectDocumentHdl, ListBox&, void );
-                                DECL_LINK_TYPED( MenuSelectHdl, Menu *, bool );
-                                DECL_LINK_TYPED( ShapeFilterCallback, Menu *, bool );
+                                DECL_LINK( SelectToolboxHdl, ToolBox *, void );
+                                DECL_LINK( DropdownClickToolBoxHdl, ToolBox *, void );
+                                DECL_LINK( ClickObjectHdl, SvTreeListBox*, bool );
+                                DECL_LINK( SelectDocumentHdl, ListBox&, void );
+                                DECL_LINK( MenuSelectHdl, Menu *, bool );
+                                DECL_LINK( ShapeFilterCallback, Menu *, bool );
 
-    virtual void                DataChanged( const DataChangedEvent& rDCEvt ) override;
     void                        SetDragImage();
-    void                        ApplyImageList();
+
 public:
     //when object is marked , fresh the corresponding entry tree .
-    static sd::DrawDocShell*    GetDrawDocShell(const SdDrawDocument*);
     void                        FreshTree ( const  SdDrawDocument* pDoc );
     void                        FreshEntry( );
 };

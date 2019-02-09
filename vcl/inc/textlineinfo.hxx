@@ -20,6 +20,9 @@
 #ifndef INCLUDED_VCL_INC_TEXTLINEINFO_HXX
 #define INCLUDED_VCL_INC_TEXTLINEINFO_HXX
 
+#include <memory>
+#include <vector>
+
 class ImplTextLineInfo
 {
 private:
@@ -30,11 +33,6 @@ private:
 public:
    ImplTextLineInfo( long nWidth, sal_Int32 nIndex, sal_Int32 nLen )
    {
-       if(nIndex == -1 || nIndex == 0x0FFFF || nLen == -1 || nLen == 0x0FFFF)
-       {
-            SAL_INFO("sal.rtl.xub",
-                     "ImplTextLine Info Suspicious arguments nIndex:" << nIndex << " nLen:" << nLen);
-       }
        mnWidth = nWidth;
        mnIndex = nIndex;
        mnLen   = nLen;
@@ -57,16 +55,14 @@ public:
     void        Clear();
 
     ImplTextLineInfo* GetLine( sal_Int32 nLine ) const
-                            { return mpLines[nLine]; }
-    sal_Int32   Count() const { return mnLines; }
+                            { return mvLines[nLine].get(); }
+    sal_Int32   Count() const { return mvLines.size(); }
 
 private:
     ImplMultiTextLineInfo( const ImplMultiTextLineInfo& ) = delete;
     ImplMultiTextLineInfo& operator=( const ImplMultiTextLineInfo& ) = delete;
 
-    ImplTextLineInfo**  mpLines;
-    sal_Int32   mnLines;
-    sal_Int32   mnSize;
+    std::vector<std::unique_ptr<ImplTextLineInfo>>  mvLines;
 
 };
 

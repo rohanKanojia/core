@@ -17,26 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "hintids.hxx"
+#include <hintids.hxx>
 #include <sfx2/htmlmode.hxx>
 #include <sfx2/tabdlg.hxx>
 #include <svl/style.hxx>
 #include <svtools/htmlcfg.hxx>
 #include <svl/cjkoptions.hxx>
-#include "docsh.hxx"
-#include "wrtsh.hxx"
-#include "frmatr.hxx"
-#include "view.hxx"
-#include "globals.hrc"
-#include "swuipardlg.hxx"
-#include "pagedesc.hxx"
-#include "paratr.hxx"
-#include "drpcps.hxx"
-#include "uitool.hxx"
-#include "viewopt.hxx"
+#include <docsh.hxx>
+#include <wrtsh.hxx>
+#include <frmatr.hxx>
+#include <view.hxx>
+#include <globals.hrc>
+#include <swuipardlg.hxx>
+#include <pagedesc.hxx>
+#include <paratr.hxx>
+#include <drpcps.hxx>
+#include <uitool.hxx>
+#include <viewopt.hxx>
 #include <numpara.hxx>
-#include "chrdlg.hrc"
-#include "poolfmt.hrc"
+#include <strings.hrc>
 #include <svx/svxids.hrc>
 #include <svl/eitem.hxx>
 #include <svl/intitem.hxx>
@@ -44,57 +43,47 @@
 #include <svx/dialogs.hrc>
 #include <svx/flagsdef.hxx>
 
-SwParaDlg::SwParaDlg(vcl::Window *pParent,
+SwParaDlg::SwParaDlg(weld::Window *pParent,
                     SwView& rVw,
                     const SfxItemSet& rCoreSet,
                     sal_uInt8 nDialogMode,
                     const OUString *pTitle,
                     bool bDraw,
                     const OString& sDefPage)
-    : SfxTabDialog(pParent,
-                 "ParagraphPropertiesDialog",
+    : SfxTabDialogController(pParent,
                  "modules/swriter/ui/paradialog.ui",
+                 "ParagraphPropertiesDialog",
                  &rCoreSet,  nullptr != pTitle)
     , rView(rVw)
-    , nDlgMode(nDialogMode)
     , bDrawParaDlg(bDraw)
-    , m_nParaStd(0)
-    , m_nParaAlign(0)
-    , m_nParaExt(0)
-    , m_nParaNumPara(0)
-    , m_nParaDrpCps(0)
-    , m_nParaBckGrnd(0)
-    , m_nParaBorder(0)
-    , m_nAreaId(0)
-    , m_nTransparenceId(0)
 {
     nHtmlMode = ::GetHtmlMode(rVw.GetDocShell());
     bool bHtmlMode = (nHtmlMode & HTMLMODE_ON) == HTMLMODE_ON;
     if(pTitle)
     {
         // Update title
-        SetText(GetText() + SW_RESSTR(STR_TEXTCOLL_HEADER) + *pTitle + ")");
+        m_xDialog->set_title(m_xDialog->get_title() + SwResId(STR_TEXTCOLL_HEADER) + *pTitle + ")");
     }
     // tabs common to paragraph and draw paragraphs (paragraphs inside a text box)
     SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
 
     OSL_ENSURE(pFact->GetTabPageCreatorFunc(RID_SVXPAGE_STD_PARAGRAPH), "GetTabPageCreatorFunc fail!");
     OSL_ENSURE(pFact->GetTabPageRangesFunc(RID_SVXPAGE_STD_PARAGRAPH), "GetTabPageRangesFunc fail!");
-    m_nParaStd = AddTabPage("labelTP_PARA_STD", pFact->GetTabPageCreatorFunc(RID_SVXPAGE_STD_PARAGRAPH),
-                            pFact->GetTabPageRangesFunc(RID_SVXPAGE_STD_PARAGRAPH) );
+    AddTabPage("labelTP_PARA_STD", pFact->GetTabPageCreatorFunc(RID_SVXPAGE_STD_PARAGRAPH),
+                                   pFact->GetTabPageRangesFunc(RID_SVXPAGE_STD_PARAGRAPH) );
 
     OSL_ENSURE(pFact->GetTabPageCreatorFunc(RID_SVXPAGE_ALIGN_PARAGRAPH), "GetTabPageCreatorFunc fail!");
     OSL_ENSURE(pFact->GetTabPageRangesFunc(RID_SVXPAGE_ALIGN_PARAGRAPH), "GetTabPageRangesFunc fail!");
-    m_nParaAlign = AddTabPage( "labelTP_PARA_ALIGN", pFact->GetTabPageCreatorFunc(RID_SVXPAGE_ALIGN_PARAGRAPH),
-                               pFact->GetTabPageRangesFunc(RID_SVXPAGE_ALIGN_PARAGRAPH) );
+    AddTabPage("labelTP_PARA_ALIGN", pFact->GetTabPageCreatorFunc(RID_SVXPAGE_ALIGN_PARAGRAPH),
+                                      pFact->GetTabPageRangesFunc(RID_SVXPAGE_ALIGN_PARAGRAPH));
 
     SvxHtmlOptions& rHtmlOpt = SvxHtmlOptions::Get();
     if (!bDrawParaDlg && (!bHtmlMode || rHtmlOpt.IsPrintLayoutExtension()))
     {
         OSL_ENSURE(pFact->GetTabPageCreatorFunc(RID_SVXPAGE_EXT_PARAGRAPH), "GetTabPageCreatorFunc fail!");
         OSL_ENSURE(pFact->GetTabPageRangesFunc(RID_SVXPAGE_EXT_PARAGRAPH), "GetTabPageRangesFunc fail!");
-        m_nParaExt = AddTabPage( "textflow", pFact->GetTabPageCreatorFunc(RID_SVXPAGE_EXT_PARAGRAPH),
-                                 pFact->GetTabPageRangesFunc(RID_SVXPAGE_EXT_PARAGRAPH) );
+        AddTabPage("textflow", pFact->GetTabPageCreatorFunc(RID_SVXPAGE_EXT_PARAGRAPH),
+                               pFact->GetTabPageRangesFunc(RID_SVXPAGE_EXT_PARAGRAPH));
 
     }
     else
@@ -134,34 +123,28 @@ SwParaDlg::SwParaDlg(vcl::Window *pParent,
     }
     else
     {
-        if(!(nDlgMode & DLG_ENVELOP))
-            m_nParaNumPara = AddTabPage("labelTP_NUMPARA", SwParagraphNumTabPage::Create, SwParagraphNumTabPage::GetRanges);
+        if(!(nDialogMode & DLG_ENVELOP))
+            AddTabPage("labelTP_NUMPARA", SwParagraphNumTabPage::Create, SwParagraphNumTabPage::GetRanges);
         else
             RemoveTabPage("labelTP_NUMPARA");
 
-        m_nParaDrpCps = AddTabPage("labelTP_DROPCAPS",  SwDropCapsPage::Create, SwDropCapsPage::GetRanges);
+        AddTabPage("labelTP_DROPCAPS",  SwDropCapsPage::Create, SwDropCapsPage::GetRanges);
 
         if(!bHtmlMode || (nHtmlMode & (HTMLMODE_SOME_STYLES|HTMLMODE_FULL_STYLES)))
         {
-            //UUUU remove?
-            //OSL_ENSURE(pFact->GetTabPageCreatorFunc( RID_SVXPAGE_BACKGROUND ), "GetTabPageCreatorFunc fail!");
-            //OSL_ENSURE(pFact->GetTabPageRangesFunc( RID_SVXPAGE_BACKGROUND ), "GetTabPageRangesFunc fail!");
-            //m_nParaBckGrnd = AddTabPage("labelTP_BACKGROUND", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_BACKGROUND ), pFact->GetTabPageRangesFunc( RID_SVXPAGE_BACKGROUND ) );
-            //
-            //UUUU add Area and Transparence TabPages
-            m_nAreaId = AddTabPage("area", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_AREA ), pFact->GetTabPageRangesFunc( RID_SVXPAGE_AREA ));
-            m_nTransparenceId = AddTabPage("transparence", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_TRANSPARENCE ), pFact->GetTabPageRangesFunc( RID_SVXPAGE_TRANSPARENCE ) );
+            // add Area and Transparence TabPages
+            AddTabPage("area", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_AREA ), pFact->GetTabPageRangesFunc( RID_SVXPAGE_AREA ));
+            AddTabPage("transparence", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_TRANSPARENCE ), pFact->GetTabPageRangesFunc( RID_SVXPAGE_TRANSPARENCE ) );
         }
         else
         {
-            //UUUU RemoveTabPage("labelTP_BACKGROUND");
             RemoveTabPage("area");
             RemoveTabPage("transparence");
         }
 
         OSL_ENSURE(pFact->GetTabPageCreatorFunc( RID_SVXPAGE_BORDER ), "GetTabPageCreatorFunc fail!");
         OSL_ENSURE(pFact->GetTabPageRangesFunc( RID_SVXPAGE_BORDER ), "GetTabPageRangesFunc fail!");
-        m_nParaBorder = AddTabPage("labelTP_BORDER", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_BORDER ), pFact->GetTabPageRangesFunc( RID_SVXPAGE_BORDER ) );
+        AddTabPage("labelTP_BORDER", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_BORDER ), pFact->GetTabPageRangesFunc( RID_SVXPAGE_BORDER ) );
     }
 
     if (!sDefPage.isEmpty())
@@ -172,21 +155,21 @@ SwParaDlg::~SwParaDlg()
 {
 }
 
-void SwParaDlg::PageCreated(sal_uInt16 nId, SfxTabPage& rPage)
+void SwParaDlg::PageCreated(const OString& rId, SfxTabPage& rPage)
 {
     SwWrtShell& rSh = rView.GetWrtShell();
     SfxAllItemSet aSet(*(GetInputSetImpl()->GetPool()));
 
     // Table borders cannot get any shade in Writer
-    if (nId == m_nParaBorder)
+    if (rId == "labelTP_BORDER")
     {
         aSet.Put (SfxUInt16Item(SID_SWMODE_TYPE,static_cast<sal_uInt16>(SwBorderModes::PARA)));
         rPage.PageCreated(aSet);
     }
-    else if( nId == m_nParaStd )
+    else if (rId == "labelTP_PARA_STD")
     {
         aSet.Put(SfxUInt16Item(SID_SVXSTDPARAGRAPHTABPAGE_PAGEWIDTH,
-                            static_cast< sal_uInt16 >(rSh.GetAnyCurRect(RECT_PAGE_PRT).Width()) ));
+                            static_cast< sal_uInt16 >(rSh.GetAnyCurRect(CurRectType::PagePrt).Width()) ));
 
         if (!bDrawParaDlg)
         {
@@ -197,7 +180,7 @@ void SwParaDlg::PageCreated(sal_uInt16 nId, SfxTabPage& rPage)
         }
         rPage.PageCreated(aSet);
     }
-    else if( m_nParaAlign == nId)
+    else if (rId == "labelTP_PARA_ALIGN")
     {
         if (!bDrawParaDlg)
         {
@@ -205,37 +188,22 @@ void SwParaDlg::PageCreated(sal_uInt16 nId, SfxTabPage& rPage)
             rPage.PageCreated(aSet);
         }
     }
-    else if( m_nParaExt == nId )
+    else if (rId == "textflow")
     {
         // pagebreak only when the cursor is in the body-area and not in a table
         const FrameTypeFlags eType = rSh.GetFrameType(nullptr,true);
         if( !(FrameTypeFlags::BODY & eType) ||
-            rSh.GetSelectionType() & nsSelectionType::SEL_TBL )
+            rSh.GetSelectionType() & SelectionType::Table )
         {
             aSet.Put(SfxBoolItem(SID_DISABLE_SVXEXTPARAGRAPHTABPAGE_PAGEBREAK,true));
             rPage.PageCreated(aSet);
         }
     }
-    else if( m_nParaDrpCps == nId )
+    else if (rId == "labelTP_DROPCAPS")
     {
         static_cast<SwDropCapsPage&>(rPage).SetFormat(false);
     }
-    else if( m_nParaBckGrnd == nId )
-    {
-      if(!( nHtmlMode & HTMLMODE_ON ) ||
-        nHtmlMode & HTMLMODE_SOME_STYLES)
-        {
-            // pagebreak only when the cursor is in the body-area and not in a table
-            const FrameTypeFlags eType = rSh.GetFrameType(nullptr,true);
-            if(!(FrameTypeFlags::BODY & eType) ||
-                rSh.GetSelectionType() & nsSelectionType::SEL_TBL)
-            {
-                aSet.Put(SfxBoolItem(SID_DISABLE_SVXEXTPARAGRAPHTABPAGE_PAGEBREAK,true));
-                rPage.PageCreated(aSet);
-            }
-        }
-    }
-    else if( m_nParaNumPara == nId)
+    else if (rId == "labelTP_NUMPARA")
     {
         SwTextFormatColl* pTmpColl = rSh.GetCurTextFormatColl();
         if( pTmpColl && pTmpColl->IsAssignedToListLevelOfOutlineStyle() )
@@ -244,9 +212,9 @@ void SwParaDlg::PageCreated(sal_uInt16 nId, SfxTabPage& rPage)
         }
 
         static_cast<SwParagraphNumTabPage&>(rPage).EnableNewStart();
-        ListBox & rBox = static_cast<SwParagraphNumTabPage&>(rPage).GetStyleBox();
+        weld::ComboBox& rBox = static_cast<SwParagraphNumTabPage&>(rPage).GetStyleBox();
         SfxStyleSheetBasePool* pPool = rView.GetDocShell()->GetStyleSheetPool();
-        pPool->SetSearchMask(SFX_STYLE_FAMILY_PSEUDO);
+        pPool->SetSearchMask(SfxStyleFamily::Pseudo);
         const SfxStyleSheetBase* pBase = pPool->First();
         std::set<OUString> aNames;
         while(pBase)
@@ -254,20 +222,20 @@ void SwParaDlg::PageCreated(sal_uInt16 nId, SfxTabPage& rPage)
             aNames.insert(pBase->GetName());
             pBase = pPool->Next();
         }
-        for(std::set<OUString>::const_iterator it = aNames.begin(); it != aNames.end(); ++it)
-            rBox.InsertEntry(*it);
+        for(const auto& rName : aNames)
+            rBox.append_text(rName);
     }
-    //UUUU inits for Area and Transparency TabPages
+    // inits for Area and Transparency TabPages
     // The selection attribute lists (XPropertyList derivates, e.g. XColorList for
     // the color table) need to be added as items (e.g. SvxColorTableItem) to make
     // these pages find the needed attributes for fill style suggestions.
-    // These are added in SwDocStyleSheet::GetItemSet() for the SFX_STYLE_FAMILY_PARA on
+    // These are added in SwDocStyleSheet::GetItemSet() for the SfxStyleFamily::Para on
     // demand, but could also be directly added from the DrawModel.
-    else if (m_nAreaId == nId)
+    else if (rId == "area")
     {
         SfxItemSet aNew(*aSet.GetPool(),
-            SID_COLOR_TABLE, SID_BITMAP_LIST,
-            SID_OFFER_IMPORT, SID_OFFER_IMPORT, 0, 0);
+            svl::Items<SID_COLOR_TABLE, SID_PATTERN_LIST,
+            SID_OFFER_IMPORT, SID_OFFER_IMPORT>{});
 
         aNew.Put(*GetInputSetImpl());
 
@@ -276,7 +244,7 @@ void SwParaDlg::PageCreated(sal_uInt16 nId, SfxTabPage& rPage)
 
         rPage.PageCreated(aNew);
     }
-    else if (m_nTransparenceId == nId)
+    else if (rId == "transparence")
     {
         rPage.PageCreated(*GetInputSetImpl());
     }

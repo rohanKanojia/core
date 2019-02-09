@@ -18,14 +18,16 @@
  */
 
 
-#include "saxemitter.hxx"
+#include <saxemitter.hxx>
 #include "emitcontext.hxx"
 #include "saxattrlist.hxx"
 
 #include <rtl/strbuf.hxx>
 #include <osl/diagnose.h>
 #include <cppuhelper/exc_hlp.hxx>
+#include <com/sun/star/xml/sax/SAXException.hpp>
 #include <com/sun/star/xml/sax/XDocumentHandler.hpp>
+#include <xmloff/xmlimp.hxx>
 
 #if OSL_DEBUG_LEVEL > 0
 #include <osl/file.hxx>
@@ -42,6 +44,8 @@ SaxEmitter::SaxEmitter( const uno::Reference< xml::sax::XDocumentHandler >& xDoc
     m_xDocHdl( xDocHdl )
 {
     OSL_PRECOND(m_xDocHdl.is(), "SaxEmitter(): invalid doc handler");
+    if (SvXMLImport *pFastHandler = dynamic_cast<SvXMLImport*>(m_xDocHdl.get()))
+        m_xDocHdl.set( new SvXMLLegacyToFastDocHandler( pFastHandler ) );
     try
     {
         m_xDocHdl->startDocument();
@@ -112,12 +116,12 @@ void SaxEmitter::beginTag( const char* pTag, const PropertyMap& rProperties )
         OStringBuffer aBuf( 1024 );
         aBuf.append( '<' );
         aBuf.append( pTag );
-        for( PropertyMap::const_iterator it = rProperties.begin(); it != rProperties.end(); ++it )
+        for( const auto& rProperty : rProperties )
         {
             aBuf.append( ' ' );
-            aBuf.append( OUStringToOString( it->first, RTL_TEXTENCODING_UTF8 ) );
+            aBuf.append( OUStringToOString( rProperty.first, RTL_TEXTENCODING_UTF8 ) );
             aBuf.append( "=\"" );
-            aBuf.append( OUStringToOString( it->second, RTL_TEXTENCODING_UTF8 ) );
+            aBuf.append( OUStringToOString( rProperty.second, RTL_TEXTENCODING_UTF8 ) );
             aBuf.append( "\"" );
         }
         aBuf.append( ">\n" );

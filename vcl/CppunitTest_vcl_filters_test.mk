@@ -31,13 +31,10 @@ $(eval $(call gb_CppunitTest_use_libraries,vcl_filters_test, \
 	tl \
 	unotest \
 	vcl \
-	$(gb_UWINAPI) \
+    emfio \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,vcl_filters_test,\
-    udkapi \
-    offapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,vcl_filters_test))
 
 $(eval $(call gb_CppunitTest_use_ure,vcl_filters_test))
 $(eval $(call gb_CppunitTest_use_vcl,vcl_filters_test))
@@ -47,6 +44,8 @@ $(eval $(call gb_CppunitTest_use_components,vcl_filters_test,\
     i18npool/util/i18npool \
     ucb/source/core/ucb1 \
     ucb/source/ucp/file/ucpfile1 \
+    uui/util/uui \
+    emfio/emfio \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,vcl_filters_test))

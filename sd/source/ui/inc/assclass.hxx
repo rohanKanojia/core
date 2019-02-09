@@ -20,10 +20,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_ASSCLASS_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_ASSCLASS_HXX
 
-#include <vector>
 #include <memory>
 
-#include "sddllapi.h"
+#include <sddllapi.h>
 
 #define MAX_PAGES 10
 

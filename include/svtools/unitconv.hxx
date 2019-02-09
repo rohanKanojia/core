@@ -19,9 +19,13 @@
 #ifndef INCLUDED_SVTOOLS_UNITCONV_HXX
 #define INCLUDED_SVTOOLS_UNITCONV_HXX
 
-#include <vcl/field.hxx>
 #include <svtools/svtdllapi.h>
-#include <svl/poolitem.hxx>
+#include <tools/mapunit.hxx>
+#include <tools/fldunit.hxx>
+
+namespace weld { class MetricSpinButton; }
+
+class MetricField;
 
 // macro -----------------------------------------------------------------
 
@@ -31,19 +35,21 @@ typedef long (*FUNC_CONVERT)(long);
 
 // Functions -------------------------------------------------------------
 
+SVT_DLLPUBLIC void      SetFieldUnit(weld::MetricSpinButton& rCtrl, FieldUnit eUnit, bool bAll = false);
 SVT_DLLPUBLIC void      SetFieldUnit( MetricField& rCtrl, FieldUnit eUnit, bool bAll = false );
-SVT_DLLPUBLIC void      SetFieldUnit( MetricBox& rCtrl, FieldUnit eUnit );
 
-SVT_DLLPUBLIC long      CalcToUnit( float nIn, SfxMapUnit eUnit );
-SVT_DLLPUBLIC long      CalcToPoint( long nIn, SfxMapUnit eUnit, sal_uInt16 nFactor );
+SVT_DLLPUBLIC long      CalcToUnit( float nIn, MapUnit eUnit );
+SVT_DLLPUBLIC long      CalcToPoint( long nIn, MapUnit eUnit, sal_uInt16 nFactor );
 
-SVT_DLLPUBLIC long      ItemToControl( long nIn, SfxMapUnit eItem, FieldUnit eCtrl );
-SVT_DLLPUBLIC long      ControlToItem( long nIn, FieldUnit eCtrl, SfxMapUnit eItem );
+SVT_DLLPUBLIC long      ItemToControl( long nIn, MapUnit eItem, FieldUnit eCtrl );
+SVT_DLLPUBLIC long      ControlToItem( long nIn, FieldUnit eCtrl, MapUnit eItem );
 
-SVT_DLLPUBLIC FieldUnit MapToFieldUnit( const SfxMapUnit eUnit );
+SVT_DLLPUBLIC FieldUnit MapToFieldUnit( const MapUnit eUnit );
 
-SVT_DLLPUBLIC void      SetMetricValue( MetricField& rField, long lCoreValue, SfxMapUnit eUnit );
-SVT_DLLPUBLIC long      GetCoreValue( const MetricField& rField, SfxMapUnit eUnit );
+SVT_DLLPUBLIC void      SetMetricValue(weld::MetricSpinButton& rField, int lCoreValue, MapUnit eUnit);
+SVT_DLLPUBLIC void      SetMetricValue( MetricField& rField, long lCoreValue, MapUnit eUnit );
+SVT_DLLPUBLIC int       GetCoreValue(const weld::MetricSpinButton& rField, MapUnit eUnit);
+SVT_DLLPUBLIC long      GetCoreValue( const MetricField& rField, MapUnit eUnit );
 
 SVT_DLLPUBLIC long  PointToTwips( long nIn );
 

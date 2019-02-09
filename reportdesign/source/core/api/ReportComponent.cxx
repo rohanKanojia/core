@@ -16,9 +16,9 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "ReportComponent.hxx"
+#include <ReportComponent.hxx>
 
-#include "corestrings.hrc"
+#include <strings.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/outdev.hxx>
 #include <vcl/settings.hxx>
@@ -26,11 +26,11 @@
 #include <toolkit/helper/vclunohelper.hxx>
 #include <com/sun/star/awt/FontWeight.hpp>
 #include <com/sun/star/awt/FontWidth.hpp>
-#include "ReportControlModel.hxx"
+#include <ReportControlModel.hxx>
 #include <com/sun/star/reflection/XProxyFactory.hpp>
 #include <com/sun/star/text/ParagraphVertAlign.hpp>
-#include <com/sun/star/style/ParagraphAdjust.hpp>
 #include <com/sun/star/i18n/ScriptType.hpp>
+#include <comphelper/uno3.hxx>
 #include <editeng/unolingu.hxx>
 #include <unotools/syslocale.hxx>
 #include <unotools/lingucfg.hxx>
@@ -44,7 +44,7 @@ namespace reportdesign
     using namespace com::sun::star;
     using namespace comphelper;
 
-void lcl_getDefaultFonts( vcl::Font& rLatinFont, vcl::Font& rCJKFont, vcl::Font& rCTLFont, LanguageType  _eLatin, LanguageType _eCJK, LanguageType _eCTL )
+static void lcl_getDefaultFonts( vcl::Font& rLatinFont, vcl::Font& rCJKFont, vcl::Font& rCTLFont, LanguageType  _eLatin, LanguageType _eCJK, LanguageType _eCTL )
 {
         LanguageType eLatin = _eLatin;
 

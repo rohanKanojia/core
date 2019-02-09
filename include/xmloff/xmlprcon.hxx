@@ -21,18 +21,18 @@
 #define INCLUDED_XMLOFF_XMLPRCON_HXX
 
 #include <xmloff/xmlictxt.hxx>
-#include <xmloff/xmlimppr.hxx>
-#include <xmloff/xmlprmap.hxx>
 
+#include <vector>
 
 class SvXMLImportPropertyMapper;
+struct XMLPropertyState;
 
 class XMLOFF_DLLPUBLIC SvXMLPropertySetContext : public SvXMLImportContext
 {
 protected:
-    sal_Int32 mnStartIdx;
-    sal_Int32 mnEndIdx;
-    sal_uInt32 mnFamily;
+    sal_Int32 const mnStartIdx;
+    sal_Int32 const mnEndIdx;
+    sal_uInt32 const mnFamily;
     ::std::vector< XMLPropertyState > &mrProperties;
     rtl::Reference < SvXMLImportPropertyMapper >   mxMapper;
 
@@ -47,16 +47,16 @@ public:
             const rtl::Reference < SvXMLImportPropertyMapper > &rMap,
               sal_Int32 nStartIdx = -1, sal_Int32 nEndIdx = -1 );
 
-    virtual ~SvXMLPropertySetContext();
+    virtual ~SvXMLPropertySetContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                                      const OUString& rLocalName,
                                      const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 
     // This method is called from this instance implementation of
     // CreateChildContext if the element matches an entry in the
     // SvXMLImportItemMapper with the mid flag MID_FLAG_ELEMENT_ITEM_IMPORT
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                                    const OUString& rLocalName,
                                    const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList,
                                    ::std::vector< XMLPropertyState > &rProperties,

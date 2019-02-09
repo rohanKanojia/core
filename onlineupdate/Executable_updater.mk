@@ -10,11 +10,24 @@
 $(eval $(call gb_Executable_Executable,updater))
 
 $(eval $(call gb_Executable_set_include,updater,\
-	-I$(SRCDIR)/onlineupdate/source/update/src \
-	-I$(SRCDIR)/onlineupdate/source/update/inc \
+	-I$(SRCDIR)/onlineupdate/inc \
 	-I$(SRCDIR)/onlineupdate/source/update/common \
 	-I$(SRCDIR)/onlineupdate/source/update/updater/xpcom/glue \
 	$$(INCLUDE) \
+))
+
+$(eval $(call gb_Executable_use_custom_headers,updater,onlineupdate/generated))
+
+$(eval $(call gb_Executable_use_static_libraries,updater,\
+	libmar \
+    libmarverify \
+    updatehelper \
+	$(if $(filter WNT,$(OS)), \
+		windows_process )\
+))
+
+$(eval $(call gb_Executable_use_externals,updater,\
+	bzip2 \
 ))
 
 ifeq ($(OS),WNT)
@@ -24,8 +37,34 @@ $(eval $(call gb_Executable_add_libs,updater,\
 	Comctl32.lib \
 	Shell32.lib \
 	Shlwapi.lib \
+	Crypt32.lib \
 ))
+
+$(eval $(call gb_Executable_set_targettype_gui,updater,YES))
+
+$(eval $(call gb_Executable_add_nativeres,updater,updaterres))
+
+$(eval $(call gb_Executable_add_ldflags,updater,\
+	/ENTRY:wmainCRTStartup \
+))
+
+$(eval $(call gb_Executable_add_defs,updater,\
+	-DVERIFY_MAR_SIGNATURE \
+	-DUNICODE \
+))
+
 else
+
+$(eval $(call gb_Executable_add_defs,updater,\
+	-DVERIFY_MAR_SIGNATURE \
+	-DNSS3 \
+))
+
+$(eval $(call gb_Executable_use_externals,updater,\
+	nss3 \
+	gtk \
+))
+
 $(eval $(call gb_Executable_add_libs,updater,\
 	-lX11 \
 	-lXext \
@@ -36,38 +75,16 @@ $(eval $(call gb_Executable_add_libs,updater,\
 ))
 endif
 
-ifeq ($(OS),WNT)
-$(eval $(call gb_Executable_add_cxxflags,updater,\
-	/Zc:wchar_t \
-))
-endif
-
-$(eval $(call gb_Executable_use_externals,updater,\
-	gtk \
-	bzip2 \
-))
-
 $(eval $(call gb_Executable_add_exception_objects,updater,\
 	onlineupdate/source/update/updater/xpcom/glue/nsVersionComparator \
 	onlineupdate/source/update/updater/archivereader \
 	onlineupdate/source/update/updater/bspatch \
-	onlineupdate/source/update/updater/loaddlls \
 	onlineupdate/source/update/updater/progressui_gtk \
-	onlineupdate/source/update/updater/progressui_null \
-	onlineupdate/source/update/updater/progressui_win \
 	onlineupdate/source/update/updater/updater \
-	onlineupdate/source/update/updater/win_dirent \
-	onlineupdate/source/update/common/pathhash \
-	onlineupdate/source/update/common/readstrings \
-	onlineupdate/source/update/common/uachelper \
-	onlineupdate/source/update/common/updatehelper \
-	onlineupdate/source/update/common/updatelogging \
-))
-
-$(eval $(call gb_Executable_add_cobjects,updater,\
-	onlineupdate/source/update/src/mar_create \
-	onlineupdate/source/update/src/mar_extract \
-	onlineupdate/source/update/src/mar_read \
+	$(if $(filter WNT,$(OS)),\
+		onlineupdate/source/update/updater/loaddlls \
+		onlineupdate/source/update/updater/progressui_win \
+		onlineupdate/source/update/updater/win_dirent )\
 ))
 
 # vim:set shiftwidth=4 tabstop=4 noexpandtab: */

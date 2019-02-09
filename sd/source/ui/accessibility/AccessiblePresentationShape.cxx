@@ -17,13 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "AccessiblePresentationShape.hxx"
+#include <AccessiblePresentationShape.hxx>
 
-#include "SdShapeTypes.hxx"
+#include <SdShapeTypes.hxx>
 
-#include "accessibility.hrc"
-#include "sdresid.hxx"
+#include <strings.hrc>
+#include <sdresid.hxx>
 #include <svx/DescriptionGenerator.hxx>
+#include <svx/ShapeTypeHandler.hxx>
 #include <rtl/ustring.h>
 
 using namespace ::com::sun::star;
@@ -48,14 +49,12 @@ AccessiblePresentationShape::~AccessiblePresentationShape()
 
 OUString SAL_CALL
     AccessiblePresentationShape::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return OUString("AccessiblePresentationShape");
 }
 
 /// Set this object's name if is different to the current name.
 OUString AccessiblePresentationShape::CreateAccessibleBaseName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     OUString sName;
 
@@ -104,7 +103,6 @@ OUString AccessiblePresentationShape::CreateAccessibleBaseName()
 
 OUString
     AccessiblePresentationShape::CreateAccessibleDescription()
-    throw (css::uno::RuntimeException, std::exception)
 {
     //    return createAccessibleName ();
     DescriptionGenerator aDG (mxShape);

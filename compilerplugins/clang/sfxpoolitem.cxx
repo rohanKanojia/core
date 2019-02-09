@@ -11,7 +11,7 @@
 #include <iostream>
 
 #include "plugin.hxx"
-#include "compat.hxx"
+#include "check.hxx"
 #include "clang/AST/CXXInheritance.h"
 
 /*
@@ -22,24 +22,19 @@ forgotten and hard to notice.
 namespace {
 
 class SfxPoolItem:
-    public RecursiveASTVisitor<SfxPoolItem>, public loplugin::Plugin
+    public loplugin::FilteringPlugin<SfxPoolItem>
 {
 public:
-    explicit SfxPoolItem(InstantiationData const & data): Plugin(data) {}
+    explicit SfxPoolItem(loplugin::InstantiationData const & data): FilteringPlugin(data)
+    {}
 
     virtual void run() override { TraverseDecl(compiler.getASTContext().getTranslationUnitDecl()); }
 
     bool VisitCXXRecordDecl( const CXXRecordDecl* );
 };
 
-bool BaseCheckNotSfxPoolItemSubclass(
-    const CXXRecordDecl *BaseDefinition
-#if CLANG_VERSION < 30800
-    , void *
-#endif
-    )
-{
-    if (BaseDefinition && BaseDefinition->getQualifiedNameAsString() == "SfxPoolItem") {
+bool BaseCheckNotSfxPoolItemSubclass(const CXXRecordDecl *BaseDefinition) {
+    if (BaseDefinition && loplugin::TypeCheck(BaseDefinition).Class("SfxPoolItem").GlobalNamespace()) {
         return false;
     }
     return true;
@@ -48,7 +43,7 @@ bool BaseCheckNotSfxPoolItemSubclass(
 bool isDerivedFromSfxPoolItem(const CXXRecordDecl *decl) {
     if (!decl)
         return false;
-    if (decl->getQualifiedNameAsString() == "SfxPoolItem")
+    if (loplugin::TypeCheck(decl).Class("SfxPoolItem").GlobalNamespace())
         return true;
     if (!decl->hasDefinition()) {
         return false;
@@ -56,21 +51,15 @@ bool isDerivedFromSfxPoolItem(const CXXRecordDecl *decl) {
     if (// not sure what hasAnyDependentBases() does,
         // but it avoids classes we don't want, e.g. WeakAggComponentImplHelper1
         !decl->hasAnyDependentBases() &&
-        !compat::forallBases(*decl, BaseCheckNotSfxPoolItemSubclass, nullptr, true)) {
+        !decl->forallBases(BaseCheckNotSfxPoolItemSubclass, true)) {
         return true;
     }
     return false;
 }
 
 
-bool BaseCheckNotSwMsgPoolItemSubclass(
-    const CXXRecordDecl *BaseDefinition
-#if CLANG_VERSION < 30800
-    , void *
-#endif
-    )
-{
-    if (BaseDefinition && BaseDefinition->getQualifiedNameAsString() == "SwMsgPoolItem") {
+bool BaseCheckNotSwMsgPoolItemSubclass(const CXXRecordDecl *BaseDefinition) {
+    if (BaseDefinition && loplugin::TypeCheck(BaseDefinition).Class("SwMsgPoolItem")) {
         return false;
     }
     return true;
@@ -79,7 +68,7 @@ bool BaseCheckNotSwMsgPoolItemSubclass(
 bool isDerivedFromSwMsgPoolItem(const CXXRecordDecl *decl) {
     if (!decl)
         return false;
-    if (decl->getQualifiedNameAsString() == "SwMsgPoolItem")
+    if (loplugin::TypeCheck(decl).Class("SwMsgPoolItem").GlobalNamespace())
         return true;
     if (!decl->hasDefinition()) {
         return false;
@@ -87,13 +76,13 @@ bool isDerivedFromSwMsgPoolItem(const CXXRecordDecl *decl) {
     if (// not sure what hasAnyDependentBases() does,
         // but it avoids classes we don't want, e.g. WeakAggComponentImplHelper1
         !decl->hasAnyDependentBases() &&
-        !compat::forallBases(*decl, BaseCheckNotSwMsgPoolItemSubclass, nullptr, true)) {
+        !decl->forallBases(BaseCheckNotSwMsgPoolItemSubclass, true)) {
         return true;
     }
     return false;
 }
 
-bool endsWith(const string& a, const string& b) {
+bool endsWith(const std::string& a, const std::string& b) {
     if (b.size() > a.size()) return false;
     return std::equal(a.begin() + a.size() - b.size(), a.end(), b.begin());
 }
@@ -118,12 +107,8 @@ bool SfxPoolItem::VisitCXXRecordDecl(const CXXRecordDecl* decl)
         return true;
     }
     // the enum types do some weird stuff involving SfxEnumItemInterface
-    std::string sRecordName = decl->getQualifiedNameAsString();
-    if (sRecordName == "SfxEnumItem" || sRecordName == "SfxAllEnumItem")
-        return true;
-
-    // the new field is only used for reading and writing to storage
-    if (sRecordName == "SvxCharSetColorItem")
+    auto tc = loplugin::TypeCheck(decl);
+    if (tc.Class("SfxEnumItem").GlobalNamespace() || tc.Class("SfxAllEnumItem").GlobalNamespace())
         return true;
 
     for (auto it = decl->method_begin(); it != decl->method_end(); ++it) {
@@ -132,8 +117,8 @@ bool SfxPoolItem::VisitCXXRecordDecl(const CXXRecordDecl* decl)
     }
     report(
             DiagnosticsEngine::Warning,
-            "SfxPoolItem subclass %0 declares new fields, but does not overide operator==",
-            decl->getLocStart())
+            "SfxPoolItem subclass %0 declares new fields, but does not override operator==",
+            compat::getBeginLoc(decl))
         << decl->getQualifiedNameAsString() << decl->getSourceRange();
     return true;
 }

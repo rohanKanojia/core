@@ -24,12 +24,11 @@
 #include <osl/module.hxx>
 #include <osl/file.hxx>
 #include <unotools/transliterationwrapper.hxx>
-#include <o3tl/make_unique.hxx>
 #include <memory>
 
-#include "callform.hxx"
-#include "global.hxx"
-#include "adiasync.hxx"
+#include <callform.hxx>
+#include <global.hxx>
+#include <adiasync.hxx>
 
 extern "C" {
 
@@ -79,17 +78,16 @@ typedef void (CALLTYPE* Unadvice)( double&      nHandle );
 class ModuleData
 {
 friend class ModuleCollection;
-    OUString aName;
-    osl::Module* pInstance;
+    OUString const aName;
+    std::unique_ptr<osl::Module> pInstance;
 public:
     ModuleData(const ModuleData&) = delete;
     const ModuleData& operator=(const ModuleData&) = delete;
 
-    ModuleData(const OUString& rStr, osl::Module* pInst) : aName(rStr), pInstance(pInst) {}
-    ~ModuleData() { delete pInstance; }
+    ModuleData(const OUString& rStr, std::unique_ptr<osl::Module> pInst) : aName(rStr), pInstance(std::move(pInst)) {}
 
     const OUString& GetName() const { return aName; }
-    osl::Module*    GetInstance() const { return pInstance; }
+    osl::Module*    GetInstance() const { return pInstance.get(); }
 };
 
 LegacyFuncData::LegacyFuncData(const ModuleData*pModule,
@@ -189,15 +187,15 @@ bool InitExternalFunc(const OUString& rModuleName)
     if ( fpSetLanguage )
     {
         LanguageType eLanguage = Application::GetSettings().GetUILanguageTag().getLanguageType();
-        sal_uInt16 nLanguage = (sal_uInt16) eLanguage;
+        sal_uInt16 nLanguage = static_cast<sal_uInt16>(eLanguage);
         (*reinterpret_cast<SetLanguagePtr>(fpSetLanguage))( nLanguage );
     }
 
-    // Module in die Collection aufnehmen
-    ModuleData* pModuleData = new ModuleData(rModuleName, pLib.release());
+    // include module into the collection
+    ModuleData* pModuleData = new ModuleData(rModuleName, std::move(pLib));
     aModuleCollection.insert(pModuleData);
 
-    // Schnittstelle initialisieren
+    // initialize interface
     AdvData pfCallBack = &ScAddInAsyncCallBack;
     LegacyFuncCollection* pLegacyFuncCol = ScGlobal::GetLegacyFuncCollection();
     sal_uInt16 nCount;
@@ -213,9 +211,9 @@ bool InitExternalFunc(const OUString& rModuleName)
         cFuncName[0] = 0;
         cInternalName[0] = 0;
         nParamCount = 0;
-        for ( sal_uInt16 j=0; j<MAXFUNCPARAM; j++ )
+        for (ParamType & rParamType : eParamType)
         {
-            eParamType[j] = ParamType::NONE;
+            rParamType = ParamType::NONE;
         }
         (*reinterpret_cast<GetFuncDataPtr>(fpGetData))(i, cFuncName, nParamCount,
                                        eParamType, cInternalName);
@@ -360,7 +358,7 @@ void LegacyFuncData::getParamDesc( OUString& aName, OUString& aDesc, sal_uInt16 
             sal_Char pcName[256];
             sal_Char pcDesc[256];
             *pcName = *pcDesc = 0;
-            sal_uInt16 nFuncNo = nNumber;   // nicht per Reference versauen lassen..
+            sal_uInt16 nFuncNo = nNumber;   // don't let it mess up via reference...
             reinterpret_cast< ::GetParamDesc>(fProc)( nFuncNo, nParam, pcName, pcDesc );
             aName = OUString( pcName, 256, osl_getThreadTextEncoding() );
             aDesc = OUString( pcDesc, 256, osl_getThreadTextEncoding() );
@@ -380,7 +378,7 @@ LegacyFuncCollection::LegacyFuncCollection(const LegacyFuncCollection& r)
 {
     for (auto const& it : r.m_Data)
     {
-        m_Data.insert(std::make_pair(it.first, o3tl::make_unique<LegacyFuncData>(*it.second)));
+        m_Data.insert(std::make_pair(it.first, std::make_unique<LegacyFuncData>(*it.second)));
     }
 }
 

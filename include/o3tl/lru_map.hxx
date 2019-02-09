@@ -11,6 +11,7 @@
 #ifndef INCLUDED_O3TL_LRU_MAP_HXX
 #define INCLUDED_O3TL_LRU_MAP_HXX
 
+#include <cassert>
 #include <list>
 #include <unordered_map>
 
@@ -30,16 +31,18 @@ namespace o3tl
  * for most of the operations with a combination unordered map and linked list.
  *
  **/
-template<typename Key, typename Value, class KeyHash = std::hash<Key>>
+template<typename Key, typename Value, class KeyHash = std::hash<Key>, class KeyEqual = std::equal_to<Key>>
 class lru_map final
 {
-private:
+public:
     typedef typename std::pair<Key, Value> key_value_pair_t;
+
+private:
     typedef std::list<key_value_pair_t> list_t;
     typedef typename list_t::iterator list_iterator_t;
     typedef typename list_t::const_iterator list_const_iterator_t;
 
-    typedef std::unordered_map<Key, list_iterator_t, KeyHash> map_t;
+    typedef std::unordered_map<Key, list_iterator_t, KeyHash, KeyEqual> map_t;
     typedef typename map_t::iterator map_iterator_t;
     typedef typename map_t::const_iterator map_const_iterator_t;
 
@@ -47,7 +50,7 @@ private:
     map_t mLruMap;
     const size_t mMaxSize;
 
-    inline void checkLRU()
+    void checkLRU()
     {
         if (mLruMap.size() > mMaxSize)
         {
@@ -57,60 +60,64 @@ private:
             mLruList.pop_back();
         }
     }
+
 public:
     typedef list_iterator_t iterator;
     typedef list_const_iterator_t const_iterator;
 
+    // a size of 0 effectively disables the LRU cleanup code
     lru_map(size_t nMaxSize)
-        : mMaxSize(nMaxSize)
+        : mMaxSize(nMaxSize ? nMaxSize : std::min(mLruMap.max_size(), mLruList.max_size()))
     {}
 
     void insert(key_value_pair_t& rPair)
     {
-        map_iterator_t iterator = mLruMap.find(rPair.first);
+        map_iterator_t i = mLruMap.find(rPair.first);
 
-        if (iterator == mLruMap.end()) // doesn't exist -> add to queue and map
+        if (i == mLruMap.end()) // doesn't exist -> add to queue and map
         {
             // add to front of the list
             mLruList.push_front(rPair);
             // add the list position (iterator) to the map
-            mLruMap[rPair.first] = mLruList.begin();
+            auto it = mLruList.begin();
+            mLruMap[it->first] = it;
             checkLRU();
         }
         else // already exists -> replace value
         {
             // replace value
-            iterator->second->second = rPair.second;
+            i->second->second = rPair.second;
             // bring to front of the lru list
-            mLruList.splice(mLruList.begin(), mLruList, iterator->second);
+            mLruList.splice(mLruList.begin(), mLruList, i->second);
         }
     }
 
     void insert(key_value_pair_t&& rPair)
     {
-        map_iterator_t iterator = mLruMap.find(rPair.first);
+        map_iterator_t i = mLruMap.find(rPair.first);
 
-        if (iterator == mLruMap.end()) // doesn't exist -> add to list and map
+        if (i == mLruMap.end()) // doesn't exist -> add to list and map
         {
             // add to front of the list
             mLruList.push_front(std::move(rPair));
             // add the list position (iterator) to the map
-            mLruMap[rPair.first] = mLruList.begin();
+            auto it = mLruList.begin();
+            mLruMap[it->first] = it;
             checkLRU();
         }
         else // already exists -> replace value
         {
             // replace value
-            iterator->second->second = std::move(rPair.second);
+            i->second->second = std::move(rPair.second);
             // push to back of the lru list
-            mLruList.splice(mLruList.begin(), mLruList, iterator->second);
+            mLruList.splice(mLruList.begin(), mLruList, i->second);
         }
     }
 
     const list_const_iterator_t find(const Key& key)
     {
-        const map_iterator_t iterator = mLruMap.find(key);
-        if (iterator == mLruMap.cend()) // can't find entry for the key
+        const map_iterator_t i = mLruMap.find(key);
+        if (i == mLruMap.cend()) // can't find entry for the key
         {
             // return empty iterator
             return mLruList.cend();
@@ -118,19 +125,48 @@ public:
         else
         {
             // push to back of the lru list
-            mLruList.splice(mLruList.begin(), mLruList, iterator->second);
-            return iterator->second;
+            mLruList.splice(mLruList.begin(), mLruList, i->second);
+            return i->second;
         }
+    }
+
+    // reverse-iterates the list removing all items matching the predicate
+    template<class UnaryPredicate>
+    void remove_if(UnaryPredicate pred)
+    {
+        auto it = mLruList.rbegin();
+        while (it != mLruList.rend())
+        {
+            if (pred(*it))
+            {
+                mLruMap.erase(it->first);
+                it = decltype(it){ mLruList.erase(std::next(it).base()) };
+            }
+            else
+                ++it;
+        }
+    }
+
+    const list_const_iterator_t begin() const
+    {
+        return mLruList.cbegin();
     }
 
     const list_const_iterator_t end() const
     {
-        return mLruList.end();
+        return mLruList.cend();
     }
 
     size_t size() const
     {
-        return mLruList.size();
+        assert(mLruMap.size() == mLruList.size());
+        return mLruMap.size();
+    }
+
+    void clear()
+    {
+        mLruMap.clear();
+        mLruList.clear();
     }
 };
 

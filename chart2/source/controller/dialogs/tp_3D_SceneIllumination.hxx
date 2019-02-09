@@ -19,16 +19,15 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_DIALOGS_TP_3D_SCENEILLUMINATION_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_DIALOGS_TP_3D_SCENEILLUMINATION_HXX
 
-#include "ModifyListenerCallBack.hxx"
-#include "TimerTriggeredControllerLock.hxx"
-
-#include <com/sun/star/beans/XPropertySet.hpp>
+#include <TimerTriggeredControllerLock.hxx>
 
 #include <vcl/tabpage.hxx>
-#include <vcl/fixed.hxx>
 #include <vcl/button.hxx>
-#include <svx/dlgctrl.hxx>
 #include <svx/dlgctl3d.hxx>
+
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+
+class SvxColorListBox;
 
 namespace chart
 {
@@ -53,22 +52,21 @@ public:
     ThreeD_SceneIllumination_TabPage(
         vcl::Window* pWindow,
         const css::uno::Reference< css::beans::XPropertySet > & xSceneProperties,
-        const css::uno::Reference< css::frame::XModel >& xChartModel,
-        const XColorListRef &pColorTable );
-    virtual ~ThreeD_SceneIllumination_TabPage();
+        const css::uno::Reference< css::frame::XModel >& xChartModel );
+    virtual ~ThreeD_SceneIllumination_TabPage() override;
     virtual void dispose() override;
 
 private:
-    DECL_LINK_TYPED( ClickLightSourceButtonHdl, Button*, void );
-    DECL_LINK_TYPED( SelectColorHdl, ListBox&, void );
-    DECL_LINK_TYPED( ColorDialogHdl, Button*, void );
-    DECL_LINK_TYPED( PreviewChangeHdl, SvxLightCtl3D*, void );
-    DECL_LINK_TYPED( PreviewSelectHdl, SvxLightCtl3D*, void );
+    DECL_LINK( ClickLightSourceButtonHdl, Button*, void );
+    DECL_LINK( SelectColorHdl, SvxColorListBox&, void );
+    DECL_LINK( ColorDialogHdl, Button*, void );
+    DECL_LINK( PreviewChangeHdl, SvxLightCtl3D*, void );
+    DECL_LINK( PreviewSelectHdl, SvxLightCtl3D*, void );
 
     void updatePreview();
 
 private:
-    DECL_LINK_TYPED(fillControlsFromModel, void *, void);
+    DECL_LINK(fillControlsFromModel, void *, void);
 
     void applyLightSourceToModel( sal_uInt32 nLightNumber );
     void applyLightSourcesToModel();
@@ -82,15 +80,15 @@ private:
     VclPtr<LightButton> m_pBtn_Light7;
     VclPtr<LightButton> m_pBtn_Light8;
 
-    VclPtr<ColorLB>     m_pLB_LightSource;
+    VclPtr<SvxColorListBox> m_pLB_LightSource;
     VclPtr<PushButton>  m_pBtn_LightSource_Color;
 
-    VclPtr<ColorLB>     m_pLB_AmbientLight;
+    VclPtr<SvxColorListBox> m_pLB_AmbientLight;
     VclPtr<PushButton>  m_pBtn_AmbientLight_Color;
 
     VclPtr<SvxLightCtl3D>   m_pCtl_Preview;
 
-    LightSourceInfo* m_pLightSourceInfoList;
+    std::unique_ptr<LightSourceInfo[]> m_pLightSourceInfoList;
 
     css::uno::Reference< css::beans::XPropertySet > m_xSceneProperties;
 

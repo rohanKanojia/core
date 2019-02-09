@@ -20,15 +20,15 @@
 #ifndef INCLUDED_VCL_PRNTYPES_HXX
 #define INCLUDED_VCL_PRNTYPES_HXX
 
-#include <tools/solar.h>
-#include <i18nutil/paper.hxx>
+#include <sal/types.h>
 #include <o3tl/typed_flags_set.hxx>
 
 
-enum DuplexMode { DUPLEX_UNKNOWN, DUPLEX_OFF, DUPLEX_LONGEDGE, DUPLEX_SHORTEDGE };
+// appears to be a copy of css::view::DuplexMode
+enum class DuplexMode { Unknown, Off, LongEdge, ShortEdge };
 
 
-enum Orientation { ORIENTATION_PORTRAIT, ORIENTATION_LANDSCAPE };
+enum class Orientation { Portrait, Landscape };
 
 
 enum class PrintQueueFlags
@@ -65,7 +65,7 @@ namespace o3tl
     template<> struct typed_flags<PrintQueueFlags> : is_typed_flags<PrintQueueFlags, 0x01ffffff> {};
 }
 
-#define QUEUE_JOBS_DONTKNOW             ((sal_uLong)0xFFFFFFFF)
+constexpr inline sal_uInt32 QUEUE_JOBS_DONTKNOW = 0xFFFFFFFF;
 
 
 enum class PrinterCapType
@@ -74,14 +74,18 @@ enum class PrinterCapType
     Copies             = 2,
     CollateCopies      = 3,
     SetOrientation     = 4,
-    SetPaperBin        = 5,
     SetPaperSize       = 6,
     SetPaper           = 7,
     Fax                = 8,
     PDF                = 9,
     ExternalDialog     = 10,
-    SetDuplex          = 11,
     UsePullModel       = 12,
+};
+
+enum class PrinterSetupMode
+{
+    SingleJob = 0,
+    DocumentGlobal = 1
 };
 
 #endif // INCLUDED_VCL_PRNTYPES_HXX

@@ -39,11 +39,11 @@
 #include <com/sun/star/uri/XUriReference.hpp>
 #include <cppuhelper/bootstrap.hxx>
 #include <cppuhelper/implbase.hxx>
-#include "cppunit/TestCase.h"
-#include "cppunit/TestFixture.h"
-#include "cppunit/TestSuite.h"
-#include "cppunit/extensions/HelperMacros.h"
-#include "cppunit/plugin/TestPlugIn.h"
+#include <cppunit/TestCase.h>
+#include <cppunit/TestFixture.h>
+#include <cppunit/TestSuite.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
 #include <rtl/strbuf.hxx>
 #include <rtl/string.h>
 #include <rtl/string.hxx>
@@ -73,40 +73,33 @@ public:
         css::uno::Reference< css::ucb::XContentIdentifier > const & identifier);
 
     virtual css::uno::Reference< css::ucb::XContentIdentifier > SAL_CALL
-    getIdentifier() throw (css::uno::RuntimeException, std::exception) override {
+    getIdentifier() override {
         return m_identifier;
     }
 
-    virtual OUString SAL_CALL getContentType()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual OUString SAL_CALL getContentType() override
     {
         return OUString();
     }
 
     virtual void SAL_CALL addContentEventListener(
-        css::uno::Reference< css::ucb::XContentEventListener > const &)
-        throw (css::uno::RuntimeException, std::exception) override
+        css::uno::Reference< css::ucb::XContentEventListener > const &) override
     {}
 
     virtual void SAL_CALL removeContentEventListener(
-        css::uno::Reference< css::ucb::XContentEventListener > const &)
-        throw (css::uno::RuntimeException, std::exception) override
+        css::uno::Reference< css::ucb::XContentEventListener > const &) override
     {}
 
-    virtual sal_Int32 SAL_CALL createCommandIdentifier()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual sal_Int32 SAL_CALL createCommandIdentifier() override
     {
         return 0;
     }
 
     virtual css::uno::Any SAL_CALL execute(
         css::ucb::Command const & command, sal_Int32 commandId,
-        css::uno::Reference< css::ucb::XCommandEnvironment > const &)
-        throw (
-            css::uno::Exception, css::ucb::CommandAbortedException,
-            css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference< css::ucb::XCommandEnvironment > const &) override;
 
-    virtual void SAL_CALL abort(sal_Int32) throw (css::uno::RuntimeException, std::exception) override {}
+    virtual void SAL_CALL abort(sal_Int32) override {}
 
 private:
     static char const m_prefix[];
@@ -132,9 +125,6 @@ Content::Content(
 css::uno::Any Content::execute(
     css::ucb::Command const & command, sal_Int32,
     css::uno::Reference< css::ucb::XCommandEnvironment > const &)
-    throw (
-        css::uno::Exception, css::ucb::CommandAbortedException,
-        css::uno::RuntimeException, std::exception)
 {
     if ( command.Name != "getCasePreservingURL" )
     {
@@ -171,16 +161,14 @@ css::uno::Any Content::execute(
 class Provider: public cppu::WeakImplHelper< css::ucb::XContentProvider > {
 public:
     virtual css::uno::Reference< css::ucb::XContent > SAL_CALL queryContent(
-        css::uno::Reference< css::ucb::XContentIdentifier > const & identifier)
-        throw (css::ucb::IllegalIdentifierException, css::uno::RuntimeException, std::exception) override
+        css::uno::Reference< css::ucb::XContentIdentifier > const & identifier) override
     {
         return new Content(identifier);
     }
 
     virtual sal_Int32 SAL_CALL compareContentIds(
         css::uno::Reference< css::ucb::XContentIdentifier > const & id1,
-        css::uno::Reference< css::ucb::XContentIdentifier > const & id2)
-        throw (css::uno::RuntimeException, std::exception) override
+        css::uno::Reference< css::ucb::XContentIdentifier > const & id2) override
     {
         assert(id1.is() && id2.is());
         return
@@ -312,12 +300,7 @@ void Test::testFindFirstURLInText() {
           "ftp://bla.bla.bla/blubber/", 3, 29 },
         { "..\\ftp://bla.bla.bla/blubber/...", nullptr, 0, 0 },
         { "..\\ftp:\\\\bla.bla.bla\\blubber/...",
-//Sync with tools/source/fsys/urlobj.cxx and changeScheme
-#ifdef LINUX
-          "smb://bla.bla.bla/blubber%2F", 7, 29 },
-#else
           "file://bla.bla.bla/blubber%2F", 7, 29 },
-#endif
         { "http://sun.com", "http://sun.com/", 0, 14 },
         { "http://sun.com/", "http://sun.com/", 0, 15 },
         { "http://www.xerox.com@www.pcworld.com/go/3990332.htm", nullptr, 0, 0 },
@@ -409,16 +392,16 @@ void Test::testFindFirstURLInText() {
             buf.append("\" -> ");
             buf.append(tests[i].result == nullptr ? "none" : tests[i].result);
             buf.append(" (");
-            buf.append(static_cast< sal_Int32 >(tests[i].begin));
+            buf.append(tests[i].begin);
             buf.append(", ");
-            buf.append(static_cast< sal_Int32 >(tests[i].end));
+            buf.append(tests[i].end);
             buf.append(')');
             buf.append(" != ");
             buf.append(OUStringToOString(result, RTL_TEXTENCODING_UTF8));
             buf.append(" (");
-            buf.append(static_cast< sal_Int32 >(begin));
+            buf.append(begin);
             buf.append(", ");
-            buf.append(static_cast< sal_Int32 >(end));
+            buf.append(end);
             buf.append(')');
             msg = buf.makeStringAndClear();
         }
@@ -432,58 +415,54 @@ void Test::testResolveIdnaHost() {
     input.clear();
     CPPUNIT_ASSERT_EQUAL(input, URIHelper::resolveIdnaHost(input));
 
-    input = OUString::fromUtf8("Foo.M\xC3\xBCnchen.de");
+    input = u"Foo.M\u00FCnchen.de";
     CPPUNIT_ASSERT_EQUAL(input, URIHelper::resolveIdnaHost(input));
 
-    input = OUString::fromUtf8("foo://Muenchen.de");
+    input = "foo://Muenchen.de";
     CPPUNIT_ASSERT_EQUAL(input, URIHelper::resolveIdnaHost(input));
 
-    input = OUString::fromUtf8("foo://-M\xC3\xBCnchen.de");
+    input = u"foo://-M\u00FCnchen.de";
     CPPUNIT_ASSERT_EQUAL(input, URIHelper::resolveIdnaHost(input));
 
-    input = OUString::fromUtf8("foo://M\xC3\xBCnchen-.de");
+    input = u"foo://M\u00FCnchen-.de";
     CPPUNIT_ASSERT_EQUAL(input, URIHelper::resolveIdnaHost(input));
 
-    input = OUString::fromUtf8("foo://xn--M\xC3\xBCnchen.de");
+    input = u"foo://xn--M\u00FCnchen.de";
     CPPUNIT_ASSERT_EQUAL(input, URIHelper::resolveIdnaHost(input));
 
-    input = OUString::fromUtf8("foo://xy--M\xC3\xBCnchen.de");
+    input = u"foo://xy--M\u00FCnchen.de";
     CPPUNIT_ASSERT_EQUAL(input, URIHelper::resolveIdnaHost(input));
 
-    input = OUString::fromUtf8("foo://.M\xC3\xBCnchen.de");
+    input = u"foo://.M\u00FCnchen.de";
     CPPUNIT_ASSERT_EQUAL(input, URIHelper::resolveIdnaHost(input));
 
-    input = OUString::fromUtf8("foo://-bar.M\xC3\xBCnchen.de");
+    input = u"foo://-bar.M\u00FCnchen.de";
     CPPUNIT_ASSERT_EQUAL(input, URIHelper::resolveIdnaHost(input));
 
-    input = OUString::fromUtf8("foo://bar-.M\xC3\xBCnchen.de");
+    input = u"foo://bar-.M\u00FCnchen.de";
     CPPUNIT_ASSERT_EQUAL(input, URIHelper::resolveIdnaHost(input));
 
-    input = OUString::fromUtf8("foo://xn--bar.M\xC3\xBCnchen.de");
+    input = u"foo://xn--bar.M\u00FCnchen.de";
     CPPUNIT_ASSERT_EQUAL(input, URIHelper::resolveIdnaHost(input));
 
-    input = OUString::fromUtf8("foo://xy--bar.M\xC3\xBCnchen.de");
+    input = u"foo://xy--bar.M\u00FCnchen.de";
     CPPUNIT_ASSERT_EQUAL(input, URIHelper::resolveIdnaHost(input));
 
     CPPUNIT_ASSERT_EQUAL(
-        OUString::fromUtf8("foo://M\xC3\xBCnchen@xn--mnchen-3ya.de"),
-        URIHelper::resolveIdnaHost(
-            OUString::fromUtf8("foo://M\xC3\xBCnchen@M\xC3\xBCnchen.de")));
+        OUString(u"foo://M\u00FCnchen@xn--mnchen-3ya.de"),
+        URIHelper::resolveIdnaHost(u"foo://M\u00FCnchen@M\u00FCnchen.de"));
 
     CPPUNIT_ASSERT_EQUAL(
-        OUString::fromUtf8("foo://xn--mnchen-3ya.de."),
-        URIHelper::resolveIdnaHost(
-            OUString::fromUtf8("foo://M\xC3\xBCnchen.de.")));
+        OUString("foo://xn--mnchen-3ya.de."),
+        URIHelper::resolveIdnaHost(u"foo://M\u00FCnchen.de."));
 
     CPPUNIT_ASSERT_EQUAL(
-        OUString::fromUtf8("Foo://bar@xn--mnchen-3ya.de:123/?bar#baz"),
-        URIHelper::resolveIdnaHost(
-            OUString::fromUtf8("Foo://bar@M\xC3\xBCnchen.de:123/?bar#baz")));
+        OUString("Foo://bar@xn--mnchen-3ya.de:123/?bar#baz"),
+        URIHelper::resolveIdnaHost(u"Foo://bar@M\u00FCnchen.de:123/?bar#baz"));
 
     CPPUNIT_ASSERT_EQUAL(
-        OUString::fromUtf8("foo://xn--mnchen-3ya.de"),
-        URIHelper::resolveIdnaHost(
-            OUString::fromUtf8("foo://Mu\xCC\x88nchen.de")));
+        OUString("foo://xn--mnchen-3ya.de"),
+        URIHelper::resolveIdnaHost(u"foo://Mu\u0308nchen.de"));
 }
 
 css::uno::Reference< css::uno::XComponentContext > Test::m_context;

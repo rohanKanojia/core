@@ -19,11 +19,11 @@
 
 
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
-#include <comphelper/anytostring.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 
-#include "shapesubset.hxx"
+#include <shapesubset.hxx>
 
 
 using namespace ::com::sun::star;
@@ -79,16 +79,13 @@ namespace slideshow
                 // if not done yet: revoke subset from original
                 disableSubsetShape();
             }
-            catch (uno::Exception &)
+            catch (const uno::Exception& e)
             {
-                OSL_FAIL( OUStringToOString(
-                                comphelper::anyToString(
-                                    cppu::getCaughtException() ),
-                                RTL_TEXTENCODING_UTF8 ).getStr() );
+                SAL_WARN("slideshow", e);
             }
         }
 
-        AttributableShapeSharedPtr ShapeSubset::getSubsetShape() const
+        AttributableShapeSharedPtr const & ShapeSubset::getSubsetShape() const
         {
             return mpSubsetShape ? mpSubsetShape : mpOriginalShape;
         }
@@ -119,7 +116,7 @@ namespace slideshow
             return maTreeNode.isEmpty();
         }
 
-        DocTreeNode ShapeSubset::getSubset() const
+        const DocTreeNode& ShapeSubset::getSubset() const
         {
             return maTreeNode;
         }

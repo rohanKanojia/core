@@ -17,20 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "Client.hxx"
+#include <Client.hxx>
 #include <com/sun/star/embed/NoVisualAreaSizeException.hpp>
 #include <svx/svdoole2.hxx>
 #include <svx/svdograf.hxx>
 #include <svx/svdpagv.hxx>
 
-#include <toolkit/helper/vclunohelper.hxx>
-
-#include "strings.hrc"
-#include "ViewShell.hxx"
-#include "DrawViewShell.hxx"
-#include "View.hxx"
-#include "Window.hxx"
-#include "sdresid.hxx"
+#include <ViewShell.hxx>
+#include <DrawViewShell.hxx>
+#include <View.hxx>
+#include <Window.hxx>
 #include <vcl/svapp.hxx>
 
 using namespace com::sun::star;
@@ -40,8 +36,7 @@ namespace sd {
 Client::Client(SdrOle2Obj* pObj, ViewShell* pViewShell, vcl::Window* pWindow) :
     SfxInPlaceClient(pViewShell->GetViewShell(), pWindow, pObj->GetAspect() ),
     mpViewShell(pViewShell),
-    pSdrOle2Obj(pObj),
-    pSdrGrafObj(nullptr)
+    pSdrOle2Obj(pObj)
 {
     SetObject( pObj->GetObjRef() );
     DBG_ASSERT( GetObject().is(), "No object connected!" );
@@ -55,7 +50,7 @@ Client::~Client()
  * If IP active, then we get this request to increase the visible section of the
  * object.
  */
-void Client::RequestNewObjectArea( Rectangle& aObjRect )
+void Client::RequestNewObjectArea( ::tools::Rectangle& aObjRect )
 {
     ::sd::View* pView = mpViewShell->GetView();
 
@@ -73,14 +68,14 @@ void Client::RequestNewObjectArea( Rectangle& aObjRect )
         bPosProtect = pObj->IsMoveProtect();
     }
 
-    Rectangle aOldRect = GetObjArea();
+    ::tools::Rectangle aOldRect = GetObjArea();
     if ( bPosProtect )
         aObjRect.SetPos( aOldRect.TopLeft() );
 
     if ( bSizeProtect )
         aObjRect.SetSize( aOldRect.GetSize() );
 
-    Rectangle aWorkArea( pView->GetWorkArea() );
+    ::tools::Rectangle aWorkArea( pView->GetWorkArea() );
     if ( !aWorkArea.IsInside(aObjRect) && !bPosProtect && aObjRect != aOldRect )
     {
         // correct position
@@ -89,10 +84,10 @@ void Client::RequestNewObjectArea( Rectangle& aObjRect )
         Point aWorkAreaTL = aWorkArea.TopLeft();
         Point aWorkAreaBR = aWorkArea.BottomRight();
 
-        aPos.X() = std::max(aPos.X(), aWorkAreaTL.X());
-        aPos.X() = std::min(aPos.X(), aWorkAreaBR.X()-aSize.Width());
-        aPos.Y() = std::max(aPos.Y(), aWorkAreaTL.Y());
-        aPos.Y() = std::min(aPos.Y(), aWorkAreaBR.Y()-aSize.Height());
+        aPos.setX( std::max(aPos.X(), aWorkAreaTL.X()) );
+        aPos.setX( std::min(aPos.X(), aWorkAreaBR.X()-aSize.Width()) );
+        aPos.setY( std::max(aPos.Y(), aWorkAreaTL.Y()) );
+        aPos.setY( std::min(aPos.Y(), aWorkAreaBR.Y()-aSize.Height()) );
 
         aObjRect.SetPos(aPos);
     }
@@ -110,7 +105,7 @@ void Client::ObjectAreaChanged()
         if(pObj)
         {
             // no need to check for changes, this method is called only if the area really changed
-            Rectangle aNewRectangle(GetScaledObjArea());
+            ::tools::Rectangle aNewRectangle(GetScaledObjArea());
 
             // #i118524# if sheared/rotated, center to non-rotated LogicRect
             pObj->setSuppressSetVisAreaSize(true);
@@ -119,7 +114,7 @@ void Client::ObjectAreaChanged()
             {
                 pObj->SetLogicRect( aNewRectangle );
 
-                const Rectangle& rBoundRect = pObj->GetCurrentBoundRect();
+                const ::tools::Rectangle& rBoundRect = pObj->GetCurrentBoundRect();
                 const Point aDelta(aNewRectangle.Center() - rBoundRect.Center());
 
                 aNewRectangle.Move(aDelta.X(), aDelta.Y());
@@ -150,21 +145,21 @@ void Client::ViewChanged()
         ::sd::View* pView = mpViewShell->GetView();
         if (pView)
         {
-            Rectangle aLogicRect( pSdrOle2Obj->GetLogicRect() );
+            ::tools::Rectangle aLogicRect( pSdrOle2Obj->GetLogicRect() );
             Size aLogicSize( aLogicRect.GetWidth(), aLogicRect.GetHeight() );
 
             if( pSdrOle2Obj->IsChart() )
             {
                 //charts never should be stretched see #i84323# for example
-                pSdrOle2Obj->SetLogicRect( Rectangle( aLogicRect.TopLeft(), aLogicSize ) );
+                pSdrOle2Obj->SetLogicRect( ::tools::Rectangle( aLogicRect.TopLeft(), aLogicSize ) );
                 pSdrOle2Obj->BroadcastObjectChange();
                 return;
             }
 
             // TODO/LEAN: maybe we can do this without requesting the VisualArea?
             // working with the visual area might need running state, so the object may switch itself to this state
-            MapMode             aMap100( MAP_100TH_MM );
-            Rectangle           aVisArea;
+            MapMode             aMap100( MapUnit::Map100thMM );
+            ::tools::Rectangle           aVisArea;
             Size aSize = pSdrOle2Obj->GetOrigObjSize( &aMap100 );
 
             aVisArea.SetSize( aSize );
@@ -179,7 +174,7 @@ void Client::ViewChanged()
                     aMap100 );
             if( aPixelDiff.Width() || aPixelDiff.Height() )
             {
-                pSdrOle2Obj->SetLogicRect( Rectangle( aLogicRect.TopLeft(), aScaledSize ) );
+                pSdrOle2Obj->SetLogicRect( ::tools::Rectangle( aLogicRect.TopLeft(), aScaledSize ) );
                 pSdrOle2Obj->BroadcastObjectChange();
             }
             else

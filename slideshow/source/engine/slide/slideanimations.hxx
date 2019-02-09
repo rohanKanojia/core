@@ -24,10 +24,10 @@
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <basegfx/vector/b2dvector.hxx>
 
-#include "event.hxx"
-#include "slideshowcontext.hxx"
-#include "subsettableshapemanager.hxx"
-#include "animationnode.hxx"
+#include <event.hxx>
+#include <slideshowcontext.hxx>
+#include <subsettableshapemanager.hxx>
+#include <animationnode.hxx>
 
 namespace com { namespace sun { namespace star { namespace animations
 {
@@ -57,7 +57,7 @@ namespace slideshow
              */
             SlideAnimations( const SlideShowContext&     rContext,
                              const ::basegfx::B2DVector& rSlideSize );
-            ~SlideAnimations();
+            ~SlideAnimations() COVERITY_NOEXCEPT_FALSE;
 
             /** Import animations from a SMIL root animation node.
 
@@ -103,7 +103,7 @@ namespace slideshow
             void end();
 
         private:
-            SlideShowContext         maContext;
+            SlideShowContext const   maContext;
             const basegfx::B2DVector maSlideSize;
             AnimationNodeSharedPtr   mpRootNode;
         };

@@ -7,26 +7,23 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <rtfreferencetable.hxx>
+#include "rtfreferencetable.hxx"
 
 namespace writerfilter
 {
 namespace rtftok
 {
-
-RTFReferenceTable::RTFReferenceTable(Entries_t const& rEntries)
-    : m_aEntries(rEntries)
+RTFReferenceTable::RTFReferenceTable(Entries_t aEntries)
+    : m_aEntries(std::move(aEntries))
 {
 }
 
-RTFReferenceTable::~RTFReferenceTable()
-{
-}
+RTFReferenceTable::~RTFReferenceTable() = default;
 
 void RTFReferenceTable::resolve(Table& rHandler)
 {
-    for (Entries_t::const_iterator i = m_aEntries.begin(); i != m_aEntries.end(); ++i)
-        rHandler.entry(i->first, i->second);
+    for (auto& rEntry : m_aEntries)
+        rHandler.entry(rEntry.first, rEntry.second);
 }
 
 } // namespace rtftok

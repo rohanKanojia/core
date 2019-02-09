@@ -8,6 +8,11 @@
           <value xml:lang="en-US">Go to Line...</value>
         </prop>
       </node>
+      <node oor:name=".uno:RepeatSearch" oor:op="replace">
+        <prop oor:name="Label" oor:type="xs:string">
+          <value xml:lang="en-US">Repeat Search</value>
+        </prop>
+      </node>
       <node oor:name=".uno:ShowLines" oor:op="replace">
         <prop oor:name="Label" oor:type="xs:string">
           <value xml:lang="en-US">Line Numbers</value>
@@ -55,7 +60,7 @@
       </node>
       <node oor:name=".uno:InsertFormHScroll" oor:op="replace">
         <prop oor:name="Label" oor:type="xs:string">
-          <value xml:lang="en-US">Form Horizonal Scroll Bar</value>
+          <value xml:lang="en-US">Form Horizontal Scroll Bar</value>
         </prop>
         <prop oor:name="Properties" oor:type="xs:int">
           <value>1</value>
@@ -69,7 +74,43 @@
           <value>1</value>
         </prop>
       </node>
+      <node oor:name=".uno:NewModule" oor:op="replace">
+        <prop oor:name="Label" oor:type="xs:string">
+          <value xml:lang="en-US">BASIC Module</value>
+        </prop>
+      </node>
+      <node oor:name=".uno:NewDialog" oor:op="replace">
+        <prop oor:name="Label" oor:type="xs:string">
+          <value xml:lang="en-US">BASIC Dialog</value>
+        </prop>
+      </node>
+      <node oor:name=".uno:DeleteCurrent" oor:op="replace">
+        <prop oor:name="Label" oor:type="xs:string">
+          <value xml:lang="en-US">Delete</value>
+        </prop>
+      </node>
+      <node oor:name=".uno:RenameCurrent" oor:op="replace">
+        <prop oor:name="Label" oor:type="xs:string">
+          <value xml:lang="en-US">Rename</value>
+        </prop>
+      </node>
+      <node oor:name=".uno:HideCurPage" oor:op="replace">
+        <prop oor:name="Label" oor:type="xs:string">
+          <value xml:lang="en-US">Hide</value>
+        </prop>
+      </node>
     </node>
-    <node oor:name="Popups"/>
+    <node oor:name="Popups">
+      <node oor:name=".uno:RunMenu" oor:op="replace">
+        <prop oor:name="Label" oor:type="xs:string">
+          <value xml:lang="en-US">~Run</value>
+        </prop>
+      </node>
+      <node oor:name=".uno:DialogMenu" oor:op="replace">
+        <prop oor:name="Label" oor:type="xs:string">
+          <value xml:lang="en-US">~Dialog</value>
+        </prop>
+      </node>
+    </node>
   </node>
 </oor:component-data>

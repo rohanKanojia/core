@@ -20,10 +20,7 @@
 #define INCLUDED_CUI_SOURCE_INC_TEXTATTR_HXX
 
 #include <svx/dlgctrl.hxx>
-
-#include <vcl/group.hxx>
-
-#include <vcl/fixed.hxx>
+#include <svx/svdobj.hxx>
 #include <sfx2/basedlgs.hxx>
 
 class SdrView;
@@ -39,25 +36,8 @@ class SvxTextAttrPage : public SvxTabPage
 private:
     static const sal_uInt16 pRanges[];
 
-    VclPtr<TriStateBox>         m_pTsbAutoGrowWidth;
-    VclPtr<TriStateBox>         m_pTsbAutoGrowHeight;
-    VclPtr<TriStateBox>         m_pTsbFitToSize;
-    VclPtr<TriStateBox>         m_pTsbContour;
-    VclPtr<TriStateBox>         m_pTsbWordWrapText;
-    VclPtr<TriStateBox>         m_pTsbAutoGrowSize;
-
-    VclPtr<VclFrame>            m_pFlDistance;
-    VclPtr<MetricField>         m_pMtrFldLeft;
-    VclPtr<MetricField>         m_pMtrFldRight;
-    VclPtr<MetricField>         m_pMtrFldTop;
-    VclPtr<MetricField>         m_pMtrFldBottom;
-
-    VclPtr<VclFrame>            m_pFlPosition;
-    VclPtr<SvxRectCtl>          m_pCtlPosition;
-    VclPtr<TriStateBox>         m_pTsbFullWidth;
-
     const SfxItemSet&   rOutAttrs;
-    const SdrView*      pView;
+    SdrObjKind    m_eObjKind;
 
     bool                bAutoGrowSizeEnabled;
     bool                bContourEnabled;
@@ -66,8 +46,27 @@ private:
     bool                bWordWrapTextEnabled;
     bool                bFitToSizeEnabled;
 
-    DECL_LINK_TYPED( ClickFullWidthHdl_Impl, Button*, void );
-    DECL_LINK_TYPED( ClickHdl_Impl, Button*, void );
+    SvxRectCtl m_aCtlPosition;
+
+    std::unique_ptr<weld::Widget> m_xDrawingText;
+    std::unique_ptr<weld::Widget> m_xCustomShapeText;
+    std::unique_ptr<weld::CheckButton> m_xTsbAutoGrowWidth;
+    std::unique_ptr<weld::CheckButton> m_xTsbAutoGrowHeight;
+    std::unique_ptr<weld::CheckButton> m_xTsbFitToSize;
+    std::unique_ptr<weld::CheckButton> m_xTsbContour;
+    std::unique_ptr<weld::CheckButton> m_xTsbWordWrapText;
+    std::unique_ptr<weld::CheckButton> m_xTsbAutoGrowSize;
+    std::unique_ptr<weld::Frame> m_xFlDistance;
+    std::unique_ptr<weld::MetricSpinButton> m_xMtrFldLeft;
+    std::unique_ptr<weld::MetricSpinButton> m_xMtrFldRight;
+    std::unique_ptr<weld::MetricSpinButton> m_xMtrFldTop;
+    std::unique_ptr<weld::MetricSpinButton> m_xMtrFldBottom;
+    std::unique_ptr<weld::Frame> m_xFlPosition;
+    std::unique_ptr<weld::CustomWeld> m_xCtlPosition;
+    std::unique_ptr<weld::CheckButton> m_xTsbFullWidth;
+
+    DECL_LINK(ClickFullWidthHdl_Impl, weld::Button&, void);
+    DECL_LINK(ClickHdl_Impl, weld::Button&, void);
 
     /** Return whether the text direction is from left to right (</sal_True>) or
         top to bottom (</sal_False>).
@@ -76,20 +75,19 @@ private:
 
 public:
 
-    SvxTextAttrPage( vcl::Window* pWindow, const SfxItemSet& rInAttrs );
-    virtual ~SvxTextAttrPage();
-    virtual void dispose() override;
+    SvxTextAttrPage(TabPageParent pWindow, const SfxItemSet& rInAttrs);
+    virtual ~SvxTextAttrPage() override;
 
-    static VclPtr<SfxTabPage>  Create( vcl::Window*, const SfxItemSet* );
+    static VclPtr<SfxTabPage>  Create( TabPageParent, const SfxItemSet* );
     static const sal_uInt16*  GetRanges() { return pRanges; }
 
     virtual bool        FillItemSet( SfxItemSet* ) override;
     virtual void        Reset( const SfxItemSet * ) override;
 
-    virtual void        PointChanged( vcl::Window* pWindow, RECT_POINT eRP ) override;
+    virtual void        PointChanged( weld::DrawingArea* pWindow, RectPoint eRP ) override;
 
     void         Construct();
-    void         SetView( const SdrView* pSdrView ) { pView = pSdrView; }
+    void         SetObjKind(SdrObjKind eObjKind) { m_eObjKind = eObjKind; }
     virtual void PageCreated(const SfxAllItemSet& aSet) override;
 };
 

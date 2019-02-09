@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "toolkit/controls/geometrycontrolmodel.hxx"
+#include <toolkit/controls/geometrycontrolmodel.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <com/sun/star/resource/XStringResourceResolver.hpp>
 #include <osl/diagnose.h>
 #include <rtl/instance.hxx>
-#include <comphelper/property.hxx>
 #include <comphelper/sequence.hxx>
 #include <toolkit/controls/eventcontainer.hxx>
 #include <toolkit/helper/property.hxx>
@@ -134,7 +134,7 @@
     }
 
 
-    Sequence< Type > SAL_CALL OGeometryControlModel_Base::getTypes(  ) throw (RuntimeException, std::exception)
+    Sequence< Type > SAL_CALL OGeometryControlModel_Base::getTypes(  )
     {
         // our own types
         Sequence< Type > aTypes = ::comphelper::concatSequences(
@@ -157,8 +157,8 @@
             sal_Int32 nOldSize = aTypes.getLength();
             aTypes.realloc( nOldSize + aAggTypes.getLength() );
             ::std::copy(
-                aAggTypes.getConstArray(),
-                aAggTypes.getConstArray() + aAggTypes.getLength(),
+                aAggTypes.begin(),
+                aAggTypes.end(),
                 aTypes.getArray() + nOldSize
             );
         }
@@ -188,13 +188,13 @@
 
         switch ( nHandle )
         {
-            case GCM_PROPERTY_ID_POS_X:             aDefault <<= (sal_Int32) 0; break;
-            case GCM_PROPERTY_ID_POS_Y:             aDefault <<= (sal_Int32) 0; break;
-            case GCM_PROPERTY_ID_WIDTH:             aDefault <<= (sal_Int32) 0; break;
-            case GCM_PROPERTY_ID_HEIGHT:            aDefault <<= (sal_Int32) 0; break;
+            case GCM_PROPERTY_ID_POS_X:             aDefault <<= sal_Int32(0); break;
+            case GCM_PROPERTY_ID_POS_Y:             aDefault <<= sal_Int32(0); break;
+            case GCM_PROPERTY_ID_WIDTH:             aDefault <<= sal_Int32(0); break;
+            case GCM_PROPERTY_ID_HEIGHT:            aDefault <<= sal_Int32(0); break;
             case GCM_PROPERTY_ID_NAME:              aDefault <<= OUString(); break;
-            case GCM_PROPERTY_ID_TABINDEX:          aDefault <<= (sal_Int16) -1; break;
-            case GCM_PROPERTY_ID_STEP:              aDefault <<= (sal_Int32) 0; break;
+            case GCM_PROPERTY_ID_TABINDEX:          aDefault <<= sal_Int16(-1); break;
+            case GCM_PROPERTY_ID_STEP:              aDefault <<= sal_Int32(0); break;
             case GCM_PROPERTY_ID_TAG:               aDefault <<= OUString(); break;
             case GCM_PROPERTY_ID_RESOURCERESOLVER:  aDefault <<= Reference< resource::XStringResourceResolver >(); break;
             default:                            OSL_FAIL( "ImplGetDefaultValueByHandle - unknown Property" );
@@ -244,7 +244,7 @@
     }
 
 
-    Any SAL_CALL OGeometryControlModel_Base::queryAggregation( const Type& _rType ) throw(RuntimeException, std::exception)
+    Any SAL_CALL OGeometryControlModel_Base::queryAggregation( const Type& _rType )
     {
         Any aReturn;
         if (_rType.equals(cppu::UnoType<XCloneable>::get()) && !m_bCloneable)
@@ -269,7 +269,7 @@
     }
 
 
-    Any SAL_CALL OGeometryControlModel_Base::queryInterface( const Type& _rType ) throw(RuntimeException, std::exception)
+    Any SAL_CALL OGeometryControlModel_Base::queryInterface( const Type& _rType )
     {
         return OGCM_Base::queryInterface(_rType);
     }
@@ -303,13 +303,13 @@
 
 
     sal_Bool SAL_CALL OGeometryControlModel_Base::convertFastPropertyValue(Any& _rConvertedValue, Any& _rOldValue,
-            sal_Int32 _nHandle, const Any& _rValue) throw (IllegalArgumentException)
+            sal_Int32 _nHandle, const Any& _rValue)
     {
         return OPropertyContainer::convertFastPropertyValue(_rConvertedValue, _rOldValue, _nHandle, _rValue);
     }
 
 
-    void SAL_CALL OGeometryControlModel_Base::setFastPropertyValue_NoBroadcast(sal_Int32 _nHandle, const Any& _rValue) throw (Exception, std::exception)
+    void SAL_CALL OGeometryControlModel_Base::setFastPropertyValue_NoBroadcast(sal_Int32 _nHandle, const Any& _rValue)
     {
         OPropertyContainer::setFastPropertyValue_NoBroadcast(_nHandle, _rValue);
     }
@@ -349,19 +349,19 @@
     }
 
 
-    Reference< XPropertySetInfo> SAL_CALL OGeometryControlModel_Base::getPropertySetInfo() throw(RuntimeException, std::exception)
+    Reference< XPropertySetInfo> SAL_CALL OGeometryControlModel_Base::getPropertySetInfo()
     {
         return OPropertySetAggregationHelper::createPropertySetInfo(getInfoHelper());
     }
 
 
-    Reference< XCloneable > SAL_CALL OGeometryControlModel_Base::createClone(  ) throw(RuntimeException, std::exception)
+    Reference< XCloneable > SAL_CALL OGeometryControlModel_Base::createClone(  )
     {
         OSL_ENSURE(m_bCloneable, "OGeometryControlModel_Base::createClone: invalid call!");
         if (!m_bCloneable)
             return Reference< XCloneable >();
 
-        // let the aggregate create it's own clone
+        // let the aggregate create its own clone
         // the interface
         Reference< XCloneable > xCloneAccess;
         m_xAggregate->queryAggregation(cppu::UnoType<decltype(xCloneAccess)>::get()) >>= xCloneAccess;
@@ -417,7 +417,7 @@
     }
 
 
-    Reference< XNameContainer > SAL_CALL OGeometryControlModel_Base::getEvents() throw(RuntimeException, std::exception)
+    Reference< XNameContainer > SAL_CALL OGeometryControlModel_Base::getEvents()
     {
         if( !mxEventContainer.is() )
             mxEventContainer = static_cast<XNameContainer*>(new toolkit::ScriptEventContainer());
@@ -439,7 +439,7 @@
     //= OCommonGeometryControlModel
 
 
-    typedef std::unordered_map< OUString, sal_Int32, OUStringHash > HashMapString2Int;
+    typedef std::unordered_map< OUString, sal_Int32 > HashMapString2Int;
     typedef std::vector< css::uno::Sequence< css::beans::Property > >   PropSeqArray;
     typedef std::vector< ::std::vector< sal_Int32 > > IntArrayArray;
 
@@ -483,7 +483,7 @@
             PropSeqArray &rAggProperties = AggregateProperties::get();
             m_nPropertyMapId = rAggProperties.size();
             rAggProperties.push_back( xPI->getProperties() );
-            AmbiguousPropertyIds::get().push_back( IntArrayArray::value_type() );
+            AmbiguousPropertyIds::get().emplace_back( );
 
             rMap[ m_sServiceSpecifier ] = m_nPropertyMapId;
         }
@@ -492,7 +492,7 @@
     }
 
 
-    struct PropertyNameLess : public ::std::binary_function< Property, Property, bool >
+    struct PropertyNameLess
     {
         bool operator()( const Property& _rLHS, const Property& _rRHS )
         {
@@ -501,7 +501,7 @@
     };
 
 
-    struct PropertyNameEqual : public ::std::unary_function< Property, bool >
+    struct PropertyNameEqual
     {
         const OUString&  m_rCompare;
         explicit PropertyNameEqual( const OUString& _rCompare ) : m_rCompare( _rCompare ) { }
@@ -516,8 +516,8 @@
     ::cppu::IPropertyArrayHelper* OCommonGeometryControlModel::createArrayHelper( sal_Int32 _nId ) const
     {
         OSL_ENSURE( _nId == m_nPropertyMapId, "OCommonGeometryControlModel::createArrayHelper: invalid argument!" );
-        OSL_ENSURE( _nId < (sal_Int32)AggregateProperties::get().size(), "OCommonGeometryControlModel::createArrayHelper: invalid status info (1)!" );
-        OSL_ENSURE( _nId < (sal_Int32)AmbiguousPropertyIds::get().size(), "OCommonGeometryControlModel::createArrayHelper: invalid status info (2)!" );
+        OSL_ENSURE( _nId < static_cast<sal_Int32>(AggregateProperties::get().size()), "OCommonGeometryControlModel::createArrayHelper: invalid status info (1)!" );
+        OSL_ENSURE( _nId < static_cast<sal_Int32>(AmbiguousPropertyIds::get().size()), "OCommonGeometryControlModel::createArrayHelper: invalid status info (2)!" );
 
         // our own properties
         Sequence< Property > aProps;
@@ -531,8 +531,8 @@
         IntArrayArray::value_type& rDuplicateIds = AmbiguousPropertyIds::get()[ _nId ];
         // for this, sort the aggregate properties
         ::std::sort(
-            aAggregateProps.getArray(),
-            aAggregateProps.getArray() + aAggregateProps.getLength(),
+            aAggregateProps.begin(),
+            aAggregateProps.end(),
             PropertyNameLess()
         );
         const Property* pAggProps = aAggregateProps.getConstArray();
@@ -578,15 +578,15 @@
         return new OCommonGeometryControlModel( _rxAggregateInstance, m_sServiceSpecifier );
     }
 
-    Sequence< sal_Int8 > SAL_CALL OCommonGeometryControlModel::getImplementationId(  ) throw (RuntimeException, std::exception)
+    Sequence< sal_Int8 > SAL_CALL OCommonGeometryControlModel::getImplementationId(  )
     {
         return css::uno::Sequence<sal_Int8>();
     }
 
 
-    struct Int32Equal : public ::std::unary_function< sal_Int32, bool >
+    struct Int32Equal
     {
-        sal_Int32   m_nCompare;
+        sal_Int32 const   m_nCompare;
         explicit Int32Equal( sal_Int32 _nCompare ) : m_nCompare( _nCompare ) { }
 
         bool operator()( sal_Int32 _nLHS )
@@ -596,20 +596,14 @@
     };
 
 
-    void SAL_CALL OCommonGeometryControlModel::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _rValue ) throw ( Exception, std::exception )
+    void SAL_CALL OCommonGeometryControlModel::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _rValue )
     {
         OGeometryControlModel_Base::setFastPropertyValue_NoBroadcast( _nHandle, _rValue );
 
         // look if this id is one we recognized as duplicate
         IntArrayArray::value_type& rDuplicateIds = AmbiguousPropertyIds::get()[ m_nPropertyMapId ];
 
-        IntArrayArray::value_type::const_iterator aPos = ::std::find_if(
-            rDuplicateIds.begin(),
-            rDuplicateIds.end(),
-            Int32Equal( _nHandle )
-        );
-
-        if ( rDuplicateIds.end() != aPos )
+        if ( std::any_of(rDuplicateIds.begin(), rDuplicateIds.end(), Int32Equal( _nHandle )) )
         {
             // yes, it is such a property
             OUString sPropName;

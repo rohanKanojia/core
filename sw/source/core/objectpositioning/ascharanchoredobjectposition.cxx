@@ -29,7 +29,6 @@
 #include <editeng/ulspitem.hxx>
 #include <fmtornt.hxx>
 
-#include <com/sun/star/text/HoriOrientation.hpp>
 
 using namespace ::com::sun::star;
 using namespace objectpositioning;
@@ -53,7 +52,7 @@ SwAsCharAnchoredObjectPosition::SwAsCharAnchoredObjectPosition(
       maAnchorPos ( Point() ),
       mnRelPos ( 0 ),
       maObjBoundRect ( SwRect() ),
-      mnLineAlignment ( 0 )
+      mnLineAlignment ( sw::LineAlign::NONE )
 {}
 
 /** destructor */
@@ -82,14 +81,14 @@ void SwAsCharAnchoredObjectPosition::CalcPosition()
     // swap anchor frame, if swapped. Note: destructor takes care of the 'undo'
     SwFrameSwapper aFrameSwapper( &rAnchorFrame, false );
 
-    SWRECTFN( ( &rAnchorFrame ) )
+    SwRectFnSet aRectFnSet(&rAnchorFrame);
 
     Point aAnchorPos( mrProposedAnchorPos );
 
     const SwFrameFormat& rFrameFormat = GetFrameFormat();
 
     SwRect aObjBoundRect( GetAnchoredObj().GetObjRect() );
-    SwTwips nObjWidth = (aObjBoundRect.*fnRect->fnGetWidth)();
+    SwTwips nObjWidth = aRectFnSet.GetWidth(aObjBoundRect);
 
     // determine spacing values considering layout-/text-direction
     const SvxLRSpaceItem& rLRSpace = rFrameFormat.GetLRSpace();
@@ -131,9 +130,9 @@ void SwAsCharAnchoredObjectPosition::CalcPosition()
     // left spacing is only considered, if requested.
     if( mnFlags & AsCharFlags::UlSpace )
     {
-        aAnchorPos.X() += nLRSpaceLeft;
+        aAnchorPos.AdjustX(nLRSpaceLeft );
     }
-    aAnchorPos.Y() += nULSpaceUpper;
+    aAnchorPos.AdjustY(nULSpaceUpper );
 
     // for drawing objects: consider difference between its bounding rectangle
     // and its snapping rectangle by adjusting anchor position.
@@ -148,9 +147,9 @@ void SwAsCharAnchoredObjectPosition::CalcPosition()
 
         if( mnFlags & AsCharFlags::UlSpace )
         {
-            aAnchorPos.X() += aSnapRect.Left() - aObjBoundRect.Left();
+            aAnchorPos.AdjustX(aSnapRect.Left() - aObjBoundRect.Left() );
         }
-        aAnchorPos.Y() += aSnapRect.Top() - aObjBoundRect.Top();
+        aAnchorPos.AdjustY(aSnapRect.Top() - aObjBoundRect.Top() );
     }
 
     // enlarge bounding rectangle of object by its spacing.
@@ -164,7 +163,7 @@ void SwAsCharAnchoredObjectPosition::CalcPosition()
     const SwTwips nObjBoundHeight = ( mnFlags & AsCharFlags::Rotate )
                                     ? aObjBoundRect.Width()
                                     : aObjBoundRect.Height();
-    const SwTwips nRelPos = _GetRelPosToBase( nObjBoundHeight, rVert );
+    const SwTwips nRelPos = GetRelPosToBase( nObjBoundHeight, rVert );
 
     // for initial positioning:
     // adjust the proposed anchor position by difference between
@@ -174,14 +173,14 @@ void SwAsCharAnchoredObjectPosition::CalcPosition()
     if( mnFlags & AsCharFlags::Init && nRelPos < 0 && mnLineAscentInclObjs < -nRelPos )
     {
         if( mnFlags & AsCharFlags::Rotate )
-            aAnchorPos.X() -= mnLineAscentInclObjs + nRelPos;
+            aAnchorPos.AdjustX( -(mnLineAscentInclObjs + nRelPos) );
         else
-            aAnchorPos.Y() -= mnLineAscentInclObjs + nRelPos;
+            aAnchorPos.AdjustY( -(mnLineAscentInclObjs + nRelPos) );
     }
 
     // consider BIDI-multiportion by adjusting proposed anchor position
     if( mnFlags & AsCharFlags::Bidi )
-        aAnchorPos.X() -= aObjBoundRect.Width();
+        aAnchorPos.AdjustX( -(aObjBoundRect.Width()) );
 
     // calculate relative position considering rotation and inside rotation
     // reverse direction.
@@ -190,15 +189,15 @@ void SwAsCharAnchoredObjectPosition::CalcPosition()
         if( mnFlags & AsCharFlags::Rotate )
         {
             if( mnFlags & AsCharFlags::Reverse )
-                aRelPos.X() = -nRelPos - aObjBoundRect.Width();
+                aRelPos.setX( -nRelPos - aObjBoundRect.Width() );
             else
             {
-                aRelPos.X() = nRelPos;
-                aRelPos.Y() = -aObjBoundRect.Height();
+                aRelPos.setX( nRelPos );
+                aRelPos.setY( -aObjBoundRect.Height() );
             }
         }
         else
-            aRelPos.Y() = nRelPos;
+            aRelPos.setY( nRelPos );
     }
 
     if( !IsObjFly() )
@@ -207,7 +206,7 @@ void SwAsCharAnchoredObjectPosition::CalcPosition()
         {
             // save calculated Y-position value for 'automatic' vertical positioning,
             // in order to avoid a switch to 'manual' vertical positioning in
-            // <SwDrawContact::_Changed(..)>.
+            // <SwDrawContact::Changed_(..)>.
             const sal_Int16 eVertOrient = rVert.GetVertOrient();
             if( rVert.GetPos() != nRelPos && eVertOrient != text::VertOrientation::NONE )
             {
@@ -225,7 +224,7 @@ void SwAsCharAnchoredObjectPosition::CalcPosition()
             if ( rAnchorFrame.IsRightToLeft() )
             {
                 rAnchorFrame.SwitchLTRtoRTL( aAbsAnchorPos );
-                aAbsAnchorPos.X() -= nObjWidth;
+                aAbsAnchorPos.AdjustX( -nObjWidth );
             }
             if ( rAnchorFrame.IsVertical() )
                 rAnchorFrame.SwitchHorizontalToVertical( aAbsAnchorPos );
@@ -260,7 +259,7 @@ void SwAsCharAnchoredObjectPosition::CalcPosition()
         if ( rAnchorFrame.IsRightToLeft() )
         {
             rAnchorFrame.SwitchLTRtoRTL( aAnchorPos );
-            aAnchorPos.X() -= nObjWidth;
+            aAnchorPos.AdjustX( -nObjWidth );
         }
         if ( rAnchorFrame.IsVertical() )
             rAnchorFrame.SwitchHorizontalToVertical( aAnchorPos );
@@ -281,7 +280,7 @@ void SwAsCharAnchoredObjectPosition::CalcPosition()
         if ( rAnchorFrame.IsRightToLeft() )
         {
             rAnchorFrame.SwitchLTRtoRTL( aAnchorPos );
-            aAnchorPos.X() -= nObjWidth;
+            aAnchorPos.AdjustX( -nObjWidth );
         }
         if ( rAnchorFrame.IsVertical() )
         {
@@ -302,9 +301,9 @@ void SwAsCharAnchoredObjectPosition::CalcPosition()
                aRelAttr != rFlyInContentFrame.GetCurrRelPos() ) )
         {
             // set new anchor position and relative position
-            SwFlyInContentFrame* pFlyInContentFrame = &(const_cast<SwFlyInContentFrame&>(rFlyInContentFrame));
+            SwFlyInContentFrame* pFlyInContentFrame = &const_cast<SwFlyInContentFrame&>(rFlyInContentFrame);
             pFlyInContentFrame->SetRefPoint( aAnchorPos, aRelAttr, aRelPos );
-            if( nObjWidth != (pFlyInContentFrame->Frame().*fnRect->fnGetWidth)() )
+            if( nObjWidth != aRectFnSet.GetWidth(pFlyInContentFrame->getFrameArea()) )
             {
                 // recalculate object bound rectangle, if object width has changed.
                 aObjBoundRect = GetAnchoredObj().GetObjRect();
@@ -314,7 +313,7 @@ void SwAsCharAnchoredObjectPosition::CalcPosition()
                 aObjBoundRect.Height( aObjBoundRect.Height() + rULSpace.GetLower() );
             }
         }
-        OSL_ENSURE( (rFlyInContentFrame.Frame().*fnRect->fnGetHeight)(),
+        OSL_ENSURE( aRectFnSet.GetHeight(rFlyInContentFrame.getFrameArea()),
             "SwAnchoredObjectPosition::CalcPosition(..) - fly frame has an invalid height" );
     }
 
@@ -332,13 +331,13 @@ void SwAsCharAnchoredObjectPosition::CalcPosition()
     0 - no feedback; 1|2|3 - proposed formatting of characters
     at top|at center|at bottom of line.
 */
-SwTwips SwAsCharAnchoredObjectPosition::_GetRelPosToBase(
+SwTwips SwAsCharAnchoredObjectPosition::GetRelPosToBase(
                                             const SwTwips _nObjBoundHeight,
                                             const SwFormatVertOrient& _rVert )
 {
     SwTwips nRelPosToBase = 0;
 
-    mnLineAlignment = 0;
+    mnLineAlignment = sw::LineAlign::NONE;
 
     const sal_Int16 eVertOrient = _rVert.GetVertOrient();
 
@@ -366,26 +365,26 @@ SwTwips SwAsCharAnchoredObjectPosition::_GetRelPosToBase(
                 // positioning necessary. Also, the max. ascent isn't changed.
                 nRelPosToBase -= mnLineAscentInclObjs;
                 if ( eVertOrient == text::VertOrientation::LINE_CENTER )
-                    mnLineAlignment = 2;
+                    mnLineAlignment = sw::LineAlign::CENTER;
                 else if ( eVertOrient == text::VertOrientation::LINE_TOP )
-                    mnLineAlignment = 1;
+                    mnLineAlignment = sw::LineAlign::TOP;
                 else if ( eVertOrient == text::VertOrientation::LINE_BOTTOM )
-                    mnLineAlignment = 3;
+                    mnLineAlignment = sw::LineAlign::BOTTOM;
             }
             else if ( eVertOrient == text::VertOrientation::LINE_CENTER )
             {
                 nRelPosToBase -= ( _nObjBoundHeight + mnLineAscentInclObjs - mnLineDescentInclObjs ) / 2;
-                mnLineAlignment = 2;
+                mnLineAlignment = sw::LineAlign::CENTER;
             }
             else if ( eVertOrient == text::VertOrientation::LINE_TOP )
             {
                 nRelPosToBase -= mnLineAscentInclObjs;
-                mnLineAlignment = 1;
+                mnLineAlignment = sw::LineAlign::TOP;
             }
             else if ( eVertOrient == text::VertOrientation::LINE_BOTTOM )
             {
                 nRelPosToBase += mnLineDescentInclObjs - _nObjBoundHeight;
-                mnLineAlignment = 3;
+                mnLineAlignment = sw::LineAlign::BOTTOM;
             }
         }
     }

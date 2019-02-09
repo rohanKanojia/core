@@ -18,15 +18,13 @@
  */
 
 #include <sal/config.h>
+#include <vector>
 #include <rtl/uuid.h>
+#include <cppuhelper/supportsservice.hxx>
 #include "securityenvironment_nssimpl.hxx"
+#include <com/sun/star/xml/crypto/XXMLSecurityContext.hpp>
 
-#include "xmlsecuritycontext_nssimpl.hxx"
-#include "xmlstreamio.hxx"
-
-#include "xmlsecurity/xmlsec-wrapper.h"
-
-using namespace ::com::sun::star::uno ;
+using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang ;
 using ::com::sun::star::lang::XMultiServiceFactory ;
 using ::com::sun::star::lang::XSingleServiceFactory ;
@@ -34,42 +32,52 @@ using ::com::sun::star::lang::XSingleServiceFactory ;
 using ::com::sun::star::xml::crypto::XSecurityEnvironment ;
 using ::com::sun::star::xml::crypto::XXMLSecurityContext ;
 
+class XMLSecurityContext_NssImpl
+    : public ::cppu::WeakImplHelper<xml::crypto::XXMLSecurityContext, lang::XServiceInfo>
+{
+private:
+    std::vector<uno::Reference<xml::crypto::XSecurityEnvironment>> m_vSecurityEnvironments;
+
+    sal_Int32 m_nDefaultEnvIndex;
+
+public:
+    XMLSecurityContext_NssImpl();
+
+    //XXMLSecurityContext
+    virtual sal_Int32 SAL_CALL addSecurityEnvironment(
+        const uno::Reference<xml::crypto::XSecurityEnvironment>& aSecurityEnvironment) override;
+
+    virtual ::sal_Int32 SAL_CALL getSecurityEnvironmentNumber() override;
+
+    virtual uno::Reference<xml::crypto::XSecurityEnvironment>
+        SAL_CALL getSecurityEnvironmentByIndex(::sal_Int32 index) override;
+
+    virtual uno::Reference<xml::crypto::XSecurityEnvironment>
+        SAL_CALL getSecurityEnvironment() override;
+
+    virtual ::sal_Int32 SAL_CALL getDefaultSecurityEnvironmentIndex() override;
+
+    virtual void SAL_CALL setDefaultSecurityEnvironmentIndex(sal_Int32 nDefaultEnvIndex) override;
+
+    //XServiceInfo
+    virtual OUString SAL_CALL getImplementationName() override;
+
+    virtual sal_Bool SAL_CALL supportsService(const OUString& ServiceName) override;
+
+    virtual uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
+};
+
 XMLSecurityContext_NssImpl::XMLSecurityContext_NssImpl()
     : m_nDefaultEnvIndex(-1)
 {
-    //Init xmlsec library
-    if( xmlSecInit() < 0 ) {
-        throw RuntimeException() ;
-    }
-
-    //Init xmlsec crypto engine library
-    if( xmlSecCryptoInit() < 0 ) {
-        xmlSecShutdown() ;
-        throw RuntimeException() ;
-    }
-
-    //Enable external stream handlers
-    if( xmlEnableStreamInputCallbacks() < 0 ) {
-        xmlSecCryptoShutdown() ;
-        xmlSecShutdown() ;
-        throw RuntimeException() ;
-    }
-}
-
-XMLSecurityContext_NssImpl::~XMLSecurityContext_NssImpl()
-{
-    xmlDisableStreamInputCallbacks() ;
-    xmlSecCryptoShutdown() ;
-    xmlSecShutdown() ;
 }
 
 sal_Int32 SAL_CALL XMLSecurityContext_NssImpl::addSecurityEnvironment(
-    const css::uno::Reference< css::xml::crypto::XSecurityEnvironment >& aSecurityEnvironment)
-    throw (css::security::SecurityInfrastructureException, css::uno::RuntimeException, std::exception)
+    const uno::Reference< xml::crypto::XSecurityEnvironment >& aSecurityEnvironment)
 {
     if( !aSecurityEnvironment.is() )
     {
-        throw RuntimeException() ;
+        throw uno::RuntimeException() ;
     }
 
     m_vSecurityEnvironments.push_back( aSecurityEnvironment );
@@ -79,92 +87,60 @@ sal_Int32 SAL_CALL XMLSecurityContext_NssImpl::addSecurityEnvironment(
 
 
 sal_Int32 SAL_CALL XMLSecurityContext_NssImpl::getSecurityEnvironmentNumber(  )
-    throw (css::uno::RuntimeException, std::exception)
 {
     return m_vSecurityEnvironments.size();
 }
 
-css::uno::Reference< css::xml::crypto::XSecurityEnvironment > SAL_CALL
+uno::Reference< xml::crypto::XSecurityEnvironment > SAL_CALL
     XMLSecurityContext_NssImpl::getSecurityEnvironmentByIndex( sal_Int32 index )
-    throw (css::uno::RuntimeException, std::exception)
 {
-    css::uno::Reference< css::xml::crypto::XSecurityEnvironment > xSecurityEnvironment;
+    if (index < 0 || index >= static_cast<sal_Int32>(m_vSecurityEnvironments.size()))
+        throw uno::RuntimeException();
 
-    if (index >= 0 && index < ( sal_Int32 )m_vSecurityEnvironments.size())
-    {
-        xSecurityEnvironment = m_vSecurityEnvironments[index];
-    }
-    else
-        throw RuntimeException() ;
-
+    uno::Reference< xml::crypto::XSecurityEnvironment > xSecurityEnvironment = m_vSecurityEnvironments[index];
     return xSecurityEnvironment;
 }
 
-css::uno::Reference< css::xml::crypto::XSecurityEnvironment > SAL_CALL
+uno::Reference< xml::crypto::XSecurityEnvironment > SAL_CALL
     XMLSecurityContext_NssImpl::getSecurityEnvironment(  )
-    throw (css::uno::RuntimeException, std::exception)
 {
-    if (m_nDefaultEnvIndex >= 0 && m_nDefaultEnvIndex < ( sal_Int32 )m_vSecurityEnvironments.size())
-        return getSecurityEnvironmentByIndex(m_nDefaultEnvIndex);
-    else
-        throw RuntimeException() ;
+    if (m_nDefaultEnvIndex < 0 || m_nDefaultEnvIndex >= static_cast<sal_Int32>(m_vSecurityEnvironments.size()))
+        throw uno::RuntimeException();
+
+    return getSecurityEnvironmentByIndex(m_nDefaultEnvIndex);
 }
 
 sal_Int32 SAL_CALL XMLSecurityContext_NssImpl::getDefaultSecurityEnvironmentIndex(  )
-    throw (css::uno::RuntimeException, std::exception)
 {
     return m_nDefaultEnvIndex ;
 }
 
 void SAL_CALL XMLSecurityContext_NssImpl::setDefaultSecurityEnvironmentIndex( sal_Int32 nDefaultEnvIndex )
-    throw (css::uno::RuntimeException, std::exception)
 {
     m_nDefaultEnvIndex = nDefaultEnvIndex;
 }
 
 /* XServiceInfo */
-OUString SAL_CALL XMLSecurityContext_NssImpl::getImplementationName() throw( RuntimeException, std::exception ) {
-    return impl_getImplementationName() ;
+OUString SAL_CALL XMLSecurityContext_NssImpl::getImplementationName() {
+    return OUString("com.sun.star.xml.crypto.XMLSecurityContext");
 }
 
 /* XServiceInfo */
-sal_Bool SAL_CALL XMLSecurityContext_NssImpl::supportsService( const OUString& serviceName) throw( RuntimeException, std::exception ) {
-    Sequence< OUString > seqServiceNames = getSupportedServiceNames() ;
-    const OUString* pArray = seqServiceNames.getConstArray() ;
-    for( sal_Int32 i = 0 ; i < seqServiceNames.getLength() ; i ++ ) {
-        if( *( pArray + i ) == serviceName )
-            return sal_True ;
-    }
-    return sal_False ;
+sal_Bool SAL_CALL XMLSecurityContext_NssImpl::supportsService( const OUString& serviceName) {
+    return cppu::supportsService(this, serviceName);
 }
 
 /* XServiceInfo */
-Sequence< OUString > SAL_CALL XMLSecurityContext_NssImpl::getSupportedServiceNames() throw( RuntimeException, std::exception ) {
-    return impl_getSupportedServiceNames() ;
-}
-
-//Helper for XServiceInfo
-Sequence< OUString > XMLSecurityContext_NssImpl::impl_getSupportedServiceNames() {
-    ::osl::Guard< ::osl::Mutex > aGuard( ::osl::Mutex::getGlobalMutex() ) ;
-    Sequence<OUString> seqServiceNames { "com.sun.star.xml.crypto.XMLSecurityContext" };
+uno::Sequence< OUString > SAL_CALL XMLSecurityContext_NssImpl::getSupportedServiceNames() {
+    uno::Sequence<OUString> seqServiceNames { "com.sun.star.xml.crypto.XMLSecurityContext" };
     return seqServiceNames ;
 }
 
-OUString XMLSecurityContext_NssImpl::impl_getImplementationName() throw( RuntimeException ) {
-    return OUString("com.sun.star.xml.security.bridge.xmlsec.XMLSecurityContext_NssImpl") ;
+extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+com_sun_star_xml_crypto_XMLSecurityContext_get_implementation(
+    uno::XComponentContext* /*pCtx*/, uno::Sequence<uno::Any> const& /*rSeq*/)
+{
+    return cppu::acquire(new XMLSecurityContext_NssImpl);
 }
-
-//Helper for registry
-Reference< XInterface > SAL_CALL XMLSecurityContext_NssImpl::impl_createInstance( const Reference< XMultiServiceFactory >& ) throw( RuntimeException ) {
-    return Reference< XInterface >( *new XMLSecurityContext_NssImpl ) ;
-}
-
-Reference< XSingleServiceFactory > XMLSecurityContext_NssImpl::impl_createFactory( const Reference< XMultiServiceFactory >& aServiceManager ) {
-    //Reference< XSingleServiceFactory > xFactory ;
-    //xFactory = ::cppu::createSingleFactory( aServiceManager , impl_getImplementationName , impl_createInstance , impl_getSupportedServiceNames ) ;
-    //return xFactory ;
-    return ::cppu::createSingleFactory( aServiceManager , impl_getImplementationName() , impl_createInstance , impl_getSupportedServiceNames() ) ;
-}
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

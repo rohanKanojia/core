@@ -17,16 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include "db.hxx"
 #include <osl/diagnose.h>
+#include <osl/file.hxx>
 #include <osl/thread.h>
 #include <osl/process.h>
+#include <rtl/character.hxx>
 #include <rtl/uri.hxx>
-#include <osl/file.hxx>
+#include <rtl/ustrbuf.hxx>
 #include <com/sun/star/lang/Locale.hpp>
 #include <com/sun/star/awt/Toolkit.hpp>
 #include <com/sun/star/i18n/Collator.hpp>
-#include <rtl/ustrbuf.hxx>
+#include <comphelper/propertysequence.hxx>
 #include "inputstream.hxx"
 #include <algorithm>
 #include <cassert>
@@ -36,6 +39,7 @@
 
 // Extensible help
 #include <com/sun/star/deployment/ExtensionManager.hpp>
+#include <com/sun/star/deployment/ExtensionRemovedException.hpp>
 #include <com/sun/star/deployment/thePackageManagerFactory.hpp>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/uno/XComponentContext.hpp>
@@ -44,12 +48,10 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
-#include <com/sun/star/frame/XConfigManager.hpp>
 #include <com/sun/star/ucb/SimpleFileAccess.hpp>
 #include <com/sun/star/util/theMacroExpander.hpp>
 #include <com/sun/star/uri/UriReferenceFactory.hpp>
 #include <com/sun/star/uri/XVndSunStarExpandUrl.hpp>
-#include <com/sun/star/script/XInvocation.hpp>
 #include <i18nlangtag/languagetag.hxx>
 
 #include <com/sun/star/awt/XToolkit.hpp>
@@ -66,6 +68,9 @@
 #include "urlparameter.hxx"
 
 #ifdef _WIN32
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #endif
 
@@ -86,7 +91,7 @@ OUString Databases::expandURL( const OUString& aURL )
     return aRetURL;
 }
 
-OUString Databases::expandURL( const OUString& aURL, Reference< uno::XComponentContext > xContext )
+OUString Databases::expandURL( const OUString& aURL, const Reference< uno::XComponentContext >& xContext )
 {
     static Reference< util::XMacroExpander > xMacroExpander;
     static Reference< uri::XUriReferenceFactory > xFac;
@@ -123,11 +128,9 @@ Databases::Databases( bool showBasic,
                       const OUString& productName,
                       const OUString& productVersion,
                       const OUString& styleSheet,
-                      Reference< uno::XComponentContext > xContext )
+                      Reference< uno::XComponentContext > const & xContext )
     : m_xContext( xContext ),
       m_bShowBasic(showBasic),
-      m_nCustomCSSDocLength( 0 ),
-      m_pCustomCSSDoc( nullptr ),
       m_aCSS(styleSheet.toAsciiLowerCase()),
       newProdName( "$[officename]" ),
       newProdVersion( "$[officeversion]" ),
@@ -160,43 +163,16 @@ Databases::Databases( bool showBasic,
 
 Databases::~Databases()
 {
-    // release stylesheet
-
-    delete[] m_pCustomCSSDoc;
-
     // unload the databases
 
-    {
-        // DatabasesTable
-        DatabasesTable::iterator it = m_aDatabases.begin();
-        while( it != m_aDatabases.end() )
-        {
-            delete it->second;
-            ++it;
-        }
-    }
+    // DatabasesTable
+    m_aDatabases.clear();
 
-    {
-        //  ModInfoTable
+    //  ModInfoTable
+    m_aModInfo.clear();
 
-        ModInfoTable::iterator it = m_aModInfo.begin();
-        while( it != m_aModInfo.end() )
-        {
-            delete it->second;
-            ++it;
-        }
-    }
-
-    {
-        // KeywordInfoTable
-
-        KeywordInfoTable::iterator it = m_aKeywordInfo.begin();
-        while( it != m_aKeywordInfo.end() )
-        {
-            delete it->second;
-            ++it;
-        }
-    }
+    // KeywordInfoTable
+    m_aKeywordInfo.clear();
 }
 
 OString Databases::getImageTheme()
@@ -205,11 +181,10 @@ OString Databases::getImageTheme()
         configuration::theDefaultProvider::get(m_xContext);
 
     // set root path
-    uno::Sequence < uno::Any > lParams(1);
-    beans::PropertyValue                       aParam ;
-    aParam.Name    = "nodepath";
-    aParam.Value <<= OUString("org.openoffice.Office.Common");
-    lParams[0] = uno::makeAny(aParam);
+    uno::Sequence<uno::Any> lParams(comphelper::InitAnyPropertySequence(
+    {
+        {"nodepath", uno::Any(OUString("org.openoffice.Office.Common"))}
+    }));
 
     // open it
     uno::Reference< uno::XInterface > xCFG( xConfigProvider->createInstanceWithArguments(
@@ -347,7 +322,7 @@ StaticModuleInformation* Databases::getStaticInformationForModule( const OUStrin
     OUString key = processLang(Language) + "/" + Module;
 
     std::pair< ModInfoTable::iterator,bool > aPair =
-        m_aModInfo.insert( ModInfoTable::value_type( key,nullptr ) );
+        m_aModInfo.emplace(key,nullptr);
 
     ModInfoTable::iterator it = aPair.first;
 
@@ -363,15 +338,15 @@ StaticModuleInformation* Databases::getStaticInformationForModule( const OUStrin
             sal_uInt64 nRead;
             sal_Char buffer[2048];
             sal_Unicode lineBuffer[1028];
-            OUString fileContent;
+            OUStringBuffer fileContent;
 
             while( osl::FileBase::E_None == cfgFile.read( &buffer,2048,nRead ) && nRead )
-                fileContent += OUString( buffer,sal_Int32( nRead ),RTL_TEXTENCODING_UTF8 );
+                fileContent.append(OUString( buffer,sal_Int32( nRead ),RTL_TEXTENCODING_UTF8 ));
 
             cfgFile.close();
 
             const sal_Unicode* str = fileContent.getStr();
-            OUString current,lang_,program,startid,title;
+            OUString current,program,startid,title;
             OUString order( "1" );
 
             for( sal_Int32 i = 0;i < fileContent.getLength();i++ )
@@ -391,10 +366,6 @@ StaticModuleInformation* Databases::getStaticInformationForModule( const OUStrin
                         {
                             startid = current.copy( current.indexOf('=') + 1 );
                         }
-                        else if( current.startsWith("Language") )
-                        {
-                            lang_ = current.copy( current.indexOf('=') + 1 );
-                        }
                         else if( current.startsWith("Program") )
                         {
                             program = current.copy( current.indexOf('=') + 1 );
@@ -410,14 +381,14 @@ StaticModuleInformation* Databases::getStaticInformationForModule( const OUStrin
                     lineBuffer[ pos++ ] = ch;
             }
             replaceName( title );
-            it->second = new StaticModuleInformation( title,
+            it->second.reset(new StaticModuleInformation( title,
                                                       startid,
                                                       program,
-                                                      order );
+                                                      order ));
         }
     }
 
-    return it->second;
+    return it->second.get();
 }
 
 OUString Databases::processLang( const OUString& Language )
@@ -480,13 +451,13 @@ helpdatafileproxy::Hdf* Databases::getHelpDataFile( const OUString& Database,
         key = *pExtensionPath + Language + dbFileName;      // make unique, don't change language
 
     std::pair< DatabasesTable::iterator,bool > aPair =
-        m_aDatabases.insert( DatabasesTable::value_type( key, reinterpret_cast<helpdatafileproxy::Hdf *>(0) ) );
+        m_aDatabases.emplace( key, nullptr);
 
     DatabasesTable::iterator it = aPair.first;
 
     if( aPair.second && ! it->second )
     {
-        helpdatafileproxy::Hdf* pHdf = nullptr;
+        std::unique_ptr<helpdatafileproxy::Hdf> pHdf;
 
         OUString fileURL;
         if( pExtensionPath )
@@ -502,27 +473,24 @@ helpdatafileproxy::Hdf* Databases::getHelpDataFile( const OUString& Database,
         //fails for example when using long path names on Windows (starting with \\?\)
         if( m_xSFA->exists( fileNameHDFHelp ) )
         {
-            pHdf = new helpdatafileproxy::Hdf( fileNameHDFHelp, m_xSFA );
+            pHdf.reset(new helpdatafileproxy::Hdf( fileNameHDFHelp, m_xSFA ));
         }
 
-        it->second = pHdf;
+        it->second = std::move(pHdf);
     }
 
-    return it->second;
+    return it->second.get();
 }
 
 Reference< XCollator >
-Databases::getCollator( const OUString& Language,
-                        const OUString& System )
+Databases::getCollator( const OUString& Language )
 {
-    (void)System;
-
     OUString key = Language;
 
     osl::MutexGuard aGuard( m_aMutex );
 
     CollatorTable::iterator it =
-        m_aCollatorTable.insert( CollatorTable::value_type( key, Reference< XCollator >() ) ).first;
+        m_aCollatorTable.emplace( key, Reference< XCollator >() ).first;
 
     if( ! it->second.is() )
     {
@@ -597,7 +565,7 @@ namespace chelp {
                     ret = true;
             }
             else
-                ret = bool( l < r );
+                ret = l < r;
 
             return ret;
         }
@@ -607,19 +575,18 @@ namespace chelp {
 
 }
 
-KeywordInfo::KeywordElement::KeywordElement( Databases *pDatabases,
+KeywordInfo::KeywordElement::KeywordElement( Databases const *pDatabases,
                                              helpdatafileproxy::Hdf* pHdf,
-                                             OUString& ky,
-                                             OUString& data )
+                                             OUString const & ky,
+                                             OUString const & data )
     : key( ky )
 {
     pDatabases->replaceName( key );
     init( pDatabases,pHdf,data );
 }
 
-void KeywordInfo::KeywordElement::init( Databases *pDatabases,helpdatafileproxy::Hdf* pHdf,const OUString& ids )
+void KeywordInfo::KeywordElement::init( Databases const *pDatabases,helpdatafileproxy::Hdf* pHdf,const OUString& ids )
 {
-    const sal_Unicode* idstr = ids.getStr();
     std::vector< OUString > id,anchor;
     int idx = -1,k;
     while( ( idx = ids.indexOf( ';',k = ++idx ) ) != -1 )
@@ -628,13 +595,13 @@ void KeywordInfo::KeywordElement::init( Databases *pDatabases,helpdatafileproxy:
         if( h < idx )
         {
             // found an anchor
-            id.push_back( OUString( &idstr[k],h-k ) );
-            anchor.push_back( OUString( &idstr[h+1],idx-h-1 ) );
+            id.push_back( ids.copy( k, h-k ) );
+            anchor.push_back( ids.copy( h+1, idx-h-1 ) );
         }
         else
         {
-            id.push_back( OUString( &idstr[k],idx-k ) );
-            anchor.push_back( OUString() );
+            id.push_back( ids.copy( k, idx-k ) );
+            anchor.emplace_back( );
         }
     }
 
@@ -737,7 +704,7 @@ KeywordInfo* Databases::getKeyword( const OUString& Database,
     OUString key = processLang(Language) + "/" + Database;
 
     std::pair< KeywordInfoTable::iterator,bool > aPair =
-        m_aKeywordInfo.insert( KeywordInfoTable::value_type( key,nullptr ) );
+        m_aKeywordInfo.emplace( key,nullptr );
 
     KeywordInfoTable::iterator it = aPair.first;
 
@@ -763,9 +730,8 @@ KeywordInfo* Databases::getKeyword( const OUString& Database,
                     helpdatafileproxy::Hdf* pHdf = getHelpDataFile( Database,Language );
                     if( pHdf != nullptr )
                     {
-                        bool bOptimizeForPerformance = true;
                         pHdf->releaseHashMap();
-                        pHdf->createHashMap( bOptimizeForPerformance );
+                        pHdf->createHashMap( true/*bOptimizeForPerformance*/ );
                     }
 
                     while( aHdf.getNextKeyAndValue( aKey, aValue ) )
@@ -782,10 +748,10 @@ KeywordInfo* Databases::getKeyword( const OUString& Database,
                         if( !bBelongsToDatabase )
                             continue;
 
-                        aVector.push_back( KeywordInfo::KeywordElement( this,
+                        aVector.emplace_back( this,
                                                                         pHdf,
                                                                         keyword,
-                                                                        doclist ) );
+                                                                        doclist );
                     }
                     aHdf.stopIteration();
 
@@ -796,15 +762,14 @@ KeywordInfo* Databases::getKeyword( const OUString& Database,
         }
 
         // sorting
-        Reference< XCollator > xCollator = getCollator( Language,OUString());
+        Reference< XCollator > xCollator = getCollator( Language );
         KeywordElementComparator aComparator( xCollator );
         std::sort(aVector.begin(),aVector.end(),aComparator);
 
-        KeywordInfo* pInfo = it->second = new KeywordInfo( aVector );
-        (void)pInfo;
+        it->second.reset(new KeywordInfo( aVector ));
     }
 
-    return it->second;
+    return it->second.get();
 }
 
 Reference< XHierarchicalNameAccess > Databases::jarFile( const OUString& jar,
@@ -819,7 +784,7 @@ Reference< XHierarchicalNameAccess > Databases::jarFile( const OUString& jar,
     osl::MutexGuard aGuard( m_aMutex );
 
     ZipFileTable::iterator it =
-        m_aZipFileTable.insert( ZipFileTable::value_type( key,Reference< XHierarchicalNameAccess >(nullptr) ) ).first;
+        m_aZipFileTable.emplace( key,Reference< XHierarchicalNameAccess >(nullptr) ).first;
 
     if( ! it->second.is() )
     {
@@ -843,15 +808,15 @@ Reference< XHierarchicalNameAccess > Databases::jarFile( const OUString& jar,
 
             Sequence< Any > aArguments( 2 );
 
-            XInputStream_impl* p = new XInputStream_impl( zipFile );
+            std::unique_ptr<XInputStream_impl> p(new XInputStream_impl( zipFile ));
             if( p->CtorSuccess() )
             {
-                Reference< XInputStream > xInputStream( p );
+                Reference< XInputStream > xInputStream( p.release() );
                 aArguments[ 0 ] <<= xInputStream;
             }
             else
             {
-                delete p;
+                p.reset();
                 aArguments[ 0 ] <<= zipFile;
             }
 
@@ -920,7 +885,7 @@ Reference< XHierarchicalNameAccess > Databases::findJarFileForPath
                     OUString aIdentifier = rtl::Uri::encode( aUnencodedIdentifier,
                         rtl_UriCharClassPchar, rtl_UriEncodeIgnoreEscapes, RTL_TEXTENCODING_UTF8 );
 
-                    if( !aIdentifierInPath.equals( aIdentifier ) )
+                    if( aIdentifierInPath != aIdentifier )
                     {
                         // path does not start with extension identifier -> ignore
                         bSuccess = false;
@@ -947,16 +912,13 @@ Reference< XHierarchicalNameAccess > Databases::findJarFileForPath
 void Databases::changeCSS(const OUString& newStyleSheet)
 {
     m_aCSS = newStyleSheet.toAsciiLowerCase();
-    delete[] m_pCustomCSSDoc;
-    m_pCustomCSSDoc = nullptr;
-    m_nCustomCSSDocLength = 0;
+    m_vCustomCSSDoc.clear();
 }
 
 void Databases::cascadingStylesheet( const OUString& Language,
-                                     char** buffer,
-                                     int* byteCount )
+                                     OStringBuffer& buffer )
 {
-    if( ! m_pCustomCSSDoc )
+    if( m_vCustomCSSDoc.empty() )
     {
         int retry = 2;
         bool error = true;
@@ -980,21 +942,21 @@ void Databases::cascadingStylesheet( const OUString& Language,
                     {
                         aCSS = "highcontrastblack";
                         #ifdef _WIN32
-                        HKEY hKey = NULL;
-                        LONG lResult = RegOpenKeyExA( HKEY_CURRENT_USER, "Control Panel\\Accessibility\\HighContrast", 0, KEY_QUERY_VALUE, &hKey );
+                        HKEY hKey = nullptr;
+                        LONG lResult = RegOpenKeyExW( HKEY_CURRENT_USER, L"Control Panel\\Accessibility\\HighContrast", 0, KEY_QUERY_VALUE, &hKey );
                         if ( ERROR_SUCCESS == lResult )
                         {
-                            CHAR szBuffer[1024];
+                            WCHAR szBuffer[1024];
                             DWORD nSize = sizeof( szBuffer );
-                            lResult = RegQueryValueExA( hKey, "High Contrast Scheme", NULL, NULL, (LPBYTE)szBuffer, &nSize );
+                            lResult = RegQueryValueExW( hKey, L"High Contrast Scheme", nullptr, nullptr, reinterpret_cast<LPBYTE>(szBuffer), &nSize );
                             if ( ERROR_SUCCESS == lResult && nSize > 0 )
                             {
                                 szBuffer[nSize] = '\0';
-                                if ( strncmp( szBuffer, "High Contrast #1", strlen("High Contrast #1") ) == 0 )
+                                if ( wcscmp( szBuffer, L"High Contrast #1" ) == 0 )
                                     aCSS = "highcontrast1";
-                                if ( strncmp( szBuffer, "High Contrast #2", strlen("High Contrast #2") ) == 0 )
+                                if ( wcscmp( szBuffer, L"High Contrast #2" ) == 0 )
                                     aCSS = "highcontrast2";
-                                if ( strncmp( szBuffer, "High Contrast White", strlen("High Contrast White") ) == 0 )
+                                if ( wcscmp( szBuffer, L"High Contrast White" ) == 0 )
                                     aCSS = "highcontrastwhite";
                             }
                             RegCloseKey( hKey );
@@ -1031,11 +993,10 @@ void Databases::cascadingStylesheet( const OUString& Language,
             {
                 sal_uInt64 nSize;
                 aFile.getSize( nSize );
-                m_nCustomCSSDocLength = (int)nSize;
-                m_pCustomCSSDoc = new char[ 1 + m_nCustomCSSDocLength ];
-                m_pCustomCSSDoc[ m_nCustomCSSDocLength ] = 0;
-                sal_uInt64 a = m_nCustomCSSDocLength,b = m_nCustomCSSDocLength;
-                aFile.read( m_pCustomCSSDoc,a,b );
+                m_vCustomCSSDoc.resize( nSize + 1);
+                m_vCustomCSSDoc[nSize] = 0;
+                sal_uInt64 a = nSize,b = nSize;
+                aFile.read( m_vCustomCSSDoc.data(), a, b );
                 aFile.close();
                 error = false;
             }
@@ -1052,23 +1013,18 @@ void Databases::cascadingStylesheet( const OUString& Language,
 
         if( error )
         {
-            m_nCustomCSSDocLength = 0;
-            m_pCustomCSSDoc = new char[ 1 ]; // Initialize with 1 to avoid gcc compiler warning
+            m_vCustomCSSDoc.clear();
         }
     }
 
-    *byteCount = m_nCustomCSSDocLength;
-    *buffer = new char[ 1 + *byteCount ];
-    (*buffer)[*byteCount] = 0;
-    memcpy( *buffer,m_pCustomCSSDoc,m_nCustomCSSDocLength );
-
+    if (!m_vCustomCSSDoc.empty())
+        buffer.append( m_vCustomCSSDoc.data(), m_vCustomCSSDoc.size() - 1 );
 }
 
 void Databases::setActiveText( const OUString& Module,
                                const OUString& Language,
                                const OUString& Id,
-                               char** buffer,
-                               int* byteCount )
+                               OStringBuffer& buffer )
 {
     DataBaseIterator aDbIt( m_xContext, *this, Module, Language, true );
 
@@ -1111,15 +1067,10 @@ void Databases::setActiveText( const OUString& Module,
                 break;
             }
 
-        *byteCount = nSize;
-        *buffer = new char[ 1 + nSize ];
-        (*buffer)[nSize] = 0;
-        memcpy( *buffer, pData, nSize );
+        buffer.append( pData, nSize );
     }
     else
     {
-        *byteCount = 0;
-        *buffer = new char[1]; // Initialize with 1 to avoid compiler warnings
         if( !bFoundAsEmpty )
             m_aEmptyActiveTextSet.insert( id );
     }
@@ -1138,13 +1089,13 @@ void Databases::setInstallPath( const OUString& aInstDir )
 
 // class ExtensionIteratorBase
 
-ExtensionHelpExistanceMap ExtensionIteratorBase::aHelpExistanceMap;
+ExtensionHelpExistenceMap ExtensionIteratorBase::aHelpExistenceMap;
 
-ExtensionIteratorBase::ExtensionIteratorBase( Reference< XComponentContext > xContext,
+ExtensionIteratorBase::ExtensionIteratorBase( Reference< XComponentContext > const & xContext,
     Databases& rDatabases, const OUString& aInitialModule, const OUString& aLanguage )
         : m_xContext( xContext )
         , m_rDatabases( rDatabases )
-        , m_eState( INITIAL_MODULE )
+        , m_eState( IteratorState::InitialModule )
         , m_aInitialModule( aInitialModule )
         , m_aLanguage( aLanguage )
 {
@@ -1156,7 +1107,7 @@ ExtensionIteratorBase::ExtensionIteratorBase( Databases& rDatabases,
     const OUString& aInitialModule, const OUString& aLanguage )
         : m_xContext( comphelper::getProcessComponentContext() )
         , m_rDatabases( rDatabases )
-        , m_eState( INITIAL_MODULE )
+        , m_eState( IteratorState::InitialModule )
         , m_aInitialModule( aInitialModule )
         , m_aLanguage( aLanguage )
 {
@@ -1176,7 +1127,7 @@ void ExtensionIteratorBase::init()
 }
 
 Reference< deployment::XPackage > ExtensionIteratorBase::implGetHelpPackageFromPackage
-    ( Reference< deployment::XPackage > xPackage, Reference< deployment::XPackage >& o_xParentPackageBundle )
+    ( const Reference< deployment::XPackage >& xPackage, Reference< deployment::XPackage >& o_xParentPackageBundle )
 {
     o_xParentPackageBundle.clear();
 
@@ -1186,8 +1137,8 @@ Reference< deployment::XPackage > ExtensionIteratorBase::implGetHelpPackageFromP
 
     // #i84550 Cache information about help content in extension
     OUString aExtensionPath = xPackage->getURL();
-    ExtensionHelpExistanceMap::iterator it = aHelpExistanceMap.find( aExtensionPath );
-    bool bFound = ( it != aHelpExistanceMap.end() );
+    ExtensionHelpExistenceMap::iterator it = aHelpExistenceMap.find( aExtensionPath );
+    bool bFound = ( it != aHelpExistenceMap.end() );
     bool bHasHelp = bFound && it->second;
     if( bFound && !bHasHelp )
         return xHelpPackage;
@@ -1216,7 +1167,7 @@ Reference< deployment::XPackage > ExtensionIteratorBase::implGetHelpPackageFromP
                 const Reference< deployment::XPackage > xSubPkg = pSeq[ iPkg ];
                 const Reference< deployment::XPackageTypeInfo > xPackageTypeInfo = xSubPkg->getPackageType();
                 OUString aMediaType = xPackageTypeInfo->getMediaType();
-                if( aMediaType.equals( aHelpMediaType ) )
+                if( aMediaType == aHelpMediaType )
                 {
                     xHelpPackage = xSubPkg;
                     o_xParentPackageBundle = xPackage;
@@ -1228,13 +1179,13 @@ Reference< deployment::XPackage > ExtensionIteratorBase::implGetHelpPackageFromP
         {
             const Reference< deployment::XPackageTypeInfo > xPackageTypeInfo = xPackage->getPackageType();
             OUString aMediaType = xPackageTypeInfo->getMediaType();
-            if( aMediaType.equals( aHelpMediaType ) )
+            if( aMediaType == aHelpMediaType )
                 xHelpPackage = xPackage;
         }
     }
 
     if( !bFound )
-        aHelpExistanceMap[ aExtensionPath ] = xHelpPackage.is();
+        aHelpExistenceMap[ aExtensionPath ] = xHelpPackage.is();
 
     return xHelpPackage;
 }
@@ -1254,7 +1205,7 @@ Reference< deployment::XPackage > ExtensionIteratorBase::implGetNextUserHelpPack
 
     if( m_iUserPackage == m_aUserPackagesSeq.getLength() )
     {
-        m_eState = SHARED_EXTENSIONS;       // Later: SHARED_MODULE
+        m_eState = IteratorState::SharedExtensions;       // Later: SHARED_MODULE
     }
     else
     {
@@ -1282,7 +1233,7 @@ Reference< deployment::XPackage > ExtensionIteratorBase::implGetNextSharedHelpPa
 
     if( m_iSharedPackage == m_aSharedPackagesSeq.getLength() )
     {
-        m_eState = BUNDLED_EXTENSIONS;
+        m_eState = IteratorState::BundledExtensions;
     }
     else
     {
@@ -1310,7 +1261,7 @@ Reference< deployment::XPackage > ExtensionIteratorBase::implGetNextBundledHelpP
 
     if( m_iBundledPackage == m_aBundledPackagesSeq.getLength() )
     {
-        m_eState = END_REACHED;
+        m_eState = IteratorState::EndReached;
     }
     else
     {
@@ -1325,7 +1276,7 @@ Reference< deployment::XPackage > ExtensionIteratorBase::implGetNextBundledHelpP
 }
 
 OUString ExtensionIteratorBase::implGetFileFromPackage(
-    const OUString& rFileExtension, Reference< deployment::XPackage > xPackage )
+    const OUString& rFileExtension, const Reference< deployment::XPackage >& xPackage )
 {
     // No extension -> search for pure language folder
     bool bLangFolderOnly = rFileExtension.isEmpty();
@@ -1356,13 +1307,13 @@ OUString ExtensionIteratorBase::implGetFileFromPackage(
     return aFile;
 }
 
-inline bool isLetter( sal_Unicode c )
+static bool isLetter( sal_Unicode c )
 {
     return rtl::isAsciiAlpha(c);
 }
 
 void ExtensionIteratorBase::implGetLanguageVectorFromPackage( ::std::vector< OUString > &rv,
-    css::uno::Reference< css::deployment::XPackage > xPackage )
+    const css::uno::Reference< css::deployment::XPackage >& xPackage )
 {
     rv.clear();
     OUString aExtensionPath = xPackage->getURL();
@@ -1399,20 +1350,20 @@ helpdatafileproxy::Hdf* DataBaseIterator::nextHdf( OUString* o_pExtensionPath, O
 {
     helpdatafileproxy::Hdf* pRetHdf = nullptr;
 
-    while( !pRetHdf && m_eState != END_REACHED )
+    while( !pRetHdf && m_eState != IteratorState::EndReached )
     {
         switch( m_eState )
         {
-            case INITIAL_MODULE:
+            case IteratorState::InitialModule:
                 pRetHdf = m_rDatabases.getHelpDataFile( m_aInitialModule, m_aLanguage, m_bHelpText );
-                m_eState = USER_EXTENSIONS;     // Later: SHARED_MODULE
+                m_eState = IteratorState::UserExtensions;     // Later: SHARED_MODULE
                 break;
 
             // Later:
             //case SHARED_MODULE
 
 
-            case USER_EXTENSIONS:
+            case IteratorState::UserExtensions:
             {
                 Reference< deployment::XPackage > xParentPackageBundle;
                 Reference< deployment::XPackage > xHelpPackage = implGetNextUserHelpPackage( xParentPackageBundle );
@@ -1422,7 +1373,7 @@ helpdatafileproxy::Hdf* DataBaseIterator::nextHdf( OUString* o_pExtensionPath, O
                 break;
             }
 
-            case SHARED_EXTENSIONS:
+            case IteratorState::SharedExtensions:
             {
                 Reference< deployment::XPackage > xParentPackageBundle;
                 Reference< deployment::XPackage > xHelpPackage = implGetNextSharedHelpPackage( xParentPackageBundle );
@@ -1433,7 +1384,7 @@ helpdatafileproxy::Hdf* DataBaseIterator::nextHdf( OUString* o_pExtensionPath, O
                 break;
             }
 
-               case BUNDLED_EXTENSIONS:
+               case IteratorState::BundledExtensions:
             {
                 Reference< deployment::XPackage > xParentPackageBundle;
                 Reference< deployment::XPackage > xHelpPackage = implGetNextBundledHelpPackage( xParentPackageBundle );
@@ -1444,8 +1395,8 @@ helpdatafileproxy::Hdf* DataBaseIterator::nextHdf( OUString* o_pExtensionPath, O
                 break;
             }
 
-            case END_REACHED:
-                OSL_FAIL( "DataBaseIterator::nextDb(): Invalid case END_REACHED" );
+            case IteratorState::EndReached:
+                OSL_FAIL( "DataBaseIterator::nextDb(): Invalid case IteratorState::EndReached" );
                 break;
         }
     }
@@ -1453,7 +1404,7 @@ helpdatafileproxy::Hdf* DataBaseIterator::nextHdf( OUString* o_pExtensionPath, O
     return pRetHdf;
 }
 
-helpdatafileproxy::Hdf* DataBaseIterator::implGetHdfFromPackage( Reference< deployment::XPackage > xPackage,
+helpdatafileproxy::Hdf* DataBaseIterator::implGetHdfFromPackage( const Reference< deployment::XPackage >& xPackage,
             OUString* o_pExtensionPath, OUString* o_pExtensionRegistryPath )
 {
 
@@ -1509,25 +1460,25 @@ OUString KeyDataBaseFileIterator::nextDbFile( bool& o_rbExtension )
 {
     OUString aRetFile;
 
-    while( aRetFile.isEmpty() && m_eState != END_REACHED )
+    while( aRetFile.isEmpty() && m_eState != IteratorState::EndReached )
     {
         switch( m_eState )
         {
-            case INITIAL_MODULE:
+            case IteratorState::InitialModule:
                 aRetFile = OUStringBuffer(m_rDatabases.getInstallPathAsURL()).
                     append(m_rDatabases.processLang(m_aLanguage)).append('/').
                     append(m_aInitialModule).append(".key").makeStringAndClear();
 
                 o_rbExtension = false;
 
-                m_eState = USER_EXTENSIONS;     // Later: SHARED_MODULE
+                m_eState = IteratorState::UserExtensions;     // Later: SHARED_MODULE
                 break;
 
             // Later:
             //case SHARED_MODULE
 
 
-            case USER_EXTENSIONS:
+            case IteratorState::UserExtensions:
             {
                 Reference< deployment::XPackage > xParentPackageBundle;
                 Reference< deployment::XPackage > xHelpPackage = implGetNextUserHelpPackage( xParentPackageBundle );
@@ -1539,7 +1490,7 @@ OUString KeyDataBaseFileIterator::nextDbFile( bool& o_rbExtension )
                 break;
             }
 
-            case SHARED_EXTENSIONS:
+            case IteratorState::SharedExtensions:
             {
                 Reference< deployment::XPackage > xParentPackageBundle;
                 Reference< deployment::XPackage > xHelpPackage = implGetNextSharedHelpPackage( xParentPackageBundle );
@@ -1551,7 +1502,7 @@ OUString KeyDataBaseFileIterator::nextDbFile( bool& o_rbExtension )
                 break;
             }
 
-            case BUNDLED_EXTENSIONS:
+            case IteratorState::BundledExtensions:
             {
                 Reference< deployment::XPackage > xParentPackageBundle;
                 Reference< deployment::XPackage > xHelpPackage = implGetNextBundledHelpPackage( xParentPackageBundle );
@@ -1563,8 +1514,8 @@ OUString KeyDataBaseFileIterator::nextDbFile( bool& o_rbExtension )
                 break;
             }
 
-            case END_REACHED:
-                OSL_FAIL( "DataBaseIterator::nextDbFile(): Invalid case END_REACHED" );
+            case IteratorState::EndReached:
+                OSL_FAIL( "DataBaseIterator::nextDbFile(): Invalid case IteratorState::EndReached" );
                 break;
         }
     }
@@ -1574,7 +1525,7 @@ OUString KeyDataBaseFileIterator::nextDbFile( bool& o_rbExtension )
 
 //Returns a file URL, that does not contain macros
 OUString KeyDataBaseFileIterator::implGetDbFileFromPackage
-    ( Reference< deployment::XPackage > xPackage )
+    ( const Reference< deployment::XPackage >& xPackage )
 {
     OUString aExpandedURL =
         implGetFileFromPackage( ".key", xPackage );
@@ -1590,20 +1541,20 @@ Reference< XHierarchicalNameAccess > JarFileIterator::nextJarFile
 {
     Reference< XHierarchicalNameAccess > xNA;
 
-    while( !xNA.is() && m_eState != END_REACHED )
+    while( !xNA.is() && m_eState != IteratorState::EndReached )
     {
         switch( m_eState )
         {
-            case INITIAL_MODULE:
+            case IteratorState::InitialModule:
                 xNA = m_rDatabases.jarFile( m_aInitialModule, m_aLanguage );
-                m_eState = USER_EXTENSIONS;     // Later: SHARED_MODULE
+                m_eState = IteratorState::UserExtensions;     // Later: SHARED_MODULE
                 break;
 
             // Later:
             //case SHARED_MODULE
 
 
-            case USER_EXTENSIONS:
+            case IteratorState::UserExtensions:
             {
                 Reference< deployment::XPackage > xHelpPackage = implGetNextUserHelpPackage( o_xParentPackageBundle );
                 if( !xHelpPackage.is() )
@@ -1613,7 +1564,7 @@ Reference< XHierarchicalNameAccess > JarFileIterator::nextJarFile
                 break;
             }
 
-            case SHARED_EXTENSIONS:
+            case IteratorState::SharedExtensions:
             {
                 Reference< deployment::XPackage > xHelpPackage = implGetNextSharedHelpPackage( o_xParentPackageBundle );
                 if( !xHelpPackage.is() )
@@ -1623,7 +1574,7 @@ Reference< XHierarchicalNameAccess > JarFileIterator::nextJarFile
                 break;
             }
 
-            case BUNDLED_EXTENSIONS:
+            case IteratorState::BundledExtensions:
             {
                 Reference< deployment::XPackage > xHelpPackage = implGetNextBundledHelpPackage( o_xParentPackageBundle );
                 if( !xHelpPackage.is() )
@@ -1633,8 +1584,8 @@ Reference< XHierarchicalNameAccess > JarFileIterator::nextJarFile
                 break;
             }
 
-            case END_REACHED:
-                OSL_FAIL( "JarFileIterator::nextJarFile(): Invalid case END_REACHED" );
+            case IteratorState::EndReached:
+                OSL_FAIL( "JarFileIterator::nextJarFile(): Invalid case IteratorState::EndReached" );
                 break;
         }
     }
@@ -1643,7 +1594,7 @@ Reference< XHierarchicalNameAccess > JarFileIterator::nextJarFile
 }
 
 Reference< XHierarchicalNameAccess > JarFileIterator::implGetJarFromPackage
-( Reference< deployment::XPackage > xPackage, OUString* o_pExtensionPath, OUString* o_pExtensionRegistryPath )
+( const Reference< deployment::XPackage >& xPackage, OUString* o_pExtensionPath, OUString* o_pExtensionRegistryPath )
 {
     Reference< XHierarchicalNameAccess > xNA;
 
@@ -1707,11 +1658,11 @@ OUString IndexFolderIterator::nextIndexFolder( bool& o_rbExtension, bool& o_rbTe
 {
     OUString aIndexFolder;
 
-    while( aIndexFolder.isEmpty() && m_eState != END_REACHED )
+    while( aIndexFolder.isEmpty() && m_eState != IteratorState::EndReached )
     {
         switch( m_eState )
         {
-            case INITIAL_MODULE:
+            case IteratorState::InitialModule:
                 aIndexFolder = m_rDatabases.getInstallPathAsURL()
                     + m_rDatabases.processLang(m_aLanguage) + "/"
                     + m_aInitialModule + ".idxl";
@@ -1719,14 +1670,14 @@ OUString IndexFolderIterator::nextIndexFolder( bool& o_rbExtension, bool& o_rbTe
                 o_rbTemporary = false;
                 o_rbExtension = false;
 
-                m_eState = USER_EXTENSIONS;     // Later: SHARED_MODULE
+                m_eState = IteratorState::UserExtensions;     // Later: SHARED_MODULE
                 break;
 
             // Later:
             //case SHARED_MODULE
 
 
-            case USER_EXTENSIONS:
+            case IteratorState::UserExtensions:
             {
                 Reference< deployment::XPackage > xParentPackageBundle;
                 Reference< deployment::XPackage > xHelpPackage = implGetNextUserHelpPackage( xParentPackageBundle );
@@ -1738,7 +1689,7 @@ OUString IndexFolderIterator::nextIndexFolder( bool& o_rbExtension, bool& o_rbTe
                 break;
             }
 
-            case SHARED_EXTENSIONS:
+            case IteratorState::SharedExtensions:
             {
                 Reference< deployment::XPackage > xParentPackageBundle;
                 Reference< deployment::XPackage > xHelpPackage = implGetNextSharedHelpPackage( xParentPackageBundle );
@@ -1750,7 +1701,7 @@ OUString IndexFolderIterator::nextIndexFolder( bool& o_rbExtension, bool& o_rbTe
                 break;
             }
 
-            case BUNDLED_EXTENSIONS:
+            case IteratorState::BundledExtensions:
             {
                 Reference< deployment::XPackage > xParentPackageBundle;
                 Reference< deployment::XPackage > xHelpPackage = implGetNextBundledHelpPackage( xParentPackageBundle );
@@ -1762,8 +1713,8 @@ OUString IndexFolderIterator::nextIndexFolder( bool& o_rbExtension, bool& o_rbTe
                 break;
             }
 
-            case END_REACHED:
-                OSL_FAIL( "IndexFolderIterator::nextIndexFolder(): Invalid case END_REACHED" );
+            case IteratorState::EndReached:
+                OSL_FAIL( "IndexFolderIterator::nextIndexFolder(): Invalid case IteratorState::EndReached" );
                 break;
         }
     }
@@ -1771,7 +1722,7 @@ OUString IndexFolderIterator::nextIndexFolder( bool& o_rbExtension, bool& o_rbTe
     return aIndexFolder;
 }
 
-OUString IndexFolderIterator::implGetIndexFolderFromPackage( bool& o_rbTemporary, Reference< deployment::XPackage > xPackage )
+OUString IndexFolderIterator::implGetIndexFolderFromPackage( bool& o_rbTemporary, const Reference< deployment::XPackage >& xPackage )
 {
     OUString aIndexFolder =
         implGetFileFromPackage( ".idxl", xPackage );
@@ -1810,8 +1761,6 @@ OUString IndexFolderIterator::implGetIndexFolderFromPackage( bool& o_rbTemporary
                 else
                     aLang = "en";
 
-                OUString aMod("help");
-
                 OUString aZipDir = aLangURL;
                 if( !bIsWriteAccess )
                 {
@@ -1819,23 +1768,22 @@ OUString IndexFolderIterator::implGetIndexFolderFromPackage( bool& o_rbTemporary
                     ::osl::FileBase::RC eErr = ::osl::File::createTempFile( nullptr, nullptr, &aTempFileURL );
                     if( eErr == ::osl::FileBase::E_None )
                     {
-                        OUString aTempDirURL = aTempFileURL;
                         try
                         {
-                            m_xSFA->kill( aTempDirURL );
+                            m_xSFA->kill( aTempFileURL );
                         }
                         catch (const Exception &)
                         {
                         }
-                        m_xSFA->createFolder( aTempDirURL );
+                        m_xSFA->createFolder( aTempFileURL );
 
-                        aZipDir = aTempDirURL;
+                        aZipDir = aTempFileURL;
                         o_rbTemporary = true;
                     }
                 }
 
-        HelpIndexer aIndexer(aLang, aMod, aLangURL, aZipDir);
-        aIndexer.indexDocuments();
+                HelpIndexer aIndexer(aLang, "help", aLangURL, aZipDir);
+                aIndexer.indexDocuments();
 
                 if( bIsWriteAccess )
                     aIndexFolder = implGetFileFromPackage( ".idxl", xPackage );

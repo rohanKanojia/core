@@ -20,7 +20,7 @@
 #ifndef INCLUDED_FORMS_SOURCE_COMPONENT_EDITBASE_HXX
 #define INCLUDED_FORMS_SOURCE_COMPONENT_EDITBASE_HXX
 
-#include "FormComponent.hxx"
+#include <FormComponent.hxx>
 #include <com/sun/star/util/XNumberFormatter.hpp>
 #include <com/sun/star/awt/XFocusListener.hpp>
 #include <com/sun/star/awt/XKeyListener.hpp>
@@ -51,7 +51,7 @@ protected:
 // [properties]         for all EditingFields
     css::uno::Any           m_aDefault;
     OUString                m_aDefaultText;             // default value
-    bool                    m_bEmptyIsNull : 1;         // empty string will be interepreted as NULL when committing
+    bool                    m_bEmptyIsNull : 1;         // empty string will be interpreted as NULL when committing
     bool                    m_bFilterProposal : 1;      // use a list of possible value in filtermode
 // [properties]
 
@@ -66,18 +66,17 @@ public:
         const bool _bSupportsValidation
     );
     DECLARE_DEFAULT_CLONE_CTOR( OEditBaseModel )
-    virtual ~OEditBaseModel();
+    virtual ~OEditBaseModel() override;
 
     // XPersistObject
-    virtual void SAL_CALL write(const css::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream) throw ( css::io::IOException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL read(const css::uno::Reference< css::io::XObjectInputStream>& _rxInStream) throw ( css::io::IOException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL write(const css::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream) override;
+    virtual void SAL_CALL read(const css::uno::Reference< css::io::XObjectInputStream>& _rxInStream) override;
 
     // XPropertySet
     virtual void SAL_CALL getFastPropertyValue(css::uno::Any& rValue, sal_Int32 nHandle ) const override;
     virtual sal_Bool SAL_CALL convertFastPropertyValue(css::uno::Any& rConvertedValue, css::uno::Any& rOldValue,
-                                          sal_Int32 nHandle, const css::uno::Any& rValue )
-                                        throw(css::lang::IllegalArgumentException) override;
-    virtual void SAL_CALL setFastPropertyValue_NoBroadcast(sal_Int32 nHandle, const css::uno::Any& rValue) throw ( css::uno::Exception, std::exception) override;
+                                          sal_Int32 nHandle, const css::uno::Any& rValue ) override;
+    virtual void SAL_CALL setFastPropertyValue_NoBroadcast(sal_Int32 nHandle, const css::uno::Any& rValue) override;
     using ::cppu::OPropertySetHelper::getFastPropertyValue;
 
     // XPropertyState
@@ -85,8 +84,8 @@ public:
 
 protected:
     // new properties common to all edit models should be handled with the following two methods
-    void SAL_CALL readCommonEditProperties(const css::uno::Reference< css::io::XObjectInputStream>& _rxInStream);
-    void SAL_CALL writeCommonEditProperties(const css::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream);
+    void readCommonEditProperties(const css::uno::Reference< css::io::XObjectInputStream>& _rxInStream);
+    void writeCommonEditProperties(const css::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream);
     void defaultCommonEditProperties();
 
     virtual sal_uInt16 getPersistenceFlags() const;

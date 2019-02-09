@@ -43,7 +43,7 @@ namespace frm
     {
         const SvxItemPropertySet* getTextEnginePropertySet()
         {
-            // Propertymap fuer einen Outliner Text
+            // property map for an outliner text
             static const SfxItemPropertyMapEntry aTextEnginePropertyMap[] =
             {
                 SVX_UNOEDIT_CHAR_PROPERTIES,
@@ -79,19 +79,18 @@ namespace frm
 
     RichTextEditSource::~RichTextEditSource()
     {
-        delete m_pTextForwarder;
     }
 
 
-    SvxEditSource* RichTextEditSource::Clone() const
+    std::unique_ptr<SvxEditSource> RichTextEditSource::Clone() const
     {
-        return new RichTextEditSource( m_rEngine, m_pTextChangeListener );
+        return std::unique_ptr<SvxEditSource>(new RichTextEditSource( m_rEngine, m_pTextChangeListener ));
     }
 
 
     SvxTextForwarder* RichTextEditSource::GetTextForwarder()
     {
-        return m_pTextForwarder;
+        return m_pTextForwarder.get();
     }
 
 

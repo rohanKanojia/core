@@ -10,7 +10,16 @@
 #ifndef INCLUDED_STARMATH_SOURCE_WORDEXPORTBASE_HXX
 #define INCLUDED_STARMATH_SOURCE_WORDEXPORTBASE_HXX
 
-#include "node.hxx"
+class SmAttributNode;
+class SmBinHorNode;
+class SmBraceNode;
+class SmMatrixNode;
+class SmNode;
+class SmOperNode;
+class SmRootNode;
+class SmSubSupNode;
+class SmUnHorNode;
+class SmVerticalBraceNode;
 
 /**
  Base class implementing writing of formulas to Word.
@@ -27,7 +36,7 @@ protected:
     virtual void HandleVerticalStack( const SmNode* pNode, int nLevel ) = 0;
     virtual void HandleText( const SmNode* pNode, int nLevel ) = 0;
     void HandleMath( const SmNode* pNode, int nLevel );
-    virtual void HandleFractions( const SmNode* pNode, int nLevel, const char* type = nullptr ) = 0;
+    virtual void HandleFractions( const SmNode* pNode, int nLevel, const char* type ) = 0;
     void HandleUnaryOperation( const SmUnHorNode* pNode, int nLevel );
     void HandleBinaryOperation( const SmBinHorNode* pNode, int nLevel );
     virtual void HandleRoot( const SmRootNode* pNode, int nLevel ) = 0;

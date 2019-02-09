@@ -18,24 +18,21 @@
  */
 
 #include <svx/dataaccessdescriptor.hxx>
-#include <comphelper/propertysetinfo.hxx>
-#include <comphelper/genericpropertyset.hxx>
 #include <osl/diagnose.h>
 #include <com/sun/star/sdbc/XConnection.hpp>
 #include <com/sun/star/ucb/XContent.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <tools/urlobj.hxx>
-
+#include <map>
 
 namespace svx
 {
-
-
     using namespace ::com::sun::star::uno;
     using namespace ::com::sun::star::sdbc;
     using namespace ::com::sun::star::beans;
     using namespace ::com::sun::star::ucb;
-    using namespace ::comphelper;
+
+    typedef std::pair<OUString const, DataAccessDescriptorProperty> PropertyMapEntry;
 
     class ODADescriptorImpl
     {
@@ -49,7 +46,7 @@ namespace svx
         Sequence< PropertyValue >   m_aAsSequence;
         Reference< XPropertySet >   m_xAsSet;
 
-        typedef ::std::map< OUString, PropertyMapEntry const * >    MapString2PropertyEntry;
+        typedef ::std::map< OUString, DataAccessDescriptorProperty >    MapString2PropertyEntry;
 
     public:
         ODADescriptorImpl();
@@ -77,13 +74,11 @@ namespace svx
         static PropertyMapEntry const *         getPropertyMapEntry( const DescriptorValues::const_iterator& _rPos );
     };
 
-
     ODADescriptorImpl::ODADescriptorImpl()
         :m_bSetOutOfDate(true)
         ,m_bSequenceOutOfDate(true)
     {
     }
-
 
     ODADescriptorImpl::ODADescriptorImpl(const ODADescriptorImpl& _rSource)
         :m_bSetOutOfDate( _rSource.m_bSetOutOfDate )
@@ -95,7 +90,6 @@ namespace svx
         if (!m_bSequenceOutOfDate)
             m_aAsSequence = _rSource.m_aAsSequence;
     }
-
 
     bool ODADescriptorImpl::buildFrom( const Sequence< PropertyValue >& _rValues )
     {
@@ -111,7 +105,7 @@ namespace svx
             MapString2PropertyEntry::const_iterator aPropPos = rProperties.find( pValues->Name );
             if ( aPropPos != rProperties.end() )
             {
-                DataAccessDescriptorProperty eProperty = (DataAccessDescriptorProperty)aPropPos->second->mnHandle;
+                DataAccessDescriptorProperty eProperty = aPropPos->second;
                 m_aValues[eProperty] = pValues->Value;
             }
             else
@@ -129,7 +123,6 @@ namespace svx
 
         return bValidPropsOnly;
     }
-
 
     bool ODADescriptorImpl::buildFrom( const Reference< XPropertySet >& _rxValues )
     {
@@ -168,68 +161,48 @@ namespace svx
         return bValidPropsOnly;
     }
 
-
     void ODADescriptorImpl::invalidateExternRepresentations()
     {
         m_bSetOutOfDate = true;
         m_bSequenceOutOfDate = true;
     }
 
-
     const ODADescriptorImpl::MapString2PropertyEntry& ODADescriptorImpl::getPropertyMap( )
     {
         // the properties we know
-        static MapString2PropertyEntry s_aProperties;
-        if ( s_aProperties.empty() )
-        {
-            static PropertyMapEntry const s_aDesriptorProperties[] =
+        static MapString2PropertyEntry s_aProperties
             {
-                { OUString("ActiveConnection"),   daConnection,           cppu::UnoType<XConnection>::get(),   PropertyAttribute::TRANSIENT, 0 },
-                { OUString("BookmarkSelection"),  daBookmarkSelection,    cppu::UnoType<bool>::get(),                                           PropertyAttribute::TRANSIENT, 0 },
-                { OUString("Column"),             daColumnObject,         cppu::UnoType<XPropertySet>::get(),  PropertyAttribute::TRANSIENT, 0 },
-                { OUString("ColumnName"),         daColumnName,           ::cppu::UnoType<OUString>::get(),            PropertyAttribute::TRANSIENT, 0 },
-                { OUString("Command"),            daCommand,              ::cppu::UnoType<OUString>::get(),            PropertyAttribute::TRANSIENT, 0 },
-                { OUString("CommandType"),        daCommandType,          ::cppu::UnoType<sal_Int32>::get(),                  PropertyAttribute::TRANSIENT, 0 },
-                { OUString("Component"),          daComponent,            cppu::UnoType<XContent>::get(),      PropertyAttribute::TRANSIENT, 0 },
-                { OUString("ConnectionResource"), daConnectionResource,   ::cppu::UnoType<OUString>::get(),            PropertyAttribute::TRANSIENT, 0 },
-                { OUString("Cursor"),             daCursor,               cppu::UnoType<XResultSet>::get(),     PropertyAttribute::TRANSIENT, 0 },
-                { OUString("DataSourceName"),     daDataSource,           ::cppu::UnoType<OUString>::get(),            PropertyAttribute::TRANSIENT, 0 },
-                { OUString("DatabaseLocation"),   daDatabaseLocation,     ::cppu::UnoType<OUString>::get(),            PropertyAttribute::TRANSIENT, 0 },
-                { OUString("EscapeProcessing"),   daEscapeProcessing,     cppu::UnoType<bool>::get(),                                           PropertyAttribute::TRANSIENT, 0 },
-                { OUString("Filter"),             daFilter,               ::cppu::UnoType<OUString>::get(),            PropertyAttribute::TRANSIENT, 0 },
-                { OUString("Selection"),          daSelection,            cppu::UnoType<Sequence< Any >>::get(),            PropertyAttribute::TRANSIENT, 0 },
-                { OUString(), 0, css::uno::Type(), 0, 0 }
+                { OUString("ActiveConnection"),   DataAccessDescriptorProperty::Connection,            },
+                { OUString("BookmarkSelection"),  DataAccessDescriptorProperty::BookmarkSelection,     },
+                { OUString("Column"),             DataAccessDescriptorProperty::ColumnObject,          },
+                { OUString("ColumnName"),         DataAccessDescriptorProperty::ColumnName,            },
+                { OUString("Command"),            DataAccessDescriptorProperty::Command,               },
+                { OUString("CommandType"),        DataAccessDescriptorProperty::CommandType,           },
+                { OUString("Component"),          DataAccessDescriptorProperty::Component,             },
+                { OUString("ConnectionResource"), DataAccessDescriptorProperty::ConnectionResource,    },
+                { OUString("Cursor"),             DataAccessDescriptorProperty::Cursor,                },
+                { OUString("DataSourceName"),     DataAccessDescriptorProperty::DataSource,            },
+                { OUString("DatabaseLocation"),   DataAccessDescriptorProperty::DatabaseLocation,      },
+                { OUString("EscapeProcessing"),   DataAccessDescriptorProperty::EscapeProcessing,      },
+                { OUString("Filter"),             DataAccessDescriptorProperty::Filter,                },
+                { OUString("Selection"),          DataAccessDescriptorProperty::Selection,             }
             };
-
-            PropertyMapEntry const * pEntry = s_aDesriptorProperties;
-            while ( !pEntry->maName.isEmpty() )
-            {
-                s_aProperties[ pEntry->maName ] = pEntry;
-                ++pEntry;
-            }
-        }
 
         return s_aProperties;
     }
-
 
     PropertyMapEntry const * ODADescriptorImpl::getPropertyMapEntry( const DescriptorValues::const_iterator& _rPos )
     {
         const MapString2PropertyEntry& rProperties = getPropertyMap();
 
-        sal_Int32 nNeededHandle = (sal_Int32)(_rPos->first);
+        DataAccessDescriptorProperty nNeededHandle = _rPos->first;
 
-        for ( MapString2PropertyEntry::const_iterator loop = rProperties.begin();
-              loop != rProperties.end();
-              ++loop
-            )
-        {
-            if ( nNeededHandle == loop->second->mnHandle )
-                return loop->second;
-        }
+        auto loop = std::find_if(rProperties.begin(), rProperties.end(),
+            [&nNeededHandle](const MapString2PropertyEntry::value_type& rProp) { return nNeededHandle == rProp.second; });
+        if (loop != rProperties.end())
+            return &*loop;
         throw RuntimeException();
     }
-
 
     PropertyValue ODADescriptorImpl::buildPropertyValue( const DescriptorValues::const_iterator& _rPos )
     {
@@ -238,15 +211,14 @@ namespace svx
 
         // build the property value
         PropertyValue aReturn;
-        aReturn.Name    = pProperty->maName;
-        aReturn.Handle  = pProperty->mnHandle;
+        aReturn.Name    = pProperty->first;
+        aReturn.Handle  = static_cast<sal_Int32>(pProperty->second);
         aReturn.Value   = _rPos->second;
         aReturn.State   = PropertyState_DIRECT_VALUE;
 
         // outta here
         return aReturn;
     }
-
 
     void ODADescriptorImpl::updateSequence()
     {
@@ -274,27 +246,34 @@ namespace svx
     {
     }
 
-
     ODataAccessDescriptor::ODataAccessDescriptor( const ODataAccessDescriptor& _rSource )
         :m_pImpl(new ODADescriptorImpl(*_rSource.m_pImpl))
     {
     }
 
-
-    const ODataAccessDescriptor& ODataAccessDescriptor::operator=(const ODataAccessDescriptor& _rSource)
+    ODataAccessDescriptor::ODataAccessDescriptor( ODataAccessDescriptor&& _rSource )
+        :m_pImpl(std::move(_rSource.m_pImpl))
     {
-        delete m_pImpl;
-        m_pImpl = new ODADescriptorImpl(*_rSource.m_pImpl);
+    }
+
+    ODataAccessDescriptor& ODataAccessDescriptor::operator=(const ODataAccessDescriptor& _rSource)
+    {
+        if (this != &_rSource)
+            m_pImpl.reset(new ODADescriptorImpl(*_rSource.m_pImpl));
         return *this;
     }
 
+    ODataAccessDescriptor& ODataAccessDescriptor::operator=(ODataAccessDescriptor&& _rSource)
+    {
+        m_pImpl = std::move(_rSource.m_pImpl);
+        return *this;
+    }
 
     ODataAccessDescriptor::ODataAccessDescriptor( const Reference< XPropertySet >& _rValues )
         :m_pImpl(new ODADescriptorImpl)
     {
         m_pImpl->buildFrom(_rValues);
     }
-
 
     ODataAccessDescriptor::ODataAccessDescriptor( const Any& _rValues )
         :m_pImpl(new ODADescriptorImpl)
@@ -308,25 +287,20 @@ namespace svx
             m_pImpl->buildFrom( xValues );
     }
 
-
     ODataAccessDescriptor::ODataAccessDescriptor( const Sequence< PropertyValue >& _rValues )
         :m_pImpl(new ODADescriptorImpl)
     {
         m_pImpl->buildFrom(_rValues);
     }
 
-
     ODataAccessDescriptor::~ODataAccessDescriptor()
     {
-        delete m_pImpl;
     }
-
 
     void ODataAccessDescriptor::clear()
     {
         m_pImpl->m_aValues.clear();
     }
-
 
     void ODataAccessDescriptor::erase(DataAccessDescriptorProperty _eWhich)
     {
@@ -335,12 +309,10 @@ namespace svx
             m_pImpl->m_aValues.erase(_eWhich);
     }
 
-
     bool ODataAccessDescriptor::has(DataAccessDescriptorProperty _eWhich) const
     {
         return m_pImpl->m_aValues.find(_eWhich) != m_pImpl->m_aValues.end();
     }
-
 
     const Any& ODataAccessDescriptor::operator [] ( DataAccessDescriptorProperty _eWhich ) const
     {
@@ -354,13 +326,11 @@ namespace svx
         return m_pImpl->m_aValues[_eWhich];
     }
 
-
     Any& ODataAccessDescriptor::operator[] ( DataAccessDescriptorProperty _eWhich )
     {
         m_pImpl->invalidateExternRepresentations();
         return m_pImpl->m_aValues[_eWhich];
     }
-
 
     void ODataAccessDescriptor::initializeFrom(const Sequence< PropertyValue >& _rValues)
     {
@@ -368,21 +338,19 @@ namespace svx
         m_pImpl->buildFrom(_rValues);
     }
 
-
-    Sequence< PropertyValue > ODataAccessDescriptor::createPropertyValueSequence()
+    Sequence< PropertyValue > const & ODataAccessDescriptor::createPropertyValueSequence()
     {
         m_pImpl->updateSequence();
         return m_pImpl->m_aAsSequence;
     }
 
-
     OUString ODataAccessDescriptor::getDataSource() const
     {
         OUString sDataSourceName;
-        if ( has(daDataSource) )
-            (*this)[daDataSource] >>= sDataSourceName;
-        else if ( has(daDatabaseLocation) )
-            (*this)[daDatabaseLocation] >>= sDataSourceName;
+        if ( has(DataAccessDescriptorProperty::DataSource) )
+            (*this)[DataAccessDescriptorProperty::DataSource] >>= sDataSourceName;
+        else if ( has(DataAccessDescriptorProperty::DatabaseLocation) )
+            (*this)[DataAccessDescriptorProperty::DatabaseLocation] >>= sDataSourceName;
         return sDataSourceName;
     }
 
@@ -391,14 +359,11 @@ namespace svx
         if ( !_sDataSourceNameOrLocation.isEmpty() )
         {
             INetURLObject aURL(_sDataSourceNameOrLocation);
-            (*this)[ (( aURL.GetProtocol() == INetProtocol::File ) ? daDatabaseLocation : daDataSource)] <<= _sDataSourceNameOrLocation;
+            (*this)[ (( aURL.GetProtocol() == INetProtocol::File ) ? DataAccessDescriptorProperty::DatabaseLocation : DataAccessDescriptorProperty::DataSource)] <<= _sDataSourceNameOrLocation;
         }
         else
-            (*this)[ daDataSource ] <<= OUString();
+            (*this)[ DataAccessDescriptorProperty::DataSource ] <<= OUString();
     }
-
-
 }
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

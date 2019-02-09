@@ -21,12 +21,14 @@
 #define INCLUDED_VCL_UNX_GTK_FPICKER_SALGTKPICKER_HXX
 
 #include <osl/mutex.hxx>
+#include <tools/link.hxx>
 #include <cppuhelper/compbase.hxx>
 
 #include <com/sun/star/awt/XTopWindowListener.hpp>
 #include <com/sun/star/awt/XExtendedToolkit.hpp>
 #include <com/sun/star/frame/XDesktop.hpp>
 #include <com/sun/star/frame/XTerminateListener.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
@@ -49,14 +51,15 @@ class SalGtkPicker
         osl::Mutex m_rbHelperMtx;
         GtkWidget  *m_pDialog;
     protected:
-        void SAL_CALL implsetTitle( const OUString& aTitle )
-            throw( css::uno::RuntimeException );
+        /// @throws css::uno::RuntimeException
+        void implsetTitle( const OUString& aTitle );
 
-        void SAL_CALL implsetDisplayDirectory( const OUString& rDirectory )
-            throw( css::lang::IllegalArgumentException, css::uno::RuntimeException );
+        /// @throws css::lang::IllegalArgumentException
+        /// @throws css::uno::RuntimeException
+        void implsetDisplayDirectory( const OUString& rDirectory );
 
-        OUString SAL_CALL implgetDisplayDirectory(  )
-            throw( css::uno::RuntimeException );
+        /// @throws css::uno::RuntimeException
+        OUString implgetDisplayDirectory(  );
         OUString uritounicode(const gchar *pIn);
         OString unicodetouri(const OUString &rURL);
 
@@ -78,39 +81,32 @@ class RunDialog :
 {
 private:
     osl::Mutex maLock;
-    GtkWidget *mpDialog;
-    css::uno::Reference< css::awt::XExtendedToolkit>  mxToolkit;
+    GtkWidget * const mpDialog;
+    bool mbTerminateDesktop;
+    css::uno::Reference<css::awt::XExtendedToolkit> mxToolkit;
+    css::uno::Reference<css::frame::XDesktop> mxDesktop;
+    DECL_STATIC_LINK(RunDialog, TerminateDesktop, void*, void);
 public:
 
     // XTopWindowListener
     using cppu::WeakComponentImplHelperBase::disposing;
-    virtual void SAL_CALL disposing( const css::lang::EventObject& )
-        throw(css::uno::RuntimeException, std::exception) override {}
-    virtual void SAL_CALL windowOpened( const css::lang::EventObject& e )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL windowClosing( const css::lang::EventObject& )
-        throw (css::uno::RuntimeException, std::exception) override {}
-    virtual void SAL_CALL windowClosed( const css::lang::EventObject& )
-        throw (css::uno::RuntimeException, std::exception) override {}
-    virtual void SAL_CALL windowMinimized( const css::lang::EventObject& )
-        throw (css::uno::RuntimeException, std::exception) override {}
-    virtual void SAL_CALL windowNormalized( const css::lang::EventObject& )
-        throw (css::uno::RuntimeException, std::exception) override {}
-    virtual void SAL_CALL windowActivated( const css::lang::EventObject& )
-        throw (css::uno::RuntimeException, std::exception) override {}
-    virtual void SAL_CALL windowDeactivated( const css::lang::EventObject& )
-        throw (css::uno::RuntimeException, std::exception) override {}
+    virtual void SAL_CALL disposing( const css::lang::EventObject& ) override {}
+    virtual void SAL_CALL windowOpened( const css::lang::EventObject& e ) override;
+    virtual void SAL_CALL windowClosing( const css::lang::EventObject& ) override {}
+    virtual void SAL_CALL windowClosed( const css::lang::EventObject& ) override {}
+    virtual void SAL_CALL windowMinimized( const css::lang::EventObject& ) override {}
+    virtual void SAL_CALL windowNormalized( const css::lang::EventObject& ) override {}
+    virtual void SAL_CALL windowActivated( const css::lang::EventObject& ) override {}
+    virtual void SAL_CALL windowDeactivated( const css::lang::EventObject& ) override {}
 
     // XTerminateListener
-    virtual void SAL_CALL queryTermination( const css::lang::EventObject& aEvent )
-        throw(css::frame::TerminationVetoException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL notifyTermination( const css::lang::EventObject& aEvent )
-        throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL queryTermination( const css::lang::EventObject& aEvent ) override;
+    virtual void SAL_CALL notifyTermination( const css::lang::EventObject& aEvent ) override;
 public:
     RunDialog(GtkWidget *pDialog,
-        css::uno::Reference< css::awt::XExtendedToolkit > &rToolkit
-        );
-    virtual ~RunDialog();
+        const css::uno::Reference<css::awt::XExtendedToolkit>& rToolkit,
+        const css::uno::Reference<css::frame::XDesktop>& rDesktop);
+    virtual ~RunDialog() override;
     gint run();
     void cancel();
     static GtkWindow* GetTransientFor();

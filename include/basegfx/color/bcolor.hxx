@@ -20,13 +20,13 @@
 #ifndef INCLUDED_BASEGFX_COLOR_BCOLOR_HXX
 #define INCLUDED_BASEGFX_COLOR_BCOLOR_HXX
 
-#include <basegfx/tuple/b3dtuple.hxx>
-#include <vector>
-#include <basegfx/basegfxdllapi.h>
+#include <sal/config.h>
 
-namespace com { namespace sun { namespace star { namespace rendering {
-    class XGraphicDevice;
-}}}}
+#include <algorithm>
+#include <ostream>
+
+#include <basegfx/tuple/b3dtuple.hxx>
+#include <basegfx/basegfxdllapi.h>
 
 namespace basegfx
 {
@@ -69,23 +69,11 @@ namespace basegfx
         :   B3DTuple(fLuminosity, fLuminosity, fLuminosity)
         {}
 
-        /** Create a copy of a Color
-
-            @param rVec
-            The Color which will be copied.
-        */
-        BColor(const BColor& rVec)
-        :   B3DTuple(rVec)
-        {}
-
         /** constructor with tuple to allow copy-constructing
             from B3DTuple-based classes
         */
         BColor(const ::basegfx::B3DTuple& rTuple)
         :   B3DTuple(rTuple)
-        {}
-
-        ~BColor()
         {}
 
         // data access read
@@ -159,16 +147,16 @@ namespace basegfx
             const double fDistG(getDistanceGreen(rColor));
             const double fDistB(getDistanceBlue(rColor));
 
-            double fRetval(fDistR > fDistG ? fDistR : fDistG);
-            return (fRetval > fDistB ? fRetval : fDistB);
+            double fRetval(std::max(fDistR, fDistG));
+            return std::max(fRetval, fDistB);
         }
 
         // clamp color to [0.0..1.0] values in all three intensity components
         BColor& clamp()
         {
-            mfX = basegfx::clamp(mfX, 0.0, 1.0);
-            mfY = basegfx::clamp(mfY, 0.0, 1.0);
-            mfZ = basegfx::clamp(mfZ, 0.0, 1.0);
+            mfX = std::clamp(mfX, 0.0, 1.0);
+            mfY = std::clamp(mfY, 0.0, 1.0);
+            mfZ = std::clamp(mfZ, 0.0, 1.0);
             return *this;
         }
 
@@ -185,6 +173,15 @@ namespace basegfx
         }
 
     };
+
+    template<typename charT, typename traits>
+    std::basic_ostream<charT, traits> & operator <<(
+        std::basic_ostream<charT, traits> & stream, BColor const & color)
+    {
+        return stream
+            << '[' << color.getRed() << ", " << color.getGreen() << ", "
+            << color.getBlue() << ']';
+    }
 } // end of namespace basegfx
 
 #endif // INCLUDED_BASEGFX_COLOR_BCOLOR_HXX

@@ -20,10 +20,11 @@
 #ifndef INCLUDED_SC_SOURCE_CORE_INC_DDELINK_HXX
 #define INCLUDED_SC_SOURCE_CORE_INC_DDELINK_HXX
 
-#include "address.hxx"
 #include <sfx2/lnkbase.hxx>
 #include <svl/broadcast.hxx>
-#include "types.hxx"
+#include <types.hxx>
+
+namespace com { namespace sun { namespace star { namespace uno { class Any; } } } }
 
 class ScDocument;
 class ScMultipleReadHeader;
@@ -53,7 +54,7 @@ public:
                         sal_uInt8 nM );
             ScDdeLink( ScDocument* pD, SvStream& rStream, ScMultipleReadHeader& rHdr );
             ScDdeLink( ScDocument* pD, const ScDdeLink& rOther );
-    virtual ~ScDdeLink();
+    virtual ~ScDdeLink() override;
 
     void            Store( SvStream& rStream, ScMultipleWriteHeader& rHdr ) const;
 

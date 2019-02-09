@@ -53,12 +53,11 @@ namespace drawinglayer
             FillGraphicAttribute(
                 const Graphic& rGraphic,
                 const basegfx::B2DRange& rGraphicRange,
-                bool bTiling = false,
+                bool bTiling,
                 double fOffsetX = 0.0,
                 double fOffsetY = 0.0);
-            FillGraphicAttribute();
-            FillGraphicAttribute(const FillGraphicAttribute& rCandidate);
-            FillGraphicAttribute& operator=(const FillGraphicAttribute& rCandidate);
+            FillGraphicAttribute(const FillGraphicAttribute&);
+            FillGraphicAttribute& operator=(const FillGraphicAttribute&);
             ~FillGraphicAttribute();
 
             // checks if the incarnation is default constructed

@@ -35,15 +35,14 @@ namespace sdr { namespace contact {
 ViewObjectContactOfSdrMediaObj::ViewObjectContactOfSdrMediaObj( ObjectContact& rObjectContact,
                                                                 ViewContact& rViewContact,
                                                                 const ::avmedia::MediaItem& rMediaItem ) :
-    ViewObjectContactOfSdrObj( rObjectContact, rViewContact ),
-    mpMediaWindow( nullptr )
+    ViewObjectContactOfSdrObj( rObjectContact, rViewContact )
 {
 #if HAVE_FEATURE_AVMEDIA
     vcl::Window* pWindow = getWindow();
 
     if( pWindow )
     {
-        mpMediaWindow = new SdrMediaWindow( pWindow, *this );
+        mpMediaWindow.reset( new SdrMediaWindow( pWindow, *this ) );
         mpMediaWindow->hide();
         executeMediaItem( rMediaItem );
     }
@@ -54,8 +53,6 @@ ViewObjectContactOfSdrMediaObj::ViewObjectContactOfSdrMediaObj( ObjectContact& r
 
 ViewObjectContactOfSdrMediaObj::~ViewObjectContactOfSdrMediaObj()
 {
-    delete mpMediaWindow;
-    mpMediaWindow = nullptr;
 }
 
 
@@ -80,8 +77,12 @@ Size ViewObjectContactOfSdrMediaObj::getPreferredSize() const
 {
     Size aRet;
 
+#if HAVE_FEATURE_AVMEDIA
     if( mpMediaWindow )
         aRet = mpMediaWindow->getPreferredSize();
+#else
+   aRet = Size(0,0);
+#endif
 
     return aRet;
 }
@@ -89,6 +90,7 @@ Size ViewObjectContactOfSdrMediaObj::getPreferredSize() const
 
 void ViewObjectContactOfSdrMediaObj::updateMediaItem( ::avmedia::MediaItem& rItem ) const
 {
+#if HAVE_FEATURE_AVMEDIA
     if( mpMediaWindow )
     {
         mpMediaWindow->updateMediaItem( rItem );
@@ -103,19 +105,23 @@ void ViewObjectContactOfSdrMediaObj::updateMediaItem( ::avmedia::MediaItem& rIte
             basegfx::B2DRange aViewRange(getObjectRange());
             aViewRange.transform(GetObjectContact().getViewInformation2D().getViewTransformation());
 
-            const Rectangle aViewRectangle(
-                (sal_Int32)floor(aViewRange.getMinX()), (sal_Int32)floor(aViewRange.getMinY()),
-                (sal_Int32)ceil(aViewRange.getMaxX()), (sal_Int32)ceil(aViewRange.getMaxY()));
+            const tools::Rectangle aViewRectangle(
+                static_cast<sal_Int32>(floor(aViewRange.getMinX())), static_cast<sal_Int32>(floor(aViewRange.getMinY())),
+                static_cast<sal_Int32>(ceil(aViewRange.getMaxX())), static_cast<sal_Int32>(ceil(aViewRange.getMaxY())));
 
             mpMediaWindow->setPosSize(aViewRectangle);
             mpMediaWindow->show();
         }
     }
+#else
+    (void) rItem;
+#endif
 }
 
 
 void ViewObjectContactOfSdrMediaObj::executeMediaItem( const ::avmedia::MediaItem& rItem )
 {
+#if HAVE_FEATURE_AVMEDIA
     if( mpMediaWindow )
     {
         ::avmedia::MediaItem aUpdatedItem;
@@ -126,6 +132,9 @@ void ViewObjectContactOfSdrMediaObj::executeMediaItem( const ::avmedia::MediaIte
         updateMediaItem( aUpdatedItem );
         static_cast< ViewContactOfSdrMediaObj& >( GetViewContact() ).mediaPropertiesChanged( aUpdatedItem );
     }
+#else
+    (void) rItem;
+#endif
 }
 
 

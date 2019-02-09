@@ -30,7 +30,6 @@
 #include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <boost/bind.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -93,12 +92,9 @@ void PresenterPaneFactory::Register (const Reference<frame::XController>& rxCont
         {
             throw RuntimeException();
         }
-        else
-        {
-            xCC->addResourceFactory(
-                "private:resource/pane/Presenter/*",
-                this);
-        }
+        xCC->addResourceFactory(
+            "private:resource/pane/Presenter/*",
+             this);
     }
     catch (RuntimeException&)
     {
@@ -116,7 +112,6 @@ PresenterPaneFactory::~PresenterPaneFactory()
 }
 
 void SAL_CALL PresenterPaneFactory::disposing()
-    throw (RuntimeException)
 {
     Reference<XConfigurationController> xCC (mxConfigurationControllerWeak);
     if (xCC.is())
@@ -124,13 +119,11 @@ void SAL_CALL PresenterPaneFactory::disposing()
     mxConfigurationControllerWeak = WeakReference<XConfigurationController>();
 
     // Dispose the panes in the cache.
-    if (mpResourceCache.get() != nullptr)
+    if (mpResourceCache != nullptr)
     {
-        ResourceContainer::const_iterator iPane (mpResourceCache->begin());
-        ResourceContainer::const_iterator iEnd (mpResourceCache->end());
-        for ( ; iPane!=iEnd; ++iPane)
+        for (const auto& rxPane : *mpResourceCache)
         {
-            Reference<lang::XComponent> xPaneComponent (iPane->second, UNO_QUERY);
+            Reference<lang::XComponent> xPaneComponent (rxPane.second, UNO_QUERY);
             if (xPaneComponent.is())
                 xPaneComponent->dispose();
         }
@@ -142,7 +135,6 @@ void SAL_CALL PresenterPaneFactory::disposing()
 
 Reference<XResource> SAL_CALL PresenterPaneFactory::createResource (
     const Reference<XResourceId>& rxPaneId)
-    throw (RuntimeException, IllegalArgumentException, WrappedTargetException, std::exception)
 {
     ThrowIfDisposed();
 
@@ -153,7 +145,7 @@ Reference<XResource> SAL_CALL PresenterPaneFactory::createResource (
     if (sPaneURL.isEmpty())
         return nullptr;
 
-    if (mpResourceCache.get() != nullptr)
+    if (mpResourceCache != nullptr)
     {
         // Has the requested resource already been created?
         ResourceContainer::const_iterator iResource (mpResourceCache->find(sPaneURL));
@@ -168,7 +160,7 @@ Reference<XResource> SAL_CALL PresenterPaneFactory::createResource (
             {
                 pDescriptor->SetActivationState(true);
                 if (pDescriptor->mxBorderWindow.is())
-                    pDescriptor->mxBorderWindow->setVisible(sal_True);
+                    pDescriptor->mxBorderWindow->setVisible(true);
                 pPaneContainer->StorePane(pDescriptor->mxPane);
             }
 
@@ -177,12 +169,11 @@ Reference<XResource> SAL_CALL PresenterPaneFactory::createResource (
     }
 
     // No.  Create a new one.
-    Reference<XResource> xResource = CreatePane(rxPaneId, OUString());
+    Reference<XResource> xResource = CreatePane(rxPaneId);
     return xResource;
 }
 
 void SAL_CALL PresenterPaneFactory::releaseResource (const Reference<XResource>& rxResource)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
 
@@ -199,9 +190,9 @@ void SAL_CALL PresenterPaneFactory::releaseResource (const Reference<XResource>&
     {
         pDescriptor->SetActivationState(false);
         if (pDescriptor->mxBorderWindow.is())
-            pDescriptor->mxBorderWindow->setVisible(sal_False);
+            pDescriptor->mxBorderWindow->setVisible(false);
 
-        if (mpResourceCache.get() != nullptr)
+        if (mpResourceCache != nullptr)
         {
             // Store the pane in the cache.
             (*mpResourceCache)[sPaneURL] = rxResource;
@@ -218,8 +209,7 @@ void SAL_CALL PresenterPaneFactory::releaseResource (const Reference<XResource>&
 
 
 Reference<XResource> PresenterPaneFactory::CreatePane (
-    const Reference<XResourceId>& rxPaneId,
-    const OUString& rsTitle)
+    const Reference<XResourceId>& rxPaneId)
 {
     if ( ! rxPaneId.is())
         return nullptr;
@@ -240,7 +230,6 @@ Reference<XResource> PresenterPaneFactory::CreatePane (
     {
         return CreatePane(
             rxPaneId,
-            rsTitle,
             xParentPane,
             rxPaneId->getFullResourceURL().Arguments == "Sprite=1");
     }
@@ -254,7 +243,6 @@ Reference<XResource> PresenterPaneFactory::CreatePane (
 
 Reference<XResource> PresenterPaneFactory::CreatePane (
     const Reference<XResourceId>& rxPaneId,
-    const OUString& rsTitle,
     const Reference<drawing::framework::XPane>& rxParentPane,
     const bool bIsSpritePane)
 {
@@ -281,7 +269,7 @@ Reference<XResource> PresenterPaneFactory::CreatePane (
     aArguments[0] <<= rxPaneId;
     aArguments[1] <<= rxParentPane->getWindow();
     aArguments[2] <<= rxParentPane->getCanvas();
-    aArguments[3] <<= rsTitle;
+    aArguments[3] <<= OUString();
     aArguments[4] <<= Reference<drawing::framework::XPaneBorderPainter>(
         static_cast<XWeak*>(mpPresenterController->GetPaneBorderPainter().get()),
         UNO_QUERY);
@@ -298,33 +286,29 @@ Reference<XResource> PresenterPaneFactory::CreatePane (
     {
         if (bIsSpritePane)
         {
-            pDescriptor->maSpriteProvider = ::boost::bind(
-                &PresenterSpritePane::GetSprite,
-                dynamic_cast<PresenterSpritePane*>(xPane.get()));
+            auto const pPane(dynamic_cast<PresenterSpritePane*>(xPane.get()));
+            pDescriptor->maSpriteProvider = [pPane](){ return pPane->GetSprite(); };
             pDescriptor->mbIsSprite = true;
-            pDescriptor->mbNeedsClipping = false;
         }
         else
         {
             pDescriptor->mbIsSprite = false;
-            pDescriptor->mbNeedsClipping = true;
         }
 
         // Get the window of the frame and make that visible.
         Reference<awt::XWindow> xWindow (pDescriptor->mxBorderWindow, UNO_QUERY_THROW);
-        xWindow->setVisible(sal_True);
+        xWindow->setVisible(true);
     }
 
     return Reference<XResource>(static_cast<XWeak*>(xPane.get()), UNO_QUERY_THROW);
 }
 
 void PresenterPaneFactory::ThrowIfDisposed() const
-    throw (css::lang::DisposedException)
 {
     if (rBHelper.bDisposed || rBHelper.bInDispose)
     {
         throw lang::DisposedException (
-            OUString( "PresenterPaneFactory object has already been disposed"),
+            "PresenterPaneFactory object has already been disposed",
             const_cast<uno::XWeak*>(static_cast<const uno::XWeak*>(this)));
     }
 }

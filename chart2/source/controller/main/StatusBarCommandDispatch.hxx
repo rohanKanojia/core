@@ -20,11 +20,13 @@
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_MAIN_STATUSBARCOMMANDDISPATCH_HXX
 
 #include "CommandDispatch.hxx"
-#include "ObjectIdentifier.hxx"
+#include <ObjectIdentifier.hxx>
 #include <cppuhelper/implbase.hxx>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/view/XSelectionSupplier.hpp>
-#include <com/sun/star/util/XModifiable.hpp>
+#include <com/sun/star/view/XSelectionChangeListener.hpp>
+
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace util { class XModifiable; } } } }
+namespace com { namespace sun { namespace star { namespace view { class XSelectionSupplier; } } } }
 
 namespace chart
 {
@@ -49,7 +51,7 @@ public:
         const css::uno::Reference< css::uno::XComponentContext > & xContext,
         const css::uno::Reference< css::frame::XModel > & xModel,
         const css::uno::Reference< css::view::XSelectionSupplier > & xSelSupp );
-    virtual ~StatusBarCommandDispatch();
+    virtual ~StatusBarCommandDispatch() override;
 
     // late initialisation, especially for adding as listener
     virtual void initialize() override;
@@ -58,8 +60,7 @@ protected:
     // ____ XDispatch ____
     virtual void SAL_CALL dispatch(
         const css::util::URL& URL,
-        const css::uno::Sequence< css::beans::PropertyValue >& Arguments )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::uno::Sequence< css::beans::PropertyValue >& Arguments ) override;
 
     // ____ WeakComponentImplHelperBase ____
     /// is called when this is disposed
@@ -67,13 +68,11 @@ protected:
 
     // ____ XModifyListener (override from CommandDispatch) ____
     virtual void SAL_CALL modified(
-        const css::lang::EventObject& aEvent )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& aEvent ) override;
 
     // ____ XEventListener (base of XModifyListener) ____
     virtual void SAL_CALL disposing(
-        const css::lang::EventObject& Source )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& Source ) override;
 
     virtual void fireStatusEvent(
         const OUString & rURL,
@@ -81,8 +80,7 @@ protected:
 
     // ____ XSelectionChangeListener ____
     virtual void SAL_CALL selectionChanged(
-        const css::lang::EventObject& aEvent )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& aEvent ) override;
 
 private:
     css::uno::Reference< css::util::XModifiable > m_xModifiable;

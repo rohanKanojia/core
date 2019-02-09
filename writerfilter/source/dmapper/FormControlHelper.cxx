@@ -37,13 +37,14 @@
 #include "FormControlHelper.hxx"
 #include <xmloff/odffields.hxx>
 #include <comphelper/sequence.hxx>
+#include <tools/diagnose_ex.h>
 
 namespace writerfilter {
 namespace dmapper {
 
 using namespace ::com::sun::star;
 
-struct FormControlHelper::FormControlHelper_Impl
+struct FormControlHelper::FormControlHelper_Impl : public virtual SvRefBase
 {
     FieldId m_eFieldId;
     awt::Size aSize;
@@ -53,13 +54,13 @@ struct FormControlHelper::FormControlHelper_Impl
     uno::Reference<lang::XMultiServiceFactory> rServiceFactory;
     uno::Reference<text::XTextDocument> rTextDocument;
 
-    uno::Reference<drawing::XDrawPage> getDrawPage();
-    uno::Reference<lang::XMultiServiceFactory> getServiceFactory();
-    uno::Reference<form::XForm> getForm();
+    uno::Reference<drawing::XDrawPage> const & getDrawPage();
+    uno::Reference<lang::XMultiServiceFactory> const & getServiceFactory();
+    uno::Reference<form::XForm> const & getForm();
     uno::Reference<container::XIndexContainer> getFormComps();
 };
 
-uno::Reference<drawing::XDrawPage> FormControlHelper::FormControlHelper_Impl::getDrawPage()
+uno::Reference<drawing::XDrawPage> const & FormControlHelper::FormControlHelper_Impl::getDrawPage()
 {
     if (! rDrawPage.is())
     {
@@ -72,7 +73,7 @@ uno::Reference<drawing::XDrawPage> FormControlHelper::FormControlHelper_Impl::ge
     return rDrawPage;
 }
 
-uno::Reference<lang::XMultiServiceFactory> FormControlHelper::FormControlHelper_Impl::getServiceFactory()
+uno::Reference<lang::XMultiServiceFactory> const & FormControlHelper::FormControlHelper_Impl::getServiceFactory()
 {
     if (! rServiceFactory.is())
         rServiceFactory.set(rTextDocument, uno::UNO_QUERY);
@@ -80,7 +81,7 @@ uno::Reference<lang::XMultiServiceFactory> FormControlHelper::FormControlHelper_
     return rServiceFactory;
 }
 
-uno::Reference<form::XForm> FormControlHelper::FormControlHelper_Impl::getForm()
+uno::Reference<form::XForm> const & FormControlHelper::FormControlHelper_Impl::getForm()
 {
     if (! rForm.is())
     {
@@ -97,8 +98,7 @@ uno::Reference<form::XForm> FormControlHelper::FormControlHelper_Impl::getForm()
             while (xFormsNamedContainer->hasByName(sFormName))
             {
                 ++nUnique;
-                sFormName = sDOCXForm;
-                sFormName += OUString::number(nUnique);
+                sFormName = sDOCXForm + OUString::number(nUnique);
             }
 
             uno::Reference<uno::XInterface> xForm(getServiceFactory()->createInstance("com.sun.star.form.component.Form"));
@@ -130,7 +130,7 @@ uno::Reference<container::XIndexContainer> FormControlHelper::FormControlHelper_
 
 FormControlHelper::FormControlHelper(FieldId eFieldId,
                                      uno::Reference<text::XTextDocument> const& xTextDocument,
-                                     FFDataHandler::Pointer_t pFFData)
+                                     FFDataHandler::Pointer_t const & pFFData)
     : m_pFFData(pFFData), m_pImpl(new FormControlHelper_Impl)
 {
     m_pImpl->m_eFieldId = eFieldId;
@@ -183,25 +183,19 @@ bool FormControlHelper::createCheckbox(uno::Reference<text::XTextRange> const& x
     m_pImpl->aSize.Width = nCheckBoxHeight;
     m_pImpl->aSize.Height = m_pImpl->aSize.Width;
 
-    uno::Any aAny;
     if (!m_pFFData->getStatusText().isEmpty())
     {
-        aAny <<= m_pFFData->getStatusText();
-
-        xPropSet->setPropertyValue("HelpText", aAny);
+        xPropSet->setPropertyValue("HelpText", uno::Any(m_pFFData->getStatusText()));
     }
 
-    aAny <<= m_pFFData->getCheckboxChecked();
-    xPropSet->setPropertyValue("DefaultState", aAny);
+    xPropSet->setPropertyValue("DefaultState", uno::Any(m_pFFData->getCheckboxChecked()));
 
     if (!m_pFFData->getHelpText().isEmpty())
     {
-        aAny <<= m_pFFData->getHelpText();
-        xPropSet->setPropertyValue("HelpF1Text", aAny);
+        xPropSet->setPropertyValue("HelpF1Text", uno::Any(m_pFFData->getHelpText()));
     }
 
-    aAny <<= rControlName;
-    xPropSet->setPropertyValue("Name", aAny);
+    xPropSet->setPropertyValue("Name", uno::Any(rControlName));
 
     return true;
 }
@@ -212,14 +206,52 @@ void FormControlHelper::processField(uno::Reference<text::XFormField> const& xFo
     uno::Reference<container::XNamed> xNamed( xFormField, uno::UNO_QUERY );
     if ( m_pFFData && xNamed.is() && xNameCont.is() )
     {
+        OUString sTmp = m_pFFData->getEntryMacro();
+        if ( !sTmp.isEmpty() )
+            xNameCont->insertByName( "EntryMacro", uno::makeAny(sTmp) );
+        sTmp = m_pFFData->getExitMacro();
+        if ( !sTmp.isEmpty() )
+            xNameCont->insertByName( "ExitMacro", uno::makeAny(sTmp) );
+
+        sTmp = m_pFFData->getHelpText();
+        if ( !sTmp.isEmpty() )
+            xNameCont->insertByName( "Help", uno::makeAny(sTmp) );
+
+        sTmp = m_pFFData->getStatusText();
+        if ( !sTmp.isEmpty() )
+            xNameCont->insertByName( "Hint", uno::makeAny(sTmp) );
 
         if (m_pImpl->m_eFieldId == FIELD_FORMTEXT )
         {
             xFormField->setFieldType(ODF_FORMTEXT);
-            if (  !m_pFFData->getName().isEmpty() )
+            sTmp = m_pFFData->getName();
+            try
             {
-                xNamed->setName( m_pFFData->getName() );
+                if ( !sTmp.isEmpty() )
+                    xNamed->setName( sTmp );
             }
+            catch ( uno::Exception& )
+            {
+                DBG_UNHANDLED_EXCEPTION("writerfilter","Set Formfield name failed");
+            }
+
+            sTmp = m_pFFData->getTextType();
+            if ( !sTmp.isEmpty() )
+                xNameCont->insertByName( "Type", uno::makeAny(sTmp) );
+
+            const sal_uInt16 nMaxLength = m_pFFData->getTextMaxLength();
+            if ( nMaxLength )
+            {
+                xNameCont->insertByName( "MaxLength", uno::makeAny(nMaxLength) );
+            }
+
+            sTmp = m_pFFData->getTextDefault();
+            if ( !sTmp.isEmpty() )
+                xNameCont->insertByName( "Content", uno::makeAny(sTmp) );
+
+            sTmp = m_pFFData->getTextFormat();
+            if ( !sTmp.isEmpty() )
+                xNameCont->insertByName( "Format", uno::makeAny(sTmp) );
         }
         else if (m_pImpl->m_eFieldId == FIELD_FORMCHECKBOX )
         {
@@ -264,16 +296,13 @@ void FormControlHelper::insertControl(uno::Reference<text::XTextRange> const& xT
     if (! xFormComps.is())
         return;
 
-    static const char sControl[] = "Control";
-
     sal_Int32 nControl = 0;
     bool bDone = false;
     OUString sControlName;
 
     do
     {
-        OUString sTmp(sControl);
-        sTmp += OUString::number(nControl);
+        OUString sTmp = "Control" + OUString::number(nControl);
 
         nControl++;
         if (! xFormCompsByName->hasByName(sTmp))
@@ -316,18 +345,13 @@ void FormControlHelper::insertControl(uno::Reference<text::XTextRange> const& xT
 
     uno::Reference<beans::XPropertySet> xShapeProps(xShape, uno::UNO_QUERY);
 
-    sal_uInt16 nTmp = text::TextContentAnchorType_AS_CHARACTER;
-    aAny <<= nTmp;
-
-    xShapeProps->setPropertyValue("AnchorType", aAny);
+    sal_uInt16 nTmp = sal_uInt16(text::TextContentAnchorType_AS_CHARACTER);
+    xShapeProps->setPropertyValue("AnchorType", uno::makeAny<sal_uInt16>(nTmp));
 
     nTmp = text::VertOrientation::CENTER;
-    aAny <<= nTmp;
-    xShapeProps->setPropertyValue("VertOrient", aAny);
+    xShapeProps->setPropertyValue("VertOrient", uno::makeAny<sal_uInt16>(nTmp));
 
-    aAny <<= xTextRange;
-
-    xShapeProps->setPropertyValue("TextRange", aAny);
+    xShapeProps->setPropertyValue("TextRange", uno::Any(xTextRange));
 
     uno::Reference<drawing::XControlShape> xControlShape(xShape, uno::UNO_QUERY);
     uno::Reference<awt::XControlModel> xControlModel(m_pImpl->rFormComponent, uno::UNO_QUERY);

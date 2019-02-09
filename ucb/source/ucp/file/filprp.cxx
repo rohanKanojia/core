@@ -17,9 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "shell.hxx"
+#include "filtask.hxx"
 #include "prov.hxx"
 #include "filprp.hxx"
+
+#include <sal/log.hxx>
 
 using namespace fileaccess;
 using namespace com::sun::star;
@@ -34,34 +36,31 @@ using namespace com::sun::star::ucb;
 #define THROW_WHERE ""
 #endif
 
-XPropertySetInfo_impl::XPropertySetInfo_impl( shell* pMyShell,const OUString& aUnqPath )
+XPropertySetInfo_impl::XPropertySetInfo_impl( TaskManager* pMyShell,const OUString& aUnqPath )
     : m_pMyShell( pMyShell ),
-      m_count( 0 ),
       m_seq( 0 )
 {
     m_pMyShell->m_pProvider->acquire();
 
-    shell::ContentMap::iterator it = m_pMyShell->m_aContent.find( aUnqPath );
+    TaskManager::ContentMap::iterator it = m_pMyShell->m_aContent.find( aUnqPath );
 
-    shell::PropertySet& properties = *(it->second.properties);
-    shell::PropertySet::iterator it1 = properties.begin();
+    TaskManager::PropertySet& properties = *(it->second.properties);
 
     m_seq.realloc( properties.size() );
 
-    while( it1 != properties.end() )
+    sal_Int32 count = 0;
+    for( const auto& rProp : properties )
     {
-        m_seq[ m_count++ ] = beans::Property( it1->getPropertyName(),
-                                              it1->getHandle(),
-                                              it1->getType(),
-                                              it1->getAttributes() );
-        ++it1;
+        m_seq[ count++ ] = beans::Property( rProp.getPropertyName(),
+                                            rProp.getHandle(),
+                                            rProp.getType(),
+                                            rProp.getAttributes() );
     }
 }
 
 
-XPropertySetInfo_impl::XPropertySetInfo_impl( shell* pMyShell,const Sequence< beans::Property >& seq )
+XPropertySetInfo_impl::XPropertySetInfo_impl( TaskManager* pMyShell,const Sequence< beans::Property >& seq )
     : m_pMyShell( pMyShell ),
-      m_count( seq.getLength() ),
       m_seq( seq )
 {
     m_pMyShell->m_pProvider->acquire();
@@ -75,10 +74,7 @@ XPropertySetInfo_impl::~XPropertySetInfo_impl()
 
 
 beans::Property SAL_CALL
-XPropertySetInfo_impl::getPropertyByName(
-                     const OUString& aName )
-  throw( beans::UnknownPropertyException,
-     RuntimeException, std::exception)
+XPropertySetInfo_impl::getPropertyByName( const OUString& aName )
 {
   for( sal_Int32 i = 0; i < m_seq.getLength(); ++i )
     if( m_seq[i].Name == aName ) return m_seq[i];
@@ -88,18 +84,14 @@ XPropertySetInfo_impl::getPropertyByName(
 
 
 Sequence< beans::Property > SAL_CALL
-XPropertySetInfo_impl::getProperties(
-                    void )
-  throw( RuntimeException, std::exception )
+XPropertySetInfo_impl::getProperties()
 {
   return m_seq;
 }
 
 
 sal_Bool SAL_CALL
-XPropertySetInfo_impl::hasPropertyByName(
-                     const OUString& aName )
-  throw( RuntimeException, std::exception )
+XPropertySetInfo_impl::hasPropertyByName( const OUString& aName )
 {
   for( sal_Int32 i = 0; i < m_seq.getLength(); ++i )
     if( m_seq[i].Name == aName ) return true;

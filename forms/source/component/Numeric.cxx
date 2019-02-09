@@ -18,7 +18,7 @@
  */
 
 #include "Numeric.hxx"
-#include <comphelper/processfactory.hxx>
+#include <comphelper/types.hxx>
 
 namespace frm
 {
@@ -42,7 +42,7 @@ ONumericControl::ONumericControl(const Reference<XComponentContext>& _rxFactory)
 }
 
 
-css::uno::Sequence<OUString> ONumericControl::getSupportedServiceNames() throw(std::exception)
+css::uno::Sequence<OUString> ONumericControl::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OBoundControl::getSupportedServiceNames();
     aSupported.realloc(aSupported.getLength() + 2);
@@ -53,20 +53,7 @@ css::uno::Sequence<OUString> ONumericControl::getSupportedServiceNames() throw(s
     return aSupported;
 }
 
-
-Sequence<Type> ONumericControl::_getTypes()
-{
-    return OBoundControl::_getTypes();
-}
-
-
 // ONumericModel
-
-Sequence<Type> ONumericModel::_getTypes()
-{
-    return OEditBaseModel::_getTypes();
-}
-
 
 ONumericModel::ONumericModel(const Reference<XComponentContext>& _rxFactory)
                 :OEditBaseModel( _rxFactory, VCL_CONTROLMODEL_NUMERICFIELD, FRM_SUN_CONTROL_NUMERICFIELD, true, true )
@@ -94,7 +81,7 @@ IMPLEMENT_DEFAULT_CLONING( ONumericModel )
 
 // XServiceInfo
 
-css::uno::Sequence<OUString> ONumericModel::getSupportedServiceNames() throw(std::exception)
+css::uno::Sequence<OUString> ONumericModel::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OBoundControlModel::getSupportedServiceNames();
 
@@ -128,7 +115,7 @@ void ONumericModel::describeFixedProperties( Sequence< Property >& _rProps ) con
 }
 
 
-OUString SAL_CALL ONumericModel::getServiceName() throw ( css::uno::RuntimeException, std::exception)
+OUString SAL_CALL ONumericModel::getServiceName()
 {
     return OUString(FRM_COMPONENT_NUMERICFIELD);  // old (non-sun) name for compatibility !
 }
@@ -160,7 +147,7 @@ bool ONumericModel::commitControlValueToDbColumn( bool /*_bPostReset*/ )
 
 Any ONumericModel::translateDbColumnToControlValue()
 {
-    m_aSaveValue <<= (double)m_xColumn->getDouble();
+    m_aSaveValue <<= m_xColumn->getDouble();
     if ( m_xColumn->wasNull() )
         m_aSaveValue.clear();
 
@@ -186,14 +173,14 @@ void ONumericModel::resetNoBroadcast()
 
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_ONumericModel_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {
     return cppu::acquire(new frm::ONumericModel(component));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_ONumericControl_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {

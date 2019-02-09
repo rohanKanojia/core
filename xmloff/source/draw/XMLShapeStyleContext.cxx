@@ -18,19 +18,23 @@
  */
 
 #include <tools/debug.hxx>
+#include <sal/log.hxx>
 #include <xmloff/XMLShapeStyleContext.hxx>
-#include "XMLShapePropertySetContext.hxx"
+#include <XMLShapePropertySetContext.hxx>
 #include <xmloff/contextid.hxx>
 #include <com/sun/star/drawing/XControlShape.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
+#include <com/sun/star/container/XIndexReplace.hpp>
 #include <xmloff/xmlimp.hxx>
 #include <xmloff/xmlnumi.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlerror.hxx>
 #include <xmloff/maptype.hxx>
+#include <xmloff/xmlimppr.hxx>
 
 #include "sdpropls.hxx"
 
@@ -79,19 +83,19 @@ void XMLShapeStyleContext::SetAttribute( sal_uInt16 nPrefixKey, const OUString& 
         {
             if( !GetName().isEmpty() && !GetDisplayName().isEmpty() && GetName() != GetDisplayName() )
             {
-                const_cast< SvXMLImport&>( GetImport() ).
+                GetImport().
                     AddStyleDisplayName( GetFamily(), GetName(), GetDisplayName() );
             }
         }
     }
 }
 
-SvXMLImportContext *XMLShapeStyleContext::CreateChildContext(
+SvXMLImportContextRef XMLShapeStyleContext::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< xml::sax::XAttributeList > & xAttrList )
 {
-    SvXMLImportContext *pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     if( XML_NAMESPACE_STYLE == nPrefix || XML_NAMESPACE_LO_EXT == nPrefix )
     {
@@ -107,7 +111,7 @@ SvXMLImportContext *XMLShapeStyleContext::CreateChildContext(
             rtl::Reference < SvXMLImportPropertyMapper > xImpPrMap =
                 GetStyles()->GetImportPropertyMapper( GetFamily() );
             if( xImpPrMap.is() )
-                pContext = new XMLShapePropertySetContext( GetImport(), nPrefix,
+                xContext = new XMLShapePropertySetContext( GetImport(), nPrefix,
                                                         rLocalName, xAttrList,
                                                         nFamily,
                                                         GetProperties(),
@@ -115,11 +119,11 @@ SvXMLImportContext *XMLShapeStyleContext::CreateChildContext(
         }
     }
 
-    if( !pContext )
-        pContext = XMLPropStyleContext::CreateChildContext( nPrefix, rLocalName,
+    if (!xContext)
+        xContext = XMLPropStyleContext::CreateChildContext( nPrefix, rLocalName,
                                                           xAttrList );
 
-    return pContext;
+    return xContext;
 }
 
 void XMLShapeStyleContext::FillPropertySet( const Reference< beans::XPropertySet > & rPropSet )
@@ -134,16 +138,12 @@ void XMLShapeStyleContext::FillPropertySet( const Reference< beans::XPropertySet
 
         ::std::vector< XMLPropertyState > &rProperties = GetProperties();
         ::std::vector< XMLPropertyState >::iterator end( rProperties.end() );
-        ::std::vector< XMLPropertyState >::iterator property;
 
         // first, look for the old format, where we had a text:list-style-name
         // attribute in the style:properties element
-        for( property = rProperties.begin(); property != end; ++property )
-        {
+        auto property = std::find_if(rProperties.begin(), end, [&rMapper](XMLPropertyState& rProp) {
             // find properties with context
-            if( (property->mnIndex != -1) && (rMapper->GetEntryContextId( property->mnIndex ) == CTF_SD_NUMBERINGRULES_NAME) )
-                break;
-        }
+            return (rProp.mnIndex != -1) && (rMapper->GetEntryContextId( rProp.mnIndex ) == CTF_SD_NUMBERINGRULES_NAME); });
 
         // if we did not find an old list-style-name in the properties, and we need one
         // because we got a style:list-style attribute in the style-style element
@@ -151,7 +151,7 @@ void XMLShapeStyleContext::FillPropertySet( const Reference< beans::XPropertySet
         if( (property == end) && ( !m_sListStyleName.isEmpty() ) )
         {
             sal_Int32 nIndex = rMapper->FindEntryIndex( CTF_SD_NUMBERINGRULES_NAME );
-            DBG_ASSERT( -1 != nIndex, "can't find numbering rules property entry, can't set numbering rule!" );
+            SAL_WARN_IF( -1 == nIndex, "xmloff", "can't find numbering rules property entry, can't set numbering rule!" );
 
             XMLPropertyState aNewState( nIndex );
             rProperties.push_back( aNewState );
@@ -170,7 +170,7 @@ void XMLShapeStyleContext::FillPropertySet( const Reference< beans::XPropertySet
 
             const SvxXMLListStyleContext *pListStyle = GetImport().GetTextImport()->FindAutoListStyle( m_sListStyleName );
 
-            DBG_ASSERT( pListStyle, "list-style not found for shape style" );
+            SAL_WARN_IF( !pListStyle, "xmloff", "list-style not found for shape style" );
             if( pListStyle )
             {
                 uno::Reference< container::XIndexReplace > xNumRule( SvxXMLListStyleContext::CreateNumRule( GetImport().GetModel() ) );
@@ -212,7 +212,7 @@ void XMLShapeStyleContext::FillPropertySet( const Reference< beans::XPropertySet
 
     rtl::Reference < SvXMLImportPropertyMapper > xImpPrMap =
         GetStyles()->GetImportPropertyMapper( GetFamily() );
-    DBG_ASSERT( xImpPrMap.is(), "There is the import prop mapper" );
+    SAL_WARN_IF( !xImpPrMap.is(), "xmloff", "There is the import prop mapper" );
     if( xImpPrMap.is() )
         xImpPrMap->FillPropertySet( GetProperties(), rPropSet, aContextIDs );
 

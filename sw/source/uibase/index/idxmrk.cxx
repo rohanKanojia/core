@@ -18,13 +18,7 @@
  */
 
 #include <hintids.hxx>
-#include <helpid.h>
-#include <comphelper/processfactory.hxx>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
 #include <svl/stritem.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/dispatch.hxx>
 #include <svl/eitem.hxx>
 #include <editeng/scripttypeitem.hxx>
@@ -38,11 +32,9 @@
 #include <multmrk.hxx>
 #include <swundo.hxx>
 #include <cmdid.h>
-#include <index.hrc>
 #include <swmodule.hxx>
 #include <fldmgr.hxx>
 #include <fldbas.hxx>
-#include <utlui.hrc>
 #include <swcont.hxx>
 #include <svl/cjkoptions.hxx>
 #include <ndtxt.hxx>
@@ -57,12 +49,8 @@ SwInsertIdxMarkWrapper::SwInsertIdxMarkWrapper( vcl::Window *pParentWindow,
         SfxChildWindow(pParentWindow, nId)
 {
     SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-    assert(pFact && "SwAbstractDialogFactory fail!");
-    pAbstDlg = pFact->CreateIndexMarkFloatDlg(pBindings, this, pParentWindow, pInfo);
-    assert(pAbstDlg && "Dialog creation failed!");
-    SetWindow( pAbstDlg->GetWindow() );
-    GetWindow()->Show();    // at this point,because before pSh has to be initialized in ReInitDlg()
-                        // -> Show() will invoke StateChanged() and save pos
+    xAbstDlg = pFact->CreateIndexMarkFloatDlg(pBindings, this, pParentWindow->GetFrameWeld(), pInfo);
+    SetController(xAbstDlg->GetController());
 }
 
 SfxChildWinInfo SwInsertIdxMarkWrapper::GetInfo() const
@@ -72,9 +60,9 @@ SfxChildWinInfo SwInsertIdxMarkWrapper::GetInfo() const
     return aInfo;
 }
 
-void    SwInsertIdxMarkWrapper::ReInitDlg(SwWrtShell& rWrtShell)
+void SwInsertIdxMarkWrapper::ReInitDlg(SwWrtShell& rWrtShell)
 {
-    pAbstDlg->ReInitDlg(rWrtShell);
+    xAbstDlg->ReInitDlg(rWrtShell);
 }
 
 SFX_IMPL_CHILDWINDOW_WITHID(SwInsertAuthMarkWrapper, FN_INSERT_AUTH_ENTRY_DLG)
@@ -86,10 +74,8 @@ SwInsertAuthMarkWrapper::SwInsertAuthMarkWrapper(   vcl::Window *pParentWindow,
         SfxChildWindow(pParentWindow, nId)
 {
     SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-    OSL_ENSURE(pFact, "SwAbstractDialogFactory fail!");
-    pAbstDlg = pFact->CreateAuthMarkFloatDlg(pBindings, this, pParentWindow, pInfo);
-    OSL_ENSURE(pAbstDlg, "Dialog creation failed!");
-    SetWindow( pAbstDlg->GetWindow() );
+    xAbstDlg = pFact->CreateAuthMarkFloatDlg(pBindings, this, pParentWindow->GetFrameWeld(), pInfo);
+    SetController(xAbstDlg->GetController());
 }
 
 SfxChildWinInfo SwInsertAuthMarkWrapper::GetInfo() const
@@ -98,9 +84,9 @@ SfxChildWinInfo SwInsertAuthMarkWrapper::GetInfo() const
     return aInfo;
 }
 
-void    SwInsertAuthMarkWrapper::ReInitDlg(SwWrtShell& rWrtShell)
+void SwInsertAuthMarkWrapper::ReInitDlg(SwWrtShell& rWrtShell)
 {
-    pAbstDlg->ReInitDlg(rWrtShell);
+    xAbstDlg->ReInitDlg(rWrtShell);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

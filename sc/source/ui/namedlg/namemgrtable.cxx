@@ -8,17 +8,19 @@
  */
 
 //ScRangeManagerTable
-#include "global.hxx"
-#include "reffact.hxx"
-#include "document.hxx"
-#include "docfunc.hxx"
-#include "scresid.hxx"
-#include "globstr.hrc"
-#include "namedlg.hxx"
-#include "viewdata.hxx"
-#include "globalnames.hxx"
+#include <memory>
+#include <global.hxx>
+#include <reffact.hxx>
+#include <document.hxx>
+#include <docfunc.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <namedlg.hxx>
+#include <viewdata.hxx>
+#include <globalnames.hxx>
 
 #include <sfx2/app.hxx>
+#include <unotools/charclass.hxx>
 
 #define ITEMID_NAME 1
 #define ITEMID_RANGE 2
@@ -35,20 +37,20 @@ static OUString createEntryString(const ScRangeNameLine& rLine)
 ScRangeManagerTable::InitListener::~InitListener() {}
 
 ScRangeManagerTable::ScRangeManagerTable(SvSimpleTableContainer& rParent,
-        std::map<OUString, std::unique_ptr<ScRangeName>>& rRangeMap,
+        const std::map<OUString, std::unique_ptr<ScRangeName>>& rRangeMap,
         const ScAddress& rPos)
     : SvSimpleTable( rParent, WB_SORT | WB_HSCROLL | WB_CLIPCHILDREN | WB_TABSTOP )
-    , maGlobalString( ScGlobal::GetRscString(STR_GLOBAL_SCOPE))
+    , maGlobalString( ScResId(STR_GLOBAL_SCOPE))
     , m_RangeMap(rRangeMap)
     , maPos( rPos )
     , mpInitListener(nullptr)
 {
-    static long aStaticTabs[] = {3, 0, 0, 0 };
-    SetTabs( &aStaticTabs[0], MAP_PIXEL );
+    static long aStaticTabs[] = { 0, 0, 0 };
+    SetTabs( SAL_N_ELEMENTS(aStaticTabs), aStaticTabs, MapUnit::MapPixel );
 
-    OUString aNameStr(ScGlobal::GetRscString(STR_HEADER_NAME));
-    OUString aRangeStr(ScGlobal::GetRscString(STR_HEADER_RANGE_OR_EXPR));
-    OUString aScopeStr(ScGlobal::GetRscString(STR_HEADER_SCOPE));
+    OUString aNameStr(ScResId(STR_HEADER_NAME));
+    OUString aRangeStr(ScResId(STR_HEADER_RANGE_OR_EXPR));
+    OUString aScopeStr(ScResId(STR_HEADER_SCOPE));
 
     HeaderBar& rHeaderBar = GetTheHeaderBar();
     InsertHeaderEntry( aNameStr );
@@ -60,7 +62,7 @@ ScRangeManagerTable::ScRangeManagerTable(SvSimpleTableContainer& rParent,
     UpdateViewSize();
     Init();
     ShowTable();
-    SetSelectionMode(MULTIPLE_SELECTION);
+    SetSelectionMode(SelectionMode::Multiple);
     SetScrolledHdl( LINK( this, ScRangeManagerTable, ScrollHdl ) );
     HeaderEndDragHdl(nullptr);
 }
@@ -98,8 +100,8 @@ void ScRangeManagerTable::setColWidths()
     rHeaderBar.SetItemSize( ITEMID_NAME, nTabSize);
     rHeaderBar.SetItemSize( ITEMID_RANGE, nTabSize);
     rHeaderBar.SetItemSize( ITEMID_SCOPE, nTabSize);
-    static long aStaticTabs[] = {3, 0, nTabSize, 2*nTabSize };
-    SetTabs( &aStaticTabs[0], MAP_PIXEL );
+    static long aStaticTabs[] = {0, nTabSize, 2*nTabSize };
+    SetTabs( SAL_N_ELEMENTS(aStaticTabs), aStaticTabs, MapUnit::MapPixel );
     HeaderEndDragHdl(nullptr);
 }
 
@@ -151,12 +153,11 @@ void ScRangeManagerTable::Init()
             aLine.aScope = maGlobalString;
         else
             aLine.aScope = itr.first;
-        for (ScRangeName::const_iterator it = pLocalRangeName->begin();
-                it != pLocalRangeName->end(); ++it)
+        for (const auto& rEntry : *pLocalRangeName)
         {
-            if (!it->second->HasType(ScRangeData::Type::Database))
+            if (!rEntry.second->HasType(ScRangeData::Type::Database))
             {
-                aLine.aName = it->second->GetName();
+                aLine.aName = rEntry.second->GetName();
                 addEntry(aLine, false);
             }
         }
@@ -238,7 +239,7 @@ void ScRangeManagerTable::SetEntry(const ScRangeNameLine& rLine)
 namespace {
 
 //ensure that the minimum column size is respected
-void CalculateItemSize(const long& rTableSize, long& rItemNameSize, long& rItemRangeSize)
+void CalculateItemSize(long rTableSize, long& rItemNameSize, long& rItemRangeSize)
 {
     long aItemScopeSize = rTableSize - rItemNameSize - rItemRangeSize;
 
@@ -277,7 +278,7 @@ void CalculateItemSize(const long& rTableSize, long& rItemNameSize, long& rItemR
 
 }
 
-IMPL_LINK_NOARG_TYPED(ScRangeManagerTable, HeaderEndDragHdl, HeaderBar*, void)
+IMPL_LINK_NOARG(ScRangeManagerTable, HeaderEndDragHdl, HeaderBar*, void)
 {
     HeaderBar& rHeaderBar = GetTheHeaderBar();
 
@@ -295,12 +296,12 @@ IMPL_LINK_NOARG_TYPED(ScRangeManagerTable, HeaderEndDragHdl, HeaderBar*, void)
     rHeaderBar.SetItemSize(ITEMID_SCOPE, nItemScopeSize);
 
     SetTab(0, 0);
-    SetTab(1, PixelToLogic( aSz, MapMode(MAP_APPFONT) ).Width() );
-    aSz.Width() += nItemRangeSize;
-    SetTab(2, PixelToLogic( aSz, MapMode(MAP_APPFONT) ).Width() );
+    SetTab(1, PixelToLogic( aSz, MapMode(MapUnit::MapAppFont) ).Width() );
+    aSz.AdjustWidth(nItemRangeSize );
+    SetTab(2, PixelToLogic( aSz, MapMode(MapUnit::MapAppFont) ).Width() );
 }
 
-IMPL_LINK_NOARG_TYPED(ScRangeManagerTable, ScrollHdl, SvTreeListBox*, void)
+IMPL_LINK_NOARG(ScRangeManagerTable, ScrollHdl, SvTreeListBox*, void)
 {
     CheckForFormulaString();
 }

@@ -23,6 +23,7 @@
 #include <osl/file.h>
 
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
 #include <xmlscript/xmldlg_imexp.hxx>
 #include <xmlscript/xml_helper.hxx>
@@ -72,8 +73,7 @@ Reference< XComponentContext > createInitialComponentContext(
 
     catch( const Exception& rExc )
     {
-        OString aStr( OUStringToOString( rExc.Message, RTL_TEXTENCODING_ASCII_US ) );
-        OSL_FAIL( aStr.getStr() );
+        SAL_WARN( "xmlscript", rExc );
     }
 
     return xContext;
@@ -132,7 +132,6 @@ void exportToFile(
 
     FILE * f = ::fopen( fname, "w" );
     ::fwrite( bytes.getConstArray(), 1, bytes.getLength(), f );
-    ::fflush( f );
     ::fclose( f );
 }
 
@@ -148,7 +147,7 @@ void MyApp::Main()
 {
     if (GetCommandLineParamCount() < 2)
     {
-        OSL_FAIL( "usage: imexp inst_dir inputfile [outputfile]\n" );
+        OSL_FAIL( "usage: imexp inst_dir inputfile [outputfile]" );
         return;
     }
 
@@ -186,19 +185,18 @@ void MyApp::Main()
     }
     catch (const xml::sax::SAXException & rExc)
     {
-        OString aStr( OUStringToOString( rExc.Message, RTL_TEXTENCODING_ASCII_US ) );
+        OUString aStr( rExc );
         uno::Exception exc;
         if (rExc.WrappedException >>= exc)
         {
-            aStr += OString( " >>> " );
-            aStr += OUStringToOString( exc.Message, RTL_TEXTENCODING_ASCII_US );
+            aStr += " >>> ";
+            aStr += exc;
         }
-        OSL_FAIL( aStr.getStr() );
+        SAL_WARN( "xmlscript", aStr );
     }
     catch (const uno::Exception & rExc)
     {
-        OString aStr( OUStringToOString( rExc.Message, RTL_TEXTENCODING_ASCII_US ) );
-        OSL_FAIL( aStr.getStr() );
+        SAL_WARN( "xmlscript", rExc );
     }
 
     Reference< lang::XComponent > xComp( xContext, UNO_QUERY );

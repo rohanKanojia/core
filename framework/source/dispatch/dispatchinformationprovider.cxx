@@ -41,7 +41,6 @@ DispatchInformationProvider::~DispatchInformationProvider()
 }
 
 css::uno::Sequence< sal_Int16 > SAL_CALL DispatchInformationProvider::getSupportedCommandGroups()
-    throw (css::uno::RuntimeException, std::exception)
 {
     css::uno::Sequence< css::uno::Reference< css::frame::XDispatchInformationProvider > > lProvider = implts_getAllSubProvider();
     sal_Int32                                                                             c1        = lProvider.getLength();
@@ -73,13 +72,12 @@ css::uno::Sequence< sal_Int16 > SAL_CALL DispatchInformationProvider::getSupport
 }
 
 css::uno::Sequence< css::frame::DispatchInformation > SAL_CALL DispatchInformationProvider::getConfigurableDispatchInformation(sal_Int16 nCommandGroup)
-    throw (css::uno::RuntimeException, std::exception)
 {
     css::uno::Sequence< css::uno::Reference< css::frame::XDispatchInformationProvider > > lProvider = implts_getAllSubProvider();
     sal_Int32                                                                             c1        = lProvider.getLength();
     sal_Int32                                                                             i1        = 0;
 
-    std::unordered_map<OUString, css::frame::DispatchInformation, OUStringHash> lInfos;
+    std::unordered_map<OUString, css::frame::DispatchInformation> lInfos;
 
     for (i1=0; i1<c1; ++i1)
     {
@@ -107,7 +105,7 @@ css::uno::Sequence< css::frame::DispatchInformation > SAL_CALL DispatchInformati
             { continue; }
     }
 
-    c1 = (sal_Int32)lInfos.size();
+    c1 = static_cast<sal_Int32>(lInfos.size());
     i1 = 0;
 
     css::uno::Sequence< css::frame::DispatchInformation >       lReturn(c1);
@@ -126,7 +124,7 @@ css::uno::Sequence< css::uno::Reference< css::frame::XDispatchInformationProvide
     if (!xFrame.is())
         return css::uno::Sequence< css::uno::Reference< css::frame::XDispatchInformationProvider > >();
 
-    CloseDispatcher* pCloser = new CloseDispatcher(m_xContext, xFrame, OUString("_self")); // explicit "_self" ... not "" ... see implementation of close dispatcher itself!
+    CloseDispatcher* pCloser = new CloseDispatcher(m_xContext, xFrame, "_self"); // explicit "_self" ... not "" ... see implementation of close dispatcher itself!
     css::uno::Reference< css::uno::XInterface > xCloser(static_cast< css::frame::XDispatch* >(pCloser), css::uno::UNO_QUERY);
 
     css::uno::Reference< css::frame::XDispatchInformationProvider > xCloseDispatch(xCloser                                                      , css::uno::UNO_QUERY);

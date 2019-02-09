@@ -17,12 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "csvtablebox.hxx"
+#include <csvtablebox.hxx>
 #include <vcl/builderfactory.hxx>
+#include <vcl/event.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/settings.hxx>
-#include "editutil.hxx"
-#include "AccessibleCsvControl.hxx"
+#include <editutil.hxx>
+#include <AccessibleCsvControl.hxx>
 
 ScCsvTableBox::ScCsvTableBox( vcl::Window* pParent, WinBits nBits ) :
     ScCsvControl( pParent, maData, nBits ),
@@ -74,7 +75,7 @@ VCL_BUILDER_FACTORY_ARGS(ScCsvTableBox, WB_BORDER)
 
 Size ScCsvTableBox::GetOptimalSize() const
 {
-    Size aDefault(LogicToPixel(Size(243, 82), MapMode(MAP_APPFONT)));
+    Size aDefault(LogicToPixel(Size(243, 82), MapMode(MapUnit::MapAppFont)));
     return aDefault;
 }
 
@@ -200,7 +201,7 @@ void ScCsvTableBox::MakePosVisible( sal_Int32 nPos )
 
 void ScCsvTableBox::SetUniStrings(
         const OUString* pTextLines, const OUString& rSepChars,
-        sal_Unicode cTextSep, bool bMergeSep )
+        sal_Unicode cTextSep, bool bMergeSep, bool bRemoveSpace )
 {
     // assuming that pTextLines is a string array with size CSV_PREVIEW_LINES
     // -> will be dynamic sometime
@@ -212,7 +213,7 @@ void ScCsvTableBox::SetUniStrings(
         if( mbFixedMode )
             maGrid->ImplSetTextLineFix( nLine, *pString );
         else
-            maGrid->ImplSetTextLineSep( nLine, *pString, rSepChars, cTextSep, bMergeSep );
+            maGrid->ImplSetTextLineSep( nLine, *pString, rSepChars, cTextSep, bMergeSep, bRemoveSpace );
     }
     EnableRepaint();
 }
@@ -251,7 +252,7 @@ void ScCsvTableBox::DataChanged( const DataChangedEvent& rDCEvt )
     ScCsvControl::DataChanged( rDCEvt );
 }
 
-IMPL_LINK_TYPED( ScCsvTableBox, CsvCmdHdl, ScCsvControl&, rCtrl, void )
+IMPL_LINK( ScCsvTableBox, CsvCmdHdl, ScCsvControl&, rCtrl, void )
 {
     const ScCsvCmd& rCmd = rCtrl.GetCmd();
     ScCsvCmdType eType = rCmd.GetType();
@@ -388,7 +389,7 @@ IMPL_LINK_TYPED( ScCsvTableBox, CsvCmdHdl, ScCsvControl&, rCtrl, void )
     }
 }
 
-IMPL_LINK_TYPED( ScCsvTableBox, ScrollHdl, ScrollBar*, pScrollBar, void )
+IMPL_LINK( ScCsvTableBox, ScrollHdl, ScrollBar*, pScrollBar, void )
 {
     OSL_ENSURE( pScrollBar, "ScCsvTableBox::ScrollHdl - missing sender" );
 
@@ -398,7 +399,7 @@ IMPL_LINK_TYPED( ScCsvTableBox, ScrollHdl, ScrollBar*, pScrollBar, void )
         Execute( CSVCMD_SETLINEOFFSET, pScrollBar->GetThumbPos() );
 }
 
-IMPL_LINK_TYPED( ScCsvTableBox, ScrollEndHdl, ScrollBar*, pScrollBar, void )
+IMPL_LINK( ScCsvTableBox, ScrollEndHdl, ScrollBar*, pScrollBar, void )
 {
     OSL_ENSURE( pScrollBar, "ScCsvTableBox::ScrollEndHdl - missing sender" );
 

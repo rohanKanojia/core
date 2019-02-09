@@ -35,12 +35,11 @@ using namespace ::com::sun::star::lang;
 OEvoabCatalog::OEvoabCatalog(OEvoabConnection* _pCon) :
     connectivity::sdbcx::OCatalog(_pCon)
     ,m_pConnection(_pCon)
-    ,m_xMetaData(m_pConnection->getMetaData())
 {
 }
 void OEvoabCatalog::refreshTables()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
     Sequence< OUString > aTypes { "TABLE" };
     Reference< XResultSet > xResult = m_xMetaData->getTables(
         Any(), "%", "%", aTypes);
@@ -59,10 +58,10 @@ void OEvoabCatalog::refreshTables()
     if(m_pTables)
         m_pTables->reFill(aVector);
     else
-        m_pTables = new OEvoabTables(m_xMetaData,*this,m_aMutex,aVector);
+        m_pTables.reset( new OEvoabTables(m_xMetaData,*this,m_aMutex,aVector) );
 }
 // XTablesSupplier
-Reference< XNameAccess > SAL_CALL  OEvoabCatalog::getTables(  ) throw(RuntimeException, std::exception)
+Reference< XNameAccess > SAL_CALL  OEvoabCatalog::getTables(  )
 {
         ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -82,7 +81,7 @@ Reference< XNameAccess > SAL_CALL  OEvoabCatalog::getTables(  ) throw(RuntimeExc
                 // allowed
         }
 
-        return m_pTables;
+        return m_pTables.get();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

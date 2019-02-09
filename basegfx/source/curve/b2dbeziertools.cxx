@@ -52,7 +52,7 @@ namespace basegfx
 
             for(sal_uInt32 a(1);;)
             {
-                const B2DPoint aNext(rBase.interpolatePoint((double)a / (double)mnEdgeCount));
+                const B2DPoint aNext(rBase.interpolatePoint(static_cast<double>(a) / static_cast<double>(mnEdgeCount)));
                 const B2DVector aEdge(aNext - aCurrent);
 
                 fLength += aEdge.getLength();
@@ -64,7 +64,7 @@ namespace basegfx
                 }
                 else
                 {
-                    const B2DPoint aLastNext(rBase.getEndPoint());
+                    const B2DPoint& aLastNext(rBase.getEndPoint());
                     const B2DVector aLastEdge(aLastNext - aNext);
 
                     fLength += aLastEdge.getLength();
@@ -97,14 +97,14 @@ namespace basegfx
 
         // fDistance is in ]0.0 .. fLength[
 
-        if(1 == mnEdgeCount)
+        if(mnEdgeCount == 1)
         {
             // not a bezier, linear edge
             return fDistance / fLength;
         }
 
         // it is a bezier
-        ::std::vector< double >::const_iterator aIter = ::std::lower_bound(maLengthArray.begin(), maLengthArray.end(), fDistance);
+        std::vector< double >::const_iterator aIter = std::lower_bound(maLengthArray.begin(), maLengthArray.end(), fDistance);
         const sal_uInt32 nIndex(aIter - maLengthArray.begin());
         const double fHighBound(maLengthArray[nIndex]);
         const double fLowBound(nIndex ?  maLengthArray[nIndex - 1] : 0.0);

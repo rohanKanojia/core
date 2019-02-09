@@ -18,13 +18,12 @@
  */
 
 #include "AppIconControl.hxx"
-#include <tools/debug.hxx>
-#include "dbaccess_helpid.hrc"
-#include "moduledbu.hxx"
-#include "dbu_app.hrc"
+#include <core_resource.hxx>
+#include <strings.hrc>
+#include <bitmaps.hlst>
 #include <vcl/image.hxx>
-#include "callbacks.hxx"
-#include "AppElementType.hxx"
+#include <callbacks.hxx>
+#include <AppElementType.hxx>
 #include <memory>
 
 using namespace ::dbaui;
@@ -36,28 +35,28 @@ OApplicationIconControl::OApplicationIconControl(vcl::Window* _pParent)
     ,m_pActionListener(nullptr)
 {
 
-    const struct CategoryDescriptor
+    static const struct CategoryDescriptor
     {
-        sal_uInt16      nLabelResId;
+        const char* pLabelResId;
         ElementType eType;
-        sal_uInt16      nImageResId;
+        const char* aImageResId;
     }   aCategories[] = {
-        { RID_STR_TABLES_CONTAINER,     E_TABLE,    IMG_TABLEFOLDER_TREE_L  },
-        { RID_STR_QUERIES_CONTAINER,    E_QUERY,    IMG_QUERYFOLDER_TREE_L  },
-        { RID_STR_FORMS_CONTAINER,      E_FORM,     IMG_FORMFOLDER_TREE_L   },
-        { RID_STR_REPORTS_CONTAINER,    E_REPORT,   IMG_REPORTFOLDER_TREE_L }
+        { RID_STR_TABLES_CONTAINER,     E_TABLE,    BMP_TABLEFOLDER_TREE_L  },
+        { RID_STR_QUERIES_CONTAINER,    E_QUERY,    BMP_QUERYFOLDER_TREE_L  },
+        { RID_STR_FORMS_CONTAINER,      E_FORM,     BMP_FORMFOLDER_TREE_L   },
+        { RID_STR_REPORTS_CONTAINER,    E_REPORT,   BMP_REPORTFOLDER_TREE_L }
     };
-    for ( size_t i=0; i < SAL_N_ELEMENTS(aCategories); ++i)
+    for (const CategoryDescriptor& aCategorie : aCategories)
     {
         SvxIconChoiceCtrlEntry* pEntry = InsertEntry(
-            OUString( ModuleRes( aCategories[i].nLabelResId ) ) ,
-            Image(  ModuleRes( aCategories[i].nImageResId ) ) );
+            DBA_RES(aCategorie.pLabelResId) ,
+            Image(StockImage::Yes, OUString::createFromAscii(aCategorie.aImageResId)));
         if ( pEntry )
-            pEntry->SetUserData( new ElementType( aCategories[i].eType ) );
+            pEntry->SetUserData( new ElementType( aCategorie.eType ) );
     }
 
     SetChoiceWithCursor();
-    SetSelectionMode(SINGLE_SELECTION);
+    SetSelectionMode(SelectionMode::Single);
 }
 
 OApplicationIconControl::~OApplicationIconControl()
@@ -77,6 +76,7 @@ void OApplicationIconControl::dispose()
             pEntry->SetUserData(nullptr);
         }
     }
+    DropTargetHelper::dispose();
     SvtIconChoiceCtrl::dispose();
 }
 

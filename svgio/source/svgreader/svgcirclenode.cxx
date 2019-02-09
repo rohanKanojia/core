@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svgcirclenode.hxx>
+#include <svgcirclenode.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 
@@ -32,14 +32,12 @@ namespace svgio
             maSvgStyleAttributes(*this),
             maCx(0),
             maCy(0),
-            maR(0),
-            mpaTransform(nullptr)
+            maR(0)
         {
         }
 
         SvgCircleNode::~SvgCircleNode()
         {
-            delete mpaTransform;
         }
 
         const SvgStyleAttributes* SvgCircleNode::getSvgStyleAttributes() const
@@ -53,7 +51,7 @@ namespace svgio
             SvgNode::parseAttribute(rTokenName, aSVGToken, aContent);
 
             // read style attributes
-            maSvgStyleAttributes.parseStyleAttribute(rTokenName, aSVGToken, aContent, false);
+            maSvgStyleAttributes.parseStyleAttribute(aSVGToken, aContent, false);
 
             // parse own
             switch(aSVGToken)
@@ -69,7 +67,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setCx(aNum);
+                        maCx = aNum;
                     }
                     break;
                 }
@@ -79,7 +77,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setCy(aNum);
+                        maCy = aNum;
                     }
                     break;
                 }
@@ -91,7 +89,7 @@ namespace svgio
                     {
                         if(aNum.isPositive())
                         {
-                            setR(aNum);
+                            maR = aNum;
                         }
                     }
                     break;
@@ -117,28 +115,28 @@ namespace svgio
         {
             const SvgStyleAttributes* pStyle = getSvgStyleAttributes();
 
-            if(pStyle && getR().isSet())
+            if(!(pStyle && getR().isSet()))
+                return;
+
+            const double fR(getR().solve(*this));
+
+            if(fR <= 0.0)
+                return;
+
+            const basegfx::B2DPolygon aPath(
+                basegfx::utils::createPolygonFromCircle(
+                    basegfx::B2DPoint(
+                        getCx().isSet() ? getCx().solve(*this, xcoordinate) : 0.0,
+                        getCy().isSet() ? getCy().solve(*this, ycoordinate) : 0.0),
+                    fR));
+
+            drawinglayer::primitive2d::Primitive2DContainer aNewTarget;
+
+            pStyle->add_path(basegfx::B2DPolyPolygon(aPath), aNewTarget, nullptr);
+
+            if(!aNewTarget.empty())
             {
-                const double fR(getR().solve(*this));
-
-                if(fR > 0.0)
-                {
-                    const basegfx::B2DPolygon aPath(
-                        basegfx::tools::createPolygonFromCircle(
-                            basegfx::B2DPoint(
-                                getCx().isSet() ? getCx().solve(*this, xcoordinate) : 0.0,
-                                getCy().isSet() ? getCy().solve(*this, ycoordinate) : 0.0),
-                            fR));
-
-                    drawinglayer::primitive2d::Primitive2DContainer aNewTarget;
-
-                    pStyle->add_path(basegfx::B2DPolyPolygon(aPath), aNewTarget, nullptr);
-
-                    if(!aNewTarget.empty())
-                    {
-                        pStyle->add_postProcess(rTarget, aNewTarget, getTransform());
-                    }
-                }
+                pStyle->add_postProcess(rTarget, aNewTarget, getTransform());
             }
         }
     } // end of namespace svgreader

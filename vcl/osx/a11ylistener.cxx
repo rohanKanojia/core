@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "osx/salinst.h"
-#include "osx/a11ylistener.hxx"
-#include "osx/a11yfactory.h"
-#include "osx/a11yfocustracker.hxx"
-#include "osx/a11ywrapper.h"
+#include <osx/salinst.h>
+#include <osx/a11ylistener.hxx>
+#include <osx/a11yfactory.h>
+#include <osx/a11yfocustracker.hxx>
+#include <osx/a11ywrapper.h>
 
 #include "a11ytextwrapper.h"
 
@@ -35,7 +35,7 @@ using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::uno;
 
-NSString * getTableNotification( const AccessibleEventObject& aEvent )
+static NSString * getTableNotification( const AccessibleEventObject& aEvent )
 {
     AccessibleTableModelChange aChange;
     NSString * notification = nil;
@@ -61,13 +61,13 @@ AquaA11yEventListener::~AquaA11yEventListener()
 }
 
 void SAL_CALL
-AquaA11yEventListener::disposing( const EventObject& ) throw( RuntimeException, std::exception )
+AquaA11yEventListener::disposing( const EventObject& )
 {
-    [ AquaA11yFactory removeFromWrapperRepositoryFor: [ (AquaA11yWrapper *) m_wrapperObject accessibleContext ] ];
+    [ AquaA11yFactory removeFromWrapperRepositoryFor: [ static_cast<AquaA11yWrapper *>(m_wrapperObject) accessibleContext ] ];
 }
 
 void SAL_CALL
-AquaA11yEventListener::notifyEvent( const AccessibleEventObject& aEvent ) throw( RuntimeException, std::exception )
+AquaA11yEventListener::notifyEvent( const AccessibleEventObject& aEvent )
 {
     NSString * notification = nil;
     id element = m_wrapperObject;
@@ -80,7 +80,7 @@ AquaA11yEventListener::notifyEvent( const AccessibleEventObject& aEvent ) throw(
             if( m_role != AccessibleRole::LIST ) {
                 Reference< XAccessible > xAccessible;
                 if( aEvent.NewValue >>= xAccessible )
-                    AquaA11yFocusTracker::get().setFocusedObject( xAccessible );
+                    TheAquaA11yFocusTracker::get().setFocusedObject( xAccessible );
             }
             break;
 
@@ -100,7 +100,7 @@ AquaA11yEventListener::notifyEvent( const AccessibleEventObject& aEvent ) throw(
             break;
 
         case AccessibleEventId::INVALIDATE_ALL_CHILDREN:
-            // TODO: depricate or remember all children
+            // TODO: deprecate or remember all children
             break;
 
         case AccessibleEventId::BOUNDRECT_CHANGED:

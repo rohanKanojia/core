@@ -10,16 +10,16 @@
 #ifndef INCLUDED_SC_SOURCE_CORE_OPENCL_OPBASE_HXX
 #define INCLUDED_SC_SOURCE_CORE_OPENCL_OPBASE_HXX
 
-#include <sal/log.hxx>
-
 #include <clew/clew.h>
-
 #include <formula/token.hxx>
-#include <formula/vectortoken.hxx>
+#include <formula/types.hxx>
 #include <memory>
 #include <set>
+#include <vector>
 
-#include "calcconfig.hxx"
+namespace formula { class DoubleVectorRefToken; }
+namespace formula { class FormulaToken; }
+struct ScCalcConfig;
 
 namespace sc { namespace opencl {
 
@@ -31,11 +31,11 @@ class FormulaTreeNode;
 class UnhandledToken
 {
 public:
-    UnhandledToken( const char* m, const std::string& fn = "", int ln = 0 );
+    UnhandledToken( const char* m, const std::string& fn, int ln );
 
     std::string mMessage;
     std::string mFile;
-    int mLineNumber;
+    int const mLineNumber;
 };
 
 /// Failed in marshaling
@@ -47,18 +47,37 @@ public:
     std::string mFunction;
     cl_int mError;
     std::string mFile;
-    int mLineNumber;
+    int const mLineNumber;
 };
 
 /// Inconsistent state
 class Unhandled
 {
 public:
-    Unhandled( const std::string& fn = "", int ln = 0 );
+    Unhandled( const std::string& fn, int ln );
 
     std::string mFile;
-    int mLineNumber;
+    int const mLineNumber;
 };
+
+class InvalidParameterCount
+{
+public:
+    InvalidParameterCount( int parameterCount, const std::string& file, int ln );
+
+    int mParameterCount;
+    std::string mFile;
+    int const mLineNumber;
+};
+
+// Helper macro to be used in code emitting OpenCL code for Calc functions.
+// Requires the vSubArguments parameter.
+#define CHECK_PARAMETER_COUNT(min, max) \
+    do { \
+        const int count = vSubArguments.size(); \
+        if( count < ( min ) || count > ( max )) \
+            throw InvalidParameterCount( count, __FILE__, __LINE__ ); \
+    } while( false )
 
 typedef std::shared_ptr<FormulaTreeNode> FormulaTreeNodeRef;
 
@@ -76,7 +95,7 @@ public:
     }
 
 private:
-    formula::FormulaConstTokenRef mpCurrentFormula;
+    formula::FormulaConstTokenRef const mpCurrentFormula;
 };
 
 /// (Partially) abstract base class for an operand
@@ -89,7 +108,7 @@ public:
     /// delete copy-assignment operator
     const DynamicKernelArgument& operator=( const DynamicKernelArgument& ) = delete;
 
-    DynamicKernelArgument( const ScCalcConfig& config, const std::string& s, FormulaTreeNodeRef ft );
+    DynamicKernelArgument( const ScCalcConfig& config, const std::string& s, const FormulaTreeNodeRef& ft );
     virtual ~DynamicKernelArgument() {}
 
     /// Generate declaration
@@ -112,13 +131,8 @@ public:
     /// When Mix, it will be called
     virtual std::string GenStringSlidingWindowDeclRef( bool = false ) const;
 
-    virtual bool IsMixedArgument() const;
-
     /// Generate use/references to the argument
     virtual void GenDeclRef( std::stringstream& ss ) const;
-    virtual void GenNumDeclRef( std::stringstream& ss ) const;
-
-    virtual void GenStringDeclRef( std::stringstream& ss ) const;
 
     virtual void GenSlidingWindowFunction( std::stringstream& );
     formula::FormulaToken* GetFormulaToken() const;
@@ -126,11 +140,13 @@ public:
     virtual void DumpInlineFun( std::set<std::string>&, std::set<std::string>& ) const;
     const std::string& GetName() const;
     virtual bool NeedParallelReduction() const;
+    /// If there's actually no argument, i.e. it expands to no code.
+    virtual bool IsEmpty() const { return false; }
 
 protected:
     const ScCalcConfig& mCalcConfig;
     std::string mSymName;
-    FormulaTreeNodeRef mFormulaTree;
+    FormulaTreeNodeRef const mFormulaTree;
 };
 
 typedef std::shared_ptr<DynamicKernelArgument> DynamicKernelArgumentRef;
@@ -143,8 +159,8 @@ typedef std::shared_ptr<DynamicKernelArgument> DynamicKernelArgumentRef;
 class VectorRef : public DynamicKernelArgument
 {
 public:
-    VectorRef( const ScCalcConfig& config, const std::string& s, FormulaTreeNodeRef ft, int index = 0 );
-    virtual ~VectorRef();
+    VectorRef( const ScCalcConfig& config, const std::string& s, const FormulaTreeNodeRef& ft, int index = 0 );
+    virtual ~VectorRef() override;
 
     /// Generate declaration
     virtual void GenDecl( std::stringstream& ss ) const override;
@@ -185,6 +201,8 @@ public:
         std::set<std::string>& ) { }
     virtual bool takeString() const = 0;
     virtual bool takeNumeric() const = 0;
+    // Whether DoubleRef containing more than one column is handled properly.
+    virtual bool canHandleMultiVector() const { return false; }
     //Continue process 'Zero' or Not(like OpMul, not continue process when meet
     // 'Zero'
     virtual bool ZeroReturnZero() { return false;}
@@ -197,7 +215,6 @@ public:
     typedef std::vector<DynamicKernelArgumentRef> SubArguments;
     virtual void GenSlidingWindowFunction( std::stringstream&,
         const std::string&, SubArguments& ) = 0;
-    virtual ~SlidingFunctionBase() { }
 };
 
 class Normal : public SlidingFunctionBase
@@ -212,16 +229,16 @@ public:
 class CheckVariables : public Normal
 {
 public:
-    static void GenTmpVariables( std::stringstream& ss, SubArguments& vSubArguments );
+    static void GenTmpVariables( std::stringstream& ss, const SubArguments& vSubArguments );
     static void CheckSubArgumentIsNan( std::stringstream& ss,
         SubArguments& vSubArguments, int argumentNum );
     static void CheckAllSubArgumentIsNan( std::stringstream& ss,
         SubArguments& vSubArguments );
-    // only check isNan
+    // only check isnan
     static void CheckSubArgumentIsNan2( std::stringstream& ss,
         SubArguments& vSubArguments, int argumentNum, const std::string& p );
     static void UnrollDoubleVector( std::stringstream& ss,
-        std::stringstream& unrollstr, const formula::DoubleVectorRefToken* pCurDVR,
+        const std::stringstream& unrollstr, const formula::DoubleVectorRefToken* pCurDVR,
         int nCurWindowSize );
 };
 

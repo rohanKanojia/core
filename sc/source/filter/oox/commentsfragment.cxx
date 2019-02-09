@@ -17,9 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "commentsfragment.hxx"
+#include <commentsfragment.hxx>
 
-#include "richstringcontext.hxx"
+#include <biffhelper.hxx>
+#include <richstringcontext.hxx>
+#include <oox/token/namespaces.hxx>
 
 namespace oox {
 namespace xls {

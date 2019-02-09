@@ -12,7 +12,6 @@
 
 #include <sal/types.h>
 #include <vcl/event.hxx>
-
 #include <android/log.h>
 
 #include <osl/detail/android-bootstrap.h>
@@ -39,10 +38,8 @@ T* getHandle(JNIEnv* pEnv, jobject aObject)
 
 const char* copyJavaString(JNIEnv* pEnv, jstring aJavaString)
 {
-    const char* pClone = NULL;
-
     const char* pTemp = pEnv->GetStringUTFChars(aJavaString, NULL);
-    pClone = strdup(pTemp);
+    const char* pClone = strdup(pTemp);
     pEnv->ReleaseStringUTFChars(aJavaString, pTemp);
 
     return pClone;
@@ -85,6 +82,7 @@ struct CallbackData
 };
 
 static CallbackData gCallbackData;
+static CallbackData gCallbackDataLOKit;
 
 /**
  * Handle retrieved callback
@@ -141,6 +139,45 @@ extern "C" SAL_JNI_EXPORT jobject JNICALL Java_org_libreoffice_kit_Office_docume
     jobject aHandle = pEnv->NewDirectByteBuffer((void*) pDocument, sizeof(LibreOfficeKitDocument));
 
     return aHandle;
+}
+
+extern "C" SAL_JNI_EXPORT void JNICALL Java_org_libreoffice_kit_Office_setDocumentPassword
+    (JNIEnv* pEnv, jobject aObject, jstring sUrl, jstring sPassword)
+{
+    LibreOfficeKit* pLibreOfficeKit = getHandle<LibreOfficeKit>(pEnv, aObject);
+
+    char const* pUrl = copyJavaString(pEnv, sUrl);
+    if (sPassword == NULL) {
+        pLibreOfficeKit->pClass->setDocumentPassword(pLibreOfficeKit, pUrl, nullptr);
+    } else {
+        char const* pPassword = copyJavaString(pEnv, sPassword);
+        pLibreOfficeKit->pClass->setDocumentPassword(pLibreOfficeKit, pUrl, pPassword);
+    }
+}
+
+extern "C" SAL_JNI_EXPORT void JNICALL Java_org_libreoffice_kit_Office_setOptionalFeatures
+    (JNIEnv* pEnv, jobject aObject, jlong options)
+{
+    LibreOfficeKit* pLibreOfficeKit = getHandle<LibreOfficeKit>(pEnv, aObject);
+
+    unsigned long long pOptions = (unsigned long long)options;
+
+    pLibreOfficeKit->pClass->setOptionalFeatures(pLibreOfficeKit, pOptions);
+}
+
+/** Implementation of org.libreoffice.kit.Office.bindMessageCallback method */
+extern "C" SAL_JNI_EXPORT void JNICALL Java_org_libreoffice_kit_Office_bindMessageCallback
+    (JNIEnv* pEnv, jobject aObject)
+{
+    LibreOfficeKit* pLibreOfficeKit = getHandle<LibreOfficeKit>(pEnv, aObject);
+
+    gCallbackDataLOKit.aObject = (jobject) pEnv->NewGlobalRef(aObject);
+    jclass aClass = pEnv->GetObjectClass(aObject);
+    gCallbackDataLOKit.aClass = (jclass) pEnv->NewGlobalRef(aClass);
+
+    gCallbackDataLOKit.aJavaCallbackMethod = pEnv->GetMethodID(aClass, "messageRetrievedLOKit", "(ILjava/lang/String;)V");
+
+    pLibreOfficeKit->pClass->registerCallback(pLibreOfficeKit, messageCallback, (void*) &gCallbackDataLOKit);
 }
 
 /* Document */
@@ -257,7 +294,7 @@ extern "C" SAL_JNI_EXPORT void JNICALL Java_org_libreoffice_kit_Document_initial
     pDocument->pClass->initializeForRendering(pDocument, NULL);
 }
 
-extern "C" SAL_JNI_EXPORT jint JNICALL Java_org_libreoffice_kit_Office_saveAs
+extern "C" SAL_JNI_EXPORT jint JNICALL Java_org_libreoffice_kit_Document_saveAs
     (JNIEnv* pEnv, jobject aObject, jstring sUrl, jstring sFormat, jstring sOptions)
 {
     LibreOfficeKitDocument* pDocument = getHandle<LibreOfficeKitDocument>(pEnv, aObject);
@@ -290,7 +327,7 @@ extern "C" SAL_JNI_EXPORT void JNICALL Java_org_libreoffice_kit_Document_postMou
 }
 
 extern "C" SAL_JNI_EXPORT void JNICALL Java_org_libreoffice_kit_Document_postUnoCommand
-    (JNIEnv* pEnv, jobject aObject, jstring command, jstring arguments)
+    (JNIEnv* pEnv, jobject aObject, jstring command, jstring arguments, jboolean bNotifyWhenFinished)
 {
     LibreOfficeKitDocument* pDocument = getHandle<LibreOfficeKitDocument>(pEnv, aObject);
 
@@ -299,7 +336,7 @@ extern "C" SAL_JNI_EXPORT void JNICALL Java_org_libreoffice_kit_Document_postUno
     if (arguments != NULL)
         pArguments = pEnv->GetStringUTFChars(arguments, NULL);
 
-    pDocument->pClass->postUnoCommand(pDocument, pCommand, pArguments, false);
+    pDocument->pClass->postUnoCommand(pDocument, pCommand, pArguments, bNotifyWhenFinished);
 
     pEnv->ReleaseStringUTFChars(command, pCommand);
     if (arguments != NULL)
@@ -321,12 +358,30 @@ extern "C" SAL_JNI_EXPORT jstring JNICALL Java_org_libreoffice_kit_Document_getT
     const char* pMimeType = pEnv->GetStringUTFChars(mimeType, NULL);
 
     char* pUsedMimeType = 0;
-    char* pSelection = pDocument->pClass->getTextSelection(pDocument, pMimeType, &pUsedMimeType);
+    LibreOfficeKitDocumentClass* pcls = pDocument->pClass;
+    char* pSelection = pcls->getTextSelection(pDocument, pMimeType, &pUsedMimeType);
     free(pUsedMimeType);
 
     pEnv->ReleaseStringUTFChars(mimeType, pMimeType);
 
     return pEnv->NewStringUTF(pSelection);
+}
+
+extern "C" SAL_JNI_EXPORT jboolean JNICALL Java_org_libreoffice_kit_Document_paste
+    (JNIEnv* pEnv, jobject aObject, jstring mimeType, jstring data)
+{
+    LibreOfficeKitDocument* pDocument = getHandle<LibreOfficeKitDocument>(pEnv, aObject);
+
+    const char* pMimeType = pEnv->GetStringUTFChars(mimeType, NULL);
+    const char* pData = pEnv->GetStringUTFChars(data, NULL);
+    const size_t nSize = pEnv->GetStringLength(data);
+
+    LibreOfficeKitDocumentClass* pcls = pDocument->pClass;
+    bool result = pcls->paste(pDocument, pMimeType, pData, nSize);
+    pEnv->ReleaseStringUTFChars(mimeType, pMimeType);
+    pEnv->ReleaseStringUTFChars(data, pData);
+
+    return result;
 }
 
 extern "C" SAL_JNI_EXPORT void JNICALL Java_org_libreoffice_kit_Document_setGraphicSelection

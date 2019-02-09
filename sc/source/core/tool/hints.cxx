@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "hints.hxx"
+#include <hints.hxx>
 
 // ScPaintHint - info what has to be repainted
 
-ScPaintHint::ScPaintHint( const ScRange& rRng, sal_uInt16 nPaint ) :
+ScPaintHint::ScPaintHint( const ScRange& rRng, PaintPartFlags nPaint ) :
     aRange( rRng ),
     nParts( nPaint ),
     bPrint( true )
@@ -35,7 +35,7 @@ ScPaintHint::~ScPaintHint()
 // ScUpdateRefHint - update references
 
 ScUpdateRefHint::ScUpdateRefHint( UpdateRefMode eMode, const ScRange& rR,
-                                    SCsCOL nX, SCsROW nY, SCsTAB nZ ) :
+                                    SCCOL nX, SCROW nY, SCTAB nZ ) :
     eUpdateRefMode( eMode ),
     aRange( rR ),
     nDx( nX ),
@@ -48,17 +48,10 @@ ScUpdateRefHint::~ScUpdateRefHint()
 {
 }
 
-// ScPointerChangedHint - pointer has become invalid
-
-ScPointerChangedHint::~ScPointerChangedHint()
-{
-}
-
 //      ScLinkRefreshedHint - a link has been refreshed
 
 ScLinkRefreshedHint::ScLinkRefreshedHint() :
-    nLinkType( ScLinkRefType::NONE ),
-    nDdeMode( 0 )
+    nLinkType( ScLinkRefType::NONE )
 {
 }
 
@@ -73,13 +66,12 @@ void ScLinkRefreshedHint::SetSheetLink( const OUString& rSourceUrl )
 }
 
 void ScLinkRefreshedHint::SetDdeLink(
-            const OUString& rA, const OUString& rT, const OUString& rI, sal_uInt8 nM )
+            const OUString& rA, const OUString& rT, const OUString& rI )
 {
     nLinkType = ScLinkRefType::DDE;
     aDdeAppl  = rA;
     aDdeTopic = rT;
     aDdeItem  = rI;
-    nDdeMode  = nM;
 }
 
 void ScLinkRefreshedHint::SetAreaLink( const ScAddress& rPos )

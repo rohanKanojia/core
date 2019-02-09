@@ -20,20 +20,21 @@
 #ifndef INCLUDED_SW_INC_SWNODENUM_HXX
 #define INCLUDED_SW_INC_SWNODENUM_HXX
 
-#include <SwNumberTree.hxx>
+#include "SwNumberTree.hxx"
 
 class SwTextNode;
 struct SwPosition;
 class SwNumRule;
-class SwNumFormat;
 
 class SW_DLLPUBLIC SwNodeNum : public SwNumberTreeNode
 {
 public:
 
-    explicit SwNodeNum( SwTextNode* pTextNode );
+    explicit SwNodeNum( SwTextNode* pTextNode, bool isHiddenRedlines );
+    // note: this is only for creating phantom nodes and root nodes; these
+    // never have a text node
     explicit SwNodeNum( SwNumRule* pNumRule );
-    virtual ~SwNodeNum();
+    virtual ~SwNodeNum() override;
 
     SwNumRule* GetNumRule() const { return mpNumRule;}
     void ChangeNumRule( SwNumRule& rNumRule );
@@ -65,8 +66,6 @@ public:
     /** determines the <SwNodeNum> instance, which is preceding the given text node
 
         #i81002#
-
-        @author OD
     */
     const SwNodeNum* GetPrecedingNodeNumOf( const SwTextNode& rTextNode ) const;
 
@@ -82,10 +81,11 @@ protected:
     // method called at a child after this child has been removed from the list tree
     virtual void PostRemove() override;
 private:
-    SwTextNode * mpTextNode;
+    SwTextNode *const mpTextNode;
     SwNumRule * mpNumRule;
+    bool m_isHiddenRedlines;
 
-    static void _UnregisterMeAndChildrenDueToRootDelete( SwNodeNum& rNodeNum );
+    static void UnregisterMeAndChildrenDueToRootDelete( SwNodeNum& rNodeNum );
 
     SwNodeNum( const SwNodeNum& ) = delete;
     SwNodeNum& operator=( const SwNodeNum& ) = delete;

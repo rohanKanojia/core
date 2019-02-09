@@ -22,7 +22,7 @@
 #include <tools/debug.hxx>
 #include <tools/stream.hxx>
 #include <basic/sbx.hxx>
-#include "runtime.hxx"
+#include <runtime.hxx>
 
 #include <boost/optional.hpp>
 
@@ -39,19 +39,9 @@ struct SbxVarEntry
 
 SbxArray::SbxArray( SbxDataType t ) : SbxBase()
 {
-    mpVarEntries = new VarEntriesType;
     eType = t;
     if( t != SbxVARIANT )
         SetFlag( SbxFlagBits::Fixed );
-}
-
-SbxArray::SbxArray( const SbxArray& rArray ) :
-    SvRefBase( rArray ), SbxBase()
-{
-    mpVarEntries = new VarEntriesType;
-    if( rArray.eType != SbxVARIANT )
-        SetFlag( SbxFlagBits::Fixed );
-    *this = rArray;
 }
 
 SbxArray& SbxArray::operator=( const SbxArray& rArray )
@@ -60,21 +50,21 @@ SbxArray& SbxArray::operator=( const SbxArray& rArray )
     {
         eType = rArray.eType;
         Clear();
-        for( const auto& rpSrcRef : *rArray.mpVarEntries )
+        for( const auto& rpSrcRef : rArray.mVarEntries )
         {
             SbxVariableRef pSrc_ = rpSrcRef.mpVar;
-            if( !pSrc_ )
+            if( !pSrc_.is() )
                 continue;
 
             if( eType != SbxVARIANT )
             {
                 // Convert no objects
-                if( eType != SbxOBJECT || pSrc_->GetClass() != SbxCLASS_OBJECT )
+                if( eType != SbxOBJECT || pSrc_->GetClass() != SbxClassType::Object )
                 {
                     pSrc_->Convert(eType);
                 }
             }
-            mpVarEntries->push_back( rpSrcRef );
+            mVarEntries.push_back( rpSrcRef );
         }
     }
     return *this;
@@ -82,34 +72,28 @@ SbxArray& SbxArray::operator=( const SbxArray& rArray )
 
 SbxArray::~SbxArray()
 {
-    delete mpVarEntries;
 }
 
 SbxDataType SbxArray::GetType() const
 {
-    return (SbxDataType) ( eType | SbxARRAY );
-}
-
-SbxClassType SbxArray::GetClass() const
-{
-    return SbxCLASS_ARRAY;
+    return static_cast<SbxDataType>( eType | SbxARRAY );
 }
 
 void SbxArray::Clear()
 {
-    mpVarEntries->clear();
+    mVarEntries.clear();
 }
 
 sal_uInt32 SbxArray::Count32() const
 {
-    return mpVarEntries->size();
+    return mVarEntries.size();
 }
 
 sal_uInt16 SbxArray::Count() const
 {
-    sal_uInt32 nCount = mpVarEntries->size();
+    sal_uInt32 nCount = mVarEntries.size();
     DBG_ASSERT( nCount <= SBX_MAXINDEX, "SBX: Array-Index > SBX_MAXINDEX" );
-    return (sal_uInt16)nCount;
+    return static_cast<sal_uInt16>(nCount);
 }
 
 SbxVariableRef& SbxArray::GetRef32( sal_uInt32 nIdx )
@@ -119,14 +103,13 @@ SbxVariableRef& SbxArray::GetRef32( sal_uInt32 nIdx )
     // Very Hot Fix
     if( nIdx > SBX_MAXINDEX32 )
     {
-        SetError( ERRCODE_SBX_BOUNDS );
+        SetError( ERRCODE_BASIC_OUT_OF_RANGE );
         nIdx = 0;
     }
-    while( mpVarEntries->size() <= nIdx )
-    {
-        mpVarEntries->push_back(SbxVarEntry());
-    }
-    return (*mpVarEntries)[nIdx].mpVar;
+    if ( mVarEntries.size() <= nIdx )
+        mVarEntries.resize(nIdx+1);
+
+    return mVarEntries[nIdx].mpVar;
 }
 
 SbxVariableRef& SbxArray::GetRef( sal_uInt16 nIdx )
@@ -136,59 +119,58 @@ SbxVariableRef& SbxArray::GetRef( sal_uInt16 nIdx )
     // Very Hot Fix
     if( nIdx > SBX_MAXINDEX )
     {
-        SetError( ERRCODE_SBX_BOUNDS );
+        SetError( ERRCODE_BASIC_OUT_OF_RANGE );
         nIdx = 0;
     }
-    while( mpVarEntries->size() <= nIdx )
-    {
-        mpVarEntries->push_back(SbxVarEntry());
-    }
-    return (*mpVarEntries)[nIdx].mpVar;
+    if ( mVarEntries.size() <= nIdx )
+        mVarEntries.resize(nIdx+1);
+
+    return mVarEntries[nIdx].mpVar;
 }
 
 SbxVariable* SbxArray::Get32( sal_uInt32 nIdx )
 {
     if( !CanRead() )
     {
-        SetError( ERRCODE_SBX_PROP_WRITEONLY );
+        SetError( ERRCODE_BASIC_PROP_WRITEONLY );
         return nullptr;
     }
     SbxVariableRef& rRef = GetRef32( nIdx );
 
-    if ( !rRef.Is() )
+    if ( !rRef.is() )
         rRef = new SbxVariable( eType );
 
-    return rRef;
+    return rRef.get();
 }
 
 SbxVariable* SbxArray::Get( sal_uInt16 nIdx )
 {
     if( !CanRead() )
     {
-        SetError( ERRCODE_SBX_PROP_WRITEONLY );
+        SetError( ERRCODE_BASIC_PROP_WRITEONLY );
         return nullptr;
     }
     SbxVariableRef& rRef = GetRef( nIdx );
 
-    if ( !rRef.Is() )
+    if ( !rRef.is() )
         rRef = new SbxVariable( eType );
 
-    return rRef;
+    return rRef.get();
 }
 
 void SbxArray::Put32( SbxVariable* pVar, sal_uInt32 nIdx )
 {
     if( !CanWrite() )
-        SetError( ERRCODE_SBX_PROP_READONLY );
+        SetError( ERRCODE_BASIC_PROP_READONLY );
     else
     {
         if( pVar )
             if( eType != SbxVARIANT )
                 // Convert no objects
-                if( eType != SbxOBJECT || pVar->GetClass() != SbxCLASS_OBJECT )
+                if( eType != SbxOBJECT || pVar->GetClass() != SbxClassType::Object )
                     pVar->Convert( eType );
         SbxVariableRef& rRef = GetRef32( nIdx );
-        if( static_cast<SbxVariable*>(rRef) != pVar )
+        if( rRef.get() != pVar )
         {
             rRef = pVar;
             SetFlag( SbxFlagBits::Modified );
@@ -199,19 +181,23 @@ void SbxArray::Put32( SbxVariable* pVar, sal_uInt32 nIdx )
 void SbxArray::Put( SbxVariable* pVar, sal_uInt16 nIdx )
 {
     if( !CanWrite() )
-        SetError( ERRCODE_SBX_PROP_READONLY );
+        SetError( ERRCODE_BASIC_PROP_READONLY );
     else
     {
         if( pVar )
             if( eType != SbxVARIANT )
                 // Convert no objects
-                if( eType != SbxOBJECT || pVar->GetClass() != SbxCLASS_OBJECT )
+                if( eType != SbxOBJECT || pVar->GetClass() != SbxClassType::Object )
                     pVar->Convert( eType );
         SbxVariableRef& rRef = GetRef( nIdx );
-        if( static_cast<SbxVariable*>(rRef) != pVar )
+        // tdf#122250. It is possible that I hold the last reference to myself, so check, otherwise I might
+        // call SetFlag on myself after I have died.
+        bool removingMyself = rRef.get() && rRef->GetParameters() == this && GetRefCount() == 1;
+        if(rRef.get() != pVar )
         {
             rRef = pVar;
-            SetFlag( SbxFlagBits::Modified );
+            if (!removingMyself)
+                SetFlag( SbxFlagBits::Modified );
         }
     }
 }
@@ -220,7 +206,7 @@ OUString SbxArray::GetAlias( sal_uInt16 nIdx )
 {
     if( !CanRead() )
     {
-        SetError( ERRCODE_SBX_PROP_WRITEONLY );
+        SetError( ERRCODE_BASIC_PROP_WRITEONLY );
         return OUString();
     }
     SbxVarEntry& rRef = reinterpret_cast<SbxVarEntry&>(GetRef( nIdx ));
@@ -235,25 +221,25 @@ void SbxArray::PutAlias( const OUString& rAlias, sal_uInt16 nIdx )
 {
     if( !CanWrite() )
     {
-        SetError( ERRCODE_SBX_PROP_READONLY );
+        SetError( ERRCODE_BASIC_PROP_READONLY );
     }
     else
     {
         SbxVarEntry& rRef = reinterpret_cast<SbxVarEntry&>( GetRef( nIdx ) );
-        rRef.maAlias.reset(rAlias);
+        rRef.maAlias = rAlias;
     }
 }
 
 void SbxArray::Insert32( SbxVariable* pVar, sal_uInt32 nIdx )
 {
-    DBG_ASSERT( mpVarEntries->size() <= SBX_MAXINDEX32, "SBX: Array gets too big" );
-    if( mpVarEntries->size() > SBX_MAXINDEX32 )
+    DBG_ASSERT( mVarEntries.size() <= SBX_MAXINDEX32, "SBX: Array gets too big" );
+    if( mVarEntries.size() > SBX_MAXINDEX32 )
     {
             return;
     }
     SbxVarEntry p;
     p.mpVar = pVar;
-    size_t nSize = mpVarEntries->size();
+    size_t nSize = mVarEntries.size();
     if( nIdx > nSize )
     {
         nIdx = nSize;
@@ -264,52 +250,43 @@ void SbxArray::Insert32( SbxVariable* pVar, sal_uInt32 nIdx )
     }
     if( nIdx == nSize )
     {
-        mpVarEntries->push_back( p );
+        mVarEntries.push_back( p );
     }
     else
     {
-        mpVarEntries->insert( mpVarEntries->begin() + nIdx, p );
+        mVarEntries.insert( mVarEntries.begin() + nIdx, p );
     }
     SetFlag( SbxFlagBits::Modified );
 }
 
 void SbxArray::Insert( SbxVariable* pVar, sal_uInt16 nIdx )
 {
-    DBG_ASSERT( mpVarEntries->size() <= 0x3FF0, "SBX: Array gets too big" );
-    if( mpVarEntries->size() > 0x3FF0 )
+    DBG_ASSERT( mVarEntries.size() <= 0x3FF0, "SBX: Array gets too big" );
+    if( mVarEntries.size() > 0x3FF0 )
     {
         return;
     }
     Insert32( pVar, nIdx );
 }
 
-void SbxArray::Remove32( sal_uInt32 nIdx )
+void SbxArray::Remove( sal_uInt32 nIdx )
 {
-    if( nIdx < mpVarEntries->size() )
+    if( nIdx < mVarEntries.size() )
     {
-        mpVarEntries->erase( mpVarEntries->begin() + nIdx );
+        mVarEntries.erase( mVarEntries.begin() + nIdx );
         SetFlag( SbxFlagBits::Modified );
     }
 }
 
-void SbxArray::Remove( sal_uInt16 nIdx )
-{
-    if( nIdx < mpVarEntries->size() )
-    {
-        mpVarEntries->erase( mpVarEntries->begin() + nIdx );
-        SetFlag( SbxFlagBits::Modified );
-    }
-}
-
-void SbxArray::Remove( SbxVariable* pVar )
+void SbxArray::Remove( SbxVariable const * pVar )
 {
     if( pVar )
     {
-        for( size_t i = 0; i < mpVarEntries->size(); i++ )
+        for( size_t i = 0; i < mVarEntries.size(); i++ )
         {
-            if (&(*mpVarEntries)[i].mpVar == pVar)
+            if (mVarEntries[i].mpVar.get() == pVar)
             {
-                Remove32( i ); break;
+                Remove( i ); break;
             }
         }
     }
@@ -323,9 +300,9 @@ void SbxArray::Merge( SbxArray* p )
     if (!p)
         return;
 
-    for (auto& rEntry1: *p->mpVarEntries)
+    for (auto& rEntry1: p->mVarEntries)
     {
-        if (!rEntry1.mpVar)
+        if (!rEntry1.mpVar.is())
             continue;
 
         OUString aName = rEntry1.mpVar->GetName();
@@ -333,9 +310,9 @@ void SbxArray::Merge( SbxArray* p )
 
         // Is the element by the same name already inside?
         // Then overwrite!
-        for (auto& rEntry2: *mpVarEntries)
+        for (auto& rEntry2: mVarEntries)
         {
-            if (!rEntry2.mpVar)
+            if (!rEntry2.mpVar.is())
                 continue;
 
             if (rEntry2.mpVar->GetHashCode() == nHash &&
@@ -343,71 +320,21 @@ void SbxArray::Merge( SbxArray* p )
             {
                 // Take this element and clear the original.
                 rEntry2.mpVar = rEntry1.mpVar;
-                rEntry1.mpVar.Clear();
+                rEntry1.mpVar.clear();
                 break;
             }
         }
 
-        if (rEntry1.mpVar)
+        if (rEntry1.mpVar.is())
         {
             // We don't have element with the same name.  Add a new entry.
             SbxVarEntry aNewEntry;
             aNewEntry.mpVar = rEntry1.mpVar;
             if (rEntry1.maAlias)
-                aNewEntry.maAlias.reset(*rEntry1.maAlias);
-            mpVarEntries->push_back(aNewEntry);
+                aNewEntry.maAlias = *rEntry1.maAlias;
+            mVarEntries.push_back(aNewEntry);
         }
     }
-}
-
-// Search of an element via the user data. If the element is
-// object, it will also be scanned.
-
-SbxVariable* SbxArray::FindUserData( sal_uInt32 nData )
-{
-    SbxVariable* p = nullptr;
-    for (auto& rEntry : *mpVarEntries)
-    {
-        if (!rEntry.mpVar)
-            continue;
-
-        if (rEntry.mpVar->IsVisible() && rEntry.mpVar->GetUserData() == nData)
-        {
-            p = &rEntry.mpVar;
-            p->ResetFlag( SbxFlagBits::ExtFound );
-            break;  // JSM 1995-10-06
-        }
-
-        // Did we have an array/object with extended search?
-        if (rEntry.mpVar->IsSet(SbxFlagBits::ExtSearch))
-        {
-            switch (rEntry.mpVar->GetClass())
-            {
-                case SbxCLASS_OBJECT:
-                {
-                    // Objects are not allowed to scan their parent.
-                    SbxFlagBits nOld = rEntry.mpVar->GetFlags();
-                    rEntry.mpVar->ResetFlag(SbxFlagBits::GlobalSearch);
-                    p = static_cast<SbxObject&>(*rEntry.mpVar).FindUserData(nData);
-                    rEntry.mpVar->SetFlags(nOld);
-                }
-                break;
-                case SbxCLASS_ARRAY:
-                    // Casting SbxVariable to SbxArray?  Really?
-                    p = reinterpret_cast<SbxArray&>(*rEntry.mpVar).FindUserData(nData);
-                break;
-                default:
-                    ;
-            }
-
-            if (p)
-            {
-                p->SetFlag(SbxFlagBits::ExtFound);
-                break;
-            }
-        }
-    }
-    return p;
 }
 
 // Search of an element by his name and type. If an element is an object,
@@ -416,22 +343,22 @@ SbxVariable* SbxArray::FindUserData( sal_uInt32 nData )
 SbxVariable* SbxArray::Find( const OUString& rName, SbxClassType t )
 {
     SbxVariable* p = nullptr;
-    if( mpVarEntries->empty() )
+    if( mVarEntries.empty() )
         return nullptr;
     bool bExtSearch = IsSet( SbxFlagBits::ExtSearch );
     sal_uInt16 nHash = SbxVariable::MakeHashCode( rName );
-    for (auto& rEntry : *mpVarEntries)
+    for (auto& rEntry : mVarEntries)
     {
-        if (!rEntry.mpVar || !rEntry.mpVar->IsVisible())
+        if (!rEntry.mpVar.is() || !rEntry.mpVar->IsVisible())
             continue;
 
         // The very secure search works as well, if there is no hashcode!
         sal_uInt16 nVarHash = rEntry.mpVar->GetHashCode();
         if ( (!nVarHash || nVarHash == nHash)
-            && (t == SbxCLASS_DONTCARE || rEntry.mpVar->GetClass() == t)
+            && (t == SbxClassType::DontCare || rEntry.mpVar->GetClass() == t)
             && (rEntry.mpVar->GetName().equalsIgnoreAsciiCase(rName)))
         {
-            p = &rEntry.mpVar;
+            p = rEntry.mpVar.get();
             p->ResetFlag(SbxFlagBits::ExtFound);
             break;
         }
@@ -441,7 +368,7 @@ SbxVariable* SbxArray::Find( const OUString& rName, SbxClassType t )
         {
             switch (rEntry.mpVar->GetClass())
             {
-                case SbxCLASS_OBJECT:
+                case SbxClassType::Object:
                 {
                     // Objects are not allowed to scan their parent.
                     SbxFlagBits nOld = rEntry.mpVar->GetFlags();
@@ -450,7 +377,7 @@ SbxVariable* SbxArray::Find( const OUString& rName, SbxClassType t )
                     rEntry.mpVar->SetFlags(nOld);
                 }
                 break;
-                case SbxCLASS_ARRAY:
+                case SbxClassType::Array:
                     // Casting SbxVariable to SbxArray?  Really?
                     p = reinterpret_cast<SbxArray&>(*rEntry.mpVar).Find(rName, t);
                 break;
@@ -501,16 +428,16 @@ bool SbxArray::StoreData( SvStream& rStrm ) const
 {
     sal_uInt32 nElem = 0;
     // Which elements are even defined?
-    for( auto& rEntry: *mpVarEntries )
+    for( auto& rEntry: mVarEntries )
     {
-        if (rEntry.mpVar && !(rEntry.mpVar->GetFlags() & SbxFlagBits::DontStore))
+        if (rEntry.mpVar.is() && !(rEntry.mpVar->GetFlags() & SbxFlagBits::DontStore))
             nElem++;
     }
     rStrm.WriteUInt16( nElem );
-    for( size_t n = 0; n < mpVarEntries->size(); n++ )
+    for( size_t n = 0; n < mVarEntries.size(); n++ )
     {
-        SbxVarEntry& rEntry = (*mpVarEntries)[n];
-        if (rEntry.mpVar && !(rEntry.mpVar->GetFlags() & SbxFlagBits::DontStore))
+        const SbxVarEntry& rEntry = mVarEntries[n];
+        if (rEntry.mpVar.is() && !(rEntry.mpVar->GetFlags() & SbxFlagBits::DontStore))
         {
             rStrm.WriteUInt16( n );
             if (!rEntry.mpVar->Store(rStrm))
@@ -534,19 +461,13 @@ SbxDimArray::SbxDimArray( SbxDataType t ) : SbxArray( t ), mbHasFixedSize( false
 {
 }
 
-SbxDimArray::SbxDimArray( const SbxDimArray& rArray )
-    : SvRefBase( rArray ), SbxArray( rArray.eType )
-{
-    *this = rArray;
-}
-
 SbxDimArray& SbxDimArray::operator=( const SbxDimArray& rArray )
 {
     if( &rArray != this )
     {
-        SbxArray::operator=( (const SbxArray&) rArray );
+        SbxArray::operator=( static_cast<const SbxArray&>(rArray) );
         m_vDimensions = rArray.m_vDimensions;
-        this->mbHasFixedSize = rArray.mbHasFixedSize;
+        mbHasFixedSize = rArray.mbHasFixedSize;
     }
     return *this;
 }
@@ -565,10 +486,10 @@ void SbxDimArray::Clear()
 
 void SbxDimArray::AddDimImpl32( sal_Int32 lb, sal_Int32 ub, bool bAllowSize0 )
 {
-    SbxError eRes = ERRCODE_SBX_OK;
+    ErrCode eRes = ERRCODE_NONE;
     if( ub < lb && !bAllowSize0 )
     {
-        eRes = ERRCODE_SBX_BOUNDS;
+        eRes = ERRCODE_BASIC_OUT_OF_RANGE;
         ub = lb;
     }
     SbxDim d;
@@ -608,7 +529,7 @@ bool SbxDimArray::GetDim32( sal_Int32 n, sal_Int32& rlb, sal_Int32& rub ) const
 {
     if( n < 1 || n > static_cast<sal_Int32>(m_vDimensions.size()) )
     {
-        SetError( ERRCODE_SBX_BOUNDS );
+        SetError( ERRCODE_BASIC_OUT_OF_RANGE );
         rub = rlb = 0;
         return false;
     }
@@ -622,13 +543,13 @@ bool SbxDimArray::GetDim( short n, short& rlb, short& rub ) const
 {
     sal_Int32 rlb32, rub32;
     bool bRet = GetDim32( n, rlb32, rub32 );
-    rub = (short)rub32;
-    rlb = (short)rlb32;
+    rub = static_cast<short>(rub32);
+    rlb = static_cast<short>(rlb32);
     if( bRet )
     {
         if( rlb32 < -SBX_MAXINDEX || rub32 > SBX_MAXINDEX )
         {
-            SetError( ERRCODE_SBX_BOUNDS );
+            SetError( ERRCODE_BASIC_OUT_OF_RANGE );
             return false;
         }
     }
@@ -645,13 +566,13 @@ sal_uInt32 SbxDimArray::Offset32( const sal_Int32* pIdx )
         sal_Int32 nIdx = *pIdx++;
         if( nIdx < rDimension.nLbound || nIdx > rDimension.nUbound )
         {
-            nPos = (sal_uInt32)SBX_MAXINDEX32 + 1; break;
+            nPos = sal_uInt32(SBX_MAXINDEX32) + 1; break;
         }
         nPos = nPos * rDimension.nSize + nIdx - rDimension.nLbound;
     }
     if( m_vDimensions.empty() || nPos > SBX_MAXINDEX32 )
     {
-        SetError( ERRCODE_SBX_BOUNDS );
+        SetError( ERRCODE_BASIC_OUT_OF_RANGE );
         nPos = 0;
     }
     return nPos;
@@ -660,23 +581,22 @@ sal_uInt32 SbxDimArray::Offset32( const sal_Int32* pIdx )
 sal_uInt16 SbxDimArray::Offset( const short* pIdx )
 {
     long nPos = 0;
-    for( std::vector<SbxDim>::const_iterator it = m_vDimensions.begin();
-         it != m_vDimensions.end(); ++it )
+    for (auto const& vDimension : m_vDimensions)
     {
         short nIdx = *pIdx++;
-        if( nIdx < it->nLbound || nIdx > it->nUbound )
+        if( nIdx < vDimension.nLbound || nIdx > vDimension.nUbound )
         {
             nPos = SBX_MAXINDEX + 1;
             break;
         }
-        nPos = nPos * it->nSize + nIdx - it->nLbound;
+        nPos = nPos * vDimension.nSize + nIdx - vDimension.nLbound;
     }
     if( m_vDimensions.empty() || nPos > SBX_MAXINDEX )
     {
-        SetError( ERRCODE_SBX_BOUNDS );
+        SetError( ERRCODE_BASIC_OUT_OF_RANGE );
         nPos = 0;
     }
-    return (sal_uInt16) nPos;
+    return static_cast<sal_uInt16>(nPos);
 }
 
 SbxVariable* SbxDimArray::Get( const short* pIdx )
@@ -707,26 +627,27 @@ sal_uInt32 SbxDimArray::Offset32( SbxArray* pPar )
         ((m_vDimensions.size() != sal::static_int_cast<size_t>(pPar->Count() - 1))
             && SbiRuntime::isVBAEnabled()))
     {
-        SetError( ERRCODE_SBX_BOUNDS );
+        SetError( ERRCODE_BASIC_OUT_OF_RANGE );
         return 0;
     }
 #endif
     sal_uInt32 nPos = 0;
     sal_uInt16 nOff = 1;    // Non element 0!
-    for( std::vector<SbxDim>::const_iterator it = m_vDimensions.begin();
-         it != m_vDimensions.end() && !IsError(); ++it )
+    for (auto const& vDimension : m_vDimensions)
     {
         sal_Int32 nIdx = pPar->Get( nOff++ )->GetLong();
-        if( nIdx < it->nLbound || nIdx > it->nUbound )
+        if( nIdx < vDimension.nLbound || nIdx > vDimension.nUbound )
         {
-            nPos = (sal_uInt32) SBX_MAXINDEX32+1;
+            nPos = sal_uInt32(SBX_MAXINDEX32)+1;
             break;
         }
-        nPos = nPos * it->nSize + nIdx - it->nLbound;
+        nPos = nPos * vDimension.nSize + nIdx - vDimension.nLbound;
+        if (IsError())
+            break;
     }
-    if( nPos > (sal_uInt32) SBX_MAXINDEX32 )
+    if( nPos > sal_uInt32(SBX_MAXINDEX32) )
     {
-        SetError( ERRCODE_SBX_BOUNDS );
+        SetError( ERRCODE_BASIC_OUT_OF_RANGE );
         nPos = 0;
     }
     return nPos;
@@ -741,7 +662,7 @@ bool SbxDimArray::LoadData( SvStream& rStrm, sal_uInt16 nVer )
 {
     short nDimension;
     rStrm.ReadInt16( nDimension );
-    for( short i = 0; i < nDimension && rStrm.GetError() == SVSTREAM_OK; i++ )
+    for( short i = 0; i < nDimension && rStrm.GetError() == ERRCODE_NONE; i++ )
     {
         sal_Int16 lb(0), ub(0);
         rStrm.ReadInt16( lb ).ReadInt16( ub );

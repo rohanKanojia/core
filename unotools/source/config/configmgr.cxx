@@ -28,10 +28,11 @@
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
-#include <osl/diagnose.h>
+#include <i18nlangtag/languagetag.hxx>
 #include <rtl/instance.hxx>
 #include <rtl/ustring.h>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 #include <unotools/configitem.hxx>
 #include <unotools/configmgr.hxx>
 #include <comphelper/processfactory.hxx>
@@ -72,7 +73,7 @@ OUString getConfigurationString(OUString const & module, OUString const & path)
 {
     css::uno::Sequence< css::uno::Any > args(1);
     args[0] <<= css::beans::NamedValue(
-        OUString("nodepath"),
+        "nodepath",
         css::uno::makeAny(module));
     return
         css::uno::Reference< css::container::XHierarchicalNameAccess >(
@@ -107,10 +108,16 @@ OUString utl::ConfigManager::getDefaultCurrency() {
         "L10N/ooSetupCurrency");
 }
 
-OUString utl::ConfigManager::getLocale() {
+OUString utl::ConfigManager::getUILocale() {
     return getConfigurationString(
         "/org.openoffice.Setup",
         "L10N/ooLocale");
+}
+
+OUString utl::ConfigManager::getWorkLocale() {
+    return getConfigurationString(
+        "/org.openoffice.Setup",
+        "L10N/ooSetupSystemLocale");
 }
 
 OUString utl::ConfigManager::getProductExtension() {
@@ -146,14 +153,14 @@ utl::ConfigManager & utl::ConfigManager::getConfigManager() {
 }
 
 css::uno::Reference< css::container::XHierarchicalNameAccess >
-utl::ConfigManager::acquireTree(utl::ConfigItem & item) {
+utl::ConfigManager::acquireTree(utl::ConfigItem const & item) {
     css::uno::Sequence< css::uno::Any > args(1);
     args[0] <<= css::beans::NamedValue(
-        OUString("nodepath"),
+        "nodepath",
         css::uno::makeAny("/org.openoffice." + item.GetSubTreeName()));
     if (item.GetMode() & ConfigItemMode::AllLocales) {
         args.realloc(2);
-        args[1] <<= css::beans::NamedValue(OUString("locale"), css::uno::makeAny(OUString("*")));
+        args[1] <<= css::beans::NamedValue("locale", css::uno::makeAny(OUString("*")));
     }
     return css::uno::Reference< css::container::XHierarchicalNameAccess >(
         getConfigurationProvider()->createInstanceWithArguments(
@@ -165,7 +172,7 @@ utl::ConfigManager::acquireTree(utl::ConfigItem & item) {
 utl::ConfigManager::ConfigManager() {}
 
 utl::ConfigManager::~ConfigManager() {
-    OSL_ASSERT(items_.empty());
+    SAL_WARN_IF(!items_.empty(), "unotools.config", "ConfigManager not empty");
 }
 
 css::uno::Reference< css::container::XHierarchicalNameAccess >
@@ -178,42 +185,37 @@ utl::ConfigManager::addConfigItem(utl::ConfigItem & item) {
 }
 
 void utl::ConfigManager::removeConfigItem(utl::ConfigItem & item) {
-    for (std::list< ConfigItem * >::iterator i(items_.begin());
-         i != items_.end(); ++i)
-    {
-        if (*i == &item) {
-            items_.erase(i);
-            break;
-        }
-    }
+    items_.erase(std::remove(items_.begin(), items_.end(), &item), items_.end());
 }
 
 void utl::ConfigManager::registerConfigItem(utl::ConfigItem * item) {
-    OSL_ASSERT(item != nullptr);
+    assert(item != nullptr);
     items_.push_back(item);
 }
 
 void utl::ConfigManager::doStoreConfigItems() {
-    for (std::list< ConfigItem * >::iterator i(items_.begin());
-         i != items_.end(); ++i)
+    for (auto const& item : items_)
     {
-        if ((*i)->IsModified()) {
-            (*i)->Commit();
-            (*i)->ClearModified();
+        if (item->IsModified()) {
+            item->Commit();
+            item->ClearModified();
         }
     }
 }
 
-static bool bIsAvoidConfig = false;
+static bool bIsFuzzing = false;
 
-bool utl::ConfigManager::IsAvoidConfig()
+#if !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+bool utl::ConfigManager::IsFuzzing()
 {
-    return bIsAvoidConfig;
+    return bIsFuzzing;
 }
+#endif
 
-void utl::ConfigManager::EnableAvoidConfig()
+void utl::ConfigManager::EnableFuzzing()
 {
-    bIsAvoidConfig = true;
+    bIsFuzzing = true;
+    LanguageTag::disable_lt_tag_parse();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

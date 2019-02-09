@@ -30,15 +30,13 @@
 
 #include <connectivity/dbtools.hxx>
 #include <connectivity/filtermanager.hxx>
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 
 #include <tools/diagnose_ex.h>
 
-#include <comphelper/uno3.hxx>
-#include <comphelper/proparrhlp.hxx>
-#include <comphelper/broadcasthelper.hxx>
 #include <connectivity/ParameterCont.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
 namespace dbtools
 {
@@ -59,7 +57,6 @@ namespace dbtools
         :m_rMutex             ( _rMutex )
         ,m_aParameterListeners( _rMutex )
         ,m_xContext           ( _rxContext  )
-        ,m_pOuterParameters   ( nullptr    )
         ,m_nInnerCount        ( 0       )
         ,m_bUpToDate          ( false   )
     {
@@ -95,7 +92,7 @@ namespace dbtools
 
     void ParameterManager::clearAllParameterInformation()
     {
-       m_xInnerParamColumns.clear();
+        m_xInnerParamColumns.clear();
         if ( m_pOuterParameters.is() )
             m_pOuterParameters->dispose();
         m_pOuterParameters   = nullptr;
@@ -107,7 +104,7 @@ namespace dbtools
         m_sIdentifierQuoteString.clear();
         m_sSpecialCharacters.clear();
         m_xConnectionMetadata.clear();
-        ::std::vector< bool > aEmptyArray;
+        std::vector< bool > aEmptyArray;
         m_aParametersVisited.swap( aEmptyArray );
         m_bUpToDate = false;
     }
@@ -163,12 +160,9 @@ namespace dbtools
         // strip previous index information
         if ( _bSecondRun )
         {
-            for ( ParameterInformation::iterator aParamInfo = m_aParameterInformation.begin();
-                  aParamInfo != m_aParameterInformation.end();
-                  ++aParamInfo
-                )
+            for (auto & paramInfo : m_aParameterInformation)
             {
-                aParamInfo->second.aInnerIndexes.clear();
+                paramInfo.second.aInnerIndexes.clear();
             }
         }
 
@@ -193,8 +187,8 @@ namespace dbtools
 
                 if ( aExistentPos == m_aParameterInformation.end() )
                 {
-                    aExistentPos = m_aParameterInformation.insert( ParameterInformation::value_type(
-                        sName, xParam ) ).first;
+                    aExistentPos = m_aParameterInformation.emplace(
+                        sName, xParam ).first;
                 }
                 else
                     aExistentPos->second.xComposerColumn = xParam;
@@ -224,7 +218,12 @@ namespace dbtools
         {
             OUString colName;
             xDetailField->getPropertyValue("RealName") >>= colName;
-            sFilter += quoteName( m_sIdentifierQuoteString, colName ) + " = :";
+            bool isFunction(false);
+            xDetailField->getPropertyValue("Function") >>= isFunction;
+            if (isFunction)
+                sFilter += colName;
+            else
+                sFilter += quoteName( m_sIdentifierQuoteString, colName );
         }
 
         // generate a parameter name which is not already used
@@ -235,12 +234,14 @@ namespace dbtools
             o_rNewParamName += "_";
         }
 
-        return sFilter += o_rNewParamName;
+        return sFilter += " =:" + o_rNewParamName;
     }
 
 
     void ParameterManager::classifyLinks( const Reference< XNameAccess >& _rxParentColumns,
-        const Reference< XNameAccess >& _rxColumns, ::std::vector< OUString >& _out_rAdditionalFilterComponents )
+        const Reference< XNameAccess >& _rxColumns,
+        std::vector< OUString >& _out_rAdditionalFilterComponents,
+        std::vector< OUString >& _out_rAdditionalHavingComponents )
     {
         OSL_PRECOND( m_aMasterFields.size() == m_aDetailFields.size(),
             "ParameterManager::classifyLinks: master and detail fields should have the same length!" );
@@ -250,9 +251,9 @@ namespace dbtools
             return;
 
         // we may need to strip any links which are invalid, so here go the containers
-        // for temporarirly holding the new pairs
-        ::std::vector< OUString > aStrippedMasterFields;
-        ::std::vector< OUString > aStrippedDetailFields;
+        // for temporarily holding the new pairs
+        std::vector< OUString > aStrippedMasterFields;
+        std::vector< OUString > aStrippedDetailFields;
 
         bool bNeedExchangeLinks = false;
 
@@ -265,9 +266,8 @@ namespace dbtools
             if ( pMasterFields->isEmpty() || pDetailFields->isEmpty() )
                 continue;
 
-            // if not even the master part of the relationship exists in the parent , the
-            // link is invalid as a whole
-            // #i63674# / 2006-03-28 / frank.schoenheit@sun.com
+            // if not even the master part of the relationship exists in the parent, the
+            // link is invalid as a whole #i63674#
             if ( !_rxParentColumns->hasByName( *pMasterFields ) )
             {
                 bNeedExchangeLinks = true;
@@ -297,15 +297,18 @@ namespace dbtools
                     OSL_PRECOND( !sNewParamName.isEmpty(), "ParameterManager::classifyLinks: createFilterConditionFromColumnLink returned nonsense!" );
 
                     // remember meta information about this new parameter
-                    ::std::pair< ParameterInformation::iterator, bool > aInsertionPos =
-                        m_aParameterInformation.insert(
-                            ParameterInformation::value_type( sNewParamName, ParameterMetaData( nullptr ) )
+                    std::pair< ParameterInformation::iterator, bool > aInsertionPos =
+                        m_aParameterInformation.emplace(
+                            sNewParamName, ParameterMetaData( nullptr )
                         );
                     OSL_ENSURE( aInsertionPos.second, "ParameterManager::classifyLinks: there already was a parameter with this name!" );
                     aInsertionPos.first->second.eType = ParameterClassification::LinkedByColumnName;
 
                     // remember the filter component
-                    _out_rAdditionalFilterComponents.push_back( sFilterCondition );
+                    if (isAggregateColumn(xDetailField))
+                        _out_rAdditionalHavingComponents.push_back( sFilterCondition );
+                    else
+                        _out_rAdditionalFilterComponents.push_back( sFilterCondition );
 
                     // remember the new "detail field" for this link
                     aStrippedDetailFields.push_back( sNewParamName );
@@ -376,29 +379,47 @@ namespace dbtools
                 return;
 
             // classify the links - depending on what the detail fields in each link pair denotes
-            ::std::vector< OUString > aAdditionalFilterComponents;
-            classifyLinks( xParentColumns, xColumns, aAdditionalFilterComponents );
+            std::vector< OUString > aAdditionalFilterComponents;
+            std::vector< OUString > aAdditionalHavingComponents;
+            classifyLinks( xParentColumns, xColumns, aAdditionalFilterComponents, aAdditionalHavingComponents );
 
             // did we find links where the detail field refers to a detail column (instead of a parameter name)?
             if ( !aAdditionalFilterComponents.empty() )
             {
                 // build a conjunction of all the filter components
                 OUStringBuffer sAdditionalFilter;
-                for (   ::std::vector< OUString >::const_iterator aComponent = aAdditionalFilterComponents.begin();
-                        aComponent != aAdditionalFilterComponents.end();
-                        ++aComponent
-                    )
+                for (auto const& elem : aAdditionalFilterComponents)
                 {
                     if ( !sAdditionalFilter.isEmpty() )
                         sAdditionalFilter.append(" AND ");
 
                     sAdditionalFilter.append("( ");
-                    sAdditionalFilter.append(*aComponent);
+                    sAdditionalFilter.append(elem);
                     sAdditionalFilter.append(" )");
                 }
 
-                // now set this filter at the 's filter manager
+                // now set this filter at the filter manager
                 _rFilterManager.setFilterComponent( FilterManager::FilterComponent::LinkFilter, sAdditionalFilter.makeStringAndClear() );
+
+                _rColumnsInLinkDetails = true;
+            }
+
+            if ( !aAdditionalHavingComponents.empty() )
+            {
+                // build a conjunction of all the filter components
+                OUStringBuffer sAdditionalHaving;
+                for (auto const& elem : aAdditionalHavingComponents)
+                {
+                    if ( !sAdditionalHaving.isEmpty() )
+                        sAdditionalHaving.append(" AND ");
+
+                    sAdditionalHaving.append("( ");
+                    sAdditionalHaving.append(elem);
+                    sAdditionalHaving.append(" )");
+                }
+
+                // now set this having clause at the filter manager
+                _rFilterManager.setFilterComponent( FilterManager::FilterComponent::LinkHaving, sAdditionalHaving.makeStringAndClear() );
 
                 _rColumnsInLinkDetails = true;
             }
@@ -423,49 +444,43 @@ namespace dbtools
         sal_Int32 nSmallestIndexLinkedByColumnName = -1;
         sal_Int32 nLargestIndexNotLinkedByColumnName = -1;
 #endif
-        for ( ParameterInformation::iterator aParam = m_aParameterInformation.begin();
-              aParam != m_aParameterInformation.end();
-              ++aParam
-            )
+        for (auto & aParam : m_aParameterInformation)
         {
 #if OSL_DEBUG_LEVEL > 0
-            if ( aParam->second.aInnerIndexes.size() )
+            if ( aParam.second.aInnerIndexes.size() )
             {
-                if ( aParam->second.eType == ParameterClassification::LinkedByColumnName )
+                if ( aParam.second.eType == ParameterClassification::LinkedByColumnName )
                 {
                     if ( nSmallestIndexLinkedByColumnName == -1 )
-                        nSmallestIndexLinkedByColumnName = aParam->second.aInnerIndexes[ 0 ];
+                        nSmallestIndexLinkedByColumnName = aParam.second.aInnerIndexes[ 0 ];
                 }
                 else
                 {
-                    nLargestIndexNotLinkedByColumnName = aParam->second.aInnerIndexes[ aParam->second.aInnerIndexes.size() - 1 ];
+                    nLargestIndexNotLinkedByColumnName = aParam.second.aInnerIndexes[ aParam.second.aInnerIndexes.size() - 1 ];
                 }
             }
 #endif
-            if ( aParam->second.eType != ParameterClassification::FilledExternally )
+            if ( aParam.second.eType != ParameterClassification::FilledExternally )
                 continue;
 
             // check which of the parameters have already been visited (e.g. filled via XParameters)
             size_t nAlreadyVisited = 0;
-            for (   ::std::vector< sal_Int32 >::iterator aIndex = aParam->second.aInnerIndexes.begin();
-                    aIndex != aParam->second.aInnerIndexes.end();
-                    ++aIndex
-                )
+            for (auto & aIndex : aParam.second.aInnerIndexes)
             {
-                if ( ( m_aParametersVisited.size() > (size_t)*aIndex ) && m_aParametersVisited[ *aIndex ] )
+                if ( ( m_aParametersVisited.size() > static_cast<size_t>(aIndex) ) && m_aParametersVisited[ aIndex ] )
                 {   // exclude this index
-                    *aIndex = -1;
+                    aIndex = -1;
                     ++nAlreadyVisited;
                 }
             }
-            if ( nAlreadyVisited == aParam->second.aInnerIndexes.size() )
+            if ( nAlreadyVisited == aParam.second.aInnerIndexes.size() )
                 continue;
 
             // need a wrapper for this .... the "inner parameters" as supplied by a result set don't have a "Value"
             // property, but the parameter listeners expect such a property. So we need an object "aggregating"
             // xParam and supplying an additional property ("Value")
             // (it's no real aggregation of course ...)
-            m_pOuterParameters->push_back( new param::ParameterWrapper( aParam->second.xComposerColumn, m_xInnerParamUpdate, aParam->second.aInnerIndexes ) );
+            m_pOuterParameters->push_back( new param::ParameterWrapper( aParam.second.xComposerColumn, m_xInnerParamUpdate, aParam.second.aInnerIndexes ) );
         }
 
 #if OSL_DEBUG_LEVEL > 0
@@ -580,13 +595,10 @@ namespace dbtools
                 Reference< XPropertySet >  xMasterField(_rxParentColumns->getByName( *pMasterFields ),UNO_QUERY);
 
                 // the positions where we have to fill in values for the current parameter name
-                for ( ::std::vector< sal_Int32 >::const_iterator aPosition = aParamInfo->second.aInnerIndexes.begin();
-                      aPosition != aParamInfo->second.aInnerIndexes.end();
-                      ++aPosition
-                    )
+                for (auto const& aPosition : aParamInfo->second.aInnerIndexes)
                 {
                     // the concrete detail field
-                    Reference< XPropertySet >  xDetailField(m_xInnerParamColumns->getByIndex( *aPosition ),UNO_QUERY);
+                    Reference< XPropertySet >  xDetailField(m_xInnerParamColumns->getByIndex(aPosition),UNO_QUERY);
                     OSL_ENSURE( xDetailField.is(), "ParameterManager::fillLinkedParameters: invalid detail field!" );
                     if ( !xDetailField.is() )
                         continue;
@@ -603,7 +615,7 @@ namespace dbtools
                     try
                     {
                         m_xInnerParamUpdate->setObjectWithInfo(
-                            *aPosition + 1,                     // parameters are based at 1
+                            aPosition + 1,                     // parameters are based at 1
                             xMasterField->getPropertyValue( OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_VALUE) ),
                             nParamType,
                             nScale
@@ -611,16 +623,16 @@ namespace dbtools
                     }
                     catch( const Exception& )
                     {
-                        DBG_UNHANDLED_EXCEPTION();
+                        DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
                         SAL_WARN( "connectivity.commontools", "ParameterManager::fillLinkedParameters: master-detail parameter number " <<
-                                  sal_Int32( *aPosition + 1 ) << " could not be filled!" );
+                                  sal_Int32( aPosition + 1 ) << " could not be filled!" );
                     }
                 }
             }
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
         }
     }
 
@@ -662,7 +674,7 @@ namespace dbtools
         try
         {
             // transfer the values from the continuation object to the parameter columns
-            Sequence< PropertyValue > aFinalValues = pParams->getValues();
+            const Sequence< PropertyValue >& aFinalValues = pParams->getValues();
             const PropertyValue* pFinalValues = aFinalValues.getConstArray();
             for ( sal_Int32 i = 0; i < aFinalValues.getLength(); ++i, ++pFinalValues )
             {
@@ -723,7 +735,7 @@ namespace dbtools
 
         // fill the parameters from the master-detail relationship
         Reference< XNameAccess > xParentColumns;
-        if ( getParentColumns( xParentColumns, false ) && xParentColumns->hasElements() && m_aMasterFields.size() )
+        if ( getParentColumns( xParentColumns, false ) && xParentColumns->hasElements() && !m_aMasterFields.empty() )
             fillLinkedParameters( xParentColumns );
 
         // let the user (via the interaction handler) fill all remaining parameters
@@ -737,11 +749,11 @@ namespace dbtools
     }
 
 
-    bool ParameterManager::getConnection( Reference< XConnection >& /* [out] */ _rxConnection )
+    void ParameterManager::getConnection( Reference< XConnection >& /* [out] */ _rxConnection )
     {
         OSL_PRECOND( isAlive(), "ParameterManager::getConnection: not initialized, or already disposed!" );
         if ( !isAlive() )
-            return false;
+            return;
 
         _rxConnection.clear();
         try
@@ -755,7 +767,6 @@ namespace dbtools
         {
             SAL_WARN( "connectivity.commontools", "ParameterManager::getConnection: could not retrieve the connection of the !" );
         }
-        return _rxConnection.is();
     }
 
 
@@ -908,13 +919,10 @@ namespace dbtools
                 if ( !xMasterField.is() )
                     continue;
 
-                for ( ::std::vector< sal_Int32 >::const_iterator aPosition = aParamInfo->second.aInnerIndexes.begin();
-                      aPosition != aParamInfo->second.aInnerIndexes.end();
-                      ++aPosition
-                    )
+                for (auto const& aPosition : aParamInfo->second.aInnerIndexes)
                 {
                     Reference< XPropertySet > xInnerParameter;
-                    m_xInnerParamColumns->getByIndex( *aPosition ) >>= xInnerParameter;
+                    m_xInnerParamColumns->getByIndex(aPosition) >>= xInnerParameter;
                     if ( !xInnerParameter.is() )
                         continue;
 
@@ -940,7 +948,7 @@ namespace dbtools
 
     void ParameterManager::externalParameterVisited( sal_Int32 _nIndex )
     {
-        if ( m_aParametersVisited.size() < (size_t)_nIndex )
+        if ( m_aParametersVisited.size() < static_cast<size_t>(_nIndex) )
         {
             m_aParametersVisited.reserve( _nIndex );
             for ( sal_Int32 i = m_aParametersVisited.size(); i < _nIndex; ++i )
@@ -1018,73 +1026,73 @@ namespace dbtools
     }
 
 
-    void ParameterManager::setBytes( sal_Int32 _nIndex, const ::com::sun::star::uno::Sequence< sal_Int8 >& x )
+    void ParameterManager::setBytes( sal_Int32 _nIndex, const css::uno::Sequence< sal_Int8 >& x )
     {
         VISIT_PARAMETER( setBytes( _nIndex, x ) );
     }
 
 
-    void ParameterManager::setDate( sal_Int32 _nIndex, const ::com::sun::star::util::Date& x )
+    void ParameterManager::setDate( sal_Int32 _nIndex, const css::util::Date& x )
     {
         VISIT_PARAMETER( setDate( _nIndex, x ) );
     }
 
 
-    void ParameterManager::setTime( sal_Int32 _nIndex, const ::com::sun::star::util::Time& x )
+    void ParameterManager::setTime( sal_Int32 _nIndex, const css::util::Time& x )
     {
         VISIT_PARAMETER( setTime( _nIndex, x ) );
     }
 
 
-    void ParameterManager::setTimestamp( sal_Int32 _nIndex, const ::com::sun::star::util::DateTime& x )
+    void ParameterManager::setTimestamp( sal_Int32 _nIndex, const css::util::DateTime& x )
     {
         VISIT_PARAMETER( setTimestamp( _nIndex, x ) );
     }
 
 
-    void ParameterManager::setBinaryStream( sal_Int32 _nIndex, const ::com::sun::star::uno::Reference< ::com::sun::star::io::XInputStream>& x, sal_Int32 length )
+    void ParameterManager::setBinaryStream( sal_Int32 _nIndex, const css::uno::Reference< css::io::XInputStream>& x, sal_Int32 length )
     {
         VISIT_PARAMETER( setBinaryStream( _nIndex, x, length ) );
     }
 
 
-    void ParameterManager::setCharacterStream( sal_Int32 _nIndex, const ::com::sun::star::uno::Reference< ::com::sun::star::io::XInputStream>& x, sal_Int32 length )
+    void ParameterManager::setCharacterStream( sal_Int32 _nIndex, const css::uno::Reference< css::io::XInputStream>& x, sal_Int32 length )
     {
         VISIT_PARAMETER( setCharacterStream( _nIndex, x, length ) );
     }
 
 
-    void ParameterManager::setObject( sal_Int32 _nIndex, const ::com::sun::star::uno::Any& x )
+    void ParameterManager::setObject( sal_Int32 _nIndex, const css::uno::Any& x )
     {
         VISIT_PARAMETER( setObject( _nIndex, x ) );
     }
 
 
-    void ParameterManager::setObjectWithInfo( sal_Int32 _nIndex, const ::com::sun::star::uno::Any& x, sal_Int32 targetSqlType, sal_Int32 scale )
+    void ParameterManager::setObjectWithInfo( sal_Int32 _nIndex, const css::uno::Any& x, sal_Int32 targetSqlType, sal_Int32 scale )
     {
         VISIT_PARAMETER( setObjectWithInfo( _nIndex, x, targetSqlType, scale ) );
     }
 
 
-    void ParameterManager::setRef( sal_Int32 _nIndex, const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XRef>& x )
+    void ParameterManager::setRef( sal_Int32 _nIndex, const css::uno::Reference< css::sdbc::XRef>& x )
     {
         VISIT_PARAMETER( setRef( _nIndex, x ) );
     }
 
 
-    void ParameterManager::setBlob( sal_Int32 _nIndex, const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XBlob>& x )
+    void ParameterManager::setBlob( sal_Int32 _nIndex, const css::uno::Reference< css::sdbc::XBlob>& x )
     {
         VISIT_PARAMETER( setBlob( _nIndex, x ) );
     }
 
 
-    void ParameterManager::setClob( sal_Int32 _nIndex, const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XClob>& x )
+    void ParameterManager::setClob( sal_Int32 _nIndex, const css::uno::Reference< css::sdbc::XClob>& x )
     {
         VISIT_PARAMETER( setClob( _nIndex, x ) );
     }
 
 
-    void ParameterManager::setArray( sal_Int32 _nIndex, const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XArray>& x )
+    void ParameterManager::setArray( sal_Int32 _nIndex, const css::uno::Reference< css::sdbc::XArray>& x )
     {
         VISIT_PARAMETER( setArray( _nIndex, x ) );
     }
@@ -1096,7 +1104,7 @@ namespace dbtools
             m_xInnerParamUpdate->clearParameters( );
     }
 
-    void SAL_CALL OParameterContinuation::setParameters( const Sequence< PropertyValue >& _rValues ) throw( RuntimeException, std::exception )
+    void SAL_CALL OParameterContinuation::setParameters( const Sequence< PropertyValue >& _rValues )
     {
         m_aValues = _rValues;
     }

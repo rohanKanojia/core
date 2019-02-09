@@ -32,7 +32,7 @@ using namespace utl;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::uno;
 
-#define CFG_FILENAME            OUString( "Office.OptionsDialog" )
+#define CFG_FILENAME            "Office.OptionsDialog"
 #define ROOT_NODE               "OptionsDialogGroups"
 #define PAGES_NODE              "Pages"
 #define OPTIONS_NODE            "Options"
@@ -43,9 +43,9 @@ static sal_Int32                    nRefCount = 0;
 class SvtOptionsDlgOptions_Impl : public utl::ConfigItem
 {
 private:
-    typedef std::unordered_map< OUString, sal_Bool, OUStringHash > OptionNodeList;
+    typedef std::unordered_map< OUString, bool > OptionNodeList;
 
-    OUString        m_sPathDelimiter;
+    static constexpr OUStringLiteral g_sPathDelimiter = "/";
     OptionNodeList  m_aOptionNodeList;
 
     enum NodeType{ NT_Group, NT_Page, NT_Option };
@@ -80,15 +80,12 @@ namespace
 }
 
 SvtOptionsDlgOptions_Impl::SvtOptionsDlgOptions_Impl()
-    : ConfigItem( OUString( CFG_FILENAME ) ),
-
-    m_sPathDelimiter( "/" ),
+    : ConfigItem( CFG_FILENAME ),
     m_aOptionNodeList( OptionNodeList() )
-
 {
     OUString sRootNode( ROOT_NODE );
     Sequence< OUString > aNodeSeq = GetNodeNames( sRootNode );
-    OUString sNode( sRootNode + m_sPathDelimiter );
+    OUString sNode( sRootNode + g_sPathDelimiter );
     sal_uInt32 nCount = aNodeSeq.getLength();
     for ( sal_uInt32 n = 0; n < nCount; n++ )
     {
@@ -109,7 +106,7 @@ void SvtOptionsDlgOptions_Impl::Notify( const Sequence< OUString >& )
 
 void SvtOptionsDlgOptions_Impl::ReadNode( const OUString& _rNode, NodeType _eType )
 {
-    OUString sNode( _rNode + m_sPathDelimiter );
+    OUString sNode( _rNode + g_sPathDelimiter );
     OUString sSet;
     sal_Int32 nLen = 0;
     switch ( _eType )
@@ -144,7 +141,7 @@ void SvtOptionsDlgOptions_Impl::ReadNode( const OUString& _rNode, NodeType _eTyp
     aValues = GetProperties( lResult );
     bool bHide = false;
     if ( aValues[0] >>= bHide )
-        m_aOptionNodeList.insert( OptionNodeList::value_type( sNode, bHide ) );
+        m_aOptionNodeList.emplace( sNode, bHide );
 
     if ( _eType != NT_Option )
     {
@@ -152,24 +149,24 @@ void SvtOptionsDlgOptions_Impl::ReadNode( const OUString& _rNode, NodeType _eTyp
         Sequence< OUString > aNodes = GetNodeNames( sNodes );
         if ( aNodes.getLength() > 0 )
         {
-            for ( sal_uInt32 n = 0; n < (sal_uInt32)aNodes.getLength(); ++n )
+            for ( sal_uInt32 n = 0; n < static_cast<sal_uInt32>(aNodes.getLength()); ++n )
             {
-                OUString sSubNodeName( sNodes + m_sPathDelimiter + aNodes[n] );
+                OUString sSubNodeName( sNodes + g_sPathDelimiter + aNodes[n] );
                 ReadNode( sSubNodeName, _eType == NT_Group ? NT_Page : NT_Option );
             }
         }
     }
 }
 
-OUString getGroupPath( const OUString& _rGroup )
+static OUString getGroupPath( const OUString& _rGroup )
 {
     return OUString( ROOT_NODE "/" + _rGroup + "/" );
 }
-OUString getPagePath( const OUString& _rPage )
+static OUString getPagePath( const OUString& _rPage )
 {
     return OUString( PAGES_NODE "/" + _rPage + "/" );
 }
-OUString getOptionPath( const OUString& _rOption )
+static OUString getOptionPath( const OUString& _rOption )
 {
     return OUString( OPTIONS_NODE "/" + _rOption + "/" );
 }
@@ -208,7 +205,7 @@ SvtOptionsDialogOptions::SvtOptionsDialogOptions()
     {
         pOptions = new SvtOptionsDlgOptions_Impl;
 
-        ItemHolder1::holdConfigItem( E_OPTIONSDLGOPTIONS );
+        ItemHolder1::holdConfigItem( EItem::OptionsDialogOptions );
     }
     m_pImp = pOptions;
 }

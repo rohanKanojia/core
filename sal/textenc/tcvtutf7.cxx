@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "rtl/textcvt.h"
+#include <rtl/textcvt.h>
 
 #include "tenchelp.hxx"
 #include "unichars.hxx"
@@ -154,7 +154,7 @@ sal_Size ImplUTF7ToUnicode( SAL_UNUSED_PARAMETER const void*, void* pContext,
     sal_Unicode*                pEndDestBuf;
     const char*             pEndSrcBuf;
 
-/* !!! Implementation not finnished !!!
+/* !!! Implementation not finished !!!
     if ( pContextData )
     {
         bShifted        = pContextData->mbShifted;
@@ -180,7 +180,7 @@ sal_Size ImplUTF7ToUnicode( SAL_UNUSED_PARAMETER const void*, void* pContext,
     {
         if ( pSrcBuf < pEndSrcBuf )
         {
-            c = (unsigned char)*pSrcBuf;
+            c = static_cast<unsigned char>(*pSrcBuf);
 
             /* End, when not a base64 character */
             bBase64End = false;
@@ -224,7 +224,7 @@ sal_Size ImplUTF7ToUnicode( SAL_UNUSED_PARAMETER const void*, void* pContext,
                         {
                             if ( pDestBuf >= pEndDestBuf )
                             {
-                                *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+                                *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
                                 break;
                             }
                             *pDestBuf = IMPL_SHIFT_IN_CHAR;
@@ -235,7 +235,7 @@ sal_Size ImplUTF7ToUnicode( SAL_UNUSED_PARAMETER const void*, void* pContext,
                         /* Skip character */
                         pSrcBuf++;
                         if ( pSrcBuf < pEndSrcBuf )
-                            c = (unsigned char)*pSrcBuf;
+                            c = static_cast<unsigned char>(*pSrcBuf);
                         else
                             bEnd = true;
                     }
@@ -248,7 +248,7 @@ sal_Size ImplUTF7ToUnicode( SAL_UNUSED_PARAMETER const void*, void* pContext,
                     /* When no more bytes in the source buffer, then */
                     /* this buffer may be to small */
                     if ( bEnd )
-                        *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL;
+                        *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL;
                     else
                     {
                         *pInfo |= RTL_TEXTTOUNICODE_INFO_INVALID;
@@ -266,7 +266,7 @@ sal_Size ImplUTF7ToUnicode( SAL_UNUSED_PARAMETER const void*, void* pContext,
             {
                 /* Add 6 Bits from character to the bit buffer */
                 nBufferBits += 6;
-                nBitBuffer |= ((sal_uInt32)(nBase64Value & 0x3F)) << (32-nBufferBits);
+                nBitBuffer |= static_cast<sal_uInt32>(nBase64Value & 0x3F) << (32-nBufferBits);
                 bFirst = false;
             }
 
@@ -275,7 +275,7 @@ sal_Size ImplUTF7ToUnicode( SAL_UNUSED_PARAMETER const void*, void* pContext,
             while ( (pDestBuf < pEndDestBuf) && (nBufferBits >= 16) )
             {
                 nBitBufferTemp = nBitBuffer >> (32-16);
-                *pDestBuf = (sal_Unicode)((nBitBufferTemp) & 0xFFFF);
+                *pDestBuf = static_cast<sal_Unicode>(nBitBufferTemp & 0xFFFF);
                 pDestBuf++;
                 nBitBuffer <<= 16;
                 nBufferBits -= 16;
@@ -284,7 +284,7 @@ sal_Size ImplUTF7ToUnicode( SAL_UNUSED_PARAMETER const void*, void* pContext,
 
             if ( nBufferBits >= 16 )
             {
-                *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+                *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
                 break;
             }
 
@@ -297,7 +297,7 @@ sal_Size ImplUTF7ToUnicode( SAL_UNUSED_PARAMETER const void*, void* pContext,
                     /* When no more bytes in the source buffer, then */
                     /* this buffer may be to small */
                     if ( bEnd )
-                        *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL;
+                        *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL;
                     else
                     {
                         *pInfo |= RTL_TEXTTOUNICODE_INFO_INVALID;
@@ -306,11 +306,11 @@ sal_Size ImplUTF7ToUnicode( SAL_UNUSED_PARAMETER const void*, void* pContext,
                             *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR;
                             break;
                         }
-                        else if ( (nFlags & RTL_TEXTTOUNICODE_FLAGS_INVALID_MASK) != RTL_TEXTTOUNICODE_FLAGS_INVALID_IGNORE )
+                        if ( (nFlags & RTL_TEXTTOUNICODE_FLAGS_INVALID_MASK) != RTL_TEXTTOUNICODE_FLAGS_INVALID_IGNORE )
                         {
                             if ( pDestBuf >= pEndDestBuf )
                             {
-                                *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+                                *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
                                 break;
                             }
                             *pDestBuf++
@@ -337,7 +337,7 @@ sal_Size ImplUTF7ToUnicode( SAL_UNUSED_PARAMETER const void*, void* pContext,
                 }
                 else
                 {
-                    /* No direct encoded charcater, then the buffer is */
+                    /* No direct encoded character, then the buffer is */
                     /* corrupt */
                     if ( c > 0x7F )
                     {
@@ -347,11 +347,11 @@ sal_Size ImplUTF7ToUnicode( SAL_UNUSED_PARAMETER const void*, void* pContext,
                             *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR;
                             break;
                         }
-                        else if ( (nFlags & RTL_TEXTTOUNICODE_FLAGS_INVALID_MASK) != RTL_TEXTTOUNICODE_FLAGS_INVALID_IGNORE )
+                        if ( (nFlags & RTL_TEXTTOUNICODE_FLAGS_INVALID_MASK) != RTL_TEXTTOUNICODE_FLAGS_INVALID_IGNORE )
                         {
                             if ( pDestBuf >= pEndDestBuf )
                             {
-                                *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+                                *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
                                 break;
                             }
                             *pDestBuf++
@@ -362,7 +362,7 @@ sal_Size ImplUTF7ToUnicode( SAL_UNUSED_PARAMETER const void*, void* pContext,
                     /* Write char to unicode buffer */
                     if ( pDestBuf >= pEndDestBuf )
                     {
-                        *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+                        *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
                         break;
                     }
                     *pDestBuf = c;
@@ -444,7 +444,7 @@ sal_Size ImplUnicodeToUTF7( SAL_UNUSED_PARAMETER const void*, void* pContext,
     char*                   pEndDestBuf;
     const sal_Unicode*          pEndSrcBuf;
 
-/* !!! Implementation not finnished !!!
+/* !!! Implementation not finished !!!
     if ( pContextData )
     {
         bShifted        = pContextData->mbShifted;
@@ -506,7 +506,7 @@ sal_Size ImplUnicodeToUTF7( SAL_UNUSED_PARAMETER const void*, void* pContext,
             if ( bNeedShift )
             {
                 nBufferBits += 16;
-                nBitBuffer |= ((sal_uInt32)c) << (32-nBufferBits);
+                nBitBuffer |= static_cast<sal_uInt32>(c) << (32-nBufferBits);
             }
             else
                 nBufferBits += (6-(nBufferBits%6))%6;

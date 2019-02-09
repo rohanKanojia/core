@@ -34,54 +34,29 @@
 #include <vector>
 #include <viewsh.hxx>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
+#include <wrtsh.hxx>
+#include <viewopt.hxx>
 
 using namespace ::com::sun::star;
-
-namespace
-{
-    class LockAllViews
-    {
-        std::vector<SwViewShell*> m_aViewWasUnLocked;
-        SwViewShell* m_pViewShell;
-    public:
-        explicit LockAllViews(SwViewShell *pViewShell)
-            : m_pViewShell(pViewShell)
-        {
-            if (!m_pViewShell)
-                return;
-            for(SwViewShell& rShell : m_pViewShell->GetRingContainer())
-            {
-                if(rShell.IsViewLocked())
-                {
-                    m_aViewWasUnLocked.push_back(&rShell);
-                    rShell.LockView(true);
-                }
-            }
-        }
-        ~LockAllViews()
-        {
-            for(SwViewShell* pShell : m_aViewWasUnLocked)
-                pShell->LockView(false);
-        }
-    };
-}
 
 namespace sw
 {
 
 DocumentStatisticsManager::DocumentStatisticsManager( SwDoc& i_rSwdoc ) : m_rDoc( i_rSwdoc ),
                                                                           mpDocStat( new SwDocStat ),
-                                                                          mbInitialized( false )
+                                                                          mbInitialized( false ),
+                                                                          maStatsUpdateIdle( i_rSwdoc )
+
 {
-    maStatsUpdateTimer.SetTimeout( 1 );
-    maStatsUpdateTimer.SetPriority( SchedulerPriority::LOWEST );
-    maStatsUpdateTimer.SetTimeoutHdl( LINK( this, DocumentStatisticsManager, DoIdleStatsUpdate ) );
+    maStatsUpdateIdle.SetPriority( TaskPriority::LOWEST );
+    maStatsUpdateIdle.SetInvokeHandler( LINK( this, DocumentStatisticsManager, DoIdleStatsUpdate ) );
+    maStatsUpdateIdle.SetDebugName( "sw::DocumentStatisticsManager maStatsUpdateIdle" );
 }
 
 void DocumentStatisticsManager::DocInfoChgd(bool const isEnableSetModified)
 {
-    m_rDoc.getIDocumentFieldsAccess().GetSysFieldType( RES_DOCINFOFLD )->UpdateFields();
-    m_rDoc.getIDocumentFieldsAccess().GetSysFieldType( RES_TEMPLNAMEFLD )->UpdateFields();
+    m_rDoc.getIDocumentFieldsAccess().GetSysFieldType( SwFieldIds::DocInfo )->UpdateFields();
+    m_rDoc.getIDocumentFieldsAccess().GetSysFieldType( SwFieldIds::TemplateName )->UpdateFields();
     if (isEnableSetModified)
     {
         m_rDoc.getIDocumentState().SetModified();
@@ -119,14 +94,14 @@ void DocumentStatisticsManager::UpdateDocStat( bool bCompleteAsync, bool bFields
     {
         if (!bCompleteAsync)
         {
+            maStatsUpdateIdle.Stop();
             while (IncrementalDocStatCalculate(
-                        ::std::numeric_limits<long>::max(), bFields)) {}
-            maStatsUpdateTimer.Stop();
+                        std::numeric_limits<long>::max(), bFields)) {}
         }
         else if (IncrementalDocStatCalculate(5000, bFields))
-            maStatsUpdateTimer.Start();
+            maStatsUpdateIdle.Start();
         else
-            maStatsUpdateTimer.Stop();
+            maStatsUpdateIdle.Stop();
     }
 }
 
@@ -140,10 +115,10 @@ bool DocumentStatisticsManager::IncrementalDocStatCalculate(long nChars, bool bF
     // This is the inner loop - at least while the paras are dirty.
     for( sal_uLong i = m_rDoc.GetNodes().Count(); i > 0 && nChars > 0; )
     {
-        SwNode* pNd;
-        switch( ( pNd = m_rDoc.GetNodes()[ --i ])->GetNodeType() )
+        SwNode* pNd = m_rDoc.GetNodes()[ --i ];
+        switch( pNd->GetNodeType() )
         {
-        case ND_TEXTNODE:
+        case SwNodeType::Text:
         {
             long const nOldChars(mpDocStat->nChar);
             SwTextNode *pText = static_cast< SwTextNode * >( pNd );
@@ -153,16 +128,17 @@ bool DocumentStatisticsManager::IncrementalDocStatCalculate(long nChars, bool bF
             }
             break;
         }
-        case ND_TABLENODE:      ++mpDocStat->nTable;   break;
-        case ND_GRFNODE:        ++mpDocStat->nGrf;   break;
-        case ND_OLENODE:        ++mpDocStat->nOLE;   break;
-        case ND_SECTIONNODE:    break;
+        case SwNodeType::Table:      ++mpDocStat->nTable;   break;
+        case SwNodeType::Grf:        ++mpDocStat->nGrf;   break;
+        case SwNodeType::Ole:        ++mpDocStat->nOLE;   break;
+        case SwNodeType::Section:    break;
+        default: break;
         }
     }
 
     // #i93174#: notes contain paragraphs that are not nodes
     {
-        SwFieldType * const pPostits( m_rDoc.getIDocumentFieldsAccess().GetSysFieldType(RES_POSTITFLD) );
+        SwFieldType * const pPostits( m_rDoc.getIDocumentFieldsAccess().GetSysFieldType(SwFieldIds::Postit) );
         SwIterator<SwFormatField,SwFieldType> aIter( *pPostits );
         for( SwFormatField* pFormatField = aIter.First(); pFormatField;  pFormatField = aIter.Next() )
         {
@@ -176,29 +152,29 @@ bool DocumentStatisticsManager::IncrementalDocStatCalculate(long nChars, bool bF
     }
 
     mpDocStat->nPage     = m_rDoc.getIDocumentLayoutAccess().GetCurrentLayout() ? m_rDoc.getIDocumentLayoutAccess().GetCurrentLayout()->GetPageNum() : 0;
-    mpDocStat->bModified = false;
+    SetDocStatModified( false );
 
     css::uno::Sequence < css::beans::NamedValue > aStat( mpDocStat->nPage ? 8 : 7);
     sal_Int32 n=0;
     aStat[n].Name = "TableCount";
-    aStat[n++].Value <<= (sal_Int32)mpDocStat->nTable;
+    aStat[n++].Value <<= static_cast<sal_Int32>(mpDocStat->nTable);
     aStat[n].Name = "ImageCount";
-    aStat[n++].Value <<= (sal_Int32)mpDocStat->nGrf;
+    aStat[n++].Value <<= static_cast<sal_Int32>(mpDocStat->nGrf);
     aStat[n].Name = "ObjectCount";
-    aStat[n++].Value <<= (sal_Int32)mpDocStat->nOLE;
+    aStat[n++].Value <<= static_cast<sal_Int32>(mpDocStat->nOLE);
     if ( mpDocStat->nPage )
     {
         aStat[n].Name = "PageCount";
-        aStat[n++].Value <<= (sal_Int32)mpDocStat->nPage;
+        aStat[n++].Value <<= static_cast<sal_Int32>(mpDocStat->nPage);
     }
     aStat[n].Name = "ParagraphCount";
-    aStat[n++].Value <<= (sal_Int32)mpDocStat->nPara;
+    aStat[n++].Value <<= static_cast<sal_Int32>(mpDocStat->nPara);
     aStat[n].Name = "WordCount";
-    aStat[n++].Value <<= (sal_Int32)mpDocStat->nWord;
+    aStat[n++].Value <<= static_cast<sal_Int32>(mpDocStat->nWord);
     aStat[n].Name = "CharacterCount";
-    aStat[n++].Value <<= (sal_Int32)mpDocStat->nChar;
+    aStat[n++].Value <<= static_cast<sal_Int32>(mpDocStat->nChar);
     aStat[n].Name = "NonWhitespaceCharacterCount";
-    aStat[n++].Value <<= (sal_Int32)mpDocStat->nCharExcludingSpaces;
+    aStat[n++].Value <<= static_cast<sal_Int32>(mpDocStat->nCharExcludingSpaces);
 
     // For e.g. autotext documents there is no pSwgInfo (#i79945)
     SwDocShell* pObjShell(m_rDoc.GetDocShell());
@@ -213,7 +189,7 @@ bool DocumentStatisticsManager::IncrementalDocStatCalculate(long nChars, bool bF
         const ModifyBlocker_Impl b(pObjShell);
         // rhbz#1081176: don't jump to cursor pos because of (temporary)
         // activation of modified flag triggering move to input position
-        LockAllViews aViewGuard(pObjShell->GetEditShell());
+        auto aViewGuard(pObjShell->LockAllViews());
         xDocProps->setDocumentStatistics(aStat);
         if (!bDocWasModified)
         {
@@ -224,19 +200,17 @@ bool DocumentStatisticsManager::IncrementalDocStatCalculate(long nChars, bool bF
     // optionally update stat. fields
     if (bFields)
     {
-        SwFieldType *pType = m_rDoc.getIDocumentFieldsAccess().GetSysFieldType(RES_DOCSTATFLD);
+        SwFieldType *pType = m_rDoc.getIDocumentFieldsAccess().GetSysFieldType(SwFieldIds::DocStat);
         pType->UpdateFields();
     }
 
     return nChars < 0;
 }
 
-IMPL_LINK_TYPED( DocumentStatisticsManager, DoIdleStatsUpdate, Timer *, pTimer, void )
+IMPL_LINK( DocumentStatisticsManager, DoIdleStatsUpdate, Timer *, pIdle, void )
 {
-    (void)pTimer;
     if (IncrementalDocStatCalculate(32000))
-        maStatsUpdateTimer.Start();
-
+        pIdle->Start();
     SwView* pView = m_rDoc.GetDocShell() ? m_rDoc.GetDocShell()->GetView() : nullptr;
     if( pView )
         pView->UpdateDocStats();
@@ -244,8 +218,7 @@ IMPL_LINK_TYPED( DocumentStatisticsManager, DoIdleStatsUpdate, Timer *, pTimer, 
 
 DocumentStatisticsManager::~DocumentStatisticsManager()
 {
-    maStatsUpdateTimer.Stop();
-    delete mpDocStat;
+    maStatsUpdateIdle.Stop();
 }
 
 }

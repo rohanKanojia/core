@@ -19,7 +19,6 @@
 
 #include <com/sun/star/io/XActiveDataControl.hpp>
 #include <com/sun/star/io/XActiveDataSource.hpp>
-#include <com/sun/star/frame/XConfigManager.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XActiveDataSink.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
@@ -27,9 +26,9 @@
 #include <com/sun/star/container/XNamed.hpp>
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/util/XChangesBatch.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 
-#include <comphelper/processfactory.hxx>
 #include <comphelper/oslfile2streamwrap.hxx>
 #include <comphelper/storagehelper.hxx>
 #include <osl/file.hxx>
@@ -43,7 +42,7 @@
 #include <rtl/uri.hxx>
 
 #include "xmlfilterjar.hxx"
-#include "xmlfilterdialogstrings.hrc"
+#include <strings.hrc>
 #include "xmlfiltersettingsdialog.hxx"
 #include "typedetectionexport.hxx"
 #include "typedetectionimport.hxx"
@@ -52,7 +51,6 @@ using namespace osl;
 using namespace comphelper;
 using namespace com::sun::star;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::frame;
 using namespace com::sun::star::uno;
 using namespace com::sun::star::util;
 using namespace com::sun::star::container;
@@ -79,7 +77,8 @@ static OUString encodeZipUri( const OUString& rURI )
     return Uri::encode( rURI, rtl_UriCharClassUric, rtl_UriEncodeCheckEscapes, RTL_TEXTENCODING_UTF8 );
 }
 
-static Reference< XInterface > addFolder( Reference< XInterface >& xRootFolder, Reference< XSingleServiceFactory >& xFactory, const OUString& rName ) throw( Exception )
+/// @throws Exception
+static Reference< XInterface > addFolder( Reference< XInterface > const & xRootFolder, Reference< XSingleServiceFactory > const & xFactory, const OUString& rName )
 {
     if ( rName == ".." || rName == "." )
         throw lang::IllegalArgumentException();
@@ -101,7 +100,8 @@ static Reference< XInterface > addFolder( Reference< XInterface >& xRootFolder, 
     return xFolder;
 }
 
-static void _addFile( Reference< XInterface >& xRootFolder, Reference< XSingleServiceFactory >& xFactory, Reference< XInputStream >& xInput, const OUString& aName ) throw( Exception )
+/// @throws Exception
+static void addFile_( Reference< XInterface > const & xRootFolder, Reference< XSingleServiceFactory > const & xFactory, Reference< XInputStream > const & xInput, const OUString& aName )
 {
     Reference< XActiveDataSink > xSink( xFactory->createInstance(), UNO_QUERY );
     Reference< XUnoTunnel > xTunnel( xSink, UNO_QUERY );
@@ -113,7 +113,7 @@ static void _addFile( Reference< XInterface >& xRootFolder, Reference< XSingleSe
     }
 }
 
-void XMLFilterJarHelper::addFile( Reference< XInterface > xRootFolder, Reference< XSingleServiceFactory > xFactory, const OUString& rSourceFile ) throw( Exception, std::exception )
+void XMLFilterJarHelper::addFile( Reference< XInterface > const & xRootFolder, Reference< XSingleServiceFactory > const & xFactory, const OUString& rSourceFile )
 {
     if( !rSourceFile.isEmpty() &&
         !rSourceFile.startsWith("http:") &&
@@ -133,11 +133,11 @@ void XMLFilterJarHelper::addFile( Reference< XInterface > xRootFolder, Reference
 
         SvFileStream* pStream = new SvFileStream(aFileURL, StreamMode::READ );
         Reference< XInputStream > xInput(  new utl::OSeekableInputStreamWrapper( pStream, true ) );
-        _addFile( xRootFolder, xFactory, xInput, aName );
+        addFile_( xRootFolder, xFactory, xInput, aName );
     }
 }
 
-bool XMLFilterJarHelper::savePackage( const OUString& rPackageURL, const XMLFilterVector& rFilters )
+bool XMLFilterJarHelper::savePackage( const OUString& rPackageURL, const std::vector<filter_info_impl*>& rFilters )
 {
     try
     {
@@ -165,25 +165,21 @@ bool XMLFilterJarHelper::savePackage( const OUString& rPackageURL, const XMLFilt
 
             // get root zip folder
             Reference< XInterface > xRootFolder;
-            OUString szRootFolder("/");
-            xIfc->getByHierarchicalName( szRootFolder ) >>= xRootFolder;
+            xIfc->getByHierarchicalName( "/" ) >>= xRootFolder;
 
             // export filters files
-            XMLFilterVector::const_iterator aIter( rFilters.begin() );
-            while( aIter != rFilters.end() )
+            for (auto const& filter : rFilters)
             {
-                const filter_info_impl* pFilter = (*aIter);
-
-                Reference< XInterface > xFilterRoot( addFolder( xRootFolder, xFactory, pFilter->maFilterName ) );
+                Reference< XInterface > xFilterRoot( addFolder( xRootFolder, xFactory, filter->maFilterName ) );
 
                 if( xFilterRoot.is() )
                 {
-                    if( !pFilter->maExportXSLT.isEmpty() )
-                        addFile( xFilterRoot, xFactory, pFilter->maExportXSLT );
+                    if( !filter->maExportXSLT.isEmpty() )
+                        addFile( xFilterRoot, xFactory, filter->maExportXSLT );
                     try
                     {
-                        if( !pFilter->maImportXSLT.isEmpty() )
-                            addFile( xFilterRoot, xFactory, pFilter->maImportXSLT );
+                        if( !filter->maImportXSLT.isEmpty() )
+                            addFile( xFilterRoot, xFactory, filter->maImportXSLT );
                     }
                     catch(const css::container::ElementExistException&)
                     {
@@ -192,11 +188,9 @@ bool XMLFilterJarHelper::savePackage( const OUString& rPackageURL, const XMLFilt
                         OSL_FAIL( "XMLFilterJarHelper::same named xslt filter exception!" );
                     }
 
-                    if( !pFilter->maImportTemplate.isEmpty() )
-                        addFile( xFilterRoot, xFactory, pFilter->maImportTemplate );
+                    if( !filter->maImportTemplate.isEmpty() )
+                        addFile( xFilterRoot, xFactory, filter->maImportTemplate );
                 }
-
-                ++aIter;
             }
 
             // create TypeDetection.xcu
@@ -214,8 +208,7 @@ bool XMLFilterJarHelper::savePackage( const OUString& rPackageURL, const XMLFilt
             }
 
             Reference< XInputStream > XIS(  new utl::OSeekableInputStreamWrapper( new SvFileStream(aTempFileURL, StreamMode::READ ), true ) );
-            OUString szTypeDetection( "TypeDetection.xcu" );
-            _addFile( xRootFolder, xFactory,  XIS, szTypeDetection );
+            addFile_( xRootFolder, xFactory,  XIS, "TypeDetection.xcu" );
 
             Reference< XChangesBatch > xBatch( xIfc, UNO_QUERY );
             if( xBatch.is() )
@@ -226,7 +219,7 @@ bool XMLFilterJarHelper::savePackage( const OUString& rPackageURL, const XMLFilt
     }
     catch( const Exception& )
     {
-        OSL_FAIL( "XMLFilterJarHelper::savePackage exception catched!" );
+        OSL_FAIL( "XMLFilterJarHelper::savePackage exception caught!" );
     }
 
     osl::File::remove( rPackageURL );
@@ -235,7 +228,8 @@ bool XMLFilterJarHelper::savePackage( const OUString& rPackageURL, const XMLFilt
 }
 
 
-void XMLFilterJarHelper::openPackage( const OUString& rPackageURL, XMLFilterVector& rFilters )
+void XMLFilterJarHelper::openPackage( const OUString& rPackageURL,
+                                      std::vector< std::unique_ptr<filter_info_impl> >& rFilters )
 {
     try
     {
@@ -257,12 +251,9 @@ void XMLFilterJarHelper::openPackage( const OUString& rPackageURL, XMLFilterVect
 
         if( xIfc.is() )
         {
-            Reference< XSingleServiceFactory > xFactory( xIfc, UNO_QUERY );
-
             // get root zip folder
             Reference< XInterface > xRootFolder;
-            OUString szRootFolder("/");
-            xIfc->getByHierarchicalName( szRootFolder ) >>= xRootFolder;
+            xIfc->getByHierarchicalName( "/" ) >>= xRootFolder;
 
             OUString szTypeDetection("TypeDetection.xcu");
             if( xIfc->hasByHierarchicalName( szTypeDetection ) )
@@ -274,24 +265,22 @@ void XMLFilterJarHelper::openPackage( const OUString& rPackageURL, XMLFilterVect
                 {
                     Reference< XInputStream > xIS( xTypeDetection->getInputStream() );
 
-                    XMLFilterVector aFilters;
+                    std::vector< std::unique_ptr<filter_info_impl> > aFilters;
                     TypeDetectionImporter::doImport( mxContext, xIS, aFilters );
 
                     // copy all files used by the filters imported from the
                     // typedetection to office/user/xslt
-                    XMLFilterVector::iterator aIter( aFilters.begin() );
-                    while( aIter != aFilters.end() )
+                    for (auto& filter : aFilters)
                     {
-                        if( copyFiles( xIfc, (*aIter) ) )
+                        if( copyFiles( xIfc, filter.get() ) )
                         {
-                            rFilters.push_back( (*aIter) );
+                            rFilters.push_back(std::move(filter));
                         }
                         else
                         {
                             // failed to copy all files
-                            delete (*aIter);
+                            filter.reset();
                         }
-                        ++aIter;
                     }
                 }
             }
@@ -299,7 +288,7 @@ void XMLFilterJarHelper::openPackage( const OUString& rPackageURL, XMLFilterVect
     }
     catch( const Exception& )
     {
-        OSL_FAIL( "XMLFilterJarHelper::savePackage exception catched!" );
+        OSL_FAIL( "XMLFilterJarHelper::savePackage exception caught!" );
     }
 }
 
@@ -370,7 +359,7 @@ bool XMLFilterJarHelper::copyFile( const Reference< XHierarchicalNameAccess >& x
     }
     catch( const Exception& )
     {
-        OSL_FAIL( "XMLFilterJarHelper::copyFile exception catched" );
+        OSL_FAIL( "XMLFilterJarHelper::copyFile exception caught" );
     }
     return false;
 }

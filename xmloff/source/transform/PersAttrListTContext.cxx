@@ -34,7 +34,7 @@ void XMLPersAttrListTContext::AddAttribute(
            ::xmloff::token::XMLTokenEnum eAToken,
            ::xmloff::token::XMLTokenEnum eVToken )
 {
-    OUString aAttrValue( ::xmloff::token::GetXMLToken( eVToken ) );
+    const OUString& aAttrValue( ::xmloff::token::GetXMLToken( eVToken ) );
     AddAttribute( nAPrefix, eAToken, aAttrValue );
 }
 
@@ -45,7 +45,7 @@ void XMLPersAttrListTContext::AddAttribute(
 {
     OUString aAttrQName( GetTransformer().GetNamespaceMap().GetQNameByKey(
                 nAPrefix, ::xmloff::token::GetXMLToken( eAToken ) ) );
-    OUString aAttrValue( rValue );
+    const OUString& aAttrValue( rValue );
 
     XMLMutableAttributeList *pMutableAttrList;
     if( m_xAttrList.is() )
@@ -103,10 +103,6 @@ XMLPersAttrListTContext::XMLPersAttrListTContext(
     m_aElemQName( rImp.GetNamespaceMap().GetQNameByKey( nPrefix,
                             ::xmloff::token::GetXMLToken( eToken ) ) ),
     m_nActionMap( nActionMap )
-{
-}
-
-XMLPersAttrListTContext::~XMLPersAttrListTContext()
 {
 }
 

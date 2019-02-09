@@ -37,18 +37,17 @@ class SchemaRestrictionContext : public TokenContext
 {
     css::uno::Reference<css::xforms::XDataTypeRepository> mxRepository;
     css::uno::Reference<css::beans::XPropertySet> mxDataType;
-    OUString msTypeName;
+    OUString const msTypeName;
     OUString msBaseName;
 
 public:
     SchemaRestrictionContext( SvXMLImport& rImport,
                               sal_uInt16 nPrfx,
                               const OUString& rLName,
-                              css::uno::Reference<css::xforms::XDataTypeRepository>& rRepository,
+                              css::uno::Reference<css::xforms::XDataTypeRepository> const & rRepository,
                               const OUString& sTypeName );
-    virtual ~SchemaRestrictionContext();
 
-protected:
+private:
     // create mxDataType (if not already present)
     void CreateDataType();
 

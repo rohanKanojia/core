@@ -34,9 +34,9 @@
 
 #include <limits.h>
 
-const sal_uInt16 XML_NAMESPACE_XMLNS  = (USHRT_MAX-2);
-const sal_uInt16 XML_NAMESPACE_NONE  = (USHRT_MAX-1);
-const sal_uInt16 XML_NAMESPACE_UNKNOWN  = (USHRT_MAX);
+const sal_uInt16 XML_NAMESPACE_XMLNS         = USHRT_MAX-2;
+const sal_uInt16 XML_NAMESPACE_NONE          = USHRT_MAX-1;
+const sal_uInt16 XML_NAMESPACE_UNKNOWN       = USHRT_MAX;
 const sal_uInt16 XML_NAMESPACE_UNKNOWN_FLAG  = 0x8000;
 
 class NameSpaceEntry : public cppu::OWeakObject
@@ -50,26 +50,19 @@ public:
     sal_uInt16          nKey;
 };
 
-struct uInt32lt
-{
-    bool operator()( const sal_uInt32 &r1, const sal_uInt32 &r2) const
-    {
-        return r1 < r2;
-    }
-};
 typedef ::std::pair < sal_uInt16, OUString > QNamePair;
 
 struct QNamePairHash
 {
     size_t operator()( const QNamePair &r1 ) const
     {
-        return (size_t) r1.second.hashCode() + r1.first;
+        return static_cast<size_t>(r1.second.hashCode()) + r1.first;
     }
 };
 
 typedef std::unordered_map < QNamePair, OUString, QNamePairHash > QNameCache;
-typedef std::unordered_map < OUString, ::rtl::Reference <NameSpaceEntry >, OUStringHash > NameSpaceHash;
-typedef std::map < sal_uInt16, ::rtl::Reference < NameSpaceEntry >, uInt32lt > NameSpaceMap;
+typedef std::unordered_map < OUString, ::rtl::Reference <NameSpaceEntry > > NameSpaceHash;
+typedef std::map < sal_uInt16, ::rtl::Reference < NameSpaceEntry > > NameSpaceMap;
 
 class XMLOFF_DLLPUBLIC SvXMLNamespaceMap
 {
@@ -89,7 +82,7 @@ public:
 
     SvXMLNamespaceMap( const SvXMLNamespaceMap& );
 
-    void operator =( const SvXMLNamespaceMap& rCmp );
+    SvXMLNamespaceMap& operator =( const SvXMLNamespaceMap& rCmp );
     bool operator ==( const SvXMLNamespaceMap& rCmp ) const;
 
     sal_uInt16 Add( const OUString& rPrefix,
@@ -119,7 +112,7 @@ public:
 
     /* This will replace the version with the unused 3rd default parameter */
     sal_uInt16 GetKeyByAttrName_( const OUString& rAttrName,
-                             OUString *pLocalName = nullptr) const;
+                             OUString *pLocalName) const;
 
     sal_uInt16 GetFirstKey() const;
     sal_uInt16 GetNextKey( sal_uInt16 nOldKey ) const;
@@ -133,8 +126,8 @@ public:
     static bool NormalizeW3URI( OUString& rName );
     static bool NormalizeURI( OUString& rName );
 
-/* deprecated */ void AddAtIndex( sal_uInt16 nIdx, const OUString& rPrefix,
-                     const OUString& rName, sal_uInt16 nKey = XML_NAMESPACE_UNKNOWN );
+/* deprecated */ void AddAtIndex( const OUString& rPrefix,
+                     const OUString& rName, sal_uInt16 nKey );
 /* deprecated */ static sal_uInt16 GetIndexByKey( sal_uInt16 nKey );
 /* deprecated */ sal_uInt16 GetIndexByPrefix( const OUString& rPrefix ) const;
 /* deprecated */ sal_uInt16 GetFirstIndex() const;
@@ -147,11 +140,9 @@ public:
 /* deprecated */ sal_uInt16 GetKeyByAttrName( const OUString& rAttrName,
                              OUString *pPrefix,
                              OUString *pLocalName,
-                             OUString *pNamespace=nullptr,
-                             sal_uInt16 nIdxGuess = USHRT_MAX ) const;
+                             OUString *pNamespace ) const;
 /* deprecated */ sal_uInt16 GetKeyByAttrName( const OUString& rAttrName,
-                             OUString *pLocalName = nullptr,
-                             sal_uInt16 nIdxGuess = USHRT_MAX ) const;
+                             OUString *pLocalName = nullptr ) const;
 };
 
 #endif // INCLUDED_XMLOFF_NMSPMAP_HXX

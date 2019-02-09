@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "swrect.hxx"
+#include <swrect.hxx>
 
 #ifdef DBG_UTIL
 #include <tools/stream.hxx>
@@ -26,13 +26,11 @@
 #include <math.h>
 #include <stdlib.h>
 
-SwRect::SwRect( const Rectangle &rRect ) :
+SwRect::SwRect( const tools::Rectangle &rRect ) :
     m_Point( rRect.Left(), rRect.Top() )
 {
-    m_Size.setWidth(rRect.Right() == RECT_EMPTY ? 0 :
-                            rRect.Right()  - rRect.Left() +1);
-    m_Size.setHeight(rRect.Bottom() == RECT_EMPTY ? 0 :
-                            rRect.Bottom() - rRect.Top() + 1);
+    m_Size.setWidth( rRect.IsWidthEmpty() ? 0 : rRect.Right()  - rRect.Left() + 1);
+    m_Size.setHeight(rRect.IsHeightEmpty() ? 0 : rRect.Bottom() - rRect.Top()  + 1);
 }
 
 Point SwRect::Center() const
@@ -80,7 +78,7 @@ SwRect& SwRect::Intersection( const SwRect& rRect )
     return *this;
 }
 
-SwRect& SwRect::_Intersection( const SwRect& rRect )
+SwRect& SwRect::Intersection_( const SwRect& rRect )
 {
     // get smaller right and lower, and greater left and upper edge
     if ( Left() < rRect.Left() )
@@ -150,28 +148,31 @@ void SwRect::Justify()
 }
 
 // Similar to the inline methods, but we need the function pointers
-void SwRect::_Width( const long nNew ) { m_Size.setWidth(nNew); }
-void SwRect::_Height( const long nNew ) { m_Size.setHeight(nNew); }
-void SwRect::_Left( const long nLeft ){ m_Size.Width() += m_Point.getX() - nLeft; m_Point.setX(nLeft); }
-void SwRect::_Right( const long nRight ){ m_Size.setWidth(nRight - m_Point.getX()); }
-void SwRect::_Top( const long nTop ){ m_Size.Height() += m_Point.getY() - nTop; m_Point.setY(nTop); }
-void SwRect::_Bottom( const long nBottom ){ m_Size.setHeight(nBottom - m_Point.getY()); }
+void SwRect::Width_( const long nNew ) { m_Size.setWidth(nNew); }
+void SwRect::Height_( const long nNew ) { m_Size.setHeight(nNew); }
+void SwRect::Left_( const long nLeft ){ m_Size.AdjustWidth(m_Point.getX() - nLeft ); m_Point.setX(nLeft); }
+void SwRect::Right_( const long nRight ){ m_Size.setWidth(nRight - m_Point.getX()); }
+void SwRect::Top_( const long nTop ){ m_Size.AdjustHeight(m_Point.getY() - nTop ); m_Point.setY(nTop); }
+void SwRect::Bottom_( const long nBottom ){ m_Size.setHeight(nBottom - m_Point.getY()); }
 
-long SwRect::_Width() const{ return m_Size.getWidth(); }
-long SwRect::_Height() const{ return m_Size.getHeight(); }
-long SwRect::_Left() const{ return m_Point.getX(); }
-long SwRect::_Right() const{ return m_Point.getX() + m_Size.getWidth(); }
-long SwRect::_Top() const{ return m_Point.getY(); }
-long SwRect::_Bottom() const{ return m_Point.getY() + m_Size.getHeight(); }
+long SwRect::Width_() const{ return m_Size.getWidth(); }
+long SwRect::Height_() const{ return m_Size.getHeight(); }
+long SwRect::Left_() const{ return m_Point.getX(); }
+long SwRect::Right_() const{ return m_Point.getX() + m_Size.getWidth(); }
+long SwRect::Top_() const{ return m_Point.getY(); }
+long SwRect::Bottom_() const{ return m_Point.getY() + m_Size.getHeight(); }
 
-void SwRect::AddWidth( const long nAdd ) { m_Size.Width() += nAdd; }
-void SwRect::AddHeight( const long nAdd ) { m_Size.Height() += nAdd; }
-void SwRect::SubLeft( const long nSub ){ m_Size.Width() += nSub; m_Point.setX(m_Point.getX() - nSub); }
-void SwRect::AddRight( const long nAdd ){ m_Size.Width() += nAdd; }
-void SwRect::SubTop( const long nSub ){ m_Size.Height() += nSub; m_Point.setY(m_Point.getY() - nSub); }
-void SwRect::AddBottom( const long nAdd ){ m_Size.Height() += nAdd; }
+void SwRect::AddWidth( const long nAdd ) { m_Size.AdjustWidth(nAdd ); }
+void SwRect::AddHeight( const long nAdd ) { m_Size.AdjustHeight(nAdd ); }
+void SwRect::SubLeft( const long nSub ){ m_Size.AdjustWidth(nSub ); m_Point.setX(m_Point.getX() - nSub); }
+void SwRect::AddRight( const long nAdd ){ m_Size.AdjustWidth(nAdd ); }
+void SwRect::SubTop( const long nSub ){ m_Size.AdjustHeight(nSub ); m_Point.setY(m_Point.getY() - nSub); }
+void SwRect::AddBottom( const long nAdd ){ m_Size.AdjustHeight(nAdd ); }
 void SwRect::SetPosX( const long nNew ){ m_Point.setX(nNew); }
 void SwRect::SetPosY( const long nNew ){ m_Point.setY(nNew); }
+
+const Size  SwRect::Size_() const { return SSize(); }
+const Size  SwRect::SwappedSize() const { return Size( m_Size.getHeight(), m_Size.getWidth() ); }
 
 const Point SwRect::TopLeft() const { return Pos(); }
 const Point SwRect::TopRight() const { return Point( m_Point.getX() + m_Size.getWidth(), m_Point.getY() ); }
@@ -216,9 +217,9 @@ void SwRect::SetBottomAndHeight( long nBottom, long nNew )
 void SwRect::SetUpperLeftCorner(  const Point& rNew )
     { m_Point = rNew; }
 void SwRect::SetUpperRightCorner(  const Point& rNew )
-    { m_Point = Point(rNew.A() - m_Size.getWidth(), rNew.B()); }
+    { m_Point = Point(rNew.X() - m_Size.getWidth(), rNew.Y()); }
 void SwRect::SetLowerLeftCorner(  const Point& rNew )
-    { m_Point = Point(rNew.A(), rNew.B() - m_Size.getHeight()); }
+    { m_Point = Point(rNew.X(), rNew.Y() - m_Size.getHeight()); }
 
 #ifdef DBG_UTIL
 SvStream& WriteSwRect(SvStream &rStream, const SwRect &rRect)

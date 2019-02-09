@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_ACCESS_ACCFRAMEBASE_HXX
 #define INCLUDED_SW_SOURCE_CORE_ACCESS_ACCFRAMEBASE_HXX
 
-#include <acccontext.hxx>
+#include "acccontext.hxx"
 #include <calbck.hxx>
 #include <pam.hxx>
 
@@ -29,7 +29,7 @@ class SwFlyFrame;
 class SwAccessibleFrameBase : public SwAccessibleContext,
                               public SwClient
 {
-    bool    bIsSelected;    // protected by base class mutex
+    bool    m_bIsSelected;    // protected by base class mutex
     bool    IsSelected();
 
 protected:
@@ -41,23 +41,23 @@ protected:
     bool GetSelectedState( );
     SwPaM* GetCursor();
 
-    virtual void _InvalidateCursorPos() override;
-    virtual void _InvalidateFocus() override;
+    virtual void InvalidateCursorPos_() override;
+    virtual void InvalidateFocus_() override;
 
-    virtual ~SwAccessibleFrameBase();
+    virtual ~SwAccessibleFrameBase() override;
     virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem *pNew) override;
 
 public:
-    SwAccessibleFrameBase( SwAccessibleMap* pInitMap,
+    SwAccessibleFrameBase(std::shared_ptr<SwAccessibleMap> const& pInitMap,
                            sal_Int16 nInitRole,
                            const SwFlyFrame *pFlyFrame );
 
     virtual bool HasCursor() override;   // required by map to remember that object
 
-    static sal_uInt8 GetNodeType( const SwFlyFrame *pFlyFrame );
+    static SwNodeType GetNodeType( const SwFlyFrame *pFlyFrame );
 
     // The object is not visible an longer and should be destroyed
-    virtual void Dispose( bool bRecursive = false ) override;
+    virtual void Dispose(bool bRecursive, bool bCanSkipInvisible = true) override;
     virtual bool SetSelectedState( bool bSeleted ) override;
 };
 

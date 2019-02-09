@@ -20,10 +20,7 @@
 #ifndef INCLUDED_SD_SOURCE_FILTER_PPT_PPTATOM_HXX
 #define INCLUDED_SD_SOURCE_FILTER_PPT_PPTATOM_HXX
 
-#include <svx/msdffdef.hxx>
-#include <filter/msfilter/msdffimp.hxx>
-
-class SvStream;
+#include <filter/msfilter/dffrecordheader.hxx>
 
 namespace ppt
 {
@@ -70,7 +67,7 @@ private:
     Atom( const DffRecordHeader& rRecordHeader, SvStream& rStCtrl );
 
     SvStream& mrStream;
-    DffRecordHeader maRecordHeader;
+    DffRecordHeader const maRecordHeader;
     Atom* mpFirstChild;
     Atom* mpNextAtom;
 };
@@ -97,13 +94,13 @@ inline const Atom* Atom::findNextChildAtom( const Atom* pLast )
 
 inline bool Atom::isContainer() const
 {
-    return (bool)maRecordHeader.IsContainer();
+    return maRecordHeader.IsContainer();
 }
 
 inline bool Atom::seekToContent() const
 {
     maRecordHeader.SeekToContent( mrStream );
-    return mrStream.GetError() == 0;
+    return mrStream.GetError() == ERRCODE_NONE;
 }
 
 inline sal_uInt16 Atom::getType() const

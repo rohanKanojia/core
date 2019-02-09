@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/ucb/XSimpleFileAccess.hpp>
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <com/sun/star/ucb/InsertCommandArgument.hpp>
@@ -36,8 +37,6 @@
 #include <rtl/ustring.hxx>
 #include <rtl/strbuf.hxx>
 #include <rtl/ustrbuf.hxx>
-
-#include <comphelper/processfactory.hxx>
 
 #include <tools/urlobj.hxx>
 #include <unotools/bootstrap.hxx>
@@ -63,7 +62,7 @@ LockFileCommon::LockFileCommon( const OUString& aOrigURL, const OUString& aPrefi
     aShareURLString += aPrefix;
     aShareURLString += aDocURL.GetName();
     aShareURLString += "%23"; // '#'
-    m_aURL = INetURLObject( aShareURLString ).GetMainURL( INetURLObject::NO_DECODE );
+    m_aURL = INetURLObject( aShareURLString ).GetMainURL( INetURLObject::DecodeMechanism::NONE );
 }
 
 
@@ -72,12 +71,12 @@ LockFileCommon::~LockFileCommon()
 }
 
 
-INetURLObject LockFileCommon::ResolveLinks( const INetURLObject& aDocURL )
+INetURLObject LockFileCommon::ResolveLinks( const INetURLObject& aDocURL ) const
 {
     if ( aDocURL.HasError() )
         throw lang::IllegalArgumentException();
 
-    OUString aURLToCheck = aDocURL.GetMainURL(INetURLObject::NO_DECODE);
+    OUString aURLToCheck = aDocURL.GetMainURL(INetURLObject::DecodeMechanism::NONE);
 
     // there is currently no UCB functionality to resolve the symbolic links;
     // since the lock files are used only for local file systems the osl
@@ -136,10 +135,10 @@ OUString LockFileCommon::ParseName( const uno::Sequence< sal_Int8 >& aBuffer, sa
 
         if ( bEscape )
         {
-            if ( aBuffer[io_nCurPos] == ',' || aBuffer[io_nCurPos] == ';' || aBuffer[io_nCurPos] == '\\' )
-                aResult.append( (sal_Char)aBuffer[io_nCurPos] );
-            else
+            if ( aBuffer[io_nCurPos] != ',' && aBuffer[io_nCurPos] != ';' && aBuffer[io_nCurPos] != '\\' )
                 throw io::WrongFormatException();
+
+            aResult.append( static_cast<sal_Char>(aBuffer[io_nCurPos]) );
 
             bEscape = false;
             io_nCurPos++;
@@ -151,7 +150,7 @@ OUString LockFileCommon::ParseName( const uno::Sequence< sal_Int8 >& aBuffer, sa
             if ( aBuffer[io_nCurPos] == '\\' )
                 bEscape = true;
             else
-                aResult.append( (sal_Char)aBuffer[io_nCurPos] );
+                aResult.append( static_cast<sal_Char>(aBuffer[io_nCurPos]) );
 
             io_nCurPos++;
         }
@@ -201,8 +200,9 @@ OUString LockFileCommon::GetCurrentLocalTime()
             oslDateTime aDateTime;
             if ( osl_getDateTimeFromTimeValue( &aLocTime, &aDateTime ) )
             {
-                char pDateTime[20];
-                sprintf( pDateTime, "%02d.%02d.%4d %02d:%02d", aDateTime.Day, aDateTime.Month, aDateTime.Year, aDateTime.Hours, aDateTime.Minutes );
+                char pDateTime[sizeof("65535.65535.-32768 65535:65535")];
+                    // reserve enough space for hypothetical max length
+                sprintf( pDateTime, "%02" SAL_PRIuUINT32 ".%02" SAL_PRIuUINT32 ".%4" SAL_PRIdINT32 " %02" SAL_PRIuUINT32 ":%02" SAL_PRIuUINT32, sal_uInt32(aDateTime.Day), sal_uInt32(aDateTime.Month), sal_Int32(aDateTime.Year), sal_uInt32(aDateTime.Hours), sal_uInt32(aDateTime.Minutes) );
                 aTime = OUString::createFromAscii( pDateTime );
             }
         }

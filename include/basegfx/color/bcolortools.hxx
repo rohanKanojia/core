@@ -20,7 +20,6 @@
 #ifndef INCLUDED_BASEGFX_COLOR_BCOLORTOOLS_HXX
 #define INCLUDED_BASEGFX_COLOR_BCOLORTOOLS_HXX
 
-#include <sal/types.h>
 #include <basegfx/basegfxdllapi.h>
 
 
@@ -28,7 +27,7 @@ namespace basegfx
 {
     class BColor;
 
-    namespace tools
+    namespace utils
     {
         /// Transform from RGB to HSL
         BASEGFX_DLLPUBLIC BColor rgb2hsl(const BColor& rRGBColor);
@@ -39,10 +38,6 @@ namespace basegfx
         BASEGFX_DLLPUBLIC BColor rgb2hsv(const BColor& rRGBColor);
         /// Transform from HSV to RGB
         BASEGFX_DLLPUBLIC BColor hsv2rgb(const BColor& rHSVColor);
-
-        /// Transform from Rec. 709 RGB (D65 white point) into CIE XYZ
-        BASEGFX_DLLPUBLIC BColor rgb2ciexyz( const BColor& rRGBColor );
-
     }
 } // end of namespace basegfx
 

@@ -15,6 +15,9 @@
 #  gb_UnpackedTarget_TARFILE_LOCATION
 #   NOTE: only for commands; targets should use TARFILE_LOCATION directly
 
+# Location of internal copies of config.{guess,sub}.
+gb_UnpackedTarball_CONFIGDIR := $(GBUILDDIR)
+
 define gb_UnpackedTarget__command_untar
 $(GNUTAR) \
 	-x \
@@ -139,6 +142,9 @@ $(call gb_Helper_abbreviate_dirs,\
 			done && \
 		) \
 		$(foreach file,$(UNPACKED_FIX_EOL),$(call gb_UnpackedTarball_CONVERTTODOS,$(file)) && ) \
+		$(foreach confdir,$(UNPACKED_CONFIG_DIRS),\
+			cp -f $(gb_UnpackedTarball_CONFIGDIR)/config.guess $(gb_UnpackedTarball_CONFIGDIR)/config.sub $(confdir) && \
+		) \
 		$(if $(UNPACKED_POST_ACTION),\
 			$(UNPACKED_POST_ACTION) && \
 		) \
@@ -190,6 +196,7 @@ $(call gb_UnpackedTarball_get_target,$(1)) : UNPACKED_PATCHLEVEL := $(gb_Unpacke
 $(call gb_UnpackedTarball_get_target,$(1)) : UNPACKED_PATCHFLAGS :=
 $(call gb_UnpackedTarball_get_target,$(1)) : UNPACKED_POST_ACTION :=
 $(call gb_UnpackedTarball_get_target,$(1)) : UNPACKED_PRE_ACTION :=
+$(call gb_UnpackedTarball_get_target,$(1)) : UNPACKED_CONFIG_DIRS :=
 
 $(call gb_UnpackedTarball_get_preparation_target,$(1)) : $(gb_Module_CURRENTMAKEFILE)
 $(call gb_UnpackedTarball_get_preparation_target,$(1)) :| $(dir $(call gb_UnpackedTarball_get_target,$(1))).dir
@@ -351,6 +358,7 @@ endef
 define gb_UnpackedTarbal__make_pattern_rule
 $(call gb_UnpackedTarball_get_dir,$(1))/%$(2) :
 	$$(if $$(wildcard $$@),,$$(call gb_Output_error,file $$@ does not exist in the tarball))
+	$$(if $$(UNPACKED_MODE),chmod $$(UNPACKED_MODE) $$@ &&) \
 	touch $$@
 
 $(eval gb_UnpackedTarball_PATTERN_RULES_$(1) += $(2))
@@ -365,6 +373,7 @@ endef
 define gb_UnpackedTarbal__make_file_rule
 $(call gb_UnpackedTarball_get_dir,$(1))/$(2) :
 	$$(if $$(wildcard $$@),,$$(call gb_Output_error,file $$@ does not exist in the tarball))
+	$$(if $$(UNPACKED_MODE),chmod $$(UNPACKED_MODE) $$@ &&) \
 	touch $$@
 
 endef
@@ -381,6 +390,7 @@ endef
 define gb_UnpackedTarball_mark_output_file
 $(call gb_UnpackedTarball_get_final_target,$(1)) : $(call gb_UnpackedTarball_get_dir,$(1))/$(2)
 $(call gb_UnpackedTarball_get_dir,$(1))/$(2) : $(call gb_UnpackedTarball_get_target,$(1))
+$(call gb_UnpackedTarball_get_dir,$(1))/$(2) : UNPACKED_MODE := 644
 $(if $(suffix $(2)),\
 	$(call gb_UnpackedTarbal__ensure_pattern_rule,$(1),$(suffix $(2))),\
 	$(call gb_UnpackedTarbal__make_file_rule,$(1),$(2)) \
@@ -393,6 +403,23 @@ endef
 # gb_UnpackedTarball_mark_output_files unpacked file(s)
 define gb_UnpackedTarball_mark_output_files
 $(foreach file,$(2),$(call gb_UnpackedTarball_mark_output_file,$(1),$(file)))
+
+endef
+
+# Replace project's config.{guess,sub} files by internal copies
+#
+# This is useful if the project's config files are outdated and don't
+# allow build on some new arch. The internal copies are located at
+# gb_UnpackedTarball_CONFIGDIR.
+#
+# If the configs are placed somewhere else than in the top-level dir of
+# the project, pass the (relative) dir as second argument. (It can even
+# be a list of dirs, if the project contains multiple subprojects, each
+# with its own configure.)
+#
+# gb_UnpackedTarball_update_autoconf_configs unpacked dirs(s)?
+define gb_UnpackedTarball_update_autoconf_configs
+$(call gb_UnpackedTarball_get_target,$(1)) : UNPACKED_CONFIG_DIRS += $(if $(strip $(2)),$(2),.)
 
 endef
 

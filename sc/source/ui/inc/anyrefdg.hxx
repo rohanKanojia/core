@@ -20,56 +20,48 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_ANYREFDG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_ANYREFDG_HXX
 
-#include <vcl/button.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/accel.hxx>
 #include <sfx2/basedlgs.hxx>
-#include <sfx2/tabdlg.hxx>
-#include "address.hxx"
-#include "compiler.hxx"
+#include <address.hxx>
 #include <formula/funcutl.hxx>
 #include "IAnyRefDialog.hxx"
-#include "scresid.hxx"
-#include "scmod.hxx"
+#include <scmod.hxx>
 
 #include <memory>
 
 class SfxObjectShell;
-class ScRange;
 class ScDocument;
-class ScTabViewShell;
-class ScRefHandler;
 class ScRangeList;
+class ScCompiler;
 
 class ScFormulaReferenceHelper
 {
     IAnyRefDialog*      m_pDlg;
-    ::std::unique_ptr<ScCompiler>         pRefComp;
-    VclPtr<formula::RefEdit>    pRefEdit;               // active input field
-    VclPtr<formula::RefButton>  pRefBtn;                // associated button
+    ::std::unique_ptr<ScCompiler>         m_pRefComp;
+    VclPtr<formula::RefEdit>    m_pRefEdit;               // active input field
+    VclPtr<formula::RefButton>  m_pRefBtn;                // associated button
     VclPtr<vcl::Window>         m_pWindow;
-    SfxBindings*        m_pBindings;
+    SfxBindings* const          m_pBindings;
     ::std::unique_ptr<Accelerator>
-                        pAccel;                 // for Enter/Escape
+                        m_pAccel;                 // for Enter/Escape
     ::std::vector<VclPtr<vcl::Window> > m_aHiddenWidgets;    // vector of hidden Controls
     sal_Int32           m_nOldBorderWidth;      // border width for expanded dialog
-    SCTAB               nRefTab;                // used for ShowReference
+    SCTAB               m_nRefTab;                // used for ShowReference
 
-    OUString            sOldDialogText;         // Original title of the dialog window
-    Size                aOldDialogSize;         // Original size of the dialog window
-    Point               aOldEditPos;            // Original position of the input field
-    Size                aOldEditSize;           // Original size of the input field
-    long                mnOldEditWidthReq;
-    Point               aOldButtonPos;          // Original position of the button
-    VclPtr<vcl::Window> mpOldEditParent;        // Original parent of the edit field and the button
-    bool                mbOldDlgLayoutEnabled;  // Original layout state of parent dialog
-    bool                mbOldEditParentLayoutEnabled;  // Original layout state of edit widget parent
+    OUString            m_sOldDialogText;         // Original title of the dialog window
+    Size                m_aOldDialogSize;         // Original size of the dialog window
+    Point               m_aOldEditPos;            // Original position of the input field
+    Size                m_aOldEditSize;           // Original size of the input field
+    long                m_nOldEditWidthReq;
+    Point               m_aOldButtonPos;          // Original position of the button
+    VclPtr<vcl::Window> m_pOldEditParent;        // Original parent of the edit field and the button
+    bool                m_bOldDlgLayoutEnabled;  // Original layout state of parent dialog
+    bool                m_bOldEditParentLayoutEnabled;  // Original layout state of edit widget parent
 
-    bool                bEnableColorRef;
-    bool                bHighlightRef;
-    bool                bAccInserted;
+    bool                m_bEnableColorRef;
+    bool                m_bHighlightRef;
+    bool                m_bAccInserted;
 
-    DECL_LINK_TYPED( AccelSelectHdl, Accelerator&, void );
+    DECL_LINK( AccelSelectHdl, Accelerator&, void );
 
 public:
     ScFormulaReferenceHelper(IAnyRefDialog* _pDlg,SfxBindings* _pBindings);
@@ -78,19 +70,19 @@ public:
 
     void                ShowSimpleReference(const OUString& rStr);
     void                ShowFormulaReference(const OUString& rStr);
-    bool                ParseWithNames( ScRangeList& rRanges, const OUString& rStr, ScDocument* pDoc );
+    bool                ParseWithNames( ScRangeList& rRanges, const OUString& rStr, const ScDocument* pDoc );
     void                Init();
 
     void                ShowReference(const OUString& rStr);
     void                ReleaseFocus( formula::RefEdit* pEdit );
     void                HideReference( bool bDoneRefMode = true );
-    void                RefInputStart( formula::RefEdit* pEdit, formula::RefButton* pButton = nullptr );
-    void                RefInputDone( bool bForced = false );
-    void                ToggleCollapsed( formula::RefEdit* pEdit, formula::RefButton* pButton = nullptr );
+    void                RefInputStart( formula::RefEdit* pEdit, formula::RefButton* pButton );
+    void                RefInputDone( bool bForced );
+    void                ToggleCollapsed( formula::RefEdit* pEdit, formula::RefButton* pButton );
 
-    inline void         SetWindow(vcl::Window* _pWindow) { m_pWindow = _pWindow; }
+    void         SetWindow(vcl::Window* _pWindow) { m_pWindow = _pWindow; }
     void                DoClose( sal_uInt16 nId );
-    static void         SetDispatcherLock( bool bLock );
+    void                SetDispatcherLock( bool bLock );
     static void         EnableSpreadsheets( bool bFlag = true );
     static void         ViewShellChanged();
 
@@ -98,7 +90,7 @@ public:
 
 public:
     static bool         CanInputStart( const formula::RefEdit *pEdit ){ return !!pEdit; }
-    bool                CanInputDone( bool bForced ){   return pRefEdit && (bForced || !pRefBtn);   }
+    bool                CanInputDone( bool bForced ){   return m_pRefEdit && (bForced || !m_pRefBtn);   }
 };
 
 class SC_DLLPUBLIC ScRefHandler :
@@ -108,35 +100,30 @@ class SC_DLLPUBLIC ScRefHandler :
     bool                 m_bInRefMode;
 
 public:
-    operator vcl::Window *(){ return m_rWindow.get(); }
     friend class        formula::RefButton;
     friend class        formula::RefEdit;
 
 private:
     ScFormulaReferenceHelper
                         m_aHelper;
-    SfxBindings*        pMyBindings;
+    SfxBindings* const  m_pMyBindings;
 
-    VclPtr<vcl::Window> pActiveWin;
-    Idle                aIdle;
-    OUString            aDocName;               // document on which the dialog was opened
-
-    DECL_LINK_TYPED( UpdateFocusHdl, Idle*, void );
+    OUString            m_aDocName;               // document on which the dialog was opened
 
 protected:
     void                disposeRefHandler();
     bool                DoClose( sal_uInt16 nId );
 
-    static void         SetDispatcherLock( bool bLock );
+    void                SetDispatcherLock( bool bLock );
 
     virtual void        RefInputStart( formula::RefEdit* pEdit, formula::RefButton* pButton = nullptr ) override;
     virtual void        RefInputDone( bool bForced = false ) override;
 
-    bool                ParseWithNames( ScRangeList& rRanges, const OUString& rStr, ScDocument* pDoc );
+    bool                ParseWithNames( ScRangeList& rRanges, const OUString& rStr, const ScDocument* pDoc );
 
 public:
                         ScRefHandler( vcl::Window &rWindow, SfxBindings* pB, bool bBindRef );
-    virtual             ~ScRefHandler();
+    virtual             ~ScRefHandler() override;
 
     virtual void        SetReference( const ScRange& rRef, ScDocument* pDoc ) override = 0;
     virtual void        AddRefEntry() override;
@@ -148,7 +135,7 @@ public:
     virtual void        ShowReference(const OUString& rStr) override;
     virtual void        HideReference( bool bDoneRefMode = true ) override;
 
-    virtual void        ToggleCollapsed( formula::RefEdit* pEdit, formula::RefButton* pButton = nullptr ) override;
+    virtual void        ToggleCollapsed( formula::RefEdit* pEdit, formula::RefButton* pButton ) override;
     virtual void        ReleaseFocus( formula::RefEdit* pEdit ) override;
 
     virtual void        ViewShellChanged() override;
@@ -167,33 +154,17 @@ template<  class TWindow, bool bBindRef = true >
 class ScRefHdlrImplBase: public TWindow, public ScRefHandler
 {
 private:
-    template<class TBindings, class TChildWindow, class TParentWindow, class TResId>
-    ScRefHdlrImplBase( TBindings* pB, TChildWindow* pCW,
-        TParentWindow* pParent, TResId nResId );
-
     template<class TBindings, class TChildWindow, class TParentWindow >
     ScRefHdlrImplBase( TBindings* pB, TChildWindow* pCW,
         TParentWindow* pParent, const OUString& rID, const OUString& rUIXMLDescription );
 
-    template<class TParentWindow, class TResId, class TArg>
-    ScRefHdlrImplBase( TParentWindow* pParent, TResId nResId, const TArg &rArg, SfxBindings *pB = nullptr );
-
     template<class TParentWindow, class TArg>
-    ScRefHdlrImplBase( TParentWindow* pParent, const OUString& rID, const OUString& rUIXMLDescription, const TArg &rArg, SfxBindings *pB = nullptr );
+    ScRefHdlrImplBase( TParentWindow* pParent, const OUString& rID, const OUString& rUIXMLDescription, const TArg &rArg, SfxBindings *pB );
 
-    virtual ~ScRefHdlrImplBase();
+    virtual ~ScRefHdlrImplBase() override;
 
     template<class, class, bool> friend struct ScRefHdlrImpl;
 };
-
-template<class TWindow, bool bBindRef>
-template<class TBindings, class TChildWindow, class TParentWindow, class TResId>
-ScRefHdlrImplBase<TWindow, bBindRef>::ScRefHdlrImplBase( TBindings* pB, TChildWindow* pCW,
-                 TParentWindow* pParent, TResId nResId)
-    : TWindow(pB, pCW, pParent, ScResId(static_cast<sal_uInt16>( nResId ) ) )
-    , ScRefHandler( *static_cast<TWindow*>(this), pB, bBindRef )
-{
-}
 
 template<class TWindow, bool bBindRef>
 template<class TBindings, class TChildWindow, class TParentWindow>
@@ -201,14 +172,6 @@ ScRefHdlrImplBase<TWindow, bBindRef>::ScRefHdlrImplBase( TBindings* pB, TChildWi
                  TParentWindow* pParent, const OUString& rID, const OUString& rUIXMLDescription )
     : TWindow(pB, pCW, pParent, rID, rUIXMLDescription )
     , ScRefHandler( *static_cast<TWindow*>(this), pB, bBindRef )
-{
-}
-
-template<class TWindow, bool bBindRef >
-template<class TParentWindow, class TResId, class TArg>
-ScRefHdlrImplBase<TWindow,bBindRef>::ScRefHdlrImplBase( TParentWindow* pParent, TResId nResIdP, const TArg &rArg, SfxBindings *pB )
-    : TWindow( pParent, ScResId(static_cast<sal_uInt16>( nResIdP )), rArg ),
-    ScRefHandler( *static_cast<TWindow*>(this), pB, bBindRef )
 {
 }
 
@@ -257,12 +220,6 @@ struct ScRefHdlrImpl: ScRefHdlrImplBase< TBase, bBindRef >
 
 struct ScAnyRefDlg : ::ScRefHdlrImpl< ScAnyRefDlg, SfxModelessDialog>
 {
-    template<class T1, class T2, class T3, class T4>
-    ScAnyRefDlg( const T1 & rt1, const T2 & rt2, const T3& rt3, const T4& rt4 )
-        : ScRefHdlrImpl< ScAnyRefDlg, SfxModelessDialog>(rt1, rt2, rt3, rt4)
-    {
-    }
-
     template<class T1, class T2, class T3, class T4, class T5>
     ScAnyRefDlg( const T1 & rt1, const T2 & rt2, const T3& rt3, const T4& rt4, const T5& rt5 )
         : ScRefHdlrImpl< ScAnyRefDlg, SfxModelessDialog>(rt1, rt2, rt3, rt4, rt5)

@@ -30,9 +30,7 @@ namespace dbaccess
 {
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Any;
     using ::com::sun::star::frame::DoubleInitializationException;
     using ::com::sun::star::document::XDocumentEventListener;
@@ -52,7 +50,7 @@ namespace dbaccess
         ::osl::Mutex&                                           m_rMutex;
         bool                                                    m_bInitialized;
         bool                                                    m_bDisposed;
-        ::rtl::Reference< ::comphelper::AsyncEventNotifier >    m_pEventBroadcaster;
+        std::shared_ptr<::comphelper::AsyncEventNotifierAutoJoin> m_pEventBroadcaster;
         ::comphelper::OInterfaceContainerHelper2                      m_aLegacyEventListeners;
         ::comphelper::OInterfaceContainerHelper2                      m_aDocumentEventListeners;
 
@@ -72,42 +70,42 @@ namespace dbaccess
         virtual void SAL_CALL acquire() throw () override;
         virtual void SAL_CALL release() throw () override;
 
-        void addLegacyEventListener( const Reference< document::XEventListener >& _Listener )
+        void addLegacyEventListener( const Reference< document::XEventListener >& Listener )
         {
-            m_aLegacyEventListeners.addInterface( _Listener );
+            m_aLegacyEventListeners.addInterface( Listener );
         }
 
-        void removeLegacyEventListener( const Reference< document::XEventListener >& _Listener )
+        void removeLegacyEventListener( const Reference< document::XEventListener >& Listener )
         {
-            m_aLegacyEventListeners.removeInterface( _Listener );
+            m_aLegacyEventListeners.removeInterface( Listener );
         }
 
-        void addDocumentEventListener( const Reference< XDocumentEventListener >& _Listener )
+        void addDocumentEventListener( const Reference< XDocumentEventListener >& Listener )
         {
-            m_aDocumentEventListeners.addInterface( _Listener );
+            m_aDocumentEventListeners.addInterface( Listener );
         }
 
-        void removeDocumentEventListener( const Reference< XDocumentEventListener >& _Listener )
+        void removeDocumentEventListener( const Reference< XDocumentEventListener >& Listener )
         {
-            m_aDocumentEventListeners.removeInterface( _Listener );
+            m_aDocumentEventListeners.removeInterface( Listener );
         }
 
         void disposing();
 
         void onDocumentInitialized();
 
-        void    notifyDocumentEvent( const OUString& _EventName, const Reference< XController2 >& _ViewController,
-                    const Any& _Supplement )
+        void    notifyDocumentEvent( const OUString& EventName, const Reference< XController2 >& ViewController,
+                    const Any& Supplement )
         {
             impl_notifyEvent_nothrow( DocumentEvent(
-                m_rDocument, _EventName, _ViewController, _Supplement ) );
+                m_rDocument, EventName, ViewController, Supplement ) );
         }
 
-        void    notifyDocumentEventAsync( const OUString& _EventName, const Reference< XController2 >& _ViewController,
-                    const Any& _Supplement )
+        void    notifyDocumentEventAsync( const OUString& EventName, const Reference< XController2 >& ViewController,
+                    const Any& Supplement )
         {
             impl_notifyEventAsync_nothrow( DocumentEvent(
-                m_rDocument, _EventName, _ViewController, _Supplement ) );
+                m_rDocument, EventName, ViewController, Supplement ) );
         }
 
     protected:
@@ -139,7 +137,7 @@ namespace dbaccess
         // SYNCHRONIZED ->
         // cancel any pending asynchronous events
         ::osl::ResettableMutexGuard aGuard( m_rMutex );
-        if ( m_pEventBroadcaster.is() )
+        if (m_pEventBroadcaster)
         {
             m_pEventBroadcaster->removeEventsForProcessor( this );
             m_pEventBroadcaster->terminate();
@@ -149,7 +147,9 @@ namespace dbaccess
                 // in atexit handlers; simply calling join here leads to
                 // deadlock, as this thread holds the solar mutex while the
                 // other thread is typically blocked waiting for the solar mutex
-            m_pEventBroadcaster.clear();
+                // For now, use newAutoJoinAsyncEventNotifier which is
+                // better than nothing.
+            m_pEventBroadcaster.reset();
         }
 
         lang::EventObject aEvent( m_rDocument );
@@ -171,9 +171,11 @@ namespace dbaccess
             throw DoubleInitializationException();
 
         m_bInitialized = true;
-        if ( m_pEventBroadcaster.is() )
+        if (m_pEventBroadcaster)
+        {
             // there are already pending asynchronous events
-            m_pEventBroadcaster->launch();
+            ::comphelper::AsyncEventNotifierAutoJoin::launch(m_pEventBroadcaster);
+        }
     }
 
     void DocumentEventNotifier_Impl::impl_notifyEvent_nothrow( const DocumentEvent& _rEvent )
@@ -187,7 +189,7 @@ namespace dbaccess
         }
         catch(const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
         try
         {
@@ -195,20 +197,22 @@ namespace dbaccess
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 
     void DocumentEventNotifier_Impl::impl_notifyEventAsync_nothrow( const DocumentEvent& _rEvent )
     {
-        if ( !m_pEventBroadcaster.is() )
+        if (!m_pEventBroadcaster)
         {
-            m_pEventBroadcaster.set(
-                new ::comphelper::AsyncEventNotifier("DocumentEventNotifier"));
+            m_pEventBroadcaster = ::comphelper::AsyncEventNotifierAutoJoin
+                ::newAsyncEventNotifierAutoJoin("DocumentEventNotifier");
             if ( m_bInitialized )
+            {
                 // start processing the events if and only if we (our document, respectively) are
                 // already initialized
-                m_pEventBroadcaster->launch();
+                ::comphelper::AsyncEventNotifierAutoJoin::launch(m_pEventBroadcaster);
+            }
         }
         m_pEventBroadcaster->addEvent( new DocumentEventHolder( _rEvent ), this );
     }
@@ -245,36 +249,36 @@ namespace dbaccess
         m_pImpl->onDocumentInitialized();
     }
 
-    void DocumentEventNotifier::addLegacyEventListener( const Reference< document::XEventListener >& _Listener )
+    void DocumentEventNotifier::addLegacyEventListener( const Reference< document::XEventListener >& Listener )
     {
-        m_pImpl->addLegacyEventListener( _Listener );
+        m_pImpl->addLegacyEventListener( Listener );
     }
 
-    void DocumentEventNotifier::removeLegacyEventListener( const Reference< document::XEventListener >& _Listener )
+    void DocumentEventNotifier::removeLegacyEventListener( const Reference< document::XEventListener >& Listener )
     {
-        m_pImpl->removeLegacyEventListener( _Listener );
+        m_pImpl->removeLegacyEventListener( Listener );
     }
 
-    void DocumentEventNotifier::addDocumentEventListener( const Reference< XDocumentEventListener >& _Listener )
+    void DocumentEventNotifier::addDocumentEventListener( const Reference< XDocumentEventListener >& Listener )
     {
-        m_pImpl->addDocumentEventListener( _Listener );
+        m_pImpl->addDocumentEventListener( Listener );
     }
 
-    void DocumentEventNotifier::removeDocumentEventListener( const Reference< XDocumentEventListener >& _Listener )
+    void DocumentEventNotifier::removeDocumentEventListener( const Reference< XDocumentEventListener >& Listener )
     {
-        m_pImpl->removeDocumentEventListener( _Listener );
+        m_pImpl->removeDocumentEventListener( Listener );
     }
 
-    void DocumentEventNotifier::notifyDocumentEvent( const OUString& _EventName,
-        const Reference< XController2 >& _ViewController, const Any& _Supplement )
+    void DocumentEventNotifier::notifyDocumentEvent( const OUString& EventName,
+        const Reference< XController2 >& ViewController, const Any& Supplement )
     {
-        m_pImpl->notifyDocumentEvent( _EventName, _ViewController, _Supplement );
+        m_pImpl->notifyDocumentEvent( EventName, ViewController, Supplement );
     }
 
-    void DocumentEventNotifier::notifyDocumentEventAsync( const OUString& _EventName,
-        const Reference< XController2 >& _ViewController, const Any& _Supplement )
+    void DocumentEventNotifier::notifyDocumentEventAsync( const OUString& EventName,
+        const Reference< XController2 >& ViewController, const Any& Supplement )
     {
-        m_pImpl->notifyDocumentEventAsync( _EventName, _ViewController, _Supplement );
+        m_pImpl->notifyDocumentEventAsync( EventName, ViewController, Supplement );
     }
 
 } // namespace dbaccess

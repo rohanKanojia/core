@@ -24,55 +24,48 @@
 
 #include "scdllapi.h"
 
-#define SCSTYLEBIT_STANDARD     0x0001
-
 class ScStyleSheetPool;
 
-class ScStyleSheet : public SfxStyleSheet
+class ScStyleSheet final : public SfxStyleSheet
 {
 friend class ScStyleSheetPool;
 
 public:
 
-    enum    Usage
+    enum class Usage
     {
         UNKNOWN,
         USED,
         NOTUSED
     };
 
-private:
-    mutable ScStyleSheet::Usage eUsage;
-
-public:
-
                         ScStyleSheet( const ScStyleSheet& rStyle );
 
     virtual bool        SetParent        ( const OUString& rParentName ) override;
     SC_DLLPUBLIC void ResetParent();
-    virtual SfxItemSet& GetItemSet       () override;
+    SC_DLLPUBLIC virtual SfxItemSet& GetItemSet() override;
     virtual bool        IsUsed           () const override;
     virtual bool        HasFollowSupport () const override;
     virtual bool        HasParentSupport () const override;
-
-    virtual const OUString& GetName() const override;
-    virtual const OUString& GetParent() const override;
-    virtual const OUString& GetFollow() const override;
 
     virtual bool SetName(const OUString& rNewName, bool bReindexNow = true) override;
 
     void                SetUsage( ScStyleSheet::Usage eUse ) const { eUsage = eUse; }
     ScStyleSheet::Usage GetUsage() const { return eUsage; }
 
-protected:
-    virtual             ~ScStyleSheet();
+    /// Fix for expensive dynamic_cast
+    virtual bool isScStyleSheet() const override { return true; }
+private:
+    virtual             ~ScStyleSheet() override;
 
                 ScStyleSheet( const OUString&   rName,
-                              ScStyleSheetPool& rPool,
+                              const ScStyleSheetPool& rPool,
                               SfxStyleFamily    eFamily,
-                              sal_uInt16        nMask );
+                              SfxStyleSearchBits nMask );
 
     virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
+
+    mutable ScStyleSheet::Usage eUsage;
 };
 
 #endif // INCLUDED_SC_INC_STLSHEET_HXX

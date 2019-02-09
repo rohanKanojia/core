@@ -29,10 +29,6 @@ class SC_DLLPUBLIC ScFilterOptions : public utl::ConfigItem
 {
 private:
     bool        bWK3Flag;
-    double      fExcelColScale;
-    double      fExcelRowScale;
-
-    static css::uno::Sequence<OUString> GetPropertyNames();
 
     virtual void    ImplCommit() override;
 

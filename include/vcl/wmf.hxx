@@ -26,40 +26,9 @@ class FilterConfigItem;
 class GDIMetaFile;
 class SvStream;
 
-struct WMF_EXTERNALHEADER
-{
-    sal_uInt16 xExt;
-    sal_uInt16 yExt;
-
-    /** One of the following values:
-        <ul>
-            <li>MM_TEXT</li>
-            <li>MM_LOMETRIC</li>
-            <li>MM_HIMETRIC</li>
-            <li>MM_LOENGLISH</li>
-            <li>MM_HIENGLISH</li>
-            <li>MM_TWIPS</li>
-            <li>MM_ISOTROPIC</li>
-            <li>MM_ANISOTROPIC</li>
-        </ul>
-        If this value is 0, then no external mapmode has been defined,
-        the internal one should then be used.
-     */
-    sal_uInt16 mapMode;
-
-    WMF_EXTERNALHEADER() :
-        xExt( 0 ),
-        yExt( 0 ),
-        mapMode( 0 )
-    {
-    }
-};
-
-bool ConvertWMFToGDIMetaFile( SvStream & rStreamWMF, GDIMetaFile & rGDIMetaFile, FilterConfigItem* pConfigItem = nullptr, WMF_EXTERNALHEADER *pExtHeader = nullptr );
-
 VCL_DLLPUBLIC bool ReadWindowMetafile( SvStream& rStream, GDIMetaFile& rMTF );
 
-VCL_DLLPUBLIC bool ConvertGDIMetaFileToWMF( const GDIMetaFile & rMTF, SvStream & rTargetStream, FilterConfigItem* pConfigItem = nullptr, bool bPlaceable = true );
+VCL_DLLPUBLIC bool ConvertGDIMetaFileToWMF( const GDIMetaFile & rMTF, SvStream & rTargetStream, FilterConfigItem const * pConfigItem, bool bPlaceable = true );
 
 bool ConvertGDIMetaFileToEMF(const GDIMetaFile & rMTF, SvStream & rTargetStream);
 

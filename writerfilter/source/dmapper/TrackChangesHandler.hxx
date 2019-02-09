@@ -10,9 +10,8 @@
 #define INCLUDED_WRITERFILTER_SOURCE_DMAPPER_TRACKCHANGESHANDLER_HXX
 
 #include "LoggedResources.hxx"
-#include <memory>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <DomainMapper_Impl.hxx>
+#include "DomainMapper_Impl.hxx"
 
 namespace writerfilter {
 namespace dmapper
@@ -33,12 +32,11 @@ class TrackChangesHandler : public LoggedProperties
 
 public:
     explicit TrackChangesHandler( sal_Int32 nToken );
-    virtual ~TrackChangesHandler();
+    virtual ~TrackChangesHandler() override;
 
     /// Compute the UNO properties for the track changes object based on the received tokens.
     css::uno::Sequence<css::beans::PropertyValue> getRedlineProperties() const;
 };
-typedef std::shared_ptr<TrackChangesHandler> TrackChangesHandlerPtr;
 }}
 
 #endif

@@ -20,10 +20,10 @@
 #define INCLUDED_STARMATH_INC_FORMAT_HXX
 
 
-#include <svl/smplhint.hxx>
+#include <svl/hint.hxx>
 #include <svl/SfxBroadcaster.hxx>
 #include "utility.hxx"
-#include <types.hxx>
+#include "types.hxx"
 
 
 #define FNTNAME_TIMES   "Times New Roman"
@@ -82,12 +82,11 @@
 #define DIS_END                 23
 
 
-// to be broadcastet on format changes:
-#define HINT_FORMATCHANGED  10003
-
-enum SmHorAlign { AlignLeft, AlignCenter, AlignRight };
-
-OUString GetDefaultFontName( LanguageType nLang, sal_uInt16 nIdent );
+enum class SmHorAlign {
+    Left,
+    Center,
+    Right
+};
 
 class SmFormat : public SfxBroadcaster
 {
@@ -140,7 +139,7 @@ public:
 
     void RequestApplyChanges()
     {
-        Broadcast(SfxSimpleHint(HINT_FORMATCHANGED));
+        Broadcast(SfxHint(SfxHintId::MathFormatChanged));
     }
 
 };

@@ -64,47 +64,47 @@
 #include <memory>
 
 #include "lwpfribheader.hxx"
-#include "lwpobj.hxx"
-#include "lwpobjstrm.hxx"
+#include <lwpobj.hxx>
+#include <lwpobjstrm.hxx>
 
 #include <vector>
-#include "lwpheader.hxx"
+#include <lwpheader.hxx>
 #include "lwpdlvlist.hxx"
-#include "lwpbasetype.hxx"
-#include "lwpoverride.hxx"
-#include "lwpfoundry.hxx"
+#include <lwpbasetype.hxx>
+#include <lwpoverride.hxx>
+#include <lwpfoundry.hxx>
 #include "lwplayout.hxx"
-#include "lwpfrib.hxx"
+#include <lwpfrib.hxx>
 #include "lwpfribptr.hxx"
 #include "lwpfribtext.hxx"
-#include "xfilter/xfparagraph.hxx"
-#include "xfilter/xfdefs.hxx"
-#include "xfilter/xfparastyle.hxx"
-#include "xfilter/xfsection.hxx"
+#include <xfilter/xfparagraph.hxx>
+#include <xfilter/xfdefs.hxx>
+#include <xfilter/xfparastyle.hxx>
+#include <xfilter/xfsection.hxx>
 
 class LwpParaProperty;
 class LwpPara;
 class LwpBreaksOverride;
 class LwpBulletStyleMgr;
-class LwpNotifyListPersistent
+
+class LwpNotifyListPersistent final
 {
 public:
     LwpNotifyListPersistent(){}
     void Read(LwpObjectStream* pObjStrm);
-protected:
+private:
     LwpObjectID m_Head;
 };
 
-class LwpForked3NotifyList
+class LwpForked3NotifyList final
 {
 public:
     LwpForked3NotifyList(){}
-protected:
-    LwpNotifyListPersistent m_ExtraList;
-    LwpNotifyListPersistent m_PersistentList;
-public:
     LwpNotifyListPersistent& GetExtraList() { return m_ExtraList; }
     void Read(LwpObjectStream* pObjStrm);
+private:
+    LwpNotifyListPersistent m_ExtraList;
+    LwpNotifyListPersistent m_PersistentList;
 };
 
 class LwpParaStyle;
@@ -119,9 +119,7 @@ struct ParaNumbering
     LwpFribParaNumber* pParaNumber;
     LwpFribText* pSuffix;
 
-    sal_uInt16 nPrefixLevel;//hidelevels of prefix text frib
     sal_uInt16 nNumLevel;//hidelevels of paranumber frib
-    sal_uInt16 nSuffixLevel;//hidelevels of suffix text frib
 
     ParaNumbering()
     {
@@ -133,9 +131,7 @@ struct ParaNumbering
         pPrefix = nullptr;
         pParaNumber = nullptr;
         pSuffix = nullptr;
-        nPrefixLevel = 0;
         nNumLevel = 0;
-        nSuffixLevel = 0;
     }
 };
 
@@ -143,7 +139,7 @@ class LwpDropcapLayout;
 class LwpPara : public LwpDLVList
 {
 public:
-    LwpPara(LwpObjectHeader& objHdr, LwpSvStream* pStrm);
+    LwpPara(LwpObjectHeader const & objHdr, LwpSvStream* pStrm);
 
     void Read() override;
     void RegisterStyle() override;
@@ -161,7 +157,7 @@ public:
     LwpNumberingOverride* GetParaNumbering();
 
     inline LwpSilverBullet* GetSilverBullet();
-    OUString GetBulletChar() const;
+    const OUString& GetBulletChar() const;
     sal_uInt32 GetBulletFontID() const;
     sal_uInt16 GetLevel() const;
     bool GetBulletFlag() const;
@@ -171,28 +167,24 @@ public:
     double GetBelowSpacing();
     LwpParaProperty* GetProperty(sal_uInt32 nPropType);
     void GatherDropcapInfo();
-    OUString GetBulletStyleName() const;
+    const OUString& GetBulletStyleName() const;
     void SetBelowSpacing(double value);
     void SetBulletFlag(bool bFlag);
     void SetIndent(LwpIndentOverride* pIndentOverride);
     void SetFirstFrib(const OUString& Content,sal_uInt32 FontID);
-    OUString GetContentText(bool bAllText = false);
+    OUString const & GetContentText(bool bAllText = false);
 
     void SetParaDropcap(bool bFlag);
-    void SetDropcapLines(sal_uInt16 number);
-    void SetDropcapChars(sal_uInt32 chars);
     void SetDropcapLayout(LwpDropcapLayout* pLayout);
 
     XFContentContainer* GetXFContainer();
     void AddXFContent(XFContent* pCont);
     void SetXFContainer(XFContentContainer* pCont);
-    void FindLayouts();// for register pagelayout
     void RegisterTabStyle(XFParaStyle* pXFParaStyle);
 
     LwpBulletStyleMgr* GetBulletStyleMgr();
-    sal_uInt32 GetOrdinal(){ return m_nOrdinal;}
-    bool operator <(LwpPara& Other);
-    bool ComparePagePosition(LwpVirtualLayout* pPreLayout, LwpVirtualLayout* pNextLayout);
+    bool operator <(LwpPara const & Other);
+    bool ComparePagePosition(LwpVirtualLayout const * pPreLayout, LwpVirtualLayout const * pNextLayout);
 
     bool IsInCell();
 
@@ -207,18 +199,18 @@ protected:
     sal_uInt16  m_nFlags;
     sal_uInt16  m_nLevel;
     LwpFribPtr  m_Fribs;
-    LwpParaProperty*  m_pProps;
+    std::vector< std::unique_ptr<LwpParaProperty> >  m_vProps;
     //LwpForked3NotifyList* m_NotifyList;   //not saved
 
     OUString m_StyleName;
     OUString m_ParentStyleName;//Add to support toc
-    LwpBreaksOverride* m_pBreaks;
+    std::unique_ptr<LwpBreaksOverride> m_pBreaks;
     OUString m_AftPageBreakName;
     OUString m_BefPageBreakName;
     OUString m_AftColumnBreakName;
 
     OUString m_BefColumnBreakName;
-    LwpIndentOverride* m_pIndentOverride;
+    std::unique_ptr<LwpIndentOverride> m_pIndentOverride;
     OUString m_Content;//for silver bullet,get text of first frib
     sal_uInt32 m_FontID;//for silver bullet
     OUString m_AllText;//get all text in this paragraph
@@ -226,8 +218,8 @@ protected:
     bool m_bHasBullet;
     LwpObjectID m_aSilverBulletID;
     LwpSilverBullet* m_pSilverBullet;
-    LwpBulletOverride* m_pBullOver;
-    std::unique_ptr<LwpNumberingOverride> m_pParaNumbering;
+    std::unique_ptr<LwpBulletOverride> m_xBullOver;
+    std::unique_ptr<LwpNumberingOverride> m_xParaNumbering;
     OUString m_aBulletStyleName;
     bool m_bBullContinue;
     //end add
@@ -239,7 +231,7 @@ protected:
     LwpDropcapLayout* m_pDropcapLayout;
     double m_BelowSpacing;
 
-    XFContentContainer* m_pXFContainer; //Current container for VO_PARA
+    rtl::Reference<XFContentContainer> m_xXFContainer; //Current container for VO_PARA
 
     enum
     {
@@ -264,7 +256,7 @@ protected:
         MAX_INDENT_LEVELS   = 10
     };
 private:
-    virtual ~LwpPara();
+    virtual ~LwpPara() override;
 
     static void OverrideAlignment(LwpAlignmentOverride* base,LwpAlignmentOverride* over,XFParaStyle* pOverStyle);
     void OverrideIndent(LwpIndentOverride* base,LwpIndentOverride* over,XFParaStyle* pOverStyle);
@@ -273,23 +265,25 @@ private:
     void OverrideParaBreaks(LwpParaProperty* pProps, XFParaStyle* pOverStyle);
 
     void OverrideParaBullet(LwpParaProperty* pProps);
-    void OverrideParaNumbering(LwpParaProperty* pProps);
+    void OverrideParaNumbering(LwpParaProperty const * pProps);
 
-    void RegisterMasterPage(XFParaStyle* pBaseStyle);
+    void RegisterMasterPage(XFParaStyle const * pBaseStyle);
     void RegisterNewSectionStyle(LwpPageLayout* pLayout);
 
     void ParseDropcapContent();
-    XFContentContainer* AddBulletList(XFContentContainer* pCont);
+    rtl::Reference<XFContentContainer> AddBulletList(XFContentContainer* pCont);
     void AddBreakAfter(XFContentContainer* pCont);
     void AddBreakBefore(XFContentContainer* pCont);
-    XFSection* CreateXFSection();
+    rtl::Reference<XFSection> CreateXFSection();
+
+    void ReadPropertyList(LwpObjectStream* pFile);
 };
 
 inline LwpSilverBullet* LwpPara::GetSilverBullet()
 {
     return m_pSilverBullet;
 }
-inline OUString LwpPara::GetBulletChar() const
+inline const OUString& LwpPara::GetBulletChar() const
 {
     return m_Content;
 }
@@ -315,31 +309,29 @@ inline LwpFribPtr& LwpPara::GetFribs()
 }
 inline XFContentContainer* LwpPara::GetXFContainer()
 {
-    return m_pXFContainer;
+    return m_xXFContainer.get();
 }
-inline OUString LwpPara::GetBulletStyleName() const
+inline const OUString& LwpPara::GetBulletStyleName() const
 {
     return m_aBulletStyleName;
 }
 inline void LwpPara::AddXFContent(XFContent* pCont)
 {
-    if (!m_pXFContainer)
+    if (!m_xXFContainer)
         throw std::runtime_error("paragraph lacks container");
-    m_pXFContainer->Add(pCont);
+    m_xXFContainer->Add(pCont);
 }
 inline void LwpPara::SetXFContainer(XFContentContainer* pCont)
 {
-    m_pXFContainer = pCont;
+    m_xXFContainer.set(pCont);
 }
 inline LwpIndentOverride* LwpPara::GetIndent()
 {
-    return m_pIndentOverride;
+    return m_pIndentOverride.get();
 }
 inline void LwpPara::SetIndent(LwpIndentOverride* pIndentOverride)
 {
-    if (m_pIndentOverride)
-        delete m_pIndentOverride;
-    m_pIndentOverride = pIndentOverride;
+    m_pIndentOverride.reset( pIndentOverride );
 }
 inline LwpObjectID& LwpPara::GetStoryID()
 {
@@ -354,14 +346,6 @@ inline LwpStory* LwpPara::GetStory()
 inline void LwpPara::SetParaDropcap(bool bFlag)
 {
     m_bHasDropcap = bFlag;
-}
-inline void LwpPara::SetDropcapLines(sal_uInt16 number)
-{
-    m_nLines = number;
-}
-inline void LwpPara::SetDropcapChars(sal_uInt32 chars)
-{
-    m_nChars = chars;
 }
 inline void LwpPara::SetDropcapLayout(LwpDropcapLayout* pLayout)
 {

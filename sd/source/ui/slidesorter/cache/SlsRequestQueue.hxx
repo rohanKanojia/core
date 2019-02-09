@@ -21,8 +21,7 @@
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_CACHE_SLSREQUESTQUEUE_HXX
 
 #include "SlsRequestPriorityClass.hxx"
-#include "cache/SlsCacheContext.hxx"
-#include <drawdoc.hxx>
+#include <cache/SlsCacheContext.hxx>
 #include <osl/mutex.hxx>
 #include <svx/sdrpageuser.hxx>
 
@@ -30,9 +29,7 @@
 
 namespace sd { namespace slidesorter { namespace cache {
 
-class RequestData;
-
-/** The request queue stores requests that are described by the RequestData
+/** The request queue stores requests that are described by the Request
     sorted according to priority class and then priority.
 */
 class RequestQueue : public sdr::PageUser
@@ -56,15 +53,19 @@ public:
     */
     void AddRequest (
         CacheKey aKey,
-        RequestPriorityClass eRequestClass,
-        bool bInsertWithHighestPriority = false);
+        RequestPriorityClass eRequestClass);
 
     /** Remove the specified request from the queue.
         @param aKey
             It is OK when the specified request is not a member of the
             queue.
     */
-    void RemoveRequest (CacheKey aKey);
+#if OSL_DEBUG_LEVEL >=2
+bool
+#else
+void
+#endif
+    RemoveRequest (CacheKey aKey);
 
     /** Change the priority class of the specified request.
     */

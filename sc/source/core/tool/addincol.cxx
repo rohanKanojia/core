@@ -23,6 +23,8 @@
 #include <vcl/settings.hxx>
 #include <sfx2/objsh.hxx>
 #include <unotools/charclass.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
 #include <com/sun/star/container/XContentEnumerationAccess.hpp>
 #include <com/sun/star/lang/XServiceName.hpp>
@@ -37,21 +39,24 @@
 #include <com/sun/star/lang/Locale.hpp>
 #include <com/sun/star/sheet/XCompatibilityNames.hpp>
 #include <com/sun/star/sheet/NoConvergenceException.hpp>
+#include <com/sun/star/sheet/XAddIn.hpp>
+#include <com/sun/star/sheet/XVolatileResult.hpp>
 
-#include "addincol.hxx"
-#include "addinhelpid.hxx"
-#include "compiler.hxx"
-#include "scmatrix.hxx"
-#include "addinlis.hxx"
+#include <addincol.hxx>
+#include <addinhelpid.hxx>
+#include <compiler.hxx>
+#include <scmatrix.hxx>
+#include <addinlis.hxx>
 #include <formula/errorcodes.hxx>
-#include "scfuncs.hrc"
-#include "optutil.hxx"
-#include "addincfg.hxx"
-#include "scmod.hxx"
-#include "rangeseq.hxx"
-#include "funcdesc.hxx"
+#include <formula/funcvarargs.h>
+#include <sc.hrc>
+#include <optutil.hxx>
+#include <addincfg.hxx>
+#include <scmod.hxx>
+#include <rangeseq.hxx>
+#include <funcdesc.hxx>
 #include <svl/sharedstring.hxx>
-#include "formulaopt.hxx"
+#include <formulaopt.hxx>
 #include <memory>
 
 using namespace com::sun::star;
@@ -80,12 +85,10 @@ ScUnoAddInFuncData::ScUnoAddInFuncData( const OUString& rNam, const OUString& rL
 {
     if ( nArgCount )
     {
-        pArgDescs = new ScAddInArgDesc[nArgCount];
+        pArgDescs.reset( new ScAddInArgDesc[nArgCount] );
         for (long i=0; i<nArgCount; i++)
             pArgDescs[i] = pAD[i];
     }
-    else
-        pArgDescs = nullptr;
 
     aUpperName = ScGlobal::pCharClass->uppercase(aUpperName);
     aUpperLocal = ScGlobal::pCharClass->uppercase(aUpperLocal);
@@ -93,7 +96,6 @@ ScUnoAddInFuncData::ScUnoAddInFuncData( const OUString& rNam, const OUString& rL
 
 ScUnoAddInFuncData::~ScUnoAddInFuncData()
 {
-    delete[] pArgDescs;
 }
 
 const ::std::vector<ScUnoAddInFuncData::LocalizedName>& ScUnoAddInFuncData::GetCompNames() const
@@ -117,9 +119,9 @@ const ::std::vector<ScUnoAddInFuncData::LocalizedName>& ScUnoAddInFuncData::GetC
                     const sheet::LocalizedName* pArray = aCompNames.getArray();
                     for (sal_Int32 i=0; i<nSeqLen; i++)
                     {
-                        maCompNames.push_back( LocalizedName(
+                        maCompNames.emplace_back(
                                     LanguageTag::convertToBcp47( pArray[i].Locale, false),
-                                    pArray[i].Name));
+                                    pArray[i].Name);
                     }
                 }
             }
@@ -145,17 +147,15 @@ bool ScUnoAddInFuncData::GetExcelName( LanguageType eDestLang, OUString& rRetExc
     if ( !rCompNames.empty() )
     {
         LanguageTag aLanguageTag( eDestLang);
-        const OUString aSearch( aLanguageTag.getBcp47());
+        const OUString& aSearch( aLanguageTag.getBcp47());
 
         // First, check exact match without fallback overhead.
-        ::std::vector<LocalizedName>::const_iterator itNames( rCompNames.begin());
-        for ( ; itNames != rCompNames.end(); ++itNames)
+        ::std::vector<LocalizedName>::const_iterator itNames = std::find_if(rCompNames.begin(), rCompNames.end(),
+            [&aSearch](const LocalizedName& rName) { return rName.maLocale == aSearch; });
+        if (itNames != rCompNames.end())
         {
-            if ((*itNames).maLocale == aSearch)
-            {
-                rRetExcelName = (*itNames).maName;
-                return true;
-            }
+            rRetExcelName = (*itNames).maName;
+            return true;
         }
 
         // Second, try match of fallback search with fallback locales,
@@ -163,28 +163,22 @@ bool ScUnoAddInFuncData::GetExcelName( LanguageType eDestLang, OUString& rRetExc
         ::std::vector< OUString > aFallbackSearch( aLanguageTag.getFallbackStrings( true));
         if (aSearch != "en-US")
         {
-            aFallbackSearch.push_back( "en-US");
+            aFallbackSearch.emplace_back("en-US");
             if (aSearch != "en")
             {
-                aFallbackSearch.push_back( "en");
+                aFallbackSearch.emplace_back("en");
             }
         }
-        ::std::vector< OUString >::const_iterator itSearch( aFallbackSearch.begin());
-        for ( ; itSearch != aFallbackSearch.end(); ++itSearch)
+        for (const auto& rSearch : aFallbackSearch)
         {
-            itNames = rCompNames.begin();
-            for ( ; itNames != rCompNames.end(); ++itNames)
+            for (const auto& rCompName : rCompNames)
             {
                 // We checked already the full tag, start with second.
-                ::std::vector< OUString > aFallbackLocales( LanguageTag( (*itNames).maLocale).getFallbackStrings( false));
-                for (::std::vector< OUString >::const_iterator itLocales( aFallbackLocales.begin());
-                        itLocales != aFallbackLocales.end(); ++itLocales)
+                ::std::vector< OUString > aFallbackLocales( LanguageTag( rCompName.maLocale).getFallbackStrings( false));
+                if (std::find(aFallbackLocales.begin(), aFallbackLocales.end(), rSearch) != aFallbackLocales.end())
                 {
-                    if (*itLocales == *itSearch)
-                    {
-                        rRetExcelName = (*itNames).maName;
-                        return true;
-                    }
+                    rRetExcelName = rCompName.maName;
+                    return true;
                 }
             }
         }
@@ -204,17 +198,15 @@ void ScUnoAddInFuncData::SetFunction( const uno::Reference< reflection::XIdlMeth
 
 void ScUnoAddInFuncData::SetArguments( long nNewCount, const ScAddInArgDesc* pNewDescs )
 {
-    delete[] pArgDescs;
-
     nArgCount = nNewCount;
     if ( nArgCount )
     {
-        pArgDescs = new ScAddInArgDesc[nArgCount];
+        pArgDescs.reset( new ScAddInArgDesc[nArgCount] );
         for (long i=0; i<nArgCount; i++)
             pArgDescs[i] = pNewDescs[i];
     }
     else
-        pArgDescs = nullptr;
+        pArgDescs.reset();
 }
 
 void ScUnoAddInFuncData::SetCallerPos( long nNewPos )
@@ -224,31 +216,20 @@ void ScUnoAddInFuncData::SetCallerPos( long nNewPos )
 
 ScUnoAddInCollection::ScUnoAddInCollection() :
     nFuncCount( 0 ),
-    ppFuncData( nullptr ),
-    pExactHashMap( nullptr ),
-    pNameHashMap( nullptr ),
-    pLocalHashMap( nullptr ),
     bInitialized( false )
 {
 }
 
 ScUnoAddInCollection::~ScUnoAddInCollection()
 {
-    Clear();
 }
 
 void ScUnoAddInCollection::Clear()
 {
-    DELETEZ( pExactHashMap );
-    DELETEZ( pNameHashMap );
-    DELETEZ( pLocalHashMap );
-    if ( ppFuncData )
-    {
-        for ( long i=0; i<nFuncCount; i++ )
-            delete ppFuncData[i];
-        delete[] ppFuncData;
-    }
-    ppFuncData = nullptr;
+    pExactHashMap.reset();
+    pNameHashMap.reset();
+    pLocalHashMap.reset();
+    ppFuncData.reset();
     nFuncCount = 0;
 
     bInitialized = false;
@@ -325,7 +306,7 @@ static sal_uInt16 lcl_GetCategory( const OUString& rName )
         //  all upper case
         "Database",         // ID_FUNCTION_GRP_DATABASE
         "Date&Time",        // ID_FUNCTION_GRP_DATETIME
-        "Financial",        // ID_FUNCTION_GRP_FINANZ
+        "Financial",        // ID_FUNCTION_GRP_FINANCIAL
         "Information",      // ID_FUNCTION_GRP_INFO
         "Logical",          // ID_FUNCTION_GRP_LOGIC
         "Mathematical",     // ID_FUNCTION_GRP_MATH
@@ -364,14 +345,13 @@ void ScUnoAddInCollection::ReadConfiguration()
     ScAddInCfg& rAddInConfig = SC_MOD()->GetAddInCfg();
 
     // additional, temporary config item for the compatibility names
-    ScLinkConfigItem aAllLocalesConfig( OUString(CFGPATH_ADDINS), ConfigItemMode::AllLocales );
+    ScLinkConfigItem aAllLocalesConfig( CFGPATH_ADDINS, ConfigItemMode::AllLocales );
     // CommitLink is not used (only reading values)
 
     const OUString sSlash('/');
 
     // get the list of add-ins (services)
-    OUString aEmptyString;
-    uno::Sequence<OUString> aServiceNames = rAddInConfig.GetNodeNames( aEmptyString );
+    uno::Sequence<OUString> aServiceNames = rAddInConfig.GetNodeNames( "" );
 
     sal_Int32 nServiceCount = aServiceNames.getLength();
     for ( sal_Int32 nService = 0; nService < nServiceCount; nService++ )
@@ -390,22 +370,21 @@ void ScUnoAddInCollection::ReadConfiguration()
         nFuncCount = nNewCount+nOld;
         if ( nOld )
         {
-            ScUnoAddInFuncData** ppNew = new ScUnoAddInFuncData*[nFuncCount];
+            std::unique_ptr<std::unique_ptr<ScUnoAddInFuncData>[]> ppNew(new std::unique_ptr<ScUnoAddInFuncData>[nFuncCount]);
             for (long i=0; i<nOld; i++)
-                ppNew[i] = ppFuncData[i];
-            delete[] ppFuncData;
-            ppFuncData = ppNew;
+                ppNew[i] = std::move(ppFuncData[i]);
+            ppFuncData = std::move(ppNew);
         }
         else
-            ppFuncData = new ScUnoAddInFuncData*[nFuncCount];
+            ppFuncData.reset( new std::unique_ptr<ScUnoAddInFuncData>[nFuncCount] );
 
         //TODO: adjust bucket count?
         if ( !pExactHashMap )
-            pExactHashMap = new ScAddInHashMap;
+            pExactHashMap.reset( new ScAddInHashMap );
         if ( !pNameHashMap )
-            pNameHashMap = new ScAddInHashMap;
+            pNameHashMap.reset( new ScAddInHashMap );
         if ( !pLocalHashMap )
-            pLocalHashMap = new ScAddInHashMap;
+            pLocalHashMap.reset( new ScAddInHashMap );
 
         //TODO: get the function information in a single call for all functions?
 
@@ -436,14 +415,10 @@ void ScUnoAddInCollection::ReadConfiguration()
                 aFuncPropPath += pFuncNameArray[nFuncPos];
                 aFuncPropPath += sSlash;
 
-                uno::Sequence<OUString> aFuncPropNames(CFG_FUNCPROP_COUNT);
-                OUString* pNameArray = aFuncPropNames.getArray();
-                pNameArray[CFG_FUNCPROP_DISPLAYNAME] = aFuncPropPath
-                    + CFGSTR_DISPLAYNAME;
-                pNameArray[CFG_FUNCPROP_DESCRIPTION] = aFuncPropPath
-                    + CFGSTR_DESCRIPTION;
-                pNameArray[CFG_FUNCPROP_CATEGORY] = aFuncPropPath
-                    + CFGSTR_CATEGORY;
+                uno::Sequence<OUString> aFuncPropNames{
+                    (aFuncPropPath + CFGSTR_DISPLAYNAME), // CFG_FUNCPROP_DISPLAYNAME
+                    (aFuncPropPath + CFGSTR_DESCRIPTION), // CFG_FUNCPROP_DESCRIPTION
+                    (aFuncPropPath + CFGSTR_CATEGORY)};   // CFG_FUNCPROP_CATEGORY
 
                 uno::Sequence<uno::Any> aFuncProperties = rAddInConfig.GetProperties( aFuncPropNames );
                 if ( aFuncProperties.getLength() == CFG_FUNCPROP_COUNT )
@@ -475,12 +450,12 @@ void ScUnoAddInCollection::ReadConfiguration()
                         for ( sal_Int32 nLocale = 0; nLocale < nLocaleCount; nLocale++ )
                         {
                             // PropertyValue name is the locale ("convert" from
-                            // string to string to canonicalize)
+                            // string to canonicalize)
                             OUString aLocale( LanguageTag( pConfigArray[nLocale].Name, true).getBcp47( false));
                             // PropertyValue value is the localized value (string in this case)
                             OUString aName;
                             pConfigArray[nLocale].Value >>= aName;
-                            aCompNames.push_back( ScUnoAddInFuncData::LocalizedName( aLocale, aName));
+                            aCompNames.emplace_back( aLocale, aName);
                         }
                     }
                 }
@@ -489,7 +464,6 @@ void ScUnoAddInCollection::ReadConfiguration()
 
                 std::unique_ptr<ScAddInArgDesc[]> pVisibleArgs;
                 long nVisibleCount = 0;
-                long nCallerPos = SC_CALLERPOS_NONE;
 
                 OUString aArgumentsPath(aFuncPropPath + CFGSTR_PARAMETERS);
 
@@ -557,24 +531,21 @@ void ScUnoAddInCollection::ReadConfiguration()
                     aFuncName, aLocalName, aDescription,
                     nCategory, sHelpId,
                     xFunc, aObject,
-                    nVisibleCount, pVisibleArgs.get(), nCallerPos );
+                    nVisibleCount, pVisibleArgs.get(), SC_CALLERPOS_NONE );
 
                 pData->SetCompNames( aCompNames );
 
-                ppFuncData[nFuncPos+nOld] = pData;
+                ppFuncData[nFuncPos+nOld].reset(pData);
 
-                pExactHashMap->insert(
-                        ScAddInHashMap::value_type(
+                pExactHashMap->emplace(
                             pData->GetOriginalName(),
-                            pData ) );
-                pNameHashMap->insert(
-                        ScAddInHashMap::value_type(
+                            pData );
+                pNameHashMap->emplace(
                             pData->GetUpperName(),
-                            pData ) );
-                pLocalHashMap->insert(
-                        ScAddInHashMap::value_type(
+                            pData );
+                pLocalHashMap->emplace(
                             pData->GetUpperLocal(),
-                            pData ) );
+                            pData );
             }
         }
     }
@@ -582,8 +553,8 @@ void ScUnoAddInCollection::ReadConfiguration()
 
 void ScUnoAddInCollection::LoadComponent( const ScUnoAddInFuncData& rFuncData )
 {
-    OUString aFullName = rFuncData.GetOriginalName();
-    sal_Int32 nPos = aFullName.lastIndexOf( (sal_Unicode) '.' );
+    const OUString& aFullName = rFuncData.GetOriginalName();
+    sal_Int32 nPos = aFullName.lastIndexOf( '.' );
     if ( nPos > 0 )
     {
         OUString aServiceName = aFullName.copy( 0, nPos );
@@ -622,31 +593,27 @@ bool ScUnoAddInCollection::GetCalcName( const OUString& rExcelName, OUString& rR
 
     for (long i=0; i<nFuncCount; i++)
     {
-        ScUnoAddInFuncData* pFuncData = ppFuncData[i];
+        ScUnoAddInFuncData* pFuncData = ppFuncData[i].get();
         if ( pFuncData )
         {
             const ::std::vector<ScUnoAddInFuncData::LocalizedName>& rNames = pFuncData->GetCompNames();
-            if ( !rNames.empty() )
+            auto bFound = std::any_of(rNames.begin(), rNames.end(),
+                [&aUpperCmp](const ScUnoAddInFuncData::LocalizedName& rName) {
+                    return ScGlobal::pCharClass->uppercase( rName.maName ) == aUpperCmp; });
+            if (bFound)
             {
-                ::std::vector<ScUnoAddInFuncData::LocalizedName>::const_iterator it( rNames.begin());
-                for ( ; it != rNames.end(); ++it)
-                {
-                    if ( ScGlobal::pCharClass->uppercase( (*it).maName ) == aUpperCmp )
-                    {
-                        //TODO: store upper case for comparing?
+                //TODO: store upper case for comparing?
 
-                        //  use the first function that has this name for any language
-                        rRetCalcName = pFuncData->GetOriginalName();
-                        return true;
-                    }
-                }
+                //  use the first function that has this name for any language
+                rRetCalcName = pFuncData->GetOriginalName();
+                return true;
             }
         }
     }
     return false;
 }
 
-inline bool IsTypeName( const OUString& rName, const uno::Type& rType )
+static bool IsTypeName( const OUString& rName, const uno::Type& rType )
 {
     return rName == rType.getTypeName();
 }
@@ -780,22 +747,21 @@ void ScUnoAddInCollection::ReadFromAddIn( const uno::Reference<uno::XInterface>&
                 nFuncCount = nNewCount+nOld;
                 if ( nOld )
                 {
-                    ScUnoAddInFuncData** ppNew = new ScUnoAddInFuncData*[nFuncCount];
+                    std::unique_ptr<std::unique_ptr<ScUnoAddInFuncData>[]> ppNew(new std::unique_ptr<ScUnoAddInFuncData>[nFuncCount]);
                     for (long i=0; i<nOld; i++)
-                        ppNew[i] = ppFuncData[i];
-                    delete[] ppFuncData;
-                    ppFuncData = ppNew;
+                        ppNew[i] = std::move(ppFuncData[i]);
+                    ppFuncData = std::move(ppNew);
                 }
                 else
-                    ppFuncData = new ScUnoAddInFuncData*[nFuncCount];
+                    ppFuncData.reset(new std::unique_ptr<ScUnoAddInFuncData>[nFuncCount]);
 
                 //TODO: adjust bucket count?
                 if ( !pExactHashMap )
-                    pExactHashMap = new ScAddInHashMap;
+                    pExactHashMap.reset( new ScAddInHashMap );
                 if ( !pNameHashMap )
-                    pNameHashMap = new ScAddInHashMap;
+                    pNameHashMap.reset( new ScAddInHashMap );
                 if ( !pLocalHashMap )
-                    pLocalHashMap = new ScAddInHashMap;
+                    pLocalHashMap.reset( new ScAddInHashMap );
 
                 const uno::Reference<reflection::XIdlMethod>* pArray = aMethods.getConstArray();
                 for (long nFuncPos=0; nFuncPos<nNewCount; nFuncPos++)
@@ -944,26 +910,23 @@ void ScUnoAddInCollection::ReadFromAddIn( const uno::Reference<uno::XInterface>&
                                     OSL_ENSURE( nDestPos==nVisibleCount, "wrong count" );
                                 }
 
-                                ppFuncData[nFuncPos+nOld] = new ScUnoAddInFuncData(
+                                ppFuncData[nFuncPos+nOld].reset( new ScUnoAddInFuncData(
                                     aFuncName, aLocalName, aDescription,
                                     nCategory, sHelpId,
                                     xFunc, aObject,
-                                    nVisibleCount, pVisibleArgs.get(), nCallerPos );
+                                    nVisibleCount, pVisibleArgs.get(), nCallerPos ) );
 
                                 const ScUnoAddInFuncData* pData =
-                                    ppFuncData[nFuncPos+nOld];
-                                pExactHashMap->insert(
-                                        ScAddInHashMap::value_type(
+                                    ppFuncData[nFuncPos+nOld].get();
+                                pExactHashMap->emplace(
                                             pData->GetOriginalName(),
-                                            pData ) );
-                                pNameHashMap->insert(
-                                        ScAddInHashMap::value_type(
+                                            pData );
+                                pNameHashMap->emplace(
                                             pData->GetUpperName(),
-                                            pData ) );
-                                pLocalHashMap->insert(
-                                        ScAddInHashMap::value_type(
+                                            pData );
+                                pLocalHashMap->emplace(
                                             pData->GetUpperLocal(),
-                                            pData ) );
+                                            pData );
                             }
                         }
                     }
@@ -973,15 +936,15 @@ void ScUnoAddInCollection::ReadFromAddIn( const uno::Reference<uno::XInterface>&
     }
 }
 
-static void lcl_UpdateFunctionList( ScFunctionList& rFunctionList, const ScUnoAddInFuncData& rFuncData )
+static void lcl_UpdateFunctionList( const ScFunctionList& rFunctionList, const ScUnoAddInFuncData& rFuncData )
 {
-    OUString aCompare = rFuncData.GetUpperLocal();    // as used in FillFunctionDescFromData
+    const OUString& aCompare = rFuncData.GetUpperLocal();    // as used in FillFunctionDescFromData
 
     sal_uLong nCount = rFunctionList.GetCount();
     for (sal_uLong nPos=0; nPos<nCount; nPos++)
     {
         const ScFuncDesc* pDesc = rFunctionList.GetFunction( nPos );
-        if ( pDesc && pDesc->pFuncName && *pDesc->pFuncName == aCompare )
+        if ( pDesc && pDesc->mxFuncName && *pDesc->mxFuncName == aCompare )
         {
             ScUnoAddInCollection::FillFunctionDescFromData( rFuncData, *const_cast<ScFuncDesc*>(pDesc) );
             break;
@@ -1134,7 +1097,7 @@ void ScUnoAddInCollection::UpdateFromAddIn( const uno::Reference<uno::XInterface
     }
 }
 
-OUString ScUnoAddInCollection::FindFunction( const OUString& rUpperName, bool bLocalFirst )
+const OUString & ScUnoAddInCollection::FindFunction( const OUString& rUpperName, bool bLocalFirst )
 {
     if (!bInitialized)
         Initialize();
@@ -1196,7 +1159,7 @@ const ScUnoAddInFuncData* ScUnoAddInCollection::GetFuncData( long nIndex )
         Initialize();
 
     if (nIndex < nFuncCount)
-        return ppFuncData[nIndex];
+        return ppFuncData[nIndex].get();
     return nullptr;
 }
 
@@ -1240,7 +1203,7 @@ bool ScUnoAddInCollection::FillFunctionDescFromData( const ScUnoAddInFuncData& r
     bool bIncomplete = !rFuncData.GetFunction().is();       //TODO: extra flag?
 
     long nArgCount = rFuncData.GetArgumentCount();
-    if ( nArgCount > USHRT_MAX )
+    if ( nArgCount > SAL_MAX_UINT16 )
         return false;
 
     if ( bIncomplete )
@@ -1248,18 +1211,18 @@ bool ScUnoAddInCollection::FillFunctionDescFromData( const ScUnoAddInFuncData& r
 
     // nFIndex is set from outside
 
-    rDesc.pFuncName = new OUString( rFuncData.GetUpperLocal() );     //TODO: upper?
+    rDesc.mxFuncName = rFuncData.GetUpperLocal();     //TODO: upper?
     rDesc.nCategory = rFuncData.GetCategory();
     rDesc.sHelpId = rFuncData.GetHelpId();
 
     OUString aDesc = rFuncData.GetDescription();
     if (aDesc.isEmpty())
         aDesc = rFuncData.GetLocalName();      // use name if no description is available
-    rDesc.pFuncDesc = new OUString( aDesc );
+    rDesc.mxFuncDesc = aDesc ;
 
     // AddInArgumentType_CALLER is already left out in FuncData
 
-    rDesc.nArgCount = (sal_uInt16)nArgCount;
+    rDesc.nArgCount = static_cast<sal_uInt16>(nArgCount);
     if ( nArgCount )
     {
         bool bMultiple = false;
@@ -1275,7 +1238,6 @@ bool ScUnoAddInCollection::FillFunctionDescFromData( const ScUnoAddInFuncData& r
             rDesc.maDefArgNames[nArg] = pArgs[nArg].aName;
             rDesc.maDefArgDescs[nArg] = pArgs[nArg].aDescription;
             rDesc.pDefArgFlags[nArg].bOptional = pArgs[nArg].bOptional;
-            rDesc.pDefArgFlags[nArg].bSuppress = false;
 
             // no empty names...
             if ( rDesc.maDefArgNames[nArg].isEmpty() )
@@ -1302,7 +1264,7 @@ bool ScUnoAddInCollection::FillFunctionDescFromData( const ScUnoAddInFuncData& r
 ScUnoAddInCall::ScUnoAddInCall( ScUnoAddInCollection& rColl, const OUString& rName,
                                 long nParamCount ) :
     bValidCount( false ),
-    nErrCode( errNoCode ),      // before function was called
+    nErrCode( FormulaError::NoCode ),      // before function was called
     bHasString( true ),
     fValue( 0.0 ),
     xMatrix( nullptr )
@@ -1369,7 +1331,7 @@ void ScUnoAddInCall::SetCaller( const uno::Reference<uno::XInterface>& rInterfac
     xCaller = rInterface;
 }
 
-void ScUnoAddInCall::SetCallerFromObjectShell( SfxObjectShell* pObjSh )
+void ScUnoAddInCall::SetCallerFromObjectShell( const SfxObjectShell* pObjSh )
 {
     if (pObjSh)
     {
@@ -1468,7 +1430,7 @@ void ScUnoAddInCall::ExecuteCallWithArgs(uno::Sequence<uno::Any>& rCallArgs)
     if ( xFunction.is() )
     {
         uno::Any aAny;
-        nErrCode = 0;
+        nErrCode = FormulaError::NONE;
 
         try
         {
@@ -1476,44 +1438,42 @@ void ScUnoAddInCall::ExecuteCallWithArgs(uno::Sequence<uno::Any>& rCallArgs)
         }
         catch(lang::IllegalArgumentException&)
         {
-            nErrCode = errIllegalArgument;
+            nErrCode = FormulaError::IllegalArgument;
         }
-
         catch(const reflection::InvocationTargetException& rWrapped)
         {
             if ( rWrapped.TargetException.getValueType().equals(
                     cppu::UnoType<lang::IllegalArgumentException>::get()) )
-                nErrCode = errIllegalArgument;
+                nErrCode = FormulaError::IllegalArgument;
             else if ( rWrapped.TargetException.getValueType().equals(
                     cppu::UnoType<sheet::NoConvergenceException>::get()) )
-                nErrCode = errNoConvergence;
+                nErrCode = FormulaError::NoConvergence;
             else
-                nErrCode = errNoValue;
+                nErrCode = FormulaError::NoValue;
         }
-
         catch(uno::Exception&)
         {
-            nErrCode = errNoValue;
+            nErrCode = FormulaError::NoValue;
         }
 
-        if (!nErrCode)
+        if (nErrCode == FormulaError::NONE)
             SetResult( aAny );      // convert result to Calc types
     }
 }
 
 void ScUnoAddInCall::SetResult( const uno::Any& rNewRes )
 {
-    nErrCode = 0;
+    nErrCode = FormulaError::NONE;
     xVarRes = nullptr;
 
     // Reflection* pRefl = rNewRes.getReflection();
 
     uno::TypeClass eClass = rNewRes.getValueTypeClass();
-    uno::Type aType = rNewRes.getValueType();
+    const uno::Type& aType = rNewRes.getValueType();
     switch (eClass)
     {
         case uno::TypeClass_VOID:
-            nErrCode = NOTAVAILABLE;         // #NA
+            nErrCode = FormulaError::NotAvailable;         // #NA
             break;
 
         case uno::TypeClass_ENUM:
@@ -1549,7 +1509,7 @@ void ScUnoAddInCall::SetResult( const uno::Any& rNewRes )
                     xVarRes.set( xInterface, uno::UNO_QUERY );
 
                 if (!xVarRes.is())
-                    nErrCode = errNoValue;          // unknown interface
+                    nErrCode = FormulaError::NoValue;          // unknown interface
             }
             break;
 
@@ -1576,7 +1536,7 @@ void ScUnoAddInCall::SetResult( const uno::Any& rNewRes )
                     }
                     if ( nMaxColCount && nRowCount )
                     {
-                        xMatrix = new ScFullMatrix(
+                        xMatrix = new ScMatrix(
                                 static_cast<SCSIZE>(nMaxColCount),
                                 static_cast<SCSIZE>(nRowCount), 0.0);
                         for (long nRow=0; nRow<nRowCount; nRow++)
@@ -1617,7 +1577,7 @@ void ScUnoAddInCall::SetResult( const uno::Any& rNewRes )
                     }
                     if ( nMaxColCount && nRowCount )
                     {
-                        xMatrix = new ScFullMatrix(
+                        xMatrix = new ScMatrix(
                                 static_cast<SCSIZE>(nMaxColCount),
                                 static_cast<SCSIZE>(nRowCount), 0.0);
                         for (long nRow=0; nRow<nRowCount; nRow++)
@@ -1658,7 +1618,7 @@ void ScUnoAddInCall::SetResult( const uno::Any& rNewRes )
                     }
                     if ( nMaxColCount && nRowCount )
                     {
-                        xMatrix = new ScFullMatrix(
+                        xMatrix = new ScMatrix(
                                 static_cast<SCSIZE>(nMaxColCount),
                                 static_cast<SCSIZE>(nRowCount), 0.0);
                         for (long nRow=0; nRow<nRowCount; nRow++)
@@ -1687,7 +1647,7 @@ void ScUnoAddInCall::SetResult( const uno::Any& rNewRes )
             }
 
             if (!xMatrix)                       // no array found
-                nErrCode = errNoValue;          //TODO: code for error in return type???
+                nErrCode = FormulaError::NoValue;          //TODO: code for error in return type???
     }
 }
 

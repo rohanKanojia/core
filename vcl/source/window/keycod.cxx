@@ -17,14 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <accel.h>
 #include <salinst.hxx>
 #include <salframe.hxx>
 #include <svdata.hxx>
 
 #include <vcl/window.hxx>
 #include <vcl/keycod.hxx>
-
-#include <tools/rc.h>
 
 static const sal_uInt16 aImplKeyFuncTab[(static_cast<int>(KeyFuncType::FRONT)+1)*4] =
 {
@@ -75,32 +76,6 @@ vcl::KeyCode::KeyCode( KeyFuncType eFunction )
     eFunc = eFunction;
 }
 
-vcl::KeyCode::KeyCode( const ResId& rResId )
-    : nKeyCodeAndModifiers(0)
-    , eFunc(KeyFuncType::DONTKNOW)
-{
-    rResId.SetRT( RSC_KEYCODE );
-
-    ResMgr* pResMgr = rResId.GetResMgr();
-    if ( pResMgr && pResMgr->GetResource( rResId ) )
-    {
-        pResMgr->Increment( sizeof( RSHEADER_TYPE ) );
-
-        sal_uLong nKeyCode  = pResMgr->ReadLong();
-        sal_uLong nModifier = pResMgr->ReadLong();
-        sal_uLong nKeyFunc  = pResMgr->ReadLong();
-
-        eFunc = (KeyFuncType)nKeyFunc;
-        if ( eFunc != KeyFuncType::DONTKNOW )
-        {
-            sal_uInt16 nDummy;
-            ImplGetKeyCode( eFunc, nKeyCodeAndModifiers, nDummy, nDummy, nDummy );
-        }
-        else
-            nKeyCodeAndModifiers = sal::static_int_cast<sal_uInt16>(nKeyCode | nModifier);
-    }
-}
-
 OUString vcl::KeyCode::GetName( vcl::Window* pWindow ) const
 {
     if ( !pWindow )
@@ -116,15 +91,15 @@ KeyFuncType vcl::KeyCode::GetFunction() const
     sal_uInt16 nCompCode = GetModifier() | GetCode();
     if ( nCompCode )
     {
-        for ( sal_uInt16 i = (sal_uInt16)KeyFuncType::NEW; i < (sal_uInt16)KeyFuncType::FRONT; i++ )
+        for ( sal_uInt16 i = sal_uInt16(KeyFuncType::NEW); i < sal_uInt16(KeyFuncType::FRONT); i++ )
         {
             sal_uInt16 nKeyCode1;
             sal_uInt16 nKeyCode2;
             sal_uInt16 nKeyCode3;
             sal_uInt16 nKeyCode4;
-            ImplGetKeyCode( (KeyFuncType)i, nKeyCode1, nKeyCode2, nKeyCode3, nKeyCode4 );
+            ImplGetKeyCode( static_cast<KeyFuncType>(i), nKeyCode1, nKeyCode2, nKeyCode3, nKeyCode4 );
             if ( (nCompCode == nKeyCode1) || (nCompCode == nKeyCode2) || (nCompCode == nKeyCode3) || (nCompCode == nKeyCode4) )
-                return (KeyFuncType)i;
+                return static_cast<KeyFuncType>(i);
         }
     }
 

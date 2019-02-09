@@ -21,19 +21,11 @@
 
 #include "FmtFilter.hxx"
 #include <osl/diagnose.h>
-#include <comphelper/sequence.hxx>
 
-#if defined _MSC_VER
-#pragma warning(push,1)
-#pragma warning(disable:4917)
-#endif
 #include <shobjidl.h>
 #include <shlguid.h>
 #include <objidl.h>
 #include <shellapi.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
 #include <string>
 #include <sstream>
@@ -58,14 +50,14 @@ struct METAFILEHEADER
 
 // convert a windows metafile picture to a openoffice metafile picture
 
-Sequence< sal_Int8 > SAL_CALL WinMFPictToOOMFPict( Sequence< sal_Int8 >& aMetaFilePict )
+Sequence< sal_Int8 > WinMFPictToOOMFPict( Sequence< sal_Int8 >& aMetaFilePict )
 {
     OSL_ASSERT( aMetaFilePict.getLength( ) == sizeof( METAFILEPICT ) );
 
     Sequence< sal_Int8 > mfpictStream;
     METAFILEPICT* pMFPict = reinterpret_cast< METAFILEPICT* >( aMetaFilePict.getArray( ) );
     HMETAFILE hMf = pMFPict->hMF;
-    sal_uInt32 nCount = GetMetaFileBitsEx( hMf, 0, NULL );
+    sal_uInt32 nCount = GetMetaFileBitsEx( hMf, 0, nullptr );
 
     if ( nCount > 0 )
     {
@@ -128,17 +120,17 @@ Sequence< sal_Int8 > SAL_CALL WinMFPictToOOMFPict( Sequence< sal_Int8 >& aMetaFi
 
 // convert a windows enhanced metafile to a openoffice metafile
 
-Sequence< sal_Int8 > SAL_CALL WinENHMFPictToOOMFPict( HENHMETAFILE hEnhMetaFile )
+Sequence< sal_Int8 > WinENHMFPictToOOMFPict( HENHMETAFILE hEnhMetaFile )
 {
     Sequence< sal_Int8 >    aRet;
     UINT                    nSize = 0;
 
     if( hEnhMetaFile &&
-        ( ( nSize = GetEnhMetaFileBits( hEnhMetaFile, 0, NULL ) ) != 0 ) )
+        ( ( nSize = GetEnhMetaFileBits( hEnhMetaFile, 0, nullptr ) ) != 0 ) )
     {
         aRet.realloc( nSize );
 
-        if( GetEnhMetaFileBits( hEnhMetaFile, nSize, (unsigned char*) aRet.getArray() ) != nSize )
+        if( GetEnhMetaFileBits( hEnhMetaFile, nSize, reinterpret_cast<unsigned char*>(aRet.getArray()) ) != nSize )
             aRet.realloc( 0 );
     }
 
@@ -147,14 +139,14 @@ Sequence< sal_Int8 > SAL_CALL WinENHMFPictToOOMFPict( HENHMETAFILE hEnhMetaFile 
 
 // convert a openoffice metafile picture to a windows metafile picture
 
-HMETAFILEPICT SAL_CALL OOMFPictToWinMFPict( Sequence< sal_Int8 >& aOOMetaFilePict )
+HMETAFILEPICT OOMFPictToWinMFPict( Sequence< sal_Int8 > const & aOOMetaFilePict )
 {
-    HMETAFILEPICT   hPict = NULL;
-    HMETAFILE       hMtf = SetMetaFileBitsEx( aOOMetaFilePict.getLength(), (unsigned char*) aOOMetaFilePict.getConstArray() );
+    HMETAFILEPICT   hPict = nullptr;
+    HMETAFILE       hMtf = SetMetaFileBitsEx( aOOMetaFilePict.getLength(), reinterpret_cast<unsigned char const *>(aOOMetaFilePict.getConstArray()) );
 
     if( hMtf )
     {
-        METAFILEPICT* pPict = (METAFILEPICT*) GlobalLock( hPict = GlobalAlloc( GHND, sizeof( METAFILEPICT ) ) );
+        METAFILEPICT* pPict = static_cast<METAFILEPICT*>(GlobalLock( hPict = GlobalAlloc( GHND, sizeof( METAFILEPICT ) ) ));
 
         pPict->mm = 8;
         pPict->xExt = 0;
@@ -169,16 +161,16 @@ HMETAFILEPICT SAL_CALL OOMFPictToWinMFPict( Sequence< sal_Int8 >& aOOMetaFilePic
 
 // convert a openoffice metafile picture to a windows enhanced metafile picture
 
-HENHMETAFILE SAL_CALL OOMFPictToWinENHMFPict( Sequence< sal_Int8 >& aOOMetaFilePict )
+HENHMETAFILE OOMFPictToWinENHMFPict( Sequence< sal_Int8 > const & aOOMetaFilePict )
 {
-    HENHMETAFILE hEnhMtf = SetEnhMetaFileBits( aOOMetaFilePict.getLength(), (unsigned char*) aOOMetaFilePict.getConstArray() );
+    HENHMETAFILE hEnhMtf = SetEnhMetaFileBits( aOOMetaFilePict.getLength(), reinterpret_cast<unsigned char const *>(aOOMetaFilePict.getConstArray()) );
 
     return hEnhMtf;
 }
 
 // convert a windows device independent bitmap into a openoffice bitmap
 
-Sequence< sal_Int8 > SAL_CALL WinDIBToOOBMP( const Sequence< sal_Int8 >& aWinDIB )
+Sequence< sal_Int8 > WinDIBToOOBMP( const Sequence< sal_Int8 >& aWinDIB )
 {
     OSL_ENSURE(sal_uInt32(aWinDIB.getLength()) > sizeof(BITMAPINFOHEADER), "CF_DIBV5/CF_DIB too small (!)");
     Sequence< sal_Int8 > ooBmpStream;
@@ -211,7 +203,7 @@ Sequence< sal_Int8 > SAL_CALL WinDIBToOOBMP( const Sequence< sal_Int8 >& aWinDIB
 
 // convert a openoffice bitmap into a windows device independent bitmap
 
-Sequence< sal_Int8 > SAL_CALL OOBmpToWinDIB( Sequence< sal_Int8 >& aOOBmp )
+Sequence< sal_Int8 > OOBmpToWinDIB( Sequence< sal_Int8 >& aOOBmp )
 {
     Sequence< sal_Int8 > winDIBStream( aOOBmp.getLength( ) - sizeof( BITMAPFILEHEADER ) );
 
@@ -222,115 +214,7 @@ Sequence< sal_Int8 > SAL_CALL OOBmpToWinDIB( Sequence< sal_Int8 >& aOOBmp )
     return winDIBStream;
 }
 
-// converts the openoffice text/html clipboard format to the HTML Format
-// well known under MS Windows
-// the MS HTML Format has a header before the real html data
-//
-// Version:1.0      Version number of the clipboard. Staring is 0.9
-// StartHTML:       Byte count from the beginning of the clipboard to the start
-//                  of the context, or -1 if no context
-// EndHTML:         Byte count from the beginning of the clipboard to the end
-//                  of the context, or -1 if no context
-// StartFragment:   Byte count from the beginning of the clipboard to the
-//                  start of the fragment
-// EndFragment:     Byte count from the beginning of the clipboard to the
-//                  end of the fragment
-// StartSelection:  Byte count from the beginning of the clipboard to the
-//                  start of the selection
-// EndSelection:    Byte count from the beginning of the clipboard to the
-//                  end of the selection
-//
-// StartSelection and EndSelection are optional
-// The fragment should be preceded and followed by the HTML comments
-// <!--StartFragment--> and <!--EndFragment--> (no space between !-- and the
-// text
-
-/*
-Sequence< sal_Int8 > SAL_CALL TextHtmlToHTMLFormat( Sequence< sal_Int8 >& aTextHtml )
-{
-    OSL_ASSERT( aTextHtml.getLength( ) > 0 );
-
-    // check parameter
-    if ( !(aTextHtml.getLength( ) > 0) )
-        return Sequence< sal_Int8 >( );
-
-    // we create a buffer with the approximated size of
-    // the HTML Format header
-    char aHTMLFmtHdr[120];
-
-    memset( aHTMLFmtHdr, 0, sizeof( aHTMLFmtHdr ) );
-
-    // fill the buffer with dummy values to calc the
-    // exact length
-
-    wsprintf(
-        aHTMLFmtHdr,
-        "Version:1.0\nStartHTML:%010d\r\nnEndHTML:%010d\r\nStartFragment:%010\r\nnEndFragment:%010d\r\n", 0, 0, 0, 0 );
-
-    sal_uInt32 lHTMLFmtHdr = rtl_str_getLength( aHTMLFmtHdr );
-
-    // the office always writes the start
-    // and end html tag in upper cases and
-    // without spaces
-    // both tags don't allow parameters
-    OString startHtmlTag( "<HTML>" );
-    OString endHtmlTag(   "</HTML>" );
-
-    // we don't include '>' into the search
-    // because the body tag allows parameters
-    // e.g. <BODY param>
-    OString startBodyTag( "<BODY" );
-    OString endBodyTag(   "</BODY" );
-
-    OString textHtml(
-        reinterpret_cast< const sal_Char* >( aTextHtml.getConstArray( ) ),
-        aTextHtml.getLength( ) );
-
-    sal_Int32 nStartHtml  = textHtml.indexOf( startHtmlTag );
-    sal_Int32 nEndHtml    = textHtml.indexOf( endHtmlTag );
-    sal_Int32 nStartFrgmt = textHtml.indexOf( startBodyTag );
-    sal_Int32 nEndFrgmt   = textHtml.indexOf( endBodyTag );
-
-    OSL_ASSERT( (nStartHtml >= 0) && (nEndHtml > nStartHtml) && (nStartFrgmt > nStartHtml) && (nEndFrgmt > nStartFrgmt) );
-
-    Sequence< sal_Int8 > aHTMLFmtSequence;
-
-    if ( (nStartHtml > -1) && (nEndHtml > -1) && (nStartFrgmt > -1) && (nEndFrgmt > -1) )
-    {
-        nStartHtml  = nStartHtml  + lHTMLFmtHdr - 1; // we start one before <HTML> Word 2000 does also so
-        nEndHtml    = nEndHtml    + lHTMLFmtHdr + endHtmlTag.getLength( ) + 1; // our SOffice 5.2 wants 2 behind </HTML>?
-        nStartFrgmt = nStartFrgmt + startBodyTag.getLength( ) + lHTMLFmtHdr; // after the <BODY> tag
-        nEndFrgmt   = nEndFrgmt   + lHTMLFmtHdr;
-
-        // fill the html header
-        memset( aHTMLFmtHdr, 0, sizeof( aHTMLFmtHdr ) );
-
-        wsprintf(
-            aHTMLFmtHdr,
-            "Version:1.0\nStartHTML:%010d\r\nEndHTML:%010d\r\nStartFragment:%010d\r\nEndFragment:%010d\r\n",
-            nStartHtml, nEndHtml, nStartFrgmt, nEndFrgmt );
-
-        // we add space for a trailing \0
-        aHTMLFmtSequence.realloc( lHTMLFmtHdr + aTextHtml.getLength( ) + 1 );
-        memset( aHTMLFmtSequence.getArray( ), 0, aHTMLFmtSequence.getLength( ) );
-
-        // copy the HTML Format header
-        memcpy(
-            static_cast< LPVOID >( aHTMLFmtSequence.getArray( ) ),
-            static_cast< LPVOID >( aHTMLFmtHdr ), lHTMLFmtHdr );
-
-        // concat the text/html
-        memcpy(
-            static_cast< LPVOID >( aHTMLFmtSequence.getArray( ) + lHTMLFmtHdr ),
-            static_cast< LPVOID >( aTextHtml.getArray( ) ),
-            aTextHtml.getLength( ) );
-    }
-
-    return aHTMLFmtSequence;
-}
-*/
-
-std::string GetHtmlFormatHeader(size_t startHtml, size_t endHtml, size_t startFragment, size_t endFragment)
+static std::string GetHtmlFormatHeader(size_t startHtml, size_t endHtml, size_t startFragment, size_t endFragment)
 {
     std::ostringstream htmlHeader;
     htmlHeader << "Version:1.0" << '\r' << '\n';
@@ -351,11 +235,11 @@ const std::string TAG_END_HTML = std::string("</html>");
 const std::string TAG_BODY = std::string("<body");
 const std::string TAG_END_BODY = std::string("</body");
 
-Sequence<sal_Int8> SAL_CALL TextHtmlToHTMLFormat(Sequence<sal_Int8>& aTextHtml)
+Sequence<sal_Int8> TextHtmlToHTMLFormat(Sequence<sal_Int8> const & aTextHtml)
 {
     OSL_ASSERT(aTextHtml.getLength() > 0);
 
-    if (!(aTextHtml.getLength() > 0))
+    if (aTextHtml.getLength() <= 0)
         return Sequence<sal_Int8>();
 
     // fill the buffer with dummy values to calc the exact length
@@ -388,10 +272,10 @@ Sequence<sal_Int8> SAL_CALL TextHtmlToHTMLFormat(Sequence<sal_Int8>& aTextHtml)
     return byteSequence;
 }
 
-std::wstring getFileExtension(const std::wstring& aFilename)
+static std::wstring getFileExtension(const std::wstring& aFilename)
 {
     std::wstring::size_type idx = aFilename.rfind(L".");
-    if ((idx != std::wstring::npos))
+    if (idx != std::wstring::npos)
     {
         return std::wstring(aFilename, idx);
     }
@@ -400,7 +284,7 @@ std::wstring getFileExtension(const std::wstring& aFilename)
 
 const std::wstring SHELL_LINK_FILE_EXTENSION = L".lnk";
 
-bool isShellLink(const std::wstring& aFilename)
+static bool isShellLink(const std::wstring& aFilename)
 {
     std::wstring ext = getFileExtension(aFilename);
     return (_wcsicmp(ext.c_str(), SHELL_LINK_FILE_EXTENSION.c_str()) == 0);
@@ -409,7 +293,7 @@ bool isShellLink(const std::wstring& aFilename)
 /** Resolve a Windows Shell Link (lnk) file. If a resolution
     is not possible simply return the provided name of the
     lnk file. */
-std::wstring getShellLinkTarget(const std::wstring& aLnkFile)
+static std::wstring getShellLinkTarget(const std::wstring& aLnkFile)
 {
     OSL_ASSERT(isShellLink(aLnkFile));
 
@@ -419,7 +303,7 @@ std::wstring getShellLinkTarget(const std::wstring& aLnkFile)
     {
         sal::systools::COMReference<IShellLinkA> pIShellLink;
         HRESULT hr = CoCreateInstance(
-            CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, reinterpret_cast<LPVOID*>(&pIShellLink));
+            CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_IShellLink, reinterpret_cast<LPVOID*>(&pIShellLink));
         if (FAILED(hr))
             return target;
 
@@ -430,7 +314,7 @@ std::wstring getShellLinkTarget(const std::wstring& aLnkFile)
         if (FAILED(hr))
             return target;
 
-        hr = pIShellLink->Resolve(NULL, SLR_UPDATE | SLR_NO_UI);
+        hr = pIShellLink->Resolve(nullptr, SLR_UPDATE | SLR_NO_UI);
         if (FAILED(hr))
             return target;
 
@@ -447,31 +331,28 @@ std::wstring getShellLinkTarget(const std::wstring& aLnkFile)
     catch(sal::systools::ComError& ex)
     {
         OSL_FAIL(ex.what());
-        (void)ex;
     }
     return target;
 }
 
-typedef std::vector<std::wstring> FileList_t;
 typedef Sequence<sal_Int8> ByteSequence_t;
 
 /* Calculate the size required for turning a string list into
    a double '\0' terminated string buffer */
-size_t CalcSizeForStringListBuffer(const FileList_t& fileList)
+static size_t CalcSizeForStringListBuffer(const std::vector<std::wstring>& fileList)
 {
     if ( fileList.empty() )
         return 0;
 
     size_t size = 1; // one for the very final '\0'
-    FileList_t::const_iterator iter_end = fileList.end();
-    for (FileList_t::const_iterator iter = fileList.begin(); iter != iter_end; ++iter)
+    for (auto const& elem : fileList)
     {
-        size += iter->length() + 1; // length including terminating '\0'
+        size += elem.length() + 1; // length including terminating '\0'
     }
-    return (size * sizeof(FileList_t::value_type::value_type));
+    return (size * sizeof(std::vector<std::wstring>::value_type::value_type));
 }
 
-ByteSequence_t FileListToByteSequence(const FileList_t& fileList)
+static ByteSequence_t FileListToByteSequence(const std::vector<std::wstring>& fileList)
 {
     ByteSequence_t bseq;
     size_t size = CalcSizeForStringListBuffer(fileList);
@@ -482,12 +363,10 @@ ByteSequence_t FileListToByteSequence(const FileList_t& fileList)
         wchar_t* p = reinterpret_cast<wchar_t*>(bseq.getArray());
         ZeroMemory(p, size);
 
-        FileList_t::const_iterator iter;
-        FileList_t::const_iterator iter_end = fileList.end();
-        for (iter = fileList.begin(); iter != iter_end; ++iter)
+        for (auto const& elem : fileList)
         {
-            wcsncpy(p, iter->c_str(), iter->length());
-            p += (iter->length() + 1);
+            wcsncpy(p, elem.c_str(), elem.length());
+            p += (elem.length() + 1);
         }
     }
     return bseq;
@@ -495,13 +374,13 @@ ByteSequence_t FileListToByteSequence(const FileList_t& fileList)
 
 ByteSequence_t CF_HDROPToFileList(HGLOBAL hGlobal)
 {
-    UINT nFiles = DragQueryFileW((HDROP)hGlobal, 0xFFFFFFFF, NULL, 0);
-    FileList_t files;
+    UINT nFiles = DragQueryFileW(static_cast<HDROP>(hGlobal), 0xFFFFFFFF, nullptr, 0);
+    std::vector<std::wstring> files;
 
     for (UINT i = 0; i < nFiles; i++)
     {
         wchar_t buff[MAX_PATH];
-        /*UINT size =*/ DragQueryFileW((HDROP)hGlobal, i, buff, MAX_PATH);
+        /*UINT size =*/ DragQueryFileW(static_cast<HDROP>(hGlobal), i, buff, MAX_PATH);
         std::wstring filename = buff;
         if (isShellLink(filename))
             filename = getShellLinkTarget(filename);
@@ -512,7 +391,7 @@ ByteSequence_t CF_HDROPToFileList(HGLOBAL hGlobal)
 
 // convert a windows bitmap handle into a openoffice bitmap
 
-Sequence< sal_Int8 > SAL_CALL WinBITMAPToOOBMP( HBITMAP aHBMP )
+Sequence< sal_Int8 > WinBITMAPToOOBMP( HBITMAP aHBMP )
 {
     Sequence< sal_Int8 > ooBmpStream;
 
@@ -525,23 +404,23 @@ Sequence< sal_Int8 > SAL_CALL WinBITMAPToOOBMP( HBITMAP aHBMP )
             sizeof(BITMAPINFO) +
             nDataBytes
             );
-        PBITMAPINFOHEADER pBmp = (PBITMAPINFOHEADER)aBitmapStream.getArray();
+        PBITMAPINFOHEADER pBmp = reinterpret_cast<PBITMAPINFOHEADER>(aBitmapStream.getArray());
         pBmp->biSize = sizeof( BITMAPINFOHEADER );
         pBmp->biWidth  = aBmpSize.cx;
         pBmp->biHeight = aBmpSize.cy;
         pBmp->biPlanes = 1;
         pBmp->biBitCount = 32;
         pBmp->biCompression = BI_RGB;
-        pBmp->biSizeImage = (DWORD)nDataBytes;
+        pBmp->biSizeImage = static_cast<DWORD>(nDataBytes);
         pBmp->biXPelsPerMeter = 1000;
         pBmp->biYPelsPerMeter = 1000;
         pBmp->biClrUsed = 0;
         pBmp->biClrImportant = 0;
-        if( GetDIBits( 0, // DC, 0 is a default GC, basically that of the desktop
+        if( GetDIBits( nullptr, // DC, 0 is a default GC, basically that of the desktop
                        aHBMP,
                        0, aBmpSize.cy,
                        aBitmapStream.getArray() + sizeof(BITMAPINFO),
-                       (LPBITMAPINFO)pBmp,
+                       reinterpret_cast<LPBITMAPINFO>(pBmp),
                        DIB_RGB_COLORS ) )
         {
             ooBmpStream = WinDIBToOOBMP( aBitmapStream );

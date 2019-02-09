@@ -21,16 +21,24 @@
 #define INCLUDED_OOX_DRAWINGML_DRAWINGMLTYPES_HXX
 
 #include <memory>
-#include <com/sun/star/style/TabAlign.hpp>
-#include <com/sun/star/drawing/TextVerticalAdjust.hpp>
-#include <com/sun/star/drawing/Hatch.hpp>
-#include <com/sun/star/geometry/IntegerRectangle2D.hpp>
+
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/awt/Size.hpp>
-#include <com/sun/star/xml/sax/XFastAttributeList.hpp>
-
+#include <com/sun/star/drawing/TextVerticalAdjust.hpp>
+#include <com/sun/star/geometry/IntegerRectangle2D.hpp>
+#include <com/sun/star/style/ParagraphAdjust.hpp>
+#include <com/sun/star/style/TabAlign.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <o3tl/safeint.hxx>
 #include <oox/dllapi.h>
 #include <oox/helper/helper.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+
+namespace com { namespace sun { namespace star {
+    namespace drawing { struct Hatch; }
+    namespace xml { namespace sax { class XFastAttributeList; } }
+} } }
 
 namespace oox {
 namespace drawingml {
@@ -57,8 +65,6 @@ typedef std::shared_ptr< Shape3DProperties > Shape3DPropertiesPtr;
 
 struct TextCharacterProperties;
 typedef std::shared_ptr< TextCharacterProperties > TextCharacterPropertiesPtr;
-
-struct TextBodyProperties;
 
 struct EffectProperties;
 typedef std::shared_ptr< EffectProperties > EffectPropertiesPtr;
@@ -125,7 +131,7 @@ sal_Int16 GetFontStrikeout( sal_Int32 nToken );
 sal_Int16 GetCaseMap( sal_Int32 nToken );
 
 /** converts a paragraph align to a ParaAdjust */
-sal_Int16 GetParaAdjust( sal_Int32 nAlign );
+css::style::ParagraphAdjust GetParaAdjust( sal_Int32 nAlign );
 
 // Converts vertical adjust tokens to a TextVerticalAdjust item
 css::drawing::TextVerticalAdjust GetTextVerticalAdjust( sal_Int32 nToken );
@@ -146,8 +152,24 @@ struct IndexRange {
 /** retrieve the content of CT_IndexRange */
 IndexRange GetIndexRange( const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttributes );
 
+/**
+* nRotation is a 100th of a degree and the return value is
+* in a 60,000th of a degree
+*
+* Also rotation is in opposite directions so multiply with -1
+*/
+inline OString calcRotationValue(sal_Int32 nRotation)
+{
+    if (nRotation > 18000) // 180 degree
+    {
+        nRotation -= 36000;
+    }
+    nRotation *= -600;
+    return OString::number(nRotation);
+}
 
 const sal_Int32 EMU_PER_HMM = 360;      /// 360 EMUs per 1/100 mm.
+const sal_Int32 EMU_PER_PT = 12700;
 
 /** Converts the passed 32-bit integer value from 1/100 mm to EMUs. */
 inline sal_Int64 convertHmmToEmu( sal_Int32 nValue )
@@ -159,9 +181,14 @@ inline sal_Int64 convertHmmToEmu( sal_Int32 nValue )
 inline sal_Int32 convertEmuToHmm( sal_Int64 nValue )
 {
     sal_Int32 nCorrection = (nValue > 0 ? 1 : -1) * EMU_PER_HMM / 2; // So that the implicit floor will round.
-    return getLimitedValue< sal_Int32, sal_Int64 >( (nValue + nCorrection) / EMU_PER_HMM, SAL_MIN_INT32, SAL_MAX_INT32 );
+    return getLimitedValue<sal_Int32, sal_Int64>(o3tl::saturating_add<sal_Int64>(nValue, nCorrection) / EMU_PER_HMM, SAL_MIN_INT32, SAL_MAX_INT32);
 }
 
+/** Converts the passed 64-bit integer value from EMUs to Points. */
+inline float convertEmuToPoints( sal_Int64 nValue )
+{
+    return static_cast<float>(nValue) / EMU_PER_PT;
+}
 
 /** A structure for a point with 64-bit integer components. */
 struct EmuPoint
@@ -189,7 +216,6 @@ struct EmuSize
 struct EmuRectangle : public EmuPoint, public EmuSize
 {
                  EmuRectangle() {}
-    explicit     EmuRectangle( const EmuPoint& rPos, const EmuSize& rSize ) : EmuPoint( rPos ), EmuSize( rSize ) {}
     explicit     EmuRectangle( sal_Int64 nX, sal_Int64 nY, sal_Int64 nWidth, sal_Int64 nHeight ) : EmuPoint( nX, nY ), EmuSize( nWidth, nHeight ) {}
 
     void         setPos( const EmuPoint& rPos ) { static_cast< EmuPoint& >( *this ) = rPos; }

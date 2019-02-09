@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DrawViewShell.hxx"
-#include "ViewShellImplementation.hxx"
+#include <DrawViewShell.hxx>
+#include <ViewShellImplementation.hxx>
 
 #include <svx/svxids.hrc>
 #include <svx/imapdlg.hxx>
@@ -28,20 +28,20 @@
 #include <svx/svdograf.hxx>
 #include <svx/svdoole2.hxx>
 
-#include "app.hrc"
+#include <app.hrc>
 
-#include "drawdoc.hxx"
-#include "slideshow.hxx"
-#include "imapinfo.hxx"
-#include "sdmod.hxx"
-#include "optsitem.hxx"
-#include "FrameView.hxx"
-#include "drawview.hxx"
-#include "fupoor.hxx"
+#include <drawdoc.hxx>
+#include <slideshow.hxx>
+#include <imapinfo.hxx>
+#include <sdmod.hxx>
+#include <optsitem.hxx>
+#include <FrameView.hxx>
+#include <drawview.hxx>
+#include <fupoor.hxx>
 
 namespace sd {
 
-void DrawViewShell::ExecIMap( SfxRequest& rReq )
+void DrawViewShell::ExecIMap( SfxRequest const & rReq )
 {
     // during a slide show, nothing is executed!
     if(HasCurrentFunction(SID_PRESENTATION) )
@@ -59,10 +59,10 @@ void DrawViewShell::ExecIMap( SfxRequest& rReq )
             if ( pDlg->GetEditingObject() == static_cast<void*>(pSdrObj) )
             {
                 const ImageMap& rImageMap = pDlg->GetImageMap();
-                SdIMapInfo*     pIMapInfo = GetDoc()->GetIMapInfo( pSdrObj );
+                SdIMapInfo*     pIMapInfo = SdDrawDocument::GetIMapInfo( pSdrObj );
 
                 if ( !pIMapInfo )
-                    pSdrObj->AppendUserData( new SdIMapInfo( rImageMap ) );
+                    pSdrObj->AppendUserData( std::unique_ptr<SdrObjUserData>(new SdIMapInfo( rImageMap )) );
                 else
                     pIMapInfo->SetImageMap( rImageMap );
 

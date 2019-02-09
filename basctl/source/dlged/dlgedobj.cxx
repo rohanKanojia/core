@@ -17,16 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dlged.hxx"
-#include "dlgeddef.hxx"
-#include "dlgedlist.hxx"
-#include "dlgedobj.hxx"
-#include "dlgedpage.hxx"
-#include "dlgedview.hxx"
-#include "iderid.hxx"
-#include "localizationmgr.hxx"
+#include <sal/config.h>
+#include <sal/log.hxx>
 
-#include "dlgresid.hrc"
+#include <cassert>
+
+#include <dlged.hxx>
+#include <dlgeddef.hxx>
+#include <dlgedlist.hxx>
+#include <dlgedobj.hxx>
+#include <dlgedpage.hxx>
+#include <dlgedview.hxx>
+#include <localizationmgr.hxx>
+#include <strings.hxx>
 
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/form/binding/XBindableValue.hpp>
@@ -39,6 +42,7 @@
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/script/XScriptEventsSupplier.hpp>
 #include <com/sun/star/table/CellAddress.hpp>
+#include <cppuhelper/exc_hlp.hxx>
 #include <o3tl/functional.hxx>
 #include <unotools/sharedunocomponent.hxx>
 #include <vcl/svapp.hxx>
@@ -61,31 +65,27 @@ DlgEditor& DlgEdObj::GetDialogEditor ()
         return pDlgEdForm->GetDlgEditor();
 }
 
-DlgEdObj::DlgEdObj()
-          :SdrUnoObj(OUString())
-          ,bIsListening(false)
-          ,pDlgEdForm( nullptr )
+DlgEdObj::DlgEdObj(SdrModel& rSdrModel)
+:   SdrUnoObj(rSdrModel, OUString())
+    ,bIsListening(false)
+    ,pDlgEdForm( nullptr )
 {
 }
 
-DlgEdObj::DlgEdObj(const OUString& rModelName,
-                   const css::uno::Reference< css::lang::XMultiServiceFactory >& rxSFac)
-          :SdrUnoObj(rModelName, rxSFac)
-          ,bIsListening(false)
-          ,pDlgEdForm( nullptr )
+DlgEdObj::DlgEdObj(
+    SdrModel& rSdrModel,
+    const OUString& rModelName,
+    const css::uno::Reference< css::lang::XMultiServiceFactory >& rxSFac)
+:   SdrUnoObj(rSdrModel, rModelName, rxSFac)
+    ,bIsListening(false)
+    ,pDlgEdForm( nullptr )
 {
 }
 
 DlgEdObj::~DlgEdObj()
 {
     if ( isListening() )
-        EndListening();
-}
-
-void DlgEdObj::SetPage(SdrPage* _pNewPage)
-{
-    // now set the page
-    SdrUnoObj::SetPage(_pNewPage);
+        EndListening(true);
 }
 
 namespace
@@ -129,7 +129,7 @@ bool DlgEdObj::TransformSdrToControlCoordinates(
     DlgEdForm* pForm = nullptr;
     if ( !lcl_getDlgEdForm( this, pForm ) )
         return false;
-    Rectangle aFormRect = pForm->GetSnapRect();
+    tools::Rectangle aFormRect = pForm->GetSnapRect();
     Size aFormPos( aFormRect.Left(), aFormRect.Top() );
 
     // convert 100th_mm to pixel
@@ -137,13 +137,13 @@ bool DlgEdObj::TransformSdrToControlCoordinates(
     DBG_ASSERT( pDevice, "DlgEdObj::TransformSdrToControlCoordinates: missing default device!" );
     if ( !pDevice )
         return false;
-    aPos = pDevice->LogicToPixel( aPos, MapMode( MAP_100TH_MM ) );
-    aSize = pDevice->LogicToPixel( aSize, MapMode( MAP_100TH_MM ) );
-    aFormPos = pDevice->LogicToPixel( aFormPos, MapMode( MAP_100TH_MM ) );
+    aPos = pDevice->LogicToPixel( aPos, MapMode( MapUnit::Map100thMM ) );
+    aSize = pDevice->LogicToPixel( aSize, MapMode( MapUnit::Map100thMM ) );
+    aFormPos = pDevice->LogicToPixel( aFormPos, MapMode( MapUnit::Map100thMM ) );
 
     // subtract form position
-    aPos.Width() -= aFormPos.Width();
-    aPos.Height() -= aFormPos.Height();
+    aPos.AdjustWidth( -(aFormPos.Width()) );
+    aPos.AdjustHeight( -(aFormPos.Height()) );
 
     // take window borders into account
     Reference< beans::XPropertySet > xPSetForm( pForm->GetUnoControlModel(), UNO_QUERY );
@@ -155,13 +155,13 @@ bool DlgEdObj::TransformSdrToControlCoordinates(
     if( bDecoration )
     {
         awt::DeviceInfo aDeviceInfo = pForm->getDeviceInfo();
-        aPos.Width() -= aDeviceInfo.LeftInset;
-        aPos.Height() -= aDeviceInfo.TopInset;
+        aPos.AdjustWidth( -(aDeviceInfo.LeftInset) );
+        aPos.AdjustHeight( -(aDeviceInfo.TopInset) );
     }
 
     // convert pixel to logic units
-    aPos = pDevice->PixelToLogic( aPos, MAP_APPFONT );
-    aSize = pDevice->PixelToLogic( aSize, MAP_APPFONT );
+    aPos = pDevice->PixelToLogic(aPos, MapMode(MapUnit::MapAppFont));
+    aSize = pDevice->PixelToLogic(aSize, MapMode(MapUnit::MapAppFont));
 
     // set out parameters
     nXOut = aPos.Width();
@@ -185,8 +185,8 @@ bool DlgEdObj::TransformSdrToFormCoordinates(
     DBG_ASSERT( pDevice, "DlgEdObj::TransformSdrToFormCoordinates: missing default device!" );
     if ( !pDevice )
         return false;
-    aPos = pDevice->LogicToPixel( aPos, MapMode( MAP_100TH_MM ) );
-    aSize = pDevice->LogicToPixel( aSize, MapMode( MAP_100TH_MM ) );
+    aPos = pDevice->LogicToPixel( aPos, MapMode( MapUnit::Map100thMM ) );
+    aSize = pDevice->LogicToPixel( aSize, MapMode( MapUnit::Map100thMM ) );
 
     // take window borders into account
     DlgEdForm* pForm = nullptr;
@@ -203,12 +203,12 @@ bool DlgEdObj::TransformSdrToFormCoordinates(
     if( bDecoration )
     {
         awt::DeviceInfo aDeviceInfo = pForm->getDeviceInfo();
-        aSize.Width() -= aDeviceInfo.LeftInset + aDeviceInfo.RightInset;
-        aSize.Height() -= aDeviceInfo.TopInset + aDeviceInfo.BottomInset;
+        aSize.AdjustWidth( -(aDeviceInfo.LeftInset + aDeviceInfo.RightInset) );
+        aSize.AdjustHeight( -(aDeviceInfo.TopInset + aDeviceInfo.BottomInset) );
     }
     // convert pixel to logic units
-    aPos = pDevice->PixelToLogic( aPos, MAP_APPFONT );
-    aSize = pDevice->PixelToLogic( aSize, MAP_APPFONT );
+    aPos = pDevice->PixelToLogic(aPos, MapMode(MapUnit::MapAppFont));
+    aSize = pDevice->PixelToLogic(aSize, MapMode(MapUnit::MapAppFont));
 
     // set out parameters
     nXOut = aPos.Width();
@@ -248,13 +248,13 @@ bool DlgEdObj::TransformControlToSdrCoordinates(
     DBG_ASSERT( pDevice, "DlgEdObj::TransformControlToSdrCoordinates: missing default device!" );
     if ( !pDevice )
         return false;
-    aPos = pDevice->LogicToPixel( aPos, MAP_APPFONT );
-    aSize = pDevice->LogicToPixel( aSize, MAP_APPFONT );
-    aFormPos = pDevice->LogicToPixel( aFormPos, MAP_APPFONT );
+    aPos = pDevice->LogicToPixel(aPos, MapMode(MapUnit::MapAppFont));
+    aSize = pDevice->LogicToPixel(aSize, MapMode(MapUnit::MapAppFont));
+    aFormPos = pDevice->LogicToPixel(aFormPos, MapMode(MapUnit::MapAppFont));
 
     // add form position
-    aPos.Width() += aFormPos.Width();
-    aPos.Height() += aFormPos.Height();
+    aPos.AdjustWidth(aFormPos.Width() );
+    aPos.AdjustHeight(aFormPos.Height() );
 
     // take window borders into account
     bool bDecoration = true;
@@ -262,13 +262,13 @@ bool DlgEdObj::TransformControlToSdrCoordinates(
     if( bDecoration )
     {
         awt::DeviceInfo aDeviceInfo = pForm->getDeviceInfo();
-        aPos.Width() += aDeviceInfo.LeftInset;
-        aPos.Height() += aDeviceInfo.TopInset;
+        aPos.AdjustWidth(aDeviceInfo.LeftInset );
+        aPos.AdjustHeight(aDeviceInfo.TopInset );
     }
 
     // convert pixel to 100th_mm
-    aPos = pDevice->PixelToLogic( aPos, MapMode( MAP_100TH_MM ) );
-    aSize = pDevice->PixelToLogic( aSize, MapMode( MAP_100TH_MM ) );
+    aPos = pDevice->PixelToLogic( aPos, MapMode( MapUnit::Map100thMM ) );
+    aSize = pDevice->PixelToLogic( aSize, MapMode( MapUnit::Map100thMM ) );
 
     // set out parameters
     nXOut = aPos.Width();
@@ -298,8 +298,8 @@ bool DlgEdObj::TransformFormToSdrCoordinates(
     if ( !lcl_getDlgEdForm( this, pForm ) )
         return false;
 
-    aPos = pDevice->LogicToPixel( aPos, MAP_APPFONT );
-    aSize = pDevice->LogicToPixel( aSize, MAP_APPFONT );
+    aPos = pDevice->LogicToPixel(aPos, MapMode(MapUnit::MapAppFont));
+    aSize = pDevice->LogicToPixel(aSize, MapMode(MapUnit::MapAppFont));
 
     // take window borders into account
     Reference< beans::XPropertySet > xPSetForm( pForm->GetUnoControlModel(), UNO_QUERY );
@@ -311,13 +311,13 @@ bool DlgEdObj::TransformFormToSdrCoordinates(
     if( bDecoration )
     {
         awt::DeviceInfo aDeviceInfo = pForm->getDeviceInfo();
-        aSize.Width() += aDeviceInfo.LeftInset + aDeviceInfo.RightInset;
-        aSize.Height() += aDeviceInfo.TopInset + aDeviceInfo.BottomInset;
+        aSize.AdjustWidth(aDeviceInfo.LeftInset + aDeviceInfo.RightInset );
+        aSize.AdjustHeight(aDeviceInfo.TopInset + aDeviceInfo.BottomInset );
     }
 
     // convert pixel to 100th_mm
-    aPos = pDevice->PixelToLogic( aPos, MapMode( MAP_100TH_MM ) );
-    aSize = pDevice->PixelToLogic( aSize, MapMode( MAP_100TH_MM ) );
+    aPos = pDevice->PixelToLogic( aPos, MapMode( MapUnit::Map100thMM ) );
+    aSize = pDevice->PixelToLogic( aSize, MapMode( MapUnit::Map100thMM ) );
 
     // set out parameters
     nXOut = aPos.Width();
@@ -347,7 +347,7 @@ void DlgEdObj::SetRectFromProps()
             // set rectangle position and size
             Point aPoint( nXOut, nYOut );
             Size aSize( nWidthOut, nHeightOut );
-            SetSnapRect( Rectangle( aPoint, aSize ) );
+            SetSnapRect( tools::Rectangle( aPoint, aSize ) );
         }
     }
 }
@@ -355,7 +355,7 @@ void DlgEdObj::SetRectFromProps()
 void DlgEdObj::SetPropsFromRect()
 {
     // get control position and size from rectangle
-    Rectangle aRect_ = GetSnapRect();
+    tools::Rectangle aRect_ = GetSnapRect();
     sal_Int32 nXIn = aRect_.Left();
     sal_Int32 nYIn = aRect_.Top();
     sal_Int32 nWidthIn = aRect_.GetWidth();
@@ -369,15 +369,10 @@ void DlgEdObj::SetPropsFromRect()
         Reference< beans::XPropertySet > xPSet( GetUnoControlModel(), UNO_QUERY );
         if ( xPSet.is() )
         {
-            Any aValue;
-            aValue <<= nXOut;
-            xPSet->setPropertyValue( DLGED_PROP_POSITIONX, aValue );
-            aValue <<= nYOut;
-            xPSet->setPropertyValue( DLGED_PROP_POSITIONY, aValue );
-            aValue <<= nWidthOut;
-            xPSet->setPropertyValue( DLGED_PROP_WIDTH, aValue );
-            aValue <<= nHeightOut;
-            xPSet->setPropertyValue( DLGED_PROP_HEIGHT, aValue );
+            xPSet->setPropertyValue( DLGED_PROP_POSITIONX, Any(nXOut) );
+            xPSet->setPropertyValue( DLGED_PROP_POSITIONY, Any(nYOut) );
+            xPSet->setPropertyValue( DLGED_PROP_WIDTH, Any(nWidthOut) );
+            xPSet->setPropertyValue( DLGED_PROP_HEIGHT, Any(nHeightOut) );
         }
     }
 }
@@ -387,13 +382,11 @@ void DlgEdObj::PositionAndSizeChange( const beans::PropertyChangeEvent& evt )
     DBG_ASSERT( pDlgEdForm, "DlgEdObj::PositionAndSizeChange: no form!" );
     DlgEdPage& rPage = pDlgEdForm->GetDlgEditor().GetPage();
     {
-        sal_Int32 nPageXIn = 0;
-        sal_Int32 nPageYIn = 0;
         Size aPageSize = rPage.GetSize();
         sal_Int32 nPageWidthIn = aPageSize.Width();
         sal_Int32 nPageHeightIn = aPageSize.Height();
         sal_Int32 nPageX, nPageY, nPageWidth, nPageHeight;
-        if ( TransformSdrToControlCoordinates( nPageXIn, nPageYIn, nPageWidthIn, nPageHeightIn, nPageX, nPageY, nPageWidth, nPageHeight ) )
+        if ( TransformSdrToControlCoordinates( 0/*nPageXIn*/, 0/*nPageYIn*/, nPageWidthIn, nPageHeightIn, nPageX, nPageY, nPageWidth, nPageHeight ) )
         {
             Reference< beans::XPropertySet > xPSet( GetUnoControlModel(), UNO_QUERY );
             if ( xPSet.is() )
@@ -439,10 +432,8 @@ void DlgEdObj::PositionAndSizeChange( const beans::PropertyChangeEvent& evt )
 
                 if ( nNewValue != nValue )
                 {
-                    Any aNewValue;
-                    aNewValue <<= nNewValue;
                     EndListening( false );
-                    xPSet->setPropertyValue( evt.PropertyName, aNewValue );
+                    xPSet->setPropertyValue( evt.PropertyName, Any(nNewValue) );
                     StartListening();
                 }
             }
@@ -452,7 +443,7 @@ void DlgEdObj::PositionAndSizeChange( const beans::PropertyChangeEvent& evt )
     SetRectFromProps();
 }
 
-void SAL_CALL DlgEdObj::NameChange( const  css::beans::PropertyChangeEvent& evt ) throw (css::container::NoSuchElementException, css::uno::RuntimeException)
+void DlgEdObj::NameChange( const  css::beans::PropertyChangeEvent& evt )
 {
     // get old name
     OUString aOldName;
@@ -462,7 +453,7 @@ void SAL_CALL DlgEdObj::NameChange( const  css::beans::PropertyChangeEvent& evt 
     OUString aNewName;
     evt.NewValue >>= aNewName;
 
-    if ( !aNewName.equals(aOldName) )
+    if ( aNewName != aOldName )
     {
         Reference< container::XNameAccess > xNameAcc((GetDlgEdForm()->GetUnoControlModel()), UNO_QUERY);
         if ( xNameAcc.is() && xNameAcc->hasByName(aOldName) )
@@ -489,9 +480,7 @@ void SAL_CALL DlgEdObj::NameChange( const  css::beans::PropertyChangeEvent& evt 
                 // set old name property
                 EndListening(false);
                 Reference< beans::XPropertySet >  xPSet(GetUnoControlModel(), UNO_QUERY);
-                Any aName;
-                aName <<= aOldName;
-                xPSet->setPropertyValue( DLGED_PROP_NAME, aName );
+                xPSet->setPropertyValue( DLGED_PROP_NAME, Any(aOldName) );
                 StartListening();
             }
         }
@@ -515,9 +504,9 @@ void DlgEdObj::UpdateStep()
     sal_Int32 nCurStep = GetDlgEdForm()->GetStep();
     sal_Int32 nStep = GetStep();
 
-    SdrLayerAdmin& rLayerAdmin = GetModel()->GetLayerAdmin();
-    SdrLayerID nHiddenLayerId   = rLayerAdmin.GetLayerID( "HiddenLayer", false );
-    SdrLayerID nControlLayerId   = rLayerAdmin.GetLayerID( rLayerAdmin.GetControlLayerName(), false );
+    SdrLayerAdmin& rLayerAdmin(getSdrModelFromSdrObject().GetLayerAdmin());
+    SdrLayerID nHiddenLayerId   = rLayerAdmin.GetLayerID( "HiddenLayer" );
+    SdrLayerID nControlLayerId   = rLayerAdmin.GetLayerID( rLayerAdmin.GetControlLayerName() );
 
     if( nCurStep )
     {
@@ -536,17 +525,16 @@ void DlgEdObj::UpdateStep()
     }
 }
 
-void DlgEdObj::TabIndexChange( const beans::PropertyChangeEvent& evt ) throw (RuntimeException)
+void DlgEdObj::TabIndexChange( const beans::PropertyChangeEvent& evt )
 {
     DlgEdForm* pForm = GetDlgEdForm();
     if ( pForm )
     {
         // stop listening with all children
-        ::std::vector<DlgEdObj*> aChildList = pForm->GetChildren();
-        ::std::vector<DlgEdObj*>::iterator aIter;
-        for ( aIter = aChildList.begin() ; aIter != aChildList.end() ; ++aIter )
+        std::vector<DlgEdObj*> aChildList = pForm->GetChildren();
+        for (auto const& child : aChildList)
         {
-            (*aIter)->EndListening( false );
+            child->EndListening( false );
         }
 
         Reference< container::XNameAccess > xNameAcc( pForm->GetUnoControlModel() , UNO_QUERY );
@@ -556,11 +544,10 @@ void DlgEdObj::TabIndexChange( const beans::PropertyChangeEvent& evt ) throw (Ru
             Sequence< OUString > aNames = xNameAcc->getElementNames();
             const OUString* pNames = aNames.getConstArray();
             sal_Int32 nCtrls = aNames.getLength();
-            sal_Int16 i;
 
             // create a map of tab indices and control names, sorted by tab index
             IndexToNameMap aIndexToNameMap;
-            for ( i = 0; i < nCtrls; ++i )
+            for ( sal_Int32 i = 0; i < nCtrls; ++i )
             {
                 // get control name
                 OUString aName( pNames[i] );
@@ -569,19 +556,19 @@ void DlgEdObj::TabIndexChange( const beans::PropertyChangeEvent& evt ) throw (Ru
                 sal_Int16 nTabIndex = -1;
                 Any aCtrl = xNameAcc->getByName( aName );
                 Reference< beans::XPropertySet > xPSet;
-                   aCtrl >>= xPSet;
+                aCtrl >>= xPSet;
                 if ( xPSet.is() && xPSet == Reference< beans::XPropertySet >( evt.Source, UNO_QUERY ) )
                     evt.OldValue >>= nTabIndex;
                 else if ( xPSet.is() )
                     xPSet->getPropertyValue( DLGED_PROP_TABINDEX ) >>= nTabIndex;
 
                 // insert into map
-                aIndexToNameMap.insert( IndexToNameMap::value_type( nTabIndex, aName ) );
+                aIndexToNameMap.emplace( nTabIndex, aName );
             }
 
             // create a helper list of control names, sorted by tab index
-            ::std::vector< OUString > aNameList( aIndexToNameMap.size() );
-            ::std::transform(
+            std::vector< OUString > aNameList( aIndexToNameMap.size() );
+            std::transform(
                     aIndexToNameMap.begin(), aIndexToNameMap.end(),
                     aNameList.begin(),
                     ::o3tl::select2nd< IndexToNameMap::value_type >( )
@@ -603,29 +590,33 @@ void DlgEdObj::TabIndexChange( const beans::PropertyChangeEvent& evt ) throw (Ru
             aNameList.insert( aNameList.begin() + nNewTabIndex , aCtrlName );
 
             // set new tab indices
-            for ( i = 0; i < nCtrls; ++i )
+            for ( sal_Int32 i = 0; i < nCtrls; ++i )
             {
                 Any aCtrl = xNameAcc->getByName( aNameList[i] );
                 Reference< beans::XPropertySet > xPSet;
-                   aCtrl >>= xPSet;
+                aCtrl >>= xPSet;
                 if ( xPSet.is() )
                 {
-                    Any aTabIndex;
-                    aTabIndex <<= (sal_Int16) i;
-                    xPSet->setPropertyValue( DLGED_PROP_TABINDEX, aTabIndex );
+                    assert(i >= SAL_MIN_INT16);
+                    if (i > SAL_MAX_INT16)
+                    {
+                        SAL_WARN("basctl", "tab " << i << " > SAL_MAX_INT16");
+                        continue;
+                    }
+                    xPSet->setPropertyValue( DLGED_PROP_TABINDEX, Any(static_cast<sal_Int16>(i)) );
                 }
             }
 
             // reorder objects in drawing page
-            GetModel()->GetPage(0)->SetObjectOrdNum( nOldTabIndex + 1, nNewTabIndex + 1 );
+            getSdrModelFromSdrObject().GetPage(0)->SetObjectOrdNum( nOldTabIndex + 1, nNewTabIndex + 1 );
 
             pForm->UpdateTabOrderAndGroups();
         }
 
         // start listening with all children
-        for ( aIter = aChildList.begin() ; aIter != aChildList.end() ; ++aIter )
+        for (auto const& child : aChildList)
         {
-            (*aIter)->StartListening();
+            child->StartListening();
         }
     }
 }
@@ -644,105 +635,103 @@ bool DlgEdObj::supportsService( OUString const & serviceName ) const
 
 OUString DlgEdObj::GetDefaultName() const
 {
-    sal_uInt16 nResId = 0;
+    OUString sResId;
     OUString aDefaultName;
     if ( supportsService( "com.sun.star.awt.UnoControlDialogModel" ) )
     {
-        nResId = RID_STR_CLASS_DIALOG;
+        sResId = RID_STR_CLASS_DIALOG;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlButtonModel" ) )
     {
-        nResId = RID_STR_CLASS_BUTTON;
+        sResId = RID_STR_CLASS_BUTTON;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlRadioButtonModel" ) )
     {
-        nResId = RID_STR_CLASS_RADIOBUTTON;
+        sResId = RID_STR_CLASS_RADIOBUTTON;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlCheckBoxModel" ) )
     {
-        nResId = RID_STR_CLASS_CHECKBOX;
+        sResId = RID_STR_CLASS_CHECKBOX;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlListBoxModel" ) )
     {
-        nResId = RID_STR_CLASS_LISTBOX;
+        sResId = RID_STR_CLASS_LISTBOX;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlComboBoxModel" ) )
     {
-        nResId = RID_STR_CLASS_COMBOBOX;
+        sResId = RID_STR_CLASS_COMBOBOX;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlGroupBoxModel" ) )
     {
-        nResId = RID_STR_CLASS_GROUPBOX;
+        sResId = RID_STR_CLASS_GROUPBOX;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlEditModel" ) )
     {
-        nResId = RID_STR_CLASS_EDIT;
+        sResId = RID_STR_CLASS_EDIT;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlFixedTextModel" ) )
     {
-        nResId = RID_STR_CLASS_FIXEDTEXT;
+        sResId = RID_STR_CLASS_FIXEDTEXT;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlImageControlModel" ) )
     {
-        nResId = RID_STR_CLASS_IMAGECONTROL;
+        sResId = RID_STR_CLASS_IMAGECONTROL;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlProgressBarModel" ) )
     {
-        nResId = RID_STR_CLASS_PROGRESSBAR;
+        sResId = RID_STR_CLASS_PROGRESSBAR;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlScrollBarModel" ) )
     {
-        nResId = RID_STR_CLASS_SCROLLBAR;
+        sResId = RID_STR_CLASS_SCROLLBAR;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlFixedLineModel" ) )
     {
-        nResId = RID_STR_CLASS_FIXEDLINE;
+        sResId = RID_STR_CLASS_FIXEDLINE;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlDateFieldModel" ) )
     {
-        nResId = RID_STR_CLASS_DATEFIELD;
+        sResId = RID_STR_CLASS_DATEFIELD;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlTimeFieldModel" ) )
     {
-        nResId = RID_STR_CLASS_TIMEFIELD;
+        sResId = RID_STR_CLASS_TIMEFIELD;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlNumericFieldModel" ) )
     {
-        nResId = RID_STR_CLASS_NUMERICFIELD;
+        sResId = RID_STR_CLASS_NUMERICFIELD;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlCurrencyFieldModel" ) )
     {
-        nResId = RID_STR_CLASS_CURRENCYFIELD;
+        sResId = RID_STR_CLASS_CURRENCYFIELD;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlFormattedFieldModel" ) )
     {
-        nResId = RID_STR_CLASS_FORMATTEDFIELD;
+        sResId = RID_STR_CLASS_FORMATTEDFIELD;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlPatternFieldModel" ) )
     {
-        nResId = RID_STR_CLASS_PATTERNFIELD;
+        sResId = RID_STR_CLASS_PATTERNFIELD;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlFileControlModel" ) )
     {
-        nResId = RID_STR_CLASS_FILECONTROL;
+        sResId = RID_STR_CLASS_FILECONTROL;
     }
     else if ( supportsService( "com.sun.star.awt.tree.TreeControlModel" ) )
     {
-        nResId = RID_STR_CLASS_TREECONTROL;
+        sResId = RID_STR_CLASS_TREECONTROL;
     }
     else if ( supportsService( "com.sun.star.awt.UnoControlSpinButtonModel" ) )
     {
-        nResId = RID_STR_CLASS_SPINCONTROL;
+        sResId = RID_STR_CLASS_SPINCONTROL;
     }
     else
     {
-        nResId = RID_STR_CLASS_CONTROL;
+        sResId = RID_STR_CLASS_CONTROL;
     }
 
-    if (nResId)
-    {
-        aDefaultName = IDE_RESSTR(nResId);
-    }
+    if (!sResId.isEmpty())
+        aDefaultName = sResId;
 
     return aDefaultName;
 }
@@ -766,9 +755,9 @@ OUString DlgEdObj::GetUniqueName() const
     return aUniqueName;
 }
 
-sal_uInt32 DlgEdObj::GetObjInventor()   const
+SdrInventor DlgEdObj::GetObjInventor()   const
 {
-    return DlgInventor;
+    return SdrInventor::BasicDialog;
 }
 
 sal_uInt16 DlgEdObj::GetObjIdentifier() const
@@ -884,16 +873,12 @@ void DlgEdObj::clonedFrom(const DlgEdObj* _pSource)
         if ( xCont.is() )
         {
             // set tabindex
-               Sequence< OUString > aNames = xCont->getElementNames();
-            Any aTabIndex;
-            aTabIndex <<= (sal_Int16) aNames.getLength();
-            xPSet->setPropertyValue( DLGED_PROP_TABINDEX, aTabIndex );
+            Sequence< OUString > aNames = xCont->getElementNames();
+            xPSet->setPropertyValue( DLGED_PROP_TABINDEX, Any(static_cast<sal_Int16>(aNames.getLength())) );
 
             // insert control model in dialog model
             Reference< awt::XControlModel > xCtrl( xPSet , UNO_QUERY );
-            Any aCtrl;
-            aCtrl <<= xCtrl;
-            xCont->insertByName( aOUniqueName , aCtrl );
+            xCont->insertByName( aOUniqueName, Any(xCtrl) );
 
             pDlgEdForm->UpdateTabOrderAndGroups();
         }
@@ -903,9 +888,9 @@ void DlgEdObj::clonedFrom(const DlgEdObj* _pSource)
     StartListening();
 }
 
-DlgEdObj* DlgEdObj::Clone() const
+DlgEdObj* DlgEdObj::CloneSdrObject(SdrModel& rTargetModel) const
 {
-    DlgEdObj* pDlgEdObj = CloneHelper< DlgEdObj >();
+    DlgEdObj* pDlgEdObj = CloneHelper< DlgEdObj >(rTargetModel);
     DBG_ASSERT( pDlgEdObj != nullptr, "DlgEdObj::Clone: invalid clone!" );
     if ( pDlgEdObj )
         pDlgEdObj->clonedFrom( this );
@@ -917,8 +902,10 @@ SdrObject* DlgEdObj::getFullDragClone() const
 {
     // no need to really add the clone for dragging, it's a temporary
     // object
-    SdrObject* pObj = new SdrUnoObj(OUString());
-    *pObj = *(static_cast<const SdrUnoObj*>(this));
+    SdrObject* pObj = new SdrUnoObj(
+        getSdrModelFromSdrObject(),
+        OUString());
+    *pObj = *static_cast<const SdrUnoObj*>(this);
 
     return pObj;
 }
@@ -961,6 +948,22 @@ bool DlgEdObj::EndCreate(SdrDragStat& rStat, SdrCreateCmd eCmd)
 {
     bool bResult = SdrUnoObj::EndCreate(rStat, eCmd);
 
+    // tdf#120674 after interactive creation, the SdrObject (this) has no SdrPage yet
+    // due to not being inserted. Usually this should be handled in a ::handlePageChange
+    // implementation. For historical reasons, the SdrPage (which is the DlgEdPage) was
+    // already set. For now, get it from the SdrDragStat and use it to access and set
+    // the local pDlgEdForm
+    if(nullptr == pDlgEdForm && nullptr != rStat.GetPageView())
+    {
+        const DlgEdPage* pDlgEdPage(dynamic_cast<const DlgEdPage*>(rStat.GetPageView()->GetPage()));
+
+        if(nullptr != pDlgEdPage)
+        {
+            // set parent form
+            pDlgEdForm = pDlgEdPage->GetDlgEdForm();
+        }
+    }
+
     SetDefaults();
     StartListening();
 
@@ -969,9 +972,6 @@ bool DlgEdObj::EndCreate(SdrDragStat& rStat, SdrCreateCmd eCmd)
 
 void DlgEdObj::SetDefaults()
 {
-    // set parent form
-    pDlgEdForm = static_cast<DlgEdPage*>(GetPage())->GetDlgEdForm();
-
     if ( pDlgEdForm )
     {
         // add child to parent form
@@ -984,9 +984,7 @@ void DlgEdObj::SetDefaults()
             OUString aOUniqueName( GetUniqueName() );
 
             // set name property
-            Any aUniqueName;
-            aUniqueName <<= aOUniqueName;
-            xPSet->setPropertyValue( DLGED_PROP_NAME, aUniqueName );
+            xPSet->setPropertyValue( DLGED_PROP_NAME, Any(aOUniqueName) );
 
             // set labels
             if ( supportsService( "com.sun.star.awt.UnoControlButtonModel" ) ||
@@ -995,7 +993,7 @@ void DlgEdObj::SetDefaults()
                 supportsService( "com.sun.star.awt.UnoControlGroupBoxModel" ) ||
                 supportsService( "com.sun.star.awt.UnoControlFixedTextModel" ) )
             {
-                xPSet->setPropertyValue( DLGED_PROP_LABEL, aUniqueName );
+                xPSet->setPropertyValue( DLGED_PROP_LABEL, Any(aOUniqueName) );
             }
 
             // set number formats supplier for formatted field
@@ -1004,9 +1002,7 @@ void DlgEdObj::SetDefaults()
                 Reference< util::XNumberFormatsSupplier > xSupplier = GetDlgEdForm()->GetDlgEditor().GetNumberFormatsSupplier();
                 if ( xSupplier.is() )
                 {
-                    Any aSupplier;
-                    aSupplier <<= xSupplier;
-                    xPSet->setPropertyValue( DLGED_PROP_FORMATSSUPPLIER, aSupplier );
+                    xPSet->setPropertyValue( DLGED_PROP_FORMATSSUPPLIER, Any(xSupplier) );
                 }
             }
 
@@ -1017,9 +1013,9 @@ void DlgEdObj::SetDefaults()
             if ( xCont.is() )
             {
                 // set tabindex
-                   Sequence< OUString > aNames = xCont->getElementNames();
+                Sequence< OUString > aNames = xCont->getElementNames();
                 uno::Any aTabIndex;
-                aTabIndex <<= (sal_Int16) aNames.getLength();
+                aTabIndex <<= static_cast<sal_Int16>(aNames.getLength());
                 xPSet->setPropertyValue( DLGED_PROP_TABINDEX, aTabIndex );
 
                 // set step
@@ -1120,7 +1116,7 @@ void DlgEdObj::EndListening(bool bRemoveListener)
     }
 }
 
-void SAL_CALL DlgEdObj::_propertyChange( const  css::beans::PropertyChangeEvent& evt ) throw (css::uno::RuntimeException, std::exception)
+void DlgEdObj::_propertyChange( const  css::beans::PropertyChangeEvent& evt )
 {
     if (isListening())
     {
@@ -1155,10 +1151,11 @@ void SAL_CALL DlgEdObj::_propertyChange( const  css::beans::PropertyChangeEvent&
                 {
                     NameChange(evt);
                 }
-                catch (container::NoSuchElementException const& e)
+                catch (container::NoSuchElementException const&)
                 {
+                    css::uno::Any anyEx = cppu::getCaughtException();
                     throw lang::WrappedTargetRuntimeException("", nullptr,
-                            uno::makeAny(e));
+                            anyEx);
                 }
             }
         }
@@ -1176,7 +1173,7 @@ void SAL_CALL DlgEdObj::_propertyChange( const  css::beans::PropertyChangeEvent&
     }
 }
 
-void SAL_CALL DlgEdObj::_elementInserted(const css::container::ContainerEvent& ) throw(css::uno::RuntimeException)
+void DlgEdObj::_elementInserted()
 {
     if (isListening())
     {
@@ -1185,7 +1182,7 @@ void SAL_CALL DlgEdObj::_elementInserted(const css::container::ContainerEvent& )
     }
 }
 
-void SAL_CALL DlgEdObj::_elementReplaced(const css::container::ContainerEvent& ) throw(css::uno::RuntimeException)
+void DlgEdObj::_elementReplaced()
 {
     if (isListening())
     {
@@ -1194,7 +1191,7 @@ void SAL_CALL DlgEdObj::_elementReplaced(const css::container::ContainerEvent& )
     }
 }
 
-void SAL_CALL DlgEdObj::_elementRemoved(const css::container::ContainerEvent& ) throw(css::uno::RuntimeException)
+void DlgEdObj::_elementRemoved()
 {
     if (isListening())
     {
@@ -1216,8 +1213,10 @@ void DlgEdObj::SetLayer(SdrLayerID nLayer)
     }
 }
 
-
-DlgEdForm::DlgEdForm (DlgEditor& rDlgEditor_) :
+DlgEdForm::DlgEdForm(
+    SdrModel& rSdrModel,
+    DlgEditor& rDlgEditor_)
+:   DlgEdObj(rSdrModel),
     rDlgEditor(rDlgEditor_)
 {
 }
@@ -1245,7 +1244,7 @@ void DlgEdForm::SetRectFromProps()
             // set rectangle position and size
             Point aPoint( nXOut, nYOut );
             Size aSize( nWidthOut, nHeightOut );
-            SetSnapRect( Rectangle( aPoint, aSize ) );
+            SetSnapRect( tools::Rectangle( aPoint, aSize ) );
         }
     }
 }
@@ -1253,7 +1252,7 @@ void DlgEdForm::SetRectFromProps()
 void DlgEdForm::SetPropsFromRect()
 {
     // get form position and size from rectangle
-    Rectangle aRect_ = GetSnapRect();
+    tools::Rectangle aRect_ = GetSnapRect();
     sal_Int32 nXIn = aRect_.Left();
     sal_Int32 nYIn = aRect_.Top();
     sal_Int32 nWidthIn = aRect_.GetWidth();
@@ -1267,15 +1266,10 @@ void DlgEdForm::SetPropsFromRect()
         Reference< beans::XPropertySet > xPSet( GetUnoControlModel(), UNO_QUERY );
         if ( xPSet.is() )
         {
-            Any aValue;
-            aValue <<= nXOut;
-            xPSet->setPropertyValue( DLGED_PROP_POSITIONX, aValue );
-            aValue <<= nYOut;
-            xPSet->setPropertyValue( DLGED_PROP_POSITIONY, aValue );
-            aValue <<= nWidthOut;
-            xPSet->setPropertyValue( DLGED_PROP_WIDTH, aValue );
-            aValue <<= nHeightOut;
-            xPSet->setPropertyValue( DLGED_PROP_HEIGHT, aValue );
+            xPSet->setPropertyValue( DLGED_PROP_POSITIONX, Any(nXOut) );
+            xPSet->setPropertyValue( DLGED_PROP_POSITIONY, Any(nYOut) );
+            xPSet->setPropertyValue( DLGED_PROP_WIDTH, Any(nWidthOut) );
+            xPSet->setPropertyValue( DLGED_PROP_HEIGHT, Any(nHeightOut) );
         }
     }
 }
@@ -1287,7 +1281,7 @@ void DlgEdForm::AddChild( DlgEdObj* pDlgEdObj )
 
 void DlgEdForm::RemoveChild( DlgEdObj* pDlgEdObj )
 {
-    pChildren.erase( ::std::find( pChildren.begin() , pChildren.end() , pDlgEdObj ) );
+    pChildren.erase( std::remove( pChildren.begin() , pChildren.end() , pDlgEdObj ) );
 }
 
 void DlgEdForm::PositionAndSizeChange( const beans::PropertyChangeEvent& evt )
@@ -1333,10 +1327,8 @@ void DlgEdForm::PositionAndSizeChange( const beans::PropertyChangeEvent& evt )
 
             if ( nNewValue != nValue )
             {
-                Any aNewValue;
-                aNewValue <<= nNewValue;
                 EndListening( false );
-                xPSetForm->setPropertyValue( evt.PropertyName, aNewValue );
+                xPSetForm->setPropertyValue( evt.PropertyName, Any(nNewValue) );
                 StartListening();
             }
         }
@@ -1345,7 +1337,6 @@ void DlgEdForm::PositionAndSizeChange( const beans::PropertyChangeEvent& evt )
     bool bAdjustedPageSize = rEditor.AdjustPageSize();
     SetRectFromProps();
     std::vector<DlgEdObj*> const& aChildList = GetChildren();
-    std::vector<DlgEdObj*>::const_iterator aIter;
 
     if ( bAdjustedPageSize )
     {
@@ -1355,9 +1346,9 @@ void DlgEdForm::PositionAndSizeChange( const beans::PropertyChangeEvent& evt )
         nPageHeightIn = aPageSize.Height();
         if ( TransformSdrToControlCoordinates( nPageXIn, nPageYIn, nPageWidthIn, nPageHeightIn, nPageX, nPageY, nPageWidth, nPageHeight ) )
         {
-            for ( aIter = aChildList.begin(); aIter != aChildList.end(); ++aIter )
+            for (auto const& child : aChildList)
             {
-                Reference< beans::XPropertySet > xPSet( (*aIter)->GetUnoControlModel(), UNO_QUERY );
+                Reference< beans::XPropertySet > xPSet( child->GetUnoControlModel(), UNO_QUERY );
                 if ( xPSet.is() )
                 {
                     sal_Int32 nX = 0, nY = 0, nWidth = 0, nHeight = 0;
@@ -1375,10 +1366,8 @@ void DlgEdForm::PositionAndSizeChange( const beans::PropertyChangeEvent& evt )
                     }
                     if ( nNewX != nX )
                     {
-                        Any aValue;
-                        aValue <<= nNewX;
                         EndListening( false );
-                        xPSet->setPropertyValue( DLGED_PROP_POSITIONX, aValue );
+                        xPSet->setPropertyValue( DLGED_PROP_POSITIONX, Any(nNewX) );
                         StartListening();
                     }
 
@@ -1391,10 +1380,8 @@ void DlgEdForm::PositionAndSizeChange( const beans::PropertyChangeEvent& evt )
                     }
                     if ( nNewY != nY )
                     {
-                        Any aValue;
-                        aValue <<= nNewY;
                         EndListening( false );
-                        xPSet->setPropertyValue( DLGED_PROP_POSITIONY, aValue );
+                        xPSet->setPropertyValue( DLGED_PROP_POSITIONY, Any(nNewY) );
                         StartListening();
                     }
                 }
@@ -1402,13 +1389,13 @@ void DlgEdForm::PositionAndSizeChange( const beans::PropertyChangeEvent& evt )
         }
     }
 
-    for ( aIter = aChildList.begin(); aIter != aChildList.end(); ++aIter )
-        (*aIter)->SetRectFromProps();
+    for (auto const& child : aChildList)
+        child->SetRectFromProps();
 }
 
 void DlgEdForm::UpdateStep()
 {
-    SdrPage* pSdrPage = GetPage();
+    SdrPage* pSdrPage = getSdrPageFromSdrObject();
 
     if ( pSdrPage )
     {
@@ -1425,10 +1412,9 @@ void DlgEdForm::UpdateStep()
 void DlgEdForm::UpdateTabIndices()
 {
     // stop listening with all children
-    ::std::vector<DlgEdObj*>::iterator aIter;
-    for ( aIter = pChildren.begin() ; aIter != pChildren.end() ; ++aIter )
+    for (auto const& child : pChildren)
     {
-        (*aIter)->EndListening( false );
+        child->EndListening( false );
     }
 
     Reference< css::container::XNameAccess > xNameAcc( GetUnoControlModel() , UNO_QUERY );
@@ -1450,26 +1436,25 @@ void DlgEdForm::UpdateTabIndices()
             sal_Int16 nTabIndex = -1;
             Any aCtrl = xNameAcc->getByName( aName );
             Reference< css::beans::XPropertySet > xPSet;
-               aCtrl >>= xPSet;
+            aCtrl >>= xPSet;
             if ( xPSet.is() )
                 xPSet->getPropertyValue( DLGED_PROP_TABINDEX ) >>= nTabIndex;
 
             // insert into map
-            aIndexToNameMap.insert( IndexToNameMap::value_type( nTabIndex, aName ) );
+            aIndexToNameMap.emplace( nTabIndex, aName );
         }
 
         // set new tab indices
         sal_Int16 nNewTabIndex = 0;
-        for ( IndexToNameMap::iterator aIt = aIndexToNameMap.begin(); aIt != aIndexToNameMap.end(); ++aIt )
+        for (auto const& indexToName : aIndexToNameMap)
         {
-            Any aCtrl = xNameAcc->getByName( aIt->second );
+            Any aCtrl = xNameAcc->getByName( indexToName.second );
             Reference< beans::XPropertySet > xPSet;
-               aCtrl >>= xPSet;
+            aCtrl >>= xPSet;
             if ( xPSet.is() )
             {
-                Any aTabIndex;
-                aTabIndex <<= (sal_Int16) nNewTabIndex++;
-                xPSet->setPropertyValue( DLGED_PROP_TABINDEX, aTabIndex );
+                xPSet->setPropertyValue( DLGED_PROP_TABINDEX, Any(nNewTabIndex) );
+                nNewTabIndex++;
             }
         }
 
@@ -1477,9 +1462,9 @@ void DlgEdForm::UpdateTabIndices()
     }
 
     // start listening with all children
-    for ( aIter = pChildren.begin() ; aIter != pChildren.end() ; ++aIter )
+    for (auto const& child : pChildren)
     {
-        (*aIter)->StartListening();
+        child->StartListening();
     }
 }
 
@@ -1516,7 +1501,7 @@ void DlgEdForm::UpdateGroups()
     if ( xTabModel.is() )
     {
         // create a global list of controls that belong to the dialog
-        ::std::vector<DlgEdObj*> aChildList = GetChildren();
+        std::vector<DlgEdObj*> aChildList = GetChildren();
         sal_uInt32 nSize = aChildList.size();
         Sequence< Reference< awt::XControl > > aSeqControls( nSize );
         for ( sal_uInt32 i = 0; i < nSize; ++i )
@@ -1583,12 +1568,11 @@ void DlgEdForm::NbcMove( const Size& rSize )
     StartListening();
 
     // set geometry properties of all children
-    ::std::vector<DlgEdObj*>::iterator aIter;
-    for ( aIter = pChildren.begin() ; aIter != pChildren.end() ; ++aIter )
+    for (auto const& child : pChildren)
     {
-        (*aIter)->EndListening(false);
-        (*aIter)->SetPropsFromRect();
-        (*aIter)->StartListening();
+        child->EndListening(false);
+        child->SetPropsFromRect();
+        child->StartListening();
     }
 
     // dialog model changed
@@ -1605,12 +1589,11 @@ void DlgEdForm::NbcResize(const Point& rRef, const Fraction& xFract, const Fract
     StartListening();
 
     // set geometry properties of all children
-    ::std::vector<DlgEdObj*>::iterator aIter;
-    for ( aIter = pChildren.begin() ; aIter != pChildren.end() ; ++aIter )
+    for (auto const& child : pChildren)
     {
-        (*aIter)->EndListening(false);
-        (*aIter)->SetPropsFromRect();
-        (*aIter)->StartListening();
+        child->EndListening(false);
+        child->SetPropsFromRect();
+        child->StartListening();
     }
 
     // dialog model changed

@@ -1,4 +1,3 @@
-/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -19,49 +18,31 @@
 #ifndef INCLUDED_CUI_SOURCE_OPTIONS_WEBCONNINFO_HXX
 #define INCLUDED_CUI_SOURCE_OPTIONS_WEBCONNINFO_HXX
 
-#include <vcl/button.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/fixed.hxx>
-#include <svtools/simptabl.hxx>
-#include <svtools/stdctrl.hxx>
-
+#include <vcl/weld.hxx>
 
 namespace svx
 {
-
-
-    class PasswordTable : public SvSimpleTable
-    {
-    public:
-        PasswordTable(SvSimpleTableContainer& rParent, WinBits nBits);
-
-        void InsertHeaderItem(sal_uInt16 nColumn, const OUString& rText, HeaderBarItemBits nBits);
-        void setColWidths();
-        void Resort( bool bForced );
-        virtual void Resize() override;
-    };
-
-    class WebConnectionInfoDialog : public ModalDialog
+    class WebConnectionInfoDialog : public weld::GenericDialogController
     {
     private:
-        VclPtr<PasswordTable> m_pPasswordsLB;
-        VclPtr<PushButton>    m_pRemoveBtn;
-        VclPtr<PushButton>    m_pRemoveAllBtn;
-        VclPtr<PushButton>    m_pChangeBtn;
-        sal_Int32      m_nPos;
+        sal_Int32 m_nPos;
 
-        DECL_LINK_TYPED( HeaderBarClickedHdl, SvSimpleTable*, void );
-        DECL_LINK_TYPED( RemovePasswordHdl, Button*, void );
-        DECL_LINK_TYPED( RemoveAllPasswordsHdl, Button*, void );
-        DECL_LINK_TYPED( ChangePasswordHdl, Button*, void );
-        DECL_LINK_TYPED( EntrySelectedHdl, SvTreeListBox*, void );
+        std::unique_ptr<weld::Button> m_xRemoveBtn;
+        std::unique_ptr<weld::Button> m_xRemoveAllBtn;
+        std::unique_ptr<weld::Button> m_xChangeBtn;
+        std::unique_ptr<weld::TreeView> m_xPasswordsLB;
+
+        DECL_LINK( HeaderBarClickedHdl, int, void );
+        DECL_LINK( RemovePasswordHdl, weld::Button&, void );
+        DECL_LINK( RemoveAllPasswordsHdl, weld::Button&, void );
+        DECL_LINK( ChangePasswordHdl, weld::Button&, void );
+        DECL_LINK( EntrySelectedHdl, weld::TreeView&, void );
 
         void FillPasswordList();
 
     public:
-        explicit WebConnectionInfoDialog( vcl::Window* pParent );
-        virtual ~WebConnectionInfoDialog();
-        virtual void dispose() override;
+        explicit WebConnectionInfoDialog(weld::Window* pParent);
+        virtual ~WebConnectionInfoDialog() override;
     };
 
 

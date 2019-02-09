@@ -17,20 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TitleItemConverter.hxx"
+#include <TitleItemConverter.hxx>
 #include "SchWhichPairs.hxx"
-#include "macros.hxx"
-#include "ItemPropertyMap.hxx"
-#include "GraphicPropertyItemConverter.hxx"
-#include "CharacterPropertyItemConverter.hxx"
-#include "MultipleItemConverter.hxx"
+#include <ItemPropertyMap.hxx>
+#include <GraphicPropertyItemConverter.hxx>
+#include <CharacterPropertyItemConverter.hxx>
+#include <MultipleItemConverter.hxx>
 #include <svl/intitem.hxx>
 #include <rtl/math.hxx>
 
-#include <com/sun/star/chart2/XTitled.hpp>
+#include <com/sun/star/chart2/XTitle.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 
-#include <functional>
-#include <algorithm>
 #include <memory>
 
 using namespace ::com::sun::star;
@@ -41,11 +39,8 @@ namespace {
 
 ItemPropertyMapType & lcl_GetTitlePropertyMap()
 {
-    static ItemPropertyMapType aTitlePropertyMap(
-        MakeItemPropertyMap
-        IPM_MAP_ENTRY( SCHATTR_TEXT_STACKED, "StackCharacters", 0 )
-        );
-
+    static ItemPropertyMapType aTitlePropertyMap{
+        {SCHATTR_TEXT_STACKED, {"StackCharacters", 0}}};
     return aTitlePropertyMap;
 };
 
@@ -59,7 +54,6 @@ public:
         SfxItemPool & rItemPool,
         const awt::Size* pRefSize,
         const uno::Reference< beans::XPropertySet > & xParentProp );
-    virtual ~FormattedStringsConverter();
 
 protected:
     virtual const sal_uInt16 * GetWhichPairs() const override;
@@ -79,17 +73,13 @@ FormattedStringsConverter::FormattedStringsConverter(
         if( xProp.is())
         {
             if( bHasRefSize )
-                m_aConverters.push_back(
+                m_aConverters.emplace_back(
                     new CharacterPropertyItemConverter(
                         xProp, rItemPool, pRefSize, "ReferencePageSize", xParentProp));
             else
-                m_aConverters.push_back( new CharacterPropertyItemConverter( xProp, rItemPool ));
+                m_aConverters.emplace_back( new CharacterPropertyItemConverter( xProp, rItemPool ));
         }
     }
-}
-
-FormattedStringsConverter::~FormattedStringsConverter()
-{
 }
 
 const sal_uInt16 * FormattedStringsConverter::GetWhichPairs() const
@@ -105,10 +95,10 @@ TitleItemConverter::TitleItemConverter(
     const awt::Size* pRefSize ) :
         ItemConverter( rPropertySet, rItemPool )
 {
-    m_aConverters.push_back( new GraphicPropertyItemConverter(
+    m_aConverters.emplace_back( new GraphicPropertyItemConverter(
                                  rPropertySet, rItemPool, rDrawModel,
                                  xNamedPropertyContainerFactory,
-                                 GraphicPropertyItemConverter::LINE_AND_FILL_PROPERTIES ));
+                                 GraphicObjectType::LineAndFillProperties ));
 
     // CharacterProperties are not at the title but at its contained XFormattedString objects
     // take the first formatted string in the sequence
@@ -118,7 +108,7 @@ TitleItemConverter::TitleItemConverter(
         uno::Sequence< uno::Reference< chart2::XFormattedString > > aStringSeq( xTitle->getText());
         if( aStringSeq.getLength() > 0 )
         {
-            m_aConverters.push_back(
+            m_aConverters.emplace_back(
                 new FormattedStringsConverter( aStringSeq, rItemPool, pRefSize, rPropertySet ));
         }
     }
@@ -126,7 +116,6 @@ TitleItemConverter::TitleItemConverter(
 
 TitleItemConverter::~TitleItemConverter()
 {
-    ::std::for_each(m_aConverters.begin(), m_aConverters.end(), std::default_delete<ItemConverter>());
 }
 
 void TitleItemConverter::FillItemSet( SfxItemSet & rOutItemSet ) const
@@ -169,7 +158,6 @@ bool TitleItemConverter::GetItemProperty( tWhichIdType nWhichId, tPropertyNameWi
 
 bool TitleItemConverter::ApplySpecialItem(
     sal_uInt16 nWhichId, const SfxItemSet & rItemSet )
-    throw( uno::Exception )
 {
     bool bChanged = false;
 
@@ -187,7 +175,7 @@ bool TitleItemConverter::ApplySpecialItem(
 
             if( ! bPropExisted || fOldVal != fVal )
             {
-                GetPropertySet()->setPropertyValue( "TextRotation" , uno::makeAny( fVal ));
+                GetPropertySet()->setPropertyValue( "TextRotation" , uno::Any( fVal ));
                 bChanged = true;
             }
         }
@@ -199,7 +187,6 @@ bool TitleItemConverter::ApplySpecialItem(
 
 void TitleItemConverter::FillSpecialItem(
     sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const
-    throw( uno::Exception )
 {
     switch( nWhichId )
     {

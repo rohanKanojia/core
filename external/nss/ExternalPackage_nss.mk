@@ -11,7 +11,7 @@ $(eval $(call gb_ExternalPackage_ExternalPackage,nss,nss))
 
 $(eval $(call gb_ExternalPackage_use_external_project,nss,nss))
 
-ifeq ($(OS),IOS)
+ifeq ($(OS),iOS)
 # nothing...
 else ifeq ($(OS),MACOSX)
 $(eval $(call gb_ExternalPackage_add_files,nss,$(LIBO_LIB_FOLDER),\
@@ -56,6 +56,11 @@ $(eval $(call gb_ExternalPackage_add_files,nss,$(LIBO_LIB_FOLDER),\
 		dist/out/lib/libsoftokn3.so \
 		dist/out/lib/libssl3.so \
 		dist/out/lib/libsqlite3.so \
+))
+endif
+ifeq ($(OS),LINUX)
+$(eval $(call gb_ExternalPackage_add_files,nss,$(LIBO_LIB_FOLDER),\
+		dist/out/lib/libfreeblpriv3.so \
 ))
 endif
 

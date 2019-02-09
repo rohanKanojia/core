@@ -83,7 +83,7 @@ PresenterSlidePreview::PresenterSlidePreview (
         if (xPeer.is())
             xPeer->setBackground(util::Color(0xff000000));
 
-        mxWindow->setVisible(sal_True);
+        mxWindow->setVisible(true);
     }
 
     if (mpPresenterController.get() != nullptr)
@@ -126,53 +126,38 @@ void SAL_CALL PresenterSlidePreview::disposing()
 //----- XResourceId -----------------------------------------------------------
 
 Reference<XResourceId> SAL_CALL PresenterSlidePreview::getResourceId()
-    throw (RuntimeException, std::exception)
 {
     return mxViewId;
 }
 
 sal_Bool SAL_CALL PresenterSlidePreview::isAnchorOnly()
-    throw (RuntimeException, std::exception)
 {
     return false;
 }
 
 //----- XWindowListener -------------------------------------------------------
 
-void SAL_CALL PresenterSlidePreview::windowResized (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
+void SAL_CALL PresenterSlidePreview::windowResized (const awt::WindowEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
     ::osl::MutexGuard aGuard (::osl::Mutex::getGlobalMutex());
     Resize();
 }
 
-void SAL_CALL PresenterSlidePreview::windowMoved (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterSlidePreview::windowMoved (const awt::WindowEvent&) {}
 
-void SAL_CALL PresenterSlidePreview::windowShown (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
+void SAL_CALL PresenterSlidePreview::windowShown (const lang::EventObject&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
     ::osl::MutexGuard aGuard (::osl::Mutex::getGlobalMutex());
     Resize();
 }
 
-void SAL_CALL PresenterSlidePreview::windowHidden (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterSlidePreview::windowHidden (const lang::EventObject&) {}
 
 //----- XPaintListener --------------------------------------------------------
 
 void SAL_CALL PresenterSlidePreview::windowPaint (const awt::PaintEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
 
@@ -188,7 +173,6 @@ void SAL_CALL PresenterSlidePreview::windowPaint (const awt::PaintEvent& rEvent)
 //----- lang::XEventListener --------------------------------------------------
 
 void SAL_CALL PresenterSlidePreview::disposing (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
 {
     if (rEvent.Source == mxWindow)
     {
@@ -201,7 +185,6 @@ void SAL_CALL PresenterSlidePreview::disposing (const lang::EventObject& rEvent)
 //----- XDrawView -------------------------------------------------------------
 
 void SAL_CALL PresenterSlidePreview::setCurrentPage (const Reference<drawing::XDrawPage>& rxSlide)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     ::osl::MutexGuard aGuard (::osl::Mutex::getGlobalMutex());
@@ -209,7 +192,6 @@ void SAL_CALL PresenterSlidePreview::setCurrentPage (const Reference<drawing::XD
 }
 
 Reference<drawing::XDrawPage> SAL_CALL PresenterSlidePreview::getCurrentPage()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     return nullptr;
@@ -243,7 +225,6 @@ void PresenterSlidePreview::SetSlide (const Reference<drawing::XDrawPage>& rxPag
 
 void PresenterSlidePreview::Paint (const awt::Rectangle& rBoundingBox)
 {
-    (void)rBoundingBox;
     if ( ! mxWindow.is())
         return;
     if ( ! mxCanvas.is())
@@ -358,7 +339,7 @@ void PresenterSlidePreview::Paint (const awt::Rectangle& rBoundingBox)
 
     Reference<rendering::XSpriteCanvas> xSpriteCanvas (mxCanvas, UNO_QUERY);
     if (xSpriteCanvas.is())
-        xSpriteCanvas->updateScreen(sal_False);
+        xSpriteCanvas->updateScreen(false);
 }
 
 void PresenterSlidePreview::Resize()
@@ -383,7 +364,6 @@ void PresenterSlidePreview::Resize()
 }
 
 void PresenterSlidePreview::ThrowIfDisposed()
-    throw (css::lang::DisposedException)
 {
     if (PresenterSlidePreviewInterfaceBase::rBHelper.bDisposed || PresenterSlidePreviewInterfaceBase::rBHelper.bInDispose)
     {

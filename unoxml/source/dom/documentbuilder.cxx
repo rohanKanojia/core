@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <documentbuilder.hxx>
+#include "documentbuilder.hxx"
 
 #include <string.h>
 #include <stdio.h>
@@ -31,6 +31,7 @@
 #include <rtl/alloc.h>
 #include <rtl/ustrbuf.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/implbase.hxx>
@@ -44,7 +45,7 @@
 #include <ucbhelper/commandenvironment.hxx>
 
 #include <node.hxx>
-#include <document.hxx>
+#include "document.hxx"
 
 using namespace css::io;
 using namespace css::lang;
@@ -63,8 +64,7 @@ namespace DOM
     class CDefaultEntityResolver : public cppu::WeakImplHelper< XEntityResolver >
     {
     public:
-        virtual InputSource SAL_CALL resolveEntity( const OUString& sPublicId, const OUString& sSystemId )
-            throw (css::uno::RuntimeException, std::exception) override
+        virtual InputSource SAL_CALL resolveEntity( const OUString& sPublicId, const OUString& sSystemId ) override
         {
             InputSource is;
             is.sPublicId = sPublicId;
@@ -88,7 +88,7 @@ namespace DOM
     };
 
     CDocumentBuilder::CDocumentBuilder()
-        : m_xEntityResolver(new CDefaultEntityResolver())
+        : m_xEntityResolver(new CDefaultEntityResolver)
     {
         // init libxml. libxml will protect itself against multiple
         // initializations so there is no problem here if this gets
@@ -101,65 +101,58 @@ namespace DOM
         return static_cast< XDocumentBuilder* >(new CDocumentBuilder);
     }
 
-    const char* CDocumentBuilder::aImplementationName = "com.sun.star.comp.xml.dom.DocumentBuilder";
-    const char* CDocumentBuilder::aSupportedServiceNames[] = {
+    static const char aImplementationName[] = "com.sun.star.comp.xml.dom.DocumentBuilder";
+    static const char* aSupportedServiceNames[] = {
         "com.sun.star.xml.dom.DocumentBuilder",
         nullptr
     };
 
     OUString CDocumentBuilder::_getImplementationName()
     {
-        return OUString::createFromAscii(aImplementationName);
+        return OUString(aImplementationName);
     }
     Sequence<OUString> CDocumentBuilder::_getSupportedServiceNames()
     {
         Sequence<OUString> aSequence;
         for (int i=0; aSupportedServiceNames[i]!=nullptr; i++) {
             aSequence.realloc(i+1);
-            aSequence[i]=(OUString::createFromAscii(aSupportedServiceNames[i]));
+            aSequence[i] = OUString::createFromAscii(aSupportedServiceNames[i]);
         }
         return aSequence;
     }
 
     Sequence< OUString > SAL_CALL CDocumentBuilder::getSupportedServiceNames()
-        throw (RuntimeException, std::exception)
     {
         return CDocumentBuilder::_getSupportedServiceNames();
     }
 
     OUString SAL_CALL CDocumentBuilder::getImplementationName()
-        throw (RuntimeException, std::exception)
     {
         return CDocumentBuilder::_getImplementationName();
     }
 
     sal_Bool SAL_CALL CDocumentBuilder::supportsService(const OUString& aServiceName)
-        throw (RuntimeException, std::exception)
     {
         return cppu::supportsService(this, aServiceName);
     }
 
     Reference< XDOMImplementation > SAL_CALL CDocumentBuilder::getDOMImplementation()
-        throw (RuntimeException, std::exception)
     {
 
         return Reference< XDOMImplementation >();
     }
 
     sal_Bool SAL_CALL CDocumentBuilder::isNamespaceAware()
-        throw (RuntimeException, std::exception)
     {
-        return sal_True;
+        return true;
     }
 
     sal_Bool SAL_CALL CDocumentBuilder::isValidating()
-        throw (RuntimeException, std::exception)
     {
-        return sal_False;
+        return false;
     }
 
     Reference< XDocument > SAL_CALL CDocumentBuilder::newDocument()
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard const g(m_Mutex);
 
@@ -188,7 +181,6 @@ namespace DOM
 
     // context struct passed to IO functions
     typedef struct context {
-        CDocumentBuilder *pBuilder;
         Reference< XInputStream > rInputStream;
         bool close;
         bool freeOnClose;
@@ -209,8 +201,7 @@ namespace DOM
             memcpy(buffer, chunk.getConstArray(), nread);
             return nread;
         } catch (const css::uno::Exception& ex) {
-            (void) ex;
-            OSL_FAIL(OUStringToOString(ex.Message, RTL_TEXTENCODING_UTF8).getStr());
+            SAL_WARN( "unoxml", ex);
             return -1;
         }
     }
@@ -229,8 +220,7 @@ namespace DOM
                 delete pctx;
             return 0;
         } catch (const css::uno::Exception& ex) {
-            (void) ex;
-            OSL_FAIL(OUStringToOString(ex.Message, RTL_TEXTENCODING_UTF8).getStr());
+            SAL_WARN( "unoxml", ex);
             return -1;
         }
     }
@@ -257,7 +247,6 @@ namespace DOM
         // when IO is actually performed through the callbacks. The close function must
         // free the memory which is indicated by the freeOnClose field in the context struct
         context_t *c = new context_t;
-        c->pBuilder = builder;
         c->rInputStream = src.aInputStream;
         c->close = true;
         c->freeOnClose = true;
@@ -281,24 +270,70 @@ namespace DOM
     // default warning handler does not trigger assertion
     static void warning_func(void * ctx, const char * /*msg*/, ...)
     {
-        SAL_INFO(
-            "unoxml",
-            "libxml2 warning: "
-                << make_error_message(static_cast<xmlParserCtxtPtr>(ctx)));
+        try
+        {
+            xmlParserCtxtPtr const pctx = static_cast<xmlParserCtxtPtr>(ctx);
+
+            SAL_INFO(
+                "unoxml",
+                "libxml2 warning: "
+                << make_error_message(pctx));
+
+            CDocumentBuilder * const pDocBuilder = static_cast<CDocumentBuilder*>(pctx->_private);
+
+            if (pDocBuilder->getErrorHandler().is())   // if custom error handler is set (using setErrorHandler ())
+            {
+                // Prepare SAXParseException to be passed to custom XErrorHandler::warning function
+                css::xml::sax::SAXParseException saxex;
+                saxex.Message = make_error_message(pctx);
+                saxex.LineNumber = static_cast<sal_Int32>(pctx->lastError.line);
+                saxex.ColumnNumber = static_cast<sal_Int32>(pctx->lastError.int2);
+
+                // Call custom warning function
+                pDocBuilder->getErrorHandler()->warning(::css::uno::Any(saxex));
+            }
+        }
+        catch (const css::uno::Exception &e)
+        {
+            // Protect lib2xml from UNO Exception
+            SAL_WARN("unoxml", "DOM::warning_func: caught " << e);
+        }
     }
 
     // default error handler triggers assertion
     static void error_func(void * ctx, const char * /*msg*/, ...)
     {
-        SAL_WARN(
-            "unoxml",
-            "libxml2 error: "
-                << make_error_message(static_cast<xmlParserCtxtPtr>(ctx)));
-    }
+        try
+        {
+            xmlParserCtxtPtr const pctx = static_cast<xmlParserCtxtPtr>(ctx);
+            SAL_WARN(
+                "unoxml",
+                "libxml2 error: "
+                << make_error_message(pctx));
 
+            CDocumentBuilder * const pDocBuilder = static_cast<CDocumentBuilder*>(pctx->_private);
+
+            if (pDocBuilder->getErrorHandler().is())   // if custom error handler is set (using setErrorHandler ())
+            {
+                // Prepare SAXParseException to be passed to custom XErrorHandler::error function
+                css::xml::sax::SAXParseException saxex;
+                saxex.Message = make_error_message(pctx);
+                saxex.LineNumber = static_cast<sal_Int32>(pctx->lastError.line);
+                saxex.ColumnNumber = static_cast<sal_Int32>(pctx->lastError.int2);
+
+                // Call custom warning function
+                pDocBuilder->getErrorHandler()->error(::css::uno::Any(saxex));
+            }
+        }
+        catch (const css::uno::Exception &e)
+        {
+            // Protect lib2xml from UNO Exception
+            SAL_WARN("unoxml", "DOM::error_func: caught " << e);
+        }
+    }
     } // extern "C"
 
-    void throwEx(xmlParserCtxtPtr ctxt)
+    static void throwEx(xmlParserCtxtPtr ctxt)
     {
         css::xml::sax::SAXParseException saxex;
         saxex.Message = make_error_message(ctxt);
@@ -307,8 +342,15 @@ namespace DOM
         throw saxex;
     }
 
+    namespace {
+
+    struct XmlFreeParserCtxt {
+        void operator ()(xmlParserCtxt * p) const { xmlFreeParserCtxt(p); }
+    };
+
+    }
+
     Reference< XDocument > SAL_CALL CDocumentBuilder::parse(const Reference< XInputStream >& is)
-        throw (RuntimeException, SAXParseException, IOException, std::exception)
     {
         if (!is.is()) {
             throw RuntimeException();
@@ -316,8 +358,16 @@ namespace DOM
 
         ::osl::MutexGuard const g(m_Mutex);
 
-        std::shared_ptr<xmlParserCtxt> const pContext(
-                xmlNewParserCtxt(), xmlFreeParserCtxt);
+        // IO context struct.  Must outlive pContext, as destroying that via
+        // xmlFreeParserCtxt may still access this context_t
+        context_t c;
+        c.rInputStream = is;
+        // we did not open the stream, thus we do not close it.
+        c.close = false;
+        c.freeOnClose = false;
+
+        std::unique_ptr<xmlParserCtxt, XmlFreeParserCtxt> const pContext(
+                xmlNewParserCtxt());
 
         // register error functions to prevent errors being printed
         // on the console
@@ -326,13 +376,6 @@ namespace DOM
         pContext->sax->warning = warning_func;
         pContext->sax->resolveEntity = resolve_func;
 
-        // IO context struct
-        context_t c;
-        c.pBuilder = this;
-        c.rInputStream = is;
-        // we did not open the stream, thus we do not close it.
-        c.close = false;
-        c.freeOnClose = false;
         xmlDocPtr const pDoc = xmlCtxtReadIO(pContext.get(),
                 xmlIO_read_func, xmlIO_close_func, &c, nullptr, nullptr, 0);
 
@@ -345,12 +388,11 @@ namespace DOM
     }
 
     Reference< XDocument > SAL_CALL CDocumentBuilder::parseURI(const OUString& sUri)
-        throw (RuntimeException, SAXParseException, IOException, std::exception)
     {
         ::osl::MutexGuard const g(m_Mutex);
 
-        std::shared_ptr<xmlParserCtxt> const pContext(
-                xmlNewParserCtxt(), xmlFreeParserCtxt);
+        std::unique_ptr<xmlParserCtxt, XmlFreeParserCtxt> const pContext(
+                xmlNewParserCtxt());
         pContext->_private = this;
         pContext->sax->error = error_func;
         pContext->sax->warning = warning_func;
@@ -369,15 +411,13 @@ namespace DOM
 
     void SAL_CALL
     CDocumentBuilder::setEntityResolver(Reference< XEntityResolver > const& xER)
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard const g(m_Mutex);
 
         m_xEntityResolver = xER;
     }
 
-    Reference< XEntityResolver > SAL_CALL CDocumentBuilder::getEntityResolver()
-        throw (RuntimeException)
+    Reference< XEntityResolver > CDocumentBuilder::getEntityResolver()
     {
         ::osl::MutexGuard const g(m_Mutex);
 
@@ -386,7 +426,6 @@ namespace DOM
 
     void SAL_CALL
     CDocumentBuilder::setErrorHandler(Reference< XErrorHandler > const& xEH)
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard const g(m_Mutex);
 

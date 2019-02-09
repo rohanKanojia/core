@@ -16,10 +16,10 @@ $(eval $(call gb_Library_use_unpacked,clucene,clucene))
 $(eval $(call gb_Library_set_warnings_not_errors,clucene))
 
 $(eval $(call gb_Library_set_include,clucene,\
-	-I$(WORKDIR)/UnpackedTarball/clucene/inc/internal \
-	-I$(WORKDIR)/UnpackedTarball/clucene/src/core \
-	-I$(WORKDIR)/UnpackedTarball/clucene/src/contribs-lib \
-	-I$(WORKDIR)/UnpackedTarball/clucene/src/shared \
+	-I$(call gb_UnpackedTarball_get_dir,clucene)/inc/internal \
+	-I$(call gb_UnpackedTarball_get_dir,clucene)/src/core \
+	-I$(call gb_UnpackedTarball_get_dir,clucene)/src/contribs-lib \
+	-I$(call gb_UnpackedTarball_get_dir,clucene)/src/shared \
 	$$(INCLUDE) \
 ))
 
@@ -27,7 +27,12 @@ $(eval $(call gb_Library_add_defs,clucene,\
     -Dclucene_shared_EXPORTS \
     -Dclucene_core_EXPORTS \
     -Dclucene_contribs_lib_EXPORTS \
-    $(LFS_CFLAGS) \
+))
+
+# Needed when building against MSVC in C++17 mode, as
+# workdir/UnpackedTarball/clucene/src/core/CLucene/util/Equators.h uses std::binary_function:
+$(eval $(call gb_Library_add_defs,clucene, \
+    -D_HAS_AUTO_PTR_ETC=1 \
 ))
 
 # clucene is riddled with warnings... let's spare use

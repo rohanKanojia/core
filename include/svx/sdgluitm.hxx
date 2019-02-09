@@ -33,11 +33,10 @@ class SVX_DLLPUBLIC SdrGrafLuminanceItem : public SdrSignedPercentItem
 public:
 
 
-                            SdrGrafLuminanceItem( short nLuminancePercent = 0 ) : SdrSignedPercentItem( SDRATTR_GRAFLUMINANCE, nLuminancePercent ) {}
-                            SdrGrafLuminanceItem( SvStream& rIn ) : SdrSignedPercentItem( SDRATTR_GRAFLUMINANCE, rIn ) {}
+                            SdrGrafLuminanceItem( short nLuminancePercent = 0 ) : SdrSignedPercentItem(
+                            SDRATTR_GRAFLUMINANCE, nLuminancePercent ) {}
 
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
-    virtual SfxPoolItem*    Create( SvStream& rIn, sal_uInt16 nVer ) const override;
 };
 
 
@@ -50,10 +49,8 @@ public:
 
 
                             SdrGrafContrastItem( short nContrastPercent = 0 ) : SdrSignedPercentItem( SDRATTR_GRAFCONTRAST, nContrastPercent ) {}
-                            SdrGrafContrastItem( SvStream& rIn ) : SdrSignedPercentItem( SDRATTR_GRAFCONTRAST, rIn ) {}
 
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
-    virtual SfxPoolItem*    Create( SvStream& rIn, sal_uInt16 nVer ) const override;
 };
 
 #endif // INCLUDED_SVX_SDGLUITM_HXX

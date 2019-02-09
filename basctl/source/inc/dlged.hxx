@@ -25,6 +25,7 @@
 #include <com/sun/star/datatransfer/DataFlavor.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/util/XNumberFormatsSupplier.hpp>
+#include <o3tl/deleter.hxx>
 #include <svl/SfxBroadcaster.hxx>
 #include <svl/hint.hxx>
 #include <tools/gen.hxx>
@@ -74,7 +75,7 @@ private:
 public:
     DlgEdHint (Kind);
     DlgEdHint (Kind, DlgEdObj* pObj);
-    virtual ~DlgEdHint();
+    virtual ~DlgEdHint() override;
 
     Kind       GetKind() const { return eKind; }
     DlgEdObj*  GetObject() const { return pDlgEdObj; }
@@ -102,7 +103,7 @@ public:
     };
 
 private:
-    DECL_LINK_TYPED(MarkTimeout, Idle *, void);
+    DECL_LINK(MarkTimeout, Timer *, void);
 
     static void Print( Printer* pPrinter, const OUString& rTitle );
 
@@ -118,18 +119,15 @@ private:
     css::uno::Sequence< css::datatransfer::DataFlavor >       m_ClipboardDataFlavors;
     css::uno::Sequence< css::datatransfer::DataFlavor >       m_ClipboardDataFlavorsResource;
     css::uno::Reference< css::util::XNumberFormatsSupplier >  m_xSupplier;
-    std::unique_ptr<DlgEdFactory> pObjFac; // never nullptr
+    std::unique_ptr<DlgEdFactory, o3tl::default_delete<DlgEdFactory>> pObjFac; // never nullptr
     vcl::Window&                    rWindow; // DialogWindow
     std::unique_ptr<DlgEdFunc>    pFunc;
     DialogWindowLayout& rLayout;
     Mode                eMode;
     sal_uInt16          eActObj;
     bool                bFirstDraw;
-    Size                aGridSize;
-    bool                bGridVisible;
-    bool                bGridSnap;
     bool                bCreateOK;
-    Rectangle           aPaintRect;
+    tools::Rectangle           aPaintRect;
     bool                bDialogModelChanged;
     Idle                aMarkIdle;
     long                mnPaintGuard;
@@ -139,9 +137,9 @@ public:
     DlgEditor (
         vcl::Window&, DialogWindowLayout&,
         css::uno::Reference<css::frame::XModel> const& xModel,
-        css::uno::Reference<css::container::XNameContainer> xDialogModel
+        css::uno::Reference<css::container::XNameContainer> const & xDialogModel
     );
-    virtual ~DlgEditor();
+    virtual ~DlgEditor() override;
 
     vcl::Window& GetWindow() const { return rWindow; }
 
@@ -149,19 +147,19 @@ public:
         @see GetWindow
         @see SetWindow
     */
-    css::uno::Reference< css::awt::XControlContainer >
+    css::uno::Reference< css::awt::XControlContainer > const &
                     GetWindowControlContainer();
 
     void            SetScrollBars( ScrollBar* pHScroll, ScrollBar* pVScroll );
     void            InitScrollBars();
     ScrollBar*      GetHScroll() const { return pHScroll; }
     ScrollBar*      GetVScroll() const { return pVScroll; }
-    void            DoScroll( ScrollBar* pActScroll );
+    void            DoScroll();
     void            UpdateScrollBars();
 
     void            SetDialog (const css::uno::Reference<css::container::XNameContainer>& xUnoControlDialogModel);
     void            ResetDialog ();
-    css::uno::Reference< css::container::XNameContainer > GetDialog() const
+    const css::uno::Reference< css::container::XNameContainer >& GetDialog() const
                         {return m_xUnoControlDialogModel;}
 
     css::uno::Reference< css::util::XNumberFormatsSupplier > const & GetNumberFormatsSupplier();
@@ -183,12 +181,11 @@ public:
     void            MouseButtonDown( const MouseEvent& rMEvt );
     void            MouseButtonUp( const MouseEvent& rMEvt );
     void            MouseMove( const MouseEvent& rMEvt );
-    void            Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect);
+    void            Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect);
     bool            KeyInput( const KeyEvent& rKEvt );
 
     void            SetMode (Mode eMode);
     void            SetInsertObj( sal_uInt16 eObj );
-    sal_uInt16      GetInsertObj() const { return eActObj;}
     void            CreateDefaultObject();
     Mode            GetMode() const { return eMode; }
     bool            IsCreateOK() const { return bCreateOK; }

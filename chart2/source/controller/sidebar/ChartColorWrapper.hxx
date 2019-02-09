@@ -10,8 +10,10 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_SIDEBAR_CHARTCOLORWRAPPER_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_SIDEBAR_CHARTCOLORWRAPPER_HXX
 
-#include <com/sun/star/frame/XFramesSupplier.hpp>
-#include <tools/color.hxx>
+#include <com/sun/star/uno/Reference.hxx>
+#include <svx/Palette.hxx>
+
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
 
 class SvxColorToolBoxControl;
 
@@ -22,11 +24,11 @@ class ChartColorWrapper
 private:
 
 public:
-    ChartColorWrapper(css::uno::Reference<css::frame::XModel> xModel,
+    ChartColorWrapper(css::uno::Reference<css::frame::XModel> const & xModel,
             SvxColorToolBoxControl* pControl,
             const OUString& rPropertyName);
 
-    void operator()(const OUString& rCommand, const Color& rColor);
+    void operator()(const OUString& rCommand, const NamedColor& rColor);
 
     void updateModel(const css::uno::Reference<css::frame::XModel>& xModel);
 

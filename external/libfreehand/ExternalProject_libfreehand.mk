@@ -16,6 +16,7 @@ $(eval $(call gb_ExternalProject_register_targets,libfreehand,\
 ))
 
 $(eval $(call gb_ExternalProject_use_externals,libfreehand,\
+	boost_headers \
 	icu \
 	lcms2 \
 	revenge \
@@ -30,11 +31,14 @@ $(call gb_ExternalProject_get_state_target,libfreehand,build) :
 			--enable-static \
 			--disable-shared \
 			--without-docs \
+			--disable-tests \
 			--disable-tools \
 			--disable-debug \
 			--disable-werror \
 			--disable-weffc \
 			$(if $(verbose),--disable-silent-rules,--enable-silent-rules) \
+			CXXFLAGS="$(gb_CXXFLAGS) $(if $(ENABLE_OPTIMIZED),$(gb_COMPILEROPTFLAGS),$(gb_COMPILERNOOPTFLAGS))" \
+			CPPFLAGS="$(CPPFLAGS) $(BOOST_CPPFLAGS)" \
 			$(if $(CROSS_COMPILING),--build=$(BUILD_PLATFORM) --host=$(HOST_PLATFORM)) \
 		&& $(MAKE) \
 	)

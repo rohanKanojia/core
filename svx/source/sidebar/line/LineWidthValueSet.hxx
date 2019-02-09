@@ -21,18 +21,17 @@
 
 #include <svtools/valueset.hxx>
 #include <vcl/image.hxx>
+#include <array>
 
 namespace svx { namespace sidebar {
 
-class LineWidthValueSet
-    : public ValueSet
+class LineWidthValueSet final : public ValueSet
 {
 public:
     explicit LineWidthValueSet(vcl::Window* pParent);
-    virtual ~LineWidthValueSet();
-    virtual void dispose() override;
+    virtual ~LineWidthValueSet() override;
 
-    void SetUnit(OUString* str);
+    void SetUnit(std::array<OUString,9> const & strUnits);
     void SetSelItem(sal_uInt16 nSel);
     sal_uInt16 GetSelItem() { return nSelItem;}
     void SetImage(const Image& img);
@@ -42,10 +41,9 @@ public:
     virtual void    Resize() override;
     virtual Size    GetOptimalSize() const override;
 
-protected:
-    VclPtr<VirtualDevice> pVDev;
+private:
     sal_uInt16          nSelItem;
-    OUString*      strUnit;
+    std::array<OUString,9> maStrUnits;
     Image           imgCus;
     bool            bCusEnable;
 };

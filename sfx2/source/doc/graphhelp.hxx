@@ -33,7 +33,7 @@ class GraphicHelper
 {
 public:
 
-    static SvMemoryStream* getFormatStrFromGDI_Impl( const GDIMetaFile* pGDIMeta, ConvertDataFormat nFormat );
+    static std::unique_ptr<SvMemoryStream> getFormatStrFromGDI_Impl( const GDIMetaFile* pGDIMeta, ConvertDataFormat nFormat );
 
     static void* getEnhMetaFileFromGDI_Impl( const GDIMetaFile* pGDIMeta );
 
@@ -49,14 +49,13 @@ public:
     }
 
     static bool getThumbnailFormatFromGDI_Impl(
-            GDIMetaFile* pMetaFile,
+            GDIMetaFile const * pMetaFile,
             const css::uno::Reference< css::io::XStream >& xStream );
 
-    static sal_uInt16 getThumbnailReplacementIDByFactoryName_Impl( const OUString& aFactoryShortName,
-                                                                    bool bIsTemplate );
+    static OUString getThumbnailReplacementIDByFactoryName_Impl(const OUString& aFactoryShortName);
 
     static bool getThumbnailReplacement_Impl(
-            sal_Int32 nResID,
+            const OUString& rResID,
             const css::uno::Reference< css::io::XStream >& xStream );
 
 };

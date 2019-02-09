@@ -10,23 +10,15 @@
 #ifndef INCLUDED_SC_QA_UNIT_HELPER_QAHELPER_HXX
 #define INCLUDED_SC_QA_UNIT_HELPER_QAHELPER_HXX
 
-#include "scdllapi.h"
-#include "debughelper.hxx"
-#include "docsh.hxx"
-#include "address.hxx"
+#include <docsh.hxx>
+#include <address.hxx>
 
 #include <cppunit/SourceLine.h>
 
 #include <test/bootstrapfixture.hxx>
 #include <comphelper/documentconstants.hxx>
 
-#include <osl/detail/android-bootstrap.h>
-
-#include <unotools/tempfile.hxx>
-#include <comphelper/storagehelper.hxx>
-#include <sfx2/docfilt.hxx>
-#include <sfx2/docfile.hxx>
-#include <svl/stritem.hxx>
+#include <comphelper/fileformat.h>
 #include <formula/grammar.hxx>
 
 #include <string>
@@ -35,6 +27,8 @@
 #include <sal/types.h>
 
 #include <memory>
+
+namespace utl { class TempFile; }
 
 #if defined(SCQAHELPER_DLLIMPLEMENTATION)
 #define SCQAHELPER_DLLPUBLIC  SAL_DLLPUBLIC_EXPORT
@@ -49,8 +43,11 @@
 #define CSV_FORMAT_TYPE      (SfxFilterFlags::IMPORT | SfxFilterFlags::EXPORT | SfxFilterFlags::ALIEN )
 #define HTML_FORMAT_TYPE     (SfxFilterFlags::IMPORT | SfxFilterFlags::EXPORT | SfxFilterFlags::ALIEN )
 #define DIF_FORMAT_TYPE      (SfxFilterFlags::IMPORT | SfxFilterFlags::EXPORT | SfxFilterFlags::ALIEN )
-#define XLS_XML_FORMAT_TYPE  (SfxFilterFlags::IMPORT | SfxFilterFlags::EXPORT | SfxFilterFlags::ALIEN)
+#define XLS_XML_FORMAT_TYPE  (SfxFilterFlags::IMPORT | SfxFilterFlags::ALIEN | SfxFilterFlags::PREFERED)
 #define XLSB_XML_FORMAT_TYPE (SfxFilterFlags::IMPORT |                          SfxFilterFlags::ALIEN | SfxFilterFlags::STARONEFILTER | SfxFilterFlags::PREFERED)
+#define FODS_FORMAT_TYPE     (SfxFilterFlags::IMPORT | SfxFilterFlags::EXPORT | SfxFilterFlags::OWN | SfxFilterFlags::STARONEFILTER )
+#define GNUMERIC_FORMAT_TYPE (SfxFilterFlags::IMPORT | SfxFilterFlags::ALIEN | SfxFilterFlags::PREFERED )
+#define XLTX_FORMAT_TYPE     (SfxFilterFlags::IMPORT | SfxFilterFlags::EXPORT | SfxFilterFlags::TEMPLATE |SfxFilterFlags::ALIEN | SfxFilterFlags::STARONEFILTER | SfxFilterFlags::PREFERED)
 
 #define FORMAT_ODS      0
 #define FORMAT_XLS      1
@@ -62,8 +59,11 @@
 #define FORMAT_DIF      7
 #define FORMAT_XLS_XML  8
 #define FORMAT_XLSB     9
+#define FORMAT_FODS     10
+#define FORMAT_GNUMERIC 11
+#define FORMAT_XLTX     12
 
-enum StringType { PureString, FormulaValue, StringValue };
+enum class StringType { PureString, StringValue };
 
 SCQAHELPER_DLLPUBLIC bool testEqualsWithTolerance( long nVal1, long nVal2, long nTol );
 
@@ -78,18 +78,18 @@ struct TestParam
 {
     struct RowData
     {
-        SCROW nStartRow;
-        SCROW nEndRow;
-        SCTAB nTab;
-        int nExpectedHeight; // -1 for default height
-        int nCheck; // currently only CHECK_OPTIMAL ( we could add CHECK_MANUAL etc.)
-        bool bOptimal;
+        SCROW const nStartRow;
+        SCROW const nEndRow;
+        SCTAB const nTab;
+        int const nExpectedHeight; // -1 for default height
+        int const nCheck; // currently only CHECK_OPTIMAL ( we could add CHECK_MANUAL etc.)
+        bool const bOptimal;
     };
     const char* sTestDoc;
     int nImportType;
     int nExportType; // -1 for import test, otherwise this is an export test
     int nRowData;
-    RowData* pData;
+    RowData const * pData;
 };
 
 struct FileFormat {
@@ -117,10 +117,10 @@ SCQAHELPER_DLLPUBLIC std::ostream& operator<<(std::ostream& rStrm, const OpCode&
 
 SCQAHELPER_DLLPUBLIC void loadFile(const OUString& aFileName, std::string& aContent);
 
-SCQAHELPER_DLLPUBLIC void testFile(OUString& aFileName, ScDocument& rDoc, SCTAB nTab, StringType aStringFormat = StringValue);
+SCQAHELPER_DLLPUBLIC void testFile(const OUString& aFileName, ScDocument& rDoc, SCTAB nTab, StringType aStringFormat = StringType::StringValue);
 
 //need own handler because conditional formatting strings must be generated
-SCQAHELPER_DLLPUBLIC void testCondFile(OUString& aFileName, ScDocument* pDoc, SCTAB nTab);
+SCQAHELPER_DLLPUBLIC void testCondFile(const OUString& aFileName, ScDocument* pDoc, SCTAB nTab);
 
 SCQAHELPER_DLLPUBLIC const SdrOle2Obj* getSingleChartObject(ScDocument& rDoc, sal_uInt16 nPage);
 
@@ -134,46 +134,13 @@ SCQAHELPER_DLLPUBLIC bool checkFormulaPosition(ScDocument& rDoc, const ScAddress
 SCQAHELPER_DLLPUBLIC bool checkFormulaPositions(
     ScDocument& rDoc, SCTAB nTab, SCCOL nCol, const SCROW* pRows, size_t nRowCount);
 
-SCQAHELPER_DLLPUBLIC ScTokenArray* compileFormula(
-    ScDocument* pDoc, const OUString& rFormula, const ScAddress* pPos = nullptr,
+SCQAHELPER_DLLPUBLIC std::unique_ptr<ScTokenArray> compileFormula(
+    ScDocument* pDoc, const OUString& rFormula,
     formula::FormulaGrammar::Grammar eGram = formula::FormulaGrammar::GRAM_NATIVE );
 
-template<size_t _Size>
-bool checkOutput(ScDocument* pDoc, const ScRange& aOutRange, const char* aOutputCheck[][_Size], const char* pCaption)
-{
-    bool bResult = true;
-    const ScAddress& s = aOutRange.aStart;
-    const ScAddress& e = aOutRange.aEnd;
-    svl::GridPrinter printer(e.Row() - s.Row() + 1, e.Col() - s.Col() + 1, CALC_DEBUG_OUTPUT != 0);
-    SCROW nOutRowSize = e.Row() - s.Row() + 1;
-    SCCOL nOutColSize = e.Col() - s.Col() + 1;
-    for (SCROW nRow = 0; nRow < nOutRowSize; ++nRow)
-    {
-        for (SCCOL nCol = 0; nCol < nOutColSize; ++nCol)
-        {
-            OUString aVal = pDoc->GetString(nCol + s.Col(), nRow + s.Row(), s.Tab());
-            printer.set(nRow, nCol, aVal);
-            const char* p = aOutputCheck[nRow][nCol];
-            if (p)
-            {
-                OUString aCheckVal = OUString::createFromAscii(p);
-                bool bEqual = aCheckVal.equals(aVal);
-                if (!bEqual)
-                {
-                    cout << "Expected: " << aCheckVal << "  Actual: " << aVal << endl;
-                    bResult = false;
-                }
-            }
-            else if (!aVal.isEmpty())
-            {
-                cout << "Empty cell expected" << endl;
-                bResult = false;
-            }
-        }
-    }
-    printer.print(pCaption);
-    return bResult;
-}
+SCQAHELPER_DLLPUBLIC bool checkOutput(
+    const ScDocument* pDoc, const ScRange& aOutRange,
+    const std::vector<std::vector<const char*>>& aCheck, const char* pCaption );
 
 SCQAHELPER_DLLPUBLIC void clearFormulaCellChangedFlag( ScDocument& rDoc, const ScRange& rRange );
 
@@ -188,7 +155,7 @@ SCQAHELPER_DLLPUBLIC bool isFormulaWithoutError(ScDocument& rDoc, const ScAddres
  */
 SCQAHELPER_DLLPUBLIC OUString toString(
     ScDocument& rDoc, const ScAddress& rPos, ScTokenArray& rArray,
-    formula::FormulaGrammar::Grammar eGram = formula::FormulaGrammar::GRAM_NATIVE);
+    formula::FormulaGrammar::Grammar eGram);
 
 inline std::string print(const ScAddress& rAddr)
 {
@@ -203,7 +170,7 @@ class SCQAHELPER_DLLPUBLIC ScBootstrapFixture : public test::BootstrapFixture
 {
     static const FileFormat aFileFormats[];
 protected:
-    OUString m_aBaseString;
+    OUString const m_aBaseString;
 
     ScDocShellRef load(
         bool bReadWrite, const OUString& rURL, const OUString& rFilter, const OUString &rUserData,
@@ -221,7 +188,7 @@ public:
     static const FileFormat* getFileFormats() { return aFileFormats; }
 
     explicit ScBootstrapFixture( const OUString& rsBaseString );
-    virtual ~ScBootstrapFixture();
+    virtual ~ScBootstrapFixture() override;
 
     void createFileURL(const OUString& aFileBase, const OUString& aFileExtension, OUString& rFilePath);
 
@@ -232,9 +199,10 @@ public:
 
     ScDocShellRef saveAndReload( ScDocShell* pShell, sal_Int32 nFormat );
 
-    static std::shared_ptr<utl::TempFile> exportTo( ScDocShell* pShell, sal_Int32 nFormat );
+    std::shared_ptr<utl::TempFile> saveAs(ScDocShell* pShell, sal_Int32 nFormat);
+    std::shared_ptr<utl::TempFile> exportTo(ScDocShell* pShell, sal_Int32 nFormat);
 
-    void miscRowHeightsTest( TestParam* aTestValues, unsigned int numElems );
+    void miscRowHeightsTest( TestParam const * aTestValues, unsigned int numElems );
 };
 
 #define ASSERT_DOUBLES_EQUAL( expected, result )    \
@@ -243,11 +211,8 @@ public:
 #define ASSERT_DOUBLES_EQUAL_MESSAGE( message, expected, result )   \
     CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE( (message), (expected), (result), 1e-14 )
 
-#define ASSERT_EQUAL_TYPE( type, expected, result ) \
-    CPPUNIT_ASSERT_EQUAL( static_cast<type>(expected), static_cast<type>(result) );
-
 SCQAHELPER_DLLPUBLIC void checkFormula(ScDocument& rDoc, const ScAddress& rPos,
-        const char* expected, const char* msg, CppUnit::SourceLine sourceLine);
+        const char* expected, const char* msg, CppUnit::SourceLine const & sourceLine);
 
 #define ASSERT_FORMULA_EQUAL(doc, pos, expected, msg) \
     checkFormula(doc, pos, expected, msg, CPPUNIT_SOURCELINE())

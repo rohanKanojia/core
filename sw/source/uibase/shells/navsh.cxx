@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "cmdid.h"
+#include <cmdid.h>
 #include <svx/svdview.hxx>
 #include <svl/srchitem.hxx>
 #include <svl/eitem.hxx>
@@ -16,18 +16,15 @@
 #include <sfx2/request.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/objface.hxx>
-#include "wrtsh.hxx"
-#include "view.hxx"
-#include "edtwin.hxx"
-#include "helpid.h"
-#include "globals.hrc"
-#include "navsh.hxx"
-#include "popup.hrc"
-#include "shells.hrc"
-#define SwNavigationShell
-#include "swslots.hxx"
+#include <wrtsh.hxx>
+#include <view.hxx>
+#include <edtwin.hxx>
+#include <globals.hrc>
+#include <navsh.hxx>
+#define ShellClass_SwNavigationShell
+#include <swslots.hxx>
 #include <unomid.h>
-#include "navmgr.hxx"
+#include <navmgr.hxx>
 
 SFX_IMPL_INTERFACE(SwNavigationShell, SwBaseShell)
 
@@ -39,10 +36,9 @@ SwNavigationShell::SwNavigationShell(SwView &_rView)
     : SwBaseShell( _rView )
 {
     SetName("Navigation");
-    SetHelpId(SW_NAVIGATIONSHELL);
 }
 
-void SwNavigationShell::Execute(SfxRequest &rReq)
+void SwNavigationShell::Execute(SfxRequest const &rReq)
 {
     SwWrtShell *pSh = &GetShell();
     SdrView* pSdrView = pSh->GetDrawView();

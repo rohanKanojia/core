@@ -21,8 +21,8 @@
 #include <com/sun/star/animations/AnimationTransformType.hpp>
 
 #include "animationtransformnode.hxx"
-#include "animationfactory.hxx"
-#include "activitiesfactory.hxx"
+#include <animationfactory.hxx>
+#include <activitiesfactory.hxx>
 
 using namespace com::sun::star;
 
@@ -51,7 +51,6 @@ AnimationActivitySharedPtr AnimationTransformNode::createActivity() const
             "Unknown transform type" );
 
     case animations::AnimationTransformType::TRANSLATE:
-        // FALLTHROUGH intended
     case animations::AnimationTransformType::SCALE:
         return ActivitiesFactory::createAnimateActivity(
             aParms,
@@ -59,7 +58,7 @@ AnimationActivitySharedPtr AnimationTransformNode::createActivity() const
                 rShape,
                 getContext().mpSubsettableShapeManager,
                 getSlideSize(),
-                nTransformType ),
+                nTransformType, 0 ),
             getXAnimateNode() );
 
     case animations::AnimationTransformType::ROTATE:

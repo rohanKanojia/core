@@ -20,10 +20,17 @@
 #ifndef INCLUDED_OOX_OLE_AXBINARYREADER_HXX
 #define INCLUDED_OOX_OLE_AXBINARYREADER_HXX
 
+#include <cstddef>
 #include <utility>
+#include <vector>
+
 #include <oox/helper/binaryinputstream.hxx>
+#include <oox/helper/binarystreambase.hxx>
 #include <oox/helper/refvector.hxx>
-#include <oox/ole/axfontdata.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+
+namespace oox { namespace ole { struct AxFontData; } }
 
 namespace oox {
 namespace ole {
@@ -69,7 +76,7 @@ public:
 
     /** Aligns the stream according to the passed type and reads a value. */
     template< typename Type >
-    SAL_WARN_UNUSED_RESULT
+    [[nodiscard]]
     Type                readAligned() { align( sizeof( Type ) ); return readValue< Type >(); }
     /** Aligns the stream according to the passed type and skips the size of the type. */
     template< typename Type >
@@ -78,7 +85,7 @@ public:
 private:
     BinaryInputStream*  mpInStrm;           ///< The wrapped input stream.
     sal_Int64           mnStrmPos;          ///< Tracks relative position in the stream.
-    sal_Int64           mnStrmSize;         ///< Size of the wrapped stream data.
+    sal_Int64 const     mnStrmSize;         ///< Size of the wrapped stream data.
 };
 
 
@@ -175,7 +182,7 @@ private:
     struct StringProperty : public ComplexProperty
     {
         OUString&    mrValue;
-        sal_uInt32          mnSize;
+        sal_uInt32 const    mnSize;
 
         explicit            StringProperty( OUString& rValue, sal_uInt32 nSize ) :
                                 mrValue( rValue ), mnSize( nSize ) {}
@@ -186,7 +193,7 @@ private:
     struct ArrayStringProperty : public ComplexProperty
     {
         AxArrayString&      mrArray;
-        sal_uInt32          mnSize;
+        sal_uInt32 const    mnSize;
         explicit            ArrayStringProperty( AxArrayString& rArray, sal_uInt32 nSize ) :
                                 mrArray( rArray ), mnSize( nSize ) {}
         virtual bool        readProperty( AxAlignedInputStream& rInStrm ) override;

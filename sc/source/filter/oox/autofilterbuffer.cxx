@@ -17,23 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "autofilterbuffer.hxx"
+#include <autofilterbuffer.hxx>
 
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/sheet/FilterConnection.hpp>
 #include <com/sun/star/sheet/FilterOperator2.hpp>
 #include <com/sun/star/sheet/TableFilterField3.hpp>
 #include <com/sun/star/sheet/XDatabaseRange.hpp>
 #include <com/sun/star/sheet/XSheetFilterDescriptor3.hpp>
 #include <com/sun/star/table/TableOrientation.hpp>
+#include <com/sun/star/table/CellAddress.hpp>
 #include <rtl/ustrbuf.hxx>
 #include <osl/diagnose.h>
 #include <oox/helper/attributelist.hxx>
 #include <oox/helper/containerhelper.hxx>
 #include <oox/helper/propertyset.hxx>
+#include <oox/helper/binaryinputstream.hxx>
+#include <oox/token/namespaces.hxx>
 #include <oox/token/properties.hxx>
-#include "addressconverter.hxx"
-#include "biffinputstream.hxx"
-#include "defnamesbuffer.hxx"
+#include <oox/token/tokens.hxx>
+#include <addressconverter.hxx>
+#include <defnamesbuffer.hxx>
+#include <biffhelper.hxx>
 
 namespace oox {
 namespace xls {
@@ -147,7 +152,7 @@ ApiFilterSettings::ApiFilterSettings()
 
 void ApiFilterSettings::appendField( bool bAnd, sal_Int32 nOperator, double fValue )
 {
-    maFilterFields.resize( maFilterFields.size() + 1 );
+    maFilterFields.emplace_back();
     TableFilterField3& rFilterField = maFilterFields.back();
     rFilterField.Connection = bAnd ? FilterConnection_AND : FilterConnection_OR;
     rFilterField.Operator = nOperator;
@@ -158,7 +163,7 @@ void ApiFilterSettings::appendField( bool bAnd, sal_Int32 nOperator, double fVal
 
 void ApiFilterSettings::appendField( bool bAnd, sal_Int32 nOperator, const OUString& rValue )
 {
-    maFilterFields.resize( maFilterFields.size() + 1 );
+    maFilterFields.emplace_back();
     TableFilterField3& rFilterField = maFilterFields.back();
     rFilterField.Connection = bAnd ? FilterConnection_AND : FilterConnection_OR;
     rFilterField.Operator = nOperator;
@@ -169,7 +174,7 @@ void ApiFilterSettings::appendField( bool bAnd, sal_Int32 nOperator, const OUStr
 
 void ApiFilterSettings::appendField( bool bAnd, const std::vector<OUString>& rValues )
 {
-    maFilterFields.resize( maFilterFields.size() + 1 );
+    maFilterFields.emplace_back();
     TableFilterField3& rFilterField = maFilterFields.back();
     rFilterField.Connection = bAnd ? FilterConnection_AND : FilterConnection_OR;
     rFilterField.Operator = FilterOperator2::EQUAL;
@@ -418,18 +423,18 @@ ApiFilterSettings CustomFilter::finalizeImport( sal_Int32 /*nMaxCount*/ )
 {
     ApiFilterSettings aSettings;
     OSL_ENSURE( maCriteria.size() <= 2, "CustomFilter::finalizeImport - too many filter criteria" );
-    for( FilterCriterionVector::iterator aIt = maCriteria.begin(), aEnd = maCriteria.end(); aIt != aEnd; ++aIt )
+    for( const auto& rCriterion : maCriteria )
     {
         // first extract the filter operator
         sal_Int32 nOperator = 0;
-        bool bValidOperator = lclGetApiOperatorFromToken( nOperator, aIt->mnOperator );
+        bool bValidOperator = lclGetApiOperatorFromToken( nOperator, rCriterion.mnOperator );
         if( bValidOperator )
         {
-            if( aIt->maValue.has< OUString >() )
+            if( rCriterion.maValue.has< OUString >() )
             {
                 // string argument
                 OUString aValue;
-                aIt->maValue >>= aValue;
+                rCriterion.maValue >>= aValue;
                 // check for 'empty', 'contains', 'begins with', or 'ends with' text filters
                 bool bEqual = nOperator == FilterOperator2::EQUAL;
                 bool bNotEqual = nOperator == FilterOperator2::NOT_EQUAL;
@@ -469,11 +474,11 @@ ApiFilterSettings CustomFilter::finalizeImport( sal_Int32 /*nMaxCount*/ )
                     aSettings.appendField( mbAnd, nOperator, aValue );
                 }
             }
-            else if( aIt->maValue.has< double >() )
+            else if( rCriterion.maValue.has< double >() )
             {
                 // floating-point argument
                 double fValue = 0.0;
-                aIt->maValue >>= fValue;
+                rCriterion.maValue >>= fValue;
                 aSettings.appendField( mbAnd, nOperator, fValue );
             }
         }
@@ -519,8 +524,8 @@ ApiFilterSettings FilterColumn::finalizeImport( sal_Int32 nMaxCount )
         // filter settings object creates a sequence of filter fields
         aSettings = mxSettings->finalizeImport( nMaxCount );
         // add column index to all filter fields
-        for( ApiFilterSettings::FilterFieldVector::iterator aIt = aSettings.maFilterFields.begin(), aEnd = aSettings.maFilterFields.end(); aIt != aEnd; ++aIt )
-            aIt->Field = mnColId;
+        for( auto& rFilterField : aSettings.maFilterFields )
+            rFilterField.Field = mnColId;
     }
     return aSettings;
 }
@@ -583,10 +588,10 @@ void AutoFilter::finalizeImport( const Reference<XSheetFilterDescriptor3>& rxFil
         bool bHasOrConnection = false;
 
         // process all filter column objects, exit when 'or' connection exists
-        for( FilterColumnVector::iterator aIt = maFilterColumns.begin(), aEnd = maFilterColumns.end(); !bHasOrConnection && (aIt != aEnd); ++aIt )
+        for( const auto& rxFilterColumn : maFilterColumns )
         {
             // the filter settings object creates a list of filter fields
-            ApiFilterSettings aSettings = (*aIt)->finalizeImport( nMaxCount );
+            ApiFilterSettings aSettings = rxFilterColumn->finalizeImport( nMaxCount );
             ApiFilterSettings::FilterFieldVector& rColumnFields = aSettings.maFilterFields;
 
             // new total number of filter fields
@@ -600,8 +605,8 @@ void AutoFilter::finalizeImport( const Reference<XSheetFilterDescriptor3>& rxFil
 
             // check whether fields are connected by 'or' (see comments above).
             if( rColumnFields.size() >= 2 )
-                for( ApiFilterSettings::FilterFieldVector::iterator aSIt = rColumnFields.begin() + 1, aSEnd = rColumnFields.end(); !bHasOrConnection && (aSIt != aSEnd); ++aSIt )
-                    bHasOrConnection = aSIt->Connection == FilterConnection_OR;
+                bHasOrConnection = std::any_of(rColumnFields.begin() + 1, rColumnFields.end(),
+                    [](const css::sheet::TableFilterField3& rColumnField) { return rColumnField.Connection == FilterConnection_OR; });
 
             /*  Skip the column filter, if no filter fields have been created,
                 if the number of new filter fields would exceed the total limit
@@ -619,6 +624,9 @@ void AutoFilter::finalizeImport( const Reference<XSheetFilterDescriptor3>& rxFil
                 // update the regular expressions mode
                 obNeedsRegExp.assignIfUsed( aSettings.mobNeedsRegExp );
             }
+
+            if( bHasOrConnection )
+                break;
         }
 
         // insert all filter fields to the filter descriptor
@@ -648,8 +656,8 @@ void AutoFilterBuffer::finalizeImport( sal_Int16 nSheet )
     // rely on existence of the defined name '_FilterDatabase' containing the range address of the filtered area
     if( const DefinedName* pFilterDBName = getDefinedNames().getByBuiltinId( BIFF_DEFNAME_FILTERDATABASE, nSheet ).get() )
     {
-        CellRangeAddress aFilterRange;
-        if( pFilterDBName->getAbsoluteRange( aFilterRange ) && (aFilterRange.Sheet == nSheet) )
+        ScRange aFilterRange;
+        if( pFilterDBName->getAbsoluteRange( aFilterRange ) && (aFilterRange.aStart.Tab() == nSheet) )
         {
             // use the same name for the database range as used for the defined name '_FilterDatabase'
             Reference< XDatabaseRange > xDatabaseRange = createUnnamedDatabaseRangeObject( aFilterRange );
@@ -661,7 +669,7 @@ void AutoFilterBuffer::finalizeImport( sal_Int16 nSheet )
                 // the built-in defined name 'Criteria' must exist
                 if( const DefinedName* pCriteriaName = getDefinedNames().getByBuiltinId( BIFF_DEFNAME_CRITERIA, nSheet ).get() )
                 {
-                    CellRangeAddress aCriteriaRange;
+                    ScRange aCriteriaRange;
                     if( pCriteriaName->getAbsoluteRange( aCriteriaRange ) )
                     {
                         // set some common properties for the filter descriptor
@@ -675,13 +683,13 @@ void AutoFilterBuffer::finalizeImport( sal_Int16 nSheet )
 
                         // position of output data (if built-in defined name 'Extract' exists)
                         DefinedNameRef xExtractName = getDefinedNames().getByBuiltinId( BIFF_DEFNAME_EXTRACT, nSheet );
-                        CellRangeAddress aOutputRange;
+                        ScRange aOutputRange;
                         bool bHasOutputRange = xExtractName.get() && xExtractName->getAbsoluteRange( aOutputRange );
                         aDescProps.setProperty( PROP_CopyOutputData, bHasOutputRange );
                         if( bHasOutputRange )
                         {
                             aDescProps.setProperty( PROP_SaveOutputPosition, true );
-                            aDescProps.setProperty( PROP_OutputPosition, CellAddress( aOutputRange.Sheet, aOutputRange.StartColumn, aOutputRange.StartRow ) );
+                            aDescProps.setProperty( PROP_OutputPosition, CellAddress( aOutputRange.aStart.Tab(), aOutputRange.aStart.Col(), aOutputRange.aStart.Row() ) );
                         }
 
                         /*  Properties of the database range (must be set after
@@ -690,7 +698,10 @@ void AutoFilterBuffer::finalizeImport( sal_Int16 nSheet )
                             deleted). */
                         PropertySet aRangeProps( xDatabaseRange );
                         aRangeProps.setProperty( PROP_AutoFilter, false );
-                        aRangeProps.setProperty( PROP_FilterCriteriaSource, aCriteriaRange );
+                        aRangeProps.setProperty( PROP_FilterCriteriaSource,
+                                                 CellRangeAddress( aCriteriaRange.aStart.Tab(),
+                                                                   aCriteriaRange.aStart.Col(), aCriteriaRange.aStart.Row(),
+                                                                   aCriteriaRange.aEnd.Col(), aCriteriaRange.aEnd.Row() ));
                     }
                 }
             }

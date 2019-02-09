@@ -44,7 +44,7 @@ MasterScriptProviderFactory::~MasterScriptProviderFactory()
 }
 
 Reference< provider::XScriptProvider > SAL_CALL
-MasterScriptProviderFactory::createScriptProvider( const Any& context ) throw ( lang::IllegalArgumentException, RuntimeException, std::exception)
+MasterScriptProviderFactory::createScriptProvider( const Any& context )
 {
     Reference< provider::XScriptProvider > xMsp( getActiveMSPList() ->getMSPFromAnyContext( context ), UNO_QUERY_THROW );
     return xMsp;
@@ -62,7 +62,7 @@ MasterScriptProviderFactory::getActiveMSPList() const
     return m_MSPList;
 }
 
-Sequence< OUString > SAL_CALL mspf_getSupportedServiceNames( )
+Sequence< OUString > mspf_getSupportedServiceNames( )
 {
     OUString str_name(
         "com.sun.star.script.provider.MasterScriptProviderFactory");
@@ -70,13 +70,13 @@ Sequence< OUString > SAL_CALL mspf_getSupportedServiceNames( )
     return Sequence< OUString >( &str_name, 1 );
 }
 
-OUString SAL_CALL mspf_getImplementationName( )
+OUString mspf_getImplementationName( )
 {
     return OUString(
         "com.sun.star.script.provider.MasterScriptProviderFactory");
 }
 
-Reference< XInterface > SAL_CALL
+Reference< XInterface >
 mspf_create( Reference< XComponentContext > const & xComponentContext )
 {
     return static_cast< ::cppu::OWeakObject * >(
@@ -84,20 +84,17 @@ mspf_create( Reference< XComponentContext > const & xComponentContext )
 }
 
 OUString SAL_CALL MasterScriptProviderFactory::getImplementationName()
-    throw (RuntimeException, std::exception)
 {
     return mspf_getImplementationName();
 }
 
 Sequence< OUString > SAL_CALL MasterScriptProviderFactory::getSupportedServiceNames()
-    throw (RuntimeException, std::exception)
 {
     return mspf_getSupportedServiceNames();
 }
 
 sal_Bool MasterScriptProviderFactory::supportsService(
     OUString const & serviceName )
-    throw (RuntimeException, std::exception)
 {
     return cppu::supportsService(this, serviceName);
 }

@@ -7,18 +7,15 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "ChartToolbarController.hxx"
+#include <ChartToolbarController.hxx>
 
-#include <rtl/ref.hxx>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/frame/XDispatch.hpp>
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/frame/XFramesSupplier.hpp>
-#include <comphelper/namedvaluecollection.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <sal/log.hxx>
+
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 namespace chart {
 
@@ -44,12 +41,10 @@ ChartToolbarController::~ChartToolbarController()
 }
 
 void ChartToolbarController::execute(sal_Int16 /*nKeyModifier*/)
-    throw (css::uno::RuntimeException, std::exception)
 {
 }
 
 void ChartToolbarController::click()
-    throw (css::uno::RuntimeException, std::exception)
 {
     css::uno::Reference<css::frame::XFrame> xActiveFrame = mxFramesSupplier->getActiveFrame();
     if (!xActiveFrame.is())
@@ -69,69 +64,58 @@ void ChartToolbarController::click()
 }
 
 void ChartToolbarController::doubleClick()
-    throw (css::uno::RuntimeException, std::exception)
 {
     SAL_INFO("chart2", "double clicked");
 }
 
 
 css::uno::Reference<css::awt::XWindow> ChartToolbarController::createPopupWindow()
-        throw (css::uno::RuntimeException, std::exception)
 {
     return css::uno::Reference<css::awt::XWindow>();
 }
 
 css::uno::Reference<css::awt::XWindow> ChartToolbarController::createItemWindow(
         const css::uno::Reference<css::awt::XWindow>& /*rParent*/)
-        throw (css::uno::RuntimeException, std::exception)
 {
     return css::uno::Reference<css::awt::XWindow>();
 }
 
 void ChartToolbarController::statusChanged(const css::frame::FeatureStateEvent& /*rEvent*/)
-        throw (css::uno::RuntimeException, std::exception)
 {
 
 }
 
 void ChartToolbarController::disposing(const css::lang::EventObject& /*rSource*/)
-        throw (css::uno::RuntimeException, std::exception)
 {
 }
 
 void ChartToolbarController::initialize(const css::uno::Sequence<css::uno::Any>& /*rAny*/)
-    throw (css::uno::Exception, std::exception)
 {
 }
 
 void ChartToolbarController::update()
-    throw (css::uno::RuntimeException, std::exception)
 {
 }
 
 
 OUString ChartToolbarController::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
-    return OUString("org.libreoffice.chart2.ChartToolbarController");
+    return OUString("org.libreoffice.chart2.Chart2ToolboxController");
 }
 
 sal_Bool ChartToolbarController::supportsService(OUString const & ServiceName)
-    throw (css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 css::uno::Sequence<OUString> ChartToolbarController::getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception)
 {
-    css::uno::Sequence<OUString> aServiceNames { "com.sun.star.frame.ToolbarController" };
-    return aServiceNames;
+    return { "com.sun.star.frame.ToolbarController" };
 }
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 org_libreoffice_chart2_Chart2ToolboxController(css::uno::XComponentContext*, css::uno::Sequence<css::uno::Any> const & rProperties)
 {
     return cppu::acquire(new ::chart::ChartToolbarController(rProperties));

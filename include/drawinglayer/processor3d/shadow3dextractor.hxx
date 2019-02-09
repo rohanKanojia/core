@@ -39,7 +39,7 @@ namespace drawinglayer
     {
         /** Shadow3DExtractingProcessor class
 
-            This processor extracts the 2D shadow geometry (projected geometry) of all feeded primitives.
+            This processor extracts the 2D shadow geometry (projected geometry) of all fed primitives.
             It is used to create the shadow of 3D objects which consists of 2D geometry. It needs quite
             some data to do so since we do not only offer flat projected 2D shadow, but also projections
             dependent on the light source
@@ -62,13 +62,7 @@ namespace drawinglayer
             basegfx::B3DPoint                               maPlanePoint;
             double                                          mfLightPlaneScalar;
 
-            /*  the shadow color used for sub-primitives. Can stay at black since
-                the encapsulating 2d shadow primitive will contain the color
-             */
-            basegfx::BColor                                 maPrimitiveColor;
-
-            /// bitfield
-            /// flag if shadow plane projection preparation leaded to valid results
+            /// flag if shadow plane projection preparation led to valid results
             bool                                            mbShadowProjectionIsValid : 1;
 
             /// flag if conversion is switched on
@@ -93,13 +87,12 @@ namespace drawinglayer
                 const basegfx::B3DVector& rLightNormal,
                 double fShadowSlant,
                 const basegfx::B3DRange& rContained3DRange);
-            virtual ~Shadow3DExtractingProcessor();
+            virtual ~Shadow3DExtractingProcessor() override;
 
             /// data read access
             const primitive2d::Primitive2DContainer& getPrimitive2DSequence() const;
             const basegfx::B2DHomMatrix& getObjectTransformation() const { return maObjectTransformation; }
             const basegfx::B3DHomMatrix& getWorldToEye() const { return maWorldToEye; }
-            const basegfx::B3DHomMatrix& getEyeToView() const { return maEyeToView; }
         };
     } // end of namespace processor3d
 } // end of namespace drawinglayer

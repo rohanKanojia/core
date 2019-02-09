@@ -15,12 +15,12 @@ namespace writerfilter
 namespace rtftok
 {
 /// RTF legacy charsets
-typedef struct
+struct RTFEncoding
 {
-    int charset;
-    int codepage;
-} RTFEncoding;
-extern RTFEncoding aRTFEncodings[];
+    int const charset;
+    int const codepage;
+};
+extern RTFEncoding const aRTFEncodings[];
 extern int nRTFEncodings;
 } // namespace rtftok
 } // namespace writerfilter

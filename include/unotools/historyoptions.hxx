@@ -20,14 +20,15 @@
 #ifndef INCLUDED_UNOTOOLS_HISTORYOPTIONS_HXX
 #define INCLUDED_UNOTOOLS_HISTORYOPTIONS_HXX
 
-#include <boost/optional.hpp>
 #include <unotools/unotoolsdllapi.h>
 #include <sal/types.h>
-#include <osl/mutex.hxx>
 #include <com/sun/star/uno/Sequence.h>
-#include <com/sun/star/beans/PropertyValue.hpp>
 #include <rtl/ustring.hxx>
 #include <unotools/options.hxx>
+#include <memory>
+
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace boost { template <class T> class optional; }
 
 // The method GetList() returns a list of property values.
 // Use follow defines to separate values by names.
@@ -58,17 +59,7 @@ class SAL_WARN_UNUSED UNOTOOLS_DLLPUBLIC SvtHistoryOptions : public utl::detail:
 {
 public:
     SvtHistoryOptions();
-    virtual ~SvtHistoryOptions();
-
-    /** Get max size of specified history.
-
-        Call this methods to get information about max. size of specified list.
-        If a new one is add to it the oldest one is deleted automatically.
-
-        @param  eHistory select right history.
-        @return Current max size of specified list.
-    */
-    sal_uInt32 GetSize(EHistoryType eHistory) const;
+    virtual ~SvtHistoryOptions() override;
 
     /** Clear complete specified list.
 
@@ -91,28 +82,17 @@ public:
         @param sURL      URL to save in history
         @param sFilter   filter name to save in history
         @param sTitle    document title to save in history
-        @param sPassword password to save in history
     */
     void AppendItem(EHistoryType eHistory,
             const OUString& sURL, const OUString& sFilter, const OUString& sTitle,
-            const OUString& sPassword, const boost::optional<OUString>& sThumbnail);
+            const boost::optional<OUString>& sThumbnail);
 
     /** Delete item from the specified list.
     */
     void DeleteItem(EHistoryType eHistory, const OUString& sURL);
 
 private:
-
-    /* Attention
-
-        Don't initialize these static members in these headers!
-        a) Double defined symbols will be detected ...
-        b) and unresolved externals exist at linking time.
-        Do it in your source only.
-     */
-
-    static SvtHistoryOptions_Impl* m_pDataContainer;
-    static sal_Int32               m_nRefCount;
+    std::shared_ptr<SvtHistoryOptions_Impl> m_pImpl;
 };
 
 #endif // INCLUDED_UNOTOOLS_HISTORYOPTIONS_HXX

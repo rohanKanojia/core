@@ -18,8 +18,9 @@
 
 #include <svtools/editbrowsebox.hxx>
 #include <vcl/decoview.hxx>
-#include <svtools/fmtfield.hxx>
+#include <vcl/fmtfield.hxx>
 #include <vcl/xtextedt.hxx>
+#include <vcl/textview.hxx>
 
 #include <algorithm>
 
@@ -70,7 +71,7 @@ namespace svt
         GetComboBox().SetModifyHdl( LINK(this, ComboBoxCellController, ModifyHdl) );
     }
 
-    IMPL_LINK_NOARG_TYPED(ComboBoxCellController, ModifyHdl, Edit&, void)
+    IMPL_LINK_NOARG(ComboBoxCellController, ModifyHdl, Edit&, void)
     {
         callModifyHdl();
     }
@@ -103,12 +104,13 @@ namespace svt
                 // drop down the list box
                 else if (rEvt.GetKeyCode().IsMod2() && rEvt.GetKeyCode().GetCode() == KEY_DOWN)
                     return false;
-                // fall-through
+                [[fallthrough]];
             case KEY_PAGEUP:
             case KEY_PAGEDOWN:
             case KEY_RETURN:
                 if (rBox.IsInDropDown())
                     return false;
+                [[fallthrough]];
             default:
                 return true;
         }
@@ -145,7 +147,7 @@ namespace svt
                 (!pEvt->GetKeyCode().IsShift() && pEvt->GetKeyCode().IsMod1()))
             {
                 // select next resp. previous entry
-                sal_Int32 nPos = GetSelectEntryPos();
+                sal_Int32 nPos = GetSelectedEntryPos();
                 int nDir = (rKey.GetCode() == KEY_DOWN ? 1 : -1);
                 if (!((nPos == 0 && nDir == -1) || (nPos >= GetEntryCount() && nDir == 1)))
                 {
@@ -183,11 +185,12 @@ namespace svt
                 else
                     if (rEvt.GetKeyCode().IsMod2() && rEvt.GetKeyCode().GetCode() == KEY_DOWN)
                         return false;
-                // fall-through
+                [[fallthrough]];
             case KEY_PAGEUP:
             case KEY_PAGEDOWN:
                 if (rBox.IsTravelSelect())
                     return false;
+                [[fallthrough]];
             default:
                 return true;
         }
@@ -206,7 +209,7 @@ namespace svt
     }
 
 
-    IMPL_LINK_NOARG_TYPED(ListBoxCellController, ListBoxSelectHdl, ListBox&, void)
+    IMPL_LINK_NOARG(ListBoxCellController, ListBoxSelectHdl, ListBox&, void)
     {
         callModifyHdl();
     }
@@ -250,7 +253,7 @@ namespace svt
     }
 
 
-    IMPL_LINK_NOARG_TYPED(CheckBoxControl, OnClick, Button*, void)
+    IMPL_LINK_NOARG(CheckBoxControl, OnClick, Button*, void)
     {
         m_aClickLink.Call(pBox);
         m_aModifyLink.Call(nullptr);
@@ -287,15 +290,16 @@ namespace svt
 
     void CheckBoxControl::GetFocus()
     {
-        pBox->GrabFocus();
+        if (pBox)
+            pBox->GrabFocus();
     }
 
 
-    void CheckBoxControl::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rClientRect)
+    void CheckBoxControl::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rClientRect)
     {
         Control::Paint(rRenderContext, rClientRect);
         if (HasFocus())
-            ShowFocus(aFocusRect);
+            ShowFocus(tools::Rectangle());
     }
 
 
@@ -304,7 +308,7 @@ namespace svt
         switch (rEvt.GetType())
         {
             case MouseNotifyEvent::GETFOCUS:
-                ShowFocus(aFocusRect);
+                ShowFocus(tools::Rectangle());
                 break;
             case MouseNotifyEvent::LOSEFOCUS:
                 HideFocus();
@@ -349,7 +353,7 @@ namespace svt
     }
 
 
-    IMPL_LINK_NOARG_TYPED(CheckBoxCellController, ModifyHdl, LinkParamNone*, void)
+    IMPL_LINK_NOARG(CheckBoxCellController, ModifyHdl, LinkParamNone*, void)
     {
         callModifyHdl();
     }
@@ -439,7 +443,7 @@ namespace svt
     }
 
 
-    IMPL_LINK_NOARG_TYPED(EditCellController, ModifyHdl, Edit&, void)
+    IMPL_LINK_NOARG(EditCellController, ModifyHdl, Edit&, void)
     {
         callModifyHdl();
     }
@@ -495,7 +499,7 @@ namespace svt
         return GetSpinWindow().IsModified();
     }
 
-    IMPL_LINK_NOARG_TYPED(SpinCellController, ModifyHdl, Edit&, void)
+    IMPL_LINK_NOARG(SpinCellController, ModifyHdl, Edit&, void)
     {
         callModifyHdl();
     }

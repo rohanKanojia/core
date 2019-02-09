@@ -18,14 +18,14 @@
  */
 
 #include <com/sun/star/registry/XRegistryKey.hpp>
+#include <com/sun/star/lang/XSingleComponentFactory.hpp>
 
-#include "facreg.hxx"
-#include "sddll.hxx"
+#include <facreg.hxx>
+#include <sddll.hxx>
 
 #include <cppuhelper/factory.hxx>
 #include <sfx2/sfxmodelfactory.hxx>
-#include "osl/diagnose.h"
-#include "sal/types.h"
+#include <sal/types.h>
 
 #include <string.h>
 #include <memory>
@@ -40,29 +40,25 @@ enum FactoryId
 {
     SdDrawingDocumentFactoryId,
     SdPresentationDocumentFactoryId,
-
-    ModuleControllerFactoryId,
 };
-typedef std::unordered_map<OUString, FactoryId, OUStringHash> FactoryMap;
+typedef std::unordered_map<OUString, FactoryId> FactoryMap;
 
 namespace {
-static std::shared_ptr<FactoryMap> spFactoryMap;
-std::shared_ptr<FactoryMap> GetFactoryMap()
+FactoryMap const & GetFactoryMap()
 {
-    if (spFactoryMap.get() == nullptr)
+    static FactoryMap aFactoryMap
     {
-        spFactoryMap.reset(new FactoryMap);
-        (*spFactoryMap)[SdDrawingDocument_getImplementationName()] = SdDrawingDocumentFactoryId;
-        (*spFactoryMap)[SdPresentationDocument_getImplementationName()] = SdPresentationDocumentFactoryId;
-    }
-    return spFactoryMap;
+        { SdDrawingDocument_getImplementationName(), SdDrawingDocumentFactoryId },
+        { SdPresentationDocument_getImplementationName(), SdPresentationDocumentFactoryId }
+    };
+    return aFactoryMap;
 };
 } // end of anonymous namespace
 
 extern "C"
 {
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL sd_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * sd_component_getFactory(
     const sal_Char * pImplName,
     void           * pServiceManager,
     void           *  )
@@ -76,10 +72,10 @@ SAL_DLLPUBLIC_EXPORT void * SAL_CALL sd_component_getFactory(
         uno::Reference<lang::XSingleServiceFactory> xFactory;
         uno::Reference<lang::XSingleComponentFactory> xComponentFactory;
 
-        std::shared_ptr<FactoryMap> pFactoryMap (GetFactoryMap());
+        const FactoryMap& rFactoryMap (GetFactoryMap());
         OUString sImplementationName (OUString::createFromAscii(pImplName));
-        FactoryMap::const_iterator iFactory (pFactoryMap->find(sImplementationName));
-        if (iFactory != pFactoryMap->end())
+        FactoryMap::const_iterator iFactory (rFactoryMap.find(sImplementationName));
+        if (iFactory != rFactoryMap.end())
         {
             switch (iFactory->second)
             {

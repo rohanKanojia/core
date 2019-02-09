@@ -20,7 +20,6 @@
 #define INCLUDED_REPORTDESIGN_SOURCE_UI_INC_DESIGNVIEW_HXX
 
 #include <dbaccess/dataview.hxx>
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/report/XSection.hpp>
 #include <com/sun/star/report/XReportComponent.hpp>
 #include <vcl/split.hxx>
@@ -71,22 +70,21 @@ namespace rptui
         Idle                                m_aMarkIdle;
         DlgEdMode                           m_eMode;
         sal_uInt16                          m_eActObj;
-        Size                                m_aGridSizeCoarse;
-        Size                                m_aGridSizeFine;
-        bool                                m_bGridSnap;
+        Size const                          m_aGridSizeCoarse;
+        Size const                          m_aGridSizeFine;
         bool                                m_bDeleted;
 
 
-        DECL_LINK_TYPED(MarkTimeout, Idle *, void);
-        DECL_LINK_TYPED( SplitHdl, SplitWindow*, void );
+        DECL_LINK(MarkTimeout, Timer *, void);
+        DECL_LINK( SplitHdl, SplitWindow*, void );
 
         void ImplInitSettings();
 
-        ODesignView(ODesignView&) = delete;
-        void operator =(ODesignView&) = delete;
+        ODesignView(ODesignView const &) = delete;
+        void operator =(ODesignView const &) = delete;
     protected:
         // return the Rectangle where I can paint myself
-        virtual void resizeDocumentView(Rectangle& rRect) override;
+        virtual void resizeDocumentView(tools::Rectangle& rRect) override;
         // return the Rectangle where I can paint myself
         virtual void DataChanged( const DataChangedEvent& rDCEvt ) override;
 
@@ -94,7 +92,7 @@ namespace rptui
         ODesignView(vcl::Window* pParent,
                     const css::uno::Reference< css::uno::XComponentContext >&,
                     OReportController& _rController);
-        virtual ~ODesignView();
+        virtual ~ODesignView() override;
         virtual void dispose() override;
 
         // Window overrides
@@ -104,12 +102,12 @@ namespace rptui
 
         virtual void initialize() override;
 
-        inline OReportController&   getController() const { return m_rReportController; }
+        OReportController&   getController() const { return m_rReportController; }
 
         void            SetMode( DlgEdMode m_eMode );
         void            SetInsertObj( sal_uInt16 eObj,const OUString& _sShapeType = OUString());
         sal_uInt16          GetInsertObj() const { return m_eActObj;}
-        OUString   GetInsertObjString() const;
+        OUString const &    GetInsertObjString() const;
         DlgEdMode       GetMode() const { return m_eMode; }
 
         /** cuts the current selection in this section
@@ -137,7 +135,7 @@ namespace rptui
 
         /** align all marked objects in all sections
         */
-        void alignMarkedObjects(sal_Int32 _nControlModification, bool _bAlignAtSection);
+        void alignMarkedObjects(ControlModification _nControlModification, bool _bAlignAtSection);
 
         /** All objects will be marked.
         */
@@ -148,7 +146,7 @@ namespace rptui
 
         void            UpdatePropertyBrowserDelayed(OSectionView& _rView);
 
-        sal_uInt16          getSectionCount() const;
+        sal_uInt16      getSectionCount() const;
 
         /** removes the section at the given position.
         *
@@ -164,9 +162,8 @@ namespace rptui
                                     ,const OUString& _sColorEntry
                                     ,sal_uInt16 _nPosition = USHRT_MAX);
 
-        inline Size     getGridSizeCoarse() const { return m_aGridSizeCoarse; }
-        inline Size     getGridSizeFine() const { return m_aGridSizeFine; }
-        inline bool     isGridSnap() const { return m_bGridSnap; }
+        const Size&     getGridSizeCoarse() const { return m_aGridSizeCoarse; }
+        const Size&     getGridSizeFine() const { return m_aGridSizeFine; }
         void            setGridSnap(bool bOn);
         void            setDragStripes(bool bOn);
         /** turns the grid on or off
@@ -175,7 +172,7 @@ namespace rptui
         */
         void            toggleGrid(bool _bGridVisible);
 
-        void            togglePropertyBrowser(bool _bToogleOn);
+        void            togglePropertyBrowser(bool _bToggleOn);
 
         bool            isAddFieldVisible() const;
         void            toggleAddField();
@@ -240,10 +237,9 @@ namespace rptui
 
         /** returns if the view handles the event by itself
         *
-        * \param _nId the command id
         * \return  <FALSE/> is the event is not handled by the view otherwise <TRUE/>
         */
-        bool        isHandleEvent(sal_uInt16 _nId) const;
+        bool        isHandleEvent() const;
 
         sal_uInt32      getMarkedObjectCount() const;
 

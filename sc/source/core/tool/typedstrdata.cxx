@@ -7,8 +7,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "typedstrdata.hxx"
-#include "global.hxx"
+#include <typedstrdata.hxx>
+#include <global.hxx>
 
 #include <unotools/collatorwrapper.hxx>
 
@@ -75,8 +75,7 @@ bool ScTypedStrData::EqualCaseInsensitive::operator() (const ScTypedStrData& lef
 bool ScTypedStrData::operator< (const ScTypedStrData& r) const
 {
     // Case insensitive comparison by default.
-    LessCaseInsensitive aHdl;
-    return aHdl(*this, r);
+    return LessCaseInsensitive()(*this, r);
 }
 
 ScTypedStrData::ScTypedStrData(
@@ -86,17 +85,6 @@ ScTypedStrData::ScTypedStrData(
     meStrType(nType),
     mbIsDate( bDate ) {}
 
-ScTypedStrData::ScTypedStrData( const ScTypedStrData& rCpy ) :
-    maStrValue(rCpy.maStrValue),
-    mfValue(rCpy.mfValue),
-    meStrType(rCpy.meStrType),
-    mbIsDate( rCpy.mbIsDate ) {}
-
-bool ScTypedStrData::IsStrData() const
-{
-    return meStrType != Value;
-}
-
 FindTypedStrData::FindTypedStrData(const ScTypedStrData& rVal, bool bCaseSens) :
     maVal(rVal), mbCaseSens(bCaseSens) {}
 
@@ -104,13 +92,11 @@ bool FindTypedStrData::operator() (const ScTypedStrData& r) const
 {
     if (mbCaseSens)
     {
-        ScTypedStrData::EqualCaseSensitive aHdl;
-        return aHdl(maVal, r);
+        return ScTypedStrData::EqualCaseSensitive()(maVal, r);
     }
     else
     {
-        ScTypedStrData::EqualCaseInsensitive aHdl;
-        return aHdl(maVal, r);
+        return ScTypedStrData::EqualCaseInsensitive()(maVal, r);
     }
 }
 

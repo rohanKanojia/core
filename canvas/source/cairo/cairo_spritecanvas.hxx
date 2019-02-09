@@ -121,20 +121,20 @@ namespace cairocanvas
         DECLARE_UNO3_XCOMPONENT_AGG_DEFAULTS( SpriteCanvas, WindowGraphicDeviceBase_Base, ::cppu::WeakComponentImplHelperBase )
 
         // XBufferController (partial)
-        virtual sal_Bool SAL_CALL showBuffer( sal_Bool bUpdateAll ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL switchBuffer( sal_Bool bUpdateAll ) throw (css::uno::RuntimeException) override;
+        virtual sal_Bool SAL_CALL showBuffer( sal_Bool bUpdateAll ) override;
+        virtual sal_Bool SAL_CALL switchBuffer( sal_Bool bUpdateAll ) override;
 
         // XSpriteCanvas (partial)
-        virtual sal_Bool SAL_CALL updateScreen( sal_Bool bUpdateAll ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL updateScreen( sal_Bool bUpdateAll ) override;
 
         // XServiceName
-        virtual OUString SAL_CALL getServiceName(  ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getServiceName(  ) override;
 
         // SurfaceProvider
         virtual ::cairo::SurfaceSharedPtr getSurface() override;
-        virtual ::cairo::SurfaceSharedPtr createSurface( const ::basegfx::B2ISize& rSize, int aContent = CAIRO_CONTENT_COLOR_ALPHA ) override;
+        virtual ::cairo::SurfaceSharedPtr createSurface( const ::basegfx::B2ISize& rSize, int aContent ) override;
         virtual ::cairo::SurfaceSharedPtr createSurface( ::Bitmap& rBitmap ) override;
-        virtual ::cairo::SurfaceSharedPtr changeSurface( bool bHasAlpha, bool bCopyContent ) override;
+        virtual ::cairo::SurfaceSharedPtr changeSurface() override;
         virtual OutputDevice* getOutputDevice() override;
 
         // RepaintTarget
@@ -142,8 +142,8 @@ namespace cairocanvas
                               const css::rendering::ViewState&   viewState,
                               const css::rendering::RenderState& renderState ) override;
 
-        ::cairo::SurfaceSharedPtr getWindowSurface();
-        ::cairo::SurfaceSharedPtr getBufferSurface();
+        ::cairo::SurfaceSharedPtr const & getWindowSurface();
+        ::cairo::SurfaceSharedPtr const & getBufferSurface();
 
         const ::basegfx::B2ISize& getSizePixel();
         void setSizePixel( const ::basegfx::B2ISize& rSize );
@@ -151,7 +151,6 @@ namespace cairocanvas
 
      private:
         css::uno::Sequence< css::uno::Any >                maArguments;
-        css::uno::Reference< css::uno::XComponentContext > mxComponentContext;
     };
 
     typedef ::rtl::Reference< SpriteCanvas > SpriteCanvasRef;

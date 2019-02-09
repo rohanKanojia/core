@@ -20,7 +20,6 @@
 #ifndef INCLUDED_SC_INC_DRWLAYER_HXX
 #define INCLUDED_SC_INC_DRWLAYER_HXX
 
-#include <vcl/graph.hxx>
 #include <svx/fmmodel.hxx>
 #include <svx/svdundo.hxx>
 #include "global.hxx"
@@ -32,16 +31,14 @@ class ScIMapInfo;
 class ScMacroInfo;
 class IMapObject;
 class ScMarkData;
-class ScRange;
-class ScAddress;
 
 class ScTabDeletedHint : public SfxHint
 {
 private:
-    SCTAB   nTab;
+    SCTAB const   nTab;
 public:
-            ScTabDeletedHint( SCTAB nTabNo = SCTAB_MAX );
-    virtual ~ScTabDeletedHint();
+            ScTabDeletedHint( SCTAB nTabNo );
+    virtual ~ScTabDeletedHint() override;
 
     SCTAB   GetTab() const { return nTab; }
 };
@@ -49,10 +46,10 @@ public:
 class ScTabSizeChangedHint : public SfxHint
 {
 private:
-    SCTAB   nTab;
+    SCTAB const   nTab;
 public:
-            ScTabSizeChangedHint( SCTAB nTabNo = SCTAB_MAX );
-    virtual ~ScTabSizeChangedHint();
+            ScTabSizeChangedHint( SCTAB nTabNo );
+    virtual ~ScTabSizeChangedHint() override;
 
     SCTAB   GetTab() const  { return nTab; }
 };
@@ -63,14 +60,14 @@ public:
 class ScUndoObjData : public SdrUndoObj
 {
 private:
-    ScAddress   aOldStt;
-    ScAddress   aOldEnd;
-    ScAddress   aNewStt;
-    ScAddress   aNewEnd;
+    ScAddress const   aOldStt;
+    ScAddress const   aOldEnd;
+    ScAddress const   aNewStt;
+    ScAddress const   aNewEnd;
 public:
                 ScUndoObjData( SdrObject* pObj, const ScAddress& rOS, const ScAddress& rOE,
                                                 const ScAddress& rNS, const ScAddress& rNE );
-                virtual ~ScUndoObjData();
+                virtual ~ScUndoObjData() override;
 
     virtual void     Undo() override;
     virtual void     Redo() override;
@@ -80,11 +77,12 @@ class ScUndoAnchorData : public SdrUndoObj
 {
 private:
     bool                    mbWasCellAnchored;
-    ScDocument*             mpDoc;
-    SCTAB                   mnTab;
+    bool                    mbWasResizeWithCell;
+    ScDocument* const       mpDoc;
+    SCTAB const             mnTab;
 public:
                 ScUndoAnchorData( SdrObject* pObj, ScDocument* pDoc, SCTAB nTab );
-                virtual ~ScUndoAnchorData();
+                virtual ~ScUndoAnchorData() override;
 
     virtual void     Undo() override;
     virtual void     Redo() override;
@@ -93,23 +91,22 @@ public:
 class SC_DLLPUBLIC ScDrawLayer : public FmFormModel
 {
 private:
-    OUString        aName;
+    OUString const  aName;
     ScDocument*     pDoc;
-    SdrUndoGroup*   pUndoGroup;
+    std::unique_ptr<SdrUndoGroup> pUndoGroup;
     bool            bRecording;
     bool            bAdjustEnabled;
     bool            bHyphenatorSet;
 
 private:
     void            MoveCells( SCTAB nTab, SCCOL nCol1,SCROW nRow1, SCCOL nCol2,SCROW nRow2,
-                                SCsCOL nDx,SCsROW nDy, bool bUpdateNoteCaptionPos );
+                                SCCOL nDx,SCROW nDy, bool bUpdateNoteCaptionPos );
 
-    void            RecalcPos( SdrObject* pObj, ScDrawObjData& rData, bool bNegativePage, bool bUpdateNoteCaptionPos );
-    void            ResizeLastRectFromAnchor( SdrObject* pObj, ScDrawObjData& rData, bool bUseLogicRect, bool bNegativePage, bool bCanResize, bool bHiddenAsZero = true );
+    void            ResizeLastRectFromAnchor( const SdrObject* pObj, ScDrawObjData& rData, bool bUseLogicRect, bool bNegativePage, bool bCanResize, bool bHiddenAsZero = true );
 
 public:
                     ScDrawLayer( ScDocument* pDocument, const OUString& rName );
-    virtual         ~ScDrawLayer();
+    virtual         ~ScDrawLayer() override;
 
     virtual SdrPage*  AllocPage(bool bMasterPage) override;
     virtual SdrModel* AllocModel() const override;
@@ -132,15 +129,16 @@ public:
 
                     //      automatic adjustments
 
-    void            EnableAdjust( bool bSet = true )    { bAdjustEnabled = bSet; }
+    void            EnableAdjust( bool bSet )    { bAdjustEnabled = bSet; }
 
     void            BeginCalcUndo(bool bDisableTextEditUsesCommonUndoManager);
-    SdrUndoGroup*   GetCalcUndo();
+    std::unique_ptr<SdrUndoGroup> GetCalcUndo();
     bool            IsRecording() const         { return bRecording; }
-    void            AddCalcUndo( SdrUndoAction* pUndo );
+    void            AddCalcUndo( std::unique_ptr<SdrUndoAction> pUndo );
 
     void            MoveArea( SCTAB nTab, SCCOL nCol1,SCROW nRow1, SCCOL nCol2,SCROW nRow2,
-                                SCsCOL nDx,SCsROW nDy, bool bInsDel, bool bUpdateNoteCaptionPos = true );
+                                SCCOL nDx,SCROW nDy, bool bInsDel, bool bUpdateNoteCaptionPos );
+    void            RecalcPos( SdrObject* pObj, ScDrawObjData& rData, bool bNegativePage, bool bUpdateNoteCaptionPos );
 
     bool            HasObjectsInRows( SCTAB nTab, SCROW nStartRow, SCROW nEndRow );
 
@@ -148,24 +146,24 @@ public:
                                             SCCOL nCol2,SCROW nRow2 );
     void            DeleteObjectsInSelection( const ScMarkData& rMark );
 
-    void            CopyToClip( ScDocument* pClipDoc, SCTAB nTab, const Rectangle& rRange );
+    void            CopyToClip( ScDocument* pClipDoc, SCTAB nTab, const tools::Rectangle& rRange );
     void            CopyFromClip( ScDrawLayer* pClipModel,
-                                    SCTAB nSourceTab, const Rectangle& rSourceRange,
-                                    const ScAddress& rDestPos, const Rectangle& rDestRange );
+                                    SCTAB nSourceTab, const tools::Rectangle& rSourceRange,
+                                    const ScAddress& rDestPos, const tools::Rectangle& rDestRange );
 
-    void            SetPageSize( sal_uInt16 nPageNo, const Size& rSize, bool bUpdateNoteCaptionPos = true );
+    void            SetPageSize( sal_uInt16 nPageNo, const Size& rSize, bool bUpdateNoteCaptionPos );
 
                     //  mirror or move between positive and negative positions for RTL
     void            MirrorRTL( SdrObject* pObj );
-    static void     MirrorRectRTL( Rectangle& rRect );      // for bounding rectangles etc.
+    static void     MirrorRectRTL( tools::Rectangle& rRect );      // for bounding rectangles etc.
 
     /** Returns the rectangle for the passed cell address in 1/100 mm.
         @param bMergedCell  True = regards merged cells. False = use single column/row size. */
-    static Rectangle GetCellRect( ScDocument& rDoc, const ScAddress& rPos, bool bMergedCell );
+    static tools::Rectangle GetCellRect( const ScDocument& rDoc, const ScAddress& rPos, bool bMergedCell );
 
                     //  GetVisibleName: name for navigator etc: GetPersistName or GetName
                     //  (ChartListenerCollection etc. must use GetPersistName directly)
-    static OUString GetVisibleName( SdrObject* pObj );
+    static OUString GetVisibleName( const SdrObject* pObj );
 
     SdrObject*      GetNamedObject( const OUString& rName, sal_uInt16 nId, SCTAB& rFoundTab ) const;
                     // if pnCounter != NULL, the search for a name starts with this index + 1,
@@ -174,14 +172,26 @@ public:
     void            EnsureGraphicNames();
 
     static bool IsCellAnchored( const SdrObject& rObj );
+    static bool IsResizeWithCell( const SdrObject& rObj );
     static void             SetPageAnchored( SdrObject& );
     static void             SetCellAnchored( SdrObject&, const ScDrawObjData &rAnchor );
     static void             SetVisualCellAnchored( SdrObject&, const ScDrawObjData &rAnchor );
+
     // Updates rAnchor based on position of rObj
-    static void             GetCellAnchorFromPosition( SdrObject &rObj, ScDrawObjData &rAnchor, const ScDocument &rDoc, SCTAB nTab, bool bUseLogicRect = true, bool bHiddenAsZero = true );
-    static void             SetCellAnchoredFromPosition( SdrObject &rObj, const ScDocument &rDoc, SCTAB nTab );
-    static void             UpdateCellAnchorFromPositionEnd( SdrObject &rObj, ScDrawObjData &rAnchor, const ScDocument &rDoc, SCTAB nTab, bool bUseLogicRect = true );
+    static void GetCellAnchorFromPosition(
+        const tools::Rectangle &rRectangle,
+        ScDrawObjData &rAnchor,
+        const ScDocument &rDoc,
+        SCTAB nTab,
+        bool bHiddenAsZero = true);
+
+    static void             SetCellAnchoredFromPosition( SdrObject &rObj, const ScDocument &rDoc, SCTAB nTab, bool bResizeWithCell );
+    static void             UpdateCellAnchorFromPositionEnd( const SdrObject &rObj, ScDrawObjData &rAnchor, const ScDocument &rDoc, SCTAB nTab, bool bUseLogicRect = true );
     static ScAnchorType     GetAnchorType( const SdrObject& );
+    std::vector<SdrObject*> GetObjectsAnchoredToRows(SCTAB nTab, SCROW nStartRow, SCROW nEndRow);
+    std::map<SCROW, std::vector<SdrObject*>> GetObjectsAnchoredToRange(SCTAB nTab, SCCOL nCol, SCROW nStartRow, SCROW nEndRow);
+    bool HasObjectsAnchoredInRange(const ScRange& rRange);
+    void MoveObject(SdrObject* pObj, const ScAddress& rNewPosition);
 
     // positions for detektive lines
     static ScDrawObjData* GetObjData( SdrObject* pObj, bool bCreate=false );
@@ -199,9 +209,9 @@ public:
     static ScDrawObjData* GetNoteCaptionData( SdrObject* pObj, SCTAB nTab );
 
     // Image-Map
-    static ScIMapInfo* GetIMapInfo( SdrObject* pObj );
+    static ScIMapInfo* GetIMapInfo( const SdrObject* pObj );
 
-    static IMapObject* GetHitIMapObject( SdrObject* pObject,
+    static IMapObject* GetHitIMapObject( const SdrObject* pObject,
                             const Point& rWinPoint, const vcl::Window& rCmpWnd );
 
     static ScMacroInfo* GetMacroInfo( SdrObject* pObj, bool bCreate = false );
@@ -215,6 +225,8 @@ public:
 protected:
     virtual css::uno::Reference< css::uno::XInterface > createUnoModel() override;
 };
+
+extern bool bDrawIsInUndo; // somewhere as member!
 
 #endif
 

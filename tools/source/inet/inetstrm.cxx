@@ -21,20 +21,19 @@
 
 #include <cassert>
 
-#include <comphelper/string.hxx>
 #include <sal/log.hxx>
 #include <sal/types.h>
 #include <rtl/strbuf.hxx>
 #include <tools/inetmsg.hxx>
 #include <tools/inetstrm.hxx>
 
-int INetMIMEMessageStream::GetHeaderLine(sal_Char* pData, sal_uIntPtr nSize)
+int INetMIMEMessageStream::GetHeaderLine(sal_Char* pData, sal_uInt32 nSize)
 {
     sal_Char* pWBuf = pData;
 
-    sal_uIntPtr i, n;
+    sal_uInt32 i, n;
 
-    if (pMsgBuffer->Tell() == 0)
+    if (maMsgBuffer.Tell() == 0)
     {
         // Insert formatted header into buffer.
         n = pSourceMsg->GetHeaderCount();
@@ -44,15 +43,15 @@ int INetMIMEMessageStream::GetHeaderLine(sal_Char* pData, sal_uIntPtr nSize)
             if (aHeader.GetValue().getLength())
             {
                 // NYI: Folding long lines.
-                pMsgBuffer->WriteCharPtr( aHeader.GetName().getStr() );
-                pMsgBuffer->WriteCharPtr( ": " );
-                pMsgBuffer->WriteCharPtr( aHeader.GetValue().getStr() );
-                pMsgBuffer->WriteCharPtr( "\r\n" );
+                maMsgBuffer.WriteCharPtr( aHeader.GetName().getStr() );
+                maMsgBuffer.WriteCharPtr( ": " );
+                maMsgBuffer.WriteCharPtr( aHeader.GetValue().getStr() );
+                maMsgBuffer.WriteCharPtr( "\r\n" );
             }
         }
 
-        pMsgWrite = const_cast<char *>(static_cast<sal_Char const *>(pMsgBuffer->GetData()));
-        pMsgRead  = pMsgWrite + pMsgBuffer->Tell();
+        pMsgWrite = const_cast<char *>(static_cast<sal_Char const *>(maMsgBuffer.GetData()));
+        pMsgRead  = pMsgWrite + maMsgBuffer.Tell();
     }
 
     n = pMsgRead - pMsgWrite;
@@ -65,13 +64,13 @@ int INetMIMEMessageStream::GetHeaderLine(sal_Char* pData, sal_uIntPtr nSize)
     else
     {
         // Reset buffer.
-        pMsgBuffer->Seek(STREAM_SEEK_TO_BEGIN);
+        maMsgBuffer.Seek(STREAM_SEEK_TO_BEGIN);
     }
 
     return (pWBuf - pData);
 }
 
-int INetMIMEMessageStream::GetBodyLine(sal_Char* pData, sal_uIntPtr nSize)
+int INetMIMEMessageStream::GetBodyLine(sal_Char* pData, sal_uInt32 nSize)
 {
     sal_Char* pWBuf = pData;
     sal_Char* pWEnd = pData + nSize;
@@ -79,16 +78,16 @@ int INetMIMEMessageStream::GetBodyLine(sal_Char* pData, sal_uIntPtr nSize)
     if (pSourceMsg->GetDocumentLB())
     {
         if (pMsgStrm == nullptr)
-            pMsgStrm = new SvStream (pSourceMsg->GetDocumentLB());
+            pMsgStrm.reset(new SvStream (pSourceMsg->GetDocumentLB()));
 
-        sal_uIntPtr nRead = pMsgStrm->Read(pWBuf, (pWEnd - pWBuf));
+        sal_uInt32 nRead = pMsgStrm->ReadBytes(pWBuf, (pWEnd - pWBuf));
         pWBuf += nRead;
     }
 
     return (pWBuf - pData);
 }
 
-int INetMIMEMessageStream::GetMsgLine(sal_Char* pData, sal_uIntPtr nSize)
+int INetMIMEMessageStream::GetMsgLine(sal_Char* pData, sal_uInt32 nSize)
 {
     // Check for header or body.
     if (!bHeaderGenerated)
@@ -156,7 +155,7 @@ int INetMIMEMessageStream::GetMsgLine(sal_Char* pData, sal_uIntPtr nSize)
                         nChildIndex++;
 
                         // Create child stream.
-                        pChildStrm = new INetMIMEMessageStream(pChild, false);
+                        pChildStrm.reset(new INetMIMEMessageStream(pChild, false));
 
                         if (pSourceMsg->IsMultipart())
                         {
@@ -200,8 +199,7 @@ int INetMIMEMessageStream::GetMsgLine(sal_Char* pData, sal_uIntPtr nSize)
                     else
                     {
                         // Cleanup exhausted child stream.
-                        delete pChildStrm;
-                        pChildStrm = nullptr;
+                        pChildStrm.reset();
                     }
                 }
             }
@@ -222,34 +220,34 @@ int INetMIMEMessageStream::GetMsgLine(sal_Char* pData, sal_uIntPtr nSize)
     }
 }
 
+namespace
+{
+
+const int BUFFER_SIZE = 2048;
+
+}
+
 INetMIMEMessageStream::INetMIMEMessageStream(
     INetMIMEMessage *pMsg, bool headerGenerated):
     pSourceMsg(pMsg),
     bHeaderGenerated(headerGenerated),
-    nBufSiz(2048),
-    pMsgStrm(nullptr),
-    pMsgBuffer(new SvMemoryStream),
+    mvBuffer(BUFFER_SIZE),
     pMsgRead(nullptr),
     pMsgWrite(nullptr),
     done(false),
-    nChildIndex(0),
-    pChildStrm(nullptr)
+    nChildIndex(0)
 {
     assert(pMsg != nullptr);
-    pMsgBuffer->SetStreamCharSet(RTL_TEXTENCODING_ASCII_US);
-    pBuffer = new sal_Char[nBufSiz];
-    pRead = pWrite = pBuffer;
+    maMsgBuffer.SetStreamCharSet(RTL_TEXTENCODING_ASCII_US);
+    pRead = pWrite = mvBuffer.data();
 }
 
 INetMIMEMessageStream::~INetMIMEMessageStream()
 {
-    delete pChildStrm;
-    delete [] pBuffer;
-    delete pMsgBuffer;
-    delete pMsgStrm;
+    pChildStrm.reset();
 }
 
-int INetMIMEMessageStream::Read(sal_Char* pData, sal_uIntPtr nSize)
+int INetMIMEMessageStream::Read(sal_Char* pData, sal_uInt32 nSize)
 {
     sal_Char* pWBuf = pData;
     sal_Char* pWEnd = pData + nSize;
@@ -257,25 +255,25 @@ int INetMIMEMessageStream::Read(sal_Char* pData, sal_uIntPtr nSize)
     while (pWBuf < pWEnd)
     {
         // Caller's buffer not yet filled.
-        sal_uIntPtr n = pRead - pWrite;
+        sal_uInt32 n = pRead - pWrite;
         if (n > 0)
         {
             // Bytes still in buffer.
-            sal_uIntPtr m = pWEnd - pWBuf;
+            sal_uInt32 m = pWEnd - pWBuf;
             if (m < n) n = m;
-            for (sal_uIntPtr i = 0; i < n; i++) *pWBuf++ = *pWrite++;
+            for (sal_uInt32 i = 0; i < n; i++) *pWBuf++ = *pWrite++;
         }
         else
         {
             // Buffer empty. Reset to <Begin-of-Buffer>.
-            pRead = pWrite = pBuffer;
+            pRead = pWrite = mvBuffer.data();
 
             // Read next message line.
-            int nRead = GetMsgLine(pBuffer, nBufSiz);
+            int nRead = GetMsgLine(mvBuffer.data(), mvBuffer.size());
             if (nRead > 0)
             {
                 // Set read pointer.
-                pRead = pBuffer + nRead;
+                pRead = mvBuffer.data() + nRead;
             }
             else
             {

@@ -20,32 +20,17 @@
 #ifndef INCLUDED_TOOLS_B3DTRANS_HXX
 #define INCLUDED_TOOLS_B3DTRANS_HXX
 
-#define ZBUFFER_DEPTH_RANGE         ((double)(256L * 256L * 256L))
+#define ZBUFFER_DEPTH_RANGE         (double(256L * 256L * 256L))
 
 #include <basegfx/matrix/b3dhommatrix.hxx>
-#include <basegfx/range/b3drange.hxx>
 #include <tools/gen.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
-#include <basegfx/point/b2dpoint.hxx>
+#include <basegfx/point/b3dpoint.hxx>
+#include <basegfx/vector/b3dvector.hxx>
 #include <tools/toolsdllapi.h>
 
-/// Supported methods for setting the aspect ratio
-enum Base3DRatio
-{
-    Base3DRatioGrow = 1,
-    Base3DRatioShrink,
-    Base3DRatioMiddle
-};
-
-/// Supported projection types
-enum Base3DProjectionType
-{
-    Base3DProjectionTypeParallel = 1,
-    Base3DProjectionTypePerspective
-};
-
 /// Transformation sets for 3D output
-class TOOLS_DLLPUBLIC B3dTransformationSet
+class SAL_WARN_UNUSED TOOLS_DLLPUBLIC B3dTransformationSet
 {
 private:
     // Object Matrix Object -> World
@@ -73,48 +58,45 @@ private:
     double                mfBottomBound;
     double                mfTopBound;
 
-    // Near and far clipping planes
-    double                mfNearBound;
-    double                mfFarBound;
-
     // Aspect ratio of 3D transformation (Y / X)
     // default: 1:1 -> 1.0
     // Disable with value 0.0
     double                mfRatio;
 
     // Viewport area in logical coordinates
-    Rectangle             maViewportRectangle;
+    tools::Rectangle             maViewportRectangle;
     // Visible area within viewport
-    Rectangle             maVisibleRectangle;
+    tools::Rectangle             maVisibleRectangle;
 
     // Actual coordinates as set by CalcViewport
     // of visible viewport area (logical coordinates)
-    Rectangle             maSetBound;
-
-    // Method of keeping defined aspect ratio
-    // default: Base3DRatioGrow
-    Base3DRatio           meRatio;
+    tools::Rectangle             maSetBound;
 
     // Flags
     bool mbPerspective              : 1;
-    bool mbWorldToViewValid         : 1;
-    bool mbInvTransObjectToEyeValid : 1;
-    bool mbObjectToDeviceValid      : 1;
     bool mbProjectionValid          : 1;
 
 public:
     B3dTransformationSet();
     virtual ~B3dTransformationSet();
 
+    B3dTransformationSet(B3dTransformationSet const &) = default;
+    B3dTransformationSet(B3dTransformationSet &&) = default;
+    B3dTransformationSet & operator =(B3dTransformationSet const &) = default;
+    B3dTransformationSet & operator =(B3dTransformationSet &&) = default;
+
     void Reset();
 
-    // Orientation
+    /** Set the orientation
+
+        @param vVRP the View Reference Point (VRP)
+        @param vVPN the View Plane Normal (VPN)
+        @param vVUP the View Up Plane (VUP)
+    */
     void SetOrientation(
         const basegfx::B3DPoint& rVRP = basegfx::B3DPoint(0.0,0.0,1.0),
         const basegfx::B3DVector& rVPN = basegfx::B3DVector(0.0,0.0,1.0),
         const basegfx::B3DVector& rVUP = basegfx::B3DVector(0.0,1.0,0.0));
-    const basegfx::B3DHomMatrix& GetOrientation() { return maOrientation; }
-    const basegfx::B3DHomMatrix& GetInvOrientation() { return maInvOrientation; }
 
     // Projection
     void SetProjection(const basegfx::B3DHomMatrix& mProject);
@@ -123,8 +105,8 @@ public:
     // Texture
 
     // aspect ratio accessors and the defined method of keeping defined aspect ratio
-    double GetRatio() { return mfRatio; }
-    void SetRatio(double fNew=1.0);
+    double GetRatio() const { return mfRatio; }
+    void SetRatio(double fNew);
 
     // Parameters of ViewportTransformation
     void SetDeviceRectangle(double fL=-1.0, double fR=1.0,
@@ -133,8 +115,8 @@ public:
 
     void SetPerspective(bool bNew);
 
-    void SetViewportRectangle(Rectangle& rRect, Rectangle& rVisible);
-    void SetViewportRectangle(Rectangle& rRect) { SetViewportRectangle(rRect, rRect); }
+    void SetViewportRectangle(tools::Rectangle const & rRect, tools::Rectangle const & rVisible);
+    void SetViewportRectangle(tools::Rectangle const & rRect) { SetViewportRectangle(rRect, rRect); }
 
     void CalcViewport();
 
@@ -171,7 +153,7 @@ protected:
     Uses a simplified model, in which a point is described using a View
     Reference Point (VRP).
 */
-class TOOLS_DLLPUBLIC B3dViewport : public B3dTransformationSet
+class SAL_WARN_UNUSED TOOLS_DLLPUBLIC B3dViewport : public B3dTransformationSet
 {
 private:
     basegfx::B3DPoint           aVRP;   // View Reference Point
@@ -180,7 +162,12 @@ private:
 
 public:
     B3dViewport();
-    virtual ~B3dViewport();
+    virtual ~B3dViewport() override;
+
+    B3dViewport(B3dViewport const &) = default;
+    B3dViewport(B3dViewport &&) = default;
+    B3dViewport & operator =(B3dViewport const &) = default;
+    B3dViewport & operator =(B3dViewport &&) = default;
 
     void SetVUV(const basegfx::B3DVector& rNewVUV);
     void SetViewportValues(
@@ -198,29 +185,31 @@ protected:
 
 // B3D camera
 
-class TOOLS_DLLPUBLIC B3dCamera : public B3dViewport
+class SAL_WARN_UNUSED TOOLS_DLLPUBLIC B3dCamera final : public B3dViewport
 {
-private:
-    basegfx::B3DPoint       aPosition;
-    basegfx::B3DPoint       aCorrectedPosition;
-    basegfx::B3DVector  aLookAt;
-    double                  fFocalLength;
-    double                  fBankAngle;
-
-    bool                    bUseFocalLength         : 1;
-
 public:
     B3dCamera(
         const basegfx::B3DPoint& rPos = basegfx::B3DPoint(0.0, 0.0, 1.0),
         const basegfx::B3DVector& rLkAt = basegfx::B3DVector(0.0, 0.0, 0.0),
         double fFocLen = 35.0, double fBnkAng = 0.0);
-    virtual ~B3dCamera();
+    virtual ~B3dCamera() override;
 
-protected:
+    B3dCamera(B3dCamera const &) = default;
+    B3dCamera(B3dCamera &&) = default;
+    B3dCamera & operator =(B3dCamera const &) = default;
+    B3dCamera & operator =(B3dCamera &&) = default;
+
+private:
     void CalcNewViewportValues();
-    bool CalcFocalLength();
+    void CalcFocalLength();
 
     virtual void DeviceRectangleChange() override;
+
+    basegfx::B3DPoint       aPosition;
+    basegfx::B3DVector  aLookAt;
+    double                  fFocalLength;
+    double                  fBankAngle;
+
 };
 
 #endif

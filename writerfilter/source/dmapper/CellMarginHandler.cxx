@@ -16,11 +16,13 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include <CellMarginHandler.hxx>
-#include <PropertyMap.hxx>
-#include <ConversionHelper.hxx>
+#include "CellMarginHandler.hxx"
+#include "PropertyMap.hxx"
+#include "ConversionHelper.hxx"
 #include <ooxml/resourceids.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <comphelper/sequence.hxx>
+#include <sal/log.hxx>
 
 namespace writerfilter {
 namespace dmapper {
@@ -51,8 +53,6 @@ CellMarginHandler::~CellMarginHandler()
 void CellMarginHandler::lcl_attribute(Id rName, Value & rVal)
 {
     sal_Int32 nIntValue = rVal.getInt();
-    (void)nIntValue;
-    (void)rName;
     switch( rName )
     {
         case NS_ooxml::LN_CT_TblWidth_w:
@@ -76,19 +76,20 @@ void CellMarginHandler::createGrabBag(const OUString& aName)
     beans::PropertyValue aRet;
     aRet.Name = aName;
 
-    uno::Sequence<beans::PropertyValue> aSeq(2);
-    aSeq[0].Name = "w";
-    aSeq[0].Value = uno::makeAny(m_nWidth);
-    aSeq[1].Name = "type";
+    OUString sType;
     switch (m_nType)
     {
-        case NS_ooxml::LN_Value_ST_TblWidth_nil: aSeq[1].Value = uno::makeAny(OUString("nil")); break;
-        case NS_ooxml::LN_Value_ST_TblWidth_pct: aSeq[1].Value = uno::makeAny(OUString("pct")); break;
-        case NS_ooxml::LN_Value_ST_TblWidth_dxa: aSeq[1].Value = uno::makeAny(OUString("dxa")); break;
-        case NS_ooxml::LN_Value_ST_TblWidth_auto: aSeq[1].Value = uno::makeAny(OUString("auto")); break;
+        case NS_ooxml::LN_Value_ST_TblWidth_nil: sType = "nil"; break;
+        case NS_ooxml::LN_Value_ST_TblWidth_pct: sType = "pct"; break;
+        case NS_ooxml::LN_Value_ST_TblWidth_dxa: sType = "dxa"; break;
+        case NS_ooxml::LN_Value_ST_TblWidth_auto: sType = "auto"; break;
     }
+    uno::Sequence<beans::PropertyValue> aSeq( comphelper::InitPropertySequence({
+        { "w", uno::Any(m_nWidth) },
+        { "type", uno::Any(sType) }
+    }));
 
-    aRet.Value = uno::makeAny(aSeq);
+    aRet.Value <<= aSeq;
     m_aInteropGrabBag.push_back(aRet);
 }
 
@@ -108,6 +109,7 @@ void CellMarginHandler::lcl_sprm(Sprm & rSprm)
                 createGrabBag("top");
             break;
             case NS_ooxml::LN_CT_TblCellMar_start:
+            case NS_ooxml::LN_CT_TcMar_start:
                 if( rtl )
                 {
                     m_nRightMargin = m_nValue;
@@ -133,6 +135,7 @@ void CellMarginHandler::lcl_sprm(Sprm & rSprm)
                 createGrabBag("bottom");
             break;
             case NS_ooxml::LN_CT_TblCellMar_end:
+            case NS_ooxml::LN_CT_TcMar_end:
                 if( rtl )
                 {
                     m_nLeftMargin = m_nValue;
@@ -167,7 +170,7 @@ beans::PropertyValue CellMarginHandler::getInteropGrabBag()
 {
     beans::PropertyValue aRet;
     aRet.Name = m_aInteropGrabBagName;
-    aRet.Value = uno::makeAny(comphelper::containerToSequence(m_aInteropGrabBag));
+    aRet.Value <<= comphelper::containerToSequence(m_aInteropGrabBag);
     return aRet;
 }
 

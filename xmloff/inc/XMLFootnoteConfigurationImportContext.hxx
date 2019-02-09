@@ -20,6 +20,7 @@
 #ifndef INCLUDED_XMLOFF_INC_XMLFOOTNOTECONFIGURATIONIMPORTCONTEXT_HXX
 #define INCLUDED_XMLOFF_INC_XMLFOOTNOTECONFIGURATIONIMPORTCONTEXT_HXX
 
+#include <memory>
 #include <xmloff/xmlstyle.hxx>
 
 namespace com { namespace sun { namespace star {
@@ -32,19 +33,6 @@ class SvXMLImport;
 /// import footnote and endnote configuration elements
 class XMLFootnoteConfigurationImportContext : public SvXMLStyleContext
 {
-    const OUString sPropertyAnchorCharStyleName;
-    const OUString sPropertyCharStyleName;
-    const OUString sPropertyNumberingType;
-    const OUString sPropertyPageStyleName;
-    const OUString sPropertyParagraphStyleName;
-    const OUString sPropertyPrefix;
-    const OUString sPropertyStartAt;
-    const OUString sPropertySuffix;
-    const OUString sPropertyPositionEndOfDoc;
-    const OUString sPropertyFootnoteCounting;
-    const OUString sPropertyEndNotice;
-    const OUString sPropertyBeginNotice;
-
     OUString sCitationStyle;
     OUString sAnchorStyle;
     OUString sDefaultStyle;
@@ -56,7 +44,7 @@ class XMLFootnoteConfigurationImportContext : public SvXMLStyleContext
     OUString sBeginNotice;
     OUString sEndNotice;
 
-    SvXMLTokenMap* pAttrTokenMap;
+    std::unique_ptr<SvXMLTokenMap> pAttrTokenMap;
 
     sal_Int16 nOffset;
     sal_Int16 nNumbering;
@@ -72,14 +60,14 @@ public:
         const OUString& rLName,
         const css::uno::Reference< css::xml::sax::XAttributeList> & xAttrList);
 
-    virtual ~XMLFootnoteConfigurationImportContext();
+    virtual ~XMLFootnoteConfigurationImportContext() override;
 
     /// parse attributes
     virtual void StartElement(
         const css::uno::Reference< css::xml::sax::XAttributeList> & xAttrList ) override;
 
     /// for footnotes, also parse begin and end notices
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList> & xAttrList ) override;

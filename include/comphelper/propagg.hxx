@@ -20,11 +20,16 @@
 #ifndef INCLUDED_COMPHELPER_PROPAGG_HXX
 #define INCLUDED_COMPHELPER_PROPAGG_HXX
 
-#include <com/sun/star/uno/XAggregation.hpp>
+#include <com/sun/star/beans/Property.hpp>
+#include <com/sun/star/beans/PropertyState.hpp>
+#include <com/sun/star/beans/XPropertiesChangeListener.hpp>
+#include <com/sun/star/beans/XVetoableChangeListener.hpp>
+#include <com/sun/star/lang/EventObject.hpp>
 #include <comphelper/propstate.hxx>
 #include <comphelper/comphelperdllapi.h>
 
 #include <map>
+#include <memory>
 #include <vector>
 
 
@@ -55,7 +60,7 @@ namespace internal
         bool operator <(const OPropertyAccessor& rOb) const { return nPos < rOb.nPos; }
     };
 
-    typedef std::map< sal_Int32, OPropertyAccessor, ::std::less< sal_Int32 > >  PropertyAccessorMap;
+    typedef std::map< sal_Int32, OPropertyAccessor >  PropertyAccessorMap;
     typedef PropertyAccessorMap::iterator           PropertyAccessorMapIterator;
     typedef PropertyAccessorMap::const_iterator     ConstPropertyAccessorMapIterator;
 }
@@ -85,10 +90,9 @@ protected:
 
 #define DEFAULT_AGGREGATE_PROPERTY_ID   10000
 
-class COMPHELPER_DLLPUBLIC OPropertyArrayAggregationHelper: public ::cppu::IPropertyArrayHelper
+class COMPHELPER_DLLPUBLIC OPropertyArrayAggregationHelper final : public ::cppu::IPropertyArrayHelper
 {
     friend class OPropertySetAggregationHelper;
-protected:
 
     std::vector<css::beans::Property>         m_aProperties;
     internal::PropertyAccessorMap             m_aPropertyAccessors;
@@ -108,7 +112,7 @@ public:
                                 If not NULL, the object pointed to is used to calc handles which should be used
                                 for referring the aggregate's properties from outside.
                                 If one of the properties returned from the info service conflict with other handles
-                                alread present (e.g. through _rProperties), the property is handled as if -1 was returned.
+                                already present (e.g. through _rProperties), the property is handled as if -1 was returned.
                                 If NULL (or, for a special property, a call to getPreferredPropertyId returns -1),
                                 the aggregate property(ies) get a new handle which they can be referred by from outside.
         @param  _nFirstAggregateId
@@ -130,8 +134,7 @@ public:
     /// inherited from IPropertyArrayHelper
     virtual css::uno::Sequence< css::beans::Property> SAL_CALL getProperties() override;
     /// inherited from IPropertyArrayHelper
-    virtual css::beans::Property SAL_CALL getPropertyByName(const OUString& _rPropertyName)
-                                throw(css::beans::UnknownPropertyException) override;
+    virtual css::beans::Property SAL_CALL getPropertyByName(const OUString& _rPropertyName) override;
 
     /// inherited from IPropertyArrayHelper
     virtual sal_Bool  SAL_CALL hasPropertyByName(const OUString& _rPropertyName) override ;
@@ -176,7 +179,7 @@ public:
     */
     PropertyOrigin  classifyProperty( const OUString& _rName );
 
-protected:
+private:
     const css::beans::Property* findPropertyByName(const OUString& _rName) const;
 };
 
@@ -204,39 +207,39 @@ protected:
     css::uno::Reference< css::beans::XMultiPropertySet>   m_xAggregateMultiSet;
     css::uno::Reference< css::beans::XFastPropertySet>    m_xAggregateFastSet;
 
-    internal::PropertyForwarder*    m_pForwarder;
+    std::unique_ptr<internal::PropertyForwarder>          m_pForwarder;
     bool                            m_bListening : 1;
 
 public:
     OPropertySetAggregationHelper( ::cppu::OBroadcastHelper& rBHelper );
 
-    virtual css::uno::Any SAL_CALL queryInterface(const css::uno::Type& aType) throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL queryInterface(const css::uno::Type& aType) override;
 
 // XEventListener
-    virtual void SAL_CALL disposing(const css::lang::EventObject& Source) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing(const css::lang::EventObject& Source) override;
 
 // XFastPropertySet
-    virtual void SAL_CALL setFastPropertyValue(sal_Int32 nHandle, const css::uno::Any& aValue) throw(css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getFastPropertyValue(sal_Int32 nHandle) throw(css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setFastPropertyValue(sal_Int32 nHandle, const css::uno::Any& aValue) override;
+    virtual css::uno::Any SAL_CALL getFastPropertyValue(sal_Int32 nHandle) override;
 
 // XPropertySet
-    virtual void SAL_CALL           addPropertyChangeListener(const OUString& aPropertyName, const css::uno::Reference< css::beans::XPropertyChangeListener >& xListener) throw(css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL           addVetoableChangeListener(const OUString& PropertyName, const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener) throw(css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL           addPropertyChangeListener(const OUString& aPropertyName, const css::uno::Reference< css::beans::XPropertyChangeListener >& xListener) override;
+    virtual void SAL_CALL           addVetoableChangeListener(const OUString& PropertyName, const css::uno::Reference< css::beans::XVetoableChangeListener >& aListener) override;
 
 // XPropertiesChangeListener
-    virtual void SAL_CALL propertiesChange(const css::uno::Sequence< css::beans::PropertyChangeEvent >& evt) throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL propertiesChange(const css::uno::Sequence< css::beans::PropertyChangeEvent >& evt) override;
 
 // XVetoableChangeListener
-    virtual void SAL_CALL vetoableChange(const css::beans::PropertyChangeEvent& aEvent) throw(css::beans::PropertyVetoException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL vetoableChange(const css::beans::PropertyChangeEvent& aEvent) override;
 
 // XMultiPropertySet
-    virtual void SAL_CALL   setPropertyValues(const css::uno::Sequence< OUString >& PropertyNames, const css::uno::Sequence< css::uno::Any >& Values) throw(css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL   addPropertiesChangeListener(const css::uno::Sequence< OUString >& aPropertyNames, const css::uno::Reference< css::beans::XPropertiesChangeListener >& xListener) throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL   setPropertyValues(const css::uno::Sequence< OUString >& PropertyNames, const css::uno::Sequence< css::uno::Any >& Values) override;
+    virtual void SAL_CALL   addPropertiesChangeListener(const css::uno::Sequence< OUString >& aPropertyNames, const css::uno::Reference< css::beans::XPropertiesChangeListener >& xListener) override;
 
 // XPropertyState
-    virtual css::beans::PropertyState SAL_CALL getPropertyState(const OUString& PropertyName) throw(css::beans::UnknownPropertyException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL                                   setPropertyToDefault(const OUString& PropertyName) throw(css::beans::UnknownPropertyException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL             getPropertyDefault(const OUString& aPropertyName) throw(css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+    virtual css::beans::PropertyState SAL_CALL getPropertyState(const OUString& PropertyName) override;
+    virtual void SAL_CALL                                   setPropertyToDefault(const OUString& PropertyName) override;
+    virtual css::uno::Any SAL_CALL             getPropertyDefault(const OUString& aPropertyName) override;
 
 // OPropertySetHelper
     /** still waiting to be overwritten ...
@@ -247,15 +250,15 @@ public:
     /** only implemented for "forwarded" properties, every other property must be handled
         in the derivee, and will assert if passed herein
     */
-    virtual sal_Bool SAL_CALL convertFastPropertyValue( css::uno::Any& _rConvertedValue, css::uno::Any& _rOldValue, sal_Int32 _nHandle, const css::uno::Any& _rValue ) throw(css::lang::IllegalArgumentException) override;
+    virtual sal_Bool SAL_CALL convertFastPropertyValue( css::uno::Any& _rConvertedValue, css::uno::Any& _rOldValue, sal_Int32 _nHandle, const css::uno::Any& _rValue ) override;
 
     /** only implemented for "forwarded" properties, every other property must be handled
         in the derivee, and will assert if passed herein
     */
-    virtual void SAL_CALL setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const css::uno::Any& _rValue ) throw ( css::uno::Exception, std::exception ) override;
+    virtual void SAL_CALL setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const css::uno::Any& _rValue ) override;
 
 protected:
-    virtual ~OPropertySetAggregationHelper();
+    virtual ~OPropertySetAggregationHelper() override;
 
     virtual void SAL_CALL getFastPropertyValue(css::uno::Any& rValue, sal_Int32 nHandle) const override;
     void disposing();
@@ -311,7 +314,9 @@ protected:
     virtual void forwardedPropertyValue( sal_Int32 _nHandle );
 
     /// must be called before aggregation, if aggregation is used
-    void setAggregation(const css::uno::Reference< css::uno::XInterface >&) throw( css::lang::IllegalArgumentException );
+    ///
+    /// @throws css::lang::IllegalArgumentException
+    void setAggregation(const css::uno::Reference< css::uno::XInterface >&);
     void startListening();
 };
 

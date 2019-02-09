@@ -24,6 +24,7 @@
 
 #include <rtl/ustring.hxx>
 #include <vcl/menu.hxx>
+#include <vector>
 
 namespace framework
 {
@@ -35,8 +36,6 @@ struct AddonMenuItem
 {
     OUString    aTitle;
     OUString    aURL;
-    OUString    aTarget;
-    OUString    aImageId;
     OUString    aContext;
     AddonMenuContainer aSubMenu;
 };
@@ -51,7 +50,7 @@ enum RPResultInfo
 
 struct ReferencePathInfo
 {
-    Menu*              pPopupMenu;
+    VclPtr<Menu>       pPopupMenu;
     sal_uInt16         nPos;
     sal_Int32          nLevel;
     RPResultInfo       eResult;
@@ -65,7 +64,7 @@ namespace MenuBarMerger
                                                  std::vector< OUString >& aReferencePath );
         ReferencePathInfo FindReferencePath( const std::vector< OUString >& aReferencePath, Menu* pMenu );
         sal_uInt16 FindMenuItem( const OUString& rCmd,
-                                        Menu* pMenu );
+                                 Menu const * pMenu );
         void       GetMenuEntry( const css::uno::Sequence< css::beans::PropertyValue >& rAddonMenuEntry,
                                         AddonMenuItem& aAddonMenu );
         void       GetSubMenu( const css::uno::Sequence< css::uno::Sequence< css::beans::PropertyValue > >& rSubMenuEntries,

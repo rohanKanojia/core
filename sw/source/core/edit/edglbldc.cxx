@@ -30,6 +30,7 @@
 #include <section.hxx>
 #include <doctxm.hxx>
 #include <edglbldc.hxx>
+#include <osl/diagnose.h>
 
 bool SwEditShell::IsGlobalDoc() const
 {
@@ -53,7 +54,7 @@ bool SwEditShell::IsGlblDocSaveLinks() const
 
 void SwEditShell::GetGlobalDocContent( SwGlblDocContents& rArr ) const
 {
-    rArr.DeleteAndDestroyAll();
+    rArr.clear();
 
     if( !getIDocumentSettingAccess().get(DocumentSettingId::GLOBAL_DOCUMENT) )
         return;
@@ -67,22 +68,21 @@ void SwEditShell::GetGlobalDocContent( SwGlblDocContents& rArr ) const
         const SwSection* pSect = rSectFormats[ --n ]->GetGlobalDocSection();
         if( pSect )
         {
-            SwGlblDocContent* pNew;
+            std::unique_ptr<SwGlblDocContent> pNew;
             switch( pSect->GetType() )
             {
             case TOX_HEADER_SECTION:
                 break;      // ignore
             case TOX_CONTENT_SECTION:
                 OSL_ENSURE( dynamic_cast<const SwTOXBaseSection*>( pSect) !=  nullptr, "no TOXBaseSection!" );
-                pNew = new SwGlblDocContent( static_cast<const SwTOXBaseSection*>(pSect) );
+                pNew.reset(new SwGlblDocContent( static_cast<const SwTOXBaseSection*>(pSect) ));
                 break;
 
             default:
-                pNew = new SwGlblDocContent( pSect );
+                pNew.reset(new SwGlblDocContent( pSect ));
                 break;
             }
-            if( !rArr.insert( pNew ).second )
-                delete pNew;
+            rArr.insert( std::move(pNew) );
         }
     }
 
@@ -98,10 +98,8 @@ void SwEditShell::GetGlobalDocContent( SwGlblDocContents& rArr ) const
             if( ( pNd = pMyDoc->GetNodes()[ nSttIdx ])->IsContentNode()
                 || pNd->IsSectionNode() || pNd->IsTableNode() )
             {
-                SwGlblDocContent* pNew = new SwGlblDocContent( nSttIdx );
-                if( !rArr.insert( pNew ).second )
-                    delete pNew;
-                else
+                std::unique_ptr<SwGlblDocContent> pNew(new SwGlblDocContent( nSttIdx ));
+                if( rArr.insert( std::move(pNew) ).second )
                     ++n; // to the next position
                 break;
             }
@@ -119,25 +117,23 @@ void SwEditShell::GetGlobalDocContent( SwGlblDocContents& rArr ) const
             if( ( pNd = pMyDoc->GetNodes()[ nSttIdx ])->IsContentNode()
                 || pNd->IsSectionNode() || pNd->IsTableNode() )
             {
-                SwGlblDocContent* pNew = new SwGlblDocContent( nSttIdx );
-                if( !rArr.insert( pNew ).second )
-                    delete pNew;
+                rArr.insert( std::make_unique<SwGlblDocContent>( nSttIdx ) );
                 break;
             }
     }
     else
     {
-        SwGlblDocContent* pNew = new SwGlblDocContent(
-                    pMyDoc->GetNodes().GetEndOfExtras().GetIndex() + 2 );
-        rArr.insert( pNew );
+        std::unique_ptr<SwGlblDocContent> pNew(new SwGlblDocContent(
+                    pMyDoc->GetNodes().GetEndOfExtras().GetIndex() + 2 ));
+        rArr.insert( std::move(pNew) );
     }
 }
 
-bool SwEditShell::InsertGlobalDocContent( const SwGlblDocContent& rInsPos,
+void SwEditShell::InsertGlobalDocContent( const SwGlblDocContent& rInsPos,
         SwSectionData & rNew)
 {
     if( !getIDocumentSettingAccess().get(DocumentSettingId::GLOBAL_DOCUMENT) )
-        return false;
+        return;
 
     SET_CURR_SHELL( this );
     StartAllAction();
@@ -157,7 +153,7 @@ bool SwEditShell::InsertGlobalDocContent( const SwGlblDocContent& rInsPos,
     else
     {
         bEndUndo = true;
-        pMyDoc->GetIDocumentUndoRedo().StartUndo( UNDO_START, nullptr );
+        pMyDoc->GetIDocumentUndoRedo().StartUndo( SwUndoId::START, nullptr );
         --rPos.nNode;
         pMyDoc->getIDocumentContentOperations().AppendTextNode( rPos );
         pCursor->SetMark();
@@ -167,11 +163,9 @@ bool SwEditShell::InsertGlobalDocContent( const SwGlblDocContent& rInsPos,
 
     if( bEndUndo )
     {
-        pMyDoc->GetIDocumentUndoRedo().EndUndo( UNDO_END, nullptr );
+        pMyDoc->GetIDocumentUndoRedo().EndUndo( SwUndoId::END, nullptr );
     }
     EndAllAction();
-
-    return true;
 }
 
 bool SwEditShell::InsertGlobalDocContent( const SwGlblDocContent& rInsPos,
@@ -199,7 +193,7 @@ bool SwEditShell::InsertGlobalDocContent( const SwGlblDocContent& rInsPos,
     else
     {
         bEndUndo = true;
-        pMyDoc->GetIDocumentUndoRedo().StartUndo( UNDO_START, nullptr );
+        pMyDoc->GetIDocumentUndoRedo().StartUndo( SwUndoId::START, nullptr );
         --rPos.nNode;
         pMyDoc->getIDocumentContentOperations().AppendTextNode( rPos );
     }
@@ -208,7 +202,7 @@ bool SwEditShell::InsertGlobalDocContent( const SwGlblDocContent& rInsPos,
 
     if( bEndUndo )
     {
-        pMyDoc->GetIDocumentUndoRedo().EndUndo( UNDO_END, nullptr );
+        pMyDoc->GetIDocumentUndoRedo().EndUndo( SwUndoId::END, nullptr );
     }
     EndAllAction();
 
@@ -237,15 +231,15 @@ bool SwEditShell::InsertGlobalDocContent( const SwGlblDocContent& rInsPos )
     return true;
 }
 
-bool SwEditShell::DeleteGlobalDocContent( const SwGlblDocContents& rArr ,
+void SwEditShell::DeleteGlobalDocContent( const SwGlblDocContents& rArr ,
                                             size_t nDelPos )
 {
     if( !getIDocumentSettingAccess().get(DocumentSettingId::GLOBAL_DOCUMENT) )
-        return false;
+        return;
 
     SET_CURR_SHELL( this );
     StartAllAction();
-    StartUndo( UNDO_START );
+    StartUndo( SwUndoId::START );
 
     SwPaM* pCursor = GetCursor();
     if( pCursor->GetNext() != pCursor || IsTableMode() )
@@ -297,9 +291,8 @@ bool SwEditShell::DeleteGlobalDocContent( const SwGlblDocContents& rArr ,
         break;
     }
 
-    EndUndo( UNDO_END );
+    EndUndo( SwUndoId::END );
     EndAllAction();
-    return true;
 }
 
 bool SwEditShell::MoveGlobalDocContent( const SwGlblDocContents& rArr ,
@@ -339,10 +332,10 @@ bool SwEditShell::MoveGlobalDocContent( const SwGlblDocContents& rArr ,
     return bRet;
 }
 
-bool SwEditShell::GotoGlobalDocContent( const SwGlblDocContent& rPos )
+void SwEditShell::GotoGlobalDocContent( const SwGlblDocContent& rPos )
 {
     if( !getIDocumentSettingAccess().get(DocumentSettingId::GLOBAL_DOCUMENT) )
-        return false;
+        return;
 
     SET_CURR_SHELL( this );
     SttCursorMove();
@@ -362,7 +355,6 @@ bool SwEditShell::GotoGlobalDocContent( const SwGlblDocContent& rPos )
     rCursorPos.nContent.Assign( pCNd, 0 );
 
     EndCursorMove();
-    return true;
 }
 
 SwGlblDocContent::SwGlblDocContent( sal_uLong nPos )

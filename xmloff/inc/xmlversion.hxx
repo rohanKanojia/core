@@ -41,10 +41,9 @@ public:
         const css::uno::Reference< css::uno::XComponentContext >& rContext,
         const css::uno::Sequence < css::util::RevisionTag >& rVersions,
         const OUString &rFileName,
-        css::uno::Reference< css::xml::sax::XDocumentHandler > &rHandler );
-    virtual     ~XMLVersionListExport() {}
+        css::uno::Reference< css::xml::sax::XDocumentHandler > const &rHandler );
 
-    sal_uInt32  exportDoc( enum ::xmloff::token::XMLTokenEnum eClass ) override;
+    ErrCode     exportDoc( enum ::xmloff::token::XMLTokenEnum eClass = ::xmloff::token::XML_TOKEN_INVALID ) override;
     void        ExportAutoStyles_() override {}
     void        ExportMasterStyles_ () override {}
     void        ExportContent_() override {}
@@ -57,9 +56,7 @@ private:
 
 protected:
 
-    // This method is called after the namespace map has been updated, but
-    // before a context for the current element has been pushed.
-    virtual SvXMLImportContext *CreateContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContext *CreateDocumentContext( sal_uInt16 nPrefix,
                     const OUString& rLocalName,
                     const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
 
@@ -68,7 +65,7 @@ public:
     XMLVersionListImport(
         const css::uno::Reference< css::uno::XComponentContext >& rContext,
         css::uno::Sequence < css::util::RevisionTag >& rVersions );
-    virtual ~XMLVersionListImport() throw();
+    virtual ~XMLVersionListImport() throw() override;
 
     css::uno::Sequence < css::util::RevisionTag >&
         GetList() { return maVersions; }
@@ -86,9 +83,9 @@ public:
                            const OUString& rLocalName,
                            const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList );
 
-    virtual ~XMLVersionListContext();
+    virtual ~XMLVersionListContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                            const OUString& rLocalName,
                            const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
 
@@ -110,23 +107,20 @@ public:
                           const OUString& rLocalName,
                           const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList );
 
-    virtual ~XMLVersionContext();
+    virtual ~XMLVersionContext() override;
 };
 
 class XMLVersionListPersistence : public ::cppu::WeakImplHelper< css::document::XDocumentRevisionListPersistence, css::lang::XServiceInfo >
 {
 public:
-    virtual css::uno::Sequence< css::util::RevisionTag > SAL_CALL load( const css::uno::Reference< css::embed::XStorage >& Storage ) throw (css::container::NoSuchElementException, css::io::IOException, css::uno::Exception, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL store( const css::uno::Reference< css::embed::XStorage >& Storage, const css::uno::Sequence< css::util::RevisionTag >& List ) throw (css::io::IOException, css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence< css::util::RevisionTag > SAL_CALL load( const css::uno::Reference< css::embed::XStorage >& Storage ) override;
+    virtual void SAL_CALL store( const css::uno::Reference< css::embed::XStorage >& Storage, const css::uno::Sequence< css::util::RevisionTag >& List ) override;
 
-    OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override;
+    OUString SAL_CALL getImplementationName() override;
 
-    sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-        throw (css::uno::RuntimeException, std::exception) override;
+    sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override;
 
-    css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override;
+    css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
 };
 
 #endif

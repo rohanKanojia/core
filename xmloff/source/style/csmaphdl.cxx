@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <csmaphdl.hxx>
+#include "csmaphdl.hxx"
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmluconv.hxx>
+#include <xmloff/xmlement.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <com/sun/star/style/CaseMap.hpp>
 #include <com/sun/star/uno/Any.hxx>
@@ -27,7 +28,7 @@
 using namespace ::com::sun::star;
 using namespace ::xmloff::token;
 
-static SvXMLEnumMapEntry pXML_Casemap_Enum[] =
+static const SvXMLEnumMapEntry<sal_uInt16> pXML_Casemap_Enum[] =
 {
     { XML_NONE,                 style::CaseMap::NONE },
     { XML_CASEMAP_LOWERCASE,    style::CaseMap::LOWERCASE },
@@ -48,7 +49,7 @@ bool XMLCaseMapPropHdl::importXML( const OUString& rStrImpValue, uno::Any& rValu
     sal_uInt16 nVal;
     bool bRet = SvXMLUnitConverter::convertEnum(
         nVal, rStrImpValue, pXML_Casemap_Enum );
-    if( ( bRet ) )
+    if( bRet )
         rValue <<= nVal;
 
     return bRet;
@@ -84,12 +85,12 @@ bool XMLCaseMapVariantHdl::importXML( const OUString& rStrImpValue, uno::Any& rV
 
     if( IsXMLToken( rStrImpValue, XML_CASEMAP_SMALL_CAPS ) )
     {
-        rValue <<= (sal_Int16)style::CaseMap::SMALLCAPS;
+        rValue <<= sal_Int16(style::CaseMap::SMALLCAPS);
         bRet = true;
     }
     else if( IsXMLToken( rStrImpValue, XML_CASEMAP_NORMAL ) )
     {
-        rValue <<= (sal_Int16)style::CaseMap::NONE;
+        rValue <<= sal_Int16(style::CaseMap::NONE);
         bRet = true;
     }
 

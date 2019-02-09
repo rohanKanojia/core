@@ -27,8 +27,8 @@
 #include <memory>
 
 class EditEngine;
-class EditView;
-
+enum class SetAttribsMode;
+enum class TransliterationFlags;
 
 // EditUndoDelContent
 
@@ -42,7 +42,7 @@ private:
 
 public:
     EditUndoDelContent(EditEngine* pEE, ContentNode* pNode, sal_Int32 nPortion);
-    virtual ~EditUndoDelContent();
+    virtual ~EditUndoDelContent() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -71,7 +71,7 @@ public:
     EditUndoConnectParas(EditEngine* pEE, sal_Int32 nNode, sal_uInt16 nSepPos,
                          const SfxItemSet& rLeftParaAttribs, const SfxItemSet& rRightParaAttribs,
                          const SfxStyleSheet* pLeftStyle, const SfxStyleSheet* pRightStyle, bool bBackward);
-    virtual ~EditUndoConnectParas();
+    virtual ~EditUndoConnectParas() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -88,7 +88,7 @@ private:
 
 public:
     EditUndoSplitPara(EditEngine* pEE, sal_Int32 nNode, sal_uInt16 nSepPos);
-    virtual ~EditUndoSplitPara();
+    virtual ~EditUndoSplitPara() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -124,9 +124,6 @@ private:
 public:
     EditUndoRemoveChars(EditEngine* pEE, const EPaM& rEPaM, const OUString& rStr);
 
-    const EPaM&     GetEPaM() { return aEPaM; }
-    OUString &      GetStr() { return aText; }
-
     virtual void    Undo() override;
     virtual void    Redo() override;
 };
@@ -137,12 +134,12 @@ public:
 class EditUndoInsertFeature : public EditUndo
 {
 private:
-    EPaM            aEPaM;
-    SfxPoolItem*    pFeature;
+    EPaM                           aEPaM;
+    std::unique_ptr<SfxPoolItem>   pFeature;
 
 public:
     EditUndoInsertFeature(EditEngine* pEE, const EPaM& rEPaM, const SfxPoolItem& rFeature);
-    virtual ~EditUndoInsertFeature();
+    virtual ~EditUndoInsertFeature() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -159,7 +156,7 @@ private:
 
 public:
     EditUndoMoveParagraphs(EditEngine* pEE, const Range& rParas, sal_Int32 nDest);
-    virtual ~EditUndoMoveParagraphs();
+    virtual ~EditUndoMoveParagraphs() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -183,7 +180,7 @@ public:
         const OUString& rPrevName, SfxStyleFamily ePrevFamily,
         const OUString& rNewName, SfxStyleFamily eNewFamily,
         const SfxItemSet& rPrevParaAttribs);
-    virtual ~EditUndoSetStyleSheet();
+    virtual ~EditUndoSetStyleSheet() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -201,7 +198,7 @@ private:
 
 public:
     EditUndoSetParaAttribs(EditEngine* pEE, sal_Int32 nPara, const SfxItemSet& rPrevItems, const SfxItemSet& rNewItems);
-    virtual ~EditUndoSetParaAttribs();
+    virtual ~EditUndoSetParaAttribs() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -219,24 +216,24 @@ private:
     SfxItemSet          aNewAttribs;
     InfoArrayType       aPrevAttribs;
 
-    sal_uInt8               nSpecial;
+    SetAttribsMode      nSpecial;
     bool                bSetIsRemove;
     bool                bRemoveParaAttribs;
-    sal_uInt16              nRemoveWhich;
+    sal_uInt16          nRemoveWhich;
 
-    void                ImpSetSelection( EditView* pView );
+    void                ImpSetSelection();
 
 
 public:
     EditUndoSetAttribs(EditEngine* pEE, const ESelection& rESel, const SfxItemSet& rNewItems);
-    virtual ~EditUndoSetAttribs();
+    virtual ~EditUndoSetAttribs() override;
 
     SfxItemSet&         GetNewAttribs()     { return aNewAttribs; }
 
-    void                SetSpecial( sal_uInt8 n )           { nSpecial = n; }
+    void                SetSpecial( SetAttribsMode n )  { nSpecial = n; }
     void                SetRemoveAttribs( bool b )      { bSetIsRemove = b; }
     void                SetRemoveParaAttribs( bool b )  { bRemoveParaAttribs = b; }
-    void                SetRemoveWhich( sal_uInt16 n )      { nRemoveWhich = n; }
+    void                SetRemoveWhich( sal_uInt16 n )  { nRemoveWhich = n; }
 
     virtual void        Undo() override;
     virtual void        Redo() override;
@@ -253,16 +250,18 @@ private:
     ESelection          aOldESel;
     ESelection          aNewESel;
 
-    sal_Int32           nMode;
-    EditTextObject*     pTxtObj;
+    TransliterationFlags
+                        nMode;
+    std::unique_ptr<EditTextObject>
+                        pTxtObj;
     OUString            aText;
 
 public:
-    EditUndoTransliteration(EditEngine* pEE, const ESelection& rESel, sal_Int32 nMode);
-    virtual ~EditUndoTransliteration();
+    EditUndoTransliteration(EditEngine* pEE, const ESelection& rESel, TransliterationFlags nMode);
+    virtual ~EditUndoTransliteration() override;
 
     void                SetText( const OUString& rText ) { aText = rText; }
-    void                SetText( EditTextObject* pObj ) { pTxtObj = pObj; }
+    void                SetText( std::unique_ptr<EditTextObject> pObj ) { pTxtObj = std::move( pObj ); }
     void                SetNewSelection( const ESelection& rSel ) { aNewESel = rSel; }
 
     virtual void        Undo() override;
@@ -279,7 +278,7 @@ private:
 
 public:
     EditUndoMarkSelection(EditEngine* pEE, const ESelection& rSel);
-    virtual ~EditUndoMarkSelection();
+    virtual ~EditUndoMarkSelection() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;

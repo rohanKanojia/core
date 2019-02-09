@@ -17,14 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "statusindicator.hxx"
+#include <statusindicator.hxx>
 
 #include <com/sun/star/awt/WindowAttribute.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <cppuhelper/queryinterface.hxx>
 #include <cppuhelper/typeprovider.hxx>
 
-#include "progressbar.hxx"
+#include <progressbar.hxx>
 
 using namespace ::cppu;
 using namespace ::osl;
@@ -33,20 +33,20 @@ using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::task;
 
-namespace unocontrols{
+namespace unocontrols {
 
 //  construct/destruct
 
 StatusIndicator::StatusIndicator( const css::uno::Reference< XComponentContext >& rxContext )
     : BaseContainerControl  ( rxContext  )
 {
-    // Its not allowed to work with member in this method (refcounter !!!)
+    // It's not allowed to work with member in this method (refcounter !!!)
     // But with a HACK (++refcount) its "OK" :-(
     ++m_refCount;
 
     // Create instances for fixedtext and progress ...
     m_xText.set( rxContext->getServiceManager()->createInstanceWithContext( FIXEDTEXT_SERVICENAME, rxContext ), UNO_QUERY );
-    m_xProgressBar = VclPtr<ProgressBar>::Create(rxContext);
+    m_xProgressBar = new ProgressBar(rxContext);
     // ... cast controls to css::uno::Reference< XControl > and set model ...
     // ( ProgressBar has no model !!! )
     css::uno::Reference< XControl > xTextControl      ( m_xText       , UNO_QUERY );
@@ -68,7 +68,7 @@ StatusIndicator::~StatusIndicator() {}
 
 //  XInterface
 
-Any SAL_CALL StatusIndicator::queryInterface( const Type& rType ) throw( RuntimeException, std::exception )
+Any SAL_CALL StatusIndicator::queryInterface( const Type& rType )
 {
     // Attention:
     //  Don't use mutex or guard in this method!!! Is a method of XInterface.
@@ -113,37 +113,19 @@ void SAL_CALL StatusIndicator::release() throw()
 
 //  XTypeProvider
 
-Sequence< Type > SAL_CALL StatusIndicator::getTypes() throw( RuntimeException, std::exception )
+Sequence< Type > SAL_CALL StatusIndicator::getTypes()
 {
-    // Optimize this method !
-    // We initialize a static variable only one time. And we don't must use a mutex at every call!
-    // For the first call; pTypeCollection is NULL - for the second call pTypeCollection is different from NULL!
-    static OTypeCollection* pTypeCollection = nullptr;
+    static OTypeCollection ourTypeCollection(
+                cppu::UnoType<XLayoutConstrains>::get(),
+                cppu::UnoType<XStatusIndicator>::get(),
+                BaseContainerControl::getTypes() );
 
-    if ( pTypeCollection == nullptr )
-    {
-        // Ready for multithreading; get global mutex for first call of this method only! see before
-        MutexGuard aGuard( Mutex::getGlobalMutex() );
-
-        // Control these pointer again ... it can be, that another instance will be faster then these!
-        if ( pTypeCollection == nullptr )
-        {
-            // Create a static typecollection ...
-            static OTypeCollection aTypeCollection  ( cppu::UnoType<XLayoutConstrains>::get(),
-                                                      cppu::UnoType<XStatusIndicator>::get(),
-                                                      BaseContainerControl::getTypes()
-                                                    );
-            // ... and set his address to static pointer!
-            pTypeCollection = &aTypeCollection;
-        }
-    }
-
-    return pTypeCollection->getTypes();
+    return ourTypeCollection.getTypes();
 }
 
 //  XAggregation
 
-Any SAL_CALL StatusIndicator::queryAggregation( const Type& aType ) throw( RuntimeException, std::exception )
+Any SAL_CALL StatusIndicator::queryAggregation( const Type& aType )
 {
     // Ask for my own supported interfaces ...
     // Attention: XTypeProvider and XInterface are supported by OComponentHelper!
@@ -165,7 +147,7 @@ Any SAL_CALL StatusIndicator::queryAggregation( const Type& aType ) throw( Runti
 
 //  XStatusIndicator
 
-void SAL_CALL StatusIndicator::start( const OUString& sText, sal_Int32 nRange ) throw( RuntimeException, std::exception )
+void SAL_CALL StatusIndicator::start( const OUString& sText, sal_Int32 nRange )
 {
     // Ready for multithreading
     MutexGuard aGuard( m_aMutex );
@@ -179,7 +161,7 @@ void SAL_CALL StatusIndicator::start( const OUString& sText, sal_Int32 nRange ) 
 
 //  XStatusIndicator
 
-void SAL_CALL StatusIndicator::end() throw( RuntimeException, std::exception )
+void SAL_CALL StatusIndicator::end()
 {
     // Ready for multithreading
     MutexGuard aGuard( m_aMutex );
@@ -192,7 +174,7 @@ void SAL_CALL StatusIndicator::end() throw( RuntimeException, std::exception )
 
 //  XStatusIndicator
 
-void SAL_CALL StatusIndicator::setText( const OUString& sText ) throw( RuntimeException, std::exception )
+void SAL_CALL StatusIndicator::setText( const OUString& sText )
 {
     // Ready for multithreading
     MutexGuard aGuard( m_aMutex );
@@ -203,7 +185,7 @@ void SAL_CALL StatusIndicator::setText( const OUString& sText ) throw( RuntimeEx
 
 //  XStatusIndicator
 
-void SAL_CALL StatusIndicator::setValue( sal_Int32 nValue ) throw( RuntimeException, std::exception )
+void SAL_CALL StatusIndicator::setValue( sal_Int32 nValue )
 {
     // Ready for multithreading
     MutexGuard aGuard( m_aMutex );
@@ -214,7 +196,7 @@ void SAL_CALL StatusIndicator::setValue( sal_Int32 nValue ) throw( RuntimeExcept
 
 //  XStatusIndicator
 
-void SAL_CALL StatusIndicator::reset() throw( RuntimeException, std::exception )
+void SAL_CALL StatusIndicator::reset()
 {
     // Ready for multithreading
     MutexGuard aGuard( m_aMutex );
@@ -227,14 +209,14 @@ void SAL_CALL StatusIndicator::reset() throw( RuntimeException, std::exception )
 
 //  XLayoutConstrains
 
-Size SAL_CALL StatusIndicator::getMinimumSize () throw( RuntimeException, std::exception )
+Size SAL_CALL StatusIndicator::getMinimumSize ()
 {
     return Size (STATUSINDICATOR_DEFAULT_WIDTH, STATUSINDICATOR_DEFAULT_HEIGHT);
 }
 
 //  XLayoutConstrains
 
-Size SAL_CALL StatusIndicator::getPreferredSize () throw( RuntimeException, std::exception )
+Size SAL_CALL StatusIndicator::getPreferredSize ()
 {
     // Ready for multithreading
     ClearableMutexGuard aGuard ( m_aMutex );
@@ -265,7 +247,7 @@ Size SAL_CALL StatusIndicator::getPreferredSize () throw( RuntimeException, std:
 
 //  XLayoutConstrains
 
-Size SAL_CALL StatusIndicator::calcAdjustedSize ( const Size& /*rNewSize*/ ) throw( RuntimeException, std::exception )
+Size SAL_CALL StatusIndicator::calcAdjustedSize ( const Size& /*rNewSize*/ )
 {
     return getPreferredSize ();
 }
@@ -275,7 +257,7 @@ Size SAL_CALL StatusIndicator::calcAdjustedSize ( const Size& /*rNewSize*/ ) thr
 void SAL_CALL StatusIndicator::createPeer (
     const css::uno::Reference< XToolkit > & rToolkit,
     const css::uno::Reference< XWindowPeer > & rParent
-) throw( RuntimeException, std::exception )
+)
 {
     if( !getPeer().is() )
     {
@@ -291,7 +273,7 @@ void SAL_CALL StatusIndicator::createPeer (
 
 //  XControl
 
-sal_Bool SAL_CALL StatusIndicator::setModel ( const css::uno::Reference< XControlModel > & /*rModel*/ ) throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL StatusIndicator::setModel ( const css::uno::Reference< XControlModel > & /*rModel*/ )
 {
     // We have no model.
     return false;
@@ -299,7 +281,7 @@ sal_Bool SAL_CALL StatusIndicator::setModel ( const css::uno::Reference< XContro
 
 //  XControl
 
-css::uno::Reference< XControlModel > SAL_CALL StatusIndicator::getModel () throw( RuntimeException, std::exception )
+css::uno::Reference< XControlModel > SAL_CALL StatusIndicator::getModel ()
 {
     // We have no model.
     // return (XControlModel*)this;
@@ -308,7 +290,7 @@ css::uno::Reference< XControlModel > SAL_CALL StatusIndicator::getModel () throw
 
 //  XComponent
 
-void SAL_CALL StatusIndicator::dispose () throw( RuntimeException, std::exception )
+void SAL_CALL StatusIndicator::dispose ()
 {
     // Ready for multithreading
     MutexGuard aGuard ( m_aMutex );
@@ -319,7 +301,7 @@ void SAL_CALL StatusIndicator::dispose () throw( RuntimeException, std::exceptio
     removeControl( xTextControl     );
     removeControl( m_xProgressBar.get() );
 
-    // do'nt use "...->clear ()" or "... = XFixedText ()"
+    // don't use "...->clear ()" or "... = XFixedText ()"
     // when other hold a reference at this object !!!
     xTextControl->dispose();
     m_xProgressBar->dispose();
@@ -334,7 +316,7 @@ void SAL_CALL StatusIndicator::setPosSize (
     sal_Int32 nWidth,
     sal_Int32 nHeight,
     sal_Int16 nFlags
-) throw( RuntimeException, std::exception )
+)
 {
     Rectangle   aBasePosSize = getPosSize ();
     BaseContainerControl::setPosSize (nX, nY, nWidth, nHeight, nFlags);
@@ -371,29 +353,25 @@ const OUString StatusIndicator::impl_getStaticImplementationName()
 
 //  protected method
 
-WindowDescriptor* StatusIndicator::impl_getWindowDescriptor( const css::uno::Reference< XWindowPeer >& xParentPeer )
+WindowDescriptor StatusIndicator::impl_getWindowDescriptor( const css::uno::Reference< XWindowPeer >& xParentPeer )
 {
-    // - used from "createPeer()" to set the values of an css::awt::WindowDescriptor !!!
-    // - if you will change the descriptor-values, you must override this virtuell function
-    // - the caller must release the memory for this dynamical descriptor !!!
+    WindowDescriptor aDescriptor;
 
-    WindowDescriptor* pDescriptor = new WindowDescriptor;
+    aDescriptor.Type               =   WindowClass_SIMPLE;
+    aDescriptor.WindowServiceName  =   "floatingwindow";
+    aDescriptor.ParentIndex        =   -1;
+    aDescriptor.Parent             =   xParentPeer;
+    aDescriptor.Bounds             =   getPosSize ();
 
-    pDescriptor->Type               =   WindowClass_SIMPLE;
-    pDescriptor->WindowServiceName  =   "floatingwindow";
-    pDescriptor->ParentIndex        =   -1;
-    pDescriptor->Parent             =   xParentPeer;
-    pDescriptor->Bounds             =   getPosSize ();
-
-    return pDescriptor;
+    return aDescriptor;
 }
 
 //  protected method
 
 void StatusIndicator::impl_paint ( sal_Int32 nX, sal_Int32 nY, const css::uno::Reference< XGraphics > & rGraphics )
 {
-    // This paint method ist not buffered !!
-    // Every request paint the completely control. ( but only, if peer exist )
+    // This paint method is not buffered!
+    // Every request paint the completely control. (But only, if peer exist)
      if ( rGraphics.is () )
     {
         MutexGuard  aGuard (m_aMutex);

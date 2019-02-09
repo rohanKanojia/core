@@ -17,26 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "JoinDesignView.hxx"
-#include "JoinTableView.hxx"
-#include "JoinController.hxx"
+#include <JoinDesignView.hxx>
+#include <JoinTableView.hxx>
+#include <JoinController.hxx>
 #include <svl/undo.hxx>
-#include "adtabdlg.hxx"
+#include <adtabdlg.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/msgbox.hxx>
-#include "browserids.hxx"
-#include "dbu_qry.hrc"
-#include <comphelper/types.hxx>
+#include <browserids.hxx>
 #include <connectivity/dbtools.hxx>
 #include <com/sun/star/sdbc/DataType.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
-#include "TableConnection.hxx"
-#include "ConnectionLine.hxx"
-#include "ConnectionLineData.hxx"
-#include "TableConnectionData.hxx"
-#include "dbustrings.hrc"
-#include <comphelper/extract.hxx>
-#include "UITools.hxx"
+#include <TableConnection.hxx>
+#include <ConnectionLine.hxx>
+#include <ConnectionLineData.hxx>
+#include <TableConnectionData.hxx>
+#include <stringconstants.hxx>
+#include <UITools.hxx>
 #include <vcl/settings.hxx>
 
 using namespace ::com::sun::star::uno;
@@ -86,7 +82,7 @@ void OJoinDesignView::initialize()
 {
 }
 
-void OJoinDesignView::resizeDocumentView(Rectangle& _rPlayground)
+void OJoinDesignView::resizeDocumentView(tools::Rectangle& _rPlayground)
 {
     m_pScrollWindow->SetPosSizePixel( _rPlayground.TopLeft(), _rPlayground.GetSize() );
 
@@ -99,7 +95,7 @@ void OJoinDesignView::setReadOnly(bool /*_bReadOnly*/)
 {
 }
 
-void OJoinDesignView::SaveTabWinUIConfig(OTableWindow* pWin)
+void OJoinDesignView::SaveTabWinUIConfig(OTableWindow const * pWin)
 {
     OJoinController::SaveTabWinPosSize(pWin, m_pScrollWindow->GetHScrollBar().GetThumbPos(), m_pScrollWindow->GetVScrollBar().GetThumbPos());
 }

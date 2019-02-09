@@ -28,14 +28,10 @@ class XMLOFF_DLLPUBLIC XMLTextShapeImportHelper : public XMLShapeImportHelper
 {
     SvXMLImport& rImport;
 
-    const OUString sAnchorType;
-    const OUString sAnchorPageNo;
-    const OUString sVertOrientPosition;
-
 public:
 
     XMLTextShapeImportHelper( SvXMLImport& rImp );
-    virtual ~XMLTextShapeImportHelper();
+    virtual ~XMLTextShapeImportHelper() override;
 
     virtual void addShape(
         css::uno::Reference< css::drawing::XShape >& rShape,

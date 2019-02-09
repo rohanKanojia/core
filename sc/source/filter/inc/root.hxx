@@ -20,11 +20,12 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_ROOT_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_ROOT_HXX
 
-#include "global.hxx"
-#include "address.hxx"
+#include <address.hxx>
 #include "flttypes.hxx"
-#include "filter.hxx"
-#include "excdefs.hxx"
+#include "lotattr.hxx"
+#include "lotfntbf.hxx"
+#include "lotrange.hxx"
+#include <memory>
 
 class ScRangeName;
 
@@ -36,7 +37,7 @@ class ExcelToSc;
 
 class XclImpColRowSettings;
 class XclImpAutoFilterBuffer;
-class _ScRangeListTabs;
+class ScRangeListTabs;
 
 class XclExpChTrTabId;
 class XclExpUserBViewList;
@@ -46,21 +47,21 @@ class XclExpRoot;
 
 // Excel Imp~/Exp~ -
 
-struct RootData     // -> Inkarnation jeweils im ImportExcel-Objekt!
+struct RootData     // -> incarnation in each case in the ImportExcel object!
 {
-    BiffTyp             eDateiTyp;              // feine Differenzierung
-    ExtSheetBuffer*     pExtSheetBuff;
-    SharedFormulaBuffer*      pShrfmlaBuff;
-    ExtNameBuff*        pExtNameBuff;
+    BiffTyp             eDateiTyp;           // fine differentiation
+    std::unique_ptr<ExtSheetBuffer>         pExtSheetBuff;
+    std::unique_ptr<SharedFormulaBuffer>    pShrfmlaBuff;
+    std::unique_ptr<ExtNameBuff>            pExtNameBuff;
     ExcelToSc*          pFmlaConverter;
-    XclImpColRowSettings* pColRowBuff;        // Col/Row-Einstellungen 1 Tabelle
+    XclImpColRowSettings* pColRowBuff;        // col/row settings 1 table
 
     // Biff8
-    XclImpAutoFilterBuffer* pAutoFilterBuffer;      // ranges for autofilter and advanced filter
-    _ScRangeListTabs*       pPrintRanges;
-    _ScRangeListTabs*       pPrintTitles;
+    std::unique_ptr<XclImpAutoFilterBuffer> pAutoFilterBuffer;      // ranges for autofilter and advanced filter
+    std::unique_ptr<ScRangeListTabs>        pPrintRanges;
+    std::unique_ptr<ScRangeListTabs>        pPrintTitles;
 
-    // Erweiterungen fuer Export
+    // extensions for export
     XclExpChTrTabId*        pTabId;             // pointer to rec list, do not destroy
     XclExpUserBViewList*    pUserBViewList;     // pointer to rec list, do not destroy
 
@@ -75,28 +76,23 @@ class ExcRoot
 {
 protected:
     RootData*       pExcRoot;
-    inline          ExcRoot( RootData* pNexExcRoot ) : pExcRoot( pNexExcRoot ) {}
-    inline          ExcRoot( const ExcRoot& rCopy ) : pExcRoot( rCopy.pExcRoot ) {}
+    ExcRoot( RootData* pNexExcRoot ) : pExcRoot( pNexExcRoot ) {}
+    ExcRoot( const ExcRoot& rCopy ) : pExcRoot( rCopy.pExcRoot ) {}
 };
 
 // Lotus Imp~/Exp~ -
 
-class LotusRangeList;
-class LotusFontBuffer;
-class LotAttrTable;
-
 struct LOTUS_ROOT
 {
     ScDocument*         pDoc;
-    LotusRangeList*     pRangeNames;
-    ScRangeName*        pScRangeName;
-    rtl_TextEncoding    eCharsetQ;
+    LotusRangeList      maRangeNames;
+    rtl_TextEncoding const    eCharsetQ;
     Lotus123Typ         eFirstType;
     Lotus123Typ         eActType;
     ScRange             aActRange;
-    RangeNameBufferWK3* pRngNmBffWK3;
-    LotusFontBuffer*    pFontBuff;
-    LotAttrTable*       pAttrTable;
+    std::unique_ptr<RangeNameBufferWK3> pRngNmBffWK3;
+    LotusFontBuffer     maFontBuff;
+    LotAttrTable        maAttrTable;
 
                         LOTUS_ROOT( ScDocument* pDocP, rtl_TextEncoding eQ );
                         ~LOTUS_ROOT();

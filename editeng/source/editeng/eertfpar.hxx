@@ -22,28 +22,20 @@
 #include <editeng/svxrtf.hxx>
 
 #include <editdoc.hxx>
-#include <impedit.hxx>
+#include "impedit.hxx"
 
 class EditEngine;
 
-
-#define ACTION_INSERTPARABRK    2
-
-class EditRTFParser : public SvxRTFParser
+class EditRTFParser final : public SvxRTFParser
 {
 private:
     EditSelection       aCurSel;
     EditEngine*         mpEditEngine;
-    rtl_TextEncoding    eDestCharSet;
-    MapMode             aRTFMapMode;
     MapMode             aEditMapMode;
 
-    sal_uInt16              nDefFont;
-    sal_uInt16              nDefTab;
-    sal_uInt16              nDefFontHeight;
-    sal_uInt8               nLastAction;
+    sal_uInt16          nDefFont;
+    bool                bLastActionInsertParaBreak;
 
-protected:
     virtual void        InsertPara() override;
     virtual void        InsertText() override;
     virtual void        MovePos( bool bForward = true ) override;
@@ -56,7 +48,7 @@ protected:
     virtual bool        IsEndPara( EditNodeIdx* pNd, sal_Int32 nCnt ) const override;
     virtual void        CalcValue() override;
     void                CreateStyleSheets();
-    SfxStyleSheet*      CreateStyleSheet( SvxRTFStyleType* pRTFStyle );
+    SfxStyleSheet*      CreateStyleSheet( SvxRTFStyleType const * pRTFStyle );
     SvxRTFStyleType*    FindStyleSheet( const OUString& rName );
     void                AddRTFDefaultValues( const EditPaM& rStart, const EditPaM& rEnd );
     void                ReadField();
@@ -64,13 +56,11 @@ protected:
 
 public:
     EditRTFParser(SvStream& rIn, EditSelection aCurSel, SfxItemPool& rAttrPool, EditEngine* pEditEngine);
-    virtual ~EditRTFParser();
+    virtual ~EditRTFParser() override;
 
     virtual SvParserState   CallParser() override;
 
-    vcl::Font       GetDefFont()                        { return GetFont( nDefFont ); }
-
-    EditPaM         GetCurPaM() const                   { return aCurSel.Max(); }
+    EditPaM const &         GetCurPaM() const                   { return aCurSel.Max(); }
 };
 
 typedef tools::SvRef<EditRTFParser> EditRTFParserRef;

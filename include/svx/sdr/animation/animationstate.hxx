@@ -37,9 +37,8 @@ namespace sdr
 {
     namespace animation
     {
-        class PrimitiveAnimation : public Event
+        class PrimitiveAnimation final : public Event
         {
-        protected:
             // the animated VOC
             sdr::contact::ViewObjectContact&                    mrVOContact;
 
@@ -55,7 +54,7 @@ namespace sdr
             PrimitiveAnimation(sdr::contact::ViewObjectContact& rVOContact, const drawinglayer::primitive2d::Primitive2DContainer& rAnimatedPrimitives);
 
             // destructor
-            virtual ~PrimitiveAnimation();
+            virtual ~PrimitiveAnimation() override;
 
             // execute event, from base class Event
             virtual void Trigger(sal_uInt32 nTime) override;

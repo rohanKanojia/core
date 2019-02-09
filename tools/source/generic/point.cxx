@@ -22,6 +22,16 @@
 #include <tools/gen.hxx>
 #include <basegfx/numeric/ftools.hxx>
 
+void Point::RotateAround( Point& rPoint,
+                          short nOrientation ) const
+{
+    long nX = rPoint.X();
+    long nY = rPoint.Y();
+    RotateAround(nX, nY, nOrientation);
+    rPoint.setX(nX);
+    rPoint.setY(nY);
+}
+
 void Point::RotateAround( long& rX, long& rY,
                           short nOrientation ) const
 {
@@ -30,7 +40,7 @@ void Point::RotateAround( long& rX, long& rY,
 
     if ( (nOrientation >= 0) && !(nOrientation % 900) )
     {
-        if ( (nOrientation >= 3600) )
+        if ( nOrientation >= 3600 )
             nOrientation %= 3600;
 
         if ( nOrientation )
@@ -71,8 +81,8 @@ void Point::RotateAround( long& rX, long& rY,
         long nY = rY-nOriginY;
 
         // Rotation...
-        rX = +((long)(nCos*nX + nSin*nY)) + nOriginX;
-        rY = -((long)(nSin*nX - nCos*nY)) + nOriginY;
+        rX = + static_cast<long>(nCos*nX + nSin*nY) + nOriginX;
+        rY = - static_cast<long>(nSin*nX - nCos*nY) + nOriginY;
     }
 }
 

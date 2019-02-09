@@ -24,6 +24,7 @@
 
 #include <comphelper/propertybag.hxx>
 #include <comphelper/propagg.hxx>
+#include <memory>
 
 
 namespace frm
@@ -53,7 +54,8 @@ namespace frm
     {
     private:
         IPropertyBagHelperContext&                      m_rContext;
-        ::comphelper::OPropertyArrayAggregationHelper*  m_pPropertyArrayHelper;
+        std::unique_ptr<::comphelper::OPropertyArrayAggregationHelper>
+                                                        m_pPropertyArrayHelper;
         ::comphelper::PropertyBag                       m_aDynamicProperties;
         bool                                            m_bDisposed;
 
@@ -74,7 +76,7 @@ namespace frm
         void removeProperty( const OUString& _rName );
 
         // XPropertyAccess equivalent
-        css::uno::Sequence< css::beans::PropertyValue > SAL_CALL getPropertyValues();
+        css::uno::Sequence< css::beans::PropertyValue > getPropertyValues();
         void setPropertyValues( const css::uno::Sequence< css::beans::PropertyValue >& _rProps );
 
         // forwards to m_aDynamicProperties

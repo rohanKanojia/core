@@ -22,11 +22,11 @@
 #include <com/sun/star/registry/XRegistryKey.hpp>
 
 #include "provider.hxx"
-#include "tvfactory.hxx"
+#include <tvfactory.hxx>
 
 using namespace com::sun::star;
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL ucpchelp_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * ucpchelp_component_getFactory(
     const sal_Char * pImplName,
     void * pServiceManager,
     SAL_UNUSED_PARAMETER void * /*pRegistryKey*/ )

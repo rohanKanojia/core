@@ -9,7 +9,7 @@
 #ifndef INCLUDED_VCL_INC_UNX_GTK_GTKSYS_HXX
 #define INCLUDED_VCL_INC_UNX_GTK_GTKSYS_HXX
 
-#include "unx/gensys.h"
+#include <unx/gensys.h>
 #include <gtk/gtk.h>
 #include <unx/saltype.h>
 #include <deque>
@@ -23,17 +23,16 @@ class GtkSalSystem : public SalGenericSystem
     ScreenMonitors_t maScreenMonitors;
 public:
              GtkSalSystem();
-    virtual ~GtkSalSystem();
+    virtual ~GtkSalSystem() override;
     static   GtkSalSystem *GetSingleton();
 
     virtual bool          IsUnifiedDisplay() override;
     virtual unsigned int  GetDisplayScreenCount() override;
     virtual unsigned int  GetDisplayBuiltInScreen() override;
-    virtual Rectangle     GetDisplayScreenPosSizePixel   (unsigned int nScreen) override;
+    virtual tools::Rectangle     GetDisplayScreenPosSizePixel   (unsigned int nScreen) override;
     virtual int           ShowNativeDialog (const OUString&              rTitle,
                                             const OUString&              rMessage,
-                                            const std::list< OUString >& rButtons,
-                                            int                        nDefButton) override;
+                                            const std::vector< OUString >& rButtons) override;
     SalX11Screen      GetDisplayDefaultXScreen()
             { return getXScreenFromDisplayScreen( GetDisplayBuiltInScreen() ); }
     int               GetDisplayXScreenCount();

@@ -28,11 +28,14 @@
 #include <osl/mutex.hxx>
 #include <osl/module.h>
 #include <osl/process.h>
-#include <osl/thread.h>
+#include <osl/thread.hxx>
 #include <osl/conditn.hxx>
 #include <osl/time.h>
 
-#ifdef SAL_W32
+#ifdef _WIN32
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #else
 #include <sys/times.h>
@@ -81,7 +84,7 @@ namespace benchmark_test
 
 static inline sal_uInt32 getSystemTicks()
 {
-#ifdef SAL_W32
+#ifdef _WIN32
     return (sal_uInt32)GetTickCount();
 #else // only UNX supported for now
     static sal_uInt32   nImplTicksPerSecond = 0;
@@ -371,24 +374,14 @@ static void createInstance( Reference< T > & rxOut,
 
     if (! x.is())
     {
-        OUStringBuffer buf( 64 );
-        buf.append( "cannot get service instance \"" );
-        buf.append( rServiceName );
-        buf.append( "\"!" );
-        throw RuntimeException( buf.makeStringAndClear() );
+        throw RuntimeException( "cannot get service instance \"" + rServiceName );
     }
 
     rxOut = Reference< T >::query( x );
     if (! rxOut.is())
     {
-        OUStringBuffer buf( 64 );
-        buf.append( "service instance \"" );
-        buf.append( rServiceName );
-        buf.append( "\" does not support demanded interface \"" );
-        const Type & rType = cppu::UnoType<T>::get();
-        buf.append( rType.getTypeName() );
-        buf.append( "\"!" );
-        throw RuntimeException( buf.makeStringAndClear() );
+        throw RuntimeException( "service instance \"" + rServiceName +
+                  "\" does not support demanded interface \"" + cppu::UnoType<T>::get().getTypeName() );
     }
 }
 
@@ -490,11 +483,7 @@ Reference< XInterface > TestImpl::resolveObject( const OUString & rUnoUrl )
 
     if (! xResolvedObject.is())
     {
-        OUStringBuffer buf( 32 );
-        buf.append( "cannot resolve object \"" );
-        buf.append( rUnoUrl );
-        buf.append( "\"!" );
-        throw RuntimeException( buf.makeStringAndClear() );
+        throw RuntimeException( "cannot resolve object \"" + rUnoUrl + "\"!" );
     }
 
     return xResolvedObject;
@@ -554,9 +543,7 @@ static void benchmark(
     TimingSheet & rSheet, const Reference< XInterface > & xInstance, sal_Int64 nLoop )
     throw (Exception)
 {
-    Reference< XPerformanceTest > xBench( xInstance, UNO_QUERY );
-    if (! xBench.is())
-        throw RuntimeException("illegal test object!" );
+    Reference< XPerformanceTest > xBench( xInstance, UNO_QUERY_THROW );
 
     sal_Int64 i;
     sal_uInt32 tStart, tEnd;
@@ -786,7 +773,7 @@ static void benchmark(
     while (i--)
         xBench->setString( aDummyString );
     tEnd = getSystemTicks();
-    rSheet.insert( "6c: setString() call (emtpy)", nLoop, tEnd - tStart );
+    rSheet.insert( "6c: setString() call (empty)", nLoop, tEnd - tStart );
     i = nLoop;
     tStart = getSystemTicks();
     while (i--)
@@ -906,7 +893,7 @@ static void benchmark(
 //      while (i--)
 //          xBench->setSequence( aSeq );
 //      tEnd = getSystemTicks();
-//      rSheet.insert( "transfer of exisiting objects", nLoop, tEnd - tStart );
+//      rSheet.insert( "transfer of existing objects", nLoop, tEnd - tStart );
 
     // exceptions
     i = nLoop;
@@ -989,11 +976,7 @@ sal_Int32 TestImpl::run( const Sequence< OUString > & rArgs )
                 stream = ::fopen( aFileName.getStr(), "w" );
                 if (! stream)
                 {
-                    OUStringBuffer buf( 32 );
-                    buf.append( "cannot open file for writing: \"" );
-                    buf.append( aLogStr );
-                    buf.append( "\"!" );
-                    throw RuntimeException( buf.makeStringAndClear() );
+                    throw RuntimeException( "cannot open file for writing: \"" + aLogStr + "\"!" );
                 }
             }
         }
@@ -1120,9 +1103,7 @@ sal_Int32 TestImpl::run( const Sequence< OUString > & rArgs )
             osl_freeProcessHandle( hProcess );
 
             // wait three seconds
-            TimeValue threeSeconds;
-            threeSeconds.Seconds = 3;
-            osl_waitThread( &threeSeconds );
+            osl::Thread::wait(std::chrono::seconds(3));
 
             // connect and resolve outer process object
             Reference< XInterface > xResolvedObject( resolveObject( OUString("uno:socket,host=localhost,port=6000;iiop;TestRemoteObject") ) );
@@ -1165,18 +1146,16 @@ sal_Int32 TestImpl::run( const Sequence< OUString > & rArgs )
 
         sal_Int32 nPos = 60;
         out( "[direct in process]", stream, nPos );
-        t_TimingSheetMap::const_iterator iSheets( aSheets.begin() );
-        for ( ; iSheets != aSheets.end(); ++iSheets )
+        for ( const auto& rSheet : aSheets )
         {
             nPos += 40;
             out( "[", stream, nPos );
-            out( (*iSheets).first.c_str(), stream );
+            out( rSheet.first.c_str(), stream );
             out( "]", stream );
         }
-        for ( t_TimeEntryMap::const_iterator iTopics( aDirect._entries.begin() );
-              iTopics != aDirect._entries.end(); ++iTopics )
+        for ( const auto& rTopics : aDirect._entries )
         {
-            const std::string & rTopic = (*iTopics).first;
+            const std::string & rTopic = rTopics.first;
 
             out( "\n", stream );
             out( rTopic.c_str(), stream );
@@ -1185,7 +1164,7 @@ sal_Int32 TestImpl::run( const Sequence< OUString > & rArgs )
 
             sal_Int32 nPos = 60;
 
-            double secs = (*iTopics).second.secPerCall();
+            double secs = rTopics.second.secPerCall();
             if (secs > 0.0)
             {
                 out( secs * 1000, stream, nPos );
@@ -1196,11 +1175,10 @@ sal_Int32 TestImpl::run( const Sequence< OUString > & rArgs )
                 out( "NA", stream, nPos );
             }
 
-            iSheets = aSheets.begin();
-            for ( ; iSheets != aSheets.end(); ++iSheets )
+            for ( const auto& rSheet : aSheets )
             {
-                const t_TimeEntryMap::const_iterator iFind( (*iSheets).second._entries.find( rTopic ) );
-                OSL_ENSURE( iFind != (*iSheets).second._entries.end(), "####" );
+                const t_TimeEntryMap::const_iterator iFind( rSheet.second._entries.find( rTopic ) );
+                OSL_ENSURE( iFind != rSheet.second._entries.end(), "####" );
 
                 nPos += 40;
 
@@ -1211,7 +1189,7 @@ sal_Int32 TestImpl::run( const Sequence< OUString > & rArgs )
                     out( "ms", stream );
 
                     out( " (", stream );
-                    double ratio = (*iFind).second.ratio( (*iTopics).second );
+                    double ratio = (*iFind).second.ratio( rTopics.second );
                     if (ratio != 0.0)
                     {
                         out( ratio, stream );

@@ -22,11 +22,11 @@
 
 #include <cppcanvas/spritecanvas.hxx>
 
-#include "unoview.hxx"
-#include "unoviewcontainer.hxx"
-#include "attributableshape.hxx"
+#include <unoview.hxx>
+#include <unoviewcontainer.hxx>
+#include <attributableshape.hxx>
 #include "layer.hxx"
-#include "tools.hxx"
+#include <tools.hxx>
 
 #include <algorithm>
 #include <functional>
@@ -65,16 +65,12 @@ namespace slideshow
                 @param rViews
                 Views currently registered
 
-                @param rPageBounds
-                Overall page bounds, in user space coordinates
-
                 @param bDisableAnimationZOrder
                 When true, all sprite animations run in the
                 foreground.  That is, no extra layers are created, and
                 the slideshow runs potentially faster.
              */
             LayerManager( const UnoViewContainer&    rViews,
-                          const ::basegfx::B2DRange& rPageBounds,
                           bool                       bDisableAnimationZOrder );
 
             /// Forbid copy construction
@@ -114,6 +110,12 @@ namespace slideshow
                 This method adds a shape to the page.
              */
             void addShape( const ShapeSharedPtr& rShape );
+
+            /** Remove shape from this object
+
+                This method removes a shape from the shape.
+             */
+            bool removeShape( const ShapeSharedPtr& rShape );
 
             /** Lookup a Shape from an XShape model object
 
@@ -244,7 +246,6 @@ namespace slideshow
              */
         private:
             typedef ::std::map< ShapeSharedPtr, LayerWeakPtr, ShapeComparator > LayerShapeMap;
-            typedef ::std::set< ShapeSharedPtr > ShapeUpdateSet;
 
 
             /// Adds shape area to containing layer's damage area
@@ -270,7 +271,7 @@ namespace slideshow
              */
             void           commitLayerChanges( std::size_t                    nCurrLayerIndex,
                                                LayerShapeMap::const_iterator  aFirstLayerShape,
-                                               LayerShapeMap::const_iterator  aEndLayerShapes );
+                                               const LayerShapeMap::const_iterator& aEndLayerShapes );
 
             /** Init Shape layers with background layer.
              */
@@ -310,7 +311,8 @@ namespace slideshow
             const UnoViewContainer&  mrViews;
 
             /// All layers of this object. Vector owns the layers
-            LayerVector              maLayers;
+            ::std::vector< LayerSharedPtr >
+                                     maLayers;
 
             /** Contains all shapes with their XShape reference as the key
              */
@@ -332,13 +334,8 @@ namespace slideshow
                 has bNeedsUpdate set to true. We maintain this
                 redundant information for faster update processing.
              */
-            ShapeUpdateSet           maUpdateShapes;
-
-            /** Overall slide bounds (in user coordinate
-                system). shapes that exceed this boundary are clipped,
-                thus, layers only need to be of this size.
-             */
-            const basegfx::B2DRange  maPageBounds;
+            ::std::set< ShapeSharedPtr >
+                                     maUpdateShapes;
 
             /// Number of shape sprites currently active on this LayerManager
             sal_Int32                mnActiveSprites;
@@ -353,7 +350,7 @@ namespace slideshow
                 is, no extra layers are created, and the slideshow runs
                 potentially faster.
              */
-            bool                     mbDisableAnimationZOrder;
+            bool const               mbDisableAnimationZOrder;
         };
 
         typedef ::std::shared_ptr< LayerManager > LayerManagerSharedPtr;

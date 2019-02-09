@@ -54,15 +54,15 @@
  *
  ************************************************************************/
 #include "lwpvpointer.hxx"
-#include "lwpfilehdr.hxx"
+#include <lwpfilehdr.hxx>
 
-LwpVersionedPointer::LwpVersionedPointer(LwpObjectHeader& objHdr, LwpSvStream* pStrm)
+LwpVersionedPointer::LwpVersionedPointer(LwpObjectHeader const & objHdr, LwpSvStream* pStrm)
     : LwpObject(objHdr, pStrm)
 {}
 
 void LwpVersionedPointer::Read()
 {
-    m_PointerID.ReadIndexed(m_pObjStrm);
+    m_PointerID.ReadIndexed(m_pObjStrm.get());
     if( LwpFileHeader::m_nFileRevision < 0x0006 )
         m_pObjStrm->SkipExtra();
 }

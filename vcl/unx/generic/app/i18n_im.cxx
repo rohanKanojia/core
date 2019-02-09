@@ -32,15 +32,15 @@
 #include <X11/Xlocale.h>
 #include <unx/XIM.h>
 
-#include "unx/salunx.h"
-#include "unx/saldisp.hxx"
-#include "unx/i18n_im.hxx"
-#include "unx/i18n_status.hxx"
+#include <unx/salunx.h>
+#include <unx/saldisp.hxx>
+#include <unx/i18n_im.hxx>
+#include <unx/i18n_status.hxx>
 
 #include <osl/thread.h>
 #include <osl/process.h>
 
-#include "unx/i18n_cb.hxx"
+#include <unx/i18n_cb.hxx>
 
 using namespace vcl;
 
@@ -54,7 +54,6 @@ class XKeyEventOp : public XKeyEvent
 
     public:
                         XKeyEventOp();
-                        ~XKeyEventOp();
 
         XKeyEventOp&    operator= (const XKeyEvent &rEvent);
         void            erase ();
@@ -77,10 +76,6 @@ XKeyEventOp::init()
 XKeyEventOp::XKeyEventOp()
 {
     init();
-}
-
-XKeyEventOp::~XKeyEventOp()
-{
 }
 
 XKeyEventOp&
@@ -143,7 +138,7 @@ SetSystemLocale( const char* p_inlocale )
     return p_outlocale;
 }
 
-#ifdef SOLARIS
+#ifdef __sun
 static void
 SetSystemEnvironment( const OUString& rLocale )
 {
@@ -206,15 +201,15 @@ SalI18N_InputMethod::SetLocale()
         {
             osl_setThreadTextEncoding (RTL_TEXTENCODING_ISO_8859_1);
             locale = SetSystemLocale( "en_US" );
-            #ifdef SOLARIS
+#ifdef __sun
             SetSystemEnvironment( "en_US" );
-            #endif
+#endif
             if (! IsXWindowCompatibleLocale(locale))
             {
                 locale = SetSystemLocale( "C" );
-                #ifdef SOLARIS
+#ifdef __sun
                 SetSystemEnvironment( "C" );
-                #endif
+#endif
                 if (! IsXWindowCompatibleLocale(locale))
                     mbUseable = False;
             }
@@ -364,7 +359,7 @@ SalI18N_InputMethod::CreateMethod ( Display *pDisplay )
         fprintf(stderr, "input method creation failed\n");
     #endif
 
-    maDestroyCallback.callback    = static_cast<XIMProc>(IM_IMDestroyCallback);
+    maDestroyCallback.callback    = IM_IMDestroyCallback;
     maDestroyCallback.client_data = reinterpret_cast<XPointer>(this);
     if (mbUseable && maMethod != nullptr)
         XSetIMValues(maMethod, XNDestroyCallback, &maDestroyCallback, nullptr);
@@ -387,20 +382,20 @@ SalI18N_InputMethod::FilterEvent( XEvent *pEvent, ::Window window    )
      * fix broken key release handling of some IMs
      */
     XKeyEvent*         pKeyEvent = &(pEvent->xkey);
-    static XKeyEventOp maLastKeyPress;
+    static XKeyEventOp s_aLastKeyPress;
 
     if (bFilterEvent)
     {
         if (pKeyEvent->type == KeyRelease)
-            bFilterEvent = !maLastKeyPress.match (*pKeyEvent);
-        maLastKeyPress.erase();
+            bFilterEvent = !s_aLastKeyPress.match (*pKeyEvent);
+        s_aLastKeyPress.erase();
     }
     else /* (!bFilterEvent) */
     {
         if (pKeyEvent->type == KeyPress)
-            maLastKeyPress = *pKeyEvent;
+            s_aLastKeyPress = *pKeyEvent;
         else
-            maLastKeyPress.erase();
+            s_aLastKeyPress.erase();
     }
 
     return bFilterEvent;

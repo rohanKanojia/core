@@ -47,27 +47,24 @@
 #include <unotools/ucbstreamhelper.hxx>
 #include <unotools/streamwrap.hxx>
 #include <comphelper/processfactory.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
-
-#include <sfx2/sfxresid.hxx>
 #include "graphhelp.hxx"
-#include "doc.hrc"
+#include <bitmaps.hlst>
 
 #include <memory>
 
 using namespace css;
 
-SvMemoryStream* GraphicHelper::getFormatStrFromGDI_Impl( const GDIMetaFile* pGDIMeta, ConvertDataFormat nFormat )
+std::unique_ptr<SvMemoryStream> GraphicHelper::getFormatStrFromGDI_Impl( const GDIMetaFile* pGDIMeta, ConvertDataFormat nFormat )
 {
-    SvMemoryStream* pResult = nullptr;
+    std::unique_ptr<SvMemoryStream> pResult;
     if ( pGDIMeta )
     {
-        SvMemoryStream* pStream = new SvMemoryStream( 65535, 65535 );
+        std::unique_ptr<SvMemoryStream> pStream(new SvMemoryStream( 65535, 65535 ));
         Graphic aGraph( *pGDIMeta );
-        if ( GraphicConverter::Export( *pStream, aGraph, nFormat ) == 0 )
-            pResult = pStream;
-        else
-            delete pStream;
+        if ( GraphicConverter::Export( *pStream, aGraph, nFormat ) == ERRCODE_NONE )
+            pResult = std::move(pStream);
     }
 
     return pResult;
@@ -77,7 +74,6 @@ SvMemoryStream* GraphicHelper::getFormatStrFromGDI_Impl( const GDIMetaFile* pGDI
 // static
 void* GraphicHelper::getEnhMetaFileFromGDI_Impl( const GDIMetaFile* pGDIMeta )
 {
-    (void)pGDIMeta;  // unused
     void* pResult = nullptr;
 
 #ifdef _WIN32
@@ -88,20 +84,21 @@ void* GraphicHelper::getEnhMetaFileFromGDI_Impl( const GDIMetaFile* pGDIMeta )
 
         OUString aMetaFile = aTempFile.GetFileName();
         OUString aMetaURL = aTempFile.GetURL();
-        OString aWinFile = OUStringToOString( aMetaFile, osl_getThreadTextEncoding() );
 
-        SvStream* pStream = ::utl::UcbStreamHelper::CreateStream( aMetaURL, STREAM_STD_READWRITE );
+        std::unique_ptr<SvStream> pStream = ::utl::UcbStreamHelper::CreateStream( aMetaURL, StreamMode::STD_READWRITE );
         if ( pStream )
         {
             Graphic aGraph( *pGDIMeta );
-            sal_Bool bFailed = (sal_Bool)GraphicConverter::Export( *pStream, aGraph, ConvertDataFormat::EMF );
+            ErrCode nFailed = GraphicConverter::Export( *pStream, aGraph, ConvertDataFormat::EMF );
             pStream->Flush();
-            delete pStream;
+            pStream.reset();
 
-            if ( !bFailed )
-                pResult = GetEnhMetaFileA( aWinFile.getStr() );
+            if ( !nFailed )
+                pResult = GetEnhMetaFileW( o3tl::toW(aMetaFile.getStr()) );
         }
     }
+#else
+    (void)pGDIMeta;  // unused
 #endif
 
     return pResult;
@@ -111,24 +108,22 @@ void* GraphicHelper::getEnhMetaFileFromGDI_Impl( const GDIMetaFile* pGDIMeta )
 // static
 void* GraphicHelper::getWinMetaFileFromGDI_Impl( const GDIMetaFile* pGDIMeta, const Size& aMetaSize )
 {
-    (void)pGDIMeta;  // unused
-    (void)aMetaSize; // unused
     void* pResult = nullptr;
 
 #ifdef _WIN32
     if ( pGDIMeta )
     {
-        SvMemoryStream* pStream = new SvMemoryStream( 65535, 65535 );
+        SvMemoryStream pStream( 65535, 65535 );
         Graphic aGraph( *pGDIMeta );
-        sal_Bool bFailed = (sal_Bool)GraphicConverter::Export( *pStream, aGraph, ConvertDataFormat::WMF );
-        pStream->Flush();
-        if ( !bFailed )
+        ErrCode nFailed = GraphicConverter::Export( pStream, aGraph, ConvertDataFormat::WMF );
+        pStream.Flush();
+        if ( !nFailed )
         {
-            sal_Int32 nLength = pStream->Seek( STREAM_SEEK_TO_END );
+            sal_Int32 nLength = pStream.TellEnd();
             if ( nLength > 22 )
             {
                 HMETAFILE hMeta = SetMetaFileBitsEx( nLength - 22,
-                                ( reinterpret_cast< const unsigned char*>( pStream->GetData() ) ) + 22 );
+                                static_cast< const unsigned char*>( pStream.GetData() ) + 22 );
 
                 if ( hMeta )
                 {
@@ -136,13 +131,13 @@ void* GraphicHelper::getWinMetaFileFromGDI_Impl( const GDIMetaFile* pGDIMeta, co
 
                     if ( hMemory )
                     {
-                           METAFILEPICT* pMF = (METAFILEPICT*)GlobalLock( hMemory );
+                           METAFILEPICT* pMF = static_cast<METAFILEPICT*>(GlobalLock( hMemory ));
 
                            pMF->hMF = hMeta;
                            pMF->mm = MM_ANISOTROPIC;
 
                         MapMode aMetaMode = pGDIMeta->GetPrefMapMode();
-                        MapMode aWinMode( MAP_100TH_MM );
+                        MapMode aWinMode( MapUnit::Map100thMM );
 
                         if ( aWinMode == pGDIMeta->GetPrefMapMode() )
                         {
@@ -159,16 +154,17 @@ void* GraphicHelper::getWinMetaFileFromGDI_Impl( const GDIMetaFile* pGDIMeta, co
                         }
 
                         GlobalUnlock( hMemory );
-                        pResult = (void*)hMemory;
+                        pResult = static_cast<void*>(hMemory);
                     }
                     else
                            DeleteMetaFile( hMeta );
                 }
             }
         }
-
-        delete pStream;
     }
+#else
+    (void)pGDIMeta;  // unused
+    (void)aMetaSize; // unused
 #endif
 
 
@@ -177,7 +173,7 @@ void* GraphicHelper::getWinMetaFileFromGDI_Impl( const GDIMetaFile* pGDIMeta, co
 
 
 // static
-bool GraphicHelper::getThumbnailFormatFromGDI_Impl(GDIMetaFile* pMetaFile, const uno::Reference<io::XStream>& xStream)
+bool GraphicHelper::getThumbnailFormatFromGDI_Impl(GDIMetaFile const * pMetaFile, const uno::Reference<io::XStream>& xStream)
 {
     bool bResult = false;
 
@@ -191,14 +187,14 @@ bool GraphicHelper::getThumbnailFormatFromGDI_Impl(GDIMetaFile* pMetaFile, const
 
     BitmapEx aResultBitmap;
 
-    bResult = pMetaFile->CreateThumbnail(aResultBitmap, 256, BMP_CONVERSION_8BIT_COLORS, BmpScaleFlag::Default);
+    bResult = pMetaFile->CreateThumbnail(aResultBitmap, BmpConversion::N8BitColors, BmpScaleFlag::Default);
 
     if (!bResult || aResultBitmap.IsEmpty())
         return false;
 
     GraphicFilter& rFilter = GraphicFilter::GetGraphicFilter();
 
-    if (rFilter.compressAsPNG(aResultBitmap, *pStream.get(), 9) != GRFILTER_OK)
+    if (rFilter.compressAsPNG(aResultBitmap, *pStream) != ERRCODE_NONE)
         return false;
 
     pStream->Flush();
@@ -207,17 +203,16 @@ bool GraphicHelper::getThumbnailFormatFromGDI_Impl(GDIMetaFile* pMetaFile, const
 }
 
 // static
-bool GraphicHelper::getThumbnailReplacement_Impl( sal_Int32 nResID, const uno::Reference< io::XStream >& xStream )
+bool GraphicHelper::getThumbnailReplacement_Impl(const OUString& rResID, const uno::Reference< io::XStream >& xStream )
 {
     bool bResult = false;
-    if ( nResID && xStream.is() )
+    if (!rResID.isEmpty() && xStream.is())
     {
         uno::Reference< uno::XComponentContext > xContext = ::comphelper::getProcessComponentContext();
         try
         {
             uno::Reference< graphic::XGraphicProvider > xGraphProvider(graphic::GraphicProvider::create(xContext));
-            OUString aURL("private:resource/sfx/bitmapex/");
-            aURL += OUString::number( nResID );
+            const OUString aURL{"private:graphicrepository/" + rResID};
 
             uno::Sequence< beans::PropertyValue > aMediaProps( 1 );
             aMediaProps[0].Name = "URL";
@@ -244,34 +239,33 @@ bool GraphicHelper::getThumbnailReplacement_Impl( sal_Int32 nResID, const uno::R
     return bResult;
 }
 
-
 // static
-sal_uInt16 GraphicHelper::getThumbnailReplacementIDByFactoryName_Impl( const OUString& aFactoryShortName, bool /*bIsTemplate*/ )
+OUString GraphicHelper::getThumbnailReplacementIDByFactoryName_Impl( const OUString& aFactoryShortName )
 {
-    sal_uInt16 nResult = 0;
+    OUString sResult;
 
     if ( aFactoryShortName == "scalc" )
     {
-        nResult = BMP_128X128_CALC_DOC;
+        sResult = BMP_128X128_CALC_DOC;
     }
     else if ( aFactoryShortName == "sdraw" )
     {
-        nResult = BMP_128X128_DRAW_DOC;
+        sResult = BMP_128X128_DRAW_DOC;
     }
     else if ( aFactoryShortName == "simpress" )
     {
-        nResult = BMP_128X128_IMPRESS_DOC;
+        sResult = BMP_128X128_IMPRESS_DOC;
     }
     else if ( aFactoryShortName == "smath" )
     {
-        nResult = BMP_128X128_MATH_DOC;
+        sResult = BMP_128X128_MATH_DOC;
     }
     else if ( aFactoryShortName == "swriter" || aFactoryShortName.startsWith("swriter/") )
     {
-        nResult = BMP_128X128_WRITER_DOC;
+        sResult = BMP_128X128_WRITER_DOC;
     }
 
-    return nResult;
+    return sResult;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

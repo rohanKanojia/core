@@ -20,12 +20,36 @@
 #ifndef INCLUDED_OOX_EXPORT_VMLEXPORT_HXX
 #define INCLUDED_OOX_EXPORT_VMLEXPORT_HXX
 
-#include <oox/dllapi.h>
-#include <oox/export/drawingml.hxx>
-#include <sax/fshelper.hxx>
-#include <filter/msfilter/escherex.hxx>
+#include <com/sun/star/uno/Reference.hxx>
 #include <editeng/outlobj.hxx>
+#include <filter/msfilter/escherex.hxx>
+#include <oox/dllapi.h>
+#include <rtl/strbuf.hxx>
+#include <rtl/string.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <sax/fshelper.hxx>
+#include <vcl/checksum.hxx>
 
+namespace com { namespace sun { namespace star {
+    namespace drawing {
+        class XShape;
+    }
+}}}
+
+namespace oox {
+    namespace drawingml {
+        class DrawingML;
+    }
+}
+
+namespace sax_fastparser {
+    class FastAttributeList;
+}
+
+class Point;
+namespace tools { class Rectangle; }
+class SdrObject;
 
 namespace oox {
 
@@ -58,9 +82,7 @@ class OOX_DLLPUBLIC VMLExport : public EscherEx
 
     /// Anchoring.
     sal_Int16 m_eHOri, m_eVOri, m_eHRel, m_eVRel;
-
-    /// Parent position.
-    const Point* m_pNdTopLeft;
+    bool m_bInline; // css::text::TextContentAnchorType_AS_CHARACTER
 
     /// The object we're exporting.
     const SdrObject* m_pSdrObject;
@@ -72,17 +94,37 @@ class OOX_DLLPUBLIC VMLExport : public EscherEx
     sal_uInt32 m_nShapeType;
 
     /// Remember the shape flags.
-    sal_uInt32 m_nShapeFlags;
+    ShapeFlag m_nShapeFlags;
 
     /// Remember style, the most important shape attribute ;-)
-    OStringBuffer *m_pShapeStyle;
+    OStringBuffer m_ShapeStyle;
+
+    /// Remember the generated shape id.
+    OString m_sShapeId;
 
     /// Remember which shape types we had already written.
-    bool *m_pShapeTypeWritten;
+    std::vector<bool> m_aShapeTypeWritten;
+
+    /// It seems useless to write out an XML_ID attribute next to XML_id which defines the actual shape id
+    bool m_bSkipwzName;
+
+    /// Use '#' mark for type attribute (check Type Attribute of VML shape in OOXML documentation)
+    bool m_bUseHashMarkForType;
+
+    /** There is a shapeid generation mechanism in EscherEx, but it does not seem to work
+    *   so override the existing behavior to get actually unique ids.
+    */
+    bool m_bOverrideShapeIdGeneration;
+
+    /// Prefix for overridden shape id generation (used if m_bOverrideShapeIdGeneration is true)
+    OString m_sShapeIDPrefix;
+
+    /// Counter for generating shape ids (used if m_bOverrideShapeIdGeneration is true)
+    sal_uInt64 m_nShapeIDCounter;
 
 public:
-                        VMLExport( ::sax_fastparser::FSHelperPtr pSerializer, VMLTextExport* pTextExport = nullptr );
-    virtual             ~VMLExport();
+                        VMLExport( ::sax_fastparser::FSHelperPtr const & pSerializer, VMLTextExport* pTextExport = nullptr);
+    virtual             ~VMLExport() override;
 
     const ::sax_fastparser::FSHelperPtr&
                         GetFS() { return m_pSerializer; }
@@ -92,11 +134,18 @@ public:
     /// Export the sdr object as VML.
     ///
     /// Call this when you need to export the object as VML.
-    void AddSdrObject( const SdrObject& rObj, sal_Int16 eHOri = -1,
+    OString const & AddSdrObject( const SdrObject& rObj, sal_Int16 eHOri = -1,
             sal_Int16 eVOri = -1, sal_Int16 eHRel = -1,
-            sal_Int16 eVRel = -1, const Point* pNdTopLeft = nullptr, const bool bOOxmlExport = false );
+            sal_Int16 eVRel = -1, const bool bOOxmlExport = false );
+    OString const & AddInlineSdrObject( const SdrObject& rObj, const bool bOOxmlExport );
     virtual void  AddSdrObjectVMLObject( const SdrObject& rObj) override;
     static bool IsWaterMarkShape(const OUString& rStr);
+
+    void    SetSkipwzName(bool bSkipwzName) { m_bSkipwzName = bSkipwzName; }
+    void    SetHashMarkForType(bool bUseHashMarkForType) { m_bUseHashMarkForType = bUseHashMarkForType; }
+    void    OverrideShapeIDGen(bool bOverrideShapeIdGeneration,
+                            const OString& sShapeIDPrefix = OString());
+
 protected:
     /// Add an attribute to the generated <v:shape/> element.
     ///
@@ -107,6 +156,9 @@ protected:
     using EscherEx::StartShape;
     using EscherEx::EndShape;
 
+    /// Override shape ID generation when m_bOverrideShapeIdGeneration is set to true
+    virtual sal_uInt32   GenerateShapeId() override;
+
     /// Start the shape for which we just collected the information.
     ///
     /// Returns the element's tag number, -1 means we wrote nothing.
@@ -116,30 +168,30 @@ protected:
     ///
     /// The parameter is just what we got from StartShape().
     virtual void        EndShape( sal_Int32 nShapeElement );
-    virtual void        Commit( EscherPropertyContainer& rProps, const Rectangle& rRect ) override;
+    virtual void        Commit( EscherPropertyContainer& rProps, const tools::Rectangle& rRect ) override;
 
 private:
 
     virtual void OpenContainer( sal_uInt16 nEscherContainer, int nRecInstance = 0 ) override;
     virtual void CloseContainer() override;
 
-    virtual sal_uInt32 EnterGroup( const OUString& rShapeName, const Rectangle* pBoundRect = nullptr ) override;
+    virtual sal_uInt32 EnterGroup( const OUString& rShapeName, const tools::Rectangle* pBoundRect ) override;
     virtual void LeaveGroup() override;
 
-    virtual void AddShape( sal_uInt32 nShapeType, sal_uInt32 nShapeFlags, sal_uInt32 nShapeId = 0 ) override;
+    virtual void AddShape( sal_uInt32 nShapeType, ShapeFlag nShapeFlags, sal_uInt32 nShapeId = 0 ) override;
 
 private:
     /// Create an OString representing the id from a numerical id.
-    static OString ShapeIdString( sal_uInt32 nId );
+    OString ShapeIdString( sal_uInt32 nId );
 
     /// Add flip X and\or flip Y
     void AddFlipXY( );
 
     /// Add starting and ending point of a line to the m_pShapeAttrList.
-    void AddLineDimensions( const Rectangle& rRectangle );
+    void AddLineDimensions( const tools::Rectangle& rRectangle );
 
     /// Add position and size to the OStringBuffer.
-    void AddRectangleDimensions( OStringBuffer& rBuffer, const Rectangle& rRectangle, bool rbAbsolutePos = true );
+    void AddRectangleDimensions( OStringBuffer& rBuffer, const tools::Rectangle& rRectangle, bool rbAbsolutePos = true );
 };
 
 } // namespace vml

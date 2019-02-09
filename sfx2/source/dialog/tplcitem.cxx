@@ -19,15 +19,13 @@
 
 #include <svl/intitem.hxx>
 #include <vcl/svapp.hxx>
+#include <osl/diagnose.h>
 
 #include <sfx2/templdlg.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/tplpitem.hxx>
-#include "tplcitem.hxx"
-#include "templdgi.hxx"
-
-#include <sfx2/sfx.hrc>
-#include "dialog.hrc"
+#include <tplcitem.hxx>
+#include <templdgi.hxx>
 
 // Constructor
 
@@ -63,6 +61,7 @@ void SfxTemplateControllerItem::StateChanged( sal_uInt16 nSID, SfxItemState eSta
         case SID_STYLE_FAMILY3:
         case SID_STYLE_FAMILY4:
         case SID_STYLE_FAMILY5:
+        case SID_STYLE_FAMILY6:
         {
             bool bAvailable = SfxItemState::DEFAULT == eState;
             if ( !bAvailable )
@@ -87,6 +86,8 @@ void SfxTemplateControllerItem::StateChanged( sal_uInt16 nSID, SfxItemState eSta
                     nFamily = 4; break;
                 case SID_STYLE_FAMILY5:
                     nFamily = 5; break;
+                case SID_STYLE_FAMILY6:
+                    nFamily = 6; break;
 
                 default: OSL_FAIL("unknown StyleFamily"); break;
             }
@@ -145,25 +146,26 @@ void SfxTemplateControllerItem::StateChanged( sal_uInt16 nSID, SfxItemState eSta
         {
             const SfxUInt16Item *pStateItem = dynamic_cast< const SfxUInt16Item* >(pItem);
             if (pStateItem)
-                rTemplateDlg.SetFamily( pStateItem->GetValue() );
+            {
+                rTemplateDlg.SetFamily(static_cast<SfxStyleFamily>(pStateItem->GetValue()));
+            }
             break;
         }
     }
 }
 
-IMPL_LINK_NOARG_TYPED(SfxTemplateControllerItem, SetWaterCanStateHdl_Impl, void*, void)
+IMPL_LINK_NOARG(SfxTemplateControllerItem, SetWaterCanStateHdl_Impl, void*, void)
 {
     nUserEventId = nullptr;
-    SfxBoolItem* pState = nullptr;
+    std::unique_ptr<SfxBoolItem> pState;
     switch(nWaterCanState)
     {
         case 0 :
         case 1 :
-            pState = new SfxBoolItem(SID_STYLE_WATERCAN, nWaterCanState != 0);
+            pState.reset(new SfxBoolItem(SID_STYLE_WATERCAN, nWaterCanState != 0));
         break;
     }
-    rTemplateDlg.SetWaterCanState(pState);
-    delete pState;
+    rTemplateDlg.SetWaterCanState(pState.get());
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

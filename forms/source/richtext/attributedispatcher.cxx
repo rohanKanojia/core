@@ -20,6 +20,8 @@
 #include "attributedispatcher.hxx"
 
 #include <editeng/editview.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
 
 namespace frm
@@ -80,26 +82,16 @@ namespace frm
     }
 
 
-    void SAL_CALL OAttributeDispatcher::dispatch( const URL& _rURL, const Sequence< PropertyValue >& _rArguments ) throw (RuntimeException, std::exception)
+    void SAL_CALL OAttributeDispatcher::dispatch( const URL& _rURL, const Sequence< PropertyValue >& _rArguments )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
         checkDisposed();
 
-        (void)_rURL;
-        (void)_rArguments;
-
         OSL_ENSURE( _rURL.Complete == getFeatureURL().Complete, "OAttributeDispatcher::dispatch: invalid URL!" );
-#if OSL_DEBUG_LEVEL > 0
-        if ( _rArguments.getLength() )
-        {
-            OString sMessage( "OAttributeDispatcher::dispatch: found arguments, but can't handle arguments at all" );
-            sMessage += "\n (URL: ";
-            sMessage += OString( _rURL.Complete.getStr(), _rURL.Complete.getLength(), RTL_TEXTENCODING_ASCII_US );
-            sMessage += ")";
-            OSL_FAIL( sMessage.getStr() );
-        }
-#endif
+        SAL_WARN_IF( _rArguments.getLength(), "forms.richtext",
+                "OAttributeDispatcher::dispatch: found arguments, but can't handle arguments at all"
+                " (URL: " << _rURL.Complete << ")");
 
         if ( m_pMasterDispatcher )
             m_pMasterDispatcher->executeAttribute( m_nAttributeId, nullptr );
@@ -109,7 +101,6 @@ namespace frm
     void OAttributeDispatcher::onAttributeStateChanged( AttributeId _nAttributeId, const AttributeState& /*_rState*/ )
     {
         OSL_ENSURE( _nAttributeId == m_nAttributeId, "OAttributeDispatcher::onAttributeStateChanged: wrong attribute!" );
-        (void)_nAttributeId;
 
         FeatureStateEvent aEvent( buildStatusEvent() );
         ::comphelper::OInterfaceIteratorHelper2 aIter( getStatusListeners() );

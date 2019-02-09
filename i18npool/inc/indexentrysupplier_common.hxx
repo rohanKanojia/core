@@ -23,9 +23,12 @@
 #include <com/sun/star/i18n/XExtendedIndexEntrySupplier.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <collatorImpl.hxx>
+#include <rtl/ref.hxx>
+#include "collatorImpl.hxx"
 
-namespace com { namespace sun { namespace star { namespace i18n {
+#include <memory>
+
+namespace i18npool {
 
 
 //  class IndexEntrySupplier_Common
@@ -39,67 +42,56 @@ class IndexEntrySupplier_Common : public cppu::WeakImplHelper
 {
 public:
     IndexEntrySupplier_Common( const css::uno::Reference < css::uno::XComponentContext >& rxContext );
-    virtual ~IndexEntrySupplier_Common();
+    virtual ~IndexEntrySupplier_Common() override;
 
-    virtual css::uno::Sequence < css::lang::Locale > SAL_CALL getLocaleList()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence < css::lang::Locale > SAL_CALL getLocaleList() override;
 
     virtual css::uno::Sequence < OUString > SAL_CALL getAlgorithmList(
-        const css::lang::Locale& rLocale )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::Locale& rLocale ) override;
 
     virtual sal_Bool SAL_CALL usePhoneticEntry(
-        const css::lang::Locale& rLocale )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::Locale& rLocale ) override;
 
     virtual OUString SAL_CALL getPhoneticCandidate( const OUString& IndexEntry,
-        const css::lang::Locale& rLocale )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::Locale& rLocale ) override;
 
     virtual sal_Bool SAL_CALL loadAlgorithm(
         const css::lang::Locale& rLocale,
-        const OUString& SortAlgorithm, sal_Int32 collatorOptions )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const OUString& SortAlgorithm, sal_Int32 collatorOptions ) override;
 
     virtual OUString SAL_CALL getIndexKey( const OUString& IndexEntry,
-        const OUString& PhoneticEntry, const css::lang::Locale& rLocale )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const OUString& PhoneticEntry, const css::lang::Locale& rLocale ) override;
 
     virtual sal_Int16 SAL_CALL compareIndexEntry( const OUString& IndexEntry1,
         const OUString& PhoneticEntry1, const css::lang::Locale& rLocale1,
         const OUString& IndexEntry2, const OUString& PhoneticEntry2,
-        const css::lang::Locale& rLocale2 )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::Locale& rLocale2 ) override;
 
     virtual OUString SAL_CALL getIndexCharacter( const OUString& rIndexEntry,
-        const css::lang::Locale& rLocale, const OUString& rSortAlgorithm )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::Locale& rLocale, const OUString& rSortAlgorithm ) override;
 
     virtual OUString SAL_CALL getIndexFollowPageWord( sal_Bool MorePages,
-        const css::lang::Locale& rLocale )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::Locale& rLocale ) override;
 
     //XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw( css::uno::RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL supportsService(const OUString& ServiceName)
-        throw( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService(const OUString& ServiceName) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
 protected:
     const sal_Char *   implementationName;
     bool               usePhonetic;
-    CollatorImpl*      collator;
+    rtl::Reference<CollatorImpl>
+                       collator;
     css::lang::Locale  aLocale;
     OUString           aAlgorithm;
 
-    const OUString& SAL_CALL getEntry( const OUString& IndexEntry,
-        const OUString& PhoneticEntry, const css::lang::Locale& rLocale )
-        throw (css::uno::RuntimeException);
+    /// @throws css::uno::RuntimeException
+    const OUString& getEntry( const OUString& IndexEntry,
+        const OUString& PhoneticEntry, const css::lang::Locale& rLocale );
 };
 
-} } } }
+}
 #endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

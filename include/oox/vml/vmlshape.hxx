@@ -22,15 +22,20 @@
 
 #include <memory>
 #include <vector>
+
 #include <com/sun/star/awt/Point.hpp>
-#include <oox/vml/vmlformatting.hxx>
-#include <oox/vml/vmltextbox.hxx>
+#include <com/sun/star/uno/Reference.hxx>
 #include <oox/dllapi.h>
+#include <oox/helper/helper.hxx>
+#include <oox/vml/vmlformatting.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 namespace com { namespace sun { namespace star {
     namespace awt { struct Rectangle; }
     namespace drawing { class XShape; }
     namespace drawing { class XShapes; }
+    namespace graphic { class XGraphic; }
 } } }
 
 namespace oox {
@@ -39,7 +44,7 @@ namespace vml {
 class Drawing;
 struct ShapeParentAnchor;
 class ShapeContainer;
-
+class TextBox;
 
 const sal_Int32 VML_CLIENTDATA_UNCHECKED        = 0;
 const sal_Int32 VML_CLIENTDATA_CHECKED          = 1;
@@ -85,6 +90,7 @@ struct OOX_DLLPUBLIC ShapeTypeModel
     OUString     maWrapStyle;            ///< Wrapping mode for text.
     OUString     maArcsize;              ///< round rectangles arc size
     OUString     maEditAs;               ///< Edit As type (e.g. "canvas" etc)
+    OUString     maAdjustments;          ///< Shape adjustment values
 
     StrokeModel         maStrokeModel;          ///< Border line formatting.
     FillModel           maFillModel;            ///< Shape fill formatting.
@@ -95,8 +101,8 @@ struct OOX_DLLPUBLIC ShapeTypeModel
     OptValue< OUString > moGraphicTitle; ///< Title of the graphic.
     OptValue< OUString > moWrapAnchorX;  ///< The base object from which our horizontal positioning should be calculated.
     OptValue< OUString > moWrapAnchorY;  ///< The base object from which our vertical positioning should be calculated.
-    OptValue< ::rtl::OUString > moWrapType;     ///< How to wrap the text around the object
-    OptValue< ::rtl::OUString > moWrapSide;     ///< On which side to wrap the text around the object
+    OptValue< OUString > moWrapType;     ///< How to wrap the text around the object
+    OptValue< OUString > moWrapSide;     ///< On which side to wrap the text around the object
     OUString maVTextAnchor; ///< How the text inside the shape is anchored vertically.
     OUString maWrapDistanceLeft;         ///< Distance from the left side of the shape to the text that wraps around it.
     OUString maWrapDistanceRight;        ///< Distance from the right side of the shape to the text that wraps around it.
@@ -192,19 +198,25 @@ struct ClientData
 struct ShapeModel
 {
     typedef ::std::vector< css::awt::Point >   PointVector;
-    typedef ::std::unique_ptr< TextBox >                    TextBoxPtr;
-    typedef ::std::unique_ptr< ClientData >                 ClientDataPtr;
 
     OUString     maType;             ///< Shape template with default properties.
     PointVector         maPoints;           ///< Points for the polyline shape.
-    TextBoxPtr          mxTextBox;          ///< Text contents and properties.
-    ClientDataPtr       mxClientData;       ///< Excel specific client data.
+    std::unique_ptr<TextBox>          mxTextBox;          ///< Text contents and properties.
+    std::unique_ptr<ClientData>       mxClientData;       ///< Excel specific client data.
     OUString     maLegacyDiagramPath;///< Legacy Diagram Fragment Path
     OUString     maFrom;             ///< Start point for line shape.
     OUString     maTo;               ///< End point for line shape.
     OUString     maControl1;         ///< Bezier control point 1
     OUString     maControl2;         ///< Bezier control point 2
     OUString     maVmlPath;          ///< VML path for this shape
+    bool         mbIsSignatureLine;  ///< Shape is a signature line
+    OUString     maSignatureId;      ///< ID of the signature
+    OUString     maSignatureLineSuggestedSignerName;
+    OUString     maSignatureLineSuggestedSignerTitle;
+    OUString     maSignatureLineSuggestedSignerEmail;
+    OUString     maSignatureLineSigningInstructions;
+    bool         mbSignatureLineShowSignDate;
+    bool         mbSignatureLineCanAddComment;
 
     explicit            ShapeModel();
                         ~ShapeModel();
@@ -290,9 +302,14 @@ protected:
                             const css::uno::Reference< css::drawing::XShapes >& rxShapes,
                             const css::awt::Rectangle& rShapeRect ) const override;
     /** Used by both RectangleShape and ComplexShape. */
+    css::uno::Reference<css::drawing::XShape>createEmbeddedPictureObject(
+        const css::uno::Reference< css::drawing::XShapes >& rxShapes,
+        const css::awt::Rectangle& rShapeRect, OUString const & rGraphicPath ) const;
+
     css::uno::Reference<css::drawing::XShape>createPictureObject(
             const css::uno::Reference< css::drawing::XShapes >& rxShapes,
-            const css::awt::Rectangle& rShapeRect, OUString& rGraphicPath ) const;
+            const css::awt::Rectangle& rShapeRect,
+            css::uno::Reference<css::graphic::XGraphic> const & rxGraphic) const;
 
 private:
     OUString     maService;          ///< Name of the UNO shape service.
@@ -400,7 +417,7 @@ class GroupShape : public ShapeBase
 {
 public:
     explicit            GroupShape( Drawing& rDrawing );
-    virtual             ~GroupShape();
+    virtual             ~GroupShape() override;
 
     /** Returns read/write access to the container of child shapes and templates. */
     ShapeContainer& getChildren() { return *mxChildren; }
@@ -423,8 +440,7 @@ protected:
                             const css::awt::Rectangle& rShapeRect ) const override;
 
 private:
-    typedef ::std::unique_ptr< ShapeContainer > ShapeContainerPtr;
-    ShapeContainerPtr   mxChildren;         ///< Shapes and templates that are part of this group.
+    std::unique_ptr<ShapeContainer>   mxChildren;         ///< Shapes and templates that are part of this group.
 };
 
 

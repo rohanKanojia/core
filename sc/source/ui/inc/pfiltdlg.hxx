@@ -20,26 +20,27 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_PFILTDLG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_PFILTDLG_HXX
 
-#include <vcl/morebtn.hxx>
-#include <svtools/stdctrl.hxx>
 #include <vcl/button.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/dialog.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/combobox.hxx>
-#include "address.hxx"
-#include "queryparam.hxx"
+#include <address.hxx>
+#include <queryparam.hxx>
+#include <array>
+#include <memory>
 
 class ScViewData;
 class ScDocument;
 class ScQueryItem;
-class ScTypedStrData;
+class SfxItemSet;
+struct ScFilterEntries;
 
 class ScPivotFilterDlg : public ModalDialog
 {
 public:
     ScPivotFilterDlg(vcl::Window* pParent, const SfxItemSet& rArgSet, SCTAB nSourceTab);
-    virtual ~ScPivotFilterDlg();
+    virtual ~ScPivotFilterDlg() override;
     virtual void dispose() override;
 
     const ScQueryItem&  GetOutputItem();
@@ -70,17 +71,16 @@ private:
 
     const sal_uInt16    nWhichQuery;
     const ScQueryParam  theQueryData;
-    ScQueryItem*        pOutItem;
+    std::unique_ptr<ScQueryItem> pOutItem;
     ScViewData*         pViewData;
     ScDocument*         pDoc;
-    SCTAB               nSrcTab;
+    SCTAB const         nSrcTab;
 
-    sal_uInt16              nFieldCount;
     VclPtr<ComboBox>           aValueEdArr[3];
     VclPtr<ListBox>            aFieldLbArr[3];
     VclPtr<ListBox>            aCondLbArr[3];
 
-    std::vector<ScTypedStrData>* pEntryLists[MAXCOLCOUNT];
+    std::array<std::unique_ptr<ScFilterEntries>, MAXCOLCOUNT> m_pEntryLists;
 
 private:
     void    Init            ( const SfxItemSet& rArgSet );
@@ -90,9 +90,9 @@ private:
     sal_uInt16  GetFieldSelPos  ( SCCOL nField );
 
     // Handler:
-    DECL_LINK_TYPED( LbSelectHdl, ListBox&, void );
-    DECL_LINK_TYPED( ValModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( CheckBoxHdl, Button*, void );
+    DECL_LINK( LbSelectHdl, ListBox&, void );
+    DECL_LINK( ValModifyHdl, Edit&, void );
+    DECL_LINK( CheckBoxHdl, Button*, void );
 };
 
 #endif // INCLUDED_SC_SOURCE_UI_INC_PFILTDLG_HXX

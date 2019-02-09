@@ -34,7 +34,7 @@ using namespace com::sun::star::uno;
 // well known under MS Windows
 // the MS HTML Format has a header before the real html data
 
-// Version:1.0      Version number of the clipboard. Staring is 0.9
+// Version:1.0      Version number of the clipboard. Starting is 0.9
 // StartHTML:       Byte count from the beginning of the clipboard to the start
 //                  of the context, or -1 if no context
 // EndHTML:         Byte count from the beginning of the clipboard to the end
@@ -53,7 +53,7 @@ using namespace com::sun::star::uno;
 // <!--StartFragment--> and <!--EndFragment--> (no space between !-- and the
 // text
 
-namespace // private
+namespace
 {
 std::string GetHtmlFormatHeader(size_t startHtml, size_t endHtml, size_t startFragment, size_t endFragment)
 {
@@ -66,7 +66,7 @@ std::string GetHtmlFormatHeader(size_t startHtml, size_t endHtml, size_t startFr
     return htmlHeader.str();
 }
 
-} // namespace private
+}
 
 // the office always writes the start and end html tag in upper cases and
 // without spaces both tags don't allow parameters
@@ -78,11 +78,11 @@ const std::string TAG_END_HTML = std::string("</html>");
 const std::string TAG_BODY = std::string("<body");
 const std::string TAG_END_BODY = std::string("</body");
 
-Sequence<sal_Int8> SAL_CALL TextHtmlToHTMLFormat(Sequence<sal_Int8>& aTextHtml)
+Sequence<sal_Int8> TextHtmlToHTMLFormat(Sequence<sal_Int8> const & aTextHtml)
 {
     OSL_ASSERT(aTextHtml.getLength() > 0);
 
-    if (!(aTextHtml.getLength() > 0))
+    if (aTextHtml.getLength() <= 0)
         return Sequence<sal_Int8>();
 
     // fill the buffer with dummy values to calc the exact length
@@ -115,7 +115,7 @@ Sequence<sal_Int8> SAL_CALL TextHtmlToHTMLFormat(Sequence<sal_Int8>& aTextHtml)
     return byteSequence;
 }
 
-const char* HtmlStartTag = "<html";
+const char* const HtmlStartTag = "<html";
 
 Sequence<sal_Int8> HTMLFormatToTextHtml(const Sequence<sal_Int8>& aHTMLFormat)
 {
@@ -149,7 +149,7 @@ Sequence<sal_Int8> HTMLFormatToTextHtml(const Sequence<sal_Int8>& aHTMLFormat)
    can improve this
 */
 const char HtmlFormatStart[] = "Version:";
-int HtmlFormatStartLen = (sizeof(HtmlFormatStart) - 1);
+int const HtmlFormatStartLen = sizeof(HtmlFormatStart) - 1;
 
 bool isHTMLFormat(const Sequence<sal_Int8>& aHtmlSequence)
 {

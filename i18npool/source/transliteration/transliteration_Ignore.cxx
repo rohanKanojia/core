@@ -19,26 +19,25 @@
 
 #include <transliteration_Ignore.hxx>
 
+using namespace com::sun::star::i18n;
 using namespace com::sun::star::uno;
 
-namespace com { namespace sun { namespace star { namespace i18n {
-
-inline sal_Int32 Min( sal_Int32 a, sal_Int32 b ) { return a > b ? b : a; }
+namespace i18npool {
 
 sal_Bool SAL_CALL
 transliteration_Ignore::equals(const OUString& str1, sal_Int32 pos1, sal_Int32 nCount1, sal_Int32& nMatch1,
-        const OUString& str2, sal_Int32 pos2, sal_Int32 nCount2, sal_Int32& nMatch2 ) throw(RuntimeException, std::exception)
+        const OUString& str2, sal_Int32 pos2, sal_Int32 nCount2, sal_Int32& nMatch2 )
 {
     Sequence< sal_Int32 > offset1;
     Sequence< sal_Int32 > offset2;
 
     // The method folding is defined in a sub class.
-    OUString s1 = this->folding( str1, pos1, nCount1, offset1);
-    OUString s2 = this->folding( str2, pos2, nCount2, offset2);
+    OUString s1 = folding( str1, pos1, nCount1, offset1);
+    OUString s2 = folding( str2, pos2, nCount2, offset2);
 
     const sal_Unicode * p1 = s1.getStr();
     const sal_Unicode * p2 = s2.getStr();
-    sal_Int32 length = Min(s1.getLength(), s2.getLength());
+    sal_Int32 length = std::min(s1.getLength(), s2.getLength());
     sal_Int32 nmatch;
 
     for ( nmatch = 0; nmatch < length; nmatch++)
@@ -59,7 +58,7 @@ transliteration_Ignore::equals(const OUString& str1, sal_Int32 pos1, sal_Int32 n
 
 
 Sequence< OUString > SAL_CALL
-transliteration_Ignore::transliterateRange( const OUString& str1, const OUString& str2 ) throw(RuntimeException, std::exception)
+transliteration_Ignore::transliterateRange( const OUString& str1, const OUString& str2 )
 {
     if (str1.isEmpty() || str2.isEmpty())
         throw RuntimeException();
@@ -72,24 +71,24 @@ transliteration_Ignore::transliterateRange( const OUString& str1, const OUString
 
 
 sal_Int16 SAL_CALL
-transliteration_Ignore::getType() throw(RuntimeException, std::exception)
+transliteration_Ignore::getType()
 {
     // The type is also defined in com/sun/star/util/TransliterationType.hdl
     return TransliterationType::IGNORE;
 }
 
 
-OUString SAL_CALL
-transliteration_Ignore::transliterate( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount,
-        Sequence< sal_Int32 >& offset  ) throw(RuntimeException, std::exception)
+OUString
+transliteration_Ignore::transliterateImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount,
+        Sequence< sal_Int32 >& offset, bool useOffset)
 {
     // The method folding is defined in a sub class.
-    return this->folding( inStr, startPos, nCount, offset);
+    return foldingImpl( inStr, startPos, nCount, offset, useOffset);
 }
 
-Sequence< OUString > SAL_CALL
+Sequence< OUString >
 transliteration_Ignore::transliterateRange( const OUString& str1, const OUString& str2,
-        XTransliteration& t1, XTransliteration& t2 ) throw(RuntimeException)
+        XTransliteration& t1, XTransliteration& t2 )
 {
     if (str1.isEmpty() || str2.isEmpty())
         throw RuntimeException();
@@ -115,10 +114,9 @@ transliteration_Ignore::transliterateRange( const OUString& str1, const OUString
     return r;
 }
 
-OUString SAL_CALL
-transliteration_Ignore::folding( const OUString& inStr, sal_Int32 startPos,
-    sal_Int32 nCount, Sequence< sal_Int32 >& offset)
-    throw(RuntimeException, std::exception)
+OUString
+transliteration_Ignore::foldingImpl( const OUString& inStr, sal_Int32 startPos,
+    sal_Int32 nCount, Sequence< sal_Int32 >& offset, bool useOffset)
 {
     // Create a string buffer which can hold nCount + 1 characters.
     // The reference count is 1 now.
@@ -191,17 +189,17 @@ transliteration_Ignore::folding( const OUString& inStr, sal_Int32 startPos,
     newStr->length = sal_Int32(dst - newStr->buffer);
     if (useOffset)
       offset.realloc(newStr->length);
-    *dst = (sal_Unicode) 0;
+    *dst = u'\0';
 
     return OUString(newStr, SAL_NO_ACQUIRE); // take ownership
 }
 
 sal_Unicode SAL_CALL
-transliteration_Ignore::transliterateChar2Char( sal_Unicode inChar) throw(RuntimeException, MultipleCharsOutputException, std::exception)
+transliteration_Ignore::transliterateChar2Char( sal_Unicode inChar)
 {
     return func ? func( inChar) : table ? (*table)[ inChar ] : inChar;
 }
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

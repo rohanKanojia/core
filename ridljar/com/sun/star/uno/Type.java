@@ -20,6 +20,8 @@ package com.sun.star.uno;
 
 import java.util.HashMap;
 
+import com.sun.star.lib.uno.typedesc.TypeDescription;
+
 /**
  * Represents the UNO built-in type <code>TYPE</code>.
  *
@@ -35,7 +37,7 @@ import java.util.HashMap;
  * will never be <code>null</code>.  A <code>Type</code> may have an additional
  * "z class" (a <code>java.lang.Class</code>), giving a Java class type that
  * corresponds to the UNO type.  Also, a <code>Type</code> can cache a type
- * description (a <code>com.sun.star.uno.ITypeDescription</code>), which can be
+ * description (a <code>com.sun.star.uno.typedesc.TypeDescription</code>), which can be
  * computed and set by <code>TypeDescription.getTypeDescription</code>.
  */
 public class Type {
@@ -78,65 +80,81 @@ public class Type {
         TYPE_NAME_ANY
     };
 
-    private static final HashMap<Class<?>, TypeClass[]> __javaClassToTypeClass = new HashMap<Class<?>, TypeClass[]>();
+    private static final class TypeInfo {
+        TypeInfo(
+            TypeClass thePrimary, TypeClass theAlternative,
+            boolean theSequenceComponentType)
+        {
+            primary = thePrimary;
+            alternative = theAlternative;
+            sequenceComponentType = theSequenceComponentType;
+        }
+
+        final TypeClass primary;
+        final TypeClass alternative;
+        final boolean sequenceComponentType;
+    }
+
+    private static final HashMap<Class<?>, TypeInfo> __javaClassToTypeClass =
+        new HashMap<Class<?>, TypeInfo>();
     static {
         __javaClassToTypeClass.put(
-            void.class, new TypeClass[] { TypeClass.VOID, TypeClass.VOID });
+            void.class, new TypeInfo(TypeClass.VOID, TypeClass.VOID, false));
         __javaClassToTypeClass.put(
-            Void.class, new TypeClass[] { TypeClass.VOID, TypeClass.VOID });
+            Void.class, new TypeInfo(TypeClass.VOID, TypeClass.VOID, false));
         __javaClassToTypeClass.put(
             boolean.class,
-            new TypeClass[] { TypeClass.BOOLEAN, TypeClass.BOOLEAN });
+            new TypeInfo(TypeClass.BOOLEAN, TypeClass.BOOLEAN, true));
         __javaClassToTypeClass.put(
             Boolean.class,
-            new TypeClass[] { TypeClass.BOOLEAN, TypeClass.BOOLEAN });
+            new TypeInfo(TypeClass.BOOLEAN, TypeClass.BOOLEAN, false));
         __javaClassToTypeClass.put(
-            byte.class, new TypeClass[] { TypeClass.BYTE, TypeClass.BYTE });
+            byte.class, new TypeInfo(TypeClass.BYTE, TypeClass.BYTE, true));
         __javaClassToTypeClass.put(
-            Byte.class, new TypeClass[] { TypeClass.BYTE, TypeClass.BYTE });
+            Byte.class, new TypeInfo(TypeClass.BYTE, TypeClass.BYTE, false));
         __javaClassToTypeClass.put(
             short.class,
-            new TypeClass[] { TypeClass.SHORT, TypeClass.UNSIGNED_SHORT });
+            new TypeInfo(TypeClass.SHORT, TypeClass.UNSIGNED_SHORT, true));
         __javaClassToTypeClass.put(
             Short.class,
-            new TypeClass[] { TypeClass.SHORT, TypeClass.UNSIGNED_SHORT });
+            new TypeInfo(TypeClass.SHORT, TypeClass.UNSIGNED_SHORT, false));
         __javaClassToTypeClass.put(
             int.class,
-            new TypeClass[] { TypeClass.LONG, TypeClass.UNSIGNED_LONG });
+            new TypeInfo(TypeClass.LONG, TypeClass.UNSIGNED_LONG, true));
         __javaClassToTypeClass.put(
             Integer.class,
-            new TypeClass[] { TypeClass.LONG, TypeClass.UNSIGNED_LONG });
+            new TypeInfo(TypeClass.LONG, TypeClass.UNSIGNED_LONG, false));
         __javaClassToTypeClass.put(
             long.class,
-            new TypeClass[] { TypeClass.HYPER, TypeClass.UNSIGNED_HYPER });
+            new TypeInfo(TypeClass.HYPER, TypeClass.UNSIGNED_HYPER, true));
         __javaClassToTypeClass.put(
             Long.class,
-            new TypeClass[] { TypeClass.HYPER, TypeClass.UNSIGNED_HYPER });
+            new TypeInfo(TypeClass.HYPER, TypeClass.UNSIGNED_HYPER, false));
         __javaClassToTypeClass.put(
-            float.class, new TypeClass[] { TypeClass.FLOAT, TypeClass.FLOAT });
+            float.class, new TypeInfo(TypeClass.FLOAT, TypeClass.FLOAT, true));
         __javaClassToTypeClass.put(
-            Float.class, new TypeClass[] { TypeClass.FLOAT, TypeClass.FLOAT });
+            Float.class, new TypeInfo(TypeClass.FLOAT, TypeClass.FLOAT, false));
         __javaClassToTypeClass.put(
             double.class,
-            new TypeClass[] { TypeClass.DOUBLE, TypeClass.DOUBLE });
+            new TypeInfo(TypeClass.DOUBLE, TypeClass.DOUBLE, true));
         __javaClassToTypeClass.put(
             Double.class,
-            new TypeClass[] { TypeClass.DOUBLE, TypeClass.DOUBLE });
+            new TypeInfo(TypeClass.DOUBLE, TypeClass.DOUBLE, false));
         __javaClassToTypeClass.put(
-            char.class, new TypeClass[] { TypeClass.CHAR, TypeClass.CHAR });
+            char.class, new TypeInfo(TypeClass.CHAR, TypeClass.CHAR, true));
         __javaClassToTypeClass.put(
             Character.class,
-            new TypeClass[] { TypeClass.CHAR, TypeClass.CHAR });
+            new TypeInfo(TypeClass.CHAR, TypeClass.CHAR, false));
         __javaClassToTypeClass.put(
             String.class,
-            new TypeClass[] { TypeClass.STRING, TypeClass.STRING });
+            new TypeInfo(TypeClass.STRING, TypeClass.STRING, true));
         __javaClassToTypeClass.put(
-            Type.class, new TypeClass[] { TypeClass.TYPE, TypeClass.TYPE });
+            Type.class, new TypeInfo(TypeClass.TYPE, TypeClass.TYPE, true));
         __javaClassToTypeClass.put(
-            Any.class, new TypeClass[] { TypeClass.ANY, TypeClass.ANY });
+            Any.class, new TypeInfo(TypeClass.ANY, TypeClass.ANY, true));
         __javaClassToTypeClass.put(
             Object.class,
-            new TypeClass[] { TypeClass.ANY, TypeClass.INTERFACE });
+            new TypeInfo(TypeClass.ANY, TypeClass.INTERFACE, true));
     }
 
     public static final Type VOID = new Type(void.class);
@@ -162,7 +180,7 @@ public class Type {
      * Constructs a new <code>Type</code> which defaults to <code>VOID</code>.
      */
     public Type() {
-        init(null, void.class, false, false);
+        init(null, void.class, false, false, false);
     }
 
     /**
@@ -190,7 +208,7 @@ public class Type {
      *     <code>null</code>.
      */
     public Type(Class<?> zClass) {
-        init(null, zClass, false, false);
+        init(null, zClass, false, false, false);
     }
 
     /**
@@ -244,16 +262,24 @@ public class Type {
      * @since UDK 3.2.0
      */
     public Type(Class<?> zClass, boolean alternative) {
-        init(null, zClass, alternative, false);
+        init(null, zClass, alternative, false, false);
+    }
+
+    private Type(
+        Class<?> zClass, boolean alternative, boolean sequenceComponentType)
+    {
+        init(null, zClass, alternative, false, sequenceComponentType);
     }
 
     /**
      * Constructs a new <code>Type</code> from the given type description.
      *
+     * <em>For internal URE use only. Not to be used by client code.</em>
+     *
      * @param typeDescription a type description.  Must not be
      *     <code>null</code>.
      */
-    public Type(ITypeDescription typeDescription) {
+    public Type(TypeDescription typeDescription) {
         _typeName         = typeDescription.getTypeName();
         _typeClass        = typeDescription.getTypeClass();
         _iTypeDescription = typeDescription;
@@ -282,7 +308,7 @@ public class Type {
             init(
                 typeName,
                 Class.forName(i < 0 ? typeName : typeName.substring(0, i)),
-                false, i >= 0);
+                false, i >= 0, false);
         } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
@@ -345,18 +371,22 @@ public class Type {
     /**
      * Gives the type description of this type.
      *
+     * <em>For internal URE use only. Not to be used by client code.</em>
+     *
      * @return the type description; may be <code>null</code>
      */
-    public ITypeDescription getTypeDescription() {
+    public TypeDescription getTypeDescription() {
         return _iTypeDescription;
     }
 
     /**
      * Sets the type description for this type.
      *
+     * <em>For internal URE use only. Not to be used by client code.</em>
+     *
      * @param typeDescription the type description
      */
-    public void setTypeDescription(ITypeDescription typeDescription) {
+    public void setTypeDescription(TypeDescription typeDescription) {
         _iTypeDescription = typeDescription;
     }
 
@@ -449,14 +479,19 @@ public class Type {
     }
 
     private void init(
-        String name, Class<?> zClass, boolean alternative, boolean arguments)
+        String name, Class<?> zClass, boolean alternative, boolean arguments,
+        boolean sequenceComponentType)
     {
-        TypeClass[] tc = __javaClassToTypeClass.get(zClass);
-        if (tc != null) {
-            // tc only contains primitive type classes, except for
+        TypeInfo info = __javaClassToTypeClass.get(zClass);
+        if (info != null) {
+            if (sequenceComponentType && !info.sequenceComponentType) {
+                throw new IllegalArgumentException(
+                    zClass + " cannot be sequence component type");
+            }
+            // info only contains primitive type classes, except for
             // TypeClass.INTERFACE, which stands for XInterface (the alternative
             // interpretation of java.lang.Object):
-            _typeClass = tc[alternative ? 1 : 0];
+            _typeClass = alternative ? info.alternative  : info.primary;
             _typeName = _typeClass == TypeClass.INTERFACE
                 ? XInterface.class.getName()
                 : __typeClassToTypeName[_typeClass.getValue()];
@@ -465,7 +500,7 @@ public class Type {
             // java.lang.Boolean.class); getZClass will later calculate the
             // correct class when needed
         } else if (zClass.isArray()) {
-            Type t = new Type(zClass.getComponentType(), alternative);
+            Type t = new Type(zClass.getComponentType(), alternative, true);
             _typeClass = t.getTypeClass() != TypeClass.UNKNOWN
                 ? TypeClass.SEQUENCE : TypeClass.UNKNOWN;
             _typeName = "[]" + t.getTypeName();
@@ -656,9 +691,9 @@ public class Type {
         return typeClass.getValue() < __typeClassToTypeName.length;
     }
 
-    protected TypeClass _typeClass; // TODO should be final
-    protected String _typeName; // TODO should be final
+    private TypeClass _typeClass; // TODO should be final
+    private String _typeName; // TODO should be final
 
-    protected Class<?> _class;
-    protected ITypeDescription _iTypeDescription;
+    private Class<?> _class;
+    private TypeDescription _iTypeDescription;
 }

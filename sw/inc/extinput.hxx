@@ -19,29 +19,33 @@
 #ifndef INCLUDED_SW_INC_EXTINPUT_HXX
 #define INCLUDED_SW_INC_EXTINPUT_HXX
 
-#include <pam.hxx>
+#include "pam.hxx"
 #include <i18nlangtag/lang.h>
+#include <vcl/commandevent.hxx>
 #include <vector>
-
-class CommandExtTextInputData;
 
 class SwExtTextInput : public SwPaM
 {
-    std::vector<sal_uInt16> aAttrs;
+    std::vector<ExtTextInputAttr> aAttrs;
     OUString sOverwriteText;
     bool bInsText : 1;
     bool bIsOverwriteCursor : 1;
     LanguageType eInputLanguage;
 public:
-    SwExtTextInput( const SwPaM& rPam, Ring* pRing = nullptr );
-    virtual ~SwExtTextInput();
+    SwExtTextInput( const SwPaM& rPam, Ring* pRing );
+    virtual ~SwExtTextInput() override;
 
     void SetInputData( const CommandExtTextInputData& rData );
-    const std::vector<sal_uInt16>& GetAttrs() const { return aAttrs; }
+    const std::vector<ExtTextInputAttr>& GetAttrs() const { return aAttrs; }
     void SetInsText( bool bFlag )       { bInsText = bFlag; }
     bool IsOverwriteCursor() const      { return bIsOverwriteCursor; }
     void SetOverwriteCursor( bool bFlag );
     void SetLanguage(LanguageType eSet) { eInputLanguage = eSet;}
+
+    SwExtTextInput* GetNext()             { return static_cast<SwExtTextInput *>(GetNextInRing()); }
+    const SwExtTextInput* GetNext() const { return static_cast<SwExtTextInput const *>(GetNextInRing()); }
+    SwExtTextInput* GetPrev()             { return static_cast<SwExtTextInput *>(GetPrevInRing()); }
+    const SwExtTextInput* GetPrev() const { return static_cast<SwExtTextInput const *>(GetPrevInRing()); }
 };
 
 #endif // INCLUDED_SW_INC_EXTINPUT_HXX

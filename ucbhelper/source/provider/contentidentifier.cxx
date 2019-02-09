@@ -27,7 +27,6 @@
 #include <ucbhelper/contentidentifier.hxx>
 #include <cppuhelper/typeprovider.hxx>
 #include <cppuhelper/queryinterface.hxx>
-#include <osl/mutex.hxx>
 
 using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
@@ -104,7 +103,6 @@ void SAL_CALL ContentIdentifier::release() throw()
 // virtual
 Any SAL_CALL
 ContentIdentifier::queryInterface( const Type & rType )
-    throw ( RuntimeException, std::exception )
 {
     Any aRet = cppu::queryInterface( rType,
                 static_cast< XTypeProvider * >( this ),
@@ -120,7 +118,6 @@ ContentIdentifier::queryInterface( const Type & rType )
 // virtual
 Sequence< sal_Int8 > SAL_CALL
 ContentIdentifier::getImplementationId()
-    throw( RuntimeException, std::exception )
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -129,21 +126,12 @@ ContentIdentifier::getImplementationId()
 // virtual
 Sequence< css::uno::Type > SAL_CALL
 ContentIdentifier::getTypes()
-    throw( RuntimeException, std::exception )
 {
-    static cppu::OTypeCollection* pCollection = nullptr;
-      if ( !pCollection )
-      {
-        osl::Guard< osl::Mutex > aGuard( osl::Mutex::getGlobalMutex() );
-        if ( !pCollection )
-        {
-            static cppu::OTypeCollection collection(
+    static cppu::OTypeCollection s_aCollection(
                     cppu::UnoType<XTypeProvider>::get(),
                     cppu::UnoType<XContentIdentifier>::get() );
-            pCollection = &collection;
-        }
-    }
-    return (*pCollection).getTypes();
+
+    return s_aCollection.getTypes();
 }
 
 
@@ -152,7 +140,6 @@ ContentIdentifier::getTypes()
 
 // virtual
 OUString SAL_CALL ContentIdentifier::getContentIdentifier()
-    throw( RuntimeException, std::exception )
 {
     return m_pImpl->m_aContentId;
 }
@@ -160,7 +147,6 @@ OUString SAL_CALL ContentIdentifier::getContentIdentifier()
 
 // virtual
 OUString SAL_CALL ContentIdentifier::getContentProviderScheme()
-    throw( RuntimeException, std::exception )
 {
     return m_pImpl->m_aProviderScheme;
 }

@@ -26,30 +26,28 @@
 #include <com/sun/star/uno/Exception.hpp>
 #include <com/sun/star/uno/RuntimeException.hpp>
 
-#include "sfxtypes.hxx"
-#include "appdata.hxx"
+#include <sfxtypes.hxx>
+#include <appdata.hxx>
 #include <sfx2/docfac.hxx>
 #include <sfx2/app.hxx>
-#include "arrdecl.hxx"
+#include <arrdecl.hxx>
 #include <sfx2/dispatch.hxx>
-#include <sfx2/sfxresid.hxx>
 #include <sfx2/fcontnr.hxx>
 #include <sfx2/viewsh.hxx>
 #include <sfx2/msgpool.hxx>
-#include "app.hrc"
 #include <sfx2/docfile.hxx>
-#include "workwin.hxx"
+#include <workwin.hxx>
 
 
 SfxFilterMatcher& SfxApplication::GetFilterMatcher()
 {
-    if( !pAppData_Impl->pMatcher )
+    if( !pImpl->pMatcher )
     {
-        pAppData_Impl->pMatcher = new SfxFilterMatcher();
+        pImpl->pMatcher = new SfxFilterMatcher();
         URIHelper::SetMaybeFileHdl( LINK(
-            pAppData_Impl->pMatcher, SfxFilterMatcher, MaybeFileHdl_Impl ) );
+            pImpl->pMatcher, SfxFilterMatcher, MaybeFileHdl_Impl ) );
     }
-    return *pAppData_Impl->pMatcher;
+    return *pImpl->pMatcher;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

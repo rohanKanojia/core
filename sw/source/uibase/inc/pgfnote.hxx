@@ -25,51 +25,50 @@
 
 #include <vcl/fixed.hxx>
 
-#include <vcl/group.hxx>
 #include <svtools/ctrlbox.hxx>
+#include <svx/colorbox.hxx>
 
 // footnote settings TabPage
 class SwFootNotePage: public SfxTabPage
 {
     friend class VclPtr<SwFootNotePage>;
     static const sal_uInt16 aPageRg[];
-    SwFootNotePage(vcl::Window *pParent, const SfxItemSet &rSet);
+    SwFootNotePage(TabPageParent pParent, const SfxItemSet &rSet);
 public:
-    static VclPtr<SfxTabPage> Create(vcl::Window *pParent, const SfxItemSet *rSet);
+    static VclPtr<SfxTabPage> Create(TabPageParent pParent, const SfxItemSet *rSet);
     static const sal_uInt16* GetRanges() { return aPageRg; }
 
     virtual bool FillItemSet(SfxItemSet *rSet) override;
     virtual void Reset(const SfxItemSet *rSet) override;
 
-    virtual ~SwFootNotePage();
+    virtual ~SwFootNotePage() override;
     virtual void dispose() override;
 private:
 
-    VclPtr<RadioButton>    m_pMaxHeightPageBtn;
-    VclPtr<RadioButton>    m_pMaxHeightBtn;
-    VclPtr<MetricField>    m_pMaxHeightEdit;
-    VclPtr<MetricField>    m_pDistEdit;
-
-    VclPtr<ListBox>        m_pLinePosBox;
-    VclPtr<LineListBox>    m_pLineTypeBox;
-    VclPtr<MetricField>    m_pLineWidthEdit;
-    VclPtr<ColorListBox>   m_pLineColorBox;
-    VclPtr<MetricField>    m_pLineLengthEdit;
-    VclPtr<MetricField>    m_pLineDistEdit;
-
-    DECL_LINK_TYPED( HeightPage, Button*, void );
-    DECL_LINK_TYPED( HeightMetric, Button*, void );
-    DECL_LINK_TYPED( HeightModify, Control&, void );
-    DECL_LINK_TYPED( LineWidthChanged_Impl, Edit&, void );
-    DECL_LINK_TYPED( LineColorSelected_Impl, ListBox&, void );
-
     long            lMaxHeight;
+
+    std::unique_ptr<weld::RadioButton> m_xMaxHeightPageBtn;
+    std::unique_ptr<weld::RadioButton> m_xMaxHeightBtn;
+    std::unique_ptr<weld::MetricSpinButton> m_xMaxHeightEdit;
+    std::unique_ptr<weld::MetricSpinButton> m_xDistEdit;
+    std::unique_ptr<weld::ComboBox> m_xLinePosBox;
+    std::unique_ptr<SvtLineListBox> m_xLineTypeBox;
+    std::unique_ptr<weld::MetricSpinButton> m_xLineWidthEdit;
+    std::unique_ptr<ColorListBox> m_xLineColorBox;
+    std::unique_ptr<weld::MetricSpinButton> m_xLineLengthEdit;
+    std::unique_ptr<weld::MetricSpinButton> m_xLineDistEdit;
+
+    DECL_LINK(HeightPage, weld::ToggleButton&, void);
+    DECL_LINK(HeightMetric, weld::ToggleButton&, void);
+    DECL_LINK(HeightModify, weld::MetricSpinButton&, void);
+    DECL_LINK(LineWidthChanged_Impl, weld::MetricSpinButton&, void);
+    DECL_LINK(LineColorSelected_Impl, ColorListBox&, void);
 
     using SfxTabPage::ActivatePage;
     using SfxTabPage::DeactivatePage;
 
     virtual void    ActivatePage( const SfxItemSet& rSet ) override;
-    virtual sfxpg   DeactivatePage( SfxItemSet* pSet = nullptr ) override;
+    virtual DeactivateRC   DeactivatePage( SfxItemSet* pSet ) override;
 
 };
 

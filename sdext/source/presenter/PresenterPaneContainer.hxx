@@ -43,11 +43,9 @@ namespace sdext { namespace presenter {
 class PresenterPaneBase;
 class PresenterSprite;
 
-namespace {
-    typedef ::cppu::WeakComponentImplHelper <
-        css::lang::XEventListener
-    > PresenterPaneContainerInterfaceBase;
-}
+typedef ::cppu::WeakComponentImplHelper <
+    css::lang::XEventListener
+> PresenterPaneContainerInterfaceBase;
 
 /** This class could also be called PresenterPaneAndViewContainer because it
     stores not only references to all panes that belong to the presenter
@@ -60,7 +58,7 @@ class PresenterPaneContainer
 public:
     explicit PresenterPaneContainer (
         const css::uno::Reference<css::uno::XComponentContext>& rxContext);
-    virtual ~PresenterPaneContainer();
+    virtual ~PresenterPaneContainer() override;
     PresenterPaneContainer(const PresenterPaneContainer&) = delete;
     PresenterPaneContainer& operator=(const PresenterPaneContainer&) = delete;
 
@@ -80,7 +78,6 @@ public:
     class PaneDescriptor
     {
     public:
-        typedef ::std::function<void (bool)> Activator;
         typedef ::std::function<std::shared_ptr<PresenterSprite> ()> SpriteProvider;
         css::uno::Reference<css::drawing::framework::XResourceId> mxPaneId;
         OUString msViewURL;
@@ -92,19 +89,12 @@ public:
         OUString msAccessibleTitleTemplate;
         OUString msTitle;
         ViewInitializationFunction maViewInitialization;
-        double mnLeft;
-        double mnTop;
-        double mnRight;
-        double mnBottom;
         SharedBitmapDescriptor mpViewBackground;
         bool mbIsActive;
-        bool mbNeedsClipping;
         bool mbIsOpaque;
         SpriteProvider maSpriteProvider;
         bool mbIsSprite;
-        Activator maActivator;
         css::awt::Point maCalloutAnchorLocation;
-        bool mbHasCalloutAnchor;
 
         void SetActivationState (const bool bIsActive);
     };
@@ -118,11 +108,7 @@ public:
         const OUString& rsTitle,
         const OUString& rsAccessibleTitle,
         const bool bIsOpaque,
-        const ViewInitializationFunction& rViewIntialization,
-        const double nLeft,
-        const double nTop,
-        const double nRight,
-        const double nBottom);
+        const ViewInitializationFunction& rViewIntialization);
 
     SharedPaneDescriptor StorePane (
         const rtl::Reference<PresenterPaneBase>& rxPane);
@@ -171,8 +157,7 @@ public:
     // XEventListener
 
     virtual void SAL_CALL disposing (
-        const css::lang::EventObject& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& rEvent) override;
 
 private:
     css::uno::Reference<css::drawing::XPresenterHelper> mxPresenterHelper;

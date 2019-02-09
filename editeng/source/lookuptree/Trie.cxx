@@ -16,18 +16,16 @@ using namespace std;
 
 /* TrieNode */
 
-struct TrieNode
+struct TrieNode final
 {
     static const int LATIN_ARRAY_SIZE = 26;
 
     sal_Unicode             mCharacter;
     bool                    mMarker;
-    std::vector<TrieNode*>  mChildren;
-    TrieNode*               mLatinArray[LATIN_ARRAY_SIZE];
-
+    std::vector<std::unique_ptr<TrieNode>>  mChildren;
+    std::unique_ptr<TrieNode> mLatinArray[LATIN_ARRAY_SIZE];
 
     explicit TrieNode(sal_Unicode aCharacter = '\0');
-    virtual ~TrieNode();
 
     void      markWord();
     TrieNode* findChild(sal_Unicode aCharacter);
@@ -41,23 +39,9 @@ TrieNode::TrieNode(sal_Unicode aCharacter) :
     mCharacter(aCharacter),
     mMarker(false)
 {
-    for (int i=0; i<LATIN_ARRAY_SIZE; i++)
+    for (auto & i : mLatinArray)
     {
-        mLatinArray[i] = nullptr;
-    }
-}
-
-TrieNode::~TrieNode()
-{
-    vector<TrieNode*>::iterator iNode;
-    for(iNode = mChildren.begin(); iNode != mChildren.end(); ++iNode)
-    {
-        delete *iNode;
-    }
-
-    for (int i=0; i<LATIN_ARRAY_SIZE; i++)
-    {
-        delete mLatinArray[i];
+        i = nullptr;
     }
 }
 
@@ -71,11 +55,11 @@ void TrieNode::addNewChild(TrieNode* pChild)
     if (pChild->mCharacter >= 'a' &&
         pChild->mCharacter <= 'z')
     {
-        mLatinArray[pChild->mCharacter - sal_Unicode('a')] = pChild;
+        mLatinArray[pChild->mCharacter - u'a'].reset(pChild);
     }
     else
     {
-        mChildren.push_back(pChild);
+        mChildren.push_back(std::unique_ptr<TrieNode>(pChild));
     }
 }
 
@@ -84,16 +68,13 @@ TrieNode* TrieNode::findChild(sal_Unicode aInputCharacter)
     if (aInputCharacter >= 'a' &&
         aInputCharacter <= 'z')
     {
-        return mLatinArray[aInputCharacter - sal_Unicode('a')];
+        return mLatinArray[aInputCharacter - u'a'].get();
     }
 
-    vector<TrieNode*>::iterator iNode;
-
-    for(iNode = mChildren.begin(); iNode != mChildren.end(); ++iNode)
+    for(auto const & pCurrent : mChildren)
     {
-        TrieNode* pCurrent = *iNode;
         if ( pCurrent->mCharacter == aInputCharacter )
-            return pCurrent;
+            return pCurrent.get();
     }
 
     return nullptr;
@@ -102,31 +83,28 @@ TrieNode* TrieNode::findChild(sal_Unicode aInputCharacter)
 void TrieNode::collectSuggestions(const OUString& sPath, vector<OUString>& rSuggestionList)
 {
     // first traverse nodes for alphabet characters
-    for (int i=0; i<LATIN_ARRAY_SIZE; i++)
+    for (auto const & pCurrent : mLatinArray)
     {
-        TrieNode* pCurrent = mLatinArray[i];
         if (pCurrent != nullptr)
-            collectSuggestionsForCurrentNode(pCurrent, sPath, rSuggestionList);
+            collectSuggestionsForCurrentNode(pCurrent.get(), sPath, rSuggestionList);
     }
 
     // traverse nodes for other characters
-    vector<TrieNode*>::iterator iNode;
-    for(iNode = mChildren.begin(); iNode != mChildren.end(); ++iNode)
+    for(auto const & pCurrent : mChildren)
     {
-        TrieNode* pCurrent = *iNode;
         if (pCurrent != nullptr)
-            collectSuggestionsForCurrentNode(pCurrent, sPath, rSuggestionList);
+            collectSuggestionsForCurrentNode(pCurrent.get(), sPath, rSuggestionList);
     }
 }
 
 void TrieNode::collectSuggestionsForCurrentNode(TrieNode* pCurrent, const OUString& sPath, vector<OUString>& rSuggestionList)
 {
-    OUString aStringPath = sPath + OUString(pCurrent->mCharacter);
+    OUString aStringPath = sPath + OUStringLiteral1(pCurrent->mCharacter);
     if(pCurrent->mMarker)
     {
         rSuggestionList.push_back(aStringPath);
     }
-    // recursivly descend tree
+    // recursively descend tree
     pCurrent->collectSuggestions(aStringPath, rSuggestionList);
 }
 

@@ -38,24 +38,21 @@ public:
 
     ExcScenarioCell( const sal_uInt16 nC, const sal_uInt16 nR );
 
-    inline void SetValue( const OUString& rVal ) { aValue = rVal; }
+    void SetValue( const OUString& rVal ) { aValue = rVal; }
 
-    inline const OUString& GetValue() const { return aValue; }
+    const OUString& GetValue() const { return aValue; }
 };
 
-class ExcScenario
+class ExcScenario final
 {
 public:
-
     ExcScenario( XclImpStream& rIn, const RootData& rRoot );
 
-    void Apply( const XclImpRoot& rRoot, const bool bLast = false );
+    void Apply( const XclImpRoot& rRoot, const bool bLast );
 
-protected:
-
+private:
     OUString         aName;
     OUString         aComment;
-    OUString         aUserName;
     sal_uInt8        nProtected;
     const sal_uInt16 nTab;
     std::vector<ExcScenarioCell> aEntries;

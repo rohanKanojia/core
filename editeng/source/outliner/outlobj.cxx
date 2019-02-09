@@ -21,27 +21,28 @@
 #include <editeng/editeng.hxx>
 #include <editeng/editview.hxx>
 #include <editeng/editdata.hxx>
-#include <editeng/eerdll.hxx>
 #include <editeng/lrspitem.hxx>
 #include <editeng/fhgtitem.hxx>
 
 #include <editeng/outliner.hxx>
 #include <editeng/outlobj.hxx>
-#include <outleeng.hxx>
+#include "outleeng.hxx"
 #include <editeng/editobj.hxx>
 #include <vcl/bitmap.hxx>
 #include <tools/stream.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
 #include <o3tl/cow_wrapper.hxx>
 #include <libxml/xmlwriter.h>
 
-OutlinerParaObjData::OutlinerParaObjData( EditTextObject* pEditTextObject, const ParagraphDataVector& rParagraphDataVector, bool bIsEditDoc ) :
-    mpEditTextObject(pEditTextObject),
+OutlinerParaObjData::OutlinerParaObjData( std::unique_ptr<EditTextObject> pEditTextObject, const ParagraphDataVector& rParagraphDataVector, bool bIsEditDoc ) :
+    mpEditTextObject(std::move(pEditTextObject)),
     maParagraphDataVector(rParagraphDataVector),
     mbIsEditDoc(bIsEditDoc)
 {
-    if( maParagraphDataVector.empty() && (pEditTextObject->GetParagraphCount() != 0) )
-        maParagraphDataVector.resize(pEditTextObject->GetParagraphCount());
+    if( maParagraphDataVector.empty() && (mpEditTextObject->GetParagraphCount() != 0) )
+        maParagraphDataVector.resize(mpEditTextObject->GetParagraphCount());
 }
 
 OutlinerParaObjData::OutlinerParaObjData( const OutlinerParaObjData& r ):
@@ -53,7 +54,6 @@ OutlinerParaObjData::OutlinerParaObjData( const OutlinerParaObjData& r ):
 
 OutlinerParaObjData::~OutlinerParaObjData()
 {
-    delete mpEditTextObject;
 }
 
 bool OutlinerParaObjData::operator==(const OutlinerParaObjData& rCandidate) const
@@ -76,6 +76,11 @@ OutlinerParaObject::OutlinerParaObject(
 
 OutlinerParaObject::OutlinerParaObject( const EditTextObject& rTextObj ) :
     mpImpl(OutlinerParaObjData(rTextObj.Clone(), ParagraphDataVector(), true))
+{
+}
+
+OutlinerParaObject::OutlinerParaObject( std::unique_ptr<EditTextObject> pTextObj ) :
+    mpImpl(OutlinerParaObjData(std::move(pTextObj), ParagraphDataVector(), true))
 {
 }
 
@@ -110,12 +115,12 @@ bool OutlinerParaObject::isWrongListEqual( const OutlinerParaObject& r ) const
     return mpImpl->isWrongListEqual(*r.mpImpl);
 }
 
-sal_uInt16 OutlinerParaObject::GetOutlinerMode() const
+OutlinerMode OutlinerParaObject::GetOutlinerMode() const
 {
     return mpImpl->mpEditTextObject->GetUserType();
 }
 
-void OutlinerParaObject::SetOutlinerMode(sal_uInt16 nNew)
+void OutlinerParaObject::SetOutlinerMode(OutlinerMode nNew)
 {
     // create a const pointer to avoid an early call to
     // make_unique() in the dereference of mpImpl
@@ -131,12 +136,18 @@ bool OutlinerParaObject::IsVertical() const
     return mpImpl->mpEditTextObject->IsVertical();
 }
 
-void OutlinerParaObject::SetVertical(bool bNew)
+bool OutlinerParaObject::IsTopToBottom() const
+{
+    return mpImpl->mpEditTextObject->IsTopToBottom();
+}
+
+void OutlinerParaObject::SetVertical(bool bNew, bool bTopToBottom)
 {
     const ::o3tl::cow_wrapper< OutlinerParaObjData >* pImpl = &mpImpl;
-    if ( ( *pImpl )->mpEditTextObject->IsVertical() != bNew )
+    if ( ( *pImpl )->mpEditTextObject->IsVertical() != bNew ||
+        (*pImpl)->mpEditTextObject->IsTopToBottom() != (bNew && bTopToBottom))
     {
-        mpImpl->mpEditTextObject->SetVertical(bNew);
+        mpImpl->mpEditTextObject->SetVertical(bNew, bTopToBottom);
     }
 }
 
@@ -166,11 +177,6 @@ sal_Int16 OutlinerParaObject::GetDepth(sal_Int32 nPara) const
 const EditTextObject& OutlinerParaObject::GetTextObject() const
 {
     return *mpImpl->mpEditTextObject;
-}
-
-bool OutlinerParaObject::IsEditDoc() const
-{
-    return mpImpl->mbIsEditDoc;
 }
 
 const ParagraphData& OutlinerParaObject::GetParagraphData(sal_Int32 nIndex) const
@@ -225,9 +231,11 @@ void OutlinerParaObject::SetStyleSheets(sal_uInt16 nLevel, const OUString& rNewN
 
 void OutlinerParaObject::dumpAsXml(xmlTextWriterPtr pWriter) const
 {
-    xmlTextWriterStartElement(pWriter, BAD_CAST("outlinerParaObject"));
+    xmlTextWriterStartElement(pWriter, BAD_CAST("OutlinerParaObject"));
     xmlTextWriterWriteFormatAttribute(pWriter, BAD_CAST("ptr"), "%p", this);
-    GetTextObject().dumpAsXml(pWriter);
+    mpImpl->mpEditTextObject->dumpAsXml(pWriter);
+    for (Paragraph const & p : mpImpl->maParagraphDataVector)
+        p.dumpAsXml(pWriter);
     xmlTextWriterEndElement(pWriter);
 }
 

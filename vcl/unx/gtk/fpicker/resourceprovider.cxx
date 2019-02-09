@@ -17,15 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/diagnose.h>
 #include <vcl/svapp.hxx>
-#include <tools/resmgr.hxx>
+#include <unotools/resmgr.hxx>
 #include <com/sun/star/ui/dialogs/CommonFilePickerElementIds.hpp>
 #include <com/sun/star/ui/dialogs/ExtendedFilePickerElementIds.hpp>
 
-#include "svids.hrc"
-#include "svdata.hxx"
-#include "gtk/fpicker/SalGtkPicker.hxx"
+#include <strings.hrc>
+#include <svdata.hxx>
+#include <gtk/fpicker/SalGtkPicker.hxx>
 
 using namespace ::com::sun::star::ui::dialogs::ExtendedFilePickerElementIds;
 using namespace ::com::sun::star::ui::dialogs::CommonFilePickerElementIds;
@@ -34,11 +33,12 @@ using namespace ::com::sun::star::ui::dialogs::CommonFilePickerElementIds;
 
 static const struct
 {
-    sal_Int32 ctrlId;
-    sal_Int16 resId;
+    sal_Int32 const ctrlId;
+    const char *resId;
 } CtrlIdToResIdTable[] = {
     { CHECKBOX_AUTOEXTENSION,                   STR_FPICKER_AUTO_EXTENSION },
     { CHECKBOX_PASSWORD,                        STR_FPICKER_PASSWORD },
+    { CHECKBOX_GPGENCRYPTION,                   STR_FPICKER_GPGENCRYPT },
     { CHECKBOX_FILTEROPTIONS,                   STR_FPICKER_FILTER_OPTIONS },
     { CHECKBOX_READONLY,                        STR_FPICKER_READONLY },
     { CHECKBOX_LINK,                            STR_FPICKER_INSERT_AS_LINK },
@@ -47,6 +47,7 @@ static const struct
     { LISTBOX_VERSION_LABEL,                    STR_FPICKER_VERSION },
     { LISTBOX_TEMPLATE_LABEL,                   STR_FPICKER_TEMPLATES },
     { LISTBOX_IMAGE_TEMPLATE_LABEL,             STR_FPICKER_IMAGE_TEMPLATE },
+    { LISTBOX_IMAGE_ANCHOR_LABEL,               STR_FPICKER_IMAGE_ANCHOR },
     { CHECKBOX_SELECTION,                       STR_FPICKER_SELECTION },
     { FOLDERPICKER_TITLE,                       STR_FPICKER_FOLDER_DEFAULT_TITLE },
     { FOLDER_PICKER_DEF_DESCRIPTION,            STR_FPICKER_FOLDER_DEFAULT_DESCRIPTION },
@@ -58,30 +59,23 @@ static const struct
     { FILE_PICKER_FILE_TYPE,                    STR_FPICKER_TYPE }
 };
 
-static sal_Int16 CtrlIdToResId( sal_Int32 aControlId )
+static const char* CtrlIdToResId( sal_Int32 aControlId )
 {
-    for ( size_t i = 0; i < SAL_N_ELEMENTS( CtrlIdToResIdTable ); i++ )
+    for (auto & i : CtrlIdToResIdTable)
     {
-        if ( CtrlIdToResIdTable[i].ctrlId == aControlId )
-            return CtrlIdToResIdTable[i].resId;
+        if ( i.ctrlId == aControlId )
+            return i.resId;
     }
-    return -1;
+    return nullptr;
 }
 
 OUString SalGtkPicker::getResString( sal_Int32 aId )
 {
     OUString aResString;
-    try
-    {
-        // translate the control id to a resource id
-        sal_Int16 aResId = CtrlIdToResId( aId );
-        if ( aResId > -1 )
-            aResString = ResId(aResId, *ImplGetResMgr()).toString();
-    }
-    catch(...)
-    {
-    }
-
+    // translate the control id to a resource id
+    const char *pResId = CtrlIdToResId( aId );
+    if (pResId)
+        aResString = VclResId(pResId);
     return aResString.replace('~', '_');
 }
 

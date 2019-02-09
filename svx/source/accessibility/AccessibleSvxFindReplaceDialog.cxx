@@ -39,56 +39,54 @@ VCLXAccessibleSvxFindReplaceDialog::~VCLXAccessibleSvxFindReplaceDialog()
 void VCLXAccessibleSvxFindReplaceDialog::FillAccessibleRelationSet( utl::AccessibleRelationSetHelper& rRelationSet )
 {
     VCLXAccessibleComponent::FillAccessibleRelationSet( rRelationSet );
-    vcl::Window* pDlg = GetWindow();
-    if ( pDlg )
+    VclPtr<vcl::Window> pDlg = GetWindow();
+    if ( !pDlg )
+        return;
+
+    SvxSearchDialog* pSrchDlg = static_cast<SvxSearchDialog*>( pDlg.get() );
+    vcl::Window* pDocWin = pSrchDlg->GetDocWin();
+    if ( !pDocWin )
     {
-        SvxSearchDialog* pSrchDlg = static_cast<SvxSearchDialog*>( pDlg );
-        vcl::Window* pDocWin = pSrchDlg->GetDocWin();
-        if ( !pDocWin )
-        {
-            return;
-        }
-        Reference < css::accessibility::XAccessible > xDocAcc = pDocWin->GetAccessible();
-        if ( !xDocAcc.is() )
-        {
-            return;
-        }
-        Reference< css::accessibility::XAccessibleGetAccFlowTo > xGetAccFlowTo( xDocAcc, UNO_QUERY );
-        if ( !xGetAccFlowTo.is() )
-        {
-            return;
-        }
-        Any aAny;
-        aAny <<= ( pSrchDlg->GetSrchFlag() );
+        return;
+    }
+    Reference < css::accessibility::XAccessible > xDocAcc = pDocWin->GetAccessible();
+    if ( !xDocAcc.is() )
+    {
+        return;
+    }
+    Reference< css::accessibility::XAccessibleGetAccFlowTo > xGetAccFlowTo( xDocAcc, UNO_QUERY );
+    if ( !xGetAccFlowTo.is() )
+    {
+        return;
+    }
 
-        const sal_Int32 FORFINDREPLACEFLOWTO = 2;
-        uno::Sequence<uno::Any> aAnySeq = xGetAccFlowTo->getAccFlowTo( aAny,  FORFINDREPLACEFLOWTO );
+    const sal_Int32 FORFINDREPLACEFLOWTO = 2;
+    uno::Sequence<uno::Any> aAnySeq = xGetAccFlowTo->getAccFlowTo( Any(pSrchDlg->GetSrchFlag()),  FORFINDREPLACEFLOWTO );
 
-        sal_Int32 nLen = aAnySeq.getLength();
-        if ( nLen )
+    sal_Int32 nLen = aAnySeq.getLength();
+    if ( nLen )
+    {
+        uno::Sequence< uno::Reference< uno::XInterface > > aSequence( nLen );
+        for ( sal_Int32 i = 0; i < nLen; i++ )
         {
-            uno::Sequence< uno::Reference< uno::XInterface > > aSequence( nLen );
-            for ( sal_Int32 i = 0; i < nLen; i++ )
-            {
-                uno::Reference < css::accessibility::XAccessible > xAcc;
-                aAnySeq[i] >>= xAcc;
-                aSequence[i] = xAcc;
-            }
-            rRelationSet.AddRelation( css::accessibility::AccessibleRelation( css::accessibility::AccessibleRelationType::CONTENT_FLOWS_TO, aSequence ) );
+            uno::Reference < css::accessibility::XAccessible > xAcc;
+            aAnySeq[i] >>= xAcc;
+            aSequence[i] = xAcc;
         }
+        rRelationSet.AddRelation( css::accessibility::AccessibleRelation( css::accessibility::AccessibleRelationType::CONTENT_FLOWS_TO, aSequence ) );
     }
 }
 
 // XServiceInfo
 
 
-OUString VCLXAccessibleSvxFindReplaceDialog::getImplementationName() throw (RuntimeException, std::exception)
+OUString VCLXAccessibleSvxFindReplaceDialog::getImplementationName()
 {
     return OUString( "VCLXAccessibleSvxFindReplaceDialog" );
 }
 
 
-Sequence< OUString > VCLXAccessibleSvxFindReplaceDialog::getSupportedServiceNames() throw (RuntimeException, std::exception)
+Sequence< OUString > VCLXAccessibleSvxFindReplaceDialog::getSupportedServiceNames()
 {
     Sequence< OUString > aNames { "VCLXAccessibleSvxFindReplaceDialog" };
     return aNames;

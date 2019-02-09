@@ -22,9 +22,6 @@
 
 #include <com/sun/star/logging/LoggerPool.hpp>
 #include <com/sun/star/logging/LogLevel.hpp>
-#include <com/sun/star/resource/OfficeResourceLoader.hpp>
-#include <com/sun/star/resource/XResourceBundle.hpp>
-#include <com/sun/star/resource/XResourceBundleLoader.hpp>
 
 #include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
@@ -32,8 +29,6 @@
 
 namespace comphelper
 {
-
-
     using ::com::sun::star::uno::Reference;
     using ::com::sun::star::uno::XComponentContext;
     using ::com::sun::star::logging::XLoggerPool;
@@ -41,48 +36,33 @@ namespace comphelper
     using ::com::sun::star::logging::XLogger;
     using ::com::sun::star::uno::UNO_QUERY_THROW;
     using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::logging::XLogHandler;
-    using ::com::sun::star::resource::XResourceBundle;
-    using ::com::sun::star::resource::XResourceBundleLoader;
-
-    namespace LogLevel = ::com::sun::star::logging::LogLevel;
 
     class EventLogger_Impl
     {
     private:
         Reference< XComponentContext >  m_aContext;
-        OUString                 m_sLoggerName;
         Reference< XLogger >            m_xLogger;
 
     public:
-        EventLogger_Impl( const Reference< XComponentContext >& _rxContext, const OUString& _rLoggerName )
-            :m_aContext( _rxContext )
-            ,m_sLoggerName( _rLoggerName )
-        {
-            impl_createLogger_nothrow();
-        }
+        EventLogger_Impl( const Reference< XComponentContext >& _rxContext, const OUString& _rLoggerName );
 
         bool isValid() const { return m_xLogger.is(); }
         const Reference< XLogger >& getLogger() const { return m_xLogger; }
-        const Reference< XComponentContext >& getContext() const { return m_aContext; }
-
-    private:
-        void    impl_createLogger_nothrow();
     };
 
-    void EventLogger_Impl::impl_createLogger_nothrow()
+    EventLogger_Impl::EventLogger_Impl( const Reference< XComponentContext >& _rxContext, const OUString& _rLoggerName )
+        :m_aContext( _rxContext )
     {
         try
         {
             Reference< XLoggerPool > xPool( LoggerPool::get( m_aContext ) );
-            if ( !m_sLoggerName.isEmpty() )
-                m_xLogger = xPool->getNamedLogger( m_sLoggerName );
+            if ( !_rLoggerName.isEmpty() )
+                m_xLogger = xPool->getNamedLogger( _rLoggerName );
             else
                 m_xLogger = xPool->getDefaultLogger();
         }
-        catch( const Exception& e )
+        catch( const Exception& )
         {
-            (void)e;
             OSL_FAIL( "EventLogger_Impl::impl_createLogger_nothrow: caught an exception!" );
         }
     }
@@ -91,12 +71,6 @@ namespace comphelper
         :m_pImpl( new EventLogger_Impl( _rxContext, OUString::createFromAscii( _pAsciiLoggerName ) ) )
     {
     }
-
-
-    EventLogger::~EventLogger()
-    {
-    }
-
 
     bool EventLogger::isLoggable( const sal_Int32 _nLogLevel ) const
     {
@@ -107,13 +81,17 @@ namespace comphelper
         {
             return m_pImpl->getLogger()->isLoggable( _nLogLevel );
         }
-        catch( const Exception& e )
+        catch( const Exception& )
         {
-            (void)e;
             OSL_FAIL( "EventLogger::isLoggable: caught an exception!" );
         }
 
         return false;
+    }
+
+    const css::uno::Reference<css::logging::XLogger> EventLogger::getLogger()
+    {
+        return m_pImpl->getLogger();
     }
 
 
@@ -131,7 +109,7 @@ namespace comphelper
     }
 
 
-    bool EventLogger::impl_log( const sal_Int32 _nLogLevel,
+    void EventLogger::impl_log( const sal_Int32 _nLogLevel,
         const sal_Char* _pSourceClass, const sal_Char* _pSourceMethod, const OUString& _rMessage,
         const OptionalString& _rArgument1, const OptionalString& _rArgument2,
         const OptionalString& _rArgument3, const OptionalString& _rArgument4,
@@ -174,106 +152,11 @@ namespace comphelper
                 xLogger->log( _nLogLevel, sMessage );
             }
         }
-        catch( const Exception& e )
+        catch( const Exception& )
         {
-            (void)e;
             OSL_FAIL( "EventLogger::impl_log: caught an exception!" );
         }
-
-        return false;
     }
-
-    struct ResourceBasedEventLogger_Data
-    {
-        /// the base name of the resource bundle
-        OUString                 sBundleBaseName;
-        /// did we already attempt to load the bundle?
-        bool                            bBundleLoaded;
-        /// the lazily loaded bundle
-        Reference< XResourceBundle >    xBundle;
-
-        ResourceBasedEventLogger_Data()
-            :sBundleBaseName()
-            ,bBundleLoaded( false )
-            ,xBundle()
-        {
-        }
-    };
-
-
-    bool    lcl_loadBundle_nothrow( Reference< XComponentContext > const & _rContext, ResourceBasedEventLogger_Data& _rLoggerData )
-    {
-        if ( _rLoggerData.bBundleLoaded )
-            return _rLoggerData.xBundle.is();
-
-        // no matter what happens below, don't attempt creation ever again
-        _rLoggerData.bBundleLoaded = true;
-
-        try
-        {
-            Reference< XResourceBundleLoader > xLoader(
-                css::resource::OfficeResourceLoader::get(
-                    _rContext ) );
-            _rLoggerData.xBundle.set( xLoader->loadBundle_Default( _rLoggerData.sBundleBaseName ), UNO_QUERY_THROW );
-        }
-        catch( const Exception& e )
-        {
-            (void)e;
-            OSL_FAIL( "lcl_loadBundle_nothrow: caught an exception!" );
-        }
-
-        return _rLoggerData.xBundle.is();
-    }
-
-
-    OUString lcl_loadString_nothrow( const Reference< XResourceBundle >& _rxBundle, const sal_Int32 _nMessageResID )
-    {
-        OSL_PRECOND( _rxBundle.is(), "lcl_loadString_nothrow: this will crash!" );
-        OUString sMessage;
-        try
-        {
-            OUStringBuffer aBuffer;
-            aBuffer.append( "string:" );
-            aBuffer.append( _nMessageResID );
-            OSL_VERIFY( _rxBundle->getDirectElement( aBuffer.makeStringAndClear() ) >>= sMessage );
-        }
-        catch( const Exception& e )
-        {
-            (void)e;
-            OSL_FAIL( "lcl_loadString_nothrow: caught an exception!" );
-        }
-        return sMessage;
-    }
-
-    ResourceBasedEventLogger::ResourceBasedEventLogger( const Reference< XComponentContext >& _rxContext, const sal_Char* _pResourceBundleBaseName,
-        const sal_Char* _pAsciiLoggerName )
-        :EventLogger( _rxContext, _pAsciiLoggerName )
-        ,m_pData( new ResourceBasedEventLogger_Data )
-    {
-        m_pData->sBundleBaseName = OUString::createFromAscii( _pResourceBundleBaseName );
-    }
-
-
-    OUString ResourceBasedEventLogger::impl_loadStringMessage_nothrow( const sal_Int32 _nMessageResID ) const
-    {
-        OUString sMessage;
-        if ( lcl_loadBundle_nothrow( m_pImpl->getContext(), *m_pData ) )
-            sMessage = lcl_loadString_nothrow( m_pData->xBundle, _nMessageResID );
-        if ( sMessage.isEmpty() )
-        {
-            OUStringBuffer aBuffer;
-            aBuffer.append( "<invalid event resource: '" );
-            aBuffer.append( m_pData->sBundleBaseName );
-            aBuffer.append( ":" );
-            aBuffer.append( _nMessageResID );
-            aBuffer.append( "'>" );
-            sMessage = aBuffer.makeStringAndClear();
-        }
-        return sMessage;
-    }
-
-
 } // namespace comphelper
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

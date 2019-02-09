@@ -17,13 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ChartModel.hxx"
-#include "MediaDescriptorHelper.hxx"
-#include "macros.hxx"
-#include "ChartViewHelper.hxx"
-#include "ChartModelHelper.hxx"
-#include "AxisHelper.hxx"
-#include "ThreeDHelper.hxx"
+#include <memory>
+#include <ChartModel.hxx>
+#include <MediaDescriptorHelper.hxx>
+#include <ChartViewHelper.hxx>
+#include <ChartModelHelper.hxx>
+#include <DataSourceHelper.hxx>
+#include <AxisHelper.hxx>
+#include <ThreeDHelper.hxx>
+#include <DiagramHelper.hxx>
 
 #include <com/sun/star/chart2/LegendPosition.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
@@ -36,23 +38,27 @@
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/embed/XStorage.hpp>
 #include <com/sun/star/embed/StorageFactory.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
-#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/io/TempFile.hpp>
 #include <com/sun/star/io/XSeekable.hpp>
 #include <com/sun/star/ucb/CommandFailedException.hpp>
+#include <com/sun/star/ucb/ContentCreationException.hpp>
+
+#include <com/sun/star/chart2/data/XPivotTableDataProvider.hpp>
 
 #include <ucbhelper/content.hxx>
 #include <unotools/ucbstreamhelper.hxx>
 #include <vcl/cvtgrf.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/storagehelper.hxx>
-#include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/svapp.hxx>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 #include <algorithm>
-#include <functional>
 
 using namespace ::com::sun::star;
 
@@ -62,14 +68,14 @@ using ::osl::MutexGuard;
 
 namespace
 {
-struct lcl_PropNameEquals : public ::std::unary_function< beans::PropertyValue, bool >
+struct lcl_PropNameEquals
 {
     explicit lcl_PropNameEquals( const OUString & rStrToCompareWith ) :
             m_aStr( rStrToCompareWith )
     {}
     bool operator() ( const beans::PropertyValue & rProp )
     {
-        return rProp.Name.equals( m_aStr );
+        return rProp.Name == m_aStr;
     }
 private:
     OUString m_aStr;
@@ -85,7 +91,7 @@ T lcl_getProperty(
     {
         const beans::PropertyValue * pIt = rMediaDescriptor.getConstArray();
         const beans::PropertyValue * pEndIt = pIt +  + rMediaDescriptor.getLength();
-        pIt = ::std::find_if( pIt, pEndIt, lcl_PropNameEquals( rPropName ));
+        pIt = std::find_if( pIt, pEndIt, lcl_PropNameEquals( rPropName ));
         if( pIt != pEndIt )
             (*pIt).Value >>= aResult;
     }
@@ -98,7 +104,7 @@ void lcl_addStorageToMediaDescriptor(
 {
     rOutMD.realloc( rOutMD.getLength() + 1 );
     rOutMD[rOutMD.getLength() - 1] = beans::PropertyValue(
-        "Storage", -1, uno::makeAny( xStorage ), beans::PropertyState_DIRECT_VALUE );
+        "Storage", -1, uno::Any( xStorage ), beans::PropertyState_DIRECT_VALUE );
 }
 
 Reference< embed::XStorage > lcl_createStorage(
@@ -124,15 +130,14 @@ Reference< embed::XStorage > lcl_createStorage(
         aStorageArgs[2] <<= rMediaDescriptor;
         xStorage.set(
             xStorageFact->createInstanceWithArguments( aStorageArgs ), uno::UNO_QUERY_THROW );
-        OSL_ENSURE( xStorage.is(), "No Storage" );
     }
-    catch(const css::ucb::ContentCreationException& rEx)
+    catch(const css::ucb::ContentCreationException&)
     {
-        ASSERT_EXCEPTION( rEx );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
-    catch(const css::ucb::CommandFailedException& rEx)
+    catch(const css::ucb::CommandFailedException&)
     {
-        ASSERT_EXCEPTION( rEx );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return xStorage;
@@ -179,9 +184,9 @@ Reference< document::XFilter > ChartModel::impl_createFilter(
                 }
             }
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
         OSL_ENSURE( xFilter.is(), "Filter not found via factory" );
     }
@@ -189,7 +194,7 @@ Reference< document::XFilter > ChartModel::impl_createFilter(
     // fall-back: create XML-Filter
     if( ! xFilter.is())
     {
-        OSL_TRACE( "No FilterName passed in MediaDescriptor" );
+        SAL_WARN("chart2", "No FilterName passed in MediaDescriptor" );
         xFilter.set(
             m_xContext->getServiceManager()->createInstanceWithContext(
                 "com.sun.star.comp.chart2.XMLFilter", m_xContext ),
@@ -202,9 +207,6 @@ Reference< document::XFilter > ChartModel::impl_createFilter(
 // frame::XStorable2
 
 void SAL_CALL ChartModel::storeSelf( const Sequence< beans::PropertyValue >& rMediaDescriptor )
-    throw (lang::IllegalArgumentException,
-           io::IOException,
-           uno::RuntimeException, std::exception)
 {
     // only some parameters are allowed (see also SfxBaseModel)
     // "VersionComment", "Author", "InteractionHandler", "StatusIndicator"
@@ -215,28 +217,23 @@ void SAL_CALL ChartModel::storeSelf( const Sequence< beans::PropertyValue >& rMe
 
 // frame::XStorable (base of XStorable2)
 sal_Bool SAL_CALL ChartModel::hasLocation()
-    throw(uno::RuntimeException, std::exception)
 {
     //@todo guard
     return !m_aResource.isEmpty();
 }
 
 OUString SAL_CALL ChartModel::getLocation()
-    throw(uno::RuntimeException, std::exception)
 {
     return impl_g_getLocation();
 }
 
 sal_Bool SAL_CALL ChartModel::isReadonly()
-    throw(uno::RuntimeException, std::exception)
 {
     //@todo guard
     return m_bReadOnly;
 }
 
 void SAL_CALL ChartModel::store()
-    throw(io::IOException,
-          uno::RuntimeException, std::exception)
 {
     apphelper::LifeTimeGuard aGuard(m_aLifeTimeManager);
     if(!aGuard.startApiCall(true)) //start LongLastingCall
@@ -259,7 +256,6 @@ void SAL_CALL ChartModel::store()
 void SAL_CALL ChartModel::storeAsURL(
     const OUString& rURL,
     const uno::Sequence< beans::PropertyValue >& rMediaDescriptor )
-    throw(io::IOException, uno::RuntimeException, std::exception)
 {
     apphelper::LifeTimeGuard aGuard(m_aLifeTimeManager);
     if(!aGuard.startApiCall(true)) //start LongLastingCall
@@ -285,8 +281,6 @@ void SAL_CALL ChartModel::storeAsURL(
 void SAL_CALL ChartModel::storeToURL(
     const OUString& rURL,
     const uno::Sequence< beans::PropertyValue >& rMediaDescriptor )
-    throw(io::IOException,
-          uno::RuntimeException, std::exception)
 {
     apphelper::LifeTimeGuard aGuard(m_aLifeTimeManager);
     if(!aGuard.startApiCall(true)) //start LongLastingCall
@@ -321,9 +315,9 @@ void SAL_CALL ChartModel::storeToURL(
                 }
             }
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
     else
@@ -351,9 +345,9 @@ void ChartModel::impl_store(
             xExporter->setSourceDocument( Reference< lang::XComponent >( this ));
             xFilter->filter( aMD );
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
     else
@@ -361,7 +355,7 @@ void ChartModel::impl_store(
         OSL_FAIL( "No filter" );
     }
 
-    setModified( sal_False );
+    setModified( false );
 
     //#i66865#
     //for data change notification during chart is not loaded:
@@ -375,7 +369,7 @@ void ChartModel::impl_store(
         {
             xPropSet->setPropertyValue(
                 "SavedObject",
-                uno::makeAny( aMDHelper.HierarchicalDocumentName ) );
+                uno::Any( aMDHelper.HierarchicalDocumentName ) );
         }
         catch ( const uno::Exception& )
         {
@@ -386,7 +380,7 @@ void ChartModel::impl_store(
 void ChartModel::insertDefaultChart()
 {
     lockControllers();
-    createInternalDataProvider( sal_False );
+    createInternalDataProvider( false );
     try
     {
         // create default chart
@@ -402,7 +396,7 @@ void ChartModel::insertDefaultChart()
                 if( bSupportsCategories )
                 {
                     aParam.realloc( 1 );
-                    aParam[0] = beans::PropertyValue( "HasCategories", -1, uno::makeAny( true ),
+                    aParam[0] = beans::PropertyValue( "HasCategories", -1, uno::Any( true ),
                                                       beans::PropertyState_DIRECT_VALUE );
                 }
 
@@ -422,13 +416,13 @@ void ChartModel::insertDefaultChart()
                 Reference< beans::XPropertySet > xLegendProperties( xLegend, uno::UNO_QUERY );
                 if( xLegendProperties.is() )
                 {
-                    xLegendProperties->setPropertyValue( "FillStyle", uno::makeAny( drawing::FillStyle_NONE ));
-                    xLegendProperties->setPropertyValue( "LineStyle", uno::makeAny( drawing::LineStyle_NONE ));
-                    xLegendProperties->setPropertyValue( "LineColor", uno::makeAny( static_cast< sal_Int32 >( 0xb3b3b3 ) ));  // gray30
-                    xLegendProperties->setPropertyValue( "FillColor", uno::makeAny( static_cast< sal_Int32 >( 0xe6e6e6 ) ) ); // gray10
+                    xLegendProperties->setPropertyValue( "FillStyle", uno::Any( drawing::FillStyle_NONE ));
+                    xLegendProperties->setPropertyValue( "LineStyle", uno::Any( drawing::LineStyle_NONE ));
+                    xLegendProperties->setPropertyValue( "LineColor", uno::Any( static_cast< sal_Int32 >( 0xb3b3b3 ) ));  // gray30
+                    xLegendProperties->setPropertyValue( "FillColor", uno::Any( static_cast< sal_Int32 >( 0xe6e6e6 ) ) ); // gray10
 
                     if( bIsRTL )
-                        xLegendProperties->setPropertyValue( "AnchorPosition", uno::makeAny( chart2::LegendPosition_LINE_START ));
+                        xLegendProperties->setPropertyValue( "AnchorPosition", uno::Any( chart2::LegendPosition_LINE_START ));
                 }
                 if(xDiagram.is())
                     xDiagram->setLegend( xLegend );
@@ -437,8 +431,8 @@ void ChartModel::insertDefaultChart()
                 Reference< beans::XPropertySet > xDiagramProperties( xDiagram, uno::UNO_QUERY );
                 if( xDiagramProperties.is() )
                 {
-                    xDiagramProperties->setPropertyValue( "RightAngledAxes", uno::makeAny( sal_True ));
-                    xDiagramProperties->setPropertyValue( "D3DScenePerspective", uno::makeAny( drawing::ProjectionMode_PARALLEL ));
+                    xDiagramProperties->setPropertyValue( "RightAngledAxes", uno::Any( true ));
+                    xDiagramProperties->setPropertyValue( "D3DScenePerspective", uno::Any( drawing::ProjectionMode_PARALLEL ));
                     ThreeDHelper::setScheme( xDiagram, ThreeDLookScheme_Realistic );
                 }
 
@@ -448,52 +442,44 @@ void ChartModel::insertDefaultChart()
                     Reference< beans::XPropertySet > xWall( xDiagram->getWall() );
                     if( xWall.is() )
                     {
-                        xWall->setPropertyValue( "LineStyle", uno::makeAny( drawing::LineStyle_SOLID ) );
-                        xWall->setPropertyValue( "FillStyle", uno::makeAny( drawing::FillStyle_NONE ) );
-                        xWall->setPropertyValue( "LineColor", uno::makeAny( static_cast< sal_Int32 >( 0xb3b3b3 ) ) ); // gray30
-                        xWall->setPropertyValue( "FillColor", uno::makeAny( static_cast< sal_Int32 >( 0xe6e6e6 ) ) ); // gray10
+                        xWall->setPropertyValue( "LineStyle", uno::Any( drawing::LineStyle_SOLID ) );
+                        xWall->setPropertyValue( "FillStyle", uno::Any( drawing::FillStyle_NONE ) );
+                        xWall->setPropertyValue( "LineColor", uno::Any( static_cast< sal_Int32 >( 0xb3b3b3 ) ) ); // gray30
+                        xWall->setPropertyValue( "FillColor", uno::Any( static_cast< sal_Int32 >( 0xe6e6e6 ) ) ); // gray10
                     }
                     Reference< beans::XPropertySet > xFloor( xDiagram->getFloor() );
                     if( xFloor.is() )
                     {
-                        xFloor->setPropertyValue( "LineStyle", uno::makeAny( drawing::LineStyle_NONE ) );
-                        xFloor->setPropertyValue( "FillStyle", uno::makeAny( drawing::FillStyle_SOLID ) );
-                        xFloor->setPropertyValue( "LineColor", uno::makeAny( static_cast< sal_Int32 >( 0xb3b3b3 ) ) ); // gray30
-                        xFloor->setPropertyValue( "FillColor", uno::makeAny( static_cast< sal_Int32 >( 0xcccccc ) ) ); // gray20
+                        xFloor->setPropertyValue( "LineStyle", uno::Any( drawing::LineStyle_NONE ) );
+                        xFloor->setPropertyValue( "FillStyle", uno::Any( drawing::FillStyle_SOLID ) );
+                        xFloor->setPropertyValue( "LineColor", uno::Any( static_cast< sal_Int32 >( 0xb3b3b3 ) ) ); // gray30
+                        xFloor->setPropertyValue( "FillColor", uno::Any( static_cast< sal_Int32 >( 0xcccccc ) ) ); // gray20
                     }
 
                 }
             }
-            catch( const uno::Exception & ex )
+            catch( const uno::Exception & )
             {
-                ASSERT_EXCEPTION( ex );
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
         }
         ChartModelHelper::setIncludeHiddenCells( false, *this );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
-    setModified( sal_False );
+    setModified( false );
     unlockControllers();
 }
 
 // frame::XLoadable
 void SAL_CALL ChartModel::initNew()
-    throw (frame::DoubleInitializationException,
-           io::IOException,
-           uno::Exception,
-           uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL ChartModel::load(
     const Sequence< beans::PropertyValue >& rMediaDescriptor )
-    throw (frame::DoubleInitializationException,
-           io::IOException,
-           uno::Exception,
-           uno::RuntimeException, std::exception)
 {
     Reference< embed::XStorage > xStorage;
     OUString aURL;
@@ -526,7 +512,7 @@ void SAL_CALL ChartModel::load(
                 Sequence< uno::Any > aStorageArgs( 2 );
                 aStorageArgs[0] <<= aMDHelper.Stream;
                 // todo: check if stream is read-only
-                aStorageArgs[1] <<= (embed::ElementModes::READ); //WRITE | embed::ElementModes::NOCREATE);
+                aStorageArgs[1] <<= embed::ElementModes::READ; //WRITE | embed::ElementModes::NOCREATE);
 
                 xStorage.set( xStorageFact->createInstanceWithArguments( aStorageArgs ),
                     uno::UNO_QUERY_THROW );
@@ -537,7 +523,7 @@ void SAL_CALL ChartModel::load(
                 // convert XInputStream to XStorage via the storage factory
                 Sequence< uno::Any > aStorageArgs( 2 );
                 aStorageArgs[0] <<= aMDHelper.InputStream;
-                aStorageArgs[1] <<= (embed::ElementModes::READ);
+                aStorageArgs[1] <<= embed::ElementModes::READ;
 
                 xStorage.set( xStorageFact->createInstanceWithArguments( aStorageArgs ),
                     uno::UNO_QUERY_THROW );
@@ -547,9 +533,9 @@ void SAL_CALL ChartModel::load(
         if( aMDHelper.ISSET_URL )
             aURL = aMDHelper.URL;
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     if( xStorage.is())
@@ -588,7 +574,7 @@ void ChartModel::impl_load(
     if( xStorage.is() )
         impl_loadGraphics( xStorage );
 
-    setModified( sal_False );
+    setModified( false );
 
     // switchToStorage without notifying listeners (which shouldn't exist at
     // this time, anyway)
@@ -629,15 +615,13 @@ void ChartModel::impl_loadGraphics(
                             ::utl::UcbStreamHelper::CreateStream(
                                 xElementStream, true ) );
 
-                        if( apIStm.get() )
+                        if (apIStm)
                         {
+                            SolarMutexGuard aGuard;
                             Graphic aGraphic;
-
-                            if( !GraphicConverter::Import(
-                                    *apIStm.get(),
-                                    aGraphic ) )
+                            if (!GraphicConverter::Import(*apIStm, aGraphic))
                             {
-                                m_aGraphicObjectVector.push_back( aGraphic );
+                                m_aGraphicObjectVector.emplace_back(aGraphic );
                             }
                         }
                     }
@@ -651,8 +635,7 @@ void ChartModel::impl_loadGraphics(
 }
 
 // util::XModifiable
-void SAL_CALL ChartModel::impl_notifyModifiedListeners()
-    throw( uno::RuntimeException)
+void ChartModel::impl_notifyModifiedListeners()
 {
     {
         MutexGuard aGuard( m_aModelMutex );
@@ -678,15 +661,12 @@ void SAL_CALL ChartModel::impl_notifyModifiedListeners()
 }
 
 sal_Bool SAL_CALL ChartModel::isModified()
-    throw(uno::RuntimeException, std::exception)
 {
     //@todo guard
     return m_bModified;
 }
 
 void SAL_CALL ChartModel::setModified( sal_Bool bModified )
-    throw(beans::PropertyVetoException,
-          uno::RuntimeException, std::exception)
 {
     apphelper::LifeTimeGuard aGuard(m_aLifeTimeManager);
     if(!aGuard.startApiCall())//@todo ? is this a long lasting call??
@@ -707,7 +687,6 @@ void SAL_CALL ChartModel::setModified( sal_Bool bModified )
 // util::XModifyBroadcaster (base of XModifiable)
 void SAL_CALL ChartModel::addModifyListener(
     const uno::Reference< util::XModifyListener >& xListener )
-    throw(uno::RuntimeException, std::exception)
 {
     if( m_aLifeTimeManager.impl_isDisposedOrClosed() )
         return; //behave passive if already disposed or closed
@@ -718,7 +697,6 @@ void SAL_CALL ChartModel::addModifyListener(
 
 void SAL_CALL ChartModel::removeModifyListener(
     const uno::Reference< util::XModifyListener >& xListener )
-    throw(uno::RuntimeException, std::exception)
 {
     if( m_aLifeTimeManager.impl_isDisposedOrClosed(false) )
         return; //behave passive if already disposed or closed
@@ -728,16 +706,39 @@ void SAL_CALL ChartModel::removeModifyListener(
 }
 
 // util::XModifyListener
-void SAL_CALL ChartModel::modified( const lang::EventObject& )
-    throw (uno::RuntimeException, std::exception)
+void SAL_CALL ChartModel::modified( const lang::EventObject& rEvenObject)
 {
-    if( m_nInLoad == 0 )
-        setModified( sal_True );
+    uno::Reference<chart2::data::XPivotTableDataProvider> xPivotTableDataProvider(rEvenObject.Source, uno::UNO_QUERY);
+    if (xPivotTableDataProvider.is())
+    {
+        lockControllers();
+        uno::Reference<chart2::data::XDataProvider> xDataProvider(xPivotTableDataProvider, uno::UNO_QUERY);
+        try
+        {
+            uno::Sequence<beans::PropertyValue> aArguments =
+                DataSourceHelper::createArguments("PivotChart", uno::Sequence<sal_Int32>(), true, true, true);
+
+            Reference<chart2::data::XDataSource> xDataSource(xDataProvider->createDataSource(aArguments));
+            Reference<lang::XMultiServiceFactory> xFactory(getChartTypeManager(), uno::UNO_QUERY);
+            Reference<chart2::XDiagram> xDiagram(getFirstDiagram());
+
+            DiagramHelper::tTemplateWithServiceName aTemplateAndService = DiagramHelper::getTemplateForDiagram(xDiagram, xFactory);
+            css::uno::Reference<css::chart2::XChartTypeTemplate> xChartTypeTemplate(aTemplateAndService.first);
+            xChartTypeTemplate->changeDiagramData(xDiagram, xDataSource, aArguments);
+        }
+        catch (const uno::Exception &)
+        {
+            DBG_UNHANDLED_EXCEPTION("chart2");
+        }
+        unlockControllers();
+    }
+
+    if (m_nInLoad == 0)
+        setModified(true);
 }
 
 // lang::XEventListener (base of util::XModifyListener)
 void SAL_CALL ChartModel::disposing( const lang::EventObject& )
-    throw (uno::RuntimeException, std::exception)
 {
     // child was disposed -- should not happen from outside
 }
@@ -746,11 +747,6 @@ void SAL_CALL ChartModel::disposing( const lang::EventObject& )
 void SAL_CALL ChartModel::loadFromStorage(
     const Reference< embed::XStorage >& xStorage,
     const Sequence< beans::PropertyValue >& rMediaDescriptor )
-    throw (lang::IllegalArgumentException,
-           frame::DoubleInitializationException,
-           io::IOException,
-           uno::Exception,
-           uno::RuntimeException, std::exception)
 {
     attachResource( OUString(), rMediaDescriptor );
     impl_load( rMediaDescriptor, xStorage );
@@ -759,34 +755,22 @@ void SAL_CALL ChartModel::loadFromStorage(
 void SAL_CALL ChartModel::storeToStorage(
     const Reference< embed::XStorage >& xStorage,
     const Sequence< beans::PropertyValue >& rMediaDescriptor )
-    throw (lang::IllegalArgumentException,
-           io::IOException,
-           uno::Exception,
-           uno::RuntimeException, std::exception)
 {
     impl_store( rMediaDescriptor, xStorage );
 }
 
 void SAL_CALL ChartModel::switchToStorage( const Reference< embed::XStorage >& xStorage )
-    throw (lang::IllegalArgumentException,
-           io::IOException,
-           uno::Exception,
-           uno::RuntimeException, std::exception)
 {
     m_xStorage = xStorage;
     impl_notifyStorageChangeListeners();
 }
 
 Reference< embed::XStorage > SAL_CALL ChartModel::getDocumentStorage()
-    throw (io::IOException,
-           uno::Exception,
-           uno::RuntimeException, std::exception)
 {
     return m_xStorage;
 }
 
-void SAL_CALL ChartModel::impl_notifyStorageChangeListeners()
-    throw( uno::RuntimeException)
+void ChartModel::impl_notifyStorageChangeListeners()
 {
     ::cppu::OInterfaceContainerHelper* pIC = m_aLifeTimeManager.m_aListenerContainer
           .getContainer( cppu::UnoType<document::XStorageChangeListener>::get());
@@ -803,7 +787,6 @@ void SAL_CALL ChartModel::impl_notifyStorageChangeListeners()
 }
 
 void SAL_CALL ChartModel::addStorageChangeListener( const Reference< document::XStorageChangeListener >& xListener )
-    throw (uno::RuntimeException, std::exception)
 {
     if( m_aLifeTimeManager.impl_isDisposedOrClosed() )
         return; //behave passive if already disposed or closed
@@ -813,7 +796,6 @@ void SAL_CALL ChartModel::addStorageChangeListener( const Reference< document::X
 }
 
 void SAL_CALL ChartModel::removeStorageChangeListener( const Reference< document::XStorageChangeListener >& xListener )
-    throw (uno::RuntimeException, std::exception)
 {
     if( m_aLifeTimeManager.impl_isDisposedOrClosed(false) )
         return; //behave passive if already disposed or closed

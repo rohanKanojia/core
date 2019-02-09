@@ -24,6 +24,7 @@
 #endif
 #endif
 #include "system.hxx"
+#include "unixerrnostring.hxx"
 
 #include <sal/log.hxx>
 #include <osl/mutex.h>
@@ -57,7 +58,7 @@ oslMutex SAL_CALL osl_createMutex()
         nRet = pthread_mutex_init(&(pMutex->mutex), &aMutexAttr);
     if ( nRet != 0 )
     {
-        SAL_WARN("sal.osl.mutex", "pthread_muxex_init failed: " << strerror(nRet));
+        SAL_WARN("sal.osl.mutex", "pthread_muxex_init failed: " << UnixErrnoString(nRet));
 
         free(pMutex);
         pMutex = nullptr;
@@ -79,13 +80,11 @@ void SAL_CALL osl_destroyMutex(oslMutexImpl *pMutex)
         nRet = pthread_mutex_destroy(&(pMutex->mutex));
         if ( nRet != 0 )
         {
-            SAL_WARN("sal.osl.mutex", "pthread_mutex_destroy failed: " << strerror(nRet));
+            SAL_WARN("sal.osl.mutex", "pthread_mutex_destroy failed: " << UnixErrnoString(nRet));
         }
 
         free(pMutex);
     }
-
-    return;
 }
 
 sal_Bool SAL_CALL osl_acquireMutex(oslMutexImpl *pMutex)
@@ -99,14 +98,14 @@ sal_Bool SAL_CALL osl_acquireMutex(oslMutexImpl *pMutex)
         nRet = pthread_mutex_lock(&(pMutex->mutex));
         if ( nRet != 0 )
         {
-            SAL_WARN("sal.osl.mutex", "pthread_mutex_lock failed: " << strerror(nRet));
-            return sal_False;
+            SAL_WARN("sal.osl.mutex", "pthread_mutex_lock failed: " << UnixErrnoString(nRet));
+            return false;
         }
-        return sal_True;
+        return true;
     }
 
     /* not initialized */
-    return sal_False;
+    return false;
 }
 
 sal_Bool SAL_CALL osl_tryToAcquireMutex(oslMutexImpl *pMutex)
@@ -136,15 +135,15 @@ sal_Bool SAL_CALL osl_releaseMutex(oslMutexImpl *pMutex)
         nRet = pthread_mutex_unlock(&(pMutex->mutex));
         if ( nRet != 0 )
         {
-            SAL_WARN("sal.osl.mutex", "pthread_mutex_unlock failed: " << strerror(nRet));
-            return sal_False;
+            SAL_WARN("sal.osl.mutex", "pthread_mutex_unlock failed: " << UnixErrnoString(nRet));
+            return false;
         }
 
-        return sal_True;
+        return true;
     }
 
     /* not initialized */
-    return sal_False;
+    return false;
 }
 
 static oslMutexImpl globalMutexImpl;

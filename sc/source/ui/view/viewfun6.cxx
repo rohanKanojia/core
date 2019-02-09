@@ -21,30 +21,31 @@
 #include <svx/svdocapt.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/dispatch.hxx>
-#include <vcl/msgbox.hxx>
 #include <svl/zforlist.hxx>
 #include <svl/zformat.hxx>
 #include <editeng/editview.hxx>
+#include <sal/log.hxx>
 
-#include "viewfunc.hxx"
-#include "detfunc.hxx"
-#include "detdata.hxx"
-#include "viewdata.hxx"
-#include "drwlayer.hxx"
-#include "docsh.hxx"
-#include "undocell.hxx"
-#include "futext.hxx"
-#include "docfunc.hxx"
-#include "globstr.hrc"
-#include "sc.hrc"
-#include "fusel.hxx"
-#include "reftokenhelper.hxx"
-#include "externalrefmgr.hxx"
-#include "formulacell.hxx"
-#include "markdata.hxx"
-#include "drawview.hxx"
-#include "globalnames.hxx"
-#include "inputhdl.hxx"
+#include <viewfunc.hxx>
+#include <detfunc.hxx>
+#include <detdata.hxx>
+#include <viewdata.hxx>
+#include <drwlayer.hxx>
+#include <docsh.hxx>
+#include <undocell.hxx>
+#include <futext.hxx>
+#include <docfunc.hxx>
+#include <sc.hrc>
+#include <fusel.hxx>
+#include <reftokenhelper.hxx>
+#include <externalrefmgr.hxx>
+#include <formulacell.hxx>
+#include <markdata.hxx>
+#include <drawview.hxx>
+#include <globalnames.hxx>
+#include <inputhdl.hxx>
+#include <tabvwsh.hxx>
+#include <scmod.hxx>
 
 #include <vector>
 
@@ -106,7 +107,7 @@ void ScViewFunc::DetectiveRefresh()
     RecalcPPT();
 }
 
-static void lcl_jumpToRange(const ScRange& rRange, ScViewData* pView, ScDocument* pDoc)
+static void lcl_jumpToRange(const ScRange& rRange, ScViewData* pView, const ScDocument* pDoc)
 {
     OUString aAddrText(rRange.Format(ScRefFlags::RANGE_ABS_3D, pDoc));
     SfxStringItem aPosItem(SID_CURRENTCELL, aAddrText);
@@ -127,25 +128,24 @@ void ScViewFunc::MarkAndJumpToRanges(const ScRangeList& rRanges)
     size_t ListSize = aRanges.size();
     for ( size_t i = 0; i < ListSize; ++i )
     {
-        const ScRange* p = aRanges[i];
+        const ScRange & r = aRanges[i];
         // Collect only those ranges that are on the same sheet as the current
         // cursor.
-        if (p->aStart.Tab() == aCurPos.Tab())
-            aRangesToMark.Append(*p);
+        if (r.aStart.Tab() == aCurPos.Tab())
+            aRangesToMark.push_back(r);
     }
 
     if (aRangesToMark.empty())
         return;
 
     // Jump to the first range of all precedent ranges.
-    const ScRange* p = aRangesToMark.front();
-    lcl_jumpToRange(*p, &rView, &pDocSh->GetDocument());
+    const ScRange & r = aRangesToMark.front();
+    lcl_jumpToRange(r, &rView, &pDocSh->GetDocument());
 
     ListSize = aRangesToMark.size();
     for ( size_t i = 0; i < ListSize; ++i )
     {
-        p = aRangesToMark[i];
-        MarkRange(*p, false, true);
+        MarkRange(aRangesToMark[i], false, true);
     }
 }
 
@@ -160,7 +160,7 @@ void ScViewFunc::DetectiveMarkPred()
     if (rMarkData.IsMarked() || rMarkData.IsMultiMarked())
         rMarkData.FillRangeListWithMarks(&aRanges, false);
     else
-        aRanges.Append(aCurPos);
+        aRanges.push_back(aCurPos);
 
     vector<ScTokenRef> aRefTokens;
     pDocSh->GetDocFunc().DetectiveCollectAllPreds(aRanges, aRefTokens);
@@ -224,7 +224,7 @@ void ScViewFunc::DetectiveMarkSucc()
     if (rMarkData.IsMarked() || rMarkData.IsMultiMarked())
         rMarkData.FillRangeListWithMarks(&aRanges, false);
     else
-        aRanges.Append(aCurPos);
+        aRanges.push_back(aCurPos);
 
     vector<ScTokenRef> aRefTokens;
     pDocSh->GetDocFunc().DetectiveCollectAllSuccs(aRanges, aRefTokens);
@@ -254,7 +254,7 @@ void ScViewFunc::DetectiveMarkSucc()
       - unless cell was empty  =>  current date+time  =>  date+time formatted cell
     - key time on other cell  =>  current time  =>  time formatted cell
  */
-void ScViewFunc::InsertCurrentTime(short nReqFmt, const OUString& rUndoStr)
+void ScViewFunc::InsertCurrentTime(SvNumFormatType nReqFmt, const OUString& rUndoStr)
 {
     ScViewData& rViewData = GetViewData();
 
@@ -267,8 +267,8 @@ void ScViewFunc::InsertCurrentTime(short nReqFmt, const OUString& rUndoStr)
     const sal_uInt32 nCurNumFormat = rDoc.GetNumberFormat(aCurPos);
     SvNumberFormatter* pFormatter = rDoc.GetFormatTable();
     const SvNumberformat* pCurNumFormatEntry = pFormatter->GetEntry(nCurNumFormat);
-    const short nCurNumFormatType = (pCurNumFormatEntry ?
-            (pCurNumFormatEntry->GetType() & ~css::util::NumberFormat::DEFINED) : css::util::NumberFormat::UNDEFINED);
+    const SvNumFormatType nCurNumFormatType = (pCurNumFormatEntry ?
+            pCurNumFormatEntry->GetMaskedType() : SvNumFormatType::UNDEFINED);
 
     if (bInputMode)
     {
@@ -276,31 +276,31 @@ void ScViewFunc::InsertCurrentTime(short nReqFmt, const OUString& rUndoStr)
         sal_uInt32 nFormat = 0;
         switch (nReqFmt)
         {
-            case css::util::NumberFormat::DATE:
+            case SvNumFormatType::DATE:
                 {
                     Date aActDate( Date::SYSTEM );
-                    fVal = aActDate - *pFormatter->GetNullDate();
-                    if (nCurNumFormatType == css::util::NumberFormat::DATE)
+                    fVal = aActDate - pFormatter->GetNullDate();
+                    if (nCurNumFormatType == SvNumFormatType::DATE)
                         nFormat = nCurNumFormat;
                 }
                 break;
-            case css::util::NumberFormat::TIME:
+            case SvNumFormatType::TIME:
                 {
                     tools::Time aActTime( tools::Time::SYSTEM );
                     fVal = aActTime.GetTimeInDays();
-                    if (nCurNumFormatType == css::util::NumberFormat::TIME)
+                    if (nCurNumFormatType == SvNumFormatType::TIME)
                         nFormat = nCurNumFormat;
                 }
                 break;
             default:
-                assert(!"unhandled current date/time request");
-                nReqFmt = css::util::NumberFormat::DATETIME;
-                // fallthru
-            case css::util::NumberFormat::DATETIME:
+                SAL_WARN("sc.ui","unhandled current date/time request");
+                nReqFmt = SvNumFormatType::DATETIME;
+                [[fallthrough]];
+            case SvNumFormatType::DATETIME:
                 {
                     DateTime aActDateTime( DateTime::SYSTEM );
-                    fVal = aActDateTime - DateTime( *pFormatter->GetNullDate());
-                    if (nCurNumFormatType == css::util::NumberFormat::DATETIME)
+                    fVal = aActDateTime - DateTime( pFormatter->GetNullDate());
+                    if (nCurNumFormatType == SvNumFormatType::DATETIME)
                         nFormat = nCurNumFormat;
                 }
                 break;
@@ -334,17 +334,17 @@ void ScViewFunc::InsertCurrentTime(short nReqFmt, const OUString& rUndoStr)
         // Combine requested date/time stamp with existing cell time/date, if any.
         switch (nReqFmt)
         {
-            case css::util::NumberFormat::DATE:
+            case SvNumFormatType::DATE:
                 switch (nCurNumFormatType)
                 {
-                    case css::util::NumberFormat::TIME:
+                    case SvNumFormatType::TIME:
                         // An empty cell formatted as time (or 00:00 time) shall
                         // not result in the current date with 00:00 time, but only
                         // in current date.
                         if (fCell != 0.0)
-                            nReqFmt = css::util::NumberFormat::DATETIME;
+                            nReqFmt = SvNumFormatType::DATETIME;
                         break;
-                    case css::util::NumberFormat::DATETIME:
+                    case SvNumFormatType::DATETIME:
                         {
                             // Force to only date if the existing date+time is the
                             // current date. This way inserting current date twice
@@ -352,77 +352,79 @@ void ScViewFunc::InsertCurrentTime(short nReqFmt, const OUString& rUndoStr)
                             // date, which otherwise would only be possible by
                             // applying a date format.
                             double fDate = rtl::math::approxFloor( fCell);
-                            if (fDate == (Date( Date::SYSTEM) - *pFormatter->GetNullDate()))
+                            if (fDate == (Date( Date::SYSTEM) - pFormatter->GetNullDate()))
                                 bForceReqFmt = true;
                         }
                         break;
+                    default: break;
                 }
                 break;
-            case css::util::NumberFormat::TIME:
+            case SvNumFormatType::TIME:
                 switch (nCurNumFormatType)
                 {
-                    case css::util::NumberFormat::DATE:
+                    case SvNumFormatType::DATE:
                         // An empty cell formatted as date shall not result in the
                         // null date and current time, but only in current time.
                         if (fCell != 0.0)
-                            nReqFmt = css::util::NumberFormat::DATETIME;
+                            nReqFmt = SvNumFormatType::DATETIME;
                         break;
-                    case css::util::NumberFormat::DATETIME:
+                    case SvNumFormatType::DATETIME:
                         // Requesting current time on an empty date+time cell
                         // inserts both current date+time.
                         if (fCell == 0.0)
-                            nReqFmt = css::util::NumberFormat::DATETIME;
+                            nReqFmt = SvNumFormatType::DATETIME;
                         else
                         {
                             // Add current time to an existing date+time where time is
                             // zero and date is current date, else force time only.
                             double fDate = rtl::math::approxFloor( fCell);
                             double fTime = fCell - fDate;
-                            if (fTime == 0.0 && fDate == (Date( Date::SYSTEM) - *pFormatter->GetNullDate()))
-                                nReqFmt = css::util::NumberFormat::DATETIME;
+                            if (fTime == 0.0 && fDate == (Date( Date::SYSTEM) - pFormatter->GetNullDate()))
+                                nReqFmt = SvNumFormatType::DATETIME;
                             else
                                 bForceReqFmt = true;
                         }
                         break;
+                    default: break;
                 }
                 break;
             default:
-                assert(!"unhandled current date/time request");
-                nReqFmt = css::util::NumberFormat::DATETIME;
-                // fallthru
-            case css::util::NumberFormat::DATETIME:
+                SAL_WARN("sc.ui","unhandled current date/time request");
+                nReqFmt = SvNumFormatType::DATETIME;
+                [[fallthrough]];
+            case SvNumFormatType::DATETIME:
                 break;
         }
         double fVal = 0.0;
         switch (nReqFmt)
         {
-            case css::util::NumberFormat::DATE:
+            case SvNumFormatType::DATE:
                 {
                     Date aActDate( Date::SYSTEM );
-                    fVal = aActDate - *pFormatter->GetNullDate();
+                    fVal = aActDate - pFormatter->GetNullDate();
                 }
                 break;
-            case css::util::NumberFormat::TIME:
+            case SvNumFormatType::TIME:
                 {
                     tools::Time aActTime( tools::Time::SYSTEM );
                     fVal = aActTime.GetTimeInDays();
                 }
                 break;
-            case css::util::NumberFormat::DATETIME:
+            case SvNumFormatType::DATETIME:
                 switch (nCurNumFormatType)
                 {
-                    case css::util::NumberFormat::DATE:
+                    case SvNumFormatType::DATE:
                         {
                             double fDate = rtl::math::approxFloor( fCell);
                             tools::Time aActTime( tools::Time::SYSTEM );
                             fVal = fDate + aActTime.GetTimeInDays();
                         }
                         break;
-                    case css::util::NumberFormat::TIME:
+                    case SvNumFormatType::TIME:
                         {
                             double fTime = fCell - rtl::math::approxFloor( fCell);
                             Date aActDate( Date::SYSTEM );
-                            fVal = (aActDate - *pFormatter->GetNullDate()) + fTime;
+                            fVal = (aActDate - pFormatter->GetNullDate()) + fTime;
                         }
                         break;
                     default:
@@ -431,21 +433,23 @@ void ScViewFunc::InsertCurrentTime(short nReqFmt, const OUString& rUndoStr)
                             // Converting the null date to DateTime forces the
                             // correct operator-() to be used, resulting in a
                             // fractional date+time instead of only date value.
-                            fVal = aActDateTime - DateTime( *pFormatter->GetNullDate());
+                            fVal = aActDateTime - DateTime( pFormatter->GetNullDate());
                         }
                 }
                 break;
+            default: break;
+
         }
 
-        ::svl::IUndoManager* pUndoMgr = pDocSh->GetUndoManager();
-        pUndoMgr->EnterListAction(rUndoStr, rUndoStr);
+        SfxUndoManager* pUndoMgr = pDocSh->GetUndoManager();
+        pUndoMgr->EnterListAction(rUndoStr, rUndoStr, 0, rViewData.GetViewShell()->GetViewShellId());
 
         pDocSh->GetDocFunc().SetValueCell(aCurPos, fVal, true);
 
         // Set the new cell format only when it differs from the current cell
         // format type. Preserve a date+time format unless we force a format
         // through.
-        if (bForceReqFmt || (nReqFmt != nCurNumFormatType && nCurNumFormatType != css::util::NumberFormat::DATETIME))
+        if (bForceReqFmt || (nReqFmt != nCurNumFormatType && nCurNumFormatType != SvNumFormatType::DATETIME))
             SetNumberFormat(nReqFmt);
         else
             rViewData.UpdateInputHandler();     // update input bar with new value
@@ -492,7 +496,7 @@ void ScViewFunc::EditNote()
         /*  Drawing object has been created in ScDocument::GetOrCreateNote() or
             in ScPostIt::ShowCaptionTemp(), so ScPostIt::GetCaption() should
             return a caption object. */
-        if( SdrCaptionObj* pCaption = pNote->GetCaption() )
+        if( SdrCaptionObj* pCaption = pNote->GetCaption().get() )
         {
             if ( ScDrawView* pScDrawView = GetScDrawView() )
                pScDrawView->SyncForGrid( pCaption );
@@ -503,11 +507,13 @@ void ScViewFunc::EditNote()
             // activate object (as in FuSelection::TestComment)
             GetViewData().GetDispatcher().Execute( SID_DRAW_NOTEEDIT, SfxCallMode::SYNCHRON | SfxCallMode::RECORD );
             // now get the created FuText and set into EditMode
-            FuPoor* pPoor = GetDrawFuncPtr();
-            if ( pPoor && (pPoor->GetSlotID() == SID_DRAW_NOTEEDIT) )    // has no RTTI
+            FuText* pFuText = dynamic_cast<FuText*>(GetDrawFuncPtr());
+            if (pFuText)
             {
                 ScrollToObject( pCaption );         // make object fully visible
-                static_cast< FuText* >( pPoor )->SetInEditMode( pCaption );
+                pFuText->SetInEditMode( pCaption );
+
+                ScTabView::OnLOKNoteStateChanged( pNote );
             }
         }
     }

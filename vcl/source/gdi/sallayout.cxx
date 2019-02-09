@@ -20,7 +20,8 @@
 #include <iostream>
 #include <iomanip>
 
-#include "sal/config.h"
+#include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <cstdio>
 
@@ -34,24 +35,24 @@
 
 #include <i18nlangtag/lang.h>
 
-#include <tools/debug.hxx>
 #include <vcl/svapp.hxx>
 
 #include <limits.h>
 
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#endif
 #include <unicode/ubidi.h>
 #include <unicode/uchar.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
 #include <algorithm>
 #include <memory>
 
-std::ostream &operator <<(std::ostream& s, ImplLayoutArgs &rArgs)
+#include <impglyphitem.hxx>
+
+// Glyph Flags
+#define GF_FONTMASK  0xF0000000
+#define GF_FONTSHIFT 28
+
+
+std::ostream &operator <<(std::ostream& s, ImplLayoutArgs const &rArgs)
 {
 #ifndef SAL_LOG_INFO
     (void) rArgs;
@@ -68,14 +69,10 @@ std::ostream &operator <<(std::ostream& s, ImplLayoutArgs &rArgs)
         TEST(BiDiRtl);
         TEST(BiDiStrong);
         TEST(RightAlign);
-        TEST(KerningPairs);
+        TEST(DisableKerning);
         TEST(KerningAsian);
         TEST(Vertical);
-        TEST(ComplexDisabled);
-        TEST(EnableLigatures);
-        TEST(SubstituteDigits);
         TEST(KashidaJustification);
-        TEST(DisableGlyphProcessing);
         TEST(ForFallback);
 #undef TEST
         s << "}";
@@ -95,11 +92,11 @@ std::ostream &operator <<(std::ostream& s, ImplLayoutArgs &rArgs)
         if (rArgs.mrStr[i] == '\n')
             s << "\\n";
         else if (rArgs.mrStr[i] < ' ' || (rArgs.mrStr[i] >= 0x7F && rArgs.mrStr[i] <= 0xFF))
-            s << "\\0x" << std::hex << std::setw(2) << std::setfill('0') << (int) rArgs.mrStr[i] << std::setfill(' ') << std::setw(1) << std::dec;
+            s << "\\0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(rArgs.mrStr[i]) << std::setfill(' ') << std::setw(1) << std::dec;
         else if (rArgs.mrStr[i] < 0x7F)
-            s << (char) rArgs.mrStr[i];
+            s << static_cast<char>(rArgs.mrStr[i]);
         else
-            s << "\\u" << std::hex << std::setw(4) << std::setfill('0') << (int) rArgs.mrStr[i] << std::setfill(' ') << std::setw(1) << std::dec;
+            s << "\\u" << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(rArgs.mrStr[i]) << std::setfill(' ') << std::setw(1) << std::dec;
     }
     if (nLength > lim)
         s << "...";
@@ -134,34 +131,6 @@ std::ostream &operator <<(std::ostream& s, ImplLayoutArgs &rArgs)
     return s;
 }
 
-int GetVerticalFlags( sal_UCS4 nChar )
-{
-    if( (nChar >= 0x1100 && nChar <= 0x11f9)    // Hangul Jamo
-     || (nChar == 0x2030 || nChar == 0x2031)    // per mille sign
-     || (nChar >= 0x3000 && nChar <= 0xfaff)    // unified CJK
-     || (nChar >= 0xfe20 && nChar <= 0xfe6f)    // CJK compatibility
-     || (nChar >= 0xff00 && nChar <= 0xfffd) )  // other CJK
-    {
-        /* #i52932# remember:
-         nChar == 0x2010 || nChar == 0x2015
-         nChar == 0x2016 || nChar == 0x2026
-         are GF_NONE also, but already handled in the outer if condition
-        */
-        if((nChar >= 0x3008 && nChar <= 0x301C && nChar != 0x3012)
-        || (nChar == 0xFF3B || nChar == 0xFF3D || nChar==0xFF08 || nChar==0xFF09)
-        || (nChar >= 0xFF5B && nChar <= 0xFF9F) // halfwidth forms
-        || (nChar == 0xFFE3) )
-            return GF_NONE; // not rotated
-        else if( nChar == 0x30fc )
-            return GF_ROTR; // right
-        return GF_ROTL;     // left
-    }
-    else if( (nChar >= 0x20000) && (nChar <= 0x3FFFF) ) // all SIP/TIP ideographs
-        return GF_ROTL; // left
-
-    return GF_NONE; // not rotated as default
-}
-
 sal_UCS4 GetMirroredChar( sal_UCS4 nChar )
 {
     nChar = u_charMirror( nChar );
@@ -178,89 +147,70 @@ sal_UCS4 GetLocalizedChar( sal_UCS4 nChar, LanguageType eLang )
     // eLang & LANGUAGE_MASK_PRIMARY catches language independent of region.
     // CAVEAT! To some like Mongolian MS assigned the same primary language
     // although the script type is different!
-    switch( eLang & LANGUAGE_MASK_PRIMARY )
-    {
-        default:
-            nOffset = 0;
-            break;
-        case LANGUAGE_ARABIC_SAUDI_ARABIA  & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x0660 - '0';  // arabic-indic digits
-            break;
-        case LANGUAGE_FARSI         & LANGUAGE_MASK_PRIMARY:
-        case LANGUAGE_URDU_PAKISTAN & LANGUAGE_MASK_PRIMARY:
-        case LANGUAGE_PUNJABI       & LANGUAGE_MASK_PRIMARY: //???
-        case LANGUAGE_SINDHI        & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x06F0 - '0';  // eastern arabic-indic digits
-            break;
-        case LANGUAGE_BENGALI       & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x09E6 - '0';  // bengali
-            break;
-        case LANGUAGE_HINDI         & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x0966 - '0';  // devanagari
-            break;
-        case LANGUAGE_AMHARIC_ETHIOPIA & LANGUAGE_MASK_PRIMARY:
-        case LANGUAGE_TIGRIGNA_ETHIOPIA & LANGUAGE_MASK_PRIMARY:
+    LanguageType pri = primary(eLang);
+    if( pri == primary(LANGUAGE_ARABIC_SAUDI_ARABIA) )
+        nOffset = 0x0660 - '0';  // arabic-indic digits
+    else if ( pri.anyOf(
+        primary(LANGUAGE_FARSI),
+        primary(LANGUAGE_URDU_PAKISTAN),
+        primary(LANGUAGE_PUNJABI), //???
+        primary(LANGUAGE_SINDHI)))
+        nOffset = 0x06F0 - '0';  // eastern arabic-indic digits
+    else if ( pri == primary(LANGUAGE_BENGALI) )
+        nOffset = 0x09E6 - '0';  // bengali
+    else if ( pri == primary(LANGUAGE_HINDI) )
+        nOffset = 0x0966 - '0';  // devanagari
+    else if ( pri.anyOf(
+        primary(LANGUAGE_AMHARIC_ETHIOPIA),
+        primary(LANGUAGE_TIGRIGNA_ETHIOPIA)))
         // TODO case:
-            nOffset = 0x1369 - '0';  // ethiopic
-            break;
-        case LANGUAGE_GUJARATI      & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x0AE6 - '0';  // gujarati
-            break;
+        nOffset = 0x1369 - '0';  // ethiopic
+    else if ( pri == primary(LANGUAGE_GUJARATI) )
+        nOffset = 0x0AE6 - '0';  // gujarati
 #ifdef LANGUAGE_GURMUKHI // TODO case:
-        case LANGUAGE_GURMUKHI      & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x0A66 - '0';  // gurmukhi
-            break;
+    else if ( pri == primary(LANGUAGE_GURMUKHI) )
+        nOffset = 0x0A66 - '0';  // gurmukhi
 #endif
-        case LANGUAGE_KANNADA       & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x0CE6 - '0';  // kannada
-            break;
-        case LANGUAGE_KHMER         & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x17E0 - '0';  // khmer
-            break;
-        case LANGUAGE_LAO           & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x0ED0 - '0';  // lao
-            break;
-        case LANGUAGE_MALAYALAM     & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x0D66 - '0';  // malayalam
-            break;
-        case LANGUAGE_MONGOLIAN_MONGOLIAN_LSO & LANGUAGE_MASK_PRIMARY:
-            switch (eLang)
-            {
-                case LANGUAGE_MONGOLIAN_MONGOLIAN_MONGOLIA:
-                case LANGUAGE_MONGOLIAN_MONGOLIAN_CHINA:
-                case LANGUAGE_MONGOLIAN_MONGOLIAN_LSO:
-                    nOffset = 0x1810 - '0';   // mongolian
-                    break;
-                default:
-                    nOffset = 0;              // mongolian cyrillic
-                    break;
-            }
-            break;
-        case LANGUAGE_BURMESE       & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x1040 - '0';  // myanmar
-            break;
-        case LANGUAGE_ODIA          & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x0B66 - '0';  // odia
-            break;
-        case LANGUAGE_TAMIL         & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x0BE7 - '0';  // tamil
-            break;
-        case LANGUAGE_TELUGU        & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x0C66 - '0';  // telugu
-            break;
-        case LANGUAGE_THAI          & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x0E50 - '0';  // thai
-            break;
-        case LANGUAGE_TIBETAN       & LANGUAGE_MASK_PRIMARY:
-            nOffset = 0x0F20 - '0';  // tibetan
-            break;
+    else if ( pri == primary(LANGUAGE_KANNADA) )
+        nOffset = 0x0CE6 - '0';  // kannada
+    else if ( pri == primary(LANGUAGE_KHMER))
+        nOffset = 0x17E0 - '0';  // khmer
+    else if ( pri == primary(LANGUAGE_LAO) )
+        nOffset = 0x0ED0 - '0';  // lao
+    else if ( pri == primary(LANGUAGE_MALAYALAM) )
+        nOffset = 0x0D66 - '0';  // malayalam
+    else if ( pri == primary(LANGUAGE_MONGOLIAN_MONGOLIAN_LSO))
+    {
+        if (eLang.anyOf(
+             LANGUAGE_MONGOLIAN_MONGOLIAN_MONGOLIA,
+             LANGUAGE_MONGOLIAN_MONGOLIAN_CHINA,
+             LANGUAGE_MONGOLIAN_MONGOLIAN_LSO))
+                nOffset = 0x1810 - '0';   // mongolian
+        else
+                nOffset = 0;              // mongolian cyrillic
+    }
+    else if ( pri == primary(LANGUAGE_BURMESE) )
+        nOffset = 0x1040 - '0';  // myanmar
+    else if ( pri == primary(LANGUAGE_ODIA) )
+        nOffset = 0x0B66 - '0';  // odia
+    else if ( pri == primary(LANGUAGE_TAMIL) )
+        nOffset = 0x0BE7 - '0';  // tamil
+    else if ( pri == primary(LANGUAGE_TELUGU) )
+        nOffset = 0x0C66 - '0';  // telugu
+    else if ( pri == primary(LANGUAGE_THAI) )
+        nOffset = 0x0E50 - '0';  // thai
+    else if ( pri == primary(LANGUAGE_TIBETAN) )
+        nOffset = 0x0F20 - '0';  // tibetan
+    else
+    {
+        nOffset = 0;
     }
 
     nChar += nOffset;
     return nChar;
 }
 
-inline bool IsControlChar( sal_UCS4 cChar )
+static bool IsControlChar( sal_UCS4 cChar )
 {
     // C0 control characters
     if( (0x0001 <= cChar) && (cChar <= 0x001F) )
@@ -273,7 +223,7 @@ inline bool IsControlChar( sal_UCS4 cChar )
     // deprecated formatting characters
     if( (0x206A <= cChar) && (cChar <= 0x206F) )
         return true;
-    if( (0x2060 == cChar) )
+    if( 0x2060 == cChar )
         return true;
     // byte order markers and invalid unicode
     if( (cChar == 0xFEFF) || (cChar == 0xFFFE) || (cChar == 0xFFFF) )
@@ -320,6 +270,12 @@ void ImplLayoutRuns::AddRun( int nCharPos0, int nCharPos1, bool bRTL )
         nCharPos1 = nTemp;
     }
 
+    if (maRuns.size() >= 2 && nCharPos0 == maRuns[maRuns.size() - 2] && nCharPos1 == maRuns[maRuns.size() - 1])
+    {
+        //this run is the same as the last
+        return;
+    }
+
     // append new run
     maRuns.push_back( nCharPos0 );
     maRuns.push_back( nCharPos1 );
@@ -327,7 +283,7 @@ void ImplLayoutRuns::AddRun( int nCharPos0, int nCharPos1, bool bRTL )
 
 bool ImplLayoutRuns::PosIsInRun( int nCharPos ) const
 {
-    if( mnRunIndex >= (int)maRuns.size() )
+    if( mnRunIndex >= static_cast<int>(maRuns.size()) )
         return false;
 
     int nMinCharPos = maRuns[ mnRunIndex+0 ];
@@ -357,7 +313,8 @@ bool ImplLayoutRuns::PosIsInAnyRun( int nCharPos ) const
 
     for (size_t i = 0; i < maRuns.size(); i+=2)
     {
-        if( (bRet = PosIsInRun( nCharPos )) )
+        bRet = PosIsInRun( nCharPos );
+        if( bRet )
             break;
         pThis->NextRun();
     }
@@ -373,7 +330,7 @@ bool ImplLayoutRuns::GetNextPos( int* nCharPos, bool* bRightToLeft )
         mnRunIndex = 0;
 
     // return false when all runs completed
-    if( mnRunIndex >= (int)maRuns.size() )
+    if( mnRunIndex >= static_cast<int>(maRuns.size()) )
         return false;
 
     int nRunPos0 = maRuns[ mnRunIndex+0 ];
@@ -394,7 +351,7 @@ bool ImplLayoutRuns::GetNextPos( int* nCharPos, bool* bRightToLeft )
         // advance to next run if current run is completed
         if( *nCharPos == nRunPos1 )
         {
-            if( (mnRunIndex += 2) >= (int)maRuns.size() )
+            if( (mnRunIndex += 2) >= static_cast<int>(maRuns.size()) )
                 return false;
             nRunPos0 = maRuns[ mnRunIndex+0 ];
             nRunPos1 = maRuns[ mnRunIndex+1 ];
@@ -412,7 +369,7 @@ bool ImplLayoutRuns::GetNextPos( int* nCharPos, bool* bRightToLeft )
 
 bool ImplLayoutRuns::GetRun( int* nMinRunPos, int* nEndRunPos, bool* bRightToLeft ) const
 {
-    if( mnRunIndex >= (int)maRuns.size() )
+    if( mnRunIndex >= static_cast<int>(maRuns.size()) )
         return false;
 
     int nRunPos0 = maRuns[ mnRunIndex+0 ];
@@ -458,10 +415,7 @@ ImplLayoutArgs::ImplLayoutArgs(const OUString& rStr,
     else
     {
         // handle weak BiDi mode
-
-        UBiDiLevel nLevel = UBIDI_DEFAULT_LTR;
-        if( mnFlags & SalLayoutFlags::BiDiRtl )
-            nLevel = UBIDI_DEFAULT_RTL;
+        UBiDiLevel nLevel = (mnFlags & SalLayoutFlags::BiDiRtl)? 1 : 0;
 
         // prepare substring for BiDi analysis
         // TODO: reuse allocated pParaBidi
@@ -470,7 +424,7 @@ ImplLayoutArgs::ImplLayoutArgs(const OUString& rStr,
         UBiDi* pParaBidi = ubidi_openSized(nLength, 0, &rcI18n);
         if( !pParaBidi )
             return;
-        ubidi_setPara(pParaBidi, reinterpret_cast<const UChar *>(mrStr.getStr()), nLength, nLevel, nullptr, &rcI18n);    // UChar != sal_Unicode in MinGW
+        ubidi_setPara(pParaBidi, reinterpret_cast<const UChar *>(mrStr.getStr()), nLength, nLevel, nullptr, &rcI18n);
 
         UBiDi* pLineBidi = pParaBidi;
         int nSubLength = mnEndCharPos - mnMinCharPos;
@@ -507,7 +461,7 @@ ImplLayoutArgs::ImplLayoutArgs(const OUString& rStr,
 // add a run after splitting it up to get rid of control chars
 void ImplLayoutArgs::AddRun( int nCharPos0, int nCharPos1, bool bRTL )
 {
-    DBG_ASSERT( nCharPos0 <= nCharPos1, "ImplLayoutArgs::AddRun() nCharPos0>=nCharPos1" );
+    SAL_WARN_IF( nCharPos0 > nCharPos1, "vcl", "ImplLayoutArgs::AddRun() nCharPos0>=nCharPos1" );
 
     // remove control characters from runs by splitting them up
     if( !bRTL )
@@ -591,10 +545,8 @@ bool ImplLayoutArgs::GetNextRun( int* nMinRunPos, int* nEndRunPos, bool* bRTL )
 SalLayout::SalLayout()
 :   mnMinCharPos( -1 ),
     mnEndCharPos( -1 ),
-    mnLayoutFlags( SalLayoutFlags::NONE ),
     mnUnitsPerPixel( 1 ),
     mnOrientation( 0 ),
-    mnRefCount( 1 ),
     maDrawOffset( 0, 0 )
 {}
 
@@ -605,17 +557,7 @@ void SalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
 {
     mnMinCharPos  = rArgs.mnMinCharPos;
     mnEndCharPos  = rArgs.mnEndCharPos;
-    mnLayoutFlags = rArgs.mnFlags;
     mnOrientation = rArgs.mnOrientation;
-}
-
-void SalLayout::Release() const
-{
-    // TODO: protect when multiple threads can access this
-    if( --mnRefCount > 0 )
-        return;
-    // const_cast because some compilers violate ANSI C++ spec
-    delete this;
 }
 
 Point SalLayout::GetDrawPosition( const Point& rRelative ) const
@@ -655,7 +597,7 @@ Point SalLayout::GetDrawPosition( const Point& rRelative ) const
 // If the range doesn't match in 0x3000 and 0x30FB, please change
 // also ImplCalcKerning.
 
-int SalLayout::CalcAsianKerning( sal_UCS4 c, bool bLeft, bool /*TODO:? bVertical*/ )
+static int lcl_CalcAsianKerning( sal_UCS4 c, bool bLeft, bool /*TODO:? bVertical*/ )
 {
     // http://www.asahi-net.or.jp/~sd5a-ucd/freetexts/jis/x4051/1995/appendix.html
     static const signed char nTable[0x30] =
@@ -689,22 +631,20 @@ int SalLayout::CalcAsianKerning( sal_UCS4 c, bool bLeft, bool /*TODO:? bVertical
     return nResult;
 }
 
-bool SalLayout::GetOutline( SalGraphics& rSalGraphics,
-    basegfx::B2DPolyPolygonVector& rVector ) const
+bool SalLayout::GetOutline(basegfx::B2DPolyPolygonVector& rVector) const
 {
     bool bAllOk = true;
     bool bOneOk = false;
 
-    Point aPos;
     basegfx::B2DPolyPolygon aGlyphOutline;
-    for( int nStart = 0;;)
-    {
-        sal_GlyphId nLGlyph;
-        if( !GetNextGlyphs( 1, &nLGlyph, aPos, nStart ) )
-            break;
 
+    Point aPos;
+    const GlyphItem* pGlyph;
+    int nStart = 0;
+    while (GetNextGlyph(&pGlyph, aPos, nStart))
+    {
         // get outline of individual glyph, ignoring "empty" glyphs
-        bool bSuccess = rSalGraphics.GetGlyphOutline( nLGlyph, aGlyphOutline );
+        bool bSuccess = pGlyph->GetGlyphOutline(aGlyphOutline);
         bAllOk &= bSuccess;
         bOneOk |= bSuccess;
         // only add non-empty outlines
@@ -712,7 +652,7 @@ bool SalLayout::GetOutline( SalGraphics& rSalGraphics,
         {
             if( aPos.X() || aPos.Y() )
             {
-                aGlyphOutline.transform(basegfx::tools::createTranslateB2DHomMatrix(aPos.X(), aPos.Y()));
+                aGlyphOutline.transform(basegfx::utils::createTranslateB2DHomMatrix(aPos.X(), aPos.Y()));
             }
 
             // insert outline at correct position
@@ -723,21 +663,20 @@ bool SalLayout::GetOutline( SalGraphics& rSalGraphics,
     return (bAllOk && bOneOk);
 }
 
-bool SalLayout::GetBoundRect( SalGraphics& rSalGraphics, Rectangle& rRect ) const
+bool SalLayout::GetBoundRect(tools::Rectangle& rRect) const
 {
     bool bRet = false;
     rRect.SetEmpty();
 
-    Point aPos;
-    Rectangle aRectangle;
-    for( int nStart = 0;;)
-    {
-        sal_GlyphId nLGlyph;
-        if( !GetNextGlyphs( 1, &nLGlyph, aPos, nStart ) )
-            break;
+    tools::Rectangle aRectangle;
 
+    Point aPos;
+    const GlyphItem* pGlyph;
+    int nStart = 0;
+    while (GetNextGlyph(&pGlyph, aPos, nStart))
+    {
         // get bounding rectangle of individual glyph
-        if( rSalGraphics.GetGlyphBoundRect( nLGlyph, aRectangle ) )
+        if (pGlyph->GetGlyphBoundRect(aRectangle))
         {
             // merge rectangle
             aRectangle += aPos;
@@ -752,112 +691,10 @@ bool SalLayout::GetBoundRect( SalGraphics& rSalGraphics, Rectangle& rRect ) cons
     return bRet;
 }
 
-bool SalLayout::IsSpacingGlyph( sal_GlyphId nGlyph )
-{
-    bool bRet = false;
-    if( nGlyph & GF_ISCHAR )
-    {
-        long nChar = nGlyph & GF_IDXMASK;
-        bRet = (nChar <= 0x0020)                    // blank
-            //|| (nChar == 0x00A0)                  // non breaking space
-            || (nChar >= 0x2000 && nChar <= 0x200F) // whitespace
-            || (nChar == 0x3000);                   // ideographic space
-    }
-    else
-        bRet = ((nGlyph & GF_IDXMASK) == 3);
-    return bRet;
-}
-
-GenericSalLayout::GenericSalLayout()
-{}
-
-GenericSalLayout::~GenericSalLayout()
-{}
-
-void GenericSalLayout::AppendGlyph( const GlyphItem& rGlyphItem )
-{
-    m_GlyphItems.push_back(rGlyphItem);
-}
-
-bool GenericSalLayout::GetCharWidths( DeviceCoordinate* pCharWidths ) const
-{
-    // initialize character extents buffer
-    int nCharCount = mnEndCharPos - mnMinCharPos;
-    for( int n = 0; n < nCharCount; ++n )
-        pCharWidths[n] = 0;
-
-    // determine cluster extents
-    for( GlyphVector::const_iterator pGlyphIter = m_GlyphItems.begin(), end = m_GlyphItems.end(); pGlyphIter != end ; ++pGlyphIter)
-    {
-        // use cluster start to get char index
-        if( !pGlyphIter->IsClusterStart() )
-            continue;
-
-        int n = pGlyphIter->mnCharPos;
-        if( n >= mnEndCharPos )
-            continue;
-        n -= mnMinCharPos;
-        if( n < 0 )
-            continue;
-
-        // left glyph in cluster defines default extent
-        long nXPosMin = pGlyphIter->maLinearPos.X();
-        long nXPosMax = nXPosMin + pGlyphIter->mnNewWidth;
-
-        // calculate right x-position for this glyph cluster
-        // break if no more glyphs in layout
-        // break at next glyph cluster start
-        while( (pGlyphIter+1 != end) && !pGlyphIter[1].IsClusterStart() )
-        {
-            // advance to next glyph in cluster
-            ++pGlyphIter;
-
-            if( pGlyphIter->IsDiacritic() )
-                continue; // ignore diacritics
-            // get leftmost x-extent of this glyph
-            long nXPos = pGlyphIter->maLinearPos.X();
-            if( nXPosMin > nXPos )
-                nXPosMin = nXPos;
-
-            // get rightmost x-extent of this glyph
-            nXPos += pGlyphIter->mnNewWidth;
-            if( nXPosMax < nXPos )
-                nXPosMax = nXPos;
-        }
-
-        // when the current cluster overlaps with the next one assume
-        // rightmost cluster edge is the leftmost edge of next cluster
-        // for clusters that do not have x-sorted glyphs
-        // TODO: avoid recalculation of left bound in next cluster iteration
-        for( GlyphVector::const_iterator pN = pGlyphIter; ++pN != end; )
-        {
-            if( pN->IsClusterStart() )
-                break;
-            if( pN->IsDiacritic() )
-                continue;   // ignore diacritics
-            if( nXPosMax > pN->maLinearPos.X() )
-                nXPosMax = pN->maLinearPos.X();
-        }
-        if( nXPosMax < nXPosMin )
-            nXPosMin = nXPosMax = 0;
-
-        // character width is sum of glyph cluster widths
-        pCharWidths[n] += nXPosMax - nXPosMin;
-    }
-
-    // TODO: distribute the cluster width proportionally to the characters
-    // clusters (e.g. ligatures) correspond to more than one char index,
-    // so some character widths are still uninitialized. This is solved
-    // by setting the first charwidth of the cluster to the cluster width
-
-    return true;
-}
-
 DeviceCoordinate GenericSalLayout::FillDXArray( DeviceCoordinate* pCharWidths ) const
 {
-    if( pCharWidths )
-        if( !GetCharWidths( pCharWidths ) )
-            return 0;
+    if (pCharWidths)
+        GetCharWidths(pCharWidths);
 
     return GetTextWidth();
 }
@@ -865,177 +702,26 @@ DeviceCoordinate GenericSalLayout::FillDXArray( DeviceCoordinate* pCharWidths ) 
 // the text width is the maximum logical extent of all glyphs
 DeviceCoordinate GenericSalLayout::GetTextWidth() const
 {
-    if( m_GlyphItems.empty() )
+    if (!m_GlyphItems.IsValid())
         return 0;
 
     // initialize the extent
     DeviceCoordinate nMinPos = 0;
     DeviceCoordinate nMaxPos = 0;
 
-    for( GlyphVector::const_iterator pGlyphIter = m_GlyphItems.begin(), end = m_GlyphItems.end(); pGlyphIter != end ; ++pGlyphIter )
+    for (auto const& aGlyphItem : *m_GlyphItems.Impl())
     {
         // update the text extent with the glyph extent
-        DeviceCoordinate nXPos = pGlyphIter->maLinearPos.X();
+        DeviceCoordinate nXPos = aGlyphItem.m_aLinearPos.X();
         if( nMinPos > nXPos )
             nMinPos = nXPos;
-        nXPos += pGlyphIter->mnNewWidth - pGlyphIter->mnXOffset;
+        nXPos += aGlyphItem.m_nNewWidth - aGlyphItem.m_nXOffset;
         if( nMaxPos < nXPos )
             nMaxPos = nXPos;
     }
 
     DeviceCoordinate nWidth = nMaxPos - nMinPos;
     return nWidth;
-}
-
-void GenericSalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
-{
-    SalLayout::AdjustLayout( rArgs );
-
-    if( rArgs.mpDXArray )
-        ApplyDXArray( rArgs );
-    else if( rArgs.mnLayoutWidth )
-        Justify( rArgs.mnLayoutWidth );
-}
-
-// This DXArray thing is one of the stupidest ideas I have ever seen (I've been
-// told that it probably a one-to-one mapping of some Windows 3.1 API, which is
-// telling).
-
-// Note: That would be the EMRTEXT structure, which is part of the EMF spec (see
-// [MS-EMF] section 2.2.5. Basically the field in question is OutputDx, which is:
-//
-//      "An array of 32-bit unsigned integers that specify the output spacing
-//      between the origins of adjacent character cells in logical units."
-//
-// This obviously makes sense for ASCII text (the EMR_EXTTEXTOUTA record), but it
-// doesn't make sense for Unicode text (the EMR_EXTTEXTOUTW record) because it is
-// mapping character codes to output spacing, which obviously can cause problems
-// with CTL. MANY of our concepts are based around Microsoft data structures, this
-// is obviously one of them and we probably need a rethink about how we go about
-// this.
-
-// To justify a text string, Writer calls OutputDevice::GetTextArray()
-// to get an array that maps input characters (not glyphs) to their absolute
-// position, GetTextArray() in turn calls SalLayout::FillDXArray() to get an
-// array of character widths that it converts to absolute positions.
-
-// Writer would then apply justification adjustments to that array of absolute
-// character positions and return to OutputDevice, which eventually calls
-// ApplyDXArray(), which needs to extract the individual adjustments for each
-// character to apply it to corresponding glyphs, and since that information is
-// already lost it tries to do some heuristics to guess it again. Those
-// heuristics often fail, and have always been a source of all sorts of weird
-// text layout bugs, and instead of fixing the broken design a hack after hack
-// have been applied on top of it, making it a complete mess that nobody
-// understands.
-
-// As you can see by now, this is utterly stupid, why doesn't Writer just send
-// us the advance width transformations it wants to apply to each character directly
-// instead of this whole mess?
-
-void GenericSalLayout::ApplyDXArray( ImplLayoutArgs& rArgs )
-{
-    if( m_GlyphItems.empty())
-        return;
-
-    // determine cluster boundaries and x base offset
-    const int nCharCount = rArgs.mnEndCharPos - rArgs.mnMinCharPos;
-    std::unique_ptr<int[]> const pLogCluster(new int[nCharCount]);
-    size_t i;
-    int n,p;
-    long nBasePointX = -1;
-    if( mnLayoutFlags & SalLayoutFlags::ForFallback )
-        nBasePointX = 0;
-    for(p = 0; p < nCharCount; ++p )
-        pLogCluster[ p ] = -1;
-
-    for( i = 0; i < m_GlyphItems.size(); ++i)
-    {
-        n = m_GlyphItems[i].mnCharPos - rArgs.mnMinCharPos;
-        if( (n < 0) || (nCharCount <= n) )
-            continue;
-        if( pLogCluster[ n ] < 0 )
-            pLogCluster[ n ] = i;
-        if( nBasePointX < 0 )
-            nBasePointX = m_GlyphItems[i].maLinearPos.X();
-    }
-    // retarget unresolved pLogCluster[n] to a glyph inside the cluster
-    // TODO: better do it while the deleted-glyph markers are still there
-    for( n = 0; n < nCharCount; ++n )
-        if( (p = pLogCluster[n]) >= 0 )
-            break;
-    if( n >= nCharCount )
-        return;
-    for( n = 0; n < nCharCount; ++n )
-    {
-        if( pLogCluster[ n ] < 0 )
-            pLogCluster[ n ] = p;
-        else
-            p = pLogCluster[ n ];
-    }
-
-    // calculate adjusted cluster widths
-    std::unique_ptr<long[]> const pNewGlyphWidths(new long[m_GlyphItems.size()]);
-    for( i = 0; i < m_GlyphItems.size(); ++i )
-        pNewGlyphWidths[ i ] = 0;
-
-    bool bRTL;
-    for( int nCharPos = p = -1; rArgs.GetNextPos( &nCharPos, &bRTL ); )
-    {
-        n = nCharPos - rArgs.mnMinCharPos;
-        if( (n < 0) || (nCharCount <= n) )  continue;
-
-        if( pLogCluster[ n ] >= 0 )
-            p = pLogCluster[ n ];
-        if( p >= 0 )
-        {
-            long nDelta = rArgs.mpDXArray[ n ] ;
-            if( n > 0 )
-                nDelta -= rArgs.mpDXArray[ n-1 ];
-            pNewGlyphWidths[ p ] += nDelta * mnUnitsPerPixel;
-        }
-    }
-
-    // move cluster positions using the adjusted widths
-    long nDelta = 0;
-    long nNewPos = 0;
-    for( i = 0; i < m_GlyphItems.size(); ++i)
-    {
-        if( m_GlyphItems[i].IsClusterStart() )
-        {
-            // calculate original and adjusted cluster width
-            int nOldClusterWidth = m_GlyphItems[i].mnNewWidth - m_GlyphItems[i].mnXOffset;
-            int nNewClusterWidth = pNewGlyphWidths[i];
-            size_t j;
-            for( j = i; ++j < m_GlyphItems.size(); )
-            {
-                if( m_GlyphItems[j].IsClusterStart() )
-                    break;
-                if( !m_GlyphItems[j].IsDiacritic() ) // #i99367# ignore diacritics
-                    nOldClusterWidth += m_GlyphItems[j].mnNewWidth - m_GlyphItems[j].mnXOffset;
-                nNewClusterWidth += pNewGlyphWidths[j];
-            }
-            const int nDiff = nNewClusterWidth - nOldClusterWidth;
-
-            // adjust cluster glyph widths and positions
-            nDelta = nBasePointX + (nNewPos - m_GlyphItems[i].maLinearPos.X());
-            if( !m_GlyphItems[i].IsRTLGlyph() )
-            {
-                // for LTR case extend rightmost glyph in cluster
-                m_GlyphItems[j - 1].mnNewWidth += nDiff;
-            }
-            else
-            {
-                // right align cluster in new space for RTL case
-                m_GlyphItems[i].mnNewWidth += nDiff;
-                nDelta += nDiff;
-            }
-
-            nNewPos += nNewClusterWidth;
-        }
-
-        m_GlyphItems[i].maLinearPos.X() += nDelta;
-    }
 }
 
 void GenericSalLayout::Justify( DeviceCoordinate nNewWidth )
@@ -1045,33 +731,33 @@ void GenericSalLayout::Justify( DeviceCoordinate nNewWidth )
     if( !nOldWidth || nNewWidth==nOldWidth )
         return;
 
-    if(m_GlyphItems.empty())
+    if (!m_GlyphItems.IsValid())
     {
         return;
     }
     // find rightmost glyph, it won't get stretched
-    GlyphVector::iterator pGlyphIterRight = m_GlyphItems.begin();
-    pGlyphIterRight += m_GlyphItems.size() - 1;
-    GlyphVector::iterator pGlyphIter;
+    std::vector<GlyphItem>::iterator pGlyphIterRight = m_GlyphItems.Impl()->begin();
+    pGlyphIterRight += m_GlyphItems.Impl()->size() - 1;
+    std::vector<GlyphItem>::iterator pGlyphIter;
     // count stretchable glyphs
     int nStretchable = 0;
     int nMaxGlyphWidth = 0;
-    for(pGlyphIter = m_GlyphItems.begin(); pGlyphIter != pGlyphIterRight; ++pGlyphIter)
+    for(pGlyphIter = m_GlyphItems.Impl()->begin(); pGlyphIter != pGlyphIterRight; ++pGlyphIter)
     {
         if( !pGlyphIter->IsDiacritic() )
             ++nStretchable;
-        if( nMaxGlyphWidth < pGlyphIter->mnOrigWidth )
-            nMaxGlyphWidth = pGlyphIter->mnOrigWidth;
+        if( nMaxGlyphWidth < pGlyphIter->m_nOrigWidth )
+            nMaxGlyphWidth = pGlyphIter->m_nOrigWidth;
     }
 
     // move rightmost glyph to requested position
-    nOldWidth -= pGlyphIterRight->mnOrigWidth;
+    nOldWidth -= pGlyphIterRight->m_nOrigWidth;
     if( nOldWidth <= 0 )
         return;
     if( nNewWidth < nMaxGlyphWidth)
         nNewWidth = nMaxGlyphWidth;
-    nNewWidth -= pGlyphIterRight->mnOrigWidth;
-    pGlyphIterRight->maLinearPos.X() = maBasePoint.X() + nNewWidth;
+    nNewWidth -= pGlyphIterRight->m_nOrigWidth;
+    pGlyphIterRight->m_aLinearPos.setX( nNewWidth );
 
     // justify glyph widths and positions
     int nDiffWidth = nNewWidth - nOldWidth;
@@ -1079,10 +765,10 @@ void GenericSalLayout::Justify( DeviceCoordinate nNewWidth )
     {
         // expand width by distributing space between glyphs evenly
         int nDeltaSum = 0;
-        for( pGlyphIter = m_GlyphItems.begin(); pGlyphIter != pGlyphIterRight; ++pGlyphIter )
+        for( pGlyphIter = m_GlyphItems.Impl()->begin(); pGlyphIter != pGlyphIterRight; ++pGlyphIter )
         {
             // move glyph to justified position
-            pGlyphIter->maLinearPos.X() += nDeltaSum;
+            pGlyphIter->m_aLinearPos.AdjustX(nDeltaSum );
 
             // do not stretch non-stretchable glyphs
             if( pGlyphIter->IsDiacritic() || (nStretchable <= 0) )
@@ -1091,26 +777,26 @@ void GenericSalLayout::Justify( DeviceCoordinate nNewWidth )
             // distribute extra space equally to stretchable glyphs
             int nDeltaWidth = nDiffWidth / nStretchable--;
             nDiffWidth     -= nDeltaWidth;
-            pGlyphIter->mnNewWidth += nDeltaWidth;
+            pGlyphIter->m_nNewWidth += nDeltaWidth;
             nDeltaSum      += nDeltaWidth;
         }
     }
     else // condensed case
     {
         // squeeze width by moving glyphs proportionally
-        double fSqueeze = (double)nNewWidth / nOldWidth;
-        if(m_GlyphItems.size() > 1)
+        double fSqueeze = static_cast<double>(nNewWidth) / nOldWidth;
+        if(m_GlyphItems.Impl()->size() > 1)
         {
-            for( pGlyphIter = m_GlyphItems.begin(); ++pGlyphIter != pGlyphIterRight;)
+            for( pGlyphIter = m_GlyphItems.Impl()->begin(); ++pGlyphIter != pGlyphIterRight;)
             {
-                int nX = pGlyphIter->maLinearPos.X() - maBasePoint.X();
-                nX = (int)(nX * fSqueeze);
-                pGlyphIter->maLinearPos.X() = nX + maBasePoint.X();
+                int nX = pGlyphIter->m_aLinearPos.X();
+                nX = static_cast<int>(nX * fSqueeze);
+                pGlyphIter->m_aLinearPos.setX( nX );
             }
         }
         // adjust glyph widths to new positions
-        for( pGlyphIter = m_GlyphItems.begin(); pGlyphIter != pGlyphIterRight; ++pGlyphIter )
-            pGlyphIter->mnNewWidth = pGlyphIter[1].maLinearPos.X() - pGlyphIter[0].maLinearPos.X();
+        for( pGlyphIter = m_GlyphItems.Impl()->begin(); pGlyphIter != pGlyphIterRight; ++pGlyphIter )
+            pGlyphIter->m_nNewWidth = pGlyphIter[1].m_aLinearPos.X() - pGlyphIter[0].m_aLinearPos.X();
     }
 }
 
@@ -1119,9 +805,9 @@ void GenericSalLayout::ApplyAsianKerning(const OUString& rStr)
     const int nLength = rStr.getLength();
     long nOffset = 0;
 
-    for( GlyphVector::iterator pGlyphIter = m_GlyphItems.begin(), pGlyphIterEnd = m_GlyphItems.end(); pGlyphIter != pGlyphIterEnd; ++pGlyphIter )
+    for( std::vector<GlyphItem>::iterator pGlyphIter = m_GlyphItems.Impl()->begin(), pGlyphIterEnd = m_GlyphItems.Impl()->end(); pGlyphIter != pGlyphIterEnd; ++pGlyphIter )
     {
-        const int n = pGlyphIter->mnCharPos;
+        const int n = pGlyphIter->m_nCharPos;
         if( n < nLength - 1)
         {
             // ignore code ranges that are not affected by asian punctuation compression
@@ -1134,75 +820,24 @@ void GenericSalLayout::ApplyAsianKerning(const OUString& rStr)
 
             // calculate compression values
             const bool bVertical = false;
-            long nKernFirst = +CalcAsianKerning( cHere, true, bVertical );
-            long nKernNext  = -CalcAsianKerning( cNext, false, bVertical );
+            long nKernFirst = +lcl_CalcAsianKerning( cHere, true, bVertical );
+            long nKernNext  = -lcl_CalcAsianKerning( cNext, false, bVertical );
 
             // apply punctuation compression to logical glyph widths
             long nDelta = (nKernFirst < nKernNext) ? nKernFirst : nKernNext;
             if( nDelta<0 && nKernFirst!=0 && nKernNext!=0 )
             {
-                int nGlyphWidth = pGlyphIter->mnOrigWidth;
+                int nGlyphWidth = pGlyphIter->m_nOrigWidth;
                 nDelta = (nDelta * nGlyphWidth + 2) / 4;
                 if( pGlyphIter+1 == pGlyphIterEnd )
-                    pGlyphIter->mnNewWidth += nDelta;
+                    pGlyphIter->m_nNewWidth += nDelta;
                 nOffset += nDelta;
             }
         }
 
         // adjust the glyph positions to the new glyph widths
         if( pGlyphIter+1 != pGlyphIterEnd )
-            pGlyphIter->maLinearPos.X() += nOffset;
-    }
-}
-
-void GenericSalLayout::KashidaJustify( long nKashidaIndex, int nKashidaWidth )
-{
-    // TODO: reimplement method when container type for GlyphItems changes
-
-    // skip if the kashida glyph in the font looks suspicious
-    if( nKashidaWidth <= 0 )
-        return;
-
-    // calculate max number of needed kashidas
-    int nKashidaCount = 0;
-    for (GlyphVector::iterator pGlyphIter = m_GlyphItems.begin();
-            pGlyphIter != m_GlyphItems.end(); ++pGlyphIter)
-    {
-        // only inject kashidas in RTL contexts
-        if( !pGlyphIter->IsRTLGlyph() )
-            continue;
-        // no kashida-injection for blank justified expansion either
-        if( IsSpacingGlyph( pGlyphIter->maGlyphId) )
-            continue;
-
-        // calculate gap, ignore if too small
-        int nGapWidth = pGlyphIter->mnNewWidth - pGlyphIter->mnOrigWidth;
-        // worst case is one kashida even for mini-gaps
-        if( nGapWidth < nKashidaWidth )
-            continue;
-
-        nKashidaCount = 0;
-        Point aPos = pGlyphIter->maLinearPos;
-        aPos.X() -= nGapWidth; // cluster is already right aligned
-        int const nCharPos = pGlyphIter->mnCharPos;
-        GlyphVector::iterator pGlyphIter2 = pGlyphIter;
-        for(; nGapWidth > nKashidaWidth; nGapWidth -= nKashidaWidth, ++nKashidaCount )
-        {
-            pGlyphIter2 = m_GlyphItems.insert(pGlyphIter2, GlyphItem(nCharPos, nKashidaIndex, aPos,
-                                                      GlyphItem::IS_IN_CLUSTER|GlyphItem::IS_RTL_GLYPH, nKashidaWidth ));
-            ++pGlyphIter2;
-            aPos.X() += nKashidaWidth;
-        }
-
-        // fixup rightmost kashida for gap remainder
-        if( nGapWidth > 0 )
-        {
-            pGlyphIter2 = m_GlyphItems.insert(pGlyphIter2, GlyphItem(nCharPos, nKashidaIndex, aPos,
-                                                      GlyphItem::IS_IN_CLUSTER|GlyphItem::IS_RTL_GLYPH, nKashidaCount ? nGapWidth : nGapWidth/2 ));
-            ++pGlyphIter2;
-            aPos.X() += nGapWidth;
-        }
-        pGlyphIter = pGlyphIter2;
+            pGlyphIter->m_aLinearPos.AdjustX(nOffset );
     }
 }
 
@@ -1213,16 +848,16 @@ void GenericSalLayout::GetCaretPositions( int nMaxIndex, long* pCaretXArray ) co
         pCaretXArray[i] = -1;
 
     // calculate caret positions using glyph array
-    for( GlyphVector::const_iterator pGlyphIter = m_GlyphItems.begin(), pGlyphIterEnd = m_GlyphItems.end(); pGlyphIter != pGlyphIterEnd; ++pGlyphIter )
+    for (auto const& aGlyphItem : *m_GlyphItems.Impl())
     {
-        long nXPos = pGlyphIter->maLinearPos.X();
-        long nXRight = nXPos + pGlyphIter->mnOrigWidth;
-        int n = pGlyphIter->mnCharPos;
+        long nXPos = aGlyphItem.m_aLinearPos.X();
+        long nXRight = nXPos + aGlyphItem.m_nOrigWidth;
+        int n = aGlyphItem.m_nCharPos;
         int nCurrIdx = 2 * (n - mnMinCharPos);
         // tdf#86399 if this is not the start of a cluster, don't overwrite the caret bounds of the cluster start
-        if (!pGlyphIter->IsClusterStart() && pCaretXArray[nCurrIdx] != -1)
+        if (aGlyphItem.IsInCluster() && pCaretXArray[nCurrIdx] != -1)
             continue;
-        if( !pGlyphIter->IsRTLGlyph() )
+        if (!aGlyphItem.IsRTLGlyph() )
         {
             // normal positions for LTR case
             pCaretXArray[ nCurrIdx ]   = nXPos;
@@ -1241,8 +876,7 @@ sal_Int32 GenericSalLayout::GetTextBreak( DeviceCoordinate nMaxWidth, DeviceCoor
 {
     int nCharCapacity = mnEndCharPos - mnMinCharPos;
     std::unique_ptr<DeviceCoordinate[]> const pCharWidths(new DeviceCoordinate[nCharCapacity]);
-    if (!GetCharWidths(pCharWidths.get()))
-        return -1;
+    GetCharWidths(pCharWidths.get());
 
     DeviceCoordinate nWidth = 0;
     for( int i = mnMinCharPos; i < mnEndCharPos; ++i )
@@ -1256,192 +890,110 @@ sal_Int32 GenericSalLayout::GetTextBreak( DeviceCoordinate nMaxWidth, DeviceCoor
     return -1;
 }
 
-int GenericSalLayout::GetNextGlyphs( int nLen, sal_GlyphId* pGlyphs, Point& rPos,
-                                     int& nStart, DeviceCoordinate* pGlyphAdvAry, int* pCharPosAry,
-                                     const PhysicalFontFace** /*pFallbackFonts*/ ) const
+bool GenericSalLayout::GetNextGlyph(const GlyphItem** pGlyph,
+                                    Point& rPos, int& nStart,
+                                    const PhysicalFontFace**, int* const pFallbackLevel) const
 {
-    GlyphVector::const_iterator pGlyphIter = m_GlyphItems.begin();
-    GlyphVector::const_iterator pGlyphIterEnd = m_GlyphItems.end();
+    std::vector<GlyphItem>::const_iterator pGlyphIter = m_GlyphItems.Impl()->begin();
+    std::vector<GlyphItem>::const_iterator pGlyphIterEnd = m_GlyphItems.Impl()->end();
     pGlyphIter += nStart;
 
     // find next glyph in substring
     for(; pGlyphIter != pGlyphIterEnd; ++nStart, ++pGlyphIter )
     {
-        int n = pGlyphIter->mnCharPos;
+        int n = pGlyphIter->m_nCharPos;
         if( (mnMinCharPos <= n) && (n < mnEndCharPos) )
             break;
     }
 
     // return zero if no more glyph found
-    if( nStart >= (int)m_GlyphItems.size() )
-        return 0;
+    if( nStart >= static_cast<int>(m_GlyphItems.Impl()->size()) )
+        return false;
 
     if( pGlyphIter == pGlyphIterEnd )
-        return 0;
+        return false;
+
+    // update return data with glyph info
+    *pGlyph = &(*pGlyphIter);
+    if (pFallbackLevel)
+        *pFallbackLevel = 0;
+    ++nStart;
 
     // calculate absolute position in pixel units
-    Point aRelativePos = pGlyphIter->maLinearPos - maBasePoint;
+    Point aRelativePos = pGlyphIter->m_aLinearPos;
 
-    // find more glyphs which can be merged into one drawing instruction
-    int nCount = 0;
-    long nYPos = pGlyphIter->maLinearPos.Y();
-    long nOldFlags = pGlyphIter->maGlyphId;
-    for(;;)
-    {
-        // update return data with glyph info
-        ++nCount;
-        *(pGlyphs++) = pGlyphIter->maGlyphId;
-        if( pCharPosAry )
-            *(pCharPosAry++) = pGlyphIter->mnCharPos;
-        if( pGlyphAdvAry )
-            *pGlyphAdvAry = pGlyphIter->mnNewWidth;
-
-        // break at end of glyph list
-        if( ++nStart >= (int)m_GlyphItems.size() )
-            break;
-        // break when enough glyphs
-        if( nCount >= nLen )
-            break;
-
-        long nGlyphAdvance = pGlyphIter[1].maLinearPos.X() - pGlyphIter->maLinearPos.X();
-        if( pGlyphAdvAry )
-        {
-            // override default advance width with correct value
-            *(pGlyphAdvAry++) = nGlyphAdvance;
-        }
-        else
-        {
-            // stop when next x-position is unexpected
-            if( pGlyphIter->mnOrigWidth != nGlyphAdvance )
-                break;
-        }
-
-        // advance to next glyph
-        ++pGlyphIter;
-
-        // stop when next y-position is unexpected
-        if( nYPos != pGlyphIter->maLinearPos.Y() )
-            break;
-
-        // stop when no longer in string
-        int n = pGlyphIter->mnCharPos;
-        if( (n < mnMinCharPos) || (mnEndCharPos <= n) )
-            break;
-
-        // stop when glyph flags change
-        if( (nOldFlags ^ pGlyphIter->maGlyphId) & GF_FLAGMASK )
-            break;
-
-        nOldFlags = pGlyphIter->maGlyphId; // &GF_FLAGMASK not needed for test above
-    }
-
-    aRelativePos.X() /= mnUnitsPerPixel;
-    aRelativePos.Y() /= mnUnitsPerPixel;
+    aRelativePos.setX( aRelativePos.X() / ( mnUnitsPerPixel) );
+    aRelativePos.setY( aRelativePos.Y() / ( mnUnitsPerPixel) );
     rPos = GetDrawPosition( aRelativePos );
 
-    return nCount;
+    return true;
 }
 
 void GenericSalLayout::MoveGlyph( int nStart, long nNewXPos )
 {
-    if( nStart >= (int)m_GlyphItems.size() )
+    if( nStart >= static_cast<int>(m_GlyphItems.Impl()->size()) )
         return;
 
-    GlyphVector::iterator pGlyphIter = m_GlyphItems.begin();
+    std::vector<GlyphItem>::iterator pGlyphIter = m_GlyphItems.Impl()->begin();
     pGlyphIter += nStart;
 
     // the nNewXPos argument determines the new cell position
     // as RTL-glyphs are right justified in their cell
     // the cell position needs to be adjusted to the glyph position
     if( pGlyphIter->IsRTLGlyph() )
-        nNewXPos += pGlyphIter->mnNewWidth - pGlyphIter->mnOrigWidth;
+        nNewXPos += pGlyphIter->m_nNewWidth - pGlyphIter->m_nOrigWidth;
     // calculate the x-offset to the old position
-    long nXDelta = nNewXPos - pGlyphIter->maLinearPos.X();
+    long nXDelta = nNewXPos - pGlyphIter->m_aLinearPos.X();
     // adjust all following glyph positions if needed
     if( nXDelta != 0 )
     {
-        for( GlyphVector::iterator pGlyphIterEnd = m_GlyphItems.end(); pGlyphIter != pGlyphIterEnd; ++pGlyphIter )
+        for( std::vector<GlyphItem>::iterator pGlyphIterEnd = m_GlyphItems.Impl()->end(); pGlyphIter != pGlyphIterEnd; ++pGlyphIter )
         {
-            pGlyphIter->maLinearPos.X() += nXDelta;
+            pGlyphIter->m_aLinearPos.AdjustX(nXDelta );
         }
     }
 }
 
 void GenericSalLayout::DropGlyph( int nStart )
 {
-    if( nStart >= (int)m_GlyphItems.size())
+    if( nStart >= static_cast<int>(m_GlyphItems.Impl()->size()))
         return;
 
-    GlyphVector::iterator pGlyphIter = m_GlyphItems.begin();
+    std::vector<GlyphItem>::iterator pGlyphIter = m_GlyphItems.Impl()->begin();
     pGlyphIter += nStart;
-    pGlyphIter->maGlyphId = GF_DROPPED;
-    pGlyphIter->mnCharPos = -1;
+    pGlyphIter->m_nCharPos = -1;
+    pGlyphIter->m_nFlags |= GlyphItem::IS_DROPPED;
 }
 
 void GenericSalLayout::Simplify( bool bIsBase )
 {
-    const sal_GlyphId nDropMarker = bIsBase ? GF_DROPPED : 0;
-
     // remove dropped glyphs inplace
     size_t j = 0;
-    for(size_t i = 0; i < m_GlyphItems.size(); i++ )
+    for(size_t i = 0; i < m_GlyphItems.Impl()->size(); i++ )
     {
-        if( m_GlyphItems[i].maGlyphId == nDropMarker )
+        if (bIsBase && (*m_GlyphItems.Impl())[i].IsDropped())
+            continue;
+        if (!bIsBase && (*m_GlyphItems.Impl())[i].m_aGlyphId == 0)
             continue;
 
         if( i != j )
         {
-            m_GlyphItems[j] = m_GlyphItems[i];
+            (*m_GlyphItems.Impl())[j] = (*m_GlyphItems.Impl())[i];
         }
         j += 1;
     }
-    m_GlyphItems.erase(m_GlyphItems.begin() + j, m_GlyphItems.end());
+    m_GlyphItems.Impl()->erase(m_GlyphItems.Impl()->begin() + j, m_GlyphItems.Impl()->end());
 }
 
-// make sure GlyphItems are sorted left to right
-void GenericSalLayout::SortGlyphItems()
-{
-    // move cluster components behind their cluster start (especially for RTL)
-    // using insertion sort because the glyph items are "almost sorted"
-
-    for( GlyphVector::iterator pGlyphIter = m_GlyphItems.begin(), pGlyphIterEnd = m_GlyphItems.end(); pGlyphIter != pGlyphIterEnd; ++pGlyphIter )
-    {
-        // find a cluster starting with a diacritic
-        if( !pGlyphIter->IsDiacritic() )
-            continue;
-        if( !pGlyphIter->IsClusterStart() )
-            continue;
-        for( GlyphVector::iterator pBaseGlyph = pGlyphIter; ++pBaseGlyph != pGlyphIterEnd; )
-        {
-            // find the base glyph matching to the misplaced diacritic
-            if( pBaseGlyph->IsClusterStart() )
-                break;
-            if( pBaseGlyph->IsDiacritic() )
-                continue;
-
-            // found the matching base glyph
-            // => this base glyph becomes the new cluster start
-            iter_swap(pGlyphIter, pBaseGlyph);
-
-            // update glyph flags of swapped glyphitems
-            pGlyphIter->mnFlags &= ~GlyphItem::IS_IN_CLUSTER;
-            pBaseGlyph->mnFlags |= GlyphItem::IS_IN_CLUSTER;
-            // prepare for checking next cluster
-            pGlyphIter = pBaseGlyph;
-            break;
-        }
-    }
-}
-
-MultiSalLayout::MultiSalLayout( SalLayout& rBaseLayout, const PhysicalFontFace* pBaseFont )
+MultiSalLayout::MultiSalLayout( std::unique_ptr<SalLayout> pBaseLayout )
 :   SalLayout()
 ,   mnLevel( 1 )
 ,   mbIncomplete( false )
 {
-    //maFallbackRuns[0].Clear();
-    mpFallbackFonts[ 0 ] = pBaseFont;
-    mpLayouts[ 0 ]  = &rBaseLayout;
-    mnUnitsPerPixel = rBaseLayout.GetUnitsPerPixel();
+    assert(dynamic_cast<GenericSalLayout*>(pBaseLayout.get()));
+
+    mpLayouts[ 0 ].reset(static_cast<GenericSalLayout*>(pBaseLayout.release()));
+    mnUnitsPerPixel = mpLayouts[ 0 ]->GetUnitsPerPixel();
 }
 
 void MultiSalLayout::SetIncomplete(bool bIncomplete)
@@ -1452,23 +1004,21 @@ void MultiSalLayout::SetIncomplete(bool bIncomplete)
 
 MultiSalLayout::~MultiSalLayout()
 {
-    for( int i = 0; i < mnLevel; ++i )
-        mpLayouts[ i ]->Release();
 }
 
-void MultiSalLayout::AddFallback( SalLayout& rFallback,
-    ImplLayoutRuns& rFallbackRuns, const PhysicalFontFace* pFallbackFont )
+void MultiSalLayout::AddFallback( std::unique_ptr<SalLayout> pFallback,
+    ImplLayoutRuns const & rFallbackRuns)
 {
+    assert(dynamic_cast<GenericSalLayout*>(pFallback.get()));
     if( mnLevel >= MAX_FALLBACK )
         return;
 
-    mpFallbackFonts[ mnLevel ]  = pFallbackFont;
-    mpLayouts[ mnLevel ]        = &rFallback;
+    mpLayouts[ mnLevel ].reset(static_cast<GenericSalLayout*>(pFallback.release()));
     maFallbackRuns[ mnLevel-1 ] = rFallbackRuns;
     ++mnLevel;
 }
 
-bool MultiSalLayout::LayoutText( ImplLayoutArgs& rArgs )
+bool MultiSalLayout::LayoutText( ImplLayoutArgs& rArgs, const SalLayoutGlyphs* )
 {
     if( mnLevel <= 1 )
         return false;
@@ -1550,7 +1100,7 @@ void MultiSalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
     }
 
     // Compute rtl flags, since in some scripts glyphs/char order can be
-    // reversed for a few character sequencies e.g. Myanmar
+    // reversed for a few character sequences e.g. Myanmar
     std::vector<bool> vRtl(rArgs.mnEndCharPos - rArgs.mnMinCharPos, false);
     rArgs.ResetPos();
     bool bRtl;
@@ -1565,11 +1115,9 @@ void MultiSalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
     // prepare "merge sort"
     int nStartOld[ MAX_FALLBACK ];
     int nStartNew[ MAX_FALLBACK ];
-    int nCharPos[ MAX_FALLBACK ];
-    DeviceCoordinate nGlyphAdv[ MAX_FALLBACK ];
-    int nValid[ MAX_FALLBACK ] = {0};
+    const GlyphItem* pGlyphs[MAX_FALLBACK];
+    bool bValid[MAX_FALLBACK] = { false };
 
-    sal_GlyphId nDummy;
     Point aPos;
     int nLevel = 0, n;
     for( n = 0; n < mnLevel; ++n )
@@ -1582,9 +1130,6 @@ void MultiSalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
         }
         mpLayouts[n]->AdjustLayout( aMultiArgs );
 
-        // disable glyph-injection for glyph-fallback SalLayout iteration
-        SalLayout::DisableGlyphInjection( true );
-
         // remove unused parts of component
         if( n > 0 )
         {
@@ -1596,21 +1141,19 @@ void MultiSalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
 
         // prepare merging components
         nStartNew[ nLevel ] = nStartOld[ nLevel ] = 0;
-        nValid[ nLevel ] = mpLayouts[n]->GetNextGlyphs( 1, &nDummy, aPos,
-            nStartNew[ nLevel ], &nGlyphAdv[ nLevel ], &nCharPos[ nLevel ] );
+        bValid[nLevel] = mpLayouts[n]->GetNextGlyph(&pGlyphs[nLevel], aPos, nStartNew[nLevel]);
 
-        if( (n > 0) && !nValid[ nLevel ] )
+        if( (n > 0) && !bValid[ nLevel ] )
         {
             // an empty fallback layout can be released
-            mpLayouts[n]->Release();
+            mpLayouts[n].reset();
         }
         else
         {
             // reshuffle used fallbacks if needed
             if( nLevel != n )
             {
-                mpLayouts[ nLevel ]         = mpLayouts[ n ];
-                mpFallbackFonts[ nLevel ]   = mpFallbackFonts[ n ];
+                mpLayouts[ nLevel ]         = std::move(mpLayouts[ n ]);
                 maFallbackRuns[ nLevel ]    = maFallbackRuns[ n ];
             }
             ++nLevel;
@@ -1623,19 +1166,31 @@ void MultiSalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
     double fUnitMul = 1.0;
     for( n = 0; n < nLevel; ++n )
         maFallbackRuns[n].ResetPos();
+
+    int nFirstValid = -1;
+    for( n = 0; n < nLevel; ++n )
+    {
+        if(bValid[n])
+        {
+            nFirstValid = n;
+            break;
+        }
+    }
+    assert(nFirstValid >= 0);
+
     // get the next codepoint index that needs fallback
-    int nActiveCharPos = nCharPos[0];
+    int nActiveCharPos = pGlyphs[nFirstValid]->m_nCharPos;
     int nActiveCharIndex = nActiveCharPos - mnMinCharPos;
     // get the end index of the active run
     int nLastRunEndChar = (nActiveCharIndex >= 0 && vRtl[nActiveCharIndex]) ?
         rArgs.mnEndCharPos : rArgs.mnMinCharPos - 1;
-    int nRunVisibleEndChar = nCharPos[0];
+    int nRunVisibleEndChar = pGlyphs[nFirstValid]->m_nCharPos;
     // merge the fallback levels
-    while( nValid[0] && (nLevel > 0))
+    while( bValid[nFirstValid] && (nLevel > 0))
     {
         // find best fallback level
         for( n = 0; n < nLevel; ++n )
-            if( nValid[n] && !maFallbackRuns[n].PosIsInAnyRun( nActiveCharPos ) )
+            if( bValid[n] && !maFallbackRuns[n].PosIsInAnyRun( nActiveCharPos ) )
                 // fallback level n wins when it requested no further fallback
                 break;
         int nFBLevel = n;
@@ -1658,16 +1213,15 @@ void MultiSalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
         {
             // drop the NotDef glyphs in the base layout run if a fallback run exists
             while (
-                    (maFallbackRuns[ n-1 ].PosIsInRun( nCharPos[0] ) ) &&
-                    (!maFallbackRuns[ n ].PosIsInAnyRun( nCharPos[0] ) )
+                    (maFallbackRuns[n-1].PosIsInRun(pGlyphs[nFirstValid]->m_nCharPos)) &&
+                    (!maFallbackRuns[n].PosIsInAnyRun(pGlyphs[nFirstValid]->m_nCharPos))
                   )
             {
                 mpLayouts[0]->DropGlyph( nStartOld[0] );
                 nStartOld[0] = nStartNew[0];
-                nValid[0] = mpLayouts[0]->GetNextGlyphs( 1, &nDummy, aPos,
-                    nStartNew[0], &nGlyphAdv[0], &nCharPos[0] );
+                bValid[nFirstValid] = mpLayouts[0]->GetNextGlyph(&pGlyphs[nFirstValid], aPos, nStartNew[0]);
 
-                if( !nValid[0] )
+                if( !bValid[nFirstValid] )
                    break;
             }
         }
@@ -1677,15 +1231,14 @@ void MultiSalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
         bool bKeepNotDef = (nFBLevel >= nLevel);
         for(;;)
         {
-            nRunAdvance += nGlyphAdv[n];
+            nRunAdvance += pGlyphs[n]->m_nNewWidth;
 
             // proceed to next glyph
             nStartOld[n] = nStartNew[n];
-            int nOrigCharPos = nCharPos[n];
-            nValid[n] = mpLayouts[n]->GetNextGlyphs( 1, &nDummy, aPos,
-                                                     nStartNew[n], &nGlyphAdv[n], &nCharPos[n] );
+            int nOrigCharPos = pGlyphs[n]->m_nCharPos;
+            bValid[n] = mpLayouts[n]->GetNextGlyph(&pGlyphs[n], aPos, nStartNew[n]);
             // break after last glyph of active layout
-            if( !nValid[n] )
+            if( !bValid[n] )
             {
                 // performance optimization (when a fallback layout is no longer needed)
                 if( n >= nLevel-1 )
@@ -1696,16 +1249,16 @@ void MultiSalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
             //If the next character is one which belongs to the next level, then we
             //are finished here for now, and we'll pick up after the next level has
             //been processed
-            if ((n+1 < nLevel) && (nCharPos[n] != nOrigCharPos))
+            if ((n+1 < nLevel) && (pGlyphs[n]->m_nCharPos != nOrigCharPos))
             {
-                if (nOrigCharPos < nCharPos[n])
+                if (nOrigCharPos < pGlyphs[n]->m_nCharPos)
                 {
-                    if (nCharPos[n+1] > nOrigCharPos && (nCharPos[n+1] < nCharPos[n]))
+                    if (pGlyphs[n+1]->m_nCharPos > nOrigCharPos && (pGlyphs[n+1]->m_nCharPos < pGlyphs[n]->m_nCharPos))
                         break;
                 }
-                else if (nOrigCharPos > nCharPos[n])
+                else if (nOrigCharPos > pGlyphs[n]->m_nCharPos)
                 {
-                    if (nCharPos[n+1] > nCharPos[n] && (nCharPos[n+1] < nOrigCharPos))
+                    if (pGlyphs[n+1]->m_nCharPos > pGlyphs[n]->m_nCharPos && (pGlyphs[n+1]->m_nCharPos < nOrigCharPos))
                         break;
                 }
             }
@@ -1714,15 +1267,15 @@ void MultiSalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
             if( n > 0 )
             {
                 // skip until end of fallback run
-                if( !maFallbackRuns[n-1].PosIsInRun( nCharPos[n] ) )
+                if (!maFallbackRuns[n-1].PosIsInRun(pGlyphs[n]->m_nCharPos))
                     break;
             }
             else
             {
                 // break when a fallback is needed and available
-                bool bNeedFallback = maFallbackRuns[0].PosIsInRun( nCharPos[0] );
+                bool bNeedFallback = maFallbackRuns[0].PosIsInRun(pGlyphs[nFirstValid]->m_nCharPos);
                 if( bNeedFallback )
-                    if( !maFallbackRuns[ nLevel-1 ].PosIsInRun( nCharPos[0] ) )
+                    if (!maFallbackRuns[nLevel-1].PosIsInRun(pGlyphs[nFirstValid]->m_nCharPos))
                         break;
                 // break when change from resolved to unresolved base layout run
                 if( bKeepNotDef && !bNeedFallback )
@@ -1733,21 +1286,21 @@ void MultiSalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
             if (aMultiArgs.mpDXArray &&
                 nRunVisibleEndChar < mnEndCharPos &&
                 nRunVisibleEndChar >= mnMinCharPos &&
-                nCharPos[n] < mnEndCharPos &&
-                nCharPos[n] >= mnMinCharPos)
+                pGlyphs[n]->m_nCharPos < mnEndCharPos &&
+                pGlyphs[n]->m_nCharPos >= mnMinCharPos)
             {
                 if (vRtl[nActiveCharPos - mnMinCharPos])
                 {
                     if (aMultiArgs.mpDXArray[nRunVisibleEndChar-mnMinCharPos]
-                        >= aMultiArgs.mpDXArray[nCharPos[n] - mnMinCharPos])
+                        >= aMultiArgs.mpDXArray[pGlyphs[n]->m_nCharPos - mnMinCharPos])
                     {
-                        nRunVisibleEndChar = nCharPos[n];
+                        nRunVisibleEndChar = pGlyphs[n]->m_nCharPos;
                     }
                 }
                 else if (aMultiArgs.mpDXArray[nRunVisibleEndChar-mnMinCharPos]
-                         <= aMultiArgs.mpDXArray[nCharPos[n] - mnMinCharPos])
+                         <= aMultiArgs.mpDXArray[pGlyphs[n]->m_nCharPos - mnMinCharPos])
                 {
-                    nRunVisibleEndChar = nCharPos[n];
+                    nRunVisibleEndChar = pGlyphs[n]->m_nCharPos;
                 }
             }
         }
@@ -1775,7 +1328,7 @@ void MultiSalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
                   nRunAdvance -= aMultiArgs.mpDXArray[nLastRunEndChar - mnMinCharPos];
             }
             nLastRunEndChar = nRunVisibleEndChar;
-            nRunVisibleEndChar = nCharPos[0];
+            nRunVisibleEndChar = pGlyphs[nFirstValid]->m_nCharPos;
             // the requested width is still in pixel units
             // => convert it to base level font units
             nRunAdvance *= mnUnitsPerPixel;
@@ -1792,7 +1345,7 @@ void MultiSalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
         nXPos += nRunAdvance;
 
         // prepare for next fallback run
-        nActiveCharPos = nCharPos[0];
+        nActiveCharPos = pGlyphs[nFirstValid]->m_nCharPos;
         // it essential that the runs don't get ahead of themselves and in the
         // if( bKeepNotDef && !bNeedFallback ) statement above, the next run may
         // have already been reached on the base level
@@ -1815,10 +1368,6 @@ void MultiSalLayout::AdjustLayout( ImplLayoutArgs& rArgs )
     }
 
     mpLayouts[0]->Simplify( true );
-
-    // reenable glyph-injection
-    for( n = 0; n < mnLevel; ++n )
-        SalLayout::DisableGlyphInjection( false );
 }
 
 void MultiSalLayout::InitFont() const
@@ -1850,21 +1399,22 @@ sal_Int32 MultiSalLayout::GetTextBreak( DeviceCoordinate nMaxWidth, DeviceCoordi
         return mpLayouts[0]->GetTextBreak( nMaxWidth, nCharExtra, nFactor );
 
     int nCharCount = mnEndCharPos - mnMinCharPos;
-    std::unique_ptr<DeviceCoordinate[]> const pCharWidths(new DeviceCoordinate[2 * nCharCount]);
+    std::unique_ptr<DeviceCoordinate[]> const pCharWidths(new DeviceCoordinate[nCharCount]);
+    std::unique_ptr<DeviceCoordinate[]> const pFallbackCharWidths(new DeviceCoordinate[nCharCount]);
     mpLayouts[0]->FillDXArray( pCharWidths.get() );
 
     for( int n = 1; n < mnLevel; ++n )
     {
         SalLayout& rLayout = *mpLayouts[ n ];
-        rLayout.FillDXArray( &pCharWidths[nCharCount] );
+        rLayout.FillDXArray( pFallbackCharWidths.get() );
         double fUnitMul = mnUnitsPerPixel;
         fUnitMul /= rLayout.GetUnitsPerPixel();
         for( int i = 0; i < nCharCount; ++i )
         {
             if( pCharWidths[ i ] == 0 )
             {
-                DeviceCoordinate w = pCharWidths[ i + nCharCount ];
-                w = (DeviceCoordinate)(w * fUnitMul + 0.5);
+                DeviceCoordinate w = pFallbackCharWidths[i];
+                w = static_cast<DeviceCoordinate>(w * fUnitMul + 0.5);
                 pCharWidths[ i ] = w;
             }
         }
@@ -1905,7 +1455,7 @@ DeviceCoordinate MultiSalLayout::FillDXArray( DeviceCoordinate* pCharWidths ) co
         // merge results from current level
         double fUnitMul = mnUnitsPerPixel;
         fUnitMul /= mpLayouts[n]->GetUnitsPerPixel();
-        nTextWidth = (DeviceCoordinate)(nTextWidth * fUnitMul + 0.5);
+        nTextWidth = static_cast<DeviceCoordinate>(nTextWidth * fUnitMul + 0.5);
         if( nMaxWidth < nTextWidth )
             nMaxWidth = nTextWidth;
         if( !pCharWidths )
@@ -1920,7 +1470,7 @@ DeviceCoordinate MultiSalLayout::FillDXArray( DeviceCoordinate* pCharWidths ) co
             DeviceCoordinate nCharWidth = pTempWidths[i];
             if( !nCharWidth )
                 continue;
-            nCharWidth = (DeviceCoordinate)(nCharWidth * fUnitMul + 0.5);
+            nCharWidth = static_cast<DeviceCoordinate>(nCharWidth * fUnitMul + 0.5);
             pCharWidths[i] = nCharWidth;
         }
     }
@@ -1952,56 +1502,39 @@ void MultiSalLayout::GetCaretPositions( int nMaxIndex, long* pCaretXArray ) cons
     }
 }
 
-int MultiSalLayout::GetNextGlyphs( int nLen, sal_GlyphId* pGlyphIdxAry, Point& rPos,
-                                   int& nStart, DeviceCoordinate* pGlyphAdvAry, int* pCharPosAry,
-                                   const PhysicalFontFace** pFallbackFonts ) const
+bool MultiSalLayout::GetNextGlyph(const GlyphItem** pGlyph,
+                                  Point& rPos, int& nStart,
+                                  const PhysicalFontFace** pFallbackFont,
+                                  int* const pFallbackLevel) const
 {
-    // for multi-level fallback only single glyphs should be used
-    if( mnLevel > 1 && nLen > 1 )
-        nLen = 1;
-
     // NOTE: nStart is tagged with current font index
     int nLevel = static_cast<unsigned>(nStart) >> GF_FONTSHIFT;
     nStart &= ~GF_FONTMASK;
     for(; nLevel < mnLevel; ++nLevel, nStart=0 )
     {
-        SalLayout& rLayout = *mpLayouts[ nLevel ];
+        GenericSalLayout& rLayout = *mpLayouts[ nLevel ];
         rLayout.InitFont();
-        int nRetVal = rLayout.GetNextGlyphs( nLen, pGlyphIdxAry, rPos,
-            nStart, pGlyphAdvAry, pCharPosAry );
-        if( nRetVal )
+        const PhysicalFontFace* pFontFace = rLayout.GetFont().GetFontFace();
+        if (rLayout.GetNextGlyph(pGlyph, rPos, nStart))
         {
             int nFontTag = nLevel << GF_FONTSHIFT;
             nStart |= nFontTag;
-            double fUnitMul = mnUnitsPerPixel;
-            fUnitMul /= mpLayouts[nLevel]->GetUnitsPerPixel();
-            for( int i = 0; i < nRetVal; ++i )
-            {
-                if( pGlyphAdvAry )
-                {
-                    DeviceCoordinate w = pGlyphAdvAry[i];
-                    w = static_cast<DeviceCoordinate>(w * fUnitMul + 0.5);
-                    pGlyphAdvAry[i] = w;
-                }
-                pGlyphIdxAry[ i ] |= nFontTag;
-                if( pFallbackFonts )
-                {
-                    pFallbackFonts[ i ] =  mpFallbackFonts[ nLevel ];
-                }
-            }
+            if (pFallbackFont)
+                *pFallbackFont = pFontFace;
+            if (pFallbackLevel)
+                *pFallbackLevel = nLevel;
             rPos += maDrawBase;
             rPos += maDrawOffset;
-            return nRetVal;
+            return true;
         }
     }
 
     // #111016# reset to base level font when done
     mpLayouts[0]->InitFont();
-    return 0;
+    return false;
 }
 
-bool MultiSalLayout::GetOutline( SalGraphics& rGraphics,
-                                 basegfx::B2DPolyPolygonVector& rPPV ) const
+bool MultiSalLayout::GetOutline(basegfx::B2DPolyPolygonVector& rPPV) const
 {
     bool bRet = false;
 
@@ -2011,17 +1544,40 @@ bool MultiSalLayout::GetOutline( SalGraphics& rGraphics,
         rLayout.DrawBase() = maDrawBase;
         rLayout.DrawOffset() += maDrawOffset;
         rLayout.InitFont();
-        bRet |= rLayout.GetOutline( rGraphics, rPPV );
+        bRet |= rLayout.GetOutline(rPPV);
         rLayout.DrawOffset() -= maDrawOffset;
     }
 
     return bRet;
 }
 
-std::shared_ptr<vcl::TextLayoutCache> SalLayout::CreateTextLayoutCache(
-        OUString const&) const
+bool MultiSalLayout::IsKashidaPosValid(int nCharPos) const
 {
-    return nullptr; // by default, nothing to cache
+    // Check the base layout
+    bool bValid = mpLayouts[0]->IsKashidaPosValid(nCharPos);
+
+    // If base layout returned false, it might be because the character was not
+    // supported there, so we check fallback layouts.
+    if (!bValid)
+    {
+        for (int i = 1; i < mnLevel; ++i)
+        {
+            // - 1 because there is no fallback run for the base layout, IIUC.
+            if (maFallbackRuns[i - 1].PosIsInAnyRun(nCharPos))
+            {
+                bValid = mpLayouts[i]->IsKashidaPosValid(nCharPos);
+                break;
+            }
+        }
+    }
+
+    return bValid;
+}
+
+const SalLayoutGlyphs* SalLayout::GetGlyphs() const
+{
+    // No access to the glyphs by default.
+    return nullptr;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

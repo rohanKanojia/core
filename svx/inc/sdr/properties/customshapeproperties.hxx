@@ -34,7 +34,7 @@ namespace sdr
 
         protected:
             // create a new itemset
-            virtual SfxItemSet* CreateObjectSpecificItemSet(SfxItemPool& rPool) override;
+            virtual std::unique_ptr<SfxItemSet> CreateObjectSpecificItemSet(SfxItemPool& rPool) override;
 
             // test changeability for a single item
             virtual bool AllowItemChange(const sal_uInt16 nWhich, const SfxPoolItem* pNewItem = nullptr) const override;
@@ -43,7 +43,7 @@ namespace sdr
             virtual void ItemSetChanged(const SfxItemSet& rSet) override;
 
             // react on Item change
-            virtual void ItemChange(const sal_uInt16 nWhich, const SfxPoolItem* pNewItem) override;
+            virtual void ItemChange(const sal_uInt16 nWhich, const SfxPoolItem* pNewItem = nullptr) override;
 
             // Called after ItemChange() is done for all items. Allows local reactions on
             // specific item changes
@@ -53,8 +53,8 @@ namespace sdr
             virtual void ClearObjectItem(const sal_uInt16 nWhich = 0) override;
 
             // clear single item direct, do not do any notifies or things like that.
-            // Also supports complete deleteion of items when default parameter 0 is used.
-            virtual void ClearObjectItemDirect(const sal_uInt16 nWhich = 0) override;
+            // Also supports complete deletion of items when default parameter 0 is used.
+            virtual void ClearObjectItemDirect(const sal_uInt16 nWhich) override;
 
         public:
 
@@ -72,10 +72,10 @@ namespace sdr
             CustomShapeProperties(const CustomShapeProperties& rProps, SdrObject& rObj);
 
             // destructor
-            virtual ~CustomShapeProperties();
+            virtual ~CustomShapeProperties() override;
 
             // Clone() operator, normally just calls the local copy constructor
-            virtual BaseProperties& Clone(SdrObject& rObj) const override;
+            virtual std::unique_ptr<BaseProperties> Clone(SdrObject& rObj) const override;
 
             // This is the notifier from SfxListener
             virtual void Notify(SfxBroadcaster& rBC, const SfxHint& rHint) override;

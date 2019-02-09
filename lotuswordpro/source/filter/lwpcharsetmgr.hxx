@@ -61,14 +61,13 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPCHARSETMGR_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPCHARSETMGR_HXX
 
-#include "lwpfilehdr.hxx"
+#include <lwpfilehdr.hxx>
 #include <map>
 
 class LwpCharSetMgr
 {
 public:
     LwpCharSetMgr(){SetCodePageMap();}
-    ~LwpCharSetMgr(){}
     static LwpCharSetMgr* GetInstance();
     void SetCodePageMap();
     rtl_TextEncoding    GetTextCharEncoding(sal_uInt16 wordproCode);

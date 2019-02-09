@@ -25,7 +25,6 @@
 #include "viewdata.hxx"
 
 class ScTabView;
-class ScViewData;
 
 class ScViewSelectionEngine : public SelectionEngine
 {
@@ -65,12 +64,12 @@ public:
     virtual void    BeginDrag() override;
     virtual void    CreateAnchor() override;
     virtual void    DestroyAnchor() override;
-    virtual bool    SetCursorAtPoint( const Point& rPointPixel, bool bDontSelectAtCursor = false ) override;
+    virtual void    SetCursorAtPoint( const Point& rPointPixel, bool bDontSelectAtCursor = false ) override;
     virtual bool    IsSelectionAtPoint( const Point& rPointPixel ) override;
     virtual void    DeselectAtPoint( const Point& rPointPixel ) override;
     virtual void    DeselectAll() override;
 
-    bool            SetCursorAtCell( SCsCOL nPosX, SCsROW nPosY, bool bScroll );
+    bool            SetCursorAtCell( SCCOL nPosX, SCROW nPosY, bool bScroll );
 };
 
 class ScHeaderFunctionSet : public FunctionSet          // Column / row headers
@@ -92,7 +91,7 @@ public:
     virtual void    BeginDrag() override;
     virtual void    CreateAnchor() override;
     virtual void    DestroyAnchor() override;
-    virtual bool    SetCursorAtPoint( const Point& rPointPixel, bool bDontSelectAtCursor = false ) override;
+    virtual void    SetCursorAtPoint( const Point& rPointPixel, bool bDontSelectAtCursor = false ) override;
     virtual bool    IsSelectionAtPoint( const Point& rPointPixel ) override;
     virtual void    DeselectAtPoint( const Point& rPointPixel ) override;
     virtual void    DeselectAll() override;

@@ -21,6 +21,7 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <tools/urlobj.hxx>
 #include <unotools/bootstrap.hxx>
+#include <sal/log.hxx>
 
 
 using namespace ::com::sun::star;
@@ -87,12 +88,10 @@ namespace migration
             }
 
             // iterate recursive over subfolders
-            TStringVector::const_iterator aI = aSubDirs.begin();
-            while ( aI != aSubDirs.end() )
+            for (auto const& subDir : aSubDirs)
             {
-                TStringVectorPtr aSubResult = getFiles( *aI );
+                TStringVectorPtr aSubResult = getFiles(subDir);
                 aResult->insert( aResult->end(), aSubResult->begin(), aSubResult->end() );
-                ++aI;
             }
         }
 
@@ -100,15 +99,15 @@ namespace migration
     }
 
 
-    void BasicMigration::checkAndCreateDirectory( INetURLObject& rDirURL )
+    void BasicMigration::checkAndCreateDirectory( INetURLObject const & rDirURL )
     {
-        ::osl::FileBase::RC aResult = ::osl::Directory::create( rDirURL.GetMainURL( INetURLObject::DECODE_TO_IURI ) );
+        ::osl::FileBase::RC aResult = ::osl::Directory::create( rDirURL.GetMainURL( INetURLObject::DecodeMechanism::ToIUri ) );
         if ( aResult == ::osl::FileBase::E_NOENT )
         {
             INetURLObject aBaseURL( rDirURL );
             aBaseURL.removeSegment();
             checkAndCreateDirectory( aBaseURL );
-            ::osl::Directory::create( rDirURL.GetMainURL( INetURLObject::DECODE_TO_IURI ) );
+            ::osl::Directory::create( rDirURL.GetMainURL( INetURLObject::DecodeMechanism::ToIUri ) );
         }
     }
 
@@ -121,23 +120,19 @@ namespace migration
         {
             sTargetDir += sTargetUserBasic;
             TStringVectorPtr aFileList = getFiles( m_sSourceDir );
-            TStringVector::const_iterator aI = aFileList->begin();
-            while ( aI != aFileList->end() )
+            for (auto const& elem : *aFileList)
             {
-                OUString sLocalName = aI->copy( m_sSourceDir.getLength() );
+                OUString sLocalName = elem.copy( m_sSourceDir.getLength() );
                 OUString sTargetName = sTargetDir + sLocalName;
                 INetURLObject aURL( sTargetName );
                 aURL.removeSegment();
                 checkAndCreateDirectory( aURL );
-                ::osl::FileBase::RC aResult = ::osl::File::copy( *aI, sTargetName );
+                ::osl::FileBase::RC aResult = ::osl::File::copy( elem, sTargetName );
                 if ( aResult != ::osl::FileBase::E_None )
                 {
-                    OString aMsg( "BasicMigration::copyFiles: cannot copy " );
-                    aMsg += OUStringToOString( *aI, RTL_TEXTENCODING_UTF8 ) + " to "
-                         +  OUStringToOString( sTargetName, RTL_TEXTENCODING_UTF8 );
-                    OSL_FAIL( aMsg.getStr() );
+                    SAL_WARN( "desktop", "BasicMigration::copyFiles: cannot copy "
+                                << elem << " to " << sTargetName );
                 }
-                ++aI;
             }
         }
         else
@@ -150,20 +145,19 @@ namespace migration
     // XServiceInfo
 
 
-    OUString BasicMigration::getImplementationName() throw (RuntimeException, std::exception)
+    OUString BasicMigration::getImplementationName()
     {
         return BasicMigration_getImplementationName();
     }
 
 
     sal_Bool BasicMigration::supportsService(OUString const & ServiceName)
-        throw (css::uno::RuntimeException, std::exception)
     {
         return cppu::supportsService(this, ServiceName);
     }
 
 
-    Sequence< OUString > BasicMigration::getSupportedServiceNames() throw (RuntimeException, std::exception)
+    Sequence< OUString > BasicMigration::getSupportedServiceNames()
     {
         return BasicMigration_getSupportedServiceNames();
     }
@@ -172,7 +166,7 @@ namespace migration
     // XInitialization
 
 
-    void BasicMigration::initialize( const Sequence< Any >& aArguments ) throw (Exception, RuntimeException, std::exception)
+    void BasicMigration::initialize( const Sequence< Any >& aArguments )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -199,7 +193,6 @@ namespace migration
 
 
     Any BasicMigration::execute( const Sequence< beans::NamedValue >& )
-        throw (lang::IllegalArgumentException, Exception, RuntimeException, std::exception)
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -212,7 +205,7 @@ namespace migration
     // component operations
 
 
-    Reference< XInterface > SAL_CALL BasicMigration_create(
+    Reference< XInterface > BasicMigration_create(
         Reference< XComponentContext > const & )
     {
         return static_cast< lang::XTypeProvider * >( new BasicMigration() );

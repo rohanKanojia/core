@@ -30,10 +30,10 @@
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/XMaterialHolder.hpp>
+#include <com/sun/star/frame/XTitle.hpp>
 #include <com/sun/star/frame/XTitleChangeBroadcaster.hpp>
 #include <com/sun/star/beans/NamedValue.hpp>
 
-#include <comphelper/processfactory.hxx>
 #include <comphelper/sequenceashashmap.hxx>
 #include <unotools/configmgr.hxx>
 #include <unotools/bootstrap.hxx>
@@ -60,8 +60,6 @@ TitleBarUpdate::~TitleBarUpdate()
 }
 
 void SAL_CALL TitleBarUpdate::initialize(const css::uno::Sequence< css::uno::Any >& lArguments)
-    throw(css::uno::Exception       ,
-          css::uno::RuntimeException, std::exception)
 {
     // check arguments
     css::uno::Reference< css::frame::XFrame > xFrame;
@@ -93,7 +91,6 @@ void SAL_CALL TitleBarUpdate::initialize(const css::uno::Sequence< css::uno::Any
 }
 
 void SAL_CALL TitleBarUpdate::frameAction(const css::frame::FrameActionEvent& aEvent)
-    throw(css::uno::RuntimeException, std::exception)
 {
     // we are interested on events only, which must trigger a title bar update
     // because component was changed.
@@ -108,13 +105,11 @@ void SAL_CALL TitleBarUpdate::frameAction(const css::frame::FrameActionEvent& aE
 }
 
 void SAL_CALL TitleBarUpdate::titleChanged(const css::frame::TitleChangedEvent& /* aEvent */)
-    throw (css::uno::RuntimeException, std::exception)
 {
     impl_forceUpdate ();
 }
 
 void SAL_CALL TitleBarUpdate::disposing(const css::lang::EventObject&)
-    throw(css::uno::RuntimeException, std::exception)
 {
     // nothing todo here - because we hold the frame as weak reference only
 }
@@ -128,9 +123,8 @@ void TitleBarUpdate::impl_updateApplicationID(const css::uno::Reference< css::fr
     if ( ! xWindow.is() )
         return;
 
-    OUString sApplicationID;
-
 #if !defined(MACOSX)
+    OUString sApplicationID;
     try
     {
         css::uno::Reference< css::frame::XModuleManager2 > xModuleManager =
@@ -154,29 +148,25 @@ void TitleBarUpdate::impl_updateApplicationID(const css::uno::Reference< css::fr
             sDesktopName = "Startcenter";
 #if defined(_WIN32)
         // We use a hardcoded product name matching the registry keys so applications can be associated with file types
-        sApplicationID = "TheDocumentFoundation.LibreOffice.";
-        sApplicationID += sDesktopName;
+        sApplicationID = "TheDocumentFoundation.LibreOffice." + sDesktopName;
 #else
-        sApplicationID = utl::ConfigManager::getProductName().toAsciiLowerCase();
-        sApplicationID += "-";
-        sApplicationID += sDesktopName.toAsciiLowerCase();
+        sApplicationID = utl::ConfigManager::getProductName().toAsciiLowerCase() + "-" + sDesktopName.toAsciiLowerCase();
 #endif
     }
     catch(const css::uno::Exception&)
     {
     }
+#else
+    OUString const sApplicationID;
 #endif
 
     // VCL SYNCHRONIZED ->
     SolarMutexGuard aSolarGuard;
 
-    vcl::Window* pWindow = (VCLUnoHelper::GetWindow( xWindow ));
-    if (
-        ( pWindow                                 ) &&
-        ( pWindow->GetType() == WINDOW_WORKWINDOW )
-       )
+    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
+    if ( pWindow && pWindow->GetType() == WindowType::WORKWINDOW )
     {
-        WorkWindow* pWorkWindow = static_cast<WorkWindow*>(pWindow);
+        WorkWindow* pWorkWindow = static_cast<WorkWindow*>(pWindow.get());
         pWorkWindow->SetApplicationID( sApplicationID );
     }
     // <- VCL SYNCHRONIZED
@@ -262,7 +252,7 @@ void TitleBarUpdate::impl_updateIcon(const css::uno::Reference< css::frame::XFra
         }
         catch(const css::uno::Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("fwk");
         }
     }
 
@@ -287,14 +277,11 @@ void TitleBarUpdate::impl_updateIcon(const css::uno::Reference< css::frame::XFra
     // VCL SYNCHRONIZED ->
     SolarMutexGuard aSolarGuard;
 
-    vcl::Window* pWindow = (VCLUnoHelper::GetWindow( xWindow ));
-    if (
-        ( pWindow                                 ) &&
-        ( pWindow->GetType() == WINDOW_WORKWINDOW )
-       )
+    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
+    if ( pWindow && ( pWindow->GetType() == WindowType::WORKWINDOW ) )
     {
-        WorkWindow* pWorkWindow = static_cast<WorkWindow*>(pWindow);
-        pWorkWindow->SetIcon( (sal_uInt16)nIcon );
+        WorkWindow* pWorkWindow = static_cast<WorkWindow*>(pWindow.get());
+        pWorkWindow->SetIcon( static_cast<sal_uInt16>(nIcon) );
 
         css::uno::Reference< css::frame::XModel > xModel = xController->getModel();
         OUString aURL;
@@ -321,13 +308,10 @@ void TitleBarUpdate::impl_updateTitle(const css::uno::Reference< css::frame::XFr
     // VCL SYNCHRONIZED ->
     SolarMutexGuard aSolarGuard;
 
-    vcl::Window* pWindow = (VCLUnoHelper::GetWindow( xWindow ));
-    if (
-        ( pWindow                                 ) &&
-        ( pWindow->GetType() == WINDOW_WORKWINDOW )
-       )
+    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
+    if ( pWindow && ( pWindow->GetType() == WindowType::WORKWINDOW ) )
     {
-        WorkWindow* pWorkWindow = static_cast<WorkWindow*>(pWindow);
+        WorkWindow* pWorkWindow = static_cast<WorkWindow*>(pWindow.get());
         pWorkWindow->SetText( sTitle );
     }
     // <- VCL SYNCHRONIZED

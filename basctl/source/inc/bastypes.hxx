@@ -21,10 +21,11 @@
 
 #include "scriptdocument.hxx"
 
-#include <sbxitem.hxx>
-#include <iderid.hxx>
+#include "sbxitem.hxx"
+#include "iderid.hxx"
 #include <svtools/tabbar.hxx>
 #include <vcl/toolbox.hxx>
+#include <basic/sbdef.hxx>
 
 #include <unordered_map>
 
@@ -34,10 +35,11 @@ class SfxRequest;
 class SvxSearchItem;
 class Printer;
 enum class SearchOptionFlags;
+class SfxUndoManager;
 
-namespace svl
+namespace weld
 {
-    class IUndoManager;
+    class Widget;
 }
 
 namespace basctl
@@ -63,13 +65,13 @@ struct BasicStatus
     bool bIsRunning : 1;
     bool bError : 1;
     bool bIsInReschedule : 1;
-    sal_uInt16 nBasicFlags;
+    BasicDebugFlags nBasicFlags;
 
     BasicStatus():
         bIsRunning(false),
         bError(false),
         bIsInReschedule(false),
-        nBasicFlags(0) { }
+        nBasicFlags(BasicDebugFlags::NONE) { }
 };
 
 
@@ -81,7 +83,7 @@ class DockingWindow : public ::DockingWindow
 public:
     DockingWindow (vcl::Window* pParent);
     DockingWindow (Layout* pParent);
-    virtual ~DockingWindow();
+    virtual ~DockingWindow() override;
     virtual void dispose() override;
     void ResizeIfDocking (Point const&, Size const&);
     void ResizeIfDocking (Size const&);
@@ -92,17 +94,17 @@ public:
     void Hide ();
 
 protected:
-    virtual bool Docking( const Point& rPos, Rectangle& rRect ) override;
-    virtual void     EndDocking( const Rectangle& rRect, bool bFloatMode ) override;
+    virtual bool Docking( const Point& rPos, tools::Rectangle& rRect ) override;
+    virtual void     EndDocking( const tools::Rectangle& rRect, bool bFloatMode ) override;
     virtual void     ToggleFloatingMode() override;
     virtual bool PrepareToggleFloatingMode() override;
     virtual void     StartDocking() override;
 
 private:
     // the position and the size of the floating window
-    Rectangle aFloatingRect;
+    tools::Rectangle aFloatingRect;
     // the position and the size of the docking window
-    Rectangle aDockingRect;
+    tools::Rectangle aDockingRect;
     // the parent layout window (only when docking)
     VclPtr<Layout> pLayout;
     // > 0: shown, <= 0: hidden, ++ by Show() and -- by Hide()
@@ -135,7 +137,6 @@ public:
 
 enum BasicWindowStatus
 {
-    BASWIN_OK           = 0x00,
     BASWIN_RUNNINGBASIC = 0x01,
     BASWIN_TOBEKILLED   = 0x02,
     BASWIN_SUSPENDED    = 0x04,
@@ -153,7 +154,7 @@ private:
     VclPtr<ScrollBar>      pShellHScrollBar;
     VclPtr<ScrollBar>      pShellVScrollBar;
 
-    DECL_LINK_TYPED( ScrollHdl, ScrollBar*, void );
+    DECL_LINK( ScrollHdl, ScrollBar*, void );
     int nStatus;
 
     ScriptDocument      m_aDocument;
@@ -168,7 +169,7 @@ protected:
 
 public:
     BaseWindow( vcl::Window* pParent, const ScriptDocument& rDocument, const OUString& aLibName, const OUString& aName );
-    virtual         ~BaseWindow();
+    virtual         ~BaseWindow() override;
     virtual void    dispose() override;
 
     void            Init();
@@ -183,7 +184,7 @@ public:
     virtual void    ExecuteCommand (SfxRequest&);
     virtual void    ExecuteGlobal (SfxRequest&);
     virtual void    GetState (SfxItemSet&) = 0;
-    virtual bool    Notify( NotifyEvent& rNEvt ) override;
+    virtual bool    EventNotify( NotifyEvent& rNEvt ) override;
 
     virtual void    StoreData();
     virtual void    UpdateData();
@@ -199,7 +200,6 @@ public:
     virtual EntryDescriptor  CreateEntryDescriptor() = 0;
 
     virtual bool    IsModified();
-    virtual bool    IsPasteAllowed();
 
     virtual bool    AllowUndo();
 
@@ -211,7 +211,7 @@ public:
     void AddStatus(int n) { nStatus |= n; }
     void ClearStatus(int n) { nStatus &= ~n; }
 
-    virtual svl::IUndoManager* GetUndoManager ();
+    virtual SfxUndoManager* GetUndoManager ();
 
     virtual SearchOptionFlags  GetSearchOptions();
     virtual sal_uInt16  StartSearchAndReplace (SvxSearchItem const&, bool bFromStart = false);
@@ -286,15 +286,15 @@ private:
     Map m_aMap;
 };
 
-void            CutLines( OUString& rStr, sal_Int32 nStartLine, sal_Int32 nLines, bool bEraseTrailingEmptyLines = false );
+void            CutLines( OUString& rStr, sal_Int32 nStartLine, sal_Int32 nLines );
 OUString CreateMgrAndLibStr( const OUString& rMgrName, const OUString& rLibName );
-sal_uLong           CalcLineCount( SvStream& rStream );
+sal_uInt32           CalcLineCount( SvStream& rStream );
 
-bool QueryReplaceMacro( const OUString& rName, vcl::Window* pParent = nullptr );
-bool QueryDelMacro( const OUString& rName, vcl::Window* pParent = nullptr );
-bool QueryDelDialog( const OUString& rName, vcl::Window* pParent = nullptr );
-bool QueryDelModule( const OUString& rName, vcl::Window* pParent = nullptr );
-bool QueryDelLib( const OUString& rName, bool bRef = false, vcl::Window* pParent = nullptr );
+bool QueryReplaceMacro( const OUString& rName, weld::Widget* pParent );
+bool QueryDelMacro( const OUString& rName, weld::Widget* pParent );
+bool QueryDelDialog( const OUString& rName, weld::Widget* pParent );
+bool QueryDelModule( const OUString& rName, weld::Widget* pParent );
+bool QueryDelLib( const OUString& rName, bool bRef, weld::Widget* pParent );
 bool QueryPassword( const css::uno::Reference< css::script::XLibraryContainer >& xLibContainer, const OUString& rLibName, OUString& rPassword, bool bRepeat = false, bool bNewTitle = false );
 
 class ModuleInfoHelper

@@ -28,7 +28,7 @@ class SdrObject;
 
 namespace sd {
 
-class FuDisplayOrder
+class FuDisplayOrder final
     : public FuPoor
 {
 public:
@@ -43,15 +43,14 @@ public:
     virtual void Activate() override;
     virtual void Deactivate() override;
 
-protected:
-    virtual ~FuDisplayOrder();
+private:
+    virtual ~FuDisplayOrder() override;
     void implClearOverlay();
 
     Pointer                 maPtr;
     SdrObject*              mpRefObj;
-    SdrDropMarkerOverlay*   mpOverlay;
+    std::unique_ptr<SdrDropMarkerOverlay> mpOverlay;
 
-private:
     FuDisplayOrder (
         ViewShell* pViewSh,
         ::sd::Window* pWin,

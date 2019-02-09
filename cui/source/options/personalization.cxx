@@ -10,7 +10,6 @@
 #include <config_folders.h>
 
 #include "personalization.hxx"
-#include "personasdochandler.hxx"
 
 #include <comphelper/processfactory.hxx>
 #include <officecfg/Office/Common.hxx>
@@ -20,95 +19,193 @@
 #include <rtl/bootstrap.hxx>
 #include <rtl/strbuf.hxx>
 #include <tools/urlobj.hxx>
+#include <tools/stream.hxx>
 #include <vcl/edit.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/fixed.hxx>
+#include <vcl/fixedhyper.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/graphicfilter.hxx>
+#include <vcl/mnemonic.hxx>
+#include <vcl/virdev.hxx>
 #include <dialmgr.hxx>
-#include "cuires.hrc"
+#include <strings.hrc>
 
+#include <com/sun/star/task/InteractionHandler.hpp>
 #include <com/sun/star/ucb/SimpleFileAccess.hpp>
 #include <com/sun/star/xml/sax/XParser.hpp>
 #include <com/sun/star/xml/sax/Parser.hpp>
-#include "ucbhelper/content.hxx"
+#include <ucbhelper/content.hxx>
+#include <comphelper/simplefileaccessinteraction.hxx>
+
+#include <curl/curl.h>
+
+#include <orcus/json_document_tree.hpp>
+#include <orcus/config.hpp>
+#include <orcus/pstring.hpp>
+
+#include <vector>
 
 using namespace com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::ucb;
 using namespace ::com::sun::star::beans;
 
-SelectPersonaDialog::SelectPersonaDialog( vcl::Window *pParent )
-    : ModalDialog( pParent, "SelectPersonaDialog", "cui/ui/select_persona_dialog.ui" )
+#ifdef UNX
+static const char kUserAgent[] = "LibreOffice PersonaDownloader/1.0 (Linux)";
+#else
+static const char kUserAgent[] = "LibreOffice PersonaDownloader/1.0 (unknown platform)";
+#endif
+
+struct PersonaInfo
 {
-    get( m_pSearchButton, "search_personas" );
-    m_pSearchButton->SetClickHdl( LINK( this, SelectPersonaDialog, SearchPersonas ) );
+    OUString sSlug;
+    OUString sName;
+    OUString sPreviewURL;
+    OUString sHeaderURL;
+    OUString sFooterURL;
+    OUString sTextColor;
+};
 
-    get( m_vSearchSuggestions[0], "suggestion1" );
-    m_vSearchSuggestions[0]->SetText( "LibreOffice" );
-    m_vSearchSuggestions[0]->SetClickHdl( LINK( this, SelectPersonaDialog, SearchPersonas ) );
+namespace {
 
-    get( m_vSearchSuggestions[1], "suggestion2" );
-    m_vSearchSuggestions[1]->SetText( CUI_RES ( RID_SVXSTR_PERSONA_ABSTRACT ) );
-    m_vSearchSuggestions[1]->SetClickHdl( LINK( this, SelectPersonaDialog, SearchPersonas ) );
+// Callback to get the response data from server.
+size_t WriteCallback(void *ptr, size_t size,
+                            size_t nmemb, void *userp)
+{
+  if (!userp)
+    return 0;
 
-    get( m_vSearchSuggestions[2], "suggestion3" );
-    m_vSearchSuggestions[2]->SetText( CUI_RES ( RID_SVXSTR_PERSONA_COLOR ) );
-    m_vSearchSuggestions[2]->SetClickHdl( LINK( this, SelectPersonaDialog, SearchPersonas ) );
+  std::string* response = static_cast<std::string *>(userp);
+  size_t real_size = size * nmemb;
+  response->append(static_cast<char *>(ptr), real_size);
+  return real_size;
+}
 
-    get( m_vSearchSuggestions[3], "suggestion4" );
-    m_vSearchSuggestions[3]->SetText( CUI_RES( RID_SVXSTR_PERSONA_MUSIC ) );
-    m_vSearchSuggestions[3]->SetClickHdl( LINK( this, SelectPersonaDialog, SearchPersonas ) );
+// Callback to get the response data from server to a file.
+size_t WriteCallbackFile(void *ptr, size_t size,
+                            size_t nmemb, void *userp)
+{
+  if (!userp)
+    return 0;
 
-    get( m_vSearchSuggestions[4], "suggestion5" );
-    m_vSearchSuggestions[4]->SetText( CUI_RES( RID_SVXSTR_PERSONA_NATURE ) );
-    m_vSearchSuggestions[4]->SetClickHdl( LINK( this, SelectPersonaDialog, SearchPersonas ) );
+  SvStream* response = static_cast<SvStream *>(userp);
+  size_t real_size = size * nmemb;
+  response->WriteBytes(ptr, real_size);
+  return real_size;
+}
 
-    get( m_pEdit, "search_term" );
-    m_pEdit->SetPlaceholderText( CUI_RES( RID_SVXSTR_SEARCHTERM ) );
+// Gets the content of the given URL and returns as a standard string
+std::string curlGet(const OString& rURL)
+{
+    CURL* curl = curl_easy_init();
 
-    get( m_pProgressLabel, "progress_label" );
+    if (!curl)
+            return std::string();
 
-    get( m_pOkButton, "ok" );
-    m_pOkButton->SetClickHdl( LINK( this, SelectPersonaDialog, ActionOK ) );
+    curl_easy_setopt(curl, CURLOPT_URL, rURL.getStr());
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
 
-    get( m_pCancelButton, "cancel" );
-    m_pCancelButton->SetClickHdl( LINK( this, SelectPersonaDialog, ActionCancel ) );
-    get( m_vResultList[0], "result1" );
-    get( m_vResultList[1], "result2" );
-    get( m_vResultList[2], "result3" );
-    get( m_vResultList[3], "result4" );
-    get( m_vResultList[4], "result5" );
-    get( m_vResultList[5], "result6" );
-    get( m_vResultList[6], "result7" );
-    get( m_vResultList[7], "result8" );
-    get( m_vResultList[8], "result9" );
+    std::string response_body;
 
-    for (sal_Int32 nIndex = 0; nIndex < 9; ++nIndex)
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA,
+                    static_cast<void *>(&response_body));
+
+    CURLcode cc = curl_easy_perform(curl);
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+    if (http_code != 200)
     {
-        m_vResultList[nIndex]->SetClickHdl( LINK( this, SelectPersonaDialog, SelectPersona ) );
-        m_vResultList[nIndex]->Disable();
+        SAL_WARN("cui.options", "Download failed. Error code: " << http_code);
     }
+
+    if (cc != CURLE_OK)
+    {
+        SAL_WARN("cui.options", "curl error: " << cc);
+    }
+
+    return response_body;
+}
+
+// Downloads and saves the file at the given rURL to a local path (sFileURL)
+void curlDownload(const OString& rURL, const OUString& sFileURL)
+{
+    CURL* curl = curl_easy_init();
+    SvFileStream aFile( sFileURL, StreamMode::WRITE );
+
+    if (!curl)
+            return;
+
+    curl_easy_setopt(curl, CURLOPT_URL, rURL.getStr());
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
+
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallbackFile);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA,
+                    static_cast<void *>(&aFile));
+
+    CURLcode cc = curl_easy_perform(curl);
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+    if (http_code != 200)
+    {
+        SAL_WARN("cui.options", "Download failed. Error code: " << http_code);
+    }
+
+    if (cc != CURLE_OK)
+    {
+        SAL_WARN("cui.options", "curl error: " << cc);
+    }
+}
+
+} //End of anonymous namespace
+SelectPersonaDialog::SelectPersonaDialog(weld::Window *pParent)
+    : GenericDialogController(pParent, "cui/ui/select_persona_dialog.ui", "SelectPersonaDialog")
+    , m_xEdit(m_xBuilder->weld_entry("search_term"))
+    , m_xSearchButton(m_xBuilder->weld_button("search_personas"))
+    , m_xProgressLabel(m_xBuilder->weld_label("progress_label"))
+    , m_xCategories(m_xBuilder->weld_combo_box("categoriesCB"))
+    , m_xOkButton(m_xBuilder->weld_button("ok"))
+    , m_xCancelButton(m_xBuilder->weld_button("cancel"))
+    , m_vResultList{ m_xBuilder->weld_button("result1"),
+                     m_xBuilder->weld_button("result2"),
+                     m_xBuilder->weld_button("result3"),
+                     m_xBuilder->weld_button("result4"),
+                     m_xBuilder->weld_button("result5"),
+                     m_xBuilder->weld_button("result6"),
+                     m_xBuilder->weld_button("result7"),
+                     m_xBuilder->weld_button("result8"),
+                     m_xBuilder->weld_button("result9") }
+{
+    m_xSearchButton->connect_clicked( LINK( this, SelectPersonaDialog, SearchPersonas ) );
+    m_xCategories->connect_changed( LINK( this, SelectPersonaDialog, SelectCategory ) );
+    m_xOkButton->connect_clicked( LINK( this, SelectPersonaDialog, ActionOK ) );
+    m_xCancelButton->connect_clicked( LINK( this, SelectPersonaDialog, ActionCancel ) );
+
+    for (auto & nIndex : m_vResultList)
+    {
+        nIndex->connect_clicked( LINK( this, SelectPersonaDialog, SelectPersona ) );
+        nIndex->set_sensitive(false);
+    }
+
+    m_xCategories->set_active_text("Featured");
+    SelectCategory(*m_xCategories);
 }
 
 SelectPersonaDialog::~SelectPersonaDialog()
 {
-    disposeOnce();
-}
-
-void SelectPersonaDialog::dispose()
-{
-    m_pEdit.clear();
-    m_pSearchButton.clear();
-    m_pProgressLabel.clear();
-    for (VclPtr<PushButton>& vp : m_vResultList)
-        vp.clear();
-    for (VclPtr<PushButton>& vp : m_vSearchSuggestions)
-        vp.clear();
-    m_pOkButton.clear();
-    m_pCancelButton.clear();
-    ModalDialog::dispose();
+    if (m_pSearchThread.is())
+    {
+        // Release the solar mutex, so the thread is not affected by the race
+        // when it's after the m_bExecute check but before taking the solar
+        // mutex.
+        SolarMutexReleaser aReleaser;
+        m_pSearchThread->join();
+    }
 }
 
 OUString SelectPersonaDialog::GetSelectedPersona() const
@@ -119,77 +216,124 @@ OUString SelectPersonaDialog::GetSelectedPersona() const
     return OUString();
 }
 
-IMPL_LINK_TYPED( SelectPersonaDialog, SearchPersonas, Button*, pButton, void )
+IMPL_LINK_NOARG( SelectPersonaDialog, SearchPersonas, weld::Button&, void )
 {
-    OUString searchTerm;
-    if( m_rSearchThread.is() )
-        m_rSearchThread->StopExecution();
-
-    if( pButton ==  m_pSearchButton )
-        searchTerm = m_pEdit->GetText();
-    else
-    {
-        for( sal_Int32 nIndex = 0; nIndex < 5; nIndex++ )
-        {
-            if( pButton == m_vSearchSuggestions[nIndex] )
-            {
-                searchTerm = m_vSearchSuggestions[nIndex]->GetDisplayText();
-                break;
-            }
-        }
-    }
+    OUString searchTerm = m_xEdit->get_text();
 
     if( searchTerm.isEmpty( ) )
         return;
 
-    OUString rSearchURL = "https://services.addons.mozilla.org/en-US/firefox/api/1.5/search/" + searchTerm + "/9/9";
-    m_rSearchThread = new SearchAndParseThread( this, rSearchURL );
-    m_rSearchThread->launch();
+    if( m_pSearchThread.is() )
+        m_pSearchThread->StopExecution();
+
+    // Direct url of a persona given
+    if ( searchTerm.startsWith( "https://addons.mozilla.org/" ) )
+    {
+        OUString sSlug = searchTerm.getToken( 6, '/' );
+
+        // Check if we got the slug
+        if ( sSlug.isEmpty() )
+        {
+            SolarMutexGuard aGuard;
+            OUString sError = CuiResId( RID_SVXSTR_INVALIDPERSONAURL );
+            std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(nullptr,
+                                                                                       VclMessageType::Error, VclButtonsType::Ok,
+                                                                                       sError));
+            xBox->run();
+            return;
+        }
+
+        // Remove invalid characters
+        searchTerm = searchTerm.replaceAll("?", "");
+
+        m_pSearchThread = new SearchAndParseThread( this, sSlug, true );
+    }
+    // Search term given
+    else
+    {
+        // Remove invalid characters
+        searchTerm = searchTerm.replaceAll("/", "");
+        searchTerm = searchTerm.replaceAll("?", "");
+
+        // 15 results so that invalid and duplicate search results whose names, textcolors etc. are null can be skipped
+        OUString rSearchURL = "https://addons.mozilla.org/api/v3/addons/search/?q=" + searchTerm + "&type=persona&page_size=15";
+
+        m_pSearchThread = new SearchAndParseThread( this, rSearchURL, false );
+    }
+
+    m_pSearchThread->launch();
 }
 
-IMPL_LINK_NOARG_TYPED( SelectPersonaDialog, ActionOK, Button*, void )
+IMPL_LINK_NOARG( SelectPersonaDialog, ActionOK, weld::Button&, void )
 {
     OUString aSelectedPersona = GetSelectedPersona();
 
     if( !aSelectedPersona.isEmpty() )
     {
-        m_rSearchThread = new SearchAndParseThread( this, aSelectedPersona );
-        m_rSearchThread->launch();
+        m_pGetPersonaThread = new GetPersonaThread( this, aSelectedPersona );
+        m_pGetPersonaThread->launch();
     }
 
     else
     {
-        if( m_rSearchThread.is() )
-            m_rSearchThread->StopExecution();
-        EndDialog( RET_OK );
+        if ( m_pSearchThread.is() )
+            m_pSearchThread->StopExecution();
+
+        m_xDialog->response(RET_OK);
     }
 }
 
-IMPL_LINK_NOARG_TYPED( SelectPersonaDialog, ActionCancel, Button*, void )
+IMPL_LINK_NOARG( SelectPersonaDialog, ActionCancel, weld::Button&, void )
 {
-    if( m_rSearchThread.is() )
-        m_rSearchThread->StopExecution();
+    if( m_pSearchThread.is() )
+        m_pSearchThread->StopExecution();
+    if( m_pGetPersonaThread.is() )
+        m_pGetPersonaThread->StopExecution();
 
-    EndDialog();
+    m_xDialog->response(RET_CANCEL);
 }
 
-IMPL_LINK_TYPED( SelectPersonaDialog, SelectPersona, Button*, pButton, void )
+IMPL_LINK_NOARG( SelectPersonaDialog, SelectCategory, weld::ComboBox&, void )
 {
-    if( m_rSearchThread.is() )
-        m_rSearchThread->StopExecution();
+    OUString searchTerm = m_xCategories->get_active_id();
+    OUString rSearchURL;
 
-    for( sal_Int32 index = 0; index < 9; index++ )
+    if (searchTerm.isEmpty())
+        return;
+
+    if( m_pSearchThread.is() )
+        m_pSearchThread->StopExecution();
+
+    // 15 results so that invalid and duplicate search results whose names, textcolors etc. are null can be skipped
+    if (searchTerm == "featured")
+        rSearchURL = "https://addons.mozilla.org/api/v3/addons/search/?type=persona&app=firefox&status=public&sort=users&featured=true&page_size=15";
+    else
+        rSearchURL = "https://addons.mozilla.org/api/v3/addons/search/?type=persona&app=firefox&category=" + searchTerm + "&status=public&sort=downloads&page_size=15";
+
+    m_pSearchThread = new SearchAndParseThread( this, rSearchURL, false );
+
+    m_pSearchThread->launch();
+}
+
+IMPL_LINK( SelectPersonaDialog, SelectPersona, weld::Button&, rButton, void )
+{
+    if( m_pSearchThread.is() )
+        m_pSearchThread->StopExecution();
+    if ( m_pGetPersonaThread.is() )
+        return;
+
+    for( sal_Int32 index = 0; index < MAX_RESULTS; index++ )
     {
-        if( pButton == m_vResultList[index] )
+        if( &rButton == m_vResultList[index].get() )
         {
             if( !m_vPersonaSettings[index].isEmpty() )
             {
                 m_aSelectedPersona = m_vPersonaSettings[index];
+
                 // get the persona name from the setting variable to show in the progress.
-                sal_Int32 nNameIndex = m_aSelectedPersona.indexOf( ';' );
-                OUString aName = m_aSelectedPersona.copy( 0, nNameIndex );
-                OUString aProgress( CUI_RES( RID_SVXSTR_SELECTEDPERSONA ) );
-                aProgress += aName;
+                OUString aName( m_aSelectedPersona.getToken( 1, ';' ) );
+                OUString aProgress( CuiResId(RID_SVXSTR_SELECTEDPERSONA) + aName );
+
                 SetProgress( aProgress );
             }
             break;
@@ -197,48 +341,51 @@ IMPL_LINK_TYPED( SelectPersonaDialog, SelectPersona, Button*, pButton, void )
     }
 }
 
-void SelectPersonaDialog::SetAppliedPersonaSetting( OUString& rPersonaSetting )
+void SelectPersonaDialog::SetAppliedPersonaSetting( OUString const & rPersonaSetting )
 {
     m_aAppliedPersona = rPersonaSetting;
 }
 
-OUString SelectPersonaDialog::GetAppliedPersonaSetting() const
+const OUString& SelectPersonaDialog::GetAppliedPersonaSetting() const
 {
     return m_aAppliedPersona;
 }
 
-void SelectPersonaDialog::SetProgress( OUString& rProgress )
+void SelectPersonaDialog::SetProgress( const OUString& rProgress )
 {
     if(rProgress.isEmpty())
-        m_pProgressLabel->Hide();
+        m_xProgressLabel->hide();
     else
     {
         SolarMutexGuard aGuard;
-        m_pProgressLabel->Show();
-        m_pProgressLabel->SetText( rProgress );
-        setOptimalLayoutSize();
+        m_xProgressLabel->show();
+        m_xProgressLabel->set_label( rProgress );
+        m_xDialog->resize_to_request(); //TODO
     }
 }
 
-void SelectPersonaDialog::SetImages( const Image& aImage, sal_Int32 nIndex )
+void SelectPersonaDialog::SetImages( VirtualDevice& rImage, const OUString& sName, const sal_Int32& nIndex )
 {
-    m_vResultList[nIndex]->Enable();
-    m_vResultList[nIndex]->SetModeImage( aImage );
+    m_vResultList[nIndex]->set_sensitive(true);
+    m_vResultList[nIndex]->set_image(&rImage);
+    m_vResultList[nIndex]->set_tooltip_text( sName );
 }
 
-void SelectPersonaDialog::AddPersonaSetting( OUString& rPersonaSetting )
+void SelectPersonaDialog::AddPersonaSetting( OUString const & rPersonaSetting )
 {
     m_vPersonaSettings.push_back( rPersonaSetting );
 }
 
 void SelectPersonaDialog::ClearSearchResults()
 {
+    // for VCL to be able to destroy bitmaps
+    SolarMutexGuard aGuard;
     m_vPersonaSettings.clear();
     m_aSelectedPersona.clear();
-    for( sal_Int32 nIndex = 0; nIndex < 9; nIndex++ )
+    for(auto & nIndex : m_vResultList)
     {
-        m_vResultList[nIndex]->Disable();
-        m_vResultList[nIndex]->SetModeImage(Image());
+        nIndex->set_sensitive(false);
+        nIndex->set_image(nullptr);
     }
 }
 
@@ -248,6 +395,7 @@ SvxPersonalizationTabPage::SvxPersonalizationTabPage( vcl::Window *pParent, cons
     // persona
     get( m_pNoPersona, "no_persona" );
     get( m_pDefaultPersona, "default_persona" );
+    get( m_pAppliedThemeLabel, "applied_theme_link" );
 
     get( m_pOwnPersona, "own_persona" );
     m_pOwnPersona->SetClickHdl( LINK( this, SvxPersonalizationTabPage, ForceSelect ) );
@@ -255,14 +403,12 @@ SvxPersonalizationTabPage::SvxPersonalizationTabPage( vcl::Window *pParent, cons
     get( m_pSelectPersona, "select_persona" );
     m_pSelectPersona->SetClickHdl( LINK( this, SvxPersonalizationTabPage, SelectPersona ) );
 
-    get( m_vDefaultPersonaImages[0], "default1" );
-    m_vDefaultPersonaImages[0]->SetClickHdl( LINK( this, SvxPersonalizationTabPage, DefaultPersona ) );
-
-    get( m_vDefaultPersonaImages[1], "default2" );
-    m_vDefaultPersonaImages[1]->SetClickHdl( LINK( this, SvxPersonalizationTabPage, DefaultPersona ) );
-
-    get( m_vDefaultPersonaImages[2], "default3" );
-    m_vDefaultPersonaImages[2]->SetClickHdl( LINK( this, SvxPersonalizationTabPage, DefaultPersona ) );
+    for (sal_uInt32 i = 0; i < MAX_DEFAULT_PERSONAS; ++i)
+    {
+        OUString sDefaultId("default" + OUString::number(i));
+        get( m_vDefaultPersonaImages[i], OUStringToOString(sDefaultId, RTL_TEXTENCODING_UTF8) );
+        m_vDefaultPersonaImages[i]->SetClickHdl( LINK( this, SvxPersonalizationTabPage, DefaultPersona ) );
+    }
 
     get( m_pPersonaList, "installed_personas" );
     m_pPersonaList->SetSelectHdl( LINK( this, SvxPersonalizationTabPage, SelectInstalledPersona ) );
@@ -271,6 +417,7 @@ SvxPersonalizationTabPage::SvxPersonalizationTabPage( vcl::Window *pParent, cons
 
     get ( m_pExtensionLabel, "extensions_label" );
 
+    CheckAppliedTheme();
     LoadDefaultImages();
     LoadExtensionThemes();
 }
@@ -286,18 +433,19 @@ void SvxPersonalizationTabPage::dispose()
     m_pDefaultPersona.clear();
     m_pOwnPersona.clear();
     m_pSelectPersona.clear();
-    for (int i=0; i<3; ++i)
-        m_vDefaultPersonaImages[i].clear();
+    for (VclPtr<PushButton> & i : m_vDefaultPersonaImages)
+        i.clear();
     m_pExtensionPersonaPreview.clear();
     m_pPersonaList.clear();
     m_pExtensionLabel.clear();
+    m_pAppliedThemeLabel.clear();
     SfxTabPage::dispose();
 }
 
 
-VclPtr<SfxTabPage> SvxPersonalizationTabPage::Create( vcl::Window *pParent, const SfxItemSet *rSet )
+VclPtr<SfxTabPage> SvxPersonalizationTabPage::Create( TabPageParent pParent, const SfxItemSet *rSet )
 {
-    return VclPtr<SvxPersonalizationTabPage>::Create( pParent, *rSet );
+    return VclPtr<SvxPersonalizationTabPage>::Create( pParent.pParent, *rSet );
 }
 
 bool SvxPersonalizationTabPage::FillItemSet( SfxItemSet * )
@@ -359,42 +507,85 @@ void SvxPersonalizationTabPage::Reset( const SfxItemSet * )
 void SvxPersonalizationTabPage::SetPersonaSettings( const OUString& aPersonaSettings )
 {
     m_aPersonaSettings = aPersonaSettings;
+    ShowAppliedThemeLabel( m_aPersonaSettings );
     m_pOwnPersona->Check();
+}
+
+void SvxPersonalizationTabPage::CheckAppliedTheme()
+{
+    uno::Reference< uno::XComponentContext > xContext( comphelper::getProcessComponentContext() );
+    OUString aPersona( "default" ), aPersonaSetting;
+    if ( xContext.is())
+    {
+        aPersona = officecfg::Office::Common::Misc::Persona::get( xContext );
+        aPersonaSetting = officecfg::Office::Common::Misc::PersonaSettings::get( xContext );
+    }
+    if(aPersona == "own")
+        ShowAppliedThemeLabel(aPersonaSetting);
+}
+
+void SvxPersonalizationTabPage::ShowAppliedThemeLabel(const OUString& aPersonaSetting)
+{
+    OUString aSlug, aName;
+    sal_Int32 nIndex = 0;
+
+    aSlug = aPersonaSetting.getToken( 0, ';', nIndex );
+
+    if ( nIndex > 0 )
+        aName = "(" + aPersonaSetting.getToken( 0, ';', nIndex ) + ")";
+
+    if ( !aName.isEmpty() )
+    {
+        m_pAppliedThemeLabel->SetText( aName );
+        m_pAppliedThemeLabel->SetURL( "https://addons.mozilla.org/en-US/firefox/addon/" + aSlug + "/" );
+        m_pAppliedThemeLabel->Show();
+    }
+    else
+    {
+        SAL_WARN("cui.options", "Applied persona doesn't have a name!");
+    }
 }
 
 void SvxPersonalizationTabPage::LoadDefaultImages()
 {
     // Load the pre saved personas
 
-    OUString gallery( "" );
-    gallery = "$BRAND_BASE_DIR/" LIBO_SHARE_FOLDER;
-    gallery += "/gallery/personas/";
+    OUString gallery
+        = "$BRAND_BASE_DIR/" LIBO_SHARE_FOLDER "/gallery/personas/";
     rtl::Bootstrap::expandMacros( gallery );
     OUString aPersonasList = gallery + "personas_list.txt";
     SvFileStream aStream( aPersonasList, StreamMode::READ );
     GraphicFilter aFilter;
     Graphic aGraphic;
     sal_Int32 nIndex = 0;
+    bool foundOne = false;
 
-    while( aStream.IsOpen() && !aStream.IsEof() )
+    while( aStream.IsOpen() && !aStream.eof() && nIndex < MAX_DEFAULT_PERSONAS )
     {
         OString aLine;
+        OUString aPersonaSetting, aPreviewFile, aName;
+        sal_Int32 nParseIndex = 0;
+
         aStream.ReadLine( aLine );
-        OUString aPersonaSetting( OStringToOUString( aLine, RTL_TEXTENCODING_UTF8 ) );
-        OUString aPreviewFile;
-        sal_Int32 nNewIndex = aPersonaSetting.indexOf( ';' );
-        if( nNewIndex < 0 )
+        aPersonaSetting = OStringToOUString( aLine, RTL_TEXTENCODING_UTF8 );
+        aName = aPersonaSetting.getToken( 1, ';', nParseIndex );
+        aPreviewFile = aPersonaSetting.getToken( 0, ';', nParseIndex );
+
+        if (aPreviewFile.isEmpty())
             break;
-        aPreviewFile = aPersonaSetting.copy( 0, nNewIndex );
-        aPersonaSetting = aPersonaSetting.copy( nNewIndex + 1 );
+
         m_vDefaultPersonaSettings.push_back( aPersonaSetting );
 
         INetURLObject aURLObj( gallery + aPreviewFile );
         aFilter.ImportGraphic( aGraphic, aURLObj );
-        Bitmap aBmp = aGraphic.GetBitmap();
-        m_vDefaultPersonaImages[nIndex]->Show();
-        m_vDefaultPersonaImages[nIndex++]->SetModeImage( Image( aBmp ) );
+        BitmapEx aBmp = aGraphic.GetBitmapEx();
+        m_vDefaultPersonaImages[nIndex]->SetModeImage( Image( aBmp ) );
+        m_vDefaultPersonaImages[nIndex]->SetQuickHelpText(aName);
+        m_vDefaultPersonaImages[nIndex++]->Show();
+        foundOne = true;
     }
+
+    m_pDefaultPersona->Enable(foundOne);
 }
 
 void SvxPersonalizationTabPage::LoadExtensionThemes()
@@ -413,8 +604,12 @@ void SvxPersonalizationTabPage::LoadExtensionThemes()
     for( sal_Int32 nIndex = 0; nIndex < nLength; nIndex++ )
     {
         Reference< XPropertySet > xPropertySet( officecfg::Office::Common::Misc::PersonasList::get()->getByName( installedPersonas[nIndex] ), UNO_QUERY_THROW );
-        OUString aPersonaName, aPreviewFile, aHeaderFile, aFooterFile, aTextColor, aAccentColor, aPersonaSettings;
-        Any aValue = xPropertySet->getPropertyValue( "Name" );
+        OUString aPersonaSlug, aPersonaName, aPreviewFile, aHeaderFile, aFooterFile, aTextColor, aPersonaSettings;
+
+        Any aValue = xPropertySet->getPropertyValue( "Slug" );
+        aValue >>= aPersonaSlug;
+
+        aValue = xPropertySet->getPropertyValue( "Name" );
         aValue >>= aPersonaName;
         m_pPersonaList->InsertEntry( aPersonaName );
 
@@ -430,22 +625,21 @@ void SvxPersonalizationTabPage::LoadExtensionThemes()
         aValue = xPropertySet->getPropertyValue( "TextColor" );
         aValue >>= aTextColor;
 
-        aValue = xPropertySet->getPropertyValue( "AccentColor" );
-        aValue >>= aAccentColor;
-
-        aPersonaSettings = aPreviewFile + ";" + aHeaderFile + ";" + aFooterFile + ";" + aTextColor + ";" + aAccentColor;
+        aPersonaSettings = aPersonaSlug + ";" + aPersonaName + ";" + aPreviewFile
+                + ";" + aHeaderFile + ";" + aFooterFile + ";" + aTextColor;
         rtl::Bootstrap::expandMacros( aPersonaSettings );
         m_vExtensionPersonaSettings.push_back( aPersonaSettings );
     }
 }
 
-IMPL_LINK_NOARG_TYPED( SvxPersonalizationTabPage, SelectPersona, Button*, void )
+IMPL_LINK_NOARG( SvxPersonalizationTabPage, SelectPersona, Button*, void )
 {
-    ScopedVclPtrInstance< SelectPersonaDialog > aDialog(nullptr);
+    m_pOwnPersona->Check();
+    SelectPersonaDialog aDialog(GetDialogFrameWeld());
 
-    if ( aDialog->Execute() == RET_OK )
+    if (aDialog.run() == RET_OK)
     {
-        OUString aPersonaSetting( aDialog->GetAppliedPersonaSetting() );
+        OUString aPersonaSetting(aDialog.GetAppliedPersonaSetting());
         if ( !aPersonaSetting.isEmpty() )
         {
             SetPersonaSettings( aPersonaSetting );
@@ -453,29 +647,29 @@ IMPL_LINK_NOARG_TYPED( SvxPersonalizationTabPage, SelectPersona, Button*, void )
     }
 }
 
-IMPL_LINK_TYPED( SvxPersonalizationTabPage, ForceSelect, Button*, pButton, void )
+IMPL_LINK( SvxPersonalizationTabPage, ForceSelect, Button*, pButton, void )
 {
     if ( pButton == m_pOwnPersona && m_aPersonaSettings.isEmpty() )
         SelectPersona( m_pSelectPersona );
 }
 
-IMPL_LINK_TYPED( SvxPersonalizationTabPage, DefaultPersona, Button*, pButton, void )
+IMPL_LINK( SvxPersonalizationTabPage, DefaultPersona, Button*, pButton, void )
 {
     m_pDefaultPersona->Check();
-    for( sal_Int32 nIndex = 0; nIndex < 3; nIndex++ )
+    for( sal_Int32 nIndex = 0; nIndex < MAX_DEFAULT_PERSONAS; ++nIndex )
     {
         if( pButton == m_vDefaultPersonaImages[nIndex] )
             m_aPersonaSettings = m_vDefaultPersonaSettings[nIndex];
     }
 }
 
-IMPL_LINK_NOARG_TYPED( SvxPersonalizationTabPage, SelectInstalledPersona, ListBox&, void)
+IMPL_LINK_NOARG( SvxPersonalizationTabPage, SelectInstalledPersona, ListBox&, void)
 {
     m_pOwnPersona->Check();
 
     // Get the details of the selected theme.
     m_pExtensionPersonaPreview->Show();
-    sal_Int32 nSelectedPos = m_pPersonaList->GetSelectEntryPos();
+    sal_Int32 nSelectedPos = m_pPersonaList->GetSelectedEntryPos();
     OUString aSettings = m_vExtensionPersonaSettings[nSelectedPos];
     sal_Int32 nIndex = aSettings.indexOf( ';' );
     OUString aPreviewFile = aSettings.copy( 0, nIndex );
@@ -486,73 +680,17 @@ IMPL_LINK_NOARG_TYPED( SvxPersonalizationTabPage, SelectInstalledPersona, ListBo
     Graphic aGraphic;
     INetURLObject aURLObj( aPreviewFile );
     aFilter.ImportGraphic( aGraphic, aURLObj );
-    Bitmap aBmp = aGraphic.GetBitmap();
+    BitmapEx aBmp = aGraphic.GetBitmapEx();
     m_pExtensionPersonaPreview->SetModeImage( Image( aBmp ) );
 }
 
-/// Find the value on the Persona page, and convert it to a usable form.
-static OUString searchValue( const OString &rBuffer, sal_Int32 from, const OString &rIdentifier )
-{
-    sal_Int32 where = rBuffer.indexOf( rIdentifier, from );
-    if ( where < 0 )
-        return OUString();
-
-    where += rIdentifier.getLength();
-
-    sal_Int32 end = rBuffer.indexOf( "&#34;", where );
-    if ( end < 0 )
-        return OUString();
-
-    OString aOString( rBuffer.copy( where, end - where ) );
-    OUString aString( aOString.getStr(),  aOString.getLength(), RTL_TEXTENCODING_UTF8, OSTRING_TO_OUSTRING_CVTFLAGS );
-
-    return aString.replaceAll( "\\/", "/" );
-}
-
-/// Parse the Persona web page, and find where to get the bitmaps + the color values.
-static bool parsePersonaInfo( const OString &rBuffer, OUString *pHeaderURL, OUString *pFooterURL,
-                              OUString *pTextColor, OUString *pAccentColor, OUString *pPreviewURL,
-                              OUString *pName )
-{
-    // it is the first attribute that contains "persona="
-    sal_Int32 persona = rBuffer.indexOf( "data-browsertheme=\"{" );
-    if ( persona < 0 )
-        return false;
-
-    // now search inside
-    *pHeaderURL = searchValue( rBuffer, persona, "&#34;headerURL&#34;:&#34;" );
-    if ( pHeaderURL->isEmpty() )
-        return false;
-
-    *pFooterURL = searchValue( rBuffer, persona, "&#34;footerURL&#34;:&#34;" );
-    if ( pFooterURL->isEmpty() )
-        return false;
-
-    *pTextColor = searchValue( rBuffer, persona, "&#34;textcolor&#34;:&#34;" );
-    if ( pTextColor->isEmpty() )
-        return false;
-
-    *pAccentColor = searchValue( rBuffer, persona, "&#34;accentcolor&#34;:&#34;" );
-    if ( pAccentColor->isEmpty() )
-        return false;
-
-    *pPreviewURL = searchValue( rBuffer, persona, "&#34;previewURL&#34;:&#34;" );
-    if ( pPreviewURL->isEmpty() )
-        return false;
-
-    *pName = searchValue( rBuffer, persona, "&#34;name&#34;:&#34;" );
-    if ( pName->isEmpty() )
-        return false;
-
-    return true;
-}
-
 SearchAndParseThread::SearchAndParseThread( SelectPersonaDialog* pDialog,
-                          const OUString& rURL ) :
+                          const OUString& rURL, bool bDirectURL ) :
             Thread( "cuiPersonasSearchThread" ),
             m_pPersonaDialog( pDialog ),
             m_aURL( rURL ),
-            m_bExecute( true )
+            m_bExecute( true ),
+            m_bDirectURL( bDirectURL )
 {
 }
 
@@ -560,207 +698,356 @@ SearchAndParseThread::~SearchAndParseThread()
 {
 }
 
-void SearchAndParseThread::execute()
+namespace {
+
+bool getPreviewFile( const PersonaInfo& aPersonaInfo, OUString& pPreviewFile )
 {
-    if( m_aURL.startsWith( "https://" ) )
-    {
-        m_pPersonaDialog->ClearSearchResults();
-        OUString sProgress( CUI_RES( RID_SVXSTR_SEARCHING ) );
-        m_pPersonaDialog->SetProgress( sProgress );
-        Reference<XComponentContext> xContext( ::comphelper::getProcessComponentContext() );
-        Reference< xml::sax::XParser > xParser = xml::sax::Parser::create(xContext);
-        PersonasDocHandler* pHandler = new PersonasDocHandler();
-        Reference< xml::sax::XDocumentHandler > xDocHandler = pHandler;
-        uno::Reference< ucb::XSimpleFileAccess3 > xFileAccess( ucb::SimpleFileAccess::create( comphelper::getProcessComponentContext() ), uno::UNO_QUERY );
-        uno::Reference< io::XInputStream > xStream;
-        xParser->setDocumentHandler( xDocHandler );
+    uno::Reference< ucb::XSimpleFileAccess3 > xFileAccess( ucb::SimpleFileAccess::create( comphelper::getProcessComponentContext() ), uno::UNO_QUERY );
+    Reference<XComponentContext> xContext( ::comphelper::getProcessComponentContext() );
 
-        if ( !xFileAccess.is() )
-            return;
+    // copy the images to the user's gallery
+    OUString gallery = "${$BRAND_BASE_DIR/" LIBO_ETC_FOLDER "/" SAL_CONFIGFILE( "bootstrap") "::UserInstallation}";
+    rtl::Bootstrap::expandMacros( gallery );
+    gallery += "/user/gallery/personas/" + aPersonaInfo.sSlug + "/";
 
-        try {
-            xStream = xFileAccess->openFileRead( m_aURL );
-        }
-        catch (...)
-        {
-            sProgress = CUI_RES(RID_SVXSTR_SEARCHERROR);
-            sProgress = sProgress.replaceAll("%1", m_aURL);
-            m_pPersonaDialog->SetProgress(sProgress);
-            return;
-        }
+    OUString aPreviewFile( INetURLObject( aPersonaInfo.sPreviewURL ).getName() );
+    OString aPreviewURL = OUStringToOString( aPersonaInfo.sPreviewURL, RTL_TEXTENCODING_UTF8 );
 
-        xml::sax::InputSource aParserInput;
-        aParserInput.aInputStream = xStream;
-        xParser->parseStream( aParserInput );
-
-        if( !pHandler->hasResults() )
-        {
-            sProgress = CUI_RES( RID_SVXSTR_NORESULTS );
-            m_pPersonaDialog->SetProgress( sProgress );
-            return;
-        }
-
-        std::vector<OUString> vLearnmoreURLs = pHandler->getLearnmoreURLs();
-        std::vector<OUString>::iterator it;
-        sal_Int32 nIndex = 0;
-        GraphicFilter aFilter;
-        Graphic aGraphic;
-
-        for( it = vLearnmoreURLs.begin(); it!=vLearnmoreURLs.end(); ++it )
-        {
-            OUString sPreviewFile, aPersonaSetting;
-            getPreviewFile( *it, &sPreviewFile, &aPersonaSetting );
-            INetURLObject aURLObj( sPreviewFile );
-            aFilter.ImportGraphic( aGraphic, aURLObj );
-            Bitmap aBmp = aGraphic.GetBitmap();
-
-            if( !m_bExecute )
-                return;
-
-            // for VCL to be able to do visual changes in the thread
-            SolarMutexGuard aGuard;
-            m_pPersonaDialog->SetImages( Image( aBmp ), nIndex++ );
-            m_pPersonaDialog->setOptimalLayoutSize();
-            m_pPersonaDialog->AddPersonaSetting( aPersonaSetting );
-        }
-
-        if( !m_bExecute )
-            return;
-
-        SolarMutexGuard aGuard;
-        sProgress.clear();
-        m_pPersonaDialog->SetProgress( sProgress );
-        m_pPersonaDialog->setOptimalLayoutSize();
-    }
-
-    else
-    {
-        OUString sProgress( CUI_RES( RID_SVXSTR_APPLYPERSONA ) );
-        m_pPersonaDialog->SetProgress( sProgress );
-
-        uno::Reference< ucb::XSimpleFileAccess3 > xFileAccess( ucb::SimpleFileAccess::create( comphelper::getProcessComponentContext() ), uno::UNO_QUERY );
-        if ( !xFileAccess.is() )
-            return;
-
-        OUString aName, aHeaderURL, aFooterURL, aTextColor, aAccentColor;
-        OUString aPersonaSetting;
-
-        // get the required fields from m_aURL
-        sal_Int32 nOldIndex = 0;
-        sal_Int32 nNewIndex = m_aURL.indexOf( ';', nOldIndex );
-        aName = m_aURL.copy( nOldIndex, ( nNewIndex - nOldIndex ) );
-
-        nOldIndex = nNewIndex + 1;
-        nNewIndex = m_aURL.indexOf( ';', nOldIndex );
-        aHeaderURL = m_aURL.copy(nOldIndex , ( nNewIndex - nOldIndex ) );
-
-        nOldIndex = nNewIndex + 1;
-        nNewIndex = m_aURL.indexOf( ';', nOldIndex );
-        aFooterURL = m_aURL.copy( nOldIndex,  ( nNewIndex - nOldIndex ) );
-
-        nOldIndex = nNewIndex + 1;
-        nNewIndex = m_aURL.indexOf( ';', nOldIndex );
-        aTextColor = m_aURL.copy( nOldIndex, ( nNewIndex - nOldIndex ) );
-
-        nOldIndex = nNewIndex + 1;
-        nNewIndex = m_aURL.getLength();
-        aAccentColor = m_aURL.copy( nOldIndex, ( nNewIndex - nOldIndex ) );
-
-        // copy the images to the user's gallery
-        OUString gallery = "${$BRAND_BASE_DIR/" LIBO_ETC_FOLDER "/" SAL_CONFIGFILE( "bootstrap") "::UserInstallation}";
-        rtl::Bootstrap::expandMacros( gallery );
-        gallery += "/user/gallery/personas/";
+    try {
         osl::Directory::createPath( gallery );
 
-        OUString aHeaderFile( INetURLObject( aHeaderURL ).getName() );
-        OUString aFooterFile( INetURLObject( aFooterURL ).getName() );
+        if ( !xFileAccess->exists( gallery + aPreviewFile ) )
+            curlDownload(aPreviewURL, gallery + aPreviewFile);
+    }
+    catch ( const uno::Exception & )
+    {
+        return false;
+    }
+    pPreviewFile = gallery + aPreviewFile;
+    return true;
+}
 
-        aHeaderFile = aName + "/" + aHeaderFile;
-        aFooterFile = aName + "/" + aFooterFile;
+void parseResponse(const std::string& rResponse, std::vector<PersonaInfo> & aPersonas)
+{
+    orcus::json::document_tree aJsonDoc;
+    orcus::json_config aConfig;
 
-        try {
-            xFileAccess->copy( aHeaderURL, gallery + aHeaderFile );
-            xFileAccess->copy( aFooterURL, gallery + aFooterFile );
-        }
-        catch ( const uno::Exception & )
+    if (rResponse.empty())
+        return;
+
+    aJsonDoc.load(rResponse, aConfig);
+
+    auto aDocumentRoot = aJsonDoc.get_document_root();
+    if (aDocumentRoot.type() != orcus::json::node_t::object)
+    {
+        SAL_WARN("cui.options", "invalid root entries: " << rResponse);
+        return;
+    }
+
+    auto resultsArray = aDocumentRoot.child("results");
+
+    for (size_t i = 0; i < resultsArray.child_count(); ++i)
+    {
+        auto arrayElement = resultsArray.child(i);
+
+        try
         {
-            sProgress = CUI_RES( RID_SVXSTR_SEARCHERROR );
-            sProgress = sProgress.replaceAll("%1", m_aURL);
-            m_pPersonaDialog->SetProgress( sProgress );
-            return;
+            PersonaInfo aNewPersona = {
+                OStringToOUString( OString(arrayElement.child("slug").string_value().get()),
+                    RTL_TEXTENCODING_UTF8 ),
+                OStringToOUString( OString(arrayElement.child("name").child("en-US").string_value().get()),
+                    RTL_TEXTENCODING_UTF8 ),
+                OStringToOUString( OString(arrayElement.child("theme_data").child("previewURL").string_value().get()),
+                    RTL_TEXTENCODING_UTF8 ),
+                OStringToOUString( OString(arrayElement.child("theme_data").child("headerURL").string_value().get()),
+                    RTL_TEXTENCODING_UTF8 ),
+                OStringToOUString( OString(arrayElement.child("theme_data").child("footerURL").string_value().get()),
+                    RTL_TEXTENCODING_UTF8 ),
+                OStringToOUString( OString(arrayElement.child("theme_data").child("textcolor").string_value().get()),
+                    RTL_TEXTENCODING_UTF8 )
+            };
+
+            aPersonas.push_back(aNewPersona);
         }
-
-        if( !m_bExecute )
-            return;
-
-        SolarMutexGuard aGuard;
-
-        aPersonaSetting = aHeaderFile + ";" + aFooterFile + ";" + aTextColor + ";" + aAccentColor;
-        m_pPersonaDialog->SetAppliedPersonaSetting( aPersonaSetting );
-        m_pPersonaDialog->EndDialog( RET_OK );
+        catch(orcus::json::document_error& e)
+        {
+            // This usually happens when one of the values is null (type() == orcus::json::node_t::null)
+            // TODO: Allow null values in personas.
+            SAL_WARN("cui.options", "Persona JSON parse error: " << e.what());
+        }
     }
 }
 
-void SearchAndParseThread::getPreviewFile( const OUString& rURL, OUString *pPreviewFile, OUString *pPersonaSetting )
+PersonaInfo parseSingleResponse(const std::string& rResponse)
 {
+    orcus::json::document_tree aJsonDoc;
+    orcus::json_config aConfig;
+
+    if (rResponse.empty())
+        return PersonaInfo();
+
+    aJsonDoc.load(rResponse, aConfig);
+
+    auto aDocumentRoot = aJsonDoc.get_document_root();
+    if (aDocumentRoot.type() != orcus::json::node_t::object)
+    {
+        SAL_WARN("cui.options", "invalid root entries: " << rResponse);
+        return PersonaInfo();
+    }
+
+    try
+    {
+        auto theme_data = aDocumentRoot.child("theme_data");
+
+        PersonaInfo aNewPersona = {
+            OUString(),
+            OStringToOUString( OString(theme_data.child("name").string_value().get()),
+            RTL_TEXTENCODING_UTF8 ),
+            OStringToOUString( OString(theme_data.child("previewURL").string_value().get()),
+            RTL_TEXTENCODING_UTF8 ),
+            OStringToOUString( OString(theme_data.child("headerURL").string_value().get()),
+            RTL_TEXTENCODING_UTF8 ),
+            OStringToOUString( OString(theme_data.child("footerURL").string_value().get()),
+            RTL_TEXTENCODING_UTF8 ),
+            OStringToOUString( OString(theme_data.child("textcolor").string_value().get()),
+            RTL_TEXTENCODING_UTF8 )
+        };
+
+        return aNewPersona;
+    }
+    catch(orcus::json::document_error& e)
+    {
+        // This usually happens when one of the values is null (type() == orcus::json::node_t::null)
+        // TODO: Allow null values in personas.
+        // TODO: Give a message to the user
+        SAL_WARN("cui.options", "Persona JSON parse error: " << e.what());
+        return PersonaInfo();
+    }
+}
+
+} //End of anonymous namespace
+
+void SearchAndParseThread::execute()
+{
+    m_pPersonaDialog->ClearSearchResults();
+    OUString sProgress( CuiResId( RID_SVXSTR_SEARCHING ) );
+    m_pPersonaDialog->SetProgress( sProgress );
+
+    uno::Reference< ucb::XSimpleFileAccess3 > xFileAccess( ucb::SimpleFileAccess::create( comphelper::getProcessComponentContext() ), uno::UNO_QUERY );
+
+    if (!m_bDirectURL)
+    {
+        OString rURL = OUStringToOString( m_aURL, RTL_TEXTENCODING_UTF8 );
+        std::string sResponse = curlGet(rURL);
+
+        std::vector<PersonaInfo> personaInfos;
+
+        parseResponse(sResponse, personaInfos);
+
+        if ( personaInfos.empty() )
+        {
+            sProgress = CuiResId( RID_SVXSTR_NORESULTS );
+            m_pPersonaDialog->SetProgress( sProgress );
+            return;
+        }
+        else
+        {
+            //Get Preview Files
+            sal_Int32 nIndex = 0;
+            for (const auto & personaInfo : personaInfos)
+            {
+                if( !m_bExecute )
+                    return;
+
+                OUString aPreviewFile;
+                bool bResult = getPreviewFile(personaInfo, aPreviewFile);
+
+                if (!bResult)
+                {
+                    SAL_INFO("cui.options", "Couldn't get the preview file. Skipping: " << aPreviewFile);
+                    continue;
+                }
+
+
+                GraphicFilter aFilter;
+                Graphic aGraphic;
+
+                INetURLObject aURLObj( aPreviewFile );
+
+                OUString aPersonaSetting = personaInfo.sSlug
+                        + ";" + personaInfo.sName
+                        + ";" + personaInfo.sPreviewURL
+                        + ";" + personaInfo.sHeaderURL
+                        + ";" + personaInfo.sFooterURL
+                        + ";" + personaInfo.sTextColor;
+
+                m_pPersonaDialog->AddPersonaSetting( aPersonaSetting );
+
+                // for VCL to be able to create bitmaps / do visual changes in the thread
+                SolarMutexGuard aGuard;
+                aFilter.ImportGraphic( aGraphic, aURLObj );
+                BitmapEx aBmp = aGraphic.GetBitmapEx();
+
+                ScopedVclPtr<VirtualDevice> xVirDev(VclPtr<VirtualDevice>::Create());
+                xVirDev->SetOutputSizePixel(aBmp.GetSizePixel());
+                xVirDev->DrawBitmapEx(Point(0, 0), aBmp);
+
+                m_pPersonaDialog->SetImages(*xVirDev, personaInfo.sName, nIndex );
+
+                if (++nIndex >= MAX_RESULTS)
+                    break;
+            }
+
+            //TODO: Give a message to the user if nIndex == 0
+        }
+    }
+    else
+    {
+        //Now we have a slug instead a search term in m_aURL
+        OString rURL = "https://addons.mozilla.org/api/v3/addons/addon/"
+                     + OUStringToOString( m_aURL, RTL_TEXTENCODING_UTF8 )
+                     + "/";
+        std::string sResponse = curlGet(rURL);
+
+        PersonaInfo aPersonaInfo = parseSingleResponse(sResponse);
+        aPersonaInfo.sSlug = m_aURL;
+
+        if ( aPersonaInfo.sName.isEmpty() )
+        {
+            //TODO: Give error message to user
+            sProgress = CuiResId( RID_SVXSTR_NORESULTS );
+            m_pPersonaDialog->SetProgress( sProgress );
+            return;
+        }
+        else
+        {
+            //Get the preview file
+            if( !m_bExecute )
+                return;
+
+            OUString aPreviewFile;
+            bool bResult = getPreviewFile(aPersonaInfo, aPreviewFile);
+
+            if (!bResult)
+            {
+                //TODO: Inform the user
+                SAL_WARN("cui.options", "Couldn't get the preview file: " << aPreviewFile);
+                return;
+            }
+
+            GraphicFilter aFilter;
+            Graphic aGraphic;
+
+            INetURLObject aURLObj( aPreviewFile );
+
+            OUString aPersonaSetting = aPersonaInfo.sSlug
+                    + ";" + aPersonaInfo.sName
+                    + ";" + aPersonaInfo.sPreviewURL
+                    + ";" + aPersonaInfo.sHeaderURL
+                    + ";" + aPersonaInfo.sFooterURL
+                    + ";" + aPersonaInfo.sTextColor;
+
+            m_pPersonaDialog->AddPersonaSetting( aPersonaSetting );
+
+            // for VCL to be able to create bitmaps / do visual changes in the thread
+            SolarMutexGuard aGuard;
+            aFilter.ImportGraphic( aGraphic, aURLObj );
+            BitmapEx aBmp = aGraphic.GetBitmapEx();
+
+            ScopedVclPtr<VirtualDevice> xVirDev(VclPtr<VirtualDevice>::Create());
+            xVirDev->SetOutputSizePixel(aBmp.GetSizePixel());
+            xVirDev->DrawBitmapEx(Point(0, 0), aBmp);
+
+            m_pPersonaDialog->SetImages( *xVirDev, aPersonaInfo.sName, 0 );
+        }
+
+    }
+
+    if( !m_bExecute )
+        return;
+
+    SolarMutexGuard aGuard;
+    sProgress.clear();
+    m_pPersonaDialog->SetProgress( sProgress );
+}
+
+GetPersonaThread::GetPersonaThread( SelectPersonaDialog* pDialog,
+                          const OUString& rSelectedPersona ) :
+            Thread( "cuiPersonasGetPersonaThread" ),
+            m_pPersonaDialog( pDialog ),
+            m_aSelectedPersona( rSelectedPersona ),
+            m_bExecute( true )
+{
+}
+
+GetPersonaThread::~GetPersonaThread()
+{
+    //TODO: Clean-up
+}
+
+void GetPersonaThread::execute()
+{
+    OUString sProgress( CuiResId( RID_SVXSTR_APPLYPERSONA ) ), sError;
+    m_pPersonaDialog->SetProgress( sProgress );
+
     uno::Reference< ucb::XSimpleFileAccess3 > xFileAccess( ucb::SimpleFileAccess::create( comphelper::getProcessComponentContext() ), uno::UNO_QUERY );
     if ( !xFileAccess.is() )
         return;
 
-    uno::Reference< io::XInputStream > xStream;
-    try {
-        xStream = xFileAccess->openFileRead( rURL );
-    }
-    catch (...)
-    {
-        OUString sProgress( CUI_RES( RID_SVXSTR_SEARCHERROR ) );
-        sProgress = sProgress.replaceAll("%1", m_aURL);
-        m_pPersonaDialog->SetProgress( sProgress );
-        return;
-    }
-    if ( !xStream.is() )
-        return;
+    OUString aSlug, aName, aPreviewURL, aHeaderURL, aFooterURL, aTextColor;
+    OUString aPersonaSetting;
 
-    // read the persona specification
-    // NOTE: Parsing for real is an overkill here; and worse - I tried, and
-    // the HTML the site provides is not 100% valid ;-)
-    const sal_Int32 BUF_LEN = 8000;
-    uno::Sequence< sal_Int8 > buffer( BUF_LEN );
-    OStringBuffer aBuffer( 64000 );
+    // get the required fields from m_aSelectedPersona
+    sal_Int32 nIndex = 0;
 
-    sal_Int32 nRead = 0;
-    while ( ( nRead = xStream->readBytes( buffer, BUF_LEN ) ) == BUF_LEN )
-        aBuffer.append( reinterpret_cast< const char* >( buffer.getConstArray() ), nRead );
-
-    if ( nRead > 0 )
-        aBuffer.append( reinterpret_cast< const char* >( buffer.getConstArray() ), nRead );
-
-    xStream->closeInput();
-
-    // get the important bits of info
-    OUString aHeaderURL, aFooterURL, aTextColor, aAccentColor, aPreviewURL, aName;
-
-    if ( !parsePersonaInfo( aBuffer.makeStringAndClear(), &aHeaderURL, &aFooterURL, &aTextColor, &aAccentColor, &aPreviewURL, &aName ) )
-        return;
+    aSlug = m_aSelectedPersona.getToken(0, ';', nIndex);
+    aName = m_aSelectedPersona.getToken(0, ';', nIndex);
+    aPreviewURL = m_aSelectedPersona.getToken(0, ';', nIndex);
+    aHeaderURL = m_aSelectedPersona.getToken(0, ';', nIndex);
+    aFooterURL = m_aSelectedPersona.getToken(0, ';', nIndex);
+    aTextColor = m_aSelectedPersona.getToken(0, ';', nIndex);
 
     // copy the images to the user's gallery
     OUString gallery = "${$BRAND_BASE_DIR/" LIBO_ETC_FOLDER "/" SAL_CONFIGFILE( "bootstrap") "::UserInstallation}";
     rtl::Bootstrap::expandMacros( gallery );
     gallery += "/user/gallery/personas/";
-    gallery += aName + "/";
-    osl::Directory::createPath( gallery );
 
-    OUString aPreviewFile( INetURLObject( aPreviewURL ).getName() );
+    OUString aPreviewFile( aSlug + "/" + INetURLObject( aPreviewURL ).getName() );
+    OUString aHeaderFile( aSlug + "/" + INetURLObject( aHeaderURL ).getName() );
+    OUString aFooterFile( aSlug + "/" + INetURLObject( aFooterURL ).getName() );
 
     try {
-        xFileAccess->copy( aPreviewURL, gallery + aPreviewFile );
+        osl::Directory::createPath( gallery );
+
+        if ( !xFileAccess->exists(gallery + aHeaderFile) )
+            curlDownload( OUStringToOString(aHeaderURL, RTL_TEXTENCODING_UTF8), gallery + aHeaderFile );
+
+        if ( !xFileAccess->exists(gallery + aFooterFile) )
+            curlDownload( OUStringToOString(aFooterURL, RTL_TEXTENCODING_UTF8), gallery + aFooterFile );
     }
     catch ( const uno::Exception & )
     {
+        SolarMutexGuard aGuard;
+        sError = CuiResId( RID_SVXSTR_SEARCHERROR );
+        sError = sError.replaceAll("%1", m_aSelectedPersona);
+        m_pPersonaDialog->SetProgress( OUString() );
+        std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(nullptr,
+                                                                                   VclMessageType::Error, VclButtonsType::Ok,
+                                                                                   sError));
+        xBox->run();
         return;
     }
-    *pPreviewFile = gallery + aPreviewFile;
-    *pPersonaSetting = aName + ";" + aHeaderURL + ";" + aFooterURL + ";" + aTextColor + ";" + aAccentColor;
+
+    if( !m_bExecute )
+        return;
+
+    SolarMutexGuard aGuard;
+
+    aPersonaSetting = aSlug + ";" + aName + ";" + aPreviewFile + ";" + aHeaderFile + ";" + aFooterFile
+            + ";" + aTextColor;
+
+    m_pPersonaDialog->SetAppliedPersonaSetting( aPersonaSetting );
+    m_pPersonaDialog->response( RET_OK );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

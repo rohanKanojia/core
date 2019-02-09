@@ -49,7 +49,7 @@ void setupccenv() {
     }
 
     // Set-up include path
-    string includepath="INCLUDE=.;";
+    string includepath="INCLUDE=.";
     char* incbuf;
     size_t inclen;
     _dupenv_s(&incbuf,&inclen,"SOLARINC");
@@ -61,16 +61,20 @@ void setupccenv() {
     free(incbuf);
 
     // 3 = strlen(" -I")
-    for(size_t pos=0; pos != string::npos;) {
-        size_t endpos=inctmp.find(" -I",pos+3);
-        size_t len=endpos-pos-3;
+    for(size_t pos=0,len=0;pos<inctmp.length();) {
+        size_t endpos=inctmp.find(" -I",pos+1);
         if(endpos==string::npos)
-            includepath.append(inctmp,pos+3,endpos);
-        else if(len>0) {
-            includepath.append(inctmp,pos+3,len);
+            endpos=inctmp.length();
+        len=endpos-pos;
+
+        while(len>0&&inctmp[pos+len-1]==' ')
+            --len;
+
+        if(len>3) {
             includepath.append(";");
+            includepath.append(inctmp,pos+3,len-3);
         }
-        pos=inctmp.find(" -I",pos+len);
+        pos=endpos;
     }
     if(_putenv(includepath.c_str())<0) {
         cerr << "Error: could not export INCLUDE" << endl;
@@ -89,12 +93,12 @@ string processccargs(vector<string> rawargs) {
     else
         args.append(" -MD");
     args.append(" -Gy");
-    args.append(" -Zc:wchar_t-");
     args.append(" -Ob1 -Oxs -Oy-");
 
     // apparently these must be at the end
     // otherwise configure tests may fail
-    string linkargs(" -link");
+    // note: always use -debug so a PDB file is created
+    string linkargs(" -link -debug");
 
     for(vector<string>::iterator i = rawargs.begin(); i != rawargs.end(); ++i) {
         args.append(" ");
@@ -124,13 +128,13 @@ string processccargs(vector<string> rawargs) {
                 exit(1);
             }
         }
-        else if(*i == "-g") {
+        else if(*i == "-g" || !(*i).compare(0,5,"-ggdb")) {
             args.append("-Zi");
             args.append(" -FS");
         }
         else if(!(*i).compare(0,2,"-D")) {
             // need to re-escape strings for preprocessor
-            for(size_t pos=(*i).find("\"",0); pos!=string::npos; pos=(*i).find("\"",pos)) {
+            for(size_t pos=(*i).find("\""); pos!=string::npos; pos=(*i).find("\"",pos)) {
                 (*i).replace(pos,0,"\\");
                 pos+=2;
             }
@@ -139,7 +143,7 @@ string processccargs(vector<string> rawargs) {
         else if(!(*i).compare(0,2,"-L")) {
             linkargs.append(" -LIBPATH:"+(*i).substr(2));
         }
-        else if(!(*i).compare(0,2,"-l")) {
+        else if(!(*i).compare(0,2,"-l") && (*i).compare(0,5,"-link")) {
             linkargs.append(" "+(*i).substr(2)+".lib");
         }
         else if(!(*i).compare(0,5,"-def:") || !(*i).compare(0,5,"/def:")) {
@@ -203,12 +207,12 @@ int startprocess(string command, string args) {
 
     if(!CreateProcess(nullptr, // Process Name
         cmdlineBuf, // Command Line
-        NULL, // Process Handle not Inheritable
-        NULL, // Thread Handle not Inheritable
+        nullptr, // Process Handle not Inheritable
+        nullptr, // Thread Handle not Inheritable
         TRUE, // Handles are Inherited
         0, // No creation flags
-        NULL, // Environment for process
-        NULL, // Use same starting directory
+        nullptr, // Environment for process
+        nullptr, // Use same starting directory
         &si, // Startup Info
         &pi) // Process Information
         ) {
@@ -224,7 +228,7 @@ int startprocess(string command, string args) {
     DWORD readlen, writelen, ret;
     HANDLE stdout_handle=GetStdHandle(STD_OUTPUT_HANDLE);
     while(true) {
-        int success=ReadFile(childout_read,buffer,BUFLEN,&readlen,NULL);
+        int success=ReadFile(childout_read,buffer,BUFLEN,&readlen,nullptr);
         // check if the child process has exited
         if(GetLastError()==ERROR_BROKEN_PIPE)
             break;
@@ -233,7 +237,7 @@ int startprocess(string command, string args) {
             exit(1);
         }
         if(readlen!=0) {
-            WriteFile(stdout_handle,buffer,readlen,&writelen,NULL);
+            WriteFile(stdout_handle,buffer,readlen,&writelen,nullptr);
         }
     }
     WaitForSingleObject(pi.hProcess, INFINITE);

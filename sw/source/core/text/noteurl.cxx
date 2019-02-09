@@ -17,47 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "noteurl.hxx"
+#include <noteurl.hxx>
 
-#include "swtypes.hxx"
+#include <swtypes.hxx>
+#include <osl/diagnose.h>
 #include <vcl/outdev.hxx>
-#include <svtools/imaprect.hxx>
-#include <svtools/imap.hxx>
+#include <vcl/imaprect.hxx>
+#include <vcl/imap.hxx>
 
 // Global variable
 SwNoteURL *pNoteURL = nullptr;
-
-void SwNoteURL::InsertURLNote( const OUString& rURL, const OUString& rTarget,
-    const SwRect& rRect )
-{
-    const size_t nCount = m_List.size();
-    for( size_t i = 0; i < nCount; ++i )
-        if (rRect == m_List[i].GetRect())
-            return;
-
-    m_List.push_back(SwURLNote(rURL, rTarget, rRect));
-}
-
-void SwNoteURL::FillImageMap( ImageMap *pMap, const Point &rPos,
-    const MapMode& rMap )
-{
-    OSL_ENSURE( pMap, "FillImageMap: No ImageMap, no cookies!" );
-    const size_t nCount = m_List.size();
-    if( nCount )
-    {
-        MapMode aMap( MAP_100TH_MM );
-        for( size_t i = 0; i < nCount; ++i )
-        {
-            const SwURLNote &rNote = m_List[i];
-            SwRect aSwRect( rNote.GetRect() );
-            aSwRect -= rPos;
-            Rectangle aRect( OutputDevice::LogicToLogic( aSwRect.SVRect(),
-                                                         rMap, aMap ) );
-            IMapRectangleObject aObj( aRect, rNote.GetURL(), OUString(), OUString(),
-                                      rNote.GetTarget(), OUString(), true, false );
-            pMap->InsertIMapObject( aObj );
-        }
-    }
-}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

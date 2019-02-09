@@ -18,7 +18,7 @@
  */
 #include "inspectorhelpwindow.hxx"
 #include "modulepcr.hxx"
-#include "propresid.hrc"
+#include <strings.hrc>
 
 
 namespace pcr
@@ -36,7 +36,7 @@ namespace pcr
     {
         SetBackground();
         SetPaintTransparent(true);
-        m_aSeparator->SetText( PcrRes(RID_STR_HELP_SECTION_LABEL).toString() );
+        m_aSeparator->SetText( PcrRes(RID_STR_HELP_SECTION_LABEL) );
         m_aSeparator->SetBackground();
         m_aSeparator->Show();
 
@@ -81,8 +81,8 @@ namespace pcr
 
     long InspectorHelpWindow::impl_getSpaceAboveTextWindow()
     {
-        Size aSeparatorSize( LogicToPixel( Size( 0, 8 ), MAP_APPFONT ) );
-        Size a3AppFontSize( LogicToPixel( Size( 3, 3 ), MAP_APPFONT ) );
+        Size aSeparatorSize(LogicToPixel(Size(0, 8), MapMode(MapUnit::MapAppFont)));
+        Size a3AppFontSize(LogicToPixel(Size(3, 3), MapMode(MapUnit::MapAppFont)));
         return aSeparatorSize.Height() + a3AppFontSize.Height();
     }
 
@@ -111,12 +111,12 @@ namespace pcr
         long nMinTextWindowHeight = impl_getMinimalTextWindowHeight();
         long nMaxTextWindowHeight = impl_getMaximalTextWindowHeight();
 
-        Rectangle aTextRect( Point( 0, 0 ), m_aHelpText->GetOutputSizePixel() );
+        tools::Rectangle aTextRect( Point( 0, 0 ), m_aHelpText->GetOutputSizePixel() );
         aTextRect = m_aHelpText->GetTextRect( aTextRect, m_aHelpText->GetText(),
             DrawTextFlags::Left | DrawTextFlags::Top | DrawTextFlags::MultiLine | DrawTextFlags::WordBreak );
         long nActTextWindowHeight = impl_getHelpTextBorderHeight() + aTextRect.GetHeight();
 
-        long nOptTextWindowHeight = ::std::max( nMinTextWindowHeight, ::std::min( nMaxTextWindowHeight, nActTextWindowHeight ) );
+        long nOptTextWindowHeight = std::max( nMinTextWindowHeight, std::min( nMaxTextWindowHeight, nActTextWindowHeight ) );
 
         // --- then add the space above the text window
         return nOptTextWindowHeight + impl_getSpaceAboveTextWindow();
@@ -125,16 +125,16 @@ namespace pcr
 
     void InspectorHelpWindow::Resize()
     {
-        Size a3AppFont( LogicToPixel( Size( 3, 3 ), MAP_APPFONT ) );
+        Size a3AppFont(LogicToPixel(Size(3, 3), MapMode(MapUnit::MapAppFont)));
 
-        Rectangle aPlayground( Point( 0, 0 ), GetOutputSizePixel() );
+        tools::Rectangle aPlayground( Point( 0, 0 ), GetOutputSizePixel() );
 
-        Rectangle aSeparatorArea( aPlayground );
-        aSeparatorArea.Bottom() = aSeparatorArea.Top() + LogicToPixel( Size( 0, 8 ), MAP_APPFONT ).Height();
+        tools::Rectangle aSeparatorArea( aPlayground );
+        aSeparatorArea.SetBottom( aSeparatorArea.Top() + LogicToPixel(Size(0, 8), MapMode(MapUnit::MapAppFont)).Height() );
         m_aSeparator->SetPosSizePixel( aSeparatorArea.TopLeft(), aSeparatorArea.GetSize() );
 
-        Rectangle aTextArea( aPlayground );
-        aTextArea.Top() = aSeparatorArea.Bottom() + a3AppFont.Height();
+        tools::Rectangle aTextArea( aPlayground );
+        aTextArea.SetTop( aSeparatorArea.Bottom() + a3AppFont.Height() );
         m_aHelpText->SetPosSizePixel( aTextArea.TopLeft(), aTextArea.GetSize() );
     }
 

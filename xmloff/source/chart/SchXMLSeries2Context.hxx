@@ -45,13 +45,13 @@ private:
     SchXMLImportHelper& mrImportHelper;
     css::uno::Reference< css::chart2::XChartDocument > mxNewDoc;
     ::std::vector< SchXMLAxis >& mrAxes;
-    ::std::list< DataRowPointStyle >& mrStyleList;
-    ::std::list< RegressionStyle >& mrRegressionStyleList;
+    ::std::vector< DataRowPointStyle >& mrStyleVector;
+    ::std::vector< RegressionStyle >& mrRegressionStyleVector;
 
     css::uno::Reference< css::chart2::XDataSeries > m_xSeries;
-    sal_Int32 mnSeriesIndex;
+    sal_Int32 const mnSeriesIndex;
     sal_Int32 mnDataPointIndex;
-    bool m_bStockHasVolume;
+    bool const m_bStockHasVolume;
 
     GlobalSeriesImportInfo& m_rGlobalSeriesImportInfo;
 
@@ -67,15 +67,15 @@ private:
     tSchXMLLSequencesPerIndex maPostponedSequences;
     bool& mrGlobalChartTypeUsedBySeries;
     bool mbSymbolSizeIsMissingInFile;
-    css::awt::Size maChartSize;
+    css::awt::Size const maChartSize;
 
 public:
     SchXMLSeries2Context( SchXMLImportHelper& rImpHelper,
                           SvXMLImport& rImport, const OUString& rLocalName,
                           const css::uno::Reference< css::chart2::XChartDocument > & xNewDoc,
                           std::vector< SchXMLAxis >& rAxes,
-                          ::std::list< DataRowPointStyle >& rStyleList,
-                          ::std::list< RegressionStyle >& rRegressionStyleList,
+                          ::std::vector< DataRowPointStyle >& rStyleVector,
+                          ::std::vector< RegressionStyle >& rRegressionStyleVector,
                           sal_Int32 nSeriesIndex,
                           bool bStockHasVolume,
                           GlobalSeriesImportInfo& rGlobalSeriesImportInfo,
@@ -83,10 +83,10 @@ public:
                           tSchXMLLSequencesPerIndex & rLSequencesPerIndex,
                           bool& rGlobalChartTypeUsedBySeries,
                           const css::awt::Size & rChartSize );
-    virtual ~SchXMLSeries2Context();
+    virtual ~SchXMLSeries2Context() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
-    virtual SvXMLImportContext* CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
@@ -115,7 +115,7 @@ public:
                     SeriesDefaultsAndStyles& rSeriesDefaultsAndStyles,
                     const SvXMLStylesContext* pStylesCtxt,
                     const SvXMLStyleContext*& rpStyle,
-                    OUString &rCurrStyleName );
+                    OUString const &rCurrStyleName );
 
     static void setStylesToDataPoints( SeriesDefaultsAndStyles& rSeriesDefaultsAndStyles
         , const SvXMLStylesContext* pStylesCtxt
@@ -125,7 +125,7 @@ public:
         , const SvXMLImport& rImport
         , bool bIsStockChart, bool bIsDonutChart, bool bSwitchOffLinesForScatter );
 
-    static void switchSeriesLinesOff( ::std::list< DataRowPointStyle >& rSeriesStyleList );
+    static void switchSeriesLinesOff( ::std::vector< DataRowPointStyle >& rSeriesStyleVector );
 };
 
 // INCLUDED_XMLOFF_SOURCE_CHART_SCHXMLSERIES2CONTEXT_HXX

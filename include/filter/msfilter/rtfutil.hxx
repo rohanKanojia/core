@@ -14,16 +14,24 @@
 #include <rtl/string.hxx>
 #include <rtl/ustring.hxx>
 #include <rtl/textenc.h>
+#include <sal/types.h>
 #include <tools/solar.h>
 
-namespace msfilter {
-namespace rtfutil {
+// RTF values are often multiplied by 2^16
+#define RTF_MULTIPLIER 65536
 
+class SvStream;
+
+namespace msfilter
+{
+namespace rtfutil
+{
 /// Outputs a single character in hex form.
 MSFILTER_DLLPUBLIC OString OutHex(sal_uLong nHex, sal_uInt8 nLen);
 
 /// Handles correct unicode and legacy export of a single character.
-MSFILTER_DLLPUBLIC OString OutChar(sal_Unicode c, int *pUCMode, rtl_TextEncoding eDestEnc, bool* pSuccess = nullptr, bool bUnicode = true);
+MSFILTER_DLLPUBLIC OString OutChar(sal_Unicode c, int* pUCMode, rtl_TextEncoding eDestEnc,
+                                   bool* pSuccess, bool bUnicode = true);
 
 /**
  * Handles correct unicode and legacy export of a string.
@@ -32,7 +40,8 @@ MSFILTER_DLLPUBLIC OString OutChar(sal_Unicode c, int *pUCMode, rtl_TextEncoding
  * @param eDestEnc the legacy encoding to use
  * @param bUnicode if unicode output is wanted as well, or just legacy
  */
-MSFILTER_DLLPUBLIC OString OutString(const OUString &rStr, rtl_TextEncoding eDestEnc, bool bUnicode = true);
+MSFILTER_DLLPUBLIC OString OutString(const OUString& rStr, rtl_TextEncoding eDestEnc,
+                                     bool bUnicode = true);
 
 /**
  * Handles correct unicode and legacy export of a string, when a
@@ -43,8 +52,27 @@ MSFILTER_DLLPUBLIC OString OutString(const OUString &rStr, rtl_TextEncoding eDes
  * @param rStr the text to export
  * @param eDestEnc the legacy encoding to use
  */
-MSFILTER_DLLPUBLIC OString OutStringUpr(const sal_Char *pToken, const OUString &rStr, rtl_TextEncoding eDestEnc);
+MSFILTER_DLLPUBLIC OString OutStringUpr(const sal_Char* pToken, const OUString& rStr,
+                                        rtl_TextEncoding eDestEnc);
 
+/**
+ * Get the numeric value of a single character, representing a hex value.
+ *
+ * @return -1 on failure
+ */
+MSFILTER_DLLPUBLIC int AsHex(char ch);
+
+/// Writes binary data as a hex dump.
+MSFILTER_DLLPUBLIC OString WriteHex(const sal_uInt8* pData, sal_uInt32 nSize,
+                                    SvStream* pStream = nullptr, sal_uInt32 nLimit = 64);
+
+/**
+ * Extract OLE2 data from an \objdata hex dump.
+ */
+MSFILTER_DLLPUBLIC bool ExtractOLE2FromObjdata(const OString& rObjdata, SvStream& rOle2);
+
+/// Strips the header of a WMF file.
+MSFILTER_DLLPUBLIC bool StripMetafileHeader(const sal_uInt8*& rpGraphicAry, sal_uInt64& rSize);
 }
 }
 

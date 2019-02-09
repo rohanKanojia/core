@@ -22,11 +22,10 @@
 
 #include <svtools/svtdllapi.h>
 #include <unotools/calendarwrapper.hxx>
-#include <com/sun/star/i18n/Weekdays.hpp>
 
 #include <vcl/ctrl.hxx>
-#include <vcl/timer.hxx>
 #include <vcl/field.hxx>
+#include <memory>
 #include <set>
 
 class MouseEvent;
@@ -58,15 +57,6 @@ WinBits
 WB_BORDER                   We draw a border around the window.
 WB_TABSTOP                  Keyboard control is possible. We get the focus, when
                             the user clicks in the Control.
-WB_QUICKHELPSHOWSDATEINFO   Show DateInfo as BallonHelp even if QuickInfo is enabled
-WB_BOLDTEXT                 We format by bold texts and DIB_BOLD is evaluated by
-                            AddDateInfo()
-WB_FRAMEINFO                We format in a way, so that FrameInfo can be displayed
-                            and the FrameColor is evaluated by AddDateInfo()
-WB_RANGESELECT              The user can select multiple days, which need to be
-                            consecutive
-WB_MULTISELECT              The user can select multiple days
-WB_WEEKNUMBER               We also display the weekdays
 
 --------------------------------------------------------------------------
 
@@ -103,9 +93,6 @@ If a ContextMenu is displayed, the baseclass' handler must not be called.
 
 --------------------------------------------------------------------------
 
-For multiple selection (WB_RANGESELECT or WB_MULTISELECT) SelectDate(),
-SelectDateRange() can select date ranges. SelectDateRange() selects
-including the end date.
 SetNoSelection() deselects everything.
 SetCurDate() does not select the current date, but only defines the focus
 rectangle.
@@ -124,43 +111,26 @@ sal_False is a selection to the right or down
 --------------------------------------------------------------------------
 
 If the DateRange area changes and we want to take over the selection, we
-should only do this is if IsScrollDateRangeChanged() retruns sal_True.
+should only do this is if IsScrollDateRangeChanged() returns sal_True.
 This method returns sal_True if the area change was triggered by using the
 ScrollButtons and sal_False if it was triggered by Resize(), other method
 calls or by ending a selection.
 
 *************************************************************************/
 
-#define WB_QUICKHELPSHOWSDATEINFO   ((WinBits)0x00004000)
-#define WB_BOLDTEXT                 ((WinBits)0x00008000)
-#define WB_FRAMEINFO                ((WinBits)0x00010000)
-#define WB_WEEKNUMBER               ((WinBits)0x00020000)
-// Needs to be in agreement with the WinBits in the TabBar or
-// we move it to \vcl\inc\wintypes.hxx
-#ifndef WB_RANGESELECT
-#define WB_RANGESELECT              ((WinBits)0x00200000)
-#endif
-#ifndef WB_MULTISELECT
-#define WB_MULTISELECT              ((WinBits)0x00400000)
-#endif
-
-#define DIB_BOLD                    ((sal_uInt16)0x0001)
-
-typedef std::set<sal_uInt32> IntDateSet;
+typedef std::set<sal_Int32> IntDateSet;
 
 
-class SVT_DLLPUBLIC Calendar : public Control
+class SVT_DLLPUBLIC Calendar final : public Control
 {
-private:
-    IntDateSet*     mpSelectTable;
-    IntDateSet*     mpOldSelectTable;
-    IntDateSet*     mpRestoreSelectTable;
+    std::unique_ptr<IntDateSet> mpSelectTable;
+    std::unique_ptr<IntDateSet> mpOldSelectTable;
     OUString        maDayTexts[31];
     OUString        maDayText;
     OUString        maWeekText;
     CalendarWrapper maCalendarWrapper;
-    Rectangle       maPrevRect;
-    Rectangle       maNextRect;
+    tools::Rectangle       maPrevRect;
+    tools::Rectangle       maNextRect;
     OUString        maDayOfWeekText;
     long            mnDayOfWeekAry[7];
     Date            maOldFormatFirstDate;
@@ -170,13 +140,9 @@ private:
     Date            maCurDate;
     Date            maOldCurDate;
     Date            maAnchorDate;
-    Date            maDropDate;
     Color           maSelColor;
     Color           maOtherColor;
-    Color*          mpStandardColor;
-    Color*          mpSaturdayColor;
-    Color*          mpSundayColor;
-    sal_uLong       mnDayCount;
+    sal_Int32       mnDayCount;
     long            mnDaysOffX;
     long            mnWeekDayOffY;
     long            mnDaysOffY;
@@ -186,32 +152,20 @@ private:
     long            mnLines;
     long            mnDayWidth;
     long            mnDayHeight;
-    long            mnWeekWidth;
     WinBits         mnWinStyle;
-    sal_uInt16      mnFirstYear;
-    sal_uInt16      mnLastYear;
-    sal_uInt16      mnRequestYear;
+    sal_Int16       mnFirstYear;
+    sal_Int16       mnLastYear;
     bool            mbCalc:1,
                     mbFormat:1,
                     mbDrag:1,
                     mbSelection:1,
-                    mbMultiSelection:1,
-                    mbWeekSel:1,
-                    mbUnSel:1,
                     mbMenuDown:1,
                     mbSpinDown:1,
                     mbPrevIn:1,
                     mbNextIn:1,
-                    mbDirect:1,
-                    mbInSelChange:1,
                     mbTravelSelect:1,
-                    mbScrollDateRange:1,
-                    mbSelLeft:1,
-                    mbAllSel:1,
-                    mbDropPos:1;
+                    mbAllSel:1;
     Link<Calendar*,void>   maSelectHdl;
-    Timer                  maDragScrollTimer;
-    sal_uInt16             mnDragScrollHitTest;
 
     using Control::ImplInitSettings;
     using Window::ImplInit;
@@ -220,36 +174,29 @@ private:
 
     virtual void ApplySettings(vcl::RenderContext& rRenderContext) override;
 
-    SVT_DLLPRIVATE void         ImplGetWeekFont( vcl::Font& rFont ) const;
     SVT_DLLPRIVATE void         ImplFormat();
     using Window::ImplHitTest;
     SVT_DLLPRIVATE sal_uInt16   ImplHitTest( const Point& rPos, Date& rDate ) const;
     SVT_DLLPRIVATE void         ImplDrawSpin(vcl::RenderContext& rRenderContext);
     SVT_DLLPRIVATE void         ImplDrawDate(vcl::RenderContext& rRenderContext, long nX, long nY,
-                                             sal_uInt16 nDay, sal_uInt16 nMonth, sal_uInt16 nYear,
-                                             DayOfWeek eDayOfWeek,
-                                             bool bOther, sal_uLong nToday);
+                                             sal_uInt16 nDay, sal_uInt16 nMonth, sal_Int16 nYear,
+                                             bool bOther, sal_Int32 nToday);
     SVT_DLLPRIVATE void         ImplDraw(vcl::RenderContext& rRenderContext);
     SVT_DLLPRIVATE void         ImplUpdateDate( const Date& rDate );
     SVT_DLLPRIVATE void         ImplUpdateSelection( IntDateSet* pOld );
     SVT_DLLPRIVATE void         ImplMouseSelect( const Date& rDate, sal_uInt16 nHitTest,
-                                                 bool bMove, bool bExpand, bool bExtended );
+                                                 bool bMove );
     SVT_DLLPRIVATE void         ImplUpdate( bool bCalcNew = false );
     using Window::ImplScroll;
     SVT_DLLPRIVATE void         ImplScroll( bool bPrev );
-    SVT_DLLPRIVATE void         ImplInvertDropPos();
     SVT_DLLPRIVATE void         ImplShowMenu( const Point& rPos, const Date& rDate );
     SVT_DLLPRIVATE void         ImplTracking( const Point& rPos, bool bRepeat );
     SVT_DLLPRIVATE void         ImplEndTracking( bool bCancel );
     SVT_DLLPRIVATE DayOfWeek    ImplGetWeekStart() const;
 
-protected:
-
-    DECL_LINK_TYPED( ScrollHdl, Timer *, void );
-
 public:
-                    Calendar( vcl::Window* pParent, WinBits nWinStyle = 0 );
-    virtual         ~Calendar();
+                    Calendar( vcl::Window* pParent, WinBits nWinStyle );
+    virtual         ~Calendar() override;
     virtual void    dispose() override;
 
     virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
@@ -257,7 +204,7 @@ public:
     virtual void    MouseMove( const MouseEvent& rMEvt ) override;
     virtual void    Tracking( const TrackingEvent& rMEvt ) override;
     virtual void    KeyInput( const KeyEvent& rKEvt ) override;
-    virtual void    Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void    Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void    Resize() override;
     virtual void    GetFocus() override;
     virtual void    LoseFocus() override;
@@ -268,9 +215,6 @@ public:
 
     void            Select();
 
-    void            SelectDate( const Date& rDate, bool bSelect = true );
-    void            SetNoSelection();
-    bool            IsDateSelected( const Date& rDate ) const;
     Date            GetFirstSelectedDate() const;
     void            EnableCallEverySelect() { mbAllSel = true; }
 
@@ -282,7 +226,7 @@ public:
     Date            GetLastMonth() const;
     sal_uInt16      GetMonthCount() const;
     bool            GetDate( const Point& rPos, Date& rDate ) const;
-    Rectangle       GetDateRect( const Date& rDate ) const;
+    tools::Rectangle       GetDateRect( const Date& rDate ) const;
 
     void            StartSelection();
     void            EndSelection();
@@ -319,9 +263,6 @@ With EnableToday()/EnableNone() we can enable a TodayButton and a NoneButton.
 
 --------------------------------------------------------------------------
 
-If we set WB_RANGESELECT with SetCalendarStyle(), we can select multiple days
-in the Calendar.
-
 Because we only take over the start date into the field, we should query
 with GetCalendar() in the SelectHandler and with GetSelectDateCount()/GetSelectDate()
 the selected range. We then can e.g. take over that value to another field.
@@ -339,24 +280,21 @@ class SVT_DLLPUBLIC CalendarField : public DateField
 private:
     VclPtr<ImplCFieldFloatWin> mpFloatWin;
     VclPtr<Calendar>    mpCalendar;
-    WinBits             mnCalendarStyle;
     VclPtr<PushButton>  mpTodayBtn;
     VclPtr<PushButton>  mpNoneBtn;
-    Date                maDefaultDate;
     bool                mbToday;
     bool                mbNone;
 
-                        DECL_DLLPRIVATE_LINK_TYPED( ImplSelectHdl, Calendar*, void );
-                        DECL_DLLPRIVATE_LINK_TYPED( ImplClickHdl, Button*, void );
-                        DECL_DLLPRIVATE_LINK_TYPED( ImplPopupModeEndHdl, FloatingWindow*, void );
+                        DECL_DLLPRIVATE_LINK( ImplSelectHdl, Calendar*, void );
+                        DECL_DLLPRIVATE_LINK( ImplClickHdl, Button*, void );
+                        DECL_DLLPRIVATE_LINK( ImplPopupModeEndHdl, FloatingWindow*, void );
 
 public:
                         CalendarField( vcl::Window* pParent, WinBits nWinStyle );
-    virtual             ~CalendarField();
+    virtual             ~CalendarField() override;
     virtual void        dispose() override;
 
     virtual bool        ShowDropDown( bool bShow ) override;
-    VclPtr<Calendar>    CreateCalendar( vcl::Window* pParent );
     Calendar*           GetCalendar();
 
     void                EnableToday() { mbToday = true; }

@@ -41,14 +41,13 @@ namespace drawinglayer
             maBack(rBack),
             maResult(),
             maCombinedTransform(),
-            mbAnyHit(bAnyHit),
-            mbUseInvisiblePrimitiveContent(true)
+            mbAnyHit(bAnyHit)
         {
         }
 
         void CutFindProcessor::processBasePrimitive3D(const primitive3d::BasePrimitive3D& rCandidate)
         {
-            if(getAnyHit() && maResult.size())
+            if(mbAnyHit && !maResult.empty())
             {
                 // stop processing as soon as a hit was recognized
                 return;
@@ -115,18 +114,15 @@ namespace drawinglayer
                 }
                 case PRIMITIVE3D_ID_HIDDENGEOMETRYPRIMITIVE3D :
                 {
-                    // HiddenGeometryPrimitive3D; the default decomposition would return an empty seqence,
+                    // HiddenGeometryPrimitive3D; the default decomposition would return an empty sequence,
                     // so force this primitive to process its children directly if the switch is set
                     // (which is the default). Else, ignore invisible content
                     const primitive3d::HiddenGeometryPrimitive3D& rHiddenGeometry(static_cast< const primitive3d::HiddenGeometryPrimitive3D& >(rCandidate));
-                       const primitive3d::Primitive3DContainer& rChildren = rHiddenGeometry.getChildren();
+                    const primitive3d::Primitive3DContainer& rChildren = rHiddenGeometry.getChildren();
 
                     if(!rChildren.empty())
                     {
-                        if(getUseInvisiblePrimitiveContent())
-                        {
                             process(rChildren);
-                        }
                     }
 
                     break;
@@ -134,23 +130,11 @@ namespace drawinglayer
                 case PRIMITIVE3D_ID_UNIFIEDTRANSPARENCETEXTUREPRIMITIVE3D :
                 {
                     const primitive3d::UnifiedTransparenceTexturePrimitive3D& rPrimitive = static_cast< const primitive3d::UnifiedTransparenceTexturePrimitive3D& >(rCandidate);
-                       const primitive3d::Primitive3DContainer rChildren = rPrimitive.getChildren();
+                    const primitive3d::Primitive3DContainer& rChildren = rPrimitive.getChildren();
 
-                    if(rChildren.size())
+                    if(!rChildren.empty())
                     {
-                        if(1.0 <= rPrimitive.getTransparence())
-                        {
-                            // not visible, but use for HitTest
-                            if(getUseInvisiblePrimitiveContent())
-                            {
-                                   process(rChildren);
-                            }
-                        }
-                        else if(rPrimitive.getTransparence() >= 0.0 && rPrimitive.getTransparence() < 1.0)
-                        {
-                            // visible; use content
-                            process(rChildren);
-                        }
+                        process(rChildren);
                     }
 
                     break;
@@ -162,12 +146,12 @@ namespace drawinglayer
 
                     if(!maFront.equal(maBack))
                     {
-                           const basegfx::B3DPolyPolygon& rPolyPolygon = rPrimitive.getB3DPolyPolygon();
+                        const basegfx::B3DPolyPolygon& rPolyPolygon = rPrimitive.getB3DPolyPolygon();
                         const sal_uInt32 nPolyCount(rPolyPolygon.count());
 
                         if(nPolyCount)
                         {
-                               const basegfx::B3DPolygon aPolygon(rPolyPolygon.getB3DPolygon(0));
+                            const basegfx::B3DPolygon& aPolygon(rPolyPolygon.getB3DPolygon(0));
                             const sal_uInt32 nPointCount(aPolygon.count());
 
                             if(nPointCount > 2)
@@ -179,11 +163,11 @@ namespace drawinglayer
                                     const basegfx::B3DPoint aPointOnPlane(aPolygon.getB3DPoint(0));
                                     double fCut(0.0);
 
-                                    if(basegfx::tools::getCutBetweenLineAndPlane(aPlaneNormal, aPointOnPlane, maFront, maBack, fCut))
+                                    if(basegfx::utils::getCutBetweenLineAndPlane(aPlaneNormal, aPointOnPlane, maFront, maBack, fCut))
                                     {
                                         const basegfx::B3DPoint aCutPoint(basegfx::interpolate(maFront, maBack, fCut));
 
-                                        if(basegfx::tools::isInside(rPolyPolygon, aCutPoint))
+                                        if(basegfx::utils::isInside(rPolyPolygon, aCutPoint))
                                         {
                                             // #i102956# add result. Do not forget to do this in the coordinate
                                             // system the processor get started with, so use the collected

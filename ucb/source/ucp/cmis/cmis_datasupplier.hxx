@@ -26,30 +26,24 @@ namespace cmis
         css::uno::Reference< css::ucb::XContent > xContent;
         css::uno::Reference< css::sdbc::XRow > xRow;
 
-        explicit ResultListEntry( css::uno::Reference< css::ucb::XContent > xCnt ) : xContent( xCnt )
-        {
-        }
-
-        ~ResultListEntry()
+        explicit ResultListEntry( css::uno::Reference< css::ucb::XContent > const & xCnt ) : xContent( xCnt )
         {
         }
     };
-
-    typedef std::vector< ResultListEntry* > ResultList;
 
     class DataSupplier : public ucbhelper::ResultSetDataSupplier
     {
         private:
             ChildrenProvider* m_pChildrenProvider;
-            sal_Int32 mnOpenMode;
+            sal_Int32 const mnOpenMode;
             bool mbCountFinal;
-            bool getData();
-            ResultList maResults;
+            void getData();
+            std::vector< ResultListEntry > maResults;
 
         public:
             DataSupplier( ChildrenProvider* pChildrenProvider, sal_Int32 nOpenMode );
 
-            virtual ~DataSupplier();
+            virtual ~DataSupplier() override;
 
             virtual OUString queryContentIdentifierString( sal_uInt32 nIndex ) override;
             virtual css::uno::Reference< css::ucb::XContentIdentifier >
@@ -69,8 +63,7 @@ namespace cmis
 
             virtual void close() override;
 
-            virtual void validate()
-                throw( css::ucb::ResultSetException ) override;
+            virtual void validate() override;
     };
 
 }

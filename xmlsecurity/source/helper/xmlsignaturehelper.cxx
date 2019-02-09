@@ -18,14 +18,13 @@
  */
 
 
-#include <xmlsecurity/xmlsignaturehelper.hxx>
-#include <xmlsecurity/documentsignaturehelper.hxx>
-#include "xsecctl.hxx"
+#include <xmlsignaturehelper.hxx>
+#include <documentsignaturehelper.hxx>
+#include <xsecctl.hxx>
 
-#include "xmlsignaturehelper2.hxx"
+#include <xmlsignaturehelper2.hxx>
 
 #include <tools/stream.hxx>
-#include <tools/debug.hxx>
 #include <tools/datetime.hxx>
 
 #include <xmloff/attrlist.hxx>
@@ -39,32 +38,30 @@
 #include <com/sun/star/beans/StringPair.hpp>
 #include <com/sun/star/xml/sax/Parser.hpp>
 #include <com/sun/star/xml/sax/Writer.hpp>
-#include <com/sun/star/xml/crypto/SEInitializer.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/embed/XStorage.hpp>
 #include <com/sun/star/embed/StorageFormats.hpp>
 #include <com/sun/star/embed/XTransactedObject.hpp>
 #include <com/sun/star/io/XSeekable.hpp>
 
-#include <tools/date.hxx>
-#include <tools/time.hxx>
 #include <comphelper/ofopxmlhelper.hxx>
 #include <comphelper/sequence.hxx>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
-#define TAG_DOCUMENTSIGNATURES  "document-signatures"
 #define NS_DOCUMENTSIGNATURES   "http://openoffice.org/2004/documentsignatures"
 #define NS_DOCUMENTSIGNATURES_ODF_1_2 "urn:oasis:names:tc:opendocument:xmlns:digitalsignature:1.0"
 #define OOXML_SIGNATURE_ORIGIN "http://schemas.openxmlformats.org/package/2006/relationships/digital-signature/origin"
 #define OOXML_SIGNATURE_SIGNATURE "http://schemas.openxmlformats.org/package/2006/relationships/digital-signature/signature"
 
 using namespace ::com::sun::star;
+using namespace ::com::sun::star::graphic;
 using namespace ::com::sun::star::uno;
 
 XMLSignatureHelper::XMLSignatureHelper( const uno::Reference< uno::XComponentContext >& rxCtx)
     : mxCtx(rxCtx), mbODFPre1_2(false)
 {
     mpXSecController = new XSecController(rxCtx);
-    mxSecurityController = mpXSecController;
     mbError = false;
 }
 
@@ -72,26 +69,13 @@ XMLSignatureHelper::~XMLSignatureHelper()
 {
 }
 
-bool XMLSignatureHelper::Init()
-{
-    DBG_ASSERT( !mxSEInitializer.is(), "XMLSignatureHelper::Init - mxSEInitializer already set!" );
-    DBG_ASSERT( !mxSecurityContext.is(), "XMLSignatureHelper::Init - mxSecurityContext already set!" );
-
-    mxSEInitializer = css::xml::crypto::SEInitializer::create( mxCtx );
-
-    if ( mxSEInitializer.is() )
-        mxSecurityContext = mxSEInitializer->createSecurityContext( OUString() );
-
-    return mxSecurityContext.is();
-}
-
 void XMLSignatureHelper::SetStorage(
     const Reference < css::embed::XStorage >& rxStorage,
     const OUString& sODFVersion)
 {
-    DBG_ASSERT( !mxUriBinding.is(), "SetStorage - UriBinding already set!" );
+    SAL_WARN_IF( mxUriBinding.is(), "xmlsecurity.helper", "SetStorage - UriBinding already set!" );
     mxUriBinding = new UriBindingHelper( rxStorage );
-    DBG_ASSERT(rxStorage.is(), "SetStorage - empty storage!");
+    SAL_WARN_IF(!rxStorage.is(), "xmlsecurity.helper", "SetStorage - empty storage!");
     mbODFPre1_2 = DocumentSignatureHelper::isODFPre_1_2(sODFVersion);
 }
 
@@ -102,12 +86,12 @@ void XMLSignatureHelper::SetStartVerifySignatureHdl( const Link<LinkParamNone*,b
 }
 
 
-void XMLSignatureHelper::StartMission()
+void XMLSignatureHelper::StartMission(const uno::Reference<xml::crypto::XXMLSecurityContext>& xSecurityContext)
 {
     if ( !mxUriBinding.is() )
         mxUriBinding = new UriBindingHelper();
 
-    mpXSecController->startMission( mxUriBinding, mxSecurityContext );
+    mpXSecController->startMission(mxUriBinding, xSecurityContext);
 }
 
 void XMLSignatureHelper::EndMission()
@@ -125,19 +109,38 @@ void XMLSignatureHelper::SetX509Certificate(
         const OUString& ouX509IssuerName,
         const OUString& ouX509SerialNumber,
         const OUString& ouX509Cert,
-        const OUString& ouX509CertDigest)
+        const OUString& ouX509CertDigest,
+        svl::crypto::SignatureMethodAlgorithm eAlgorithmID)
 {
     mpXSecController->setX509Certificate(
         nSecurityId,
         ouX509IssuerName,
         ouX509SerialNumber,
         ouX509Cert,
-        ouX509CertDigest);
+        ouX509CertDigest,
+        eAlgorithmID);
 }
 
-void XMLSignatureHelper::SetDateTime( sal_Int32 nSecurityId, const ::Date& rDate, const tools::Time& rTime )
+void XMLSignatureHelper::AddEncapsulatedX509Certificate(const OUString& ouEncapsulatedX509Certificate)
 {
-    css::util::DateTime stDateTime = ::DateTime(rDate, rTime).GetUNODateTime();
+    mpXSecController->addEncapsulatedX509Certificate(ouEncapsulatedX509Certificate);
+}
+
+void XMLSignatureHelper::SetGpgCertificate(sal_Int32 nSecurityId,
+                                           const OUString& ouGpgCertDigest,
+                                           const OUString& ouGpgCert,
+                                           const OUString& ouGpgOwner)
+{
+    mpXSecController->setGpgCertificate(
+        nSecurityId,
+        ouGpgCertDigest,
+        ouGpgCert,
+        ouGpgOwner);
+}
+
+void XMLSignatureHelper::SetDateTime( sal_Int32 nSecurityId, const ::DateTime& rDateTime )
+{
+    css::util::DateTime stDateTime = rDateTime.GetUNODateTime();
     mpXSecController->setDate( nSecurityId, stDateTime );
 }
 
@@ -146,9 +149,26 @@ void XMLSignatureHelper::SetDescription(sal_Int32 nSecurityId, const OUString& r
     mpXSecController->setDescription(nSecurityId, rDescription);
 }
 
-void XMLSignatureHelper::AddForSigning( sal_Int32 nSecurityId, const OUString& uri, const OUString& objectURL, bool bBinary )
+void XMLSignatureHelper::SetSignatureLineId(sal_Int32 nSecurityId, const OUString& rSignatureLineId)
 {
-    mpXSecController->signAStream( nSecurityId, uri, objectURL, bBinary );
+    mpXSecController->setSignatureLineId(nSecurityId, rSignatureLineId);
+}
+
+void XMLSignatureHelper::SetSignatureLineValidGraphic(
+    sal_Int32 nSecurityId, const css::uno::Reference<XGraphic>& xValidGraphic)
+{
+    mpXSecController->setSignatureLineValidGraphic(nSecurityId, xValidGraphic);
+}
+
+void XMLSignatureHelper::SetSignatureLineInvalidGraphic(
+    sal_Int32 nSecurityId, const css::uno::Reference<XGraphic>& xInvalidGraphic)
+{
+    mpXSecController->setSignatureLineInvalidGraphic(nSecurityId, xInvalidGraphic);
+}
+
+void XMLSignatureHelper::AddForSigning( sal_Int32 nSecurityId, const OUString& uri, bool bBinary, bool bXAdESCompliantIfODF )
+{
+    mpXSecController->signAStream( nSecurityId, uri, bBinary, bXAdESCompliantIfODF );
 }
 
 
@@ -158,7 +178,6 @@ uno::Reference<xml::sax::XWriter> XMLSignatureHelper::CreateDocumentHandlerWithH
     /*
      * get SAX writer component
      */
-    uno::Reference< lang::XMultiComponentFactory > xMCF( mxCtx->getServiceManager() );
     uno::Reference< xml::sax::XWriter > xSaxWriter = xml::sax::Writer::create(mxCtx);
 
     /*
@@ -169,8 +188,6 @@ uno::Reference<xml::sax::XWriter> XMLSignatureHelper::CreateDocumentHandlerWithH
     /*
      * write the xml context for signatures
      */
-    OUString tag_AllSignatures(TAG_DOCUMENTSIGNATURES);
-
     SvXMLAttributeList *pAttributeList = new SvXMLAttributeList();
     OUString sNamespace;
     if (mbODFPre1_2)
@@ -179,12 +196,12 @@ uno::Reference<xml::sax::XWriter> XMLSignatureHelper::CreateDocumentHandlerWithH
         sNamespace = NS_DOCUMENTSIGNATURES_ODF_1_2;
 
     pAttributeList->AddAttribute(
-        ATTR_XMLNS,
+        "xmlns",
         sNamespace);
 
     xSaxWriter->startDocument();
     xSaxWriter->startElement(
-        tag_AllSignatures,
+        "document-signatures",
         uno::Reference< css::xml::sax::XAttributeList > (pAttributeList));
 
     return xSaxWriter;
@@ -192,22 +209,21 @@ uno::Reference<xml::sax::XWriter> XMLSignatureHelper::CreateDocumentHandlerWithH
 
 void XMLSignatureHelper::CloseDocumentHandler( const uno::Reference<xml::sax::XDocumentHandler>& xDocumentHandler )
 {
-    OUString tag_AllSignatures(TAG_DOCUMENTSIGNATURES);
-    xDocumentHandler->endElement( tag_AllSignatures );
+    xDocumentHandler->endElement( "document-signatures" );
     xDocumentHandler->endDocument();
 }
 
 void XMLSignatureHelper::ExportSignature(
     const uno::Reference< xml::sax::XDocumentHandler >& xDocumentHandler,
-    const SignatureInformation& signatureInfo )
+    const SignatureInformation& signatureInfo,
+    bool bXAdESCompliantIfODF )
 {
-    XSecController::exportSignature(xDocumentHandler, signatureInfo);
+    XSecController::exportSignature(xDocumentHandler, signatureInfo, bXAdESCompliantIfODF);
 }
 
-void XMLSignatureHelper::ExportOOXMLSignature(uno::Reference<embed::XStorage> xRootStorage, uno::Reference<embed::XStorage> xSignatureStorage, const SignatureInformation& rInformation, int nSignatureIndex)
+void XMLSignatureHelper::ExportOOXMLSignature(const uno::Reference<embed::XStorage>& xRootStorage, const uno::Reference<embed::XStorage>& xSignatureStorage, const SignatureInformation& rInformation, int nSignatureIndex)
 {
-    sal_Int32 nOpenMode = embed::ElementModes::READWRITE;
-    uno::Reference<io::XOutputStream> xOutputStream(xSignatureStorage->openStreamElement("sig" + OUString::number(nSignatureIndex) + ".xml", nOpenMode), uno::UNO_QUERY);
+    uno::Reference<io::XOutputStream> xOutputStream(xSignatureStorage->openStreamElement("sig" + OUString::number(nSignatureIndex) + ".xml", embed::ElementModes::READWRITE), uno::UNO_QUERY);
 
     if (rInformation.aSignatureBytes.hasElements())
         // This is a signature roundtrip, just write back the signature as-is.
@@ -225,111 +241,48 @@ void XMLSignatureHelper::ExportOOXMLSignature(uno::Reference<embed::XStorage> xR
     }
 }
 
-bool XMLSignatureHelper::CreateAndWriteSignature( const uno::Reference< xml::sax::XDocumentHandler >& xDocumentHandler )
+void XMLSignatureHelper::CreateAndWriteSignature( const uno::Reference< xml::sax::XDocumentHandler >& xDocumentHandler, bool bXAdESCompliantIfODF )
 {
     mbError = false;
 
-    /*
-     * create a signature listener
-     */
-
-    /*
-     * configure the signature creation listener
-     */
-
-    /*
-     * write signatures
-     */
-    if ( !mpXSecController->WriteSignature( xDocumentHandler ) )
+    if ( !mpXSecController->WriteSignature( xDocumentHandler, bXAdESCompliantIfODF ) )
     {
         mbError = true;
     }
-
-    /*
-     * clear up the signature creation listener
-     */
-
-    return !mbError;
 }
 
 bool XMLSignatureHelper::ReadAndVerifySignature( const css::uno::Reference< css::io::XInputStream >& xInputStream )
 {
     mbError = false;
 
-    DBG_ASSERT(xInputStream.is(), "input stream missing");
+    SAL_WARN_IF(!xInputStream.is(), "xmlsecurity.helper", "input stream missing");
 
-    /*
-     * prepare ParserInputSrouce
-     */
+    // prepare ParserInputSrouce
     xml::sax::InputSource aParserInput;
     aParserInput.aInputStream = xInputStream;
 
-    /*
-     * get SAX parser component
-     */
+    // get SAX parser component
     uno::Reference< xml::sax::XParser > xParser = xml::sax::Parser::create(mxCtx);
 
-    /*
-     * create a signature reader
-     */
+    // create a signature reader
     uno::Reference< xml::sax::XDocumentHandler > xHandler
-        = mpXSecController->createSignatureReader( );
+        = mpXSecController->createSignatureReader(*this);
 
-    /*
-     * create a signature listener
-     */
-    ImplXMLSignatureListener* pSignatureListener = new ImplXMLSignatureListener(
-                                                    LINK( this, XMLSignatureHelper, SignatureCreationResultListener ),
-                                                    LINK( this, XMLSignatureHelper, SignatureVerifyResultListener ),
-                                                    LINK( this, XMLSignatureHelper, StartVerifySignatureElement ) );
+    // setup the connection:
+    // Parser -> SignatureReader
+    xParser->setDocumentHandler( xHandler );
 
-    /*
-     * configure the signature verify listener
-     */
-
-    /*
-     * setup the connection:
-     * Parser -> SignatureListener -> SignatureReader
-     */
-    pSignatureListener->setNextHandler(xHandler);
-    xParser->setDocumentHandler( pSignatureListener );
-
-    /*
-     * parser the stream
-     */
+    // parser the stream
     try
     {
         xParser->parseStream( aParserInput );
-    }
-    catch( xml::sax::SAXParseException& )
-    {
-        mbError = true;
-    }
-    catch( xml::sax::SAXException& )
-    {
-        mbError = true;
-    }
-    catch( css::io::IOException& )
-    {
-        mbError = true;
     }
     catch( uno::Exception& )
     {
         mbError = true;
     }
 
-    /*
-     * clear up the connection
-     */
-    pSignatureListener->setNextHandler( nullptr );
-
-    /*
-     * clear up the signature verify listener
-     */
-
-    /*
-     * release the signature reader
-     */
+    // release the signature reader
     mpXSecController->releaseSignatureReader( );
 
     return !mbError;
@@ -345,26 +298,7 @@ SignatureInformations XMLSignatureHelper::GetSignatureInformations() const
     return mpXSecController->getSignatureInformations();
 }
 
-uno::Reference< css::xml::crypto::XSecurityEnvironment > XMLSignatureHelper::GetSecurityEnvironment()
-{
-    return (mxSecurityContext.is()?(mxSecurityContext->getSecurityEnvironment()): uno::Reference< css::xml::crypto::XSecurityEnvironment >());
-}
-
-IMPL_LINK_TYPED( XMLSignatureHelper, SignatureCreationResultListener, XMLSignatureCreationResult&, rResult, void )
-{
-    maCreationResults.insert( maCreationResults.begin() + maCreationResults.size(), rResult );
-    if ( rResult.nSignatureCreationResult != css::xml::crypto::SecurityOperationStatus_OPERATION_SUCCEEDED )
-        mbError = true;
-}
-
-IMPL_LINK_TYPED( XMLSignatureHelper, SignatureVerifyResultListener, XMLSignatureVerifyResult&, rResult, void )
-{
-    maVerifyResults.insert( maVerifyResults.begin() + maVerifyResults.size(), rResult );
-    if ( rResult.nSignatureVerifyResult != css::xml::crypto::SecurityOperationStatus_OPERATION_SUCCEEDED )
-        mbError = true;
-}
-
-IMPL_LINK_NOARG_TYPED( XMLSignatureHelper, StartVerifySignatureElement, LinkParamNone*, void )
+void XMLSignatureHelper::StartVerifySignatureElement()
 {
     if ( !maStartVerifySignatureHdl.IsSet() || maStartVerifySignatureHdl.Call(nullptr) )
     {
@@ -404,7 +338,7 @@ bool XMLSignatureHelper::ReadAndVerifySignatureStorage(const uno::Reference<embe
     {
         const uno::Sequence<beans::StringPair>& rRelation = aRelationsInfo[i];
         auto aRelation = comphelper::sequenceToContainer< std::vector<beans::StringPair> >(rRelation);
-        if (std::find_if(aRelation.begin(), aRelation.end(), lcl_isSignatureType) != aRelation.end())
+        if (std::any_of(aRelation.begin(), aRelation.end(), lcl_isSignatureType))
         {
             std::vector<beans::StringPair>::iterator it = std::find_if(aRelation.begin(), aRelation.end(), [](const beans::StringPair& rPair) { return rPair.First == "Target"; });
             if (it != aRelation.end())
@@ -424,21 +358,25 @@ bool XMLSignatureHelper::ReadAndVerifySignatureStorage(const uno::Reference<embe
                 if (!bCacheLastSignature && i == aRelationsInfo.getLength() - 1)
                     bCache = false;
 
-                if (bCache)
+                if (!bCache)
+                    continue;
+                // Store the contents of the stream as is, in case we need to write it back later.
+                xInputStream.clear();
+                xInputStream.set(xStorage->openStreamElement(it->Second, nOpenMode), uno::UNO_QUERY);
+                uno::Reference<beans::XPropertySet> xPropertySet(xInputStream, uno::UNO_QUERY);
+                if (!xPropertySet.is())
+                    continue;
+
+                sal_Int64 nSize = 0;
+                xPropertySet->getPropertyValue("Size") >>= nSize;
+                if (nSize < 0 || nSize > SAL_MAX_INT32)
                 {
-                    // Store the contents of the stream as is, in case we need to write it back later.
-                    xInputStream.clear();
-                    xInputStream.set(xStorage->openStreamElement(it->Second, nOpenMode), uno::UNO_QUERY);
-                    uno::Reference<beans::XPropertySet> xPropertySet(xInputStream, uno::UNO_QUERY);
-                    if (xPropertySet.is())
-                    {
-                        sal_Int64 nSize = 0;
-                        xPropertySet->getPropertyValue("Size") >>= nSize;
-                        uno::Sequence<sal_Int8> aData;
-                        xInputStream->readBytes(aData, nSize);
-                        mpXSecController->setSignatureBytes(aData);
-                    }
+                    SAL_WARN("xmlsecurity.helper", "bogus signature size: " << nSize);
+                    continue;
                 }
+                uno::Sequence<sal_Int8> aData;
+                xInputStream->readBytes(aData, nSize);
+                mpXSecController->setSignatureBytes(aData);
             }
         }
     }
@@ -458,36 +396,27 @@ bool XMLSignatureHelper::ReadAndVerifySignatureStorageStream(const css::uno::Ref
     uno::Reference<xml::sax::XParser> xParser = xml::sax::Parser::create(mxCtx);
 
     // Create the signature reader.
-    uno::Reference<xml::sax::XDocumentHandler> xHandler = mpXSecController->createSignatureReader(embed::StorageFormats::OFOPXML);
+    uno::Reference<xml::sax::XDocumentHandler> xHandler = mpXSecController->createSignatureReader(*this, embed::StorageFormats::OFOPXML);
 
-    // Create the signature listener.
-    ImplXMLSignatureListener* pSignatureListener = new ImplXMLSignatureListener(
-        LINK(this, XMLSignatureHelper, SignatureCreationResultListener),
-        LINK(this, XMLSignatureHelper, SignatureVerifyResultListener),
-        LINK(this, XMLSignatureHelper, StartVerifySignatureElement));
-    uno::Reference<xml::sax::XDocumentHandler> xSignatureListener(pSignatureListener);
-
-    // Parser -> signature listener -> signature reader.
-    pSignatureListener->setNextHandler(xHandler);
-    xParser->setDocumentHandler(xSignatureListener);
+    // Parser -> signature reader.
+    xParser->setDocumentHandler(xHandler);
 
     // Parse the stream.
     try
     {
         xParser->parseStream(aParserInput);
     }
-    catch(const uno::Exception& rException)
+    catch(const uno::Exception&)
     {
-        SAL_WARN("xmlsecurity.helper", "XMLSignatureHelper::ReadAndVerifySignatureStorageStream: " << rException.Message);
+        DBG_UNHANDLED_EXCEPTION("xmlsecurity.helper");
     }
 
-    pSignatureListener->setNextHandler(nullptr);
     mpXSecController->releaseSignatureReader();
 
     return !mbError;
 }
 
-void XMLSignatureHelper::EnsureSignaturesRelation(css::uno::Reference<css::embed::XStorage> xStorage, bool bAdd)
+void XMLSignatureHelper::EnsureSignaturesRelation(const css::uno::Reference<css::embed::XStorage>& xStorage, bool bAdd)
 {
     sal_Int32 nOpenMode = embed::ElementModes::READWRITE;
     uno::Reference<embed::XStorage> xSubStorage = xStorage->openStorageElement("_rels", nOpenMode);
@@ -501,7 +430,7 @@ void XMLSignatureHelper::EnsureSignaturesRelation(css::uno::Reference<css::embed
     for (const uno::Sequence<beans::StringPair>& rRelation : aRelationsInfo)
     {
         auto aRelation = comphelper::sequenceToContainer< std::vector<beans::StringPair> >(rRelation);
-        if (std::find_if(aRelation.begin(), aRelation.end(), lcl_isSignatureOriginType) != aRelation.end())
+        if (std::any_of(aRelation.begin(), aRelation.end(), lcl_isSignatureOriginType))
         {
             bHaveRelation = true;
             break;
@@ -513,9 +442,9 @@ void XMLSignatureHelper::EnsureSignaturesRelation(css::uno::Reference<css::embed
     {
         // No, and have to add one.
         std::vector<beans::StringPair> aRelation;
-        aRelation.push_back(beans::StringPair("Id", "rId" + OUString::number(++nCount)));
-        aRelation.push_back(beans::StringPair("Type", OOXML_SIGNATURE_ORIGIN));
-        aRelation.push_back(beans::StringPair("Target", "_xmlsignatures/origin.sigs"));
+        aRelation.emplace_back("Id", "rId" + OUString::number(++nCount));
+        aRelation.emplace_back("Type", OOXML_SIGNATURE_ORIGIN);
+        aRelation.emplace_back("Target", "_xmlsignatures/origin.sigs");
         aRelationsInfo.push_back(comphelper::containerToSequence(aRelation));
     }
     else if (bHaveRelation && !bAdd)
@@ -524,7 +453,7 @@ void XMLSignatureHelper::EnsureSignaturesRelation(css::uno::Reference<css::embed
         for (std::vector< uno::Sequence<beans::StringPair> >::iterator it = aRelationsInfo.begin(); it != aRelationsInfo.end();)
         {
             auto aRelation = comphelper::sequenceToContainer< std::vector<beans::StringPair> >(*it);
-            if (std::find_if(aRelation.begin(), aRelation.end(), lcl_isSignatureOriginType) != aRelation.end())
+            if (std::any_of(aRelation.begin(), aRelation.end(), lcl_isSignatureOriginType))
                 it = aRelationsInfo.erase(it);
             else
                 ++it;
@@ -544,7 +473,7 @@ void XMLSignatureHelper::EnsureSignaturesRelation(css::uno::Reference<css::embed
     xTransact->commit();
 }
 
-void XMLSignatureHelper::ExportSignatureRelations(css::uno::Reference<css::embed::XStorage> xStorage, int nSignatureCount)
+void XMLSignatureHelper::ExportSignatureRelations(const css::uno::Reference<css::embed::XStorage>& xStorage, int nSignatureCount)
 {
     // Write the empty file, its relations will be the signatures.
     sal_Int32 nOpenMode = embed::ElementModes::READWRITE;
@@ -560,9 +489,9 @@ void XMLSignatureHelper::ExportSignatureRelations(css::uno::Reference<css::embed
     for (int i = 0; i < nSignatureCount; ++i)
     {
         std::vector<beans::StringPair> aRelation;
-        aRelation.push_back(beans::StringPair("Id", "rId" + OUString::number(i + 1)));
-        aRelation.push_back(beans::StringPair("Type", OOXML_SIGNATURE_SIGNATURE));
-        aRelation.push_back(beans::StringPair("Target", "sig" + OUString::number(i + 1) + ".xml"));
+        aRelation.emplace_back("Id", "rId" + OUString::number(i + 1));
+        aRelation.emplace_back("Type", OOXML_SIGNATURE_SIGNATURE);
+        aRelation.emplace_back("Target", "sig" + OUString::number(i + 1) + ".xml");
         aRelations.push_back(comphelper::containerToSequence(aRelation));
     }
     comphelper::OFOPXMLHelper::WriteRelationsInfoSequence(xRelStream, comphelper::containerToSequence(aRelations), mxCtx);
@@ -570,10 +499,9 @@ void XMLSignatureHelper::ExportSignatureRelations(css::uno::Reference<css::embed
     xTransact->commit();
 }
 
-void XMLSignatureHelper::ExportSignatureContentTypes(css::uno::Reference<css::embed::XStorage> xStorage, int nSignatureCount)
+void XMLSignatureHelper::ExportSignatureContentTypes(const css::uno::Reference<css::embed::XStorage>& xStorage, int nSignatureCount)
 {
-    sal_Int32 nOpenMode = embed::ElementModes::READWRITE;
-    uno::Reference<io::XStream> xStream(xStorage->openStreamElement("[Content_Types].xml", nOpenMode), uno::UNO_QUERY);
+    uno::Reference<io::XStream> xStream(xStorage->openStreamElement("[Content_Types].xml", embed::ElementModes::READWRITE), uno::UNO_QUERY);
     uno::Reference<io::XInputStream> xInputStream = xStream->getInputStream();
     uno::Sequence< uno::Sequence<beans::StringPair> > aContentTypeInfo = comphelper::OFOPXMLHelper::ReadContentTypeSequence(xInputStream, mxCtx);
     if (aContentTypeInfo.getLength() < 2)
@@ -585,19 +513,11 @@ void XMLSignatureHelper::ExportSignatureContentTypes(css::uno::Reference<css::em
     // Append rels and sigs to defaults, if it's not there already.
     uno::Sequence<beans::StringPair>& rDefaults = aContentTypeInfo[0];
     auto aDefaults = comphelper::sequenceToContainer< std::vector<beans::StringPair> >(rDefaults);
-    auto it = std::find_if(rDefaults.begin(), rDefaults.end(), [](const beans::StringPair& rPair)
-    {
-        return rPair.First == "rels";
-    });
-    if (it == rDefaults.end())
-        aDefaults.push_back(beans::StringPair("rels", "application/vnd.openxmlformats-package.relationships+xml"));
+    if (std::none_of(rDefaults.begin(), rDefaults.end(), [](const beans::StringPair& rPair) { return rPair.First == "rels"; }))
+        aDefaults.emplace_back("rels", "application/vnd.openxmlformats-package.relationships+xml");
 
-    it = std::find_if(rDefaults.begin(), rDefaults.end(), [](const beans::StringPair& rPair)
-    {
-        return rPair.First == "sigs";
-    });
-    if (it == rDefaults.end())
-        aDefaults.push_back(beans::StringPair("sigs", "application/vnd.openxmlformats-package.digital-signature-origin"));
+    if (std::none_of(rDefaults.begin(), rDefaults.end(), [](const beans::StringPair& rPair) { return rPair.First == "sigs"; }))
+        aDefaults.emplace_back("sigs", "application/vnd.openxmlformats-package.digital-signature-origin");
     rDefaults = comphelper::containerToSequence(aDefaults);
 
     // Remove existing signature overrides.
@@ -610,7 +530,7 @@ void XMLSignatureHelper::ExportSignatureContentTypes(css::uno::Reference<css::em
 
     // Add our signature overrides.
     for (int i = 1; i <= nSignatureCount; ++i)
-        aOverrides.push_back(beans::StringPair("/_xmlsignatures/sig" + OUString::number(i) + ".xml", "application/vnd.openxmlformats-package.digital-signature-xmlsignature+xml"));
+        aOverrides.emplace_back("/_xmlsignatures/sig" + OUString::number(i) + ".xml", "application/vnd.openxmlformats-package.digital-signature-xmlsignature+xml");
 
     rOverrides = comphelper::containerToSequence(aOverrides);
     uno::Reference<io::XOutputStream> xOutputStream = xStream->getOutputStream();
@@ -620,10 +540,9 @@ void XMLSignatureHelper::ExportSignatureContentTypes(css::uno::Reference<css::em
     uno::Reference<embed::XTransactedObject> xTransact(xStorage, uno::UNO_QUERY);
     xTransact->commit();
 }
-bool XMLSignatureHelper::CreateAndWriteOOXMLSignature(uno::Reference<embed::XStorage> xRootStorage, uno::Reference<embed::XStorage> xSignatureStorage, int nSignatureIndex)
+void XMLSignatureHelper::CreateAndWriteOOXMLSignature(const uno::Reference<embed::XStorage>& xRootStorage, const uno::Reference<embed::XStorage>& xSignatureStorage, int nSignatureIndex)
 {
-    sal_Int32 nOpenMode = embed::ElementModes::READWRITE;
-    uno::Reference<io::XOutputStream> xOutputStream(xSignatureStorage->openStreamElement("sig" + OUString::number(nSignatureIndex) + ".xml", nOpenMode), uno::UNO_QUERY);
+    uno::Reference<io::XOutputStream> xOutputStream(xSignatureStorage->openStreamElement("sig" + OUString::number(nSignatureIndex) + ".xml", embed::ElementModes::READWRITE), uno::UNO_QUERY);
     uno::Reference<xml::sax::XWriter> xSaxWriter = xml::sax::Writer::create(mxCtx);
     xSaxWriter->setOutputStream(xOutputStream);
     xSaxWriter->startDocument();
@@ -634,8 +553,6 @@ bool XMLSignatureHelper::CreateAndWriteOOXMLSignature(uno::Reference<embed::XSto
         mbError = true;
 
     xSaxWriter->endDocument();
-
-    return !mbError;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

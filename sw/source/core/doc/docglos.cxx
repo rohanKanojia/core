@@ -22,6 +22,8 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
 
+#include <osl/diagnose.h>
+
 #include <doc.hxx>
 #include <IDocumentUndoRedo.hxx>
 #include <IDocumentFieldsAccess.hxx>
@@ -165,10 +167,10 @@ bool SwDoc::InsertGlossary( SwTextBlocks& rBlock, const OUString& rEntry,
             aCpyPam.GetPoint()->nNode = pGDoc->GetNodes().GetEndOfContent().GetIndex()-1;
             pContentNd = aCpyPam.GetContentNode();
             aCpyPam.GetPoint()->nContent.Assign(
-                    pContentNd, (pContentNd) ? pContentNd->Len() : 0 );
+                    pContentNd, pContentNd ? pContentNd->Len() : 0 );
 
-            GetIDocumentUndoRedo().StartUndo( UNDO_INSGLOSSARY, nullptr );
-            SwPaM *_pStartCursor = &rPaM, *__pStartCursor = _pStartCursor;
+            GetIDocumentUndoRedo().StartUndo( SwUndoId::INSGLOSSARY, nullptr );
+            SwPaM *_pStartCursor = &rPaM, *_pStartCursor2 = _pStartCursor;
             do {
 
                 SwPosition& rInsPos = *_pStartCursor->GetPoint();
@@ -192,9 +194,9 @@ bool SwDoc::InsertGlossary( SwTextBlocks& rBlock, const OUString& rEntry,
                 aACD.RestoreDontExpandItems( rInsPos );
                 if( pShell )
                     pShell->SaveTableBoxContent( &rInsPos );
-            } while( (_pStartCursor = static_cast<SwPaM *>(_pStartCursor->GetNext())) !=
-                        __pStartCursor );
-            GetIDocumentUndoRedo().EndUndo( UNDO_INSGLOSSARY, nullptr );
+            } while( (_pStartCursor = _pStartCursor->GetNext()) !=
+                        _pStartCursor2 );
+            GetIDocumentUndoRedo().EndUndo( SwUndoId::INSGLOSSARY, nullptr );
 
             getIDocumentFieldsAccess().UnlockExpFields();
             if( !getIDocumentFieldsAccess().IsExpFieldsLocked() )

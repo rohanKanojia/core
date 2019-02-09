@@ -19,9 +19,7 @@
 #ifndef INCLUDED_SW_INC_SWDLL_HXX
 #define INCLUDED_SW_INC_SWDLL_HXX
 
-#include <sfx2/module.hxx>
-
-#include <swdllapi.h>
+#include "swdllapi.h"
 
 namespace sw { class Filters; }
 

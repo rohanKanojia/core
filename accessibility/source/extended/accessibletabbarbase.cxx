@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "accessibility/extended/accessibletabbarbase.hxx"
+#include <extended/accessibletabbarbase.hxx>
 #ifndef ACCESSIBILITY_EXT_ACCESSIBLETABBARPAGELIST
-#include "accessibility/extended/accessibletabbarpagelist.hxx"
+#include <extended/accessibletabbarpagelist.hxx>
 #endif
-#include <toolkit/helper/externallock.hxx>
 #include <svtools/tabbar.hxx>
+#include <vcl/vclevent.hxx>
 
 
 namespace accessibility
@@ -30,38 +30,35 @@ namespace accessibility
 
 
 AccessibleTabBarBase::AccessibleTabBarBase( TabBar* pTabBar ) :
-    OAccessibleExtendedComponentHelper( new VCLExternalSolarLock() ),
     m_pTabBar( nullptr )
 {
-    m_pExternalLock = static_cast< VCLExternalSolarLock* >( getExternalLock() );
     SetTabBarPointer( pTabBar );
 }
 
 AccessibleTabBarBase::~AccessibleTabBarBase()
 {
     ClearTabBarPointer();
-    DELETEZ( m_pExternalLock );
 }
 
-IMPL_LINK_TYPED( AccessibleTabBarBase, WindowEventListener, VclWindowEvent&, rEvent, void )
+IMPL_LINK( AccessibleTabBarBase, WindowEventListener, VclWindowEvent&, rEvent, void )
 {
     vcl::Window* pEventWindow = rEvent.GetWindow();
     OSL_ENSURE( pEventWindow, "AccessibleTabBarBase::WindowEventListener: no window!" );
 
-    if( ( rEvent.GetId() == VCLEVENT_TABBAR_PAGEREMOVED ) &&
-        ( (sal_uInt16)reinterpret_cast<sal_IntPtr>(rEvent.GetData()) == TabBar::PAGE_NOT_FOUND ) &&
-        ( dynamic_cast< AccessibleTabBarPageList *> (this) != nullptr ) )
+    if( ( rEvent.GetId() == VclEventId::TabbarPageRemoved ) &&
+        ( static_cast<sal_uInt16>(reinterpret_cast<sal_IntPtr>(rEvent.GetData())) == TabBar::PAGE_NOT_FOUND ) &&
+        (dynamic_cast<AccessibleTabBarPageList *>(this) == nullptr))
     {
         return;
     }
 
-    if ( !pEventWindow->IsAccessibilityEventsSuppressed() || (rEvent.GetId() == VCLEVENT_OBJECT_DYING) )
+    if ( !pEventWindow->IsAccessibilityEventsSuppressed() || (rEvent.GetId() == VclEventId::ObjectDying) )
         ProcessWindowEvent( rEvent );
 }
 
 void AccessibleTabBarBase::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent )
 {
-    if( rVclWindowEvent.GetId() == VCLEVENT_OBJECT_DYING )
+    if( rVclWindowEvent.GetId() == VclEventId::ObjectDying )
         ClearTabBarPointer();
 }
 

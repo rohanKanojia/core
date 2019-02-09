@@ -21,35 +21,33 @@
 #include <transliteration_Numeric.hxx>
 #include <nativenumbersupplier.hxx>
 #include <defaultnumberingprovider.hxx>
-#include <comphelper/string.hxx>
+#include <rtl/ref.hxx>
 
+using namespace com::sun::star::i18n;
 using namespace com::sun::star::uno;
 
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
-sal_Int16 SAL_CALL transliteration_Numeric::getType() throw(RuntimeException, std::exception)
+sal_Int16 SAL_CALL transliteration_Numeric::getType()
 {
     return TransliterationType::NUMERIC;
 }
 
-OUString SAL_CALL
-    transliteration_Numeric::folding( const OUString& /*inStr*/, sal_Int32 /*startPos*/, sal_Int32 /*nCount*/, Sequence< sal_Int32 >& /*offset*/ )
-throw(RuntimeException, std::exception)
+OUString
+    transliteration_Numeric::foldingImpl( const OUString& /*inStr*/, sal_Int32 /*startPos*/, sal_Int32 /*nCount*/, Sequence< sal_Int32 >& /*offset*/, bool )
 {
     throw RuntimeException();
 }
 
 sal_Bool SAL_CALL
     transliteration_Numeric::equals( const OUString& /*str1*/, sal_Int32 /*pos1*/, sal_Int32 /*nCount1*/, sal_Int32& /*nMatch1*/, const OUString& /*str2*/, sal_Int32 /*pos2*/, sal_Int32 /*nCount2*/, sal_Int32& /*nMatch2*/ )
-throw(RuntimeException, std::exception)
 {
     throw RuntimeException();
 }
 
 Sequence< OUString > SAL_CALL
     transliteration_Numeric::transliterateRange( const OUString& /*str1*/, const OUString& /*str2*/ )
-throw(RuntimeException, std::exception)
 {
     throw RuntimeException();
 }
@@ -58,9 +56,9 @@ throw(RuntimeException, std::exception)
 #define isNumber(c) ((c) >= 0x30 && (c) <= 0x39)
 #define NUMBER_ZERO 0x30
 
-OUString SAL_CALL
+OUString
 transliteration_Numeric::transliterateBullet( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount,
-        Sequence< sal_Int32 >& offset ) throw(RuntimeException)
+        Sequence< sal_Int32 >& offset, bool useOffset )
 {
     sal_Int32 number = -1, j = 0, endPos = startPos + nCount;
 
@@ -86,7 +84,7 @@ transliteration_Numeric::transliterateBullet( const OUString& inStr, sal_Int32 s
                 if (useOffset)
                     offset[j] = startPos;
                 out[j++] = NUMBER_ZERO;
-            } if (number > tableSize && !recycleSymbol) {
+            } else if (number > tableSize && !recycleSymbol) {
                 for (sal_Int32 k = startPos; k < i; k++) {
                     if (useOffset)
                         offset[j] = k;
@@ -112,18 +110,18 @@ transliteration_Numeric::transliterateBullet( const OUString& inStr, sal_Int32 s
     return OUString( pStr, SAL_NO_ACQUIRE );
 }
 
-OUString SAL_CALL
-transliteration_Numeric::transliterate( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount,
-        Sequence< sal_Int32 >& offset ) throw(RuntimeException, std::exception)
+OUString
+transliteration_Numeric::transliterateImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount,
+        Sequence< sal_Int32 >& offset, bool useOffset )
 {
     if (tableSize)
-        return transliterateBullet( inStr, startPos, nCount, offset);
+        return transliterateBullet( inStr, startPos, nCount, offset, useOffset);
     else
-        return NativeNumberSupplierService(useOffset).getNativeNumberString( inStr.copy(startPos, nCount), aLocale, nNativeNumberMode, offset );
+        return rtl::Reference<NativeNumberSupplierService>(new NativeNumberSupplierService(useOffset))->getNativeNumberString( inStr.copy(startPos, nCount), aLocale, nNativeNumberMode, offset );
 }
 
 sal_Unicode SAL_CALL
-transliteration_Numeric::transliterateChar2Char( sal_Unicode inChar ) throw(RuntimeException, MultipleCharsOutputException, std::exception)
+transliteration_Numeric::transliterateChar2Char( sal_Unicode inChar )
 {
     if (tableSize) {
         if (isNumber(inChar)) {
@@ -134,9 +132,9 @@ transliteration_Numeric::transliterateChar2Char( sal_Unicode inChar ) throw(Runt
         return inChar;
     }
     else
-        return NativeNumberSupplierService().getNativeNumberChar( inChar, aLocale, nNativeNumberMode );
+        return rtl::Reference<NativeNumberSupplierService>(new NativeNumberSupplierService)->getNativeNumberChar( inChar, aLocale, nNativeNumberMode );
 }
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

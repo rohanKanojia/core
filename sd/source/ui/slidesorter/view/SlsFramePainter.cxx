@@ -20,6 +20,7 @@
 #include "SlsFramePainter.hxx"
 #include <vcl/outdev.hxx>
 #include <vcl/bitmapaccess.hxx>
+#include <osl/diagnose.h>
 
 namespace sd { namespace slidesorter { namespace view {
 
@@ -55,7 +56,7 @@ FramePainter::~FramePainter()
 
 void FramePainter::PaintFrame (
     OutputDevice& rDevice,
-    const Rectangle& rBox) const
+    const ::tools::Rectangle& rBox) const
 {
     if ( ! mbIsValid)
         return;
@@ -78,11 +79,7 @@ void FramePainter::AdaptColor (
     // Get the source color.
     if (maCenter.maBitmap.IsEmpty())
         return;
-    BitmapReadAccess* pReadAccess = maCenter.maBitmap.GetBitmap().AcquireReadAccess();
-    if (pReadAccess == nullptr)
-        return;
-    const Color aSourceColor = pReadAccess->GetColor(0,0);
-    Bitmap::ReleaseAccess(pReadAccess);
+    const Color aSourceColor = maCenter.maBitmap.GetPixelColor(0,0);
 
     // Erase the center bitmap.
     maCenter.maBitmap.SetEmpty();
@@ -174,7 +171,7 @@ void FramePainter::OffsetBitmap::PaintSide (
             + rCornerBitmap1.maOffset.X());
         const sal_Int32 nRight (
             rAnchor2.X()
-            + rCornerBitmap2.maOffset.X()\
+            + rCornerBitmap2.maOffset.X()
             - 1);
         for (sal_Int32 nX=nLeft; nX<=nRight; nX+=aBitmapSize.Width())
         {
@@ -213,7 +210,7 @@ void FramePainter::OffsetBitmap::PaintSide (
 
 void FramePainter::OffsetBitmap::PaintCenter (
     OutputDevice& rDevice,
-    const Rectangle& rBox) const
+    const ::tools::Rectangle& rBox) const
 {
     const Size aBitmapSize (maBitmap.GetSizePixel());
     for (long nY=rBox.Top(); nY<=rBox.Bottom(); nY+=aBitmapSize.Height())

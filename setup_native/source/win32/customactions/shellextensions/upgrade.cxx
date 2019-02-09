@@ -17,63 +17,47 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#undef UNICODE
-#undef _UNICODE
-
-#ifdef _MSC_VER
-#pragma warning(push, 1) /* disable warnings within system headers */
-#endif
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <msiquery.h>
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
+#include "shlxtmsi.hxx"
 
 #include <malloc.h>
 #include <assert.h>
 
-#include <tchar.h>
-#include <string>
-
-using namespace std;
-
 namespace
 {
     // The provided GUID must be without surrounding '{}'
-    string GetGuidPart(const string& guid, int index)
+    std::wstring GetGuidPart(const std::wstring& guid, int index)
     {
         assert((guid.length() == 36) && "No GUID or wrong format!");
         assert(((index > -1) && (index < 5)) && "Out of range!");
 
-        if (index == 0) return string(guid.c_str(), 8);
-        if (index == 1) return string(guid.c_str() + 9, 4);
-        if (index == 2) return string(guid.c_str() + 14, 4);
-        if (index == 3) return string(guid.c_str() + 19, 4);
-        if (index == 4) return string(guid.c_str() + 24, 12);
+        if (index == 0) return std::wstring(guid.c_str(), 8);
+        if (index == 1) return std::wstring(guid.c_str() + 9, 4);
+        if (index == 2) return std::wstring(guid.c_str() + 14, 4);
+        if (index == 3) return std::wstring(guid.c_str() + 19, 4);
+        if (index == 4) return std::wstring(guid.c_str() + 24, 12);
 
-        return string();
+        return std::wstring();
     }
 
-    void Swap(char* p1, char* p2)
+    void Swap(wchar_t* p1, wchar_t* p2)
     {
-        char tmp = *p1;
+        wchar_t tmp = *p1;
         *p1 = *p2;
         *p2 = tmp;
     }
 
-    string Invert(const string& str)
+    std::wstring Invert(const std::wstring& str)
     {
-        char* buff = reinterpret_cast<char*>(_alloca(str.length()));
-        strncpy(buff, str.c_str(), str.length());
+        wchar_t* buff = static_cast<wchar_t*>(_alloca(str.length()*sizeof(wchar_t)));
+        wcsncpy(buff, str.c_str(), str.length());
 
-        char* front = buff;
-        char* back = buff + str.length() - 1;
+        wchar_t* front = buff;
+        wchar_t* back = buff + str.length() - 1;
 
         while (front < back)
             Swap(front++, back--);
 
-        return string(buff, str.length());
+        return std::wstring(buff, str.length());
     }
 
     // Convert the upgrade code (which is a GUID) according
@@ -82,11 +66,11 @@ namespace
     // The first 8 bytes will be inverted, from the last
     // 8 bytes always the nibbles will be inverted for further
     // details look in the MSDN under compressed registry keys
-    string ConvertGuid(const string& guid)
+    std::wstring ConvertGuid(const std::wstring& guid)
     {
-        string convertedGuid;
+        std::wstring convertedGuid;
 
-        string part = GetGuidPart(guid, 0);
+        std::wstring part = GetGuidPart(guid, 0);
         convertedGuid = Invert(part);
 
         part = GetGuidPart(guid, 1);
@@ -96,68 +80,46 @@ namespace
         convertedGuid += Invert(part);
 
         part = GetGuidPart(guid, 3);
-        convertedGuid += Invert(string(part.c_str(), 2));
-        convertedGuid += Invert(string(part.c_str() + 2, 2));
+        convertedGuid += Invert(std::wstring(part.c_str(), 2));
+        convertedGuid += Invert(std::wstring(part.c_str() + 2, 2));
 
         part = GetGuidPart(guid, 4);
         int pos = 0;
         for (int i = 0; i < 6; i++)
         {
-            convertedGuid += Invert(string(part.c_str() + pos, 2));
+            convertedGuid += Invert(std::wstring(part.c_str() + pos, 2));
             pos += 2;
         }
         return convertedGuid;
     }
 
-    string GetMsiProperty(MSIHANDLE handle, const string& sProperty)
+    bool IsSetMsiPropertyW(MSIHANDLE handle, const std::wstring& sProperty)
     {
-        string  result;
-        TCHAR   szDummy[1] = TEXT("");
-        DWORD   nChars = 0;
-
-        if (MsiGetProperty(handle, sProperty.c_str(), szDummy, &nChars) == ERROR_MORE_DATA)
-        {
-            DWORD nBytes = ++nChars * sizeof(TCHAR);
-            LPTSTR buffer = reinterpret_cast<LPTSTR>(_alloca(nBytes));
-            ZeroMemory( buffer, nBytes );
-            MsiGetProperty(handle, sProperty.c_str(), buffer, &nChars);
-            result = buffer;
-        }
-        return  result;
+        return (GetMsiPropertyW(handle, sProperty).length() > 0);
     }
 
-    inline bool IsSetMsiProperty(MSIHANDLE handle, const string& sProperty)
+    void SetMsiPropertyW(MSIHANDLE handle, const std::wstring& sProperty)
     {
-        return (GetMsiProperty(handle, sProperty).length() > 0);
-    }
-
-    inline void UnsetMsiProperty(MSIHANDLE handle, const string& sProperty)
-    {
-        MsiSetProperty(handle, sProperty.c_str(), NULL);
-    }
-
-    inline void SetMsiProperty(MSIHANDLE handle, const string& sProperty)
-    {
-        MsiSetProperty(handle, sProperty.c_str(), TEXT("1"));
+        MsiSetPropertyW(handle, sProperty.c_str(), L"1");
     }
 
     bool RegistryKeyHasUpgradeSubKey(
-        HKEY hRootKey, const string& regKey, const string& upgradeKey)
+        HKEY hRootKey, const std::wstring& regKey, const std::wstring& upgradeKey)
     {
         HKEY hKey;
-        if (RegOpenKey(hRootKey, regKey.c_str(), &hKey) == ERROR_SUCCESS)
+        if (RegOpenKeyW(hRootKey, regKey.c_str(), &hKey) == ERROR_SUCCESS)
         {
             DWORD nSubKeys;
             DWORD lLongestSubKey;
 
-            if (RegQueryInfoKey(
-                hKey, NULL, NULL, NULL, &nSubKeys, &lLongestSubKey, NULL, NULL, NULL, NULL, NULL, NULL) == ERROR_SUCCESS)
+            if (RegQueryInfoKeyW(
+                hKey, nullptr, nullptr, nullptr, &nSubKeys, &lLongestSubKey, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS)
             {
-                LPTSTR buffer = reinterpret_cast<LPTSTR>(_alloca(lLongestSubKey + 1));
+                LPWSTR buffer = static_cast<LPWSTR>(_alloca((lLongestSubKey + 1)*sizeof(WCHAR)));
 
                 for (DWORD i = 0; i < nSubKeys; i++)
                 {
-                    LONG ret = RegEnumKey(hKey, i, buffer, lLongestSubKey + 1);
+                    LONG ret = RegEnumKeyW(hKey, i, buffer, lLongestSubKey + 1);
                     if ((ret == ERROR_SUCCESS) && (buffer == upgradeKey))
                         return true;
                 }
@@ -167,28 +129,28 @@ namespace
     }
 } // namespace
 
-extern "C" UINT __stdcall SetProductInstallMode(MSIHANDLE handle)
+extern "C" __declspec(dllexport) UINT __stdcall SetProductInstallMode(MSIHANDLE handle)
 {
-    string upgradeCode = GetMsiProperty(handle, TEXT("UpgradeCode"));
-    upgradeCode = ConvertGuid(string(upgradeCode.c_str() + 1, upgradeCode.length() - 2));
+    std::wstring upgradeCode = GetMsiPropertyW(handle, L"UpgradeCode");
+    upgradeCode = ConvertGuid(std::wstring(upgradeCode.c_str() + 1, upgradeCode.length() - 2));
 
-    //MessageBox(NULL, upgradeCode.c_str(), TEXT("Debug"), MB_OK);
+    // MessageBoxW(NULL, upgradeCode.c_str(), "Debug", MB_OK);
 
     if (RegistryKeyHasUpgradeSubKey(
         HKEY_CURRENT_USER,
-        TEXT("Software\\Microsoft\\Installer\\UpgradeCodes"),
-        upgradeCode) && IsSetMsiProperty(handle, TEXT("ALLUSERS")))
+        L"Software\\Microsoft\\Installer\\UpgradeCodes",
+        upgradeCode) && IsSetMsiPropertyW(handle, L"ALLUSERS"))
     {
-        UnsetMsiProperty(handle, TEXT("ALLUSERS"));
-        //MessageBox(NULL, "ALLUSERS removed", "DEBUG", MB_OK);
+        UnsetMsiPropertyW(handle, L"ALLUSERS");
+        // MessageBoxW(NULL, L"ALLUSERS removed", L"DEBUG", MB_OK);
     }
     else if (RegistryKeyHasUpgradeSubKey(
              HKEY_LOCAL_MACHINE,
-             TEXT("Software\\Classes\\Installer\\UpgradeCodes"),
-             upgradeCode) && !IsSetMsiProperty(handle, TEXT("ALLUSERS")))
+             L"Software\\Classes\\Installer\\UpgradeCodes",
+             upgradeCode) && !IsSetMsiPropertyW(handle, L"ALLUSERS"))
     {
-        SetMsiProperty(handle, TEXT("ALLUSERS"));
-        //MessageBox(NULL, "ALLUSERS set", "DEBUG", MB_OK);
+        SetMsiPropertyW(handle, L"ALLUSERS");
+        // MessageBoxW(NULL, L"ALLUSERS set", L"DEBUG", MB_OK);
     }
     return ERROR_SUCCESS;
 }

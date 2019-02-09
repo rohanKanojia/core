@@ -21,9 +21,7 @@
 #define INCLUDED_SD_SOURCE_UI_INC_CLIENT_HXX
 
 #include <sfx2/ipclient.hxx>
-class SdrGrafObj;
 class SdrOle2Obj;
-class OutlinerParaObject;
 
 namespace sd {
 
@@ -31,18 +29,16 @@ class ViewShell;
 
 class Client : public SfxInPlaceClient
 {
-    ViewShell*      mpViewShell;
+    ViewShell* const mpViewShell;
     SdrOle2Obj*     pSdrOle2Obj;
-    SdrGrafObj*     pSdrGrafObj;
 
     virtual void    ObjectAreaChanged() override;
-    virtual void    RequestNewObjectArea( Rectangle& ) override;
+    virtual void    RequestNewObjectArea( ::tools::Rectangle& ) override;
     virtual void    ViewChanged() override;
 
 public:
     Client (SdrOle2Obj* pObj, ViewShell* pSdViewShell, vcl::Window* pWindow);
-    virtual ~Client();
-    void            SetSdrGrafObj(SdrGrafObj* pObj) { pSdrGrafObj = pObj; }
+    virtual ~Client() override;
 };
 
 } // end of namespace sd

@@ -21,9 +21,11 @@
 
 #include <osl/thread.h>
 #include <osl/module.h>
+#include <tools/stream.hxx>
+#include <tools/link.hxx>
 #include <vcl/bitmap.hxx>
 #include <sane/sane.h>
-#include <scanner.hxx>
+#include "scanner.hxx"
 
 
 class BitmapTransporter: public cppu::WeakImplHelper<css::awt::XBitmap>
@@ -34,11 +36,11 @@ class BitmapTransporter: public cppu::WeakImplHelper<css::awt::XBitmap>
 public:
 
                                         BitmapTransporter();
-    virtual                             ~BitmapTransporter();
+    virtual                             ~BitmapTransporter() override;
 
-    virtual css::awt::Size SAL_CALL          getSize() throw(std::exception) override;
-    virtual Sequence< sal_Int8 > SAL_CALL    getDIB() throw(std::exception) override;
-    virtual Sequence< sal_Int8 > SAL_CALL    getMaskDIB() throw(std::exception) override { return Sequence< sal_Int8 >(); }
+    virtual css::awt::Size SAL_CALL          getSize() override;
+    virtual Sequence< sal_Int8 > SAL_CALL    getDIB() override;
+    virtual Sequence< sal_Int8 > SAL_CALL    getMaskDIB() override { return Sequence< sal_Int8 >(); }
 
     // Misc
     void                                lock() { m_aProtector.acquire(); }
@@ -79,7 +81,7 @@ private:
     static SANE_Device**        ppDevices;
     static int                  nDevices;
 
-    const SANE_Option_Descriptor**  mppOptions;
+    std::unique_ptr<const SANE_Option_Descriptor*[]> mppOptions;
     int                             mnOptions;
     int                             mnDevice;
     SANE_Handle                     maHandle;
@@ -129,7 +131,7 @@ public:
         { return mppOptions[n]->constraint_type; }
     const char**    GetStringConstraint( int n )
         { return const_cast<const char**>(mppOptions[n]->constraint.string_list); }
-    int             GetRange( int, double*& );
+    int             GetRange( int, std::unique_ptr<double[]>& );
 
     inline int      GetOptionElements( int n );
     int             GetOptionByName( const char* );
@@ -141,7 +143,7 @@ public:
     void            SetOptionValue( int, bool );
     void            SetOptionValue( int, const OUString& );
     void            SetOptionValue( int, double, int nElement = 0 );
-    void            SetOptionValue( int, double* );
+    void            SetOptionValue( int, double const * );
 
     bool            ActivateButtonOption( int );
 

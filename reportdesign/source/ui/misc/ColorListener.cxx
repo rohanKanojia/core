@@ -16,11 +16,12 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "ColorListener.hxx"
-#include <svl/smplhint.hxx>
+#include <ColorListener.hxx>
+#include <svl/hint.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/event.hxx>
 
-#include "uistrings.hrc"
+#include <strings.hxx>
 
 
 namespace rptui
@@ -51,8 +52,7 @@ void OColorListener::dispose()
 
 void OColorListener::Notify(SfxBroadcaster & /*rBc*/, SfxHint const & rHint)
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if (pSimpleHint && pSimpleHint->GetId() == SFX_HINT_COLORS_CHANGED)
+    if (rHint.GetId() == SfxHintId::ColorsChanged)
     {
         m_nColor = m_aExtendedColorConfig.GetColorValue(CFG_REPORTDESIGNER,m_sColorEntry).getColor();
         m_nTextBoundaries = m_aColorConfig.GetColorValue(::svtools::DOCBOUNDARIES).nColor;

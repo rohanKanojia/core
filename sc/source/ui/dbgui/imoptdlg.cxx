@@ -17,17 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "imoptdlg.hxx"
-#include "asciiopt.hxx"
-#include "scresid.hxx"
+#include <imoptdlg.hxx>
+#include <asciiopt.hxx>
 #include <comphelper/string.hxx>
 #include <osl/thread.h>
 #include <rtl/tencinfo.h>
+#include <global.hxx>
 
 static const sal_Char pStrFix[] = "FIX";
 
-//  Der Options-String darf kein Semikolon mehr enthalten (wegen Pickliste)
-//  darum ab Version 336 Komma stattdessen
+//  The option string can no longer contain a semicolon (because of pick list),
+//  therefore, starting with version 336 comma instead
 
 ScImportOptions::ScImportOptions( const OUString& rStr )
 {
@@ -41,7 +41,9 @@ ScImportOptions::ScImportOptions( const OUString& rStr )
     eCharSet = RTL_TEXTENCODING_DONTKNOW;
     bSaveAsShown = true;    // "true" if not in string (after CSV import)
     bQuoteAllText = false;
+    bSaveNumberAsSuch = true;
     bSaveFormulas = false;
+    bRemoveSpace = false;
     sal_Int32 nTokenCount = comphelper::string::getTokenCount(rStr, ',');
     if ( nTokenCount >= 3 )
     {
@@ -51,7 +53,7 @@ ScImportOptions::ScImportOptions( const OUString& rStr )
             bFixedWidth = true;
         else
             nFieldSepCode = ScAsciiOptions::GetWeightedFieldSep( aToken, true);
-        nTextSepCode  = (sal_Unicode) rStr.getToken(1,',').toInt32();
+        nTextSepCode  = static_cast<sal_Unicode>(rStr.getToken(1,',').toInt32());
         aStrFont      = rStr.getToken(2,',');
         eCharSet      = ScGlobal::GetCharsetValue(aStrFont);
 
@@ -66,10 +68,14 @@ ScImportOptions::ScImportOptions( const OUString& rStr )
             // look at the same positions as in ScAsciiOptions
             if ( nTokenCount >= 7 )
                 bQuoteAllText = rStr.getToken(6, ',') == "true";
+            if ( nTokenCount >= 8 )
+                bSaveNumberAsSuch = rStr.getToken(7, ',') == "true";
             if ( nTokenCount >= 9 )
                 bSaveAsShown = rStr.getToken(8, ',') == "true";
             if ( nTokenCount >= 10 )
                 bSaveFormulas = rStr.getToken(9, ',') == "true";
+            if ( nTokenCount >= 11 )
+                bRemoveSpace = rStr.getToken(10, ',') == "true";
         }
     }
 }
@@ -86,10 +92,14 @@ OUString ScImportOptions::BuildString() const
                                                  // use the same string format as ScAsciiOptions:
             ",1,,0," +                           // first row, no column info, default language
             OUString::boolean( bQuoteAllText ) + // same as "quoted field as text" in ScAsciiOptions
-            ",true," +                           // "detect special numbers"
+            "," +
+            OUString::boolean( bSaveNumberAsSuch ) + // "save number as such": not in ScAsciiOptions
+            "," +
             OUString::boolean( bSaveAsShown ) +  // "save as shown": not in ScAsciiOptions
             "," +
-            OUString::boolean( bSaveFormulas );  // "save formulas": not in ScAsciiOptions
+            OUString::boolean( bSaveFormulas ) +  // "save formulas": not in ScAsciiOptions
+            "," +
+            OUString::boolean( bRemoveSpace );    // same as "Remove space" in ScAsciiOptions
 
     return aResult;
 }

@@ -20,6 +20,10 @@
 #ifndef INCLUDED_BASEGFX_MATRIX_B2DHOMMATRIX_HXX
 #define INCLUDED_BASEGFX_MATRIX_B2DHOMMATRIX_HXX
 
+#include <sal/config.h>
+
+#include <ostream>
+
 #include <sal/types.h>
 #include <o3tl/cow_wrapper.hxx>
 #include <basegfx/basegfxdllapi.h>
@@ -29,7 +33,7 @@ namespace basegfx
     class B2DTuple;
     class Impl2DHomMatrix;
 
-    class BASEGFX_DLLPUBLIC B2DHomMatrix
+    class SAL_WARN_UNUSED BASEGFX_DLLPUBLIC B2DHomMatrix
     {
     public:
         typedef o3tl::cow_wrapper< Impl2DHomMatrix > ImplType;
@@ -40,6 +44,7 @@ namespace basegfx
     public:
         B2DHomMatrix();
         B2DHomMatrix(const B2DHomMatrix& rMat);
+        B2DHomMatrix(B2DHomMatrix&& rMat);
         ~B2DHomMatrix();
 
         /** constructor to allow setting all needed values for a 3x2 matrix at once. The
@@ -69,8 +74,10 @@ namespace basegfx
         void rotate(double fRadiant);
 
         void translate(double fX, double fY);
+        void translate(const B2DTuple& rTuple);
 
         void scale(double fX, double fY);
+        void scale(const B2DTuple& rTuple);
 
         // Shearing-Matrices
         void shearX(double fSx);
@@ -90,6 +97,7 @@ namespace basegfx
 
         // assignment operator
         B2DHomMatrix& operator=(const B2DHomMatrix& rMat);
+        B2DHomMatrix& operator=(B2DHomMatrix&& rMat);
 
         // Help routine to decompose given homogen 3x3 matrix to components. A correction of
         // the components is done to avoid inaccuracies.
@@ -101,6 +109,18 @@ namespace basegfx
         B2DHomMatrix aMul(rMatB);
         aMul *= rMatA;
         return aMul;
+    }
+
+    template<typename charT, typename traits>
+    std::basic_ostream<charT, traits> & operator <<(
+        std::basic_ostream<charT, traits> & stream, B2DHomMatrix const & matrix)
+    {
+        return stream
+            << '[' << matrix.get(0, 0) << ' ' << matrix.get(0, 1) << ' '
+            << matrix.get(0, 2) << "; " << matrix.get(1, 0) << ' '
+            << matrix.get(1, 1) << ' ' << matrix.get(1, 2) << "; "
+            << matrix.get(2, 0) << ' ' << matrix.get(2, 1) << ' '
+            << matrix.get(2, 2) << ']';
     }
 } // end of namespace basegfx
 

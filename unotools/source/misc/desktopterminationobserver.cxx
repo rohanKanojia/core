@@ -19,13 +19,14 @@
 
 #include <unotools/desktopterminationobserver.hxx>
 
+#include <com/sun/star/frame/TerminationVetoException.hpp>
 #include <com/sun/star/frame/XTerminateListener.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <comphelper/processfactory.hxx>
 #include <osl/diagnose.h>
 
-#include <list>
+#include <vector>
 
 namespace utl
 {
@@ -37,7 +38,7 @@ namespace utl
     namespace
     {
 
-        typedef ::std::list< ITerminationListener* > Listeners;
+        typedef ::std::vector< ITerminationListener* > Listeners;
 
         struct ListenerAdminData
         {
@@ -61,17 +62,16 @@ namespace utl
         public:
             static void ensureObservation();
 
-        protected:
-            OObserverImpl();
-            virtual ~OObserverImpl();
-
         private:
+            OObserverImpl();
+            virtual ~OObserverImpl() override;
+
             // XTerminateListener
-            virtual void SAL_CALL queryTermination( const EventObject& Event ) throw (TerminationVetoException, RuntimeException, std::exception) override;
-            virtual void SAL_CALL notifyTermination( const EventObject& Event ) throw (RuntimeException, std::exception) override;
+            virtual void SAL_CALL queryTermination( const EventObject& Event ) override;
+            virtual void SAL_CALL notifyTermination( const EventObject& Event ) override;
 
             // XEventListener
-            virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw (css::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
         };
 
         OObserverImpl::OObserverImpl()
@@ -105,7 +105,7 @@ namespace utl
             }
         }
 
-        void SAL_CALL OObserverImpl::queryTermination( const EventObject& /*Event*/ ) throw (TerminationVetoException, RuntimeException, std::exception)
+        void SAL_CALL OObserverImpl::queryTermination( const EventObject& /*Event*/ )
         {
             Listeners aToNotify;
             {
@@ -113,17 +113,14 @@ namespace utl
                 aToNotify = getListenerAdminData().aListeners;
             }
 
-            for ( Listeners::const_iterator listener = aToNotify.begin();
-                  listener != aToNotify.end();
-                  ++listener
-                )
+            for (auto const& listener : aToNotify)
             {
-                if ( !(*listener)->queryTermination() )
+                if ( !listener->queryTermination() )
                     throw TerminationVetoException();
             }
         }
 
-        void SAL_CALL OObserverImpl::notifyTermination( const EventObject& /*Event*/ ) throw (RuntimeException, std::exception)
+        void SAL_CALL OObserverImpl::notifyTermination( const EventObject& /*Event*/ )
         {
             // get the listeners
             Listeners aToNotify;
@@ -135,12 +132,9 @@ namespace utl
             }
 
             // notify the listeners
-            for ( Listeners::const_iterator listener = aToNotify.begin();
-                  listener != aToNotify.end();
-                  ++listener
-                )
+            for (auto const& listener : aToNotify)
             {
-                (*listener)->notifyTermination();
+                listener->notifyTermination();
             }
 
             // clear the listener container
@@ -150,7 +144,7 @@ namespace utl
             }
         }
 
-        void SAL_CALL OObserverImpl::disposing( const EventObject& /*Event*/ ) throw (RuntimeException, std::exception)
+        void SAL_CALL OObserverImpl::disposing( const EventObject& /*Event*/ )
         {
 #if OSL_DEBUG_LEVEL > 0
             ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
@@ -181,21 +175,11 @@ namespace utl
         OObserverImpl::ensureObservation();
     }
 
-    void DesktopTerminationObserver::revokeTerminationListener( ITerminationListener* _pListener )
+    void DesktopTerminationObserver::revokeTerminationListener( ITerminationListener const * _pListener )
     {
         ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
         Listeners& rListeners = getListenerAdminData().aListeners;
-        for ( Listeners::iterator lookup = rListeners.begin();
-              lookup != rListeners.end();
-              ++lookup
-              )
-        {
-            if ( *lookup == _pListener )
-            {
-                rListeners.erase( lookup );
-                break;
-            }
-        }
+        rListeners.erase(std::remove(rListeners.begin(), rListeners.end(), _pListener), rListeners.end());
     }
 
 } // namespace utl

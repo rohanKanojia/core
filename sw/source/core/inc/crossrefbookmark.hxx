@@ -21,7 +21,7 @@
 #define INCLUDED_SW_SOURCE_CORE_INC_CROSSREFBOOKMARK_HXX
 
 #include <IMark.hxx>
-#include <bookmrk.hxx>
+#include "bookmrk.hxx"
 #include <rtl/ustring.hxx>
 #include <vcl/keycod.hxx>
 
@@ -34,7 +34,6 @@ namespace sw {
             CrossRefBookmark(const SwPaM& rPaM,
                 const vcl::KeyCode& rCode,
                 const OUString& rName,
-                const OUString& rShortName,
                 const OUString& rPrefix);
 
             // getters
@@ -67,8 +66,7 @@ namespace sw {
         public:
             CrossRefHeadingBookmark(const SwPaM& rPaM,
                 const vcl::KeyCode& rCode,
-                const OUString& rName,
-                const OUString& rShortName);
+                const OUString& rName);
             static bool IsLegalName(const OUString& rName);
         };
 
@@ -78,8 +76,7 @@ namespace sw {
         public:
             CrossRefNumItemBookmark(const SwPaM& rPaM,
                 const vcl::KeyCode& rCode,
-                const OUString& rName,
-                const OUString& rShortName);
+                const OUString& rName);
             static bool IsLegalName(const OUString& rName);
         };
     }

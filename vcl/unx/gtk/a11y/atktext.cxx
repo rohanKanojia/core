@@ -58,7 +58,7 @@ text_type_from_boundary(AtkTextBoundary boundary_type)
 
 static gchar *
 adjust_boundaries( css::uno::Reference<css::accessibility::XAccessibleText> const & pText,
-                   accessibility::TextSegment& rTextSegment,
+                   accessibility::TextSegment const & rTextSegment,
                    AtkTextBoundary  boundary_type,
                    gint * start_offset, gint * end_offset )
 {
@@ -133,8 +133,9 @@ adjust_boundaries( css::uno::Reference<css::accessibility::XAccessibleText> cons
 
 /*****************************************************************************/
 
+/// @throws uno::RuntimeException
 static css::uno::Reference<css::accessibility::XAccessibleText>
-    getText( AtkText *pText ) throw (uno::RuntimeException)
+    getText( AtkText *pText )
 {
     AtkObjectWrapper *pWrap = ATK_OBJECT_WRAPPER( pText );
     if( pWrap )
@@ -152,8 +153,9 @@ static css::uno::Reference<css::accessibility::XAccessibleText>
 
 /*****************************************************************************/
 
+/// @throws uno::RuntimeException
 static css::uno::Reference<css::accessibility::XAccessibleTextMarkup>
-    getTextMarkup( AtkText *pText ) throw (uno::RuntimeException)
+    getTextMarkup( AtkText *pText )
 {
     AtkObjectWrapper *pWrap = ATK_OBJECT_WRAPPER( pText );
     if( pWrap )
@@ -171,8 +173,9 @@ static css::uno::Reference<css::accessibility::XAccessibleTextMarkup>
 
 /*****************************************************************************/
 
+/// @throws uno::RuntimeException
 static css::uno::Reference<css::accessibility::XAccessibleTextAttributes>
-    getTextAttributes( AtkText *pText ) throw (uno::RuntimeException)
+    getTextAttributes( AtkText *pText )
 {
     AtkObjectWrapper *pWrap = ATK_OBJECT_WRAPPER( pText );
     if( pWrap )
@@ -190,8 +193,9 @@ static css::uno::Reference<css::accessibility::XAccessibleTextAttributes>
 
 /*****************************************************************************/
 
+/// @throws uno::RuntimeException
 static css::uno::Reference<css::accessibility::XAccessibleMultiLineText>
-    getMultiLineText( AtkText *pText ) throw (uno::RuntimeException)
+    getMultiLineText( AtkText *pText )
 {
     AtkObjectWrapper *pWrap = ATK_OBJECT_WRAPPER( pText );
     if( pWrap )
@@ -405,7 +409,7 @@ text_wrapper_set_caret_offset (AtkText *text,
 }
 
 // #i92232#
-AtkAttributeSet*
+static AtkAttributeSet*
 handle_text_markup_as_run_attribute( css::uno::Reference<css::accessibility::XAccessibleTextMarkup> const & pTextMarkup,
                                      const gint nTextMarkupType,
                                      const gint offset,
@@ -494,12 +498,20 @@ text_wrapper_get_run_attributes( AtkText        *text,
 
         css::uno::Reference<css::accessibility::XAccessibleText> pText
             = getText( text );
-        css::uno::Reference<css::accessibility::XAccessibleTextAttributes>
-            pTextAttributes = getTextAttributes( text );
-        if( pText.is() && pTextAttributes.is() )
+        if( pText.is())
         {
-            uno::Sequence< beans::PropertyValue > aAttributeList =
-                pTextAttributes->getRunAttributes( offset, uno::Sequence< OUString > () );
+            uno::Sequence< beans::PropertyValue > aAttributeList;
+
+            css::uno::Reference<css::accessibility::XAccessibleTextAttributes>
+                pTextAttributes = getTextAttributes( text );
+            if(pTextAttributes.is()) // Text attributes are available for paragraphs only
+            {
+                aAttributeList = pTextAttributes->getRunAttributes( offset, uno::Sequence< OUString > () );
+            }
+            else // For other text objects use character attributes
+            {
+                aAttributeList = pText->getCharacterAttributes( offset, uno::Sequence< OUString > () );
+            }
 
             pSet = attribute_set_new_from_property_values( aAttributeList, true, text );
             //  #i100938#

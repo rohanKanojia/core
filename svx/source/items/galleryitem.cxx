@@ -74,7 +74,7 @@ bool SvxGalleryItem::PutValue( const css::uno::Any& rVal, sal_uInt8 /* nMemberId
     bool bAllConverted( true );
 
     sal_Int8 nType(0);
-    rtl::OUString aURL, aFilterName;
+    OUString aURL, aFilterName;
     css::uno::Reference< css::lang::XComponent > xDrawing;
     css::uno::Reference< css::graphic::XGraphic > xGraphic;
 
@@ -123,7 +123,7 @@ bool SvxGalleryItem::PutValue( const css::uno::Any& rVal, sal_uInt8 /* nMemberId
 
 bool SvxGalleryItem::operator==( const SfxPoolItem& rAttr ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==(rAttr), "unequal types" );
+    assert(SfxPoolItem::operator==(rAttr));
 
     const SvxGalleryItem& rItem = static_cast<const SvxGalleryItem&>(rAttr);
 
@@ -136,16 +136,6 @@ bool SvxGalleryItem::operator==( const SfxPoolItem& rAttr ) const
 SfxPoolItem* SvxGalleryItem::Clone( SfxItemPool * ) const
 {
     return new SvxGalleryItem( *this );
-}
-
-SvStream& SvxGalleryItem::Store( SvStream& rStream, sal_uInt16 /*nItemVersion*/ ) const
-{
-    return rStream;
-}
-
-SfxPoolItem* SvxGalleryItem::Create(SvStream& , sal_uInt16) const
-{
-    return nullptr;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

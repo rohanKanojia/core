@@ -19,26 +19,23 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_ROWHT_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_ROWHT_HXX
 
-#include <svx/stddlg.hxx>
-#include <vcl/field.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/button.hxx>
+#include <vcl/weld.hxx>
 
 class SwWrtShell;
 
-class SwTableHeightDlg : public SvxStandardDialog
+class SwTableHeightDlg : public weld::GenericDialogController
 {
-    VclPtr<MetricField>    m_pHeightEdit;
-    VclPtr<CheckBox>       m_pAutoHeightCB;
-    SwWrtShell      &rSh;
+    SwWrtShell &m_rSh;
 
-protected:
-    virtual void Apply() override;
+    std::unique_ptr<weld::MetricSpinButton> m_xHeightEdit;
+    std::unique_ptr<weld::CheckButton> m_xAutoHeightCB;
+
+private:
+    void Apply();
 
 public:
-    SwTableHeightDlg( vcl::Window *pParent, SwWrtShell &rS );
-    virtual ~SwTableHeightDlg();
-    virtual void dispose() override;
+    SwTableHeightDlg(weld::Window *pParent, SwWrtShell &rS);
+    virtual short run() override;
 };
 
 #endif

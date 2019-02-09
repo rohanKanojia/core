@@ -56,7 +56,6 @@ $(eval $(call gb_Library_use_libraries,sb,\
 	utl \
 	vcl \
 	xmlscript \
-	$(gb_UWINAPI) \
 ))
 
 ifneq ($(filter SCRIPTING,$(BUILD_TYPE)),)
@@ -66,13 +65,11 @@ $(eval $(call gb_Library_add_exception_objects,sb,\
 	basic/source/basmgr/basmgr \
 	basic/source/basmgr/vbahelper \
 	basic/source/classes/codecompletecache \
-	basic/source/classes/errobject \
 	basic/source/classes/eventatt \
 	basic/source/classes/global \
 	basic/source/classes/image \
 	basic/source/classes/propacc \
 	basic/source/classes/sb \
-	basic/source/classes/sbintern \
 	basic/source/classes/sbunoobj \
 	basic/source/classes/sbxmod \
 	basic/source/comp/basiccharclass \
@@ -98,17 +95,18 @@ $(eval $(call gb_Library_add_exception_objects,sb,\
 	basic/source/runtime/inputbox \
 	basic/source/runtime/iosys \
 	basic/source/runtime/props \
-	basic/source/runtime/runtime \
 	basic/source/runtime/stdobj \
 	basic/source/runtime/stdobj1 \
+	basic/source/runtime/runtime \
+	basic/source/classes/errobject \
 ))
-
 endif
 
 $(eval $(call gb_Library_add_exception_objects,sb,\
 	basic/source/runtime/basrdll \
 	basic/source/runtime/methods \
 	basic/source/runtime/methods1 \
+	basic/source/classes/sbintern \
 	basic/source/sbx/sbxarray \
 	basic/source/sbx/sbxbool \
 	basic/source/sbx/sbxbyte \
@@ -144,6 +142,9 @@ ifeq ($(OS)$(CPUNAME),WNTINTEL)
 $(eval $(call gb_Library_add_exception_objects,sb,\
 	basic/source/runtime/dllmgr-x86 \
 ))
+$(eval $(call gb_Library_add_asmobjects,sb,\
+	basic/source/runtime/wnt-x86 \
+))
 else
 ifeq ($(OS)$(CPUNAME),WNTX86_64)
 $(eval $(call gb_Library_add_exception_objects,sb,\
@@ -155,18 +156,5 @@ $(eval $(call gb_Library_add_exception_objects,sb,\
 ))
 endif
 endif
-ifeq ($(OS)$(COM)$(CPUNAME),WNTMSCINTEL)
-$(eval $(call gb_Library_add_asmobjects,sb,\
-	basic/source/runtime/wnt-x86 \
-))
-endif
-ifeq ($(OS)$(COM)$(CPUNAME),WNTGCCINTEL)
-$(eval $(call gb_Library_add_asmobjects,sb,\
-	basic/source/runtime/wnt-mingw \
-))
-endif
-
-# Runtime dependency for unit-tests
-$(eval $(call gb_Library_use_restarget,sb,sb))
 
 # vim: set noet sw=4 ts=4:

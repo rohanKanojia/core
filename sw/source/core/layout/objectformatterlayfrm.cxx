@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <objectformatterlayfrm.hxx>
+#include "objectformatterlayfrm.hxx"
 #include <anchoredobject.hxx>
 #include <sortedobjs.hxx>
 #include <pagefrm.hxx>
@@ -36,7 +36,7 @@ SwObjectFormatterLayFrame::~SwObjectFormatterLayFrame()
 {
 }
 
-SwObjectFormatterLayFrame* SwObjectFormatterLayFrame::CreateObjFormatter(
+std::unique_ptr<SwObjectFormatterLayFrame> SwObjectFormatterLayFrame::CreateObjFormatter(
                                                 SwLayoutFrame& _rAnchorLayFrame,
                                                 const SwPageFrame& _rPageFrame,
                                                 SwLayAction* _pLayAction )
@@ -48,7 +48,7 @@ SwObjectFormatterLayFrame* SwObjectFormatterLayFrame::CreateObjFormatter(
         return nullptr;
     }
 
-    SwObjectFormatterLayFrame* pObjFormatter = nullptr;
+    std::unique_ptr<SwObjectFormatterLayFrame> pObjFormatter;
 
     // create object formatter, if floating screen objects are registered at
     // given anchor layout frame.
@@ -56,8 +56,8 @@ SwObjectFormatterLayFrame* SwObjectFormatterLayFrame::CreateObjFormatter(
          ( _rAnchorLayFrame.IsPageFrame() &&
             static_cast<SwPageFrame&>(_rAnchorLayFrame).GetSortedObjs() ) )
     {
-        pObjFormatter =
-            new SwObjectFormatterLayFrame( _rAnchorLayFrame, _rPageFrame, _pLayAction );
+        pObjFormatter.reset(
+            new SwObjectFormatterLayFrame( _rAnchorLayFrame, _rPageFrame, _pLayAction ));
     }
 
     return pObjFormatter;
@@ -73,7 +73,7 @@ SwFrame& SwObjectFormatterLayFrame::GetAnchorFrame()
 bool SwObjectFormatterLayFrame::DoFormatObj( SwAnchoredObject& _rAnchoredObj,
                                            const bool )
 {
-    _FormatObj( _rAnchoredObj );
+    FormatObj_( _rAnchoredObj );
 
     // #124218# - consider that the layout action has to be
     // restarted due to a deleted page frame.
@@ -84,7 +84,7 @@ bool SwObjectFormatterLayFrame::DoFormatObjs()
 {
     bool bSuccess( true );
 
-    bSuccess = _FormatObjsAtFrame();
+    bSuccess = FormatObjsAtFrame_();
 
     if ( bSuccess && GetAnchorFrame().IsPageFrame() )
     {
@@ -92,7 +92,7 @@ bool SwObjectFormatterLayFrame::DoFormatObjs()
         // Thus, format also all anchored objects, which are registered at
         // this page frame, whose 'anchor' isn't on this page frame and whose
         // anchor frame is valid.
-        bSuccess = _AdditionalFormatObjsOnPage();
+        bSuccess = AdditionalFormatObjsOnPage();
     }
 
     return bSuccess;
@@ -104,11 +104,11 @@ bool SwObjectFormatterLayFrame::DoFormatObjs()
 
     OD 2004-07-02 #i28701#
 */
-bool SwObjectFormatterLayFrame::_AdditionalFormatObjsOnPage()
+bool SwObjectFormatterLayFrame::AdditionalFormatObjsOnPage()
 {
     if ( !GetAnchorFrame().IsPageFrame() )
     {
-        OSL_FAIL( "<SwObjectFormatterLayFrame::_AdditionalFormatObjsOnPage()> - mis-usage of method, call only for anchor frames of type page frame" );
+        OSL_FAIL( "<SwObjectFormatterLayFrame::AdditionalFormatObjsOnPage()> - mis-usage of method, call only for anchor frames of type page frame" );
         return true;
     }
 
@@ -146,7 +146,7 @@ bool SwObjectFormatterLayFrame::_AdditionalFormatObjsOnPage()
         // #i26945# - check, if the page frame of the
         // object's anchor frame isn't the given page frame
         OSL_ENSURE( pPageFrameOfAnchor,
-                "<SwObjectFormatterLayFrame::_AdditionalFormatObjsOnPage()> - missing page frame" );
+                "<SwObjectFormatterLayFrame::AdditionalFormatObjsOnPage()> - missing page frame" );
         if ( pPageFrameOfAnchor &&
              // #i35911#
              pPageFrameOfAnchor->GetPhyPageNum() < rPageFrame.GetPhyPageNum() )

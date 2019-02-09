@@ -29,7 +29,7 @@ class XMLPersAttrListTContext : public XMLTransformerContext
 
     css::uno::Reference< css::xml::sax::XAttributeList > m_xAttrList;
     OUString m_aElemQName;
-    sal_uInt16 m_nActionMap;
+    sal_uInt16 const m_nActionMap;
 
 protected:
 
@@ -60,12 +60,6 @@ public:
                               sal_uInt16 nPrefix,
                               ::xmloff::token::XMLTokenEnum eToken,
                               sal_uInt16 nActionMap );
-
-    // A contexts destructor does anything that is required if an element
-    // ends. By default, nothing is done.
-    // Note that virtual methods cannot be used inside destructors. Use
-    // EndElement instead if this is required.
-    virtual ~XMLPersAttrListTContext();
 
     // Create a children element context. By default, the import's
     // CreateContext method is called to create a new default context.
@@ -102,7 +96,7 @@ public:
         ::xmloff::token::XMLTokenEnum eAToken,
         const OUString & rValue );
 
-    css::uno::Reference< css::xml::sax::XAttributeList >
+    const css::uno::Reference< css::xml::sax::XAttributeList >&
         GetAttrList() const { return m_xAttrList; }
 
 };

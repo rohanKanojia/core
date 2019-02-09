@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <osl/diagnose.h>
 #include <hintids.hxx>
 #include <unotools/tempfile.hxx>
 #include <svl/urihelper.hxx>
@@ -47,6 +48,7 @@
 #include <doctxm.hxx>
 #include <poolfmt.hxx>
 #include <calbck.hxx>
+#include <iodetect.hxx>
 #include <memory>
 #include <com/sun/star/uno/Reference.h>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
@@ -83,7 +85,7 @@ bool SwDoc::GenerateHTMLDoc( const OUString& rPath,
 }
 
 // two helpers for outline mode
-SwNodePtr GetStartNode( SwOutlineNodes* pOutlNds, int nOutlineLevel, sal_uInt16* nOutl )
+static SwNodePtr GetStartNode( SwOutlineNodes const * pOutlNds, int nOutlineLevel, SwOutlineNodes::size_type* nOutl )
 {
     SwNodePtr pNd;
 
@@ -96,7 +98,7 @@ SwNodePtr GetStartNode( SwOutlineNodes* pOutlNds, int nOutlineLevel, sal_uInt16*
     return nullptr;
 }
 
-SwNodePtr GetEndNode( SwOutlineNodes* pOutlNds, int nOutlineLevel, sal_uInt16* nOutl )
+static SwNodePtr GetEndNode( SwOutlineNodes const * pOutlNds, int nOutlineLevel, SwOutlineNodes::size_type* nOutl )
 {
     SwNodePtr pNd;
 
@@ -116,7 +118,7 @@ SwNodePtr GetEndNode( SwOutlineNodes* pOutlNds, int nOutlineLevel, sal_uInt16* n
 }
 
 // two helpers for collection mode
-SwNodePtr GetStartNode( const SwOutlineNodes* pOutlNds, const SwTextFormatColl* pSplitColl, sal_uInt16* nOutl )
+static SwNodePtr GetStartNode( const SwOutlineNodes* pOutlNds, const SwTextFormatColl* pSplitColl, SwOutlineNodes::size_type* nOutl )
 {
     SwNodePtr pNd;
     for( ; *nOutl < pOutlNds->size(); ++(*nOutl) )
@@ -129,7 +131,7 @@ SwNodePtr GetStartNode( const SwOutlineNodes* pOutlNds, const SwTextFormatColl* 
     return nullptr;
 }
 
-SwNodePtr GetEndNode( const SwOutlineNodes* pOutlNds, const SwTextFormatColl* pSplitColl, sal_uInt16* nOutl )
+static SwNodePtr GetEndNode( const SwOutlineNodes* pOutlNds, const SwTextFormatColl* pSplitColl, SwOutlineNodes::size_type* nOutl )
 {
     SwNodePtr pNd;
 
@@ -160,7 +162,7 @@ bool SwDoc::SplitDoc( sal_uInt16 eDocType, const OUString& rPath, bool bOutline,
         ( SPLITDOC_TO_GLOBALDOC == eDocType && GetDocumentSettingManager().get(DocumentSettingId::GLOBAL_DOCUMENT) ) )
         return false;
 
-    sal_uInt16 nOutl = 0;
+    SwOutlineNodes::size_type nOutl = 0;
     SwOutlineNodes* pOutlNds = const_cast<SwOutlineNodes*>(&GetNodes().GetOutLineNds());
     std::unique_ptr<SwOutlineNodes> xTmpOutlNds;
     SwNodePtr pStartNd;
@@ -216,7 +218,7 @@ bool SwDoc::SplitDoc( sal_uInt16 eDocType, const OUString& rPath, bool bOutline,
 
     // Deactivate Undo/Redline in any case
     GetIDocumentUndoRedo().DoUndo(false);
-    getIDocumentRedlineAccess().SetRedlineMode_intern( (RedlineMode_t)(getIDocumentRedlineAccess().GetRedlineMode() & ~nsRedlineMode_t::REDLINE_ON));
+    getIDocumentRedlineAccess().SetRedlineFlags_intern( getIDocumentRedlineAccess().GetRedlineFlags() & ~RedlineFlags::On );
 
     OUString sExt = pFilter->GetSuffixes().getToken(0, ',');
     if( sExt.isEmpty() )
@@ -234,7 +236,7 @@ bool SwDoc::SplitDoc( sal_uInt16 eDocType, const OUString& rPath, bool bOutline,
     INetURLObject aEntry(rPath);
     OUString sLeading(aEntry.GetBase());
     aEntry.removeSegment();
-    OUString sPath = aEntry.GetMainURL( INetURLObject::NO_DECODE );
+    OUString sPath = aEntry.GetMainURL( INetURLObject::DecodeMechanism::NONE );
     utl::TempFile aTemp(sLeading, true, &sExt, &sPath);
     aTemp.EnableKillingFile();
 
@@ -290,7 +292,7 @@ bool SwDoc::SplitDoc( sal_uInt16 eDocType, const OUString& rPath, bool bOutline,
                     OUString sTitle( xDocProps->getTitle() );
                     if (!sTitle.isEmpty())
                         sTitle += ": ";
-                    sTitle += pStartNd->GetTextNode()->GetExpandText();
+                    sTitle += pStartNd->GetTextNode()->GetExpandText(nullptr);
                     xDocProps->setTitle( sTitle );
 
                     // Replace template
@@ -302,7 +304,7 @@ bool SwDoc::SplitDoc( sal_uInt16 eDocType, const OUString& rPath, bool bOutline,
 
                     SwNodeRange aRg( *pStartNd, 0, aEndIdx.GetNode() );
                     SwNodeIndex aTmpIdx( pDoc->GetNodes().GetEndOfContent() );
-                    GetNodes()._Copy( aRg, aTmpIdx, false );
+                    GetNodes().Copy_( aRg, aTmpIdx, false );
 
                     // Delete the initial TextNode
                     SwNodeIndex aIdx( pDoc->GetNodes().GetEndOfExtras(), 2 );
@@ -319,7 +321,7 @@ bool SwDoc::SplitDoc( sal_uInt16 eDocType, const OUString& rPath, bool bOutline,
                     utl::TempFile aTempFile2(sLeading, true, &sExt, &sPath);
                     sFileName = aTempFile2.GetURL();
                     SfxMedium* pTmpMed = new SfxMedium( sFileName,
-                                                STREAM_STD_READWRITE );
+                                                StreamMode::STD_READWRITE );
                     pTmpMed->SetFilter( pFilter );
 
                     // We need to have a Layout for the HTMLFilter, so that
@@ -327,7 +329,7 @@ bool SwDoc::SplitDoc( sal_uInt16 eDocType, const OUString& rPath, bool bOutline,
                     if( SPLITDOC_TO_HTML == eDocType &&
                         !pDoc->GetSpzFrameFormats()->empty() )
                     {
-                            SfxViewFrame::LoadHiddenDocument( *xDocSh, 0 );
+                            SfxViewFrame::LoadHiddenDocument( *xDocSh, SFX_INTERFACE_NONE );
                     }
                     xDocSh->DoSaveAs( *pTmpMed );
                     xDocSh->DoSaveCompleted( pTmpMed );
@@ -359,11 +361,11 @@ bool SwDoc::SplitDoc( sal_uInt16 eDocType, const OUString& rPath, bool bOutline,
                             SwNodeIndex aEIdx( aTmp.GetPoint()->nNode );
 
                             // Try to move past the end
-                            if( !aTmp.Move( fnMoveForward, fnGoNode ) )
+                            if( !aTmp.Move( fnMoveForward, GoInNode ) )
                             {
                                 // well then, back to the beginning
                                 aTmp.Exchange();
-                                if( !aTmp.Move( fnMoveBackward, fnGoNode ))
+                                if( !aTmp.Move( fnMoveBackward, GoInNode ))
                                 {
                                     OSL_FAIL( "no more Nodes!" );
                                 }
@@ -379,8 +381,8 @@ bool SwDoc::SplitDoc( sal_uInt16 eDocType, const OUString& rPath, bool bOutline,
                                 SwPosition const*const pAPos =
                                     pAnchor->GetContentAnchor();
                                 if (pAPos &&
-                                    ((FLY_AT_PARA == pAnchor->GetAnchorId()) ||
-                                     (FLY_AT_CHAR == pAnchor->GetAnchorId())) &&
+                                    ((RndStdIds::FLY_AT_PARA == pAnchor->GetAnchorId()) ||
+                                     (RndStdIds::FLY_AT_CHAR == pAnchor->GetAnchorId())) &&
                                     aSIdx <= pAPos->nNode &&
                                     pAPos->nNode < aEIdx )
                                 {
@@ -401,7 +403,7 @@ bool SwDoc::SplitDoc( sal_uInt16 eDocType, const OUString& rPath, bool bOutline,
                         // it has to be a bug!
                         if( !pOutlNds->Seek_Entry( pStartNd, &nOutl ))
                             pStartNd = nullptr;
-                        ++nOutl;
+                        ++nOutl ;
                     }
                     break;
 
@@ -437,7 +439,7 @@ bool SwDoc::SplitDoc( sal_uInt16 eDocType, const OUString& rPath, bool bOutline,
                             {
                                 SwNodeRange aRg( *pStartNd, *pSectEnd );
                                 SwNodeIndex aIdx( *pSectEnd, 1 );
-                                GetNodes()._MoveNodes( aRg, GetNodes(), aIdx );
+                                GetNodes().MoveNodes( aRg, GetNodes(), aIdx );
                             }
                             pSectNd = pStartNd->FindSectionNode();
                         }
@@ -452,7 +454,7 @@ bool SwDoc::SplitDoc( sal_uInt16 eDocType, const OUString& rPath, bool bOutline,
                             {
                                 SwNodeRange aRg( *pSectNd, 1, aEndIdx, 1 );
                                 SwNodeIndex aIdx( *pSectNd );
-                                GetNodes()._MoveNodes( aRg, GetNodes(), aIdx );
+                                GetNodes().MoveNodes( aRg, GetNodes(), aIdx );
                             }
 
                             pSectNd = pStartNd->FindSectionNode();

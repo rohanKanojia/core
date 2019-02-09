@@ -11,15 +11,16 @@ $(eval $(call gb_CppunitTest_CppunitTest,vcl_bitmap_test))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,vcl_bitmap_test, \
     vcl/qa/cppunit/BitmapTest \
+    vcl/qa/cppunit/bitmapcolor \
 ))
 
 $(eval $(call gb_CppunitTest_use_externals,vcl_bitmap_test,\
 	boost_headers \
 	glm_headers \
 ))
-ifeq ($(ENABLE_OPENGL),TRUE)
+ifeq ($(DISABLE_GUI),)
 $(eval $(call gb_CppunitTest_use_externals,vcl_bitmap_test,\
-     glew \
+     epoxy \
  ))
 endif
 
@@ -39,13 +40,9 @@ $(eval $(call gb_CppunitTest_use_libraries,vcl_bitmap_test, \
 	unotest \
 	vcl \
 	utl \
-	$(gb_UWINAPI) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,vcl_bitmap_test,\
-    udkapi \
-    offapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,vcl_bitmap_test))
 
 $(eval $(call gb_CppunitTest_use_ure,vcl_bitmap_test))
 $(eval $(call gb_CppunitTest_use_vcl,vcl_bitmap_test))

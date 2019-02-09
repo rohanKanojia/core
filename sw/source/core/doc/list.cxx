@@ -33,13 +33,13 @@ class SwListImpl
         SwListImpl( const OUString& sListId,
                     SwNumRule& rDefaultListStyle,
                     const SwNodes& rNodes );
-        ~SwListImpl();
+        ~SwListImpl() COVERITY_NOEXCEPT_FALSE;
 
-        const OUString GetListId() const { return msListId;}
+        const OUString& GetListId() const { return msListId;}
 
-        const OUString GetDefaultListStyleName() const { return msDefaultListStyleName;}
+        const OUString& GetDefaultListStyleName() const { return msDefaultListStyleName;}
 
-        void InsertListItem( SwNodeNum& rNodeNum,
+        void InsertListItem( SwNodeNum& rNodeNum, bool isHiddenRedlines,
                              const int nLevel );
         static void RemoveListItem( SwNodeNum& rNodeNum );
 
@@ -57,7 +57,24 @@ class SwListImpl
         OUString msDefaultListStyleName;
 
         // list trees for certain document ranges
-        typedef std::pair<SwNodeNum*, SwPaM*> tListTreeForRange;
+        struct tListTreeForRange
+        {
+            /// tree always corresponds to document model
+            std::unique_ptr<SwNodeNum> pRoot;
+            /// Tree that is missing those nodes that are merged or hidden
+            /// by delete redlines; this is only used if there is a layout
+            /// that has IsHideRedlines() enabled.
+            /// A second tree is needed because not only are the numbers in
+            /// the nodes different, the structure of the tree may be different
+            /// as well, if a high-level node is hidden its children go under
+            /// the previous node on the same level.
+            /// The nodes of pRootRLHidden are a subset of the nodes of pRoot.
+            std::unique_ptr<SwNodeNum> pRootRLHidden;
+            /// top-level SwNodes section
+            std::unique_ptr<SwPaM> pSection;
+            tListTreeForRange(std::unique_ptr<SwNodeNum> p1, std::unique_ptr<SwNodeNum> p2, std::unique_ptr<SwPaM> p3)
+                : pRoot(std::move(p1)), pRootRLHidden(std::move(p2)), pSection(std::move(p3)) {}
+        };
         typedef std::vector<tListTreeForRange> tListTrees;
         tListTrees maListTrees;
 
@@ -80,10 +97,10 @@ SwListImpl::SwListImpl( const OUString& sListId,
     {
         SwPaM aPam( *pNode, *pNode->EndOfSectionNode() );
 
-        SwNodeNum* pNumberTreeRootNode = new SwNodeNum( &rDefaultListStyle );
-        SwPaM* pPam = new SwPaM( *(aPam.Start()), *(aPam.End()) );
-        tListTreeForRange aListTreeForRange( pNumberTreeRootNode, pPam );
-        maListTrees.push_back( aListTreeForRange );
+        maListTrees.emplace_back(
+            std::make_unique<SwNodeNum>( &rDefaultListStyle ),
+            std::make_unique<SwNodeNum>( &rDefaultListStyle ),
+            std::make_unique<SwPaM>( *(aPam.Start()), *(aPam.End()) ));
 
         pNode = pNode->EndOfSectionNode();
         if (pNode != &rNodes.GetEndOfContent())
@@ -96,40 +113,34 @@ SwListImpl::SwListImpl( const OUString& sListId,
     while ( pNode != &rNodes.GetEndOfContent() );
 }
 
-SwListImpl::~SwListImpl()
+SwListImpl::~SwListImpl() COVERITY_NOEXCEPT_FALSE
 {
-    tListTrees::iterator aNumberTreeIter;
-    for ( aNumberTreeIter = maListTrees.begin();
-          aNumberTreeIter != maListTrees.end();
-          ++aNumberTreeIter )
+    for ( auto& rNumberTree : maListTrees )
     {
-        SwNodeNum::HandleNumberTreeRootNodeDelete( *((*aNumberTreeIter).first) );
-        delete (*aNumberTreeIter).first;
-        delete (*aNumberTreeIter).second;
+        SwNodeNum::HandleNumberTreeRootNodeDelete(*(rNumberTree.pRoot));
+        SwNodeNum::HandleNumberTreeRootNodeDelete(*(rNumberTree.pRootRLHidden));
     }
 }
 
-
-void SwListImpl::InsertListItem( SwNodeNum& rNodeNum,
+void SwListImpl::InsertListItem( SwNodeNum& rNodeNum, bool const isHiddenRedlines,
                                  const int nLevel )
 {
     const SwPosition aPosOfNodeNum( rNodeNum.GetPosition() );
     const SwNodes* pNodesOfNodeNum = &(aPosOfNodeNum.nNode.GetNode().GetNodes());
 
-    tListTrees::const_iterator aNumberTreeIter;
-    for ( aNumberTreeIter = maListTrees.begin();
-          aNumberTreeIter != maListTrees.end();
-          ++aNumberTreeIter )
+    for ( const auto& rNumberTree : maListTrees )
     {
-        const SwPosition* pStart = (*aNumberTreeIter).second->Start();
-        const SwPosition* pEnd = (*aNumberTreeIter).second->End();
+        const SwPosition* pStart = rNumberTree.pSection->Start();
+        const SwPosition* pEnd = rNumberTree.pSection->End();
         const SwNodes* pRangeNodes = &(pStart->nNode.GetNode().GetNodes());
 
         if ( pRangeNodes == pNodesOfNodeNum &&
              *pStart <= aPosOfNodeNum && aPosOfNodeNum <= *pEnd)
         {
-            (*aNumberTreeIter).first->AddChild( &rNodeNum, nLevel );
-
+            auto const& pRoot(isHiddenRedlines
+                    ? rNumberTree.pRootRLHidden
+                    : rNumberTree.pRoot);
+            pRoot->AddChild(&rNodeNum, nLevel);
             break;
         }
     }
@@ -142,23 +153,19 @@ void SwListImpl::RemoveListItem( SwNodeNum& rNodeNum )
 
 void SwListImpl::InvalidateListTree()
 {
-    tListTrees::iterator aNumberTreeIter;
-    for ( aNumberTreeIter = maListTrees.begin();
-          aNumberTreeIter != maListTrees.end();
-          ++aNumberTreeIter )
+    for ( auto& rNumberTree : maListTrees )
     {
-        (*aNumberTreeIter).first->InvalidateTree();
+        rNumberTree.pRoot->InvalidateTree();
+        rNumberTree.pRootRLHidden->InvalidateTree();
     }
 }
 
 void SwListImpl::ValidateListTree()
 {
-    tListTrees::iterator aNumberTreeIter;
-    for ( aNumberTreeIter = maListTrees.begin();
-          aNumberTreeIter != maListTrees.end();
-          ++aNumberTreeIter )
+    for ( auto& rNumberTree : maListTrees )
     {
-        (*aNumberTreeIter).first->NotifyInvalidChildren();
+        rNumberTree.pRoot->NotifyInvalidChildren();
+        rNumberTree.pRootRLHidden->NotifyInvalidChildren();
     }
 }
 
@@ -200,12 +207,10 @@ bool SwListImpl::IsListLevelMarked( const int nListLevel ) const
 
 void SwListImpl::NotifyItemsOnListLevel( const int nLevel )
 {
-    tListTrees::iterator aNumberTreeIter;
-    for ( aNumberTreeIter = maListTrees.begin();
-          aNumberTreeIter != maListTrees.end();
-          ++aNumberTreeIter )
+    for ( auto& rNumberTree : maListTrees )
     {
-        (*aNumberTreeIter).first->NotifyNodesOnListLevel( nLevel );
+        rNumberTree.pRoot->NotifyNodesOnListLevel( nLevel );
+        rNumberTree.pRootRLHidden->NotifyNodesOnListLevel( nLevel );
     }
 }
 
@@ -218,15 +223,14 @@ SwList::SwList( const OUString& sListId,
 
 SwList::~SwList()
 {
-    delete mpListImpl;
 }
 
-const OUString SwList::GetListId() const
+const OUString & SwList::GetListId() const
 {
     return mpListImpl->GetListId();
 }
 
-const OUString SwList::GetDefaultListStyleName() const
+const OUString & SwList::GetDefaultListStyleName() const
 {
     return mpListImpl->GetDefaultListStyleName();
 }
@@ -236,10 +240,10 @@ void SwList::SetDefaultListStyleName(OUString const& rNew)
     mpListImpl->msDefaultListStyleName = rNew;
 }
 
-void SwList::InsertListItem( SwNodeNum& rNodeNum,
+void SwList::InsertListItem( SwNodeNum& rNodeNum, bool const isHiddenRedlines,
                              const int nLevel )
 {
-    mpListImpl->InsertListItem( rNodeNum, nLevel );
+    mpListImpl->InsertListItem( rNodeNum, isHiddenRedlines, nLevel );
 }
 
 void SwList::RemoveListItem( SwNodeNum& rNodeNum )

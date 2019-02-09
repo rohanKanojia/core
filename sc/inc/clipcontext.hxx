@@ -12,7 +12,7 @@
 
 #include "address.hxx"
 #include "cellvalue.hxx"
-#include <celltextattr.hxx>
+#include "celltextattr.hxx"
 
 #include <memory>
 #include <vector>
@@ -32,9 +32,8 @@ class ClipContextBase
 {
     std::unique_ptr<ColumnBlockPositionSet> mpSet;
 
-    ClipContextBase(); // disabled
-
 public:
+    ClipContextBase() = delete;
     ClipContextBase(const ClipContextBase&) = delete;
     const ClipContextBase& operator=(const ClipContextBase&) = delete;
     ClipContextBase(ScDocument& rDoc);
@@ -52,9 +51,9 @@ class CopyFromClipContext : public ClipContextBase
     SCTAB mnTabStart;
     SCTAB mnTabEnd;
     ScDocument& mrDestDoc;
-    ScDocument* mpRefUndoDoc;
+    ScDocument* const mpRefUndoDoc;
     ScDocument* mpClipDoc;
-    InsertDeleteFlags mnInsertFlag;
+    InsertDeleteFlags const mnInsertFlag;
     InsertDeleteFlags mnDeleteFlag;
 
     std::vector<ScCellValue> maSingleCells;
@@ -63,12 +62,10 @@ class CopyFromClipContext : public ClipContextBase
     std::vector<const ScPostIt*> maSingleNotes;
 
     ScConditionalFormatList* mpCondFormatList;
-    bool mbAsLink:1;
-    bool mbSkipAttrForEmptyCells:1;
-    bool mbCloneNotes:1;
+    bool const mbAsLink:1;
+    bool const mbSkipAttrForEmptyCells:1;
+    bool const mbCloneNotes:1;
     bool mbTableProtected:1;
-
-    CopyFromClipContext(); // disabled
 
 public:
 
@@ -80,11 +77,12 @@ public:
         SCROW mnRow2;
     };
 
+    CopyFromClipContext() = delete;
     CopyFromClipContext(ScDocument& rDoc,
         ScDocument* pRefUndoDoc, ScDocument* pClipDoc, InsertDeleteFlags nInsertFlag,
         bool bAsLink, bool bSkipAttrForEmptyCells);
 
-    virtual ~CopyFromClipContext();
+    virtual ~CopyFromClipContext() override;
 
     void setTabRange(SCTAB nStart, SCTAB nEnd);
 
@@ -134,17 +132,13 @@ public:
 
 class CopyToClipContext : public ClipContextBase
 {
-    bool mbKeepScenarioFlags:1;
-    bool mbCloneNotes:1;
-
-    CopyToClipContext(); // disabled
+    bool const mbKeepScenarioFlags:1;
 
 public:
-    CopyToClipContext(ScDocument& rDoc, bool bKeepScenarioFlags, bool bCloneNotes);
-    virtual ~CopyToClipContext();
+    CopyToClipContext(ScDocument& rDoc, bool bKeepScenarioFlags);
+    virtual ~CopyToClipContext() override;
 
     bool isKeepScenarioFlags() const;
-    bool isCloneNotes() const;
 };
 
 class CopyToDocContext : public ClipContextBase
@@ -153,7 +147,7 @@ class CopyToDocContext : public ClipContextBase
 
 public:
     CopyToDocContext(ScDocument& rDoc);
-    virtual ~CopyToDocContext();
+    virtual ~CopyToDocContext() override;
 
     void setStartListening( bool b );
     bool isStartListening() const;
@@ -163,7 +157,7 @@ class MixDocContext : public ClipContextBase
 {
 public:
     MixDocContext(ScDocument& rDoc);
-    virtual ~MixDocContext();
+    virtual ~MixDocContext() override;
 };
 
 }

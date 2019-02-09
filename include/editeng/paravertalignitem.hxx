@@ -34,31 +34,26 @@
 class EDITENG_DLLPUBLIC SvxParaVertAlignItem : public SfxUInt16Item
 {
 public:
-    enum { AUTOMATIC, BASELINE, TOP, CENTER, BOTTOM };
+    enum class Align { Automatic, Baseline, Top, Center, Bottom };
     static SfxPoolItem* CreateDefault();
 
-    SvxParaVertAlignItem( sal_uInt16 nValue /*= 0*/,
+    SvxParaVertAlignItem( Align nValue /*= 0*/,
                        const sal_uInt16 nId  );
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual SfxPoolItem*    Create(SvStream &, sal_uInt16) const override;
-    virtual SvStream&       Store(SvStream & rStrm, sal_uInt16 nIVer) const override;
     virtual sal_uInt16          GetVersion( sal_uInt16 nFileVersion ) const override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& ) const override;
 
     virtual bool            QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool            PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
-    inline SvxParaVertAlignItem& operator=( const SvxParaVertAlignItem& rItem )
-    {
-        SetValue( rItem.GetValue() );
-        return *this;
-    }
+    Align                   GetValue() const { return static_cast<Align>(SfxUInt16Item::GetValue()); }
+    void                    SetValue(Align n) { SfxUInt16Item::SetValue(static_cast<sal_uInt16>(n)); }
 
     virtual bool            operator==( const SfxPoolItem& ) const override;
 

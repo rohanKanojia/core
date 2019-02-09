@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <editeng/adjustitem.hxx>
 #include <svx/drawitem.hxx>
 #include <svx/fontwork.hxx>
@@ -33,16 +33,16 @@
 #include <sot/formats.hxx>
 #include <svl/whiter.hxx>
 #include <svx/svdoashp.hxx>
-#include "sc.hrc"
-#include "drtxtob.hxx"
-#include "viewdata.hxx"
-#include "drawview.hxx"
-#include "tabvwsh.hxx"
-#include "impex.hxx"
-#include "docsh.hxx"
-#include "transobj.hxx"
-#include "drwtrans.hxx"
-#include "drwlayer.hxx"
+#include <sc.hrc>
+#include <drtxtob.hxx>
+#include <viewdata.hxx>
+#include <drawview.hxx>
+#include <tabvwsh.hxx>
+#include <impex.hxx>
+#include <docsh.hxx>
+#include <transobj.hxx>
+#include <drwtrans.hxx>
+#include <drwlayer.hxx>
 
 sal_uInt16 ScGetFontWorkId()
 {
@@ -54,7 +54,7 @@ bool ScDrawTextObjectBar::IsNoteEdit()
     return ScDrawLayer::IsNoteCaption( pViewData->GetView()->GetSdrView()->GetTextEditObject() );
 }
 
-//  wenn kein Text editiert wird, Funktionen wie in drawsh
+//  if no text edited, functions like in drawsh
 
 void ScDrawTextObjectBar::ExecuteGlobal( SfxRequest &rReq )
 {
@@ -75,6 +75,7 @@ void ScDrawTextObjectBar::ExecuteGlobal( SfxRequest &rReq )
 
         case SID_PASTE:
         case SID_PASTE_SPECIAL:
+        case SID_PASTE_UNFORMATTED:
         case SID_CLIPBOARD_FORMAT_ITEMS:
         case SID_HYPERLINK_SETLINK:
             {
@@ -91,7 +92,7 @@ void ScDrawTextObjectBar::ExecuteGlobal( SfxRequest &rReq )
         case SID_TEXTDIRECTION_LEFT_TO_RIGHT:
         case SID_TEXTDIRECTION_TOP_TO_BOTTOM:
             {
-                SfxItemSet aAttr( pView->GetModel()->GetItemPool(), SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION, 0 );
+                SfxItemSet aAttr( pView->GetModel()->GetItemPool(), svl::Items<SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION>{} );
                 aAttr.Put( SvxWritingModeItem(
                     nSlot == SID_TEXTDIRECTION_LEFT_TO_RIGHT ?
                         css::text::WritingMode_LR_TB : css::text::WritingMode_TB_RL,
@@ -107,7 +108,7 @@ void ScDrawTextObjectBar::ExecuteGlobal( SfxRequest &rReq )
                 const SfxBoolItem* pItem = rReq.GetArg<SfxBoolItem>(SID_ENABLE_HYPHENATION);
                 if( pItem )
                 {
-                    SfxItemSet aSet( GetPool(), EE_PARA_HYPHENATE, EE_PARA_HYPHENATE );
+                    SfxItemSet aSet( GetPool(), svl::Items<EE_PARA_HYPHENATE, EE_PARA_HYPHENATE>{} );
                     bool bValue = pItem->GetValue();
                     aSet.Put( SfxBoolItem( EE_PARA_HYPHENATE, bValue ) );
                     pView->SetAttributes( aSet );
@@ -163,15 +164,14 @@ void ScDrawTextObjectBar::ExecuteExtra( SfxRequest &rReq )
         case SID_ATTR_PARA_RIGHT_TO_LEFT:
             {
                 SfxItemSet aAttr( pView->GetModel()->GetItemPool(),
-                                    EE_PARA_WRITINGDIR, EE_PARA_WRITINGDIR,
-                                    EE_PARA_JUST, EE_PARA_JUST,
-                                    0 );
+                                    svl::Items<EE_PARA_WRITINGDIR, EE_PARA_WRITINGDIR,
+                                    EE_PARA_JUST, EE_PARA_JUST>{} );
                 bool bLeft = ( nSlot == SID_ATTR_PARA_LEFT_TO_RIGHT );
                 aAttr.Put( SvxFrameDirectionItem(
-                                bLeft ? FRMDIR_HORI_LEFT_TOP : FRMDIR_HORI_RIGHT_TOP,
+                                bLeft ? SvxFrameDirection::Horizontal_LR_TB : SvxFrameDirection::Horizontal_RL_TB,
                                 EE_PARA_WRITINGDIR ) );
                 aAttr.Put( SvxAdjustItem(
-                                bLeft ? SVX_ADJUST_LEFT : SVX_ADJUST_RIGHT,
+                                bLeft ? SvxAdjust::Left : SvxAdjust::Right,
                                 EE_PARA_JUST ) );
                 pView->SetAttributes( aAttr );
                 pViewData->GetScDrawView()->InvalidateDrawTextAttrs();
@@ -182,7 +182,7 @@ void ScDrawTextObjectBar::ExecuteExtra( SfxRequest &rReq )
     }
 }
 
-void ScDrawTextObjectBar::ExecFormText(SfxRequest& rReq)
+void ScDrawTextObjectBar::ExecFormText(const SfxRequest& rReq)
 {
     ScTabView*          pTabView    = pViewData->GetView();
     ScDrawView*         pDrView     = pTabView->GetScDrawView();
@@ -202,17 +202,8 @@ void ScDrawTextObjectBar::ExecFormText(SfxRequest& rReq)
 void ScDrawTextObjectBar::GetFormTextState(SfxItemSet& rSet)
 {
     const SdrObject*    pObj        = nullptr;
-    SvxFontWorkDialog*  pDlg        = nullptr;
     ScDrawView*         pDrView     = pViewData->GetView()->GetScDrawView();
     const SdrMarkList&  rMarkList   = pDrView->GetMarkedObjectList();
-    sal_uInt16              nId = SvxFontWorkChildWindow::GetChildWindowId();
-
-    SfxViewFrame* pViewFrm = pViewData->GetViewShell()->GetViewFrame();
-    if (pViewFrm->HasChildWindow(nId))
-    {
-        SfxChildWindow* pWnd = pViewFrm->GetChildWindow(nId);
-        pDlg = pWnd ? static_cast<SvxFontWorkDialog*>(pWnd->GetWindow()) : nullptr;
-    }
 
     if ( rMarkList.GetMarkCount() == 1 )
         pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
@@ -240,22 +231,6 @@ void ScDrawTextObjectBar::GetFormTextState(SfxItemSet& rSet)
     }
     else
     {
-        if ( pDlg )
-        {
-            SfxObjectShell* pDocSh = SfxObjectShell::Current();
-
-            if ( pDocSh )
-            {
-                const SfxPoolItem*  pItem = pDocSh->GetItem( SID_COLOR_TABLE );
-                XColorListRef pColorList;
-
-                if ( pItem )
-                    pColorList = static_cast<const SvxColorListItem*>(pItem)->GetColorList();
-
-                if ( pColorList.is() )
-                    pDlg->SetColorList( pColorList );
-            }
-        }
         SfxItemSet aViewAttr(pDrView->GetModel()->GetItemPool());
         pDrView->GetAttributes(aViewAttr);
         rSet.Set(aViewAttr);

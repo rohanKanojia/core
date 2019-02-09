@@ -21,7 +21,7 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 
-#include "futempl.hxx"
+#include <futempl.hxx>
 
 #include <editeng/editdata.hxx>
 #include <editeng/bulletitem.hxx>
@@ -29,13 +29,15 @@
 #include <sfx2/bindings.hxx>
 #include <svl/aeitem.hxx>
 #include <sfx2/dispatch.hxx>
-#include <vcl/msgbox.hxx>
 #include <editeng/eeitem.hxx>
 #include <sfx2/request.hxx>
+#include <sfx2/sfxdlg.hxx>
 #include <editeng/numitem.hxx>
 #include <editeng/editeng.hxx>
 #include <editeng/lrspitem.hxx>
 #include <svx/svdopage.hxx>
+#include <editeng/colritem.hxx>
+#include <editeng/brushitem.hxx>
 #include <svx/svditer.hxx>
 #include <svx/sdr/properties/properties.hxx>
 
@@ -43,28 +45,27 @@
 #include <svx/xlndsit.hxx>
 #include <svx/xlnstit.hxx>
 #include <svx/xlnedit.hxx>
-#include "app.hrc"
-#include "stlsheet.hxx"
-#include "sdpage.hxx"
-#include "stlpool.hxx"
-#include "sdmod.hxx"
-#include "View.hxx"
-#include "Window.hxx"
-#include "drawview.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "DrawViewShell.hxx"
-#include "ViewShell.hxx"
-#include "res_bmp.hrc"
-#include "glob.hrc"
-#include "prlayout.hxx"
-#include "prltempl.hrc"
+#include <app.hrc>
+#include <stlsheet.hxx>
+#include <sdpage.hxx>
+#include <stlpool.hxx>
+#include <sdmod.hxx>
+#include <View.hxx>
+#include <Window.hxx>
+#include <drawview.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <DrawViewShell.hxx>
+#include <ViewShell.hxx>
+
+#include <strings.hrc>
+#include <prlayout.hxx>
 #include <svx/xfillit.hxx>
-#include "sdresid.hxx"
-#include "OutlineViewShell.hxx"
-#include "strings.hrc"
-#include "helpids.h"
-#include "sdabstdlg.hxx"
+#include <sdresid.hxx>
+#include <OutlineView.hxx>
+#include <OutlineViewShell.hxx>
+#include <helpids.h>
+#include <sdabstdlg.hxx>
 #include <memory>
 
 using namespace com::sun::star::uno;
@@ -103,24 +104,24 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
     SfxStyleSheetBase* pStyleSheet = nullptr;
 
     const SfxPoolItem* pItem;
-    sal_uInt16 nFamily = USHRT_MAX;
+    SfxStyleFamily nFamily = SfxStyleFamily(USHRT_MAX);
     if( pArgs && SfxItemState::SET == pArgs->GetItemState( SID_STYLE_FAMILY,
         false, &pItem ))
     {
-        nFamily = static_cast<const SfxUInt16Item &>( pArgs->Get( SID_STYLE_FAMILY ) ).GetValue();
+        nFamily = static_cast<SfxStyleFamily>( pArgs->Get( SID_STYLE_FAMILY ).GetValue());
     }
     else if( pArgs && SfxItemState::SET == pArgs->GetItemState( SID_STYLE_FAMILYNAME,
         false, &pItem ))
     {
-        OUString sFamily = static_cast<const SfxStringItem &>( pArgs->Get( SID_STYLE_FAMILYNAME ) ).GetValue();
+        OUString sFamily = pArgs->Get( SID_STYLE_FAMILYNAME ).GetValue();
         if (sFamily == "graphics")
-            nFamily = SD_STYLE_FAMILY_GRAPHICS;
+            nFamily = SfxStyleFamily::Para;
         else
-            nFamily = SD_STYLE_FAMILY_PSEUDO;
+            nFamily = SfxStyleFamily::Pseudo;
     }
 
     OUString aStyleName;
-    sal_uInt16 nRetMask = SFXSTYLEBIT_ALL;
+    sal_uInt16 nRetMask = static_cast<sal_uInt16>(SfxStyleSearchBits::All);
 
     switch( nSId )
     {
@@ -162,22 +163,22 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
     {
         case SID_STYLE_NEW:
         {
-            SfxStyleSheetBase *p = pSSPool->Find(aStyleName, (SfxStyleFamily) nFamily );
+            SfxStyleSheetBase *p = pSSPool->Find(aStyleName, nFamily );
             if(p)
             {
                 pSSPool->Remove(p);
                 p = nullptr;
             }
-            pStyleSheet = &pSSPool->Make( aStyleName, (SfxStyleFamily) nFamily, SFXSTYLEBIT_USERDEF );
+            pStyleSheet = &pSSPool->Make( aStyleName, nFamily, SfxStyleSearchBits::UserDefined );
 
             if (pArgs && pArgs->GetItemState(SID_STYLE_REFERENCE) == SfxItemState::SET)
             {
-                OUString aParentName(static_cast<const SfxStringItem&>( pArgs->Get(SID_STYLE_REFERENCE)).GetValue());
+                OUString aParentName( pArgs->Get(SID_STYLE_REFERENCE).GetValue());
                 pStyleSheet->SetParent(aParentName);
             }
             else
             {
-                pStyleSheet->SetParent(SD_RESSTR(STR_STANDARD_STYLESHEET_NAME));
+                pStyleSheet->SetParent(SdResId(STR_STANDARD_STYLESHEET_NAME));
             }
         }
         break;
@@ -185,23 +186,23 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
         case SID_STYLE_NEW_BY_EXAMPLE:
         {
             // at the moment, the dialog to enter the name of the template is still opened
-            SfxStyleSheetBase *p = pSSPool->Find(aStyleName, (SfxStyleFamily) nFamily );
+            SfxStyleSheetBase *p = pSSPool->Find(aStyleName, nFamily );
             if(p)
             {
                 pSSPool->Remove(p);
                 p = nullptr;
             }
-            pStyleSheet = &pSSPool->Make( aStyleName, (SfxStyleFamily) nFamily, SFXSTYLEBIT_USERDEF );
-            pStyleSheet->SetParent(SD_RESSTR(STR_STANDARD_STYLESHEET_NAME));
+            pStyleSheet = &pSSPool->Make( aStyleName, nFamily, SfxStyleSearchBits::UserDefined );
+            pStyleSheet->SetParent(SdResId(STR_STANDARD_STYLESHEET_NAME));
         }
         break;
 
         case SID_STYLE_EDIT:
-            pStyleSheet = pSSPool->Find( aStyleName, (SfxStyleFamily) nFamily);
+            pStyleSheet = pSSPool->Find( aStyleName, nFamily);
         break;
 
         case SID_STYLE_DELETE:
-            pStyleSheet = pSSPool->Find( aStyleName, (SfxStyleFamily) nFamily);
+            pStyleSheet = pSSPool->Find( aStyleName, nFamily);
             if( pStyleSheet )
             {
                 pSSPool->Remove( pStyleSheet );
@@ -216,17 +217,17 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
 
         case SID_STYLE_HIDE:
         case SID_STYLE_SHOW:
-            pStyleSheet = pSSPool->Find( aStyleName, (SfxStyleFamily) nFamily);
+            pStyleSheet = pSSPool->Find( aStyleName, nFamily);
             pStyleSheet->SetHidden( nSId == SID_STYLE_HIDE );
             nRetMask = sal_uInt16(true);
         break;
 
         case SID_STYLE_APPLY:
             // apply the template to the document
-            pStyleSheet = pSSPool->Find( aStyleName, (SfxStyleFamily) nFamily);
+            pStyleSheet = pSSPool->Find( aStyleName, nFamily);
 
             // do not set presentation styles, they will be set implicit
-            if ( pStyleSheet && pStyleSheet->GetFamily() != SD_STYLE_FAMILY_PSEUDO )
+            if ( pStyleSheet && pStyleSheet->GetFamily() != SfxStyleFamily::Pseudo )
             {
                 SfxStyleSheet* pOldStyleSheet = mpView->GetStyleSheet();
                 OUString aStr;
@@ -238,10 +239,10 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
                     pStyleSheet->GetFamily() == pOldStyleSheet->GetFamily() ||
 
                     // allow if old was background objects and new is graphics
-                    (pStyleSheet->GetFamily() == SD_STYLE_FAMILY_GRAPHICS && pOldStyleSheet->GetHelpId( aStr ) == HID_PSEUDOSHEET_BACKGROUNDOBJECTS) ||
+                    (pStyleSheet->GetFamily() == SfxStyleFamily::Para && pOldStyleSheet->GetHelpId( aStr ) == HID_PSEUDOSHEET_BACKGROUNDOBJECTS) ||
 
                     // allow if old was presentation and we are a drawing document
-                    (pOldStyleSheet->GetFamily() == SD_STYLE_FAMILY_MASTERPAGE && mpDoc->GetDocumentType() == DOCUMENT_TYPE_DRAW) )
+                    (pOldStyleSheet->GetFamily() == SfxStyleFamily::Page && mpDoc->GetDocumentType() == DocumentType::Draw) )
                 {
                     mpView->SetStyleSheet( static_cast<SfxStyleSheet*>(pStyleSheet));
                     mpDoc->SetChanged();
@@ -258,10 +259,10 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
                 {
                     aStyleName = static_cast<const SfxStringItem &>( pArgs->Get( nSId ) ).GetValue();
                     SD_MOD()->SetWaterCan( true );
-                    pStyleSheet = pSSPool->Find( aStyleName, (SfxStyleFamily) nFamily);
+                    pStyleSheet = pSSPool->Find( aStyleName, nFamily);
                 }
                 // no presentation object templates, they are only allowed implicitly
-                if( pStyleSheet && pStyleSheet->GetFamily() != SD_STYLE_FAMILY_PSEUDO )
+                if( pStyleSheet && pStyleSheet->GetFamily() != SfxStyleFamily::Pseudo )
                 {
                     static_cast<SdStyleSheetPool*>( pSSPool )->SetActualStyleSheet( pStyleSheet );
 
@@ -295,59 +296,52 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
 
             if( pStyleSheet )
             {
-                std::unique_ptr<SfxAbstractTabDialog> pStdDlg;
-                std::unique_ptr<SfxAbstractTabDialog> pPresDlg;
+                ScopedVclPtr<SfxAbstractTabDialog> pStdDlg;
+                ScopedVclPtr<SfxAbstractTabDialog> pPresDlg;
                 SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
                 bool bOldDocInOtherLanguage = false;
-                SfxItemSet aOriSet( pStyleSheet->GetItemSet() );
 
                 SfxStyleFamily eFamily = pStyleSheet->GetFamily();
 
-                if (eFamily == SD_STYLE_FAMILY_GRAPHICS)
+                if (eFamily == SfxStyleFamily::Para)
                 {
-                    pStdDlg.reset(pFact ? pFact->CreateSdTabTemplateDlg( mpDoc->GetDocSh(), *pStyleSheet, mpDoc, mpView ) : nullptr);
+                    pStdDlg.disposeAndReset(pFact ? pFact->CreateSdTabTemplateDlg(mpViewShell->GetFrameWeld(), mpDoc->GetDocSh(), *pStyleSheet, mpDoc, mpView) : nullptr);
                 }
-                else if (eFamily == SD_STYLE_FAMILY_PSEUDO)
+                else if (eFamily == SfxStyleFamily::Pseudo)
                 {
                     OUString aName(pStyleSheet->GetName());
-                    sal_uInt16 nDlgId = 0;
+                    bool bBackground = false;
 
-                    if (aName == SD_RESSTR(STR_PSEUDOSHEET_TITLE))
+                    if (aName == SdResId(STR_PSEUDOSHEET_TITLE))
                     {
-                        nDlgId = TAB_PRES_LAYOUT_TEMPLATE;
                         ePO    = PO_TITLE;
                     }
-                    else if (aName == SD_RESSTR(STR_PSEUDOSHEET_SUBTITLE))
+                    else if (aName == SdResId(STR_PSEUDOSHEET_SUBTITLE))
                     {
-                        nDlgId = TAB_PRES_LAYOUT_TEMPLATE;
                         ePO    = PO_SUBTITLE;
                     }
                     else if (aName ==
-                             SD_RESSTR(STR_PSEUDOSHEET_BACKGROUND))
+                             SdResId(STR_PSEUDOSHEET_BACKGROUND))
                     {
-                        nDlgId = TAB_PRES_LAYOUT_TEMPLATE_BACKGROUND;
+                        bBackground = true;
                         ePO    = PO_BACKGROUND;
                     }
                     else if (aName ==
-                             SD_RESSTR(STR_PSEUDOSHEET_BACKGROUNDOBJECTS))
+                             SdResId(STR_PSEUDOSHEET_BACKGROUNDOBJECTS))
                     {
-                        nDlgId = TAB_PRES_LAYOUT_TEMPLATE;
                         ePO    = PO_BACKGROUNDOBJECTS;
                     }
                     else if (aName ==
-                             SD_RESSTR(STR_PSEUDOSHEET_NOTES))
+                             SdResId(STR_PSEUDOSHEET_NOTES))
                     {
-                        nDlgId = TAB_PRES_LAYOUT_TEMPLATE;
                         ePO    = PO_NOTES;
                     }
-                    else if(aName.indexOf(SD_RESSTR(STR_PSEUDOSHEET_OUTLINE)) != -1)
+                    else if(aName.indexOf(SdResId(STR_PSEUDOSHEET_OUTLINE)) != -1)
                     {
-                        nDlgId = TAB_PRES_LAYOUT_TEMPLATE;
-
-                        OUString aOutlineStr(SD_RESSTR(STR_PSEUDOSHEET_OUTLINE));
+                        OUString aOutlineStr(SdResId(STR_PSEUDOSHEET_OUTLINE));
                         // determine number, mind the blank between name and number
                         OUString aNumStr(aName.copy(aOutlineStr.getLength() + 1));
-                        sal_uInt16 nLevel = (sal_uInt16)aNumStr.toInt32();
+                        sal_uInt16 nLevel = static_cast<sal_uInt16>(aNumStr.toInt32());
                         switch (nLevel)
                         {
                             case 1: ePO = PO_OUTLINE_1; break;
@@ -369,11 +363,8 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
 
                     if( !bOldDocInOtherLanguage )
                     {
-                        pPresDlg.reset(pFact ? pFact->CreateSdPresLayoutTemplateDlg( mpDocSh, nullptr, SdResId(nDlgId), *pStyleSheet, ePO, pSSPool ) : nullptr);
+                        pPresDlg.disposeAndReset(pFact ? pFact->CreateSdPresLayoutTemplateDlg(mpDocSh,  mpViewShell->GetFrameWeld(), bBackground, *pStyleSheet, ePO, pSSPool ) : nullptr);
                     }
-                }
-                else if (eFamily == SD_STYLE_FAMILY_CELL)
-                {
                 }
 
                 sal_uInt16 nResult = RET_CANCEL;
@@ -393,11 +384,20 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
                 {
                     case RET_OK:
                     {
-                        nRetMask = pStyleSheet->GetMask();
+                        nRetMask = static_cast<sal_uInt16>(pStyleSheet->GetMask());
 
-                        if (eFamily == SD_STYLE_FAMILY_PSEUDO)
+                        if (eFamily == SfxStyleFamily::Pseudo)
                         {
                             SfxItemSet aTempSet(*pOutSet);
+                            /* Extract SvxBrushItem out of set and insert SvxBackgroundColorItem */
+                            const SvxBrushItem* pBrushItem = aTempSet.GetItem<SvxBrushItem>( SID_ATTR_BRUSH_CHAR );
+
+                            if ( pBrushItem )
+                            {
+                                SvxBackgroundColorItem aBackColorItem(pBrushItem->GetColor(), EE_CHAR_BKGCOLOR);
+                                aTempSet.ClearItem( EE_CHAR_BKGCOLOR );
+                                aTempSet.Put( aBackColorItem );
+                            }
                             static_cast<SdStyleSheet*>(pStyleSheet)->AdjustToFontHeight(aTempSet);
 
                             /* Special treatment: reset the INVALIDS to
@@ -411,16 +411,16 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
                             {
                                 if (aTempSet.GetItemState(EE_PARA_NUMBULLET) == SfxItemState::SET)
                                 {
-                                    SvxNumRule aRule(*static_cast<const SvxNumBulletItem*>(aTempSet.GetItem(EE_PARA_NUMBULLET))->GetNumRule());
+                                    SvxNumRule aRule(*aTempSet.GetItem<SvxNumBulletItem>(EE_PARA_NUMBULLET)->GetNumRule());
 
-                                    OUString sStyleName(SD_RESSTR(STR_PSEUDOSHEET_OUTLINE) + " 1");
-                                    SfxStyleSheetBase* pFirstStyleSheet = pSSPool->Find( sStyleName, SD_STYLE_FAMILY_PSEUDO);
+                                    OUString sStyleName(SdResId(STR_PSEUDOSHEET_OUTLINE) + " 1");
+                                    SfxStyleSheetBase* pFirstStyleSheet = pSSPool->Find( sStyleName, SfxStyleFamily::Pseudo);
 
                                     if(pFirstStyleSheet)
                                     {
                                         pFirstStyleSheet->GetItemSet().Put( SvxNumBulletItem( aRule, EE_PARA_NUMBULLET ));
                                         SdStyleSheet* pRealSheet = static_cast<SdStyleSheet*>(pFirstStyleSheet)->GetRealStyleSheet();
-                                        pRealSheet->Broadcast(SfxSimpleHint(SFX_HINT_DATACHANGED));
+                                        pRealSheet->Broadcast(SfxHint(SfxHintId::DataChanged));
                                     }
 
                                     aTempSet.ClearItem( EE_PARA_NUMBULLET );
@@ -439,92 +439,85 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
                         if( rAttr.GetItemState( XATTR_FILLBITMAP ) == SfxItemState::SET )
                         {
                             const SfxPoolItem* pOldItem = rAttr.GetItem( XATTR_FILLBITMAP );
-                            SfxPoolItem* pNewItem = static_cast<const XFillBitmapItem*>(pOldItem)->checkForUniqueItem( mpDoc );
+                            std::unique_ptr<SfxPoolItem> pNewItem = static_cast<const XFillBitmapItem*>(pOldItem)->checkForUniqueItem( mpDoc );
                             if( pNewItem )
                             {
                                 rAttr.Put( *pNewItem );
-                                delete pNewItem;
                             }
                         }
                         if( rAttr.GetItemState( XATTR_LINEDASH ) == SfxItemState::SET )
                         {
                             const SfxPoolItem* pOldItem = rAttr.GetItem( XATTR_LINEDASH );
-                            SfxPoolItem* pNewItem = static_cast<const XLineDashItem*>(pOldItem)->checkForUniqueItem( mpDoc );
+                            std::unique_ptr<SfxPoolItem> pNewItem = static_cast<const XLineDashItem*>(pOldItem)->checkForUniqueItem( mpDoc );
                             if( pNewItem )
                             {
                                 rAttr.Put( *pNewItem );
-                                delete pNewItem;
                             }
                         }
                         if( rAttr.GetItemState( XATTR_LINESTART ) == SfxItemState::SET )
                         {
                             const SfxPoolItem* pOldItem = rAttr.GetItem( XATTR_LINESTART );
-                            SfxPoolItem* pNewItem = static_cast<const XLineStartItem*>(pOldItem)->checkForUniqueItem( mpDoc );
+                            std::unique_ptr<SfxPoolItem> pNewItem = static_cast<const XLineStartItem*>(pOldItem)->checkForUniqueItem( mpDoc );
                             if( pNewItem )
                             {
                                 rAttr.Put( *pNewItem );
-                                delete pNewItem;
                             }
                         }
                         if( rAttr.GetItemState( XATTR_LINEEND ) == SfxItemState::SET )
                         {
                             const SfxPoolItem* pOldItem = rAttr.GetItem( XATTR_LINEEND );
-                            SfxPoolItem* pNewItem = static_cast<const XLineEndItem*>(pOldItem)->checkForUniqueItem( mpDoc );
+                            std::unique_ptr<SfxPoolItem> pNewItem = static_cast<const XLineEndItem*>(pOldItem)->checkForUniqueItem( mpDoc );
                             if( pNewItem )
                             {
                                 rAttr.Put( *pNewItem );
-                                delete pNewItem;
                             }
                         }
                         if( rAttr.GetItemState( XATTR_FILLGRADIENT ) == SfxItemState::SET )
                         {
                             const SfxPoolItem* pOldItem = rAttr.GetItem( XATTR_FILLGRADIENT );
-                            SfxPoolItem* pNewItem = static_cast<const XFillGradientItem*>(pOldItem)->checkForUniqueItem( mpDoc );
+                            std::unique_ptr<SfxPoolItem> pNewItem = static_cast<const XFillGradientItem*>(pOldItem)->checkForUniqueItem( mpDoc );
                             if( pNewItem )
                             {
                                 rAttr.Put( *pNewItem );
-                                delete pNewItem;
                             }
                         }
                         if( rAttr.GetItemState( XATTR_FILLFLOATTRANSPARENCE ) == SfxItemState::SET )
                         {
                             const SfxPoolItem* pOldItem = rAttr.GetItem( XATTR_FILLFLOATTRANSPARENCE );
-                            SfxPoolItem* pNewItem = static_cast<const XFillFloatTransparenceItem*>(pOldItem)->checkForUniqueItem( mpDoc );
+                            std::unique_ptr<SfxPoolItem> pNewItem = static_cast<const XFillFloatTransparenceItem*>(pOldItem)->checkForUniqueItem( mpDoc );
                             if( pNewItem )
                             {
                                 rAttr.Put( *pNewItem );
-                                delete pNewItem;
                             }
                         }
                         if( rAttr.GetItemState( XATTR_FILLHATCH ) == SfxItemState::SET )
                         {
                             const SfxPoolItem* pOldItem = rAttr.GetItem( XATTR_FILLHATCH );
-                            SfxPoolItem* pNewItem = static_cast<const XFillHatchItem*>(pOldItem)->checkForUniqueItem( mpDoc );
+                            std::unique_ptr<SfxPoolItem> pNewItem = static_cast<const XFillHatchItem*>(pOldItem)->checkForUniqueItem( mpDoc );
                             if( pNewItem )
                             {
                                 rAttr.Put( *pNewItem );
-                                delete pNewItem;
                             }
                         }
 
-                        static_cast<SfxStyleSheet*>( pStyleSheet )->Broadcast( SfxSimpleHint( SFX_HINT_DATACHANGED ) );
+                        static_cast<SfxStyleSheet*>( pStyleSheet )->Broadcast( SfxHint( SfxHintId::DataChanged ) );
 
                         DrawViewShell* pDrawViewShell = dynamic_cast< DrawViewShell* >( mpViewShell );
                         if( pDrawViewShell )
                         {
                             PageKind ePageKind = pDrawViewShell->GetPageKind();
-                            if( ePageKind == PK_NOTES || ePageKind == PK_HANDOUT )
+                            if( ePageKind == PageKind::Notes || ePageKind == PageKind::Handout )
                             {
                                 SdPage* pPage = mpViewShell->GetActualPage();
 
-                                if(pDrawViewShell->GetEditMode() == EM_MASTERPAGE)
+                                if(pDrawViewShell->GetEditMode() == EditMode::MasterPage)
                                 {
                                     pPage = static_cast<SdPage*>((&(pPage->TRG_GetMasterPage())));
                                 }
 
                                 if( pPage )
                                 {
-                                    SdrObjListIter aIter( *pPage );
+                                    SdrObjListIter aIter( pPage );
                                     while( aIter.IsMore() )
                                     {
                                         SdrObject* pObj = aIter.Next();
@@ -570,7 +563,7 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
         {
             if( pStyleSheet )
             {
-                nRetMask = pStyleSheet->GetMask();
+                nRetMask = static_cast<sal_uInt16>(pStyleSheet->GetMask());
                 SfxItemSet aCoreSet( mpDoc->GetPool() );
                 mpView->GetAttributes( aCoreSet, true );
 
@@ -596,7 +589,7 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
                         mpView->SetStyleSheet( static_cast<SfxStyleSheet*>(pStyleSheet));
                     }
 
-                    static_cast<SfxStyleSheet*>( pStyleSheet )->Broadcast( SfxSimpleHint( SFX_HINT_DATACHANGED ) );
+                    static_cast<SfxStyleSheet*>( pStyleSheet )->Broadcast( SfxHint( SfxHintId::DataChanged ) );
                     mpDoc->SetChanged();
 
                     mpViewShell->GetViewFrame()->GetBindings().Invalidate( SID_STYLE_FAMILY2 );
@@ -614,7 +607,7 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
 
                 if( pStyleSheet )
                 {
-                    nRetMask = pStyleSheet->GetMask();
+                    nRetMask = static_cast<sal_uInt16>(pStyleSheet->GetMask());
                     SfxItemSet aCoreSet( mpDoc->GetPool() );
                     mpView->GetAttributes( aCoreSet );
 
@@ -623,7 +616,7 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
 
                     mpView->SetStyleSheet( static_cast<SfxStyleSheet*>(pStyleSheet));
 
-                    static_cast<SfxStyleSheet*>( pStyleSheet )->Broadcast( SfxSimpleHint( SFX_HINT_DATACHANGED ) );
+                    static_cast<SfxStyleSheet*>( pStyleSheet )->Broadcast( SfxHint( SfxHintId::DataChanged ) );
                     mpDoc->SetChanged();
                     mpViewShell->GetViewFrame()->GetBindings().Invalidate( SID_STYLE_FAMILY2 );
                 }
@@ -632,7 +625,7 @@ void FuTemplate::DoExecute( SfxRequest& rReq )
         break;
 
     }
-    if( nRetMask != SFXSTYLEBIT_ALL )
+    if( nRetMask != static_cast<sal_uInt16>(SfxStyleSearchBits::All) )
         rReq.SetReturnValue( SfxUInt16Item( nSId, nRetMask ) );
 }
 

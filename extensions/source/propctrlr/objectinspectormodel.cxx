@@ -25,9 +25,6 @@
 #include <com/sun/star/ucb/AlreadyInitializedException.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 
-#include <comphelper/broadcasthelper.hxx>
-#include <comphelper/uno3.hxx>
-
 
 namespace pcr
 {
@@ -46,7 +43,6 @@ namespace pcr
     using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::lang::IllegalArgumentException;
     using ::com::sun::star::ucb::AlreadyInitializedException;
-    using ::com::sun::star::beans::XPropertySetInfo;
 
 
     //= ObjectInspectorModel
@@ -60,21 +56,23 @@ namespace pcr
         ObjectInspectorModel();
 
         // XObjectInspectorModel
-        virtual Sequence< Any > SAL_CALL getHandlerFactories() throw (RuntimeException, std::exception) override;
-        virtual Sequence< PropertyCategoryDescriptor > SAL_CALL describeCategories(  ) throw (RuntimeException, std::exception) override;
-        virtual ::sal_Int32 SAL_CALL getPropertyOrderIndex( const OUString& PropertyName ) throw (RuntimeException, std::exception) override;
+        virtual Sequence< Any > SAL_CALL getHandlerFactories() override;
+        virtual Sequence< PropertyCategoryDescriptor > SAL_CALL describeCategories(  ) override;
+        virtual ::sal_Int32 SAL_CALL getPropertyOrderIndex( const OUString& PropertyName ) override;
 
         // XInitialization
-        virtual void SAL_CALL initialize( const Sequence< Any >& aArguments ) throw (Exception, RuntimeException, std::exception) override;
+        virtual void SAL_CALL initialize( const Sequence< Any >& aArguments ) override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName(  ) throw (RuntimeException, std::exception) override;
-        virtual Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) throw (RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getImplementationName(  ) override;
+        virtual Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 
         // XServiceInfo - static versions
-        static OUString getImplementationName_static(  ) throw(RuntimeException);
-        static Sequence< OUString > getSupportedServiceNames_static(  ) throw(RuntimeException);
-        static Reference< XInterface > SAL_CALL
+        /// @throws RuntimeException
+        static OUString getImplementationName_static(  );
+        /// @throws RuntimeException
+        static Sequence< OUString > getSupportedServiceNames_static(  );
+        static Reference< XInterface >
                         Create(const Reference< XComponentContext >&);
 
     protected:
@@ -97,27 +95,27 @@ namespace pcr
     }
 
 
-    Sequence< Any > SAL_CALL ObjectInspectorModel::getHandlerFactories() throw (RuntimeException, std::exception)
+    Sequence< Any > SAL_CALL ObjectInspectorModel::getHandlerFactories()
     {
         return m_aFactories;
     }
 
 
-    Sequence< PropertyCategoryDescriptor > SAL_CALL ObjectInspectorModel::describeCategories(  ) throw (RuntimeException, std::exception)
+    Sequence< PropertyCategoryDescriptor > SAL_CALL ObjectInspectorModel::describeCategories(  )
     {
         // no category info provided by this default implementation
         return Sequence< PropertyCategoryDescriptor >( );
     }
 
 
-    ::sal_Int32 SAL_CALL ObjectInspectorModel::getPropertyOrderIndex( const OUString& /*PropertyName*/ ) throw (RuntimeException, std::exception)
+    ::sal_Int32 SAL_CALL ObjectInspectorModel::getPropertyOrderIndex( const OUString& /*PropertyName*/ )
     {
         // no ordering provided by this default implementation
         return 0;
     }
 
 
-    void SAL_CALL ObjectInspectorModel::initialize( const Sequence< Any >& _arguments ) throw (Exception, RuntimeException, std::exception)
+    void SAL_CALL ObjectInspectorModel::initialize( const Sequence< Any >& _arguments )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         if ( m_aFactories.getLength() )
@@ -152,32 +150,32 @@ namespace pcr
     }
 
 
-    OUString SAL_CALL ObjectInspectorModel::getImplementationName(  ) throw (RuntimeException, std::exception)
+    OUString SAL_CALL ObjectInspectorModel::getImplementationName(  )
     {
         return getImplementationName_static();
     }
 
 
-    Sequence< OUString > SAL_CALL ObjectInspectorModel::getSupportedServiceNames(  ) throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL ObjectInspectorModel::getSupportedServiceNames(  )
     {
         return getSupportedServiceNames_static();
     }
 
 
-    OUString ObjectInspectorModel::getImplementationName_static(  ) throw(RuntimeException)
+    OUString ObjectInspectorModel::getImplementationName_static(  )
     {
         return OUString( "org.openoffice.comp.extensions.ObjectInspectorModel" );
     }
 
 
-    Sequence< OUString > ObjectInspectorModel::getSupportedServiceNames_static(  ) throw(RuntimeException)
+    Sequence< OUString > ObjectInspectorModel::getSupportedServiceNames_static(  )
     {
         OUString sService( "com.sun.star.inspection.ObjectInspectorModel" );
         return Sequence< OUString >( &sService, 1 );
     }
 
 
-    Reference< XInterface > SAL_CALL ObjectInspectorModel::Create(const Reference< XComponentContext >& /* _rxContext */ )
+    Reference< XInterface > ObjectInspectorModel::Create(const Reference< XComponentContext >& /* _rxContext */ )
     {
         return *( new ObjectInspectorModel() );
     }
@@ -219,7 +217,7 @@ namespace pcr
 } // namespace pcr
 
 
-extern "C" void SAL_CALL createRegistryInfo_ObjectInspectorModel()
+extern "C" void createRegistryInfo_ObjectInspectorModel()
 {
     ::pcr::OAutoRegistration< ::pcr::ObjectInspectorModel > aObjectInspectorModelRegistration;
 }

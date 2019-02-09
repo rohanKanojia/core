@@ -31,7 +31,7 @@ private:
 public:
     UnoTunnelIdInit() : m_aSeq(16)
     {
-        rtl_createUuid( reinterpret_cast<sal_uInt8*>(m_aSeq.getArray()), nullptr, sal_True );
+        rtl_createUuid( reinterpret_cast<sal_uInt8*>(m_aSeq.getArray()), nullptr, true );
     }
     const css::uno::Sequence< sal_Int8 >& getSeq() const { return m_aSeq; }
 };
@@ -53,7 +53,7 @@ public:
 #define UNO3_GETIMPLEMENTATION_DECL( classname ) \
     static const css::uno::Sequence< sal_Int8 > & getUnoTunnelId() throw(); \
     static classname* getImplementation( const css::uno::Reference< css::uno::XInterface >& xInt ); \
-    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
 
 #define UNO3_GETIMPLEMENTATION_BASE_IMPL( classname ) \
 namespace \
@@ -76,10 +76,10 @@ classname* classname::getImplementation( const uno::Reference< uno::XInterface >
 
 #define UNO3_GETIMPLEMENTATION_IMPL( classname )\
 UNO3_GETIMPLEMENTATION_BASE_IMPL(classname)\
-sal_Int64 SAL_CALL classname::getSomething( const css::uno::Sequence< sal_Int8 >& rId ) throw(css::uno::RuntimeException, std::exception) \
+sal_Int64 SAL_CALL classname::getSomething( const css::uno::Sequence< sal_Int8 >& rId ) \
 { \
-    if( rId.getLength() == 16 && 0 == memcmp( getUnoTunnelId().getConstArray(), \
-                                                         rId.getConstArray(), 16 ) ) \
+    if( rId.getLength() == 16 && memcmp( getUnoTunnelId().getConstArray(), \
+                                                         rId.getConstArray(), 16 ) == 0 ) \
     { \
         return sal::static_int_cast<sal_Int64>(reinterpret_cast<sal_IntPtr>(this)); \
     } \
@@ -88,10 +88,10 @@ sal_Int64 SAL_CALL classname::getSomething( const css::uno::Sequence< sal_Int8 >
 
 #define UNO3_GETIMPLEMENTATION2_IMPL( classname, baseclass )\
 UNO3_GETIMPLEMENTATION_BASE_IMPL(classname)\
-sal_Int64 SAL_CALL classname::getSomething( const css::uno::Sequence< sal_Int8 >& rId ) throw(css::uno::RuntimeException, std::exception) \
+sal_Int64 SAL_CALL classname::getSomething( const css::uno::Sequence< sal_Int8 >& rId ) \
 { \
-    if( rId.getLength() == 16 && 0 == memcmp( getUnoTunnelId().getConstArray(), \
-                                                         rId.getConstArray(), 16 ) ) \
+    if( rId.getLength() == 16 && memcmp( getUnoTunnelId().getConstArray(), \
+                                                         rId.getConstArray(), 16 ) == 0 ) \
     { \
         return sal::static_int_cast<sal_Int64>(reinterpret_cast<sal_IntPtr>(this)); \
     } \

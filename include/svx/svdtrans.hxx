@@ -25,6 +25,7 @@
 #include <svx/svxdllapi.h>
 #include <tools/fract.hxx>
 #include <tools/gen.hxx>
+#include <tools/helpers.hxx>
 #include <tools/poly.hxx>
 #include <vcl/field.hxx>
 #include <vcl/mapmod.hxx>
@@ -49,18 +50,12 @@ const double nPi180=0.000174532925199432957692222; // If we have too few digits,
 
 class XPolygon;
 class XPolyPolygon;
-namespace svx
-{
-    inline long Round(double a) { return a>0.0 ? (long)(a+0.5) : -(long)((-a)+0.5); }
-}
 
-inline void MoveRect(Rectangle& rRect, const Size& S)    { rRect.Move(S.Width(),S.Height()); }
-inline void MovePoint(Point& rPnt, const Size& S)        { rPnt.X()+=S.Width(); rPnt.Y()+=S.Height(); }
 inline void MovePoly(tools::Polygon& rPoly, const Size& S)      { rPoly.Move(S.Width(),S.Height()); }
 void MoveXPoly(XPolygon& rPoly, const Size& S);
 
-SVX_DLLPUBLIC void ResizeRect(Rectangle& rRect, const Point& rRef, const Fraction& xFact, const Fraction& yFact);
-inline void ResizePoint(Point& rPnt, const Point& rRef, Fraction xFact, Fraction yFact);
+SVX_DLLPUBLIC void ResizeRect(tools::Rectangle& rRect, const Point& rRef, const Fraction& xFact, const Fraction& yFact);
+inline void ResizePoint(Point& rPnt, const Point& rRef, const Fraction& xFract, const Fraction& yFract);
 void ResizePoly(tools::Polygon& rPoly, const Point& rRef, const Fraction& xFact, const Fraction& yFact);
 void ResizeXPoly(XPolygon& rPoly, const Point& rRef, const Fraction& xFact, const Fraction& yFact);
 
@@ -97,51 +92,45 @@ double CrookSlantXPoint(Point& rPnt, Point* pC1, Point* pC2, const Point& rCente
                         const Point& rRad, double& rSin, double& rCos, bool bVert);
 double CrookStretchXPoint(Point& rPnt, Point* pC1, Point* pC2, const Point& rCenter,
                           const Point& rRad, double& rSin, double& rCos, bool bVert,
-                          const Rectangle& rRefRect);
+                          const tools::Rectangle& rRefRect);
 
 void CrookRotatePoly(XPolygon& rPoly, const Point& rCenter, const Point& rRad, bool bVert);
 void CrookSlantPoly(XPolygon& rPoly, const Point& rCenter, const Point& rRad, bool bVert);
-void CrookStretchPoly(XPolygon& rPoly, const Point& rCenter, const Point& rRad, bool bVert, const Rectangle& rRefRect);
+void CrookStretchPoly(XPolygon& rPoly, const Point& rCenter, const Point& rRad, bool bVert, const tools::Rectangle& rRefRect);
 
 void CrookRotatePoly(XPolyPolygon& rPoly, const Point& rCenter, const Point& rRad, bool bVert);
 void CrookSlantPoly(XPolyPolygon& rPoly, const Point& rCenter, const Point& rRad, bool bVert);
-void CrookStretchPoly(XPolyPolygon& rPoly, const Point& rCenter, const Point& rRad, bool bVert, const Rectangle& rRefRect);
+void CrookStretchPoly(XPolyPolygon& rPoly, const Point& rCenter, const Point& rRad, bool bVert, const tools::Rectangle& rRefRect);
 
 /**************************************************************************************************/
 /*  Inline                                                                                        */
 /**************************************************************************************************/
 
-inline void ResizePoint(Point& rPnt, const Point& rRef, Fraction xFact, Fraction yFact)
+inline void ResizePoint(Point& rPnt, const Point& rRef, const Fraction& xFract, const Fraction& yFract)
 {
-    if (!xFact.IsValid()) {
-        SAL_WARN( "svx.svdraw", "invalid fraction xFact, using Fraction(1,1)" );
-        xFact = Fraction(1,1);
-    }
-    if (!yFact.IsValid()) {
-        SAL_WARN( "svx.svdraw", "invalid fraction yFact, using Fraction(1,1)" );
-        yFact = Fraction(1,1);
-    }
-    rPnt.X() = rRef.X() + svx::Round( (rPnt.X() - rRef.X()) * double(xFact) );
-    rPnt.Y() = rRef.Y() + svx::Round( (rPnt.Y() - rRef.Y()) * double(yFact) );
+    double nxFract = xFract.IsValid() ? static_cast<double>(xFract) : 1.0;
+    double nyFract = yFract.IsValid() ? static_cast<double>(yFract) : 1.0;
+    rPnt.setX(rRef.X() + FRound( (rPnt.X() - rRef.X()) * nxFract ));
+    rPnt.setY(rRef.Y() + FRound( (rPnt.Y() - rRef.Y()) * nyFract ));
 }
 
 inline void RotatePoint(Point& rPnt, const Point& rRef, double sn, double cs)
 {
     long dx=rPnt.X()-rRef.X();
     long dy=rPnt.Y()-rRef.Y();
-    rPnt.X()=svx::Round(rRef.X()+dx*cs+dy*sn);
-    rPnt.Y()=svx::Round(rRef.Y()+dy*cs-dx*sn);
+    rPnt.setX(FRound(rRef.X()+dx*cs+dy*sn));
+    rPnt.setY(FRound(rRef.Y()+dy*cs-dx*sn));
 }
 
 inline void ShearPoint(Point& rPnt, const Point& rRef, double tn, bool bVShear)
 {
     if (!bVShear) { // Horizontal
         if (rPnt.Y()!=rRef.Y()) { // else not needed
-            rPnt.X()-=svx::Round((rPnt.Y()-rRef.Y())*tn);
+            rPnt.AdjustX(-FRound((rPnt.Y()-rRef.Y())*tn));
         }
     } else { // or else vertical
         if (rPnt.X()!=rRef.X()) { // else not needed
-            rPnt.Y()-=svx::Round((rPnt.X()-rRef.X())*tn);
+            rPnt.AdjustY(-FRound((rPnt.X()-rRef.X())*tn));
         }
     }
 }
@@ -151,12 +140,12 @@ inline double GetCrookAngle(Point& rPnt, const Point& rCenter, const Point& rRad
     double nAngle;
     if (bVertical) {
         long dy=rPnt.Y()-rCenter.Y();
-        nAngle=(double)dy/(double)rRad.Y();
-        rPnt.Y()=rCenter.Y();
+        nAngle=static_cast<double>(dy)/static_cast<double>(rRad.Y());
+        rPnt.setY(rCenter.Y());
     } else {
         long dx=rCenter.X()-rPnt.X();
-        nAngle=(double)dx/(double)rRad.X();
-        rPnt.X()=rCenter.X();
+        nAngle=static_cast<double>(dx)/static_cast<double>(rRad.X());
+        rPnt.setX(rCenter.X());
     }
     return nAngle;
 }
@@ -175,9 +164,9 @@ inline double GetCrookAngle(Point& rPnt, const Point& rCenter, const Point& rRad
  */
 SVX_DLLPUBLIC long GetAngle(const Point& rPnt);
 
-long NormAngle180(long a); /// Normalize angle to -180.00..179.99
+long NormAngle18000(long a); /// Normalize angle to -180.00..179.99
 
-SVX_DLLPUBLIC long NormAngle360(long a); /// Normalize angle to 0.00..359.99
+SVX_DLLPUBLIC long NormAngle36000(long a); /// Normalize angle to 0.00..359.99
 
 sal_uInt16 GetAngleSector(long nAngle); /// Determine sector within the cartesian coordinate system
 
@@ -238,8 +227,8 @@ public:
     void RecalcTan();
 };
 
-tools::Polygon Rect2Poly(const Rectangle& rRect, const GeoStat& rGeo);
-void Poly2Rect(const tools::Polygon& rPol, Rectangle& rRect, GeoStat& rGeo);
+tools::Polygon Rect2Poly(const tools::Rectangle& rRect, const GeoStat& rGeo);
+void Poly2Rect(const tools::Polygon& rPol, tools::Rectangle& rRect, GeoStat& rGeo);
 
 SVX_DLLPUBLIC void OrthoDistance8(const Point& rPt0, Point& rPt, bool bBigOrtho);
 SVX_DLLPUBLIC void OrthoDistance4(const Point& rPt0, Point& rPt, bool bBigOrtho);
@@ -252,7 +241,6 @@ class FrPair {
     Fraction aX;
     Fraction aY;
 public:
-    FrPair()                                          : aX(0,1),aY(0,1)             {}
     FrPair(const Fraction& rBoth)                     : aX(rBoth),aY(rBoth)         {}
     FrPair(const Fraction& rX, const Fraction& rY)    : aX(rX),aY(rY)               {}
     FrPair(long nMul, long nDiv)                      : aX(nMul,nDiv),aY(nMul,nDiv) {}
@@ -268,54 +256,44 @@ SVX_DLLPUBLIC FrPair GetMapFactor(MapUnit eS, MapUnit eD);
 FrPair GetMapFactor(FieldUnit eS, FieldUnit eD);
 
 inline bool IsMetric(MapUnit eU) {
-    return (eU==MAP_100TH_MM || eU==MAP_10TH_MM || eU==MAP_MM || eU==MAP_CM);
+    return (eU==MapUnit::Map100thMM || eU==MapUnit::Map10thMM || eU==MapUnit::MapMM || eU==MapUnit::MapCM);
 }
 
 inline bool IsInch(MapUnit eU) {
-    return (eU==MAP_1000TH_INCH || eU==MAP_100TH_INCH || eU==MAP_10TH_INCH || eU==MAP_INCH ||
-            eU==MAP_POINT       || eU==MAP_TWIP);
+    return (eU==MapUnit::Map1000thInch || eU==MapUnit::Map100thInch || eU==MapUnit::Map10thInch || eU==MapUnit::MapInch ||
+            eU==MapUnit::MapPoint       || eU==MapUnit::MapTwip);
 }
 
 inline bool IsMetric(FieldUnit eU) {
-    return (eU==FUNIT_MM || eU==FUNIT_CM || eU==FUNIT_M || eU==FUNIT_KM || eU==FUNIT_100TH_MM);
+    return (eU == FieldUnit::MM || eU == FieldUnit::CM || eU == FieldUnit::M
+            || eU == FieldUnit::KM || eU == FieldUnit::MM_100TH);
 }
 
 inline bool IsInch(FieldUnit eU) {
-    return (eU==FUNIT_TWIP || eU==FUNIT_POINT || eU==FUNIT_PICA ||
-            eU==FUNIT_INCH || eU==FUNIT_FOOT || eU==FUNIT_MILE);
+    return (eU == FieldUnit::TWIP || eU == FieldUnit::POINT
+            || eU == FieldUnit::PICA || eU == FieldUnit::INCH
+            || eU == FieldUnit::FOOT || eU == FieldUnit::MILE);
 }
 
 class SVX_DLLPUBLIC SdrFormatter {
     long      nMul_;
     long      nDiv_;
-    short     nKomma_;
-    bool      bSrcFU;
-    bool      bDstFU;
+    short     nComma_;
     bool      bDirty;
-    MapUnit   eSrcMU;
-    MapUnit   eDstMU;
-    FieldUnit eSrcFU;
-    FieldUnit eDstFU;
+    MapUnit const   eSrcMU;
+    MapUnit const   eDstMU;
 private:
     SVX_DLLPRIVATE void Undirty();
-    SVX_DLLPRIVATE void ForceUndirty() const { if (bDirty) const_cast<SdrFormatter*>(this)->Undirty(); }
 public:
     SdrFormatter(MapUnit eSrc, MapUnit eDst)
         : nMul_(0)
         , nDiv_(0)
-        , nKomma_(0)
-        , bSrcFU(false)
-        , bDstFU(false)
+        , nComma_(0)
         , bDirty(true)
         , eSrcMU(eSrc)
         , eDstMU(eDst)
-        , eSrcFU(FUNIT_NONE)
-        , eDstFU(FUNIT_NONE)
     {
     }
-    SdrFormatter(MapUnit eSrc, FieldUnit eDst)   { eSrcMU=eSrc; bSrcFU=false; eDstFU=eDst; bDstFU=true;  bDirty=true; }
-    SdrFormatter(FieldUnit eSrc, MapUnit eDst)   { eSrcFU=eSrc; bSrcFU=true;  eDstMU=eDst; bDstFU=false; bDirty=true; }
-    SdrFormatter(FieldUnit eSrc, FieldUnit eDst) { eSrcFU=eSrc; bSrcFU=true;  eDstFU=eDst; bDstFU=true;  bDirty=true; }
     void TakeStr(long nVal, OUString& rStr) const;
     static void TakeUnitStr(MapUnit eUnit, OUString& rStr);
     static void TakeUnitStr(FieldUnit eUnit, OUString& rStr);

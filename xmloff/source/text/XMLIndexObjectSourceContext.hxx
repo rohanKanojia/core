@@ -35,12 +35,6 @@ namespace com { namespace sun { namespace star {
  */
 class XMLIndexObjectSourceContext : public XMLIndexSourceBaseContext
 {
-    const OUString sCreateFromStarCalc;
-    const OUString sCreateFromStarChart;
-    const OUString sCreateFromStarDraw;
-    const OUString sCreateFromStarMath;
-    const OUString sCreateFromOtherEmbeddedObjects;
-
     bool bUseCalc;
     bool bUseChart;
     bool bUseDraw;
@@ -56,7 +50,7 @@ public:
         const OUString& rLocalName,
         css::uno::Reference<css::beans::XPropertySet> & rPropSet);
 
-    virtual ~XMLIndexObjectSourceContext();
+    virtual ~XMLIndexObjectSourceContext() override;
 
 protected:
 
@@ -66,7 +60,7 @@ protected:
 
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext* CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList ) override;

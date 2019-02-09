@@ -12,6 +12,11 @@ $(eval $(call gb_Library_Library,fps_office))
 
 $(eval $(call gb_Library_set_componentfile,fps_office,fpicker/source/office/fps_office))
 
+$(eval $(call gb_Library_set_include,fps_office,\
+    $$(INCLUDE) \
+    -I$(SRCDIR)/fpicker/inc \
+))
+
 $(eval $(call gb_Library_use_external,fps_office,boost_headers))
 
 $(eval $(call gb_Library_use_custom_headers,fps_office,\
@@ -34,7 +39,6 @@ $(eval $(call gb_Library_use_libraries,fps_office,\
 	utl \
 	vcl \
 	i18nlangtag \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,fps_office,\

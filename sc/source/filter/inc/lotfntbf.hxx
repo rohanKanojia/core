@@ -20,10 +20,9 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_LOTFNTBF_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_LOTFNTBF_HXX
 
-#include "scitems.hxx"
 #include <editeng/fontitem.hxx>
 #include <editeng/fhgtitem.hxx>
-#include <editeng/colritem.hxx>
+#include <boost/optional.hpp>
 
 // Code in fontbuff.cxx (excel)
 
@@ -32,44 +31,19 @@ class LotusFontBuffer
 private:
     struct ENTRY
     {
-        OUString*           pTmpName;
-        SvxFontItem*        pFont;
-        SvxFontHeightItem*  pHeight;
-        SvxColorItem*       pColor;
-        sal_Int32               nType;      // < 0 -> undefiniert
-        inline              ENTRY()
+        boost::optional<OUString>           xTmpName;
+        std::unique_ptr<SvxFontItem>        pFont;
+        std::unique_ptr<SvxFontHeightItem>  pHeight;
+        sal_Int32                           nType = -1; // < 0 -> undefined
+        void         TmpName( const OUString &rNew )
                             {
-                                pTmpName = nullptr;
-                                pFont = nullptr;
-                                pHeight = nullptr;
-                                pColor = nullptr;
-                                nType = -1;
+                                xTmpName = rNew;
                             }
-        inline              ~ENTRY()
+        void         Height( std::unique_ptr<SvxFontHeightItem> pNew )
                             {
-                                if( pTmpName )
-                                    delete pTmpName;
-                                if( pFont )
-                                    delete pFont;
-                                if( pHeight )
-                                    delete pHeight;
-                                if( pColor )
-                                    delete pColor;
+                                pHeight = std::move(pNew);
                             }
-        inline void         TmpName( const OUString &rNew )
-                            {
-                                if( pTmpName )
-                                    *pTmpName = rNew;
-                                else
-                                    pTmpName = new OUString( rNew );
-                            }
-        inline void         Height( SvxFontHeightItem& rNew )
-                            {
-                                if( pHeight )
-                                    delete pHeight;
-                                pHeight = &rNew;
-                            }
-        inline void         Type( const sal_uInt16 nNew )       { nType = nNew; }
+        void         Type( const sal_uInt16 nNew )       { nType = nNew; }
     };
 
     static void             MakeFont( ENTRY* pEntry );

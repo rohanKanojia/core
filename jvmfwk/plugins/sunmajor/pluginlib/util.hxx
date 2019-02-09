@@ -19,10 +19,10 @@
 #ifndef INCLUDED_JVMFWK_PLUGINS_SUNMAJOR_PLUGINLIB_UTIL_HXX
 #define INCLUDED_JVMFWK_PLUGINS_SUNMAJOR_PLUGINLIB_UTIL_HXX
 
-#include "rtl/ustring.hxx"
-#include "rtl/bootstrap.hxx"
+#include <rtl/ustring.hxx>
+#include <rtl/bootstrap.hxx>
 #include <vector>
-#include "vendorbase.hxx"
+#include <vendorbase.hxx>
 
 namespace jfw_plugin
 {
@@ -69,7 +69,7 @@ struct InfoFindSame
 
     bool operator () (const rtl::Reference<VendorBase> & aVendorInfo)
     {
-        return aVendorInfo->getHome().equals(sJava);
+        return aVendorInfo->getHome() == sJava;
     }
 };
 

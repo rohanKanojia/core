@@ -19,7 +19,9 @@
 
 #include "browserview.hxx"
 #include "propertyeditor.hxx"
-#include "propctrlr.hrc"
+#include <helpids.h>
+#include <propctrlr.h>
+#include <vcl/event.hxx>
 #include <vcl/tabpage.hxx>
 #include <memory>
 
@@ -40,7 +42,7 @@ namespace pcr
     }
 
 
-    IMPL_LINK_NOARG_TYPED(OPropertyBrowserView, OnPageActivation, LinkParamNone*, void)
+    IMPL_LINK_NOARG(OPropertyBrowserView, OnPageActivation, LinkParamNone*, void)
     {
         m_nActivePage = m_pPropBox->GetCurPage();
         m_aPageActivationHandler.Call(nullptr);
@@ -81,7 +83,7 @@ namespace pcr
     }
 
 
-    bool OPropertyBrowserView::Notify( NotifyEvent& _rNEvt )
+    bool OPropertyBrowserView::EventNotify( NotifyEvent& _rNEvt )
     {
         if ( MouseNotifyEvent::KEYINPUT == _rNEvt.GetType() )
         {
@@ -93,7 +95,7 @@ namespace pcr
                 // #i63285#
                 return true;
         }
-        return Window::Notify( _rNEvt );
+        return Window::EventNotify(_rNEvt);
     }
 
 

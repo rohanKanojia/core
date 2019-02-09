@@ -31,9 +31,9 @@ namespace dbaxml
 
         OXMLDatabase( ODBFilter& rImport, sal_uInt16 nPrfx,
                     const OUString& rLName );
-        virtual ~OXMLDatabase();
+        virtual ~OXMLDatabase() override;
 
-        virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+        virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                     const OUString& rLocalName,
                     const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
 

@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "querytablefragment.hxx"
-
-#include "biffinputstream.hxx"
-#include "querytablebuffer.hxx"
+#include <querytablefragment.hxx>
+#include <querytablebuffer.hxx>
+#include <biffhelper.hxx>
+#include <oox/token/namespaces.hxx>
 
 namespace oox {
 namespace xls {

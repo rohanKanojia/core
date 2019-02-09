@@ -28,9 +28,8 @@
 #include "xmlCondPrtExpr.hxx"
 #include "xmlStyleImport.hxx"
 #include <connectivity/dbtools.hxx>
-#include <tools/debug.hxx>
 #include <com/sun/star/report/ReportPrintOption.hpp>
-#include "xmlstrings.hrc"
+#include <strings.hxx>
 #include "xmlTable.hxx"
 
 
@@ -41,10 +40,10 @@ namespace rptxml
     using namespace ::com::sun::star::uno;
     using namespace ::com::sun::star::xml::sax;
 
-    sal_uInt16 lcl_getReportPrintOption(const OUString& _sValue)
+    static sal_Int16 lcl_getReportPrintOption(const OUString& _sValue)
     {
-        sal_uInt16 nRet = report::ReportPrintOption::ALL_PAGES;
-        const SvXMLEnumMapEntry* aXML_EnumMap = OXMLHelper::GetReportPrintOptions();
+        sal_Int16 nRet = report::ReportPrintOption::ALL_PAGES;
+        const SvXMLEnumMapEntry<sal_Int16>* aXML_EnumMap = OXMLHelper::GetReportPrintOptions();
         (void)SvXMLUnitConverter::convertEnum( nRet, _sValue, aXML_EnumMap );
         return nRet;
     }
@@ -94,7 +93,7 @@ OXMLSection::OXMLSection( ORptFilter& rImport,
     }
     catch(Exception&)
     {
-        OSL_FAIL("Exception catched while filling the section props");
+        OSL_FAIL("Exception caught while filling the section props");
     }
 }
 
@@ -102,8 +101,7 @@ OXMLSection::~OXMLSection()
 {
 }
 
-
-SvXMLImportContext* OXMLSection::CreateChildContext(
+SvXMLImportContextRef OXMLSection::CreateChildContext(
         sal_uInt16 _nPrefix,
         const OUString& _rLocalName,
         const uno::Reference< xml::sax::XAttributeList > & xAttrList )

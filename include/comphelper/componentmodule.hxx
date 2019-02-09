@@ -28,17 +28,16 @@
 
 #include <osl/mutex.hxx>
 
-#include <rtl/string.hxx>
-#include <rtl/instance.hxx>
+#include <memory>
 
 
 namespace comphelper
 {
 
 
-    /** factory factory declaration
+    /** factory declaration
     */
-    typedef css::uno::Reference< css::lang::XSingleComponentFactory > (SAL_CALL *FactoryInstantiation)
+    typedef css::uno::Reference< css::lang::XSingleComponentFactory > (*FactoryInstantiation)
     (
         ::cppu::ComponentFactoryFunc          _pFactoryFunc,
         OUString const&                       _rComponentName,
@@ -52,21 +51,13 @@ namespace comphelper
     struct COMPHELPER_DLLPUBLIC ComponentDescription
     {
         /// the implementation name of the component
-        OUString                                     sImplementationName;
+        OUString const                               sImplementationName;
         /// the services supported by the component implementation
-        css::uno::Sequence< OUString >               aSupportedServices;
+        css::uno::Sequence< OUString > const         aSupportedServices;
         /// the function to create an instance of the component
-        ::cppu::ComponentFactoryFunc                 pComponentCreationFunc;
+        ::cppu::ComponentFactoryFunc const           pComponentCreationFunc;
         /// the function to create a factory for the component (usually <code>::cppu::createSingleComponentFactory</code>)
-        FactoryInstantiation                         pFactoryCreationFunc;
-
-        ComponentDescription()
-            :sImplementationName()
-            ,aSupportedServices()
-            ,pComponentCreationFunc( nullptr )
-            ,pFactoryCreationFunc( nullptr )
-        {
-        }
+        FactoryInstantiation const                   pFactoryCreationFunc;
 
         ComponentDescription(
                 const OUString& _rImplementationName,
@@ -89,8 +80,7 @@ namespace comphelper
     class COMPHELPER_DLLPUBLIC OModule
     {
     private:
-        oslInterlockedCount     m_nClients;     /// number of registered clients
-        OModuleImpl*            m_pImpl;        /// impl class. lives as long as at least one client for the module is registered
+        std::unique_ptr<OModuleImpl>            m_pImpl;        /// impl class. lives as long as at least one client for the module is registered
 
     protected:
         mutable ::osl::Mutex    m_aMutex;       /// access safety
@@ -133,39 +123,9 @@ namespace comphelper
         */
         void* getComponentFactory( const sal_Char* _pImplementationName );
 
-    public:
-        class ClientAccess { friend class OModuleClient; private: ClientAccess() { } };
-        /// register a client for the module
-        void registerClient( ClientAccess );
-        /// revoke a client for the module
-        void revokeClient( ClientAccess );
-
-    protected:
-
-        /** called when the last client has been revoked
-            @precond
-                <member>m_aMutex</member> is locked
-        */
-        virtual void onLastClient();
-
     private:
         OModule( const OModule& ) = delete;
         OModule& operator=( const OModule& ) = delete;
-    };
-
-
-    //= OModuleClient
-
-    /** base class for objects which uses any global module-specific resources
-    */
-    class COMPHELPER_DLLPUBLIC OModuleClient
-    {
-    protected:
-        OModule&    m_rModule;
-
-    public:
-        OModuleClient( OModule& _rModule ) :m_rModule( _rModule )   { m_rModule.registerClient( OModule::ClientAccess() ); }
-        ~OModuleClient()                                            { m_rModule.revokeClient( OModule::ClientAccess() ); }
     };
 
 

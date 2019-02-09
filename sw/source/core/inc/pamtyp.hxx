@@ -27,43 +27,38 @@ class SwpHints;
 struct SwPosition;
 class SwPaM;
 class SwTextAttr;
+class SwFormat;
+class SfxPoolItem;
+class SwRootFrame;
 
-// Funktions-Deklarationen fuer die Move/Find-Methoden vom SwPaM
+namespace i18nutil {
+    struct SearchOptions2;
+}
+namespace utl {
+    class TextSearch;
+}
+
+// function prototypes for the move/find methods of SwPaM
 
 void GoStartDoc( SwPosition*);
 void GoEndDoc( SwPosition*);
 void GoStartSection( SwPosition*);
 void GoEndSection( SwPosition*);
-bool GoInDoc( SwPaM&, SwMoveFn);
-bool GoInSection( SwPaM&, SwMoveFn);
-bool GoInNode( SwPaM&, SwMoveFn);
-bool GoInContent( SwPaM&, SwMoveFn);
-bool GoInContentCells( SwPaM&, SwMoveFn);
-bool GoInContentSkipHidden( SwPaM&, SwMoveFn);
-bool GoInContentCellsSkipHidden( SwPaM&, SwMoveFn);
-const SwTextAttr* GetFrwrdTextHint( const SwpHints&, sal_uInt16&, sal_Int32 );
-const SwTextAttr* GetBkwrdTextHint( const SwpHints&, sal_uInt16&, sal_Int32 );
+const SwTextAttr* GetFrwrdTextHint( const SwpHints&, size_t&, sal_Int32 );
+const SwTextAttr* GetBkwrdTextHint( const SwpHints&, size_t&, sal_Int32 );
 
 bool GoNext(SwNode* pNd, SwIndex * pIdx, sal_uInt16 nMode );
 bool GoPrevious(SwNode* pNd, SwIndex * pIdx, sal_uInt16 nMode );
 SW_DLLPUBLIC SwContentNode* GoNextNds( SwNodeIndex * pIdx, bool );
 SwContentNode* GoPreviousNds( SwNodeIndex * pIdx, bool );
 
-// Funktionsdefinitionen fuer die SwCursorShell
-bool GoPrevPara( SwPaM&, SwPosPara);
-bool GoCurrPara( SwPaM&, SwPosPara);
-bool GoNextPara( SwPaM&, SwPosPara);
-bool GoPrevSection( SwPaM&, SwPosSection);
-bool GoCurrSection( SwPaM&, SwPosSection);
-bool GoNextSection( SwPaM&, SwPosSection);
-
-// Typedefiniton fuer Funktionen
+// type definitions of functions
 typedef bool (*GoNd)( SwNode*, SwIndex*, sal_uInt16 );
 typedef SwContentNode* (*GoNds)( SwNodeIndex*, bool );
 typedef void (*GoDoc)( SwPosition* );
 typedef void (*GoSection)( SwPosition* );
 typedef bool (SwPosition:: *CmpOp)( const SwPosition& ) const;
-typedef const SwTextAttr* (*GetHint)( const SwpHints&, sal_uInt16&, sal_Int32 );
+typedef const SwTextAttr* (*GetHint)( const SwpHints&, size_t&, sal_Int32 );
 typedef bool (utl::TextSearch:: *SearchText)( const OUString&, sal_Int32*,
                     sal_Int32*, css::util::SearchResult* );
 typedef void (*MvSection)( SwNodeIndex * );
@@ -80,8 +75,35 @@ struct SwMoveFnCollection
     MvSection fnSection;
 };
 
-// Funktionsdefinitionen fuers Suchen
-SwContentNode* GetNode( SwPaM&, bool&, SwMoveFn, bool bInReadOnly = false );
+// function prototype for searching
+SwContentNode* GetNode(SwPaM&, bool&, SwMoveFnCollection const &,
+        bool bInReadOnly = false, SwRootFrame const* pLayout = nullptr);
+
+namespace sw {
+
+    std::unique_ptr<SwPaM> MakeRegion(SwMoveFnCollection const & fnMove,
+            const SwPaM & rOrigRg);
+
+    /// Search.
+    bool FindTextImpl(SwPaM & rSearchPam,
+                const i18nutil::SearchOptions2& rSearchOpt,
+                bool bSearchInNotes,
+                utl::TextSearch& rSText,
+                SwMoveFnCollection const & fnMove,
+                const SwPaM & rRegion, bool bInReadOnly,
+                SwRootFrame const* pLayout);
+    bool FindFormatImpl(SwPaM & rSearchPam,
+                const SwFormat& rFormat,
+                SwMoveFnCollection const & fnMove,
+                const SwPaM & rRegion, bool bInReadOnly,
+                SwRootFrame const* pLayout);
+    bool FindAttrImpl(SwPaM & rSearchPam,
+                const SfxPoolItem& rAttr,
+                SwMoveFnCollection const & fnMove,
+                const SwPaM & rPam, bool bInReadOnly,
+                SwRootFrame const* pLayout);
+
+} // namespace sw
 
 #endif
 

@@ -26,10 +26,10 @@
 
 #include <cxxabi.h>
 
-#include <bridges/cpp_uno/shared/bridge.hxx>
-#include <bridges/cpp_uno/shared/types.hxx>
-#include <bridges/cpp_uno/shared/unointerfaceproxy.hxx>
-#include <bridges/cpp_uno/shared/vtables.hxx>
+#include <bridge.hxx>
+#include <types.hxx>
+#include <unointerfaceproxy.hxx>
+#include <vtables.hxx>
 #include <com/sun/star/uno/Exception.hpp>
 #include <com/sun/star/uno/RuntimeException.hpp>
 #include <com/sun/star/uno/genfunc.hxx>
@@ -42,8 +42,8 @@
 #include <uno/any2.h>
 #include <uno/data.h>
 
-#include <abi.hxx>
-#include <callvirtualfunction.hxx>
+#include "abi.hxx"
+#include "callvirtualfunction.hxx"
 
 namespace {
 
@@ -192,7 +192,8 @@ void call(
         abi_aarch64::mapException(
             reinterpret_cast<abi_aarch64::__cxa_eh_globals *>(
                 __cxxabiv1::__cxa_get_globals())->caughtExceptions,
-            *exception, proxy->getBridge()->getCpp2Uno());
+            __cxxabiv1::__cxa_current_exception_type(), *exception,
+            proxy->getBridge()->getCpp2Uno());
         for (sal_Int32 i = 0; i != count; ++i) {
             if (cppArgs[i] != 0) {
                 uno_destructData(

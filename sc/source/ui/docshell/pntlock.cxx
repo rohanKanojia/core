@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "pntlock.hxx"
+#include <pntlock.hxx>
 
 ScPaintLockData::ScPaintLockData() :
     nLevel( 0 ),
     nDocLevel( 0 ),
-    nParts( 0 ),
+    nParts( PaintPartFlags::NONE ),
     bModified( false )
 {
 }
@@ -31,9 +31,9 @@ ScPaintLockData::~ScPaintLockData()
 {
 }
 
-void ScPaintLockData::AddRange( const ScRange& rRange, sal_uInt16 nP )
+void ScPaintLockData::AddRange( const ScRange& rRange, PaintPartFlags nP )
 {
-    if (!xRangeList.Is())
+    if (!xRangeList.is())
         xRangeList = new ScRangeList;
 
     xRangeList->Join( rRange );

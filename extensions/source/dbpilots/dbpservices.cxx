@@ -17,28 +17,31 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "componentmodule.hxx"
+#include <componentmodule.hxx>
 #include "dbpservices.hxx"
+#include <mutex>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::registry;
 
-extern "C" void SAL_CALL dbp_initializeModule()
+extern "C" {
+
+static void dbp_initializeModule()
 {
-    static bool s_bInit = false;
-    if (!s_bInit)
+    std::once_flag aInit;
+    std::call_once(aInit, [&]()
     {
         createRegistryInfo_OGroupBoxWizard();
         createRegistryInfo_OListComboWizard();
         createRegistryInfo_OGridWizard();
-        ::dbp::OModule::setResourceFilePrefix("dbp");
-        s_bInit = true;
-    }
+        return true;
+    });
 }
 
+}
 
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL dbp_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void* dbp_component_getFactory(
                     const sal_Char* pImplementationName,
                     void* pServiceManager,
                     void* /*pRegistryKey*/)
@@ -48,7 +51,7 @@ extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL dbp_component_getFactory(
     Reference< XInterface > xRet;
     if (pServiceManager && pImplementationName)
     {
-        xRet = ::dbp::OModule::getComponentFactory(
+        xRet = compmodule::OModule::getComponentFactory(
             OUString::createFromAscii(pImplementationName),
             static_cast< XMultiServiceFactory* >(pServiceManager));
     }

@@ -29,7 +29,7 @@
 
 module com { module sun { module star { module security {
 
-/** interface for signing and verifying digital signatures in office documents
+/** Interface for signing and verifying digital signatures in office documents
 
     <p>
     This interface can be used to digitally sign different content in a office document.
@@ -45,6 +45,24 @@ interface XDocumentDigitalSignatures : com::sun::star::uno::XInterface
      */
     boolean signDocumentContent( [in] ::com::sun::star::embed::XStorage xStorage,
                                  [in] ::com::sun::star::io::XStream xSignStream);
+
+    /** Signs the content of the document including text and pictures
+        using the given XCertificate.
+
+        Also adds the given Signature Line Id and the signed and unsigned graphics to
+        the signature.
+
+       Macros will not be signed.
+
+       @since LibreOffice 6.1
+     */
+    boolean signSignatureLine( [in] ::com::sun::star::embed::XStorage xStorage,
+                               [in] ::com::sun::star::io::XStream xSignStream,
+                               [in] string signatureLineId,
+                               [in] ::com::sun::star::security::XCertificate xCertificate,
+                               [in] ::com::sun::star::graphic::XGraphic xValidGraphic,
+                               [in] ::com::sun::star::graphic::XGraphic xInvalidGraphic,
+                               [in] string comment);
 
     /** checks for digital signatures and their status.
 
@@ -119,22 +137,69 @@ interface XDocumentDigitalSignatures : com::sun::star::uno::XInterface
     void showCertificate( [in] com::sun::star::security::XCertificate Certificate );
 
 
-       /** manages trusted sources (Authors and paths )
+    /** manages trusted sources (Authors and paths )
      */
-
     void    manageTrustedSources();
     boolean isAuthorTrusted( [in] com::sun::star::security::XCertificate Author );
     boolean isLocationTrusted( [in] string Location );
 
-    // These method should raise confirmation dialog, so it can not used from bad macros...
+    // These methods should raise a confirmation dialog, so they can not be misused from bad macros.
     void    addAuthorToTrustedSources( [in] com::sun::star::security::XCertificate Author );
     void    addLocationToTrustedSources( [in] string Location );
 
-    /**  This method shows CertificateChooser dialog, used by document and PDF signing
-     */
-    com::sun::star::security::XCertificate chooseCertificate();
+    /**  This method shows the CertificateChooser dialog, used by document and PDF signing
+         Shows only private certificates
 
-} ;
+         @since LibreOffice 5.3
+     */
+    com::sun::star::security::XCertificate chooseCertificate( [out] string Description );
+
+    /**  This is an alias for 'chooseCertificate', shows the CertificateChooser dialog
+         with private certificates
+
+         @since LibreOffice 6.0
+     */
+    com::sun::star::security::XCertificate chooseSigningCertificate( [out] string Description );
+
+    /**  This shows the certificate selection dialog and allows to only select the certificate
+         without actually signing the document.
+
+         @since LibreOffice 6.1
+     */
+    com::sun::star::security::XCertificate selectSigningCertificate( [out] string Description );
+
+    /**  This shows the certificate selection dialog and allows to only select the certificate
+         without actually signing the document. Only certificates of the given type will be shown.
+
+         @since LibreOffice 6.2
+     */
+    com::sun::star::security::XCertificate selectSigningCertificateWithType(
+        [in] CertificateKind certificateKind,
+        [out] string Description);
+
+    /**  This method shows the CertificateChooser dialog with all certificates, private and
+         other people's. Useful when choosing certificate/key for encryption
+
+         @since LibreOffice 6.0
+     */
+    sequence< com::sun::star::security::XCertificate > chooseEncryptionCertificate( );
+
+    /**  This method shows the CertificateChooser dialog, used by document and PDF signing
+         Shows only private certificates and returns usage string in addition to description.
+
+         @since LibreOffice 6.0
+     */
+    com::sun::star::security::XCertificate chooseCertificateWithProps( [out] sequence<::com::sun::star::beans::PropertyValue> Properties);
+
+    /** Signs the content of the document with the provided certificate.
+
+        @since LibreOffice 6.2
+     */
+    boolean signDocumentWithCertificate([in] ::com::sun::star::security::XCertificate xCertificate,
+                                        [in] ::com::sun::star::embed::XStorage xStorage,
+                                        [in] ::com::sun::star::io::XStream xStream);
+
+};
 
 } ; } ; } ; } ;
 

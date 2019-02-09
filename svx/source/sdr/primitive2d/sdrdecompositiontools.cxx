@@ -37,7 +37,7 @@
 #include <drawinglayer/primitive2d/animatedprimitive2d.hxx>
 #include <drawinglayer/animation/animationtiming.hxx>
 #include <drawinglayer/primitive2d/maskprimitive2d.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <drawinglayer/primitive2d/texthierarchyprimitive2d.hxx>
 #include <drawinglayer/attribute/sdrfillattribute.hxx>
@@ -46,7 +46,6 @@
 #include <drawinglayer/attribute/sdrshadowattribute.hxx>
 
 
-class TransparencePrimitive2D;
 using namespace com::sun::star;
 
 
@@ -54,6 +53,9 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
+
+        class TransparencePrimitive2D;
+
         Primitive2DReference createPolyPolygonFillPrimitive(
             const basegfx::B2DPolyPolygon& rPolyPolygon,
             const attribute::SdrFillAttribute& rFill,
@@ -61,7 +63,7 @@ namespace drawinglayer
         {
             // when we have no given definition range, use the range of the given geometry
             // also for definition (simplest case)
-            const basegfx::B2DRange aRange(basegfx::tools::getRange(rPolyPolygon));
+            const basegfx::B2DRange aRange(basegfx::utils::getRange(rPolyPolygon));
 
             return createPolyPolygonFillPrimitive(
                 rPolyPolygon,
@@ -128,7 +130,7 @@ namespace drawinglayer
 
                 // create FillGradientPrimitive2D for transparence and add to new sequence
                 // fillGradientPrimitive is enough here (compared to PolyPolygonGradientPrimitive2D) since float transparence will be masked anyways
-                const basegfx::B2DRange aRange(basegfx::tools::getRange(rPolyPolygon));
+                const basegfx::B2DRange aRange(basegfx::utils::getRange(rPolyPolygon));
                 const Primitive2DReference xRefB(
                     new FillGradientPrimitive2D(
                         aRange,
@@ -190,11 +192,10 @@ namespace drawinglayer
             const attribute::SdrTextAttribute& rText,
             const attribute::SdrLineAttribute& rStroke,
             bool bCellText,
-            bool bWordWrap,
-            bool bClipOnBounds)
+            bool bWordWrap)
         {
             basegfx::B2DHomMatrix aAnchorTransform(rObjectTransform);
-            SdrTextPrimitive2D* pNew = nullptr;
+            std::unique_ptr<SdrTextPrimitive2D> pNew;
 
             if(rText.isContour())
             {
@@ -210,32 +211,32 @@ namespace drawinglayer
                     // scale outline to object's size to allow growing with value relative to that size
                     // and also to keep aspect ratio
                     basegfx::B2DPolyPolygon aScaledUnitPolyPolygon(rUnitPolyPolygon);
-                    aScaledUnitPolyPolygon.transform(basegfx::tools::createScaleB2DHomMatrix(
+                    aScaledUnitPolyPolygon.transform(basegfx::utils::createScaleB2DHomMatrix(
                         fabs(aScale.getX()), fabs(aScale.getY())));
 
                     // grow the polygon. To shrink, use negative value (half width)
-                    aScaledUnitPolyPolygon = basegfx::tools::growInNormalDirection(aScaledUnitPolyPolygon, -(rStroke.getWidth() * 0.5));
+                    aScaledUnitPolyPolygon = basegfx::utils::growInNormalDirection(aScaledUnitPolyPolygon, -(rStroke.getWidth() * 0.5));
 
                     // scale back to unit polygon
-                    aScaledUnitPolyPolygon.transform(basegfx::tools::createScaleB2DHomMatrix(
+                    aScaledUnitPolyPolygon.transform(basegfx::utils::createScaleB2DHomMatrix(
                         0.0 != aScale.getX() ? 1.0 / aScale.getX() : 1.0,
                         0.0 != aScale.getY() ? 1.0 / aScale.getY() : 1.0));
 
                     // create with unit polygon
-                    pNew = new SdrContourTextPrimitive2D(
+                    pNew.reset(new SdrContourTextPrimitive2D(
                         &rText.getSdrText(),
                         rText.getOutlinerParaObject(),
                         aScaledUnitPolyPolygon,
-                        rObjectTransform);
+                        rObjectTransform));
                 }
                 else
                 {
                     // create with unit polygon
-                    pNew = new SdrContourTextPrimitive2D(
+                    pNew.reset(new SdrContourTextPrimitive2D(
                         &rText.getSdrText(),
                         rText.getOutlinerParaObject(),
                         rUnitPolyPolygon,
-                        rObjectTransform);
+                        rObjectTransform));
                 }
             }
             else if(!rText.getSdrFormTextAttribute().isDefault())
@@ -243,11 +244,11 @@ namespace drawinglayer
                 // text on path, use scaled polygon
                 basegfx::B2DPolyPolygon aScaledPolyPolygon(rUnitPolyPolygon);
                 aScaledPolyPolygon.transform(rObjectTransform);
-                pNew = new SdrPathTextPrimitive2D(
+                pNew.reset(new SdrPathTextPrimitive2D(
                     &rText.getSdrText(),
                     rText.getOutlinerParaObject(),
                     aScaledPolyPolygon,
-                    rText.getSdrFormTextAttribute());
+                    rText.getSdrFormTextAttribute()));
             }
             else
             {
@@ -262,14 +263,14 @@ namespace drawinglayer
                 const bool bMirrorY(basegfx::fTools::less(aScale.getY(), 0.0));
                 aScale = basegfx::absolute(aScale);
 
-                // Get the real size, since polygon ountline and scale
+                // Get the real size, since polygon outline and scale
                 // from the object transformation may vary (e.g. ellipse segments)
                 basegfx::B2DHomMatrix aJustScaleTransform;
                 aJustScaleTransform.set(0, 0, aScale.getX());
                 aJustScaleTransform.set(1, 1, aScale.getY());
                 basegfx::B2DPolyPolygon aScaledUnitPolyPolygon(rUnitPolyPolygon);
                 aScaledUnitPolyPolygon.transform(aJustScaleTransform);
-                const basegfx::B2DRange aSnapRange(basegfx::tools::getRange(aScaledUnitPolyPolygon));
+                const basegfx::B2DRange aSnapRange(basegfx::utils::getRange(aScaledUnitPolyPolygon));
 
                 // create a range describing the wanted text position and size (aTextAnchorRange). This
                 // means to use the text distance values here
@@ -282,7 +283,7 @@ namespace drawinglayer
                 // now create a transformation from this basic range (aTextAnchorRange)
                 // #i121494# if we have no scale use at least 1.0 to have a carrier e.g. for
                 // mirror values, else these will get lost
-                aAnchorTransform = basegfx::tools::createScaleTranslateB2DHomMatrix(
+                aAnchorTransform = basegfx::utils::createScaleTranslateB2DHomMatrix(
                     basegfx::fTools::equalZero(aTextAnchorRange.getWidth()) ? 1.0 : aTextAnchorRange.getWidth(),
                     basegfx::fTools::equalZero(aTextAnchorRange.getHeight()) ? 1.0 : aTextAnchorRange.getHeight(),
                     aTextAnchorRange.getMinX(), aTextAnchorRange.getMinY());
@@ -291,38 +292,38 @@ namespace drawinglayer
                 aAnchorTransform.scale(bMirrorX ? -1.0 : 1.0, bMirrorY ? -1.0 : 1.0);
 
                 // apply object's other transforms
-                aAnchorTransform = basegfx::tools::createShearXRotateTranslateB2DHomMatrix(fShearX, fRotate, aTranslate)
+                aAnchorTransform = basegfx::utils::createShearXRotateTranslateB2DHomMatrix(fShearX, fRotate, aTranslate)
                     * aAnchorTransform;
 
                 if(rText.isFitToSize())
                 {
                     // stretched text in range
-                    pNew = new SdrStretchTextPrimitive2D(
+                    pNew.reset(new SdrStretchTextPrimitive2D(
                         &rText.getSdrText(),
                         rText.getOutlinerParaObject(),
                         aAnchorTransform,
-                        rText.isFixedCellHeight());
+                        rText.isFixedCellHeight()));
                 }
                 else if(rText.isAutoFit())
                 {
-                    // isotrophically scaled text in range
-                    pNew = new SdrAutoFitTextPrimitive2D(
+                    // isotropically scaled text in range
+                    pNew.reset(new SdrAutoFitTextPrimitive2D(
                                     &rText.getSdrText(),
                                     rText.getOutlinerParaObject(),
                                     aAnchorTransform,
-                                    bWordWrap);
+                                    bWordWrap));
                 }
                 else if( rText.isChainable() && !rText.isInEditMode() )
                 {
-                    pNew = new SdrChainedTextPrimitive2D(
+                    pNew.reset(new SdrChainedTextPrimitive2D(
                                     &rText.getSdrText(),
                                     rText.getOutlinerParaObject(),
-                                    aAnchorTransform );
+                                    aAnchorTransform ));
                 }
                 else // text in range
                 {
                     // build new primitive
-                    pNew = new SdrBlockTextPrimitive2D(
+                    pNew.reset(new SdrBlockTextPrimitive2D(
                         &rText.getSdrText(),
                         rText.getOutlinerParaObject(),
                         aAnchorTransform,
@@ -332,7 +333,7 @@ namespace drawinglayer
                         rText.isScroll(),
                         bCellText,
                         bWordWrap,
-                        bClipOnBounds);
+                        false/*bClipOnBounds*/));
                 }
             }
 
@@ -347,16 +348,16 @@ namespace drawinglayer
                 if(0.0 != aAnimationList.getDuration())
                 {
                     // create content sequence
-                    const Primitive2DReference xRefA(pNew);
+                    const Primitive2DReference xRefA(pNew.release());
                     const Primitive2DContainer aContent { xRefA };
 
                     // create and add animated switch primitive
-                    return Primitive2DReference(new AnimatedBlinkPrimitive2D(aAnimationList, aContent, true));
+                    return Primitive2DReference(new AnimatedBlinkPrimitive2D(aAnimationList, aContent));
                 }
                 else
                 {
                     // add to decomposition
-                    return Primitive2DReference(pNew);
+                    return Primitive2DReference(pNew.release());
                 }
             }
 
@@ -367,7 +368,7 @@ namespace drawinglayer
                 {
                     // get scroll direction
                     const SdrTextAniDirection eDirection(rText.getSdrText().GetObject().GetTextAniDirection());
-                    const bool bHorizontal(SDRTEXTANI_LEFT == eDirection || SDRTEXTANI_RIGHT == eDirection);
+                    const bool bHorizontal(SdrTextAniDirection::Left == eDirection || SdrTextAniDirection::Right == eDirection);
 
                     // decompose to get separated values for the scroll box
                     basegfx::B2DVector aScale, aTranslate;
@@ -375,16 +376,15 @@ namespace drawinglayer
                     aAnchorTransform.decompose(aScale, aTranslate, fRotate, fShearX);
 
                     // build transform from scaled only to full AnchorTransform and inverse
-                    const basegfx::B2DHomMatrix aSRT(basegfx::tools::createShearXRotateTranslateB2DHomMatrix(
+                    const basegfx::B2DHomMatrix aSRT(basegfx::utils::createShearXRotateTranslateB2DHomMatrix(
                         fShearX, fRotate, aTranslate));
                     basegfx::B2DHomMatrix aISRT(aSRT);
                     aISRT.invert();
 
                     // bring the primitive back to scaled only and get scaled range, create new clone for this
-                    SdrTextPrimitive2D* pNew2 = pNew->createTransformedClone(aISRT);
+                    std::unique_ptr<SdrTextPrimitive2D> pNew2 = pNew->createTransformedClone(aISRT);
                     OSL_ENSURE(pNew2, "createTextPrimitive: Could not create transformed clone of text primitive (!)");
-                    delete pNew;
-                    pNew = pNew2;
+                    pNew = std::move(pNew2);
 
                     // create neutral geometry::ViewInformation2D for local range and decompose calls. This is okay
                     // since the decompose is view-independent
@@ -436,26 +436,27 @@ namespace drawinglayer
                         // use the decomposition to force to simple text primitives, those will no longer
                         // need the outliner for formatting (alternatively it is also possible to just add
                         // pNew to aNewPrimitiveSequence)
-                        Primitive2DContainer aAnimSequence(pNew->get2DDecomposition(aViewInformation2D));
-                        delete pNew;
+                        Primitive2DContainer aAnimSequence;
+                        pNew->get2DDecomposition(aAnimSequence, aViewInformation2D);
+                        pNew.reset();
 
                         // create a new animatedInterpolatePrimitive and add it
                         std::vector< basegfx::B2DHomMatrix > aMatrixStack;
                         aMatrixStack.push_back(aLeft);
                         aMatrixStack.push_back(aRight);
-                        const Primitive2DReference xRefA(new AnimatedInterpolatePrimitive2D(aMatrixStack, aAnimationList, aAnimSequence, true));
+                        const Primitive2DReference xRefA(new AnimatedInterpolatePrimitive2D(aMatrixStack, aAnimationList, aAnimSequence));
                         const Primitive2DContainer aContent { xRefA };
 
                         // scrolling needs an encapsulating clipping primitive
                         const basegfx::B2DRange aClipRange(aClipTopLeft, aClipBottomRight);
-                        basegfx::B2DPolygon aClipPolygon(basegfx::tools::createPolygonFromRect(aClipRange));
+                        basegfx::B2DPolygon aClipPolygon(basegfx::utils::createPolygonFromRect(aClipRange));
                         aClipPolygon.transform(aSRT);
                         return Primitive2DReference(new MaskPrimitive2D(basegfx::B2DPolyPolygon(aClipPolygon), aContent));
                     }
                     else
                     {
                         // add to decomposition
-                        return Primitive2DReference(pNew);
+                        return Primitive2DReference(pNew.release());
                     }
                 }
             }
@@ -465,7 +466,7 @@ namespace drawinglayer
                 // #i97628#
                 // encapsulate with TextHierarchyEditPrimitive2D to allow renderers
                 // to suppress actively edited content if needed
-                const Primitive2DReference xRefA(pNew);
+                const Primitive2DReference xRefA(pNew.release());
                 const Primitive2DContainer aContent { xRefA };
 
                 // create and add TextHierarchyEditPrimitive2D primitive
@@ -474,7 +475,7 @@ namespace drawinglayer
             else
             {
                 // add to decomposition
-                return Primitive2DReference(pNew);
+                return Primitive2DReference(pNew.release());
             }
         }
 

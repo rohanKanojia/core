@@ -7,25 +7,27 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "namedefdlg.hxx"
+#include <namedefdlg.hxx>
 
-#include <vcl/msgbox.hxx>
 #include <vcl/settings.hxx>
-
+#include <formula/errorcodes.hxx>
 #include <sfx2/app.hxx>
+#include <unotools/charclass.hxx>
 
-#include "document.hxx"
-#include "globstr.hrc"
-#include "globalnames.hxx"
-#include "rangenam.hxx"
-#include "reffact.hxx"
-#include "undorangename.hxx"
-#include "tabvwsh.hxx"
-#include "tokenarray.hxx"
-#include "sc.hrc"
+#include <compiler.hxx>
+#include <document.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <globalnames.hxx>
+#include <rangenam.hxx>
+#include <reffact.hxx>
+#include <undorangename.hxx>
+#include <tabvwsh.hxx>
+#include <tokenarray.hxx>
+#include <sc.hrc>
 
 ScNameDefDlg::ScNameDefDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent,
-        ScViewData* pViewData, const std::map<OUString, ScRangeName*>& aRangeMap,
+        const ScViewData* pViewData, const std::map<OUString, ScRangeName*>& aRangeMap,
         const ScAddress& aCursorPos, const bool bUndo )
     : ScAnyRefDlg( pB, pCW, pParent, "DefineNameDialog", "modules/scalc/ui/definename.ui" )
     ,
@@ -34,9 +36,10 @@ ScNameDefDlg::ScNameDefDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* p
     mpDocShell ( pViewData->GetDocShell() ),
     maCursorPos( aCursorPos ),
 
-    maGlobalNameStr  ( ScGlobal::GetRscString(STR_GLOBAL_SCOPE) ),
-    maErrInvalidNameStr( ScGlobal::GetRscString(STR_ERR_NAME_INVALID)),
-    maErrNameInUse   ( ScGlobal::GetRscString(STR_ERR_NAME_EXISTS)),
+    maGlobalNameStr  ( ScResId(STR_GLOBAL_SCOPE) ),
+    maErrInvalidNameStr( ScResId(STR_ERR_NAME_INVALID)),
+    maErrInvalidNameCellRefStr( ScResId(STR_ERR_NAME_INVALID_CELL_REF)),
+    maErrNameInUse   ( ScResId(STR_ERR_NAME_EXISTS)),
     maRangeMap( aRangeMap )
 {
     get(m_pEdName, "edit");
@@ -119,25 +122,22 @@ void ScNameDefDlg::CancelPushed()
 
 bool ScNameDefDlg::IsFormulaValid()
 {
-    ScCompiler aComp( mpDoc, maCursorPos);
-    aComp.SetGrammar( mpDoc->GetGrammar() );
-    ScTokenArray* pCode = aComp.CompileString(m_pEdRange->GetText());
-    if (pCode->GetCodeError())
+    ScCompiler aComp( mpDoc, maCursorPos, mpDoc->GetGrammar());
+    std::unique_ptr<ScTokenArray> pCode = aComp.CompileString(m_pEdRange->GetText());
+    if (pCode->GetCodeError() != FormulaError::NONE)
     {
         //TODO: info message
-        delete pCode;
         return false;
     }
     else
     {
-        delete pCode;
         return true;
     }
 }
 
 bool ScNameDefDlg::IsNameValid()
 {
-    OUString aScope = m_pLbScope->GetSelectEntry();
+    OUString aScope = m_pLbScope->GetSelectedEntry();
     OUString aName = m_pEdName->GetText();
 
     ScRangeName* pRangeName = nullptr;
@@ -150,6 +150,7 @@ bool ScNameDefDlg::IsNameValid()
         pRangeName = maRangeMap.find(aScope)->second;
     }
 
+    ScRangeData::IsNameValidType eType;
     m_pFtInfo->SetControlBackground(GetSettings().GetStyleSettings().GetDialogColor());
     if ( aName.isEmpty() )
     {
@@ -157,10 +158,17 @@ bool ScNameDefDlg::IsNameValid()
         m_pFtInfo->SetText(maStrInfoDefault);
         return false;
     }
-    else if (!ScRangeData::IsNameValid( aName, mpDoc ))
+    else if ((eType = ScRangeData::IsNameValid( aName, mpDoc )) != ScRangeData::NAME_VALID)
     {
         m_pFtInfo->SetControlBackground(GetSettings().GetStyleSettings().GetHighlightColor());
-        m_pFtInfo->SetText(maErrInvalidNameStr);
+        if (eType == ScRangeData::NAME_INVALID_BAD_STRING)
+        {
+            m_pFtInfo->SetText(maErrInvalidNameStr);
+        }
+        else if (eType == ScRangeData::NAME_INVALID_CELL_REF)
+        {
+            m_pFtInfo->SetText(maErrInvalidNameCellRefStr);
+        }
         m_pBtnAdd->Disable();
         return false;
     }
@@ -186,7 +194,7 @@ bool ScNameDefDlg::IsNameValid()
 
 void ScNameDefDlg::AddPushed()
 {
-    OUString aScope = m_pLbScope->GetSelectEntry();
+    OUString aScope = m_pLbScope->GetSelectedEntry();
     OUString aName = m_pEdName->GetText();
     OUString aExpression = m_pEdRange->GetText();
 
@@ -233,9 +241,9 @@ void ScNameDefDlg::AddPushed()
             pNewEntry->AddType(nType);
 
             // aExpression valid?
-            if ( 0 == pNewEntry->GetErrCode() )
+            if ( FormulaError::NONE == pNewEntry->GetErrCode() )
             {
-                if ( !pRangeName->insert( pNewEntry ) )
+                if ( !pRangeName->insert( pNewEntry, false /*bReuseFreeIndex*/ ) )
                     pNewEntry = nullptr;
 
                 if (mbUndo)
@@ -250,13 +258,13 @@ void ScNameDefDlg::AddPushed()
                     assert( pNewEntry);     // undo of no insertion smells fishy
                     if (pNewEntry)
                         mpDocShell->GetUndoManager()->AddUndoAction(
-                                new ScUndoAddRangeData( mpDocShell, pNewEntry, nTab) );
+                                std::make_unique<ScUndoAddRangeData>( mpDocShell, pNewEntry, nTab) );
 
                     // set table stream invalid, otherwise RangeName won't be saved if no other
                     // call invalidates the stream
                     if (nTab != -1)
                         mpDoc->SetStreamValid(nTab, false);
-                    SfxGetpApp()->Broadcast( SfxSimpleHint( SC_HINT_AREAS_CHANGED ) );
+                    SfxGetpApp()->Broadcast( SfxHint( SfxHintId::ScAreasChanged ) );
                     mpDocShell->SetDocumentModified();
                     Close();
                 }
@@ -319,22 +327,22 @@ void ScNameDefDlg::SetActive()
     RefInputDone();
 }
 
-IMPL_LINK_NOARG_TYPED(ScNameDefDlg, CancelBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScNameDefDlg, CancelBtnHdl, Button*, void)
 {
     CancelPushed();
 }
 
-IMPL_LINK_NOARG_TYPED(ScNameDefDlg, AddBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScNameDefDlg, AddBtnHdl, Button*, void)
 {
     AddPushed();
 };
 
-IMPL_LINK_NOARG_TYPED(ScNameDefDlg, NameModifyHdl, Edit&, void)
+IMPL_LINK_NOARG(ScNameDefDlg, NameModifyHdl, Edit&, void)
 {
     IsNameValid();
 }
 
-IMPL_LINK_NOARG_TYPED(ScNameDefDlg, AssignGetFocusHdl, Control&, void)
+IMPL_LINK_NOARG(ScNameDefDlg, AssignGetFocusHdl, Control&, void)
 {
     IsNameValid();
 }

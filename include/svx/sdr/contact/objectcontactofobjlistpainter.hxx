@@ -39,15 +39,14 @@ protected:
 public:
     // basic constructor/destructor
     ObjectContactPainter();
-    virtual ~ObjectContactPainter();
+    virtual ~ObjectContactPainter() override;
 };
 
 // typedef for transferring SdrObject
 typedef ::std::vector< SdrObject* > SdrObjectVector;
 
-class SVX_DLLPUBLIC ObjectContactOfObjListPainter : public ObjectContactPainter
+class SVX_DLLPUBLIC ObjectContactOfObjListPainter final : public ObjectContactPainter
 {
-protected:
     // Target OutputDevice
     OutputDevice&                                   mrTargetOutputDevice;
 
@@ -67,13 +66,10 @@ public:
         OutputDevice& rTargetDevice,
         const SdrObjectVector& rObjects,
         const SdrPage* pProcessedPage);
-    virtual ~ObjectContactOfObjListPainter();
+    virtual ~ObjectContactOfObjListPainter() override;
 
     // Process the whole displaying
     virtual void ProcessDisplay(DisplayInfo& rDisplayInfo) override;
-
-    // VirtualDevice? Default is false
-    virtual bool isOutputToVirtualDevice() const override;
 
     // recording MetaFile? Default is false
     virtual bool isOutputToRecordingMetaFile() const override;
@@ -91,7 +87,7 @@ protected:
     ObjectContact&                                  mrOriginalObjectContact;
 
     // Set StartPoint for next run, also given in constructor
-    SdrPageWeakRef                                  mxStartPage;
+    tools::WeakReference<SdrPage>                   mxStartPage;
 
     // Hierarchy access methods
     virtual sal_uInt32 GetPaintObjectCount() const override;
@@ -99,10 +95,8 @@ protected:
 
 public:
     // basic constructor
-    ObjectContactOfPagePainter(
-        const SdrPage* pPage,
-        ObjectContact& rOriginalObjectContact);
-    virtual ~ObjectContactOfPagePainter();
+    ObjectContactOfPagePainter(ObjectContact& rOriginalObjectContact);
+    virtual ~ObjectContactOfPagePainter() override;
 
     // set another page
     void SetStartPage(const SdrPage* pPage);

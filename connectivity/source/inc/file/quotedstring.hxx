@@ -21,7 +21,7 @@
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_FILE_QUOTEDSTRING_HXX
 
 #include <rtl/ustring.hxx>
-#include "file/filedllapi.hxx"
+#include <file/filedllapi.hxx>
 
 namespace connectivity
 {
@@ -34,14 +34,13 @@ namespace connectivity
         OUString m_sString;
     public:
         QuotedTokenizedString() {}
-        QuotedTokenizedString(const OUString& _sString) : m_sString(_sString){}
 
         sal_Int32  GetTokenCount( sal_Unicode cTok , sal_Unicode cStrDel ) const;
-        OUString   GetTokenSpecial(sal_Int32& nStartPos, sal_Unicode cTok = ';', sal_Unicode cStrDel = '\0') const;
-        inline OUString& GetString() { return m_sString; }
-        inline void SetString(const OUString& aStr) { m_sString = aStr;}
-        inline sal_Int32 Len() const { return m_sString.getLength(); }
-        inline operator OUString&() { return m_sString; }
+        OUString   GetTokenSpecial(sal_Int32& nStartPos, sal_Unicode cTok, sal_Unicode cStrDel = '\0') const;
+        OUString& GetString() { return m_sString; }
+        void SetString(const OUString& aStr) { m_sString = aStr;}
+        sal_Int32 Len() const { return m_sString.getLength(); }
+        operator OUString&() { return m_sString; }
     };
 }
 

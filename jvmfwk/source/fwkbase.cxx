@@ -17,17 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "rtl/ustring.hxx"
-#include "rtl/ustrbuf.hxx"
-#include "rtl/uri.hxx"
-#include "osl/thread.hxx"
-#include "osl/process.h"
-#include "libxml/xpathInternals.h"
-#include "osl/file.hxx"
-#include "osl/module.hxx"
+#include <rtl/ustring.hxx>
+#include <rtl/ustrbuf.hxx>
+#include <rtl/uri.hxx>
+#include <sal/log.hxx>
+#include <osl/thread.hxx>
+#include <osl/process.h>
+#include <libxml/xpathInternals.h>
+#include <osl/file.hxx>
+#include <osl/module.hxx>
 #include "framework.hxx"
-#include "fwkutil.hxx"
-#include "elements.hxx"
+#include <fwkutil.hxx>
+#include <elements.hxx>
 #include "fwkbase.hxx"
 
 using namespace osl;
@@ -43,7 +44,7 @@ using namespace osl;
 
 namespace jfw
 {
-bool  g_bJavaSet = false;
+static bool  g_bJavaSet = false;
 
 namespace {
 
@@ -56,8 +57,7 @@ OString getVendorSettingsPath(OUString const & sURL)
         & sSystemPathSettings.pData) != osl_File_E_None)
         throw FrameworkException(
             JFW_E_ERROR,
-            OString("[Java framework] Error in function "
-                         "getVendorSettingsPath (fwkbase.cxx) "));
+            "[Java framework] Error in function getVendorSettingsPath (fwkbase.cxx) ");
     OString osSystemPathSettings =
         OUStringToOString(sSystemPathSettings,osl_getThreadTextEncoding());
     return osSystemPathSettings;
@@ -89,15 +89,13 @@ OUString getParamFirstUrl(OUString const & name)
 VendorSettings::VendorSettings():
     m_xmlDocVendorSettingsFileUrl(BootParams::getVendorSettings())
 {
-    OString sMsgExc("[Java framework] Error in constructor "
-                         "VendorSettings::VendorSettings() (fwkbase.cxx)");
     //Prepare the xml document and context
     OString sSettingsPath = getVendorSettingsPath(m_xmlDocVendorSettingsFileUrl);
     if (sSettingsPath.isEmpty())
     {
         OString sMsg("[Java framework] A vendor settings file was not specified."
                "Check the bootstrap parameter " UNO_JAVA_JFW_VENDOR_SETTINGS ".");
-        OSL_FAIL(sMsg.getStr());
+        SAL_WARN( "jfw", sMsg );
         throw FrameworkException(JFW_E_CONFIGURATION, sMsg);
     }
     if (!sSettingsPath.isEmpty())
@@ -107,30 +105,31 @@ VendorSettings::VendorSettings():
             throw FrameworkException(
                 JFW_E_ERROR,
                 OString("[Java framework] Error while parsing file: ")
-                + sSettingsPath + OString("."));
+                + sSettingsPath + ".");
 
         m_xmlPathContextVendorSettings = xmlXPathNewContext(m_xmlDocVendorSettings);
         int res = xmlXPathRegisterNs(
             m_xmlPathContextVendorSettings, reinterpret_cast<xmlChar const *>("jf"),
             reinterpret_cast<xmlChar const *>(NS_JAVA_FRAMEWORK));
         if (res == -1)
-            throw FrameworkException(JFW_E_ERROR, sMsgExc);
+            throw FrameworkException(JFW_E_ERROR,
+                    "[Java framework] Error in constructor VendorSettings::VendorSettings() (fwkbase.cxx)");
     }
 }
 
-VersionInfo VendorSettings::getVersionInformation(const OUString & sVendor)
+VersionInfo VendorSettings::getVersionInformation(const OUString & sVendor) const
 {
     OSL_ASSERT(!sVendor.isEmpty());
     VersionInfo aVersionInfo;
     OString osVendor = OUStringToOString(sVendor, RTL_TEXTENCODING_UTF8);
     //Get minVersion
-    OString sExpresion = OString(
+    OString sExpression = OString(
         "/jf:javaSelection/jf:vendorInfos/jf:vendor[@name=\"") +
         osVendor + OString("\"]/jf:minVersion");
 
     CXPathObjectPtr xPathObjectMin;
     xPathObjectMin =
-        xmlXPathEvalExpression(reinterpret_cast<xmlChar const *>(sExpresion.getStr()),
+        xmlXPathEvalExpression(reinterpret_cast<xmlChar const *>(sExpression.getStr()),
                                m_xmlPathContextVendorSettings);
     if (xmlXPathNodeSetIsEmpty(xPathObjectMin->nodesetval))
     {
@@ -148,11 +147,11 @@ VersionInfo VendorSettings::getVersionInformation(const OUString & sVendor)
     }
 
     //Get maxVersion
-    sExpresion = OString("/jf:javaSelection/jf:vendorInfos/jf:vendor[@name=\"") +
+    sExpression = OString("/jf:javaSelection/jf:vendorInfos/jf:vendor[@name=\"") +
         osVendor + OString("\"]/jf:maxVersion");
     CXPathObjectPtr xPathObjectMax;
     xPathObjectMax = xmlXPathEvalExpression(
-        reinterpret_cast<xmlChar const *>(sExpresion.getStr()),
+        reinterpret_cast<xmlChar const *>(sExpression.getStr()),
         m_xmlPathContextVendorSettings);
     if (xmlXPathNodeSetIsEmpty(xPathObjectMax->nodesetval))
     {
@@ -170,11 +169,11 @@ VersionInfo VendorSettings::getVersionInformation(const OUString & sVendor)
     }
 
     //Get excludeVersions
-    sExpresion = OString("/jf:javaSelection/jf:vendorInfos/jf:vendor[@name=\"") +
+    sExpression = OString("/jf:javaSelection/jf:vendorInfos/jf:vendor[@name=\"") +
         osVendor + OString("\"]/jf:excludeVersions/jf:version");
     CXPathObjectPtr xPathObjectVersions;
     xPathObjectVersions =
-        xmlXPathEvalExpression(reinterpret_cast<xmlChar const *>(sExpresion.getStr()),
+        xmlXPathEvalExpression(reinterpret_cast<xmlChar const *>(sExpression.getStr()),
                                m_xmlPathContextVendorSettings);
     if (!xmlXPathNodeSetIsEmpty(xPathObjectVersions->nodesetval))
     {
@@ -191,7 +190,7 @@ VersionInfo VendorSettings::getVersionInformation(const OUString & sVendor)
                     OString osVersion(sVersion);
                     OUString usVersion = OStringToOUString(
                         osVersion, RTL_TEXTENCODING_UTF8);
-                    aVersionInfo.addExcludeVersion(usVersion);
+                    aVersionInfo.vecExcludeVersions.push_back(usVersion);
                 }
             }
             cur = cur->next;
@@ -200,7 +199,7 @@ VersionInfo VendorSettings::getVersionInformation(const OUString & sVendor)
     return aVersionInfo;
 }
 
-std::vector<OUString> VendorSettings::getSupportedVendors()
+std::vector<OUString> VendorSettings::getSupportedVendors() const
 {
     std::vector<OUString> vecVendors;
     //get the nodeset for the vendor elements
@@ -306,16 +305,16 @@ OUString BootParams::getVendorSettings()
                 != File::E_None)
                 throw FrameworkException(
                     JFW_E_CONFIGURATION,
-                    OString("[Java framework] Invalid value for bootstrap variable: "
-                             UNO_JAVA_JFW_VENDOR_SETTINGS));
+                    "[Java framework] Invalid value for bootstrap variable: "
+                             UNO_JAVA_JFW_VENDOR_SETTINGS);
             sVendor = sAbsoluteUrl;
             s = checkFileURL(sVendor);
             if (s == jfw::FILE_INVALID || s == jfw::FILE_DOES_NOT_EXIST)
             {
                 throw FrameworkException(
                     JFW_E_CONFIGURATION,
-                    OString("[Java framework] Invalid value for bootstrap variable: "
-                                 UNO_JAVA_JFW_VENDOR_SETTINGS));
+                    "[Java framework] Invalid value for bootstrap variable: "
+                                 UNO_JAVA_JFW_VENDOR_SETTINGS);
             }
         }
     SAL_INFO(
@@ -337,11 +336,11 @@ OUString BootParams::getJREHome()
     {
         throw FrameworkException(
             JFW_E_CONFIGURATION,
-            OString("[Java framework] Both bootstrap parameter "
-                         UNO_JAVA_JFW_JREHOME" and "
-                         UNO_JAVA_JFW_ENV_JREHOME" are set. However only one of them can be set."
-                             "Check bootstrap parameters: environment variables, command line "
-                             "arguments, rc/ini files for executable and java framework library."));
+            "[Java framework] Both bootstrap parameter "
+            UNO_JAVA_JFW_JREHOME" and "
+            UNO_JAVA_JFW_ENV_JREHOME" are set. However only one of them can be set."
+            "Check bootstrap parameters: environment variables, command line "
+            "arguments, rc/ini files for executable and java framework library.");
     }
     else if (bEnvJRE)
     {
@@ -349,32 +348,30 @@ OUString BootParams::getJREHome()
         if (pJRE == nullptr)
         {
             throw FrameworkException(
-            JFW_E_CONFIGURATION,
-            OString("[Java framework] Both bootstrap parameter "
-                         UNO_JAVA_JFW_ENV_JREHOME" is set, but the environment variable "
-                         "JAVA_HOME is not set."));
+                JFW_E_CONFIGURATION,
+                "[Java framework] Both bootstrap parameter "
+                UNO_JAVA_JFW_ENV_JREHOME" is set, but the environment variable "
+                "JAVA_HOME is not set.");
         }
         OString osJRE(pJRE);
         OUString usJRE = OStringToOUString(osJRE, osl_getThreadTextEncoding());
         if (File::getFileURLFromSystemPath(usJRE, sJRE) != File::E_None)
             throw FrameworkException(
                 JFW_E_ERROR,
-                OString("[Java framework] Error in function BootParams::getJREHome() "
-                             "(fwkbase.cxx)."));
+                "[Java framework] Error in function BootParams::getJREHome() "
+                "(fwkbase.cxx).");
         SAL_INFO(
             "jfw.level2",
             "Using bootstrap parameter " UNO_JAVA_JFW_ENV_JREHOME
                 " with JAVA_HOME = " << pJRE);
     }
-    else if (getMode() == JFW_MODE_DIRECT
-        && !bEnvJRE
-        && !bJRE)
+    else if (getMode() == JFW_MODE_DIRECT && !bJRE)
     {
         throw FrameworkException(
             JFW_E_CONFIGURATION,
-            OString("[Java framework] The bootstrap parameter "
-                         UNO_JAVA_JFW_ENV_JREHOME" or " UNO_JAVA_JFW_JREHOME
-                         " must be set in direct mode."));
+            "[Java framework] The bootstrap parameter "
+            UNO_JAVA_JFW_ENV_JREHOME" or " UNO_JAVA_JFW_JREHOME
+            " must be set in direct mode.");
     }
 
     SAL_INFO_IF(
@@ -437,10 +434,9 @@ JFW_MODE getMode()
 OUString getApplicationClassPath()
 {
     OSL_ASSERT(getMode() == JFW_MODE_APPLICATION);
-    OUString retVal;
     OUString sParams = BootParams::getClasspathUrls();
     if (sParams.isEmpty())
-        return retVal;
+        return OUString();
 
     OUStringBuffer buf;
     sal_Int32 index = 0;
@@ -482,8 +478,7 @@ OString makeClassPathOption(OUString const & sUserClassPath)
     {
         if (!sUserClassPath.isEmpty())
         {
-            char szSep[] = {SAL_PATHSEPARATOR,0};
-            sBufCP.appendAscii(szSep);
+            sBufCP.append(SAL_PATHSEPARATOR);
         }
         sBufCP.append(sAppCP);
     }
@@ -514,8 +509,8 @@ OString getSettingsPath( const OUString & sURL)
     if (osl_getSystemPathFromFileURL(sURL.pData,
         & sPath.pData) != osl_File_E_None)
         throw FrameworkException(
-            JFW_E_ERROR, OString(
-                "[Java framework] Error in function ::getSettingsPath (fwkbase.cxx)."));
+            JFW_E_ERROR,
+            "[Java framework] Error in function ::getSettingsPath (fwkbase.cxx).");
     return OUStringToOString(sPath,osl_getThreadTextEncoding());
 }
 
@@ -532,9 +527,7 @@ void setJavaSelected()
 bool wasJavaSelectedInSameProcess()
 {
     //g_setJavaProcId not set means no Java selected
-    if (g_bJavaSet)
-        return true;
-    return false;
+    return g_bJavaSet;
 }
 
 

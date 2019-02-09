@@ -20,8 +20,9 @@
 
 #include "asyncfilepicker.hxx"
 #include "iodlg.hxx"
-#include "svtools/fileview.hxx"
+#include <svtools/fileview.hxx>
 #include <tools/debug.hxx>
+#include <osl/diagnose.h>
 
 #include <memory>
 
@@ -125,7 +126,7 @@ namespace svt
     }
 
 
-    IMPL_LINK_TYPED( AsyncPickerAction, OnActionDone, void*, pEmptyArg, void )
+    IMPL_LINK( AsyncPickerAction, OnActionDone, void*, pEmptyArg, void )
     {
         DBG_TESTSOLARMUTEX();
             // if this asserts, we'd need to have an own mutex per instance

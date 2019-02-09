@@ -18,8 +18,9 @@
  */
 
 #include "CacheSet.hxx"
-#include "core_resource.hxx"
-#include "core_resource.hrc"
+#include <core_resource.hxx>
+#include <strings.hrc>
+#include <strings.hxx>
 #include <com/sun/star/sdbcx/CompareBookmark.hpp>
 #include <com/sun/star/sdbc/XResultSetMetaDataSupplier.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -27,7 +28,7 @@
 #include <com/sun/star/sdbc/XPreparedStatement.hpp>
 #include <com/sun/star/sdbc/ColumnValue.hpp>
 #include <com/sun/star/sdbc/XParameters.hpp>
-#include "dbastrings.hrc"
+#include <stringconstants.hxx>
 #include <com/sun/star/sdbcx/XKeysSupplier.hpp>
 #include <com/sun/star/sdbcx/XIndexesSupplier.hpp>
 
@@ -35,11 +36,10 @@
 
 #include <connectivity/dbtools.hxx>
 #include <com/sun/star/sdbcx/KeyType.hpp>
-#include <comphelper/extract.hxx>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <comphelper/types.hxx>
-#include <tools/debug.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
 using namespace comphelper;
 
@@ -133,7 +133,7 @@ OCacheSet::~OCacheSet()
 
 }
 
-void OCacheSet::fillTableName(const Reference<XPropertySet>& _xTable)  throw(SQLException, RuntimeException)
+void OCacheSet::fillTableName(const Reference<XPropertySet>& _xTable)
 {
     OSL_ENSURE(_xTable.is(),"OCacheSet::fillTableName: PropertySet is empty!");
     if(m_aComposedTableName.isEmpty() && _xTable.is() )
@@ -148,7 +148,7 @@ void OCacheSet::fillTableName(const Reference<XPropertySet>& _xTable)  throw(SQL
     }
 }
 
-void SAL_CALL OCacheSet::insertRow( const ORowSetRow& _rInsertRow,const connectivity::OSQLTable& _xTable ) throw(SQLException, RuntimeException, std::exception)
+void OCacheSet::insertRow( const ORowSetRow& _rInsertRow,const connectivity::OSQLTable& _xTable )
 {
     Reference<XPropertySet> xSet(_xTable,UNO_QUERY);
     fillTableName(xSet);
@@ -157,16 +157,14 @@ void SAL_CALL OCacheSet::insertRow( const ORowSetRow& _rInsertRow,const connecti
 
     // set values and column names
     OUStringBuffer aValues(" VALUES ( ");
-    static const char aPara[] = "?,";
     OUString aQuote = getIdentifierQuoteString();
-    static const char aComma[] = ",";
     sal_Int32 i = 1;
     ORowVector< ORowSetValue >::Vector::const_iterator aIter = _rInsertRow->get().begin()+1;
     connectivity::ORowVector< ORowSetValue > ::Vector::iterator aEnd = _rInsertRow->get().end();
     for(; aIter != aEnd;++aIter)
     {
-        aSql.append(::dbtools::quoteName( aQuote,m_xSetMetaData->getColumnName(i++)) + aComma);
-        aValues.append(aPara);
+        aSql.append(::dbtools::quoteName( aQuote,m_xSetMetaData->getColumnName(i++)) ).append(",");
+        aValues.append("?,");
     }
 
     aSql[aSql.getLength() - 1] = ')';
@@ -196,7 +194,7 @@ void OCacheSet::fillParameters( const ORowSetRow& _rRow
                                         ,const connectivity::OSQLTable& _xTable
                                         ,OUStringBuffer& _sCondition
                                         ,OUStringBuffer& _sParameter
-                                        ,::std::list< sal_Int32>& _rOrgValues)
+                                        ,std::vector< sal_Int32>& _rOrgValues)
 {
     // use keys and indexes for exact positioning
     // first the keys
@@ -208,10 +206,8 @@ void OCacheSet::fillParameters( const ORowSetRow& _rRow
     if(xIndexSup.is())
         xIndexes.set(xIndexSup->getIndexes(),UNO_QUERY);
 
-    //  Reference<XColumnsSupplier>
     Reference<XPropertySet> xIndexColsSup;
-    Reference<XNameAccess> xIndexColumns;
-    ::std::vector< Reference<XNameAccess> > aAllIndexColumns;
+    std::vector< Reference<XNameAccess> > aAllIndexColumns;
     if(xIndexes.is())
     {
         for(sal_Int32 j=0;j<xIndexes->getCount();++j)
@@ -227,7 +223,6 @@ void OCacheSet::fillParameters( const ORowSetRow& _rRow
 
     OUString aColumnName;
 
-    static const char aPara[] = "?,";
     static const char aAnd[] = " AND ";
 
     OUString aQuote  = getIdentifierQuoteString();
@@ -238,7 +233,7 @@ void OCacheSet::fillParameters( const ORowSetRow& _rRow
     OUString sIsNull(" IS NULL");
     OUString sParam(" = ?");
     ORowVector< ORowSetValue >::Vector::const_iterator aIter = _rRow->get().begin()+1;
-    ORowVector< ORowSetValue >::Vector::const_iterator aEnd = _rRow->get().end()+1;
+    ORowVector< ORowSetValue >::Vector::const_iterator aEnd = _rRow->get().end();
     for(; aIter != aEnd;++aIter,++nCheckCount,++i)
     {
         aColumnName = m_xSetMetaData->getColumnName(i);
@@ -253,11 +248,9 @@ void OCacheSet::fillParameters( const ORowSetRow& _rRow
             _rOrgValues.push_back(nCheckCount);
 
         }
-        ::std::vector< Reference<XNameAccess> >::const_iterator aIndexEnd = aAllIndexColumns.end();
-        for( ::std::vector< Reference<XNameAccess> >::const_iterator aIndexIter = aAllIndexColumns.begin();
-                aIndexIter != aIndexEnd;++aIndexIter)
+        for (auto const& indexColumn : aAllIndexColumns)
         {
-            if((*aIndexIter)->hasByName(aColumnName))
+            if(indexColumn->hasByName(aColumnName))
             {
                 _sCondition.append(::dbtools::quoteName( aQuote,aColumnName));
                 if(aIter->isNull())
@@ -271,12 +264,12 @@ void OCacheSet::fillParameters( const ORowSetRow& _rRow
         }
         if(aIter->isModified())
         {
-            _sParameter.append(::dbtools::quoteName( aQuote,aColumnName) + aPara);
+            _sParameter.append(::dbtools::quoteName( aQuote,aColumnName) ).append("?,");
         }
     }
 }
 
-void SAL_CALL OCacheSet::updateRow(const ORowSetRow& _rInsertRow ,const ORowSetRow& _rOriginalRow,const connectivity::OSQLTable& _xTable  ) throw(SQLException, RuntimeException, std::exception)
+void OCacheSet::updateRow(const ORowSetRow& _rInsertRow ,const ORowSetRow& _rOriginalRow,const connectivity::OSQLTable& _xTable  )
 {
     Reference<XPropertySet> xSet(_xTable,UNO_QUERY);
     fillTableName(xSet);
@@ -285,18 +278,18 @@ void SAL_CALL OCacheSet::updateRow(const ORowSetRow& _rInsertRow ,const ORowSetR
     // list all columns that should be set
 
     OUStringBuffer aCondition;
-    ::std::list< sal_Int32> aOrgValues;
+    std::vector< sal_Int32> aOrgValues;
     fillParameters(_rInsertRow,_xTable,aCondition,aSql,aOrgValues);
     aSql[aSql.getLength() - 1] = ' ';
     if ( !aCondition.isEmpty() )
     {
         aCondition.setLength(aCondition.getLength()-5);
 
-        aSql.append(" WHERE " + aCondition.makeStringAndClear());
+        aSql.append(" WHERE " ).append( aCondition.makeStringAndClear());
     }
     else
         ::dbtools::throwSQLException(
-            DBACORE_RESSTRING( RID_STR_NO_UPDATE_MISSING_CONDITION ), StandardSQLState::GENERAL_ERROR, *this );
+            DBA_RES( RID_STR_NO_UPDATE_MISSING_CONDITION ), StandardSQLState::GENERAL_ERROR, *this );
 
     // now create end execute the prepared statement
     Reference< XPreparedStatement > xPrep(m_xConnection->prepareStatement(aSql.makeStringAndClear()));
@@ -311,16 +304,16 @@ void SAL_CALL OCacheSet::updateRow(const ORowSetRow& _rInsertRow ,const ORowSetR
             ++i;
         }
     }
-    ::std::list< sal_Int32>::const_iterator aOrgValueEnd = aOrgValues.end();
-    for(::std::list< sal_Int32>::const_iterator aOrgValue = aOrgValues.begin(); aOrgValue != aOrgValueEnd;++aOrgValue,++i)
+    for (auto const& orgValue : aOrgValues)
     {
-        setParameter(i,xParameter,(_rOriginalRow->get())[*aOrgValue],m_xSetMetaData->getColumnType(i),m_xSetMetaData->getScale(i));
+        setParameter(i,xParameter,(_rOriginalRow->get())[orgValue],m_xSetMetaData->getColumnType(i),m_xSetMetaData->getScale(i));
+        ++i;
     }
 
-     m_bUpdated = xPrep->executeUpdate() > 0;
+    m_bUpdated = xPrep->executeUpdate() > 0;
 }
 
-void SAL_CALL OCacheSet::deleteRow(const ORowSetRow& _rDeleteRow ,const connectivity::OSQLTable& _xTable  ) throw(SQLException, RuntimeException)
+void OCacheSet::deleteRow(const ORowSetRow& _rDeleteRow ,const connectivity::OSQLTable& _xTable  )
 {
     Reference<XPropertySet> xSet(_xTable,UNO_QUERY);
     fillTableName(xSet);
@@ -338,8 +331,7 @@ void SAL_CALL OCacheSet::deleteRow(const ORowSetRow& _rDeleteRow ,const connecti
 
     //  Reference<XColumnsSupplier>
     Reference<XPropertySet> xIndexColsSup;
-    Reference<XNameAccess> xIndexColumns;
-    ::std::vector< Reference<XNameAccess> > aAllIndexColumns;
+    std::vector< Reference<XNameAccess> > aAllIndexColumns;
     if(xIndexes.is())
     {
         for(sal_Int32 j=0;j<xIndexes->getCount();++j)
@@ -354,7 +346,7 @@ void SAL_CALL OCacheSet::deleteRow(const ORowSetRow& _rDeleteRow ,const connecti
     }
 
     OUStringBuffer aColumnName;
-    ::std::list< sal_Int32> aOrgValues;
+    std::vector< sal_Int32> aOrgValues;
     fillParameters(_rDeleteRow,_xTable,aSql,aColumnName,aOrgValues);
 
     aSql.setLength(aSql.getLength()-5);
@@ -363,10 +355,10 @@ void SAL_CALL OCacheSet::deleteRow(const ORowSetRow& _rDeleteRow ,const connecti
     Reference< XPreparedStatement > xPrep(m_xConnection->prepareStatement(aSql.makeStringAndClear()));
     Reference< XParameters > xParameter(xPrep,UNO_QUERY);
     sal_Int32 i = 1;
-    ::std::list< sal_Int32>::const_iterator aOrgValueEnd = aOrgValues.end();
-    for(::std::list< sal_Int32>::const_iterator j = aOrgValues.begin(); j != aOrgValueEnd;++j,++i)
+    for (auto const& orgValue : aOrgValues)
     {
-        setParameter(i,xParameter,(_rDeleteRow->get())[*j],m_xSetMetaData->getColumnType(i),m_xSetMetaData->getScale(i));
+        setParameter(i,xParameter,(_rDeleteRow->get())[orgValue],m_xSetMetaData->getColumnType(i),m_xSetMetaData->getScale(i));
+        ++i;
     }
 
     m_bDeleted = xPrep->executeUpdate() > 0;
@@ -386,7 +378,7 @@ void OCacheSet::fillValueRow(ORowSetRow& _rRow,sal_Int32 _nPosition)
 {
     Any aBookmark = getBookmark();
     if(!aBookmark.hasValue())
-        aBookmark = makeAny(_nPosition);
+        aBookmark <<= _nPosition;
 
     connectivity::ORowVector< ORowSetValue >::Vector::iterator aIter = _rRow->get().begin();
     connectivity::ORowVector< ORowSetValue >::Vector::iterator aEnd = _rRow->get().end();
@@ -399,159 +391,149 @@ void OCacheSet::fillValueRow(ORowSetRow& _rRow,sal_Int32 _nPosition)
     }
 }
 
-sal_Bool SAL_CALL OCacheSet::wasNull(  ) throw(SQLException, RuntimeException, std::exception)
+sal_Bool SAL_CALL OCacheSet::wasNull(  )
 {
     return m_xDriverRow->wasNull();
 }
 
-OUString SAL_CALL OCacheSet::getString( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+OUString SAL_CALL OCacheSet::getString( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getString(columnIndex);
 }
 
-sal_Bool SAL_CALL OCacheSet::getBoolean( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+sal_Bool SAL_CALL OCacheSet::getBoolean( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getBoolean(columnIndex);
 }
 
-sal_Int8 SAL_CALL OCacheSet::getByte( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+sal_Int8 SAL_CALL OCacheSet::getByte( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getByte(columnIndex);
 }
 
-sal_Int16 SAL_CALL OCacheSet::getShort( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+sal_Int16 SAL_CALL OCacheSet::getShort( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getShort(columnIndex);
 }
 
-sal_Int32 SAL_CALL OCacheSet::getInt( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+sal_Int32 SAL_CALL OCacheSet::getInt( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getInt(columnIndex);
 }
 
-sal_Int64 SAL_CALL OCacheSet::getLong( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+sal_Int64 SAL_CALL OCacheSet::getLong( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getLong(columnIndex);
 }
 
-float SAL_CALL OCacheSet::getFloat( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+float SAL_CALL OCacheSet::getFloat( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getFloat(columnIndex);
 }
 
-double SAL_CALL OCacheSet::getDouble( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+double SAL_CALL OCacheSet::getDouble( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getDouble(columnIndex);
 }
 
-Sequence< sal_Int8 > SAL_CALL OCacheSet::getBytes( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+Sequence< sal_Int8 > SAL_CALL OCacheSet::getBytes( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getBytes(columnIndex);
 }
 
-css::util::Date SAL_CALL OCacheSet::getDate( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+css::util::Date SAL_CALL OCacheSet::getDate( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getDate(columnIndex);
 }
 
-css::util::Time SAL_CALL OCacheSet::getTime( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+css::util::Time SAL_CALL OCacheSet::getTime( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getTime(columnIndex);
 }
 
-css::util::DateTime SAL_CALL OCacheSet::getTimestamp( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+css::util::DateTime SAL_CALL OCacheSet::getTimestamp( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getTimestamp(columnIndex);
 }
 
-Reference< css::io::XInputStream > SAL_CALL OCacheSet::getBinaryStream( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+Reference< css::io::XInputStream > SAL_CALL OCacheSet::getBinaryStream( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getBinaryStream(columnIndex);
 }
 
-Reference< css::io::XInputStream > SAL_CALL OCacheSet::getCharacterStream( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+Reference< css::io::XInputStream > SAL_CALL OCacheSet::getCharacterStream( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getCharacterStream(columnIndex);
 }
 
-Any SAL_CALL OCacheSet::getObject( sal_Int32 columnIndex, const Reference< css::container::XNameAccess >& typeMap ) throw(SQLException, RuntimeException, std::exception)
+Any SAL_CALL OCacheSet::getObject( sal_Int32 columnIndex, const Reference< css::container::XNameAccess >& typeMap )
 {
     return m_xDriverRow->getObject(columnIndex,typeMap);
 }
 
-Reference< XRef > SAL_CALL OCacheSet::getRef( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+Reference< XRef > SAL_CALL OCacheSet::getRef( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getRef(columnIndex);
 }
 
-Reference< XBlob > SAL_CALL OCacheSet::getBlob( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+Reference< XBlob > SAL_CALL OCacheSet::getBlob( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getBlob(columnIndex);
 }
 
-Reference< XClob > SAL_CALL OCacheSet::getClob( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+Reference< XClob > SAL_CALL OCacheSet::getClob( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getClob(columnIndex);
 }
 
-Reference< XArray > SAL_CALL OCacheSet::getArray( sal_Int32 columnIndex ) throw(SQLException, RuntimeException, std::exception)
+Reference< XArray > SAL_CALL OCacheSet::getArray( sal_Int32 columnIndex )
 {
     return m_xDriverRow->getArray(columnIndex);
 }
 
 // XResultSet
-bool SAL_CALL OCacheSet::next(  ) throw(SQLException, RuntimeException)
+bool OCacheSet::next()
 {
     m_bInserted = m_bUpdated = m_bDeleted = false;
     return m_xDriverSet->next();
 }
 
-bool SAL_CALL OCacheSet::isBeforeFirst(  ) throw(SQLException, RuntimeException)
-{
-    return m_xDriverSet->isBeforeFirst();
-}
-
-bool SAL_CALL OCacheSet::isAfterLast(  ) throw(SQLException, RuntimeException)
-{
-    return m_xDriverSet->isAfterLast();
-}
-
-void SAL_CALL OCacheSet::beforeFirst(  ) throw(SQLException, RuntimeException)
+void OCacheSet::beforeFirst(  )
 {
     m_bInserted = m_bUpdated = m_bDeleted = false;
     m_xDriverSet->beforeFirst();
 }
 
-void SAL_CALL OCacheSet::afterLast(  ) throw(SQLException, RuntimeException)
+void OCacheSet::afterLast(  )
 {
     m_bInserted = m_bUpdated = m_bDeleted = false;
     m_xDriverSet->afterLast();
 }
 
-bool SAL_CALL OCacheSet::first(  ) throw(SQLException, RuntimeException)
+bool OCacheSet::first()
 {
     m_bInserted = m_bUpdated = m_bDeleted = false;
     return m_xDriverSet->first();
 }
 
-bool SAL_CALL OCacheSet::last(  ) throw(SQLException, RuntimeException)
+bool OCacheSet::last()
 {
     m_bInserted = m_bUpdated = m_bDeleted = false;
     return m_xDriverSet->last();
 }
 
-sal_Int32 SAL_CALL OCacheSet::getRow(  ) throw(SQLException, RuntimeException)
+sal_Int32 OCacheSet::getRow(  )
 {
     return m_xDriverSet->getRow();
 }
 
-bool SAL_CALL OCacheSet::absolute( sal_Int32 row ) throw(SQLException, RuntimeException)
+bool OCacheSet::absolute( sal_Int32 row )
 {
     m_bInserted = m_bUpdated = m_bDeleted = false;
     return m_xDriverSet->absolute(row);
 }
 
-bool SAL_CALL OCacheSet::previous(  ) throw(SQLException, RuntimeException)
+bool OCacheSet::previous(  )
 {
     m_bInserted = m_bUpdated = m_bDeleted = false;
     return m_xDriverSet->previous();
@@ -572,22 +554,22 @@ bool OCacheSet::absolute_checked( sal_Int32 row,bool /*i_bFetchRow*/ )
     return absolute(row);
 }
 
-void SAL_CALL OCacheSet::refreshRow(  ) throw(SQLException, RuntimeException)
+void OCacheSet::refreshRow(  )
 {
     m_xDriverSet->refreshRow();
 }
 
-bool SAL_CALL OCacheSet::rowUpdated(  ) throw(SQLException, RuntimeException)
+bool OCacheSet::rowUpdated(  )
 {
     return m_xDriverSet->rowUpdated();
 }
 
-bool SAL_CALL OCacheSet::rowInserted(  ) throw(SQLException, RuntimeException)
+bool OCacheSet::rowInserted(  )
 {
     return m_xDriverSet->rowInserted();
 }
 
-bool SAL_CALL OCacheSet::rowDeleted(  ) throw(SQLException, RuntimeException)
+bool OCacheSet::rowDeleted(  )
 {
     return m_xDriverSet->rowDeleted();
 }
@@ -597,7 +579,7 @@ bool OCacheSet::isResultSetChanged() const
     return false;
 }
 
-void OCacheSet::mergeColumnValues(sal_Int32 i_nColumnIndex,ORowSetValueVector::Vector& /*io_aInsertRow*/,ORowSetValueVector::Vector& /*io_aRow*/,::std::vector<sal_Int32>& o_aChangedColumns)
+void OCacheSet::mergeColumnValues(sal_Int32 i_nColumnIndex,ORowSetValueVector::Vector& /*io_aInsertRow*/,ORowSetValueVector::Vector& /*io_aRow*/,std::vector<sal_Int32>& o_aChangedColumns)
 {
     o_aChangedColumns.push_back(i_nColumnIndex);
 }
@@ -607,7 +589,7 @@ bool OCacheSet::columnValuesUpdated(ORowSetValueVector::Vector& /*io_aCachedRow*
     return false;
 }
 
-bool OCacheSet::updateColumnValues(const ORowSetValueVector::Vector& /*io_aCachedRow*/,ORowSetValueVector::Vector& /*io_aRow*/,const ::std::vector<sal_Int32>& /*i_aChangedColumns*/)
+bool OCacheSet::updateColumnValues(const ORowSetValueVector::Vector& /*io_aCachedRow*/,ORowSetValueVector::Vector& /*io_aRow*/,const std::vector<sal_Int32>& /*i_aChangedColumns*/)
 {
     return true;
 }

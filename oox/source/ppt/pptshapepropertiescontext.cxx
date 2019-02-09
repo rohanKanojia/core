@@ -23,15 +23,18 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 
-#include "oox/ppt/pptshape.hxx"
-#include "oox/ppt/pptshapepropertiescontext.hxx"
-#include "oox/ppt/slidepersist.hxx"
-#include "drawingml/shapestylecontext.hxx"
-#include "drawingml/fillpropertiesgroupcontext.hxx"
-#include "oox/drawingml/lineproperties.hxx"
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "drawingml/customshapegeometry.hxx"
-#include "drawingml/textbodycontext.hxx"
+#include <oox/ppt/pptshape.hxx>
+#include <oox/ppt/pptshapepropertiescontext.hxx>
+#include <oox/ppt/slidepersist.hxx>
+#include <drawingml/shapestylecontext.hxx>
+#include <drawingml/misccontexts.hxx>
+#include <drawingml/lineproperties.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <drawingml/customshapegeometry.hxx>
+#include <drawingml/textbodycontext.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace oox::core;
 using namespace ::com::sun::star;
@@ -44,7 +47,7 @@ using namespace ::com::sun::star::xml::sax;
 namespace oox { namespace ppt {
 
 // CT_Shape
-PPTShapePropertiesContext::PPTShapePropertiesContext( ContextHandler2Helper& rParent, ::oox::drawingml::Shape& rShape )
+PPTShapePropertiesContext::PPTShapePropertiesContext( ContextHandler2Helper const & rParent, ::oox::drawingml::Shape& rShape )
 : ShapePropertiesContext( rParent, rShape )
 {
 }
@@ -54,7 +57,7 @@ ContextHandlerRef PPTShapePropertiesContext::onCreateContext( sal_Int32 aElement
     switch( aElementToken )
     {
         case A_TOKEN( xfrm ):
-            mrShape.getShapeProperties().setProperty( PROP_IsPlaceholderDependent, sal_False);
+            mrShape.getShapeProperties().setProperty( PROP_IsPlaceholderDependent, false);
             return ShapePropertiesContext::onCreateContext( aElementToken, rAttribs );
 
         default:

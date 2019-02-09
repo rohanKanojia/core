@@ -18,17 +18,14 @@
  */
 
 #include <tools/urlobj.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/help.hxx>
 #include <sfx2/sfxsids.hrc>
-#include "macroass.hxx"
-#include <svtools/imaprect.hxx>
-#include <svtools/imapcirc.hxx>
-#include <svtools/imappoly.hxx>
+#include <macroass.hxx>
+#include <vcl/imaprect.hxx>
+#include <vcl/imapcirc.hxx>
+#include <vcl/imappoly.hxx>
 #include <svl/urlbmk.hxx>
 #include <svx/xoutbmp.hxx>
-#include <dialmgr.hxx>
-#include <cuires.hrc>
 #include <cuiimapwnd.hxx>
 #include <svx/svdpage.hxx>
 #include <svx/svdorect.hxx>
@@ -64,8 +61,8 @@ URLDlg::URLDlg( vcl::Window* pWindow, const OUString& rURL, const OUString& rAlt
     m_pEdtDescription->SetText( rDescription );
     m_pEdtName->SetText( rName );
 
-    for( size_t i = 0, n = rTargetList.size(); i < n; ++i )
-        m_pCbbTargets->InsertEntry( rTargetList[ i ] );
+    for(OUString & i : rTargetList)
+        m_pCbbTargets->InsertEntry( i );
 
     if( rTarget.isEmpty() )
         m_pCbbTargets->SetText( "_self");

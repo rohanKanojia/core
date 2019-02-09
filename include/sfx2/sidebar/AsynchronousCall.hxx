@@ -43,10 +43,10 @@ public:
     void CancelRequest();
 
 private:
-    Action maAction;
+    Action const maAction;
     ImplSVEvent * mnCallId;
 
-    DECL_LINK_TYPED(HandleUserCall, void*, void);
+    DECL_LINK(HandleUserCall, void*, void);
 };
 
 } } // end of namespace sfx2::sidebar

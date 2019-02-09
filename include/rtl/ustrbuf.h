@@ -20,10 +20,10 @@
 #ifndef INCLUDED_RTL_USTRBUF_H
 #define INCLUDED_RTL_USTRBUF_H
 
-#include <sal/config.h>
+#include "sal/config.h"
 
-#include <rtl/ustring.h>
-#include <sal/saldllapi.h>
+#include "rtl/ustring.h"
+#include "sal/saldllapi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -190,7 +190,7 @@ SAL_DLLPUBLIC void SAL_CALL rtl_uStringbuffer_remove(
  */
 SAL_DLLPUBLIC rtl_uString * SAL_CALL rtl_uStringBuffer_makeStringAndClear(
                                         /*inout*/ rtl_uString ** ppThis,
-                                        sal_Int32 *nCapacity );
+                                        sal_Int32 *nCapacity ) SAL_RETURNS_NONNULL;
 
 /**
     References and returns an immutable rtl_uString object, from a mutable

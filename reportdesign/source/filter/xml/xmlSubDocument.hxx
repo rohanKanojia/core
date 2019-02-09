@@ -39,7 +39,7 @@ namespace rptxml
         OXMLSubDocument(const OXMLSubDocument&) = delete;
         void operator =(const OXMLSubDocument&) = delete;
 
-        virtual SvXMLImportContext* _CreateChildContext( sal_uInt16 nPrefix,
+        virtual SvXMLImportContextRef CreateChildContext_( sal_uInt16 nPrefix,
                     const OUString& rLocalName,
                     const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
     public:
@@ -50,7 +50,7 @@ namespace rptxml
                     ,const css::uno::Reference< css::report::XReportComponent >& _xComponent
                     ,OXMLTable* _pContainer
                     ,OXMLCell* _pCellParent);
-        virtual ~OXMLSubDocument();
+        virtual ~OXMLSubDocument() override;
 
         virtual void EndElement() override;
         virtual void addMasterDetailPair(const ::std::pair< OUString,OUString >& _aPair) override;

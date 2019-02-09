@@ -19,15 +19,14 @@
 
 #include <uielement/headermenucontroller.hxx>
 
-#include "services.h"
+#include <services.h>
 
-#include <classes/resource.hrc>
-#include <classes/fwlresid.hxx>
+#include <strings.hrc>
+#include <classes/fwkresid.hxx>
 
 #include <com/sun/star/awt/XDevice.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/awt/MenuItemStyle.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -72,7 +71,7 @@ HeaderMenuController::~HeaderMenuController()
 }
 
 // private function
-void HeaderMenuController::fillPopupMenu( const Reference< css::frame::XModel >& rModel, Reference< css::awt::XPopupMenu >& rPopupMenu )
+void HeaderMenuController::fillPopupMenu( const Reference< css::frame::XModel >& rModel, Reference< css::awt::XPopupMenu > const & rPopupMenu )
 {
     VCLXPopupMenu*       pPopupMenu        = static_cast<VCLXPopupMenu *>(VCLXMenu::GetImplementation( rPopupMenu ));
     PopupMenu*           pVCLPopupMenu     = nullptr;
@@ -159,7 +158,7 @@ void HeaderMenuController::fillPopupMenu( const Reference< css::frame::XModel >&
                 if ( bAllOneState && ( nCount > 1 ))
                 {
                     // Insert special item for all command
-                    pVCLPopupMenu->InsertItem( ALL_MENUITEM_ID, FwlResId(STR_MENU_HEADFOOTALL).toString(), MenuItemBits::NONE, OString(), 0 );
+                    pVCLPopupMenu->InsertItem( ALL_MENUITEM_ID, FwkResId(STR_MENU_HEADFOOTALL), MenuItemBits::NONE, OString(), 0 );
 
                     OUStringBuffer aStrBuf( aCmd );
                     aStrBuf.append( "?On:bool=" );
@@ -182,7 +181,7 @@ void HeaderMenuController::fillPopupMenu( const Reference< css::frame::XModel >&
 }
 
 // XEventListener
-void SAL_CALL HeaderMenuController::disposing( const EventObject& ) throw ( RuntimeException, std::exception )
+void SAL_CALL HeaderMenuController::disposing( const EventObject& )
 {
     Reference< css::awt::XMenuListener > xHolder(static_cast<OWeakObject *>(this), UNO_QUERY );
 
@@ -196,7 +195,7 @@ void SAL_CALL HeaderMenuController::disposing( const EventObject& ) throw ( Runt
 }
 
 // XStatusListener
-void SAL_CALL HeaderMenuController::statusChanged( const FeatureStateEvent& Event ) throw ( RuntimeException, std::exception )
+void SAL_CALL HeaderMenuController::statusChanged( const FeatureStateEvent& Event )
 {
     Reference< css::frame::XModel > xModel;
 
@@ -210,7 +209,7 @@ void SAL_CALL HeaderMenuController::statusChanged( const FeatureStateEvent& Even
 }
 
 // XMenuListener
-void SAL_CALL HeaderMenuController::updatePopupMenu() throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL HeaderMenuController::updatePopupMenu()
 {
     osl::ResettableMutexGuard aLock( m_aMutex );
 

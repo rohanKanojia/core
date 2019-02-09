@@ -21,6 +21,7 @@
 
 #include <IDocumentFieldsAccess.hxx>
 #include <sal/types.h>
+#include <memory>
 
 class SwDoc;
 class SwDBNameInfField;
@@ -36,14 +37,14 @@ public:
 
     virtual const SwFieldTypes *GetFieldTypes() const override;
     virtual SwFieldType *InsertFieldType(const SwFieldType &) override;
-    virtual SwFieldType *GetSysFieldType( const sal_uInt16 eWhich ) const override;
-    virtual SwFieldType* GetFieldType(sal_uInt16 nResId, const OUString& rName, bool bDbFieldMatching) const override;
+    virtual SwFieldType *GetSysFieldType( const SwFieldIds eWhich ) const override;
+    virtual SwFieldType* GetFieldType(SwFieldIds nResId, const OUString& rName, bool bDbFieldMatching) const override;
     virtual void RemoveFieldType(size_t nField) override;
     virtual void UpdateFields(bool bCloseDB) override;
     virtual void InsDeletedFieldType(SwFieldType &) override;
-    virtual bool PutValueToField(const SwPosition & rPos, const css::uno::Any& rVal, sal_uInt16 nWhich) override;
+    virtual void PutValueToField(const SwPosition & rPos, const css::uno::Any& rVal, sal_uInt16 nWhich) override;
     virtual bool UpdateField(SwTextField * rDstFormatField, SwField & rSrcField, SwMsgPoolItem * pMsgHint, bool bUpdateTableFields) override;
-    virtual void UpdateRefFields(SfxPoolItem* pHt) override;
+    virtual void UpdateRefFields() override;
     virtual void UpdateTableFields(SfxPoolItem* pHt) override;
     virtual void UpdateExpFields(SwTextField* pField, bool bUpdateRefFields) override;
     virtual void UpdateUsrFields() override;
@@ -55,11 +56,12 @@ public:
     virtual bool SetFieldsDirty(bool b, const SwNode* pChk, sal_uLong nLen) override;
     virtual void SetFixFields(const DateTime* pNewDateTime) override;
     virtual void FieldsToCalc(SwCalc& rCalc, sal_uLong nLastNd, sal_uInt16 nLastCnt) override;
-    virtual void FieldsToCalc(SwCalc& rCalc, const _SetGetExpField& rToThisField) override;
-    virtual void FieldsToExpand(SwHash**& ppTable, sal_uInt16& rTableSize, const _SetGetExpField& rToThisField) override;
+    virtual void FieldsToCalc(SwCalc& rCalc, const SetGetExpField& rToThisField, SwRootFrame const* pLayout) override;
+    virtual void FieldsToExpand(SwHashTable<HashStr>& rTable, const SetGetExpField& rToThisField, SwRootFrame const& rLayout) override;
     virtual bool IsNewFieldLst() const override;
     virtual void SetNewFieldLst( bool bFlag) override;
     virtual void InsDelFieldInFieldLst(bool bIns, const SwTextField& rField) override;
+    virtual sal_Int32 GetRecordsPerDocument() const override;
 
     //Non Interface methods
 
@@ -80,24 +82,26 @@ public:
     // Delete all unreferenced field types.
     void GCFieldTypes();
 
-    void _InitFieldTypes();
+    void InitFieldTypes();
 
     void ClearFieldTypes();
 
     void UpdateDBNumFields( SwDBNameInfField& rDBField, SwCalc& rCalc );
 
-    virtual ~DocumentFieldsManager();
+    virtual ~DocumentFieldsManager() override;
 
 private:
 
     DocumentFieldsManager(DocumentFieldsManager const&) = delete;
     DocumentFieldsManager& operator=(DocumentFieldsManager const&) = delete;
 
+    void UpdateExpFieldsImpl(SwTextField* pField, SwRootFrame const* pLayout);
+
     SwDoc& m_rDoc;
 
     bool mbNewFieldLst; //< TRUE: Rebuild field-list.
-    SwDocUpdateField    *mpUpdateFields; //< Struct for updating fields
-    SwFieldTypes      *mpFieldTypes;
+    std::unique_ptr<SwDocUpdateField> mpUpdateFields; //< Struct for updating fields
+    std::unique_ptr<SwFieldTypes>     mpFieldTypes;
     sal_Int8    mnLockExpField;  //< If != 0 UpdateExpFields() has no effect!
 };
 

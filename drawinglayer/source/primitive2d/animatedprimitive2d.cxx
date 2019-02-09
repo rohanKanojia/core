@@ -31,12 +31,17 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
+        void AnimatedSwitchPrimitive2D::setAnimationEntry(const animation::AnimationEntry& rNew)
+        {
+            // clone given animation description
+            mpAnimationEntry = rNew.clone();
+        }
+
         AnimatedSwitchPrimitive2D::AnimatedSwitchPrimitive2D(
             const animation::AnimationEntry& rAnimationEntry,
             const Primitive2DContainer& rChildren,
             bool bIsTextAnimation)
         :   GroupPrimitive2D(rChildren),
-            mpAnimationEntry(nullptr),
             mbIsTextAnimation(bIsTextAnimation)
         {
             // clone given animation description
@@ -45,8 +50,6 @@ namespace drawinglayer
 
         AnimatedSwitchPrimitive2D::~AnimatedSwitchPrimitive2D()
         {
-            // delete cloned animation description
-            delete mpAnimationEntry;
         }
 
         bool AnimatedSwitchPrimitive2D::operator==(const BasePrimitive2D& rPrimitive) const
@@ -61,24 +64,22 @@ namespace drawinglayer
             return false;
         }
 
-        Primitive2DContainer AnimatedSwitchPrimitive2D::get2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const
+        void AnimatedSwitchPrimitive2D::get2DDecomposition(Primitive2DDecompositionVisitor& rVisitor, const geometry::ViewInformation2D& rViewInformation) const
         {
             if(!getChildren().empty())
             {
                 const double fState(getAnimationEntry().getStateAtTime(rViewInformation.getViewTime()));
                 const sal_uInt32 nLen(getChildren().size());
-                sal_uInt32 nIndex(basegfx::fround(fState * (double)nLen));
+                sal_uInt32 nIndex(basegfx::fround(fState * static_cast<double>(nLen)));
 
                 if(nIndex >= nLen)
                 {
-                    nIndex = nLen - 1L;
+                    nIndex = nLen - 1;
                 }
 
                 const Primitive2DReference xRef(getChildren()[nIndex], uno::UNO_QUERY_THROW);
-                return Primitive2DContainer { xRef };
+                rVisitor.append(xRef);
             }
-
-            return Primitive2DContainer();
         }
 
         // provide unique ID
@@ -94,13 +95,12 @@ namespace drawinglayer
     {
         AnimatedBlinkPrimitive2D::AnimatedBlinkPrimitive2D(
             const animation::AnimationEntry& rAnimationEntry,
-            const Primitive2DContainer& rChildren,
-            bool bIsTextAnimation)
-        :   AnimatedSwitchPrimitive2D(rAnimationEntry, rChildren, bIsTextAnimation)
+            const Primitive2DContainer& rChildren)
+        :   AnimatedSwitchPrimitive2D(rAnimationEntry, rChildren, true/*bIsTextAnimation*/)
         {
         }
 
-        Primitive2DContainer AnimatedBlinkPrimitive2D::get2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const
+        void AnimatedBlinkPrimitive2D::get2DDecomposition(Primitive2DDecompositionVisitor& rVisitor, const geometry::ViewInformation2D& rViewInformation) const
         {
             if(!getChildren().empty())
             {
@@ -108,11 +108,9 @@ namespace drawinglayer
 
                 if(fState < 0.5)
                 {
-                    return getChildren();
+                    getChildren(rVisitor);
                 }
             }
-
-            return Primitive2DContainer();
         }
 
         // provide unique ID
@@ -129,22 +127,21 @@ namespace drawinglayer
         AnimatedInterpolatePrimitive2D::AnimatedInterpolatePrimitive2D(
             const std::vector< basegfx::B2DHomMatrix >& rmMatrixStack,
             const animation::AnimationEntry& rAnimationEntry,
-            const Primitive2DContainer& rChildren,
-            bool bIsTextAnimation)
-        :   AnimatedSwitchPrimitive2D(rAnimationEntry, rChildren, bIsTextAnimation),
+            const Primitive2DContainer& rChildren)
+        :   AnimatedSwitchPrimitive2D(rAnimationEntry, rChildren, true/*bIsTextAnimation*/),
             maMatrixStack()
         {
             // copy matrices to locally pre-decomposed matrix stack
             const sal_uInt32 nCount(rmMatrixStack.size());
             maMatrixStack.reserve(nCount);
 
-            for(sal_uInt32 a(0L); a < nCount; a++)
+            for(sal_uInt32 a(0); a < nCount; a++)
             {
-                maMatrixStack.push_back(basegfx::tools::B2DHomMatrixBufferedDecompose(rmMatrixStack[a]));
+                maMatrixStack.emplace_back(rmMatrixStack[a]);
             }
         }
 
-        Primitive2DContainer AnimatedInterpolatePrimitive2D::get2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const
+        void AnimatedInterpolatePrimitive2D::get2DDecomposition(Primitive2DDecompositionVisitor& rVisitor, const geometry::ViewInformation2D& rViewInformation) const
         {
             const sal_uInt32 nSize(maMatrixStack.size());
 
@@ -161,11 +158,11 @@ namespace drawinglayer
                     fState = 1.0;
                 }
 
-                const double fIndex(fState * (double)(nSize - 1L));
+                const double fIndex(fState * static_cast<double>(nSize - 1));
                 const sal_uInt32 nIndA(sal_uInt32(floor(fIndex)));
-                const double fOffset(fIndex - (double)nIndA);
+                const double fOffset(fIndex - static_cast<double>(nIndA));
                 basegfx::B2DHomMatrix aTargetTransform;
-                std::vector< basegfx::tools::B2DHomMatrixBufferedDecompose >::const_iterator aMatA(maMatrixStack.begin() + nIndA);
+                std::vector< basegfx::utils::B2DHomMatrixBufferedDecompose >::const_iterator aMatA(maMatrixStack.begin() + nIndA);
 
                 if(basegfx::fTools::equalZero(fOffset))
                 {
@@ -175,8 +172,8 @@ namespace drawinglayer
                 else
                 {
                     // interpolate. Get involved buffered decomposed matrices
-                    const sal_uInt32 nIndB((nIndA + 1L) % nSize);
-                    std::vector< basegfx::tools::B2DHomMatrixBufferedDecompose >::const_iterator aMatB(maMatrixStack.begin() + nIndB);
+                    const sal_uInt32 nIndB((nIndA + 1) % nSize);
+                    std::vector< basegfx::utils::B2DHomMatrixBufferedDecompose >::const_iterator aMatB(maMatrixStack.begin() + nIndB);
 
                     // interpolate for fOffset [0.0 .. 1.0[
                     const basegfx::B2DVector aScale(basegfx::interpolate(aMatA->getScale(), aMatB->getScale(), fOffset));
@@ -185,17 +182,17 @@ namespace drawinglayer
                     const double fShearX(((aMatB->getShearX() - aMatA->getShearX()) * fOffset) + aMatA->getShearX());
 
                     // build matrix for state
-                    aTargetTransform = basegfx::tools::createScaleShearXRotateTranslateB2DHomMatrix(
+                    aTargetTransform = basegfx::utils::createScaleShearXRotateTranslateB2DHomMatrix(
                         aScale, fShearX, fRotate, aTranslate);
                 }
 
                 // create new transform primitive reference, return new sequence
                 const Primitive2DReference xRef(new TransformPrimitive2D(aTargetTransform, getChildren()));
-                return Primitive2DContainer { xRef };
+                rVisitor.append(xRef);
             }
             else
             {
-                return getChildren();
+                getChildren(rVisitor);
             }
         }
 

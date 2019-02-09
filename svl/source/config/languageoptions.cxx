@@ -27,8 +27,13 @@
 #include <rtl/instance.hxx>
 #include <com/sun/star/i18n/ScriptType.hpp>
 #include <unotools/syslocale.hxx>
+#include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
 
 #ifdef _WIN32
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #endif
 
@@ -42,8 +47,8 @@ SvtLanguageOptions::SvtLanguageOptions( bool _bDontLoad )
     // Global access, must be guarded (multithreading)
     ::osl::MutexGuard aGuard( ALMutex::get() );
 
-    m_pCJKOptions = new SvtCJKOptions( _bDontLoad );
-    m_pCTLOptions = new SvtCTLOptions( _bDontLoad );
+    m_pCJKOptions.reset(new SvtCJKOptions( _bDontLoad ));
+    m_pCTLOptions.reset(new SvtCTLOptions( _bDontLoad ));
     m_pCTLOptions->AddListener(this);
     m_pCJKOptions->AddListener(this);
 }
@@ -55,8 +60,8 @@ SvtLanguageOptions::~SvtLanguageOptions()
     m_pCTLOptions->RemoveListener(this);
     m_pCJKOptions->RemoveListener(this);
 
-    delete m_pCJKOptions;
-    delete m_pCTLOptions;
+    m_pCJKOptions.reset();
+    m_pCTLOptions.reset();
 }
 // CJK options
 bool SvtLanguageOptions::IsCJKFontEnabled() const
@@ -133,7 +138,7 @@ bool SvtLanguageOptions::IsReadOnly(SvtLanguageOptions::EOption eOption) const
 }
 
 // returns for a language the scripttype
-SvtScriptType SvtLanguageOptions::GetScriptTypeOfLanguage( sal_uInt16 nLang )
+SvtScriptType SvtLanguageOptions::GetScriptTypeOfLanguage( LanguageType nLang )
 {
     if( LANGUAGE_DONTKNOW == nLang )
         nLang = LANGUAGE_ENGLISH_US;
@@ -183,7 +188,7 @@ sal_Int16 SvtLanguageOptions::FromSvtScriptTypeToI18N( SvtScriptType nItemType )
     return 0;
 }
 
-sal_Int16 SvtLanguageOptions::GetI18NScriptTypeOfLanguage( sal_uInt16 nLang )
+sal_Int16 SvtLanguageOptions::GetI18NScriptTypeOfLanguage( LanguageType nLang )
 {
     return FromSvtScriptTypeToI18N( GetScriptTypeOfLanguage( nLang ) );
 }
@@ -225,18 +230,18 @@ bool SvtSystemLanguageOptions::isKeyboardLayoutTypeInstalled(sal_Int16 scriptTyp
 {
     bool isInstalled = false;
 #ifdef _WIN32
-    int nLayouts = GetKeyboardLayoutList(0, NULL);
+    int nLayouts = GetKeyboardLayoutList(0, nullptr);
     if (nLayouts > 0)
     {
-        HKL *lpList = (HKL*)LocalAlloc(LPTR, (nLayouts * sizeof(HKL)));
+        HKL *lpList = static_cast<HKL*>(LocalAlloc(LPTR, (nLayouts * sizeof(HKL))));
         if (lpList)
         {
             nLayouts = GetKeyboardLayoutList(nLayouts, lpList);
 
             for(int i = 0; i < nLayouts; ++i)
             {
-                LCID lang = MAKELCID((WORD)((DWORD_PTR)lpList[i] & 0xffff), SORT_DEFAULT);
-                if (MsLangId::getScriptType(lang) == scriptType)
+                LCID lang = MAKELCID(LOWORD(lpList[i]), SORT_DEFAULT);
+                if (MsLangId::getScriptType(LanguageType(lang)) == scriptType)
                 {
                     isInstalled = true;
                     break;
@@ -251,13 +256,6 @@ bool SvtSystemLanguageOptions::isKeyboardLayoutTypeInstalled(sal_Int16 scriptTyp
 #endif
     return isInstalled;
 }
-
-
-bool SvtSystemLanguageOptions::isCTLKeyboardLayoutInstalled() const
-{
-    return isKeyboardLayoutTypeInstalled(css::i18n::ScriptType::COMPLEX);
-}
-
 
 bool SvtSystemLanguageOptions::isCJKKeyboardLayoutInstalled() const
 {

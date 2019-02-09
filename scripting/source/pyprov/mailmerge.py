@@ -17,6 +17,7 @@ import unohelper
 import uno
 import re
 import os
+import encodings.idna
 
 #to implement com::sun::star::mail::XMailServiceProvider
 #and
@@ -90,7 +91,7 @@ class PyMailSMTPService(unohelper.Base, XSmtpService):
 		self.connectioncontext = xConnectionContext
 		if dbg:
 			print("PyMailSMTPService connect", file=dbgout)
-		server = xConnectionContext.getValueByName("ServerName")
+		server = xConnectionContext.getValueByName("ServerName").strip()
 		if dbg:
 			print("ServerName: " + server, file=dbgout)
 		port = int(xConnectionContext.getValueByName("Port"))
@@ -103,7 +104,10 @@ class PyMailSMTPService(unohelper.Base, XSmtpService):
 			tout = _GLOBAL_DEFAULT_TIMEOUT
 		if dbg:
 			print("Timeout: " + str(tout), file=dbgout)
-		self.server = smtplib.SMTP(server, port,timeout=tout)
+		if port == 465:
+			self.server = smtplib.SMTP_SSL(server, port,timeout=tout)
+		else:
+			self.server = smtplib.SMTP(server, port,timeout=tout)
 
 		#stderr not available for us under windows, but
 		#set_debuglevel outputs there, and so throw
@@ -115,7 +119,7 @@ class PyMailSMTPService(unohelper.Base, XSmtpService):
 		connectiontype = xConnectionContext.getValueByName("ConnectionType")
 		if dbg:
 			print("ConnectionType: " + connectiontype, file=dbgout)
-		if connectiontype.upper() == 'SSL':
+		if connectiontype.upper() == 'SSL' and port != 465:
 			self.server.ehlo()
 			self.server.starttls()
 			self.server.ehlo()
@@ -404,7 +408,7 @@ class PyMailPOP3Service(unohelper.Base, XMailService):
 				print("Timeout: " + str(tout), file=dbgout)
 			self.server = poplib.POP3(server, port, timeout=tout)
 		print("AFTER", file=dbgout)
-			
+
 		user = xAuthenticator.getUserName()
 		password = xAuthenticator.getPassword()
 		if sys.version < '3': # fdo#59249 i#105669 Python 2 needs "ascii"
@@ -527,3 +531,5 @@ g_ImplementationHelper.addImplementation( \
 g_ImplementationHelper.addImplementation( \
 	PyMailMessage, g_messageImplName,
 		("com.sun.star.mail.MailMessage",),)
+
+# vim: set shiftwidth=4 softtabstop=4 expandtab:

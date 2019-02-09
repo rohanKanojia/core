@@ -32,31 +32,31 @@ namespace com { namespace sun { namespace star {
     namespace xml { namespace sax { class XAttributeList; } }
     namespace beans { class XPropertySet; }
 } } }
-struct SvXMLEnumMapEntry;
+template<typename EnumT> struct SvXMLEnumMapEntry;
 
 
 // constants for the XMLIndexTemplateContext constructor
 
 // TOC and user defined index:
-extern const SvXMLEnumMapEntry aSvLevelNameTOCMap[];
+extern const SvXMLEnumMapEntry<sal_uInt16> aSvLevelNameTOCMap[];
 extern const sal_Char* aLevelStylePropNameTOCMap[];
-extern const sal_Bool aAllowedTokenTypesTOC[];
-extern const sal_Bool aAllowedTokenTypesUser[];
+extern const bool aAllowedTokenTypesTOC[];
+extern const bool aAllowedTokenTypesUser[];
 
 // alphabetical index:
-extern const SvXMLEnumMapEntry aLevelNameAlphaMap[];
+extern const SvXMLEnumMapEntry<sal_uInt16> aLevelNameAlphaMap[];
 extern const sal_Char* aLevelStylePropNameAlphaMap[];
-extern const sal_Bool aAllowedTokenTypesAlpha[];
+extern const bool aAllowedTokenTypesAlpha[];
 
 // bibliography:
-extern const SvXMLEnumMapEntry aLevelNameBibliographyMap[];
+extern const SvXMLEnumMapEntry<sal_uInt16> aLevelNameBibliographyMap[];
 extern const sal_Char* aLevelStylePropNameBibliographyMap[];
-extern const sal_Bool aAllowedTokenTypesBibliography[];
+extern const bool aAllowedTokenTypesBibliography[];
 
 // table, illustration and object tables:
-extern const SvXMLEnumMapEntry* aLevelNameTableMap; // NULL: no outline-level
+extern const SvXMLEnumMapEntry<sal_uInt16>* aLevelNameTableMap; // NULL: no outline-level
 extern const sal_Char* aLevelStylePropNameTableMap[];
-extern const sal_Bool aAllowedTokenTypesTable[];
+extern const bool aAllowedTokenTypesTable[];
 
 
 /**
@@ -69,58 +69,46 @@ class XMLIndexTemplateContext : public SvXMLImportContext
 
     OUString sStyleName;
 
-    const SvXMLEnumMapEntry* pOutlineLevelNameMap;
-    enum ::xmloff::token::XMLTokenEnum eOutlineLevelAttrName;
+    const SvXMLEnumMapEntry<sal_uInt16>* pOutlineLevelNameMap;
+    enum ::xmloff::token::XMLTokenEnum const eOutlineLevelAttrName;
     const sal_Char** pOutlineLevelStylePropMap;
-    const sal_Bool* pAllowedTokenTypesMap;
+    const bool* pAllowedTokenTypesMap;
 
     sal_Int32 nOutlineLevel;
     bool bStyleNameOK;
     bool bOutlineLevelOK;
-    bool bTOC;
+    bool const bTOC;
 
     // PropertySet of current index
     css::uno::Reference<css::beans::XPropertySet> & rPropertySet;
 
 public:
-
-    // constants made available to other contexts (template entry
-    // contexts, in particular)
-    const OUString sTokenEntryNumber;
-    const OUString sTokenEntryText;
-    const OUString sTokenTabStop;
-    const OUString sTokenText;
-    const OUString sTokenPageNumber;
-    const OUString sTokenChapterInfo;
-    const OUString sTokenHyperlinkStart;
-    const OUString sTokenHyperlinkEnd;
-    const OUString sTokenBibliographyDataField;
-
-    const OUString sCharacterStyleName;
-    const OUString sTokenType;
-    const OUString sText;
-    const OUString sTabStopRightAligned;
-    const OUString sTabStopPosition;
-    const OUString sTabStopFillCharacter;
-    const OUString sBibliographyDataField;
-    const OUString sChapterFormat;
-    const OUString sChapterLevel;//i53420
-
-    const OUString sLevelFormat;
-
-
+    template<typename EnumT>
     XMLIndexTemplateContext(
         SvXMLImport& rImport,
         css::uno::Reference<css::beans::XPropertySet> & rPropSet,
         sal_uInt16 nPrfx,
         const OUString& rLocalName,
-        const SvXMLEnumMapEntry* aLevelNameMap,
+        const SvXMLEnumMapEntry<EnumT>* aLevelNameMap,
         enum ::xmloff::token::XMLTokenEnum eLevelAttrName,
         const sal_Char** aLevelStylePropNameMap,
-        const sal_Bool* aAllowedTokenTypes,
-        bool bTOC=false);
+        const bool* aAllowedTokenTypes,
+        bool bTOC_=false)
+        : XMLIndexTemplateContext(rImport,rPropSet,nPrfx,rLocalName,
+                reinterpret_cast<const SvXMLEnumMapEntry<sal_uInt16>*>(aLevelNameMap),
+                eLevelAttrName, aLevelStylePropNameMap, aAllowedTokenTypes, bTOC_) {}
+    XMLIndexTemplateContext(
+        SvXMLImport& rImport,
+        css::uno::Reference<css::beans::XPropertySet> & rPropSet,
+        sal_uInt16 nPrfx,
+        const OUString& rLocalName,
+        const SvXMLEnumMapEntry<sal_uInt16>* aLevelNameMap,
+        enum ::xmloff::token::XMLTokenEnum eLevelAttrName,
+        const sal_Char** aLevelStylePropNameMap,
+        const bool* aAllowedTokenTypes,
+        bool bTOC);
 
-    virtual ~XMLIndexTemplateContext();
+    virtual ~XMLIndexTemplateContext() override;
 
     /** add template; to be called by child template entry contexts */
     void addTemplateEntry(
@@ -133,7 +121,7 @@ protected:
 
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList ) override;

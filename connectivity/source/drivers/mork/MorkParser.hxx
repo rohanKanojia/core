@@ -59,31 +59,17 @@ enum MorkErrors
 {
     NoError = 0,
     FailedToOpen,
-    UnsupportedVersion,
     DefectedFormat
-};
-
-// Mork term types
-enum MorkTerm
-{
-    NoneTerm = 0,
-    DictTerm,
-    GroupTerm,
-    TableTerm,
-    RowTerm,
-    CellTerm,
-    CommentTerm,
-    LiteralTerm
 };
 
 
 /// Class MorkParser
 
-class LO_DLLPUBLIC_MORK MorkParser
+class LO_DLLPUBLIC_MORK MorkParser final
 {
 public:
 
-    explicit MorkParser( int defaultScope = 0x80 );
+    explicit MorkParser();
 
     /// Open and parse mork file
 
@@ -99,21 +85,21 @@ public:
 
     /// Return value of specified value oid
 
-    std::string &getValue( int oid );
+    std::string const &getValue( int oid );
 
     /// Return value of specified column oid
 
-    std::string &getColumn( int oid );
+    std::string const &getColumn( int oid );
 
     void retrieveLists(std::set<std::string>& lists);
-    void getRecordKeysForListTable(std::string& listName, std::set<int>& records);
+    void getRecordKeysForListTable(std::string const & listName, std::set<int>& records);
 
     void dump();
 
     // All lists
     std::vector<OUString> lists_;
 
-protected: // Members
+private: // Members
 
     void initVars();
 
@@ -129,11 +115,11 @@ protected: // Members
     bool parseComment();
     bool parseCell();
     bool parseTable();
-    bool parseMeta( char c );
+    void parseMeta( char c );
     bool parseRow( int TableId, int TableScope );
-    bool parseGroup();
+    void parseGroup();
 
-protected: // Data
+private: // Data
 
     // Columns in mork means value names
     MorkDict columns_;
@@ -152,14 +138,11 @@ protected: // Data
 
     unsigned morkPos_;
     int nextAddValueId_;
-    int defaultScope_;
-    int defaultListScope_;
     int defaultTableId_;
 
     // Indicates entity is being parsed
-    enum { NPColumns, NPValues, NPRows } nowParsing_;
+    enum class NP { Columns, Values, Rows } nowParsing_;
 
-private:
     MorkParser(const MorkParser &) = delete;
     MorkParser &operator=(const MorkParser &) = delete;
 

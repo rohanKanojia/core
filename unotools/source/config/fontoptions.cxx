@@ -31,7 +31,7 @@ using namespace ::utl;
 using namespace ::osl;
 using namespace ::com::sun::star::uno;
 
-#define ROOTNODE_FONT                       OUString("Office.Common/Font")
+#define ROOTNODE_FONT                       "Office.Common/Font"
 
 #define PROPERTYNAME_REPLACEMENTTABLE       "Substitution/Replacement"
 #define PROPERTYNAME_FONTHISTORY            "View/History"
@@ -41,19 +41,17 @@ using namespace ::com::sun::star::uno;
 #define PROPERTYHANDLE_FONTHISTORY          1
 #define PROPERTYHANDLE_FONTWYSIWYG          2
 
-#define PROPERTYCOUNT                       3
-
 class SvtFontOptions_Impl : public ConfigItem
 {
     public:
 
          SvtFontOptions_Impl();
-        virtual ~SvtFontOptions_Impl();
+        virtual ~SvtFontOptions_Impl() override;
 
         /*-****************************************************************************************************
             @short      called for notify of configmanager
-            @descr      These method is called from the ConfigManager before application ends or from the
-                         PropertyChangeListener if the sub tree broadcasts changes. You must update your
+            @descr      This method is called from the ConfigManager before the application ends or from the
+                        PropertyChangeListener if the sub tree broadcasts changes. You must update your
                         internal values.
 
             @seealso    baseclass ConfigItem
@@ -79,8 +77,8 @@ class SvtFontOptions_Impl : public ConfigItem
         virtual void ImplCommit() override;
 
         /*-****************************************************************************************************
-            @short      return list of key names of our configuration management which represent oue module tree
-            @descr      These methods return a static const list of key names. We need it to get needed values from our
+            @short      return list of key names of our configuration management which represent our module tree
+            @descr      This method returns a static const list of key names. We need it to get needed values from our
                         configuration management.
             @return     A list of needed configuration keys is returned.
         *//*-*****************************************************************************************************/
@@ -183,7 +181,7 @@ void SvtFontOptions_Impl::Notify( const Sequence< OUString >& seqPropertyNames )
             seqValues[nProperty] >>= m_bFontWYSIWYG;
         }
 #if OSL_DEBUG_LEVEL > 0
-        else assert(false && "SvtFontOptions_Impl::Notify()\nUnknown property detected ... I can't handle these!\n");
+        else assert(false && "Unknown property detected ... I can't handle these!");
 #endif
     }
 }
@@ -230,58 +228,40 @@ void SvtFontOptions_Impl::EnableFontWYSIWYG( bool bState )
 
 Sequence< OUString > SvtFontOptions_Impl::impl_GetPropertyNames()
 {
-    // Build list of configuration key names.
-    const OUString pProperties[] =
+    return Sequence< OUString >
     {
-        OUString(PROPERTYNAME_REPLACEMENTTABLE)   ,
-        OUString(PROPERTYNAME_FONTHISTORY)        ,
-        OUString(PROPERTYNAME_FONTWYSIWYG)        ,
+        PROPERTYNAME_REPLACEMENTTABLE   ,
+        PROPERTYNAME_FONTHISTORY        ,
+        PROPERTYNAME_FONTWYSIWYG        ,
     };
-    // Initialize return sequence with these list ...
-    const Sequence< OUString > seqPropertyNames( pProperties, PROPERTYCOUNT );
-    // ... and return it.
-    return seqPropertyNames;
 }
 
-//  initialize static member
-//  DON'T DO IT IN YOUR HEADER!
-//  see definition for further information
+namespace {
 
-SvtFontOptions_Impl*    SvtFontOptions::m_pDataContainer    = nullptr;
-sal_Int32               SvtFontOptions::m_nRefCount         = 0;
+std::weak_ptr<SvtFontOptions_Impl> g_pFontOptions;
 
-//  constructor
+}
 
 SvtFontOptions::SvtFontOptions()
 {
     // Global access, must be guarded (multithreading!).
     MutexGuard aGuard( impl_GetOwnStaticMutex() );
-    // Increase our refcount ...
-    ++m_nRefCount;
-    // ... and initialize our data container only if it not already exist!
-    if( m_pDataContainer == nullptr )
-    {
-        m_pDataContainer = new SvtFontOptions_Impl;
 
-        ItemHolder1::holdConfigItem(E_FONTOPTIONS);
+    m_pImpl = g_pFontOptions.lock();
+    if( !m_pImpl )
+    {
+        m_pImpl = std::make_shared<SvtFontOptions_Impl>();
+        g_pFontOptions = m_pImpl;
+        ItemHolder1::holdConfigItem(EItem::FontOptions);
     }
 }
-
-//  destructor
 
 SvtFontOptions::~SvtFontOptions()
 {
     // Global access, must be guarded (multithreading!)
     MutexGuard aGuard( impl_GetOwnStaticMutex() );
-    // Decrease our refcount.
-    --m_nRefCount;
-    // If last instance was deleted ...
-    // we must destroy our static data container!
-    if( m_nRefCount <= 0 )
-    {
-        delete m_pDataContainer;
-        m_pDataContainer = nullptr;
-    }
+
+    m_pImpl.reset();
 }
 
 //  public method
@@ -289,7 +269,7 @@ SvtFontOptions::~SvtFontOptions()
 bool SvtFontOptions::IsFontHistoryEnabled() const
 {
     MutexGuard aGuard( impl_GetOwnStaticMutex() );
-    return m_pDataContainer->IsFontHistoryEnabled();
+    return m_pImpl->IsFontHistoryEnabled();
 }
 
 //  public method
@@ -297,7 +277,7 @@ bool SvtFontOptions::IsFontHistoryEnabled() const
 bool SvtFontOptions::IsFontWYSIWYGEnabled() const
 {
     MutexGuard aGuard( impl_GetOwnStaticMutex() );
-    return m_pDataContainer->IsFontWYSIWYGEnabled();
+    return m_pImpl->IsFontWYSIWYGEnabled();
 }
 
 //  public method
@@ -305,7 +285,7 @@ bool SvtFontOptions::IsFontWYSIWYGEnabled() const
 void SvtFontOptions::EnableFontWYSIWYG( bool bState )
 {
     MutexGuard aGuard( impl_GetOwnStaticMutex() );
-    m_pDataContainer->EnableFontWYSIWYG( bState );
+    m_pImpl->EnableFontWYSIWYG( bState );
 }
 
 namespace

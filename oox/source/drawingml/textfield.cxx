@@ -17,22 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/textfield.hxx"
+#include <drawingml/textfield.hxx>
 
 #include <list>
 
-#include <osl/diagnose.h>
 #include <rtl/ustring.hxx>
 #include <rtl/string.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/text/XTextField.hpp>
 
-#include "oox/helper/helper.hxx"
-#include "oox/helper/propertyset.hxx"
-#include "oox/core/xmlfilterbase.hxx"
-#include "drawingml/textparagraphproperties.hxx"
-#include "drawingml/textcharacterproperties.hxx"
+#include <oox/helper/helper.hxx>
+#include <oox/helper/propertyset.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <drawingml/textparagraphproperties.hxx>
+#include <drawingml/textcharacterproperties.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -49,13 +49,13 @@ TextField::TextField()
 
 namespace {
 
-/** intsanciate the textfields. Because of semantics difference between
+/** instantiate the textfields. Because of semantics difference between
  * OpenXML and OpenOffice, some OpenXML field might cause two fields to be created.
  * @param aFields the created fields. The list is empty if no field has been created.
  * @param xModel the model
  * @param sType the OpenXML field type.
  */
-void lclCreateTextFields( std::list< Reference< XTextField > > & aFields,
+void lclCreateTextFields( std::vector< Reference< XTextField > > & aFields,
                                                             const Reference< XModel > & xModel, const OUString & sType )
 {
     Reference< XInterface > xIface;
@@ -69,9 +69,8 @@ void lclCreateTextFields( std::list< Reference< XTextField > > & aFields,
             bool bIsDate = true;
             int idx = p.toInt32();
             sal_uInt16 nNumFmt;
-//              OSL_TRACE( "OOX: p = %s, %d", p.pData->buffer, idx );
             xIface = xFactory->createInstance( "com.sun.star.text.TextField.DateTime" );
-            aFields.push_back( Reference< XTextField > ( xIface, UNO_QUERY ) );
+            aFields.emplace_back( xIface, UNO_QUERY );
             Reference< XPropertySet > xProps( xIface, UNO_QUERY_THROW );
 
             // here we should format the field properly. waiting after #i81091.
@@ -132,23 +131,23 @@ void lclCreateTextFields( std::list< Reference< XTextField > > & aFields,
         }
         catch(Exception & e)
         {
-            OSL_TRACE( "Exception %s",  OUStringToOString( e.Message, RTL_TEXTENCODING_ASCII_US ).getStr() );
+            SAL_WARN("oox",  e );
         }
     }
     else if ( sType == "slidenum" )
     {
         xIface = xFactory->createInstance( "com.sun.star.text.TextField.PageNumber" );
-        aFields.push_back( Reference< XTextField > ( xIface, UNO_QUERY ) );
+        aFields.emplace_back( xIface, UNO_QUERY );
     }
     else if ( sType == "slidecount" )
     {
         xIface = xFactory->createInstance( "com.sun.star.text.TextField.PageCount" );
-        aFields.push_back( Reference< XTextField > ( xIface, UNO_QUERY ) );
+        aFields.emplace_back( xIface, UNO_QUERY );
     }
     else if ( sType == "slidename" )
     {
         xIface = xFactory->createInstance( "com.sun.star.text.TextField.PageName" );
-        aFields.push_back( Reference< XTextField > ( xIface, uno::UNO_QUERY ) );
+        aFields.emplace_back( xIface, uno::UNO_QUERY );
     }
     else if ( sType.startsWith("file") )
     {
@@ -156,7 +155,7 @@ void lclCreateTextFields( std::list< Reference< XTextField > > & aFields,
         OString p( s.pData->buffer + 4 );
         int idx = p.toInt32();
         xIface = xFactory->createInstance( "com.sun.star.text.TextField.FileName" );
-        aFields.push_back( Reference< XTextField > ( xIface, UNO_QUERY ) );
+        aFields.emplace_back( xIface, UNO_QUERY );
         Reference< XPropertySet > xProps( xIface, UNO_QUERY_THROW );
 
         switch( idx )
@@ -177,7 +176,7 @@ void lclCreateTextFields( std::list< Reference< XTextField > > & aFields,
     else if( sType == "author" )
     {
         xIface = xFactory->createInstance( "com.sun.star.text.TextField.Author" );
-        aFields.push_back( Reference< XTextField > ( xIface, UNO_QUERY ) );
+        aFields.emplace_back( xIface, UNO_QUERY );
     }
 }
 
@@ -206,37 +205,36 @@ sal_Int32 TextField::insertAt(
             nCharHeight = aTextCharacterProps.moHeight.get();
         aTextCharacterProps.pushToPropSet( aPropSet, rFilterBase );
 
-        std::list< Reference< XTextField > > fields;
+        std::vector< Reference< XTextField > > fields;
         lclCreateTextFields( fields, rFilterBase.getModel(), msType );
         if( !fields.empty() )
         {
             bool bFirst = true;
-            for( std::list< Reference< XTextField > >::iterator iter = fields.begin();
-                     iter != fields.end(); ++iter )
+            for (auto const& field : fields)
             {
-                if( iter->is() )
+                if( field.is() )
                 {
-                    Reference< XTextContent > xContent( *iter, UNO_QUERY);
+                    Reference< XTextContent > xContent( field, UNO_QUERY);
                     if( bFirst)
                     {
                         bFirst = false;
                     }
                     else
                     {
-                        xText->insertString( xAt, " ", sal_False );
+                        xText->insertString( xAt, " ", false );
                     }
-                    xText->insertTextContent( xAt, xContent, sal_False );
+                    xText->insertTextContent( xAt, xContent, false );
                 }
             }
         }
         else
         {
-            xText->insertString( xAt, getText(), sal_False );
+            xText->insertString( xAt, getText(), false );
         }
     }
     catch( const Exception&  )
     {
-        OSL_TRACE("OOX:  TextField::insertAt() exception");
+        SAL_WARN("oox", "OOX:  TextField::insertAt() exception");
     }
 
     return nCharHeight;

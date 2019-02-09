@@ -9,7 +9,7 @@
 
 #include <test/container/xnamereplace.hxx>
 #include <com/sun/star/container/XNameReplace.hpp>
-#include "cppunit/extensions/HelperMacros.h"
+#include <cppunit/extensions/HelperMacros.h>
 
 using namespace css;
 using namespace css::uno;
@@ -22,7 +22,6 @@ void XNameReplace::testReplaceByName()
     xNameReplace->replaceByName(maTestReplacementName, getAnyElementForNameReplace());
     Any aAny = xNameReplace->getByName( maTestReplacementName );
     uno::Reference< uno::XInterface > xElement(aAny, UNO_QUERY_THROW);
-    CPPUNIT_ASSERT(xElement.is());
 }
 
 }

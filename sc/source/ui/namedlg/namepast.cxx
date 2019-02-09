@@ -19,16 +19,13 @@
 
 #undef SC_DLLIMPLEMENTATION
 
-#include "namepast.hxx"
-#include "scresid.hxx"
-#include "docsh.hxx"
-#include "miscdlgs.hrc"
-#include "rangenam.hxx"
-#include "viewdata.hxx"
+#include <namepast.hxx>
+#include <docsh.hxx>
+#include <rangenam.hxx>
+#include <viewdata.hxx>
+#include <scui_def.hxx>
 
-#include <o3tl/make_unique.hxx>
-
-ScNamePasteDlg::ScNamePasteDlg( vcl::Window * pParent, ScDocShell* pShell, bool )
+ScNamePasteDlg::ScNamePasteDlg( vcl::Window * pParent, ScDocShell* pShell )
     : ModalDialog( pParent, "InsertNameDialog", "modules/scalc/ui/insertname.ui" )
 {
     get(m_pBtnPasteAll, "pasteall");
@@ -38,18 +35,16 @@ ScNamePasteDlg::ScNamePasteDlg( vcl::Window * pParent, ScDocShell* pShell, bool 
     ScDocument& rDoc = pShell->GetDocument();
     std::map<OUString, ScRangeName*> aCopyMap;
     rDoc.GetRangeNameMap(aCopyMap);
-    std::map<OUString, ScRangeName*>::iterator itr = aCopyMap.begin(), itrEnd = aCopyMap.end();
-    for (; itr != itrEnd; ++itr)
+    for (const auto& [aTemp, pName] : aCopyMap)
     {
-        OUString aTemp(itr->first);
-        m_RangeMap.insert(std::make_pair(aTemp, o3tl::make_unique<ScRangeName>(*itr->second)));
+        m_RangeMap.insert(std::make_pair(aTemp, std::make_unique<ScRangeName>(*pName)));
     }
 
     ScViewData* pViewData = ScDocShell::GetViewData();
     ScAddress aPos(pViewData->GetCurX(), pViewData->GetCurY(), pViewData->GetTabNo());
     SvSimpleTableContainer *pContainer = get<SvSimpleTableContainer>("ctrl");
     Size aControlSize(210, 0);
-    aControlSize = LogicToPixel(aControlSize, MAP_APPFONT);
+    aControlSize = LogicToPixel(aControlSize, MapMode(MapUnit::MapAppFont));
     pContainer->set_width_request(aControlSize.Width());
     pContainer->set_height_request(10 * GetTextHeight());
     mpTable = VclPtr<ScRangeManagerTable>::Create(*pContainer, m_RangeMap, aPos);
@@ -79,7 +74,7 @@ void ScNamePasteDlg::dispose()
     ModalDialog::dispose();
 }
 
-IMPL_LINK_TYPED( ScNamePasteDlg, ButtonHdl, Button *, pButton, void )
+IMPL_LINK( ScNamePasteDlg, ButtonHdl, Button *, pButton, void )
 {
     if( pButton == m_pBtnPasteAll )
     {
@@ -88,10 +83,9 @@ IMPL_LINK_TYPED( ScNamePasteDlg, ButtonHdl, Button *, pButton, void )
     else if( pButton == m_pBtnPaste )
     {
         std::vector<ScRangeNameLine> aSelectedLines = mpTable->GetSelectedEntries();
-        for (std::vector<ScRangeNameLine>::const_iterator itr = aSelectedLines.begin();
-                itr != aSelectedLines.end(); ++itr)
+        for (const auto& rLine : aSelectedLines)
         {
-            maSelectedNames.push_back(itr->aName);
+            maSelectedNames.push_back(rLine.aName);
         }
         EndDialog( BTN_PASTE_NAME );
     }
@@ -101,7 +95,7 @@ IMPL_LINK_TYPED( ScNamePasteDlg, ButtonHdl, Button *, pButton, void )
     }
 }
 
-std::vector<OUString> ScNamePasteDlg::GetSelectedNames() const
+const std::vector<OUString>& ScNamePasteDlg::GetSelectedNames() const
 {
     return maSelectedNames;
 }

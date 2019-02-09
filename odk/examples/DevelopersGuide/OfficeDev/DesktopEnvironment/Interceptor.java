@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  *
  *  The Contents of this file are made available subject to the terms of
@@ -116,8 +117,8 @@ public class Interceptor implements com.sun.star.frame.XFrameActionListener,
      * start working as frame action listener really.
      * We will be frame action listener here. In case
      * we get a frame action which indicates, that we should
-     * update our interception. Because such using of an interecptor
-     * isn't guaranteed - in case a newer one was registered ...
+     * update our interception. Because such using of an interceptor
+     * isn't guaranteed - in case a newer one was registered...
      */
     public void startListening()
     {
@@ -147,7 +148,7 @@ public class Interceptor implements com.sun.star.frame.XFrameActionListener,
      * (started inside the original oneway method). We found all parameters of
      * the original request packed inside a vector. Here we unpack it and
      * call the right internal helper method, which implements the right
-     * funtionality.
+     * functionality.
      *
      * @seealso frameAction()
      * @seealso dispatch()
@@ -193,7 +194,7 @@ public class Interceptor implements com.sun.star.frame.XFrameActionListener,
      * callback for frame action events
      * We use it to update our interception. Because if a new component was loaded into
      * the frame or another interceptor was registered, we should refresh our connection
-     * to the frame. Otherwhise we can't guarantee full functionality here.
+     * to the frame. Otherwise we can't guarantee full functionality here.
      *
      * Note: Don't react synchronous in an asynchronous listener callback. So use a thread
      * here to update anything.
@@ -394,7 +395,7 @@ public class Interceptor implements com.sun.star.frame.XFrameActionListener,
 
     /*
      * Implementation of interface XDispatchProvider
-     * These functions are called from our master if he willn't handle the outstanding request.
+     * These functions are called from our master if he will not handle the outstanding request.
      * Given parameter should be checked if they are right for us. If it's true, the returned
      * dispatcher should be this implementation himself; otherwise call should be forwarded
      * to the slave.
@@ -596,7 +597,7 @@ public class Interceptor implements com.sun.star.frame.XFrameActionListener,
 
     /*
      * If this java application shutdown - we must cancel all current existing
-     * listener connections. Otherwhise the office will run into some
+     * listener connections. Otherwise the office will run into some
      * DisposedExceptions if it tries to use these forgotten listener references.
      * And of course it can die doing that.
      * We are registered at a central object to be informed if the VM will exit.
@@ -650,3 +651,5 @@ public class Interceptor implements com.sun.star.frame.XFrameActionListener,
         }
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

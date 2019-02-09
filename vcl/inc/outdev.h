@@ -20,7 +20,6 @@
 #ifndef INCLUDED_VCL_INC_OUTDEV_H
 #define INCLUDED_VCL_INC_OUTDEV_H
 
-#include <list>
 #include <set>
 #include <vector>
 
@@ -42,12 +41,12 @@ enum class AddFontSubstituteFlags;
 class ImplDeviceFontList
 {
 private:
-    std::vector<PhysicalFontFace*> maDevFontVector;
+    std::vector<rtl::Reference<PhysicalFontFace>> maDevFontVector;
 
 public:
                         ImplDeviceFontList()        { maDevFontVector.reserve(1024); }
     void                Add( PhysicalFontFace* pFace )  { maDevFontVector.push_back( pFace ); }
-    PhysicalFontFace*   Get( int nIndex ) const     { return maDevFontVector[ nIndex ]; }
+    PhysicalFontFace*   Get( int nIndex ) const     { return maDevFontVector[ nIndex ].get(); }
     int                 Count() const               { return maDevFontVector.size(); }
 };
 
@@ -87,7 +86,7 @@ struct ImplFontSubstEntry
 {
     OUString                  maSearchName;
     OUString                  maSearchReplaceName;
-    AddFontSubstituteFlags    mnFlags;
+    AddFontSubstituteFlags const mnFlags;
 
     ImplFontSubstEntry(  const OUString& rFontName, const OUString& rSubstFontName, AddFontSubstituteFlags nSubstFlags );
 };
@@ -96,12 +95,10 @@ class ImplDirectFontSubstitution
 :   public ImplFontSubstitution
 {
 private:
-    typedef std::list<ImplFontSubstEntry> FontSubstList;
-    FontSubstList maFontSubstList;
+    std::vector<ImplFontSubstEntry> maFontSubstList;
 public:
     void    AddFontSubstitute( const OUString& rFontName, const OUString& rSubstName, AddFontSubstituteFlags nFlags );
-    void    RemoveFontSubstitute( int nIndex );
-    int     GetFontSubstituteCount() const { return maFontSubstList.size(); };
+    void    RemoveFontsSubstitute();
 
     bool    FindFontSubstitute( OUString& rSubstName, const OUString& rFontName ) const;
 };
@@ -113,7 +110,7 @@ class ImplPreMatchFontSubstitution
 :   public ImplFontSubstitution
 {
 public:
-    virtual bool FindFontSubstitute( FontSelectPattern& ) const = 0;
+    virtual bool FindFontSubstitute(FontSelectPattern&)  const = 0;
 };
 
 // ImplGlyphFallbackFontSubstitution
@@ -122,7 +119,7 @@ class ImplGlyphFallbackFontSubstitution
 :   public ImplFontSubstitution
 {
 public:
-    virtual bool FindFontSubstitute( FontSelectPattern&, OUString& rMissingCodes ) const = 0;
+    virtual bool FindFontSubstitute(FontSelectPattern&, LogicalFontInstance* pLogicalFont, OUString& rMissingCodes) const = 0;
 };
 
 namespace vcl { struct ControlLayoutData; }
@@ -133,7 +130,7 @@ struct ImplOutDevData
 {
     VclPtr<VirtualDevice>       mpRotateDev;
     vcl::ControlLayoutData*     mpRecordLayout;
-    Rectangle                   maRecordRect;
+    tools::Rectangle                   maRecordRect;
 
     // #i75163#
     basegfx::B2DHomMatrix*      mpViewTransform;

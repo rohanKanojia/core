@@ -21,37 +21,37 @@
 
 #include <sfx2/childwin.hxx>
 
-#include "swabstdlg.hxx"
+#include <swabstdlg.hxx>
 
 class SwWrtShell;
 
-class SwInsertIdxMarkWrapper : public SfxChildWindow
+class SwInsertIdxMarkWrapper final : public SfxChildWindow
 {
-    AbstractMarkFloatDlg*   pAbstDlg;
-protected:
-    SwInsertIdxMarkWrapper( vcl::Window *pParentWindow,
-                            sal_uInt16 nId,
-                            SfxBindings* pBindings,
-                            SfxChildWinInfo* pInfo );
+    ScopedVclPtr<AbstractMarkFloatDlg> xAbstDlg;
+
+public:
+    SwInsertIdxMarkWrapper(vcl::Window *pParentWindow,
+                           sal_uInt16 nId,
+                           SfxBindings* pBindings,
+                           SfxChildWinInfo* pInfo);
 
     SFX_DECL_CHILDWINDOW_WITHID(SwInsertIdxMarkWrapper);
 
-public:
     void    ReInitDlg(SwWrtShell& rWrtShell);
 };
 
-class SwInsertAuthMarkWrapper : public SfxChildWindow
+class SwInsertAuthMarkWrapper final : public SfxChildWindow
 {
-    AbstractMarkFloatDlg*   pAbstDlg;
-protected:
-    SwInsertAuthMarkWrapper(    vcl::Window *pParentWindow,
+    ScopedVclPtr<AbstractMarkFloatDlg> xAbstDlg;
+
+public:
+    SwInsertAuthMarkWrapper(vcl::Window *pParentWindow,
                             sal_uInt16 nId,
                             SfxBindings* pBindings,
-                            SfxChildWinInfo* pInfo );
+                            SfxChildWinInfo* pInfo);
 
     SFX_DECL_CHILDWINDOW_WITHID(SwInsertAuthMarkWrapper);
 
-public:
     void    ReInitDlg(SwWrtShell& rWrtShell);
 };
 

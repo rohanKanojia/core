@@ -17,25 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "hintids.hxx"
+#include <hintids.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/objface.hxx>
 #include <svl/srchitem.hxx>
-#include "swtypes.hxx"
-#include "cmdid.h"
-#include "view.hxx"
-#include "wfrmsh.hxx"
-#include "globals.hrc"
-#include "popup.hrc"
-#include "shells.hrc"
-#include "web.hrc"
+#include <swtypes.hxx>
+#include <cmdid.h>
+#include <view.hxx>
+#include <wfrmsh.hxx>
+#include <globals.hrc>
 
 #include <sfx2/request.hxx>
     // needed for -fsanitize=function visibility of typeinfo for functions of
     // type void(SfxShell*,SfxRequest&) defined in swslots.hxx
-#define SwWebFrameShell
+#define ShellClass_SwWebFrameShell
 #include <sfx2/msg.hxx>
-#include "swslots.hxx"
+#include <swslots.hxx>
 
 SFX_IMPL_INTERFACE(SwWebFrameShell, SwFrameShell)
 
@@ -43,14 +40,13 @@ void SwWebFrameShell::InitInterface_Impl()
 {
     GetStaticInterface()->RegisterPopupMenu("frame");
 
-    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, RID_WEBFRAME_TOOLBOX);
+    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, SfxVisibilityFlags::Invisible, ToolbarId::Webframe_Toolbox);
 }
 
 
 SwWebFrameShell::SwWebFrameShell(SwView &_rView) :
     SwFrameShell(_rView)
 {
-    SetHelpId(SW_WEBFRAMESHELL);
 }
 
 SwWebFrameShell::~SwWebFrameShell()

@@ -18,7 +18,6 @@
  */
 
 #include <tools/stream.hxx>
-#include <osl/diagnose.h>
 #include <com/sun/star/table/BorderLine.hpp>
 #include <com/sun/star/table/CellVertJustify2.hpp>
 #include <com/sun/star/table/ShadowLocation.hpp>
@@ -32,7 +31,7 @@
 #include <com/sun/star/table/CellOrientation.hpp>
 #include <com/sun/star/table/CellAddress.hpp>
 
-#include "svx/rotmodit.hxx"
+#include <svx/rotmodit.hxx>
 
 using namespace ::com::sun::star;
 
@@ -44,7 +43,7 @@ SfxPoolItem* SvxRotateModeItem::CreateDefault() { return new  SvxRotateModeItem(
 
 
 SvxRotateModeItem::SvxRotateModeItem( SvxRotateMode eMode, sal_uInt16 _nWhich )
-    : SfxEnumItem( _nWhich, (sal_uInt16)eMode )
+    : SfxEnumItem( _nWhich, eMode )
 {
 }
 
@@ -61,24 +60,24 @@ SfxPoolItem* SvxRotateModeItem::Create( SvStream& rStream, sal_uInt16 ) const
 {
     sal_uInt16 nVal;
     rStream.ReadUInt16( nVal );
-    return new SvxRotateModeItem( (SvxRotateMode) nVal,Which() );
+    return new SvxRotateModeItem( static_cast<SvxRotateMode>(nVal),Which() );
 }
 
 bool SvxRotateModeItem::GetPresentation(
                                 SfxItemPresentation ePres,
-                                SfxMapUnit /*eCoreUnit*/, SfxMapUnit /*ePresUnit*/,
-                                OUString& rText, const IntlWrapper * )  const
+                                MapUnit /*eCoreUnit*/, MapUnit /*ePresUnit*/,
+                                OUString& rText, const IntlWrapper& )  const
 {
     rText.clear();
 
     switch ( ePres )
     {
-        case SFX_ITEM_PRESENTATION_COMPLETE:
+        case SfxItemPresentation::Complete:
             rText += "...: ";
-//          break; // FALL THROUGH!!!
+            [[fallthrough]]; // break; // FALL THROUGH!!!
 
-        case SFX_ITEM_PRESENTATION_NAMELESS:
-            rText += OUString( sal_Unicode(GetValue()) );
+        case SfxItemPresentation::Nameless:
+            rText += OUStringLiteral1( GetValue() );
             return true;
             break;
         default: ;//prevent warning
@@ -105,7 +104,7 @@ sal_uInt16 SvxRotateModeItem::GetVersion( sal_uInt16 /*nFileVersion*/ ) const
 bool SvxRotateModeItem::QueryValue( uno::Any& rVal, sal_uInt8 /*nMemberId*/ ) const
 {
     sal_Int32 nUno = table::CellVertJustify2::STANDARD;
-    switch ( (SvxRotateMode)GetValue() )
+    switch ( GetValue() )
     {
         case SVX_ROTATE_MODE_STANDARD: nUno = table::CellVertJustify2::STANDARD; break;
         case SVX_ROTATE_MODE_TOP:      nUno = table::CellVertJustify2::TOP;      break;
@@ -133,7 +132,7 @@ bool SvxRotateModeItem::PutValue( const uno::Any& rVal, sal_uInt8 /*nMemberId*/ 
         case table::CellVertJustify2::BOTTOM:   eSvx = SVX_ROTATE_MODE_BOTTOM;   break;
         default: ;//prevent warning
     }
-    SetValue( (sal_uInt16)eSvx );
+    SetValue( eSvx );
     return true;
 }
 

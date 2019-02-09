@@ -17,23 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
 #include <basic/basmgr.hxx>
 #include <basic/sbmeth.hxx>
 #include <unotools/moduleoptions.hxx>
 
 #include <iderdll.hxx>
-#include <iderdll2.hxx>
-#include <basdoc.hxx>
-#include <basidesh.hrc>
+#include "iderdll2.hxx"
+#include "basdoc.hxx"
+#include <strings.hrc>
 
-#include <baside2.hxx>
+#include "baside2.hxx"
 #include <baside3.hxx>
 #include <localizationmgr.hxx>
-#include "dlged.hxx"
+#include <dlged.hxx>
 #include <com/sun/star/script/XLibraryContainerPassword.hpp>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/request.hxx>
+#include <sal/log.hxx>
 
 namespace basctl
 {
@@ -44,9 +45,9 @@ using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::container;
 
 extern "C" {
-    SAL_DLLPUBLIC_EXPORT long basicide_handle_basic_error( void* pPtr )
+    SAL_DLLPUBLIC_EXPORT long basicide_handle_basic_error( void const * pPtr )
     {
-        return HandleBasicError( static_cast<StarBASIC*>(pPtr) );
+        return HandleBasicError( static_cast<StarBASIC const *>(pPtr) );
     }
 }
 
@@ -58,7 +59,7 @@ SbMethod* CreateMacro( SbModule* pModule, const OUString& rMacroName )
         pDispatcher->Execute( SID_BASICIDE_STOREALLMODULESOURCES );
     }
 
-    if ( pModule->GetMethods()->Find( rMacroName, SbxCLASS_METHOD ) )
+    if ( pModule->FindMethod( rMacroName, SbxClassType::Method ) )
         return nullptr;
 
     OUString aMacroName( rMacroName );
@@ -72,10 +73,9 @@ SbMethod* CreateMacro( SbModule* pModule, const OUString& rMacroName )
             sal_Int32 nMacro = 1;
             while ( !bValid )
             {
-                aMacroName = "Macro";
-                aMacroName += OUString::number( nMacro );
+                aMacroName = "Macro" + OUString::number( nMacro );
                 // test whether existing...
-                bValid = pModule->GetMethods()->Find( aMacroName, SbxCLASS_METHOD ) == nullptr;
+                bValid = pModule->FindMethod( aMacroName, SbxClassType::Method ) == nullptr;
                 nMacro++;
             }
         }
@@ -96,55 +96,45 @@ SbMethod* CreateMacro( SbModule* pModule, const OUString& rMacroName )
             aOUSource = aOUSource.copy( 0, nSourceLen-1 );
     }
 
-    OUString aSubStr;
-    aSubStr = "Sub " ;
-    aSubStr += aMacroName;
-    aSubStr += "\n\nEnd Sub" ;
+    OUString aSubStr = "Sub " + aMacroName + "\n\nEnd Sub";
 
     aOUSource += aSubStr;
 
     // update module in library
-    ScriptDocument aDocument( ScriptDocument::NoDocument );
     StarBASIC* pBasic = dynamic_cast<StarBASIC*>(pModule->GetParent());
-    DBG_ASSERT(pBasic, "basctl::CreateMacro: No Basic found!");
-    if ( pBasic )
+    BasicManager* pBasMgr = pBasic ? FindBasicManager(pBasic) : nullptr;
+    SAL_WARN_IF(!pBasMgr, "basctl.basicide", "No BasicManager found!");
+    ScriptDocument aDocument = pBasMgr
+        ? ScriptDocument::getDocumentForBasicManager(pBasMgr)
+        : ScriptDocument(ScriptDocument::NoDocument);
+
+    if (aDocument.isValid())
     {
-        BasicManager* pBasMgr = FindBasicManager( pBasic );
-        DBG_ASSERT(pBasMgr, "basctl::CreateMacro: No BasicManager found!");
-        if ( pBasMgr )
-        {
-            aDocument = ScriptDocument::getDocumentForBasicManager( pBasMgr );
-            OSL_ENSURE( aDocument.isValid(), "basctl::CreateMacro: no document for the given BasicManager!" );
-            if ( aDocument.isValid() )
-            {
-                OUString aLibName = pBasic->GetName();
-                OUString aModName = pModule->GetName();
-                OSL_VERIFY( aDocument.updateModule( aLibName, aModName, aOUSource ) );
-            }
-        }
+        const OUString& aLibName = pBasic->GetName();
+        const OUString& aModName = pModule->GetName();
+        OSL_VERIFY( aDocument.updateModule( aLibName, aModName, aOUSource ) );
     }
 
-    SbMethod* pMethod = static_cast<SbMethod*>(pModule->GetMethods()->Find( aMacroName, SbxCLASS_METHOD ));
+    SbMethod* pMethod = pModule->FindMethod( aMacroName, SbxClassType::Method );
 
     if( pDispatcher )
     {
         pDispatcher->Execute( SID_BASICIDE_UPDATEALLMODULESOURCES );
     }
 
-    if ( aDocument.isAlive() )
-        MarkDocumentModified( aDocument );
+    if (aDocument.isAlive())
+        MarkDocumentModified(aDocument);
 
     return pMethod;
 }
 
 bool RenameDialog (
-    vcl::Window* pErrorParent,
+    weld::Widget* pErrorParent,
     ScriptDocument const& rDocument,
     OUString const& rLibName,
     OUString const& rOldName,
     OUString const& rNewName
 )
-    throw (ElementExistException, NoSuchElementException, RuntimeException, std::exception)
 {
     if ( !rDocument.hasDialog( rLibName, rOldName ) )
     {
@@ -154,21 +144,23 @@ bool RenameDialog (
 
     if ( rDocument.hasDialog( rLibName, rNewName ) )
     {
-        ScopedVclPtrInstance< MessageDialog > aError(pErrorParent, IDE_RESSTR(RID_STR_SBXNAMEALLREADYUSED2));
-        aError->Execute();
+        std::unique_ptr<weld::MessageDialog> xError(Application::CreateMessageDialog(pErrorParent,
+                                                    VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_SBXNAMEALLREADYUSED2)));
+        xError->run();
         return false;
     }
 
     // #i74440
     if ( rNewName.isEmpty() )
     {
-        ScopedVclPtrInstance< MessageDialog > aError(pErrorParent, IDE_RESSTR(RID_STR_BADSBXNAME));
-        aError->Execute();
+        std::unique_ptr<weld::MessageDialog> xError(Application::CreateMessageDialog(pErrorParent,
+                                                    VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_BADSBXNAME)));
+        xError->run();
         return false;
     }
 
     Shell* pShell = GetShell();
-    DialogWindow* pWin = pShell ? pShell->FindDlgWin(rDocument, rLibName, rOldName) : nullptr;
+    VclPtr<DialogWindow> pWin = pShell ? pShell->FindDlgWin(rDocument, rLibName, rOldName) : nullptr;
     Reference< XNameContainer > xExistingDialog;
     if ( pWin )
         xExistingDialog = pWin->GetEditor().GetDialog();
@@ -205,7 +197,7 @@ bool RemoveDialog( const ScriptDocument& rDocument, const OUString& rLibName, co
 {
     if (Shell* pShell = GetShell())
     {
-        if (DialogWindow* pDlgWin = pShell->FindDlgWin(rDocument, rLibName, rDlgName))
+        if (VclPtr<DialogWindow> pDlgWin = pShell->FindDlgWin(rDocument, rLibName, rDlgName))
         {
             Reference< container::XNameContainer > xDialogModel = pDlgWin->GetDialog();
             LocalizationMgr::removeResourceForDialog( rDocument, rLibName, rDlgName, xDialogModel );
@@ -223,20 +215,17 @@ StarBASIC* FindBasic( const SbxVariable* pVar )
     return const_cast<StarBASIC*>(static_cast<const StarBASIC*>(pSbx));
 }
 
-BasicManager* FindBasicManager( StarBASIC* pLib )
+BasicManager* FindBasicManager( StarBASIC const * pLib )
 {
     ScriptDocuments aDocuments( ScriptDocument::getAllScriptDocuments( ScriptDocument::AllWithApplication ) );
-    for (   ScriptDocuments::const_iterator doc = aDocuments.begin();
-            doc != aDocuments.end();
-            ++doc
-        )
+    for (auto const& doc : aDocuments)
     {
-        BasicManager* pBasicMgr = doc->getBasicManager();
+        BasicManager* pBasicMgr = doc.getBasicManager();
         OSL_ENSURE( pBasicMgr, "basctl::FindBasicManager: no basic manager for the document!" );
         if ( !pBasicMgr )
             continue;
 
-        Sequence< OUString > aLibNames( doc->getLibraryNames() );
+        Sequence< OUString > aLibNames( doc.getLibraryNames() );
         sal_Int32 nLibCount = aLibNames.getLength();
         const OUString* pLibNames = aLibNames.getConstArray();
 
@@ -257,7 +246,7 @@ void MarkDocumentModified( const ScriptDocument& rDocument )
     {
         if (Shell* pShell = GetShell())
         {
-            pShell->SetAppBasicModified();
+            pShell->SetAppBasicModified(true);
             pShell->UpdateObjectCatalog();
         }
     }
@@ -274,7 +263,7 @@ void MarkDocumentModified( const ScriptDocument& rDocument )
     }
 }
 
-void RunMethod( SbMethod* pMethod )
+void RunMethod( SbMethod const * pMethod )
 {
     SbxValues aRes;
     aRes.eType = SbxVOID;
@@ -287,9 +276,9 @@ void StopBasic()
     if (Shell* pShell = GetShell())
     {
         Shell::WindowTable& rWindows = pShell->GetWindowTable();
-        for (Shell::WindowTableIt it = rWindows.begin(); it != rWindows.end(); ++it )
+        for (auto const& window : rWindows)
         {
-            BaseWindow* pWin = it->second;
+            BaseWindow* pWin = window.second;
             // call BasicStopped manually because the Stop-Notify
             // might not get through otherwise
             pWin->BasicStopped();
@@ -366,7 +355,7 @@ void InvalidateDebuggerSlots()
     }
 }
 
-long HandleBasicError( StarBASIC* pBasic )
+long HandleBasicError( StarBASIC const * pBasic )
 {
     EnsureIde();
     BasicStopped();
@@ -389,7 +378,7 @@ long HandleBasicError( StarBASIC* pBasic )
             OSL_ENSURE( aDocument.isValid(), "basctl::HandleBasicError: no document for the given BasicManager!" );
             if ( aDocument.isValid() )
             {
-                OUString aOULibName( pBasic->GetName() );
+                const OUString& aOULibName( pBasic->GetName() );
                 Reference< script::XLibraryContainer > xModLibContainer( aDocument.getLibraryContainer( E_SCRIPTS ) );
                 if ( xModLibContainer.is() && xModLibContainer->hasByName( aOULibName ) )
                 {

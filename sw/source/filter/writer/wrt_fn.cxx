@@ -19,14 +19,15 @@
 
 #include <svl/itemiter.hxx>
 #include <svl/whiter.hxx>
+#include <osl/diagnose.h>
 
 // tdf#94088 SdrAllFillAttributesHelper needed
 #include <svx/unobrushitemhelper.hxx>
 
-#include "shellio.hxx"
-#include "wrt_fn.hxx"
-#include "node.hxx"
-#include "format.hxx"
+#include <shellio.hxx>
+#include <wrt_fn.hxx>
+#include <node.hxx>
+#include <format.hxx>
 
 Writer& Out( const SwAttrFnTab pTab, const SfxPoolItem& rHt, Writer & rWrt )
 {
@@ -133,13 +134,13 @@ Writer& Out( const SwNodeFnTab pTab, SwNode& rNode, Writer & rWrt )
     sal_uInt16 nId = RES_TXTNODE;
     switch (pCNd->GetNodeType())
     {
-        case ND_TEXTNODE:
+        case SwNodeType::Text:
             nId = RES_TXTNODE;
              break;
-        case ND_GRFNODE:
+        case SwNodeType::Grf:
             nId = RES_GRFNODE;
             break;
-        case ND_OLENODE:
+        case SwNodeType::Ole:
             nId = RES_OLENODE;
             break;
         default:

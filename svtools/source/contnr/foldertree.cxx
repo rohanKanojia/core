@@ -7,22 +7,31 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <comphelper/processfactory.hxx>
 #include <svtools/foldertree.hxx>
-
+#include <toolkit/helper/vclunohelper.hxx>
+#include <tools/urlobj.hxx>
+#include <ucbhelper/commandenvironment.hxx>
+#include <vcl/dialog.hxx>
+#include <vcl/treelistentry.hxx>
+#include <com/sun/star/task/InteractionHandler.hpp>
 #include "contentenumeration.hxx"
+#include <bitmaps.hlst>
+
+using namespace ::com::sun::star::task;
 
 FolderTree::FolderTree( vcl::Window* pParent, WinBits nBits )
     : SvTreeListBox( pParent, nBits | WB_SORT | WB_TABSTOP )
-    , m_aFolderImage( SvtResId( IMG_SVT_FOLDER ) )
-    , m_aFolderExpandedImage( SvtResId( IMG_SVT_FOLDER_OPEN ) )
 {
     Reference< XComponentContext > xContext = ::comphelper::getProcessComponentContext();
     Reference< XInteractionHandler > xInteractionHandler(
-                InteractionHandler::createWithParent( xContext, nullptr ), UNO_QUERY_THROW );
+                InteractionHandler::createWithParent(xContext, VCLUnoHelper::GetInterface(GetParentDialog())), UNO_QUERY_THROW );
     m_xEnv = new ::ucbhelper::CommandEnvironment( xInteractionHandler, Reference< XProgressHandler >() );
 
-    SetDefaultCollapsedEntryBmp( m_aFolderImage );
-    SetDefaultExpandedEntryBmp( m_aFolderExpandedImage );
+    Image aFolderImage(StockImage::Yes, RID_BMP_FOLDER);
+    Image aFolderExpandedImage(StockImage::Yes, RID_BMP_FOLDER_OPEN);
+    SetDefaultCollapsedEntryBmp( aFolderImage );
+    SetDefaultExpandedEntryBmp( aFolderExpandedImage );
 }
 
 void FolderTree::RequestingChildren( SvTreeListEntry* pEntry )
@@ -39,48 +48,48 @@ void FolderTree::RequestingChildren( SvTreeListEntry* pEntry )
 
 void FolderTree::FillTreeEntry( SvTreeListEntry* pEntry )
 {
-    if( pEntry )
+    if( !pEntry )
+        return;
+
+    OUString* pURL = static_cast< OUString* >( pEntry->GetUserData() );
+
+    if( pURL && m_sLastUpdatedDir != *pURL )
     {
-        OUString* pURL = static_cast< OUString* >( pEntry->GetUserData() );
-
-        if( pURL && m_sLastUpdatedDir != *pURL )
+        while (SvTreeListEntry* pChild = FirstChild(pEntry))
         {
-            while (SvTreeListEntry* pChild = FirstChild(pEntry))
+            GetModel()->Remove(pChild);
+        }
+
+        ::std::vector< std::unique_ptr<SortingData_Impl> > aContent;
+
+        ::rtl::Reference< ::svt::FileViewContentEnumerator >
+            xContentEnumerator(new FileViewContentEnumerator(
+            m_xEnv, aContent, m_aMutex));
+
+        FolderDescriptor aFolder( *pURL );
+
+        EnumerationResult eResult =
+            xContentEnumerator->enumerateFolderContentSync( aFolder, m_aBlackList );
+
+        if ( EnumerationResult::SUCCESS == eResult )
+        {
+            for(auto & i : aContent)
             {
-                GetModel()->Remove(pChild);
-            }
-
-            ::std::vector< SortingData_Impl* > aContent;
-
-            ::rtl::Reference< ::svt::FileViewContentEnumerator >
-                xContentEnumerator(new FileViewContentEnumerator(
-                m_xEnv, aContent, m_aMutex, nullptr));
-
-            FolderDescriptor aFolder( *pURL );
-
-            EnumerationResult eResult =
-                xContentEnumerator->enumerateFolderContentSync( aFolder, m_aBlackList );
-
-            if ( SUCCESS == eResult )
-            {
-                for( std::vector<SortingData_Impl *>::size_type i = 0; i < aContent.size(); i++ )
+                if( i->mbIsFolder )
                 {
-                    if( aContent[i]->mbIsFolder )
-                    {
-                        SvTreeListEntry* pNewEntry = InsertEntry( aContent[i]->GetTitle(), pEntry, true );
+                    SvTreeListEntry* pNewEntry = InsertEntry( i->GetTitle(), pEntry, true );
 
-                        OUString* sData = new OUString( aContent[i]->maTargetURL );
-                        pNewEntry->SetUserData( static_cast< void* >( sData ) );
-                    }
+                    OUString* sData = new OUString( i->maTargetURL );
+                    pNewEntry->SetUserData( static_cast< void* >( sData ) );
                 }
             }
         }
-        else
-        {
-            // this dir was updated recently
-            // next time read this remote folder
-            m_sLastUpdatedDir.clear();
-        }
+    }
+    else
+    {
+        // this dir was updated recently
+        // next time read this remote folder
+        m_sLastUpdatedDir.clear();
     }
 }
 
@@ -90,24 +99,23 @@ void FolderTree::FillTreeEntry( const OUString & rUrl, const ::std::vector< std:
 
     SvTreeListEntry* pParent = GetCurEntry();
 
-    if( pParent && !IsExpanded( pParent ) )
+    if( !(pParent && !IsExpanded( pParent )) )
+        return;
+
+    while (SvTreeListEntry* pChild = FirstChild(pParent))
     {
-        while (SvTreeListEntry* pChild = FirstChild(pParent))
-        {
-            GetModel()->Remove(pChild);
-        }
-
-
-        for(::std::vector< std::pair< OUString, OUString > >::const_iterator it = rFolders.begin(); it != rFolders.end() ; ++it)
-        {
-            SvTreeListEntry* pNewEntry = InsertEntry( it->first, pParent, true  );
-            OUString* sData = new OUString( it->second );
-            pNewEntry->SetUserData( static_cast< void* >( sData ) );
-        }
-
-        m_sLastUpdatedDir = rUrl;
-        Expand( pParent );
+        GetModel()->Remove(pChild);
     }
+
+    for (auto const& folder : rFolders)
+    {
+        SvTreeListEntry* pNewEntry = InsertEntry( folder.first, pParent, true  );
+        OUString* sData = new OUString( folder.second );
+        pNewEntry->SetUserData( static_cast< void* >( sData ) );
+    }
+
+    m_sLastUpdatedDir = rUrl;
+    Expand( pParent );
 }
 
 void FolderTree::SetTreePath( OUString const & sUrl )
@@ -115,7 +123,7 @@ void FolderTree::SetTreePath( OUString const & sUrl )
     INetURLObject aUrl( sUrl );
     aUrl.setFinalSlash();
 
-    OUString sPath = aUrl.GetURLPath( INetURLObject::DECODE_WITH_CHARSET );
+    OUString sPath = aUrl.GetURLPath( INetURLObject::DecodeMechanism::WithCharset );
 
     SvTreeListEntry* pEntry = First();
     bool end = false;
@@ -129,7 +137,7 @@ void FolderTree::SetTreePath( OUString const & sUrl )
             INetURLObject aUrlObj( sNodeUrl );
             aUrlObj.setFinalSlash();
 
-            sNodeUrl = aUrlObj.GetURLPath( INetURLObject::DECODE_WITH_CHARSET );
+            sNodeUrl = aUrlObj.GetURLPath( INetURLObject::DecodeMechanism::WithCharset );
 
             if( sPath == sNodeUrl )
             {
@@ -145,7 +153,7 @@ void FolderTree::SetTreePath( OUString const & sUrl )
             }
             else
             {
-                pEntry = NextSibling( pEntry );
+                pEntry = pEntry->NextSibling();
             }
         }
         else

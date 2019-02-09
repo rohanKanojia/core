@@ -30,6 +30,12 @@ $(eval $(call gb_Library_add_defs,orcus-parser,\
 	-D__ORCUS_PSR_BUILDING_DLL \
 ))
 
+# Needed when building against MSVC in C++17 mode, as
+# workdir/UnpackedTarball/liborcus/include/orcus/global.hpp uses std::unary_function:
+$(eval $(call gb_Library_add_defs,orcus-parser, \
+    -D_HAS_AUTO_PTR_ETC=1 \
+))
+
 $(eval $(call gb_Library_set_generated_cxx_suffix,orcus-parser,cpp))
 
 $(eval $(call gb_Library_add_generated_exception_objects,orcus-parser,\
@@ -39,12 +45,15 @@ $(eval $(call gb_Library_add_generated_exception_objects,orcus-parser,\
 	UnpackedTarball/liborcus/src/parser/css_types \
 	UnpackedTarball/liborcus/src/parser/csv_parser_base \
 	UnpackedTarball/liborcus/src/parser/exception \
+	UnpackedTarball/liborcus/src/parser/json_global \
 	UnpackedTarball/liborcus/src/parser/json_parser_base \
+	UnpackedTarball/liborcus/src/parser/json_parser_thread \
 	UnpackedTarball/liborcus/src/parser/parser_base \
 	UnpackedTarball/liborcus/src/parser/parser_global \
 	UnpackedTarball/liborcus/src/parser/pstring \
 	UnpackedTarball/liborcus/src/parser/sax_parser_base \
 	UnpackedTarball/liborcus/src/parser/sax_token_parser \
+	UnpackedTarball/liborcus/src/parser/sax_token_parser_thread \
 	UnpackedTarball/liborcus/src/parser/stream \
 	UnpackedTarball/liborcus/src/parser/string_pool \
 	UnpackedTarball/liborcus/src/parser/tokens \

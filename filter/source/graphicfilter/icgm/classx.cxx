@@ -18,23 +18,23 @@
  */
 
 
-#include <main.hxx>
-#include <outact.hxx>
+#include "main.hxx"
+#include "outact.hxx"
 
 
-#define ImplSetUnderlineMode()                                  \
-                                                                \
-    sal_uInt32 nMode = ImplGetUI16();                               \
-    switch ( nMode )                                            \
-    {                                                           \
-        case 1 : pElement->eUnderlineMode = UM_LOW; break;      \
-        case 2 : pElement->eUnderlineMode = UM_HIGH; break;     \
-        case 4 : pElement->eUnderlineMode = UM_STRIKEOUT; break;\
-        case 8 : pElement->eUnderlineMode = UM_OVERSCORE; break;\
-        default: pElement->eUnderlineMode = UM_OFF; break;      \
-    }                                                           \
+void CGM::ImplSetUnderlineMode()
+{
+    sal_uInt32 nMode = ImplGetUI16();
+    switch ( nMode )
+    {
+        case 1 : pElement->eUnderlineMode = UM_LOW; break;
+        case 2 : pElement->eUnderlineMode = UM_HIGH; break;
+        case 4 : pElement->eUnderlineMode = UM_STRIKEOUT; break;
+        case 8 : pElement->eUnderlineMode = UM_OVERSCORE; break;
+        default: pElement->eUnderlineMode = UM_OFF; break;
+    }
     pElement->nUnderlineColor = ImplGetBitmapColor();
-
+}
 
 void CGM::ImplDoClass6()
 {
@@ -48,7 +48,7 @@ void CGM::ImplDoClass6()
                 case 0 : /*inquire function support */break;
                 case -1 : /*set underline mode*/
                 {
-                    ImplSetUnderlineMode()
+                    ImplSetUnderlineMode();
                 }
                 break;
                 case -2 : /*set script mode */break;
@@ -218,16 +218,16 @@ void CGM::ImplDoClass9()
 {
     switch ( mnElementID )
     {
-        case 0x01 : /*Pixel Array */break;                  // NS
-        case 0x02 : /*Create Bitmap */break;                    // NS
-        case 0x03 : /*Delete Bitmap */break;                    // NS
-        case 0x04 : /*Select Drawing Bitmap */break;            // NS
-        case 0x05 : /*Display Bitmap */break;               // NS
+        case 0x01 : /*Pixel Array */break;                    // NS
+        case 0x02 : /*Create Bitmap */break;                  // NS
+        case 0x03 : /*Delete Bitmap */break;                  // NS
+        case 0x04 : /*Select Drawing Bitmap */break;          // NS
+        case 0x05 : /*Display Bitmap */break;                 // NS
         case 0x06 : /*Drawing Mode */break;
-        case 0x07 : /*Mapped Bitmap ForeGrnd Color */break; // NS
-        case 0x08 : /*Fill Bitmap */break;                  // NS
-        case 0x09 : /*Two Operand BitBlt */break;           // NS
-        case 0x0a : /*Three Operand BitBlt */break;         // NS
+        case 0x07 : /*Mapped Bitmap ForeGround Color */break; // NS
+        case 0x08 : /*Fill Bitmap */break;                    // NS
+        case 0x09 : /*Two Operand BitBlt */break;             // NS
+        case 0x0a : /*Three Operand BitBlt */break;           // NS
         default: break;
     }
 };

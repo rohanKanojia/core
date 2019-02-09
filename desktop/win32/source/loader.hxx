@@ -20,11 +20,10 @@
 #ifndef INCLUDED_DESKTOP_WIN32_SOURCE_LOADER_HXX
 #define INCLUDED_DESKTOP_WIN32_SOURCE_LOADER_HXX
 
-#include <sal/config.h>
-
 #include <cstddef>
-
-#include <tchar.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <string.h>
 
 #define MY_LENGTH(s) (sizeof (s) / sizeof *(s) - 1)
 #define MY_STRING(s) (s), MY_LENGTH(s)
@@ -68,6 +67,8 @@ inline WCHAR * commandLineAppendEncoded(WCHAR * buffer, WCHAR const * text) {
     return buffer;
 }
 
+// Set the PATH environment variable in the current (loader) process, so that a
+// following CreateProcess has the necessary environment:
 // @param binPath
 // Must point to an array of size at least MAX_PATH.  Is filled with the null
 // terminated full path to the "bin" file corresponding to the current
@@ -76,7 +77,10 @@ inline WCHAR * commandLineAppendEncoded(WCHAR * buffer, WCHAR const * text) {
 // Must point to an array of size at least MAX_PATH.  Is filled with the null
 // terminated full directory path (ending in "\") to the "ini" file
 // corresponding to the current executable.
-void getPaths(WCHAR * binPath, WCHAR * iniDirectory);
+void extendLoaderEnvironment(WCHAR * binPath, WCHAR * iniDirectory);
+
+// Implementation of the process guarding soffice.bin
+int officeloader_impl(bool bAllowConsole);
 
 }
 

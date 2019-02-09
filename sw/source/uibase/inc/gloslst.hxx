@@ -45,7 +45,7 @@ struct AutoTextGroup
 
 class SwGlossaryList : public AutoTimer
 {
-    std::vector<AutoTextGroup*> aGroupArr;
+    std::vector<std::unique_ptr<AutoTextGroup>> aGroupArr;
     OUString        sPath;
     bool            bFilled;
 
@@ -54,7 +54,7 @@ class SwGlossaryList : public AutoTimer
 
 public:
         SwGlossaryList();
-        virtual ~SwGlossaryList();
+        virtual ~SwGlossaryList() override;
 
     void            HasLongName(const OUString& rBegin, std::vector<OUString> *pLongNames);
     bool            GetShortName(const OUString& rLongName,

@@ -170,13 +170,13 @@
                 <xsl:attribute name="fo:margin-right">
                     <xsl:value-of select="concat($tbl_margin_right, 'in')"/>
                 </xsl:attribute>
-                <!-- If previous w:p has a page break, the table must have the page break attribute applied to it	 May need this for tables starting on new pages -->
-                <!--	<xsl:if test="parent::w:tbl/preceding-sibling::w:p[1][descendant::w:br/@w:type='page']">
-							<xsl:attribute name="fo:break-before">page</xsl:attribute></xsl:if>	-->
+                <!-- If previous w:p has a page break, the table must have the page break attribute applied to it    May need this for tables starting on new pages -->
+                <!--    <xsl:if test="parent::w:tbl/preceding-sibling::w:p[1][descendant::w:br/@w:type='page']">
+                            <xsl:attribute name="fo:break-before">page</xsl:attribute></xsl:if> -->
                 <!-- initial values for tables-->
             </xsl:element>
         </xsl:element>
-        <!-- the following style is for conveting Word table text wrapping to SO Writer. Since SO Writer has no table text wrapping feature, so we use the draw:text-box as a container and put the table in draw:text-box -->
+        <!-- the following style is for converting Word table text wrapping to SO Writer. Since SO Writer has no table text wrapping feature, so we use the draw:text-box as a container and put the table in draw:text-box -->
         <xsl:if test="w:tblpPr">
             <xsl:element name="style:style">
                 <xsl:attribute name="style:name">TableFrame<xsl:number count="w:tblpPr" from="/w:wordDocument/w:body" level="any" format="1"/>
@@ -281,7 +281,7 @@
                         <xsl:value-of select="$frame_v_anchor"/>
                     </xsl:attribute>
                     <!--/xsl:if-->
-                    <!--xsl:if test="w:tblpPr/@w:tblpXSpec" to get the horizntal alignment-->
+                    <!--xsl:if test="w:tblpPr/@w:tblpXSpec" to get the horizontal alignment-->
                     <xsl:variable name="horizental_alignment">
                         <xsl:choose>
                             <xsl:when test="w:tblpPr/@w:tblpXSpec = 'left' ">

@@ -37,6 +37,9 @@ AutoReqProv: no
 %define gnome_dir /usr
 %define gnome_mime_theme hicolor
 
+# only symlinks in the package that at the time of building point to non-existing files
+%global dont_check_desktop_files 1
+
 %description
 %productname desktop integration for desktop-environments that implement
 the menu- and mime-related specifications from http://www.freedesktop.org
@@ -56,6 +59,7 @@ mkdir -p $RPM_BUILD_ROOT
 export DESTDIR=$RPM_BUILD_ROOT
 export KDEMAINDIR=/usr
 export PREFIXDIR=/usr
+export BINDIR=/usr/bin
 export GNOMEDIR=%{gnome_dir}
 
 ./create_tree.sh
@@ -66,7 +70,6 @@ cd $RPM_BUILD_ROOT
 rm -rf usr/share/application-registry
 rm -rf usr/share/applications.flag
 rm -rf usr/share/mime-info
-rm -rf usr/share/mimelnk
 rm -rf usr/share/applnk-redhat
 #find usr/share/icons -name '*.png' -exec chmod g+w {} \;
 
@@ -78,7 +81,7 @@ rm -rf $RPM_BUILD_ROOT
 # package gets installed OR when the menu-package is already installed and one
 # of the above listed packages gets installed
 
-# Dut to a bug in rpm it is not possible to check why the script is triggered...
+# Due to a bug in rpm it is not possible to check why the script is triggered...
 # This is how it should be: 1st arg: number of this package, 2nd arg: number of
 # package that triggers - the bug is that rpm reports the same number for both
 # (the value of the 2nd one), so just run this always...
@@ -231,17 +234,17 @@ application/vnd.sun.xml.base odb
 application/vnd.stardivision.math smf
 application/vnd.openofficeorg.extension oxt
 application/vnd.openxmlformats-officedocument.wordprocessingml.document docx
-application/vnd.ms-word.document.macroenabled.12 docm
+application/vnd.ms-word.document.macroEnabled.12 docm
 application/vnd.openxmlformats-officedocument.wordprocessingml.template dotx
-application/vnd.ms-word.template.macroenabled.12 dotm
+application/vnd.ms-word.template.macroEnabled.12 dotm
 application/vnd.openxmlformats-officedocument.spreadsheetml.sheet xlsx
-application/vnd.ms-excel.sheet.macroenabled.12 xlsm
+application/vnd.ms-excel.sheet.macroEnabled.12 xlsm
 application/vnd.openxmlformats-officedocument.spreadsheetml.template xltx
-application/vnd.ms-excel.template.macroenabled.12 xltm
+application/vnd.ms-excel.template.macroEnabled.12 xltm
 application/vnd.openxmlformats-officedocument.presentationml.presentation pptx
-application/vnd.ms-powerpoint.presentation.macroenabled.12 pptm
+application/vnd.ms-powerpoint.presentation.macroEnabled.12 pptm
 application/vnd.openxmlformats-officedocument.presentationml.template potx
-application/vnd.ms-powerpoint.template.macroenabled.12 potm
+application/vnd.ms-powerpoint.template.macroEnabled.12 potm
 END
 
 # and replace the original file
@@ -320,17 +323,17 @@ application/vnd.oasis.opendocument.database; %unixfilename -view %s
 application/vnd.sun.xml.base; %unixfilename -view %s
 application/vnd.openofficeorg.extension; %unixfilename %s
 application/vnd.openxmlformats-officedocument.wordprocessingml.document; %unixfilename -view %s
-application/vnd.ms-word.document.macroenabled.12;%unixfilename -view %s
+application/vnd.ms-word.document.macroEnabled.12;%unixfilename -view %s
 application/vnd.openxmlformats-officedocument.wordprocessingml.template; %unixfilename -view %s
-application/vnd.ms-word.template.macroenabled.12; %unixfilename -view %s
+application/vnd.ms-word.template.macroEnabled.12; %unixfilename -view %s
 application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; %unixfilename -view %s
-application/vnd.ms-excel.sheet.macroenabled.12; %unixfilename -view %s
+application/vnd.ms-excel.sheet.macroEnabled.12; %unixfilename -view %s
 application/vnd.openxmlformats-officedocument.spreadsheetml.template; %unixfilename -view %s
-application/vnd.ms-excel.template.macroenabled.12; %unixfilename -view %s
+application/vnd.ms-excel.template.macroEnabled.12; %unixfilename -view %s
 application/vnd.openxmlformats-officedocument.presentationml.presentation; %unixfilename -view %s
-application/vnd.ms-powerpoint.presentation.macroenabled.12; %unixfilename -view %s
+application/vnd.ms-powerpoint.presentation.macroEnabled.12; %unixfilename -view %s
 application/vnd.openxmlformats-officedocument.presentationml.template; %unixfilename -view %s
-application/vnd.ms-powerpoint.template.macroenabled.12; %unixfilename -view %s
+application/vnd.ms-powerpoint.template.macroEnabled.12; %unixfilename -view %s
 END
 
   # and replace the original file
@@ -401,14 +404,16 @@ done
 /usr/share/applications/%unixfilename-startcenter.desktop
 /usr/share/applications/%unixfilename-xsltfilter.desktop
 /usr/share/icons/gnome/*/apps/*png
+/usr/share/icons/gnome/*/apps/*svg
 /usr/share/icons/gnome/*/mimetypes/*png
-/usr/share/icons/gnome/scalable/apps/*svg
-/usr/share/icons/gnome/scalable/mimetypes/*svg
+/usr/share/icons/gnome/*/mimetypes/*svg
 /usr/share/icons/hicolor/*/apps/*png
+/usr/share/icons/hicolor/*/apps/*svg
 /usr/share/icons/hicolor/*/mimetypes/*png
-/usr/share/icons/hicolor/scalable/apps/*svg
-/usr/share/icons/hicolor/scalable/mimetypes/*svg
+/usr/share/icons/hicolor/*/mimetypes/*svg
 /usr/share/icons/locolor/*/apps/*png
+/usr/share/icons/locolor/*/apps/*svg
 /usr/share/icons/locolor/*/mimetypes/*png
+/usr/share/icons/locolor/*/mimetypes/*svg
 /usr/share/mime/packages/*
 /usr/share/appdata/*

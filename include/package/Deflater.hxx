@@ -22,21 +22,21 @@
 
 #include <com/sun/star/uno/Sequence.hxx>
 #include <package/packagedllapi.hxx>
+#include <memory>
 
 struct z_stream_s;
 
 namespace ZipUtils {
 
-class DLLPUBLIC_PACKAGE Deflater
+class DLLPUBLIC_PACKAGE Deflater final
 {
     typedef struct z_stream_s z_stream;
 
-protected:
     css::uno::Sequence< sal_Int8 > sInBuffer;
     bool                    bFinish;
     bool                    bFinished;
     sal_Int64               nOffset, nLength;
-    z_stream*               pStream;
+    std::unique_ptr<z_stream> pStream;
 
     void init (sal_Int32 nLevel, bool bNowrap);
     sal_Int32 doDeflateBytes (css::uno::Sequence < sal_Int8 > &rBuffer, sal_Int32 nNewOffset, sal_Int32 nNewLength);
@@ -44,15 +44,15 @@ protected:
 public:
     ~Deflater();
     Deflater(sal_Int32 nSetLevel, bool bNowrap);
-    void SAL_CALL setInputSegment( const css::uno::Sequence< sal_Int8 >& rBuffer );
-    bool SAL_CALL needsInput(  );
-    void SAL_CALL finish(  );
-    bool SAL_CALL finished(  ) { return bFinished;}
-    sal_Int32 SAL_CALL doDeflateSegment( css::uno::Sequence< sal_Int8 >& rBuffer, sal_Int32 nNewOffset, sal_Int32 nNewLength );
-    sal_Int64 SAL_CALL getTotalIn(  );
-    sal_Int64 SAL_CALL getTotalOut(  );
-    void SAL_CALL reset(  );
-    void SAL_CALL end(  );
+    void setInputSegment( const css::uno::Sequence< sal_Int8 >& rBuffer );
+    bool needsInput(  );
+    void finish(  );
+    bool finished(  ) { return bFinished;}
+    sal_Int32 doDeflateSegment( css::uno::Sequence< sal_Int8 >& rBuffer, sal_Int32 nNewLength );
+    sal_Int64 getTotalIn(  );
+    sal_Int64 getTotalOut(  );
+    void reset(  );
+    void end(  );
 };
 
 }

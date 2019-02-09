@@ -22,21 +22,15 @@
 
 #include <svl/svldllapi.h>
 
-#include <com/sun/star/io/XStream.hpp>
-#include <com/sun/star/io/XInputStream.hpp>
-#include <com/sun/star/io/XOutputStream.hpp>
-#include <com/sun/star/io/XSeekable.hpp>
-#include <com/sun/star/io/XTruncate.hpp>
-
 #include <svl/lockfilecommon.hxx>
+
+namespace com { namespace sun { namespace star { namespace io { class XInputStream; } } } }
+namespace com { namespace sun { namespace star { namespace io { class XOutputStream; } } } }
 
 namespace svt {
 
 class SVL_DLLPUBLIC DocumentLockFile : public LockFileCommon
 {
-    // the workaround for automated testing!
-    static bool m_bAllowInteraction;
-
     css::uno::Reference< css::io::XInputStream > OpenStream();
 
     void WriteEntryToStream( const LockFileEntry& aEntry, const css::uno::Reference< css::io::XOutputStream >& xStream );
@@ -48,9 +42,10 @@ public:
     bool CreateOwnLockFile();
     LockFileEntry GetLockData();
     bool OverwriteOwnLockFile();
+    /// Delete the Lockfile, if current user is the owner
     void RemoveFile();
-
-    static bool IsInteractionAllowed() { return m_bAllowInteraction; }
+    /// Only delete lockfile, disregarding ownership
+    void RemoveFileDirectly();
 };
 
 }

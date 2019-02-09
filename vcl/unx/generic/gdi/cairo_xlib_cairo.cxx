@@ -23,7 +23,6 @@
 #include <X11/Xutil.h>
 #include <X11/extensions/Xrender.h>
 
-#include "cairo_cairo.hxx"
 #include "cairo_xlib_cairo.hxx"
 
 #include <vcl/sysdata.hxx>
@@ -31,6 +30,10 @@
 #include <vcl/virdev.hxx>
 #include <vcl/window.hxx>
 #include <basegfx/vector/b2isize.hxx>
+#include <sal/log.hxx>
+
+#include <cairo-xlib.h>
+#include <cairo-xlib-xrender.h>
 
 namespace
 {
@@ -53,9 +56,6 @@ namespace
 
 namespace cairo
 {
-
-#include <cairo-xlib.h>
-#include <cairo-xlib-xrender.h>
 
     X11SysData::X11SysData() :
         pDisplay(nullptr),
@@ -230,8 +230,7 @@ namespace cairo
             aSysData.pRenderFormat = pFormat;
             return SurfaceSharedPtr(
                 new X11Surface( aSysData,
-                                X11PixmapSharedPtr(
-                                    new X11Pixmap(hPixmap, maSysData.pDisplay)),
+                                std::make_shared<X11Pixmap>(hPixmap, maSysData.pDisplay),
                                 CairoSurfaceSharedPtr(
                                     cairo_xlib_surface_create_with_xrender_format(
                                         static_cast<Display*>(maSysData.pDisplay),
@@ -255,16 +254,15 @@ namespace cairo
         SystemGraphicsData aSystemGraphicsData;
 
         aSystemGraphicsData.nSize = sizeof(SystemGraphicsData);
-        aSystemGraphicsData.hDrawable = getDrawable();
+        aSystemGraphicsData.hDrawable = mpPixmap ? mpPixmap->mhDrawable : maSysData.hDrawable;
         aSystemGraphicsData.pXRenderFormat = getRenderFormat();
 
         int width = cairo_xlib_surface_get_width(mpSurface.get());
         int height = cairo_xlib_surface_get_height(mpSurface.get());
 
-        return VclPtr<VirtualDevice>(
-            VclPtr<VirtualDevice>::Create(&aSystemGraphicsData,
+        return VclPtr<VirtualDevice>::Create(&aSystemGraphicsData,
                               Size(width, height),
-                              getFormat()));
+                              getFormat());
     }
 
     /**

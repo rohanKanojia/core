@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "swtypes.hxx"
-#include "swrect.hxx"
-#include "scroll.hxx"
+#include <swtypes.hxx>
+#include <swrect.hxx>
+#include <scroll.hxx>
 
 #define SCROLL_LINE_SIZE 250
 
@@ -31,7 +31,7 @@ SwScrollbar::SwScrollbar( vcl::Window *pWin, bool bHoriz ) :
     bVisible(false),
     bSizeSet(false)
 {
-    // SSA: --- RTL --- no mirroring for horizontal scrollbars
+    // No mirroring for horizontal scrollbars
     if( bHoriz )
         EnableRTL( false );
 }
@@ -52,7 +52,7 @@ void SwScrollbar::DocSzChgd( const Size &rSize )
 
 // Will be called after a change of the visible view section.
 
-void SwScrollbar::ViewPortChgd( const Rectangle &rRect )
+void SwScrollbar::ViewPortChgd( const tools::Rectangle &rRect )
 {
     long nThumb, nVisible;
     if( bHori )
@@ -95,7 +95,7 @@ void SwScrollbar::SetAuto(bool bSet)
     {
         bAuto = bSet;
 
-        // hide automatically - automatisch versteckt - then show
+        // hide automatically - then show
         if(!bAuto && bVisible && !ScrollBar::IsVisible())
             ExtendedShow();
         else if(bAuto)

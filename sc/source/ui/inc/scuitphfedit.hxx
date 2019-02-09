@@ -21,6 +21,7 @@
 #define INCLUDED_SC_SOURCE_UI_INC_SCUITPHFEDIT_HXX
 
 #include "tphfedit.hxx"
+#include <vcl/menubtn.hxx>
 
 enum ScHFEntryId
 {
@@ -56,7 +57,7 @@ protected:
                               const SfxItemSet& rCoreSet,
                               sal_uInt16        nWhich,
                               bool              bHeader );
-    virtual     ~ScHFEditPage();
+    virtual     ~ScHFEditPage() override;
     virtual void dispose() override;
 
 private:
@@ -67,7 +68,7 @@ private:
     VclPtr<ListBox>         m_pLbDefined;
     VclPtr<FixedText>       m_pFtCustomHF;
     VclPtr<PushButton>      m_pBtnText;
-    VclPtr<ScExtIButton>    m_pBtnFile;
+    VclPtr<MenuButton>      m_pBtnFile;
     VclPtr<PushButton>      m_pBtnTable;
     VclPtr<PushButton>      m_pBtnPage;
     VclPtr<PushButton>      m_pBtnLastPage;
@@ -84,29 +85,29 @@ private:
 
     ScEditWindow * m_pEditFocus; ///one of m_pWndLeft, m_pWndCenter, m_pWndRight
 
-    sal_uInt16       nWhich;
+    sal_uInt16 const       nWhich;
 
-    DECL_LINK_TYPED( ObjectSelectHdl, ScEditWindow&, void );
+    DECL_LINK( ObjectSelectHdl, ScEditWindow&, void );
 
 private:
     void InitPreDefinedList();
-    void ProcessDefinedListSel(ScHFEntryId eSel, bool bTravelling = false);
+    void ProcessDefinedListSel(ScHFEntryId eSel, bool bTravelling);
     void InsertToDefinedList();
     void RemoveFromDefinedList();
     void SetSelectDefinedList();
-    bool IsPageEntry(EditEngine*pEngine, EditTextObject* pTextObj);
-    static bool IsDateEntry(EditTextObject* pTextObj);
-    static bool IsExtFileNameEntry(EditTextObject* pTextObj);
-    DECL_LINK_TYPED( ListHdl_Impl, ListBox&, void);
-    DECL_LINK_TYPED( ClickHdl, Button*, void );
-    DECL_LINK_TYPED( MenuHdl, ScExtIButton&, void );
+    bool IsPageEntry(EditEngine*pEngine, const EditTextObject* pTextObj);
+    static bool IsDateEntry(const EditTextObject* pTextObj);
+    static bool IsExtFileNameEntry(const EditTextObject* pTextObj);
+    DECL_LINK( ListHdl_Impl, ListBox&, void);
+    DECL_LINK( ClickHdl, Button*, void );
+    DECL_LINK( MenuHdl, MenuButton*, void );
 };
 
 class ScRightHeaderEditPage : public ScHFEditPage
 {
     friend class VclPtr<ScRightHeaderEditPage>;
 public:
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rCoreSet );
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rCoreSet );
 
 private:
     ScRightHeaderEditPage( vcl::Window* pParent, const SfxItemSet& rSet );
@@ -116,7 +117,7 @@ class ScLeftHeaderEditPage : public ScHFEditPage
 {
     friend class VclPtr<ScLeftHeaderEditPage>;
 public:
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rCoreSet );
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rCoreSet );
 
 private:
     ScLeftHeaderEditPage( vcl::Window* pParent, const SfxItemSet& rSet );
@@ -126,7 +127,7 @@ class ScRightFooterEditPage : public ScHFEditPage
 {
     friend class VclPtr<ScRightFooterEditPage>;
 public:
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rCoreSet );
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rCoreSet );
 
 private:
     ScRightFooterEditPage( vcl::Window* pParent, const SfxItemSet& rSet );
@@ -136,7 +137,7 @@ class ScLeftFooterEditPage : public ScHFEditPage
 {
     friend class VclPtr<ScLeftFooterEditPage>;
 public:
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rCoreSet );
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rCoreSet );
 
 private:
     ScLeftFooterEditPage( vcl::Window* pParent, const SfxItemSet& rSet );

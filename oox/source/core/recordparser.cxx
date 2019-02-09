@@ -17,14 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/core/recordparser.hxx"
+#include <oox/core/recordparser.hxx>
 
 #include <vector>
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/xml/sax/XLocator.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <osl/diagnose.h>
-#include "oox/core/fragmenthandler.hxx"
+#include <oox/core/fragmenthandler.hxx>
 
 namespace oox {
 namespace core {
@@ -39,17 +39,18 @@ namespace prv {
 class Locator : public ::cppu::WeakImplHelper< XLocator >
 {
 public:
-    inline explicit         Locator( RecordParser* pParser ) : mpParser( pParser ) {}
+    explicit         Locator( RecordParser* pParser ) : mpParser( pParser ) {}
 
     void                    dispose();
-    void                    checkDispose() throw( RuntimeException );
+    /// @throws css::uno::RuntimeException
+    void                    checkDispose();
 
     // com.sun.star.sax.XLocator interface
 
-    virtual sal_Int32 SAL_CALL getColumnNumber() throw( RuntimeException, std::exception ) override;
-    virtual sal_Int32 SAL_CALL getLineNumber() throw( RuntimeException, std::exception ) override;
-    virtual OUString SAL_CALL getPublicId() throw( RuntimeException, std::exception ) override;
-    virtual OUString SAL_CALL getSystemId() throw( RuntimeException, std::exception ) override;
+    virtual sal_Int32 SAL_CALL getColumnNumber() override;
+    virtual sal_Int32 SAL_CALL getLineNumber() override;
+    virtual OUString SAL_CALL getPublicId() override;
+    virtual OUString SAL_CALL getSystemId() override;
 
 private:
     RecordParser*           mpParser;
@@ -60,29 +61,29 @@ void Locator::dispose()
     mpParser = nullptr;
 }
 
-void Locator::checkDispose() throw( RuntimeException )
+void Locator::checkDispose()
 {
     if( !mpParser )
         throw DisposedException();
 }
 
-sal_Int32 SAL_CALL Locator::getColumnNumber() throw( RuntimeException, std::exception )
+sal_Int32 SAL_CALL Locator::getColumnNumber()
 {
     return -1;
 }
 
-sal_Int32 SAL_CALL Locator::getLineNumber() throw( RuntimeException, std::exception )
+sal_Int32 SAL_CALL Locator::getLineNumber()
 {
     return -1;
 }
 
-OUString SAL_CALL Locator::getPublicId() throw( RuntimeException, std::exception )
+OUString SAL_CALL Locator::getPublicId()
 {
     checkDispose();
-    return mpParser->getInputSource().maPublicId;
+    return OUString();
 }
 
-OUString SAL_CALL Locator::getSystemId() throw( RuntimeException, std::exception )
+OUString SAL_CALL Locator::getSystemId()
 {
     checkDispose();
     return mpParser->getInputSource().maSystemId;
@@ -91,9 +92,9 @@ OUString SAL_CALL Locator::getSystemId() throw( RuntimeException, std::exception
 class ContextStack
 {
 public:
-    explicit            ContextStack( FragmentHandlerRef xHandler );
+    explicit            ContextStack( FragmentHandlerRef const & xHandler );
 
-    inline bool         empty() const { return maStack.empty(); }
+    bool         empty() const { return maStack.empty(); }
 
     sal_Int32           getCurrentRecId() const;
     bool                hasCurrentEndRecId() const;
@@ -106,11 +107,11 @@ private:
     typedef ::std::pair< RecordInfo, ContextHandlerRef >    ContextInfo;
     typedef ::std::vector< ContextInfo >                    ContextInfoVec;
 
-    FragmentHandlerRef  mxHandler;
+    FragmentHandlerRef const mxHandler;
     ContextInfoVec      maStack;
 };
 
-ContextStack::ContextStack( FragmentHandlerRef xHandler ) :
+ContextStack::ContextStack( FragmentHandlerRef const & xHandler ) :
     mxHandler( xHandler )
 {
 }
@@ -136,7 +137,7 @@ void ContextStack::pushContext( const RecordInfo& rRecInfo, const ContextHandler
 {
     OSL_ENSURE( (rRecInfo.mnEndRecId >= 0) || maStack.empty() || hasCurrentEndRecId(),
         "ContextStack::pushContext - nested incomplete context record identifiers" );
-    maStack.push_back( ContextInfo( rRecInfo, rxContext ) );
+    maStack.emplace_back( rRecInfo, rxContext );
 }
 
 void ContextStack::popContext()
@@ -156,7 +157,7 @@ void ContextStack::popContext()
 namespace {
 
 /** Reads a byte from the passed stream, returns true on success. */
-inline bool lclReadByte( sal_uInt8& ornByte, BinaryInputStream& rStrm )
+bool lclReadByte( sal_uInt8& ornByte, BinaryInputStream& rStrm )
 {
     return rStrm.readMemory( &ornByte, 1 ) == 1;
 }
@@ -229,7 +230,7 @@ void RecordParser::setFragmentHandler( const ::rtl::Reference< FragmentHandler >
     }
 }
 
-void RecordParser::parseStream( const RecordInputSource& rInputSource ) throw( SAXException, IOException, RuntimeException )
+void RecordParser::parseStream( const RecordInputSource& rInputSource )
 {
     maSource = rInputSource;
 
@@ -259,7 +260,6 @@ void RecordParser::parseStream( const RecordInputSource& rInputSource ) throw( S
                 mxStack->popContext();
             // finalize the current context and pop context info from stack
             OSL_ENSURE( mxStack->getCurrentRecId() == pEndRecInfo->mnStartRecId, "RecordParser::parseStream - context records mismatch" );
-            (void)pEndRecInfo;  // suppress compiler warning for unused variable
             ContextHandlerRef xCurrContext = mxStack->getCurrentContext();
             if( xCurrContext.is() )
             {

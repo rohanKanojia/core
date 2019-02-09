@@ -23,6 +23,7 @@
 
 #include <toolkit/controls/stdtabcontroller.hxx>
 #include <toolkit/controls/stdtabcontrollermodel.hxx>
+#include <toolkit/helper/servicenames.hxx>
 #include <toolkit/awt/vclxwindow.hxx>
 #include <toolkit/helper/macros.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -30,6 +31,7 @@
 #include <cppuhelper/queryinterface.hxx>
 #include <rtl/uuid.h>
 
+#include <sal/log.hxx>
 #include <tools/debug.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
@@ -125,7 +127,7 @@ bool StdTabController::ImplCreateComponentSequence(
         }
         else
         {
-            OSL_TRACE( "ImplCreateComponentSequence: Control not found" );
+            SAL_WARN("toolkit", "Control not found" );
             bOK = false;
         }
     }
@@ -143,7 +145,7 @@ void StdTabController::ImplActivateControl( bool bFirst ) const
     for ( sal_uInt32 n = bFirst ? 0 : nCount; bFirst ? n < nCount : n != 0; )
     {
         sal_uInt32 nCtrl = bFirst ? n++ : --n;
-        DBG_ASSERT( pControls[nCtrl].is(), "Control nicht im Container!" );
+        DBG_ASSERT( pControls[nCtrl].is(), "Control not in Container!" );
         if ( pControls[nCtrl].is() )
         {
             Reference< XWindowPeer >  xCP = pControls[nCtrl]->getPeer();
@@ -161,12 +163,12 @@ void StdTabController::ImplActivateControl( bool bFirst ) const
 }
 
 // XInterface
-Any StdTabController::queryAggregation( const Type & rType ) throw(RuntimeException, std::exception)
+Any StdTabController::queryAggregation( const Type & rType )
 {
     Any aRet = ::cppu::queryInterface( rType,
-                                        (static_cast< XTabController* >(this)),
-                                        (static_cast< XServiceInfo* >(this)),
-                                        (static_cast< XTypeProvider* >(this)) );
+                                        static_cast< XTabController* >(this),
+                                        static_cast< XServiceInfo* >(this),
+                                        static_cast< XTypeProvider* >(this) );
     return (aRet.hasValue() ? aRet : OWeakAggObject::queryAggregation( rType ));
 }
 
@@ -176,35 +178,35 @@ IMPL_XTYPEPROVIDER_START( StdTabController )
     cppu::UnoType<XServiceInfo>::get()
 IMPL_XTYPEPROVIDER_END
 
-void StdTabController::setModel( const Reference< XTabControllerModel >& Model ) throw(RuntimeException, std::exception)
+void StdTabController::setModel( const Reference< XTabControllerModel >& Model )
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
 
     mxModel = Model;
 }
 
-Reference< XTabControllerModel > StdTabController::getModel(  ) throw(RuntimeException, std::exception)
+Reference< XTabControllerModel > StdTabController::getModel(  )
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
 
     return mxModel;
 }
 
-void StdTabController::setContainer( const Reference< XControlContainer >& Container ) throw(RuntimeException, std::exception)
+void StdTabController::setContainer( const Reference< XControlContainer >& Container )
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
 
     mxControlContainer = Container;
 }
 
-Reference< XControlContainer > StdTabController::getContainer(  ) throw(RuntimeException, std::exception)
+Reference< XControlContainer > StdTabController::getContainer(  )
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
 
     return mxControlContainer;
 }
 
-Sequence< Reference< XControl > > StdTabController::getControls(  ) throw(RuntimeException, std::exception)
+Sequence< Reference< XControl > > StdTabController::getControls(  )
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
 
@@ -230,7 +232,13 @@ Sequence< Reference< XControl > > StdTabController::getControls(  ) throw(Runtim
     return aSeq;
 }
 
-void StdTabController::autoTabOrder(  ) throw(RuntimeException, std::exception)
+struct ComponentEntry
+{
+    css::awt::XWindow*  pComponent;
+    ::Point             aPos;
+};
+
+void StdTabController::autoTabOrder(  )
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
 
@@ -254,48 +262,44 @@ void StdTabController::autoTabOrder(  ) throw(RuntimeException, std::exception)
     Reference< XWindow > * pComponents = aCompSeq.getArray();
 
     // insert sort algorithm
-    ComponentEntryList aCtrls;
-    size_t n;
-    for ( n = 0; n < nCtrls; n++ )
+    std::vector< ComponentEntry > aCtrls;
+    aCtrls.reserve(nCtrls);
+    for ( size_t n = 0; n < nCtrls; n++ )
     {
         XWindow* pC = pComponents[n].get();
-        ComponentEntry* pE = new ComponentEntry;
-        pE->pComponent = pC;
+        ComponentEntry newEntry;
+        newEntry.pComponent = pC;
         awt::Rectangle aPosSize = pC->getPosSize();
-        pE->aPos.X() = aPosSize.X;
-        pE->aPos.Y() = aPosSize.Y;
+        newEntry.aPos.setX( aPosSize.X );
+        newEntry.aPos.setY( aPosSize.Y );
 
-        sal_uInt16 nPos;
+        decltype(aCtrls)::size_type nPos;
         for ( nPos = 0; nPos < aCtrls.size(); nPos++ )
         {
-            ComponentEntry* pEntry = aCtrls[ nPos ];
-            if ( ( pEntry->aPos.Y() > pE->aPos.Y() ) ||
-                 ( ( pEntry->aPos.Y() == pE->aPos.Y() ) && ( pEntry->aPos.X() > pE->aPos.X() ) ) )
+            ComponentEntry& rEntry = aCtrls[ nPos ];
+            if ( ( rEntry.aPos.Y() > newEntry.aPos.Y() ) ||
+                 ( ( rEntry.aPos.Y() == newEntry.aPos.Y() ) && ( rEntry.aPos.X() > newEntry.aPos.X() ) ) )
                     break;
         }
         if ( nPos < aCtrls.size() ) {
-            ComponentEntryList::iterator it = aCtrls.begin();
-            ::std::advance( it, nPos );
-            aCtrls.insert( it, pE );
+            aCtrls.insert( aCtrls.begin() + nPos, newEntry );
         } else {
-            aCtrls.push_back( pE );
+            aCtrls.push_back( newEntry );
         }
     }
 
     Sequence< Reference< XControlModel > > aNewSeq( nCtrls );
-    for ( n = 0; n < nCtrls; n++ )
+    for ( size_t n = 0; n < nCtrls; n++ )
     {
-        ComponentEntry* pE = aCtrls[ n ];
-        Reference< XControl >  xUC( pE->pComponent, UNO_QUERY );
+        ComponentEntry& rEntry = aCtrls[ n ];
+        Reference< XControl >  xUC( rEntry.pComponent, UNO_QUERY );
         aNewSeq.getArray()[n] = xUC->getModel();
-        delete pE;
     }
-    aCtrls.clear();
 
     mxModel->setControlModels( aNewSeq );
 }
 
-void StdTabController::activateTabOrder(  ) throw(RuntimeException, std::exception)
+void StdTabController::activateTabOrder(  )
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
 
@@ -350,7 +354,7 @@ void StdTabController::activateTabOrder(  ) throw(RuntimeException, std::excepti
     }
 }
 
-void StdTabController::activateFirst(  ) throw(RuntimeException, std::exception)
+void StdTabController::activateFirst(  )
 {
     SolarMutexGuard aSolarGuard;
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() ); //TODO: necessary?
@@ -358,7 +362,7 @@ void StdTabController::activateFirst(  ) throw(RuntimeException, std::exception)
     ImplActivateControl( true );
 }
 
-void StdTabController::activateLast(  ) throw(RuntimeException, std::exception)
+void StdTabController::activateLast(  )
 {
     SolarMutexGuard aSolarGuard;
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() ); //TODO: necessary?
@@ -367,19 +371,16 @@ void StdTabController::activateLast(  ) throw(RuntimeException, std::exception)
 }
 
 OUString StdTabController::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return OUString("stardiv.Toolkit.StdTabController");
 }
 
 sal_Bool StdTabController::supportsService(OUString const & ServiceName)
-    throw (css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 css::uno::Sequence<OUString> StdTabController::getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<OUString>{
         OUString::createFromAscii(szServiceName2_TabController),
@@ -389,7 +390,7 @@ css::uno::Sequence<OUString> StdTabController::getSupportedServiceNames()
 Reference< XControl >  StdTabController::FindControl( Sequence< Reference< XControl > >& rCtrls,
  const Reference< XControlModel > & rxCtrlModel )
 {
-    DBG_ASSERT( rxCtrlModel.is(), "ImplFindControl - welches ?!" );
+    DBG_ASSERT( rxCtrlModel.is(), "ImplFindControl - which one ?!" );
 
     const Reference< XControl > * pCtrls = rCtrls.getConstArray();
     sal_Int32 nCtrls = rCtrls.getLength();
@@ -406,7 +407,7 @@ Reference< XControl >  StdTabController::FindControl( Sequence< Reference< XCont
     return Reference< XControl > ();
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 stardiv_Toolkit_StdTabController_get_implementation(
     css::uno::XComponentContext *,
     css::uno::Sequence<css::uno::Any> const &)

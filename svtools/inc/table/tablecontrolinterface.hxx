@@ -91,16 +91,9 @@ namespace svt { namespace table
 
     struct TableCell
     {
-        ColPos          nColumn;
-        RowPos          nRow;
+        ColPos const    nColumn;
+        RowPos const    nRow;
         TableCellArea   eArea;
-
-        TableCell()
-            :nColumn( COL_INVALID )
-            ,nRow( ROW_INVALID )
-            ,eArea( CellContent )
-        {
-        }
 
         TableCell( ColPos const i_column, RowPos const i_row )
             :nColumn( i_column )
@@ -149,12 +142,11 @@ namespace svt { namespace table
 
     //= TableArea
 
-    enum TableArea
+    enum class TableArea
     {
-        TableAreaColumnHeaders,
-        TableAreaRowHeaders,
-        TableAreaDataArea,
-        TableAreaAll
+        ColumnHeaders,
+        RowHeaders,
+        All
     };
 
 
@@ -230,7 +222,7 @@ namespace svt { namespace table
         virtual long    pixelWidthToAppFont( long const i_pixels ) const = 0;
 
         /// shows a tracking rectangle
-        virtual void    showTracking( Rectangle const & i_location, sal_uInt16 const i_flags ) = 0;
+        virtual void    showTracking( tools::Rectangle const & i_location, ShowTrackFlags const i_flags ) = 0;
 
         /// hides a prviously shown tracking rectangle
         virtual void    hideTracking() = 0;

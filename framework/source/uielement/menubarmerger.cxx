@@ -19,6 +19,7 @@
 
 #include <uielement/menubarmerger.hxx>
 #include <framework/addonsoptions.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
 
 using namespace ::com::sun::star;
 
@@ -142,7 +143,7 @@ ReferencePathInfo MenuBarMerger::FindReferencePath(
     return aResult;
 }
 
-sal_uInt16 MenuBarMerger::FindMenuItem( const OUString& rCmd, Menu* pCurrMenu )
+sal_uInt16 MenuBarMerger::FindMenuItem( const OUString& rCmd, Menu const * pCurrMenu )
 {
     for ( sal_uInt16 i = 0; i < pCurrMenu->GetItemCount(); i++ )
     {
@@ -180,7 +181,7 @@ bool MenuBarMerger::CreateSubMenu(
                 pSubMenu->SetItemCommand( nItemId, rMenuItem.aURL );
                 if ( !rMenuItem.aSubMenu.empty() )
                 {
-                    PopupMenu* pPopupMenu = new PopupMenu();
+                    VclPtr<PopupMenu> pPopupMenu = VclPtr<PopupMenu>::Create();
                     pSubMenu->SetPopupMenu( nItemId, pPopupMenu );
                     ++nItemId;
 
@@ -221,7 +222,7 @@ bool MenuBarMerger::MergeMenuItems(
                 pMenu->SetItemCommand( nItemId, rMenuItem.aURL );
                 if ( !rMenuItem.aSubMenu.empty() )
                 {
-                    PopupMenu* pSubMenu = new PopupMenu();
+                    VclPtr<PopupMenu> pSubMenu = VclPtr<PopupMenu>::Create();
                     pMenu->SetPopupMenu( nItemId, pSubMenu );
                     ++nItemId;
 
@@ -352,7 +353,7 @@ bool MenuBarMerger::ProcessFallbackOperation(
                 const OUString aCmd( rReferencePath[nLevel] );
 
                 sal_uInt16 nInsPos( MENU_APPEND );
-                PopupMenu* pPopupMenu( new PopupMenu );
+                VclPtr<PopupMenu> pPopupMenu = VclPtr<PopupMenu>::Create();
 
                 if ( bFirstLevel && ( aRefPathInfo.eResult == RP_MENUITEM_INSTEAD_OF_POPUPMENU_FOUND ))
                 {
@@ -396,8 +397,6 @@ void MenuBarMerger::GetMenuEntry(
             rAddonMenuEntry[i].Value >>= rAddonMenuItem.aURL;
         else if ( aMenuEntryPropName == ADDONSMENUITEM_STRING_TITLE )
             rAddonMenuEntry[i].Value >>= rAddonMenuItem.aTitle;
-        else if ( aMenuEntryPropName == ADDONSMENUITEM_STRING_TARGET )
-            rAddonMenuEntry[i].Value >>= rAddonMenuItem.aTarget;
         else if ( aMenuEntryPropName == ADDONSMENUITEM_STRING_SUBMENU )
         {
             uno::Sequence< uno::Sequence< beans::PropertyValue > > aSubMenu;
@@ -406,8 +405,6 @@ void MenuBarMerger::GetMenuEntry(
         }
         else if ( aMenuEntryPropName == ADDONSMENUITEM_STRING_CONTEXT )
             rAddonMenuEntry[i].Value >>= rAddonMenuItem.aContext;
-        else if ( aMenuEntryPropName == ADDONSMENUITEM_STRING_IMAGEIDENTIFIER )
-            rAddonMenuEntry[i].Value >>= rAddonMenuItem.aImageId;
     }
 }
 

@@ -24,6 +24,7 @@
 #include <sal/types.h>
 #include <sfx2/dllapi.h>
 #include <tools/link.hxx>
+#include <memory>
 
 namespace rtl {
     class OUString;
@@ -35,31 +36,30 @@ struct SvProgressArg;
 
 class SFX2_DLLPUBLIC SfxProgress
 {
-    SfxProgress_Impl*       pImp;
-    sal_uIntPtr             nVal;
+    std::unique_ptr< SfxProgress_Impl >       pImpl;
+    sal_uInt32              nVal;
     bool                    bSuspended;
 
 public:
                             SfxProgress( SfxObjectShell* pObjSh,
-                                         const rtl::OUString& rText,
-                                         sal_uIntPtr nRange,
+                                         const OUString& rText,
+                                         sal_uInt32 nRange,
                                          bool bWait = true);
     virtual                 ~SfxProgress();
 
-    bool                    SetStateText( sal_uIntPtr nVal, const rtl::OUString &rVal );
-    bool                    SetState( sal_uIntPtr nVal, sal_uIntPtr nNewRange = 0 );
-    sal_uIntPtr             GetState() const { return nVal; }
+    void                    SetStateText( sal_uInt32 nVal, const OUString &rVal );
+    void                    SetState( sal_uInt32 nVal, sal_uInt32 nNewRange = 0 );
+    sal_uInt32              GetState() const { return nVal; }
 
     void                    Resume();
     void                    Suspend();
     bool                    IsSuspended() const { return bSuspended; }
 
-    void                    UnLock();
-    void                    Reschedule();
+    static void             Reschedule();
 
     void                    Stop();
 
-    static SfxProgress*     GetActiveProgress( SfxObjectShell *pDocSh = nullptr );
+    static SfxProgress*     GetActiveProgress( SfxObjectShell const *pDocSh = nullptr );
     static void             EnterLock();
     static void             LeaveLock();
 };

@@ -15,16 +15,16 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
-#include "com/sun/star/io/XInputStream.hpp"
-#include "com/sun/star/ucb/XSimpleFileAccess.hpp"
-#include "com/sun/star/uno/Reference.hxx"
+#include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/ucb/XSimpleFileAccess.hpp>
+#include <com/sun/star/uno/Reference.hxx>
 
-#include "comphelper/processfactory.hxx"
-#include "comphelper/seqstream.hxx"
+#include <comphelper/processfactory.hxx>
+#include <comphelper/seqstream.hxx>
 
-#include "rtl/ref.hxx"
+#include <rtl/ref.hxx>
 
-#include "test/bootstrapfixture.hxx"
+#include <test/bootstrapfixture.hxx>
 
 #include <WPXSvInputStream.hxx>
 
@@ -45,7 +45,6 @@ using writerperfect::WPXSvInputStream;
 
 namespace
 {
-
 class WPXSvStreamTest : public test::BootstrapFixture
 {
 public:
@@ -73,7 +72,8 @@ shared_ptr<RVNGInputStream> lcl_createStream()
 {
     using comphelper::SequenceInputStream;
 
-    const css::uno::Sequence<sal_Int8> aData(reinterpret_cast<const sal_Int8 *>(aText), sizeof aText);
+    const css::uno::Sequence<sal_Int8> aData(reinterpret_cast<const sal_Int8*>(aText),
+                                             sizeof aText);
     const uno::Reference<io::XInputStream> xInputStream(new SequenceInputStream(aData));
 
     shared_ptr<RVNGInputStream> pInputStream;
@@ -83,22 +83,25 @@ shared_ptr<RVNGInputStream> lcl_createStream()
     return pInputStream;
 }
 
-const shared_ptr<RVNGInputStream> lcl_createStreamForURL(const rtl::OUString &rURL)
+const shared_ptr<RVNGInputStream> lcl_createStreamForURL(const OUString& rURL)
 {
     using uno::Reference;
     using uno::UNO_QUERY_THROW;
 
-    const Reference<uno::XComponentContext> xContext(comphelper::getProcessComponentContext(), UNO_QUERY_THROW);
+    const Reference<uno::XComponentContext> xContext(comphelper::getProcessComponentContext(),
+                                                     UNO_QUERY_THROW);
     const Reference<ucb::XSimpleFileAccess> xFileAccess(
-        xContext->getServiceManager()->createInstanceWithContext("com.sun.star.ucb.SimpleFileAccess", xContext),
+        xContext->getServiceManager()->createInstanceWithContext(
+            "com.sun.star.ucb.SimpleFileAccess", xContext),
         UNO_QUERY_THROW);
-    const Reference<io::XInputStream> xInputStream(xFileAccess->openFileRead(rURL), UNO_QUERY_THROW);
+    const Reference<io::XInputStream> xInputStream(xFileAccess->openFileRead(rURL),
+                                                   UNO_QUERY_THROW);
 
     const shared_ptr<RVNGInputStream> pInput(new WPXSvInputStream(xInputStream));
     return pInput;
 }
 
-void lcl_testSubStreams(const shared_ptr<RVNGInputStream> &pInput)
+void lcl_testSubStreams(const shared_ptr<RVNGInputStream>& pInput)
 {
     shared_ptr<RVNGInputStream> pSubStream;
 
@@ -122,9 +125,9 @@ void WPXSvStreamTest::testRead()
     const unsigned long nLen = sizeof aText;
 
     unsigned long nReadBytes = 0;
-    const unsigned char *pData = nullptr;
-    const unsigned char *const pTextOrig = reinterpret_cast<const unsigned char *>(aText);
-    const unsigned char *pText = pTextOrig;
+    const unsigned char* pData = nullptr;
+    const unsigned char* const pTextOrig = reinterpret_cast<const unsigned char*>(aText);
+    const unsigned char* pText = pTextOrig;
 
     // reading by small pieces
     pData = pInput->read(1UL, nReadBytes);
@@ -174,7 +177,7 @@ void WPXSvStreamTest::testRead()
     pData = pInput->read(0UL, nReadBytes);
     CPPUNIT_ASSERT_EQUAL(0UL, nReadBytes);
     CPPUNIT_ASSERT_EQUAL(0L, pInput->tell());
-    CPPUNIT_ASSERT_EQUAL(pData, static_cast<const unsigned char *>(nullptr));
+    CPPUNIT_ASSERT_EQUAL(pData, static_cast<const unsigned char*>(nullptr));
     CPPUNIT_ASSERT(!pInput->isEnd());
 }
 
@@ -197,7 +200,7 @@ void WPXSvStreamTest::testSeekSet()
     CPPUNIT_ASSERT(!pInput->isEnd());
 
     CPPUNIT_ASSERT_EQUAL(0, pInput->seek(nLen, RVNG_SEEK_SET));
-    CPPUNIT_ASSERT(nLen == pInput->tell());
+    CPPUNIT_ASSERT_EQUAL(nLen, pInput->tell());
     CPPUNIT_ASSERT(pInput->isEnd());
 
     // go back to the beginning
@@ -212,7 +215,7 @@ void WPXSvStreamTest::testSeekSet()
     CPPUNIT_ASSERT(!pInput->isEnd());
 
     CPPUNIT_ASSERT(0 != pInput->seek(nLen + 1, RVNG_SEEK_SET));
-    CPPUNIT_ASSERT(nLen == pInput->tell());
+    CPPUNIT_ASSERT_EQUAL(nLen, pInput->tell());
     CPPUNIT_ASSERT(pInput->isEnd());
 }
 
@@ -249,7 +252,7 @@ void WPXSvStreamTest::testSeekCur()
     CPPUNIT_ASSERT(!pInput->isEnd());
 
     CPPUNIT_ASSERT(0 != pInput->seek(nLen + 1, RVNG_SEEK_CUR));
-    CPPUNIT_ASSERT(nLen == pInput->tell());
+    CPPUNIT_ASSERT_EQUAL(nLen, pInput->tell());
     CPPUNIT_ASSERT(pInput->isEnd());
 }
 
@@ -264,11 +267,11 @@ void WPXSvStreamTest::testSeekEnd()
 
     // valid seeks
     CPPUNIT_ASSERT_EQUAL(0, pInput->seek(0, RVNG_SEEK_END));
-    CPPUNIT_ASSERT(nLen == pInput->tell());
+    CPPUNIT_ASSERT_EQUAL(nLen, pInput->tell());
     CPPUNIT_ASSERT(pInput->isEnd());
 
     CPPUNIT_ASSERT_EQUAL(0, pInput->seek(-1, RVNG_SEEK_END));
-    CPPUNIT_ASSERT((nLen - 1) == pInput->tell());
+    CPPUNIT_ASSERT_EQUAL(nLen - 1, pInput->tell());
     CPPUNIT_ASSERT(!pInput->isEnd());
 
     CPPUNIT_ASSERT_EQUAL(0, pInput->seek(-nLen, RVNG_SEEK_END));
@@ -281,7 +284,7 @@ void WPXSvStreamTest::testSeekEnd()
 
     // invalid seeks
     CPPUNIT_ASSERT(0 != pInput->seek(1, RVNG_SEEK_END));
-    CPPUNIT_ASSERT(nLen == pInput->tell());
+    CPPUNIT_ASSERT_EQUAL(nLen, pInput->tell());
     CPPUNIT_ASSERT(pInput->isEnd());
 
     CPPUNIT_ASSERT(0 != pInput->seek(-nLen - 1, RVNG_SEEK_END));
@@ -293,11 +296,12 @@ void WPXSvStreamTest::testStructured()
 {
     // OLE2
     {
-        const shared_ptr<RVNGInputStream> pInput(lcl_createStreamForURL(m_directories.getURLFromSrc(aOLEFile)));
+        const shared_ptr<RVNGInputStream> pInput(
+            lcl_createStreamForURL(m_directories.getURLFromSrc(aOLEFile)));
         assert(bool(pInput));
 
         CPPUNIT_ASSERT(pInput->isStructured());
-        CPPUNIT_ASSERT(2 == pInput->subStreamCount());
+        CPPUNIT_ASSERT_EQUAL(static_cast<unsigned>(2), pInput->subStreamCount());
         lcl_testSubStreams(pInput);
 
         // check for existing substream
@@ -314,11 +318,12 @@ void WPXSvStreamTest::testStructured()
 
     // Zip
     {
-        const shared_ptr<RVNGInputStream> pInput(lcl_createStreamForURL(m_directories.getURLFromSrc(aZipFile)));
+        const shared_ptr<RVNGInputStream> pInput(
+            lcl_createStreamForURL(m_directories.getURLFromSrc(aZipFile)));
         assert(bool(pInput));
 
         CPPUNIT_ASSERT(pInput->isStructured());
-        CPPUNIT_ASSERT(9 == pInput->subStreamCount());
+        CPPUNIT_ASSERT_EQUAL(static_cast<unsigned>(9), pInput->subStreamCount());
         lcl_testSubStreams(pInput);
 
         // check for existing substream
@@ -338,16 +343,15 @@ void WPXSvStreamTest::testStructured()
         const shared_ptr<RVNGInputStream> pInput(lcl_createStream());
 
         CPPUNIT_ASSERT(!pInput->isStructured());
-        CPPUNIT_ASSERT(0 == pInput->subStreamCount());
+        CPPUNIT_ASSERT_EQUAL(static_cast<unsigned>(0), pInput->subStreamCount());
         CPPUNIT_ASSERT(!pInput->existsSubStream("foo"));
-        CPPUNIT_ASSERT(nullptr == pInput->getSubStreamByName("foo"));
-        CPPUNIT_ASSERT(nullptr == pInput->getSubStreamById(42));
-        CPPUNIT_ASSERT(nullptr == pInput->subStreamName(42));
+        CPPUNIT_ASSERT(!pInput->getSubStreamByName("foo"));
+        CPPUNIT_ASSERT(!pInput->getSubStreamById(42));
+        CPPUNIT_ASSERT(!pInput->subStreamName(42));
     }
 }
 
 CPPUNIT_TEST_SUITE_REGISTRATION(WPXSvStreamTest);
-
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

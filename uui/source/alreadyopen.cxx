@@ -17,37 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ids.hrc"
+#include <strings.hrc>
 #include "alreadyopen.hxx"
+#include <unotools/resmgr.hxx>
+#include <vcl/button.hxx>
+#include <vcl/svapp.hxx>
 
-AlreadyOpenQueryBox::AlreadyOpenQueryBox( vcl::Window* pParent, ResMgr* pResMgr, const OUString& aMessage, bool bIsStoring ) :
-    MessBox(pParent, 0,
-            ResId(STR_ALREADYOPEN_TITLE, *pResMgr).toString(),
-            aMessage )
+AlreadyOpenQueryBox::AlreadyOpenQueryBox(weld::Window* pParent, const std::locale& rLocale, const OUString& rMessage, bool bIsStoring)
+    : m_xQueryBox(Application::CreateMessageDialog(pParent, VclMessageType::Question, VclButtonsType::NONE, rMessage))
 {
-    SetImage( QueryBox::GetStandardImage() );
-
-    if ( bIsStoring )
+    m_xQueryBox->set_title(Translate::get(STR_ALREADYOPEN_TITLE, rLocale));
+    if (bIsStoring)
     {
-        AddButton( ResId(STR_ALREADYOPEN_RETRY_SAVE_BTN, *pResMgr).toString(), RET_YES,
-                ButtonDialogFlags::Default | ButtonDialogFlags::OK | ButtonDialogFlags::Focus );
-        AddButton( ResId(STR_ALREADYOPEN_SAVE_BTN, *pResMgr).toString(), RET_NO);
-        AddButton( StandardButtonType::Cancel, RET_CANCEL, ButtonDialogFlags::Cancel );
+        m_xQueryBox->add_button(Translate::get(STR_ALREADYOPEN_RETRY_SAVE_BTN, rLocale), RET_YES);
+        m_xQueryBox->add_button(Translate::get(STR_ALREADYOPEN_SAVE_BTN, rLocale), RET_NO);
     }
     else
     {
-        AddButton( ResId(STR_ALREADYOPEN_READONLY_BTN, *pResMgr).toString(), RET_YES,
-                ButtonDialogFlags::Default | ButtonDialogFlags::OK | ButtonDialogFlags::Focus );
-        AddButton( ResId(STR_ALREADYOPEN_OPEN_BTN, *pResMgr).toString(), RET_NO);
-        AddButton( StandardButtonType::Cancel, RET_CANCEL, ButtonDialogFlags::Cancel );
+        m_xQueryBox->add_button(Translate::get(STR_ALREADYOPEN_READONLY_BTN, rLocale), RET_YES);
+        m_xQueryBox->add_button(Translate::get(STR_ALREADYOPEN_OPEN_BTN, rLocale), RET_NO);
     }
-
-    SetButtonHelpText( RET_YES, OUString() );
-    SetButtonHelpText( RET_NO, OUString() );
-}
-
-AlreadyOpenQueryBox::~AlreadyOpenQueryBox()
-{
+    m_xQueryBox->add_button(Button::GetStandardText(StandardButtonType::Cancel), RET_CANCEL);
+    m_xQueryBox->set_default_response(RET_YES);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

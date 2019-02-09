@@ -64,23 +64,11 @@ namespace basegfx
         :   B3DTuple(fX, fY, fZ)
         {}
 
-        /** Create a copy of a 3D Point
-
-            @param rVec
-            The 3D Point which will be copied.
-        */
-        B3DPoint(const B3DPoint& rVec)
-        :   B3DTuple(rVec)
-        {}
-
         /** constructor with tuple to allow copy-constructing
             from B3DTuple-based classes
         */
         B3DPoint(const ::basegfx::B3DTuple& rTuple)
         :   B3DTuple(rTuple)
-        {}
-
-        ~B3DPoint()
         {}
 
         /** *=operator to allow usage from B3DPoint, too

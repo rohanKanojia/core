@@ -89,7 +89,7 @@ namespace vclcanvas
                                  vcl::Font&                            io_rVCLFont,
                                  const css::rendering::ViewState&      viewState,
                                  const css::rendering::RenderState&    renderState,
-                                 ::OutputDevice&                       rOutDev );
+                                 ::OutputDevice const &                rOutDev );
 
         /** Predicate, to determine whether polygon is actually an axis-aligned rectangle
 
@@ -171,16 +171,8 @@ namespace vclcanvas
                                       const css::rendering::ViewState&     rViewState,
                                       const css::rendering::RenderState&   rRenderState );
 
-        enum ModulationMode
-        {
-            MODULATE_NONE,
-            MODULATE_WITH_DEVICECOLOR
-        };
-
         ::BitmapEx transformBitmap( const BitmapEx&                                     rBitmap,
-                                    const ::basegfx::B2DHomMatrix&                      rTransform,
-                                    const css::uno::Sequence< double >&                 rDeviceColor,
-                                    ModulationMode                                      eModulationMode );
+                                    const ::basegfx::B2DHomMatrix&                      rTransform );
 
     }
 }

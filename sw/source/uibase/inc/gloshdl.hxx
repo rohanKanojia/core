@@ -19,8 +19,9 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_GLOSHDL_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_GLOSHDL_HXX
 
+#include <memory>
 #include <rtl/ustring.hxx>
-#include "swdllapi.h"
+#include <swdllapi.h>
 
 class SwWrtShell;
 class SwTextBlocks;
@@ -33,19 +34,20 @@ class SW_DLLPUBLIC SwGlossaryHdl
 
     SwGlossaries&   rStatGlossaries;
     OUString        aCurGrp;
-    SfxViewFrame*   pViewFrame;
+    SfxViewFrame* const pViewFrame;
     SwWrtShell*     pWrtShell;
-    SwTextBlocks*   pCurGrp;
+    std::unique_ptr<SwTextBlocks>
+                    pCurGrp;
 
-    SAL_DLLPRIVATE bool  Expand( const OUString& rShortName,
+    SAL_DLLPRIVATE bool  Expand(weld::Window* pParent, const OUString& rShortName,
                     SwGlossaries* pGlossaries,
-                    SwTextBlocks *pGlossary );
+                    std::unique_ptr<SwTextBlocks> pGlossary );
 
 public:
     void        GlossaryDlg();
 
     size_t      GetGroupCnt() const;
-    OUString    GetGroupName( size_t, OUString* pTitle = nullptr );
+    OUString    GetGroupName( size_t, OUString* pTitle );
     void        NewGroup(OUString & rGroupName, const OUString& rTitle);
     bool        DelGroup(const OUString &);
     void        RenameGroup(const OUString& rOld, OUString& rNew, const OUString& rNewTitle);
@@ -68,7 +70,7 @@ public:
     bool    DelGlossary(const OUString&);
     bool    CopyToClipboard(SwWrtShell& rSh, const OUString& rShortName);
 
-    bool    ExpandGlossary();
+    bool    ExpandGlossary(weld::Window* pParent);
     bool    InsertGlossary(const OUString &rName);
 
     void    SetMacros(const OUString& rName,

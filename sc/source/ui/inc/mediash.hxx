@@ -21,11 +21,10 @@
 #define INCLUDED_SC_SOURCE_UI_INC_MEDIASH_HXX
 
 #include <sfx2/shell.hxx>
-#include "shellids.hxx"
-#include <sfx2/module.hxx>
-#include <svx/svdmark.hxx>
+#include <shellids.hxx>
 
 class ScViewData;
+class SfxModule;
 
 #include "drawsh.hxx"
 
@@ -40,9 +39,9 @@ private:
 
 public:
     ScMediaShell(ScViewData* pData);
-    virtual ~ScMediaShell();
+    virtual ~ScMediaShell() override;
 
-    void ExecuteMedia(SfxRequest& rReq);
+    void ExecuteMedia(const SfxRequest& rReq);
     void GetMediaState(SfxItemSet &rSet);
 };
 

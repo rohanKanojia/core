@@ -33,8 +33,8 @@
 
 #include <ne_locks.h>
 
-#include "osl/mutex.hxx"
-#include "rtl/ref.hxx"
+#include <osl/mutex.hxx>
+#include <rtl/ref.hxx>
 #include "NeonTypes.hxx"
 
 namespace webdav_ucp
@@ -42,14 +42,6 @@ namespace webdav_ucp
 
 class TickerThread;
 class NeonSession;
-
-struct ltptr
-{
-    bool operator()( const NeonLock * p1, const NeonLock * p2 ) const
-    {
-        return p1 < p2;
-    }
-};
 
 struct LockInfo
 {
@@ -66,12 +58,12 @@ struct LockInfo
 
 };
 
-typedef std::map< NeonLock *, LockInfo, ltptr > LockInfoMap;
+typedef std::map< NeonLock *, LockInfo > LockInfoMap;
 
 class NeonLockStore
 {
     osl::Mutex         m_aMutex;
-    ne_lock_store    * m_pNeonLockStore;
+    ne_lock_store * const m_pNeonLockStore;
     rtl::Reference< TickerThread > m_pTickerThread;
     LockInfoMap        m_aLockInfoMap;
 

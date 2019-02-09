@@ -761,9 +761,9 @@ public class UnoDialog
         }
     }
 
-    public void addResourceHandler(String _Module)
+    public void addResourceHandler()
     {
-        m_oResource = new Resource(xMSF, _Module);
+        m_oResource = new Resource(xMSF);
     }
 
     public static short setInitialTabindex(int _istep)
@@ -827,30 +827,6 @@ public class UnoDialog
         int nGreenModulo = (nRedModulo % 256);
         int nBlue = nGreenModulo;
         return nBlue;
-    }
-
-    public String getWizardImageUrl(int _nResId, int _nHCResId)
-    {
-        if (isHighContrastModeActivated())
-        {
-            return "private:resource/wzi/image/" + _nHCResId;
-        }
-        else
-        {
-            return "private:resource/wzi/image/" + _nResId;
-        }
-    }
-
-    public String getImageUrl(String _surl, String _shcurl)
-    {
-        if (isHighContrastModeActivated())
-        {
-            return _shcurl;
-        }
-        else
-        {
-            return _surl;
-        }
     }
 
     public static short getListBoxLineCount()

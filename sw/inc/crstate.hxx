@@ -21,13 +21,13 @@
 
 #include <com/sun/star/text/HoriOrientation.hpp>
 #include <tools/gen.hxx>
-#include <swtypes.hxx>
-#include <swrect.hxx>
+#include "swrect.hxx"
 
 enum SwFillMode
 {
     FILL_TAB,       ///< default, fill with tabs
-    FILL_SPACE,     ///< fill with spaces and tabs
+    FILL_TAB_SPACE, ///< fill with spaces and tabs
+    FILL_SPACE,     ///< fill with spaces
     FILL_MARGIN,    ///< only align left, center, right
     FILL_INDENT     ///< by left paragraph indention
 };
@@ -38,11 +38,12 @@ struct SwFillCursorPos
     sal_uInt16 nParaCnt;        ///< number of paragraphs to insert
     sal_uInt16 nTabCnt;         ///< number of tabs respectively size of indentation
     sal_uInt16 nSpaceCnt;       ///< number of spaces to insert
+    sal_uInt16 nSpaceOnlyCnt;   ///< number of spaces to insert ("only spaces, no tabs" mode)
     sal_uInt16 nColumnCnt;      ///< number of necessary column breaks
     sal_Int16  eOrient;      ///< paragraph alignment
-    SwFillMode eMode;       ///< desired fill-up rule
-    SwFillCursorPos( SwFillMode eMd = FILL_TAB ) :
-        nParaCnt( 0 ), nTabCnt( 0 ), nSpaceCnt( 0 ), nColumnCnt( 0 ),
+    SwFillMode const eMode; ///< desired fill-up rule
+    SwFillCursorPos( SwFillMode eMd ) :
+        nParaCnt( 0 ), nTabCnt( 0 ), nSpaceCnt( 0 ), nSpaceOnlyCnt(0), nColumnCnt( 0 ),
         eOrient( css::text::HoriOrientation::NONE ), eMode( eMd )
     {}
 };
@@ -129,7 +130,7 @@ enum CursorMoveState
 struct SwCursorMoveState
 {
     SwFillCursorPos   *m_pFill;     ///< for automatic filling with tabs etc
-    Sw2LinesPos     *m_p2Lines;   ///< for selections inside/around 2line portions
+    std::unique_ptr<Sw2LinesPos> m_p2Lines;   ///< for selections inside/around 2line portions
     SwSpecialPos*   m_pSpecialPos; ///< for positions inside fields
     Point m_aRealHeight;          ///< contains then the position/height of the cursor
     CursorMoveState m_eState;
@@ -158,11 +159,10 @@ struct SwCursorMoveState
      */
     bool m_bInFrontOfLabel;
     bool m_bInNumPortion;         ///< point is in number portion #i23726#
-    int m_nInNumPostionOffset;        ///< distance from number portion's start
+    int m_nInNumPortionOffset;        ///< distance from number portion's start
 
     SwCursorMoveState( CursorMoveState eSt = MV_NONE ) :
         m_pFill( nullptr ),
-        m_p2Lines( nullptr ),
         m_pSpecialPos( nullptr ),
         m_eState( eSt ),
         m_nCursorBidiLevel( 0 ),
@@ -181,11 +181,10 @@ struct SwCursorMoveState
         m_bContentCheck( false ), // #i43742#
         m_bInFrontOfLabel( false ), // #i27615#
         m_bInNumPortion(false), // #i26726#
-        m_nInNumPostionOffset(0) // #i26726#
+        m_nInNumPortionOffset(0) // #i26726#
     {}
     SwCursorMoveState( SwFillCursorPos *pInitFill ) :
         m_pFill( pInitFill ),
-        m_p2Lines( nullptr ),
         m_pSpecialPos( nullptr ),
         m_eState( MV_SETONLYTEXT ),
         m_nCursorBidiLevel( 0 ),
@@ -204,7 +203,7 @@ struct SwCursorMoveState
         m_bContentCheck( false ), // #i43742#
         m_bInFrontOfLabel( false ), // #i27615#
         m_bInNumPortion(false), // #i23726#
-        m_nInNumPostionOffset(0) // #i23726#
+        m_nInNumPortionOffset(0) // #i23726#
     {}
 };
 

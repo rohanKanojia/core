@@ -24,9 +24,8 @@ namespace loplugin
 {
 
 class RtlConstAsciiMacro
-    : public RecursiveASTVisitor< RtlConstAsciiMacro >
+    : public loplugin::FilteringRewritePlugin< RtlConstAsciiMacro >
     , public PPCallbacks
-    , public RewritePlugin
     {
     public:
         explicit RtlConstAsciiMacro( const InstantiationData& data );
@@ -34,12 +33,8 @@ class RtlConstAsciiMacro
         bool VisitCXXConstructExpr( CXXConstructExpr* expr );
         bool VisitCXXTemporaryObjectExpr( CXXTemporaryObjectExpr* expr );
         bool VisitStringLiteral( const StringLiteral* literal );
-#if CLANG_VERSION < 30300
-        virtual void MacroExpands( const Token& macro, const MacroInfo* info, SourceRange range ) override;
-#else
         virtual void MacroExpands( const Token& macro, const MacroDirective* directive,
             SourceRange range, const MacroArgs* args ) override;
-#endif
         enum { isPPCallback = true };
     private:
         map< SourceLocation, SourceLocation > expansions; // start location -> end location
@@ -48,7 +43,7 @@ class RtlConstAsciiMacro
     };
 
 RtlConstAsciiMacro::RtlConstAsciiMacro( const InstantiationData& data )
-    : RewritePlugin( data )
+    : FilteringRewritePlugin( data )
     , searchingForString( false )
     {
     compiler.getPreprocessor().addPPCallbacks( this );
@@ -59,12 +54,8 @@ void RtlConstAsciiMacro::run()
     TraverseDecl( compiler.getASTContext().getTranslationUnitDecl());
     }
 
-#if CLANG_VERSION < 30300
-void RtlConstAsciiMacro::MacroExpands( const Token& macro, const MacroInfo*, SourceRange range )
-#else
 void RtlConstAsciiMacro::MacroExpands( const Token& macro, const MacroDirective*,
     SourceRange range, const MacroArgs* )
-#endif
     {
     if( macro.getIdentifierInfo()->getName() != "RTL_CONSTASCII_USTRINGPARAM" )
         return;

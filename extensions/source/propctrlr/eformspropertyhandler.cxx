@@ -21,20 +21,22 @@
 #include "formstrings.hxx"
 #include "formmetadata.hxx"
 #include "pcrservices.hxx"
-#include "propctrlr.hrc"
+#include <propctrlr.h>
 #include "formbrowsertools.hxx"
 #include "eformshelper.hxx"
 #include "handlerhelper.hxx"
 
+#include <com/sun/star/lang/NullPointerException.hpp>
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
 #include <com/sun/star/inspection/PropertyControlType.hpp>
 #include <com/sun/star/inspection/XObjectInspectorUI.hpp>
 #include <tools/debug.hxx>
+#include <sal/log.hxx>
 
 #include <functional>
 
 
-extern "C" void SAL_CALL createRegistryInfo_EFormsPropertyHandler()
+extern "C" void createRegistryInfo_EFormsPropertyHandler()
 {
     ::pcr::EFormsPropertyHandler::registerImplementation();
 }
@@ -70,13 +72,13 @@ namespace pcr
     }
 
 
-    OUString SAL_CALL EFormsPropertyHandler::getImplementationName_static(  ) throw (RuntimeException)
+    OUString EFormsPropertyHandler::getImplementationName_static(  )
     {
         return OUString( "com.sun.star.comp.extensions.EFormsPropertyHandler" );
     }
 
 
-    Sequence< OUString > SAL_CALL EFormsPropertyHandler::getSupportedServiceNames_static(  ) throw (RuntimeException)
+    Sequence< OUString > EFormsPropertyHandler::getSupportedServiceNames_static(  )
     {
         Sequence<OUString> aSupported { "com.sun.star.form.inspection.XMLFormsPropertyHandler" };
         return aSupported;
@@ -92,13 +94,15 @@ namespace pcr
     }
 
 
-    Any SAL_CALL EFormsPropertyHandler::getPropertyValue( const OUString& _rPropertyName ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    Any SAL_CALL EFormsPropertyHandler::getPropertyValue( const OUString& _rPropertyName )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         PropertyId nPropId( impl_getPropertyId_throwUnknownProperty( _rPropertyName ) );
 
-        OSL_ENSURE( m_pHelper.get(), "EFormsPropertyHandler::getPropertyValue: we don't have any SupportedProperties!" );
-            // if we survived impl_getPropertyId_throwUnknownProperty, we should have a helper, since no helper implies no properties
+        OSL_ENSURE(
+            m_pHelper,
+            "EFormsPropertyHandler::getPropertyValue: we don't have any SupportedProperties!");
+        // if we survived impl_getPropertyId_throwUnknownProperty, we should have a helper, since no helper implies no properties
 
         Any aReturn;
         try
@@ -143,25 +147,22 @@ namespace pcr
         }
         catch( const Exception& )
         {
-#if OSL_DEBUG_LEVEL > 0
-            OString sMessage( "EFormsPropertyHandler::getPropertyValue: caught an exception!" );
-            sMessage += "\n(have been asked for the \"";
-            sMessage += OString( _rPropertyName.getStr(), _rPropertyName.getLength(), RTL_TEXTENCODING_ASCII_US );
-            sMessage += "\" property.)";
-            OSL_FAIL( sMessage.getStr() );
-#endif
+            SAL_WARN( "extensions.propctrlr", "EFormsPropertyHandler::getPropertyValue: caught an exception!"
+                "\n(have been asked for the \"" <<_rPropertyName << "\" property.)");
         }
         return aReturn;
     }
 
 
-    void SAL_CALL EFormsPropertyHandler::setPropertyValue( const OUString& _rPropertyName, const Any& _rValue ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    void SAL_CALL EFormsPropertyHandler::setPropertyValue( const OUString& _rPropertyName, const Any& _rValue )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         PropertyId nPropId( impl_getPropertyId_throwUnknownProperty( _rPropertyName ) );
 
-        OSL_ENSURE( m_pHelper.get(), "EFormsPropertyHandler::setPropertyValue: we don't have any SupportedProperties!" );
-            // if we survived impl_getPropertyId_throwUnknownProperty, we should have a helper, since no helper implies no properties
+        OSL_ENSURE(
+            m_pHelper,
+            "EFormsPropertyHandler::setPropertyValue: we don't have any SupportedProperties!");
+        // if we survived impl_getPropertyId_throwUnknownProperty, we should have a helper, since no helper implies no properties
 
         try
         {
@@ -282,11 +283,11 @@ namespace pcr
     }
 
 
-    Sequence< Property > SAL_CALL EFormsPropertyHandler::doDescribeSupportedProperties() const
+    Sequence< Property > EFormsPropertyHandler::doDescribeSupportedProperties() const
     {
-        ::std::vector< Property > aProperties;
+        std::vector< Property > aProperties;
 
-        if ( m_pHelper.get() )
+        if (m_pHelper)
         {
             if ( m_pHelper->canBindToAnyDataType() )
             {
@@ -313,13 +314,15 @@ namespace pcr
     }
 
 
-    Any SAL_CALL EFormsPropertyHandler::convertToPropertyValue( const OUString& _rPropertyName, const Any& _rControlValue ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    Any SAL_CALL EFormsPropertyHandler::convertToPropertyValue( const OUString& _rPropertyName, const Any& _rControlValue )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         Any aReturn;
 
-        OSL_ENSURE( m_pHelper.get(), "EFormsPropertyHandler::convertToPropertyValue: we have no SupportedProperties!" );
-        if ( !m_pHelper.get() )
+        OSL_ENSURE(
+            m_pHelper,
+            "EFormsPropertyHandler::convertToPropertyValue: we have no SupportedProperties!");
+        if (!m_pHelper)
             return aReturn;
 
         PropertyId nPropId( m_pInfoService->getPropertyId( _rPropertyName ) );
@@ -346,13 +349,14 @@ namespace pcr
     }
 
 
-    Any SAL_CALL EFormsPropertyHandler::convertToControlValue( const OUString& _rPropertyName, const Any& _rPropertyValue, const Type& _rControlValueType ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    Any SAL_CALL EFormsPropertyHandler::convertToControlValue( const OUString& _rPropertyName, const Any& _rPropertyValue, const Type& _rControlValueType )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         Any aReturn;
 
-        OSL_ENSURE( m_pHelper.get(), "EFormsPropertyHandler::convertToControlValue: we have no SupportedProperties!" );
-        if ( !m_pHelper.get() )
+        OSL_ENSURE(m_pHelper,
+                   "EFormsPropertyHandler::convertToControlValue: we have no SupportedProperties!");
+        if (!m_pHelper)
             return aReturn;
 
         PropertyId nPropId( m_pInfoService->getPropertyId( _rPropertyName ) );
@@ -379,23 +383,23 @@ namespace pcr
     }
 
 
-    Sequence< OUString > SAL_CALL EFormsPropertyHandler::getActuatingProperties( ) throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL EFormsPropertyHandler::getActuatingProperties( )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
-        if ( !m_pHelper.get() )
+        if (!m_pHelper)
             return Sequence< OUString >();
 
-        ::std::vector< OUString > aInterestedInActuations( 2 );
+        std::vector< OUString > aInterestedInActuations( 2 );
         aInterestedInActuations[ 0 ] = PROPERTY_XML_DATA_MODEL;
         aInterestedInActuations[ 1 ] = PROPERTY_BINDING_NAME;
         return Sequence< OUString >( &(*aInterestedInActuations.begin()), aInterestedInActuations.size() );
     }
 
 
-    Sequence< OUString > SAL_CALL EFormsPropertyHandler::getSupersededProperties( ) throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL EFormsPropertyHandler::getSupersededProperties( )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
-        if ( !m_pHelper.get() )
+        if (!m_pHelper)
             return Sequence< OUString >();
 
         Sequence<OUString> aReturn { PROPERTY_INPUT_REQUIRED };
@@ -405,23 +409,22 @@ namespace pcr
 
     LineDescriptor SAL_CALL EFormsPropertyHandler::describePropertyLine( const OUString& _rPropertyName,
         const Reference< XPropertyControlFactory >& _rxControlFactory )
-        throw (UnknownPropertyException, NullPointerException, RuntimeException, std::exception)
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         if ( !_rxControlFactory.is() )
             throw NullPointerException();
-        if ( !m_pHelper.get() )
+        if (!m_pHelper)
             throw RuntimeException();
 
         LineDescriptor aDescriptor;
         sal_Int16 nControlType = PropertyControlType::TextField;
-        ::std::vector< OUString > aListEntries;
+        std::vector< OUString > aListEntries;
         PropertyId nPropId( impl_getPropertyId_throwUnknownProperty( _rPropertyName ) );
         switch ( nPropId )
         {
         case PROPERTY_ID_LIST_BINDING:
             nControlType = PropertyControlType::ListBox;
-            m_pHelper.get()->getAllElementUINames( EFormsHelper::Binding, aListEntries, true );
+            m_pHelper->getAllElementUINames(EFormsHelper::Binding, aListEntries, true);
             break;
 
         case PROPERTY_ID_XML_DATA_MODEL:
@@ -456,10 +459,10 @@ namespace pcr
             aDescriptor.Control = PropertyHandlerHelper::createListBoxControl( _rxControlFactory, aListEntries, false, true );
             break;
         case PropertyControlType::ComboBox:
-            aDescriptor.Control = PropertyHandlerHelper::createComboBoxControl( _rxControlFactory, aListEntries, false, true );
+            aDescriptor.Control = PropertyHandlerHelper::createComboBoxControl( _rxControlFactory, aListEntries, true );
             break;
         default:
-            aDescriptor.Control = _rxControlFactory->createPropertyControl( nControlType, sal_False );
+            aDescriptor.Control = _rxControlFactory->createPropertyControl( nControlType, false );
             break;
         }
 
@@ -470,18 +473,18 @@ namespace pcr
     }
 
 
-    InteractiveSelectionResult SAL_CALL EFormsPropertyHandler::onInteractivePropertySelection( const OUString& _rPropertyName, sal_Bool /*_bPrimary*/, Any& _rData, const Reference< XObjectInspectorUI >& _rxInspectorUI ) throw (UnknownPropertyException, NullPointerException, RuntimeException, std::exception)
+    InteractiveSelectionResult SAL_CALL EFormsPropertyHandler::onInteractivePropertySelection( const OUString& _rPropertyName, sal_Bool /*_bPrimary*/, Any& _rData, const Reference< XObjectInspectorUI >& _rxInspectorUI )
     {
         if ( !_rxInspectorUI.is() )
             throw NullPointerException();
 
         ::osl::MutexGuard aGuard( m_aMutex );
-        OSL_ENSURE( m_pHelper.get(), "EFormsPropertyHandler::onInteractivePropertySelection: we do not have any SupportedProperties!" );
-        if ( !m_pHelper.get() )
+        OSL_ENSURE(m_pHelper, "EFormsPropertyHandler::onInteractivePropertySelection: we do not "
+                              "have any SupportedProperties!");
+        if (!m_pHelper)
             return InteractiveSelectionResult_Cancelled;
 
         PropertyId nPropId( impl_getPropertyId_throwUnknownProperty( _rPropertyName ) );
-        (void)nPropId;
         OSL_ENSURE( ( PROPERTY_ID_BINDING_NAME == nPropId )
                  || ( PROPERTY_ID_BIND_EXPRESSION == nPropId )
                  || ( PROPERTY_ID_XSD_REQUIRED == nPropId )
@@ -501,7 +504,7 @@ namespace pcr
             // the binding for the dialog to work with
             Reference< XPropertySet > xBinding( m_pHelper->getCurrentBinding() );
             // the aspect of the binding which the dialog should modify
-            OUString sFacetName( _rPropertyName );
+            const OUString& sFacetName( _rPropertyName );
 
             OSL_ENSURE( xModel.is() && xBinding.is() && !sFacetName.isEmpty(),
                 "EFormsPropertyHandler::onInteractivePropertySelection: something is missing for the dialog initialization!" );
@@ -529,33 +532,33 @@ namespace pcr
     }
 
 
-    void SAL_CALL EFormsPropertyHandler::addPropertyChangeListener( const Reference< XPropertyChangeListener >& _rxListener ) throw (NullPointerException, RuntimeException, std::exception)
+    void SAL_CALL EFormsPropertyHandler::addPropertyChangeListener( const Reference< XPropertyChangeListener >& _rxListener )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         EFormsPropertyHandler_Base::addPropertyChangeListener( _rxListener );
-        if ( m_pHelper.get() )
+        if (m_pHelper)
             m_pHelper->registerBindingListener( _rxListener );
     }
 
 
-    void SAL_CALL EFormsPropertyHandler::removePropertyChangeListener( const Reference< XPropertyChangeListener >& _rxListener ) throw (RuntimeException, std::exception)
+    void SAL_CALL EFormsPropertyHandler::removePropertyChangeListener( const Reference< XPropertyChangeListener >& _rxListener )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
-        if ( m_pHelper.get() )
+        if (m_pHelper)
             m_pHelper->revokeBindingListener( _rxListener );
         EFormsPropertyHandler_Base::removePropertyChangeListener( _rxListener );
     }
 
 
-    void SAL_CALL EFormsPropertyHandler::actuatingPropertyChanged( const OUString& _rActuatingPropertyName, const Any& _rNewValue, const Any& /*_rOldValue*/, const Reference< XObjectInspectorUI >& _rxInspectorUI, sal_Bool ) throw (NullPointerException, RuntimeException, std::exception)
+    void SAL_CALL EFormsPropertyHandler::actuatingPropertyChanged( const OUString& _rActuatingPropertyName, const Any& _rNewValue, const Any& /*_rOldValue*/, const Reference< XObjectInspectorUI >& _rxInspectorUI, sal_Bool )
     {
         if ( !_rxInspectorUI.is() )
             throw NullPointerException();
 
         ::osl::MutexGuard aGuard( m_aMutex );
         PropertyId nActuatingPropId( impl_getPropertyId_throwRuntime( _rActuatingPropertyName ) );
-        OSL_PRECOND( m_pHelper.get(), "EFormsPropertyHandler::actuatingPropertyChanged: inconsistentcy!" );
-            // if we survived impl_getPropertyId_throwRuntime, we should have a helper, since no helper implies no properties
+        OSL_PRECOND(m_pHelper, "EFormsPropertyHandler::actuatingPropertyChanged: inconsistentcy!");
+        // if we survived impl_getPropertyId_throwRuntime, we should have a helper, since no helper implies no properties
 
         DBG_ASSERT( _rxInspectorUI.is(), "EFormsPropertyHandler::actuatingPropertyChanged: invalid callback!" );
         if ( !_rxInspectorUI.is() )
@@ -572,8 +575,8 @@ namespace pcr
             bool bBoundToSomeModel = !sDataModelName.isEmpty();
             _rxInspectorUI->rebuildPropertyUI( PROPERTY_BINDING_NAME );
             _rxInspectorUI->enablePropertyUI( PROPERTY_BINDING_NAME, bBoundToSomeModel );
+            [[fallthrough]];
         }
-        // NO break
 
         case PROPERTY_ID_BINDING_NAME:
         {

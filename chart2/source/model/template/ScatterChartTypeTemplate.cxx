@@ -18,20 +18,21 @@
  */
 
 #include "ScatterChartTypeTemplate.hxx"
-#include "macros.hxx"
 #include "XYDataInterpreter.hxx"
-#include "CartesianCoordinateSystem.hxx"
-#include "DiagramHelper.hxx"
-#include "servicenames_charttypes.hxx"
-#include "ContainerHelper.hxx"
-#include "DataSeriesHelper.hxx"
-#include "PropertyHelper.hxx"
+#include <DiagramHelper.hxx>
+#include <servicenames_charttypes.hxx>
+#include <DataSeriesHelper.hxx>
+#include <PropertyHelper.hxx>
 #include <unonames.hxx>
 
+#include <com/sun/star/chart2/CurveStyle.hpp>
 #include <com/sun/star/chart2/SymbolStyle.hpp>
 #include <com/sun/star/chart2/Symbol.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <tools/diagnose_ex.h>
 
 #include <algorithm>
 
@@ -40,7 +41,6 @@ using namespace ::com::sun::star;
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::beans::Property;
-using ::osl::MutexGuard;
 
 namespace
 {
@@ -54,26 +54,23 @@ enum
 };
 
 void lcl_AddPropertiesToVector(
-    ::std::vector< Property > & rOutProperties )
+    std::vector< Property > & rOutProperties )
 {
-    rOutProperties.push_back(
-        Property( CHART_UNONAME_CURVE_STYLE,
+    rOutProperties.emplace_back( CHART_UNONAME_CURVE_STYLE,
                   PROP_SCATTERCHARTTYPE_TEMPLATE_CURVE_STYLE,
                   cppu::UnoType<chart2::CurveStyle>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
-    rOutProperties.push_back(
-        Property( CHART_UNONAME_CURVE_RESOLUTION,
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( CHART_UNONAME_CURVE_RESOLUTION,
                   PROP_SCATTERCHARTTYPE_TEMPLATE_CURVE_RESOLUTION,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
-    rOutProperties.push_back(
-        Property( CHART_UNONAME_SPLINE_ORDER,
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( CHART_UNONAME_SPLINE_ORDER,
                   PROP_SCATTERCHARTTYPE_TEMPLATE_SPLINE_ORDER,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 }
 
 struct StaticScatterChartTypeTemplateDefaults_Initializer
@@ -111,10 +108,10 @@ struct StaticScatterChartTypeTemplateInfoHelper_Initializer
 private:
     static Sequence< Property > lcl_GetPropertySequence()
     {
-        ::std::vector< css::beans::Property > aProperties;
+        std::vector< css::beans::Property > aProperties;
         lcl_AddPropertiesToVector( aProperties );
 
-        ::std::sort( aProperties.begin(), aProperties.end(),
+        std::sort( aProperties.begin(), aProperties.end(),
                      ::chart::PropertyNameLess() );
 
         return comphelper::containerToSequence( aProperties );
@@ -167,7 +164,6 @@ ScatterChartTypeTemplate::~ScatterChartTypeTemplate()
 
 // ____ OPropertySet ____
 uno::Any ScatterChartTypeTemplate::GetDefaultValue( sal_Int32 nHandle ) const
-    throw(beans::UnknownPropertyException)
 {
     const tPropertyValueMap& rStaticDefaults = *StaticScatterChartTypeTemplateDefaults::get();
     tPropertyValueMap::const_iterator aFound( rStaticDefaults.find( nHandle ) );
@@ -183,7 +179,6 @@ uno::Any ScatterChartTypeTemplate::GetDefaultValue( sal_Int32 nHandle ) const
 
 // ____ XPropertySet ____
 uno::Reference< beans::XPropertySetInfo > SAL_CALL ScatterChartTypeTemplate::getPropertySetInfo()
-    throw (uno::RuntimeException, std::exception)
 {
     return *StaticScatterChartTypeTemplateInfo::get();
 }
@@ -196,8 +191,8 @@ sal_Int32 ScatterChartTypeTemplate::getDimension() const
 StackMode ScatterChartTypeTemplate::getStackMode( sal_Int32 /* nChartTypeIndex */ ) const
 {
     if( m_nDim == 3 )
-        return StackMode_Z_STACKED;
-    return StackMode_NONE;
+        return StackMode::ZStacked;
+    return StackMode::NONE;
 }
 
 void SAL_CALL ScatterChartTypeTemplate::applyStyle(
@@ -205,7 +200,6 @@ void SAL_CALL ScatterChartTypeTemplate::applyStyle(
     ::sal_Int32 nChartTypeIndex,
     ::sal_Int32 nSeriesIndex,
     ::sal_Int32 nSeriesCount )
-    throw (uno::RuntimeException, std::exception)
 {
     ChartTypeTemplate::applyStyle( xSeries, nChartTypeIndex, nSeriesIndex, nSeriesCount );
 
@@ -217,25 +211,23 @@ void SAL_CALL ScatterChartTypeTemplate::applyStyle(
         DataSeriesHelper::switchLinesOnOrOff( xProp, m_bHasLines );
         DataSeriesHelper::makeLinesThickOrThin( xProp, m_nDim==2 );
         if( m_nDim==3 )
-            DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints( xSeries, "BorderStyle", uno::makeAny( drawing::LineStyle_NONE ) );
+            DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints( xSeries, "BorderStyle", uno::Any( drawing::LineStyle_NONE ) );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 // ____ XChartTypeTemplate ____
 sal_Bool SAL_CALL ScatterChartTypeTemplate::supportsCategories()
-    throw (uno::RuntimeException, std::exception)
 {
-    return sal_False;
+    return false;
 }
 
 sal_Bool SAL_CALL ScatterChartTypeTemplate::matchesTemplate(
     const Reference< chart2::XDiagram >& xDiagram,
     sal_Bool bAdaptProperties )
-    throw (uno::RuntimeException, std::exception)
 {
     bool bResult = ChartTypeTemplate::matchesTemplate( xDiagram, bAdaptProperties );
 
@@ -247,17 +239,16 @@ sal_Bool SAL_CALL ScatterChartTypeTemplate::matchesTemplate(
         bool bSymbolFound = false;
         bool bLineFound = false;
 
-        ::std::vector< Reference< chart2::XDataSeries > > aSeriesVec(
+        std::vector< Reference< chart2::XDataSeries > > aSeriesVec(
             DiagramHelper::getDataSeriesFromDiagram( xDiagram ));
 
-        for( ::std::vector< Reference< chart2::XDataSeries > >::const_iterator aIt =
-                 aSeriesVec.begin(); aIt != aSeriesVec.end(); ++aIt )
+        for (auto const& series : aSeriesVec)
         {
             try
             {
                 chart2::Symbol aSymbProp;
                 drawing::LineStyle eLineStyle;
-                Reference< beans::XPropertySet > xProp( *aIt, uno::UNO_QUERY_THROW );
+                Reference< beans::XPropertySet > xProp(series, uno::UNO_QUERY_THROW);
 
                 bool bCurrentHasSymbol = (xProp->getPropertyValue( "Symbol") >>= aSymbProp) &&
                     (aSymbProp.Style != chart2::SymbolStyle_NONE);
@@ -283,9 +274,9 @@ sal_Bool SAL_CALL ScatterChartTypeTemplate::matchesTemplate(
                     break;
                 }
             }
-            catch( const uno::Exception & ex )
+            catch( const uno::Exception & )
             {
-                ASSERT_EXCEPTION( ex );
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
         }
 
@@ -312,9 +303,9 @@ sal_Bool SAL_CALL ScatterChartTypeTemplate::matchesTemplate(
             setFastPropertyValue_NoBroadcast( PROP_SCATTERCHARTTYPE_TEMPLATE_CURVE_RESOLUTION, xChartTypeProp->getPropertyValue(CHART_UNONAME_CURVE_RESOLUTION) );
             setFastPropertyValue_NoBroadcast( PROP_SCATTERCHARTTYPE_TEMPLATE_SPLINE_ORDER, xChartTypeProp->getPropertyValue(CHART_UNONAME_SPLINE_ORDER) );
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 
@@ -343,9 +334,9 @@ Reference< chart2::XChartType > ScatterChartTypeTemplate::getChartTypeForIndex( 
                 CHART_UNONAME_SPLINE_ORDER, getFastPropertyValue( PROP_SCATTERCHARTTYPE_TEMPLATE_SPLINE_ORDER ));
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return xResult;
@@ -353,7 +344,6 @@ Reference< chart2::XChartType > ScatterChartTypeTemplate::getChartTypeForIndex( 
 
 Reference< chart2::XChartType > SAL_CALL ScatterChartTypeTemplate::getChartTypeForNewSeries(
         const uno::Sequence< Reference< chart2::XChartType > >& aFormerlyUsedChartTypes )
-    throw (uno::RuntimeException, std::exception)
 {
     Reference< chart2::XChartType > xResult;
 
@@ -377,19 +367,18 @@ Reference< chart2::XChartType > SAL_CALL ScatterChartTypeTemplate::getChartTypeF
                 CHART_UNONAME_SPLINE_ORDER, getFastPropertyValue( PROP_SCATTERCHARTTYPE_TEMPLATE_SPLINE_ORDER ));
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return xResult;
 }
 
 Reference< chart2::XDataInterpreter > SAL_CALL ScatterChartTypeTemplate::getDataInterpreter()
-    throw (uno::RuntimeException, std::exception)
 {
     if( ! m_xDataInterpreter.is())
-        m_xDataInterpreter.set( new XYDataInterpreter( GetComponentContext()) );
+        m_xDataInterpreter.set( new XYDataInterpreter );
 
     return m_xDataInterpreter;
 }

@@ -8,44 +8,44 @@
  *
  */
 
+#include <memory>
 #include <sfx2/dispatch.hxx>
 #include <svl/zforlist.hxx>
 #include <svl/undo.hxx>
 
-#include "formulacell.hxx"
-#include "rangelst.hxx"
-#include "scitems.hxx"
-#include "docsh.hxx"
-#include "document.hxx"
-#include "uiitems.hxx"
-#include "reffact.hxx"
-#include "strload.hxx"
-#include "docfunc.hxx"
-#include "StatisticsDialogs.hrc"
-#include "TableFillingAndNavigationTools.hxx"
-
-#include "AnalysisOfVarianceDialog.hxx"
+#include <formulacell.hxx>
+#include <rangelst.hxx>
+#include <scitems.hxx>
+#include <docsh.hxx>
+#include <document.hxx>
+#include <uiitems.hxx>
+#include <reffact.hxx>
+#include <docfunc.hxx>
+#include <TableFillingAndNavigationTools.hxx>
+#include <AnalysisOfVarianceDialog.hxx>
+#include <scresid.hxx>
+#include <strings.hrc>
 
 namespace
 {
 
 struct StatisticCalculation {
-    sal_Int16   aLabelId;
+    const char* aLabelId;
     const char* aFormula;
     const char* aResultRangeName;
 };
 
-static StatisticCalculation lclBasicStatistics[] =
+static StatisticCalculation const lclBasicStatistics[] =
 {
-    { STR_ANOVA_LABEL_GROUPS, nullptr,                nullptr          },
+    { STR_ANOVA_LABEL_GROUPS, nullptr,             nullptr       },
     { STRID_CALC_COUNT,       "=COUNT(%RANGE%)",   "COUNT_RANGE" },
     { STRID_CALC_SUM,         "=SUM(%RANGE%)",     "SUM_RANGE"   },
     { STRID_CALC_MEAN,        "=AVERAGE(%RANGE%)", "MEAN_RANGE"  },
     { STRID_CALC_VARIANCE,    "=VAR(%RANGE%)",     "VAR_RANGE"   },
-    { 0,                      nullptr,                nullptr          }
+    { nullptr,                nullptr,             nullptr       }
 };
 
-static sal_Int16 lclAnovaLabels[] =
+static const char* lclAnovaLabels[] =
 {
     STR_ANOVA_LABEL_SOURCE_OF_VARIATION,
     STR_ANOVA_LABEL_SS,
@@ -54,30 +54,29 @@ static sal_Int16 lclAnovaLabels[] =
     STR_ANOVA_LABEL_F,
     STR_ANOVA_LABEL_P_VALUE,
     STR_ANOVA_LABEL_F_CRITICAL,
-    0
+    nullptr
 };
 
 static const char strWildcardRange[] = "%RANGE%";
-static const char strWildcardNumber[] = "%NUMBER%";
 
 OUString lclCreateMultiParameterFormula(
             ScRangeList&        aRangeList, const OUString& aFormulaTemplate,
-            const OUString&     aWildcard,  ScDocument*     pDocument,
-            ScAddress::Details& aAddressDetails)
+            const OUString&     aWildcard,  const ScDocument*     pDocument,
+            const ScAddress::Details& aAddressDetails)
 {
-    OUString aResult;
+    OUStringBuffer aResult;
     for (size_t i = 0; i < aRangeList.size(); i++)
     {
-        OUString aRangeString(aRangeList[i]->Format(ScRefFlags::RANGE_ABS, pDocument, aAddressDetails));
+        OUString aRangeString(aRangeList[i].Format(ScRefFlags::RANGE_ABS, pDocument, aAddressDetails));
         OUString aFormulaString = aFormulaTemplate.replaceAll(aWildcard, aRangeString);
-        aResult += aFormulaString;
+        aResult.append(aFormulaString);
         if(i != aRangeList.size() - 1) // Not Last
-            aResult+= ";";
+            aResult.append(";");
     }
-    return aResult;
+    return aResult.makeStringAndClear();
 }
 
-void lclMakeSubRangesList(ScRangeList& rRangeList, ScRange& rInputRange, ScStatisticsInputOutputDialog::GroupedBy aGroupedBy)
+void lclMakeSubRangesList(ScRangeList& rRangeList, const ScRange& rInputRange, ScStatisticsInputOutputDialog::GroupedBy aGroupedBy)
 {
     std::unique_ptr<DataRangeIterator> pIterator;
     if (aGroupedBy == ScStatisticsInputOutputDialog::BY_COLUMN)
@@ -88,7 +87,7 @@ void lclMakeSubRangesList(ScRangeList& rRangeList, ScRange& rInputRange, ScStati
     for( ; pIterator->hasNext(); pIterator->next() )
     {
         ScRange aRange = pIterator->get();
-        rRangeList.Append(aRange);
+        rRangeList.push_back(aRange);
     }
 }
 
@@ -135,12 +134,12 @@ bool ScAnalysisOfVarianceDialog::Close()
     return DoClose( ScAnalysisOfVarianceDialogWrapper::GetChildWindowId() );
 }
 
-sal_Int16 ScAnalysisOfVarianceDialog::GetUndoNameId()
+const char* ScAnalysisOfVarianceDialog::GetUndoNameId()
 {
     return STR_ANALYSIS_OF_VARIANCE_UNDO_NAME;
 }
 
-IMPL_LINK_NOARG_TYPED( ScAnalysisOfVarianceDialog, FactorChanged, RadioButton&, void )
+IMPL_LINK_NOARG( ScAnalysisOfVarianceDialog, FactorChanged, RadioButton&, void )
 {
     FactorChanged();
 }
@@ -164,7 +163,7 @@ void ScAnalysisOfVarianceDialog::FactorChanged()
 }
 
 void ScAnalysisOfVarianceDialog::RowColumn(ScRangeList& rRangeList, AddressWalkerWriter& aOutput, FormulaTemplate& aTemplate,
-                                           OUString& sFormula, GroupedBy aGroupedBy, ScRange* pResultRange)
+                                           const OUString& sFormula, GroupedBy aGroupedBy, ScRange* pResultRange)
 {
     if (pResultRange != nullptr)
         pResultRange->aStart = aOutput.current();
@@ -172,9 +171,9 @@ void ScAnalysisOfVarianceDialog::RowColumn(ScRangeList& rRangeList, AddressWalke
     {
         for (size_t i = 0; i < rRangeList.size(); i++)
         {
-            ScRange* pRange = rRangeList[i];
+            ScRange const & rRange = rRangeList[i];
             aTemplate.setTemplate(sFormula);
-            aTemplate.applyRange(strWildcardRange, *pRange);
+            aTemplate.applyRange(strWildcardRange, rRange);
             aOutput.writeFormula(aTemplate.getTemplate());
             if (pResultRange != nullptr)
                 pResultRange->aEnd = aOutput.current();
@@ -183,13 +182,13 @@ void ScAnalysisOfVarianceDialog::RowColumn(ScRangeList& rRangeList, AddressWalke
     }
     else
     {
-        sal_Int16 aLabelId = (aGroupedBy == BY_COLUMN) ? STR_COLUMN_LABEL_TEMPLATE : STR_ROW_LABEL_TEMPLATE;
-        OUString aLabelTemplate(SC_STRLOAD(RID_STATISTICS_DLGS, aLabelId));
+        const char* pLabelId = (aGroupedBy == BY_COLUMN) ? STR_COLUMN_LABEL_TEMPLATE : STR_ROW_LABEL_TEMPLATE;
+        OUString aLabelTemplate(ScResId(pLabelId));
 
         for (size_t i = 0; i < rRangeList.size(); i++)
         {
             aTemplate.setTemplate(aLabelTemplate);
-            aTemplate.applyNumber(strWildcardNumber, i + 1);
+            aTemplate.applyNumber("%NUMBER%", i + 1);
             aOutput.writeString(aTemplate.getTemplate());
             if (pResultRange != nullptr)
                 pResultRange->aEnd = aOutput.current();
@@ -200,11 +199,11 @@ void ScAnalysisOfVarianceDialog::RowColumn(ScRangeList& rRangeList, AddressWalke
 
 void ScAnalysisOfVarianceDialog::AnovaSingleFactor(AddressWalkerWriter& output, FormulaTemplate& aTemplate)
 {
-    output.writeBoldString(SC_STRLOAD(RID_STATISTICS_DLGS, STR_ANOVA_SINGLE_FACTOR_LABEL));
+    output.writeBoldString(ScResId(STR_ANOVA_SINGLE_FACTOR_LABEL));
     output.newLine();
 
     double aAlphaValue = mpAlphaField->GetValue() / 100.0;
-    output.writeString(SC_STRLOAD(RID_STATISTICS_DLGS, STR_LABEL_ALPHA));
+    output.writeString(ScResId(STR_LABEL_ALPHA));
     output.nextColumn();
     output.writeValue(aAlphaValue);
     aTemplate.autoReplaceAddress("%ALPHA%", output.current());
@@ -212,9 +211,9 @@ void ScAnalysisOfVarianceDialog::AnovaSingleFactor(AddressWalkerWriter& output, 
     output.newLine();
 
     // Write labels
-    for(sal_Int32 i = 0; lclBasicStatistics[i].aLabelId != 0; i++)
+    for(sal_Int32 i = 0; lclBasicStatistics[i].aLabelId; i++)
     {
-        output.writeString(SC_STRLOAD(RID_STATISTICS_DLGS, lclBasicStatistics[i].aLabelId));
+        output.writeString(ScResId(lclBasicStatistics[i].aLabelId));
         output.nextColumn();
     }
     output.newLine();
@@ -226,7 +225,7 @@ void ScAnalysisOfVarianceDialog::AnovaSingleFactor(AddressWalkerWriter& output, 
     output.push();
 
     // Write values
-    for(sal_Int32 i = 0; lclBasicStatistics[i].aLabelId != 0; i++)
+    for(sal_Int32 i = 0; lclBasicStatistics[i].aLabelId; i++)
     {
         output.resetRow();
         ScRange aResultRange;
@@ -244,20 +243,20 @@ void ScAnalysisOfVarianceDialog::AnovaSingleFactor(AddressWalkerWriter& output, 
 
     // Write ANOVA labels
     output.resetColumn();
-    for(sal_Int32 i = 0; lclAnovaLabels[i] != 0; i++)
+    for(sal_Int32 i = 0; lclAnovaLabels[i]; i++)
     {
-        output.writeString(SC_STRLOAD(RID_STATISTICS_DLGS, lclAnovaLabels[i]));
+        output.writeString(ScResId(lclAnovaLabels[i]));
         output.nextColumn();
     }
     output.nextRow();
 
-    aTemplate.autoReplaceRange("%FIRST_COLUMN%", *aRangeList[0]);
+    aTemplate.autoReplaceRange("%FIRST_COLUMN%", aRangeList[0]);
 
     // Between Groups
     {
         // Label
         output.resetColumn();
-        output.writeString(SC_STRLOAD(RID_STATISTICS_DLGS, STR_ANOVA_LABEL_BETWEEN_GROUPS));
+        output.writeString(ScResId(STR_ANOVA_LABEL_BETWEEN_GROUPS));
         output.nextColumn();
 
         // Sum of Squares
@@ -303,7 +302,7 @@ void ScAnalysisOfVarianceDialog::AnovaSingleFactor(AddressWalkerWriter& output, 
     {
         // Label
         output.resetColumn();
-        output.writeString(SC_STRLOAD(RID_STATISTICS_DLGS, STR_ANOVA_LABEL_WITHIN_GROUPS));
+        output.writeString(ScResId(STR_ANOVA_LABEL_WITHIN_GROUPS));
         output.nextColumn();
 
         // Sum of Squares
@@ -330,12 +329,12 @@ void ScAnalysisOfVarianceDialog::AnovaSingleFactor(AddressWalkerWriter& output, 
     {
         // Label
         output.resetColumn();
-        output.writeString(SC_STRLOAD(RID_STATISTICS_DLGS, STR_ANOVA_LABEL_TOTAL));
+        output.writeString(ScResId(STR_ANOVA_LABEL_TOTAL));
         output.nextColumn();
 
         // Sum of Squares
         aTemplate.setTemplate("=DEVSQ(%RANGE_LIST%)");
-        aTemplate.applyRangeList("%RANGE_LIST%", aRangeList);
+        aTemplate.applyRangeList("%RANGE_LIST%", aRangeList, ';');
         output.writeFormula(aTemplate.getTemplate());
         output.nextColumn();
 
@@ -348,7 +347,7 @@ void ScAnalysisOfVarianceDialog::AnovaSingleFactor(AddressWalkerWriter& output, 
 
 void ScAnalysisOfVarianceDialog::AnovaTwoFactor(AddressWalkerWriter& output, FormulaTemplate& aTemplate)
 {
-    output.writeBoldString(SC_STRLOAD(RID_STATISTICS_DLGS, STR_ANOVA_TWO_FACTOR_LABEL));
+    output.writeBoldString(ScResId(STR_ANOVA_TWO_FACTOR_LABEL));
     output.newLine();
 
     double aAlphaValue = mpAlphaField->GetValue() / 100.0;
@@ -360,9 +359,9 @@ void ScAnalysisOfVarianceDialog::AnovaTwoFactor(AddressWalkerWriter& output, For
     output.newLine();
 
     // Write labels
-    for(sal_Int32 i = 0; lclBasicStatistics[i].aLabelId != 0; i++)
+    for(sal_Int32 i = 0; lclBasicStatistics[i].aLabelId; i++)
     {
-        output.writeString(SC_STRLOAD(RID_STATISTICS_DLGS, lclBasicStatistics[i].aLabelId));
+        output.writeString(ScResId(lclBasicStatistics[i].aLabelId));
         output.nextColumn();
     }
     output.newLine();
@@ -375,7 +374,7 @@ void ScAnalysisOfVarianceDialog::AnovaTwoFactor(AddressWalkerWriter& output, For
 
     // Write ColumnX values
     output.push();
-    for(sal_Int32 i = 0; lclBasicStatistics[i].aLabelId != 0; i++)
+    for(sal_Int32 i = 0; lclBasicStatistics[i].aLabelId; i++)
     {
         output.resetRow();
         ScRange aResultRange;
@@ -392,7 +391,7 @@ void ScAnalysisOfVarianceDialog::AnovaTwoFactor(AddressWalkerWriter& output, For
 
     // Write RowX values
     output.push();
-    for(sal_Int32 i = 0; lclBasicStatistics[i].aLabelId != 0; i++)
+    for(sal_Int32 i = 0; lclBasicStatistics[i].aLabelId; i++)
     {
         output.resetRow();
         ScRange aResultRange;
@@ -409,17 +408,17 @@ void ScAnalysisOfVarianceDialog::AnovaTwoFactor(AddressWalkerWriter& output, For
     output.newLine();
 
     // Write ANOVA labels
-    for(sal_Int32 i = 0; lclAnovaLabels[i] != 0; i++)
+    for(sal_Int32 i = 0; lclAnovaLabels[i]; i++)
     {
-        output.writeString(SC_STRLOAD(RID_STATISTICS_DLGS, lclAnovaLabels[i]));
+        output.writeString(ScResId(lclAnovaLabels[i]));
         output.nextColumn();
     }
     output.nextRow();
 
     // Setup auto-replace strings
     aTemplate.autoReplaceRange(strWildcardRange, mInputRange);
-    aTemplate.autoReplaceRange("%FIRST_COLUMN%", *aColumnRangeList[0]);
-    aTemplate.autoReplaceRange("%FIRST_ROW%",    *aRowRangeList[0]);
+    aTemplate.autoReplaceRange("%FIRST_COLUMN%", aColumnRangeList[0]);
+    aTemplate.autoReplaceRange("%FIRST_ROW%",    aRowRangeList[0]);
 
     // Rows
     {

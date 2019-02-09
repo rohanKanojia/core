@@ -51,8 +51,10 @@ $(eval $(call gb_Library_use_externals,vclplug_gen,\
 	boost_headers \
 	cairo \
 	graphite \
-	glew \
+	epoxy \
+	glm_headers \
 	harfbuzz \
+	icu_headers \
 	icuuc \
 	valgrind \
 	Xrender \
@@ -63,7 +65,6 @@ $(eval $(call gb_Library_add_libs,vclplug_gen,\
 	-lXext \
 	-lSM \
 	-lICE \
-	-lGL \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,vclplug_gen,\
@@ -91,7 +92,6 @@ $(eval $(call gb_Library_add_exception_objects,vclplug_gen,\
     vcl/unx/generic/dtrans/X11_transferable \
     vcl/unx/generic/gdi/cairo_xlib_cairo \
     vcl/unx/generic/gdi/x11cairotextrender \
-    vcl/unx/generic/gdi/gcach_xpeer \
 	vcl/unx/generic/gdi/gdiimpl \
 	vcl/unx/generic/gdi/openglx11cairotextrender \
     vcl/unx/generic/gdi/salbmp \
@@ -100,7 +100,6 @@ $(eval $(call gb_Library_add_exception_objects,vclplug_gen,\
     vcl/unx/generic/gdi/salgdi \
     vcl/unx/generic/gdi/salvd \
     vcl/unx/generic/gdi/xrender_peer \
-    vcl/unx/generic/window/FWS \
     vcl/unx/generic/window/salframe \
     vcl/unx/generic/window/salobj \
     vcl/unx/x11/x11sys \

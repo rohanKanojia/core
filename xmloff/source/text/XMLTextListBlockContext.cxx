@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/debug.hxx>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/container/XIndexReplace.hpp>
 #include <com/sun/star/style/XStyle.hpp>
@@ -29,7 +28,8 @@
 #include <xmloff/xmltoken.hxx>
 #include "XMLTextListItemContext.hxx"
 #include "XMLTextListBlockContext.hxx"
-#include "txtlists.hxx"
+#include <txtlists.hxx>
+#include <sal/log.hxx>
 
 
 using namespace ::com::sun::star;
@@ -71,11 +71,11 @@ XMLTextListBlockContext::XMLTextListBlockContext(
     // Inherit style name from parent list, as well as the flags whether
     // numbering must be restarted and formats have to be created.
     OUString sParentListStyleName;
-    if( mxParentListBlock.Is() )
+    if( mxParentListBlock.is() )
     {
         XMLTextListBlockContext *pParent =
-                                static_cast<XMLTextListBlockContext *>(&mxParentListBlock);
-        msListStyleName = pParent->GetListStyleName();
+                                static_cast<XMLTextListBlockContext *>(mxParentListBlock.get());
+        msListStyleName = pParent->msListStyleName;
         sParentListStyleName = msListStyleName;
         mxNumRules = pParent->GetNumRules();
         mnLevel = pParent->GetLevel() + 1;
@@ -102,7 +102,6 @@ XMLTextListBlockContext::XMLTextListBlockContext(
         switch( rTokenMap.Get( nPrefix, aLocalName ) )
         {
         case XML_TOK_TEXT_LIST_BLOCK_XMLID:
-            sXmlId = rValue;
 //FIXME: there is no UNO API for lists
             // xml:id is also the list ID (#i92221#)
             if ( mnLevel == 0 ) // root <list> element
@@ -125,6 +124,9 @@ XMLTextListBlockContext::XMLTextListBlockContext(
             break;
         }
     }
+
+    // Remember this list block.
+    mrTxtImport.GetTextListHelper().PushListContext( this );
 
     mxNumRules = XMLTextListsHelper::MakeNumRule(GetImport(), mxNumRules,
         sParentListStyleName, msListStyleName,
@@ -149,7 +151,7 @@ XMLTextListBlockContext::XMLTextListBlockContext(
                 {
                     xNumRuleProps->getPropertyValue(s_PropNameDefaultListId)
                         >>= sListStyleDefaultListId;
-                    DBG_ASSERT( !sListStyleDefaultListId.isEmpty(),
+                    SAL_WARN_IF( sListStyleDefaultListId.isEmpty(), "xmloff",
                                 "no default list id found at numbering rules instance. Serious defect." );
                 }
             }
@@ -187,7 +189,7 @@ XMLTextListBlockContext::XMLTextListBlockContext(
         if ( bIsContinueNumberingAttributePresent && !mbRestartNumbering &&
              msContinueListId.isEmpty() )
         {
-            OUString Last( rTextListsHelper.GetLastProcessedListId() );
+            const OUString& Last( rTextListsHelper.GetLastProcessedListId() );
             if ( rTextListsHelper.GetListStyleOfLastProcessedList() == msListStyleName
                  && Last != msListId )
             {
@@ -225,9 +227,6 @@ XMLTextListBlockContext::XMLTextListBlockContext(
                 sListStyleDefaultListId );
         }
     }
-
-    // Remember this list block.
-    mrTxtImport.GetTextListHelper().PushListContext( this );
 }
 
 XMLTextListBlockContext::~XMLTextListBlockContext()
@@ -239,7 +238,7 @@ void XMLTextListBlockContext::EndElement()
     // Numbering has not to be restarted if it has been restarted within
     // a child list.
     XMLTextListBlockContext *pParent =
-                                static_cast<XMLTextListBlockContext *>(&mxParentListBlock);
+                                static_cast<XMLTextListBlockContext *>(mxParentListBlock.get());
     if( pParent )
     {
         pParent->mbRestartNumbering = mbRestartNumbering;
@@ -253,7 +252,7 @@ void XMLTextListBlockContext::EndElement()
     mrTxtImport.GetTextListHelper().SetListItem( nullptr );
 }
 
-SvXMLImportContext *XMLTextListBlockContext::CreateChildContext(
+SvXMLImportContextRef XMLTextListBlockContext::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< xml::sax::XAttributeList > & xAttrList )
@@ -267,7 +266,7 @@ SvXMLImportContext *XMLTextListBlockContext::CreateChildContext(
     {
     case XML_TOK_TEXT_LIST_HEADER:
         bHeader = true;
-        //fall-through
+        [[fallthrough]];
     case XML_TOK_TEXT_LIST_ITEM:
         pContext = new XMLTextListItemContext( GetImport(), mrTxtImport,
                                                 nPrefix, rLocalName,

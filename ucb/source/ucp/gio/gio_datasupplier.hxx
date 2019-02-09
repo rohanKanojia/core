@@ -22,6 +22,7 @@
 
 #include <ucbhelper/resultset.hxx>
 #include "gio_content.hxx"
+#include <memory>
 #include <vector>
 
 namespace gio
@@ -35,7 +36,7 @@ struct ResultListEntry
     css::uno::Reference< css::ucb::XContentIdentifier > xId;
     css::uno::Reference< css::ucb::XContent > xContent;
     css::uno::Reference< css::sdbc::XRow > xRow;
-    GFileInfo *pInfo;
+    GFileInfo * const pInfo;
 
     explicit ResultListEntry( GFileInfo *pInInfo ) : pInfo(pInInfo)
     {
@@ -48,19 +49,19 @@ struct ResultListEntry
     }
 };
 
-typedef std::vector< ResultListEntry* > ResultList;
+typedef std::vector< std::unique_ptr<ResultListEntry> > ResultList;
 
 class DataSupplier : public ucbhelper::ResultSetDataSupplier
 {
 private:
-    css::uno::Reference< ::gio::Content > mxContent;
-    sal_Int32 mnOpenMode;
+    rtl::Reference< ::gio::Content > mxContent;
+    sal_Int32 const mnOpenMode;
     bool mbCountFinal;
     bool getData();
     ResultList maResults;
 public:
-    DataSupplier( const css::uno::Reference< Content >& rContent, sal_Int32 nOpenMode );
-    virtual ~DataSupplier();
+    DataSupplier( const rtl::Reference< Content >& rContent, sal_Int32 nOpenMode );
+    virtual ~DataSupplier() override;
 
     virtual OUString queryContentIdentifierString( sal_uInt32 nIndex ) override;
     virtual css::uno::Reference< css::ucb::XContentIdentifier >
@@ -80,8 +81,7 @@ public:
 
     virtual void close() override;
 
-    virtual void validate()
-        throw( css::ucb::ResultSetException ) override;
+    virtual void validate() override;
 };
 
 }

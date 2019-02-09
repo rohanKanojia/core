@@ -59,7 +59,7 @@ $(eval $(call gb_CppunitTest_use_libraries,connectivity_commontools, \
     utl \
     tl \
     svt \
-    $(gb_UWINAPI) \
+    vcl \
 ))
 
 $(eval $(call gb_CppunitTest_use_components,connectivity_commontools,\

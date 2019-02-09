@@ -19,46 +19,37 @@
 
 
 #include <limits.h>
-#include <ctype.h>
 #include <bastype.hxx>
 #include <lex.hxx>
 #include <globals.hxx>
 #include <hash.hxx>
 #include <database.hxx>
-#include <osl/diagnose.h>
 #include <tools/stream.hxx>
 
-bool SvBOOL::ReadSvIdl( SvStringHashEntry * pName, SvTokenStream & rInStm )
+bool SvBOOL::ReadSvIdl( SvStringHashEntry const * pName, SvTokenStream & rInStm )
 {
     sal_uInt32 nTokPos = rInStm.Tell();
     SvToken& rTok = rInStm.GetToken_Next();
 
     if( rTok.Is( pName ) )
     {
-        bool bOk = true;
-        bool bBracket = rInStm.ReadIf( '(' );
-        if( bBracket || rInStm.ReadIf( '=' ) )
+        if( rInStm.ReadIf( '=' ) )
         {
             rTok = rInStm.GetToken();
-            if( rTok.IsBool() )
-            {
-                *this = rTok.GetBool();
-
-                rInStm.GetToken_Next();
-            }
-            if( bOk && bBracket )
-                bOk = rInStm.ReadIf( ')' );
+            if( !rTok.IsBool() )
+                throw SvParseException(rInStm, "xxx");
+            *this = rTok.GetBool();
+            rInStm.GetToken_Next();
         }
         else
             *this = true; //default action set to TRUE
-        if( bOk )
-            return true;
+        return true;
     }
     rInStm.Seek( nTokPos );
     return false;
 }
 
-bool SvIdentifier::ReadSvIdl( SvStringHashEntry * pName, SvTokenStream & rInStm )
+void SvIdentifier::ReadSvIdl( SvStringHashEntry const * pName, SvTokenStream & rInStm )
 {
     sal_uInt32 nTokPos = rInStm.Tell();
     SvToken& rTok = rInStm.GetToken_Next();
@@ -79,10 +70,9 @@ bool SvIdentifier::ReadSvIdl( SvStringHashEntry * pName, SvTokenStream & rInStm 
                 bOk = rInStm.ReadIf( ')' );
         }
         if( bOk )
-            return true;
+            return;
     }
     rInStm.Seek( nTokPos );
-    return false;
 }
 
 void SvIdentifier::ReadSvIdl( SvIdlDataBase & rBase,
@@ -103,7 +93,7 @@ void SvIdentifier::ReadSvIdl( SvIdlDataBase & rBase,
     rInStm.Seek( nTokPos );
 }
 
-bool ReadStringSvIdl( SvStringHashEntry * pName, SvTokenStream & rInStm, OString& aRetString )
+bool ReadStringSvIdl( SvStringHashEntry const * pName, SvTokenStream & rInStm, OString& aRetString )
 {
     sal_uInt32 nTokPos = rInStm.Tell();
     SvToken& rTok = rInStm.GetToken_Next();

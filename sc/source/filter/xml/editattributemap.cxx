@@ -10,10 +10,10 @@
 #include "editattributemap.hxx"
 
 #include <editeng/eeitem.hxx>
-#include <editeng/memberids.hrc>
+#include <editeng/memberids.h>
 #include <xmloff/xmlnmspe.hxx>
 
-ScXMLEditAttributeMap::Entry aEntries[] = {
+ScXMLEditAttributeMap::Entry const aEntries[] = {
 
     { XML_NAMESPACE_FO, "color", "CharColor", EE_CHAR_COLOR, 0 },
     { XML_NAMESPACE_STYLE, "font-charset", "CharFontCharSet", EE_CHAR_FONTINFO, MID_FONT_CHAR_SET },
@@ -57,6 +57,9 @@ ScXMLEditAttributeMap::Entry aEntries[] = {
     { XML_NAMESPACE_STYLE, "text-position", "CharEscapement", EE_CHAR_ESCAPEMENT, MID_ESC },
     { XML_NAMESPACE_STYLE, "text-position", "CharEscapementHeight", EE_CHAR_ESCAPEMENT, MID_ESC_HEIGHT },
     { XML_NAMESPACE_STYLE, "text-emphasize", "CharEmphasis", EE_CHAR_EMPHASISMARK, MID_EMPHASIS },
+    // The following 3 "country" entries are just placeholders for language,
+    // country, script and rfc-language-tag, which all map to CharLocale,
+    // EE_CHAR_LANGUAGE and MID_LANG_LOCALE and are handled individually.
     { XML_NAMESPACE_FO, "country", "CharLocale", EE_CHAR_LANGUAGE, MID_LANG_LOCALE },
     { XML_NAMESPACE_STYLE, "country-asian", "CharLocaleAsian", EE_CHAR_LANGUAGE_CJK, MID_LANG_LOCALE },
     { XML_NAMESPACE_STYLE, "country-complex", "CharLocaleComplex", EE_CHAR_LANGUAGE_CTL, MID_LANG_LOCALE },
@@ -64,15 +67,12 @@ ScXMLEditAttributeMap::Entry aEntries[] = {
 
 ScXMLEditAttributeMap::ScXMLEditAttributeMap()
 {
-    size_t n = SAL_N_ELEMENTS(aEntries);
-    for (size_t i = 0; i < n; ++i)
+    for (size_t i = 0; i < SAL_N_ELEMENTS(aEntries); ++i)
     {
-        maAPIEntries.insert(
-            StrToEntriesType::value_type(
-                OUString::createFromAscii(aEntries[i].mpAPIName), &aEntries[i]));
+        maAPIEntries.emplace(
+                OUString::createFromAscii(aEntries[i].mpAPIName), &aEntries[i]);
 
-        maItemIDEntries.insert(
-            IndexToEntriesType::value_type(aEntries[i].mnItemID, &aEntries[i]));
+        maItemIDEntries.emplace(aEntries[i].mnItemID, &aEntries[i]);
     }
 }
 

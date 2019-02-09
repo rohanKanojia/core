@@ -24,15 +24,18 @@
 #include <limits.h>
 #include <vector>
 #include <algorithm>
-#include <osl/mutex.hxx>
 #include <vcl/window.hxx>
 #include <vcl/svapp.hxx>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 #include <editeng/flditem.hxx>
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/awt/Rectangle.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
+#include <com/sun/star/i18n/Boundary.hpp>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <com/sun/star/accessibility/AccessibleTextType.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
@@ -45,12 +48,14 @@
 #include <com/sun/star/accessibility/AccessibleRelationType.hpp>
 #include <vcl/unohelp.hxx>
 #include <vcl/settings.hxx>
+#include <i18nlangtag/languagetag.hxx>
 
 #include <editeng/editeng.hxx>
 #include <editeng/unoprnms.hxx>
 #include <editeng/unoipset.hxx>
 #include <editeng/outliner.hxx>
 #include <svl/intitem.hxx>
+#include <svl/eitem.hxx>
 
 
 // Project-local header
@@ -60,12 +65,12 @@
 
 #include <editeng/unolingu.hxx>
 #include <editeng/unopracc.hxx>
-#include "editeng/AccessibleEditableTextPara.hxx"
+#include <editeng/AccessibleEditableTextPara.hxx>
 #include "AccessibleHyperlink.hxx"
 
 #include <svtools/colorcfg.hxx>
 using namespace std;
-#include "editeng.hrc"
+#include <editeng/editrids.hrc>
 #include <editeng/eerdll.hxx>
 #include <editeng/numitem.hxx>
 #include <memory>
@@ -80,7 +85,7 @@ using namespace ::com::sun::star::accessibility;
 
 namespace accessibility
 {
-    const SvxItemPropertySet* ImplGetSvxCharAndParaPropertiesSet()
+    static const SvxItemPropertySet* ImplGetSvxCharAndParaPropertiesSet()
     {
         // PropertyMap for character and paragraph properties
         static const SfxItemPropertyMapEntry aPropMap[] =
@@ -116,9 +121,6 @@ namespace accessibility
           // #i27138#
           mpParaManager( _pParaManager )
     {
-#ifdef DBG_UTIL
-        OSL_TRACE( "AccessibleEditableTextPara received ID: %d", mnNotifierClientId );
-#endif
 
         try
         {
@@ -147,9 +149,6 @@ namespace accessibility
             try
             {
                 ::comphelper::AccessibleEventNotifier::revokeClient( getNotifierClientId() );
-#ifdef DBG_UTIL
-                OSL_TRACE( "AccessibleEditableTextPara revoked ID: %d", mnNotifierClientId );
-#endif
             }
             catch (const uno::Exception&)
             {
@@ -164,7 +163,7 @@ namespace accessibility
 
     css::lang::Locale AccessibleEditableTextPara::implGetLocale()
     {
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= SAL_MAX_INT32,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getLocale: paragraph index value overflow");
 
         // return locale of first character in the paragraph
@@ -188,23 +187,20 @@ namespace accessibility
         }
     }
 
-    void AccessibleEditableTextPara::implGetParagraphBoundary( css::i18n::Boundary& rBoundary, sal_Int32 /*nIndex*/ )
+    void AccessibleEditableTextPara::implGetParagraphBoundary( const OUString& rText, css::i18n::Boundary& rBoundary, sal_Int32 /*nIndex*/ )
     {
         SAL_INFO( "editeng", "AccessibleEditableTextPara::implGetParagraphBoundary: only a base implementation, ignoring the index" );
 
         rBoundary.startPos = 0;
-        //rBoundary.endPos = GetTextLen();
-        OUString sText( implGetText() );
-        sal_Int32 nLength = sText.getLength();
-        rBoundary.endPos = nLength;
+        rBoundary.endPos = rText.getLength();
     }
 
-    void AccessibleEditableTextPara::implGetLineBoundary( css::i18n::Boundary& rBoundary, sal_Int32 nIndex )
+    void AccessibleEditableTextPara::implGetLineBoundary( const OUString&, css::i18n::Boundary& rBoundary, sal_Int32 nIndex )
     {
         SvxTextForwarder&   rCacheTF = GetTextForwarder();
         const sal_Int32     nParaIndex = GetParagraphIndex();
 
-        DBG_ASSERT(nParaIndex >= 0 && nParaIndex <= SAL_MAX_INT32,
+        DBG_ASSERT(nParaIndex >= 0,
                    "AccessibleEditableTextPara::implGetLineBoundary: paragraph index value overflow");
 
         const sal_Int32 nTextLen = rCacheTF.GetTextLen( nParaIndex );
@@ -306,9 +302,6 @@ namespace accessibility
 
                 // #106234# Delegate to EventNotifier
                 ::comphelper::AccessibleEventNotifier::revokeClientNotifyDisposing( nClientId, xThis );
-#ifdef DBG_UTIL
-                OSL_TRACE( "Disposed ID: %d", nClientId );
-#endif
             }
             catch (const uno::Exception&)
             {
@@ -346,9 +339,9 @@ namespace accessibility
     ESelection AccessibleEditableTextPara::MakeSelection( sal_Int32 nStartEEIndex, sal_Int32 nEndEEIndex )
     {
         // check overflow
-        DBG_ASSERT(nStartEEIndex >= 0 && nStartEEIndex <= USHRT_MAX &&
-                   nEndEEIndex >= 0 && nEndEEIndex <= USHRT_MAX &&
-                   GetParagraphIndex() >= 0 && GetParagraphIndex() <= SAL_MAX_INT32,
+        DBG_ASSERT(nStartEEIndex >= 0 &&
+                   nEndEEIndex >= 0 &&
+                   GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::MakeSelection: index value overflow");
 
         sal_Int32 nParaIndex = GetParagraphIndex();
@@ -442,13 +435,12 @@ namespace accessibility
 
     SvxEditSourceAdapter& AccessibleEditableTextPara::GetEditSource() const
     {
-        if( mpEditSource )
-            return *mpEditSource;
-        else
+        if( !mpEditSource )
             throw uno::RuntimeException("No edit source, object is defunct",
                                         uno::Reference< uno::XInterface >
                                         ( static_cast< ::cppu::OWeakObject* >
                                           ( const_cast< AccessibleEditableTextPara* > (this) ) ) ); // disambiguate hierarchy
+        return *mpEditSource;
     }
 
     SvxAccessibleTextAdapter& AccessibleEditableTextPara::GetTextForwarder() const
@@ -462,13 +454,12 @@ namespace accessibility
                                         ( static_cast< ::cppu::OWeakObject* >
                                           ( const_cast< AccessibleEditableTextPara* > (this) ) ) ); // disambiguate hierarchy
 
-        if( pTextForwarder->IsValid() )
-            return *pTextForwarder;
-        else
+        if( !pTextForwarder->IsValid() )
             throw uno::RuntimeException("Text forwarder is invalid, object is defunct",
                                         uno::Reference< uno::XInterface >
                                         ( static_cast< ::cppu::OWeakObject* >
                                           ( const_cast< AccessibleEditableTextPara* > (this) ) ) ); // disambiguate hierarchy
+        return *pTextForwarder;
     }
 
     SvxViewForwarder& AccessibleEditableTextPara::GetViewForwarder() const
@@ -484,13 +475,12 @@ namespace accessibility
                                           ( const_cast< AccessibleEditableTextPara* > (this) ) ) ); // disambiguate hierarchy
         }
 
-        if( pViewForwarder->IsValid() )
-            return *pViewForwarder;
-        else
+        if( !pViewForwarder->IsValid() )
             throw uno::RuntimeException("View forwarder is invalid, object is defunct",
                                         uno::Reference< uno::XInterface >
                                         ( static_cast< ::cppu::OWeakObject* >
                                           ( const_cast< AccessibleEditableTextPara* > (this) )  ) );    // disambiguate hierarchy
+        return *pViewForwarder;
     }
 
     SvxAccessibleTextEditViewAdapter& AccessibleEditableTextPara::GetEditViewForwarder( bool bCreate ) const
@@ -545,16 +535,16 @@ namespace accessibility
 
     bool AccessibleEditableTextPara::HaveChildren()
     {
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= SAL_MAX_INT32,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::HaveChildren: paragraph index value overflow");
 
         return GetTextForwarder().HaveImageBullet( GetParagraphIndex() );
     }
 
-    Rectangle AccessibleEditableTextPara::LogicToPixel( const Rectangle& rRect, const MapMode& rMapMode, SvxViewForwarder& rForwarder )
+    tools::Rectangle AccessibleEditableTextPara::LogicToPixel( const tools::Rectangle& rRect, const MapMode& rMapMode, SvxViewForwarder const & rForwarder )
     {
         // convert to screen coordinates
-        return Rectangle( rForwarder.LogicToPixel( rRect.TopLeft(), rMapMode ),
+        return tools::Rectangle( rForwarder.LogicToPixel( rRect.TopLeft(), rMapMode ),
                           rForwarder.LogicToPixel( rRect.BottomRight(), rMapMode ) );
     }
 
@@ -584,16 +574,6 @@ namespace accessibility
                                                              aEvent );
     }
 
-    void AccessibleEditableTextPara::GotPropertyEvent( const uno::Any& rNewValue, const sal_Int16 nEventId ) const
-    {
-        FireEvent( nEventId, rNewValue );
-    }
-
-    void AccessibleEditableTextPara::LostPropertyEvent( const uno::Any& rOldValue, const sal_Int16 nEventId ) const
-    {
-        FireEvent( nEventId, uno::Any(), rOldValue );
-    }
-
     void AccessibleEditableTextPara::SetState( const sal_Int16 nStateId )
     {
         ::utl::AccessibleStateSetHelper* pStateSet = static_cast< ::utl::AccessibleStateSetHelper*>(mxStateSet.get());
@@ -601,7 +581,7 @@ namespace accessibility
             !pStateSet->contains(nStateId) )
         {
             pStateSet->AddState( nStateId );
-            GotPropertyEvent( uno::makeAny( nStateId ), AccessibleEventId::STATE_CHANGED );
+            FireEvent( AccessibleEventId::STATE_CHANGED, uno::makeAny( nStateId ) );
         }
     }
 
@@ -612,13 +592,13 @@ namespace accessibility
             pStateSet->contains(nStateId) )
         {
             pStateSet->RemoveState( nStateId );
-            LostPropertyEvent( uno::makeAny( nStateId ), AccessibleEventId::STATE_CHANGED );
+            FireEvent( AccessibleEventId::STATE_CHANGED, uno::Any(), uno::makeAny( nStateId ) );
         }
     }
 
     void AccessibleEditableTextPara::TextChanged()
     {
-        OUString aCurrentString( OCommonAccessibleText::getText() );
+        OUString aCurrentString( implGetText() );
         uno::Any aDeleted;
         uno::Any aInserted;
         if( OCommonAccessibleText::implInitTextChangedEvent( maLastTextString, aCurrentString,
@@ -631,10 +611,10 @@ namespace accessibility
 
     bool AccessibleEditableTextPara::GetAttributeRun( sal_Int32& nStartIndex, sal_Int32& nEndIndex, sal_Int32 nIndex )
     {
-        DBG_ASSERT(nIndex >= 0 && nIndex <= SAL_MAX_INT32,
+        DBG_ASSERT(nIndex >= 0,
                    "AccessibleEditableTextPara::GetAttributeRun: index value overflow");
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= SAL_MAX_INT32,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getLocale: paragraph index value overflow");
 
         return GetTextForwarder().GetAttributeRun( nStartIndex,
@@ -643,11 +623,11 @@ namespace accessibility
                                                    nIndex );
     }
 
-    uno::Any SAL_CALL AccessibleEditableTextPara::queryInterface (const uno::Type & rType) throw (uno::RuntimeException, std::exception)
+    uno::Any SAL_CALL AccessibleEditableTextPara::queryInterface (const uno::Type & rType)
     {
         uno::Any aRet;
 
-        // must provide XAccesibleText by hand, since it comes publicly inherited by XAccessibleEditableText
+        // must provide XAccessibleText by hand, since it comes publicly inherited by XAccessibleEditableText
         if ( rType == cppu::UnoType<XAccessibleText>::get())
         {
             uno::Reference< XAccessibleText > aAccText = static_cast< XAccessibleEditableText * >(this);
@@ -672,21 +652,21 @@ namespace accessibility
     }
 
     // XAccessible
-    uno::Reference< XAccessibleContext > SAL_CALL AccessibleEditableTextPara::getAccessibleContext() throw (uno::RuntimeException, std::exception)
+    uno::Reference< XAccessibleContext > SAL_CALL AccessibleEditableTextPara::getAccessibleContext()
     {
         // We implement the XAccessibleContext interface in the same object
         return uno::Reference< XAccessibleContext > ( this );
     }
 
     // XAccessibleContext
-    sal_Int32 SAL_CALL AccessibleEditableTextPara::getAccessibleChildCount() throw (uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL AccessibleEditableTextPara::getAccessibleChildCount()
     {
         SolarMutexGuard aGuard;
 
         return HaveChildren() ? 1 : 0;
     }
 
-    uno::Reference< XAccessible > SAL_CALL AccessibleEditableTextPara::getAccessibleChild( sal_Int32 i ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    uno::Reference< XAccessible > SAL_CALL AccessibleEditableTextPara::getAccessibleChild( sal_Int32 i )
     {
         SolarMutexGuard aGuard;
 
@@ -717,28 +697,24 @@ namespace accessibility
         return aChild.get();
     }
 
-    uno::Reference< XAccessible > SAL_CALL AccessibleEditableTextPara::getAccessibleParent() throw (uno::RuntimeException, std::exception)
+    uno::Reference< XAccessible > SAL_CALL AccessibleEditableTextPara::getAccessibleParent()
     {
-
-#ifdef DBG_UTIL
-        if( !mxParent.is() )
-            OSL_TRACE( "AccessibleEditableTextPara::getAccessibleParent: no frontend set, did somebody forgot to call AccessibleTextHelper::SetEventSource()?");
-#endif
+        SAL_WARN_IF(!mxParent.is(), "editeng", "AccessibleEditableTextPara::getAccessibleParent: no frontend set, did somebody forgot to call AccessibleTextHelper::SetEventSource()?");
 
         return mxParent;
     }
 
-    sal_Int32 SAL_CALL AccessibleEditableTextPara::getAccessibleIndexInParent() throw (uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL AccessibleEditableTextPara::getAccessibleIndexInParent()
     {
         return mnIndexInParent;
     }
 
-    sal_Int16 SAL_CALL AccessibleEditableTextPara::getAccessibleRole() throw (uno::RuntimeException, std::exception)
+    sal_Int16 SAL_CALL AccessibleEditableTextPara::getAccessibleRole()
     {
         return AccessibleRole::PARAGRAPH;
     }
 
-    OUString SAL_CALL AccessibleEditableTextPara::getAccessibleDescription() throw (uno::RuntimeException, std::exception)
+    OUString SAL_CALL AccessibleEditableTextPara::getAccessibleDescription()
     {
         SolarMutexGuard aGuard;
 
@@ -779,23 +755,16 @@ namespace accessibility
             }
         }
 
-        return OUString( sStr ) + aLine;
+        return sStr + aLine;
     }
 
-    OUString SAL_CALL AccessibleEditableTextPara::getAccessibleName() throw (uno::RuntimeException, std::exception)
+    OUString SAL_CALL AccessibleEditableTextPara::getAccessibleName()
     {
-        SolarMutexGuard aGuard;
-
-        // throws if defunc
-        sal_Int32 nPara( GetParagraphIndex() );
-
-        // Get the string from the resource for the specified id.
-        OUString sStr(EditResId(RID_SVXSTR_A11Y_PARAGRAPH_NAME));
-        OUString sParaIndex = OUString::number(nPara);
-        return sStr.replaceFirst("$(ARG)", sParaIndex);
+        //See tdf#101003 before implementing a body
+        return OUString();
     }
 
-    uno::Reference< XAccessibleRelationSet > SAL_CALL AccessibleEditableTextPara::getAccessibleRelationSet() throw (uno::RuntimeException, std::exception)
+    uno::Reference< XAccessibleRelationSet > SAL_CALL AccessibleEditableTextPara::getAccessibleRelationSet()
     {
         // #i27138# - provide relations CONTENT_FLOWS_FROM
         // and CONTENT_FLOWS_TO
@@ -816,7 +785,7 @@ namespace accessibility
             }
 
             // relation CONTENT_FLOWS_TO
-            if ( (nMyParaIndex + 1) < (sal_Int32)mpParaManager->GetNum() &&
+            if ( (nMyParaIndex + 1) < mpParaManager->GetNum() &&
                  mpParaManager->IsReferencable( nMyParaIndex + 1 ) )
             {
                 uno::Sequence<uno::Reference<XInterface> > aSequence
@@ -835,142 +804,138 @@ namespace accessibility
         }
     }
 
-    static uno::Sequence< OUString > getAttributeNames()
+    static uno::Sequence< OUString > const & getAttributeNames()
     {
-        static uno::Sequence< OUString >* pNames = nullptr;
+        static const uno::Sequence<OUString> aNames{
+            "CharColor",
+            "CharContoured",
+            "CharEmphasis",
+            "CharEscapement",
+            "CharFontName",
+            "CharHeight",
+            "CharPosture",
+            "CharShadowed",
+            "CharStrikeout",
+            "CharCaseMap",
+            "CharUnderline",
+            "CharUnderlineColor",
+            "CharWeight",
+            "NumberingLevel",
+            "NumberingRules",
+            "ParaAdjust",
+            "ParaBottomMargin",
+            "ParaFirstLineIndent",
+            "ParaLeftMargin",
+            "ParaLineSpacing",
+            "ParaRightMargin",
+            "ParaTabStops"};
 
-        if( pNames == nullptr )
-        {
-            uno::Sequence< OUString >* pSeq = new uno::Sequence< OUString >( 21 );
-            OUString* pStrings = pSeq->getArray();
-            sal_Int32 i = 0;
-            #define STR(x) pStrings[i++] = x
-            STR("CharColor");
-            STR("CharContoured");
-            STR("CharEmphasis");
-            STR("CharEscapement");
-            STR("CharFontName");
-            STR("CharHeight");
-            STR("CharPosture");
-            STR("CharShadowed");
-            STR("CharStrikeout");
-            STR("CharCaseMap");
-            STR("CharUnderline");
-            STR("CharUnderlineColor");
-            STR("CharWeight");
-            STR("NumberingLevel");
-            STR("NumberingRules");
-            STR("ParaAdjust");
-            STR("ParaBottomMargin");
-            STR("ParaFirstLineIndent");
-            STR("ParaLeftMargin");
-            STR("ParaLineSpacing");
-            STR("ParaRightMargin");
-            STR("ParaTabStops");
-            #undef STR
-            DBG_ASSERT( i == pSeq->getLength(), "Please adjust length" );
-            if( i != pSeq->getLength() )
-                pSeq->realloc( i );
-            pNames = pSeq;
-        }
-        return *pNames;
+        return aNames;
     }
 
     struct IndexCompare
     {
         const PropertyValue* pValues;
         explicit IndexCompare( const PropertyValue* pVals ) : pValues(pVals) {}
-        bool operator() ( const sal_Int32& a, const sal_Int32& b ) const
+        bool operator() ( sal_Int32 a, sal_Int32 b ) const
         {
             return pValues[a].Name < pValues[b].Name;
         }
     };
+}
 
-    OUString AccessibleEditableTextPara::GetFieldTypeNameAtIndex(sal_Int32 nIndex)
+namespace
+{
+    OUString GetFieldTypeNameFromField(EFieldInfo const &ree)
     {
         OUString strFldType;
-        SvxAccessibleTextAdapter& rCacheTF = GetTextForwarder();
-        //For field object info
-        sal_Int32 nParaIndex = GetParagraphIndex();
-        sal_Int32 nAllFieldLen = 0;
-        sal_Int32 nField = rCacheTF.GetFieldCount(nParaIndex), nFoundFieldIndex = -1;
-        EFieldInfo ree;
-        sal_Int32  reeBegin, reeEnd;
         sal_Int32 nFieldType = -1;
-        for(sal_Int32 j = 0; j < nField; j++)
-        {
-            ree = rCacheTF.GetFieldInfo(nParaIndex, j);
-            reeBegin  = ree.aPosition.nIndex + nAllFieldLen;
-            reeEnd = reeBegin + ree.aCurrentText.getLength();
-            nAllFieldLen += (ree.aCurrentText.getLength() - 1);
-            if( reeBegin > nIndex )
-            {
-                break;
-            }
-            if(  nIndex >= reeBegin && nIndex < reeEnd )
-            {
-                nFoundFieldIndex = j;
-                break;
-            }
-        }
-        if (nFoundFieldIndex >= 0 && ree.pFieldItem)
+        if (ree.pFieldItem)
         {
             // So we get a field, check its type now.
             nFieldType = ree.pFieldItem->GetField()->GetClassId() ;
         }
-        switch(nFieldType)
+        switch (nFieldType)
         {
-        case text::textfield::Type::DATE:
+            case text::textfield::Type::DATE:
             {
                 const SvxDateField* pDateField = static_cast< const SvxDateField* >(ree.pFieldItem->GetField());
                 if (pDateField)
                 {
-                    if (pDateField->GetType() == SVXDATETYPE_FIX)
+                    if (pDateField->GetType() == SvxDateType::Fix)
                         strFldType = "date (fixed)";
-                    else if (pDateField->GetType() == SVXDATETYPE_VAR)
+                    else if (pDateField->GetType() == SvxDateType::Var)
                         strFldType = "date (variable)";
                 }
+                break;
             }
-            break;
-        case text::textfield::Type::PAGE:
-            strFldType = "page-number";
-            break;
-        //support the sheet name & pages fields
-        case text::textfield::Type::PAGES:
-            strFldType = "page-count";
-            break;
-        case text::textfield::Type::TABLE:
-            strFldType = "sheet-name";
-            break;
-        //End
-        case text::textfield::Type::TIME:
-            strFldType = "time";
-            break;
-        case text::textfield::Type::EXTENDED_TIME:
+            case text::textfield::Type::PAGE:
+                strFldType = "page-number";
+                break;
+            //support the sheet name & pages fields
+            case text::textfield::Type::PAGES:
+                strFldType = "page-count";
+                break;
+            case text::textfield::Type::TABLE:
+                strFldType = "sheet-name";
+                break;
+            //End
+            case text::textfield::Type::TIME:
+                strFldType = "time";
+                break;
+            case text::textfield::Type::EXTENDED_TIME:
             {
                 const SvxExtTimeField* pTimeField = static_cast< const SvxExtTimeField* >(ree.pFieldItem->GetField());
                 if (pTimeField)
                 {
-                    if (pTimeField->GetType() == SVXTIMETYPE_FIX)
+                    if (pTimeField->GetType() == SvxTimeType::Fix)
                         strFldType = "time (fixed)";
-                    else if (pTimeField->GetType() == SVXTIMETYPE_VAR)
+                    else if (pTimeField->GetType() == SvxTimeType::Var)
                         strFldType = "time (variable)";
                 }
+                break;
             }
-            break;
-        case text::textfield::Type::AUTHOR:
-            strFldType = "author";
-            break;
-        case text::textfield::Type::EXTENDED_FILE:
-        case text::textfield::Type::DOCINFO_TITLE:
-            strFldType = "file name";
-        default:
-            break;
+            case text::textfield::Type::AUTHOR:
+                strFldType = "author";
+                break;
+            case text::textfield::Type::EXTENDED_FILE:
+            case text::textfield::Type::DOCINFO_TITLE:
+                strFldType = "file name";
+                break;
+            case text::textfield::Type::DOCINFO_CUSTOM:
+                strFldType = "custom document property";
+                break;
+            default:
+                break;
         }
         return strFldType;
     }
+}
 
-    uno::Reference< XAccessibleStateSet > SAL_CALL AccessibleEditableTextPara::getAccessibleStateSet() throw (uno::RuntimeException, std::exception)
+namespace accessibility
+{
+    OUString AccessibleEditableTextPara::GetFieldTypeNameAtIndex(sal_Int32 nIndex)
+    {
+        SvxAccessibleTextAdapter& rCacheTF = GetTextForwarder();
+        //For field object info
+        sal_Int32 nParaIndex = GetParagraphIndex();
+        sal_Int32 nAllFieldLen = 0;
+        sal_Int32 nField = rCacheTF.GetFieldCount(nParaIndex);
+        for (sal_Int32 j = 0; j < nField; ++j)
+        {
+            EFieldInfo ree = rCacheTF.GetFieldInfo(nParaIndex, j);
+            sal_Int32 reeBegin = ree.aPosition.nIndex + nAllFieldLen;
+            sal_Int32 reeEnd = reeBegin + ree.aCurrentText.getLength();
+            nAllFieldLen += (ree.aCurrentText.getLength() - 1);
+            if (nIndex < reeBegin)
+                break;
+            if (nIndex < reeEnd)
+                return GetFieldTypeNameFromField(ree);
+        }
+        return OUString();
+    }
+
+    uno::Reference< XAccessibleStateSet > SAL_CALL AccessibleEditableTextPara::getAccessibleStateSet()
     {
         SolarMutexGuard aGuard;
 
@@ -992,20 +957,20 @@ namespace accessibility
         return uno::Reference<XAccessibleStateSet>( new ::utl::AccessibleStateSetHelper (*pStateSet) );
     }
 
-    lang::Locale SAL_CALL AccessibleEditableTextPara::getLocale() throw (IllegalAccessibleComponentStateException, uno::RuntimeException, std::exception)
+    lang::Locale SAL_CALL AccessibleEditableTextPara::getLocale()
     {
         SolarMutexGuard aGuard;
 
         return implGetLocale();
     }
 
-    void SAL_CALL AccessibleEditableTextPara::addAccessibleEventListener( const uno::Reference< XAccessibleEventListener >& xListener ) throw (uno::RuntimeException, std::exception)
+    void SAL_CALL AccessibleEditableTextPara::addAccessibleEventListener( const uno::Reference< XAccessibleEventListener >& xListener )
     {
         if( getNotifierClientId() != -1 )
             ::comphelper::AccessibleEventNotifier::addEventListener( getNotifierClientId(), xListener );
     }
 
-    void SAL_CALL AccessibleEditableTextPara::removeAccessibleEventListener( const uno::Reference< XAccessibleEventListener >& xListener ) throw (uno::RuntimeException, std::exception)
+    void SAL_CALL AccessibleEditableTextPara::removeAccessibleEventListener( const uno::Reference< XAccessibleEventListener >& xListener )
     {
         if( getNotifierClientId() != -1 )
         {
@@ -1024,21 +989,21 @@ namespace accessibility
     }
 
     // XAccessibleComponent
-    sal_Bool SAL_CALL AccessibleEditableTextPara::containsPoint( const awt::Point& aTmpPoint ) throw (uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL AccessibleEditableTextPara::containsPoint( const awt::Point& aTmpPoint )
     {
         SolarMutexGuard aGuard;
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= SAL_MAX_INT32,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::contains: index value overflow");
 
         awt::Rectangle aTmpRect = getBounds();
-        Rectangle aRect( Point(aTmpRect.X, aTmpRect.Y), Size(aTmpRect.Width, aTmpRect.Height) );
+        tools::Rectangle aRect( Point(aTmpRect.X, aTmpRect.Y), Size(aTmpRect.Width, aTmpRect.Height) );
         Point aPoint( aTmpPoint.X, aTmpPoint.Y );
 
         return aRect.IsInside( aPoint );
     }
 
-    uno::Reference< XAccessible > SAL_CALL AccessibleEditableTextPara::getAccessibleAtPoint( const awt::Point& _aPoint ) throw (uno::RuntimeException, std::exception)
+    uno::Reference< XAccessible > SAL_CALL AccessibleEditableTextPara::getAccessibleAtPoint( const awt::Point& _aPoint )
     {
         SolarMutexGuard aGuard;
 
@@ -1060,7 +1025,7 @@ namespace accessibility
                 aBulletInfo.bVisible &&
                 aBulletInfo.nType == SVX_NUM_BITMAP )
             {
-                Rectangle aRect = aBulletInfo.aBounds;
+                tools::Rectangle aRect = aBulletInfo.aBounds;
 
                 if( aRect.IsInside( aLogPoint ) )
                     return getAccessibleChild(0);
@@ -1071,18 +1036,18 @@ namespace accessibility
         return uno::Reference< XAccessible >();
     }
 
-    awt::Rectangle SAL_CALL AccessibleEditableTextPara::getBounds() throw (uno::RuntimeException, std::exception)
+    awt::Rectangle SAL_CALL AccessibleEditableTextPara::getBounds()
     {
         SolarMutexGuard aGuard;
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= SAL_MAX_INT32,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getBounds: index value overflow");
 
         SvxTextForwarder& rCacheTF = GetTextForwarder();
-        Rectangle aRect = rCacheTF.GetParaBounds( GetParagraphIndex() );
+        tools::Rectangle aRect = rCacheTF.GetParaBounds( GetParagraphIndex() );
 
         // convert to screen coordinates
-        Rectangle aScreenRect = AccessibleEditableTextPara::LogicToPixel( aRect,
+        tools::Rectangle aScreenRect = AccessibleEditableTextPara::LogicToPixel( aRect,
                                                                           rCacheTF.GetMapMode(),
                                                                           GetViewForwarder() );
 
@@ -1095,7 +1060,7 @@ namespace accessibility
                                aScreenRect.GetSize().Height() );
     }
 
-    awt::Point SAL_CALL AccessibleEditableTextPara::getLocation(  ) throw (uno::RuntimeException, std::exception)
+    awt::Point SAL_CALL AccessibleEditableTextPara::getLocation(  )
     {
         SolarMutexGuard aGuard;
 
@@ -1104,7 +1069,7 @@ namespace accessibility
         return awt::Point( aRect.X, aRect.Y );
     }
 
-    awt::Point SAL_CALL AccessibleEditableTextPara::getLocationOnScreen(  ) throw (uno::RuntimeException, std::exception)
+    awt::Point SAL_CALL AccessibleEditableTextPara::getLocationOnScreen(  )
     {
         SolarMutexGuard aGuard;
 
@@ -1148,7 +1113,7 @@ namespace accessibility
                                     ( static_cast< XAccessible* > (this) ) );   // disambiguate hierarchy
     }
 
-    awt::Size SAL_CALL AccessibleEditableTextPara::getSize(  ) throw (uno::RuntimeException, std::exception)
+    awt::Size SAL_CALL AccessibleEditableTextPara::getSize(  )
     {
         SolarMutexGuard aGuard;
 
@@ -1157,33 +1122,33 @@ namespace accessibility
         return awt::Size( aRect.Width, aRect.Height );
     }
 
-    void SAL_CALL AccessibleEditableTextPara::grabFocus(  ) throw (uno::RuntimeException, std::exception)
+    void SAL_CALL AccessibleEditableTextPara::grabFocus(  )
     {
         // set cursor to this paragraph
         setSelection(0,0);
     }
 
-    sal_Int32 SAL_CALL AccessibleEditableTextPara::getForeground(  ) throw (css::uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL AccessibleEditableTextPara::getForeground(  )
     {
         // #104444# Added to XAccessibleComponent interface
         svtools::ColorConfig aColorConfig;
-        sal_uInt32 nColor = aColorConfig.GetColorValue( svtools::FONTCOLOR ).nColor;
+        Color nColor = aColorConfig.GetColorValue( svtools::FONTCOLOR ).nColor;
         return static_cast<sal_Int32>(nColor);
     }
 
-    sal_Int32 SAL_CALL AccessibleEditableTextPara::getBackground(  ) throw (css::uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL AccessibleEditableTextPara::getBackground(  )
     {
         // #104444# Added to XAccessibleComponent interface
-        Color aColor( Application::GetSettings().GetStyleSettings().GetWindowColor().GetColor() );
+        Color aColor( Application::GetSettings().GetStyleSettings().GetWindowColor() );
 
         // the background is transparent
         aColor.SetTransparency( 0xFF);
 
-        return static_cast<sal_Int32>( aColor.GetColor() );
+        return static_cast<sal_Int32>( aColor );
     }
 
     // XAccessibleText
-    sal_Int32 SAL_CALL AccessibleEditableTextPara::getCaretPosition() throw (uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL AccessibleEditableTextPara::getCaretPosition()
     {
         SolarMutexGuard aGuard;
 
@@ -1211,22 +1176,22 @@ namespace accessibility
         return -1;
     }
 
-    sal_Bool SAL_CALL AccessibleEditableTextPara::setCaretPosition( sal_Int32 nIndex ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL AccessibleEditableTextPara::setCaretPosition( sal_Int32 nIndex )
     {
         return setSelection(nIndex, nIndex);
     }
 
-    sal_Unicode SAL_CALL AccessibleEditableTextPara::getCharacter( sal_Int32 nIndex ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    sal_Unicode SAL_CALL AccessibleEditableTextPara::getCharacter( sal_Int32 nIndex )
     {
         SolarMutexGuard aGuard;
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getCharacter: index value overflow");
 
-        return OCommonAccessibleText::getCharacter( nIndex );
+        return OCommonAccessibleText::implGetCharacter( implGetText(), nIndex );
     }
 
-    uno::Sequence< beans::PropertyValue > SAL_CALL AccessibleEditableTextPara::getCharacterAttributes( sal_Int32 nIndex, const css::uno::Sequence< OUString >& rRequestedAttributes ) throw (lang::IndexOutOfBoundsException, beans::UnknownPropertyException, uno::RuntimeException, std::exception)
+    uno::Sequence< beans::PropertyValue > SAL_CALL AccessibleEditableTextPara::getCharacterAttributes( sal_Int32 nIndex, const css::uno::Sequence< OUString >& rRequestedAttributes )
     {
         SolarMutexGuard aGuard;
 
@@ -1245,16 +1210,13 @@ namespace accessibility
             aPropertyNames = getAttributeNames();
         }
 
-        // get default attribues...
+        // get default attributes...
         ::comphelper::SequenceAsHashMap aPropHashMap( getDefaultAttributes( aPropertyNames ) );
 
         // ... and override them with the direct attributes from the specific position
-        uno::Sequence< beans::PropertyValue > aRunAttribs( getRunAttributes( nIndex, aPropertyNames ) );
-        sal_Int32 nRunAttribs = aRunAttribs.getLength();
-        const beans::PropertyValue *pRunAttrib = aRunAttribs.getConstArray();
-        for (sal_Int32 k = 0;  k < nRunAttribs;  ++k)
+        const uno::Sequence< beans::PropertyValue > aRunAttribs( getRunAttributes( nIndex, aPropertyNames ) );
+        for (auto const& rRunAttrib : aRunAttribs)
         {
-            const beans::PropertyValue &rRunAttrib = pRunAttrib[k];
             aPropHashMap[ rRunAttrib.Name ] = rRunAttrib.Value; //!! should not only be the value !!
         }
 
@@ -1265,28 +1227,25 @@ namespace accessibility
         // since SequenceAsHashMap ignores property handles and property state
         // we have to restore the property state here (property handles are
         // of no use to the accessibility API).
-        sal_Int32 nRes = aRes.getLength();
-        beans::PropertyValue *pRes = aRes.getArray();
-        for (sal_Int32 i = 0;  i < nRes;  ++i)
+        for (beans::PropertyValue & rRes : aRes)
         {
-            beans::PropertyValue &rRes = pRes[i];
             bool bIsDirectVal = false;
-            for (sal_Int32 k = 0;  k < nRunAttribs && !bIsDirectVal;  ++k)
+            for (auto const& rRunAttrib : aRunAttribs)
             {
-                if (rRes.Name == pRunAttrib[k].Name)
-                    bIsDirectVal = true;
+                bIsDirectVal = rRes.Name == rRunAttrib.Name;
+                if (bIsDirectVal)
+                    break;
             }
             rRes.Handle = -1;
             rRes.State  = bIsDirectVal ? PropertyState_DIRECT_VALUE : PropertyState_DEFAULT_VALUE;
         }
         if( bSupplementalMode )
         {
-            _correctValues( nIndex, aRes );
+            _correctValues( aRes );
             // NumberingPrefix
-            nRes = aRes.getLength();
+            sal_Int32 nRes = aRes.getLength();
             aRes.realloc( nRes + 1 );
-            pRes = aRes.getArray();
-            beans::PropertyValue &rRes = pRes[nRes];
+            beans::PropertyValue &rRes = aRes[nRes];
             rRes.Name = "NumberingPrefix";
             OUString numStr;
             if (aBulletInfo.nType != SVX_NUM_CHAR_SPECIAL && aBulletInfo.nType != SVX_NUM_BITMAP)
@@ -1300,41 +1259,39 @@ namespace accessibility
             {
                 nRes = aRes.getLength();
                 aRes.realloc( nRes + 1 );
-                pRes = aRes.getArray();
-                beans::PropertyValue &rResField = pRes[nRes];
-                beans::PropertyValue aFieldType;
+                beans::PropertyValue &rResField = aRes[nRes];
                 rResField.Name = "FieldType";
                 rResField.Value <<= strFieldType.toAsciiLowerCase();
                 rResField.Handle = -1;
                 rResField.State = PropertyState_DIRECT_VALUE;
-        }
-        //sort property values
-        // build sorted index array
-        sal_Int32 nLength = aRes.getLength();
-        const beans::PropertyValue* pPairs = aRes.getConstArray();
-        std::unique_ptr<sal_Int32[]> pIndices(new sal_Int32[nLength]);
-        sal_Int32 i = 0;
-        for( i = 0; i < nLength; i++ )
-            pIndices[i] = i;
-        sort( &pIndices[0], &pIndices[nLength], IndexCompare(pPairs) );
-        // create sorted sequences according to index array
-        uno::Sequence<beans::PropertyValue> aNewValues( nLength );
-        beans::PropertyValue* pNewValues = aNewValues.getArray();
-        for( i = 0; i < nLength; i++ )
-        {
-            pNewValues[i] = pPairs[pIndices[i]];
-        }
+            }
+            //sort property values
+            // build sorted index array
+            sal_Int32 nLength = aRes.getLength();
+            const beans::PropertyValue* pPairs = aRes.getConstArray();
+            std::unique_ptr<sal_Int32[]> pIndices(new sal_Int32[nLength]);
+            sal_Int32 i = 0;
+            for( i = 0; i < nLength; i++ )
+                pIndices[i] = i;
+            sort( &pIndices[0], &pIndices[nLength], IndexCompare(pPairs) );
+            // create sorted sequences according to index array
+            uno::Sequence<beans::PropertyValue> aNewValues( nLength );
+            beans::PropertyValue* pNewValues = aNewValues.getArray();
+            for( i = 0; i < nLength; i++ )
+            {
+                pNewValues[i] = pPairs[pIndices[i]];
+            }
 
-        return aNewValues;
+            return aNewValues;
         }
         return aRes;
     }
 
-    awt::Rectangle SAL_CALL AccessibleEditableTextPara::getCharacterBounds( sal_Int32 nIndex ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    awt::Rectangle SAL_CALL AccessibleEditableTextPara::getCharacterBounds( sal_Int32 nIndex )
     {
         SolarMutexGuard aGuard;
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getCharacterBounds: index value overflow");
 
         // #108900# Have position semantics now for nIndex, as
@@ -1342,10 +1299,10 @@ namespace accessibility
         CheckPosition( nIndex );
 
         SvxTextForwarder& rCacheTF = GetTextForwarder();
-        Rectangle aRect = rCacheTF.GetCharBounds(GetParagraphIndex(), nIndex);
+        tools::Rectangle aRect = rCacheTF.GetCharBounds(GetParagraphIndex(), nIndex);
 
         // convert to screen
-        Rectangle aScreenRect = AccessibleEditableTextPara::LogicToPixel( aRect,
+        tools::Rectangle aScreenRect = AccessibleEditableTextPara::LogicToPixel( aRect,
                                                                           rCacheTF.GetMapMode(),
                                                                           GetViewForwarder() );
         // #109864# offset from parent (paragraph), but in screen
@@ -1363,17 +1320,17 @@ namespace accessibility
                                aScreenRect.GetSize().Height() );
     }
 
-    sal_Int32 SAL_CALL AccessibleEditableTextPara::getCharacterCount() throw (uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL AccessibleEditableTextPara::getCharacterCount()
     {
         SolarMutexGuard aGuard;
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getCharacterCount: index value overflow");
 
-        return OCommonAccessibleText::getCharacterCount();
+        return implGetText().getLength();
     }
 
-    sal_Int32 SAL_CALL AccessibleEditableTextPara::getIndexAtPoint( const awt::Point& rPoint ) throw (uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL AccessibleEditableTextPara::getIndexAtPoint( const awt::Point& rPoint )
     {
         SolarMutexGuard aGuard;
 
@@ -1389,7 +1346,7 @@ namespace accessibility
         Point aLogPoint( GetViewForwarder().PixelToLogic( aPoint, rCacheTF.GetMapMode() ) );
 
         // re-offset to parent (paragraph)
-        Rectangle aParaRect = rCacheTF.GetParaBounds( GetParagraphIndex() );
+        tools::Rectangle aParaRect = rCacheTF.GetParaBounds( GetParagraphIndex() );
         aLogPoint.Move( aParaRect.Left(), aParaRect.Top() );
 
         if( rCacheTF.GetIndexAtPoint( aLogPoint, nPara, nIndex ) &&
@@ -1399,7 +1356,7 @@ namespace accessibility
             try
             {
                 awt::Rectangle aRect1( getCharacterBounds(nIndex) );
-                Rectangle aRect2( aRect1.X, aRect1.Y,
+                tools::Rectangle aRect2( aRect1.X, aRect1.Y,
                                   aRect1.Width + aRect1.X, aRect1.Height + aRect1.Y );
                 if( aRect2.IsInside( Point( rPoint.X, rPoint.Y ) ) )
                     return nIndex;
@@ -1419,11 +1376,11 @@ namespace accessibility
         }
     }
 
-    OUString SAL_CALL AccessibleEditableTextPara::getSelectedText() throw (uno::RuntimeException, std::exception)
+    OUString SAL_CALL AccessibleEditableTextPara::getSelectedText()
     {
         SolarMutexGuard aGuard;
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getSelectedText: index value overflow");
 
         if( !HaveEditView() )
@@ -1432,11 +1389,11 @@ namespace accessibility
         return OCommonAccessibleText::getSelectedText();
     }
 
-    sal_Int32 SAL_CALL AccessibleEditableTextPara::getSelectionStart() throw (uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL AccessibleEditableTextPara::getSelectionStart()
     {
         SolarMutexGuard aGuard;
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getSelectionStart: index value overflow");
 
         if( !HaveEditView() )
@@ -1445,11 +1402,11 @@ namespace accessibility
         return OCommonAccessibleText::getSelectionStart();
     }
 
-    sal_Int32 SAL_CALL AccessibleEditableTextPara::getSelectionEnd() throw (uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL AccessibleEditableTextPara::getSelectionEnd()
     {
         SolarMutexGuard aGuard;
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getSelectionEnd: index value overflow");
 
         if( !HaveEditView() )
@@ -1458,11 +1415,11 @@ namespace accessibility
         return OCommonAccessibleText::getSelectionEnd();
     }
 
-    sal_Bool SAL_CALL AccessibleEditableTextPara::setSelection( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL AccessibleEditableTextPara::setSelection( sal_Int32 nStartIndex, sal_Int32 nEndIndex )
     {
         SolarMutexGuard aGuard;
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::setSelection: paragraph index value overflow");
 
         CheckRange(nStartIndex, nEndIndex);
@@ -1474,32 +1431,31 @@ namespace accessibility
         }
         catch (const uno::RuntimeException&)
         {
-            return sal_False;
+            return false;
         }
     }
 
-    OUString SAL_CALL AccessibleEditableTextPara::getText() throw (uno::RuntimeException, std::exception)
+    OUString SAL_CALL AccessibleEditableTextPara::getText()
     {
         SolarMutexGuard aGuard;
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getText: paragraph index value overflow");
 
-        return OCommonAccessibleText::getText();
+        return implGetText();
     }
 
-    OUString SAL_CALL AccessibleEditableTextPara::getTextRange( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    OUString SAL_CALL AccessibleEditableTextPara::getTextRange( sal_Int32 nStartIndex, sal_Int32 nEndIndex )
     {
         SolarMutexGuard aGuard;
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getTextRange: paragraph index value overflow");
 
-        return OCommonAccessibleText::getTextRange(nStartIndex, nEndIndex);
+        return OCommonAccessibleText::implGetTextRange(implGetText(), nStartIndex, nEndIndex);
     }
 
-    void AccessibleEditableTextPara::_correctValues( const sal_Int32 /* nIndex */,
-                                           uno::Sequence< PropertyValue >& rValues)
+    void AccessibleEditableTextPara::_correctValues( uno::Sequence< PropertyValue >& rValues)
     {
         SvxTextForwarder& rCacheTF = GetTextForwarder();
         sal_Int32 nRes = rValues.getLength();
@@ -1511,18 +1467,10 @@ namespace accessibility
             if (rRes.Name == "CharColor")
             {
                 uno::Any &anyChar = rRes.Value;
-                sal_uInt32 crChar = static_cast<sal_uInt32>( reinterpret_cast<sal_uIntPtr>(anyChar.pReserved));
+                Color crChar = static_cast<sal_uInt32>( reinterpret_cast<sal_uIntPtr>(anyChar.pReserved));
                 if (COL_AUTO == crChar )
                 {
-                    uno::Reference< css::accessibility::XAccessibleComponent > xComponent;
-                    if (mxParent.is())
-                    {
-                        xComponent.set(mxParent,uno::UNO_QUERY);
-                    }
-                    else
-                    {
-                        xComponent.set(m_xAccInfo,uno::UNO_QUERY);
-                    }
+                    uno::Reference< css::accessibility::XAccessibleComponent > xComponent(mxParent,uno::UNO_QUERY);
                     if (xComponent.is())
                     {
                         uno::Reference< css::accessibility::XAccessibleContext > xContext(xComponent,uno::UNO_QUERY);
@@ -1550,18 +1498,10 @@ namespace accessibility
             if (rRes.Name == "CharUnderlineColor")
             {
                 uno::Any &anyCharUnderLine = rRes.Value;
-                sal_uInt32 crCharUnderLine = static_cast<sal_uInt32>( reinterpret_cast<sal_uIntPtr>( anyCharUnderLine.pReserved));
+                Color crCharUnderLine = static_cast<sal_uInt32>( reinterpret_cast<sal_uIntPtr>( anyCharUnderLine.pReserved));
                 if (COL_AUTO == crCharUnderLine )
                 {
-                    uno::Reference< css::accessibility::XAccessibleComponent > xComponent;
-                    if (mxParent.is())
-                    {
-                        xComponent.set(mxParent,uno::UNO_QUERY);
-                    }
-                    else
-                    {
-                        xComponent.set(m_xAccInfo,uno::UNO_QUERY);
-                    }
+                    uno::Reference< css::accessibility::XAccessibleComponent > xComponent(mxParent,uno::UNO_QUERY);
                     if (xComponent.is())
                     {
                         uno::Reference< css::accessibility::XAccessibleContext > xContext(xComponent,uno::UNO_QUERY);
@@ -1583,10 +1523,10 @@ namespace accessibility
             // NumberingLevel
             if (rRes.Name == "NumberingLevel")
             {
-                const SvxNumBulletItem& rNumBullet = static_cast<const SvxNumBulletItem&>(rCacheTF.GetParaAttribs(GetParagraphIndex()).Get(EE_PARA_NUMBULLET));
+                const SvxNumBulletItem& rNumBullet = rCacheTF.GetParaAttribs(GetParagraphIndex()).Get(EE_PARA_NUMBULLET);
                 if(rNumBullet.GetNumRule()->GetLevelCount()==0)
                 {
-                    rRes.Value <<= (sal_Int16)-1;
+                    rRes.Value <<= sal_Int16(-1);
                     rRes.Handle = -1;
                     rRes.State = PropertyState_DIRECT_VALUE;
                 }
@@ -1595,7 +1535,7 @@ namespace accessibility
 //                  SvxAccessibleTextPropertySet aPropSet( &GetEditSource(),
 //                      ImplGetSvxCharAndParaPropertiesMap() );
                     // MT IA2 TODO: Check if this is the correct replacement for ImplGetSvxCharAndParaPropertiesMap
-                    uno::Reference< SvxAccessibleTextPropertySet > xPropSet( new SvxAccessibleTextPropertySet( &GetEditSource(), ImplGetSvxTextPortionSvxPropertySet() ) );
+                    rtl::Reference< SvxAccessibleTextPropertySet > xPropSet( new SvxAccessibleTextPropertySet( &GetEditSource(), ImplGetSvxTextPortionSvxPropertySet() ) );
 
                     xPropSet->SetSelection( MakeSelection( 0, GetTextLen() ) );
                     rRes.Value = xPropSet->_getPropertyValue( rRes.Name, mnParagraphIndex );
@@ -1608,17 +1548,17 @@ namespace accessibility
             if (rRes.Name == "NumberingRules")
             {
                 SfxItemSet aAttribs = rCacheTF.GetParaAttribs(GetParagraphIndex());
-                bool bVis = static_cast<const SfxUInt16Item&>(aAttribs.Get( EE_PARA_BULLETSTATE )).GetValue() != 0;
+                bool bVis = aAttribs.Get( EE_PARA_BULLETSTATE ).GetValue();
                 if(bVis)
                 {
-                    rRes.Value <<= (sal_Int16)-1;
+                    rRes.Value <<= sal_Int16(-1);
                     rRes.Handle = -1;
                     rRes.State = PropertyState_DIRECT_VALUE;
                 }
                 else
                 {
                     // MT IA2 TODO: Check if this is the correct replacement for ImplGetSvxCharAndParaPropertiesMap
-                    uno::Reference< SvxAccessibleTextPropertySet > xPropSet( new SvxAccessibleTextPropertySet( &GetEditSource(), ImplGetSvxTextPortionSvxPropertySet() ) );
+                    rtl::Reference< SvxAccessibleTextPropertySet > xPropSet( new SvxAccessibleTextPropertySet( &GetEditSource(), ImplGetSvxTextPortionSvxPropertySet() ) );
                     xPropSet->SetSelection( MakeSelection( 0, GetTextLen() ) );
                     rRes.Value = xPropSet->_getPropertyValue( rRes.Name, mnParagraphIndex );
                     rRes.State = xPropSet->_getPropertyState( rRes.Name, mnParagraphIndex );
@@ -1634,21 +1574,18 @@ namespace accessibility
         SvxAccessibleTextAdapter& rCacheTF = GetTextForwarder();
         sal_Int32 nAllFieldLen = 0;
         sal_Int32 nField = rCacheTF.GetFieldCount(nParaIndex), nFoundFieldIndex = -1;
-        EFieldInfo ree;
         sal_Int32  reeBegin=0, reeEnd=0;
-        for (sal_Int32 j = 0; j < nField; j++)
+        for (sal_Int32 j = 0; j < nField; ++j)
         {
-            ree = rCacheTF.GetFieldInfo(nParaIndex, j);
-            reeBegin  = ree.aPosition.nIndex + nAllFieldLen;
+            EFieldInfo ree = rCacheTF.GetFieldInfo(nParaIndex, j);
+            reeBegin = ree.aPosition.nIndex + nAllFieldLen;
             reeEnd = reeBegin + ree.aCurrentText.getLength();
             nAllFieldLen += (ree.aCurrentText.getLength() - 1);
-            if( reeBegin > nIndex )
-            {
+            if (nIndex < reeBegin)
                 break;
-            }
             if (!ree.pFieldItem)
                 continue;
-            if (nIndex >= reeBegin && nIndex < reeEnd)
+            if (nIndex < reeEnd)
             {
                 if (ree.pFieldItem->GetField()->GetClassId() != text::textfield::Type::URL)
                 {
@@ -1672,11 +1609,10 @@ namespace accessibility
         SvxAccessibleTextAdapter& rCacheTF = GetTextForwarder();
         sal_Int32 nAllFieldLen = 0;
         sal_Int32 nField = rCacheTF.GetFieldCount(nParaIndex), nFoundFieldIndex = -1;
-        EFieldInfo ree;
         sal_Int32  reeBegin=0, reeEnd=0;
-        for (sal_Int32 j = 0; j < nField; j++)
+        for (sal_Int32 j = 0; j < nField; ++j)
         {
-            ree = rCacheTF.GetFieldInfo(nParaIndex, j);
+            EFieldInfo ree = rCacheTF.GetFieldInfo(nParaIndex, j);
             reeBegin  = ree.aPosition.nIndex + nAllFieldLen;
             reeEnd = reeBegin + ree.aCurrentText.getLength();
             nAllFieldLen += (ree.aCurrentText.getLength() - 1);
@@ -1731,11 +1667,11 @@ namespace accessibility
         }
     }
 
-    css::accessibility::TextSegment SAL_CALL AccessibleEditableTextPara::getTextAtIndex( sal_Int32 nIndex, sal_Int16 aTextType ) throw (css::lang::IndexOutOfBoundsException, css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
+    css::accessibility::TextSegment SAL_CALL AccessibleEditableTextPara::getTextAtIndex( sal_Int32 nIndex, sal_Int16 aTextType )
     {
         SolarMutexGuard aGuard;
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getTextAtIndex: paragraph index value overflow");
 
         css::accessibility::TextSegment aResult;
@@ -1846,11 +1782,11 @@ namespace accessibility
         return aResult;
     }
 
-    css::accessibility::TextSegment SAL_CALL AccessibleEditableTextPara::getTextBeforeIndex( sal_Int32 nIndex, sal_Int16 aTextType ) throw (css::lang::IndexOutOfBoundsException, css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
+    css::accessibility::TextSegment SAL_CALL AccessibleEditableTextPara::getTextBeforeIndex( sal_Int32 nIndex, sal_Int16 aTextType )
     {
         SolarMutexGuard aGuard;
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getTextBeforeIndex: paragraph index value overflow");
 
         css::accessibility::TextSegment aResult;
@@ -1966,7 +1902,7 @@ namespace accessibility
                 sal_Int32 nLength = sText.getLength();
 
                 // get word at index
-                implGetWordBoundary( aBoundary, nIndex );
+                implGetWordBoundary( sText, aBoundary, nIndex );
 
 
                 //sal_Int32 curWordStart = aBoundary.startPos;
@@ -1985,7 +1921,7 @@ namespace accessibility
                 while ( (preWordStart >= 0 && !bWord ) || ( aBoundary.endPos > curWordStart ) )
                     {
                     preWordStart--;
-                    bWord = implGetWordBoundary( aBoundary, preWordStart );
+                    bWord = implGetWordBoundary( sText, aBoundary, preWordStart );
                 }
                 if ( bWord && implIsValidBoundary( aBoundary, nLength ) )
                 {
@@ -2011,11 +1947,11 @@ namespace accessibility
         return aResult;
     }
 
-    css::accessibility::TextSegment SAL_CALL AccessibleEditableTextPara::getTextBehindIndex( sal_Int32 nIndex, sal_Int16 aTextType ) throw (css::lang::IndexOutOfBoundsException, css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
+    css::accessibility::TextSegment SAL_CALL AccessibleEditableTextPara::getTextBehindIndex( sal_Int32 nIndex, sal_Int16 aTextType )
     {
         SolarMutexGuard aGuard;
 
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getTextBehindIndex: paragraph index value overflow");
 
         css::accessibility::TextSegment aResult;
@@ -2095,7 +2031,7 @@ namespace accessibility
                 sal_Int32 nLength = sText.getLength();
 
                 // get word at index
-                bool bWord = implGetWordBoundary( aBoundary, nIndex );
+                bool bWord = implGetWordBoundary( sText, aBoundary, nIndex );
 
                 // real current world
                 sal_Int32 nextWord = nIndex;
@@ -2103,8 +2039,8 @@ namespace accessibility
                 if( nIndex <= aBoundary.endPos )
                 {
                     nextWord =  aBoundary.endPos;
-                    if( sText.getStr()[nextWord] == sal_Unicode(' ') ) nextWord++;
-                    bWord = implGetWordBoundary( aBoundary, nextWord );
+                    if( sText[nextWord] == u' ' ) nextWord++;
+                    bWord = implGetWordBoundary( sText, aBoundary, nextWord );
                 }
 
                 if ( bWord && implIsValidBoundary( aBoundary, nLength ) )
@@ -2135,23 +2071,18 @@ namespace accessibility
         return aResult;
     }
 
-    sal_Bool SAL_CALL AccessibleEditableTextPara::copyText( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL AccessibleEditableTextPara::copyText( sal_Int32 nStartIndex, sal_Int32 nEndIndex )
     {
         SolarMutexGuard aGuard;
 
         try
         {
             SvxEditViewForwarder& rCacheVF = GetEditViewForwarder( true );
-            #if OSL_DEBUG_LEVEL > 0
-            SvxAccessibleTextAdapter& rCacheTF = GetTextForwarder();    // MUST be after GetEditViewForwarder(), see method docs
-            (void)rCacheTF;
-            #else
             GetTextForwarder();                                         // MUST be after GetEditViewForwarder(), see method docs
-            #endif
 
             bool aRetVal;
 
-            DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+            DBG_ASSERT(GetParagraphIndex() >= 0,
                        "AccessibleEditableTextPara::copyText: index value overflow");
 
             CheckRange(nStartIndex, nEndIndex);
@@ -2174,12 +2105,12 @@ namespace accessibility
         }
         catch (const uno::RuntimeException&)
         {
-            return sal_False;
+            return false;
         }
     }
 
     // XAccessibleEditableText
-    sal_Bool SAL_CALL AccessibleEditableTextPara::cutText( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL AccessibleEditableTextPara::cutText( sal_Int32 nStartIndex, sal_Int32 nEndIndex )
     {
 
         SolarMutexGuard aGuard;
@@ -2189,7 +2120,7 @@ namespace accessibility
             SvxEditViewForwarder& rCacheVF = GetEditViewForwarder( true );
             SvxAccessibleTextAdapter& rCacheTF = GetTextForwarder();    // MUST be after GetEditViewForwarder(), see method docs
 
-            DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+            DBG_ASSERT(GetParagraphIndex() >= 0,
                        "AccessibleEditableTextPara::cutText: index value overflow");
 
             CheckRange(nStartIndex, nEndIndex);
@@ -2202,7 +2133,7 @@ namespace accessibility
             ESelection aSelection = MakeSelection (nStartIndex + nBulletLen, nEndIndex + nBulletLen);
             //if( !rCacheTF.IsEditable( MakeSelection(nStartIndex, nEndIndex) ) )
             if( !rCacheTF.IsEditable( aSelection ) )
-                return sal_False; // non-editable area selected
+                return false; // non-editable area selected
 
             // don't save selection, might become invalid after cut!
             //rCacheVF.SetSelection( MakeSelection(nStartIndex, nEndIndex) );
@@ -2212,11 +2143,11 @@ namespace accessibility
         }
         catch (const uno::RuntimeException&)
         {
-            return sal_False;
+            return false;
         }
     }
 
-    sal_Bool SAL_CALL AccessibleEditableTextPara::pasteText( sal_Int32 nIndex ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL AccessibleEditableTextPara::pasteText( sal_Int32 nIndex )
     {
 
         SolarMutexGuard aGuard;
@@ -2226,7 +2157,7 @@ namespace accessibility
             SvxEditViewForwarder& rCacheVF = GetEditViewForwarder( true );
             SvxAccessibleTextAdapter& rCacheTF = GetTextForwarder();    // MUST be after GetEditViewForwarder(), see method docs
 
-            DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+            DBG_ASSERT(GetParagraphIndex() >= 0,
                        "AccessibleEditableTextPara::pasteText: index value overflow");
 
             CheckPosition(nIndex);
@@ -2237,7 +2168,7 @@ namespace accessibility
             if( aBulletInfo.nParagraph != EE_PARA_NOT_FOUND && aBulletInfo.bVisible )
                         nBulletLen = aBulletInfo.aText.getLength();
             if( !rCacheTF.IsEditable( MakeSelection(nIndex + nBulletLen) ) )
-                return sal_False; // non-editable area selected
+                return false; // non-editable area selected
 
             // #104400# set empty selection (=> cursor) to given index
             //rCacheVF.SetSelection( MakeCursor(nIndex) );
@@ -2247,11 +2178,11 @@ namespace accessibility
         }
         catch (const uno::RuntimeException&)
         {
-            return sal_False;
+            return false;
         }
     }
 
-    sal_Bool SAL_CALL AccessibleEditableTextPara::deleteText( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL AccessibleEditableTextPara::deleteText( sal_Int32 nStartIndex, sal_Int32 nEndIndex )
     {
 
         SolarMutexGuard aGuard;
@@ -2263,7 +2194,7 @@ namespace accessibility
             GetEditViewForwarder( true );
             SvxAccessibleTextAdapter& rCacheTF = GetTextForwarder();    // MUST be after GetEditViewForwarder(), see method docs
 
-            DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+            DBG_ASSERT(GetParagraphIndex() >= 0,
                        "AccessibleEditableTextPara::deleteText: index value overflow");
 
             CheckRange(nStartIndex, nEndIndex);
@@ -2277,7 +2208,7 @@ namespace accessibility
 
             //if( !rCacheTF.IsEditable( MakeSelection(nStartIndex, nEndIndex) ) )
             if( !rCacheTF.IsEditable( aSelection ) )
-                return sal_False; // non-editable area selected
+                return false; // non-editable area selected
 
             //sal_Bool bRet = rCacheTF.Delete( MakeSelection(nStartIndex, nEndIndex) );
             bool bRet = rCacheTF.Delete( aSelection );
@@ -2288,11 +2219,11 @@ namespace accessibility
         }
         catch (const uno::RuntimeException&)
         {
-            return sal_False;
+            return false;
         }
     }
 
-    sal_Bool SAL_CALL AccessibleEditableTextPara::insertText( const OUString& sText, sal_Int32 nIndex ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL AccessibleEditableTextPara::insertText( const OUString& sText, sal_Int32 nIndex )
     {
 
         SolarMutexGuard aGuard;
@@ -2304,7 +2235,7 @@ namespace accessibility
             GetEditViewForwarder( true );
             SvxAccessibleTextAdapter& rCacheTF = GetTextForwarder();    // MUST be after GetEditViewForwarder(), see method docs
 
-            DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+            DBG_ASSERT(GetParagraphIndex() >= 0,
                        "AccessibleEditableTextPara::insertText: index value overflow");
 
             CheckPosition(nIndex);
@@ -2316,7 +2247,7 @@ namespace accessibility
                         nBulletLen = aBulletInfo.aText.getLength();
 
             if( !rCacheTF.IsEditable( MakeSelection(nIndex + nBulletLen) ) )
-                return sal_False; // non-editable area selected
+                return false; // non-editable area selected
 
             // #104400# insert given text at empty selection (=> cursor)
             bool bRet = rCacheTF.InsertText( sText, MakeCursor(nIndex + nBulletLen) );
@@ -2328,11 +2259,11 @@ namespace accessibility
         }
         catch (const uno::RuntimeException&)
         {
-            return sal_False;
+            return false;
         }
     }
 
-    sal_Bool SAL_CALL AccessibleEditableTextPara::replaceText( sal_Int32 nStartIndex, sal_Int32 nEndIndex, const OUString& sReplacement ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL AccessibleEditableTextPara::replaceText( sal_Int32 nStartIndex, sal_Int32 nEndIndex, const OUString& sReplacement )
     {
 
         SolarMutexGuard aGuard;
@@ -2344,7 +2275,7 @@ namespace accessibility
             GetEditViewForwarder( true );
             SvxAccessibleTextAdapter& rCacheTF = GetTextForwarder();    // MUST be after GetEditViewForwarder(), see method docs
 
-            DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+            DBG_ASSERT(GetParagraphIndex() >= 0,
                        "AccessibleEditableTextPara::replaceText: index value overflow");
 
             CheckRange(nStartIndex, nEndIndex);
@@ -2358,7 +2289,7 @@ namespace accessibility
 
             //if( !rCacheTF.IsEditable( MakeSelection(nStartIndex, nEndIndex) ) )
             if( !rCacheTF.IsEditable( aSelection ) )
-                return sal_False; // non-editable area selected
+                return false; // non-editable area selected
 
             // insert given text into given range => replace
             //sal_Bool bRet = rCacheTF.InsertText( sReplacement, MakeSelection(nStartIndex, nEndIndex) );
@@ -2371,11 +2302,11 @@ namespace accessibility
         }
         catch (const uno::RuntimeException&)
         {
-            return sal_False;
+            return false;
         }
     }
 
-    sal_Bool SAL_CALL AccessibleEditableTextPara::setAttributes( sal_Int32 nStartIndex, sal_Int32 nEndIndex, const uno::Sequence< beans::PropertyValue >& aAttributeSet ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL AccessibleEditableTextPara::setAttributes( sal_Int32 nStartIndex, sal_Int32 nEndIndex, const uno::Sequence< beans::PropertyValue >& aAttributeSet )
     {
 
         SolarMutexGuard aGuard;
@@ -2388,17 +2319,17 @@ namespace accessibility
             SvxAccessibleTextAdapter& rCacheTF = GetTextForwarder();    // MUST be after GetEditViewForwarder(), see method docs
             sal_Int32 nPara = GetParagraphIndex();
 
-            DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+            DBG_ASSERT(GetParagraphIndex() >= 0,
                        "AccessibleEditableTextPara::setAttributes: index value overflow");
 
             CheckRange(nStartIndex, nEndIndex);
 
             if( !rCacheTF.IsEditable( MakeSelection(nStartIndex, nEndIndex) ) )
-                return sal_False; // non-editable area selected
+                return false; // non-editable area selected
 
             // do the indices span the whole paragraph? Then use the outliner map
             // TODO: hold it as a member?
-            uno::Reference< SvxAccessibleTextPropertySet > xPropSet( new SvxAccessibleTextPropertySet( &GetEditSource(),
+            rtl::Reference< SvxAccessibleTextPropertySet > xPropSet( new SvxAccessibleTextPropertySet( &GetEditSource(),
                                                    0 == nStartIndex &&
                                                    rCacheTF.GetTextLen(nPara) == nEndIndex ?
                                                    ImplGetSvxUnoOutlinerTextCursorSvxPropertySet() :
@@ -2407,34 +2338,30 @@ namespace accessibility
             xPropSet->SetSelection( MakeSelection(nStartIndex, nEndIndex) );
 
             // convert from PropertyValue to Any
-            sal_Int32 i, nLength( aAttributeSet.getLength() );
-            const beans::PropertyValue* pPropArray = aAttributeSet.getConstArray();
-            for(i=0; i<nLength; ++i)
+            for(const beans::PropertyValue& rProp : aAttributeSet)
             {
                 try
                 {
-                    xPropSet->setPropertyValue(pPropArray->Name, pPropArray->Value);
+                    xPropSet->setPropertyValue(rProp.Name, rProp.Value);
                 }
                 catch (const uno::Exception&)
                 {
                     OSL_FAIL("AccessibleEditableTextPara::setAttributes exception in setPropertyValue");
                 }
-
-                ++pPropArray;
             }
 
             rCacheTF.QuickFormatDoc();
             GetEditSource().UpdateData();
 
-            return sal_True;
+            return true;
         }
         catch (const uno::RuntimeException&)
         {
-            return sal_False;
+            return false;
         }
     }
 
-    sal_Bool SAL_CALL AccessibleEditableTextPara::setText( const OUString& sText ) throw (uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL AccessibleEditableTextPara::setText( const OUString& sText )
     {
 
         SolarMutexGuard aGuard;
@@ -2445,25 +2372,17 @@ namespace accessibility
     // XAccessibleTextAttributes
     uno::Sequence< beans::PropertyValue > SAL_CALL AccessibleEditableTextPara::getDefaultAttributes(
             const uno::Sequence< OUString >& rRequestedAttributes )
-        throw (beans::UnknownPropertyException, uno::RuntimeException, std::exception)
     {
         SolarMutexGuard aGuard;
 
-        #if OSL_DEBUG_LEVEL > 0
-        SvxAccessibleTextAdapter& rCacheTF =
-        #endif
-            GetTextForwarder();
+        GetTextForwarder();
 
-        #if OSL_DEBUG_LEVEL > 0
-        (void)rCacheTF;
-        #endif
-
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getCharacterAttributes: index value overflow");
 
         // get XPropertySetInfo for paragraph attributes and
         // character attributes that span all the paragraphs text.
-        uno::Reference< SvxAccessibleTextPropertySet > xPropSet( new SvxAccessibleTextPropertySet( &GetEditSource(),
+        rtl::Reference< SvxAccessibleTextPropertySet > xPropSet( new SvxAccessibleTextPropertySet( &GetEditSource(),
                 ImplGetSvxCharAndParaPropertiesSet() ) );
         xPropSet->SetSelection( MakeSelection( 0, GetTextLen() ) );
         uno::Reference< beans::XPropertySetInfo > xPropSetInfo = xPropSet->getPropertySetInfo();
@@ -2473,21 +2392,18 @@ namespace accessibility
                         ( static_cast< XAccessible* > (this) ) );   // disambiguate hierarchy
 
         // build sequence of available properties to check
-        sal_Int32 nLenReqAttr = rRequestedAttributes.getLength();
         uno::Sequence< beans::Property > aProperties;
-        if (nLenReqAttr)
+        if (const sal_Int32 nLenReqAttr = rRequestedAttributes.getLength())
         {
-            const OUString *pRequestedAttributes = rRequestedAttributes.getConstArray();
-
             aProperties.realloc( nLenReqAttr );
             beans::Property *pProperties = aProperties.getArray();
             sal_Int32 nCurLen = 0;
-            for (sal_Int32 i = 0;  i < nLenReqAttr;  ++i)
+            for (const OUString& rRequestedAttribute : rRequestedAttributes)
             {
                 beans::Property aProp;
                 try
                 {
-                    aProp = xPropSetInfo->getPropertyByName( pRequestedAttributes[i] );
+                    aProp = xPropSetInfo->getPropertyByName( rRequestedAttribute );
                 }
                 catch (const beans::UnknownPropertyException&)
                 {
@@ -2500,19 +2416,16 @@ namespace accessibility
         else
             aProperties = xPropSetInfo->getProperties();
 
-        sal_Int32 nLength = aProperties.getLength();
-        const beans::Property *pProperties = aProperties.getConstArray();
-
         // build resulting sequence
-        uno::Sequence< beans::PropertyValue > aOutSequence( nLength );
+        uno::Sequence< beans::PropertyValue > aOutSequence( aProperties.getLength() );
         beans::PropertyValue* pOutSequence = aOutSequence.getArray();
         sal_Int32 nOutLen = 0;
-        for (sal_Int32 i = 0;  i < nLength;  ++i)
+        for (const beans::Property& rProperty : aProperties)
         {
             // calling implementation functions:
             // _getPropertyState and _getPropertyValue (see below) to provide
             // the proper paragraph number when retrieving paragraph attributes
-            PropertyState eState = xPropSet->_getPropertyState( pProperties->Name, mnParagraphIndex );
+            PropertyState eState = xPropSet->_getPropertyState( rProperty.Name, mnParagraphIndex );
             if ( eState == PropertyState_AMBIGUOUS_VALUE )
             {
                 OSL_FAIL( "ambiguous property value encountered" );
@@ -2523,15 +2436,14 @@ namespace accessibility
             // properties spanning the whole paragraph should be returned
             // and declared as default value
             {
-                pOutSequence->Name      = pProperties->Name;
-                pOutSequence->Handle    = pProperties->Handle;
-                pOutSequence->Value     = xPropSet->_getPropertyValue( pProperties->Name, mnParagraphIndex );
+                pOutSequence->Name      = rProperty.Name;
+                pOutSequence->Handle    = rProperty.Handle;
+                pOutSequence->Value     = xPropSet->_getPropertyValue( rProperty.Name, mnParagraphIndex );
                 pOutSequence->State     = PropertyState_DEFAULT_VALUE;
 
                 ++pOutSequence;
                 ++nOutLen;
             }
-            ++pProperties;
         }
         aOutSequence.realloc( nOutLen );
 
@@ -2542,22 +2454,13 @@ namespace accessibility
     uno::Sequence< beans::PropertyValue > SAL_CALL AccessibleEditableTextPara::getRunAttributes(
             sal_Int32 nIndex,
             const uno::Sequence< OUString >& rRequestedAttributes )
-        throw (beans::UnknownPropertyException, lang::IndexOutOfBoundsException,
-               uno::RuntimeException, std::exception)
     {
 
         SolarMutexGuard aGuard;
 
-        #if OSL_DEBUG_LEVEL > 0
-        SvxAccessibleTextAdapter& rCacheTF =
-        #endif
-            GetTextForwarder();
+        GetTextForwarder();
 
-        #if OSL_DEBUG_LEVEL > 0
-        (void)rCacheTF;
-        #endif
-
-        DBG_ASSERT(GetParagraphIndex() >= 0 && GetParagraphIndex() <= USHRT_MAX,
+        DBG_ASSERT(GetParagraphIndex() >= 0,
                    "AccessibleEditableTextPara::getCharacterAttributes: index value overflow");
 
         if( getCharacterCount() > 0 )
@@ -2565,7 +2468,7 @@ namespace accessibility
         else
             CheckPosition(nIndex);
 
-        uno::Reference< SvxAccessibleTextPropertySet > xPropSet( new SvxAccessibleTextPropertySet( &GetEditSource(),
+        rtl::Reference< SvxAccessibleTextPropertySet > xPropSet( new SvxAccessibleTextPropertySet( &GetEditSource(),
                                                ImplGetSvxCharAndParaPropertiesSet() ) );
         xPropSet->SetSelection( MakeSelection( nIndex ) );
         uno::Reference< beans::XPropertySetInfo > xPropSetInfo = xPropSet->getPropertySetInfo();
@@ -2575,21 +2478,18 @@ namespace accessibility
                                         ( static_cast< XAccessible* > (this) ) );   // disambiguate hierarchy
 
         // build sequence of available properties to check
-        sal_Int32 nLenReqAttr = rRequestedAttributes.getLength();
         uno::Sequence< beans::Property > aProperties;
-        if (nLenReqAttr)
+        if (const sal_Int32 nLenReqAttr = rRequestedAttributes.getLength())
         {
-            const OUString *pRequestedAttributes = rRequestedAttributes.getConstArray();
-
             aProperties.realloc( nLenReqAttr );
             beans::Property *pProperties = aProperties.getArray();
             sal_Int32 nCurLen = 0;
-            for (sal_Int32 i = 0;  i < nLenReqAttr;  ++i)
+            for (const OUString& rRequestedAttribute : rRequestedAttributes)
             {
                 beans::Property aProp;
                 try
                 {
-                    aProp = xPropSetInfo->getPropertyByName( pRequestedAttributes[i] );
+                    aProp = xPropSetInfo->getPropertyByName( rRequestedAttribute );
                 }
                 catch (const beans::UnknownPropertyException&)
                 {
@@ -2602,28 +2502,24 @@ namespace accessibility
         else
             aProperties = xPropSetInfo->getProperties();
 
-        sal_Int32 nLength = aProperties.getLength();
-        const beans::Property *pProperties = aProperties.getConstArray();
-
         // build resulting sequence
-        uno::Sequence< beans::PropertyValue > aOutSequence( nLength );
+        uno::Sequence< beans::PropertyValue > aOutSequence( aProperties.getLength() );
         beans::PropertyValue* pOutSequence = aOutSequence.getArray();
         sal_Int32 nOutLen = 0;
-        for (sal_Int32 i = 0;  i < nLength;  ++i)
+        for (const beans::Property& rProperty : aProperties)
         {
             // calling 'regular' functions that will operate on the selection
-            PropertyState eState = xPropSet->getPropertyState( pProperties->Name );
+            PropertyState eState = xPropSet->getPropertyState( rProperty.Name );
             if (eState == PropertyState_DIRECT_VALUE)
             {
-                pOutSequence->Name      = pProperties->Name;
-                pOutSequence->Handle    = pProperties->Handle;
-                pOutSequence->Value     = xPropSet->getPropertyValue( pProperties->Name );
+                pOutSequence->Name      = rProperty.Name;
+                pOutSequence->Handle    = rProperty.Handle;
+                pOutSequence->Value     = xPropSet->getPropertyValue( rProperty.Name );
                 pOutSequence->State     = eState;
 
                 ++pOutSequence;
                 ++nOutLen;
             }
-            ++pProperties;
         }
         aOutSequence.realloc( nOutLen );
 
@@ -2631,7 +2527,7 @@ namespace accessibility
     }
 
     // XAccessibleHypertext
-    ::sal_Int32 SAL_CALL AccessibleEditableTextPara::getHyperLinkCount(  ) throw (css::uno::RuntimeException, std::exception)
+    ::sal_Int32 SAL_CALL AccessibleEditableTextPara::getHyperLinkCount(  )
     {
         SvxAccessibleTextAdapter& rT = GetTextForwarder();
         const sal_Int32 nPara = GetParagraphIndex();
@@ -2647,7 +2543,7 @@ namespace accessibility
         return nHyperLinks;
     }
 
-    css::uno::Reference< css::accessibility::XAccessibleHyperlink > SAL_CALL AccessibleEditableTextPara::getHyperLink( ::sal_Int32 nLinkIndex ) throw (css::lang::IndexOutOfBoundsException, css::uno::RuntimeException, std::exception)
+    css::uno::Reference< css::accessibility::XAccessibleHyperlink > SAL_CALL AccessibleEditableTextPara::getHyperLink( ::sal_Int32 nLinkIndex )
     {
         css::uno::Reference< css::accessibility::XAccessibleHyperlink > xRef;
 
@@ -2678,7 +2574,7 @@ namespace accessibility
         return xRef;
     }
 
-    ::sal_Int32 SAL_CALL AccessibleEditableTextPara::getHyperLinkIndex( ::sal_Int32 nCharIndex ) throw (css::lang::IndexOutOfBoundsException, css::uno::RuntimeException, std::exception)
+    ::sal_Int32 SAL_CALL AccessibleEditableTextPara::getHyperLinkIndex( ::sal_Int32 nCharIndex )
     {
         const sal_Int32 nPara = GetParagraphIndex();
         SvxAccessibleTextAdapter& rT = GetTextForwarder();
@@ -2705,7 +2601,7 @@ namespace accessibility
     }
 
     // XAccessibleMultiLineText
-    sal_Int32 SAL_CALL AccessibleEditableTextPara::getLineNumberAtIndex( sal_Int32 nIndex ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL AccessibleEditableTextPara::getLineNumberAtIndex( sal_Int32 nIndex )
     {
 
         sal_Int32 nRes = -1;
@@ -2717,16 +2613,15 @@ namespace accessibility
         if (bValidPara)
         {
             // we explicitly allow for the index to point at the character right behind the text
-            if (0 <= nIndex && nIndex <= rCacheTF.GetTextLen( nPara ))
-                nRes = rCacheTF.GetLineNumberAtIndex( nPara, nIndex );
-            else
+            if (0 > nIndex || nIndex > rCacheTF.GetTextLen( nPara ))
                 throw lang::IndexOutOfBoundsException();
+            nRes = rCacheTF.GetLineNumberAtIndex( nPara, nIndex );
         }
         return nRes;
     }
 
     // XAccessibleMultiLineText
-    css::accessibility::TextSegment SAL_CALL AccessibleEditableTextPara::getTextAtLineNumber( sal_Int32 nLineNo ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+    css::accessibility::TextSegment SAL_CALL AccessibleEditableTextPara::getTextAtLineNumber( sal_Int32 nLineNo )
     {
 
         css::accessibility::TextSegment aResult;
@@ -2736,33 +2631,30 @@ namespace accessibility
         DBG_ASSERT( bValidPara, "getTextAtLineNumber: current paragraph index out of range" );
         if (bValidPara)
         {
-            if (0 <= nLineNo && nLineNo < rCacheTF.GetLineCount( nPara ))
+            if (0 > nLineNo || nLineNo >= rCacheTF.GetLineCount( nPara ))
+                throw lang::IndexOutOfBoundsException();
+            sal_Int32 nStart = 0, nEnd = 0;
+            rCacheTF.GetLineBoundaries( nStart, nEnd, nPara, nLineNo );
+            if (nStart >= 0 && nEnd >=  0)
             {
-                sal_Int32 nStart = 0, nEnd = 0;
-                rCacheTF.GetLineBoundaries( nStart, nEnd, nPara, nLineNo );
-                if (nStart >= 0 && nEnd >=  0)
+                try
                 {
-                    try
-                    {
-                        aResult.SegmentText     = getTextRange( nStart, nEnd );
-                        aResult.SegmentStart    = nStart;
-                        aResult.SegmentEnd      = nEnd;
-                    }
-                    catch (const lang::IndexOutOfBoundsException&)
-                    {
-                        // this is not the exception that should be raised in this function ...
-                        DBG_ASSERT( false, "unexpected exception" );
-                    }
+                    aResult.SegmentText     = getTextRange( nStart, nEnd );
+                    aResult.SegmentStart    = nStart;
+                    aResult.SegmentEnd      = nEnd;
+                }
+                catch (const lang::IndexOutOfBoundsException&)
+                {
+                    // this is not the exception that should be raised in this function ...
+                    DBG_UNHANDLED_EXCEPTION("editeng");
                 }
             }
-            else
-                throw lang::IndexOutOfBoundsException();
         }
         return aResult;
     }
 
     // XAccessibleMultiLineText
-    css::accessibility::TextSegment SAL_CALL AccessibleEditableTextPara::getTextAtLineWithCaret(  ) throw (uno::RuntimeException, std::exception)
+    css::accessibility::TextSegment SAL_CALL AccessibleEditableTextPara::getTextAtLineWithCaret(  )
     {
 
         css::accessibility::TextSegment aResult;
@@ -2772,13 +2664,13 @@ namespace accessibility
         }
         catch (const lang::IndexOutOfBoundsException&)
         {
-            // this one needs to be catched since this interface does not allow for it.
+            // this one needs to be caught since this interface does not allow for it.
         }
         return aResult;
     }
 
     // XAccessibleMultiLineText
-    sal_Int32 SAL_CALL AccessibleEditableTextPara::getNumberOfLineWithCaret(  ) throw (uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL AccessibleEditableTextPara::getNumberOfLineWithCaret(  )
     {
 
         sal_Int32 nRes = -1;
@@ -2788,38 +2680,29 @@ namespace accessibility
         }
         catch (const lang::IndexOutOfBoundsException&)
         {
-            // this one needs to be catched since this interface does not allow for it.
+            // this one needs to be caught since this interface does not allow for it.
         }
         return nRes;
     }
 
 
     // XServiceInfo
-    OUString SAL_CALL AccessibleEditableTextPara::getImplementationName() throw (uno::RuntimeException, std::exception)
+    OUString SAL_CALL AccessibleEditableTextPara::getImplementationName()
     {
 
         return OUString("AccessibleEditableTextPara");
     }
 
-    sal_Bool SAL_CALL AccessibleEditableTextPara::supportsService (const OUString& sServiceName) throw (uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL AccessibleEditableTextPara::supportsService (const OUString& sServiceName)
     {
 
         return cppu::supportsService(this, sServiceName);
     }
 
-    uno::Sequence< OUString> SAL_CALL AccessibleEditableTextPara::getSupportedServiceNames() throw (uno::RuntimeException, std::exception)
+    uno::Sequence< OUString> SAL_CALL AccessibleEditableTextPara::getSupportedServiceNames()
     {
-
-        const OUString sServiceName( getServiceName() );
-        return uno::Sequence< OUString > (&sServiceName, 1);
-    }
-
-    // XServiceName
-    OUString SAL_CALL AccessibleEditableTextPara::getServiceName() throw (uno::RuntimeException)
-    {
-
         // #105185# Using correct service now
-        return OUString("com.sun.star.text.AccessibleParagraphView");
+        return { OUString("com.sun.star.text.AccessibleParagraphView") };
     }
 
 }  // end of namespace accessibility

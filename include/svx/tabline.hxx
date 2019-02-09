@@ -20,8 +20,6 @@
 #define INCLUDED_SVX_TABLINE_HXX
 
 #include <vcl/button.hxx>
-#include <vcl/group.hxx>
-#include <svtools/stdctrl.hxx>
 #include <svx/svdpage.hxx>
 #include <svx/xlineit0.hxx>
 #include <svx/xlineit.hxx>

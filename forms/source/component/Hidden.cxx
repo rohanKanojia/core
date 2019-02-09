@@ -18,12 +18,11 @@
  */
 
 #include "Hidden.hxx"
-#include "property.hxx"
-#include "property.hrc"
-#include "services.hxx"
+#include <property.hxx>
+#include <services.hxx>
 #include <tools/debug.hxx>
 #include <comphelper/basicio.hxx>
-#include <comphelper/processfactory.hxx>
+#include <comphelper/property.hxx>
 
 
 namespace frm
@@ -74,7 +73,7 @@ void OHiddenModel::getFastPropertyValue(Any& _rValue, sal_Int32 _nHandle) const
 }
 
 
-void OHiddenModel::setFastPropertyValue_NoBroadcast(sal_Int32 _nHandle, const Any& _rValue) throw (css::uno::Exception, std::exception)
+void OHiddenModel::setFastPropertyValue_NoBroadcast(sal_Int32 _nHandle, const Any& _rValue)
 {
     switch (_nHandle)
     {
@@ -90,7 +89,6 @@ void OHiddenModel::setFastPropertyValue_NoBroadcast(sal_Int32 _nHandle, const An
 
 sal_Bool OHiddenModel::convertFastPropertyValue(
             Any& _rConvertedValue, Any& _rOldValue, sal_Int32 _nHandle, const Any& _rValue)
-            throw (IllegalArgumentException)
 {
     bool bModified(false);
     switch (_nHandle)
@@ -118,7 +116,7 @@ void OHiddenModel::describeFixedProperties( Sequence< Property >& _rProps ) cons
 
 // XServiceInfo
 
-css::uno::Sequence<OUString> SAL_CALL OHiddenModel::getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception)
+css::uno::Sequence<OUString> SAL_CALL OHiddenModel::getSupportedServiceNames()
 {
     return css::uno::Sequence<OUString>{
         FRM_SUN_COMPONENT_HIDDENCONTROL, FRM_SUN_FORMCOMPONENT,
@@ -126,14 +124,13 @@ css::uno::Sequence<OUString> SAL_CALL OHiddenModel::getSupportedServiceNames() t
 }
 
 
-OUString SAL_CALL OHiddenModel::getServiceName() throw(RuntimeException, std::exception)
+OUString SAL_CALL OHiddenModel::getServiceName()
 {
     return OUString(FRM_COMPONENT_HIDDEN);    // old (non-sun) name for compatibility !
 }
 
 
 void SAL_CALL OHiddenModel::write(const Reference<XObjectOutputStream>& _rxOutStream)
-    throw(IOException, RuntimeException, std::exception)
 {
     // Version
     _rxOutStream->writeShort(0x0002);
@@ -145,7 +142,7 @@ void SAL_CALL OHiddenModel::write(const Reference<XObjectOutputStream>& _rxOutSt
 }
 
 
-void SAL_CALL OHiddenModel::read(const Reference<XObjectInputStream>& _rxInStream) throw(IOException, RuntimeException, std::exception)
+void SAL_CALL OHiddenModel::read(const Reference<XObjectInputStream>& _rxInStream)
 {
     // Version
     sal_uInt16 nVersion = _rxInStream->readShort();
@@ -163,7 +160,7 @@ void SAL_CALL OHiddenModel::read(const Reference<XObjectInputStream>& _rxInStrea
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OHiddenModel_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {

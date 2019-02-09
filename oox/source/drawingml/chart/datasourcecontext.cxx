@@ -17,12 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/chart/datasourcecontext.hxx"
+#include <drawingml/chart/datasourcecontext.hxx>
 
-#include "oox/drawingml/chart/datasourcemodel.hxx"
+#include <oox/drawingml/chart/datasourcemodel.hxx>
 
 #include <comphelper/processfactory.hxx>
 #include <oox/core/xmlfilterbase.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 #include <svl/zforlist.hxx>
 #include <osl/diagnose.h>
 
@@ -37,14 +40,12 @@ using namespace ::com::sun::star;
 
 DoubleSequenceContext::DoubleSequenceContext( ContextHandler2Helper& rParent, DataSequenceModel& rModel ) :
     DataSequenceContextBase( rParent, rModel ),
-    mnPtIndex( -1 ),
-    mpNumberFormatter( nullptr )
+    mnPtIndex( -1 )
 {
 }
 
 DoubleSequenceContext::~DoubleSequenceContext()
 {
-    delete mpNumberFormatter;
 }
 
 ContextHandlerRef DoubleSequenceContext::onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs )
@@ -116,7 +117,7 @@ void DoubleSequenceContext::onCharacters( const OUString& rChars )
                         {
                             OUString aFormatCode = mrModel.maFormatCode;
                             sal_Int32 nCheckPos = 0;
-                            short nType;
+                            SvNumFormatType nType;
                             pNumFrmt->PutEntry( aFormatCode, nCheckPos, nType, nKey );
                             bNoKey = (nCheckPos != 0);
                         }
@@ -153,11 +154,11 @@ SvNumberFormatter* DoubleSequenceContext::getNumberFormatter()
     if( mpNumberFormatter == nullptr )
     {
         uno::Reference<uno::XComponentContext> rContext =
-                                this->getFilter().getComponentContext();
-        mpNumberFormatter =
-                new SvNumberFormatter(rContext, LANGUAGE_DONTKNOW);
+                                getFilter().getComponentContext();
+        mpNumberFormatter.reset(
+                new SvNumberFormatter(rContext, LANGUAGE_DONTKNOW) );
     }
-    return mpNumberFormatter;
+    return mpNumberFormatter.get();
 }
 
 

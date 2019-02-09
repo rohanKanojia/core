@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "NameContainer.hxx"
+#include <NameContainer.hxx>
 
 #include <com/sun/star/uno/Any.hxx>
  #include <cppuhelper/supportsservice.hxx>
@@ -45,7 +45,7 @@ NameContainer::NameContainer( const css::uno::Type& rType, const OUString& rServ
 
 NameContainer::NameContainer(
     const NameContainer & rOther )
-    : impl::NameContainer_Base()
+    : impl::NameContainer_Base(rOther)
     , m_aType( rOther.m_aType )
     , m_aServicename( rOther.m_aServicename )
     , m_aImplementationName( rOther.m_aImplementationName )
@@ -59,35 +59,29 @@ NameContainer::~NameContainer()
 
 //XServiceInfo
 OUString SAL_CALL NameContainer::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
 {
     return m_aImplementationName;
 }
 
 sal_Bool SAL_CALL NameContainer::supportsService( const OUString& ServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 Sequence< OUString > SAL_CALL NameContainer::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    Sequence<OUString> aSNS { m_aServicename };
-    return aSNS;
+    return { m_aServicename };
 }
 
 // XNameContainer
 void SAL_CALL NameContainer::insertByName( const OUString& rName, const Any& rElement )
-    throw( lang::IllegalArgumentException, container::ElementExistException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     if( m_aMap.find( rName ) != m_aMap.end() )
         throw container::ElementExistException();
-    m_aMap.insert( tContentMap::value_type( rName, rElement ));
+    m_aMap.emplace( rName, rElement );
 }
 
 void SAL_CALL NameContainer::removeByName( const OUString& Name )
-    throw( container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     tContentMap::iterator aIt( m_aMap.find( Name ));
     if( aIt == m_aMap.end())
@@ -97,7 +91,6 @@ void SAL_CALL NameContainer::removeByName( const OUString& Name )
 
 // XNameReplace
 void SAL_CALL NameContainer::replaceByName( const OUString& rName, const Any& rElement )
-    throw( lang::IllegalArgumentException, container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     tContentMap::iterator aIt( m_aMap.find( rName ));
     if( aIt == m_aMap.end() )
@@ -107,7 +100,6 @@ void SAL_CALL NameContainer::replaceByName( const OUString& rName, const Any& rE
 
 // XNameAccess
 Any SAL_CALL NameContainer::getByName( const OUString& rName )
-    throw( container::NoSuchElementException,  lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     tContentMap::iterator aIter( m_aMap.find( rName ) );
     if( aIter == m_aMap.end() )
@@ -116,38 +108,35 @@ Any SAL_CALL NameContainer::getByName( const OUString& rName )
 }
 
 Sequence< OUString > SAL_CALL NameContainer::getElementNames()
-    throw( uno::RuntimeException, std::exception )
 {
     sal_Int32 nCount = m_aMap.size();
     Sequence< OUString > aSeq(nCount);
     sal_Int32 nN = 0;
-    for( tContentMap::iterator aIter = m_aMap.begin(); aIter != m_aMap.end() && nN < nCount; ++aIter, ++nN )
-        aSeq[nN]=aIter->first;
+    for (auto const& elem : m_aMap)
+    {
+        aSeq[nN++]=elem.first;
+    }
     return aSeq;
 }
 
 sal_Bool SAL_CALL NameContainer::hasByName( const OUString& rName )
-    throw( uno::RuntimeException, std::exception )
 {
     return ( m_aMap.find( rName ) != m_aMap.end() );
 }
 
 // XElementAccess
 sal_Bool SAL_CALL NameContainer::hasElements()
-    throw( uno::RuntimeException, std::exception )
 {
     return ! m_aMap.empty();
 }
 
 uno::Type SAL_CALL NameContainer::getElementType()
-    throw( uno::RuntimeException, std::exception )
 {
     return m_aType;
 }
 
 // XCloneable
 uno::Reference< util::XCloneable > SAL_CALL NameContainer::createClone()
-    throw ( uno::RuntimeException, std::exception )
 {
     return uno::Reference< util::XCloneable >( new NameContainer( *this ));
 }

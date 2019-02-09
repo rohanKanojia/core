@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ViewShell.hxx"
-#include "smarttag.hxx"
-#include "Window.hxx"
-#include "View.hxx"
+#include <ViewShell.hxx>
+#include <smarttag.hxx>
+#include <Window.hxx>
+#include <View.hxx>
 
 namespace sd
 {
@@ -85,12 +85,12 @@ bool SmartTag::getContext( SdrViewContext& /*rContext*/ )
     return false;
 }
 
-sal_uLong SmartTag::GetMarkablePointCount() const
+sal_Int32 SmartTag::GetMarkablePointCount() const
 {
     return 0;
 }
 
-sal_uLong SmartTag::GetMarkedPointCount() const
+sal_Int32 SmartTag::GetMarkedPointCount() const
 {
     return 0;
 }
@@ -100,7 +100,7 @@ bool SmartTag::MarkPoint(SdrHdl& /*rHdl*/, bool /*bUnmark*/ )
     return false;
 }
 
-bool SmartTag::MarkPoints(const Rectangle* /*pRect*/, bool /*bUnmark*/ )
+bool SmartTag::MarkPoints(const ::tools::Rectangle* /*pRect*/, bool /*bUnmark*/ )
 {
     return false;
 }
@@ -148,8 +148,8 @@ void SmartTagSet::Dispose()
 {
     std::set< SmartTagReference > aSet;
     aSet.swap( maSet );
-    for( std::set< SmartTagReference >::iterator aIter( aSet.begin() ); aIter != aSet.end(); )
-        (*aIter++)->Dispose();
+    for( auto& rxItem : aSet )
+        rxItem->Dispose();
     mrView.InvalidateAllWin();
     mxMouseOverTag.clear();
     mxSelectedTag.clear();
@@ -217,7 +217,7 @@ bool SmartTagSet::KeyInput( const KeyEvent& rKEvt )
         if( pSmartHdl )
         {
             const_cast< SdrHdlList& >( mrView.GetHdlList() ).ResetFocusHdl();
-            SmartTagReference xTag( pSmartHdl->getTag() );
+            const SmartTagReference& xTag( pSmartHdl->getTag() );
             select( xTag );
             return true;
         }
@@ -237,7 +237,7 @@ bool SmartTagSet::RequestHelp( const HelpEvent& rHEvt )
         SmartHdl* pSmartHdl = dynamic_cast< SmartHdl* >( pHdl );
         if(pSmartHdl && pSmartHdl->getTag().is() )
         {
-            SmartTagReference xTag( pSmartHdl->getTag() );
+            const SmartTagReference& xTag( pSmartHdl->getTag() );
             return xTag->RequestHelp( rHEvt );
         }
     }
@@ -259,7 +259,7 @@ bool SmartTagSet::Command( const CommandEvent& rCEvt )
             SmartHdl* pSmartHdl = dynamic_cast< SmartHdl* >( pHdl );
             if(pSmartHdl && pSmartHdl->getTag().is() )
             {
-                SmartTagReference xTag( pSmartHdl->getTag() );
+                const SmartTagReference& xTag( pSmartHdl->getTag() );
                 return xTag->Command( rCEvt );
             }
         }
@@ -276,11 +276,8 @@ bool SmartTagSet::Command( const CommandEvent& rCEvt )
 
 void SmartTagSet::addCustomHandles( SdrHdlList& rHandlerList )
 {
-    if( !maSet.empty() )
-    {
-        for( std::set< SmartTagReference >::iterator aIter( maSet.begin() ); aIter != maSet.end(); )
-            (*aIter++)->addCustomHandles( rHandlerList );
-    }
+    for( auto& rxItem : maSet )
+        rxItem->addCustomHandles( rHandlerList );
 }
 
 /** returns true if the currently selected smart tag has
@@ -335,7 +332,7 @@ bool SmartTagSet::MarkPoint(SdrHdl& rHdl, bool bUnmark )
     return false;
 }
 
-bool SmartTagSet::MarkPoints(const Rectangle* pRect, bool bUnmark)
+bool SmartTagSet::MarkPoints(const ::tools::Rectangle* pRect, bool bUnmark)
 {
     if( mxSelectedTag.is() )
         return mxSelectedTag->MarkPoints( pRect, bUnmark );
@@ -348,16 +345,16 @@ void SmartTagSet::CheckPossibilities()
         mxSelectedTag->CheckPossibilities();
 }
 
-SmartHdl::SmartHdl( const SmartTagReference& xTag, SdrObject* pObject, const Point& rPnt, SdrHdlKind eNewKind /*=HDL_MOVE*/ )
+SmartHdl::SmartHdl( const SmartTagReference& xTag, SdrObject* pObject, const Point& rPnt, SdrHdlKind eNewKind /*=SdrHdlKind::Move*/ )
 : SdrHdl( rPnt, eNewKind )
-, mxTag( xTag )
+, mxSmartTag( xTag )
 {
     SetObj( pObject );
 }
 
-SmartHdl::SmartHdl( const SmartTagReference& xTag, const Point& rPnt, SdrHdlKind eNewKind /*=HDL_MOVE*/ )
+SmartHdl::SmartHdl( const SmartTagReference& xTag, const Point& rPnt, SdrHdlKind eNewKind /*=SdrHdlKind::Move*/ )
 : SdrHdl( rPnt, eNewKind )
-, mxTag( xTag )
+, mxSmartTag( xTag )
 {
 }
 

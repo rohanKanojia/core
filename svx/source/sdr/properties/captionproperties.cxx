@@ -17,6 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <o3tl/make_unique.hxx>
 #include <sdr/properties/captionproperties.hxx>
 #include <svl/itemset.hxx>
 #include <svl/style.hxx>
@@ -30,23 +33,16 @@ namespace sdr
     namespace properties
     {
         // create a new itemset
-        SfxItemSet* CaptionProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
+        std::unique_ptr<SfxItemSet> CaptionProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
         {
-            return new SfxItemSet(rPool,
-
-                // range from SdrAttrObj
-                SDRATTR_START, SDRATTR_SHADOW_LAST,
-                SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST,
-                SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION,
-
-                // range from SdrCaptionObj
-                SDRATTR_CAPTION_FIRST, SDRATTR_CAPTION_LAST,
-
-                // range from SdrTextObj
-                EE_ITEMS_START, EE_ITEMS_END,
-
-                // end
-                0, 0);
+            return o3tl::make_unique<SfxItemSet>(
+                rPool,
+                svl::Items<
+                    // Ranges from SdrAttrObj, SdrCaptionObj:
+                    SDRATTR_START, SDRATTR_MISC_LAST,
+                    SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION,
+                    // Range from SdrTextObj:
+                    EE_ITEMS_START, EE_ITEMS_END>{});
         }
 
         CaptionProperties::CaptionProperties(SdrObject& rObj)
@@ -63,9 +59,9 @@ namespace sdr
         {
         }
 
-        BaseProperties& CaptionProperties::Clone(SdrObject& rObj) const
+        std::unique_ptr<BaseProperties> CaptionProperties::Clone(SdrObject& rObj) const
         {
-            return *(new CaptionProperties(*this, rObj));
+            return std::unique_ptr<BaseProperties>(new CaptionProperties(*this, rObj));
         }
 
         void CaptionProperties::ItemSetChanged(const SfxItemSet& rSet)
@@ -81,12 +77,11 @@ namespace sdr
 
         void CaptionProperties::SetStyleSheet(SfxStyleSheet* pNewStyleSheet, bool bDontRemoveHardAttr)
         {
-            SdrCaptionObj& rObj = static_cast<SdrCaptionObj&>(GetSdrObject());
-
-            // call parent
+            // call parent (always first thing to do, may create the SfxItemSet)
             RectangleProperties::SetStyleSheet(pNewStyleSheet, bDontRemoveHardAttr);
 
             // local changes
+            SdrCaptionObj& rObj = static_cast<SdrCaptionObj&>(GetSdrObject());
             rObj.ImpRecalcTail();
         }
 
@@ -99,7 +94,7 @@ namespace sdr
             GetObjectItemSet();
 
             // this was set by TextProperties::ForceDefaultAttributes(),
-            // retet to default
+            // reset to default
             mpItemSet->ClearItem(XATTR_LINESTYLE);
         }
     } // end of namespace properties

@@ -8,19 +8,26 @@
  */
 #ifndef INCLUDED_FILTER_MSFILTER_MSTOOLBAR_HXX
 #define INCLUDED_FILTER_MSFILTER_MSTOOLBAR_HXX
-#include <filter/msfilter/msfilterdllapi.h>
-#include <ostream>
+
+#include <cstdio>
 #include <memory>
 #include <vector>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/container/XIndexContainer.hpp>
-#include <com/sun/star/ui/XUIConfigurationManagerSupplier.hpp>
-#include <com/sun/star/ui/ImageType.hpp>
-#include <com/sun/star/graphic/XGraphic.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <tools/stream.hxx>
-#include <vcl/bitmap.hxx>
 
+#include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Reference.hxx>
+#include <filter/msfilter/msfilterdllapi.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <tools/stream.hxx>
+#include <vcl/bitmapex.hxx>
+
+namespace com { namespace sun { namespace star {
+    namespace beans { struct PropertyValue; }
+    namespace container { class XIndexAccess; }
+    namespace graphic { class XGraphic; }
+    namespace ui { class XUIConfigurationManager; }
+    namespace ui { class XUIConfigurationManagerSupplier; }
+} } }
 
 class TBCHeader;
 
@@ -62,7 +69,7 @@ public:
     OUString MSOCommandToOOCommand( sal_Int16 msoCmd );
     OUString MSOTCIDToOOCommand( sal_Int16 msoTCID );
     SfxObjectShell& GetDocShell() { return mrDocSh; }
-    bool createMenu( const OUString& rName, const css::uno::Reference< css::container::XIndexAccess >& xMenuDesc, bool bPersist );
+    bool createMenu( const OUString& rName, const css::uno::Reference< css::container::XIndexAccess >& xMenuDesc );
 };
 
 class MSFILTER_DLLPUBLIC TBBase
@@ -78,6 +85,11 @@ public:
     TBBase() : nOffSet( 0 ) {}
     virtual ~TBBase(){}
 
+    TBBase(TBBase const &) = default;
+    TBBase(TBBase &&) = default;
+    TBBase & operator =(TBBase const &) = default;
+    TBBase & operator =(TBBase &&) = default;
+
     virtual bool Read(SvStream &rS) = 0;
 #ifdef DEBUG_FILTER_MSTOOLBAR
     virtual void Print( FILE* ) {} // #FIXME remove this an implement the debug routines in all the classes below to enable some sort of readable output
@@ -88,15 +100,14 @@ public:
 class Indent
 {
 public:
-    Indent( bool binit = false )
+    Indent( bool binit )
     {
         if ( binit )
-            init();
+            TBBase::nIndent = 0;
         else
             TBBase::nIndent = TBBase::nIndent + 2;
     }
     ~Indent() { TBBase::nIndent = TBBase::nIndent - 2; }
-    static void init() { TBBase::nIndent = 0; }
 };
 
 
@@ -106,7 +117,6 @@ class MSFILTER_DLLPUBLIC WString : public TBBase
 
 public:
     WString(){};
-    virtual ~WString(){};
     bool Read(SvStream &rS) override;
     const OUString& getString(){ return sString; }
 };
@@ -125,12 +135,11 @@ class MSFILTER_DLLPUBLIC TBCExtraInfo : public TBBase
     TBCExtraInfo& operator = ( const TBCExtraInfo&) = delete;
 public:
     TBCExtraInfo();
-    virtual ~TBCExtraInfo(){}
     bool Read(SvStream &rS) override;
 #ifdef DEBUG_FILTER_MSTOOLBAR
     virtual void Print( FILE* ) override;
 #endif
-    OUString getOnAction();
+    OUString const & getOnAction();
 };
 
 class MSFILTER_DLLPUBLIC TBCGeneralInfo  : public TBBase
@@ -143,29 +152,25 @@ class MSFILTER_DLLPUBLIC TBCGeneralInfo  : public TBBase
 
 public:
     TBCGeneralInfo();
-    virtual ~TBCGeneralInfo() {}
     bool Read(SvStream &rS) override;
-#if OSL_DEBUG_LEVEL > 1
-    virtual void Print( FILE* ) override;
-#endif
     void ImportToolBarControlData( CustomToolBarImportHelper&, std::vector< css::beans::PropertyValue >& );
-    OUString CustomText() { return customText.getString(); }
+    OUString const & CustomText() { return customText.getString(); }
 };
 
 class MSFILTER_DLLPUBLIC TBCBitMap : public TBBase
 {
 friend class TBCBSpecific; // #FIXME hacky access, need to fix
     sal_Int32 cbDIB;
-    Bitmap mBitMap;
+    BitmapEx mBitMap;
 public:
     TBCBitMap();
-    virtual ~TBCBitMap();
+    virtual ~TBCBitMap() override;
     bool Read(SvStream &rS) override;
 #ifdef DEBUG_FILTER_MSTOOLBAR
     virtual void Print( FILE* ) override;
 #endif
    // #FIXME Const-ness
-    Bitmap& getBitMap() { return mBitMap;}
+    BitmapEx& getBitMap() { return mBitMap;}
 };
 
 class MSFILTER_DLLPUBLIC TBCMenuSpecific : public TBBase
@@ -174,11 +179,7 @@ class MSFILTER_DLLPUBLIC TBCMenuSpecific : public TBBase
     std::shared_ptr< WString > name; //exist only if tbid equals 0x00000001
 public:
     TBCMenuSpecific();
-    virtual ~TBCMenuSpecific(){}
     bool Read(SvStream &rS) override;
-#if OSL_DEBUG_LEVEL > 1
-    virtual void Print( FILE* ) override;
-#endif
     OUString Name();
 };
 
@@ -194,11 +195,8 @@ class MSFILTER_DLLPUBLIC TBCCDData : public TBBase
 
 public:
     TBCCDData();
-    virtual ~TBCCDData();
+    virtual ~TBCCDData() override;
     bool Read(SvStream &rS) override;
-#if OSL_DEBUG_LEVEL > 1
-    virtual void Print( FILE* ) override;
-#endif
 };
 
 class TBCComboDropdownSpecific : public TBBase
@@ -206,11 +204,7 @@ class TBCComboDropdownSpecific : public TBBase
     std::shared_ptr< TBCCDData > data;
 public:
     TBCComboDropdownSpecific( const TBCHeader& header );
-    TBCComboDropdownSpecific(){}
     bool Read(SvStream &rS) override;
-#if OSL_DEBUG_LEVEL > 1
-    virtual void Print( FILE* ) override;
-#endif
 };
 
 class TBCBSpecific :  public TBBase
@@ -223,11 +217,7 @@ class TBCBSpecific :  public TBBase
 
 public:
     TBCBSpecific();
-    virtual ~TBCBSpecific(){}
     bool Read(SvStream &rS) override;
-#if OSL_DEBUG_LEVEL > 1
-    virtual void Print( FILE* ) override;
-#endif
     // #TODO just add a getGraphic member here
     TBCBitMap* getIcon();
     TBCBitMap* getIconMask();
@@ -269,7 +259,13 @@ class MSFILTER_DLLPUBLIC TBCHeader : public TBBase
 
 public:
     TBCHeader();
-    virtual ~TBCHeader();
+    virtual ~TBCHeader() override;
+
+    TBCHeader(TBCHeader const &) = default;
+    TBCHeader(TBCHeader &&) = default;
+    TBCHeader & operator =(TBCHeader const &) = default;
+    TBCHeader & operator =(TBCHeader &&) = default;
+
     sal_uInt8 getTct() const { return tct; }
     sal_uInt16 getTcID() const { return tcid; }
     bool isVisible() { return !( bFlagsTCR & 0x1 ); }
@@ -290,12 +286,11 @@ class MSFILTER_DLLPUBLIC TBCData : public TBBase
     TBCData& operator = ( const TBCData&) = delete;
 public:
     TBCData( const TBCHeader& Header );
-    virtual ~TBCData(){}
     bool Read(SvStream &rS) override;
 #ifdef DEBUG_FILTER_MSTOOLBAR
     virtual void Print( FILE* ) override;
 #endif
-    bool ImportToolBarControl( CustomToolBarImportHelper&, std::vector< css::beans::PropertyValue >&, bool& bBeginGroup, bool bIsMenuBar );
+    void ImportToolBarControl( CustomToolBarImportHelper&, std::vector< css::beans::PropertyValue >&, bool& bBeginGroup, bool bIsMenuBar );
     TBCGeneralInfo& getGeneralInfo() { return controlGeneralInfo; }
     TBCMenuSpecific* getMenuSpecific();
 };
@@ -312,7 +307,6 @@ class MSFILTER_DLLPUBLIC TB : public TBBase
     WString name; //Structure of type WString that specifies the toolbar name
 public:
     TB();
-    virtual ~TB(){}
     bool Read(SvStream &rS) override;
 #ifdef DEBUG_FILTER_MSTOOLBAR
     virtual void Print( FILE* ) override;
@@ -350,7 +344,6 @@ class MSFILTER_DLLPUBLIC TBVisualData : public TBBase
 
 public:
     TBVisualData();
-    virtual ~TBVisualData(){}
     bool Read(SvStream &rS) override;
 #ifdef DEBUG_FILTER_MSTOOLBAR
     virtual void Print( FILE* ) override;

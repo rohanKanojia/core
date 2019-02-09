@@ -38,15 +38,13 @@
 #include <com/sun/star/sdbcx/XKeysSupplier.hpp>
 #include <com/sun/star/task/XInteractionHandler.hpp>
 #include <vcl/lstbox.hxx>
-#include <functional>
 #include <map>
 #include <algorithm>
 
 namespace dbaui
 {
 
-    typedef ::std::unary_function< OUString,bool> TColumnFindFunctorType;
-    class TColumnFindFunctor : public TColumnFindFunctorType
+    class TColumnFindFunctor
     {
     public:
         virtual bool operator()(const OUString& _sColumnName) const = 0;
@@ -75,9 +73,9 @@ namespace dbaui
     class TMultiListBoxEntryFindFunctor : public TColumnFindFunctor
     {
         ::comphelper::UStringMixEqual m_aCase;
-        ::std::vector< OUString>* m_pVector;
+        std::vector< OUString>* m_pVector;
     public:
-        TMultiListBoxEntryFindFunctor(::std::vector< OUString>* _pVector,
+        TMultiListBoxEntryFindFunctor(std::vector< OUString>* _pVector,
                                     const ::comphelper::UStringMixEqual& _aCase)
             :m_aCase(_aCase)
             ,m_pVector(_pVector)
@@ -88,8 +86,9 @@ namespace dbaui
 
         bool operator()(const OUString& _sColumnName) const override
         {
-            return ::std::any_of(m_pVector->begin(),m_pVector->end(),
-                ::std::bind2nd(m_aCase, _sColumnName));
+            return std::any_of(m_pVector->begin(),m_pVector->end(),
+                [this, &_sColumnName](const OUString& lhs)
+                { return m_aCase(lhs, _sColumnName); });
         }
     };
 
@@ -183,7 +182,7 @@ namespace dbaui
         OUString                                                           m_sTableCatalog;
         OUString                                                           m_sTableSchema;
         OUString                                                           m_sTableBareName;
-        ::std::vector< OFieldDescription >                                 m_aColumnInfo;
+        std::vector< OFieldDescription >                                 m_aColumnInfo;
         ::utl::SharedUNOComponent< css::sdbc::XPreparedStatement >         m_xStatement;
 
     public:
@@ -208,7 +207,7 @@ namespace dbaui
 
     private:
         void    impl_ensureColumnInfo_throw();
-        ::utl::SharedUNOComponent< css::sdbc::XPreparedStatement >
+        ::utl::SharedUNOComponent< css::sdbc::XPreparedStatement > const &
                 impl_ensureStatement_throw();
     };
 
@@ -246,13 +245,13 @@ namespace dbaui
         VclPtr<PushButton>             m_pbFinish;
 
         OTypeInfoMap                            m_aTypeInfo;
-        ::std::vector<OTypeInfoMap::iterator>   m_aTypeInfoIndex;
+        std::vector<OTypeInfoMap::iterator>   m_aTypeInfoIndex;
         OTypeInfoMap                            m_aDestTypeInfo;
-        ::std::vector<OTypeInfoMap::iterator>   m_aDestTypeInfoIndex;
+        std::vector<OTypeInfoMap::iterator>   m_aDestTypeInfoIndex;
         TNameMapping                            m_mNameMapping;
 
-        ODatabaseExport::TPositions             m_vColumnPos;
-        ::std::vector<sal_Int32>                m_vColumnTypes;
+        ODatabaseExport::TPositions             m_vColumnPositions;
+        std::vector<sal_Int32>                m_vColumnTypes;
 
         css::uno::Reference< css::sdbc::XConnection >         m_xDestConnection;
 
@@ -279,22 +278,20 @@ namespace dbaui
         bool                     m_bUseHeaderLine;
 
     private:
-        DECL_LINK_TYPED( ImplPrevHdl, Button*, void );
-        DECL_LINK_TYPED( ImplNextHdl, Button*, void);
-        DECL_LINK_TYPED( ImplOKHdl, Button*, void );
-        DECL_LINK_TYPED( ImplActivateHdl, WizardDialog*, void );
+        DECL_LINK( ImplPrevHdl, Button*, void );
+        DECL_LINK( ImplNextHdl, Button*, void);
+        DECL_LINK( ImplOKHdl, Button*, void );
+        DECL_LINK( ImplActivateHdl, WizardDialog*, void );
         bool CheckColumns(sal_Int32& _rnBreakPos);
         void loadData( const ICopyTableSourceObject& _rSourceObject,
                        ODatabaseExport::TColumns& _rColumns,
                        ODatabaseExport::TColumnVector& _rColVector );
         void construct();
         // need for table creation
-        static void appendColumns( css::uno::Reference< css::sdbcx::XColumnsSupplier>& _rxColSup, const ODatabaseExport::TColumnVector* _pVec, bool _bKeyColumns = false );
-        static void appendKey(css::uno::Reference< css::sdbcx::XKeysSupplier>& _rxSup,const ODatabaseExport::TColumnVector* _pVec);
+        static void appendColumns( css::uno::Reference< css::sdbcx::XColumnsSupplier> const & _rxColSup, const ODatabaseExport::TColumnVector* _pVec, bool _bKeyColumns = false );
+        static void appendKey(css::uno::Reference< css::sdbcx::XKeysSupplier> const & _rxSup,const ODatabaseExport::TColumnVector* _pVec);
         // checks if the type is supported in the destination database
         bool supportsType(sal_Int32 _nDataType,sal_Int32& _rNewDataType);
-
-        void    impl_loadSourceData();
 
     public:
         // used for copy tables or queries
@@ -323,7 +320,7 @@ namespace dbaui
             const css::uno::Reference< css::uno::XComponentContext >& _rxContext
         );
 
-        virtual ~OCopyTableWizard();
+        virtual ~OCopyTableWizard() override;
         virtual void        dispose() override;
 
         virtual bool        DeactivatePage() override;
@@ -334,9 +331,9 @@ namespace dbaui
         void                CheckButtons(); // checks which button can be disabled, enabled
 
         // returns a vector where the position of a column and if the column is in the selection
-        // when not the value is COLUMN_POSITION_NOT_FOUND == (sal_uInt32)-1
-        const ODatabaseExport::TPositions& GetColumnPositions()    const { return m_vColumnPos; }
-        const ::std::vector<sal_Int32>&    GetColumnTypes()        const { return m_vColumnTypes; }
+        // when not the value is COLUMN_POSITION_NOT_FOUND.
+        const ODatabaseExport::TPositions& GetColumnPositions()    const { return m_vColumnPositions; }
+        const std::vector<sal_Int32>&    GetColumnTypes()        const { return m_vColumnTypes; }
         bool                        UseHeaderLine()         const { return m_bUseHeaderLine; }
         void                        setUseHeaderLine(bool _bUseHeaderLine) { m_bUseHeaderLine = _bUseHeaderLine; }
 
@@ -371,7 +368,7 @@ namespace dbaui
 
         const OTypeInfoMap& getTypeInfo()                       const { return m_aTypeInfo; }
 
-        TOTypeInfoSP        getDestTypeInfo(sal_Int32 _nPos)    const { return m_aDestTypeInfoIndex[_nPos]->second; }
+        TOTypeInfoSP const & getDestTypeInfo(sal_Int32 _nPos)    const { return m_aDestTypeInfoIndex[_nPos]->second; }
         const OTypeInfoMap& getDestTypeInfo()                   const { return m_aDestTypeInfo; }
 
         const css::lang::Locale&  GetLocale() const { return m_aLocale; }

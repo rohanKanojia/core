@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <sal/log.hxx>
 #include <sal/types.h>
@@ -120,7 +120,7 @@ oslModule SAL_CALL osl_loadModule(rtl_uString *ustrModuleName, sal_Int32 nRtldMo
     SAL_WARN_IF(ustrModuleName == nullptr, "sal.osl", "string is not valid");
 
     /* ensure ustrTmp hold valid string */
-    if (osl_File_E_None != osl_getSystemPathFromFileURL(ustrModuleName, &ustrTmp))
+    if (osl_getSystemPathFromFileURL(ustrModuleName, &ustrTmp) != osl_File_E_None)
         rtl_uString_assign(&ustrTmp, ustrModuleName);
 
     if (ustrTmp)
@@ -172,28 +172,27 @@ oslModule osl_loadModuleRelativeAscii(
     assert(relativePath && "illegal argument");
     if (relativePath[0] == '/') {
         return osl_loadModuleAscii(relativePath, mode);
-    } else {
-        rtl_String * path = nullptr;
-        rtl_String * suffix = nullptr;
-        oslModule module;
-        if (!getModulePathFromAddress(
-                reinterpret_cast< void * >(baseModule), &path))
-        {
-            return nullptr;
-        }
-        rtl_string_newFromStr_WithLength(
-            &path, path->buffer,
-            (rtl_str_lastIndexOfChar_WithLength(path->buffer, path->length, '/')
-             + 1));
-            /* cut off everything after the last slash; should the original path
-               contain no slash, the resulting path is the empty string */
-        rtl_string_newFromStr(&suffix, relativePath);
-        rtl_string_newConcat(&path, path, suffix);
-        rtl_string_release(suffix);
-        module = osl_loadModuleAscii(path->buffer, mode);
-        rtl_string_release(path);
-        return module;
     }
+    rtl_String * path = nullptr;
+    rtl_String * suffix = nullptr;
+    oslModule module;
+    if (!getModulePathFromAddress(
+            reinterpret_cast< void * >(baseModule), &path))
+    {
+        return nullptr;
+    }
+    rtl_string_newFromStr_WithLength(
+        &path, path->buffer,
+        (rtl_str_lastIndexOfChar_WithLength(path->buffer, path->length, '/')
+         + 1));
+        /* cut off everything after the last slash; should the original path
+           contain no slash, the resulting path is the empty string */
+    rtl_string_newFromStr(&suffix, relativePath);
+    rtl_string_newConcat(&path, path, suffix);
+    rtl_string_release(suffix);
+    module = osl_loadModuleAscii(path->buffer, mode);
+    rtl_string_release(path);
+    return module;
 }
 
 #endif // !DISABLE_DYNLOADING
@@ -210,7 +209,7 @@ osl_getModuleHandle(rtl_uString *, oslModule *pResult)
 #else
     *pResult = nullptr;
 #endif
-    return sal_True;
+    return true;
 }
 
 #ifndef DISABLE_DYNLOADING
@@ -310,8 +309,6 @@ sal_Bool SAL_CALL osl_getModuleURLFromAddress(void * addr, rtl_uString ** ppLibr
         osl_getProcessWorkingDir(&workDir);
         if (workDir)
         {
-            SAL_INFO(
-                "sal.osl", "osl_getModuleURLFromAddress: " << path->buffer);
             rtl_string2UString(ppLibraryUrl,
                                path->buffer,
                                path->length,
@@ -322,6 +319,7 @@ sal_Bool SAL_CALL osl_getModuleURLFromAddress(void * addr, rtl_uString ** ppLibr
                 *ppLibraryUrl == nullptr, "sal.osl", "rtl_string2UString failed");
             osl_getFileURLFromSystemPath(*ppLibraryUrl, ppLibraryUrl);
             osl_getAbsoluteFileURL(workDir, *ppLibraryUrl, ppLibraryUrl);
+            SAL_INFO("sal.osl", "osl_getModuleURLFromAddress(" << addr << ") => " << OUString(*ppLibraryUrl));
 
             rtl_uString_release(workDir);
             result = true;

@@ -19,9 +19,11 @@
 
 
 #include <osl/file.hxx>
+#include <tools/debug.hxx>
 #include <tools/urlobj.hxx>
 #include <tools/fract.hxx>
 #include <tools/poly.hxx>
+#include <unotools/resmgr.hxx>
 #include <vcl/mapmod.hxx>
 #include <vcl/virdev.hxx>
 #include <vcl/metaact.hxx>
@@ -50,7 +52,7 @@
 
 #include "pdfexport.hxx"
 #include "impdialog.hxx"
-#include "pdf.hrc"
+#include <strings.hrc>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
@@ -60,17 +62,19 @@
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/frame/ModuleManager.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/document/XDocumentProperties.hpp>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/view/XViewSettingsSupplier.hpp>
 #include <com/sun/star/task/XInteractionRequest.hpp>
 #include <com/sun/star/task/PDFExportException.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/io/XSeekable.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/graphic/XGraphicProvider.hpp>
+#include <com/sun/star/security/XCertificate.hpp>
+#include <com/sun/star/beans/XMaterialHolder.hpp>
 
 #include <memory>
 
@@ -93,7 +97,8 @@ PDFExport::PDFExport( const Reference< XComponent >& rxSrcDoc,
     mbUseTaggedPDF              ( false ),
     mnPDFTypeSelection          ( 0 ),
     mbExportNotes               ( true ),
-    mbViewPDF                   ( true ),
+    mbExportPlaceholders        ( false ),
+    mbUseReferenceXObject       ( false ),
     mbExportNotesPages          ( false ),
     mbExportOnlyNotesPages      ( false ),
     mbUseTransitionEffects      ( true ),
@@ -112,6 +117,8 @@ PDFExport::PDFExport( const Reference< XComponent >& rxSrcDoc,
     mnProgressValue             ( 0 ),
     mbRemoveTransparencies      ( false ),
 
+    mbIsRedactMode              ( false ),
+
     mbHideViewerToolbar         ( false ),
     mbHideViewerMenubar         ( false ),
     mbHideViewerWindowControls  ( false ),
@@ -124,7 +131,6 @@ PDFExport::PDFExport( const Reference< XComponent >& rxSrcDoc,
     mnZoom                      ( 100 ),
     mnInitialPage               ( 1 ),
     mnPDFPageLayout             ( 0 ),
-    mbFirstPageLeft             ( false ),
 
     mbEncrypt                   ( false ),
     mbRestrictPermissions       ( false ),
@@ -149,7 +155,7 @@ PDFExport::~PDFExport()
 
 
 bool PDFExport::ExportSelection( vcl::PDFWriter& rPDFWriter,
-    Reference< css::view::XRenderable >& rRenderable,
+    Reference< css::view::XRenderable > const & rRenderable,
     const Any& rSelection,
     const StringRangeEnumerator& rRangeEnum,
     Sequence< PropertyValue >& rRenderOptions,
@@ -199,7 +205,7 @@ bool PDFExport::ExportSelection( vcl::PDFWriter& rPDFWriter,
                     rPDFExtOutDevData.SetCurrentPageNumber( nCurrentPage );
 
                     GDIMetaFile                 aMtf;
-                    const MapMode               aMapMode( MAP_100TH_MM );
+                    const MapMode               aMapMode( MapUnit::Map100thMM );
                     const Size                  aMtfSize( aPageSize.Width, aPageSize.Height );
 
                     pOut->Push();
@@ -215,7 +221,7 @@ bool PDFExport::ExportSelection( vcl::PDFWriter& rPDFWriter,
                     const sal_Int32 nCurrentRenderer = *aIter;
                     ++aIter;
                     if ( pLastPage && aIter == aEnd )
-                        *pLastPage <<= sal_True;
+                        *pLastPage <<= true;
 
                     rRenderable->render( nCurrentRenderer, rSelection, rRenderOptions );
 
@@ -224,14 +230,35 @@ bool PDFExport::ExportSelection( vcl::PDFWriter& rPDFWriter,
 
                     if( aMtf.GetActionSize() &&
                              ( !mbSkipEmptyPages || aPageSize.Width || aPageSize.Height ) )
-                        bRet = ImplExportPage(rPDFWriter, rPDFExtOutDevData, aMtf) || bRet;
+                    {
+                        // We convert the whole metafile into a bitmap to get rid of the
+                        // text covered by redaction shapes
+                        if (mbIsRedactMode)
+                        {
+                            try
+                            {
+                                Graphic aGraph(aMtf);
+                                BitmapEx bmp = aGraph.GetBitmapEx();
+                                Graphic bgraph(bmp);
+                                aMtf = bgraph.GetGDIMetaFile();
+                            }
+                            catch(const Exception& e)
+                            {
+                                SAL_WARN("filter.pdf", "Something went wrong while converting metafile to bitmap. Exception: "
+                                         << e.Message);
+                            }
+                        }
+
+                        ImplExportPage(rPDFWriter, rPDFExtOutDevData, aMtf);
+                        bRet = true;
+                    }
 
                     pOut->Pop();
 
                     if ( mxStatusIndicator.is() )
                         mxStatusIndicator->setValue( mnProgressValue );
                     if ( pFirstPage )
-                        *pFirstPage <<= sal_False;
+                        *pFirstPage <<= false;
 
                     ++mnProgressValue;
                     ++nCurrentPage;
@@ -241,7 +268,7 @@ bool PDFExport::ExportSelection( vcl::PDFWriter& rPDFWriter,
             {
                 bRet = true;                            // #i18334# nPageCount == 0,
                 rPDFWriter.NewPage( 10000, 10000 );     // creating dummy page
-                rPDFWriter.SetMapMode( MAP_100TH_MM );
+                rPDFWriter.SetMapMode(MapMode(MapUnit::Map100thMM));
             }
         }
     }
@@ -264,16 +291,9 @@ public:
     : m_xSrcDoc( xDoc ),
       m_aPreparedPassword( rPwd )
     {}
-    virtual ~PDFExportStreamDoc();
 
     virtual void write( const Reference< XOutputStream >& xStream ) override;
 };
-
-
-PDFExportStreamDoc::~PDFExportStreamDoc()
-{
-}
-
 
 void PDFExportStreamDoc::write( const Reference< XOutputStream >& xStream )
 {
@@ -395,7 +415,7 @@ bool PDFExport::Export( const OUString& rFile, const Sequence< PropertyValue >& 
 
         if( xRenderable.is() )
         {
-            VCLXDevice*                 pXDevice = new VCLXDevice;
+            rtl::Reference<VCLXDevice>  xDevice(new VCLXDevice);
             OUString                    aPageRange;
             Any                         aSelection;
             vcl::PDFWriter::PDFWriterContext aContext;
@@ -445,7 +465,7 @@ bool PDFExport::Export( const OUString& rFile, const Sequence< PropertyValue >& 
                 if ( rFilterData[ nData ].Name == "PageRange" )
                     rFilterData[ nData ].Value >>= aPageRange;
                 else if ( rFilterData[ nData ].Name == "Selection" )
-                    rFilterData[ nData ].Value >>= aSelection;
+                    aSelection = rFilterData[ nData ].Value;
                 else if ( rFilterData[ nData ].Name == "UseLosslessCompression" )
                     rFilterData[ nData ].Value >>= mbUseLosslessCompression;
                 else if ( rFilterData[ nData ].Name == "Quality" )
@@ -462,8 +482,6 @@ bool PDFExport::Export( const OUString& rFile, const Sequence< PropertyValue >& 
                     rFilterData[ nData ].Value >>= mnPDFTypeSelection;
                 else if ( rFilterData[ nData ].Name == "ExportNotes" )
                     rFilterData[ nData ].Value >>= mbExportNotes;
-                else if ( rFilterData[ nData ].Name == "ViewPDFAfterExport" )
-                    rFilterData[ nData ].Value >>= mbViewPDF;
                 else if ( rFilterData[ nData ].Name == "ExportNotesPages" )
                     rFilterData[ nData ].Value >>= mbExportNotesPages;
                 else if ( rFilterData[ nData ].Name == "ExportOnlyNotesPages" )
@@ -535,7 +553,7 @@ bool PDFExport::Export( const OUString& rFile, const Sequence< PropertyValue >& 
                     rFilterData[ nData ].Value >>= mnDefaultLinkAction;
                 else if ( rFilterData[ nData ].Name == "ConvertOOoTargetToPDFTarget" )
                     rFilterData[ nData ].Value >>= mbConvertOOoTargetToPDFTarget;
-                 else if ( rFilterData[ nData ].Name == "ExportBookmarksToPDFDestination" )
+                else if ( rFilterData[ nData ].Name == "ExportBookmarksToPDFDestination" )
                     rFilterData[ nData ].Value >>= mbExportBmkToDest;
                 else if ( rFilterData[ nData ].Name == "ExportBookmarks" )
                     rFilterData[ nData ].Value >>= mbExportBookmarks;
@@ -557,24 +575,34 @@ bool PDFExport::Export( const OUString& rFile, const Sequence< PropertyValue >& 
                     rFilterData[ nData ].Value >>= maSignCertificate;
                 else if ( rFilterData[ nData ].Name == "SignatureTSA" )
                     rFilterData[ nData ].Value >>= msSignTSA;
+                else if ( rFilterData[ nData ].Name == "ExportPlaceholders" )
+                    rFilterData[ nData ].Value >>= mbExportPlaceholders;
+                else if ( rFilterData[ nData ].Name == "UseReferenceXObject" )
+                    rFilterData[ nData ].Value >>= mbUseReferenceXObject;
+                // Redaction & bitmap related stuff
+                else if ( rFilterData[ nData ].Name == "IsRedactMode" )
+                    rFilterData[ nData ].Value >>= mbIsRedactMode;
             }
 
-            aContext.URL        = aURL.GetMainURL(INetURLObject::DECODE_TO_IURI);
+            aContext.URL        = aURL.GetMainURL(INetURLObject::DecodeMechanism::ToIUri);
 
             // set the correct version, depending on user request
             switch( mnPDFTypeSelection )
             {
             default:
             case 0:
-                aContext.Version    = vcl::PDFWriter::PDF_1_4;
+                aContext.Version    = vcl::PDFWriter::PDFVersion::PDF_1_5;
                 break;
             case 1:
-                aContext.Version    = vcl::PDFWriter::PDF_A_1;
+                aContext.Version    = vcl::PDFWriter::PDFVersion::PDF_A_1;
                 mbUseTaggedPDF = true;          // force the tagged PDF as well
                 mbExportFormFields = false;     // force disabling of form conversion
                 mbRemoveTransparencies = true;  // PDF/A does not allow transparencies
                 mbEncrypt = false;              // no encryption
                 xEnc.clear();
+                break;
+            case 16:
+                aContext.Version = vcl::PDFWriter::PDFVersion::PDF_1_6;
                 break;
             }
 
@@ -643,18 +671,11 @@ bool PDFExport::Export( const OUString& rFile, const Sequence< PropertyValue >& 
                     break;
             }
 
-            aContext.FirstPageLeft = mbFirstPageLeft;
+            aContext.FirstPageLeft = false;
 
             // check if PDF/A, which does not allow encryption
-            if( aContext.Version != vcl::PDFWriter::PDF_A_1 )
+            if( aContext.Version != vcl::PDFWriter::PDFVersion::PDF_A_1 )
             {
-                // set values needed in encryption
-                // set encryption level, fixed, but here it can set by the UI if needed.
-                // true is 128 bit, false 40
-                // note that in 40 bit mode the UI needs reworking, since the current UI is meaningfull only for
-                // 128bit security mode
-                aContext.Encryption.Security128bit = true;
-
                 // set check for permission change password
                 // if not enabled and no permission password, force permissions to default as if PDF where without encryption
                 if( mbRestrictPermissions && (xEnc.is() || !aPermissionPassword.isEmpty()) )
@@ -677,6 +698,7 @@ bool PDFExport::Export( const OUString& rFile, const Sequence< PropertyValue >& 
                 default:
                 case 2:
                     aContext.Encryption.CanPrintFull            = true;
+                    [[fallthrough]];
                 case 1:
                     aContext.Encryption.CanPrintTheDocument     = true;
                     break;
@@ -707,13 +729,13 @@ bool PDFExport::Export( const OUString& rFile, const Sequence< PropertyValue >& 
                 aContext.Encryption.CanCopyOrExtract                = mbCanCopyOrExtract;
                 aContext.Encryption.CanExtractForAccessibility  = mbCanExtractForAccessibility;
                 if( mbEncrypt && ! xEnc.is() )
-                    xEnc = vcl::PDFWriter::InitEncryption( aPermissionPassword, aOpenPassword, aContext.Encryption.Security128bit );
+                    xEnc = vcl::PDFWriter::InitEncryption( aPermissionPassword, aOpenPassword );
                 if( mbEncrypt && !aPermissionPassword.isEmpty() && ! aPreparedPermissionPassword.getLength() )
                     aPreparedPermissionPassword = comphelper::OStorageHelper::CreatePackageEncryptionData( aPermissionPassword );
             }
             // after this point we don't need the legacy clear passwords anymore
             // however they are still inside the passed filter data sequence
-            // which is sadly out out our control
+            // which is sadly out of our control
             aPermissionPassword.clear();
             aOpenPassword.clear();
 
@@ -769,7 +791,7 @@ bool PDFExport::Export( const OUString& rFile, const Sequence< PropertyValue >& 
 
                 // check for Link Launch action, not allowed on PDF/A-1
                 // this code chunk checks when the filter is called from scripting
-                if( aContext.Version == vcl::PDFWriter::PDF_A_1 &&
+                if( aContext.Version == vcl::PDFWriter::PDFVersion::PDF_A_1 &&
                     aContext.DefaultLinkAction == vcl::PDFWriter::LaunchAction )
                 {
                     // force the similar allowed URI action
@@ -786,13 +808,14 @@ bool PDFExport::Export( const OUString& rFile, const Sequence< PropertyValue >& 
             aContext.SignPassword = msSignPassword;
             aContext.SignCertificate = maSignCertificate;
             aContext.SignTSA = msSignTSA;
+            aContext.UseReferenceXObject = mbUseReferenceXObject;
 
             // all context data set, time to create the printing device
             std::unique_ptr<vcl::PDFWriter> pPDFWriter(new vcl::PDFWriter( aContext, xEnc ));
             OutputDevice*       pOut = pPDFWriter->GetReferenceDevice();
 
             DBG_ASSERT( pOut, "PDFExport::Export: no reference device" );
-            pXDevice->SetOutputDevice( pOut );
+            xDevice->SetOutputDevice(pOut);
 
             if( mbAddStream )
             {
@@ -812,30 +835,30 @@ bool PDFExport::Export( const OUString& rFile, const Sequence< PropertyValue >& 
                 pPDFExtOutDevData->SetIsExportNotes( mbExportNotes );
                 pPDFExtOutDevData->SetIsExportTaggedPDF( mbUseTaggedPDF );
                 pPDFExtOutDevData->SetIsExportTransitionEffects( mbUseTransitionEffects );
-                pPDFExtOutDevData->SetFormsFormat( mnFormsFormat );
                 pPDFExtOutDevData->SetIsExportFormFields( mbExportFormFields );
                 pPDFExtOutDevData->SetIsExportBookmarks( mbExportBookmarks );
                 pPDFExtOutDevData->SetIsExportHiddenSlides( mbExportHiddenSlides );
                 pPDFExtOutDevData->SetIsLosslessCompression( mbUseLosslessCompression );
                 pPDFExtOutDevData->SetCompressionQuality( mnQuality );
-                pPDFExtOutDevData->SetMaxImageResolution( mnMaxImageResolution );
                 pPDFExtOutDevData->SetIsReduceImageResolution( mbReduceImageResolution );
                 pPDFExtOutDevData->SetIsExportNamedDestinations( mbExportBmkToDest );
 
-                Sequence< PropertyValue > aRenderOptions( 6 );
+                Sequence< PropertyValue > aRenderOptions( 7 );
                 aRenderOptions[ 0 ].Name = "RenderDevice";
-                aRenderOptions[ 0 ].Value <<= Reference< awt::XDevice >( pXDevice );
+                aRenderOptions[ 0 ].Value <<= uno::Reference<awt::XDevice>(xDevice.get());
                 aRenderOptions[ 1 ].Name = "ExportNotesPages";
-                aRenderOptions[ 1 ].Value <<= sal_False;
+                aRenderOptions[ 1 ].Value <<= false;
                 Any& rExportNotesValue = aRenderOptions[ 1 ].Value;
                 aRenderOptions[ 2 ].Name = "IsFirstPage";
-                aRenderOptions[ 2 ].Value <<= sal_True;
+                aRenderOptions[ 2 ].Value <<= true;
                 aRenderOptions[ 3 ].Name = "IsLastPage";
-                aRenderOptions[ 3 ].Value <<= sal_False;
+                aRenderOptions[ 3 ].Value <<= false;
                 aRenderOptions[ 4 ].Name = "IsSkipEmptyPages";
                 aRenderOptions[ 4 ].Value <<= mbSkipEmptyPages;
                 aRenderOptions[ 5 ].Name = "PageRange";
                 aRenderOptions[ 5 ].Value <<= aPageRange;
+                aRenderOptions[ 6 ].Name = "ExportPlaceholders";
+                aRenderOptions[ 6 ].Value <<= mbExportPlaceholders;
 
                 if( !aPageRange.isEmpty() || !aSelection.hasValue() )
                 {
@@ -893,14 +916,11 @@ bool PDFExport::Export( const OUString& rFile, const Sequence< PropertyValue >& 
 
                 if ( mxStatusIndicator.is() )
                 {
-                    std::unique_ptr<ResMgr> pResMgr(ResMgr::CreateResMgr( "pdffilter", Application::GetSettings().GetUILanguageTag() ));
-                    if ( pResMgr )
-                    {
-                        sal_Int32 nTotalPageCount = aRangeEnum.size();
-                        if ( bExportPages && bExportNotesPages )
-                            nTotalPageCount *= 2;
-                        mxStatusIndicator->start( ResId( PDF_PROGRESS_BAR, *pResMgr ), nTotalPageCount );
-                    }
+                    std::locale loc(Translate::Create("flt"));
+                    sal_Int32 nTotalPageCount = aRangeEnum.size();
+                    if ( bExportPages && bExportNotesPages )
+                        nTotalPageCount *= 2;
+                    mxStatusIndicator->start(Translate::get(PDF_PROGRESS_BAR, loc), nTotalPageCount);
                 }
 
                 bRet = nPageCount > 0;
@@ -910,7 +930,7 @@ bool PDFExport::Export( const OUString& rFile, const Sequence< PropertyValue >& 
 
                 if ( bRet && bExportNotesPages )
                 {
-                    rExportNotesValue <<= sal_True;
+                    rExportNotesValue <<= true;
                     bRet = ExportSelection( *pPDFWriter, xRenderable, aSelection, aRangeEnum, aRenderOptions, nPageCount );
                 }
                 if ( mxStatusIndicator.is() )
@@ -972,8 +992,8 @@ public:
     explicit PDFErrorRequest( const task::PDFExportException& i_rExc );
 
     // XInteractionRequest
-    virtual uno::Any SAL_CALL getRequest() throw (uno::RuntimeException, std::exception) override;
-    virtual uno::Sequence< uno::Reference< task::XInteractionContinuation > > SAL_CALL getContinuations() throw (uno::RuntimeException, std::exception) override;
+    virtual uno::Any SAL_CALL getRequest() override;
+    virtual uno::Sequence< uno::Reference< task::XInteractionContinuation > > SAL_CALL getContinuations() override;
 };
 
 
@@ -984,7 +1004,7 @@ PDFErrorRequest::PDFErrorRequest( const task::PDFExportException& i_rExc ) :
 }
 
 
-uno::Any SAL_CALL PDFErrorRequest::getRequest() throw (uno::RuntimeException, std::exception)
+uno::Any SAL_CALL PDFErrorRequest::getRequest()
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -994,7 +1014,7 @@ uno::Any SAL_CALL PDFErrorRequest::getRequest() throw (uno::RuntimeException, st
 }
 
 
-uno::Sequence< uno::Reference< task::XInteractionContinuation > > SAL_CALL PDFErrorRequest::getContinuations() throw (uno::RuntimeException, std::exception)
+uno::Sequence< uno::Reference< task::XInteractionContinuation > > SAL_CALL PDFErrorRequest::getContinuations()
 {
     return uno::Sequence< uno::Reference< task::XInteractionContinuation > >();
 }
@@ -1014,14 +1034,15 @@ void PDFExport::showErrors( const std::set< vcl::PDFWriter::ErrorCode >& rErrors
 }
 
 
-bool PDFExport::ImplExportPage( vcl::PDFWriter& rWriter, vcl::PDFExtOutDevData& rPDFExtOutDevData, const GDIMetaFile& rMtf )
+void PDFExport::ImplExportPage( vcl::PDFWriter& rWriter, vcl::PDFExtOutDevData& rPDFExtOutDevData, const GDIMetaFile& rMtf )
 {
-    const Size      aSizePDF( OutputDevice::LogicToLogic( rMtf.GetPrefSize(), rMtf.GetPrefMapMode(), MAP_POINT ) );
-    Point           aOrigin;
-    Rectangle       aPageRect( aOrigin, rMtf.GetPrefSize() );
-    bool        bRet = true;
+    //Rectangle(Point, Size) creates a rectangle off by 1, use Rectangle(long, long, long, long) instead
+    basegfx::B2DPolygon aSize(tools::Polygon(tools::Rectangle(0, 0, rMtf.GetPrefSize().Width(), rMtf.GetPrefSize().Height())).getB2DPolygon());
+    basegfx::B2DPolygon aSizePDF(OutputDevice::LogicToLogic(aSize, rMtf.GetPrefMapMode(), MapMode(MapUnit::MapPoint)));
+    basegfx::B2DRange aRangePDF(aSizePDF.getB2DRange());
+    tools::Rectangle       aPageRect( Point(), rMtf.GetPrefSize() );
 
-    rWriter.NewPage( aSizePDF.Width(), aSizePDF.Height() );
+    rWriter.NewPage( aRangePDF.getWidth(), aRangePDF.getHeight() );
     rWriter.SetMapMode( rMtf.GetPrefMapMode() );
 
     vcl::PDFWriter::PlayMetafileContext aCtx;
@@ -1042,16 +1063,14 @@ bool PDFExport::ImplExportPage( vcl::PDFWriter& rWriter, vcl::PDFExtOutDevData& 
 
 
     basegfx::B2DRectangle aB2DRect( aPageRect.Left(), aPageRect.Top(), aPageRect.Right(), aPageRect.Bottom() );
-    rWriter.SetClipRegion( basegfx::B2DPolyPolygon( basegfx::tools::createPolygonFromRect( aB2DRect ) ) );
+    rWriter.SetClipRegion( basegfx::B2DPolyPolygon( basegfx::utils::createPolygonFromRect( aB2DRect ) ) );
 
     rWriter.PlayMetafile( aMtf, aCtx, &rPDFExtOutDevData );
 
     rPDFExtOutDevData.ResetSyncData();
 
     if (!msWatermark.isEmpty())
-        ImplWriteWatermark( rWriter, aSizePDF );
-
-    return bRet;
+        ImplWriteWatermark( rWriter, Size(aRangePDF.getWidth(), aRangePDF.getHeight()) );
 }
 
 
@@ -1073,7 +1092,7 @@ void PDFExport::ImplWriteWatermark( vcl::PDFWriter& rWriter, const Size& rPageSi
     OutputDevice* pDev = rWriter.GetReferenceDevice();
     pDev->Push();
     pDev->SetFont( aFont );
-    pDev->SetMapMode( MapMode( MAP_POINT ) );
+    pDev->SetMapMode( MapMode( MapUnit::MapPoint ) );
     int w = 0;
     while( ( w = pDev->GetTextWidth( msWatermark ) ) > nTextWidth )
     {
@@ -1096,16 +1115,16 @@ void PDFExport::ImplWriteWatermark( vcl::PDFWriter& rWriter, const Size& rPageSi
     pDev->Pop();
 
     rWriter.Push();
-    rWriter.SetMapMode( MapMode( MAP_POINT ) );
+    rWriter.SetMapMode( MapMode( MapUnit::MapPoint ) );
     rWriter.SetFont( aFont );
     rWriter.SetTextColor( COL_LIGHTGREEN );
     Point aTextPoint;
-    Rectangle aTextRect;
+    tools::Rectangle aTextRect;
     if( rPageSize.Width() > rPageSize.Height() )
     {
         aTextPoint = Point( (rPageSize.Width()-w)/2,
                             rPageSize.Height()-(rPageSize.Height()-nTextHeight)/2 );
-        aTextRect = Rectangle( Point( (rPageSize.Width()-w)/2,
+        aTextRect = tools::Rectangle( Point( (rPageSize.Width()-w)/2,
                                       (rPageSize.Height()-nTextHeight)/2 ),
                                Size( w, nTextHeight ) );
     }
@@ -1113,7 +1132,7 @@ void PDFExport::ImplWriteWatermark( vcl::PDFWriter& rWriter, const Size& rPageSi
     {
         aTextPoint = Point( (rPageSize.Width()-nTextHeight)/2,
                             (rPageSize.Height()-w)/2 );
-        aTextRect = Rectangle( aTextPoint, Size( nTextHeight, w ) );
+        aTextRect = tools::Rectangle( aTextPoint, Size( nTextHeight, w ) );
     }
     rWriter.SetClipRegion();
     rWriter.BeginTransparencyGroup();

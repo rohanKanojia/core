@@ -17,14 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <osl/diagnose.h>
+#include <comphelper/lok.hxx>
 #include <vcl/settings.hxx>
 #include <unotools/viewoptions.hxx>
-#include "cuihyperdlg.hxx"
-#include "hlinettp.hxx"
-#include "hlmailtp.hxx"
-#include "hldoctp.hxx"
-#include "hldocntp.hxx"
+#include <cuihyperdlg.hxx>
+#include <hlinettp.hxx>
+#include <hlmailtp.hxx>
+#include <hldoctp.hxx>
+#include <hldocntp.hxx>
+#include <bitmaps.hlst>
 #include <svx/svxids.hrc>
+#include <dialmgr.hxx>
+#include <strings.hrc>
 #include <vector>
 
 using ::com::sun::star::uno::Reference;
@@ -58,7 +65,7 @@ void SvxHlinkCtrl::StateChanged( sal_uInt16 nSID, SfxItemState eState,
         {
             case SID_HYPERLINK_GETLINK :
             {
-                pParent->SetPage( const_cast<SvxHyperlinkItem*>(static_cast<const SvxHyperlinkItem*>(pState)) );
+                pParent->SetPage( static_cast<const SvxHyperlinkItem*>(pState) );
             }
             break;
             case SID_READONLY_MODE :
@@ -70,87 +77,69 @@ void SvxHlinkCtrl::StateChanged( sal_uInt16 nSID, SfxItemState eState,
     }
 }
 
-
 //#                                                                      #
 //# Hyperlink - Dialog                                                   #
 //#                                                                      #
-
-
-/*************************************************************************
-|*
-|* Constructor / Destructor
-|*
-|************************************************************************/
 
 SvxHpLinkDlg::SvxHpLinkDlg (vcl::Window* pParent, SfxBindings* pBindings)
 :   IconChoiceDialog( pParent, "HyperlinkDialog", "cui/ui/hyperlinkdialog.ui" ),
     maCtrl          ( SID_HYPERLINK_GETLINK, *pBindings, this ),
     mpBindings      ( pBindings ),
-    mbReadOnly      ( false ),
     mbIsHTMLDoc     ( false )
 {
-    SetUniqueId( HID_HYPERLINK_DIALOG );
     mbGrabFocus = true;
     // insert pages
-    std::vector<Image> imgVector;
     OUString aStrTitle;
     SvxIconChoiceCtrlEntry *pEntry;
-    imgVector.push_back( Image( CUI_RES ( RID_SVXBMP_HLINETTP ) ) );
-    imgVector.push_back( Image( CUI_RES ( RID_SVXBMP_HLMAILTP ) ) );
-    imgVector.push_back( Image( CUI_RES ( RID_SVXBMP_HLDOCTP  ) ) );
-    imgVector.push_back( Image( CUI_RES ( RID_SVXBMP_HLDOCNTP ) ) );
 
-    for(Image &aImage : imgVector )
+    aStrTitle = CuiResId( RID_SVXSTR_HYPERDLG_HLINETTP );
+    pEntry = AddTabPage ( HyperLinkPageType::Internet, aStrTitle, Image(StockImage::Yes, RID_SVXBMP_HLINETTP), SvxHyperlinkInternetTp::Create );
+    pEntry->SetQuickHelpText( CuiResId( RID_SVXSTR_HYPERDLG_HLINETTP_HELP ) );
+    aStrTitle = CuiResId( RID_SVXSTR_HYPERDLG_HLMAILTP );
+    pEntry = AddTabPage ( HyperLinkPageType::Mail, aStrTitle, Image(StockImage::Yes, RID_SVXBMP_HLMAILTP), SvxHyperlinkMailTp::Create );
+    pEntry->SetQuickHelpText( CuiResId( RID_SVXSTR_HYPERDLG_HLMAILTP_HELP ) );
+    if (!comphelper::LibreOfficeKit::isActive())
     {
-        BitmapEx aBitmap = aImage.GetBitmapEx();
-        aBitmap.Scale(GetDPIScaleFactor(),GetDPIScaleFactor(),BmpScaleFlag::BestQuality);
-        aImage = Image(aBitmap);
+        aStrTitle = CuiResId( RID_SVXSTR_HYPERDLG_HLDOCTP );
+        pEntry = AddTabPage ( HyperLinkPageType::Document, aStrTitle, Image(StockImage::Yes, RID_SVXBMP_HLDOCTP), SvxHyperlinkDocTp::Create );
+        pEntry->SetQuickHelpText( CuiResId( RID_SVXSTR_HYPERDLG_HLDOCTP_HELP ) );
+        aStrTitle = CuiResId( RID_SVXSTR_HYPERDLG_HLDOCNTP );
+        pEntry = AddTabPage ( HyperLinkPageType::NewDocument, aStrTitle, Image(StockImage::Yes, RID_SVXBMP_HLDOCNTP), SvxHyperlinkNewDocTp::Create );
+        pEntry->SetQuickHelpText( CuiResId( RID_SVXSTR_HYPERDLG_HLDOCNTP_HELP ) );
     }
-    aStrTitle = CUI_RESSTR( RID_SVXSTR_HYPERDLG_HLINETTP );
-    pEntry = AddTabPage ( RID_SVXPAGE_HYPERLINK_INTERNET, aStrTitle, imgVector[0], SvxHyperlinkInternetTp::Create );
-    pEntry->SetQuickHelpText( CUI_RESSTR( RID_SVXSTR_HYPERDLG_HLINETTP_HELP ) );
-    aStrTitle = CUI_RESSTR( RID_SVXSTR_HYPERDLG_HLMAILTP );
-    pEntry = AddTabPage ( RID_SVXPAGE_HYPERLINK_MAIL, aStrTitle, imgVector[1], SvxHyperlinkMailTp::Create );
-    pEntry->SetQuickHelpText( CUI_RESSTR( RID_SVXSTR_HYPERDLG_HLMAILTP_HELP ) );
-    aStrTitle = CUI_RESSTR( RID_SVXSTR_HYPERDLG_HLDOCTP );
-    pEntry = AddTabPage ( RID_SVXPAGE_HYPERLINK_DOCUMENT, aStrTitle, imgVector[2], SvxHyperlinkDocTp::Create );
-    pEntry->SetQuickHelpText( CUI_RESSTR( RID_SVXSTR_HYPERDLG_HLDOCTP_HELP ) );
-    aStrTitle = CUI_RESSTR( RID_SVXSTR_HYPERDLG_HLDOCNTP );
-    pEntry = AddTabPage ( RID_SVXPAGE_HYPERLINK_NEWDOCUMENT, aStrTitle, imgVector[3], SvxHyperlinkNewDocTp::Create );
-    pEntry->SetQuickHelpText( CUI_RESSTR( RID_SVXSTR_HYPERDLG_HLDOCNTP_HELP ) );
 
     // set OK/Cancel - button
-    GetCancelButton().SetText ( CUI_RESSTR(RID_SVXSTR_HYPDLG_CLOSEBUT) );
+    GetCancelButton().SetText ( CuiResId(RID_SVXSTR_HYPDLG_CLOSEBUT) );
 
     // create itemset for tabpages
-    mpItemSet = new SfxItemSet( SfxGetpApp()->GetPool(), SID_HYPERLINK_GETLINK,
-                               SID_HYPERLINK_SETLINK );
+    mpItemSet = std::make_unique<SfxItemSet>( SfxGetpApp()->GetPool(), svl::Items<SID_HYPERLINK_GETLINK,
+                               SID_HYPERLINK_SETLINK>{} );
 
-    SvxHyperlinkItem aItem;
-    mpItemSet->Put (aItem, SID_HYPERLINK_GETLINK);
+    SvxHyperlinkItem aItem(SID_HYPERLINK_GETLINK);
+    mpItemSet->Put(aItem);
 
-    SetInputSet (mpItemSet);
+    SetInputSet (mpItemSet.get());
 
     //loop through the pages and get their max bounds and lock that down
-    ShowPage(RID_SVXPAGE_HYPERLINK_NEWDOCUMENT);
+    ShowPage(HyperLinkPageType::NewDocument);
     VclBox *pBox = get_content_area();
     Size aMaxPrefSize(pBox->get_preferred_size());
-    ShowPage(RID_SVXPAGE_HYPERLINK_DOCUMENT);
+    ShowPage(HyperLinkPageType::Document);
     Size aSize(pBox->get_preferred_size());
-    aMaxPrefSize.Width() = std::max(aMaxPrefSize.Width(), aSize.Width());
-    aMaxPrefSize.Height() = std::max(aMaxPrefSize.Height(), aSize.Height());
-    ShowPage(RID_SVXPAGE_HYPERLINK_MAIL);
+    aMaxPrefSize.setWidth( std::max(aMaxPrefSize.Width(), aSize.Width()) );
+    aMaxPrefSize.setHeight( std::max(aMaxPrefSize.Height(), aSize.Height()) );
+    ShowPage(HyperLinkPageType::Mail);
     aSize = pBox->get_preferred_size();
-    aMaxPrefSize.Width() = std::max(aMaxPrefSize.Width(), aSize.Width());
-    aMaxPrefSize.Height() = std::max(aMaxPrefSize.Height(), aSize.Height());
-    ShowPage(RID_SVXPAGE_HYPERLINK_INTERNET);
+    aMaxPrefSize.setWidth( std::max(aMaxPrefSize.Width(), aSize.Width()) );
+    aMaxPrefSize.setHeight( std::max(aMaxPrefSize.Height(), aSize.Height()) );
+    ShowPage(HyperLinkPageType::Internet);
     aSize = pBox->get_preferred_size();
-    aMaxPrefSize.Width() = std::max(aMaxPrefSize.Width(), aSize.Width());
-    aMaxPrefSize.Height() = std::max(aMaxPrefSize.Height(), aSize.Height());
+    aMaxPrefSize.setWidth( std::max(aMaxPrefSize.Width(), aSize.Width()) );
+    aMaxPrefSize.setHeight( std::max(aMaxPrefSize.Height(), aSize.Height()) );
     pBox->set_width_request(aMaxPrefSize.Width());
     pBox->set_height_request(aMaxPrefSize.Height());
 
-    SetCurPageId(RID_SVXPAGE_HYPERLINK_INTERNET);
+    SetCurPageId(HyperLinkPageType::Internet);
 
     // Init Dialog
     Start();
@@ -170,11 +159,10 @@ SvxHpLinkDlg::~SvxHpLinkDlg ()
 void SvxHpLinkDlg::dispose()
 {
     // delete config item, so the base class (IconChoiceDialog) can not load it on the next start
-    SvtViewOptions aViewOpt( E_TABDIALOG, OUString::number(SID_HYPERLINK_DIALOG) );
+    SvtViewOptions aViewOpt( EViewType::TabDialog, OUString::number(SID_HYPERLINK_DIALOG) );
     aViewOpt.Delete();
 
-    delete mpItemSet;
-    mpItemSet = nullptr;
+    mpItemSet.reset();
 
     maCtrl.dispose();
 
@@ -197,8 +185,8 @@ bool SvxHpLinkDlg::Close()
 
 void SvxHpLinkDlg::Apply()
 {
-    SfxItemSet aItemSet( SfxGetpApp()->GetPool(), SID_HYPERLINK_GETLINK,
-                         SID_HYPERLINK_SETLINK );
+    SfxItemSet aItemSet( SfxGetpApp()->GetPool(), svl::Items<SID_HYPERLINK_GETLINK,
+                         SID_HYPERLINK_SETLINK>{} );
 
     SvxHyperlinkTabPageBase* pCurrentPage = static_cast<SvxHyperlinkTabPageBase*>(
                                                 GetTabPage( GetCurPageId() ) );
@@ -207,10 +195,8 @@ void SvxHpLinkDlg::Apply()
     {
         pCurrentPage->FillItemSet( &aItemSet );
 
-        const SvxHyperlinkItem *aItem = static_cast<const SvxHyperlinkItem *>(
-                                      aItemSet.GetItem (SID_HYPERLINK_SETLINK));
-        OUString aStrEmpty;
-        if ( aItem->GetURL() != aStrEmpty )
+        const SvxHyperlinkItem *aItem = aItemSet.GetItem(SID_HYPERLINK_SETLINK);
+        if ( !aItem->GetURL().isEmpty() )
             GetDispatcher()->ExecuteList(SID_HYPERLINK_SETLINK,
                     SfxCallMode::ASYNCHRON | SfxCallMode::RECORD, { aItem });
 
@@ -272,7 +258,7 @@ void SvxHpLinkDlg::Move()
 }
 
 /// Click on OK button
-IMPL_LINK_NOARG_TYPED(SvxHpLinkDlg, ClickOkHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxHpLinkDlg, ClickOkHdl_Impl, Button*, void)
 {
     Apply();
     Close();
@@ -284,7 +270,7 @@ IMPL_LINK_NOARG_TYPED(SvxHpLinkDlg, ClickOkHdl_Impl, Button*, void)
 |*
 |************************************************************************/
 
-IMPL_LINK_NOARG_TYPED(SvxHpLinkDlg, ClickApplyHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxHpLinkDlg, ClickApplyHdl_Impl, Button*, void)
 {
     Apply();
 }
@@ -295,7 +281,7 @@ IMPL_LINK_NOARG_TYPED(SvxHpLinkDlg, ClickApplyHdl_Impl, Button*, void)
 |*
 |************************************************************************/
 
-IMPL_LINK_NOARG_TYPED(SvxHpLinkDlg, ClickCloseHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxHpLinkDlg, ClickCloseHdl_Impl, Button*, void)
 {
     Close();
 }
@@ -306,9 +292,9 @@ IMPL_LINK_NOARG_TYPED(SvxHpLinkDlg, ClickCloseHdl_Impl, Button*, void)
 |*
 |************************************************************************/
 
-void SvxHpLinkDlg::SetPage ( SvxHyperlinkItem* pItem )
+void SvxHpLinkDlg::SetPage ( SvxHyperlinkItem const * pItem )
 {
-    sal_uInt16 nPageId = RID_SVXPAGE_HYPERLINK_INTERNET;
+    HyperLinkPageType nPageId = HyperLinkPageType::Internet;
 
     OUString aStrURL(pItem->GetURL());
     INetURLObject aURL(aStrURL);
@@ -318,20 +304,20 @@ void SvxHpLinkDlg::SetPage ( SvxHyperlinkItem* pItem )
     {
         case INetProtocol::Http :
         case INetProtocol::Ftp :
-            nPageId = RID_SVXPAGE_HYPERLINK_INTERNET;
+            nPageId = HyperLinkPageType::Internet;
             break;
         case INetProtocol::File :
-            nPageId = RID_SVXPAGE_HYPERLINK_DOCUMENT;
+            nPageId = HyperLinkPageType::Document;
             break;
         case INetProtocol::Mailto :
-            nPageId = RID_SVXPAGE_HYPERLINK_MAIL;
+            nPageId = HyperLinkPageType::Mail;
             break;
         default :
             if (aStrURL.startsWith("#"))
-                nPageId = RID_SVXPAGE_HYPERLINK_DOCUMENT;
+                nPageId = HyperLinkPageType::Document;
             else
             {
-                eProtocolTyp = INetProtocol::NotValid;
+                // not valid
                 nPageId = GetCurPageId();
             }
             break;
@@ -346,7 +332,7 @@ void SvxHpLinkDlg::SetPage ( SvxHyperlinkItem* pItem )
     IconChoicePage* pPage = GetTabPage (nPageId);
     if(pPage)
     {
-        SfxItemSet& aPageSet =  (SfxItemSet&)pPage->GetItemSet ();
+        SfxItemSet& aPageSet = const_cast<SfxItemSet&>(pPage->GetItemSet ());
         aPageSet.Put ( *pItem );
 
         pCurrentPage->Reset( aPageSet );
@@ -366,7 +352,6 @@ void SvxHpLinkDlg::SetPage ( SvxHyperlinkItem* pItem )
 
 void SvxHpLinkDlg::SetReadOnlyMode( bool bRdOnly )
 {
-    mbReadOnly = bRdOnly;
     if ( bRdOnly )
         GetOKButton().Disable();
     else
@@ -379,7 +364,7 @@ void SvxHpLinkDlg::SetReadOnlyMode( bool bRdOnly )
 |*
 |************************************************************************/
 
-void SvxHpLinkDlg::PageCreated( sal_uInt16 /*nId*/, IconChoicePage& rPage )
+void SvxHpLinkDlg::PageCreated( HyperLinkPageType /*nId*/, IconChoicePage& rPage )
 {
     SvxHyperlinkTabPageBase& rHyperlinkPage = dynamic_cast< SvxHyperlinkTabPageBase& >( rPage );
     Reference< XFrame > xDocumentFrame;

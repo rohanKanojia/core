@@ -17,19 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <com/sun/star/animations/XAnimate.hpp>
 #include <com/sun/star/animations/XAnimationNode.hpp>
 #include <com/sun/star/animations/Event.hpp>
-#include <com/sun/star/animations/XAnimateColor.hpp>
-#include <com/sun/star/animations/XAnimateSet.hpp>
 #include <com/sun/star/animations/XCommand.hpp>
-#include <com/sun/star/animations/XAnimateMotion.hpp>
-#include <com/sun/star/animations/XAnimateTransform.hpp>
-#include <com/sun/star/animations/XTransitionFilter.hpp>
 #include <com/sun/star/animations/XIterateContainer.hpp>
 #include <com/sun/star/animations/XAudio.hpp>
 #include <com/sun/star/animations/AnimationNodeType.hpp>
 #include <com/sun/star/animations/ValuePair.hpp>
-#include <com/sun/star/presentation/EffectNodeType.hpp>
 #include <com/sun/star/util/XCloneable.hpp>
 #include <com/sun/star/presentation/ParagraphTarget.hpp>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
@@ -37,15 +32,16 @@
 
 #include <map>
 
-#include "comphelper/anytostring.hxx"
-#include "cppuhelper/exc_hlp.hxx"
-#include "rtl/ref.hxx"
+#include <comphelper/anytostring.hxx>
+#include <cppuhelper/exc_hlp.hxx>
+#include <sal/log.hxx>
+#include <tools/debug.hxx>
 #include <animations/animationnodehelper.hxx>
 
 #include <svx/svditer.hxx>
 
-#include "CustomAnimationCloner.hxx"
-#include "sdpage.hxx"
+#include <CustomAnimationCloner.hxx>
+#include <sdpage.hxx>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::animations;
@@ -61,7 +57,7 @@ namespace sd
     {
     public:
         CustomAnimationClonerImpl();
-        Reference< XAnimationNode > Clone( const Reference< XAnimationNode >& xSourceNode, const SdPage* pSource = nullptr, const SdPage* pTarget = nullptr );
+        Reference< XAnimationNode > Clone( const Reference< XAnimationNode >& xSourceNode, const SdPage* pSource, const SdPage* pTarget );
 
     private:
         void transformNode( const Reference< XAnimationNode >& xNode );
@@ -96,8 +92,8 @@ namespace sd
             // create a dictionary to map source to cloned shapes
             if( pSourcePage && pTargetPage )
             {
-                SdrObjListIter aSourceIter( *pSourcePage, IM_DEEPWITHGROUPS );
-                SdrObjListIter aTargetIter( *pTargetPage, IM_DEEPWITHGROUPS );
+                SdrObjListIter aSourceIter( pSourcePage, SdrIterMode::DeepWithGroups );
+                SdrObjListIter aTargetIter( pTargetPage, SdrIterMode::DeepWithGroups );
 
                 while( aSourceIter.IsMore() && aTargetIter.IsMore() )
                 {
@@ -126,13 +122,8 @@ namespace sd
         }
         catch( Exception& )
         {
-            OSL_FAIL(
-                OString(OString("sd::CustomAnimationClonerImpl::Clone(), "
-                        "exception caught: ") +
-                OUStringToOString(
-                    comphelper::anyToString( cppu::getCaughtException() ),
-                    RTL_TEXTENCODING_UTF8 )).getStr() );
-
+            SAL_WARN( "sd", "sd::CustomAnimationClonerImpl::Clone(), "
+                      "exception caught: " <<  comphelper::anyToString( cppu::getCaughtException() ) );
             Reference< XAnimationNode > xEmpty;
             return xEmpty;
         }
@@ -152,8 +143,8 @@ namespace sd
             {
                 Reference< XIterateContainer > xIter( xNode, UNO_QUERY_THROW );
                 xIter->setTarget( transformValue( xIter->getTarget() ) );
+                [[fallthrough]];
             }
-            // its intended that here is no break!
             case AnimationNodeType::PAR:
             case AnimationNodeType::SEQ:
             {
@@ -197,12 +188,9 @@ namespace sd
             Sequence< NamedValue > aUserData( xNode->getUserData() );
             if( aUserData.hasElements() )
             {
-                NamedValue* pValue = aUserData.getArray();
-                const sal_Int32 nLength = aUserData.getLength();
-                sal_Int32 nElement;
-                for( nElement = 0; nElement < nLength; nElement++, pValue++ )
+                for( NamedValue & namedValue : aUserData )
                 {
-                    pValue->Value = transformValue( pValue->Value );
+                    namedValue.Value = transformValue( namedValue.Value );
                 }
 
                 xNode->setUserData( aUserData );
@@ -210,12 +198,9 @@ namespace sd
         }
         catch( Exception& )
         {
-            OSL_FAIL(
-                OString(OString("sd::CustomAnimationClonerImpl::transformNode(), "
-                        "exception caught: ") +
-                OUStringToOString(
-                    comphelper::anyToString( cppu::getCaughtException() ),
-                    RTL_TEXTENCODING_UTF8 )).getStr() );
+            SAL_WARN( "sd", "sd::CustomAnimationClonerImpl::transformNode(), "
+                      "exception caught: "
+                      << comphelper::anyToString( cppu::getCaughtException() ) );
         }
     }
 
@@ -284,12 +269,9 @@ namespace sd
         }
         catch( Exception& )
         {
-            OSL_FAIL(
-                OString(OString("sd::CustomAnimationClonerImpl::transformValue(), "
-                        "exception caught: ") +
-                OUStringToOString(
-                    comphelper::anyToString( cppu::getCaughtException() ),
-                    RTL_TEXTENCODING_UTF8 )).getStr() );
+            SAL_WARN( "sd", "sd::CustomAnimationClonerImpl::transformValue(), "
+                      "exception caught: "
+                      << comphelper::anyToString( cppu::getCaughtException() ) );
         }
 
         return rValue;

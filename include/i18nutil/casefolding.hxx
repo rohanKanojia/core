@@ -20,27 +20,30 @@
 #define INCLUDED_I18NUTIL_CASEFOLDING_HXX
 
 #include <sal/types.h>
-#include <com/sun/star/i18n/TransliterationModules.hpp>
-#include <com/sun/star/lang/Locale.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
 #include <i18nutil/i18nutildllapi.h>
+#include <o3tl/typed_flags_set.hxx>
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace com { namespace sun { namespace star { namespace lang { struct Locale; } } } }
 
-#define MappingTypeLowerToUpper     (1 << 0)  // Upper to Lower mapping
-#define MappingTypeUpperToLower     (1 << 1)  // Lower to Upper mapping
-#define MappingTypeToUpper          (1 << 2)  // to Upper mapping
-#define MappingTypeToLower          (1 << 3)  // to Lower mapping
-#define MappingTypeToTitle          (1 << 4)  // to Title mapping
-#define MappingTypeSimpleFolding    (1 << 5)  // Simple Case Folding
-#define MappingTypeFullFolding      (1 << 6)  // Full Case Folding
-#define MappingTypeMask (MappingTypeLowerToUpper|MappingTypeUpperToLower|\
-            MappingTypeToUpper|MappingTypeToLower|MappingTypeToTitle|\
-            MappingTypeSimpleFolding|MappingTypeFullFolding)
+enum class TransliterationFlags;
 
-#define ValueTypeNotValue           (1 << 7)  // Value field is an address
+enum class MappingType {
+    NONE             = 0x00,
+    LowerToUpper     = 0x01,  // Upper to Lower mapping
+    UpperToLower     = 0x02,  // Lower to Upper mapping
+    ToUpper          = 0x04,  // to Upper mapping
+    ToLower          = 0x08,  // to Lower mapping
+    ToTitle          = 0x10,  // to Title mapping
+    SimpleFolding    = 0x20,  // Simple Case Folding
+    FullFolding      = 0x40,  // Full Case Folding
+    CasedLetterMask  = LowerToUpper | UpperToLower | ToUpper | ToLower | ToTitle | SimpleFolding | FullFolding, // for final sigmar
+    NotValue         = 0x80,  // Value field is an address
+};
+namespace o3tl {
+    template<> struct typed_flags<MappingType> : is_typed_flags<MappingType, 0xff> {};
+}
 
-#define CasedLetter     (MappingTypeMask)  // for final sigmar
+namespace i18nutil {
 
 struct Value
 {
@@ -70,13 +73,16 @@ struct MappingElement
 class I18NUTIL_DLLPUBLIC casefolding
 {
 public:
-    static Mapping& getValue(const sal_Unicode* str, sal_Int32 pos, sal_Int32 len, css::lang::Locale& aLocale, sal_uInt8 nMappingType) throw (css::uno::RuntimeException);
-    static Mapping& getConditionalValue(const sal_Unicode* str, sal_Int32 pos, sal_Int32 len, css::lang::Locale& aLocale, sal_uInt8 nMappingType) throw (css::uno::RuntimeException);
-    static sal_Unicode getNextChar(const sal_Unicode *str, sal_Int32& idx, sal_Int32 len, MappingElement& e, css::lang::Locale& aLocale,sal_uInt8 nMappingtype, TransliterationModules moduleLoaded) throw (css::uno::RuntimeException);
+    /// @throws css::uno::RuntimeException
+    static Mapping getValue(const sal_Unicode* str, sal_Int32 pos, sal_Int32 len, css::lang::Locale const & aLocale, MappingType nMappingType);
+    /// @throws css::uno::RuntimeException
+    static const Mapping& getConditionalValue(const sal_Unicode* str, sal_Int32 pos, sal_Int32 len, css::lang::Locale const & aLocale, MappingType nMappingType);
+    /// @throws css::uno::RuntimeException
+    static sal_Unicode getNextChar(const sal_Unicode *str, sal_Int32& idx, sal_Int32 len, MappingElement& e, css::lang::Locale const & aLocale, MappingType nMappingtype, TransliterationFlags moduleLoaded);
 
 };
 
-} } } }
+}
 
 #endif
 

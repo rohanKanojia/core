@@ -16,6 +16,7 @@ $(eval $(call gb_Library_add_defs,mork,\
 ))
 
 $(eval $(call gb_Library_set_include,mork,\
+	-I$(SRCDIR)/connectivity/inc \
 	-I$(SRCDIR)/connectivity/source/inc \
 	$$(INCLUDE) \
 	-I$(WORKDIR)/YaccTarget/connectivity/source/parse \
@@ -36,7 +37,6 @@ $(eval $(call gb_Library_use_libraries,mork, \
     salhelper \
     tl \
     utl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_sdk_api,mork))

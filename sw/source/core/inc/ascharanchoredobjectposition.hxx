@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_ASCHARANCHOREDOBJECTPOSITION_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_ASCHARANCHOREDOBJECTPOSITION_HXX
 
-#include <anchoredobjectposition.hxx>
+#include "anchoredobjectposition.hxx"
 #include <sal/types.h>
 #include <swtypes.hxx>
 #include <swrect.hxx>
@@ -43,6 +43,17 @@ namespace o3tl {
     template<> struct typed_flags<AsCharFlags> : is_typed_flags<AsCharFlags, 0x3f> {};
 };
 
+namespace sw
+{
+    // TODO: merge/migrate this to com::sun::star::VertOrientation instead of duplicating?
+    enum class LineAlign
+    {
+        NONE,
+        TOP,
+        CENTER,
+        BOTTOM
+    };
+};
 namespace objectpositioning
 {
     class SwAsCharAnchoredObjectPosition : public SwAnchoredObjectPosition
@@ -70,9 +81,8 @@ namespace objectpositioning
         Point       maAnchorPos;
         SwTwips     mnRelPos;
         SwRect      maObjBoundRect;
-        // line alignment relative to line height; gives feedback for line formatting
-        // 0 - no line alignment, 1 - at top, 2 - at center, 3 - at bottom
-        sal_uInt8   mnLineAlignment;
+        // line alignment relative to line height
+        sw::LineAlign   mnLineAlignment;
 
         // method to cast <SwAnchoredObjectPosition::GetAnchorFrame()>
         const SwTextFrame& GetAnchorTextFrame() const;
@@ -88,7 +98,7 @@ namespace objectpositioning
 
             @return relative position to the base line
         */
-        SwTwips _GetRelPosToBase( const SwTwips          _nObjBoundHeight,
+        SwTwips GetRelPosToBase( const SwTwips          _nObjBoundHeight,
                                   const SwFormatVertOrient& _rVert );
 
     public:
@@ -122,7 +132,7 @@ namespace objectpositioning
                                         const SwTwips     _nLineDescent,
                                         const SwTwips     _nLineAscentInclObjs,
                                         const SwTwips     _nLineDescentInclObjs );
-        virtual ~SwAsCharAnchoredObjectPosition();
+        virtual ~SwAsCharAnchoredObjectPosition() override;
 
         /** calculate position for object position
 
@@ -142,7 +152,7 @@ namespace objectpositioning
         const SwRect& GetObjBoundRectInclSpacing() const { return maObjBoundRect;}
 
         // determined line alignment relative to line height
-        sal_uInt8 GetLineAlignment() const { return mnLineAlignment;}
+        sw::LineAlign GetLineAlignment() const { return mnLineAlignment;}
     };
 }
 

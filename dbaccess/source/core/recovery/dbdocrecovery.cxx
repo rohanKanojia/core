@@ -17,25 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "recovery/dbdocrecovery.hxx"
-#include "sdbcoretools.hxx"
+#include <recovery/dbdocrecovery.hxx>
+#include <sdbcoretools.hxx>
 #include "storagetextstream.hxx"
 #include "subcomponentrecovery.hxx"
 #include "subcomponents.hxx"
-#include "dbastrings.hrc"
+#include <stringconstants.hxx>
 
 #include <com/sun/star/sdb/application/XDatabaseDocumentUI.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
-#include <com/sun/star/document/XStorageBasedDocument.hpp>
-#include <com/sun/star/io/XTextOutputStream.hpp>
 #include <com/sun/star/io/TextInputStream.hpp>
-#include <com/sun/star/io/XActiveDataSource.hpp>
-#include <com/sun/star/io/XActiveDataSink.hpp>
 #include <com/sun/star/util/XModifiable.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
 
-#include <comphelper/namedvaluecollection.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <tools/diagnose_ex.h>
 
 #include <algorithm>
@@ -44,29 +39,20 @@ namespace dbaccess
 {
 
     using css::uno::Reference;
-    using css::uno::XInterface;
     using css::uno::UNO_QUERY;
     using css::uno::UNO_QUERY_THROW;
     using css::uno::UNO_SET_THROW;
     using css::uno::Exception;
-    using css::uno::RuntimeException;
     using css::uno::Sequence;
     using css::uno::XComponentContext;
     using css::embed::XStorage;
     using css::frame::XController;
     using css::sdb::application::XDatabaseDocumentUI;
     using css::lang::XComponent;
-    using css::document::XStorageBasedDocument;
-    using css::beans::PropertyValue;
     using css::io::XStream;
-    using css::io::XTextOutputStream;
-    using css::io::XActiveDataSource;
     using css::io::TextInputStream;
     using css::io::XTextInputStream2;
-    using css::io::XActiveDataSink;
-    using css::frame::XModel;
     using css::util::XModifiable;
-    using css::beans::XPropertySet;
 
     namespace ElementModes = css::embed::ElementModes;
 
@@ -118,13 +104,10 @@ namespace dbaccess
 
             aTextOutput.writeLine( "[storages]" );
 
-            for (   MapStringToCompDesc::const_iterator stor = i_mapStorageToCompDesc.begin();
-                    stor != i_mapStorageToCompDesc.end();
-                    ++stor
-                )
+            for (auto const& elem : i_mapStorageToCompDesc)
             {
                 OUStringBuffer aLine;
-                lcl_getPersistentRepresentation( *stor, aLine );
+                lcl_getPersistentRepresentation(elem, aLine);
 
                 aTextOutput.writeLine( aLine.makeStringAndClear() );
             }
@@ -210,12 +193,12 @@ namespace dbaccess
                 return;
             }
 
-            xModify->setModified( sal_True );
+            xModify->setModified( true );
         }
     }
 
     // DatabaseDocumentRecovery_Data
-    struct DBACCESS_DLLPRIVATE DatabaseDocumentRecovery_Data
+    struct DatabaseDocumentRecovery_Data
     {
         const Reference<XComponentContext> aContext;
 
@@ -236,7 +219,7 @@ namespace dbaccess
     }
 
     void DatabaseDocumentRecovery::saveModifiedSubComponents( const Reference< XStorage >& i_rTargetStorage,
-        const ::std::vector< Reference< XController > >& i_rControllers )
+        const std::vector< Reference< XController > >& i_rControllers )
     {
         ENSURE_OR_THROW( i_rTargetStorage.is(), "invalid document storage" );
 
@@ -256,31 +239,23 @@ namespace dbaccess
 
             MapCompTypeToCompDescs aMapCompDescs;
 
-            for (   ::std::vector< Reference< XController > >::const_iterator ctrl = i_rControllers.begin();
-                    ctrl != i_rControllers.end();
-                    ++ctrl
-                )
+            for (auto const& controller : i_rControllers)
             {
-                Reference< XDatabaseDocumentUI > xDatabaseUI( *ctrl, UNO_QUERY_THROW );
+                Reference< XDatabaseDocumentUI > xDatabaseUI(controller, UNO_QUERY_THROW);
                 Sequence< Reference< XComponent > > aComponents( xDatabaseUI->getSubComponents() );
 
-                const Reference< XComponent >* component = aComponents.getConstArray();
-                const Reference< XComponent >* componentEnd = aComponents.getConstArray() + aComponents.getLength();
-                for ( ; component != componentEnd; ++component )
+                for ( auto const & component : aComponents )
                 {
-                    SubComponentRecovery aComponentRecovery( m_pData->aContext, xDatabaseUI, *component );
+                    SubComponentRecovery aComponentRecovery( m_pData->aContext, xDatabaseUI, component );
                     aComponentRecovery.saveToRecoveryStorage( xRecoveryStorage, aMapCompDescs );
                 }
             }
 
-            for (   MapCompTypeToCompDescs::const_iterator map = aMapCompDescs.begin();
-                    map != aMapCompDescs.end();
-                    ++map
-                )
+            for (auto const& elem : aMapCompDescs)
             {
                 Reference< XStorage > xComponentsStor( xRecoveryStorage->openStorageElement(
-                    SubComponentRecovery::getComponentsStorageName( map->first ), ElementModes::WRITE | ElementModes::NOCREATE ) );
-                lcl_writeObjectMap_throw( m_pData->aContext, xComponentsStor, map->second );
+                    SubComponentRecovery::getComponentsStorageName( elem.first ), ElementModes::WRITE | ElementModes::NOCREATE ) );
+                lcl_writeObjectMap_throw( m_pData->aContext, xComponentsStor, elem.second );
                 tools::stor::commitStorageIfWriteable( xComponentsStor );
             }
         }
@@ -305,41 +280,35 @@ namespace dbaccess
         // read the map from sub storages to object names
         MapCompTypeToCompDescs aMapCompDescs;
         const SubComponentType aKnownTypes[] = { TABLE, QUERY, FORM, REPORT, RELATION_DESIGN };
-        for ( size_t i = 0; i < SAL_N_ELEMENTS( aKnownTypes ); ++i )
+        for (SubComponentType aKnownType : aKnownTypes)
         {
-            if ( !xRecoveryStorage->hasByName( SubComponentRecovery::getComponentsStorageName( aKnownTypes[i] ) ) )
+            if ( !xRecoveryStorage->hasByName( SubComponentRecovery::getComponentsStorageName( aKnownType ) ) )
                 continue;
 
             Reference< XStorage > xComponentsStor( xRecoveryStorage->openStorageElement(
-                SubComponentRecovery::getComponentsStorageName( aKnownTypes[i] ), ElementModes::READ ) );
-            lcl_readObjectMap_throw( m_pData->aContext, xComponentsStor, aMapCompDescs[ aKnownTypes[i] ] );
+                SubComponentRecovery::getComponentsStorageName( aKnownType ), ElementModes::READ ) );
+            lcl_readObjectMap_throw( m_pData->aContext, xComponentsStor, aMapCompDescs[ aKnownType ] );
             xComponentsStor->dispose();
         }
 
         // recover all sub components as indicated by the map
-        for (   MapCompTypeToCompDescs::const_iterator map = aMapCompDescs.begin();
-                map != aMapCompDescs.end();
-                ++map
-            )
+        for (auto const& elemMapCompDescs : aMapCompDescs)
         {
-            const SubComponentType eComponentType = map->first;
+            const SubComponentType eComponentType = elemMapCompDescs.first;
 
             // the storage for all components of the current type
             Reference< XStorage > xComponentsStor( xRecoveryStorage->openStorageElement(
                 SubComponentRecovery::getComponentsStorageName( eComponentType ), ElementModes::READ ), UNO_QUERY_THROW );
 
             // loop through all components of this type
-            for (   MapStringToCompDesc::const_iterator stor = map->second.begin();
-                    stor != map->second.end();
-                    ++stor
-                )
+            for (auto const&  elem : elemMapCompDescs.second)
             {
-                const OUString sComponentName( stor->second.sName );
-                if ( !xComponentsStor->hasByName( stor->first ) )
+                const OUString sComponentName(elem.second.sName);
+                if ( !xComponentsStor->hasByName(elem.first) )
                 {
                     SAL_WARN( "dbaccess",
                               "DatabaseDocumentRecovery::recoverSubDocuments: inconsistent recovery storage: storage '" <<
-                              stor->first <<
+                              elem.first <<
                               "' not found in '" <<
                               SubComponentRecovery::getComponentsStorageName( eComponentType ) <<
                               "', but required per map file!" );
@@ -351,9 +320,9 @@ namespace dbaccess
                     xDocumentUI->connect();
 
                 // recover the single component
-                Reference< XStorage > xCompStor( xComponentsStor->openStorageElement( stor->first, ElementModes::READ ) );
+                Reference< XStorage > xCompStor( xComponentsStor->openStorageElement( elem.first, ElementModes::READ ) );
                 SubComponentRecovery aComponentRecovery( m_pData->aContext, xDocumentUI, eComponentType );
-                Reference< XComponent > xSubComponent( aComponentRecovery.recoverFromStorage( xCompStor, sComponentName, stor->second.bForEditing ) );
+                Reference< XComponent > xSubComponent( aComponentRecovery.recoverFromStorage( xCompStor, sComponentName, elem.second.bForEditing ) );
 
                 // at the moment, we only store, during session save, sub components which are modified. So, set this
                 // recovered sub component to "modified", too.
@@ -372,7 +341,7 @@ namespace dbaccess
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 

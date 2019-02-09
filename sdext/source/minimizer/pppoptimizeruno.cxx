@@ -18,10 +18,10 @@
  */
 
 
-#include <osl/mutex.hxx>
 #include <osl/thread.h>
 #include <cppuhelper/factory.hxx>
-#include <pppoptimizerdialog.hxx>
+#include <com/sun/star/lang/XSingleComponentFactory.hpp>
+#include "pppoptimizerdialog.hxx"
 
 using namespace ::cppu;
 using namespace ::com::sun::star::uno;
@@ -30,7 +30,7 @@ using namespace ::com::sun::star::registry;
 
 extern "C"
 {
-    SAL_DLLPUBLIC_EXPORT void* SAL_CALL pptminimizer_component_getFactory(
+    SAL_DLLPUBLIC_EXPORT void* pptminimizer_component_getFactory(
         const sal_Char * pImplName, void * pServiceManager,
         SAL_UNUSED_PARAMETER void * /*pRegistryKey*/ )
     {
@@ -40,7 +40,7 @@ extern "C"
         if( pServiceManager )
         {
             Reference< XSingleComponentFactory > xFactory;
-            if( aImplName.equals( PPPOptimizerDialog_getImplementationName() ) )
+            if( aImplName == PPPOptimizerDialog_getImplementationName() )
             {
                 xFactory = createSingleComponentFactory(
                         PPPOptimizerDialog_createInstance,

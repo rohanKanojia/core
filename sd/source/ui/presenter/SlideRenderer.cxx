@@ -18,11 +18,10 @@
  */
 
 #include "SlideRenderer.hxx"
-#include "facreg.hxx"
-#include "sdpage.hxx"
+#include <facreg.hxx>
+#include <sdpage.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <com/sun/star/rendering/XBitmapCanvas.hpp>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 #include <cppcanvas/vclfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -34,11 +33,10 @@ namespace sd { namespace presenter {
 
 //===== SlideRenderer ==========================================================
 
-SlideRenderer::SlideRenderer (const Reference<XComponentContext>& rxContext)
+SlideRenderer::SlideRenderer ()
     : SlideRendererInterfaceBase(m_aMutex),
       maPreviewRenderer()
 {
-    (void)rxContext;
 }
 
 SlideRenderer::~SlideRenderer()
@@ -52,7 +50,6 @@ void SAL_CALL SlideRenderer::disposing()
 //----- XInitialization -------------------------------------------------------
 
 void SAL_CALL SlideRenderer::initialize (const Sequence<Any>& rArguments)
-    throw (Exception, RuntimeException, std::exception)
 {
     ThrowIfDisposed();
 
@@ -64,19 +61,16 @@ void SAL_CALL SlideRenderer::initialize (const Sequence<Any>& rArguments)
 }
 
 OUString SlideRenderer::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return OUString("com.sun.star.comp.Draw.SlideRenderer");
 }
 
 sal_Bool SlideRenderer::supportsService(OUString const & ServiceName)
-    throw (css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 css::uno::Sequence<OUString> SlideRenderer::getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<OUString>{"com.sun.star.drawing.SlideRenderer"};
 }
@@ -87,7 +81,6 @@ Reference<awt::XBitmap> SlideRenderer::createPreview (
     const Reference<drawing::XDrawPage>& rxSlide,
     const awt::Size& rMaximalSize,
     sal_Int16 nSuperSampleFactor)
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     SolarMutexGuard aGuard;
@@ -101,7 +94,6 @@ Reference<rendering::XBitmap> SlideRenderer::createPreviewForCanvas (
     const awt::Size& rMaximalSize,
     sal_Int16 nSuperSampleFactor,
     const Reference<rendering::XCanvas>& rxCanvas)
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     SolarMutexGuard aGuard;
@@ -119,7 +111,6 @@ Reference<rendering::XBitmap> SlideRenderer::createPreviewForCanvas (
 awt::Size SAL_CALL SlideRenderer::calculatePreviewSize (
     double nSlideAspectRatio,
     const awt::Size& rMaximalSize)
-    throw (css::uno::RuntimeException, std::exception)
 {
     if (rMaximalSize.Width <= 0
         || rMaximalSize.Height <= 0
@@ -143,8 +134,6 @@ BitmapEx SlideRenderer::CreatePreview (
     const Reference<drawing::XDrawPage>& rxSlide,
     const awt::Size& rMaximalSize,
     sal_Int16 nSuperSampleFactor)
-    throw (css::uno::RuntimeException,
-           std::exception)
 {
     const SdPage* pPage = SdPage::getImplementation(rxSlide);
     if (pPage == nullptr)
@@ -184,7 +173,7 @@ BitmapEx SlideRenderer::CreatePreview (
     const Image aPreview = maPreviewRenderer.RenderPage (
         pPage,
         Size(aPreviewSize.Width*nFactor, aPreviewSize.Height*nFactor),
-        OUString());
+        true);
     if (nFactor == 1)
         return aPreview.GetBitmapEx();
     else
@@ -198,7 +187,6 @@ BitmapEx SlideRenderer::CreatePreview (
 }
 
 void SlideRenderer::ThrowIfDisposed()
-    throw (css::lang::DisposedException)
 {
     if (SlideRendererInterfaceBase::rBHelper.bDisposed || SlideRendererInterfaceBase::rBHelper.bInDispose)
     {
@@ -210,11 +198,11 @@ void SlideRenderer::ThrowIfDisposed()
 } } // end of namespace ::sd::presenter
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
-com_sun_star_comp_Draw_SlideRenderer_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+com_sun_star_comp_Draw_SlideRenderer_get_implementation(css::uno::XComponentContext*,
                                                         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new sd::presenter::SlideRenderer(context));
+    return cppu::acquire(new sd::presenter::SlideRenderer);
 }
 
 

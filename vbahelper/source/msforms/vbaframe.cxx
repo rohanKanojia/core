@@ -31,56 +31,56 @@ ScVbaFrame::ScVbaFrame(
         const uno::Reference< uno::XComponentContext >& xContext,
         const uno::Reference< uno::XInterface >& xControl,
         const uno::Reference< frame::XModel >& xModel,
-        ov::AbstractGeometryAttributes* pGeomHelper,
+        std::unique_ptr<ov::AbstractGeometryAttributes> pGeomHelper,
         const css::uno::Reference< css::awt::XControl >& xDialog ) :
-    FrameImpl_BASE( xParent, xContext, xControl, xModel, pGeomHelper ),
+    FrameImpl_BASE( xParent, xContext, xControl, xModel, std::move(pGeomHelper) ),
     mxDialog( xDialog )
 {
 }
 
 // XFrame attributes
 
-OUString SAL_CALL ScVbaFrame::getCaption() throw (css::uno::RuntimeException, std::exception)
+OUString SAL_CALL ScVbaFrame::getCaption()
 {
     OUString Label;
     m_xProps->getPropertyValue( "Label" ) >>= Label;
     return Label;
 }
 
-void SAL_CALL ScVbaFrame::setCaption( const OUString& _caption ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL ScVbaFrame::setCaption( const OUString& _caption )
 {
     m_xProps->setPropertyValue( "Label", uno::makeAny( _caption ) );
 }
 
-sal_Int32 SAL_CALL ScVbaFrame::getSpecialEffect() throw (uno::RuntimeException, std::exception)
+sal_Int32 SAL_CALL ScVbaFrame::getSpecialEffect()
 {
     return msforms::fmSpecialEffect::fmSpecialEffectEtched;
 }
 
 
-void SAL_CALL ScVbaFrame::setSpecialEffect( sal_Int32 /*nSpecialEffect*/ ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL ScVbaFrame::setSpecialEffect( sal_Int32 /*nSpecialEffect*/ )
 {
     // #STUB
 }
 
-sal_Int32 SAL_CALL ScVbaFrame::getBorderStyle() throw (uno::RuntimeException, std::exception)
+sal_Int32 SAL_CALL ScVbaFrame::getBorderStyle()
 {
     return msforms::fmBorderStyle::fmBorderStyleNone;
 }
 
-void SAL_CALL ScVbaFrame::setBorderStyle( sal_Int32 /*nBorderStyle*/ ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL ScVbaFrame::setBorderStyle( sal_Int32 /*nBorderStyle*/ )
 {
     // #STUB
 }
 
-uno::Reference< msforms::XNewFont > SAL_CALL ScVbaFrame::getFont() throw (uno::RuntimeException, std::exception)
+uno::Reference< msforms::XNewFont > SAL_CALL ScVbaFrame::getFont()
 {
     return new VbaNewFont( m_xProps );
 }
 
 // XFrame methods
 
-uno::Any SAL_CALL ScVbaFrame::Controls( const uno::Any& rIndex ) throw (uno::RuntimeException, std::exception)
+uno::Any SAL_CALL ScVbaFrame::Controls( const uno::Any& rIndex )
 {
     // horizontal anchor of frame children is inside border line (add one unit to compensate border line width)
     double fOffsetX = mpGeometryHelper->getOffsetX() + getLeft() + 1.0;
@@ -89,7 +89,7 @@ uno::Any SAL_CALL ScVbaFrame::Controls( const uno::Any& rIndex ) throw (uno::Run
 
     uno::Reference< XCollection > xControls( new ScVbaControls( this, mxContext, mxDialog, m_xModel, fOffsetX, fOffsetY ) );
     if( rIndex.hasValue() )
-        return uno::Any( xControls->Item( rIndex, uno::Any() ) );
+        return xControls->Item( rIndex, uno::Any() );
     return uno::Any( xControls );
 }
 

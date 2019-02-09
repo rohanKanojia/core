@@ -18,15 +18,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TokenWriter.hxx"
+#include <TokenWriter.hxx>
 #include <com/sun/star/sdbc/XColumnLocate.hpp>
 #include <com/sun/star/sdbc/XResultSetMetaDataSupplier.hpp>
-#include "dbu_misc.hrc"
-#include "sqlmessage.hxx"
-#include <vcl/msgbox.hxx>
-#include "dbustrings.hrc"
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
+#include <core_resource.hxx>
+#include <strings.hrc>
+#include <strings.hxx>
+#include <sqlmessage.hxx>
+#include <stringconstants.hxx>
 #include <com/sun/star/sdbc/XRowUpdate.hpp>
-#include <functional>
 
 using namespace dbaui;
 using namespace ::com::sun::star::uno;
@@ -41,10 +43,9 @@ using namespace ::com::sun::star::lang;
 ORowSetImportExport::ORowSetImportExport(   vcl::Window* _pParent,
                                             const Reference< XResultSetUpdate >& _xResultSetUpdate,
                                             const svx::ODataAccessDescriptor& _aDataDescriptor,
-                                            const Reference< XComponentContext >& _rM,
-                                            const OUString& rExchange
+                                            const Reference< XComponentContext >& _rM
                                             )
-                                            : ODatabaseImportExport(_aDataDescriptor,_rM,nullptr,rExchange)
+                                            : ODatabaseImportExport(_aDataDescriptor,_rM,nullptr)
                                             ,m_xTargetResultSetUpdate(_xResultSetUpdate)
                                             ,m_xTargetRowUpdate(_xResultSetUpdate,UNO_QUERY)
                                             ,m_pParent(_pParent)
@@ -62,14 +63,14 @@ void ORowSetImportExport::initialize()
 
     m_xTargetResultSetMetaData = Reference<XResultSetMetaDataSupplier>(m_xTargetResultSetUpdate,UNO_QUERY)->getMetaData();
     if(!m_xTargetResultSetMetaData.is() || !xColumnLocate.is() || !m_xResultSetMetaData.is() )
-        throw SQLException(ModuleRes(STR_UNEXPECTED_ERROR),*this,OUString("S1000") ,0,Any());
+        throw SQLException(DBA_RES(STR_UNEXPECTED_ERROR),*this,"S1000",0,Any());
 
     sal_Int32 nCount = m_xTargetResultSetMetaData->getColumnCount();
     m_aColumnMapping.reserve(nCount);
     m_aColumnTypes.reserve(nCount);
     for (sal_Int32 i = 1;i <= nCount; ++i)
     {
-        sal_Int32 nPos = -1; // -1 means column is autoincrement or doesn't exist
+        sal_Int32 nPos = COLUMN_POSITION_NOT_FOUND; // means column is autoincrement or doesn't exist
         if(!m_xTargetResultSetMetaData->isAutoIncrement(i))
         {
             try
@@ -100,8 +101,8 @@ bool ORowSetImportExport::Write()
 bool ORowSetImportExport::Read()
 {
     // check if there is any column to copy
-    if(::std::find_if(m_aColumnMapping.begin(),m_aColumnMapping.end(),
-                        ::std::bind2nd(::std::greater<sal_Int32>(),0)) == m_aColumnMapping.end())
+    if(std::none_of(m_aColumnMapping.begin(),m_aColumnMapping.end(),
+                        [](sal_Int32 n) { return n > 0; }))
         return false;
     bool bContinue = true;
     if(m_aSelection.getLength())
@@ -141,11 +142,8 @@ bool ORowSetImportExport::Read()
         {
             --nRowCount;
             ++nCurrentRow;
-            if(!m_pRowMarker || m_pRowMarker[nRowFilterIndex] == nCurrentRow)
-            {
-                ++nRowFilterIndex;
-                bContinue = insertNewRow();
-            }
+            ++nRowFilterIndex;
+            bContinue = insertNewRow();
         }
     }
     return true;
@@ -157,71 +155,70 @@ bool ORowSetImportExport::insertNewRow()
     {
         m_xTargetResultSetUpdate->moveToInsertRow();
         sal_Int32 i = 1;
-        ::std::vector<sal_Int32>::const_iterator aEnd = m_aColumnMapping.end();
-        for (::std::vector<sal_Int32>::const_iterator aIter = m_aColumnMapping.begin(); aIter != aEnd ;++aIter,++i )
+        for (auto const& column : m_aColumnMapping)
         {
-            if(*aIter > 0)
+            if(column > 0)
             {
                 Any aValue;
                 switch(m_aColumnTypes[i-1])
                 {
                     case DataType::CHAR:
                     case DataType::VARCHAR:
-                        aValue <<= m_xRow->getString(*aIter);
+                        aValue <<= m_xRow->getString(column);
                         break;
                     case DataType::DECIMAL:
                     case DataType::NUMERIC:
-                        aValue <<= m_xRow->getDouble(*aIter);
+                        aValue <<= m_xRow->getDouble(column);
                         break;
                     case DataType::BIGINT:
-                        aValue <<= m_xRow->getLong(*aIter);
+                        aValue <<= m_xRow->getLong(column);
                         break;
                     case DataType::FLOAT:
-                        aValue <<= m_xRow->getFloat(*aIter);
+                        aValue <<= m_xRow->getFloat(column);
                         break;
                     case DataType::DOUBLE:
-                        aValue <<= m_xRow->getDouble(*aIter);
+                        aValue <<= m_xRow->getDouble(column);
                         break;
                     case DataType::LONGVARCHAR:
-                        aValue <<= m_xRow->getString(*aIter);
+                        aValue <<= m_xRow->getString(column);
                         break;
                     case DataType::LONGVARBINARY:
-                        aValue <<= m_xRow->getBytes(*aIter);
+                        aValue <<= m_xRow->getBytes(column);
                         break;
                     case DataType::DATE:
-                        aValue <<= m_xRow->getDate(*aIter);
+                        aValue <<= m_xRow->getDate(column);
                         break;
                     case DataType::TIME:
-                        aValue <<= m_xRow->getTime(*aIter);
+                        aValue <<= m_xRow->getTime(column);
                         break;
                     case DataType::TIMESTAMP:
-                        aValue <<= m_xRow->getTimestamp(*aIter);
+                        aValue <<= m_xRow->getTimestamp(column);
                         break;
                     case DataType::BIT:
                     case DataType::BOOLEAN:
-                        aValue <<= m_xRow->getBoolean(*aIter);
+                        aValue <<= m_xRow->getBoolean(column);
                         break;
                     case DataType::TINYINT:
-                        aValue <<= m_xRow->getByte(*aIter);
+                        aValue <<= m_xRow->getByte(column);
                         break;
                     case DataType::SMALLINT:
-                        aValue <<= m_xRow->getShort(*aIter);
+                        aValue <<= m_xRow->getShort(column);
                         break;
                     case DataType::INTEGER:
-                        aValue <<= m_xRow->getInt(*aIter);
+                        aValue <<= m_xRow->getInt(column);
                         break;
                     case DataType::REAL:
-                        aValue <<= m_xRow->getDouble(*aIter);
+                        aValue <<= m_xRow->getDouble(column);
                         break;
                     case DataType::BINARY:
                     case DataType::VARBINARY:
-                        aValue <<= m_xRow->getBytes(*aIter);
+                        aValue <<= m_xRow->getBytes(column);
                         break;
                     case DataType::BLOB:
-                        aValue <<= m_xRow->getBlob(*aIter);
+                        aValue <<= m_xRow->getBlob(column);
                         break;
                     case DataType::CLOB:
-                        aValue <<= m_xRow->getClob(*aIter);
+                        aValue <<= m_xRow->getClob(column);
                         break;
                     default:
                         SAL_WARN("dbaccess.ui", "Unknown type");
@@ -231,8 +228,9 @@ bool ORowSetImportExport::insertNewRow()
                 else
                     m_xTargetRowUpdate->updateObject(i,aValue);
             }
-            else if(*aIter == 0)//now we have know that we to set this column to null
+            else if(column == 0)//now we have know that we to set this column to null
                 m_xTargetRowUpdate->updateNull(i);
+            ++i;
         }
         m_xTargetResultSetUpdate->insertRow();
     }
@@ -240,9 +238,9 @@ bool ORowSetImportExport::insertNewRow()
     {
         if(!m_bAlreadyAsked)
         {
-            OUString sAskIfContinue = ModuleRes(STR_ERROR_OCCURRED_WHILE_COPYING);
-            ScopedVclPtrInstance< OSQLWarningBox > aDlg( m_pParent, sAskIfContinue, WB_YES_NO | WB_DEF_YES );
-            if(aDlg->Execute() == RET_YES)
+            OUString sAskIfContinue = DBA_RES(STR_ERROR_OCCURRED_WHILE_COPYING);
+            OSQLWarningBox aDlg(m_pParent ? m_pParent->GetFrameWeld() : nullptr, sAskIfContinue, MessBoxStyle::YesNo | MessBoxStyle::DefaultYes);
+            if (aDlg.run() == RET_YES)
                 m_bAlreadyAsked = true;
             else
                 return false;

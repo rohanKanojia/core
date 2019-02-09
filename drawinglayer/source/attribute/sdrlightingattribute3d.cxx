@@ -33,11 +33,11 @@ namespace drawinglayer
         public:
             // 3D light attribute definitions
             basegfx::BColor                         maAmbientLight;
-            ::std::vector< Sdr3DLightAttribute >    maLightVector;
+            std::vector< Sdr3DLightAttribute >    maLightVector;
 
             ImpSdrLightingAttribute(
                 const basegfx::BColor& rAmbientLight,
-                const ::std::vector< Sdr3DLightAttribute >& rLightVector)
+                const std::vector< Sdr3DLightAttribute >& rLightVector)
             :   maAmbientLight(rAmbientLight),
                 maLightVector(rLightVector)
             {
@@ -51,7 +51,7 @@ namespace drawinglayer
 
             // data read access
             const basegfx::BColor& getAmbientLight() const { return maAmbientLight; }
-            const ::std::vector< Sdr3DLightAttribute >& getLightVector() const { return maLightVector; }
+            const std::vector< Sdr3DLightAttribute >& getLightVector() const { return maLightVector; }
 
             bool operator==(const ImpSdrLightingAttribute& rCandidate) const
             {
@@ -68,7 +68,7 @@ namespace drawinglayer
 
         SdrLightingAttribute::SdrLightingAttribute(
             const basegfx::BColor& rAmbientLight,
-            const ::std::vector< Sdr3DLightAttribute >& rLightVector)
+            const std::vector< Sdr3DLightAttribute >& rLightVector)
         :   mpSdrLightingAttribute(ImpSdrLightingAttribute(
                 rAmbientLight, rLightVector))
         {
@@ -79,25 +79,21 @@ namespace drawinglayer
         {
         }
 
-        SdrLightingAttribute::SdrLightingAttribute(const SdrLightingAttribute& rCandidate)
-        :   mpSdrLightingAttribute(rCandidate.mpSdrLightingAttribute)
-        {
-        }
+        SdrLightingAttribute::SdrLightingAttribute(const SdrLightingAttribute&) = default;
 
-        SdrLightingAttribute::~SdrLightingAttribute()
-        {
-        }
+        SdrLightingAttribute::SdrLightingAttribute(SdrLightingAttribute&&) = default;
+
+        SdrLightingAttribute::~SdrLightingAttribute() = default;
+
 
         bool SdrLightingAttribute::isDefault() const
         {
             return mpSdrLightingAttribute.same_object(theGlobalDefault::get());
         }
 
-        SdrLightingAttribute& SdrLightingAttribute::operator=(const SdrLightingAttribute& rCandidate)
-        {
-            mpSdrLightingAttribute = rCandidate.mpSdrLightingAttribute;
-            return *this;
-        }
+        SdrLightingAttribute& SdrLightingAttribute::operator=(const SdrLightingAttribute&) = default;
+
+        SdrLightingAttribute& SdrLightingAttribute::operator=(SdrLightingAttribute&&) = default;
 
         bool SdrLightingAttribute::operator==(const SdrLightingAttribute& rCandidate) const
         {
@@ -108,7 +104,7 @@ namespace drawinglayer
             return rCandidate.mpSdrLightingAttribute == mpSdrLightingAttribute;
         }
 
-        const ::std::vector< Sdr3DLightAttribute >& SdrLightingAttribute::getLightVector() const
+        const std::vector< Sdr3DLightAttribute >& SdrLightingAttribute::getLightVector() const
         {
             return mpSdrLightingAttribute->getLightVector();
         }
@@ -125,8 +121,10 @@ namespace drawinglayer
             // take care of global ambient light
             aRetval += mpSdrLightingAttribute->getAmbientLight() * rColor;
 
+            const std::vector<Sdr3DLightAttribute>& rLightVector = mpSdrLightingAttribute->getLightVector();
+
             // prepare light access. Is there a light?
-            const sal_uInt32 nLightCount(mpSdrLightingAttribute->getLightVector().size());
+            const sal_uInt32 nLightCount(rLightVector.size());
 
             if(nLightCount && !rNormalInEyeCoordinates.equalZero())
             {
@@ -134,14 +132,14 @@ namespace drawinglayer
                 basegfx::B3DVector aEyeNormal(rNormalInEyeCoordinates);
                 aEyeNormal.normalize();
 
-                for(sal_uInt32 a(0L); a < nLightCount; a++)
+                for(sal_uInt32 a(0); a < nLightCount; a++)
                 {
-                    const Sdr3DLightAttribute& rLight(mpSdrLightingAttribute->getLightVector()[a]);
+                    const Sdr3DLightAttribute& rLight(rLightVector[a]);
                     const double fCosFac(rLight.getDirection().scalar(aEyeNormal));
 
                     if(basegfx::fTools::more(fCosFac, 0.0))
                     {
-                        aRetval += ((rLight.getColor() * rColor) * fCosFac);
+                        aRetval += (rLight.getColor() * rColor) * fCosFac;
 
                         if(rLight.getSpecular())
                         {
@@ -152,8 +150,8 @@ namespace drawinglayer
 
                             if(basegfx::fTools::more(fCosFac2, 0.0))
                             {
-                                fCosFac2 = pow(fCosFac2, (double)nSpecularIntensity);
-                                aRetval += (rSpecular * fCosFac2);
+                                fCosFac2 = pow(fCosFac2, static_cast<double>(nSpecularIntensity));
+                                aRetval += rSpecular * fCosFac2;
                             }
                         }
                     }

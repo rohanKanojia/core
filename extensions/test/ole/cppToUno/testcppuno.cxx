@@ -19,16 +19,17 @@
 
 
 #pragma warning(disable: 4917)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <comdef.h>
-#include <tchar.h>
 #include <atlbase.h>
 #include <atlcom.h>
 #include <stdio.h>
 #include <com/sun/star/bridge/ModelDependent.hpp>
 #include <com/sun/star/bridge/XBridgeSupplier2.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/script/XInvocation.hpp>
 #include <oletest/XCallback.hpp>
 #include <rtl/process.h>
 #include <cppuhelper/servicefactory.hxx>
@@ -37,7 +38,6 @@
 
 using namespace com::sun::star::lang;
 using namespace com::sun::star::uno;
-using namespace com::sun::star::script;
 using namespace com::sun::star::bridge;
 using namespace com::sun::star::bridge::ModelDependent;
 using namespace cppu;
@@ -48,12 +48,12 @@ bool incrementMultidimensionalIndex(
     const sal_Int32 * parDimensionLengths,
     sal_Int32 * parMultidimensionalIndex);
 
-int SAL_CALL _tmain( int /*argc*/, _TCHAR * /*argv[]*/ )
+int SAL_CALL main( int /*argc*/, char** /*argv*/ )
 {
     HRESULT hr;
     if( FAILED( hr=CoInitialize(NULL)))
     {
-        _tprintf(_T("CoInitialize failed \n"));
+        printf("CoInitialize failed \n");
         return -1;
     }
 
@@ -61,8 +61,8 @@ int SAL_CALL _tmain( int /*argc*/, _TCHAR * /*argv[]*/ )
     if( FAILED(hr=doTest()))
     {
         _com_error err( hr);
-        const TCHAR * errMsg= err.ErrorMessage();
-        MessageBox( NULL, errMsg, "Test failed", MB_ICONERROR);
+        const CHAR * errMsg= err.ErrorMessage();
+        MessageBoxA( NULL, errMsg, "Test failed", MB_ICONERROR);
     }
 
     CoUninitialize();

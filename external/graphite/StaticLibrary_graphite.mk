@@ -15,6 +15,7 @@ $(eval $(call gb_StaticLibrary_set_warnings_not_errors,graphite))
 
 $(eval $(call gb_StaticLibrary_set_include,graphite,\
 	-I$(call gb_UnpackedTarball_get_dir,graphite/include) \
+	-I$(call gb_UnpackedTarball_get_dir,graphite/src) \
 	$$(INCLUDE) \
 ))
 
@@ -33,7 +34,7 @@ endif
 
 $(eval $(call gb_StaticLibrary_set_generated_cxx_suffix,graphite,cpp))
 
-$(eval $(call gb_StaticLibrary_add_generated_cxxobjects,graphite,\
+$(eval $(call gb_StaticLibrary_add_generated_exception_objects,graphite,\
 	UnpackedTarball/graphite/src/$(if $(filter GCC,$(COM)),direct,call)_machine \
 	UnpackedTarball/graphite/src/gr_char_info \
 	UnpackedTarball/graphite/src/gr_face \
@@ -43,7 +44,6 @@ $(eval $(call gb_StaticLibrary_add_generated_cxxobjects,graphite,\
 	UnpackedTarball/graphite/src/gr_segment \
 	UnpackedTarball/graphite/src/gr_slot \
 	UnpackedTarball/graphite/src/json \
-	UnpackedTarball/graphite/src/CachedFace \
 	UnpackedTarball/graphite/src/CmapCache \
 	UnpackedTarball/graphite/src/Code \
 	UnpackedTarball/graphite/src/Collider \
@@ -59,9 +59,6 @@ $(eval $(call gb_StaticLibrary_add_generated_cxxobjects,graphite,\
 	UnpackedTarball/graphite/src/NameTable \
 	UnpackedTarball/graphite/src/Pass \
 	UnpackedTarball/graphite/src/Position \
-	UnpackedTarball/graphite/src/SegCache \
-	UnpackedTarball/graphite/src/SegCacheEntry \
-	UnpackedTarball/graphite/src/SegCacheStore \
 	UnpackedTarball/graphite/src/Segment \
 	UnpackedTarball/graphite/src/Silf \
 	UnpackedTarball/graphite/src/Slot \

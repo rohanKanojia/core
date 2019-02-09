@@ -19,15 +19,12 @@
 #ifndef INCLUDED_CHART2_SOURCE_MODEL_INC_CHARTTYPEMANAGER_HXX
 #define INCLUDED_CHART2_SOURCE_MODEL_INC_CHARTTYPEMANAGER_HXX
 
-#include "OPropertySet.hxx"
-#include "MutexContainer.hxx"
 #include <cppuhelper/implbase.hxx>
-#include <comphelper/uno3.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-
 #include <com/sun/star/chart2/XChartTypeManager.hpp>
+
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 namespace chart
 {
@@ -41,36 +38,25 @@ class ChartTypeManager :
 public:
     explicit ChartTypeManager(
         css::uno::Reference< css::uno::XComponentContext > const & xContext );
-    virtual ~ChartTypeManager();
+    virtual ~ChartTypeManager() override;
 
     virtual OUString SAL_CALL
         getImplementationName()
-            throw( css::uno::RuntimeException, std::exception )
         override;
     virtual sal_Bool SAL_CALL
         supportsService( const OUString& ServiceName )
-            throw( css::uno::RuntimeException, std::exception )
         override;
     virtual css::uno::Sequence< OUString > SAL_CALL
         getSupportedServiceNames()
-            throw( css::uno::RuntimeException, std::exception )
         override;
-    static OUString getImplementationName_Static();
-    static css::uno::Sequence< OUString >
-        getSupportedServiceNames_Static();
 
 protected:
     // ____ XMultiServiceFactory ____
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstance( const OUString& aServiceSpecifier )
-        throw (css::uno::Exception,
-               css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstance( const OUString& aServiceSpecifier ) override;
     virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceWithArguments(
             const OUString& ServiceSpecifier,
-            const css::uno::Sequence< css::uno::Any >& Arguments )
-        throw (css::uno::Exception,
-               css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getAvailableServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Sequence< css::uno::Any >& Arguments ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getAvailableServiceNames() override;
 
     // ____ XChartTypeManager ____
     // currently empty

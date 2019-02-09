@@ -13,6 +13,11 @@ $(eval $(call gb_Module_add_targets,extras,\
 	CustomTarget_autocorr \
 	CustomTarget_autotextuser \
 	CustomTarget_glade \
+	CustomTarget_tplofficorr \
+	CustomTarget_tploffimisc \
+	CustomTarget_tplpersonal \
+	CustomTarget_tplpresnt \
+	CustomTarget_tpl_styles \
 	Package_autocorr \
 	Package_autotextuser \
 	Package_cfgsrvnolang \
@@ -25,18 +30,16 @@ $(eval $(call gb_Module_add_targets,extras,\
 	Package_gallmytheme \
 	Package_gallroot \
 	Package_gallsystem \
-	Package_gallwwwback \
 	Package_gallwwwgraf \
 	Package_glade \
 	Package_labels \
 	$(if $(filter WNT,$(OS)),Package_newfiles) \
 	Package_palettes \
-	Package_tpllayoutimpr \
 	Package_tplofficorr \
 	Package_tploffimisc \
+	Package_tplpersonal \
 	Package_tplpresnt \
 	Package_tpl_styles \
-	Package_tplpersonal \
 	Package_tplwizagenda \
 	Package_tplwizbitmap \
 	Package_tplwizdesktop \
@@ -55,6 +58,7 @@ $(eval $(call gb_Module_add_l10n_targets,extras,\
 ifneq ($(WITH_GALLERY_BUILD),)
 $(eval $(call gb_Module_add_targets,extras,\
 	Gallery_arrows \
+	Gallery_backgrounds \
 	Gallery_computers \
 	Gallery_diagrams \
 	Gallery_education \
@@ -67,5 +71,13 @@ $(eval $(call gb_Module_add_targets,extras,\
 	Gallery_transportation \
 ))
 endif
+
+$(eval $(call gb_Module_add_targets,extras,\
+	Personas \
+))
+
+$(eval $(call gb_Module_add_targets,extras,\
+	CustomTarget_opensymbol \
+))
 
 # vim: set noet sw=4 ts=4:

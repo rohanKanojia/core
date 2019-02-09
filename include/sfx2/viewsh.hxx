@@ -33,19 +33,24 @@
 #include <com/sun/star/datatransfer/clipboard/XClipboardNotifier.hpp>
 #include <cppuhelper/interfacecontainer.hxx>
 #include <sfx2/shell.hxx>
+#include <sfx2/viewfac.hxx>
 #include <tools/gen.hxx>
-#include <tools/errcode.hxx>
+#include <i18nlangtag/languagetag.hxx>
+#include <vcl/IDialogRenderable.hxx>
+#include <vcl/errcode.hxx>
 #include <vcl/jobset.hxx>
 #include <o3tl/typed_flags_set.hxx>
 #include <vcl/vclptr.hxx>
 #include <sfx2/tabdlg.hxx>
 #include <LibreOfficeKit/LibreOfficeKitTypes.h>
+#include <editeng/outliner.hxx>
 #include <functional>
 
 class SfxBaseController;
 class Size;
 class Fraction;
 namespace vcl { class Window; }
+namespace weld { class Window; }
 class KeyEvent;
 class WorkWindow;
 class SvBorder;
@@ -60,7 +65,6 @@ class Printer;
 class SfxPrinter;
 class SfxProgress;
 class SfxFrameItem;
-class Dialog;
 class Menu;
 class NotifyEvent;
 class SfxInPlaceClient;
@@ -95,13 +99,11 @@ enum class SfxViewShellFlags
 {
     NONE              = 0x0000,
     HAS_PRINTOPTIONS  = 0x0010, /* Options-Button and Options-Dialog in PrintDialog */
-    CAN_PRINT         = 0x0020, /* Printing enabled without having to create a Printer */
-    NO_SHOW           = 0x0040, /* Window of the ViewShell shall not be showed automatically */
     NO_NEWWINDOW      = 0x0100, /* Allow N View */
 };
 namespace o3tl
 {
-    template<> struct typed_flags<SfxViewShellFlags> : is_typed_flags<SfxViewShellFlags, 0x0170> {};
+    template<> struct typed_flags<SfxViewShellFlags> : is_typed_flags<SfxViewShellFlags, 0x0110> {};
 }
 
 /*  [Description]
@@ -112,12 +114,13 @@ namespace o3tl
 */
 
 
+class SfxViewFactory;
 #define SFX_DECL_VIEWFACTORY(Class) \
 private: \
     static SfxViewFactory *pFactory; \
 public: \
     static SfxViewShell  *CreateInstance(SfxViewFrame *pFrame, SfxViewShell *pOldView); \
-    static void           RegisterFactory( sal_uInt16 nPrio = USHRT_MAX ); \
+    static void           RegisterFactory( SfxInterfaceId nPrio ); \
     static SfxViewFactory*Factory() { return pFactory; } \
     static void           InitFactory()
 
@@ -125,7 +128,7 @@ public: \
     SfxViewFactory* Class::pFactory; \
     SfxViewShell* Class::CreateInstance(SfxViewFrame *pFrame, SfxViewShell *pOldView) \
     { return new Class(pFrame, pOldView); } \
-    void Class::RegisterFactory( sal_uInt16 nPrio ) \
+    void Class::RegisterFactory( SfxInterfaceId nPrio ) \
     { \
         pFactory = new SfxViewFactory(&CreateInstance,nPrio,AsciiViewName);\
         InitFactory(); \
@@ -140,26 +143,24 @@ template<class T> bool checkSfxViewShell(const SfxViewShell* pShell)
     return dynamic_cast<const T*>(pShell) != nullptr;
 }
 
-class SFX2_DLLPUBLIC SfxViewShell: public SfxShell, public SfxListener
+class SFX2_DLLPUBLIC SfxViewShell: public SfxShell, public SfxListener, public OutlinerViewShell, public vcl::ILibreOfficeKitNotifier
 {
-#ifdef INCLUDED_SFX2_VIEWSH_HXX
 friend class SfxViewFrame;
 friend class SfxBaseController;
 friend class SfxPrinterController;
-#endif
 
-    struct SfxViewShell_Impl*   pImp;
+    std::unique_ptr<struct SfxViewShell_Impl>   pImpl;
     SfxViewFrame*               pFrame;
-    SfxShell*                   pSubShell;
     VclPtr<vcl::Window>         pWindow;
     bool                        bNoNewWindow;
     bool                        mbPrinterSettingsModified;
+    LanguageTag                 maLOKLanguageTag;
 
 protected:
     virtual void                Activate(bool IsMDIActivate) override;
     virtual void                Deactivate(bool IsMDIActivate) override;
 
-    virtual void                InnerResizePixel( const Point &rOfs, const Size &rSize );
+    virtual void                InnerResizePixel( const Point &rOfs, const Size &rSize, bool inplaceEditModeChange );
     virtual void                OuterResizePixel( const Point &rOfs, const Size &rSize );
     virtual void                SetZoomFactor( const Fraction &rZoomX, const Fraction &rZoomY );
 
@@ -169,6 +170,7 @@ protected:
 
 public:
     // Iteration
+    static size_t               GetActiveShells( bool bOnlyVisible = true );
     static SfxViewShell*        GetFirst( bool bOnlyVisible = true, const std::function<bool ( const SfxViewShell* )>& isViewShell = nullptr );
     static SfxViewShell*        GetNext( const SfxViewShell& rPrev,
                                          bool bOnlyVisible = true,
@@ -186,8 +188,8 @@ private:
 
 public:
 
-                                SfxViewShell( SfxViewFrame *pFrame, SfxViewShellFlags nFlags = SfxViewShellFlags::NONE );
-    virtual                     ~SfxViewShell();
+                                SfxViewShell( SfxViewFrame *pFrame, SfxViewShellFlags nFlags );
+    virtual                     ~SfxViewShell() override;
 
     SfxInPlaceClient*           GetIPClient() const;
     SfxInPlaceClient*           GetUIActiveClient() const;
@@ -195,12 +197,12 @@ public:
 
     virtual ErrCode             DoVerb(long nVerb);
 
-    void                        OutplaceActivated( bool bActive, SfxInPlaceClient* pClient );
+    void                        OutplaceActivated( bool bActive );
     virtual void                UIActivating( SfxInPlaceClient* pClient );
     virtual void                UIDeactivated( SfxInPlaceClient* pClient );
 
     void                        JumpToMark( const OUString& rMark );
-    void                        VisAreaChanged(const Rectangle& rRect);
+    void                        VisAreaChanged();
 
     // Misc
 
@@ -214,13 +216,15 @@ public:
     virtual bool                HasSelection( bool bText = true ) const;
     virtual SdrView*            GetDrawView() const;
 
-    SfxShell*                   GetSubShell() const { return pSubShell; }
     void                        AddSubShell( SfxShell& rShell );
     void                        RemoveSubShell( SfxShell *pShell=nullptr );
     SfxShell*                   GetSubShell( sal_uInt16 );
 
     virtual       SfxShell*     GetFormShell()       { return nullptr; };
     virtual const SfxShell*     GetFormShell() const { return nullptr; };
+
+    // ILibreOfficeKitNotifier
+    virtual void                notifyWindow(vcl::LOKWindowId nLOKWindowId, const OUString& rAction, const std::vector<vcl::LOKPayloadItem>& rPayload = std::vector<vcl::LOKPayloadItem>()) const override;
 
     // Focus, KeyInput, Cursor
     virtual void                ShowCursor( bool bOn = true );
@@ -229,8 +233,8 @@ public:
 
     // Viewing Interface
     vcl::Window*                GetWindow() const { return pWindow; }
+    weld::Window*               GetFrameWeld() const;
     void                        SetWindow( vcl::Window *pViewPort );
-    virtual void                AdjustPosSizePixel( const Point &rOfs, const Size &rSize );
     const SvBorder&             GetBorderPixel() const;
     void                        SetBorderPixel( const SvBorder &rBorder );
     void                        InvalidateBorder();
@@ -240,8 +244,7 @@ public:
     virtual SfxPrinter*         GetPrinter( bool bCreate = false );
     virtual sal_uInt16          SetPrinter( SfxPrinter *pNewPrinter, SfxPrinterChangeFlags nDiffFlags = SFX_PRINTER_ALL );
     virtual bool                HasPrintOptionsPage() const;
-    virtual VclPtr<SfxTabPage>  CreatePrintOptionsPage( vcl::Window *pParent, const SfxItemSet &rOptions );
-    static JobSetup             GetJobSetup();
+    virtual VclPtr<SfxTabPage>  CreatePrintOptionsPage(TabPageParent pParent, const SfxItemSet &rOptions);
     Printer*                    GetActivePrinter() const;
 
     // Working set
@@ -249,7 +252,7 @@ public:
     virtual void                ReadUserData( const OUString&, bool bBrowse = false );
     virtual void                WriteUserDataSequence ( css::uno::Sequence < css::beans::PropertyValue >& );
     virtual void                ReadUserDataSequence ( const css::uno::Sequence < css::beans::PropertyValue >& );
-    virtual void                QueryObjAreaPixel( Rectangle& rRect ) const;
+    virtual void                QueryObjAreaPixel( tools::Rectangle& rRect ) const;
 
     virtual SfxObjectShell*     GetObjectShell() override;
 
@@ -281,7 +284,7 @@ public:
     css::uno::Reference< css::frame::XController >
                                 GetController();
 
-    bool                        TryContextMenuInterception( Menu& rIn, const OUString& rMenuIdentifier, Menu*& rpOut, css::ui::ContextMenuExecuteEvent aEvent );
+    bool                        TryContextMenuInterception( Menu& rIn, const OUString& rMenuIdentifier, VclPtr<Menu>& rpOut, css::ui::ContextMenuExecuteEvent aEvent );
     bool                        TryContextMenuInterception( Menu& rMenu, const OUString& rMenuIdentifier, css::ui::ContextMenuExecuteEvent aEvent );
 
     void                        ExecPrint( const css::uno::Sequence < css::beans::PropertyValue >&, bool, bool );
@@ -298,14 +301,12 @@ public:
     SAL_DLLPRIVATE bool GlobalKeyInput_Impl( const KeyEvent &rKeyEvent );
 
     SAL_DLLPRIVATE void NewIPClient_Impl( SfxInPlaceClient *pIPClient );
-    SAL_DLLPRIVATE void IPClientGone_Impl( SfxInPlaceClient *pIPClient );
-    SAL_DLLPRIVATE void ResetAllClients_Impl( SfxInPlaceClient *pIP );
-    SAL_DLLPRIVATE void DiscardClients_Impl();
+    SAL_DLLPRIVATE void IPClientGone_Impl( SfxInPlaceClient const *pIPClient );
+    SAL_DLLPRIVATE void ResetAllClients_Impl( SfxInPlaceClient const *pIP );
 
     SAL_DLLPRIVATE void SetPrinter_Impl( VclPtr<SfxPrinter>& pNewPrinter );
-    SAL_DLLPRIVATE bool IsShowView_Impl() const;
 
-    SAL_DLLPRIVATE bool HandleNotifyEvent_Impl( NotifyEvent& rEvent );
+    SAL_DLLPRIVATE bool HandleNotifyEvent_Impl( NotifyEvent const & rEvent );
     SAL_DLLPRIVATE bool HasKeyListeners_Impl();
     SAL_DLLPRIVATE bool HasMouseClickListeners_Impl();
 
@@ -315,17 +316,37 @@ public:
     SAL_DLLPRIVATE void ExecPrint_Impl(SfxRequest &);
     SAL_DLLPRIVATE void ExecMisc_Impl(SfxRequest &);
     SAL_DLLPRIVATE void GetState_Impl(SfxItemSet&);
-    SAL_DLLPRIVATE void CheckIPClient_Impl( SfxInPlaceClient*, const Rectangle& );
+    SAL_DLLPRIVATE void CheckIPClient_Impl(SfxInPlaceClient const *, const tools::Rectangle&);
     SAL_DLLPRIVATE void PushSubShells_Impl( bool bPush=true );
     SAL_DLLPRIVATE void PopSubShells_Impl() { PushSubShells_Impl( false ); }
-    SAL_DLLPRIVATE void TakeOwnership_Impl();
-    SAL_DLLPRIVATE void TakeFrameOwnership_Impl();
     SAL_DLLPRIVATE bool ExecKey_Impl(const KeyEvent& aKey);
 
     /// The actual per-view implementation of lok::Document::registerCallback().
     void registerLibreOfficeKitViewCallback(LibreOfficeKitCallback pCallback, void* pLibreOfficeKitData);
     /// Invokes the registered callback, if there are any.
-    void libreOfficeKitViewCallback(int nType, const char* pPayload) const;
+    void libreOfficeKitViewCallback(int nType, const char* pPayload) const override;
+    /// Set if we are doing tiled searching.
+    void setTiledSearching(bool bTiledSearching);
+    /// See lok::Document::getPart().
+    virtual int getPart() const;
+    virtual void dumpAsXml(struct _xmlTextWriter* pWriter) const;
+    /// See OutlinerViewShell::GetViewShellId().
+    ViewShellId GetViewShellId() const override;
+    /// See OutlinerViewShell::NotifyOtherViews().
+    void NotifyOtherViews(int nType, const OString& rKey, const OString& rPayload) override;
+    /// See OutlinerViewShell::NotifyOtherView().
+    void NotifyOtherView(OutlinerViewShell* pOtherShell, int nType, const OString& rKey, const OString& rPayload) override;
+    /// Ask this view to send its cursor position to pViewShell.
+    virtual void NotifyCursor(SfxViewShell* /*pViewShell*/) const;
+    /// Where a new view can perform some update/initialization soon after the callback has been registered.
+    virtual void afterCallbackRegistered();
+    /// See OutlinerViewShell::GetEditWindowForActiveOLEObj().
+    virtual vcl::Window* GetEditWindowForActiveOLEObj() const override;
+
+    /// Set the LibreOfficeKit language of this view.
+    void SetLOKLanguageTag(const OUString& rBcp47LanguageTag);
+    /// Get the LibreOfficeKit language of this view.
+    const LanguageTag& GetLOKLanguageTag() const { return maLOKLanguageTag; }
 };
 
 

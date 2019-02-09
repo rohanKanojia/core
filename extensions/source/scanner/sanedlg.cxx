@@ -20,16 +20,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <tools/config.hxx>
+#include <unotools/resmgr.hxx>
 #include <vcl/dibtools.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
+#include <vcl/settings.hxx>
+#include <vcl/svapp.hxx>
 #include <vcl/builderfactory.hxx>
-#include <sanedlg.hxx>
-#include <grid.hxx>
+#include <vcl/event.hxx>
+#include "sanedlg.hxx"
+#include "grid.hxx"
 #include <math.h>
 #include <sal/macros.h>
+#include <sal/log.hxx>
 #include <rtl/strbuf.hxx>
 #include <memory>
-#include "strings.hrc"
+#include <strings.hrc>
 
 #define PREVIEW_WIDTH       113
 #define PREVIEW_HEIGHT      160
@@ -38,7 +43,7 @@
 
 namespace {
 
-void DrawRectangles(vcl::RenderContext& rRenderContext, Point& rUL, Point& rBR)
+void DrawRectangles(vcl::RenderContext& rRenderContext, Point const & rUL, Point const & rBR)
 {
     int nMiddleX, nMiddleY;
     Point aBL, aUR;
@@ -52,14 +57,14 @@ void DrawRectangles(vcl::RenderContext& rRenderContext, Point& rUL, Point& rBR)
     rRenderContext.DrawLine(aBL, rBR);
     rRenderContext.DrawLine(rBR, aUR);
     rRenderContext.DrawLine(aUR, rUL);
-    rRenderContext.DrawRect(Rectangle(rUL, Size(RECT_SIZE_PIX,RECT_SIZE_PIX)));
-    rRenderContext.DrawRect(Rectangle(aBL, Size(RECT_SIZE_PIX, -RECT_SIZE_PIX)));
-    rRenderContext.DrawRect(Rectangle(rBR, Size(-RECT_SIZE_PIX, -RECT_SIZE_PIX)));
-    rRenderContext.DrawRect(Rectangle(aUR, Size(-RECT_SIZE_PIX, RECT_SIZE_PIX )));
-    rRenderContext.DrawRect(Rectangle(Point(nMiddleX - RECT_SIZE_PIX / 2, rUL.Y()), Size(RECT_SIZE_PIX, RECT_SIZE_PIX)));
-    rRenderContext.DrawRect(Rectangle(Point(nMiddleX - RECT_SIZE_PIX / 2, rBR.Y()), Size(RECT_SIZE_PIX, -RECT_SIZE_PIX)));
-    rRenderContext.DrawRect(Rectangle(Point(rUL.X(), nMiddleY - RECT_SIZE_PIX / 2), Size(RECT_SIZE_PIX, RECT_SIZE_PIX)));
-    rRenderContext.DrawRect(Rectangle(Point(rBR.X(), nMiddleY - RECT_SIZE_PIX / 2), Size(-RECT_SIZE_PIX, RECT_SIZE_PIX)));
+    rRenderContext.DrawRect(tools::Rectangle(rUL, Size(RECT_SIZE_PIX,RECT_SIZE_PIX)));
+    rRenderContext.DrawRect(tools::Rectangle(aBL, Size(RECT_SIZE_PIX, -RECT_SIZE_PIX)));
+    rRenderContext.DrawRect(tools::Rectangle(rBR, Size(-RECT_SIZE_PIX, -RECT_SIZE_PIX)));
+    rRenderContext.DrawRect(tools::Rectangle(aUR, Size(-RECT_SIZE_PIX, RECT_SIZE_PIX )));
+    rRenderContext.DrawRect(tools::Rectangle(Point(nMiddleX - RECT_SIZE_PIX / 2, rUL.Y()), Size(RECT_SIZE_PIX, RECT_SIZE_PIX)));
+    rRenderContext.DrawRect(tools::Rectangle(Point(nMiddleX - RECT_SIZE_PIX / 2, rBR.Y()), Size(RECT_SIZE_PIX, -RECT_SIZE_PIX)));
+    rRenderContext.DrawRect(tools::Rectangle(Point(rUL.X(), nMiddleY - RECT_SIZE_PIX / 2), Size(RECT_SIZE_PIX, RECT_SIZE_PIX)));
+    rRenderContext.DrawRect(tools::Rectangle(Point(rBR.X(), nMiddleY - RECT_SIZE_PIX / 2), Size(-RECT_SIZE_PIX, RECT_SIZE_PIX)));
 }
 
 }
@@ -71,7 +76,7 @@ private:
                          BottomLeft, Left };
 
     Bitmap    maPreviewBitmap;
-    Rectangle maPreviewRect;
+    tools::Rectangle maPreviewRect;
     Point     maTopLeft, maBottomRight;
     Point     maMinTopLeft, maMaxBottomRight;
     VclPtr<SaneDlg>  mpParentDialog;
@@ -92,7 +97,7 @@ public:
     {
     }
 
-    virtual ~ScanPreview()
+    virtual ~ScanPreview() override
     {
         disposeOnce();
     }
@@ -129,7 +134,7 @@ public:
         return mbDragEnable;
     }
 
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
     virtual void MouseButtonDown(const MouseEvent& rMEvt) override;
     virtual void MouseMove(const MouseEvent& rMEvt) override;
     virtual void MouseButtonUp(const MouseEvent& rMEvt) override;
@@ -151,31 +156,31 @@ public:
     {
         Point aPoint(0, Y);
         aPoint = GetPixelPos(aPoint);
-        maTopLeft.Y() = aPoint.Y();
+        maTopLeft.setY( aPoint.Y() );
     }
     void ChangePreviewLogicTopLeftX(long X)
     {
         Point aPoint(X, 0);
         aPoint = GetPixelPos(aPoint);
-        maTopLeft.X() = aPoint.X();
+        maTopLeft.setX( aPoint.X() );
     }
     void ChangePreviewLogicBottomRightY(long Y)
     {
         Point aPoint(0, Y);
         aPoint = GetPixelPos(aPoint);
-        maBottomRight.Y() = aPoint.Y();
+        maBottomRight.setY( aPoint.Y() );
     }
     void ChangePreviewLogicBottomRightX(long X)
     {
         Point aPoint(X, 0);
         aPoint = GetPixelPos(aPoint);
-        maBottomRight.X() = aPoint.X();
+        maBottomRight.setX( aPoint.X() );
     }
     void SetPreviewLogicRect(const Point& rTopLeft, const Point &rBottomRight)
     {
         maTopLeft = GetPixelPos(rTopLeft);
         maBottomRight = GetPixelPos(rBottomRight);
-        maPreviewRect = Rectangle(maTopLeft,
+        maPreviewRect = tools::Rectangle(maTopLeft,
                                   Size(maBottomRight.X() - maTopLeft.X(),
                                        maBottomRight.Y() - maTopLeft.Y()));
     }
@@ -192,21 +197,14 @@ public:
     }
     virtual Size GetOptimalSize() const override
     {
-        Size aSize(LogicToPixel(Size(PREVIEW_WIDTH, PREVIEW_HEIGHT), MAP_APPFONT));
+        Size aSize(LogicToPixel(Size(PREVIEW_WIDTH, PREVIEW_HEIGHT), MapMode(MapUnit::MapAppFont)));
         aSize.setWidth(aSize.getWidth()+1);
         aSize.setHeight(aSize.getHeight()+1);
         return aSize;
     }
 };
 
-VCL_BUILDER_DECL_FACTORY(ScanPreview)
-{
-    WinBits nWinStyle = 0;
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nWinStyle |= WB_BORDER;
-    rRet = VclPtr<ScanPreview>::Create(pParent, nWinStyle);
-}
+VCL_BUILDER_FACTORY_CONSTRUCTOR(ScanPreview, 0)
 
 SaneDlg::SaneDlg( vcl::Window* pParent, Sane& rSane, bool bScanEnabled ) :
         ModalDialog(pParent, "SaneDialog", "modules/scanner/ui/sanedialog.ui"),
@@ -214,7 +212,6 @@ SaneDlg::SaneDlg( vcl::Window* pParent, Sane& rSane, bool bScanEnabled ) :
         mbScanEnabled( bScanEnabled ),
         mnCurrentOption(0),
         mnCurrentElement(0),
-        mpRange(nullptr),
         mfMin(0.0),
         mfMax(0.0),
         doScan(false)
@@ -226,7 +223,7 @@ SaneDlg::SaneDlg( vcl::Window* pParent, Sane& rSane, bool bScanEnabled ) :
     get(mpScanButton, "scanButton");
     get(mpButtonOption, "optionsButton");
     get(mpOptionTitle, "optionTitleLabel");
-    Size aSize(LogicToPixel(Size(130, 102), MAP_APPFONT));
+    Size aSize(LogicToPixel(Size(130, 102), MapMode(MapUnit::MapAppFont)));
     mpOptionTitle->set_width_request(aSize.Width());
     mpOptionTitle->set_height_request(aSize.Height() / 2);
     get(mpOptionDescTxt, "optionsDescLabel");
@@ -323,10 +320,9 @@ void SaneDlg::dispose()
 
 namespace {
 
-ResId SaneResId( sal_uInt32 nID )
+OUString SaneResId(const char *pID)
 {
-    static ResMgr* pResMgr = ResMgr::CreateResMgr( "scn" );
-    return ResId( nID, *pResMgr );
+    return Translate::get(pID, Translate::Create("pcr"));
 }
 
 }
@@ -335,8 +331,10 @@ short SaneDlg::Execute()
 {
     if( ! Sane::IsSane() )
     {
-        ScopedVclPtrInstance< MessageDialog > aErrorBox(nullptr, SaneResId(STR_COULD_NOT_BE_INIT));
-        aErrorBox->Execute();
+        std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(nullptr,
+                                                       VclMessageType::Warning, VclButtonsType::Ok,
+                                                       SaneResId(STR_COULD_NOT_BE_INIT)));
+        xErrorBox->run();
         return RET_CANCEL;
     }
     LoadState();
@@ -398,45 +396,45 @@ void SaneDlg::InitFields()
         {
             mpReslBox->Enable();
 
-            mpReslBox->SetValue( (long)fRes );
-            double *pDouble = nullptr;
+            mpReslBox->SetValue( static_cast<long>(fRes) );
+            std::unique_ptr<double[]> pDouble;
             nValue = mrSane.GetRange( nOption, pDouble );
             if( nValue > -1 )
             {
+                assert(pDouble);
                 if( nValue )
                 {
-                    mpReslBox->SetMin( (long)pDouble[0] );
-                    mpReslBox->SetMax( (long)pDouble[ nValue-1 ] );
+                    mpReslBox->SetMin( static_cast<long>(pDouble[0]) );
+                    mpReslBox->SetMax( static_cast<long>(pDouble[ nValue-1 ]) );
                     for( i=0; i<nValue; i++ )
                     {
-                        if( i == 0 || i == nValue-1 || ! ( ((int)pDouble[i]) % 20) )
-                            mpReslBox->InsertValue( (long)pDouble[i] );
+                        if( i == 0 || i == nValue-1 || ! ( static_cast<int>(pDouble[i]) % 20) )
+                            mpReslBox->InsertValue( static_cast<long>(pDouble[i]) );
                     }
                 }
                 else
                 {
-                    mpReslBox->SetMin( (long)pDouble[0] );
-                    mpReslBox->SetMax( (long)pDouble[1] );
-                    mpReslBox->InsertValue( (long)pDouble[0] );
+                    mpReslBox->SetMin( static_cast<long>(pDouble[0]) );
+                    mpReslBox->SetMax( static_cast<long>(pDouble[1]) );
+                    mpReslBox->InsertValue( static_cast<long>(pDouble[0]) );
                     // Can only select 75 and 2400 dpi in Scanner dialogue
                     // scanner allows random setting of dpi resolution, a slider might be useful
                     // support that
                     // workaround: offer at least some more standard dpi resolution between
                     // min and max value
                     int bGot300 = 0;
-                    for ( long nRes = (long) pDouble[0] * 2; nRes < (long) pDouble[1]; nRes = nRes * 2 )
+                    for ( long nRes = static_cast<long>(pDouble[0]) * 2; nRes < static_cast<long>(pDouble[1]); nRes = nRes * 2 )
                     {
                         if ( !bGot300 && nRes > 300 ) {
                             nRes = 300; bGot300 = 1;
                         }
                         mpReslBox->InsertValue(nRes);
                     }
-                    mpReslBox->InsertValue( (long)pDouble[1] );
+                    mpReslBox->InsertValue( static_cast<long>(pDouble[1]) );
                 }
             }
             else
                 mpReslBox->Enable( false );
-            delete [] pDouble;
         }
     }
     else
@@ -472,48 +470,47 @@ void SaneDlg::InitFields()
             {
                 if( mrSane.GetOptionUnit( nOption ) == SANE_UNIT_MM )
                 {
-                    pField->SetUnit( FUNIT_MM );
-                    pField->SetValue( (int)fValue, FUNIT_MM );
+                    pField->SetUnit( FieldUnit::MM );
+                    pField->SetValue( static_cast<int>(fValue), FieldUnit::MM );
                 }
                 else // SANE_UNIT_PIXEL
                 {
-                    pField->SetValue( (int)fValue, FUNIT_CUSTOM );
+                    pField->SetValue( static_cast<int>(fValue), FieldUnit::CUSTOM );
                     pField->SetCustomUnitText("Pixel");
                 }
                 switch( i ) {
-                    case 0: aTopLeft.X() = (int)fValue;break;
-                    case 1: aTopLeft.Y() = (int)fValue;break;
-                    case 2: aBottomRight.X() = (int)fValue;break;
-                    case 3: aBottomRight.Y() = (int)fValue;break;
+                    case 0: aTopLeft.setX( static_cast<int>(fValue) );break;
+                    case 1: aTopLeft.setY( static_cast<int>(fValue) );break;
+                    case 2: aBottomRight.setX( static_cast<int>(fValue) );break;
+                    case 3: aBottomRight.setY( static_cast<int>(fValue) );break;
                 }
             }
-            double *pDouble = nullptr;
+            std::unique_ptr<double[]> pDouble;
             nValue = mrSane.GetRange( nOption, pDouble );
             if( nValue > -1 )
             {
                 if( pDouble )
                 {
-                    pField->SetMin( (long)pDouble[0] );
+                    pField->SetMin( static_cast<long>(pDouble[0]) );
                     if( nValue )
-                        pField->SetMax( (long)pDouble[ nValue-1 ] );
+                        pField->SetMax( static_cast<long>(pDouble[ nValue-1 ]) );
                     else
-                        pField->SetMax( (long)pDouble[ 1 ] );
-                    delete [] pDouble;
+                        pField->SetMax( static_cast<long>(pDouble[ 1 ]) );
                 }
                 switch( i ) {
-                    case 0: aMinTopLeft.X() = pField->GetMin();break;
-                    case 1: aMinTopLeft.Y() = pField->GetMin();break;
-                    case 2: aMaxBottomRight.X() = pField->GetMax();break;
-                    case 3: aMaxBottomRight.Y() = pField->GetMax();break;
+                    case 0: aMinTopLeft.setX( pField->GetMin() );break;
+                    case 1: aMinTopLeft.setY( pField->GetMin() );break;
+                    case 2: aMaxBottomRight.setX( pField->GetMax() );break;
+                    case 3: aMaxBottomRight.setY( pField->GetMax() );break;
                 }
             }
             else
             {
                 switch( i ) {
-                    case 0: aMinTopLeft.X() = (int)fValue;break;
-                    case 1: aMinTopLeft.Y() = (int)fValue;break;
-                    case 2: aMaxBottomRight.X() = (int)fValue;break;
-                    case 3: aMaxBottomRight.Y() = (int)fValue;break;
+                    case 0: aMinTopLeft.setX( static_cast<int>(fValue) );break;
+                    case 1: aMinTopLeft.setY( static_cast<int>(fValue) );break;
+                    case 2: aMaxBottomRight.setX( static_cast<int>(fValue) );break;
+                    case 3: aMaxBottomRight.setY( static_cast<int>(fValue) );break;
                 }
             }
             pField->Enable();
@@ -524,26 +521,26 @@ void SaneDlg::InitFields()
             pField->SetMin( 0 );
             switch( i ) {
                 case 0:
-                    aMinTopLeft.X() = 0;
-                    aTopLeft.X() = 0;
+                    aMinTopLeft.setX( 0 );
+                    aTopLeft.setX( 0 );
                     pField->SetMax( PREVIEW_WIDTH );
                     pField->SetValue( 0 );
                     break;
                 case 1:
-                    aMinTopLeft.Y() = 0;
-                    aTopLeft.Y() = 0;
+                    aMinTopLeft.setY( 0 );
+                    aTopLeft.setY( 0 );
                     pField->SetMax( PREVIEW_HEIGHT );
                     pField->SetValue( 0 );
                     break;
                 case 2:
-                    aMaxBottomRight.X() = PREVIEW_WIDTH;
-                    aBottomRight.X() = PREVIEW_WIDTH;
+                    aMaxBottomRight.setX( PREVIEW_WIDTH );
+                    aBottomRight.setX( PREVIEW_WIDTH );
                     pField->SetMax( PREVIEW_WIDTH );
                     pField->SetValue( PREVIEW_WIDTH );
                     break;
                 case 3:
-                    aMaxBottomRight.Y() = PREVIEW_HEIGHT;
-                    aBottomRight.Y() = PREVIEW_HEIGHT;
+                    aMaxBottomRight.setY( PREVIEW_HEIGHT );
+                    aBottomRight.setY( PREVIEW_HEIGHT );
                     pField->SetMax( PREVIEW_HEIGHT );
                     pField->SetValue( PREVIEW_HEIGHT );
                     break;
@@ -603,7 +600,7 @@ void SaneDlg::InitFields()
     }
 }
 
-IMPL_LINK_TYPED( SaneDlg, ClickBtnHdl, Button*, pButton, void )
+IMPL_LINK( SaneDlg, ClickBtnHdl, Button*, pButton, void )
 {
     if( mrSane.IsOpen() )
     {
@@ -614,8 +611,10 @@ IMPL_LINK_TYPED( SaneDlg, ClickBtnHdl, Button*, pButton, void )
             aString = aString.replaceFirst( "%s", Sane::GetVendor( mrSane.GetDeviceNumber() ) );
             aString = aString.replaceFirst( "%s", Sane::GetModel( mrSane.GetDeviceNumber() ) );
             aString = aString.replaceFirst( "%s", Sane::GetType( mrSane.GetDeviceNumber() ) );
-            ScopedVclPtrInstance< MessageDialog > aInfoBox(this, aString, VCL_MESSAGE_INFO);
-            aInfoBox->Execute();
+            std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                          VclMessageType::Info, VclButtonsType::Ok,
+                                                          aString));
+            xInfoBox->run();
         }
         else if( pButton == mpPreviewButton )
             AcquirePreview();
@@ -640,7 +639,7 @@ IMPL_LINK_TYPED( SaneDlg, ClickBtnHdl, Button*, pButton, void )
                     std::unique_ptr<double[]> x(new double[ nElements ]);
                     std::unique_ptr<double[]> y(new double[ nElements ]);
                     for( int i = 0; i < nElements; i++ )
-                        x[ i ] = (double)i;
+                        x[ i ] = static_cast<double>(i);
                     mrSane.GetOptionValue( mnCurrentOption, y.get() );
 
                     ScopedVclPtrInstance< GridDialog > aGrid( x.get(), y.get(), nElements, this );
@@ -663,7 +662,7 @@ IMPL_LINK_TYPED( SaneDlg, ClickBtnHdl, Button*, pButton, void )
     }
     if( pButton == mpOKButton || pButton == mpScanButton )
     {
-        double fRes = (double)mpReslBox->GetValue();
+        double fRes = static_cast<double>(mpReslBox->GetValue());
         SetAdjustedNumericalValue( "resolution", fRes );
         UpdateScanArea(true);
         SaveState();
@@ -677,11 +676,11 @@ IMPL_LINK_TYPED( SaneDlg, ClickBtnHdl, Button*, pButton, void )
     }
 }
 
-IMPL_LINK_TYPED( SaneDlg, SelectHdl, ListBox&, rListBox, void )
+IMPL_LINK( SaneDlg, SelectHdl, ListBox&, rListBox, void )
 {
     if( &rListBox == mpDeviceBox && Sane::IsSane() && Sane::CountDevices() )
     {
-        int nNewNumber = mpDeviceBox->GetSelectEntryPos();
+        int nNewNumber = mpDeviceBox->GetSelectedEntryPos();
         int nOldNumber = mrSane.GetDeviceNumber();
         if (nNewNumber != nOldNumber)
         {
@@ -695,19 +694,17 @@ IMPL_LINK_TYPED( SaneDlg, SelectHdl, ListBox&, rListBox, void )
     {
         if( &rListBox == mpQuantumRangeBox )
         {
-            OString aValue(OUStringToOString(mpQuantumRangeBox->GetSelectEntry(),
-                osl_getThreadTextEncoding()));
-            double fValue = atof(aValue.getStr());
+            double fValue = mpQuantumRangeBox->GetSelectedEntry().toDouble();
             mrSane.SetOptionValue( mnCurrentOption, fValue, mnCurrentElement );
         }
         else if( &rListBox == mpStringRangeBox )
         {
-            mrSane.SetOptionValue( mnCurrentOption, mpStringRangeBox->GetSelectEntry() );
+            mrSane.SetOptionValue( mnCurrentOption, mpStringRangeBox->GetSelectedEntry() );
         }
     }
 }
 
-IMPL_LINK_TYPED( SaneDlg, OptionsBoxSelectHdl, SvTreeListBox*, pBox, void )
+IMPL_LINK( SaneDlg, OptionsBoxSelectHdl, SvTreeListBox*, pBox, void )
 {
     if( pBox == mpOptionBox && Sane::IsSane() )
     {
@@ -775,7 +772,7 @@ IMPL_LINK_TYPED( SaneDlg, OptionsBoxSelectHdl, SvTreeListBox*, pBox, void )
     }
 }
 
-IMPL_LINK_TYPED( SaneDlg, ModifyHdl, Edit&, rEdit, void )
+IMPL_LINK( SaneDlg, ModifyHdl, Edit&, rEdit, void )
 {
     if( mrSane.IsOpen() )
     {
@@ -785,11 +782,11 @@ IMPL_LINK_TYPED( SaneDlg, ModifyHdl, Edit&, rEdit, void )
         }
         else if( &rEdit == mpReslBox )
         {
-            double fRes = (double)mpReslBox->GetValue();
+            double fRes = static_cast<double>(mpReslBox->GetValue());
             int nOption = mrSane.GetOptionByName( "resolution" );
             if( nOption != -1 )
             {
-                double* pDouble = nullptr;
+                std::unique_ptr<double[]> pDouble;
                 int nValues = mrSane.GetRange( nOption, pDouble );
                 if( nValues > 0 )
                 {
@@ -809,16 +806,12 @@ IMPL_LINK_TYPED( SaneDlg, ModifyHdl, Edit&, rEdit, void )
                     if( fRes > pDouble[ 1 ] )
                         fRes = pDouble[ 1 ];
                 }
-                delete[] pDouble;
-                mpReslBox->SetValue( (sal_uLong)fRes );
+                mpReslBox->SetValue( static_cast<sal_uLong>(fRes) );
             }
         }
         else if( &rEdit == mpNumericEdit )
         {
-            double fValue;
-            OString aContents(OUStringToOString(mpNumericEdit->GetText(),
-                osl_getThreadTextEncoding()));
-            fValue = atof(aContents.getStr());
+            double fValue = mpNumericEdit->GetText().toDouble();
             if( mfMin != mfMax && ( fValue < mfMin || fValue > mfMax ) )
             {
                 char pBuf[256];
@@ -867,7 +860,7 @@ IMPL_LINK_TYPED( SaneDlg, ModifyHdl, Edit&, rEdit, void )
     }
 }
 
-IMPL_LINK_NOARG_TYPED( SaneDlg, ReloadSaneOptionsHdl, Sane&, void )
+IMPL_LINK_NOARG( SaneDlg, ReloadSaneOptionsHdl, Sane&, void )
 {
     mnCurrentOption = -1;
     mnCurrentElement = 0;
@@ -883,36 +876,42 @@ void SaneDlg::AcquirePreview()
 
     UpdateScanArea( true );
     // set small resolution for preview
-    double fResl = (double)mpReslBox->GetValue();
+    double fResl = static_cast<double>(mpReslBox->GetValue());
     SetAdjustedNumericalValue( "resolution", 30.0 );
 
     int nOption = mrSane.GetOptionByName( "preview" );
     if( nOption == -1 )
     {
         OUString aString(SaneResId(STR_SLOW_PREVIEW));
-        ScopedVclPtrInstance< MessageDialog > aBox(this, aString, VCL_MESSAGE_WARNING, VCL_BUTTONS_OK_CANCEL);
-        if (aBox->Execute() == RET_CANCEL)
+        std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                  VclMessageType::Warning, VclButtonsType::OkCancel,
+                                                  aString));
+        if (xBox->run() == RET_CANCEL)
             return;
     }
     else
         mrSane.SetOptionValue( nOption, true );
 
-    Reference<BitmapTransporter> xTransporter(new BitmapTransporter);
-    if( ! mrSane.Start( *xTransporter.get() ) )
+    rtl::Reference<BitmapTransporter> xTransporter(new BitmapTransporter);
+    if (!mrSane.Start(*xTransporter))
     {
-        ScopedVclPtrInstance< MessageDialog > aErrorBox(this, SaneResId(STR_ERROR_SCAN));
-        aErrorBox->Execute();
+        std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                       VclMessageType::Warning, VclButtonsType::Ok,
+                                                       SaneResId(STR_ERROR_SCAN)));
+        xErrorBox->run();
     }
     else
     {
+#if OSL_DEBUG_LEVEL > 0
         xTransporter->getStream().Seek( STREAM_SEEK_TO_END );
         SAL_INFO("extensions.scanner", "Previewbitmapstream contains " << xTransporter->getStream().Tell() << "bytes");
+#endif
         xTransporter->getStream().Seek( STREAM_SEEK_TO_BEGIN );
         mpPreview->SetBitmap(xTransporter->getStream());
     }
 
     SetAdjustedNumericalValue( "resolution", fResl );
-    mpReslBox->SetValue( (sal_uLong)fResl );
+    mpReslBox->SetValue( static_cast<sal_uLong>(fResl) );
 
     mpPreview->UpdatePreviewBounds();
     mpPreview->Invalidate();
@@ -922,7 +921,7 @@ void ScanPreview::UpdatePreviewBounds()
 {
     if( mbDragEnable )
     {
-        maPreviewRect = Rectangle( maTopLeft,
+        maPreviewRect = tools::Rectangle( maTopLeft,
                                    Size( maBottomRight.X() - maTopLeft.X(),
                                          maBottomRight.Y() - maTopLeft.Y() )
                                    );
@@ -933,29 +932,29 @@ void ScanPreview::UpdatePreviewBounds()
         if( aBMSize.Width() > aBMSize.Height() && aBMSize.Width() )
         {
             int nVHeight = (maBottomRight.X() - maTopLeft.X()) * aBMSize.Height() / aBMSize.Width();
-            maPreviewRect = Rectangle( Point( maTopLeft.X(), ( maTopLeft.Y() + maBottomRight.Y() )/2 - nVHeight/2 ),
+            maPreviewRect = tools::Rectangle( Point( maTopLeft.X(), ( maTopLeft.Y() + maBottomRight.Y() )/2 - nVHeight/2 ),
                                        Size( maBottomRight.X() - maTopLeft.X(),
                                              nVHeight ) );
         }
         else if (aBMSize.Height())
         {
             int nVWidth = (maBottomRight.Y() - maTopLeft.Y()) * aBMSize.Width() / aBMSize.Height();
-            maPreviewRect = Rectangle( Point( ( maTopLeft.X() + maBottomRight.X() )/2 - nVWidth/2, maTopLeft.Y() ),
+            maPreviewRect = tools::Rectangle( Point( ( maTopLeft.X() + maBottomRight.X() )/2 - nVWidth/2, maTopLeft.Y() ),
                                        Size( nVWidth,
                                              maBottomRight.Y() - maTopLeft.Y() ) );
         }
     }
 }
 
-void ScanPreview::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void ScanPreview::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect)
 {
     Window::Paint(rRenderContext, rRect);
-    rRenderContext.SetMapMode(MAP_APPFONT);
-    rRenderContext.SetFillColor(Color(COL_WHITE));
-    rRenderContext.SetLineColor(Color(COL_WHITE));
-    rRenderContext.DrawRect(Rectangle(Point(0, 0),
+    rRenderContext.SetMapMode(MapMode(MapUnit::MapAppFont));
+    rRenderContext.SetFillColor(COL_WHITE);
+    rRenderContext.SetLineColor(COL_WHITE);
+    rRenderContext.DrawRect(tools::Rectangle(Point(0, 0),
                                       Size(PREVIEW_WIDTH, PREVIEW_HEIGHT)));
-    rRenderContext.SetMapMode(MapMode(MAP_PIXEL));
+    rRenderContext.SetMapMode(MapMode(MapUnit::MapPixel));
     // check for sane values
     rRenderContext.DrawBitmap(maPreviewRect.TopLeft(), maPreviewRect.GetSize(), maPreviewBitmap);
 
@@ -1020,18 +1019,13 @@ void SaneDlg::EstablishStringRange()
 
 void SaneDlg::EstablishQuantumRange()
 {
-    if( mpRange )
-    {
-        delete [] mpRange;
-        mpRange = nullptr;
-    }
+    mpRange.reset();
     int nValues = mrSane.GetRange( mnCurrentOption, mpRange );
     if( nValues == 0 )
     {
         mfMin = mpRange[ 0 ];
         mfMax = mpRange[ 1 ];
-        delete [] mpRange;
-        mpRange = nullptr;
+        mpRange.reset();
         EstablishNumericOption();
     }
     else if( nValues > 0 )
@@ -1103,33 +1097,33 @@ void ScanPreview::MouseMove(const MouseEvent& rMEvt)
         switch( meDragDirection )
         {
             case TopLeft:       maTopLeft = aMousePos; break;
-            case Top:           maTopLeft.Y() = aMousePos.Y(); break;
+            case Top:           maTopLeft.setY( aMousePos.Y() ); break;
             case TopRight:
-                maTopLeft.Y() = aMousePos.Y();
-                maBottomRight.X() = aMousePos.X();
+                maTopLeft.setY( aMousePos.Y() );
+                maBottomRight.setX( aMousePos.X() );
                 break;
-            case Right:         maBottomRight.X() = aMousePos.X(); break;
+            case Right:         maBottomRight.setX( aMousePos.X() ); break;
             case BottomRight:   maBottomRight = aMousePos; break;
-            case Bottom:        maBottomRight.Y() = aMousePos.Y(); break;
+            case Bottom:        maBottomRight.setY( aMousePos.Y() ); break;
             case BottomLeft:
-                maTopLeft.X() = aMousePos.X();
-                maBottomRight.Y() = aMousePos.Y();
+                maTopLeft.setX( aMousePos.X() );
+                maBottomRight.setY( aMousePos.Y() );
                 break;
-            case Left:          maTopLeft.X() = aMousePos.X(); break;
+            case Left:          maTopLeft.setX( aMousePos.X() ); break;
             default: break;
         }
         int nSwap;
         if( maTopLeft.X() > maBottomRight.X() )
         {
             nSwap = maTopLeft.X();
-            maTopLeft.X() = maBottomRight.X();
-            maBottomRight.X() = nSwap;
+            maTopLeft.setX( maBottomRight.X() );
+            maBottomRight.setX( nSwap );
         }
         if( maTopLeft.Y() > maBottomRight.Y() )
         {
             nSwap = maTopLeft.Y();
-            maTopLeft.Y() = maBottomRight.Y();
-            maBottomRight.Y() = nSwap;
+            maTopLeft.setY( maBottomRight.Y() );
+            maBottomRight.setY( nSwap );
         }
         Invalidate();
         mpParentDialog->UpdateScanArea(false);
@@ -1159,7 +1153,7 @@ void ScanPreview::MouseButtonDown( const MouseEvent& rMEvt )
                      aMousePixel.X() < nMiddleX + RECT_SIZE_PIX )
             {
                 meDragDirection = Top;
-                aMousePixel.Y() = maTopLeft.Y();
+                aMousePixel.setY( maTopLeft.Y() );
                 mbIsDragging = true;
             }
             else if( aMousePixel.X() > maBottomRight.X() - RECT_SIZE_PIX &&
@@ -1177,14 +1171,14 @@ void ScanPreview::MouseButtonDown( const MouseEvent& rMEvt )
                 aMousePixel.X() < maTopLeft.X() + RECT_SIZE_PIX )
             {
                 meDragDirection = Left;
-                aMousePixel.X() = maTopLeft.X();
+                aMousePixel.setX( maTopLeft.X() );
                 mbIsDragging = true;
             }
             else if( aMousePixel.X() > maBottomRight.X() - RECT_SIZE_PIX &&
                      aMousePixel.X() <= maBottomRight.X() )
             {
                 meDragDirection = Right;
-                aMousePixel.X() = maBottomRight.X();
+                aMousePixel.setX( maBottomRight.X() );
                 mbIsDragging = true;
             }
         }
@@ -1202,7 +1196,7 @@ void ScanPreview::MouseButtonDown( const MouseEvent& rMEvt )
                      aMousePixel.X() < nMiddleX + RECT_SIZE_PIX )
             {
                 meDragDirection = Bottom;
-                aMousePixel.Y() = maBottomRight.Y();
+                aMousePixel.setY( maBottomRight.Y() );
                 mbIsDragging = true;
             }
             else if( aMousePixel.X() > maBottomRight.X() - RECT_SIZE_PIX &&
@@ -1241,8 +1235,8 @@ void ScanPreview::DrawDrag(vcl::RenderContext& rRenderContext)
         return;
 
     RasterOp eROP = rRenderContext.GetRasterOp();
-    rRenderContext.SetRasterOp(ROP_INVERT);
-    rRenderContext.SetMapMode(MapMode(MAP_PIXEL));
+    rRenderContext.SetRasterOp(RasterOp::Invert);
+    rRenderContext.SetMapMode(MapMode(MapUnit::MapPixel));
 
     if (mbDragDrawn)
         DrawRectangles(rRenderContext, aLastUL, aLastBR);
@@ -1253,7 +1247,7 @@ void ScanPreview::DrawDrag(vcl::RenderContext& rRenderContext)
 
     mbDragDrawn = true;
     rRenderContext.SetRasterOp(eROP);
-    rRenderContext.SetMapMode(MAP_APPFONT);
+    rRenderContext.SetMapMode(MapMode(MapUnit::MapAppFont));
 }
 
 Point ScanPreview::GetPixelPos( const Point& rIn) const
@@ -1266,25 +1260,25 @@ Point ScanPreview::GetPixelPos( const Point& rIn) const
           / ( maMaxBottomRight.Y() - maMinTopLeft.Y() ) )
         );
 
-    return LogicToPixel(aConvert, MAP_APPFONT);
+    return LogicToPixel(aConvert, MapMode(MapUnit::MapAppFont));
 }
 
 Point ScanPreview::GetLogicPos(const Point& rIn) const
 {
-    Point aConvert = PixelToLogic(rIn, MAP_APPFONT);
+    Point aConvert = PixelToLogic(rIn, MapMode(MapUnit::MapAppFont));
     if( aConvert.X() < 0 )
-        aConvert.X() = 0;
+        aConvert.setX( 0 );
     if( aConvert.X() >= PREVIEW_WIDTH )
-        aConvert.X() = PREVIEW_WIDTH-1;
+        aConvert.setX( PREVIEW_WIDTH-1 );
     if( aConvert.Y() < 0 )
-        aConvert.Y() = 0;
+        aConvert.setY( 0 );
     if( aConvert.Y() >= PREVIEW_HEIGHT )
-        aConvert.Y() = PREVIEW_HEIGHT-1;
+        aConvert.setY( PREVIEW_HEIGHT-1 );
 
-    aConvert.X() *= ( maMaxBottomRight.X() - maMinTopLeft.X() );
-    aConvert.X() /= PREVIEW_WIDTH;
-    aConvert.Y() *= ( maMaxBottomRight.Y() - maMinTopLeft.Y() );
-    aConvert.Y() /= PREVIEW_HEIGHT;
+    aConvert.setX( aConvert.X() * ( maMaxBottomRight.X() - maMinTopLeft.X() ) );
+    aConvert.setX( aConvert.X() / ( PREVIEW_WIDTH) );
+    aConvert.setY( aConvert.Y() * ( maMaxBottomRight.Y() - maMinTopLeft.Y() ) );
+    aConvert.setY( aConvert.Y() / ( PREVIEW_HEIGHT) );
     return aConvert;
 }
 
@@ -1306,10 +1300,10 @@ void SaneDlg::UpdateScanArea(bool bSend)
 
     if( mrSane.IsOpen() )
     {
-        SetAdjustedNumericalValue( "tl-x", (double)aUL.X() );
-        SetAdjustedNumericalValue( "tl-y", (double)aUL.Y() );
-        SetAdjustedNumericalValue( "br-x", (double)aBR.X() );
-        SetAdjustedNumericalValue( "br-y", (double)aBR.Y() );
+        SetAdjustedNumericalValue( "tl-x", static_cast<double>(aUL.X()) );
+        SetAdjustedNumericalValue( "tl-y", static_cast<double>(aUL.Y()) );
+        SetAdjustedNumericalValue( "br-x", static_cast<double>(aBR.X()) );
+        SetAdjustedNumericalValue( "br-y", static_cast<double>(aBR.Y()) );
     }
 }
 
@@ -1329,7 +1323,7 @@ bool SaneDlg::LoadState()
 
     aConfig.SetGroup( "SANE" );
     OString aString = aConfig.ReadKey( "SO_LastSaneDevice" );
-    for( i = 0; i < Sane::CountDevices() && !aString.equals(OUStringToOString(Sane::GetName(i), osl_getThreadTextEncoding())); i++ ) ;
+    for( i = 0; i < Sane::CountDevices() && aString != OUStringToOString(Sane::GetName(i), osl_getThreadTextEncoding()); i++ ) ;
     if( i == Sane::CountDevices() )
         return false;
 
@@ -1402,7 +1396,7 @@ void SaneDlg::SaveState()
     aConfig.DeleteGroup( "SANE" );
     aConfig.SetGroup( "SANE" );
     aConfig.WriteKey( "SO_LastSANEDevice",
-        OUStringToOString(mpDeviceBox->GetSelectEntry(), RTL_TEXTENCODING_UTF8) );
+        OUStringToOString(mpDeviceBox->GetSelectedEntry(), RTL_TEXTENCODING_UTF8) );
 
     static char const* pSaveOptions[] = {
         "resolution",
@@ -1411,10 +1405,10 @@ void SaneDlg::SaveState()
         "br-x",
         "br-y"
     };
-    for( size_t i = 0; i < SAL_N_ELEMENTS(pSaveOptions); ++i )
+    for(const char * pSaveOption : pSaveOptions)
     {
-        OString aOption = pSaveOptions[i];
-        int nOption = mrSane.GetOptionByName( pSaveOptions[i] );
+        OString aOption = pSaveOption;
+        int nOption = mrSane.GetOptionByName( pSaveOption );
         if( nOption > -1 )
         {
             SANE_Value_Type nType = mrSane.GetOptionType( nOption );
@@ -1475,18 +1469,19 @@ bool SaneDlg::SetAdjustedNumericalValue(
     double fValue,
     int nElement )
 {
-    int nOption;
-    if( ! Sane::IsSane() || ! mrSane.IsOpen() || ( nOption = mrSane.GetOptionByName( pOption ) ) == -1 )
+    if (! Sane::IsSane() || ! mrSane.IsOpen())
+        return false;
+    int const nOption(mrSane.GetOptionByName(pOption));
+    if (nOption == -1)
         return false;
 
     if( nElement < 0 || nElement >= mrSane.GetOptionElements( nOption ) )
         return false;
 
-    double* pValues = nullptr;
+    std::unique_ptr<double[]> pValues;
     int nValues;
     if( ( nValues = mrSane.GetRange( nOption, pValues ) ) < 0 )
     {
-        delete [] pValues;
         return false;
     }
 
@@ -1513,7 +1508,6 @@ bool SaneDlg::SetAdjustedNumericalValue(
         if( fValue > pValues[1] )
             fValue = pValues[1];
     }
-    delete [] pValues;
     mrSane.SetOptionValue( nOption, fValue, nElement );
     SAL_INFO("extensions.scanner", "yields " << fValue);
 

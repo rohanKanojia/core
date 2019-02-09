@@ -24,6 +24,7 @@
 
 #include <drawinglayer/primitive2d/baseprimitive2d.hxx>
 #include <vcl/vclenum.hxx>
+#include <tools/fontenum.hxx>
 
 
 namespace drawinglayer
@@ -78,11 +79,11 @@ namespace drawinglayer
         /** TextEmphasisMark definition */
         enum TextEmphasisMark
         {
-            TEXT_EMPHASISMARK_NONE,
-            TEXT_EMPHASISMARK_DOT,
-            TEXT_EMPHASISMARK_CIRCLE,
-            TEXT_EMPHASISMARK_DISC,
-            TEXT_EMPHASISMARK_ACCENT
+            TEXT_FONT_EMPHASIS_MARK_NONE,
+            TEXT_FONT_EMPHASIS_MARK_DOT,
+            TEXT_FONT_EMPHASIS_MARK_CIRCLE,
+            TEXT_FONT_EMPHASIS_MARK_DISC,
+            TEXT_FONT_EMPHASIS_MARK_ACCENT
         };
 
         /** TextRelief definition */

@@ -23,8 +23,7 @@
 #include <oox/drawingml/drawingmltypes.hxx>
 #include "worksheethelper.hxx"
 
-#include <com/sun/star/drawing/XShape.hpp>
-#include <com/sun/star/table/XCell.hpp>
+namespace oox { class AttributeList; }
 
 namespace oox {
 namespace xls {
@@ -32,15 +31,15 @@ namespace xls {
 /** Absolute position in a spreadsheet (in EMUs) independent from cells. */
 struct AnchorPointModel : public ::oox::drawingml::EmuPoint
 {
-    inline explicit     AnchorPointModel() : ::oox::drawingml::EmuPoint( -1, -1 ) {}
-    inline bool         isValid() const { return (X >= 0) && (Y >= 0); }
+    explicit     AnchorPointModel() : ::oox::drawingml::EmuPoint( -1, -1 ) {}
+    bool         isValid() const { return (X >= 0) && (Y >= 0); }
 };
 
 /** Absolute size in a spreadsheet (in EMUs). */
 struct AnchorSizeModel : public ::oox::drawingml::EmuSize
 {
-    inline explicit     AnchorSizeModel() : ::oox::drawingml::EmuSize( -1, -1 ) {}
-    inline bool         isValid() const { return (Width >= 0) && (Height >= 0); }
+    explicit     AnchorSizeModel() : ::oox::drawingml::EmuSize( -1, -1 ) {}
+    bool         isValid() const { return (Width >= 0) && (Height >= 0); }
 };
 
 /** Position in spreadsheet (cell position and offset inside cell). */
@@ -52,7 +51,7 @@ struct CellAnchorModel
     sal_Int64           mnRowOffset;        /// Y offset inside the row.
 
     explicit            CellAnchorModel();
-    inline bool         isValid() const { return (mnCol >= 0) && (mnRow >= 0); }
+    bool         isValid() const { return (mnCol >= 0) && (mnRow >= 0); }
 };
 
 /** Application-specific client data of a shape. */
@@ -73,8 +72,11 @@ public:
     {
         ANCHOR_INVALID,         /// Anchor type is unknown.
         ANCHOR_ABSOLUTE,        /// Absolute anchor (top-left corner and size in absolute units).
+                                /// Matches our "Page" anchor -> ScAnchorType::SCA_PAGE
         ANCHOR_ONECELL,         /// One-cell anchor (top-left corner at cell, size in absolute units).
+                                /// Matches our "Cell" anchor -> ScAnchorType::SCA_CELL
         ANCHOR_TWOCELL,         /// Two-cell anchor (top-left and bottom-right corner at cell).
+                                /// Matches our "Cell (resize with cell)" anchor -> ScAnchorType::SCA_CELL_RESIZE
         ANCHOR_VML
     };
     explicit            ShapeAnchor( const WorksheetHelper& rHelper );
@@ -112,11 +114,10 @@ private:
 private:
 
     /** Specifies how cell positions from CellAnchorModel have to be processed. */
-    enum CellAnchorType
+    enum class CellAnchorType
     {
-        CELLANCHOR_EMU,             /// Offsets are given in EMUs.
-        CELLANCHOR_PIXEL,           /// Offsets are given in screen pixels.
-        CELLANCHOR_COLROW           /// Offsets are given in fractions of column width or row height.
+        Emu,             /// Offsets are given in EMUs.
+        Pixel,           /// Offsets are given in screen pixels.
     };
 
     AnchorType          meAnchorType;       /// Type of this shape anchor.

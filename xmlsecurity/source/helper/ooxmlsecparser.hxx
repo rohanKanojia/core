@@ -17,7 +17,7 @@
 
 #include <cppuhelper/implbase.hxx>
 
-#include "xsecctl.hxx"
+#include <xsecctl.hxx>
 
 /// Parses an OOXML digital signature.
 class OOXMLSecParser: public cppu::WeakImplHelper
@@ -45,37 +45,42 @@ class OOXMLSecParser: public cppu::WeakImplHelper
     OUString m_aX509SerialNumber;
     bool m_bInCertDigest;
     OUString m_aCertDigest;
+    bool m_bInValidSignatureImage;
+    OUString m_aValidSignatureImage;
+    bool m_bInInvalidSignatureImage;
+    OUString m_aInvalidSignatureImage;
+    bool m_bInSignatureLineId;
+    OUString m_aSignatureLineId;
 
     /// Last seen <Reference URI="...">.
     OUString m_aReferenceURI;
     /// Already called addStreamReference() for this reference.
     bool m_bReferenceUnresolved;
+    XMLSignatureHelper& m_rXMLSignatureHelper;
 
 public:
-    explicit OOXMLSecParser(XSecController* pXSecController);
-    virtual ~OOXMLSecParser();
+    explicit OOXMLSecParser(XMLSignatureHelper& rXMLSignatureHelper, XSecController* pXSecController);
+    virtual ~OOXMLSecParser() override;
 
     // XDocumentHandler
-    virtual void SAL_CALL startDocument() throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL startDocument() override;
 
-    virtual void SAL_CALL endDocument() throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL endDocument() override;
 
-    virtual void SAL_CALL startElement(const OUString& aName, const css::uno::Reference<css::xml::sax::XAttributeList>& xAttribs)
-    throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL startElement(const OUString& aName, const css::uno::Reference<css::xml::sax::XAttributeList>& xAttribs) override;
 
-    virtual void SAL_CALL endElement(const OUString& aName) throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL endElement(const OUString& aName) override;
 
-    virtual void SAL_CALL characters(const OUString& aChars) throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL characters(const OUString& aChars) override;
 
-    virtual void SAL_CALL ignorableWhitespace(const OUString& aWhitespaces) throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL ignorableWhitespace(const OUString& aWhitespaces) override;
 
-    virtual void SAL_CALL processingInstruction(const OUString& aTarget, const OUString& aData) throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL processingInstruction(const OUString& aTarget, const OUString& aData) override;
 
-    virtual void SAL_CALL setDocumentLocator(const css::uno::Reference<css::xml::sax::XLocator>& xLocator)
-    throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setDocumentLocator(const css::uno::Reference<css::xml::sax::XLocator>& xLocator) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize(const css::uno::Sequence<css::uno::Any>& rArguments) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize(const css::uno::Sequence<css::uno::Any>& rArguments) override;
 };
 
 #endif

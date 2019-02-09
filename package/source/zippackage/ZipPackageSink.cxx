@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <ZipPackageSink.hxx>
+#include "ZipPackageSink.hxx"
 
 ZipPackageSink::ZipPackageSink()
 : xStream ( css::uno::Reference < css::io::XInputStream > (nullptr))
@@ -27,12 +27,10 @@ ZipPackageSink::~ZipPackageSink()
 {
 }
 void SAL_CALL ZipPackageSink::setInputStream( const css::uno::Reference< css::io::XInputStream >& aStream )
-    throw(css::uno::RuntimeException, std::exception)
 {
     xStream = aStream;
 }
 css::uno::Reference< css::io::XInputStream > SAL_CALL ZipPackageSink::getInputStream(  )
-    throw(css::uno::RuntimeException, std::exception)
 {
     return xStream;
 }

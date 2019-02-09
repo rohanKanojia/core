@@ -20,12 +20,12 @@
 #ifndef INCLUDED_SC_INC_EDITUTIL_HXX
 #define INCLUDED_SC_INC_EDITUTIL_HXX
 
+#include <memory>
 #include "scdllapi.h"
-#include "address.hxx"
+#include "types.hxx"
 #include <editeng/editeng.hxx>
 #include <svx/pageitem.hxx>
-#include <tools/date.hxx>
-#include <tools/time.hxx>
+#include <tools/datetime.hxx>
 #include <tools/gen.hxx>
 #include <tools/fract.hxx>
 #include <vcl/outdev.hxx>
@@ -37,14 +37,14 @@ class ScEditEngineDefaulter;
 class ScEditUtil
 {
     ScDocument*     pDoc;
-    SCCOL           nCol;
-    SCROW           nRow;
-    SCTAB           nTab;
-    Point           aScrPos;
+    SCCOL const     nCol;
+    SCROW const     nRow;
+    SCTAB const     nTab;
+    Point const     aScrPos;
     VclPtr<OutputDevice> pDev; // MapMode has to be set
-    double          nPPTX;
-    double          nPPTY;
-    Fraction        aZoomX;
+    double const    nPPTX;
+    double const    nPPTY;
+    Fraction const  aZoomX;
     Fraction        aZoomY;
 
 public:
@@ -66,15 +66,15 @@ public:
      */
     SC_DLLPUBLIC static OUString GetString( const EditTextObject& rEditText, const ScDocument* pDoc );
 
-    static EditTextObject* CreateURLObjectFromURL(
+    static std::unique_ptr<EditTextObject> CreateURLObjectFromURL(
         ScDocument& rDoc, const OUString& rURL, const OUString& rText );
 
     static void RemoveCharAttribs( EditTextObject& rEditText, const ScPatternAttr& rAttr );
 
-    static EditTextObject* Clone( const EditTextObject& rSrc, ScDocument& rDestDoc );
+    static std::unique_ptr<EditTextObject> Clone( const EditTextObject& rSrc, ScDocument& rDestDoc );
 
     static OUString GetCellFieldValue(
-        const SvxFieldData& rFieldData, const ScDocument* pDoc, Color** ppTextColor );
+        const SvxFieldData& rFieldData, const ScDocument* pDoc, boost::optional<Color>* ppTextColor );
 
 public:
                 ScEditUtil( ScDocument* pDocument, SCCOL nX, SCROW nY, SCTAB nZ,
@@ -82,13 +82,13 @@ public:
                             OutputDevice* pDevice, double nScaleX, double nScaleY,
                             const Fraction& rX, const Fraction& rY );
 
-    Rectangle   GetEditArea( const ScPatternAttr* pPattern, bool bForceToTop );
+    tools::Rectangle   GetEditArea( const ScPatternAttr* pPattern, bool bForceToTop );
 };
 
 class ScEditAttrTester
 {
     ScEditEngineDefaulter* pEngine;
-    SfxItemSet* pEditAttrs;
+    std::unique_ptr<SfxItemSet> pEditAttrs;
     bool        bNeedsObject;
     bool        bNeedsCellAttr;
 
@@ -105,13 +105,12 @@ public:
 class ScEnginePoolHelper
 {
 protected:
-    SfxItemPool*    pEnginePool;
+    SfxItemPool* const    pEnginePool;
     SfxItemSet*     pDefaults;
-    bool            bDeleteEnginePool;
+    bool const      bDeleteEnginePool;
     bool            bDeleteDefaults;
 
-                    ScEnginePoolHelper( SfxItemPool* pEnginePool,
-                        bool bDeleteEnginePool = false );
+                    ScEnginePoolHelper( SfxItemPool* pEnginePool, bool bDeleteEnginePool );
                     ScEnginePoolHelper( const ScEnginePoolHelper& rOrg );
     virtual         ~ScEnginePoolHelper();
 };
@@ -129,7 +128,7 @@ public:
                     /// If rOrg.bDeleteEnginePool: pool gets cloned and will be
                     /// deleted on destruction. Defaults are not set.
                     ScEditEngineDefaulter( const ScEditEngineDefaulter& rOrg );
-    virtual         ~ScEditEngineDefaulter();
+    virtual         ~ScEditEngineDefaulter() override;
 
                     /// Creates a copy of SfxItemSet if bRememberCopy set
     void            SetDefaults( const SfxItemSet& rDefaults, bool bRememberCopy = true );
@@ -172,38 +171,11 @@ public:
     void            RepeatDefaults();
 };
 
-// 1/100 mm
-class SC_DLLPUBLIC ScTabEditEngine : public ScEditEngineDefaulter
-{
-private:
-    void    Init(const ScPatternAttr& rPattern);
-public:
-    ScTabEditEngine( ScDocument* pDoc );            // Default
-    ScTabEditEngine( const ScPatternAttr& rPattern,
-                    SfxItemPool* pEnginePool,
-                    SfxItemPool* pTextObjectPool = nullptr );
-};
-
-struct ScHeaderFieldData
-{
-    OUString    aTitle;             // title or file name (if no title)
-    OUString    aLongDocName;       // path and file name
-    OUString    aShortDocName;      // pure file name
-    OUString    aTabName;
-    Date        aDate;
-    tools::Time aTime;
-    long        nPageNo;
-    long        nTotalPages;
-    SvxNumType  eNumType;
-
-    ScHeaderFieldData();
-};
-
 // for field commands (or just fields?) in a table
 class SC_DLLPUBLIC ScFieldEditEngine : public ScEditEngineDefaulter
 {
 private:
-    ScDocument* mpDoc;
+    ScDocument* const mpDoc;
     bool bExecuteURL;
 
 public:
@@ -214,7 +186,33 @@ public:
     void SetExecuteURL(bool bSet)    { bExecuteURL = bSet; }
 
     virtual void    FieldClicked( const SvxFieldItem& rField, sal_Int32, sal_Int32 ) override;
-    virtual OUString CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, Color*& rTxtColor, Color*& rFldColor ) override;
+    virtual OUString CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, boost::optional<Color>& rTxtColor, boost::optional<Color>& rFldColor ) override;
+};
+
+// 1/100 mm
+class SC_DLLPUBLIC ScTabEditEngine : public ScFieldEditEngine
+{
+private:
+    void    Init(const ScPatternAttr& rPattern);
+public:
+    ScTabEditEngine( ScDocument* pDoc );            // Default
+    ScTabEditEngine(const ScPatternAttr& rPattern,
+                    SfxItemPool *pEngineItemPool, ScDocument *pDoc,
+                    SfxItemPool* pTextObjectPool = nullptr );
+};
+
+struct ScHeaderFieldData
+{
+    OUString    aTitle;             // title or file name (if no title)
+    OUString    aLongDocName;       // path and file name
+    OUString    aShortDocName;      // pure file name
+    OUString    aTabName;
+    DateTime    aDateTime;
+    long        nPageNo;
+    long        nTotalPages;
+    SvxNumType  eNumType;
+
+    ScHeaderFieldData();
 };
 
 // for headers/footers with fields
@@ -225,7 +223,7 @@ private:
 
 public:
     ScHeaderEditEngine( SfxItemPool* pEnginePool );
-    virtual OUString CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, Color*& rTxtColor, Color*& rFldColor ) override;
+    virtual OUString CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, boost::optional<Color>& rTxtColor, boost::optional<Color>& rFldColor ) override;
 
     void SetNumType(SvxNumType eNew)                { aData.eNumType = eNew; }
     void SetData(const ScHeaderFieldData& rNew)     { aData = rNew; }
@@ -236,8 +234,7 @@ class ScNoteEditEngine : public ScEditEngineDefaulter
 {
 
 public:
-    ScNoteEditEngine( SfxItemPool* pEnginePool,
-                SfxItemPool* pTextObjectPool = nullptr );
+    ScNoteEditEngine( SfxItemPool* pEnginePool, SfxItemPool* pTextObjectPool );
 
 };
 

@@ -22,17 +22,14 @@ namespace writerfilter
 namespace rtftok
 {
 /// The RTFDocument opens and resolves the RTF document.
-class RTFDocument
-    : public writerfilter::Reference<Stream>
+class RTFDocument : public writerfilter::Reference<Stream>
 {
 public:
     /// Pointer to this stream.
-    typedef std::shared_ptr<RTFDocument> Pointer_t;
-
-    virtual ~RTFDocument() { }
+    using Pointer_t = tools::SvRef<RTFDocument>;
 
     /// Resolves this document to a stream handler.
-    virtual void resolve(Stream& rHandler) override = 0;
+    void resolve(Stream& rHandler) override = 0;
 };
 
 /// Interface to create an RTFDocument instance.

@@ -18,21 +18,21 @@
  */
 
 #include "PieChartTypeTemplate.hxx"
-#include "macros.hxx"
-#include "CommonConverters.hxx"
-#include "DiagramHelper.hxx"
-#include "servicenames_charttypes.hxx"
-#include "DataSeriesHelper.hxx"
-#include "ContainerHelper.hxx"
-#include "BaseGFXHelper.hxx"
-#include "AxisHelper.hxx"
-#include "ThreeDHelper.hxx"
-#include "PropertyHelper.hxx"
+#include <CommonConverters.hxx>
+#include <DiagramHelper.hxx>
+#include <servicenames_charttypes.hxx>
+#include <DataSeriesHelper.hxx>
+#include <AxisHelper.hxx>
+#include <ThreeDHelper.hxx>
+#include <PropertyHelper.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
-#include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/chart2/XChartTypeContainer.hpp>
 #include <com/sun/star/chart2/XDataSeriesContainer.hpp>
+#include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <tools/diagnose_ex.h>
 
 #include <rtl/math.hxx>
 
@@ -43,7 +43,6 @@ using namespace ::com::sun::star;
 using ::com::sun::star::beans::Property;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Reference;
-using ::osl::MutexGuard;
 
 namespace
 {
@@ -57,32 +56,28 @@ enum
 };
 
 void lcl_AddPropertiesToVector(
-    ::std::vector< Property > & rOutProperties )
+    std::vector< Property > & rOutProperties )
 {
-    rOutProperties.push_back(
-        Property( "OffsetMode",
+    rOutProperties.emplace_back( "OffsetMode",
                   PROP_PIE_TEMPLATE_OFFSET_MODE,
                   cppu::UnoType<chart2::PieChartOffsetMode>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
-    rOutProperties.push_back(
-        Property( "DefaultOffset",
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( "DefaultOffset",
                   PROP_PIE_TEMPLATE_DEFAULT_OFFSET,
                   cppu::UnoType<double>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
-    rOutProperties.push_back(
-        Property( "Dimension",
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( "Dimension",
                   PROP_PIE_TEMPLATE_DIMENSION,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
-    rOutProperties.push_back(
-        Property( "UseRings",
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( "UseRings",
                   PROP_PIE_TEMPLATE_USE_RINGS,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 }
 
 struct StaticPieChartTypeTemplateDefaults_Initializer
@@ -118,10 +113,10 @@ struct StaticPieChartTypeTemplateInfoHelper_Initializer
 private:
     static uno::Sequence< Property > lcl_GetPropertySequence()
     {
-        ::std::vector< css::beans::Property > aProperties;
+        std::vector< css::beans::Property > aProperties;
         lcl_AddPropertiesToVector( aProperties );
 
-        ::std::sort( aProperties.begin(), aProperties.end(),
+        std::sort( aProperties.begin(), aProperties.end(),
                      ::chart::PropertyNameLess() );
 
         return comphelper::containerToSequence( aProperties );
@@ -162,9 +157,9 @@ PieChartTypeTemplate::PieChartTypeTemplate(
         ChartTypeTemplate( xContext, rServiceName ),
         ::property::OPropertySet( m_aMutex )
 {
-    setFastPropertyValue_NoBroadcast( PROP_PIE_TEMPLATE_OFFSET_MODE,    uno::makeAny( eMode ));
-    setFastPropertyValue_NoBroadcast( PROP_PIE_TEMPLATE_DIMENSION,      uno::makeAny( nDim ));
-    setFastPropertyValue_NoBroadcast( PROP_PIE_TEMPLATE_USE_RINGS,      uno::makeAny( bRings ));
+    setFastPropertyValue_NoBroadcast( PROP_PIE_TEMPLATE_OFFSET_MODE,    uno::Any( eMode ));
+    setFastPropertyValue_NoBroadcast( PROP_PIE_TEMPLATE_DIMENSION,      uno::Any( nDim ));
+    setFastPropertyValue_NoBroadcast( PROP_PIE_TEMPLATE_USE_RINGS,      uno::Any( bRings ));
 }
 
 PieChartTypeTemplate::~PieChartTypeTemplate()
@@ -172,7 +167,6 @@ PieChartTypeTemplate::~PieChartTypeTemplate()
 
 // ____ OPropertySet ____
 uno::Any PieChartTypeTemplate::GetDefaultValue( sal_Int32 nHandle ) const
-    throw(beans::UnknownPropertyException)
 {
     const tPropertyValueMap& rStaticDefaults = *StaticPieChartTypeTemplateDefaults::get();
     tPropertyValueMap::const_iterator aFound( rStaticDefaults.find( nHandle ) );
@@ -188,7 +182,6 @@ uno::Any PieChartTypeTemplate::GetDefaultValue( sal_Int32 nHandle ) const
 
 // ____ XPropertySet ____
 uno::Reference< beans::XPropertySetInfo > SAL_CALL PieChartTypeTemplate::getPropertySetInfo()
-    throw (uno::RuntimeException, std::exception)
 {
     return *StaticPieChartTypeTemplateInfo::get();
 }
@@ -203,9 +196,9 @@ sal_Int32 PieChartTypeTemplate::getDimension() const
         const_cast< PieChartTypeTemplate * >( this )->
             getFastPropertyValue( PROP_PIE_TEMPLATE_DIMENSION ) >>= nDim;
     }
-    catch( const beans::UnknownPropertyException & ex )
+    catch( const beans::UnknownPropertyException & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return nDim;
@@ -256,9 +249,9 @@ void PieChartTypeTemplate::adaptScales(
                 xAxis->setScaleData( aScaleData );
             }
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 }
@@ -298,9 +291,9 @@ void PieChartTypeTemplate::createChartTypes(
                 aFlatSeriesSeq, rCoordSys[0], getStackMode( 0 ));
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
@@ -308,7 +301,6 @@ void PieChartTypeTemplate::createChartTypes(
 sal_Bool SAL_CALL PieChartTypeTemplate::matchesTemplate(
     const uno::Reference< chart2::XDiagram >& xDiagram,
     sal_Bool bAdaptProperties )
-    throw (uno::RuntimeException, std::exception)
 {
     bool bResult = ChartTypeTemplate::matchesTemplate( xDiagram, bAdaptProperties );
 
@@ -325,14 +317,14 @@ sal_Bool SAL_CALL PieChartTypeTemplate::matchesTemplate(
             double fOffset=0.0;
             bool bAllOffsetsEqual = true;
 
-            ::std::vector< Reference< chart2::XDataSeries > > aSeriesVec(
+            std::vector< Reference< chart2::XDataSeries > > aSeriesVec(
                 DiagramHelper::getDataSeriesFromDiagram( xDiagram ));
 
             //check offset of outer series
             if( !aSeriesVec.empty() )
             {
-                sal_Int32 nOuterSeriesIndex = 0; //@todo in future this will depend on Orientation of the radius axis scale
-                Reference< chart2::XDataSeries > xSeries( aSeriesVec[nOuterSeriesIndex] );
+                //@todo in future this will depend on Orientation of the radius axis scale
+                Reference< chart2::XDataSeries > xSeries( aSeriesVec[0] );
                 Reference< beans::XPropertySet > xProp( xSeries, uno::UNO_QUERY_THROW );
                 xProp->getPropertyValue( "Offset") >>= fOffset;
 
@@ -346,7 +338,7 @@ sal_Bool SAL_CALL PieChartTypeTemplate::matchesTemplate(
                         if(xPointProp.is())
                         {
                             double fPointOffset=0.0;
-                            if( (xProp->getPropertyValue( "Offset") >>= fPointOffset ) )
+                            if( xProp->getPropertyValue( "Offset") >>= fPointOffset )
                             {
                                 if( ! ::rtl::math::approxEqual( fPointOffset, fOffset ) )
                                 {
@@ -364,14 +356,14 @@ sal_Bool SAL_CALL PieChartTypeTemplate::matchesTemplate(
             {
                 eOffsetMode = chart2::PieChartOffsetMode_ALL_EXPLODED;
                 if( bAdaptProperties )
-                    setFastPropertyValue_NoBroadcast( PROP_PIE_TEMPLATE_DEFAULT_OFFSET, uno::makeAny( fOffset ));
+                    setFastPropertyValue_NoBroadcast( PROP_PIE_TEMPLATE_DEFAULT_OFFSET, uno::Any( fOffset ));
             }
 
             bResult = ( eOffsetMode == ePieOffsetMode );
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
             bResult = false;
         }
     }
@@ -409,9 +401,9 @@ Reference< chart2::XChartType > PieChartTypeTemplate::getChartTypeForIndex( sal_
         }
 
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return xResult;
@@ -419,7 +411,6 @@ Reference< chart2::XChartType > PieChartTypeTemplate::getChartTypeForIndex( sal_
 
 Reference< chart2::XChartType > SAL_CALL PieChartTypeTemplate::getChartTypeForNewSeries(
         const uno::Sequence< Reference< chart2::XChartType > >& aFormerlyUsedChartTypes )
-    throw (uno::RuntimeException, std::exception)
 {
     Reference< chart2::XChartType > xResult;
 
@@ -438,9 +429,9 @@ Reference< chart2::XChartType > SAL_CALL PieChartTypeTemplate::getChartTypeForNe
         }
 
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return xResult;
@@ -451,7 +442,6 @@ void SAL_CALL PieChartTypeTemplate::applyStyle(
     ::sal_Int32 nChartTypeIndex,
     ::sal_Int32 nSeriesIndex,
     ::sal_Int32 nSeriesCount )
-    throw (uno::RuntimeException, std::exception)
 {
     ChartTypeTemplate::applyStyle( xSeries, nChartTypeIndex, nSeriesIndex, nSeriesCount );
 
@@ -461,17 +451,16 @@ void SAL_CALL PieChartTypeTemplate::applyStyle(
 
         bool bTemplateUsesRings = false;
         getFastPropertyValue( PROP_PIE_TEMPLATE_USE_RINGS ) >>= bTemplateUsesRings;
-        sal_Int32 nOuterSeriesIndex = 0; //@todo in future this will depend on Orientation of the radius axis scale
-        if( nSeriesIndex == nOuterSeriesIndex )
+        if( nSeriesIndex == 0 ) //@todo in future this will depend on Orientation of the radius axis scale
         {
             const OUString aOffsetPropName( "Offset" );
             // get offset mode
             chart2::PieChartOffsetMode ePieOffsetMode;
-            this->getFastPropertyValue( PROP_PIE_TEMPLATE_OFFSET_MODE ) >>= ePieOffsetMode;
+            getFastPropertyValue( PROP_PIE_TEMPLATE_OFFSET_MODE ) >>= ePieOffsetMode;
 
             // get default offset
             double fDefaultOffset = 0.5;
-            this->getFastPropertyValue( PROP_PIE_TEMPLATE_DEFAULT_OFFSET ) >>= fDefaultOffset;
+            getFastPropertyValue( PROP_PIE_TEMPLATE_DEFAULT_OFFSET ) >>= fDefaultOffset;
             double fOffsetToSet = fDefaultOffset;
 
             uno::Sequence< sal_Int32 > aAttributedDataPointIndexList;
@@ -512,7 +501,7 @@ void SAL_CALL PieChartTypeTemplate::applyStyle(
             if( bSetOffset )
             {
                 // set the offset to the series and to the attributed data points
-                xProp->setPropertyValue( aOffsetPropName, uno::makeAny( fOffsetToSet ));
+                xProp->setPropertyValue( aOffsetPropName, uno::Any( fOffsetToSet ));
 
                 // remove hard attributes from data points
                 for( sal_Int32 nPtIdx=0; nPtIdx<aAttributedDataPointIndexList.getLength(); ++nPtIdx )
@@ -526,19 +515,18 @@ void SAL_CALL PieChartTypeTemplate::applyStyle(
         }
 
         // line style
-        DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints( xSeries, "BorderStyle", uno::makeAny( drawing::LineStyle_NONE ) );
+        DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints( xSeries, "BorderStyle", uno::Any( drawing::LineStyle_NONE ) );
 
         // vary colors by point
-        xProp->setPropertyValue( "VaryColorsByPoint", uno::makeAny( true ));
+        xProp->setPropertyValue( "VaryColorsByPoint", uno::Any( true ));
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 void SAL_CALL PieChartTypeTemplate::resetStyles( const Reference< chart2::XDiagram >& xDiagram )
-    throw (uno::RuntimeException, std::exception)
 {
     // reset axes and grids
     Reference< chart2::XCoordinateSystemContainer > xCooSysCnt( xDiagram, uno::UNO_QUERY );
@@ -569,9 +557,9 @@ void SAL_CALL PieChartTypeTemplate::resetStyles( const Reference< chart2::XDiagr
                     xAxis->setScaleData( aScaleData );
                 }
             }
-            catch( const uno::Exception & ex )
+            catch( const uno::Exception & )
             {
-                ASSERT_EXCEPTION( ex );
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
         }
     }
@@ -580,13 +568,12 @@ void SAL_CALL PieChartTypeTemplate::resetStyles( const Reference< chart2::XDiagr
 
     // vary colors by point,
     // line style
-    ::std::vector< Reference< chart2::XDataSeries > > aSeriesVec(
+    std::vector< Reference< chart2::XDataSeries > > aSeriesVec(
         DiagramHelper::getDataSeriesFromDiagram( xDiagram ));
-    uno::Any aLineStyleAny( uno::makeAny( drawing::LineStyle_NONE ));
-    for( ::std::vector< Reference< chart2::XDataSeries > >::iterator aIt( aSeriesVec.begin());
-         aIt != aSeriesVec.end(); ++aIt )
+    uno::Any aLineStyleAny( drawing::LineStyle_NONE );
+    for (auto const& series : aSeriesVec)
     {
-        Reference< beans::XPropertyState > xState( *aIt, uno::UNO_QUERY );
+        Reference< beans::XPropertyState > xState(series, uno::UNO_QUERY);
         if( xState.is())
         {
             xState->setPropertyToDefault( "VaryColorsByPoint");

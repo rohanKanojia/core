@@ -20,16 +20,18 @@
 #define INCLUDED_COMPHELPER_EMBEDDEDOBJECTCONTAINER_HXX
 
 #include <com/sun/star/uno/Reference.h>
-#include <com/sun/star/uno/Sequence.hxx>
-#include <com/sun/star/embed/XEmbeddedObject.hpp>
-#include <com/sun/star/task/XInteractionHandler.hpp>
-#include <com/sun/star/embed/XStorage.hpp>
-#include <com/sun/star/io/XInputStream.hpp>
-#include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/uno/Sequence.h>
 #include <comphelper/comphelperdllapi.h>
 
 #include <rtl/ustring.hxx>
+#include <memory>
+
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace com { namespace sun { namespace star { namespace embed { class XEmbeddedObject; } } } }
+namespace com { namespace sun { namespace star { namespace embed { class XStorage; } } } }
+namespace com { namespace sun { namespace star { namespace io { class XInputStream; } } } }
+namespace com { namespace sun { namespace star { namespace task { class XInteractionHandler; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XInterface; } } } }
 
 namespace comphelper
 {
@@ -52,11 +54,11 @@ namespace comphelper
 struct EmbedImpl;
 class COMPHELPER_DLLPUBLIC EmbeddedObjectContainer
 {
-    EmbedImpl*  pImpl;
+    std::unique_ptr<EmbedImpl>  pImpl;
 
     css::uno::Reference < css::embed::XEmbeddedObject > Get_Impl( const OUString&,
             const css::uno::Reference < css::embed::XEmbeddedObject >& xCopy,
-            OUString const* pBaseURL = nullptr);
+            OUString const* pBaseURL);
 
 public:
     // add an embedded object to the container storage
@@ -80,18 +82,18 @@ public:
     OUString     CreateUniqueObjectName();
 
     // get a list of object names that have been added so far
-    css::uno::Sequence < OUString > GetObjectNames();
+    css::uno::Sequence < OUString > GetObjectNames() const;
 
     // check for existence of objects at all
-    bool            HasEmbeddedObjects();
+    bool            HasEmbeddedObjects() const;
 
     // check existence of an object - either by identity or by name
     bool            HasEmbeddedObject( const OUString& );
-    bool            HasEmbeddedObject( const css::uno::Reference < css::embed::XEmbeddedObject >& );
+    bool            HasEmbeddedObject( const css::uno::Reference < css::embed::XEmbeddedObject >& ) const;
     bool            HasInstantiatedEmbeddedObject( const OUString& );
 
     // get the object name of an object - this is the persist name if the object has persistence
-    OUString        GetEmbeddedObjectName( const css::uno::Reference < css::embed::XEmbeddedObject >& );
+    OUString        GetEmbeddedObjectName( const css::uno::Reference < css::embed::XEmbeddedObject >& ) const;
 
     // retrieve an embedded object by name that either has been added already or is available in the container storage
     css::uno::Reference<css::embed::XEmbeddedObject> GetEmbeddedObject(const OUString&, OUString const* pBaseURL = nullptr);
@@ -129,23 +131,16 @@ public:
         EmbeddedObjectContainer& rSrc, const css::uno::Reference <css::embed::XEmbeddedObject>& xObj, OUString& rName,
         const OUString& rSrcShellID, const OUString& rDestShellID );
 
-    // move an embedded object from one container to another one
-    bool MoveEmbeddedObject( EmbeddedObjectContainer& rSrc, const css::uno::Reference < css::embed::XEmbeddedObject >&, OUString& );
-
     // remove an embedded object from the container and from the storage; if object can't be closed
     // #i119941, bKeepToTempStorage: use to specify whether store the removed object to temporary storage+
-    bool            RemoveEmbeddedObject( const OUString& rName, bool bKeepToTempStorage = true);
+    void            RemoveEmbeddedObject( const OUString& rName, bool bKeepToTempStorage = true);
     bool            RemoveEmbeddedObject( const css::uno::Reference < css::embed::XEmbeddedObject >&, bool bKeepToTempStorage = true);
 
     // close and remove an embedded object from the container without removing it from the storage
-    bool            CloseEmbeddedObject( const css::uno::Reference < css::embed::XEmbeddedObject >& );
+    void            CloseEmbeddedObject( const css::uno::Reference < css::embed::XEmbeddedObject >& );
 
     // move an embedded object to another container (keep the persistent name)
     bool            MoveEmbeddedObject( const OUString& rName, EmbeddedObjectContainer& );
-
-    // get the stored representation for the object
-    css::uno::Reference < css::io::XInputStream > GetObjectStream( const css::uno::Reference < css::embed::XEmbeddedObject >& );
-    css::uno::Reference < css::io::XInputStream > GetObjectStream( const OUString& aName, OUString* pMediaType );
 
     // get the stored graphical representation for the object
     css::uno::Reference < css::io::XInputStream > GetGraphicStream( const css::uno::Reference < css::embed::XEmbeddedObject >&, OUString* pMediaType=nullptr );
@@ -160,7 +155,7 @@ public:
     bool            InsertGraphicStreamDirectly( const css::uno::Reference < css::io::XInputStream >& rStream, const OUString& rObjectName, const OUString& rMediaType );
 
     // remove a graphical representation for an object
-    bool            RemoveGraphicStream( const OUString& rObjectName );
+    void            RemoveGraphicStream( const OUString& rObjectName );
 
     // copy the graphical representation from different container
     bool            TryToCopyGraphReplacement( EmbeddedObjectContainer& rSrc,

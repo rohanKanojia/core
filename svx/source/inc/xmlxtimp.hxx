@@ -25,7 +25,7 @@
 namespace com { namespace sun { namespace star {
     namespace uno { template<class X> class Reference; }
     namespace uno { class XInterface; }
-    namespace document { class XGraphicObjectResolver; }
+    namespace document { class XGraphicStorageHandler; }
     namespace container { class XNameContainer; }
 
 } } }
@@ -36,16 +36,16 @@ public:
     SvxXMLXTableImport(
         const css::uno::Reference< css::uno::XComponentContext >& rContext,
         const css::uno::Reference< css::container::XNameContainer > & rTable,
-        css::uno::Reference< css::document::XGraphicObjectResolver >& rGrfResolver);
+        css::uno::Reference<css::document::XGraphicStorageHandler> const & rxGraphicStorageHandler);
 
-    virtual ~SvxXMLXTableImport() throw ();
+    virtual ~SvxXMLXTableImport() throw () override;
 
     static bool load( const OUString &rPath, const OUString &rReferer,
                       const css::uno::Reference < css::embed::XStorage > &xStorage,
                       const css::uno::Reference< css::container::XNameContainer >& xTable,
                       bool *bOptLoadedFromStorage ) throw();
 protected:
-    virtual SvXMLImportContext *CreateContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContext *CreateDocumentContext( sal_uInt16 nPrefix,
                                       const OUString& rLocalName,
                                       const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 

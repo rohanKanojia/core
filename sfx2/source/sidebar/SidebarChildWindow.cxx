@@ -22,9 +22,8 @@
 #include <sfx2/sidebar/SidebarChildWindow.hxx>
 #include <sfx2/sidebar/SidebarDockingWindow.hxx>
 #include <sfx2/sfxsids.hrc>
-#include "helpid.hrc"
+#include <helpids.h>
 #include <sfx2/dockwin.hxx>
-#include <sfx2/sidebar/ResourceDefinitions.hrc>
 
 namespace sfx2 { namespace sidebar {
 
@@ -61,17 +60,17 @@ SidebarChildWindow::SidebarChildWindow (vcl::Window* pParentWindow, sal_uInt16 n
     }
     SetHideNotDelete(true);
 
-    GetWindow()->Show();
+    GetWindow()->Show(true, ShowFlags::NoFocusChange);
 }
 
-sal_Int32 SidebarChildWindow::GetDefaultWidth (vcl::Window* pWindow)
+sal_Int32 SidebarChildWindow::GetDefaultWidth (vcl::Window const * pWindow)
 {
     if (pWindow != nullptr)
     {
         // Width of the paragraph panel.
-        const static sal_Int32 nMaxPropertyPageWidth (115);
+        const static sal_Int32 nMaxPropertyPageWidth(146);
 
-        return pWindow->LogicToPixel(Point(nMaxPropertyPageWidth,1), MAP_APPFONT).X()
+        return pWindow->LogicToPixel(Point(nMaxPropertyPageWidth,1), MapMode(MapUnit::MapAppFont)).X()
             + TabBar::GetDefaultWidth() * pWindow->GetDPIScaleFactor();
     }
     else

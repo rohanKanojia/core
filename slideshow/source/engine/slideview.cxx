@@ -20,11 +20,11 @@
 #include <tools/diagnose_ex.h>
 #include <canvas/canvastools.hxx>
 
-#include "eventqueue.hxx"
-#include "eventmultiplexer.hxx"
-#include "slideview.hxx"
-#include "delayevent.hxx"
-#include "unoview.hxx"
+#include <eventqueue.hxx>
+#include <eventmultiplexer.hxx>
+#include <slideview.hxx>
+#include <delayevent.hxx>
+#include <unoview.hxx>
 
 #include <cppuhelper/basemutex.hxx>
 #include <cppuhelper/compbase.hxx>
@@ -45,11 +45,12 @@
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <basegfx/polygon/b2dpolygonclipper.hxx>
 #include <basegfx/polygon/b2dpolypolygoncutter.hxx>
 
 #include <com/sun/star/presentation/XSlideShow.hpp>
+#include <com/sun/star/rendering/CompositeOperation.hpp>
 
 #include <memory>
 #include <vector>
@@ -116,11 +117,11 @@ basegfx::B2DPolyPolygon createClipPolygon( const basegfx::B2DPolyPolygon&    rCl
 
     if(rClip.count())
     {
-        return basegfx::tools::clipPolyPolygonOnRange(rClip, aClipRange, true, false);
+        return basegfx::utils::clipPolyPolygonOnRange(rClip, aClipRange, true, false);
     }
     else
     {
-        return basegfx::B2DPolyPolygon(basegfx::tools::createPolygonFromRect(aClipRange));
+        return basegfx::B2DPolyPolygon(basegfx::utils::createPolygonFromRect(aClipRange));
     }
 }
 
@@ -138,14 +139,14 @@ basegfx::B2DPolyPolygon prepareClip( const basegfx::B2DPolyPolygon& rClip )
     // TODO(P2): unnecessary, once XCanvas is correctly handling this
     // AW: Should be no longer necessary; tools are now bezier-safe
     if( aClip.areControlPointsUsed() )
-        aClip = basegfx::tools::adaptiveSubdivideByAngle( aClip );
+        aClip = basegfx::utils::adaptiveSubdivideByAngle( aClip );
 
     // normalize polygon, preparation for clipping
     // in updateCanvas()
-    aClip = basegfx::tools::correctOrientations(aClip);
-    aClip = basegfx::tools::solveCrossovers(aClip);
-    aClip = basegfx::tools::stripNeutralPolygons(aClip);
-    aClip = basegfx::tools::stripDispensablePolygons(aClip);
+    aClip = basegfx::utils::correctOrientations(aClip);
+    aClip = basegfx::utils::solveCrossovers(aClip);
+    aClip = basegfx::utils::stripNeutralPolygons(aClip);
+    aClip = basegfx::utils::stripDispensablePolygons(aClip);
 
     return aClip;
 }
@@ -172,7 +173,7 @@ void clearRect( ::cppcanvas::CanvasSharedPtr const& pCanvas,
     // depending on the slide content a one pixel wide
     // line will show to the bottom and the right.
     const ::basegfx::B2DPolygon aPoly(
-        ::basegfx::tools::createPolygonFromRect(
+        ::basegfx::utils::createPolygonFromRect(
             basegfx::B2DRange(rArea)));
 
     ::cppcanvas::PolyPolygonSharedPtr pPolyPoly(
@@ -180,7 +181,7 @@ void clearRect( ::cppcanvas::CanvasSharedPtr const& pCanvas,
 
     if( pPolyPoly )
     {
-        pPolyPoly->setCompositeOp( cppcanvas::CanvasGraphic::SOURCE );
+        pPolyPoly->setCompositeOp( css::rendering::CompositeOperation::SOURCE );
         pPolyPoly->setRGBAFillColor( 0xFFFFFF00U );
         pPolyPoly->draw();
     }
@@ -305,7 +306,7 @@ public:
     {
     }
 
-    basegfx::B1DRange getLayerPriority() const
+    const basegfx::B1DRange& getLayerPriority() const
     {
         return maLayerPrioRange;
     }
@@ -705,14 +706,11 @@ private:
     virtual bool isSoundEnabled() const override;
 
     // XEventListener:
-    virtual void SAL_CALL disposing( lang::EventObject const& evt )
-        throw (uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing( lang::EventObject const& evt ) override;
     // XModifyListener:
-    virtual void SAL_CALL modified( const lang::EventObject& aEvent )
-        throw (uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL modified( const lang::EventObject& aEvent ) override;
     // XPaintListener:
-    virtual void SAL_CALL windowPaint( const awt::PaintEvent& e )
-        throw (uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL windowPaint( const awt::PaintEvent& e ) override;
 
     // WeakComponentImplHelperBase:
     virtual void SAL_CALL disposing() override;
@@ -1015,10 +1013,7 @@ void SlideView::_dispose()
 
 // XEventListener
 void SlideView::disposing( lang::EventObject const& evt )
-    throw (uno::RuntimeException, std::exception)
 {
-    (void)evt;
-
     // no deregistration necessary anymore, XView has left:
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1057,7 +1052,6 @@ struct WeakRefWrapper
 
 // XModifyListener
 void SlideView::modified( const lang::EventObject& /*aEvent*/ )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1105,7 +1099,6 @@ void SlideView::modified( const lang::EventObject& /*aEvent*/ )
 
 // XPaintListener
 void SlideView::windowPaint( const awt::PaintEvent& /*e*/ )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard aGuard( m_aMutex );
 

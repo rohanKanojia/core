@@ -19,26 +19,20 @@
 #ifndef INCLUDED_SW_INC_SWTYPES_HXX
 #define INCLUDED_SW_INC_SWTYPES_HXX
 #include <rtl/ustring.hxx>
-#include <tools/solar.h>
-#include <tools/mapunit.hxx>
-#include <SwGetPoolIdFromName.hxx>
 
 #include <limits.h>
 #include <com/sun/star/uno/Reference.h>
+#include <com/sun/star/i18n/CollatorOptions.hpp>
 #include "swdllapi.h"
-#include <i18nlangtag/languagetag.hxx>
 #include <o3tl/typed_flags_set.hxx>
+#include <i18nlangtag/lang.h>
 
 namespace com { namespace sun { namespace star {
     namespace linguistic2{
-        class XDictionaryList;
         class XLinguProperties;
         class XSpellChecker1;
         class XHyphenator;
         class XThesaurus;
-    }
-    namespace beans{
-        class XPropertySet;
     }
 }}}
 namespace utl{
@@ -46,13 +40,12 @@ namespace utl{
 }
 
 class Size;
-class ResMgr;
 class SwPathFinder;
 class Graphic;
 class OutputDevice;
 class CharClass;
-class LocaleDataWrapper;
 class CollatorWrapper;
+class LanguageTag;
 
 typedef long SwTwips;
 #define INVALID_TWIPS   LONG_MAX
@@ -60,7 +53,7 @@ typedef long SwTwips;
 
 // Converts Millimeters to Twips (1 mm == 56.905479 twips).
 template <typename T = SwTwips>
-static SAL_CONSTEXPR T MmToTwips(const double mm) { return static_cast<T>(mm / 0.017573); }
+constexpr T MmToTwips(const double mm) { return static_cast<T>(mm / 0.017573); }
 
 #define MM50   283  // 1/2 cm in TWIPS.
 
@@ -84,11 +77,8 @@ const SwTwips lMinBorder = 1134;
 
 // Margin left and above document.
 // Half of it is gap between the pages.
-//TODO: Replace with SwViewOption::GetDefDocumentBorder()
-#define DOCUMENTBORDER  284L
-
-// Constant strings.
-SW_DLLPUBLIC extern OUString aEmptyOUStr;  // remove once aEmptyOUStr can be changed to OUString
+//TODO: Replace with SwViewOption::defDocumentBorder
+#define DOCUMENTBORDER  284
 
 // For inserting of captions (what and where to insert).
 // It's here because it is not big enough to justify its own hxx
@@ -107,9 +97,6 @@ const sal_uInt8 NO_NUMLEVEL  = 0x20;    // "or" with the levels.
 
 // Some helper functions as macros or inlines.
 
-// One kilobyte is 1024 bytes:
-#define KB 1024
-
 #define SET_CURR_SHELL( shell ) CurrShell aCurr( shell )
 
 // pPathFinder is initialized by the UI.
@@ -120,43 +107,22 @@ extern SwPathFinder *pPathFinder;
 //  (For more levels the values have to be multiplied with the levels+1;
 //  levels 0 ..4!)
 
-const sal_uInt16 lBullIndent = 1440/4;
+const short lBullIndent = 1440/4;
 const short lBullFirstLineOffset = -lBullIndent;
 const sal_uInt16 lNumIndent = 1440/4;
 const short lNumFirstLineOffset = -lNumIndent;
 const short lOutlineMinTextDistance = 216; // 0.15 inch = 0.38 cm
 
 // Count of SystemField-types of SwDoc.
-#define INIT_FLDTYPES   32
+#define INIT_FLDTYPES   33
 
 // Count of predefined Seq-field types. It is always the last
 // fields before INIT_FLDTYPES.
-#define INIT_SEQ_FLDTYPES   4
+#define INIT_SEQ_FLDTYPES   5
 
-// The former Rendevouz-IDs live on:
-// There are IDs for the anchors (SwFormatAnchor) and some others
-// that are only of importance for interfaces (SwDoc).
-enum RndStdIds
-{
-    FLY_AT_PARA,        // Anchored at paragraph.
-    FLY_AS_CHAR,        // Anchored as character.
-    FLY_AT_PAGE,        // Anchored at page.
-    FLY_AT_FLY,         // Anchored at frame.
-    FLY_AT_CHAR,        // Anchored at character.
-
-    RND_STD_HEADER,
-    RND_STD_FOOTER,
-    RND_STD_HEADERL,
-    RND_STD_HEADERR,
-    RND_STD_FOOTERL,
-    RND_STD_FOOTERR,
-
-    RND_DRAW_OBJECT     // A draw-Object! For the SwDoc-interface only!
-};
-
-extern ResMgr* pSwResMgr;           // Is in swapp0.cxx.
-#define SW_RES(i)       ResId(i,*pSwResMgr)
-#define SW_RESSTR(i)    SW_RES(i).toString()
+// defined in sw/source/uibase/app/swmodule.cxx
+SW_DLLPUBLIC OUString SwResId(const char* pId);
+SW_DLLPUBLIC OUString SwResId(const char* pId, int nCardinality);
 
 css::uno::Reference< css::linguistic2::XSpellChecker1 > GetSpellChecker();
 css::uno::Reference< css::linguistic2::XHyphenator >    GetHyphenator();
@@ -171,7 +137,7 @@ const sal_Unicode cMarkSeparator = '|';
 // Sequences names for jumps are <name of sequence>!<no>
 const char cSequenceMarkSeparator = '!';
 
-#define DB_DELIM ((sal_Unicode)0xff)        // Database <-> table separator.
+#define DB_DELIM u'\x00ff'        // Database <-> table separator.
 
 enum class SetAttrMode
 {
@@ -186,35 +152,29 @@ enum class SetAttrMode
     /// when using this need to pay attention to ignore start/end flags of hint
     NOHINTADJUST    = 0x0008,  // No merging of ranges.
     NOFORMATATTR    = 0x0010,  // Do not change into format attribute.
-    DONTCHGNUMRULE  = 0x0020,  // Do not change NumRule.
-    APICALL         = 0x0040,  // Called from API (all UI related
+    APICALL         = 0x0020,  // Called from API (all UI related
                                                         // functionality will be disabled).
     /// Force hint expand (only matters for hints with CH_TXTATR).
-    FORCEHINTEXPAND = 0x0080,
+    FORCEHINTEXPAND = 0x0040,
     /// The inserted item is a copy -- intended for use in ndtxt.cxx.
-    IS_COPY         = 0x0100
+    IS_COPY         = 0x0080,
+    /// for Undo, translated to SwInsertFlags::NOHINTEXPAND
+    NOHINTEXPAND    = 0x0100,
 };
 namespace o3tl
 {
     template<> struct typed_flags<SetAttrMode> : is_typed_flags<SetAttrMode, 0x1ff> {};
 }
 
-#define SW_ISPRINTABLE( c ) ( c >= ' ' && 127 != c )
+constexpr bool SW_ISPRINTABLE(sal_Unicode c) { return c >= ' ' && 127 != c; }
 
-#ifndef SW_CONSTASCII_DECL
-#define SW_CONSTASCII_DECL( n, s ) n[sizeof(s)]
-#endif
-#ifndef SW_CONSTASCII_DEF
-#define SW_CONSTASCII_DEF( n, s ) n[sizeof(s)] = s
-#endif
-
-#define CHAR_HARDBLANK      ((sal_Unicode)0x00A0)
-#define CHAR_HARDHYPHEN     ((sal_Unicode)0x2011)
-#define CHAR_SOFTHYPHEN     ((sal_Unicode)0x00AD)
-#define CHAR_RLM            ((sal_Unicode)0x200F)
-#define CHAR_LRM            ((sal_Unicode)0x200E)
-#define CHAR_ZWSP           ((sal_Unicode)0x200B)
-#define CHAR_ZWNBSP         ((sal_Unicode)0x2060)
+#define CHAR_HARDBLANK      u'\x00A0'
+#define CHAR_HARDHYPHEN     u'\x2011'
+#define CHAR_SOFTHYPHEN     u'\x00AD'
+#define CHAR_RLM            u'\x200F'
+#define CHAR_LRM            u'\x200E'
+#define CHAR_ZWSP           u'\x200B'
+#define CHAR_ZWNBSP         u'\x2060'
 
 // Returns the APP - CharClass instance - used for all ToUpper/ToLower/...
 SW_DLLPUBLIC CharClass& GetAppCharClass();
@@ -248,7 +208,7 @@ enum PrepareHint
     PREP_FOLLOW_FOLLOWS,    // Follow is now possibly adjacent.
     PREP_ADJUST_FRM,        // Adjust size via grow/shrink without formatting.
     PREP_FLY_CHGD,          // A FlyFrame has changed its size.
-    PREP_FLY_ATTR_CHG,      // A FlyFrame hat has changed its attributes
+    PREP_FLY_ATTR_CHG,      // A FlyFrame has changed its attributes
                             // (e. g. wrap).
     PREP_FLY_ARRIVE,        // A FlyFrame now overlaps range.
     PREP_FLY_LEAVE,         // A FlyFrame has left range.
@@ -273,21 +233,20 @@ enum PrepareHint
                             // Direction is communicated via pVoid:
                             //     MoveFwd: pVoid == 0
                             //     MoveBwd: pVoid == pOldPage
-    PREP_SWAP,              // Swap graphic; for graphics in visible area.
     PREP_REGISTER,          // Invalidate frames with registers.
     PREP_FTN_GONE,          // A Follow loses its footnote, possibly its first line can move up.
     PREP_MOVEFTN,           // A footnote changes its page. Its contents receives at first a
                             // height of zero in order to avoid too much noise. At formatting
                             // it checks whether it fits and if necessary changes its page again.
     PREP_ERGOSUM,           // Needed because of movement in FootnoteFrames. Check QuoVadis/ErgoSum.
-    PREP_END                // END.
 };
 
 enum FrameControlType
 {
     PageBreak,
     Header,
-    Footer
+    Footer,
+    FloatingTable
 };
 
 #endif

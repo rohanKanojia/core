@@ -22,20 +22,15 @@
 
 #include <vcl/button.hxx>
 #include <vcl/dialog.hxx>
-#include <vcl/edit.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/layout.hxx>
-#include <vcl/scrbar.hxx>
-#include <svx/checklbx.hxx>
-#include <svtools/stdctrl.hxx>
+#include <vcl/weld.hxx>
 
-#include "tabprotection.hxx"
+#include <tabprotection.hxx>
 
 #include <memory>
 
 namespace vcl { class Window; }
-class ScDocProtection;
-class ScTableProtection;
 class ScDocument;
 
 class ScRetypePassDlg : public ModalDialog
@@ -44,8 +39,9 @@ public:
     typedef std::shared_ptr<ScDocProtection>    DocProtectionPtr;
     typedef std::shared_ptr<ScTableProtection>  TabProtectionPtr;
 
+    ScRetypePassDlg() = delete;
     explicit ScRetypePassDlg(vcl::Window* pParent);
-    virtual ~ScRetypePassDlg();
+    virtual ~ScRetypePassDlg() override;
     virtual void dispose() override;
 
     virtual short Execute() override;
@@ -58,8 +54,6 @@ public:
     void WriteNewDataToDocument(ScDocument& rDoc) const;
 
 private:
-    ScRetypePassDlg(); // disabled
-
     void Init();
     void PopulateDialog();
     void SetDocData();
@@ -79,13 +73,13 @@ private:
 
     std::vector<VclPtr<VclHBox>> maSheets;
 
-    OUString        maTextNotProtected;
-    OUString        maTextNotPassProtected;
-    OUString        maTextHashBad;
-    OUString        maTextHashGood;
+    OUString const        maTextNotProtected;
+    OUString const        maTextNotPassProtected;
+    OUString const        maTextHashBad;
+    OUString const        maTextHashGood;
 
-    DECL_LINK_TYPED( OKHdl, Button*, void );
-    DECL_LINK_TYPED( RetypeBtnHdl, Button*, void );
+    DECL_LINK( OKHdl, Button*, void );
+    DECL_LINK( RetypeBtnHdl, Button*, void );
 
     struct TableItem
     {
@@ -98,43 +92,39 @@ private:
     ScPasswordHash      meDesiredHash;
 };
 
-class ScRetypePassInputDlg : public ModalDialog
+class ScRetypePassInputDlg : public weld::GenericDialogController
 {
 public:
-    explicit ScRetypePassInputDlg(vcl::Window* pParent, ScPassHashProtectable* pProtected);
-    virtual ~ScRetypePassInputDlg();
-    virtual void dispose() override;
-
-    virtual short Execute() override;
+    ScRetypePassInputDlg() = delete;
+    explicit ScRetypePassInputDlg(weld::Window* pParent, ScPassHashProtectable* pProtected);
+    virtual ~ScRetypePassInputDlg() override;
 
     bool IsRemovePassword() const;
     OUString GetNewPassword() const;
 
 private:
-    ScRetypePassInputDlg(); // disabled
-
     void Init();
     void CheckPasswordInput();
 
 private:
-    VclPtr<OKButton>       m_pBtnOk;
+    ScPassHashProtectable* const m_pProtected;
 
-    VclPtr<RadioButton>    m_pBtnRetypePassword;
+    std::unique_ptr<weld::Button> m_xBtnOk;
 
-    VclPtr<VclContainer>   m_pPasswordGrid;
-    VclPtr<Edit>           m_pPassword1Edit;
-    VclPtr<Edit>           m_pPassword2Edit;
+    std::unique_ptr<weld::RadioButton> m_xBtnRetypePassword;
 
-    VclPtr<CheckBox>       m_pBtnMatchOldPass;
+    std::unique_ptr<weld::Widget> m_xPasswordGrid;
+    std::unique_ptr<weld::Entry> m_xPassword1Edit;
+    std::unique_ptr<weld::Entry> m_xPassword2Edit;
 
-    VclPtr<RadioButton>    m_pBtnRemovePassword;
+    std::unique_ptr<weld::CheckButton> m_xBtnMatchOldPass;
 
-    DECL_LINK_TYPED( OKHdl, Button*, void );
-    DECL_LINK_TYPED( RadioBtnHdl, Button*, void );
-    DECL_LINK_TYPED( CheckBoxHdl, Button*, void );
-    DECL_LINK_TYPED( PasswordModifyHdl, Edit&, void );
+    std::unique_ptr<weld::RadioButton> m_xBtnRemovePassword;
 
-    ScPassHashProtectable* mpProtected;
+    DECL_LINK( OKHdl, weld::Button&, void );
+    DECL_LINK( RadioBtnHdl, weld::ToggleButton&, void );
+    DECL_LINK( CheckBoxHdl, weld::ToggleButton&, void );
+    DECL_LINK( PasswordModifyHdl, weld::Entry&, void );
 };
 
 #endif

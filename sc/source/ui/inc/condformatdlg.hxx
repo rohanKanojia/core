@@ -11,47 +11,23 @@
 #define INCLUDED_SC_SOURCE_UI_INC_CONDFORMATDLG_HXX
 
 #include <vcl/button.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/lstbox.hxx>
 #include <vcl/scrbar.hxx>
 #include <vcl/fixed.hxx>
-#include <vcl/edit.hxx>
-#include <svx/fntctrl.hxx>
-#include <svtools/ctrlbox.hxx>
 
-#include "rangelst.hxx"
-#include "condformathelper.hxx"
-#include "viewdata.hxx"
+#include <rangelst.hxx>
+#include "condformatdlgitem.hxx"
 
 #include "anyrefdg.hxx"
+
+#include <memory>
 
 #define DLG_RET_ADD         8
 #define DLG_RET_EDIT        16
 
 class ScDocument;
 class ScConditionalFormat;
-class ScFormatEntry;
-class ScConditionalFormat;
-struct ScDataBarFormatData;
 class ScCondFrmtEntry;
-
-namespace condformat {
-
-namespace dialog {
-
-enum ScCondFormatDialogType
-{
-    NONE,
-    CONDITION,
-    COLORSCALE,
-    DATABAR,
-    ICONSET,
-    DATE
-};
-
-}
-
-}
+class ScViewData;
 
 class ScCondFormatDlg;
 
@@ -62,6 +38,8 @@ private:
     EntryContainer maEntries;
 
     bool mbHasScrollBar;
+    bool mbFrozen;
+    bool mbNewEntry;
     VclPtr<ScrollBar> mpScrollBar;
 
     ScDocument* mpDoc;
@@ -73,27 +51,34 @@ private:
 
 public:
     ScCondFormatList(vcl::Window* pParent, WinBits nStyle);
-    virtual ~ScCondFormatList();
+    virtual ~ScCondFormatList() override;
     virtual void dispose() override;
 
     void init(ScDocument* pDoc, ScCondFormatDlg* pDialogParent, const ScConditionalFormat* pFormat,
         const ScRangeList& rRanges, const ScAddress& rPos,
         condformat::dialog::ScCondFormatDialogType eType);
 
+    void SetRange(const ScRangeList& rRange);
+
     virtual Size GetOptimalSize() const override;
+    virtual void queue_resize(StateChangedType eReason = StateChangedType::Layout) override;
     virtual void Resize() override;
 
-    ScConditionalFormat* GetConditionalFormat() const;
+    std::unique_ptr<ScConditionalFormat> GetConditionalFormat() const;
+    void Freeze() { mbFrozen = true; }
+    void Thaw() { mbFrozen = false; }
     void RecalcAll();
 
-    DECL_LINK_TYPED( AddBtnHdl, Button*, void );
-    DECL_LINK_TYPED( RemoveBtnHdl, Button*, void );
-    DECL_LINK_TYPED( ScrollHdl, ScrollBar*, void );
-    DECL_LINK_TYPED( EntrySelectHdl, ScCondFrmtEntry&, void );
+    DECL_LINK( AddBtnHdl, Button*, void );
+    DECL_LINK( RemoveBtnHdl, Button*, void );
+    DECL_LINK( UpBtnHdl, Button*, void );
+    DECL_LINK( DownBtnHdl, Button*, void );
+    DECL_LINK( ScrollHdl, ScrollBar*, void );
+    DECL_LINK( EntrySelectHdl, ScCondFrmtEntry&, void );
 
-    DECL_LINK_TYPED( TypeListHdl, ListBox&, void );
-    DECL_LINK_TYPED( AfterTypeListHdl, void*, void );
-    DECL_LINK_TYPED( ColFormatTypeHdl, ListBox&, void );
+    DECL_LINK( TypeListHdl, ListBox&, void );
+    DECL_LINK( AfterTypeListHdl, void*, void );
+    DECL_LINK( ColFormatTypeHdl, ListBox&, void );
 };
 
 class ScCondFormatDlg : public ScAnyRefDlg
@@ -102,24 +87,27 @@ private:
     VclPtr<PushButton> mpBtnOk;
     VclPtr<PushButton> mpBtnAdd;
     VclPtr<PushButton> mpBtnRemove;
+    VclPtr<PushButton> mpBtnUp;
+    VclPtr<PushButton> mpBtnDown;
     VclPtr<PushButton> mpBtnCancel;
     VclPtr<FixedText> mpFtRange;
     VclPtr<formula::RefEdit> mpEdRange;
     VclPtr<formula::RefButton> mpRbRange;
 
     VclPtr<ScCondFormatList> mpCondFormList;
-    sal_Int32 maKey;
+    sal_Int32 mnKey;
 
-    bool mbManaged;
     ScAddress maPos;
     ScViewData* mpViewData;
 
     VclPtr<formula::RefEdit> mpLastEdit;
 
+    std::shared_ptr<ScCondFormatDlgItem> mpDlgItem;
+
     OUString msBaseTitle;
     void updateTitle();
 
-    DECL_LINK_TYPED( EdRangeModifyHdl, Edit&, void );
+    DECL_LINK( EdRangeModifyHdl, Edit&, void );
 protected:
 
     virtual void RefInputDone( bool bForced = false ) override;
@@ -128,17 +116,12 @@ protected:
 
 public:
     SC_DLLPUBLIC ScCondFormatDlg(SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pWindow,
-                                 ScViewData* pViewData, const ScConditionalFormat* pFormat,
-                                 const ScRangeList& rRange, const ScAddress& rPos,
-                                 condformat::dialog::ScCondFormatDialogType eType, bool bManaged);
-    virtual ~ScCondFormatDlg();
+                                 ScViewData* pViewData, const ScCondFormatDlgItem* pDlgItem);
+    virtual ~ScCondFormatDlg() override;
     virtual void dispose() override;
 
-    SC_DLLPUBLIC ScConditionalFormat* GetConditionalFormat() const;
+    SC_DLLPUBLIC std::unique_ptr<ScConditionalFormat> GetConditionalFormat() const;
 
-    static OUString GenerateXmlString(sal_uInt32 nIndex, sal_uInt8 nType, bool bManaged);
-    static bool ParseXmlString(const OUString& sXMLString, sal_uInt32& nIndex,
-                               sal_uInt8& nType, bool& bManaged);
     virtual void SetReference(const ScRange&, ScDocument*) override;
     virtual bool IsRefInputMode() const override;
     virtual void SetActive() override;
@@ -146,9 +129,10 @@ public:
     virtual bool Close() override;
 
     void InvalidateRefData();
+    void OnSelectionChange(size_t nIndex, size_t nSize, bool bSelected = true);
 
-    DECL_LINK_TYPED( BtnPressedHdl, Button*, void );
-    DECL_LINK_TYPED( RangeGetFocusHdl, Control&, void );
+    DECL_LINK( BtnPressedHdl, Button*, void );
+    DECL_LINK( RangeGetFocusHdl, Control&, void );
 };
 
 #endif

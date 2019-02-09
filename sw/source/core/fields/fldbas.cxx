@@ -28,6 +28,7 @@
 #include <svl/zforlist.hxx>
 #include <svl/zformat.hxx>
 #include <editeng/unolingu.hxx>
+#include <o3tl/enumarray.hxx>
 #include <unofldmid.h>
 #include <doc.hxx>
 #include <editsh.hxx>
@@ -43,7 +44,7 @@
 #include <expfld.hxx>
 #include <shellres.hxx>
 #include <calc.hxx>
-#include <comcore.hrc>
+#include <strings.hrc>
 #include <docary.hxx>
 #include <authfld.hxx>
 #include <calbck.hxx>
@@ -51,7 +52,7 @@
 using namespace ::com::sun::star;
 using namespace nsSwDocInfoSubType;
 
-static sal_uInt16 lcl_GetLanguageOfFormat( sal_uInt16 nLng, sal_uLong nFormat,
+static LanguageType lcl_GetLanguageOfFormat( LanguageType nLng, sal_uLong nFormat,
                                 const SvNumberFormatter& rFormatter )
 {
     if( nLng == LANGUAGE_NONE ) // Bug #60010
@@ -78,47 +79,48 @@ std::vector<OUString>* SwFieldType::s_pFieldNames = nullptr;
 namespace
 {
 
-    const sal_uInt16 aTypeTab[] = {
-    /* RES_DBFLD            */      TYP_DBFLD,
-    /* RES_USERFLD          */      TYP_USERFLD,
-    /* RES_FILENAMEFLD      */      TYP_FILENAMEFLD,
-    /* RES_DBNAMEFLD        */      TYP_DBNAMEFLD,
-    /* RES_DATEFLD          */      TYP_DATEFLD,
-    /* RES_TIMEFLD          */      TYP_TIMEFLD,
-    /* RES_PAGENUMBERFLD    */      TYP_PAGENUMBERFLD,  // dynamic
-    /* RES_AUTHORFLD        */      TYP_AUTHORFLD,
-    /* RES_CHAPTERFLD       */      TYP_CHAPTERFLD,
-    /* RES_DOCSTATFLD       */      TYP_DOCSTATFLD,
-    /* RES_GETEXPFLD        */      TYP_GETFLD,         // dynamic
-    /* RES_SETEXPFLD        */      TYP_SETFLD,         // dynamic
-    /* RES_GETREFFLD        */      TYP_GETREFFLD,
-    /* RES_HIDDENTXTFLD     */      TYP_HIDDENTXTFLD,
-    /* RES_POSTITFLD        */      TYP_POSTITFLD,
-    /* RES_FIXDATEFLD       */      TYP_FIXDATEFLD,
-    /* RES_FIXTIMEFLD       */      TYP_FIXTIMEFLD,
-    /* RES_REGFLD           */      0,                  // old (no change since 2000)
-    /* RES_VARREGFLD        */      0,                  // old (no change since 2000)
-    /* RES_SETREFFLD        */      TYP_SETREFFLD,
-    /* RES_INPUTFLD         */      TYP_INPUTFLD,
-    /* RES_MACROFLD         */      TYP_MACROFLD,
-    /* RES_DDEFLD           */      TYP_DDEFLD,
-    /* RES_TABLEFLD         */      TYP_FORMELFLD,
-    /* RES_HIDDENPARAFLD    */      TYP_HIDDENPARAFLD,
-    /* RES_DOCINFOFLD       */      TYP_DOCINFOFLD,
-    /* RES_TEMPLNAMEFLD     */      TYP_TEMPLNAMEFLD,
-    /* RES_DBNEXTSETFLD     */      TYP_DBNEXTSETFLD,
-    /* RES_DBNUMSETFLD      */      TYP_DBNUMSETFLD,
-    /* RES_DBSETNUMBERFLD   */      TYP_DBSETNUMBERFLD,
-    /* RES_EXTUSERFLD       */      TYP_EXTUSERFLD,
-    /* RES_REFPAGESETFLD    */      TYP_SETREFPAGEFLD,
-    /* RES_REFPAGEGETFLD    */      TYP_GETREFPAGEFLD,
-    /* RES_INTERNETFLD      */      TYP_INTERNETFLD,
-    /* RES_JUMPEDITFLD      */      TYP_JUMPEDITFLD,
-    /* RES_SCRIPTFLD        */      TYP_SCRIPTFLD,
-    /* RES_DATETIMEFLD      */      0,                  // dynamic
-    /* RES_AUTHORITY        */      TYP_AUTHORITY,
-    /* RES_COMBINED_CHARS   */      TYP_COMBINED_CHARS,
-    /* RES_DROPDOWN         */      TYP_DROPDOWN
+    const o3tl::enumarray<SwFieldIds,SwFieldTypesEnum> aTypeTab {
+    /* SwFieldIds::Database      */      TYP_DBFLD,
+    /* SwFieldIds::User          */      TYP_USERFLD,
+    /* SwFieldIds::Filename      */      TYP_FILENAMEFLD,
+    /* SwFieldIds::DatabaseName  */      TYP_DBNAMEFLD,
+    /* SwFieldIds::Date          */      TYP_DATEFLD,
+    /* SwFieldIds::Time          */      TYP_TIMEFLD,
+    /* SwFieldIds::PageNumber    */      TYP_PAGENUMBERFLD,  // dynamic
+    /* SwFieldIds::Author        */      TYP_AUTHORFLD,
+    /* SwFieldIds::Chapter       */      TYP_CHAPTERFLD,
+    /* SwFieldIds::DocStat       */      TYP_DOCSTATFLD,
+    /* SwFieldIds::GetExp        */      TYP_GETFLD,         // dynamic
+    /* SwFieldIds::SetExp        */      TYP_SETFLD,         // dynamic
+    /* SwFieldIds::GetRef        */      TYP_GETREFFLD,
+    /* SwFieldIds::HiddenText    */      TYP_HIDDENTXTFLD,
+    /* SwFieldIds::Postit        */      TYP_POSTITFLD,
+    /* SwFieldIds::FixDate       */      TYP_FIXDATEFLD,
+    /* SwFieldIds::FixTime       */      TYP_FIXTIMEFLD,
+    /* SwFieldIds::Reg           */      TYP_BEGIN,         // old (no change since 2000)
+    /* SwFieldIds::VarReg        */      TYP_BEGIN,         // old (no change since 2000)
+    /* SwFieldIds::SetRef        */      TYP_SETREFFLD,
+    /* SwFieldIds::Input         */      TYP_INPUTFLD,
+    /* SwFieldIds::Macro         */      TYP_MACROFLD,
+    /* SwFieldIds::Dde           */      TYP_DDEFLD,
+    /* SwFieldIds::Table         */      TYP_FORMELFLD,
+    /* SwFieldIds::HiddenPara    */      TYP_HIDDENPARAFLD,
+    /* SwFieldIds::DocInfo       */      TYP_DOCINFOFLD,
+    /* SwFieldIds::TemplateName  */      TYP_TEMPLNAMEFLD,
+    /* SwFieldIds::DbNextSet     */      TYP_DBNEXTSETFLD,
+    /* SwFieldIds::DbNumSet      */      TYP_DBNUMSETFLD,
+    /* SwFieldIds::DbSetNumber   */      TYP_DBSETNUMBERFLD,
+    /* SwFieldIds::ExtUser       */      TYP_EXTUSERFLD,
+    /* SwFieldIds::RefPageSet    */      TYP_SETREFPAGEFLD,
+    /* SwFieldIds::RefPageGet    */      TYP_GETREFPAGEFLD,
+    /* SwFieldIds::Internet      */      TYP_INTERNETFLD,
+    /* SwFieldIds::JumpEdit      */      TYP_JUMPEDITFLD,
+    /* SwFieldIds::Script        */      TYP_SCRIPTFLD,
+    /* SwFieldIds::DateTime      */      TYP_BEGIN,         // dynamic
+    /* SwFieldIds::TableOfAuthorities*/  TYP_AUTHORITY,
+    /* SwFieldIds::CombinedChars */      TYP_COMBINED_CHARS,
+    /* SwFieldIds::Dropdown      */      TYP_DROPDOWN,
+    /* SwFieldIds::ParagraphSignature */ TYP_PARAGRAPHSIGFLD
     };
 
 }
@@ -126,15 +128,15 @@ namespace
 OUString SwFieldType::GetTypeStr(sal_uInt16 nTypeId)
 {
     if (!s_pFieldNames)
-        _GetFieldName();
+        GetFieldName_();
 
     if (nTypeId < SwFieldType::s_pFieldNames->size())
         return (*SwFieldType::s_pFieldNames)[nTypeId];
     return OUString();
 }
 
-// each field refences a field type that is unique for each document
-SwFieldType::SwFieldType( sal_uInt16 nWhichId )
+// each field references a field type that is unique for each document
+SwFieldType::SwFieldType( SwFieldIds nWhichId )
     : SwModify(nullptr)
     , m_nWhich(nWhichId)
 {
@@ -145,26 +147,31 @@ OUString SwFieldType::GetName() const
     return OUString();
 }
 
-bool SwFieldType::QueryValue( uno::Any&, sal_uInt16 ) const
+void SwFieldType::QueryValue( uno::Any&, sal_uInt16 ) const
 {
-    return false;
 }
-bool SwFieldType::PutValue( const uno::Any& , sal_uInt16 )
+void SwFieldType::PutValue( const uno::Any& , sal_uInt16 )
 {
-    return false;
+}
+
+void SwFieldType::dumpAsXml(xmlTextWriterPtr pWriter) const
+{
+    SwIterator<SwFormatField, SwFieldType> aIter(*this);
+    if (!aIter.First())
+        return;
+    xmlTextWriterStartElement(pWriter, BAD_CAST("SwFieldType"));
+    for (const SwFormatField* pFormatField = aIter.First(); pFormatField;
+         pFormatField = aIter.Next())
+        pFormatField->dumpAsXml(pWriter);
+    xmlTextWriterEndElement(pWriter);
 }
 
 void SwFieldTypes::dumpAsXml(xmlTextWriterPtr pWriter) const
 {
-    xmlTextWriterStartElement(pWriter, BAD_CAST("swFieldTypes"));
+    xmlTextWriterStartElement(pWriter, BAD_CAST("SwFieldTypes"));
     sal_uInt16 nCount = size();
     for (sal_uInt16 nType = 0; nType < nCount; ++nType)
-    {
-        const SwFieldType *pCurType = (*this)[nType];
-        SwIterator<SwFormatField, SwFieldType> aIter(*pCurType);
-        for (const SwFormatField* pFormatField = aIter.First(); pFormatField; pFormatField = aIter.Next())
-            pFormatField->dumpAsXml(pWriter);
-    }
+        (*this)[nType]->dumpAsXml(pWriter);
     xmlTextWriterEndElement(pWriter);
 }
 
@@ -173,7 +180,7 @@ void SwFieldTypes::dumpAsXml(xmlTextWriterPtr pWriter) const
 SwField::SwField(
         SwFieldType* pType,
         sal_uInt32 nFormat,
-        sal_uInt16 nLang,
+        LanguageType nLang,
         bool bUseFieldValueCache)
     : m_Cache()
     , m_bUseFieldValueCache( bUseFieldValueCache )
@@ -192,7 +199,7 @@ SwField::~SwField()
 // instead of indirectly via the type
 
 #ifdef DBG_UTIL
-sal_uInt16 SwField::Which() const
+SwFieldIds SwField::Which() const
 {
     assert(m_pType);
     return m_pType->Which();
@@ -205,21 +212,21 @@ sal_uInt16 SwField::GetTypeId() const
     sal_uInt16 nRet;
     switch (m_pType->Which())
     {
-    case RES_DATETIMEFLD:
+    case SwFieldIds::DateTime:
         if (GetSubType() & FIXEDFLD)
             nRet = static_cast<sal_uInt16>(GetSubType() & DATEFLD ? TYP_FIXDATEFLD : TYP_FIXTIMEFLD);
         else
             nRet = static_cast<sal_uInt16>(GetSubType() & DATEFLD ? TYP_DATEFLD : TYP_TIMEFLD);
         break;
-    case RES_GETEXPFLD:
+    case SwFieldIds::GetExp:
         nRet = static_cast<sal_uInt16>(nsSwGetSetExpType::GSE_FORMULA & GetSubType() ? TYP_FORMELFLD : TYP_GETFLD);
         break;
 
-    case RES_HIDDENTXTFLD:
+    case SwFieldIds::HiddenText:
         nRet = GetSubType();
         break;
 
-    case RES_SETEXPFLD:
+    case SwFieldIds::SetExp:
         if( nsSwGetSetExpType::GSE_SEQ & GetSubType() )
             nRet = TYP_SEQFLD;
         else if( static_cast<const SwSetExpField*>(this)->GetInputFlag() )
@@ -228,7 +235,7 @@ sal_uInt16 SwField::GetTypeId() const
             nRet = TYP_SETFLD;
         break;
 
-    case RES_PAGENUMBERFLD:
+    case SwFieldIds::PageNumber:
         nRet = GetSubType();
         if( PG_NEXT == nRet )
             nRet = TYP_NEXTPAGEFLD;
@@ -248,7 +255,7 @@ sal_uInt16 SwField::GetTypeId() const
 OUString SwField::GetFieldName() const
 {
     sal_uInt16 nTypeId = GetTypeId();
-    if (RES_DATETIMEFLD == GetTyp()->Which())
+    if (SwFieldIds::DateTime == GetTyp()->Which())
     {
         nTypeId = static_cast<sal_uInt16>(
             ((GetSubType() & DATEFLD) != 0) ? TYP_DATEFLD : TYP_TIMEFLD);
@@ -256,7 +263,7 @@ OUString SwField::GetFieldName() const
     OUString sRet = SwFieldType::GetTypeStr( nTypeId );
     if (IsFixed())
     {
-        sRet += " " + OUString(SwViewShell::GetShellRes()->aFixedStr);
+        sRet += " " + SwViewShell::GetShellRes()->aFixedStr;
     }
     return sRet;
 }
@@ -299,7 +306,7 @@ bool  SwField::QueryValue( uno::Any& rVal, sal_uInt16 nWhichId ) const
             rVal <<= !m_bIsAutomaticLanguage;
         break;
         default:
-            OSL_FAIL("illegal property");
+            assert(false);
     }
     return true;
 }
@@ -316,7 +323,7 @@ bool SwField::PutValue( const uno::Any& rVal, sal_uInt16 nWhichId )
         }
         break;
         default:
-            OSL_FAIL("illegal property");
+            assert(false);
     }
     return true;
 }
@@ -343,23 +350,24 @@ bool SwField::HasClickHdl() const
     bool bRet = false;
     switch (m_pType->Which())
     {
-    case RES_INTERNETFLD:
-    case RES_JUMPEDITFLD:
-    case RES_GETREFFLD:
-    case RES_MACROFLD:
-    case RES_INPUTFLD:
-    case RES_DROPDOWN :
+    case SwFieldIds::Internet:
+    case SwFieldIds::JumpEdit:
+    case SwFieldIds::GetRef:
+    case SwFieldIds::Macro:
+    case SwFieldIds::Input:
+    case SwFieldIds::Dropdown :
         bRet = true;
         break;
 
-    case RES_SETEXPFLD:
+    case SwFieldIds::SetExp:
         bRet = static_cast<const SwSetExpField*>(this)->GetInputFlag();
         break;
+    default: break;
     }
     return bRet;
 }
 
-void SwField::SetLanguage(sal_uInt16 const nLang)
+void SwField::SetLanguage(LanguageType const nLang)
 {
     m_nLang = nLang;
 }
@@ -374,32 +382,34 @@ bool SwField::IsFixed() const
     bool bRet = false;
     switch (m_pType->Which())
     {
-    case RES_FIXDATEFLD:
-    case RES_FIXTIMEFLD:
+    case SwFieldIds::FixDate:
+    case SwFieldIds::FixTime:
         bRet = true;
         break;
 
-    case RES_DATETIMEFLD:
+    case SwFieldIds::DateTime:
         bRet = 0 != (GetSubType() & FIXEDFLD);
         break;
 
-    case RES_EXTUSERFLD:
-    case RES_AUTHORFLD:
+    case SwFieldIds::ExtUser:
+    case SwFieldIds::Author:
         bRet = 0 != (GetFormat() & AF_FIXED);
         break;
 
-    case RES_FILENAMEFLD:
+    case SwFieldIds::Filename:
         bRet = 0 != (GetFormat() & FF_FIXED);
         break;
 
-    case RES_DOCINFOFLD:
+    case SwFieldIds::DocInfo:
         bRet = 0 != (GetSubType() & DI_SUB_FIXED);
         break;
+    default: break;
     }
     return bRet;
 }
 
-OUString SwField::ExpandField(bool const bCached) const
+OUString
+SwField::ExpandField(bool const bCached, SwRootFrame const*const pLayout) const
 {
     if ( m_bUseFieldValueCache )
     {
@@ -408,20 +418,20 @@ OUString SwField::ExpandField(bool const bCached) const
             if (GetTypeId() == TYP_AUTHORITY)
             {
                 const SwAuthorityField* pAuthorityField = static_cast<const SwAuthorityField*>(this);
-                m_Cache = pAuthorityField->ConditionalExpandAuthIdentifier();
+                m_Cache = pAuthorityField->ConditionalExpandAuthIdentifier(pLayout);
             }
             else
-                m_Cache = Expand();
+                m_Cache = ExpandImpl(pLayout);
         }
         return m_Cache;
     }
 
-    return Expand();
+    return ExpandImpl(pLayout);
 }
 
-SwField * SwField::CopyField() const
+std::unique_ptr<SwField> SwField::CopyField() const
 {
-    SwField *const pNew = Copy();
+    std::unique_ptr<SwField> pNew = Copy();
     // #i85766# cache expansion of source (for clipboard)
     // use this->cache, not this->Expand(): only text formatting calls Expand()
     pNew->m_Cache = m_Cache;
@@ -431,7 +441,7 @@ SwField * SwField::CopyField() const
 }
 
 /// expand numbering
-OUString FormatNumber(sal_uInt32 nNum, sal_uInt32 nFormat)
+OUString FormatNumber(sal_uInt32 nNum, SvxNumType nFormat, LanguageType nLang)
 {
     if(SVX_NUM_PAGEDESC == nFormat)
         return  OUString::number( nNum );
@@ -439,11 +449,15 @@ OUString FormatNumber(sal_uInt32 nNum, sal_uInt32 nFormat)
 
     OSL_ENSURE(nFormat != SVX_NUM_NUMBER_NONE, "wrong number format" );
 
-    aNumber.SetNumberingType((sal_Int16)nFormat);
-    return aNumber.GetNumStr(nNum);
+    aNumber.SetNumberingType(nFormat);
+
+    if (nLang == LANGUAGE_NONE)
+        return aNumber.GetNumStr(nNum);
+    else
+        return aNumber.GetNumStr(nNum, LanguageTag::convertToLocale(nLang));
 }
 
-SwValueFieldType::SwValueFieldType(SwDoc *const pDoc, sal_uInt16 const nWhichId)
+SwValueFieldType::SwValueFieldType(SwDoc *const pDoc, SwFieldIds const nWhichId)
     : SwFieldType(nWhichId)
     , m_pDoc(pDoc)
     , m_bUseFormat(true)
@@ -459,7 +473,7 @@ SwValueFieldType::SwValueFieldType( const SwValueFieldType& rTyp )
 
 /// return value formatted as string
 OUString SwValueFieldType::ExpandValue( const double& rVal,
-                                        sal_uInt32 nFormat, sal_uInt16 nLng) const
+                                        sal_uInt32 nFormat, LanguageType nLng) const
 {
     if (rVal >= DBL_MAX) // error string for calculator
         return SwViewShell::GetShellRes()->aCalc_Error;
@@ -469,11 +483,11 @@ OUString SwValueFieldType::ExpandValue( const double& rVal,
     Color* pCol = nullptr;
 
     // Bug #60010
-    sal_uInt16 nFormatLng = ::lcl_GetLanguageOfFormat( nLng, nFormat, *pFormatter );
+    LanguageType nFormatLng = ::lcl_GetLanguageOfFormat( nLng, nFormat, *pFormatter );
 
     if( nFormat < SV_COUNTRY_LANGUAGE_OFFSET && LANGUAGE_SYSTEM != nFormatLng )
     {
-        short nType = css::util::NumberFormat::DEFINED;
+        SvNumFormatType nType = SvNumFormatType::DEFINED;
         sal_Int32 nDummy;
 
         const SvNumberformat* pEntry = pFormatter->GetEntry(nFormat);
@@ -481,7 +495,7 @@ OUString SwValueFieldType::ExpandValue( const double& rVal,
         if (pEntry && nLng != pEntry->GetLanguage())
         {
             sal_uInt32 nNewFormat = pFormatter->GetFormatForLanguageIfBuiltIn(nFormat,
-                                                    (LanguageType)nFormatLng);
+                                                    nFormatLng);
 
             if (nNewFormat == nFormat)
             {
@@ -489,7 +503,7 @@ OUString SwValueFieldType::ExpandValue( const double& rVal,
                 OUString sFormat(pEntry->GetFormatstring());
 
                 pFormatter->PutandConvertEntry(sFormat, nDummy, nType, nFormat,
-                                        pEntry->GetLanguage(), nFormatLng );
+                                        pEntry->GetLanguage(), nFormatLng, false);
             }
             else
                 nFormat = nNewFormat;
@@ -522,7 +536,7 @@ OUString SwValueFieldType::DoubleToString(const double &rVal,
 }
 
 OUString SwValueFieldType::DoubleToString( const double &rVal,
-                                        sal_uInt16 nLng ) const
+                                        LanguageType nLng ) const
 {
     SvNumberFormatter* pFormatter = m_pDoc->GetNumberFormatter();
 
@@ -532,11 +546,11 @@ OUString SwValueFieldType::DoubleToString( const double &rVal,
 
     pFormatter->ChangeIntl( nLng ); // get separator in the correct language
     return ::rtl::math::doubleToUString( rVal, rtl_math_StringFormat_F, 12,
-                                    pFormatter->GetDecSep(), true );
+                                    pFormatter->GetNumDecimalSep()[0], true );
 }
 
 SwValueField::SwValueField( SwValueFieldType* pFieldType, sal_uInt32 nFormat,
-                            sal_uInt16 nLng, const double fVal )
+                            LanguageType nLng, const double fVal )
     : SwField(pFieldType, nFormat, nLng)
     , m_fValue(fVal)
 {
@@ -580,24 +594,24 @@ SwFieldType* SwValueField::ChgTyp( SwFieldType* pNewType )
 sal_uInt32 SwValueField::GetSystemFormat(SvNumberFormatter* pFormatter, sal_uInt32 nFormat)
 {
     const SvNumberformat* pEntry = pFormatter->GetEntry(nFormat);
-    sal_uInt16 nLng = SvtSysLocale().GetLanguageTag().getLanguageType();
+    LanguageType nLng = SvtSysLocale().GetLanguageTag().getLanguageType();
 
     if (pEntry && nLng != pEntry->GetLanguage())
     {
         sal_uInt32 nNewFormat = pFormatter->GetFormatForLanguageIfBuiltIn(nFormat,
-                                                        (LanguageType)nLng);
+                                                        nLng);
 
         if (nNewFormat == nFormat)
         {
             // probably user-defined format
-            short nType = css::util::NumberFormat::DEFINED;
+            SvNumFormatType nType = SvNumFormatType::DEFINED;
             sal_Int32 nDummy;
 
             OUString sFormat(pEntry->GetFormatstring());
 
             sal_uInt32 nTempFormat = nFormat;
             pFormatter->PutandConvertEntry(sFormat, nDummy, nType,
-                                           nTempFormat, pEntry->GetLanguage(), nLng);
+                                           nTempFormat, pEntry->GetLanguage(), nLng, true);
             nFormat = nTempFormat;
         }
         else
@@ -607,8 +621,16 @@ sal_uInt32 SwValueField::GetSystemFormat(SvNumberFormatter* pFormatter, sal_uInt
     return nFormat;
 }
 
+void SwValueField::dumpAsXml(xmlTextWriterPtr pWriter) const
+{
+    xmlTextWriterStartElement(pWriter, BAD_CAST("SwValueField"));
+    xmlTextWriterWriteAttribute(pWriter, BAD_CAST("m_fValue"), BAD_CAST(OString::number(m_fValue).getStr()));
+    SwField::dumpAsXml(pWriter);
+    xmlTextWriterEndElement(pWriter);
+}
+
 /// set language of the format
-void SwValueField::SetLanguage( sal_uInt16 nLng )
+void SwValueField::SetLanguage( LanguageType nLng )
 {
     if( IsAutomaticLanguage() &&
             static_cast<SwValueFieldType *>(GetTyp())->UseFormat() &&
@@ -616,30 +638,30 @@ void SwValueField::SetLanguage( sal_uInt16 nLng )
     {
         // Bug #60010
         SvNumberFormatter* pFormatter = GetDoc()->GetNumberFormatter();
-        sal_uInt16 nFormatLng = ::lcl_GetLanguageOfFormat( nLng, GetFormat(),
+        LanguageType nFormatLng = ::lcl_GetLanguageOfFormat( nLng, GetFormat(),
                                                     *pFormatter );
 
         if( (GetFormat() >= SV_COUNTRY_LANGUAGE_OFFSET ||
              LANGUAGE_SYSTEM != nFormatLng ) &&
-            !(Which() == RES_USERFLD && (GetSubType()&nsSwExtendedSubType::SUB_CMD) ) )
+            !(Which() == SwFieldIds::User && (GetSubType()&nsSwExtendedSubType::SUB_CMD) ) )
         {
             const SvNumberformat* pEntry = pFormatter->GetEntry(GetFormat());
 
             if( pEntry && nFormatLng != pEntry->GetLanguage() )
             {
                 sal_uInt32 nNewFormat = pFormatter->GetFormatForLanguageIfBuiltIn(
-                                        GetFormat(), (LanguageType)nFormatLng );
+                                        GetFormat(), nFormatLng );
 
                 if( nNewFormat == GetFormat() )
                 {
                     // probably user-defined format
-                    short nType = css::util::NumberFormat::DEFINED;
+                    SvNumFormatType nType = SvNumFormatType::DEFINED;
                     sal_Int32 nDummy;
                     OUString sFormat( pEntry->GetFormatstring() );
                     pFormatter->PutandConvertEntry( sFormat, nDummy, nType,
                                                     nNewFormat,
                                                     pEntry->GetLanguage(),
-                                                    nFormatLng );
+                                                    nFormatLng, false);
                 }
                 SetFormat( nNewFormat );
             }
@@ -699,9 +721,7 @@ void SwFormulaField::SetExpandedFormula( const OUString& rStr )
     {
         double fTmpValue;
 
-        SvNumberFormatter* pFormatter = GetDoc()->GetNumberFormatter();
-
-        if (pFormatter->IsNumberFormat(rStr, nFormat, fTmpValue))
+        if (GetDoc()->IsNumberFormat(rStr, nFormat, fTmpValue))
         {
             SwValueField::SetValue(fTmpValue);
 
@@ -740,29 +760,32 @@ OUString SwFormulaField::GetExpandedFormula() const
 
 OUString SwField::GetDescription() const
 {
-    return SW_RES(STR_FIELD);
+    return SwResId(STR_FIELD);
 }
 
 bool SwField::IsClickable() const
 {
     switch (Which())
     {
-    case RES_JUMPEDITFLD:
-    case RES_MACROFLD:
-    case RES_GETREFFLD:
-    case RES_INPUTFLD:
-    case RES_SETEXPFLD:
-    case RES_DROPDOWN:
+    case SwFieldIds::JumpEdit:
+    case SwFieldIds::Macro:
+    case SwFieldIds::GetRef:
+    case SwFieldIds::Input:
+    case SwFieldIds::SetExp:
+    case SwFieldIds::Dropdown:
         return true;
+    default: break;
     }
     return false;
 }
 
 void SwField::dumpAsXml(xmlTextWriterPtr pWriter) const
 {
-    xmlTextWriterStartElement(pWriter, BAD_CAST("swField"));
+    xmlTextWriterStartElement(pWriter, BAD_CAST("SwField"));
     xmlTextWriterWriteFormatAttribute(pWriter, BAD_CAST("symbol"), "%s", BAD_CAST(typeid(*this).name()));
     xmlTextWriterWriteFormatAttribute(pWriter, BAD_CAST("ptr"), "%p", this);
+    xmlTextWriterWriteAttribute(pWriter, BAD_CAST("m_nFormat"), BAD_CAST(OString::number(m_nFormat).getStr()));
+    xmlTextWriterWriteAttribute(pWriter, BAD_CAST("m_nLang"), BAD_CAST(OString::number(m_nLang.get()).getStr()));
 
     xmlTextWriterEndElement(pWriter);
 }

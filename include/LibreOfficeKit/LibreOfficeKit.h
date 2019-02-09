@@ -12,10 +12,13 @@
 
 #include <stddef.h>
 
-#if defined LOK_USE_UNSTABLE_API || defined LIBO_INTERNAL_ONLY
 // the unstable API needs C99's bool
-#include <stdbool.h>
-#include <stdint.h>
+// TODO remove the C99 types from the API before making stable
+#if defined LOK_USE_UNSTABLE_API || defined LIBO_INTERNAL_ONLY
+# ifndef _WIN32
+#  include <stdbool.h>
+# endif
+# include <stdint.h>
 #endif
 
 #include <LibreOfficeKit/LibreOfficeKitTypes.h>
@@ -60,23 +63,47 @@ struct _LibreOfficeKitClass
     /// @since LibreOffice 5.2
     void (*freeError) (char* pFree);
 
-#if defined LOK_USE_UNSTABLE_API || defined LIBO_INTERNAL_ONLY
+    /// @since LibreOffice 6.0
     void (*registerCallback) (LibreOfficeKit* pThis,
                               LibreOfficeKitCallback pCallback,
                               void* pData);
 
-    /// @see lok::Office::getFilterTypes().
+    /** @see lok::Office::getFilterTypes().
+        @since LibreOffice 6.0
+     */
     char* (*getFilterTypes) (LibreOfficeKit* pThis);
 
-    /// @see lok::Office::setOptionalFeatures().
-    void (*setOptionalFeatures)(LibreOfficeKit* pThis, uint64_t features);
+    /** @see lok::Office::setOptionalFeatures().
+        @since LibreOffice 6.0
+     */
+    void (*setOptionalFeatures)(LibreOfficeKit* pThis, unsigned long long features);
 
-    /// @see lok::Office::setDocumentPassword().
+    /** @see lok::Office::setDocumentPassword().
+        @since LibreOffice 6.0
+     */
     void (*setDocumentPassword) (LibreOfficeKit* pThis,
             char const* pURL,
             char const* pPassword);
-#endif
 
+    /** @see lok::Office::getVersionInfo().
+        @since LibreOffice 6.0
+     */
+    char* (*getVersionInfo) (LibreOfficeKit* pThis);
+
+    /** @see lok::Office::runMacro().
+        @since LibreOffice 6.0
+     */
+    int (*runMacro) (LibreOfficeKit *pThis, const char* pURL);
+
+    /** @see lok::Office::signDocument().
+        @since LibreOffice 6.2
+     */
+     bool (*signDocument) (LibreOfficeKit* pThis,
+                           const char* pUrl,
+                           const unsigned char* pCertificateBinary,
+                           const int nCertificateBinarySize,
+                           const unsigned char* pPrivateKeyBinary,
+                           const int nPrivateKeyBinarySize);
 };
 
 #define LIBREOFFICEKIT_DOCUMENT_HAS(pDoc,member) LIBREOFFICEKIT_HAS_MEMBER(LibreOfficeKitDocumentClass,member,(pDoc)->pClass->nSize)
@@ -97,10 +124,12 @@ struct _LibreOfficeKitDocumentClass
                    const char* pFormat,
                    const char* pFilterOptions);
 
-#if defined LOK_USE_UNSTABLE_API || defined LIBO_INTERNAL_ONLY
-    /// @see lok::Document::getDocumentType().
+    /** @see lok::Document::getDocumentType().
+        @since LibreOffice 6.0
+     */
     int (*getDocumentType) (LibreOfficeKitDocument* pThis);
 
+#if defined LOK_USE_UNSTABLE_API || defined LIBO_INTERNAL_ONLY
     /// @see lok::Document::getParts().
     int (*getParts) (LibreOfficeKitDocument* pThis);
 
@@ -205,6 +234,7 @@ struct _LibreOfficeKitDocumentClass
             int nTilePixelHeight,
             int nTileTwipWidth,
             int nTileTwipHeight);
+
     /// @see lok::Document::setVisibleArea).
     void (*setClientVisibleArea) (LibreOfficeKitDocument* pThis, int nX, int nY, int nWidth, int nHeight);
 
@@ -216,14 +246,120 @@ struct _LibreOfficeKitDocumentClass
     void (*setView) (LibreOfficeKitDocument* pThis, int nId);
     /// @see lok::Document::getView().
     int (*getView) (LibreOfficeKitDocument* pThis);
-    /// @see lok::Document::getViews().
-    int (*getViews) (LibreOfficeKitDocument* pThis);
+    /// @see lok::Document::getViewsCount().
+    int (*getViewsCount) (LibreOfficeKitDocument* pThis);
 
     /// @see lok::Document::renderFont().
     unsigned char* (*renderFont) (LibreOfficeKitDocument* pThis,
                        const char* pFontName,
+                       const char* pChar,
                        int* pFontWidth,
                        int* pFontHeight);
+
+    /// @see lok::Document::getPartHash().
+    char* (*getPartHash) (LibreOfficeKitDocument* pThis,
+                          int nPart);
+
+    /// Paints a tile from a specific part.
+    /// @see lok::Document::paintTile().
+    void (*paintPartTile) (LibreOfficeKitDocument* pThis,
+                           unsigned char* pBuffer,
+                           const int nPart,
+                           const int nCanvasWidth,
+                           const int nCanvasHeight,
+                           const int nTilePosX,
+                           const int nTilePosY,
+                           const int nTileWidth,
+                           const int nTileHeight);
+
+    /// @see lok::Document::getViewIds().
+    bool (*getViewIds) (LibreOfficeKitDocument* pThis,
+                       int* pArray,
+                       size_t nSize);
+
+    /// @see lok::Document::setOutlineState).
+    void (*setOutlineState) (LibreOfficeKitDocument* pThis, bool bColumn, int nLevel, int nIndex, bool bHidden);
+
+    /// Paints window with given id to the buffer
+    /// @see lok::Document::paintWindow().
+    void (*paintWindow) (LibreOfficeKitDocument* pThis, unsigned nWindowId,
+                         unsigned char* pBuffer,
+                         const int x, const int y,
+                         const int width, const int height);
+
+    /// @see lok::Document::postWindow().
+    void (*postWindow) (LibreOfficeKitDocument* pThis, unsigned nWindowId, int nAction);
+
+    /// @see lok::Document::postWindowKeyEvent().
+    void (*postWindowKeyEvent) (LibreOfficeKitDocument* pThis,
+                                unsigned nWindowId,
+                                int nType,
+                                int nCharCode,
+                                int nKeyCode);
+
+    /// @see lok::Document::postWindowMouseEvent().
+    void (*postWindowMouseEvent) (LibreOfficeKitDocument* pThis,
+                                  unsigned nWindowId,
+                                  int nType,
+                                  int nX,
+                                  int nY,
+                                  int nCount,
+                                  int nButtons,
+                                  int nModifier);
+
+    /// @see lok::Document::setViewLanguage().
+    void (*setViewLanguage) (LibreOfficeKitDocument* pThis, int nId, const char* language);
+
+    /// @see lok::Document::postWindowExtTextInputEvent
+    void (*postWindowExtTextInputEvent) (LibreOfficeKitDocument* pThis,
+                                         unsigned nWindowId,
+                                         int nType,
+                                         const char* pText);
+
+    /// @see lok::Document::getPartInfo().
+    char* (*getPartInfo) (LibreOfficeKitDocument* pThis, int nPart);
+
+    /// Paints window with given id to the buffer with the give DPI scale
+    /// (every pixel is dpiscale-times larger).
+    /// @see lok::Document::paintWindow().
+    void (*paintWindowDPI) (LibreOfficeKitDocument* pThis, unsigned nWindowId,
+                            unsigned char* pBuffer,
+                            const int x, const int y,
+                            const int width, const int height,
+                            const double dpiscale);
+
+#ifdef IOS
+    /// @see lok::Document::paintTileToCGContext().
+    void (*paintTileToCGContext) (LibreOfficeKitDocument* pThis,
+                                  void* rCGContext,
+                                  const int nCanvasWidth,
+                                  const int nCanvasHeight,
+                                  const int nTilePosX,
+                                  const int nTilePosY,
+                                  const int nTileWidth,
+                                  const int nTileHeight);
+#endif // IOS
+
+// CERTIFICATE AND SIGNING
+
+    /// @see lok::Document::insertCertificate().
+    bool (*insertCertificate) (LibreOfficeKitDocument* pThis,
+                                const unsigned char* pCertificateBinary,
+                                const int nCertificateBinarySize,
+                                const unsigned char* pPrivateKeyBinary,
+                                const int nPrivateKeyBinarySize);
+
+    /// @see lok::Document::addCertificate().
+    bool (*addCertificate) (LibreOfficeKitDocument* pThis,
+                                const unsigned char* pCertificateBinary,
+                                const int nCertificateBinarySize);
+
+    /// @see lok::Document::getSignatureState().
+    int (*getSignatureState) (LibreOfficeKitDocument* pThis);
+
+    /// @see lok::Document::renderShapeSelection
+    size_t (*renderShapeSelection)(LibreOfficeKitDocument* pThis, char** pOutput);
+
 #endif // defined LOK_USE_UNSTABLE_API || defined LIBO_INTERNAL_ONLY
 };
 

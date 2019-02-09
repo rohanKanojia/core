@@ -21,16 +21,16 @@
 #include <osl/diagnose.h>
 #include "QTableWindow.hxx"
 #include "QTableWindowData.hxx"
-#include "TableConnection.hxx"
-#include "TableConnectionData.hxx"
+#include <TableConnection.hxx>
+#include <TableConnectionData.hxx>
 #include "QueryDesignFieldUndoAct.hxx"
-#include "QueryTableView.hxx"
+#include <QueryTableView.hxx>
 
 using namespace dbaui;
-OQueryDesignFieldUndoAct::OQueryDesignFieldUndoAct(OSelectionBrowseBox* pSelBrwBox, sal_uInt16 nCommentID)
-    : OCommentUndoAction(nCommentID)
+OQueryDesignFieldUndoAct::OQueryDesignFieldUndoAct(OSelectionBrowseBox* pSelBrwBox, const char* pCommentID)
+    : OCommentUndoAction(pCommentID)
     , pOwner(pSelBrwBox)
-    , m_nColumnPostion(BROWSER_INVALIDID)
+    , m_nColumnPosition(BROWSER_INVALIDID)
 {
 }
 
@@ -39,8 +39,8 @@ OQueryDesignFieldUndoAct::~OQueryDesignFieldUndoAct()
     pOwner = nullptr;
 }
 
-OQueryTabWinUndoAct::OQueryTabWinUndoAct(OQueryTableView* pOwner, sal_uInt16 nCommentID)
-    : OQueryDesignUndoAction(pOwner, nCommentID)
+OQueryTabWinUndoAct::OQueryTabWinUndoAct(OQueryTableView* pOwner, const char* pCommentID)
+    : OQueryDesignUndoAction(pOwner, pCommentID)
     , m_pTabWin(nullptr)
     , m_bOwnerOfObjects(false)
 {
@@ -51,20 +51,18 @@ OQueryTabWinUndoAct::~OQueryTabWinUndoAct()
     if (m_bOwnerOfObjects)
     {
         // I should take care to delete the window if I am the only owner
-        OSL_ENSURE(m_pTabWin != nullptr, "OQueryTabWinUndoAct::~OQueryTabWinUndoAct() : m_pTabWin sollte nicht NULL sein");
-        OSL_ENSURE(!m_pTabWin->IsVisible(), "OQueryTabWinUndoAct::~OQueryTabWinUndoAct() : *m_pTabWin sollte nicht sichtbar sein");
+        OSL_ENSURE(m_pTabWin != nullptr, "OQueryTabWinUndoAct::~OQueryTabWinUndoAct() : m_pTabWin must not be NULL");
+        OSL_ENSURE(!m_pTabWin->IsVisible(), "OQueryTabWinUndoAct::~OQueryTabWinUndoAct() : *m_pTabWin must not be visible");
 
         if ( m_pTabWin )
             m_pTabWin->clearListBox();
         m_pTabWin.disposeAndClear();
 
         // and of course the corresponding connections
-        auto aIter = m_vTableConnection.begin();
-        auto aEnd = m_vTableConnection.end();
-        for(;aIter != aEnd;++aIter)
+        for (auto & connection : m_vTableConnection)
         {
-            m_pOwner->DeselectConn(*aIter);
-            aIter->disposeAndClear();
+            m_pOwner->DeselectConn(connection);
+            connection.disposeAndClear();
         }
         m_vTableConnection.clear();
     }
@@ -73,11 +71,11 @@ OQueryTabWinUndoAct::~OQueryTabWinUndoAct()
 void OTabFieldCellModifiedUndoAct::Undo()
 {
     pOwner->EnterUndoMode();
-    OSL_ENSURE(m_nColumnPostion != BROWSER_INVALIDID,"Column position was not set add the undo action!");
-    OSL_ENSURE(m_nColumnPostion < pOwner->GetColumnCount(),"Position outside the column count!");
-    if ( m_nColumnPostion != BROWSER_INVALIDID )
+    OSL_ENSURE(m_nColumnPosition != BROWSER_INVALIDID,"Column position was not set add the undo action!");
+    OSL_ENSURE(m_nColumnPosition < pOwner->GetColumnCount(),"Position outside the column count!");
+    if ( m_nColumnPosition != BROWSER_INVALIDID )
     {
-        sal_uInt16 nColumnId = pOwner->GetColumnId(m_nColumnPostion);
+        sal_uInt16 nColumnId = pOwner->GetColumnId(m_nColumnPosition);
         OUString strNext = pOwner->GetCellContents(m_nCellIndex, nColumnId);
         pOwner->SetCellContents(m_nCellIndex, nColumnId, m_strNextCellContents);
         m_strNextCellContents = strNext;
@@ -88,10 +86,10 @@ void OTabFieldCellModifiedUndoAct::Undo()
 void OTabFieldSizedUndoAct::Undo()
 {
     pOwner->EnterUndoMode();
-    OSL_ENSURE(m_nColumnPostion != BROWSER_INVALIDID,"Column position was not set add the undo action!");
-    if ( m_nColumnPostion != BROWSER_INVALIDID )
+    OSL_ENSURE(m_nColumnPosition != BROWSER_INVALIDID,"Column position was not set add the undo action!");
+    if ( m_nColumnPosition != BROWSER_INVALIDID )
     {
-        sal_uInt16 nColumnId = pOwner->GetColumnId(m_nColumnPostion);
+        sal_uInt16 nColumnId = pOwner->GetColumnId(m_nColumnPosition);
         long nNextWidth = pOwner->GetColumnWidth(nColumnId);
         pOwner->SetColWidth(nColumnId, m_nNextWidth);
         m_nNextWidth = nNextWidth;
@@ -102,14 +100,14 @@ void OTabFieldSizedUndoAct::Undo()
 void OTabFieldMovedUndoAct::Undo()
 {
     pOwner->EnterUndoMode();
-    OSL_ENSURE(m_nColumnPostion != BROWSER_INVALIDID,"Column position was not set add the undo action!");
-    if ( m_nColumnPostion != BROWSER_INVALIDID )
+    OSL_ENSURE(m_nColumnPosition != BROWSER_INVALIDID,"Column position was not set add the undo action!");
+    if ( m_nColumnPosition != BROWSER_INVALIDID )
     {
         sal_uInt16 nId = pDescr->GetColumnId();
         sal_uInt16 nOldPos = pOwner->GetColumnPos(nId);
-        pOwner->SetColumnPos(nId,m_nColumnPostion);
+        pOwner->SetColumnPos(nId,m_nColumnPosition);
         pOwner->ColumnMoved(nId,false);
-        m_nColumnPostion = nOldPos;
+        m_nColumnPosition = nOldPos;
     }
     pOwner->LeaveUndoMode();
 }

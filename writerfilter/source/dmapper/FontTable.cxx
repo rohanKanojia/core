@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <FontTable.hxx>
+#include "FontTable.hxx"
 #include <ooxml/resourceids.hxx>
 #include <vector>
+#include <sal/log.hxx>
 #include <osl/file.hxx>
 #include <rtl/tencinfo.h>
 #include <vcl/embeddedfontshelper.hxx>
@@ -53,7 +54,7 @@ FontTable::~FontTable()
 
 void FontTable::lcl_attribute(Id Name, Value & val)
 {
-    OSL_ENSURE( m_pImpl->pCurrentEntry, "current entry has to be set here");
+    SAL_WARN_IF( !m_pImpl->pCurrentEntry, "writerfilter.dmapper", "current entry has to be set here" );
     if(!m_pImpl->pCurrentEntry)
         return ;
     int nIntValue = val.getInt();
@@ -62,13 +63,13 @@ void FontTable::lcl_attribute(Id Name, Value & val)
     {
         case NS_ooxml::LN_CT_Pitch_val:
             if (static_cast<Id>(nIntValue) == NS_ooxml::LN_Value_ST_Pitch_fixed)
-                m_pImpl->pCurrentEntry->nPitchRequest = awt::FontPitch::FIXED;
+                ;
             else if (static_cast<Id>(nIntValue) == NS_ooxml::LN_Value_ST_Pitch_variable)
-                m_pImpl->pCurrentEntry->nPitchRequest = awt::FontPitch::VARIABLE;
+                ;
             else if (static_cast<Id>(nIntValue) == NS_ooxml::LN_Value_ST_Pitch_default)
-                m_pImpl->pCurrentEntry->nPitchRequest = awt::FontPitch::DONTKNOW;
+                ;
             else
-                SAL_WARN("writerfilter", "FontTable::lcl_attribute: unhandled NS_ooxml::CT_Pitch_val: " << nIntValue);
+                SAL_WARN("writerfilter.dmapper", "FontTable::lcl_attribute: unhandled NS_ooxml::CT_Pitch_val: " << nIntValue);
             break;
         case NS_ooxml::LN_CT_Font_name:
             m_pImpl->pCurrentEntry->sFontName = sValue;
@@ -104,7 +105,7 @@ void FontTable::lcl_attribute(Id Name, Value & val)
 
 void FontTable::lcl_sprm(Sprm& rSprm)
 {
-    OSL_ENSURE( m_pImpl->pCurrentEntry, "current entry has to be set here");
+    SAL_WARN_IF( !m_pImpl->pCurrentEntry, "writerfilter.dmapper", "current entry has to be set here" );
     if(!m_pImpl->pCurrentEntry)
         return ;
     sal_uInt32 nSprmId = rSprm.getId();
@@ -140,8 +141,10 @@ void FontTable::lcl_sprm(Sprm& rSprm)
             break;
         case NS_ooxml::LN_CT_Font_sig:
             break;
+        case NS_ooxml::LN_CT_Font_notTrueType:
+            break;
         default:
-            SAL_WARN("writerfilter", "FontTable::lcl_sprm: unhandled token: " << nSprmId);
+            SAL_WARN("writerfilter.dmapper", "FontTable::lcl_sprm: unhandled token: " << nSprmId);
             break;
     }
 }
@@ -156,12 +159,12 @@ void FontTable::resolveSprm(Sprm & r_Sprm)
 void FontTable::lcl_entry(int /*pos*/, writerfilter::Reference<Properties>::Pointer_t ref)
 {
     //create a new font entry
-    OSL_ENSURE( !m_pImpl->pCurrentEntry, "current entry has to be NULL here");
-    m_pImpl->pCurrentEntry.reset(new FontEntry);
+    SAL_WARN_IF( m_pImpl->pCurrentEntry, "writerfilter.dmapper", "current entry has to be NULL here" );
+    m_pImpl->pCurrentEntry = new FontEntry;
     ref->resolve(*this);
     //append it to the table
     m_pImpl->aFontEntries.push_back( m_pImpl->pCurrentEntry );
-    m_pImpl->pCurrentEntry.reset();
+    m_pImpl->pCurrentEntry.clear();
 }
 
 void FontTable::lcl_startSectionGroup()

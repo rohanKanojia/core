@@ -20,11 +20,9 @@
 #define INCLUDED_SVX_SVXDLG_HXX
 
 #include <sfx2/sfxdlg.hxx>
+#include <svx/anchorid.hxx>
 #include <svx/zoom_def.hxx>
 #include <editeng/edtdlg.hxx>
-
-class SdrModel;
-class SdrView;
 
 #include <svx/dstribut_enum.hxx>
 #include <svx/rectenum.hxx>
@@ -41,11 +39,10 @@ namespace linguistic2{
     class XThesaurus;
     class XHyphenator;
 }}}}
-
+class SdrModel;
+class SdrView;
 class SvxSpellWrapper;
-typedef VclPtr<SfxTabPage> (*CreateSvxDistributePage)(vcl::Window *pParent, const SfxItemSet &rAttrSet, SvxDistributeHorizontal eHor, SvxDistributeVertical eVer);
-typedef const sal_uInt16*  (*DialogGetRanges)();
-
+enum class TransliterationFlags;
 struct ExchangeData;
 class INetURLObject;
 class GalleryTheme;
@@ -57,12 +54,20 @@ class SdrObject;
 class SvxSpellWrapper;
 struct FmSearchContext;
 
+typedef const sal_uInt16*  (*DialogGetRanges)();
+
 typedef ::std::vector< OUString > TargetList;
 
 namespace svx{ class SpellDialogChildWindow;}
+namespace weld{
+    class Dialog;
+    class Window;
+}
 
 class AbstractSvxDistributeDialog :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractSvxDistributeDialog() override = default;
 public:
     virtual SvxDistributeHorizontal GetDistributeHor() const = 0;
     virtual SvxDistributeVertical GetDistributeVer() const = 0;
@@ -70,12 +75,16 @@ public:
 
 class AbstractFmShowColsDialog : public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractFmShowColsDialog() override = default;
 public:
      virtual void SetColumns(const css::uno::Reference< css::container::XIndexContainer>& xCols)= 0;
 };
 
 class AbstractSvxZoomDialog : public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractSvxZoomDialog() override = default;
 public:
     virtual void    SetLimits( sal_uInt16 nMin, sal_uInt16 nMax ) = 0;
     virtual void    HideButton( ZoomButtonId nBtnId )= 0;
@@ -84,36 +93,34 @@ public:
 
 class AbstractSpellDialog : public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractSpellDialog() override = default;
 public:
     virtual void        Invalidate() = 0;
     virtual vcl::Window*     GetWindow()  = 0;
     virtual SfxBindings& GetBindings() = 0;
 };
 
-typedef sal_IntPtr (*PLinkStub)( void*, void* );
-
-class AbstractSearchProgress :public VclAbstractRefreshableDialog
-{
-};
-
-class AbstractTakeProgress :public VclAbstractRefreshableDialog
-{
-};
-
 class AbstractTitleDialog :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractTitleDialog() override = default;
 public:
     virtual OUString  GetTitle() const =0;
 };
 
 class AbstractGalleryIdDialog :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractGalleryIdDialog() override = default;
 public:
-    virtual sal_uIntPtr GetId() const =0;
+    virtual sal_uInt32 GetId() const =0;
 };
 
 class AbstractURLDlg :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractURLDlg() override = default;
 public:
     virtual OUString      GetURL() const = 0;
     virtual OUString      GetAltText() const = 0;
@@ -124,10 +131,14 @@ public:
 
 class AbstractSvxHlinkDlgMarkWnd :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractSvxHlinkDlgMarkWnd() override = default;
 };
 
 class AbstractSvxSearchSimilarityDialog :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractSvxSearchSimilarityDialog() override = default;
 public:
     virtual sal_uInt16  GetOther() =0 ;
     virtual sal_uInt16  GetShorter() =0 ;
@@ -137,12 +148,16 @@ public:
 
 class AbstractSvxJSearchOptionsDialog :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractSvxJSearchOptionsDialog() override = default;
 public:
-    virtual sal_Int32           GetTransliterationFlags() const = 0;
+    virtual TransliterationFlags GetTransliterationFlags() const = 0;
 };
 
 class AbstractFmInputRecordNoDialog :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractFmInputRecordNoDialog() override = default;
 public:
     virtual void SetValue(long dNew) = 0;
     virtual long GetValue() const = 0;
@@ -150,12 +165,16 @@ public:
 
 class AbstractSvxNewDictionaryDialog :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractSvxNewDictionaryDialog() override = default;
 public:
     virtual css::uno::Reference< css::linguistic2::XDictionary >  GetNewDictionary() = 0;
 };
 
 class AbstractSvxNameDialog :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractSvxNameDialog() override = default;
 public:
     virtual void    GetName( OUString& rName ) = 0;
     virtual void    SetCheckNameHdl( const Link<AbstractSvxNameDialog&,bool>& rLink, bool bCheckImmediately = false ) = 0;
@@ -167,6 +186,8 @@ public:
 
 class AbstractSvxObjectNameDialog :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractSvxObjectNameDialog() override = default;
 public:
     virtual void GetName(OUString& rName) = 0;
     virtual void SetCheckNameHdl(const Link<AbstractSvxObjectNameDialog&,bool>& rLink) = 0;
@@ -174,6 +195,8 @@ public:
 
 class AbstractSvxObjectTitleDescDialog :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractSvxObjectTitleDescDialog() override = default;
 public:
     virtual void GetTitle(OUString& rTitle) = 0;
     virtual void GetDescription(OUString& rDescription) = 0;
@@ -181,10 +204,14 @@ public:
 
 class AbstractSvxMessDialog :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractSvxMessDialog() override = default;
 };
 
 class AbstractSvxMultiPathDialog : public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractSvxMultiPathDialog() override = default;
 public:
     virtual OUString        GetPath() const = 0;
     virtual void            SetPath( const OUString& rPath ) = 0;
@@ -193,6 +220,8 @@ public:
 
 class AbstractSvxHpLinkDlg : public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractSvxHpLinkDlg() override = default;
 public:
     virtual vcl::Window*     GetWindow()  = 0;
     virtual bool       QueryClose() = 0;
@@ -201,6 +230,8 @@ public:
 struct FmFoundRecordInformation;
 class AbstractFmSearchDialog :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractFmSearchDialog() override = default;
 public:
     virtual void SetFoundHandler(const Link<FmFoundRecordInformation&,void>& lnk) = 0;
     virtual void SetCanceledNotFoundHdl(const Link<FmFoundRecordInformation&,void>& lnk)=0;
@@ -209,29 +240,39 @@ public:
 
 class AbstractGraphicFilterDialog :public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractGraphicFilterDialog() override = default;
 public:
     virtual Graphic GetFilteredGraphic( const Graphic& rGraphic, double fScaleX, double fScaleY ) = 0;
 };
 
 class AbstractSvxAreaTabDialog :public SfxAbstractTabDialog
 {
+protected:
+    virtual ~AbstractSvxAreaTabDialog() override = default;
 };
 
 struct SvxSwFrameValidation;
 class AbstractSvxTransformTabDialog : public SfxAbstractTabDialog
 {
+protected:
+    virtual ~AbstractSvxTransformTabDialog() override = default;
 public:
     virtual void SetValidateFramePosLink( const Link<SvxSwFrameValidation&,void>& rLink ) = 0;
 };
 
 class AbstractSvxCaptionDialog : public SfxAbstractTabDialog
 {
+protected:
+    virtual ~AbstractSvxCaptionDialog() override = default;
 public:
     virtual void SetValidateFramePosLink( const Link<SvxSwFrameValidation&,void>& rLink ) = 0;
 };
 
-class AbstractSvxPostItDialog :public VclAbstractDialog
+class AbstractSvxPostItDialog : public VclAbstractDialog
 {
+protected:
+    virtual ~AbstractSvxPostItDialog() override = default;
 public:
     virtual void                SetText( const OUString& rStr ) = 0;  //From class Window
     virtual const SfxItemSet*   GetOutputItemSet() const = 0;
@@ -243,11 +284,13 @@ public:
     virtual void                ShowLastAuthor(const OUString& rAuthor, const OUString& rDate) = 0;
     virtual void                DontChangeAuthor() = 0;
     virtual void                HideAuthor() = 0;
-    virtual vcl::Window *            GetWindow() = 0;
+    virtual std::shared_ptr<weld::Dialog> GetDialog() = 0;
 };
 
-class SvxAbstractSplittTableDialog : public VclAbstractDialog
+class SvxAbstractSplitTableDialog : public VclAbstractDialog
 {
+protected:
+    virtual ~SvxAbstractSplitTableDialog() override = default;
 public:
     virtual bool IsHorizontal() const = 0;
     virtual bool IsProportional() const = 0;
@@ -256,6 +299,8 @@ public:
 
 class SvxAbstractNewTableDialog : public VclAbstractDialog
 {
+protected:
+    virtual ~SvxAbstractNewTableDialog() override = default;
 public:
     virtual sal_Int32 getRows() const = 0;
     virtual sal_Int32 getColumns() const = 0;
@@ -263,6 +308,8 @@ public:
 
 class SvxAbstractInsRowColDlg : public VclAbstractDialog
 {
+protected:
+    virtual ~SvxAbstractInsRowColDlg() override = default;
 public:
     virtual bool isInsertBefore() const = 0;
     virtual sal_uInt16 getInsertCount() const = 0;
@@ -273,144 +320,128 @@ class SVX_DLLPUBLIC SvxAbstractDialogFactory : public SfxAbstractDialogFactory, 
 public:
     static SvxAbstractDialogFactory* Create();
 
-    virtual                             ~SvxAbstractDialogFactory();
+    virtual                             ~SvxAbstractDialogFactory() override;
 
-    virtual SfxAbstractTabDialog*       CreateTextTabDialog( vcl::Window* pParent,
+    virtual VclPtr<SfxAbstractTabDialog>      CreateTextTabDialog( weld::Window* pParent,
                                             const SfxItemSet* pAttrSet,
                                             SdrView* pView ) = 0 ;
 
-    virtual AbstractSvxCaptionDialog* CreateCaptionDialog( vcl::Window* pParent,
-                                        const SdrView* pView,
-                                        sal_uInt16 nAnchorTypes = 0 ) = 0;
+    virtual VclPtr<AbstractSvxCaptionDialog> CreateCaptionDialog(weld::Window* pParent,
+                                                                 const SdrView* pView,
+                                                                 SvxAnchorIds nAnchorTypes = SvxAnchorIds::NONE) = 0;
 
-    virtual AbstractSvxDistributeDialog*    CreateSvxDistributeDialog(
+    virtual VclPtr<AbstractSvxDistributeDialog>    CreateSvxDistributeDialog(weld::Window* pParent,
                                             const SfxItemSet& rAttr)= 0;
 
-    virtual AbstractFmShowColsDialog * CreateFmShowColsDialog() = 0;
+    virtual VclPtr<AbstractFmShowColsDialog> CreateFmShowColsDialog(weld::Window* pParent) = 0;
 
-    virtual AbstractSvxZoomDialog * CreateSvxZoomDialog( vcl::Window* pParent,
-                                            const SfxItemSet& rCoreSet )=0;
+    virtual VclPtr<AbstractSvxZoomDialog> CreateSvxZoomDialog(weld::Window* pParent, const SfxItemSet& rCoreSet) = 0;
 
-    virtual AbstractSpellDialog *   CreateSvxSpellDialog(vcl::Window* pParent,
+    virtual VclPtr<AbstractSpellDialog>   CreateSvxSpellDialog(vcl::Window* pParent,
                                             SfxBindings* pBindings,
                                             svx::SpellDialogChildWindow* pSpellChildWindow )=0;
 
-    virtual VclAbstractRefreshableDialog * CreateActualizeProgressDialog( vcl::Window* pParent,
-                                            GalleryTheme* pThm ) = 0;
-    virtual AbstractTitleDialog * CreateTitleDialog( vcl::Window* pParent,
-                                             const OUString& rOldText ) = 0;
-    virtual AbstractGalleryIdDialog * CreateGalleryIdDialog( vcl::Window* pParent,
-                                            GalleryTheme* pThm ) = 0;
-    virtual VclAbstractDialog2 * CreateGalleryThemePropertiesDialog(
+    virtual VclPtr<VclAbstractDialog> CreateActualizeProgressDialog(weld::Window* pParent,
+                                            GalleryTheme* pThm) = 0;
+    virtual VclPtr<AbstractTitleDialog> CreateTitleDialog(weld::Window* pParent,
+                                             const OUString& rOldText) = 0;
+    virtual VclPtr<AbstractGalleryIdDialog> CreateGalleryIdDialog(weld::Window* pParent,
+                                            GalleryTheme* pThm) = 0;
+    virtual VclPtr<VclAbstractDialog> CreateGalleryThemePropertiesDialog(weld::Window* pParent,
                                             ExchangeData* pData,
                                             SfxItemSet* pItemSet ) = 0;
-    virtual AbstractURLDlg * CreateURLDialog( vcl::Window* pParent,
+    virtual VclPtr<AbstractURLDlg> CreateURLDialog( vcl::Window* pParent,
                                             const OUString& rURL, const OUString& rAltText, const OUString& rDescription,
                                             const OUString& rTarget, const OUString& rName,
                                             TargetList& rTargetList ) = 0;
 
-    virtual SfxAbstractTabDialog* CreateTabItemDialog(vcl::Window* pParent,
-                                            const SfxItemSet& rSet) = 0;
-    virtual VclAbstractDialog*      CreateSvxSearchAttributeDialog( vcl::Window* pParent,
+    virtual VclPtr<SfxAbstractTabDialog> CreateTabItemDialog(weld::Window* pParent, const SfxItemSet& rSet) = 0;
+    virtual VclPtr<VclAbstractDialog>      CreateSvxSearchAttributeDialog( vcl::Window* pParent,
                                             SearchAttrItemList& rLst,
                                             const sal_uInt16* pWhRanges)=0;
-    virtual AbstractSvxSearchSimilarityDialog * CreateSvxSearchSimilarityDialog( vcl::Window* pParent,
+    virtual VclPtr<AbstractSvxSearchSimilarityDialog> CreateSvxSearchSimilarityDialog( weld::Window* pParent,
                                                             bool bRelax,
                                                             sal_uInt16 nOther,
                                                             sal_uInt16 nShorter,
                                                             sal_uInt16 nLonger ) = 0;
-    //UUUU add for SvxBorderBackgroundDlg
-    virtual SfxAbstractTabDialog* CreateSvxBorderBackgroundDlg(
-        vcl::Window* pParent,
+    // add for SvxBorderBackgroundDlg
+    virtual VclPtr<SfxAbstractTabDialog> CreateSvxBorderBackgroundDlg(
+        weld::Window* pParent,
         const SfxItemSet& rCoreSet,
-        bool bEnableSelector = false,
-        bool bEnableDrawingLayerFillStyles = false) = 0;
+        bool bEnableDrawingLayerFillStyles) = 0;
 
-    virtual AbstractSvxTransformTabDialog* CreateSvxTransformTabDialog( vcl::Window* pParent,
-                                                                const SfxItemSet* pAttr,
-                                                                const SdrView* pView,
-                                                                sal_uInt16 nAnchorTypes = 0) = 0;
-    virtual SfxAbstractTabDialog* CreateSchTransformTabDialog( vcl::Window* pParent,
-                                                                const SfxItemSet* pAttr,
-                                                                const SdrView* pSdrView,
-                                                                sal_uInt32 nResId,
-                                                                bool bSizeTabPage = false
-                                                                 )=0;
-    virtual AbstractSvxJSearchOptionsDialog * CreateSvxJSearchOptionsDialog( vcl::Window* pParent,
-                                                            const SfxItemSet& rOptionsSet,
-                                                            sal_Int32 nInitialFlags )=0;
-    virtual AbstractFmInputRecordNoDialog * CreateFmInputRecordNoDialog() = 0;
-    virtual AbstractSvxNewDictionaryDialog* CreateSvxNewDictionaryDialog( vcl::Window* pParent ) = 0;
-    virtual VclAbstractDialog *     CreateSvxEditDictionaryDialog( vcl::Window* pParent,
-                                            const OUString& rName,
-                                            sal_uInt32 nResId) = 0;
-    virtual AbstractSvxNameDialog *     CreateSvxNameDialog( vcl::Window* pParent,
+    virtual VclPtr<AbstractSvxTransformTabDialog> CreateSvxTransformTabDialog(weld::Window* pParent,
+                                                                              const SfxItemSet* pAttr,
+                                                                              const SdrView* pView,
+                                                                              SvxAnchorIds nAnchorTypes = SvxAnchorIds::NONE) = 0;
+    virtual VclPtr<SfxAbstractTabDialog> CreateSchTransformTabDialog(weld::Window* pParent,
+                                                                     const SfxItemSet* pAttr,
+                                                                     const SdrView* pSdrView,
+                                                                     bool bSizeTabPage) = 0;
+    virtual VclPtr<AbstractSvxJSearchOptionsDialog> CreateSvxJSearchOptionsDialog(weld::Window* pParent,
+                                                                                  const SfxItemSet& rOptionsSet,
+                                                                                  TransliterationFlags nInitialFlags) = 0;
+    virtual VclPtr<AbstractFmInputRecordNoDialog> CreateFmInputRecordNoDialog(weld::Window* pParent) = 0;
+    virtual VclPtr<AbstractSvxNewDictionaryDialog> CreateSvxNewDictionaryDialog(weld::Window* pParent) = 0;
+    virtual VclPtr<VclAbstractDialog>     CreateSvxEditDictionaryDialog( vcl::Window* pParent,
+                                            const OUString& rName) = 0;
+    virtual VclPtr<AbstractSvxNameDialog> CreateSvxNameDialog(weld::Window* pParent,
                                             const OUString& rName, const OUString& rDesc ) = 0;
 
     // #i68101#
-    virtual AbstractSvxObjectNameDialog* CreateSvxObjectNameDialog(const OUString& rName ) = 0;
-    virtual AbstractSvxObjectTitleDescDialog* CreateSvxObjectTitleDescDialog(const OUString& rTitle, const OUString& rDescription) = 0;
+    virtual VclPtr<AbstractSvxObjectNameDialog> CreateSvxObjectNameDialog(weld::Window* pParent, const OUString& rName) = 0;
+    virtual VclPtr<AbstractSvxObjectTitleDescDialog> CreateSvxObjectTitleDescDialog(weld::Window* pParent, const OUString& rTitle, const OUString& rDescription) = 0;
 
-    virtual AbstractSvxMultiPathDialog *    CreateSvxMultiPathDialog(vcl::Window* pParent) = 0 ;
-    virtual AbstractSvxMultiPathDialog *    CreateSvxPathSelectDialog(vcl::Window* pParent) = 0 ;
-    virtual AbstractSvxHpLinkDlg *  CreateSvxHpLinkDlg(vcl::Window* pParent, SfxBindings* pBindings)=0;
-    virtual AbstractFmSearchDialog* CreateFmSearchDialog(vcl::Window* pParent,
+    virtual VclPtr<AbstractSvxMultiPathDialog>    CreateSvxMultiPathDialog(weld::Window* pParent) = 0 ;
+    virtual VclPtr<AbstractSvxMultiPathDialog>    CreateSvxPathSelectDialog(weld::Window* pParent) = 0 ;
+    virtual VclPtr<AbstractSvxHpLinkDlg>  CreateSvxHpLinkDlg(vcl::Window* pParent, SfxBindings* pBindings)=0;
+    virtual VclPtr<AbstractFmSearchDialog> CreateFmSearchDialog(vcl::Window* pParent,
                                                         const OUString& strInitialText,
                                                         const ::std::vector< OUString >& _rContexts,
                                                         sal_Int16 nInitialContext,
                                                         const Link<FmSearchContext&,sal_uInt32>& lnkContextSupplier)=0;
-    virtual AbstractGraphicFilterDialog *   CreateGraphicFilterEmboss(vcl::Window* pParent,
-                                                const Graphic& rGraphic,
-                                                RECT_POINT eLightSource)=0;
-    virtual AbstractGraphicFilterDialog *   CreateGraphicFilterPoster(vcl::Window* pParent,
-                                                const Graphic& rGraphic,
-                                                sal_uInt16 nCount)=0;
-    virtual AbstractGraphicFilterDialog *   CreateGraphicFilterSepia (vcl::Window* pParent,
-                                                const Graphic& rGraphic,
-                                                sal_uInt16 nCount)=0;
-    virtual AbstractGraphicFilterDialog *   CreateGraphicFilterSmooth (vcl::Window* pParent,
+    virtual VclPtr<AbstractGraphicFilterDialog>   CreateGraphicFilterEmboss(weld::Window* pParent,
+                                                const Graphic& rGraphic)=0;
+    virtual VclPtr<AbstractGraphicFilterDialog>   CreateGraphicFilterPoster(weld::Window* pParent,
+                                                const Graphic& rGraphic)=0;
+    virtual VclPtr<AbstractGraphicFilterDialog>   CreateGraphicFilterSepia(weld::Window* pParent,
+                                                const Graphic& rGraphic)=0;
+    virtual VclPtr<AbstractGraphicFilterDialog>   CreateGraphicFilterSmooth(weld::Window* pParent,
                                                 const Graphic& rGraphic,
                                                 double nRadius)=0;
-    virtual AbstractGraphicFilterDialog *   CreateGraphicFilterSolarize (vcl::Window* pParent,
-                                                const Graphic& rGraphic,
-                                                sal_uInt8 nGreyThreshold)=0;
-    virtual AbstractGraphicFilterDialog *   CreateGraphicFilterMosaic (vcl::Window* pParent,
-                                                const Graphic& rGraphic,
-                                                sal_uInt16 nTileWidth, sal_uInt16 nTileHeight)=0;
-    virtual AbstractSvxAreaTabDialog*       CreateSvxAreaTabDialog( vcl::Window* pParent,
-                                                            const SfxItemSet* pAttr,
-                                                            SdrModel* pModel,
-                                                            bool bShadow) = 0 ;
-    virtual SfxAbstractTabDialog*           CreateSvxLineTabDialog( vcl::Window* pParent, const SfxItemSet* pAttr, //add forSvxLineTabDialog
+    virtual VclPtr<AbstractGraphicFilterDialog>   CreateGraphicFilterSolarize(weld::Window* pParent,
+                                                const Graphic& rGraphic)=0;
+    virtual VclPtr<AbstractGraphicFilterDialog>   CreateGraphicFilterMosaic(weld::Window* pParent,
+                                                const Graphic& rGraphic)=0;
+    virtual VclPtr<AbstractSvxAreaTabDialog>       CreateSvxAreaTabDialog(weld::Window* pParent,
+                                                                          const SfxItemSet* pAttr,
+                                                                          SdrModel* pModel,
+                                                                          bool bShadow) = 0 ;
+    virtual VclPtr<SfxAbstractTabDialog>           CreateSvxLineTabDialog(weld::Window* pParent, const SfxItemSet* pAttr, //add forSvxLineTabDialog
                                                                  SdrModel* pModel,
-                                                                 const SdrObject* pObj = nullptr,
-                                                                 bool bHasObj = true )=0;
-    virtual SfxAbstractDialog*              CreateSfxDialog( vcl::Window* pParent,
+                                                                 const SdrObject* pObj,
+                                                                 bool bHasObj )=0;
+    virtual VclPtr<SfxAbstractDialog>       CreateSfxDialog( vcl::Window* pParent,
                                                                         const SfxItemSet& rAttr,
                                                                         const SdrView* pView,
-                                                                        sal_uInt32 nResId
-                                                                        )=0;
-    virtual SfxAbstractDialog*              CreateSfxDialog( vcl::Window* pParent,
-                                                                        const SfxItemSet& rAttr,
-                                    const css::uno::Reference< css::frame::XFrame >& _rxFrame,
-                                                                        sal_uInt32 nResId
-                                                                        )=0;
-    virtual AbstractSvxPostItDialog*        CreateSvxPostItDialog( vcl::Window* pParent,
-                                                                        const SfxItemSet& rCoreSet,
-                                                                        bool bPrevNext = false) = 0;
-    virtual VclAbstractDialog*          CreateSvxScriptOrgDialog( vcl::Window* pParent, const OUString& rLanguage ) override = 0;
+                                                                        sal_uInt32 nResId )=0;
+    virtual VclPtr<SfxAbstractDialog>       CreateCharMapDialog(weld::Window* pParent, const SfxItemSet& rAttr, bool bInsert) = 0;
+    virtual VclPtr<SfxAbstractDialog>       CreateEventConfigDialog(weld::Window* pParent, const SfxItemSet& rAttr,
+                                                                    const css::uno::Reference< css::frame::XFrame >& _rxFrame) = 0;
+    virtual VclPtr<AbstractSvxPostItDialog>    CreateSvxPostItDialog(weld::Window* pParent, const SfxItemSet& rCoreSet, bool bPrevNext = false) = 0;
+    virtual VclPtr<VclAbstractDialog>          CreateSvxScriptOrgDialog( vcl::Window* pParent, const OUString& rLanguage ) override = 0;
 
-    virtual DialogGetRanges             GetDialogGetRangesFunc() = 0;
+    virtual DialogGetRanges                    GetDialogGetRangesFunc() = 0;
 
-    virtual AbstractScriptSelectorDialog*
+    virtual VclPtr<AbstractScriptSelectorDialog>
         CreateScriptSelectorDialog(
             vcl::Window* pParent,
             const css::uno::Reference< css::frame::XFrame >& _rxFrame
         ) override = 0;
 
-    virtual VclAbstractDialog* CreateScriptErrorDialog(const css::uno::Any& rException) override = 0;
+    virtual VclPtr<VclAbstractDialog> CreateScriptErrorDialog(const css::uno::Any& rException) override = 0;
 
-    virtual VclAbstractDialog*  CreateSvxMacroAssignDlg(
+    virtual VclPtr<VclAbstractDialog> CreateSvxMacroAssignDlg(
                 vcl::Window* _pParent,
                 const css::uno::Reference< css::frame::XFrame >& _rxDocumentFrame,
                 const bool _bUnoDialogMode,
@@ -418,13 +449,13 @@ public:
                 const sal_uInt16 _nInitiallySelectedEvent
             ) = 0;
 
-    virtual SfxAbstractTabDialog* CreateSvxFormatCellsDialog( const SfxItemSet* pAttr, SdrModel* pModel, const SdrObject* pObj = nullptr )=0;
+    virtual VclPtr<SfxAbstractTabDialog> CreateSvxFormatCellsDialog(weld::Window* pParent, const SfxItemSet* pAttr, const SdrModel& rModel, const SdrObject* pObj )=0;
 
-    virtual SvxAbstractSplittTableDialog* CreateSvxSplittTableDialog( vcl::Window* pParent, bool bIsTableVertical, long nMaxVertical, long nMaxHorizontal )=0;
+    virtual VclPtr<SvxAbstractSplitTableDialog> CreateSvxSplitTableDialog(weld::Window* pParent, bool bIsTableVertical, long nMaxVertical) = 0;
 
-    virtual SvxAbstractNewTableDialog* CreateSvxNewTableDialog() = 0;
+    virtual VclPtr<SvxAbstractNewTableDialog> CreateSvxNewTableDialog(weld::Window* pParent) = 0;
 
-    virtual SvxAbstractInsRowColDlg* CreateSvxInsRowColDlg( vcl::Window* pParent, bool bCol, const OString& sHelpId ) = 0;
+    virtual VclPtr<SvxAbstractInsRowColDlg> CreateSvxInsRowColDlg(weld::Window* pParent, bool bCol, const OString& rHelpId) = 0;
 };
 
 #endif

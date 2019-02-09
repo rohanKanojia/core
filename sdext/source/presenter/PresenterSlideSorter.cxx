@@ -44,7 +44,6 @@
 #include <com/sun/star/util/Color.hpp>
 #include <algorithm>
 #include <math.h>
-#include <boost/bind.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -140,7 +139,6 @@ public:
         const std::shared_ptr<PresenterTheme>& rpTheme,
         const Reference<awt::XWindow>& rxInvalidateTarget,
         const std::shared_ptr<PresenterPaintManager>& rpPaintManager);
-    ~MouseOverManager();
     MouseOverManager(const MouseOverManager&) = delete;
     MouseOverManager& operator=(const MouseOverManager&) = delete;
 
@@ -192,7 +190,6 @@ public:
     CurrentSlideFrameRenderer (
         const css::uno::Reference<css::uno::XComponentContext>& rxContext,
         const css::uno::Reference<css::rendering::XCanvas>& rxCanvas);
-    ~CurrentSlideFrameRenderer();
 
     void PaintCurrentSlideFrame (
         const awt::Rectangle& rSlideBoundingBox,
@@ -250,7 +247,6 @@ PresenterSlideSorter::PresenterSlideSorter (
       mpPresenterController(rpPresenterController),
       mxSlideShowController(mpPresenterController->GetSlideShowController()),
       mxPreviewCache(),
-      mbIsPaintPending(true),
       mbIsLayoutPending(true),
       mpLayout(),
       mpVerticalScrollBar(),
@@ -292,7 +288,7 @@ PresenterSlideSorter::PresenterSlideSorter (
         mxWindow->addPaintListener(this);
         mxWindow->addMouseListener(this);
         mxWindow->addMouseMotionListener(this);
-        mxWindow->setVisible(sal_True);
+        mxWindow->setVisible(true);
 
         // Remember the current slide.
         mnCurrentSlideIndex = mxSlideShowController->getCurrentSlideIndex();
@@ -303,7 +299,7 @@ PresenterSlideSorter::PresenterSlideSorter (
                 rxContext,
                 mxWindow,
                 mpPresenterController->GetPaintManager(),
-                ::boost::bind(&PresenterSlideSorter::SetVerticalOffset,this,_1)));
+                [this] (double const offset) { return this->SetVerticalOffset(offset); }));
 
         mpCloseButton = PresenterButton::Create(
             rxContext,
@@ -313,7 +309,7 @@ PresenterSlideSorter::PresenterSlideSorter (
             mxCanvas,
             "SlideSorterCloser");
 
-        if (mpPresenterController->GetTheme().get() != nullptr)
+        if (mpPresenterController->GetTheme() != nullptr)
         {
             PresenterTheme::SharedFontDescriptor pFont (
                 mpPresenterController->GetTheme()->GetFont("ButtonFont"));
@@ -421,15 +417,9 @@ void SAL_CALL PresenterSlideSorter::disposing()
     }
 }
 
-void PresenterSlideSorter::SetActiveState (const bool bIsActive)
-{
-    (void)bIsActive;
-}
-
 //----- lang::XEventListener --------------------------------------------------
 
 void SAL_CALL PresenterSlideSorter::disposing (const lang::EventObject& rEventObject)
-    throw (RuntimeException, std::exception)
 {
     if (rEventObject.Source == mxWindow)
     {
@@ -445,7 +435,6 @@ void SAL_CALL PresenterSlideSorter::disposing (const lang::EventObject& rEventOb
     {
         mxCanvas = nullptr;
         mbIsLayoutPending = true;
-        mbIsPaintPending = true;
 
         mpPresenterController->GetPaintManager()->Invalidate(mxWindow);
     }
@@ -453,45 +442,34 @@ void SAL_CALL PresenterSlideSorter::disposing (const lang::EventObject& rEventOb
 
 //----- XWindowListener -------------------------------------------------------
 
-void SAL_CALL PresenterSlideSorter::windowResized (const awt::WindowEvent& rEvent)
-    throw (uno::RuntimeException, std::exception)
+void SAL_CALL PresenterSlideSorter::windowResized (const awt::WindowEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
     mbIsLayoutPending = true;
     mpPresenterController->GetPaintManager()->Invalidate(mxWindow);
 }
 
-void SAL_CALL PresenterSlideSorter::windowMoved (const awt::WindowEvent& rEvent)
-    throw (uno::RuntimeException, std::exception)
+void SAL_CALL PresenterSlideSorter::windowMoved (const awt::WindowEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 }
 
-void SAL_CALL PresenterSlideSorter::windowShown (const lang::EventObject& rEvent)
-    throw (uno::RuntimeException, std::exception)
+void SAL_CALL PresenterSlideSorter::windowShown (const lang::EventObject&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
     mbIsLayoutPending = true;
     mpPresenterController->GetPaintManager()->Invalidate(mxWindow);
 }
 
-void SAL_CALL PresenterSlideSorter::windowHidden (const lang::EventObject& rEvent)
-    throw (uno::RuntimeException, std::exception)
+void SAL_CALL PresenterSlideSorter::windowHidden (const lang::EventObject&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 }
 
 //----- XPaintListener --------------------------------------------------------
 
 void SAL_CALL PresenterSlideSorter::windowPaint (const css::awt::PaintEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
-    (void)rEvent;
-
     // Deactivated views must not be painted.
     if ( ! mbIsPresenterViewActive)
         return;
@@ -500,13 +478,12 @@ void SAL_CALL PresenterSlideSorter::windowPaint (const css::awt::PaintEvent& rEv
 
     Reference<rendering::XSpriteCanvas> xSpriteCanvas (mxCanvas, UNO_QUERY);
     if (xSpriteCanvas.is())
-        xSpriteCanvas->updateScreen(sal_False);
+        xSpriteCanvas->updateScreen(false);
 }
 
 //----- XMouseListener --------------------------------------------------------
 
 void SAL_CALL PresenterSlideSorter::mousePressed (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
 {
     css::awt::MouseEvent rTemp =rEvent;
     /// check whether RTL interface or not
@@ -519,7 +496,6 @@ void SAL_CALL PresenterSlideSorter::mousePressed (const css::awt::MouseEvent& rE
 }
 
 void SAL_CALL PresenterSlideSorter::mouseReleased (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
 {
     css::awt::MouseEvent rTemp =rEvent;
     /// check whether RTL interface or not
@@ -549,27 +525,20 @@ void SAL_CALL PresenterSlideSorter::mouseReleased (const css::awt::MouseEvent& r
     }
 }
 
-void SAL_CALL PresenterSlideSorter::mouseEntered (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterSlideSorter::mouseEntered (const css::awt::MouseEvent&) {}
 
-void SAL_CALL PresenterSlideSorter::mouseExited (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterSlideSorter::mouseExited (const css::awt::MouseEvent&)
 {
-    (void)rEvent;
     mnSlideIndexMousePressed = -1;
-    if (mpMouseOverManager.get() != nullptr)
+    if (mpMouseOverManager != nullptr)
         mpMouseOverManager->SetSlide(mnSlideIndexMousePressed, awt::Rectangle(0,0,0,0));
 }
 
 //----- XMouseMotionListener --------------------------------------------------
 
 void SAL_CALL PresenterSlideSorter::mouseMoved (const css::awt::MouseEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
 {
-    if (mpMouseOverManager.get() != nullptr)
+    if (mpMouseOverManager != nullptr)
     {
         css::awt::MouseEvent rTemp =rEvent;
         /// check whether RTL interface or not
@@ -596,23 +565,17 @@ void SAL_CALL PresenterSlideSorter::mouseMoved (const css::awt::MouseEvent& rEve
     }
 }
 
-void SAL_CALL PresenterSlideSorter::mouseDragged (const css::awt::MouseEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterSlideSorter::mouseDragged (const css::awt::MouseEvent&) {}
 
 //----- XResourceId -----------------------------------------------------------
 
 Reference<XResourceId> SAL_CALL PresenterSlideSorter::getResourceId()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     return mxViewId;
 }
 
 sal_Bool SAL_CALL PresenterSlideSorter::isAnchorOnly()
-    throw (RuntimeException, std::exception)
 {
     return false;
 }
@@ -620,19 +583,15 @@ sal_Bool SAL_CALL PresenterSlideSorter::isAnchorOnly()
 //----- XPropertyChangeListener -----------------------------------------------
 
 void SAL_CALL PresenterSlideSorter::propertyChange (
-    const css::beans::PropertyChangeEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+    const css::beans::PropertyChangeEvent&)
+{}
 
 //----- XSlidePreviewCacheListener --------------------------------------------
 
 void SAL_CALL PresenterSlideSorter::notifyPreviewCreation (
     sal_Int32 nSlideIndex)
-    throw(css::uno::RuntimeException, std::exception)
 {
-    OSL_ASSERT(mpLayout.get()!=nullptr);
+    OSL_ASSERT(mpLayout != nullptr);
 
     awt::Rectangle aBBox (mpLayout->GetBoundingBox(nSlideIndex));
     mpPresenterController->GetPaintManager()->Invalidate(mxWindow, aBBox, true);
@@ -640,11 +599,8 @@ void SAL_CALL PresenterSlideSorter::notifyPreviewCreation (
 
 //----- XDrawView -------------------------------------------------------------
 
-void SAL_CALL PresenterSlideSorter::setCurrentPage (const Reference<drawing::XDrawPage>& rxSlide)
-    throw (RuntimeException, std::exception)
+void SAL_CALL PresenterSlideSorter::setCurrentPage (const Reference<drawing::XDrawPage>&)
 {
-    (void)rxSlide;
-
     ThrowIfDisposed();
     ::osl::MutexGuard aGuard (::osl::Mutex::getGlobalMutex());
 
@@ -673,7 +629,6 @@ void SAL_CALL PresenterSlideSorter::setCurrentPage (const Reference<drawing::XDr
 }
 
 Reference<drawing::XDrawPage> SAL_CALL PresenterSlideSorter::getCurrentPage()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     return nullptr;
@@ -686,10 +641,8 @@ void PresenterSlideSorter::UpdateLayout()
         return;
 
     mbIsLayoutPending = false;
-    mbIsPaintPending = true;
 
     const awt::Rectangle aWindowBox (mxWindow->getPosSize());
-    awt::Rectangle aCenterBox (aWindowBox);
     sal_Int32 nLeftBorderWidth (aWindowBox.X);
 
     // Get border width.
@@ -707,7 +660,7 @@ void PresenterSlideSorter::UpdateLayout()
             pPane->mxPane->GetPaneBorderPainter());
         if ( ! xBorderPainter.is())
             break;
-        aCenterBox = xBorderPainter->addBorder (
+        xBorderPainter->addBorder (
             mxViewId->getAnchor()->getResourceURL(),
             awt::Rectangle(0, 0, aWindowBox.Width, aWindowBox.Height),
             drawing::framework::BorderType_INNER_BORDER);
@@ -748,8 +701,7 @@ geometry::RealRectangle2D PresenterSlideSorter::PlaceScrollBars (
     mpLayout->Update(rUpperBox, GetSlideAspectRatio());
     bool bIsScrollBarNeeded (false);
     Reference<container::XIndexAccess> xSlides (mxSlideShowController, UNO_QUERY_THROW);
-    if (xSlides.is())
-        bIsScrollBarNeeded = mpLayout->IsScrollBarNeeded(xSlides->getCount());
+    bIsScrollBarNeeded = mpLayout->IsScrollBarNeeded(xSlides->getCount());
     if (mpVerticalScrollBar.get() != nullptr)
         {
             if (bIsScrollBarNeeded)
@@ -772,7 +724,7 @@ geometry::RealRectangle2D PresenterSlideSorter::PlaceScrollBars (
                         }
                     else
                         {
-                            // if its not RTL place vertical scroll bar at right border.
+                            // if it's not RTL place vertical scroll bar at right border.
                             mpVerticalScrollBar->SetPosSize(geometry::RealRectangle2D(
                                                                                       rUpperBox.X2 - mpVerticalScrollBar->GetSize(),
                                                                                       rUpperBox.Y1,
@@ -805,7 +757,7 @@ void PresenterSlideSorter::PlaceCloseButton (
     sal_Int32 nCloseButtonCenter (rCenterBox.Width/2);
     if (rpPane.get() != nullptr && rpPane->mxPane.is())
     {
-        const sal_Int32 nCalloutCenter (rpPane->mxPane->GetCalloutAnchor().X - nLeftBorderWidth);
+        const sal_Int32 nCalloutCenter (-nLeftBorderWidth);
         const sal_Int32 nDistanceFromWindowCenter (abs(nCalloutCenter - rCenterBox.Width/2));
         const sal_Int32 nButtonWidth (mpCloseButton->GetSize().Width);
         const static sal_Int32 nMaxDistanceForCalloutCentering (nButtonWidth * 2);
@@ -934,7 +886,7 @@ void PresenterSlideSorter::PaintPreview (
     // Emphasize the current slide.
     if (nSlideIndex == mnCurrentSlideIndex)
     {
-        if (mpCurrentSlideFrameRenderer.get() != nullptr)
+        if (mpCurrentSlideFrameRenderer != nullptr)
         {
             const awt::Rectangle aSlideBoundingBox(
                 sal::static_int_cast<sal_Int32>(0.5 + aTopLeft.X),
@@ -1019,8 +971,6 @@ void PresenterSlideSorter::Paint (const awt::Rectangle& rUpdateBox)
         return;
     }
 
-    mbIsPaintPending = false;
-
     ClearBackground(mxCanvas, rUpdateBox);
 
     // Give the canvas to the controls.
@@ -1052,12 +1002,14 @@ void PresenterSlideSorter::Paint (const awt::Rectangle& rUpdateBox)
         PresenterGeometryHelper::ConvertRectangle(mpLayout->maBoundingBox)))
     {
         mpLayout->ForAllVisibleSlides(
-            ::boost::bind(&PresenterSlideSorter::PaintPreview, this, mxCanvas, rUpdateBox, _1));
+            [this, &rUpdateBox] (sal_Int32 const nIndex) {
+                return this->PaintPreview(this->mxCanvas, rUpdateBox, nIndex);
+            });
     }
 
     Reference<rendering::XSpriteCanvas> xSpriteCanvas (mxCanvas, UNO_QUERY);
     if (xSpriteCanvas.is())
-        xSpriteCanvas->updateScreen(sal_False);
+        xSpriteCanvas->updateScreen(false);
 }
 
 void PresenterSlideSorter::SetHorizontalOffset (const double nXOffset)
@@ -1109,14 +1061,12 @@ bool PresenterSlideSorter::ProvideCanvas()
 }
 
 void PresenterSlideSorter::ThrowIfDisposed()
-    throw (lang::DisposedException)
 {
     if (rBHelper.bDisposed || rBHelper.bInDispose)
     {
         throw lang::DisposedException (
-            OUString(
-                "PresenterSlideSorter has been already disposed"),
-            const_cast<uno::XWeak*>(static_cast<const uno::XWeak*>(this)));
+            "PresenterSlideSorter has been already disposed",
+            static_cast<uno::XWeak*>(this));
     }
 }
 
@@ -1161,7 +1111,7 @@ void PresenterSlideSorter::Layout::Update (
 
     // Determine column count, preview width, and horizontal gap (borders
     // are half the gap).  Try to use the preferred values.  Try more to
-    // stay in the valid intervalls.  This last constraint may be not
+    // stay in the valid intervals.  This last constraint may be not
     // fulfilled in some cases.
     const double nElementWidth = nWidth / gnPreferredColumnCount;
     if (nElementWidth < gnMinimalPreviewWidth + gnMinimalHorizontalPreviewGap)
@@ -1493,10 +1443,10 @@ PresenterSlideSorter::MouseOverManager::MouseOverManager (
       mxInvalidateTarget(rxInvalidateTarget),
       mpPaintManager(rpPaintManager)
 {
-    if (rpTheme.get()!=nullptr)
+    if (rpTheme != nullptr)
     {
         std::shared_ptr<PresenterBitmapContainer> pBitmaps (rpTheme->GetBitmapContainer());
-        if (pBitmaps.get() != nullptr)
+        if (pBitmaps != nullptr)
         {
             mpLeftLabelBitmap = pBitmaps->GetBitmap("LabelLeft");
             mpCenterLabelBitmap = pBitmaps->GetBitmap("LabelCenter");
@@ -1505,10 +1455,6 @@ PresenterSlideSorter::MouseOverManager::MouseOverManager (
 
         mpFont = rpTheme->GetFont("SlideSorterLabelFont");
     }
-}
-
-PresenterSlideSorter::MouseOverManager::~MouseOverManager()
-{
 }
 
 void PresenterSlideSorter::MouseOverManager::Paint (
@@ -1763,7 +1709,7 @@ void PresenterSlideSorter::MouseOverManager::PaintButtonBackground (
 
 void PresenterSlideSorter::MouseOverManager::Invalidate()
 {
-    if (mpPaintManager.get() != nullptr)
+    if (mpPaintManager != nullptr)
         mpPaintManager->Invalidate(mxInvalidateTarget, maSlideBoundingBox, true);
 }
 
@@ -1787,7 +1733,7 @@ PresenterSlideSorter::CurrentSlideFrameRenderer::CurrentSlideFrameRenderer (
 {
     PresenterConfigurationAccess aConfiguration (
         rxContext,
-        OUString("/org.openoffice.Office.PresenterScreen/"),
+        "/org.openoffice.Office.PresenterScreen/",
         PresenterConfigurationAccess::READ_ONLY);
     Reference<container::XHierarchicalNameAccess> xBitmaps (
         aConfiguration.GetConfigurationNode(
@@ -1841,10 +1787,6 @@ PresenterSlideSorter::CurrentSlideFrameRenderer::CurrentSlideFrameRenderer (
         mnRightFrameSize = ::std::max(mnRightFrameSize, mpBottomRight->mnWidth);
         mnBottomFrameSize = ::std::max(mnBottomFrameSize, mpBottomRight->mnHeight);
     }
-}
-
-PresenterSlideSorter::CurrentSlideFrameRenderer::~CurrentSlideFrameRenderer()
-{
 }
 
 void PresenterSlideSorter::CurrentSlideFrameRenderer::PaintCurrentSlideFrame (

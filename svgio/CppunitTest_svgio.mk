@@ -21,10 +21,7 @@ $(eval $(call gb_CppunitTest_use_externals,svgio,\
     libxml2 \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,svgio,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,svgio))
 
 $(eval $(call gb_CppunitTest_use_library_objects,svgio,\
     svgio \
@@ -43,7 +40,6 @@ $(eval $(call gb_CppunitTest_use_libraries,svgio,\
     unotest \
     tl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,svgio,\

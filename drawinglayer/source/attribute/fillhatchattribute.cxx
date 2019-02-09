@@ -36,7 +36,6 @@ namespace drawinglayer
             basegfx::BColor                         maColor;
             sal_uInt32                              mnMinimalDiscreteDistance;
 
-            // bitfield
             bool                                    mbFillBackground : 1;
 
             ImpFillHatchAttribute(
@@ -56,7 +55,7 @@ namespace drawinglayer
             }
 
             ImpFillHatchAttribute()
-            :   meStyle(HATCHSTYLE_SINGLE),
+            :   meStyle(HatchStyle::Single),
                 mfDistance(0.0),
                 mfAngle(0.0),
                 maColor(basegfx::BColor()),
@@ -108,25 +107,20 @@ namespace drawinglayer
         {
         }
 
-        FillHatchAttribute::FillHatchAttribute(const FillHatchAttribute& rCandidate)
-        :   mpFillHatchAttribute(rCandidate.mpFillHatchAttribute)
-        {
-        }
+        FillHatchAttribute::FillHatchAttribute(const FillHatchAttribute&) = default;
 
-        FillHatchAttribute::~FillHatchAttribute()
-        {
-        }
+        FillHatchAttribute::FillHatchAttribute(FillHatchAttribute&&) = default;
+
+        FillHatchAttribute::~FillHatchAttribute() = default;
 
         bool FillHatchAttribute::isDefault() const
         {
             return mpFillHatchAttribute.same_object(theGlobalDefault::get());
         }
 
-        FillHatchAttribute& FillHatchAttribute::operator=(const FillHatchAttribute& rCandidate)
-        {
-            mpFillHatchAttribute = rCandidate.mpFillHatchAttribute;
-            return *this;
-        }
+        FillHatchAttribute& FillHatchAttribute::operator=(const FillHatchAttribute&) = default;
+
+        FillHatchAttribute& FillHatchAttribute::operator=(FillHatchAttribute&&) = default;
 
         bool FillHatchAttribute::operator==(const FillHatchAttribute& rCandidate) const
         {

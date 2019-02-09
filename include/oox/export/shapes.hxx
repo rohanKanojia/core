@@ -20,13 +20,21 @@
 #ifndef INCLUDED_OOX_EXPORT_SHAPES_HXX
 #define INCLUDED_OOX_EXPORT_SHAPES_HXX
 
-#include <oox/dllapi.h>
-#include <com/sun/star/uno/XReference.hpp>
-#include <oox/export/drawingml.hxx>
-#include <sax/fshelper.hxx>
-#include <vcl/mapmod.hxx>
-#include <tools/fract.hxx>
+#include <cstddef>
+#include <memory>
 #include <unordered_map>
+
+#include <com/sun/star/awt/Size.hpp>
+#include <com/sun/star/table/BorderLine2.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <oox/dllapi.h>
+#include <oox/export/drawingml.hxx>
+#include <oox/export/utils.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <sax/fshelper.hxx>
+#include <tools/fract.hxx>
+#include <vcl/mapmod.hxx>
 
 namespace com { namespace sun { namespace star {
 namespace beans {
@@ -34,12 +42,26 @@ namespace beans {
 }
 namespace drawing {
     class XShape;
-    class XShapes;
 }
+
 namespace embed {
     class XEmbeddedObject;
 }
+namespace io {
+    class XInputStream;
+}
+namespace uno {
+    class XComponentContext;
+    class XInterface;
+}
 }}}
+
+namespace oox {
+namespace core {
+    class XmlFilterBase;
+}}
+
+class Graphic;
 
 namespace oox {
 
@@ -93,7 +115,6 @@ protected:
 
 private:
     sal_Int32           mnXmlNamespace;
-    Fraction            maFraction;
     MapMode             maMapModeSrc, maMapModeDest;
     std::shared_ptr<URLTransformer> mpURLTransformer;
 
@@ -105,7 +126,10 @@ private:
 
 public:
 
-    ShapeExport( sal_Int32 nXmlNamespace, ::sax_fastparser::FSHelperPtr pFS, ShapeHashMap* pShapeMap = nullptr, ::oox::core::XmlFilterBase* pFB = nullptr, DocumentType eDocumentType = DOCUMENT_PPTX, DMLTextExport* pTextExport = nullptr );
+    ShapeExport( sal_Int32 nXmlNamespace, ::sax_fastparser::FSHelperPtr pFS,
+                 ShapeHashMap* pShapeMap, ::oox::core::XmlFilterBase* pFB,
+                 DocumentType eDocumentType = DOCUMENT_PPTX,
+                 DMLTextExport* pTextExport = nullptr );
     virtual ~ShapeExport() {}
 
     void SetURLTranslator(const std::shared_ptr<URLTransformer>& pTransformer);
@@ -113,9 +137,9 @@ public:
     static bool         NonEmptyText( const css::uno::Reference< css::uno::XInterface >& xIface );
 
     ShapeExport&
-                        WriteBezierShape( const css::uno::Reference< css::drawing::XShape >& xShape, bool bClosed );
+                        WritePolyPolygonShape( const css::uno::Reference< css::drawing::XShape >& xShape, bool bClosed );
     ShapeExport&
-                        WriteClosedBezierShape( const css::uno::Reference< css::drawing::XShape >& xShape );
+                        WriteClosedPolyPolygonShape( const css::uno::Reference< css::drawing::XShape >& xShape );
     ShapeExport&
                         WriteConnectorShape( const css::uno::Reference< css::drawing::XShape >& xShape );
     ShapeExport&
@@ -133,7 +157,7 @@ public:
     virtual ShapeExport&
                         WriteNonVisualProperties( const css::uno::Reference< css::drawing::XShape >& xShape );
     ShapeExport&
-                        WriteOpenBezierShape( const css::uno::Reference< css::drawing::XShape >& xShape );
+                        WriteOpenPolyPolygonShape( const css::uno::Reference< css::drawing::XShape >& xShape );
     ShapeExport&
                         WriteRectangleShape( const css::uno::Reference< css::drawing::XShape >& xShape );
 
@@ -150,12 +174,14 @@ public:
      *
      * <table>
      *   <tr><th>Shape Type</th><th>Method</th></tr>
-     *   <tr><td><tt>com.sun.star.drawing.ClosedBezierShape</tt></td>    <td>ShapeExport::WriteClosedBezierShape</td></tr>
+     *   <tr><td><tt>com.sun.star.drawing.ClosedBezierShape</tt></td>    <td>ShapeExport::WriteClosedPolyPolygonShape</td></tr>
      *   <tr><td><tt>com.sun.star.drawing.CustomShape</tt></td>          <td>ShapeExport::WriteCustomShape</td></tr>
      *   <tr><td><tt>com.sun.star.drawing.EllipseShape</tt></td>         <td>ShapeExport::WriteEllipseShape</td></tr>
      *   <tr><td><tt>com.sun.star.drawing.GraphicObjectShape</tt></td>   <td>ShapeExport::WriteGraphicObjectShape</td></tr>
      *   <tr><td><tt>com.sun.star.drawing.LineShape</tt></td>            <td>ShapeExport::WriteLineShape</td></tr>
-     *   <tr><td><tt>com.sun.star.drawing.OpenBezierShape</tt></td>      <td>ShapeExport::WriteOpenBezierShape</td></tr>
+     *   <tr><td><tt>com.sun.star.drawing.OpenBezierShape</tt></td>      <td>ShapeExport::WriteOpenPolyPolygonShape</td></tr>
+     *   <tr><td><tt>com.sun.star.drawing.PolyPolygonShape</tt></td>      <td>ShapeExport::WriteClosedPolyPolygonShape</td></tr>
+     *   <tr><td><tt>com.sun.star.drawing.PolyLineShape</tt></td>      <td>ShapeExport::WriteOpenPolyPolygonShape</td></tr>
      *   <tr><td><tt>com.sun.star.drawing.RectangleShape</tt></td>       <td>ShapeExport::WriteRectangleShape</td></tr>
      *   <tr><td><tt>com.sun.star.drawing.TableShape</tt></td>           <td>ShapeExport::WriteTableShape</td></tr>
      *   <tr><td><tt>com.sun.star.drawing.TextShape</tt></td>            <td>ShapeExport::WriteTextShape</td></tr>
@@ -190,6 +216,7 @@ public:
 
     void WriteTableCellProperties(const css::uno::Reference< css::beans::XPropertySet >& rXPropSet);
 
+    void WriteBorderLine(const sal_Int32 XML_line, const css::table::BorderLine2& rBorderLine);
     void WriteTableCellBorders(const css::uno::Reference< css::beans::XPropertySet >& rXPropSet);
 
     sal_Int32 GetNewShapeID( const css::uno::Reference< css::drawing::XShape >& rShape );

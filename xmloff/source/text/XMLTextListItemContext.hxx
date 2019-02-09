@@ -44,23 +44,23 @@ public:
             const sal_uInt16 nPrfx,
             const OUString& rLName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList,
-            const bool bIsHeader = false );
-    virtual ~XMLTextListItemContext();
+            const bool bIsHeader );
+    virtual ~XMLTextListItemContext() override;
 
     virtual void EndElement() override;
 
-    SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                  const OUString& rLocalName,
                  const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
 
     bool HasStartValue() const { return -1 != nStartValue; }
     sal_Int16 GetStartValue() const { return nStartValue; }
 
-    inline bool HasNumRulesOverride() const
+    bool HasNumRulesOverride() const
     {
         return mxNumRulesOverride.is();
     }
-    inline const css::uno::Reference < css::container::XIndexReplace >& GetNumRulesOverride() const
+    const css::uno::Reference < css::container::XIndexReplace >& GetNumRulesOverride() const
     {
         return mxNumRulesOverride;
     }

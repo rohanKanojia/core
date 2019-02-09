@@ -10,7 +10,6 @@
 #define INCLUDED_WRITERFILTER_SOURCE_DMAPPER_LATENTSTYLEHANDLER_HXX
 
 #include "LoggedResources.hxx"
-#include <memory>
 #include <vector>
 #include <com/sun/star/beans/PropertyValue.hpp>
 
@@ -26,14 +25,14 @@ class LatentStyleHandler
     std::vector<css::beans::PropertyValue> m_aAttributes;
 
     // Properties
-    virtual void lcl_attribute(Id Name, Value& val) override;
-    virtual void lcl_sprm(Sprm& sprm) override;
+    void lcl_attribute(Id nId, Value& rVal) override;
+    void lcl_sprm(Sprm& sprm) override;
 
 public:
     LatentStyleHandler();
-    virtual ~LatentStyleHandler();
+    ~LatentStyleHandler() override;
 
-    std::vector<css::beans::PropertyValue> getAttributes() const;
+    const std::vector<css::beans::PropertyValue>& getAttributes() const;
 };
 
 } // namespace dmapper

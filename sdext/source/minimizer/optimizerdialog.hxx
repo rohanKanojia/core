@@ -19,7 +19,6 @@
 
 #ifndef INCLUDED_SDEXT_SOURCE_MINIMIZER_OPTIMIZERDIALOG_HXX
 #define INCLUDED_SDEXT_SOURCE_MINIMIZER_OPTIMIZERDIALOG_HXX
-#include "optimizerdialog.hrc"
 #include <vector>
 #include "unodialog.hxx"
 #include "optimizationstats.hxx"
@@ -33,13 +32,10 @@
 #include <com/sun/star/text/XTextRange.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/awt/XItemEventBroadcaster.hpp>
-#include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/frame/XDispatch.hpp>
-#include <com/sun/star/frame/XDesktop.hpp>
 #include <com/sun/star/awt/PushButtonType.hpp>
 #include <cppuhelper/implbase.hxx>
 
@@ -54,13 +50,18 @@
 #define PAGE_POS_Y      8
 #define PAGE_WIDTH      OD_DIALOG_WIDTH - PAGE_POS_X
 
+#define ITEM_ID_INTRODUCTION            0
+#define ITEM_ID_SLIDES                  1
+#define ITEM_ID_GRAPHIC_OPTIMIZATION    2
+#define ITEM_ID_OLE_OPTIMIZATION        3
+#define ITEM_ID_SUMMARY                 4
 
 class OptimizerDialog : public UnoDialog, public ConfigurationAccess
 {
 public:
 
-    OptimizerDialog( const css::uno::Reference< css::uno::XComponentContext >& rxContext, css::uno::Reference< css::frame::XFrame >& rxFrame,
-        css::uno::Reference< css::frame::XDispatch > rxStatusDispatcher );
+    OptimizerDialog( const css::uno::Reference< css::uno::XComponentContext >& rxContext, css::uno::Reference< css::frame::XFrame > const & rxFrame,
+        css::uno::Reference< css::frame::XDispatch > const & rxStatusDispatcher );
     ~OptimizerDialog();
 
     void                execute();
@@ -130,8 +131,8 @@ class ItemListener : public ::cppu::WeakImplHelper< css::awt::XItemListener >
 public:
     explicit ItemListener( OptimizerDialog& rOptimizerDialog ) : mrOptimizerDialog( rOptimizerDialog ){}
 
-    virtual void SAL_CALL itemStateChanged( const css::awt::ItemEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL itemStateChanged( const css::awt::ItemEvent& Event ) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 private:
 
     OptimizerDialog& mrOptimizerDialog;
@@ -143,8 +144,8 @@ class ActionListener : public ::cppu::WeakImplHelper< css::awt::XActionListener 
 public:
     explicit ActionListener( OptimizerDialog& rOptimizerDialog ) : mrOptimizerDialog( rOptimizerDialog ){}
 
-    virtual void SAL_CALL actionPerformed( const css::awt::ActionEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL actionPerformed( const css::awt::ActionEvent& Event ) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 private:
 
     OptimizerDialog& mrOptimizerDialog;
@@ -156,8 +157,8 @@ class ActionListenerListBox0Pg0 : public ::cppu::WeakImplHelper< css::awt::XActi
 public:
     explicit ActionListenerListBox0Pg0( OptimizerDialog& rOptimizerDialog ) : mrOptimizerDialog( rOptimizerDialog ){}
 
-    virtual void SAL_CALL actionPerformed( const css::awt::ActionEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL actionPerformed( const css::awt::ActionEvent& Event ) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 private:
 
     OptimizerDialog& mrOptimizerDialog;
@@ -169,8 +170,8 @@ class TextListenerFormattedField0Pg1 : public ::cppu::WeakImplHelper< css::awt::
 public:
     explicit TextListenerFormattedField0Pg1( OptimizerDialog& rOptimizerDialog ) : mrOptimizerDialog( rOptimizerDialog ){}
 
-    virtual void SAL_CALL textChanged( const css::awt::TextEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL textChanged( const css::awt::TextEvent& Event ) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 private:
 
     OptimizerDialog& mrOptimizerDialog;
@@ -182,8 +183,8 @@ class TextListenerComboBox0Pg1 : public ::cppu::WeakImplHelper< css::awt::XTextL
 public:
     explicit TextListenerComboBox0Pg1( OptimizerDialog& rOptimizerDialog ) : mrOptimizerDialog( rOptimizerDialog ){}
 
-    virtual void SAL_CALL textChanged( const css::awt::TextEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL textChanged( const css::awt::TextEvent& Event ) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 private:
 
     OptimizerDialog& mrOptimizerDialog;
@@ -195,11 +196,11 @@ class SpinListenerFormattedField0Pg1 : public ::cppu::WeakImplHelper< css::awt::
 public:
     explicit SpinListenerFormattedField0Pg1( OptimizerDialog& rOptimizerDialog ) : mrOptimizerDialog( rOptimizerDialog ){}
 
-    virtual void SAL_CALL up( const css::awt::SpinEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL down( const css::awt::SpinEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL first( const css::awt::SpinEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL last( const css::awt::SpinEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL up( const css::awt::SpinEvent& Event ) override;
+    virtual void SAL_CALL down( const css::awt::SpinEvent& Event ) override;
+    virtual void SAL_CALL first( const css::awt::SpinEvent& Event ) override;
+    virtual void SAL_CALL last( const css::awt::SpinEvent& Event ) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 private:
 
     OptimizerDialog& mrOptimizerDialog;

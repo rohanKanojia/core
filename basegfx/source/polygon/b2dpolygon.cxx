@@ -23,8 +23,8 @@
 #include <basegfx/vector/b2dvector.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/curve/b2dcubicbezier.hxx>
-#include <rtl/instance.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
+#include <basegfx/utils/systemdependentdata.hxx>
 #include <algorithm>
 #include <memory>
 #include <vector>
@@ -52,18 +52,13 @@ public:
 
 class CoordinateDataArray2D
 {
-    typedef ::std::vector< CoordinateData2D > CoordinateData2DVector;
+    typedef std::vector< CoordinateData2D > CoordinateData2DVector;
 
     CoordinateData2DVector                          maVector;
 
 public:
     explicit CoordinateDataArray2D(sal_uInt32 nCount)
     :   maVector(nCount)
-    {
-    }
-
-    explicit CoordinateDataArray2D(const CoordinateDataArray2D& rOriginal)
-    :   maVector(rOriginal.maVector)
     {
     }
 
@@ -152,7 +147,7 @@ public:
 
             for(sal_uInt32 a(0); a < nHalfSize; a++)
             {
-                ::std::swap(*aStart, *aEnd);
+                std::swap(*aStart, *aEnd);
                 ++aStart;
                 --aEnd;
             }
@@ -192,12 +187,9 @@ public:
 
     void transform(const basegfx::B2DHomMatrix& rMatrix)
     {
-        CoordinateData2DVector::iterator aStart(maVector.begin());
-        CoordinateData2DVector::iterator aEnd(maVector.end());
-
-        for(; aStart != aEnd; ++aStart)
+        for (auto & elem : maVector)
         {
-            aStart->transform(rMatrix);
+            elem.transform(rMatrix);
         }
     }
 };
@@ -239,13 +231,13 @@ public:
 
     void flip()
     {
-        ::std::swap(maPrevVector, maNextVector);
+        std::swap(maPrevVector, maNextVector);
     }
 };
 
 class ControlVectorArray2D
 {
-    typedef ::std::vector< ControlVectorPair2D > ControlVectorPair2DVector;
+    typedef std::vector< ControlVectorPair2D > ControlVectorPair2DVector;
 
     ControlVectorPair2DVector                           maVector;
     sal_uInt32                                          mnUsedVectors;
@@ -285,7 +277,7 @@ public:
 
     bool isUsed() const
     {
-        return (0 != mnUsedVectors);
+        return (mnUsedVectors != 0);
     }
 
     const basegfx::B2DVector& getPrevVector(sal_uInt32 nIndex) const
@@ -443,7 +435,7 @@ public:
                 aEnd->flip();
 
                 // swap entries
-                ::std::swap(*aStart, *aEnd);
+                std::swap(*aStart, *aEnd);
 
                 ++aStart;
                 --aEnd;
@@ -464,26 +456,28 @@ public:
     }
 };
 
-class ImplBufferedData
+class ImplBufferedData : public basegfx::SystemDependentDataHolder
 {
 private:
     // Possibility to hold the last subdivision
-    std::unique_ptr< basegfx::B2DPolygon >        mpDefaultSubdivision;
+    std::unique_ptr< basegfx::B2DPolygon >  mpDefaultSubdivision;
 
     // Possibility to hold the last B2DRange calculation
-    std::unique_ptr< basegfx::B2DRange >          mpB2DRange;
+    std::unique_ptr< basegfx::B2DRange >    mpB2DRange;
 
 public:
     ImplBufferedData()
-    :   mpDefaultSubdivision(),
+    :   basegfx::SystemDependentDataHolder(),
+        mpDefaultSubdivision(),
         mpB2DRange()
-    {}
+    {
+    }
 
     const basegfx::B2DPolygon& getDefaultAdaptiveSubdivision(const basegfx::B2DPolygon& rSource) const
     {
         if(!mpDefaultSubdivision)
         {
-            const_cast< ImplBufferedData* >(this)->mpDefaultSubdivision.reset(new basegfx::B2DPolygon(basegfx::tools::adaptiveSubdivideByCount(rSource, 9)));
+            const_cast< ImplBufferedData* >(this)->mpDefaultSubdivision.reset(new basegfx::B2DPolygon(basegfx::utils::adaptiveSubdivideByAngle(rSource)));
         }
 
         return *mpDefaultSubdivision;
@@ -530,7 +524,7 @@ public:
                                     // subdividing the bezier segment.
                                     // Ideal here is a subdivision at the extreme values, so use
                                     // getAllExtremumPositions to get all extremas in one run
-                                    ::std::vector< double > aExtremas;
+                                    std::vector< double > aExtremas;
 
                                     aExtremas.reserve(4);
                                     aEdge.getAllExtremumPositions(aExtremas);
@@ -637,7 +631,24 @@ public:
         }
     }
 
-    ImplB2DPolygon& operator=( const ImplB2DPolygon& ) = delete;
+    ImplB2DPolygon& operator=(const ImplB2DPolygon& rOther)
+    {
+        if (this != &rOther)
+        {
+            mpControlVector.reset();
+            mpBufferedData.reset();
+            maPoints = rOther.maPoints;
+            mbIsClosed = rOther.mbIsClosed;
+            if (rOther.mpControlVector && rOther.mpControlVector->isUsed())
+            {
+                mpControlVector.reset( new ControlVectorArray2D(*rOther.mpControlVector) );
+
+                if(!mpControlVector->isUsed())
+                    mpControlVector.reset();
+            }
+        }
+        return *this;
+    }
 
     sal_uInt32 count() const
     {
@@ -1018,14 +1029,11 @@ public:
             {
                 bool bRemove(maPoints.getCoordinate(nIndex) == maPoints.getCoordinate(nIndex + 1));
 
-                if(bRemove)
+                if(bRemove && mpControlVector)
                 {
-                    if(mpControlVector)
+                    if(!mpControlVector->getNextVector(nIndex).equalZero() || !mpControlVector->getPrevVector(nIndex + 1).equalZero())
                     {
-                        if(!mpControlVector->getNextVector(nIndex).equalZero() || !mpControlVector->getPrevVector(nIndex + 1).equalZero())
-                        {
-                            bRemove = false;
-                        }
+                        bRemove = false;
                     }
                 }
 
@@ -1092,22 +1100,44 @@ public:
             maPoints.transform(rMatrix);
         }
     }
+
+    void addOrReplaceSystemDependentData(basegfx::SystemDependentData_SharedPtr& rData)
+    {
+        if(!mpBufferedData)
+        {
+            mpBufferedData.reset(new ImplBufferedData);
+        }
+
+        mpBufferedData->addOrReplaceSystemDependentData(rData);
+    }
+
+    basegfx::SystemDependentData_SharedPtr getSystemDependentData(size_t hash_code) const
+    {
+        if(mpBufferedData)
+        {
+            return mpBufferedData->getSystemDependentData(hash_code);
+        }
+
+        return basegfx::SystemDependentData_SharedPtr();
+    }
 };
 
 namespace basegfx
 {
-    namespace
+    B2DPolygon::B2DPolygon() = default;
+
+    B2DPolygon::B2DPolygon(std::initializer_list<basegfx::B2DPoint> aPoints)
+        : mpPolygon()
     {
-        struct DefaultPolygon: public rtl::Static<B2DPolygon::ImplType, DefaultPolygon> {};
+        for (const basegfx::B2DPoint& rPoint : aPoints)
+        {
+            append(rPoint);
+        }
     }
 
-    B2DPolygon::B2DPolygon()
-    :   mpPolygon(DefaultPolygon::get())
-    {}
+    B2DPolygon::B2DPolygon(const B2DPolygon&) = default;
 
-    B2DPolygon::B2DPolygon(const B2DPolygon& rPolygon)
-    :   mpPolygon(rPolygon.mpPolygon)
-    {}
+    B2DPolygon::B2DPolygon(B2DPolygon&&) = default;
 
     B2DPolygon::B2DPolygon(const B2DPolygon& rPolygon, sal_uInt32 nIndex, sal_uInt32 nCount)
     :   mpPolygon(ImplB2DPolygon(*rPolygon.mpPolygon, nIndex, nCount))
@@ -1117,15 +1147,11 @@ namespace basegfx
         OSL_ENSURE(nIndex + nCount <= rPolygon.mpPolygon->count(), "B2DPolygon constructor outside range (!)");
     }
 
-    B2DPolygon::~B2DPolygon()
-    {
-    }
+    B2DPolygon::~B2DPolygon() = default;
 
-    B2DPolygon& B2DPolygon::operator=(const B2DPolygon& rPolygon)
-    {
-        mpPolygon = rPolygon.mpPolygon;
-        return *this;
-    }
+    B2DPolygon& B2DPolygon::operator=(const B2DPolygon&) = default;
+
+    B2DPolygon& B2DPolygon::operator=(B2DPolygon&&) = default;
 
     void B2DPolygon::makeUnique()
     {
@@ -1150,7 +1176,7 @@ namespace basegfx
         return mpPolygon->count();
     }
 
-    B2DPoint B2DPolygon::getB2DPoint(sal_uInt32 nIndex) const
+    B2DPoint const & B2DPolygon::getB2DPoint(sal_uInt32 nIndex) const
     {
         OSL_ENSURE(nIndex < mpPolygon->count(), "B2DPolygon access outside range (!)");
 
@@ -1374,12 +1400,12 @@ namespace basegfx
         }
     }
 
-    B2DPolygon B2DPolygon::getDefaultAdaptiveSubdivision() const
+    B2DPolygon const & B2DPolygon::getDefaultAdaptiveSubdivision() const
     {
         return mpPolygon->getDefaultAdaptiveSubdivision(*this);
     }
 
-    B2DRange B2DPolygon::getB2DRange() const
+    B2DRange const & B2DPolygon::getB2DRange() const
     {
         return mpPolygon->getB2DRange(*this);
     }
@@ -1393,7 +1419,7 @@ namespace basegfx
                 nCount = rPoly.count();
             }
 
-            if(0 == nIndex && nCount == rPoly.count())
+            if(nIndex == 0 && nCount == rPoly.count())
             {
                 mpPolygon->insert(mpPolygon->count(), *rPoly.mpPolygon);
             }
@@ -1418,7 +1444,7 @@ namespace basegfx
 
     void B2DPolygon::clear()
     {
-        mpPolygon = DefaultPolygon::get();
+        *mpPolygon = ImplB2DPolygon();
     }
 
     bool B2DPolygon::isClosed() const
@@ -1462,6 +1488,23 @@ namespace basegfx
         {
             mpPolygon->transform(rMatrix);
         }
+    }
+
+    void B2DPolygon::addOrReplaceSystemDependentDataInternal(SystemDependentData_SharedPtr& rData) const
+    {
+        // Need to get ImplB2DPolygon* from cow_wrapper *without*
+        // calling make_unique() here - we do not want to
+        // 'modify' the ImplB2DPolygon, but add buffered data that
+        // is valid for all referencing instances
+        const B2DPolygon* pMe(this);
+        const ImplB2DPolygon* pMyImpl(pMe->mpPolygon.get());
+
+        const_cast<ImplB2DPolygon*>(pMyImpl)->addOrReplaceSystemDependentData(rData);
+    }
+
+    SystemDependentData_SharedPtr B2DPolygon::getSystemDependantDataInternal(size_t hash_code) const
+    {
+        return mpPolygon->getSystemDependentData(hash_code);
     }
 
 } // end of namespace basegfx

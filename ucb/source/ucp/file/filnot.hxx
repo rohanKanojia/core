@@ -24,17 +24,18 @@
 #include <com/sun/star/beans/PropertyChangeEvent.hpp>
 #include <com/sun/star/ucb/XContentIdentifier.hpp>
 #include "filglob.hxx"
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
 namespace fileaccess {
 
-    class shell;
+    class TaskManager;
 
     class ContentEventNotifier
     {
     private:
-        shell* m_pMyShell;
+        TaskManager* m_pMyShell;
         css::uno::Reference< css::ucb::XContent > m_xCreatorContent;
         css::uno::Reference< css::ucb::XContentIdentifier > m_xCreatorId;
         css::uno::Reference< css::ucb::XContentIdentifier > m_xOldId;
@@ -42,13 +43,13 @@ namespace fileaccess {
     public:
 
         ContentEventNotifier(
-            shell* pMyShell,
+            TaskManager* pMyShell,
             const css::uno::Reference< css::ucb::XContent >& xCreatorContent,
             const css::uno::Reference< css::ucb::XContentIdentifier >& xCreatorId,
             const std::vector< css::uno::Reference< css::uno::XInterface > >& sListeners );
 
         ContentEventNotifier(
-            shell* pMyShell,
+            TaskManager* pMyShell,
             const css::uno::Reference< css::ucb::XContent >& xCreatorContent,
             const css::uno::Reference< css::ucb::XContentIdentifier >& xCreatorId,
             const css::uno::Reference< css::ucb::XContentIdentifier >& xOldId,
@@ -71,24 +72,23 @@ namespace fileaccess {
             const css::uno::Reference< css::ucb::XContent >& xCreatorContent,
             const std::vector< css::uno::Reference< css::uno::XInterface > >& sListeners );
 
-        void SAL_CALL notifyPropertyAdded( const OUString & aPropertyName );
-        void SAL_CALL notifyPropertyRemoved( const OUString & aPropertyName );
+        void notifyPropertyAdded( const OUString & aPropertyName );
+        void notifyPropertyRemoved( const OUString & aPropertyName );
     };
 
 
     typedef std::unordered_map< OUString,
-                           css::uno::Sequence< css::uno::Reference< css::uno::XInterface > >,
-                           OUStringHash >      ListenerMap;
+                           css::uno::Sequence< css::uno::Reference< css::uno::XInterface > > >  ListenerMap;
 
     class PropertyChangeNotifier
     {
     private:
         css::uno::Reference< css::ucb::XContent > m_xCreatorContent;
-        ListenerMap* m_pListeners;
+        std::unique_ptr<ListenerMap> m_pListeners;
     public:
         PropertyChangeNotifier(
             const css::uno::Reference< css::ucb::XContent >& xCreatorContent,
-            ListenerMap* pListeners );
+            std::unique_ptr<ListenerMap> pListeners );
 
         ~PropertyChangeNotifier();
 
@@ -101,12 +101,12 @@ namespace fileaccess {
     {
     public:
         // Side effect of this function is the change of the name
-        virtual ContentEventNotifier*          cEXC( const OUString& aNewName ) = 0;
+        virtual std::unique_ptr<ContentEventNotifier> cEXC( const OUString& aNewName ) = 0;
         // Side effect is the change of the state of the object to "deleted".
-        virtual ContentEventNotifier*          cDEL() = 0;
-        virtual ContentEventNotifier*          cCEL() = 0;
-        virtual PropertySetInfoChangeNotifier* cPSL() = 0;
-        virtual PropertyChangeNotifier*        cPCL() = 0;
+        virtual std::unique_ptr<ContentEventNotifier> cDEL() = 0;
+        virtual std::unique_ptr<ContentEventNotifier> cCEL() = 0;
+        virtual std::unique_ptr<PropertySetInfoChangeNotifier> cPSL() = 0;
+        virtual std::unique_ptr<PropertyChangeNotifier> cPCL() = 0;
 
     protected:
         ~Notifier() {}

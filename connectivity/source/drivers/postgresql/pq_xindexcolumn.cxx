@@ -45,8 +45,8 @@ using com::sun::star::beans::XPropertySet;
 
 namespace pq_sdbc_driver
 {
-IndexColumn::IndexColumn( const ::rtl::Reference< RefCountedMutex > & refMutex,
-                      const Reference< com::sun::star::sdbc::XConnection > & connection,
+IndexColumn::IndexColumn( const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+                      const Reference< css::sdbc::XConnection > & connection,
                       ConnectionSettings *pSettings )
     : ReflectionBase(
         getStatics().refl.indexColumn.implName,
@@ -57,10 +57,10 @@ IndexColumn::IndexColumn( const ::rtl::Reference< RefCountedMutex > & refMutex,
         * getStatics().refl.indexColumn.pProps )
 {}
 
-Reference< XPropertySet > IndexColumn::createDataDescriptor(  ) throw (RuntimeException, std::exception)
+Reference< XPropertySet > IndexColumn::createDataDescriptor(  )
 {
     IndexColumnDescriptor * pIndexColumn = new IndexColumnDescriptor(
-        m_refMutex, m_conn, m_pSettings  );
+        m_xMutex, m_conn, m_pSettings  );
     pIndexColumn->copyValuesFrom( this );
 
     return Reference< XPropertySet > ( pIndexColumn );
@@ -68,8 +68,8 @@ Reference< XPropertySet > IndexColumn::createDataDescriptor(  ) throw (RuntimeEx
 
 
 IndexColumnDescriptor::IndexColumnDescriptor(
-    const ::rtl::Reference< RefCountedMutex > & refMutex,
-    const Reference< com::sun::star::sdbc::XConnection > & connection,
+    const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+    const Reference< css::sdbc::XConnection > & connection,
     ConnectionSettings *pSettings )
     : ReflectionBase(
         getStatics().refl.indexColumnDescriptor.implName,
@@ -80,10 +80,10 @@ IndexColumnDescriptor::IndexColumnDescriptor(
         * getStatics().refl.indexColumnDescriptor.pProps )
 {}
 
-Reference< XPropertySet > IndexColumnDescriptor::createDataDescriptor(  ) throw (RuntimeException, std::exception)
+Reference< XPropertySet > IndexColumnDescriptor::createDataDescriptor(  )
 {
     IndexColumnDescriptor * pIndexColumn = new IndexColumnDescriptor(
-        m_refMutex, m_conn, m_pSettings  );
+        m_xMutex, m_conn, m_pSettings  );
     pIndexColumn->copyValuesFrom( this );
 
     return Reference< XPropertySet > ( pIndexColumn );

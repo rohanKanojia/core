@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/dump/dffdumper.hxx"
+#include <oox/dump/dffdumper.hxx>
 
 #if OOX_INCLUDE_DUMPER
 
@@ -41,7 +41,6 @@ const sal_uInt16 DFF_ID_SPLITMENUCOLORS     = 0xF11E;   /// Current toolbar colo
 
 const sal_uInt16 DFF_OPT_IDMASK             = 0x3FFF;
 const sal_uInt16 DFF_OPT_COMPLEX            = 0x8000;
-const sal_uInt16 DFF_OPT_FLAGSMASK          = 0x003F;
 
 } // namespace
 
@@ -155,15 +154,15 @@ sal_uInt32 DffStreamObject::dumpDffSimpleColor( const String& rName )
 
 namespace {
 
-enum PropType { PROPTYPE_BINARY, PROPTYPE_STRING, PROPTYPE_BLIP, PROPTYPE_COLORARRAY };
+enum class PropType { Binary };
 
 struct PropInfo
 {
-    OUString            maName;
-    PropType            meType;
-    sal_uInt16          mnId;
-    sal_uInt32          mnSize;
-    inline explicit     PropInfo( const OUString& rName, PropType eType, sal_uInt16 nId, sal_uInt32 nSize ) :
+    OUString const      maName;
+    PropType const      meType;
+    sal_uInt16 const    mnId;
+    sal_uInt32 const    mnSize;
+    explicit     PropInfo( const OUString& rName, PropType eType, sal_uInt16 nId, sal_uInt32 nSize ) :
                             maName( rName ), meType( eType ), mnId( nId ), mnSize( nSize ) {}
 };
 
@@ -186,74 +185,30 @@ void DffStreamObject::dumpDffOpt()
         if( getFlag( nPropId, DFF_OPT_COMPLEX ) )
         {
             writeHexItem( "complex-size", nValue, "CONV-DEC" );
-            String aName;
-            PropType eType = PROPTYPE_BINARY;
-            ::std::map< sal_Int64, ItemFormat >::const_iterator aIt = maComplexProps.find( nBaseId );
-            if( aIt != maComplexProps.end() )
-            {
-                const ItemFormat& rItemFmt = aIt->second;
-                aName = rItemFmt.maItemName;
-                if ( rItemFmt.maListName == "binary" )
-                    eType = PROPTYPE_BINARY;
-                else if ( rItemFmt.maListName == "string" )
-                    eType = PROPTYPE_STRING;
-                else if ( rItemFmt.maListName == "blip" )
-                    eType = PROPTYPE_BLIP;
-                else if ( rItemFmt.maListName == "colorarray" )
-                    eType = PROPTYPE_COLORARRAY;
-            }
-            aPropInfos.push_back( PropInfo( aName( "property-data" ), eType, nBaseId, nValue ) );
+            aPropInfos.emplace_back( String( "property-data" ), PropType::Binary, nBaseId, nValue );
         }
         else
         {
-            ::std::map< sal_Int64, ItemFormat >::const_iterator aIt = maSimpleProps.find( nBaseId );
-            if( aIt != maSimpleProps.end() )
-            {
-                const ItemFormat& rItemFmt = aIt->second;
-                // flags always at end of block of 64 properties
-                if( (nBaseId & DFF_OPT_FLAGSMASK) == DFF_OPT_FLAGSMASK )
-                {
-                    FlagsList* pFlagsList = dynamic_cast< FlagsList* >( cfg().getNameList( rItemFmt.maListName ).get() );
-                    sal_Int64 nOldIgnoreFlags = 0;
-                    if( pFlagsList )
-                    {
-                        nOldIgnoreFlags = pFlagsList->getIgnoreFlags();
-                        pFlagsList->setIgnoreFlags( nOldIgnoreFlags | 0xFFFF0000 | ~(nValue >> 16) );
-                    }
-                    writeValueItem( rItemFmt, nValue );
-                    if( pFlagsList )
-                        pFlagsList->setIgnoreFlags( nOldIgnoreFlags );
-                }
-                else
-                    writeValueItem( rItemFmt, nValue );
-            }
-            else
-                writeHexItem( "value", nValue );
+            writeHexItem( "value", nValue );
         }
     }
 
     mxOut->resetItemIndex();
-    for( PropInfoVector::iterator aIt = aPropInfos.begin(), aEnd = aPropInfos.end(); !mxStrm->isEof() && (aIt != aEnd); ++aIt )
+    for (auto const& propInfo : aPropInfos)
     {
+        if (mxStrm->isEof())
+            break;
         mxOut->startMultiItems();
         writeEmptyItem( "#complex-data" );
-        writeHexItem( "id", aIt->mnId, "DFFOPT-PROPERTY-NAMES" );
+        writeHexItem( "id", propInfo.mnId, "DFFOPT-PROPERTY-NAMES" );
         mxOut->endMultiItems();
         IndentGuard aIndent( mxOut );
-        switch( aIt->meType )
+        switch(propInfo.meType)
         {
-            case PROPTYPE_BINARY:
-                dumpBinary( aIt->maName, aIt->mnSize );
+            case PropType::Binary:
+                dumpBinary( propInfo.maName, propInfo.mnSize );
             break;
-            case PROPTYPE_STRING:
-                dumpUnicodeArray( aIt->maName, aIt->mnSize / 2, true );
-            break;
-            case PROPTYPE_BLIP:
-                dumpBinary( aIt->maName, aIt->mnSize );
-            break;
-            case PROPTYPE_COLORARRAY:
-                dumpBinary( aIt->maName, aIt->mnSize );
-            break;
+            default: assert(false && "missing implementation?");
         }
     }
 }

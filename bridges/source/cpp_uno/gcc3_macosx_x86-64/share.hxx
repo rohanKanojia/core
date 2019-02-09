@@ -19,7 +19,7 @@
 #ifndef INCLUDED_BRIDGES_SOURCE_CPP_UNO_GCC3_MACOSX_X86_64_SHARE_HXX
 #define INCLUDED_BRIDGES_SOURCE_CPP_UNO_GCC3_MACOSX_X86_64_SHARE_HXX
 
-#include "uno/mapping.h"
+#include <uno/mapping.h>
 
 #include <typeinfo>
 #include <exception>
@@ -80,7 +80,7 @@ struct __cxa_exception
 
   // The C++ standard has entertaining rules wrt calling set_terminate
   // and set_unexpected in the middle of the exception cleanup process.
-  std::unexpected_handler unexpectedHandler;
+  void (*unexpectedHandler)(); // std::unexpected_handler dropped from C++17
   std::terminate_handler terminateHandler;
 
   // The caught exception stack threads through here.
@@ -136,8 +136,7 @@ namespace CPPU_CURRENT_NAMESPACE
 void raiseException(
     uno_Any * pUnoExc, uno_Mapping * pUno2Cpp );
 
-void fillUnoException(
-    __cxa_exception * header, uno_Any *, uno_Mapping * pCpp2Uno );
+void fillUnoException(uno_Any *, uno_Mapping * pCpp2Uno);
 }
 
 #endif

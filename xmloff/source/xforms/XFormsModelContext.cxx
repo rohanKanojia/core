@@ -34,14 +34,12 @@
 
 #include <osl/diagnose.h>
 
-#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/xml/dom/XDocument.hpp>
 #include <com/sun/star/util/XUpdatable.hpp>
 #include <com/sun/star/xforms/XModel2.hpp>
 
 
 using com::sun::star::xml::sax::XAttributeList;
-using com::sun::star::beans::XPropertySet;
 using com::sun::star::util::XUpdatable;
 using namespace com::sun::star::uno;
 using namespace xmloff::token;
@@ -71,11 +69,6 @@ XFormsModelContext::XFormsModelContext( SvXMLImport& rImport,
     mxModel( xforms_createXFormsModel() )
 {
 }
-
-XFormsModelContext::~XFormsModelContext()
-{
-}
-
 
 void XFormsModelContext::HandleAttribute(
     sal_uInt16 nToken,

@@ -7,8 +7,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "scopetools.hxx"
-#include "document.hxx"
+#include <scopetools.hxx>
+#include <document.hxx>
 #include <vcl/window.hxx>
 
 namespace sc {
@@ -68,6 +68,22 @@ WaitPointerSwitch::~WaitPointerSwitch()
 {
     if (mpFrameWin)
         mpFrameWin->LeaveWait();
+}
+
+DelayFormulaGroupingSwitch::DelayFormulaGroupingSwitch(ScDocument& rDoc, bool delay) :
+    mrDoc(rDoc), mbOldValue(rDoc.IsDelayedFormulaGrouping())
+{
+    mrDoc.DelayFormulaGrouping(delay);
+}
+
+DelayFormulaGroupingSwitch::~DelayFormulaGroupingSwitch()
+{
+    mrDoc.DelayFormulaGrouping(mbOldValue);
+}
+
+void DelayFormulaGroupingSwitch::reset()
+{
+    mrDoc.DelayFormulaGrouping(mbOldValue);
 }
 
 }

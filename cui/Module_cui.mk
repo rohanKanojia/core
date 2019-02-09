@@ -11,11 +11,23 @@ $(eval $(call gb_Module_Module,cui))
 
 $(eval $(call gb_Module_add_targets,cui,\
 	Library_cui \
+	UIConfig_cui \
 ))
 
 $(eval $(call gb_Module_add_l10n_targets,cui,\
-	AllLangResTarget_cui \
-	UIConfig_cui \
+    AllLangMoTarget_cui \
+))
+
+# screenshots
+$(eval $(call gb_Module_add_screenshot_targets,cui,\
+    CppunitTest_cui_dialogs_test \
+    CppunitTest_cui_dialogs_test_2 \
+    CppunitTest_cui_dialogs_test_3 \
+    CppunitTest_cui_dialogs_test_4 \
+))
+
+$(eval $(call gb_Module_add_uicheck_targets,cui,\
+    UITest_cui_dialogs \
 ))
 
 # vim: set noet sw=4 ts=4:

@@ -10,17 +10,18 @@
 #ifndef INCLUDED_SC_QA_UNIT_HELPER_XPATH_HXX
 #define INCLUDED_SC_QA_UNIT_HELPER_XPATH_HXX
 
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <libxml/parser.h>
 
-#include <unotools/tempfile.hxx>
-
-#include <libxml/xpathInternals.h>
-#include <libxml/parserInternals.h>
-
-#include <rtl/string.hxx>
 #include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 #include <memory>
+
+namespace com { namespace sun { namespace star { namespace uno { template <class interface_type> class Reference; } } } }
+namespace com { namespace sun { namespace star { namespace lang { class XMultiServiceFactory; } } } }
+namespace utl { class TempFile; }
+class ScDocShell;
+class SvStream;
 
 #if defined(SCQAHELPER_DLLIMPLEMENTATION)
 #define SCQAHELPER_DLLPUBLIC  SAL_DLLPUBLIC_EXPORT
@@ -28,9 +29,9 @@
 #define SCQAHELPER_DLLPUBLIC  SAL_DLLPUBLIC_IMPORT
 #endif
 
-#include "docsh.hxx"
-
 using namespace com::sun::star;
+
+class ScBootstrapFixture;
 
 namespace XPathHelper
 {
@@ -44,8 +45,14 @@ namespace XPathHelper
      *      test several files in the same exported xml file you need to export the file manually
      *      and call the parseExport method that takes a TempFile
      */
-    SCQAHELPER_DLLPUBLIC xmlDocPtr parseExport(ScDocShell& rShell, uno::Reference< lang::XMultiServiceFactory> xSFactory,
+    SCQAHELPER_DLLPUBLIC xmlDocPtr parseExport2(ScBootstrapFixture &, ScDocShell& rShell, uno::Reference< lang::XMultiServiceFactory> const & xSFactory,
             const OUString& rFile, sal_Int32 nFormat);
+
+    /**
+     * Tries to parse the specified file in the temp file zip container as a binary file.
+     */
+    SCQAHELPER_DLLPUBLIC std::shared_ptr<SvStream> parseExportStream(std::shared_ptr<utl::TempFile> const & pTempFile,
+            uno::Reference<lang::XMultiServiceFactory> const & xSFactory, const OUString& rFile);
 
     /**
      * Tries to parse the specified file in the temp file zip container as an xml file.
@@ -53,7 +60,7 @@ namespace XPathHelper
      * Should be used when the same exported file is used for testing different files in
      * the same zip file.
      */
-    SCQAHELPER_DLLPUBLIC xmlDocPtr parseExport(std::shared_ptr<utl::TempFile> pTempFile, uno::Reference< lang::XMultiServiceFactory> xSFactory,
+    SCQAHELPER_DLLPUBLIC xmlDocPtr parseExport(std::shared_ptr<utl::TempFile> const & pTempFile, uno::Reference< lang::XMultiServiceFactory> const & xSFactory,
             const OUString& rFile);
 }
 

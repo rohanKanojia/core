@@ -20,25 +20,20 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_CRDLG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_CRDLG_HXX
 
-#include <vcl/dialog.hxx>
-#include <vcl/button.hxx>
-#include <vcl/layout.hxx>
-#include "scui_def.hxx"
+#include <vcl/weld.hxx>
 
-class ScColOrRowDlg : public ModalDialog
+class ScColOrRowDlg : public weld::GenericDialogController
 {
 public:
-    ScColOrRowDlg(vcl::Window* pParent, const OUString& rStrTitle,
-        const OUString& rStrLabel);
-    virtual ~ScColOrRowDlg();
-    virtual void dispose() override;
+    ScColOrRowDlg(weld::Window* pParent, const OUString& rStrTitle, const OUString& rStrLabel);
+    virtual ~ScColOrRowDlg() override;
 private:
-    VclPtr<VclFrame>       m_pFrame;
-    VclPtr<RadioButton>    m_pBtnRows;
-    VclPtr<RadioButton>    m_pBtnCols;
-    VclPtr<OKButton>       m_pBtnOk;
+    std::unique_ptr<weld::Frame> m_xFrame;
+    std::unique_ptr<weld::RadioButton> m_xBtnRows;
+    std::unique_ptr<weld::RadioButton> m_xBtnCols;
+    std::unique_ptr<weld::Button> m_xBtnOk;
 
-    DECL_LINK_TYPED(OkHdl, Button*, void);
+    DECL_LINK(OkHdl, weld::Button&, void);
 };
 
 #endif

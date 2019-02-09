@@ -22,10 +22,10 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
 #include "xmlMasterFields.hxx"
 #include "xmlTable.hxx"
-#include <tools/debug.hxx>
 #include <comphelper/property.hxx>
 #include <com/sun/star/report/XReportControlModel.hpp>
 
@@ -51,20 +51,18 @@ OXMLSubDocument::OXMLSubDocument( ORptFilter& rImport,
 
 }
 
-
 OXMLSubDocument::~OXMLSubDocument()
 {
 }
 
-
-SvXMLImportContext* OXMLSubDocument::_CreateChildContext(
+SvXMLImportContextRef OXMLSubDocument::CreateChildContext_(
         sal_uInt16 _nPrefix,
         const OUString& _rLocalName,
         const Reference< XAttributeList > & xAttrList )
 {
-    SvXMLImportContext *pContext = OXMLReportElementBase::_CreateChildContext(_nPrefix,_rLocalName,xAttrList);
-    if ( pContext )
-        return pContext;
+    SvXMLImportContextRef xContext = OXMLReportElementBase::CreateChildContext_(_nPrefix,_rLocalName,xAttrList);
+    if (xContext)
+        return xContext;
     const SvXMLTokenMap&    rTokenMap   = static_cast<ORptFilter&>(GetImport()).GetReportElemTokenMap();
 
     switch( rTokenMap.Get( _nPrefix, _rLocalName ) )
@@ -72,7 +70,7 @@ SvXMLImportContext* OXMLSubDocument::_CreateChildContext(
         case XML_TOK_MASTER_DETAIL_FIELDS:
             {
                 GetImport().GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-                pContext = new OXMLMasterFields(static_cast<ORptFilter&>(GetImport()), _nPrefix, _rLocalName,xAttrList ,this);
+                xContext = new OXMLMasterFields(static_cast<ORptFilter&>(GetImport()), _nPrefix, _rLocalName,xAttrList ,this);
             }
             break;
         case XML_TOK_SUB_FRAME:
@@ -81,7 +79,7 @@ SvXMLImportContext* OXMLSubDocument::_CreateChildContext(
                     m_nCurrentCount = m_pContainer->getSection()->getCount();
                 rtl::Reference< XMLShapeImportHelper > xShapeImportHelper = GetImport().GetShapeImport();
                 uno::Reference< drawing::XShapes > xShapes = m_pContainer->getSection().get();
-                pContext = xShapeImportHelper->CreateGroupChildContext(GetImport(),_nPrefix,_rLocalName,xAttrList,xShapes);
+                xContext = xShapeImportHelper->CreateGroupChildContext(GetImport(),_nPrefix,_rLocalName,xAttrList,xShapes);
                 m_bContainsShape = true;
                 if (m_pCellParent)
                 {
@@ -90,32 +88,38 @@ SvXMLImportContext* OXMLSubDocument::_CreateChildContext(
                 }
             }
             break;
+        // FIXME: is it *intentional* that this is supported?
+        // ORptExport::exportContainer() can export this but the import
+        // used to be rather accidental previously
+        case XML_TOK_SUB_BODY:
+            xContext = new RptXMLDocumentBodyContext(GetImport(), _nPrefix, _rLocalName);
+            break;
         default:
             break;
     }
 
-    if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), _nPrefix, _rLocalName );
+    if (!xContext)
+        xContext = new SvXMLImportContext( GetImport(), _nPrefix, _rLocalName );
 
-    return pContext;
+    return xContext;
 }
 
 void OXMLSubDocument::EndElement()
 {
     if ( m_bContainsShape )
     {
-        m_xComponent.set(m_pContainer->getSection()->getByIndex(m_nCurrentCount),uno::UNO_QUERY);
-        if ( m_xComponent.is() )
+        m_xReportComponent.set(m_pContainer->getSection()->getByIndex(m_nCurrentCount),uno::UNO_QUERY);
+        if ( m_xReportComponent.is() )
         {
             if ( !m_aMasterFields.empty() )
-                m_xComponent->setMasterFields(Sequence< OUString>(&*m_aMasterFields.begin(),m_aMasterFields.size()));
+                m_xReportComponent->setMasterFields(Sequence< OUString>(&*m_aMasterFields.begin(),m_aMasterFields.size()));
             if ( !m_aDetailFields.empty() )
-                m_xComponent->setDetailFields(Sequence< OUString>(&*m_aDetailFields.begin(),m_aDetailFields.size()));
+                m_xReportComponent->setDetailFields(Sequence< OUString>(&*m_aDetailFields.begin(),m_aDetailFields.size()));
 
-            m_xComponent->setName(m_xFake->getName());
-            m_xComponent->setPrintRepeatedValues(m_xFake->getPrintRepeatedValues());
+            m_xReportComponent->setName(m_xFake->getName());
+            m_xReportComponent->setPrintRepeatedValues(m_xFake->getPrintRepeatedValues());
             uno::Reference< report::XReportControlModel >   xFakeModel(m_xFake,uno::UNO_QUERY);
-            uno::Reference< report::XReportControlModel >   xComponentModel(m_xComponent,uno::UNO_QUERY);
+            uno::Reference< report::XReportControlModel >   xComponentModel(m_xReportComponent,uno::UNO_QUERY);
             if ( xComponentModel.is() && xFakeModel.is() )
             {
                 xComponentModel->setPrintWhenGroupChange(xFakeModel->getPrintWhenGroupChange());

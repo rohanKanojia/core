@@ -35,7 +35,6 @@
 #include <com/sun/star/beans/PropertyValues.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/linguistic2/XSpellChecker.hpp>
-#include <com/sun/star/linguistic2/XSearchableDictionaryList.hpp>
 #include <com/sun/star/linguistic2/XLinguServiceEventBroadcaster.hpp>
 
 #include <linguistic/misc.hxx>
@@ -64,7 +63,6 @@ class MacSpellChecker :
     Locale *                aDLocs;
     OUString *              aDNames;
     sal_Int32               numdict;
-    NSSpellChecker *        macSpell;
     int                     macTag;   // unique tag for this doc
 
     ::comphelper::OInterfaceContainerHelper2       aEvtListeners;
@@ -82,39 +80,38 @@ class MacSpellChecker :
     }
 
     sal_Int16   GetSpellFailure( const OUString &rWord, const Locale &rLocale );
-    Reference< XSpellAlternatives > GetProposals( const OUString &rWord, const Locale &rLocale );
 
 public:
     MacSpellChecker();
-    virtual ~MacSpellChecker();
+    virtual ~MacSpellChecker() override;
 
     // XSupportedLocales (for XSpellChecker)
-    virtual Sequence< Locale > SAL_CALL getLocales() throw(RuntimeException) override;
-    virtual sal_Bool SAL_CALL hasLocale( const Locale& rLocale ) throw(RuntimeException) override;
+    virtual Sequence< Locale > SAL_CALL getLocales() override;
+    virtual sal_Bool SAL_CALL hasLocale( const Locale& rLocale ) override;
 
     // XSpellChecker
-    virtual sal_Bool SAL_CALL isValid( const OUString& rWord, const Locale& rLocale, const PropertyValues& rProperties ) throw(IllegalArgumentException, RuntimeException) override;
-    virtual Reference< XSpellAlternatives > SAL_CALL spell( const OUString& rWord, const Locale& rLocale, const PropertyValues& rProperties ) throw(IllegalArgumentException, RuntimeException) override;
+    virtual sal_Bool SAL_CALL isValid( const OUString& rWord, const Locale& rLocale, const PropertyValues& rProperties ) override;
+    virtual Reference< XSpellAlternatives > SAL_CALL spell( const OUString& rWord, const Locale& rLocale, const PropertyValues& rProperties ) override;
 
     // XLinguServiceEventBroadcaster
-    virtual sal_Bool SAL_CALL addLinguServiceEventListener( const Reference< XLinguServiceEventListener >& rxLstnr ) throw(RuntimeException) override;
-    virtual sal_Bool SAL_CALL removeLinguServiceEventListener( const Reference< XLinguServiceEventListener >& rxLstnr ) throw(RuntimeException) override;
+    virtual sal_Bool SAL_CALL addLinguServiceEventListener( const Reference< XLinguServiceEventListener >& rxLstnr ) override;
+    virtual sal_Bool SAL_CALL removeLinguServiceEventListener( const Reference< XLinguServiceEventListener >& rxLstnr ) override;
 
     // XServiceDisplayName
-    virtual OUString SAL_CALL getServiceDisplayName( const Locale& rLocale ) throw(RuntimeException) override;
+    virtual OUString SAL_CALL getServiceDisplayName( const Locale& rLocale ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const Sequence< Any >& rArguments ) throw(Exception, RuntimeException) override;
+    virtual void SAL_CALL initialize( const Sequence< Any >& rArguments ) override;
 
     // XComponent
-    virtual void SAL_CALL dispose() throw(RuntimeException) override;
-    virtual void SAL_CALL addEventListener( const Reference< XEventListener >& rxListener ) throw(RuntimeException) override;
-    virtual void SAL_CALL removeEventListener( const Reference< XEventListener >& rxListener ) throw(RuntimeException) override;
+    virtual void SAL_CALL dispose() override;
+    virtual void SAL_CALL addEventListener( const Reference< XEventListener >& rxListener ) override;
+    virtual void SAL_CALL removeEventListener( const Reference< XEventListener >& rxListener ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw(RuntimeException) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& rServiceName ) throw(RuntimeException) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() throw(RuntimeException) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& rServiceName ) override;
+    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     static inline OUString  getImplementationName_Static() throw();
     static Sequence< OUString > getSupportedServiceNames_Static() throw();
@@ -124,9 +121,6 @@ inline OUString MacSpellChecker::getImplementationName_Static() throw()
 {
     return OUString( "org.openoffice.lingu.MacOSXSpellChecker" );
 }
-
-void * SAL_CALL MacSpellChecker_getFactory(
-    char const * pImplName, XMultiServiceFactory * pServiceManager, void *);
 
 #endif
 

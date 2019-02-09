@@ -17,12 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/rcid.h>
-
 #include <cstdarg>
 #include <sfx2/module.hxx>
 #include <sfx2/app.hxx>
-#include <sfx2/sfxresid.hxx>
+#include <sfx2/styfitem.hxx>
 #include <sfx2/msgpool.hxx>
 #include <sfx2/tbxctrl.hxx>
 #include <sfx2/stbitem.hxx>
@@ -30,185 +28,92 @@
 #include <sfx2/docfac.hxx>
 #include <sfx2/objface.hxx>
 #include <sfx2/viewfrm.hxx>
-#include <sfx2/sfx.hrc>
 #include <sfx2/tabdlg.hxx>
 #include <svl/intitem.hxx>
 #include <tools/diagnose_ex.h>
 #include <rtl/strbuf.hxx>
 #include <sal/log.hxx>
 
-#define SfxModule
-#include "sfxslots.hxx"
-#include "childwinimpl.hxx"
+#define ShellClass_SfxModule
+#include <sfxslots.hxx>
+#include <childwinimpl.hxx>
 #include <ctrlfactoryimpl.hxx>
-
-class SfxModuleArr_Impl
-{
-    typedef ::std::vector<SfxModule*> DataType;
-    DataType maData;
-public:
-
-    typedef DataType::iterator iterator;
-
-    iterator begin()
-    {
-        return maData.begin();
-    }
-
-    void erase( const iterator& it )
-    {
-        maData.erase(it);
-    }
-
-    SfxModule* operator[] ( size_t i )
-    {
-        return maData[i];
-    }
-
-    void push_back( SfxModule* p )
-    {
-        maData.push_back(p);
-    }
-
-    size_t size() const
-    {
-        return maData.size();
-    }
-};
-
-static SfxModuleArr_Impl* pModules=nullptr;
 
 class SfxModule_Impl
 {
 public:
 
-    SfxSlotPool*                pSlotPool;
-    SfxTbxCtrlFactArr_Impl*     pTbxCtrlFac;
-    SfxStbCtrlFactArr_Impl*     pStbCtrlFac;
-    SfxChildWinFactArr_Impl*    pFactArr;
-    ImageList*                  pImgListSmall;
-    ImageList*                  pImgListBig;
+    std::unique_ptr<SfxSlotPool>              pSlotPool;
+    std::unique_ptr<SfxTbxCtrlFactArr_Impl>   pTbxCtrlFac;
+    std::unique_ptr<SfxStbCtrlFactArr_Impl>   pStbCtrlFac;
+    std::unique_ptr<SfxChildWinFactArr_Impl>  pFactArr;
+    OString                     maResName;
 
                                 SfxModule_Impl();
                                 ~SfxModule_Impl();
-    ImageList*                  GetImageList( ResMgr* pResMgr, bool bBig );
 };
 
 SfxModule_Impl::SfxModule_Impl()
- : pSlotPool(nullptr), pTbxCtrlFac(nullptr), pStbCtrlFac(nullptr), pFactArr(nullptr), pImgListSmall(nullptr), pImgListBig(nullptr)
 {
 }
 
 SfxModule_Impl::~SfxModule_Impl()
 {
-    delete pSlotPool;
-    delete pTbxCtrlFac;
-    delete pStbCtrlFac;
-    delete pFactArr;
-    delete pImgListSmall;
-    delete pImgListBig;
+    pSlotPool.reset();
+    pTbxCtrlFac.reset();
+    pStbCtrlFac.reset();
+    pFactArr.reset();
 }
-
-ImageList* SfxModule_Impl::GetImageList( ResMgr* pResMgr, bool bBig )
-{
-    ImageList*& rpList = bBig ? pImgListBig : pImgListSmall;
-    if ( !rpList )
-    {
-        ResId aResId( bBig ? ( RID_DEFAULTIMAGELIST_LC ) : ( RID_DEFAULTIMAGELIST_SC ), *pResMgr );
-
-        aResId.SetRT( RSC_IMAGELIST );
-
-        DBG_ASSERT( pResMgr->IsAvailable(aResId), "No default ImageList!" );
-
-        if ( pResMgr->IsAvailable(aResId) )
-            rpList = new ImageList( aResId );
-        else
-            rpList = new ImageList();
-    }
-
-    return rpList; }
-
 
 SFX_IMPL_SUPERCLASS_INTERFACE(SfxModule, SfxShell)
 
-ResMgr* SfxModule::GetResMgr()
+SfxModule::SfxModule(const OString& rResName, std::initializer_list<SfxObjectFactory*> pFactoryList)
+    : pImpl(nullptr)
 {
-    return pResMgr;
-}
-
-SfxModule::SfxModule( ResMgr* pMgrP, bool bDummyP,
-                      SfxObjectFactory* pFactoryP, ... )
-    : pResMgr( pMgrP ), bDummy( bDummyP ), pImpl(nullptr)
-{
-    Construct_Impl();
-    va_list pVarArgs;
-    va_start( pVarArgs, pFactoryP );
-    for ( SfxObjectFactory *pArg = pFactoryP; pArg;
-         pArg = va_arg( pVarArgs, SfxObjectFactory* ) )
-        pArg->SetModule_Impl( this );
-    va_end(pVarArgs);
-}
-
-void SfxModule::Construct_Impl()
-{
-    if( !bDummy )
+    Construct_Impl(rResName);
+    for (auto pFactory : pFactoryList)
     {
-        SfxApplication *pApp = SfxGetpApp();
-        SfxModuleArr_Impl& rArr = GetModules_Impl();
-        SfxModule* pPtr = this;
-        rArr.push_back( pPtr );
-        pImpl = new SfxModule_Impl;
-        pImpl->pSlotPool = new SfxSlotPool(&pApp->GetAppSlotPool_Impl());
-
-        pImpl->pTbxCtrlFac=nullptr;
-        pImpl->pStbCtrlFac=nullptr;
-        pImpl->pFactArr=nullptr;
-        pImpl->pImgListSmall=nullptr;
-        pImpl->pImgListBig=nullptr;
-
-        SetPool( &pApp->GetPool() );
+        if (pFactory)
+            pFactory->SetModule_Impl( this );
     }
 }
 
+void SfxModule::Construct_Impl(const OString& rResName)
+{
+    SfxApplication *pApp = SfxApplication::GetOrCreate();
+    pImpl = new SfxModule_Impl;
+    pImpl->pSlotPool.reset( new SfxSlotPool(&pApp->GetAppSlotPool_Impl()) );
+    pImpl->maResName = rResName;
+
+    SetPool( &pApp->GetPool() );
+}
 
 SfxModule::~SfxModule()
 {
-    if( !bDummy )
+    //TODO how to silence useuniqueptr
+    if (true)
     {
-        if ( SfxGetpApp()->Get_Impl() )
-        {
-            // The module will be destroyed before the Deinitialize,
-            // so remove from the array
-            SfxModuleArr_Impl& rArr = GetModules_Impl();
-            for( sal_uInt16 nPos = rArr.size(); nPos--; )
-            {
-                if( rArr[ nPos ] == this )
-                {
-                    rArr.erase( rArr.begin() + nPos );
-                    break;
-                }
-            }
-
-            delete pImpl;
-        }
-
-        delete pResMgr;
+        delete pImpl;
     }
 }
 
+std::locale SfxModule::GetResLocale() const
+{
+    return Translate::Create(pImpl->maResName.getStr());
+}
 
 SfxSlotPool* SfxModule::GetSlotPool() const
 {
-    return pImpl->pSlotPool;
+    return pImpl->pSlotPool.get();
 }
 
 
-void SfxModule::RegisterChildWindow(SfxChildWinFactory *pFact)
+void SfxModule::RegisterChildWindow(std::unique_ptr<SfxChildWinFactory> pFact)
 {
     DBG_ASSERT( pImpl, "No real Module!" );
 
     if (!pImpl->pFactArr)
-        pImpl->pFactArr = new SfxChildWinFactArr_Impl;
+        pImpl->pFactArr.reset( new SfxChildWinFactArr_Impl );
 
     for (size_t nFactory=0; nFactory<pImpl->pFactArr->size(); ++nFactory)
     {
@@ -220,14 +125,14 @@ void SfxModule::RegisterChildWindow(SfxChildWinFactory *pFact)
         }
     }
 
-    pImpl->pFactArr->push_back( pFact );
+    pImpl->pFactArr->push_back( std::move(pFact) );
 }
 
 
 void SfxModule::RegisterToolBoxControl( const SfxTbxCtrlFactory& rFact )
 {
     if (!pImpl->pTbxCtrlFac)
-        pImpl->pTbxCtrlFac = new SfxTbxCtrlFactArr_Impl;
+        pImpl->pTbxCtrlFac.reset( new SfxTbxCtrlFactArr_Impl );
 
 #ifdef DBG_UTIL
     for ( size_t n=0; n<pImpl->pTbxCtrlFac->size(); n++ )
@@ -248,7 +153,7 @@ void SfxModule::RegisterToolBoxControl( const SfxTbxCtrlFactory& rFact )
 void SfxModule::RegisterStatusBarControl( const SfxStbCtrlFactory& rFact )
 {
     if (!pImpl->pStbCtrlFac)
-        pImpl->pStbCtrlFac = new SfxStbCtrlFactArr_Impl;
+        pImpl->pStbCtrlFac.reset( new SfxStbCtrlFactArr_Impl );
 
 #ifdef DBG_UTIL
     for ( size_t n=0; n<pImpl->pStbCtrlFac->size(); n++ )
@@ -268,50 +173,23 @@ void SfxModule::RegisterStatusBarControl( const SfxStbCtrlFactory& rFact )
 
 SfxTbxCtrlFactArr_Impl*  SfxModule::GetTbxCtrlFactories_Impl() const
 {
-    return pImpl->pTbxCtrlFac;
+    return pImpl->pTbxCtrlFac.get();
 }
 
 
 SfxStbCtrlFactArr_Impl*  SfxModule::GetStbCtrlFactories_Impl() const
 {
-    return pImpl->pStbCtrlFac;
+    return pImpl->pStbCtrlFac.get();
 }
 
 SfxChildWinFactArr_Impl* SfxModule::GetChildWinFactories_Impl() const
 {
-    return pImpl->pFactArr;
+    return pImpl->pFactArr.get();
 }
 
-ImageList* SfxModule::GetImageList_Impl( bool bBig )
-{
-    return pImpl->GetImageList( pResMgr, bBig );
-}
-
-VclPtr<SfxTabPage> SfxModule::CreateTabPage( sal_uInt16, vcl::Window*, const SfxItemSet& )
+VclPtr<SfxTabPage> SfxModule::CreateTabPage(sal_uInt16, TabPageParent, const SfxItemSet&)
 {
     return VclPtr<SfxTabPage>();
-}
-
-SfxModuleArr_Impl& SfxModule::GetModules_Impl()
-{
-    if( !pModules )
-        pModules = new SfxModuleArr_Impl;
-    return *pModules;
-};
-
-void SfxModule::DestroyModules_Impl()
-{
-    if ( pModules )
-    {
-        SfxModuleArr_Impl& rModules = *pModules;
-        for( sal_uInt16 nPos = rModules.size(); nPos--; )
-        {
-            SfxModule* pMod = rModules[nPos];
-            delete pMod;
-        }
-        delete pModules;
-        pModules = nullptr;
-    }
 }
 
 void SfxModule::Invalidate( sal_uInt16 nId )
@@ -333,7 +211,7 @@ SfxModule* SfxModule::GetActiveModule( SfxViewFrame* pFrame )
 
 FieldUnit SfxModule::GetModuleFieldUnit( css::uno::Reference< css::frame::XFrame > const & i_frame )
 {
-    ENSURE_OR_RETURN( i_frame.is(), "SfxModule::GetModuleFieldUnit: invalid frame!", FUNIT_100TH_MM );
+    ENSURE_OR_RETURN( i_frame.is(), "SfxModule::GetModuleFieldUnit: invalid frame!", FieldUnit::MM_100TH );
 
     // find SfxViewFrame for the given XFrame
     SfxViewFrame* pViewFrame = SfxViewFrame::GetFirst();
@@ -343,23 +221,28 @@ FieldUnit SfxModule::GetModuleFieldUnit( css::uno::Reference< css::frame::XFrame
             break;
         pViewFrame = SfxViewFrame::GetNext( *pViewFrame );
     }
-    ENSURE_OR_RETURN( pViewFrame != nullptr, "SfxModule::GetModuleFieldUnit: unable to find an SfxViewFrame for the given XFrame", FUNIT_100TH_MM );
+    ENSURE_OR_RETURN(
+        pViewFrame != nullptr,
+        "SfxModule::GetModuleFieldUnit: unable to find an SfxViewFrame for the given XFrame",
+        FieldUnit::MM_100TH);
 
     // find the module
     SfxModule const * pModule = GetActiveModule( pViewFrame );
-    ENSURE_OR_RETURN( pModule != nullptr, "SfxModule::GetModuleFieldUnit: no SfxModule for the given frame!", FUNIT_100TH_MM );
+    ENSURE_OR_RETURN(pModule != nullptr,
+                     "SfxModule::GetModuleFieldUnit: no SfxModule for the given frame!",
+                     FieldUnit::MM_100TH);
     return pModule->GetFieldUnit();
 }
 
 FieldUnit SfxModule::GetCurrentFieldUnit()
 {
-    FieldUnit eUnit = FUNIT_INCH;
+    FieldUnit eUnit = FieldUnit::INCH;
     SfxModule* pModule = GetActiveModule();
     if ( pModule )
     {
         const SfxPoolItem* pItem = pModule->GetItem( SID_ATTR_METRIC );
         if ( pItem )
-            eUnit = (FieldUnit) static_cast<const SfxUInt16Item*>(pItem)->GetValue();
+            eUnit = static_cast<FieldUnit>(static_cast<const SfxUInt16Item*>(pItem)->GetValue());
     }
     else
         SAL_WARN( "sfx.appl", "GetModuleFieldUnit(): no module found" );
@@ -368,10 +251,10 @@ FieldUnit SfxModule::GetCurrentFieldUnit()
 
 FieldUnit SfxModule::GetFieldUnit() const
 {
-    FieldUnit eUnit = FUNIT_INCH;
+    FieldUnit eUnit = FieldUnit::INCH;
     const SfxPoolItem* pItem = GetItem( SID_ATTR_METRIC );
     if ( pItem )
-        eUnit = (FieldUnit) static_cast<const SfxUInt16Item*>(pItem)->GetValue();
+        eUnit = static_cast<FieldUnit>(static_cast<const SfxUInt16Item*>(pItem)->GetValue());
     return eUnit;
 }
 

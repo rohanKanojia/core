@@ -18,13 +18,15 @@
  */
 
 #include <svtools/prnsetup.hxx>
-#include <svtools/svtools.hrc>
+#include <svtools/strings.hrc>
 #include <svtools/svtresid.hxx>
+#include <vcl/svapp.hxx>
 #include <vcl/print.hxx>
-
+#include <vcl/event.hxx>
+#include <sal/log.hxx>
 
 void ImplFillPrnDlgListBox( const Printer* pPrinter,
-                            ListBox* pBox, PushButton* pPropBtn )
+                            weld::ComboBox* pBox, weld::Button* pPropBtn )
 {
     ImplFreePrnDlgListBox( pBox );
 
@@ -33,29 +35,29 @@ void ImplFillPrnDlgListBox( const Printer* pPrinter,
     if ( nCount )
     {
         for( unsigned int i = 0; i < nCount; i++ )
-            pBox->InsertEntry( rPrinters[i] );
-        pBox->SelectEntry( pPrinter->GetName() );
+            pBox->append_text( rPrinters[i] );
+        pBox->set_active_text(pPrinter->GetName());
     }
 
-    pBox->Enable( nCount != 0 );
-    pPropBtn->Show( pPrinter->HasSupport( SUPPORT_SETUPDIALOG ) );
+    pBox->set_sensitive(nCount != 0);
+    pPropBtn->show( pPrinter->HasSupport( PrinterSupport::SetupDialog ) );
 }
 
 
-void ImplFreePrnDlgListBox( ListBox* pBox, bool bClear )
+void ImplFreePrnDlgListBox( weld::ComboBox* pBox, bool bClear )
 {
     if ( bClear )
-        pBox->Clear();
+        pBox->clear();
 }
 
 
-Printer* ImplPrnDlgListBoxSelect( ListBox* pBox, PushButton* pPropBtn,
-                                  Printer* pPrinter, Printer* pTempPrinterIn )
+Printer* ImplPrnDlgListBoxSelect( const weld::ComboBox* pBox, weld::Button* pPropBtn,
+                                  Printer const * pPrinter, Printer* pTempPrinterIn )
 {
     VclPtr<Printer> pTempPrinter( pTempPrinterIn );
-    if ( pBox->GetSelectEntryPos() != LISTBOX_ENTRY_NOTFOUND )
+    if ( pBox->get_active() != -1 )
     {
-        const QueueInfo* pInfo = Printer::GetQueueInfo( pBox->GetSelectEntry(), true );
+        const QueueInfo* pInfo = Printer::GetQueueInfo( pBox->get_active_text(), true );
         if( pInfo)
         {
             if ( !pTempPrinter )
@@ -76,19 +78,19 @@ Printer* ImplPrnDlgListBoxSelect( ListBox* pBox, PushButton* pPropBtn,
                 }
             }
 
-            pPropBtn->Enable( pTempPrinter->HasSupport( SUPPORT_SETUPDIALOG ) );
+            pPropBtn->set_sensitive(pTempPrinter->HasSupport(PrinterSupport::SetupDialog));
         }
         else
-            pPropBtn->Disable();
+            pPropBtn->set_sensitive(false);
     }
     else
-        pPropBtn->Disable();
+        pPropBtn->set_sensitive(false);
 
     return pTempPrinter;
 }
 
 
-Printer* ImplPrnDlgUpdatePrinter( Printer* pPrinter, Printer* pTempPrinterIn )
+Printer* ImplPrnDlgUpdatePrinter( Printer const * pPrinter, Printer* pTempPrinterIn )
 {
     VclPtr<Printer> pTempPrinter( pTempPrinterIn );
     OUString aPrnName;
@@ -107,11 +109,11 @@ Printer* ImplPrnDlgUpdatePrinter( Printer* pPrinter, Printer* pTempPrinterIn )
 }
 
 
-void ImplPrnDlgUpdateQueueInfo( ListBox* pBox, QueueInfo& rInfo )
+void ImplPrnDlgUpdateQueueInfo( const weld::ComboBox* pBox, QueueInfo& rInfo )
 {
-    if ( pBox->GetSelectEntryPos() != LISTBOX_ENTRY_NOTFOUND )
+    if ( pBox->get_active() != -1 )
     {
-        const QueueInfo* pInfo = Printer::GetQueueInfo( pBox->GetSelectEntry(), true );
+        const QueueInfo* pInfo = Printer::GetQueueInfo( pBox->get_active_text(), true );
         if( pInfo )
             rInfo = *pInfo;
     }
@@ -127,9 +129,9 @@ static OUString ImplPrnDlgAddString(const OUString& rStr, const OUString& rAddSt
 }
 
 
-static OUString ImplPrnDlgAddResString(const OUString& rStr, sal_uInt16 nResId)
+static OUString ImplPrnDlgAddResString(const OUString& rStr, const char* pResId)
 {
-    return ImplPrnDlgAddString(rStr, SVT_RESSTR(nResId));
+    return ImplPrnDlgAddString(rStr, SvtResId(pResId));
 }
 
 
@@ -195,11 +197,11 @@ OUString ImplPrnDlgGetStatusText( const QueueInfo& rInfo )
     if ( nStatus & PrintQueueFlags::PowerSave )
         aStr = ImplPrnDlgAddResString( aStr, STR_SVT_PRNDLG_POWER_SAVE );
 
-    // Anzahl Jobs
-    sal_uLong nJobs = rInfo.GetJobs();
+    // Number of jobs
+    sal_uInt32 nJobs = rInfo.GetJobs();
     if ( nJobs && (nJobs != QUEUE_JOBS_DONTKNOW) )
     {
-        OUString aJobStr( SVT_RESSTR( STR_SVT_PRNDLG_JOBCOUNT ) );
+        OUString aJobStr( SvtResId( STR_SVT_PRNDLG_JOBCOUNT ) );
         OUString aJobs( OUString::number( nJobs ) );
         aStr = ImplPrnDlgAddString(aStr, aJobStr.replaceAll("%d", aJobs));
     }
@@ -207,154 +209,132 @@ OUString ImplPrnDlgGetStatusText( const QueueInfo& rInfo )
     return aStr;
 }
 
-
-PrinterSetupDialog::PrinterSetupDialog(vcl::Window* pParent)
-    : ModalDialog(pParent, "PrinterSetupDialog",
-        "svt/ui/printersetupdialog.ui")
+PrinterSetupDialog::PrinterSetupDialog(weld::Window* pParent)
+    : GenericDialogController(pParent, "svt/ui/printersetupdialog.ui", "PrinterSetupDialog")
+    , m_xLbName(m_xBuilder->weld_combo_box("name"))
+    , m_xBtnProperties(m_xBuilder->weld_button("properties"))
+    , m_xBtnOptions(m_xBuilder->weld_button("options"))
+    , m_xFiStatus(m_xBuilder->weld_label("status"))
+    , m_xFiType(m_xBuilder->weld_label("type"))
+    , m_xFiLocation(m_xBuilder->weld_label("location"))
+    , m_xFiComment(m_xBuilder->weld_label("comment"))
 {
-    get(m_pLbName, "name");
-    m_pLbName->SetStyle(m_pLbName->GetStyle() | WB_SORT);
-    get(m_pBtnProperties, "properties");
-    get(m_pBtnOptions, "options");
-    get(m_pFiStatus, "status");
-    get(m_pFiType, "type");
-    get(m_pFiLocation, "location");
-    get(m_pFiComment, "comment");
+    m_xLbName->make_sorted();
 
     // show options button only if link is set
-    m_pBtnOptions->Hide();
+    m_xBtnOptions->hide();
 
     mpPrinter       = nullptr;
     mpTempPrinter   = nullptr;
 
     maStatusTimer.SetTimeout( IMPL_PRINTDLG_STATUS_UPDATE );
-    maStatusTimer.SetTimeoutHdl( LINK( this, PrinterSetupDialog, ImplStatusHdl ) );
-    m_pBtnProperties->SetClickHdl( LINK( this, PrinterSetupDialog, ImplPropertiesHdl ) );
-    m_pLbName->SetSelectHdl( LINK( this, PrinterSetupDialog, ImplChangePrinterHdl ) );
+    maStatusTimer.SetInvokeHandler( LINK( this, PrinterSetupDialog, ImplStatusHdl ) );
+    m_xBtnProperties->connect_clicked( LINK( this, PrinterSetupDialog, ImplPropertiesHdl ) );
+    m_xLbName->connect_changed( LINK( this, PrinterSetupDialog, ImplChangePrinterHdl ) );
+    m_xDialog->connect_focus_in( LINK( this, PrinterSetupDialog, ImplGetFocusHdl ) );
+    Application::AddEventListener(LINK( this, PrinterSetupDialog, ImplDataChangedHdl ) );
 }
-
 
 PrinterSetupDialog::~PrinterSetupDialog()
 {
-    disposeOnce();
+    Application::RemoveEventListener(LINK( this, PrinterSetupDialog, ImplDataChangedHdl ) );
+    ImplFreePrnDlgListBox(m_xLbName.get(), false);
 }
 
-void PrinterSetupDialog::dispose()
+void PrinterSetupDialog::SetOptionsHdl(const Link<weld::Button&, void>& rLink)
 {
-    ImplFreePrnDlgListBox(m_pLbName, false);
-    m_pLbName.clear();
-    m_pBtnProperties.clear();
-    m_pBtnOptions.clear();
-    m_pFiStatus.clear();
-    m_pFiType.clear();
-    m_pFiLocation.clear();
-    m_pFiComment.clear();
-    mpTempPrinter.disposeAndClear();
-    mpPrinter.clear();
-    ModalDialog::dispose();
-}
-
-void PrinterSetupDialog::SetOptionsHdl( const Link<Button*,void>& rLink )
-{
-    m_pBtnOptions->SetClickHdl( rLink );
-    m_pBtnOptions->Show( rLink.IsSet() );
+    m_xBtnOptions->connect_clicked(rLink);
+    m_xBtnOptions->show(rLink.IsSet());
 }
 
 void PrinterSetupDialog::ImplSetInfo()
 {
-    const QueueInfo* pInfo = Printer::GetQueueInfo(m_pLbName->GetSelectEntry(), true);
+    const QueueInfo* pInfo = Printer::GetQueueInfo(m_xLbName->get_active_text(), true);
     if ( pInfo )
     {
-        m_pFiType->SetText( pInfo->GetDriver() );
-        m_pFiLocation->SetText( pInfo->GetLocation() );
-        m_pFiComment->SetText( pInfo->GetComment() );
-        m_pFiStatus->SetText( ImplPrnDlgGetStatusText( *pInfo ) );
+        m_xFiType->set_label( pInfo->GetDriver() );
+        m_xFiLocation->set_label( pInfo->GetLocation() );
+        m_xFiComment->set_label( pInfo->GetComment() );
+        m_xFiStatus->set_label( ImplPrnDlgGetStatusText( *pInfo ) );
     }
     else
     {
         OUString aTempStr;
-        m_pFiType->SetText( aTempStr );
-        m_pFiLocation->SetText( aTempStr );
-        m_pFiComment->SetText( aTempStr );
-        m_pFiStatus->SetText( aTempStr );
+        m_xFiType->set_label( aTempStr );
+        m_xFiLocation->set_label( aTempStr );
+        m_xFiComment->set_label( aTempStr );
+        m_xFiStatus->set_label( aTempStr );
     }
 }
 
-
-IMPL_LINK_NOARG_TYPED(PrinterSetupDialog, ImplStatusHdl, Timer *, void)
+IMPL_LINK_NOARG(PrinterSetupDialog, ImplStatusHdl, Timer *, void)
 {
     QueueInfo aInfo;
-    ImplPrnDlgUpdateQueueInfo(m_pLbName, aInfo);
-    m_pFiStatus->SetText( ImplPrnDlgGetStatusText( aInfo ) );
+    ImplPrnDlgUpdateQueueInfo(m_xLbName.get(), aInfo);
+    m_xFiStatus->set_label( ImplPrnDlgGetStatusText( aInfo ) );
 }
 
 
-IMPL_LINK_NOARG_TYPED(PrinterSetupDialog, ImplPropertiesHdl, Button*, void)
+IMPL_LINK_NOARG(PrinterSetupDialog, ImplPropertiesHdl, weld::Button&, void)
 {
     if ( !mpTempPrinter )
         mpTempPrinter = VclPtr<Printer>::Create( mpPrinter->GetJobSetup() );
-    mpTempPrinter->Setup( this );
+    mpTempPrinter->Setup(m_xDialog.get());
 }
 
-
-IMPL_LINK_NOARG_TYPED(PrinterSetupDialog, ImplChangePrinterHdl, ListBox&, void)
+IMPL_LINK_NOARG(PrinterSetupDialog, ImplChangePrinterHdl, weld::ComboBox&, void)
 {
-    mpTempPrinter = ImplPrnDlgListBoxSelect(m_pLbName, m_pBtnProperties,
-                                             mpPrinter, mpTempPrinter );
+    mpTempPrinter = ImplPrnDlgListBoxSelect(m_xLbName.get(), m_xBtnProperties.get(),
+                                             mpPrinter, mpTempPrinter);
     ImplSetInfo();
 }
 
-
-bool PrinterSetupDialog::Notify( NotifyEvent& rNEvt )
+IMPL_LINK(PrinterSetupDialog, ImplGetFocusHdl, weld::Widget&, rWidget, void)
 {
-    if ( (rNEvt.GetType() == MouseNotifyEvent::GETFOCUS) && IsReallyVisible() )
-        ImplStatusHdl( &maStatusTimer );
-
-    return ModalDialog::Notify( rNEvt );
+    if (rWidget.is_visible())
+        ImplStatusHdl(&maStatusTimer);
 }
 
-
-void PrinterSetupDialog::DataChanged( const DataChangedEvent& rDCEvt )
+IMPL_LINK(PrinterSetupDialog, ImplDataChangedHdl, VclSimpleEvent&, rEvt, void)
 {
-    if ( rDCEvt.GetType() == DataChangedEventType::PRINTER )
-    {
-        mpTempPrinter = ImplPrnDlgUpdatePrinter( mpPrinter, mpTempPrinter );
-        Printer* pPrn;
-        if ( mpTempPrinter )
-            pPrn = mpTempPrinter;
-        else
-            pPrn = mpPrinter;
-        ImplFillPrnDlgListBox(pPrn, m_pLbName, m_pBtnProperties);
-        ImplSetInfo();
-    }
+    VclEventId nEvent = rEvt.GetId();
+    if (nEvent != VclEventId::ApplicationDataChanged)
+        return;
 
-    ModalDialog::DataChanged( rDCEvt );
+    DataChangedEvent* pData = static_cast<DataChangedEvent*>(static_cast<VclWindowEvent&>(rEvt).GetData());
+    if (!pData || pData->GetType() != DataChangedEventType::PRINTER)
+        return;
+
+    mpTempPrinter = ImplPrnDlgUpdatePrinter(mpPrinter, mpTempPrinter);
+    Printer* pPrn;
+    if (mpTempPrinter)
+        pPrn = mpTempPrinter;
+    else
+        pPrn = mpPrinter;
+    ImplFillPrnDlgListBox(pPrn, m_xLbName.get(), m_xBtnProperties.get());
+    ImplSetInfo();
 }
 
-
-short PrinterSetupDialog::Execute()
+short PrinterSetupDialog::run()
 {
     if ( !mpPrinter || mpPrinter->IsPrinting() || mpPrinter->IsJobActive() )
     {
-        SAL_WARN( "svtools.dialogs", "PrinterSetupDialog::Execute() - No Printer or printer is printing" );
+        SAL_WARN( "svtools.dialogs", "PrinterSetupDialog::execute() - No Printer or printer is printing" );
         return RET_CANCEL;
     }
 
     Printer::updatePrinters();
 
-    ImplFillPrnDlgListBox(mpPrinter, m_pLbName, m_pBtnProperties);
+    ImplFillPrnDlgListBox(mpPrinter, m_xLbName.get(), m_xBtnProperties.get());
     ImplSetInfo();
     maStatusTimer.Start();
 
     // start dialog
-    short nRet = ModalDialog::Execute();
+    short nRet = GenericDialogController::run();
 
     // update data if the dialog was terminated with OK
-    if ( nRet == RET_OK )
-    {
-        if ( mpTempPrinter )
-            mpPrinter->SetPrinterProps( mpTempPrinter );
-    }
+    if ( nRet == RET_OK && mpTempPrinter )
+        mpPrinter->SetPrinterProps( mpTempPrinter );
 
     maStatusTimer.Stop();
 

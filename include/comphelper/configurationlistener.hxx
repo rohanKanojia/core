@@ -10,18 +10,17 @@
 #ifndef INCLUDED_COMPHELPER_CONFIGURATIONLISTENER_HXX
 #define INCLUDED_COMPHELPER_CONFIGURATIONLISTENER_HXX
 
-#include <algorithm>
 #include <vector>
-#include <iterator>
 #include <comphelper/comphelperdllapi.h>
-#include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/beans/PropertyChangeEvent.hpp>
 #include <com/sun/star/beans/XPropertyChangeListener.hpp>
 #include <rtl/ref.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/configurationhelper.hxx>
+
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyChangeEvent; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 namespace comphelper {
 
@@ -55,7 +54,7 @@ public:
     inline ConfigurationListenerProperty(const rtl::Reference< ConfigurationListener > &xListener,
                                              const OUString &rProp );
 
-    virtual inline ~ConfigurationListenerProperty();
+    virtual inline ~ConfigurationListenerProperty() override;
 
     uno_type get() const { return maValue; }
 };
@@ -74,7 +73,7 @@ public:
                     css::uno::UNO_QUERY_THROW )
     { }
 
-    virtual ~ConfigurationListener()
+    virtual ~ConfigurationListener() override
     {
         dispose();
     }
@@ -89,13 +88,11 @@ public:
     void dispose();
 
     // XPropertyChangeListener implementation
-    virtual void SAL_CALL disposing(css::lang::EventObject const &)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing(css::lang::EventObject const &) override;
 
     /// Notify of the property change
     virtual void SAL_CALL propertyChange(
-        css::beans::PropertyChangeEvent const &rEvt )
-        throw (css::uno::RuntimeException, std::exception) override;
+        css::beans::PropertyChangeEvent const &rEvt ) override;
 };
 
 template< typename uno_type > ConfigurationListenerProperty< uno_type >::ConfigurationListenerProperty(const rtl::Reference< ConfigurationListener > &xListener, const OUString &rProp )

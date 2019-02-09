@@ -17,15 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "directsql.hxx"
-#include "dbu_dlg.hrc"
-#include <vcl/layout.hxx>
+#include <core_resource.hxx>
+#include <directsql.hxx>
+#include <dbu_dlg.hxx>
+#include <strings.hrc>
+#include <vcl/weld.hxx>
 #include <comphelper/types.hxx>
 #include <vcl/svapp.hxx>
 #include <osl/mutex.hxx>
 #include <tools/diagnose_ex.h>
 #include <rtl/strbuf.hxx>
+#include <com/sun/star/sdbc/SQLException.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
+#include <com/sun/star/sdbc/XMultipleResults.hpp>
 
 namespace dbaui
 {
@@ -34,10 +38,11 @@ namespace dbaui
     using namespace ::com::sun::star::sdbc;
     using namespace ::com::sun::star::lang;
 
+    constexpr sal_Int32 g_nHistoryLimit = 20;
+
     // DirectSQLDialog
     DirectSQLDialog::DirectSQLDialog( vcl::Window* _pParent, const Reference< XConnection >& _rxConn )
         :ModalDialog(_pParent, "DirectSQLDialog" , "dbaccess/ui/directsqldialog.ui")
-        ,m_nHistoryLimit(20)
         ,m_nStatusCount(1)
         ,m_xConnection(_rxConn)
     {
@@ -102,12 +107,13 @@ namespace dbaui
 
         OSL_ENSURE(Reference< XConnection >(_rSource.Source, UNO_QUERY).get() == m_xConnection.get(),
             "DirectSQLDialog::_disposing: where does this come from?");
-        (void)_rSource;
 
         {
-            OUString sMessage(ModuleRes(STR_DIRECTSQL_CONNECTIONLOST));
-            ScopedVclPtrInstance< MessageDialog > aError(this, sMessage);
-            aError->Execute();
+            OUString sMessage(DBA_RES(STR_DIRECTSQL_CONNECTIONLOST));
+            std::unique_ptr<weld::MessageDialog> xError(Application::CreateMessageDialog(GetFrameWeld(),
+                                                        VclMessageType::Warning, VclButtonsType::Ok,
+                                                        sMessage));
+            xError->run();
         }
 
         PostUserEvent(LINK(this, DirectSQLDialog, OnClose), nullptr, true);
@@ -123,16 +129,16 @@ namespace dbaui
     {
         CHECK_INVARIANTS("DirectSQLDialog::implEnsureHistoryLimit");
 
-        if (getHistorySize() <= m_nHistoryLimit)
+        if (getHistorySize() <= g_nHistoryLimit)
             // nothing to do
             return;
 
-        sal_Int32 nRemoveEntries = getHistorySize() - m_nHistoryLimit;
+        sal_Int32 nRemoveEntries = getHistorySize() - g_nHistoryLimit;
         while (nRemoveEntries--)
         {
             m_aStatementHistory.pop_front();
             m_aNormalizedHistory.pop_front();
-            m_pSQLHistory->RemoveEntry((sal_uInt16)0);
+            m_pSQLHistory->RemoveEntry(sal_uInt16(0));
         }
     }
 
@@ -181,54 +187,54 @@ namespace dbaui
         ::osl::MutexGuard aGuard(m_aMutex);
 
         OUString sStatus;
-        css::uno::Reference< css::sdbc::XResultSet > xResultSet;
+
+        // clear the output box
+        m_pOutput->SetText(OUString());
         try
         {
             // create a statement
             Reference< XStatement > xStatement = m_xConnection->createStatement();
-            OSL_ENSURE(xStatement.is(), "DirectSQLDialog::implExecuteStatement: no statement returned by the connection!");
 
-            // clear the output box
-            m_pOutput->SetText(OUString());
-            if (xStatement.is())
+            Reference<XDatabaseMetaData> xMeta = m_xConnection->getMetaData();
+            css::uno::Reference< css::sdbc::XMultipleResults > xMR ( xStatement, UNO_QUERY );
+
+            if (xMeta.is() && xMeta->supportsMultipleResultSets() && xMR.is())
             {
-                if (OUString(_rStatement).toAsciiUpperCase().startsWith("SELECT") && m_pShowOutput->IsChecked())
+                bool hasRS = xStatement->execute(_rStatement);
+                if(hasRS)
                 {
-                    // execute it as a query
-                    xResultSet = xStatement->executeQuery(_rStatement);
-                    // get a handle for the rows
-                    css::uno::Reference< css::sdbc::XRow > xRow( xResultSet, css::uno::UNO_QUERY );
-                    // work through each of the rows
-                    while (xResultSet->next())
+                    css::uno::Reference< css::sdbc::XResultSet > xRS (xMR->getResultSet());
+                    if (m_pShowOutput->IsChecked())
+                        display(xRS);
+                }
+                else
+                    addOutputText(OUString::number(xMR->getUpdateCount()) + " rows updated\n");
+                while ((hasRS=xMR->getMoreResults()) || (xMR->getUpdateCount() != -1))
+                {
+                    if(hasRS)
                     {
-                        // initialise the output line for each row
-                        OUString out("");
-                        // work along the columns until that are none left
-                        try
-                        {
-                            int i = 1;
-                            for (;;)
-                            {
-                                // be dumb, treat everything as a string
-                                out += xRow->getString(i) + ",";
-                                i++;
-                            }
-                        }
-                        // trap for when we fall off the end of the row
-                        catch (const SQLException&)
-                        {
-                        }
-                        // report the output
-                        addOutputText(OUString(out));
+                        css::uno::Reference< css::sdbc::XResultSet > xRS (xMR->getResultSet());
+                        if (m_pShowOutput->IsChecked())
+                            display(xRS);
                     }
-                } else {
-                    // execute it
-                    xStatement->execute(_rStatement);
                 }
             }
-
+            else
+            {
+                if (_rStatement.toAsciiUpperCase().startsWith("SELECT"))
+                {
+                    css::uno::Reference< css::sdbc::XResultSet > xRS = xStatement->executeQuery(_rStatement);
+                    if(m_pShowOutput->IsChecked())
+                        display(xRS);
+                }
+                else
+                {
+                    sal_Int32 resultCount = xStatement->executeUpdate(_rStatement);
+                    addOutputText(OUString::number(resultCount) + " rows updated\n");
+                }
+            }
             // successful
-            sStatus = ModuleRes(STR_COMMAND_EXECUTED_SUCCESSFULLY);
+            sStatus = DBA_RES(STR_COMMAND_EXECUTED_SUCCESSFULLY);
 
             // dispose the statement
             ::comphelper::disposeComponent(xStatement);
@@ -239,11 +245,40 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
 
         // add the status text
         addStatusText(sStatus);
+    }
+
+    void DirectSQLDialog::display(const css::uno::Reference< css::sdbc::XResultSet >& xRS)
+    {
+        // get a handle for the rows
+        css::uno::Reference< css::sdbc::XRow > xRow( xRS, css::uno::UNO_QUERY );
+        // work through each of the rows
+        while (xRS->next())
+        {
+            // initialise the output line for each row
+            OUStringBuffer out;
+            // work along the columns until that are none left
+            try
+            {
+                int i = 1;
+                for (;;)
+                {
+                    // be dumb, treat everything as a string
+                    out.append(xRow->getString(i)).append(",");
+                    i++;
+                }
+            }
+            // trap for when we fall off the end of the row
+            catch (const SQLException&)
+            {
+            }
+            // report the output
+            addOutputText(out.makeStringAndClear());
+        }
     }
 
     void DirectSQLDialog::addStatusText(const OUString& _rMessage)
@@ -258,11 +293,9 @@ namespace dbaui
 
     void DirectSQLDialog::addOutputText(const OUString& _rMessage)
     {
-        OUString sAppendMessage = _rMessage;
-        sAppendMessage += "\n";
+        OUString sAppendMessage = _rMessage + "\n";
 
-        OUString sCompleteMessage = m_pOutput->GetText();
-        sCompleteMessage += sAppendMessage;
+        OUString sCompleteMessage = m_pOutput->GetText() + sAppendMessage;
         m_pOutput->SetText(sCompleteMessage);
     }
 
@@ -300,30 +333,30 @@ namespace dbaui
             OSL_FAIL("DirectSQLDialog::switchToHistory: invalid position!");
     }
 
-    IMPL_LINK_NOARG_TYPED( DirectSQLDialog, OnStatementModified, Edit&, void )
+    IMPL_LINK_NOARG( DirectSQLDialog, OnStatementModified, Edit&, void )
     {
         m_pExecute->Enable(!m_pSQL->GetText().isEmpty());
     }
 
-    IMPL_LINK_NOARG_TYPED( DirectSQLDialog, OnCloseClick, Button*, void )
+    IMPL_LINK_NOARG( DirectSQLDialog, OnCloseClick, Button*, void )
     {
         EndDialog( RET_OK );
     }
-    IMPL_LINK_NOARG_TYPED( DirectSQLDialog, OnClose, void*, void )
+    IMPL_LINK_NOARG( DirectSQLDialog, OnClose, void*, void )
     {
         EndDialog( RET_OK );
     }
 
-    IMPL_LINK_NOARG_TYPED( DirectSQLDialog, OnExecute, Button*, void )
+    IMPL_LINK_NOARG( DirectSQLDialog, OnExecute, Button*, void )
     {
         executeCurrent();
     }
 
-    IMPL_LINK_NOARG_TYPED( DirectSQLDialog, OnListEntrySelected, ListBox&, void )
+    IMPL_LINK_NOARG( DirectSQLDialog, OnListEntrySelected, ListBox&, void )
     {
         if (!m_pSQLHistory->IsTravelSelect())
         {
-            const sal_Int32 nSelected = m_pSQLHistory->GetSelectEntryPos();
+            const sal_Int32 nSelected = m_pSQLHistory->GetSelectedEntryPos();
             if (LISTBOX_ENTRY_NOTFOUND != nSelected)
                 switchToHistory(nSelected);
         }

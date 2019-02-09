@@ -20,6 +20,8 @@
 #ifndef INCLUDED_XMLOFF_INC_ANIMATIONIMPORT_HXX
 #define INCLUDED_XMLOFF_INC_ANIMATIONIMPORT_HXX
 
+#include <memory>
+
 #include <xmloff/xmlictxt.hxx>
 #include <com/sun/star/animations/XAnimationNode.hpp>
 
@@ -31,8 +33,7 @@ class AnimationsImportHelperImpl;
 
 class AnimationNodeContext : public SvXMLImportContext
 {
-    AnimationsImportHelperImpl* mpHelper;
-    bool mbRootContext;
+    std::shared_ptr<AnimationsImportHelperImpl> mpHelper;
     css::uno::Reference< css::animations::XAnimationNode > mxNode;
 
     void init_node( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList );
@@ -45,15 +46,14 @@ public:
         sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        AnimationsImportHelperImpl* mpImpl = nullptr );
-    virtual ~AnimationNodeContext();
+        const std::shared_ptr<AnimationsImportHelperImpl>& pImpl = nullptr );
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 
-    virtual SvXMLImportContext * CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
 
-    static void postProcessRootNode( SvXMLImport& rImport, const css::uno::Reference< css::animations::XAnimationNode >& xNode, css::uno::Reference< css::beans::XPropertySet >& xPageProps );
+    static void postProcessRootNode( const css::uno::Reference< css::animations::XAnimationNode >& xNode, css::uno::Reference< css::beans::XPropertySet > const & xPageProps );
 };
 
 }

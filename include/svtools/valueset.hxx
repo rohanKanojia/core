@@ -23,8 +23,8 @@
 #include <svtools/svtdllapi.h>
 
 #include <vcl/ctrl.hxx>
-#include <vcl/virdev.hxx>
 #include <vcl/timer.hxx>
+#include <vcl/customweld.hxx>
 #include <memory>
 #include <vector>
 
@@ -34,11 +34,12 @@ class HelpEvent;
 class KeyEvent;
 class DataChangedEvent;
 class ScrollBar;
+class UserDrawEvent;
+class VirtualDevice;
 
 struct ValueSetItem;
+struct SvtValueSetItem;
 
-class ValueSetAcc;
-class ValueItemAcc;
 enum class DrawFrameStyle;
 
 /*************************************************************************
@@ -85,7 +86,7 @@ WB_NAMEFIELD        There is a namefield, where the name of an item will be
                     shown.
 WB_NONEFIELD        There is a NoSelection field which can be selected if
                     0 is passed along with SelectItem. Respectively
-                    GetSelectItemId() returns 0 if this field or nothing
+                    GetSelectedItemId() returns 0 if this field or nothing
                     is selected. This field shows the text which is specified
                     by SetText() respectively no one, if no text was set. With
                     SetNoSelection() the selection can be disabled.
@@ -177,32 +178,30 @@ to be set (before Show) with SetStyle().
 
 *************************************************************************/
 
-typedef std::vector<ValueSetItem*> ValueItemList;
+typedef std::vector<std::unique_ptr<ValueSetItem>> ValueItemList;
+typedef std::vector<std::unique_ptr<SvtValueSetItem>> SvtValueItemList;
 
-#define WB_RADIOSEL             ((WinBits)0x00008000)
-#define WB_ITEMBORDER           ((WinBits)0x00010000)
-#define WB_DOUBLEBORDER         ((WinBits)0x00020000)
-#define WB_NAMEFIELD            ((WinBits)0x00040000)
-#define WB_NONEFIELD            ((WinBits)0x00080000)
-#define WB_FLATVALUESET         ((WinBits)0x02000000)
-#define WB_NO_DIRECTSELECT      ((WinBits)0x04000000)
-#define WB_MENUSTYLEVALUESET    ((WinBits)0x08000000)
+#define WB_ITEMBORDER           (WinBits(0x00010000))
+#define WB_DOUBLEBORDER         (WinBits(0x00020000))
+#define WB_NAMEFIELD            (WinBits(0x00040000))
+#define WB_NONEFIELD            (WinBits(0x00080000))
+#define WB_FLATVALUESET         (WinBits(0x02000000))
+#define WB_NO_DIRECTSELECT      (WinBits(0x04000000))
+#define WB_MENUSTYLEVALUESET    (WinBits(0x08000000))
 
-#define VALUESET_APPEND         ((size_t)-1)
-#define VALUESET_ITEM_NOTFOUND  ((size_t)-1)
+#define VALUESET_APPEND         (size_t(-1))
+#define VALUESET_ITEM_NOTFOUND  (size_t(-1))
 
 
 class SVT_DLLPUBLIC ValueSet : public Control
 {
 private:
-
-    ScopedVclPtr<VirtualDevice> maVirDev;
     Timer           maTimer;
     ValueItemList   mItemList;
     std::unique_ptr<ValueSetItem> mpNoneItem;
     VclPtr<ScrollBar> mxScrollBar;
-    Rectangle       maNoneItemRect;
-    Rectangle       maItemListRect;
+    tools::Rectangle       maNoneItemRect;
+    tools::Rectangle       maItemListRect;
     long            mnItemWidth;
     long            mnItemHeight;
     long            mnTextOffset;
@@ -211,7 +210,6 @@ private:
     long            mnUserItemWidth;
     long            mnUserItemHeight;
     sal_uInt16      mnSelItemId;
-    sal_uInt16      mnSavedItemId;
     sal_uInt16      mnHighItemId;
     sal_uInt16      mnCols;
     sal_uInt16      mnCurCol;
@@ -225,7 +223,6 @@ private:
     Link<ValueSet*,void>  maSelectHdl;
     Link<ValueSet*,void>  maHighlightHdl;
 
-    // bitfield
     bool            mbFormat : 1;
     bool            mbHighlight : 1;
     bool            mbSelection : 1;
@@ -236,26 +233,22 @@ private:
     bool            mbScroll : 1;
     bool            mbFullMode : 1;
     bool            mbEdgeBlending : 1;
-    bool            mbIsTransientChildrenDisabled : 1;
     bool            mbHasVisibleItems : 1;
 
     friend class ValueSetAcc;
     friend class ValueItemAcc;
 
     using Control::ImplInitSettings;
-    using Window::ImplInit;
-    SVT_DLLPRIVATE void         ImplInit();
     SVT_DLLPRIVATE void         ImplInitSettings( bool bFont, bool bForeground, bool bBackground );
 
     virtual void ApplySettings(vcl::RenderContext& rRenderContext) override;
 
     SVT_DLLPRIVATE void         ImplInitScrollBar();
     SVT_DLLPRIVATE void         ImplDeleteItems();
-    SVT_DLLPRIVATE void         ImplFormatItem(vcl::RenderContext& rRenderContext, ValueSetItem* pItem, Rectangle aRect);
+    SVT_DLLPRIVATE void         ImplFormatItem(vcl::RenderContext& rRenderContext, ValueSetItem* pItem, tools::Rectangle aRect);
     SVT_DLLPRIVATE void         ImplDrawItemText(vcl::RenderContext& rRenderContext, const OUString& rStr);
     SVT_DLLPRIVATE void         ImplDrawSelect(vcl::RenderContext& rRenderContext, sal_uInt16 nItemId, const bool bFocus, const bool bDrawSel);
     SVT_DLLPRIVATE void         ImplDrawSelect(vcl::RenderContext& rRenderContext);
-    SVT_DLLPRIVATE void         ImplHideSelect(sal_uInt16 nItemId);
     SVT_DLLPRIVATE void         ImplHighlightItem(sal_uInt16 nItemId, bool bIsSelection = true);
     SVT_DLLPRIVATE void         ImplDraw(vcl::RenderContext& rRenderContext);
     using Window::ImplScroll;
@@ -264,17 +257,19 @@ private:
     SVT_DLLPRIVATE ValueSetItem*    ImplGetItem( size_t nPos );
     SVT_DLLPRIVATE ValueSetItem*    ImplGetFirstItem();
     SVT_DLLPRIVATE sal_uInt16          ImplGetVisibleItemCount() const;
-    SVT_DLLPRIVATE void         ImplInsertItem( ValueSetItem *const pItem, const size_t nPos );
-    SVT_DLLPRIVATE Rectangle    ImplGetItemRect( size_t nPos ) const;
+    SVT_DLLPRIVATE void         ImplInsertItem( std::unique_ptr<ValueSetItem> pItem, const size_t nPos );
+    SVT_DLLPRIVATE tools::Rectangle    ImplGetItemRect( size_t nPos ) const;
     SVT_DLLPRIVATE void         ImplFireAccessibleEvent( short nEventId, const css::uno::Any& rOldValue, const css::uno::Any& rNewValue );
     SVT_DLLPRIVATE bool         ImplHasAccessibleListeners();
     SVT_DLLPRIVATE void         ImplTracking( const Point& rPos, bool bRepeat );
     SVT_DLLPRIVATE void         ImplEndTracking( const Point& rPos, bool bCancel );
-    DECL_DLLPRIVATE_LINK_TYPED( ImplScrollHdl, ScrollBar*, void );
-    DECL_DLLPRIVATE_LINK_TYPED( ImplTimerHdl, Timer*, void );
+    DECL_DLLPRIVATE_LINK( ImplScrollHdl, ScrollBar*, void );
+    DECL_DLLPRIVATE_LINK( ImplTimerHdl, Timer*, void );
 
     ValueSet (const ValueSet &) = delete;
     ValueSet & operator= (const ValueSet &) = delete;
+
+    SVT_DLLPRIVATE void Format(vcl::RenderContext& rRenderContext);
 
 protected:
     void StartDrag( const CommandEvent& rCEvt, vcl::Region& rRegion );
@@ -283,8 +278,7 @@ protected:
 
 public:
                     ValueSet( vcl::Window* pParent, WinBits nWinStyle );
-                    ValueSet( vcl::Window* pParent, const ResId& rResId );
-    virtual         ~ValueSet();
+    virtual         ~ValueSet() override;
     virtual void    dispose() override;
 
     virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
@@ -293,7 +287,7 @@ public:
     virtual void    Tracking( const TrackingEvent& rMEvt ) override;
     virtual void    KeyInput( const KeyEvent& rKEvt ) override;
     virtual void    Command( const CommandEvent& rCEvt ) override;
-    virtual void    Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void    Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
     virtual void    GetFocus() override;
     virtual void    LoseFocus() override;
     virtual void    Resize() override;
@@ -303,7 +297,6 @@ public:
     virtual void    DataChanged( const DataChangedEvent& rDCEvt ) override;
 
     virtual void    Select();
-    void            DoubleClick();
     virtual void    UserDraw( const UserDrawEvent& rUDEvt );
 
     /// Insert @rImage item.
@@ -316,8 +309,6 @@ public:
                                const OUString& rStr);
     /// Insert an User Drawn item.
     void            InsertItem(sal_uInt16 nItemId, size_t nPos = VALUESET_APPEND);
-    /// Insert an User Drawn item with @rStr tooltip.
-    void            InsertItem(sal_uInt16 nItemId, const OUString& rStr, size_t nPos = VALUESET_APPEND);
     void            RemoveItem(sal_uInt16 nItemId);
 
     void            Clear();
@@ -326,8 +317,8 @@ public:
     size_t          GetItemPos( sal_uInt16 nItemId ) const;
     sal_uInt16      GetItemId( size_t nPos ) const;
     sal_uInt16      GetItemId( const Point& rPos ) const;
-    Rectangle       GetItemRect( sal_uInt16 nItemId ) const;
-    void            EnableFullItemMode( bool bFullMode = true );
+    tools::Rectangle       GetItemRect( sal_uInt16 nItemId ) const;
+    void            EnableFullItemMode( bool bFullMode );
 
     void            SetColCount( sal_uInt16 nNewCols = 1 );
     sal_uInt16      GetColCount() const
@@ -339,18 +330,16 @@ public:
     {
         return mnUserVisLines;
     }
-    void           SetItemWidth( long nItemWidth = 0 );
-    void           SetItemHeight( long nLineHeight = 0 );
+    void           SetItemWidth( long nItemWidth );
+    void           SetItemHeight( long nLineHeight );
     Size           GetLargestItemSize();
     void           RecalculateItemSizes();
 
     void           SelectItem( sal_uInt16 nItemId );
-    sal_uInt16     GetSelectItemId() const
+    sal_uInt16     GetSelectedItemId() const
     {
         return mnSelItemId;
     }
-    void                SaveValue() { mnSavedItemId = GetSelectItemId(); }
-    sal_Int32           GetSavedValue() const { return mnSavedItemId; }
     bool IsItemSelected( sal_uInt16 nItemId ) const
     {
         return !mbNoSelection && (nItemId == mnSelItemId);
@@ -372,7 +361,7 @@ public:
     void            SetColor( const Color& rColor );
     void            SetColor()
     {
-        SetColor(Color(COL_TRANSPARENT));
+        SetColor(COL_TRANSPARENT);
     }
     bool            IsColor() const
     {
@@ -381,7 +370,6 @@ public:
 
     void            SetExtraSpacing( sal_uInt16 nNewSpacing );
 
-    void            Format(vcl::RenderContext& rRenderContext);
     void            SetFormat();
 
     void            StartSelection();
@@ -410,6 +398,201 @@ public:
     }
     void SetEdgeBlending(bool bNew);
 };
+
+class SVT_DLLPUBLIC SvtValueSet : public weld::CustomWidgetController
+{
+private:
+
+    ScopedVclPtr<VirtualDevice> maVirDev;
+    css::uno::Reference<css::accessibility::XAccessible> mxAccessible;
+    SvtValueItemList   mItemList;
+    std::unique_ptr<SvtValueSetItem> mpNoneItem;
+    std::unique_ptr<weld::ScrolledWindow> mxScrolledWindow;
+    tools::Rectangle  maNoneItemRect;
+    tools::Rectangle  maItemListRect;
+    long            mnItemWidth;
+    long            mnItemHeight;
+    long            mnTextOffset;
+    long            mnVisLines;
+    long            mnLines;
+    long            mnUserItemWidth;
+    long            mnUserItemHeight;
+    sal_uInt16      mnSelItemId;
+    int             mnSavedItemId;
+    sal_uInt16      mnHighItemId;
+    sal_uInt16      mnCols;
+    sal_uInt16      mnCurCol;
+    sal_uInt16      mnUserCols;
+    sal_uInt16      mnUserVisLines;
+    sal_uInt16      mnFirstLine;
+    sal_uInt16      mnSpacing;
+    DrawFrameStyle  mnFrameStyle;
+    Color const     maColor;
+    OUString        maText;
+    WinBits         mnStyle;
+    Link<SvtValueSet*,void>  maDoubleClickHdl;
+    Link<SvtValueSet*,void>  maSelectHdl;
+
+    bool            mbFormat : 1;
+    bool            mbHighlight : 1;
+    bool            mbNoSelection : 1;
+    bool            mbDrawSelection : 1;
+    bool            mbBlackSel : 1;
+    bool            mbDoubleSel : 1;
+    bool            mbScroll : 1;
+    bool            mbEdgeBlending : 1;
+    bool            mbHasVisibleItems : 1;
+
+    friend class SvtValueSetAcc;
+    friend class SvtValueItemAcc;
+
+    SVT_DLLPRIVATE void         ImplDeleteItems();
+    SVT_DLLPRIVATE void         ImplFormatItem(vcl::RenderContext const & rRenderContext, SvtValueSetItem* pItem, tools::Rectangle aRect);
+    SVT_DLLPRIVATE void         ImplDrawItemText(vcl::RenderContext& rRenderContext, const OUString& rStr);
+    SVT_DLLPRIVATE void         ImplDrawSelect(vcl::RenderContext& rRenderContext, sal_uInt16 nItemId, const bool bFocus, const bool bDrawSel);
+    SVT_DLLPRIVATE void         ImplDrawSelect(vcl::RenderContext& rRenderContext);
+    SVT_DLLPRIVATE void         ImplHighlightItem(sal_uInt16 nItemId, bool bIsSelection = true);
+    SVT_DLLPRIVATE void         ImplDraw(vcl::RenderContext& rRenderContext);
+    SVT_DLLPRIVATE size_t       ImplGetItem( const Point& rPoint ) const;
+    SVT_DLLPRIVATE SvtValueSetItem*    ImplGetItem( size_t nPos );
+    SVT_DLLPRIVATE SvtValueSetItem*    ImplGetFirstItem();
+    SVT_DLLPRIVATE sal_uInt16          ImplGetVisibleItemCount() const;
+    SVT_DLLPRIVATE void         ImplInsertItem( std::unique_ptr<SvtValueSetItem> pItem, const size_t nPos );
+    SVT_DLLPRIVATE tools::Rectangle    ImplGetItemRect( size_t nPos ) const;
+    SVT_DLLPRIVATE void         ImplFireAccessibleEvent( short nEventId, const css::uno::Any& rOldValue, const css::uno::Any& rNewValue );
+    SVT_DLLPRIVATE bool         ImplHasAccessibleListeners();
+    SVT_DLLPRIVATE void         ImplTracking(const Point& rPos);
+    DECL_DLLPRIVATE_LINK(ImplScrollHdl, weld::ScrolledWindow&, void);
+
+    Size           GetLargestItemSize();
+
+    SvtValueSet (const SvtValueSet &) = delete;
+    SvtValueSet & operator= (const SvtValueSet &) = delete;
+
+protected:
+    virtual css::uno::Reference<css::accessibility::XAccessible> CreateAccessible() override;
+
+public:
+    SvtValueSet(std::unique_ptr<weld::ScrolledWindow> pScrolledWindow);
+    virtual         ~SvtValueSet() override;
+
+    virtual void    SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
+
+    virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
+    virtual void    MouseMove( const MouseEvent& rMEvt ) override;
+    virtual bool    KeyInput( const KeyEvent& rKEvt ) override;
+    virtual void    Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
+    virtual void    GetFocus() override;
+    virtual void    LoseFocus() override;
+    virtual void    Resize() override;
+    virtual void    StyleUpdated() override;
+    virtual OUString RequestHelp(tools::Rectangle& rHelpRect) override;
+
+    void            Select();
+    virtual void    UserDraw( const UserDrawEvent& rUDEvt );
+
+    OUString const & GetText() const { return maText; }
+    void            SetText(const OUString& rText) { maText = rText; }
+    void            SetStyle(WinBits nStyle);
+    WinBits         GetStyle() const { return mnStyle; }
+
+    void SetOptimalSize();
+
+    /// Insert @rImage item.
+    void            InsertItem(sal_uInt16 nItemId, const Image& rImage);
+    /// Insert @rImage item with @rStr as a tooltip
+    void            InsertItem(sal_uInt16 nItemId, const Image& rImage,
+                               const OUString& rStr, size_t nPos = VALUESET_APPEND);
+    /// Insert an @rColor item with @rStr tooltip.
+    void            InsertItem(sal_uInt16 nItemId, const Color& rColor,
+                               const OUString& rStr);
+    /// Insert an User Drawn item.
+    void            InsertItem(sal_uInt16 nItemId, size_t nPos = VALUESET_APPEND);
+    /// Insert an User Drawn item with @rStr tooltip.
+    void            InsertItem(sal_uInt16 nItemId, const OUString& rStr, size_t nPos);
+    void            RemoveItem(sal_uInt16 nItemId);
+
+    void            Clear();
+
+    size_t          GetItemCount() const;
+    size_t          GetItemPos( sal_uInt16 nItemId ) const;
+    sal_uInt16      GetItemId( size_t nPos ) const;
+    sal_uInt16      GetItemId( const Point& rPos ) const;
+    tools::Rectangle       GetItemRect( sal_uInt16 nItemId ) const;
+
+    void            SetColCount( sal_uInt16 nNewCols = 1 );
+    void            SetLineCount( sal_uInt16 nNewLines = 0 );
+    void           SetItemWidth( long nItemWidth );
+    void           SetItemHeight( long nLineHeight );
+
+    void           SelectItem( sal_uInt16 nItemId );
+    sal_uInt16     GetSelectedItemId() const
+    {
+        return mnSelItemId;
+    }
+    size_t         GetSelectItemPos() const
+    {
+        return GetItemPos( mnSelItemId );
+    }
+    bool IsItemSelected( sal_uInt16 nItemId ) const
+    {
+        return !mbNoSelection && (nItemId == mnSelItemId);
+    }
+    void SetNoSelection();
+    bool IsNoSelection() const
+    {
+        return mbNoSelection;
+    }
+
+    void            SetItemImage( sal_uInt16 nItemId, const Image& rImage );
+    Image           GetItemImage( sal_uInt16 nItemId ) const;
+    Color           GetItemColor( sal_uInt16 nItemId ) const;
+    void            SetItemText( sal_uInt16 nItemId, const OUString& rStr );
+    OUString        GetItemText( sal_uInt16 nItemId ) const;
+    bool            IsColor() const
+    {
+        return maColor.GetTransparency() == 0;
+    }
+
+    void            SetExtraSpacing( sal_uInt16 nNewSpacing );
+
+    void            Format(vcl::RenderContext const & rRenderContext);
+    void            SetFormat();
+
+    Size            CalcWindowSizePixel(const Size& rItemSize,
+                                        sal_uInt16 nCalcCols = 0,
+                                        sal_uInt16 nCalcLines = 0) const;
+    Size            CalcItemSizePixel(const Size& rSize) const;
+    int             GetScrollWidth() const;
+
+    void            SetSelectHdl(const Link<SvtValueSet*,void>& rLink)
+    {
+        maSelectHdl = rLink;
+    }
+
+    void            SetDoubleClickHdl(const Link<SvtValueSet*,void>& rLink)
+    {
+        maDoubleClickHdl = rLink;
+    }
+
+    bool GetEdgeBlending() const
+    {
+        return mbEdgeBlending;
+    }
+    void SetEdgeBlending(bool bNew);
+
+    void SaveValue()
+    {
+        mnSavedItemId = IsNoSelection() ? -1 : GetSelectedItemId();
+    }
+
+    bool IsValueChangedFromSaved() const
+    {
+        int nItemId = IsNoSelection() ? -1 : GetSelectedItemId();
+        return mnSavedItemId != nItemId;
+    }
+};
+
 
 #endif // INCLUDED_SVTOOLS_VALUESET_HXX
 

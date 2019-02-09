@@ -19,7 +19,7 @@
 
 #include "UpdateRequest.hxx"
 
-#include "framework/FrameworkHelper.hxx"
+#include <framework/FrameworkHelper.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -37,24 +37,19 @@ UpdateRequest::~UpdateRequest() throw()
 {
 }
 
-void SAL_CALL UpdateRequest::execute (const Reference<XConfiguration>& rxConfiguration)
-    throw (RuntimeException, std::exception)
+void SAL_CALL UpdateRequest::execute (const Reference<XConfiguration>&)
 {
-    (void)rxConfiguration;
     // Do nothing here.  The configuration is updated when the request queue
     // becomes empty.
 }
 
 OUString SAL_CALL UpdateRequest::getName()
-    throw (RuntimeException, std::exception)
 {
     return OUString("UpdateRequest");
 }
 
-void SAL_CALL UpdateRequest::setName (const OUString& rsName)
-    throw (RuntimeException, std::exception)
+void SAL_CALL UpdateRequest::setName (const OUString&)
 {
-    (void)rsName;
     // Ignored.
 }
 

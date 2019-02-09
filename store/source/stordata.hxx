@@ -20,28 +20,27 @@
 #ifndef INCLUDED_STORE_SOURCE_STORDATA_HXX
 #define INCLUDED_STORE_SOURCE_STORDATA_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "sal/types.h"
-#include "sal/macros.h"
-#include "rtl/string.h"
+#include <memory>
 
-#include "store/types.h"
+#include <sal/types.h>
+#include <rtl/string.h>
+
+#include <store/types.h>
 #include "storbase.hxx"
+#include <string.h>
 
 namespace store
 {
 
-/*========================================================================
- *
- * OStoreDataPageData.
- *
- *======================================================================*/
-#define STORE_MAGIC_DATAPAGE sal_uInt32(0x94190310)
+class OStorePageBIOS;
 
-struct OStoreDataPageData : public store::OStorePageData
+constexpr sal_uInt32 STORE_MAGIC_DATAPAGE(0x94190310);
+
+struct OStoreDataPageData : public store::PageData
 {
-    typedef OStorePageData       base;
+    typedef PageData       base;
     typedef OStoreDataPageData   self;
 
     typedef OStorePageDescriptor D;
@@ -73,7 +72,7 @@ struct OStoreDataPageData : public store::OStorePageData
 
     /** Construction.
     */
-    explicit OStoreDataPageData (sal_uInt16 nPageSize = self::thePageSize)
+    explicit OStoreDataPageData (sal_uInt16 nPageSize)
         : base (nPageSize)
     {
         base::m_aGuard.m_nMagic = store::htonl(self::theTypeId);
@@ -83,7 +82,7 @@ struct OStoreDataPageData : public store::OStorePageData
 
     /** guard (external representation).
     */
-    void guard() { (void) this; /* loplugin:staticmethods */ }
+    void guard() const { (void) this; /* loplugin:staticmethods */ }
 
     /** verify (external representation).
     */
@@ -93,11 +92,6 @@ struct OStoreDataPageData : public store::OStorePageData
     }
 };
 
-/*========================================================================
- *
- * OStoreDataPageObject.
- *
- *======================================================================*/
 class OStoreDataPageObject : public store::OStorePageObject
 {
     typedef OStorePageObject     base;
@@ -106,7 +100,7 @@ class OStoreDataPageObject : public store::OStorePageObject
 public:
     /** Construction.
     */
-    explicit OStoreDataPageObject (PageHolder const & rxPage = PageHolder())
+    explicit OStoreDataPageObject (std::shared_ptr<PageData> const & rxPage = std::shared_ptr<PageData>())
         : OStorePageObject (rxPage)
     {}
 
@@ -116,16 +110,11 @@ public:
     virtual storeError verify (sal_uInt32 nAddr) const override;
 };
 
-/*========================================================================
- *
- * OStoreIndirectionPageData.
- *
- *======================================================================*/
-#define STORE_MAGIC_INDIRECTPAGE sal_uInt32(0x89191107)
+constexpr sal_uInt32 STORE_MAGIC_INDIRECTPAGE(0x89191107);
 
-struct OStoreIndirectionPageData : public store::OStorePageData
+struct OStoreIndirectionPageData : public store::PageData
 {
-    typedef OStorePageData            base;
+    typedef PageData            base;
     typedef OStoreIndirectionPageData self;
 
     typedef OStorePageGuard           G;
@@ -203,11 +192,6 @@ struct OStoreIndirectionPageData : public store::OStorePageData
     }
 };
 
-/*========================================================================
- *
- * OStoreIndirectionPageObject.
- *
- *======================================================================*/
 class OStoreIndirectionPageObject : public store::OStorePageObject
 {
     typedef OStorePageObject          base;
@@ -216,7 +200,7 @@ class OStoreIndirectionPageObject : public store::OStorePageObject
 public:
     /** Construction.
     */
-    explicit OStoreIndirectionPageObject (PageHolder const & rxPage = PageHolder())
+    explicit OStoreIndirectionPageObject (std::shared_ptr<PageData> const & rxPage = std::shared_ptr<PageData>())
         : OStorePageObject (rxPage)
     {}
 
@@ -234,20 +218,20 @@ public:
     storeError read (
         sal_uInt16             nSingle,
         OStoreDataPageObject  &rData,
-        OStorePageBIOS        &rBIOS);
+        OStorePageBIOS        &rBIOS) const;
 
     storeError read (
         sal_uInt16             nDouble,
         sal_uInt16             nSingle,
         OStoreDataPageObject  &rData,
-        OStorePageBIOS        &rBIOS);
+        OStorePageBIOS        &rBIOS) const;
 
     storeError read (
         sal_uInt16             nTriple,
         sal_uInt16             nDouble,
         sal_uInt16             nSingle,
         OStoreDataPageObject  &rData,
-        OStorePageBIOS        &rBIOS);
+        OStorePageBIOS        &rBIOS) const;
 
     /** write (indirect data page).
     */
@@ -287,11 +271,6 @@ public:
         OStorePageBIOS        &rBIOS);
 };
 
-/*========================================================================
- *
- * OStorePageNameBlock.
- *
- *======================================================================*/
 struct OStorePageNameBlock
 {
     typedef OStorePageGuard G;
@@ -340,11 +319,6 @@ struct OStorePageNameBlock
     }
 };
 
-/*========================================================================
- *
- * OStoreDirectoryDataBlock.
- *
- *======================================================================*/
 #define STORE_LIMIT_DATAPAGE_DIRECT 16
 #define STORE_LIMIT_DATAPAGE_SINGLE  8
 #define STORE_LIMIT_DATAPAGE_DOUBLE  1
@@ -368,10 +342,10 @@ struct OStoreDirectoryDataBlock
         /** Construction.
         */
         LinkDescriptor()
-            : m_nIndex0 ((sal_uInt16)(~0)),
-              m_nIndex1 ((sal_uInt16)(~0)),
-              m_nIndex2 ((sal_uInt16)(~0)),
-              m_nIndex3 ((sal_uInt16)(~0))
+            : m_nIndex0 (sal_uInt16(~0)),
+              m_nIndex1 (sal_uInt16(~0)),
+              m_nIndex2 (sal_uInt16(~0)),
+              m_nIndex3 (sal_uInt16(~0))
         {}
     };
 
@@ -445,7 +419,7 @@ struct OStoreDirectoryDataBlock
 
     /** direct.
     */
-    static const sal_uInt16 directCount = ((sal_uInt16)(STORE_LIMIT_DATAPAGE_DIRECT));
+    static const sal_uInt16 directCount = sal_uInt16(STORE_LIMIT_DATAPAGE_DIRECT);
 
     sal_uInt32 directLink (sal_uInt16 nIndex) const
     {
@@ -462,7 +436,7 @@ struct OStoreDirectoryDataBlock
 
     /** single.
     */
-    static const sal_uInt16 singleCount = ((sal_uInt16)(STORE_LIMIT_DATAPAGE_SINGLE));
+    static const sal_uInt16 singleCount = sal_uInt16(STORE_LIMIT_DATAPAGE_SINGLE);
 
     sal_uInt32 singleLink (sal_uInt16 nIndex) const
     {
@@ -479,7 +453,7 @@ struct OStoreDirectoryDataBlock
 
     /** double.
     */
-    static const sal_uInt16 doubleCount = ((sal_uInt16)(STORE_LIMIT_DATAPAGE_DOUBLE));
+    static const sal_uInt16 doubleCount = sal_uInt16(STORE_LIMIT_DATAPAGE_DOUBLE);
 
     sal_uInt32 doubleLink (sal_uInt16 nIndex) const
     {
@@ -496,7 +470,7 @@ struct OStoreDirectoryDataBlock
 
     /** triple.
     */
-    static const sal_uInt16 tripleCount = ((sal_uInt16)(STORE_LIMIT_DATAPAGE_TRIPLE));
+    static const sal_uInt16 tripleCount = sal_uInt16(STORE_LIMIT_DATAPAGE_TRIPLE);
 
     sal_uInt32 tripleLink (sal_uInt16 nIndex) const
     {
@@ -512,16 +486,11 @@ struct OStoreDirectoryDataBlock
     }
 };
 
-/*========================================================================
- *
- * OStoreDirectoryPageData.
- *
- *======================================================================*/
 #define STORE_MAGIC_DIRECTORYPAGE sal_uInt32(0x62190120)
 
-struct OStoreDirectoryPageData : public store::OStorePageData
+struct OStoreDirectoryPageData : public store::PageData
 {
-    typedef OStorePageData           base;
+    typedef PageData           base;
     typedef OStoreDirectoryPageData  self;
 
     typedef OStorePageDescriptor     D;
@@ -594,7 +563,7 @@ struct OStoreDirectoryPageData : public store::OStorePageData
         ChunkDescriptor (sal_uInt32 nPosition, sal_uInt16 nCapacity)
         {
             m_nPage   = nPosition / nCapacity;
-            m_nOffset = (sal_uInt16)((nPosition % nCapacity) & 0xffff);
+            m_nOffset = static_cast<sal_uInt16>((nPosition % nCapacity) & 0xffff);
             m_nLength = nCapacity - m_nOffset;
         }
     };
@@ -625,11 +594,6 @@ struct OStoreDirectoryPageData : public store::OStorePageData
     }
 };
 
-/*========================================================================
- *
- * OStoreDirectoryPageObject.
- *
- *======================================================================*/
 class OStoreDirectoryPageObject : public store::OStorePageObject
 {
     typedef OStorePageObject          base;
@@ -641,7 +605,7 @@ class OStoreDirectoryPageObject : public store::OStorePageObject
 public:
     /** Construction.
     */
-    explicit OStoreDirectoryPageObject (PageHolder const & rxPage = PageHolder())
+    explicit OStoreDirectoryPageObject (std::shared_ptr<PageData> const & rxPage = std::shared_ptr<PageData>())
         : OStorePageObject (rxPage)
     {}
 
@@ -745,7 +709,7 @@ public:
     storeError read (
         sal_uInt32             nPage,
         OStoreDataPageObject  &rData,
-        OStorePageBIOS        &rBIOS);
+        OStorePageBIOS        &rBIOS) const;
 
     /** write (external data page).
     */
@@ -789,12 +753,6 @@ private:
         sal_uInt16             nRemain,
         OStorePageBIOS        &rBIOS);
 };
-
-/*========================================================================
- *
- * The End.
- *
- *======================================================================*/
 
 } // namespace store
 

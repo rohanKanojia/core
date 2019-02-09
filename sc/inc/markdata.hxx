@@ -30,13 +30,11 @@
 
 namespace sc {
 
-struct RowSpan;
 struct ColRowSpan;
 
 }
 
 class ScMarkArray;
-class ScRangeList;
 
 //!     todo:
 //!     It should be possible to have MarkArrays for each table, in order to
@@ -108,10 +106,21 @@ public:
     ScMarkArray GetMarkArray( SCCOL nCol ) const;
 
     bool        IsCellMarked( SCCOL nCol, SCROW nRow, bool bNoSimple = false ) const;
-    void        FillRangeListWithMarks( ScRangeList* pList, bool bClear ) const;
+
+    /** Create a range list of marks.
+        @param  nForTab
+                If -1, use start-sheet-tab of the multi-area in ranges.
+                If >= 0, use given sheet-tab in ranges.
+     */
+    void        FillRangeListWithMarks( ScRangeList* pList, bool bClear, SCTAB nForTab = -1 ) const;
     void        ExtendRangeListTables( ScRangeList* pList ) const;
 
     ScRangeList GetMarkedRanges() const;
+    /** Get marked ranges with sheet-tab set to nTab.
+        Marks are stored for the currently active sheet respectively the
+        multi-area start-sheet-tab, update ranges with the sheet for which this
+        is called. */
+    ScRangeList GetMarkedRangesForTab( SCTAB nTab ) const;
 
     void        MarkFromRangeList( const ScRangeList& rList, bool bReset );
 
@@ -123,7 +132,7 @@ public:
     bool        IsAllMarked( const ScRange& rRange ) const;     // Multi
 
                 /// May return -1
-    SCsROW      GetNextMarked( SCCOL nCol, SCsROW nRow, bool bUp ) const;
+    SCROW       GetNextMarked( SCCOL nCol, SCROW nRow, bool bUp ) const;
     bool        HasMultiMarks( SCCOL nCol ) const;
     bool        HasAnyMultiMarks() const;
 
@@ -131,7 +140,10 @@ public:
     void        InsertTab( SCTAB nTab );
     void        DeleteTab( SCTAB nTab );
 
-    // Generate envelopes if mutimarked and fills the passed ScRange object with
+    void        ShiftCols(SCCOL nStartCol, long nColOffset);
+    void        ShiftRows(SCROW nStartRow, long nRowOffset);
+
+    // Generate envelopes if multimarked and fills the passed ScRange object with
     // the smallest range that includes the marked area plus its envelopes.
     void        GetSelectionCover( ScRange& rRange );
     // Get top, bottom, left and right envelopes
@@ -143,10 +155,12 @@ public:
     // iterators for table access
     typedef std::set<SCTAB>::iterator iterator;
     typedef std::set<SCTAB>::const_iterator const_iterator;
+    typedef std::set<SCTAB>::const_reverse_iterator const_reverse_iterator;
     iterator begin();
     iterator end();
     const_iterator begin() const;
     const_iterator end() const;
+    const_reverse_iterator rbegin() const;
 };
 
 #endif

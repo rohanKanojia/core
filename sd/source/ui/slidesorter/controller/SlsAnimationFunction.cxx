@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "controller/SlsAnimationFunction.hxx"
-#include "model/SlsPageDescriptor.hxx"
-#include "view/SlideSorterView.hxx"
+#include <controller/SlsAnimationFunction.hxx>
+#include <model/SlsPageDescriptor.hxx>
+#include <view/SlideSorterView.hxx>
 
 #include <osl/diagnose.hxx>
 #include <rtl/math.hxx>
@@ -82,7 +82,7 @@ AnimationParametricFunction::AnimationParametricFunction (const ParametricFuncti
     for (sal_Int32 nIndex=0; nIndex<nSampleCount; ++nIndex)
     {
         const double nT (nIndex/double(nSampleCount-1));
-        aPoints.push_back(basegfx::B2DPoint(rFunction(nT)));
+        aPoints.emplace_back(rFunction(nT));
     }
 
     // Interpolate at evenly spaced points.

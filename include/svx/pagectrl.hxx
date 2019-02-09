@@ -19,16 +19,17 @@
 #ifndef INCLUDED_SVX_PAGECTRL_HXX
 #define INCLUDED_SVX_PAGECTRL_HXX
 
+#include <vcl/customweld.hxx>
 #include <vcl/window.hxx>
 #include <svx/svxdllapi.h>
 #include <svx/sdr/attribute/sdrallfillattributeshelper.hxx>
 
 class SvxBoxItem;
+enum class SvxPageUsage;
+enum class SvxFrameDirection;
 
-class SVX_DLLPUBLIC SvxPageWindow : public vcl::Window
+class SVX_DLLPUBLIC SvxPageWindow : public weld::CustomWidgetController
 {
-    using Window::GetBorder;
-
 private:
     Size aWinSize;
     Size aSize;
@@ -38,24 +39,20 @@ private:
     long nLeft;
     long nRight;
 
-    SvxBoxItem* pBorder;
     bool bResetBackground;
     bool bFrameDirection;
-    sal_Int32 nFrameDirection;
+    SvxFrameDirection nFrameDirection;
 
     long nHdLeft;
     long nHdRight;
     long nHdDist;
     long nHdHeight;
-    SvxBoxItem* pHdBorder;
 
     long nFtLeft;
     long nFtRight;
     long nFtDist;
     long nFtHeight;
-    SvxBoxItem* pFtBorder;
 
-    //UUUU
     drawinglayer::attribute::SdrAllFillAttributesHelperPtr  maHeaderFillAttributes;
     drawinglayer::attribute::SdrAllFillAttributesHelperPtr  maFooterFillAttributes;
     drawinglayer::attribute::SdrAllFillAttributesHelperPtr  maPageFillAttributes;
@@ -66,25 +63,23 @@ private:
     bool bHorz : 1;
     bool bVert : 1;
 
-    sal_uInt16 eUsage;
+    SvxPageUsage eUsage;
 
 protected:
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
 
     virtual void DrawPage(vcl::RenderContext& rRenderContext, const Point& rPoint,
                           const bool bSecond, const bool bEnabled);
 
-    //UUUU
-    void drawFillAttributes(vcl::RenderContext& rRenderContext,
+    static void drawFillAttributes(vcl::RenderContext& rRenderContext,
                             const drawinglayer::attribute::SdrAllFillAttributesHelperPtr& rFillAttributes,
-                            const Rectangle& rPaintRange, const Rectangle& rDefineRange);
+                            const tools::Rectangle& rPaintRange, const tools::Rectangle& rDefineRange);
 
 public:
-    SvxPageWindow(vcl::Window* pParent);
-    virtual ~SvxPageWindow();
-    virtual void dispose() override;
+    SvxPageWindow();
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
+    virtual ~SvxPageWindow() override;
 
-    //UUUU
     void setHeaderFillAttributes(const drawinglayer::attribute::SdrAllFillAttributesHelperPtr& rFillAttributes)
     {
         maHeaderFillAttributes = rFillAttributes;
@@ -114,7 +109,6 @@ public:
     void SetBottom(long nNew) { nBottom = nNew; }
     void SetLeft(long nNew) { nLeft = nNew; }
     void SetRight(long nNew) { nRight = nNew; }
-    void SetBorder(const SvxBoxItem& rNew);
 
     long GetTop() const { return nTop; }
     long GetBottom() const { return nBottom; }
@@ -125,7 +119,6 @@ public:
     void SetHdRight(long nNew) { nHdRight = nNew; }
     void SetHdDist(long nNew) { nHdDist = nNew; }
     void SetHdHeight(long nNew) { nHdHeight = nNew; }
-    void SetHdBorder(const SvxBoxItem& rNew);
 
     long GetHdLeft() const { return nHdLeft; }
     long GetHdRight() const { return nHdRight; }
@@ -136,15 +129,14 @@ public:
     void SetFtRight(long nNew) { nFtRight = nNew; }
     void SetFtDist(long nNew) { nFtDist = nNew; }
     void SetFtHeight(long nNew) { nFtHeight = nNew; }
-    void SetFtBorder(const SvxBoxItem& rNew);
 
     long GetFtLeft() const { return nFtLeft; }
     long GetFtRight() const { return nFtRight; }
     long GetFtDist() const { return nFtDist; }
     long GetFtHeight() const { return nFtHeight; }
 
-    void SetUsage(sal_uInt16 eU) { eUsage = eU; }
-    sal_uInt16 GetUsage() const { return eUsage; }
+    void SetUsage(SvxPageUsage eU) { eUsage = eU; }
+    SvxPageUsage GetUsage() const { return eUsage; }
 
     void SetHeader( bool bNew ) { bHeader = bNew; }
     void SetFooter( bool bNew ) { bFooter = bNew; }
@@ -153,12 +145,9 @@ public:
     void SetVert( bool bNew ) { bVert = bNew; }
 
     void EnableFrameDirection(bool bEnable);
-    //uses enum SvxFrameDirection
-    void SetFrameDirection(sal_Int32 nDirection);
+    void SetFrameDirection(SvxFrameDirection nDirection);
 
     void ResetBackground();
-
-    virtual Size GetOptimalSize() const override;
 };
 
 #endif // INCLUDED_SVX_PAGECTRL_HXX

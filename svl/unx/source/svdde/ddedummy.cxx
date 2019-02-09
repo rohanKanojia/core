@@ -20,23 +20,31 @@
 #include <svl/svdde.hxx>
 #include <rtl/instance.hxx>
 
+struct Conversation
+{
+};
+
+struct DdeDataImp
+{
+};
+
 DdeData::DdeData()
-    : pImp(nullptr)
 {
 }
 
 DdeData::DdeData( const OUString& )
-    : pImp(nullptr)
 {
 }
 
-DdeData::DdeData( const DdeData& )
-    : pImp(nullptr)
+DdeData::DdeData(const DdeData&)
+{
+}
+
+DdeData::DdeData(DdeData&&)
 {
 }
 
 DdeData::DdeData( const void*, long, SotClipboardFormatId)
-    : pImp(nullptr)
 {
 }
 
@@ -53,20 +61,27 @@ SotClipboardFormatId DdeData::GetFormat() const
     return SotClipboardFormatId::NONE;
 }
 
-DdeData& DdeData::operator = ( const DdeData& )
+DdeData& DdeData::operator=(const DdeData&)
 {
     return *this;
 }
 
-DdeData::operator long() const
+DdeData& DdeData::operator=(DdeData&&)
+{
+    return *this;
+}
+
+long DdeData::getSize() const
 {
     return 0L;
 }
 
-DdeData::operator const void*() const
+void const * DdeData::getData() const
 {
   return nullptr;
 }
+
+struct DdeImp {};
 
 long DdeConnection::GetError()
 {
@@ -76,7 +91,6 @@ long DdeConnection::GetError()
 DdeConnection::DdeConnection( const OUString&, const OUString& )
     : pService(nullptr)
     , pTopic(nullptr)
-    , pImp(nullptr)
 {
 }
 
@@ -191,7 +205,6 @@ const OUString DdeTopic::GetName() const
 DdeService::DdeService( const OUString& )
     : pSysTopic(nullptr)
     , pName(nullptr)
-    , pConv(nullptr)
     , nStatus(0)
 {
 }
@@ -308,8 +321,8 @@ void DdeLink::Notify()
 {
 }
 
-DdeHotLink::DdeHotLink( DdeConnection& rConnection, const OUString& rString, long l )
-    : DdeLink( rConnection, rString, l )
+DdeHotLink::DdeHotLink( DdeConnection& rConnection, const OUString& rString )
+    : DdeLink( rConnection, rString, 0 )
 {
 }
 

@@ -35,12 +35,12 @@ namespace drawinglayer
         class SdrEllipsePrimitive2D : public BufferedDecompositionPrimitive2D
         {
         private:
-            ::basegfx::B2DHomMatrix                     maTransform;
-            attribute::SdrLineFillShadowTextAttribute   maSdrLFSTAttribute;
+            ::basegfx::B2DHomMatrix const                     maTransform;
+            attribute::SdrLineFillShadowTextAttribute const   maSdrLFSTAttribute;
 
         protected:
             // local decomposition.
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& aViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& aViewInformation) const override;
 
         public:
             SdrEllipsePrimitive2D(
@@ -68,16 +68,15 @@ namespace drawinglayer
         class SdrEllipseSegmentPrimitive2D : public SdrEllipsePrimitive2D
         {
         private:
-            double                                      mfStartAngle;
-            double                                      mfEndAngle;
+            double const                                      mfStartAngle;
+            double const                                      mfEndAngle;
 
-            // bitfield
-            bool                                        mbCloseSegment : 1;
-            bool                                        mbCloseUsingCenter : 1;
+            bool const                                        mbCloseSegment : 1;
+            bool const                                        mbCloseUsingCenter : 1;
 
         protected:
             // local decomposition.
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& aViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& aViewInformation) const override;
 
         public:
             SdrEllipseSegmentPrimitive2D(

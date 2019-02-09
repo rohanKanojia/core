@@ -27,14 +27,6 @@ using namespace ::com::sun::star::uno;
 
 using ::xmloff::token::XMLTokenEnum;
 
-XMLConstantsPropertyHandler::XMLConstantsPropertyHandler(
-    const SvXMLEnumMapEntry *pM,
-    enum XMLTokenEnum eDflt ) :
-        pMap( pM ),
-        eDefault( eDflt )
-{
-}
-
 XMLConstantsPropertyHandler::~XMLConstantsPropertyHandler()
 {
 }
@@ -49,7 +41,7 @@ bool XMLConstantsPropertyHandler::importXML(
         nEnum, rStrImpValue, pMap );
 
     if( bRet )
-        rValue <<= (sal_Int16)nEnum;
+        rValue <<= static_cast<sal_Int16>(nEnum);
 
     return bRet;
 }

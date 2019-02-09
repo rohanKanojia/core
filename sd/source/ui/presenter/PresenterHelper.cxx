@@ -17,25 +17,26 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstddef>
 
 #include "PresenterHelper.hxx"
 #include "CanvasUpdateRequester.hxx"
 #include "PresenterCanvas.hxx"
-#include "facreg.hxx"
+#include <facreg.hxx>
 #include <cppcanvas/vclfactory.hxx>
 #include <com/sun/star/awt/WindowAttribute.hpp>
 #include <com/sun/star/awt/WindowClass.hpp>
 #include <com/sun/star/awt/WindowDescriptor.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
 #include <vcl/wrkwin.hxx>
 
-#include "res_bmp.hrc"
-#include "sdresid.hxx"
+
+#include <bitmaps.hlst>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -57,11 +58,7 @@ PresenterHelper::~PresenterHelper()
 
 //----- XInitialize -----------------------------------------------------------
 
-void SAL_CALL PresenterHelper::initialize (const Sequence<Any>& rArguments)
-    throw(Exception,RuntimeException, std::exception)
-{
-    (void)rArguments;
-}
+void SAL_CALL PresenterHelper::initialize (const Sequence<Any>&) {}
 
 //----- XPaneHelper ----------------------------------------------------
 
@@ -71,7 +68,6 @@ Reference<awt::XWindow> SAL_CALL PresenterHelper::createWindow (
     sal_Bool bInitiallyVisible,
     sal_Bool bEnableChildTransparentMode,
     sal_Bool bEnableParentClip)
-    throw (css::uno::RuntimeException, std::exception)
 {
     VclPtr<vcl::Window> pParentWindow(VCLUnoHelper::GetWindow(rxParentWindow));
 
@@ -97,7 +93,7 @@ Reference<awt::XWindow> SAL_CALL PresenterHelper::createWindow (
 
     pWindow->Show(bInitiallyVisible);
 
-    pWindow->SetMapMode(MAP_PIXEL);
+    pWindow->SetMapMode(MapMode(MapUnit::MapPixel));
     pWindow->SetBackground();
     if ( ! bEnableParentClip)
     {
@@ -119,7 +115,6 @@ Reference<rendering::XCanvas> SAL_CALL PresenterHelper::createSharedCanvas (
     const Reference<rendering::XCanvas>& rxSharedCanvas,
     const Reference<awt::XWindow>& rxSharedWindow,
     const Reference<awt::XWindow>& rxWindow)
-    throw (css::uno::RuntimeException, std::exception)
 {
     if ( ! rxSharedCanvas.is()
         || ! rxSharedWindow.is()
@@ -141,46 +136,40 @@ Reference<rendering::XCanvas> SAL_CALL PresenterHelper::createSharedCanvas (
 
 Reference<rendering::XCanvas> SAL_CALL PresenterHelper::createCanvas (
     const Reference<awt::XWindow>& rxWindow,
-    sal_Int16 nRequestedCanvasFeatures,
+    sal_Int16,
     const OUString& rsOptionalCanvasServiceName)
-    throw (css::uno::RuntimeException, std::exception)
 {
-    (void)nRequestedCanvasFeatures;
-
     // No shared window is given or an explicit canvas service name is
     // specified.  Create a new canvas.
-    vcl::Window* pWindow = VCLUnoHelper::GetWindow(rxWindow);
-    if (pWindow != nullptr)
-    {
-        Sequence<Any> aArg (5);
-
-        // common: first any is VCL pointer to window (for VCL canvas)
-        aArg[0] = makeAny(reinterpret_cast<sal_Int64>(pWindow));
-        aArg[1] = Any();
-        aArg[2] = makeAny(css::awt::Rectangle());
-        aArg[3] = makeAny(sal_False);
-        aArg[4] = makeAny(rxWindow);
-
-        Reference<lang::XMultiServiceFactory> xFactory (
-            mxComponentContext->getServiceManager(), UNO_QUERY_THROW);
-        return Reference<rendering::XCanvas>(
-            xFactory->createInstanceWithArguments(
-                !rsOptionalCanvasServiceName.isEmpty()
-                    ? rsOptionalCanvasServiceName
-                    : OUString("com.sun.star.rendering.Canvas.VCL"),
-                aArg),
-            UNO_QUERY);
-    }
-    else
+    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow(rxWindow);
+    if (!pWindow)
         throw RuntimeException();
+
+    Sequence<Any> aArg (5);
+
+    // common: first any is VCL pointer to window (for VCL canvas)
+    aArg[0] <<= reinterpret_cast<sal_Int64>(pWindow.get());
+    aArg[1] = Any();
+    aArg[2] <<= css::awt::Rectangle();
+    aArg[3] <<= false;
+    aArg[4] <<= rxWindow;
+
+    Reference<lang::XMultiServiceFactory> xFactory (
+        mxComponentContext->getServiceManager(), UNO_QUERY_THROW);
+    return Reference<rendering::XCanvas>(
+        xFactory->createInstanceWithArguments(
+            !rsOptionalCanvasServiceName.isEmpty()
+                ? rsOptionalCanvasServiceName
+                : OUString("com.sun.star.rendering.Canvas.VCL"),
+            aArg),
+        UNO_QUERY);
 }
 
 void SAL_CALL PresenterHelper::toTop (
     const Reference<awt::XWindow>& rxWindow)
-    throw (css::uno::RuntimeException, std::exception)
 {
-    vcl::Window* pWindow = VCLUnoHelper::GetWindow(rxWindow);
-    if (pWindow != nullptr)
+    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow(rxWindow);
+    if (pWindow)
     {
         pWindow->ToTop();
         pWindow->SetZOrder(nullptr, ZOrderFlags::Last);
@@ -191,7 +180,7 @@ namespace {
 
 struct IdMapEntry {
     char const * sid;
-    sal_uInt32 nid;
+    const char* bmpid;
 };
 
 }
@@ -199,7 +188,6 @@ struct IdMapEntry {
 Reference<rendering::XBitmap> SAL_CALL PresenterHelper::loadBitmap (
     const OUString& id,
     const Reference<rendering::XCanvas>& rxCanvas)
-    throw (RuntimeException, std::exception)
 {
     if ( ! rxCanvas.is())
         return nullptr;
@@ -388,14 +376,14 @@ Reference<rendering::XBitmap> SAL_CALL PresenterHelper::loadBitmap (
           BMP_PRESENTERSCREEN_SCROLLBAR_THUMB_TOP_NORMAL },
         { "bitmaps/ViewBackground.png", BMP_PRESENTERSCREEN_VIEW_BACKGROUND }
     };
-    sal_uInt32 nid = 0;
+    OUString bmpid;
     for (std::size_t i = 0; i != SAL_N_ELEMENTS(map); ++i) {
         if (id.equalsAscii(map[i].sid)) {
-            nid = map[i].nid;
+            bmpid = OUString::createFromAscii(map[i].bmpid);
             break;
         }
     }
-    if (nid == 0) {
+    if (bmpid.isEmpty()) {
         return nullptr;
     }
 
@@ -407,7 +395,7 @@ Reference<rendering::XBitmap> SAL_CALL PresenterHelper::loadBitmap (
 
     if (pCanvas.get() != nullptr)
     {
-        BitmapEx aBitmapEx = SdResId(nid);
+        BitmapEx aBitmapEx(bmpid);
         cppcanvas::BitmapSharedPtr xBitmap(
             cppcanvas::VCLFactory::createBitmap(pCanvas,
                 aBitmapEx));
@@ -421,26 +409,24 @@ Reference<rendering::XBitmap> SAL_CALL PresenterHelper::loadBitmap (
 
 void SAL_CALL PresenterHelper::captureMouse (
     const Reference<awt::XWindow>& rxWindow)
-    throw (RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard (::osl::Mutex::getGlobalMutex());
 
     // Capture the mouse (if not already done.)
-    vcl::Window* pWindow = VCLUnoHelper::GetWindow(rxWindow);
-    if (pWindow != nullptr && ! pWindow->IsMouseCaptured())
+    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow(rxWindow);
+    if (pWindow && ! pWindow->IsMouseCaptured())
     {
         pWindow->CaptureMouse();
     }
 }
 
 void SAL_CALL PresenterHelper::releaseMouse (const Reference<awt::XWindow>& rxWindow)
-    throw (RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard (::osl::Mutex::getGlobalMutex());
 
     // Release the mouse (if not already done.)
-    vcl::Window* pWindow = VCLUnoHelper::GetWindow(rxWindow);
-    if (pWindow != nullptr && pWindow->IsMouseCaptured())
+    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow(rxWindow);
+    if (pWindow && pWindow->IsMouseCaptured())
     {
         pWindow->ReleaseMouse();
     }
@@ -449,13 +435,12 @@ void SAL_CALL PresenterHelper::releaseMouse (const Reference<awt::XWindow>& rxWi
 awt::Rectangle PresenterHelper::getWindowExtentsRelative (
     const Reference<awt::XWindow>& rxChildWindow,
     const Reference<awt::XWindow>& rxParentWindow)
-    throw (RuntimeException, std::exception)
 {
-    vcl::Window* pChildWindow = VCLUnoHelper::GetWindow(rxChildWindow);
-    vcl::Window* pParentWindow = VCLUnoHelper::GetWindow(rxParentWindow);
-    if (pChildWindow!=nullptr && pParentWindow!=nullptr)
+    VclPtr<vcl::Window> pChildWindow = VCLUnoHelper::GetWindow(rxChildWindow);
+    VclPtr<vcl::Window> pParentWindow = VCLUnoHelper::GetWindow(rxParentWindow);
+    if (pChildWindow && pParentWindow)
     {
-        Rectangle aBox (pChildWindow->GetWindowExtentsRelative(pParentWindow));
+        ::tools::Rectangle aBox (pChildWindow->GetWindowExtentsRelative(pParentWindow));
         return awt::Rectangle(aBox.Left(),aBox.Top(),aBox.GetWidth(),aBox.GetHeight());
     }
     else
@@ -465,7 +450,7 @@ awt::Rectangle PresenterHelper::getWindowExtentsRelative (
 } } // end of namespace ::sd::presenter
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Draw_PresenterHelper_get_implementation(css::uno::XComponentContext* context,
                                                           css::uno::Sequence<css::uno::Any> const &)
 {

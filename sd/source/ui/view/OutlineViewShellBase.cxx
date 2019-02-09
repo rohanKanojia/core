@@ -17,11 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "OutlineViewShellBase.hxx"
-#include "sdresid.hxx"
-#include "DrawDocShell.hxx"
-#include "strings.hrc"
-#include "framework/FrameworkHelper.hxx"
+#include <OutlineViewShellBase.hxx>
+#include <DrawDocShell.hxx>
+#include <framework/FrameworkHelper.hxx>
+#include <sfx2/viewfac.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/viewsh.hxx>
 
@@ -41,7 +40,7 @@ SfxViewShell* OutlineViewShellBase::CreateInstance (
     pBase->LateInit(framework::FrameworkHelper::msOutlineViewURL);
     return pBase;
 }
-void OutlineViewShellBase::RegisterFactory( sal_uInt16 nPrio )
+void OutlineViewShellBase::RegisterFactory( SfxInterfaceId nPrio )
 {
     pFactory = new SfxViewFactory(&CreateInstance,nPrio,"Outline");
     InitFactory();

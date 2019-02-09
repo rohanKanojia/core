@@ -27,7 +27,7 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnon-virtual-dtor"
 #endif
-#include  "UAccCOM.h"
+#include  <UAccCOM.h>
 #if defined __clang__
 #pragma clang diagnostic pop
 #endif
@@ -101,16 +101,6 @@ STDMETHODIMP CAccAction::get_keyBinding(
     return CAccActionBase::get_keyBinding(actionIndex, nMaxBinding, keyBinding, nBinding);
 }
 
-/**
- * Override of IUNOXWrapper.
- *
- * @param    pXInterface    the pointer of UNO interface.
- */
-STDMETHODIMP CAccAction::put_XInterface(hyper pXInterface)
-{
-
-    return CAccActionBase::put_XInterface(pXInterface);
-}
 /**
    * Put UNO interface.
    * @param pXSubInterface XAccessibleHyperlink interface.

@@ -18,12 +18,11 @@
  */
 
 #include <basic/sbx.hxx>
-#include "sbunoobj.hxx"
-#include "parser.hxx"
+#include <sbunoobj.hxx>
+#include <parser.hxx>
 #include <svtools/miscopt.hxx>
 #include <osl/diagnose.h>
 #include <com/sun/star/reflection/theCoreReflection.hpp>
-#include <comphelper/namedvaluecollection.hxx>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/reflection/XInterfaceMemberTypeDescription.hpp>
 #include <com/sun/star/reflection/XIdlMethod.hpp>
@@ -157,7 +156,7 @@ void SbiParser::TypeDecl( SbiSymDef& rDef, bool bAsNewAlreadyParsed )
                             }
                         }
                     }
-                    else if( rEnumArray->Find( aCompleteName, SbxCLASS_OBJECT ) || ( IsVBASupportOn() && VBAConstantHelper::instance().isVBAConstantType( aCompleteName ) ) )
+                    else if( rEnumArray->Find( aCompleteName, SbxClassType::Object ) || ( IsVBASupportOn() && VBAConstantHelper::instance().isVBAConstantType( aCompleteName ) ) )
                     {
                         eType = SbxLONG;
                         break;
@@ -192,7 +191,7 @@ void SbiParser::TypeDecl( SbiSymDef& rDef, bool bAsNewAlreadyParsed )
     }
 }
 
-// Here variables, arrays and structures were definied.
+// Here variables, arrays and structures were defined.
 // DIM/PRIVATE/PUBLIC/GLOBAL
 
 void SbiParser::Dim()
@@ -204,7 +203,7 @@ void SbiParser::DefVar( SbiOpcode eOp, bool bStatic )
 {
     SbiSymPool* pOldPool = pPool;
     bool bSwitchPool = false;
-    bool bPersistantGlobal = false;
+    bool bPersistentGlobal = false;
     SbiToken eFirstTok = eCurTok;
 
     if( pProc && ( eCurTok == GLOBAL || eCurTok == PUBLIC || eCurTok == PRIVATE ) )
@@ -213,12 +212,12 @@ void SbiParser::DefVar( SbiOpcode eOp, bool bStatic )
     {
         bSwitchPool = true;     // at the right moment switch to the global pool
         if( eCurTok == GLOBAL )
-            bPersistantGlobal = true;
+            bPersistentGlobal = true;
     }
     // behavior in VBA is that a module scope variable's lifetime is
     // tied to the document. e.g. a module scope variable is global
-       if(  GetBasic()->IsDocBasic() && bVBASupportOn && !pProc )
-        bPersistantGlobal = true;
+    if(  GetBasic()->IsDocBasic() && bVBASupportOn && !pProc )
+        bPersistentGlobal = true;
     // PRIVATE is a synonymous for DIM
     // _CONST_?
     bool bConst = false;
@@ -271,21 +270,14 @@ void SbiParser::DefVar( SbiOpcode eOp, bool bStatic )
         else if( eCurTok == TYPE )
         {
             Next();
-            DefType( bPrivate );
+            DefType(); // TODO: Use bPrivate in DefType()
             return;
         }
     }
 
-#ifdef SHARED
-#define tmpSHARED
-#undef SHARED
-#endif
     // SHARED were ignored
     if( Peek() == SHARED ) Next();
-#ifdef tmpSHARED
-#define SHARED
-#undef tmpSHARED
-#endif
+
     // PRESERVE only at REDIM
     if( Peek() == PRESERVE )
     {
@@ -298,7 +290,7 @@ void SbiParser::DefVar( SbiOpcode eOp, bool bStatic )
     SbiSymDef* pDef;
     SbiExprListPtr pDim;
 
-    // #40689, Statics -> Modul-Initialising, skip in Sub
+    // #40689, Statics -> Module-Initialising, skip in Sub
     sal_uInt32 nEndOfStaticLbl = 0;
     if( !bVBASupportOn && bStatic )
     {
@@ -366,9 +358,9 @@ void SbiParser::DefVar( SbiOpcode eOp, bool bStatic )
             SbiOpcode eOp2;
             switch ( pDef->GetScope() )
             {
-                case SbGLOBAL:  eOp2 = bPersistantGlobal ? SbiOpcode::GLOBAL_P_ : SbiOpcode::GLOBAL_;
+                case SbGLOBAL:  eOp2 = bPersistentGlobal ? SbiOpcode::GLOBAL_P_ : SbiOpcode::GLOBAL_;
                                 goto global;
-                case SbPUBLIC:  eOp2 = bPersistantGlobal ? SbiOpcode::PUBLIC_P_ : SbiOpcode::PUBLIC_;
+                case SbPUBLIC:  eOp2 = bPersistentGlobal ? SbiOpcode::PUBLIC_P_ : SbiOpcode::PUBLIC_;
                                 // #40689, no own Opcode anymore
                                 if( bVBASupportOn && bStatic )
                                 {
@@ -406,7 +398,7 @@ void SbiParser::DefVar( SbiOpcode eOp, bool bStatic )
             if( !bCompatible && !pDef->IsNew() )
             {
                 OUString aTypeName( aGblStrings.Find( pDef->GetTypeId() ) );
-                if( rTypeArray->Find( aTypeName, SbxCLASS_OBJECT ) == nullptr )
+                if( rTypeArray->Find( aTypeName, SbxClassType::Object ) == nullptr )
                 {
                     if( CodeCompleteOptions::IsExtendedTypeDeclaration() )
                     {
@@ -509,7 +501,7 @@ void SbiParser::DefVar( SbiOpcode eOp, bool bStatic )
                     aGen.Gen( SbiOpcode::REDIMP_ERASE_ );
                 }
                 pDef->SetDims( pDim->GetDims() );
-                if( bPersistantGlobal )
+                if( bPersistentGlobal )
                     pDef->SetGlobal( true );
                 SbiExpression aExpr( this, *pDef, std::move(pDim) );
                 aExpr.Gen();
@@ -569,19 +561,16 @@ void SbiParser::Erase()
 
 void SbiParser::Type()
 {
-    DefType( false );
+    DefType();
 }
 
-void SbiParser::DefType( bool bPrivate )
+void SbiParser::DefType()
 {
-    // TODO: Use bPrivate
-    (void)bPrivate;
-
     // Read the new Token lesen. It had to be a symbol
     if (!TestSymbol())
         return;
 
-    if (rTypeArray->Find(aSym,SbxCLASS_OBJECT))
+    if (rTypeArray->Find(aSym,SbxClassType::Object))
     {
         Error( ERRCODE_BASIC_VAR_DEFINED, aSym );
         return;
@@ -616,7 +605,7 @@ void SbiParser::DefType( bool bPrivate )
         {
             SbxArray *pTypeMembers = pType->GetProperties();
             OUString aElemName = pElem->GetName();
-            if( pTypeMembers->Find( aElemName, SbxCLASS_DONTCARE) )
+            if( pTypeMembers->Find( aElemName, SbxClassType::DontCare) )
             {
                 Error (ERRCODE_BASIC_VAR_DEFINED);
             }
@@ -666,7 +655,7 @@ void SbiParser::DefType( bool bPrivate )
                     if( nElemTypeId != 0 )
                     {
                         OUString aTypeName( aGblStrings.Find( nElemTypeId ) );
-                        SbxObject* pTypeObj = static_cast< SbxObject* >( rTypeArray->Find( aTypeName, SbxCLASS_OBJECT ) );
+                        SbxObject* pTypeObj = static_cast< SbxObject* >( rTypeArray->Find( aTypeName, SbxClassType::Object ) );
                         if( pTypeObj != nullptr )
                         {
                             SbxObject* pCloneObj = cloneTypeObjectImpl( *pTypeObj );
@@ -679,8 +668,8 @@ void SbiParser::DefType( bool bPrivate )
         }
     }
 
-    pType->Remove( "Name", SbxCLASS_DONTCARE );
-    pType->Remove( "Parent", SbxCLASS_DONTCARE );
+    pType->Remove( "Name", SbxClassType::DontCare );
+    pType->Remove( "Parent", SbxClassType::DontCare );
 
     rTypeArray->Insert (pType,rTypeArray->Count());
 }
@@ -700,7 +689,7 @@ void SbiParser::DefEnum( bool bPrivate )
         return;
 
     OUString aEnumName = aSym;
-    if( rEnumArray->Find(aEnumName,SbxCLASS_OBJECT) )
+    if( rEnumArray->Find(aEnumName,SbxClassType::Object) )
     {
         Error( ERRCODE_BASIC_VAR_DEFINED, aSym );
         return;
@@ -782,12 +771,11 @@ void SbiParser::DefEnum( bool bPrivate )
 
                 if( !bPrivate )
                 {
-                    SbiOpcode eOp = SbiOpcode::GLOBAL_;
                     aGen.BackChain( nGblChain );
                     nGblChain = 0;
                     bGblDefs = bNewGblDefs = true;
                     aGen.Gen(
-                        eOp, pElem->GetId(),
+                        SbiOpcode::GLOBAL_, pElem->GetId(),
                         sal::static_int_cast< sal_uInt16 >( pElem->GetType() ) );
 
                     aVar.Gen();
@@ -811,8 +799,8 @@ void SbiParser::DefEnum( bool bPrivate )
         }
     }
 
-    pEnum->Remove( "Name", SbxCLASS_DONTCARE );
-    pEnum->Remove( "Parent", SbxCLASS_DONTCARE );
+    pEnum->Remove( "Name", SbxClassType::DontCare );
+    pEnum->Remove( "Parent", SbxClassType::DontCare );
 
     rEnumArray->Insert( pEnum, rEnumArray->Count() );
 }
@@ -833,7 +821,7 @@ SbiProcDef* SbiParser::ProcDecl( bool bDecl )
     pDef->SetType( eType );
     if( Peek() == CDECL_ )
     {
-        Next(); pDef->SetCdecl();
+        Next(); pDef->SetCdecl(true);
     }
     if( Peek() == LIB )
     {
@@ -939,7 +927,7 @@ SbiProcDef* SbiParser::ProcDecl( bool bDecl )
                 }
                 if( bByVal )
                 {
-                    pPar->SetByVal();
+                    pPar->SetByVal(true);
                 }
                 if( bOptional )
                 {
@@ -1012,6 +1000,9 @@ void SbiParser::Declare()
 void SbiParser::DefDeclare( bool bPrivate )
 {
     Next();
+    if( eCurTok == PTRSAFE )
+        Next();
+
     if( eCurTok != SUB && eCurTok != FUNCTION )
     {
       Error( ERRCODE_BASIC_UNEXPECTED, eCurTok );
@@ -1224,17 +1215,13 @@ void SbiParser::DefProc( bool bStatic, bool bPrivate )
         }
 
         pDef->Match( pProc );
-        pProc = pDef;
     }
     else
     {
         aPublics.Add( pDef );
-        pProc = pDef;
     }
-    if( !pProc )
-    {
-        return;
-    }
+    assert(pDef);
+    pProc = pDef;
     pProc->SetPublic( !bPrivate );
 
     // Now we set the search hierarchy for symbols as well as the

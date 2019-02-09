@@ -17,15 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "comphelper/anytostring.hxx"
-#include "cppuhelper/exc_hlp.hxx"
+#include <cppuhelper/exc_hlp.hxx>
 
 #include <com/sun/star/beans/XMultiPropertySet.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 
 #include "headerfootercontext.hxx"
-#include "oox/ppt/layoutfragmenthandler.hxx"
-#include "oox/drawingml/shapegroupcontext.hxx"
+#include <oox/ppt/layoutfragmenthandler.hxx>
+#include <oox/drawingml/shapegroupcontext.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
+#include <utility>
 
 using namespace ::com::sun::star;
 using namespace ::oox::core;
@@ -38,14 +41,13 @@ namespace oox { namespace ppt {
 
 // CT_SlideLayout
 
-LayoutFragmentHandler::LayoutFragmentHandler( XmlFilterBase& rFilter, const OUString& rFragmentPath, SlidePersistPtr pMasterPersistPtr )
-    throw()
-: SlideFragmentHandler( rFilter, rFragmentPath, pMasterPersistPtr, Layout )
+LayoutFragmentHandler::LayoutFragmentHandler(XmlFilterBase& rFilter, const OUString& rFragmentPath,
+                                             const SlidePersistPtr& pMasterPersistPtr)
+    : SlideFragmentHandler(rFilter, rFragmentPath, std::move(pMasterPersistPtr), Layout)
 {
 }
 
 LayoutFragmentHandler::~LayoutFragmentHandler()
-    throw()
 {
 
 }

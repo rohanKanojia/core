@@ -1,4 +1,4 @@
-/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column:100 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -23,6 +23,7 @@
 
 #include <rtl/ustring.hxx>
 #include <osl/file.hxx>
+#include <sal/log.hxx>
 
 #include <com/sun/star/document/XStorageBasedDocument.hpp>
 #include <com/sun/star/embed/XStorage.hpp>
@@ -34,57 +35,37 @@
 #include <vcl/svapp.hxx>
 
 #include <svx/svdmodel.hxx>
-#include "svdglob.hxx"
-#include "svx/svdstr.hrc"
+#include <svx/dialmgr.hxx>
+#include <svx/strings.hrc>
 #include <svx/sdr/contact/viewcontactofsdrmediaobj.hxx>
 #include <avmedia/mediawindow.hxx>
-
-// For handling of glTF models
-#include <unotools/tempfile.hxx>
-#include <unotools/localfilehelper.hxx>
-#include <tools/urlobj.hxx>
+#include <o3tl/make_unique.hxx>
 
 using namespace ::com::sun::star;
 
 
-// Note: the temp file is read only, until it is deleted!
-// It may be shared between multiple documents in case of copy/paste,
-// hence the shared_ptr.
-struct MediaTempFile
-{
-    OUString const m_TempFileURL;
-    OUString const m_TempDirURL; // yet another hack, for the glTF models
-    MediaTempFile(OUString const& rURL, OUString const& rDirURL)
-        : m_TempFileURL(rURL), m_TempDirURL(rDirURL)
-    {}
-    ~MediaTempFile()
-    {
-        ::osl::File::remove(m_TempFileURL);
-        if (!m_TempDirURL.isEmpty())
-        {
-            ::utl::removeTree(m_TempDirURL);
-        }
-    }
-};
-
 struct SdrMediaObj::Impl
 {
     ::avmedia::MediaItem                  m_MediaProperties;
-    std::shared_ptr< MediaTempFile >  m_pTempFile;
+    // Note: the temp file is read only, until it is deleted!
+    // It may be shared between multiple documents in case of copy/paste,
+    // hence the shared_ptr.
+    std::shared_ptr< ::avmedia::MediaTempFile >  m_pTempFile;
     uno::Reference< graphic::XGraphic >   m_xCachedSnapshot;
     OUString m_LastFailedPkgURL;
 };
 
-
-SdrMediaObj::SdrMediaObj()
-    : SdrRectObj()
-    , m_xImpl( new Impl() )
+SdrMediaObj::SdrMediaObj(SdrModel& rSdrModel)
+:   SdrRectObj(rSdrModel)
+    ,m_xImpl( new Impl )
 {
 }
 
-SdrMediaObj::SdrMediaObj( const Rectangle& rRect )
-    : SdrRectObj( rRect )
-    , m_xImpl( new Impl() )
+SdrMediaObj::SdrMediaObj(
+    SdrModel& rSdrModel,
+    const tools::Rectangle& rRect)
+:   SdrRectObj(rSdrModel, rRect)
+    ,m_xImpl( new Impl )
 {
 }
 
@@ -97,14 +78,13 @@ bool SdrMediaObj::HasTextEdit() const
     return false;
 }
 
-sdr::contact::ViewContact* SdrMediaObj::CreateObjectSpecificViewContact()
+std::unique_ptr<sdr::contact::ViewContact> SdrMediaObj::CreateObjectSpecificViewContact()
 {
-    return new sdr::contact::ViewContactOfSdrMediaObj( *this );
+    return o3tl::make_unique<sdr::contact::ViewContactOfSdrMediaObj>( *this );
 }
 
 void SdrMediaObj::TakeObjInfo( SdrObjTransformInfoRec& rInfo ) const
 {
-    rInfo.bSelectAllowed = true;
     rInfo.bMoveAllowed = true;
     rInfo.bResizeFreeAllowed = true;
     rInfo.bResizePropAllowed = true;
@@ -114,7 +94,6 @@ void SdrMediaObj::TakeObjInfo( SdrObjTransformInfoRec& rInfo ) const
     rInfo.bMirror45Allowed = false;
     rInfo.bMirror90Allowed = false;
     rInfo.bTransparenceAllowed = false;
-    rInfo.bGradientAllowed = false;
     rInfo.bShearAllowed = false;
     rInfo.bEdgeRadiusAllowed = false;
     rInfo.bNoOrthoDesired = false;
@@ -133,7 +112,7 @@ sal_uInt16 SdrMediaObj::GetObjIdentifier() const
 
 OUString SdrMediaObj::TakeObjNameSingul() const
 {
-    OUStringBuffer sName(ImpGetResStr(STR_ObjNameSingulMEDIA));
+    OUStringBuffer sName(SvxResId(STR_ObjNameSingulMEDIA));
 
     OUString aName(GetName());
 
@@ -150,12 +129,12 @@ OUString SdrMediaObj::TakeObjNameSingul() const
 
 OUString SdrMediaObj::TakeObjNamePlural() const
 {
-    return ImpGetResStr(STR_ObjNamePluralMEDIA);
+    return SvxResId(STR_ObjNamePluralMEDIA);
 }
 
-SdrMediaObj* SdrMediaObj::Clone() const
+SdrMediaObj* SdrMediaObj::CloneSdrObject(SdrModel& rTargetModel) const
 {
-    return CloneHelper< SdrMediaObj >();
+    return CloneHelper< SdrMediaObj >(rTargetModel);
 }
 
 SdrMediaObj& SdrMediaObj::operator=(const SdrMediaObj& rObj)
@@ -170,8 +149,9 @@ SdrMediaObj& SdrMediaObj::operator=(const SdrMediaObj& rObj)
     return *this;
 }
 
-const uno::Reference< graphic::XGraphic > SdrMediaObj::getSnapshot() const
+uno::Reference< graphic::XGraphic > const & SdrMediaObj::getSnapshot() const
 {
+#if HAVE_FEATURE_AVMEDIA
     if( !m_xImpl->m_xCachedSnapshot.is() )
     {
         OUString aRealURL = m_xImpl->m_MediaProperties.getTempURL();
@@ -179,12 +159,15 @@ const uno::Reference< graphic::XGraphic > SdrMediaObj::getSnapshot() const
             aRealURL = m_xImpl->m_MediaProperties.getURL();
         m_xImpl->m_xCachedSnapshot = avmedia::MediaWindow::grabFrame( aRealURL, m_xImpl->m_MediaProperties.getReferer(), m_xImpl->m_MediaProperties.getMimeType());
     }
+#endif
     return m_xImpl->m_xCachedSnapshot;
 }
 
-void SdrMediaObj::AdjustToMaxRect( const Rectangle& rMaxRect, bool bShrinkOnly /* = false */ )
+void SdrMediaObj::AdjustToMaxRect( const tools::Rectangle& rMaxRect, bool bShrinkOnly /* = false */ )
 {
-    Size aSize( Application::GetDefaultDevice()->PixelToLogic( getPreferredSize(), MAP_100TH_MM ) );
+    Size aSize( Application::GetDefaultDevice()->PixelToLogic(
+                    static_cast< sdr::contact::ViewContactOfSdrMediaObj& >( GetViewContact() ).getPreferredSize(),
+                    MapMode(MapUnit::Map100thMM)) );
     Size aMaxSize( rMaxRect.GetSize() );
 
     if( aSize.Height() != 0 && aSize.Width() != 0 )
@@ -197,21 +180,21 @@ void SdrMediaObj::AdjustToMaxRect( const Rectangle& rMaxRect, bool bShrinkOnly /
              ( aSize.Width()  > aMaxSize.Width()  ) )&&
              aSize.Height() && aMaxSize.Height() )
         {
-            float fGrfWH =  (float)aSize.Width() /
-                            (float)aSize.Height();
-            float fWinWH =  (float)aMaxSize.Width() /
-                            (float)aMaxSize.Height();
+            float fGrfWH =  static_cast<float>(aSize.Width()) /
+                            static_cast<float>(aSize.Height());
+            float fWinWH =  static_cast<float>(aMaxSize.Width()) /
+                            static_cast<float>(aMaxSize.Height());
 
             // scale graphic to page size
             if ( fGrfWH < fWinWH )
             {
-                aSize.Width() = (long)(aMaxSize.Height() * fGrfWH);
-                aSize.Height()= aMaxSize.Height();
+                aSize.setWidth( static_cast<long>(aMaxSize.Height() * fGrfWH) );
+                aSize.setHeight( aMaxSize.Height() );
             }
             else if ( fGrfWH > 0.F )
             {
-                aSize.Width() = aMaxSize.Width();
-                aSize.Height()= (long)(aMaxSize.Width() / fGrfWH);
+                aSize.setWidth( aMaxSize.Width() );
+                aSize.setHeight( static_cast<long>(aMaxSize.Width() / fGrfWH) );
             }
 
             aPos = rMaxRect.Center();
@@ -220,24 +203,35 @@ void SdrMediaObj::AdjustToMaxRect( const Rectangle& rMaxRect, bool bShrinkOnly /
         if( bShrinkOnly )
             aPos = maRect.TopLeft();
 
-        aPos.X() -= aSize.Width() / 2;
-        aPos.Y() -= aSize.Height() / 2;
-        SetLogicRect( Rectangle( aPos, aSize ) );
+        aPos.AdjustX( -(aSize.Width() / 2) );
+        aPos.AdjustY( -(aSize.Height() / 2) );
+        SetLogicRect( tools::Rectangle( aPos, aSize ) );
     }
 }
 
 void SdrMediaObj::setURL( const OUString& rURL, const OUString& rReferer, const OUString& rMimeType )
 {
     ::avmedia::MediaItem aURLItem;
+#if HAVE_FEATURE_AVMEDIA
     if( !rMimeType.isEmpty() )
         m_xImpl->m_MediaProperties.setMimeType(rMimeType);
     aURLItem.setURL( rURL, "", rReferer );
+#else
+    (void) rMimeType;
+    (void) rURL;
+    (void) rReferer;
+#endif
     setMediaProperties( aURLItem );
 }
 
 const OUString& SdrMediaObj::getURL() const
 {
+#if HAVE_FEATURE_AVMEDIA
     return m_xImpl->m_MediaProperties.getURL();
+#else
+static OUString ret;
+    return ret;
+#endif
 }
 
 void SdrMediaObj::setMediaProperties( const ::avmedia::MediaItem& rState )
@@ -249,11 +243,6 @@ void SdrMediaObj::setMediaProperties( const ::avmedia::MediaItem& rState )
 const ::avmedia::MediaItem& SdrMediaObj::getMediaProperties() const
 {
     return m_xImpl->m_MediaProperties;
-}
-
-Size SdrMediaObj::getPreferredSize() const
-{
-    return static_cast< sdr::contact::ViewContactOfSdrMediaObj& >( GetViewContact() ).getPreferredSize();
 }
 
 uno::Reference<io::XInputStream> SdrMediaObj::GetInputStream()
@@ -269,97 +258,6 @@ uno::Reference<io::XInputStream> SdrMediaObj::GetInputStream()
     return tempFile.openStream();
 }
 
-#if HAVE_FEATURE_GLTF
-static bool lcl_HandleJsonPackageURL(
-    const OUString& rURL,
-    SdrModel* const pModel,
-    OUString& o_rTempFileURL,
-    OUString& o_rTempDirURL)
-{
-    // Create a temporary folder which will contain all files of glTF model
-    o_rTempDirURL = ::utl::TempFile(nullptr, true).GetURL();
-
-    const sal_uInt16 nPackageLength = OString("vnd.sun.star.Package:").getLength();
-    const OUString sUrlPath = rURL.copy(nPackageLength,rURL.lastIndexOf("/")-nPackageLength);
-    try
-    {
-        // Base storage:
-        uno::Reference<document::XStorageBasedDocument> const xSBD(
-            pModel->getUnoModel(), uno::UNO_QUERY_THROW);
-        const uno::Reference<embed::XStorage> xStorage(
-            xSBD->getDocumentStorage(), uno::UNO_QUERY_THROW);
-
-        // Model source
-        ::comphelper::LifecycleProxy proxy;
-        const uno::Reference<embed::XStorage> xModelStorage(
-            ::comphelper::OStorageHelper::GetStorageAtPath(xStorage, sUrlPath,
-                embed::ElementModes::READ, proxy));
-
-        // Copy all files of glTF model from storage to the temp folder
-        uno::Reference< container::XNameAccess > xNameAccess( xModelStorage, uno::UNO_QUERY );
-        const uno::Sequence< OUString > aFilenames = xNameAccess->getElementNames();
-        for( sal_Int32 nFileIndex = 0; nFileIndex < aFilenames.getLength(); ++nFileIndex )
-        {
-            // Generate temp file path
-            const OUString& rFilename = aFilenames[nFileIndex];
-            INetURLObject aUrlObj(o_rTempDirURL);
-            aUrlObj.insertName(rFilename);
-            const OUString sFilepath = aUrlObj.GetMainURL( INetURLObject::NO_DECODE );
-
-            // Media URL will point at json file
-            if( rFilename.endsWith(".json") )
-                o_rTempFileURL = sFilepath;
-
-            // Create temp file and fill it from storage
-            ::ucbhelper::Content aTargetContent(sFilepath,
-                uno::Reference<ucb::XCommandEnvironment>(), comphelper::getProcessComponentContext());
-
-            uno::Reference<io::XStream> const xStream(
-                xModelStorage->openStreamElement(rFilename,embed::ElementModes::READ), uno::UNO_SET_THROW);
-            uno::Reference<io::XInputStream> const xInputStream(
-                xStream->getInputStream(), uno::UNO_SET_THROW);
-
-            aTargetContent.writeStream(xInputStream,true);
-        }
-
-    }
-    catch (uno::Exception const& e)
-    {
-        SAL_INFO("svx", "exception while copying glTF related files to temp directory '" << e.Message << "'");
-    }
-    return true;
-}
-#endif
-
-static bool lcl_CopyToTempFile(
-        uno::Reference<io::XInputStream> const& xInStream,
-        OUString & o_rTempFileURL)
-{
-    OUString tempFileURL;
-    ::osl::FileBase::RC const err =
-        ::osl::FileBase::createTempFile(nullptr, nullptr, & tempFileURL);
-    if (::osl::FileBase::E_None != err)
-    {
-        SAL_INFO("svx", "cannot create temp file");
-        return false;
-    }
-
-    try
-    {
-        ::ucbhelper::Content tempContent(tempFileURL,
-                uno::Reference<ucb::XCommandEnvironment>(),
-                comphelper::getProcessComponentContext());
-        tempContent.writeStream(xInStream, true); // copy stream to file
-    }
-    catch (uno::Exception const& e)
-    {
-        SAL_WARN("svx", "exception: '" << e.Message << "'");
-        return false;
-    }
-    o_rTempFileURL = tempFileURL;
-    return true;
-}
-
 void SdrMediaObj::SetInputStream(uno::Reference<io::XInputStream> const& xStream)
 {
     if (m_xImpl->m_pTempFile || m_xImpl->m_LastFailedPkgURL.isEmpty())
@@ -367,41 +265,45 @@ void SdrMediaObj::SetInputStream(uno::Reference<io::XInputStream> const& xStream
         SAL_WARN("svx", "this is only intended for embedded media");
         return;
     }
+
     OUString tempFileURL;
-    bool const bSuccess = lcl_CopyToTempFile(xStream, tempFileURL);
+    const bool bSuccess(
+        ::avmedia::CreateMediaTempFile(
+            xStream,
+            tempFileURL,
+            ""));
+
     if (bSuccess)
     {
-        m_xImpl->m_pTempFile.reset(new MediaTempFile(tempFileURL, ""));
+        m_xImpl->m_pTempFile.reset(new ::avmedia::MediaTempFile(tempFileURL));
+#if HAVE_FEATURE_AVMEDIA
         m_xImpl->m_MediaProperties.setURL(
             m_xImpl->m_LastFailedPkgURL, tempFileURL, "");
+#endif
     }
     m_xImpl->m_LastFailedPkgURL.clear(); // once only
 }
 
 /// copy a stream from XStorage to temp file
+#if HAVE_FEATURE_AVMEDIA
 static bool lcl_HandlePackageURL(
-        OUString const & rURL,
-        SdrModel *const pModel,
-        OUString & o_rTempFileURL)
+    OUString const & rURL,
+    const SdrModel& rModel,
+    OUString & o_rTempFileURL)
 {
-    if (!pModel)
-    {
-        SAL_WARN("svx", "no model");
-        return false;
-    }
     ::comphelper::LifecycleProxy sourceProxy;
     uno::Reference<io::XInputStream> xInStream;
     try {
-        xInStream = pModel->GetDocumentStream(rURL, sourceProxy);
+        xInStream = rModel.GetDocumentStream(rURL, sourceProxy);
     }
     catch (container::NoSuchElementException const&)
     {
-        SAL_INFO("svx", "not found: '" << OUString(rURL) << "'");
+        SAL_INFO("svx", "not found: '" << rURL << "'");
         return false;
     }
     catch (uno::Exception const& e)
     {
-        SAL_WARN("svx", "exception: '" << e.Message << "'");
+        SAL_WARN("svx", "exception: '" << e << "'");
         return false;
     }
     if (!xInStream.is())
@@ -409,15 +311,25 @@ static bool lcl_HandlePackageURL(
         SAL_WARN("svx", "no stream?");
         return false;
     }
-    return lcl_CopyToTempFile(xInStream, o_rTempFileURL);
+    // Make sure the temporary copy has the same file name extension as the original media file
+    // (like .mp4). That seems to be important for some AVFoundation APIs. For random extension-less
+    // file names, they don't seem to even bother looking inside the file.
+    sal_Int32 nLastDot = rURL.lastIndexOf('.');
+    sal_Int32 nLastSlash = rURL.lastIndexOf('/');
+    OUString sDesiredExtension;
+    if (nLastDot > nLastSlash && nLastDot+1 < rURL.getLength())
+        sDesiredExtension = rURL.copy(nLastDot);
+    return ::avmedia::CreateMediaTempFile(xInStream, o_rTempFileURL, sDesiredExtension);
 }
+#endif
 
 void SdrMediaObj::mediaPropertiesChanged( const ::avmedia::MediaItem& rNewProperties )
 {
     bool bBroadcastChanged = false;
+#if HAVE_FEATURE_AVMEDIA
     const AVMediaSetMask nMaskSet = rNewProperties.getMaskSet();
 
-    // use only a subset of MediaItem properties for own own properties
+    // use only a subset of MediaItem properties for own properties
     if( AVMediaSetMask::MIME_TYPE & nMaskSet )
         m_xImpl->m_MediaProperties.setMimeType( rNewProperties.getMimeType() );
 
@@ -425,7 +337,7 @@ void SdrMediaObj::mediaPropertiesChanged( const ::avmedia::MediaItem& rNewProper
         ( rNewProperties.getURL() != getURL() ))
     {
         m_xImpl->m_xCachedSnapshot.clear();
-        OUString const url(rNewProperties.getURL());
+        OUString const& url(rNewProperties.getURL());
         if (url.startsWithIgnoreAsciiCase("vnd.sun.star.Package:"))
         {
             if (   !m_xImpl->m_pTempFile
@@ -433,24 +345,26 @@ void SdrMediaObj::mediaPropertiesChanged( const ::avmedia::MediaItem& rNewProper
                                 rNewProperties.getTempURL()))
             {
                 OUString tempFileURL;
-                OUString tempDirURL;
-                bool bSuccess;
-#if HAVE_FEATURE_GLTF
-                if( url.endsWith(".json") )
-                    bSuccess = lcl_HandleJsonPackageURL(url, GetModel(), tempFileURL, tempDirURL);
-                else
-#endif
-                    bSuccess = lcl_HandlePackageURL(url, GetModel(), tempFileURL);
+                const bool bSuccess(
+                    lcl_HandlePackageURL(
+                        url,
+                        getSdrModelFromSdrObject(),
+                        tempFileURL));
+
                 if (bSuccess)
                 {
                     m_xImpl->m_pTempFile.reset(
-                            new MediaTempFile(tempFileURL, tempDirURL));
+                            new ::avmedia::MediaTempFile(tempFileURL));
+#if HAVE_FEATURE_AVMEDIA
                     m_xImpl->m_MediaProperties.setURL(url, tempFileURL, "");
+#endif
                 }
                 else // this case is for Clone via operator=
                 {
                     m_xImpl->m_pTempFile.reset();
+#if HAVE_FEATURE_AVMEDIA
                     m_xImpl->m_MediaProperties.setURL("", "", "");
+#endif
                     // UGLY: oox import also gets here, because unlike ODF
                     // getDocumentStorage() is not the imported file...
                     m_xImpl->m_LastFailedPkgURL = url;
@@ -458,14 +372,18 @@ void SdrMediaObj::mediaPropertiesChanged( const ::avmedia::MediaItem& rNewProper
             }
             else
             {
+#if HAVE_FEATURE_AVMEDIA
                 m_xImpl->m_MediaProperties.setURL(url,
                         rNewProperties.getTempURL(), "");
+#endif
             }
         }
         else
         {
             m_xImpl->m_pTempFile.reset();
+#if HAVE_FEATURE_AVMEDIA
             m_xImpl->m_MediaProperties.setURL(url, "", rNewProperties.getReferer());
+#endif
         }
         bBroadcastChanged = true;
     }
@@ -481,6 +399,9 @@ void SdrMediaObj::mediaPropertiesChanged( const ::avmedia::MediaItem& rNewProper
 
     if( AVMediaSetMask::ZOOM & nMaskSet )
         m_xImpl->m_MediaProperties.setZoom( rNewProperties.getZoom() );
+#else
+    (void) rNewProperties;
+#endif
 
     if( bBroadcastChanged )
     {

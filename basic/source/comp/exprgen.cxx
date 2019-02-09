@@ -18,9 +18,9 @@
  */
 
 
-#include "codegen.hxx"
-#include "expr.hxx"
-#include "parser.hxx"
+#include <codegen.hxx>
+#include <expr.hxx>
+#include <parser.hxx>
 
 // Transform table for token operators and opcodes
 
@@ -68,7 +68,7 @@ void SbiExprNode::Gen( SbiCodeGen& rGen, RecursiveMode eRecMode )
             rGen.Gen( SbiOpcode::EMPTY_ );
             break;
         case SbxINTEGER:
-            rGen.Gen( SbiOpcode::CONST_,  (short) nVal );
+            rGen.Gen( SbiOpcode::CONST_,  static_cast<short>(nVal) );
             break;
         case SbxSTRING:
             nStringId = rGen.GetParser()->aGblStrings.Add( aStrVal );
@@ -87,7 +87,7 @@ void SbiExprNode::Gen( SbiCodeGen& rGen, RecursiveMode eRecMode )
         if( aVar.pDef->GetScope() == SbPARAM )
         {
             eOp = SbiOpcode::PARAM_;
-            if( 0 == aVar.pDef->GetPos() )
+            if( aVar.pDef->GetPos() == 0 )
             {
                 bool bTreatFunctionAsParam = true;
                 if( eRecMode == FORCE_CALL )
@@ -108,7 +108,7 @@ void SbiExprNode::Gen( SbiCodeGen& rGen, RecursiveMode eRecMode )
             }
         }
         // special treatment for WITH
-        else if( (pWithParent_ = GetWithParent()) != nullptr )
+        else if( (pWithParent_ = pWithParent) != nullptr )
         {
             eOp = SbiOpcode::ELEM_;            // .-Term in WITH
         }
@@ -141,12 +141,12 @@ void SbiExprNode::Gen( SbiCodeGen& rGen, RecursiveMode eRecMode )
             eOp = SbiOpcode::ELEM_;
         }
     }
-    else if( IsTypeOf() )
+    else if( eNodeType == SbxTYPEOF )
     {
         pLeft->Gen(rGen);
         rGen.Gen( SbiOpcode::TESTCLASS_, nTypeStrId );
     }
-    else if( IsNew() )
+    else if( eNodeType == SbxNEW )
     {
         rGen.Gen( SbiOpcode::CREATE_, 0, nTypeStrId );
     }

@@ -17,26 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "WCPage.hxx"
-#include "WCopyTable.hxx"
-#include "WColumnSelect.hxx"
-#include "WExtendPages.hxx"
+#include <WCPage.hxx>
+#include <WCopyTable.hxx>
+#include <WColumnSelect.hxx>
+#include <WExtendPages.hxx>
 
-#include "defaultobjectnamecheck.hxx"
-#include <tools/debug.hxx>
-#include "dbaccess_helpid.hrc"
-#include "dbu_misc.hrc"
+#include <defaultobjectnamecheck.hxx>
+#include <strings.hrc>
+#include <core_resource.hxx>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/sdb/CommandType.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
 #include <com/sun/star/sdbcx/XViewsSupplier.hpp>
 #include <com/sun/star/sdb/application/CopyTableOperation.hpp>
-#include <vcl/msgbox.hxx>
 #include <connectivity/dbexception.hxx>
 #include <connectivity/dbtools.hxx>
-#include "UITools.hxx"
-#include "moduledbu.hxx"
+#include <UITools.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 
 using namespace ::dbaui;
@@ -51,12 +48,9 @@ using namespace ::com::sun::star::sdbcx;
 
 namespace CopyTableOperation = css::sdb::application::CopyTableOperation;
 
-// Klasse OCopyTable
 OCopyTable::OCopyTable(vcl::Window * pParent)
     : OWizardPage(pParent, "CopyTablePage", "dbaccess/ui/copytablepage.ui")
     , m_nOldOperation(0)
-    , m_pPage2(nullptr)
-    , m_pPage3(nullptr)
     , m_bPKeyAllowed(false)
     , m_bUseHeaderAllowed(true)
 {
@@ -70,7 +64,7 @@ OCopyTable::OCopyTable(vcl::Window * pParent)
     get(m_pFT_KeyName, "keynamelabel");
     get(m_pEdKeyName, "keyname");
 
-    m_pEdTableName->SetMaxTextLen();
+    m_pEdTableName->SetMaxTextLen(EDIT_NOLIMIT);
 
     if ( m_pParent->m_xDestConnection.is() )
     {
@@ -92,15 +86,13 @@ OCopyTable::OCopyTable(vcl::Window * pParent)
 
         m_pFT_KeyName->Enable(false);
         m_pEdKeyName->Enable(false);
-        OUString sKeyName("ID");
-        sKeyName = m_pParent->createUniqueName(sKeyName);
-        m_pEdKeyName->SetText(sKeyName);
+        m_pEdKeyName->SetText(m_pParent->createUniqueName("ID"));
 
-        sal_Int32 nMaxLen = m_pParent->getMaxColumnNameLength();
+        const sal_Int32 nMaxLen = m_pParent->getMaxColumnNameLength();
         m_pEdKeyName->SetMaxTextLen(nMaxLen ? nMaxLen : EDIT_NOLIMIT);
     }
 
-    SetText(ModuleRes(STR_COPYTABLE_TITLE_COPY));
+    SetText(DBA_RES(STR_COPYTABLE_TITLE_COPY));
 }
 
 OCopyTable::~OCopyTable()
@@ -119,12 +111,10 @@ void OCopyTable::dispose()
     m_pCB_PrimaryColumn.clear();
     m_pFT_KeyName.clear();
     m_pEdKeyName.clear();
-    m_pPage2.clear();
-    m_pPage3.clear();
     OWizardPage::dispose();
 }
 
-IMPL_LINK_NOARG_TYPED( OCopyTable, AppendDataClickHdl, Button*, void )
+IMPL_LINK_NOARG( OCopyTable, AppendDataClickHdl, Button*, void )
 {
     SetAppendDataRadio();
 }
@@ -138,7 +128,7 @@ void OCopyTable::SetAppendDataRadio()
     m_pParent->setOperation(CopyTableOperation::AppendData);
 }
 
-IMPL_LINK_TYPED( OCopyTable, RadioChangeHdl, Button*, pButton, void )
+IMPL_LINK( OCopyTable, RadioChangeHdl, Button*, pButton, void )
 {
     m_pParent->EnableNextButton(pButton != m_pRB_View);
     bool bKey = m_bPKeyAllowed && pButton != m_pRB_View;
@@ -147,7 +137,7 @@ IMPL_LINK_TYPED( OCopyTable, RadioChangeHdl, Button*, pButton, void )
     m_pCB_PrimaryColumn->Enable(bKey);
     m_pCB_UseHeaderLine->Enable(m_bUseHeaderAllowed && IsOptionDefData());
 
-    // set typ what to do
+    // set type what to do
     if( IsOptionDefData() )
         m_pParent->setOperation( CopyTableOperation::CopyDefinitionAndData );
     else if( IsOptionDef() )
@@ -156,7 +146,7 @@ IMPL_LINK_TYPED( OCopyTable, RadioChangeHdl, Button*, pButton, void )
         m_pParent->setOperation( CopyTableOperation::CreateAsView );
 }
 
-IMPL_LINK_NOARG_TYPED( OCopyTable, KeyClickHdl, Button*, void )
+IMPL_LINK_NOARG( OCopyTable, KeyClickHdl, Button*, void )
 {
     m_pEdKeyName->Enable(m_pCB_PrimaryColumn->IsChecked());
     m_pFT_KeyName->Enable(m_pCB_PrimaryColumn->IsChecked());
@@ -176,7 +166,7 @@ bool OCopyTable::LeavePage()
         SQLExceptionInfo aErrorInfo;
         if ( !aNameCheck.isNameValid( m_pEdTableName->GetText(), aErrorInfo ) )
         {
-            aErrorInfo.append( SQLExceptionInfo::TYPE::SQLContext, ModuleRes( STR_SUGGEST_APPEND_TABLE_DATA ) );
+            aErrorInfo.append( SQLExceptionInfo::TYPE::SQLContext, DBA_RES( STR_SUGGEST_APPEND_TABLE_DATA ) );
             m_pParent->showError(aErrorInfo.get());
 
             return false;
@@ -196,8 +186,7 @@ bool OCopyTable::LeavePage()
         sal_Int32 nMaxLength = xMeta->getMaxTableNameLength();
         if ( nMaxLength && sTable.getLength() > nMaxLength )
         {
-            OUString sError(ModuleRes(STR_INVALID_TABLE_NAME_LENGTH));
-            m_pParent->showError(sError);
+            m_pParent->showError(DBA_RES(STR_INVALID_TABLE_NAME_LENGTH));
             return false;
         }
 
@@ -205,10 +194,7 @@ bool OCopyTable::LeavePage()
         if (    m_pParent->m_bCreatePrimaryKeyColumn
             &&  m_pParent->m_aKeyName != m_pParent->createUniqueName(m_pParent->m_aKeyName) )
         {
-            OUString aInfoString( ModuleRes(STR_WIZ_NAME_ALREADY_DEFINED) );
-            aInfoString += " ";
-            aInfoString += m_pParent->m_aKeyName;
-            m_pParent->showError(aInfoString);
+            m_pParent->showError(DBA_RES(STR_WIZ_NAME_ALREADY_DEFINED) + " " + m_pParent->m_aKeyName);
             return false;
         }
     }
@@ -239,8 +225,7 @@ bool OCopyTable::LeavePage()
 
     if(m_pParent->m_sName.isEmpty())
     {
-        OUString sError(ModuleRes(STR_INVALID_TABLE_NAME));
-        m_pParent->showError(sError);
+        m_pParent->showError(DBA_RES(STR_INVALID_TABLE_NAME));
         return false;
     }
 
@@ -257,7 +242,7 @@ void OCopyTable::ActivatePage()
 
 OUString OCopyTable::GetTitle() const
 {
-    return ModuleRes(STR_WIZ_TABLE_COPY);
+    return DBA_RES(STR_WIZ_TABLE_COPY);
 }
 
 void OCopyTable::Reset()
@@ -280,7 +265,7 @@ bool OCopyTable::checkAppendData()
     {
         const ODatabaseExport::TColumnVector& rSrcColumns = m_pParent->getSrcVector();
         const sal_uInt32 nSrcSize = rSrcColumns.size();
-        m_pParent->m_vColumnPos.resize( nSrcSize, ODatabaseExport::TPositions::value_type( COLUMN_POSITION_NOT_FOUND, COLUMN_POSITION_NOT_FOUND ) );
+        m_pParent->m_vColumnPositions.resize( nSrcSize, ODatabaseExport::TPositions::value_type( COLUMN_POSITION_NOT_FOUND, COLUMN_POSITION_NOT_FOUND ) );
         m_pParent->m_vColumnTypes.resize( nSrcSize , COLUMN_POSITION_NOT_FOUND );
 
         // set new destination
@@ -288,18 +273,18 @@ bool OCopyTable::checkAppendData()
         ObjectCopySource aTableCopySource( m_pParent->m_xDestConnection, xTable );
         m_pParent->loadData( aTableCopySource, m_pParent->m_vDestColumns, m_pParent->m_aDestVec );
         const ODatabaseExport::TColumnVector& rDestColumns          = m_pParent->getDestVector();
-        ODatabaseExport::TColumnVector::const_iterator aDestIter    = rDestColumns.begin();
-        ODatabaseExport::TColumnVector::const_iterator aDestEnd     = rDestColumns.end();
-        const sal_uInt32 nDestSize = rDestColumns.size();
+        const sal_uInt32 nMinSrcDestSize = std::min<sal_uInt32>(nSrcSize, rDestColumns.size());
         sal_uInt32 i = 0;
-        for(sal_Int32 nPos = 1;aDestIter != aDestEnd && i < nDestSize && i < nSrcSize;++aDestIter,++nPos,++i)
+        for (auto const& column : rDestColumns)
         {
+            if (i >= nMinSrcDestSize)
+                break;
             bool bNotConvert = true;
-            m_pParent->m_vColumnPos[i] = ODatabaseExport::TPositions::value_type(nPos,nPos);
-            TOTypeInfoSP pTypeInfo = m_pParent->convertType((*aDestIter)->second->getSpecialTypeInfo(),bNotConvert);
+            m_pParent->m_vColumnPositions[i] = ODatabaseExport::TPositions::value_type(i+1,i+1);
+            TOTypeInfoSP pTypeInfo = m_pParent->convertType(column->second->getSpecialTypeInfo(),bNotConvert);
             if ( !bNotConvert )
             {
-                m_pParent->showColumnTypeNotSupported((*aDestIter)->first);
+                m_pParent->showColumnTypeNotSupported(column->first);
                 return false;
             }
 
@@ -307,14 +292,14 @@ bool OCopyTable::checkAppendData()
                 m_pParent->m_vColumnTypes[i] = pTypeInfo->nType;
             else
                 m_pParent->m_vColumnTypes[i] = DataType::VARCHAR;
+            ++i;
         }
 
     }
 
     if ( !xTable.is() )
     {
-        OUString sError(ModuleRes(STR_INVALID_TABLE_NAME));
-        m_pParent->showError(sError);
+        m_pParent->showError(DBA_RES(STR_INVALID_TABLE_NAME));
         return false;
     }
     return true;

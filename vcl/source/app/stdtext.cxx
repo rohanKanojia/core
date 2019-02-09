@@ -17,30 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vcl/layout.hxx>
 #include <vcl/stdtext.hxx>
+#include <vcl/weld.hxx>
 
-#include <svids.hrc>
+#include <strings.hrc>
 #include <svdata.hxx>
 
-OUString GetStandardText( sal_uInt16 nStdText )
-{
-    ResMgr* pResMgr = ImplGetResMgr();
-    if (pResMgr)
-    {
-        return ResId(nStdText-STANDARD_TEXT_FIRST+SV_STDTEXT_FIRST, *pResMgr).
-            toString();
-    }
-    return OUString();
-}
-
-void ShowServiceNotAvailableError(vcl::Window* pParent,
+void ShowServiceNotAvailableError(weld::Widget* pParent,
     const OUString& rServiceName, bool bError)
 {
-    OUString aText  = GetStandardText(STANDARD_TEXT_SERVICE_NOT_AVAILABLE).
-        replaceAll("%s", rServiceName);
-    ScopedVclPtrInstance< MessageDialog > aBox( pParent, aText, bError ? VCL_MESSAGE_ERROR : VCL_MESSAGE_WARNING );
-    aBox->Execute();
+    OUString aText = VclResId(SV_STDTEXT_SERVICENOTAVAILABLE).replaceAll("%s", rServiceName);
+    std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pParent,
+        bError ? VclMessageType::Error : VclMessageType::Warning, VclButtonsType::Ok, aText));
+    xBox->run();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

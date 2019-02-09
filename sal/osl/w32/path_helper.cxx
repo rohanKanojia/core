@@ -17,34 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-/*******************************************************************
- Includes
- ******************************************************************/
-
 #include "path_helper.hxx"
 #include <osl/diagnose.h>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 
 #include <algorithm>
 #include <wchar.h>
 
-/*******************************************************************
- Constants
- ******************************************************************/
-
-const rtl::OUString BACKSLASH ("\\");
-const rtl::OUString SLASH     ("/");
-
-/*******************************************************************
- osl_systemPathEnsureSeparator
- ******************************************************************/
+const OUString BACKSLASH ("\\");
+const OUString SLASH     ("/");
 
 void osl_systemPathEnsureSeparator(/*inout*/ rtl_uString** ppustrPath)
 {
-    OSL_PRECOND(ppustrPath && (NULL != *ppustrPath), \
+    OSL_PRECOND(ppustrPath && (nullptr != *ppustrPath),
                 "osl_systemPathEnsureSeparator: Invalid parameter");
 
-     rtl::OUString path(*ppustrPath);
+     OUString path(*ppustrPath);
     sal_Int32     i = std::max<sal_Int32>(path.lastIndexOf(BACKSLASH), path.lastIndexOf(SLASH));
 
     if (i < (path.getLength()-1))
@@ -58,13 +47,9 @@ void osl_systemPathEnsureSeparator(/*inout*/ rtl_uString** ppustrPath)
                  "osl_systemPathEnsureSeparator: Post condition failed");
 }
 
-/*******************************************************************
- osl_systemPathRemoveSeparator
- ******************************************************************/
-
-void SAL_CALL osl_systemPathRemoveSeparator(/*inout*/ rtl_uString** ppustrPath)
+void osl_systemPathRemoveSeparator(/*inout*/ rtl_uString** ppustrPath)
 {
-    rtl::OUString path(*ppustrPath);
+    OUString path(*ppustrPath);
 
     if (!osl::systemPathIsLogicalDrivePattern(path))
     {
@@ -72,27 +57,23 @@ void SAL_CALL osl_systemPathRemoveSeparator(/*inout*/ rtl_uString** ppustrPath)
 
         if (i > -1 && (i == (path.getLength() - 1)))
         {
-            path = rtl::OUString(path.getStr(), path.getLength() - 1);
+            path = OUString(path.getStr(), path.getLength() - 1);
             rtl_uString_assign(ppustrPath, path.pData);
         }
     }
 }
 
-/*******************************************************************
- osl_is_logical_drive_pattern
- ******************************************************************/
-
 // is [A-Za-z]:[/|\]\0
-const sal_Char* LDP                    = ":";
-const sal_Char* LDP_WITH_BACKSLASH     = ":\\";
-const sal_Char* LDP_WITH_SLASH         = ":/";
+const sal_Char* const LDP                = ":";
+const sal_Char* const LDP_WITH_BACKSLASH = ":\\";
+const sal_Char* const LDP_WITH_SLASH     = ":/";
 
 // degenerated case returned by the Windows FileOpen dialog
 // when someone enters for instance "x:filename", the Win32
 // API accepts this case
-const sal_Char* LDP_WITH_DOT_BACKSLASH = ":.\\";
+const sal_Char* const LDP_WITH_DOT_BACKSLASH = ":.\\";
 
-sal_Int32 osl_systemPathIsLogicalDrivePattern(/*in*/ const rtl_uString* pustrPath)
+bool osl_systemPathIsLogicalDrivePattern(/*in*/ const rtl_uString* pustrPath)
 {
     const sal_Unicode* p = rtl_uString_getStr(const_cast<rtl_uString*>(pustrPath));
     if (iswalpha(*p++))
@@ -102,7 +83,7 @@ sal_Int32 osl_systemPathIsLogicalDrivePattern(/*in*/ const rtl_uString* pustrPat
                 (0 == rtl_ustr_ascii_compare(p, LDP_WITH_SLASH)) ||
                 (0 == rtl_ustr_ascii_compare(p, LDP_WITH_DOT_BACKSLASH)));
     }
-    return 0;
+    return false;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -17,17 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "doc.hxx"
+#include <doc.hxx>
 #include <IDocumentStylePoolAccess.hxx>
-#include "editsh.hxx"
-#include "swtable.hxx"
-#include "pam.hxx"
+#include <editsh.hxx>
+#include <swtable.hxx>
+#include <pam.hxx>
 #include <docary.hxx>
 #include <fchrfmt.hxx>
 #include <frmfmt.hxx>
 #include <charfmt.hxx>
-#include "ndtxt.hxx"
-#include "hints.hxx"
+#include <ndtxt.hxx>
+#include <hints.hxx>
 
 sal_uInt16 SwEditShell::GetCharFormatCount() const
 {
@@ -42,8 +42,8 @@ SwCharFormat& SwEditShell::GetCharFormat(sal_uInt16 nFormat) const
 SwCharFormat* SwEditShell::GetCurCharFormat() const
 {
     SwCharFormat *pFormat = nullptr;
-    SfxItemSet aSet( GetDoc()->GetAttrPool(), RES_TXTATR_CHARFMT,
-                                                RES_TXTATR_CHARFMT );
+    SfxItemSet aSet( GetDoc()->GetAttrPool(), svl::Items<RES_TXTATR_CHARFMT,
+                                                RES_TXTATR_CHARFMT>{} );
     const SfxPoolItem* pItem;
     if( GetCurAttr( aSet ) && SfxItemState::SET ==
         aSet.GetItemState( RES_TXTATR_CHARFMT, false, &pItem ) )
@@ -91,9 +91,9 @@ void SwEditShell::FillByEx(SwCharFormat* pCharFormat)
         else
             nStt = nEnd = pPam->GetPoint()->nContent.GetIndex();
 
-        SfxItemSet aSet( mpDoc->GetAttrPool(),
+        SfxItemSet aSet( mxDoc->GetAttrPool(),
                             pCharFormat->GetAttrSet().GetRanges() );
-        pTextNode->GetAttr( aSet, nStt, nEnd );
+        pTextNode->GetParaAttr(aSet, nStt, nEnd, false, true, false, GetLayout());
         pCharFormat->SetFormatAttr( aSet );
     }
     else if( pCNd->HasSwAttrSet() )
@@ -140,22 +140,22 @@ SwPageDesc* SwEditShell::GetPageDescFromPool( sal_uInt16 nId )
 
 bool SwEditShell::IsUsed( const SwModify& rModify ) const
 {
-    return mpDoc->IsUsed( rModify );
+    return mxDoc->IsUsed( rModify );
 }
 
 const SwFlyFrameFormat* SwEditShell::FindFlyByName( const OUString& rName ) const
 {
-    return mpDoc->FindFlyByName(rName);
+    return mxDoc->FindFlyByName(rName);
 }
 
 SwCharFormat* SwEditShell::FindCharFormatByName( const OUString& rName ) const
 {
-    return mpDoc->FindCharFormatByName( rName );
+    return mxDoc->FindCharFormatByName( rName );
 }
 
 SwTextFormatColl* SwEditShell::FindTextFormatCollByName( const OUString& rName ) const
 {
-    return mpDoc->FindTextFormatCollByName( rName );
+    return mxDoc->FindTextFormatCollByName( rName );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

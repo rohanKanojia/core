@@ -20,16 +20,15 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_VIEW_SLSLAYOUTER_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_VIEW_SLSLAYOUTER_HXX
 
-#include "SlideSorter.hxx"
-#include "view/SlsPageObjectLayouter.hxx"
-#include "view/SlsTheme.hxx"
+#include <vcl/vclptr.hxx>
+#include <tools/gen.hxx>
 #include <sal/types.h>
-#include <tools/fract.hxx>
-#include <vcl/mapmod.hxx>
-#include <vector>
-#include <utility>
+#include <memory>
 
-class Size;
+namespace sd { class Window; }
+namespace sd { namespace slidesorter { namespace model { class SlideSorterModel; } } }
+namespace sd { namespace slidesorter { namespace view { class PageObjectLayouter; } } }
+namespace sd { namespace slidesorter { namespace view { class Theme; } } }
 
 namespace sd { namespace slidesorter { namespace view {
 
@@ -44,7 +43,7 @@ class InsertPosition;
     5.) Borders around every page object.
     6.) Vertical and horizontal borders between enclosing page and outer
         page objects.
-    From these it calculates various output values:
+    From these, it calculates various output values:
     1.) The width of page objects.
     2.) The number of columns.
     3.) The size of the enclosing page.
@@ -68,7 +67,7 @@ public:
         const std::shared_ptr<Theme>& rpTheme);
     ~Layouter();
 
-    std::shared_ptr<PageObjectLayouter> GetPageObjectLayouter() const;
+    std::shared_ptr<PageObjectLayouter> const & GetPageObjectLayouter() const;
     /** Set the interval of valid column counts.  When nMinimalColumnCount
         <= nMaximalColumnCount is not fulfilled then the call is ignored.
         @param nMinimalColumnCount
@@ -111,19 +110,19 @@ public:
 
     sal_Int32 GetIndex (const sal_Int32 nRow, const sal_Int32 nColumn) const;
 
-    Size GetPageObjectSize() const;
+    Size const & GetPageObjectSize() const;
 
     /** Return the bounding box in window coordinates of the nIndex-th page
         object.
     */
-    Rectangle GetPageObjectBox (
+    ::tools::Rectangle GetPageObjectBox (
         const sal_Int32 nIndex,
-        const bool bIncludeBorderAndGap = false) const;
+        const bool bIncludeBorderAndGap) const;
 
     /** Return the bounding box in model coordinates of the page that
         contains the given amount of page objects.
     */
-    Rectangle GetTotalBoundingBox() const;
+    ::tools::Rectangle GetTotalBoundingBox() const;
 
     /** Return the index of the first fully or partially visible page
         object.  This takes into account only the vertical dimension.
@@ -131,7 +130,7 @@ public:
             The second index may be larger than the number of existing
             page objects.
     */
-    Range GetRangeOfVisiblePageObjects (const Rectangle& rVisibleArea) const;
+    Range GetRangeOfVisiblePageObjects (const ::tools::Rectangle& rVisibleArea) const;
 
     /** Return the index of the page object that is rendered at the given
         point.
@@ -155,7 +154,7 @@ public:
     */
     sal_Int32 GetIndexAtPoint (
         const Point& rModelPosition,
-        const bool bIncludePageBorders = false,
+        const bool bIncludePageBorders,
         const bool bClampToValidRange = true) const;
 
     /** Return an object that describes the logical and visual properties of
@@ -178,7 +177,7 @@ public:
     InsertPosition GetInsertPosition (
         const Point& rModelPosition,
         const Size& rIndicatorSize,
-        model::SlideSorterModel& rModel) const;
+        model::SlideSorterModel const & rModel) const;
 
     Range GetValidHorizontalSizeRange() const;
     Range GetValidVerticalSizeRange() const;
@@ -191,13 +190,12 @@ private:
 };
 
 /** Collect all values concerning the logical and visual properties of the
-    insertion position that is used for drag-and-drop and copy-and-past.
+    insertion position that is used for drag-and-drop and copy-and-paste.
 */
 class InsertPosition
 {
 public:
     InsertPosition();
-    InsertPosition& operator= (const InsertPosition& rInsertPosition);
     bool operator== (const InsertPosition& rInsertPosition) const;
     bool operator!= (const InsertPosition& rInsertPosition) const;
 
@@ -216,9 +214,9 @@ public:
     sal_Int32 GetRow() const { return mnRow; }
     sal_Int32 GetColumn() const { return mnColumn; }
     sal_Int32 GetIndex() const { return mnIndex; }
-    Point GetLocation() const { return maLocation; }
-    Point GetLeadingOffset() const { return maLeadingOffset; }
-    Point GetTrailingOffset() const { return maTrailingOffset; }
+    const Point& GetLocation() const { return maLocation; }
+    const Point& GetLeadingOffset() const { return maLeadingOffset; }
+    const Point& GetTrailingOffset() const { return maTrailingOffset; }
     bool IsAtRunStart() const { return mbIsAtRunStart; }
     bool IsAtRunEnd() const { return mbIsAtRunEnd; }
     bool IsExtraSpaceNeeded() const { return mbIsExtraSpaceNeeded; }

@@ -23,14 +23,13 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
 #include "xmlEnums.hxx"
-#include "xmlstrings.hrc"
+#include <stringconstants.hxx>
+#include <strings.hxx>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
-#include <comphelper/processfactory.hxx>
-#include <comphelper/sequence.hxx>
 #include <svl/filenotation.hxx>
 #include <unotools/pathoptions.hxx>
-#include "dsntypes.hxx"
+#include <dsntypes.hxx>
 namespace dbaxml
 {
     using namespace ::com::sun::star::uno;
@@ -99,15 +98,14 @@ OXMLFileBasedDatabase::OXMLFileBasedDatabase( ODBFilter& rImport,
     if ( !(sLocation.isEmpty() || sMediaType.isEmpty()) )
     {
         ::dbaccess::ODsnTypeCollection aTypeCollection(rImport.GetComponentContext());
-        OUString sURL(aTypeCollection.getDatasourcePrefixFromMediaType(sMediaType,sFileTypeExtension));
-        sURL += sLocation;
+        OUString sURL = aTypeCollection.getDatasourcePrefixFromMediaType(sMediaType,sFileTypeExtension) + sLocation;
         try
         {
             xDataSource->setPropertyValue(PROPERTY_URL,makeAny(sURL));
         }
         catch(const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 }

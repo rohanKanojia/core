@@ -20,15 +20,11 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_DIACTRL_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_DIACTRL_HXX
 
-#include "dlgctrls.hxx"
-#include <svl/intitem.hxx>
-#include <sfx2/bindings.hxx>
 #include <svx/itemwin.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/field.hxx>
-#include <vcl/toolbox.hxx>
 #include <sfx2/tbxctrl.hxx>
-#include <com/sun/star/frame/XFrame.hpp>
+
+namespace com { namespace sun { namespace star { namespace frame { class XFrame; } } } }
+class SfxUInt16Item;
 
 // SdPagesField:
 
@@ -41,9 +37,8 @@ protected:
 
 public:
                     SdPagesField( vcl::Window* pParent,
-                                  const css::uno::Reference< css::frame::XFrame >& rFrame,
-                                  WinBits nBits = WB_BORDER | WB_SPIN | WB_REPEAT );
-                    virtual ~SdPagesField();
+                                  const css::uno::Reference< css::frame::XFrame >& rFrame );
+                    virtual ~SdPagesField() override;
 
     void            UpdatePagesField( const SfxUInt16Item* pItem );
 };
@@ -60,7 +55,7 @@ public:
     SFX_DECL_TOOLBOX_CONTROL();
 
     SdTbxCtlDiaPages( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx );
-    virtual ~SdTbxCtlDiaPages();
+    virtual ~SdTbxCtlDiaPages() override;
 };
 
 #endif // INCLUDED_SD_SOURCE_UI_INC_DIACTRL_HXX

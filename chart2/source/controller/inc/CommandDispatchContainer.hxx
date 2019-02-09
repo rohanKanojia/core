@@ -19,21 +19,22 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_MAIN_COMMANDDISPATCHCONTAINER_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_MAIN_COMMANDDISPATCHCONTAINER_HXX
 
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/frame/DispatchDescriptor.hpp>
-
 #include <cppuhelper/weakref.hxx>
-#include <cppuhelper/interfacecontainer.hxx>
 
 #include <set>
 #include <map>
+#include <vector>
+
+namespace com { namespace sun { namespace star { namespace frame { class XController; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XDispatch; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace frame { struct DispatchDescriptor; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+namespace com { namespace sun { namespace star { namespace util { struct URL; } } } }
 
 namespace chart
 {
 
-class ChartController;
 class DrawCommandDispatch;
 class ShapeController;
 
@@ -70,8 +71,7 @@ public:
     // handled by other dispatchers.  (Chart is currently the controller
     // itself)
     explicit CommandDispatchContainer(
-        const css::uno::Reference< css::uno::XComponentContext > & xContext,
-        ChartController* pController );
+        const css::uno::Reference< css::uno::XComponentContext > & xContext );
 
     void setModel(
         const css::uno::Reference< css::frame::XModel > & xModel );
@@ -81,7 +81,7 @@ public:
      */
     void setChartDispatch(
         const css::uno::Reference< css::frame::XDispatch >& rChartDispatch,
-        const ::std::set< OUString > & rChartCommands );
+        const std::set< OUString > & rChartCommands );
 
     /** Returns the dispatch that is able to do the command given in rURL, if
         implemented here.  If the URL is not implemented here, it should be
@@ -110,12 +110,12 @@ public:
 
 private:
     typedef
-        ::std::map< OUString,
+        std::map< OUString,
             css::uno::Reference< css::frame::XDispatch > >
         tDispatchMap;
 
     typedef
-        ::std::vector< css::uno::Reference< css::frame::XDispatch > > tDisposeVector;
+        std::vector< css::uno::Reference< css::frame::XDispatch > > tDisposeVector;
 
     mutable tDispatchMap m_aCachedDispatches;
     mutable tDisposeVector m_aToBeDisposedDispatches;
@@ -124,11 +124,8 @@ private:
     css::uno::WeakReference< css::frame::XModel >         m_xModel;
 
     css::uno::Reference< css::frame::XDispatch >          m_xChartDispatcher;
-    ::std::set< OUString >                                m_aChartCommands;
+    std::set< OUString >                                m_aChartCommands;
 
-    ::std::set< OUString >                                m_aContainerDocumentCommands;
-
-    ChartController* m_pChartController;
     DrawCommandDispatch* m_pDrawCommandDispatch;
     ShapeController* m_pShapeController;
 };

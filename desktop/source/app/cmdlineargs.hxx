@@ -36,11 +36,12 @@ class CommandLineArgs
         struct Supplier
         {
             // Thrown from constructors and next:
-            class Exception {
+            class Exception final
+            {
             public:
                 Exception();
                 Exception(Exception const &);
-                virtual ~Exception();
+                ~Exception();
                 Exception & operator =(Exception const &);
             };
 
@@ -55,7 +56,7 @@ class CommandLineArgs
         CommandLineArgs(const CommandLineArgs&) = delete;
         const CommandLineArgs& operator=(const CommandLineArgs&) = delete;
 
-        boost::optional< OUString > getCwdUrl() const { return m_cwdUrl; }
+        const boost::optional< OUString >& getCwdUrl() const { return m_cwdUrl; }
 
         // Access to bool parameters
         bool                IsMinimized() const { return m_minimized;}
@@ -92,8 +93,10 @@ class CommandLineArgs
         bool                HasModuleParam() const;
         bool                WantsToLoadDocument() const { return m_bDocumentArgs;}
         bool                IsTextCat() const { return m_textcat;}
+        bool                IsScriptCat() const { return m_scriptcat;}
+        bool                IsSafeMode() const { return m_safemode; }
 
-        OUString            GetUnknown() const { return m_unknown;}
+        const OUString&     GetUnknown() const { return m_unknown;}
 
         // Access to string parameters
         bool                    HasSplashPipe() const { return m_splashpipe;}
@@ -106,13 +109,14 @@ class CommandLineArgs
         std::vector< OUString > GetForceNewList() const;
         std::vector< OUString > GetPrintList() const;
         std::vector< OUString > GetPrintToList() const;
-        OUString       GetPrinterName() const { return m_printername;}
-        OUString       GetLanguage() const { return m_language;}
+        const OUString&         GetPrinterName() const { return m_printername;}
+        const OUString&         GetLanguage() const { return m_language;}
         std::vector< OUString > const & GetInFilter() const { return m_infilter;}
         std::vector< OUString > GetConversionList() const;
-        OUString       GetConversionParams() const { return m_conversionparams;}
-        OUString       GetConversionOut() const;
-        OUString       GetPidfileName() const { return m_pidfile;}
+        const OUString&         GetConversionParams() const { return m_conversionparams;}
+        OUString                GetConversionOut() const;
+        OUString const &        GetImageConversionType() const { return m_convertimages; }
+        const OUString&         GetPidfileName() const { return m_pidfile;}
 
         // Special analyzed states (does not match directly to a command line parameter!)
         bool IsEmpty() const { return m_bEmpty;}
@@ -155,6 +159,8 @@ class CommandLineArgs
         bool m_version;
         bool m_splashpipe;
         bool m_textcat;
+        bool m_scriptcat;
+        bool m_safemode;
 
         OUString m_unknown;
 
@@ -173,6 +179,7 @@ class CommandLineArgs
         std::vector< OUString > m_conversionlist; // contains external URIs
         OUString m_conversionparams;
         OUString m_conversionout; // contains external URIs
+        OUString m_convertimages; // The format in which images should be converted
         std::vector< OUString > m_infilter;
         OUString m_language;
         OUString m_pidfile;

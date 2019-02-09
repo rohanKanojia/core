@@ -19,15 +19,13 @@
 
 #include <limits.h>
 #include <vcl/svapp.hxx>
-#include <editeng/editrids.hrc>
 #include <editeng/paperinf.hxx>
-#include <editeng/eerdll.hxx>
 
 /*--------------------------------------------------------------------
     Description:    Is the printer valid
  --------------------------------------------------------------------*/
 
-inline bool IsValidPrinter( const Printer* pPtr )
+static bool IsValidPrinter( const Printer* pPtr )
 {
     return !pPtr->GetName().isEmpty();
 }
@@ -37,7 +35,9 @@ Size SvxPaperInfo::GetPaperSize( Paper ePaper, MapUnit eUnit )
 {
     PaperInfo aInfo(ePaper);
     Size aRet(aInfo.getWidth(), aInfo.getHeight()); // in 100thMM
-    return eUnit == MAP_100TH_MM ? aRet : OutputDevice::LogicToLogic(aRet, MAP_100TH_MM, eUnit);
+    return eUnit == MapUnit::Map100thMM
+        ? aRet
+        : OutputDevice::LogicToLogic(aRet, MapMode(MapUnit::Map100thMM), MapMode(eUnit));
 }
 
 /*------------------------------------------------------------------------
@@ -65,39 +65,38 @@ Size SvxPaperInfo::GetPaperSize( const Printer* pPrinter )
 
         if ( aPaperSize == aInvalidSize )
             return GetPaperSize(PAPER_A4);
-        MapMode aMap1 = pPrinter->GetMapMode();
+        const MapMode& aMap1 = pPrinter->GetMapMode();
         MapMode aMap2;
 
         if ( aMap1 == aMap2 )
             aPaperSize =
-                pPrinter->PixelToLogic( aPaperSize, MapMode( MAP_TWIP ) );
+                pPrinter->PixelToLogic( aPaperSize, MapMode( MapUnit::MapTwip ) );
         return aPaperSize;
     }
 
     const Orientation eOrient = pPrinter->GetOrientation();
     Size aSize( GetPaperSize( ePaper ) );
         // for Landscape exchange the pages, has already been done by SV
-    if ( eOrient == ORIENTATION_LANDSCAPE )
+    if ( eOrient == Orientation::Landscape )
         Swap( aSize );
     return aSize;
 }
 
 
-Paper SvxPaperInfo::GetSvxPaper( const Size &rSize, MapUnit eUnit, bool bSloppy )
+Paper SvxPaperInfo::GetSvxPaper( const Size &rSize, MapUnit eUnit )
 {
-    Size aSize(eUnit == MAP_100TH_MM ? rSize : OutputDevice::LogicToLogic(rSize, eUnit, MAP_100TH_MM));
+    Size aSize(eUnit == MapUnit::Map100thMM ? rSize : OutputDevice::LogicToLogic(rSize, MapMode(eUnit), MapMode(MapUnit::Map100thMM)));
     PaperInfo aInfo(aSize.Width(), aSize.Height());
-    if (bSloppy)
-        aInfo.doSloppyFit();
+    aInfo.doSloppyFit();
     return aInfo.getPaper();
 }
 
 
 long SvxPaperInfo::GetSloppyPaperDimension( long nSize )
 {
-    nSize = OutputDevice::LogicToLogic(nSize, MAP_TWIP, MAP_100TH_MM);
+    nSize = OutputDevice::LogicToLogic(nSize, MapUnit::MapTwip, MapUnit::Map100thMM);
     nSize = PaperInfo::sloppyFitPageDimension(nSize);
-    return OutputDevice::LogicToLogic(nSize, MAP_100TH_MM, MAP_TWIP);
+    return OutputDevice::LogicToLogic(nSize, MapUnit::Map100thMM, MapUnit::MapTwip);
 }
 
 
@@ -105,7 +104,9 @@ Size SvxPaperInfo::GetDefaultPaperSize( MapUnit eUnit )
 {
     PaperInfo aInfo(PaperInfo::getSystemDefaultPaper());
     Size aRet(aInfo.getWidth(), aInfo.getHeight());
-    return eUnit == MAP_100TH_MM ? aRet : OutputDevice::LogicToLogic(aRet, MAP_100TH_MM, eUnit);
+    return eUnit == MapUnit::Map100thMM
+        ? aRet
+        : OutputDevice::LogicToLogic(aRet, MapMode(MapUnit::Map100thMM), MapMode(eUnit));
 }
 
 /*------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.20.0 -->
+<interface domain="sc">
+  <requires lib="gtk+" version="3.18"/>
   <requires lib="LibreOffice" version="1.0"/>
   <object class="GtkAdjustment" id="decimal-places-adjustment">
     <property name="lower">1</property>
@@ -19,39 +19,39 @@
     </columns>
     <data>
       <row>
-        <col id="0" translatable="yes">Uniform</col>
+        <col id="0" translatable="yes" context="randomnumbergenerator|distribution-liststore">Uniform</col>
         <col id="1">0</col>
       </row>
       <row>
-        <col id="0" translatable="yes">Uniform Integer</col>
+        <col id="0" translatable="yes" context="randomnumbergenerator|distribution-liststore">Uniform Integer</col>
         <col id="1">8</col>
       </row>
       <row>
-        <col id="0" translatable="yes">Normal</col>
+        <col id="0" translatable="yes" context="randomnumbergenerator|distribution-liststore">Normal</col>
         <col id="1">1</col>
       </row>
       <row>
-        <col id="0" translatable="yes">Cauchy</col>
+        <col id="0" translatable="yes" context="randomnumbergenerator|distribution-liststore">Cauchy</col>
         <col id="1">2</col>
       </row>
       <row>
-        <col id="0" translatable="yes">Bernoulli</col>
+        <col id="0" translatable="yes" context="randomnumbergenerator|distribution-liststore">Bernoulli</col>
         <col id="1">3</col>
       </row>
       <row>
-        <col id="0" translatable="yes">Binomial</col>
+        <col id="0" translatable="yes" context="randomnumbergenerator|distribution-liststore">Binomial</col>
         <col id="1">4</col>
       </row>
       <row>
-        <col id="0" translatable="yes">Chi Squared</col>
+        <col id="0" translatable="yes" context="randomnumbergenerator|distribution-liststore">Chi Squared</col>
         <col id="1">5</col>
       </row>
       <row>
-        <col id="0" translatable="yes">Geometric</col>
+        <col id="0" translatable="yes" context="randomnumbergenerator|distribution-liststore">Geometric</col>
         <col id="1">6</col>
       </row>
       <row>
-        <col id="0" translatable="yes">Negative Binomial</col>
+        <col id="0" translatable="yes" context="randomnumbergenerator|distribution-liststore">Negative Binomial</col>
         <col id="1">7</col>
       </row>
     </data>
@@ -70,7 +70,7 @@
   <object class="GtkDialog" id="RandomNumberGeneratorDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Random Number Generator</property>
+    <property name="title" translatable="yes" context="randomnumbergenerator|RandomNumberGeneratorDialog">Random Number Generator</property>
     <property name="resizable">False</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
@@ -176,10 +176,10 @@
                       <object class="GtkLabel" id="cell-range-label">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">0</property>
-                        <property name="label" translatable="yes">Cell range:</property>
+                        <property name="label" translatable="yes" context="randomnumbergenerator|cell-range-label">Cell range:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">cell-range-edit</property>
+                        <property name="xalign">0</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -193,7 +193,6 @@
                         <property name="can_focus">True</property>
                         <property name="valign">center</property>
                         <property name="hexpand">True</property>
-                        <property name="invisible_char">•</property>
                         <property name="width_chars">30</property>
                       </object>
                       <packing>
@@ -222,7 +221,7 @@
               <object class="GtkLabel" id="label1">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Data</property>
+                <property name="label" translatable="yes" context="randomnumbergenerator|label1">Data</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -259,8 +258,10 @@
                       <object class="GtkLabel" id="distribution-label">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
+                        <property name="label" translatable="yes" context="randomnumbergenerator|distribution-label">Distribution:</property>
+                        <property name="use_underline">True</property>
+                        <property name="mnemonic_widget">distribution-combo</property>
                         <property name="xalign">0</property>
-                        <property name="label" translatable="yes">Distribution:</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -284,10 +285,10 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="hexpand">True</property>
-                        <property name="xalign">0</property>
-                        <property name="label" translatable="yes">...</property>
+                        <property name="label" translatable="yes" context="randomnumbergenerator|parameter1-label">...</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">parameter1-spin</property>
+                        <property name="xalign">0</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -299,10 +300,10 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="hexpand">True</property>
-                        <property name="xalign">0</property>
-                        <property name="label" translatable="yes">...</property>
+                        <property name="label" translatable="yes" context="randomnumbergenerator|parameter2-label">...</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">parameter2-spin</property>
+                        <property name="xalign">0</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -314,8 +315,7 @@
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="hexpand">True</property>
-                        <property name="invisible_char">•</property>
-                        <property name="text" translatable="no">0,0000</property>
+                        <property name="text">0,0000</property>
                         <property name="adjustment">parameter2-adjustment</property>
                         <property name="digits">4</property>
                       </object>
@@ -329,8 +329,7 @@
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="hexpand">True</property>
-                        <property name="invisible_char">•</property>
-                        <property name="text" translatable="no">1,0000</property>
+                        <property name="text">1,0000</property>
                         <property name="adjustment">parameter1-adjustment</property>
                         <property name="digits">4</property>
                         <property name="value">1</property>
@@ -348,7 +347,7 @@
               <object class="GtkLabel" id="label2">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Random Number Generator</property>
+                <property name="label" translatable="yes" context="randomnumbergenerator|label2">Random Number Generator</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -383,7 +382,7 @@
                     <property name="column_spacing">12</property>
                     <child>
                       <object class="GtkCheckButton" id="enable-seed-check">
-                        <property name="label" translatable="yes">Enable custom seed</property>
+                        <property name="label" translatable="yes" context="randomnumbergenerator|enable-seed-check">Enable custom seed</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -401,11 +400,11 @@
                       <object class="GtkLabel" id="seed-label">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">0</property>
                         <property name="xpad">12</property>
-                        <property name="label" translatable="yes">Seed:</property>
+                        <property name="label" translatable="yes" context="randomnumbergenerator|seed-label">Seed:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">seed-spin</property>
+                        <property name="xalign">0</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -417,7 +416,6 @@
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="hexpand">True</property>
-                        <property name="invisible_char">•</property>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
@@ -426,7 +424,7 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="enable-rounding-check">
-                        <property name="label" translatable="yes">Enable rounding</property>
+                        <property name="label" translatable="yes" context="randomnumbergenerator|enable-rounding-check">Enable rounding</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -445,10 +443,11 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="hexpand">True</property>
-                        <property name="xalign">0</property>
                         <property name="xpad">12</property>
-                        <property name="label" translatable="yes">Decimal places:</property>
+                        <property name="label" translatable="yes" context="randomnumbergenerator|decimal-places-label">Decimal places:</property>
                         <property name="use_underline">True</property>
+                        <property name="mnemonic_widget">decimal-places-spin</property>
+                        <property name="xalign">0</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -460,8 +459,7 @@
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="hexpand">True</property>
-                        <property name="invisible_char">•</property>
-                        <property name="text" translatable="no">1</property>
+                        <property name="text">1</property>
                         <property name="adjustment">decimal-places-adjustment</property>
                         <property name="value">1</property>
                       </object>
@@ -478,7 +476,7 @@
               <object class="GtkLabel" id="label4">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Options</property>
+                <property name="label" translatable="yes" context="randomnumbergenerator|label4">Options</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -495,8 +493,9 @@
     </child>
     <action-widgets>
       <action-widget response="0">apply</action-widget>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">close</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-7">close</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
   </object>
   <object class="GtkSizeGroup" id="sizegroup1">

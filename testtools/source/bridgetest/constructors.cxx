@@ -18,32 +18,32 @@
  */
 
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "com/sun/star/lang/XInitialization.hpp"
-#include "com/sun/star/lang/XComponent.hpp"
-#include "com/sun/star/uno/Any.hxx"
-#include "com/sun/star/uno/Exception.hpp"
-#include "com/sun/star/uno/Reference.hxx"
-#include "com/sun/star/uno/Sequence.hxx"
-#include "com/sun/star/uno/Type.hxx"
-#include "com/sun/star/uno/XComponentContext.hpp"
-#include "com/sun/star/uno/XInterface.hpp"
-#include "cppu/unotype.hxx"
-#include "cppuhelper/factory.hxx"
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Exception.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <com/sun/star/uno/Type.hxx>
+#include <com/sun/star/uno/XComponentContext.hpp>
+#include <com/sun/star/uno/XInterface.hpp>
+#include <cppu/unotype.hxx>
+#include <cppuhelper/factory.hxx>
 #include <cppuhelper/implbase.hxx>
-#include "cppuhelper/implementationentry.hxx"
-#include "cppuhelper/weak.hxx"
-#include "rtl/string.h"
-#include "rtl/ustring.h"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
-#include "test/testtools/bridgetest/BadConstructorArguments.hpp"
-#include "test/testtools/bridgetest/TestEnum.hpp"
-#include "test/testtools/bridgetest/TestStruct.hpp"
-#include "test/testtools/bridgetest/TestPolyStruct.hpp"
-#include "test/testtools/bridgetest/TestPolyStruct2.hpp"
-#include "test/testtools/bridgetest/XMultiBase1.hpp"
+#include <cppuhelper/implementationentry.hxx>
+#include <cppuhelper/weak.hxx>
+#include <rtl/string.h>
+#include <rtl/ustring.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <test/testtools/bridgetest/BadConstructorArguments.hpp>
+#include <test/testtools/bridgetest/TestEnum.hpp>
+#include <test/testtools/bridgetest/TestStruct.hpp>
+#include <test/testtools/bridgetest/TestPolyStruct.hpp>
+#include <test/testtools/bridgetest/TestPolyStruct2.hpp>
+#include <test/testtools/bridgetest/XMultiBase1.hpp>
 
 namespace {
 
@@ -57,15 +57,13 @@ public:
     Impl& operator=(const Impl&) = delete;
 
 private:
-    virtual ~Impl() {}
+    virtual ~Impl() override {}
 
     virtual void SAL_CALL initialize(
-        css::uno::Sequence< css::uno::Any > const & arguments)
-        throw (css::uno::Exception, std::exception) override;
+        css::uno::Sequence< css::uno::Any > const & arguments) override;
 };
 
 void Impl::initialize(css::uno::Sequence< css::uno::Any > const & arguments)
-    throw (css::uno::Exception, std::exception)
 {
     bool arg0;
     ::sal_Int8 arg1 = sal_Int8();
@@ -77,6 +75,7 @@ void Impl::initialize(css::uno::Sequence< css::uno::Any > const & arguments)
     ::sal_uInt64 arg7 = sal_uInt64();
     float arg8 = float();
     double arg9 = double();
+    sal_Unicode arg10 = sal_Unicode();
     OUString arg11;
     css::uno::Type arg12;
     bool arg13;
@@ -90,6 +89,7 @@ void Impl::initialize(css::uno::Sequence< css::uno::Any > const & arguments)
     css::uno::Sequence< ::sal_uInt64 > arg21;
     css::uno::Sequence< float > arg22;
     css::uno::Sequence< double > arg23;
+    css::uno::Sequence< sal_Unicode > arg24;
     css::uno::Sequence< OUString > arg25;
     css::uno::Sequence< css::uno::Type > arg26;
     css::uno::Sequence< css::uno::Any > arg27;
@@ -115,8 +115,6 @@ void Impl::initialize(css::uno::Sequence< css::uno::Any > const & arguments)
           && (arguments[0] >>= arg0) && arg0
           && (arguments[1] >>= arg1) && arg1 == SAL_MIN_INT8
           && (arguments[2] >>= arg2) && arg2 == SAL_MIN_INT16
-          && (arguments[3].getValueType()
-              == ::cppu::UnoType< ::cppu::UnoUnsignedShortType >::get())
           && (arguments[3] >>= arg3) && arg3 == SAL_MAX_UINT16
           && (arguments[4] >>= arg4) && arg4 == SAL_MIN_INT32
           && (arguments[5] >>= arg5) && arg5 == SAL_MAX_UINT32
@@ -124,10 +122,7 @@ void Impl::initialize(css::uno::Sequence< css::uno::Any > const & arguments)
           && (arguments[7] >>= arg7) && arg7 == SAL_MAX_UINT64
           && (arguments[8] >>= arg8) && arg8 == 0.123f
           && (arguments[9] >>= arg9) && arg9 == 0.456
-          && (arguments[10].getValueType()
-              == ::cppu::UnoType< ::cppu::UnoCharType >::get())
-          && (*static_cast< ::sal_Unicode const * >(arguments[10].getValue())
-              == 'X')
+          && (arguments[10] >>= arg10) && arg10 == 'X'
           && (arguments[11] >>= arg11)
           && arg11 == "test"
           && (arguments[12] >>= arg12)
@@ -138,10 +133,6 @@ void Impl::initialize(css::uno::Sequence< css::uno::Any > const & arguments)
           && arg15[0] == SAL_MIN_INT8
           && (arguments[16] >>= arg16) && arg16.getLength() == 1
           && arg16[0] == SAL_MIN_INT16
-          && (arguments[17].getValueType()
-              == ::cppu::UnoType<
-                  ::cppu::UnoSequenceType <
-                      ::cppu::UnoUnsignedShortType > >::get())
           && (arguments[17] >>= arg17) && arg17.getLength() == 1
           && arg17[0] == SAL_MAX_UINT16
           && (arguments[18] >>= arg18) && arg18.getLength() == 1
@@ -156,15 +147,8 @@ void Impl::initialize(css::uno::Sequence< css::uno::Any > const & arguments)
           && arg22[0] == 0.123f
           && (arguments[23] >>= arg23) && arg23.getLength() == 1
           && arg23[0] == 0.456
-          && (arguments[24].getValueType()
-              == ::cppu::UnoType<
-                  ::cppu::UnoSequenceType< ::cppu::UnoCharType > >::get())
-          && (static_cast< css::uno::Sequence< ::sal_Unicode > const * >(
-                  arguments[24].getValue())->getLength()
-              == 1)
-          && ((*static_cast< css::uno::Sequence< ::sal_Unicode > const * >(
-                   arguments[24].getValue()))[0]
-              == 'X')
+          && (arguments[24] >>= arg24) && arg24.getLength() == 1
+          && arg24[0] == 'X'
           && (arguments[25] >>= arg25) && arg25.getLength() == 1
           && arg25[0] == "test"
           && (arguments[26] >>= arg26) && arg26.getLength() == 1
@@ -204,32 +188,26 @@ public:
     Impl2(): m_attr1(0.0) {}
 
 private:
-    virtual ~Impl2() {}
+    virtual ~Impl2() override {}
 
     virtual void SAL_CALL initialize(
-        css::uno::Sequence< css::uno::Any > const & arguments)
-        throw (css::uno::Exception, std::exception) override;
+        css::uno::Sequence< css::uno::Any > const & arguments) override;
 
     //XMultiBase1
-    virtual double SAL_CALL getatt1()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setatt1( double _att1 )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual ::sal_Int32 SAL_CALL fn11( ::sal_Int32 arg )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL fn12( const OUString& arg )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual double SAL_CALL getatt1() override;
+    virtual void SAL_CALL setatt1( double _att1 ) override;
+    virtual ::sal_Int32 SAL_CALL fn11( ::sal_Int32 arg ) override;
+    virtual OUString SAL_CALL fn12( const OUString& arg ) override;
 
 
     double m_attr1;
 };
 
 void Impl2::initialize(css::uno::Sequence< css::uno::Any > const & arguments)
-    throw (css::uno::Exception, std::exception)
 {
     ttb::TestPolyStruct< css::uno::Type > arg0;
     ttb::TestPolyStruct< css::uno::Any > arg1;
-    css::uno::Any arg1b(sal_True);
+    css::uno::Any arg1b(true);
     ttb::TestPolyStruct< sal_Bool > arg2;
     ttb::TestPolyStruct< ::sal_Int8 > arg3;
     ttb::TestPolyStruct< ::sal_Int16 > arg4;
@@ -258,7 +236,7 @@ void Impl2::initialize(css::uno::Sequence< css::uno::Any > const & arguments)
     ttb::TestPolyStruct<css::uno::Sequence< ::sal_Int16 > > arg22;
     ttb::TestPolyStruct<css::uno::Sequence< ::sal_Int32 > > arg23;
     ttb::TestPolyStruct<css::uno::Sequence< ::sal_Int64 > > arg24;
-//    ttb::TestPolyStruct<css::uno::Sequence<::sal_Unicode> > arg25;
+    ttb::TestPolyStruct<css::uno::Sequence< sal_Unicode> > arg25;
     ttb::TestPolyStruct<css::uno::Sequence< OUString > > arg26;
     ttb::TestPolyStruct<css::uno::Sequence<float> > arg27;
     ttb::TestPolyStruct<css::uno::Sequence<double> > arg28;
@@ -328,11 +306,8 @@ void Impl2::initialize(css::uno::Sequence< css::uno::Any > const & arguments)
           && arg23.member[0] == SAL_MIN_INT32
           && (arguments[24] >>= arg24) && arg24.member.getLength() == 1
           && arg24.member[0] == SAL_MIN_INT64
-          && (arguments[25].getValueType()
-               == ::cppu::UnoType< ttb::TestPolyStruct< ::cppu::UnoSequenceType<
-              ::cppu::UnoCharType> > >::get())
-          && (static_cast< ttb::TestPolyStruct<css::uno::Sequence<
-              ::sal_Unicode> > const *>(arguments[25].getValue())->member[0]) == 'X'
+          && (arguments[25] >>= arg25) && arg25.member.getLength() == 1
+          && arg25.member[0] == 'X'
           && (arguments[26] >>= arg26) && arg26.member.getLength() == 1
           && arg26.member[0] == "test"
           && (arguments[27] >>= arg27) && arg27.member.getLength() == 1
@@ -411,63 +386,60 @@ void Impl2::initialize(css::uno::Sequence< css::uno::Any > const & arguments)
 
 //XMultiBase1
 double Impl2::getatt1()
-        throw (css::uno::RuntimeException, std::exception)
 {
     return m_attr1;
 }
 
-void Impl2::setatt1( double _att1 )throw (css::uno::RuntimeException, std::exception)
+void Impl2::setatt1( double _att1 )
 {
     m_attr1 = _att1;
 }
 
 ::sal_Int32 Impl2::fn11( ::sal_Int32 arg )
-        throw (css::uno::RuntimeException, std::exception)
 {
     return 11 * arg;
 }
 
 OUString Impl2::fn12( const OUString& arg )
-        throw (css::uno::RuntimeException, std::exception)
 {
     return "12" + arg;
 }
 
-css::uno::Reference< css::uno::XInterface > SAL_CALL create(
+css::uno::Reference< css::uno::XInterface > create(
     SAL_UNUSED_PARAMETER css::uno::Reference< css::uno::XComponentContext >
         const &)
 {
     return static_cast< ::cppu::OWeakObject * >(new Impl);
 }
 
-OUString SAL_CALL getImplementationName() {
+OUString getImplementationName() {
     return OUString(
             "comp.test.testtools.bridgetest.Constructors");
 }
 
-css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() {
+css::uno::Sequence< OUString > getSupportedServiceNames() {
     css::uno::Sequence< OUString > s { "test.testtools.bridgetest.Constructors" };
     return s;
 }
 
-css::uno::Reference< css::uno::XInterface > SAL_CALL create2(
+css::uno::Reference< css::uno::XInterface > create2(
     SAL_UNUSED_PARAMETER css::uno::Reference< css::uno::XComponentContext >
         const &)
 {
     return static_cast< ::cppu::OWeakObject * >(new Impl2);
 }
 
-OUString SAL_CALL getImplementationName2() {
+OUString getImplementationName2() {
     return OUString(
             "comp.test.testtools.bridgetest.Constructors2");
 }
 
-css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames2() {
+css::uno::Sequence< OUString > getSupportedServiceNames2() {
     css::uno::Sequence< OUString > s { "test.testtools.bridgetest.Constructors2" };
     return s;
 }
 
-::cppu::ImplementationEntry entries[] = {
+::cppu::ImplementationEntry const entries[] = {
     { &create, &getImplementationName, &getSupportedServiceNames,
       &::cppu::createSingleComponentFactory, nullptr, 0 },
     { &create2, &getImplementationName2, &getSupportedServiceNames2,
@@ -475,7 +447,7 @@ css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames2() {
     { nullptr, nullptr, nullptr, nullptr, nullptr, 0 } };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * component_getFactory(
     char const * implName, void * serviceManager, void * registryKey)
 {
     return ::cppu::component_getFactoryHelper(

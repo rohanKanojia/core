@@ -40,16 +40,15 @@ private:
     OUString m_aUserName;
     OUString m_aPassword;
     OUString m_aPasswordToModify;
-    OUString m_aPath;
     OUString m_aErrorText;
     sal_uInt8   m_nFlags;
-    sal_uInt16 m_nRet;
+    DialogMask m_nRet;
     bool   m_bRecommendToOpenReadonly;
 
 public:
     LoginErrorInfo()
         : m_nFlags(LOGINERROR_FLAG_MODIFY_USER_NAME)
-        , m_nRet(ERRCODE_BUTTON_CANCEL)
+        , m_nRet(DialogMask::ButtonsCancel)
         , m_bRecommendToOpenReadonly(false)
     {
     }
@@ -60,7 +59,6 @@ public:
     const OUString&   GetPassword() const                 { return m_aPassword; }
     const OUString&   GetPasswordToModify() const         { return m_aPasswordToModify; }
     bool              IsRecommendToOpenReadonly() const   { return m_bRecommendToOpenReadonly; }
-    const OUString&   GetPath() const                     { return m_aPath; }
     const OUString&   GetErrorText() const                { return m_aErrorText; }
     bool            GetCanRememberPassword() const      { return ( m_nFlags & LOGINERROR_FLAG_CAN_REMEMBER_PASSWORD ); }
     bool            GetIsRememberPersistent() const     { return ( m_nFlags & LOGINERROR_FLAG_REMEMBER_PERSISTENT ); }
@@ -71,8 +69,8 @@ public:
     bool            GetIsUseSystemCredentials() const
                     { return ( m_nFlags & LOGINERROR_FLAG_IS_USE_SYSCREDS ) ==
                              LOGINERROR_FLAG_IS_USE_SYSCREDS; }
-    sal_uInt8            GetFlags() const        { return m_nFlags; }
-    sal_uInt16          GetResult() const       { return m_nRet; }
+    sal_uInt8       GetFlags() const        { return m_nFlags; }
+    DialogMask   GetResult() const       { return m_nRet; }
 
     void            SetTitle( const OUString& aTitle )
                     { m_aTitle = aTitle; }
@@ -100,7 +98,7 @@ public:
     inline void     SetModifyAccount( bool bSet );
     inline void     SetModifyUserName( bool bSet );
 
-    void            SetResult( sal_uInt16 nRet )
+    void            SetResult( DialogMask nRet )
                     { m_nRet = nRet; }
 };
 

@@ -23,6 +23,7 @@
 
 
 #include <com/sun/star/table/ShadowFormat.hpp>
+#include <o3tl/safeint.hxx>
 #include <tools/color.hxx>
 #include <sax/tools/converter.hxx>
 #include <xmloff/xmluconv.hxx>
@@ -62,12 +63,9 @@ bool XMLShadowPropHdl::importXML( const OUString& rStrImpValue, uno::Any& rValue
         }
         else if( !bColorFound && aToken.startsWith("#") )
         {
-            sal_Int32 nColor(0);
-            bRet = ::sax::Converter::convertColor( nColor, aToken );
+            bRet = ::sax::Converter::convertColor( aColor, aToken );
             if( !bRet )
                 return false;
-
-            aColor.SetColor(nColor);
             bColorFound = true;
         }
         else if( !bOffsetFound )
@@ -95,11 +93,15 @@ bool XMLShadowPropHdl::importXML( const OUString& rStrImpValue, uno::Any& rValue
                         aShadow.Location = table::ShadowLocation_BOTTOM_RIGHT;
                 }
 
-                if( nX < 0 ) nX *= -1;
-                if( nY < 0 ) nY *= -1;
+                if (nX < 0)
+                    nX = o3tl::saturating_toggle_sign(nX);
+                if (nY < 0)
+                    nY = o3tl::saturating_toggle_sign(nY);
 
-                aShadow.ShadowWidth = sal::static_int_cast< sal_Int16 >(
-                    (nX + nY) >> 1);
+                sal_Int32 nWidth;
+                bRet = !o3tl::checked_add(nX, nY, nWidth);
+                if (bRet)
+                    aShadow.ShadowWidth = sal::static_int_cast<sal_Int16>(nWidth >> 1);
             }
         }
     }
@@ -107,7 +109,7 @@ bool XMLShadowPropHdl::importXML( const OUString& rStrImpValue, uno::Any& rValue
     if( bRet && ( bColorFound || bOffsetFound ) )
     {
         aShadow.IsTransparent = aColor.GetTransparency() > 0;
-        aShadow.Color = aColor.GetColor();
+        aShadow.Color = sal_Int32(aColor);
         bRet = true;
     }
 

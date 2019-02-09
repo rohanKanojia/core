@@ -19,12 +19,12 @@
 
 #include "PaneHider.hxx"
 
-#include "ViewShell.hxx"
-#include "ViewShellBase.hxx"
-#include "slideshow.hxx"
+#include <ViewShell.hxx>
+#include <ViewShellBase.hxx>
+#include <slideshow.hxx>
 #include "slideshowimpl.hxx"
-#include "framework/FrameworkHelper.hxx"
-#include "framework/ConfigurationController.hxx"
+#include <framework/FrameworkHelper.hxx>
+#include <framework/ConfigurationController.hxx>
 
 #include <com/sun/star/drawing/framework/XControllerManager.hpp>
 #include <com/sun/star/drawing/framework/XConfigurationController.hpp>
@@ -65,7 +65,7 @@ PaneHider::PaneHider (const ViewShell& rViewShell, SlideshowImpl* pSlideShow)
                 for (sal_Int32 nIndex=0; nIndex<aResources.getLength(); ++nIndex)
                 {
                     Reference<XResourceId> xPaneId (aResources[nIndex]);
-                    if ( ! xPaneId->getResourceURL().equals(FrameworkHelper::msCenterPaneURL))
+                    if ( xPaneId->getResourceURL() != FrameworkHelper::msCenterPaneURL )
                     {
                         mxConfigurationController->requestResourceDeactivation(xPaneId);
                     }
@@ -76,7 +76,7 @@ PaneHider::PaneHider (const ViewShell& rViewShell, SlideshowImpl* pSlideShow)
     }
     catch (RuntimeException&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("sd");
     }
 }
 

@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -84,7 +85,7 @@ public class ButtonOperator implements XActionListener, XFeatureInvalidation
     }
 
     /* ------------------------------------------------------------------ */
-    /** get's the button which we operate and which is responsible for a given URL
+    /** gets the button which we operate and which is responsible for a given URL
     */
     private XPropertySet getButton( short _formFeature )
     {
@@ -215,3 +216,4 @@ public class ButtonOperator implements XActionListener, XFeatureInvalidation
     }
 }
 
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

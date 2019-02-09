@@ -22,6 +22,7 @@
 #include <vcl/builderfactory.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
+#include <osl/diagnose.h>
 
 SvxColorValueSet::SvxColorValueSet(vcl::Window* _pParent, WinBits nWinStyle)
 :   ValueSet(_pParent, nWinStyle)
@@ -29,22 +30,17 @@ SvxColorValueSet::SvxColorValueSet(vcl::Window* _pParent, WinBits nWinStyle)
     SetEdgeBlending(true);
 }
 
-VCL_BUILDER_DECL_FACTORY(SvxColorValueSet)
+ColorValueSet::ColorValueSet(std::unique_ptr<weld::ScrolledWindow> pWindow)
+    : SvtValueSet(std::move(pWindow))
 {
-    WinBits nWinBits = WB_TABSTOP;
-
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-       nWinBits |= WB_BORDER;
-
-    rRet = VclPtr<SvxColorValueSet>::Create(pParent, nWinBits);
+    SetEdgeBlending(true);
 }
+
+VCL_BUILDER_FACTORY_CONSTRUCTOR(SvxColorValueSet, WB_TABSTOP)
 
 sal_uInt32 SvxColorValueSet::getMaxRowCount()
 {
-    const StyleSettings& rStyleSettings = Application::GetSettings().GetStyleSettings();
-
-    return rStyleSettings.GetColorValueSetMaximumRowCount();
+    return StyleSettings::GetColorValueSetMaximumRowCount();
 }
 
 sal_uInt32 SvxColorValueSet::getEntryEdgeLength()
@@ -80,25 +76,93 @@ void SvxColorValueSet::addEntriesForXColorList(const XColorList& rXColorList, sa
     }
 }
 
+void ColorValueSet::addEntriesForXColorList(const XColorList& rXColorList, sal_uInt32 nStartIndex)
+{
+    const sal_uInt32 nColorCount(rXColorList.Count());
+
+    for(sal_uInt32 nIndex(0); nIndex < nColorCount; nIndex++, nStartIndex++)
+    {
+        const XColorEntry* pEntry = rXColorList.GetColor(nIndex);
+
+        if(pEntry)
+        {
+            InsertItem(nStartIndex, pEntry->GetColor(), pEntry->GetName());
+        }
+        else
+        {
+            OSL_ENSURE(false, "OOps, XColorList with empty entries (!)");
+        }
+    }
+}
+
+void ColorValueSet::addEntriesForColorSet(const std::set<Color>& rColorSet, const OUString& rNamePrefix)
+{
+    sal_uInt32 nStartIndex = 1;
+    if(rNamePrefix.getLength() != 0)
+    {
+        for(const auto& rColor : rColorSet)
+        {
+            InsertItem(nStartIndex, rColor, rNamePrefix + OUString::number(nStartIndex));
+            nStartIndex++;
+        }
+    }
+    else
+    {
+        for(const auto& rColor : rColorSet)
+        {
+            InsertItem(nStartIndex, rColor, "");
+            nStartIndex++;
+        }
+    }
+}
+
 void SvxColorValueSet::addEntriesForColorSet(const std::set<Color>& rColorSet, const OUString& rNamePrefix)
 {
     sal_uInt32 nStartIndex = 1;
     if(rNamePrefix.getLength() != 0)
     {
-        for(std::set<Color>::const_iterator it = rColorSet.begin();
-            it != rColorSet.end(); ++it, nStartIndex++)
+        for(const auto& rColor : rColorSet)
         {
-            InsertItem(nStartIndex, *it, rNamePrefix + OUString::number(nStartIndex));
+            InsertItem(nStartIndex, rColor, rNamePrefix + OUString::number(nStartIndex));
+            nStartIndex++;
         }
     }
     else
     {
-        for(std::set<Color>::const_iterator it = rColorSet.begin();
-            it != rColorSet.end(); ++it, nStartIndex++)
+        for(const auto& rColor : rColorSet)
         {
-            InsertItem(nStartIndex, *it, "");
+            InsertItem(nStartIndex, rColor, "");
+            nStartIndex++;
         }
     }
+}
+
+Size ColorValueSet::layoutAllVisible(sal_uInt32 nEntryCount)
+{
+    if(!nEntryCount)
+    {
+        nEntryCount++;
+    }
+
+    const sal_uInt32 nRowCount(ceil(double(nEntryCount)/SvxColorValueSet::getColumnCount()));
+    const Size aItemSize(SvxColorValueSet::getEntryEdgeLength() - 2, SvxColorValueSet::getEntryEdgeLength() - 2);
+    const WinBits aWinBits(GetStyle() & ~WB_VSCROLL);
+
+    if (nRowCount > SvxColorValueSet::getMaxRowCount())
+    {
+        SetStyle(aWinBits|WB_VSCROLL);
+    }
+    else
+    {
+        SetStyle(aWinBits);
+    }
+
+    SetColCount(SvxColorValueSet::getColumnCount());
+    SetLineCount(std::min(nRowCount, SvxColorValueSet::getMaxRowCount()));
+    SetItemWidth(aItemSize.Width());
+    SetItemHeight(aItemSize.Height());
+
+    return CalcWindowSizePixel(aItemSize);
 }
 
 Size SvxColorValueSet::layoutAllVisible(sal_uInt32 nEntryCount)
@@ -131,11 +195,14 @@ Size SvxColorValueSet::layoutAllVisible(sal_uInt32 nEntryCount)
 
 void SvxColorValueSet::Resize()
 {
-    vcl::Window *pParent = GetParent();
-    //don't do this for the drop down color palettes
-    if (pParent && pParent->GetType() != WINDOW_FLOATINGWINDOW)
-        layoutToGivenHeight(GetOutputSizePixel().Height(), GetItemCount());
+    layoutToGivenHeight(GetSizePixel().Height(), GetItemCount());
     ValueSet::Resize();
+}
+
+void ColorValueSet::Resize()
+{
+    layoutToGivenHeight(GetOutputSizePixel().Height(), GetItemCount());
+    SvtValueSet::Resize();
 }
 
 Size SvxColorValueSet::layoutToGivenHeight(sal_uInt32 nHeight, sal_uInt32 nEntryCount)
@@ -145,7 +212,7 @@ Size SvxColorValueSet::layoutToGivenHeight(sal_uInt32 nHeight, sal_uInt32 nEntry
         nEntryCount++;
     }
 
-    const Size aItemSize(getEntryEdgeLength(), getEntryEdgeLength());
+    const Size aItemSize(getEntryEdgeLength() - 2, getEntryEdgeLength() - 2);
     const WinBits aWinBits(GetStyle() & ~WB_VSCROLL);
 
     // get size with all fields disabled
@@ -172,11 +239,55 @@ Size SvxColorValueSet::layoutToGivenHeight(sal_uInt32 nHeight, sal_uInt32 nEntry
     }
 
     // set height to wanted height
-    aNewSize.Height() = nHeight;
+    aNewSize.setHeight( nHeight );
 
     SetItemWidth(aItemSize.Width());
     SetItemHeight(aItemSize.Height());
     SetColCount(getColumnCount());
+    SetLineCount(nLineCount);
+
+    return aNewSize;
+}
+
+Size ColorValueSet::layoutToGivenHeight(sal_uInt32 nHeight, sal_uInt32 nEntryCount)
+{
+    if(!nEntryCount)
+    {
+        nEntryCount++;
+    }
+
+    const Size aItemSize(SvxColorValueSet::getEntryEdgeLength() - 2, SvxColorValueSet::getEntryEdgeLength() - 2);
+    const WinBits aWinBits(GetStyle() & ~WB_VSCROLL);
+
+    // get size with all fields disabled
+    const WinBits aWinBitsNoScrollNoFields(GetStyle() & ~(WB_VSCROLL|WB_NAMEFIELD|WB_NONEFIELD));
+    SetStyle(aWinBitsNoScrollNoFields);
+    const Size aSizeNoScrollNoFields(CalcWindowSizePixel(aItemSize, SvxColorValueSet::getColumnCount()));
+
+    // get size with all needed fields
+    SetStyle(aWinBits);
+    Size aNewSize(CalcWindowSizePixel(aItemSize, SvxColorValueSet::getColumnCount()));
+
+    const Size aItemSizePixel(CalcItemSizePixel(aItemSize));
+    // calculate field height and available height for requested height
+    const sal_uInt32 nFieldHeight(aNewSize.Height() - aSizeNoScrollNoFields.Height());
+    const sal_uInt32 nAvailableHeight(nHeight >= nFieldHeight ? nHeight - nFieldHeight + aItemSizePixel.Height() - 1 : 0);
+
+    // calculate how many lines can be shown there
+    const sal_uInt32 nLineCount(nAvailableHeight / aItemSizePixel.Height());
+    const sal_uInt32 nLineMax(ceil(double(nEntryCount)/SvxColorValueSet::getColumnCount()));
+
+    if(nLineMax > nLineCount)
+    {
+        SetStyle(aWinBits|WB_VSCROLL);
+    }
+
+    // set height to wanted height
+    aNewSize.setHeight( nHeight );
+
+    SetItemWidth(aItemSize.Width());
+    SetItemHeight(aItemSize.Height());
+    SetColCount(SvxColorValueSet::getColumnCount());
     SetLineCount(nLineCount);
 
     return aNewSize;

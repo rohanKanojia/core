@@ -35,14 +35,13 @@ class SvBOOL
           bSet:1;
 public:
                 SvBOOL() { bSet = bVal = false; }
-                SvBOOL( bool b ) : bVal( b ), bSet( true ) {}
-                SvBOOL( bool b, bool bSetP ) : bVal( b ), bSet( bSetP ) {}
+                SvBOOL( bool b ) : bVal( b ), bSet( false) {}
     SvBOOL &    operator = ( bool n ) { bVal = n; bSet = true; return *this; }
 
     operator    bool() const { return bVal; }
     bool        IsSet() const { return bSet; }
 
-    bool        ReadSvIdl( SvStringHashEntry * pName, SvTokenStream & rInStm );
+    bool        ReadSvIdl( SvStringHashEntry const * pName, SvTokenStream & rInStm );
 };
 
 
@@ -57,7 +56,7 @@ public:
     void        setString(const OString& rStr) { m_aStr = rStr; }
     const OString& getString() const { return m_aStr; }
 
-    bool        ReadSvIdl( SvStringHashEntry * pName, SvTokenStream & rInStm );
+    void        ReadSvIdl( SvStringHashEntry const * pName, SvTokenStream & rInStm );
     bool        IsSet() const
                 {
                     return !m_aStr.isEmpty() || nValue != 0;
@@ -69,7 +68,7 @@ public:
 };
 
 
-bool        ReadStringSvIdl( SvStringHashEntry * pName, SvTokenStream & rInStm, OString& aString );
+bool        ReadStringSvIdl( SvStringHashEntry const * pName, SvTokenStream & rInStm, OString& aString );
 
 
 #endif // INCLUDED_IDL_INC_BASTYPE_HXX

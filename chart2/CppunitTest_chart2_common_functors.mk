@@ -19,12 +19,15 @@ $(eval $(call gb_CppunitTest_add_defs,chart2_common_functors,\
     -DOOO_DLLIMPLEMENTATION_CHARTTOOLS \
 ))
 
+$(eval $(call gb_CppunitTest_use_externals,chart2_common_functors, \
+    boost_headers \
+))
+
 $(eval $(call gb_CppunitTest_use_libraries,chart2_common_functors, \
     cppu \
     cppuhelper \
     sal \
     salhelper \
-    $(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,chart2_common_functors,\
@@ -33,10 +36,7 @@ $(eval $(call gb_CppunitTest_set_include,chart2_common_functors,\
     $$(INCLUDE) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,chart2_common_functors,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,chart2_common_functors))
 
 $(eval $(call gb_CppunitTest_use_ure,chart2_common_functors))
 

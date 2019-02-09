@@ -19,11 +19,13 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_DIALOGS_DATABROWSERMODEL_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_DIALOGS_DATABROWSERMODEL_HXX
 
-#include <com/sun/star/chart2/XChartDocument.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <com/sun/star/uno/Reference.hxx>
 
 #include <memory>
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace chart2 { class XChartDocument; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 namespace com { namespace sun { namespace star { namespace chart2 {
     class XDataSeries;
@@ -35,13 +37,13 @@ namespace chart
 
 class DialogModel;
 
-class DataBrowserModel
+class DataBrowserModel final
 {
 public:
     explicit DataBrowserModel(
         const css::uno::Reference< css::chart2::XChartDocument > & xChartDoc,
         const css::uno::Reference< css::uno::XComponentContext > & xContext );
-    virtual ~DataBrowserModel();
+    ~DataBrowserModel();
 
     /** Inserts a new data series after the data series to which the data column
         with index nAfterColumnIndex belongs.
@@ -73,12 +75,12 @@ public:
         TEXTORDATE
     };
 
-    eCellType getCellType( sal_Int32 nAtColumn, sal_Int32 nAtRow ) const;
+    eCellType getCellType( sal_Int32 nAtColumn ) const;
     /// If getCellType( nAtColumn, nAtRow ) returns TEXT, the result will be Nan
     double getCellNumber( sal_Int32 nAtColumn, sal_Int32 nAtRow );
     OUString getCellText( sal_Int32 nAtColumn, sal_Int32 nAtRow );
     css::uno::Any getCellAny( sal_Int32 nAtColumn, sal_Int32 nAtRow );
-    sal_uInt32 getNumberFormatKey( sal_Int32 nAtColumn, sal_Int32 nAtRow );
+    sal_uInt32 getNumberFormatKey( sal_Int32 nAtColumn );
 
     /// returns </sal_True> if the number could successfully be set at the given position
     bool setCellNumber( sal_Int32 nAtColumn, sal_Int32 nAtRow, double fValue );
@@ -109,8 +111,8 @@ public:
         {}
         // "full" CTOR
         tDataHeader(
-            css::uno::Reference< css::chart2::XDataSeries > xDataSeries,
-            css::uno::Reference< css::chart2::XChartType >  xChartType,
+            css::uno::Reference< css::chart2::XDataSeries > const & xDataSeries,
+            css::uno::Reference< css::chart2::XChartType > const &xChartType,
             bool                                        bSwapXAndYAxis,
             sal_Int32                                   nStartColumn,
             sal_Int32                                   nEndColumn ) :
@@ -122,7 +124,7 @@ public:
         {}
     };
 
-    typedef ::std::vector< tDataHeader > tDataHeaderVector;
+    typedef std::vector< tDataHeader > tDataHeaderVector;
 
     const tDataHeaderVector& getDataHeaders() const { return m_aHeaders;}
 
@@ -151,7 +153,7 @@ private:
     struct tDataColumn;
     struct implColumnLess;
 
-    typedef ::std::vector< tDataColumn > tDataColumnVector;
+    typedef std::vector< tDataColumn > tDataColumnVector;
 
     tDataColumnVector m_aColumns;
     tDataHeaderVector m_aHeaders;

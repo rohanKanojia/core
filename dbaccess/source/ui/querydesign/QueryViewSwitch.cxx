@@ -17,15 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "QueryViewSwitch.hxx"
-#include "QueryDesignView.hxx"
-#include "QueryTextView.hxx"
-#include "querycontainerwindow.hxx"
-#include "dbu_qry.hrc"
-#include "browserids.hxx"
-#include "adtabdlg.hxx"
-#include "querycontroller.hxx"
-#include "sqledit.hxx"
+#include <QueryViewSwitch.hxx>
+#include <QueryDesignView.hxx>
+#include <QueryTextView.hxx>
+#include <querycontainerwindow.hxx>
+#include <browserids.hxx>
+#include <adtabdlg.hxx>
+#include <querycontroller.hxx>
+#include <sqledit.hxx>
 
 using namespace dbaui;
 using namespace ::com::sun::star::uno;
@@ -92,8 +91,6 @@ void OQueryViewSwitch::setStatement(const OUString& _rsStatement)
 {
     if(m_pTextView->IsVisible())
         m_pTextView->setStatement(_rsStatement);
-    else
-        m_pDesignView->setStatement(_rsStatement);
 }
 
 void OQueryViewSwitch::copy()
@@ -274,21 +271,18 @@ void OQueryViewSwitch::SetPosSizePixel( Point _rPt,Size _rSize)
     m_pTextView->SetPosSizePixel( _rPt,_rSize);
 }
 
-Reference< XComponentContext > OQueryViewSwitch::getORB() const
+Reference< XComponentContext > const & OQueryViewSwitch::getORB() const
 {
     return m_pDesignView->getORB();
 }
 
-bool OQueryViewSwitch::reset( ::dbtools::SQLExceptionInfo* _pErrorInfo )
+void OQueryViewSwitch::reset()
 {
     m_pDesignView->reset();
-    if ( !m_pDesignView->initByParseIterator( _pErrorInfo ) )
-        return false;
+    if ( !m_pDesignView->initByParseIterator( nullptr ) )
+        return;
 
-    if ( switchView( _pErrorInfo ) )
-        return false;
-
-    return true;
+    switchView( nullptr );
 }
 
 void OQueryViewSwitch::setNoneVisbleRow(sal_Int32 _nRows)

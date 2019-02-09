@@ -26,10 +26,10 @@
 #include <com/sun/star/rendering/PathCapType.hpp>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 
 #include "implpolypolygon.hxx"
-#include "tools.hxx"
+#include <tools.hxx>
 
 
 using namespace ::com::sun::star;
@@ -62,24 +62,21 @@ namespace cppcanvas
         {
         }
 
-        void ImplPolyPolygon::setRGBAFillColor( Color::IntSRGBA aColor )
+        void ImplPolyPolygon::setRGBAFillColor( IntSRGBA aColor )
         {
-            maFillColor = tools::intSRGBAToDoubleSequence( getGraphicDevice(),
-                                                           aColor );
+            maFillColor = tools::intSRGBAToDoubleSequence( aColor );
             mbFillColorSet = true;
         }
 
-        void ImplPolyPolygon::setRGBALineColor( Color::IntSRGBA aColor )
+        void ImplPolyPolygon::setRGBALineColor( IntSRGBA aColor )
         {
-            maStrokeColor = tools::intSRGBAToDoubleSequence( getGraphicDevice(),
-                                                             aColor );
+            maStrokeColor = tools::intSRGBAToDoubleSequence( aColor );
             mbStrokeColorSet = true;
         }
 
-        Color::IntSRGBA ImplPolyPolygon::getRGBALineColor() const
+        IntSRGBA ImplPolyPolygon::getRGBALineColor() const
         {
-            return tools::doubleSequenceToIntSRGBA( getGraphicDevice(),
-                                                    maStrokeColor );
+            return tools::doubleSequenceToIntSRGBA( maStrokeColor );
         }
 
         void ImplPolyPolygon::setStrokeWidth( const double& rStrokeWidth )

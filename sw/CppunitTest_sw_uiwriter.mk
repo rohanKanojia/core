@@ -13,6 +13,7 @@ $(eval $(call gb_CppunitTest_CppunitTest,sw_uiwriter))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,sw_uiwriter, \
     sw/qa/extras/uiwriter/uiwriter \
+    sw/qa/extras/uiwriter/uiwriter2 \
 ))
 
 # note: this links msword only for the reason to have a order dependency,
@@ -34,7 +35,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_uiwriter, \
     vcl \
     tl \
     utl \
-    $(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_externals,sw_uiwriter,\
@@ -46,13 +46,16 @@ $(eval $(call gb_CppunitTest_set_include,sw_uiwriter,\
     -I$(SRCDIR)/sw/inc \
     -I$(SRCDIR)/sw/source/core/inc \
     -I$(SRCDIR)/sw/source/uibase/inc \
+    -I$(SRCDIR)/sw/source/filter/inc \
+    -I$(SRCDIR)/sw/source/filter/html \
     -I$(SRCDIR)/sw/qa/extras/inc \
     $$(INCLUDE) \
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sw_uiwriter,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sw_uiwriter))
@@ -62,7 +65,13 @@ $(eval $(call gb_CppunitTest_use_rdb,sw_uiwriter,services))
 
 $(eval $(call gb_CppunitTest_use_configuration,sw_uiwriter))
 
+$(eval $(call gb_CppunitTest_use_uiconfigs,sw_uiwriter, \
+    modules/swriter \
+))
+
 $(call gb_CppunitTest_get_target,sw_uiwriter): \
     $(call gb_Library_get_target,textconv_dict)
+
+$(eval $(call gb_CppunitTest_use_more_fonts,sw_uiwriter))
 
 # vim: set noet sw=4 ts=4:

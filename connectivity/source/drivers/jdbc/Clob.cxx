@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "java/sql/Clob.hxx"
-#include "java/tools.hxx"
-#include "java/io/Reader.hxx"
+#include <java/sql/Clob.hxx>
+#include <java/tools.hxx>
+#include <java/io/Reader.hxx>
 #include <connectivity/dbexception.hxx>
 
 using namespace connectivity;
@@ -47,32 +47,32 @@ jclass java_sql_Clob::getMyClass() const
     return theClass;
 }
 
-sal_Int64 SAL_CALL java_sql_Clob::length(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception)
+sal_Int64 SAL_CALL java_sql_Clob::length(  )
 {
     jlong out(0);
-    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java Enviroment geloescht worden!");
+    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java environment has been deleted!");
 
     {
         // initialize temporary variable
-        static const char * cSignature = "()J";
-        static const char * cMethodName = "length";
+        static const char * const cSignature = "()J";
+        static const char * const cMethodName = "length";
         // execute Java-Call
         static jmethodID mID(nullptr);
         obtainMethodId_throwSQL(t.pEnv, cMethodName,cSignature, mID);
         out = t.pEnv->CallLongMethod( object, mID );
         ThrowSQLException(t.pEnv,*this);
     } //t.pEnv
-    return (sal_Int64)out;
+    return static_cast<sal_Int64>(out);
 }
 
-OUString SAL_CALL java_sql_Clob::getSubString( sal_Int64 pos, sal_Int32 subStringLength ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception)
+OUString SAL_CALL java_sql_Clob::getSubString( sal_Int64 pos, sal_Int32 subStringLength )
 {
-    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java Enviroment geloescht worden!");
+    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java environment has been deleted!");
     OUString aStr;
     {
         // initialize temporary variable
-        static const char * cSignature = "(JI)Ljava/lang/String;";
-        static const char * cMethodName = "getSubString";
+        static const char * const cSignature = "(JI)Ljava/lang/String;";
+        static const char * const cMethodName = "getSubString";
         // execute Java-Call
         static jmethodID mID(nullptr);
         obtainMethodId_throwSQL(t.pEnv, cMethodName,cSignature, mID);
@@ -84,7 +84,7 @@ OUString SAL_CALL java_sql_Clob::getSubString( sal_Int64 pos, sal_Int32 subStrin
     return  aStr;
 }
 
-::com::sun::star::uno::Reference< ::com::sun::star::io::XInputStream > SAL_CALL java_sql_Clob::getCharacterStream(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception)
+css::uno::Reference< css::io::XInputStream > SAL_CALL java_sql_Clob::getCharacterStream(  )
 {
     SDBThreadAttach t;
     static jmethodID mID(nullptr);
@@ -94,18 +94,18 @@ OUString SAL_CALL java_sql_Clob::getSubString( sal_Int64 pos, sal_Int32 subStrin
     return out==nullptr ? nullptr : new java_io_Reader( t.pEnv, out );
 }
 
-sal_Int64 SAL_CALL java_sql_Clob::position( const OUString& searchstr, sal_Int32 start ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception)
+sal_Int64 SAL_CALL java_sql_Clob::position( const OUString& searchstr, sal_Int32 start )
 {
     jlong out(0);
-    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java Enviroment geloescht worden!");
+    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java environment has been deleted!");
 
     {
         jvalue args[1];
         // convert Parameter
         args[0].l = convertwchar_tToJavaString(t.pEnv,searchstr);
         // initialize temporary Variable
-        static const char * cSignature = "(Ljava/lang/String;I)J";
-        static const char * cMethodName = "position";
+        static const char * const cSignature = "(Ljava/lang/String;I)J";
+        static const char * const cMethodName = "position";
         // execute Java-Call
         static jmethodID mID(nullptr);
         obtainMethodId_throwSQL(t.pEnv, cMethodName,cSignature, mID);
@@ -113,10 +113,10 @@ sal_Int64 SAL_CALL java_sql_Clob::position( const OUString& searchstr, sal_Int32
         ThrowSQLException(t.pEnv,*this);
         t.pEnv->DeleteLocalRef(static_cast<jstring>(args[0].l));
     } //t.pEnv
-    return (sal_Int64)out;
+    return static_cast<sal_Int64>(out);
 }
 
-sal_Int64 SAL_CALL java_sql_Clob::positionOfClob( const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XClob >& /*pattern*/, sal_Int64 /*start*/ ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception)
+sal_Int64 SAL_CALL java_sql_Clob::positionOfClob( const css::uno::Reference< css::sdbc::XClob >& /*pattern*/, sal_Int64 /*start*/ )
 {
     ::dbtools::throwFeatureNotImplementedSQLException( "XClob::positionOfClob", *this );
     // this was put here in CWS warnings01. The previous implementation was defective, as it did ignore

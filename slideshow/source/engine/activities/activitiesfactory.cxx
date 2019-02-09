@@ -23,12 +23,12 @@
 #include <com/sun/star/animations/AnimationCalcMode.hpp>
 #include <comphelper/sequence.hxx>
 
-#include "activitiesfactory.hxx"
-#include "smilfunctionparser.hxx"
+#include <activitiesfactory.hxx>
+#include <smilfunctionparser.hxx>
 #include "accumulation.hxx"
 #include "activityparameters.hxx"
 #include "interpolation.hxx"
-#include "tools.hxx"
+#include <tools.hxx>
 #include "simplecontinuousactivitybase.hxx"
 #include "discreteactivitybase.hxx"
 #include "continuousactivitybase.hxx"
@@ -53,7 +53,7 @@ namespace {
 template<typename ValueType> struct FormulaTraits
 {
     static ValueType getPresentationValue(
-        const ValueType& rVal, const ExpressionNodeSharedPtr& )
+        const ValueType& rVal, const std::shared_ptr<ExpressionNode>& )
     {
         return rVal;
     }
@@ -63,7 +63,7 @@ template<typename ValueType> struct FormulaTraits
 template<> struct FormulaTraits<double>
 {
     static double getPresentationValue(
-        double const& rVal, ExpressionNodeSharedPtr const& rFormula )
+        double const& rVal, std::shared_ptr<ExpressionNode> const& rFormula )
     {
         return rFormula ? (*rFormula)(rVal) : rVal;
     }
@@ -208,6 +208,7 @@ public:
                 maStartValue = *maFrom;
                 maEndValue = maStartValue + *maBy;
             }
+            maStartInterpolationValue = maStartValue;
         }
         else
         {
@@ -352,7 +353,7 @@ private:
     const OptionalValueType                 maTo;
     const OptionalValueType                 maBy;
 
-    ExpressionNodeSharedPtr                 mpFormula;
+    std::shared_ptr<ExpressionNode>                 mpFormula;
 
     ValueType                               maStartValue;
     ValueType                               maEndValue;
@@ -402,21 +403,21 @@ AnimationActivitySharedPtr createFromToByActivity(
         ENSURE_OR_THROW(
             extractValue( aTmpValue, rFromAny, rShape, rSlideBounds ),
             "createFromToByActivity(): Could not extract from value" );
-        aFrom.reset(aTmpValue);
+        aFrom = aTmpValue;
     }
     if( rToAny.hasValue() )
     {
         ENSURE_OR_THROW(
             extractValue( aTmpValue, rToAny, rShape, rSlideBounds ),
             "createFromToByActivity(): Could not extract to value" );
-        aTo.reset(aTmpValue);
+        aTo = aTmpValue;
     }
     if( rByAny.hasValue() )
     {
         ENSURE_OR_THROW(
             extractValue( aTmpValue, rByAny, rShape, rSlideBounds ),
             "createFromToByActivity(): Could not extract by value" );
-        aBy.reset(aTmpValue);
+        aBy = aTmpValue;
     }
 
     return AnimationActivitySharedPtr(
@@ -589,7 +590,7 @@ public:
 private:
     ValueVectorType                         maValues;
 
-    ExpressionNodeSharedPtr                 mpFormula;
+    std::shared_ptr<ExpressionNode>                 mpFormula;
 
     std::shared_ptr<AnimationType>        mpAnim;
     Interpolator< ValueType >               maInterpolator;
@@ -764,11 +765,9 @@ AnimationActivitySharedPtr createActivity(
 
             default:
                 OSL_FAIL( "createActivity(): unexpected case" );
-                // FALLTHROUGH intended
+                [[fallthrough]];
             case animations::AnimationCalcMode::PACED:
-                // FALLTHROUGH intended
             case animations::AnimationCalcMode::SPLINE:
-                // FALLTHROUGH intended
             case animations::AnimationCalcMode::LINEAR:
                 return createValueListActivity< ContinuousKeyTimeActivityBase >(
                     xNode->getValues(),
@@ -832,11 +831,9 @@ AnimationActivitySharedPtr createActivity(
 
             default:
                 OSL_FAIL( "createActivity(): unexpected case" );
-                // FALLTHROUGH intended
+                [[fallthrough]];
             case animations::AnimationCalcMode::PACED:
-                // FALLTHROUGH intended
             case animations::AnimationCalcMode::SPLINE:
-                // FALLTHROUGH intended
             case animations::AnimationCalcMode::LINEAR:
                 return createFromToByActivity< ContinuousActivityBase >(
                     xNode->getFrom(),

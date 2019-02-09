@@ -20,8 +20,10 @@
 #ifndef INCLUDED_XMLOFF_XMLEVENT_HXX
 #define INCLUDED_XMLOFF_XMLEVENT_HXX
 
-#include <com/sun/star/uno/Sequence.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <rtl/ustring.hxx>
+
+namespace com { namespace sun { namespace star { namespace uno { template <class interface_type> class Reference; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Sequence; } } } }
 
 
 /**
@@ -73,7 +75,7 @@ struct XMLEventName
 struct XMLEventNameTranslation
 {
     const sal_Char* sAPIName;
-    sal_uInt16      nPrefix;    // namespace prefix
+    sal_uInt16 const nPrefix;    // namespace prefix
     const sal_Char* sXMLName;
 };
 

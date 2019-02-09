@@ -21,8 +21,7 @@
 #define INCLUDED_SC_SOURCE_UI_INC_CHARTSH_HXX
 
 #include <sfx2/shell.hxx>
-#include "shellids.hxx"
-#include <sfx2/module.hxx>
+#include <shellids.hxx>
 
 class ScViewData;
 
@@ -39,7 +38,7 @@ private:
 
 public:
     ScChartShell(ScViewData* pData);
-    virtual ~ScChartShell();
+    virtual ~ScChartShell() override;
 
     void ExecuteExportAsGraphic(SfxRequest& rReq);
     void GetExportAsGraphicState(SfxItemSet &rSet);

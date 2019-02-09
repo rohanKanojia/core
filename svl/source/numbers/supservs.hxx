@@ -24,6 +24,7 @@
 #include <svl/zforlist.hxx>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
+#include <memory>
 
 /**
  * SvNumberFormatsSupplierServiceObject - a number formats supplier which
@@ -32,47 +33,45 @@
  * - can be initialized (css::lang::XInitialization)
  * with a specific language (i.e. css::lang::Locale)
  */
-class SvNumberFormatsSupplierServiceObject
+class SvNumberFormatsSupplierServiceObject final
             :public SvNumberFormatsSupplierObj
             ,public css::lang::XInitialization
             ,public css::lang::XServiceInfo
 {
-protected:
-    SvNumberFormatter*                                  m_pOwnFormatter;
+    std::unique_ptr<SvNumberFormatter>                  m_pOwnFormatter;
     css::uno::Reference< css::uno::XComponentContext >  m_xORB;
+
+    void implEnsureFormatter();
 
 public:
     explicit SvNumberFormatsSupplierServiceObject(const css::uno::Reference< css::uno::XComponentContext >& _rxORB);
-    virtual ~SvNumberFormatsSupplierServiceObject();
+    virtual ~SvNumberFormatsSupplierServiceObject() override;
 
     // XInterface
     virtual void SAL_CALL acquire() throw() override { SvNumberFormatsSupplierObj::acquire(); }
     virtual void SAL_CALL release() throw() override { SvNumberFormatsSupplierObj::release(); }
-    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& _rType ) throw(css::uno::RuntimeException, std::exception) override
+    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& _rType ) override
         { return SvNumberFormatsSupplierObj::queryInterface(_rType); }
 
     // XAggregation
-    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw(css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 
     // XNumberFormatsSupplier
     virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL
-                getNumberFormatSettings() throw(css::uno::RuntimeException, std::exception) override;
+                getNumberFormatSettings() override;
     virtual css::uno::Reference< css::util::XNumberFormats > SAL_CALL
-                getNumberFormats() throw(css::uno::RuntimeException, std::exception) override;
+                getNumberFormats() override;
 
     // XUnoTunnler
-    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) throw (css::uno::RuntimeException, std::exception) override;
-
-protected:
-    void implEnsureFormatter();
+    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
 };
 
 

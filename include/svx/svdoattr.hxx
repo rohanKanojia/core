@@ -28,29 +28,23 @@
 #include <svx/svdattr.hxx>
 #include <svx/svxdllapi.h>
 
-
 //   Initial Declarations
-
-
 class SfxPoolItem;
 class SfxSetItem;
 class SdrOutliner;
 class SfxItemSet;
 class SfxItemPool;
 
-
 //   SdrAttrObj
-
-
 class SVX_DLLPUBLIC SdrAttrObj : public SdrObject
 {
 private:
     friend class                SdrOutliner;
 
 protected:
-    virtual sdr::properties::BaseProperties* CreateObjectSpecificProperties() override;
+    virtual std::unique_ptr<sdr::properties::BaseProperties> CreateObjectSpecificProperties() override;
 
-    Rectangle                   maSnapRect;
+    tools::Rectangle                   maSnapRect;
 
 protected:
     /// Detects the width of the line. No line ->0.
@@ -59,10 +53,14 @@ protected:
     /// Detects when a stylesheet is changed
     virtual void Notify(SfxBroadcaster& rBC, const SfxHint& rHint) override;
 
-    SdrAttrObj();
-    virtual ~SdrAttrObj();
+    SdrAttrObj(SdrModel& rSdrModel);
+    virtual ~SdrAttrObj() override;
 
 public:
+    SdrAttrObj(SdrAttrObj const &) = delete; // due to SdrObject
+    SdrAttrObj(SdrAttrObj &&) = delete; // due to SdrObject
+    SdrAttrObj & operator =(SdrAttrObj const &) = default;
+    SdrAttrObj & operator =(SdrAttrObj &&) = default;
 
     // Detects if bFilledObj && Fill != FillNone
     bool HasFill() const;
@@ -70,9 +68,7 @@ public:
     // Detects if Line != LineNone
     bool HasLine() const;
 
-    virtual const Rectangle& GetSnapRect() const override;
-
-    virtual void SetModel(SdrModel* pNewModel) override;
+    virtual const tools::Rectangle& GetSnapRect() const override;
 };
 
 

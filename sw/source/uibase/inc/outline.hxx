@@ -19,61 +19,43 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_OUTLINE_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_OUTLINE_HXX
 
+#include <memory>
 #include <sfx2/tabdlg.hxx>
-
-#include <vcl/menu.hxx>
-
-#include <vcl/button.hxx>
-#include <svtools/stdctrl.hxx>
-
-#include <vcl/fixed.hxx>
-
-#include <vcl/lstbox.hxx>
-
-#include <vcl/edit.hxx>
-
-#include <vcl/field.hxx>
-
-#include "swtypes.hxx"
-#include <numprevw.hxx>
-#include <numberingtypelistbox.hxx>
+#include <swtypes.hxx>
+#include "numprevw.hxx"
+#include "numberingtypelistbox.hxx"
 #include <rtl/ustring.hxx>
 
 class SwWrtShell;
 class SwNumRule;
 class SwChapterNumRules;
 
-class SwOutlineTabDialog : public SfxTabDialog
+class SwOutlineTabDialog final : public SfxTabDialogController
 {
     static     sal_uInt16    nNumLevel;
-
-    sal_uInt16 m_nNumPosId;
-    sal_uInt16 m_nOutlineId;
 
     OUString            aCollNames[MAXLEVEL];
 
     SwWrtShell&         rWrtSh;
-    SwNumRule*          pNumRule;
+    std::unique_ptr<SwNumRule>  xNumRule;
     SwChapterNumRules*  pChapterNumRules;
 
-    bool                bModified : 1;
+    bool const          bModified : 1;
 
-protected:
-    DECL_LINK_TYPED(CancelHdl, Button*, void);
-    DECL_LINK_TYPED( FormHdl, Button *, void );
-    DECL_LINK_TYPED( MenuSelectHdl, Menu *, bool );
+    std::unique_ptr<weld::MenuButton> m_xMenuButton;
 
-        virtual void    PageCreated(sal_uInt16 nPageId, SfxTabPage& rPage) override;
-        virtual short   Ok() override;
+    DECL_LINK(CancelHdl, weld::Button&, void);
+    DECL_LINK(FormHdl, weld::Button&, void);
+    DECL_LINK(MenuSelectHdl, const OString&, void);
+
+    virtual void    PageCreated(const OString& rPageId, SfxTabPage& rPage) override;
+    virtual short   Ok() override;
 
 public:
-        SwOutlineTabDialog(vcl::Window* pParent,
-                    const SfxItemSet* pSwItemSet,
-                    SwWrtShell &);
-        virtual ~SwOutlineTabDialog();
-    virtual void        dispose() override;
+    SwOutlineTabDialog(weld::Window* pParent, const SfxItemSet* pSwItemSet, SwWrtShell &);
+    virtual ~SwOutlineTabDialog() override;
 
-    SwNumRule*          GetNumRule() {return pNumRule;}
+    SwNumRule*          GetNumRule() { return xNumRule.get(); }
     sal_uInt16          GetLevel(const OUString &rFormatName) const;
     OUString*           GetCollNames() {return aCollNames;}
 
@@ -83,56 +65,60 @@ public:
 
 class SwOutlineSettingsTabPage : public SfxTabPage
 {
-    VclPtr<ListBox>        m_pLevelLB;
-
-    VclPtr<ListBox>        m_pCollBox;
-    VclPtr<SwNumberingTypeListBox> m_pNumberBox;
-    VclPtr<ListBox>        m_pCharFormatLB;
-    VclPtr<FixedText>      m_pAllLevelFT;
-    VclPtr<NumericField>   m_pAllLevelNF;
-    VclPtr<Edit>           m_pPrefixED;
-    VclPtr<Edit>           m_pSuffixED;
-    VclPtr<NumericField>   m_pStartEdit;
-    VclPtr<NumberingPreview> m_pPreviewWIN;
-
-    OUString            aNoFormatName;
+    OUString const      aNoFormatName;
     OUString            aSaveCollNames[MAXLEVEL];
     SwWrtShell*         pSh;
     SwNumRule*          pNumRule;
     OUString*           pCollNames;
-    sal_uInt16              nActLevel;
+    sal_uInt16          nActLevel;
+    NumberingPreview  m_aPreviewWIN;
 
-    DECL_LINK_TYPED( LevelHdl, ListBox&, void );
-    DECL_LINK_TYPED( ToggleComplete, Edit&, void );
-    DECL_LINK_TYPED( CollSelect, ListBox&, void );
-    DECL_LINK_TYPED( CollSelectGetFocus, Control&, void );
-    DECL_LINK_TYPED( NumberSelect, ListBox&, void );
-    DECL_LINK_TYPED( DelimModify, Edit&, void );
-    DECL_LINK_TYPED( StartModified, Edit&, void );
-    DECL_LINK_TYPED( CharFormatHdl, ListBox&, void );
+    std::unique_ptr<weld::TreeView> m_xLevelLB;
+    std::unique_ptr<weld::ComboBox> m_xCollBox;
+    std::unique_ptr<SwNumberingTypeListBox> m_xNumberBox;
+    std::unique_ptr<weld::ComboBox> m_xCharFormatLB;
+    std::unique_ptr<weld::Label> m_xAllLevelFT;
+    std::unique_ptr<weld::SpinButton>  m_xAllLevelNF;
+    std::unique_ptr<weld::Entry> m_xPrefixED;
+    std::unique_ptr<weld::Entry> m_xSuffixED;
+    std::unique_ptr<weld::SpinButton> m_xStartEdit;
+    std::unique_ptr<weld::CustomWeld> m_xPreviewWIN;
+
+    DECL_LINK( LevelHdl, weld::TreeView&, void );
+    DECL_LINK( ToggleComplete, weld::SpinButton&, void );
+    DECL_LINK( CollSelect, weld::ComboBox&, void );
+    void CollSave();
+    DECL_LINK( NumberSelect, weld::ComboBox&, void );
+    DECL_LINK( DelimModify, weld::Entry&, void );
+    DECL_LINK( StartModified, weld::SpinButton&, void );
+    DECL_LINK( CharFormatHdl, weld::ComboBox&, void );
 
     void    Update();
 
-    void    SetModified(){m_pPreviewWIN->Invalidate();}
+    void    SetModified() { m_aPreviewWIN.Invalidate(); }
     void    CheckForStartValue_Impl(sal_uInt16 nNumberingType);
 
     using SfxTabPage::ActivatePage;
     using SfxTabPage::DeactivatePage;
 
 public:
-    SwOutlineSettingsTabPage(vcl::Window* pParent, const SfxItemSet& rSet);
-    virtual ~SwOutlineSettingsTabPage();
-    virtual void dispose() override;
+    SwOutlineSettingsTabPage(TabPageParent pParent, const SfxItemSet& rSet);
+    virtual ~SwOutlineSettingsTabPage() override;
 
     void SetWrtShell(SwWrtShell* pShell);
 
     virtual void        ActivatePage(const SfxItemSet& rSet) override;
-    virtual sfxpg       DeactivatePage(SfxItemSet *pSet) override;
+    virtual DeactivateRC   DeactivatePage(SfxItemSet *pSet) override;
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent,
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent,
                                        const SfxItemSet* rAttrSet);
+    void SetNumRule(SwNumRule *pRule)
+    {
+        pNumRule = pRule;
+        m_aPreviewWIN.SetNumRule(pNumRule);
+    }
 };
 
 #endif

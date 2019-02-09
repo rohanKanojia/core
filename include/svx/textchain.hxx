@@ -53,11 +53,11 @@
     a##PropName = (PropDefault);
 
 #define DECL_CHAIN_PROP_INTERFACE(PropName, PropType) \
-    PropType Get##PropName (const SdrTextObj *); \
+    PropType const & Get##PropName (const SdrTextObj *); \
     void Set##PropName (const SdrTextObj *, PropType);
 
 #define IMPL_CHAIN_PROP_INTERFACE(PropName, PropType) \
-    PropType TextChain::Get##PropName (const SdrTextObj *pTarget) { \
+    PropType const & TextChain::Get##PropName (const SdrTextObj *pTarget) { \
         ImpChainLinkProperties *pLinkProperties = GetLinkProperties(pTarget); \
         return pLinkProperties->a##PropName; \
     } \
@@ -78,7 +78,7 @@ namespace rtl {
     class OUString;
 }
 
-typedef rtl::OUString ChainLinkId;
+typedef OUString ChainLinkId;
 
 enum class CursorChainingEvent
 {

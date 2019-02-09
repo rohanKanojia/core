@@ -22,8 +22,7 @@
 #include <vcl/bitmap.hxx>
 #include <vcl/button.hxx>
 #include <vcl/fixed.hxx>
-#include <svtools/stdctrl.hxx>
-#include <svtools/treelistbox.hxx>
+#include <vcl/treelistbox.hxx>
 #include <svx/stddlg.hxx>
 #include "dbtree.hxx"
 
@@ -41,13 +40,11 @@ class SwChangeDBDlg: public SvxStandardDialog
     VclPtr<FixedText>      m_pDocDBNameFT;
     VclPtr<PushButton>     m_pDefineBT;
 
-    ImageList       aImageList;
-
     SwWrtShell      *pSh;
 
-    DECL_LINK_TYPED(TreeSelectHdl, SvTreeListBox*, void);
-    DECL_LINK_TYPED(ButtonHdl, Button*, void);
-    DECL_LINK_TYPED(AddDBHdl, Button*, void);
+    DECL_LINK(TreeSelectHdl, SvTreeListBox*, void);
+    DECL_LINK(ButtonHdl, Button*, void);
+    DECL_LINK(AddDBHdl, Button*, void);
 
     virtual void    Apply() override;
     void            UpdateFields();
@@ -56,8 +53,8 @@ class SwChangeDBDlg: public SvxStandardDialog
     void            ShowDBName(const SwDBData& rDBData);
 
 public:
-    SwChangeDBDlg(SwView& rVw);
-    virtual ~SwChangeDBDlg();
+    SwChangeDBDlg(SwView const & rVw);
+    virtual ~SwChangeDBDlg() override;
     virtual void dispose() override;
 };
 

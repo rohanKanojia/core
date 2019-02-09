@@ -17,11 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DrawController.hxx"
+#include <DrawController.hxx>
+#include <ViewShellBase.hxx>
+#include <slideshow.hxx>
 #include "SlideShowRestarter.hxx"
-#include "framework/ConfigurationController.hxx"
-#include "framework/FrameworkHelper.hxx"
-#include <comphelper/processfactory.hxx>
+#include <framework/ConfigurationController.hxx>
+#include <framework/FrameworkHelper.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/app.hxx>
@@ -77,12 +78,12 @@ void SlideShowRestarter::Restart (bool bForce)
         LINK(this, SlideShowRestarter, EndPresentation));
 }
 
-IMPL_LINK_NOARG_TYPED(SlideShowRestarter, EndPresentation, void*, void)
+IMPL_LINK_NOARG(SlideShowRestarter, EndPresentation, void*, void)
 {
     mnEventId = nullptr;
     if (mpSlideShow.is())
     {
-        if (mnDisplayCount != (sal_Int32)Application::GetScreenCount())
+        if (mnDisplayCount != static_cast<sal_Int32>(Application::GetScreenCount()))
         {
             bool bIsExitAfterPresenting = mpSlideShow->IsExitAfterPresenting();
             mpSlideShow->SetExitAfterPresenting(false);

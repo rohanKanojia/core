@@ -26,8 +26,9 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <osl/diagnose.h>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
-#include <FPServiceInfo.hxx>
+#include "FPServiceInfo.hxx"
 #include <osl/mutex.hxx>
+#include <sal/log.hxx>
 #include <vcl/svapp.hxx>
 #include "SalAquaFolderPicker.hxx"
 
@@ -42,32 +43,22 @@
 
 #pragma mark DEFINES
 
-// namespace directives
-
-
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::ui::dialogs;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::uno;
 
-
-// helper functions
-
-
 namespace
 {
     // controlling event notifications
-    uno::Sequence<rtl::OUString> SAL_CALL FolderPicker_getSupportedServiceNames()
+    uno::Sequence<OUString> FolderPicker_getSupportedServiceNames()
     {
-        uno::Sequence<rtl::OUString> aRet(2);
+        uno::Sequence<OUString> aRet(2);
         aRet[0] = "com.sun.star.ui.dialogs.SystemFolderPicker";
         aRet[1] = "com.sun.star.ui.dialogs.AquaFolderPicker";
         return aRet;
     }
 }
-
-
-// constructor
 
 SalAquaFolderPicker::SalAquaFolderPicker( const uno::Reference<lang::XMultiServiceFactory>& xServiceMgr ) :
     m_xServiceMgr( xServiceMgr )
@@ -75,18 +66,16 @@ SalAquaFolderPicker::SalAquaFolderPicker( const uno::Reference<lang::XMultiServi
     m_nDialogType = NAVIGATIONSERVICES_DIRECTORY;
 }
 
+// XExecutableDialog
 
-// XExecutableDialog functions
-
-
-void SAL_CALL SalAquaFolderPicker::setTitle( const rtl::OUString& aTitle ) throw( uno::RuntimeException )
+void SAL_CALL SalAquaFolderPicker::setTitle( const OUString& aTitle )
 {
     SolarMutexGuard aGuard;
 
     implsetTitle(aTitle);
 }
 
-sal_Int16 SAL_CALL SalAquaFolderPicker::execute() throw( uno::RuntimeException )
+sal_Int16 SAL_CALL SalAquaFolderPicker::execute()
 {
     SolarMutexGuard aGuard;
 
@@ -96,19 +85,11 @@ sal_Int16 SAL_CALL SalAquaFolderPicker::execute() throw( uno::RuntimeException )
 
     switch( nResult )
     {
-#if MACOSX_SDK_VERSION >= 101000
     case NSModalResponseOK:
-#else
-    case NSOKButton:
-#endif
         retVal = ExecutableDialogResults::OK;
         break;
 
-#if MACOSX_SDK_VERSION >= 101000
     case NSModalResponseCancel:
-#else
-    case NSCancelButton:
-#endif
         retVal = ExecutableDialogResults::CANCEL;
         break;
 
@@ -120,19 +101,16 @@ sal_Int16 SAL_CALL SalAquaFolderPicker::execute() throw( uno::RuntimeException )
     return retVal;
 }
 
+// XFolderPicker
 
-// XFolderPicker functions
-
-
-void SAL_CALL SalAquaFolderPicker::setDisplayDirectory( const rtl::OUString& aDirectory )
-    throw( lang::IllegalArgumentException, uno::RuntimeException )
+void SAL_CALL SalAquaFolderPicker::setDisplayDirectory( const OUString& aDirectory )
 {
     SolarMutexGuard aGuard;
 
     implsetDisplayDirectory(aDirectory);
 }
 
-rtl::OUString SAL_CALL SalAquaFolderPicker::getDisplayDirectory() throw( uno::RuntimeException )
+OUString SAL_CALL SalAquaFolderPicker::getDisplayDirectory()
 {
     SolarMutexGuard aGuard;
 
@@ -141,13 +119,13 @@ rtl::OUString SAL_CALL SalAquaFolderPicker::getDisplayDirectory() throw( uno::Ru
     return aDirectory;
 }
 
-rtl::OUString SAL_CALL SalAquaFolderPicker::getDirectory() throw( uno::RuntimeException )
+OUString SAL_CALL SalAquaFolderPicker::getDirectory()
 {
     SolarMutexGuard aGuard;
 
     NSArray *files = nil;
     if (m_nDialogType == NAVIGATIONSERVICES_DIRECTORY) {
-        files = [(NSOpenPanel*)m_pDialog URLs];
+        files = [static_cast<NSOpenPanel*>(m_pDialog) URLs];
     }
 
     long nFiles = [files count];
@@ -157,7 +135,7 @@ rtl::OUString SAL_CALL SalAquaFolderPicker::getDirectory() throw( uno::RuntimeEx
         throw uno::RuntimeException("no directory selected", static_cast< cppu::OWeakObject * >( this ));
     }
 
-    rtl::OUString aDirectory;
+    OUString aDirectory;
 
     NSURL *url = [files objectAtIndex:0];
 
@@ -168,53 +146,40 @@ rtl::OUString SAL_CALL SalAquaFolderPicker::getDirectory() throw( uno::RuntimeEx
     return aDirectory;
 }
 
-void SAL_CALL SalAquaFolderPicker::setDescription( const rtl::OUString& rDescription )
-    throw( uno::RuntimeException )
+void SAL_CALL SalAquaFolderPicker::setDescription( const OUString& rDescription )
 {
     [m_pDialog setMessage:[NSString stringWithOUString:rDescription]];
 }
 
-
 // XServiceInfo
 
-
-rtl::OUString SAL_CALL SalAquaFolderPicker::getImplementationName()
-    throw( uno::RuntimeException )
+OUString SAL_CALL SalAquaFolderPicker::getImplementationName()
 {
-    rtl::OUString retVal( FOLDER_PICKER_IMPL_NAME );
-
-    return retVal;
+    return FOLDER_PICKER_IMPL_NAME;
 }
 
-sal_Bool SAL_CALL SalAquaFolderPicker::supportsService( const rtl::OUString& sServiceName )
-    throw( uno::RuntimeException )
+sal_Bool SAL_CALL SalAquaFolderPicker::supportsService( const OUString& sServiceName )
 {
     return cppu::supportsService(this, sServiceName);
 }
 
-uno::Sequence<rtl::OUString> SAL_CALL SalAquaFolderPicker::getSupportedServiceNames()
-    throw( uno::RuntimeException )
+uno::Sequence<OUString> SAL_CALL SalAquaFolderPicker::getSupportedServiceNames()
 {
     return FolderPicker_getSupportedServiceNames();
 }
 
-
 // XCancellable
 
-
-void SAL_CALL SalAquaFolderPicker::cancel() throw( uno::RuntimeException )
+void SAL_CALL SalAquaFolderPicker::cancel()
 {
     SolarMutexGuard aGuard;
 
     [m_pDialog cancel:nil];
 }
 
-
 // XEventListener
 
-
 void SAL_CALL SalAquaFolderPicker::disposing( const lang::EventObject& )
-    throw( uno::RuntimeException )
 {
 }
 

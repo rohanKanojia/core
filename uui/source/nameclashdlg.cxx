@@ -17,94 +17,86 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vcl/layout.hxx>
 #include <osl/file.hxx>
+#include <unotools/resmgr.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 
-#include "ids.hrc"
+#include <strings.hrc>
 #include "nameclashdlg.hxx"
 
 // NameClashDialog ---------------------------------------------------------
 
-IMPL_LINK_TYPED( NameClashDialog, ButtonHdl_Impl, Button *, pBtn, void )
+IMPL_LINK(NameClashDialog, ButtonHdl_Impl, weld::Button&, rBtn, void)
 {
-    long nRet = (long) ABORT;
-    if ( m_pBtnRename == pBtn )
+    long nRet = long(ABORT);
+    if (m_xBtnRename.get() == &rBtn)
     {
-        nRet = (long) RENAME;
-        OUString aNewName = m_pEDNewName->GetText();
-        if ( ( aNewName == maNewName ) || aNewName.isEmpty() )
+        nRet = long(RENAME);
+        OUString aNewName = m_xEDNewName->get_text();
+        if ( ( aNewName == m_aNewName ) || aNewName.isEmpty() )
         {
-            ScopedVclPtrInstance< MessageDialog > aError(nullptr, maSameName);
-            aError->Execute();
+            std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(m_xDialog.get(),
+                                                      VclMessageType::Warning, VclButtonsType::Ok,
+                                                      m_aSameName));
+            xErrorBox->run();
             return;
         }
-        maNewName = aNewName;
+        m_aNewName = aNewName;
     }
-    else if ( m_pBtnOverwrite == pBtn )
-        nRet = (long) OVERWRITE;
+    else if (m_xBtnOverwrite.get() == &rBtn)
+        nRet = long(OVERWRITE);
 
-    EndDialog( nRet );
+    m_xDialog->response(nRet);
 }
 
 
-NameClashDialog::NameClashDialog( vcl::Window* pParent, ResMgr* pResMgr,
+NameClashDialog::NameClashDialog( weld::Window* pParent, const std::locale& rResLocale,
                                   OUString const & rTargetFolderURL,
                                   OUString const & rClashingName,
                                   OUString const & rProposedNewName,
                                   bool bAllowOverwrite )
-    : ModalDialog( pParent, "SimpleNameClashDialog", "uui/ui/simplenameclash.ui" ),
-    maNewName              ( rClashingName )
+    : GenericDialogController(pParent, "uui/ui/simplenameclash.ui", "SimpleNameClashDialog")
+    , m_aNewName(rClashingName)
+    , m_xFTMessage(m_xBuilder->weld_label("warning"))
+    , m_xEDNewName(m_xBuilder->weld_entry("newname"))
+    , m_xBtnOverwrite(m_xBuilder->weld_button("replace"))
+    , m_xBtnRename(m_xBuilder->weld_button("rename"))
+    , m_xBtnCancel(m_xBuilder->weld_button("cancel"))
 {
-    get(m_pFTMessage, "warning");
-    get(m_pEDNewName, "newname");
-    get(m_pBtnOverwrite, "replace");
-    get(m_pBtnRename, "rename");
-    get(m_pBtnCancel, "cancel");
-
-    Link<Button*,void> aLink( LINK( this, NameClashDialog, ButtonHdl_Impl ) );
-    m_pBtnOverwrite->SetClickHdl( aLink );
-    m_pBtnRename->SetClickHdl( aLink );
-    m_pBtnCancel->SetClickHdl( aLink );
+    Link<weld::Button&,void> aLink( LINK( this, NameClashDialog, ButtonHdl_Impl ) );
+    m_xBtnOverwrite->connect_clicked( aLink );
+    m_xBtnRename->connect_clicked( aLink );
+    m_xBtnCancel->connect_clicked( aLink );
 
     OUString aInfo;
     if ( bAllowOverwrite )
     {
-        aInfo = ResId(STR_RENAME_OR_REPLACE, *pResMgr).toString();
+        aInfo = Translate::get(STR_RENAME_OR_REPLACE, rResLocale);
     }
     else
     {
-        aInfo = ResId(STR_NAME_CLASH_RENAME_ONLY, *pResMgr).toString();
-        m_pBtnOverwrite->Hide();
+        aInfo = Translate::get(STR_NAME_CLASH_RENAME_ONLY, rResLocale);
+        m_xBtnOverwrite->hide();
     }
 
     OUString aPath;
     if ( osl::FileBase::E_None != osl::FileBase::getSystemPathFromFileURL( rTargetFolderURL, aPath ) )
         aPath = rTargetFolderURL;
 
-    maSameName = ResId(STR_SAME_NAME_USED, *pResMgr).toString();
+    m_aSameName = Translate::get(STR_SAME_NAME_USED, rResLocale);
 
     aInfo = aInfo.replaceFirst( "%NAME", rClashingName );
     aInfo = aInfo.replaceFirst( "%FOLDER", aPath );
-    m_pFTMessage->SetText( aInfo );
+    m_xFTMessage->set_label(aInfo);
     if ( !rProposedNewName.isEmpty() )
-        m_pEDNewName->SetText( rProposedNewName );
+        m_xEDNewName->set_text( rProposedNewName );
     else
-        m_pEDNewName->SetText( rClashingName );
+        m_xEDNewName->set_text( rClashingName );
 }
 
 NameClashDialog::~NameClashDialog()
 {
-    disposeOnce();
-}
-
-void NameClashDialog::dispose()
-{
-    m_pFTMessage.clear();
-    m_pEDNewName.clear();
-    m_pBtnOverwrite.clear();
-    m_pBtnRename.clear();
-    m_pBtnCancel.clear();
-    ModalDialog::dispose();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

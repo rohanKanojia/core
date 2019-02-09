@@ -17,30 +17,30 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <comphelper/unique_disposing_ptr.hxx>
 #include <comphelper/processfactory.hxx>
 
 #include <iderdll.hxx>
-#include <iderdll2.hxx>
+#include "iderdll2.hxx"
 #include <iderid.hxx>
 #include <basidesh.hxx>
-#include <basidesh.hrc>
-#include <basdoc.hxx>
-#include <basicmod.hxx>
+#include <strings.hrc>
+#include "basdoc.hxx"
+#include "basicmod.hxx"
 
 #include <svl/srchitem.hxx>
+#include <svx/svxids.hrc>
 #include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/script/XLibraryContainerPassword.hpp>
+#include <unotools/resmgr.hxx>
 #include <vcl/settings.hxx>
-
 
 namespace basctl
 {
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
-
-Module* Module::mpModule = nullptr;
 
 namespace
 {
@@ -63,7 +63,7 @@ public:
 class DllInstance : public comphelper::unique_disposing_solar_mutex_reset_ptr<Dll>
 {
 public:
-    DllInstance() : comphelper::unique_disposing_solar_mutex_reset_ptr<Dll>(Reference<lang::XComponent>( frame::Desktop::create(comphelper::getProcessComponentContext()), UNO_QUERY_THROW), new Dll)
+    DllInstance() : comphelper::unique_disposing_solar_mutex_reset_ptr<Dll>(Reference<lang::XComponent>( frame::Desktop::create(comphelper::getProcessComponentContext()), UNO_QUERY_THROW), new Dll, true)
     { }
 };
 
@@ -90,7 +90,7 @@ void ShellCreated (Shell* pShell)
         pDll->SetShell(pShell);
 }
 
-void ShellDestroyed (Shell* pShell)
+void ShellDestroyed (Shell const * pShell)
 {
     Dll* pDll = theDllInstance::get().get();
     if (pDll && pDll->GetShell() == pShell)
@@ -104,10 +104,10 @@ ExtraData* GetExtraData()
     return nullptr;
 }
 
-
-IDEResId::IDEResId( sal_uInt16 nId ):
-    ResId(nId, *Module::Get()->GetResMgr())
-{ }
+OUString IDEResId(const char *pId)
+{
+    return Translate::get(pId, SfxApplication::GetModule(SfxToolsModule::Basic)->GetResLocale());
+}
 
 namespace
 {
@@ -115,19 +115,14 @@ namespace
 Dll::Dll () :
     m_pShell(nullptr)
 {
-    SfxObjectFactory* pFact = &DocShell::Factory();
-    (void)pFact;
+    SfxObjectFactory& rFactory = DocShell::Factory();
 
-    ResMgr* pMgr = ResMgr::CreateResMgr(
-        "basctl", Application::GetSettings().GetUILanguageTag());
-
-    Module::Get() = new Module( pMgr, &DocShell::Factory() );
+    auto pModule = std::make_unique<Module>("basctl", &rFactory);
+    SfxModule* pMod = pModule.get();
+    SfxApplication::SetModule(SfxToolsModule::Basic, std::move(pModule));
 
     GetExtraData(); // to cause GlobalErrorHdl to be set
 
-    SfxModule* pMod = Module::Get();
-
-    SfxObjectFactory& rFactory = DocShell::Factory();
     rFactory.SetDocumentServiceName( "com.sun.star.script.BasicIDE" );
 
     DocShell::RegisterInterface( pMod );
@@ -149,7 +144,6 @@ ExtraData* Dll::GetExtraData ()
 
 
 ExtraData::ExtraData () :
-    pSearchItem(new SvxSearchItem(SID_SEARCH_ITEM)),
     bChoosingMacro(false),
     bShellInCriticalSection(false)
 {
@@ -167,14 +161,9 @@ ExtraData::~ExtraData ()
 //  StarBASIC::setGlobalStarScriptListener( XEngineListenerRef() );
 }
 
-void ExtraData::SetSearchItem (const SvxSearchItem& rItem)
+IMPL_STATIC_LINK(ExtraData, GlobalBasicBreakHdl, StarBASIC *, pBasic, BasicDebugFlags)
 {
-    pSearchItem.reset(static_cast<SvxSearchItem*>(rItem.Clone()));
-}
-
-IMPL_STATIC_LINK_TYPED(ExtraData, GlobalBasicBreakHdl, StarBASIC *, pBasic, sal_uInt16)
-{
-    sal_uInt16 nRet = 0;
+    BasicDebugFlags nRet = BasicDebugFlags::NONE;
     if (Shell* pShell = GetShell())
     {
         if (BasicManager* pBasMgr = FindBasicManager(pBasic))
@@ -195,7 +184,7 @@ IMPL_STATIC_LINK_TYPED(ExtraData, GlobalBasicBreakHdl, StarBASIC *, pBasic, sal_
                     if ( xPasswd.is() && xPasswd->isLibraryPasswordProtected( aOULibName ) && !xPasswd->isLibraryPasswordVerified( aOULibName ) )
                     {
                            // a step-out should get me out of the protected area...
-                        nRet = SbDEBUG_STEPOUT;
+                        nRet = BasicDebugFlags::StepOut;
                     }
                     else
                     {

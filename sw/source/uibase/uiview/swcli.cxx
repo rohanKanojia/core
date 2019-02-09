@@ -27,6 +27,7 @@
 #include <swcli.hxx>
 #include <cmdid.h>
 #include <cfgitems.hxx>
+#include <svtools/embedhlp.hxx>
 
 #include <toolkit/helper/vclunohelper.hxx>
 
@@ -40,7 +41,7 @@ SwOleClient::SwOleClient(SwView *pView, SwEditWin *pWin, const svt::EmbeddedObje
     SetObject( xObj.GetObject() );
 }
 
-void SwOleClient::RequestNewObjectArea( Rectangle& aLogRect )
+void SwOleClient::RequestNewObjectArea( tools::Rectangle& aLogRect )
 {
     // The server wants to change the client size.
     // We put the desired size in the core. The attributes of the frame
@@ -68,8 +69,8 @@ void SwOleClient::RequestNewObjectArea( Rectangle& aLogRect )
         MapMode aObjectMap( VCLUnoHelper::UnoEmbed2VCLMapUnit( GetObject()->getMapUnit( GetAspect() ) ) );
         MapMode aClientMap( GetEditWin()->GetMapMode().GetMapUnit() );
 
-        Size aNewObjSize( Fraction( aLogRect.GetWidth() ) / GetScaleWidth(),
-                          Fraction( aLogRect.GetHeight() ) / GetScaleHeight() );
+        Size aNewObjSize( long( aLogRect.GetWidth() / GetScaleWidth() ),
+                          long( aLogRect.GetHeight() / GetScaleHeight() ) );
 
         // convert to logical coordinates of the embedded object
         Size aNewSize = GetEditWin()->LogicToLogic( aNewObjSize, &aClientMap, &aObjectMap );
@@ -78,8 +79,8 @@ void SwOleClient::RequestNewObjectArea( Rectangle& aLogRect )
 
     rSh.EndAllAction();
 
-    SwRect aFrame( rSh.GetAnyCurRect( RECT_FLY_EMBEDDED,     nullptr, GetObject() )),
-           aPrt( rSh.GetAnyCurRect( RECT_FLY_PRT_EMBEDDED, nullptr, GetObject() ));
+    SwRect aFrame( rSh.GetAnyCurRect( CurRectType::FlyEmbedded,     nullptr, GetObject() )),
+           aPrt( rSh.GetAnyCurRect( CurRectType::FlyEmbeddedPrt, nullptr, GetObject() ));
     aLogRect.SetPos( aPrt.Pos() + aFrame.Pos() );
     aLogRect.SetSize( aPrt.SSize() );
 }
@@ -87,7 +88,7 @@ void SwOleClient::RequestNewObjectArea( Rectangle& aLogRect )
 void SwOleClient::ObjectAreaChanged()
 {
     SwWrtShell &rSh  = static_cast<SwView*>(GetViewShell())->GetWrtShell();
-    SwRect aFrame( rSh.GetAnyCurRect( RECT_FLY_EMBEDDED,     nullptr, GetObject() ));
+    SwRect aFrame( rSh.GetAnyCurRect( CurRectType::FlyEmbedded,     nullptr, GetObject() ));
     if ( !aFrame.IsOver( rSh.VisArea() ) )
         rSh.MakeVisible( aFrame );
 }
@@ -125,7 +126,7 @@ void SwOleClient::ViewChanged()
     }
     catch (const uno::Exception&)
     {
-        OSL_FAIL( "Something goes wrong on requesting object size!\n" );
+        OSL_FAIL( "Something goes wrong on requesting object size!" );
     }
 
     Size aVisSize( aSz.Width, aSz.Height );
@@ -138,12 +139,12 @@ void SwOleClient::ViewChanged()
     // first convert to TWIPS before scaling, because scaling factors are calculated for
     // the TWIPS mapping and so they will produce the best results if applied to TWIPS based
     // coordinates
-    const MapMode aMyMap ( MAP_TWIP );
+    const MapMode aMyMap ( MapUnit::MapTwip );
     const MapMode aObjMap( VCLUnoHelper::UnoEmbed2VCLMapUnit( GetObject()->getMapUnit( GetAspect() ) ) );
     aVisSize = OutputDevice::LogicToLogic( aVisSize, aObjMap, aMyMap );
 
-    aVisSize.Width() = Fraction( aVisSize.Width()  ) * GetScaleWidth();
-    aVisSize.Height()= Fraction( aVisSize.Height() ) * GetScaleHeight();
+    aVisSize.setWidth( long(aVisSize.Width() * GetScaleWidth()) );
+    aVisSize.setHeight( long(aVisSize.Height() * GetScaleHeight()) );
 
     SwRect aRect( Point( LONG_MIN, LONG_MIN ), aVisSize );
     rSh.LockView( true );   // Prevent scrolling in the EndAction

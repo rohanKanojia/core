@@ -21,51 +21,50 @@
 #define INCLUDED_VCL_MNEMONIC_HXX
 
 #include <com/sun/star/uno/Reference.h>
-#include <com/sun/star/i18n/XCharacterClassification.hpp>
 #include <rtl/ustring.hxx>
 #include <vcl/dllapi.h>
 
+namespace com { namespace sun { namespace star { namespace i18n { class XCharacterClassification; } } } }
 
 // Mnemonic Chars, which we want support
 // Latin 0-9
 #define MNEMONIC_RANGE_1_START      0x30
 #define MNEMONIC_RANGE_1_END        0x39
 // Latin A-Z
-#define MNEMONIC_RANGE_2_START      0x41
-#define MNEMONIC_RANGE_2_END        0x5A
+#define MNEMONIC_RANGE_2_START      0x61
+#define MNEMONIC_RANGE_2_END        0x7A
 // Cyrillic
-#define MNEMONIC_RANGE_3_START      0x0410
-#define MNEMONIC_RANGE_3_END        0x042F
+#define MNEMONIC_RANGE_3_START      0x0430
+#define MNEMONIC_RANGE_3_END        0x044F
 // Greek
-#define MNEMONIC_RANGE_4_START      0x0391
-#define MNEMONIC_RANGE_4_END        0x03AB
+#define MNEMONIC_RANGE_4_START      0x03B1
+#define MNEMONIC_RANGE_4_END        0x03CB
 #define MNEMONIC_RANGES             4
 #define MAX_MNEMONICS               ((MNEMONIC_RANGE_1_END-MNEMONIC_RANGE_1_START+1)+\
                                      (MNEMONIC_RANGE_2_END-MNEMONIC_RANGE_2_START+1)+\
                                      (MNEMONIC_RANGE_3_END-MNEMONIC_RANGE_3_START+1)+\
                                      (MNEMONIC_RANGE_4_END-MNEMONIC_RANGE_4_START+1))
 
-#define MNEMONIC_CHAR               ((sal_Unicode)'~')
-#define MNEMONIC_INDEX_NOTFOUND     ((sal_uInt16)0xFFFF)
+#define MNEMONIC_CHAR               u'~'
+#define MNEMONIC_INDEX_NOTFOUND     (sal_uInt16(0xFFFF))
 
 
 class VCL_DLLPUBLIC MnemonicGenerator
 {
-private:
+    sal_Unicode m_cMnemonic;
     // 0 == Mnemonic; >0 == count of characters
     sal_uInt8               maMnemonics[MAX_MNEMONICS];
     css::uno::Reference< css::i18n::XCharacterClassification > mxCharClass;
 
-protected:
-    SAL_DLLPRIVATE sal_uInt16       ImplGetMnemonicIndex( sal_Unicode c );
-    SAL_DLLPRIVATE sal_Unicode  ImplFindMnemonic( const OUString& rKey );
+    SAL_DLLPRIVATE static sal_uInt16 ImplGetMnemonicIndex( sal_Unicode c );
+    SAL_DLLPRIVATE sal_Unicode ImplFindMnemonic( const OUString& rKey );
 
 public:
-                        MnemonicGenerator();
+                        MnemonicGenerator(sal_Unicode cMnemonic = MNEMONIC_CHAR);
 
     void                RegisterMnemonic( const OUString& rKey );
     OUString            CreateMnemonic( const OUString& rKey );
-    css::uno::Reference< css::i18n::XCharacterClassification > GetCharClass();
+    css::uno::Reference< css::i18n::XCharacterClassification > const & GetCharClass();
 
     // returns a string where all '~'-characters and CJK mnemonics of the form (~A) are completely removed
     static OUString EraseAllMnemonicChars( const OUString& rStr );

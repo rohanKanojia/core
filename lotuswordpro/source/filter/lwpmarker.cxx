@@ -58,16 +58,16 @@
  *  For LWP filter architecture prototype
  ************************************************************************/
 
-#include "lwpfoundry.hxx"
-#include "lwpfilehdr.hxx"
+#include <lwpfoundry.hxx>
+#include <lwpfilehdr.hxx>
 #include "lwpstory.hxx"
 #include "lwpmarker.hxx"
 #include "lwpproplist.hxx"
-#include "lwpglobalmgr.hxx"
-#include "xfilter/xfplaceholder.hxx"
-#include "xfilter/xfinputlist.hxx"
+#include <lwpglobalmgr.hxx>
+#include <xfilter/xfplaceholder.hxx>
+#include <xfilter/xfinputlist.hxx>
 
-LwpMarker::LwpMarker(LwpObjectHeader &objHdr, LwpSvStream *pStrm)
+LwpMarker::LwpMarker(LwpObjectHeader const &objHdr, LwpSvStream *pStrm)
     : LwpDLNFPVList(objHdr,pStrm)
     , m_nFlag(0)
     , m_nPageNumber(0)
@@ -78,9 +78,9 @@ LwpMarker::LwpMarker(LwpObjectHeader &objHdr, LwpSvStream *pStrm)
 void LwpMarker::Read()
 {
     LwpDLNFPVList::Read();
-    m_objContent.ReadIndexed(m_pObjStrm);
-    m_objLayout.ReadIndexed(m_pObjStrm);
-    m_objMarkerList.ReadIndexed(m_pObjStrm);
+    m_objContent.ReadIndexed(m_pObjStrm.get());
+    m_objLayout.ReadIndexed(m_pObjStrm.get());
+    m_objMarkerList.ReadIndexed(m_pObjStrm.get());
     m_nNeedUpdate = m_pObjStrm->QuickReaduInt16();
     m_nFlag = m_pObjStrm->QuickReaduInt16();
     m_nPageNumber = m_pObjStrm->QuickReaduInt16();
@@ -94,10 +94,10 @@ OUString LwpMarker::GetNamedProperty(const OUString& name)
     if (pProp)
         return pProp->GetNamedProperty(name);
     else
-        return OUString("");
+        return OUString();
 }
 
-LwpStoryMarker::LwpStoryMarker(LwpObjectHeader &objHdr, LwpSvStream *pStrm)
+LwpStoryMarker::LwpStoryMarker(LwpObjectHeader const &objHdr, LwpSvStream *pStrm)
     : LwpMarker(objHdr,pStrm)
     , m_nFlag(0)
 {
@@ -107,7 +107,7 @@ void LwpStoryMarker::Read()
 {
     LwpMarker::Read();
     m_nFlag = m_pObjStrm->QuickReaduInt16();
-    m_Range.Read(m_pObjStrm);
+    m_Range.Read(m_pObjStrm.get());
     m_pObjStrm->SkipExtra();
 }
 
@@ -117,7 +117,7 @@ void LwpFribRange::Read(LwpObjectStream* pObjStrm)
     m_EndPara.ReadIndexed(pObjStrm);
 }
 
-LwpCHBlkMarker::LwpCHBlkMarker(LwpObjectHeader &objHdr, LwpSvStream *pStrm)
+LwpCHBlkMarker::LwpCHBlkMarker(LwpObjectHeader const &objHdr, LwpSvStream *pStrm)
     : LwpStoryMarker(objHdr, pStrm)
     , m_nTab(0)
     , m_nFlag(0)
@@ -128,14 +128,14 @@ LwpCHBlkMarker::LwpCHBlkMarker(LwpObjectHeader &objHdr, LwpSvStream *pStrm)
 void LwpCHBlkMarker::Read()
 {
     LwpStoryMarker::Read();
-    m_objPromptStory.ReadIndexed(m_pObjStrm);
-    m_Help.Read(m_pObjStrm);
+    m_objPromptStory.ReadIndexed(m_pObjStrm.get());
+    m_Help.Read(m_pObjStrm.get());
     m_nAction = m_pObjStrm->QuickReaduInt16();
     m_nTab = m_pObjStrm->QuickReaduInt32();
     m_nFlag = m_pObjStrm->QuickReaduInt16();
     if(m_pObjStrm->CheckExtra())
     {
-        m_Mirror.Read(m_pObjStrm);
+        m_Mirror.Read(m_pObjStrm.get());
         m_pObjStrm->SkipExtra();
     }
 }
@@ -147,7 +147,7 @@ OUString LwpCHBlkMarker::GetPromptText()
         pStory = dynamic_cast<LwpStory*>(m_objPromptStory.obj().get());
     if (pStory)
         return pStory->GetContentText();
-    return OUString("");
+    return OUString();
 }
 
 void LwpCHBlkMarker::ConvertCHBlock(XFContentContainer* pXFPara, sal_uInt8 nType)
@@ -261,9 +261,7 @@ void LwpCHBlkMarker::ProcessKeylist(XFContentContainer* pXFPara,sal_uInt8 nType)
             pList->SetLabels(m_Keylist);
             pXFPara->Add(pList);
         }
-        else if (nType == MARKER_END)//skip
-        {
-        }
+        // else skip MARKER_END
     }
     else
     {
@@ -290,9 +288,7 @@ void LwpCHBlkMarker::ProcessKeylist(XFContentContainer* pXFPara,sal_uInt8 nType)
 
 bool LwpCHBlkMarker::IsHasFilled()
 {
-    if (CHB_PROMPT & m_nFlag)
-        return false;
-    return true;
+    return (CHB_PROMPT & m_nFlag) == 0;
 }
 
 bool LwpCHBlkMarker::IsBubbleHelp()
@@ -319,7 +315,7 @@ void LwpCHBlkMarker::EnumAllKeywords()
     }
 }
 
-LwpBookMark::LwpBookMark(LwpObjectHeader &objHdr, LwpSvStream *pStrm)
+LwpBookMark::LwpBookMark(LwpObjectHeader const &objHdr, LwpSvStream *pStrm)
     : LwpDLNFVList(objHdr,pStrm)
     , m_nFlag(0)
 {
@@ -328,7 +324,7 @@ LwpBookMark::LwpBookMark(LwpObjectHeader &objHdr, LwpSvStream *pStrm)
 void LwpBookMark::Read()
 {
     LwpDLNFVList::Read();
-    m_objMarker.ReadIndexed(m_pObjStrm);
+    m_objMarker.ReadIndexed(m_pObjStrm.get());
     if (LwpFileHeader::m_nFileRevision < 0x0008)
     {
         if (m_pObjStrm->QuickReadBool())
@@ -341,17 +337,15 @@ void LwpBookMark::Read()
 
 bool LwpBookMark::IsRightMarker(LwpObjectID objMarker)
 {
-    if (objMarker == m_objMarker)
-        return true;
-    return false;
+    return objMarker == m_objMarker;
 }
 
-OUString LwpBookMark::GetName()
+OUString const & LwpBookMark::GetName()
 {
     return LwpDLNFVList::GetName().str();
 }
 
-LwpFieldMark::LwpFieldMark(LwpObjectHeader &objHdr, LwpSvStream *pStrm)
+LwpFieldMark::LwpFieldMark(LwpObjectHeader const &objHdr, LwpSvStream *pStrm)
     : LwpStoryMarker(objHdr,pStrm)
     , m_nFlag(0)
     , m_nFieldType(0)
@@ -365,11 +359,11 @@ LwpFieldMark::LwpFieldMark(LwpObjectHeader &objHdr, LwpSvStream *pStrm)
 void LwpFieldMark::Read()
 {
     LwpStoryMarker::Read();
-    m_Formula.Read(m_pObjStrm);
-    m_objFormulaStory.ReadIndexed(m_pObjStrm);
+    m_Formula.Read(m_pObjStrm.get());
+    m_objFormulaStory.ReadIndexed(m_pObjStrm.get());
     if (LwpFileHeader::m_nFileRevision < 0x000B)
         return;
-    m_objResultContent.ReadIndexed(m_pObjStrm);
+    m_objResultContent.ReadIndexed(m_pObjStrm.get());
     m_nFlag = m_pObjStrm->QuickReaduInt16();
     m_nFieldType = m_pObjStrm->QuickReaduInt16();
     m_pObjStrm->SkipExtra();
@@ -419,19 +413,13 @@ void LwpFieldMark::ParseTOC(OUString& sLevel,OUString& sText)
 
 bool LwpFieldMark::IsFormulaInsert()
 {
-    if (m_nFlag & FF_FORMULAINSERTED)
-        return true;
-    return false;
+    return (m_nFlag & FF_FORMULAINSERTED) != 0;
 }
 
 bool LwpFieldMark::IsDateTimeField(sal_uInt8& type,OUString& formula)
 {
     OUString sFormula = m_Formula.str();
-    sal_Int32 index;
-    sal_Unicode ch1(0x0020);//space
-    OUString tag;
-
-    index = sFormula.indexOf(ch1);
+    sal_Int32 index = sFormula.indexOf(0x20); // space
     if (index < 0)
     {
         if (sFormula == "TotalEditingTime")
@@ -442,23 +430,23 @@ bool LwpFieldMark::IsDateTimeField(sal_uInt8& type,OUString& formula)
         return false;
     }
 
-    tag = sFormula.copy(0,index);
+    OUString tag = sFormula.copy(0,index);
     if (tag == "Now()")
     {
         type = DATETIME_NOW;
-        formula = sFormula.copy(index+1,sFormula.getLength()-index-1);
+        formula = sFormula.copy(index+1);
         return true;
     }
     else if (tag == "CreateDate")
     {
         type = DATETIME_CREATE;
-        formula = sFormula.copy(index+1,sFormula.getLength()-index-1);
+        formula = sFormula.copy(index+1);
         return true;
     }
     else if (tag == "EditDate")
     {
         type = DATETIME_LASTEDIT;
-        formula = sFormula.copy(index+1,sFormula.getLength()-index-1);
+        formula = sFormula.copy(index+1);
         return true;
     }
     else if (tag == "YesterdaysDate" || tag == "TomorrowsDate"
@@ -474,11 +462,7 @@ bool LwpFieldMark::IsDateTimeField(sal_uInt8& type,OUString& formula)
 bool LwpFieldMark::IsCrossRefField(sal_uInt8& nType, OUString& sMarkName)
 {
     OUString sFormula = m_Formula.str();
-    sal_Int32 index;
-    sal_Unicode ch1(0x0020);//space
-    OUString tag;
-
-    index = sFormula.indexOf(ch1);
+    sal_Int32 index = sFormula.indexOf(0x20); // space
     if (index < 0)
     {
         LwpGlobalMgr* pGlobal = LwpGlobalMgr::GetInstance();
@@ -493,16 +477,16 @@ bool LwpFieldMark::IsCrossRefField(sal_uInt8& nType, OUString& sMarkName)
             return false;
     }
 
-    tag = sFormula.copy(0,index);
+    OUString tag = sFormula.copy(0,index);
     if (tag == "PageRef")
     {
-        sMarkName = sFormula.copy(index+1,sFormula.getLength()-index-1);
+        sMarkName = sFormula.copy(index+1);
         nType = CROSSREF_PAGE;
         return true;
     }
     else if (tag == "ParaRef")
     {
-        sMarkName = sFormula.copy(index+1,sFormula.getLength()-index-1);
+        sMarkName = sFormula.copy(index+1);
         nType = CROSSREF_PARANUMBER;
         return true;
     }
@@ -540,14 +524,14 @@ bool LwpFieldMark::IsDocPowerField(sal_uInt8& nType,OUString& sFormula)
     }
 }
 
-LwpRubyMarker::LwpRubyMarker(LwpObjectHeader &objHdr, LwpSvStream *pStrm):LwpStoryMarker(objHdr,pStrm)
+LwpRubyMarker::LwpRubyMarker(LwpObjectHeader const &objHdr, LwpSvStream *pStrm):LwpStoryMarker(objHdr,pStrm)
 {
 }
 
 void LwpRubyMarker::Read()
 {
     LwpStoryMarker::Read();
-    m_objLayout.ReadIndexed(m_pObjStrm);
+    m_objLayout.ReadIndexed(m_pObjStrm.get());
     m_pObjStrm->SkipExtra();
 }
 

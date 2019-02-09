@@ -12,7 +12,8 @@
 
 // Unfortunately requires linkage to sc/ internals so
 // can't live in qahelper itself.
-#include "inputopt.hxx"
+#include <inputopt.hxx>
+#include <scmod.hxx>
 
 /**
  * Temporarily set the sorting type.
@@ -32,7 +33,7 @@ public:
         SC_MOD()->SetInputOptions(aInputOptions);
         return bRet;
     }
-    virtual ~SortTypeSetter()
+    virtual ~SortTypeSetter() COVERITY_NOEXCEPT_FALSE
     {
         changeTo(mbSortRefUpdate);
     }

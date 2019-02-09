@@ -23,6 +23,7 @@
 #include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/strbuf.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
 
 namespace extensions { namespace config { namespace ldap {
@@ -61,26 +62,24 @@ void LdapConnection::disconnect()
 
 
 static void checkLdapReturnCode(const sal_Char *aOperation,
-                                LdapErrCode aRetCode,
-                                LDAP * /*aConnection*/)
+                                LdapErrCode aRetCode)
 {
     if (aRetCode == LDAP_SUCCESS) { return ; }
 
-    OUStringBuffer message;
+    OUString message;
 
     if (aOperation != nullptr)
     {
-        message.appendAscii(aOperation).append(": ") ;
+        message += OUString::createFromAscii(aOperation) + ": ";
     }
-    message.appendAscii(ldap_err2string(aRetCode)).append(" (") ;
-    sal_Char *stub = nullptr ;
+    message += OUString::createFromAscii(ldap_err2string(aRetCode)) + " (" ;
 
 #ifndef LDAP_OPT_SIZELIMIT // for use with OpenLDAP
+    sal_Char* stub = nullptr;
     ldap_get_lderrno(aConnection, NULL, &stub) ;
-#endif
     if (stub != nullptr)
     {
-        message.appendAscii(stub) ;
+        message += OUString::createFromAscii(stub) ;
         // It would seem the message returned is actually
         // not a copy of a string but rather some static
         // string itself. At any rate freeing it seems to
@@ -88,14 +87,15 @@ static void checkLdapReturnCode(const sal_Char *aOperation,
         // This call is thus disabled for the moment.
         //ldap_memfree(stub) ;
     }
-    else { message.append("No additional information") ; }
-    message.append(")") ;
-    throw ldap::LdapGenericException(message.makeStringAndClear(),
-                                     nullptr, aRetCode) ;
+    else
+#endif
+    { message += "No additional information"; }
+
+    message += ")" ;
+    throw ldap::LdapGenericException(message, nullptr, aRetCode) ;
 }
 
 void  LdapConnection::connectSimple(const LdapDefinition& aDefinition)
-   throw (ldap::LdapConnectionException, ldap::LdapGenericException)
 {
     OSL_ENSURE(!isValid(), "Re-connecting to an LDAP connection that is already established");
     if (isValid()) disconnect();
@@ -105,7 +105,6 @@ void  LdapConnection::connectSimple(const LdapDefinition& aDefinition)
 }
 
 void  LdapConnection::connectSimple()
-   throw (ldap::LdapConnectionException, ldap::LdapGenericException)
 {
     if (!isValid())
     {
@@ -134,33 +133,29 @@ void  LdapConnection::connectSimple()
         // Do the bind
 #ifdef _WIN32
         LdapErrCode retCode = ldap_simple_bind_sW(mConnection,
-                                               (PWCHAR) mLdapDefinition.mAnonUser.getStr(),
-                                               (PWCHAR) mLdapDefinition.mAnonCredentials.getStr() );
+                                               const_cast<PWSTR>(o3tl::toW(mLdapDefinition.mAnonUser.getStr())),
+                                               const_cast<PWSTR>(o3tl::toW(mLdapDefinition.mAnonCredentials.getStr())) );
 #else
         LdapErrCode retCode = ldap_simple_bind_s(mConnection,
                                                OUStringToOString( mLdapDefinition.mAnonUser, RTL_TEXTENCODING_UTF8 ).getStr(),
                                                OUStringToOString( mLdapDefinition.mAnonCredentials, RTL_TEXTENCODING_UTF8 ).getStr()) ;
 #endif
 
-        checkLdapReturnCode("SimpleBind", retCode, mConnection) ;
+        checkLdapReturnCode("SimpleBind", retCode) ;
     }
 }
 
 void LdapConnection::initConnection()
-    throw (ldap::LdapConnectionException)
 {
     if (mLdapDefinition.mServer.isEmpty())
     {
-        OUStringBuffer message ;
-
-        message.append("Cannot initialise connection to LDAP: No server specified.") ;
-        throw ldap::LdapConnectionException(message.makeStringAndClear()) ;
+        throw ldap::LdapConnectionException("Cannot initialise connection to LDAP: No server specified.");
     }
 
     if (mLdapDefinition.mPort == 0) mLdapDefinition.mPort = LDAP_PORT;
 
 #ifdef _WIN32
-    mConnection = ldap_initW((PWCHAR) mLdapDefinition.mServer.getStr(),
+    mConnection = ldap_initW(const_cast<PWSTR>(o3tl::toW(mLdapDefinition.mServer.getStr())),
                             mLdapDefinition.mPort) ;
 #else
     mConnection = ldap_init(OUStringToOString( mLdapDefinition.mServer, RTL_TEXTENCODING_UTF8 ).getStr(),
@@ -168,20 +163,14 @@ void LdapConnection::initConnection()
 #endif
     if (mConnection == nullptr)
     {
-        OUStringBuffer message ;
-
-        message.append("Cannot initialise connection to LDAP server ") ;
-        message.append(mLdapDefinition.mServer) ;
-        message.append(":") ;
-        message.append(mLdapDefinition.mPort) ;
-        throw ldap::LdapConnectionException(message.makeStringAndClear());
+        throw ldap::LdapConnectionException(
+            "Cannot initialise connection to LDAP server "
+            + mLdapDefinition.mServer + ":" + OUString::number(mLdapDefinition.mPort));
     }
 }
 
  void LdapConnection::getUserProfile(
      const OUString& aUser, LdapData * data)
-    throw (lang::IllegalArgumentException,
-            ldap::LdapConnectionException, ldap::LdapGenericException)
 {
     OSL_ASSERT(data != nullptr);
     if (!isValid()) { connectSimple(); }
@@ -191,10 +180,10 @@ void LdapConnection::initConnection()
     LdapMessageHolder result;
 #ifdef _WIN32
     LdapErrCode retCode = ldap_search_sW(mConnection,
-                                      (PWCHAR) aUserDn.getStr(),
+                                      const_cast<PWSTR>(o3tl::toW(aUserDn.getStr())),
                                       LDAP_SCOPE_BASE,
-                                      const_cast<PWCHAR>( L"(objectclass=*)" ),
-                                      0,
+                                      const_cast<PWSTR>( L"(objectclass=*)" ),
+                                      nullptr,
                                       0, // Attributes + values
                                       &result.msg) ;
 #else
@@ -206,7 +195,7 @@ void LdapConnection::initConnection()
                                       0, // Attributes + values
                                       &result.msg) ;
 #endif
-    checkLdapReturnCode("getUserProfile", retCode,mConnection) ;
+    checkLdapReturnCode("getUserProfile", retCode) ;
 
     BerElement * ptr;
 #ifdef _WIN32
@@ -214,10 +203,9 @@ void LdapConnection::initConnection()
     while (attr) {
         PWCHAR * values = ldap_get_valuesW(mConnection, result.msg, attr);
         if (values) {
-            const OUString aAttr( reinterpret_cast<sal_Unicode*>( attr ) );
-            const OUString aValues( reinterpret_cast<sal_Unicode*>( *values ) );
-            data->insert(
-                LdapData::value_type( aAttr, aValues ));
+            const OUString aAttr( o3tl::toU( attr ) );
+            const OUString aValues( o3tl::toU( *values ) );
+            data->emplace( aAttr, aValues );
             ldap_value_freeW(values);
         }
         attr = ldap_next_attributeW(mConnection, result.msg, ptr);
@@ -226,10 +214,9 @@ void LdapConnection::initConnection()
     while (attr) {
         char ** values = ldap_get_values(mConnection, result.msg, attr);
         if (values) {
-            data->insert(
-                LdapData::value_type(
+            data->emplace(
                     OStringToOUString(attr, RTL_TEXTENCODING_ASCII_US),
-                    OStringToOUString(*values, RTL_TEXTENCODING_UTF8)));
+                    OStringToOUString(*values, RTL_TEXTENCODING_UTF8));
             ldap_value_free(values);
         }
         attr = ldap_next_attribute(mConnection, result.msg, ptr);
@@ -238,8 +225,6 @@ void LdapConnection::initConnection()
 }
 
  OUString LdapConnection::findUserDn(const OUString& aUser)
-    throw (lang::IllegalArgumentException,
-            ldap::LdapConnectionException, ldap::LdapGenericException)
 {
     if (!isValid()) { connectSimple(); }
 
@@ -250,27 +235,29 @@ void LdapConnection::initConnection()
                 nullptr, 0) ;
     }
 
-
-    OUStringBuffer filter( "(&(objectclass=" );
-
-    filter.append( mLdapDefinition.mUserObjectClass ).append(")(") ;
-    filter.append( mLdapDefinition.mUserUniqueAttr ).append("=").append(aUser).append("))") ;
+    OUString filter = "(&(objectclass="
+                    + mLdapDefinition.mUserObjectClass
+                    + ")("
+                    + mLdapDefinition.mUserUniqueAttr
+                    + "="
+                    + aUser
+                    + "))";
 
     LdapMessageHolder result;
 #ifdef _WIN32
-    PWCHAR attributes [2] = { const_cast<PWCHAR>( L"1.1" ), NULL };
+    PWCHAR attributes [2] = { const_cast<PWCHAR>( L"1.1" ), nullptr };
     LdapErrCode retCode = ldap_search_sW(mConnection,
-                                      (PWCHAR) mLdapDefinition.mBaseDN.getStr(),
+                                      const_cast<PWSTR>(o3tl::toW(mLdapDefinition.mBaseDN.getStr())),
                                       LDAP_SCOPE_SUBTREE,
-                                      (PWCHAR) filter.makeStringAndClear().getStr(), attributes, 0, &result.msg) ;
+                                      const_cast<PWSTR>(o3tl::toW(filter.getStr())), attributes, 0, &result.msg) ;
 #else
     sal_Char * attributes [2] = { const_cast<sal_Char *>(LDAP_NO_ATTRS), nullptr };
     LdapErrCode retCode = ldap_search_s(mConnection,
                                       OUStringToOString( mLdapDefinition.mBaseDN, RTL_TEXTENCODING_UTF8 ).getStr(),
                                       LDAP_SCOPE_SUBTREE,
-                                      OUStringToOString( filter.makeStringAndClear(), RTL_TEXTENCODING_UTF8 ).getStr(), attributes, 0, &result.msg) ;
+                                      OUStringToOString( filter, RTL_TEXTENCODING_UTF8 ).getStr(), attributes, 0, &result.msg) ;
 #endif
-    checkLdapReturnCode("FindUserDn", retCode,mConnection) ;
+    checkLdapReturnCode("FindUserDn", retCode) ;
     OUString userDn ;
     LDAPMessage *entry = ldap_first_entry(mConnection, result.msg) ;
 
@@ -279,7 +266,7 @@ void LdapConnection::initConnection()
 #ifdef _WIN32
         PWCHAR charsDn = ldap_get_dnW(mConnection, entry) ;
 
-        userDn = OUString( reinterpret_cast<const sal_Unicode*>( charsDn ) );
+        userDn = OUString( o3tl::toU( charsDn ) );
         ldap_memfreeW(charsDn) ;
 #else
         sal_Char *charsDn = ldap_get_dn(mConnection, entry) ;

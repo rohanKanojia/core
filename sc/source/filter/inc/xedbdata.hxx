@@ -24,13 +24,12 @@
 #include "xerecord.hxx"
 
 class ScDBData;
-class XclExpTablesManagerImpl;
 
 class XclExpTables : public XclExpRecordBase, protected XclExpRoot
 {
 public:
                         XclExpTables( const XclExpRoot& rRoot );
-    virtual             ~XclExpTables();
+    virtual             ~XclExpTables() override;
 
     void                AppendTable( const ScDBData* pData, sal_Int32 nTableId );
 
@@ -38,7 +37,7 @@ protected:
     struct Entry
     {
         const ScDBData* mpData;
-        sal_Int32       mnTableId;  /// used as [n] in table[n].xml part name.
+        sal_Int32 const mnTableId;  /// used as [n] in table[n].xml part name.
 
         Entry( const ScDBData* pData, sal_Int32 nTableId );
     };
@@ -55,7 +54,7 @@ class XclExpTablesManager : protected XclExpRoot
 {
 public:
     explicit            XclExpTablesManager( const XclExpRoot& rRoot );
-    virtual             ~XclExpTablesManager();
+    virtual             ~XclExpTablesManager() override;
 
     void                Initialize();
     ::std::shared_ptr< XclExpTables > GetTablesBySheet( SCTAB nTab );

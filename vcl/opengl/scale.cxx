@@ -18,23 +18,24 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
+
+#include <cmath>
 
 #include <vcl/opengl/OpenGLHelper.hxx>
 
 #include <vcl/bitmap.hxx>
 
-#include "opengl/zone.hxx"
-#include "opengl/salbmp.hxx"
-#include "opengl/program.hxx"
-#include "opengl/texture.hxx"
+#include <opengl/zone.hxx>
+#include <opengl/salbmp.hxx>
+#include <opengl/program.hxx>
+#include <opengl/texture.hxx>
+#include <opengl/RenderState.hxx>
 
 #include <ResampleKernel.hxx>
 
 using vcl::Kernel;
 using vcl::Lanczos3Kernel;
-using vcl::BicubicKernel;
-using vcl::BilinearKernel;
-using vcl::BoxKernel;
 
 bool OpenGLSalBitmap::ImplScaleFilter(
     const rtl::Reference< OpenGLContext > &xContext,
@@ -82,7 +83,7 @@ void OpenGLSalBitmap::ImplCreateKernel(
 {
     const double fSamplingRadius(rKernel.GetWidth());
     const double fScaledRadius((fScale < 1.0) ? fSamplingRadius / fScale : fSamplingRadius);
-    const double fFilterFactor((fScale < 1.0) ? fScale : 1.0);
+    const double fFilterFactor(std::min(fScale, 1.0));
     int aNumberOfContributions;
     double aSum( 0 );
 
@@ -142,7 +143,7 @@ bool OpenGLSalBitmap::ImplScaleConvolution(
 
         for( sal_uInt32 i = 0; i < 16; i++ )
         {
-            aOffsets[i * 2] = i / (double) mnWidth;
+            aOffsets[i * 2] = i / static_cast<double>(mnWidth);
             aOffsets[i * 2 + 1] = 0;
         }
         ImplCreateKernel( rScaleX, aKernel, pWeights, nKernelSize );
@@ -166,7 +167,7 @@ bool OpenGLSalBitmap::ImplScaleConvolution(
         for( sal_uInt32 i = 0; i < 16; i++ )
         {
             aOffsets[i * 2] = 0;
-            aOffsets[i * 2 + 1] = i / (double) mnHeight;
+            aOffsets[i * 2 + 1] = i / static_cast<double>(mnHeight);
         }
         ImplCreateKernel( rScaleY, aKernel, pWeights, nKernelSize );
         pProgram->SetUniform1fv( "kernel", 16, pWeights );
@@ -205,7 +206,7 @@ bool OpenGLSalBitmap::ImplScaleArea( const rtl::Reference< OpenGLContext > &xCon
 
     double ixscale = 1 / rScaleX;
     double iyscale = 1 / rScaleY;
-    bool fast = ( ixscale == int( ixscale ) && iyscale == int( iyscale )
+    bool fast = ( ixscale == std::trunc( ixscale ) && iyscale == std::trunc( iyscale )
         && int( nNewWidth * ixscale ) == mnWidth && int( nNewHeight * iyscale ) == mnHeight );
 
     bool bTwoPasses = false;
@@ -233,8 +234,14 @@ bool OpenGLSalBitmap::ImplScaleArea( const rtl::Reference< OpenGLContext > &xCon
 
     // TODO Make sure the framebuffer is alright
 
+    OString sUseReducedRegisterVariantDefine;
+    if (xContext->getOpenGLCapabilitySwitch().mbLimitedShaderRegisters)
+        sUseReducedRegisterVariantDefine = OString("#define USE_REDUCED_REGISTER_VARIANT\n");
+
     OpenGLProgram* pProgram = xContext->UseProgram( "textureVertexShader",
-        fast ? OUString( "areaScaleFastFragmentShader" ) : OUString( "areaScaleFragmentShader" ));
+        fast ? OUString( "areaScaleFastFragmentShader" ) : OUString( "areaScaleFragmentShader" ),
+        sUseReducedRegisterVariantDefine);
+
     if( pProgram == nullptr )
         return false;
 
@@ -283,7 +290,7 @@ bool OpenGLSalBitmap::ImplScaleArea( const rtl::Reference< OpenGLContext > &xCon
         ixscale = 1 / rScaleX;
         iyscale = 1 / rScaleY;
 
-        pProgram = xContext->UseProgram("textureVertexShader", "areaScaleFragmentShader");
+        pProgram = xContext->UseProgram("textureVertexShader", "areaScaleFragmentShader", sUseReducedRegisterVariantDefine);
         if (pProgram == nullptr)
             return false;
 
@@ -323,13 +330,15 @@ bool OpenGLSalBitmap::ImplScaleArea( const rtl::Reference< OpenGLContext > &xCon
     return true;
 }
 
-bool OpenGLSalBitmap::ImplScale( const double& rScaleX, const double& rScaleY, BmpScaleFlag nScaleFlag )
+void OpenGLSalBitmap::ImplScale( const double& rScaleX, const double& rScaleY, BmpScaleFlag nScaleFlag )
 {
     VCL_GL_INFO( "::ImplScale" );
 
     mpUserBuffer.reset();
     OpenGLVCLContextZone aContextZone;
     rtl::Reference<OpenGLContext> xContext = OpenGLContext::getVCLContext();
+    xContext->state().scissor().disable();
+    xContext->state().stencil().disable();
 
     if (rScaleX <= 1 && rScaleY <= 1)
     {
@@ -338,31 +347,35 @@ bool OpenGLSalBitmap::ImplScale( const double& rScaleX, const double& rScaleY, B
 
     if( nScaleFlag == BmpScaleFlag::Fast )
     {
-        return ImplScaleFilter( xContext, rScaleX, rScaleY, GL_NEAREST );
+        ImplScaleFilter( xContext, rScaleX, rScaleY, GL_NEAREST );
     }
     if( nScaleFlag == BmpScaleFlag::BiLinear )
     {
-        return ImplScaleFilter( xContext, rScaleX, rScaleY, GL_LINEAR );
+        ImplScaleFilter( xContext, rScaleX, rScaleY, GL_LINEAR );
     }
-    else if( nScaleFlag == BmpScaleFlag::Super || nScaleFlag == BmpScaleFlag::Default )
+    else if( nScaleFlag == BmpScaleFlag::Default )
     {
         const Lanczos3Kernel aKernel;
 
-        return ImplScaleConvolution( xContext, rScaleX, rScaleY, aKernel );
+        ImplScaleConvolution( xContext, rScaleX, rScaleY, aKernel );
     }
     else if( nScaleFlag == BmpScaleFlag::BestQuality && rScaleX <= 1 && rScaleY <= 1 )
     { // Use are scaling for best quality, but only if downscaling.
-        return ImplScaleArea( xContext, rScaleX, rScaleY );
+        ImplScaleArea( xContext, rScaleX, rScaleY );
     }
     else if( nScaleFlag == BmpScaleFlag::Lanczos || nScaleFlag == BmpScaleFlag::BestQuality  )
     {
         const Lanczos3Kernel aKernel;
 
-        return ImplScaleConvolution( xContext, rScaleX, rScaleY, aKernel );
+        ImplScaleConvolution( xContext, rScaleX, rScaleY, aKernel );
     }
+    else
+        SAL_WARN( "vcl.opengl", "Invalid flag for scaling operation" );
+}
 
-    SAL_WARN( "vcl.opengl", "Invalid flag for scaling operation" );
-    return false;
+bool OpenGLSalBitmap::ScalingSupported() const
+{
+    return true;
 }
 
 bool OpenGLSalBitmap::Scale( const double& rScaleX, const double& rScaleY, BmpScaleFlag nScaleFlag )
@@ -375,7 +388,6 @@ bool OpenGLSalBitmap::Scale( const double& rScaleX, const double& rScaleY, BmpSc
 
     if( nScaleFlag == BmpScaleFlag::Fast ||
         nScaleFlag == BmpScaleFlag::BiLinear ||
-        nScaleFlag == BmpScaleFlag::Super ||
         nScaleFlag == BmpScaleFlag::Lanczos ||
         nScaleFlag == BmpScaleFlag::Default ||
         nScaleFlag == BmpScaleFlag::BestQuality )

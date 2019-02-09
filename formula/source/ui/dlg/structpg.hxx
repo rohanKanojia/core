@@ -20,22 +20,17 @@
 #ifndef INCLUDED_FORMULA_SOURCE_UI_DLG_STRUCTPG_HXX
 #define INCLUDED_FORMULA_SOURCE_UI_DLG_STRUCTPG_HXX
 
-#include <svtools/stdctrl.hxx>
-#include <vcl/lstbox.hxx>
-#include <vcl/group.hxx>
 #include <svtools/svmedit.hxx>
 #include <vcl/tabpage.hxx>
 #include <vcl/tabctrl.hxx>
-#include <svtools/treelistbox.hxx>
-#include "formula/IFunctionDescription.hxx"
-#include "formula/omoduleclient.hxx"
-
+#include <vcl/treelistbox.hxx>
+#include <formula/IFunctionDescription.hxx>
 
 namespace formula
 {
 
-class IFormulaToken;
-class   StructListBox : public SvTreeListBox
+class FormulaToken;
+class StructListBox : public SvTreeListBox
 {
 private:
 
@@ -52,46 +47,43 @@ public:
     SvTreeListEntry*    InsertStaticEntry(
                         const OUString& rText,
                         const Image& rEntryImg,
-                        SvTreeListEntry* pParent = nullptr,
-                        sal_uLong nPos = TREELIST_APPEND,
-                        IFormulaToken* pToken = nullptr );
+                        SvTreeListEntry* pParent,
+                        sal_uLong nPos,
+                        const FormulaToken* pToken );
 
-    void            SetActiveFlag(bool bFlag=true);
+    void            SetActiveFlag(bool bFlag);
     bool            GetActiveFlag() { return bActiveFlag;}
     void            GetFocus() override;
     void            LoseFocus() override;
 };
 
 
-class StructPage : public TabPage
+class StructPage final : public TabPage
 {
 private:
-    OModuleClient           m_aModuleClient;
     Link<StructPage&,void>  aSelLink;
 
     VclPtr<StructListBox>   m_pTlbStruct;
     Image           maImgEnd;
     Image           maImgError;
 
-    IFormulaToken*  pSelectedToken;
+    const FormulaToken* pSelectedToken;
 
-    DECL_LINK_TYPED( SelectHdl, SvTreeListBox*, void );
+    DECL_LINK( SelectHdl, SvTreeListBox*, void );
 
     using Window::GetParent;
 
-protected:
-
-    IFormulaToken*      GetFunctionEntry(SvTreeListEntry* pEntry);
+    const FormulaToken* GetFunctionEntry(SvTreeListEntry* pEntry);
 
 public:
 
     explicit StructPage(vcl::Window* pParent);
-    virtual         ~StructPage();
+    virtual         ~StructPage() override;
     virtual void    dispose() override;
 
     void            ClearStruct();
     SvTreeListEntry* InsertEntry(const OUString& rText, SvTreeListEntry* pParent,
-                                sal_uInt16 nFlag,sal_uLong nPos=0,IFormulaToken* pScToken=nullptr);
+                                sal_uInt16 nFlag, sal_uLong nPos, const FormulaToken* pScToken);
 
     OUString        GetEntryText(SvTreeListEntry* pEntry) const;
 

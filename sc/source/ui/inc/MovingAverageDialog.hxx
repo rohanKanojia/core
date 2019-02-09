@@ -11,13 +11,8 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_MOVINGAVERAGEDIALOG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_MOVINGAVERAGEDIALOG_HXX
 
-#include "global.hxx"
-#include "address.hxx"
-#include "anyrefdg.hxx"
-
-#include <vcl/fixed.hxx>
-#include <vcl/group.hxx>
-#include <vcl/lstbox.hxx>
+#include <address.hxx>
+#include "viewdata.hxx"
 
 #include "StatisticsInputOutputDialog.hxx"
 
@@ -31,13 +26,13 @@ public:
         SfxBindings* pB, SfxChildWindow* pCW,
         vcl::Window* pParent, ScViewData* pViewData );
 
-    virtual ~ScMovingAverageDialog();
+    virtual ~ScMovingAverageDialog() override;
     virtual void dispose() override;
 
     virtual bool Close() override;
 
 protected:
-    virtual sal_Int16 GetUndoNameId() override;
+    virtual const char* GetUndoNameId() override;
     virtual ScRange ApplyOutput(ScDocShell* pDocShell) override;
 };
 

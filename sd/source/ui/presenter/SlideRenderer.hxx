@@ -20,26 +20,23 @@
 #ifndef INCLUDED_SD_SOURCE_UI_PRESENTER_SLIDERENDERER_HXX
 #define INCLUDED_SD_SOURCE_UI_PRESENTER_SLIDERENDERER_HXX
 
-#include "PreviewRenderer.hxx"
-#include <com/sun/star/drawing/XDrawPage.hpp>
+#include <PreviewRenderer.hxx>
 #include <com/sun/star/drawing/XSlideRenderer.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/rendering/XSpriteCanvas.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <cppuhelper/basemutex.hxx>
 #include <cppuhelper/compbase.hxx>
 
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawPage; } } } }
+
 namespace sd { namespace presenter {
 
-namespace {
-    typedef ::cppu::WeakComponentImplHelper <
-        css::drawing::XSlideRenderer,
-        css::lang::XInitialization,
-        css::lang::XServiceInfo
-    > SlideRendererInterfaceBase;
-}
+typedef ::cppu::WeakComponentImplHelper <
+    css::drawing::XSlideRenderer,
+    css::lang::XInitialization,
+    css::lang::XServiceInfo
+> SlideRendererInterfaceBase;
 
 /** Render single slides into bitmaps.
 */
@@ -48,59 +45,52 @@ class SlideRenderer
       public SlideRendererInterfaceBase
 {
 public:
-    explicit SlideRenderer (const css::uno::Reference<css::uno::XComponentContext>& rxContext);
-    virtual ~SlideRenderer();
+    SlideRenderer ();
+    virtual ~SlideRenderer() override;
     SlideRenderer(const SlideRenderer&) = delete;
     SlideRenderer& operator=(const SlideRenderer&) = delete;
     virtual void SAL_CALL disposing() override;
 
     // XInitialization
 
-    virtual void SAL_CALL initialize (const css::uno::Sequence<css::uno::Any>& rArguments)
-        throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize (const css::uno::Sequence<css::uno::Any>& rArguments) override;
 
-    OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override;
+    OUString SAL_CALL getImplementationName() override;
 
-    sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-        throw (css::uno::RuntimeException, std::exception) override;
+    sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override;
 
-    css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override;
+    css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
 
     // XSlideRenderer
 
     virtual css::uno::Reference<css::awt::XBitmap> SAL_CALL createPreview (
         const css::uno::Reference<css::drawing::XDrawPage>& rxSlide,
         const css::awt::Size& rMaximumPreviewPixelSize,
-        sal_Int16 nSuperSampleFactor)
-        throw (css::uno::RuntimeException, std::exception) override;
+        sal_Int16 nSuperSampleFactor) override;
 
     virtual css::uno::Reference<css::rendering::XBitmap> SAL_CALL createPreviewForCanvas (
         const css::uno::Reference<css::drawing::XDrawPage>& rxSlide,
         const css::awt::Size& rMaximumPreviewPixelSize,
         sal_Int16 nSuperSampleFactor,
-        const css::uno::Reference<css::rendering::XCanvas>& rxCanvas)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference<css::rendering::XCanvas>& rxCanvas) override;
 
     virtual css::awt::Size SAL_CALL calculatePreviewSize (
         double nSlideAspectRatio,
-        const css::awt::Size& rMaximumPreviewPixelSize)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::awt::Size& rMaximumPreviewPixelSize) override;
 
 private:
     PreviewRenderer maPreviewRenderer;
 
+    /// @throws css::uno::RuntimeException
     BitmapEx CreatePreview (
         const css::uno::Reference<css::drawing::XDrawPage>& rxSlide,
         const css::awt::Size& rMaximumPreviewPixelSize,
-        sal_Int16 nSuperSampleFactor)
-        throw (css::uno::RuntimeException, std::exception);
+        sal_Int16 nSuperSampleFactor);
 
-    /** This method throws a DisposedException when the object has already been
+    /** @throws css::lang::DisposedException when the object has already been
         disposed.
     */
-    void ThrowIfDisposed() throw (css::lang::DisposedException);
+    void ThrowIfDisposed();
 };
 
 } } // end of namespace ::sd::presenter

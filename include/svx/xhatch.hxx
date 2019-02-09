@@ -28,9 +28,8 @@
 // class XHatch
 
 
-class SVX_DLLPUBLIC XHatch
+class SVX_DLLPUBLIC XHatch final
 {
-protected:
     css::drawing::HatchStyle     eStyle;
     Color           aColor;
     long            nDistance;
@@ -49,7 +48,7 @@ public:
     void            SetAngle(long nNewAngle) { nAngle = nNewAngle; }
 
     css::drawing::HatchStyle     GetHatchStyle() const { return eStyle; }
-    Color           GetColor() const { return aColor; }
+    const Color&    GetColor() const { return aColor; }
     long            GetDistance() const { return nDistance; }
     long            GetAngle() const { return nAngle; }
 };

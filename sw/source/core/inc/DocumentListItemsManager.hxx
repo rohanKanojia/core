@@ -21,6 +21,7 @@
 #define INCLUDED_SW_SOURCE_CORE_INC_DOCUMENTLISTITEMSMANAGER_HXX
 
 #include <IDocumentListItems.hxx>
+#include <memory>
 #include <set>
 
 namespace sw
@@ -35,11 +36,15 @@ public:
     void addListItem( const SwNodeNum& rNodeNum ) override;
     void removeListItem( const SwNodeNum& rNodeNum ) override;
 
-    OUString getListItemText( const SwNodeNum& rNodeNum ) const override;
+    OUString getListItemText(const SwNodeNum& rNodeNum,
+                             SwRootFrame const& rLayout) const override;
+
+    bool isNumberedInLayout(SwNodeNum const& rNodeNum,
+            SwRootFrame const& rLayout) const override;
 
     void getNumItems( IDocumentListItems::tSortedNodeNumList& orNodeNumList ) const override;
 
-    virtual ~DocumentListItemsManager();
+    virtual ~DocumentListItemsManager() override;
 
 
     //Non Interface
@@ -49,14 +54,14 @@ public:
                          const SwNodeNum* pNodeNumTwo ) const;
     };
 
-    typedef ::std::set< const SwNodeNum*, lessThanNodeNum > tImplSortedNodeNumList;
+    typedef std::set< const SwNodeNum*, lessThanNodeNum > tImplSortedNodeNumList;
 
 private:
 
     DocumentListItemsManager(DocumentListItemsManager const&) = delete;
     DocumentListItemsManager& operator=(DocumentListItemsManager const&) = delete;
 
-    tImplSortedNodeNumList* mpListItemsList;
+    std::unique_ptr<tImplSortedNodeNumList> mpListItemsList;
 };
 
 }

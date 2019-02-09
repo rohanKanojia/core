@@ -25,7 +25,7 @@
  *************************************************************************/
 #include <ucbhelper/interactionrequest.hxx>
 
-#include <osl/mutex.hxx>
+#include <rtl/ref.hxx>
 #include <osl/diagnose.h>
 #include <cppuhelper/typeprovider.hxx>
 #include <cppuhelper/queryinterface.hxx>
@@ -88,7 +88,7 @@ void InteractionRequest::setContinuations(
 }
 
 
-rtl::Reference< InteractionContinuation >
+rtl::Reference< InteractionContinuation > const &
 InteractionRequest::getSelection() const
 {
     return m_pImpl->m_xSelection;
@@ -124,7 +124,6 @@ void SAL_CALL InteractionRequest::release()
 // virtual
 uno::Any SAL_CALL
 InteractionRequest::queryInterface( const uno::Type & rType )
-    throw ( uno::RuntimeException, std::exception )
 {
     uno::Any aRet = cppu::queryInterface( rType,
                 static_cast< lang::XTypeProvider * >( this ),
@@ -139,7 +138,6 @@ InteractionRequest::queryInterface( const uno::Type & rType )
 
 // virtual
 uno::Sequence< sal_Int8 > SAL_CALL InteractionRequest::getImplementationId()
-    throw( uno::RuntimeException, std::exception )
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -147,21 +145,12 @@ uno::Sequence< sal_Int8 > SAL_CALL InteractionRequest::getImplementationId()
 
 // virtual
 uno::Sequence< uno::Type > SAL_CALL InteractionRequest::getTypes()
-    throw( uno::RuntimeException, std::exception )
 {
-    static cppu::OTypeCollection* pCollection = nullptr;
-      if ( !pCollection )
-      {
-        osl::Guard< osl::Mutex > aGuard( osl::Mutex::getGlobalMutex() );
-        if ( !pCollection )
-        {
-            static cppu::OTypeCollection collection(
+    static cppu::OTypeCollection s_aCollection(
                 cppu::UnoType<lang::XTypeProvider>::get(),
                 cppu::UnoType<task::XInteractionRequest>::get() );
-            pCollection = &collection;
-        }
-    }
-    return (*pCollection).getTypes();
+
+    return s_aCollection.getTypes();
 }
 
 
@@ -170,7 +159,6 @@ uno::Sequence< uno::Type > SAL_CALL InteractionRequest::getTypes()
 
 // virtual
 uno::Any SAL_CALL InteractionRequest::getRequest()
-    throw( uno::RuntimeException, std::exception )
 {
     return m_pImpl->m_aRequest;
 }
@@ -179,7 +167,6 @@ uno::Any SAL_CALL InteractionRequest::getRequest()
 // virtual
 uno::Sequence< uno::Reference< task::XInteractionContinuation > > SAL_CALL
 InteractionRequest::getContinuations()
-    throw( uno::RuntimeException, std::exception )
 {
     return m_pImpl->m_aContinuations;
 }
@@ -187,23 +174,10 @@ InteractionRequest::getContinuations()
 
 // InteractionContinuation Implementation.
 
-namespace ucbhelper
-{
-
-struct InteractionContinuation_Impl
-{
-    InteractionRequest * m_pRequest;
-
-    explicit InteractionContinuation_Impl( InteractionRequest * pRequest )
-    : m_pRequest( pRequest ) {}
-};
-
-}
-
 
 InteractionContinuation::InteractionContinuation(
                         InteractionRequest * pRequest )
-: m_pImpl( new InteractionContinuation_Impl( pRequest ) )
+: m_pRequest( pRequest )
 {
 }
 
@@ -216,7 +190,7 @@ InteractionContinuation::~InteractionContinuation()
 
 void InteractionContinuation::recordSelection()
 {
-    m_pImpl->m_pRequest->setSelection( this );
+    m_pRequest->setSelection( this );
 }
 
 
@@ -245,7 +219,6 @@ void SAL_CALL InteractionAbort::release()
 // virtual
 uno::Any SAL_CALL
 InteractionAbort::queryInterface( const uno::Type & rType )
-    throw ( uno::RuntimeException, std::exception )
 {
     uno::Any aRet = cppu::queryInterface( rType,
                 static_cast< lang::XTypeProvider * >( this ),
@@ -262,7 +235,6 @@ InteractionAbort::queryInterface( const uno::Type & rType )
 
 // virtual
 uno::Sequence< sal_Int8 > SAL_CALL InteractionAbort::getImplementationId()
-    throw( uno::RuntimeException, std::exception )
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -270,21 +242,12 @@ uno::Sequence< sal_Int8 > SAL_CALL InteractionAbort::getImplementationId()
 
 // virtual
 uno::Sequence< uno::Type > SAL_CALL InteractionAbort::getTypes()
-    throw( uno::RuntimeException, std::exception )
 {
-    static cppu::OTypeCollection* pCollection = nullptr;
-      if ( !pCollection )
-      {
-        osl::Guard< osl::Mutex > aGuard( osl::Mutex::getGlobalMutex() );
-        if ( !pCollection )
-        {
-            static cppu::OTypeCollection collection(
+    static cppu::OTypeCollection s_aCollection(
                 cppu::UnoType<lang::XTypeProvider>::get(),
                 cppu::UnoType<task::XInteractionAbort>::get() );
-            pCollection = &collection;
-        }
-    }
-    return (*pCollection).getTypes();
+
+    return s_aCollection.getTypes();
 }
 
 
@@ -293,7 +256,6 @@ uno::Sequence< uno::Type > SAL_CALL InteractionAbort::getTypes()
 
 // virtual
 void SAL_CALL InteractionAbort::select()
-    throw( uno::RuntimeException, std::exception )
 {
     recordSelection();
 }
@@ -324,7 +286,6 @@ void SAL_CALL InteractionRetry::release()
 // virtual
 uno::Any SAL_CALL
 InteractionRetry::queryInterface( const uno::Type & rType )
-    throw ( uno::RuntimeException, std::exception )
 {
     uno::Any aRet = cppu::queryInterface( rType,
                 static_cast< lang::XTypeProvider * >( this ),
@@ -341,7 +302,6 @@ InteractionRetry::queryInterface( const uno::Type & rType )
 
 // virtual
 uno::Sequence< sal_Int8 > SAL_CALL InteractionRetry::getImplementationId()
-    throw( uno::RuntimeException, std::exception )
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -349,21 +309,12 @@ uno::Sequence< sal_Int8 > SAL_CALL InteractionRetry::getImplementationId()
 
 // virtual
 uno::Sequence< uno::Type > SAL_CALL InteractionRetry::getTypes()
-    throw( uno::RuntimeException, std::exception )
 {
-    static cppu::OTypeCollection* pCollection = nullptr;
-      if ( !pCollection )
-      {
-        osl::Guard< osl::Mutex > aGuard( osl::Mutex::getGlobalMutex() );
-        if ( !pCollection )
-        {
-            static cppu::OTypeCollection collection(
+    static cppu::OTypeCollection s_aCollection(
                 cppu::UnoType<lang::XTypeProvider>::get(),
                 cppu::UnoType<task::XInteractionRetry>::get() );
-            pCollection = &collection;
-        }
-    }
-    return (*pCollection).getTypes();
+
+    return s_aCollection.getTypes();
 }
 
 
@@ -372,7 +323,6 @@ uno::Sequence< uno::Type > SAL_CALL InteractionRetry::getTypes()
 
 // virtual
 void SAL_CALL InteractionRetry::select()
-    throw( uno::RuntimeException, std::exception )
 {
     recordSelection();
 }
@@ -403,7 +353,6 @@ void SAL_CALL InteractionApprove::release()
 // virtual
 uno::Any SAL_CALL
 InteractionApprove::queryInterface( const uno::Type & rType )
-    throw ( uno::RuntimeException, std::exception )
 {
     uno::Any aRet = cppu::queryInterface( rType,
                 static_cast< lang::XTypeProvider * >( this ),
@@ -420,7 +369,6 @@ InteractionApprove::queryInterface( const uno::Type & rType )
 
 // virtual
 uno::Sequence< sal_Int8 > SAL_CALL InteractionApprove::getImplementationId()
-    throw( uno::RuntimeException, std::exception )
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -428,21 +376,12 @@ uno::Sequence< sal_Int8 > SAL_CALL InteractionApprove::getImplementationId()
 
 // virtual
 uno::Sequence< uno::Type > SAL_CALL InteractionApprove::getTypes()
-    throw( uno::RuntimeException, std::exception )
 {
-    static cppu::OTypeCollection* pCollection = nullptr;
-      if ( !pCollection )
-      {
-        osl::Guard< osl::Mutex > aGuard( osl::Mutex::getGlobalMutex() );
-        if ( !pCollection )
-        {
-            static cppu::OTypeCollection collection(
+    static cppu::OTypeCollection s_aCollection(
                 cppu::UnoType<lang::XTypeProvider>::get(),
                 cppu::UnoType<task::XInteractionApprove>::get() );
-            pCollection = &collection;
-        }
-    }
-    return (*pCollection).getTypes();
+
+    return s_aCollection.getTypes();
 }
 
 
@@ -451,7 +390,6 @@ uno::Sequence< uno::Type > SAL_CALL InteractionApprove::getTypes()
 
 // virtual
 void SAL_CALL InteractionApprove::select()
-    throw( uno::RuntimeException, std::exception )
 {
     recordSelection();
 }
@@ -482,7 +420,6 @@ void SAL_CALL InteractionDisapprove::release()
 // virtual
 uno::Any SAL_CALL
 InteractionDisapprove::queryInterface( const uno::Type & rType )
-    throw ( uno::RuntimeException, std::exception )
 {
     uno::Any aRet = cppu::queryInterface( rType,
                 static_cast< lang::XTypeProvider * >( this ),
@@ -499,7 +436,6 @@ InteractionDisapprove::queryInterface( const uno::Type & rType )
 
 // virtual
 uno::Sequence< sal_Int8 > SAL_CALL InteractionDisapprove::getImplementationId()
-    throw( uno::RuntimeException, std::exception )
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -507,21 +443,12 @@ uno::Sequence< sal_Int8 > SAL_CALL InteractionDisapprove::getImplementationId()
 
 // virtual
 uno::Sequence< uno::Type > SAL_CALL InteractionDisapprove::getTypes()
-    throw( uno::RuntimeException, std::exception )
 {
-    static cppu::OTypeCollection* pCollection = nullptr;
-      if ( !pCollection )
-      {
-        osl::Guard< osl::Mutex > aGuard( osl::Mutex::getGlobalMutex() );
-        if ( !pCollection )
-        {
-            static cppu::OTypeCollection collection(
+    static cppu::OTypeCollection s_aCollection(
                 cppu::UnoType<lang::XTypeProvider>::get(),
                 cppu::UnoType<task::XInteractionDisapprove>::get() );
-            pCollection = &collection;
-        }
-    }
-    return (*pCollection).getTypes();
+
+    return s_aCollection.getTypes();
 }
 
 
@@ -530,7 +457,6 @@ uno::Sequence< uno::Type > SAL_CALL InteractionDisapprove::getTypes()
 
 // virtual
 void SAL_CALL InteractionDisapprove::select()
-    throw( uno::RuntimeException, std::exception )
 {
     recordSelection();
 }
@@ -561,7 +487,6 @@ void SAL_CALL InteractionSupplyAuthentication::release()
 // virtual
 uno::Any SAL_CALL
 InteractionSupplyAuthentication::queryInterface( const uno::Type & rType )
-    throw ( uno::RuntimeException, std::exception )
 {
     uno::Any aRet = cppu::queryInterface( rType,
             static_cast< lang::XTypeProvider * >( this ),
@@ -580,7 +505,6 @@ InteractionSupplyAuthentication::queryInterface( const uno::Type & rType )
 // virtual
 uno::Sequence< sal_Int8 > SAL_CALL
 InteractionSupplyAuthentication::getImplementationId()
-    throw( uno::RuntimeException, std::exception )
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -588,21 +512,12 @@ InteractionSupplyAuthentication::getImplementationId()
 
 // virtual
 uno::Sequence< uno::Type > SAL_CALL InteractionSupplyAuthentication::getTypes()
-    throw( uno::RuntimeException, std::exception )
 {
-    static cppu::OTypeCollection* pCollection = nullptr;
-      if ( !pCollection )
-      {
-        osl::Guard< osl::Mutex > aGuard( osl::Mutex::getGlobalMutex() );
-        if ( !pCollection )
-        {
-            static cppu::OTypeCollection collection(
+    static cppu::OTypeCollection s_aCollection(
                 cppu::UnoType<lang::XTypeProvider>::get(),
                 cppu::UnoType<ucb::XInteractionSupplyAuthentication2>::get() );
-            pCollection = &collection;
-        }
-    }
-    return (*pCollection).getTypes();
+
+    return s_aCollection.getTypes();
 }
 
 
@@ -611,7 +526,6 @@ uno::Sequence< uno::Type > SAL_CALL InteractionSupplyAuthentication::getTypes()
 
 // virtual
 void SAL_CALL InteractionSupplyAuthentication::select()
-    throw( uno::RuntimeException, std::exception )
 {
     recordSelection();
 }
@@ -623,7 +537,6 @@ void SAL_CALL InteractionSupplyAuthentication::select()
 // virtual
 sal_Bool SAL_CALL
 InteractionSupplyAuthentication::canSetRealm()
-    throw( uno::RuntimeException, std::exception )
 {
     return m_bCanSetRealm;
 }
@@ -632,7 +545,6 @@ InteractionSupplyAuthentication::canSetRealm()
 // virtual
 void SAL_CALL
 InteractionSupplyAuthentication::setRealm( const OUString& Realm )
-    throw( uno::RuntimeException, std::exception )
 {
     OSL_ENSURE( m_bCanSetPassword,
         "InteractionSupplyAuthentication::setRealm - Not supported!" );
@@ -645,7 +557,6 @@ InteractionSupplyAuthentication::setRealm( const OUString& Realm )
 // virtual
 sal_Bool SAL_CALL
 InteractionSupplyAuthentication::canSetUserName()
-    throw( uno::RuntimeException, std::exception )
 {
     return m_bCanSetUserName;
 }
@@ -654,7 +565,6 @@ InteractionSupplyAuthentication::canSetUserName()
 // virtual
 void SAL_CALL
 InteractionSupplyAuthentication::setUserName( const OUString& UserName )
-    throw( uno::RuntimeException, std::exception )
 {
     OSL_ENSURE( m_bCanSetUserName,
         "InteractionSupplyAuthentication::setUserName - Not supported!" );
@@ -667,7 +577,6 @@ InteractionSupplyAuthentication::setUserName( const OUString& UserName )
 // virtual
 sal_Bool SAL_CALL
 InteractionSupplyAuthentication::canSetPassword()
-    throw( uno::RuntimeException, std::exception )
 {
     return m_bCanSetPassword;
 }
@@ -676,7 +585,6 @@ InteractionSupplyAuthentication::canSetPassword()
 // virtual
 void SAL_CALL
 InteractionSupplyAuthentication::setPassword( const OUString& Password )
-    throw( uno::RuntimeException, std::exception )
 {
     OSL_ENSURE( m_bCanSetPassword,
         "InteractionSupplyAuthentication::setPassword - Not supported!" );
@@ -690,7 +598,6 @@ InteractionSupplyAuthentication::setPassword( const OUString& Password )
 uno::Sequence< ucb::RememberAuthentication > SAL_CALL
 InteractionSupplyAuthentication::getRememberPasswordModes(
                                     ucb::RememberAuthentication& Default )
-    throw( uno::RuntimeException, std::exception )
 {
     Default = m_eDefaultRememberPasswordMode;
     return m_aRememberPasswordModes;
@@ -701,7 +608,6 @@ InteractionSupplyAuthentication::getRememberPasswordModes(
 void SAL_CALL
 InteractionSupplyAuthentication::setRememberPassword(
                                     ucb::RememberAuthentication Remember )
-    throw( uno::RuntimeException, std::exception )
 {
     m_eRememberPasswordMode = Remember;
 }
@@ -710,7 +616,6 @@ InteractionSupplyAuthentication::setRememberPassword(
 // virtual
 sal_Bool SAL_CALL
 InteractionSupplyAuthentication::canSetAccount()
-    throw( uno::RuntimeException, std::exception )
 {
     return m_bCanSetAccount;
 }
@@ -719,7 +624,6 @@ InteractionSupplyAuthentication::canSetAccount()
 // virtual
 void SAL_CALL
 InteractionSupplyAuthentication::setAccount( const OUString& Account )
-    throw( uno::RuntimeException, std::exception )
 {
     OSL_ENSURE( m_bCanSetAccount,
         "InteractionSupplyAuthentication::setAccount - Not supported!" );
@@ -733,7 +637,6 @@ InteractionSupplyAuthentication::setAccount( const OUString& Account )
 uno::Sequence< ucb::RememberAuthentication > SAL_CALL
 InteractionSupplyAuthentication::getRememberAccountModes(
                                     ucb::RememberAuthentication& Default )
-    throw( uno::RuntimeException, std::exception )
 {
     Default = m_eDefaultRememberAccountMode;
     return m_aRememberAccountModes;
@@ -742,10 +645,8 @@ InteractionSupplyAuthentication::getRememberAccountModes(
 
 // virtual
 void SAL_CALL InteractionSupplyAuthentication::setRememberAccount(
-                                    ucb::RememberAuthentication Remember )
-    throw( uno::RuntimeException, std::exception )
+                                    ucb::RememberAuthentication )
 {
-    m_eRememberAccountMode = Remember;
 }
 
 
@@ -756,9 +657,8 @@ void SAL_CALL InteractionSupplyAuthentication::setRememberAccount(
 sal_Bool SAL_CALL
 InteractionSupplyAuthentication::canUseSystemCredentials(
         sal_Bool& Default )
-    throw ( uno::RuntimeException, std::exception )
 {
-    Default = m_bDefaultUseSystemCredentials;
+    Default = false;
     return m_bCanUseSystemCredentials;
 }
 
@@ -766,7 +666,6 @@ InteractionSupplyAuthentication::canUseSystemCredentials(
 // virtual
 void SAL_CALL InteractionSupplyAuthentication::setUseSystemCredentials(
         sal_Bool UseSystemCredentials )
-    throw ( uno::RuntimeException, std::exception )
 {
     if ( m_bCanUseSystemCredentials )
         m_bUseSystemCredentials = UseSystemCredentials;
@@ -798,7 +697,6 @@ void SAL_CALL InteractionReplaceExistingData::release()
 // virtual
 uno::Any SAL_CALL
 InteractionReplaceExistingData::queryInterface( const uno::Type & rType )
-    throw ( uno::RuntimeException, std::exception )
 {
     uno::Any aRet = cppu::queryInterface( rType,
                 static_cast< lang::XTypeProvider * >( this ),
@@ -816,7 +714,6 @@ InteractionReplaceExistingData::queryInterface( const uno::Type & rType )
 // virtual
 uno::Sequence< sal_Int8 > SAL_CALL
 InteractionReplaceExistingData::getImplementationId()
-    throw( uno::RuntimeException, std::exception )
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -824,21 +721,12 @@ InteractionReplaceExistingData::getImplementationId()
 
 // virtual
 uno::Sequence< uno::Type > SAL_CALL InteractionReplaceExistingData::getTypes()
-    throw( uno::RuntimeException, std::exception )
 {
-    static cppu::OTypeCollection* pCollection = nullptr;
-      if ( !pCollection )
-      {
-        osl::Guard< osl::Mutex > aGuard( osl::Mutex::getGlobalMutex() );
-        if ( !pCollection )
-        {
-            static cppu::OTypeCollection collection(
+    static cppu::OTypeCollection s_aCollection(
                 cppu::UnoType<lang::XTypeProvider>::get(),
                 cppu::UnoType<ucb::XInteractionReplaceExistingData>::get() );
-            pCollection = &collection;
-        }
-    }
-    return (*pCollection).getTypes();
+
+    return s_aCollection.getTypes();
 }
 
 
@@ -847,7 +735,6 @@ uno::Sequence< uno::Type > SAL_CALL InteractionReplaceExistingData::getTypes()
 
 // virtual
 void SAL_CALL InteractionReplaceExistingData::select()
-    throw( uno::RuntimeException, std::exception )
 {
     recordSelection();
 }
@@ -873,7 +760,6 @@ void SAL_CALL InteractionAuthFallback::release()
 // virtual
 uno::Any SAL_CALL
 InteractionAuthFallback::queryInterface( const uno::Type & rType )
-    throw ( uno::RuntimeException, std::exception )
 {
     uno::Any aRet = cppu::queryInterface( rType,
             static_cast< task::XInteractionContinuation * >( this ),
@@ -887,7 +773,6 @@ InteractionAuthFallback::queryInterface( const uno::Type & rType )
 
 // virtual
 void SAL_CALL InteractionAuthFallback::select()
-    throw( uno::RuntimeException, std::exception )
 {
     recordSelection();
 }
@@ -896,14 +781,11 @@ void SAL_CALL InteractionAuthFallback::select()
 
 // virtual
 void SAL_CALL InteractionAuthFallback::setCode( const OUString& code )
-    throw ( uno::RuntimeException, std::exception )
 {
     m_aCode = code;
 }
 
-// virtual
-OUString SAL_CALL InteractionAuthFallback::getCode( )
-    throw ( uno::RuntimeException, std::exception )
+const OUString& InteractionAuthFallback::getCode() const
 {
     return m_aCode;
 }

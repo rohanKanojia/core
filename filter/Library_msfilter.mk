@@ -35,6 +35,7 @@ $(eval $(call gb_Library_use_libraries,msfilter,\
 	sfx \
 	xo \
 	sb \
+	salhelper \
 	svt \
 	tk \
 	vcl \
@@ -48,7 +49,6 @@ $(eval $(call gb_Library_use_libraries,msfilter,\
 	cppuhelper \
 	cppu \
 	sal \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,msfilter,\

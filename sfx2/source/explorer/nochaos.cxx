@@ -19,11 +19,13 @@
 
 #include <sal/config.h>
 
+#include <tools/solar.h>
 #include <svl/itempool.hxx>
 #include <svl/poolitem.hxx>
 #include <svl/stritem.hxx>
-#include <nochaos.hxx>
 #include <sfx2/sfxuno.hxx>
+#include <nochaos.hxx>
+#include <memory>
 
 
 #define WID_CHAOS_START 500
@@ -35,21 +37,21 @@ class CntItemPool;
 
 class CntStaticPoolDefaults_Impl
 {
-    sal_uInt32        m_nItems;
-    SfxPoolItem** m_ppDefaults;
-    SfxItemInfo*  m_pItemInfos;
+    static const sal_uInt32  m_nItems = 1;
+    std::vector<SfxPoolItem*> mvDefaults;
+    std::unique_ptr<SfxItemInfo[]>  m_pItemInfos;
 
 private:
     inline void Insert( SfxPoolItem* pItem );
 
 public:
-    explicit CntStaticPoolDefaults_Impl( CntItemPool* pPool );
+    explicit CntStaticPoolDefaults_Impl();
     ~CntStaticPoolDefaults_Impl();
     CntStaticPoolDefaults_Impl(const CntStaticPoolDefaults_Impl&) = delete;
     CntStaticPoolDefaults_Impl& operator=(const CntStaticPoolDefaults_Impl&) = delete;
 
-    SfxPoolItem**      GetDefaults() const  { return m_ppDefaults; }
-    const SfxItemInfo* GetItemInfos() const { return m_pItemInfos; }
+    std::vector<SfxPoolItem*>*  GetDefaults() { return &mvDefaults; }
+    const SfxItemInfo*          GetItemInfos() const { return m_pItemInfos.get(); }
 };
 
 
@@ -60,7 +62,7 @@ class CntItemPool: public SfxItemPool
 
 protected:
              CntItemPool();
-    virtual ~CntItemPool();
+    virtual ~CntItemPool() override;
 
 public:
     static CntItemPool* Acquire();
@@ -97,12 +99,10 @@ CntItemPool::CntItemPool()
 : SfxItemPool( "chaos", WID_CHAOS_START, WID_CHAOS_START, nullptr ),
   _nRefs( 0 )
 {
-    SetFileFormatVersion( SOFFICE_FILEFORMAT_50 );
-
     FreezeIdRanges();
 
     // Create static defaults.
-    pPoolDefs_Impl = new CntStaticPoolDefaults_Impl( this );
+    pPoolDefs_Impl = new CntStaticPoolDefaults_Impl;
 
     // Set item infos.
     SetItemInfos( pPoolDefs_Impl->GetItemInfos() );
@@ -162,7 +162,7 @@ inline void CntStaticPoolDefaults_Impl::Insert(
 {
     sal_uInt16 nPos = pItem->Which() - WID_CHAOS_START;
 
-    m_ppDefaults[ nPos ]         = pItem;
+    mvDefaults[ nPos ]         = pItem;
     m_pItemInfos[ nPos ]._nSID   = 0;
     m_pItemInfos[ nPos ]._bPoolable = true;
 }
@@ -171,20 +171,15 @@ inline void CntStaticPoolDefaults_Impl::Insert(
 CntStaticPoolDefaults_Impl::~CntStaticPoolDefaults_Impl()
 {
     for ( sal_uInt32 n = 0; n < m_nItems; ++n )
-        delete m_ppDefaults[ n ];
-
-    delete [] m_ppDefaults;
-    delete [] m_pItemInfos;
+        delete mvDefaults[ n ];
 }
 
 
-CntStaticPoolDefaults_Impl::CntStaticPoolDefaults_Impl( CntItemPool* /*pPool*/ )
-: m_nItems( 1 ),
-  m_ppDefaults( new SfxPoolItem* [ m_nItems ] ),
+CntStaticPoolDefaults_Impl::CntStaticPoolDefaults_Impl()
+: mvDefaults( m_nItems, nullptr ),
   m_pItemInfos( new SfxItemInfo  [ m_nItems ] )
 {
-    memset( m_ppDefaults, 0, sizeof( SfxPoolItem* ) * m_nItems );
-    memset( m_pItemInfos, 0, sizeof( SfxItemInfo ) * m_nItems );
+    memset( m_pItemInfos.get(), 0, sizeof( SfxItemInfo ) * m_nItems );
     Insert( new SfxStringItem( WID_CHAOS_START, OUString() ) );
 }
 

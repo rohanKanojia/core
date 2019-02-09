@@ -18,12 +18,7 @@
  */
 
 
-#include <vcl/wrkwin.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/msgbox.hxx>
-#include <vcl/svapp.hxx>
-
-#include <impedit.hxx>
+#include "impedit.hxx"
 #include <editeng/editview.hxx>
 #include <editeng/editeng.hxx>
 #include <editeng/unolingu.hxx>
@@ -31,7 +26,8 @@
 #include <com/sun/star/lang/Locale.hpp>
 #include <editeng/langitem.hxx>
 #include <editeng/fontitem.hxx>
-#include <textconv.hxx>
+#include "textconv.hxx"
+#include <osl/diagnose.h>
 
 
 using namespace com::sun::star;
@@ -87,7 +83,7 @@ bool TextConvWrapper::ConvNext_impl()
         {
             m_bStartDone = true;
             m_bEndDone  = false;
-            ConvStart_impl( SVX_SPELL_BODY );
+            ConvStart_impl( SvxSpellArea::Body );
             return true;
         }
         return false;
@@ -100,14 +96,14 @@ bool TextConvWrapper::ConvNext_impl()
         {
             m_bStartDone = true;
             m_bEndDone  = false;
-            ConvStart_impl( SVX_SPELL_BODY );
+            ConvStart_impl( SvxSpellArea::Body );
             return true;
         }
     }
     else if (!m_aConvSel.HasRange())
     {
         m_bStartChk = !m_bStartDone;
-        ConvStart_impl( m_bStartChk ? SVX_SPELL_BODY_START : SVX_SPELL_BODY_END );
+        ConvStart_impl( m_bStartChk ? SvxSpellArea::BodyStart : SvxSpellArea::BodyEnd );
         return true;
     }
 
@@ -160,7 +156,7 @@ void TextConvWrapper::ConvStart_impl( SvxSpellArea eArea )
     ImpEditEngine* pImpEE = m_pEditView->GetImpEditEngine();
     ConvInfo* pConvInfo = pImpEE->GetConvInfo();
 
-    if ( eArea == SVX_SPELL_BODY_START )
+    if ( eArea == SvxSpellArea::BodyStart )
     {
         // Is called when Spell-forward has reached the end, and to start over
         if ( m_bEndDone )
@@ -178,7 +174,7 @@ void TextConvWrapper::ConvStart_impl( SvxSpellArea eArea )
                     pEE->GetEditDoc().GetStartPaM() );
         }
     }
-    else if ( eArea == SVX_SPELL_BODY_END )
+    else if ( eArea == SvxSpellArea::BodyEnd )
     {
         // Is called when Spell-forward starts
         pConvInfo->bConvToEnd = true;
@@ -196,7 +192,7 @@ void TextConvWrapper::ConvStart_impl( SvxSpellArea eArea )
                 pEE->GetEditDoc().GetEndPaM() );
         }
     }
-    else if ( eArea == SVX_SPELL_BODY )
+    else if ( eArea == SvxSpellArea::Body )
     {
         // called by ConvNext_impl...
         pConvInfo->aConvContinue = pConvInfo->aConvStart;
@@ -393,7 +389,7 @@ void TextConvWrapper::ReplaceUnit(
         }
     }
 
-    pImpEditEng->UndoActionEnd( EDITUNDO_INSERT );
+    pImpEditEng->UndoActionEnd();
 
     // adjust ConvContinue / ConvTo if necessary
     ImpEditEngine* pImpEE = m_pEditView->GetImpEditEngine();
@@ -542,7 +538,7 @@ void TextConvWrapper::ChangeText_impl( const OUString &rNewText, bool bKeepAttri
 void TextConvWrapper::Convert()
 {
     m_bStartChk = false;
-    ConvStart_impl( SVX_SPELL_BODY_END );
+    ConvStart_impl( SvxSpellArea::BodyEnd );
     ConvertDocument();
 }
 

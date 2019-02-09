@@ -7,94 +7,98 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "frame.hxx"
-#include "frmfmt.hxx"
-#include "sectfrm.hxx"
-#include "tabfrm.hxx"
-#include "txtfrm.hxx"
-#include "hffrm.hxx"
-#include "rootfrm.hxx"
-#include "editsh.hxx"
+#include <frame.hxx>
+#include <frmfmt.hxx>
+#include <ftnfrm.hxx>
+#include <sectfrm.hxx>
+#include <tabfrm.hxx>
+#include <pagefrm.hxx>
+#include <txtfrm.hxx>
+#include <hffrm.hxx>
+#include <rootfrm.hxx>
+#include <editsh.hxx>
 #include "porlin.hxx"
 #include "porlay.hxx"
 #include "portxt.hxx"
-#include "sortedobjs.hxx"
+#include <sortedobjs.hxx>
 #include <anchoredobject.hxx>
 #include <libxml/xmlwriter.h>
 #include <SwPortionHandler.hxx>
+#include <view.hxx>
 #include <svx/svdobj.hxx>
 
 class XmlPortionDumper:public SwPortionHandler
 {
   private:
-    xmlTextWriterPtr writer;
-    sal_Int32 ofs;
+    xmlTextWriterPtr const writer;
+    TextFrameIndex ofs;
+    const OUString& m_rText;
+    OUString m_aLine;
 
-    static const char* getTypeName( sal_uInt16 nType )
+    static const char* getTypeName( PortionType nType )
     {
         switch ( nType )
         {
-            case POR_LIN: return "POR_LIN";
-            case POR_FLYCNT: return "POR_FLYCNT";
+            case PortionType::NONE: return "PortionType::NONE";
+            case PortionType::FlyCnt: return "PortionType::FlyCnt";
 
-            case POR_HOLE: return "POR_HOLE";
-            case POR_TMPEND: return "POR_TMPEND";
-            case POR_BRK: return "POR_BRK";
-            case POR_KERN: return "POR_KERN";
-            case POR_ARROW: return "POR_ARROW";
-            case POR_MULTI: return "POR_MULTI";
-            case POR_HIDDEN_TXT: return "POR_HIDDEN_TXT";
-            case POR_CONTROLCHAR: return "POR_CONTROLCHAR";
+            case PortionType::Hole: return "PortionType::Hole";
+            case PortionType::TempEnd: return "PortionType::TempEnd";
+            case PortionType::Break: return "PortionType::Break";
+            case PortionType::Kern: return "PortionType::Kern";
+            case PortionType::Arrow: return "PortionType::Arrow";
+            case PortionType::Multi: return "PortionType::Multi";
+            case PortionType::HiddenText: return "PortionType::HiddenText";
+            case PortionType::ControlChar: return "PortionType::ControlChar";
 
-            case POR_TXT: return "POR_TXT";
-            case POR_LAY: return "POR_LAY";
-            case POR_PARA: return "POR_PARA";
-            case POR_URL: return "POR_URL";
-            case POR_HNG: return "POR_HNG";
+            case PortionType::Text: return "PortionType::Text";
+            case PortionType::Lay: return "PortionType::Lay";
+            case PortionType::Para: return "PortionType::Para";
+            case PortionType::Hanging: return "PortionType::Hanging";
 
-            case POR_DROP: return "POR_DROP";
-            case POR_TOX: return "POR_TOX";
-            case POR_ISOTOX: return "POR_ISOTOX";
-            case POR_REF: return "POR_REF";
-            case POR_ISOREF: return "POR_ISOREF";
-            case POR_META: return "POR_META";
+            case PortionType::Drop: return "PortionType::Drop";
+            case PortionType::Tox: return "PortionType::Tox";
+            case PortionType::IsoTox: return "PortionType::IsoTox";
+            case PortionType::Ref: return "PortionType::Ref";
+            case PortionType::IsoRef: return "PortionType::IsoRef";
+            case PortionType::Meta: return "PortionType::Meta";
 
-            case POR_EXP: return "POR_EXP";
-            case POR_BLANK: return "POR_BLANK";
-            case POR_POSTITS: return "POR_POSTITS";
+            case PortionType::Expand: return "PortionType::Expand";
+            case PortionType::Blank: return "PortionType::Blank";
+            case PortionType::PostIts: return "PortionType::PostIts";
 
-            case POR_HYPH: return "POR_HYPH";
-            case POR_HYPHSTR: return "POR_HYPHSTR";
-            case POR_SOFTHYPH: return "POR_SOFTHYPH";
-            case POR_SOFTHYPHSTR: return "POR_SOFTHYPHSTR";
-            case POR_SOFTHYPH_COMP: return "POR_SOFTHYPH_COMP";
+            case PortionType::Hyphen: return "PortionType::Hyphen";
+            case PortionType::HyphenStr: return "PortionType::HyphenStr";
+            case PortionType::SoftHyphen: return "PortionType::SoftHyphen";
+            case PortionType::SoftHyphenStr: return "PortionType::SoftHyphenStr";
+            case PortionType::SoftHyphenComp: return "PortionType::SoftHyphenComp";
 
-            case POR_FLD: return "POR_FLD";
-            case POR_HIDDEN: return "POR_HIDDEN";
-            case POR_QUOVADIS: return "POR_QUOVADIS";
-            case POR_ERGOSUM: return "POR_ERGOSUM";
-            case POR_COMBINED: return "POR_COMBINED";
-            case POR_FTN: return "POR_FTN";
+            case PortionType::Field: return "PortionType::Field";
+            case PortionType::Hidden: return "PortionType::Hidden";
+            case PortionType::QuoVadis: return "PortionType::QuoVadis";
+            case PortionType::ErgoSum: return "PortionType::ErgoSum";
+            case PortionType::Combined: return "PortionType::Combined";
+            case PortionType::Footnote: return "PortionType::Footnote";
 
-            case POR_FTNNUM: return "POR_FTNNUM";
-            case POR_NUMBER: return "POR_NUMBER";
-            case POR_BULLET: return "POR_BULLET";
-            case POR_GRFNUM: return "POR_GRFNUM";
+            case PortionType::FootnoteNum: return "PortionType::FootnoteNum";
+            case PortionType::Number: return "PortionType::Number";
+            case PortionType::Bullet: return "PortionType::Bullet";
+            case PortionType::GrfNum: return "PortionType::GrfNum";
 
-            case POR_GLUE: return "POR_GLUE";
+            case PortionType::Glue: return "PortionType::Glue";
 
-            case POR_MARGIN: return "POR_MARGIN";
+            case PortionType::Margin: return "PortionType::Margin";
 
-            case POR_FIX: return "POR_FIX";
-            case POR_FLY: return "POR_FLY";
+            case PortionType::Fix: return "PortionType::Fix";
+            case PortionType::Fly: return "PortionType::Fly";
 
-            case POR_TAB: return "POR_TAB";
+            case PortionType::Table: return "PortionType::Table";
 
-            case POR_TABRIGHT: return "POR_TABRIGHT";
-            case POR_TABCENTER: return "POR_TABCENTER";
-            case POR_TABDECIMAL: return "POR_TABDECIMAL";
+            case PortionType::TabRight: return "PortionType::TabRight";
+            case PortionType::TabCenter: return "PortionType::TabCenter";
+            case PortionType::TabDecimal: return "PortionType::TabDecimal";
 
-            case POR_TABLEFT: return "POR_TABLEFT";
+            case PortionType::TabLeft: return "PortionType::TabLeft";
             default:
                 return "Unknown";
         }
@@ -102,11 +106,7 @@ class XmlPortionDumper:public SwPortionHandler
 
   public:
 
-    explicit XmlPortionDumper( xmlTextWriterPtr some_writer ):writer( some_writer ), ofs( 0 )
-    {
-    }
-
-    virtual ~ XmlPortionDumper(  )
+    explicit XmlPortionDumper( xmlTextWriterPtr some_writer, const OUString& rText ):writer( some_writer ), ofs( 0 ), m_rText(rText)
     {
     }
 
@@ -116,25 +116,29 @@ class XmlPortionDumper:public SwPortionHandler
         @param rText
                 text which is painted on-screen
       */
-    virtual void Text( sal_Int32 nLength,
-                       sal_uInt16 nType,
+    virtual void Text( TextFrameIndex nLength,
+                       PortionType nType,
                        sal_Int32 nHeight,
                        sal_Int32 nWidth) override
     {
-        ofs += nLength;
         xmlTextWriterStartElement( writer, BAD_CAST( "Text" ) );
         xmlTextWriterWriteFormatAttribute( writer,
                                            BAD_CAST( "nLength" ),
-                                           "%i", ( int ) nLength );
+                                           "%i", static_cast<int>(static_cast<sal_Int32>(nLength)) );
         xmlTextWriterWriteFormatAttribute( writer,
                                            BAD_CAST( "nType" ),
                                            "%s", getTypeName( nType ) );
         if (nHeight > 0)
-            xmlTextWriterWriteFormatAttribute(writer, BAD_CAST("nHeight"), "%i", (int)nHeight);
+            xmlTextWriterWriteFormatAttribute(writer, BAD_CAST("nHeight"), "%i", static_cast<int>(nHeight));
         if (nWidth > 0)
-            xmlTextWriterWriteFormatAttribute(writer, BAD_CAST("nWidth"), "%i", (int)nWidth);
+            xmlTextWriterWriteFormatAttribute(writer, BAD_CAST("nWidth"), "%i", static_cast<int>(nWidth));
+        if (nLength > TextFrameIndex(0))
+            xmlTextWriterWriteAttribute(writer, BAD_CAST("Portion"),
+                BAD_CAST(m_rText.copy(sal_Int32(ofs), sal_Int32(nLength)).toUtf8().getStr()));
 
         xmlTextWriterEndElement( writer );
+        m_aLine += m_rText.copy(sal_Int32(ofs), sal_Int32(nLength));
+        ofs += nLength;
     }
 
     /**
@@ -147,9 +151,9 @@ class XmlPortionDumper:public SwPortionHandler
         @param nHeight
                 font size of the painted text
       */
-    virtual void Special( sal_Int32 nLength,
+    virtual void Special( TextFrameIndex nLength,
                           const OUString & rText,
-                          sal_uInt16 nType,
+                          PortionType nType,
                           sal_Int32 nHeight,
                           sal_Int32 nWidth,
                           const SwFont* pFont ) override
@@ -157,26 +161,25 @@ class XmlPortionDumper:public SwPortionHandler
         xmlTextWriterStartElement( writer, BAD_CAST( "Special" ) );
         xmlTextWriterWriteFormatAttribute( writer,
                                            BAD_CAST( "nLength" ),
-                                           "%i", ( int ) nLength );
+                                           "%i", static_cast<int>(static_cast<sal_Int32>(nLength)) );
         xmlTextWriterWriteFormatAttribute( writer,
                                            BAD_CAST( "nType" ),
                                            "%s", getTypeName( nType ) );
-        OUString sText( rText );
-        OString sText8 =OUStringToOString( sText,
-                                                       RTL_TEXTENCODING_UTF8 );
+        OString sText8 = OUStringToOString( rText, RTL_TEXTENCODING_UTF8 );
         xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "rText" ),
                                            "%s", sText8.getStr(  ) );
 
         if (nHeight > 0)
-            xmlTextWriterWriteFormatAttribute(writer, BAD_CAST("nHeight"), "%i", (int)nHeight);
+            xmlTextWriterWriteFormatAttribute(writer, BAD_CAST("nHeight"), "%i", static_cast<int>(nHeight));
 
         if (nWidth > 0)
-            xmlTextWriterWriteFormatAttribute(writer, BAD_CAST("nWidth"), "%i", (int)nWidth);
+            xmlTextWriterWriteFormatAttribute(writer, BAD_CAST("nWidth"), "%i", static_cast<int>(nWidth));
 
         if (pFont)
             pFont->dumpAsXml(writer);
 
         xmlTextWriterEndElement( writer );
+        m_aLine += rText;
         ofs += nLength;
     }
 
@@ -186,7 +189,13 @@ class XmlPortionDumper:public SwPortionHandler
         if (nWidth > 0)
             xmlTextWriterWriteFormatAttribute( writer,
                                                BAD_CAST( "nWidth" ),
-                                               "%i", ( int ) nWidth );
+                                               "%i", static_cast<int>(nWidth) );
+        if (!m_aLine.isEmpty())
+        {
+            xmlTextWriterWriteAttribute(writer, BAD_CAST("Line"),
+                                        BAD_CAST(m_aLine.toUtf8().getStr()));
+            m_aLine.clear();
+        }
         xmlTextWriterEndElement( writer );
     }
 
@@ -194,12 +203,12 @@ class XmlPortionDumper:public SwPortionHandler
       * @param nLength
       *         number of 'model string' characters to be skipped
       */
-    virtual void Skip( sal_Int32 nLength ) override
+    virtual void Skip( TextFrameIndex nLength ) override
     {
         xmlTextWriterStartElement( writer, BAD_CAST( "Skip" ) );
         xmlTextWriterWriteFormatAttribute( writer,
                                            BAD_CAST( "nLength" ),
-                                           "%i", ( int ) nLength );
+                                           "%i", static_cast<int>(static_cast<sal_Int32>(nLength)) );
         xmlTextWriterEndElement( writer );
         ofs += nLength;
     }
@@ -217,6 +226,8 @@ namespace
     xmlTextWriterPtr lcl_createDefaultWriter()
     {
         xmlTextWriterPtr writer = xmlNewTextWriterFilename( "layout.xml", 0 );
+        xmlTextWriterSetIndent(writer,1);
+        xmlTextWriterSetIndentString(writer, BAD_CAST("  "));
         xmlTextWriterStartDocument( writer, nullptr, nullptr, nullptr );
         return writer;
     }
@@ -226,6 +237,17 @@ namespace
         xmlTextWriterEndDocument( writer );
         xmlFreeTextWriter( writer );
     }
+}
+
+void SwFrame::dumpTopMostAsXml(xmlTextWriterPtr writer) const
+{
+    const SwFrame* pFrame = this;
+    while (pFrame->GetUpper())
+    {
+        pFrame = pFrame->GetUpper();
+    }
+
+    pFrame->dumpAsXml(writer);
 }
 
 void SwFrame::dumpAsXml( xmlTextWriterPtr writer ) const
@@ -295,10 +317,47 @@ void SwFrame::dumpAsXml( xmlTextWriterPtr writer ) const
         if (IsRootFrame())
         {
             const SwRootFrame* pRootFrame = static_cast<const SwRootFrame*>(this);
-            xmlTextWriterStartElement(writer, BAD_CAST("shells"));
-            for (SwViewShell& rViewShell : pRootFrame->GetCurrShell()->GetRingContainer())
-                rViewShell.dumpAsXml(writer);
+            xmlTextWriterStartElement(writer, BAD_CAST("sfxViewShells"));
+            SwView* pView = static_cast<SwView*>(SfxViewShell::GetFirst(true, checkSfxViewShell<SwView>));
+            while (pView)
+            {
+                if (pView->GetObjectShell() == pRootFrame->GetCurrShell()->GetSfxViewShell()->GetObjectShell())
+                    pView->dumpAsXml(writer);
+                pView = static_cast<SwView*>(SfxViewShell::GetNext(*pView, true, checkSfxViewShell<SwView>));
+            }
             xmlTextWriterEndElement(writer);
+        }
+
+        if (IsPageFrame())
+        {
+            const SwPageFrame* pPageFrame = static_cast<const SwPageFrame*>(this);
+            xmlTextWriterStartElement(writer, BAD_CAST("page_status"));
+            xmlTextWriterWriteAttribute(writer, BAD_CAST("ValidFlyLayout"), BAD_CAST(OString::boolean(!pPageFrame->IsInvalidFlyLayout()).getStr()));
+            xmlTextWriterWriteAttribute(writer, BAD_CAST("ValidFlyContent"), BAD_CAST(OString::boolean(!pPageFrame->IsInvalidFlyContent()).getStr()));
+            xmlTextWriterWriteAttribute(writer, BAD_CAST("ValidFlyInCnt"), BAD_CAST(OString::boolean(!pPageFrame->IsInvalidFlyInCnt()).getStr()));
+            xmlTextWriterWriteAttribute(writer, BAD_CAST("ValidLayout"), BAD_CAST(OString::boolean(!pPageFrame->IsInvalidLayout()).getStr()));
+            xmlTextWriterWriteAttribute(writer, BAD_CAST("ValidContent"), BAD_CAST(OString::boolean(!pPageFrame->IsInvalidContent()).getStr()));
+            xmlTextWriterEndElement(writer);
+        }
+
+        if (IsTextFrame())
+        {
+            const SwTextFrame *pTextFrame = static_cast<const SwTextFrame *>(this);
+            sw::MergedPara const*const pMerged(pTextFrame->GetMergedPara());
+            if (pMerged)
+            {
+                xmlTextWriterStartElement( writer, BAD_CAST( "merged" ) );
+                xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "paraPropsNodeIndex" ), "%" SAL_PRIuUINTPTR, pMerged->pParaPropsNode->GetIndex() );
+                for (auto const& e : pMerged->extents)
+                {
+                    xmlTextWriterStartElement( writer, BAD_CAST( "extent" ) );
+                    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "txtNodeIndex" ), "%" SAL_PRIuUINTPTR, e.pNode->GetIndex() );
+                    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "start" ), "%" SAL_PRIdINT32, e.nStart );
+                    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "end" ), "%" SAL_PRIdINT32, e.nEnd );
+                    xmlTextWriterEndElement( writer );
+                }
+                xmlTextWriterEndElement( writer );
+            }
         }
 
         xmlTextWriterStartElement( writer, BAD_CAST( "infos" ) );
@@ -311,9 +370,8 @@ void SwFrame::dumpAsXml( xmlTextWriterPtr writer ) const
         {
             xmlTextWriterStartElement( writer, BAD_CAST( "anchored" ) );
 
-            for ( size_t i = 0, len = pAnchored->size(); i < len; ++i )
+            for (SwAnchoredObject* pObject : *pAnchored)
             {
-                SwAnchoredObject* pObject = (*pAnchored)[i];
                 pObject->dumpAsXml( writer );
             }
 
@@ -333,7 +391,7 @@ void SwFrame::dumpAsXml( xmlTextWriterPtr writer ) const
                                                           RTL_TEXTENCODING_UTF8 );
             xmlTextWriterWriteString( writer,
                                       reinterpret_cast<const xmlChar *>(aText8.getStr(  )) );
-            XmlPortionDumper pdumper( writer );
+            XmlPortionDumper pdumper( writer, aText );
             pTextFrame->VisitPortions( pdumper );
 
         }
@@ -352,25 +410,28 @@ void SwFrame::dumpInfosAsXml( xmlTextWriterPtr writer ) const
 {
     // output the Frame
     xmlTextWriterStartElement( writer, BAD_CAST( "bounds" ) );
-    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "left" ), "%ld", Frame().Left() );
-    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "top" ), "%ld", Frame().Top() );
-    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "width" ), "%ld", Frame().Width() );
-    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "height" ), "%ld", Frame().Height() );
+    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "left" ), "%ld", getFrameArea().Left() );
+    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "top" ), "%ld", getFrameArea().Top() );
+    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "width" ), "%ld", getFrameArea().Width() );
+    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "height" ), "%ld", getFrameArea().Height() );
     xmlTextWriterWriteAttribute(writer, BAD_CAST("mbFixSize"), BAD_CAST(OString::boolean(HasFixSize()).getStr()));
+    xmlTextWriterWriteAttribute(writer, BAD_CAST("mbValidPos"), BAD_CAST(OString::boolean(isFrameAreaPositionValid()).getStr()));
+    xmlTextWriterWriteAttribute(writer, BAD_CAST("mbValidSize"), BAD_CAST(OString::boolean(isFrameAreaSizeValid()).getStr()));
+    xmlTextWriterWriteAttribute(writer, BAD_CAST("mbValidPrtArea"), BAD_CAST(OString::boolean(isFramePrintAreaValid()).getStr()));
     xmlTextWriterEndElement( writer );
 
     // output the Prt
     xmlTextWriterStartElement( writer, BAD_CAST( "prtBounds" ) );
-    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "left" ), "%ld", Prt().Left() );
-    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "top" ), "%ld", Prt().Top() );
-    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "width" ), "%ld", Prt().Width() );
-    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "height" ), "%ld", Prt().Height() );
+    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "left" ), "%ld", getFramePrintArea().Left() );
+    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "top" ), "%ld", getFramePrintArea().Top() );
+    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "width" ), "%ld", getFramePrintArea().Width() );
+    xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "height" ), "%ld", getFramePrintArea().Height() );
     xmlTextWriterEndElement( writer );
 }
 
 // Hack: somehow conversion from "..." to va_list does
-// bomb on two string litterals in the format.
-static const char* TMP_FORMAT = "%" SAL_PRIuUINTPTR;
+// bomb on two string literals in the format.
+static const char* const TMP_FORMAT = "%" SAL_PRIuUINTPTR;
 
 void SwFrame::dumpAsXmlAttributes( xmlTextWriterPtr writer ) const
 {
@@ -385,10 +446,19 @@ void SwFrame::dumpAsXmlAttributes( xmlTextWriterPtr writer ) const
         xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "upper" ), "%" SAL_PRIuUINT32, GetUpper()->GetFrameId() );
     if ( GetLower( ) )
         xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "lower" ), "%" SAL_PRIuUINT32, GetLower()->GetFrameId() );
+    if (IsFootnoteFrame())
+    {
+        SwFootnoteFrame const*const pFF(static_cast<SwFootnoteFrame const*>(this));
+        xmlTextWriterWriteFormatAttribute( writer, BAD_CAST("ref"), "%" SAL_PRIuUINT32, pFF->GetRef()->GetFrameId() );
+        if (pFF->GetMaster())
+            xmlTextWriterWriteFormatAttribute( writer, BAD_CAST("master"), "%" SAL_PRIuUINT32, pFF->GetMaster()->GetFrameId() );
+        if (pFF->GetFollow())
+            xmlTextWriterWriteFormatAttribute( writer, BAD_CAST("follow"), "%" SAL_PRIuUINT32, pFF->GetFollow()->GetFrameId() );
+    }
     if ( IsTextFrame(  ) )
     {
         const SwTextFrame *pTextFrame = static_cast<const SwTextFrame *>(this);
-        const SwTextNode *pTextNode = pTextFrame->GetTextNode();
+        const SwTextNode *pTextNode = pTextFrame->GetTextNodeFirst();
         xmlTextWriterWriteFormatAttribute( writer, BAD_CAST( "txtNodeIndex" ), TMP_FORMAT, pTextNode->GetIndex() );
     }
     if (IsHeaderFrame() || IsFooterFrame())
@@ -436,9 +506,10 @@ void SwAnchoredObject::dumpAsXml( xmlTextWriterPtr writer ) const
 
 void SwFont::dumpAsXml(xmlTextWriterPtr writer) const
 {
-    xmlTextWriterStartElement(writer, BAD_CAST("pFont"));
+    xmlTextWriterStartElement(writer, BAD_CAST("SwFont"));
     xmlTextWriterWriteFormatAttribute(writer, BAD_CAST("ptr"), "%p", this);
-    xmlTextWriterWriteFormatAttribute(writer, BAD_CAST("color"), "%s", GetColor().AsRGBHexString().toUtf8().getStr());
+    // do not use Color::AsRGBHexString() as that omits the transparency
+    xmlTextWriterWriteFormatAttribute(writer, BAD_CAST("color"), "%08" SAL_PRIxUINT32, sal_uInt32(GetColor()));
     xmlTextWriterEndElement(writer);
 }
 

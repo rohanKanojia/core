@@ -22,20 +22,22 @@
 
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <ucbhelper/ucbhelperdllapi.h>
-#include <cppuhelper/implbase1.hxx>
+#include <cppuhelper/implbase.hxx>
 #include <memory>
 
 namespace ucbhelper
 {
 struct CommandEnvironment_Impl;
 
+// workaround for incremental linking bugs in MSVC2015
+class SAL_DLLPUBLIC_TEMPLATE CommandEnvironment_Base : public cppu::WeakImplHelper< css::ucb::XCommandEnvironment > {};
+
 /**
   * This class implements the interface
   * css::ucb::XCommandEnvironment. Instances of this class can
   * be used to supply environments to commands executed by UCB contents.
   */
-class UCBHELPER_DLLPUBLIC CommandEnvironment :
-            public cppu::WeakImplHelper1< css::ucb::XCommandEnvironment >
+class UCBHELPER_DLLPUBLIC CommandEnvironment : public CommandEnvironment_Base
 {
     std::unique_ptr<CommandEnvironment_Impl> m_pImpl;
 
@@ -57,16 +59,12 @@ public:
     /**
       * Destructor.
       */
-    virtual ~CommandEnvironment();
+    virtual ~CommandEnvironment() override;
 
      // XCommandEnvironemnt
-    virtual css::uno::Reference< css::task::XInteractionHandler > SAL_CALL getInteractionHandler()
-        throw ( css::uno::RuntimeException,
-                std::exception ) override;
+    virtual css::uno::Reference< css::task::XInteractionHandler > SAL_CALL getInteractionHandler() override;
 
-    virtual css::uno::Reference< css::ucb::XProgressHandler > SAL_CALL getProgressHandler()
-        throw ( css::uno::RuntimeException,
-                std::exception ) override;
+    virtual css::uno::Reference< css::ucb::XProgressHandler > SAL_CALL getProgressHandler() override;
 };
 
 } /* namespace ucbhelper */

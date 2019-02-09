@@ -19,15 +19,16 @@
 #ifndef INCLUDED_I18NPOOL_INC_INPUTSEQUENCECHECKER_HXX
 #define INCLUDED_I18NPOOL_INC_INPUTSEQUENCECHECKER_HXX
 
-#include <comphelper/processfactory.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/i18n/XExtendedInputSequenceChecker.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <vector>
+#include <memory>
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 
 //  class InputSequenceCheckerImpl
@@ -41,20 +42,18 @@ class InputSequenceCheckerImpl : public cppu::WeakImplHelper
 public:
     InputSequenceCheckerImpl( const css::uno::Reference < css::uno::XComponentContext >& rxContext );
     InputSequenceCheckerImpl(const char *pServiceName);
-    virtual ~InputSequenceCheckerImpl();
+    virtual ~InputSequenceCheckerImpl() override;
 
     virtual sal_Bool SAL_CALL checkInputSequence(const OUString& Text, sal_Int32 nStartPos,
-        sal_Unicode inputChar, sal_Int16 inputCheckMode) throw(css::uno::RuntimeException, std::exception) override;
+        sal_Unicode inputChar, sal_Int16 inputCheckMode) override;
 
     virtual sal_Int32 SAL_CALL correctInputSequence(OUString& Text, sal_Int32 nStartPos,
-        sal_Unicode inputChar, sal_Int16 inputCheckMode) throw(css::uno::RuntimeException, std::exception) override;
+        sal_Unicode inputChar, sal_Int16 inputCheckMode) override;
 
     //XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw( css::uno::RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL supportsService(const OUString& ServiceName)
-        throw( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService(const OUString& ServiceName) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
 private:
     const sal_Char *serviceName;
@@ -65,17 +64,17 @@ private:
         const sal_Char* aLanguage;
         css::uno::Reference < css::i18n::XExtendedInputSequenceChecker > xISC;
     };
-    std::vector<lookupTableItem*> lookupTable;
+    std::vector<std::unique_ptr<lookupTableItem>> lookupTable;
     lookupTableItem *cachedItem;
 
     css::uno::Reference < css::uno::XComponentContext > m_xContext;
 
-    css::uno::Reference< css::i18n::XExtendedInputSequenceChecker >& SAL_CALL getInputSequenceChecker(sal_Char* rLanguage)
-        throw (css::uno::RuntimeException);
-    static sal_Char* SAL_CALL getLanguageByScripType(sal_Unicode cChar, sal_Unicode nChar);
+    /// @throws css::uno::RuntimeException
+    css::uno::Reference< css::i18n::XExtendedInputSequenceChecker >& getInputSequenceChecker(sal_Char const * rLanguage);
+    static sal_Char* getLanguageByScripType(sal_Unicode cChar, sal_Unicode nChar);
 };
 
-} } } }
+}
 
 #endif // INCLUDED_I18NPOOL_INC_INPUTSEQUENCECHECKER_HXX
 

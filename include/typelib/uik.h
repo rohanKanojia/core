@@ -19,9 +19,9 @@
 #ifndef INCLUDED_TYPELIB_UIK_H
 #define INCLUDED_TYPELIB_UIK_H
 
-#include <sal/types.h>
+#include "sal/types.h"
 
-#if defined( SAL_W32)
+#if defined( _WIN32)
 #pragma pack(push, 8)
 #endif
 
@@ -38,7 +38,7 @@ typedef struct _typelib_Uik
     sal_uInt32  m_Data5;
 } typelib_Uik;
 
-#if defined( SAL_W32)
+#if defined( _WIN32)
 #   pragma pack(pop)
 #endif
 

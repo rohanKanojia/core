@@ -18,26 +18,30 @@
  */
 
 #include <svtools/svparser.hxx>
+#include <svtools/htmltokn.h>
 #include <tools/stream.hxx>
 #include <tools/debug.hxx>
 #include <rtl/textcvt.h>
 #include <rtl/tencinfo.h>
 #include <rtl/character.hxx>
+#include <sal/log.hxx>
 
 #include <vector>
+#include <climits>
 
-// structure to store the actuel data
+// structure to store the actual data
+template<typename T>
 struct SvParser_Impl
 {
     OUString        aToken;             // gescanntes Token
-    sal_uLong       nFilePos;           // actual position in stream
+    sal_uInt64      nFilePos;           // actual position in stream
     sal_uLong       nlLineNr;           // actual line number
     sal_uLong       nlLinePos;          // actual column number
     long            nTokenValue;        // extra value (RTF)
-    bool        bTokenHasValue;     // indicates whether nTokenValue is valid
-    int             nToken;             // actual Token
+    bool            bTokenHasValue;     // indicates whether nTokenValue is valid
+    T               nToken;             // actual Token
     sal_uInt32      nNextCh;            // actual character
-    int             nSaveToken;         // the token from Continue
+    T               nSaveToken;         // the token from Continue
 
     rtl_TextToUnicodeConverter hConv;
     rtl_TextToUnicodeContext   hContext;
@@ -48,9 +52,9 @@ struct SvParser_Impl
         , nlLinePos(0)
         , nTokenValue(0)
         , bTokenHasValue(false)
-        , nToken(0)
+        , nToken(static_cast<T>(0))
         , nNextCh(0)
-        , nSaveToken(0)
+        , nSaveToken(static_cast<T>(0))
         , hConv( nullptr )
         , hContext( reinterpret_cast<rtl_TextToUnicodeContext>(1) )
     {
@@ -59,33 +63,43 @@ struct SvParser_Impl
 };
 
 
-// Construktor
-SvParser::SvParser( SvStream& rIn, sal_uInt8 nStackSize )
+template<typename T>
+SvParser<T>::TokenStackType::TokenStackType()
+  : nTokenValue(0)
+    , bTokenHasValue(false)
+    , nTokenId(static_cast<T>(0))
+{
+}
+
+// Constructor
+template<typename T>
+SvParser<T>::SvParser( SvStream& rIn, sal_uInt8 nStackSize )
     : rInput( rIn )
     , nlLineNr( 1 )
     , nlLinePos( 1 )
     , pImplData( nullptr )
+    , m_nTokenIndex(0)
     , nTokenValue( 0 )
     , bTokenHasValue( false )
-    , eState( SVPAR_NOTSTARTED )
+    , eState( SvParserState::NotStarted )
     , eSrcEnc( RTL_TEXTENCODING_DONTKNOW )
     , nNextChPos(0)
     , nNextCh(0)
-    , bDownloadingFile(false)
     , bUCS2BSrcEnc(false)
     , bSwitchToUCS2(false)
     , bRTF_InTextRead(false)
     , nTokenStackSize( nStackSize )
     , nTokenStackPos( 0 )
 {
-    eState = SVPAR_NOTSTARTED;
+    eState = SvParserState::NotStarted;
     if( nTokenStackSize < 3 )
         nTokenStackSize = 3;
-    pTokenStack = new TokenStackType[ nTokenStackSize ];
-    pTokenStackPos = pTokenStack;
+    pTokenStack.reset(new TokenStackType[ nTokenStackSize ]);
+    pTokenStackPos = pTokenStack.get();
 }
 
-SvParser::~SvParser()
+template<typename T>
+SvParser<T>::~SvParser()
 {
     if( pImplData && pImplData->hConv )
     {
@@ -94,60 +108,80 @@ SvParser::~SvParser()
         rtl_destroyTextToUnicodeConverter( pImplData->hConv );
     }
 
-    delete [] pTokenStack;
+    pTokenStack.reset();
 }
 
-void SvParser::ClearTxtConvContext()
+template<typename T> SvParserState SvParser<T>::GetStatus() const { return eState; }
+template<typename T> sal_uLong  SvParser<T>::GetLineNr() const       { return nlLineNr; }
+template<typename T> sal_uLong  SvParser<T>::GetLinePos() const      { return nlLinePos; }
+template<typename T> void       SvParser<T>::IncLineNr()             { ++nlLineNr; }
+template<typename T> sal_uLong  SvParser<T>::IncLinePos()            { return ++nlLinePos; }
+template<typename T> void       SvParser<T>::SetLineNr( sal_uLong nlNum ) { nlLineNr = nlNum; }
+template<typename T> void       SvParser<T>::SetLinePos( sal_uLong nlPos ) {   nlLinePos = nlPos; }
+template<typename T> bool       SvParser<T>::IsParserWorking() const { return SvParserState::Working == eState; }
+template<typename T> rtl_TextEncoding SvParser<T>::GetSrcEncoding() const { return eSrcEnc; }
+template<typename T> void       SvParser<T>::SetSwitchToUCS2( bool bSet ) { bSwitchToUCS2 = bSet; }
+template<typename T> bool       SvParser<T>::IsSwitchToUCS2() const { return bSwitchToUCS2; }
+template<typename T> sal_uInt16 SvParser<T>::GetCharSize() const { return (RTL_TEXTENCODING_UCS2 == eSrcEnc) ? 2 : 1; }
+template<typename T> Link<LinkParamNone*,void> SvParser<T>::GetAsynchCallLink() const
+{
+    return LINK( const_cast<SvParser*>(this), SvParser, NewDataRead );
+}
+
+template<typename T>
+void SvParser<T>::ClearTxtConvContext()
 {
     if( pImplData && pImplData->hConv )
         rtl_resetTextToUnicodeContext( pImplData->hConv, pImplData->hContext );
 }
 
-void SvParser::SetSrcEncoding( rtl_TextEncoding eEnc )
+template<typename T>
+void SvParser<T>::SetSrcEncoding( rtl_TextEncoding eEnc )
 {
+    if( eEnc == eSrcEnc )
+        return;
 
-    if( eEnc != eSrcEnc )
+    if( pImplData && pImplData->hConv )
     {
-        if( pImplData && pImplData->hConv )
-        {
-            rtl_destroyTextToUnicodeContext( pImplData->hConv,
-                                             pImplData->hContext );
-            rtl_destroyTextToUnicodeConverter( pImplData->hConv );
-            pImplData->hConv = nullptr;
-            pImplData->hContext = reinterpret_cast<rtl_TextToUnicodeContext>(1);
-        }
+        rtl_destroyTextToUnicodeContext( pImplData->hConv,
+                                         pImplData->hContext );
+        rtl_destroyTextToUnicodeConverter( pImplData->hConv );
+        pImplData->hConv = nullptr;
+        pImplData->hContext = reinterpret_cast<rtl_TextToUnicodeContext>(1);
+    }
 
-        if( rtl_isOctetTextEncoding(eEnc) ||
-            RTL_TEXTENCODING_UCS2 == eEnc  )
-        {
-            eSrcEnc = eEnc;
-            if( !pImplData )
-                pImplData.reset(new SvParser_Impl);
-            pImplData->hConv = rtl_createTextToUnicodeConverter( eSrcEnc );
-            DBG_ASSERT( pImplData->hConv,
-                        "SvParser::SetSrcEncoding: no converter for source encoding" );
-            if( !pImplData->hConv )
-                eSrcEnc = RTL_TEXTENCODING_DONTKNOW;
-            else
-                pImplData->hContext =
-                    rtl_createTextToUnicodeContext( pImplData->hConv );
-        }
-        else
-        {
-            DBG_ASSERT( false,
-                        "SvParser::SetSrcEncoding: invalid source encoding" );
+    if( rtl_isOctetTextEncoding(eEnc) ||
+        RTL_TEXTENCODING_UCS2 == eEnc  )
+    {
+        eSrcEnc = eEnc;
+        if( !pImplData )
+            pImplData.reset(new SvParser_Impl<T>);
+        pImplData->hConv = rtl_createTextToUnicodeConverter( eSrcEnc );
+        DBG_ASSERT( pImplData->hConv,
+                    "SvParser::SetSrcEncoding: no converter for source encoding" );
+        if( !pImplData->hConv )
             eSrcEnc = RTL_TEXTENCODING_DONTKNOW;
-        }
+        else
+            pImplData->hContext =
+                rtl_createTextToUnicodeContext( pImplData->hConv );
+    }
+    else
+    {
+        SAL_WARN( "svtools",
+                    "SvParser::SetSrcEncoding: invalid source encoding" );
+        eSrcEnc = RTL_TEXTENCODING_DONTKNOW;
     }
 }
 
-void SvParser::RereadLookahead()
+template<typename T>
+void SvParser<T>::RereadLookahead()
 {
     rInput.Seek(nNextChPos);
     nNextCh = GetNextChar();
 }
 
-sal_uInt32 SvParser::GetNextChar()
+template<typename T>
+sal_uInt32 SvParser<T>::GetNextChar()
 {
     sal_uInt32 c = 0U;
 
@@ -161,14 +195,14 @@ sal_uInt32 SvParser::GetNextChar()
         bool bSeekBack = true;
 
         rInput.ReadUChar( c1 );
-        bErr = rInput.IsEof() || rInput.GetError();
+        bErr = !rInput.good();
         if( !bErr )
         {
             if( 0xff == c1 || 0xfe == c1 )
             {
                 unsigned char c2;
                 rInput.ReadUChar( c2 );
-                bErr = rInput.IsEof() || rInput.GetError();
+                bErr = !rInput.good();
                 if( !bErr )
                 {
                     if( 0xfe == c1 && 0xff == c2 )
@@ -189,17 +223,17 @@ sal_uInt32 SvParser::GetNextChar()
             {
                 unsigned char c2;
                 rInput.ReadUChar( c2 );
-                bErr = rInput.IsEof() || rInput.GetError();
+                bErr = !rInput.good();
                 if( !bErr )
                 {
                     if( ( 0xef == c1 && 0xbb == c2 ) || ( 0xbb == c1 && 0xef == c2 ) )
                     {
                         unsigned char c3(0);
                         rInput.ReadUChar( c3 );
-                        bErr = rInput.IsEof() || rInput.GetError();
+                        bErr = !rInput.good();
                         if( !bErr && ( 0xbf == c3 ) )
                         {
-                            eSrcEnc = RTL_TEXTENCODING_UTF8;
+                            SetSrcEncoding(RTL_TEXTENCODING_UTF8);
                             bSeekBack = false;
                         }
                     }
@@ -220,13 +254,12 @@ sal_uInt32 SvParser::GetNextChar()
         unsigned char c1, c2;
 
         rInput.ReadUChar( c1 ).ReadUChar( c2 );
-        if( 2 == rInput.Tell() &&
-            !(rInput.IsEof() || rInput.GetError()) &&
+        if( 2 == rInput.Tell() && rInput.good() &&
             ( (bUCS2BSrcEnc && 0xfe == c1 && 0xff == c2) ||
               (!bUCS2BSrcEnc && 0xff == c1 && 0xfe == c2) ) )
             rInput.ReadUChar( c1 ).ReadUChar( c2 );
 
-        bErr = rInput.IsEof() || rInput.GetError();
+        bErr = !rInput.good();
         if( !bErr )
         {
             if( bUCS2BSrcEnc )
@@ -247,7 +280,7 @@ sal_uInt32 SvParser::GetNextChar()
         {
             sal_Char c1;    // signed, that's the text converter expects
             rInput.ReadChar( c1 );
-            bErr = rInput.IsEof() || rInput.GetError();
+            bErr = !rInput.good();
             if( !bErr )
             {
                 if (
@@ -255,7 +288,7 @@ sal_uInt32 SvParser::GetNextChar()
                      RTL_TEXTENCODING_SYMBOL == eSrcEnc
                    )
                 {
-                    // no convserion shall take place
+                    // no conversion shall take place
                     c = reinterpret_cast<sal_uChar&>( c1 );
                     nChars = 1;
                 }
@@ -273,17 +306,17 @@ sal_uInt32 SvParser::GetNextChar()
                                 RTL_TEXTTOUNICODE_FLAGS_MBUNDEFINED_ERROR|
                                 RTL_TEXTTOUNICODE_FLAGS_INVALID_ERROR,
                                 &nInfo, &nCvtBytes);
-                    if( (nInfo&RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL) != 0 )
+                    if( (nInfo&RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL) != 0 )
                     {
                         // The conversion wasn't successful because we haven't
                         // read enough characters.
                         if( pImplData->hContext != reinterpret_cast<rtl_TextToUnicodeContext>(1) )
                         {
                             sal_Unicode sCh[2];
-                            while( (nInfo&RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL) != 0 )
+                            while( (nInfo&RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL) != 0 )
                             {
                                 rInput.ReadChar( c1 );
-                                bErr = rInput.IsEof() || rInput.GetError();
+                                bErr = !rInput.good();
                                 if( bErr )
                                     break;
 
@@ -307,15 +340,15 @@ sal_uInt32 SvParser::GetNextChar()
                                 }
                                 else if( 0 != nChars || 0 != nInfo )
                                 {
-                                    DBG_ASSERT( (nInfo&RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL) == 0,
+                                    DBG_ASSERT( (nInfo&RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL) == 0,
                                         "source buffer is to small" );
-                                    DBG_ASSERT( (nInfo&~(RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL)) == 0,
+                                    DBG_ASSERT( (nInfo&~(RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL)) == 0,
                                          "there is a conversion error" );
                                     DBG_ASSERT( 0 == nChars,
                                        "there is a converted character, but an error" );
                                     // There are still errors, but nothing we can
                                     // do
-                                    c = (sal_uInt32)'?';
+                                    c = '?';
                                     nChars = 1;
                                 }
                             }
@@ -325,11 +358,11 @@ sal_uInt32 SvParser::GetNextChar()
                             sal_Char sBuffer[10];
                             sBuffer[0] = c1;
                             sal_uInt16 nLen = 1;
-                            while( (nInfo&RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL) != 0 &&
+                            while( (nInfo&RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL) != 0 &&
                                     nLen < 10 )
                             {
                                 rInput.ReadChar( c1 );
-                                bErr = rInput.IsEof() || rInput.GetError();
+                                bErr = !rInput.good();
                                 if( bErr )
                                     break;
 
@@ -351,9 +384,9 @@ sal_uInt32 SvParser::GetNextChar()
                                 }
                                 else
                                 {
-                                    DBG_ASSERT( (nInfo&RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL) == 0,
+                                    DBG_ASSERT( (nInfo&RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL) == 0,
                                         "source buffer is to small" );
-                                    DBG_ASSERT( (nInfo&~(RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL)) == 0,
+                                    DBG_ASSERT( (nInfo&~(RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL)) == 0,
                                          "there is a conversion error" );
                                     DBG_ASSERT( 0 == nChars,
                                        "there is a converted character, but an error" );
@@ -392,14 +425,14 @@ sal_uInt32 SvParser::GetNextChar()
         while( 0 == nChars  && !bErr );
     }
 
-    if ( ! rtl::isUnicodeCodePoint( c ) )
-        c = (sal_uInt32) '?' ;
+    if ( ! rtl::isUnicodeScalarValue( c ) )
+        c = '?' ;
 
     if( bErr )
     {
         if( ERRCODE_IO_PENDING == rInput.GetError() )
         {
-            eState = SVPAR_PENDING;
+            eState = SvParserState::Pending;
             return c;
         }
         else
@@ -409,7 +442,7 @@ sal_uInt32 SvParser::GetNextChar()
     if( c == '\n' )
     {
         IncLineNr();
-        SetLinePos( 1L );
+        SetLinePos( 1 );
     }
     else
         IncLinePos();
@@ -417,9 +450,10 @@ sal_uInt32 SvParser::GetNextChar()
     return c;
 }
 
-int SvParser::GetNextToken()
+template<typename T>
+T SvParser<T>::GetNextToken()
 {
-    int nRet = 0;
+    T nRet = static_cast<T>(0);
 
     if( !nTokenStackPos )
     {
@@ -428,13 +462,13 @@ int SvParser::GetNextToken()
         bTokenHasValue = false;
 
         nRet = GetNextToken_();
-        if( SVPAR_PENDING == eState )
+        if( SvParserState::Pending == eState )
             return nRet;
     }
 
     ++pTokenStackPos;
-    if( pTokenStackPos == pTokenStack + nTokenStackSize )
-        pTokenStackPos = pTokenStack;
+    if( pTokenStackPos == pTokenStack.get() + nTokenStackSize )
+        pTokenStackPos = pTokenStack.get();
 
     // pop from stack ??
     if( nTokenStackPos )
@@ -444,22 +478,25 @@ int SvParser::GetNextToken()
         bTokenHasValue = pTokenStackPos->bTokenHasValue;
         aToken = pTokenStackPos->sToken;
         nRet = pTokenStackPos->nTokenId;
+        ++m_nTokenIndex;
     }
     // no, now push actual value on stack
-    else if( SVPAR_WORKING == eState )
+    else if( SvParserState::Working == eState )
     {
         pTokenStackPos->sToken = aToken;
         pTokenStackPos->nTokenValue = nTokenValue;
         pTokenStackPos->bTokenHasValue = bTokenHasValue;
         pTokenStackPos->nTokenId = nRet;
+        ++m_nTokenIndex;
     }
-    else if( SVPAR_ACCEPTED != eState && SVPAR_PENDING != eState )
-        eState = SVPAR_ERROR;       // an error occurred
+    else if( SvParserState::Accepted != eState && SvParserState::Pending != eState )
+        eState = SvParserState::Error;       // an error occurred
 
     return nRet;
 }
 
-int SvParser::SkipToken( short nCnt )       // "skip" n Tokens backward
+template<typename T>
+T SvParser<T>::SkipToken( short nCnt )       // "skip" n Tokens backward
 {
     pTokenStackPos = GetStackPtr( nCnt );
     short nTmp = nTokenStackPos - nCnt;
@@ -469,6 +506,8 @@ int SvParser::SkipToken( short nCnt )       // "skip" n Tokens backward
         nTmp = nTokenStackSize;
     nTokenStackPos = sal_uInt8(nTmp);
 
+    m_nTokenIndex -= nTmp;
+
     // restore values
     aToken = pTokenStackPos->sToken;
     nTokenValue = pTokenStackPos->nTokenValue;
@@ -477,52 +516,49 @@ int SvParser::SkipToken( short nCnt )       // "skip" n Tokens backward
     return pTokenStackPos->nTokenId;
 }
 
-SvParser::TokenStackType* SvParser::GetStackPtr( short nCnt )
+template<typename T>
+typename SvParser<T>::TokenStackType* SvParser<T>::GetStackPtr( short nCnt )
 {
-    sal_uInt8 nAktPos = sal_uInt8(pTokenStackPos - pTokenStack );
+    sal_uInt8 nCurrentPos = sal_uInt8(pTokenStackPos - pTokenStack.get());
     if( nCnt > 0 )
     {
         if( nCnt >= nTokenStackSize )
             nCnt = (nTokenStackSize-1);
-        if( nAktPos + nCnt < nTokenStackSize )
-            nAktPos = sal::static_int_cast< sal_uInt8 >(nAktPos + nCnt);
+        if( nCurrentPos + nCnt < nTokenStackSize )
+            nCurrentPos = sal::static_int_cast< sal_uInt8 >(nCurrentPos + nCnt);
         else
-            nAktPos = sal::static_int_cast< sal_uInt8 >(
-                nAktPos + (nCnt - nTokenStackSize));
+            nCurrentPos = sal::static_int_cast< sal_uInt8 >(
+                nCurrentPos + (nCnt - nTokenStackSize));
     }
     else if( nCnt < 0 )
     {
         if( -nCnt >= nTokenStackSize )
             nCnt = -nTokenStackSize+1;
-        if( -nCnt <= nAktPos )
-            nAktPos = sal::static_int_cast< sal_uInt8 >(nAktPos + nCnt);
+        if( -nCnt <= nCurrentPos )
+            nCurrentPos = sal::static_int_cast< sal_uInt8 >(nCurrentPos + nCnt);
         else
-            nAktPos = sal::static_int_cast< sal_uInt8 >(
-                nAktPos + (nCnt + nTokenStackSize));
+            nCurrentPos = sal::static_int_cast< sal_uInt8 >(
+                nCurrentPos + (nCnt + nTokenStackSize));
     }
-    return pTokenStack + nAktPos;
+    return pTokenStack.get() + nCurrentPos;
 }
-
-// is called for each token which is recognised by CallParser
-void SvParser::NextToken( int )
-{
-}
-
 
 // to read asynchronous from SvStream
 
-int SvParser::GetSaveToken() const
+template<typename T>
+T SvParser<T>::GetSaveToken() const
 {
-    return pImplData ? pImplData->nSaveToken : 0;
+    return pImplData ? pImplData->nSaveToken : static_cast<T>(0);
 }
 
-void SvParser::SaveState( int nToken )
+template<typename T>
+void SvParser<T>::SaveState( T nToken )
 {
     // save actual status
     if( !pImplData )
     {
-        pImplData.reset(new SvParser_Impl);
-        pImplData->nSaveToken = 0;
+        pImplData.reset(new SvParser_Impl<T>);
+        pImplData->nSaveToken = static_cast<T>(0);
     }
 
     pImplData->nFilePos = rInput.Tell();
@@ -536,33 +572,35 @@ void SvParser::SaveState( int nToken )
     pImplData->nNextCh = nNextCh;
 }
 
-void SvParser::RestoreState()
+template<typename T>
+void SvParser<T>::RestoreState()
 {
     // restore old status
-    if( pImplData )
-    {
-        if( ERRCODE_IO_PENDING == rInput.GetError() )
-            rInput.ResetError();
-        aToken = pImplData->aToken;
-        nlLineNr = pImplData->nlLineNr;
-        nlLinePos = pImplData->nlLinePos;
-        nTokenValue= pImplData->nTokenValue;
-        bTokenHasValue=pImplData->bTokenHasValue;
-        nNextCh = pImplData->nNextCh;
+    if( !pImplData )
+        return;
 
-        pImplData->nSaveToken = pImplData->nToken;
+    if( ERRCODE_IO_PENDING == rInput.GetError() )
+        rInput.ResetError();
+    aToken = pImplData->aToken;
+    nlLineNr = pImplData->nlLineNr;
+    nlLinePos = pImplData->nlLinePos;
+    nTokenValue= pImplData->nTokenValue;
+    bTokenHasValue=pImplData->bTokenHasValue;
+    nNextCh = pImplData->nNextCh;
 
-        rInput.Seek( pImplData->nFilePos );
-    }
+    pImplData->nSaveToken = pImplData->nToken;
+
+    rInput.Seek( pImplData->nFilePos );
 }
 
-void SvParser::Continue( int )
+template<typename T>
+void SvParser<T>::Continue( T )
 {
 }
 
-void SvParser::BuildWhichTable( std::vector<sal_uInt16> &rWhichMap,
-                              sal_uInt16 *pWhichIds,
-                              sal_uInt16 nWhichIds )
+void BuildWhichTable( std::vector<sal_uInt16> &rWhichMap,
+                      sal_uInt16 const *pWhichIds,
+                      sal_uInt16 nWhichIds )
 {
     sal_uInt16 aNewRange[2];
 
@@ -616,17 +654,20 @@ void SvParser::BuildWhichTable( std::vector<sal_uInt16> &rWhichMap,
 }
 
 
-IMPL_LINK_NOARG_TYPED( SvParser, NewDataRead, LinkParamNone*, void )
+// expanded out version of
+//   IMPL_LINK_NOARG( SvParser, NewDataRead, LinkParamNone*, void )
+// since it can't cope with template methods
+template<typename T>
+void SvParser<T>::LinkStubNewDataRead(void * instance, LinkParamNone* data) {
+    return static_cast<SvParser<T> *>(instance)->NewDataRead(data);
+}
+template<typename T>
+void SvParser<T>::NewDataRead(SAL_UNUSED_PARAMETER LinkParamNone*)
 {
     switch( eState )
     {
-    case SVPAR_PENDING:
-        // if file is loaded we are not allowed to continue
-        // instead should ignore the call.
-        if( IsDownloadingFile() )
-            break;
-
-        eState = SVPAR_WORKING;
+    case SvParserState::Pending:
+        eState = SvParserState::Working;
         RestoreState();
 
         Continue( pImplData->nToken );
@@ -634,16 +675,12 @@ IMPL_LINK_NOARG_TYPED( SvParser, NewDataRead, LinkParamNone*, void )
         if( ERRCODE_IO_PENDING == rInput.GetError() )
             rInput.ResetError();
 
-        if( SVPAR_PENDING != eState )
+        if( SvParserState::Pending != eState )
             ReleaseRef();                    // ready otherwise!
         break;
 
-    case SVPAR_WAITFORDATA:
-        eState = SVPAR_WORKING;
-        break;
-
-    case SVPAR_NOTSTARTED:
-    case SVPAR_WORKING:
+    case SvParserState::NotStarted:
+    case SvParserState::Working:
         break;
 
     default:
@@ -651,6 +688,9 @@ IMPL_LINK_NOARG_TYPED( SvParser, NewDataRead, LinkParamNone*, void )
         break;
     }
 }
+
+template class SVT_DLLPUBLIC SvParser<int>;
+template class SVT_DLLPUBLIC SvParser<HtmlTokenId>;
 
 /*========================================================================
  *

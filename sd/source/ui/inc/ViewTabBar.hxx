@@ -20,35 +20,35 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_VIEWTABBAR_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_VIEWTABBAR_HXX
 
-#include <com/sun/star/frame/XController.hpp>
-#include <com/sun/star/drawing/framework/XPane.hpp>
 #include <com/sun/star/drawing/framework/TabBarButton.hpp>
 #include <com/sun/star/drawing/framework/XTabBar.hpp>
 #include <com/sun/star/drawing/framework/XToolBar.hpp>
-#include <com/sun/star/drawing/framework/XConfigurationController.hpp>
 #include <com/sun/star/drawing/framework/XConfigurationChangeListener.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
 #include <vcl/tabctrl.hxx>
 #include <cppuhelper/compbase.hxx>
 #include "MutexOwner.hxx"
 
-#include <memory>
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XConfigurationController; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XResourceId; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { struct ConfigurationChangeEvent; } } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XController; } } } }
+namespace vcl { class Window; }
 
 namespace sd {
     class ViewShellBase;
 }
 
-namespace {
-    typedef ::cppu::WeakComponentImplHelper <
-        css::drawing::framework::XToolBar,
-        css::drawing::framework::XTabBar,
-        css::drawing::framework::XConfigurationChangeListener,
-        css::lang::XUnoTunnel
-        > ViewTabBarInterfaceBase;
-}
-
 namespace sd {
+
+typedef ::cppu::WeakComponentImplHelper <
+    css::drawing::framework::XToolBar,
+    css::drawing::framework::XTabBar,
+    css::drawing::framework::XConfigurationChangeListener,
+    css::lang::XUnoTunnel
+    > ViewTabBarInterfaceBase;
 
 /** Tab control for switching between views in the center pane.
 */
@@ -60,11 +60,11 @@ public:
     ViewTabBar (
         const css::uno::Reference< css::drawing::framework::XResourceId>& rxViewTabBarId,
         const css::uno::Reference< css::frame::XController>& rxController);
-    virtual ~ViewTabBar();
+    virtual ~ViewTabBar() override;
 
     virtual void SAL_CALL disposing() override;
 
-    VclPtr< ::TabControl> GetTabControl() const { return mpTabControl;}
+    const VclPtr< ::TabControl>& GetTabControl() const { return mpTabControl;}
 
     bool ActivatePage();
 
@@ -72,58 +72,48 @@ public:
 
     virtual void SAL_CALL
         notifyConfigurationChange (
-            const css::drawing::framework::ConfigurationChangeEvent& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::drawing::framework::ConfigurationChangeEvent& rEvent) override;
 
     //----- XEventListener ----------------------------------------------------
 
     virtual void SAL_CALL disposing(
-        const css::lang::EventObject& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& rEvent) override;
 
     //----- XTabBar -----------------------------------------------------------
 
     virtual void
         SAL_CALL addTabBarButtonAfter (
             const css::drawing::framework::TabBarButton& rButton,
-            const css::drawing::framework::TabBarButton& rAnchor)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::drawing::framework::TabBarButton& rAnchor) override;
 
     virtual void
         SAL_CALL appendTabBarButton (
-            const css::drawing::framework::TabBarButton& rButton)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::drawing::framework::TabBarButton& rButton) override;
 
     virtual void
         SAL_CALL removeTabBarButton (
-            const css::drawing::framework::TabBarButton& rButton)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::drawing::framework::TabBarButton& rButton) override;
 
     virtual sal_Bool
         SAL_CALL hasTabBarButton (
-            const css::drawing::framework::TabBarButton& rButton)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::drawing::framework::TabBarButton& rButton) override;
 
     virtual css::uno::Sequence<css::drawing::framework::TabBarButton>
-        SAL_CALL getTabBarButtons()
-        throw (css::uno::RuntimeException, std::exception) override;
+        SAL_CALL getTabBarButtons() override;
 
     //----- XResource ---------------------------------------------------------
 
     virtual css::uno::Reference<
-        css::drawing::framework::XResourceId> SAL_CALL getResourceId()
-        throw (css::uno::RuntimeException, std::exception) override;
+        css::drawing::framework::XResourceId> SAL_CALL getResourceId() override;
 
-    virtual sal_Bool SAL_CALL isAnchorOnly()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL isAnchorOnly() override;
 
     //----- XUnoTunnel --------------------------------------------------------
 
-    virtual sal_Int64 SAL_CALL getSomething (const css::uno::Sequence<sal_Int8>& rId)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int64 SAL_CALL getSomething (const css::uno::Sequence<sal_Int8>& rId) override;
 
     /** The returned value is calculated as the difference between the
-        total height of the control and the heigh of its first tab page.
+        total height of the control and the height of its first tab page.
         This can be considered a hack.
         This procedure works only when the control is visible.  Calling this
         method when the control is not visible results in returning a

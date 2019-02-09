@@ -23,6 +23,7 @@
 
 #include <vcl/svapp.hxx>
 #include <comphelper/sequence.hxx>
+#include <sal/log.hxx>
 
 namespace framework{
 
@@ -30,7 +31,7 @@ namespace framework{
     @short      initialize an empty container
     @descr      The container will be empty then - special features (e.g. the async quit mechanism) are disabled.
 
-    @threadsafe not necessary - its not a singleton
+    @threadsafe not necessary - it's not a singleton
  *****************************************************************************************************************/
 FrameContainer::FrameContainer()
 /*DEPRECATEME
@@ -44,7 +45,7 @@ FrameContainer::FrameContainer()
     @short      deinitialize may a filled container
     @descr      Special features (if the currently are running) will be disabled and we free all used other resources.
 
-    @threadsafe not necessary - its not a singleton
+    @threadsafe not necessary - it's not a singleton
  *****************************************************************************************************************/
 FrameContainer::~FrameContainer()
 {
@@ -124,7 +125,7 @@ void FrameContainer::clear()
     // Clear the container ...
     m_aContainer.clear();
     // ... and don't forget to reset the active frame.
-    // Its an reference to a valid container-item.
+    // It's a reference to a valid container-item.
     // But no container item => no active frame!
     m_xActiveFrame.clear();
 }
@@ -141,13 +142,13 @@ void FrameContainer::clear()
 sal_uInt32 FrameContainer::getCount() const
 {
     SolarMutexGuard g;
-    return( (sal_uInt32)m_aContainer.size() );
+    return static_cast<sal_uInt32>(m_aContainer.size());
 }
 
 /**-***************************************************************************************************************
     @short      returns one item of this container
     @deprecated This value can't be guaranteed for multithreading environments.
-                So it will be marked as deprecatedf and should be replaced by "getAllElements()".
+                So it will be marked as deprecated and should be replaced by "getAllElements()".
 
     @param      nIndex
                     a value between 0 and (getCount()-1) to address one container item
@@ -242,16 +243,16 @@ css::uno::Reference< css::frame::XFrame > FrameContainer::searchOnAllChildrens( 
     // Step over all child frames. But if direct child isn't the right one search on his children first - before
     // you go to next direct child of this container!
     css::uno::Reference< css::frame::XFrame > xSearchedFrame;
-    for( TFrameContainer::const_iterator pIterator=m_aContainer.begin(); pIterator!=m_aContainer.end(); ++pIterator )
+    for (auto const& container : m_aContainer)
     {
-        if ((*pIterator)->getName()==sName)
+        if (container->getName()==sName)
         {
-            xSearchedFrame = *pIterator;
+            xSearchedFrame = container;
             break;
         }
         else
         {
-            xSearchedFrame = (*pIterator)->findFrame( sName, css::frame::FrameSearchFlag::CHILDREN );
+            xSearchedFrame = container->findFrame( sName, css::frame::FrameSearchFlag::CHILDREN );
             if (xSearchedFrame.is())
                 break;
         }
@@ -274,11 +275,11 @@ css::uno::Reference< css::frame::XFrame > FrameContainer::searchOnDirectChildren
 {
     SolarMutexGuard g;
     css::uno::Reference< css::frame::XFrame > xSearchedFrame;
-    for( TFrameContainer::const_iterator pIterator=m_aContainer.begin(); pIterator!=m_aContainer.end(); ++pIterator )
+    for (auto const& container : m_aContainer)
     {
-        if ((*pIterator)->getName()==sName)
+        if (container->getName()==sName)
         {
-            xSearchedFrame = *pIterator;
+            xSearchedFrame = container;
             break;
         }
     }

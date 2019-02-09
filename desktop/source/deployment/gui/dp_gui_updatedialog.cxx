@@ -52,10 +52,9 @@
 #include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
-#include <com/sun/star/system/SystemShellExecuteFlags.hpp>
-#include <com/sun/star/system/SystemShellExecute.hpp>
 #include <com/sun/star/task/InteractionHandler.hpp>
 #include <com/sun/star/task/XAbortChannel.hpp>
 #include <com/sun/star/task/XJob.hpp>
@@ -82,37 +81,37 @@
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
 #include <salhelper/thread.hxx>
-#include <svtools/svlbitm.hxx>
-#include <svtools/treelistbox.hxx>
-#include <svtools/controldims.hrc>
+#include <vcl/svlbitm.hxx>
+#include <vcl/treelistbox.hxx>
+#include <svtools/controldims.hxx>
 #include <svx/checklbx.hxx>
 #include <tools/gen.hxx>
 #include <tools/link.hxx>
-#include <tools/resid.hxx>
 #include <tools/solar.h>
 #include <unotools/configmgr.hxx>
 #include <vcl/button.hxx>
 #include <vcl/dialog.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/image.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
+#include <vcl/vclmedit.hxx>
 
 #include <comphelper/processfactory.hxx>
+#include <cppuhelper/exc_hlp.hxx>
 
-#include "dp_dependencies.hxx"
-#include "dp_descriptioninfoset.hxx"
-#include "dp_identifier.hxx"
-#include "dp_version.hxx"
-#include "dp_misc.h"
-#include "dp_update.hxx"
+#include <dp_dependencies.hxx>
+#include <dp_descriptioninfoset.hxx>
+#include <dp_identifier.hxx>
+#include <dp_version.hxx>
+#include <dp_misc.h>
+#include <dp_update.hxx>
 
 #include "dp_gui.h"
-#include "dp_gui.hrc"
+#include <strings.hrc>
+#include <bitmaps.hlst>
 #include "dp_gui_updatedata.hxx"
 #include "dp_gui_updatedialog.hxx"
-#include "dp_gui_shared.hxx"
+#include <dp_shared.hxx>
 
 class KeyEvent;
 class MouseEvent;
@@ -151,20 +150,18 @@ struct UpdateDialog::DisabledUpdate {
     uno::Sequence< OUString > unsatisfiedDependencies;
     // We also want to show release notes and publisher for disabled updates
     css::uno::Reference< css::xml::dom::XNode > aUpdateInfo;
-    sal_uInt16                m_nID;
 };
 
 struct UpdateDialog::SpecificError {
     OUString name;
     OUString message;
-    sal_uInt16 m_nID;
 };
 
 
 struct UpdateDialog::IgnoredUpdate {
     OUString sExtensionID;
     OUString sVersion;
-    bool          bRemoved;
+    bool     bRemoved;
 
     IgnoredUpdate( const OUString &rExtensionID, const OUString &rVersion );
 };
@@ -202,7 +199,7 @@ public:
     void stop();
 
 private:
-    virtual ~Thread();
+    virtual ~Thread() override;
 
     virtual void execute() override;
 
@@ -219,8 +216,8 @@ private:
         dp_gui::UpdateData & out_data) const;
 
     bool update(
-        UpdateDialog::DisabledUpdate & du,
-        dp_gui::UpdateData & data) const;
+        UpdateDialog::DisabledUpdate const & du,
+        dp_gui::UpdateData const & data) const;
 
     uno::Reference< uno::XComponentContext > m_context;
     UpdateDialog & m_dialog;
@@ -229,7 +226,6 @@ private:
     uno::Reference< task::XInteractionHandler > m_xInteractionHdl;
 
     // guarded by Application::GetSolarMutex():
-    uno::Reference< task::XAbortChannel > m_abort;
     bool m_stop;
 };
 
@@ -255,14 +251,9 @@ UpdateDialog::Thread::Thread(
 }
 
 void UpdateDialog::Thread::stop() {
-    uno::Reference< task::XAbortChannel > abort;
     {
         SolarMutexGuard g;
-        abort = m_abort;
         m_stop = true;
-    }
-    if (abort.is()) {
-        abort->sendAbort();
     }
     m_updateInformation->cancel();
 }
@@ -289,14 +280,12 @@ void UpdateDialog::Thread::execute()
     dp_misc::UpdateInfoMap updateInfoMap = dp_misc::getOnlineUpdateInfos(
         m_context, extMgr, m_updateInformation, &m_vExtensionList, errors);
 
-    typedef std::vector<std::pair<uno::Reference<deployment::XPackage>,
-        uno::Any> >::const_iterator ITERROR;
-    for (ITERROR ite = errors.begin(); ite != errors.end(); ++ite )
-        handleSpecificError(ite->first, ite->second);
+    for (auto const& elem : errors)
+        handleSpecificError(elem.first, elem.second);
 
-    for (dp_misc::UpdateInfoMap::iterator i(updateInfoMap.begin()); i != updateInfoMap.end(); ++i)
+    for (auto const& updateInfo : updateInfoMap)
     {
-        dp_misc::UpdateInfo const & info = i->second;
+        dp_misc::UpdateInfo const & info = updateInfo.second;
         UpdateData updateData(info.extension);
         DisabledUpdate disableUpdate;
         //determine if online updates meet the requirements
@@ -336,7 +325,6 @@ void UpdateDialog::Thread::execute()
         dp_misc::UPDATE_SOURCE sourceShared = dp_misc::isUpdateSharedExtension(
             bSharedReadOnly, sVersionShared, sVersionBundled, sOnlineVersion);
 
-        uno::Reference<deployment::XPackage> updateSource;
         if (sourceUser != dp_misc::UPDATE_SOURCE_NONE)
         {
             if (sourceUser == dp_misc::UPDATE_SOURCE_SHARED)
@@ -454,8 +442,8 @@ void UpdateDialog::Thread::prepareUpdateData(
 }
 
 bool UpdateDialog::Thread::update(
-    UpdateDialog::DisabledUpdate & du,
-    dp_gui::UpdateData & data) const
+    UpdateDialog::DisabledUpdate const & du,
+    dp_gui::UpdateData const & data) const
 {
     bool ret = false;
     if (du.unsatisfiedDependencies.getLength() == 0)
@@ -484,22 +472,21 @@ UpdateDialog::UpdateDialog(
     std::vector< dp_gui::UpdateData > * updateData):
     ModalDialog(parent, "UpdateDialog", "desktop/ui/updatedialog.ui"),
     m_context(context),
-    m_none(DPGUI_RESSTR(RID_DLG_UPDATE_NONE)),
-    m_noInstallable(DPGUI_RESSTR(RID_DLG_UPDATE_NOINSTALLABLE)),
-    m_failure(DPGUI_RESSTR(RID_DLG_UPDATE_FAILURE)),
-    m_unknownError(DPGUI_RESSTR(RID_DLG_UPDATE_UNKNOWNERROR)),
-    m_noDescription(DPGUI_RESSTR(RID_DLG_UPDATE_NODESCRIPTION)),
-    m_noInstall(DPGUI_RESSTR(RID_DLG_UPDATE_NOINSTALL)),
-    m_noDependency(DPGUI_RESSTR(RID_DLG_UPDATE_NODEPENDENCY)),
-    m_noDependencyCurVer(DPGUI_RESSTR(RID_DLG_UPDATE_NODEPENDENCY_CUR_VER)),
-    m_browserbased(DPGUI_RESSTR(RID_DLG_UPDATE_BROWSERBASED)),
-    m_version(DPGUI_RESSTR(RID_DLG_UPDATE_VERSION)),
-    m_ignoredUpdate(DPGUI_RESSTR(RID_DLG_UPDATE_IGNORED_UPDATE)),
+    m_none(DpResId(RID_DLG_UPDATE_NONE)),
+    m_noInstallable(DpResId(RID_DLG_UPDATE_NOINSTALLABLE)),
+    m_failure(DpResId(RID_DLG_UPDATE_FAILURE)),
+    m_unknownError(DpResId(RID_DLG_UPDATE_UNKNOWNERROR)),
+    m_noDescription(DpResId(RID_DLG_UPDATE_NODESCRIPTION)),
+    m_noInstall(DpResId(RID_DLG_UPDATE_NOINSTALL)),
+    m_noDependency(DpResId(RID_DLG_UPDATE_NODEPENDENCY)),
+    m_noDependencyCurVer(DpResId(RID_DLG_UPDATE_NODEPENDENCY_CUR_VER)),
+    m_browserbased(DpResId(RID_DLG_UPDATE_BROWSERBASED)),
+    m_version(DpResId(RID_DLG_UPDATE_VERSION)),
+    m_ignoredUpdate(DpResId(RID_DLG_UPDATE_IGNORED_UPDATE)),
     m_updateData(*updateData),
     m_thread(
         new UpdateDialog::Thread(
             context, *this, vExtensionList)),
-    m_nLastID(1),
     m_bModified( false )
     // TODO: check!
 //    ,
@@ -510,7 +497,7 @@ UpdateDialog::UpdateDialog(
     get(m_pUpdate, "UPDATE_LABEL");
     get(m_pContainer, "UPDATES_CONTAINER");
     m_pUpdates = VclPtr<UpdateDialog::CheckListBox>::Create(m_pContainer, *this);
-    Size aSize(LogicToPixel(Size(240, 51), MAP_APPFONT));
+    Size aSize(LogicToPixel(Size(240, 51), MapMode(MapUnit::MapAppFont)));
     m_pUpdates->set_width_request(aSize.Width());
     m_pUpdates->set_height_request(aSize.Height());
     m_pUpdates->Show();
@@ -521,12 +508,12 @@ UpdateDialog::UpdateDialog(
     get(m_pReleaseNotesLabel, "RELEASE_NOTES_LABEL");
     get(m_pReleaseNotesLink, "RELEASE_NOTES_LINK");
     get(m_pDescriptions, "DESCRIPTIONS");
-    aSize = LogicToPixel(Size(240, 59), MAP_APPFONT);
+    aSize = LogicToPixel(Size(240, 59), MapMode(MapUnit::MapAppFont));
     m_pDescriptions->set_width_request(aSize.Width());
     m_pDescriptions->set_height_request(aSize.Height());
     get(m_pOk, "INSTALL");
-    get(m_pClose, "gtk-close");
-    get(m_pHelp, "gtk-help");
+    get(m_pClose, "close");
+    get(m_pHelp, "help");
     OSL_ASSERT(updateData != nullptr);
 
     m_xExtensionManager = deployment::ExtensionManager::get( context );
@@ -537,7 +524,9 @@ UpdateDialog::UpdateDialog(
     } catch (const uno::RuntimeException &) {
         throw;
     } catch (const uno::Exception & e) {
-        throw uno::RuntimeException(e.Message, e.Context);
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw css::lang::WrappedTargetRuntimeException( e.Message,
+                        e.Context, anyEx );
     }
     m_pUpdates->SetSelectHdl(LINK(this, UpdateDialog, selectionHandler));
     m_pAll->SetToggleHdl(LINK(this, UpdateDialog, allHandler));
@@ -560,14 +549,8 @@ void UpdateDialog::dispose()
 {
     storeIgnoredUpdates();
 
-    for ( std::vector< UpdateDialog::Index* >::iterator i( m_ListboxEntries.begin() ); i != m_ListboxEntries.end(); ++i )
-    {
-        delete (*i);
-    }
-    for ( std::vector< UpdateDialog::IgnoredUpdate* >::iterator i( m_ignoredUpdates.begin() ); i != m_ignoredUpdates.end(); ++i )
-    {
-        delete (*i);
-    }
+    m_ListboxEntries.clear();
+    m_ignoredUpdates.clear();
     m_pUpdates.disposeAndClear();
     m_pchecking.clear();
     m_pthrobber.clear();
@@ -600,12 +583,12 @@ short UpdateDialog::Execute() {
 
 UpdateDialog::CheckListBox::CheckListBox( vcl::Window* pParent, UpdateDialog & dialog):
     SvxCheckListBox( pParent, WinBits(WB_BORDER) ),
-    m_ignoreUpdate( DPGUI_RESSTR( RID_DLG_UPDATE_IGNORE ) ),
-    m_ignoreAllUpdates( DPGUI_RESSTR( RID_DLG_UPDATE_IGNORE_ALL ) ),
-    m_enableUpdate( DPGUI_RESSTR( RID_DLG_UPDATE_ENABLE ) ),
+    m_ignoreUpdate( DpResId( RID_DLG_UPDATE_IGNORE ) ),
+    m_ignoreAllUpdates( DpResId( RID_DLG_UPDATE_IGNORE_ALL ) ),
+    m_enableUpdate( DpResId( RID_DLG_UPDATE_ENABLE ) ),
     m_dialog(dialog)
 {
-    SetNormalStaticImage(Image(DpGuiResId(RID_DLG_UPDATE_NORMALALERT)));
+    SetNormalStaticImage(Image(StockImage::Yes, RID_DLG_UPDATE_NORMALALERT));
 }
 
 sal_uInt16 UpdateDialog::CheckListBox::getItemCount() const {
@@ -649,22 +632,22 @@ void UpdateDialog::CheckListBox::handlePopupMenu( const Point &rPos )
 
     if ( pData )
     {
-        sal_uLong nEntryPos = GetSelectEntryPos();
+        sal_uLong nEntryPos = GetSelectedEntryPos();
         UpdateDialog::Index * p = static_cast< UpdateDialog::Index * >( GetEntryData( nEntryPos ) );
 
         if ( ( p->m_eKind == ENABLED_UPDATE ) || ( p->m_eKind == DISABLED_UPDATE ) )
         {
-            PopupMenu aPopup;
+            ScopedVclPtrInstance<PopupMenu> aPopup;
 
             if ( p->m_bIgnored )
-                aPopup.InsertItem( CMD_ENABLE_UPDATE, m_enableUpdate );
+                aPopup->InsertItem( CMD_ENABLE_UPDATE, m_enableUpdate );
             else
             {
-                aPopup.InsertItem( CMD_IGNORE_UPDATE, m_ignoreUpdate );
-                aPopup.InsertItem( CMD_IGNORE_ALL_UPDATES, m_ignoreAllUpdates );
+                aPopup->InsertItem( CMD_IGNORE_UPDATE, m_ignoreUpdate );
+                aPopup->InsertItem( CMD_IGNORE_ALL_UPDATES, m_ignoreAllUpdates );
             }
 
-            sal_uInt16 aCmd = aPopup.Execute( this, rPos );
+            sal_uInt16 aCmd = aPopup->Execute( this, rPos );
             if ( ( aCmd == CMD_IGNORE_UPDATE ) || ( aCmd == CMD_IGNORE_ALL_UPDATES ) )
             {
                 p->m_bIgnored = true;
@@ -725,16 +708,13 @@ void UpdateDialog::addAdditional( UpdateDialog::Index * index, SvLBoxButtonKind 
 
 
 void UpdateDialog::addEnabledUpdate( OUString const & name,
-                                     dp_gui::UpdateData & data )
+                                     dp_gui::UpdateData const & data )
 {
     sal_uInt16 nIndex = sal::static_int_cast< sal_uInt16 >( m_enabledUpdates.size() );
     UpdateDialog::Index *pEntry = new UpdateDialog::Index( ENABLED_UPDATE, nIndex, name );
 
-    data.m_nID = m_nLastID;
-    m_nLastID += 1;
-
     m_enabledUpdates.push_back( data );
-    m_ListboxEntries.push_back( pEntry );
+    m_ListboxEntries.emplace_back( pEntry );
 
     if ( ! isIgnoredUpdate( pEntry ) )
     {
@@ -751,32 +731,26 @@ void UpdateDialog::addEnabledUpdate( OUString const & name,
 }
 
 
-void UpdateDialog::addDisabledUpdate( UpdateDialog::DisabledUpdate & data )
+void UpdateDialog::addDisabledUpdate( UpdateDialog::DisabledUpdate const & data )
 {
     sal_uInt16 nIndex = sal::static_int_cast< sal_uInt16 >( m_disabledUpdates.size() );
     UpdateDialog::Index *pEntry = new UpdateDialog::Index( DISABLED_UPDATE, nIndex, data.name );
 
-    data.m_nID = m_nLastID;
-    m_nLastID += 1;
-
     m_disabledUpdates.push_back( data );
-    m_ListboxEntries.push_back( pEntry );
+    m_ListboxEntries.emplace_back( pEntry );
 
     isIgnoredUpdate( pEntry );
     addAdditional( pEntry, SvLBoxButtonKind::DisabledCheckbox );
 }
 
 
-void UpdateDialog::addSpecificError( UpdateDialog::SpecificError & data )
+void UpdateDialog::addSpecificError( UpdateDialog::SpecificError const & data )
 {
     sal_uInt16 nIndex = sal::static_int_cast< sal_uInt16 >( m_specificErrors.size() );
     UpdateDialog::Index *pEntry = new UpdateDialog::Index( SPECIFIC_ERROR, nIndex, data.name );
 
-    data.m_nID = m_nLastID;
-    m_nLastID += 1;
-
     m_specificErrors.push_back( data );
-    m_ListboxEntries.push_back( pEntry );
+    m_ListboxEntries.emplace_back( pEntry );
 
     addAdditional( pEntry, SvLBoxButtonKind::StaticImage);
 }
@@ -808,7 +782,7 @@ void UpdateDialog::enableOk() {
 
 // *********************************************************************************
 void UpdateDialog::createNotifyJob( bool bPrepareOnly,
-    uno::Sequence< uno::Sequence< OUString > > &rItemList )
+    uno::Sequence< uno::Sequence< OUString > > const &rItemList )
 {
     if ( !dp_misc::office_is_running() )
         return;
@@ -822,10 +796,10 @@ void UpdateDialog::createNotifyJob( bool bPrepareOnly,
 
         beans::PropertyValue aProperty;
         aProperty.Name  = "nodepath";
-        aProperty.Value = uno::makeAny( OUString("org.openoffice.Office.Addons/AddonUI/OfficeHelp/UpdateCheckJob") );
+        aProperty.Value <<= OUString("org.openoffice.Office.Addons/AddonUI/OfficeHelp/UpdateCheckJob");
 
         uno::Sequence< uno::Any > aArgumentList( 1 );
-        aArgumentList[0] = uno::makeAny( aProperty );
+        aArgumentList[0] <<= aProperty;
 
         uno::Reference< container::XNameAccess > xNameAccess(
             xConfigProvider->createInstanceWithArguments(
@@ -849,10 +823,10 @@ void UpdateDialog::createNotifyJob( bool bPrepareOnly,
         {
             uno::Sequence< beans::PropertyValue > aPropList(2);
             aProperty.Name  = "updateList";
-            aProperty.Value = uno::makeAny( rItemList );
+            aProperty.Value <<= rItemList;
             aPropList[0] = aProperty;
             aProperty.Name  = "prepareOnly";
-            aProperty.Value = uno::makeAny( bPrepareOnly );
+            aProperty.Value <<= bPrepareOnly;
             aPropList[1] = aProperty;
 
             xDispatch->dispatch(aURL, aPropList );
@@ -876,7 +850,7 @@ void UpdateDialog::notifyMenubar( bool bPrepareOnly, bool bRecheckOnly )
     if ( ! bRecheckOnly )
     {
         sal_Int32 nCount = 0;
-        for ( sal_Int16 i = 0; i < m_pUpdates->getItemCount(); ++i )
+        for ( sal_uInt16 i = 0; i < m_pUpdates->getItemCount(); ++i )
         {
             uno::Sequence< OUString > aItem(2);
 
@@ -911,10 +885,6 @@ void UpdateDialog::initDescription()
     m_pPublisherLink->Hide();
     m_pReleaseNotesLabel->Hide();
     m_pReleaseNotesLink->Hide();
-
-    Link<FixedHyperlink&,void> aLink = LINK( this, UpdateDialog, hyperlink_clicked );
-    m_pPublisherLink->SetClickHdl( aLink );
-    m_pReleaseNotesLink->SetClickHdl( aLink );
 }
 
 void UpdateDialog::clearDescription()
@@ -1001,7 +971,7 @@ void UpdateDialog::getIgnoredUpdates()
         uno::Any aPropValue( uno::Reference< beans::XPropertySet >( xNameAccess->getByName( aIdentifier ), uno::UNO_QUERY_THROW )->getPropertyValue( PROPERTY_VERSION ) );
         aPropValue >>= aVersion;
         IgnoredUpdate *pData = new IgnoredUpdate( aIdentifier, aVersion );
-        m_ignoredUpdates.push_back( pData );
+        m_ignoredUpdates.emplace_back( pData );
     }
 }
 
@@ -1019,20 +989,20 @@ void UpdateDialog::storeIgnoredUpdates()
         uno::Reference< container::XNameContainer > xNameContainer( xConfig->createInstanceWithArguments(
             "com.sun.star.configuration.ConfigurationUpdateAccess", args ), uno::UNO_QUERY_THROW );
 
-        for ( std::vector< UpdateDialog::IgnoredUpdate* >::iterator i( m_ignoredUpdates.begin() ); i != m_ignoredUpdates.end(); ++i )
+        for (auto const& ignoredUpdate : m_ignoredUpdates)
         {
-            if ( xNameContainer->hasByName( (*i)->sExtensionID ) )
+            if ( xNameContainer->hasByName( ignoredUpdate->sExtensionID ) )
             {
-                if ( (*i)->bRemoved )
-                    xNameContainer->removeByName( (*i)->sExtensionID );
+                if ( ignoredUpdate->bRemoved )
+                    xNameContainer->removeByName( ignoredUpdate->sExtensionID );
                 else
-                    uno::Reference< beans::XPropertySet >( xNameContainer->getByName( (*i)->sExtensionID ), uno::UNO_QUERY_THROW )->setPropertyValue( PROPERTY_VERSION, uno::Any( (*i)->sVersion ) );
+                    uno::Reference< beans::XPropertySet >( xNameContainer->getByName( ignoredUpdate->sExtensionID ), uno::UNO_QUERY_THROW )->setPropertyValue( PROPERTY_VERSION, uno::Any( ignoredUpdate->sVersion ) );
             }
-            else if ( ! (*i)->bRemoved )
+            else if ( ! ignoredUpdate->bRemoved )
             {
                 uno::Reference< beans::XPropertySet > elem( uno::Reference< lang::XSingleServiceFactory >( xNameContainer, uno::UNO_QUERY_THROW )->createInstance(), uno::UNO_QUERY_THROW );
-                elem->setPropertyValue( PROPERTY_VERSION, uno::Any( (*i)->sVersion ) );
-                xNameContainer->insertByName( (*i)->sExtensionID, uno::Any( elem ) );
+                elem->setPropertyValue( PROPERTY_VERSION, uno::Any( ignoredUpdate->sVersion ) );
+                xNameContainer->insertByName( ignoredUpdate->sExtensionID, uno::Any( elem ) );
             }
         }
 
@@ -1070,17 +1040,17 @@ bool UpdateDialog::isIgnoredUpdate( UpdateDialog::Index * index )
             aVersion = aInfoset.getVersion();
         }
 
-        for ( std::vector< UpdateDialog::IgnoredUpdate* >::iterator i( m_ignoredUpdates.begin() ); i != m_ignoredUpdates.end(); ++i )
+        for (auto const& ignoredUpdate : m_ignoredUpdates)
         {
-            if ( (*i)->sExtensionID == aExtensionID )
+            if ( ignoredUpdate->sExtensionID == aExtensionID )
             {
-                if ( ( !(*i)->sVersion.isEmpty() ) || ( (*i)->sVersion == aVersion ) )
+                if ( ( !ignoredUpdate->sVersion.isEmpty() ) || ( ignoredUpdate->sVersion == aVersion ) )
                 {
                     bIsIgnored = true;
                     index->m_bIgnored = true;
                 }
                 else // when we find another update of an ignored version, we will remove the old one to keep the ignored list small
-                    (*i)->bRemoved = true;
+                    ignoredUpdate->bRemoved = true;
                 break;
             }
         }
@@ -1090,7 +1060,7 @@ bool UpdateDialog::isIgnoredUpdate( UpdateDialog::Index * index )
 }
 
 
-void UpdateDialog::setIgnoredUpdate( UpdateDialog::Index *pIndex, bool bIgnore, bool bIgnoreAll )
+void UpdateDialog::setIgnoredUpdate( UpdateDialog::Index const *pIndex, bool bIgnore, bool bIgnoreAll )
 {
     OUString aExtensionID;
     OUString aVersion;
@@ -1118,12 +1088,12 @@ void UpdateDialog::setIgnoredUpdate( UpdateDialog::Index *pIndex, bool bIgnore, 
     if ( !aExtensionID.isEmpty() )
     {
         bool bFound = false;
-        for ( std::vector< UpdateDialog::IgnoredUpdate* >::iterator i( m_ignoredUpdates.begin() ); i != m_ignoredUpdates.end(); ++i )
+        for (auto const& ignoredUpdate : m_ignoredUpdates)
         {
-            if ( (*i)->sExtensionID == aExtensionID )
+            if ( ignoredUpdate->sExtensionID == aExtensionID )
             {
-                (*i)->sVersion = aVersion;
-                (*i)->bRemoved = !bIgnore;
+                ignoredUpdate->sVersion = aVersion;
+                ignoredUpdate->bRemoved = !bIgnore;
                 bFound = true;
                 break;
             }
@@ -1131,17 +1101,17 @@ void UpdateDialog::setIgnoredUpdate( UpdateDialog::Index *pIndex, bool bIgnore, 
         if ( bIgnore && !bFound )
         {
             IgnoredUpdate *pData = new IgnoredUpdate( aExtensionID, aVersion );
-            m_ignoredUpdates.push_back( pData );
+            m_ignoredUpdates.emplace_back( pData );
         }
     }
 }
 
 
-IMPL_LINK_NOARG_TYPED(UpdateDialog, selectionHandler, SvTreeListBox*, void)
+IMPL_LINK_NOARG(UpdateDialog, selectionHandler, SvTreeListBox*, void)
 {
     OUStringBuffer b;
     UpdateDialog::Index const * p = static_cast< UpdateDialog::Index const * >(
-        m_pUpdates->GetSelectEntryData());
+        m_pUpdates->GetSelectedEntryData());
     clearDescription();
 
     if ( p != nullptr )
@@ -1235,7 +1205,7 @@ IMPL_LINK_NOARG_TYPED(UpdateDialog, selectionHandler, SvTreeListBox*, void)
     showDescription( b.makeStringAndClear() );
 }
 
-IMPL_LINK_NOARG_TYPED(UpdateDialog, allHandler, CheckBox&, void)
+IMPL_LINK_NOARG(UpdateDialog, allHandler, CheckBox&, void)
 {
     if (m_pAll->IsChecked())
     {
@@ -1244,11 +1214,10 @@ IMPL_LINK_NOARG_TYPED(UpdateDialog, allHandler, CheckBox&, void)
         m_pDescription->Enable();
         m_pDescriptions->Enable();
 
-        for (std::vector< UpdateDialog::Index* >::iterator i( m_ListboxEntries.begin() );
-             i != m_ListboxEntries.end(); ++i )
+        for (auto const& listboxEntry : m_ListboxEntries)
         {
-            if ( (*i)->m_bIgnored || ( (*i)->m_eKind != ENABLED_UPDATE ) )
-                insertItem( (*i), SvLBoxButtonKind::DisabledCheckbox );
+            if ( listboxEntry->m_bIgnored || ( listboxEntry->m_eKind != ENABLED_UPDATE ) )
+                insertItem( listboxEntry.get(), SvLBoxButtonKind::DisabledCheckbox );
         }
     }
     else
@@ -1277,14 +1246,13 @@ IMPL_LINK_NOARG_TYPED(UpdateDialog, allHandler, CheckBox&, void)
     }
 }
 
-IMPL_LINK_NOARG_TYPED(UpdateDialog, okHandler, Button*, void)
+IMPL_LINK_NOARG(UpdateDialog, okHandler, Button*, void)
 {
     //If users are going to update a shared extension then we need
     //to warn them
-    typedef ::std::vector<UpdateData>::const_iterator CIT;
-    for (CIT i = m_enabledUpdates.begin(); i < m_enabledUpdates.end(); ++i)
+    for (auto const& enableUpdate : m_enabledUpdates)
     {
-        OSL_ASSERT(i->aInstalledPackage.is());
+        OSL_ASSERT(enableUpdate.aInstalledPackage.is());
         //If the user has no write access to the shared folder then the update
         //for a shared extension is disable, that is it cannot be in m_enabledUpdates
     }
@@ -1302,28 +1270,10 @@ IMPL_LINK_NOARG_TYPED(UpdateDialog, okHandler, Button*, void)
     EndDialog(RET_OK);
 }
 
-IMPL_LINK_NOARG_TYPED(UpdateDialog, closeHandler, Button*, void)
+IMPL_LINK_NOARG(UpdateDialog, closeHandler, Button*, void)
 {
     m_thread->stop();
     EndDialog();
-}
-
-IMPL_LINK_TYPED( UpdateDialog, hyperlink_clicked, FixedHyperlink&, rHyperlink, void )
-{
-    OUString sURL = rHyperlink.GetURL();
-    if ( sURL.isEmpty() )
-        return;
-
-    try
-    {
-        uno::Reference< css::system::XSystemShellExecute > xSystemShellExecute(
-            css::system::SystemShellExecute::create(m_context) );
-        //throws lang::IllegalArgumentException, system::SystemShellExecuteException
-        xSystemShellExecute->execute( sURL, OUString(), css::system::SystemShellExecuteFlags::URIS_ONLY);
-    }
-    catch ( const uno::Exception& )
-    {
-    }
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

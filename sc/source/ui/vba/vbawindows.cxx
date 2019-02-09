@@ -23,6 +23,7 @@
 #include <com/sun/star/frame/Desktop.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <comphelper/sequence.hxx>
+#include <rtl/ref.hxx>
 
 #include "vbawindow.hxx"
 #include "vbaglobals.hxx"
@@ -33,14 +34,14 @@ using namespace ::com::sun::star;
 using namespace ::ooo::vba;
 
 typedef  std::unordered_map< OUString,
-sal_Int32, OUStringHash > NameIndexHash;
+sal_Int32 > NameIndexHash;
 
 static uno::Reference< XHelperInterface > lcl_createWorkbookHIParent( const uno::Reference< frame::XModel >& xModel, const uno::Reference< uno::XComponentContext >& xContext, const uno::Any& aApplication )
 {
     return new ScVbaWorkbook( uno::Reference< XHelperInterface >( aApplication, uno::UNO_QUERY_THROW ), xContext,  xModel );
 }
 
-uno::Any ComponentToWindow( const uno::Any& aSource, uno::Reference< uno::XComponentContext > & xContext, const uno::Any& aApplication )
+static uno::Any ComponentToWindow( const uno::Any& aSource, const uno::Reference< uno::XComponentContext > & xContext, const uno::Any& aApplication )
 {
     uno::Reference< frame::XModel > xModel( aSource, uno::UNO_QUERY_THROW );
     // !! TODO !! iterate over all controllers
@@ -59,30 +60,32 @@ protected:
     Components::const_iterator m_it;
 
 public:
-    WindowComponentEnumImpl( const uno::Reference< uno::XComponentContext >& xContext, const Components& components ) throw ( uno::RuntimeException ) :  m_xContext( xContext ), m_components( components )
+    /// @throws uno::RuntimeException
+    WindowComponentEnumImpl( const uno::Reference< uno::XComponentContext >& xContext, const Components& components ) :  m_xContext( xContext ), m_components( components )
     {
         m_it = m_components.begin();
     }
 
-    explicit WindowComponentEnumImpl( const uno::Reference< uno::XComponentContext >& xContext ) throw ( uno::RuntimeException ) :  m_xContext( xContext )
+    /// @throws uno::RuntimeException
+    explicit WindowComponentEnumImpl( const uno::Reference< uno::XComponentContext >& xContext ) :  m_xContext( xContext )
     {
         uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create(m_xContext);
-        uno::Reference< container::XEnumeration > mxComponents = xDesktop->getComponents()->createEnumeration();
-        while( mxComponents->hasMoreElements() )
+        uno::Reference< container::XEnumeration > xComponents = xDesktop->getComponents()->createEnumeration();
+        while( xComponents->hasMoreElements() )
         {
-            uno::Reference< sheet::XSpreadsheetDocument > xNext( mxComponents->nextElement(), uno::UNO_QUERY );
+            uno::Reference< sheet::XSpreadsheetDocument > xNext( xComponents->nextElement(), uno::UNO_QUERY );
             if ( xNext.is() )
                 m_components.push_back( xNext );
         }
         m_it = m_components.begin();
     }
     // XEnumeration
-    virtual sal_Bool SAL_CALL hasMoreElements(  ) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL hasMoreElements(  ) override
     {
         return m_it != m_components.end();
     }
 
-    virtual uno::Any SAL_CALL nextElement(  ) throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual uno::Any SAL_CALL nextElement(  ) override
     {
         if ( !hasMoreElements() )
         {
@@ -94,10 +97,10 @@ public:
 
 class WindowEnumImpl : public  WindowComponentEnumImpl
 {
-    uno::Any m_aApplication;
+    uno::Any const m_aApplication;
 public:
     WindowEnumImpl( const uno::Reference< uno::XComponentContext >& xContext,  const uno::Any& aApplication ): WindowComponentEnumImpl( xContext ), m_aApplication( aApplication ) {}
-    virtual uno::Any SAL_CALL nextElement(  ) throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual uno::Any SAL_CALL nextElement(  ) override
     {
         return ComponentToWindow( WindowComponentEnumImpl::nextElement(), m_xContext, m_aApplication );
     }
@@ -128,7 +131,7 @@ public:
                 // !! TODO !! iterate over all controllers
                 uno::Reference< frame::XController > xController( xModel->getCurrentController(), uno::UNO_SET_THROW );
                 uno::Reference< XHelperInterface > xTemp;  // temporary needed for g++ 3.3.5
-                uno::Reference< ScVbaWindow > window( new ScVbaWindow( xTemp, m_xContext, xModel, xController ) );
+                rtl::Reference< ScVbaWindow > window( new ScVbaWindow( xTemp, m_xContext, xModel, xController ) );
                 OUString sCaption;
                 window->getCaption() >>= sCaption;
                 namesToIndices[ sCaption ] = nIndex++;
@@ -138,16 +141,16 @@ public:
     }
 
     //XEnumerationAccess
-    virtual uno::Reference< container::XEnumeration > SAL_CALL createEnumeration(  ) throw (uno::RuntimeException, std::exception) override
+    virtual uno::Reference< container::XEnumeration > SAL_CALL createEnumeration(  ) override
     {
         return new WindowComponentEnumImpl( m_xContext, m_windows );
     }
     // XIndexAccess
-    virtual ::sal_Int32 SAL_CALL getCount(  ) throw (uno::RuntimeException, std::exception) override
+    virtual ::sal_Int32 SAL_CALL getCount(  ) override
     {
         return m_windows.size();
     }
-    virtual uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) throw ( lang::IndexOutOfBoundsException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) override
     {
         if ( Index < 0
             || static_cast< Components::size_type >( Index ) >= m_windows.size() )
@@ -156,18 +159,18 @@ public:
     }
 
     //XElementAccess
-    virtual uno::Type SAL_CALL getElementType(  ) throw (uno::RuntimeException, std::exception) override
+    virtual uno::Type SAL_CALL getElementType(  ) override
     {
         return cppu::UnoType<sheet::XSpreadsheetDocument>::get();
     }
 
-    virtual sal_Bool SAL_CALL hasElements(  ) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL hasElements(  ) override
     {
         return ( !m_windows.empty() );
     }
 
     //XNameAccess
-    virtual uno::Any SAL_CALL getByName( const OUString& aName ) throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual uno::Any SAL_CALL getByName( const OUString& aName ) override
     {
         NameIndexHash::const_iterator it = namesToIndices.find( aName );
         if ( it == namesToIndices.end() )
@@ -176,12 +179,12 @@ public:
 
     }
 
-    virtual uno::Sequence< OUString > SAL_CALL getElementNames(  ) throw (uno::RuntimeException, std::exception) override
+    virtual uno::Sequence< OUString > SAL_CALL getElementNames(  ) override
     {
         return comphelper::mapKeysToSequence( namesToIndices );
     }
 
-    virtual sal_Bool SAL_CALL hasByName( const OUString& aName ) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL hasByName( const OUString& aName ) override
     {
         NameIndexHash::const_iterator it = namesToIndices.find( aName );
         return (it != namesToIndices.end());
@@ -193,7 +196,7 @@ ScVbaWindows::ScVbaWindows( const uno::Reference< ov::XHelperInterface >& xParen
 {
 }
 uno::Reference< container::XEnumeration >
-ScVbaWindows::createEnumeration() throw (uno::RuntimeException)
+ScVbaWindows::createEnumeration()
 {
     return new WindowEnumImpl( mxContext, Application() );
 }
@@ -205,13 +208,13 @@ ScVbaWindows::createCollectionObject( const css::uno::Any& aSource )
 }
 
 uno::Type
-ScVbaWindows::getElementType() throw (uno::RuntimeException)
+ScVbaWindows::getElementType()
 {
     return cppu::UnoType<excel::XWindows>::get();
 }
 
 void SAL_CALL
-ScVbaWindows::Arrange( ::sal_Int32 /*ArrangeStyle*/, const uno::Any& /*ActiveWorkbook*/, const uno::Any& /*SyncHorizontal*/, const uno::Any& /*SyncVertical*/ ) throw (uno::RuntimeException, std::exception)
+ScVbaWindows::Arrange( ::sal_Int32 /*ArrangeStyle*/, const uno::Any& /*ActiveWorkbook*/, const uno::Any& /*SyncHorizontal*/, const uno::Any& /*SyncVertical*/ )
 {
     //#TODO #FIXME see what can be done for an implementation here
 }
@@ -225,12 +228,10 @@ ScVbaWindows::getServiceImplName()
 css::uno::Sequence<OUString>
 ScVbaWindows::getServiceNames()
 {
-    static uno::Sequence< OUString > sNames;
-    if ( sNames.getLength() == 0 )
+    static uno::Sequence< OUString > const sNames
     {
-        sNames.realloc( 1 );
-        sNames[0] = "ooo.vba.excel.Windows";
-    }
+        "ooo.vba.excel.Windows"
+    };
     return sNames;
 }
 

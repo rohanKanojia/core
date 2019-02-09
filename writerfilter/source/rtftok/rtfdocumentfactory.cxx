@@ -7,21 +7,22 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <rtfdocumentimpl.hxx>
+#include "rtfdocumentimpl.hxx"
 
 namespace writerfilter
 {
 namespace rtftok
 {
-
-RTFDocument::Pointer_t RTFDocumentFactory::createDocument(css::uno::Reference< css::uno::XComponentContext > const& xContext,
-        css::uno::Reference< css::io::XInputStream > const& xInputStream,
-        css::uno::Reference< css::lang::XComponent > const& xDstDoc,
-        css::uno::Reference< css::frame::XFrame > const& xFrame,
-        css::uno::Reference< css::task::XStatusIndicator > const& xStatusIndicator,
-        const utl::MediaDescriptor& rMediaDescriptor)
+RTFDocument::Pointer_t RTFDocumentFactory::createDocument(
+    css::uno::Reference<css::uno::XComponentContext> const& xContext,
+    css::uno::Reference<css::io::XInputStream> const& xInputStream,
+    css::uno::Reference<css::lang::XComponent> const& xDstDoc,
+    css::uno::Reference<css::frame::XFrame> const& xFrame,
+    css::uno::Reference<css::task::XStatusIndicator> const& xStatusIndicator,
+    const utl::MediaDescriptor& rMediaDescriptor)
 {
-    return std::make_shared<RTFDocumentImpl>(xContext, xInputStream, xDstDoc, xFrame, xStatusIndicator, rMediaDescriptor);
+    return new RTFDocumentImpl(xContext, xInputStream, xDstDoc, xFrame, xStatusIndicator,
+                               rMediaDescriptor);
 }
 
 } // namespace rtftok

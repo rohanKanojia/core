@@ -19,12 +19,17 @@
 #ifndef INCLUDED_CHART2_SOURCE_INC_STATISTICSHELPER_HXX
 #define INCLUDED_CHART2_SOURCE_INC_STATISTICSHELPER_HXX
 
-#include <com/sun/star/uno/Sequence.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/chart2/data/XDataSource.hpp>
-#include <com/sun/star/chart2/data/XDataProvider.hpp>
-#include <com/sun/star/chart2/XDataSeries.hpp>
+#include <com/sun/star/uno/Reference.h>
+#include <rtl/ustring.hxx>
 #include "charttoolsdllapi.hxx"
+
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XDataSeries; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { namespace data { class XDataProvider; } } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { namespace data { class XDataSequence; } } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { namespace data { class XDataSource; } } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { namespace data { class XLabeledDataSequence; } } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Sequence; } } } }
 
 namespace chart
 {
@@ -67,13 +72,12 @@ namespace StatisticsHelper
         const OUString & rNewRange,
         bool bPositiveValue,
         bool bYError = true,
-        OUString * pXMLRange = nullptr );
+        OUString const * pXMLRange = nullptr );
 
     /// @return the newly created or existing error bar object
     OOO_DLLPUBLIC_CHARTTOOLS css::uno::Reference< css::beans::XPropertySet >
         addErrorBars(
             const css::uno::Reference< css::chart2::XDataSeries > & xDataSeries,
-            const css::uno::Reference< css::uno::XComponentContext > & xContext,
             sal_Int32 nStyle,
             bool bYError = true );
 

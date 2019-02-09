@@ -18,7 +18,7 @@
  */
 
 #include <swtypes.hxx>
-#include <dbtablepreviewdialog.hxx>
+#include "dbtablepreviewdialog.hxx"
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/frame/Frame.hpp>
 #include <toolkit/helper/vclunohelper.hxx>
@@ -32,12 +32,12 @@ using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::util;
 
-SwDBTablePreviewDialog::SwDBTablePreviewDialog(vcl::Window* pParent, uno::Sequence< beans::PropertyValue>& rValues ) :
+SwDBTablePreviewDialog::SwDBTablePreviewDialog(vcl::Window* pParent, uno::Sequence< beans::PropertyValue> const & rValues ) :
     SfxModalDialog(pParent, "TablePreviewDialog", "modules/swriter/ui/tablepreviewdialog.ui")
 {
     get(m_pDescriptionFI, "description");
     get(m_pBeamerWIN, "beamer");
-    Size aSize(LogicToPixel(Size(338, 150), MAP_APPFONT));
+    Size aSize(LogicToPixel(Size(338, 150), MapMode(MapUnit::MapAppFont)));
     m_pBeamerWIN->set_width_request(aSize.Width());
     m_pBeamerWIN->set_height_request(aSize.Height());
 

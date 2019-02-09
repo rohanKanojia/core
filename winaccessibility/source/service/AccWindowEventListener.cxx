@@ -25,9 +25,9 @@
 
 #include <vcl/svapp.hxx>
 
-#include "AccWindowEventListener.hxx"
-#include "AccObjectManagerAgent.hxx"
-#include "unomsaaevent.hxx"
+#include <AccWindowEventListener.hxx>
+#include <AccObjectManagerAgent.hxx>
+#include <unomsaaevent.hxx>
 
 using namespace com::sun::star::uno;
 using namespace com::sun::star::accessibility;
@@ -43,7 +43,7 @@ AccWindowEventListener::~AccWindowEventListener()
  *  Uno's event notifier when event is captured
  *  @param AccessibleEventObject: the event object which contains information about event
  */
-void  AccWindowEventListener::notifyEvent( const css::accessibility::AccessibleEventObject& aEvent ) throw (css::uno::RuntimeException)
+void  AccWindowEventListener::notifyEvent( const css::accessibility::AccessibleEventObject& aEvent )
 {
     SolarMutexGuard g;
 
@@ -84,8 +84,6 @@ void AccWindowEventListener::HandleChildChangedEvent(Any oldValue, Any newValue)
             pAgent->InsertChildrenAccObj(pAcc);
             pAgent->NotifyAccEvent(UM_EVENT_CHILD_ADDED, pAcc);
         }
-        else
-        {}
     }
     else if (oldValue >>= xChild)
     {
@@ -98,8 +96,6 @@ void AccWindowEventListener::HandleChildChangedEvent(Any oldValue, Any newValue)
             //delete this child
             pAgent->DeleteAccObj( pAcc );
         }
-        else
-        {}
     }
 }
 

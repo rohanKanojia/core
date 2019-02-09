@@ -17,6 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+#include <osl/diagnose.h>
+
+#include <tools/debug.hxx>
+#include <vcl/metaact.hxx>
 #include <vcl/virdev.hxx>
 #include <vcl/window.hxx>
 #include <vcl/gdimtf.hxx>
@@ -75,9 +80,8 @@ bool OutputDevice::SelectClipRegion( const vcl::Region& rRegion, SalGraphics* pG
 
     if( !pGraphics )
     {
-        if( !mpGraphics )
-            if( !AcquireGraphics() )
-                return false;
+        if( !mpGraphics && !AcquireGraphics() )
+            return false;
         pGraphics = mpGraphics;
     }
 
@@ -103,13 +107,13 @@ void OutputDevice::MoveClipRegion( long nHorzMove, long nVertMove )
         mpAlphaVDev->MoveClipRegion( nHorzMove, nVertMove );
 }
 
-void OutputDevice::IntersectClipRegion( const Rectangle& rRect )
+void OutputDevice::IntersectClipRegion( const tools::Rectangle& rRect )
 {
 
     if ( mpMetaFile )
         mpMetaFile->AddAction( new MetaISectRectClipRegionAction( rRect ) );
 
-    Rectangle aRect = LogicToPixel( rRect );
+    tools::Rectangle aRect = LogicToPixel( rRect );
     maRegion.Intersect( aRect );
     mbClipRegion        = true;
     mbInitClipRegion    = true;
@@ -150,14 +154,14 @@ void OutputDevice::InitClipRegion()
 
             // #102532# Respect output offset also for clip region
             vcl::Region aRegion( ImplPixelToDevicePixel( maRegion ) );
-            const bool bClipDeviceBounds( ! GetPDFWriter()
-                                          && GetOutDevType() != OUTDEV_PRINTER );
+            const bool bClipDeviceBounds((OUTDEV_PDF != GetOutDevType())
+                                          && (OUTDEV_PRINTER != GetOutDevType()));
             if( bClipDeviceBounds )
             {
                 // Perform actual rect clip against outdev
                 // dimensions, to generate empty clips whenever one of the
                 // values is completely off the device.
-                Rectangle aDeviceBounds( mnOutOffX, mnOutOffY,
+                tools::Rectangle aDeviceBounds( mnOutOffX, mnOutOffY,
                                          mnOutOffX+GetOutputWidthPixel()-1,
                                          mnOutOffY+GetOutputHeightPixel()-1 );
                 aRegion.Intersect( aDeviceBounds );
@@ -195,7 +199,7 @@ vcl::Region OutputDevice::GetActiveClipRegion() const
     return GetClipRegion();
 }
 
-void OutputDevice::ClipToPaintRegion(Rectangle& /*rDstRect*/)
+void OutputDevice::ClipToPaintRegion(tools::Rectangle& /*rDstRect*/)
 {
     // this is only used in Window, but we still need it as it's called
     // on in other clipping functions

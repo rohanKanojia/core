@@ -12,11 +12,10 @@
 
 #include <sfx2/dllapi.h>
 
-#include <vector>
 #include <functional>
+#include <memory>
+#include <vector>
 
-#include <comphelper/processfactory.hxx>
-#include <unotools/ucbstreamhelper.hxx>
 #include <sfx2/thumbnailviewitem.hxx>
 #include <vcl/ctrl.hxx>
 #include <vcl/timer.hxx>
@@ -71,7 +70,7 @@ namespace drawinglayer {
 
     WinBits
 
-    WB_VSCROLL          A scroolbar will be always shown. The visible number of
+    WB_VSCROLL          A scrollbar will be always shown. The visible number of
                         lines have to be specified with SetLineCount() if this
                         flag is set.
     WB_TABSTOP          It is possible to jump into the ValueSet with the tab key.
@@ -156,8 +155,7 @@ namespace drawinglayer {
 
 /* ThumbnailView types */
 
-#define THUMBNAILVIEW_APPEND         ((sal_uInt16)-1)
-#define THUMBNAILVIEW_ITEM_NOTFOUND  ((sal_uInt16)-1)
+#define THUMBNAILVIEW_ITEM_NOTFOUND  (sal_uInt16(-1))
 
 // Display all the available items in the thumbnail.
 class ViewFilterAll
@@ -180,14 +178,14 @@ class SFX2_DLLPUBLIC ThumbnailView : public Control
 {
 public:
 
-    ThumbnailView(vcl::Window* pParent, WinBits nWinStyle = WB_TABSTOP, bool bDisableTransientChildren = false);
+    ThumbnailView(vcl::Window* pParent, WinBits nWinStyle = WB_TABSTOP);
 
-    virtual ~ThumbnailView();
+    virtual ~ThumbnailView() override;
     virtual void dispose() override;
 
     virtual void MouseMove(const MouseEvent& rMEvt) override;
 
-    void AppendItem(ThumbnailViewItem *pItem);
+    void AppendItem(std::unique_ptr<ThumbnailViewItem> pItem);
 
     void RemoveItem(sal_uInt16 nItemId);
 
@@ -197,7 +195,7 @@ public:
     virtual void Reload() {}
 
     // Change current thumbnail item list with new one (invalidates all pointers to a thumbnail item)
-    void updateItems(const std::vector<ThumbnailViewItem *> &items);
+    void updateItems(std::vector<std::unique_ptr<ThumbnailViewItem>> items);
 
     size_t GetItemPos( sal_uInt16 nItemId ) const;
 
@@ -226,10 +224,9 @@ public:
 
     void ShowTooltips( bool bShowTooltips );
 
-    void filterItems (const std::function<bool (const ThumbnailViewItem*) > &func);
+    void SetMultiSelectionEnabled( bool bIsMultiSelectionEnabled );
 
-    void sortItems (const std::function<bool (const ThumbnailViewItem*,
-                                                const ThumbnailViewItem*) > &func);
+    void filterItems (const std::function<bool (const ThumbnailViewItem*) > &func);
 
     void setItemStateHdl (const Link<const ThumbnailViewItem*,void> &aLink) { maItemStateHdl = aLink; }
 
@@ -245,11 +242,9 @@ protected:
 
     virtual void MouseButtonDown( const MouseEvent& rMEvt ) override;
 
-    virtual void MouseButtonUp( const MouseEvent& rMEvt ) override;
-
     virtual void Command( const CommandEvent& rCEvt ) override;
 
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
 
     virtual void GetFocus() override;
 
@@ -265,7 +260,7 @@ protected:
 
     // Drawing item related functions, override them to make your own custom ones.
 
-    void DrawItem (ThumbnailViewItem *pItem);
+    void DrawItem (ThumbnailViewItem const *pItem);
 
     virtual void OnItemDblClicked (ThumbnailViewItem *pItem);
 
@@ -282,7 +277,6 @@ protected:
 
     virtual void ApplySettings(vcl::RenderContext& rRenderContext) override;
 
-    SFX2_DLLPRIVATE void         ImplInitScrollBar();
     SFX2_DLLPRIVATE void         ImplDeleteItems();
     SFX2_DLLPRIVATE size_t       ImplGetItem( const Point& rPoint ) const;
     SFX2_DLLPRIVATE ThumbnailViewItem*    ImplGetItem( size_t nPos );
@@ -290,15 +284,14 @@ protected:
     SFX2_DLLPRIVATE ThumbnailViewItem*    ImplGetVisibleItem( sal_uInt16 nVisiblePos );
     SFX2_DLLPRIVATE void         ImplFireAccessibleEvent( short nEventId, const css::uno::Any& rOldValue, const css::uno::Any& rNewValue );
     SFX2_DLLPRIVATE bool         ImplHasAccessibleListeners();
-    DECL_DLLPRIVATE_LINK_TYPED( ImplScrollHdl, ScrollBar*, void );
+    DECL_DLLPRIVATE_LINK( ImplScrollHdl, ScrollBar*, void );
 
 protected:
 
-    ThumbnailValueItemList mItemList;
+    std::vector< std::unique_ptr<ThumbnailViewItem> > mItemList;
     ThumbnailValueItemList mFilteredItemList; ///< Cache to store the filtered items
     ThumbnailValueItemList::iterator mpStartSelRange;
     VclPtr<ScrollBar> mpScrBar;
-    long mnHeaderHeight;
     long mnItemWidth;
     long mnItemHeight;
     long mnItemPadding;
@@ -307,22 +300,22 @@ protected:
     long mnVisLines;
     long mnLines;
 
-    int mnFineness;
-
     sal_uInt16 mnCols;
     sal_uInt16 mnFirstLine;
     bool mbScroll : 1;
-    bool mbIsTransientChildrenDisabled : 1;
     bool mbHasVisibleItems : 1;
     bool mbShowTooltips : 1;
+    bool mbIsMultiSelectionEnabled: 1;
     Color maFillColor;              ///< Background color of the thumbnail view widget.
     Color maTextColor;              ///< Text color.
-    Color maHighlightColor;         ///< Color of the highlight (background) of the hovered / selected item.
-    Color maHighlightTextColor;     ///< Color of the text for the higlighted item.
+    Color maHighlightColor;         ///< Color of the highlight (background) of the hovered item.
+    Color maHighlightTextColor;     ///< Color of the text for the highlighted item.
+    Color maSelectHighlightColor;   ///< Color of the highlight (background) of the selected and hovered item.
+    Color maSelectHighlightTextColor;   ///< Color of the text of the selected and hovered item.
     double mfHighlightTransparence; ///< Transparence of the highlight.
 
     Link<const ThumbnailViewItem*, void> maItemStateHdl;
-    ThumbnailItemAttributes* mpItemAttrs;
+    std::unique_ptr<ThumbnailItemAttributes> mpItemAttrs;
 
     std::function<bool (const ThumbnailViewItem*)> maFilterFunc;
 };

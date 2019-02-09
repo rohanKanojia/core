@@ -22,6 +22,7 @@
 #include <com/sun/star/embed/EmbedMapUnits.hpp>
 #include <com/sun/star/embed/EmbedMisc.hpp>
 #include <com/sun/star/embed/Aspects.hpp>
+#include <com/sun/star/embed/WrongStateException.hpp>
 #include <com/sun/star/io/XSeekable.hpp>
 #include <com/sun/star/embed/NoVisualAreaSizeException.hpp>
 
@@ -29,25 +30,25 @@
 #include <comphelper/mimeconfighelper.hxx>
 #include <comphelper/seqstream.hxx>
 #include <filter/msfilter/classids.hxx>
+#include <sal/log.hxx>
 
 #if defined(_WIN32)
-#include <olecomponent.hxx>
+#include "olecomponent.hxx"
 #endif
 
 using namespace ::com::sun::star;
 using namespace ::comphelper;
 
 embed::VisualRepresentation OleEmbeddedObject::GetVisualRepresentationInNativeFormat_Impl(
-                    const uno::Reference< io::XStream > xCachedVisRepr )
-        throw ( uno::Exception )
+                    const uno::Reference< io::XStream >& xCachedVisRepr )
 {
     embed::VisualRepresentation aVisualRepr;
 
     // TODO: detect the format in the future for now use workaround
     uno::Reference< io::XInputStream > xInStream = xCachedVisRepr->getInputStream();
-    uno::Reference< io::XSeekable > xSeekable( xCachedVisRepr, uno::UNO_QUERY );
-    if ( !xInStream.is() || !xSeekable.is() )
+    if ( !xInStream.is() )
         throw uno::RuntimeException();
+    uno::Reference< io::XSeekable > xSeekable( xCachedVisRepr, uno::UNO_QUERY_THROW );
 
     uno::Sequence< sal_Int8 > aSeq( 2 );
     xInStream->readBytes( aSeq, 2 );
@@ -56,20 +57,20 @@ embed::VisualRepresentation OleEmbeddedObject::GetVisualRepresentationInNativeFo
     {
         // it's a bitmap
         aVisualRepr.Flavor = datatransfer::DataFlavor(
-            OUString( "application/x-openoffice-bitmap;windows_formatname=\"Bitmap\"" ),
-            OUString( "Bitmap" ),
+            "application/x-openoffice-bitmap;windows_formatname=\"Bitmap\"",
+            "Bitmap",
             cppu::UnoType<uno::Sequence< sal_Int8 >>::get() );
     }
     else
     {
         // it's a metafile
         aVisualRepr.Flavor = datatransfer::DataFlavor(
-            OUString( "application/x-openoffice-wmf;windows_formatname=\"Image WMF\"" ),
-            OUString( "Windows Metafile" ),
+            "application/x-openoffice-wmf;windows_formatname=\"Image WMF\"",
+            "Windows Metafile",
             cppu::UnoType<uno::Sequence< sal_Int8 >>::get() );
     }
 
-    sal_Int32 nStreamLength = (sal_Int32)xSeekable->getLength();
+    sal_Int32 nStreamLength = static_cast<sal_Int32>(xSeekable->getLength());
     uno::Sequence< sal_Int8 > aRepresent( nStreamLength );
     xInStream->readBytes( aRepresent, nStreamLength );
     aVisualRepr.Data <<= aRepresent;
@@ -78,10 +79,6 @@ embed::VisualRepresentation OleEmbeddedObject::GetVisualRepresentationInNativeFo
 }
 
 void SAL_CALL OleEmbeddedObject::setVisualAreaSize( sal_Int64 nAspect, const awt::Size& aSize )
-        throw ( lang::IllegalArgumentException,
-                embed::WrongStateException,
-                uno::Exception,
-                uno::RuntimeException, std::exception )
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;
@@ -97,7 +94,7 @@ void SAL_CALL OleEmbeddedObject::setVisualAreaSize( sal_Int64 nAspect, const awt
     if ( m_bDisposed )
         throw lang::DisposedException(); // TODO
 
-    SAL_WARN_IF( nAspect == embed::Aspects::MSOLE_ICON, "embeddedobj.ole", "For iconified objects no graphical replacement is required!\n" );
+    SAL_WARN_IF( nAspect == embed::Aspects::MSOLE_ICON, "embeddedobj.ole", "For iconified objects no graphical replacement is required!" );
     if ( nAspect == embed::Aspects::MSOLE_ICON )
         // no representation can be retrieved
         throw embed::WrongStateException( "Illegal call!",
@@ -112,7 +109,7 @@ void SAL_CALL OleEmbeddedObject::setVisualAreaSize( sal_Int64 nAspect, const awt
     // SetExtent() is called only for objects that require it,
     // it should not be called for MSWord documents to workaround problem i49369
     // If cached size is not set, that means that this is the size initialization, so there is no need to set the real size
-    sal_Bool bAllowToSetExtent =
+    bool bAllowToSetExtent =
       ( ( getStatus( nAspect ) & embed::EmbedMisc::MS_EMBED_RECOMPOSEONRESIZE )
       && !MimeConfigurationHelper::ClassIDsEqual(m_aClassID, MimeConfigurationHelper::GetSequenceClassID(MSO_WW8_CLASSID))
       && m_bHasCachedSize );
@@ -125,7 +122,7 @@ void SAL_CALL OleEmbeddedObject::setVisualAreaSize( sal_Int64 nAspect, const awt
         }
         catch( const uno::Exception& )
         {
-            SAL_WARN( "embeddedobj.ole", "The object should not be resized without activation!\n" );
+            SAL_WARN( "embeddedobj.ole", "The object should not be resized without activation!" );
         }
         aGuard.reset();
     }
@@ -136,12 +133,12 @@ void SAL_CALL OleEmbeddedObject::setVisualAreaSize( sal_Int64 nAspect, const awt
         aGuard.clear();
         try {
             m_pOleComponent->SetExtent( aSizeToSet, nAspect ); // will throw an exception in case of failure
-            m_bHasSizeToSet = sal_False;
+            m_bHasSizeToSet = false;
         }
         catch( const uno::Exception& )
         {
             // some objects do not allow to set the size even in running state
-            m_bHasSizeToSet = sal_True;
+            m_bHasSizeToSet = true;
             m_aSizeToSet = aSizeToSet;
             m_nAspectToSet = nAspect;
         }
@@ -156,10 +153,6 @@ void SAL_CALL OleEmbeddedObject::setVisualAreaSize( sal_Int64 nAspect, const awt
 }
 
 awt::Size SAL_CALL OleEmbeddedObject::getVisualAreaSize( sal_Int64 nAspect )
-        throw ( lang::IllegalArgumentException,
-                embed::WrongStateException,
-                uno::Exception,
-                uno::RuntimeException, std::exception )
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;
@@ -203,7 +196,9 @@ awt::Size SAL_CALL OleEmbeddedObject::getVisualAreaSize( sal_Int64 nAspect )
                 awt::Size aSize;
                 aGuard.clear();
 
-                sal_Bool bSuccess = sal_False;
+                bool bBackToLoaded = false;
+
+                bool bSuccess = false;
                 if ( getCurrentState() == embed::EmbedStates::LOADED )
                 {
                     SAL_WARN( "embeddedobj.ole", "Loaded object has no cached size!" );
@@ -211,6 +206,9 @@ awt::Size SAL_CALL OleEmbeddedObject::getVisualAreaSize( sal_Int64 nAspect )
                     // try to switch the object to RUNNING state and request the value again
                     try {
                         changeState( embed::EmbedStates::RUNNING );
+                        // the links should be switched back to loaded state to avoid too
+                        // many open MathType instances
+                        bBackToLoaded = true;
                     }
                     catch( const uno::Exception& )
                     {
@@ -224,10 +222,22 @@ awt::Size SAL_CALL OleEmbeddedObject::getVisualAreaSize( sal_Int64 nAspect )
                 {
                     // first try to get size using replacement image
                     aSize = m_pOleComponent->GetExtent( nAspect ); // will throw an exception in case of failure
-                    bSuccess = sal_True;
+                    bSuccess = true;
                 }
                 catch( const uno::Exception& )
                 {
+                }
+
+                if (bBackToLoaded)
+                {
+                    try
+                    {
+                        changeState(embed::EmbedStates::LOADED);
+                    }
+                    catch( const uno::Exception& e )
+                    {
+                        SAL_WARN("embeddedobj.ole", "ignoring " << e);
+                    }
                 }
 
                 if ( !bSuccess )
@@ -236,7 +246,7 @@ awt::Size SAL_CALL OleEmbeddedObject::getVisualAreaSize( sal_Int64 nAspect )
                     {
                         // second try the cached replacement image
                         aSize = m_pOleComponent->GetCachedExtent( nAspect ); // will throw an exception in case of failure
-                        bSuccess = sal_True;
+                        bSuccess = true;
                     }
                     catch( const uno::Exception& )
                     {
@@ -248,8 +258,8 @@ awt::Size SAL_CALL OleEmbeddedObject::getVisualAreaSize( sal_Int64 nAspect )
                     try
                     {
                         // third try the size reported by the object
-                        aSize = m_pOleComponent->GetReccomendedExtent( nAspect ); // will throw an exception in case of failure
-                        bSuccess = sal_True;
+                        aSize = m_pOleComponent->GetRecommendedExtent( nAspect ); // will throw an exception in case of failure
+                        bSuccess = true;
                     }
                     catch( const uno::Exception& )
                     {
@@ -265,7 +275,7 @@ awt::Size SAL_CALL OleEmbeddedObject::getVisualAreaSize( sal_Int64 nAspect )
 
                 m_aCachedSize = aSize;
                 m_nCachedAspect = nAspect;
-                m_bHasCachedSize = sal_True;
+                m_bHasCachedSize = true;
 
                 aResult = m_aCachedSize;
             }
@@ -285,27 +295,20 @@ awt::Size SAL_CALL OleEmbeddedObject::getVisualAreaSize( sal_Int64 nAspect )
 #endif
     {
         // return cached value
-        if ( m_bHasCachedSize )
-        {
-            SAL_WARN_IF( nAspect != m_nCachedAspect, "embeddedobj.ole", "Unexpected aspect is requested!" );
-            aResult = m_aCachedSize;
-        }
-        else
+        if ( !m_bHasCachedSize )
         {
             throw embed::NoVisualAreaSizeException(
                             "No size available!",
                             static_cast< ::cppu::OWeakObject* >(this) );
         }
+        SAL_WARN_IF( nAspect != m_nCachedAspect, "embeddedobj.ole", "Unexpected aspect is requested!" );
+        aResult = m_aCachedSize;
     }
 
     return aResult;
 }
 
 embed::VisualRepresentation SAL_CALL OleEmbeddedObject::getPreferredVisualRepresentation( sal_Int64 nAspect )
-        throw ( lang::IllegalArgumentException,
-                embed::WrongStateException,
-                uno::Exception,
-                uno::RuntimeException, std::exception )
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;
@@ -343,12 +346,8 @@ embed::VisualRepresentation SAL_CALL OleEmbeddedObject::getPreferredVisualRepres
         SetVisReplInStream( m_xCachedVisualRepresentation.is() );
     }
 
-    if ( m_xCachedVisualRepresentation.is() )
-    {
-        return GetVisualRepresentationInNativeFormat_Impl( m_xCachedVisualRepresentation );
-    }
 #ifdef _WIN32
-    else if ( m_pOleComponent )
+    if ( !m_xCachedVisualRepresentation.is() && m_pOleComponent )
     {
         try
         {
@@ -356,8 +355,8 @@ embed::VisualRepresentation SAL_CALL OleEmbeddedObject::getPreferredVisualRepres
                 changeState( embed::EmbedStates::RUNNING );
 
             datatransfer::DataFlavor aDataFlavor(
-                    OUString( "application/x-openoffice-wmf;windows_formatname=\"Image WMF\"" ),
-                    OUString( "Windows Metafile" ),
+                    "application/x-openoffice-wmf;windows_formatname=\"Image WMF\"",
+                    "Windows Metafile",
                     cppu::UnoType<uno::Sequence< sal_Int8 >>::get() );
 
             aVisualRepr.Data = m_pOleComponent->getTransferData( aDataFlavor );
@@ -397,8 +396,6 @@ embed::VisualRepresentation SAL_CALL OleEmbeddedObject::getPreferredVisualRepres
 }
 
 sal_Int32 SAL_CALL OleEmbeddedObject::getMapUnit( sal_Int64 nAspect )
-        throw ( uno::Exception,
-                uno::RuntimeException, std::exception)
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;

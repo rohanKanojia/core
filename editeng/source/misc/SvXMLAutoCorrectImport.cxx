@@ -17,14 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <SvXMLAutoCorrectImport.hxx>
-#include <SvXMLAutoCorrectTokenHandler.hxx>
+#include "SvXMLAutoCorrectImport.hxx"
+#include "SvXMLAutoCorrectTokenHandler.hxx"
 
 using namespace css;
 using namespace css::xml::sax;
 
 SvXMLAutoCorrectImport::SvXMLAutoCorrectImport(
-    const uno::Reference< uno::XComponentContext > xContext,
+    const uno::Reference< uno::XComponentContext > & xContext,
     SvxAutocorrWordList *pNewAutocorr_List,
     SvxAutoCorrect &rNewAutoCorrect,
     const css::uno::Reference < css::embed::XStorage >& rNewStorage)
@@ -43,15 +43,13 @@ SvXMLImportContext *SvXMLAutoCorrectImport::CreateFastContext( sal_Int32 Element
         const uno::Reference< xml::sax::XFastAttributeList > & xAttrList )
 {
     if( Element == SvXMLAutoCorrectToken::BLOCKLIST )
-        return new SvXMLWordListContext( *this, Element, xAttrList );
+        return new SvXMLWordListContext( *this );
     else
         return SvXMLImport::CreateFastContext( Element, xAttrList );
 }
 
 SvXMLWordListContext::SvXMLWordListContext(
-   SvXMLAutoCorrectImport& rImport,
-   sal_Int32 /*Element*/,
-   const css::uno::Reference< css::xml::sax::XFastAttributeList > & /*xAttrList*/ ) :
+   SvXMLAutoCorrectImport& rImport ) :
    SvXMLImportContext ( rImport ),
    rLocalRef(rImport)
 {
@@ -60,10 +58,9 @@ SvXMLWordListContext::SvXMLWordListContext(
 
 css::uno::Reference<XFastContextHandler> SAL_CALL SvXMLWordListContext::createFastChildContext(
     sal_Int32 Element, const uno::Reference< xml::sax::XFastAttributeList > & xAttrList )
-throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception)
 {
     if ( Element == SvXMLAutoCorrectToken::BLOCK )
-        return new SvXMLWordContext (rLocalRef, Element, xAttrList);
+        return new SvXMLWordContext (rLocalRef, xAttrList);
     else
         return new SvXMLImportContext( rLocalRef );
 }
@@ -74,10 +71,8 @@ SvXMLWordListContext::~SvXMLWordListContext()
 
 SvXMLWordContext::SvXMLWordContext(
    SvXMLAutoCorrectImport& rImport,
-   sal_Int32 /*Element*/,
    const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) :
-   SvXMLImportContext ( rImport ),
-   rLocalRef(rImport)
+   SvXMLImportContext ( rImport )
 {
     OUString sWrong, sRight;
     if ( xAttrList.is() && xAttrList->hasAttribute( SvXMLAutoCorrectToken::ABBREVIATED_NAME ) )
@@ -86,21 +81,21 @@ SvXMLWordContext::SvXMLWordContext(
     if ( xAttrList.is() && xAttrList->hasAttribute( SvXMLAutoCorrectToken::NAME ) )
         sRight = xAttrList->getValue( SvXMLAutoCorrectToken::NAME );
 
-   if ( sWrong.isEmpty() || sRight.isEmpty())
+    if ( sWrong.isEmpty() || sRight.isEmpty())
         return;
 
     bool bOnlyTxt = sRight != sWrong;
     if( !bOnlyTxt )
     {
         const OUString sLongSave( sRight );
-        if( !rLocalRef.rAutoCorrect.GetLongText( sWrong, sRight ) &&
+        if( !rImport.rAutoCorrect.GetLongText( sWrong, sRight ) &&
             !sLongSave.isEmpty() )
         {
             sRight = sLongSave;
             bOnlyTxt = true;
         }
     }
-    rLocalRef.pAutocorr_List->LoadEntry( sWrong, sRight, bOnlyTxt );
+    rImport.pAutocorr_List->LoadEntry( sWrong, sRight, bOnlyTxt );
 }
 
 SvXMLWordContext::~SvXMLWordContext()
@@ -108,7 +103,7 @@ SvXMLWordContext::~SvXMLWordContext()
 }
 
 SvXMLExceptionListImport::SvXMLExceptionListImport(
-    const uno::Reference< uno::XComponentContext > xContext,
+    const uno::Reference< uno::XComponentContext > & xContext,
     SvStringsISortDtor & rNewList )
 :   SvXMLImport( xContext, "" ),
     rList (rNewList)
@@ -123,15 +118,13 @@ SvXMLImportContext *SvXMLExceptionListImport::CreateFastContext(sal_Int32 Elemen
     const uno::Reference< xml::sax::XFastAttributeList > & xAttrList )
 {
     if( Element == SvXMLAutoCorrectToken::BLOCKLIST )
-        return new SvXMLExceptionListContext( *this, Element, xAttrList );
+        return new SvXMLExceptionListContext( *this );
     else
         return SvXMLImport::CreateFastContext( Element, xAttrList );
 }
 
 SvXMLExceptionListContext::SvXMLExceptionListContext(
-   SvXMLExceptionListImport& rImport,
-   sal_Int32 /*Element*/,
-   const css::uno::Reference< css::xml::sax::XFastAttributeList > & /* xAttrList */ ) :
+   SvXMLExceptionListImport& rImport ) :
    SvXMLImportContext ( rImport ),
    rLocalRef(rImport)
 {
@@ -139,10 +132,9 @@ SvXMLExceptionListContext::SvXMLExceptionListContext(
 
 css::uno::Reference<xml::sax::XFastContextHandler> SAL_CALL SvXMLExceptionListContext::createFastChildContext(
     sal_Int32 Element, const uno::Reference< xml::sax::XFastAttributeList > & xAttrList )
-    throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception)
 {
     if ( Element == SvXMLAutoCorrectToken::BLOCK )
-        return new SvXMLExceptionContext (rLocalRef, Element, xAttrList);
+        return new SvXMLExceptionContext (rLocalRef, xAttrList);
     else
         return new SvXMLImportContext( rLocalRef );
 }
@@ -153,10 +145,8 @@ SvXMLExceptionListContext::~SvXMLExceptionListContext()
 
 SvXMLExceptionContext::SvXMLExceptionContext(
    SvXMLExceptionListImport& rImport,
-   sal_Int32 /*Element*/,
    const css::uno::Reference< css::xml::sax::XFastAttributeList > & xAttrList ) :
-   SvXMLImportContext ( rImport ),
-   rLocalRef(rImport)
+   SvXMLImportContext ( rImport )
 {
     OUString sWord;
     if( xAttrList.is() && xAttrList->hasAttribute( SvXMLAutoCorrectToken::ABBREVIATED_NAME ) )
@@ -165,7 +155,7 @@ SvXMLExceptionContext::SvXMLExceptionContext(
     if (sWord.isEmpty())
         return;
 
-    rLocalRef.rList.insert( sWord );
+    rImport.rList.insert( sWord );
 }
 
 SvXMLExceptionContext::~SvXMLExceptionContext()

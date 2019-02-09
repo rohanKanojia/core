@@ -25,7 +25,7 @@
 #include <basegfx/color/bcolor.hxx>
 #include <drawinglayer/primitive2d/polygonprimitive2d.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
-#include <sdr/contact/objectcontactofpageview.hxx>
+#include <svx/sdr/contact/objectcontactofpageview.hxx>
 #include <tools/debug.hxx>
 
 namespace sdr { namespace contact {
@@ -55,20 +55,14 @@ void ViewContact::deleteAllVOCs()
     // #i84257# To avoid that each 'delete pCandidate' again uses
     // the local RemoveViewObjectContact with a search and removal in the
     // vector, simply copy and clear local vector.
-    std::vector< ViewObjectContact* > aLocalVOCList(maViewObjectContactVector);
-    maViewObjectContactVector.clear();
+    std::vector< ViewObjectContact* > aLocalVOCList;
+    aLocalVOCList.swap(maViewObjectContactVector);
 
-    while(!aLocalVOCList.empty())
-    {
-        ViewObjectContact* pCandidate = aLocalVOCList.back();
-        aLocalVOCList.pop_back();
-        DBG_ASSERT(pCandidate, "Corrupted ViewObjectContactList in VC (!)");
-
+    for (auto & pCandidate : aLocalVOCList)
         // ViewObjectContacts only make sense with View and Object contacts.
         // When the contact to the SdrObject is deleted like in this case,
         // all ViewObjectContacts can be deleted, too.
         delete pCandidate;
-    }
 
     // assert when there were new entries added during deletion
     DBG_ASSERT(maViewObjectContactVector.empty(), "Corrupted ViewObjectContactList in VC (!)");
@@ -166,7 +160,7 @@ ViewContact& ViewContact::GetViewContact(sal_uInt32 /*nIndex*/) const
 {
     // This is the default implementation; call would be an error
     OSL_FAIL("ViewContact::GetViewContact: This call needs to be overridden when GetObjectCount() can return results != 0 (!)");
-    return (ViewContact&)(*this);
+    return const_cast<ViewContact&>(*this);
 }
 
 ViewContact* ViewContact::GetParentContact() const
@@ -221,11 +215,11 @@ drawinglayer::primitive2d::Primitive2DContainer ViewContact::createViewIndepende
 {
     // This is the default implementation and should never be called (see header). If this is called,
     // someone implemented a ViewContact (VC) visualisation object without defining the visualisation by
-    // providing a seqence of primitives -> which cannot be correct.
+    // providing a sequence of primitives -> which cannot be correct.
     // Since we have no access to any known model data here, the default implementation creates a yellow placeholder
     // hairline polygon with a default size of (1000, 1000, 5000, 3000)
     OSL_FAIL("ViewContact::createViewIndependentPrimitive2DSequence(): Never call the fallback base implementation, this is always an error (!)");
-    const basegfx::B2DPolygon aOutline(basegfx::tools::createPolygonFromRect(basegfx::B2DRange(1000.0, 1000.0, 5000.0, 3000.0)));
+    const basegfx::B2DPolygon aOutline(basegfx::utils::createPolygonFromRect(basegfx::B2DRange(1000.0, 1000.0, 5000.0, 3000.0)));
     const basegfx::BColor aYellow(1.0, 1.0, 0.0);
     const drawinglayer::primitive2d::Primitive2DReference xReference(
         new drawinglayer::primitive2d::PolygonHairlinePrimitive2D(aOutline, aYellow));
@@ -233,7 +227,7 @@ drawinglayer::primitive2d::Primitive2DContainer ViewContact::createViewIndepende
     return drawinglayer::primitive2d::Primitive2DContainer { xReference };
 }
 
-drawinglayer::primitive2d::Primitive2DContainer ViewContact::getViewIndependentPrimitive2DSequence() const
+drawinglayer::primitive2d::Primitive2DContainer const & ViewContact::getViewIndependentPrimitive2DContainer() const
 {
     // local up-to-date checks. Create new list and compare.
     drawinglayer::primitive2d::Primitive2DContainer xNew(createViewIndependentPrimitive2DSequence());

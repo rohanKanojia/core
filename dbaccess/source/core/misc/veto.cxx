@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "veto.hxx"
+#include <veto.hxx>
 
 namespace dbaccess
 {
@@ -26,9 +26,8 @@ namespace dbaccess
     using ::com::sun::star::uno::RuntimeException;
 
     // Veto
-    Veto::Veto( const OUString& _rReason, const Any& _rDetails )
-        :m_sReason( _rReason )
-        ,m_aDetails( _rDetails )
+    Veto::Veto( const Any& _rDetails )
+        :m_aDetails( _rDetails )
     {
     }
 
@@ -36,12 +35,12 @@ namespace dbaccess
     {
     }
 
-    OUString SAL_CALL Veto::getReason() throw (RuntimeException, std::exception)
+    OUString SAL_CALL Veto::getReason()
     {
-        return m_sReason;
+        return OUString();
     }
 
-    Any SAL_CALL Veto::getDetails() throw (RuntimeException, std::exception)
+    Any SAL_CALL Veto::getDetails()
     {
         return m_aDetails;
     }

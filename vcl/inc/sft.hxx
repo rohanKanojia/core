@@ -20,7 +20,6 @@
 /**
  * @file sft.hxx
  * @brief Sun Font Tools
- * @author Alexander Gelfenbain
  */
 
 /*
@@ -48,28 +47,29 @@
 
 #include <vcl/dllapi.h>
 #include <vcl/fontcapabilities.hxx>
+#include <i18nlangtag/lang.h>
 
+#include <memory>
 #include <vector>
+#include <cstdint>
 
 namespace vcl
 {
 
 /*@{*/
-    typedef sal_Int16       F2Dot14;            /**< fixed: 2.14 */
     typedef sal_Int32       F16Dot16;           /**< fixed: 16.16 */
 /*@}*/
 
 /** Return value of OpenTTFont() and CreateT3FromTTGlyphs() */
-    enum SFErrCodes {
-        SF_OK,                              /**< no error                                     */
-        SF_BADFILE,                         /**< file not found                               */
-        SF_FILEIO,                          /**< file I/O error                               */
-        SF_MEMORY,                          /**< memory allocation error                      */
-        SF_GLYPHNUM,                        /**< incorrect number of glyphs                   */
-        SF_BADARG,                          /**< incorrect arguments                          */
-        SF_TTFORMAT,                        /**< incorrect TrueType font format               */
-        SF_TABLEFORMAT,                     /**< incorrect format of a TrueType table         */
-        SF_FONTNO                           /**< incorrect logical font number of a TTC font  */
+    enum class SFErrCodes {
+        Ok,                              /**< no error                                     */
+        BadFile,                         /**< file not found                               */
+        FileIo,                          /**< file I/O error                               */
+        Memory,                          /**< memory allocation error                      */
+        GlyphNum,                        /**< incorrect number of glyphs                   */
+        BadArg,                          /**< incorrect arguments                          */
+        TtFormat,                        /**< incorrect TrueType font format               */
+        FontNo                           /**< incorrect logical font number of a TTC font  */
     };
 
 #ifndef FW_THIN /* WIN32 compilation would conflict */
@@ -100,14 +100,7 @@ namespace vcl
         FWIDTH_ULTRA_EXPANDED = 9           /**< 200% of normal                     */
     };
 
-/** Type of the 'kern' table, stored in TrueTypeFont::kerntype */
-    enum KernType {
-        KT_NONE         = 0,                /**< no kern table                      */
-        KT_APPLE_NEW    = 1,                /**< new Apple kern table               */
-        KT_MICROSOFT    = 2                 /**< Microsoft table                    */
-    };
-
-/* Composite glyph flags definition */
+/** Composite glyph flags definition */
     enum CompositeFlags {
         ARG_1_AND_2_ARE_WORDS     = 1,
         ARGS_ARE_XY_VALUES        = 1<<1,
@@ -121,23 +114,7 @@ namespace vcl
         OVERLAP_COMPOUND          = 1<<10
     };
 
-/** Flags for TrueType generation */
-    enum TTCreationFlags {
-        TTCF_AutoName = 1,                  /**< Automatically generate a compact 'name' table.
-                                               If this flag is not set, name table is generated
-                                               either from an array of NameRecord structs passed as
-                                               arguments or if the array is NULL, 'name' table
-                                               of the generated TrueType file will be a copy
-                                               of the name table of the original file.
-                                               If this flag is set the array of NameRecord structs
-                                               is ignored and a very compact 'name' table is automatically
-                                               generated. */
-
-        TTCF_IncludeOS2 = 2                 /** If this flag is set OS/2 table from the original font will be
-                                                copied to the subset */
-    };
-
-/** Structure used by GetTTSimpleGlyphMetrics() and GetTTSimpleCharMetrics() functions */
+/** Structure used by GetTTSimpleCharMetrics() functions */
     typedef struct {
         sal_uInt16 adv;                         /**< advance width or height            */
         sal_Int16 sb;                           /**< left or top sidebearing            */
@@ -162,7 +139,7 @@ namespace vcl
     typedef struct {
         sal_uInt16 platformID;                  /**< Platform ID                                            */
         sal_uInt16 encodingID;                  /**< Platform-specific encoding ID                          */
-        sal_uInt16 languageID;                  /**< Language ID                                            */
+        LanguageType languageID;                /**< Language ID                                            */
         sal_uInt16 nameID;                      /**< Name ID                                                */
         sal_uInt16 slen;                        /**< String length in bytes                                 */
         sal_uInt8  *sptr;                        /**< Pointer to string data (not zero-terminated!)          */
@@ -189,32 +166,16 @@ namespace vcl
         int   descender;          /**< typographic descent.                                    */
         int   linegap;            /**< typographic line gap.\ Negative values are treated as
                                      zero in Win 3.1, System 6 and System 7.                 */
-        int   vascent;            /**< typographic ascent for vertical writing mode            */
-        int   vdescent;           /**< typographic descent for vertical writing mode           */
         int   typoAscender;       /**< OS/2 portable typographic ascender                      */
         int   typoDescender;      /**< OS/2 portable typographic descender                     */
         int   typoLineGap;        /**< OS/2 portable typographic line gap                       */
         int   winAscent;          /**< ascender metric for Windows                             */
         int   winDescent;         /**< descender metric for Windows                            */
         bool  symbolEncoded;      /**< true: MS symbol encoded */
-        int   rangeFlag;          /**< if set to 1 Unicode Range flags are applicable          */
-        sal_uInt32 ur1;               /**< bits 0 - 31 of Unicode Range flags                      */
-        sal_uInt32 ur2;               /**< bits 32 - 63 of Unicode Range flags                     */
-        sal_uInt32 ur3;               /**< bits 64 - 95 of Unicode Range flags                     */
-        sal_uInt32 ur4;               /**< bits 96 - 127 of Unicode Range flags                    */
-        sal_uInt8   panose[10];        /**< PANOSE classification number                            */
-        sal_uInt32 typeFlags;         /**< type flags (copyright bits + PS-OpenType flag)       */
+        sal_uInt8  panose[10];    /**< PANOSE classification number                            */
+        sal_uInt32 typeFlags;     /**< type flags (copyright bits)                             */
+        sal_uInt16 fsSelection;   /**< OS/2 fsSelection */
     } TTGlobalFontInfo;
-
-#define TYPEFLAG_INVALID        0x8000000
-#define TYPEFLAG_COPYRIGHT_MASK 0x000000E
-#define TYPEFLAG_PS_OPENTYPE    0x0010000
-
-/** Structure used by KernGlyphs()      */
-    typedef struct {
-        int x;                    /**< positive: right, negative: left                        */
-        int y;                    /**< positive: up, negative: down                           */
-    } KernData;
 
 /** ControlPoint structure used by GetTTGlyphPoints() */
     typedef struct {
@@ -251,7 +212,7 @@ namespace vcl
  * @return value of SFErrCodes enum
  * @ingroup sft
  */
-    int VCL_DLLPUBLIC OpenTTFontBuffer(const void* pBuffer, sal_uInt32 nLen, sal_uInt32 facenum, TrueTypeFont** ttf);
+    SFErrCodes VCL_DLLPUBLIC OpenTTFontBuffer(const void* pBuffer, sal_uInt32 nLen, sal_uInt32 facenum, TrueTypeFont** ttf);
 #if !defined(_WIN32)
 /**
  * TrueTypeFont constructor.
@@ -264,13 +225,12 @@ namespace vcl
  * @return value of SFErrCodes enum
  * @ingroup sft
  */
-    int VCL_DLLPUBLIC OpenTTFontFile(const char *fname, sal_uInt32 facenum, TrueTypeFont** ttf);
+    SFErrCodes VCL_DLLPUBLIC OpenTTFontFile(const char *fname, sal_uInt32 facenum, TrueTypeFont** ttf);
 #endif
 
-    void getTTScripts(std::vector< sal_uInt32 > &rScriptTags, const unsigned char* pTable, size_t nLength);
-    bool getTTCoverage(
-        boost::dynamic_bitset<sal_uInt32> &rUnicodeCoverage,
-        boost::dynamic_bitset<sal_uInt32> &rCodePageCoverage,
+    bool VCL_DLLPUBLIC getTTCoverage(
+        boost::optional<std::bitset<UnicodeCoverage::MAX_UC_ENUM>> & rUnicodeCoverage,
+        boost::optional<std::bitset<CodePageCoverage::MAX_CP_ENUM>> & rCodePageCoverage,
         const unsigned char* pTable, size_t nLength);
 
 /**
@@ -336,7 +296,7 @@ namespace vcl
  * @ingroup sft
  */
 
-    int GetTTNameRecords(TrueTypeFont *ttf, NameRecord **nr);
+    int GetTTNameRecords(TrueTypeFont const *ttf, NameRecord **nr);
 
 /**
  * Deallocates previously allocated array of NameRecords.
@@ -365,7 +325,7 @@ namespace vcl
  * @ingroup sft
  *
  */
-    int  CreateT3FromTTGlyphs(TrueTypeFont *ttf, FILE *outf, const char *fname, sal_uInt16 *glyphArray, sal_uInt8 *encoding, int nGlyphs, int wmode);
+    SFErrCodes CreateT3FromTTGlyphs(TrueTypeFont *ttf, FILE *outf, const char *fname, sal_uInt16 const *glyphArray, sal_uInt8 *encoding, int nGlyphs, int wmode);
 
 /**
  * Generates a new TrueType font and dumps it to <b>outf</b> file.
@@ -378,23 +338,17 @@ namespace vcl
  *                    the glyphID glyphArray[i]. Character code 0 usually points to a default
  *                    glyph (glyphID 0)
  * @param nGlyphs     number of glyph IDs in glyphArray and encoding values in encoding
- * @param nNameRecs   number of NameRecords for the font, if 0 the name table from the
- *                    original font will be used
- * @param nr          array of NameRecords
  * @param flags       or'ed TTCreationFlags
  * @return            return the value of SFErrCodes enum
  * @see               SFErrCodes
  * @ingroup sft
  *
  */
-    int  CreateTTFromTTGlyphs(TrueTypeFont  *ttf,
+    VCL_DLLPUBLIC SFErrCodes CreateTTFromTTGlyphs(TrueTypeFont  *ttf,
                               const char    *fname,
-                              sal_uInt16        *glyphArray,
-                              sal_uInt8          *encoding,
-                              int            nGlyphs,
-                              int            nNameRecs,
-                              NameRecord    *nr,
-                              sal_uInt32        flags);
+                              sal_uInt16 const *glyphArray,
+                              sal_uInt8 const *encoding,
+                              int            nGlyphs);
 
 /**
  * Generates a new PostScript Type42 font and dumps it to <b>outf</b> file.
@@ -408,23 +362,23 @@ namespace vcl
  *                    the glyphID glyphArray[i]. Character code 0 usually points to a default
  *                    glyph (glyphID 0)
  * @param nGlyphs     number of glyph IDs in glyphArray and encoding values in encoding
- * @return            SF_OK - no errors
- *                    SF_GLYPHNUM - too many glyphs (> 255)
- *                    SF_TTFORMAT - corrupted TrueType fonts
+ * @return            SFErrCodes::Ok - no errors
+ *                    SFErrCodes::GlyphNum - too many glyphs (> 255)
+ *                    SFErrCodes::TtFormat - corrupted TrueType fonts
  *
  * @see               SFErrCodes
  * @ingroup sft
  *
  */
-    int  CreateT42FromTTGlyphs(TrueTypeFont  *ttf,
+    SFErrCodes CreateT42FromTTGlyphs(TrueTypeFont  *ttf,
                                FILE          *outf,
                                const char    *psname,
-                               sal_uInt16        *glyphArray,
+                               sal_uInt16 const *glyphArray,
                                sal_uInt8          *encoding,
                                int            nGlyphs);
 
 /**
- * Queries glyph metrics. Allocates an array of TTSimpleGlyphMetrics structs and returns it.
+ * Queries glyph metrics. Allocates an array of advance width/height values and returns it.
  *
  * @param ttf         pointer to the TrueTypeFont structure
  * @param glyphArray  pointer to an array of glyphs that are to be extracted from ttf
@@ -433,44 +387,7 @@ namespace vcl
  * @ingroup sft
  *
  */
-    TTSimpleGlyphMetrics *GetTTSimpleGlyphMetrics(TrueTypeFont *ttf, sal_uInt16 *glyphArray, int nGlyphs, bool vertical);
-
-/**
- * Queries glyph metrics. Allocates an array of TTSimpleGlyphMetrics structs and returns it.
- * This function behaves just like GetTTSimpleGlyphMetrics() but it takes a range of Unicode
- * characters instead of an array of glyphs.
- *
- * @param ttf         pointer to the TrueTypeFont structure
- * @param firstChar   Unicode value of the first character in the range
- * @param nChars      number of Unicode characters in the range
- * @param vertical    writing mode: false - horizontal, true - vertical
- *
- * @see GetTTSimpleGlyphMetrics
- * @ingroup sft
- *
- */
-    TTSimpleGlyphMetrics *GetTTSimpleCharMetrics(TrueTypeFont *ttf, sal_uInt16 firstChar, int nChars, bool vertical);
-
-/**
- * Maps a Unicode (UCS-2) string to a glyph array. Returns the number of glyphs in the array,
- * which for TrueType fonts is always the same as the number of input characters.
- *
- * @param ttf         pointer to the TrueTypeFont structure
- * @param str         pointer to a UCS-2 string
- * @param nchars      number of characters in <b>str</b>
- * @param glyphArray  pointer to the glyph array where glyph IDs are to be recorded.
- * @param bvertical   vertical text
- *
- * @return MapString() returns -1 if the TrueType font has no usable 'cmap' tables.
- *         Otherwise it returns the number of characters processed: <b>nChars</b>
- *
- * glyphIDs of TrueType fonts are 2 byte positive numbers. glyphID of 0 denotes a missing
- * glyph and traditionally defaults to an empty square.
- * glyphArray should be at least sizeof(sal_uInt16) * nchars bytes long. If glyphArray is NULL
- * MapString() replaces the UCS-2 characters in str with glyphIDs.
- * @ingroup sft
- */
-    int VCL_DLLPUBLIC MapString(TrueTypeFont *ttf, sal_uInt16 *str, int nchars, sal_uInt16 *glyphArray, bool bvertical);
+    VCL_DLLPUBLIC std::unique_ptr<sal_uInt16[]> GetTTSimpleGlyphMetrics(TrueTypeFont const *ttf, const sal_uInt16 *glyphArray, int nGlyphs, bool vertical);
 
 #if defined(_WIN32) || defined(MACOSX) || defined(IOS)
 /**
@@ -479,22 +396,11 @@ namespace vcl
  *
  * @param ttf         pointer to the TrueTypeFont structure
  * @param ch          Unicode (UCS-2) character
- * @param bvertical   flag to function that we want to find the vertical
- *                    GlobalSUBstitution attribute
  * @return glyph ID, if the character is missing in the font, the return value is 0.
  * @ingroup sft
  */
-    sal_uInt16 MapChar(TrueTypeFont *ttf, sal_uInt16 ch, bool bvertical);
+    VCL_DLLPUBLIC sal_uInt16 MapChar(TrueTypeFont const *ttf, sal_uInt16 ch);
 #endif
-
-/**
- * Returns 0 when the font does not substitute vertical glyphs
- *
- * @param ttf         pointer to the TrueTypeFont structure
- * @param bvertical   flag to function that we want to find the vertical
- *                    GlobalSUBstitution attribute
- */
-    int DoesVerticalSubstitution( TrueTypeFont *ttf, int bvertical);
 
 /**
  * Returns global font information about the TrueType font.
@@ -505,24 +411,36 @@ namespace vcl
  * @ingroup sft
  *
  */
-    void GetTTGlobalFontInfo(TrueTypeFont *ttf, TTGlobalFontInfo *info);
+    VCL_DLLPUBLIC void GetTTGlobalFontInfo(TrueTypeFont *ttf, TTGlobalFontInfo *info);
+
+/**
+ * Returns fonts metrics.
+ * @see TTGlobalFontInfo
+ *
+ * @param hhea        hhea table data
+ * @param os2         OS/2 table data
+ * @param info        pointer to a TTGlobalFontInfo structure
+ * @ingroup sft
+ *
+ */
+ void GetTTFontMetrics(const std::vector<uint8_t>& hhea,
+                       const std::vector<uint8_t>& os2,
+                       TTGlobalFontInfo *info);
 
 /**
  * returns the number of glyphs in a font
  */
- int GetTTGlyphCount( TrueTypeFont* ttf );
+ VCL_DLLPUBLIC int GetTTGlyphCount( TrueTypeFont const * ttf );
 
 /**
  * provide access to the raw data of a SFNT-container's subtable
  */
- bool GetSfntTable( TrueTypeFont* ttf, int nSubtableIndex,
+ bool GetSfntTable( TrueTypeFont const * ttf, int nSubtableIndex,
      const sal_uInt8** ppRawBytes, int* pRawLength );
 
 /*- private definitions */
 
     struct TrueTypeFont {
-        sal_uInt32 tag;
-
         char        *fname;
         sal_Int32   fsize;
         sal_uInt8   *ptr;
@@ -544,10 +462,6 @@ namespace vcl
         sal_uInt32 (*mapper)(const sal_uInt8 *, sal_uInt32, sal_uInt32); /* character to glyphID translation function                          */
         const sal_uInt8   **tables;                        /* array of pointers to raw subtables in SFNT file                    */
         sal_uInt32  *tlens;                                /* array of table lengths                                             */
-        int         kerntype;                              /* Defined in the KernType enum                                       */
-        sal_uInt32  nkern;                                 /* number of kern subtables                                           */
-        const sal_uInt8** kerntables;                      /* array of pointers to kern subtables                                */
-        void        *pGSubstitution;                       /* info provided by GSUB for UseGSUB()                                */
     };
 
 /* indexes into TrueTypeFont::tables[] and TrueTypeFont::tlens[] */
@@ -563,7 +477,6 @@ namespace vcl
 #define O_vmtx 9     /* 'vmtx' */
 #define O_OS2  10    /* 'OS/2' */
 #define O_post 11    /* 'post' */
-#define O_kern 12    /* 'kern' */
 #define O_cvt  13    /* 'cvt_' - only used in TT->TT generation */
 #define O_prep 14    /* 'prep' - only used in TT->TT generation */
 #define O_fpgm 15    /* 'fpgm' - only used in TT->TT generation */

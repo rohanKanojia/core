@@ -22,7 +22,6 @@
 #include <svtools/wizardmachine.hxx>
 #include <mailmergehelper.hxx>
 #include <vcl/button.hxx>
-#include <svtools/stdctrl.hxx>
 #include <vcl/field.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/lstbox.hxx>
@@ -53,7 +52,7 @@ class SwMailMergeLayoutPage : public svt::OWizardPage
 
     VclPtr<ListBox>            m_pZoomLB;
 
-    SwOneExampleFrame*  m_pExampleFrame;
+    std::unique_ptr<SwOneExampleFrame> m_pExampleFrame;
     SwWrtShell*         m_pExampleWrtShell;
 
     OUString            m_sExampleURL;
@@ -65,29 +64,29 @@ class SwMailMergeLayoutPage : public svt::OWizardPage
 
     css::uno::Reference< css::beans::XPropertySet >  m_xViewProperties;
 
-    DECL_LINK_TYPED(PreviewLoadedHdl_Impl, SwOneExampleFrame&, void);
-    DECL_LINK_TYPED(ZoomHdl_Impl, ListBox&, void);
-    DECL_LINK_TYPED(ChangeAddressHdl_Impl, SpinField&, void);
-    DECL_LINK_TYPED(ChangeAddressLoseFocusHdl_Impl, Control&, void);
-    DECL_LINK_TYPED(GreetingsHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(AlignToTextHdl_Impl, Button*, void);
+    DECL_LINK(PreviewLoadedHdl_Impl, SwOneExampleFrame&, void);
+    DECL_LINK(ZoomHdl_Impl, ListBox&, void);
+    DECL_LINK(ChangeAddressHdl_Impl, SpinField&, void);
+    DECL_LINK(ChangeAddressLoseFocusHdl_Impl, Control&, void);
+    DECL_LINK(GreetingsHdl_Impl, Button*, void);
+    DECL_LINK(AlignToTextHdl_Impl, Button*, void);
 
     static SwFrameFormat*        InsertAddressFrame(
                             SwWrtShell& rShell,
-                            SwMailMergeConfigItem& rConfigItem,
+                            SwMailMergeConfigItem const & rConfigItem,
                             const Point& rDestination,
                             bool bAlignToBody,
                             bool bExample);
-    static void             InsertGreeting(SwWrtShell& rShell, SwMailMergeConfigItem& rConfigItem, bool bExample);
+    static void             InsertGreeting(SwWrtShell& rShell, SwMailMergeConfigItem const & rConfigItem, bool bExample);
 
     virtual void        ActivatePage() override;
     virtual bool        commitPage(::svt::WizardTypes::CommitPageReason _eReason) override;
 public:
         SwMailMergeLayoutPage( SwMailMergeWizard* _pParent);
-        virtual ~SwMailMergeLayoutPage();
+        virtual ~SwMailMergeLayoutPage() override;
     virtual void            dispose() override;
 
-    static SwFrameFormat*        InsertAddressAndGreeting(SwView* pView,
+    static SwFrameFormat*        InsertAddressAndGreeting(SwView const * pView,
                                             SwMailMergeConfigItem& rConfigItem,
                                             const Point& rAddressPos,
                                             bool bAlignToBody);

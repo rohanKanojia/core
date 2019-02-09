@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_TEXTSH_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_TEXTSH_HXX
 
-#include <basesh.hxx>
+#include "basesh.hxx"
 #include <unotools/caserotate.hxx>
 
 class AbstractSvxPostItDialog;
@@ -34,7 +34,7 @@ class SW_DLLPUBLIC SwTextShell: public SwBaseShell
 
     void InsertSymbol( SfxRequest& );
     void InsertHyperlink( const SvxHyperlinkItem& rHlnkItem );
-    bool InsertMediaDlg( SfxRequest& );
+    bool InsertMediaDlg( SfxRequest const & );
 
 public:
     SFX_DECL_INTERFACE(SW_TEXTSHELL)
@@ -44,8 +44,8 @@ private:
     static void InitInterface_Impl();
 
 public:
-    DECL_LINK_TYPED( RedlineNextHdl, AbstractSvxPostItDialog&, void );
-    DECL_LINK_TYPED( RedlinePrevHdl, AbstractSvxPostItDialog&, void );
+    DECL_LINK( RedlineNextHdl, AbstractSvxPostItDialog&, void );
+    DECL_LINK( RedlinePrevHdl, AbstractSvxPostItDialog&, void );
 
     void    Execute(SfxRequest &);
     void    GetState(SfxItemSet &);
@@ -61,9 +61,9 @@ public:
     void    ExecMoveLingu(SfxRequest &);
     void    ExecMoveMisc(SfxRequest &);
     void    ExecField(SfxRequest &rReq);
-    void    ExecSetNumber(SfxRequest &);
+    void    ExecSetNumber(SfxRequest const &);
     void    StateField(SfxItemSet &);
-    void    ExecIdx(SfxRequest &);
+    void    ExecIdx(SfxRequest const &);
     void    GetIdxState(SfxItemSet &);
     void    ExecGlossary(SfxRequest &);
 
@@ -71,14 +71,14 @@ public:
     void    ExecCharAttrArgs(SfxRequest &);
     void    ExecParaAttr(SfxRequest &);
     void    ExecParaAttrArgs(SfxRequest &);
-    void    ExecDB(SfxRequest &);
-    void    ExecTransliteration(SfxRequest &);
-    void    ExecRotateTransliteration(SfxRequest &);
+    void    ExecDB(SfxRequest const &);
+    void    ExecTransliteration(SfxRequest const &);
+    void    ExecRotateTransliteration(SfxRequest const &);
 
     void    GetAttrState(SfxItemSet &);
 
              SwTextShell(SwView &rView);
-    virtual ~SwTextShell();
+    virtual ~SwTextShell() override;
     /// Create item set for the insert frame dialog.
     SfxItemSet CreateInsertFrameItemSet(SwFlyFrameAttrMgr& rMgr);
 };

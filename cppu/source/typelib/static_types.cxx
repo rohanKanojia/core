@@ -17,14 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <algorithm>
 #include <cassert>
-#include <stdarg.h>
 
 #include <osl/mutex.hxx>
-#include <osl/interlck.h>
 #include <rtl/ustring.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/instance.hxx>
@@ -35,14 +33,11 @@
 
 using namespace osl;
 
-using ::rtl::OUString;
-using ::rtl::OUStringBuffer;
-
 extern "C"
 {
 
 
-#ifdef SAL_W32
+#ifdef _WIN32
 #pragma pack(push, 8)
 #endif
 
@@ -65,14 +60,14 @@ struct AlignSize_Impl
 #endif
 };
 
-#ifdef SAL_W32
+#ifdef _WIN32
 #pragma pack(pop)
 #endif
 
 // the value of the maximal alignment
-static sal_Int32 nMaxAlignment = (sal_Int32)( reinterpret_cast<sal_Size>(&(reinterpret_cast<AlignSize_Impl *>(16))->dDouble) - 16);
+static const sal_Int32 nMaxAlignment = static_cast<sal_Int32>( reinterpret_cast<sal_Size>(&reinterpret_cast<AlignSize_Impl *>(16)->dDouble) - 16);
 
-static inline sal_Int32 adjustAlignment( sal_Int32 nRequestedAlignment )
+static sal_Int32 adjustAlignment( sal_Int32 nRequestedAlignment )
 {
     if( nRequestedAlignment > nMaxAlignment )
         nRequestedAlignment = nMaxAlignment;
@@ -82,7 +77,7 @@ static inline sal_Int32 adjustAlignment( sal_Int32 nRequestedAlignment )
 /**
  * Calculate the new size of the struktur.
  */
-static inline sal_Int32 newAlignedSize(
+static sal_Int32 newAlignedSize(
     sal_Int32 OldSize, sal_Int32 ElementSize, sal_Int32 NeededAlignment )
 {
     NeededAlignment = adjustAlignment( NeededAlignment );
@@ -96,7 +91,7 @@ namespace
 }
 
 // !for NOT REALLY WEAK TYPES only!
-static inline typelib_TypeDescriptionReference * igetTypeByName( rtl_uString * pTypeName )
+static typelib_TypeDescriptionReference * igetTypeByName( rtl_uString const * pTypeName )
 {
     typelib_TypeDescriptionReference * pRef = nullptr;
     ::typelib_typedescriptionreference_getByName( &pRef, pTypeName );
@@ -104,10 +99,7 @@ static inline typelib_TypeDescriptionReference * igetTypeByName( rtl_uString * p
     {
         return pRef;
     }
-    else
-    {
-        return nullptr;
-    }
+    return nullptr;
 }
 
 extern "C"
@@ -236,26 +228,26 @@ typelib_TypeDescriptionReference ** SAL_CALL typelib_static_type_getByTypeClass(
                     aParameters[0].pParamName = sParamName0.pData;
                     aParameters[0].eTypeClass = typelib_TypeClass_TYPE;
                     aParameters[0].pTypeName = sParamType0.pData;
-                    aParameters[0].bIn = sal_True;
-                    aParameters[0].bOut = sal_False;
+                    aParameters[0].bIn = true;
+                    aParameters[0].bOut = false;
                     rtl_uString * pExceptions[1];
                     OUString sExceptionName0("com.sun.star.uno.RuntimeException");
                     pExceptions[0] = sExceptionName0.pData;
                     OUString sReturnType0("any");
                     typelib_typedescription_newInterfaceMethod(
-                        &pMethod, 0, sal_False, sMethodName0.pData,
+                        &pMethod, 0, false, sMethodName0.pData,
                         typelib_TypeClass_ANY, sReturnType0.pData,
                         1, aParameters, 1, pExceptions );
                     ::typelib_typedescription_register( reinterpret_cast<typelib_TypeDescription**>(&pMethod) );
 
                     OUString sReturnType1("void");
                     ::typelib_typedescription_newInterfaceMethod(
-                        &pMethod, 1, sal_True, sMethodName1.pData,
+                        &pMethod, 1, true, sMethodName1.pData,
                         typelib_TypeClass_VOID, sReturnType1.pData, 0, nullptr, 0, nullptr );
                     ::typelib_typedescription_register( reinterpret_cast<typelib_TypeDescription**>(&pMethod) );
 
                     ::typelib_typedescription_newInterfaceMethod(
-                        &pMethod, 2, sal_True, sMethodName2.pData,
+                        &pMethod, 2, true, sMethodName2.pData,
                         typelib_TypeClass_VOID, sReturnType1.pData,
                         0, nullptr, 0, nullptr );
                     ::typelib_typedescription_register( reinterpret_cast<typelib_TypeDescription**>(&pMethod) );
@@ -289,7 +281,7 @@ void SAL_CALL typelib_static_type_init(
             OUString aTypeName( OUString::createFromAscii( pTypeName ) );
             ::typelib_typedescriptionreference_new( ppRef, eTypeClass, aTypeName.pData );
 
-            // coverity[var_deref_op] - another static ref
+            assert(*ppRef && "coverity[var_deref_op] - shouldn't be possible");
             ++((*ppRef)->nStaticRefCount);
         }
     }
@@ -400,7 +392,7 @@ void init(
                 // sizeof(void) not allowed
                 pReg->nSize = ::typelib_typedescription_getAlignedUnoSize( pReg, 0, pReg->nAlignment );
                 pReg->nAlignment = adjustAlignment( pReg->nAlignment );
-                pReg->bComplete = sal_False;
+                pReg->bComplete = false;
 
                 ::typelib_typedescription_register( &pReg );
                 *ppRef = reinterpret_cast<typelib_TypeDescriptionReference *>(pReg);
@@ -442,7 +434,7 @@ void SAL_CALL typelib_static_interface_type_init(
     typelib_TypeDescriptionReference * pBaseType )
     SAL_THROW_EXTERN_C()
 {
-    // coverity[callee_ptr_arith]
+    // coverity[callee_ptr_arith] - not a bug
     typelib_static_mi_interface_type_init(
         ppRef, pTypeName, pBaseType == nullptr ? 0 : 1, &pBaseType);
 }
@@ -498,7 +490,7 @@ void SAL_CALL typelib_static_mi_interface_type_init(
                 pReg->nSize = ::typelib_typedescription_getAlignedUnoSize( pReg, 0, pReg->nAlignment );
 
                 pReg->nAlignment = adjustAlignment( pReg->nAlignment );
-                pReg->bComplete = sal_False;
+                pReg->bComplete = false;
 
                 ::typelib_typedescription_register( &pReg );
                 *ppRef = reinterpret_cast<typelib_TypeDescriptionReference *>(pReg);
@@ -538,7 +530,7 @@ void SAL_CALL typelib_static_enum_type_init(
                 // sizeof(void) not allowed
                 pReg->nSize = ::typelib_typedescription_getAlignedUnoSize( pReg, 0, pReg->nAlignment );
                 pReg->nAlignment = ::adjustAlignment( pReg->nAlignment );
-                pReg->bComplete = sal_False;
+                pReg->bComplete = false;
 
                 ::typelib_typedescription_register( &pReg );
                 *ppRef = reinterpret_cast<typelib_TypeDescriptionReference *>(pReg);

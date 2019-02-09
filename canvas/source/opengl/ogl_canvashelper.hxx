@@ -58,10 +58,6 @@ namespace oglcanvas
         // XCanvas (only providing, not implementing the
         // interface. Also note subtle method parameter differences)
         void clear();
-        void drawPoint( const css::rendering::XCanvas*     pCanvas,
-                        const css::geometry::RealPoint2D&  aPoint,
-                        const css::rendering::ViewState&   viewState,
-                        const css::rendering::RenderState& renderState );
         void drawLine( const css::rendering::XCanvas*      pCanvas,
                        const css::geometry::RealPoint2D&   aStartPoint,
                        const css::geometry::RealPoint2D&   aEndPoint,
@@ -137,7 +133,7 @@ namespace oglcanvas
                                           const css::uno::Reference<
                                                 css::geometry::XMapping2D >&       xMapping );
 
-        css::uno::Reference< css::rendering::XCanvasFont > SAL_CALL
+        css::uno::Reference< css::rendering::XCanvasFont >
             createFont( const css::rendering::XCanvas*             pCanvas,
                         const css::rendering::FontRequest&         fontRequest,
                         const css::uno::Sequence<

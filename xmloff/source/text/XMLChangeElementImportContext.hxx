@@ -51,7 +51,7 @@ class XMLChangeElementImportContext : public SvXMLImportContext
      *
      * So if bAcceptContent is true, we are importing a <text:deletion> element
      */
-    bool bAcceptContent;
+    bool const bAcceptContent;
 
     /// context of enclosing <text:changed-region> element
     XMLChangedRegionImportContext& rChangedRegion;
@@ -68,7 +68,7 @@ public:
         /// context of enclosing <text:changed-region> element
         XMLChangedRegionImportContext& rParent);
 
-    virtual SvXMLImportContext* CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList) override;

@@ -17,14 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/helper/textinputstream.hxx"
+#include <oox/helper/textinputstream.hxx>
 
+#include <com/sun/star/io/NotConnectedException.hpp>
 #include <com/sun/star/io/XActiveDataSink.hpp>
 #include <com/sun/star/io/TextInputStream.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <osl/diagnose.h>
 #include <rtl/tencinfo.h>
-#include "oox/helper/binaryinputstream.hxx"
+#include <oox/helper/binaryinputstream.hxx>
 
 namespace oox {
 
@@ -34,28 +35,22 @@ using namespace ::com::sun::star::uno;
 
 namespace {
 
-typedef ::cppu::WeakImplHelper< XInputStream > UnoBinaryInputStream_BASE;
-
 /** Implementation of a UNO input stream wrapping a binary input stream.
  */
-class UnoBinaryInputStream : public UnoBinaryInputStream_BASE
+class UnoBinaryInputStream : public ::cppu::WeakImplHelper< XInputStream >
 {
 public:
     explicit            UnoBinaryInputStream( BinaryInputStream& rInStrm );
 
-    virtual sal_Int32 SAL_CALL readBytes( Sequence< sal_Int8 >& rData, sal_Int32 nBytesToRead )
-                        throw (NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception) override;
-    virtual sal_Int32 SAL_CALL readSomeBytes( Sequence< sal_Int8 >& rData, sal_Int32 nMaxBytesToRead )
-                        throw (NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception) override;
-    virtual void SAL_CALL skipBytes( sal_Int32 nBytesToSkip )
-                        throw (NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception) override;
-    virtual sal_Int32 SAL_CALL available()
-                        throw (NotConnectedException, IOException, RuntimeException, std::exception) override;
-    virtual void SAL_CALL closeInput()
-                        throw (NotConnectedException, IOException, RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL readBytes( Sequence< sal_Int8 >& rData, sal_Int32 nBytesToRead ) override;
+    virtual sal_Int32 SAL_CALL readSomeBytes( Sequence< sal_Int8 >& rData, sal_Int32 nMaxBytesToRead ) override;
+    virtual void SAL_CALL skipBytes( sal_Int32 nBytesToSkip ) override;
+    virtual sal_Int32 SAL_CALL available() override;
+    virtual void SAL_CALL closeInput() override;
 
 private:
-    void                ensureConnected() const throw (NotConnectedException);
+    /// @throws NotConnectedException
+    void                ensureConnected() const;
 
 private:
     BinaryInputStream*  mpInStrm;
@@ -67,40 +62,37 @@ UnoBinaryInputStream::UnoBinaryInputStream( BinaryInputStream& rInStrm ) :
 }
 
 sal_Int32 SAL_CALL UnoBinaryInputStream::readBytes( Sequence< sal_Int8 >& rData, sal_Int32 nBytesToRead )
-        throw (NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception)
 {
     ensureConnected();
     return mpInStrm->readData( rData, nBytesToRead );
 }
 
 sal_Int32 SAL_CALL UnoBinaryInputStream::readSomeBytes( Sequence< sal_Int8 >& rData, sal_Int32 nMaxBytesToRead )
-        throw (NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception)
 {
     ensureConnected();
     return mpInStrm->readData( rData, nMaxBytesToRead );
 }
 
 void SAL_CALL UnoBinaryInputStream::skipBytes( sal_Int32 nBytesToSkip )
-        throw (NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception)
 {
     ensureConnected();
     mpInStrm->skip( nBytesToSkip );
 }
 
-sal_Int32 SAL_CALL UnoBinaryInputStream::available() throw (NotConnectedException, IOException, RuntimeException, std::exception)
+sal_Int32 SAL_CALL UnoBinaryInputStream::available()
 {
     ensureConnected();
     throw RuntimeException( "Functionality not supported", Reference< XInputStream >() );
 }
 
-void SAL_CALL UnoBinaryInputStream::closeInput() throw (NotConnectedException, IOException, RuntimeException, std::exception)
+void SAL_CALL UnoBinaryInputStream::closeInput()
 {
     ensureConnected();
     mpInStrm->close();
     mpInStrm = nullptr;
 }
 
-void UnoBinaryInputStream::ensureConnected() const throw (NotConnectedException)
+void UnoBinaryInputStream::ensureConnected() const
 {
     if( !mpInStrm )
         throw NotConnectedException( "Stream closed" );
@@ -161,7 +153,7 @@ OUString TextInputStream::readToChar( sal_Unicode cChar, bool bIncludeChar )
             character in this call, it will be returned in the next call of one
             of the own member functions. The function createFinalString() adds
             a character that has been buffered in the previous call. */
-        OUString aString = createFinalString( mxTextStrm->readString( aDelimiters, sal_False ) );
+        OUString aString = createFinalString( mxTextStrm->readString( aDelimiters, false ) );
         // remove last character from string and remember it for next call
         if( !bIncludeChar && !aString.isEmpty() && (aString[ aString.getLength() - 1 ] == cChar) )
         {
@@ -202,7 +194,7 @@ OUString TextInputStream::createFinalString( const OUString& rString )
     if( mcPendingChar == 0 )
         return rString;
 
-    OUString aString = OUString( mcPendingChar ) + rString;
+    OUString aString = OUStringLiteral1( mcPendingChar ) + rString;
     mcPendingChar = 0;
     return aString;
 }

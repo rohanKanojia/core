@@ -49,7 +49,7 @@ private:
 /** Contains all view settings for a single sheet.
 
     Usage:
-    1)  When import filter starts reading a worksheet substream, inizialize an
+    1)  When import filter starts reading a worksheet substream, initialize an
         instance of this class with the Initialize() function. This will set
         all view options to Excel default values.
     2)  Read all view related records using the Read*() functions.
@@ -73,7 +73,7 @@ public:
     /** Reads a SELECTION record. */
     void                ReadSelection( XclImpStream& rStrm );
     /** Reads a SHEETEXT record (Tab Color). */
-    void                ReadTabBgColor( XclImpStream& rStrm, XclImpPalette& rPal );
+    void                ReadTabBgColor( XclImpStream& rStrm, const XclImpPalette& rPal );
     /** Sets the view settings at the current sheet or the extended sheet options object. */
     void                Finalize();
 

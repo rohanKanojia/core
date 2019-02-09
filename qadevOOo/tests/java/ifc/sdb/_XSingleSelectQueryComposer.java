@@ -147,7 +147,7 @@ public class _XSingleSelectQueryComposer extends MultiMethodTest {
         requiredMethod("setFilter()");
         try{
             xQueryAna.setQuery("SELECT \"Identifier\", \"Type\", \"Address\" FROM \"biblio\" \"biblio\"");
-            String complexFilter = "( \"Identifier\" = '1' AND \"Type\" = '4' ) OR ( \"Identifier\" = '2' AND \"Type\" = '5' ) OR ( \"Identifier\" = '3' AND \"Type\" = '6' AND \"Address\" = '7' ) OR ( \"Address\" = '8' ) OR ( \"Type\" = '9' )";
+            String complexFilter = "( \"Identifier\" >= '1' AND \"Type\" <= '4' ) OR ( \"Identifier\" <> '2' AND \"Type\" = '5' ) OR ( \"Identifier\" < '3' AND \"Type\" > '6' AND \"Address\" = '7' ) OR ( \"Address\" >= '8' ) OR ( \"Type\" = '9' )";
             oObj.setFilter(complexFilter);
             PropertyValue[][] aStructuredFilter = xQueryAna.getStructuredFilter();
             oObj.setFilter("");
@@ -304,7 +304,7 @@ public class _XSingleSelectQueryComposer extends MultiMethodTest {
     }
 
     /**
-    * The group which was setted by <code>setGroup</code> must be returned
+    * The group which was set by <code>setGroup</code> must be returned
     * while calling from object relation <code>XQueryAna</code>
     * method <code>getGroup</code>
     */
@@ -322,7 +322,7 @@ public class _XSingleSelectQueryComposer extends MultiMethodTest {
 
 
     /**
-    * The clause which was setted by <code>setHavingClause</code> must be returned
+    * The clause which was set by <code>setHavingClause</code> must be returned
     * while calling from object relation <code>XQueryAna</code>
     * method <code>getHavingClause</code>
     */
@@ -343,7 +343,7 @@ public class _XSingleSelectQueryComposer extends MultiMethodTest {
     * At first <code>setHavingClause</code> sets a complex clause.
     * Then method <code>getStructuredHavingClause</code> from object relation
     * <code>xQueryAna</code> returns a valid <code>PropertyValue[][]</code>
-    * Method <code>setHavingClause</code> was called with an empty sting to
+    * Method <code>setHavingClause</code> was called with an empty string to
     * reset filter. Now <code>setStructuredHavingClause</code> with the valid
     * <code>PropertyValue[][]</code> as parameter was called.
     * Test is ok if <code>getHavingClause</code> from <code>xQueryAna</code>
@@ -358,8 +358,7 @@ public class _XSingleSelectQueryComposer extends MultiMethodTest {
     public void _setStructuredHavingClause() {
         requiredMethod("setHavingClause()");
         executeMethod("setStructuredFilter()");
-        String complexFilter = "( \"Identifier\" = '1' AND \"Type\" = '4' ) OR ( \"Identifier\" = '2' AND \"Type\" = '5' ) OR ( \"Identifier\" = '3' AND \"Type\" = '6' AND \"Address\" = '7' ) OR ( \"Address\" = '8' ) OR ( \"Type\" = '9' )";
-
+        String complexFilter = "( \"Identifier\" >= '1' AND \"Type\" <= '4' ) OR ( \"Identifier\" <> '2' AND \"Type\" = '5' ) OR ( \"Identifier\" < '3' AND \"Type\" > '6' AND \"Address\" = '7' ) OR ( \"Address\" >= '8' ) OR ( \"Type\" = '9' )";
         try{
            oObj.setHavingClause(complexFilter);
            PropertyValue[][] aStructuredHaving =
@@ -503,7 +502,7 @@ public class _XSingleSelectQueryComposer extends MultiMethodTest {
 
     /**
     * Method <code>getOrder</code> from object relation <code>xQueryAna</code>
-    * checks the order which was setted while calling <code>setOrder</code>
+    * checks the order which was set while calling <code>setOrder</code>
     */
     public void _setOrder() {
         try{

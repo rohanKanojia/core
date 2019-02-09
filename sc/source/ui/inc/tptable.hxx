@@ -21,61 +21,64 @@
 #define INCLUDED_SC_SOURCE_UI_INC_TPTABLE_HXX
 
 #include <sfx2/tabdlg.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/lstbox.hxx>
-#include <vcl/field.hxx>
 
 class ScTablePage : public SfxTabPage
 {
     friend class VclPtr<ScTablePage>;
     static const sal_uInt16 pPageTableRanges[];
 public:
-    static  VclPtr<SfxTabPage> Create          ( vcl::Window*           pParent,
+    static  VclPtr<SfxTabPage> Create          ( TabPageParent pParent,
                                           const SfxItemSet* rCoreSet );
     static  const sal_uInt16* GetRanges () { return pPageTableRanges; }
     virtual bool        FillItemSet     ( SfxItemSet* rCoreSet ) override;
     virtual void        Reset           ( const SfxItemSet* rCoreSet ) override;
     using SfxTabPage::DeactivatePage;
-    virtual sfxpg       DeactivatePage  ( SfxItemSet* pSet = nullptr ) override;
+    virtual DeactivateRC   DeactivatePage  ( SfxItemSet* pSet ) override;
     virtual void        DataChanged     ( const DataChangedEvent& rDCEvt ) override;
 
-    virtual         ~ScTablePage();
-    virtual void    dispose() override;
+    virtual         ~ScTablePage() override;
 private:
-                    ScTablePage( vcl::Window* pParent, const SfxItemSet& rCoreSet );
+    ScTablePage(TabPageParent pParent, const SfxItemSet& rCoreSet);
     void            ShowImage();
 
 private:
-    VclPtr<RadioButton>     m_pBtnTopDown;
-    VclPtr<RadioButton>     m_pBtnLeftRight;
-    VclPtr<FixedImage>      m_pBmpPageDir;
-    VclPtr<CheckBox>        m_pBtnPageNo;
-    VclPtr<NumericField>    m_pEdPageNo;
+    sal_uInt16              m_nOrigScalePageWidth;
+    sal_uInt16              m_nOrigScalePageHeight;
 
-    VclPtr<CheckBox>        m_pBtnHeaders;
-    VclPtr<CheckBox>        m_pBtnGrid;
-    VclPtr<CheckBox>        m_pBtnNotes;
-    VclPtr<CheckBox>        m_pBtnObjects;
-    VclPtr<CheckBox>        m_pBtnCharts;
-    VclPtr<CheckBox>        m_pBtnDrawings;
-    VclPtr<CheckBox>        m_pBtnFormulas;
-    VclPtr<CheckBox>        m_pBtnNullVals;
+    std::unique_ptr<weld::RadioButton> m_xBtnTopDown;
+    std::unique_ptr<weld::RadioButton> m_xBtnLeftRight;
+    std::unique_ptr<weld::Image> m_xBmpPageDir;
+    std::unique_ptr<weld::CheckButton> m_xBtnPageNo;
+    std::unique_ptr<weld::SpinButton> m_xEdPageNo;
 
-    VclPtr<ListBox>             m_pLbScaleMode;
-    VclPtr<VclHBox>             m_pBxScaleAll;
-    VclPtr<MetricField>         m_pEdScaleAll;
-    VclPtr<VclGrid>             m_pGrHeightWidth;
-    VclPtr<NumericField>        m_pEdScalePageWidth;
-    VclPtr<NumericField>        m_pEdScalePageHeight;
-    VclPtr<VclHBox>             m_pBxScalePageNum;
-    VclPtr<NumericField>        m_pEdScalePageNum;
+    std::unique_ptr<weld::CheckButton> m_xBtnHeaders;
+    std::unique_ptr<weld::CheckButton> m_xBtnGrid;
+    std::unique_ptr<weld::CheckButton> m_xBtnNotes;
+    std::unique_ptr<weld::CheckButton> m_xBtnObjects;
+    std::unique_ptr<weld::CheckButton> m_xBtnCharts;
+    std::unique_ptr<weld::CheckButton> m_xBtnDrawings;
+    std::unique_ptr<weld::CheckButton> m_xBtnFormulas;
+    std::unique_ptr<weld::CheckButton> m_xBtnNullVals;
+
+    std::unique_ptr<weld::ComboBox> m_xLbScaleMode;
+    std::unique_ptr<weld::Widget> m_xBxScaleAll;
+    std::unique_ptr<weld::MetricSpinButton> m_xEdScaleAll;
+    std::unique_ptr<weld::Widget> m_xGrHeightWidth;
+    std::unique_ptr<weld::SpinButton> m_xEdScalePageWidth;
+    std::unique_ptr<weld::CheckButton> m_xCbScalePageWidth;
+    std::unique_ptr<weld::SpinButton> m_xEdScalePageHeight;
+    std::unique_ptr<weld::CheckButton> m_xCbScalePageHeight;
+    std::unique_ptr<weld::Widget> m_xBxScalePageNum;
+    std::unique_ptr<weld::SpinButton> m_xEdScalePageNum;
 
 private:
 
     // Handler:
-    DECL_LINK_TYPED(PageDirHdl, Button*, void);
-    DECL_LINK_TYPED( PageNoHdl, Button*, void );
-    DECL_LINK_TYPED(ScaleHdl, ListBox&, void);
+    DECL_LINK(PageDirHdl, weld::ToggleButton&, void);
+    DECL_LINK(PageNoHdl, weld::ToggleButton&, void);
+    void PageNoHdl(const weld::ToggleButton* pBtn);
+    DECL_LINK(ScaleHdl, weld::ComboBox&, void);
+    DECL_LINK(ToggleHdl, weld::ToggleButton&, void);
 };
 
 #endif // INCLUDED_SC_SOURCE_UI_INC_TPTABLE_HXX

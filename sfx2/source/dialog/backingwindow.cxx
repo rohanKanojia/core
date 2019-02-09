@@ -20,24 +20,28 @@
 #include "backingwindow.hxx"
 #include <sfx2/inputdlg.hxx>
 
+#include <sal/log.hxx>
+#include <vcl/accel.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/virdev.hxx>
+#include <vcl/fixed.hxx>
 
 #include <unotools/dynamicmenuoptions.hxx>
+#include <unotools/historyoptions.hxx>
+#include <unotools/moduleoptions.hxx>
 #include <svtools/openfiledroptargetlistener.hxx>
 #include <svtools/colorcfg.hxx>
 #include <svtools/langhelp.hxx>
 #include <sfx2/filedlghelper.hxx>
-#include <sfx2/sfxresid.hxx>
 #include <sfx2/templatecontaineritem.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/toolbox.hxx>
 
 #include <vcl/menubtn.hxx>
 
 #include <comphelper/processfactory.hxx>
 #include <comphelper/sequenceashashmap.hxx>
+#include <comphelper/propertysequence.hxx>
 
 #include <toolkit/awt/vclxmenu.hxx>
 
@@ -64,33 +68,15 @@ using namespace ::com::sun::star::document;
 const char SERVICENAME_CFGREADACCESS[] = "com.sun.star.configuration.ConfigurationAccess";
 
 // increase size of the text in the buttons on the left fMultiplier-times
-float fMultiplier = 1.4f;
-
-/***
- *
- * Order items in ascending order (useful for the selection sets and move/copy operations since the associated ids
- * change when processed by the SfxDocumentTemplates class so we want to process to ones with higher id first)
- *
- ***/
-
-static bool cmpSelectionItems (const ThumbnailViewItem *pItem1, const ThumbnailViewItem *pItem2)
-{
-    return pItem1->mnId > pItem2->mnId;
-}
-
+float const fMultiplier = 1.4f;
 
 BackingWindow::BackingWindow( vcl::Window* i_pParent ) :
     Window( i_pParent ),
     mbLocalViewInitialized(false),
-    maButtonsTextColor(officecfg::Office::Common::Help::StartCenter::StartCenterTextColor::get()),
-    mbIsSaveMode( false ),
-    mbInitControls( false ),
-    mnHideExternalLinks( 0 ),
-    maSelTemplates(cmpSelectionItems),
-    maSelFolders(cmpSelectionItems)
-
+    maButtonsTextColor(Color(officecfg::Office::Common::Help::StartCenter::StartCenterTextColor::get())),
+    mbInitControls( false )
 {
-    m_pUIBuilder = new VclBuilder(this, getUIRootDir(), "sfx/ui/startcenter.ui", "StartCenter" );
+    m_pUIBuilder.reset(new VclBuilder(this, getUIRootDir(), "sfx/ui/startcenter.ui", "StartCenter" ));
 
     get(mpOpenButton, "open_all");
     get(mpRemoteButton, "open_remote");
@@ -138,30 +124,15 @@ BackingWindow::BackingWindow( vcl::Window* i_pParent ) :
     get(mpAllRecentThumbnails, "all_recent");
     get(mpLocalView, "local_view");
 
-    maDndWindows.push_back(mpAllRecentThumbnails);
+    maDndWindows.emplace_back(mpAllRecentThumbnails);
 
     try
     {
         mxContext.set( ::comphelper::getProcessComponentContext(), uno::UNO_SET_THROW );
-        Reference<lang::XMultiServiceFactory> xConfig = configuration::theDefaultProvider::get( mxContext );
-        Sequence<Any> args(1);
-        PropertyValue val(
-            "nodepath",
-            0,
-            Any(OUString("/org.openoffice.Office.Common/Help/StartCenter")),
-            PropertyState_DIRECT_VALUE);
-        args.getArray()[0] <<= val;
-        Reference<container::XNameAccess> xNameAccess(xConfig->createInstanceWithArguments(SERVICENAME_CFGREADACCESS,args), UNO_QUERY);
-        if( xNameAccess.is() )
-        {
-            //throws css::container::NoSuchElementException, css::lang::WrappedTargetException
-            Any value( xNameAccess->getByName("StartCenterHideExternalLinks") );
-            mnHideExternalLinks = value.get<sal_Int32>();
-        }
     }
     catch (const Exception& e)
     {
-        SAL_WARN( "fwk", "BackingWindow - caught an exception! " << e.Message );
+        SAL_WARN( "fwk", "BackingWindow - caught an exception! " << e );
     }
 
     // fdo#34392: we do the layout dynamically, the layout depends on the font,
@@ -180,7 +151,6 @@ BackingWindow::BackingWindow( vcl::Window* i_pParent ) :
     SetBackground();
 }
 
-
 BackingWindow::~BackingWindow()
 {
     disposeOnce();
@@ -191,9 +161,8 @@ void BackingWindow::dispose()
     // deregister drag&drop helper
     if (mxDropTargetListener.is())
     {
-        for (auto aI = maDndWindows.begin(), aEnd = maDndWindows.end(); aI != aEnd; ++aI)
+        for (auto const & pDndWin : maDndWindows)
         {
-            vcl::Window *pDndWin = *aI;
             css::uno::Reference< css::datatransfer::dnd::XDropTarget > xDropTarget =
                     pDndWin->GetDropTarget();
             if (xDropTarget.is())
@@ -205,6 +174,7 @@ void BackingWindow::dispose()
         mxDropTargetListener.clear();
     }
     disposeBuilder();
+    maDndWindows.clear();
     mpOpenButton.clear();
     mpRemoteButton.clear();
     mpRecentButton.clear();
@@ -237,50 +207,54 @@ void BackingWindow::initControls()
     SvtModuleOptions    aModuleOptions;
     std::set< OUString > aFileNewAppsAvailable;
     SvtDynamicMenuOptions aOpt;
-    Sequence < Sequence < PropertyValue > > aNewMenu = aOpt.GetMenu( E_NEWMENU );
+    Sequence < Sequence < PropertyValue > > aNewMenu = aOpt.GetMenu( EDynamicMenuType::NewMenu );
     const OUString sURLKey( "URL"  );
 
-    const Sequence< PropertyValue >* pNewMenu = aNewMenu.getConstArray();
-    const Sequence< PropertyValue >* pNewMenuEnd = aNewMenu.getConstArray() + aNewMenu.getLength();
-    for ( ; pNewMenu != pNewMenuEnd; ++pNewMenu )
+    for ( auto const & newMenuProp : aNewMenu )
     {
-        comphelper::SequenceAsHashMap aEntryItems( *pNewMenu );
+        comphelper::SequenceAsHashMap aEntryItems( newMenuProp );
         OUString sURL( aEntryItems.getUnpackedValueOrDefault( sURLKey, OUString() ) );
         if ( !sURL.isEmpty() )
             aFileNewAppsAvailable.insert( sURL );
     }
 
     if (aModuleOptions.IsModuleInstalled(SvtModuleOptions::EModule::WRITER))
-        mpAllRecentThumbnails->mnFileTypes |= TYPE_WRITER;
+        mpAllRecentThumbnails->mnFileTypes |= sfx2::ApplicationType::TYPE_WRITER;
 
     if (aModuleOptions.IsModuleInstalled(SvtModuleOptions::EModule::CALC))
-        mpAllRecentThumbnails->mnFileTypes |= TYPE_CALC;
+        mpAllRecentThumbnails->mnFileTypes |= sfx2::ApplicationType::TYPE_CALC;
 
     if (aModuleOptions.IsModuleInstalled(SvtModuleOptions::EModule::IMPRESS))
-        mpAllRecentThumbnails->mnFileTypes |= TYPE_IMPRESS;
+        mpAllRecentThumbnails->mnFileTypes |= sfx2::ApplicationType::TYPE_IMPRESS;
 
     if (aModuleOptions.IsModuleInstalled(SvtModuleOptions::EModule::DRAW))
-        mpAllRecentThumbnails->mnFileTypes |= TYPE_DRAW;
+        mpAllRecentThumbnails->mnFileTypes |= sfx2::ApplicationType::TYPE_DRAW;
 
     if (aModuleOptions.IsModuleInstalled(SvtModuleOptions::EModule::DATABASE))
-        mpAllRecentThumbnails->mnFileTypes |= TYPE_DATABASE;
+        mpAllRecentThumbnails->mnFileTypes |= sfx2::ApplicationType::TYPE_DATABASE;
 
     if (aModuleOptions.IsModuleInstalled(SvtModuleOptions::EModule::MATH))
-        mpAllRecentThumbnails->mnFileTypes |= TYPE_MATH;
+        mpAllRecentThumbnails->mnFileTypes |= sfx2::ApplicationType::TYPE_MATH;
 
-    mpAllRecentThumbnails->mnFileTypes |= TYPE_OTHER;
+    mpAllRecentThumbnails->mnFileTypes |= sfx2::ApplicationType::TYPE_OTHER;
     mpAllRecentThumbnails->Reload();
     mpAllRecentThumbnails->ShowTooltips( true );
+    mpRecentButton->SetActive(true);
 
     //initialize Template view
     mpLocalView->SetStyle( mpLocalView->GetStyle() | WB_VSCROLL);
     mpLocalView->Hide();
 
-    mpTemplateButton->SetMenuMode( MENUBUTTON_MENUMODE_TIMED );
+    mpTemplateButton->SetDelayMenu(true);
+    mpTemplateButton->SetDropDown(PushButtonDropdownStyle::SplitMenuButton);
+    mpRecentButton->SetDelayMenu(true);
+    mpRecentButton->SetDropDown(PushButtonDropdownStyle::SplitMenuButton);
 
     //set handlers
-    mpLocalView->setOpenRegionHdl(LINK(this, BackingWindow, OpenRegionHdl));
-    mpLocalView->setOpenTemplateHdl(LINK(this,BackingWindow,OpenTemplateHdl));
+    mpLocalView->setCreateContextMenuHdl(LINK(this, BackingWindow, CreateContextMenuHdl));
+    mpLocalView->setOpenTemplateHdl(LINK(this, BackingWindow, OpenTemplateHdl));
+    mpLocalView->setEditTemplateHdl(LINK(this, BackingWindow, EditTemplateHdl));
+    mpLocalView->ShowTooltips( true );
 
     setupButton( mpOpenButton );
     setupButton( mpRemoteButton );
@@ -293,6 +267,8 @@ void BackingWindow::initControls()
     setupButton( mpImpressAllButton );
     setupButton( mpMathAllButton );
 
+    checkInstalledModules();
+
     mpExtensionsButton->SetClickHdl(LINK(this, BackingWindow, ExtLinkClickHdl));
 
     // setup nice colors
@@ -304,7 +280,7 @@ void BackingWindow::initControls()
     mpHelpButton->SetControlForeground(maButtonsTextColor);
     mpExtensionsButton->SetControlForeground(maButtonsTextColor);
 
-    const Color aButtonsBackground(officecfg::Office::Common::Help::StartCenter::StartCenterBackgroundColor::get());
+    const Color aButtonsBackground = Color(officecfg::Office::Common::Help::StartCenter::StartCenterBackgroundColor::get());
 
     mpAllButtonsBox->SetBackground(aButtonsBackground);
     mpSmallButtonsBox->SetBackground(aButtonsBackground);
@@ -338,8 +314,8 @@ void BackingWindow::initializeLocalView()
     {
         mbLocalViewInitialized = true;
         mpLocalView->Populate();
-        mpLocalView->showRootRegion();
         mpLocalView->filterItems(ViewFilter_Application(FILTER_APPLICATION::NONE));
+        mpLocalView->showAllTemplates();
     }
 }
 
@@ -355,7 +331,7 @@ void BackingWindow::setupButton( PushButton* pButton )
     pButton->SetClickHdl( LINK( this, BackingWindow, ClickHdl ) );
 }
 
-void BackingWindow::setupButton( MenuButton* pButton )
+void BackingWindow::setupButton( MenuToggleButton* pButton )
 {
     vcl::Font aFont(pButton->GetSettings().GetStyleSettings().GetPushButtonFont());
     aFont.SetFontSize(Size(0, aFont.GetFontSize().Height() * fMultiplier));
@@ -371,32 +347,49 @@ void BackingWindow::setupButton( MenuButton* pButton )
     pButton->SetSelectHdl(LINK(this, BackingWindow, MenuSelectHdl));
 }
 
-void BackingWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle&)
+void BackingWindow::checkInstalledModules()
+{
+    SvtModuleOptions aModuleOpt;
+
+    mpWriterAllButton->Enable( aModuleOpt.IsModuleInstalled( SvtModuleOptions::EModule::WRITER ));
+
+    mpCalcAllButton->Enable( aModuleOpt.IsModuleInstalled( SvtModuleOptions::EModule::CALC ) );
+
+    mpImpressAllButton->Enable( aModuleOpt.IsModuleInstalled( SvtModuleOptions::EModule::IMPRESS ) );
+
+    mpDrawAllButton->Enable( aModuleOpt.IsModuleInstalled( SvtModuleOptions::EModule::DRAW ) );
+
+    mpMathAllButton->Enable(aModuleOpt.IsModuleInstalled( SvtModuleOptions::EModule::MATH ));
+
+    mpDBAllButton->Enable(aModuleOpt.IsModuleInstalled( SvtModuleOptions::EModule::DATABASE ));
+}
+
+void BackingWindow::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&)
 {
     Resize();
 
     Wallpaper aBack(svtools::ColorConfig().GetColorValue(::svtools::APPBACKGROUND).nColor);
-    vcl::Region aClip(Rectangle(Point(0, 0), GetOutputSizePixel()));
+    vcl::Region aClip(tools::Rectangle(Point(0, 0), GetOutputSizePixel()));
 
     aClip.Exclude(maStartCentButtons);
 
     rRenderContext.Push(PushFlags::CLIPREGION);
     rRenderContext.IntersectClipRegion(aClip);
-    rRenderContext.DrawWallpaper(Rectangle(Point(0, 0), GetOutputSizePixel()), aBack);
+    rRenderContext.DrawWallpaper(tools::Rectangle(Point(0, 0), GetOutputSizePixel()), aBack);
     rRenderContext.Pop();
 
     ScopedVclPtrInstance<VirtualDevice> pVDev(rRenderContext);
     pVDev->EnableRTL(rRenderContext.IsRTLEnabled());
     pVDev->SetOutputSizePixel(maStartCentButtons.GetSize());
     Point aOffset(Point(0, 0) - maStartCentButtons.TopLeft());
-    pVDev->DrawWallpaper(Rectangle(aOffset, GetOutputSizePixel()), aBack);
+    pVDev->DrawWallpaper(tools::Rectangle(aOffset, GetOutputSizePixel()), aBack);
 
     rRenderContext.DrawOutDev(maStartCentButtons.TopLeft(), maStartCentButtons.GetSize(),
                               Point(0, 0), maStartCentButtons.GetSize(),
-                              *pVDev.get());
+                              *pVDev);
 }
 
-bool BackingWindow::PreNotify( NotifyEvent& rNEvt )
+bool BackingWindow::PreNotify(NotifyEvent& rNEvt)
 {
     if( rNEvt.GetType() == MouseNotifyEvent::KEYINPUT )
     {
@@ -408,7 +401,7 @@ bool BackingWindow::PreNotify( NotifyEvent& rNEvt )
         {
             if( rKeyCode.IsShift() ) // Shift + F6
             {
-                if( mpAllRecentThumbnails->HasFocus() )
+                if( mpAllRecentThumbnails->HasFocus() || mpLocalView->HasFocus())
                 {
                     mpOpenButton->GrabFocus();
                     return true;
@@ -416,14 +409,27 @@ bool BackingWindow::PreNotify( NotifyEvent& rNEvt )
             }
             else if ( rKeyCode.IsMod1() ) // Ctrl + F6
             {
-                mpAllRecentThumbnails->GrabFocus();
-                return true;
+                if(mpAllRecentThumbnails->IsVisible())
+                {
+                    mpAllRecentThumbnails->GrabFocus();
+                    return true;
+                }
+                else if(mpLocalView->IsVisible())
+                {
+                    mpLocalView->GrabFocus();
+                    return true;
+                }
             }
             else // F6
             {
-                if( mpAllButtonsBox->HasChildPathFocus() )
+                if(mpAllRecentThumbnails->IsVisible())
                 {
                     mpAllRecentThumbnails->GrabFocus();
+                    return true;
+                }
+                else if(mpLocalView->IsVisible())
+                {
+                    mpLocalView->GrabFocus();
                     return true;
                 }
             }
@@ -439,6 +445,10 @@ bool BackingWindow::PreNotify( NotifyEvent& rNEvt )
         const OUString aCommand = mpAccExec->findCommand(svt::AcceleratorExecute::st_VCLKey2AWTKey(rKeyCode));
         if ((aCommand != "vnd.sun.star.findbar:FocusToFindbar") && pEvt && mpAccExec->execute(rKeyCode))
             return true;
+    }
+    else if (rNEvt.GetType() == MouseNotifyEvent::COMMAND)
+    {
+        Accelerator::ToggleMnemonicsOnHierarchy(*rNEvt.GetCommandEvent(), this);
     }
 
     return Window::PreNotify( rNEvt );
@@ -472,9 +482,8 @@ void BackingWindow::setOwningFrame( const css::uno::Reference< css::frame::XFram
     // establish drag&drop mode
     mxDropTargetListener.set(new OpenFileDropTargetListener(mxContext, mxFrame));
 
-    for (auto aI = maDndWindows.begin(), aEnd = maDndWindows.end(); aI != aEnd; ++aI)
+    for (auto const & pDndWin : maDndWindows)
     {
-        vcl::Window *pDndWin = *aI;
         css::uno::Reference< css::datatransfer::dnd::XDropTarget > xDropTarget =
             pDndWin->GetDropTarget();
         if (xDropTarget.is())
@@ -487,7 +496,7 @@ void BackingWindow::setOwningFrame( const css::uno::Reference< css::frame::XFram
 
 void BackingWindow::Resize()
 {
-    maStartCentButtons = Rectangle( Point(0, 0), GetOutputSizePixel() );
+    maStartCentButtons = tools::Rectangle( Point(0, 0), GetOutputSizePixel() );
 
     if (isLayoutEnabled(this))
         VclContainer::setLayoutAllocation(*GetWindow(GetWindowType::FirstChild),
@@ -497,46 +506,47 @@ void BackingWindow::Resize()
         Invalidate();
 }
 
-IMPL_LINK_TYPED(BackingWindow, ExtLinkClickHdl, Button*, pButton, void)
+IMPL_LINK(BackingWindow, ExtLinkClickHdl, Button*, pButton, void)
 {
     OUString aNode;
 
     if (pButton == mpExtensionsButton)
         aNode = "AddFeatureURL";
 
-    if (!aNode.isEmpty())
+    if (aNode.isEmpty())
+        return;
+
+    try
     {
-        try
+        uno::Sequence<uno::Any> args(comphelper::InitAnyPropertySequence(
         {
-            Sequence<Any> args(1);
-            PropertyValue val("nodepath", 0, Any(OUString("/org.openoffice.Office.Common/Help/StartCenter")), PropertyState_DIRECT_VALUE);
-            args.getArray()[0] <<= val;
+            {"nodepath", uno::Any(OUString("/org.openoffice.Office.Common/Help/StartCenter"))}
+        }));
 
-            Reference<lang::XMultiServiceFactory> xConfig = configuration::theDefaultProvider::get( comphelper::getProcessComponentContext() );
-            Reference<container::XNameAccess> xNameAccess(xConfig->createInstanceWithArguments(SERVICENAME_CFGREADACCESS, args), UNO_QUERY);
-            if (xNameAccess.is())
-            {
-                OUString sURL;
-                Any value(xNameAccess->getByName(aNode));
-
-                sURL = value.get<OUString>();
-                localizeWebserviceURI(sURL);
-
-                Reference<css::system::XSystemShellExecute> const
-                    xSystemShellExecute(
-                        css::system::SystemShellExecute::create(
-                            ::comphelper::getProcessComponentContext()));
-                xSystemShellExecute->execute(sURL, OUString(),
-                    css::system::SystemShellExecuteFlags::URIS_ONLY);
-            }
-        }
-        catch (const Exception&)
+        Reference<lang::XMultiServiceFactory> xConfig = configuration::theDefaultProvider::get( comphelper::getProcessComponentContext() );
+        Reference<container::XNameAccess> xNameAccess(xConfig->createInstanceWithArguments(SERVICENAME_CFGREADACCESS, args), UNO_QUERY);
+        if (xNameAccess.is())
         {
+            OUString sURL;
+            Any value(xNameAccess->getByName(aNode));
+
+            sURL = value.get<OUString>();
+            localizeWebserviceURI(sURL);
+
+            Reference<css::system::XSystemShellExecute> const
+                xSystemShellExecute(
+                    css::system::SystemShellExecute::create(
+                        ::comphelper::getProcessComponentContext()));
+            xSystemShellExecute->execute(sURL, OUString(),
+                css::system::SystemShellExecuteFlags::URIS_ONLY);
         }
+    }
+    catch (const Exception&)
+    {
     }
 }
 
-IMPL_LINK_TYPED( BackingWindow, ClickHdl, Button*, pButton, void )
+IMPL_LINK( BackingWindow, ClickHdl, Button*, pButton, void )
 {
     // dispatch the appropriate URL and end the dialog
     if( pButton == mpWriterAllButton )
@@ -575,6 +585,9 @@ IMPL_LINK_TYPED( BackingWindow, ClickHdl, Button*, pButton, void )
         mpLocalView->Hide();
         mpAllRecentThumbnails->Show();
         mpAllRecentThumbnails->GrabFocus();
+        mpRecentButton->SetActive(true);
+        mpTemplateButton->SetActive(false);
+        mpTemplateButton->Invalidate();
     }
     else if( pButton == mpTemplateButton )
     {
@@ -584,90 +597,126 @@ IMPL_LINK_TYPED( BackingWindow, ClickHdl, Button*, pButton, void )
         mpLocalView->Show();
         mpLocalView->reload();
         mpLocalView->GrabFocus();
+        mpRecentButton->SetActive(false);
+        mpRecentButton->Invalidate();
+        mpTemplateButton->SetActive(true);
     }
 }
 
-IMPL_LINK_TYPED( BackingWindow, MenuSelectHdl, MenuButton*, pButton, void )
+IMPL_LINK( BackingWindow, MenuSelectHdl, MenuButton*, pButton, void )
 {
-    initializeLocalView();
-
-    OString sId = pButton->GetCurItemIdent();
-
-    if( sId == "filter_writer" )
+    if(pButton == mpRecentButton)
     {
-        mpLocalView->filterItems(ViewFilter_Application(FILTER_APPLICATION::WRITER));
+        SvtHistoryOptions().Clear(ePICKLIST);
+        mpAllRecentThumbnails->Reload();
+        return;
     }
-    else if( sId == "filter_calc" )
+    else if(pButton == mpTemplateButton)
     {
-        mpLocalView->filterItems(ViewFilter_Application(FILTER_APPLICATION::CALC));
-    }
-    else if( sId == "filter_impress" )
-    {
-        mpLocalView->filterItems(ViewFilter_Application(FILTER_APPLICATION::IMPRESS));
-    }
-    else if( sId == "filter_draw" )
-    {
-        mpLocalView->filterItems(ViewFilter_Application(FILTER_APPLICATION::DRAW));
-    }
-    else if( sId == "edit" )
-    {
-        Reference< XDispatchProvider > xFrame( mxFrame, UNO_QUERY );
+        initializeLocalView();
 
-        Sequence< css::beans::PropertyValue > aArgs(1);
-        PropertyValue* pArg = aArgs.getArray();
-        pArg[0].Name = "Referer";
-        pArg[0].Value <<= OUString("private:user");
+        OString sId = pButton->GetCurItemIdent();
 
-        dispatchURL( ".uno:NewDoc", OUString(), xFrame, aArgs );
-
-    }
-
-    mpAllRecentThumbnails->Hide();
-    mpLocalView->Show();
-    mpLocalView->reload();
-    mpLocalView->GrabFocus();
-}
-
-
-IMPL_LINK_NOARG_TYPED( BackingWindow, OpenRegionHdl, void*, void)
-{
-    maSelFolders.clear();
-    maSelTemplates.clear();
-}
-
-IMPL_LINK_TYPED(BackingWindow, OpenTemplateHdl, ThumbnailViewItem*, pItem, void)
-{
-    if (!mbIsSaveMode)
-    {
-        uno::Sequence< PropertyValue > aArgs(4);
-        aArgs[0].Name = "AsTemplate";
-        aArgs[0].Value <<= sal_True;
-        aArgs[1].Name = "MacroExecutionMode";
-        aArgs[1].Value <<= MacroExecMode::USE_CONFIG;
-        aArgs[2].Name = "UpdateDocMode";
-        aArgs[2].Value <<= UpdateDocMode::ACCORDING_TO_CONFIG;
-        aArgs[3].Name = "InteractionHandler";
-        aArgs[3].Value <<= task::InteractionHandler::createWithParent( ::comphelper::getProcessComponentContext(), nullptr );
-
-        TemplateViewItem *pTemplateItem = static_cast<TemplateViewItem*>(pItem);
-
-        Reference< XDispatchProvider > xFrame( mxFrame, UNO_QUERY );
-
-        try
+        if( sId == "filter_writer" )
         {
-            dispatchURL( pTemplateItem->getPath(), "_default", xFrame, aArgs );
+            mpLocalView->filterItems(ViewFilter_Application(FILTER_APPLICATION::WRITER));
         }
-        catch( const uno::Exception& )
+        else if( sId == "filter_calc" )
         {
+            mpLocalView->filterItems(ViewFilter_Application(FILTER_APPLICATION::CALC));
         }
+        else if( sId == "filter_impress" )
+        {
+            mpLocalView->filterItems(ViewFilter_Application(FILTER_APPLICATION::IMPRESS));
+        }
+        else if( sId == "filter_draw" )
+        {
+            mpLocalView->filterItems(ViewFilter_Application(FILTER_APPLICATION::DRAW));
+        }
+        else if( sId == "manage" )
+        {
+            Reference< XDispatchProvider > xFrame( mxFrame, UNO_QUERY );
+
+            Sequence< css::beans::PropertyValue > aArgs(1);
+            PropertyValue* pArg = aArgs.getArray();
+            pArg[0].Name = "Referer";
+            pArg[0].Value <<= OUString("private:user");
+
+            dispatchURL( ".uno:NewDoc", OUString(), xFrame, aArgs );
+            return;
+        }
+
+        mpAllRecentThumbnails->Hide();
+        mpLocalView->Show();
+        mpLocalView->reload();
+        mpLocalView->GrabFocus();
+        mpRecentButton->SetActive(false);
+        mpTemplateButton->SetActive(true);
+        mpRecentButton->Invalidate();
+    }
+}
+
+IMPL_LINK(BackingWindow, CreateContextMenuHdl, ThumbnailViewItem*, pItem, void)
+{
+    const TemplateViewItem *pViewItem = dynamic_cast<TemplateViewItem*>(pItem);
+
+    if (pViewItem)
+        mpLocalView->createContextMenu();
+}
+
+IMPL_LINK(BackingWindow, OpenTemplateHdl, ThumbnailViewItem*, pItem, void)
+{
+    uno::Sequence< PropertyValue > aArgs(4);
+    aArgs[0].Name = "AsTemplate";
+    aArgs[0].Value <<= true;
+    aArgs[1].Name = "MacroExecutionMode";
+    aArgs[1].Value <<= MacroExecMode::USE_CONFIG;
+    aArgs[2].Name = "UpdateDocMode";
+    aArgs[2].Value <<= UpdateDocMode::ACCORDING_TO_CONFIG;
+    aArgs[3].Name = "InteractionHandler";
+    aArgs[3].Value <<= task::InteractionHandler::createWithParent( ::comphelper::getProcessComponentContext(), nullptr );
+
+    TemplateViewItem *pTemplateItem = static_cast<TemplateViewItem*>(pItem);
+
+    Reference< XDispatchProvider > xFrame( mxFrame, UNO_QUERY );
+
+    try
+    {
+        dispatchURL( pTemplateItem->getPath(), "_default", xFrame, aArgs );
+    }
+    catch( const uno::Exception& )
+    {
+    }
+}
+
+IMPL_LINK(BackingWindow, EditTemplateHdl, ThumbnailViewItem*, pItem, void)
+{
+    uno::Sequence< PropertyValue > aArgs(3);
+    aArgs[0].Name = "AsTemplate";
+    aArgs[0].Value <<= false;
+    aArgs[1].Name = "MacroExecutionMode";
+    aArgs[1].Value <<= MacroExecMode::USE_CONFIG;
+    aArgs[2].Name = "UpdateDocMode";
+    aArgs[2].Value <<= UpdateDocMode::ACCORDING_TO_CONFIG;
+
+    TemplateViewItem *pViewItem = static_cast<TemplateViewItem*>(pItem);
+
+    Reference< XDispatchProvider > xFrame( mxFrame, UNO_QUERY );
+
+    try
+    {
+        dispatchURL( pViewItem->getPath(), "_default", xFrame, aArgs );
+    }
+    catch( const uno::Exception& )
+    {
     }
 }
 
 struct ImplDelayedDispatch
 {
     Reference< XDispatch >      xDispatch;
-    css::util::URL   aDispatchURL;
-    Sequence< PropertyValue >   aArgs;
+    css::util::URL const   aDispatchURL;
+    Sequence< PropertyValue > const   aArgs;
 
     ImplDelayedDispatch( const Reference< XDispatch >& i_xDispatch,
                          const css::util::URL& i_rURL,
@@ -677,7 +726,6 @@ struct ImplDelayedDispatch
       aArgs( i_rArgs )
     {
     }
-    ~ImplDelayedDispatch() {}
 };
 
 static void implDispatchDelayed( void*, void* pArg )
@@ -724,9 +772,9 @@ void BackingWindow::dispatchURL( const OUString& i_rURL,
         // dispatch the URL
         if ( xDispatch.is() )
         {
-            ImplDelayedDispatch* pDisp = new ImplDelayedDispatch( xDispatch, aDispatchURL, i_rArgs );
-            if( Application::PostUserEvent( Link<void*,void>( nullptr, implDispatchDelayed ), pDisp ) == nullptr )
-                delete pDisp; // event could not be posted for unknown reason, at least don't leak
+            std::unique_ptr<ImplDelayedDispatch> pDisp(new ImplDelayedDispatch( xDispatch, aDispatchURL, i_rArgs ));
+            if( Application::PostUserEvent( Link<void*,void>( nullptr, implDispatchDelayed ), pDisp.get() ) )
+                pDisp.release();
         }
     }
     catch (const css::uno::RuntimeException&)

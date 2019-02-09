@@ -24,9 +24,11 @@
 #include <boost/optional.hpp>
 #include <oox/drawingml/color.hxx>
 #include <drawingml/textfont.hxx>
-#include <oox/drawingml/fillproperties.hxx>
-#include <oox/drawingml/lineproperties.hxx>
 #include <oox/drawingml/shape.hxx>
+
+#include <drawingml/fillproperties.hxx>
+#include <drawingml/lineproperties.hxx>
+
 #include <map>
 
 namespace oox { namespace drawingml { namespace table {
@@ -36,7 +38,6 @@ class TableStylePart
 public:
 
     TableStylePart();
-    ~TableStylePart();
 
     ::oox::drawingml::Color&            getTextColor(){ return maTextColor; }
     ::boost::optional< bool >&          getTextBoldStyle(){ return maTextBoldStyle; }

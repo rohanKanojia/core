@@ -20,7 +20,7 @@
 #ifndef INCLUDED_DESKTOP_SOURCE_DEPLOYMENT_MANAGER_DP_ACTIVEPACKAGES_HXX
 #define INCLUDED_DESKTOP_SOURCE_DEPLOYMENT_MANAGER_DP_ACTIVEPACKAGES_HXX
 
-#include <config_features.h>
+#include <config_extensions.h>
 
 #include <sal/config.h>
 
@@ -28,7 +28,7 @@
 #include <vector>
 
 #if HAVE_FEATURE_EXTENSIONS
-#include "dp_persmap.h"
+#include <dp_persmap.h>
 #endif
 
 
@@ -47,7 +47,7 @@ public:
         OUString temporaryName;
         /* The file name (shared, user) or the folder name (bundled)
            If the key is the file name, then file name is not encoded.
-           If the key is the idendifier then the file name is UTF-8 encoded.
+           If the key is the identifier then the file name is UTF-8 encoded.
          */
         OUString fileName;
         OUString mediaType;
@@ -61,7 +61,7 @@ public:
         OUString failedPrerequisites;
     };
 
-    typedef ::std::vector< ::std::pair< OUString, Data > > Entries;
+    typedef std::vector< std::pair< OUString, Data > > Entries;
 
     ActivePackages();
 
@@ -83,8 +83,8 @@ public:
     void erase(OUString const & id, OUString const & fileName);
 
 private:
-    ActivePackages(ActivePackages &) = delete;
-    void operator =(ActivePackages &) = delete;
+    ActivePackages(ActivePackages const &) = delete;
+    ActivePackages& operator =(ActivePackages const &) = delete;
 #if HAVE_FEATURE_EXTENSIONS
     ::dp_misc::PersistentMap m_map;
 #endif

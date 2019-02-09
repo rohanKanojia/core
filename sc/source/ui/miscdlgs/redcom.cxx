@@ -17,40 +17,36 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vcl/msgbox.hxx>
 #include <unotools/localedatawrapper.hxx>
 
-#include "redcom.hxx"
-#include "docsh.hxx"
-#include "tabvwsh.hxx"
+#include <chgtrack.hxx>
+#include <redcom.hxx>
+#include <docsh.hxx>
+#include <tabvwsh.hxx>
 #include <svx/svxdlg.hxx>
 #include <svx/dialogs.hrc>
 
-ScRedComDialog::ScRedComDialog( vcl::Window* pParent, const SfxItemSet& rCoreSet,
+ScRedComDialog::ScRedComDialog( weld::Window* pParent, const SfxItemSet& rCoreSet,
                     ScDocShell *pShell, ScChangeAction *pAction, bool bPrevNext)
     : pChangeAction(nullptr)
     , pDocShell(nullptr)
     , pDlg(nullptr)
 {
     SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-    if(pFact)
-    {
-        pDlg = pFact->CreateSvxPostItDialog( pParent, rCoreSet, bPrevNext );
-        OSL_ENSURE(pDlg, "Dialog creation failed!");
-        pDocShell=pShell;
-        pDlg->DontChangeAuthor();
-        pDlg->HideAuthor();
+    pDlg = pFact->CreateSvxPostItDialog( pParent, rCoreSet, bPrevNext );
+    pDocShell=pShell;
+    pDlg->DontChangeAuthor();
+    pDlg->HideAuthor();
 
-        pDlg->SetPrevHdl(LINK( this, ScRedComDialog, PrevHdl));
-        pDlg->SetNextHdl(LINK( this, ScRedComDialog, NextHdl));
+    pDlg->SetPrevHdl(LINK( this, ScRedComDialog, PrevHdl));
+    pDlg->SetNextHdl(LINK( this, ScRedComDialog, NextHdl));
 
-        ReInit(pAction);
-    }
+    ReInit(pAction);
 }
 
 ScRedComDialog::~ScRedComDialog()
 {
-    delete pDlg;
+    pDlg.disposeAndClear();
 }
 
 ScChangeAction *ScRedComDialog::FindPrev(ScChangeAction *pAction)
@@ -149,7 +145,7 @@ void ScRedComDialog::SelectCell()
     }
 }
 
-IMPL_LINK_TYPED(ScRedComDialog, PrevHdl, AbstractSvxPostItDialog&, rDlgP, void )
+IMPL_LINK(ScRedComDialog, PrevHdl, AbstractSvxPostItDialog&, rDlgP, void )
 {
     if (pDocShell!=nullptr && rDlgP.GetNote() != aComment )
         pDocShell->SetChangeComment( pChangeAction, rDlgP.GetNote());
@@ -158,7 +154,7 @@ IMPL_LINK_TYPED(ScRedComDialog, PrevHdl, AbstractSvxPostItDialog&, rDlgP, void )
     SelectCell();
 }
 
-IMPL_LINK_TYPED(ScRedComDialog, NextHdl, AbstractSvxPostItDialog&, rDlgP, void )
+IMPL_LINK(ScRedComDialog, NextHdl, AbstractSvxPostItDialog&, rDlgP, void )
 {
     if ( pDocShell!=nullptr && rDlgP.GetNote() != aComment )
         pDocShell->SetChangeComment( pChangeAction, rDlgP.GetNote());

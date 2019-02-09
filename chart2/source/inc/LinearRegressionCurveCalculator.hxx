@@ -19,7 +19,6 @@
 #ifndef INCLUDED_CHART2_SOURCE_INC_LINEARREGRESSIONCURVECALCULATOR_HXX
 #define INCLUDED_CHART2_SOURCE_INC_LINEARREGRESSIONCURVECALCULATOR_HXX
 
-#include "RegressionCurveCalculator.hxx"
 #include "PolynomialRegressionCurveCalculator.hxx"
 
 namespace chart
@@ -29,15 +28,14 @@ class LinearRegressionCurveCalculator : public PolynomialRegressionCurveCalculat
 {
 public:
     LinearRegressionCurveCalculator();
-    virtual ~LinearRegressionCurveCalculator();
+    virtual ~LinearRegressionCurveCalculator() override;
 
 private:
     virtual void SAL_CALL setRegressionProperties(
         sal_Int32 aDegree,
         sal_Bool  aForceIntercept,
         double    aInterceptValue,
-        sal_Int32 aPeriod)
-        throw (css::uno::RuntimeException, std::exception) override;
+        sal_Int32 aPeriod) override;
 
     virtual css::uno::Sequence<css::geometry::RealPoint2D> SAL_CALL getCurveValues(
         double min,
@@ -45,9 +43,7 @@ private:
         sal_Int32 nPointCount,
         const css::uno::Reference<css::chart2::XScaling>& xScalingX,
         const css::uno::Reference<css::chart2::XScaling>& xScalingY,
-        sal_Bool bMaySkipPointsInCalculation )
-        throw (css::lang::IllegalArgumentException,
-               css::uno::RuntimeException, std::exception) override;
+        sal_Bool bMaySkipPointsInCalculation ) override;
 };
 
 } //  namespace chart

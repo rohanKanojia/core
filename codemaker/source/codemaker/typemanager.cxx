@@ -17,17 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstdlib>
 #include <cstring>
 #include <vector>
 
-#include "codemaker/global.hxx"
-#include "codemaker/typemanager.hxx"
-#include "rtl/ref.hxx"
-#include "rtl/ustring.hxx"
-#include "unoidl/unoidl.hxx"
+#include <codemaker/global.hxx>
+#include <codemaker/typemanager.hxx>
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
+#include <unoidl/unoidl.hxx>
 
 TypeManager::TypeManager(): manager_(new unoidl::Manager) {}
 
@@ -178,15 +178,14 @@ codemaker::UnoType::Sort TypeManager::decompose(
         switch (s) {
         case codemaker::UnoType::Sort::Typedef:
             if (resolveTypedefs) {
-                n = dynamic_cast<unoidl::TypedefEntity&>(*ent.get()).
-                    getType();
+                n = dynamic_cast<unoidl::TypedefEntity&>(*ent).getType();
                 while (n.startsWith("[]")) {
                     ++k; //TODO: overflow
                     n = n.copy(std::strlen("[]"));
                 }
                 break;
             }
-            // fall through
+            [[fallthrough]];
         case codemaker::UnoType::Sort::Void:
         case codemaker::UnoType::Sort::Boolean:
         case codemaker::UnoType::Sort::Byte:
@@ -248,12 +247,11 @@ codemaker::UnoType::Sort TypeManager::decompose(
             return
                 codemaker::UnoType::Sort::InstantiatedPolymorphicStruct;
         case codemaker::UnoType::Sort::Sequence:
-            assert(false); // this cannot happen
-            // fall through
+            for (;;) std::abort(); // this cannot happen
         default:
             throw CannotDumpException(
                 "unexpected \"" + n + "\" resolved from \"" + name
-                + ("\"in call to TypeManager::decompose"));
+                + "\"in call to TypeManager::decompose");
         }
     }
 }

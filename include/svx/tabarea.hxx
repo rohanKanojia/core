@@ -21,33 +21,15 @@
 
 #include <o3tl/typed_flags_set.hxx>
 
-enum ColorModel
-{
-    CM_RGB,
-    CM_CMYK // can be extend with more models, e.g. HSV
-};
-
-enum PageType
-{
-    PT_AREA,
-    PT_GRADIENT,
-    PT_HATCH,
-    PT_BITMAP,
-    PT_COLOR,
-    PT_SHADOW,
-    PT_TRANSPARENCE
-};
-
 enum class ChangeType
 {
     NONE                 = 0x00,
     MODIFIED             = 0x01,
-    CHANGED              = 0x02,
-    SAVED                = 0x04,
+    CHANGED              = 0x02
 };
 namespace o3tl
 {
-    template<> struct typed_flags<ChangeType> : is_typed_flags<ChangeType, 0x07> {};
+    template<> struct typed_flags<ChangeType> : is_typed_flags<ChangeType, 0x03> {};
 }
 
 #endif // INCLUDED_SVX_TABAREA_HXX

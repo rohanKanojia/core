@@ -17,10 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "smmod.hxx"
+#include <smmod.hxx>
 #include "tmpdevice.hxx"
 
+#include <svtools/colorcfg.hxx>
 #include <vcl/window.hxx>
+#include <sal/log.hxx>
 
 // SmTmpDevice
 // Allows for font and color changes. The original settings will be restored
@@ -35,18 +37,18 @@ SmTmpDevice::SmTmpDevice(OutputDevice &rTheDev, bool bUseMap100th_mm) :
 {
     rOutDev.Push( PushFlags::FONT | PushFlags::MAPMODE |
                   PushFlags::LINECOLOR | PushFlags::FILLCOLOR | PushFlags::TEXTCOLOR );
-    if (bUseMap100th_mm  &&  MAP_100TH_MM != rOutDev.GetMapMode().GetMapUnit())
+    if (bUseMap100th_mm  &&  MapUnit::Map100thMM != rOutDev.GetMapMode().GetMapUnit())
     {
         SAL_WARN("starmath", "incorrect MapMode?");
-        rOutDev.SetMapMode( MAP_100TH_MM );     //format for 100% always
+        rOutDev.SetMapMode(MapMode(MapUnit::Map100thMM)); // format for 100% always
     }
 }
 
 
 Color SmTmpDevice::Impl_GetColor( const Color& rColor )
 {
-    ColorData nNewCol = rColor.GetColor();
-    if (COL_AUTO == nNewCol)
+    Color nNewCol = rColor;
+    if (nNewCol == COL_AUTO)
     {
         if (OUTDEV_PRINTER == rOutDev.GetOutDevType())
             nNewCol = COL_BLACK;
@@ -65,7 +67,7 @@ Color SmTmpDevice::Impl_GetColor( const Color& rColor )
                 nNewCol = COL_BLACK;
         }
     }
-    return Color( nNewCol );
+    return nNewCol;
 }
 
 

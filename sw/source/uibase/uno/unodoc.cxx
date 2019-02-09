@@ -19,19 +19,18 @@
 
 #include <sfx2/docfac.hxx>
 #include <sfx2/sfxmodelfactory.hxx>
-#include "swdll.hxx"
-#include "unofreg.hxx"
-#include "docsh.hxx"
-#include "globdoc.hxx"
-#include "wdocsh.hxx"
-#include <osl/mutex.hxx>
+#include <swdll.hxx>
+#include <unofreg.hxx>
+#include <docsh.hxx>
+#include <globdoc.hxx>
+#include <wdocsh.hxx>
 #include <vcl/svapp.hxx>
 
 using namespace ::com::sun::star;
 
 // com.sun.star.comp.Writer.TextDocument
 
-uno::Sequence< OUString > SAL_CALL SwTextDocument_getSupportedServiceNames() throw()
+uno::Sequence< OUString > SwTextDocument_getSupportedServiceNames() throw()
 {
     // return only top level services here! All others must be
     // resolved by rtti!
@@ -39,14 +38,13 @@ uno::Sequence< OUString > SAL_CALL SwTextDocument_getSupportedServiceNames() thr
     return aRet;
 }
 
-OUString SAL_CALL SwTextDocument_getImplementationName() throw()
+OUString SwTextDocument_getImplementationName() throw()
 {
     return OUString( "com.sun.star.comp.Writer.TextDocument" );
 }
 
-uno::Reference< uno::XInterface > SAL_CALL SwTextDocument_createInstance(
+uno::Reference< uno::XInterface > SwTextDocument_createInstance(
         const uno::Reference< lang::XMultiServiceFactory >&, SfxModelFlags _nCreationFlags )
-    throw( uno::Exception )
 {
     SolarMutexGuard aGuard;
     SwGlobals::ensure();
@@ -54,20 +52,20 @@ uno::Reference< uno::XInterface > SAL_CALL SwTextDocument_createInstance(
     return uno::Reference< uno::XInterface >( pShell->GetModel() );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Writer_WebDocument_get_implementation(css::uno::XComponentContext*,
                                                         css::uno::Sequence<css::uno::Any> const &)
 {
     SolarMutexGuard aGuard;
     SwGlobals::ensure();
-    SfxObjectShell* pShell = new SwWebDocShell( SfxObjectCreateMode::STANDARD );
+    SfxObjectShell* pShell = new SwWebDocShell;
     uno::Reference< uno::XInterface > model( pShell->GetModel() );
     model->acquire();
     return model.get();
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Writer_GlobalDocument_get_implementation(css::uno::XComponentContext*,
                                                            css::uno::Sequence<css::uno::Any> const &)
 {

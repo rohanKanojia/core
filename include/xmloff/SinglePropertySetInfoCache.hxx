@@ -24,20 +24,22 @@
 
 #include <map>
 
-#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySetInfo; } } } }
 
 class SinglePropertySetInfoCache
 {
     typedef std::map<css::uno::Reference<css::beans::XPropertySetInfo>, bool>
         Map;
 
-    OUString sName;
+    OUString const sName;
     Map map_;
 
 public:
 
     inline SinglePropertySetInfoCache( const OUString& rName );
-    ~SinglePropertySetInfoCache() {};
 
     bool hasProperty(
             const css::uno::Reference< css::beans::XPropertySet >& rPropSet,

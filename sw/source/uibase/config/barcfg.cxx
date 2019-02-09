@@ -20,7 +20,7 @@
 #include <osl/diagnose.h>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <wrtsh.hxx>
-#include "barcfg.hxx"
+#include <barcfg.hxx>
 
 #include <unomid.h>
 
@@ -35,7 +35,7 @@ using namespace com::sun::star::uno;
 
 SwToolbarConfigItem::SwToolbarConfigItem( bool bWeb ) :
     ConfigItem(bWeb ? OUString("Office.WriterWeb/ObjectBar") : OUString("Office.Writer/ObjectBar"),
-        ConfigItemMode::DelayedUpdate|ConfigItemMode::ReleaseTree)
+        ConfigItemMode::ReleaseTree)
 {
     for(int i = 0; i <= SEL_TYPE_GRAPHIC; ++i)
         aTbxIdArray[i] = -1;
@@ -62,31 +62,31 @@ SwToolbarConfigItem::~SwToolbarConfigItem()
 {
 }
 
-static sal_Int32 lcl_getArrayIndex(int nSelType)
+static sal_Int32 lcl_getArrayIndex(SelectionType nSelType)
 {
     sal_Int32 nRet = -1;
-    if(nSelType & nsSelectionType::SEL_NUM)
+    if(nSelType & SelectionType::NumberList)
     {
-        if(nSelType & nsSelectionType::SEL_TBL)
+        if(nSelType & SelectionType::Table)
             nRet = SEL_TYPE_TABLE_LIST;
         else
             nRet = SEL_TYPE_LIST_TEXT;
     }
-    else if(nSelType & nsSelectionType::SEL_TBL)
+    else if(nSelType & SelectionType::Table)
         nRet = SEL_TYPE_TABLE_TEXT;
-    else if(nSelType & nsSelectionType::SEL_BEZ)
+    else if(nSelType & SelectionType::Ornament)
         nRet = SEL_TYPE_BEZIER;
-    else if(nSelType & nsSelectionType::SEL_GRF)
+    else if(nSelType & SelectionType::Graphic)
         nRet = SEL_TYPE_GRAPHIC;
     return nRet;
 }
 
-void SwToolbarConfigItem::SetTopToolbar( sal_Int32 nSelType, sal_Int32 nBarId )
+void SwToolbarConfigItem::SetTopToolbar(SelectionType nSelType, ToolbarId eBarId)
 {
     sal_Int32 nProp = lcl_getArrayIndex(nSelType);
     if(nProp >= 0)
     {
-        aTbxIdArray[nProp] = nBarId;
+        aTbxIdArray[nProp] = static_cast<sal_Int32>(eBarId);
         SetModified();
     }
 }

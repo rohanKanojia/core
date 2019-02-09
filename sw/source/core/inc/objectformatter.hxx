@@ -20,6 +20,7 @@
 #define INCLUDED_SW_SOURCE_CORE_INC_OBJECTFORMATTER_HXX
 
 #include <sal/types.h>
+#include <memory>
 
 class SwFrame;
 // #i26945#
@@ -41,10 +42,6 @@ class SwObjectFormatter
         // page frame, at which the floating screen objects are registered.
         const SwPageFrame& mrPageFrame;
 
-        // boolean, indicating that only as-character anchored objects have to
-        // be formatted.
-        bool mbFormatOnlyAsCharAnchored;
-
         // value of document compatibility option 'Consider wrapping style on
         // object positioning'
         const bool mbConsiderWrapOnObjPos;
@@ -54,9 +51,9 @@ class SwObjectFormatter
 
         // data structure to collect page number of object's 'anchor'
         // #i26945#
-        SwPageNumAndTypeOfAnchors* mpPgNumAndTypeOfAnchors;
+        std::unique_ptr<SwPageNumAndTypeOfAnchors> mpPgNumAndTypeOfAnchors;
 
-        /** helper method for method <_FormatObj(..)> - performs the intrinsic
+        /** helper method for method <FormatObj_(..)> - performs the intrinsic
             format of the layout of the given layout frame and all its lower
             layout frames.
 
@@ -66,49 +63,44 @@ class SwObjectFormatter
             <SwLayAction::FormatLayout(..)>. Thus, its code for the formatting have
             to be synchronised.
         */
-        void _FormatLayout( SwLayoutFrame& _rLayoutFrame );
+        void FormatLayout_( SwLayoutFrame& _rLayoutFrame );
 
-        /** helper method for method <_FormatObj(..)> - performs the intrinsic
+        /** helper method for method <FormatObj_(..)> - performs the intrinsic
             format of the content of the given floating screen object.
 
             #i28701#
         */
-        void _FormatObjContent( SwAnchoredObject& _rAnchoredObj );
+        void FormatObjContent( SwAnchoredObject& _rAnchoredObj );
 
     protected:
         SwObjectFormatter( const SwPageFrame& _rPageFrame,
-                           SwLayAction* _pLayAction = nullptr,
+                           SwLayAction* _pLayAction,
                            const bool _bCollectPgNumOfAnchors = false );
 
-        static SwObjectFormatter* CreateObjFormatter( SwFrame& _rAnchorFrame,
+        static std::unique_ptr<SwObjectFormatter> CreateObjFormatter( SwFrame& _rAnchorFrame,
                                                       const SwPageFrame& _rPageFrame,
                                                       SwLayAction* _pLayAction );
 
         virtual SwFrame& GetAnchorFrame() = 0;
 
-        inline const SwPageFrame& GetPageFrame() const
+        const SwPageFrame& GetPageFrame() const
         {
             return mrPageFrame;
         }
 
-        inline bool ConsiderWrapOnObjPos() const
+        bool ConsiderWrapOnObjPos() const
         {
             return mbConsiderWrapOnObjPos;
         }
 
-        inline SwLayAction* GetLayAction()
+        SwLayAction* GetLayAction()
         {
             return mpLayAction;
         }
 
-        inline bool FormatOnlyAsCharAnchored() const
-        {
-            return mbFormatOnlyAsCharAnchored;
-        }
-
         /** performs the intrinsic format of a given floating screen object and its content.
         */
-        void _FormatObj( SwAnchoredObject& _rAnchoredObj );
+        void FormatObj_( SwAnchoredObject& _rAnchoredObj );
 
         /** invokes the intrinsic format method for all floating screen objects,
             anchored at anchor frame on the given page frame
@@ -121,7 +113,7 @@ class SwObjectFormatter
             @param _pMasterTextFrame
             input parameter - pointer to 'master' text frame. default value: NULL
         */
-        bool _FormatObjsAtFrame( SwTextFrame* _pMasterTextFrame = nullptr );
+        bool FormatObjsAtFrame_( SwTextFrame* _pMasterTextFrame = nullptr );
 
         /** accessor to collected anchored object
         */
@@ -174,8 +166,7 @@ class SwObjectFormatter
         */
         static bool FormatObj( SwAnchoredObject& _rAnchoredObj,
                                SwFrame* _pAnchorFrame = nullptr,
-                               const SwPageFrame* _pPageFrame = nullptr,
-                               SwLayAction* _pLayAction = nullptr );
+                               const SwPageFrame* _pPageFrame = nullptr );
 };
 
 #endif

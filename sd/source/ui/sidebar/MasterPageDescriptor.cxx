@@ -17,11 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include "MasterPageDescriptor.hxx"
+#include "MasterPageContainerProviders.hxx"
 
 #include "DocumentHelper.hxx"
-#include "sdpage.hxx"
+#include <PreviewRenderer.hxx>
+#include <sdpage.hxx>
 #include <tools/urlobj.hxx>
+#include <sal/log.hxx>
 
 namespace sd { namespace sidebar {
 
@@ -38,7 +42,7 @@ MasterPageDescriptor::MasterPageDescriptor (
     const std::shared_ptr<PreviewProvider>& rpPreviewProvider)
     : maToken(MasterPageContainer::NIL_TOKEN),
       meOrigin(eOrigin),
-      msURL(INetURLObject(rsURL).GetMainURL(INetURLObject::DECODE_UNAMBIGUOUS)),
+      msURL(INetURLObject(rsURL).GetMainURL(INetURLObject::DecodeMechanism::Unambiguous)),
       msPageName(rsPageName),
       msStyleName(rsStyleName),
       mbIsPrecious(bIsPrecious),
@@ -54,35 +58,12 @@ MasterPageDescriptor::MasterPageDescriptor (
 {
 }
 
-MasterPageDescriptor::MasterPageDescriptor (const MasterPageDescriptor& rDescriptor)
-    : maToken(rDescriptor.maToken),
-      meOrigin(rDescriptor.meOrigin),
-      msURL(rDescriptor.msURL),
-      msPageName(rDescriptor.msPageName),
-      msStyleName(rDescriptor.msStyleName),
-      mbIsPrecious(rDescriptor.mbIsPrecious),
-      mpMasterPage(rDescriptor.mpMasterPage),
-      mpSlide(rDescriptor.mpSlide),
-      maSmallPreview(rDescriptor.maSmallPreview),
-      maLargePreview(rDescriptor.maLargePreview),
-      mpPreviewProvider(rDescriptor.mpPreviewProvider),
-      mpPageObjectProvider(rDescriptor.mpPageObjectProvider),
-      mnTemplateIndex(rDescriptor.mnTemplateIndex),
-      meURLClassification(rDescriptor.meURLClassification),
-      mnUseCount(rDescriptor.mnUseCount)
-{
-}
-
-MasterPageDescriptor::~MasterPageDescriptor()
-{
-}
-
 void MasterPageDescriptor::SetToken (MasterPageContainer::Token aToken)
 {
     maToken = aToken;
 }
 
-Image MasterPageDescriptor::GetPreview (MasterPageContainer::PreviewSize eSize) const
+const Image& MasterPageDescriptor::GetPreview (MasterPageContainer::PreviewSize eSize) const
 {
     if (eSize == MasterPageContainer::SMALL)
         return maSmallPreview;
@@ -123,16 +104,16 @@ Image MasterPageDescriptor::GetPreview (MasterPageContainer::PreviewSize eSize) 
         bDataChanged = true;
     }
 
-    if (mpPageObjectProvider.get()==nullptr && rDescriptor.mpPageObjectProvider.get()!=nullptr)
+    if (mpPageObjectProvider == nullptr && rDescriptor.mpPageObjectProvider != nullptr)
     {
         mpPageObjectProvider = rDescriptor.mpPageObjectProvider;
         bDataChanged = true;
     }
 
-     if (mpPreviewProvider.get()==nullptr && rDescriptor.mpPreviewProvider.get()!=nullptr)
-     {
-         mpPreviewProvider = rDescriptor.mpPreviewProvider;
-         bPreviewChanged = true;
+    if (mpPreviewProvider == nullptr && rDescriptor.mpPreviewProvider != nullptr)
+    {
+        mpPreviewProvider = rDescriptor.mpPreviewProvider;
+        bPreviewChanged = true;
      }
 
      if (mnTemplateIndex<0 && rDescriptor.mnTemplateIndex>=0)
@@ -145,13 +126,13 @@ Image MasterPageDescriptor::GetPreview (MasterPageContainer::PreviewSize eSize) 
      ::std::unique_ptr<std::vector<MasterPageContainerChangeEvent::EventType> > pResult;
      if (bDataChanged || bIndexChanged || bPreviewChanged)
      {
-         pResult.reset(new std::vector<MasterPageContainerChangeEvent::EventType>());
+         pResult.reset(new std::vector<MasterPageContainerChangeEvent::EventType>);
          if (bDataChanged)
-             pResult->push_back(MasterPageContainerChangeEvent::DATA_CHANGED);
+             pResult->push_back(MasterPageContainerChangeEvent::EventType::DATA_CHANGED);
          if (bIndexChanged)
-             pResult->push_back(MasterPageContainerChangeEvent::INDEX_CHANGED);
+             pResult->push_back(MasterPageContainerChangeEvent::EventType::INDEX_CHANGED);
          if (bPreviewChanged)
-             pResult->push_back(MasterPageContainerChangeEvent::PREVIEW_CHANGED);
+             pResult->push_back(MasterPageContainerChangeEvent::EventType::PREVIEW_CHANGED);
      }
 
      return pResult;
@@ -164,9 +145,8 @@ int MasterPageDescriptor::UpdatePageObject (
     int nModified = 0;
 
     // Update the page object when that is not yet known.
-    if (mpMasterPage == nullptr
-        && mpPageObjectProvider.get()!=nullptr
-        && (nCostThreshold<0 || mpPageObjectProvider->GetCostIndex()<=nCostThreshold))
+    if (mpMasterPage == nullptr && mpPageObjectProvider != nullptr
+        && (nCostThreshold < 0 || mpPageObjectProvider->GetCostIndex() <= nCostThreshold))
     {
         // Note that pDocument may be NULL.
 
@@ -200,7 +180,7 @@ int MasterPageDescriptor::UpdatePageObject (
         }
         else
         {
-            DBG_ASSERT(false, "UpdatePageObject: master page is NULL");
+            SAL_WARN( "sd", "UpdatePageObject: master page is NULL");
             return -1;
         }
 
@@ -219,9 +199,8 @@ bool MasterPageDescriptor::UpdatePreview (
     bool bModified (false);
 
     // Update the preview when that is not yet known.
-    if (maLargePreview.GetSizePixel().Width()==0
-        && mpPreviewProvider.get()!=nullptr
-        && (nCostThreshold<0 || mpPreviewProvider->GetCostIndex()<=nCostThreshold))
+    if (maLargePreview.GetSizePixel().Width() == 0 && mpPreviewProvider != nullptr
+        && (nCostThreshold < 0 || mpPreviewProvider->GetCostIndex() <= nCostThreshold))
     {
         SdPage* pPage = mpSlide;
         if (pPage == nullptr)
@@ -291,7 +270,7 @@ bool MasterPageDescriptor::URLComparator::operator() (
     if (rDescriptor.get() == nullptr)
         return false;
     else
-        return rDescriptor->msURL.equals(msURL);
+        return rDescriptor->msURL == msURL;
 }
 
 // ===== StyleNameComparator ==================================================
@@ -307,7 +286,7 @@ bool MasterPageDescriptor::StyleNameComparator::operator() (
     if (rDescriptor.get() == nullptr)
         return false;
     else
-        return rDescriptor->msStyleName.equals(msStyleName);
+        return rDescriptor->msStyleName == msStyleName;
 }
 
 //===== PageObjectComparator ==================================================
@@ -344,20 +323,17 @@ bool MasterPageDescriptor::AllComparator::operator() (const SharedMasterPageDesc
         // identical in any of these values then there are thought of as
         // equivalent.  Only the Origin has to be the same in both
         // descriptors.
-        return
-            mpDescriptor->meOrigin == rDescriptor->meOrigin
-            && (
-                (!mpDescriptor->msURL.isEmpty()
-                    && mpDescriptor->msURL.equals(rDescriptor->msURL))
-                || (!mpDescriptor->msPageName.isEmpty()
-                    && mpDescriptor->msPageName.equals(rDescriptor->msPageName))
-                || (!mpDescriptor->msStyleName.isEmpty()
-                    && mpDescriptor->msStyleName.equals(rDescriptor->msStyleName))
-                || (mpDescriptor->mpMasterPage!=nullptr
-                    && mpDescriptor->mpMasterPage==rDescriptor->mpMasterPage)
-                || (mpDescriptor->mpPageObjectProvider.get()!=nullptr
-                    && rDescriptor->mpPageObjectProvider.get()!=nullptr
-                    && mpDescriptor->mpPageObjectProvider==rDescriptor->mpPageObjectProvider));
+        return mpDescriptor->meOrigin == rDescriptor->meOrigin
+               && ((!mpDescriptor->msURL.isEmpty() && mpDescriptor->msURL == rDescriptor->msURL)
+                   || (!mpDescriptor->msPageName.isEmpty()
+                       && mpDescriptor->msPageName == rDescriptor->msPageName)
+                   || (!mpDescriptor->msStyleName.isEmpty()
+                       && mpDescriptor->msStyleName == rDescriptor->msStyleName)
+                   || (mpDescriptor->mpMasterPage != nullptr
+                       && mpDescriptor->mpMasterPage == rDescriptor->mpMasterPage)
+                   || (mpDescriptor->mpPageObjectProvider != nullptr
+                       && rDescriptor->mpPageObjectProvider != nullptr
+                       && mpDescriptor->mpPageObjectProvider == rDescriptor->mpPageObjectProvider));
     }
 }
 

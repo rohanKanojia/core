@@ -22,10 +22,11 @@
 
 #include <xmloff/dllapi.h>
 
-#include <com/sun/star/awt/Rectangle.hpp>
-#include <com/sun/star/formula/SymbolDescriptor.hpp>
-#include <com/sun/star/util/XStringSubstitution.hpp>
-#include <xmloff/xmlexp.hxx>
+#include <com/sun/star/uno/Reference.hxx>
+
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace com { namespace sun { namespace star { namespace formula { struct SymbolDescriptor; } } } }
+namespace com { namespace sun { namespace star { namespace util { class XStringSubstitution; } } } }
 
 namespace com
 {
@@ -46,21 +47,13 @@ class XMLOFF_DLLPUBLIC XMLSettingsExportHelper
 
     css::uno::Reference< css::util::XStringSubstitution > mxStringSubsitution;
 
-    const OUString msPrinterIndependentLayout;
-    const OUString msColorTableURL;
-    const OUString msLineEndTableURL;
-    const OUString msHatchTableURL;
-    const OUString msDashTableURL;
-    const OUString msGradientTableURL;
-    const OUString msBitmapTableURL;
-
     void ManipulateSetting( css::uno::Any& rAny, const OUString& rName ) const;
 
     void CallTypeFunction(const css::uno::Any& rAny,
                         const OUString& rName) const;
 
     void exportBool(const bool bValue, const OUString& rName) const;
-    static void exportByte(const sal_Int8 nValue, const OUString& rName);
+    static void exportByte();
     void exportShort(const sal_Int16 nValue, const OUString& rName) const;
     void exportInt(const sal_Int32 nValue, const OUString& rName) const;
     void exportLong(const sal_Int64 nValue, const OUString& rName) const;

@@ -25,7 +25,7 @@ Catalog::Catalog(const uno::Reference< XConnection >& rConnection):
 //----- OCatalog -------------------------------------------------------------
 void Catalog::refreshTables()
 {
-    // TODO: set type -- currenty we also get system tables...
+    // TODO: set type -- currently we also get system tables...
     Sequence< OUString > aTypes(2);
     aTypes[0] = "TABLE";
     aTypes[1] = "VIEW";
@@ -38,15 +38,15 @@ void Catalog::refreshTables()
     if (!xTables.is())
         return;
 
-    TStringVector aTableNames;
+    ::std::vector< OUString> aTableNames;
 
     fillNames(xTables, aTableNames);
 
     if (!m_pTables)
-        m_pTables = new Tables(m_xConnection->getMetaData(),
+        m_pTables.reset( new Tables(m_xConnection->getMetaData(),
                                *this,
                                m_aMutex,
-                               aTableNames);
+                               aTableNames) );
     else
         m_pTables->reFill(aTableNames);
 
@@ -67,7 +67,7 @@ void Catalog::refreshGroups()
 //----- IRefreshableUsers ----------------------------------------------------
 void Catalog::refreshUsers()
 {
-    OUString sSql("SELECT DISTINCT RDB$USER FROM RDB$USER_PRIVILEGES");
+    OUString const sSql("SELECT DISTINCT RDB$USER FROM RDB$USER_PRIVILEGES");
 
     uno::Reference< XResultSet > xUsers = m_xMetaData->getConnection()
                                             ->createStatement()->executeQuery(sSql);
@@ -75,7 +75,7 @@ void Catalog::refreshUsers()
     if (!xUsers.is())
         return;
 
-    TStringVector aUserNames;
+    ::std::vector< OUString> aUserNames;
 
     uno::Reference< XRow > xRow(xUsers,UNO_QUERY);
     while (xUsers->next())
@@ -84,10 +84,10 @@ void Catalog::refreshUsers()
     }
 
     if (!m_pUsers)
-        m_pUsers = new Users(m_xConnection->getMetaData(),
+        m_pUsers.reset( new Users(m_xConnection->getMetaData(),
                              *this,
                              m_aMutex,
-                             aUserNames);
+                             aUserNames) );
     else
         m_pUsers->reFill(aUserNames);
 }

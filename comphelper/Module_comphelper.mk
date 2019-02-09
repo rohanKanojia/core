@@ -21,6 +21,8 @@ $(eval $(call gb_Module_Module,comphelper))
 
 $(eval $(call gb_Module_add_targets,comphelper,\
     Library_comphelper \
+	$(if $(filter WNT,$(OS)),\
+		StaticLibrary_windows_process )\
 ))
 
 $(eval $(call gb_Module_add_subsequentcheck_targets,comphelper,\
@@ -28,9 +30,10 @@ $(eval $(call gb_Module_add_subsequentcheck_targets,comphelper,\
 ))
 
 $(eval $(call gb_Module_add_check_targets,comphelper,\
+    CppunitTest_comphelper_threadpool_test \
     CppunitTest_comphelper_syntaxhighlight_test \
     CppunitTest_comphelper_variadictemplates_test \
-	CppunitTest_comphelper_ifcontainer \
+    CppunitTest_comphelper_ifcontainer \
     CppunitTest_comphelper_test \
 ))
 

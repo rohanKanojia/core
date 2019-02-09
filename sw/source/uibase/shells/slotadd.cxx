@@ -19,12 +19,13 @@
 
 #include <config_options.h>
 
-#include "hintids.hxx"
-#include "uiitems.hxx"
-#include "cmdid.h"
+#include <hintids.hxx>
+#include <uiitems.hxx>
+#include <cmdid.h>
+#include <unomid.h>
 
 #include <svl/globalnameitem.hxx>
-#include <editeng/memberids.hrc>
+#include <editeng/memberids.h>
 #include <svl/imageitm.hxx>
 #include <svl/aeitem.hxx>
 #include <svl/rectitem.hxx>
@@ -40,6 +41,7 @@
 #include <svx/pageitem.hxx>
 #include <svl/srchitem.hxx>
 #include <sfx2/tplpitem.hxx>
+#include <sfx2/watermarkitem.hxx>
 #include <editeng/wrlmitem.hxx>
 #include <editeng/protitem.hxx>
 #include <editeng/opaqitem.hxx>
@@ -104,11 +106,11 @@
 #include <fmtinfmt.hxx>
 #include <fmtfsize.hxx>
 #include <fmtsrnd.hxx>
-#include "envimg.hxx"
-#include "frmatr.hxx"
-#include "cfgitems.hxx"
-#include "grfatr.hxx"
-#include "fmtline.hxx"
+#include <envimg.hxx>
+#include <frmatr.hxx>
+#include <cfgitems.hxx>
+#include <grfatr.hxx>
+#include <fmtline.hxx>
 #include <svx/clipfmtitem.hxx>
 #include <editeng/blinkitem.hxx>
 #include <svl/slstitm.hxx>
@@ -122,7 +124,6 @@
 #include <svx/drawitem.hxx>
 #include <avmedia/mediaitem.hxx>
 
-#define SvxDrawAlignItem SfxAllEnumItem
 #define avmedia_MediaItem ::avmedia::MediaItem
 
 #include <svx/xflftrit.hxx>
@@ -133,6 +134,6 @@
 
 #define SFX_TYPEMAP
 #include <sfx2/msg.hxx>
-#include "swslots.hxx"
+#include <swslots.hxx>
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

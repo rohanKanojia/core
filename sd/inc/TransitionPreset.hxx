@@ -31,22 +31,18 @@ namespace com { namespace sun { namespace star {
     namespace uno { template<class X> class Reference; }
 } } }
 
-class SdPage;
-
 namespace sd {
 
 class TransitionPreset;
 typedef std::shared_ptr< TransitionPreset > TransitionPresetPtr;
 typedef std::list< TransitionPresetPtr > TransitionPresetList;
-typedef std::unordered_map< OUString, OUString, OUStringHash > UStringMap;
+typedef std::unordered_map< OUString, OUString > UStringMap;
 
 class TransitionPreset
 {
 public:
     static const TransitionPresetList& getTransitionPresetList();
     static bool importTransitionPresetList( TransitionPresetList& rList );
-
-    void apply( SdPage* pSlide ) const;
 
     sal_Int16 getTransition() const { return mnTransition; }
     sal_Int16 getSubtype() const { return mnSubtype; }
@@ -72,7 +68,7 @@ private:
     OUString maVariantLabel;
 
     static bool importTransitionsFile( TransitionPresetList& rList,
-                                       css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceFactory,
+                                       css::uno::Reference< css::lang::XMultiServiceFactory > const & xServiceFactory,
                                        const OUString& aFilename );
 };
 

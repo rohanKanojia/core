@@ -41,7 +41,6 @@
 #include <svx/sdrpagewindow.hxx>
 #include <svx/sdr/table/tabledesign.hxx>
 #include <svx/svxdlg.hxx>
-#include <vcl/msgbox.hxx>
 
 #include <svl/itempool.hxx>
 #include <sfx2/viewfrm.hxx>
@@ -51,18 +50,18 @@
 #include <sfx2/sidebar/Sidebar.hxx>
 #include <svl/style.hxx>
 
-#include "framework/FrameworkHelper.hxx"
+#include <framework/FrameworkHelper.hxx>
 #include "TableDesignPane.hxx"
-#include "app.hrc"
-#include "glob.hrc"
-#include "tablefunction.hxx"
-#include "DrawViewShell.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "Window.hxx"
-#include "drawview.hxx"
-#include "sdresid.hxx"
-#include "undo/undoobjects.hxx"
+#include <app.hrc>
+#include <tablefunction.hxx>
+#include <DrawViewShell.hxx>
+#include <drawdoc.hxx>
+#include <sdpage.hxx>
+#include <DrawDocShell.hxx>
+#include <Window.hxx>
+#include <drawview.hxx>
+#include <undo/undoobjects.hxx>
+#include <sdmod.hxx>
 
 #include <memory>
 
@@ -72,7 +71,6 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::util;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::drawing;
@@ -81,7 +79,7 @@ using namespace ::com::sun::star::linguistic2;
 namespace sd
 {
 
-static void apply_table_style( SdrTableObj* pObj, SdrModel* pModel, const OUString& sTableStyle )
+static void apply_table_style( SdrTableObj* pObj, SdrModel const * pModel, const OUString& sTableStyle )
 {
     if( pModel && pObj )
     {
@@ -128,16 +126,16 @@ void DrawViewShell::FuTable(SfxRequest& rReq)
         if( (nColumns == 0) || (nRows == 0) )
         {
             SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-            std::unique_ptr<SvxAbstractNewTableDialog> pDlg( pFact ? pFact->CreateSvxNewTableDialog() : nullptr);
+            ScopedVclPtr<SvxAbstractNewTableDialog> pDlg( pFact->CreateSvxNewTableDialog(rReq.GetFrameWeld()) );
 
-            if( !pDlg.get() || (pDlg->Execute() != RET_OK) )
+            if( pDlg->Execute() != RET_OK )
                 break;
 
             nColumns = pDlg->getColumns();
             nRows = pDlg->getRows();
         }
 
-        Rectangle aRect;
+        ::tools::Rectangle aRect;
 
         SdrObject* pPickObj = mpView->GetEmptyPresentationObject( PRESOBJ_TABLE );
         if( pPickObj )
@@ -150,7 +148,7 @@ void DrawViewShell::FuTable(SfxRequest& rReq)
             Size aSize( 14100, 2000 );
 
             Point aPos;
-            Rectangle aWinRect(aPos, GetActiveWindow()->GetOutputSizePixel());
+            ::tools::Rectangle aWinRect(aPos, GetActiveWindow()->GetOutputSizePixel());
             aWinRect = GetActiveWindow()->PixelToLogic(aWinRect);
 
             // make sure that the default size of the table fits on the paper and is inside the viewing area.
@@ -160,7 +158,7 @@ void DrawViewShell::FuTable(SfxRequest& rReq)
             if (comphelper::LibreOfficeKit::isActive())
             {
                 // aWinRect is nonsensical in the LOK case
-                aWinRect = Rectangle(aPos, aMaxSize);
+                aWinRect = ::tools::Rectangle(aPos, aMaxSize);
             }
             else
             {
@@ -182,12 +180,16 @@ void DrawViewShell::FuTable(SfxRequest& rReq)
             }
 
             aPos = aWinRect.Center();
-            aPos.X() -= aSize.Width() / 2;
-            aPos.Y() -= aSize.Height() / 2;
-            aRect = Rectangle(aPos, aSize);
+            aPos.AdjustX( -(aSize.Width() / 2) );
+            aPos.AdjustY( -(aSize.Height() / 2) );
+            aRect = ::tools::Rectangle(aPos, aSize);
         }
 
-        sdr::table::SdrTableObj* pObj = new sdr::table::SdrTableObj( GetDoc(), aRect, nColumns, nRows );
+        sdr::table::SdrTableObj* pObj = new sdr::table::SdrTableObj(
+            *GetDoc(), // TTTT should be reference
+            aRect,
+            nColumns,
+            nRows);
         pObj->NbcSetStyleSheet( GetDoc()->GetDefaultStyleSheet(), true );
         apply_table_style( pObj, GetDoc(), sTableStyle );
         SdrPageView* pPV = mpView->GetSdrPageView();
@@ -204,7 +206,7 @@ void DrawViewShell::FuTable(SfxRequest& rReq)
         // if we have a pick obj we need to make this new ole a pres obj replacing the current pick obj
         if( pPickObj )
         {
-            SdPage* pPage = static_cast< SdPage* >(pPickObj->GetPage());
+            SdPage* pPage = static_cast< SdPage* >(pPickObj->getSdrPageFromSdrObject());
             if(pPage && pPage->IsPresObj(pPickObj))
             {
                 pObj->SetUserCall( pPickObj->GetUserCall() );
@@ -227,22 +229,15 @@ void DrawViewShell::FuTable(SfxRequest& rReq)
     }
     case SID_TABLEDESIGN:
     {
-        if( GetDoc() && (GetDoc()->GetDocumentType() == DOCUMENT_TYPE_DRAW) )
-        {
-            // in draw open a modal dialog since we have no tool pane yet
-            showTableDesignDialog( GetActiveWindow(), GetViewShellBase() );
-        }
-        else
-        {
-            // First make sure that the sidebar is visible
-            GetViewFrame()->ShowChildWindow(SID_SIDEBAR);
-            ::sfx2::sidebar::Sidebar::ShowPanel(
-                "SdTableDesignPanel",
-                GetViewFrame()->GetFrame().GetFrameInterface());
-        }
+        // First make sure that the sidebar is visible
+        GetViewFrame()->ShowChildWindow(SID_SIDEBAR);
+        ::sfx2::sidebar::Sidebar::ShowPanel(
+            "SdTableDesignPanel",
+            GetViewFrame()->GetFrame().GetFrameInterface());
 
         Cancel();
         rReq.Done ();
+        break;
     }
     default:
         break;
@@ -273,12 +268,14 @@ void CreateTableFromRTF( SvStream& rStream, SdDrawDocument* pModel )
         if( pPage )
         {
             Size aSize( 200, 200 );
-            Point aPos;
-            Rectangle aRect (aPos, aSize);
-            sdr::table::SdrTableObj* pObj = new sdr::table::SdrTableObj( pModel, aRect, 1, 1 );
+            ::tools::Rectangle aRect (Point(), aSize);
+            sdr::table::SdrTableObj* pObj = new sdr::table::SdrTableObj(
+                *pModel,
+                aRect,
+                1,
+                1);
             pObj->NbcSetStyleSheet( pModel->GetDefaultStyleSheet(), true );
-            OUString sTableStyle;
-            apply_table_style( pObj, pModel, sTableStyle );
+            apply_table_style( pObj, pModel, OUString() );
 
             pPage->NbcInsertObject( pObj );
 

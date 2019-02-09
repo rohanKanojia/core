@@ -32,7 +32,6 @@
 #include <xmloff/xmluconv.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <rtl/ustrbuf.hxx>
-#include <osl/diagnose.h>
 #include "callbacks.hxx"
 #include <xmloff/XMLConstantsPropertyHandler.hxx>
 
@@ -47,25 +46,7 @@ namespace xmloff
 
     //= OControlPropertyHandlerFactory
     OControlPropertyHandlerFactory::OControlPropertyHandlerFactory()
-        :m_pTextAlignHandler(nullptr)
-        ,m_pControlBorderStyleHandler(nullptr)
-        ,m_pControlBorderColorHandler(nullptr)
-        ,m_pRotationAngleHandler(nullptr)
-        ,m_pFontWidthHandler(nullptr)
-        ,m_pFontEmphasisHandler(nullptr)
-        ,m_pFontReliefHandler(nullptr)
     {
-    }
-
-    OControlPropertyHandlerFactory::~OControlPropertyHandlerFactory()
-    {
-        delete m_pTextAlignHandler;
-        delete m_pControlBorderStyleHandler;
-        delete m_pControlBorderColorHandler;
-        delete m_pRotationAngleHandler;
-        delete m_pFontWidthHandler;
-        delete m_pFontEmphasisHandler;
-        delete m_pFontReliefHandler;
     }
 
     const XMLPropertyHandler* OControlPropertyHandlerFactory::GetPropertyHandler(sal_Int32 _nType) const
@@ -76,49 +57,53 @@ namespace xmloff
         {
             case XML_TYPE_TEXT_ALIGN:
                 if (!m_pTextAlignHandler)
-                    m_pTextAlignHandler = new XMLConstantsPropertyHandler(OEnumMapper::getEnumMap(OEnumMapper::epTextAlign), XML_TOKEN_INVALID );
-                pHandler = m_pTextAlignHandler;
+                    m_pTextAlignHandler = std::make_unique<XMLConstantsPropertyHandler>(aTextAlignMap, XML_TOKEN_INVALID );
+                pHandler = m_pTextAlignHandler.get();
                 break;
 
             case XML_TYPE_CONTROL_BORDER:
                 if (!m_pControlBorderStyleHandler)
-                    m_pControlBorderStyleHandler = new OControlBorderHandler( OControlBorderHandler::STYLE );
-                pHandler = m_pControlBorderStyleHandler;
+                    m_pControlBorderStyleHandler = std::make_unique<OControlBorderHandler>( OControlBorderHandler::STYLE );
+                pHandler = m_pControlBorderStyleHandler.get();
                 break;
 
             case XML_TYPE_CONTROL_BORDER_COLOR:
                 if ( !m_pControlBorderColorHandler )
-                    m_pControlBorderColorHandler = new OControlBorderHandler( OControlBorderHandler::COLOR );
-                pHandler = m_pControlBorderColorHandler;
+                    m_pControlBorderColorHandler = std::make_unique<OControlBorderHandler>( OControlBorderHandler::COLOR );
+                pHandler = m_pControlBorderColorHandler.get();
                 break;
 
             case XML_TYPE_ROTATION_ANGLE:
                 if (!m_pRotationAngleHandler)
-                    m_pRotationAngleHandler = new ORotationAngleHandler;
-                pHandler = m_pRotationAngleHandler;
+                    m_pRotationAngleHandler = std::make_unique<ORotationAngleHandler>();
+                pHandler = m_pRotationAngleHandler.get();
                 break;
 
             case XML_TYPE_FONT_WIDTH:
                 if (!m_pFontWidthHandler)
-                    m_pFontWidthHandler = new OFontWidthHandler;
-                pHandler = m_pFontWidthHandler;
+                    m_pFontWidthHandler = std::make_unique<OFontWidthHandler>();
+                pHandler = m_pFontWidthHandler.get();
                 break;
 
             case XML_TYPE_CONTROL_TEXT_EMPHASIZE:
                 if (!m_pFontEmphasisHandler)
-                    m_pFontEmphasisHandler = new XMLConstantsPropertyHandler( OEnumMapper::getEnumMap(OEnumMapper::epFontEmphasis), XML_NONE );
-                pHandler = m_pFontEmphasisHandler;
+                    m_pFontEmphasisHandler = std::make_unique<XMLConstantsPropertyHandler>( aFontEmphasisMap, XML_NONE );
+                pHandler = m_pFontEmphasisHandler.get();
                 break;
 
             case XML_TYPE_TEXT_FONT_RELIEF:
                 if (!m_pFontReliefHandler)
-                    m_pFontReliefHandler = new XMLConstantsPropertyHandler( OEnumMapper::getEnumMap(OEnumMapper::epFontRelief), XML_NONE );
-                pHandler = m_pFontReliefHandler;
+                    m_pFontReliefHandler = std::make_unique<XMLConstantsPropertyHandler>( aFontReliefMap, XML_NONE );
+                pHandler = m_pFontReliefHandler.get();
                 break;
             case XML_TYPE_TEXT_LINE_MODE:
-                pHandler = new XMLNamedBoolPropertyHdl(
-                                            ::xmloff::token::XML_SKIP_WHITE_SPACE,
-                                            ::xmloff::token::XML_CONTINUOUS);
+                if (!m_pTextLineModeHandler)
+                {
+                    m_pTextLineModeHandler = std::make_unique<XMLNamedBoolPropertyHdl>(
+                            ::xmloff::token::XML_SKIP_WHITE_SPACE,
+                            ::xmloff::token::XML_CONTINUOUS);
+                }
+                pHandler = m_pTextLineModeHandler.get();
                 break;
         }
 
@@ -140,12 +125,12 @@ namespace xmloff
         if (_rValue >>= nFontEmphasis)
         {
             // the type
-            sal_Int16 nType = nFontEmphasis & ~(awt::FontEmphasisMark::ABOVE | awt::FontEmphasisMark::BELOW);
+            sal_uInt16 nType = nFontEmphasis & ~(awt::FontEmphasisMark::ABOVE | awt::FontEmphasisMark::BELOW);
             // the position of the mark
             bool bBelow = 0 != (nFontEmphasis & awt::FontEmphasisMark::BELOW);
 
             // convert
-            bSuccess = SvXMLUnitConverter::convertEnum(aReturn, nType, OEnumMapper::getEnumMap(OEnumMapper::epFontEmphasis), XML_NONE);
+            bSuccess = SvXMLUnitConverter::convertEnum(aReturn, nType, aFontEmphasisMap, XML_NONE);
             if (bSuccess)
             {
                 aReturn.append( ' ' );
@@ -185,7 +170,7 @@ namespace xmloff
             }
             if (!bHasType)
             {
-                if (SvXMLUnitConverter::convertEnum(nEmphasis, sToken, OEnumMapper::getEnumMap(OEnumMapper::epFontEmphasis)))
+                if (SvXMLUnitConverter::convertEnum(nEmphasis, sToken, aFontEmphasisMap))
                 {
                     bHasType = true;
                 }
@@ -200,7 +185,7 @@ namespace xmloff
         if (bSuccess)
         {
             nEmphasis |= bBelow ? awt::FontEmphasisMark::BELOW : awt::FontEmphasisMark::ABOVE;
-            _rValue <<= (sal_Int16)nEmphasis;
+            _rValue <<= nEmphasis;
         }
 
         return bSuccess;
@@ -227,7 +212,7 @@ namespace xmloff
             if ( m_eFacet == STYLE )
             {
                 // is it a valid enum value?
-                if ( SvXMLUnitConverter::convertEnum( nStyle, sToken, OEnumMapper::getEnumMap( OEnumMapper::epBorderWidth ) ) )
+                if ( SvXMLUnitConverter::convertEnum( nStyle, sToken, aBorderTypeMap ) )
                 {
                     _rValue <<= nStyle;
                     return true;
@@ -258,9 +243,9 @@ namespace xmloff
         {
         case STYLE:
         {
-            sal_Int16 nBorder = 0;
+            sal_uInt16 nBorder = 0;
             bSuccess =  (_rValue >>= nBorder)
-                    &&  SvXMLUnitConverter::convertEnum( aOut, nBorder, OEnumMapper::getEnumMap( OEnumMapper::epBorderWidth ) );
+                    &&  SvXMLUnitConverter::convertEnum( aOut, nBorder, aBorderTypeMap );
         }
         break;
         case COLOR:
@@ -280,7 +265,7 @@ namespace xmloff
 
         if ( !_rStrExpValue.isEmpty() )
             _rStrExpValue += " ";
-        _rStrExpValue += aOut.makeStringAndClear();
+        _rStrExpValue += aOut;
 
         return true;
     }
@@ -296,7 +281,7 @@ namespace xmloff
         bool const bSuccess = ::sax::Converter::convertMeasure(
                 nWidth, _rStrImpValue, util::MeasureUnit::POINT);
         if (bSuccess)
-            _rValue <<= (sal_Int16)nWidth;
+            _rValue <<= static_cast<sal_Int16>(nWidth);
 
         return bSuccess;
     }
@@ -328,7 +313,7 @@ namespace xmloff
         if (bSucces)
         {
             fValue *= 10;
-            _rValue <<= (float)fValue;
+            _rValue <<= static_cast<float>(fValue);
         }
 
         return bSucces;
@@ -342,7 +327,7 @@ namespace xmloff
         if (bSuccess)
         {
             OUStringBuffer sValue;
-            ::sax::Converter::convertDouble(sValue, ((double)fAngle) / 10);
+            ::sax::Converter::convertDouble(sValue, static_cast<double>(fAngle) / 10);
             _rStrExpValue = sValue.makeStringAndClear();
         }
 
@@ -351,7 +336,7 @@ namespace xmloff
 
     //= ImageScaleModeHandler
     ImageScaleModeHandler::ImageScaleModeHandler()
-        :XMLConstantsPropertyHandler( OEnumMapper::getEnumMap( OEnumMapper::epImageScaleMode ), XML_STRETCH )
+        :XMLConstantsPropertyHandler( aScaleModeMap, XML_STRETCH )
     {
     }
 

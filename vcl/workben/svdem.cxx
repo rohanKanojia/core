@@ -18,6 +18,7 @@
  */
 
 #include <sal/main.h>
+#include <sal/log.hxx>
 #include <tools/extendapplicationenvironment.hxx>
 
 #include <cppuhelper/bootstrap.hxx>
@@ -36,7 +37,7 @@ using namespace ::com::sun::star::lang;
 using namespace cppu;
 
 // Forward declaration
-void Main();
+static void Main();
 
 SAL_IMPLEMENT_MAIN()
 {
@@ -58,7 +59,7 @@ SAL_IMPLEMENT_MAIN()
     }
     catch (const Exception& e)
     {
-        SAL_WARN("vcl.app", "Fatal exception: " << e.Message);
+        SAL_WARN("vcl.app", "Fatal: " << e);
         return 1;
     }
     catch (const std::exception &e)
@@ -74,14 +75,6 @@ class MyWin : public WorkWindow
 {
 public:
                 MyWin( vcl::Window* pParent, WinBits nWinStyle );
-
-    void        MouseMove( const MouseEvent& rMEvt ) override;
-    void        MouseButtonDown( const MouseEvent& rMEvt ) override;
-    void        MouseButtonUp( const MouseEvent& rMEvt ) override;
-    void        KeyInput( const KeyEvent& rKEvt ) override;
-    void        KeyUp( const KeyEvent& rKEvt ) override;
-    void        Paint( vcl::RenderContext& /*rRenderContext*/, const Rectangle& rRect ) override;
-    void        Resize() override;
 };
 
 void Main()
@@ -96,41 +89,6 @@ void Main()
 MyWin::MyWin( vcl::Window* pParent, WinBits nWinStyle ) :
     WorkWindow( pParent, nWinStyle )
 {
-}
-
-void MyWin::MouseMove( const MouseEvent& rMEvt )
-{
-    WorkWindow::MouseMove( rMEvt );
-}
-
-void MyWin::MouseButtonDown( const MouseEvent& rMEvt )
-{
-    WorkWindow::MouseButtonDown( rMEvt );
-}
-
-void MyWin::MouseButtonUp( const MouseEvent& rMEvt )
-{
-    WorkWindow::MouseButtonUp( rMEvt );
-}
-
-void MyWin::KeyInput( const KeyEvent& rKEvt )
-{
-    WorkWindow::KeyInput( rKEvt );
-}
-
-void MyWin::KeyUp( const KeyEvent& rKEvt )
-{
-    WorkWindow::KeyUp( rKEvt );
-}
-
-void MyWin::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
-{
-    WorkWindow::Paint(rRenderContext, rRect);
-}
-
-void MyWin::Resize()
-{
-    WorkWindow::Resize();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

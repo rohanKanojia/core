@@ -20,7 +20,7 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_CORE_INC_VIEW_HXX
 #define INCLUDED_DBACCESS_SOURCE_CORE_INC_VIEW_HXX
 
-#include "connectivity/sdbcx/VView.hxx"
+#include <connectivity/sdbcx/VView.hxx>
 
 #include <com/sun/star/sdbcx/XAlterView.hpp>
 #include <com/sun/star/sdb/tools/XViewAccess.hpp>
@@ -51,10 +51,10 @@ namespace dbaccess
         DECLARE_XTYPEPROVIDER()
 
         // XAlterView
-        virtual void SAL_CALL alterCommand( const OUString& NewCommand ) throw (css::sdbc::SQLException, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL alterCommand( const OUString& NewCommand ) override;
 
     protected:
-        virtual ~View();
+        virtual ~View() override;
 
     protected:
         // OPropertyContainer

@@ -20,7 +20,7 @@
 #ifndef INCLUDED_UNO_ENTERABLE_H
 #define INCLUDED_UNO_ENTERABLE_H
 
-#include <uno/environment.h>
+#include "uno/environment.h"
 
 
 #ifdef __cplusplus
@@ -38,7 +38,7 @@ extern "C"
 typedef void uno_Enterable_enter     (void * context);
 
 
-/** Generic function type declaration for levaing an Environment.
+/** Generic function type declaration for leaving an Environment.
     (http://wiki.openoffice.org/wiki/Uno/Binary/Spec/Environment_Stack)
 
     @param context

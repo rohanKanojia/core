@@ -18,28 +18,17 @@
  */
 
 
-#include "osl/thread.hxx"
-#include "osl/conditn.hxx"
-#include "osl/mutex.hxx"
+#include <osl/thread.hxx>
+#include <osl/conditn.hxx>
+#include <osl/mutex.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 #include <cppu/Enterable.hxx>
-#include "cppu/helper/purpenv/Environment.hxx"
-#include "cppu/helper/purpenv/Mapping.hxx"
+#include <cppu/helper/purpenv/Environment.hxx>
+#include <cppu/helper/purpenv/Mapping.hxx>
+#include <memory>
 
-
-#ifdef debug
-# define LOG_LIFECYCLE_AffineBridge
-#endif
-
-#ifdef LOG_LIFECYCLE_AffineBridge
-#  include <iostream>
-#  define LOG_LIFECYCLE_AffineBridge_emit(x) x
-
-#else
-#  define LOG_LIFECYCLE_AffineBridge_emit(x)
-
-#endif
 
 class InnerThread;
 class OuterThread;
@@ -59,17 +48,17 @@ public:
 
     osl::Mutex            m_innerMutex;
     oslThreadIdentifier   m_innerThreadId;
-    InnerThread         * m_pInnerThread;
+    std::unique_ptr<InnerThread> m_pInnerThread;
     osl::Condition        m_innerCondition;
     sal_Int32             m_enterCount;
 
     osl::Mutex            m_outerMutex;
     oslThreadIdentifier   m_outerThreadId;
     osl::Condition        m_outerCondition;
-    OuterThread         * m_pOuterThread;
+    std::unique_ptr<OuterThread> m_pOuterThread;
 
     explicit  AffineBridge();
-    virtual  ~AffineBridge();
+    virtual  ~AffineBridge() override;
 
     virtual void  v_callInto_v(uno_EnvCallee * pCallee, va_list * pParam) override;
     virtual void  v_callOut_v (uno_EnvCallee * pCallee, va_list * pParam) override;
@@ -77,10 +66,10 @@ public:
     virtual void  v_enter() override;
     virtual void  v_leave() override;
 
-    virtual bool v_isValid(rtl::OUString * pReason) override;
+    virtual bool v_isValid(OUString * pReason) override;
 
     void innerDispatch();
-    void outerDispatch(int loop);
+    void outerDispatch(bool loop);
 };
 
 class InnerThread : public osl::Thread
@@ -129,7 +118,7 @@ void OuterThread::run()
     osl::MutexGuard guard(m_pAffineBridge->m_outerMutex);
 
     m_pAffineBridge->m_outerThreadId = getIdentifier();
-    m_pAffineBridge->outerDispatch(0);
+    m_pAffineBridge->outerDispatch(false);
     m_pAffineBridge->m_outerThreadId = 0;
 
     m_pAffineBridge->m_pOuterThread = nullptr;
@@ -142,17 +131,15 @@ AffineBridge::AffineBridge()
       m_pCallee      (nullptr),
       m_pParam       (nullptr),
       m_innerThreadId(0),
-      m_pInnerThread (nullptr),
       m_enterCount   (0),
-      m_outerThreadId(0),
-      m_pOuterThread (nullptr)
+      m_outerThreadId(0)
 {
-    LOG_LIFECYCLE_AffineBridge_emit(fprintf(stderr, "LIFE: %s -> %p\n", "AffineBridge::AffineBridge(uno_Environment * pEnv)", this));
+    SAL_INFO("cppu.affinebridge", "LIFE: AffineBridge::AffineBridge(uno_Environment * pEnv) -> " << this);
 }
 
 AffineBridge::~AffineBridge()
 {
-    LOG_LIFECYCLE_AffineBridge_emit(fprintf(stderr, "LIFE: %s -> %p\n", "AffineBridge::~AffineBridge()", this));
+    SAL_INFO("cppu.affinebridge", "LIFE: AffineBridge::~AffineBridge() -> " << this);
 
     if (m_pInnerThread && osl::Thread::getCurrentIdentifier() != m_innerThreadId)
     {
@@ -162,17 +149,16 @@ AffineBridge::~AffineBridge()
         m_pInnerThread->join();
     }
 
-    delete m_pInnerThread;
+    m_pInnerThread.reset();
 
     if (m_pOuterThread)
     {
         m_pOuterThread->join();
-        delete m_pOuterThread;
     }
 }
 
 
-void AffineBridge::outerDispatch(int loop)
+void AffineBridge::outerDispatch(bool loop)
 {
     OSL_ASSERT(m_outerThreadId == osl::Thread::getCurrentIdentifier());
     OSL_ASSERT(m_innerThreadId != m_outerThreadId);
@@ -251,7 +237,7 @@ void AffineBridge::v_callInto_v(uno_EnvCallee * pCallee, va_list * pParam)
 
     if (m_innerThreadId == 0) // no inner thread yet
     {
-        m_pInnerThread  = new InnerThread(this);
+        m_pInnerThread.reset(new InnerThread(this));
         m_pInnerThread->resume();
     }
 
@@ -267,7 +253,7 @@ void AffineBridge::v_callInto_v(uno_EnvCallee * pCallee, va_list * pParam)
     m_pParam  = pParam;
     m_innerCondition.set();
 
-    outerDispatch(1);
+    outerDispatch(true);
 
     if (bResetId)
         m_outerThreadId = 0;
@@ -288,10 +274,9 @@ void AffineBridge::v_callOut_v(uno_EnvCallee * pCallee, va_list * pParam)
             if (m_pOuterThread)
             {
                 m_pOuterThread->join();
-                delete m_pOuterThread;
             }
 
-            m_pOuterThread = new OuterThread(this);
+            m_pOuterThread.reset(new OuterThread(this));
         }
     }
 
@@ -326,7 +311,7 @@ void AffineBridge::v_leave()
     m_innerMutex.release();
 }
 
-bool AffineBridge::v_isValid(rtl::OUString * pReason)
+bool AffineBridge::v_isValid(OUString * pReason)
 {
     bool result = m_enterCount > 0;
     if (!result)
@@ -353,13 +338,13 @@ bool AffineBridge::v_isValid(rtl::OUString * pReason)
 
 #endif
 
-extern "C" void SAL_DLLPUBLIC_EXPORT SAL_CALL uno_initEnvironment(uno_Environment * pEnv)
+extern "C" void SAL_DLLPUBLIC_EXPORT uno_initEnvironment(uno_Environment * pEnv)
     SAL_THROW_EXTERN_C()
 {
     cppu::helper::purpenv::Environment_initWithEnterable(pEnv, new AffineBridge());
 }
 
-extern "C" void SAL_DLLPUBLIC_EXPORT SAL_CALL uno_ext_getMapping(uno_Mapping     ** ppMapping,
+extern "C" void SAL_DLLPUBLIC_EXPORT uno_ext_getMapping(uno_Mapping     ** ppMapping,
                                                         uno_Environment  * pFrom,
                                                         uno_Environment  * pTo )
 {

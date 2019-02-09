@@ -29,9 +29,8 @@
 namespace abp
 {
 
-    class TypeSelectionPage : public AddressBookSourcePage
+    class TypeSelectionPage final : public AddressBookSourcePage
     {
-    protected:
         VclPtr<RadioButton> m_pEvolution;
         VclPtr<RadioButton> m_pEvolutionGroupwise;
         VclPtr<RadioButton> m_pEvolutionLdap;
@@ -55,17 +54,17 @@ namespace abp
             {}
         };
 
-        ::std::vector< ButtonItem > m_aAllTypes;
+        std::vector< ButtonItem > m_aAllTypes;
 
     public:
-        explicit TypeSelectionPage( OAddessBookSourcePilot* _pParent );
-        virtual ~TypeSelectionPage();
+        explicit TypeSelectionPage( OAddressBookSourcePilot* _pParent );
+        virtual ~TypeSelectionPage() override;
         virtual void        dispose() override;
 
         // retrieves the currently selected type
         AddressSourceType   getSelectedType() const;
 
-    protected:
+    private:
         // OWizardPage overridables
         virtual void        initializePage() override;
         virtual bool        commitPage( ::svt::WizardTypes::CommitPageReason _eReason ) override;
@@ -77,8 +76,7 @@ namespace abp
         // OImportPage overridables
         virtual bool        canAdvance() const override;
 
-    private:
-        DECL_LINK_TYPED( OnTypeSelected, Button*, void );
+        DECL_LINK( OnTypeSelected, Button*, void );
 
         void                selectType( AddressSourceType _eType );
     };

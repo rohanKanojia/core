@@ -19,27 +19,31 @@
 
 #include <config_folders.h>
 
-#include "deployment.hrc"
-#include "unopkg_shared.h"
-#include "dp_identifier.hxx"
-#include "../../deployment/gui/dp_gui.hrc"
-#include "lockfile.hxx"
+#include <stdio.h>
+
 #include <vcl/svapp.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 #include <rtl/bootstrap.hxx>
 #include <rtl/strbuf.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <osl/process.h>
 #include <osl/file.hxx>
 #include <osl/thread.hxx>
-#include <tools/getprocessworkingdir.hxx>
-#include <comphelper/processfactory.hxx>
 #include <unotools/configmgr.hxx>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/ucb/UniversalContentBroker.hpp>
+#include <unotools/bootstrap.hxx>
 #include <cppuhelper/bootstrap.hxx>
 #include <comphelper/sequence.hxx>
-#include <stdio.h>
+#include <comphelper/processfactory.hxx>
+
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/ucb/UniversalContentBroker.hpp>
+
+#include <strings.hrc>
+#include "unopkg_shared.h"
+#include <dp_identifier.hxx>
+#include <dp_shared.hxx>
+#include <lockfile.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -81,8 +85,7 @@ OptionInfo const * getOptionInfo(
             }
         }
     }
-    OSL_FAIL( OUStringToOString(
-                    opt, osl_getThreadTextEncoding() ).getStr() );
+    SAL_WARN( "desktop", opt );
     return nullptr;
 }
 
@@ -104,7 +107,7 @@ bool isOption( OptionInfo const * option_info, sal_uInt32 * pIndex )
     {
         ++(*pIndex);
         dp_misc::TRACE(__FILE__ ": identified option \'\'"
-            + OUString( option_info->m_short_option ) + "\n");
+            + OUStringLiteral1( option_info->m_short_option ) + "\n");
         return true;
     }
     if (arg[ 1 ] == '-' && rtl_ustr_ascii_compare(
@@ -169,7 +172,7 @@ struct ProcessWorkingDir : public rtl::StaticWithInit<
     OUString, ProcessWorkingDir> {
     const OUString operator () () {
         OUString workingDir;
-        tools::getProcessWorkingDir(workingDir);
+        utl::Bootstrap::getProcessWorkingDir(workingDir);
         return workingDir;
     }
 };
@@ -196,28 +199,21 @@ OUString makeAbsoluteFileUrl(
     oslFileError rc = osl_getFileURLFromSystemPath( sys_path.pData, &file_url.pData );
     if ( rc != osl_File_E_None) {
         OUString tempPath;
-        if ( osl_getSystemPathFromFileURL( sys_path.pData, &tempPath.pData) == osl_File_E_None )
-        {
-            file_url = sys_path;
-        }
-        else
+        if ( osl_getSystemPathFromFileURL( sys_path.pData, &tempPath.pData) != osl_File_E_None )
         {
             throw RuntimeException("cannot get file url from system path: " +
                 sys_path );
         }
+        file_url = sys_path;
     }
 
     OUString abs;
     if (osl_getAbsoluteFileURL(
             base_url.pData, file_url.pData, &abs.pData ) != osl_File_E_None)
     {
-        OUStringBuffer buf;
-        buf.append( "making absolute file url failed: \"" );
-        buf.append( base_url );
-        buf.append( "\" (base-url) and \"" );
-        buf.append( file_url );
-        buf.append( "\" (file-url)!" );
-        throw RuntimeException( buf.makeStringAndClear() );
+        throw RuntimeException(
+            "making absolute file url failed: \"" + base_url
+            + "\" (base-url) and \"" + file_url + "\" (file-url)!" );
     }
     return abs[ abs.getLength() -1 ] == '/'
         ? abs.copy( 0, abs.getLength() -1 ) : abs;
@@ -227,7 +223,7 @@ OUString makeAbsoluteFileUrl(
 namespace {
 
 
-inline void printf_space( sal_Int32 space )
+void printf_space( sal_Int32 space )
 {
     while (space--)
         dp_misc::writeConsole("  ");
@@ -237,7 +233,7 @@ inline void printf_space( sal_Int32 space )
 void printf_line(
     OUString const & name, OUString const & value, sal_Int32 level )
 {
-   printf_space( level );
+    printf_space( level );
     dp_misc::writeConsole(name + ": " + value + "\n");
 }
 
@@ -284,9 +280,9 @@ void printf_package(
             xPackage->getBundle( Reference<task::XAbortChannel>(), xCmdEnv ) );
         printf_space( level + 1 );
         dp_misc::writeConsole("bundled Packages: {\n");
-        ::std::vector<Reference<deployment::XPackage> >vec_bundle;
+        std::vector<Reference<deployment::XPackage> >vec_bundle;
         ::comphelper::sequenceToContainer(vec_bundle, seq);
-        printf_packages( vec_bundle, ::std::vector<bool>(vec_bundle.size()),
+        printf_packages( vec_bundle, std::vector<bool>(vec_bundle.size()),
                          xCmdEnv, level + 2 );
         printf_space( level + 1 );
         dp_misc::writeConsole("}\n");
@@ -295,7 +291,7 @@ void printf_package(
 
 } // anon namespace
 
-void printf_unaccepted_licenses(
+static void printf_unaccepted_licenses(
     Reference<deployment::XPackage> const & ext)
 {
         OUString id(
@@ -307,8 +303,8 @@ void printf_unaccepted_licenses(
 
 
 void printf_packages(
-    ::std::vector< Reference<deployment::XPackage> > const & allExtensions,
-    ::std::vector<bool> const & vecUnaccepted,
+    std::vector< Reference<deployment::XPackage> > const & allExtensions,
+    std::vector<bool> const & vecUnaccepted,
     Reference<XCommandEnvironment> const & xCmdEnv, sal_Int32 level )
 {
     OSL_ASSERT(allExtensions.size() == vecUnaccepted.size());
@@ -320,15 +316,15 @@ void printf_packages(
     }
     else
     {
-        typedef ::std::vector< Reference<deployment::XPackage> >::const_iterator I_EXT;
         int index = 0;
-        for (I_EXT i = allExtensions.begin(); i != allExtensions.end(); ++i, ++index)
+        for (auto const& extension : allExtensions)
         {
             if (vecUnaccepted[index])
-                printf_unaccepted_licenses(*i);
+                printf_unaccepted_licenses(extension);
             else
-                printf_package( *i, xCmdEnv, level );
+                printf_package( extension, xCmdEnv, level );
             dp_misc::writeConsole("\n");
+            ++index;
         }
     }
 }
@@ -359,16 +355,13 @@ Reference<XComponentContext> connectToOffice(
     Reference<XComponentContext> const & xLocalComponentContext,
     bool verbose )
 {
-    Sequence<OUString> args( 3 );
-    args[ 0 ] = "--nologo";
-    args[ 1 ] = "--nodefault";
-
     OUString pipeId( ::dp_misc::generateRandomPipeId() );
     OUStringBuffer buf;
     buf.append( "--accept=pipe,name=" );
     buf.append( pipeId );
     buf.append( ";urp;" );
-    args[ 2 ] = buf.makeStringAndClear();
+
+    Sequence<OUString> args { "--nologo", "--nodefault", buf.makeStringAndClear() };
     OUString appURL( getExecutableDir() + "/soffice" );
 
     if (verbose)
@@ -403,7 +396,7 @@ Reference<XComponentContext> connectToOffice(
 /** returns the path to the lock file used by unopkg.
     @return the path. An empty string signifies an error.
 */
-OUString getLockFilePath()
+static OUString getLockFilePath()
 {
     OUString ret;
     OUString sBootstrap("${$BRAND_BASE_DIR/" LIBO_ETC_FOLDER "/" SAL_CONFIGFILE("bootstrap") ":UserInstallation}");
@@ -443,10 +436,8 @@ Reference<XComponentContext> getUNO(
     {
         if (! s_lockfile.check( nullptr ))
         {
-            OUString sMsg(ResId(RID_STR_CONCURRENTINSTANCE, *DeploymentResMgr::get()));
-            //Create this string before we call DeInitVCL, because this will kill
-            //the ResMgr
-            OUString sError(ResId(RID_STR_UNOPKG_ERROR, *DeploymentResMgr::get()));
+            OUString sMsg(DpResId(RID_STR_CONCURRENTINSTANCE));
+            OUString sError(DpResId(RID_STR_UNOPKG_ERROR));
 
             sMsg += "\n" + getLockFilePath();
 
@@ -457,10 +448,11 @@ Reference<XComponentContext> getUNO(
                 if ( ! InitVCL() )
                     throw RuntimeException( "Cannot initialize VCL!" );
                 {
-                    ScopedVclPtrInstance< WarningBox > warn(nullptr, WB_OK | WB_DEF_OK, sMsg);
-                    warn->SetText(utl::ConfigManager::getProductName());
-                    warn->SetIcon(0);
-                    warn->Execute();
+                    std::unique_ptr<weld::MessageDialog> xWarn(Application::CreateMessageDialog(nullptr,
+                                                               VclMessageType::Warning, VclButtonsType::Ok,
+                                                               sMsg));
+                    xWarn->set_title(utl::ConfigManager::getProductName());
+                    xWarn->run();
                 }
                 DeInitVCL();
             }

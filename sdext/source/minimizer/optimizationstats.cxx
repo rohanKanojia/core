@@ -45,7 +45,7 @@ void OptimizationStats::SetStatusValue( const PPPOptimizerTokenEnum eStat, const
 
 const uno::Any* OptimizationStats::GetStatusValue( const PPPOptimizerTokenEnum eStat ) const
 {
-    std::map< PPPOptimizerTokenEnum, uno::Any, Compare >::const_iterator aIter( maStats.find( eStat ) );
+    std::map< PPPOptimizerTokenEnum, uno::Any >::const_iterator aIter( maStats.find( eStat ) );
     return aIter != maStats.end() ? &((*aIter).second) : nullptr;
 }
 
@@ -54,11 +54,10 @@ css::beans::PropertyValues OptimizationStats::GetStatusSequence()
 {
     int i = 0;
     uno::Sequence< PropertyValue > aStatsSequence( maStats.size() );
-    std::map< PPPOptimizerTokenEnum, uno::Any, Compare >::iterator aIter( maStats.begin() );
-    while( aIter != maStats.end() )
+    for( const auto& rEntry : maStats )
     {
-        aStatsSequence[ i ].Name = TKGet( (*aIter).first );
-        aStatsSequence[ i++ ].Value <<= (*aIter++).second;
+        aStatsSequence[ i ].Name = TKGet( rEntry.first );
+        aStatsSequence[ i++ ].Value = rEntry.second;
     }
     return aStatsSequence;
 }
@@ -67,11 +66,11 @@ css::beans::PropertyValues OptimizationStats::GetStatusSequence()
 void OptimizationStats::InitializeStatusValues( const uno::Sequence< PropertyValue >& rOptimizationStats )
 {
     for( int i = 0; i < rOptimizationStats.getLength(); i++ )
-        rOptimizationStats[ i ].Value >>= maStats[ TKGet( rOptimizationStats[ i ].Name ) ];
+        maStats[ TKGet( rOptimizationStats[ i ].Name ) ] = rOptimizationStats[ i ].Value;
 }
 
 
-void OptimizationStats::InitializeStatusValuesFromDocument( Reference< XModel > rxModel )
+void OptimizationStats::InitializeStatusValuesFromDocument( const Reference< XModel >& rxModel )
 {
     try
     {

@@ -25,16 +25,13 @@
 namespace chart
 {
 
-/**
-*/
-
 class VPolarAngleAxis : public VPolarAxis
 {
 public:
     VPolarAngleAxis( const AxisProperties& rAxisProperties
            , const css::uno::Reference< css::util::XNumberFormatsSupplier >& xNumberFormatsSupplier
            , sal_Int32 nDimensionCount );
-    virtual ~VPolarAngleAxis();
+    virtual ~VPolarAngleAxis() override;
 
     virtual void createMaximumLabels() override;
     virtual void createLabels() override;
@@ -43,10 +40,10 @@ public:
     virtual void createShapes() override;
 
 private: //methods
-    bool createTextShapes_ForAngleAxis(
+    void createTextShapes_ForAngleAxis(
                        const css::uno::Reference< css::drawing::XShapes >& xTarget
                      , EquidistantTickIter& rTickIter
-                     , AxisLabelProperties& rAxisLabelProperties
+                     , AxisLabelProperties const & rAxisLabelProperties
                      , double fLogicRadius, double fLogicZ );
 };
 

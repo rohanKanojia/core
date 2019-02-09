@@ -20,11 +20,12 @@
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_ITEMCONVERTER_HXX
 
 #include <unotools/eventlisteneradapter.hxx>
-#include <svl/itempool.hxx>
 #include <svl/itemset.hxx>
-#include <com/sun/star/beans/XPropertySet.hpp>
 
 #include <utility>
+
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySetInfo; } } } }
 
 namespace chart { namespace wrapper {
 
@@ -75,13 +76,13 @@ public:
     ItemConverter(
             const css::uno::Reference< css::beans::XPropertySet > & rPropertySet ,
             SfxItemPool& rItemPool );
-    virtual ~ItemConverter();
+    virtual ~ItemConverter() override;
 
     typedef sal_uInt16          tWhichIdType;
     typedef OUString tPropertyNameType;
     typedef sal_uInt8            tMemberIdType;
 
-    typedef ::std::pair< tPropertyNameType, tMemberIdType > tPropertyNameWithMemberId;
+    typedef std::pair< tPropertyNameType, tMemberIdType > tPropertyNameWithMemberId;
 
     /** applies all properties that can be mapped to items into the given item
         set.
@@ -145,9 +146,10 @@ protected:
         false.
 
         The default implementation does nothing except showing an assertion
+
+        @throws css::uno::Exception
      */
-    virtual void FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const
-        throw (css::uno::Exception, std::exception);
+    virtual void FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const;
 
     /** for items that can not be mapped directly to a property.
 
@@ -157,9 +159,10 @@ protected:
         The default implementation returns just false and shows an assertion
 
         @return true if the item changed a property, false otherwise.
+
+        @throws css::uno::Exception
      */
-    virtual bool ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet )
-        throw( css::uno::Exception );
+    virtual bool ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet );
 
     /// Returns the pool
     SfxItemPool & GetItemPool() const { return m_rItemPool;}
@@ -167,7 +170,7 @@ protected:
     /** Returns the XPropertySet that was given in the CTOR and is used to apply
         items in ApplyItemSet().
      */
-    css::uno::Reference< css::beans::XPropertySet >  GetPropertySet() const { return m_xPropertySet;}
+    const css::uno::Reference< css::beans::XPropertySet >&  GetPropertySet() const { return m_xPropertySet;}
 
     // ____ ::utl::OEventListenerAdapter ____
     virtual void _disposing( const css::lang::EventObject& rSource ) override;
@@ -185,7 +188,6 @@ private:
     css::uno::Reference< css::beans::XPropertySetInfo > m_xPropertySetInfo;
 
     SfxItemPool&                                    m_rItemPool;
-    bool                                            m_bIsValid;
 };
 
 }}

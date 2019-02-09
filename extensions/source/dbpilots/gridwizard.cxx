@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <vector>
 
@@ -30,7 +30,7 @@
 #include <sal/log.hxx>
 #include <tools/debug.hxx>
 #include "dbptools.hxx"
-#include "dbpilots.hrc"
+#include <helpids.h>
 
 #define GW_STATE_DATASOURCE_SELECTION   0
 #define GW_STATE_FIELDSELECTION         1
@@ -60,7 +60,7 @@ namespace dbp
         m_pNextPage->SetHelpId(HID_GRIDWIZARD_NEXT);
         m_pCancel->SetHelpId(HID_GRIDWIZARD_CANCEL);
         m_pFinish->SetHelpId(HID_GRIDWIZARD_FINISH);
-        setTitleBase(ModuleRes(RID_STR_GRIDWIZARD_TITLE).toString());
+        setTitleBase(compmodule::ModuleRes(RID_STR_GRIDWIZARD_TITLE));
 
         // if we do not need the data source selection page ...
         if (!needDatasourceSelection())
@@ -77,10 +77,7 @@ namespace dbp
             return false;
 
         Reference< XGridColumnFactory > xColumnFactory(getContext().xObjectModel, UNO_QUERY);
-        if (!xColumnFactory.is())
-            return false;
-
-        return true;
+        return xColumnFactory.is();
     }
 
 
@@ -100,9 +97,6 @@ namespace dbp
         if (!xColumnFactory.is() || !xColumnContainer.is())
             return;
 
-        static const char s_sDataFieldProperty [] = "DataField";
-        static const char s_sLabelProperty     [] = "Label";
-        static const char s_sWidthProperty     [] = "Width";
         static const char s_sMouseWheelBehavior[] = "MouseWheelBehavior";
         static const char s_sEmptyString[] = "";
 
@@ -163,11 +157,11 @@ namespace dbp
 
                 case DataType::TIMESTAMP:
                     aColumnServiceNames.push_back(OUString("DateField"));
-                    aColumnLabelPostfixes.push_back(ModuleRes(RID_STR_DATEPOSTFIX).toString());
+                    aColumnLabelPostfixes.push_back(compmodule::ModuleRes(RID_STR_DATEPOSTFIX));
 
                     aFormFieldNames.push_back(*pSelectedFields);
                     aColumnServiceNames.push_back(OUString("TimeField"));
-                    aColumnLabelPostfixes.push_back(ModuleRes(RID_STR_TIMEPOSTFIX).toString());
+                    aColumnLabelPostfixes.push_back(compmodule::ModuleRes(RID_STR_TIMEPOSTFIX));
                     break;
 
                 default:
@@ -201,11 +195,11 @@ namespace dbp
                     disambiguateName(xExistenceChecker, sColumnName);
 
                     // the data field the column should be bound to
-                    xColumn->setPropertyValue(s_sDataFieldProperty, makeAny(*pFormFieldName));
+                    xColumn->setPropertyValue("DataField", makeAny(*pFormFieldName));
                     // the label
-                    xColumn->setPropertyValue(s_sLabelProperty, makeAny(*pFormFieldName + *pColumnLabelPostfix));
+                    xColumn->setPropertyValue("Label", makeAny(*pFormFieldName + *pColumnLabelPostfix));
                     // the width (<void/> => column will be auto-sized)
-                    xColumn->setPropertyValue(s_sWidthProperty, Any());
+                    xColumn->setPropertyValue("Width", Any());
 
                     if ( xColumnPSI->hasPropertyByName( s_sMouseWheelBehavior ) )
                         xColumn->setPropertyValue( s_sMouseWheelBehavior, makeAny( MouseWheelBehavior::SCROLL_DISABLED ) );
@@ -217,7 +211,7 @@ namespace dbp
                 {
                     SAL_WARN( "extensions.dbpilots", "OGridWizard::implApplySettings: "
                               "unexpected exception while creating the grid column for field " <<
-                              pFormFieldName->getStr() << "!" );
+                              *pFormFieldName );
                 }
             }
         }
@@ -381,19 +375,19 @@ namespace dbp
 
     void OGridFieldsSelection::implCheckButtons()
     {
-        m_pSelectOne->Enable(m_pExistFields->GetSelectEntryCount() != 0);
+        m_pSelectOne->Enable(m_pExistFields->GetSelectedEntryCount() != 0);
         m_pSelectAll->Enable(m_pExistFields->GetEntryCount() != 0);
 
-        m_pDeselectOne->Enable(m_pSelFields->GetSelectEntryCount() != 0);
+        m_pDeselectOne->Enable(m_pSelFields->GetSelectedEntryCount() != 0);
         m_pDeselectAll->Enable(m_pSelFields->GetEntryCount() != 0);
 
         getDialog()->enableButtons(WizardButtonFlags::FINISH, 0 != m_pSelFields->GetEntryCount());
     }
 
 
-    IMPL_LINK_TYPED(OGridFieldsSelection, OnEntryDoubleClicked, ListBox&, _rList, void)
+    IMPL_LINK(OGridFieldsSelection, OnEntryDoubleClicked, ListBox&, _rList, void)
     {
-        PushButton* pSimulateButton = m_pExistFields == &_rList ? m_pSelectOne : m_pDeselectOne;
+        PushButton* pSimulateButton = m_pExistFields == &_rList ? m_pSelectOne.get() : m_pDeselectOne.get();
         if (pSimulateButton->IsEnabled())
         {
             OnMoveOneEntry( pSimulateButton );
@@ -401,19 +395,19 @@ namespace dbp
     }
 
 
-    IMPL_LINK_NOARG_TYPED(OGridFieldsSelection, OnEntrySelected, ListBox&, void)
+    IMPL_LINK_NOARG(OGridFieldsSelection, OnEntrySelected, ListBox&, void)
     {
         implCheckButtons();
     }
 
 
-    IMPL_LINK_TYPED(OGridFieldsSelection, OnMoveOneEntry, Button*, _pButton, void)
+    IMPL_LINK(OGridFieldsSelection, OnMoveOneEntry, Button*, _pButton, void)
     {
         bool bMoveRight = (m_pSelectOne == _pButton);
         ListBox& rMoveTo = bMoveRight ? *m_pSelFields : *m_pExistFields;
 
         // the index of the selected entry
-        const sal_Int32 nSelected = bMoveRight ? m_pExistFields->GetSelectEntryPos() : m_pSelFields->GetSelectEntryPos();
+        const sal_Int32 nSelected = bMoveRight ? m_pExistFields->GetSelectedEntryPos() : m_pSelFields->GetSelectedEntryPos();
         // the (original) relative position of the entry
         sal_IntPtr nRelativeIndex = reinterpret_cast<sal_IntPtr>(bMoveRight ? m_pExistFields->GetEntryData(nSelected) : m_pSelFields->GetEntryData(nSelected));
 
@@ -440,7 +434,7 @@ namespace dbp
         // remove the entry from its old list
         if (bMoveRight)
         {
-            sal_Int32 nSelectPos = m_pExistFields->GetSelectEntryPos();
+            sal_Int32 nSelectPos = m_pExistFields->GetSelectedEntryPos();
             m_pExistFields->RemoveEntry(nSelected);
             if ((LISTBOX_ENTRY_NOTFOUND != nSelectPos) && (nSelectPos < m_pExistFields->GetEntryCount()))
                 m_pExistFields->SelectEntryPos(nSelectPos);
@@ -449,7 +443,7 @@ namespace dbp
         }
         else
         {
-            sal_Int32 nSelectPos = m_pSelFields->GetSelectEntryPos();
+            sal_Int32 nSelectPos = m_pSelFields->GetSelectedEntryPos();
             m_pSelFields->RemoveEntry(nSelected);
             if ((LISTBOX_ENTRY_NOTFOUND != nSelectPos) && (nSelectPos < m_pSelFields->GetEntryCount()))
                 m_pSelFields->SelectEntryPos(nSelectPos);
@@ -461,7 +455,7 @@ namespace dbp
     }
 
 
-    IMPL_LINK_TYPED(OGridFieldsSelection, OnMoveAllEntries, Button*, _pButton, void)
+    IMPL_LINK(OGridFieldsSelection, OnMoveAllEntries, Button*, _pButton, void)
     {
         bool bMoveRight = (m_pSelectAll == _pButton);
         m_pExistFields->Clear();

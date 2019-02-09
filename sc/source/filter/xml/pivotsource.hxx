@@ -20,13 +20,12 @@
 namespace sc {
 
 /**
- * Store pivot table data that need to be post-processeed at the end of the
+ * Store pivot table data that need to be post-processed at the end of the
  * import.
  */
 struct PivotTableSources
 {
-    typedef std::unordered_map<OUString, OUString, OUStringHash> SelectedPagesType;
-    typedef std::unordered_map<ScDPObject*, SelectedPagesType> SelectedPagesMapType;
+    typedef std::unordered_map<OUString, OUString> SelectedPagesType;
 
     struct SelectedPages
     {
@@ -38,24 +37,24 @@ struct PivotTableSources
 
     struct SheetSource
     {
-        ScDPObject* mpDP;
-        ScSheetSourceDesc maDesc;
+        ScDPObject* const mpDP;
+        ScSheetSourceDesc const maDesc;
 
         SheetSource( ScDPObject* pObj, const ScSheetSourceDesc& rDesc );
     };
 
     struct DBSource
     {
-        ScDPObject* mpDP;
-        ScImportSourceDesc maDesc;
+        ScDPObject* const mpDP;
+        ScImportSourceDesc const maDesc;
 
         DBSource( ScDPObject* pObj, const ScImportSourceDesc& rDesc );
     };
 
     struct ServiceSource
     {
-        ScDPObject* mpDP;
-        ScDPServiceDesc maDesc;
+        ScDPObject* const mpDP;
+        ScDPServiceDesc const maDesc;
 
         ServiceSource( ScDPObject* pObj, const ScDPServiceDesc& rDesc );
     };

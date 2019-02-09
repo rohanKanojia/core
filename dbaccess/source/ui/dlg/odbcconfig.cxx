@@ -26,7 +26,6 @@
 #include <osl/diagnose.h>
 #include <osl/process.h>
 #include <osl/thread.hxx>
-#include <tools/debug.hxx>
 #include <vcl/svapp.hxx>
 
 #ifdef HAVE_ODBC_SUPPORT
@@ -38,8 +37,9 @@
 #ifdef MACOSX
 #define ODBC_LIBRARY        "libiodbc.dylib"
 #else
+#define ODBC_LIBRARY_PLAIN  "libodbc.so"
 #define ODBC_LIBRARY_1      "libodbc.so.1"
-#define ODBC_LIBRARY        "libodbc.so"
+#define ODBC_LIBRARY        "libodbc.so.2"
 #endif
 #endif
 
@@ -73,7 +73,7 @@ typedef SQLRETURN (SQL_API* TSQLDataSources) (SQLHENV EnvironmentHandle, SQLUSMA
 bool OOdbcEnumeration::load(const sal_Char* _pLibPath)
 {
     m_sLibPath = OUString::createFromAscii(_pLibPath);
-#ifdef HAVE_ODBC_SUPPORT
+#if defined(HAVE_ODBC_SUPPORT) && !defined(DISABLE_DYNLOADING)
     // load the module
     m_pOdbcLib = osl_loadModule(m_sLibPath.pData, SAL_LOADMODULE_NOW);
     return (nullptr != m_pOdbcLib);
@@ -84,7 +84,7 @@ bool OOdbcEnumeration::load(const sal_Char* _pLibPath)
 
 void OOdbcEnumeration::unload()
 {
-#ifdef HAVE_ODBC_SUPPORT
+#if defined(HAVE_ODBC_SUPPORT) && !defined(DISABLE_DYNLOADING)
     if (isLoaded())
     {
         osl_unloadModule(m_pOdbcLib);
@@ -124,6 +124,10 @@ OOdbcEnumeration::OOdbcEnumeration()
     if ( !bLoaded )
         bLoaded = load(ODBC_LIBRARY_1);
 #endif
+#ifdef ODBC_LIBRARY_PLAIN
+    if ( !bLoaded )
+        bLoaded = load(ODBC_LIBRARY_PLAIN);
+#endif
 
     if ( bLoaded )
     {
@@ -147,7 +151,6 @@ OOdbcEnumeration::OOdbcEnumeration()
 OOdbcEnumeration::~OOdbcEnumeration()
 {
     freeEnv();
-    delete m_pImpl;
     unload();
 }
 
@@ -183,7 +186,7 @@ void OOdbcEnumeration::freeEnv()
 #endif
 }
 
-void OOdbcEnumeration::getDatasourceNames(StringBag& _rNames)
+void OOdbcEnumeration::getDatasourceNames(std::set<OUString>& _rNames)
 {
     OSL_ENSURE(isLoaded(), "OOdbcEnumeration::getDatasourceNames: not loaded!");
     if (!isLoaded())
@@ -239,7 +242,7 @@ public:
     }
 
 protected:
-    virtual void SAL_CALL run()
+    virtual void SAL_CALL run() override
     {
         osl_setThreadName("dbaui::ProcessTerminationWait");
 
@@ -272,8 +275,8 @@ bool OOdbcManagement::manageDataSources_async()
     // (and note this whole functionality is supported on Windows only, ATM)
     OUString sExecutableName( "$BRAND_BASE_DIR/" LIBO_LIBEXEC_FOLDER "/odbcconfig.exe" );
     ::rtl::Bootstrap::expandMacros( sExecutableName ); //TODO: detect failure
-    oslProcess hProcessHandle(0);
-    oslProcessError eError = osl_executeProcess( sExecutableName.pData, NULL, 0, 0, NULL, NULL, NULL, 0, &hProcessHandle );
+    oslProcess hProcessHandle(nullptr);
+    oslProcessError eError = osl_executeProcess( sExecutableName.pData, nullptr, 0, 0, nullptr, nullptr, nullptr, 0, &hProcessHandle );
     if ( eError != osl_Process_E_None )
         return false;
 

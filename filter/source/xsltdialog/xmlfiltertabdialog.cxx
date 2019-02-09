@@ -21,11 +21,11 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <comphelper/fileurl.hxx>
-#include <tools/resid.hxx>
-#include <vcl/layout.hxx>
+#include <unotools/resmgr.hxx>
+#include <vcl/weld.hxx>
 #include <osl/file.hxx>
 
-#include "xmlfilterdialogstrings.hrc"
+#include <strings.hrc>
 #include "xmlfiltertabdialog.hxx"
 #include "xmlfiltertabpagebasic.hxx"
 #include "xmlfiltertabpagexslt.hxx"
@@ -36,66 +36,40 @@ using namespace com::sun::star::container;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::lang;
 
-XMLFilterTabDialog::XMLFilterTabDialog(vcl::Window *pParent, ResMgr& rResMgr,
+XMLFilterTabDialog::XMLFilterTabDialog(weld::Window *pParent,
     const Reference< XComponentContext >& rxContext, const filter_info_impl* pInfo)
-    : TabDialog(pParent, "XSLTFilterDialog","filter/ui/xsltfilterdialog.ui")
+    : GenericDialogController(pParent, "filter/ui/xsltfilterdialog.ui", "XSLTFilterDialog")
     , mxContext(rxContext)
-    , mrResMgr(rResMgr)
+    , m_xTabCtrl(m_xBuilder->weld_notebook("tabcontrol"))
+    , m_xOKBtn(m_xBuilder->weld_button("ok"))
+    , mpBasicPage(new XMLFilterTabPageBasic(m_xTabCtrl->get_page("general")))
+    , mpXSLTPage(new XMLFilterTabPageXSLT(m_xTabCtrl->get_page("transformation"), m_xDialog.get()))
 {
-    get(m_pOKBtn, "ok");
-    get(m_pTabCtrl, "tabcontrol");
-
     mpOldInfo = pInfo;
-    mpNewInfo = new filter_info_impl( *mpOldInfo );
+    mpNewInfo.reset( new filter_info_impl( *mpOldInfo ) );
 
-    OUString aTitle( GetText() );
+    OUString aTitle(m_xDialog->get_title());
     aTitle = aTitle.replaceAll("%s", mpNewInfo->maFilterName);
-    SetText( aTitle );
+    m_xDialog->set_title(aTitle);
 
-    m_pOKBtn->SetClickHdl( LINK( this, XMLFilterTabDialog, OkHdl ) );
+    m_xOKBtn->connect_clicked( LINK( this, XMLFilterTabDialog, OkHdl ) );
 
-    m_pTabCtrl->SetActivatePageHdl( LINK( this, XMLFilterTabDialog, ActivatePageHdl ) );
-
-    mpBasicPage = VclPtr<XMLFilterTabPageBasic>::Create(m_pTabCtrl);
-    mpBasicPage->SetInfo( mpNewInfo );
-
-    m_nBasicPageId = m_pTabCtrl->GetPageId("general");
-    m_pTabCtrl->SetTabPage(m_nBasicPageId, mpBasicPage);
-
-    mpXSLTPage = VclPtr<XMLFilterTabPageXSLT>::Create(m_pTabCtrl);
-    mpXSLTPage->SetInfo( mpNewInfo );
-
-    m_nXSLTPageId = m_pTabCtrl->GetPageId("transformation");
-    m_pTabCtrl->SetTabPage(m_nXSLTPageId, mpXSLTPage);
-
-    ActivatePageHdl(nullptr, m_pTabCtrl);
+    mpBasicPage->SetInfo( mpNewInfo.get() );
+    mpXSLTPage->SetInfo( mpNewInfo.get() );
 }
-
 
 XMLFilterTabDialog::~XMLFilterTabDialog()
 {
-    disposeOnce();
 }
-
-void XMLFilterTabDialog::dispose()
-{
-    mpBasicPage.disposeAndClear();
-    mpXSLTPage.disposeAndClear();
-    delete mpNewInfo;
-    m_pTabCtrl.clear();
-    m_pOKBtn.clear();
-    TabDialog::dispose();
-}
-
 
 bool XMLFilterTabDialog::onOk()
 {
-    mpXSLTPage->FillInfo( mpNewInfo );
-    mpBasicPage->FillInfo( mpNewInfo );
+    mpXSLTPage->FillInfo( mpNewInfo.get() );
+    mpBasicPage->FillInfo( mpNewInfo.get() );
 
-    sal_uInt16 nErrorPage = 0;
-    sal_uInt16 nErrorId = 0;
-    vcl::Window* pFocusWindow = nullptr;
+    OString sErrorPage;
+    const char* pErrorId = nullptr;
+    weld::Widget* pFocusWindow = nullptr;
     OUString aReplace1;
     OUString aReplace2;
 
@@ -116,9 +90,9 @@ bool XMLFilterTabDialog::onOk()
                 {
                     if( xFilterContainer->hasByName( mpNewInfo->maFilterName ) )
                     {
-                        nErrorPage = m_nBasicPageId;
-                        nErrorId = STR_ERROR_FILTER_NAME_EXISTS;
-                        pFocusWindow = (mpBasicPage->m_pEDFilterName);
+                        sErrorPage = "general";
+                        pErrorId = STR_ERROR_FILTER_NAME_EXISTS;
+                        pFocusWindow = mpBasicPage->m_xEDFilterName.get();
                         aReplace1 = mpNewInfo->maFilterName;
                     }
 
@@ -126,7 +100,7 @@ bool XMLFilterTabDialog::onOk()
             }
             catch( const Exception& )
             {
-                OSL_FAIL( "XMLFilterTabDialog::onOk exception catched!" );
+                OSL_FAIL( "XMLFilterTabDialog::onOk exception caught!" );
             }
         }
     }
@@ -153,7 +127,7 @@ bool XMLFilterTabDialog::onOk()
                     sal_Int32 nFilter;
 
                     Sequence< PropertyValue > aValues;
-                    for( nFilter = 0; (nFilter < nCount) && (nErrorId == 0); nFilter++, pFilterName++ )
+                    for( nFilter = 0; (nFilter < nCount) && (pErrorId == nullptr); nFilter++, pFilterName++ )
                     {
                         Any aAny( xFilterContainer->getByName( *pFilterName ) );
                         if( !(aAny >>= aValues) )
@@ -163,7 +137,7 @@ bool XMLFilterTabDialog::onOk()
                         PropertyValue* pValues = aValues.getArray();
                         sal_Int32 nValue;
 
-                        for( nValue = 0; (nValue < nValueCount) && (nErrorId == 0); nValue++, pValues++ )
+                        for( nValue = 0; (nValue < nValueCount) && (pErrorId == nullptr); nValue++, pValues++ )
                         {
                             if ( pValues->Name == "UIName" )
                             {
@@ -171,9 +145,9 @@ bool XMLFilterTabDialog::onOk()
                                 pValues->Value >>= aInterfaceName;
                                 if( aInterfaceName == mpNewInfo->maInterfaceName )
                                 {
-                                    nErrorPage = m_nBasicPageId;
-                                    nErrorId = STR_ERROR_TYPE_NAME_EXISTS;
-                                    pFocusWindow = (mpBasicPage->m_pEDInterfaceName);
+                                    sErrorPage = "general";
+                                    pErrorId = STR_ERROR_TYPE_NAME_EXISTS;
+                                    pFocusWindow = mpBasicPage->m_xEDInterfaceName.get();
                                     aReplace1 = mpNewInfo->maInterfaceName;
                                     aReplace2 = *pFilterName;
                                 }
@@ -184,12 +158,12 @@ bool XMLFilterTabDialog::onOk()
             }
             catch( const Exception& )
             {
-                OSL_FAIL( "XMLFilterTabDialog::onOk exception catched!" );
+                OSL_FAIL( "XMLFilterTabDialog::onOk exception caught!" );
             }
         }
     }
 
-    if( 0 == nErrorId )
+    if (!pErrorId)
     {
         // 4. see if the export xslt is valid
         if( (mpNewInfo->maExportXSLT != mpOldInfo->maExportXSLT) && comphelper::isFileUrl( mpNewInfo->maExportXSLT ) )
@@ -198,14 +172,14 @@ bool XMLFilterTabDialog::onOk()
             osl::File::RC aRC = aFile.open( osl_File_OpenFlag_Read );
             if( aRC != osl::File::E_None )
             {
-                nErrorId = STR_ERROR_EXPORT_XSLT_NOT_FOUND;
-                nErrorPage = m_nXSLTPageId;
-                pFocusWindow = (mpXSLTPage->m_pEDExportXSLT);
+                pErrorId = STR_ERROR_EXPORT_XSLT_NOT_FOUND;
+                sErrorPage = "transformation";
+                pFocusWindow = mpXSLTPage->m_xEDExportXSLT->getWidget();
             }
         }
     }
 
-    if( 0 == nErrorId )
+    if (!pErrorId)
     {
         // 5. see if the import xslt is valid
         if( (mpNewInfo->maImportXSLT != mpOldInfo->maImportXSLT) && comphelper::isFileUrl( mpNewInfo->maImportXSLT ) )
@@ -214,9 +188,9 @@ bool XMLFilterTabDialog::onOk()
             osl::File::RC aRC = aFile.open( osl_File_OpenFlag_Read );
             if( aRC != osl::File::E_None )
             {
-                nErrorId = STR_ERROR_IMPORT_XSLT_NOT_FOUND;
-                nErrorPage = m_nXSLTPageId;
-                pFocusWindow = (mpXSLTPage->m_pEDImportTemplate);
+                pErrorId = STR_ERROR_IMPORT_XSLT_NOT_FOUND;
+                sErrorPage = "transformation";
+                pFocusWindow = mpXSLTPage->m_xEDImportTemplate->getWidget();
             }
         }
     }
@@ -224,12 +198,12 @@ bool XMLFilterTabDialog::onOk()
     // see if we have at least an import or an export xslt
     if((mpNewInfo->maImportXSLT.isEmpty()) && (mpNewInfo->maExportXSLT.isEmpty()) )
     {
-        nErrorId = STR_ERROR_EXPORT_XSLT_NOT_FOUND;
-        nErrorPage = m_nXSLTPageId;
-        pFocusWindow = (mpXSLTPage->m_pEDExportXSLT);
+        pErrorId = STR_ERROR_EXPORT_XSLT_NOT_FOUND;
+        sErrorPage = "transformation";
+        pFocusWindow = mpXSLTPage->m_xEDExportXSLT->getWidget();
     }
 
-    if( 0 == nErrorId )
+    if (!pErrorId)
     {
         // 6. see if the import template is valid
         if( (mpNewInfo->maImportTemplate != mpOldInfo->maImportTemplate) && comphelper::isFileUrl( mpNewInfo->maImportTemplate ) )
@@ -238,20 +212,18 @@ bool XMLFilterTabDialog::onOk()
             osl::File::RC aRC = aFile.open( osl_File_OpenFlag_Read );
             if( aRC != osl::File::E_None )
             {
-                nErrorId = STR_ERROR_IMPORT_TEMPLATE_NOT_FOUND;
-                nErrorPage = m_nXSLTPageId;
-                pFocusWindow = (mpXSLTPage->m_pEDImportTemplate);
+                pErrorId = STR_ERROR_IMPORT_TEMPLATE_NOT_FOUND;
+                sErrorPage = "transformation";
+                pFocusWindow = mpXSLTPage->m_xEDImportTemplate->getWidget();
             }
         }
     }
 
-    if( 0 != nErrorId )
+    if (pErrorId)
     {
-        m_pTabCtrl->SetCurPageId((sal_uInt16)nErrorPage);
-        ActivatePageHdl(nullptr, m_pTabCtrl);
+        m_xTabCtrl->set_current_page(sErrorPage);
 
-        ResId aResId( nErrorId, mrResMgr );
-        OUString aMessage( aResId );
+        OUString aMessage(XsltResId(pErrorId));
 
         if( aReplace2.getLength() )
         {
@@ -263,11 +235,13 @@ bool XMLFilterTabDialog::onOk()
             aMessage = aMessage.replaceAll( "%s", aReplace1 );
         }
 
-        ScopedVclPtrInstance< MessageDialog > aBox(this, aMessage);
-        aBox->Execute();
+        std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(m_xDialog.get(),
+                                                  VclMessageType::Warning, VclButtonsType::Ok,
+                                                  aMessage));
+        xBox->run();
 
         if( pFocusWindow )
-            pFocusWindow->GrabFocus();
+            pFocusWindow->grab_focus();
 
         return false;
     }
@@ -277,19 +251,10 @@ bool XMLFilterTabDialog::onOk()
     }
 }
 
-
-IMPL_LINK_NOARG_TYPED(XMLFilterTabDialog, OkHdl, Button*, void)
+IMPL_LINK_NOARG(XMLFilterTabDialog, OkHdl, weld::Button&, void)
 {
     if( onOk() )
-        EndDialog(1);
-}
-
-
-IMPL_STATIC_LINK_TYPED( XMLFilterTabDialog, ActivatePageHdl, TabControl *, pTabCtrl, void )
-{
-    const sal_uInt16 nId = pTabCtrl->GetCurPageId();
-    TabPage* pTabPage = pTabCtrl->GetTabPage( nId );
-    pTabPage->Show();
+        m_xDialog->response(RET_OK);
 }
 
 

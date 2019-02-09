@@ -29,39 +29,26 @@ using namespace com::sun::star::uno;
 
 const Sequence<OUString>& SwDBConfig::GetPropertyNames()
 {
-    static Sequence<OUString> aNames;
-    if(!aNames.getLength())
-    {
-        static const char* aPropNames[] =
-        {
-            "AddressBook/DataSourceName",        //  0
-            "AddressBook/Command",              //  1
-            "AddressBook/CommandType",          //  2
-            "Bibliography/CurrentDataSource/DataSourceName",        //  4
-            "Bibliography/CurrentDataSource/Command",              //  5
-            "Bibliography/CurrentDataSource/CommandType"          //  6
-        };
-        const int nCount = sizeof(aPropNames)/sizeof(const char*);
-        aNames.realloc(nCount);
-        OUString* pNames = aNames.getArray();
-        for(int i = 0; i < nCount; i++)
-            pNames[i] = OUString::createFromAscii(aPropNames[i]);
-    }
+    static Sequence<OUString> aNames {
+        "AddressBook/DataSourceName",        //  0
+        "AddressBook/Command",               //  1
+        "AddressBook/CommandType",           //  2
+        "Bibliography/CurrentDataSource/DataSourceName",    //  4
+        "Bibliography/CurrentDataSource/Command",           //  5
+        "Bibliography/CurrentDataSource/CommandType"        //  6
+    };
     return aNames;
 }
 
 SwDBConfig::SwDBConfig() :
-    ConfigItem("Office.DataAccess",
-        ConfigItemMode::DelayedUpdate|ConfigItemMode::ReleaseTree),
-    pAdrImpl(nullptr),
-    pBibImpl(nullptr)
+    ConfigItem("Office.DataAccess", ConfigItemMode::ReleaseTree)
 {
 };
 
 SwDBConfig::~SwDBConfig()
 {
-    delete pAdrImpl;
-    delete pBibImpl;
+    pAdrImpl.reset();
+    pBibImpl.reset();
 }
 
 void SwDBConfig::Load()
@@ -69,10 +56,9 @@ void SwDBConfig::Load()
     const Sequence<OUString>& rNames = GetPropertyNames();
     if(!pAdrImpl)
     {
-
-        pAdrImpl = new SwDBData;
+        pAdrImpl.reset(new SwDBData);
         pAdrImpl->nCommandType = 0;
-        pBibImpl = new SwDBData;
+        pBibImpl.reset(new SwDBData);
         pBibImpl->nCommandType = 0;
     }
     Sequence<Any> aValues = GetProperties(rNames);

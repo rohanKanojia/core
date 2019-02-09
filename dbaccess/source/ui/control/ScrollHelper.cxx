@@ -17,8 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ScrollHelper.hxx"
-#include <tools/debug.hxx>
+#include <ScrollHelper.hxx>
 
 #define LISTBOX_SCROLLING_AREA  12
 namespace dbaui
@@ -34,7 +33,7 @@ namespace dbaui
     void OScrollHelper::scroll(const Point& _rPoint, const Size& _rOutputSize)
     {
         // Scrolling Areas
-        Rectangle aScrollArea( Point(0, _rOutputSize.Height() - LISTBOX_SCROLLING_AREA),
+        tools::Rectangle aScrollArea( Point(0, _rOutputSize.Height() - LISTBOX_SCROLLING_AREA),
                                      Size(_rOutputSize.Width(), LISTBOX_SCROLLING_AREA) );
 
         // if pointer in bottom area begin scroll

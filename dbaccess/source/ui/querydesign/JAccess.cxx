@@ -17,13 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "JAccess.hxx"
-#include "JoinTableView.hxx"
-#include "TableWindow.hxx"
+#include <JAccess.hxx>
+#include <JoinTableView.hxx>
+#include <TableWindow.hxx>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
-#include "JoinDesignView.hxx"
-#include "JoinController.hxx"
-#include "TableConnection.hxx"
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
+#include <JoinDesignView.hxx>
+#include <JoinController.hxx>
+#include <TableConnection.hxx>
 
 namespace dbaui
 {
@@ -37,11 +38,7 @@ namespace dbaui
         ,m_pTableView(_pTableView)
     {
     }
-    OUString SAL_CALL OJoinDesignViewAccess::getImplementationName() throw(RuntimeException, std::exception)
-    {
-        return getImplementationName_Static();
-    }
-    OUString OJoinDesignViewAccess::getImplementationName_Static() throw( RuntimeException )
+    OUString SAL_CALL OJoinDesignViewAccess::getImplementationName()
     {
         return OUString("org.openoffice.comp.dbu.JoinViewAccessibility");
     }
@@ -51,7 +48,7 @@ namespace dbaui
         m_pTableView = nullptr;
     }
     // XAccessibleContext
-    sal_Int32 SAL_CALL OJoinDesignViewAccess::getAccessibleChildCount(  ) throw (RuntimeException, std::exception)
+    sal_Int32 SAL_CALL OJoinDesignViewAccess::getAccessibleChildCount(  )
     {
         // TODO may be this will change to only visible windows
         // this is the same assumption mt implements
@@ -61,33 +58,30 @@ namespace dbaui
             nChildCount = m_pTableView->GetTabWinCount() + m_pTableView->getTableConnections().size();
         return nChildCount;
     }
-    Reference< XAccessible > SAL_CALL OJoinDesignViewAccess::getAccessibleChild( sal_Int32 i ) throw (IndexOutOfBoundsException,RuntimeException, std::exception)
+    Reference< XAccessible > SAL_CALL OJoinDesignViewAccess::getAccessibleChild( sal_Int32 i )
     {
         Reference< XAccessible > aRet;
         ::osl::MutexGuard aGuard( m_aMutex  );
-        if(i >= 0 && i < getAccessibleChildCount() && m_pTableView )
-        {
-            // check if we should return a table window or a connection
-            sal_Int32 nTableWindowCount = m_pTableView->GetTabWinCount();
-            if( i < nTableWindowCount )
-            {
-                OJoinTableView::OTableWindowMap::const_iterator aIter = m_pTableView->GetTabWinMap().begin();
-                for (sal_Int32 j=i; j; ++aIter,--j)
-                    ;
-                aRet = aIter->second->GetAccessible();
-            }
-            else if( size_t(i - nTableWindowCount) < m_pTableView->getTableConnections().size() )
-                aRet = m_pTableView->getTableConnections()[i - nTableWindowCount]->GetAccessible();
-        }
-        else
+        if(i < 0 || i >= getAccessibleChildCount() || !m_pTableView)
             throw IndexOutOfBoundsException();
+        // check if we should return a table window or a connection
+        sal_Int32 nTableWindowCount = m_pTableView->GetTabWinCount();
+        if( i < nTableWindowCount )
+        {
+            OJoinTableView::OTableWindowMap::const_iterator aIter = m_pTableView->GetTabWinMap().begin();
+            for (sal_Int32 j=i; j; ++aIter,--j)
+                ;
+            aRet = aIter->second->GetAccessible();
+        }
+        else if( size_t(i - nTableWindowCount) < m_pTableView->getTableConnections().size() )
+            aRet = m_pTableView->getTableConnections()[i - nTableWindowCount]->GetAccessible();
         return aRet;
     }
-    sal_Int16 SAL_CALL OJoinDesignViewAccess::getAccessibleRole(  ) throw (RuntimeException, std::exception)
+    sal_Int16 SAL_CALL OJoinDesignViewAccess::getAccessibleRole(  )
     {
         return AccessibleRole::VIEW_PORT;
     }
-    Reference< XAccessibleContext > SAL_CALL OJoinDesignViewAccess::getAccessibleContext(  ) throw (css::uno::RuntimeException, std::exception)
+    Reference< XAccessibleContext > SAL_CALL OJoinDesignViewAccess::getAccessibleContext(  )
     {
         return this;
     }

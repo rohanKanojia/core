@@ -19,7 +19,6 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_INC_DATEHELPER_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_INC_DATEHELPER_HXX
 
-#include <com/sun/star/chart2/XScaling.hpp>
 #include <tools/date.hxx>
 
 namespace chart
@@ -31,8 +30,8 @@ public:
     static bool IsInSameYear( const Date& rD1, const Date& rD2 );
     static bool IsInSameMonth( const Date& rD1, const Date& rD2 );
 
-    static Date GetDateSomeMonthsAway( const Date& rD, long nMonthDistance );
-    static Date GetDateSomeYearsAway( const Date& rD, long nYearDistance );
+    static Date GetDateSomeMonthsAway( const Date& rD, sal_Int32 nMonthDistance );
+    static Date GetDateSomeYearsAway( const Date& rD, sal_Int32 nYearDistance );
     static bool IsLessThanOneMonthAway( const Date& rD1, const Date& rD2 );
     static bool IsLessThanOneYearAway( const Date& rD1, const Date& rD2 );
 

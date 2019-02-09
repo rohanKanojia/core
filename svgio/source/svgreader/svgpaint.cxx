@@ -17,13 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svgpaint.hxx>
-
-namespace svgio
-{
-    namespace svgreader
-    {
-    } // end of namespace svgreader
-} // end of namespace svgio
+#include <svgpaint.hxx>
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

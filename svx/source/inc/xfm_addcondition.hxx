@@ -30,45 +30,41 @@ namespace svxform
 {
 
     typedef ::svt::OGenericUnoDialog OAddConditionDialogBase;
-    class OAddConditionDialog
+    class OAddConditionDialog final
             :public OAddConditionDialogBase
             ,public ::comphelper::OPropertyArrayUsageHelper< OAddConditionDialog >
     {
+    public:
+        static css::uno::Reference< css::uno::XInterface >
+            Create( const css::uno::Reference< css::lang::XMultiServiceFactory >& );
+
     private:
-        // <properties>
+        OAddConditionDialog( const css::uno::Reference< css::uno::XComponentContext >& _rxORB );
+
+        // XTypeProvider
+        virtual css::uno::Sequence<sal_Int8> SAL_CALL getImplementationId(  ) override;
+
+        // XServiceInfo
+        virtual OUString SAL_CALL getImplementationName() override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+
+        // XPropertySet
+        virtual css::uno::Reference<css::beans::XPropertySetInfo>  SAL_CALL getPropertySetInfo() override;
+        virtual ::cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
+
+        // OPropertyArrayUsageHelper
+        virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
+
+        // OGenericUnoDialog overridables
+        virtual svt::OGenericUnoDialog::Dialog createDialog(const css::uno::Reference<css::awt::XWindow>& rParent) override;
+        virtual void executedDialog(sal_Int16 _nExecutionResult) override;
+
         css::uno::Reference< css::beans::XPropertySet >
                                 m_xBinding;
         OUString                m_sFacetName;
         OUString                m_sConditionValue;
         css::uno::Reference< css::xforms::XModel >
                                 m_xWorkModel;
-        // </properties>
-
-    public:
-        static css::uno::Reference< css::uno::XInterface >
-            SAL_CALL Create( const css::uno::Reference< css::lang::XMultiServiceFactory >& );
-
-    protected:
-        OAddConditionDialog( const css::uno::Reference< css::uno::XComponentContext >& _rxORB );
-
-        // XTypeProvider
-        virtual css::uno::Sequence<sal_Int8> SAL_CALL getImplementationId(  ) throw(css::uno::RuntimeException, std::exception) override;
-
-        // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() throw(css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception) override;
-
-        // XPropertySet
-        virtual css::uno::Reference<css::beans::XPropertySetInfo>  SAL_CALL getPropertySetInfo() throw(css::uno::RuntimeException, std::exception) override;
-        virtual ::cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
-
-        // OPropertyArrayUsageHelper
-        virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
-
-    protected:
-        // OGenericUnoDialog overridables
-        virtual VclPtr<Dialog> createDialog(vcl::Window* _pParent) override;
-        virtual void executedDialog(sal_Int16 _nExecutionResult) override;
     };
 
 

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 #include <new>
@@ -28,14 +28,14 @@
 #include <cxxabi.h>
 #include <dlfcn.h>
 
-#include "com/sun/star/uno/RuntimeException.hpp"
-#include "com/sun/star/uno/genfunc.hxx"
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/uno/genfunc.hxx>
 #include <sal/log.hxx>
-#include "osl/mutex.hxx"
-#include "rtl/strbuf.hxx"
-#include "rtl/ustrbuf.hxx"
-#include "typelib/typedescription.h"
-#include "uno/any2.h"
+#include <osl/mutex.hxx>
+#include <rtl/strbuf.hxx>
+#include <rtl/ustrbuf.hxx>
+#include <typelib/typedescription.h>
+#include <uno/any2.h>
 #include <unordered_map>
 #include "share.hxx"
 
@@ -52,11 +52,11 @@ struct Fake_type_info {
 };
 
 struct Fake_class_type_info: Fake_type_info {
-    virtual ~Fake_class_type_info() = delete;
+    virtual ~Fake_class_type_info() override = delete;
 };
 
 struct Fake_si_class_type_info: Fake_class_type_info {
-    virtual ~Fake_si_class_type_info() = delete;
+    virtual ~Fake_si_class_type_info() override = delete;
     void const * base;
 };
 
@@ -119,7 +119,7 @@ static OUString toUNOname( char const * p )
     while ('E' != *p)
     {
         // read chars count
-        long n = (*p++ - '0');
+        long n = *p++ - '0';
         while ('0' <= *p && '9' >= *p)
         {
             n *= 10;
@@ -143,7 +143,7 @@ static OUString toUNOname( char const * p )
 
 class RTTI
 {
-    typedef std::unordered_map< OUString, std::type_info *, OUStringHash > t_rtti_map;
+    typedef std::unordered_map< OUString, std::type_info * > t_rtti_map;
 
     Mutex m_mutex;
     t_rtti_map m_rttis;
@@ -256,6 +256,26 @@ std::type_info * RTTI::getRTTI( typelib_CompoundTypeDescription *pTypeDescr )
 static void deleteException( void * pExc )
 {
     __cxa_exception const * header = static_cast<__cxa_exception const *>(pExc) - 1;
+    // The libcxxabi commit
+    // <http://llvm.org/viewvc/llvm-project?view=revision&revision=303175>
+    // "[libcxxabi] Align unwindHeader on a double-word boundary" towards
+    // LLVM 5.0 changed the size of __cxa_exception by adding
+    //
+    //   __attribute__((aligned))
+    //
+    // to the final member unwindHeader, on x86-64 effectively adding a hole of
+    // size 8 in front of that member (changing its offset from 88 to 96,
+    // sizeof(__cxa_exception) from 120 to 128, and alignof(__cxa_exception)
+    // from 8 to 16); a hack to dynamically determine whether we run against a
+    // new libcxxabi is to look at the exceptionDestructor member, which must
+    // point to this function (the use of __cxa_exception in fillUnoException is
+    // unaffected, as it only accesses members towards the start of the struct,
+    // through a pointer known to actually point at the start):
+    if (header->exceptionDestructor != &deleteException) {
+        header = reinterpret_cast<__cxa_exception const *>(
+            reinterpret_cast<char const *>(header) - 8);
+        assert(header->exceptionDestructor == &deleteException);
+    }
     typelib_TypeDescription * pTD = nullptr;
     OUString unoName( toUNOname( header->exceptionType->name() ) );
     ::typelib_typedescription_getByName( &pTD, unoName.pData );
@@ -297,21 +317,8 @@ void raiseException( uno_Any * pUnoExc, uno_Mapping * pUno2Cpp )
     // destruct uno exception
     ::uno_any_destruct( pUnoExc, nullptr );
     // avoiding locked counts
-    static RTTI * s_rtti = nullptr;
-    if (! s_rtti)
-    {
-        MutexGuard guard( Mutex::getGlobalMutex() );
-        if (! s_rtti)
-        {
-#ifdef LEAK_STATIC_DATA
-            s_rtti = new RTTI();
-#else
-            static RTTI rtti_data;
-            s_rtti = &rtti_data;
-#endif
-        }
-    }
-    rtti = s_rtti->getRTTI( reinterpret_cast<typelib_CompoundTypeDescription *>(pTypeDescr) );
+    static RTTI rtti_data;
+    rtti = rtti_data.getRTTI(reinterpret_cast<typelib_CompoundTypeDescription*>(pTypeDescr));
     TYPELIB_DANGER_RELEASE( pTypeDescr );
     assert(rtti && "### no rtti for throwing exception!");
     if (! rtti)
@@ -325,8 +332,9 @@ void raiseException( uno_Any * pUnoExc, uno_Mapping * pUno2Cpp )
     __cxxabiv1::__cxa_throw( pCppExc, rtti, deleteException );
 }
 
-void fillUnoException( __cxa_exception * header, uno_Any * pUnoExc, uno_Mapping * pCpp2Uno )
+void fillUnoException(uno_Any * pUnoExc, uno_Mapping * pCpp2Uno)
 {
+    __cxa_exception * header = __cxa_get_globals()->caughtExceptions;
     if (! header)
     {
         RuntimeException aRE( "no exception header!" );
@@ -336,8 +344,10 @@ void fillUnoException( __cxa_exception * header, uno_Any * pUnoExc, uno_Mapping 
         return;
     }
 
+    std::type_info *exceptionType = __cxxabiv1::__cxa_current_exception_type();
+
     typelib_TypeDescription * pExcTypeDescr = nullptr;
-    OUString unoName( toUNOname( header->exceptionType->name() ) );
+    OUString unoName( toUNOname( exceptionType->name() ) );
 #if OSL_DEBUG_LEVEL > 1
     OString cstr_unoName( OUStringToOString( unoName, RTL_TEXTENCODING_ASCII_US ) );
     fprintf( stderr, "> c++ exception occurred: %s\n", cstr_unoName.getStr() );

@@ -17,10 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dbaccess_helpid.hrc"
-#include "dbmm_module.hxx"
-#include "dbmm_global.hrc"
-#include "macromigration.hrc"
 #include "macromigrationpages.hxx"
 #include "macromigrationdialog.hxx"
 
@@ -34,10 +30,8 @@ namespace dbmm
 {
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::uno::UNO_QUERY_THROW;
     using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::frame::XModel;
 
     MacroMigrationPage::MacroMigrationPage(vcl::Window *pParent, const OString& rID, const OUString& rUIXMLDescription)
@@ -85,8 +79,8 @@ namespace dbmm
         get(m_pStartMigration, "startmigrate");
         get(m_pBrowseSaveAsLocation, "browse");
         get(m_pSaveAsLocation, "location");
-        m_pLocationController = new svx::DatabaseLocationInputController(
-            _rParentDialog.getComponentContext(), *m_pSaveAsLocation, *m_pBrowseSaveAsLocation);
+        m_pLocationController.reset( new svx::DatabaseLocationInputController(
+            _rParentDialog.getComponentContext(), *m_pSaveAsLocation, *m_pBrowseSaveAsLocation) );
 
         m_pSaveAsLocation->SetModifyHdl( LINK( this, SaveDBDocPage, OnLocationModified ) );
         m_pSaveAsLocation->SetDropDownLineCount( 20 );
@@ -101,7 +95,7 @@ namespace dbmm
 
     void SaveDBDocPage::dispose()
     {
-        delete m_pLocationController;
+        m_pLocationController.reset();
         m_pSaveAsLocation.clear();
         m_pBrowseSaveAsLocation.clear();
         m_pStartMigration.clear();
@@ -114,7 +108,7 @@ namespace dbmm
         m_pStartMigration->Show(!m_pSaveAsLocation->GetText().isEmpty());
     }
 
-    IMPL_LINK_NOARG_TYPED( SaveDBDocPage, OnLocationModified, Edit&, void )
+    IMPL_LINK_NOARG( SaveDBDocPage, OnLocationModified, Edit&, void )
     {
         impl_updateLocationDependentItems();
     }
@@ -134,12 +128,12 @@ namespace dbmm
             aBaseName.append( ".backup" );
             aURLParser.setBase( aBaseName.makeStringAndClear() );
 
-            m_pLocationController->setURL( aURLParser.GetMainURL( INetURLObject::NO_DECODE ) );
+            m_pLocationController->setURL( aURLParser.GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
             impl_updateLocationDependentItems();
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 
@@ -221,7 +215,7 @@ namespace dbmm
         m_pCurrentObject->SetText( _rObjectName );
         m_pCurrentAction->SetText( _rCurrentAction );
         m_aCurrentProgress.SetRange( _nRange );
-        m_aCurrentProgress.SetValue( (sal_uInt32)0 );
+        m_aCurrentProgress.SetValue( sal_uInt32(0) );
 
         // since this is currently called from the main thread, which does not have the chance
         // to re-schedule, we need to explicitly update the display

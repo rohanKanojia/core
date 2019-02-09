@@ -21,6 +21,7 @@ $(eval $(call gb_CppunitTest_add_exception_objects,vcl_outdev, \
 $(eval $(call gb_CppunitTest_use_externals,vcl_outdev,boost_headers))
 
 $(eval $(call gb_CppunitTest_use_libraries,vcl_outdev, \
+	basegfx \
 	comphelper \
 	cppu \
 	cppuhelper \
@@ -30,13 +31,9 @@ $(eval $(call gb_CppunitTest_use_libraries,vcl_outdev, \
 	tl \
 	unotest \
 	vcl \
-	$(gb_UWINAPI) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,vcl_outdev,\
-	udkapi \
-	offapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,vcl_outdev))
 
 $(eval $(call gb_CppunitTest_use_ure,vcl_outdev))
 $(eval $(call gb_CppunitTest_use_vcl,vcl_outdev))

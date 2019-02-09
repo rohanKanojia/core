@@ -21,6 +21,7 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/awt/XWindow2.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <vcl/virdev.hxx>
 #include <vcl/svapp.hxx>
@@ -135,8 +136,8 @@ namespace drawinglayer
                             {   // #i93162# For painting the control setting a Zoom (using setZoom() at the xControlView)
                                 // is needed to define the font size. Normally this is done in
                                 // ViewObjectContactOfUnoControl::createPrimitive2DSequence by using positionControlForPaint().
-                                // For some reason the difference between MAP_TWIPS and MAP_100TH_MM still plays
-                                // a role there so that for Draw/Impress/Calc (the MAP_100TH_MM users) i need to set a zoom
+                                // For some reason the difference between MapUnit::MapTwipS and MapUnit::Map100thMM still plays
+                                // a role there so that for Draw/Impress/Calc (the MapUnit::Map100thMM users) i need to set a zoom
                                 // here, too. The factor includes the needed scale, but is calculated by pure comparisons. It
                                 // is somehow related to the twips/100thmm relationship.
                                 bool bUserIs100thmm(false);
@@ -152,18 +153,15 @@ namespace drawinglayer
 
                                         if(pVCLXWindow)
                                         {
-                                            vcl::Window* pWindow = pVCLXWindow->GetWindow();
+                                            VclPtr<vcl::Window> pWindow = pVCLXWindow->GetWindow();
 
                                             if(pWindow)
                                             {
                                                 pWindow = pWindow->GetParent();
 
-                                                if(pWindow)
+                                                if(pWindow && MapUnit::Map100thMM == pWindow->GetMapMode().GetMapUnit())
                                                 {
-                                                    if(MAP_100TH_MM == pWindow->GetMapMode().GetMapUnit())
-                                                    {
-                                                        bUserIs100thmm = true;
-                                                    }
+                                                    bUserIs100thmm = true;
                                                 }
                                             }
                                         }
@@ -176,11 +174,11 @@ namespace drawinglayer
                                     basegfx::B2DVector aScreenZoom(
                                         basegfx::fTools::equalZero(aScale.getX()) ? 1.0 : aDiscreteSize.getX() / aScale.getX(),
                                         basegfx::fTools::equalZero(aScale.getY()) ? 1.0 : aDiscreteSize.getY() / aScale.getY());
-                                    static double fZoomScale(28.0); // do not ask for this constant factor, but it gets the zoom right
+                                    static const double fZoomScale(28.0); // do not ask for this constant factor, but it gets the zoom right
                                     aScreenZoom *= fZoomScale;
 
                                     // set zoom at control view for text scaling
-                                    xControlView->setZoom((float)aScreenZoom.getX(), (float)aScreenZoom.getY());
+                                    xControlView->setZoom(static_cast<float>(aScreenZoom.getX()), static_cast<float>(aScreenZoom.getY()));
                                 }
                             }
 
@@ -190,7 +188,7 @@ namespace drawinglayer
                                 xControlView->draw(0, 0);
 
                                 // get bitmap
-                                const Bitmap aContent(aVirtualDevice->GetBitmap(Point(), aSizePixel));
+                                const BitmapEx aContent(aVirtualDevice->GetBitmapEx(Point(), aSizePixel));
 
                                 // to avoid scaling, use the Bitmap pixel size as primitive size
                                 const Size aBitmapSize(aContent.GetSizePixel());
@@ -205,15 +203,15 @@ namespace drawinglayer
                                 }
 
                                 // short form for scale and translate transformation
-                                const basegfx::B2DHomMatrix aBitmapTransform(basegfx::tools::createScaleTranslateB2DHomMatrix(
+                                const basegfx::B2DHomMatrix aBitmapTransform(basegfx::utils::createScaleTranslateB2DHomMatrix(
                                     aBitmapSizeLogic.getX(), aBitmapSizeLogic.getY(), aTranslate.getX(), aTranslate.getY()));
 
                                 // create primitive
-                                xRetval = new BitmapPrimitive2D(BitmapEx(aContent), aBitmapTransform);
+                                xRetval = new BitmapPrimitive2D(aContent, aBitmapTransform);
                             }
                             catch( const uno::Exception& )
                             {
-                                DBG_UNHANDLED_EXCEPTION();
+                                DBG_UNHANDLED_EXCEPTION("drawinglayer");
                             }
                         }
                     }
@@ -223,12 +221,12 @@ namespace drawinglayer
             return xRetval;
         }
 
-        Primitive2DReference ControlPrimitive2D::createPlaceholderDecomposition(const geometry::ViewInformation2D& /*rViewInformation*/) const
+        Primitive2DReference ControlPrimitive2D::createPlaceholderDecomposition() const
         {
             // create a gray placeholder hairline polygon in object size
             basegfx::B2DRange aObjectRange(0.0, 0.0, 1.0, 1.0);
             aObjectRange.transform(getTransform());
-            const basegfx::B2DPolygon aOutline(basegfx::tools::createPolygonFromRect(aObjectRange));
+            const basegfx::B2DPolygon aOutline(basegfx::utils::createPolygonFromRect(aObjectRange));
             const basegfx::BColor aGrayTone(0xc0 / 255.0, 0xc0 / 255.0, 0xc0 / 255.0);
 
             // The replacement object may also get a text like 'empty group' here later
@@ -237,7 +235,7 @@ namespace drawinglayer
             return xRetval;
         }
 
-        Primitive2DContainer ControlPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const
+        void ControlPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const
         {
             // try to create a bitmap decomposition. If that fails for some reason,
             // at least create a replacement decomposition.
@@ -245,10 +243,10 @@ namespace drawinglayer
 
             if(!xReference.is())
             {
-                xReference = createPlaceholderDecomposition(rViewInformation);
+                xReference = createPlaceholderDecomposition();
             }
 
-            return Primitive2DContainer { xReference };
+            rContainer.push_back(xReference);
         }
 
         ControlPrimitive2D::ControlPrimitive2D(
@@ -329,7 +327,7 @@ namespace drawinglayer
             return aRetval;
         }
 
-        Primitive2DContainer ControlPrimitive2D::get2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const
+        void ControlPrimitive2D::get2DDecomposition(Primitive2DDecompositionVisitor& rVisitor, const geometry::ViewInformation2D& rViewInformation) const
         {
             // this primitive is view-dependent related to the scaling. If scaling has changed,
             // destroy existing decomposition. To detect change, use size of unit size in view coordinates
@@ -352,7 +350,7 @@ namespace drawinglayer
             }
 
             // use parent implementation
-            return BufferedDecompositionPrimitive2D::get2DDecomposition(rViewInformation);
+            BufferedDecompositionPrimitive2D::get2DDecomposition(rVisitor, rViewInformation);
         }
 
         // provide unique ID

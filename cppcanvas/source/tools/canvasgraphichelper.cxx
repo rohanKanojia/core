@@ -25,11 +25,11 @@
 #include <com/sun/star/rendering/XPolyPolygon2D.hpp>
 
 #include <canvas/canvastools.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 
 #include <cppcanvas/polypolygon.hxx>
-#include "tools.hxx"
+#include <tools.hxx>
 
 
 using namespace ::com::sun::star;
@@ -93,9 +93,9 @@ namespace cppcanvas
             return maRenderState;
         }
 
-        void CanvasGraphicHelper::setCompositeOp( CompositeOp aOp )
+        void CanvasGraphicHelper::setCompositeOp( sal_Int8 aOp )
         {
-            maRenderState.CompositeOperation = (sal_Int8)aOp;
+            maRenderState.CompositeOperation = aOp;
         }
 
     }

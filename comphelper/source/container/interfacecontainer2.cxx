@@ -39,13 +39,13 @@ namespace comphelper
 {
 
 OInterfaceIteratorHelper2::OInterfaceIteratorHelper2( OInterfaceContainerHelper2 & rCont_ )
-    : rCont( rCont_ )
+    : rCont( rCont_ ),
+      bIsList( rCont_.bIsList )
 {
     MutexGuard aGuard( rCont.rMutex );
     if( rCont.bInUse )
         // worst case, two iterators at the same time
         rCont.copyAndResetInUse();
-    bIsList = rCont_.bIsList;
     aData = rCont_.aData;
     if( bIsList )
     {
@@ -105,7 +105,7 @@ void OInterfaceIteratorHelper2::remove()
     if( bIsList )
     {
         OSL_ASSERT( nRemain >= 0 &&
-                    nRemain < (sal_Int32)aData.pAsVector->size() );
+                    nRemain < static_cast<sal_Int32>(aData.pAsVector->size()) );
         rCont.removeInterface(  (*aData.pAsVector)[nRemain] );
     }
     else
@@ -149,7 +149,7 @@ std::vector< Reference<XInterface> > OInterfaceContainerHelper2::getElements() c
         rVec = *aData.pAsVector;
     else if( aData.pAsInterface )
     {
-        rVec.push_back( Reference<XInterface>( aData.pAsInterface ) );
+        rVec.emplace_back( aData.pAsInterface );
     }
     return rVec;
 }

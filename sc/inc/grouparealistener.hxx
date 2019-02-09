@@ -10,11 +10,9 @@
 #ifndef INCLUDED_SC_GROUPAREALISTENER_HXX
 #define INCLUDED_SC_GROUPAREALISTENER_HXX
 
-#include <address.hxx>
-#include <calcmacros.hxx>
+#include "address.hxx"
 
 #include <svl/listener.hxx>
-#include <vector>
 
 #include <vector>
 
@@ -32,17 +30,16 @@ class FormulaGroupAreaListener : public SvtListener
     const ScColumn* mpColumn;
     SCROW mnTopCellRow;
     SCROW mnGroupLen;
-    bool mbStartFixed;
-    bool mbEndFixed;
-
-    FormulaGroupAreaListener(); // disabled
+    bool const mbStartFixed;
+    bool const mbEndFixed;
 
 public:
 
+    FormulaGroupAreaListener() = delete;
     FormulaGroupAreaListener( const ScRange& rRange, const ScDocument& rDocument,
             const ScAddress& rTopCellPos, SCROW nGroupLen, bool bStartFixed, bool bEndFixed );
 
-    virtual ~FormulaGroupAreaListener();
+    virtual ~FormulaGroupAreaListener() override;
 
     ScRange getListeningRange() const;
 

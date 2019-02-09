@@ -16,8 +16,8 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include <ModelEventListener.hxx>
-#include <PropertyIds.hxx>
+#include "ModelEventListener.hxx"
+#include "PropertyIds.hxx"
 #include <rtl/ustring.hxx>
 #include <com/sun/star/document/XEventBroadcaster.hpp>
 #include <com/sun/star/text/XDocumentIndex.hpp>
@@ -29,6 +29,7 @@
 #include <com/sun/star/text/ReferenceFieldSource.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/view/XFormLayerAccess.hpp>
+#include <tools/diagnose_ex.h>
 
 namespace writerfilter {
 namespace dmapper {
@@ -48,7 +49,7 @@ ModelEventListener::~ModelEventListener()
 }
 
 
-void ModelEventListener::notifyEvent( const document::EventObject& rEvent ) throw (uno::RuntimeException, std::exception)
+void ModelEventListener::notifyEvent( const document::EventObject& rEvent )
 {
     if ( rEvent.EventName == "OnFocus" && m_bIndexes)
     {
@@ -85,9 +86,9 @@ void ModelEventListener::notifyEvent( const document::EventObject& rEvent ) thro
                 xRefreshable->refresh();
             }
         }
-        catch( const uno::Exception& rEx )
+        catch( const uno::Exception& )
         {
-            SAL_WARN("writerfilter", "exception while updating indexes: " << rEx.Message);
+            DBG_UNHANDLED_EXCEPTION("writerfilter", "exception while updating indexes");
         }
     }
 
@@ -102,7 +103,7 @@ void ModelEventListener::notifyEvent( const document::EventObject& rEvent ) thro
 }
 
 
-void ModelEventListener::disposing( const lang::EventObject& rEvent ) throw (uno::RuntimeException, std::exception)
+void ModelEventListener::disposing( const lang::EventObject& rEvent )
 {
     try
     {

@@ -19,11 +19,11 @@
 
 #include <sal/config.h>
 
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <canvas/canvastools.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/canvastools.hxx>
 #include <vcl/dibtools.hxx>
+#include <tools/stream.hxx>
 
 #include "canvasbitmap.hxx"
 #include "spritecanvas.hxx"
@@ -95,7 +95,7 @@ namespace vclcanvas
         if( !mpBackBuffer )
             return uno::Any();
 
-        return uno::makeAny(
+        return uno::Any(
             reinterpret_cast< sal_Int64 >(&mpBackBuffer->getOutDev()) );
     }
 
@@ -116,12 +116,12 @@ namespace vclcanvas
         {
             OUString aFilename = "dbg_backbuffer" + OUString::number(nFilePostfixCount) + ".bmp";
 
-            SvFileStream aStream( aFilename, STREAM_STD_READWRITE );
+            SvFileStream aStream( aFilename, StreamMode::STD_READWRITE );
 
             const ::Point aEmptyPoint;
             mpBackBuffer->getOutDev().EnableMapMode( false );
             mpBackBuffer->getOutDev().SetAntialiasing( AntialiasingFlags::EnableB2dDraw );
-            WriteDIB(mpBackBuffer->getOutDev().GetBitmap(aEmptyPoint, mpBackBuffer->getOutDev().GetOutputSizePixel()), aStream, false, true);
+            WriteDIB(mpBackBuffer->getOutDev().GetBitmapEx(aEmptyPoint, mpBackBuffer->getOutDev().GetOutputSizePixel()), aStream, false);
         }
 
         ++nFilePostfixCount;

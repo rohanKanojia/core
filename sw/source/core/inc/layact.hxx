@@ -21,10 +21,12 @@
 
 #include <sal/config.h>
 
+#include <vcl/inputtypes.hxx>
+
 #include <ctime>
 
-#include "swtypes.hxx"
-#include "swrect.hxx"
+#include <swtypes.hxx>
+#include <swrect.hxx>
 
 class SwRootFrame;
 class SwLayoutFrame;
@@ -60,7 +62,7 @@ class SwLayAction
     // painting.
     const SwTabFrame *m_pOptTab;
 
-    SwWait *m_pWait;
+    std::unique_ptr<SwWait> m_pWait;
 
     // If a paragraph (or anything else) moved more than one page when
     // formatting, it adds its new page number here.
@@ -97,18 +99,18 @@ class SwLayAction
                      const SwRect &rOldRect, long nOldBottom );
     bool PaintWithoutFlys( const SwRect &, const SwContentFrame *,
                            const SwPageFrame * );
-    inline bool _PaintContent( const SwContentFrame *, const SwPageFrame *,
+    inline bool PaintContent_( const SwContentFrame *, const SwPageFrame *,
                              const SwRect & );
 
     bool FormatLayout( OutputDevice* pRenderContext, SwLayoutFrame *, bool bAddRect = true );
-    bool FormatLayoutTab( SwTabFrame *, bool bAddRect = true );
+    bool FormatLayoutTab( SwTabFrame *, bool bAddRect );
     bool FormatContent( const SwPageFrame* pPage );
-    void _FormatContent( const SwContentFrame* pContent,
+    void FormatContent_( const SwContentFrame* pContent,
                        const SwPageFrame* pPage );
     bool IsShortCut( SwPageFrame *& );
 
     bool TurboAction();
-    bool _TurboAction( const SwContentFrame * );
+    bool TurboAction_( const SwContentFrame * );
     void InternalAction(OutputDevice* pRenderContext);
 
     static SwPageFrame *CheckFirstVisPage( SwPageFrame *pPage );
@@ -116,7 +118,6 @@ class SwLayAction
     bool RemoveEmptyBrowserPages();
 
     inline void CheckIdleEnd();
-    inline std::clock_t GetStartTicks() { return m_nStartTicks; }
 
 public:
     SwLayAction( SwRootFrame *pRt, SwViewShellImp *pImp );
@@ -130,7 +131,6 @@ public:
     bool IsWaitAllowed()        const       { return m_bWaitAllowed; }
     bool IsNextCycle()          const       { return m_bNextCycle; }
     bool IsInput()              const       { return m_bInput; }
-    bool IsWait()               const       { return nullptr != m_pWait;  }
     bool IsPaint()              const       { return m_bPaint; }
     bool IsIdle()               const       { return m_bIdle;  }
     bool IsReschedule()         const       { return m_bReschedule;  }
@@ -152,7 +152,7 @@ public:
     void SetUpdateExpFields() {m_bUpdateExpFields = true; }
 
     inline void SetCheckPageNum( sal_uInt16 nNew );
-    inline void SetCheckPageNumDirect( sal_uInt16 nNew ) { m_nCheckPageNum = nNew; }
+    void SetCheckPageNumDirect( sal_uInt16 nNew ) { m_nCheckPageNum = nNew; }
 
     void Action(OutputDevice* pRenderContext); // here it begins
     void Reset();   // back to CTor-defaults
@@ -171,10 +171,10 @@ public:
     void CheckWaitCursor();
 
     // #i28701# - method is now public;
-    // delete 2nd parameter, because its not used;
-    bool FormatLayoutFly( SwFlyFrame * );
+    // delete 2nd parameter, because it's not used;
+    void FormatLayoutFly( SwFlyFrame * );
     // #i28701# - method is now public
-    bool _FormatFlyContent( const SwFlyFrame * );
+    void FormatFlyContent( const SwFlyFrame * );
 
 };
 
@@ -186,18 +186,17 @@ class SwLayIdle
     SwContentNode *pContentNode;    // The current cursor position is saved here
     sal_Int32  nTextPos;
     bool        bPageValid;     // Were we able to evaluate everything on the whole page?
-    bool        bAllValid;      // Were we able to evaluate everything?
 
 #ifdef DBG_UTIL
     bool m_bIndicator;
 #endif
 
 #ifdef DBG_UTIL
-    void ShowIdle( ColorData eName );
+    void ShowIdle( Color eName );
 #endif
 
     enum IdleJobType{ ONLINE_SPELLING, AUTOCOMPLETE_WORDS, WORD_COUNT, SMART_TAGS };
-    bool _DoIdleJob( const SwContentFrame*, IdleJobType );
+    bool DoIdleJob_( const SwContentFrame*, IdleJobType );
     bool DoIdleJob( IdleJobType, bool bVisAreaOnly );
 
 public:

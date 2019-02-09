@@ -18,7 +18,7 @@
  */
 
 #include "filinsreq.hxx"
-#include "shell.hxx"
+#include "filtask.hxx"
 #include "filglob.hxx"
 
 #include <comphelper/interaction.hxx>
@@ -42,37 +42,35 @@ using namespace fileaccess;
 XInteractionRequestImpl::XInteractionRequestImpl(
     const OUString& aClashingName,
     const Reference<XInterface>& xOrigin,
-    shell *pShell,sal_Int32 CommandId)
+    TaskManager *pShell,sal_Int32 CommandId)
     : p1( new XInteractionSupplyNameImpl ),
       p2( new XInteractionAbortImpl ),
-      m_nErrorCode(0),
-      m_nMinorError(0),
-      m_aClashingName(aClashingName),
       m_xOrigin(xOrigin)
 {
+    sal_Int32 nErrorCode(0), nMinorError(0);
     if( pShell )
-        pShell->retrieveError(CommandId,m_nErrorCode,m_nMinorError);
+        pShell->retrieveError(CommandId,nErrorCode,nMinorError);
     std::vector<uno::Reference<task::XInteractionContinuation>> continuations{
         Reference<XInteractionContinuation>(p1),
         Reference<XInteractionContinuation>(p2) };
     Any aAny;
-    if(m_nErrorCode == TASKHANDLING_FOLDER_EXISTS_MKDIR)
+    if(nErrorCode == TASKHANDLING_FOLDER_EXISTS_MKDIR)
     {
         NameClashException excep;
-        excep.Name = m_aClashingName;
+        excep.Name = aClashingName;
         excep.Classification = InteractionClassification_ERROR;
         excep.Context = m_xOrigin;
         excep.Message = "folder exists and overwrite forbidden";
         aAny <<= excep;
     }
-    else if(m_nErrorCode == TASKHANDLING_INVALID_NAME_MKDIR)
+    else if(nErrorCode == TASKHANDLING_INVALID_NAME_MKDIR)
     {
         InteractiveAugmentedIOException excep;
         excep.Code = IOErrorCode_INVALID_CHARACTER;
         PropertyValue prop;
         prop.Name = "ResourceName";
         prop.Handle = -1;
-        prop.Value <<= m_aClashingName;
+        prop.Value <<= aClashingName;
         Sequence<Any> seq(1);
         seq[0] <<= prop;
         excep.Arguments = seq;

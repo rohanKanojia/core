@@ -17,25 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "prnsave.hxx"
-#include "global.hxx"
-#include "address.hxx"
+#include <prnsave.hxx>
+#include <global.hxx>
+#include <address.hxx>
 
 #include <osl/diagnose.h>
 
-//      Daten pro Tabelle
+//      Data per table
 
 ScPrintSaverTab::ScPrintSaverTab() :
-    mpRepeatCol(nullptr),
-    mpRepeatRow(nullptr),
     mbEntireSheet(false)
 {
 }
 
 ScPrintSaverTab::~ScPrintSaverTab()
 {
-    delete mpRepeatCol;
-    delete mpRepeatRow;
+    mpRepeatCol.reset();
+    mpRepeatRow.reset();
 }
 
 void ScPrintSaverTab::SetAreas( const ScRangeVec& rRanges, bool bEntireSheet )
@@ -46,13 +44,11 @@ void ScPrintSaverTab::SetAreas( const ScRangeVec& rRanges, bool bEntireSheet )
 
 void ScPrintSaverTab::SetRepeat( const ScRange* pCol, const ScRange* pRow )
 {
-    delete mpRepeatCol;
-    mpRepeatCol = pCol ? new ScRange(*pCol) : nullptr;
-    delete mpRepeatRow;
-    mpRepeatRow = pRow ? new ScRange(*pRow) : nullptr;
+    mpRepeatCol.reset(pCol ? new ScRange(*pCol) : nullptr);
+    mpRepeatRow.reset(pRow ? new ScRange(*pRow) : nullptr);
 }
 
-inline bool PtrEqual( const ScRange* p1, const ScRange* p2 )
+static bool PtrEqual( const ScRange* p1, const ScRange* p2 )
 {
     return ( !p1 && !p2 ) || ( p1 && p2 && *p1 == *p2 );
 }
@@ -60,26 +56,23 @@ inline bool PtrEqual( const ScRange* p1, const ScRange* p2 )
 bool ScPrintSaverTab::operator==( const ScPrintSaverTab& rCmp ) const
 {
     return
-        PtrEqual( mpRepeatCol, rCmp.mpRepeatCol ) &&
-        PtrEqual( mpRepeatRow, rCmp.mpRepeatRow ) &&
+        PtrEqual( mpRepeatCol.get(), rCmp.mpRepeatCol.get() ) &&
+        PtrEqual( mpRepeatRow.get(), rCmp.mpRepeatRow.get() ) &&
         (mbEntireSheet == rCmp.mbEntireSheet) &&
         (maPrintRanges == rCmp.maPrintRanges);
 }
 
-//      Daten fuer das ganze Dokument
+//      Data for the whole document
 
 ScPrintRangeSaver::ScPrintRangeSaver( SCTAB nCount ) :
     nTabCount( nCount )
 {
     if (nCount > 0)
-        pData = new ScPrintSaverTab[nCount];
-    else
-        pData = nullptr;
+        pData.reset( new ScPrintSaverTab[nCount] );
 }
 
 ScPrintRangeSaver::~ScPrintRangeSaver()
 {
-    delete[] pData;
 }
 
 ScPrintSaverTab& ScPrintRangeSaver::GetTabData(SCTAB nTab)

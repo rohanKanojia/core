@@ -27,9 +27,9 @@ class SbStdFactory;
 
 class SbiStdObject : public SbxObject
 {
-    SbStdFactory* pStdFactory;
+    std::unique_ptr<SbStdFactory> pStdFactory;
 
-    virtual ~SbiStdObject();
+    virtual ~SbiStdObject() override;
     using SbxVariable::GetInfo;
     static SbxInfo* GetInfo( short );
     virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;

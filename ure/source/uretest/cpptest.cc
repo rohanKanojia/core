@@ -20,7 +20,6 @@
 
 #include "com/sun/star/uno/Exception.hpp"
 #include "com/sun/star/uno/Reference.hxx"
-#include "com/sun/star/uno/RuntimeException.hpp"
 #include "com/sun/star/uno/Sequence.hxx"
 #include "com/sun/star/uno/XComponentContext.hpp"
 #include "com/sun/star/uno/XInterface.hpp"
@@ -42,11 +41,9 @@ class Service: public cppu::WeakImplHelper1< test::types::XTest > {
 public:
     Service() {}
 
-    virtual void SAL_CALL throwException()
-        throw (test::types::TestException, css::uno::RuntimeException)
-    {
+    virtual void SAL_CALL throwException() {
         throw test::types::TestException(
-            rtl::OUString("test"),
+            OUString("test"),
             static_cast< cppu::OWeakObject * >(this));
     }
 
@@ -62,20 +59,16 @@ namespace CppTest {
 css::uno::Reference< css::uno::XInterface > create(
     css::uno::Reference< css::uno::XComponentContext > const &)
 {
-    try {
-        return static_cast< cppu::OWeakObject * >(new Service);
-    } catch (std::bad_alloc &) {
-        throw css::uno::RuntimeException("std::bad_alloc");
-    }
+    return static_cast< cppu::OWeakObject * >(new Service);
 }
 
-rtl::OUString getImplementationName() {
-    return rtl::OUString("test.cpp.cpptest.Component");
+OUString getImplementationName() {
+    return OUString("test.cpp.cpptest.Component");
 }
 
-css::uno::Sequence< rtl::OUString > getSupportedServiceNames() {
-    rtl::OUString s("test.types.CppTest");
-    return css::uno::Sequence< rtl::OUString >(&s, 1);
+css::uno::Sequence< OUString > getSupportedServiceNames() {
+    OUString s("test.types.CppTest");
+    return css::uno::Sequence< OUString >(&s, 1);
 }
 
 }

@@ -27,9 +27,11 @@
 #include <com/sun/star/script/XInvocation.hpp>
 #include <com/sun/star/lang/WrappedTargetException.hpp>
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
 #include "vbacontrols.hxx"
 #include "vbacontrol.hxx"
+#include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <ooo/vba/XControlProvider.hpp>
 #include <unordered_map>
@@ -38,18 +40,17 @@ using namespace com::sun::star;
 using namespace ooo::vba;
 
 
-typedef  std::unordered_map< OUString, sal_Int32, OUStringHash > ControlIndexMap;
-typedef  std::vector< uno::Reference< awt::XControl > > ControlVec;
+typedef  std::unordered_map< OUString, sal_Int32 > ControlIndexMap;
 
 class ControlArrayWrapper : public ::cppu::WeakImplHelper< container::XNameAccess, container::XIndexAccess >
 {
     uno::Reference< awt::XControlContainer > mxDialog;
     uno::Sequence< OUString > msNames;
-    ControlVec mControls;
+    std::vector< uno::Reference< awt::XControl > > mControls;
     ControlIndexMap mIndices;
 
 private:
-    void SetArrayElementTo( const uno::Reference< awt::XControl >& xCtrl, sal_Int32 nIndex = -1 )
+    void SetArrayElementTo( const uno::Reference< awt::XControl >& xCtrl, sal_Int32 nIndex )
     {
         // initialize the element with specified index to the control
         if ( xCtrl.is() )
@@ -63,19 +64,6 @@ private:
             msNames[ nIndex ] = getControlName( xCtrl );
             mControls.push_back( xCtrl );
             mIndices[ msNames[ nIndex ] ] = nIndex;
-        }
-    }
-    void getNestedControls( ControlVec& vControls, uno::Reference< awt::XControlContainer >& xContainer )
-    {
-        uno::Sequence< uno::Reference< awt::XControl > > aControls = xContainer->getControls();
-        const uno::Reference< awt::XControl >* pCtrl = aControls.getConstArray();
-        const uno::Reference< awt::XControl >* pCtrlsEnd = pCtrl + aControls.getLength();
-        for ( ; pCtrl < pCtrlsEnd; ++pCtrl )
-        {
-            uno::Reference< awt::XControlContainer > xC( *pCtrl, uno::UNO_QUERY );
-            vControls.push_back( *pCtrl );
-            if ( xC.is() )
-                getNestedControls( vControls, xC );
         }
     }
 public:
@@ -110,42 +98,42 @@ public:
 
 
     // XElementAccess
-    virtual uno::Type SAL_CALL getElementType(  ) throw (uno::RuntimeException, std::exception) override
+    virtual uno::Type SAL_CALL getElementType(  ) override
     {
         return cppu::UnoType<awt::XControl>::get();
     }
 
-    virtual sal_Bool SAL_CALL hasElements(  ) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL hasElements(  ) override
     {
         return ( !mControls.empty() );
     }
 
-    // XNameAcess
-    virtual uno::Any SAL_CALL getByName( const OUString& aName ) throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    // XNameAccess
+    virtual uno::Any SAL_CALL getByName( const OUString& aName ) override
     {
         if ( !hasByName( aName ) )
             throw container::NoSuchElementException();
         return getByIndex( mIndices[ aName ] );
     }
 
-    virtual uno::Sequence< OUString > SAL_CALL getElementNames(  ) throw (uno::RuntimeException, std::exception) override
+    virtual uno::Sequence< OUString > SAL_CALL getElementNames(  ) override
     {
         return msNames;
     }
 
-    virtual sal_Bool SAL_CALL hasByName( const OUString& aName ) throw (css::uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL hasByName( const OUString& aName ) override
     {
         ControlIndexMap::iterator it = mIndices.find( aName );
         return it != mIndices.end();
     }
 
     // XElementAccess
-    virtual ::sal_Int32 SAL_CALL getCount(  ) throw (css::uno::RuntimeException, std::exception) override
+    virtual ::sal_Int32 SAL_CALL getCount(  ) override
     {
         return mControls.size();
     }
 
-    virtual uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException, uno::RuntimeException, std::exception ) override
+    virtual uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) override
     {
         if ( Index < 0 || Index >= static_cast< sal_Int32 >( mControls.size() ) )
             throw lang::IndexOutOfBoundsException();
@@ -160,8 +148,8 @@ class ControlsEnumWrapper : public EnumerationHelper_BASE
     uno::Reference<container::XIndexAccess > m_xIndexAccess;
     uno::Reference<awt::XControl > m_xDlg;
     uno::Reference< frame::XModel > m_xModel;
-    double mfOffsetX;
-    double mfOffsetY;
+    double const mfOffsetX;
+    double const mfOffsetY;
     sal_Int32 nIndex;
 
 public:
@@ -180,12 +168,12 @@ public:
     mfOffsetY( fOffsetY ),
     nIndex( 0 ) {}
 
-    virtual sal_Bool SAL_CALL hasMoreElements(  ) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL hasMoreElements(  ) override
     {
         return ( nIndex < m_xIndexAccess->getCount() );
     }
 
-    virtual uno::Any SAL_CALL nextElement(  ) throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual uno::Any SAL_CALL nextElement(  ) override
     {
         if ( nIndex < m_xIndexAccess->getCount() )
         {
@@ -224,7 +212,7 @@ ScVbaControls::ScVbaControls(
 }
 
 uno::Reference< container::XEnumeration >
-ScVbaControls::createEnumeration() throw (uno::RuntimeException)
+ScVbaControls::createEnumeration()
 {
     uno::Reference< container::XEnumeration > xEnum( new ControlsEnumWrapper( mxContext, m_xIndexAccess, mxDialog, mxModel, mfOffsetX, mfOffsetY ) );
     if ( !xEnum.is() )
@@ -242,7 +230,7 @@ ScVbaControls::createCollectionObject( const css::uno::Any& aSource )
 }
 
 void SAL_CALL
-ScVbaControls::Move( double cx, double cy ) throw (uno::RuntimeException, std::exception)
+ScVbaControls::Move( double cx, double cy )
 {
     uno::Reference< container::XEnumeration > xEnum( createEnumeration() );
     while ( xEnum->hasMoreElements() )
@@ -254,7 +242,6 @@ ScVbaControls::Move( double cx, double cy ) throw (uno::RuntimeException, std::e
 }
 
 uno::Any SAL_CALL ScVbaControls::Add( const uno::Any& Object, const uno::Any& StringKey, const uno::Any& /*Before*/, const uno::Any& /*After*/ )
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Any aResult;
     OUString aComServiceName;
@@ -283,8 +270,7 @@ uno::Any SAL_CALL ScVbaControls::Add( const uno::Any& Object, const uno::Any& St
             sal_Int32 nInd = 0;
             while( xDialogContainer->hasByName( aNewName ) && (nInd < SAL_MAX_INT32) )
             {
-                aNewName = aComServiceName;
-                aNewName += OUString::number( nInd++ );
+                aNewName = aComServiceName + OUString::number( nInd++ );
             }
         }
 
@@ -408,36 +394,34 @@ uno::Any SAL_CALL ScVbaControls::Add( const uno::Any& Object, const uno::Any& St
             }
         }
 
-        if ( xNewControl.is() )
-        {
-            UpdateCollectionIndex( lcl_controlsWrapper( mxDialog  ) );
-            aResult <<= xNewControl;
-            aResult = createCollectionObject( aResult );
-            uno::Reference< msforms::XControl > xVBAControl( aResult, uno::UNO_QUERY_THROW );
-            if( fDefWidth > 0.0 )
-                xVBAControl->setWidth( fDefWidth );
-            if( fDefHeight > 0.0 )
-                xVBAControl->setHeight( fDefHeight );
-        }
-        else
+        if ( !xNewControl.is() )
             throw uno::RuntimeException();
+
+        UpdateCollectionIndex( lcl_controlsWrapper( mxDialog  ) );
+        aResult <<= xNewControl;
+        aResult = createCollectionObject( aResult );
+        uno::Reference< msforms::XControl > xVBAControl( aResult, uno::UNO_QUERY_THROW );
+        if( fDefWidth > 0.0 )
+            xVBAControl->setWidth( fDefWidth );
+        if( fDefHeight > 0.0 )
+            xVBAControl->setHeight( fDefHeight );
     }
     catch (const uno::RuntimeException&)
     {
         throw;
     }
-    catch (const uno::Exception& e)
+    catch (const uno::Exception&)
     {
+        css::uno::Any anyEx = cppu::getCaughtException();
         throw lang::WrappedTargetRuntimeException( "Can not create AXControl!",
                 uno::Reference< uno::XInterface >(),
-                uno::makeAny( e ) );
+                anyEx );
     }
 
     return aResult;
 }
 
 void SAL_CALL ScVbaControls::Remove( const uno::Any& StringKeyOrIndex )
-    throw (uno::RuntimeException, std::exception)
 {
     OUString aControlName;
     sal_Int32 nIndex = -1;
@@ -491,7 +475,7 @@ void SAL_CALL ScVbaControls::Remove( const uno::Any& StringKeyOrIndex )
 
 
 uno::Type
-ScVbaControls::getElementType() throw (uno::RuntimeException)
+ScVbaControls::getElementType()
 {
     return cppu::UnoType<ooo::vba::msforms::XControl>::get();
 }

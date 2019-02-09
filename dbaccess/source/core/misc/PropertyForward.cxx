@@ -17,10 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "PropertyForward.hxx"
-#include "dbastrings.hrc"
+#include <PropertyForward.hxx>
+#include <stringconstants.hxx>
 
 #include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/sdbcx/XDataDescriptorFactory.hpp>
 #include <com/sun/star/sdbcx/XAppend.hpp>
 
@@ -39,7 +40,7 @@ namespace dbaccess
 
 
     OPropertyForward::OPropertyForward( const Reference< XPropertySet>& _xSource, const Reference< XNameAccess>& _xDestContainer,
-            const OUString& _sName, const ::std::vector< OUString>& _aPropertyList )
+            const OUString& _sName, const std::vector< OUString>& _aPropertyList )
         :m_xSource( _xSource, UNO_SET_THROW )
         ,m_xDestContainer( _xDestContainer, UNO_SET_THROW )
         ,m_sName( _sName )
@@ -53,15 +54,13 @@ namespace dbaccess
                 _xSource->addPropertyChangeListener( OUString(), this );
             else
             {
-                ::std::vector< OUString >::const_iterator aIter = _aPropertyList.begin();
-                ::std::vector< OUString >::const_iterator aEnd = _aPropertyList.end();
-                for (; aIter != aEnd ; ++aIter )
-                    _xSource->addPropertyChangeListener( *aIter, this );
+                for (auto const& property : _aPropertyList)
+                    _xSource->addPropertyChangeListener(property, this);
             }
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
         osl_atomic_decrement( &m_refCount );
     }
@@ -70,7 +69,7 @@ namespace dbaccess
     {
     }
 
-    void SAL_CALL OPropertyForward::propertyChange( const PropertyChangeEvent& evt ) throw(RuntimeException, std::exception)
+    void SAL_CALL OPropertyForward::propertyChange( const PropertyChangeEvent& evt )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -108,11 +107,11 @@ namespace dbaccess
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 
-    void SAL_CALL OPropertyForward::disposing( const css::lang::EventObject& /*_rSource*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL OPropertyForward::disposing( const css::lang::EventObject& /*_rSource*/ )
     {
         ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -141,7 +140,7 @@ namespace dbaccess
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 

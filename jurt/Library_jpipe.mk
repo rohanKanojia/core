@@ -9,10 +9,6 @@
 
 $(eval $(call gb_Library_Library,jpipe))
 
-$(eval $(call gb_Library_use_libraries,jpipe,\
-	$(gb_UWINAPI) \
-))
-
 ifeq ($(OS),WNT)
 
 # The real library is called jpipx on Windows. We build only a wrapper
@@ -72,14 +68,20 @@ $(eval $(call gb_Library_use_externals,jpipe, \
     boost_headers \
 ))
 
+ifeq ($(OS),MACOSX)
+$(eval $(call gb_Library_use_system_darwin_frameworks,jpipe, \
+    CoreFoundation \
+))
+endif
+
 $(eval $(call gb_Library_add_libs,jpipe, \
     $(if $(filter-out $(OS),ANDROID),-lpthread) \
 ))
 
 $(call gb_LinkTarget_get_target,$(call gb_Library_get_linktarget,jpipe)): \
-    gb_CC := $(filter-out -fsanitize=%,$(gb_CC))
+    gb_CC := $(filter-out -fsanitize%,$(gb_CC))
 $(call gb_LinkTarget_get_target,$(call gb_Library_get_linktarget,jpipe)): \
-    gb_CXX := $(filter-out -fsanitize=%,$(gb_CXX))
+    gb_CXX := $(filter-out -fsanitize%,$(gb_CXX))
 
 endif
 endif

@@ -60,19 +60,17 @@ ViewContactOfSdrOle2Obj::~ViewContactOfSdrOle2Obj()
 basegfx::B2DHomMatrix ViewContactOfSdrOle2Obj::createObjectTransform() const
 {
     // take unrotated snap rect (direct model data) for position and size
-    Rectangle rRectangle = GetOle2Obj().GetGeoRect();
-    // Hack for calc, transform position of object according
-    // to current zoom so as objects relative position to grid
-    // appears stable
-    rRectangle += GetOle2Obj().GetGridOffset();
-    const basegfx::B2DRange aObjectRange(rRectangle.Left(), rRectangle.Top(), rRectangle.Right(), rRectangle.Bottom());
+    const tools::Rectangle aRectangle(GetOle2Obj().GetGeoRect());
+    const basegfx::B2DRange aObjectRange(
+        aRectangle.Left(), aRectangle.Top(),
+        aRectangle.Right(), aRectangle.Bottom());
 
     // create object matrix
     const GeoStat& rGeoStat(GetOle2Obj().GetGeoStat());
     const double fShearX(rGeoStat.nShearAngle ? tan((36000 - rGeoStat.nShearAngle) * F_PI18000) : 0.0);
     const double fRotate(rGeoStat.nRotationAngle ? (36000 - rGeoStat.nRotationAngle) * F_PI18000 : 0.0);
 
-    return basegfx::tools::createScaleShearXRotateTranslateB2DHomMatrix(
+    return basegfx::utils::createScaleShearXRotateTranslateB2DHomMatrix(
         aObjectRange.getWidth(), aObjectRange.getHeight(),
         fShearX,
         fRotate,
@@ -99,7 +97,7 @@ drawinglayer::primitive2d::Primitive2DContainer ViewContactOfSdrOle2Obj::createP
     {
         // #i123539# allow buffering and reuse of local chart data to not need to rebuild it
         // on every ViewObjectContact::getPrimitive2DSequence call. TTTT: Not needed for
-        // aw080, there this mechanism alraedy works differently
+        // aw080, there this mechanism already works differently
         if(mxChartContent.is())
         {
             xContent = mxChartContent;
@@ -121,7 +119,7 @@ drawinglayer::primitive2d::Primitive2DContainer ViewContactOfSdrOle2Obj::createP
             {
                 // create embedding transformation
                 basegfx::B2DHomMatrix aEmbed(
-                    basegfx::tools::createTranslateB2DHomMatrix(
+                    basegfx::utils::createTranslateB2DHomMatrix(
                         -aChartContentRange.getMinX(),
                         -aChartContentRange.getMinY()));
 

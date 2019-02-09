@@ -19,9 +19,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSSLOTMANAGER_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSSLOTMANAGER_HXX
 
-#include "model/SlsSharedPageDescriptor.hxx"
+#include <model/SlsSharedPageDescriptor.hxx>
 #include <tools/link.hxx>
-#include <queue>
+#include <rtl/ustring.hxx>
 
 class AbstractSvxNameDialog;
 class SfxItemSet;
@@ -32,8 +32,6 @@ class SlideSorter;
 } }
 
 namespace sd { namespace slidesorter { namespace controller {
-
-class Command;
 
 /** This manager takes over the work of handling slot calls from the
     controller of the slide sorter.
@@ -78,15 +76,11 @@ private:
     /// The controller for which we manage the slot calls.
     SlideSorter& mrSlideSorter;
 
-    /** Called by FuTemporary to show the slide show.
-    */
-    void ShowSlideShow (SfxRequest& rRequest);
-
     /** The implementation is a copy of the code for SID_RENAMEPAGE in
         drviews2.cxx.
     */
-    void RenameSlide();
-    DECL_LINK_TYPED(RenameSlideHdl, AbstractSvxNameDialog&, bool);
+    void RenameSlide( const SfxRequest& rRequest );
+    DECL_LINK(RenameSlideHdl, AbstractSvxNameDialog&, bool);
     bool RenameSlideFromDrawViewShell( sal_uInt16 nPageId, const OUString& rName);
 
     /** Handle SID_INSERTPAGE slot calls.

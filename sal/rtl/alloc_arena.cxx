@@ -17,26 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
 #include "alloc_arena.hxx"
 
 #include "alloc_impl.hxx"
-#include "rtllifecycle.h"
-#include "sal/macros.h"
-#include "osl/diagnose.h"
+#include <rtllifecycle.h>
+#include <sal/macros.h>
 
 #include <cassert>
 #include <string.h>
 #include <stdio.h>
 
-/* ================================================================= *
- *
- * arena internals.
- *
- * ================================================================= */
-
-/** g_arena_list
- *  @internal
- */
+/**
+    @internal
+*/
 struct rtl_arena_list_st
 {
     rtl_memory_lock_type m_lock;
@@ -45,64 +40,48 @@ struct rtl_arena_list_st
 
 static rtl_arena_list_st g_arena_list;
 
-/** gp_arena_arena
- *  provided for arena_type allocations, and hash_table resizing.
- *
- *  @internal
- */
+/**
+    provided for arena_type allocations, and hash_table resizing.
+
+    @internal
+*/
 static rtl_arena_type * gp_arena_arena = nullptr;
 
-/** gp_machdep_arena
- *
- *  Low level virtual memory (pseudo) arena
- *  (platform dependent implementation)
- *
- *  @internal
+/**
+    Low level virtual memory (pseudo) arena
+    (platform dependent implementation)
+
+    @internal
  */
 static rtl_arena_type * gp_machdep_arena = nullptr;
 
-/** gp_default_arena
- */
 rtl_arena_type * gp_default_arena = nullptr;
 
 namespace
 {
 
-void *
-SAL_CALL rtl_machdep_alloc (
+void * rtl_machdep_alloc(
     rtl_arena_type * pArena,
     sal_Size *       pSize
 );
 
-void
-SAL_CALL rtl_machdep_free (
+void rtl_machdep_free(
     rtl_arena_type * pArena,
     void *           pAddr,
     sal_Size         nSize
 );
 
-sal_Size
-rtl_machdep_pagesize();
+sal_Size rtl_machdep_pagesize();
 
-/* ================================================================= */
-
-/** rtl_arena_segment_constructor()
- */
-int
-rtl_arena_segment_constructor (void * obj)
+void rtl_arena_segment_constructor(void * obj)
 {
     rtl_arena_segment_type * segment = static_cast<rtl_arena_segment_type*>(obj);
 
     QUEUE_START_NAMED(segment, s);
     QUEUE_START_NAMED(segment, f);
-
-    return 1;
 }
 
-/** rtl_arena_segment_destructor()
- */
-void
-rtl_arena_segment_destructor (void * obj)
+void rtl_arena_segment_destructor(void * obj)
 {
     rtl_arena_segment_type * segment = static_cast< rtl_arena_segment_type * >(
         obj);
@@ -111,23 +90,17 @@ rtl_arena_segment_destructor (void * obj)
     (void) segment; // avoid warnings
 }
 
-/* ================================================================= */
-
-/** rtl_arena_segment_populate()
- *
- *  @precond  arena->m_lock acquired.
+/**
+    @precond  arena->m_lock acquired.
  */
-bool
-rtl_arena_segment_populate (
-    rtl_arena_type * arena
-)
+bool rtl_arena_segment_populate(rtl_arena_type * arena)
 {
     rtl_arena_segment_type *span;
     sal_Size                size = rtl_machdep_pagesize();
 
     span = static_cast< rtl_arena_segment_type * >(
         rtl_machdep_alloc(gp_machdep_arena, &size));
-    if (span != nullptr)
+    if (span)
     {
         rtl_arena_segment_type *first, *last, *head;
         sal_Size                count = size / sizeof(rtl_arena_segment_type);
@@ -153,44 +126,40 @@ rtl_arena_segment_populate (
     return (span != nullptr);
 }
 
-/** rtl_arena_segment_get()
- *
- *  @precond  arena->m_lock acquired.
- *  @precond  (*ppSegment == 0)
- */
-inline void
-rtl_arena_segment_get (
-    rtl_arena_type *          arena,
+/**
+    @precond  arena->m_lock acquired.
+    @precond  (*ppSegment == 0)
+*/
+void rtl_arena_segment_get(
+    rtl_arena_type * arena,
     rtl_arena_segment_type ** ppSegment
 )
 {
     rtl_arena_segment_type * head;
 
-    assert(*ppSegment == nullptr);
+    assert(!*ppSegment);
 
     head = &(arena->m_segment_reserve_head);
-    if ((head->m_snext != head) || rtl_arena_segment_populate (arena))
+    if (head->m_snext != head || rtl_arena_segment_populate (arena))
     {
         (*ppSegment) = head->m_snext;
-        QUEUE_REMOVE_NAMED((*ppSegment), s);
+        QUEUE_REMOVE_NAMED(*ppSegment, s);
     }
 }
 
-/** rtl_arena_segment_put()
- *
- *  @precond  arena->m_lock acquired.
- *  @postcond (*ppSegment == 0)
+/**
+    @precond  arena->m_lock acquired.
+    @postcond (*ppSegment == 0)
  */
-inline void
-rtl_arena_segment_put (
-    rtl_arena_type *          arena,
+void rtl_arena_segment_put(
+    rtl_arena_type * arena,
     rtl_arena_segment_type ** ppSegment
 )
 {
     rtl_arena_segment_type * head;
 
-    assert(QUEUE_STARTED_NAMED((*ppSegment), s));
-    assert(QUEUE_STARTED_NAMED((*ppSegment), f));
+    assert(QUEUE_STARTED_NAMED(*ppSegment, s));
+    assert(QUEUE_STARTED_NAMED(*ppSegment, f));
 
     (*ppSegment)->m_addr = 0;
     (*ppSegment)->m_size = 0;
@@ -206,36 +175,33 @@ rtl_arena_segment_put (
     (*ppSegment) = nullptr;
 }
 
-/** rtl_arena_freelist_insert()
- *
- *  @precond arena->m_lock acquired.
- */
-inline void
-rtl_arena_freelist_insert (
-    rtl_arena_type *         arena,
+/**
+    @precond arena->m_lock acquired.
+*/
+void rtl_arena_freelist_insert (
+    rtl_arena_type * arena,
     rtl_arena_segment_type * segment
 )
 {
     rtl_arena_segment_type * head;
-
-    head = &(arena->m_freelist_head[highbit(segment->m_size) - 1]);
+    const auto bit = highbit(segment->m_size);
+    assert(bit > 0);
+    head = &(arena->m_freelist_head[bit - 1]);
     QUEUE_INSERT_TAIL_NAMED(head, segment, f);
 
     arena->m_freelist_bitmap |= head->m_size;
 }
 
-/** rtl_arena_freelist_remove()
- *
- *  @precond arena->m_lock acquired.
- */
-inline void
-rtl_arena_freelist_remove (
-    rtl_arena_type *         arena,
+/**
+    @precond arena->m_lock acquired.
+*/
+void rtl_arena_freelist_remove(
+    rtl_arena_type * arena,
     rtl_arena_segment_type * segment
 )
 {
-    if ((segment->m_fnext->m_type == RTL_ARENA_SEGMENT_TYPE_HEAD) &&
-        (segment->m_fprev->m_type == RTL_ARENA_SEGMENT_TYPE_HEAD)    )
+    if (segment->m_fnext->m_type == RTL_ARENA_SEGMENT_TYPE_HEAD &&
+        segment->m_fprev->m_type == RTL_ARENA_SEGMENT_TYPE_HEAD)
     {
         rtl_arena_segment_type * head;
 
@@ -246,24 +212,18 @@ rtl_arena_freelist_remove (
     QUEUE_REMOVE_NAMED(segment, f);
 }
 
-/* ================================================================= */
-
-/** RTL_ARENA_HASH_INDEX()
- */
 #define RTL_ARENA_HASH_INDEX_IMPL(a, s, q, m) \
      ((((a) + ((a) >> (s)) + ((a) >> ((s) << 1))) >> (q)) & (m))
 
 #define RTL_ARENA_HASH_INDEX(arena, addr) \
     RTL_ARENA_HASH_INDEX_IMPL((addr), (arena)->m_hash_shift, (arena)->m_quantum_shift, ((arena)->m_hash_size - 1))
 
-/** rtl_arena_hash_rescale()
- *
- * @precond arena->m_lock released.
- */
-void
-rtl_arena_hash_rescale (
+/**
+   @precond arena->m_lock released.
+*/
+void rtl_arena_hash_rescale(
     rtl_arena_type * arena,
-    sal_Size         new_size
+    sal_Size new_size
 )
 {
     assert(new_size != 0);
@@ -274,7 +234,7 @@ rtl_arena_hash_rescale (
     new_bytes = new_size * sizeof(rtl_arena_segment_type*);
     new_table = static_cast<rtl_arena_segment_type **>(rtl_arena_alloc (gp_arena_arena, &new_bytes));
 
-    if (new_table != nullptr)
+    if (new_table)
     {
         rtl_arena_segment_type ** old_table;
         sal_Size                  old_size, i;
@@ -286,15 +246,6 @@ rtl_arena_hash_rescale (
         old_table = arena->m_hash_table;
         old_size  = arena->m_hash_size;
 
-        // SAL_INFO(
-        //  "sal.rtl",
-        //  "rtl_arena_hash_rescale(" << arena->m_name << "): nseg: "
-        //      << (arena->m_stats.m_alloc - arena->m_stats.m_free) << " (ave: "
-        //      << ((arena->m_stats.m_alloc - arena->m_stats.m_free)
-        //          >> arena->m_hash_shift)
-        //      << "), frees: " << arena->m_stats.m_free << " [old_size: "
-        //      << old_size << ", new_size: " << new_size << ']');
-
         arena->m_hash_table = new_table;
         arena->m_hash_size  = new_size;
         arena->m_hash_shift = highbit(arena->m_hash_size) - 1;
@@ -302,12 +253,12 @@ rtl_arena_hash_rescale (
         for (i = 0; i < old_size; i++)
         {
             rtl_arena_segment_type * curr = old_table[i];
-            while (curr != nullptr)
+            while (curr)
             {
                 rtl_arena_segment_type  * next = curr->m_fnext;
                 rtl_arena_segment_type ** head;
 
-                // coverity[negative_shift]
+                // coverity[negative_shift] - bogus
                 head = &(arena->m_hash_table[RTL_ARENA_HASH_INDEX(arena, curr->m_addr)]);
                 curr->m_fnext = (*head);
                 (*head) = curr;
@@ -327,12 +278,11 @@ rtl_arena_hash_rescale (
     }
 }
 
-/** rtl_arena_hash_insert()
- *  ...and update stats.
- */
-inline void
-rtl_arena_hash_insert (
-    rtl_arena_type *         arena,
+/**
+    Insert arena hash, and update stats.
+*/
+void rtl_arena_hash_insert(
+    rtl_arena_type * arena,
     rtl_arena_segment_type * segment
 )
 {
@@ -347,21 +297,20 @@ rtl_arena_hash_insert (
     arena->m_stats.m_mem_alloc += segment->m_size;
 }
 
-/** rtl_arena_hash_remove()
- *  ...and update stats.
- */
-rtl_arena_segment_type *
-rtl_arena_hash_remove (
+/**
+    Remove arena hash, and update stats.
+*/
+rtl_arena_segment_type * rtl_arena_hash_remove(
     rtl_arena_type * arena,
-    sal_uIntPtr      addr,
-    sal_Size         size
+    sal_uIntPtr addr,
+    sal_Size size
 )
 {
     rtl_arena_segment_type *segment, **segpp;
     sal_Size lookups = 0;
 
     segpp = &(arena->m_hash_table[RTL_ARENA_HASH_INDEX(arena, addr)]);
-    while ((segment = *segpp) != nullptr)
+    while ((segment = *segpp))
     {
         if (segment->m_addr == addr)
         {
@@ -375,8 +324,8 @@ rtl_arena_hash_remove (
         segpp = &(segment->m_fnext);
     }
 
-    assert(segment != nullptr); // bad free
-    if (segment != nullptr)
+    assert(segment); // bad free
+    if (segment)
     {
         assert(segment->m_size == size);
         (void) size; // avoid warnings
@@ -386,7 +335,7 @@ rtl_arena_hash_remove (
 
         if (lookups > 1)
         {
-            sal_Size nseg = (sal_Size)(arena->m_stats.m_alloc - arena->m_stats.m_free);
+            sal_Size nseg = static_cast<sal_Size>(arena->m_stats.m_alloc - arena->m_stats.m_free);
             if (nseg > 4 * arena->m_hash_size)
             {
                 if (!(arena->m_flags & RTL_ARENA_FLAG_RESCALE))
@@ -408,28 +357,25 @@ rtl_arena_hash_remove (
     return segment;
 }
 
-/* ================================================================= */
+/**
+    allocate (and remove) segment from freelist
 
-/** rtl_arena_segment_alloc()
- *  allocate (and remove) segment from freelist
- *
- *  @precond arena->m_lock acquired
- *  @precond (*ppSegment == 0)
- */
-bool
-rtl_arena_segment_alloc (
-    rtl_arena_type *          arena,
-    sal_Size                  size,
+    @precond arena->m_lock acquired
+    @precond (*ppSegment == 0)
+*/
+bool rtl_arena_segment_alloc(
+    rtl_arena_type * arena,
+    sal_Size size,
     rtl_arena_segment_type ** ppSegment
 )
 {
     int index = 0;
 
-    assert(*ppSegment == nullptr);
+    assert(!*ppSegment);
     if (!RTL_MEMORY_ISP2(size))
     {
-        int msb = highbit(size);
-        if (RTL_ARENA_FREELIST_SIZE == sal::static_int_cast< size_t >(msb))
+        unsigned int msb = highbit(size);
+        if (RTL_ARENA_FREELIST_SIZE == msb)
         {
             /* highest possible freelist: fall back to first fit */
             rtl_arena_segment_type *head, *segment;
@@ -448,7 +394,7 @@ rtl_arena_segment_alloc (
         }
 
         /* roundup to next power of 2 */
-        size = (((sal_Size)1) << msb);
+        size = ((sal_Size(1)) << msb);
     }
 
     index = lowbit(RTL_MEMORY_P2ALIGN(arena->m_freelist_bitmap, size));
@@ -463,7 +409,7 @@ rtl_arena_segment_alloc (
     }
 
 dequeue_and_leave:
-    if (*ppSegment != nullptr)
+    if (*ppSegment)
     {
         /* remove from freelist */
         rtl_arena_freelist_remove (arena, (*ppSegment));
@@ -471,28 +417,27 @@ dequeue_and_leave:
     return (*ppSegment != nullptr);
 }
 
-/** rtl_arena_segment_create()
- *  import new (span) segment from source arena
- *
- *  @precond arena->m_lock acquired
- *  @precond (*ppSegment == 0)
- */
-int
-rtl_arena_segment_create (
-    rtl_arena_type *          arena,
-    sal_Size                  size,
+/**
+    import new (span) segment from source arena
+
+    @precond arena->m_lock acquired
+    @precond (*ppSegment == 0)
+*/
+bool rtl_arena_segment_create(
+    rtl_arena_type * arena,
+    sal_Size size,
     rtl_arena_segment_type ** ppSegment
 )
 {
-    assert((*ppSegment) == nullptr);
-    if (arena->m_source_alloc != nullptr)
+    assert(!*ppSegment);
+    if (arena->m_source_alloc)
     {
         rtl_arena_segment_get (arena, ppSegment);
-        if (*ppSegment != nullptr)
+        if (*ppSegment)
         {
             rtl_arena_segment_type * span = nullptr;
             rtl_arena_segment_get (arena, &span);
-            if (span != nullptr)
+            if (span)
             {
                 /* import new span from source arena */
                 RTL_MEMORY_LOCK_RELEASE(&(arena->m_lock));
@@ -516,25 +461,24 @@ rtl_arena_segment_create (
                     QUEUE_INSERT_HEAD_NAMED(span, (*ppSegment), s);
 
                     /* report success */
-                    return 1;
+                    return true;
                 }
                 rtl_arena_segment_put (arena, &span);
             }
             rtl_arena_segment_put (arena, ppSegment);
         }
     }
-    return 0;
+    return false; // failure
 }
 
-/** rtl_arena_segment_coalesce()
- *  mark as free and join with adjacent free segment(s)
- *
- *  @precond arena->m_lock acquired
- *  @precond segment marked 'used'
- */
-void
-rtl_arena_segment_coalesce (
-    rtl_arena_type *         arena,
+/**
+    mark as free and join with adjacent free segment(s)
+
+    @precond arena->m_lock acquired
+    @precond segment marked 'used'
+*/
+void rtl_arena_segment_coalesce(
+    rtl_arena_type * arena,
     rtl_arena_segment_type * segment
 )
 {
@@ -580,12 +524,7 @@ rtl_arena_segment_coalesce (
     }
 }
 
-/* ================================================================= */
-
-/** rtl_arena_constructor()
- */
-void
-rtl_arena_constructor (void * obj)
+void rtl_arena_constructor(void * obj)
 {
     rtl_arena_type * arena = static_cast<rtl_arena_type*>(obj);
     rtl_arena_segment_type * head;
@@ -595,7 +534,7 @@ rtl_arena_constructor (void * obj)
 
     QUEUE_START_NAMED(arena, arena_);
 
-    (void) RTL_MEMORY_LOCK_INIT(&(arena->m_lock));
+    RTL_MEMORY_LOCK_INIT(&(arena->m_lock));
 
     head = &(arena->m_segment_reserve_span_head);
     rtl_arena_segment_constructor (head);
@@ -614,7 +553,7 @@ rtl_arena_constructor (void * obj)
         head = &(arena->m_freelist_head[i]);
         rtl_arena_segment_constructor (head);
 
-        head->m_size = (((sal_Size)1) << i);
+        head->m_size = ((sal_Size(1)) << i);
         head->m_type = RTL_ARENA_SEGMENT_TYPE_HEAD;
     }
 
@@ -623,10 +562,7 @@ rtl_arena_constructor (void * obj)
     arena->m_hash_shift = highbit(arena->m_hash_size) - 1;
 }
 
-/** rtl_arena_destructor()
- */
-void
-rtl_arena_destructor (void * obj)
+void rtl_arena_destructor(void * obj)
 {
     rtl_arena_type * arena = static_cast<rtl_arena_type*>(obj);
     rtl_arena_segment_type * head;
@@ -652,7 +588,7 @@ rtl_arena_destructor (void * obj)
     {
         head = &(arena->m_freelist_head[i]);
 
-        assert(head->m_size == (((sal_Size)1) << i));
+        assert(head->m_size == ((sal_Size(1)) << i));
         assert(head->m_type == RTL_ARENA_SEGMENT_TYPE_HEAD);
 
         rtl_arena_segment_destructor (head);
@@ -660,65 +596,35 @@ rtl_arena_destructor (void * obj)
 
     assert(arena->m_hash_table == arena->m_hash_table_0);
     assert(arena->m_hash_size  == RTL_ARENA_HASH_SIZE);
-    assert(
-        arena->m_hash_shift ==
-        sal::static_int_cast< unsigned >(highbit(arena->m_hash_size) - 1));
+    assert(arena->m_hash_shift == highbit(arena->m_hash_size) - 1);
 }
 
-/* ================================================================= */
-
-/** rtl_arena_activate()
- */
-rtl_arena_type *
-rtl_arena_activate (
-    rtl_arena_type *   arena,
-    const char *       name,
-    sal_Size           quantum,
-    sal_Size           quantum_cache_max,
-    rtl_arena_type *   source_arena,
+rtl_arena_type * rtl_arena_activate(
+    rtl_arena_type * arena,
+    const char *     name,
+    sal_Size         quantum,
+    rtl_arena_type * source_arena,
     void * (SAL_CALL * source_alloc)(rtl_arena_type *, sal_Size *),
     void   (SAL_CALL * source_free) (rtl_arena_type *, void *, sal_Size)
 )
 {
-    assert(arena != nullptr);
-    if (arena != nullptr)
+    assert(arena);
+    if (arena)
     {
         (void) snprintf (arena->m_name, sizeof(arena->m_name), "%s", name);
 
         if (!RTL_MEMORY_ISP2(quantum))
         {
             /* roundup to next power of 2 */
-            quantum = (((sal_Size)1) << highbit(quantum));
+            quantum = ((sal_Size(1)) << highbit(quantum));
         }
-        quantum_cache_max = RTL_MEMORY_P2ROUNDUP(quantum_cache_max, quantum);
 
         arena->m_quantum = quantum;
         arena->m_quantum_shift = highbit(arena->m_quantum) - 1;
-        arena->m_qcache_max = quantum_cache_max;
 
         arena->m_source_arena = source_arena;
         arena->m_source_alloc = source_alloc;
         arena->m_source_free  = source_free;
-
-        if (arena->m_qcache_max > 0)
-        {
-            char namebuf[RTL_ARENA_NAME_LENGTH + 1];
-            int  i, n = (arena->m_qcache_max >> arena->m_quantum_shift);
-
-            sal_Size size = n * sizeof(rtl_cache_type*);
-            arena->m_qcache_ptr = static_cast<rtl_cache_type**>(rtl_arena_alloc (gp_arena_arena, &size));
-            if (!(arena->m_qcache_ptr))
-            {
-                /* out of memory */
-                return nullptr;
-            }
-            for (i = 1; i <= n; i++)
-            {
-                size = i * arena->m_quantum;
-                (void) snprintf (namebuf, sizeof(namebuf), "%s_%" SAL_PRIuUINTPTR, arena->m_name, size);
-                arena->m_qcache_ptr[i - 1] = rtl_cache_create(namebuf, size, 0, nullptr, nullptr, nullptr, nullptr, arena, RTL_CACHE_FLAG_QUANTUMCACHE);
-            }
-        }
 
         /* insert into arena list */
         RTL_MEMORY_LOCK_ACQUIRE(&(g_arena_list.m_lock));
@@ -728,12 +634,7 @@ rtl_arena_activate (
     return arena;
 }
 
-/** rtl_arena_deactivate()
- */
-void
-rtl_arena_deactivate (
-    rtl_arena_type * arena
-)
+void rtl_arena_deactivate(rtl_arena_type * arena)
 {
     rtl_arena_segment_type * head, * segment;
 
@@ -742,48 +643,15 @@ rtl_arena_deactivate (
     QUEUE_REMOVE_NAMED(arena, arena_);
     RTL_MEMORY_LOCK_RELEASE(&(g_arena_list.m_lock));
 
-    /* cleanup quantum cache(s) */
-    if ((arena->m_qcache_max > 0) && (arena->m_qcache_ptr != nullptr))
-    {
-        int  i, n = (arena->m_qcache_max >> arena->m_quantum_shift);
-        for (i = 1; i <= n; i++)
-        {
-            if (arena->m_qcache_ptr[i - 1] != nullptr)
-            {
-                rtl_cache_destroy (arena->m_qcache_ptr[i - 1]);
-                arena->m_qcache_ptr[i - 1] = nullptr;
-            }
-        }
-        rtl_arena_free (
-            gp_arena_arena,
-            arena->m_qcache_ptr,
-            n * sizeof(rtl_cache_type*));
-
-        arena->m_qcache_ptr = nullptr;
-    }
-
     /* check for leaked segments */
-    // SAL_INFO(
-    //  "sal.rtl",
-    //  "rtl_arena_deactivate(" << arena->m_name << "): allocs: "
-    //      << arena->m_stats.m_alloc << ", frees: " << arena->m_stats.m_free
-    //      << "; total: " << arena->m_stats.m_mem_total << ", used: "
-    //      << arena->m_stats.m_mem_alloc);
     if (arena->m_stats.m_alloc > arena->m_stats.m_free)
     {
         sal_Size i, n;
 
-        // SAL_INFO(
-        //  "sal.rtl",
-        //  "rtl_arena_deactivate(" << arena->m_name << "): cleaning up "
-        //      << (arena->m_stats.m_alloc - arena->m_stats.m_free)
-        //      << " leaked segment(s) [" << arena->m_stats.m_mem_alloc
-        //      << " bytes]");
-
         /* cleanup still used segment(s) */
         for (i = 0, n = arena->m_hash_size; i < n; i++)
         {
-            while ((segment = arena->m_hash_table[i]) != nullptr)
+            while ((segment = arena->m_hash_table[i]))
             {
                 /* pop from hash table */
                 arena->m_hash_table[i] = segment->m_fnext;
@@ -801,13 +669,13 @@ rtl_arena_deactivate (
     /* cleanup hash table */
     if (arena->m_hash_table != arena->m_hash_table_0)
     {
-        rtl_arena_free (
+        rtl_arena_free(
             gp_arena_arena,
             arena->m_hash_table,
             arena->m_hash_size * sizeof(rtl_arena_segment_type*));
 
         arena->m_hash_table = arena->m_hash_table_0;
-        arena->m_hash_size  = RTL_ARENA_HASH_SIZE;
+        arena->m_hash_size = RTL_ARENA_HASH_SIZE;
         arena->m_hash_shift = highbit(arena->m_hash_size) - 1;
     }
 
@@ -856,20 +724,12 @@ rtl_arena_deactivate (
     }
 }
 
-} //namespace
-/* ================================================================= *
- *
- * arena implementation.
- *
- * ================================================================= */
+} // namespace
 
-/** rtl_arena_create()
- */
-rtl_arena_type *
-SAL_CALL rtl_arena_create (
+rtl_arena_type * SAL_CALL rtl_arena_create(
     const char *       name,
     sal_Size           quantum,
-    sal_Size           quantum_cache_max,
+    sal_Size,
     rtl_arena_type *   source_arena,
     void * (SAL_CALL * source_alloc)(rtl_arena_type *, sal_Size *),
     void   (SAL_CALL * source_free) (rtl_arena_type *, void *, sal_Size),
@@ -881,14 +741,14 @@ SAL_CALL rtl_arena_create (
 
 try_alloc:
     result = static_cast<rtl_arena_type*>(rtl_arena_alloc (gp_arena_arena, &size));
-    if (result != nullptr)
+    if (result)
     {
         rtl_arena_type * arena = result;
         rtl_arena_constructor (arena);
 
         if (!source_arena)
         {
-            assert(gp_default_arena != nullptr);
+            assert(gp_default_arena);
             source_arena = gp_default_arena;
         }
 
@@ -896,20 +756,19 @@ try_alloc:
             arena,
             name,
             quantum,
-            quantum_cache_max,
             source_arena,
             source_alloc,
             source_free
         );
 
-        if (result == nullptr)
+        if (!result)
         {
             rtl_arena_deactivate (arena);
             rtl_arena_destructor (arena);
             rtl_arena_free (gp_arena_arena, arena, size);
         }
     }
-    else if (gp_arena_arena == nullptr)
+    else if (!gp_arena_arena)
     {
         ensureArenaSingleton();
         if (gp_arena_arena)
@@ -921,14 +780,9 @@ try_alloc:
     return result;
 }
 
-/** rtl_arena_destroy()
- */
-void
-SAL_CALL rtl_arena_destroy (
-    rtl_arena_type * arena
-) SAL_THROW_EXTERN_C()
+void SAL_CALL rtl_arena_destroy(rtl_arena_type * arena) SAL_THROW_EXTERN_C()
 {
-    if (arena != nullptr)
+    if (arena)
     {
         rtl_arena_deactivate (arena);
         rtl_arena_destructor (arena);
@@ -936,22 +790,19 @@ SAL_CALL rtl_arena_destroy (
     }
 }
 
-/** rtl_arena_alloc()
- */
-void *
-SAL_CALL rtl_arena_alloc (
+void * SAL_CALL rtl_arena_alloc(
     rtl_arena_type * arena,
     sal_Size *       pSize
 ) SAL_THROW_EXTERN_C()
 {
     void * addr = nullptr;
 
-    if ((arena != nullptr) && (pSize != nullptr))
+    if (arena && pSize)
     {
         sal_Size size;
 
-        size = RTL_MEMORY_ALIGN((*pSize), arena->m_quantum);
-        if (size > arena->m_qcache_max)
+        size = RTL_MEMORY_ALIGN(*pSize, arena->m_quantum);
+        if (size > 0)
         {
             /* allocate from segment list */
             rtl_arena_segment_type *segment = nullptr;
@@ -970,11 +821,11 @@ SAL_CALL rtl_arena_alloc (
                 /* resize */
                 assert(segment->m_size >= size);
                 oversize = segment->m_size - size;
-                if ((oversize >= arena->m_quantum) && (oversize >= arena->m_qcache_max))
+                if (oversize >= arena->m_quantum)
                 {
                     rtl_arena_segment_type * remainder = nullptr;
                     rtl_arena_segment_get (arena, &remainder);
-                    if (remainder != nullptr)
+                    if (remainder)
                     {
                         segment->m_size = size;
 
@@ -994,33 +845,20 @@ SAL_CALL rtl_arena_alloc (
             }
             RTL_MEMORY_LOCK_RELEASE(&(arena->m_lock));
         }
-        else if (size > 0)
-        {
-            /* allocate from quantum cache(s) */
-            int index = (size >> arena->m_quantum_shift) - 1;
-            assert(arena->m_qcache_ptr[index] != nullptr);
-
-            addr = rtl_cache_alloc (arena->m_qcache_ptr[index]);
-            if (addr != nullptr)
-                (*pSize) = size;
-        }
     }
     return addr;
 }
 
-/** rtl_arena_free()
- */
-void
-SAL_CALL rtl_arena_free (
+void SAL_CALL rtl_arena_free (
     rtl_arena_type * arena,
     void *           addr,
     sal_Size         size
 ) SAL_THROW_EXTERN_C()
 {
-    if (arena != nullptr)
+    if (arena)
     {
         size = RTL_MEMORY_ALIGN(size, arena->m_quantum);
-        if (size > arena->m_qcache_max)
+        if (size > 0)
         {
             /* free to segment list */
             rtl_arena_segment_type * segment;
@@ -1028,7 +866,7 @@ SAL_CALL rtl_arena_free (
             RTL_MEMORY_LOCK_ACQUIRE(&(arena->m_lock));
 
             segment = rtl_arena_hash_remove (arena, reinterpret_cast<sal_uIntPtr>(addr), size);
-            if (segment != nullptr)
+            if (segment)
             {
                 rtl_arena_segment_type *next, *prev;
 
@@ -1040,9 +878,9 @@ SAL_CALL rtl_arena_free (
                 prev = segment->m_sprev;
 
                 /* entire span free when prev is a span, and next is either a span or a list head */
-                if (((prev->m_type == RTL_ARENA_SEGMENT_TYPE_SPAN)) &&
+                if (prev->m_type == RTL_ARENA_SEGMENT_TYPE_SPAN &&
                     ((next->m_type == RTL_ARENA_SEGMENT_TYPE_SPAN)  ||
-                     (next->m_type == RTL_ARENA_SEGMENT_TYPE_HEAD))    )
+                     (next->m_type == RTL_ARENA_SEGMENT_TYPE_HEAD)))
                 {
                     assert(
                         prev->m_addr == segment->m_addr
@@ -1080,46 +918,43 @@ SAL_CALL rtl_arena_free (
 
             RTL_MEMORY_LOCK_RELEASE(&(arena->m_lock));
         }
-        else if (size > 0)
-        {
-            /* free to quantum cache(s) */
-            int index = (size >> arena->m_quantum_shift) - 1;
-            assert(arena->m_qcache_ptr[index] != nullptr);
+    }
+}
 
-            rtl_cache_free (arena->m_qcache_ptr[index], addr);
+void rtl_arena_foreach (rtl_arena_type *arena, ArenaForeachFn foreachFn)
+{
+    /* used segments */
+    for (int i = 0, n = arena->m_hash_size; i < n; i++)
+    {
+        for (rtl_arena_segment_type *segment = arena->m_hash_table[i];
+             segment != nullptr; segment = segment->m_fnext)
+        {
+            foreachFn(reinterpret_cast<void *>(segment->m_addr),
+                      segment->m_size);
         }
     }
 }
 
-/* ================================================================= *
- *
- * machdep internals.
- *
- * ================================================================= */
-
 #if defined(SAL_UNX)
 #include <sys/mman.h>
-#elif defined(SAL_W32)
-#define MAP_FAILED 0
-#endif /* SAL_UNX || SAL_W32 */
+#elif defined(_WIN32)
+#define MAP_FAILED nullptr
+#endif /* SAL_UNX || _WIN32 */
 
 namespace
 {
 
-/** rtl_machdep_alloc()
- */
-void *
-SAL_CALL rtl_machdep_alloc (
+void * rtl_machdep_alloc(
     rtl_arena_type * pArena,
     sal_Size *       pSize
 )
 {
     void *   addr;
-    sal_Size size = (*pSize);
+    sal_Size size = *pSize;
 
     assert(pArena == gp_machdep_arena);
 
-#if defined(SOLARIS) && defined(SPARC)
+#if defined(__sun) && defined(SPARC)
     /* see @ mmap(2) man pages */
     size += (pArena->m_quantum + pArena->m_quantum); /* "red-zone" pages */
     if (size > (4 << 20))
@@ -1131,7 +966,7 @@ SAL_CALL rtl_machdep_alloc (
     size -= (pArena->m_quantum + pArena->m_quantum); /* "red-zone" pages */
 #else
     /* default allocation granularity */
-    if(pArena->m_quantum < (64 << 10))
+    if (pArena->m_quantum < (64 << 10))
     {
         size = RTL_MEMORY_P2ROUNDUP(size, (64 << 10));
     }
@@ -1142,10 +977,10 @@ SAL_CALL rtl_machdep_alloc (
 #endif
 
 #if defined(SAL_UNX)
-    addr = mmap (nullptr, (size_t)(size), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
-#elif defined(SAL_W32)
-    addr = VirtualAlloc (NULL, (SIZE_T)(size), MEM_COMMIT, PAGE_READWRITE);
-#endif /* (SAL_UNX || SAL_W32) */
+    addr = mmap (nullptr, static_cast<size_t>(size), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+#elif defined(_WIN32)
+    addr = VirtualAlloc (nullptr, static_cast<SIZE_T>(size), MEM_COMMIT, PAGE_READWRITE);
+#endif /* (SAL_UNX || _WIN32) */
 
     if (addr != MAP_FAILED)
     {
@@ -1159,10 +994,7 @@ SAL_CALL rtl_machdep_alloc (
     return nullptr;
 }
 
-/** rtl_machdep_free()
- */
-void
-SAL_CALL rtl_machdep_free (
+void rtl_machdep_free(
     rtl_arena_type * pArena,
     void *           pAddr,
     sal_Size         nSize
@@ -1176,37 +1008,29 @@ SAL_CALL rtl_machdep_free (
 
 #if defined(SAL_UNX)
     (void) munmap(pAddr, nSize);
-#elif defined(SAL_W32)
-    (void) VirtualFree ((LPVOID)(pAddr), (SIZE_T)(0), MEM_RELEASE);
-#endif /* (SAL_UNX || SAL_W32) */
+#elif defined(_WIN32)
+    (void) VirtualFree (pAddr, SIZE_T(0), MEM_RELEASE);
+#endif /* (SAL_UNX || _WIN32) */
 }
 
-sal_Size
-rtl_machdep_pagesize()
+sal_Size rtl_machdep_pagesize()
 {
 #if defined(SAL_UNX)
 #if defined(FREEBSD) || defined(NETBSD) || defined(DRAGONFLY)
     return (sal_Size)getpagesize();
 #else  /* POSIX */
-    return (sal_Size)sysconf(_SC_PAGESIZE);
+    return static_cast<sal_Size>(sysconf(_SC_PAGESIZE));
 #endif /* xBSD || POSIX */
-#elif defined(SAL_W32)
+#elif defined(_WIN32)
     SYSTEM_INFO info;
     GetSystemInfo (&info);
-    return (sal_Size)info.dwPageSize;
-#endif /* (SAL_UNX || SAL_W32) */
+    return static_cast<sal_Size>(info.dwPageSize);
+#endif /* (SAL_UNX || _WIN32) */
 }
 
 } //namespace
 
-/* ================================================================= *
- *
- * arena initialization.
- *
- * ================================================================= */
-
-void
-rtl_arena_init()
+void rtl_arena_init()
 {
     {
         /* list of arenas */
@@ -1217,63 +1041,56 @@ rtl_arena_init()
         /* machdep (pseudo) arena */
         static rtl_arena_type g_machdep_arena;
 
-        assert(gp_machdep_arena == nullptr);
+        assert(!gp_machdep_arena);
         rtl_arena_constructor (&g_machdep_arena);
 
         gp_machdep_arena = rtl_arena_activate (
             &g_machdep_arena,
             "rtl_machdep_arena",
             rtl_machdep_pagesize(),
-            0,       /* no quantum caching */
             nullptr, nullptr, nullptr  /* no source */
         );
-        assert(gp_machdep_arena != nullptr);
+        assert(gp_machdep_arena);
     }
     {
         /* default arena */
         static rtl_arena_type g_default_arena;
 
-        assert(gp_default_arena == nullptr);
+        assert(!gp_default_arena);
         rtl_arena_constructor (&g_default_arena);
 
         gp_default_arena = rtl_arena_activate (
             &g_default_arena,
             "rtl_default_arena",
             rtl_machdep_pagesize(),
-            0,                 /* no quantum caching */
             gp_machdep_arena,  /* source */
             rtl_machdep_alloc,
             rtl_machdep_free
         );
-        assert(gp_default_arena != nullptr);
+        assert(gp_default_arena);
     }
     {
         /* arena internal arena */
         static rtl_arena_type g_arena_arena;
 
-        assert(gp_arena_arena == nullptr);
+        assert(!gp_arena_arena);
         rtl_arena_constructor (&g_arena_arena);
 
-        gp_arena_arena = rtl_arena_activate (
+        gp_arena_arena = rtl_arena_activate(
             &g_arena_arena,
             "rtl_arena_internal_arena",
             64,                /* quantum */
-            0,                 /* no quantum caching */
             gp_default_arena,  /* source */
             rtl_arena_alloc,
             rtl_arena_free
         );
-        assert(gp_arena_arena != nullptr);
+        assert(gp_arena_arena);
     }
-    // SAL_INFO("sal.rtl", "rtl_arena_init completed");
 }
 
-/* ================================================================= */
-
-void
-rtl_arena_fini()
+void rtl_arena_fini()
 {
-    if (gp_arena_arena != nullptr)
+    if (gp_arena_arena)
     {
         rtl_arena_type * arena, * head;
 
@@ -1282,19 +1099,10 @@ rtl_arena_fini()
 
         for (arena = head->m_arena_next; arena != head; arena = arena->m_arena_next)
         {
-            // SAL_INFO(
-            //  "sal.rtl",
-            //  "rtl_arena_fini(" << arena->m_name << "): allocs: "
-            //      << arena->m_stats.m_alloc << ", frees: "
-            //      << arena->m_stats.m_free << "; total: "
-            //      << arena->m_stats.m_mem_total << ", used: "
-            //      << arena->m_stats.m_mem_alloc);
+            // noop
         }
         RTL_MEMORY_LOCK_RELEASE(&(g_arena_list.m_lock));
     }
-    // SAL_INFO("sal.rtl", "rtl_arena_fini completed");
 }
-
-/* ================================================================= */
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

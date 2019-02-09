@@ -23,6 +23,8 @@
 #include <basic/sbxform.hxx>
 #include <rtl/ustrbuf.hxx>
 
+#include <rtl/character.hxx>
+
 /*
 TODO: are there any Star-Basic characteristics unconsidered?
 
@@ -51,10 +53,6 @@ COMMENT: Visual-Basic treats the following (invalid) format-strings
                     // +3 for the exponent's value
                     // +1 for closing 0
 
-// Defines for the digits:
-#define ASCII_0                     '0' // 48
-#define ASCII_9                     '9' // 57
-
 #define CREATE_1000SEP_CHAR         '@'
 
 #define FORMAT_SEPARATOR            ';'
@@ -82,7 +80,7 @@ COMMENT: Visual-Basic treats the following (invalid) format-strings
 //          be generated. That's a StarBasic 'extension'.
 
 
-double get_number_of_digits( double dNumber )
+static double get_number_of_digits( double dNumber )
 //double floor_log10_fabs( double dNumber )
 {
     if( dNumber==0.0 )
@@ -117,7 +115,7 @@ SbxBasicFormater::SbxBasicFormater( sal_Unicode _cDecPoint, sal_Unicode _cThousa
 {
 }
 
-// function for ouput of a error-text (for debugging)
+// function for output of a error-text (for debugging)
 // displaces all characters of the string, starting from nStartPos
 // for one position to larger indexes, i. e. place for a new
 // character (which is to be inserted) is created.
@@ -131,7 +129,7 @@ void SbxBasicFormater::AppendDigit( OUStringBuffer& sStrg, short nDigit )
 {
     if( nDigit>=0 && nDigit<=9 )
     {
-        sStrg.append((sal_Unicode)(nDigit+ASCII_0));
+        sStrg.append(static_cast<sal_Unicode>(nDigit+'0'));
     }
 }
 
@@ -175,24 +173,24 @@ void SbxBasicFormater::StrRoundDigit( OUStringBuffer& sStrg, short nPos, bool& b
     // in one piece, i. e. special characters should ONLY be in
     // front OR behind the number and not right in the middle of
     // the format information for the number
-    while( nPos >= 0 && ( sStrg[nPos] < ASCII_0 || sStrg[nPos] > ASCII_9 ))
+    while( nPos >= 0 && ! rtl::isAsciiDigit(sStrg[nPos]))
     {
         nPos--;
     }
     if( nPos==-1 )
     {
         ShiftString( sStrg, 0 );
-        sStrg[0] = (sal_Unicode)'1';
+        sStrg[0] = '1';
         bOverflow = true;
     }
     else
     {
         sal_Unicode c2 = sStrg[nPos];
-        if( c2 >= ASCII_0 && c2 <= ASCII_9 )
+        if( rtl::isAsciiDigit(c2) )
         {
-            if( c2 == ASCII_9 )
+            if( c2 == '9' )
             {
-                sStrg[nPos] = (sal_Unicode)'0';
+                sStrg[nPos] = '0';
                 StrRoundDigit( sStrg, nPos - 1, bOverflow );
             }
             else
@@ -203,7 +201,7 @@ void SbxBasicFormater::StrRoundDigit( OUStringBuffer& sStrg, short nPos, bool& b
         else
         {
             ShiftString( sStrg,nPos+1 );
-            sStrg[nPos + 1] = (sal_Unicode)'1';
+            sStrg[nPos + 1] = '1';
             bOverflow = true;
         }
     }
@@ -220,15 +218,12 @@ void SbxBasicFormater::ParseBack( OUStringBuffer& sStrg, const OUString& sFormat
                                   short nFormatPos )
 {
     for( sal_Int32 i = nFormatPos;
-         i>0 && sFormatStrg[ i ]  == (sal_Unicode)'#' && sStrg[sStrg.getLength() - 1] == (sal_Unicode)'0';
+         i>0 && sFormatStrg[ i ]  == '#' && sStrg[sStrg.getLength() - 1] == '0';
          i-- )
     {
         sStrg.setLength(sStrg.getLength() - 1 );
     }
 }
-
-#ifdef with_sprintf_
-
 
 void SbxBasicFormater::InitScan( double _dNum )
 {
@@ -245,10 +240,10 @@ void SbxBasicFormater::InitScan( double _dNum )
 void SbxBasicFormater::InitExp( double _dNewExp )
 {
     char sBuffer[ MAX_DOUBLE_BUFFER_LENGTH ];
-    nNumExp = (short)_dNewExp;
+    nNumExp = static_cast<short>(_dNewExp);
     /*int nCount =*/ sprintf( sBuffer,"%+i",nNumExp );
     sNumExpStrg = OUString::createFromAscii( sBuffer );
-    nExpExp = (short)get_number_of_digits( (double)nNumExp );
+    nExpExp = static_cast<short>(get_number_of_digits( static_cast<double>(nNumExp) ));
 }
 
 
@@ -272,7 +267,7 @@ short SbxBasicFormater::GetDigitAtPosScan( short nPos, bool& bFoundFirstDigit )
     // query of the number's first valid digit --> set flag
     if( nPos==nNumExp )
         bFoundFirstDigit = true;
-    return (short)(sSciNumStrg[ no ] - ASCII_0);
+    return static_cast<short>(sSciNumStrg[ no ] - '0');
 }
 
 short SbxBasicFormater::GetDigitAtPosExpScan( short nPos, bool& bFoundFirstDigit )
@@ -285,7 +280,7 @@ short SbxBasicFormater::GetDigitAtPosExpScan( short nPos, bool& bFoundFirstDigit
 
     if( nPos==nExpExp )
         bFoundFirstDigit = true;
-    return (short)(sNumExpStrg[ no ] - ASCII_0);
+    return static_cast<short>(sNumExpStrg[ no ] - '0');
 }
 
 // a value for the exponent can be given because the number maybe shall
@@ -297,70 +292,6 @@ short SbxBasicFormater::GetDigitAtPosExpScan( double dNewExponent, short nPos,
 
     return GetDigitAtPosExpScan( nPos,bFoundFirstDigit );
 }
-
-#else
-
-/* Problems with the following method:
-
-TODO: an 'intelligent' peek-parser might be needed to detect rounding
-      mistakes at double-numbers - e. g. for  0.00115 #.#e-000
-
-  problem with: format( 0.3345 ,  "0.000" )
-  problem with: format( 0.00115 , "0.0000" )
-
-*/
-// returns the digit at the given '10 system'-position,
-// i. e. positive nPos for positions before the decimal
-// point and negative for positions after.
-// nPos==0 means first position after the decimalpoint, so 10^0.
-// returns 0..9 for valid digits and -1 for not existing,
-// i. e. if the passed number is too small
-// (e. g. position 5 of dNumber=123).
-// Furthermore in dNextNumber the number shorted by leading
-// positions (till nPos) is returned, e. g.
-//   GetDigitAtPos( 3434.565 , 2 , dNewNumber ) --> dNewNumber = 434.565
-// In bFoundFirstDigit a flag is set if a digit has been found,
-// this is used to prevent 'errors' on parsing 202
-// ATTENTION: apparently there are sometimes still problems with rounding mistakes!
-short SbxBasicFormater::GetDigitAtPos( double dNumber, short nPos,
-                                double& dNextNumber, bool& bFoundFirstDigit )
-{
-    double dDigit;
-    short  nMaxDigit;
-
-    dNumber = fabs( dNumber );
-
-    nMaxDigit = (short)get_number_of_digits( dNumber );
-    // error only at numbers > 0, i. e. for digits before
-    // the decimal point
-    if( nMaxDigit<nPos && !bFoundFirstDigit && nPos>=0 )
-        return NO_DIGIT_;
-
-    bFoundFirstDigit = true;
-    for( short i=nMaxDigit; i>=nPos; i-- )
-    {
-        double dI = (double)i;
-        double dTemp1 = pow( 10.0,dI );
-
-        dDigit = floor( pow( 10.0,log10( fabs( dNumber ) )-dI ) );
-        dNumber -= dTemp1 * dDigit;
-    }
-    // for optimized loop run
-    dNextNumber = dNumber;
-
-    return RoundDigit( dDigit );
-}
-
-
-short SbxBasicFormater::RoundDigit( double dNumber )
-{
-    if( dNumber<0.0 || dNumber>10.0 )
-        return -1;
-    short nTempHigh = (short)(dNumber+0.5); // maybe floor( )
-    return nTempHigh;
-}
-
-#endif
 
 // Copies the respective part of the format-string, if existing, and returns it.
 // So a new string is created, which has to be freed by the caller later.
@@ -599,7 +530,7 @@ void SbxBasicFormater::ScanFormatString( double dNumber,
             - optional digits in the exponent
             - percent-character found?
             - () for negative leading sign?
-            - exponetial-notation?
+            - exponential-notation?
             - shall thousand-separators be generated?
             - is a percent-character being found? --> dNumber *= 100.0;
             - are there thousand-separators in a row?
@@ -636,13 +567,13 @@ void SbxBasicFormater::ScanFormatString( double dNumber,
     dExponent = get_number_of_digits( dNumber );
     nExponentPos = 0;
     nMaxExponentDigit = 0;
-    nMaxDigit = (short)dExponent;
+    nMaxDigit = static_cast<short>(dExponent);
     bDigitPosNegative = false;
     if( bScientific )
     {
-        dExponent = dExponent - (double)(nNoOfDigitsLeft-1);
+        dExponent = dExponent - static_cast<double>(nNoOfDigitsLeft-1);
         nDigitPos = nMaxDigit;
-        nMaxExponentDigit = (short)get_number_of_digits( dExponent );
+        nMaxExponentDigit = static_cast<short>(get_number_of_digits( dExponent ));
         nExponentPos = nNoOfExponentDigits - 1 - nNoOfOptionalExponentDigits;
     }
     else
@@ -657,9 +588,7 @@ void SbxBasicFormater::ScanFormatString( double dNumber,
     bZeroSpaceOn = false;
 
 
-#ifdef with_sprintf_
     InitScan( dNumber );
-#endif
     // scanning the format-string:
     sal_Unicode cForce = 0;
     for( i = 0; i < nLen; i++ )
@@ -696,12 +625,8 @@ void SbxBasicFormater::ScanFormatString( double dNumber,
                     {
                         for( short j = nMaxDigit; j > nDigitPos; j-- )
                         {
-                            short nTempDigit;
-#ifdef with_sprintf_
-                            AppendDigit( sReturnStrg, nTempDigit = GetDigitAtPosScan( j, bFoundFirstDigit ) );
-#else
-                            AppendDigit( sReturnStrg, nTempDigit = GetDigitAtPos( dNumber, j, dNumber, bFoundFirstDigit ) );
-#endif
+                            short nTempDigit = GetDigitAtPosScan( j, bFoundFirstDigit );
+                            AppendDigit( sReturnStrg, nTempDigit );
                             if( nTempDigit != NO_DIGIT_ )
                             {
                                 bFirstDigit = false;
@@ -722,19 +647,15 @@ void SbxBasicFormater::ScanFormatString( double dNumber,
                     // Remark: in Visual-Basic the first 0 turns on the 0 for
                     //         all the following # (up to the decimal point),
                     //         this behaviour is simulated here with the flag.
-                    if( bGenerateThousandSeparator && ( c=='0' || nMaxDigit >= nDigitPos ) && nDigitPos > 0 && (nDigitPos % 3 == 0) )
+                    if (bGenerateThousandSeparator && c == '0' && nDigitPos > 0 && (nDigitPos % 3 == 0))
                     {
                         sReturnStrg.append(cThousandSep);
                     }
                 }
                 else
                 {
-                    short nTempDigit;
-#ifdef with_sprintf_
-                    AppendDigit( sReturnStrg, nTempDigit = GetDigitAtPosScan( nDigitPos, bFoundFirstDigit ) );
-#else
-                    AppendDigit( sReturnStrg, nTempDigit = GetDigitAtPos( dNumber, nDigitPos, dNumber, bFoundFirstDigit ) );
-#endif
+                    short nTempDigit = GetDigitAtPosScan( nDigitPos, bFoundFirstDigit ) ;
+                    AppendDigit( sReturnStrg, nTempDigit );
 
                     if( nTempDigit != NO_DIGIT_ )
                     {
@@ -760,11 +681,7 @@ void SbxBasicFormater::ScanFormatString( double dNumber,
                     {
                         for( short j = nMaxExponentDigit; j > nExponentPos; j-- )
                         {
-#ifdef with_sprintf_
                             AppendDigit( sReturnStrg, GetDigitAtPosExpScan( dExponent, j, bFoundFirstDigit ) );
-#else
-                            AppendDigit( sReturnStrg,GetDigitAtPos( dExponent, j, dExponent, bFoundFirstDigit ) );
-#endif
                         }
                     }
                 }
@@ -775,11 +692,7 @@ void SbxBasicFormater::ScanFormatString( double dNumber,
                 }
                 else
                 {
-#ifdef with_sprintf_
                     AppendDigit( sReturnStrg, GetDigitAtPosExpScan( dExponent, nExponentPos, bFoundFirstDigit ) );
-#else
-                    AppendDigit( sReturnStrg, GetDigitAtPos( dExponent, nExponentPos, dExponent, bFoundFirstDigit ) );
-#endif
                 }
                 nExponentPos--;
             }
@@ -817,11 +730,7 @@ void SbxBasicFormater::ScanFormatString( double dNumber,
                 }
 
                 bool bOverflow = false;
-#ifdef with_sprintf_
                 short nNextDigit = GetDigitAtPosScan( nDigitPos, bFoundFirstDigit );
-#else
-                short nNextDigit = GetDigitAtPos( dNumber, nDigitPos, dNumber, bFoundFirstDigit );
-#endif
                 if( nNextDigit>=5 )
                 {
                     StrRoundDigit( sReturnStrg, sReturnStrg.getLength() - 1, bOverflow );
@@ -916,11 +825,7 @@ void SbxBasicFormater::ScanFormatString( double dNumber,
     // scan completed - rounding necessary?
     if( !bScientific )
     {
-#ifdef with_sprintf_
         short nNextDigit = GetDigitAtPosScan( nDigitPos, bFoundFirstDigit );
-#else
-        short nNextDigit = GetDigitAtPos( dNumber, nDigitPos, dNumber, bFoundFirstDigit );
-#endif
         if( nNextDigit>=5 )
         {
             StrRoundDigit( sReturnStrg, sReturnStrg.getLength() - 1 );
@@ -1026,8 +931,7 @@ OUString SbxBasicFormater::BasicFormat( double dNumber, const OUString& _sFormat
             {
                 if( sNegFormatStrg.isEmpty() && bPosFormatFound )
                 {
-                    sTempStrg = "-";
-                    sTempStrg += sPosFormatStrg;
+                    sTempStrg = "-" + sPosFormatStrg;
                 }
                 else
                 {

@@ -17,12 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "PlotterBase.hxx"
-#include "PlottingPositionHelper.hxx"
-#include "AbstractShapeFactory.hxx"
+#include <PlotterBase.hxx>
+#include <PlottingPositionHelper.hxx>
+#include <ShapeFactory.hxx>
 #include <rtl/math.hxx>
 #include <osl/diagnose.h>
-#include <com/sun/star/chart2/DataPointLabel.hpp>
 
 namespace chart
 {
@@ -30,10 +29,7 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
 
 PlotterBase::PlotterBase( sal_Int32 nDimensionCount )
-        : m_xLogicTarget(nullptr)
-        , m_xFinalTarget(nullptr)
-        , m_xShapeFactory(nullptr)
-        , m_pShapeFactory(nullptr)
+        : m_pShapeFactory(nullptr)
         , m_aCID()
         , m_nDimension(nDimensionCount)
         , m_pPosHelper(nullptr)
@@ -44,14 +40,13 @@ void PlotterBase::initPlotter(  const uno::Reference< drawing::XShapes >& xLogic
        , const uno::Reference< drawing::XShapes >& xFinalTarget
        , const uno::Reference< lang::XMultiServiceFactory >& xShapeFactory
        , const OUString& rCID )
-            throw (uno::RuntimeException, std::exception)
 {
     OSL_PRECOND(xLogicTarget.is()&&xFinalTarget.is()&&xShapeFactory.is(),"no proper initialization parameters");
     //is only allowed to be called once
     m_xLogicTarget  = xLogicTarget;
     m_xFinalTarget  = xFinalTarget;
     m_xShapeFactory = xShapeFactory;
-    m_pShapeFactory = AbstractShapeFactory::getOrCreateShapeFactory(xShapeFactory);
+    m_pShapeFactory = ShapeFactory::getOrCreateShapeFactory(xShapeFactory);
     m_aCID = rCID;
 }
 

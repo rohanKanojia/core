@@ -60,16 +60,14 @@
 
 #include <sal/config.h>
 
-#include "ixfattrlist.hxx"
-#include "ixfstream.hxx"
-#include "xfentry.hxx"
+#include <xfilter/ixfattrlist.hxx>
+#include <xfilter/ixfstream.hxx>
+#include <xfilter/xfentry.hxx>
 
 XFEntry::XFEntry()
-{
-    m_eType = enumXFEntryTOC;
-    m_bMainEntry = false;
-    m_nOutlineLevel = 1;
-}
+    : m_eType(enumXFEntryTOC)
+    , m_nOutlineLevel(1)
+{}
 
 void    XFEntry::ToXml(IXFStream *pStrm)
 {
@@ -90,9 +88,6 @@ void    XFEntry::ToXml(IXFStream *pStrm)
         pAttrList->AddAttribute( "text:key1", m_strKey1 );
         if( !m_strKey2.isEmpty() )
             pAttrList->AddAttribute( "text:key2", m_strKey2 );
-
-        if( m_bMainEntry )
-            pAttrList->AddAttribute( "text:main-etry", "true" );
 
         pStrm->StartElement( "text:alphabetical-index-mark" );
 //      pStrm->Characters(m_strDisplay);

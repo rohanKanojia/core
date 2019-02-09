@@ -17,19 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "core_resource.hxx"
+#include <core_resource.hxx>
 
-#include <tools/resmgr.hxx>
+#include <unotools/resmgr.hxx>
 
 // ---- needed as long as we have no contexts for components ---
-#include <vcl/svapp.hxx>
-#include <vcl/settings.hxx>
 #include <rtl/instance.hxx>
 #include <svl/solar.hrc>
 
 namespace dbaccess
 {
-
     // ResourceManager
     namespace
     {
@@ -37,57 +34,24 @@ namespace dbaccess
         struct theResourceManagerMutex : public rtl::Static< osl::Mutex, theResourceManagerMutex > {};
     }
 
-    sal_Int32       ResourceManager::s_nClients = 0;
-    ResMgr*         ResourceManager::m_pImpl = nullptr;
-
-    void ResourceManager::ensureImplExists()
+    OUString ResourceManager::loadString(const char* pResId)
     {
-        if (m_pImpl)
-            return;
-
-        m_pImpl = ResMgr::CreateResMgr("dba", Application::GetSettings().GetUILanguageTag());
+        return Translate::get(pResId, Translate::Create("dba"));
     }
 
-    OUString ResourceManager::loadString(sal_uInt16 _nResId)
+    OUString ResourceManager::loadString(const char* pResId, const sal_Char* _pPlaceholderAscii, const OUString& _rReplace)
     {
-        OUString sReturn;
-
-        ensureImplExists();
-        if (m_pImpl)
-            sReturn = OUString(ResId(_nResId,*m_pImpl));
-
-        return sReturn;
-    }
-
-    OUString ResourceManager::loadString( sal_uInt16 _nResId, const sal_Char* _pPlaceholderAscii, const OUString& _rReplace )
-    {
-        OUString sString( loadString( _nResId ) );
+        OUString sString(loadString(pResId));
         return sString.replaceFirst( OUString::createFromAscii(_pPlaceholderAscii), _rReplace );
     }
 
-    OUString ResourceManager::loadString( sal_uInt16 _nResId, const sal_Char* _pPlaceholderAscii1, const OUString& _rReplace1,
-        const sal_Char* _pPlaceholderAscii2, const OUString& _rReplace2 )
+    OUString ResourceManager::loadString(const char* pResId, const sal_Char* _pPlaceholderAscii1, const OUString& _rReplace1,
+        const sal_Char* _pPlaceholderAscii2, const OUString& _rReplace2)
     {
-        OUString sString( loadString( _nResId ) );
+        OUString sString(loadString(pResId));
         sString = sString.replaceFirst( OUString::createFromAscii(_pPlaceholderAscii1), _rReplace1 );
         sString = sString.replaceFirst( OUString::createFromAscii(_pPlaceholderAscii2), _rReplace2 );
         return sString;
-    }
-
-    void ResourceManager::registerClient()
-    {
-        ::osl::MutexGuard aGuard(theResourceManagerMutex::get());
-        ++s_nClients;
-    }
-
-    void ResourceManager::revokeClient()
-    {
-        ::osl::MutexGuard aGuard(theResourceManagerMutex::get());
-        if (!--s_nClients && m_pImpl)
-        {
-            delete m_pImpl;
-            m_pImpl = nullptr;
-        }
     }
 }
 

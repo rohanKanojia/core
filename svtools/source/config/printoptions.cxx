@@ -30,13 +30,13 @@
 
 #include <comphelper/configurationhelper.hxx>
 #include <comphelper/processfactory.hxx>
-#include <comphelper/string.hxx>
 
 #include "itemholder2.hxx"
 
 #include <sal/macros.h>
+#include <tools/diagnose_ex.h>
 
-static sal_uInt16 aDPIArray[] = { 72, 96, 150, 200, 300, 600 };
+static const sal_uInt16 aDPIArray[] = { 72, 96, 150, 200, 300, 600 };
 
 #define DPI_COUNT (SAL_N_ELEMENTS(aDPIArray))
 
@@ -128,17 +128,14 @@ SvtPrintOptions_Impl::SvtPrintOptions_Impl(const OUString& rConfigRoot)
 
         if (m_xCfg.is())
         {
-            using comphelper::string::getTokenCount;
-            sal_Int32 nTokenCount = getTokenCount(rConfigRoot, '/');
-            OUString sTok = rConfigRoot.getToken(nTokenCount - 1, '/');
-            m_xCfg->getByName(sTok) >>= m_xNode;
+            m_xCfg->getByName(rConfigRoot.copy(rConfigRoot.lastIndexOf('/')+1)) >>= m_xNode;
         }
     }
-    catch (const css::uno::Exception& ex)
+    catch (const css::uno::Exception&)
     {
+        DBG_UNHANDLED_EXCEPTION("svtools.config");
         m_xNode.clear();
         m_xCfg.clear();
-        SAL_WARN("svtools.config", "Caught unexpected: " << ex.Message);
     }
 }
 
@@ -154,9 +151,9 @@ bool SvtPrintOptions_Impl::IsReduceTransparency() const
                 xSet->getPropertyValue(PROPERTYNAME_REDUCETRANSPARENCY) >>= bRet;
         }
     }
-    catch (const css::uno::Exception& ex)
+    catch (const css::uno::Exception&)
     {
-        SAL_WARN("svtools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("svtools.config");
     }
 
     return bRet;
@@ -174,9 +171,9 @@ sal_Int16 SvtPrintOptions_Impl::GetReducedTransparencyMode() const
                 xSet->getPropertyValue(PROPERTYNAME_REDUCEDTRANSPARENCYMODE) >>= nRet;
         }
     }
-    catch (const css::uno::Exception& ex)
+    catch (const css::uno::Exception&)
     {
-        SAL_WARN("svtools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("svtools.config");
     }
 
     return  nRet;
@@ -196,9 +193,9 @@ bool SvtPrintOptions_Impl::IsReduceGradients() const
             }
         }
     }
-    catch (const css::uno::Exception& ex)
+    catch (const css::uno::Exception&)
     {
-        SAL_WARN("svtools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("svtools.config");
     }
 
     return bRet;
@@ -218,9 +215,9 @@ sal_Int16 SvtPrintOptions_Impl::GetReducedGradientMode() const
             }
         }
     }
-    catch (const css::uno::Exception& ex)
+    catch (const css::uno::Exception&)
     {
-        SAL_WARN("svtools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("svtools.config");
     }
 
     return nRet;
@@ -240,9 +237,9 @@ sal_Int16 SvtPrintOptions_Impl::GetReducedGradientStepCount() const
             }
         }
     }
-    catch (const css::uno::Exception& ex)
+    catch (const css::uno::Exception&)
     {
-        SAL_WARN("svtools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("svtools.config");
     }
 
     return nRet;
@@ -262,9 +259,9 @@ bool SvtPrintOptions_Impl::IsReduceBitmaps() const
             }
         }
     }
-    catch (const css::uno::Exception& ex)
+    catch (const css::uno::Exception&)
     {
-        SAL_WARN("svtools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("svtools.config");
     }
 
     return bRet;
@@ -284,9 +281,9 @@ sal_Int16 SvtPrintOptions_Impl::GetReducedBitmapMode() const
             }
         }
     }
-    catch (const css::uno::Exception& ex)
+    catch (const css::uno::Exception&)
     {
-        SAL_WARN("svtools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("svtools.config");
     }
 
     return nRet;
@@ -306,9 +303,9 @@ sal_Int16 SvtPrintOptions_Impl::GetReducedBitmapResolution() const
             }
         }
     }
-    catch (const css::uno::Exception& ex)
+    catch (const css::uno::Exception&)
     {
-        SAL_WARN("svtools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("svtools.config");
     }
 
     return  nRet;
@@ -328,9 +325,9 @@ bool SvtPrintOptions_Impl::IsReducedBitmapIncludesTransparency() const
             }
         }
     }
-    catch (const css::uno::Exception& ex)
+    catch (const css::uno::Exception&)
     {
-        SAL_WARN("svtools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("svtools.config");
     }
 
     return  bRet;
@@ -350,9 +347,9 @@ bool SvtPrintOptions_Impl::IsConvertToGreyscales() const
             }
         }
     }
-    catch (const css::uno::Exception& ex)
+    catch (const css::uno::Exception&)
     {
-        SAL_WARN("svtools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("svtools.config");
     }
 
     return  bRet;
@@ -373,9 +370,9 @@ bool SvtPrintOptions_Impl::IsPDFAsStandardPrintJobFormat() const
             }
         }
     }
-    catch (const css::uno::Exception& ex)
+    catch (const css::uno::Exception&)
     {
-        SAL_WARN("svtools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("svtools.config");
     }
 
     return  bRet;
@@ -463,9 +460,9 @@ void SvtPrintOptions_Impl::impl_setValue (const OUString& sProp, bool bNew )
             ::comphelper::ConfigurationHelper::flush(m_xCfg);
         }
     }
-    catch(const css::uno::Exception& ex)
+    catch(const css::uno::Exception&)
     {
-        SAL_WARN("svtools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("svtools.config");
     }
 }
 
@@ -491,9 +488,9 @@ void SvtPrintOptions_Impl::impl_setValue (const OUString& sProp,
             ::comphelper::ConfigurationHelper::flush(m_xCfg);
         }
     }
-    catch(const css::uno::Exception& ex)
+    catch(const css::uno::Exception&)
     {
-        SAL_WARN("svtools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("svtools.config");
     }
 }
 
@@ -508,24 +505,9 @@ SvtBasePrintOptions::~SvtBasePrintOptions()
 
 Mutex& SvtBasePrintOptions::GetOwnStaticMutex()
 {
-    // Initialize static mutex only for one time!
-    static Mutex* pMutex = nullptr;
-    // If these method first called (Mutex not already exist!) ...
-    if( pMutex == nullptr )
-    {
-        // ... we must create a new one. Protect follow code with the global mutex -
-        // It must be - we create a static variable!
-        MutexGuard aGuard( Mutex::getGlobalMutex() );
-        // We must check our pointer again - because it can be that another instance of our class will be faster than these!
-        if( pMutex == nullptr )
-        {
-            // Create the new mutex and set it for return on static variable.
-            static Mutex aMutex;
-            pMutex = &aMutex;
-        }
-    }
-    // Return new created or already existing mutex object.
-    return *pMutex;
+    static Mutex ourMutex;
+
+    return ourMutex;
 }
 
 bool SvtBasePrintOptions::IsReduceTransparency() const
@@ -663,13 +645,13 @@ void SvtBasePrintOptions::SetPDFAsStandardPrintJobFormat( bool bState )
 void SvtBasePrintOptions::GetPrinterOptions( PrinterOptions& rOptions ) const
 {
     rOptions.SetReduceTransparency( IsReduceTransparency() );
-    rOptions.SetReducedTransparencyMode( (PrinterTransparencyMode) GetReducedTransparencyMode() );
+    rOptions.SetReducedTransparencyMode( static_cast<PrinterTransparencyMode>(GetReducedTransparencyMode()) );
     rOptions.SetReduceGradients( IsReduceGradients() );
-    rOptions.SetReducedGradientMode( (PrinterGradientMode) GetReducedGradientMode() );
+    rOptions.SetReducedGradientMode( static_cast<PrinterGradientMode>(GetReducedGradientMode()) );
     rOptions.SetReducedGradientStepCount( GetReducedGradientStepCount() );
     rOptions.SetReduceBitmaps( IsReduceBitmaps() );
-    rOptions.SetReducedBitmapMode( (PrinterBitmapMode) GetReducedBitmapMode() );
-    rOptions.SetReducedBitmapResolution( aDPIArray[ std::min( (sal_uInt16) GetReducedBitmapResolution(), (sal_uInt16)( DPI_COUNT - 1 ) ) ] );
+    rOptions.SetReducedBitmapMode( static_cast<PrinterBitmapMode>(GetReducedBitmapMode()) );
+    rOptions.SetReducedBitmapResolution( aDPIArray[ std::min( static_cast<sal_uInt16>(GetReducedBitmapResolution()), sal_uInt16( DPI_COUNT - 1 ) ) ] );
     rOptions.SetReducedBitmapIncludesTransparency( IsReducedBitmapIncludesTransparency() );
     rOptions.SetConvertToGreyscales( IsConvertToGreyscales() );
     rOptions.SetPDFAsStandardPrintJobFormat( IsPDFAsStandardPrintJobFormat() );
@@ -698,11 +680,11 @@ void SvtBasePrintOptions::SetPrinterOptions( const PrinterOptions& rOptions )
         SetReducedBitmapResolution( 0 );
     else
     {
-        for( long i = ( DPI_COUNT - 1 ); i >= 0; i-- )
+        for( long i = DPI_COUNT - 1; i >= 0; i-- )
         {
             if( nDPI >= aDPIArray[ i ] )
             {
-                SetReducedBitmapResolution( (sal_Int16) i );
+                SetReducedBitmapResolution( static_cast<sal_Int16>(i) );
                 i = -1;
             }
         }
@@ -719,9 +701,10 @@ SvtPrinterOptions::SvtPrinterOptions()
     if( m_pStaticDataContainer == nullptr )
     {
         OUString aRootPath( ROOTNODE_START );
-        m_pStaticDataContainer = new SvtPrintOptions_Impl( aRootPath += "/Printer" );
+        aRootPath += "/Printer";
+        m_pStaticDataContainer = new SvtPrintOptions_Impl( aRootPath );
         pPrinterOptionsDataContainer = m_pStaticDataContainer;
-        svtools::ItemHolder2::holdConfigItem(E_PRINTOPTIONS);
+        svtools::ItemHolder2::holdConfigItem(EItem::PrintOptions);
     }
 
     SetDataContainer( m_pStaticDataContainer );
@@ -753,10 +736,11 @@ SvtPrintFileOptions::SvtPrintFileOptions()
     if( m_pStaticDataContainer == nullptr )
     {
         OUString aRootPath( ROOTNODE_START );
-        m_pStaticDataContainer = new SvtPrintOptions_Impl( aRootPath += "/File" );
+        aRootPath += "/File";
+        m_pStaticDataContainer = new SvtPrintOptions_Impl( aRootPath );
         pPrintFileOptionsDataContainer = m_pStaticDataContainer;
 
-        svtools::ItemHolder2::holdConfigItem(E_PRINTFILEOPTIONS);
+        svtools::ItemHolder2::holdConfigItem(EItem::PrintFileOptions);
     }
 
     SetDataContainer( m_pStaticDataContainer );

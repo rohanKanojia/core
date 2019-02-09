@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SW_SOURCE_FILTER_HTML_SWCSS1_HXX
 #define INCLUDED_SW_SOURCE_FILTER_HTML_SWCSS1_HXX
 
-#include "poolfmt.hxx"
+#include <poolfmt.hxx>
 
 #include "svxcss1.hxx"
 
@@ -31,33 +31,33 @@ class SvxBrushItem;
 class SwFormatDrop;
 class SwPageDesc;
 
-// Dieser Header seiht zwar harmlos aus, included aber eben doch
-// ganz unauffaellig das ein oder andere! Andererseits wird diese
-// Klasse recht selten benoetigt. Deshalb ein eigener Header.
+// This header looks harmless, but includes still quite
+// inconspicuous one or the other! On the other hand this class
+// is rarely needed. Therefore its own header.
 
 class SwCSS1Parser : public SvxCSS1Parser
 {
-    SwDoc *pDoc;
+    SwDoc *m_pDoc;
 
-    sal_uLong aFontHeights[7];
+    sal_uLong m_aFontHeights[7];
 
-    sal_uInt16 nDropCapCnt;
+    sal_uInt16 m_nDropCapCnt;
 
-    bool bIsNewDoc : 1;
+    bool const m_bIsNewDoc : 1;
 
-    bool bBodyBGColorSet : 1;
-    bool bBodyBackgroundSet : 1;
-    bool bBodyTextSet : 1;
-    bool bBodyLinkSet : 1;
-    bool bBodyVLinkSet : 1;
+    bool m_bBodyBGColorSet : 1;
+    bool m_bBodyBackgroundSet : 1;
+    bool m_bBodyTextSet : 1;
+    bool m_bBodyLinkSet : 1;
+    bool m_bBodyVLinkSet : 1;
 
-    bool bSetFirstPageDesc : 1;
-    bool bSetRightPageDesc : 1;
+    bool m_bSetFirstPageDesc : 1;
+    bool m_bSetRightPageDesc : 1;
 
-    bool bTableHeaderTextCollSet : 1;
-    bool bTableTextCollSet : 1;
+    bool m_bTableHeaderTextCollSet : 1;
+    bool m_bTableTextCollSet : 1;
 
-    bool bLinkCharFormatsSet : 1;
+    bool m_bLinkCharFormatsSet : 1;
 
     const SwPageDesc* GetPageDesc( sal_uInt16 nPoolId, bool bCreate );
 
@@ -72,22 +72,21 @@ protected:
     using CSS1Parser::ParseStyleSheet;
 
 public:
-    SwCSS1Parser( SwDoc *pDoc, sal_uInt32 aFHeight[7], const OUString& rBaseURL, bool bNewDoc );
-    virtual ~SwCSS1Parser();
+    SwCSS1Parser( SwDoc *pDoc, sal_uInt32 const aFHeight[7], const OUString& rBaseURL, bool bNewDoc );
+    virtual ~SwCSS1Parser() override;
 
     virtual bool ParseStyleSheet( const OUString& rIn ) override;
 
-    // Die Font-Hoehe fuer eine bestimmte Font-Groesse (0-6) ermitteln
+    // determine font height for a certain font size (0-6)
     virtual sal_uInt32 GetFontHeight( sal_uInt16 nSize ) const override;
 
-    // Die aktuelle Font-Liste holen (auch 0 ist erlaubt)
+    // fetch current font list (also zero is allowed)
     virtual const FontList *GetFontList() const override;
 
-    // das Zeichen-Format zu einem Token und einer ggf leeren Klasse
-    // ermitteln
-    SwCharFormat* GetChrFormat( sal_uInt16 nToken, const OUString& rClass ) const;
+    // determine the character format of a token and a maybe empty class
+    SwCharFormat* GetChrFormat( HtmlTokenId nToken, const OUString& rClass ) const;
 
-    // eine TextFormatColl zu einer Pool-Id ermitteln
+    // determine a TextFormatColl of a Pool-Id
     SwTextFormatColl *GetTextFormatColl( sal_uInt16 nTextColl, const OUString& rClass );
 
     // This methods do the same as the one of SwDoc, but change the
@@ -95,30 +94,28 @@ public:
     SwTextFormatColl *GetTextCollFromPool( sal_uInt16 nPoolId ) const;
     SwCharFormat *GetCharFormatFromPool( sal_uInt16 nPoolId ) const;
 
-    // Die linke oder rechte Seiten-Vorlage holen. In Dokumenten mit nur
-    // einer Vorlage gibt es nur eine rechtee Seite.
-    // Ansonsten ist die rechte Seite die HTML-Poolvorlage und die linke
-    // eine Benutzter-Vorlage, die on-demand angelegt wird, wenn
-    // bCreate gesetzt ist.
+    // Fetch the left or right page style. In documents with only
+    // one style there is only a right page.
+    // Otherwise the right page is the HTML pool style and the left
+    // page a user style which is created on-demand if bCreate is set.
     SwPageDesc* GetMasterPageDesc();
     inline const SwPageDesc* GetFirstPageDesc( bool bCreate=false );
     inline const SwPageDesc* GetRightPageDesc( bool bCreate=false );
     inline const SwPageDesc* GetLeftPageDesc( bool bCreate=false );
 
-    // Attribute an der HTML-Seitenvorlage setzen (gesetzte Attribute
-    // werden aus dem Item-Set geloescht ). Wird fuer's BODY-Tag
-    // aufgerufen.
+    // Set attributes on the HTML page style (set attributes are
+    // deleted from the Item-Set). Is called for the BODY tag.
     void SetPageDescAttrs( const SvxBrushItem *pBrush,
                            SfxItemSet *pItemSet=nullptr );
 
     void ChgPageDesc( const SwPageDesc *pPageDesc,
                       const SwPageDesc& rNewPageDesc );
 
-    // Wird fuer @page aufgerufen.
+    // Is called for @page
     void SetPageDescAttrs( const SwPageDesc *pPageDesc, SfxItemSet& rItemSet,
                            const SvxCSS1PropertyInfo& rPropInfo );
 
-    // Fuellen eines DropCap-Attributs
+    // Fill a DropCap attribute
     void FillDropCap( SwFormatDrop& rDrop, SfxItemSet& rItemSet,
                       const OUString *pName=nullptr );
 
@@ -127,28 +124,26 @@ public:
 
     static void AddClassName( OUString& rFormatName, const OUString& rClass );
 
-    static inline void AddFirstLetterExt( OUString& rFormatName );
-
     static bool MayBePositioned( const SvxCSS1PropertyInfo& rPropInfo,
                                  bool bAutoWidth=false );
 
-    static sal_uInt16 GetScriptFromClass( OUString& rClass,
-                                      bool bSubClassOnly = true );
+    static Css1ScriptFlags GetScriptFromClass( OUString& rClass,
+                                               bool bSubClassOnly = true );
 
-    bool IsBodyBGColorSet() const { return bBodyBGColorSet; }
-    bool IsBodyBackgroundSet() const { return bBodyBackgroundSet; }
-    bool IsBodyTextSet() const { return bBodyTextSet; }
-    bool IsBodyLinkSet() const { return bBodyLinkSet; }
-    bool IsBodyVLinkSet() const { return bBodyVLinkSet; }
+    bool IsBodyBGColorSet() const { return m_bBodyBGColorSet; }
+    bool IsBodyBackgroundSet() const { return m_bBodyBackgroundSet; }
+    bool IsBodyTextSet() const { return m_bBodyTextSet; }
+    bool IsBodyLinkSet() const { return m_bBodyLinkSet; }
+    bool IsBodyVLinkSet() const { return m_bBodyVLinkSet; }
 
-    bool IsSetFirstPageDesc() const { return bSetFirstPageDesc; }
-    bool IsSetRightPageDesc() const { return bSetRightPageDesc; }
+    bool IsSetFirstPageDesc() const { return m_bSetFirstPageDesc; }
+    bool IsSetRightPageDesc() const { return m_bSetRightPageDesc; }
 
-    void SetBodyBGColorSet() { bBodyBGColorSet = true; }
-    void SetBodyBackgroundSet() { bBodyBackgroundSet = true; }
-    void SetBodyTextSet() { bBodyTextSet = true; }
-    void SetBodyLinkSet() { bBodyLinkSet = true; }
-    void SetBodyVLinkSet() { bBodyVLinkSet = true; }
+    void SetBodyBGColorSet() { m_bBodyBGColorSet = true; }
+    void SetBodyBackgroundSet() { m_bBodyBackgroundSet = true; }
+    void SetBodyTextSet() { m_bBodyTextSet = true; }
+    void SetBodyLinkSet() { m_bBodyLinkSet = true; }
+    void SetBodyVLinkSet() { m_bBodyVLinkSet = true; }
 
     SvxBrushItem makePageDescBackground() const;
 
@@ -159,11 +154,6 @@ public:
 
     virtual void SetDfltEncoding( rtl_TextEncoding eEnc ) override;
 };
-
-inline void SwCSS1Parser::AddFirstLetterExt( OUString& rFormatName )
-{
-    rFormatName += ".FL";   // first letter
-}
 
 inline const SwPageDesc* SwCSS1Parser::GetFirstPageDesc( bool bCreate )
 {
@@ -182,19 +172,19 @@ inline const SwPageDesc* SwCSS1Parser::GetLeftPageDesc( bool bCreate )
 
 inline void SwCSS1Parser::SetTHTagStyles()
 {
-    if( !bTableHeaderTextCollSet )
+    if( !m_bTableHeaderTextCollSet )
         SetTableTextColl( true );
 }
 
 inline void SwCSS1Parser::SetTDTagStyles()
 {
-    if( !bTableTextCollSet )
+    if( !m_bTableTextCollSet )
         SetTableTextColl( false );
 }
 
 inline void SwCSS1Parser::SetATagStyles()
 {
-    if( !bLinkCharFormatsSet )
+    if( !m_bLinkCharFormatsSet )
         SetLinkCharFormats();
 }
 

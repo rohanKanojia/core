@@ -17,24 +17,29 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/log.hxx>
+
 #include <com/sun/star/xml/sax/FastToken.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/beans/XMultiPropertySet.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 
-#include "oox/helper/attributelist.hxx"
-#include "oox/ppt/pptshape.hxx"
-#include "oox/ppt/pptshapecontext.hxx"
-#include "oox/ppt/pptshapepropertiescontext.hxx"
-#include "oox/ppt/slidepersist.hxx"
-#include "drawingml/shapestylecontext.hxx"
-#include "drawingml/fillpropertiesgroupcontext.hxx"
-#include "oox/drawingml/lineproperties.hxx"
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "drawingml/customshapegeometry.hxx"
-#include "drawingml/textbodycontext.hxx"
-#include "drawingml/transform2dcontext.hxx"
+#include <oox/helper/attributelist.hxx>
+#include <oox/ppt/pptshape.hxx>
+#include <oox/ppt/pptshapecontext.hxx>
+#include <oox/ppt/pptshapepropertiescontext.hxx>
+#include <oox/ppt/slidepersist.hxx>
+#include <drawingml/shapestylecontext.hxx>
+#include <drawingml/misccontexts.hxx>
+#include <drawingml/lineproperties.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <drawingml/customshapegeometry.hxx>
+#include <drawingml/textbodycontext.hxx>
+#include <drawingml/transform2dcontext.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace oox::core;
 using namespace ::com::sun::star;
@@ -47,7 +52,7 @@ using namespace ::com::sun::star::xml::sax;
 namespace oox { namespace ppt {
 
 // CT_Shape
-PPTShapeContext::PPTShapeContext( ContextHandler2Helper& rParent, const SlidePersistPtr& rSlidePersistPtr, oox::drawingml::ShapePtr pMasterShapePtr, oox::drawingml::ShapePtr pShapePtr )
+PPTShapeContext::PPTShapeContext( ContextHandler2Helper const & rParent, const SlidePersistPtr& rSlidePersistPtr, const oox::drawingml::ShapePtr& pMasterShapePtr, const oox::drawingml::ShapePtr& pShapePtr )
 : oox::drawingml::ShapeContext( rParent, pMasterShapePtr, pShapePtr )
 , mpSlidePersistPtr( rSlidePersistPtr )
 {
@@ -118,6 +123,7 @@ ContextHandlerRef PPTShapeContext::onCreateContext( sal_Int32 aElementToken, con
                               case XML_sldImg :     // notes/notesmaster
                               case XML_pic :            // slide/layout
                                   nFirstPlaceholder = nSubType;
+                                  break;
                               default:
                                   break;
                         }
@@ -142,7 +148,7 @@ ContextHandlerRef PPTShapeContext::onCreateContext( sal_Int32 aElementToken, con
                               {
                                   SAL_INFO("oox.ppt","shape " << mpShapePtr->getId() <<
                                           " will get shape reference " << pPlaceholder->getId() << " applied");
-                                  mpShapePtr->applyShapeReference( *pPlaceholder.get() );
+                                  mpShapePtr->applyShapeReference( *pPlaceholder );
                                   PPTShape* pPPTShape = dynamic_cast< PPTShape* >( pPlaceholder.get() );
                                   if ( pPPTShape )
                                       pPPTShape->setReferenced( true );
@@ -169,7 +175,7 @@ ContextHandlerRef PPTShapeContext::onCreateContext( sal_Int32 aElementToken, con
             oox::drawingml::TextBodyPtr xTextBody( new oox::drawingml::TextBody( mpShapePtr->getTextBody() ) );
             xTextBody->getTextProperties().maPropertyMap.setProperty( PROP_FontIndependentLineSpacing, true );
             mpShapePtr->setTextBody( xTextBody );
-            return new oox::drawingml::TextBodyContext( *this, *xTextBody );
+            return new oox::drawingml::TextBodyContext( *this, mpShapePtr );
         }
         case PPT_TOKEN( txXfrm ):
         {

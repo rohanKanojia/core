@@ -9,16 +9,19 @@
  * This file incorporates work covered by the following license notice:
  */
 
-#include "PivotLayoutTreeList.hxx"
-#include "PivotLayoutDialog.hxx"
+#include <PivotLayoutTreeList.hxx>
+#include <PivotLayoutDialog.hxx>
 #include <reffact.hxx>
-#include <svtools/treelistentry.hxx>
+#include <vcl/treelistentry.hxx>
 
-#include "rangeutl.hxx"
-#include "uiitems.hxx"
-#include "dputil.hxx"
-#include "dbdocfun.hxx"
+#include <rangeutl.hxx>
+#include <uiitems.hxx>
+#include <dputil.hxx>
+#include <dbdocfun.hxx>
+#include <dpsave.hxx>
+#include <dpshttab.hxx>
 
+#include <memory>
 #include <vector>
 
 #include <com/sun/star/sheet/DataPilotFieldOrientation.hpp>
@@ -27,13 +30,13 @@
 using namespace css::uno;
 using namespace css::sheet;
 
-ScItemValue::ScItemValue(OUString const & aName, SCCOL nColumn, sal_uInt16 nFunctionMask) :
+ScItemValue::ScItemValue(OUString const & aName, SCCOL nColumn, PivotFunc nFunctionMask) :
     maName(aName),
     maFunctionData(nColumn, nFunctionMask),
     mpOriginalItemValue(this)
 {}
 
-ScItemValue::ScItemValue(ScItemValue* pInputItemValue) :
+ScItemValue::ScItemValue(const ScItemValue* pInputItemValue) :
     maName(pInputItemValue->maName),
     maFunctionData(pInputItemValue->maFunctionData),
     mpOriginalItemValue(this)
@@ -45,7 +48,7 @@ ScItemValue::~ScItemValue()
 namespace
 {
 
-ScRange lclGetRangeForNamedRange(OUString const & aName, ScDocument* pDocument)
+ScRange lclGetRangeForNamedRange(OUString const & aName, const ScDocument* pDocument)
 {
     ScRange aInvalidRange(ScAddress::INITIALIZE_INVALID);
     ScRangeName* pRangeName = pDocument->GetRangeName();
@@ -71,7 +74,6 @@ ScPivotLayoutDialog::ScPivotLayoutDialog(
     ScAnyRefDlg           (pSfxBindings, pChildWindow, pParent, "PivotTableLayout", "modules/scalc/ui/pivottablelayoutdialog.ui"),
     maPivotTableObject    (*pPivotTableObject),
     mpPreviouslyFocusedListBox(nullptr),
-    mpCurrentlyFocusedListBox(nullptr),
     mpViewData            (pViewData),
     mpDocument            (pViewData->GetDocument()),
     mbNewPivotTable       (bNewPivotTable),
@@ -190,7 +192,6 @@ ScPivotLayoutDialog::~ScPivotLayoutDialog()
 void ScPivotLayoutDialog::dispose()
 {
     mpPreviouslyFocusedListBox.clear();
-    mpCurrentlyFocusedListBox.clear();
     mpListBoxField.clear();
     mpListBoxPage.clear();
     mpListBoxColumn.clear();
@@ -390,7 +391,7 @@ bool ScPivotLayoutDialog::IsRefInputMode() const
     return mbDialogLostFocus;
 }
 
-void ScPivotLayoutDialog::ItemInserted(ScItemValue* pItemValue, ScPivotLayoutTreeList::SvPivotTreeListType eType)
+void ScPivotLayoutDialog::ItemInserted(const ScItemValue* pItemValue, ScPivotLayoutTreeList::SvPivotTreeListType eType)
 {
     if (pItemValue == nullptr)
         return;
@@ -405,6 +406,7 @@ void ScPivotLayoutDialog::ItemInserted(ScItemValue* pItemValue, ScPivotLayoutTre
             mpListBoxColumn->RemoveEntryForItem(pItemValue);
             mpListBoxPage->RemoveEntryForItem(pItemValue);
         }
+        break;
         case ScPivotLayoutTreeList::LABEL_LIST:
         {
             mpListBoxRow->RemoveEntryForItem(pItemValue);
@@ -427,7 +429,7 @@ void ScPivotLayoutDialog::UpdateSourceRange()
 
     if (mpSourceRadioNamedRange->IsChecked())
     {
-        OUString aEntryString = mpSourceListBox->GetSelectEntry();
+        OUString aEntryString = mpSourceListBox->GetSelectedEntry();
         ScRange aSourceRange = lclGetRangeForNamedRange(aEntryString, mpDocument);
         if (!aSourceRange.IsValid() || aSourceSheet.GetSourceRange() == aSourceRange)
             return;
@@ -467,7 +469,7 @@ void ScPivotLayoutDialog::UpdateSourceRange()
                 return;
 
         aSourceSheet.SetSourceRange(aSourceRange);
-        if (aSourceSheet.CheckSourceRange() != 0)
+        if (aSourceSheet.CheckSourceRange() != nullptr)
         {
             mpSourceEdit->SetRefValid(false);
             return;
@@ -503,11 +505,11 @@ void ScPivotLayoutDialog::ApplyChanges()
 
     sal_uInt16 nWhichPivot = SC_MOD()->GetPool().GetWhich(SID_PIVOT_TABLE);
     ScPivotItem aPivotItem(nWhichPivot, &aSaveData, &aDestinationRange, bToNewSheet);
-    mpViewData->GetViewShell()->SetDialogDPObject(&maPivotTableObject);
+    mpViewData->GetViewShell()->SetDialogDPObject(std::make_unique<ScDPObject>(maPivotTableObject));
 
 
     SfxDispatcher* pDispatcher = GetBindings().GetDispatcher();
-    SfxCallMode nCallMode = SfxCallMode::SLOT | SfxCallMode::RECORD;
+    SfxCallMode const nCallMode = SfxCallMode::SLOT | SfxCallMode::RECORD;
     const SfxPoolItem* pResult = pDispatcher->ExecuteList(SID_PIVOT_TABLE,
             nCallMode, { &aPivotItem });
 
@@ -572,34 +574,29 @@ void ScPivotLayoutDialog::ApplySaveData(ScDPSaveData& rSaveData)
                                    &aColFieldVector, &aRowFieldVector, &aPageFieldVector);
 }
 
-void ScPivotLayoutDialog::ApplyLabelData(ScDPSaveData& rSaveData)
+void ScPivotLayoutDialog::ApplyLabelData(const ScDPSaveData& rSaveData)
 {
-    ScDPLabelDataVector::const_iterator it;
     ScDPLabelDataVector& rLabelDataVector = GetLabelDataVector();
 
-    for (it = rLabelDataVector.begin(); it != rLabelDataVector.end(); ++it)
+    for (std::unique_ptr<ScDPLabelData> const & pLabelData : rLabelDataVector)
     {
-        const ScDPLabelData& pLabelData = *it->get();
-
-        OUString aUnoName = ScDPUtil::createDuplicateDimensionName(pLabelData.maName, pLabelData.mnDupCount);
+        OUString aUnoName = ScDPUtil::createDuplicateDimensionName(pLabelData->maName, pLabelData->mnDupCount);
         ScDPSaveDimension* pSaveDimensions = rSaveData.GetExistingDimensionByName(aUnoName);
 
         if (pSaveDimensions == nullptr)
             continue;
 
-        pSaveDimensions->SetUsedHierarchy(pLabelData.mnUsedHier);
-        pSaveDimensions->SetShowEmpty(pLabelData.mbShowAll);
-        pSaveDimensions->SetRepeatItemLabels(pLabelData.mbRepeatItemLabels);
-        pSaveDimensions->SetSortInfo(&pLabelData.maSortInfo);
-        pSaveDimensions->SetLayoutInfo(&pLabelData.maLayoutInfo);
-        pSaveDimensions->SetAutoShowInfo(&pLabelData.maShowInfo);
+        pSaveDimensions->SetUsedHierarchy(pLabelData->mnUsedHier);
+        pSaveDimensions->SetShowEmpty(pLabelData->mbShowAll);
+        pSaveDimensions->SetRepeatItemLabels(pLabelData->mbRepeatItemLabels);
+        pSaveDimensions->SetSortInfo(&pLabelData->maSortInfo);
+        pSaveDimensions->SetLayoutInfo(&pLabelData->maLayoutInfo);
+        pSaveDimensions->SetAutoShowInfo(&pLabelData->maShowInfo);
 
-        bool bManualSort = (pLabelData.maSortInfo.Mode == DataPilotFieldSortMode::MANUAL);
+        bool bManualSort = (pLabelData->maSortInfo.Mode == DataPilotFieldSortMode::MANUAL);
 
-        std::vector<ScDPLabelData::Member>::const_iterator itMember;
-        for (itMember = pLabelData.maMembers.begin(); itMember != pLabelData.maMembers.end(); ++itMember)
+        for (ScDPLabelData::Member const & rLabelMember : pLabelData->maMembers)
         {
-            const ScDPLabelData::Member& rLabelMember = *itMember;
             ScDPSaveMember* pMember = pSaveDimensions->GetMemberByName(rLabelMember.maName);
 
             if (bManualSort || !rLabelMember.mbVisible || !rLabelMember.mbShowDetails)
@@ -617,7 +614,7 @@ bool ScPivotLayoutDialog::GetDestination(ScRange& aDestinationRange, bool& bToNe
 
     if (mpDestinationRadioNamedRange->IsChecked())
     {
-        OUString aName = mpDestinationListBox->GetSelectEntry();
+        OUString aName = mpDestinationListBox->GetSelectedEntry();
         aDestinationRange = lclGetRangeForNamedRange(aName, mpDocument);
         if (!aDestinationRange.IsValid())
             return false;
@@ -661,18 +658,18 @@ bool ScPivotLayoutDialog::Close()
     return DoClose( ScPivotLayoutWrapper::GetChildWindowId() );
 }
 
-IMPL_LINK_NOARG_TYPED( ScPivotLayoutDialog, OKClicked, Button*, void )
+IMPL_LINK_NOARG( ScPivotLayoutDialog, OKClicked, Button*, void )
 {
     ApplyChanges();
     Close();
 }
 
-IMPL_LINK_NOARG_TYPED( ScPivotLayoutDialog, CancelClicked, Button*, void )
+IMPL_LINK_NOARG( ScPivotLayoutDialog, CancelClicked, Button*, void )
 {
     Close();
 }
 
-IMPL_LINK_TYPED(ScPivotLayoutDialog, GetFocusHandler, Control&, rCtrl, void)
+IMPL_LINK(ScPivotLayoutDialog, GetFocusHandler, Control&, rCtrl, void)
 {
     mpActiveEdit = nullptr;
 
@@ -691,22 +688,22 @@ IMPL_LINK_TYPED(ScPivotLayoutDialog, GetFocusHandler, Control&, rCtrl, void)
         mpActiveEdit->SetSelection(Selection(0, SELECTION_MAX));
 }
 
-IMPL_LINK_NOARG_TYPED(ScPivotLayoutDialog, LoseFocusHandler, Control&, void)
+IMPL_LINK_NOARG(ScPivotLayoutDialog, LoseFocusHandler, Control&, void)
 {
     mbDialogLostFocus = !IsActive();
 }
 
-IMPL_LINK_NOARG_TYPED(ScPivotLayoutDialog, SourceListSelected, ListBox&, void)
+IMPL_LINK_NOARG(ScPivotLayoutDialog, SourceListSelected, ListBox&, void)
 {
     UpdateSourceRange();
 }
 
-IMPL_LINK_NOARG_TYPED(ScPivotLayoutDialog, SourceEditModified, Edit&, void)
+IMPL_LINK_NOARG(ScPivotLayoutDialog, SourceEditModified, Edit&, void)
 {
     UpdateSourceRange();
 }
 
-IMPL_LINK_NOARG_TYPED(ScPivotLayoutDialog, ToggleSource, RadioButton&, void)
+IMPL_LINK_NOARG(ScPivotLayoutDialog, ToggleSource, RadioButton&, void)
 {
     ToggleSource();
 }
@@ -721,7 +718,7 @@ void ScPivotLayoutDialog::ToggleSource()
     UpdateSourceRange();
 }
 
-IMPL_LINK_NOARG_TYPED(ScPivotLayoutDialog, ToggleDestination, RadioButton&, void)
+IMPL_LINK_NOARG(ScPivotLayoutDialog, ToggleDestination, RadioButton&, void)
 {
     ToggleDestination();
 }
@@ -733,6 +730,19 @@ void ScPivotLayoutDialog::ToggleDestination()
     mpDestinationListBox->Enable(bNamedRange);
     mpDestinationButton->Enable(bSelection);
     mpDestinationEdit->Enable(bSelection);
+}
+
+ScPivotLayoutTreeListBase* ScPivotLayoutDialog::FindListBoxFor(const SvTreeListEntry *pEntry)
+{
+    if (mpListBoxPage->HasEntry(pEntry))
+        return mpListBoxPage.get();
+    if (mpListBoxColumn->HasEntry(pEntry))
+        return mpListBoxColumn.get();
+    if (mpListBoxRow->HasEntry(pEntry))
+        return mpListBoxRow.get();
+    if (mpListBoxData->HasEntry(pEntry))
+        return mpListBoxData.get();
+    return nullptr;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

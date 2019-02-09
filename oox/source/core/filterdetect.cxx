@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/core/filterdetect.hxx"
+#include <oox/core/filterdetect.hxx>
 
 #include <com/sun/star/io/TempFile.hpp>
 #include <com/sun/star/io/XStream.hpp>
@@ -25,16 +25,19 @@
 #include <unotools/mediadescriptor.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
-#include "oox/core/fastparser.hxx"
-#include "oox/helper/attributelist.hxx"
-#include "oox/helper/zipstorage.hxx"
-#include "oox/ole/olestorage.hxx"
+#include <oox/core/fastparser.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/helper/zipstorage.hxx>
+#include <oox/ole/olestorage.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
-#include "oox/crypto/DocumentDecryption.hxx"
+#include <oox/crypto/DocumentDecryption.hxx>
 
 #include <com/sun/star/uri/UriReferenceFactory.hpp>
+#include <com/sun/star/beans/NamedValue.hpp>
 
-#include <services.hxx>
+using namespace ::com::sun::star;
 
 namespace oox {
 namespace core {
@@ -47,12 +50,12 @@ using namespace ::com::sun::star::xml::sax;
 using namespace ::com::sun::star::uri;
 
 using utl::MediaDescriptor;
-using comphelper::SequenceAsHashMap;
 using comphelper::IDocPasswordVerifier;
 using comphelper::DocPasswordVerifierResult;
 
-FilterDetectDocHandler::FilterDetectDocHandler( const  Reference< XComponentContext >& rxContext, OUString& rFilterName ) :
+FilterDetectDocHandler::FilterDetectDocHandler( const  Reference< XComponentContext >& rxContext, OUString& rFilterName, const OUString& rFileName ) :
     mrFilterName( rFilterName ),
+    maFileName(rFileName),
     mxContext( rxContext )
 {
     maContextStack.reserve( 2 );
@@ -63,23 +66,23 @@ FilterDetectDocHandler::~FilterDetectDocHandler()
 }
 
 void SAL_CALL FilterDetectDocHandler::startDocument()
-    throw (SAXException, RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL FilterDetectDocHandler::endDocument()
-    throw (SAXException, RuntimeException, std::exception)
+{
+}
+
+void SAL_CALL FilterDetectDocHandler::processingInstruction( const OUString& /*rTarget*/, const OUString& /*rData*/ )
 {
 }
 
 void SAL_CALL FilterDetectDocHandler::setDocumentLocator( const Reference<XLocator>& /*xLocator*/ )
-    throw (SAXException, RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL FilterDetectDocHandler::startFastElement(
         sal_Int32 nElement, const Reference< XFastAttributeList >& rAttribs )
-    throw (SAXException,RuntimeException, std::exception)
 {
     AttributeList aAttribs( rAttribs );
     switch ( nElement )
@@ -109,37 +112,32 @@ void SAL_CALL FilterDetectDocHandler::startFastElement(
 
 void SAL_CALL FilterDetectDocHandler::startUnknownElement(
     const OUString& /*Namespace*/, const OUString& /*Name*/, const Reference<XFastAttributeList>& /*Attribs*/ )
-    throw (SAXException, RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL FilterDetectDocHandler::endFastElement( sal_Int32 /*nElement*/ )
-    throw (SAXException, RuntimeException, std::exception)
 {
     maContextStack.pop_back();
 }
 
 void SAL_CALL FilterDetectDocHandler::endUnknownElement(
-    const OUString& /*Namespace*/, const OUString& /*Name*/ ) throw (SAXException, RuntimeException, std::exception)
+    const OUString& /*Namespace*/, const OUString& /*Name*/ )
 {
 }
 
 Reference<XFastContextHandler> SAL_CALL FilterDetectDocHandler::createFastChildContext(
     sal_Int32 /*Element*/, const Reference<XFastAttributeList>& /*Attribs*/ )
-    throw (SAXException, RuntimeException, std::exception)
 {
     return this;
 }
 
 Reference<XFastContextHandler> SAL_CALL FilterDetectDocHandler::createUnknownChildContext(
     const OUString& /*Namespace*/, const OUString& /*Name*/, const Reference<XFastAttributeList>& /*Attribs*/)
-    throw (SAXException, RuntimeException, std::exception)
 {
     return this;
 }
 
 void SAL_CALL FilterDetectDocHandler::characters( const OUString& /*aChars*/ )
-    throw (SAXException, RuntimeException, std::exception)
 {
 }
 
@@ -157,7 +155,7 @@ void FilterDetectDocHandler::parseRelationship( const AttributeList& rAttribs )
              Reference< XUriReference > xBase = xFactory->parse( "file:///" );
 
              Reference< XUriReference > xPart = xFactory->parse(  rAttribs.getString( XML_Target, OUString() ) );
-             Reference< XUriReference > xAbs = xFactory->makeAbsolute(  xBase, xPart, sal_True, RelativeUriExcessParentSegments_RETAIN );
+             Reference< XUriReference > xAbs = xFactory->makeAbsolute(  xBase, xPart, true, RelativeUriExcessParentSegments_RETAIN );
 
              if ( xAbs.is() )
                  maTargetPath = xAbs->getPath();
@@ -168,11 +166,15 @@ void FilterDetectDocHandler::parseRelationship( const AttributeList& rAttribs )
     }
 }
 
-OUString FilterDetectDocHandler::getFilterNameFromContentType( const OUString& rContentType )
+OUString FilterDetectDocHandler::getFilterNameFromContentType( const OUString& rContentType, const OUString& rFileName )
 {
-    if( rContentType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml" ||
-        rContentType == "application/vnd.ms-word.document.macroEnabled.main+xml" )
+    bool bDocm = rFileName.endsWithIgnoreAsciiCase(".docm");
+
+    if( rContentType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml" && !bDocm )
         return OUString( "writer_MS_Word_2007" );
+
+    if( rContentType == "application/vnd.ms-word.document.macroEnabled.main+xml" || bDocm )
+        return OUString( "writer_MS_Word_2007_VBA" );
 
     if( rContentType == "application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml" ||
         rContentType == "application/vnd.ms-word.template.macroEnabledTemplate.main+xml" )
@@ -191,9 +193,11 @@ OUString FilterDetectDocHandler::getFilterNameFromContentType( const OUString& r
     if ( rContentType == "application/vnd.ms-excel.sheet.binary.macroEnabled.main" )
         return OUString( "MS Excel 2007 Binary" );
 
-    if( rContentType == "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml" ||
-        rContentType == "application/vnd.ms-powerpoint.presentation.macroEnabled.main+xml" )
+    if (rContentType == "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml")
         return OUString( "MS PowerPoint 2007 XML" );
+
+    if (rContentType == "application/vnd.ms-powerpoint.presentation.macroEnabled.main+xml")
+        return OUString( "MS PowerPoint 2007 XML VBA" );
 
     if( rContentType == "application/vnd.openxmlformats-officedocument.presentationml.slideshow.main+xml" ||
         rContentType == "application/vnd.ms-powerpoint.slideshow.macroEnabled.main+xml" )
@@ -215,36 +219,17 @@ void FilterDetectDocHandler::parseContentTypesDefault( const AttributeList& rAtt
         OUString aExtension = rAttribs.getString( XML_Extension, OUString() );
         sal_Int32 nExtPos = maTargetPath.getLength() - aExtension.getLength();
         if( (nExtPos > 0) && (maTargetPath[ nExtPos - 1 ] == '.') && maTargetPath.match( aExtension, nExtPos ) )
-            mrFilterName = getFilterNameFromContentType( rAttribs.getString( XML_ContentType, OUString() ) );
+            mrFilterName = getFilterNameFromContentType( rAttribs.getString( XML_ContentType, OUString() ), maFileName );
     }
 }
 
 void FilterDetectDocHandler::parseContentTypesOverride( const AttributeList& rAttribs )
 {
-    if( rAttribs.getString( XML_PartName, OUString() ).equals( maTargetPath ) )
-        mrFilterName = getFilterNameFromContentType( rAttribs.getString( XML_ContentType, OUString() ) );
+    if( rAttribs.getString( XML_PartName, OUString() ) == maTargetPath )
+        mrFilterName = getFilterNameFromContentType( rAttribs.getString( XML_ContentType, OUString() ), maFileName );
 }
 
-/* Helper for XServiceInfo */
-Sequence< OUString > FilterDetect_getSupportedServiceNames()
-{
-    Sequence<OUString> aServiceNames { "com.sun.star.frame.ExtendedTypeDetection" };
-    return aServiceNames;
-}
-
-/* Helper for XServiceInfo */
-OUString FilterDetect_getImplementationName()
-{
-    return OUString( "com.sun.star.comp.oox.FormatDetector" );
-}
-
-/* Helper for registry */
-Reference< XInterface > SAL_CALL FilterDetect_createInstance( const Reference< XComponentContext >& rxContext ) throw( Exception )
-{
-    return static_cast< ::cppu::OWeakObject* >( new FilterDetect( rxContext ) );
-}
-
-FilterDetect::FilterDetect( const Reference< XComponentContext >& rxContext ) throw( RuntimeException ) :
+FilterDetect::FilterDetect( const Reference< XComponentContext >& rxContext ) :
     mxContext( rxContext, UNO_SET_THROW )
 {
 }
@@ -315,7 +300,7 @@ Reference< XInputStream > FilterDetect::extractUnencryptedPackage( MediaDescript
     {
         try
         {
-            DocumentDecryption aDecryptor(aOleStorage, mxContext);
+            DocumentDecryption aDecryptor(aOleStorage);
 
             if( aDecryptor.readEncryptionInfo() )
             {
@@ -324,7 +309,7 @@ Reference< XInputStream > FilterDetect::extractUnencryptedPackage( MediaDescript
                     feature with password. Try this first before prompting the
                     user for a password. */
                 std::vector<OUString> aDefaultPasswords;
-                aDefaultPasswords.push_back("VelvetSweatshop");
+                aDefaultPasswords.emplace_back("VelvetSweatshop");
 
                 /*  Use the comphelper password helper to request a password.
                     This helper returns either with the correct password
@@ -345,14 +330,21 @@ Reference< XInputStream > FilterDetect::extractUnencryptedPackage( MediaDescript
                 {
                     // create temporary file for unencrypted package
                     Reference<XStream> xTempFile( TempFile::create(mxContext), UNO_QUERY_THROW );
-                    aDecryptor.decrypt( xTempFile );
 
-                    // store temp file in media descriptor to keep it alive
-                    rMediaDescriptor.setComponentDataEntry( "DecryptedPackage", Any( xTempFile ) );
+                    // if decryption was unsuccessful (corrupted file or any other reason)
+                    if (!aDecryptor.decrypt(xTempFile))
+                    {
+                        rMediaDescriptor[ MediaDescriptor::PROP_ABORTED() ] <<= true;
+                    }
+                    else
+                    {
+                        // store temp file in media descriptor to keep it alive
+                        rMediaDescriptor.setComponentDataEntry( "DecryptedPackage", Any( xTempFile ) );
 
-                    Reference<XInputStream> xDecryptedInputStream = xTempFile->getInputStream();
-                    if( lclIsZipPackage( mxContext, xDecryptedInputStream ) )
-                        return xDecryptedInputStream;
+                        Reference<XInputStream> xDecryptedInputStream = xTempFile->getInputStream();
+                        if( lclIsZipPackage( mxContext, xDecryptedInputStream ) )
+                            return xDecryptedInputStream;
+                    }
                 }
             }
         }
@@ -365,33 +357,30 @@ Reference< XInputStream > FilterDetect::extractUnencryptedPackage( MediaDescript
 
 // com.sun.star.lang.XServiceInfo interface -----------------------------------
 
-OUString SAL_CALL FilterDetect::getImplementationName() throw( RuntimeException, std::exception )
+OUString SAL_CALL FilterDetect::getImplementationName()
 {
-    return FilterDetect_getImplementationName();
+    return OUString( "com.sun.star.comp.oox.FormatDetector" );
 }
 
-sal_Bool SAL_CALL FilterDetect::supportsService( const OUString& rServiceName ) throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL FilterDetect::supportsService( const OUString& rServiceName )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-Sequence< OUString > SAL_CALL FilterDetect::getSupportedServiceNames() throw( RuntimeException, std::exception )
+Sequence< OUString > SAL_CALL FilterDetect::getSupportedServiceNames()
 {
-    return FilterDetect_getSupportedServiceNames();
+    Sequence<OUString> aServiceNames { "com.sun.star.frame.ExtendedTypeDetection" };
+    return aServiceNames;
 }
 
 // com.sun.star.document.XExtendedFilterDetection interface -------------------
 
-OUString SAL_CALL FilterDetect::detect( Sequence< PropertyValue >& rMediaDescSeq ) throw( RuntimeException, std::exception )
+OUString SAL_CALL FilterDetect::detect( Sequence< PropertyValue >& rMediaDescSeq )
 {
     OUString aFilterName;
     MediaDescriptor aMediaDescriptor( rMediaDescSeq );
 
-    /*  Check that the user has not chosen to abort detection, e.g. by hitting
-        'Cancel' in the password input dialog. This may happen because this
-        filter detection is used by different filters. */
-    bool bAborted = aMediaDescriptor.getUnpackedValueOrDefault( MediaDescriptor::PROP_ABORTED(), false );
-    if( !bAborted ) try
+    try
     {
         aMediaDescriptor.addInputStream();
 
@@ -406,11 +395,15 @@ OUString SAL_CALL FilterDetect::detect( Sequence< PropertyValue >& rMediaDescSeq
         if( aZipStorage.isStorage() )
         {
             // create the fast parser, register the XML namespaces, set document handler
-            FastParser aParser( mxContext );
+            FastParser aParser;
             aParser.registerNamespace( NMSP_packageRel );
             aParser.registerNamespace( NMSP_officeRel );
             aParser.registerNamespace( NMSP_packageContentTypes );
-            aParser.setDocumentHandler( new FilterDetectDocHandler( mxContext, aFilterName ) );
+
+            OUString aFileName;
+            aMediaDescriptor[utl::MediaDescriptor::PROP_URL()] >>= aFileName;
+
+            aParser.setDocumentHandler( new FilterDetectDocHandler( mxContext, aFilterName, aFileName ) );
 
             /*  Parse '_rels/.rels' to get the target path and '[Content_Types].xml'
                 to determine the content type of the part at the target path. */
@@ -420,6 +413,18 @@ OUString SAL_CALL FilterDetect::detect( Sequence< PropertyValue >& rMediaDescSeq
     }
     catch( const Exception& )
     {
+        if ( aMediaDescriptor.getUnpackedValueOrDefault( MediaDescriptor::PROP_ABORTED(), false ) )
+            /*  The user chose to abort detection, e.g. by hitting 'Cancel' in the password input dialog,
+                so we have to return non-empty type name to abort the detection loop. The loading code is
+                supposed to check whether the "Aborted" flag is present in the descriptor, and to not attempt
+                to actually load the file then.
+
+                The returned type name is the one we got as an input, which typically was detected by the flat
+                detection (i.e. by file extension), so normally that's the correct one. Also at this point we
+                already know that the file is OLE encrypted package, so trying with other type detectors doesn't
+                make much sense anyway.
+            */
+            aFilterName = aMediaDescriptor.getUnpackedValueOrDefault( MediaDescriptor::PROP_TYPENAME(), OUString() );
     }
 
     // write back changed media descriptor members
@@ -429,5 +434,12 @@ OUString SAL_CALL FilterDetect::detect( Sequence< PropertyValue >& rMediaDescSeq
 
 } // namespace core
 } // namespace oox
+
+extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+com_sun_star_comp_oox_FormatDetector_get_implementation(uno::XComponentContext* pCtx,
+                                                        uno::Sequence<uno::Any> const& /*rSeq*/)
+{
+    return cppu::acquire(new oox::core::FilterDetect(pCtx));
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

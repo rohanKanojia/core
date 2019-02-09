@@ -12,18 +12,17 @@
 #include <svl/zforlist.hxx>
 #include <svl/undo.hxx>
 
-#include "formulacell.hxx"
-#include "rangelst.hxx"
-#include "scitems.hxx"
-#include "docsh.hxx"
-#include "document.hxx"
-#include "uiitems.hxx"
-#include "reffact.hxx"
-#include "scresid.hxx"
-#include "docfunc.hxx"
-#include "strload.hxx"
+#include <formulacell.hxx>
+#include <rangelst.hxx>
+#include <scitems.hxx>
+#include <docsh.hxx>
+#include <document.hxx>
+#include <uiitems.hxx>
+#include <reffact.hxx>
+#include <scresid.hxx>
+#include <docfunc.hxx>
 
-#include "StatisticsTwoVariableDialog.hxx"
+#include <StatisticsTwoVariableDialog.hxx>
 
 ScStatisticsTwoVariableDialog::ScStatisticsTwoVariableDialog(
                     SfxBindings* pSfxBindings, SfxChildWindow* pChildWindow,
@@ -200,20 +199,16 @@ void ScStatisticsTwoVariableDialog::SetReference( const ScRange& rReferenceRange
         }
     }
 
-    // Enable OK if all ranges are set.
-    if (mVariable1Range.IsValid() && mVariable2Range.IsValid() && mOutputAddress.IsValid())
-        mpButtonOk->Enable();
-    else
-        mpButtonOk->Disable();
+    ValidateDialogInput();
 }
 
-IMPL_LINK_NOARG_TYPED( ScStatisticsTwoVariableDialog, OkClicked, Button*, void )
+IMPL_LINK_NOARG( ScStatisticsTwoVariableDialog, OkClicked, Button*, void )
 {
     CalculateInputAndWriteToOutput();
     Close();
 }
 
-IMPL_LINK_TYPED( ScStatisticsTwoVariableDialog, GetFocusHandler, Control&, rCtrl, void )
+IMPL_LINK( ScStatisticsTwoVariableDialog, GetFocusHandler, Control&, rCtrl, void )
 {
     mpActiveEdit = nullptr;
     if(      &rCtrl == mpVariable1RangeEdit
@@ -236,20 +231,22 @@ IMPL_LINK_TYPED( ScStatisticsTwoVariableDialog, GetFocusHandler, Control&, rCtrl
         mpActiveEdit->SetSelection( Selection( 0, SELECTION_MAX ) );
 }
 
-IMPL_LINK_NOARG_TYPED( ScStatisticsTwoVariableDialog, LoseFocusHandler, Control&, void )
+IMPL_LINK_NOARG( ScStatisticsTwoVariableDialog, LoseFocusHandler, Control&, void )
 {
     mDialogLostFocus = !IsActive();
 }
 
-IMPL_LINK_NOARG_TYPED( ScStatisticsTwoVariableDialog, GroupByChanged, RadioButton&, void )
+IMPL_LINK_NOARG( ScStatisticsTwoVariableDialog, GroupByChanged, RadioButton&, void )
 {
     if (mpGroupByColumnsRadio->IsChecked())
         mGroupedBy = BY_COLUMN;
     else if (mpGroupByRowsRadio->IsChecked())
         mGroupedBy = BY_ROW;
+
+    ValidateDialogInput();
 }
 
-IMPL_LINK_NOARG_TYPED( ScStatisticsTwoVariableDialog, RefInputModifyHandler, Edit&, void )
+IMPL_LINK_NOARG( ScStatisticsTwoVariableDialog, RefInputModifyHandler, Edit&, void )
 {
     if ( mpActiveEdit )
     {
@@ -257,7 +254,7 @@ IMPL_LINK_NOARG_TYPED( ScStatisticsTwoVariableDialog, RefInputModifyHandler, Edi
         {
             ScRangeList aRangeList;
             bool bValid = ParseWithNames( aRangeList, mpVariable1RangeEdit->GetText(), mDocument);
-            const ScRange* pRange = (bValid && aRangeList.size() == 1) ? aRangeList[0] : nullptr;
+            const ScRange* pRange = (bValid && aRangeList.size() == 1) ? &aRangeList[0] : nullptr;
             if (pRange)
             {
                 mVariable1Range = *pRange;
@@ -273,7 +270,7 @@ IMPL_LINK_NOARG_TYPED( ScStatisticsTwoVariableDialog, RefInputModifyHandler, Edi
         {
             ScRangeList aRangeList;
             bool bValid = ParseWithNames( aRangeList, mpVariable2RangeEdit->GetText(), mDocument);
-            const ScRange* pRange = (bValid && aRangeList.size() == 1) ? aRangeList[0] : nullptr;
+            const ScRange* pRange = (bValid && aRangeList.size() == 1) ? &aRangeList[0] : nullptr;
             if (pRange)
             {
                 mVariable2Range = *pRange;
@@ -289,7 +286,7 @@ IMPL_LINK_NOARG_TYPED( ScStatisticsTwoVariableDialog, RefInputModifyHandler, Edi
         {
             ScRangeList aRangeList;
             bool bValid = ParseWithNames( aRangeList, mpOutputRangeEdit->GetText(), mDocument);
-            const ScRange* pRange = (bValid && aRangeList.size() == 1) ? aRangeList[0] : nullptr;
+            const ScRange* pRange = (bValid && aRangeList.size() == 1) ? &aRangeList[0] : nullptr;
             if (pRange)
             {
                 mOutputAddress = pRange->aStart;
@@ -314,24 +311,34 @@ IMPL_LINK_NOARG_TYPED( ScStatisticsTwoVariableDialog, RefInputModifyHandler, Edi
         }
     }
 
-    // Enable OK if all ranges are set.
-    if (mVariable1Range.IsValid() && mVariable2Range.IsValid() && mOutputAddress.IsValid())
-        mpButtonOk->Enable();
-    else
-        mpButtonOk->Disable();
+    ValidateDialogInput();
 }
 
 void ScStatisticsTwoVariableDialog::CalculateInputAndWriteToOutput()
 {
-    OUString aUndo(SC_STRLOAD(RID_STATISTICS_DLGS, GetUndoNameId()));
+    OUString aUndo(ScResId(GetUndoNameId()));
     ScDocShell* pDocShell = mViewData->GetDocShell();
-    svl::IUndoManager* pUndoManager = pDocShell->GetUndoManager();
-    pUndoManager->EnterListAction( aUndo, aUndo );
+    SfxUndoManager* pUndoManager = pDocShell->GetUndoManager();
+    pUndoManager->EnterListAction( aUndo, aUndo, 0, mViewData->GetViewShell()->GetViewShellId() );
 
     ScRange aOutputRange = ApplyOutput(pDocShell);
 
     pUndoManager->LeaveListAction();
-    pDocShell->PostPaint( aOutputRange, PAINT_GRID );
+    pDocShell->PostPaint( aOutputRange, PaintPartFlags::Grid );
+}
+
+bool ScStatisticsTwoVariableDialog::InputRangesValid()
+{
+    return mVariable1Range.IsValid() && mVariable2Range.IsValid() && mOutputAddress.IsValid();
+}
+
+void ScStatisticsTwoVariableDialog::ValidateDialogInput()
+{
+    // Enable OK button if all inputs are ok.
+    if (InputRangesValid())
+        mpButtonOk->Enable();
+    else
+        mpButtonOk->Disable();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

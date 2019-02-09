@@ -17,8 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/errcode.hxx>
+#include <vcl/errcode.hxx>
 #include <basic/sbx.hxx>
+#include <basic/sberrors.hxx>
 #include "sbxconv.hxx"
 #include "sbxres.hxx"
 
@@ -28,7 +29,8 @@ enum SbxBOOL ImpGetBool( const SbxValues* p )
     switch( +p->eType )
     {
         case SbxNULL:
-            SbxBase::SetError( ERRCODE_SBX_CONVERSION );
+            SbxBase::SetError( ERRCODE_BASIC_CONVERSION );
+            [[fallthrough]];
         case SbxEMPTY:
             nRes = SbxFALSE; break;
         case SbxCHAR:
@@ -79,7 +81,7 @@ enum SbxBOOL ImpGetBool( const SbxValues* p )
                     double n;
                     SbxDataType t;
                     sal_uInt16 nLen = 0;
-                    if( ImpScan( *p->pOUString, n, t, &nLen ) == ERRCODE_SBX_OK )
+                    if( ImpScan( *p->pOUString, n, t, &nLen, false ) == ERRCODE_NONE )
                     {
                         if( nLen == p->pOUString->getLength() )
                         {
@@ -89,7 +91,7 @@ enum SbxBOOL ImpGetBool( const SbxValues* p )
                         }
                     }
                     if( bError )
-                        SbxBase::SetError( ERRCODE_SBX_CONVERSION );
+                        SbxBase::SetError( ERRCODE_BASIC_CONVERSION );
                 }
             }
             break;
@@ -100,7 +102,7 @@ enum SbxBOOL ImpGetBool( const SbxValues* p )
                 nRes = pVal->GetBool() ? SbxTRUE : SbxFALSE;
             else
             {
-                SbxBase::SetError( ERRCODE_SBX_NO_OBJECT ); nRes = SbxFALSE;
+                SbxBase::SetError( ERRCODE_BASIC_NO_OBJECT ); nRes = SbxFALSE;
             }
             break;
         }
@@ -130,7 +132,7 @@ enum SbxBOOL ImpGetBool( const SbxValues* p )
         case SbxBYREF | SbxSALUINT64:
             nRes = ( *p->puInt64 ) ? SbxTRUE : SbxFALSE; break;
         default:
-            SbxBase::SetError( ERRCODE_SBX_CONVERSION ); nRes = SbxFALSE;
+            SbxBase::SetError( ERRCODE_BASIC_CONVERSION ); nRes = SbxFALSE;
     }
     return nRes;
 }
@@ -142,19 +144,19 @@ void ImpPutBool( SbxValues* p, sal_Int16 n )
     switch( +p->eType )
     {
         case SbxCHAR:
-            p->nChar = (sal_Unicode) n; break;
+            p->nChar = static_cast<sal_Unicode>(n); break;
         case SbxUINT:
-            p->nByte = (sal_uInt8) n; break;
+            p->nByte = static_cast<sal_uInt8>(n); break;
         case SbxINTEGER:
         case SbxBOOL:
             p->nInteger = n; break;
         case SbxLONG:
             p->nLong = n; break;
         case SbxULONG:
-            p->nULong = (sal_uInt32) n; break;
+            p->nULong = static_cast<sal_uInt32>(n); break;
         case SbxERROR:
         case SbxUSHORT:
-            p->nUShort = (sal_uInt16) n; break;
+            p->nUShort = static_cast<sal_uInt16>(n); break;
         case SbxSINGLE:
             p->nSingle = n; break;
         case SbxDATE:
@@ -162,12 +164,12 @@ void ImpPutBool( SbxValues* p, sal_Int16 n )
             p->nDouble = n; break;
         case SbxCURRENCY:
         case SbxSALINT64:
-            p->nInt64 = (sal_Int64) n; break;
+            p->nInt64 = static_cast<sal_Int64>(n); break;
         case SbxSALUINT64:
-            p->uInt64 = (sal_uInt64) n; break;
+            p->uInt64 = static_cast<sal_uInt64>(n); break;
         case SbxDECIMAL:
         case SbxBYREF | SbxDECIMAL:
-            ImpCreateDecimal( p )->setInt( (sal_Int16)n );
+            ImpCreateDecimal( p )->setInt( n );
             break;
 
         case SbxBYREF | SbxSTRING:
@@ -185,23 +187,23 @@ void ImpPutBool( SbxValues* p, sal_Int16 n )
             if( pVal )
                 pVal->PutBool( n != 0 );
             else
-                SbxBase::SetError( ERRCODE_SBX_NO_OBJECT );
+                SbxBase::SetError( ERRCODE_BASIC_NO_OBJECT );
             break;
         }
         case SbxBYREF | SbxCHAR:
-            *p->pChar = (sal_Unicode) n; break;
+            *p->pChar = static_cast<sal_Unicode>(n); break;
         case SbxBYREF | SbxBYTE:
-            *p->pByte = (sal_uInt8) n; break;
+            *p->pByte = static_cast<sal_uInt8>(n); break;
         case SbxBYREF | SbxINTEGER:
         case SbxBYREF | SbxBOOL:
-            *p->pInteger = (sal_Int16) n; break;
+            *p->pInteger = n; break;
         case SbxBYREF | SbxERROR:
         case SbxBYREF | SbxUSHORT:
-            *p->pUShort = (sal_uInt16) n; break;
+            *p->pUShort = static_cast<sal_uInt16>(n); break;
         case SbxBYREF | SbxLONG:
             *p->pLong = n; break;
         case SbxBYREF | SbxULONG:
-            *p->pULong = (sal_uInt32) n; break;
+            *p->pULong = static_cast<sal_uInt32>(n); break;
         case SbxBYREF | SbxSINGLE:
             *p->pSingle = n; break;
         case SbxBYREF | SbxDATE:
@@ -209,11 +211,11 @@ void ImpPutBool( SbxValues* p, sal_Int16 n )
             *p->pDouble = n; break;
         case SbxBYREF | SbxCURRENCY:
         case SbxBYREF | SbxSALINT64:
-            *p->pnInt64 = (sal_Int64) n; break;
+            *p->pnInt64 = static_cast<sal_Int64>(n); break;
         case SbxBYREF | SbxSALUINT64:
-            *p->puInt64 = (sal_uInt64) n; break;
+            *p->puInt64 = static_cast<sal_uInt64>(n); break;
         default:
-            SbxBase::SetError( ERRCODE_SBX_CONVERSION );
+            SbxBase::SetError( ERRCODE_BASIC_CONVERSION );
     }
 }
 

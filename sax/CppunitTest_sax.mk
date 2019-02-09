@@ -9,10 +9,7 @@
 
 $(eval $(call gb_CppunitTest_CppunitTest,sax))
 
-$(eval $(call gb_CppunitTest_use_api,sax,\
-	offapi \
-	udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,sax))
 
 $(eval $(call gb_CppunitTest_use_external,sax,boost_headers))
 
@@ -21,7 +18,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sax, \
 	sal \
 	comphelper \
 	cppu \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,sax, \

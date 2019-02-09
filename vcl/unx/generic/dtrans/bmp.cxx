@@ -17,20 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <unistd.h>
-#include <cstdio>
-#include <cstring>
-
-#include <bmp.hxx>
-
-#include <X11_selection.hxx>
-#include <unx/x11/xlimits.hxx>
-
 #include <sal/macros.h>
 #include <tools/stream.hxx>
+
 #include <vcl/dibtools.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/bitmap.hxx>
+#include <vcl/bitmapex.hxx>
+#include <vcl/BitmapSimpleColorQuantizationFilter.hxx>
+
+#include <unx/x11/xlimits.hxx>
+
+#include "bmp.hxx"
+#include "X11_selection.hxx"
+
+#include <unistd.h>
+#include <cstdio>
+#include <cstring>
 
 using namespace x11;
 
@@ -38,13 +41,13 @@ using namespace x11;
  *  helper functions
  */
 
-inline void writeLE( sal_uInt16 nNumber, sal_uInt8* pBuffer )
+static void writeLE( sal_uInt16 nNumber, sal_uInt8* pBuffer )
 {
     pBuffer[ 0 ] = (nNumber & 0xff);
     pBuffer[ 1 ] = ((nNumber>>8)&0xff);
 }
 
-inline void writeLE( sal_uInt32 nNumber, sal_uInt8* pBuffer )
+static void writeLE( sal_uInt32 nNumber, sal_uInt8* pBuffer )
 {
     pBuffer[ 0 ] = (nNumber & 0xff);
     pBuffer[ 1 ] = ((nNumber>>8)&0xff);
@@ -52,7 +55,7 @@ inline void writeLE( sal_uInt32 nNumber, sal_uInt8* pBuffer )
     pBuffer[ 3 ] = ((nNumber>>24)&0xff);
 }
 
-inline sal_uInt16 readLE16( const sal_uInt8* pBuffer )
+static sal_uInt16 readLE16( const sal_uInt8* pBuffer )
 {
     //This is untainted data which comes from a controlled source
     //so, using a byte-swapping pattern which coverity doesn't
@@ -63,7 +66,7 @@ inline sal_uInt16 readLE16( const sal_uInt8* pBuffer )
     return v;
 }
 
-inline sal_uInt32 readLE32( const sal_uInt8* pBuffer )
+static sal_uInt32 readLE32( const sal_uInt8* pBuffer )
 {
     //This is untainted data which comes from a controlled source
     //so, using a byte-swapping pattern which coverity doesn't
@@ -80,7 +83,7 @@ inline sal_uInt32 readLE32( const sal_uInt8* pBuffer )
  * scanline helpers
  */
 
-inline void X11_writeScanlinePixel( unsigned long nColor, sal_uInt8* pScanline, int depth, int x )
+static void X11_writeScanlinePixel( unsigned long nColor, sal_uInt8* pScanline, int depth, int x )
 {
     switch( depth )
     {
@@ -160,13 +163,13 @@ static sal_uInt8* X11_getPaletteBmpFromImage(
     pBuffer[ 1 ] = 'M';
 
     writeLE( nHeaderSize, pBuffer+10 );
-    writeLE( (sal_uInt32)40, pBuffer+14 );
-    writeLE( (sal_uInt32)pImage->width, pBuffer+18 );
-    writeLE( (sal_uInt32)pImage->height, pBuffer+22 );
-    writeLE( (sal_uInt16)1, pBuffer+26 );
+    writeLE( sal_uInt32(40), pBuffer+14 );
+    writeLE( static_cast<sal_uInt32>(pImage->width), pBuffer+18 );
+    writeLE( static_cast<sal_uInt32>(pImage->height), pBuffer+22 );
+    writeLE( sal_uInt16(1), pBuffer+26 );
     writeLE( nBitCount, pBuffer+28 );
-    writeLE( (sal_uInt32)(DisplayWidth(pDisplay,DefaultScreen(pDisplay))*1000/DisplayWidthMM(pDisplay,DefaultScreen(pDisplay))), pBuffer+38);
-    writeLE( (sal_uInt32)(DisplayHeight(pDisplay,DefaultScreen(pDisplay))*1000/DisplayHeightMM(pDisplay,DefaultScreen(pDisplay))), pBuffer+42);
+    writeLE( static_cast<sal_uInt32>(DisplayWidth(pDisplay,DefaultScreen(pDisplay))*1000/DisplayWidthMM(pDisplay,DefaultScreen(pDisplay))), pBuffer+38);
+    writeLE( static_cast<sal_uInt32>(DisplayHeight(pDisplay,DefaultScreen(pDisplay))*1000/DisplayHeightMM(pDisplay,DefaultScreen(pDisplay))), pBuffer+42);
     writeLE( nColors, pBuffer+46 );
     writeLE( nColors, pBuffer+50 );
 
@@ -181,9 +184,9 @@ static sal_uInt8* X11_getPaletteBmpFromImage(
     XQueryColors( pDisplay, aColormap, aColors, nColors );
     for( sal_uInt32 i = 0; i < nColors; i++ )
     {
-        pBuffer[ 54 + i*4 ] = (sal_uInt8)(aColors[i].blue >> 8);
-        pBuffer[ 55 + i*4 ] = (sal_uInt8)(aColors[i].green >> 8);
-        pBuffer[ 56 + i*4 ] = (sal_uInt8)(aColors[i].red >> 8);
+        pBuffer[ 54 + i*4 ] = static_cast<sal_uInt8>(aColors[i].blue >> 8);
+        pBuffer[ 55 + i*4 ] = static_cast<sal_uInt8>(aColors[i].green >> 8);
+        pBuffer[ 56 + i*4 ] = static_cast<sal_uInt8>(aColors[i].red >> 8);
     }
 
     // done
@@ -191,12 +194,12 @@ static sal_uInt8* X11_getPaletteBmpFromImage(
     return pBuffer;
 }
 
-inline unsigned long doRightShift( unsigned long nValue, int nShift )
+static unsigned long doRightShift( unsigned long nValue, int nShift )
 {
     return (nShift > 0) ? (nValue >> nShift) : (nValue << (-nShift));
 }
 
-inline unsigned long doLeftShift( unsigned long nValue, int nShift )
+static unsigned long doLeftShift( unsigned long nValue, int nShift )
 {
     return (nShift > 0) ? (nValue << nShift) : (nValue >> (-nShift));
 }
@@ -273,17 +276,17 @@ static sal_uInt8* X11_getTCBmpFromImage(
         {
             unsigned long nPixel = XGetPixel( pImage, x, y );
 
-            sal_uInt8 nValue = (sal_uInt8)doRightShift( nPixel&aVInfo.blue_mask, nBlueShift);
+            sal_uInt8 nValue = static_cast<sal_uInt8>(doRightShift( nPixel&aVInfo.blue_mask, nBlueShift));
             if( nBlueShift2 )
                 nValue |= (nValue >> nBlueShift2 );
             *pScanline++ = nValue;
 
-            nValue = (sal_uInt8)doRightShift( nPixel&aVInfo.green_mask, nGreenShift);
+            nValue = static_cast<sal_uInt8>(doRightShift( nPixel&aVInfo.green_mask, nGreenShift));
             if( nGreenShift2 )
                 nValue |= (nValue >> nGreenShift2 );
             *pScanline++ = nValue;
 
-            nValue = (sal_uInt8)doRightShift( nPixel&aVInfo.red_mask, nRedShift);
+            nValue = static_cast<sal_uInt8>(doRightShift( nPixel&aVInfo.red_mask, nRedShift));
             if( nRedShift2 )
                 nValue |= (nValue >> nRedShift2 );
             *pScanline++ = nValue;
@@ -295,13 +298,13 @@ static sal_uInt8* X11_getTCBmpFromImage(
     pBuffer[  1 ] = 'M';
 
     writeLE( nHeaderSize, pBuffer+10 );
-    writeLE( (sal_uInt32)40, pBuffer+14 );
-    writeLE( (sal_uInt32)pImage->width, pBuffer+18 );
-    writeLE( (sal_uInt32)pImage->height, pBuffer+22 );
-    writeLE( (sal_uInt16)1, pBuffer+26 );
-    writeLE( (sal_uInt16)24, pBuffer+28 );
-    writeLE( (sal_uInt32)(DisplayWidth(pDisplay,DefaultScreen(pDisplay))*1000/DisplayWidthMM(pDisplay,DefaultScreen(pDisplay))), pBuffer+38);
-    writeLE( (sal_uInt32)(DisplayHeight(pDisplay,DefaultScreen(pDisplay))*1000/DisplayHeightMM(pDisplay,DefaultScreen(pDisplay))), pBuffer+42);
+    writeLE( sal_uInt32(40), pBuffer+14 );
+    writeLE( static_cast<sal_uInt32>(pImage->width), pBuffer+18 );
+    writeLE( static_cast<sal_uInt32>(pImage->height), pBuffer+22 );
+    writeLE( sal_uInt16(1), pBuffer+26 );
+    writeLE( sal_uInt16(24), pBuffer+28 );
+    writeLE( static_cast<sal_uInt32>(DisplayWidth(pDisplay,DefaultScreen(pDisplay))*1000/DisplayWidthMM(pDisplay,DefaultScreen(pDisplay))), pBuffer+38);
+    writeLE( static_cast<sal_uInt32>(DisplayHeight(pDisplay,DefaultScreen(pDisplay))*1000/DisplayHeightMM(pDisplay,DefaultScreen(pDisplay))), pBuffer+42);
 
     // done
 
@@ -347,11 +350,6 @@ sal_uInt8* x11::X11_getBmpFromPixmap(
     return pBmp;
 }
 
-void x11::X11_freeBmp( sal_uInt8* pBmp )
-{
-    rtl_freeMemory( pBmp );
-}
-
 /*
  *  PixmapHolder
  */
@@ -362,11 +360,8 @@ PixmapHolder::PixmapHolder( Display* pDisplay )
     , m_aPixmap(None)
     , m_aBitmap(None)
     , m_nRedShift(0)
-    , m_nRedShift2(0)
     , m_nGreenShift(0)
-    , m_nGreenShift2(0)
     , m_nBlueShift(0)
-    , m_nBlueShift2(0)
     , m_nBlueShift2Mask(0)
     , m_nRedShift2Mask(0)
     , m_nGreenShift2Mask(0)
@@ -402,14 +397,17 @@ PixmapHolder::PixmapHolder( Display* pDisplay )
 #endif
     if( m_aInfo.c_class == TrueColor )
     {
+        int nRedShift2(0);
+        int nGreenShift2(0);
+        int nBlueShift2(0);
         int nRedSig, nGreenSig, nBlueSig;
-        getShift( m_aInfo.red_mask, m_nRedShift, nRedSig, m_nRedShift2 );
-        getShift( m_aInfo.green_mask, m_nGreenShift, nGreenSig, m_nGreenShift2 );
-        getShift( m_aInfo.blue_mask, m_nBlueShift, nBlueSig, m_nBlueShift2 );
+        getShift( m_aInfo.red_mask, m_nRedShift, nRedSig, nRedShift2 );
+        getShift( m_aInfo.green_mask, m_nGreenShift, nGreenSig, nGreenShift2 );
+        getShift( m_aInfo.blue_mask, m_nBlueShift, nBlueSig, nBlueShift2 );
 
-        m_nBlueShift2Mask = m_nBlueShift2 ? ~((unsigned long)((1<<m_nBlueShift2)-1)) : ~0L;
-        m_nGreenShift2Mask = m_nGreenShift2 ? ~((unsigned long)((1<<m_nGreenShift2)-1)) : ~0L;
-        m_nRedShift2Mask = m_nRedShift2 ? ~((unsigned long)((1<<m_nRedShift2)-1)) : ~0L;
+        m_nBlueShift2Mask = nBlueShift2 ? ~static_cast<unsigned long>((1<<nBlueShift2)-1) : ~0L;
+        m_nGreenShift2Mask = nGreenShift2 ? ~static_cast<unsigned long>((1<<nGreenShift2)-1) : ~0L;
+        m_nRedShift2Mask = nRedShift2 ? ~static_cast<unsigned long>((1<<nRedShift2)-1) : ~0L;
     }
 }
 
@@ -424,15 +422,15 @@ PixmapHolder::~PixmapHolder()
 unsigned long PixmapHolder::getTCPixel( sal_uInt8 r, sal_uInt8 g, sal_uInt8 b ) const
 {
     unsigned long nPixel = 0;
-    unsigned long nValue = (unsigned long)b;
+    unsigned long nValue = static_cast<unsigned long>(b);
     nValue &= m_nBlueShift2Mask;
     nPixel |= doLeftShift( nValue, m_nBlueShift );
 
-    nValue = (unsigned long)g;
+    nValue = static_cast<unsigned long>(g);
     nValue &= m_nGreenShift2Mask;
     nPixel |= doLeftShift( nValue, m_nGreenShift );
 
-    nValue = (unsigned long)r;
+    nValue = static_cast<unsigned long>(r);
     nValue &= m_nRedShift2Mask;
     nPixel |= doLeftShift( nValue, m_nRedShift );
 
@@ -457,17 +455,17 @@ void PixmapHolder::setBitmapDataPalette( const sal_uInt8* pData, XImage* pImage 
             //so, using a byte-swapping pattern which coverity doesn't
             //detect as such
             //http://security.coverity.com/blog/2014/Apr/on-detecting-heartbleed-with-static-analysis.html
-            aPalette[i].red = ((unsigned short)pData[42 + i*4]);
+            aPalette[i].red = static_cast<unsigned short>(pData[42 + i*4]);
             aPalette[i].red <<= 8;
-            aPalette[i].red |= ((unsigned short)pData[42 + i*4]);
+            aPalette[i].red |= static_cast<unsigned short>(pData[42 + i*4]);
 
-            aPalette[i].green = ((unsigned short)pData[41 + i*4]);
+            aPalette[i].green = static_cast<unsigned short>(pData[41 + i*4]);
             aPalette[i].green <<= 8;
-            aPalette[i].green |= ((unsigned short)pData[41 + i*4]);
+            aPalette[i].green |= static_cast<unsigned short>(pData[41 + i*4]);
 
-            aPalette[i].blue = ((unsigned short)pData[40 + i*4]);
+            aPalette[i].blue = static_cast<unsigned short>(pData[40 + i*4]);
             aPalette[i].blue <<= 8;
-            aPalette[i].blue |= ((unsigned short)pData[40 + i*4]);
+            aPalette[i].blue |= static_cast<unsigned short>(pData[40 + i*4]);
             XAllocColor( m_pDisplay, m_aColormap, aPalette+i );
         }
         else
@@ -507,11 +505,11 @@ void PixmapHolder::setBitmapDataPalette( const sal_uInt8* pData, XImage* pImage 
                 case 1: nCol = (pScanline[ x/8 ] & (0x80 >> (x&7))) != 0 ? 0 : 1; break;
                 case 4:
                     if( x & 1 )
-                        nCol = (int)(pScanline[ x/2 ] >> 4);
+                        nCol = static_cast<int>(pScanline[ x/2 ] >> 4);
                     else
-                        nCol = (int)(pScanline[ x/2 ] & 0x0f);
+                        nCol = static_cast<int>(pScanline[ x/2 ] & 0x0f);
                     break;
-                case 8: nCol = (int)pScanline[x];
+                case 8: nCol = static_cast<int>(pScanline[x]);
             }
             XPutPixel( pImage, x, y, aPalette[nCol].pixel );
         }
@@ -547,14 +545,14 @@ void PixmapHolder::setBitmapDataTCDither( const sal_uInt8* pData, XImage* pImage
         int nColors = 1 << m_aInfo.depth;
         int i;
         for( i = 0; i < nColors; i++ )
-            aRealPalette[i].pixel = (unsigned long)i;
+            aRealPalette[i].pixel = static_cast<unsigned long>(i);
         XQueryColors( m_pDisplay, m_aColormap, aRealPalette, nColors );
         for( i = 0; i < nColors; i++ )
         {
             sal_uInt8 nIndex =
-                36*(sal_uInt8)(aRealPalette[i].red/10923) +
-                6*(sal_uInt8)(aRealPalette[i].green/10923) +
-                (sal_uInt8)(aRealPalette[i].blue/10923);
+                36*static_cast<sal_uInt8>(aRealPalette[i].red/10923) +
+                6*static_cast<sal_uInt8>(aRealPalette[i].green/10923) +
+                static_cast<sal_uInt8>(aRealPalette[i].blue/10923);
             if( aPalette[nIndex].pixel == 0 )
                 aPalette[nIndex] = aRealPalette[i];
         }
@@ -572,10 +570,10 @@ void PixmapHolder::setBitmapDataTCDither( const sal_uInt8* pData, XImage* pImage
         nScanlineSize += 4;
     }
 
-    for( int y = 0; y < (int)nHeight; y++ )
+    for( int y = 0; y < static_cast<int>(nHeight); y++ )
     {
-        const sal_uInt8* pScanline = pBMData + (nHeight-1-(sal_uInt32)y)*nScanlineSize;
-        for( int x = 0; x < (int)nWidth; x++ )
+        const sal_uInt8* pScanline = pBMData + (nHeight-1-static_cast<sal_uInt32>(y))*nScanlineSize;
+        for( int x = 0; x < static_cast<int>(nWidth); x++ )
         {
             sal_uInt8 b = pScanline[3*x];
             sal_uInt8 g = pScanline[3*x+1];
@@ -604,10 +602,10 @@ void PixmapHolder::setBitmapDataTC( const sal_uInt8* pData, XImage* pImage )
         nScanlineSize += 4;
     }
 
-    for( int y = 0; y < (int)nHeight; y++ )
+    for( int y = 0; y < static_cast<int>(nHeight); y++ )
     {
-        const sal_uInt8* pScanline = pBMData + (nHeight-1-(sal_uInt32)y)*nScanlineSize;
-        for( int x = 0; x < (int)nWidth; x++ )
+        const sal_uInt8* pScanline = pBMData + (nHeight-1-static_cast<sal_uInt32>(y))*nScanlineSize;
+        for( int x = 0; x < static_cast<int>(nWidth); x++ )
         {
             unsigned long nPixel = getTCPixel( pScanline[3*x+2], pScanline[3*x+1], pScanline[3*x] );
             XPutPixel( pImage, x, y, nPixel );
@@ -627,7 +625,7 @@ bool PixmapHolder::needsConversion( const sal_uInt8* pData )
         if( m_aInfo.c_class != TrueColor )
             return true;
     }
-    else if( nDepth != (sal_uInt32)m_aInfo.depth )
+    else if( nDepth != static_cast<sal_uInt32>(m_aInfo.depth) )
     {
         if( m_aInfo.c_class != TrueColor )
             return true;
@@ -668,8 +666,8 @@ Pixmap PixmapHolder::setBitmapData( const sal_uInt8* pData )
     if( m_aPixmap != None )
     {
         XImage aImage;
-        aImage.width            = (int)nWidth;
-        aImage.height           = (int)nHeight;
+        aImage.width            = static_cast<int>(nWidth);
+        aImage.height           = static_cast<int>(nHeight);
         aImage.xoffset          = 0;
         aImage.format           = ZPixmap;
         aImage.data             = nullptr;
@@ -689,7 +687,7 @@ Pixmap PixmapHolder::setBitmapData( const sal_uInt8* pData )
         aImage.obdata           = nullptr;
 
         XInitImage( &aImage );
-        aImage.data = static_cast<char*>(rtl_allocateMemory( nHeight*aImage.bytes_per_line ));
+        aImage.data = static_cast<char*>(std::malloc( nHeight*aImage.bytes_per_line ));
 
         if( readLE32( pData+14 ) == 24 )
         {
@@ -711,7 +709,7 @@ Pixmap PixmapHolder::setBitmapData( const sal_uInt8* pData )
                    nWidth, nHeight );
 
         // clean up
-        rtl_freeMemory( aImage.data );
+        std::free( aImage.data );
 
         // prepare bitmap (mask)
         m_aBitmap = limitXCreatePixmap( m_pDisplay,
@@ -745,21 +743,31 @@ css::uno::Sequence<sal_Int8> x11::convertBitmapDepth(
     Bitmap bm;
     ReadDIB(bm, in, true);
     if (bm.GetBitCount() == 24 && depth <= 8) {
-        bm.Dither(BmpDitherFlags::Floyd);
+        bm.Dither();
     }
     if (bm.GetBitCount() != depth) {
         switch (depth) {
         case 1:
-            bm.Convert(BMP_CONVERSION_1BIT_THRESHOLD);
+            bm.Convert(BmpConversion::N1BitThreshold);
             break;
         case 4:
-            bm.ReduceColors(BMP_CONVERSION_4BIT_COLORS);
-            break;
+        {
+            BitmapEx aBmpEx(bm);
+            BitmapFilter::Filter(aBmpEx, BitmapSimpleColorQuantizationFilter(1<<4));
+            bm = aBmpEx.GetBitmap();
+        }
+        break;
+
         case 8:
-            bm.ReduceColors(BMP_CONVERSION_8BIT_COLORS);
-            break;
+        {
+            BitmapEx aBmpEx(bm);
+            BitmapFilter::Filter(aBmpEx, BitmapSimpleColorQuantizationFilter(1<<8));
+            bm = aBmpEx.GetBitmap();
+        }
+        break;
+
         case 24:
-            bm.Convert(BMP_CONVERSION_24BIT);
+            bm.Convert(BmpConversion::N24Bit);
             break;
         }
     }

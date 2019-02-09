@@ -88,7 +88,8 @@ endef
 #
 # gb_Helper_make_userfriendly_targets target class build-target? clean-target?
 define gb_Helper_make_userfriendly_targets
-.PHONY: $(2)_$(1) $(2)_$(1).clean
+.PHONY: $(2) $(2)_$(1) $(2)_$(1).clean
+$(2): $(2)_$(1)
 $(2)_$(1) : $(if $(3),$(3),$(call gb_$(2)_get_target,$(1)))
 $(2)_$(1).clean : $(if $(4),$(4),$(call gb_$(2)_get_clean_target,$(1)))
 
@@ -231,12 +232,45 @@ gb_Jar_MODULE_$(2) += $(3)
 
 endef
 
+define gb_Helper__register_packages
+$(foreach target,$(1),\
+ $(if $(filter $(target),$(gb_Package_REGISTERED)),\
+  $(call gb_Output_error,gb_Helper_register_packages: already registered: $(target))))
+$(if $(filter-out $(words $(1)),$(words $(sort $(1)))),\
+ $(call gb_Output_error,gb_Helper_register_packages: contains duplicates: $(1)))
+
+gb_Package_REGISTERED += $(1)
+
+endef
+
+# $(call gb_Helper_register_packages,packages)
+define gb_Helper_register_packages
+$(call gb_Helper__register_packages,$(1))
+
+endef
+
 # $(call gb_Helper_register_packages_for_install,installmodule,packages)
 define gb_Helper_register_packages_for_install
 $(if $(2),,$(call gb_Output_error,gb_Helper_register_packages_for_install: no packages - need 2 parameters))
+$(call gb_Helper__register_packages,$(2))
 
 gb_Package_MODULE_$(1) += $(2)
 
+endef
+
+define gb_Helper_register_mos
+gb_AllLangMoTarget_REGISTERED += $(1)
+
+endef
+
+# TODO: this should be extended to handle auto-installation.
+define gb_Helper_register_uiconfigs
+gb_UIConfig_REGISTERED += $(1)
+
+endef
+
+define gb_Helper_get_imagelists
+$(foreach ui,$(gb_UIConfig_REGISTERED),$(call gb_UIConfig_get_imagelist_target,$(ui)))
 endef
 
 # call gb_Helper_replace_if_different_and_touch,source,target,optional-touch-reference-file
@@ -282,7 +316,9 @@ endef
 endif
 
 define gb_Helper_optional_for_host
-$(if $(filter $(1),$(BUILD_TYPE_FOR_HOST)),$(2))
+$(if $(filter build,$(gb_Side)), \
+	$(if $(filter $(1),$(BUILD_TYPE_FOR_HOST)),$(2)), \
+	$(call gb_Output_error,gb_Helper_optional_for_host: Use only when gb_Side=build))
 endef
 
 define gb_Helper_print_on_error

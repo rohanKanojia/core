@@ -22,13 +22,9 @@
 #include <unotools/unotoolsdllapi.h>
 
 #include <com/sun/star/accessibility/XAccessibleStateSet.hpp>
-#include <cppuhelper/weak.hxx>
-#include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/lang/XTypeProvider.hpp>
-#include <com/sun/star/lang/XServiceName.hpp>
 #include <osl/mutex.hxx>
-#include <cppuhelper/implbase1.hxx>
-#include <comphelper/servicehelper.hxx>
+#include <cppuhelper/implbase.hxx>
+#include <memory>
 
 class AccessibleStateSetHelperImpl;
 
@@ -43,7 +39,7 @@ namespace utl
         <code>AccessibleStateSet</code> service.
 */
 class UNOTOOLS_DLLPUBLIC AccessibleStateSetHelper
-    :   public cppu::WeakImplHelper1< css::accessibility::XAccessibleStateSet >
+    :   public cppu::WeakImplHelper< css::accessibility::XAccessibleStateSet >
 {
 public:
     //=====  internal  ========================================================
@@ -61,8 +57,8 @@ public:
     AccessibleStateSetHelper ( const sal_Int64 _nInitialStates );
 
     AccessibleStateSetHelper ( const AccessibleStateSetHelper& rHelper );
-protected:
-    virtual ~AccessibleStateSetHelper();
+private:
+    virtual ~AccessibleStateSetHelper() override;
 public:
 
     //=====  XAccessibleStateSet  ==============================================
@@ -73,8 +69,7 @@ public:
             Returns <TRUE/> if there is no state in this state set and
             <FALSE/> if there is at least one state set in it.
     */
-    virtual sal_Bool SAL_CALL isEmpty ()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL isEmpty () override;
 
     /** Checks if the given state is a member of the state set of this
         object.
@@ -87,8 +82,7 @@ public:
             Returns <TRUE/> if the given state is a member of this object's
             state set and <FALSE/> otherwise.
     */
-    virtual sal_Bool SAL_CALL contains (sal_Int16 aState)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL contains (sal_Int16 aState) override;
 
     /** Checks if all of the given states are in this object's state
         set.
@@ -106,45 +100,41 @@ public:
             object's state set.
     */
     virtual sal_Bool SAL_CALL containsAll (
-        const css::uno::Sequence<sal_Int16>& rStateSet)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::uno::Sequence<sal_Int16>& rStateSet) override;
 
     /** Returns a sequence of all states.
     */
-    virtual css::uno::Sequence<sal_Int16> SAL_CALL getStates()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence<sal_Int16> SAL_CALL getStates() override;
 
     /** Adds a state to the set.
+
+        @throws css::uno::RuntimeException
     */
-    void    AddState(sal_Int16 aState)
-        throw (css::uno::RuntimeException);
+    void    AddState(sal_Int16 aState);
 
     /** Removes a state from the set if the set contains the state, otherwise nothing is done.
+
+        @throws css::uno::RuntimeException
     */
-    void    RemoveState(sal_Int16 aState)
-        throw (css::uno::RuntimeException);
+    void    RemoveState(sal_Int16 aState);
 
     //=====  XTypeProvider  ===================================================
 
     /** Returns a sequence of all supported interfaces.
     */
     virtual css::uno::Sequence< css::uno::Type> SAL_CALL
-        getTypes()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getTypes() override;
 
     /** Returns a implementation id.
     */
     virtual css::uno::Sequence<sal_Int8> SAL_CALL
-        getImplementationId()
-        throw (css::uno::RuntimeException, std::exception) override;
-
-protected:
-    /// Mutex guarding this object.
-    ::osl::Mutex maMutex;
+        getImplementationId() override;
 
 private:
+    /// Mutex guarding this object.
+    ::osl::Mutex maMutex;
     /// The implementation of this helper interface.
-    AccessibleStateSetHelperImpl*   mpHelperImpl;
+    std::unique_ptr<AccessibleStateSetHelperImpl>   mpHelperImpl;
 };
 
 }

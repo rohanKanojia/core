@@ -21,6 +21,7 @@
 #define INCLUDED_SW_SOURCE_CORE_INC_DOCUMENTTIMERMANAGER_HXX
 
 #include <IDocumentTimerAccess.hxx>
+#include <SwDocIdle.hxx>
 
 #include <vcl/idle.hxx>
 #include <sal/types.h>
@@ -34,8 +35,17 @@ namespace sw
 class DocumentTimerManager : public IDocumentTimerAccess
 {
 public:
+    enum class IdleJob
+    {
+        None, ///< document has no idle jobs to do
+        Busy, ///< document is busy and idle jobs are postponed
+        Grammar,
+        Layout,
+        Fields,
+    };
 
     DocumentTimerManager( SwDoc& i_rSwdoc );
+    virtual ~DocumentTimerManager() override;
 
     void StartIdling() override;
 
@@ -45,24 +55,33 @@ public:
 
     void UnblockIdling() override;
 
-    void StartBackgroundJobs() override;
-
-    // Our own 'IdleTimer' calls the following method
-    DECL_LINK_TYPED( DoIdleJobs, Idle *, void );
-
-    virtual ~DocumentTimerManager();
+    bool IsDocIdle() const override;
 
 private:
-
     DocumentTimerManager(DocumentTimerManager const&) = delete;
     DocumentTimerManager& operator=(DocumentTimerManager const&) = delete;
 
+    /// Delay starting idle jobs to allow for post-load activity.
+    /// Used by LOK only.
+    DECL_LINK( FireIdleJobsTimeout, Timer *, void );
+
+    DECL_LINK( DoIdleJobs, Timer *, void );
+
+    IdleJob GetNextIdleJob() const;
+
     SwDoc& m_rDoc;
 
-    bool mbStartIdleTimer; //< idle timer mode start/stop
-    sal_Int32 mIdleBlockCount;
-    Idle  maIdle;
+    sal_uInt32 m_nIdleBlockCount; ///< Don't run the Idle, if > 0
+    bool m_bStartOnUnblock; ///< true, if the last unblock should start the timer
+    SwDocIdle m_aDocIdle;
+    Timer m_aFireIdleJobsTimer;
+    bool m_bWaitForLokInit; ///< true if we waited for LOK to initialize already.
 };
+
+inline bool DocumentTimerManager::IsDocIdle() const
+{
+    return ((0 == m_nIdleBlockCount) && (GetNextIdleJob() != IdleJob::Busy));
+}
 
 }
 

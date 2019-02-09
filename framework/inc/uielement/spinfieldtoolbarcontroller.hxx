@@ -21,7 +21,6 @@
 #define INCLUDED_FRAMEWORK_INC_UIELEMENT_SPINFIELDTOOLBARCONTROLLER_HXX
 
 #include <com/sun/star/beans/NamedValue.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/frame/ControlCommand.hpp>
 
 #include <uielement/complextoolbarcontroller.hxx>
@@ -45,10 +44,10 @@ class SpinfieldToolbarController : public ComplexToolbarController
                                     sal_uInt16 nID,
                                     sal_Int32 nWidth,
                                     const OUString& aCommand );
-        virtual ~SpinfieldToolbarController();
+        virtual ~SpinfieldToolbarController() override;
 
         // XComponent
-        virtual void SAL_CALL dispose() throw ( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL dispose() override;
 
         // called from SpinfieldControl
         void Up();
@@ -57,7 +56,7 @@ class SpinfieldToolbarController : public ComplexToolbarController
         void Last();
         void Modify();
         void GetFocus();
-        bool PreNotify( NotifyEvent& rNEvt );
+        bool PreNotify( NotifyEvent const & rNEvt );
 
     protected:
         virtual void executeControlCommand( const css::frame::ControlCommand& rControlCommand ) override;

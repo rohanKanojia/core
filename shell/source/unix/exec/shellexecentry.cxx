@@ -18,12 +18,8 @@
  */
 
 #include <cppuhelper/factory.hxx>
-#include <osl/diagnose.h>
+#include <com/sun/star/lang/XSingleComponentFactory.hpp>
 #include "shellexec.hxx"
-
-
-// namespace directives
-
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
@@ -34,10 +30,9 @@ using com::sun::star::system::XSystemShellExecute;
 #define SHELLEXEC_SERVICE_NAME  "com.sun.star.system.SystemShellExecute"
 #define SHELLEXEC_IMPL_NAME     "com.sun.star.comp.system.SystemShellExecute"
 
-
 namespace
 {
-    Reference< XInterface > SAL_CALL createInstance(const Reference< XComponentContext >& xContext)
+    Reference< XInterface > createInstance(const Reference< XComponentContext >& xContext)
     {
         return Reference< XInterface >( static_cast< XSystemShellExecute* >( new ShellExec(xContext) ) );
     }
@@ -46,10 +41,7 @@ namespace
 extern "C"
 {
 
-// component_getFactory
-
-
-SAL_DLLPUBLIC_EXPORT void* SAL_CALL syssh_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void* syssh_component_getFactory(
     const sal_Char* pImplName,
     SAL_UNUSED_PARAMETER void* /*pSrvManager*/,
     SAL_UNUSED_PARAMETER void* /*pRegistryKey*/ )

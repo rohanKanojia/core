@@ -17,52 +17,52 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <sal/config.h>
 
 #include <cstdlib>
 
-#include "controller/SlsSelectionFunction.hxx"
+#include <controller/SlsSelectionFunction.hxx>
 
-#include "SlideSorter.hxx"
-#include "SlideSorterViewShell.hxx"
+#include <SlideSorter.hxx>
+#include <SlideSorterViewShell.hxx>
 #include "SlsDragAndDropContext.hxx"
-#include "controller/SlsTransferableData.hxx"
-#include "controller/SlideSorterController.hxx"
-#include "controller/SlsPageSelector.hxx"
-#include "controller/SlsFocusManager.hxx"
-#include "controller/SlsScrollBarManager.hxx"
-#include "controller/SlsClipboard.hxx"
-#include "controller/SlsCurrentSlideManager.hxx"
-#include "controller/SlsInsertionIndicatorHandler.hxx"
-#include "controller/SlsSelectionManager.hxx"
-#include "controller/SlsProperties.hxx"
-#include "controller/SlsSlotManager.hxx"
-#include "controller/SlsVisibleAreaManager.hxx"
-#include "model/SlideSorterModel.hxx"
-#include "model/SlsPageDescriptor.hxx"
-#include "model/SlsPageEnumerationProvider.hxx"
-#include "view/SlideSorterView.hxx"
-#include "view/SlsLayouter.hxx"
-#include "view/SlsPageObjectLayouter.hxx"
-#include "framework/FrameworkHelper.hxx"
-#include "ViewShellBase.hxx"
-#include "DrawController.hxx"
-#include "Window.hxx"
-#include "sdpage.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "sdxfer.hxx"
-#include "ViewShell.hxx"
-#include "FrameView.hxx"
-#include "app.hrc"
-#include "sdresid.hxx"
-#include "strings.hrc"
+#include <controller/SlsTransferableData.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <controller/SlsPageSelector.hxx>
+#include <controller/SlsFocusManager.hxx>
+#include <controller/SlsScrollBarManager.hxx>
+#include <controller/SlsClipboard.hxx>
+#include <controller/SlsCurrentSlideManager.hxx>
+#include <controller/SlsInsertionIndicatorHandler.hxx>
+#include <controller/SlsSelectionManager.hxx>
+#include <controller/SlsProperties.hxx>
+#include <controller/SlsSlotManager.hxx>
+#include <controller/SlsVisibleAreaManager.hxx>
+#include <model/SlideSorterModel.hxx>
+#include <model/SlsPageDescriptor.hxx>
+#include <model/SlsPageEnumerationProvider.hxx>
+#include <view/SlideSorterView.hxx>
+#include <view/SlsLayouter.hxx>
+#include <view/SlsPageObjectLayouter.hxx>
+#include <framework/FrameworkHelper.hxx>
+#include <ViewShellBase.hxx>
+#include <DrawController.hxx>
+#include <Window.hxx>
+#include <sdpage.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <sdxfer.hxx>
+#include <ViewShell.hxx>
+#include <FrameView.hxx>
+#include <app.hrc>
+#include <o3tl/deleter.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/dispatch.hxx>
 #include <svx/svdpagv.hxx>
-#include <vcl/msgbox.hxx>
 #include <svx/svxids.hrc>
 #include <boost/optional.hpp>
+#include <sdmod.hxx>
 
 namespace {
 static const sal_uInt32 SINGLE_CLICK             (0x00000001);
@@ -103,24 +103,23 @@ namespace sd { namespace slidesorter { namespace controller {
 class SelectionFunction::EventDescriptor
 {
 public:
-    Point maMousePosition;
+    Point const maMousePosition;
     Point maMouseModelPosition;
     model::SharedPageDescriptor mpHitDescriptor;
     SdrPage* mpHitPage;
     sal_uInt32 mnEventCode;
-    InsertionIndicatorHandler::Mode meDragMode;
-    bool mbMakeSelectionVisible;
+    InsertionIndicatorHandler::Mode const meDragMode;
     bool mbIsLeaving;
 
     EventDescriptor (
         sal_uInt32 nEventType,
         const MouseEvent& rEvent,
-        SlideSorter& rSlideSorter);
+        SlideSorter const & rSlideSorter);
     EventDescriptor (
         sal_uInt32 nEventType,
         const AcceptDropEvent& rEvent,
         const sal_Int8 nDragAction,
-        SlideSorter& rSlideSorter);
+        SlideSorter const & rSlideSorter);
 
 private:
     /** Compute a numerical code that describes a mouse event and that can
@@ -144,7 +143,7 @@ public:
         SlideSorter& rSlideSorter,
         SelectionFunction& rSelectionFunction,
         const bool bIsMouseOverIndicatorAllowed);
-    virtual ~ModeHandler();
+    virtual ~ModeHandler() COVERITY_NOEXCEPT_FALSE;
 
     virtual Mode GetMode() const = 0;
     virtual void Abort() = 0;
@@ -165,8 +164,7 @@ public:
     void SwitchView (const model::SharedPageDescriptor& rpDescriptor);
 
     void StartDrag (
-        const Point& rMousePosition,
-        const InsertionIndicatorHandler::Mode eMode);
+        const Point& rMousePosition);
 
     bool IsMouseOverIndicatorAllowed() const { return mbIsMouseOverIndicatorAllowed;}
 
@@ -195,7 +193,6 @@ public:
     NormalModeHandler (
         SlideSorter& rSlideSorter,
         SelectionFunction& rSelectionFunction);
-    virtual ~NormalModeHandler();
 
     virtual SelectionFunction::Mode GetMode() const override;
     virtual void Abort() override;
@@ -234,7 +231,7 @@ public:
         const Point& rMouseModelPosition,
         const sal_uInt32 nEventCode);
 #endif
-    virtual ~MultiSelectionModeHandler();
+    virtual ~MultiSelectionModeHandler() override;
 
 #ifndef MACOSX
     void Initialize(const sal_uInt32 nEventCode);
@@ -257,7 +254,7 @@ protected:
 private:
     SelectionMode meSelectionMode;
     Point maSecondCorner;
-    Pointer maSavedPointer;
+    Pointer const maSavedPointer;
     bool mbAutoScrollInstalled;
     sal_Int32 mnAnchorIndex;
     sal_Int32 mnSecondIndex;
@@ -291,7 +288,7 @@ public:
         const Point& rMousePosition,
         vcl::Window* pWindow);
 #endif
-    virtual ~DragAndDropModeHandler();
+    virtual ~DragAndDropModeHandler() override;
 
 #ifndef MACOSX
     void Initialize(const Point& rMousePosition, vcl::Window* pWindow);
@@ -305,7 +302,7 @@ protected:
     virtual bool ProcessDragEvent (SelectionFunction::EventDescriptor& rDescriptor) override;
 
 private:
-    std::unique_ptr<DragAndDropContext> mpDragAndDropContext;
+    std::unique_ptr<DragAndDropContext, o3tl::default_delete<DragAndDropContext>> mpDragAndDropContext;
 };
 
 //===== SelectionFunction =====================================================
@@ -322,7 +319,6 @@ SelectionFunction::SelectionFunction (
         rRequest),
       mrSlideSorter(rSlideSorter),
       mrController(mrSlideSorter.GetController()),
-      mbProcessingMouseButtonDown(false),
       mnShiftKeySelectionAnchor(-1),
       mpModeHandler(new NormalModeHandler(rSlideSorter, *this))
 {
@@ -346,7 +342,6 @@ bool SelectionFunction::MouseButtonDown (const MouseEvent& rEvent)
     // remember button state for creation of own MouseEvents
     SetMouseButtonCode (rEvent.GetButtons());
     aMDPos = rEvent.GetPosPixel();
-    mbProcessingMouseButtonDown = true;
 
     //  mpWindow->CaptureMouse();
 
@@ -366,8 +361,6 @@ bool SelectionFunction::MouseButtonUp (const MouseEvent& rEvent)
     mrController.GetScrollBarManager().StopAutoScroll ();
 
     ProcessMouseEvent(BUTTON_UP, rEvent);
-
-    mbProcessingMouseButtonDown = false;
 
     return true;
 }
@@ -446,25 +439,25 @@ bool SelectionFunction::KeyInput (const KeyEvent& rEvent)
 
         // Move the focus indicator left.
         case KEY_LEFT:
-            MoveFocus(FocusManager::FMD_LEFT, rCode.IsShift(), rCode.IsMod1());
+            MoveFocus(FocusManager::FocusMoveDirection::Left, rCode.IsShift(), rCode.IsMod1());
             bResult = true;
             break;
 
         // Move the focus indicator right.
         case KEY_RIGHT:
-            MoveFocus(FocusManager::FMD_RIGHT, rCode.IsShift(), rCode.IsMod1());
+            MoveFocus(FocusManager::FocusMoveDirection::Right, rCode.IsShift(), rCode.IsMod1());
             bResult = true;
             break;
 
         // Move the focus indicator up.
         case KEY_UP:
-            MoveFocus(FocusManager::FMD_UP, rCode.IsShift(), rCode.IsMod1());
+            MoveFocus(FocusManager::FocusMoveDirection::Up, rCode.IsShift(), rCode.IsMod1());
             bResult = true;
             break;
 
         // Move the focus indicator down.
         case KEY_DOWN:
-            MoveFocus(FocusManager::FMD_DOWN, rCode.IsShift(), rCode.IsMod1());
+            MoveFocus(FocusManager::FocusMoveDirection::Down, rCode.IsShift(), rCode.IsMod1());
             bResult = true;
             break;
 
@@ -585,16 +578,6 @@ void SelectionFunction::MoveFocus (
     }
 }
 
-void SelectionFunction::Activate()
-{
-    FuPoor::Activate();
-}
-
-void SelectionFunction::Deactivate()
-{
-    FuPoor::Deactivate();
-}
-
 void SelectionFunction::DoCut()
 {
     if ( ! mrSlideSorter.GetProperties()->IsUIReadOnly())
@@ -638,7 +621,7 @@ void SelectionFunction::GotoNextPage (int nOffset)
 
 void SelectionFunction::GotoPage (int nIndex)
 {
-    sal_uInt16 nPageCount = (sal_uInt16)mrSlideSorter.GetModel().GetPageCount();
+    sal_uInt16 nPageCount = static_cast<sal_uInt16>(mrSlideSorter.GetModel().GetPageCount());
 
     if (nIndex >= nPageCount)
         nIndex = nPageCount - 1;
@@ -683,7 +666,7 @@ void SelectionFunction::ProcessEvent (EventDescriptor& rDescriptor)
     pModeHandler->ProcessEvent(rDescriptor);
 }
 
-bool Match (
+static bool Match (
     const sal_uInt32 nEventCode,
     const sal_uInt32 nPositivePattern)
 {
@@ -773,14 +756,13 @@ void SelectionFunction::ResetMouseAnchor()
 SelectionFunction::EventDescriptor::EventDescriptor (
     const sal_uInt32 nEventType,
     const MouseEvent& rEvent,
-    SlideSorter& rSlideSorter)
+    SlideSorter const & rSlideSorter)
     : maMousePosition(rEvent.GetPosPixel()),
       maMouseModelPosition(),
       mpHitDescriptor(),
       mpHitPage(),
       mnEventCode(nEventType),
       meDragMode(InsertionIndicatorHandler::MoveMode),
-      mbMakeSelectionVisible(true),
       mbIsLeaving(false)
 {
     maMouseModelPosition = rSlideSorter.GetContentWindow()->PixelToLogic(maMousePosition);
@@ -797,7 +779,7 @@ SelectionFunction::EventDescriptor::EventDescriptor (
     // we can call IsLeaveWindow at the event.  Otherwise we have to make an
     // explicit test.
     mbIsLeaving = rEvent.IsLeaveWindow()
-        || ! Rectangle(Point(0,0),
+        || ! ::tools::Rectangle(Point(0,0),
              rSlideSorter.GetContentWindow()->GetOutputSizePixel()).IsInside(maMousePosition);
 }
 
@@ -805,14 +787,13 @@ SelectionFunction::EventDescriptor::EventDescriptor (
     const sal_uInt32 nEventType,
     const AcceptDropEvent& rEvent,
     const sal_Int8 nDragAction,
-    SlideSorter& rSlideSorter)
+    SlideSorter const & rSlideSorter)
     : maMousePosition(rEvent.maPosPixel),
       maMouseModelPosition(),
       mpHitDescriptor(),
       mpHitPage(),
       mnEventCode(nEventType),
       meDragMode(InsertionIndicatorHandler::GetModeFromDndAction(nDragAction)),
-      mbMakeSelectionVisible(true),
       mbIsLeaving(false)
 {
     maMouseModelPosition = rSlideSorter.GetContentWindow()->PixelToLogic(maMousePosition);
@@ -828,7 +809,7 @@ SelectionFunction::EventDescriptor::EventDescriptor (
     // we can call IsLeaveWindow at the event.  Otherwise we have to make an
     // explicit test.
     mbIsLeaving = rEvent.mbLeaving
-        || ! Rectangle(Point(0,0),
+        || ! ::tools::Rectangle(Point(0,0),
              rSlideSorter.GetContentWindow()->GetOutputSizePixel()).IsInside(maMousePosition);
 }
 
@@ -890,7 +871,7 @@ SelectionFunction::ModeHandler::ModeHandler (
 {
 }
 
-SelectionFunction::ModeHandler::~ModeHandler()
+SelectionFunction::ModeHandler::~ModeHandler() COVERITY_NOEXCEPT_FALSE
 {
 }
 
@@ -1007,10 +988,8 @@ void SelectionFunction::ModeHandler::SwitchView (const model::SharedPageDescript
 }
 
 void SelectionFunction::ModeHandler::StartDrag (
-    const Point& rMousePosition,
-    const InsertionIndicatorHandler::Mode eMode)
+    const Point& rMousePosition)
 {
-    (void)eMode;
     // Do not start a drag-and-drop operation when one is already active.
     // (when dragging pages from one document into another, pressing a
     // modifier key can trigger a MouseMotion event in the originating
@@ -1032,10 +1011,6 @@ NormalModeHandler::NormalModeHandler (
     SelectionFunction& rSelectionFunction)
     : ModeHandler(rSlideSorter, rSelectionFunction, true),
       maButtonDownLocation()
-{
-}
-
-NormalModeHandler::~NormalModeHandler()
 {
 }
 
@@ -1089,12 +1064,10 @@ bool NormalModeHandler::ProcessButtonDownEvent (
             // selection is set to this single page.  Otherwise the
             // selection is not modified.
             SetCurrentPage(rDescriptor.mpHitDescriptor);
-            rDescriptor.mbMakeSelectionVisible = false;
             break;
 
         case BUTTON_DOWN | RIGHT_BUTTON | SINGLE_CLICK | OVER_SELECTED_PAGE:
             // Do not change the selection.  Just adjust the insertion indicator.
-            rDescriptor.mbMakeSelectionVisible = false;
             break;
 
         case BUTTON_DOWN | RIGHT_BUTTON | SINGLE_CLICK | NOT_OVER_PAGE:
@@ -1123,12 +1096,16 @@ bool NormalModeHandler::ProcessButtonDownEvent (
             pInsertionIndicatorHandler->UpdatePosition(
                     rDescriptor.maMousePosition,
                     InsertionIndicatorHandler::MoveMode);
+
             mrSlideSorter.GetController().GetSelectionManager()->SetInsertionPosition(
                 pInsertionIndicatorHandler->GetInsertionPageIndex());
 
             mrSlideSorter.GetViewShell()->GetDispatcher()->Execute(
                 SID_INSERTPAGE,
                 SfxCallMode::ASYNCHRON | SfxCallMode::RECORD);
+
+            pInsertionIndicatorHandler->End(Animator::AM_Immediate);
+
             break;
         }
 
@@ -1179,31 +1156,22 @@ bool NormalModeHandler::ProcessMotionEvent (
     bool bIsProcessed (true);
     switch (rDescriptor.mnEventCode)
     {
-        case ANY_MODIFIER(MOUSE_MOTION | LEFT_BUTTON | SINGLE_CLICK | OVER_UNSELECTED_PAGE):
-            //            SetCurrentPage(rDescriptor.mpHitDescriptor);
-            // Fallthrough
-
         // A mouse motion without visible substitution starts that.
+        case ANY_MODIFIER(MOUSE_MOTION | LEFT_BUTTON | SINGLE_CLICK | OVER_UNSELECTED_PAGE):
         case ANY_MODIFIER(MOUSE_MOTION | LEFT_BUTTON | SINGLE_CLICK | OVER_SELECTED_PAGE):
         {
             if (maButtonDownLocation)
             {
-                const sal_Int32 nDistance (maButtonDownLocation
-                    ? ::std::max (
-                        std::abs(maButtonDownLocation->X() - rDescriptor.maMousePosition.X()),
-                        std::abs(maButtonDownLocation->Y() - rDescriptor.maMousePosition.Y()))
-                    : 0);
+                const sal_Int32 nDistance(std::max(
+                    std::abs(maButtonDownLocation->X() - rDescriptor.maMousePosition.X()),
+                    std::abs(maButtonDownLocation->Y() - rDescriptor.maMousePosition.Y())));
                 if (nDistance > 3)
-                    StartDrag(
-                        rDescriptor.maMousePosition,
-                        (rDescriptor.mnEventCode & CONTROL_MODIFIER) != 0
-                            ? InsertionIndicatorHandler::CopyMode
-                            : InsertionIndicatorHandler::MoveMode);
+                    StartDrag(rDescriptor.maMousePosition);
             }
+            break;
         }
-        break;
 
-            // A mouse motion not over a page starts a rectangle selection.
+        // A mouse motion not over a page starts a rectangle selection.
         case ANY_MODIFIER(MOUSE_MOTION | LEFT_BUTTON | SINGLE_CLICK | NOT_OVER_PAGE):
             mrSelectionFunction.SwitchToMultiSelectionMode(
                 rDescriptor.maMouseModelPosition,
@@ -1352,7 +1320,6 @@ bool MultiSelectionModeHandler::ProcessMotionEvent (
     {
         SetSelectionModeFromModifier(rDescriptor.mnEventCode);
         UpdatePosition(rDescriptor.maMousePosition, true);
-        rDescriptor.mbMakeSelectionVisible = false;
         return true;
     }
     else
@@ -1380,7 +1347,7 @@ void MultiSelectionModeHandler::UpdatePosition (
     // Convert window coordinates into model coordinates (we need the
     // window coordinates for auto-scrolling because that remains
     // constant while scrolling.)
-    sd::Window *pWindow (mrSlideSorter.GetContentWindow());
+    sd::Window *pWindow (mrSlideSorter.GetContentWindow().get());
     const Point aMouseModelPosition (pWindow->PixelToLogic(rMousePosition));
 
     bool bDoAutoScroll = bAllowAutoScroll && mrSlideSorter.GetController().GetScrollBarManager().AutoScroll(
@@ -1576,7 +1543,7 @@ bool DragAndDropModeHandler::ProcessDragEvent (SelectionFunction::EventDescripto
     {
         mpDragAndDropContext->UpdatePosition(
             rDescriptor.maMousePosition,
-            rDescriptor.meDragMode);
+            rDescriptor.meDragMode, true);
     }
 
     return true;

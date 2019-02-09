@@ -21,7 +21,7 @@
 #include <CoinError.hpp>
 
 #include "SolverComponent.hxx"
-#include "solver.hrc"
+#include <strings.hrc>
 
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/table/CellAddress.hpp>
@@ -30,6 +30,7 @@
 #include <rtl/math.hxx>
 #include <stdexcept>
 #include <vector>
+#include <float.h>
 
 using namespace com::sun::star;
 
@@ -37,27 +38,22 @@ class CoinMPSolver : public SolverComponent
 {
 public:
     CoinMPSolver() {}
-    virtual ~CoinMPSolver() {}
 
 private:
-    virtual void SAL_CALL solve() throw(css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getImplementationName()
-        throw(css::uno::RuntimeException, std::exception) override
+    virtual void SAL_CALL solve() override;
+    virtual OUString SAL_CALL getImplementationName() override
     {
         return OUString("com.sun.star.comp.Calc.CoinMPSolver");
     }
-    virtual OUString SAL_CALL getComponentDescription()
-        throw (uno::RuntimeException, std::exception) override
+    virtual OUString SAL_CALL getComponentDescription() override
     {
         return SolverComponent::GetResourceString( RID_COINMP_SOLVER_COMPONENT );
     }
 };
 
-void SAL_CALL CoinMPSolver::solve() throw(uno::RuntimeException, std::exception)
+void SAL_CALL CoinMPSolver::solve()
 {
-    uno::Reference<frame::XModel> xModel( mxDoc, uno::UNO_QUERY );
-    if ( !xModel.is() )
-        throw uno::RuntimeException();
+    uno::Reference<frame::XModel> xModel( mxDoc, uno::UNO_QUERY_THROW );
 
     maStatus.clear();
     mbSuccess = false;
@@ -67,6 +63,7 @@ void SAL_CALL CoinMPSolver::solve() throw(uno::RuntimeException, std::exception)
     // collect variables in vector (?)
 
     std::vector<table::CellAddress> aVariableCells;
+    aVariableCells.reserve(maVariables.getLength());
     for (sal_Int32 nPos=0; nPos<maVariables.getLength(); nPos++)
         aVariableCells.push_back( maVariables[nPos] );
     size_t nVariables = aVariableCells.size();
@@ -89,40 +86,38 @@ void SAL_CALL CoinMPSolver::solve() throw(uno::RuntimeException, std::exception)
     // set all variables to zero
     //! store old values?
     //! use old values as initial values?
-    std::vector<table::CellAddress>::const_iterator aVarIter;
-    for ( aVarIter = aVariableCells.begin(); aVarIter != aVariableCells.end(); ++aVarIter )
+    for ( const auto& rVarCell : aVariableCells )
     {
-        SolverComponent::SetValue( mxDoc, *aVarIter, 0.0 );
+        SolverComponent::SetValue( mxDoc, rVarCell, 0.0 );
     }
 
     // read initial values from all dependent cells
-    ScSolverCellHashMap::iterator aCellsIter;
-    for ( aCellsIter = aCellsHash.begin(); aCellsIter != aCellsHash.end(); ++aCellsIter )
+    for ( auto& rEntry : aCellsHash )
     {
-        double fValue = SolverComponent::GetValue( mxDoc, aCellsIter->first );
-        aCellsIter->second.push_back( fValue );                         // store as first element, as-is
+        double fValue = SolverComponent::GetValue( mxDoc, rEntry.first );
+        rEntry.second.push_back( fValue );                         // store as first element, as-is
     }
 
     // loop through variables
-    for ( aVarIter = aVariableCells.begin(); aVarIter != aVariableCells.end(); ++aVarIter )
+    for ( const auto& rVarCell : aVariableCells )
     {
-        SolverComponent::SetValue( mxDoc, *aVarIter, 1.0 );      // set to 1 to examine influence
+        SolverComponent::SetValue( mxDoc, rVarCell, 1.0 );      // set to 1 to examine influence
 
         // read value change from all dependent cells
-        for ( aCellsIter = aCellsHash.begin(); aCellsIter != aCellsHash.end(); ++aCellsIter )
+        for ( auto& rEntry : aCellsHash )
         {
-            double fChanged = SolverComponent::GetValue( mxDoc, aCellsIter->first );
-            double fInitial = aCellsIter->second.front();
-            aCellsIter->second.push_back( fChanged - fInitial );
+            double fChanged = SolverComponent::GetValue( mxDoc, rEntry.first );
+            double fInitial = rEntry.second.front();
+            rEntry.second.push_back( fChanged - fInitial );
         }
 
-        SolverComponent::SetValue( mxDoc, *aVarIter, 2.0 );      // minimal test for linearity
+        SolverComponent::SetValue( mxDoc, rVarCell, 2.0 );      // minimal test for linearity
 
-        for ( aCellsIter = aCellsHash.begin(); aCellsIter != aCellsHash.end(); ++aCellsIter )
+        for ( const auto& rEntry : aCellsHash )
         {
-            double fInitial = aCellsIter->second.front();
-            double fCoeff   = aCellsIter->second.back();       // last appended: coefficient for this variable
-            double fTwo     = SolverComponent::GetValue( mxDoc, aCellsIter->first );
+            double fInitial = rEntry.second.front();
+            double fCoeff   = rEntry.second.back();       // last appended: coefficient for this variable
+            double fTwo     = SolverComponent::GetValue( mxDoc, rEntry.first );
 
             bool bLinear = rtl::math::approxEqual( fTwo, fInitial + 2.0 * fCoeff ) ||
                            rtl::math::approxEqual( fInitial, fTwo - 2.0 * fCoeff );
@@ -131,7 +126,7 @@ void SAL_CALL CoinMPSolver::solve() throw(uno::RuntimeException, std::exception)
                 maStatus = SolverComponent::GetResourceString( RID_ERROR_NONLINEAR );
         }
 
-        SolverComponent::SetValue( mxDoc, *aVarIter, 0.0 );      // set back to zero for examining next variable
+        SolverComponent::SetValue( mxDoc, rVarCell, 0.0 );      // set back to zero for examining next variable
     }
 
     xModel->unlockControllers();
@@ -146,7 +141,7 @@ void SAL_CALL CoinMPSolver::solve() throw(uno::RuntimeException, std::exception)
     // set objective function
 
     const std::vector<double>& rObjCoeff = aCellsHash[maObjective];
-    double* pObjectCoeffs = new double[nVariables];
+    std::unique_ptr<double[]> pObjectCoeffs(new double[nVariables]);
     for (nVar=0; nVar<nVariables; nVar++)
         pObjectCoeffs[nVar] = rObjCoeff[nVar+1];
     double nObjectConst = rObjCoeff[0];             // constant term of objective
@@ -155,12 +150,12 @@ void SAL_CALL CoinMPSolver::solve() throw(uno::RuntimeException, std::exception)
 
     size_t nRows = maConstraints.getLength();
     size_t nCompSize = nVariables * nRows;
-    double* pCompMatrix = new double[nCompSize];    // first collect all coefficients, row-wise
+    std::unique_ptr<double[]> pCompMatrix(new double[nCompSize]);    // first collect all coefficients, row-wise
     for (size_t i=0; i<nCompSize; i++)
         pCompMatrix[i] = 0.0;
 
-    double* pRHS = new double[nRows];
-    char* pRowType = new char[nRows];
+    std::unique_ptr<double[]> pRHS(new double[nRows]);
+    std::unique_ptr<char[]> pRowType(new char[nRows]);
     for (size_t i=0; i<nRows; i++)
     {
         pRHS[i] = 0.0;
@@ -220,10 +215,10 @@ void SAL_CALL CoinMPSolver::solve() throw(uno::RuntimeException, std::exception)
 
     // Find non-zero coefficients, column-wise
 
-    int* pMatrixBegin = new int[nVariables+1];
-    int* pMatrixCount = new int[nVariables];
-    double* pMatrix = new double[nCompSize];    // not always completely used
-    int* pMatrixIndex = new int[nCompSize];
+    std::unique_ptr<int[]> pMatrixBegin(new int[nVariables+1]);
+    std::unique_ptr<int[]> pMatrixCount(new int[nVariables]);
+    std::unique_ptr<double[]> pMatrix(new double[nCompSize]);    // not always completely used
+    std::unique_ptr<int[]> pMatrixIndex(new int[nCompSize]);
     int nMatrixPos = 0;
     for (nVar=0; nVar<nVariables; nVar++)
     {
@@ -242,13 +237,12 @@ void SAL_CALL CoinMPSolver::solve() throw(uno::RuntimeException, std::exception)
         pMatrixCount[nVar] = nMatrixPos - nBegin;
     }
     pMatrixBegin[nVariables] = nMatrixPos;
-    delete[] pCompMatrix;
-    pCompMatrix = nullptr;
+    pCompMatrix.reset();
 
     // apply settings to all variables
 
-    double* pLowerBounds = new double[nVariables];
-    double* pUpperBounds = new double[nVariables];
+    std::unique_ptr<double[]> pLowerBounds(new double[nVariables]);
+    std::unique_ptr<double[]> pUpperBounds(new double[nVariables]);
     for (nVar=0; nVar<nVariables; nVar++)
     {
         pLowerBounds[nVar] = mbNonNegative ? 0.0 : -DBL_MAX;
@@ -257,7 +251,7 @@ void SAL_CALL CoinMPSolver::solve() throw(uno::RuntimeException, std::exception)
         // bounds could possibly be further restricted from single-cell constraints
     }
 
-    char* pColType = new char[nVariables];
+    std::unique_ptr<char[]> pColType(new char[nVariables]);
     for (nVar=0; nVar<nVariables; nVar++)
         pColType[nVar] = mbInteger ? 'I' : 'C';
 
@@ -290,25 +284,25 @@ void SAL_CALL CoinMPSolver::solve() throw(uno::RuntimeException, std::exception)
 
     HPROB hProb = CoinCreateProblem("");
     int nResult = CoinLoadProblem( hProb, nVariables, nRows, nMatrixPos, 0,
-                    nObjectSense, nObjectConst, pObjectCoeffs,
-                    pLowerBounds, pUpperBounds, pRowType, pRHS, nullptr,
-                    pMatrixBegin, pMatrixCount, pMatrixIndex, pMatrix,
+                    nObjectSense, nObjectConst, pObjectCoeffs.get(),
+                    pLowerBounds.get(), pUpperBounds.get(), pRowType.get(), pRHS.get(), nullptr,
+                    pMatrixBegin.get(), pMatrixCount.get(), pMatrixIndex.get(), pMatrix.get(),
                     nullptr, nullptr, nullptr );
     if (nResult == SOLV_CALL_SUCCESS)
     {
-        nResult = CoinLoadInteger( hProb, pColType );
+        nResult = CoinLoadInteger( hProb, pColType.get() );
     }
 
-    delete[] pColType;
-    delete[] pMatrixIndex;
-    delete[] pMatrix;
-    delete[] pMatrixCount;
-    delete[] pMatrixBegin;
-    delete[] pUpperBounds;
-    delete[] pLowerBounds;
-    delete[] pRowType;
-    delete[] pRHS;
-    delete[] pObjectCoeffs;
+    pColType.reset();
+    pMatrixIndex.reset();
+    pMatrix.reset();
+    pMatrixCount.reset();
+    pMatrixBegin.reset();
+    pUpperBounds.reset();
+    pLowerBounds.reset();
+    pRowType.reset();
+    pRHS.reset();
+    pObjectCoeffs.reset();
 
     CoinSetRealOption( hProb, COIN_REAL_MAXSECONDS, mnTimeout );
     CoinSetRealOption( hProb, COIN_REAL_MIPMAXSEC, mnTimeout );
@@ -357,7 +351,7 @@ void SAL_CALL CoinMPSolver::solve() throw(uno::RuntimeException, std::exception)
     CoinUnloadProblem( hProb );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_Calc_CoinMPSolver_get_implementation(
     css::uno::XComponentContext *,
     css::uno::Sequence<css::uno::Any> const &)

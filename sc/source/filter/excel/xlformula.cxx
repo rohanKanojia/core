@@ -17,16 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xlformula.hxx"
+#include <xlformula.hxx>
 
-#include <algorithm>
-#include "compiler.hxx"
-#include "rangenam.hxx"
-#include "token.hxx"
-#include "tokenarray.hxx"
-#include "xestream.hxx"
-#include "xistream.hxx"
-#include "xlroot.hxx"
+#include <refdata.hxx>
+#include <tokenarray.hxx>
+#include <xestream.hxx>
+#include <xistream.hxx>
+#include <xlroot.hxx>
 
 #include <comphelper/string.hxx>
 #include <svl/sharedstringpool.hxx>
@@ -213,6 +210,9 @@ static const XclFunctionInfo saFuncTable_2[] =
     { ocIsLogical,          198,    1,  1,  V, { VR }, 0, nullptr },
     { ocDBCount2,           199,    3,  3,  V, { RO, RR }, 0, nullptr },
     { ocCurrency,           204,    1,  2,  V, { VR }, EXC_FUNCFLAG_IMPORTONLY, nullptr },
+    { ocFindB,              205,    2,  3,  V, { VR }, 0, nullptr },
+    { ocSearchB,            206,    2,  3,  V, { VR }, 0, nullptr },
+    { ocReplaceB,           207,    4,  4,  V, { VR }, 0, nullptr },
     { ocLeftB,              208,    1,  2,  V, { VR }, 0, nullptr },
     { ocRightB,             209,    1,  2,  V, { VR }, 0, nullptr },
     { ocMidB,               210,    3,  3,  V, { VR }, 0, nullptr },
@@ -259,7 +259,7 @@ static const XclFunctionInfo saFuncTable_4[] =
     { ocRank,               216,    2,  3,  V, { VR, RO, VR }, 0, nullptr },
     { ocDB,                 247,    4,  5,  V, { VR }, 0, nullptr },
     { ocFrequency,          252,    2,  2,  A, { RA }, 0, nullptr },
-    { ocErrorType,          261,    1,  1,  V, { VR }, 0, nullptr },
+    { ocErrorType_ODF,      261,    1,  1,  V, { VR }, 0, nullptr },
     { ocAveDev,             269,    1,  MX, V, { RX }, 0, nullptr },
     { ocBetaDist,           270,    3,  5,  V, { VR }, 0, nullptr },
     { ocGammaLn,            271,    1,  1,  V, { VR }, 0, nullptr },
@@ -332,7 +332,7 @@ static const XclFunctionInfo saFuncTable_4[] =
     { ocIsOdd,              255,    1,  MX, R, { RO_E, RO }, EXC_FUNCFLAG_EXPORTONLY | EXC_FUNCFLAG_ADDINEQUIV, EXC_FUNCNAME_ADDIN( "Analysis.getIsodd" ) },
     { ocGCD,                255,    1,  MX, R, { RO_E, RO }, EXC_FUNCFLAG_EXPORTONLY | EXC_FUNCFLAG_ADDINEQUIV, EXC_FUNCNAME_ADDIN( "Analysis.getGcd" ) },
     { ocLCM,                255,    1,  MX, R, { RO_E, RO }, EXC_FUNCFLAG_EXPORTONLY | EXC_FUNCFLAG_ADDINEQUIV, EXC_FUNCNAME_ADDIN( "Analysis.getLcm" ) },
-    { ocEffective,          255,    1,  MX, R, { RO_E, RO }, EXC_FUNCFLAG_EXPORTONLY | EXC_FUNCFLAG_ADDINEQUIV, EXC_FUNCNAME_ADDIN( "Analysis.getEffect" ) },
+    { ocEffect,             255,    1,  MX, R, { RO_E, RO }, EXC_FUNCFLAG_EXPORTONLY | EXC_FUNCFLAG_ADDINEQUIV, EXC_FUNCNAME_ADDIN( "Analysis.getEffect" ) },
     { ocCumPrinc,           255,    1,  MX, R, { RO_E, RO }, EXC_FUNCFLAG_EXPORTONLY | EXC_FUNCFLAG_ADDINEQUIV, EXC_FUNCNAME_ADDIN( "Analysis.getCumprinc" ) },
     { ocCumIpmt,            255,    1,  MX, R, { RO_E, RO }, EXC_FUNCFLAG_EXPORTONLY | EXC_FUNCFLAG_ADDINEQUIV, EXC_FUNCNAME_ADDIN( "Analysis.getCumipmt" ) },
     { ocNominal,            255,    1,  MX, R, { RO_E, RO }, EXC_FUNCFLAG_EXPORTONLY | EXC_FUNCFLAG_ADDINEQUIV, EXC_FUNCNAME_ADDIN( "Analysis.getNominal" ) },
@@ -407,6 +407,9 @@ static const XclFunctionInfo saFuncTable_Oox[] =
 
 #define EXC_FUNCENTRY_V_VR_IMPORT( opcode, minparam, maxparam, flags, asciiname ) \
     { opcode, NOID, minparam,     maxparam,     V, { VR },       EXC_FUNCFLAG_IMPORTONLY|(flags), EXC_FUNCNAME( asciiname ) }
+
+#define EXC_FUNCENTRY_V_RO_EXPORT( opcode, minparam, maxparam, flags, asciiname ) \
+    { opcode,  255, (minparam)+1, (maxparam)+1, V, { RO_E, RO }, EXC_FUNCFLAG_EXPORTONLY|(flags), EXC_FUNCNAME( asciiname ) }
 
 #define EXC_FUNCENTRY_A_VR( opcode, minparam, maxparam, flags, asciiname ) \
     { opcode, NOID, minparam,     maxparam,     A, { VR },       EXC_FUNCFLAG_IMPORTONLY|(flags), EXC_FUNCNAME( asciiname ) }, \
@@ -524,6 +527,7 @@ static const XclFunctionInfo saFuncTable_2013[] =
     EXC_FUNCENTRY_V_VR(         ocBitRshift,     2,  2,  0,  "BITRSHIFT" ),
     EXC_FUNCENTRY_V_VR(         ocBitXor,        2,  2,  0,  "BITXOR" ),
     EXC_FUNCENTRY_V_VR(         ocCeil_Math,     1,  3,  0,  "CEILING.MATH" ),
+    EXC_FUNCENTRY_V_RO_EXPORT(  ocCeil,          1,  3,  0,  "CEILING.MATH" ),
     EXC_FUNCENTRY_V_VR(         ocCombinA,       2,  2,  0,  "COMBINA" ),
     EXC_FUNCENTRY_V_VR_IMPORT(  ocCot,           1,  1,  0,  "COT" ),
     EXC_FUNCENTRY_V_VR_IMPORT(  ocCotHyp,        1,  1,  0,  "COTH" ),
@@ -538,6 +542,7 @@ static const XclFunctionInfo saFuncTable_2013[] =
     EXC_FUNCENTRY_V_VR(         ocNoName,        3,  3,  0,  "FINV" ),
     EXC_FUNCENTRY_V_VR(         ocFilterXML,     2,  2,  0,  "FILTERXML" ),
     EXC_FUNCENTRY_V_VR(         ocFloor_Math,    1,  3,  0,  "FLOOR.MATH" ),
+    EXC_FUNCENTRY_V_RO_EXPORT(  ocFloor,         1,  3,  0,  "FLOOR.MATH" ),
     EXC_FUNCENTRY_V_RO(         ocFormula,       1,  1,  0,  "FORMULATEXT" ),
     EXC_FUNCENTRY_V_VR(         ocGamma,         1,  1,  0,  "GAMMA" ),
     EXC_FUNCENTRY_V_VR(         ocGauss,         1,  1,  0,  "GAUSS" ),
@@ -550,7 +555,7 @@ static const XclFunctionInfo saFuncTable_2013[] =
     EXC_FUNCENTRY_V_VR(         ocIsoWeeknum,    1,  1,  0,  "ISOWEEKNUM" ),
     EXC_FUNCENTRY_A_VR(         ocMatrixUnit,    1,  1,  0,  "MUNIT" ),
     EXC_FUNCENTRY_V_VR(         ocNumberValue,   1,  3,  0,  "NUMBERVALUE" ),
-    EXC_FUNCENTRY_V_VR(         ocDuration,      3,  3,  0,  "PDURATION" ),
+    EXC_FUNCENTRY_V_VR(         ocPDuration,     3,  3,  0,  "PDURATION" ),
     EXC_FUNCENTRY_V_VR(         ocPermutationA,  2,  2,  0,  "PERMUTATIONA" ),
     EXC_FUNCENTRY_V_VR(         ocPhi,           1,  1,  0,  "PHI" ),
     EXC_FUNCENTRY_V_VR(         ocRRI,           3,  3,  0,  "RRI" ),
@@ -569,6 +574,7 @@ static const XclFunctionInfo saFuncTable_2013[] =
 /** Functions new in Excel 2016.
 
     See https://support.office.com/en-us/article/Forecasting-functions-897a2fe9-6595-4680-a0b0-93e0308d5f6e?ui=en-US&rs=en-US&ad=US#_forecast.ets
+    and  https://support.office.com/en-us/article/What-s-New-and-Improved-in-Office-2016-for-Office-365-95c8d81d-08ba-42c1-914f-bca4603e1426?ui=en-US&rs=en-US&ad=US
 
     @See sc/source/filter/oox/formulabase.cxx saFuncTable2016 for V,VR,RO,...
  */
@@ -578,7 +584,13 @@ static const XclFunctionInfo saFuncTable_2016[] =
     EXC_FUNCENTRY_V_VR(  ocForecast_ETS_PIA,    3,  7,  0,  "FORECAST.ETS.CONFINT" ),
     EXC_FUNCENTRY_V_VR(  ocForecast_ETS_SEA,    2,  4,  0,  "FORECAST.ETS.SEASONALITY" ),
     EXC_FUNCENTRY_V_VR(  ocForecast_ETS_STA,    3,  6,  0,  "FORECAST.ETS.STAT" ),
-    EXC_FUNCENTRY_V_VR(  ocForecast_LIN,        3,  3,  0,  "FORECAST.LINEAR" )
+    EXC_FUNCENTRY_V_VR(  ocForecast_LIN,        3,  3,  0,  "FORECAST.LINEAR" ),
+    EXC_FUNCENTRY_V_VR(  ocConcat_MS,           1,  MX, 0,  "CONCAT" ),
+    EXC_FUNCENTRY_V_VR(  ocTextJoin_MS,         3,  MX, 0,  "TEXTJOIN" ),
+    EXC_FUNCENTRY_V_VR(  ocIfs_MS,              2,  MX, 0,  "IFS" ),
+    EXC_FUNCENTRY_V_VR(  ocSwitch_MS,           3,  MX, 0,  "SWITCH" ),
+    EXC_FUNCENTRY_V_VR(  ocMinIfs_MS,           3,  MX, 0,  "MINIFS" ),
+    EXC_FUNCENTRY_V_VR(  ocMaxIfs_MS,           3,  MX, 0,  "MAXIFS" )
 };
 
 #define EXC_FUNCENTRY_ODF( opcode, minparam, maxparam, flags, asciiname ) \
@@ -598,18 +610,37 @@ static const XclFunctionInfo saFuncTable_Odf[] =
     { opcode, NOID, minparam,     maxparam,     V, { VR },       EXC_FUNCFLAG_IMPORTONLY|(flags), EXC_FUNCNAME( asciiname ) }, \
     { opcode,  255, (minparam)+1, (maxparam)+1, V, { RO_E, RO }, EXC_FUNCFLAG_EXPORTONLY|(flags), EXC_FUNCNAME( asciiname ) }
 
+// Import Broken Raw ... even without leading _xlfn.
+#define EXC_FUNCENTRY_OOO_IBR( opcode, minparam, maxparam, flags, asciiname ) \
+    { opcode, NOID, minparam,     maxparam,     V, { VR },       EXC_FUNCFLAG_IMPORTONLY|(flags), asciiname }
+
 /** Functions defined by Calc, but not in OpenFormula nor supported by Excel. */
 static const XclFunctionInfo saFuncTable_OOoLO[] =
 {
-    EXC_FUNCENTRY_OOO( ocConvert,       3,  3,  0,  "ORG.OPENOFFICE.CONVERT" ),
+    EXC_FUNCENTRY_OOO( ocErrorType,     1,  1,  0,  "ORG.OPENOFFICE.ERRORTYPE" ),
+    EXC_FUNCENTRY_OOO_IBR( ocErrorType, 1,  1,  0,  "ERRORTYPE" ),      // was written wrongly, read it
+    EXC_FUNCENTRY_OOO( ocMultiArea,     1, MX,  0,  "ORG.OPENOFFICE.MULTIRANGE" ),
+    EXC_FUNCENTRY_OOO_IBR( ocMultiArea, 1, MX,  0,  "MULTIRANGE" ),     // was written wrongly, read it
+    EXC_FUNCENTRY_OOO( ocBackSolver,    3,  3,  0,  "ORG.OPENOFFICE.GOALSEEK" ),
+    EXC_FUNCENTRY_OOO_IBR( ocBackSolver,3,  3,  0,  "GOALSEEK" ),       // was written wrongly, read it
+    EXC_FUNCENTRY_OOO( ocEasterSunday,  1,  1,  0,  "ORG.OPENOFFICE.EASTERSUNDAY" ),
+    EXC_FUNCENTRY_OOO_IBR( ocEasterSunday,1,1,  0,  "EASTERSUNDAY" ),   // was written wrongly, read it
+    EXC_FUNCENTRY_OOO( ocCurrent,       0,  0,  0,  "ORG.OPENOFFICE.CURRENT" ),
+    EXC_FUNCENTRY_OOO_IBR( ocCurrent,   0,  0,  0,  "CURRENT" ),        // was written wrongly, read it
+    EXC_FUNCENTRY_OOO( ocStyle,         1,  3,  0,  "ORG.OPENOFFICE.STYLE" ),
+    EXC_FUNCENTRY_OOO_IBR( ocStyle,     1,  3,  0,  "STYLE" ),          // was written wrongly, read it
+    EXC_FUNCENTRY_OOO( ocConvertOOo,    3,  3,  0,  "ORG.OPENOFFICE.CONVERT" ),
     EXC_FUNCENTRY_OOO( ocColor,         3,  4,  0,  "ORG.LIBREOFFICE.COLOR" ),
     EXC_FUNCENTRY_OOO( ocRawSubtract,   2, MX,  0,  "ORG.LIBREOFFICE.RAWSUBTRACT" ),
     EXC_FUNCENTRY_OOO( ocWeeknumOOo,    2,  2,  0,  "ORG.LIBREOFFICE.WEEKNUM_OOO" ),
     EXC_FUNCENTRY_OOO( ocForecast_ETS_MUL, 3,  6,  0,  "ORG.LIBREOFFICE.FORECAST.ETS.MULT" ),
     EXC_FUNCENTRY_OOO( ocForecast_ETS_PIM, 3,  7,  0,  "ORG.LIBREOFFICE.FORECAST.ETS.PI.MULT" ),
-    EXC_FUNCENTRY_OOO( ocForecast_ETS_STM, 3,  6,  0,  "ORG.LIBREOFFICE.FORECAST.ETS.STAT.MULT" )
+    EXC_FUNCENTRY_OOO( ocForecast_ETS_STM, 3,  6,  0,  "ORG.LIBREOFFICE.FORECAST.ETS.STAT.MULT" ),
+    EXC_FUNCENTRY_OOO( ocRoundSig,      2,  2,  0,  "ORG.LIBREOFFICE.ROUNDSIG" ),
+    EXC_FUNCENTRY_OOO( ocRegex,         2,  4,  0,  "ORG.LIBREOFFICE.REGEX" )
 };
 
+#undef EXC_FUNCENTRY_OOO_IBR
 #undef EXC_FUNCENTRY_OOO
 
 XclFunctionProvider::XclFunctionProvider( const XclRoot& rRoot )
@@ -622,21 +653,21 @@ XclFunctionProvider::XclFunctionProvider( const XclRoot& rRoot )
         from earlier tables. */
     XclBiff eBiff = rRoot.GetBiff();
     if( eBiff >= EXC_BIFF2 )
-        (this->*pFillFunc)( saFuncTable_2, STATIC_ARRAY_END( saFuncTable_2 ) );
+        (this->*pFillFunc)(saFuncTable_2, saFuncTable_2 + SAL_N_ELEMENTS(saFuncTable_2));
     if( eBiff >= EXC_BIFF3 )
-        (this->*pFillFunc)( saFuncTable_3, STATIC_ARRAY_END( saFuncTable_3 ) );
+        (this->*pFillFunc)(saFuncTable_3, saFuncTable_3 + SAL_N_ELEMENTS(saFuncTable_3));
     if( eBiff >= EXC_BIFF4 )
-        (this->*pFillFunc)( saFuncTable_4, STATIC_ARRAY_END( saFuncTable_4 ) );
+        (this->*pFillFunc)(saFuncTable_4, saFuncTable_4 + SAL_N_ELEMENTS(saFuncTable_4));
     if( eBiff >= EXC_BIFF5 )
-        (this->*pFillFunc)( saFuncTable_5, STATIC_ARRAY_END( saFuncTable_5 ) );
+        (this->*pFillFunc)(saFuncTable_5, saFuncTable_5 + SAL_N_ELEMENTS(saFuncTable_5));
     if( eBiff >= EXC_BIFF8 )
-        (this->*pFillFunc)( saFuncTable_8, STATIC_ARRAY_END( saFuncTable_8 ) );
-    (this->*pFillFunc)( saFuncTable_Oox, STATIC_ARRAY_END( saFuncTable_Oox ) );
-    (this->*pFillFunc)( saFuncTable_2010, STATIC_ARRAY_END( saFuncTable_2010 ) );
-    (this->*pFillFunc)( saFuncTable_2013, STATIC_ARRAY_END( saFuncTable_2013 ) );
-    (this->*pFillFunc)( saFuncTable_2016, STATIC_ARRAY_END( saFuncTable_2016 ) );
-    (this->*pFillFunc)( saFuncTable_Odf, STATIC_ARRAY_END( saFuncTable_Odf ) );
-    (this->*pFillFunc)( saFuncTable_OOoLO, STATIC_ARRAY_END( saFuncTable_OOoLO ) );
+        (this->*pFillFunc)(saFuncTable_8, saFuncTable_8 + SAL_N_ELEMENTS(saFuncTable_8));
+    (this->*pFillFunc)(saFuncTable_Oox, saFuncTable_Oox + SAL_N_ELEMENTS(saFuncTable_Oox));
+    (this->*pFillFunc)(saFuncTable_2010, saFuncTable_2010 + SAL_N_ELEMENTS(saFuncTable_2010));
+    (this->*pFillFunc)(saFuncTable_2013, saFuncTable_2013 + SAL_N_ELEMENTS(saFuncTable_2013));
+    (this->*pFillFunc)(saFuncTable_2016, saFuncTable_2016 + SAL_N_ELEMENTS(saFuncTable_2016));
+    (this->*pFillFunc)(saFuncTable_Odf, saFuncTable_Odf + SAL_N_ELEMENTS(saFuncTable_Odf));
+    (this->*pFillFunc)(saFuncTable_OOoLO, saFuncTable_OOoLO + SAL_N_ELEMENTS(saFuncTable_OOoLO));
 }
 
 const XclFunctionInfo* XclFunctionProvider::GetFuncInfoFromXclFunc( sal_uInt16 nXclFunc ) const
@@ -714,7 +745,7 @@ void XclTokenArray::ReadSize( XclImpStream& rStrm )
 void XclTokenArray::ReadArray( XclImpStream& rStrm )
 {
     if( !maTokVec.empty() )
-        rStrm.Read( &maTokVec.front(), GetSize() );
+        rStrm.Read(maTokVec.data(), GetSize());
 }
 
 void XclTokenArray::Read( XclImpStream& rStrm )
@@ -731,9 +762,9 @@ void XclTokenArray::WriteSize( XclExpStream& rStrm ) const
 void XclTokenArray::WriteArray( XclExpStream& rStrm ) const
 {
     if( !maTokVec.empty() )
-        rStrm.Write( &maTokVec.front(), GetSize() );
+        rStrm.Write(maTokVec.data(), GetSize());
     if( !maExtDataVec.empty() )
-        rStrm.Write( &maExtDataVec.front(), maExtDataVec.size() );
+        rStrm.Write(maExtDataVec.data(), maExtDataVec.size());
 }
 
 void XclTokenArray::Write( XclExpStream& rStrm ) const
@@ -840,7 +871,6 @@ bool XclTokenArrayHelper::GetString( OUString& rString, const ScTokenArray& rScT
 bool XclTokenArrayHelper::GetStringList( OUString& rStringList, const ScTokenArray& rScTokArr, sal_Unicode cSep )
 {
     bool bRet = true;
-    OUString aString;
     XclTokenArrayIterator aIt( rScTokArr, true );
     enum { STATE_START, STATE_STR, STATE_SEP, STATE_END } eState = STATE_START;
     while( eState != STATE_END ) switch( eState )
@@ -849,13 +879,16 @@ bool XclTokenArrayHelper::GetStringList( OUString& rStringList, const ScTokenArr
             eState = aIt.Is() ? STATE_STR : STATE_END;
         break;
         case STATE_STR:
+        {
+            OUString aString;
             bRet = GetTokenString( aString, *aIt );
             if( bRet ) rStringList += aString ;
             eState = (bRet && (++aIt).Is()) ? STATE_SEP : STATE_END;
-        break;
+            break;
+        }
         case STATE_SEP:
             bRet = aIt->GetOpCode() == ocSep;
-            if( bRet ) rStringList += OUString(cSep);
+            if( bRet ) rStringList += OUStringLiteral1(cSep);
             eState = (bRet && (++aIt).Is()) ? STATE_STR : STATE_END;
         break;
         default:;
@@ -864,22 +897,22 @@ bool XclTokenArrayHelper::GetStringList( OUString& rStringList, const ScTokenArr
 }
 
 void XclTokenArrayHelper::ConvertStringToList(
-    ScTokenArray& rScTokArr, svl::SharedStringPool& rSPool, sal_Unicode cStringSep, bool bTrimLeadingSpaces )
+    ScTokenArray& rScTokArr, svl::SharedStringPool& rSPool, sal_Unicode cStringSep )
 {
     OUString aString;
     if( GetString( aString, rScTokArr ) )
     {
         rScTokArr.Clear();
-        sal_Int32 nTokenCnt = comphelper::string::getTokenCount(aString, cStringSep);
+        if (aString.isEmpty())
+            return;
         sal_Int32 nStringIx = 0;
-        for( sal_Int32 nToken = 0; nToken < nTokenCnt; ++nToken )
+        for (;;)
         {
             OUString aToken( aString.getToken( 0, cStringSep, nStringIx ) );
-            if( bTrimLeadingSpaces )
-                aToken = comphelper::string::stripStart(aToken, ' ');
-            if( nToken > 0 )
-                rScTokArr.AddOpCode( ocSep );
-            rScTokArr.AddString(rSPool.intern(aToken));
+            rScTokArr.AddString(rSPool.intern(comphelper::string::stripStart(aToken, ' ')));
+            if (nStringIx<0)
+                break;
+            rScTokArr.AddOpCode( ocSep );
         }
     }
 }
@@ -888,7 +921,7 @@ void XclTokenArrayHelper::ConvertStringToList(
 
 namespace {
 
-inline bool lclGetAddress( ScAddress& rAddress, const FormulaToken& rToken, const ScAddress& rPos )
+bool lclGetAddress( ScAddress& rAddress, const FormulaToken& rToken, const ScAddress& rPos )
 {
     OpCode eOpCode = rToken.GetOpCode();
     bool bIsSingleRef = (eOpCode == ocPush) && (rToken.GetType() == svSingleRef);

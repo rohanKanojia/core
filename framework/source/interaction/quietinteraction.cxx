@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "interaction/quietinteraction.hxx"
+#include <interaction/quietinteraction.hxx>
 
 #include <com/sun/star/task/XInteractionAbort.hpp>
 #include <com/sun/star/task/XInteractionApprove.hpp>
@@ -30,9 +30,7 @@
 
 #include <vcl/svapp.hxx>
 
-#ifndef __RSC
-#include <tools/errinf.hxx>
-#endif
+#include <vcl/errinf.hxx>
 
 namespace framework{
 
@@ -41,7 +39,7 @@ QuietInteraction::QuietInteraction()
 {
 }
 
-void SAL_CALL QuietInteraction::handle( const css::uno::Reference< css::task::XInteractionRequest >& xRequest ) throw( css::uno::RuntimeException, std::exception )
+void SAL_CALL QuietInteraction::handle( const css::uno::Reference< css::task::XInteractionRequest >& xRequest )
 {
     // safe the request for outside analyzing every time!
     css::uno::Any aRequest = xRequest->getRequest();
@@ -75,8 +73,8 @@ void SAL_CALL QuietInteraction::handle( const css::uno::Reference< css::task::XI
             xFOptions.set( lContinuations[i], css::uno::UNO_QUERY );
     }
 
-    // differ between abortable interactions (error, unknown filter ...)
-    // and other ones (ambigous but not unknown filter ...)
+    // differ between abortable interactions (error, unknown filter...)
+    // and other ones (ambiguous but not unknown filter...)
     css::task::ErrorCodeRequest          aErrorCodeRequest;
     css::document::LockedDocumentRequest aLockedDocumentRequest;
     css::document::FilterOptionsRequest  aFilterOptionsRequest;
@@ -85,7 +83,7 @@ void SAL_CALL QuietInteraction::handle( const css::uno::Reference< css::task::XI
     {
         // warnings can be ignored   => approve
         // errors must break loading => abort
-        bool bWarning = (aErrorCodeRequest.ErrCode & ERRCODE_WARNING_MASK) == ERRCODE_WARNING_MASK;
+        bool bWarning = ErrCode(aErrorCodeRequest.ErrCode).IsWarning();
         if (xApprove.is() && bWarning)
             xApprove->select();
         else

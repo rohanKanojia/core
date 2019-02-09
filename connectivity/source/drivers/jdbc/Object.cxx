@@ -17,18 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "java/lang/Class.hxx"
+#include <java/lang/Class.hxx>
 #include <connectivity/CommonTools.hxx>
 #include <com/sun/star/uno/Exception.hpp>
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
-#include "java/tools.hxx"
-#include "java/sql/SQLException.hxx"
-#include <osl/mutex.hxx>
+#include <com/sun/star/logging/LogLevel.hpp>
+#include <java/tools.hxx>
+#include <java/sql/SQLException.hxx>
 #include <osl/thread.h>
-#include "java/LocalRef.hxx"
-#include "resource/jdbc_log.hrc"
+#include <java/LocalRef.hxx>
+#include <strings.hxx>
 
 #include <comphelper/logging.hxx>
+#include <cppuhelper/exc_hlp.hxx>
 
 #include <memory>
 
@@ -40,7 +41,7 @@ using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::lang;
 
 
-::rtl::Reference< jvmaccess::VirtualMachine > getJavaVM2(const ::rtl::Reference< jvmaccess::VirtualMachine >& _rVM = ::rtl::Reference< jvmaccess::VirtualMachine >(),
+static ::rtl::Reference< jvmaccess::VirtualMachine > const & getJavaVM2(const ::rtl::Reference< jvmaccess::VirtualMachine >& _rVM = ::rtl::Reference< jvmaccess::VirtualMachine >(),
                                                         bool _bSet = false)
 {
     static ::rtl::Reference< jvmaccess::VirtualMachine > s_VM;
@@ -70,7 +71,7 @@ SDBThreadAttach::~SDBThreadAttach()
 {
 }
 
-oslInterlockedCount& getJavaVMRefCount()
+static oslInterlockedCount& getJavaVMRefCount()
 {
     static oslInterlockedCount s_nRefCount = 0;
     return s_nRefCount;
@@ -115,7 +116,7 @@ java_lang_Object::java_lang_Object( JNIEnv * pXEnv, jobject myObj )
         object = pXEnv->NewGlobalRef( myObj );
 }
 
-java_lang_Object::~java_lang_Object()
+java_lang_Object::~java_lang_Object() COVERITY_NOEXCEPT_FALSE
 {
     if( object )
     {
@@ -197,13 +198,13 @@ namespace
 }
 
 
-void java_lang_Object::ThrowLoggedSQLException( const ::comphelper::ResourceBasedEventLogger& _rLogger, JNIEnv* _pEnvironment,
+void java_lang_Object::ThrowLoggedSQLException( const ::comphelper::EventLogger& _rLogger, JNIEnv* _pEnvironment,
     const Reference< XInterface >& _rxContext )
 {
     SQLException aException;
     if ( lcl_translateJNIExceptionToUNOException( _pEnvironment, _rxContext, aException ) )
     {
-        _rLogger.log( ::com::sun::star::logging::LogLevel::SEVERE, STR_LOG_THROWING_EXCEPTION, aException.Message, aException.SQLState, aException.ErrorCode );
+        _rLogger.log( css::logging::LogLevel::SEVERE, STR_LOG_THROWING_EXCEPTION, aException.Message, aException.SQLState, aException.ErrorCode );
         throw aException;
     }
 }
@@ -223,7 +224,9 @@ void java_lang_Object::ThrowRuntimeException( JNIEnv* _pEnvironment, const Refer
     }
     catch (const SQLException& e)
     {
-        throw WrappedTargetRuntimeException(e.Message, e.Context, makeAny(e));
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw css::lang::WrappedTargetRuntimeException( e.Message,
+                        e.Context, anyEx );
     }
 }
 
@@ -252,7 +255,7 @@ void java_lang_Object::obtainMethodId_throwRuntime(JNIEnv* _pEnv,const char* _pM
 
 bool java_lang_Object::callBooleanMethod( const char* _pMethodName, jmethodID& _inout_MethodID ) const
 {
-    jboolean out( sal_False );
+    jboolean out( false );
 
     SDBThreadAttach t;
     OSL_ENSURE( t.pEnv, "java_lang_Object::callBooleanMethod: no Java environment anymore!" );
@@ -266,7 +269,7 @@ bool java_lang_Object::callBooleanMethod( const char* _pMethodName, jmethodID& _
 
 bool java_lang_Object::callBooleanMethodWithIntArg( const char* _pMethodName, jmethodID& _inout_MethodID, sal_Int32 _nArgument ) const
 {
-    jboolean out( sal_False );
+    jboolean out( false );
     SDBThreadAttach t;
     OSL_ENSURE( t.pEnv, "java_lang_Object::callBooleanMethodWithIntArg: no Java environment anymore!" );
     obtainMethodId_throwSQL(t.pEnv, _pMethodName,"(I)Z", _inout_MethodID);
@@ -292,7 +295,7 @@ sal_Int32 java_lang_Object::callIntMethod_ThrowSQL(const char* _pMethodName, jme
     // call method
     jint out( t.pEnv->CallIntMethod( object, _inout_MethodID ) );
     ThrowSQLException( t.pEnv, nullptr );
-    return (sal_Int32)out;
+    return static_cast<sal_Int32>(out);
 }
 
 sal_Int32 java_lang_Object::callIntMethod_ThrowRuntime(const char* _pMethodName, jmethodID& _inout_MethodID) const
@@ -303,7 +306,7 @@ sal_Int32 java_lang_Object::callIntMethod_ThrowRuntime(const char* _pMethodName,
     // call method
     jint out( t.pEnv->CallIntMethod( object, _inout_MethodID ) );
     ThrowRuntimeException(t.pEnv, nullptr);
-    return (sal_Int32)out;
+    return static_cast<sal_Int32>(out);
 }
 
 sal_Int32 java_lang_Object::callIntMethodWithIntArg_ThrowSQL( const char* _pMethodName, jmethodID& _inout_MethodID,sal_Int32 _nArgument ) const
@@ -314,7 +317,7 @@ sal_Int32 java_lang_Object::callIntMethodWithIntArg_ThrowSQL( const char* _pMeth
     // call method
     jint out( t.pEnv->CallIntMethod( object, _inout_MethodID , _nArgument) );
     ThrowSQLException( t.pEnv, nullptr );
-    return (sal_Int32)out;
+    return static_cast<sal_Int32>(out);
 }
 
 sal_Int32 java_lang_Object::callIntMethodWithIntArg_ThrowRuntime( const char* _pMethodName, jmethodID& _inout_MethodID,sal_Int32 _nArgument ) const
@@ -325,7 +328,7 @@ sal_Int32 java_lang_Object::callIntMethodWithIntArg_ThrowRuntime( const char* _p
     // call method
     jint out( t.pEnv->CallIntMethod( object, _inout_MethodID , _nArgument) );
     ThrowRuntimeException(t.pEnv, nullptr);
-    return (sal_Int32)out;
+    return static_cast<sal_Int32>(out);
 }
 
 void java_lang_Object::callVoidMethod_ThrowSQL( const char* _pMethodName, jmethodID& _inout_MethodID) const
@@ -461,14 +464,14 @@ sal_Int32 java_lang_Object::callIntMethodWithStringArg( const char* _pMethodName
     // call method
     jint out = t.pEnv->CallIntMethod( object, _inout_MethodID , str.get());
     ThrowSQLException( t.pEnv, nullptr );
-    return (sal_Int32)out;
+    return static_cast<sal_Int32>(out);
 }
 
 jclass java_lang_Object::findMyClass(const char* _pClassName)
 {
     // the class must be fetched only once, therefore static
     SDBThreadAttach t;
-    jclass tempClass = t.pEnv->FindClass(_pClassName); OSL_ENSURE(tempClass,"Java : FindClass nicht erfolgreich!");
+    jclass tempClass = t.pEnv->FindClass(_pClassName); OSL_ENSURE(tempClass,"Java : FindClass not successful!");
     if(!tempClass)
     {
         t.pEnv->ExceptionDescribe();

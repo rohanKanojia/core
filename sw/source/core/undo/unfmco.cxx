@@ -17,19 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "doc.hxx"
-#include "swundo.hxx"
-#include "pam.hxx"
-#include "ndtxt.hxx"
+#include <doc.hxx>
+#include <swundo.hxx>
+#include <pam.hxx>
+#include <ndtxt.hxx>
 #include <UndoCore.hxx>
-#include "rolbck.hxx"
-#include "docary.hxx"
+#include <rolbck.hxx>
+#include <docary.hxx>
 
 SwUndoFormatColl::SwUndoFormatColl( const SwPaM& rRange,
                               SwFormatColl* pColl,
                               const bool bReset,
                               const bool bResetListAttrs )
-    : SwUndo( UNDO_SETFMTCOLL ),
+    : SwUndo( SwUndoId::SETFMTCOLL, rRange.GetDoc() ),
       SwUndRng( rRange ),
       pHistory( new SwHistory ),
       pFormatColl( pColl ),
@@ -43,7 +43,6 @@ SwUndoFormatColl::SwUndoFormatColl( const SwPaM& rRange,
 
 SwUndoFormatColl::~SwUndoFormatColl()
 {
-    delete pHistory;
 }
 
 void SwUndoFormatColl::UndoImpl(::sw::UndoRedoContext & rContext)
@@ -68,13 +67,13 @@ void SwUndoFormatColl::RepeatImpl(::sw::RepeatContext & rContext)
     DoSetFormatColl(rContext.GetDoc(), rContext.GetRepeatPaM());
 }
 
-void SwUndoFormatColl::DoSetFormatColl(SwDoc & rDoc, SwPaM & rPaM)
+void SwUndoFormatColl::DoSetFormatColl(SwDoc & rDoc, SwPaM const & rPaM)
 {
     // Only one TextFrameColl can be applied to a section, thus request only in
     // this array.
 
     // does the format still exist?
-    if( rDoc.GetTextFormatColls()->Contains(static_cast<SwTextFormatColl*>(pFormatColl)) )
+    if (rDoc.GetTextFormatColls()->IsAlive(static_cast<SwTextFormatColl*>(pFormatColl)))
     {
         rDoc.SetTextFormatColl(rPaM, static_cast<SwTextFormatColl*>(pFormatColl), mbReset,
                            mbResetListAttrs);

@@ -56,16 +56,9 @@
 */
 
 #include <string.h>
-
-#if defined( _MSC_VER )
-#pragma warning(once: 4068)
-#endif
+#include <algorithm>
 
 #include "levdis.hxx"
-
-#ifdef SOLARIS
-#undef min
-#endif
 
 #define LEVDISBIG   (nLimit + 1)    // Return value if distance > nLimit
 #define LEVDISDOUBLEBUF 2048        // no doubling atop this border
@@ -75,7 +68,7 @@ static sal_Int32 Impl_WLD_StringLen( const sal_Unicode* pStr )
     const sal_Unicode* pTempStr = pStr;
     while( *pTempStr )
         pTempStr++;
-    return (sal_Int32)(pTempStr-pStr);
+    return static_cast<sal_Int32>(pTempStr-pStr);
 }
 
 // Distance from string to pattern
@@ -319,9 +312,9 @@ int WLevDistance::LCM( int a, int b )
 inline int WLevDistance::Min3( int x, int y, int z )
 {
     if ( x < y )
-        return( x < z ? x : z );
+        return std::min(x, z);
     else
-        return( y < z ? y : z );
+        return std::min(y, z);
 }
 
 // The value in the middle
@@ -329,20 +322,20 @@ int WLevDistance::Mid3( int x, int y, int z )
 {
     int min = Min3(x,y,z);
     if ( x == min )
-        return( y < z ? y : z);
+        return std::min(y, z);
     else if ( y == min )
-        return( x < z ? x : z);
+        return std::min(x, z);
     else        // z == min
-        return( x < y ? x : y);
+        return std::min(x, y);
 }
 
 // Maximum of three values
 int WLevDistance::Max3( int x, int y, int z )
 {
     if ( x > y )
-        return( x > z ? x : z );
+        return std::max(x, z);
     else
-        return( y > z ? y : z );
+        return std::max(y, z);
 }
 
 // initialize data from CTOR

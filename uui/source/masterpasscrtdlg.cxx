@@ -18,59 +18,52 @@
  */
 
 #include <sal/macros.h>
-#include <vcl/layout.hxx>
-
-#include "ids.hrc"
+#include <unotools/resmgr.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
+#include <strings.hrc>
 #include "masterpasscrtdlg.hxx"
 
 // MasterPasswordCreateDialog---------------------------------------------------
 
 
-IMPL_LINK_NOARG_TYPED(MasterPasswordCreateDialog, EditHdl_Impl, Edit&, void)
+IMPL_LINK_NOARG(MasterPasswordCreateDialog, EditHdl_Impl, weld::Entry&, void)
 {
-    m_pOKBtn->Enable( m_pEDMasterPasswordCrt->GetText().getLength() >= nMinLen );
+    m_xOKBtn->set_sensitive(m_xEDMasterPasswordCrt->get_text().getLength() >= 1);
 }
 
-IMPL_LINK_NOARG_TYPED(MasterPasswordCreateDialog, OKHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(MasterPasswordCreateDialog, OKHdl_Impl, weld::Button&, void)
 {
     // compare both passwords and show message box if there are not equal!!
-    if( m_pEDMasterPasswordCrt->GetText() == m_pEDMasterPasswordRepeat->GetText() )
-        EndDialog( RET_OK );
+    if (m_xEDMasterPasswordCrt->get_text() == m_xEDMasterPasswordRepeat->get_text())
+        m_xDialog->response(RET_OK);
     else
     {
-        OUString aErrorMsg( ResId( STR_ERROR_PASSWORDS_NOT_IDENTICAL, *pResourceMgr ));
-        ScopedVclPtrInstance< MessageDialog > aErrorBox(this, aErrorMsg);
-        aErrorBox->Execute();
-        m_pEDMasterPasswordCrt->SetText( OUString() );
-        m_pEDMasterPasswordRepeat->SetText( OUString() );
-        m_pEDMasterPasswordCrt->GrabFocus();
+        OUString aErrorMsg(Translate::get(STR_ERROR_PASSWORDS_NOT_IDENTICAL, rResLocale));
+        std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(m_xDialog.get(),
+                                                  VclMessageType::Warning, VclButtonsType::Ok,
+                                                  aErrorMsg));
+        xErrorBox->run();
+        m_xEDMasterPasswordCrt->set_text( OUString() );
+        m_xEDMasterPasswordRepeat->set_text( OUString() );
+        m_xEDMasterPasswordCrt->grab_focus();
     }
 }
 
-MasterPasswordCreateDialog::MasterPasswordCreateDialog(vcl::Window* pParent, ResMgr* pResMgr)
-    : ModalDialog(pParent, "SetMasterPasswordDialog", "uui/ui/setmasterpassworddlg.ui")
-    , pResourceMgr(pResMgr)
-    , nMinLen(1)
+MasterPasswordCreateDialog::MasterPasswordCreateDialog(weld::Window* pParent, const std::locale& rLocale)
+    : GenericDialogController(pParent, "uui/ui/setmasterpassworddlg.ui", "SetMasterPasswordDialog")
+    , rResLocale(rLocale)
+    , m_xEDMasterPasswordCrt(m_xBuilder->weld_entry("password1"))
+    , m_xEDMasterPasswordRepeat(m_xBuilder->weld_entry("password2"))
+    , m_xOKBtn(m_xBuilder->weld_button("ok"))
 {
-    get(m_pEDMasterPasswordCrt, "password1");
-    get(m_pEDMasterPasswordRepeat, "password2");
-    get(m_pOKBtn, "ok");
-    m_pOKBtn->Enable( false );
-    m_pOKBtn->SetClickHdl( LINK( this, MasterPasswordCreateDialog, OKHdl_Impl ) );
-    m_pEDMasterPasswordCrt->SetModifyHdl( LINK( this, MasterPasswordCreateDialog, EditHdl_Impl ) );
+    m_xOKBtn->set_sensitive(false);
+    m_xOKBtn->connect_clicked( LINK( this, MasterPasswordCreateDialog, OKHdl_Impl ) );
+    m_xEDMasterPasswordCrt->connect_changed( LINK( this, MasterPasswordCreateDialog, EditHdl_Impl ) );
 }
 
 MasterPasswordCreateDialog::~MasterPasswordCreateDialog()
 {
-    disposeOnce();
-}
-
-void MasterPasswordCreateDialog::dispose()
-{
-    m_pEDMasterPasswordCrt.clear();
-    m_pEDMasterPasswordRepeat.clear();
-    m_pOKBtn.clear();
-    ModalDialog::dispose();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

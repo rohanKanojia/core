@@ -19,7 +19,7 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_UI_INC_SQLEDIT_HXX
 #define INCLUDED_DBACCESS_SOURCE_UI_INC_SQLEDIT_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <rtl/ref.hxx>
 #include <svtools/editsyntaxhighlighter.hxx>
@@ -33,7 +33,7 @@ namespace com { namespace sun { namespace star { namespace beans {
 namespace dbaui
 {
     class OQueryTextView;
-    class OSqlEdit : public MultiLineEditSyntaxHighlight, public utl::ConfigurationListener
+    class OSqlEdit final : public MultiLineEditSyntaxHighlight, public utl::ConfigurationListener
     {
     private:
         class ChangesListener;
@@ -51,21 +51,19 @@ namespace dbaui
         osl::Mutex              m_mutex;
         css::uno::Reference<  css::beans::XMultiPropertySet > m_notifier;
 
-        DECL_LINK_TYPED(OnUndoActionTimer, Timer*, void);
-        DECL_LINK_TYPED(OnInvalidateTimer, Timer*, void);
+        DECL_LINK(OnUndoActionTimer, Timer*, void);
+        DECL_LINK(OnInvalidateTimer, Timer*, void);
 
-    private:
         void            ImplSetFont();
 
-    protected:
         virtual void KeyInput( const KeyEvent& rKEvt ) override;
         virtual void GetFocus() override;
 
-        DECL_LINK_TYPED(ModifyHdl, Edit&, void);
+        DECL_LINK(ModifyHdl, Edit&, void);
 
     public:
-        OSqlEdit( OQueryTextView* pParent,  WinBits nWinStyle = WB_LEFT | WB_VSCROLL |WB_BORDER);
-        virtual ~OSqlEdit();
+        OSqlEdit( OQueryTextView* pParent);
+        virtual ~OSqlEdit() override;
         virtual void dispose() override;
 
         // Edit overridables
@@ -81,8 +79,7 @@ namespace dbaui
         void stopTimer();
         void startTimer();
 
-        virtual void    ConfigurationChanged( utl::ConfigurationBroadcaster*, sal_uInt32 ) override;
-        using MultiLineEditSyntaxHighlight::Notify;
+        virtual void    ConfigurationChanged( utl::ConfigurationBroadcaster*, ConfigurationHints ) override;
     };
 }
 

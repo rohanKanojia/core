@@ -23,6 +23,7 @@
 #include <com/sun/star/embed/OLEEmbeddedObjectFactory.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/datatransfer/DataFlavor.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/ucb/CommandAbortedException.hpp>
 
 #include <osl/thread.h>
@@ -35,20 +36,21 @@
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
-#include <xdialogcreator.hxx>
+#include "xdialogcreator.hxx"
 #include <oleembobj.hxx>
 
 
 #ifdef _WIN32
 
 #include <oledlg.h>
+#include <vcl/winscheduler.hxx>
 
 class InitializedOleGuard
 {
 public:
     InitializedOleGuard()
     {
-        if ( !SUCCEEDED( OleInitialize( NULL ) ) )
+        if ( !SUCCEEDED( OleInitialize( nullptr ) ) )
             throw css::uno::RuntimeException();
     }
 
@@ -68,7 +70,7 @@ typedef UINT STDAPICALLTYPE OleUIInsertObjectA_Type(LPOLEUIINSERTOBJECTA);
 using namespace ::com::sun::star;
 using namespace ::comphelper;
 
-uno::Sequence< sal_Int8 > GetRelatedInternalID_Impl( const uno::Sequence< sal_Int8 >& aClassID )
+static uno::Sequence< sal_Int8 > GetRelatedInternalID_Impl( const uno::Sequence< sal_Int8 >& aClassID )
 {
     // Writer
     if ( MimeConfigurationHelper::ClassIDsEqual( aClassID, MimeConfigurationHelper::GetSequenceClassID( SO3_SW_OLE_EMBED_CLASSID_60 ) )
@@ -104,7 +106,7 @@ uno::Sequence< sal_Int8 > GetRelatedInternalID_Impl( const uno::Sequence< sal_In
 }
 
 
-uno::Sequence< OUString > SAL_CALL MSOLEDialogObjectCreator::impl_staticGetSupportedServiceNames()
+uno::Sequence< OUString > MSOLEDialogObjectCreator::impl_staticGetSupportedServiceNames()
 {
     uno::Sequence< OUString > aRet(2);
     aRet[0] = "com.sun.star.embed.MSOLEObjectSystemCreator";
@@ -113,13 +115,13 @@ uno::Sequence< OUString > SAL_CALL MSOLEDialogObjectCreator::impl_staticGetSuppo
 }
 
 
-OUString SAL_CALL MSOLEDialogObjectCreator::impl_staticGetImplementationName()
+OUString MSOLEDialogObjectCreator::impl_staticGetImplementationName()
 {
     return OUString("com.sun.star.comp.embed.MSOLEObjectSystemCreator");
 }
 
 
-uno::Reference< uno::XInterface > SAL_CALL MSOLEDialogObjectCreator::impl_staticCreateSelfInstance(
+uno::Reference< uno::XInterface > MSOLEDialogObjectCreator::impl_staticCreateSelfInstance(
             const uno::Reference< lang::XMultiServiceFactory >& xServiceManager )
 {
     return uno::Reference< uno::XInterface >( *new MSOLEDialogObjectCreator( xServiceManager ) );
@@ -130,10 +132,6 @@ embed::InsertedObjectInfo SAL_CALL MSOLEDialogObjectCreator::createInstanceByDia
             const uno::Reference< embed::XStorage >& xStorage,
             const OUString& sEntName,
             const uno::Sequence< beans::PropertyValue >& aInObjArgs )
-    throw ( lang::IllegalArgumentException,
-            io::IOException,
-            uno::Exception,
-            uno::RuntimeException )
 {
     embed::InsertedObjectInfo aObjectInfo;
     uno::Sequence< beans::PropertyValue > aObjArgs( aInObjArgs );
@@ -169,105 +167,106 @@ embed::InsertedObjectInfo SAL_CALL MSOLEDialogObjectCreator::createInstanceByDia
 
 
     ::osl::Module aOleDlgLib;
-    if( !aOleDlgLib.load( OUString( "oledlg" ) ))
+    if( !aOleDlgLib.load( "oledlg" ))
         throw uno::RuntimeException();
 
-    OleUIInsertObjectA_Type * pInsertFct = (OleUIInsertObjectA_Type *)
-                                aOleDlgLib.getSymbol( OUString( "OleUIInsertObjectA" ));
+    OleUIInsertObjectA_Type * pInsertFct = reinterpret_cast<OleUIInsertObjectA_Type *>(
+                                aOleDlgLib.getSymbol( "OleUIInsertObjectA" ));
     if( !pInsertFct )
         throw uno::RuntimeException();
 
+    // Disable any event loop shortcuts by enabling a real timer.
+    // This way the native windows dialog won't block our own processing.
+    WinScheduler::SetForceRealTimer();
+
     uTemp=pInsertFct(&io);
 
-    if ( OLEUI_OK == uTemp )
-    {
-        if (io.dwFlags & IOF_SELECTCREATENEW)
-        {
-            uno::Reference< embed::XEmbeddedObjectCreator > xEmbCreator = embed::EmbeddedObjectCreator::create( comphelper::getComponentContext(m_xFactory) );
-
-            uno::Sequence< sal_Int8 > aClassID = MimeConfigurationHelper::GetSequenceClassID( io.clsid.Data1,
-                                                                     io.clsid.Data2,
-                                                                     io.clsid.Data3,
-                                                                     io.clsid.Data4[0],
-                                                                     io.clsid.Data4[1],
-                                                                     io.clsid.Data4[2],
-                                                                     io.clsid.Data4[3],
-                                                                     io.clsid.Data4[4],
-                                                                     io.clsid.Data4[5],
-                                                                     io.clsid.Data4[6],
-                                                                     io.clsid.Data4[7] );
-
-            aClassID = GetRelatedInternalID_Impl( aClassID );
-
-            //TODO: retrieve ClassName
-            OUString aClassName;
-            aObjectInfo.Object.set( xEmbCreator->createInstanceInitNew( aClassID, aClassName, xStorage, sEntName, aObjArgs ),
-                                    uno::UNO_QUERY );
-        }
-        else
-        {
-            OUString aFileName = OStringToOUString( OString( szFile ), osl_getThreadTextEncoding() );
-            OUString aFileURL;
-            if ( osl::FileBase::getFileURLFromSystemPath( aFileName, aFileURL ) != osl::FileBase::E_None )
-                throw uno::RuntimeException();
-
-            uno::Sequence< beans::PropertyValue > aMediaDescr( 1 );
-            aMediaDescr[0].Name = "URL";
-            aMediaDescr[0].Value <<= aFileURL;
-
-            // TODO: use config helper for type detection
-            uno::Reference< embed::XEmbeddedObjectCreator > xEmbCreator;
-            ::comphelper::MimeConfigurationHelper aHelper( comphelper::getComponentContext(m_xFactory) );
-
-            if ( aHelper.AddFilterNameCheckOwnFile( aMediaDescr ) )
-                xEmbCreator = embed::EmbeddedObjectCreator::create( comphelper::getComponentContext(m_xFactory) );
-            else
-                xEmbCreator = embed::OLEEmbeddedObjectFactory::create( comphelper::getComponentContext(m_xFactory) );
-
-            if ( !xEmbCreator.is() )
-                throw uno::RuntimeException();
-
-            aObjectInfo.Object.set( xEmbCreator->createInstanceInitFromMediaDescriptor( xStorage, sEntName, aMediaDescr, aObjArgs ),
-                                    uno::UNO_QUERY );
-        }
-
-        if ( ( io.dwFlags & IOF_CHECKDISPLAYASICON) && io.hMetaPict != NULL )
-        {
-            METAFILEPICT* pMF = ( METAFILEPICT* )GlobalLock( io.hMetaPict );
-            if ( pMF )
-            {
-                sal_uInt32 nBufSize = GetMetaFileBitsEx( pMF->hMF, 0, NULL );
-                uno::Sequence< sal_Int8 > aMetafile( nBufSize + 22 );
-                sal_uInt8* pBuf = (sal_uInt8*)( aMetafile.getArray() );
-                *( (long* )pBuf ) = 0x9ac6cdd7L;
-                *( (short* )( pBuf+6 )) = ( SHORT ) 0;
-                *( (short* )( pBuf+8 )) = ( SHORT ) 0;
-                *( (short* )( pBuf+10 )) = ( SHORT ) pMF->xExt;
-                *( (short* )( pBuf+12 )) = ( SHORT ) pMF->yExt;
-                *( (short* )( pBuf+14 )) = ( USHORT ) 2540;
-
-                if ( nBufSize && nBufSize == GetMetaFileBitsEx( pMF->hMF, nBufSize, pBuf+22 ) )
-                {
-                    datatransfer::DataFlavor aFlavor(
-                        OUString( "application/x-openoffice-wmf;windows_formatname=\"Image WMF\"" ),
-                        OUString( "Image WMF" ),
-                        cppu::UnoType<uno::Sequence< sal_Int8 >>::get() );
-
-                    aObjectInfo.Options.realloc( 2 );
-                    aObjectInfo.Options[0].Name = "Icon";
-                    aObjectInfo.Options[0].Value <<= aMetafile;
-                    aObjectInfo.Options[1].Name = "IconFormat";
-                    aObjectInfo.Options[1].Value <<= aFlavor;
-                }
-
-                GlobalUnlock( io.hMetaPict );
-            }
-        }
-    }
-    else
+    if ( OLEUI_OK != uTemp )
         throw ucb::CommandAbortedException();
 
-    OSL_ENSURE( aObjectInfo.Object.is(), "No object was created!\n" );
+    if (io.dwFlags & IOF_SELECTCREATENEW)
+    {
+        uno::Reference< embed::XEmbeddedObjectCreator > xEmbCreator = embed::EmbeddedObjectCreator::create( comphelper::getComponentContext(m_xFactory) );
+
+        uno::Sequence< sal_Int8 > aClassID = MimeConfigurationHelper::GetSequenceClassID( io.clsid.Data1,
+                                                                                          io.clsid.Data2,
+                                                                                          io.clsid.Data3,
+                                                                                          io.clsid.Data4[0],
+                                                                                          io.clsid.Data4[1],
+                                                                                          io.clsid.Data4[2],
+                                                                                          io.clsid.Data4[3],
+                                                                                          io.clsid.Data4[4],
+                                                                                          io.clsid.Data4[5],
+                                                                                          io.clsid.Data4[6],
+                                                                                          io.clsid.Data4[7] );
+
+        aClassID = GetRelatedInternalID_Impl( aClassID );
+
+        //TODO: retrieve ClassName
+        aObjectInfo.Object.set( xEmbCreator->createInstanceInitNew( aClassID, OUString(), xStorage, sEntName, aObjArgs ),
+                                uno::UNO_QUERY );
+    }
+    else
+    {
+        OUString aFileName = OStringToOUString( OString( szFile ), osl_getThreadTextEncoding() );
+        OUString aFileURL;
+        if ( osl::FileBase::getFileURLFromSystemPath( aFileName, aFileURL ) != osl::FileBase::E_None )
+            throw uno::RuntimeException();
+
+        uno::Sequence< beans::PropertyValue > aMediaDescr( 1 );
+        aMediaDescr[0].Name = "URL";
+        aMediaDescr[0].Value <<= aFileURL;
+
+        // TODO: use config helper for type detection
+        uno::Reference< embed::XEmbeddedObjectCreator > xEmbCreator;
+        ::comphelper::MimeConfigurationHelper aHelper( comphelper::getComponentContext(m_xFactory) );
+
+        if ( aHelper.AddFilterNameCheckOwnFile( aMediaDescr ) )
+            xEmbCreator = embed::EmbeddedObjectCreator::create( comphelper::getComponentContext(m_xFactory) );
+        else
+            xEmbCreator = embed::OLEEmbeddedObjectFactory::create( comphelper::getComponentContext(m_xFactory) );
+
+        if ( !xEmbCreator.is() )
+            throw uno::RuntimeException();
+
+        aObjectInfo.Object.set( xEmbCreator->createInstanceInitFromMediaDescriptor( xStorage, sEntName, aMediaDescr, aObjArgs ),
+                                uno::UNO_QUERY );
+    }
+
+    if ( ( io.dwFlags & IOF_CHECKDISPLAYASICON) && io.hMetaPict != nullptr )
+    {
+        METAFILEPICT* pMF = static_cast<METAFILEPICT*>(GlobalLock( io.hMetaPict ));
+        if ( pMF )
+        {
+            sal_uInt32 nBufSize = GetMetaFileBitsEx( pMF->hMF, 0, nullptr );
+            uno::Sequence< sal_Int8 > aMetafile( nBufSize + 22 );
+            sal_Int8* pBuf = aMetafile.getArray();
+            *reinterpret_cast<long*>( pBuf ) = 0x9ac6cdd7L;
+            *reinterpret_cast<short*>( pBuf+6 ) = SHORT(0);
+            *reinterpret_cast<short*>( pBuf+8 ) = SHORT(0);
+            *reinterpret_cast<short*>( pBuf+10 ) = static_cast<SHORT>(pMF->xExt);
+            *reinterpret_cast<short*>( pBuf+12 ) = static_cast<SHORT>(pMF->yExt);
+            *reinterpret_cast<short*>( pBuf+14 ) = USHORT(2540);
+
+            if ( nBufSize && nBufSize == GetMetaFileBitsEx( pMF->hMF, nBufSize, pBuf+22 ) )
+            {
+                datatransfer::DataFlavor aFlavor(
+                    "application/x-openoffice-wmf;windows_formatname=\"Image WMF\"",
+                    "Image WMF",
+                    cppu::UnoType<uno::Sequence< sal_Int8 >>::get() );
+
+                aObjectInfo.Options.realloc( 2 );
+                aObjectInfo.Options[0].Name = "Icon";
+                aObjectInfo.Options[0].Value <<= aMetafile;
+                aObjectInfo.Options[1].Name = "IconFormat";
+                aObjectInfo.Options[1].Value <<= aFlavor;
+            }
+
+            GlobalUnlock( io.hMetaPict );
+        }
+    }
+
+    OSL_ENSURE( aObjectInfo.Object.is(), "No object was created!" );
     if ( !aObjectInfo.Object.is() )
         throw uno::RuntimeException();
 
@@ -282,10 +281,6 @@ embed::InsertedObjectInfo SAL_CALL MSOLEDialogObjectCreator::createInstanceInitF
                 const uno::Reference< embed::XStorage >& xStorage,
                 const OUString& sEntryName,
                 const uno::Sequence< beans::PropertyValue >& aObjectArgs )
-        throw ( lang::IllegalArgumentException,
-                io::IOException,
-                uno::Exception,
-                uno::RuntimeException )
 {
     embed::InsertedObjectInfo aObjectInfo;
 
@@ -304,11 +299,7 @@ embed::InsertedObjectInfo SAL_CALL MSOLEDialogObjectCreator::createInstanceInitF
                     static_cast< ::cppu::OWeakObject* > ( new OleEmbeddedObject( m_xFactory ) ),
                     uno::UNO_QUERY );
 
-    uno::Reference< embed::XEmbedPersist > xPersist( xResult, uno::UNO_QUERY );
-
-    if ( !xPersist.is() )
-        throw uno::RuntimeException(); // TODO: the interface must be supported by own document objects
-
+    uno::Reference< embed::XEmbedPersist > xPersist( xResult, uno::UNO_QUERY_THROW );
     xPersist->setPersistentEntry( xStorage,
                                     sEntryName,
                                     embed::EntryInitModes::DEFAULT_INIT,
@@ -319,7 +310,7 @@ embed::InsertedObjectInfo SAL_CALL MSOLEDialogObjectCreator::createInstanceInitF
 
     // TODO/LATER: in case of iconify object the icon should be stored in aObjectInfo
 
-    OSL_ENSURE( aObjectInfo.Object.is(), "No object was created!\n" );
+    OSL_ENSURE( aObjectInfo.Object.is(), "No object was created!" );
     if ( !aObjectInfo.Object.is() )
         throw uno::RuntimeException();
 
@@ -331,21 +322,18 @@ embed::InsertedObjectInfo SAL_CALL MSOLEDialogObjectCreator::createInstanceInitF
 
 
 OUString SAL_CALL MSOLEDialogObjectCreator::getImplementationName()
-    throw ( uno::RuntimeException )
 {
     return impl_staticGetImplementationName();
 }
 
 
 sal_Bool SAL_CALL MSOLEDialogObjectCreator::supportsService( const OUString& ServiceName )
-    throw ( uno::RuntimeException )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 
 uno::Sequence< OUString > SAL_CALL MSOLEDialogObjectCreator::getSupportedServiceNames()
-    throw ( uno::RuntimeException )
 {
     return impl_staticGetSupportedServiceNames();
 }

@@ -26,7 +26,6 @@
 #include <connectivity/sdbcx/VTable.hxx>
 #include "NCatalog.hxx"
 #include "NConnection.hxx"
-#include <comphelper/extract.hxx>
 #include <connectivity/dbtools.hxx>
 #include <connectivity/dbexception.hxx>
 #include <cppuhelper/interfacecontainer.h>
@@ -47,13 +46,11 @@ using namespace dbtools;
 
 ObjectType OEvoabTables::createObject(const OUString& aName)
 {
-    OUString aSchema(  "%" );
-
     Sequence< OUString > aTypes { "TABLE" };
 
-    Reference< XResultSet > xResult = m_xMetaData->getTables(Any(),aSchema,aName,aTypes);
+    Reference< XResultSet > xResult = m_xMetaData->getTables(Any(),"%",aName,aTypes);
 
-    ObjectType xRet = nullptr;
+    ObjectType xRet;
     if(xResult.is())
     {
         Reference< XRow > xRow(xResult,UNO_QUERY);
@@ -61,12 +58,13 @@ ObjectType OEvoabTables::createObject(const OUString& aName)
         {
             OEvoabTable* pRet = new OEvoabTable(
                     this,
-                    static_cast<OEvoabConnection*>(static_cast<OEvoabCatalog&>(m_rParent).getConnection()),
+                    static_cast<OEvoabCatalog&>(m_rParent).getConnection(),
                     aName,
                     xRow->getString(4),
                     xRow->getString(5),
+                    "",
                     "");
-                    xRet = pRet;
+            xRet = pRet;
         }
     }
 
@@ -75,14 +73,14 @@ ObjectType OEvoabTables::createObject(const OUString& aName)
     return xRet;
 }
 
-void OEvoabTables::impl_refresh(  ) throw(RuntimeException)
+void OEvoabTables::impl_refresh(  )
 {
     static_cast<OEvoabCatalog&>(m_rParent).refreshTables();
 }
 
 void OEvoabTables::disposing()
 {
-m_xMetaData.clear();
+    m_xMetaData.clear();
     OCollection::disposing();
 }
 

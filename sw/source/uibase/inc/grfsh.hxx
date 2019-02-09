@@ -19,6 +19,7 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_GRFSH_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_GRFSH_HXX
 
+#include <memory>
 #include "frmsh.hxx"
 
 class SwGrfShell: public SwBaseShell
@@ -35,14 +36,14 @@ private:
 
 public:
     void Execute(SfxRequest& rRequest);
-    void ExecAttr(SfxRequest& rRequest);
+    void ExecAttr(SfxRequest const & rRequest);
     void GetAttrState(SfxItemSet& rRequest);
 
-    void ExecuteRotation(SfxRequest &rRequest);
+    void ExecuteRotation(SfxRequest const &rRequest);
     void GetAttrStateForRotation(SfxItemSet& rRequest);
 
     SwGrfShell(SwView &rView);
-    virtual ~SwGrfShell();
+    virtual ~SwGrfShell() override;
 };
 
 #endif

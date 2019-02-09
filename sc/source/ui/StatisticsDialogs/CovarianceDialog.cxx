@@ -8,14 +8,11 @@
  *
  */
 
-#include "docsh.hxx"
-#include "reffact.hxx"
-#include "strload.hxx"
-#include "StatisticsDialogs.hrc"
-
-#include "CovarianceDialog.hxx"
-
-static const char strCovarianceTemplate[] = "=COVAR(%VAR1%; %VAR2%)";
+#include <docsh.hxx>
+#include <reffact.hxx>
+#include <CovarianceDialog.hxx>
+#include <scresid.hxx>
+#include <strings.hrc>
 
 ScCovarianceDialog::ScCovarianceDialog(
                         SfxBindings* pSfxBindings, SfxChildWindow* pChildWindow,
@@ -25,7 +22,7 @@ ScCovarianceDialog::ScCovarianceDialog(
             "CovarianceDialog", "modules/scalc/ui/covariancedialog.ui" )
 {}
 
-sal_Int16 ScCovarianceDialog::GetUndoNameId()
+const char* ScCovarianceDialog::GetUndoNameId()
 {
     return STR_COVARIANCE_UNDO_NAME;
 }
@@ -37,12 +34,12 @@ bool ScCovarianceDialog::Close()
 
 const OUString ScCovarianceDialog::getLabel()
 {
-    return SC_STRLOAD(RID_STATISTICS_DLGS, STR_COVARIANCE_LABEL);
+    return ScResId(STR_COVARIANCE_LABEL);
 }
 
 const OUString ScCovarianceDialog::getTemplate()
 {
-    return OUString(strCovarianceTemplate);
+    return OUString("=COVAR(%VAR1%; %VAR2%)");
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

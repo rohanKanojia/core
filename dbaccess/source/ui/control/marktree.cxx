@@ -17,10 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "marktree.hxx"
-#include "dbu_control.hrc"
+#include <marktree.hxx>
+#include <vcl/treelistentry.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/event.hxx>
 
 namespace dbaui
 {
@@ -42,11 +43,11 @@ OMarkableTreeListBox::~OMarkableTreeListBox()
 
 void OMarkableTreeListBox::dispose()
 {
-    delete m_pCheckButton;
+    m_pCheckButton.reset();
     DBTreeListBox::dispose();
 }
 
-void OMarkableTreeListBox::Paint(vcl::RenderContext& rRenderContext, const Rectangle& _rRect)
+void OMarkableTreeListBox::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& _rRect)
 {
     if (!IsEnabled())
     {
@@ -66,8 +67,8 @@ void OMarkableTreeListBox::Paint(vcl::RenderContext& rRenderContext, const Recta
 
 void OMarkableTreeListBox::InitButtonData()
 {
-    m_pCheckButton = new SvLBoxButtonData( this );
-    EnableCheckButton( m_pCheckButton );
+    m_pCheckButton.reset( new SvLBoxButtonData( this ) );
+    EnableCheckButton( m_pCheckButton.get() );
 }
 
 void OMarkableTreeListBox::KeyInput( const KeyEvent& rKEvt )
@@ -115,7 +116,7 @@ SvButtonState OMarkableTreeListBox::implDetermineState(SvTreeListEntry* _pEntry)
             ++nCheckedChildren;
         ++nChildrenOverall;
 
-        pChildLoop = SvTreeList::NextSibling(pChildLoop);
+        pChildLoop = pChildLoop->NextSibling();
     }
 
     if (pChildLoop)
@@ -129,7 +130,7 @@ SvButtonState OMarkableTreeListBox::implDetermineState(SvTreeListEntry* _pEntry)
         while (pChildLoop)
         {
             implDetermineState(pChildLoop);
-            pChildLoop = SvTreeList::NextSibling(pChildLoop);
+            pChildLoop = pChildLoop->NextSibling();
         }
     }
     else
@@ -158,7 +159,7 @@ void OMarkableTreeListBox::CheckButtons()
     while (pEntry)
     {
         implDetermineState(pEntry);
-        pEntry = SvTreeList::NextSibling(pEntry);
+        pEntry = pEntry->NextSibling();
     }
 }
 
@@ -174,7 +175,7 @@ void OMarkableTreeListBox::checkedButton_noBroadcast(SvTreeListEntry* _pEntry)
     if (GetModel()->HasChildren(_pEntry)) // if it has children, check those too
     {
         SvTreeListEntry* pChildEntry = GetModel()->Next(_pEntry);
-        SvTreeListEntry* pSiblingEntry = SvTreeList::NextSibling(_pEntry);
+        SvTreeListEntry* pSiblingEntry = _pEntry->NextSibling();
         while(pChildEntry && pChildEntry != pSiblingEntry)
         {
             SetCheckButtonState(pChildEntry, eState);
@@ -189,7 +190,7 @@ void OMarkableTreeListBox::checkedButton_noBroadcast(SvTreeListEntry* _pEntry)
         if(GetModel()->HasChildren(pEntry))   // if it has children, check those too
         {
             SvTreeListEntry* pChildEntry = GetModel()->Next(pEntry);
-            SvTreeListEntry* pSiblingEntry = SvTreeList::NextSibling(pEntry);
+            SvTreeListEntry* pSiblingEntry = pEntry->NextSibling();
             while(pChildEntry && pChildEntry != pSiblingEntry)
             {
                 SetCheckButtonState(pChildEntry,eState);

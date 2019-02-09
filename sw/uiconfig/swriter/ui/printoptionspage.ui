@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.16.1 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.20.4 -->
+<interface domain="sw">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkBox" id="PrintOptionsPage">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -34,7 +34,7 @@
                     <property name="row_spacing">6</property>
                     <child>
                       <object class="GtkCheckButton" id="graphics">
-                        <property name="label" translatable="yes">_Images and objects</property>
+                        <property name="label" translatable="yes" context="printoptionspage|graphics">_Images and objects</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -45,13 +45,11 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">0</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="formcontrols">
-                        <property name="label" translatable="yes">Form control_s</property>
+                        <property name="label" translatable="yes" context="printoptionspage|formcontrols">Form control_s</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -62,13 +60,11 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">1</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="background">
-                        <property name="label" translatable="yes">Page ba_ckground</property>
+                        <property name="label" translatable="yes" context="printoptionspage|background">Page ba_ckground</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -79,13 +75,11 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">2</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="inblack">
-                        <property name="label" translatable="yes">Print text in blac_k</property>
+                        <property name="label" translatable="yes" context="printoptionspage|inblack">Print text in blac_k</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -96,13 +90,11 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">3</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="hiddentext">
-                        <property name="label" translatable="yes">Hidden te_xt</property>
+                        <property name="label" translatable="yes" context="printoptionspage|hiddentext">Hidden te_xt</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -113,13 +105,11 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">4</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="textplaceholder">
-                        <property name="label" translatable="yes">Text _placeholder</property>
+                        <property name="label" translatable="yes" context="printoptionspage|textplaceholder">Text _placeholder</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -130,8 +120,6 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">5</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                   </object>
@@ -142,7 +130,7 @@
               <object class="GtkLabel" id="label2">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Contents</property>
+                <property name="label" translatable="yes" context="printoptionspage|label2">Contents</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -152,8 +140,6 @@
           <packing>
             <property name="left_attach">0</property>
             <property name="top_attach">0</property>
-            <property name="width">1</property>
-            <property name="height">1</property>
           </packing>
         </child>
         <child>
@@ -176,7 +162,7 @@
                     <property name="row_spacing">6</property>
                     <child>
                       <object class="GtkCheckButton" id="leftpages">
-                        <property name="label" translatable="yes">_Left pages</property>
+                        <property name="label" translatable="yes" context="printoptionspage|leftpages">_Left pages</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -187,13 +173,11 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">0</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="rightpages">
-                        <property name="label" translatable="yes">_Right pages</property>
+                        <property name="label" translatable="yes" context="printoptionspage|rightpages">_Right pages</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -204,13 +188,11 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">1</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="brochure">
-                        <property name="label" translatable="yes">Broch_ure</property>
+                        <property name="label" translatable="yes" context="printoptionspage|brochure">Broch_ure</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -221,13 +203,11 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">2</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="rtl">
-                        <property name="label" translatable="yes">Right to Left</property>
+                        <property name="label" translatable="yes" context="printoptionspage|rtl">Right to Left</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -239,8 +219,6 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">3</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                   </object>
@@ -251,7 +229,7 @@
               <object class="GtkLabel" id="label10">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Pages</property>
+                <property name="label" translatable="yes" context="printoptionspage|label10">Pages</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -261,8 +239,6 @@
           <packing>
             <property name="left_attach">1</property>
             <property name="top_attach">0</property>
-            <property name="width">1</property>
-            <property name="height">1</property>
           </packing>
         </child>
         <child>
@@ -284,79 +260,71 @@
                     <property name="row_spacing">6</property>
                     <child>
                       <object class="GtkRadioButton" id="none">
-                        <property name="label" translatable="yes">_None</property>
+                        <property name="label" translatable="yes" context="printoptionspage|none">_None</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
                         <property name="use_underline">True</property>
                         <property name="xalign">0</property>
+                        <property name="active">True</property>
                         <property name="draw_indicator">True</property>
-                        <property name="group">only</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">0</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkRadioButton" id="only">
-                        <property name="label" translatable="yes">Comments _only</property>
+                        <property name="label" translatable="yes" context="printoptionspage|only">Comments _only</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
                         <property name="use_underline">True</property>
                         <property name="xalign">0</property>
                         <property name="draw_indicator">True</property>
-                        <property name="group">end</property>
+                        <property name="group">none</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">1</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkRadioButton" id="end">
-                        <property name="label" translatable="yes">End of docu_ment</property>
+                        <property name="label" translatable="yes" context="printoptionspage|end">End of docu_ment</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
                         <property name="use_underline">True</property>
                         <property name="xalign">0</property>
                         <property name="draw_indicator">True</property>
-                        <property name="group">endpage</property>
+                        <property name="group">none</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">2</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkRadioButton" id="endpage">
-                        <property name="label" translatable="yes">_End of page</property>
+                        <property name="label" translatable="yes" context="printoptionspage|endpage">_End of page</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
                         <property name="use_underline">True</property>
                         <property name="xalign">0</property>
                         <property name="draw_indicator">True</property>
-                        <property name="group">inmargins</property>
+                        <property name="group">none</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">3</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkRadioButton" id="inmargins">
-                        <property name="label" translatable="yes">In margins</property>
+                        <property name="label" translatable="yes" context="printoptionspage|inmargins">In margins</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -368,8 +336,6 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">4</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                   </object>
@@ -380,7 +346,7 @@
               <object class="GtkLabel" id="4">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Comments</property>
+                <property name="label" translatable="yes" context="printoptionspage|4">Comments</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -390,8 +356,6 @@
           <packing>
             <property name="left_attach">2</property>
             <property name="top_attach">0</property>
-            <property name="width">1</property>
-            <property name="height">1</property>
           </packing>
         </child>
       </object>
@@ -427,40 +391,34 @@
                       <object class="GtkLabel" id="label5">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">_Fax</property>
+                        <property name="label" translatable="yes" context="printoptionspage|label5">_Fax</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">fax</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">0</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkComboBox" id="fax">
+                      <object class="GtkComboBoxText" id="fax">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
                         <property name="top_attach">0</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="blankpages">
-                    <property name="label" translatable="yes">Print _automatically inserted blank pages</property>
+                    <property name="label" translatable="yes" context="printoptionspage|blankpages">Print _automatically inserted blank pages</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -471,13 +429,11 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="papertray">
-                    <property name="label" translatable="yes">_Paper tray from printer settings</property>
+                    <property name="label" translatable="yes" context="printoptionspage|papertray">_Paper tray from printer settings</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -488,8 +444,6 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
               </object>
@@ -500,7 +454,7 @@
           <object class="GtkLabel" id="label1">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Other</property>
+            <property name="label" translatable="yes" context="printoptionspage|label1">Other</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>

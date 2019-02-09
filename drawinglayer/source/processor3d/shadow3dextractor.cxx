@@ -147,7 +147,7 @@ namespace drawinglayer
                         }
                         else
                         {
-                            a2DHairline = basegfx::tools::createB2DPolygonFromB3DPolygon(rPrimitive.getB3DPolygon(), getViewInformation3D().getObjectToView());
+                            a2DHairline = basegfx::utils::createB2DPolygonFromB3DPolygon(rPrimitive.getB3DPolygon(), getViewInformation3D().getObjectToView());
                         }
 
                         if(a2DHairline.count())
@@ -156,7 +156,7 @@ namespace drawinglayer
                             mpPrimitive2DSequence->push_back(
                                 new primitive2d::PolygonHairlinePrimitive2D(
                                     a2DHairline,
-                                    maPrimitiveColor));
+                                    basegfx::BColor()));
                         }
                     }
                     break;
@@ -178,7 +178,7 @@ namespace drawinglayer
                         }
                         else
                         {
-                            a2DFill = basegfx::tools::createB2DPolyPolygonFromB3DPolyPolygon(rPrimitive.getB3DPolyPolygon(), getViewInformation3D().getObjectToView());
+                            a2DFill = basegfx::utils::createB2DPolyPolygonFromB3DPolyPolygon(rPrimitive.getB3DPolyPolygon(), getViewInformation3D().getObjectToView());
                         }
 
                         if(a2DFill.count())
@@ -187,7 +187,7 @@ namespace drawinglayer
                             mpPrimitive2DSequence->push_back(
                                 new primitive2d::PolyPolygonColorPrimitive2D(
                                     a2DFill,
-                                    maPrimitiveColor));
+                                    basegfx::BColor()));
                         }
                     }
                     break;
@@ -217,7 +217,6 @@ namespace drawinglayer
             maShadowPlaneNormal(),
             maPlanePoint(),
             mfLightPlaneScalar(0.0),
-            maPrimitiveColor(),
             mbShadowProjectionIsValid(false),
             mbConvert(false),
             mbUseProjection(false)
@@ -249,7 +248,7 @@ namespace drawinglayer
 
         Shadow3DExtractingProcessor::~Shadow3DExtractingProcessor()
         {
-            OSL_ENSURE(0 == maPrimitive2DSequence.size(),
+            OSL_ENSURE(maPrimitive2DSequence.empty(),
                 "OOps, someone used Shadow3DExtractingProcessor, but did not fetch the results (!)");
         }
 
@@ -257,7 +256,7 @@ namespace drawinglayer
         {
             basegfx::B2DPolygon aRetval;
 
-            for(sal_uInt32 a(0L); a < rSource.count(); a++)
+            for(sal_uInt32 a(0); a < rSource.count(); a++)
             {
                 // get point, transform to eye coordinate system
                 basegfx::B3DPoint aCandidate(rSource.getB3DPoint(a));
@@ -272,7 +271,7 @@ namespace drawinglayer
                 aCandidate += maLightNormal * fCut;
 
                 // transform to view, use 2d coordinates
-                aCandidate *= getEyeToView();
+                aCandidate *= maEyeToView;
                 aRetval.append(basegfx::B2DPoint(aCandidate.getX(), aCandidate.getY()));
             }
 
@@ -286,7 +285,7 @@ namespace drawinglayer
         {
             basegfx::B2DPolyPolygon aRetval;
 
-            for(sal_uInt32 a(0L); a < rSource.count(); a++)
+            for(sal_uInt32 a(0); a < rSource.count(); a++)
             {
                 aRetval.append(impDoShadowProjection(rSource.getB3DPolygon(a)));
             }

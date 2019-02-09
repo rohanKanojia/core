@@ -61,8 +61,8 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPFRIBBREAKS_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPFRIBBREAKS_HXX
 
-#include "lwpfrib.hxx"
-#include "xfilter/xfparastyle.hxx"
+#include <lwpfrib.hxx>
+#include <xfilter/xfparastyle.hxx>
 #include "lwppara.hxx"
 #include "lwpfribsection.hxx"
 
@@ -70,7 +70,7 @@ class LwpFribPageBreak: public LwpFrib
 {
 public:
     explicit LwpFribPageBreak( LwpPara* pPara );
-    virtual ~LwpFribPageBreak();
+    virtual ~LwpFribPageBreak() override;
     void Read(LwpObjectStream* pObjStrm, sal_uInt16 len) override;
     void RegisterBreakStyle(LwpPara* pPara);
     void ParseLayout();
@@ -81,21 +81,19 @@ private:
     LwpObjectID m_Layout;
     bool m_bLastFrib;
 
-    LwpMasterPage* m_pMasterPage;
+    std::unique_ptr<LwpMasterPage> m_pMasterPage;
 };
 
 class LwpFribLineBreak: public LwpFrib
 {
 public:
     explicit LwpFribLineBreak( LwpPara* pPara ) : LwpFrib(pPara){}
-    virtual ~LwpFribLineBreak(){}
 };
 
 class LwpFribColumnBreak: public LwpFrib
 {
 public:
     explicit LwpFribColumnBreak( LwpPara* pPara ) : LwpFrib(pPara){}
-    virtual ~LwpFribColumnBreak(){}
     void RegisterBreakStyle(LwpPara* pPara);
 };
 

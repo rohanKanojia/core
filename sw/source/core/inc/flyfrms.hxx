@@ -25,20 +25,27 @@
 
 // #i28701#
 class SwFlyAtContentFrame;
+class SwNoTextFrame;
+
+double getLocalFrameRotation_from_SwNoTextFrame(const SwNoTextFrame& rNoTextFrame);
 
 // Base class for those Flys that can "move freely" or better that are not
 // bound in Content.
 class SwFlyFreeFrame : public SwFlyFrame
 {
+private:
     // #i34753# - flag for at-page anchored Writer fly frames
     // to prevent a positioning - call of method <MakeObjPos()> -, if Writer
     // fly frame is already clipped during its format by the object formatter.
-    bool mbNoMakePos;
+    bool            mbNoMakePos : 1;
 
     // #i37068# - flag to prevent move in method <CheckClip(..)>
-    bool mbNoMoveOnCheckClip;
+    bool            mbNoMoveOnCheckClip : 1;
 
     SwRect maUnclippedFrame;
+
+    // RotateFlyFrame3 add TransformableSwFrame
+    std::unique_ptr< TransformableSwFrame >     mpTransformableSwFrame;
 
     void CheckClip( const SwFormatFrameSize &rSz );  //'Emergency' Clipping.
 
@@ -54,6 +61,11 @@ class SwFlyFreeFrame : public SwFlyFrame
     */
     bool HasEnvironmentAutoSize() const;
 
+    // RotateFlyFrame3 - Support for outer Frame of a SwGrfNode
+    // Only for local data extraction. To uniquely access information
+    // for local transformation, use getFrameArea(Print)Transformation
+    double getLocalFrameRotation() const;
+
 protected:
     // #i28701# - new friend class <SwFlyNotify> for access to
     // method <NotifyBackground>
@@ -63,7 +75,7 @@ protected:
     SwFlyFreeFrame( SwFlyFrameFormat*, SwFrame*, SwFrame *pAnchor );
 
     virtual void DestroyImpl() override;
-    virtual ~SwFlyFreeFrame();
+    virtual ~SwFlyFreeFrame() override;
 
 public:
     // #i28701#
@@ -71,23 +83,23 @@ public:
     virtual void MakeAll(vcl::RenderContext* pRenderContext) override;
 
     // #i37068# - accessors for member <mbNoMoveOnCheckClip>
-    inline void SetNoMoveOnCheckClip( const bool _bNewNoMoveOnCheckClip )
+    void SetNoMoveOnCheckClip( const bool _bNewNoMoveOnCheckClip )
     {
         mbNoMoveOnCheckClip = _bNewNoMoveOnCheckClip;
     }
-    inline bool IsNoMoveOnCheckClip() const
+    bool IsNoMoveOnCheckClip() const
     {
         return mbNoMoveOnCheckClip;
     }
     // #i34753# - accessors for member <mbNoMakePos>
-    inline void SetNoMakePos( const bool _bNoMakePos )
+    void SetNoMakePos( const bool _bNoMakePos )
     {
         if ( IsFlyLayFrame() )
         {
             mbNoMakePos = _bNoMakePos;
         }
     }
-    inline bool IsNoMakePos() const
+    bool IsNoMakePos() const
     {
         if ( IsFlyLayFrame() )
         {
@@ -99,12 +111,12 @@ public:
         }
     }
 
-    inline const SwRect& GetUnclippedFrame( ) const
+    const SwRect& GetUnclippedFrame( ) const
     {
         if ( maUnclippedFrame.HasArea( ) )
             return maUnclippedFrame;
         else
-            return Frame();
+            return getFrameArea();
     }
 
     /** method to determine, if a format on the Writer fly frame is possible
@@ -116,6 +128,21 @@ public:
         and its anchor frame isn't inside another Writer fly frame.
     */
     virtual bool IsFormatPossible() const override;
+
+    // RotateFlyFrame3 - Support for Transformations
+    bool isTransformableSwFrame() const { return bool(mpTransformableSwFrame); }
+    TransformableSwFrame* getTransformableSwFrame() { return mpTransformableSwFrame.get(); }
+    const TransformableSwFrame* getTransformableSwFrame() const { return mpTransformableSwFrame.get(); }
+
+    // RotateFlyFrame3 - Support for AutoContour
+    bool supportsAutoContour() const;
+
+    // RotateFlyFrame3 - Support for Transformations
+    virtual basegfx::B2DHomMatrix getFrameAreaTransformation() const override;
+    virtual basegfx::B2DHomMatrix getFramePrintAreaTransformation() const override;
+
+    // RotateFlyFrame3 - Support for Transformations
+    virtual void transform_translate(const Point& rOffset) override;
 };
 
 // Flys that are bound to LayoutFrames and not to Content
@@ -137,7 +164,7 @@ protected:
     virtual void MakeAll(vcl::RenderContext* pRenderContext) override;
 
     // #i28701#
-    virtual bool _InvalidationAllowed( const InvalidationType _nInvalid ) const override;
+    virtual bool InvalidationAllowed( const InvalidationType _nInvalid ) const override;
 
     /** method to assure that anchored object is registered at the correct
         page frame
@@ -172,11 +199,8 @@ class SwFlyInContentFrame : public SwFlyFrame
 {
     Point aRef;  // relative to this point AbsPos is being calculated
 
-    bool bInvalidLayout :1;
-    bool bInvalidContent  :1;
-
     virtual void DestroyImpl() override;
-    virtual ~SwFlyInContentFrame();
+    virtual ~SwFlyInContentFrame() override;
 
 protected:
     virtual void NotifyBackground( SwPageFrame *pPage,
@@ -194,11 +218,7 @@ public:
     void SetRefPoint( const Point& rPoint, const Point &rRelAttr,
         const Point &rRelPos );
     const Point &GetRefPoint() const { return aRef; }
-    const Point GetRelPos() const;
-
-    inline void InvalidateLayout() const;
-    inline void InvalidateContent() const;
-    bool IsInvalid() const { return (bInvalidLayout || bInvalidContent); }
+    Point const & GetRelPos() const;
 
     // (26.11.93, see tabfrm.hxx, but might also be valid for others)
     // For creation of a Fly after a FlyCnt was created _and_ inserted.
@@ -208,25 +228,15 @@ public:
     void RegistFlys();
 
     //see layact.cxx
-    void AddRefOfst( long nOfst ) { aRef.Y() += nOfst; }
+    void AddRefOfst( long nOfst ) { aRef.AdjustY( nOfst ); }
 
     // #i26791#
     virtual void MakeObjPos() override;
 
     // invalidate anchor frame on invalidation of the position, because the
     // position is calculated during the format of the anchor frame
-    virtual void _ActionOnInvalidation( const InvalidationType _nInvalid ) override;
+    virtual void ActionOnInvalidation( const InvalidationType _nInvalid ) override;
 };
-
-inline void SwFlyInContentFrame::InvalidateLayout() const
-{
-    const_cast<SwFlyInContentFrame*>(this)->bInvalidLayout = true;
-}
-inline void SwFlyInContentFrame::InvalidateContent() const
-{
-    const_cast<SwFlyInContentFrame*>(this)->bInvalidContent = true;
-}
-
 
 #endif
 

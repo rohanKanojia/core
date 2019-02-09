@@ -22,11 +22,9 @@
 
 #include <general.h>
 
-#include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/XController.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/util/CloseVetoException.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
 
 // namespaces
@@ -50,15 +48,10 @@ namespace framework{
     @param  xResource
             the object, which should be closed here.
 
-    @param  bDelegateOwnership
-            used at the XCloseable->close() method to define
-            the right owner in case closing failed.
-
     @return [bool]
             sal_True if closing failed.
  */
-inline bool closeIt(const css::uno::Reference< css::uno::XInterface >& xResource         ,
-                       bool                                     bDelegateOwnership)
+inline bool closeIt(const css::uno::Reference< css::uno::XInterface >& xResource)
 {
     css::uno::Reference< css::util::XCloseable > xClose  (xResource, css::uno::UNO_QUERY);
     css::uno::Reference< css::lang::XComponent > xDispose(xResource, css::uno::UNO_QUERY);
@@ -66,7 +59,7 @@ inline bool closeIt(const css::uno::Reference< css::uno::XInterface >& xResource
     try
     {
         if (xClose.is())
-            xClose->close(bDelegateOwnership);
+            xClose->close(false/*bDelegateOwnership*/);
         else
         if (xDispose.is())
             xDispose->dispose();
@@ -81,7 +74,7 @@ inline bool closeIt(const css::uno::Reference< css::uno::XInterface >& xResource
         { throw; } // should not be suppressed!
     catch(const css::uno::Exception&)
         { return false;  } // ??? We defined to return a boolean value instead of throwing exceptions...
-                               // (OK: RuntimeExceptions should not be catched inside the core..)
+                               // (OK: RuntimeExceptions should not be caught inside the core..)
 
     return true;
 }

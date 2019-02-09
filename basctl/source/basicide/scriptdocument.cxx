@@ -17,25 +17,27 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scriptdocument.hxx"
-#include "basobj.hxx"
-#include "basidesh.hrc"
-#include "iderid.hxx"
-#include "dlgeddef.hxx"
-#include "doceventnotifier.hxx"
+#include <memory>
+#include <scriptdocument.hxx>
+#include <basobj.hxx>
+#include <strings.hrc>
+#include <iderid.hxx>
+#include <dlgeddef.hxx>
+#include <doceventnotifier.hxx>
 #include "documentenumeration.hxx"
 
+#include <com/sun/star/ucb/ContentCreationException.hpp>
 #include <com/sun/star/uri/UriReferenceFactory.hpp>
 #include <com/sun/star/util/theMacroExpander.hpp>
 #include <com/sun/star/document/MacroExecMode.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/frame/FrameSearchFlag.hpp>
-#include <com/sun/star/frame/XDesktop.hpp>
-#include <com/sun/star/frame/XModel2.hpp>
 #include <com/sun/star/awt/XWindow2.hpp>
 #include <com/sun/star/document/XEmbeddedScripts.hpp>
 #include <com/sun/star/script/vba/XVBACompatibility.hpp>
 #include <com/sun/star/script/vba/XVBAModuleInfo.hpp>
+#include <com/sun/star/script/ModuleInfo.hpp>
+#include <com/sun/star/script/ModuleType.hpp>
 
 #include <sfx2/objsh.hxx>
 #include <sfx2/bindings.hxx>
@@ -46,16 +48,19 @@
 
 #include <xmlscript/xmldlg_imexp.hxx>
 
+#include <i18nlangtag/languagetag.hxx>
 #include <unotools/syslocale.hxx>
 
 #include <unotools/collatorwrapper.hxx>
 
 #include <tools/diagnose_ex.h>
+#include <tools/debug.hxx>
 
 #include <comphelper/documentinfo.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/propertysequence.hxx>
 
+#include <sal/log.hxx>
 #include <osl/file.hxx>
 #include <rtl/uri.hxx>
 #include <set>
@@ -70,15 +75,13 @@ namespace basctl
     using ::com::sun::star::script::XLibraryContainer;
     using ::com::sun::star::uno::UNO_QUERY_THROW;
     using ::com::sun::star::uno::UNO_SET_THROW;
-    using ::com::sun::star::beans::XPropertySetInfo;
     using ::com::sun::star::uno::Exception;
     using ::com::sun::star::container::XNameContainer;
     using ::com::sun::star::container::NoSuchElementException;
     using ::com::sun::star::uno::UNO_QUERY;
     using ::com::sun::star::task::XStatusIndicator;
-    using ::com::sun::star::uno::makeAny;
+    using ::com::sun::star::uno::Any;
     using ::com::sun::star::script::XLibraryContainer2;
-    using ::com::sun::star::lang::XMultiServiceFactory;
     using ::com::sun::star::uri::UriReferenceFactory;
     using ::com::sun::star::uri::XUriReferenceFactory;
     using ::com::sun::star::uri::XUriReference;
@@ -96,20 +99,12 @@ namespace basctl
     using ::com::sun::star::frame::XDispatchProvider;
     using ::com::sun::star::frame::XDispatch;
     using ::com::sun::star::beans::PropertyValue;
-    using ::com::sun::star::frame::XDesktop;
-    using ::com::sun::star::container::XEnumerationAccess;
-    using ::com::sun::star::container::XEnumeration;
-    using ::com::sun::star::frame::XModel2;
     using ::com::sun::star::awt::XWindow2;
-    using ::com::sun::star::document::XEventListener;
-    using ::com::sun::star::lang::EventObject;
-    using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::document::XEmbeddedScripts;
     using ::com::sun::star::script::ModuleInfo;
     using ::com::sun::star::script::vba::XVBACompatibility;
     using ::com::sun::star::script::vba::XVBAModuleInfo;
 
-    namespace MacroExecMode = ::com::sun::star::document::MacroExecMode;
     namespace FrameSearchFlag = ::com::sun::star::frame::FrameSearchFlag;
 
 
@@ -143,12 +138,9 @@ namespace basctl
         {
             try
             {
-                for (   docs::Controllers::const_iterator controller = _rDocument.aControllers.begin();
-                        controller != _rDocument.aControllers.end();
-                        ++controller
-                    )
+                for (auto const& controller : _rDocument.aControllers)
                 {
-                    Reference< XFrame > xFrame( (*controller)->getFrame(), UNO_SET_THROW );
+                    Reference< XFrame > xFrame( controller->getFrame(), UNO_SET_THROW );
                     Reference< XWindow2 > xContainer( xFrame->getContainerWindow(), UNO_QUERY_THROW );
                     if ( xContainer->isVisible() )
                         return true;
@@ -156,7 +148,7 @@ namespace basctl
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("basctl.basicide");
             }
             return false;
         }
@@ -166,9 +158,7 @@ namespace basctl
             Reference< XEmbeddedScripts > xScripts( _rDocument.xModel, UNO_QUERY );
             if ( !xScripts.is() )
                 return false;
-            if ( !m_bFilterInvisible || impl_isDocumentVisible_nothrow( _rDocument ) )
-                return true;
-            return false;
+            return !m_bFilterInvisible || impl_isDocumentVisible_nothrow( _rDocument );
         }
 
         void lcl_getAllModels_throw( docs::Documents& _out_rModels, bool _bVisibleOnly )
@@ -197,19 +187,19 @@ namespace basctl
     public:
         Impl ();
         explicit Impl(Reference<XModel> const& rxDocument);
-        virtual ~Impl();
+        virtual ~Impl() override;
 
         /** determines whether the instance refers to a valid "document" with script and
             dialog libraries
         */
-        inline  bool    isValid()       const   { return m_bValid; }
+        bool    isValid()       const   { return m_bValid; }
         /** determines whether the instance refers to a non-closed document
         */
-        inline  bool    isAlive()       const   { return m_bValid && ( m_bIsApplication || !m_bDocumentClosed ); }
+        bool    isAlive()       const   { return m_bValid && ( m_bIsApplication || !m_bDocumentClosed ); }
         /// determines whether the "document" refers to the application in real
-        inline  bool    isApplication() const   { return m_bValid && m_bIsApplication; }
+        bool    isApplication() const   { return m_bValid && m_bIsApplication; }
         /// determines whether the document refers to a real document (instead of the application)
-        inline  bool    isDocument()    const   { return m_bValid && !m_bIsApplication; }
+        bool    isDocument()    const   { return m_bValid && !m_bIsApplication; }
 
         /** invalidates the instance
         */
@@ -296,11 +286,7 @@ namespace basctl
         ,m_bDocumentClosed( false )
     {
         if ( _rxDocument.is() )
-        {
-            if ( impl_initDocument_nothrow( _rxDocument ) )
-            {
-            }
-        }
+            impl_initDocument_nothrow( _rxDocument );
     }
 
     ScriptDocument::Impl::~Impl()
@@ -318,7 +304,7 @@ namespace basctl
         m_xDocModify.clear();
         m_xScriptAccess.clear();
 
-        if ( m_pDocListener.get() )
+        if (m_pDocListener)
             m_pDocListener->dispose();
     }
 
@@ -337,7 +323,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
             m_bValid = false;
         }
 
@@ -370,7 +356,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
         return xContainer;
     }
@@ -391,7 +377,7 @@ namespace basctl
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("basctl.basicide");
             }
         }
         return bIsReadOnly;
@@ -424,7 +410,7 @@ namespace basctl
         }
         catch (const css::ucb::ContentCreationException& e)
         {
-            SAL_WARN( "basctl.basicide", "ScriptDocument::getBasicManager: Caught exception: " << e.Message );
+            SAL_WARN( "basctl.basicide", "ScriptDocument::getBasicManager: Caught exception: " << e );
         }
         return nullptr;
     }
@@ -448,11 +434,8 @@ namespace basctl
         try
         {
             Reference< XLibraryContainer > xLibContainer = getLibraryContainer( _eType );
-            if ( isValid() )
-            {
-                if ( xLibContainer.is() )
-                    xContainer.set( xLibContainer->getByName( _rLibName ), UNO_QUERY_THROW );
-            }
+            if ( isValid() && xLibContainer.is() )
+                xContainer.set( xLibContainer->getByName( _rLibName ), UNO_QUERY_THROW );
 
             if ( !xContainer.is() )
                 throw NoSuchElementException();
@@ -467,7 +450,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
 
         return xContainer;
@@ -484,7 +467,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
         return bHas;
     }
@@ -506,7 +489,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
         return xLibrary;
     }
@@ -522,7 +505,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
     }
 
@@ -538,12 +521,15 @@ namespace basctl
                 if ( xLib.is() )
                 {
                     xLib->removeByName( _rModuleName );
+                    Reference< XVBAModuleInfo > xVBAModuleInfo(xLib, UNO_QUERY);
+                    if(xVBAModuleInfo.is() && xVBAModuleInfo->hasModuleInfo(_rModuleName))
+                        xVBAModuleInfo->removeModuleInfo(_rModuleName);
                     return true;
                 }
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("basctl.basicide");
             }
         }
         return false;
@@ -564,7 +550,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
         return false;
     }
@@ -588,7 +574,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
         return false;
     }
@@ -638,7 +624,7 @@ namespace basctl
 
                 // set new name as property
                 Reference< XPropertySet > xDlgPSet( xDialogModel, UNO_QUERY_THROW );
-                xDlgPSet->setPropertyValue( DLGED_PROP_NAME, makeAny( _rNewName ) );
+                xDlgPSet->setPropertyValue( DLGED_PROP_NAME, Any( _rNewName ) );
 
                 // export dialog model
                 xISP = ::xmlscript::exportDialogModel( xDialogModel, aContext, isDocument() ? getDocument() : Reference< XModel >() );
@@ -649,7 +635,7 @@ namespace basctl
             if ( _eType == E_SCRIPTS )
             {
                 Reference< XVBAModuleInfo > xVBAModuleInfo( xLib, UNO_QUERY );
-                if ( xVBAModuleInfo->hasModuleInfo( _rOldName ) )
+                if ( xVBAModuleInfo.is() && xVBAModuleInfo->hasModuleInfo( _rOldName ) )
                 {
                     ModuleInfo sModuleInfo = xVBAModuleInfo->getModuleInfo( _rOldName );
                     xVBAModuleInfo->removeModuleInfo( _rOldName );
@@ -661,7 +647,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
         return false;
     }
@@ -681,12 +667,20 @@ namespace basctl
             if ( _bCreateMain )
                 _out_rNewModuleCode += "Sub Main\n\nEnd Sub\n" ;
 
+            Reference< XVBAModuleInfo > xVBAModuleInfo(xLib, UNO_QUERY);
+            if (xVBAModuleInfo.is())
+            {
+                css::script::ModuleInfo aModuleInfo;
+                aModuleInfo.ModuleType = css::script::ModuleType::NORMAL;
+                xVBAModuleInfo->insertModuleInfo(_rModName, aModuleInfo);
+            }
+
             // insert module into library
-            xLib->insertByName( _rModName, makeAny( _out_rNewModuleCode ) );
+            xLib->insertByName( _rModName, Any( _out_rNewModuleCode ) );
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
             return false;
         }
 
@@ -707,7 +701,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
         return false;
     }
@@ -720,12 +714,12 @@ namespace basctl
             Reference< XNameContainer > xLib( getOrCreateLibrary( E_SCRIPTS, _rLibName ), UNO_QUERY_THROW );
             if ( !xLib->hasByName( _rModName ) )
                 return false;
-            xLib->replaceByName( _rModName, makeAny( _rModuleCode ) );
+            xLib->replaceByName( _rModName, Any( _rModuleCode ) );
             return true;
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
         return false;
     }
@@ -752,17 +746,17 @@ namespace basctl
 
             // set name property
             Reference< XPropertySet > xDlgPSet( xDialogModel, UNO_QUERY_THROW );
-            xDlgPSet->setPropertyValue( DLGED_PROP_NAME, makeAny( _rDialogName ) );
+            xDlgPSet->setPropertyValue( DLGED_PROP_NAME, Any( _rDialogName ) );
 
             // export dialog model
             _out_rDialogProvider = ::xmlscript::exportDialogModel( xDialogModel, aContext, isDocument() ? getDocument() : Reference< XModel >() );
 
             // insert dialog into library
-            xLib->insertByName( _rDialogName, makeAny( _out_rDialogProvider ) );
+            xLib->insertByName( _rDialogName, Any( _out_rDialogProvider ) );
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
 
         return _out_rDialogProvider.is();
@@ -780,7 +774,7 @@ namespace basctl
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("basctl.basicide");
             }
         }
     }
@@ -798,7 +792,7 @@ namespace basctl
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("basctl.basicide");
             }
         }
         return bIsModified;
@@ -815,7 +809,7 @@ namespace basctl
         if ( _rxStatusIndicator.is() )
         {
             aArgs = ::comphelper::InitPropertySequence({
-                { "StatusIndicator", makeAny(_rxStatusIndicator) }
+                { "StatusIndicator", Any(_rxStatusIndicator) }
             });
         }
 
@@ -836,7 +830,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
     }
 
@@ -867,7 +861,7 @@ namespace basctl
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("basctl.basicide");
             }
         }
         return sURL;
@@ -886,7 +880,7 @@ namespace basctl
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("basctl.basicide");
             }
         }
         return bAllow;
@@ -908,7 +902,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
 
         return _out_rxFrame.is();
@@ -956,18 +950,15 @@ namespace basctl
                 OSL_VERIFY( aFileItem.getFileStatus( aFileStatus ) == ::osl::FileBase::E_None );
                 OUString aCanonicalFileURL( aFileStatus.getFileURL() );
 
-                OUString aSearchURL1( "share/basic" );
-                OUString aSearchURL2( "share/uno_packages" );
-                OUString aSearchURL3( "share/extensions" );
-                if( aCanonicalFileURL.indexOf( aSearchURL1 ) >= 0 ||
-                    aCanonicalFileURL.indexOf( aSearchURL2 ) >= 0 ||
-                    aCanonicalFileURL.indexOf( aSearchURL3 ) >= 0 )
+                if( aCanonicalFileURL.indexOf( "share/basic" ) >= 0 ||
+                    aCanonicalFileURL.indexOf( "share/uno_packages" ) >= 0 ||
+                    aCanonicalFileURL.indexOf( "share/extensions" ) >= 0 )
                         bIsShared = true;
             }
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
 
         return bIsShared;
@@ -1038,7 +1029,6 @@ namespace basctl
         :m_pImpl( new Impl( Reference< XModel >() ) )
     {
         OSL_ENSURE( _eType == NoDocument, "ScriptDocument::ScriptDocument: unknown SpecialDocument type!" );
-        (void)_eType;
     }
 
 
@@ -1048,17 +1038,6 @@ namespace basctl
         OSL_ENSURE( _rxDocument.is(), "ScriptDocument::ScriptDocument: document must not be NULL!" );
             // a NULL document results in an uninitialized instance, and for this
             // purpose, there is a dedicated constructor
-    }
-
-
-    ScriptDocument::ScriptDocument( const ScriptDocument& _rSource )
-        :m_pImpl( _rSource.m_pImpl )
-    {
-    }
-
-
-    ScriptDocument::~ScriptDocument()
-    {
     }
 
 
@@ -1077,17 +1056,14 @@ namespace basctl
         docs::Documents aDocuments;
         lcl_getAllModels_throw( aDocuments, false );
 
-        for (   docs::Documents::const_iterator doc = aDocuments.begin();
-                doc != aDocuments.end();
-                ++doc
-            )
+        for (auto const& doc : aDocuments)
         {
-            const BasicManager* pDocBasicManager = ::basic::BasicManagerRepository::getDocumentBasicManager( doc->xModel );
+            const BasicManager* pDocBasicManager = ::basic::BasicManagerRepository::getDocumentBasicManager( doc.xModel );
             if  (   ( pDocBasicManager != SfxApplication::GetBasicManager() )
                 &&  ( pDocBasicManager == _pManager )
                 )
             {
-                return ScriptDocument( doc->xModel );
+                return ScriptDocument( doc.xModel );
             }
         }
 
@@ -1105,14 +1081,11 @@ namespace basctl
         docs::Documents aDocuments;
         lcl_getAllModels_throw( aDocuments, false );
 
-        for (   docs::Documents::const_iterator doc = aDocuments.begin();
-                doc != aDocuments.end();
-                ++doc
-            )
+        for (auto const& doc : aDocuments)
         {
-            const ScriptDocument aCheck = ScriptDocument( doc->xModel );
+            const ScriptDocument aCheck = ScriptDocument( doc.xModel );
             if  (   _rUrlOrCaption == aCheck.getTitle()
-                ||  _rUrlOrCaption == aCheck.getURL()
+                ||  _rUrlOrCaption == aCheck.m_pImpl->getURL()
                 )
             {
                 aDocument = aCheck;
@@ -1126,7 +1099,7 @@ namespace basctl
 
     namespace
     {
-        struct DocumentTitleLess : public ::std::binary_function< ScriptDocument, ScriptDocument, bool >
+        struct DocumentTitleLess
         {
             explicit DocumentTitleLess( const CollatorWrapper& _rCollator )
                 :m_aCollator( _rCollator )
@@ -1157,13 +1130,10 @@ namespace basctl
             docs::Documents aDocuments;
             lcl_getAllModels_throw( aDocuments, true /* exclude invisible */ );
 
-            for (   docs::Documents::const_iterator doc = aDocuments.begin();
-                    doc != aDocuments.end();
-                    ++doc
-                )
+            for (auto const& doc : aDocuments)
             {
                 // exclude documents without script/library containers
-                ScriptDocument aDoc( doc->xModel );
+                ScriptDocument aDoc( doc.xModel );
                 if ( !aDoc.isValid() )
                     continue;
 
@@ -1172,7 +1142,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
 
         // sort document list by doc title?
@@ -1180,7 +1150,7 @@ namespace basctl
         {
             CollatorWrapper aCollator( ::comphelper::getProcessComponentContext() );
             aCollator.loadDefaultCollator( SvtSysLocale().GetLanguageTag().getLocale(), 0 );
-            ::std::sort( aScriptDocs.begin(), aScriptDocs.end(), DocumentTitleLess( aCollator ) );
+            std::sort( aScriptDocs.begin(), aScriptDocs.end(), DocumentTitleLess( aCollator ) );
         }
 
         return aScriptDocs;
@@ -1256,11 +1226,11 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
 
         // sort
-        ::std::sort( aModuleNames.getArray() , aModuleNames.getArray() + aModuleNames.getLength() , StringCompareLessThan );
+        std::sort( aModuleNames.begin(), aModuleNames.end(), StringCompareLessThan );
 
         return aModuleNames;
     }
@@ -1273,16 +1243,16 @@ namespace basctl
         OUString aBaseName = _eType == E_SCRIPTS ? OUString("Module") : OUString("Dialog");
 
         Sequence< OUString > aUsedNames( getObjectNames( _eType, _rLibName ) );
-        ::std::set< OUString > aUsedNamesCheck;
-        ::std::copy( aUsedNames.begin(), aUsedNames.end(),
-            ::std::insert_iterator< ::std::set< OUString > >( aUsedNamesCheck, aUsedNamesCheck.begin() ) );
+        std::set< OUString > aUsedNamesCheck;
+        std::copy( aUsedNames.begin(), aUsedNames.end(),
+            std::insert_iterator< std::set< OUString > >( aUsedNamesCheck, aUsedNamesCheck.begin() ) );
 
         bool bValid = false;
         sal_Int32 i = 1;
         while ( !bValid )
         {
-            aObjectName = aBaseName;
-            aObjectName += OUString::number( i );
+            aObjectName = aBaseName
+                        + OUString::number( i );
 
             if ( aUsedNamesCheck.find( aObjectName ) == aUsedNamesCheck.end() )
                 bValid = true;
@@ -1378,7 +1348,7 @@ namespace basctl
 
     bool ScriptDocument::insertModule( const OUString& _rLibName, const OUString& _rModName, const OUString& _rModuleCode ) const
     {
-        return m_pImpl->insertModuleOrDialog( E_SCRIPTS, _rLibName, _rModName, makeAny( _rModuleCode ) );
+        return m_pImpl->insertModuleOrDialog( E_SCRIPTS, _rLibName, _rModName, Any( _rModuleCode ) );
     }
 
 
@@ -1428,7 +1398,7 @@ namespace basctl
 
     bool ScriptDocument::insertDialog( const OUString& _rLibName, const OUString& _rDialogName, const Reference< XInputStreamProvider >& _rxDialogProvider ) const
     {
-        return m_pImpl->insertModuleOrDialog( E_DIALOGS, _rLibName, _rDialogName, makeAny( _rxDialogProvider ) );
+        return m_pImpl->insertModuleOrDialog( E_DIALOGS, _rLibName, _rDialogName, Any( _rxDialogProvider ) );
     }
 
 
@@ -1488,20 +1458,21 @@ namespace basctl
             {
                 switch ( _eType )
                 {
-                case LIBRARY_TYPE_MODULE:   aTitle = IDE_RESSTR(RID_STR_USERMACROS); break;
-                case LIBRARY_TYPE_DIALOG:   aTitle = IDE_RESSTR(RID_STR_USERDIALOGS); break;
-                case LIBRARY_TYPE_ALL:      aTitle = IDE_RESSTR(RID_STR_USERMACROSDIALOGS); break;
+                case LibraryType::Module:   aTitle = IDEResId(RID_STR_USERMACROS); break;
+                case LibraryType::Dialog:   aTitle = IDEResId(RID_STR_USERDIALOGS); break;
+                case LibraryType::All:      aTitle = IDEResId(RID_STR_USERMACROSDIALOGS); break;
                 default:
                     break;
+                }
             }
             break;
             case LIBRARY_LOCATION_SHARE:
             {
                 switch ( _eType )
                 {
-                case LIBRARY_TYPE_MODULE:   aTitle = IDE_RESSTR(RID_STR_SHAREMACROS); break;
-                case LIBRARY_TYPE_DIALOG:   aTitle = IDE_RESSTR(RID_STR_SHAREDIALOGS); break;
-                case LIBRARY_TYPE_ALL:      aTitle = IDE_RESSTR(RID_STR_SHAREMACROSDIALOGS); break;
+                case LibraryType::Module:   aTitle = IDEResId(RID_STR_SHAREMACROS); break;
+                case LibraryType::Dialog:   aTitle = IDEResId(RID_STR_SHAREDIALOGS); break;
+                case LibraryType::All:      aTitle = IDEResId(RID_STR_SHAREMACROSDIALOGS); break;
                 default:
                     break;
                 }
@@ -1512,7 +1483,6 @@ namespace basctl
                 break;
             default:
                 break;
-            }
         }
 
         return aTitle;
@@ -1522,12 +1492,6 @@ namespace basctl
     OUString ScriptDocument::getTitle() const
     {
         return m_pImpl->getTitle();
-    }
-
-
-    OUString ScriptDocument::getURL() const
-    {
-        return m_pImpl->getURL();
     }
 
 
@@ -1542,7 +1506,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
         return bIsActive;
     }

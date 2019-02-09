@@ -58,17 +58,18 @@
  *  the class for VO_FrameLayout
  ************************************************************************/
 
+#include <memory>
 #include "lwpframelayout.hxx"
 #include "lwppara.hxx"
-#include "xfilter/xfstylemanager.hxx"
-#include "xfilter/xfparagraph.hxx"
-#include "xfilter/xffloatframe.hxx"
-#include "xfilter/xfrubystyle.hxx"
+#include <xfilter/xfstylemanager.hxx>
+#include <xfilter/xfparagraph.hxx>
+#include <xfilter/xffloatframe.hxx>
+#include <xfilter/xfrubystyle.hxx>
 #include "lwppagelayout.hxx"
 #include "lwpoleobject.hxx"
 #include "lwptablelayout.hxx"
 #include "lwpgrfobj.hxx"
-#include "lwpglobalmgr.hxx"
+#include <lwpglobalmgr.hxx>
 
 LwpFrame::LwpFrame(LwpPlacableLayout* pLayout):m_pLayout(pLayout)
 {
@@ -83,26 +84,26 @@ LwpFrame::~LwpFrame()
 * @param:  pFrameStyle - Frame Style object
 *
 */
-void  LwpFrame::RegisterStyle(XFFrameStyle* pFrameStyle)
+void LwpFrame::RegisterStyle(std::unique_ptr<XFFrameStyle>& rFrameStyle)
 {
-    ApplyWrapType(pFrameStyle);
-    ApplyMargins(pFrameStyle);
-    ApplyPadding(pFrameStyle);
-    ApplyBorders(pFrameStyle);
-    ApplyColumns(pFrameStyle);
-    ApplyShadow(pFrameStyle);
-    ApplyBackGround(pFrameStyle);
-    ApplyWatermark(pFrameStyle);
-//  ApplyBackColor(pFrameStyle);
-    ApplyProtect(pFrameStyle);
-    ApplyTextDir(pFrameStyle);
-    ApplyPosType(pFrameStyle);
+    ApplyWrapType(rFrameStyle.get());
+    ApplyMargins(rFrameStyle.get());
+    ApplyPadding(rFrameStyle.get());
+    ApplyBorders(rFrameStyle.get());
+    ApplyColumns(rFrameStyle.get());
+    ApplyShadow(rFrameStyle.get());
+    ApplyBackGround(rFrameStyle.get());
+    ApplyWatermark(rFrameStyle.get());
+    ApplyProtect(rFrameStyle.get());
+    ApplyTextDir(rFrameStyle.get());
+    ApplyPosType(rFrameStyle.get());
 
-    pFrameStyle->SetStyleName(m_pLayout->GetName().str());
+    rFrameStyle->SetStyleName(m_pLayout->GetName().str());
     XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
-    m_StyleName = pXFStyleManager->AddStyle(pFrameStyle).m_pStyle->GetStyleName();
+    m_StyleName = pXFStyleManager->AddStyle(std::move(rFrameStyle)).m_pStyle->GetStyleName();
     m_pLayout->SetStyleName(m_StyleName);
 }
+
 /**
 * @descr:  parse frame and set frame properties
 * @param:   pXFFrame - XFFrame object
@@ -345,10 +346,10 @@ void LwpFrame::ApplyPadding(XFFrameStyle *pFrameStyle)
 */
 void LwpFrame::ApplyBorders(XFFrameStyle *pFrameStyle)
 {
-    XFBorders* pBordres = m_pLayout->GetXFBorders();
+    std::unique_ptr<XFBorders> pBordres = m_pLayout->GetXFBorders();
     if(pBordres)
     {
-        pFrameStyle->SetBorders(pBordres);
+        pFrameStyle->SetBorders(std::move(pBordres));
     }
 }
 /**
@@ -530,10 +531,10 @@ void LwpFrame::ApplyPosType(XFFrameStyle* pFrameStyle)
 */
 void LwpFrame::ApplyWatermark(XFFrameStyle *pFrameStyle)
 {
-    XFBGImage* pBGImage = m_pLayout->GetXFBGImage();
-    if(pBGImage)
+    std::unique_ptr<XFBGImage> xBGImage(m_pLayout->GetXFBGImage());
+    if (xBGImage)
     {
-        pFrameStyle->SetBackImage(pBGImage);
+        pFrameStyle->SetBackImage(xBGImage);
         //set watermark transparent
         rtl::Reference<LwpVirtualLayout> xWaterMarkLayout(m_pLayout->GetWaterMarkLayout());
         LwpMiddleLayout* pLay = dynamic_cast<LwpMiddleLayout*>(xWaterMarkLayout.get());
@@ -552,10 +553,10 @@ void LwpFrame::ApplyWatermark(XFFrameStyle *pFrameStyle)
  */
 void LwpFrame::ApplyPatternFill(XFFrameStyle* pFrameStyle)
 {
-    XFBGImage* pXFBGImage = m_pLayout->GetFillPattern();
-    if (pXFBGImage)
+    std::unique_ptr<XFBGImage> xXFBGImage(m_pLayout->GetFillPattern());
+    if (xXFBGImage)
     {
-        pFrameStyle->SetBackImage(pXFBGImage);
+        pFrameStyle->SetBackImage(xXFBGImage);
     }
 }
 
@@ -591,8 +592,6 @@ void LwpFrame::ParseAnchorType(XFFrame *pXFFrame)
     //set position
     double fXOffset = 0;
     double fYOffset = 0;
-    //page number
-    sal_uInt16 nPageNum = 0;
     //set anchor type
     enumXFAnchor eAnchor = enumXFAnchorNone;
 
@@ -693,7 +692,7 @@ void LwpFrame::ParseAnchorType(XFFrame *pXFFrame)
             rtl::Reference<XFFont> pFont = m_pLayout->GetFont();
             if(pFont.is())
             {
-                offset = (double)(pFont->GetFontSize())*CM_PER_INCH/POINTS_PER_INCH;
+                offset = static_cast<double>(pFont->GetFontSize())*CM_PER_INCH/POINTS_PER_INCH;
             }
             fYOffset = offset-fYOffset;
             break;
@@ -704,7 +703,7 @@ void LwpFrame::ParseAnchorType(XFFrame *pXFFrame)
 
     pXFFrame->SetX(fXOffset);
     pXFFrame->SetY(fYOffset);
-    pXFFrame->SetAnchorPage(nPageNum);
+    pXFFrame->SetAnchorPage(0);
     pXFFrame->SetAnchorType(eAnchor);
 }
 
@@ -715,7 +714,7 @@ void LwpFrame::ParseAnchorType(XFFrame *pXFFrame)
 bool LwpFrame::IsLeftWider()
 {
     rtl::Reference<LwpVirtualLayout> xLayout(m_pLayout->GetContainerLayout());
-    LwpVirtualLayout* pParent = dynamic_cast<LwpVirtualLayout*>(xLayout.get());
+    LwpVirtualLayout* pParent = xLayout.get();
     if (pParent)
     {
         LwpPoint aPoint = m_pLayout->GetOrigin();
@@ -760,14 +759,13 @@ void LwpFrameLink::Read(LwpObjectStream* pStrm)
     pStrm->SkipExtra();
 }
 
-LwpFrameLayout::LwpFrameLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
-    : LwpPlacableLayout(objHdr, pStrm), m_pFrame(nullptr)
+LwpFrameLayout::LwpFrameLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
+    : LwpPlacableLayout(objHdr, pStrm), m_bGettingMaxWidth(false)
 {
 }
 
 LwpFrameLayout::~LwpFrameLayout()
 {
-    delete m_pFrame;
 }
 
 /**
@@ -781,7 +779,7 @@ void LwpFrameLayout::Read()
     {
         if(m_pObjStrm->QuickReaduInt16())
         {
-            m_Link.Read(m_pObjStrm);
+            m_Link.Read(m_pObjStrm.get());
         }
     }
     m_pObjStrm->SkipExtra();
@@ -818,29 +816,29 @@ void LwpFrameLayout::XFConvertFrame(XFContentContainer* pCont, sal_Int32 nStart 
 {
     if(m_pFrame)
     {
-        XFFrame* pXFFrame = nullptr;
+        rtl::Reference<XFFrame> xXFFrame;
         if(nEnd < nStart)
         {
-            pXFFrame = new XFFrame();
+            xXFFrame.set(new XFFrame);
         }
         else
         {
-            pXFFrame = new XFFloatFrame(nStart, nEnd, bAll);
+            xXFFrame.set(new XFFloatFrame(nStart, nEnd, bAll));
         }
 
-        m_pFrame->Parse(pXFFrame, nStart);
+        m_pFrame->Parse(xXFFrame.get(), nStart);
         //if it is a link frame, parse contents only once
         if(!HasPreviousLinkLayout())
         {
             rtl::Reference<LwpObject> content = m_Content.obj();
             if (content.is())
             {
-                content->DoXFConvert(pXFFrame);
+                content->DoXFConvert(xXFFrame.get());
                 //set frame size according to ole size
-                ApplyGraphicSize(pXFFrame);
+                ApplyGraphicSize(xXFFrame.get());
             }
         }
-        pCont ->Add(pXFFrame);
+        pCont->Add(xXFFrame.get());
     }
 }
 /**
@@ -857,9 +855,9 @@ void  LwpFrameLayout::RegisterStyle()
         return;
 
     //register frame style
-    XFFrameStyle* pFrameStyle = new XFFrameStyle();
-    m_pFrame = new LwpFrame(this);
-    m_pFrame->RegisterStyle(pFrameStyle);
+    std::unique_ptr<XFFrameStyle> xFrameStyle(new XFFrameStyle);
+    m_pFrame.reset(new LwpFrame(this));
+    m_pFrame->RegisterStyle(xFrameStyle);
 
     //register content style
     rtl::Reference<LwpObject> content = m_Content.obj();
@@ -902,9 +900,7 @@ OUString LwpFrameLayout::GetNextLinkName()
 bool LwpFrameLayout::HasPreviousLinkLayout()
 {
     LwpObjectID& rObjectID = m_Link.GetPreviousLayout();
-    if(rObjectID.IsNull())
-        return false;
-    return true;
+    return !rObjectID.IsNull();
 }
 /**
  * @descr whether current frame is for water mark. Problem maybe exists by this method, must be tracking
@@ -946,6 +942,10 @@ double LwpFrameLayout::GetWidth()
  */
 double LwpFrameLayout::GetMaxWidth()
 {
+    if (m_bGettingMaxWidth)
+        throw std::runtime_error("recursive GetMaxWidth");
+
+    m_bGettingMaxWidth = true;
     double fActualWidth = 0;
     rtl::Reference<LwpVirtualLayout> xLayout(GetContainerLayout());
     LwpMiddleLayout* pParent = dynamic_cast<LwpMiddleLayout*>(xLayout.get());
@@ -974,6 +974,7 @@ double LwpFrameLayout::GetMaxWidth()
         fActualWidth = fParentWidth - fXOffset - fParentMarginRight - fWrapRight;
     }
 
+    m_bGettingMaxWidth = false;
     return fActualWidth;
 }
 
@@ -1018,16 +1019,14 @@ void LwpFrameLayout::ApplyGraphicSize(XFFrame * pXFFrame)
     }
 }
 
-LwpGroupLayout::LwpGroupLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpGroupLayout::LwpGroupLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpPlacableLayout(objHdr, pStrm)
-    , m_pFrame(nullptr)
 {
 
 }
 
 LwpGroupLayout::~LwpGroupLayout()
 {
-    delete m_pFrame;
 }
 /**
  * @descr read group layout object
@@ -1048,9 +1047,9 @@ void LwpGroupLayout::RegisterStyle()
         return;
 
     //register frame style
-    XFFrameStyle* pFrameStyle = new XFFrameStyle();
-    m_pFrame = new LwpFrame(this);
-    m_pFrame->RegisterStyle(pFrameStyle);
+    std::unique_ptr<XFFrameStyle> xFrameStyle(new XFFrameStyle);
+    m_pFrame.reset(new LwpFrame(this));
+    m_pFrame->RegisterStyle(xFrameStyle);
 
     //register child frame style
     RegisterChildStyle();
@@ -1086,32 +1085,32 @@ void LwpGroupLayout::XFConvertFrame(XFContentContainer* pCont, sal_Int32 nStart 
 {
     if(m_pFrame)
     {
-        XFFrame* pXFFrame = nullptr;
+        rtl::Reference<XFFrame> xXFFrame;
         if(nEnd < nStart)
         {
-            pXFFrame = new XFFrame();
+            xXFFrame.set(new XFFrame);
         }
         else
         {
-            pXFFrame = new XFFloatFrame(nStart, nEnd, bAll);
+            xXFFrame.set(new XFFloatFrame(nStart, nEnd, bAll));
         }
 
-        m_pFrame->Parse(pXFFrame, nStart);
+        m_pFrame->Parse(xXFFrame.get(), nStart);
 
         //add child frame into group
         LwpVirtualLayout* pLayout = dynamic_cast<LwpVirtualLayout*>(GetChildHead().obj().get());
 
         while (pLayout && pLayout != this)
         {
-            pLayout->DoXFConvert(pXFFrame);
+            pLayout->DoXFConvert(xXFFrame.get());
             pLayout = dynamic_cast<LwpVirtualLayout*>(pLayout->GetNext().obj().get());
         }
 
-        pCont ->Add(pXFFrame);
+        pCont->Add(xXFFrame.get());
     }
 }
 
-LwpGroupFrame::LwpGroupFrame(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpGroupFrame::LwpGroupFrame(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     :LwpContent(objHdr, pStrm)
 {}
 
@@ -1133,7 +1132,7 @@ void LwpGroupFrame::XFConvert(XFContentContainer* /*pCont*/)
 {
 }
 
-LwpDropcapLayout::LwpDropcapLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpDropcapLayout::LwpDropcapLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpFrameLayout(objHdr, pStrm)
 {
     m_nChars = 1;
@@ -1171,14 +1170,9 @@ void LwpDropcapLayout::XFConvert(XFContentContainer* pCont)
     }
 }
 
-LwpStory* LwpDropcapLayout::GetContentStory()
-{
-    return static_cast<LwpStory*>(m_Content.obj(VO_STORY).get());
-}
-
 void LwpDropcapLayout::RegisterStyle(LwpFoundry* pFoundry)
 {
-    LwpStory* pStory = GetContentStory();
+    LwpStory* pStory = static_cast<LwpStory*>(m_Content.obj(VO_STORY).get());
     if (pStory)
     {
         pStory->SetDropcapFlag(true);
@@ -1201,7 +1195,7 @@ void LwpDropcapLayout::RegisterStyle()
 {
 }
 
-LwpRubyLayout::LwpRubyLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpRubyLayout::LwpRubyLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpFrameLayout(objHdr, pStrm)
     , m_nPlacement(0)
     , m_nAlignment(0)
@@ -1219,7 +1213,7 @@ void LwpRubyLayout::Read()
     m_nStateFlag = m_pObjStrm->QuickReaduInt16();
     m_nXOffset = m_pObjStrm->QuickReadInt32();
     m_nYOffset = m_pObjStrm->QuickReadInt32();
-    m_objRubyMarker.ReadIndexed(m_pObjStrm);
+    m_objRubyMarker.ReadIndexed(m_pObjStrm.get());
     m_pObjStrm->SkipExtra();
 }
 
@@ -1247,7 +1241,7 @@ void LwpRubyLayout::RegisterStyle()
     if (!pMarker)
         throw std::runtime_error("missing Ruby Marker");
 
-    XFRubyStyle* pRubyStyle = new XFRubyStyle;
+    std::unique_ptr<XFRubyStyle> xRubyStyle(new XFRubyStyle);
 
     enumXFRubyPosition eType = enumXFRubyLeft;
     if (m_nAlignment == LEFT)
@@ -1262,7 +1256,7 @@ void LwpRubyLayout::RegisterStyle()
     {
         eType =  enumXFRubyCenter;
     }
-    pRubyStyle->SetAlignment(eType);
+    xRubyStyle->SetAlignment(eType);
 
     eType = enumXFRubyTop;
     if (m_nPlacement == TOP)
@@ -1273,10 +1267,10 @@ void LwpRubyLayout::RegisterStyle()
     {
         eType =  enumXFRubyBottom;
     }
-    pRubyStyle->SetPosition(eType);
+    xRubyStyle->SetPosition(eType);
 
     XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
-    OUString rubyStyle = pXFStyleManager->AddStyle(pRubyStyle).m_pStyle->GetStyleName();
+    OUString rubyStyle = pXFStyleManager->AddStyle(std::move(xRubyStyle)).m_pStyle->GetStyleName();
     pMarker->SetRubyStyleName(rubyStyle);
 
     LwpStory* pStory = GetContentStory();

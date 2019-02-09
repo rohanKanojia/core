@@ -17,33 +17,33 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TableWindow.hxx"
-#include "TableWindowListBox.hxx"
-#include "QueryTableView.hxx"
-#include "QueryDesignView.hxx"
-#include "TableWindowData.hxx"
-#include "imageprovider.hxx"
+#include <TableWindow.hxx>
+#include <TableWindowListBox.hxx>
+#include <QueryTableView.hxx>
+#include <QueryDesignView.hxx>
+#include <TableWindowData.hxx>
+#include <imageprovider.hxx>
 #include <tools/diagnose_ex.h>
 #include <osl/diagnose.h>
 #include <vcl/svapp.hxx>
 #include <vcl/wall.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/commandevent.hxx>
+#include <vcl/event.hxx>
 
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
-#include "querycontroller.hxx"
-#include "dbu_qry.hrc"
-#include "dbustrings.hrc"
-#include "Query.hrc"
-#include <comphelper/extract.hxx>
-#include "UITools.hxx"
-#include "TableWindowAccess.hxx"
-#include "browserids.hxx"
+#include <querycontroller.hxx>
+#include <stringconstants.hxx>
+#include <bitmaps.hlst>
+#include <UITools.hxx>
+#include <TableWindowAccess.hxx>
+#include <browserids.hxx>
 #include <connectivity/dbtools.hxx>
-#include "svtools/treelistentry.hxx"
+#include <vcl/treelistentry.hxx>
 
 using namespace dbaui;
 using namespace ::utl;
@@ -65,7 +65,7 @@ namespace DatabaseObject = css::sdb::application::DatabaseObject;
 
 namespace {
 
-void Draw3DBorder(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void Draw3DBorder(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect)
 {
     // Use the System Style-Settings for my colours
     const StyleSettings& aSystemStyle = Application::GetSettings().GetStyleSettings();
@@ -95,12 +95,10 @@ OTableWindow::OTableWindow( vcl::Window* pParent, const TTableWindowData::value_
           ,Window( pParent, WB_3DLOOK|WB_MOVEABLE )
           ,m_aTypeImage( VclPtr<FixedImage>::Create(this) )
           ,m_xTitle( VclPtr<OTableWindowTitle>::Create(this) )
-          ,m_pAccessible(nullptr)
           ,m_pData( pTabWinData )
           ,m_nMoveCount(0)
           ,m_nMoveIncrement(1)
-          ,m_nSizingFlags( SIZING_NONE )
-          ,m_bActive( false )
+          ,m_nSizingFlags( SizingFlags::NONE )
 {
 
     // Set position and size
@@ -135,7 +133,6 @@ void OTableWindow::dispose()
     if ( m_pContainerListener.is() )
         m_pContainerListener->dispose();
 
-    m_pAccessible = nullptr;
     m_aTypeImage.disposeAndClear();
     m_xTitle.disposeAndClear();
     vcl::Window::dispose();
@@ -170,9 +167,9 @@ void OTableWindow::SetSizePixel( const Size& rNewSize )
 {
     Size aOutSize(rNewSize);
     if( aOutSize.Width() < TABWIN_WIDTH_MIN )
-        aOutSize.Width() = TABWIN_WIDTH_MIN;
+        aOutSize.setWidth( TABWIN_WIDTH_MIN );
     if( aOutSize.Height() < TABWIN_HEIGHT_MIN )
-        aOutSize.Height() = TABWIN_HEIGHT_MIN;
+        aOutSize.setHeight( TABWIN_HEIGHT_MIN );
 
     GetData()->SetSize( aOutSize );
     Window::SetSizePixel( aOutSize );
@@ -184,12 +181,7 @@ void OTableWindow::SetPosSizePixel( const Point& rNewPos, const Size& rNewSize )
     SetSizePixel( rNewSize );
 }
 
-VclPtr<OTableWindowListBox> OTableWindow::CreateListBox()
-{
-    return VclPtr<OTableWindowListBox>::Create(this);
-}
-
-bool OTableWindow::FillListBox()
+void OTableWindow::FillListBox()
 {
     m_xListBox->Clear();
     if ( !m_pContainerListener.is() )
@@ -198,10 +190,9 @@ bool OTableWindow::FillListBox()
         if ( xContainer.is() )
             m_pContainerListener = new ::comphelper::OContainerListenerAdapter(this,xContainer);
     }
+
     // mark all primary keys with special image
-    ModuleRes TmpRes(IMG_JOINS);
-    ImageList aImageList(TmpRes);
-    Image aPrimKeyImage = aImageList.GetImage(IMG_PRIMARY_KEY);
+    Image aPrimKeyImage = Image(StockImage::Yes, BMP_PRIMARY_KEY);
 
     if (GetData()->IsShowAll())
     {
@@ -247,8 +238,6 @@ bool OTableWindow::FillListBox()
     {
         OSL_FAIL("Exception occurred!");
     }
-
-    return true;
 }
 
 void* OTableWindow::createUserData(const Reference< XPropertySet>& /*_xColumn*/,bool /*_bPrimaryKey*/)
@@ -301,9 +290,9 @@ bool OTableWindow::Init()
     // create list box if necessary
     if ( !m_xListBox )
     {
-        m_xListBox = CreateListBox();
+        m_xListBox = VclPtr<OTableWindowListBox>::Create(this);
         OSL_ENSURE( m_xListBox != nullptr, "OTableWindow::Init() : CreateListBox returned NULL !" );
-        m_xListBox->SetSelectionMode( MULTIPLE_SELECTION );
+        m_xListBox->SetSelectionMode( SelectionMode::Multiple );
     }
 
     // Set the title
@@ -314,13 +303,12 @@ bool OTableWindow::Init()
 
     // add the fields to the ListBox
     clearListBox();
-    bool bSuccess = FillListBox();
-    if ( bSuccess )
-        m_xListBox->SelectAll( false );
+    FillListBox();
+    m_xListBox->SelectAll( false );
 
     impl_updateImage();
 
-    return bSuccess;
+    return true;
 }
 
 void OTableWindow::DataChanged(const DataChangedEvent& rDCEvt)
@@ -330,53 +318,52 @@ void OTableWindow::DataChanged(const DataChangedEvent& rDCEvt)
         // In the worst-case the colours have changed so
         // adapt myself to the new colours
         const StyleSettings&  aSystemStyle = Application::GetSettings().GetStyleSettings();
-        SetBackground(Wallpaper(Color(aSystemStyle.GetFaceColor())));
+        SetBackground(Wallpaper(aSystemStyle.GetFaceColor()));
         SetTextColor(aSystemStyle.GetButtonTextColor());
     }
 }
 
-void OTableWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void OTableWindow::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect)
 {
-    Rectangle aRect(Point(0,0), GetOutputSizePixel());
+    tools::Rectangle aRect(Point(0,0), GetOutputSizePixel());
     Window::Paint(rRenderContext, rRect);
     Draw3DBorder(rRenderContext, aRect);
 }
 
-Rectangle OTableWindow::getSizingRect(const Point& _rPos,const Size& _rOutputSize) const
+tools::Rectangle OTableWindow::getSizingRect(const Point& _rPos,const Size& _rOutputSize) const
 {
-    Rectangle aSizingRect = Rectangle( GetPosPixel(), GetSizePixel() );
-    sal_uInt16 nSizingFlags = GetSizingFlags();
+    tools::Rectangle aSizingRect = tools::Rectangle( GetPosPixel(), GetSizePixel() );
 
-    if( nSizingFlags & SIZING_TOP )
+    if( m_nSizingFlags & SizingFlags::Top )
     {
         if( _rPos.Y() < 0 )
-            aSizingRect.Top() = 0;
+            aSizingRect.SetTop( 0 );
         else
-            aSizingRect.Top() = _rPos.Y();
+            aSizingRect.SetTop( _rPos.Y() );
     }
 
-    if( nSizingFlags & SIZING_BOTTOM )
+    if( m_nSizingFlags & SizingFlags::Bottom )
     {
         if( _rPos.Y() > _rOutputSize.Height() )
-            aSizingRect.Bottom() = _rOutputSize.Height();
+            aSizingRect.SetBottom( _rOutputSize.Height() );
         else
-            aSizingRect.Bottom() = _rPos.Y();
+            aSizingRect.SetBottom( _rPos.Y() );
     }
 
-    if( nSizingFlags & SIZING_RIGHT )
+    if( m_nSizingFlags & SizingFlags::Right )
     {
         if( _rPos.X() > _rOutputSize.Width() )
-            aSizingRect.Right() = _rOutputSize.Width();
+            aSizingRect.SetRight( _rOutputSize.Width() );
         else
-            aSizingRect.Right() = _rPos.X();
+            aSizingRect.SetRight( _rPos.X() );
     }
 
-    if( nSizingFlags & SIZING_LEFT )
+    if( m_nSizingFlags & SizingFlags::Left )
     {
         if( _rPos.X() < 0 )
-            aSizingRect.Left() = 0;
+            aSizingRect.SetLeft( 0 );
         else
-            aSizingRect.Left() = _rPos.X();
+            aSizingRect.SetLeft( _rPos.X() );
     }
     return aSizingRect;
 }
@@ -385,19 +372,19 @@ void OTableWindow::setSizingFlag(const Point& _rPos)
 {
     Size    aOutSize = GetOutputSizePixel();
     // Set the flags when the mouse cursor is in the sizing area
-    m_nSizingFlags = SIZING_NONE;
+    m_nSizingFlags = SizingFlags::NONE;
 
     if( _rPos.X() < TABWIN_SIZING_AREA )
-        m_nSizingFlags |= SIZING_LEFT;
+        m_nSizingFlags |= SizingFlags::Left;
 
     if( _rPos.Y() < TABWIN_SIZING_AREA )
-        m_nSizingFlags |= SIZING_TOP;
+        m_nSizingFlags |= SizingFlags::Top;
 
     if( _rPos.X() > aOutSize.Width()-TABWIN_SIZING_AREA )
-        m_nSizingFlags |= SIZING_RIGHT;
+        m_nSizingFlags |= SizingFlags::Right;
 
     if( _rPos.Y() > aOutSize.Height()-TABWIN_SIZING_AREA )
-        m_nSizingFlags |= SIZING_BOTTOM;
+        m_nSizingFlags |= SizingFlags::Bottom;
 }
 
 void OTableWindow::MouseMove( const MouseEvent& rEvt )
@@ -413,28 +400,18 @@ void OTableWindow::MouseMove( const MouseEvent& rEvt )
     Pointer aPointer;
 
     // Set the mouse cursor when it is in the sizing area
-    switch( m_nSizingFlags )
-    {
-    case SIZING_TOP:
-    case SIZING_BOTTOM:
+    if ( m_nSizingFlags == SizingFlags::Top ||
+         m_nSizingFlags == SizingFlags::Bottom )
         aPointer = Pointer( PointerStyle::SSize );
-        break;
-
-    case SIZING_LEFT:
-    case SIZING_RIGHT:
+    else if ( m_nSizingFlags == SizingFlags::Left ||
+              m_nSizingFlags ==SizingFlags::Right )
         aPointer = Pointer( PointerStyle::ESize );
-        break;
-
-    case SIZING_LEFT+SIZING_TOP:
-    case SIZING_RIGHT+SIZING_BOTTOM:
+    else if ( m_nSizingFlags == (SizingFlags::Left | SizingFlags::Top) ||
+              m_nSizingFlags == (SizingFlags::Right | SizingFlags::Bottom) )
         aPointer = Pointer( PointerStyle::SESize );
-        break;
-
-    case SIZING_RIGHT+SIZING_TOP:
-    case SIZING_LEFT+SIZING_BOTTOM:
+    else if ( m_nSizingFlags == (SizingFlags::Right | SizingFlags::Top) ||
+              m_nSizingFlags == (SizingFlags::Left | SizingFlags::Bottom) )
         aPointer = Pointer( PointerStyle::NESize );
-        break;
-    }
 
     SetPointer( aPointer );
 }
@@ -443,7 +420,7 @@ void OTableWindow::MouseButtonDown( const MouseEvent& rEvt )
 {
     // When resizing, the parent must be informed that
     // the window size of its child has changed
-    if( m_nSizingFlags )
+    if( m_nSizingFlags != SizingFlags::NONE )
         getTableView()->BeginChildSizing( this, GetPointer() );
 
     Window::MouseButtonDown( rEvt );
@@ -494,7 +471,7 @@ void OTableWindow::SetBoldTitle( bool bBold )
 void OTableWindow::GetFocus()
 {
     Window::GetFocus();
-    // we have to forward the focus to our listbox to enable keystokes
+    // we have to forward the focus to our listbox to enable keystrokes
     if(m_xListBox)
         m_xListBox->GrabFocus();
 }
@@ -502,7 +479,6 @@ void OTableWindow::GetFocus()
 void OTableWindow::setActive(bool _bActive)
 {
     SetBoldTitle( _bActive );
-    m_bActive = _bActive;
     if (!_bActive && m_xListBox && m_xListBox->GetSelectionCount() != 0)
         m_xListBox->SelectAll(false);
 }
@@ -511,6 +487,7 @@ void OTableWindow::Remove()
 {
     // Delete the window
     OJoinTableView* pTabWinCont = getTableView();
+    VclPtr<OTableWindow> aHoldSelf(this); // keep ourselves alive during the RemoveTabWin process
     pTabWinCont->RemoveTabWin( this );
     pTabWinCont->Invalidate();
 }
@@ -537,7 +514,7 @@ bool OTableWindow::ExistsAConn() const
     return getTableView()->ExistsAConn(this);
 }
 
-void OTableWindow::EnumValidFields(::std::vector< OUString>& arrstrFields)
+void OTableWindow::EnumValidFields(std::vector< OUString>& arrstrFields)
 {
     arrstrFields.clear();
     // This default implementation counts every item in the ListBox ... for any other behaviour it must be over-written
@@ -577,9 +554,7 @@ void OTableWindow::StateChanged( StateChangedType nType )
 
 Reference< XAccessible > OTableWindow::CreateAccessible()
 {
-    OTableWindowAccess* pAccessible = new OTableWindowAccess(this);
-    m_pAccessible = pAccessible;
-    return pAccessible;
+    return new OTableWindowAccess(this);
 }
 
 void OTableWindow::Command(const CommandEvent& rEvt)
@@ -603,13 +578,10 @@ void OTableWindow::Command(const CommandEvent& rEvt)
                         ptWhere = m_xTitle->GetPosPixel();
                 }
 
-                PopupMenu aContextMenu(ModuleRes(RID_MENU_JOINVIEW_TABLE));
-                switch (aContextMenu.Execute(this, ptWhere))
-                {
-                    case SID_DELETE:
-                        Remove();
-                        break;
-                }
+                VclBuilder aBuilder(nullptr, VclBuilderContainer::getUIRootDir(), "dbaccess/ui/jointablemenu.ui", "");
+                VclPtr<PopupMenu> aContextMenu(aBuilder.get_menu("menu"));
+                if (aContextMenu->Execute(this, ptWhere))
+                    Remove();
             }
             break;
         }
@@ -635,27 +607,27 @@ bool OTableWindow::PreNotify(NotifyEvent& rNEvt)
                 Point aStartPoint = GetPosPixel();
                 if ( rCode.IsShift() )
                 {
-                    aStartPoint.X() = GetSizePixel().Width();
-                    aStartPoint.Y() = GetSizePixel().Height();
+                    aStartPoint.setX( GetSizePixel().Width() );
+                    aStartPoint.setY( GetSizePixel().Height() );
                 }
 
                 switch( rCode.GetCode() )
                 {
                     case KEY_DOWN:
                         bHandled = true;
-                        aStartPoint.Y() += m_nMoveIncrement;
+                        aStartPoint.AdjustY(m_nMoveIncrement );
                         break;
                     case KEY_UP:
                         bHandled = true;
-                        aStartPoint.Y() += -m_nMoveIncrement;
+                        aStartPoint.AdjustY(-m_nMoveIncrement );
                         break;
                     case KEY_LEFT:
                         bHandled = true;
-                        aStartPoint.X() += -m_nMoveIncrement;
+                        aStartPoint.AdjustX(-m_nMoveIncrement );
                         break;
                     case KEY_RIGHT:
                         bHandled = true;
-                        aStartPoint.X()  += m_nMoveIncrement;
+                        aStartPoint.AdjustX(m_nMoveIncrement );
                         break;
                 }
                 if ( bHandled )
@@ -670,9 +642,9 @@ bool OTableWindow::PreNotify(NotifyEvent& rNEvt)
                             && ((ptOld.Y() + aNewSize.Height()) <= aSize.Height()) )
                         {
                             if ( aNewSize.Width() < TABWIN_WIDTH_MIN )
-                                aNewSize.Width() = TABWIN_WIDTH_MIN;
+                                aNewSize.setWidth( TABWIN_WIDTH_MIN );
                             if ( aNewSize.Height() < TABWIN_HEIGHT_MIN )
-                                aNewSize.Height() = TABWIN_HEIGHT_MIN;
+                                aNewSize.setHeight( TABWIN_HEIGHT_MIN );
 
                             Size szOld = GetSizePixel();
 
@@ -704,7 +676,7 @@ bool OTableWindow::PreNotify(NotifyEvent& rNEvt)
                                 pView->EnsureVisible(GetData()->GetPosition(), GetData()->GetSize());
                                 pView->TabWinMoved(this,aOldDataPoint);
                                 Invalidate(InvalidateFlags::NoChildren);
-                                getDesignView()->getController().setModified( sal_True );
+                                getDesignView()->getController().setModified( true );
                             }
                             else
                             {
@@ -718,7 +690,7 @@ bool OTableWindow::PreNotify(NotifyEvent& rNEvt)
                             m_nMoveIncrement    = 1;
                         }
                     }
-                    resetSizingFlag();
+                    m_nSizingFlags = SizingFlags::NONE;
                 }
                 else
                 {
@@ -758,17 +730,17 @@ OUString OTableWindow::getTitle() const
     return m_xTitle->GetText();
 }
 
-void OTableWindow::_elementInserted( const container::ContainerEvent& /*_rEvent*/ )  throw(css::uno::RuntimeException, std::exception)
+void OTableWindow::_elementInserted( const container::ContainerEvent& /*_rEvent*/ )
 {
     FillListBox();
 }
 
-void OTableWindow::_elementRemoved( const container::ContainerEvent& /*_rEvent*/ ) throw(css::uno::RuntimeException, std::exception)
+void OTableWindow::_elementRemoved( const container::ContainerEvent& /*_rEvent*/ )
 {
     FillListBox();
 }
 
-void OTableWindow::_elementReplaced( const container::ContainerEvent& /*_rEvent*/ ) throw(css::uno::RuntimeException, std::exception)
+void OTableWindow::_elementReplaced( const container::ContainerEvent& /*_rEvent*/ )
 {
     FillListBox();
 }

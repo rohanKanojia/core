@@ -18,12 +18,8 @@
  */
 
 #include "CommandDispatch.hxx"
-#include "CommonFunctors.hxx"
-#include "macros.hxx"
 #include <com/sun/star/util/URLTransformer.hpp>
-
-#include <algorithm>
-#include <functional>
+#include <tools/diagnose_ex.h>
 
 using namespace ::com::sun::star;
 
@@ -75,11 +71,9 @@ void SAL_CALL CommandDispatch::disposing()
 
 // ____ XDispatch ____
 void SAL_CALL CommandDispatch::dispatch( const util::URL& /* URL */, const Sequence< beans::PropertyValue >& /* Arguments */ )
-    throw (uno::RuntimeException, std::exception)
 {}
 
 void SAL_CALL CommandDispatch::addStatusListener( const Reference< frame::XStatusListener >& Control, const util::URL& URL )
-    throw (uno::RuntimeException, std::exception)
 {
     tListenerMap::iterator aIt( m_aListeners.find( URL.Complete ));
     if( aIt == m_aListeners.end())
@@ -95,7 +89,6 @@ void SAL_CALL CommandDispatch::addStatusListener( const Reference< frame::XStatu
 }
 
 void SAL_CALL CommandDispatch::removeStatusListener( const Reference< frame::XStatusListener >& Control, const util::URL& URL )
-    throw (uno::RuntimeException, std::exception)
 {
     tListenerMap::iterator aIt( m_aListeners.find( URL.Complete ));
     if( aIt != m_aListeners.end())
@@ -104,14 +97,12 @@ void SAL_CALL CommandDispatch::removeStatusListener( const Reference< frame::XSt
 
 // ____ XModifyListener ____
 void SAL_CALL CommandDispatch::modified( const lang::EventObject& /* aEvent */ )
-    throw (uno::RuntimeException, std::exception)
 {
     fireAllStatusEvents( nullptr );
 }
 
 // ____ XEventListener (base of XModifyListener) ____
 void SAL_CALL CommandDispatch::disposing( const lang::EventObject& /* Source */ )
-    throw (uno::RuntimeException, std::exception)
 {}
 
 void CommandDispatch::fireAllStatusEvents(
@@ -124,8 +115,7 @@ void CommandDispatch::fireStatusEventForURL(
     const OUString & rURL,
     const uno::Any & rState,
     bool bEnabled,
-    const Reference< frame::XStatusListener > & xSingleListener, /* = 0 */
-    const OUString & rFeatureDescriptor /* = OUString() */ )
+    const Reference< frame::XStatusListener > & xSingleListener /* = 0 */)
 {
     // prepare event to send
     util::URL aURL;
@@ -139,7 +129,7 @@ void CommandDispatch::fireStatusEventForURL(
     frame::FeatureStateEvent aEventToSend(
         static_cast< cppu::OWeakObject* >( this ), // Source
         aURL,                                      // FeatureURL
-        rFeatureDescriptor,                        // FeatureDescriptor
+        OUString(),                                // FeatureDescriptor
         bEnabled,                                  // IsEnabled
         false,                                     // Requery
         rState                                     // State
@@ -165,9 +155,9 @@ void CommandDispatch::fireStatusEventForURL(
                         if( xListener.is())
                             xListener->statusChanged( aEventToSend );
                     }
-                    catch( const uno::Exception & ex )
+                    catch( const uno::Exception & )
                     {
-                        ASSERT_EXCEPTION( ex );
+                        DBG_UNHANDLED_EXCEPTION("chart2");
                     }
                 }
             }

@@ -20,18 +20,20 @@
 #ifndef INCLUDED_SVTOOLS_RULER_HXX
 #define INCLUDED_SVTOOLS_RULER_HXX
 
+#include <memory>
+#include <map>
 #include <svtools/svtdllapi.h>
+#include <rtl/ref.hxx>
+#include <tools/fldunit.hxx>
 #include <tools/link.hxx>
 #include <tools/fract.hxx>
 #include <vcl/window.hxx>
-#include <vcl/virdev.hxx>
-#include <vcl/field.hxx>
-
-#include <svtools/accessibleruler.hxx>
+#include <vcl/glyphitem.hxx>
 
 class MouseEvent;
 class TrackingEvent;
 class DataChangedEvent;
+class SvtRulerAccessible;
 
 /*************************************************************************
 
@@ -106,15 +108,15 @@ The values are computed as described below:
 SetUnit() and SetZoom() configure which unit is used to display
 the values on the ruler. The following units are accepted:
 
-    FUNIT_MM
-    FUNIT_CM (Default)
-    FUNIT_M
-    FUNIT_KM
-    FUNIT_INCH
-    FUNIT_FOOT
-    FUNIT_MILE
-    FUNIT_POINT
-    FUNIT_PICA
+    FieldUnit::MM
+    FieldUnit::CM (Default)
+    FieldUnit::M
+    FieldUnit::KM
+    FieldUnit::INCH
+    FieldUnit::FOOT
+    FieldUnit::MILE
+    FieldUnit::POINT
+    FieldUnit::PICA
 
 --------------------------------------------------------------------------
 
@@ -139,25 +141,25 @@ has to be passed. In the array, the following values have to be initialized:
     long    nWidth          - column spacing in pixels (can also be 0, for example,
                               for table columns)
     sal_uInt16 nStyle       - bit style:
-                                RULER_BORDER_SIZEABLE
+                                RulerBorderStyle::Sizeable
                                 Column spacing can be changed. This flag should
                                 only be set if the size of the spacing is changed,
                                 not that of a cell.
-                                RULER_BORDER_MOVEABLE
+                                RulerBorderStyle::Moveable
                                 Column spacing/border can be moved. Whenever
                                 table borders are to be moved, this flag should
                                 be set instead of SIZEABLE (SIZEABLE indicates
                                 that the size of a spacing, not that of a single
                                 cell can be changed).
-                                RULER_BORDER_VARIABLE
+                                RulerBorderStyle::Variable
                                 Not all of the column spacings are equal
-                                RULER_BORDER_TABLE
+                                RulerBorderStyle::Table
                                 Table border. Whenever this style is set, the column
                                 width must be 0.
-                                RULER_BORDER_SNAP
+                                RulerBorderStyle::Snap
                                 Auxiliary line. Whenever this style is set, the
                                 column width must be 0.
-                                RULER_BORDER_MARGIN
+                                RulerBorderStyle::Margin
                                 Margin. Whenever this style is set, the column
                                 width must be 0.
 
@@ -171,9 +173,9 @@ initialized:
 
     long    nPos            - offset relative to the origin in pixels
     sal_uInt16 nStyle       - bit style:
-                                RULER_INDENT_TOP    (indent of the first line)
-                                RULER_INDENT_BOTTOM (left/right indent)
-                                RULER_INDENT_BORDER (Vertical line that shows the border distance)
+                                RulerIndentStyle::Top    (indent of the first line)
+                                RulerIndentStyle::Bottom (left/right indent)
+                                RulerIndentStyle::Border (Vertical line that shows the border distance)
                                 The following bits can be set in addition
                                 to these styles:
                                 RULER_STYLE_DONTKNOW (for old position or for
@@ -244,11 +246,11 @@ it has been dragged. There are the following query methods:
 
     - GetDragType()
         Returns what has been dragged.
-            RULER_TYPE_MARGIN1
-            RULER_TYPE_MARGIN2
-            RULER_TYPE_BORDER
-            RULER_TYPE_INDENT
-            RULER_TYPE_TAB
+            RulerType::Margin1
+            RulerType::Margin2
+            RulerType::Border
+            RulerType::Indent
+            RulerType::Tab
 
     - GetDragPos()
         Returns the pixel position to which the user has moved the mouse
@@ -264,9 +266,9 @@ it has been dragged. There are the following query methods:
     - GetDragSize()
         If Borders are dragged, this can be used to query whether the size
         resp. which side or the position should be changed.
-            RULER_DRAGSIZE_MOVE oder 0      - Move
-            RULER_DRAGSIZE_1                - left/upper border
-            RULER_DRAGSIZE_2                - right/bottom border
+            RulerDragSize::Move or 0      - Move
+            RulerDragSize::N1                - left/upper border
+            RulerDragSize::N2                - right/bottom border
 
     - IsDragDelete()
         This method can be used to query whether the mouse has been
@@ -298,13 +300,13 @@ it has been dragged. There are the following query methods:
 
     - GetClickType()
         Returns what is applied by double click:
-            RULER_TYPE_DONTKNOW             (no element in the ruler area)
-            RULER_TYPE_OUTSIDE              (outside of the ruler area)
-            RULER_TYPE_MARGIN1              (only Margin1 border)
-            RULER_TYPE_MARGIN2              (only Margin2 border)
-            RULER_TYPE_BORDER               (Border: GetClickAryPos())
-            RULER_TYPE_INDENT               (indent: GetClickAryPos())
-            RULER_TYPE_TAB                  (Tab: GetClickAryPos())
+            RulerType::DontKnow             (no element in the ruler area)
+            RulerType::Outside              (outside of the ruler area)
+            RulerType::Margin1              (only Margin1 border)
+            RulerType::Margin2              (only Margin2 border)
+            RulerType::Border               (Border: GetClickAryPos())
+            RulerType::Indent               (indent: GetClickAryPos())
+            RulerType::Tab                  (Tab: GetClickAryPos())
 
     - GetClickAryPos()
         Returns the index in the array if a Border, an Indent or a Tab
@@ -318,13 +320,13 @@ it has been dragged. There are the following query methods:
         sal_uInt16 are passed, in order to determine the array position
         of a Tab, an Indent, or a Border. The following values are
         returned as type:
-            RULER_TYPE_DONTKNOW             (no element in the ruler area)
-            RULER_TYPE_OUTSIDE              (outside of the ruler area)
-            RULER_TYPE_MARGIN1              (only Margin1 border)
-            RULER_TYPE_MARGIN2              (only Margin2 border)
-            RULER_TYPE_BORDER               (Border: GetClickAryPos())
-            RULER_TYPE_INDENT               (indent: GetClickAryPos())
-            RULER_TYPE_TAB                  (Tab: GetClickAryPos())
+            RulerType::DontKnow             (no element in the ruler area)
+            RulerType::Outside              (outside of the ruler area)
+            RulerType::Margin1              (only Margin1 border)
+            RulerType::Margin2              (only Margin2 border)
+            RulerType::Border               (Border: GetClickAryPos())
+            RulerType::Indent               (indent: GetClickAryPos())
+            RulerType::Tab                  (Tab: GetClickAryPos())
 
 If the drag process should be canceled, this can be done using CancelDrag().
 There are the following methods for controlling the Drag:
@@ -342,7 +344,7 @@ methods:
 
     - StartDocDrag()
         This method is passed the MouseEvent of the document window
-        and what should be dragged. If RULER_TYPE_DONTKNOW is passed
+        and what should be dragged. If RulerType::DontKnow is passed
         as DragType, the ruler decides what should be dragged. In case
         of the other types, the Drag is only started if a respective
         element was found at the given position.
@@ -370,9 +372,9 @@ that can be used to handle specific actions.
         With this method, it can be defined what should be displayed in
         the extra field.
             - ExtraType         what should be displayed in the extra field
-                                RULER_EXTRA_DONTKNOW        (nothing)
-                                RULER_EXTRA_NULLOFFSET      (coordinate axes)
-                                RULER_EXTRA_TAB             (Tab)
+                                RulerExtra::DontKnow        (nothing)
+                                RulerExtra::NullOffset      (coordinate axes)
+                                RulerExtra::Tab             (Tab)
             - sal_uInt16 nStyle     bit field as style:
                                     RULER_STYLE_HIGHLIGHT   (selected)
                                     RULER_TAB_...           (a Tab style)
@@ -435,92 +437,102 @@ Tips for the use of the ruler:
   multiple of one value because the screen resolution is very imprecise.
 
 - DoubleClicks should be handled in the following way (GetClickType()):
-    - RULER_TYPE_DONTKNOW
-      RULER_TYPE_MARGIN1
-      RULER_TYPE_MARGIN2
+    - RulerType::DontKnow
+      RulerType::Margin1
+      RulerType::Margin2
         If the conditions GetClickPos() <= GetMargin1() or
         GetClickPos() >= GetMargin2() are met or the type is equal to
-        RULER_TYPE_MARGIN1 or RULER_TYPE_MARGIN2, a side dialog should
+        RulerType::Margin1 or RulerType::Margin2, a side dialog should
         be displayed in which the focus is at the respective border.
-    - RULER_TYPE_BORDER
+    - RulerType::Border
         A column or table dialog should be shown in which the focus
         is at the respective column that can be queried using
         GetClickAryPos().
-    - RULER_TYPE_INDENT
+    - RulerType::Indent
         The dialog, in which the indents can be configured, should be
         shown. In this, the focus should be on the indent which can
         be queried using GetClickAryPos().
-    - RULER_TYPE_TAB
+    - RulerType::Tab
         A TabDialog should be displayed in which the Tab, that can be
         queried using GetClickAryPos(), should be selected.
 
 *************************************************************************/
 
 
-#define WB_EXTRAFIELD     ((WinBits)0x00004000)
-#define WB_RIGHT_ALIGNED  ((WinBits)0x00008000)
+#define WB_EXTRAFIELD     (WinBits(0x00004000))
+#define WB_RIGHT_ALIGNED  (WinBits(0x00008000))
 #define WB_STDRULER       WB_HORZ
 
 
-enum RulerType { RULER_TYPE_DONTKNOW, RULER_TYPE_OUTSIDE,
-                 RULER_TYPE_MARGIN1, RULER_TYPE_MARGIN2,
-                 RULER_TYPE_BORDER, RULER_TYPE_INDENT, RULER_TYPE_TAB };
+enum class RulerType { DontKnow, Outside,
+                 Margin1, Margin2,
+                 Border, Indent, Tab };
 
-enum RulerExtra { RULER_EXTRA_DONTKNOW,
-                  RULER_EXTRA_NULLOFFSET, RULER_EXTRA_TAB };
+enum class RulerExtra { DontKnow, NullOffset, Tab };
 
-#define RULER_STYLE_HIGHLIGHT   ((sal_uInt16)0x8000)
-#define RULER_STYLE_DONTKNOW    ((sal_uInt16)0x4000)
-#define RULER_STYLE_INVISIBLE   ((sal_uInt16)0x2000)
+#define RULER_STYLE_HIGHLIGHT   (sal_uInt16(0x8000))
+#define RULER_STYLE_DONTKNOW    (sal_uInt16(0x4000))
+#define RULER_STYLE_INVISIBLE   (sal_uInt16(0x2000))
 
-#define RULER_DRAGSIZE_MOVE     0
-#define RULER_DRAGSIZE_1        1
-#define RULER_DRAGSIZE_2        2
+enum class RulerDragSize {
+    Move,
+    N1,
+    N2
+};
 
 #define RULER_MOUSE_BORDERMOVE  5
 #define RULER_MOUSE_BORDERWIDTH 5
 #define RULER_MOUSE_MARGINWIDTH 3
 
 
-#define RULER_MARGIN_SIZEABLE   ((sal_uInt16)0x0001)
+enum class RulerMarginStyle {
+    NONE       = 0x0000,
+    Sizeable   = 0x0001,
+    Invisible  = 0x0002
+};
+namespace o3tl {
+    template<> struct typed_flags<RulerMarginStyle> : is_typed_flags<RulerMarginStyle, 0x0003> {};
+}
 
 
-#define RULER_BORDER_SIZEABLE   ((sal_uInt16)0x0001)
-#define RULER_BORDER_MOVEABLE   ((sal_uInt16)0x0002)
-#define RULER_BORDER_VARIABLE   ((sal_uInt16)0x0004)
-#define RULER_BORDER_TABLE      ((sal_uInt16)0x0008)
-#define RULER_BORDER_SNAP       ((sal_uInt16)0x0010)
-#define RULER_BORDER_MARGIN     ((sal_uInt16)0x0020)
+enum class RulerBorderStyle {
+    Sizeable   = 0x0001,
+    Moveable   = 0x0002,
+    Variable   = 0x0004,
+    Invisible  = 0x0008
+};
+namespace o3tl {
+    template<> struct typed_flags<RulerBorderStyle> : is_typed_flags<RulerBorderStyle, 0x000f> {};
+}
 
 struct RulerBorder
 {
-    long        nPos;
-    long        nWidth;
-    sal_uInt16  nStyle;
-    long        nMinPos; //minimum/maximum position, supported for table borders/rows
-    long        nMaxPos;
+    long             nPos;
+    long             nWidth;
+    RulerBorderStyle nStyle;
+    long             nMinPos; //minimum/maximum position, supported for table borders/rows
+    long             nMaxPos;
 };
 
-
-#define RULER_INDENT_TOP        ((sal_uInt16)0x0000)
-#define RULER_INDENT_BOTTOM     ((sal_uInt16)0x0001)
-#define RULER_INDENT_BORDER     ((sal_uInt16)0x0002)
-#define RULER_INDENT_STYLE      ((sal_uInt16)0x000F)
+enum class RulerIndentStyle {
+    Top, Bottom
+};
 
 struct RulerIndent
 {
-    long        nPos;
-    sal_uInt16  nStyle;
+    long              nPos;
+    RulerIndentStyle  nStyle;
+    bool              bInvisible;
 };
 
 
-#define RULER_TAB_LEFT          ((sal_uInt16)0x0000)
-#define RULER_TAB_RIGHT         ((sal_uInt16)0x0001)
-#define RULER_TAB_CENTER        ((sal_uInt16)0x0002)
-#define RULER_TAB_DECIMAL       ((sal_uInt16)0x0003)
-#define RULER_TAB_DEFAULT       ((sal_uInt16)0x0004)
-#define RULER_TAB_STYLE         ((sal_uInt16)0x000F)
-#define RULER_TAB_RTL           ((sal_uInt16)0x0010)
+#define RULER_TAB_LEFT          (sal_uInt16(0x0000))
+#define RULER_TAB_RIGHT         (sal_uInt16(0x0001))
+#define RULER_TAB_CENTER        (sal_uInt16(0x0002))
+#define RULER_TAB_DECIMAL       (sal_uInt16(0x0003))
+#define RULER_TAB_DEFAULT       (sal_uInt16(0x0004))
+#define RULER_TAB_STYLE         (sal_uInt16(0x000F))
+#define RULER_TAB_RTL           (sal_uInt16(0x0010))
 
 struct RulerTab
 {
@@ -532,25 +544,24 @@ struct RulerTab
 struct RulerLine
 {
     long    nPos;
-    sal_uInt16  nStyle;
 };
 
 
 struct RulerSelection
 {
-    long        nPos;
-    RulerType   eType;
-    sal_uInt16  nAryPos;
-    sal_uInt16  mnDragSize;
-    bool        bSize;
-    bool        bSizeBar;
-    bool        bExpandTest;
+    long          nPos;
+    RulerType     eType;
+    sal_uInt16    nAryPos;
+    RulerDragSize mnDragSize;
+    bool          bSize;
+    bool          bSizeBar;
+    bool          bExpandTest;
 
     RulerSelection()
         : nPos(0)
-        , eType(RULER_TYPE_DONTKNOW)
+        , eType(RulerType::DontKnow)
         , nAryPos(0)
-        , mnDragSize(0)
+        , mnDragSize(RulerDragSize::Move)
         , bSize(false)
         , bSizeBar(false)
         , bExpandTest( false )
@@ -560,13 +571,13 @@ struct RulerSelection
 
 struct RulerUnitData
 {
-    MapUnit         eMapUnit;           // MAP_UNIT for calculation
-    long            nTickUnit;          // Unit divider
-    double          nTick1;             // Minimal step
-    double          nTick2;             // Tick quarter unit
-    double          nTick3;             // Tick half unit
-    double          nTick4;             // Tick whole unit
-    sal_Char        aUnitStr[8];        // Unit string
+    MapUnit const         eMapUnit;           // MAP_UNIT for calculation
+    long const            nTickUnit;          // Unit divider
+    double const          nTick1;             // Minimal step
+    double const          nTick2;             // Tick quarter unit
+    double const          nTick3;             // Tick half unit
+    double const          nTick4;             // Tick whole unit
+    sal_Char const        aUnitStr[8];        // Unit string
 };
 
 
@@ -610,25 +621,21 @@ private:
     long            mnBorderWidth;
     long            mnStartDragPos;
     long            mnDragPos;
-    ImplSVEvent *   mnUpdateEvtId;
-    ImplRulerData*  mpSaveData;
+    std::unique_ptr<ImplRulerData>  mpSaveData;
     ImplRulerData*  mpData;
-    ImplRulerData*  mpDragData;
-    Rectangle       maExtraRect;
+    std::unique_ptr<ImplRulerData>  mpDragData;
+    tools::Rectangle       maExtraRect;
     WinBits         mnWinStyle;
     sal_uInt16      mnUnitIndex;
     sal_uInt16      mnDragAryPos;
-    sal_uInt16      mnDragSize;
+    RulerDragSize   mnDragSize;
     sal_uInt16      mnDragModifier;
     sal_uInt16      mnExtraStyle;
-    sal_uInt16      mnExtraClicks;
-    sal_uInt16      mnExtraModifier;
     long            mnCharWidth;
     long            mnLineHeight;
 
     RulerExtra      meExtraType;
     RulerType       meDragType;
-    MapUnit         meSourceUnit;
     FieldUnit       meUnit;
     Fraction        maZoom;
     bool            mbCalc;
@@ -647,7 +654,9 @@ private:
     std::unique_ptr<RulerSelection> mxCurrentHitTest;
     std::unique_ptr<RulerSelection> mxPreviousHitTest;
 
-    SvtRulerAccessible* pAccContext;
+    rtl::Reference<SvtRulerAccessible> mxAccContext;
+
+    std::map<OUString, SalLayoutGlyphs> maTextGlyphs;
 
     SVT_DLLPRIVATE void ImplVDrawLine(vcl::RenderContext& rRenderContext,  long nX1, long nY1, long nX2, long nY2 );
     SVT_DLLPRIVATE void ImplVDrawRect(vcl::RenderContext& rRenderContext, long nX1, long nY1, long nX2, long nY2 );
@@ -658,8 +667,8 @@ private:
                                       long nMin, long nMax, long nStart, long nVirTop, long nVirBottom);
     SVT_DLLPRIVATE void ImplDrawBorders(vcl::RenderContext& rRenderContext,
                                         long nMin, long nMax, long nVirTop, long nVirBottom);
-    SVT_DLLPRIVATE void ImplDrawIndent(vcl::RenderContext& rRenderContext,
-                                       const tools::Polygon& rPoly, sal_uInt16 nStyle, bool bIsHit = false);
+    SVT_DLLPRIVATE static void ImplDrawIndent(vcl::RenderContext& rRenderContext,
+                                       const tools::Polygon& rPoly, bool bIsHit);
     SVT_DLLPRIVATE void ImplDrawIndents(vcl::RenderContext& rRenderContext,
                                         long nMin, long nMax, long nVirTop, long nVirBottom);
     SVT_DLLPRIVATE void ImplDrawTab(vcl::RenderContext& rRenderContext, const Point& rPos, sal_uInt16 nStyle);
@@ -670,7 +679,7 @@ private:
     SVT_DLLPRIVATE void ImplInit( WinBits nWinBits );
     SVT_DLLPRIVATE void ImplInitSettings( bool bFont, bool bForeground, bool bBackground );
     SVT_DLLPRIVATE void ImplCalc();
-    SVT_DLLPRIVATE void ImplFormat(vcl::RenderContext& rRenderContext);
+    SVT_DLLPRIVATE void ImplFormat(vcl::RenderContext const & rRenderContext);
     SVT_DLLPRIVATE void ImplInitExtraField( bool bUpdate );
     SVT_DLLPRIVATE void ImplInvertLines(vcl::RenderContext& rRenderContext);
     SVT_DLLPRIVATE void ImplDraw(vcl::RenderContext& rRenderContext);
@@ -683,9 +692,9 @@ private:
     SVT_DLLPRIVATE bool ImplHitTest( const Point& rPosition,
                                          RulerSelection* pHitTest,
                                          bool bRequiredStyle = false,
-                                         sal_uInt16 nRequiredStyle = 0 ) const;
+                                         RulerIndentStyle nRequiredStyle = RulerIndentStyle::Top ) const;
     SVT_DLLPRIVATE bool     ImplDocHitTest( const Point& rPos, RulerType eDragType, RulerSelection* pHitTest ) const;
-    SVT_DLLPRIVATE bool     ImplStartDrag( RulerSelection* pHitTest, sal_uInt16 nModifier );
+    SVT_DLLPRIVATE bool     ImplStartDrag( RulerSelection const * pHitTest, sal_uInt16 nModifier );
     SVT_DLLPRIVATE void     ImplDrag( const Point& rPos );
     SVT_DLLPRIVATE void     ImplEndDrag();
 
@@ -699,13 +708,13 @@ protected:
 
 public:
             Ruler( vcl::Window* pParent, WinBits nWinStyle = WB_STDRULER );
-    virtual ~Ruler();
+    virtual ~Ruler() override;
     virtual void dispose() override;
 
     virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
     virtual void    MouseMove( const MouseEvent& rMEvt ) override;
     virtual void    Tracking( const TrackingEvent& rTEvt ) override;
-    virtual void    Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void    Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
     virtual void    Resize() override;
     virtual void    StateChanged( StateChangedType nStateChange ) override;
     virtual void    DataChanged( const DataChangedEvent& rDCEvt ) override;
@@ -720,28 +729,26 @@ public:
     void            Activate() override;
     void            Deactivate() override;
 
-    void            SetWinPos( long nOff = 0, long nWidth = 0 );
+    void            SetWinPos( long nOff, long nWidth = 0 );
     long            GetWinOffset() const { return mnWinOff; }
     void            SetPagePos( long nOff = 0, long nWidth = 0 );
     long            GetPageOffset() const;
     void            SetBorderPos( long nOff = 0 );
     long            GetBorderOffset() const { return mnBorderOff; }
-    const Rectangle& GetExtraRect() const { return maExtraRect; }
+    const tools::Rectangle& GetExtraRect() const { return maExtraRect; }
 
     void            SetUnit( FieldUnit eNewUnit );
     FieldUnit       GetUnit() const { return meUnit; }
     void            SetZoom( const Fraction& rNewZoom );
 
-    void            SetSourceUnit( MapUnit eNewUnit ) { meSourceUnit = eNewUnit; }
-
     void            SetExtraType( RulerExtra eNewExtraType, sal_uInt16 nStyle = 0 );
 
     bool            StartDocDrag( const MouseEvent& rMEvt,
-                                  RulerType eDragType = RULER_TYPE_DONTKNOW );
+                                  RulerType eDragType );
     RulerType       GetDragType() const { return meDragType; }
     long            GetDragPos() const { return mnDragPos; }
     sal_uInt16      GetDragAryPos() const { return mnDragAryPos; }
-    sal_uInt16      GetDragSize() const { return mnDragSize; }
+    RulerDragSize   GetDragSize() const { return mnDragSize; }
     bool            IsDragDelete() const { return mbDragDelete; }
     bool            IsDragCanceled() const { return mbDragCanceled; }
     sal_uInt16      GetDragModifier() const { return mnDragModifier; }
@@ -757,11 +764,11 @@ public:
 
     void            SetNullOffset( long nPos );
     long            GetNullOffset() const;
-    void            SetMargin1() { SetMargin1( 0, RULER_STYLE_INVISIBLE ); }
-    void            SetMargin1( long nPos, sal_uInt16 nMarginStyle = RULER_MARGIN_SIZEABLE );
+    void            SetMargin1() { SetMargin1( 0, RulerMarginStyle::Invisible ); }
+    void            SetMargin1( long nPos, RulerMarginStyle nMarginStyle = RulerMarginStyle::Sizeable );
     long            GetMargin1() const;
-    void            SetMargin2() { SetMargin2( 0, RULER_STYLE_INVISIBLE ); }
-    void            SetMargin2( long nPos, sal_uInt16 nMarginStyle = RULER_MARGIN_SIZEABLE );
+    void            SetMargin2() { SetMargin2( 0, RulerMarginStyle::Invisible ); }
+    void            SetMargin2( long nPos, RulerMarginStyle nMarginStyle = RulerMarginStyle::Sizeable );
     long            GetMargin2() const;
 
     void            SetLeftFrameMargin( long nPos );

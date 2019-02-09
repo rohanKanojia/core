@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "screenupdater.hxx"
-#include "listenercontainer.hxx"
+#include <screenupdater.hxx>
+#include <listenercontainer.hxx>
 
 #include <osl/diagnose.h>
 
-#include <boost/mem_fn.hpp>
+#include <functional>
 #include <memory>
 #include <vector>
 #include <algorithm>
@@ -99,8 +99,7 @@ namespace internal
     void ScreenUpdater::notifyUpdate( const UnoViewSharedPtr& rView,
                                       bool                    bViewClobbered )
     {
-        mpImpl->maViewUpdateRequests.push_back(
-            std::make_pair(rView, bViewClobbered) );
+        mpImpl->maViewUpdateRequests.emplace_back(rView, bViewClobbered );
 
         if( bViewClobbered )
             mpImpl->mbViewClobbered = true;
@@ -125,12 +124,12 @@ namespace internal
         // any ViewUpdate-triggered updates?
         const bool bViewUpdatesNeeded(
             mpImpl->maUpdaters.apply(
-                boost::mem_fn(&ViewUpdate::needsUpdate)) );
+                std::mem_fn(&ViewUpdate::needsUpdate)) );
 
         if( bViewUpdatesNeeded )
         {
             mpImpl->maUpdaters.applyAll(
-                boost::mem_fn((bool (ViewUpdate::*)())&ViewUpdate::update) );
+                std::mem_fn(&ViewUpdate::update) );
         }
 
         if( bViewUpdatesNeeded ||

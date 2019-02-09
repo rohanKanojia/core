@@ -22,7 +22,7 @@
 #include <cppunit/TestFixture.h>
 #include <cppunit/extensions/HelperMacros.h>
 
-#include <basegfx/tools/b2dclipstate.hxx>
+#include <basegfx/utils/b2dclipstate.hxx>
 #include <basegfx/range/b2dpolyrange.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
@@ -38,11 +38,11 @@ namespace basegfx2d
 class clipstate : public CppUnit::TestFixture
 {
 private:
-    tools::B2DClipState aUnion1;
-    tools::B2DClipState aUnion2;
-    tools::B2DClipState aIntersect;
-    tools::B2DClipState aXor;
-    tools::B2DClipState aSubtract;
+    utils::B2DClipState aUnion1;
+    utils::B2DClipState aUnion2;
+    utils::B2DClipState aIntersect;
+    utils::B2DClipState aXor;
+    utils::B2DClipState aSubtract;
 
 public:
     void setUp() override
@@ -86,39 +86,39 @@ public:
         aSubtract.subtractRange(aEast);
     }
 
-    void verifyPoly(const char* sName, const char* sSvg, const tools::B2DClipState& toTest)
+    void verifyPoly(const char* sName, const char* sSvg, const utils::B2DClipState& toTest) const
     {
 #if OSL_DEBUG_LEVEL > 2
         fprintf(stderr, "%s - svg:d=\"%s\"\n",
                 sName, OUStringToOString(
-                    basegfx::tools::exportToSvgD(toTest.getClipPoly(), true, true, false),
+                    basegfx::utils::exportToSvgD(toTest.getClipPoly(), true, true, false),
                     RTL_TEXTENCODING_UTF8).getStr() );
 #endif
 
         B2DPolyPolygon aTmp1;
         CPPUNIT_ASSERT_MESSAGE(sName,
-                               tools::importFromSvgD(
+                               utils::importFromSvgD(
                                    aTmp1, OUString::createFromAscii(sSvg), false, nullptr));
 
         const OUString aSvg=
-            tools::exportToSvgD(toTest.getClipPoly(), true, true, false);
+            utils::exportToSvgD(toTest.getClipPoly(), true, true, false);
         B2DPolyPolygon aTmp2;
         CPPUNIT_ASSERT_MESSAGE(sName,
-                               tools::importFromSvgD(
+                               utils::importFromSvgD(
                                    aTmp2, aSvg, false, nullptr));
 
-        CPPUNIT_ASSERT_MESSAGE(
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(
             sName,
-            aTmp2 == aTmp1);
+            aTmp1, aTmp2);
     }
 
     void verifySimpleRange()
     {
-        const char* unionSvg="m100 10v90h-90v10h-20v-10h-90v-90h-10v-20h10v-90h90v-10h20v10h90v90h10v20z";
-        const char* intersectSvg="m-100 10v-20h10v20zm90 90v-10h20v10zm0-190v-10h20v10zm100 100v-20h10v20z";
-        const char* xorSvg="m-100 10h10v-20h-10zm90 90h20v-10h-20zm0-190h20v-10h-20zm100 100h10v-20h-10z"
+        const char* const unionSvg="m100 10v90h-90v10h-20v-10h-90v-90h-10v-20h10v-90h90v-10h20v10h90v90h10v20z";
+        const char* const intersectSvg="m-100 10v-20h10v20zm90 90v-10h20v10zm0-190v-10h20v10zm100 100v-20h10v20z";
+        const char* const xorSvg="m-100 10h10v-20h-10zm90 90h20v-10h-20zm0-190h20v-10h-20zm100 100h10v-20h-10z"
                            "m10 0v90h-90v10h-20v-10h-90v-90h-10v-20h10v-90h90v-10h20v10h90v90h10v20z";
-        const char* subtractSvg="m-90 10v-20h-10v-90h90v10h20v-10h90v90h-10v20h10v90h-90v-10h-20v10h-90v-90z";
+        const char* const subtractSvg="m-90 10v-20h-10v-90h90v10h20v-10h90v90h-10v20h10v90h-90v-10h-20v10h-90v-90z";
 
         CPPUNIT_ASSERT_MESSAGE("cleared clip stays empty under union operation",
                                aUnion1.isCleared());
@@ -130,20 +130,19 @@ public:
 
     void verifyMixedClips()
     {
-        tools::B2DClipState aMixedClip;
+        utils::B2DClipState aMixedClip;
 
-        const char* unionSvg="m100 10v90h-90v10h-20v-10h-90v-90h-10v-20h10v-90h90v-10h20v10h90v90h10v20z";
+        const char unionSvg[]="m100 10v90h-90v10h-20v-10h-90v-90h-10v-20h10v-90h90v-10h20v10h90v90h10v20z";
 
         B2DPolyPolygon aTmp1;
-        tools::importFromSvgD(
-            aTmp1, OUString::createFromAscii(unionSvg), false, nullptr);
+        CPPUNIT_ASSERT(utils::importFromSvgD(aTmp1, unionSvg, false, nullptr));
 
         aMixedClip.intersectPolyPolygon(aTmp1);
         aMixedClip.subtractRange(B2DRange(-20,-150,20,0));
         aMixedClip.subtractRange(B2DRange(-150,-20,0,20));
         aMixedClip.xorRange(B2DRange(-150,-150,150,150));
 
-        const char* mixedClipSvg="m0 0v20h-100v80h90v10h20v-10h90v-90h10v-20h-10v-90h-80v100zm-20-20v-80h-80v80zm-130 170v-300h300v300z";
+        const char* const mixedClipSvg="m0 0v20h-100v80h90v10h20v-10h90v-90h10v-20h-10v-90h-80v100zm-20-20v-80h-80v80zm-130 170v-300h300v300z";
         verifyPoly("mixed clip", mixedClipSvg, aMixedClip);
     }
 

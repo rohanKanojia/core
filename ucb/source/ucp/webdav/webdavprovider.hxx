@@ -21,11 +21,19 @@
 #ifndef INCLUDED_UCB_SOURCE_UCP_WEBDAV_WEBDAVPROVIDER_HXX
 #define INCLUDED_UCB_SOURCE_UCP_WEBDAV_WEBDAVPROVIDER_HXX
 
+#include <sal/config.h>
+
+#include <memory>
+
 #include <rtl/ref.hxx>
 #include <com/sun/star/beans/Property.hpp>
 #include "DAVSessionFactory.hxx"
 #include <ucbhelper/providerhelper.hxx>
 #include "PropertyMap.hxx"
+
+namespace com { namespace sun { namespace star { namespace lang {
+class XSingleServiceFactory;
+} } } }
 
 namespace http_dav_ucp {
 
@@ -37,58 +45,45 @@ namespace http_dav_ucp {
 // URL scheme. This is the scheme the provider will be able to create
 // contents for. The UCB will select the provider ( i.e. in order to create
 // contents ) according to this scheme.
-#define WEBDAV_URL_SCHEME       "vnd.sun.star.webdav"
-#define WEBDAV_URL_SCHEME_LENGTH    19
-
-#define WEBDAVS_URL_SCHEME "vnd.sun.star.webdavs"
-#define WEBDAVS_URL_SCHEME_LENGTH 20
-
-#define HTTP_URL_SCHEME         "http"
-
-#define HTTPS_URL_SCHEME        "https"
-
-#define DAV_URL_SCHEME          "dav"
-#define DAV_URL_SCHEME_LENGTH   3
-
-#define DAVS_URL_SCHEME         "davs"
-#define DAVS_URL_SCHEME_LENGTH  4
+#define VNDSUNSTARWEBDAV_URL_SCHEME  "vnd.sun.star.webdav"
+#define VNDSUNSTARWEBDAVS_URL_SCHEME u"vnd.sun.star.webdavs"
+#define HTTP_URL_SCHEME              "http"
+#define HTTPS_URL_SCHEME             "https"
+#define DAV_URL_SCHEME               u"dav"
+#define DAVS_URL_SCHEME              u"davs"
+#define WEBDAV_URL_SCHEME            u"webdav"
+#define WEBDAVS_URL_SCHEME           u"webdavs"
 
 #define HTTP_CONTENT_TYPE      "application/" HTTP_URL_SCHEME "-content"
 
 #define WEBDAV_CONTENT_TYPE    HTTP_CONTENT_TYPE
-#define WEBDAV_COLLECTION_TYPE "application/" WEBDAV_URL_SCHEME "-collection"
+#define WEBDAV_COLLECTION_TYPE "application/" VNDSUNSTARWEBDAV_URL_SCHEME "-collection"
 
 
 class ContentProvider : public ::ucbhelper::ContentProviderImplHelper
 {
     rtl::Reference< DAVSessionFactory > m_xDAVSessionFactory;
-    PropertyMap * m_pProps;
+    std::unique_ptr<PropertyMap> m_pProps;
 
 public:
     explicit ContentProvider( const css::uno::Reference< css::uno::XComponentContext >& rContext );
-    virtual ~ContentProvider();
+    virtual ~ContentProvider() override;
 
     // XInterface
-    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type & rType )
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type & rType ) override;
     virtual void SAL_CALL acquire()
         throw() override;
     virtual void SAL_CALL release()
         throw() override;
 
     // XTypeProvider
-    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId()
-        throw( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() override;
+    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw( css::uno::RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-        throw( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     static OUString getImplementationName_Static();
     static css::uno::Sequence< OUString > getSupportedServiceNames_Static();
@@ -99,9 +94,7 @@ public:
 
     // XContentProvider
     virtual css::uno::Reference< css::ucb::XContent > SAL_CALL
-    queryContent( const css::uno::Reference< css::ucb::XContentIdentifier >& Identifier )
-        throw( css::ucb::IllegalIdentifierException,
-               css::uno::RuntimeException ) override;
+    queryContent( const css::uno::Reference< css::ucb::XContentIdentifier >& Identifier ) override;
 
 
     // Non-interface methods.

@@ -19,10 +19,11 @@
 
 #include <com/sun/star/awt/XLayoutConstrains.hpp>
 #include <com/sun/star/awt/XTextLayoutConstrains.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XMultiPropertySet.hpp>
 
 #include <toolkit/controls/unocontrolbase.hxx>
 #include <toolkit/helper/property.hxx>
-#include <comphelper/processfactory.hxx>
 
 #include <tools/debug.hxx>
 
@@ -34,7 +35,7 @@ using namespace com::sun::star;
 
 bool UnoControlBase::ImplHasProperty( sal_uInt16 nPropId )
 {
-    OUString aPropName( GetPropertyName( nPropId ) );
+    const OUString& aPropName( GetPropertyName( nPropId ) );
     return ImplHasProperty( aPropName );
 }
 
@@ -73,11 +74,6 @@ void UnoControlBase::ImplSetPropertyValues( const css::uno::Sequence< OUString >
         }
         if ( !bUpdateThis )
             ImplLockPropertyChangeNotifications( aPropertyNames, false );
-    }
-    else
-    {
-        int dummy = 0;
-        (void)dummy;
     }
 }
 
@@ -138,7 +134,7 @@ template <typename T> T UnoControlBase::ImplGetPropertyValueClass( sal_uInt16 nP
 
 bool UnoControlBase::ImplGetPropertyValue_BOOL( sal_uInt16 nProp )
 {
-    return ImplGetPropertyValuePOD<sal_Bool>(nProp);
+    return ImplGetPropertyValuePOD<bool>(nProp);
 }
 
 sal_Int16 UnoControlBase::ImplGetPropertyValue_INT16( sal_uInt16 nProp )

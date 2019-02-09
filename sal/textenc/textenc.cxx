@@ -21,20 +21,19 @@
    implementation of rtl/textenc.h.  Rather, it should be called
    gettextencodingdata.c. */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstddef>
 #include <cstdlib>
 
-#include "osl/diagnose.h"
-#include "osl/module.hxx"
-#include "rtl/instance.hxx"
-#include "rtl/textenc.h"
-#include "rtl/ustring.h"
-#include "rtl/ustring.hxx"
-#include "sal/log.hxx"
-#include "sal/macros.h"
-#include "sal/types.h"
+#include <osl/module.hxx>
+#include <rtl/instance.hxx>
+#include <rtl/textenc.h>
+#include <rtl/ustring.h>
+#include <rtl/ustring.hxx>
+#include <sal/log.hxx>
+#include <sal/macros.h>
+#include <sal/types.h>
 
 #include "convertsimple.hxx"
 #include "gettextencodingdata.hxx"
@@ -90,7 +89,7 @@ static unsigned char const aImplA0FFSameToCharTab[SAMEA0FFCHAR_END
 
 /* MS-1252 */
 /* Windows Standard CharSet (ANSI) for Western Script */
-/* 1-Byte, 0x00-0x7F ASCII ohne Ausnahme */
+/* 1-Byte, 0x00-0x7F ASCII without exception */
 /* Convert-Tables: mappings/vendors/micsft/windows/cp1252.txt from 04/15/98 Version 2.01 */
 /* Last-Changes from us: */
 
@@ -195,7 +194,7 @@ static ImplTextEncodingData const aImplMS1252TextEncodingData
 
 /* ISO-8859-1 */
 /* Unix Standard CharSet (Latin1) for Western Script */
-/* 1-Byte, 0x00-0x7F ASCII ohne Ausnahme, 0x80-0x9F Control-Caracter wie in Unicode */
+/* 1-Byte, 0x00-0x7F ASCII without exception, 0x80-0x9F control character like in Unicode */
 /* Convert-Tables: mappings/iso8859/8859-1.txt from 07/27/99 Version 1.0 (based on Unicode 3.0) */
 /* Last-Changes from us: */
 
@@ -260,7 +259,7 @@ static ImplTextEncodingData const aImplISO88591TextEncodingData
 
 /* US-ASCII */
 /* 7-Bit ASCII */
-/* 1-Byte, 0x00-0x7F ASCII ohne Ausnahme */
+/* 1-Byte, 0x00-0x7F ASCII without exception */
 /* For the import we use ISO-8859-1 with MS extension (MS-1252), because */
 /* when the 8-Bit is set, the chance, that this is a ISO-8859-1 character */
 /* is the greatest. For the export all chars greater than 127 are not */
@@ -375,9 +374,9 @@ extern "C" {
 
 typedef ImplTextEncodingData const * TextEncodingFunction(rtl_TextEncoding);
 
-void SAL_CALL thisModule() {}
+void thisModule() {}
 
-};
+}
 
 class FullTextEncodingData {
 public:
@@ -396,7 +395,7 @@ public:
         }
     }
 
-    ImplTextEncodingData const * get(rtl_TextEncoding encoding) {
+    ImplTextEncodingData const * get(rtl_TextEncoding encoding) const {
         return (*function_)(encoding);
     }
 

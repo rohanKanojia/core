@@ -38,8 +38,8 @@
 #include <com/sun/star/xsd/DataTypeClass.hpp>
 #include <com/sun/star/xsd/WhiteSpaceTreatment.hpp>
 
-#include <tools/debug.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 
 using com::sun::star::uno::Reference;
@@ -51,7 +51,6 @@ using namespace com::sun::star;
 using com::sun::star::util::Duration;
 using com::sun::star::xml::sax::XAttributeList;
 using com::sun::star::beans::XPropertySet;
-using com::sun::star::beans::XPropertySetInfo;
 using com::sun::star::xforms::XDataTypeRepository;
 using namespace xmloff::token;
 
@@ -84,18 +83,14 @@ SchemaRestrictionContext::SchemaRestrictionContext(
     SvXMLImport& rImport,
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
-    Reference<css::xforms::XDataTypeRepository>& rRepository,
+    Reference<css::xforms::XDataTypeRepository> const & rRepository,
     const OUString& sTypeName ) :
         TokenContext( rImport, nPrefix, rLocalName, aAttributes, aChildren ),
         mxRepository( rRepository ),
         msTypeName( sTypeName ),
         msBaseName()
 {
-    DBG_ASSERT( mxRepository.is(), "need repository" );
-}
-
-SchemaRestrictionContext::~SchemaRestrictionContext()
-{
+    SAL_WARN_IF( !mxRepository.is(), "xmloff", "need repository" );
 }
 
 void SchemaRestrictionContext::CreateDataType()
@@ -104,8 +99,8 @@ void SchemaRestrictionContext::CreateDataType()
     if( mxDataType.is() )
         return;
 
-    DBG_ASSERT( !msBaseName.isEmpty(), "no base name?" );
-    DBG_ASSERT( mxRepository.is(), "no repository?" );
+    SAL_WARN_IF( msBaseName.isEmpty(), "xmloff", "no base name?" );
+    SAL_WARN_IF( !mxRepository.is(), "xmloff", "no repository?" );
 
     try
     {
@@ -122,7 +117,7 @@ void SchemaRestrictionContext::CreateDataType()
     {
         OSL_FAIL( "exception during type creation" );
     }
-    DBG_ASSERT( mxDataType.is(), "can't create type" );
+    SAL_WARN_IF( !mxDataType.is(), "xmloff", "can't create type" );
 }
 
 void SchemaRestrictionContext::HandleAttribute(
@@ -137,26 +132,26 @@ void SchemaRestrictionContext::HandleAttribute(
 
 typedef Any (*convert_t)( const OUString& );
 
-Any xforms_string( const OUString& rValue )
+static Any xforms_string( const OUString& rValue )
 {
     return makeAny( rValue );
 }
 
-Any xforms_int32( const OUString& rValue )
+static Any xforms_int32( const OUString& rValue )
 {
     sal_Int32 nValue;
     bool bSuccess = ::sax::Converter::convertNumber( nValue, rValue );
     return bSuccess ? makeAny( nValue ) : Any();
 }
 
-Any xforms_int16( const OUString& rValue )
+static Any xforms_int16( const OUString& rValue )
 {
     sal_Int32 nValue;
     bool bSuccess = ::sax::Converter::convertNumber( nValue, rValue );
     return bSuccess ? makeAny( static_cast<sal_Int16>( nValue ) ) : Any();
 }
 
-Any xforms_whitespace( const OUString& rValue )
+static Any xforms_whitespace( const OUString& rValue )
 {
     Any aValue;
     if( IsXMLToken( rValue, XML_PRESERVE ) )
@@ -168,14 +163,14 @@ Any xforms_whitespace( const OUString& rValue )
     return aValue;
 }
 
-Any xforms_double( const OUString& rValue )
+static Any xforms_double( const OUString& rValue )
 {
     double fValue;
     bool bSuccess = ::sax::Converter::convertDouble( fValue, rValue );
     return bSuccess ? makeAny( fValue ) : Any();
 }
 
-Any xforms_date( const OUString& rValue )
+static Any xforms_date( const OUString& rValue )
 {
     Any aAny;
 
@@ -196,14 +191,14 @@ Any xforms_date( const OUString& rValue )
     return aAny;
 }
 
-Any xforms_dateTime( const OUString& rValue )
+static Any xforms_dateTime( const OUString& rValue )
 {
     util::DateTime aDateTime;
-    bool const bSuccess = ::sax::Converter::parseDateTime(aDateTime, nullptr, rValue);
+    bool const bSuccess = ::sax::Converter::parseDateTime(aDateTime, rValue);
     return bSuccess ? makeAny( aDateTime ) : Any();
 }
 
-Any xforms_time( const OUString& rValue )
+static Any xforms_time( const OUString& rValue )
 {
     Any aAny;
     Duration aDuration;

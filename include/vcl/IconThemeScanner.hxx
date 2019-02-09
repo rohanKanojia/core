@@ -11,9 +11,9 @@
 #define INCLUDED_VCL_ICONTHEMESCANNER_HXX
 
 #include <vcl/dllapi.h>
-#include <tools/solar.h>
 
 #include <rtl/ustring.hxx>
+#include <vcl/IconThemeInfo.hxx>
 
 #include <memory>
 #include <vector>
@@ -21,21 +21,13 @@
 // forward declaration of unit test class. Required for friend relationship.
 class IconThemeScannerTest;
 
-namespace osl {
-class Directory;
-class DirectoryItem;
-}
-
 namespace vcl {
-class IconThemeInfo;
 
 /** This class scans a folder for icon themes and provides the results.
  */
 class VCL_DLLPUBLIC IconThemeScanner
 {
 public:
-    ~IconThemeScanner();
-
     /** Factory method to create the object.
      * Provide a path to search for IconThemes.
      */
@@ -67,13 +59,11 @@ private:
     /** Scan a directory for icon themes.
      *
      * @return
-     * This method will return true on success.
      * There are several cases when this method will fail:
      * - The directory does not exist
-     * - There are no files which which match the pattern images_xxx.zip
+     * - There are no files which match the pattern images_xxx.zip
      */
-    bool
-    ScanDirectoryForIconThemes(const OUString &path);
+    void ScanDirectoryForIconThemes(const OUString &path);
 
     /** Adds the provided icon theme by path.
      */

@@ -9,18 +9,27 @@
 #ifndef INCLUDED_UCB_SOURCE_UCP_CMIS_AUTH_PROVIDER_HXX
 #define INCLUDED_UCB_SOURCE_UCP_CMIS_AUTH_PROVIDER_HXX
 
+#if defined __GNUC__ && !defined __clang__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated"
+#pragma GCC diagnostic ignored "-Wunused-but-set-parameter"
+#endif
 #include <libcmis/libcmis.hxx>
+#if defined __GNUC__ && !defined __clang__
+#pragma GCC diagnostic pop
+#endif
 
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
+#include <cppuhelper/weakref.hxx>
 
 namespace cmis
 {
     class AuthProvider : public libcmis::AuthProvider
     {
         const css::uno::Reference< css::ucb::XCommandEnvironment>& m_xEnv;
-        static css::uno::Reference< css::ucb::XCommandEnvironment> sm_xEnv;
-        OUString m_sUrl;
-        OUString m_sBindingUrl;
+        static css::uno::WeakReference< css::ucb::XCommandEnvironment> sm_xEnv;
+        OUString const m_sUrl;
+        OUString const m_sBindingUrl;
 
         public:
             AuthProvider ( const css::uno::Reference< css::ucb::XCommandEnvironment>& xEnv,
@@ -34,9 +43,13 @@ namespace cmis
                     const char* /*username*/,
                     const char* /*password*/ );
 
-            static void setXEnv( const css::uno::Reference< css::ucb::XCommandEnvironment>& xEnv ) { sm_xEnv = xEnv; }
+            static char* gdriveAuthCodeFallback( const char* /*url*/,
+                    const char* /*username*/,
+                    const char* /*password*/ );
 
-            static css::uno::Reference< css::ucb::XCommandEnvironment> getXEnv( ) { return sm_xEnv; }
+            static void setXEnv( const css::uno::Reference< css::ucb::XCommandEnvironment>& xEnv );
+            static css::uno::Reference< css::ucb::XCommandEnvironment> getXEnv();
+
     };
 }
 

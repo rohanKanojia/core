@@ -17,17 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
-#include <comphelper/string.hxx>
+#include <scitems.hxx>
 #include <editeng/eeitem.hxx>
 
-#include <rtl/tencinfo.h>
-
 #include <vcl/svapp.hxx>
-#include <svx/algitem.hxx>
 #include <editeng/boxitem.hxx>
 #include <editeng/brushitem.hxx>
 #include <editeng/colritem.hxx>
+#include <editeng/crossedoutitem.hxx>
 #include <editeng/fhgtitem.hxx>
 #include <editeng/fontitem.hxx>
 #include <editeng/postitem.hxx>
@@ -40,42 +37,39 @@
 #include <sfx2/docfile.hxx>
 #include <sfx2/frmhtmlw.hxx>
 #include <sfx2/objsh.hxx>
-#include <svl/stritem.hxx>
 #include <svl/urihelper.hxx>
-#include <svl/zforlist.hxx>
 #include <svtools/htmlkywd.hxx>
 #include <svtools/htmlout.hxx>
 #include <svtools/parhtml.hxx>
 #include <vcl/outdev.hxx>
 #include <stdio.h>
+#include <osl/diagnose.h>
 
-#include "htmlexp.hxx"
-#include "filter.hxx"
-#include "global.hxx"
-#include "postit.hxx"
-#include "document.hxx"
-#include "attrib.hxx"
-#include "patattr.hxx"
-#include "stlpool.hxx"
-#include "scresid.hxx"
-#include "formulacell.hxx"
-#include "cellform.hxx"
-#include "docoptio.hxx"
-#include "editutil.hxx"
-#include "ftools.hxx"
-#include "cellvalue.hxx"
+#include <htmlexp.hxx>
+#include <global.hxx>
+#include <postit.hxx>
+#include <document.hxx>
+#include <attrib.hxx>
+#include <patattr.hxx>
+#include <stlpool.hxx>
+#include <scresid.hxx>
+#include <formulacell.hxx>
+#include <cellform.hxx>
+#include <docoptio.hxx>
+#include <editutil.hxx>
+#include <ftools.hxx>
+#include <cellvalue.hxx>
 
 #include <editeng/flditem.hxx>
 #include <editeng/borderline.hxx>
-#include <unotools/syslocale.hxx>
 
-// Without sc.hrc: error C2679: binary '=' : no operator defined which takes a
+// Without strings.hrc: error C2679: binary '=' : no operator defined which takes a
 // right-hand operand of type 'const class String (__stdcall *)(class ScResId)'
 // at
 // const String aStrTable( ScResId( SCSTR_TABLE ) ); aStrOut = aStrTable;
 // ?!???
-#include "sc.hrc"
-#include "globstr.hrc"
+#include <strings.hrc>
+#include <globstr.hrc>
 
 #include <com/sun/star/uno/Reference.h>
 #include <com/sun/star/document/XDocumentProperties.hpp>
@@ -87,15 +81,9 @@ using namespace ::com::sun::star;
 
 const static sal_Char sMyBegComment[]   = "<!-- ";
 const static sal_Char sMyEndComment[]   = " -->";
-const static sal_Char sFontFamily[]     = "font-family:";
-const static sal_Char sFontSize[]       = "font-size:";
 const static sal_Char sDisplay[]        = "display:";
 const static sal_Char sBorder[]         = "border:";
-const static sal_Char sPadding[]        = "padding:";
-const static sal_Char sPosition[]       = "position:";
 const static sal_Char sBackground[]     = "background:";
-const static sal_Char sWidth[]          = "width:";
-const static sal_Char sHeight[]         = "height:";
 
 const sal_uInt16 ScHTMLExport::nDefaultFontSize[SC_HTML_FONTSIZES] =
 {
@@ -129,7 +117,7 @@ const sal_Char ScHTMLExport::sIndentSource[nIndentMax+1] =
 
 #define OUT_SP_CSTR_ASS( s )    rStrm.WriteChar( ' ').WriteCharPtr( s ).WriteChar( '=' )
 
-#define GLOBSTR(id) ScGlobal::GetRscString( id )
+#define GLOBSTR(id) ScResId( id )
 
 void ScFormatFilterPluginImpl::ScExportHTML( SvStream& rStrm, const OUString& rBaseURL, ScDocument* pDoc,
         const ScRange& rRange, const rtl_TextEncoding /*eNach*/, bool bAll,
@@ -189,16 +177,12 @@ static void lcl_AddStamp( OUString& rStr, const OUString& rName,
 
 static OString lcl_makeHTMLColorTriplet(const Color& rColor)
 {
-    OStringBuffer aStr( "\"#" );
+    sal_Char    buf[24];
+
     // <font COLOR="#00FF40">hello</font>
-    sal_Char    buf[64];
-    sal_Char*   p = buf;
-    p += sprintf( p, "%02X", rColor.GetRed() );
-    p += sprintf( p, "%02X", rColor.GetGreen() );
-    p += sprintf( p, "%02X", rColor.GetBlue() );
-    aStr.append(buf);
-    aStr.append('\"');
-    return aStr.makeStringAndClear();
+    snprintf( buf, 24, "\"#%02X%02X%02X\"", rColor.GetRed(), rColor.GetGreen(), rColor.GetBlue() );
+
+    return OString(buf);
 }
 
 ScHTMLExport::ScHTMLExport( SvStream& rStrmP, const OUString& rBaseURL, ScDocument* pDocP,
@@ -214,7 +198,6 @@ ScHTMLExport::ScHTMLExport( SvStream& rStrmP, const OUString& rBaseURL, ScDocume
     bTabHasGraphics( false ),
     bTabAlignedLeft( false ),
     bCalcAsShown( pDocP->GetDocOptions().IsCalcAsShown() ),
-    bTableDataWidth( true ),
     bTableDataHeight( true ),
     mbSkipImages ( false ),
     mbSkipHeaderFooter( false )
@@ -252,18 +235,6 @@ ScHTMLExport::ScHTMLExport( SvStream& rStrmP, const OUString& rBaseURL, ScDocume
         if ( !IsEmptyTable( nTab ) )
             nUsedTables++;
     }
-
-    // Content-Id for Mail export?
-    SfxObjectShell* pDocSh = pDoc->GetDocumentShell();
-    if ( pDocSh )
-    {
-        const SfxPoolItem* pItem = pDocSh->GetItem( SID_ORIGURL );
-        if( pItem )
-        {
-            aCId = static_cast<const SfxStringItem *>(pItem)->GetValue();
-            OSL_ENSURE( !aCId.isEmpty(), "CID without length!" );
-        }
-    }
 }
 
 ScHTMLExport::~ScHTMLExport()
@@ -295,8 +266,8 @@ sal_uInt16 ScHTMLExport::ToPixel( sal_uInt16 nVal )
 {
     if( nVal )
     {
-        nVal = (sal_uInt16)pAppWin->LogicToPixel(
-                    Size( nVal, nVal ), MapMode( MAP_TWIP ) ).Width();
+        nVal = static_cast<sal_uInt16>(pAppWin->LogicToPixel(
+                    Size( nVal, nVal ), MapMode( MapUnit::MapTwip ) ).Width());
         if( !nVal ) // If there's a Twip there should also be a Pixel
             nVal = 1;
     }
@@ -306,12 +277,12 @@ sal_uInt16 ScHTMLExport::ToPixel( sal_uInt16 nVal )
 Size ScHTMLExport::MMToPixel( const Size& rSize )
 {
     Size aSize( rSize );
-    aSize = pAppWin->LogicToPixel( rSize, MapMode( MAP_100TH_MM ) );
+    aSize = pAppWin->LogicToPixel( rSize, MapMode( MapUnit::Map100thMM ) );
     // If there's something there should also be a Pixel
     if ( !aSize.Width() && rSize.Width() )
-        aSize.Width() = 1;
+        aSize.setWidth( 1 );
     if ( !aSize.Height() && rSize.Height() )
-        aSize.Height() = 1;
+        aSize.setHeight( 1 );
     return aSize;
 }
 
@@ -341,7 +312,6 @@ void ScHTMLExport::WriteHeader()
     }
     else
     {
-        using namespace ::com::sun::star;
         uno::Reference<document::XDocumentPropertiesSupplier> xDPS(
             pDoc->GetDocumentShell()->GetModel(), uno::UNO_QUERY_THROW);
         uno::Reference<document::XDocumentProperties> xDocProps
@@ -371,29 +341,23 @@ void ScHTMLExport::WriteHeader()
     rStrm.WriteCharPtr( OOO_STRING_SVTOOLS_HTML_body ).WriteCharPtr( "," ).WriteCharPtr( OOO_STRING_SVTOOLS_HTML_division ).WriteCharPtr( "," ).WriteCharPtr( OOO_STRING_SVTOOLS_HTML_table ).WriteCharPtr( "," )
        .WriteCharPtr( OOO_STRING_SVTOOLS_HTML_thead ).WriteCharPtr( "," ).WriteCharPtr( OOO_STRING_SVTOOLS_HTML_tbody ).WriteCharPtr( "," ).WriteCharPtr( OOO_STRING_SVTOOLS_HTML_tfoot ).WriteCharPtr( "," )
        .WriteCharPtr( OOO_STRING_SVTOOLS_HTML_tablerow ).WriteCharPtr( "," ).WriteCharPtr( OOO_STRING_SVTOOLS_HTML_tableheader ).WriteCharPtr( "," )
-       .WriteCharPtr( OOO_STRING_SVTOOLS_HTML_tabledata ).WriteCharPtr( "," ).WriteCharPtr( OOO_STRING_SVTOOLS_HTML_parabreak ).WriteCharPtr( " { " ).WriteCharPtr( sFontFamily );
-    sal_Int32 nFonts = comphelper::string::getTokenCount(aHTMLStyle.aFontFamilyName, ';');
-    if ( nFonts == 1 )
+       .WriteCharPtr( OOO_STRING_SVTOOLS_HTML_tabledata ).WriteCharPtr( "," ).WriteCharPtr( OOO_STRING_SVTOOLS_HTML_parabreak )
+       .WriteCharPtr( " { " ).WriteCharPtr( "font-family:" );
+    if (!aHTMLStyle.aFontFamilyName.isEmpty())
     {
-        rStrm.WriteChar( '\"' );
-        OUT_STR( aHTMLStyle.aFontFamilyName );
-        rStrm.WriteChar( '\"' );
-    }
-    else
-    {   // Fontlist, VCL: Semicolon as separator
-        // CSS1: Comma as separator and every single font name quoted
         const OUString& rList = aHTMLStyle.aFontFamilyName;
-        for ( sal_Int32 j = 0, nPos = 0; j < (sal_Int32) nFonts; j++ )
+        for(sal_Int32 nPos {0};;)
         {
             rStrm.WriteChar( '\"' );
             OUT_STR( rList.getToken( 0, ';', nPos ) );
             rStrm.WriteChar( '\"' );
-            if ( j < nFonts-1 )
-                rStrm.WriteCharPtr( ", " );
+            if (nPos<0)
+                break;
+            rStrm.WriteCharPtr( ", " );
         }
     }
-    rStrm.WriteCharPtr( "; " ).WriteCharPtr( sFontSize )
-       .WriteCharPtr( GetFontSizeCss( ( sal_uInt16 ) aHTMLStyle.nFontHeight ) ).WriteCharPtr( " }" );
+    rStrm.WriteCharPtr( "; " ).WriteCharPtr( "font-size:" )
+       .WriteCharPtr( GetFontSizeCss( static_cast<sal_uInt16>(aHTMLStyle.nFontHeight) ) ).WriteCharPtr( " }" );
 
     OUT_LF();
 
@@ -402,10 +366,10 @@ void ScHTMLExport::WriteHeader()
     rStrm.WriteCharPtr( OOO_STRING_SVTOOLS_HTML_anchor ).WriteCharPtr(".comment-indicator:hover")
        .WriteCharPtr(" + ").WriteCharPtr( OOO_STRING_SVTOOLS_HTML_comment2 ).WriteCharPtr(" { ")
        .WriteCharPtr(sBackground).WriteCharPtr("#ffd").WriteCharPtr("; ")
-       .WriteCharPtr(sPosition).WriteCharPtr("absolute").WriteCharPtr("; ")
+       .WriteCharPtr("position:").WriteCharPtr("absolute").WriteCharPtr("; ")
        .WriteCharPtr(sDisplay).WriteCharPtr("block").WriteCharPtr("; ")
        .WriteCharPtr(sBorder).WriteCharPtr("1px solid black").WriteCharPtr("; ")
-       .WriteCharPtr(sPadding).WriteCharPtr("0.5em").WriteCharPtr("; ")
+       .WriteCharPtr("padding:").WriteCharPtr("0.5em").WriteCharPtr("; ")
        .WriteCharPtr(" } ");
 
     OUT_LF();
@@ -415,8 +379,8 @@ void ScHTMLExport::WriteHeader()
         .WriteCharPtr(sBackground).WriteCharPtr("red").WriteCharPtr("; ")
         .WriteCharPtr(sDisplay).WriteCharPtr("inline-block").WriteCharPtr("; ")
         .WriteCharPtr(sBorder).WriteCharPtr("1px solid black").WriteCharPtr("; ")
-        .WriteCharPtr(sWidth).WriteCharPtr("0.5em").WriteCharPtr("; ")
-        .WriteCharPtr(sHeight).WriteCharPtr("0.5em").WriteCharPtr("; ")
+        .WriteCharPtr("width:").WriteCharPtr("0.5em").WriteCharPtr("; ")
+        .WriteCharPtr("height:").WriteCharPtr("0.5em").WriteCharPtr("; ")
         .WriteCharPtr(" } ");
 
     OUT_LF();
@@ -439,7 +403,7 @@ void ScHTMLExport::WriteOverview()
         OUT_HR();
         IncIndent(1); TAG_ON( OOO_STRING_SVTOOLS_HTML_parabreak ); TAG_ON_LF( OOO_STRING_SVTOOLS_HTML_center );
         TAG_ON( OOO_STRING_SVTOOLS_HTML_head1 );
-        OUT_STR( ScGlobal::GetRscString( STR_OVERVIEW ) );
+        OUT_STR( ScResId( STR_OVERVIEW ) );
         TAG_OFF_LF( OOO_STRING_SVTOOLS_HTML_head1 );
 
         OUString aStr;
@@ -473,10 +437,10 @@ const SfxItemSet& ScHTMLExport::PageDefaults( SCTAB nTab )
     // remember defaults for compare in WriteCell
     if ( !aHTMLStyle.bInitialized )
     {
-        pStylePool->SetSearchMask( SFX_STYLE_FAMILY_PARA );
+        pStylePool->SetSearchMask( SfxStyleFamily::Para );
         pStyleSheet = pStylePool->Find(
-                ScGlobal::GetRscString(STR_STYLENAME_STANDARD),
-                SFX_STYLE_FAMILY_PARA );
+                ScResId(STR_STYLENAME_STANDARD),
+                SfxStyleFamily::Para );
         OSL_ENSURE( pStyleSheet, "ParaStyle not found! :-(" );
         if (!pStyleSheet)
             pStyleSheet = pStylePool->First();
@@ -496,15 +460,15 @@ const SfxItemSet& ScHTMLExport::PageDefaults( SCTAB nTab )
 
     // Page style sheet printer settings, e.g. for background graphics.
     // There's only one background graphic in HTML!
-    pStylePool->SetSearchMask( SFX_STYLE_FAMILY_PAGE );
-    pStyleSheet = pStylePool->Find( pDoc->GetPageStyle( nTab ), SFX_STYLE_FAMILY_PAGE );
+    pStylePool->SetSearchMask( SfxStyleFamily::Page );
+    pStyleSheet = pStylePool->Find( pDoc->GetPageStyle( nTab ), SfxStyleFamily::Page );
     OSL_ENSURE( pStyleSheet, "PageStyle not found! :-(" );
     if (!pStyleSheet)
         pStyleSheet = pStylePool->First();
     const SfxItemSet& rSet = pStyleSheet->GetItemSet();
     if ( !aHTMLStyle.bInitialized )
     {
-        const SvxBrushItem* pBrushItem = static_cast<const SvxBrushItem*>(&rSet.Get( ATTR_BACKGROUND ));
+        const SvxBrushItem* pBrushItem = &rSet.Get( ATTR_BACKGROUND );
         aHTMLStyle.aBackgroundColor = pBrushItem->GetColor();
         aHTMLStyle.bInitialized = true;
     }
@@ -532,37 +496,37 @@ OString ScHTMLExport::BorderToStyle(const char* pBorderName,
             append("px ");
         switch (pLine->GetBorderLineStyle())
         {
-            case table::BorderLineStyle::SOLID:
+            case SvxBorderLineStyle::SOLID:
                 aOut.append("solid");
                 break;
-            case table::BorderLineStyle::DOTTED:
+            case SvxBorderLineStyle::DOTTED:
                 aOut.append("dotted");
                 break;
-            case table::BorderLineStyle::DASHED:
-            case table::BorderLineStyle::DASH_DOT:
-            case table::BorderLineStyle::DASH_DOT_DOT:
+            case SvxBorderLineStyle::DASHED:
+            case SvxBorderLineStyle::DASH_DOT:
+            case SvxBorderLineStyle::DASH_DOT_DOT:
                 aOut.append("dashed");
                 break;
-            case table::BorderLineStyle::DOUBLE:
-            case table::BorderLineStyle::DOUBLE_THIN:
-            case table::BorderLineStyle::THINTHICK_SMALLGAP:
-            case table::BorderLineStyle::THINTHICK_MEDIUMGAP:
-            case table::BorderLineStyle::THINTHICK_LARGEGAP:
-            case table::BorderLineStyle::THICKTHIN_SMALLGAP:
-            case table::BorderLineStyle::THICKTHIN_MEDIUMGAP:
-            case table::BorderLineStyle::THICKTHIN_LARGEGAP:
+            case SvxBorderLineStyle::DOUBLE:
+            case SvxBorderLineStyle::DOUBLE_THIN:
+            case SvxBorderLineStyle::THINTHICK_SMALLGAP:
+            case SvxBorderLineStyle::THINTHICK_MEDIUMGAP:
+            case SvxBorderLineStyle::THINTHICK_LARGEGAP:
+            case SvxBorderLineStyle::THICKTHIN_SMALLGAP:
+            case SvxBorderLineStyle::THICKTHIN_MEDIUMGAP:
+            case SvxBorderLineStyle::THICKTHIN_LARGEGAP:
                 aOut.append("double");
                 break;
-            case table::BorderLineStyle::EMBOSSED:
+            case SvxBorderLineStyle::EMBOSSED:
                 aOut.append("ridge");
                 break;
-            case table::BorderLineStyle::ENGRAVED:
+            case SvxBorderLineStyle::ENGRAVED:
                 aOut.append("groove");
                 break;
-            case table::BorderLineStyle::OUTSET:
+            case SvxBorderLineStyle::OUTSET:
                 aOut.append("outset");
                 break;
-            case table::BorderLineStyle::INSET:
+            case SvxBorderLineStyle::INSET:
                 aOut.append("inset");
                 break;
             default:
@@ -572,7 +536,7 @@ OString ScHTMLExport::BorderToStyle(const char* pBorderName,
 
         // color
         char hex[7];
-        snprintf( hex, 7, "%06x", static_cast< unsigned int >( pLine->GetColor().GetRGBColor() ) );
+        snprintf( hex, 7, "%06" SAL_PRIxUINT32, static_cast<sal_uInt32>( pLine->GetColor().GetRGBColor() ) );
         hex[6] = 0;
 
         aOut.append(hex);
@@ -586,7 +550,7 @@ OString ScHTMLExport::BorderToStyle(const char* pBorderName,
 void ScHTMLExport::WriteBody()
 {
     const SfxItemSet& rSet = PageDefaults( bAll ? 0 : aRange.aStart.Tab() );
-    const SvxBrushItem* pBrushItem = static_cast<const SvxBrushItem*>(&rSet.Get( ATTR_BACKGROUND ));
+    const SvxBrushItem* pBrushItem = &rSet.Get( ATTR_BACKGROUND );
 
     // default text color black
     if (!mbSkipHeaderFooter)
@@ -608,15 +572,13 @@ void ScHTMLExport::WriteBody()
                     {
                         // Save graphic as (JPG) file
                         aGrfNm = aStreamPath;
-                        sal_uInt16 nErr = XOutBitmap::WriteGraphic( *pGrf, aGrfNm,
-                            "JPG", XOUTBMP_USE_NATIVE_IF_POSSIBLE );
+                        ErrCode nErr = XOutBitmap::WriteGraphic( *pGrf, aGrfNm,
+                            "JPG", XOutFlags::UseNativeIfPossible );
                         if( !nErr ) // Contains errors, as we have nothing to output
                         {
                             aGrfNm = URIHelper::SmartRel2Abs(
                                     INetURLObject(aBaseURL),
                                     aGrfNm, URIHelper::GetMaybeFileHdl());
-                            if ( HasCId() )
-                                MakeCIdURL( aGrfNm );
                             aLink = aGrfNm;
                         }
                     }
@@ -624,11 +586,9 @@ void ScHTMLExport::WriteBody()
                 else
                 {
                     aGrfNm = aLink;
-                    if( bCopyLocalFileToINet || HasCId() )
+                    if( bCopyLocalFileToINet )
                     {
                         CopyLocalFileToINet( aGrfNm, aStreamPath );
-                        if ( HasCId() )
-                            MakeCIdURL( aGrfNm );
                     }
                     else
                         aGrfNm = URIHelper::SmartRel2Abs(
@@ -804,7 +764,6 @@ void ScHTMLExport::WriteTables()
         // IncIndent(1); TAG_ON_LF( OOO_STRING_SVTOOLS_HTML_tbody );
         // At least old (3.x, 4.x?) Netscape doesn't follow <TABLE COLS=n> and
         // <COL WIDTH=x> specified, but needs a width at every column.
-        bTableDataWidth = true;     // widths in first row
         bool bHasHiddenRows = pDoc->HasHiddenRows(nStartRow, nEndRow, nTab);
         for ( SCROW nRow=nStartRow; nRow<=nEndRow; nRow++ )
         {
@@ -827,7 +786,6 @@ void ScHTMLExport::WriteTables()
                 WriteCell( nCol2, nRow, nTab );
                 bTableDataHeight = false;
             }
-            bTableDataWidth = false;    // widths only in first row
 
             if ( nRow == nEndRow )
                 IncIndent(-1);
@@ -870,7 +828,7 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
     const ScPatternAttr* pAttr = pDoc->GetPattern( nCol, nRow, nTab );
     const SfxItemSet* pCondItemSet = pDoc->GetCondResult( nCol, nRow, nTab );
 
-    const ScMergeFlagAttr& rMergeFlagAttr = static_cast<const ScMergeFlagAttr&>( pAttr->GetItem( ATTR_MERGE_FLAG, pCondItemSet ) );
+    const ScMergeFlagAttr& rMergeFlagAttr = pAttr->GetItem( ATTR_MERGE_FLAG, pCondItemSet );
     if ( rMergeFlagAttr.IsOverlapped() )
         return ;
 
@@ -897,7 +855,7 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
 
     ScRefCellValue aCell(*pDoc, aPos);
 
-    sal_uLong nFormat = pAttr->GetNumberFormat( pFormatter );
+    sal_uInt32 nFormat = pAttr->GetNumberFormat( pFormatter );
     bool bValueData = aCell.hasNumeric();
     SvtScriptType nScriptType = SvtScriptType::NONE;
     if (!aCell.isEmpty())
@@ -909,7 +867,7 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
     OStringBuffer aStrTD(OOO_STRING_SVTOOLS_HTML_tabledata);
 
     // border of the cells
-    const SvxBoxItem* pBorder = static_cast<const SvxBoxItem*>( pDoc->GetAttr( nCol, nRow, nTab, ATTR_BORDER ) );
+    const SvxBoxItem* pBorder = pDoc->GetAttr( nCol, nRow, nTab, ATTR_BORDER );
     if ( pBorder && (pBorder->GetTop() || pBorder->GetBottom() || pBorder->GetLeft() || pBorder->GetRight()) )
     {
         aStrTD.append(' ').append(OOO_STRING_SVTOOLS_HTML_style).
@@ -931,7 +889,7 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
     const sal_Char* pChar;
     sal_uInt16 nHeightPixel;
 
-    const ScMergeAttr& rMergeAttr = static_cast<const ScMergeAttr&>( pAttr->GetItem( ATTR_MERGE, pCondItemSet ) );
+    const ScMergeAttr& rMergeAttr = pAttr->GetItem( ATTR_MERGE, pCondItemSet );
     if ( pGraphEntry || rMergeAttr.IsMerged() )
     {
         SCCOL nC, jC;
@@ -939,7 +897,7 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
         sal_uLong v;
         if ( pGraphEntry )
             nC = std::max( SCCOL(pGraphEntry->aRange.aEnd.Col() - nCol + 1),
-                SCCOL(rMergeAttr.GetColMerge()) );
+                           rMergeAttr.GetColMerge() );
         else
             nC = rMergeAttr.GetColMerge();
         if ( nC > 1 )
@@ -953,7 +911,7 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
 
         if ( pGraphEntry )
             nR = std::max( SCROW(pGraphEntry->aRange.aEnd.Row() - nRow + 1),
-                SCROW(rMergeAttr.GetRowMerge()) );
+                           rMergeAttr.GetRowMerge() );
         else
             nR = rMergeAttr.GetRowMerge();
         if ( nR > 1 )
@@ -993,20 +951,23 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
         pAttr->GetItem( ScGlobal::GetScriptedWhichID( nScriptType,
                     ATTR_FONT_POSTURE), pCondItemSet) );
 
-    const SvxUnderlineItem& rUnderlineItem = static_cast<const SvxUnderlineItem&>(
-        pAttr->GetItem( ATTR_FONT_UNDERLINE, pCondItemSet ) );
+    const SvxUnderlineItem& rUnderlineItem =
+        pAttr->GetItem( ATTR_FONT_UNDERLINE, pCondItemSet );
 
-    const SvxColorItem& rColorItem = static_cast<const SvxColorItem&>( pAttr->GetItem(
-            ATTR_FONT_COLOR, pCondItemSet ) );
+    const SvxCrossedOutItem& rCrossedOutItem =
+        pAttr->GetItem( ATTR_FONT_CROSSEDOUT, pCondItemSet );
 
-    const SvxHorJustifyItem& rHorJustifyItem = static_cast<const SvxHorJustifyItem&>(
-        pAttr->GetItem( ATTR_HOR_JUSTIFY, pCondItemSet ) );
+    const SvxColorItem& rColorItem = pAttr->GetItem(
+            ATTR_FONT_COLOR, pCondItemSet );
 
-    const SvxVerJustifyItem& rVerJustifyItem = static_cast<const SvxVerJustifyItem&>(
-        pAttr->GetItem( ATTR_VER_JUSTIFY, pCondItemSet ) );
+    const SvxHorJustifyItem& rHorJustifyItem =
+        pAttr->GetItem( ATTR_HOR_JUSTIFY, pCondItemSet );
 
-    const SvxBrushItem& rBrushItem = static_cast<const SvxBrushItem&>( pAttr->GetItem(
-            ATTR_BACKGROUND, pCondItemSet ) );
+    const SvxVerJustifyItem& rVerJustifyItem =
+        pAttr->GetItem( ATTR_VER_JUSTIFY, pCondItemSet );
+
+    const SvxBrushItem& rBrushItem = pAttr->GetItem(
+            ATTR_BACKGROUND, pCondItemSet );
 
     Color aBgColor;
     if ( rBrushItem.GetColor().GetTransparency() == 255 )
@@ -1014,16 +975,17 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
     else
         aBgColor = rBrushItem.GetColor();
 
-    bool bBold          = ( WEIGHT_BOLD     <= rWeightItem.GetWeight() );
-    bool bItalic        = ( ITALIC_NONE     != rPostureItem.GetPosture() );
-    bool bUnderline     = ( LINESTYLE_NONE  != rUnderlineItem.GetLineStyle() );
-    bool bSetFontColor  = ( COL_AUTO        != rColorItem.GetValue().GetColor() );  // default is AUTO now
+    bool bBold          = ( WEIGHT_BOLD      <= rWeightItem.GetWeight() );
+    bool bItalic        = ( ITALIC_NONE      != rPostureItem.GetPosture() );
+    bool bUnderline     = ( LINESTYLE_NONE   != rUnderlineItem.GetLineStyle() );
+    bool bCrossedOut    = ( STRIKEOUT_SINGLE <= rCrossedOutItem.GetStrikeout() );
+    bool bSetFontColor  = ( COL_AUTO         != rColorItem.GetValue() );  // default is AUTO now
     bool bSetFontName   = ( aHTMLStyle.aFontFamilyName  != rFontItem.GetFamilyName() );
     sal_uInt16 nSetFontSizeNumber = 0;
     sal_uInt32 nFontHeight = rFontHeightItem.GetHeight();
     if ( nFontHeight != aHTMLStyle.nFontHeight )
     {
-        nSetFontSizeNumber = GetFontSizeNumber( (sal_uInt16) nFontHeight );
+        nSetFontSizeNumber = GetFontSizeNumber( static_cast<sal_uInt16>(nFontHeight) );
         if ( nSetFontSizeNumber == aHTMLStyle.nFontSizeNumber )
             nSetFontSizeNumber = 0;   // no difference, don't set
     }
@@ -1036,14 +998,14 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
 
     switch( rHorJustifyItem.GetValue() )
     {
-        case SVX_HOR_JUSTIFY_STANDARD:
+        case SvxCellHorJustify::Standard:
             pChar = (bValueData ? OOO_STRING_SVTOOLS_HTML_AL_right : OOO_STRING_SVTOOLS_HTML_AL_left);
             break;
-        case SVX_HOR_JUSTIFY_CENTER:    pChar = OOO_STRING_SVTOOLS_HTML_AL_center;  break;
-        case SVX_HOR_JUSTIFY_BLOCK:     pChar = OOO_STRING_SVTOOLS_HTML_AL_justify; break;
-        case SVX_HOR_JUSTIFY_RIGHT:     pChar = OOO_STRING_SVTOOLS_HTML_AL_right;   break;
-        case SVX_HOR_JUSTIFY_LEFT:
-        case SVX_HOR_JUSTIFY_REPEAT:
+        case SvxCellHorJustify::Center:    pChar = OOO_STRING_SVTOOLS_HTML_AL_center;  break;
+        case SvxCellHorJustify::Block:     pChar = OOO_STRING_SVTOOLS_HTML_AL_justify; break;
+        case SvxCellHorJustify::Right:     pChar = OOO_STRING_SVTOOLS_HTML_AL_right;   break;
+        case SvxCellHorJustify::Left:
+        case SvxCellHorJustify::Repeat:
         default:                        pChar = OOO_STRING_SVTOOLS_HTML_AL_left;    break;
     }
 
@@ -1052,10 +1014,10 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
 
     switch( rVerJustifyItem.GetValue() )
     {
-        case SVX_VER_JUSTIFY_TOP:       pChar = OOO_STRING_SVTOOLS_HTML_VA_top;     break;
-        case SVX_VER_JUSTIFY_CENTER:    pChar = OOO_STRING_SVTOOLS_HTML_VA_middle;  break;
-        case SVX_VER_JUSTIFY_BOTTOM:    pChar = OOO_STRING_SVTOOLS_HTML_VA_bottom;  break;
-        case SVX_VER_JUSTIFY_STANDARD:
+        case SvxCellVerJustify::Top:       pChar = OOO_STRING_SVTOOLS_HTML_VA_top;     break;
+        case SvxCellVerJustify::Center:    pChar = OOO_STRING_SVTOOLS_HTML_VA_middle;  break;
+        case SvxCellVerJustify::Bottom:    pChar = OOO_STRING_SVTOOLS_HTML_VA_bottom;  break;
+        case SvxCellVerJustify::Standard:
         default:                        pChar = nullptr;
     }
     if ( pChar )
@@ -1119,6 +1081,7 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
     if ( bBold )        TAG_ON( OOO_STRING_SVTOOLS_HTML_bold );
     if ( bItalic )      TAG_ON( OOO_STRING_SVTOOLS_HTML_italic );
     if ( bUnderline )   TAG_ON( OOO_STRING_SVTOOLS_HTML_underline );
+    if ( bCrossedOut )  TAG_ON( OOO_STRING_SVTOOLS_HTML_strikethrough );
 
     if ( bSetFont )
     {
@@ -1127,26 +1090,22 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
         {
             aStr.append(' ').append(OOO_STRING_SVTOOLS_HTML_O_face).
                 append("=\"");
-            sal_Int32 nFonts = comphelper::string::getTokenCount(rFontItem.GetFamilyName(), ';');
-            if ( nFonts == 1 )
+
+            if (!rFontItem.GetFamilyName().isEmpty())
             {
-                OString aTmpStr = HTMLOutFuncs::ConvertStringToHTML(
-                    rFontItem.GetFamilyName(), eDestEnc, &aNonConvertibleChars);
-                aStr.append(aTmpStr);
-            }
-            else
-            {   // Font list, VCL: Semicolon as separator, HTML: Comma
                 const OUString& rList = rFontItem.GetFamilyName();
-                for ( sal_Int32 j = 0, nPos = 0; j < (sal_Int32)nFonts; j++ )
+                for (sal_Int32 nPos {0};;)
                 {
                     OString aTmpStr = HTMLOutFuncs::ConvertStringToHTML(
                         rList.getToken( 0, ';', nPos ), eDestEnc,
                         &aNonConvertibleChars);
                     aStr.append(aTmpStr);
-                    if ( j < nFonts-1 )
-                        aStr.append(',');
+                    if (nPos<0)
+                        break;
+                    aStr.append(',');
                 }
             }
+
             aStr.append('\"');
         }
         if ( nSetFontSizeNumber )
@@ -1159,8 +1118,8 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
             Color   aColor = rColorItem.GetValue();
 
             //  always export automatic text color as black
-            if ( aColor.GetColor() == COL_AUTO )
-                aColor.SetColor( COL_BLACK );
+            if ( aColor == COL_AUTO )
+                aColor = COL_BLACK;
 
             aStr.append(' ').append(OOO_STRING_SVTOOLS_HTML_O_color).
                 append('=').append(lcl_makeHTMLColorTriplet(aColor));
@@ -1178,7 +1137,7 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
             bFieldText = WriteFieldText(aCell.mpEditText);
             if ( bFieldText )
                 break;
-            //! else: fallthru
+            [[fallthrough]];
         default:
             ScCellFormat::GetString(aCell, nFormat, aStrOut, &pColor, *pFormatter, pDoc);
     }
@@ -1191,8 +1150,7 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
         }
         else
         {
-            OUString aStr = aStrOut;
-            sal_Int32 nPos = aStr.indexOf( '\n' );
+            sal_Int32 nPos = aStrOut.indexOf( '\n' );
             if ( nPos == -1 )
             {
                 OUT_STR( aStrOut );
@@ -1202,13 +1160,13 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
                 sal_Int32 nStartPos = 0;
                 do
                 {
-                    OUString aSingleLine = aStr.copy( nStartPos, nPos - nStartPos );
+                    OUString aSingleLine = aStrOut.copy( nStartPos, nPos - nStartPos );
                     OUT_STR( aSingleLine );
                     TAG_ON( OOO_STRING_SVTOOLS_HTML_linebreak );
                     nStartPos = nPos + 1;
                 }
-                while( ( nPos = aStr.indexOf( '\n', nStartPos ) ) != -1 );
-                OUString aSingleLine = aStr.copy( nStartPos, aStr.getLength() - nStartPos );
+                while( ( nPos = aStrOut.indexOf( '\n', nStartPos ) ) != -1 );
+                OUString aSingleLine = aStrOut.copy( nStartPos );
                 OUT_STR( aSingleLine );
             }
         }
@@ -1217,6 +1175,7 @@ void ScHTMLExport::WriteCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
         WriteGraphEntry( pGraphEntry );
 
     if ( bSetFont )     TAG_OFF( OOO_STRING_SVTOOLS_HTML_font );
+    if ( bCrossedOut )  TAG_OFF( OOO_STRING_SVTOOLS_HTML_strikethrough );
     if ( bUnderline )   TAG_OFF( OOO_STRING_SVTOOLS_HTML_underline );
     if ( bItalic )      TAG_OFF( OOO_STRING_SVTOOLS_HTML_italic );
     if ( bBold )        TAG_OFF( OOO_STRING_SVTOOLS_HTML_bold );
@@ -1250,9 +1209,8 @@ bool ScHTMLExport::WriteFieldText( const EditTextObject* pData )
             std::vector<sal_Int32> aPortions;
             rEngine.GetPortions( nPar, aPortions );
             sal_Int32 nStart = 0;
-            for ( std::vector<sal_Int32>::const_iterator it(aPortions.begin()); it != aPortions.end(); ++it )
+            for ( const sal_Int32 nEnd : aPortions )
             {
-                sal_Int32 nEnd = *it;
                 ESelection aSel( nPar, nStart, nPar, nEnd );
                 bool bUrl = false;
                 // fields are single characters
@@ -1307,7 +1265,7 @@ void ScHTMLExport::CopyLocalFileToINet( OUString& rFileNm,
         }
         else
         {
-            pFileNameMap.reset( new std::map<OUString, OUString>() );
+            pFileNameMap.reset( new std::map<OUString, OUString> );
         }
 
         bool bRet = false;
@@ -1328,7 +1286,7 @@ void ScHTMLExport::CopyLocalFileToINet( OUString& rFileNm,
         aMedium.Close();
         aMedium.Commit();
 
-        bRet = 0 == aMedium.GetError();
+        bRet = ERRCODE_NONE == aMedium.GetError();
 
         if( bRet )
         {
@@ -1336,21 +1294,6 @@ void ScHTMLExport::CopyLocalFileToINet( OUString& rFileNm,
             rFileNm = aDest;
         }
     }
-}
-
-void ScHTMLExport::MakeCIdURL( OUString& rURL )
-{
-    if( aCId.isEmpty() )
-        return;
-
-    INetURLObject aURLObj( rURL );
-    if( INetProtocol::File != aURLObj.GetProtocol() )
-        return;
-
-    OUString aLastName( aURLObj.GetLastName().toAsciiLowerCase() );
-    OSL_ENSURE( !aLastName.isEmpty(), "filename without length!" );
-
-    rURL = "cid:" + aLastName + "." + aCId;
 }
 
 void ScHTMLExport::IncIndent( short nVal )

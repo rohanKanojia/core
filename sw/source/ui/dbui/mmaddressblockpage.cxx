@@ -17,25 +17,32 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <mmaddressblockpage.hxx>
+#include "mmaddressblockpage.hxx"
 #include <mailmergewizard.hxx>
 #include <swtypes.hxx>
-#include <addresslistdialog.hxx>
-#include <vcl/layout.hxx>
+#include "addresslistdialog.hxx"
+#include <vcl/fixed.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/txtattr.hxx>
 #include <vcl/xtextedt.hxx>
+#include <vcl/textview.hxx>
 #include <vcl/builderfactory.hxx>
+#include <vcl/lstbox.hxx>
+#include <vcl/treelistentry.hxx>
 #include <mmconfigitem.hxx>
 #include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/sdbc/SQLException.hpp>
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
 #include <com/sun/star/sdb/XColumn.hpp>
 #include <comphelper/string.hxx>
-#include <svtools/treelistentry.hxx>
+#include <sal/log.hxx>
 
 #include <vector>
 #include <globals.hrc>
+#include <strings.hrc>
 #include <dbui.hrc>
-#include <helpid.h>
+#include <mmaddressblockpage.hrc>
+#include <helpids.h>
 
 using namespace svt;
 using namespace ::com::sun::star;
@@ -47,7 +54,7 @@ using namespace ::com::sun::star::sdbcx;
 static void lcl_Move(Control* pCtrl, long nYOffset)
 {
     Point aPos(pCtrl->GetPosPixel());
-    aPos.Y() += nYOffset;
+    aPos.AdjustY(nYOffset );
     pCtrl->SetPosPixel(aPos);
 }
 
@@ -64,14 +71,14 @@ SwMailMergeAddressBlockPage::SwMailMergeAddressBlockPage( SwMailMergeWizard* _pP
     get(m_pSettingsFI, "settingsft");
     get(m_pAddressCB, "address");
     get(m_pSettingsWIN, "settingspreview");
-    Size aSize(LogicToPixel(Size(164 , 45), MAP_APPFONT));
+    Size aSize(LogicToPixel(Size(164 , 45), MapMode(MapUnit::MapAppFont)));
     m_pSettingsWIN->set_width_request(aSize.Width());
     m_pSettingsWIN->set_height_request(aSize.Height());
     get(m_pSettingsPB, "settings");
     get(m_pHideEmptyParagraphsCB, "hideempty");
     get(m_pAssignPB, "assign");
     get(m_pPreviewWIN, "addresspreview");
-    aSize = LogicToPixel(Size(176, 46), MAP_APPFONT);
+    aSize = LogicToPixel(Size(176, 46), MapMode(MapUnit::MapAppFont));
     m_pPreviewWIN->set_width_request(aSize.Width());
     m_pPreviewWIN->set_height_request(aSize.Height());
     get(m_pDocumentIndexFI, "documentindex");
@@ -144,7 +151,7 @@ void SwMailMergeAddressBlockPage::ActivatePage()
                     m_pWizard->GetConfigItem().GetAddressBlocks();
         for(sal_Int32 nAddress = 0; nAddress < aBlocks.getLength(); ++nAddress)
             m_pSettingsWIN->AddAddress(aBlocks[nAddress]);
-        m_pSettingsWIN->SelectAddress((sal_uInt16)rConfigItem.GetCurrentAddressBlockIndex());
+        m_pSettingsWIN->SelectAddress(static_cast<sal_uInt16>(rConfigItem.GetCurrentAddressBlockIndex()));
         m_pAddressCB->Check(rConfigItem.IsAddressBlock());
         AddressBlockHdl_Impl(m_pAddressCB);
         m_pSettingsWIN->SetLayout(1, 2);
@@ -154,12 +161,10 @@ void SwMailMergeAddressBlockPage::ActivatePage()
 
 bool SwMailMergeAddressBlockPage::commitPage( ::svt::WizardTypes::CommitPageReason _eReason )
 {
-    if ( ::svt::WizardTypes::eTravelForward == _eReason && !m_pWizard->GetConfigItem().GetResultSet().is() )
-        return false;
-    return true;
+    return ::svt::WizardTypes::eTravelForward != _eReason || m_pWizard->GetConfigItem().GetResultSet().is();
 }
 
-IMPL_LINK_NOARG_TYPED(SwMailMergeAddressBlockPage, AddressListHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SwMailMergeAddressBlockPage, AddressListHdl_Impl, Button*, void)
 {
     try
     {
@@ -181,44 +186,44 @@ IMPL_LINK_NOARG_TYPED(SwMailMergeAddressBlockPage, AddressListHdl_Impl, Button*,
     }
     catch (const uno::Exception& e)
     {
-        OSL_FAIL(OUStringToOString(e.Message, osl_getThreadTextEncoding()).getStr());
-        ScopedVclPtrInstance<MessageDialog>::Create(this, e.Message)->Execute();
+        SAL_WARN("sw", e);
+        std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                  VclMessageType::Warning, VclButtonsType::Ok, e.Message));
+        xBox->run();
     }
 }
 
-IMPL_LINK_TYPED(SwMailMergeAddressBlockPage, SettingsHdl_Impl, Button*, pButton, void)
+IMPL_LINK_NOARG(SwMailMergeAddressBlockPage, SettingsHdl_Impl, Button*, void)
 {
-    ScopedVclPtr<SwSelectAddressBlockDialog> pDlg(
-                VclPtr<SwSelectAddressBlockDialog>::Create(pButton, m_pWizard->GetConfigItem()));
+    SwSelectAddressBlockDialog aDlg(GetFrameWeld(), m_pWizard->GetConfigItem());
     SwMailMergeConfigItem& rConfig = m_pWizard->GetConfigItem();
-    pDlg->SetAddressBlocks(rConfig.GetAddressBlocks(), m_pSettingsWIN->GetSelectedAddress());
-    pDlg->SetSettings(rConfig.IsIncludeCountry(), rConfig.GetExcludeCountry());
-    if(RET_OK == pDlg->Execute())
+    aDlg.SetAddressBlocks(rConfig.GetAddressBlocks(), m_pSettingsWIN->GetSelectedAddress());
+    aDlg.SetSettings(rConfig.IsIncludeCountry(), rConfig.GetExcludeCountry());
+    if (aDlg.run() == RET_OK)
     {
         //the dialog provides the selected address at the first position!
-        const uno::Sequence< OUString> aBlocks =
-                    pDlg->GetAddressBlocks();
+        const uno::Sequence< OUString> aBlocks = aDlg.GetAddressBlocks();
         rConfig.SetAddressBlocks(aBlocks);
         m_pSettingsWIN->Clear();
         for(sal_Int32 nAddress = 0; nAddress < aBlocks.getLength(); ++nAddress)
             m_pSettingsWIN->AddAddress(aBlocks[nAddress]);
         m_pSettingsWIN->SelectAddress(0);
         m_pSettingsWIN->Invalidate();    // #i40408
-        rConfig.SetCountrySettings(pDlg->IsIncludeCountry(), pDlg->GetCountry());
+        rConfig.SetCountrySettings(aDlg.IsIncludeCountry(), aDlg.GetCountry());
         InsertDataHdl_Impl(nullptr);
     }
-    pDlg.disposeAndClear();
     GetWizard()->UpdateRoadmap();
     GetWizard()->enableButtons(WizardButtonFlags::NEXT, GetWizard()->isStateEnabled(MM_GREETINGSPAGE));
 }
 
-IMPL_LINK_TYPED(SwMailMergeAddressBlockPage, AssignHdl_Impl, Button*, pButton, void)
+IMPL_LINK(SwMailMergeAddressBlockPage, AssignHdl_Impl, Button*, pButton, void)
 {
     SwMailMergeConfigItem& rConfigItem = m_pWizard->GetConfigItem();
     const sal_uInt16 nSel = m_pSettingsWIN->GetSelectedAddress();
     const uno::Sequence< OUString> aBlocks = rConfigItem.GetAddressBlocks();
-    VclPtr<SwAssignFieldsDialog> pDlg(
-            VclPtr<SwAssignFieldsDialog>::Create(pButton, m_pWizard->GetConfigItem(), aBlocks[nSel], true));
+    ScopedVclPtr<SwAssignFieldsDialog> pDlg(
+        VclPtr<SwAssignFieldsDialog>::Create(
+            pButton, m_pWizard->GetConfigItem(), aBlocks[nSel], true));
     if(RET_OK == pDlg->Execute())
     {
         //preview update
@@ -240,15 +245,16 @@ void SwMailMergeAddressBlockPage::EnableAddressBlock(bool bAll, bool bSelective)
     m_pStep4->Enable(bSelective);
 }
 
-IMPL_LINK_TYPED(SwMailMergeAddressBlockPage, AddressBlockHdl_Impl, Button*, pBox, void)
+IMPL_LINK(SwMailMergeAddressBlockPage, AddressBlockHdl_Impl, Button*, pBox, void)
 {
     EnableAddressBlock(pBox->IsEnabled(), static_cast<CheckBox*>(pBox)->IsChecked());
     SwMailMergeConfigItem& rConfigItem = m_pWizard->GetConfigItem();
     rConfigItem.SetAddressBlock(m_pAddressCB->IsChecked());
     m_pWizard->UpdateRoadmap();
+    GetWizard()->enableButtons(WizardButtonFlags::NEXT, GetWizard()->isStateEnabled(MM_GREETINGSPAGE));
 }
 
-IMPL_LINK_NOARG_TYPED(SwMailMergeAddressBlockPage, AddressBlockSelectHdl_Impl, LinkParamNone*, void)
+IMPL_LINK_NOARG(SwMailMergeAddressBlockPage, AddressBlockSelectHdl_Impl, LinkParamNone*, void)
 {
     const sal_uInt16 nSel = m_pSettingsWIN->GetSelectedAddress();
     const uno::Sequence< OUString> aBlocks =
@@ -260,13 +266,13 @@ IMPL_LINK_NOARG_TYPED(SwMailMergeAddressBlockPage, AddressBlockSelectHdl_Impl, L
     GetWizard()->enableButtons(WizardButtonFlags::NEXT, GetWizard()->isStateEnabled(MM_GREETINGSPAGE));
 }
 
-IMPL_LINK_TYPED(SwMailMergeAddressBlockPage, HideParagraphsHdl_Impl, Button*, pBox, void)
+IMPL_LINK(SwMailMergeAddressBlockPage, HideParagraphsHdl_Impl, Button*, pBox, void)
 {
     SwMailMergeConfigItem& rConfigItem = m_pWizard->GetConfigItem();
     rConfigItem.SetHideEmptyParagraphs( static_cast<CheckBox*>(pBox)->IsChecked() );
 }
 
-IMPL_LINK_TYPED(SwMailMergeAddressBlockPage, InsertDataHdl_Impl, Button*, pButton, void)
+IMPL_LINK(SwMailMergeAddressBlockPage, InsertDataHdl_Impl, Button*, pButton, void)
 {
     //if no pButton is given, the first set has to be pre-set
     SwMailMergeConfigItem& rConfig = m_pWizard->GetConfigItem();
@@ -315,70 +321,54 @@ IMPL_LINK_TYPED(SwMailMergeAddressBlockPage, InsertDataHdl_Impl, Button*, pButto
     EnableAddressBlock(bHasResultSet, m_pAddressCB->IsChecked());
 }
 
-SwSelectAddressBlockDialog::SwSelectAddressBlockDialog(
-                vcl::Window* pParent, SwMailMergeConfigItem& rConfig)
-    : SfxModalDialog(pParent, "SelectBlockDialog",
-        "modules/swriter/ui/selectblockdialog.ui")
+SwSelectAddressBlockDialog::SwSelectAddressBlockDialog(weld::Window* pParent, SwMailMergeConfigItem& rConfig)
+    : SfxDialogController(pParent, "modules/swriter/ui/selectblockdialog.ui", "SelectBlockDialog")
     , m_rConfig(rConfig)
+    , m_xPreview(new AddressPreview(m_xBuilder->weld_scrolled_window("previewwin")))
+    , m_xNewPB(m_xBuilder->weld_button("new"))
+    , m_xCustomizePB(m_xBuilder->weld_button("edit"))
+    , m_xDeletePB(m_xBuilder->weld_button("delete"))
+    , m_xNeverRB(m_xBuilder->weld_radio_button("never"))
+    , m_xAlwaysRB(m_xBuilder->weld_radio_button("always"))
+    , m_xDependentRB(m_xBuilder->weld_radio_button("dependent"))
+    , m_xCountryED(m_xBuilder->weld_entry("country"))
+    , m_xPreviewWin(new weld::CustomWeld(*m_xBuilder, "preview", *m_xPreview))
 {
-    get(m_pPreview, "preview");
-    Size aSize(m_pPreview->LogicToPixel(Size(192, 100), MAP_APPFONT));
-    m_pPreview->set_width_request(aSize.Width());
-    m_pPreview->set_height_request(aSize.Height());
-    get(m_pNewPB, "new");
-    get(m_pCustomizePB, "edit");
-    get(m_pDeletePB, "delete");
-    get(m_pNeverRB, "never");
-    get(m_pAlwaysRB, "always");
-    get(m_pDependentRB, "dependent");
-    get(m_pCountryED, "country");
+    m_xPreviewWin->set_size_request(m_xCountryED->get_approximate_digit_width() * 45,
+                                    m_xCountryED->get_text_height() * 12);
 
-    Link<Button*,void> aCustomizeHdl = LINK(this, SwSelectAddressBlockDialog, NewCustomizeHdl_Impl);
-    m_pNewPB->SetClickHdl(aCustomizeHdl);
-    m_pCustomizePB->SetClickHdl(aCustomizeHdl);
+    Link<weld::Button&,void> aCustomizeHdl = LINK(this, SwSelectAddressBlockDialog, NewCustomizeHdl_Impl);
+    m_xNewPB->connect_clicked(aCustomizeHdl);
+    m_xCustomizePB->connect_clicked(aCustomizeHdl);
 
-    m_pDeletePB->SetClickHdl(LINK(this, SwSelectAddressBlockDialog, DeleteHdl_Impl));
+    m_xDeletePB->connect_clicked(LINK(this, SwSelectAddressBlockDialog, DeleteHdl_Impl));
 
-    Link<Button*,void> aLk = LINK(this, SwSelectAddressBlockDialog, IncludeHdl_Impl);
-    m_pNeverRB->SetClickHdl(aLk);
-    m_pAlwaysRB->SetClickHdl(aLk);
-    m_pDependentRB->SetClickHdl(aLk);
-    m_pPreview->SetLayout(2, 2);
-    m_pPreview->EnableScrollBar();
+    Link<weld::ToggleButton&,void> aLk = LINK(this, SwSelectAddressBlockDialog, IncludeHdl_Impl);
+    m_xNeverRB->connect_toggled(aLk);
+    m_xAlwaysRB->connect_toggled(aLk);
+    m_xDependentRB->connect_toggled(aLk);
+    m_xPreview->SetLayout(2, 2);
+    m_xPreview->EnableScrollBar();
 }
 
 SwSelectAddressBlockDialog::~SwSelectAddressBlockDialog()
 {
-    disposeOnce();
-}
-
-void SwSelectAddressBlockDialog::dispose()
-{
-    m_pPreview.clear();
-    m_pNewPB.clear();
-    m_pCustomizePB.clear();
-    m_pDeletePB.clear();
-    m_pNeverRB.clear();
-    m_pAlwaysRB.clear();
-    m_pDependentRB.clear();
-    m_pCountryED.clear();
-    SfxModalDialog::dispose();
 }
 
 void SwSelectAddressBlockDialog::SetAddressBlocks(const uno::Sequence< OUString>& rBlocks,
         sal_uInt16 nSelectedAddress)
 {
     m_aAddressBlocks = rBlocks;
-    for(sal_Int32 nAddress = 0; nAddress < m_aAddressBlocks.getLength(); ++nAddress)
-        m_pPreview->AddAddress(m_aAddressBlocks[nAddress]);
-    m_pPreview->SelectAddress(nSelectedAddress);
+    for (sal_Int32 nAddress = 0; nAddress < m_aAddressBlocks.getLength(); ++nAddress)
+        m_xPreview->AddAddress(m_aAddressBlocks[nAddress]);
+    m_xPreview->SelectAddress(nSelectedAddress);
 }
 
 // return the address blocks and put the selected one to the first position
 const uno::Sequence< OUString >&    SwSelectAddressBlockDialog::GetAddressBlocks()
 {
     //put the selected block to the first position
-    const sal_Int32 nSelect = static_cast<sal_Int32>(m_pPreview->GetSelectedAddress());
+    const sal_Int32 nSelect = static_cast<sal_Int32>(m_xPreview->GetSelectedAddress());
     if(nSelect)
     {
         uno::Sequence< OUString >aTemp = m_aAddressBlocks;
@@ -401,29 +391,29 @@ const uno::Sequence< OUString >&    SwSelectAddressBlockDialog::GetAddressBlocks
 void SwSelectAddressBlockDialog::SetSettings(
         bool bIsCountry, const OUString& rCountry)
 {
-    RadioButton *pActive = m_pNeverRB;
+    weld::RadioButton *pActive = m_xNeverRB.get();
     if(bIsCountry)
     {
-        pActive = !rCountry.isEmpty() ? m_pDependentRB : m_pAlwaysRB;
-        m_pCountryED->SetText(rCountry);
+        pActive = !rCountry.isEmpty() ? m_xDependentRB.get() : m_xAlwaysRB.get();
+        m_xCountryED->set_text(rCountry);
     }
-    pActive->Check();
-    IncludeHdl_Impl(pActive);
-    m_pDeletePB->Enable(m_aAddressBlocks.getLength() > 1);
+    pActive->set_active(true);
+    IncludeHdl_Impl(*pActive);
+    m_xDeletePB->set_sensitive(m_aAddressBlocks.getLength() > 1);
 }
 
-OUString     SwSelectAddressBlockDialog::GetCountry() const
+OUString SwSelectAddressBlockDialog::GetCountry() const
 {
-    if(m_pDependentRB->IsChecked())
-        return m_pCountryED->GetText();
+    if (m_xDependentRB->get_active())
+        return m_xCountryED->get_text();
     return OUString();
 }
 
-IMPL_LINK_TYPED(SwSelectAddressBlockDialog, DeleteHdl_Impl, Button*, pButton, void)
+IMPL_LINK(SwSelectAddressBlockDialog, DeleteHdl_Impl, weld::Button&, rButton, void)
 {
     if(m_aAddressBlocks.getLength())
     {
-        const sal_Int32 nSelected = static_cast<sal_Int32>(m_pPreview->GetSelectedAddress());
+        const sal_Int32 nSelected = static_cast<sal_Int32>(m_xPreview->GetSelectedAddress());
         OUString* pAddressBlocks = m_aAddressBlocks.getArray();
         sal_Int32 nSource = 0;
         for(sal_Int32 nTarget = 0; nTarget < m_aAddressBlocks.getLength() - 1; nTarget++)
@@ -433,47 +423,48 @@ IMPL_LINK_TYPED(SwSelectAddressBlockDialog, DeleteHdl_Impl, Button*, pButton, vo
             pAddressBlocks[nTarget] = pAddressBlocks[nSource++];
         }
         m_aAddressBlocks.realloc(m_aAddressBlocks.getLength() - 1);
-        if(m_aAddressBlocks.getLength() <= 1)
-            pButton->Enable(false);
-        m_pPreview->RemoveSelectedAddress();
+        if (m_aAddressBlocks.getLength() <= 1)
+            rButton.set_sensitive(false);
+        m_xPreview->RemoveSelectedAddress();
     }
 }
 
-IMPL_LINK_TYPED(SwSelectAddressBlockDialog, NewCustomizeHdl_Impl, Button*, pButton, void)
+IMPL_LINK(SwSelectAddressBlockDialog, NewCustomizeHdl_Impl, weld::Button&, rButton, void)
 {
-    bool bCustomize = pButton == m_pCustomizePB;
+    bool bCustomize = &rButton == m_xCustomizePB.get();
     SwCustomizeAddressBlockDialog::DialogType nType = bCustomize ?
         SwCustomizeAddressBlockDialog::ADDRESSBLOCK_EDIT :
         SwCustomizeAddressBlockDialog::ADDRESSBLOCK_NEW;
-    VclPtr<SwCustomizeAddressBlockDialog> pDlg(
-        VclPtr<SwCustomizeAddressBlockDialog>::Create(pButton,m_rConfig,nType));
+    ScopedVclPtr<SwCustomizeAddressBlockDialog> pDlg(
+        VclPtr<SwCustomizeAddressBlockDialog>::Create(
+            nullptr /*TODO*/,m_rConfig,nType));
     if(bCustomize)
     {
-        pDlg->SetAddress(m_aAddressBlocks[m_pPreview->GetSelectedAddress()]);
+        pDlg->SetAddress(m_aAddressBlocks[m_xPreview->GetSelectedAddress()]);
     }
     if(RET_OK == pDlg->Execute())
     {
         const OUString sNew = pDlg->GetAddress();
         if(bCustomize)
         {
-            m_pPreview->ReplaceSelectedAddress(sNew);
-            m_aAddressBlocks[m_pPreview->GetSelectedAddress()] = sNew;
+            m_xPreview->ReplaceSelectedAddress(sNew);
+            m_aAddressBlocks[m_xPreview->GetSelectedAddress()] = sNew;
         }
         else
         {
-            m_pPreview->AddAddress(sNew);
+            m_xPreview->AddAddress(sNew);
             m_aAddressBlocks.realloc(m_aAddressBlocks.getLength() + 1);
             const sal_Int32 nSelect = m_aAddressBlocks.getLength() - 1;
             m_aAddressBlocks[nSelect] = sNew;
-            m_pPreview->SelectAddress(static_cast<sal_uInt16>(nSelect));
+            m_xPreview->SelectAddress(static_cast<sal_uInt16>(nSelect));
         }
-        m_pDeletePB->Enable( m_aAddressBlocks.getLength() > 1);
+        m_xDeletePB->set_sensitive(m_aAddressBlocks.getLength() > 1);
     }
 }
 
-IMPL_LINK_TYPED(SwSelectAddressBlockDialog, IncludeHdl_Impl, Button*, pButton, void)
+IMPL_LINK_NOARG(SwSelectAddressBlockDialog, IncludeHdl_Impl, weld::ToggleButton&,  void)
 {
-    m_pCountryED->Enable(m_pDependentRB == pButton);
+    m_xCountryED->set_sensitive(m_xDependentRB->get_active());
 }
 
 #define USER_DATA_SALUTATION        -1
@@ -512,37 +503,45 @@ SwCustomizeAddressBlockDialog::SwCustomizeAddressBlockDialog(
     {
         m_pFieldFT->Show();
         m_pFieldCB->Show();
-        SvTreeListEntry* pEntry = m_pAddressElementsLB->InsertEntry(SW_RESSTR(ST_SALUTATION));
-        pEntry->SetUserData(reinterpret_cast<void*>((sal_Int32)USER_DATA_SALUTATION) );
-        pEntry = m_pAddressElementsLB->InsertEntry(SW_RESSTR(ST_PUNCTUATION));
-        pEntry->SetUserData(reinterpret_cast<void*>((sal_Int32)USER_DATA_PUNCTUATION) );
-        pEntry = m_pAddressElementsLB->InsertEntry(SW_RESSTR(ST_TEXT));
-        pEntry->SetUserData(reinterpret_cast<void*>((sal_Int32)USER_DATA_TEXT)       );
-        ResStringArray aSalutArr(SW_RES(RA_SALUTATION));
-        for(sal_uInt32 i = 0; i < aSalutArr.Count(); ++i)
-            m_aSalutations.push_back(aSalutArr.GetString(i));
-        ResStringArray aPunctArr(SW_RES(RA_PUNCTUATION));
-        for(sal_uInt32 i = 0; i < aPunctArr.Count(); ++i)
-            m_aPunctuations.push_back(aPunctArr.GetString(i));
+        SvTreeListEntry* pEntry = m_pAddressElementsLB->InsertEntry(SwResId(ST_SALUTATION));
+        pEntry->SetUserData(reinterpret_cast<void*>(sal_Int32(USER_DATA_SALUTATION)) );
+        pEntry = m_pAddressElementsLB->InsertEntry(SwResId(ST_PUNCTUATION));
+        pEntry->SetUserData(reinterpret_cast<void*>(sal_Int32(USER_DATA_PUNCTUATION)) );
+        pEntry = m_pAddressElementsLB->InsertEntry(SwResId(ST_TEXT));
+        pEntry->SetUserData(reinterpret_cast<void*>(sal_Int32(USER_DATA_TEXT))       );
+        for (size_t i = 0; i < SAL_N_ELEMENTS(RA_SALUTATION); ++i)
+            m_aSalutations.push_back(SwResId(RA_SALUTATION[i]));
+        for (size_t i = 0; i < SAL_N_ELEMENTS(RA_PUNCTUATION); ++i)
+            m_aPunctuations.push_back(SwResId(RA_PUNCTUATION[i]));
         m_pDragED->SetText("            ");
-        SetText(SW_RESSTR(eType == GREETING_MALE ? ST_TITLE_MALE : ST_TITLE_FEMALE));
-        m_pAddressElementsFT->SetText(SW_RESSTR(ST_SALUTATIONELEMENTS));
-        m_pInsertFieldIB->SetQuickHelpText(SW_RESSTR(ST_INSERTSALUTATIONFIELD));
-        m_pRemoveFieldIB->SetQuickHelpText(SW_RESSTR(ST_REMOVESALUTATIONFIELD));
-        m_pDragFT->SetText(SW_RESSTR(ST_DRAGSALUTATION));
+        SetText(SwResId(eType == GREETING_MALE ? ST_TITLE_MALE : ST_TITLE_FEMALE));
+        m_pAddressElementsFT->SetText(SwResId(ST_SALUTATIONELEMENTS));
+        m_pInsertFieldIB->SetQuickHelpText(SwResId(ST_INSERTSALUTATIONFIELD));
+        m_pRemoveFieldIB->SetQuickHelpText(SwResId(ST_REMOVESALUTATIONFIELD));
+        m_pDragFT->SetText(SwResId(ST_DRAGSALUTATION));
     }
     else
     {
         if(eType == ADDRESSBLOCK_EDIT)
-            SetText(SW_RESSTR(ST_TITLE_EDIT));
+            SetText(SwResId(ST_TITLE_EDIT));
         m_pDragED->SetText("\n\n\n\n\n");
+        /* Set custom HIDs for swriter/01/mm_newaddblo.xhp */
+        m_pAddressElementsLB->SetHelpId( HID_MM_ADDBLOCK_ELEMENTS );
+        m_pInsertFieldIB->SetHelpId( HID_MM_ADDBLOCK_INSERT );
+        m_pRemoveFieldIB->SetHelpId( HID_MM_ADDBLOCK_REMOVE );
+        m_pDragED->SetHelpId( HID_MM_ADDBLOCK_DRAG );
+        m_pPreviewWIN->SetHelpId( HID_MM_ADDBLOCK_PREVIEW );
+        m_pRightIB->SetHelpId( HID_MM_ADDBLOCK_MOVEBUTTONS );
+        m_pLeftIB->SetHelpId( HID_MM_ADDBLOCK_MOVEBUTTONS );
+        m_pDownIB->SetHelpId( HID_MM_ADDBLOCK_MOVEBUTTONS );
+        m_pUpIB->SetHelpId( HID_MM_ADDBLOCK_MOVEBUTTONS );
     }
 
-    const ResStringArray& rHeaders = m_rConfigItem.GetDefaultAddressHeaders();
-    for(sal_uInt32 i = 0; i < rHeaders.Count(); ++i)
+    const std::vector<std::pair<OUString, int>>& rHeaders = m_rConfigItem.GetDefaultAddressHeaders();
+    for (size_t i = 0; i < rHeaders.size(); ++i)
     {
-        SvTreeListEntry* pEntry = m_pAddressElementsLB->InsertEntry(rHeaders.GetString( i ));
-        pEntry->SetUserData(reinterpret_cast<void*>((sal_IntPtr)i));
+        SvTreeListEntry* pEntry = m_pAddressElementsLB->InsertEntry(rHeaders[i].first);
+        pEntry->SetUserData(reinterpret_cast<void*>(static_cast<sal_IntPtr>(i)));
     }
     m_pOK->SetClickHdl(LINK(this, SwCustomizeAddressBlockDialog, OKHdl_Impl));
     m_pAddressElementsLB->SetSelectHdl(LINK(this, SwCustomizeAddressBlockDialog, ListBoxSelectHdl_Impl ));
@@ -585,25 +584,25 @@ void SwCustomizeAddressBlockDialog::dispose()
     SfxModalDialog::dispose();
 }
 
-IMPL_LINK_NOARG_TYPED(SwCustomizeAddressBlockDialog, OKHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SwCustomizeAddressBlockDialog, OKHdl_Impl, Button*, void)
 {
     EndDialog(RET_OK);
 }
 
-IMPL_LINK_TYPED(SwCustomizeAddressBlockDialog, ListBoxSelectHdl_Impl, SvTreeListBox*, pBox, void)
+IMPL_LINK(SwCustomizeAddressBlockDialog, ListBoxSelectHdl_Impl, SvTreeListBox*, pBox, void)
 {
-    sal_Int32 nUserData = (sal_Int32)reinterpret_cast<sal_IntPtr>(pBox->FirstSelected()->GetUserData());
+    sal_Int32 nUserData = static_cast<sal_Int32>(reinterpret_cast<sal_IntPtr>(pBox->FirstSelected()->GetUserData()));
     // Check if the selected entry is already in the address and then forbid inserting
     m_pInsertFieldIB->Enable(nUserData >= 0 || !HasItem_Impl(nUserData));
 }
 
-IMPL_LINK_NOARG_TYPED(SwCustomizeAddressBlockDialog, EditModifyHdl_Impl, Edit&, void)
+IMPL_LINK_NOARG(SwCustomizeAddressBlockDialog, EditModifyHdl_Impl, Edit&, void)
 {
     m_pPreviewWIN->SetAddress(SwAddressPreview::FillData(GetAddress(), m_rConfigItem));
     UpdateImageButtons_Impl();
 }
 
-IMPL_LINK_TYPED(SwCustomizeAddressBlockDialog, ImageButtonHdl_Impl, Button*, pButton, void)
+IMPL_LINK(SwCustomizeAddressBlockDialog, ImageButtonHdl_Impl, Button*, pButton, void)
 {
     if (m_pInsertFieldIB == pButton)
     {
@@ -619,13 +618,13 @@ IMPL_LINK_TYPED(SwCustomizeAddressBlockDialog, ImageButtonHdl_Impl, Button*, pBu
     }
     else
     {
-        sal_uInt16 nMove = MOVE_ITEM_DOWN;
+        MoveItemFlags nMove = MoveItemFlags::Down;
         if (m_pUpIB == pButton)
-            nMove = MOVE_ITEM_UP;
+            nMove = MoveItemFlags::Up;
         else if (m_pLeftIB == pButton)
-            nMove = MOVE_ITEM_LEFT;
+            nMove = MoveItemFlags::Left;
         else if (m_pRightIB == pButton)
-            nMove = MOVE_ITEM_RIGHT;
+            nMove = MoveItemFlags::Right;
         m_pDragED->MoveCurrentItem(nMove);
     }
     UpdateImageButtons_Impl();
@@ -642,7 +641,7 @@ sal_Int32 SwCustomizeAddressBlockDialog::GetSelectedItem_Impl()
             const OUString sEntry = m_pAddressElementsLB->GetEntryText(pEntry);
             if( sEntry == sSelected.copy( 1, sSelected.getLength() - 2 ) )
             {
-                nRet = (sal_Int32)reinterpret_cast<sal_IntPtr>(pEntry->GetUserData());
+                nRet = static_cast<sal_Int32>(reinterpret_cast<sal_IntPtr>(pEntry->GetUserData()));
                 break;
             }
         }
@@ -656,7 +655,7 @@ bool   SwCustomizeAddressBlockDialog::HasItem_Impl(sal_Int32 nUserData)
     for(sal_uLong i = 0; i < m_pAddressElementsLB->GetEntryCount();  ++i)
     {
         SvTreeListEntry* pEntry = m_pAddressElementsLB->GetEntry(i);
-        if((sal_Int32)reinterpret_cast<sal_IntPtr>(pEntry->GetUserData()) == nUserData)
+        if(static_cast<sal_Int32>(reinterpret_cast<sal_IntPtr>(pEntry->GetUserData())) == nUserData)
         {
             sEntry = m_pAddressElementsLB->GetEntryText(pEntry);
             break;
@@ -666,7 +665,7 @@ bool   SwCustomizeAddressBlockDialog::HasItem_Impl(sal_Int32 nUserData)
     return m_pDragED->GetText().indexOf("<" + sEntry + ">") >= 0;
 }
 
-IMPL_LINK_TYPED(SwCustomizeAddressBlockDialog, SelectionChangedHdl_Impl, AddressMultiLineEdit&, rEdit, void)
+IMPL_LINK(SwCustomizeAddressBlockDialog, SelectionChangedHdl_Impl, AddressMultiLineEdit&, rEdit, void)
 {
     // called in case the selection of the edit field changes.
     // determine selection - if it's one of the editable fields then
@@ -684,7 +683,7 @@ IMPL_LINK_TYPED(SwCustomizeAddressBlockDialog, SelectionChangedHdl_Impl, Address
     {
         //search in ListBox if it's one of the first entries
         OUString sSelect;
-        ::std::vector<OUString>* pVector = nullptr;
+        std::vector<OUString>* pVector = nullptr;
         switch(nSelected) {
             case USER_DATA_SALUTATION:
                 sSelect =  m_sCurrentSalutation;
@@ -700,9 +699,8 @@ IMPL_LINK_TYPED(SwCustomizeAddressBlockDialog, SelectionChangedHdl_Impl, Address
         }
         m_pFieldCB->Clear();
         if(pVector) {
-            ::std::vector<OUString>::iterator  aIterator;
-            for( aIterator = pVector->begin(); aIterator != pVector->end(); ++aIterator)
-                m_pFieldCB->InsertEntry(*aIterator);
+            for (const auto& rItem : *pVector)
+                m_pFieldCB->InsertEntry(rItem);
         }
         m_pFieldCB->SetText(sSelect);
         m_pFieldCB->Enable();
@@ -718,11 +716,11 @@ IMPL_LINK_TYPED(SwCustomizeAddressBlockDialog, SelectionChangedHdl_Impl, Address
     bOnEntry = false;
 }
 
-IMPL_LINK_NOARG_TYPED(SwCustomizeAddressBlockDialog, FieldChangeComboBoxHdl_Impl, ComboBox&, void)
+IMPL_LINK_NOARG(SwCustomizeAddressBlockDialog, FieldChangeComboBoxHdl_Impl, ComboBox&, void)
 {
     FieldChangeHdl_Impl(*m_pFieldCB);
 }
-IMPL_LINK_NOARG_TYPED(SwCustomizeAddressBlockDialog, FieldChangeHdl_Impl, Edit&, void)
+IMPL_LINK_NOARG(SwCustomizeAddressBlockDialog, FieldChangeHdl_Impl, Edit&, void)
 {
     //changing the field content changes the related members, too
     sal_Int32 nSelected = GetSelectedItem_Impl();
@@ -745,15 +743,15 @@ IMPL_LINK_NOARG_TYPED(SwCustomizeAddressBlockDialog, FieldChangeHdl_Impl, Edit&,
 
 void SwCustomizeAddressBlockDialog::UpdateImageButtons_Impl()
 {
-    sal_uInt16 nMove = m_pDragED->IsCurrentItemMoveable();
-    m_pUpIB->Enable(nMove & MOVE_ITEM_UP );
-    m_pLeftIB->Enable(nMove & MOVE_ITEM_LEFT );
-    m_pRightIB->Enable(nMove & MOVE_ITEM_RIGHT );
-    m_pDownIB->Enable(nMove & MOVE_ITEM_DOWN);
+    MoveItemFlags nMove = m_pDragED->IsCurrentItemMoveable();
+    m_pUpIB->Enable( bool(nMove & MoveItemFlags::Up) );
+    m_pLeftIB->Enable( bool(nMove & MoveItemFlags::Left) );
+    m_pRightIB->Enable( bool(nMove & MoveItemFlags::Right) );
+    m_pDownIB->Enable( bool(nMove & MoveItemFlags::Down) );
     m_pRemoveFieldIB->Enable(m_pDragED->HasCurrentItem());
     SvTreeListEntry* pEntry = m_pAddressElementsLB->GetCurEntry();
     m_pInsertFieldIB->Enable( pEntry &&
-            (0 < (sal_Int32)reinterpret_cast<sal_IntPtr>(pEntry->GetUserData()) || !m_pFieldCB->GetText().isEmpty()));
+            (0 < static_cast<sal_Int32>(reinterpret_cast<sal_IntPtr>(pEntry->GetUserData())) || !m_pFieldCB->GetText().isEmpty()));
 }
 
 void SwCustomizeAddressBlockDialog::SetAddress(const OUString& rAddress)
@@ -773,7 +771,7 @@ OUString SwCustomizeAddressBlockDialog::GetAddress()
         {
             SvTreeListEntry* pEntry = m_pAddressElementsLB->GetEntry(i);
             const OUString sEntry = "<" + m_pAddressElementsLB->GetEntryText(pEntry) + ">";
-            sal_Int32 nUserData = (sal_Int32)reinterpret_cast<sal_IntPtr>(pEntry->GetUserData());
+            sal_Int32 nUserData = static_cast<sal_Int32>(reinterpret_cast<sal_IntPtr>(pEntry->GetUserData()));
             switch(nUserData)
             {
                 case USER_DATA_SALUTATION:
@@ -798,9 +796,9 @@ class SwAssignFieldsControl : public Control
     VclPtr<HeaderBar>           m_aHeaderHB;
     VclPtr<Window>              m_aWindow;
 
-    ::std::vector<VclPtr<FixedText> >   m_aFieldNames;
-    ::std::vector<VclPtr<ListBox> >     m_aMatches;
-    ::std::vector<VclPtr<FixedText> >   m_aPreviews;
+    std::vector<VclPtr<FixedText> >     m_aFieldNames;
+    std::vector<VclPtr<ListBox> >       m_aMatches;
+    std::vector<VclPtr<FixedText> >     m_aPreviews;
 
     SwMailMergeConfigItem*              m_rConfigItem;
 
@@ -810,9 +808,9 @@ class SwAssignFieldsControl : public Control
     long                        m_nYOffset;
     long                        m_nFirstYPos;
 
-    DECL_LINK_TYPED(ScrollHdl_Impl, ScrollBar*, void);
-    DECL_LINK_TYPED(MatchHdl_Impl, ListBox&, void);
-    DECL_LINK_TYPED(GotFocusHdl_Impl, Control&, void);
+    DECL_LINK(ScrollHdl_Impl, ScrollBar*, void);
+    DECL_LINK(MatchHdl_Impl, ListBox&, void);
+    DECL_LINK(GotFocusHdl_Impl, Control&, void);
 
     virtual bool        PreNotify( NotifyEvent& rNEvt ) override;
     virtual void        Command( const CommandEvent& rCEvt ) override;
@@ -820,7 +818,7 @@ class SwAssignFieldsControl : public Control
     void                MakeVisible( sal_Int32 nIndex );
 public:
     SwAssignFieldsControl(vcl::Window* pParent, WinBits nBits);
-    virtual ~SwAssignFieldsControl();
+    virtual ~SwAssignFieldsControl() override;
     virtual void dispose() override;
 
     void        Init(SwMailMergeConfigItem& rConfigItem);
@@ -836,7 +834,7 @@ public:
 VCL_BUILDER_FACTORY_ARGS(SwAssignFieldsControl, WB_BORDER)
 
 SwAssignFieldsControl::SwAssignFieldsControl(vcl::Window* pParent, WinBits nBits) :
-    Control(pParent, nBits | WB_DIALOGCONTROL | WB_TABSTOP | WB_DIALOGCONTROL),
+    Control(pParent, nBits | WB_DIALOGCONTROL | WB_TABSTOP),
     m_aVScroll(VclPtr<ScrollBar>::Create(this)),
     m_aHeaderHB(VclPtr<HeaderBar>::Create(this, WB_BUTTONSTYLE | WB_BOTTOMBORDER)),
     m_aWindow(VclPtr<vcl::Window>::Create(this, WB_BORDER | WB_DIALOGCONTROL)),
@@ -858,7 +856,7 @@ SwAssignFieldsControl::SwAssignFieldsControl(vcl::Window* pParent, WinBits nBits
 
 Size SwAssignFieldsControl::GetOptimalSize() const
 {
-    return LogicToPixel(Size(248 , 120), MAP_APPFONT);
+    return LogicToPixel(Size(248, 120), MapMode(MapUnit::MapAppFont));
 }
 
 void SwAssignFieldsControl::Init(SwMailMergeConfigItem& rConfigItem)
@@ -868,7 +866,7 @@ void SwAssignFieldsControl::Init(SwMailMergeConfigItem& rConfigItem)
     long nHBHeight = m_aHeaderHB->CalcWindowSizePixel().Height();
 
     //get the name of the default headers
-    const ResStringArray& rHeaders = rConfigItem.GetDefaultAddressHeaders();
+    const std::vector<std::pair<OUString, int>>& rHeaders = rConfigItem.GetDefaultAddressHeaders();
     //get the actual data
     uno::Reference< XColumnsSupplier > xColsSupp( rConfigItem.GetResultSet(), uno::UNO_QUERY);
     //get the name of the actual columns
@@ -888,14 +886,14 @@ void SwAssignFieldsControl::Init(SwMailMergeConfigItem& rConfigItem)
     //fill the controls
     long nControlWidth = aOutputSize.Width() / 3;
     long nControlHeight = -1;
-    for(sal_uInt32 i = 0; i < rHeaders.Count(); ++i)
+    for (size_t i = 0; i < rHeaders.size(); ++i)
     {
-        const OUString rHeader = rHeaders.GetString( i );
+        const OUString rHeader = rHeaders[i].first;
         VclPtr<FixedText> pNewText = VclPtr<FixedText>::Create(m_aWindow.get(), WB_VCENTER);
         pNewText->SetText("<" + rHeader + ">");
         VclPtr<ListBox> pNewLB = VclPtr<ListBox>::Create(m_aWindow.get(), WB_DROPDOWN | WB_VCENTER | WB_TABSTOP);
         pNewText->set_mnemonic_widget(pNewLB);
-        pNewLB->InsertEntry(SW_RESSTR(SW_STR_NONE));
+        pNewLB->InsertEntry(SwResId(SW_STR_NONE));
         pNewLB->SelectEntryPos(0);
         pNewLB->SetDropDownLineCount(5);
 
@@ -918,10 +916,10 @@ void SwAssignFieldsControl::Init(SwMailMergeConfigItem& rConfigItem)
         else //otherwise the current column name may match one of the db columns
             pNewLB->SelectEntry(rHeader);
         //then the preview can be filled accordingly
-        if(xColAccess.is() && pNewLB->GetSelectEntryPos() > 0 &&
-                xColAccess->hasByName(pNewLB->GetSelectEntry()))
+        if(xColAccess.is() && pNewLB->GetSelectedEntryPos() > 0 &&
+                xColAccess->hasByName(pNewLB->GetSelectedEntry()))
         {
-            uno::Any aCol = xColAccess->getByName(pNewLB->GetSelectEntry());
+            uno::Any aCol = xColAccess->getByName(pNewLB->GetSelectedEntry());
             uno::Reference< XColumn > xColumn;
             aCol >>= xColumn;
             if(xColumn.is())
@@ -957,7 +955,7 @@ void SwAssignFieldsControl::Init(SwMailMergeConfigItem& rConfigItem)
         pNewPreview->Show();
         pNewPreview->SetPosPixel(Point(2 * nControlWidth + 6, nMove));
     }
-    m_aVScroll->SetRange(Range(0, rHeaders.Count()));
+    m_aVScroll->SetRange(Range(0, rHeaders.size()));
     m_aVScroll->SetPageSize((aOutputSize.Height() - nHBHeight - m_nLBStartTopPos)/ m_nYOffset);
     m_aVScroll->EnableDrag();
     m_aVScroll->SetVisibleSize(m_aVScroll->GetPageSize());
@@ -974,12 +972,12 @@ SwAssignFieldsControl::~SwAssignFieldsControl()
 
 void SwAssignFieldsControl::dispose()
 {
-    for(auto aFIIter = m_aFieldNames.begin(); aFIIter != m_aFieldNames.end(); ++aFIIter)
-        aFIIter->disposeAndClear();
-    for(auto aLBIter = m_aMatches.begin(); aLBIter != m_aMatches.end(); ++aLBIter)
-        aLBIter->disposeAndClear();
-    for(auto aFIIter = m_aPreviews.begin(); aFIIter != m_aPreviews.end(); ++aFIIter)
-        aFIIter->disposeAndClear();
+    for(auto& rFIItem : m_aFieldNames)
+        rFIItem.disposeAndClear();
+    for(auto& rLBItem : m_aMatches)
+        rLBItem.disposeAndClear();
+    for(auto& rFIItem : m_aPreviews)
+        rFIItem.disposeAndClear();
 
     m_aFieldNames.clear();
     m_aMatches.clear();
@@ -1019,17 +1017,17 @@ void SwAssignFieldsControl::Resize()
     long nControlHeight = std::max(m_aFieldNames[0]->get_preferred_size().Height(),
                                    m_aMatches[0]->get_preferred_size().Height());
 
-    for(auto aFIIter = m_aFieldNames.begin(); aFIIter != m_aFieldNames.end(); ++aFIIter)
-        (*aFIIter)->SetSizePixel(Size(nColWidth - 6, nControlHeight));
-    for(auto aLBIter = m_aMatches.begin(); aLBIter != m_aMatches.end(); ++aLBIter)
+    for(auto& rFIItem : m_aFieldNames)
+        rFIItem->SetSizePixel(Size(nColWidth - 6, nControlHeight));
+    for(auto& rLBItem : m_aMatches)
     {
-        long nPosY = (*aLBIter)->GetPosPixel().Y();
-        (*aLBIter)->SetPosSizePixel(Point(nColWidth, nPosY), Size(nColWidth - 6, nControlHeight));
+        long nPosY = rLBItem->GetPosPixel().Y();
+        rLBItem->SetPosSizePixel(Point(nColWidth, nPosY), Size(nColWidth - 6, nControlHeight));
     }
-    for(auto aFIIter = m_aPreviews.begin(); aFIIter != m_aPreviews.end(); ++aFIIter)
+    for(auto& rFIItem : m_aPreviews)
     {
-        long nPosY = (*aFIIter)->GetPosPixel().Y();
-        (*aFIIter)->SetPosSizePixel(Point(2 * nColWidth + 6, nPosY), Size(nColWidth, nControlHeight));
+        long nPosY = rFIItem->GetPosPixel().Y();
+        rFIItem->SetPosSizePixel(Point(2 * nColWidth + 6, nPosY), Size(nColWidth, nControlHeight));
     }
 }
 
@@ -1080,7 +1078,7 @@ void SwAssignFieldsControl::MakeVisible( sal_Int32 nIndex )
     ScrollHdl_Impl( m_aVScroll.get() );
 }
 
-IMPL_LINK_TYPED(SwAssignFieldsControl, ScrollHdl_Impl, ScrollBar*, pScroll, void)
+IMPL_LINK(SwAssignFieldsControl, ScrollHdl_Impl, ScrollBar*, pScroll, void)
 {
     long nThumb = pScroll->GetThumbPos();
     // the scrollbar moves on a per line basis
@@ -1090,18 +1088,18 @@ IMPL_LINK_TYPED(SwAssignFieldsControl, ScrollHdl_Impl, ScrollBar*, pScroll, void
     long nMove = m_nFirstYPos - (*m_aMatches.begin())->GetPosPixel().Y() - (nThumb * m_nYOffset);
 
     SetUpdateMode(false);
-    for(auto aFIIter = m_aFieldNames.begin(); aFIIter != m_aFieldNames.end(); ++aFIIter)
-        lcl_Move(*aFIIter, nMove);
-    for(auto aLBIter = m_aMatches.begin(); aLBIter != m_aMatches.end(); ++aLBIter)
-        lcl_Move(*aLBIter, nMove);
-    for(auto aFIIter = m_aPreviews.begin(); aFIIter != m_aPreviews.end(); ++aFIIter)
-        lcl_Move(*aFIIter, nMove);
+    for(auto& rFIItem : m_aFieldNames)
+        lcl_Move(rFIItem, nMove);
+    for(auto& rLBItem : m_aMatches)
+        lcl_Move(rLBItem, nMove);
+    for(auto& rFIItem : m_aPreviews)
+        lcl_Move(rFIItem, nMove);
     SetUpdateMode(true);
 }
 
-IMPL_LINK_TYPED(SwAssignFieldsControl, MatchHdl_Impl, ListBox&, rBox, void)
+IMPL_LINK(SwAssignFieldsControl, MatchHdl_Impl, ListBox&, rBox, void)
 {
-    const OUString sColumn = rBox.GetSelectEntry();
+    const OUString sColumn = rBox.GetSelectedEntry();
     uno::Reference< XColumnsSupplier > xColsSupp( m_rConfigItem->GetResultSet(), uno::UNO_QUERY);
     uno::Reference <XNameAccess> xColAccess = xColsSupp.is() ? xColsSupp->getColumns() : nullptr;
     OUString sPreview;
@@ -1121,31 +1119,25 @@ IMPL_LINK_TYPED(SwAssignFieldsControl, MatchHdl_Impl, ListBox&, rBox, void)
             }
         }
     }
-    sal_Int32 nIndex = 0;
-    for(auto aLBIter = m_aMatches.begin(); aLBIter != m_aMatches.end(); ++aLBIter, ++nIndex)
+    auto aLBIter = std::find(m_aMatches.begin(), m_aMatches.end(), &rBox);
+    if(aLBIter != m_aMatches.end())
     {
-        if(*aLBIter == &rBox)
-        {
-            m_aPreviews[nIndex]->SetText(sPreview);
-            break;
-        }
+        auto nIndex = static_cast<sal_Int32>(std::distance(m_aMatches.begin(), aLBIter));
+        m_aPreviews[nIndex]->SetText(sPreview);
     }
     m_aModifyHdl.Call(nullptr);
 }
 
-IMPL_LINK_TYPED(SwAssignFieldsControl, GotFocusHdl_Impl, Control&, rControl, void)
+IMPL_LINK(SwAssignFieldsControl, GotFocusHdl_Impl, Control&, rControl, void)
 {
     ListBox* pBox = static_cast<ListBox*>(&rControl);
     if(GetFocusFlags::Tab & pBox->GetGetFocusFlags())
     {
-        sal_Int32 nIndex = 0;
-        for(auto aLBIter = m_aMatches.begin(); aLBIter != m_aMatches.end(); ++aLBIter, ++nIndex)
+        auto aLBIter = std::find(m_aMatches.begin(), m_aMatches.end(), pBox);
+        if(aLBIter != m_aMatches.end())
         {
-            if(*aLBIter == pBox)
-            {
-                MakeVisible(nIndex);
-                break;
-            }
+            auto nIndex = static_cast<sal_Int32>(std::distance(m_aMatches.begin(), aLBIter));
+            MakeVisible(nIndex);
         }
     }
 }
@@ -1155,7 +1147,7 @@ SwAssignFieldsDialog::SwAssignFieldsDialog(
         const OUString& rPreview,
         bool bIsAddressBlock) :
     SfxModalDialog(pParent, "AssignFieldsDialog", "modules/swriter/ui/assignfieldsdialog.ui"),
-    m_sNone(SW_RESSTR(SW_STR_NONE)),
+    m_sNone(SwResId(SW_STR_NONE)),
     m_rPreviewString(rPreview),
     m_rConfigItem(rConfigItem)
 {
@@ -1163,26 +1155,26 @@ SwAssignFieldsDialog::SwAssignFieldsDialog(
     get(m_pPreviewFI, "PREVIEW_LABEL");
     get(m_pOK, "ok");
     get(m_pPreviewWIN, "PREVIEW");
-    Size aSize(LogicToPixel(Size(248 , 45), MAP_APPFONT));
+    Size aSize(LogicToPixel(Size(248, 45), MapMode(MapUnit::MapAppFont)));
     m_pPreviewWIN->set_width_request(aSize.Width());
     m_pPreviewWIN->set_height_request(aSize.Height());
     get(m_pFieldsControl, "FIELDS");
     m_pFieldsControl->Init(rConfigItem);
     //resize the HeaderBar
-    OUString sAddressElement( SW_RESSTR(ST_ADDRESSELEMENT) );
-    const OUString sMatchesTo( SW_RESSTR(ST_MATCHESTO) );
-    const OUString sPreview( SW_RESSTR(ST_PREVIEW) );
+    OUString sAddressElement( SwResId(ST_ADDRESSELEMENT) );
+    const OUString sMatchesTo( SwResId(ST_MATCHESTO) );
+    const OUString sPreview( SwResId(ST_PREVIEW) );
     if(!bIsAddressBlock)
     {
-        m_pPreviewFI->SetText(SW_RESSTR(ST_SALUTATIONPREVIEW));
-        m_pMatchingFI->SetText(SW_RESSTR(ST_SALUTATIONMATCHING));
-        sAddressElement = SW_RESSTR(ST_SALUTATIONELEMENT);
+        m_pPreviewFI->SetText(SwResId(ST_SALUTATIONPREVIEW));
+        m_pMatchingFI->SetText(SwResId(ST_SALUTATIONMATCHING));
+        sAddressElement = SwResId(ST_SALUTATIONELEMENT);
     }
 
     Size aOutputSize(m_pFieldsControl->m_aHeaderHB->GetSizePixel());
     sal_Int32 nFirstWidth;
     sal_Int32 nSecondWidth = nFirstWidth = aOutputSize.Width() / 3;
-    const HeaderBarItemBits nHeadBits = HeaderBarItemBits::VCENTER | HeaderBarItemBits::FIXED| HeaderBarItemBits::FIXEDPOS;
+    const HeaderBarItemBits nHeadBits = HeaderBarItemBits::FIXED| HeaderBarItemBits::FIXEDPOS;
     m_pFieldsControl->m_aHeaderHB->InsertItem( 1, sAddressElement, nFirstWidth, nHeadBits|HeaderBarItemBits::LEFT);
     m_pFieldsControl->m_aHeaderHB->InsertItem( 2, sMatchesTo,      nSecondWidth, nHeadBits|HeaderBarItemBits::LEFT);
     m_pFieldsControl->m_aHeaderHB->InsertItem( 3, sPreview,
@@ -1213,20 +1205,19 @@ void SwAssignFieldsDialog::dispose()
 uno::Sequence< OUString > SwAssignFieldsDialog::CreateAssignments()
 {
     uno::Sequence< OUString > aAssignments(
-            m_rConfigItem.GetDefaultAddressHeaders().Count());
+            m_rConfigItem.GetDefaultAddressHeaders().size());
     OUString* pAssignments = aAssignments.getArray();
     sal_Int32 nIndex = 0;
-    for(auto aLBIter = m_pFieldsControl->m_aMatches.begin();
-                aLBIter != m_pFieldsControl->m_aMatches.end();
-                    ++aLBIter, ++nIndex)
+    for(const auto& rLBItem : m_pFieldsControl->m_aMatches)
     {
-        const OUString sSelect = (*aLBIter)->GetSelectEntry();
+        const OUString sSelect = rLBItem->GetSelectedEntry();
         pAssignments[nIndex] = (m_sNone != sSelect) ? sSelect : OUString();
+        ++nIndex;
     }
     return aAssignments;
 }
 
-IMPL_LINK_NOARG_TYPED(SwAssignFieldsDialog, OkHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SwAssignFieldsDialog, OkHdl_Impl, Button*, void)
 {
     m_rConfigItem.SetColumnAssignment(
                             m_rConfigItem.GetCurrentDBData(),
@@ -1234,7 +1225,7 @@ IMPL_LINK_NOARG_TYPED(SwAssignFieldsDialog, OkHdl_Impl, Button*, void)
     EndDialog(RET_OK);
 }
 
-IMPL_LINK_NOARG_TYPED(SwAssignFieldsDialog, AssignmentModifyHdl_Impl, LinkParamNone*, void)
+IMPL_LINK_NOARG(SwAssignFieldsDialog, AssignmentModifyHdl_Impl, LinkParamNone*, void)
 {
     uno::Sequence< OUString > aAssignments = CreateAssignments();
     const OUString sPreview = SwAddressPreview::FillData(
@@ -1248,7 +1239,7 @@ DDListBox::DDListBox(vcl::Window* pParent, WinBits nStyle)
 {
     SetStyle( GetStyle() | /*WB_HASBUTTONS|WB_HASBUTTONSATROOT|*/
                             WB_CLIPCHILDREN );
-    SetSelectionMode( SINGLE_SELECTION );
+    SetSelectionMode( SelectionMode::Single );
     SetDragDropMode( DragDropMode::CTRL_COPY );
     EnableAsyncDrag(true);
     // expand selection to the complete width of the ListBox
@@ -1268,14 +1259,7 @@ void DDListBox::dispose()
     SvTreeListBox::dispose();
 }
 
-VCL_BUILDER_DECL_FACTORY(DDListBox)
-{
-    WinBits nWinStyle = WB_TABSTOP;
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nWinStyle |= WB_BORDER;
-    rRet = VclPtr<DDListBox>::Create(pParent, nWinStyle);
-}
+VCL_BUILDER_FACTORY_CONSTRUCTOR(DDListBox, WB_TABSTOP)
 
 void DDListBox::SetAddressDialog(SwCustomizeAddressBlockDialog *pParent)
 {
@@ -1289,11 +1273,9 @@ void  DDListBox::StartDrag( sal_Int8 /*nAction*/, const Point& /*rPosPixel*/ )
     {
         ReleaseMouse();
 
-        TransferDataContainer* pContainer = new TransferDataContainer;
-        uno::Reference<
-             datatransfer::XTransferable > xRef( pContainer );
+        rtl::Reference<TransferDataContainer> pContainer = new TransferDataContainer;
 
-        sal_Int32 nUserData = (sal_Int32)reinterpret_cast<sal_IntPtr>(pEntry->GetUserData());
+        sal_Int32 nUserData = static_cast<sal_Int32>(reinterpret_cast<sal_IntPtr>(pEntry->GetUserData()));
         //special entries can only be once in the address / greeting
         if(nUserData >= 0 || !m_pParentDialog->HasItem_Impl(nUserData))
         {
@@ -1327,17 +1309,11 @@ void AddressMultiLineEdit::dispose()
 
 Size AddressMultiLineEdit::GetOptimalSize() const
 {
-    return LogicToPixel(Size(160, 60), MAP_APPFONT);
+    return LogicToPixel(Size(160, 60), MapMode(MapUnit::MapAppFont));
 }
 
-VCL_BUILDER_DECL_FACTORY(AddressMultiLineEdit)
-{
-    WinBits nWinStyle = WB_LEFT|WB_TABSTOP;
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nWinStyle |= WB_BORDER;
-    rRet = VclPtr<AddressMultiLineEdit>::Create(pParent, nWinStyle);
-}
+
+VCL_BUILDER_FACTORY_CONSTRUCTOR(AddressMultiLineEdit, WB_LEFT|WB_TABSTOP)
 
 void AddressMultiLineEdit::SetAddressDialog(SwCustomizeAddressBlockDialog *pParent)
 {
@@ -1349,8 +1325,8 @@ void AddressMultiLineEdit::Notify(SfxBroadcaster& /*rBC*/, const SfxHint& rHint)
     if (m_aSelectionLink.IsSet() && dynamic_cast<const TextHint*>(&rHint))
     {
         const TextHint& rTextHint = static_cast<const TextHint&>(rHint);
-        if (rTextHint.GetId() == TEXT_HINT_VIEWSELECTIONCHANGED ||
-            rTextHint.GetId() == TEXT_HINT_VIEWCARETCHANGED)
+        if (rTextHint.GetId() == SfxHintId::TextViewSelectionChanged ||
+            rTextHint.GetId() == SfxHintId::TextViewCaretChanged)
         {
             m_aSelectionLink.Call(*this);
         }
@@ -1423,7 +1399,7 @@ void AddressMultiLineEdit::SetText( const OUString& rStr )
 void AddressMultiLineEdit::InsertNewEntry( const OUString& rStr )
 {
     // insert new entry after current selected one.
-    ExtTextView* pTextView = GetTextView();
+    TextView* pTextView = GetTextView();
     const TextSelection& rSelection = pTextView->GetSelection();
     const sal_uInt32 nPara = rSelection.GetStart().GetPara();
     sal_Int32 nIndex = rSelection.GetEnd().GetIndex();
@@ -1453,7 +1429,7 @@ void AddressMultiLineEdit::InsertNewEntryAtPosition( const OUString& rStr, sal_u
     SetText( GetAddress() );
     //select the newly inserted/moved element
     TextSelection aEntrySel(aInsertPos);
-    ExtTextView* pTextView = GetTextView();
+    TextView* pTextView = GetTextView();
     pTextView->SetSelection(aEntrySel);
     m_aSelectionLink.Call(*this);
 }
@@ -1461,7 +1437,7 @@ void AddressMultiLineEdit::InsertNewEntryAtPosition( const OUString& rStr, sal_u
 void AddressMultiLineEdit::RemoveCurrentEntry()
 {
     ExtTextEngine* pTextEngine = GetTextEngine();
-    ExtTextView* pTextView = GetTextView();
+    TextView* pTextView = GetTextView();
     const TextSelection& rSelection = pTextView->GetSelection();
     const TextCharAttrib* pBeginAttrib = pTextEngine->FindCharAttrib( rSelection.GetStart(), TEXTATTR_PROTECTED );
     if(pBeginAttrib &&
@@ -1477,84 +1453,86 @@ void AddressMultiLineEdit::RemoveCurrentEntry()
     }
 }
 
-void AddressMultiLineEdit::MoveCurrentItem(sal_uInt16 nMove)
+void AddressMultiLineEdit::MoveCurrentItem(MoveItemFlags nMove)
 {
     ExtTextEngine* pTextEngine = GetTextEngine();
-    ExtTextView* pTextView = GetTextView();
+    TextView* pTextView = GetTextView();
     const TextSelection& rSelection = pTextView->GetSelection();
     const TextCharAttrib* pBeginAttrib = pTextEngine->FindCharAttrib( rSelection.GetStart(), TEXTATTR_PROTECTED );
-    if(pBeginAttrib &&
-            (pBeginAttrib->GetStart() <= rSelection.GetStart().GetIndex()
-                            && pBeginAttrib->GetEnd() >= rSelection.GetEnd().GetIndex()))
+    if(!pBeginAttrib ||
+       !(pBeginAttrib->GetStart() <= rSelection.GetStart().GetIndex() &&
+         pBeginAttrib->GetEnd() >= rSelection.GetEnd().GetIndex()))
+        return;
+
+    //current item has been found
+    sal_uInt32 nPara = rSelection.GetStart().GetPara();
+    sal_Int32 nIndex = pBeginAttrib->GetStart();
+    TextSelection aEntrySel(TextPaM( nPara, pBeginAttrib->GetStart()), TextPaM(nPara, pBeginAttrib->GetEnd()));
+    const OUString sCurrentItem = pTextEngine->GetText(aEntrySel);
+    pTextEngine->RemoveAttrib( nPara, *pBeginAttrib );
+    pTextEngine->ReplaceText(aEntrySel, OUString());
+    switch(nMove)
     {
-        //current item has been found
-        sal_uInt32 nPara = rSelection.GetStart().GetPara();
-        sal_Int32 nIndex = pBeginAttrib->GetStart();
-        TextSelection aEntrySel(TextPaM( nPara, pBeginAttrib->GetStart()), TextPaM(nPara, pBeginAttrib->GetEnd()));
-        const OUString sCurrentItem = pTextEngine->GetText(aEntrySel);
-        pTextEngine->RemoveAttrib( nPara, *pBeginAttrib );
-        pTextEngine->ReplaceText(aEntrySel, OUString());
-        switch(nMove)
-        {
-            case MOVE_ITEM_LEFT :
-                if(nIndex)
-                {
-                    //go left to find a predecessor or simple text
-                    --nIndex;
-                    const OUString sPara = pTextEngine->GetText( nPara );
-                    sal_Int32 nSearchIndex = sPara.lastIndexOf( '>', nIndex+1 );
-                    if( nSearchIndex != -1 && nSearchIndex == nIndex )
-                    {
-                        nSearchIndex = sPara.lastIndexOf( '<', nIndex );
-                        if( nSearchIndex != -1 )
-                            nIndex = nSearchIndex;
-                    }
-                }
-            break;
-            case MOVE_ITEM_RIGHT:
+        case MoveItemFlags::Left :
+            if(nIndex)
             {
-                //go right to find a successor or simple text
-                ++nIndex;
-                const TextCharAttrib* pEndAttrib = pTextEngine->FindCharAttrib( rSelection.GetStart(), TEXTATTR_PROTECTED );
-                if(pEndAttrib && pEndAttrib->GetEnd() >= nIndex)
+                //go left to find a predecessor or simple text
+                --nIndex;
+                const OUString sPara = pTextEngine->GetText( nPara );
+                sal_Int32 nSearchIndex = sPara.lastIndexOf( '>', nIndex+1 );
+                if( nSearchIndex != -1 && nSearchIndex == nIndex )
                 {
-                    nIndex = pEndAttrib->GetEnd();
+                    nSearchIndex = sPara.lastIndexOf( '<', nIndex );
+                    if( nSearchIndex != -1 )
+                        nIndex = nSearchIndex;
                 }
             }
-            break;
-            case MOVE_ITEM_UP   :
-                --nPara;
-                nIndex = 0;
-            break;
-            case MOVE_ITEM_DOWN :
-                ++nPara;
-                nIndex = 0;
-            break;
-        }
-        //add a new paragraph if there is none yet
-        if(nPara >= pTextEngine->GetParagraphCount())
+        break;
+        case MoveItemFlags::Right:
         {
-
-            TextPaM aTemp(nPara - 1, pTextEngine->GetTextLen( nPara - 1 ));
-            pTextEngine->ReplaceText(aTemp, "\n");
+            //go right to find a successor or simple text
+            ++nIndex;
+            const TextCharAttrib* pEndAttrib = pTextEngine->FindCharAttrib( rSelection.GetStart(), TEXTATTR_PROTECTED );
+            if(pEndAttrib && pEndAttrib->GetEnd() >= nIndex)
+            {
+                nIndex = pEndAttrib->GetEnd();
+            }
         }
-        InsertNewEntryAtPosition( sCurrentItem, nPara, nIndex );
-
-        // select the new entry [#i40817]
-        const TextCharAttrib *pAttrib = pTextEngine->FindCharAttrib(TextPaM(nPara, nIndex),TEXTATTR_PROTECTED);
-        if (pAttrib)
-            aEntrySel = TextSelection(TextPaM(nPara, nIndex), TextPaM(nPara, pAttrib->GetEnd()));
-        pTextView->SetSelection(aEntrySel);
-        Invalidate();
-        Modify();
+        break;
+        case MoveItemFlags::Up   :
+            --nPara;
+            nIndex = 0;
+        break;
+        case MoveItemFlags::Down :
+            ++nPara;
+            nIndex = 0;
+        break;
+        default: break;
     }
+    //add a new paragraph if there is none yet
+    if(nPara >= pTextEngine->GetParagraphCount())
+    {
+
+        TextPaM aTemp(nPara - 1, pTextEngine->GetTextLen( nPara - 1 ));
+        pTextEngine->ReplaceText(aTemp, "\n");
+    }
+    InsertNewEntryAtPosition( sCurrentItem, nPara, nIndex );
+
+    // select the new entry [#i40817]
+    const TextCharAttrib *pAttrib = pTextEngine->FindCharAttrib(TextPaM(nPara, nIndex),TEXTATTR_PROTECTED);
+    if (pAttrib)
+        aEntrySel = TextSelection(TextPaM(nPara, nIndex), TextPaM(nPara, pAttrib->GetEnd()));
+    pTextView->SetSelection(aEntrySel);
+    Invalidate();
+    Modify();
+
 }
 
-sal_uInt16  AddressMultiLineEdit::IsCurrentItemMoveable()
+MoveItemFlags  AddressMultiLineEdit::IsCurrentItemMoveable()
 {
-    sal_uInt16 nRet = 0;
+    MoveItemFlags nRet = MoveItemFlags::NONE;
     ExtTextEngine* pTextEngine = GetTextEngine();
-    ExtTextView* pTextView = GetTextView();
+    TextView* pTextView = GetTextView();
     const TextSelection& rSelection = pTextView->GetSelection();
     const TextCharAttrib* pBeginAttrib = pTextEngine->FindCharAttrib( rSelection.GetStart(), TEXTATTR_PROTECTED );
     if(pBeginAttrib &&
@@ -1562,11 +1540,11 @@ sal_uInt16  AddressMultiLineEdit::IsCurrentItemMoveable()
                             && pBeginAttrib->GetEnd() >= rSelection.GetEnd().GetIndex()))
     {
         if(pBeginAttrib->GetStart())
-            nRet |= MOVE_ITEM_LEFT;
+            nRet |= MoveItemFlags::Left;
         //if there is an entry it can always be move to the right and down
-        nRet |= MOVE_ITEM_RIGHT|MOVE_ITEM_DOWN;
+        nRet |= MoveItemFlags::Right | MoveItemFlags::Down;
         if(rSelection.GetStart().GetPara() > 0)
-            nRet |= MOVE_ITEM_UP;
+            nRet |= MoveItemFlags::Up;
     }
     return nRet;
 }
@@ -1574,7 +1552,7 @@ sal_uInt16  AddressMultiLineEdit::IsCurrentItemMoveable()
 bool AddressMultiLineEdit::HasCurrentItem()
 {
     ExtTextEngine* pTextEngine = GetTextEngine();
-    ExtTextView* pTextView = GetTextView();
+    TextView* pTextView = GetTextView();
     const TextSelection& rSelection = pTextView->GetSelection();
     const TextCharAttrib* pBeginAttrib = pTextEngine->FindCharAttrib( rSelection.GetStart(), TEXTATTR_PROTECTED );
     return (pBeginAttrib &&
@@ -1585,7 +1563,7 @@ bool AddressMultiLineEdit::HasCurrentItem()
 OUString AddressMultiLineEdit::GetCurrentItem()
 {
     ExtTextEngine* pTextEngine = GetTextEngine();
-    ExtTextView* pTextView = GetTextView();
+    TextView* pTextView = GetTextView();
     const TextSelection& rSelection = pTextView->GetSelection();
     const TextCharAttrib* pBeginAttrib = pTextEngine->FindCharAttrib( rSelection.GetStart(), TEXTATTR_PROTECTED );
     if(pBeginAttrib &&
@@ -1602,7 +1580,7 @@ OUString AddressMultiLineEdit::GetCurrentItem()
 void AddressMultiLineEdit::SelectCurrentItem()
 {
     ExtTextEngine* pTextEngine = GetTextEngine();
-    ExtTextView* pTextView = GetTextView();
+    TextView* pTextView = GetTextView();
     const TextSelection& rSelection = pTextView->GetSelection();
     const TextCharAttrib* pBeginAttrib = pTextEngine->FindCharAttrib( rSelection.GetStart(), TEXTATTR_PROTECTED );
     if(pBeginAttrib &&

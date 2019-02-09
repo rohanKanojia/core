@@ -221,12 +221,6 @@ sub set_important_properties
         push(@{$propertyfile}, $onepropertyline);
     }
 
-    if ( $allvariables->{'PRODUCTMINOR'} )
-    {
-        my $onepropertyline = "PRODUCTMINOR" . "\t" . $allvariables->{'PRODUCTMINOR'} . "\n";
-        push(@{$propertyfile}, $onepropertyline);
-    }
-
     if ( $allvariables->{'PRODUCTBUILDID'} )
     {
         my $onepropertyline = "PRODUCTBUILDID" . "\t" . $allvariables->{'PRODUCTBUILDID'} . "\n";
@@ -386,6 +380,7 @@ sub set_ms_file_types_properties
     push(@{$propertyfile}, "REGISTER_XLT"  . "\t" . "0" . "\n");
     push(@{$propertyfile}, "REGISTER_XLTX" . "\t" . "0" . "\n");
     push(@{$propertyfile}, "REGISTER_XLTM" . "\t" . "0" . "\n");
+    push(@{$propertyfile}, "REGISTER_IQY"  . "\t" . "0" . "\n");
 
     push(@{$propertyfile}, "REGISTER_NO_MSO_TYPES"  . "\t" . "0" . "\n");
     push(@{$propertyfile}, "REGISTER_ALL_MSO_TYPES"  . "\t" . "0" . "\n");
@@ -418,14 +413,9 @@ sub update_property_table
     my $productname = get_productname_for_property_table($language, $allvariables);
     my $productversion = get_productversion_for_property_table();
     my $quickstarterlinkname = get_quickstarterlinkname_for_property_table($language, $allvariables);
-    my $windowsminversiontext = "Windows Vista";
-    my $windowsminversionnumber = "600";
-
-    if ( $allvariables->{'WINDOWSSDKVERSION'} eq '70' )
-    {
-       $windowsminversiontext = "Windows XP";
-       $windowsminversionnumber = "501";
-    }
+    my $windowsminversiontext = "Windows 7 SP1";
+    my $windowsminversionnumber = "601";
+    my $windowsminspnumber = "1";
 
     # Updating the values
 
@@ -441,6 +431,7 @@ sub update_property_table
         ${$propertyfile}[$i] =~ s/\bQUICKSTARTERLINKNAMETEMPLATE\b/$quickstarterlinkname/;
         ${$propertyfile}[$i] =~ s/\bWINDOWSMINVERSIONTEXTTEMPLATE\b/$windowsminversiontext/;
         ${$propertyfile}[$i] =~ s/\bWINDOWSMINVERSIONNUMBERTEMPLATE\b/$windowsminversionnumber/;
+        ${$propertyfile}[$i] =~ s/\bWINDOWSMINSPNUMBERTEMPLATE\b/$windowsminspnumber/;
         if ( ${$propertyfile}[$i] =~ m/\bARPNOMODIFY\b/ ) { $hasarpnomodify = 1; }
     }
 

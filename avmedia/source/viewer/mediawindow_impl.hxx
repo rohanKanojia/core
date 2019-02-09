@@ -20,10 +20,10 @@
 #ifndef INCLUDED_AVMEDIA_SOURCE_VIEWER_MEDIAWINDOW_IMPL_HXX
 #define INCLUDED_AVMEDIA_SOURCE_VIEWER_MEDIAWINDOW_IMPL_HXX
 
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <vcl/syschild.hxx>
 
-#include "mediacontrol.hxx"
+#include <mediacontrol.hxx>
 
 namespace com { namespace sun { namespace star { namespace media {
     class XPlayer;
@@ -61,7 +61,6 @@ class MediaChildWindow : public SystemChildWindow
 public:
 
     explicit MediaChildWindow( vcl::Window* pParent );
-    MediaChildWindow( vcl::Window* pParent, SystemWindowData* pData );
 
 protected:
 
@@ -79,11 +78,11 @@ class MediaWindowImpl : public Control, public DropTargetHelper, public DragSour
 {
 public:
     MediaWindowImpl(vcl::Window* parent, MediaWindow* pMediaWindow, bool bInternalMediaControl);
-    virtual ~MediaWindowImpl();
+    virtual ~MediaWindowImpl() override;
 
     virtual void dispose() override;
 
-    static css::uno::Reference<css::media::XPlayer> createPlayer(const OUString& rURL, const OUString& rReferer, const OUString* pMimeType = nullptr);
+    static css::uno::Reference<css::media::XPlayer> createPlayer(const OUString& rURL, const OUString& rReferer, const OUString* pMimeType);
 
     void setURL(const OUString& rURL, OUString const& rTempURL, OUString const& rReferer);
 
@@ -98,7 +97,7 @@ public:
     void updateMediaItem( MediaItem& rItem ) const;
     void executeMediaItem( const MediaItem& rItem );
 
-    void setPosSize( const Rectangle& rRect );
+    void setPosSize( const tools::Rectangle& rRect );
 
     void setPointer( const Pointer& rPointer );
 
@@ -113,7 +112,7 @@ private:
     virtual void Command( const CommandEvent& rCEvt ) override;
     virtual void Resize() override;
     virtual void StateChanged( StateChangedType ) override;
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle&) override; // const
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&) override; // const
     virtual void GetFocus() override;
 
     // DropTargetHelper
@@ -122,9 +121,6 @@ private:
 
     // DragSourceHelper
     virtual void    StartDrag( sal_Int8 nAction, const Point& rPosPixel ) override;
-
-    bool setZoom(css::media::ZoomLevel eLevel);
-    css::media::ZoomLevel getZoom() const;
 
     void stop();
 
@@ -135,21 +131,12 @@ private:
     void setMediaTime( double fTime );
     double getMediaTime() const;
 
-    void setPlaybackLoop( bool bSet );
-    bool isPlaybackLoop() const;
-
-    void setMute( bool bSet );
-    bool isMute() const;
-
-    void setVolumeDB( sal_Int16 nVolumeDB );
-    sal_Int16 getVolumeDB() const;
-
     void stopPlayingInternal( bool );
 
     void onURLChanged();
 
     static css::uno::Reference<css::media::XPlayer> createPlayer(const OUString& rURL, const OUString& rManagerServName,
-                                                                 css::uno::Reference<css::uno::XComponentContext> xContext);
+                                                                 const css::uno::Reference<css::uno::XComponentContext>& xContext);
 
     OUString maFileURL;
     OUString mTempFileURL;
@@ -159,13 +146,11 @@ private:
     css::uno::Reference<css::media::XPlayerWindow> mxPlayerWindow;
     MediaWindow* mpMediaWindow;
 
-    css::uno::Reference<css::uno::XInterface> mxEventsIf;
-    MediaEventListenersImpl* mpEvents;
-    bool mbEventTransparent;
+    rtl::Reference<MediaEventListenersImpl> mxEvents;
     VclPtr<MediaChildWindow> mpChildWindow;
     VclPtr<MediaWindowControl> mpMediaWindowControl;
-    BitmapEx* mpEmptyBmpEx;
-    BitmapEx* mpAudioBmpEx;
+    std::unique_ptr<BitmapEx> mpEmptyBmpEx;
+    std::unique_ptr<BitmapEx> mpAudioBmpEx;
 };
 
 }} // end namespace avmedia::priv

@@ -19,8 +19,9 @@
 #ifndef INCLUDED_XMLOFF_SOURCE_CHART_SCHXMLREGRESSIONCURVEOBJECTCONTEXT_HXX
 #define INCLUDED_XMLOFF_SOURCE_CHART_SCHXMLREGRESSIONCURVEOBJECTCONTEXT_HXX
 
-#include "SchXMLImport.hxx"
+#include <SchXMLImport.hxx>
 
+#include <com/sun/star/awt/Size.hpp>
 #include <xmloff/xmlictxt.hxx>
 #include <xmloff/shapeimport.hxx>
 #include <list>
@@ -35,14 +36,14 @@ public:
         SvXMLImport& rImport,
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
-        std::list< RegressionStyle >& rRegressionStyleList,
+        std::vector< RegressionStyle >& rRegressionStyleVector,
         const css::uno::Reference< css::chart2::XDataSeries >& xSeries,
         const css::awt::Size & rChartSize );
 
-    virtual ~SchXMLRegressionCurveObjectContext();
+    virtual ~SchXMLRegressionCurveObjectContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
-    virtual SvXMLImportContext* CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
@@ -51,8 +52,8 @@ private:
 
     SchXMLImportHelper&                mrImportHelper;
     css::uno::Reference<css::chart2::XDataSeries > mxSeries;
-    css::awt::Size                     maChartSize;
-    std::list< RegressionStyle >&      mrRegressionStyleList;
+    css::awt::Size const               maChartSize;
+    std::vector< RegressionStyle >&    mrRegressionStyleVector;
 };
 
 class SchXMLEquationContext : public SvXMLImportContext
@@ -66,14 +67,14 @@ public:
         const css::awt::Size & rChartSize,
         RegressionStyle & rRegressionStyle );
 
-    virtual ~SchXMLEquationContext();
+    virtual ~SchXMLEquationContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 
 private:
     SchXMLImportHelper&                           mrImportHelper;
     RegressionStyle&                              mrRegressionStyle;
-    css::awt::Size                                maChartSize;
+    css::awt::Size const                          maChartSize;
 };
 
 #endif // INCLUDED_XMLOFF_SOURCE_CHART_SCHXMLREGRESSIONCURVEOBJECTCONTEXT_HXX

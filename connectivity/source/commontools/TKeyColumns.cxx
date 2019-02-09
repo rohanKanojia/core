@@ -19,13 +19,12 @@
 
 #include <connectivity/TKeyColumns.hxx>
 #include <connectivity/sdbcx/VKeyColumn.hxx>
+#include <com/sun/star/sdbc/SQLException.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/sdbc/DataType.hpp>
 #include <com/sun/star/sdbc/ColumnValue.hpp>
-#include <comphelper/extract.hxx>
-#include <comphelper/property.hxx>
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 #include <connectivity/TTableHelper.hxx>
 
 using namespace connectivity;
@@ -39,7 +38,7 @@ using namespace ::com::sun::star::lang;
 
 OKeyColumnsHelper::OKeyColumnsHelper(   OTableKeyHelper* _pKey,
                 ::osl::Mutex& _rMutex,
-                const ::std::vector< OUString> &_rVector)
+                const std::vector< OUString> &_rVector)
             : connectivity::sdbcx::OCollection(*_pKey,true,_rMutex,_rVector)
             ,m_pKey(_pKey)
 {
@@ -49,12 +48,12 @@ sdbcx::ObjectType OKeyColumnsHelper::createObject(const OUString& _rName)
 {
     ::dbtools::OPropertyMap& rPropMap = OMetaConnection::getPropMap();
     OUString aCatalog, aSchema, aTable;
-    ::com::sun::star::uno::Any Catalog(m_pKey->getTable()->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_CATALOGNAME)));
+    css::uno::Any Catalog(m_pKey->getTable()->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_CATALOGNAME)));
     Catalog >>= aCatalog;
     m_pKey->getTable()->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_SCHEMANAME))   >>= aSchema;
     m_pKey->getTable()->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_NAME))         >>= aTable;
 
-    // frist get the related column to _rName
+    // first get the related column to _rName
     Reference< XResultSet > xResult = m_pKey->getTable()->getMetaData()->getImportedKeys(
             Catalog, aSchema, aTable);
 
@@ -109,9 +108,6 @@ sdbcx::ObjectType OKeyColumnsHelper::createObject(const OUString& _rName)
                                                   nSize,
                                                   nDec,
                                                   nDataType,
-                                                  false,
-                                                  false,
-                                                  false,
                                                   isCaseSensitive(),
                                                   aCatalog,
                                                   aSchema,
@@ -129,7 +125,7 @@ Reference< XPropertySet > OKeyColumnsHelper::createDescriptor()
     return new OKeyColumn(isCaseSensitive());
 }
 
-void OKeyColumnsHelper::impl_refresh() throw(::com::sun::star::uno::RuntimeException)
+void OKeyColumnsHelper::impl_refresh()
 {
     m_pKey->refreshColumns();
 }

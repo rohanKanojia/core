@@ -37,6 +37,8 @@ namespace com { namespace sun { namespace star {
     }
 }}}
 
+namespace weld { class Window; }
+
 namespace sfx2
 {
     // For the link to receive information about the status of graphics that
@@ -60,7 +62,7 @@ class SFX2_DLLPUBLIC LinkManager
     SfxObjectShell *pPersist; // LinkMgr must be release before SfxObjectShell
 protected:
     bool        InsertLink( SvBaseLink* pLink, sal_uInt16 nObjType, SfxLinkUpdateMode nUpdateType,
-                            const OUString* pName = nullptr );
+                            const OUString* pName );
 public:
 
     enum LinkState
@@ -86,7 +88,7 @@ public:
     SfxObjectShell*    GetPersist() const              { return pPersist; }
     void        SetPersist( SfxObjectShell * p )   { pPersist = p; }
 
-    void        Remove( SvBaseLink *pLink );
+    void        Remove( SvBaseLink const *pLink );
     void        Remove( size_t nPos, size_t nCnt = 1 );
     bool        Insert( SvBaseLink* pLink );
 
@@ -100,7 +102,7 @@ public:
     void        InsertDDELink( SvBaseLink* );
 
     // Connect the links to a pseudo-object and add to the list
-    bool InsertFileLink( sfx2::SvBaseLink&,
+    void InsertFileLink( sfx2::SvBaseLink&,
                         sal_uInt16 nFileType,
                         const OUString& rFileNm,
                         const OUString* pFilterNm = nullptr,
@@ -124,12 +126,11 @@ public:
                                     OUString* pLink = nullptr,
                                     OUString* pFilter = nullptr );
 
-    static SvLinkSourceRef CreateObj( SvBaseLink* );
+    static SvLinkSourceRef CreateObj( SvBaseLink const * );
 
-    void        UpdateAllLinks( bool bAskUpdate = true,
-                                bool bCallErrHdl = true,
-                                bool bUpdateGrfLinks = false,
-                                vcl::Window* pParentWin = nullptr );
+    void        UpdateAllLinks(bool bAskUpdate,
+                               bool bUpdateGrfLinks,
+                               weld::Window* pParentWin);
 
     // Call for list of links (eg for link-dialog)
     const       SvBaseLinks& GetLinks() const { return aLinkTbl; }
@@ -155,9 +156,10 @@ public:
 
     // if the mimetype says graphic/bitmap/gdimetafile then get the
     // graphic from the Any. Return says no errors
-    static bool GetGraphicFromAny( const OUString& rMimeType,
-                                const css::uno::Any & rValue,
-                                Graphic& rGrf );
+    static bool GetGraphicFromAny(const OUString& rMimeType,
+                                  const css::uno::Any & rValue,
+                                  const OUString& rReferer,
+                                  Graphic& rGrf);
 
 private:
                 LinkManager( const LinkManager& ) = delete;

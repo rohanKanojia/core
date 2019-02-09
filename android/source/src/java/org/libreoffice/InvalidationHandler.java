@@ -5,9 +5,15 @@ import android.graphics.PointF;
 import android.graphics.RectF;
 import android.net.Uri;
 import android.util.Log;
+import android.widget.EditText;
+import android.widget.Toast;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.libreoffice.canvas.SelectionHandle;
 import org.libreoffice.kit.Document;
+import org.libreoffice.kit.Office;
 import org.libreoffice.overlay.DocumentOverlay;
 import org.mozilla.gecko.gfx.GeckoLayerClient;
 
@@ -18,16 +24,20 @@ import java.util.List;
 /**
  * Parses (interprets) and handles invalidation messages from LibreOffice.
  */
-public class InvalidationHandler implements Document.MessageCallback {
+public class InvalidationHandler implements Document.MessageCallback, Office.MessageCallback {
     private static String LOGTAG = InvalidationHandler.class.getSimpleName();
     private final DocumentOverlay mDocumentOverlay;
     private final GeckoLayerClient mLayerClient;
     private OverlayState mState;
     private boolean mKeyEvent = false;
+    private LibreOfficeMainActivity mContext;
 
-    public InvalidationHandler(LibreOfficeMainActivity mainActivity) {
-        mDocumentOverlay = mainActivity.getDocumentOverlay();
-        mLayerClient = LibreOfficeMainActivity.getLayerClient();
+    private int currentTotalPageNumber = 0; // total page number of the current document
+
+    public InvalidationHandler(LibreOfficeMainActivity context) {
+        mContext = context;
+        mDocumentOverlay = mContext.getDocumentOverlay();
+        mLayerClient = mContext.getLayerClient();
         mState = OverlayState.NONE;
     }
 
@@ -40,13 +50,21 @@ public class InvalidationHandler implements Document.MessageCallback {
     @Override
     public void messageRetrieved(int messageID, String payload) {
         if (!LOKitShell.isEditingEnabled()) {
-            // enable handling of hyperlinks even in the Viewer
-            if (messageID != Document.CALLBACK_INVALIDATE_TILES && messageID != Document.CALLBACK_HYPERLINK_CLICKED)
+            // enable handling of hyperlinks and search result even in the Viewer
+            if (messageID != Document.CALLBACK_INVALIDATE_TILES
+                    && messageID != Document.CALLBACK_HYPERLINK_CLICKED
+                    && messageID != Document.CALLBACK_SEARCH_RESULT_SELECTION
+                    && messageID != Document.CALLBACK_TEXT_SELECTION
+                    && messageID != Document.CALLBACK_TEXT_SELECTION_START
+                    && messageID != Document.CALLBACK_TEXT_SELECTION_END)
                 return;
         }
         switch (messageID) {
             case Document.CALLBACK_INVALIDATE_TILES:
                 invalidateTiles(payload);
+                break;
+            case Document.CALLBACK_UNO_COMMAND_RESULT:
+                unoCommandResult(payload);
                 break;
             case Document.CALLBACK_INVALIDATE_VISIBLE_CURSOR:
                 invalidateCursor(payload);
@@ -72,13 +90,196 @@ public class InvalidationHandler implements Document.MessageCallback {
                 }
                 Intent urlIntent = new Intent(Intent.ACTION_VIEW);
                 urlIntent.setData(Uri.parse(payload));
-                LibreOfficeMainActivity.mAppContext.startActivity(urlIntent);
+                mContext.startActivity(urlIntent);
                 break;
             case Document.CALLBACK_STATE_CHANGED:
                 stateChanged(payload);
                 break;
+            case Document.CALLBACK_SEARCH_RESULT_SELECTION:
+                searchResultSelection(payload);
+                break;
+            case Document.CALLBACK_SEARCH_NOT_FOUND:
+                Log.d(LOGTAG, "LOK_CALLBACK: Search not found.");
+                // this callback is never caught. Hope someone fix this.
+                break;
+            case Document.CALLBACK_CELL_CURSOR:
+                invalidateCellCursor(payload);
+                break;
+            case Document.CALLBACK_INVALIDATE_HEADER:
+                invalidateHeader();
+                break;
+            case Document.CALLBACK_CELL_ADDRESS:
+                cellAddress(payload);
+                break;
+            case Document.CALLBACK_CELL_FORMULA:
+                cellFormula(payload);
+                break;
+            case Document.CALLBACK_DOCUMENT_PASSWORD:
+                documentPassword();
+                break;
+            case Document.CALLBACK_DOCUMENT_SIZE_CHANGED:
+                pageSizeChanged(payload);
             default:
-                Log.d(LOGTAG, "LOK_CALLBACK uncatched: " + messageID + " : " + payload);
+
+                Log.d(LOGTAG, "LOK_CALLBACK uncaught: " + messageID + " : " + payload);
+        }
+    }
+
+    private void unoCommandResult(String payload) {
+        try {
+            JSONObject payloadObject = new JSONObject(payload);
+            if (payloadObject.getString("commandName").equals(".uno:Save")) {
+                if (payloadObject.getString("success").equals("true")) {
+                    mContext.saveFilesToCloud();
+                }
+            }else if(payloadObject.getString("commandName").equals(".uno:Name") ||
+                    payloadObject.getString("commandName").equals(".uno:RenamePage")){
+                //success returns false even though its true for some reason,
+                LOKitShell.getMainHandler().post(new Runnable() {
+                    @Override
+                    public void run() {
+                        mContext.getTileProvider().resetParts();
+                        mContext.getDocumentPartViewListAdapter().notifyDataSetChanged();
+                        LibreOfficeMainActivity.setDocumentChanged(true);
+                        Toast.makeText(mContext, mContext.getString(R.string.part_name_changed), Toast.LENGTH_SHORT).show();
+                    }
+                });
+            } else if(payloadObject.getString("commandName").equals(".uno:Remove") ||
+                    payloadObject.getString("commandName").equals(".uno:DeletePage") ) {
+                LOKitShell.getMainHandler().post(new Runnable() {
+                    @Override
+                    public void run() {
+                        mContext.getTileProvider().resetParts();
+                        mContext.getDocumentPartViewListAdapter().notifyDataSetChanged();
+                        LibreOfficeMainActivity.setDocumentChanged(true);
+                        Toast.makeText(mContext, mContext.getString(R.string.part_deleted), Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        }catch(JSONException e){
+            e.printStackTrace();
+        }
+    }
+
+    private void cellFormula(final String payload) {
+        LOKitShell.getMainHandler().post(new Runnable() {
+            @Override
+            public void run() {
+                ((EditText)mContext.findViewById(R.id.calc_formula)).setText(payload);
+            }
+        });
+    }
+
+    private void cellAddress(final String payload) {
+        LOKitShell.getMainHandler().post(new Runnable() {
+            @Override
+            public void run() {
+                ((EditText)mContext.findViewById(R.id.calc_address)).setText(payload);
+            }
+        });
+    }
+
+    private void invalidateHeader() {
+        LOKitShell.sendEvent(new LOEvent(LOEvent.UPDATE_CALC_HEADERS));
+    }
+
+    private void documentPassword() {
+        mContext.setPasswordProtected(true);
+        mContext.promptForPassword();
+        synchronized (this) {
+            try {
+                this.wait();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        mContext.setPassword();
+    }
+
+    private void invalidateCellCursor(String payload) {
+        RectF cellCursorRect = convertPayloadToRectangle(payload);
+
+        if (cellCursorRect != null) {
+            mDocumentOverlay.showCellSelection(cellCursorRect);
+            moveViewportToMakeSelectionVisible(cellCursorRect);
+        }
+    }
+
+    /**
+     * Handles the search result selection message, which is a JSONObject
+     *
+     * @param payload
+     */
+    private void searchResultSelection(String payload) {
+        RectF selectionRectangle = null;
+        try {
+            JSONObject collectiveResult = new JSONObject(payload);
+            JSONArray searchResult = collectiveResult.getJSONArray("searchResultSelection");
+            if (searchResult.length() == 1) {
+                String rectangle = searchResult.getJSONObject(0).getString("rectangles");
+                selectionRectangle = convertPayloadToRectangle(rectangle);
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        if (selectionRectangle != null) {
+            moveViewportToMakeSelectionVisible(selectionRectangle);
+        }
+    }
+
+    /**
+     * Move the viewport to show the selection. The selection will appear at the
+     * viewport position depending on where the selection is relative to the
+     * viewport (either selection is above, below, on left or right). The difference
+     * between this method and moveViewportToMakeCursorVisible() is that this method
+     * takes into account the width and height of the selection and zooms out
+     * accordingly.
+     *
+     * @param selectionRectangle - selection position on the document
+     */
+    public void moveViewportToMakeSelectionVisible(RectF selectionRectangle) {
+        RectF moveToRect = mLayerClient.getViewportMetrics().getCssViewport();
+        if (moveToRect.contains(selectionRectangle)) {
+            return;
+        }
+
+        float newLeft = moveToRect.left;
+        float newTop = moveToRect.top;
+
+        // if selection rectangle is wider or taller than current viewport, we need to zoom out
+        float oldZoom = mLayerClient.getViewportMetrics().getZoomFactor();
+        float widthRatio = 1f;
+        float heightRatio = 1f;
+        if (moveToRect.width() < selectionRectangle.width()) {
+            widthRatio = selectionRectangle.width() / moveToRect.width() / 0.85f; // 0.85f gives some margin (must < 0.9)
+        }
+        if (moveToRect.height() < selectionRectangle.height()) {
+            heightRatio = selectionRectangle.height() / moveToRect.height() / 0.45f; // 0.45f gives some margin (must < 0.5)
+        }
+        float newZoom = widthRatio > heightRatio ? oldZoom/widthRatio : oldZoom/heightRatio;
+
+        // if selection is out of viewport we need to adjust accordingly
+        if (selectionRectangle.right < moveToRect.left || selectionRectangle.left < moveToRect.left) {
+            newLeft = selectionRectangle.left - (moveToRect.width() * 0.1f) * oldZoom / newZoom; // 0.1f gives left margin
+        } else if (selectionRectangle.right > moveToRect.right || selectionRectangle.left > moveToRect.right) {
+            newLeft = selectionRectangle.right - (moveToRect.width() * 0.9f) * oldZoom / newZoom; // 0.9f gives right margin
+        }
+
+        if (selectionRectangle.top < moveToRect.top || selectionRectangle.bottom < moveToRect.top) {
+            newTop = selectionRectangle.top - (moveToRect.height() * 0.1f) * oldZoom / newZoom; // 0.1f gives top margin
+        } else if (selectionRectangle.bottom > moveToRect.bottom || selectionRectangle.top > moveToRect.bottom){
+            newTop = selectionRectangle.bottom - (moveToRect.height() * 0.5f) * oldZoom / newZoom; // 0.5 f gives bottom margin
+        }
+
+        LOKitShell.moveViewportTo(mContext, new PointF(newLeft, newTop), newZoom);
+    }
+
+    private void pageSizeChanged(String payload){
+        if(mContext.getTileProvider().isTextDocument()){
+            String[] bounds = payload.split(",");
+            int pageWidth = Integer.parseInt(bounds[0]);
+            int pageHeight = Integer.parseInt(bounds[1].trim());
+            LOKitShell.sendEvent(new LOEvent(LOEvent.PAGE_SIZE_CHANGED, pageWidth, pageHeight));
         }
     }
 
@@ -90,27 +291,51 @@ public class InvalidationHandler implements Document.MessageCallback {
         }
         final String value = parts[1];
         boolean pressed = Boolean.parseBoolean(value);
-
+        if (!mContext.getTileProvider().isReady()) {
+            Log.w(LOGTAG, "tile provider not ready, ignoring payload "+payload);
+            return;
+        }
         if (parts[0].equals(".uno:Bold")) {
-            LOKitShell.getFormattingController().onToggleStateChanged(Document.BOLD, pressed);
+            mContext.getFormattingController().onToggleStateChanged(Document.BOLD, pressed);
         } else if (parts[0].equals(".uno:Italic")) {
-            LOKitShell.getFormattingController().onToggleStateChanged(Document.ITALIC, pressed);
+            mContext.getFormattingController().onToggleStateChanged(Document.ITALIC, pressed);
         } else if (parts[0].equals(".uno:Underline")) {
-            LOKitShell.getFormattingController().onToggleStateChanged(Document.UNDERLINE, pressed);
+            mContext.getFormattingController().onToggleStateChanged(Document.UNDERLINE, pressed);
         } else if (parts[0].equals(".uno:Strikeout")) {
-            LOKitShell.getFormattingController().onToggleStateChanged(Document.STRIKEOUT, pressed);
+            mContext.getFormattingController().onToggleStateChanged(Document.STRIKEOUT, pressed);
         } else if (parts[0].equals(".uno:CharFontName")) {
-            LOKitShell.getFontController().selectFont(value);
+            mContext.getFontController().selectFont(value);
         } else if (parts[0].equals(".uno:FontHeight")) {
-            LOKitShell.getFontController().selectFontSize(value);
+            mContext.getFontController().selectFontSize(value);
         } else if (parts[0].equals(".uno:LeftPara")) {
-            LOKitShell.getFormattingController().onToggleStateChanged(Document.ALIGN_LEFT, pressed);
+            mContext.getFormattingController().onToggleStateChanged(Document.ALIGN_LEFT, pressed);
         } else if (parts[0].equals(".uno:CenterPara")) {
-            LOKitShell.getFormattingController().onToggleStateChanged(Document.ALIGN_CENTER, pressed);
+            mContext.getFormattingController().onToggleStateChanged(Document.ALIGN_CENTER, pressed);
         } else if (parts[0].equals(".uno:RightPara")) {
-            LOKitShell.getFormattingController().onToggleStateChanged(Document.ALIGN_RIGHT, pressed);
+            mContext.getFormattingController().onToggleStateChanged(Document.ALIGN_RIGHT, pressed);
         } else if (parts[0].equals(".uno:JustifyPara")) {
-            LOKitShell.getFormattingController().onToggleStateChanged(Document.ALIGN_JUSTIFY, pressed);
+            mContext.getFormattingController().onToggleStateChanged(Document.ALIGN_JUSTIFY, pressed);
+        } else if (parts[0].equals(".uno:DefaultBullet")) {
+            mContext.getFormattingController().onToggleStateChanged(Document.BULLET_LIST, pressed);
+        } else if (parts[0].equals(".uno:DefaultNumbering")) {
+            mContext.getFormattingController().onToggleStateChanged(Document.NUMBERED_LIST, pressed);
+        } else if (parts[0].equals(".uno:Color")) {
+            mContext.getFontController().colorPaletteListener.updateColorPickerPosition(Integer.parseInt(value));
+        } else if (mContext.getTileProvider().isTextDocument() && parts[0].equals(".uno:BackColor")) {
+            mContext.getFontController().backColorPaletteListener.updateColorPickerPosition(Integer.parseInt(value));
+        } else if (mContext.getTileProvider().isPresentation() && parts[0].equals(".uno:CharBackColor")) {
+            mContext.getFontController().backColorPaletteListener.updateColorPickerPosition(Integer.parseInt(value));
+        } else if (mContext.getTileProvider().isSpreadsheet() && parts[0].equals(".uno:BackgroundColor")) {
+            mContext.getFontController().backColorPaletteListener.updateColorPickerPosition(Integer.parseInt(value));
+        } else if (parts[0].equals(".uno:StatePageNumber")) {
+            // get the total page number and compare to the current value and update accordingly
+            String[] splitStrings = parts[1].split(" ");
+            int totalPageNumber = Integer.valueOf(splitStrings[splitStrings.length - 1]);
+            if (totalPageNumber != currentTotalPageNumber) {
+                currentTotalPageNumber = totalPageNumber;
+                // update part page rectangles stored in DocumentOverlayView object
+                LOKitShell.sendEvent(new LOEvent(LOEvent.UPDATE_PART_PAGE_RECT));
+            }
         } else {
             Log.d(LOGTAG, "LOK_CALLBACK_STATE_CHANGED type uncatched: " + payload);
         }
@@ -122,7 +347,7 @@ public class InvalidationHandler implements Document.MessageCallback {
      * @param payload - invalidation message payload text
      * @return rectangle in pixel coordinates
      */
-    private RectF convertPayloadToRectangle(String payload) {
+    public RectF convertPayloadToRectangle(String payload) {
         String payloadWithoutWhitespace = payload.replaceAll("\\s", ""); // remove all whitespace from the string
 
         if (payloadWithoutWhitespace.isEmpty() || payloadWithoutWhitespace.equals("EMPTY")) {
@@ -140,7 +365,7 @@ public class InvalidationHandler implements Document.MessageCallback {
         int width = Integer.decode(coordinates[2]);
         int height = Integer.decode(coordinates[3]);
 
-        float dpi = LOKitShell.getDpi();
+        float dpi = LOKitShell.getDpi(mContext);
 
         return new RectF(
                 LOKitTileProvider.twipToPixel(x, dpi),
@@ -156,7 +381,7 @@ public class InvalidationHandler implements Document.MessageCallback {
      * @param payload - invalidation message payload text
      * @return list of rectangles
      */
-    private List<RectF> convertPayloadToRectangles(String payload) {
+    public List<RectF> convertPayloadToRectangles(String payload) {
         List<RectF> rectangles = new ArrayList<RectF>();
         String[] rectangleArray = payload.split(";");
 
@@ -233,7 +458,7 @@ public class InvalidationHandler implements Document.MessageCallback {
             newTop = cursorRectangle.bottom - (moveToRect.height() / 2.0f);
         }
 
-        LOKitShell.moveViewportTo(new PointF(newLeft, newTop), null);
+        LOKitShell.moveViewportTo(mContext, new PointF(newLeft, newTop), null);
     }
 
     /**
@@ -270,7 +495,11 @@ public class InvalidationHandler implements Document.MessageCallback {
             if (mState == OverlayState.SELECTION) {
                 changeStateTo(OverlayState.TRANSITION);
             }
-            mDocumentOverlay.changeSelections(Collections.EMPTY_LIST);
+            mDocumentOverlay.changeSelections(Collections.<RectF>emptyList());
+            if (mContext.isSpreadsheet()) {
+                mDocumentOverlay.showHeaderSelection(null);
+            }
+            mContext.getToolbarController().showHideClipboardCutAndCopy(false);
         } else {
             List<RectF> rectangles = convertPayloadToRectangles(payload);
             if (mState != OverlayState.SELECTION) {
@@ -278,6 +507,11 @@ public class InvalidationHandler implements Document.MessageCallback {
             }
             changeStateTo(OverlayState.SELECTION);
             mDocumentOverlay.changeSelections(rectangles);
+            if (mContext.isSpreadsheet()) {
+                mDocumentOverlay.showHeaderSelection(rectangles.get(0));
+            }
+            String selectedText = mContext.getTileProvider().getTextSelection("");
+            mContext.getToolbarController().showClipboardActions(selectedText);
         }
     }
 
@@ -359,10 +593,12 @@ public class InvalidationHandler implements Document.MessageCallback {
      * Handle a general transition - executed for all transitions.
      */
     private void handleGeneralChangeState(OverlayState previous, OverlayState next) {
-        if (previous == OverlayState.NONE) {
-            LOKitShell.getToolbarController().switchToEditMode();
-        } else if (next == OverlayState.NONE) {
-            LOKitShell.getToolbarController().switchToViewMode();
+        if (previous == OverlayState.NONE &&
+                !mContext.getToolbarController().getEditModeStatus()) {
+            mContext.getToolbarController().switchToEditMode();
+        } else if (next == OverlayState.NONE &&
+                mContext.getToolbarController().getEditModeStatus()) {
+            mContext.getToolbarController().switchToViewMode();
         }
     }
 
@@ -381,7 +617,7 @@ public class InvalidationHandler implements Document.MessageCallback {
         mDocumentOverlay.hideSelections();
         mDocumentOverlay.hideCursor();
         mDocumentOverlay.hideGraphicSelection();
-        LibreOfficeMainActivity.mAppContext.hideSoftKeyboard();
+        mContext.hideSoftKeyboard();
     }
 
     /**
@@ -397,7 +633,7 @@ public class InvalidationHandler implements Document.MessageCallback {
      * Handle a transition to OverlayState.CURSOR state.
      */
     private void handleCursorState(OverlayState previous) {
-        LibreOfficeMainActivity.mAppContext.showSoftKeyboardOrFormattingToolbar();
+        mContext.showSoftKeyboardOrFormattingToolbar();
         if (previous == OverlayState.TRANSITION) {
             mDocumentOverlay.showHandle(SelectionHandle.HandleType.MIDDLE);
             mDocumentOverlay.showCursor();
@@ -408,14 +644,18 @@ public class InvalidationHandler implements Document.MessageCallback {
      * Handle a transition to OverlayState.TRANSITION state.
      */
     private void handleTransitionState(OverlayState previous) {
-        if (previous == OverlayState.SELECTION) {
-            mDocumentOverlay.hideHandle(SelectionHandle.HandleType.START);
-            mDocumentOverlay.hideHandle(SelectionHandle.HandleType.END);
-            mDocumentOverlay.hideSelections();
-        } else if (previous == OverlayState.CURSOR) {
-            mDocumentOverlay.hideHandle(SelectionHandle.HandleType.MIDDLE);
-        } else if (previous == OverlayState.GRAPHIC_SELECTION) {
-            mDocumentOverlay.hideGraphicSelection();
+        switch (previous) {
+            case SELECTION:
+                mDocumentOverlay.hideHandle(SelectionHandle.HandleType.START);
+                mDocumentOverlay.hideHandle(SelectionHandle.HandleType.END);
+                mDocumentOverlay.hideSelections();
+                break;
+            case CURSOR:
+                mDocumentOverlay.hideHandle(SelectionHandle.HandleType.MIDDLE);
+                break;
+            case GRAPHIC_SELECTION:
+                mDocumentOverlay.hideGraphicSelection();
+                break;
         }
     }
 
@@ -424,7 +664,7 @@ public class InvalidationHandler implements Document.MessageCallback {
      */
     private void handleGraphicSelectionState(OverlayState previous) {
         mDocumentOverlay.showGraphicSelection();
-        LibreOfficeMainActivity.mAppContext.hideSoftKeyboard();
+        mContext.hideSoftKeyboard();
     }
 
     /**

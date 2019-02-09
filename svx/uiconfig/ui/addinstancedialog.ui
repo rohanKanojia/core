@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
-  <requires lib="LibreOffice" version="1.0"/>
+<!-- Generated with glade 3.22.1 -->
+<interface domain="svx">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="AddInstanceDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Add Instance</property>
+    <property name="title" translatable="yes" context="addinstancedialog|AddInstanceDialog">Add Instance</property>
+    <property name="modal">True</property>
+    <property name="default_width">0</property>
+    <property name="default_height">0</property>
     <property name="type_hint">dialog</property>
+    <child>
+      <placeholder/>
+    </child>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
         <property name="can_focus">False</property>
@@ -81,7 +86,7 @@
               <object class="GtkEntry" id="name">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
-                <property name="invisible_char">•</property>
+                <property name="activates_default">True</property>
                 <property name="width_chars">46</property>
               </object>
               <packing>
@@ -94,10 +99,10 @@
               <object class="GtkLabel" id="label2">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="xalign">1</property>
-                <property name="label" translatable="yes">_Name:</property>
+                <property name="label" translatable="yes" context="addinstancedialog|label2">_Name:</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">name</property>
+                <property name="xalign">1</property>
               </object>
               <packing>
                 <property name="left_attach">0</property>
@@ -108,7 +113,7 @@
               <object class="GtkLabel" id="alttitle">
                 <property name="can_focus">False</property>
                 <property name="no_show_all">True</property>
-                <property name="label" translatable="yes">Edit Instance</property>
+                <property name="label" translatable="yes" context="addinstancedialog|alttitle">Edit Instance</property>
               </object>
               <packing>
                 <property name="left_attach">0</property>
@@ -120,10 +125,10 @@
               <object class="GtkLabel" id="urlft">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="xalign">1</property>
-                <property name="label" translatable="yes">_URL:</property>
+                <property name="label" translatable="yes" context="addinstancedialog|urlft">_URL:</property>
                 <property name="use_underline">True</property>
-                <property name="mnemonic_widget">name</property>
+                <property name="mnemonic_widget">url</property>
+                <property name="xalign">1</property>
               </object>
               <packing>
                 <property name="left_attach">0</property>
@@ -131,10 +136,16 @@
               </packing>
             </child>
             <child>
-              <object class="svtlo-SvtURLBox" id="url">
+               <object class="GtkComboBoxText" id="url">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="hexpand">True</property>
+                <property name="has_entry">True</property>
+                <child internal-child="entry">
+                  <object class="GtkEntry">
+                    <property name="can_focus">True</property>
+                  </object>
+                </child>
               </object>
               <packing>
                 <property name="left_attach">1</property>
@@ -143,7 +154,7 @@
             </child>
             <child>
               <object class="GtkButton" id="browse">
-                <property name="label" translatable="yes">_Browse...</property>
+                <property name="label" translatable="yes" context="addinstancedialog|browse">_Browse...</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -156,7 +167,7 @@
             </child>
             <child>
               <object class="GtkCheckButton" id="link">
-                <property name="label" translatable="yes">_Link instance</property>
+                <property name="label" translatable="yes" context="addinstancedialog|link">_Link instance</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
@@ -180,9 +191,9 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">cancel</action-widget>
-      <action-widget response="0">help</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
   </object>
 </interface>

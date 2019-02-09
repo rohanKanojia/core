@@ -8,8 +8,10 @@
  */
 
 #include <opengl/program.hxx>
+#include <opengl/RenderState.hxx>
 
 #include <vcl/opengl/OpenGLHelper.hxx>
+#include <vcl/opengl/OpenGLContext.hxx>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -22,8 +24,9 @@ OpenGLProgram::OpenGLProgram() :
     mnTexCoordAttrib( SAL_MAX_UINT32 ),
     mnAlphaCoordAttrib( SAL_MAX_UINT32 ),
     mnMaskCoordAttrib( SAL_MAX_UINT32 ),
-    mnNormalAttrib( SAL_MAX_UINT32 ),
-    mbBlending( false ),
+    mnExtrusionVectorsAttrib( SAL_MAX_UINT32 ),
+    mnVertexColorsAttrib( SAL_MAX_UINT32 ),
+    mbBlending(false),
     mfLastWidth(0.0),
     mfLastHeight(0.0),
     mfLastPixelOffset(0.0)
@@ -42,39 +45,36 @@ OpenGLProgram::~OpenGLProgram()
 
 bool OpenGLProgram::Load( const OUString& rVertexShader,
                           const OUString& rFragmentShader,
-                          const rtl::OString& preamble,
-                          const rtl::OString& rDigest )
+                          const OString& preamble,
+                          const OString& rDigest )
 {
     mnId = OpenGLHelper::LoadShaders( rVertexShader, rFragmentShader, preamble, rDigest );
     return ( mnId != 0 );
 }
 
-bool OpenGLProgram::Use()
+void OpenGLProgram::Reuse()
 {
-    if( !mnId )
-        return false;
-
-    glUseProgram( mnId );
-    CHECK_GL_ERROR();
-    return true;
+    mbBlending = false;
 }
 
-bool OpenGLProgram::Clean()
+void OpenGLProgram::Use()
+{
+    if (!mnId)
+        return;
+
+    glUseProgram(mnId);
+    CHECK_GL_ERROR();
+    Reuse();
+}
+
+void OpenGLProgram::Clean()
 {
     // unbind all textures
-    if( !maTextures.empty() )
+    for (OpenGLTexture& rTexture : maTextures)
     {
-        int nIndex( maTextures.size() - 1 );
-        TextureList::reverse_iterator it( maTextures.rbegin() );
-        while( it != maTextures.rend() )
-        {
-            glActiveTexture( GL_TEXTURE0 + nIndex-- );
-            CHECK_GL_ERROR();
-            it->Unbind();
-            ++it;
-        }
-        maTextures.clear();
+        rTexture.Unbind();
     }
+    maTextures.clear();
 
     // disable any enabled vertex attrib array
     if( mnEnabledAttribs )
@@ -89,24 +89,17 @@ bool OpenGLProgram::Clean()
         }
         mnEnabledAttribs = 0;
     }
-
-    // disable blending if enabled
-    if( mbBlending )
-    {
-        mbBlending = false;
-        glDisable( GL_BLEND );
-        CHECK_GL_ERROR();
-    }
-
-    return true;
 }
 
-void OpenGLProgram::SetVertexAttrib( GLuint& rAttrib, const OString& rName, const GLvoid* pData, GLint nSize )
+bool OpenGLProgram::EnableVertexAttrib(GLuint& rAttrib, const OString& rName)
 {
     if( rAttrib == SAL_MAX_UINT32 )
     {
-        rAttrib = glGetAttribLocation( mnId, rName.getStr() );
+        GLint aLocation = glGetAttribLocation(mnId, rName.getStr());
         CHECK_GL_ERROR();
+        if (aLocation < 0)
+            return false;
+        rAttrib = GLuint(aLocation);
     }
     if( (mnEnabledAttribs & ( 1 << rAttrib )) == 0 )
     {
@@ -114,33 +107,62 @@ void OpenGLProgram::SetVertexAttrib( GLuint& rAttrib, const OString& rName, cons
         CHECK_GL_ERROR();
         mnEnabledAttribs |= ( 1 << rAttrib );
     }
-    glVertexAttribPointer( rAttrib, nSize, GL_FLOAT, GL_FALSE, 0, pData );
-    CHECK_GL_ERROR();
+    return true;
+}
+
+void OpenGLProgram::SetVertexAttrib(GLuint& rAttrib, const OString& rName, GLint nSize,
+                                    GLenum eType, GLboolean bNormalized, GLsizei aStride,
+                                    const GLvoid* pPointer)
+{
+    if (EnableVertexAttrib(rAttrib, rName))
+    {
+        glVertexAttribPointer(rAttrib, nSize, eType, bNormalized, aStride, pPointer);
+        CHECK_GL_ERROR();
+    }
+    else
+    {
+        VCL_GL_INFO("Vertex attribute '" << rName << "' doesn't exist in this program (" << mnId << ")");
+    }
 }
 
 void OpenGLProgram::SetVertices( const GLvoid* pData )
 {
-    SetVertexAttrib( mnPositionAttrib, "position", pData );
+    SetVertexAttrib(mnPositionAttrib, "position", 2, GL_FLOAT, GL_FALSE, 0, pData);
 }
 
 void OpenGLProgram::SetTextureCoord( const GLvoid* pData )
 {
-    SetVertexAttrib( mnTexCoordAttrib, "tex_coord_in", pData );
+    SetVertexAttrib(mnTexCoordAttrib, "tex_coord_in", 2, GL_FLOAT, GL_FALSE, 0, pData);
 }
 
 void OpenGLProgram::SetAlphaCoord( const GLvoid* pData )
 {
-    SetVertexAttrib( mnAlphaCoordAttrib, "alpha_coord_in", pData );
+    SetVertexAttrib(mnAlphaCoordAttrib, "alpha_coord_in", 2, GL_FLOAT, GL_FALSE, 0, pData);
 }
 
 void OpenGLProgram::SetMaskCoord(const GLvoid* pData)
 {
-    SetVertexAttrib(mnMaskCoordAttrib, "mask_coord_in", pData);
+    SetVertexAttrib(mnMaskCoordAttrib, "mask_coord_in", 2, GL_FLOAT, GL_FALSE, 0, pData);
 }
 
 void OpenGLProgram::SetExtrusionVectors(const GLvoid* pData)
 {
-    SetVertexAttrib(mnNormalAttrib, "extrusion_vectors", pData, 3);
+    SetVertexAttrib(mnExtrusionVectorsAttrib, "extrusion_vectors", 3, GL_FLOAT, GL_FALSE, 0, pData);
+}
+
+void OpenGLProgram::SetVertexColors(std::vector<GLubyte>& rColorVector)
+{
+    SetVertexAttrib(mnVertexColorsAttrib, "vertex_color_in", 4, GL_UNSIGNED_BYTE, GL_FALSE, 0, rColorVector.data());
+}
+
+void OpenGLProgram::SetShaderType(TextureShaderType eTextureShaderType)
+{
+    SetUniform1i("type", GLint(eTextureShaderType));
+}
+
+void OpenGLProgram::SetShaderType(DrawShaderType eDrawShaderType)
+{
+    SetUniform1i("type", GLint(eDrawShaderType));
 }
 
 GLuint OpenGLProgram::GetUniformLocation( const OString& rName )
@@ -157,6 +179,23 @@ GLuint OpenGLProgram::GetUniformLocation( const OString& rName )
     return it->second;
 }
 
+void OpenGLProgram::DrawArrays(GLenum aMode, std::vector<GLfloat>& aVertices)
+{
+    if (!mbBlending)
+        OpenGLContext::getVCLContext()->state().blend().disable();
+
+    SetVertices(aVertices.data());
+    glDrawArrays(aMode, 0, aVertices.size() / 2);
+}
+
+void OpenGLProgram::DrawElements(GLenum aMode, GLuint nNumberOfVertices)
+{
+    if (!mbBlending)
+        OpenGLContext::getVCLContext()->state().blend().disable();
+
+    glDrawElements(aMode, nNumberOfVertices, GL_UNSIGNED_INT, nullptr);
+}
+
 void OpenGLProgram::SetUniform1f( const OString& rName, GLfloat v1 )
 {
     GLuint nUniform = GetUniformLocation( rName );
@@ -171,14 +210,14 @@ void OpenGLProgram::SetUniform2f( const OString& rName, GLfloat v1, GLfloat v2 )
     CHECK_GL_ERROR();
 }
 
-void OpenGLProgram::SetUniform1fv( const OString& rName, GLsizei nCount, GLfloat* aValues )
+void OpenGLProgram::SetUniform1fv( const OString& rName, GLsizei nCount, GLfloat const * aValues )
 {
     GLuint nUniform = GetUniformLocation( rName );
     glUniform1fv( nUniform, nCount, aValues );
     CHECK_GL_ERROR();
 }
 
-void OpenGLProgram::SetUniform2fv( const OString& rName, GLsizei nCount, GLfloat* aValues )
+void OpenGLProgram::SetUniform2fv( const OString& rName, GLsizei nCount, GLfloat const * aValues )
 {
     GLuint nUniform = GetUniformLocation( rName );
     glUniform2fv( nUniform, nCount, aValues );
@@ -192,13 +231,13 @@ void OpenGLProgram::SetUniform1i( const OString& rName, GLint v1 )
     CHECK_GL_ERROR();
 }
 
-void OpenGLProgram::SetColor( const OString& rName, SalColor nColor, sal_uInt8 nTransparency )
+void OpenGLProgram::SetColor( const OString& rName, Color nColor, sal_uInt8 nTransparency )
 {
     GLuint nUniform = GetUniformLocation( rName );
     glUniform4f( nUniform,
-                 ((float) SALCOLOR_RED( nColor )) / 255,
-                 ((float) SALCOLOR_GREEN( nColor )) / 255,
-                 ((float) SALCOLOR_BLUE( nColor )) / 255,
+                 nColor.GetRed() / 255.0f,
+                 nColor.GetGreen() / 255.0f,
+                 nColor.GetBlue() / 255.0f,
                  (100 - nTransparency) * (1.0 / 100) );
     CHECK_GL_ERROR();
 
@@ -206,13 +245,13 @@ void OpenGLProgram::SetColor( const OString& rName, SalColor nColor, sal_uInt8 n
         SetBlendMode( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
 }
 
-void OpenGLProgram::SetColorf( const OString& rName, SalColor nColor, double fTransparency )
+void OpenGLProgram::SetColorf( const OString& rName, Color nColor, double fTransparency )
 {
     GLuint nUniform = GetUniformLocation( rName );
     glUniform4f( nUniform,
-                 ((float) SALCOLOR_RED( nColor )) / 255,
-                 ((float) SALCOLOR_GREEN( nColor )) / 255,
-                 ((float) SALCOLOR_BLUE( nColor )) / 255,
+                 nColor.GetRed() / 255.0f,
+                 nColor.GetGreen() / 255.0f,
+                 nColor.GetBlue() / 255.0f,
                  (1.0f - fTransparency) );
     CHECK_GL_ERROR();
 
@@ -224,10 +263,10 @@ void OpenGLProgram::SetColor( const OString& rName, const Color& rColor )
 {
     GLuint nUniform = GetUniformLocation( rName );
     glUniform4f( nUniform,
-                 ((float) rColor.GetRed()) / 255,
-                 ((float) rColor.GetGreen()) / 255,
-                 ((float) rColor.GetBlue()) / 255,
-                 1.0f - ((float) rColor.GetTransparency()) / 255 );
+                 static_cast<float>(rColor.GetRed()) / 255,
+                 static_cast<float>(rColor.GetGreen()) / 255,
+                 static_cast<float>(rColor.GetBlue()) / 255,
+                 1.0f - static_cast<float>(rColor.GetTransparency()) / 255 );
     CHECK_GL_ERROR();
 
     if( rColor.GetTransparency() > 0 )
@@ -238,9 +277,9 @@ void OpenGLProgram::SetColorWithIntensity( const OString& rName, const Color& rC
 {
     GLuint nUniform = GetUniformLocation( rName );
     glUniform4f( nUniform,
-                 ((float) rColor.GetRed()) * nFactor / 25500.0,
-                 ((float) rColor.GetGreen()) * nFactor / 25500.0,
-                 ((float) rColor.GetBlue()) * nFactor / 25500.0,
+                 static_cast<float>(rColor.GetRed()) * nFactor / 25500.0,
+                 static_cast<float>(rColor.GetGreen()) * nFactor / 25500.0,
+                 static_cast<float>(rColor.GetBlue()) * nFactor / 25500.0,
                  1.0f );
     CHECK_GL_ERROR();
 }
@@ -252,10 +291,11 @@ void OpenGLProgram::SetTexture( const OString& rName, OpenGLTexture& rTexture )
 
     glUniform1i( nUniform, nIndex );
     CHECK_GL_ERROR();
-    glActiveTexture( GL_TEXTURE0 + nIndex );
-    CHECK_GL_ERROR();
+
+    OpenGLContext::getVCLContext()->state().texture().active(nIndex);
+
     rTexture.Bind();
-    maTextures.push_back( rTexture );
+    maTextures.push_back(rTexture);
 }
 
 void OpenGLProgram::SetTransform(
@@ -274,12 +314,20 @@ void OpenGLProgram::SetTransform(
     const basegfx::B2DVector aXRel = rX - rNull;
     const basegfx::B2DVector aYRel = rY - rNull;
     const float aValues[] = {
-        (float) aXRel.getX()/nTexWidth,  (float) aXRel.getY()/nTexWidth,  0, 0,
-        (float) aYRel.getX()/nTexHeight, (float) aYRel.getY()/nTexHeight, 0, 0,
+        static_cast<float>(aXRel.getX())/nTexWidth,  static_cast<float>(aXRel.getY())/nTexWidth,  0, 0,
+        static_cast<float>(aYRel.getX())/nTexHeight, static_cast<float>(aYRel.getY())/nTexHeight, 0, 0,
         0,                               0,                               1, 0,
-        (float) rNull.getX(),            (float) rNull.getY(),            0, 1 };
-    glm::mat4 mMatrix = glm::make_mat4( aValues );
-    glUniformMatrix4fv( nUniform, 1, GL_FALSE, glm::value_ptr( mMatrix ) );
+        static_cast<float>(rNull.getX()),            static_cast<float>(rNull.getY()),            0, 1 };
+    glm::mat4 aMatrix = glm::make_mat4( aValues );
+    glUniformMatrix4fv( nUniform, 1, GL_FALSE, glm::value_ptr( aMatrix ) );
+    CHECK_GL_ERROR();
+}
+
+void OpenGLProgram::SetIdentityTransform(const OString& rName)
+{
+    GLuint nUniform = GetUniformLocation(rName);
+    glm::mat4 aMatrix = glm::mat4();
+    glUniformMatrix4fv(nUniform, 1, GL_FALSE, glm::value_ptr( aMatrix ) );
     CHECK_GL_ERROR();
 }
 
@@ -293,31 +341,28 @@ void OpenGLProgram::ApplyMatrix(float fWidth, float fHeight, float fPixelOffset)
     mfLastHeight = fHeight;
     mfLastPixelOffset = fPixelOffset;
 
-    OString sProjectionMatrix("mvp");
-    GLuint nUniform = GetUniformLocation(sProjectionMatrix);
+    GLuint nUniform = GetUniformLocation("mvp");
 
-    glm::mat4 mMVP = glm::ortho(0.0f, fWidth, fHeight, 0.0f, 0.0f, 1.0f);
+    glm::mat4 aMVP = glm::ortho(0.0f, fWidth, fHeight, 0.0f, 0.0f, 1.0f);
 
     if (fPixelOffset != 0.0f)
-        mMVP = glm::translate(mMVP, glm::vec3(fPixelOffset, fPixelOffset, 0.0f));
+        aMVP = glm::translate(aMVP, glm::vec3(fPixelOffset, fPixelOffset, 0.0f));
 
-    glUniformMatrix4fv(nUniform, 1, GL_FALSE, glm::value_ptr(mMVP));
+    glUniformMatrix4fv(nUniform, 1, GL_FALSE, glm::value_ptr(aMVP));
     CHECK_GL_ERROR();
 }
 
-void OpenGLProgram::SetBlendMode( GLenum nSFactor, GLenum nDFactor )
+void OpenGLProgram::SetBlendMode(GLenum nSFactor, GLenum nDFactor)
 {
-    glEnable( GL_BLEND );
-    CHECK_GL_ERROR();
-    glBlendFunc( nSFactor, nDFactor );
-    CHECK_GL_ERROR();
+    OpenGLContext::getVCLContext()->state().blend().enable();
+    OpenGLContext::getVCLContext()->state().blend().func(nSFactor, nDFactor);
     mbBlending = true;
 }
 
-bool OpenGLProgram::DrawTexture( const OpenGLTexture& rTexture )
+void OpenGLProgram::DrawTexture( const OpenGLTexture& rTexture )
 {
     if (!rTexture)
-        return false;
+        return;
 
     float fWidth = rTexture.GetWidth();
     float fHeight = rTexture.GetHeight();
@@ -327,17 +372,19 @@ bool OpenGLProgram::DrawTexture( const OpenGLTexture& rTexture )
     float fMinY = 0.0f;
     float fMaxY = fHeight;
 
-    GLfloat aPosition[8] = { fMinX, fMaxY, fMinX, fMinY, fMaxX, fMinY, fMaxX, fMaxY };
+    std::vector<GLfloat> aPosition {
+        fMinX, fMaxY,
+        fMinX, fMinY,
+        fMaxX, fMinY,
+        fMaxX, fMaxY
+    };
     GLfloat aTexCoord[8];
 
     rTexture.GetWholeCoord( aTexCoord );
-    SetVertices( aPosition );
     SetTextureCoord( aTexCoord );
     ApplyMatrix(fWidth, fHeight);
-    glDrawArrays( GL_TRIANGLE_FAN, 0, 4 );
+    DrawArrays(GL_TRIANGLE_FAN, aPosition);
     CHECK_GL_ERROR();
-
-    return true;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

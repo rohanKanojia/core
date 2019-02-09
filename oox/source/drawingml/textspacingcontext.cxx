@@ -17,8 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "drawingml/textspacing.hxx"
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
+#include <drawingml/textspacing.hxx>
 #include "textspacingcontext.hxx"
 
 using namespace ::oox::core;
@@ -27,7 +30,7 @@ using namespace ::com::sun::star::uno;
 
 namespace oox { namespace drawingml {
 
-    TextSpacingContext::TextSpacingContext( ContextHandler2Helper& rParent, TextSpacing & aSpacing )
+    TextSpacingContext::TextSpacingContext( ContextHandler2Helper const & rParent, TextSpacing & aSpacing )
         : ContextHandler2( rParent )
         , maSpacing( aSpacing )
     {
@@ -40,12 +43,13 @@ namespace oox { namespace drawingml {
         switch( aElement )
         {
         case A_TOKEN( spcPct ):
-            maSpacing.nUnit = TextSpacing::PERCENT;
+            maSpacing.nUnit = TextSpacing::Unit::Percent;
             maSpacing.nValue = GetPercent( rAttribs.getString( XML_val ).get() );
             break;
         case A_TOKEN( spcPts ):
-            maSpacing.nUnit = TextSpacing::POINTS;
+            maSpacing.nUnit = TextSpacing::Unit::Points;
             maSpacing.nValue = GetTextSpacingPoint( rAttribs.getString( XML_val ).get() );
+            maSpacing.bExactValue = true;
             break;
         default:
             break;

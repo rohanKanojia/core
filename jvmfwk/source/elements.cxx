@@ -17,20 +17,26 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "elements.hxx"
-#include "osl/mutex.hxx"
-#include "osl/file.hxx"
-#include "fwkutil.hxx"
+#include <sal/config.h>
+#include <sal/log.hxx>
+
+#include <cassert>
+#include <memory>
+
+#include <elements.hxx>
+#include <osl/mutex.hxx>
+#include <osl/file.hxx>
+#include <fwkutil.hxx>
 #include "fwkbase.hxx"
 #include "framework.hxx"
 #include "libxmlutil.hxx"
-#include "osl/thread.hxx"
+#include <osl/thread.hxx>
 #include <algorithm>
-#include "libxml/parser.h"
-#include "libxml/xpath.h"
-#include "libxml/xpathInternals.h"
-#include "rtl/bootstrap.hxx"
-#include "boost/optional.hpp"
+#include <libxml/parser.h>
+#include <libxml/xpath.h>
+#include <libxml/xpathInternals.h>
+#include <rtl/bootstrap.hxx>
+#include <boost/optional.hpp>
 #include <string.h>
 
 // For backwards compatibility, the nFeatures and nRequirements flag words are
@@ -42,8 +48,8 @@ using namespace osl;
 namespace jfw
 {
 
-OString getElement(OString const & docPath,
-                        xmlChar const * pathExpression, bool bThrowIfEmpty)
+static OString getElement(OString const & docPath,
+                        xmlChar const * pathExpression)
 {
     //Prepare the xml document and context
     OSL_ASSERT(!docPath.isEmpty());
@@ -51,39 +57,32 @@ OString getElement(OString const & docPath,
     if (doc == nullptr)
         throw FrameworkException(
             JFW_E_ERROR,
-            OString("[Java framework] Error in function getElement "
-                         "(elements.cxx)"));
+            "[Java framework] Error in function getElement (elements.cxx)");
 
     jfw::CXPathContextPtr context(xmlXPathNewContext(doc));
     if (xmlXPathRegisterNs(context, reinterpret_cast<xmlChar const *>("jf"),
         reinterpret_cast<xmlChar const *>(NS_JAVA_FRAMEWORK)) == -1)
         throw FrameworkException(
             JFW_E_ERROR,
-            OString("[Java framework] Error in function getElement "
-                         "(elements.cxx)"));
+            "[Java framework] Error in function getElement (elements.cxx)");
 
     CXPathObjectPtr pathObj;
     pathObj = xmlXPathEvalExpression(pathExpression, context);
     OString sValue;
     if (xmlXPathNodeSetIsEmpty(pathObj->nodesetval))
     {
-        if (bThrowIfEmpty)
-            throw FrameworkException(
-                JFW_E_ERROR,
-                OString("[Java framework] Error in function getElement "
-                             "(elements.cxx)"));
+        throw FrameworkException(
+            JFW_E_ERROR,
+            "[Java framework] Error in function getElement (elements.cxx)");
     }
-    else
-    {
-        sValue = reinterpret_cast<sal_Char*>(pathObj->nodesetval->nodeTab[0]->content);
-    }
+    sValue = reinterpret_cast<sal_Char*>(pathObj->nodesetval->nodeTab[0]->content);
     return sValue;
 }
 
 OString getElementUpdated()
 {
     return getElement(jfw::getVendorSettingsPath(),
-                      reinterpret_cast<xmlChar const *>("/jf:javaSelection/jf:updated/text()"), true);
+                      reinterpret_cast<xmlChar const *>("/jf:javaSelection/jf:updated/text()"));
 }
 
 void createSettingsStructure(xmlDoc * document, bool * bNeedsSave)
@@ -167,44 +166,6 @@ void createSettingsStructure(xmlDoc * document, bool * bNeedsSave)
     xmlAddChild(root, nodeCrLf);
 }
 
-
-VersionInfo::VersionInfo(): arVersions(nullptr)
-{
-}
-
-VersionInfo::~VersionInfo()
-{
-    delete [] arVersions;
-}
-
-void VersionInfo::addExcludeVersion(const OUString& sVersion)
-{
-    vecExcludeVersions.push_back(sVersion);
-}
-
-rtl_uString** VersionInfo::getExcludeVersions()
-{
-    osl::MutexGuard guard(FwkMutex::get());
-    if (arVersions != nullptr)
-        return arVersions;
-
-    arVersions = new rtl_uString*[vecExcludeVersions.size()];
-    int j=0;
-    typedef std::vector<OUString>::const_iterator it;
-    for (it i = vecExcludeVersions.begin(); i != vecExcludeVersions.end();
-         ++i, ++j)
-    {
-        arVersions[j] = vecExcludeVersions[j].pData;
-    }
-    return arVersions;
-}
-
-sal_Int32 VersionInfo::getExcludeVersionSize()
-{
-    return vecExcludeVersions.size();
-}
-
-
 NodeJava::NodeJava(Layer layer):
     m_layer(layer)
 {
@@ -278,9 +239,9 @@ void NodeJava::load()
                 CXmlCharPtr sEnabled( xmlNodeListGetString(
                     docUser, cur->children, 1));
                 if (xmlStrcmp(sEnabled, reinterpret_cast<xmlChar const *>("true")) == 0)
-                    m_enabled = boost::optional<sal_Bool>(sal_True);
+                    m_enabled = boost::optional<sal_Bool>(true);
                 else if (xmlStrcmp(sEnabled, reinterpret_cast<xmlChar const *>("false")) == 0)
-                    m_enabled = boost::optional<sal_Bool>(sal_False);
+                    m_enabled = boost::optional<sal_Bool>(false);
             }
         }
         else if (xmlStrcmp(cur->name, reinterpret_cast<xmlChar const *>("userClassPath")) == 0)
@@ -464,7 +425,7 @@ void NodeJava::write() const
                      reinterpret_cast<xmlChar const *>("nil"),
                      reinterpret_cast<xmlChar const *>("false"));
 
-        if (m_enabled == boost::optional<sal_Bool>(sal_True))
+        if (m_enabled == boost::optional<sal_Bool>(true))
             xmlNodeSetContent(nodeEnabled,reinterpret_cast<xmlChar const *>("true"));
         else
             xmlNodeSetContent(nodeEnabled,reinterpret_cast<xmlChar const *>("false"));
@@ -523,17 +484,16 @@ void NodeJava::write() const
             xmlFreeNode(lastNode);
         }
         //add a new line after <vmParameters>
-        if (m_vmParameters->size() > 0)
+        if (!m_vmParameters->empty())
         {
             xmlNode * nodeCrLf = xmlNewText(reinterpret_cast<xmlChar const *>("\n"));
             xmlAddChild(vmParameters, nodeCrLf);
         }
 
-        typedef std::vector<OUString>::const_iterator cit;
-        for (cit i = m_vmParameters->begin(); i != m_vmParameters->end(); ++i)
+        for (auto const & vmParameter : *m_vmParameters)
         {
             xmlNewTextChild(vmParameters, nullptr, reinterpret_cast<xmlChar const *>("param"),
-                            CXmlCharPtr(*i));
+                            CXmlCharPtr(vmParameter));
             //add a new line
             xmlNode * nodeCrLf = xmlNewText(reinterpret_cast<xmlChar const *>("\n"));
             xmlAddChild(vmParameters, nodeCrLf);
@@ -564,17 +524,16 @@ void NodeJava::write() const
             xmlFreeNode(lastNode);
         }
         //add a new line after <vmParameters>
-        if (m_JRELocations->size() > 0)
+        if (!m_JRELocations->empty())
         {
             xmlNode * nodeCrLf = xmlNewText(reinterpret_cast<xmlChar const *>("\n"));
             xmlAddChild(jreLocationsNode, nodeCrLf);
         }
 
-        typedef std::vector<OUString>::const_iterator cit;
-        for (cit i = m_JRELocations->begin(); i != m_JRELocations->end(); ++i)
+        for (auto const & JRELocation : *m_JRELocations)
         {
             xmlNewTextChild(jreLocationsNode, nullptr, reinterpret_cast<xmlChar const *>("location"),
-                            CXmlCharPtr(*i));
+                            CXmlCharPtr(JRELocation));
             //add a new line
             xmlNode * nodeCrLf = xmlNewText(reinterpret_cast<xmlChar const *>("\n"));
             xmlAddChild(jreLocationsNode, nodeCrLf);
@@ -625,35 +584,21 @@ void NodeJava::setJavaInfo(const JavaInfo * pInfo, bool bAutoSelect)
     }
 }
 
-void NodeJava::setVmParameters(rtl_uString * * arOptions, sal_Int32 size)
+void NodeJava::setVmParameters(std::vector<OUString> const & arOptions)
 {
-    OSL_ASSERT( !(arOptions == nullptr && size != 0));
-    if ( ! m_vmParameters)
-        m_vmParameters = boost::optional<std::vector<OUString> >(
-            std::vector<OUString>());
-    m_vmParameters->clear();
-    if (arOptions != nullptr)
-    {
-        for (int i  = 0; i < size; i++)
-        {
-            const OUString sOption(static_cast<rtl_uString*>(arOptions[i]));
-            m_vmParameters->push_back(sOption);
-        }
-    }
+    m_vmParameters = boost::optional<std::vector<OUString> >(arOptions);
 }
 
-void NodeJava::addJRELocation(rtl_uString * sLocation)
+void NodeJava::addJRELocation(OUString const & sLocation)
 {
-    OSL_ASSERT( sLocation);
     if (!m_JRELocations)
         m_JRELocations = boost::optional<std::vector<OUString> >(
             std::vector<OUString> ());
      //only add the path if not already present
     std::vector<OUString>::const_iterator it =
-        std::find(m_JRELocations->begin(), m_JRELocations->end(),
-                  OUString(sLocation));
+        std::find(m_JRELocations->begin(), m_JRELocations->end(), sLocation);
     if (it == m_JRELocations->end())
-        m_JRELocations->push_back(OUString(sLocation));
+        m_JRELocations->push_back(sLocation);
 }
 
 jfw::FileStatus NodeJava::checkSettingsFileStatus(OUString const & sURL)
@@ -747,10 +692,6 @@ bool NodeJava::createSettingsDocument() const
 CNodeJavaInfo::CNodeJavaInfo() :
     m_bEmptyNode(false), bNil(true), bAutoSelect(true),
     nFeatures(0), nRequirements(0)
-{
-}
-
-CNodeJavaInfo::~CNodeJavaInfo()
 {
 }
 
@@ -973,19 +914,14 @@ void CNodeJavaInfo::writeToNode(xmlDoc* pDoc,
     xmlAddChild(pJavaInfoNode, nodeCrLf);
 }
 
-JavaInfo * CNodeJavaInfo::makeJavaInfo() const
+std::unique_ptr<JavaInfo> CNodeJavaInfo::makeJavaInfo() const
 {
     if (bNil || m_bEmptyNode)
-        return nullptr;
-    JavaInfo * pInfo = new JavaInfo;
-    memset(pInfo, 0, sizeof(JavaInfo));
-    pInfo->sVendor = sVendor;
-    pInfo->sLocation = sLocation;
-    pInfo->sVersion = sVersion;
-    pInfo->nFeatures = nFeatures;
-    pInfo->nRequirements = nRequirements;
-    pInfo->arVendorData = arVendorData;
-    return pInfo;
+        return std::unique_ptr<JavaInfo>();
+    return std::unique_ptr<JavaInfo>(
+        new JavaInfo{
+            sVendor, sLocation, sVersion, nFeatures, nRequirements,
+            arVendorData});
 }
 
 
@@ -1041,16 +977,15 @@ void MergedSettings::merge(const NodeJava & share, const NodeJava & user)
 ::std::vector< OString> MergedSettings::getVmParametersUtf8() const
 {
     ::std::vector< OString> ret;
-    typedef ::std::vector< OUString>::const_iterator cit;
-    for (cit i = m_vmParams.begin(); i != m_vmParams.end(); ++i)
+    for (auto const & vmParam : m_vmParams)
     {
-        ret.push_back( OUStringToOString(*i, RTL_TEXTENCODING_UTF8));
+        ret.push_back( OUStringToOString(vmParam, RTL_TEXTENCODING_UTF8));
     }
     return ret;
 }
 
 
-JavaInfo * MergedSettings::createJavaInfo() const
+std::unique_ptr<JavaInfo> MergedSettings::createJavaInfo() const
 {
     return m_javaInfo.makeJavaInfo();
 }
@@ -1060,26 +995,13 @@ bool MergedSettings::getJavaInfoAttrAutoSelect() const
     return m_javaInfo.bAutoSelect;
 }
 #endif
-void MergedSettings::getVmParametersArray(
-    rtl_uString *** parParams, sal_Int32 * size) const
+void MergedSettings::getVmParametersArray(std::vector<OUString> * parParams)
+    const
 {
+    assert(parParams != nullptr);
     osl::MutexGuard guard(FwkMutex::get());
-    OSL_ASSERT(parParams != nullptr && size != nullptr);
 
-    *parParams = static_cast<rtl_uString **>(
-        rtl_allocateMemory(sizeof(rtl_uString*) * m_vmParams.size()));
-    if (*parParams == nullptr)
-        return;
-
-    int j=0;
-    typedef std::vector<OUString>::const_iterator it;
-    for (it i = m_vmParams.begin(); i != m_vmParams.end();
-         ++i, ++j)
-    {
-        (*parParams)[j] = i->pData;
-        rtl_uString_acquire(i->pData);
-    }
-    *size = m_vmParams.size();
+    *parParams = m_vmParams;
 }
 
 }

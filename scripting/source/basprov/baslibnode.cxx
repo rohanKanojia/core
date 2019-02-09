@@ -21,7 +21,6 @@
 #include "basmodnode.hxx"
 #include <com/sun/star/script/browse/BrowseNodeTypes.hpp>
 #include <comphelper/sequence.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 #include <basic/basmgr.hxx>
 #include <basic/sbstar.hxx>
@@ -66,7 +65,7 @@ namespace basprov
     // XBrowseNode
 
 
-    OUString BasicLibraryNodeImpl::getName(  ) throw (RuntimeException, std::exception)
+    OUString BasicLibraryNodeImpl::getName(  )
     {
         SolarMutexGuard aGuard;
 
@@ -74,7 +73,7 @@ namespace basprov
     }
 
 
-    Sequence< Reference< browse::XBrowseNode > > BasicLibraryNodeImpl::getChildNodes(  ) throw (RuntimeException, std::exception)
+    Sequence< Reference< browse::XBrowseNode > > BasicLibraryNodeImpl::getChildNodes(  )
     {
         SolarMutexGuard aGuard;
 
@@ -106,7 +105,7 @@ namespace basprov
     }
 
 
-    sal_Bool BasicLibraryNodeImpl::hasChildNodes(  ) throw (RuntimeException, std::exception)
+    sal_Bool BasicLibraryNodeImpl::hasChildNodes(  )
     {
         SolarMutexGuard aGuard;
 
@@ -118,7 +117,7 @@ namespace basprov
     }
 
 
-    sal_Int16 BasicLibraryNodeImpl::getType(  ) throw (RuntimeException, std::exception)
+    sal_Int16 BasicLibraryNodeImpl::getType(  )
     {
         SolarMutexGuard aGuard;
 

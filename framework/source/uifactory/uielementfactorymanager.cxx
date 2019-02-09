@@ -25,16 +25,20 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
+#include <com/sun/star/container/ElementExistException.hpp>
 #include <com/sun/star/container/XContainer.hpp>
 #include <com/sun/star/container/XContainerListener.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/loader/CannotActivateFactoryException.hpp>
 #include <com/sun/star/frame/ModuleManager.hpp>
+#include <com/sun/star/frame/UnknownModuleException.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/frame/XModuleManager2.hpp>
 #include <com/sun/star/ui/XUIElementFactoryManager.hpp>
 
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <cppuhelper/basemutex.hxx>
 #include <cppuhelper/compbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -47,7 +51,6 @@ using namespace com::sun::star::frame;
 using namespace com::sun::star::configuration;
 using namespace com::sun::star::container;
 using namespace ::com::sun::star::ui;
-using namespace ::com::sun::star::frame;
 using namespace framework;
 
 namespace framework
@@ -126,8 +129,7 @@ void ConfigurationAccess_FactoryManager::addFactorySpecifierToTypeNameModule( co
 
     if ( pIter != m_aFactoryManagerMap.end() )
         throw ElementExistException();
-    else
-        m_aFactoryManagerMap.insert( FactoryManagerMap::value_type( aHashKey, rServiceSpecifier ));
+    m_aFactoryManagerMap.emplace( aHashKey, rServiceSpecifier );
 }
 
 void ConfigurationAccess_FactoryManager::removeFactorySpecifierFromTypeNameModule( const OUString& rType, const OUString& rName, const OUString& rModule )
@@ -141,8 +143,7 @@ void ConfigurationAccess_FactoryManager::removeFactorySpecifierFromTypeNameModul
 
     if ( pIter == m_aFactoryManagerMap.end() )
         throw NoSuchElementException();
-    else
-        m_aFactoryManagerMap.erase( aHashKey );
+    m_aFactoryManagerMap.erase( aHashKey );
 }
 
 Sequence< Sequence< PropertyValue > > ConfigurationAccess_FactoryManager::getFactoriesDescription() const
@@ -164,17 +165,17 @@ Sequence< Sequence< PropertyValue > > ConfigurationAccess_FactoryManager::getFac
 
             aSeqSeq.realloc( aSeqSeq.getLength() + 1 );
             aSeq[0].Name  = m_aPropType;
-            aSeq[0].Value = makeAny( aFactory.getToken( 0, '^', nToken ));
+            aSeq[0].Value <<= aFactory.getToken( 0, '^', nToken );
             if ( nToken > 0 )
             {
                 aSeq.realloc( 2 );
                 aSeq[1].Name  = m_aPropName;
-                aSeq[1].Value = makeAny( aFactory.getToken( 0, '^', nToken ));
+                aSeq[1].Value <<= aFactory.getToken( 0, '^', nToken );
                 if ( nToken > 0 )
                 {
                     aSeq.realloc( 3 );
                     aSeq[2].Name  = m_aPropModule;
-                    aSeq[2].Value = makeAny( aFactory.getToken( 0, '^', nToken ));
+                    aSeq[2].Value <<= aFactory.getToken( 0, '^', nToken );
                 }
             }
 
@@ -188,7 +189,7 @@ Sequence< Sequence< PropertyValue > > ConfigurationAccess_FactoryManager::getFac
 }
 
 // container.XContainerListener
-void SAL_CALL ConfigurationAccess_FactoryManager::elementInserted( const ContainerEvent& aEvent ) throw(RuntimeException, std::exception)
+void SAL_CALL ConfigurationAccess_FactoryManager::elementInserted( const ContainerEvent& aEvent )
 {
     OUString   aType;
     OUString   aName;
@@ -203,11 +204,11 @@ void SAL_CALL ConfigurationAccess_FactoryManager::elementInserted( const Contain
         // Create hash key from type, name and module as they are together a primary key to
         // the UNO service that implements a user interface factory.
         OUString aHashKey( getHashKeyFromStrings( aType, aName, aModule ));
-        m_aFactoryManagerMap.insert( FactoryManagerMap::value_type( aHashKey, aService ));
+        m_aFactoryManagerMap.emplace( aHashKey, aService );
     }
 }
 
-void SAL_CALL ConfigurationAccess_FactoryManager::elementRemoved ( const ContainerEvent& aEvent ) throw(RuntimeException, std::exception)
+void SAL_CALL ConfigurationAccess_FactoryManager::elementRemoved ( const ContainerEvent& aEvent )
 {
     OUString   aType;
     OUString   aName;
@@ -226,7 +227,7 @@ void SAL_CALL ConfigurationAccess_FactoryManager::elementRemoved ( const Contain
     }
 }
 
-void SAL_CALL ConfigurationAccess_FactoryManager::elementReplaced( const ContainerEvent& aEvent ) throw(RuntimeException, std::exception)
+void SAL_CALL ConfigurationAccess_FactoryManager::elementReplaced( const ContainerEvent& aEvent )
 {
     OUString   aType;
     OUString   aName;
@@ -242,12 +243,12 @@ void SAL_CALL ConfigurationAccess_FactoryManager::elementReplaced( const Contain
         // the UNO service that implements the popup menu controller.
         OUString aHashKey( getHashKeyFromStrings( aType, aName, aModule ));
         m_aFactoryManagerMap.erase( aHashKey );
-        m_aFactoryManagerMap.insert( FactoryManagerMap::value_type( aHashKey, aService ));
+        m_aFactoryManagerMap.emplace( aHashKey, aService );
     }
 }
 
 // lang.XEventListener
-void SAL_CALL ConfigurationAccess_FactoryManager::disposing( const EventObject& ) throw(RuntimeException, std::exception)
+void SAL_CALL ConfigurationAccess_FactoryManager::disposing( const EventObject& )
 {
     // SAFE
     // remove our reference to the config access
@@ -262,12 +263,10 @@ void ConfigurationAccess_FactoryManager::readConfigurationData()
 
     if ( !m_bConfigAccessInitialized )
     {
-        Sequence< Any > aArgs( 1 );
-        PropertyValue   aPropValue;
-
-        aPropValue.Name  = "nodepath";
-        aPropValue.Value <<= m_sRoot;
-        aArgs[0] <<= aPropValue;
+        Sequence<Any> aArgs(comphelper::InitAnyPropertySequence(
+        {
+            {"nodepath", Any(m_sRoot)}
+        }));
 
         try
         {
@@ -290,7 +289,6 @@ void ConfigurationAccess_FactoryManager::readConfigurationData()
         OUString             aModule;
         OUString             aService;
         OUString             aHashKey;
-        Reference< XPropertySet > xPropertySet;
         for ( sal_Int32 i = 0; i < aUIElementFactories.getLength(); i++ )
         {
             if ( impl_getElementProps( m_xConfigAccess->getByName( aUIElementFactories[i] ), aType, aName, aModule, aService ))
@@ -298,7 +296,7 @@ void ConfigurationAccess_FactoryManager::readConfigurationData()
                 // Create hash key from type, name and module as they are together a primary key to
                 // the UNO service that implements the user interface element factory.
                 aHashKey = getHashKeyFromStrings( aType, aName, aModule );
-                m_aFactoryManagerMap.insert( FactoryManagerMap::value_type( aHashKey, aService ));
+                m_aFactoryManagerMap.emplace( aHashKey, aService );
             }
         }
 
@@ -352,35 +350,30 @@ class UIElementFactoryManager : private cppu::BaseMutex,
     virtual void SAL_CALL disposing() override;
 public:
     explicit UIElementFactoryManager( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
-    virtual ~UIElementFactoryManager();
 
-    virtual OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual OUString SAL_CALL getImplementationName() override
     {
         return OUString("com.sun.star.comp.framework.UIElementFactoryManager");
     }
 
-    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
     {
-        css::uno::Sequence< OUString > aSeq { "com.sun.star.ui.UIElementFactoryManager" };
-        return aSeq;
+        return {"com.sun.star.ui.UIElementFactoryManager"};
     }
 
     // XUIElementFactory
-    virtual css::uno::Reference< css::ui::XUIElement > SAL_CALL createUIElement( const OUString& ResourceURL, const css::uno::Sequence< css::beans::PropertyValue >& Args ) throw (css::container::NoSuchElementException, css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::ui::XUIElement > SAL_CALL createUIElement( const OUString& ResourceURL, const css::uno::Sequence< css::beans::PropertyValue >& Args ) override;
 
     // XUIElementFactoryRegistration
-    virtual css::uno::Sequence< css::uno::Sequence< css::beans::PropertyValue > > SAL_CALL getRegisteredFactories(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::ui::XUIElementFactory > SAL_CALL getFactory( const OUString& ResourceURL, const OUString& ModuleIdentifier ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL registerFactory( const OUString& aType, const OUString& aName, const OUString& aModuleIdentifier, const OUString& aFactoryImplementationName ) throw (css::container::ElementExistException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL deregisterFactory( const OUString& aType, const OUString& aName, const OUString& aModuleIdentifier ) throw (css::container::NoSuchElementException, css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence< css::uno::Sequence< css::beans::PropertyValue > > SAL_CALL getRegisteredFactories(  ) override;
+    virtual css::uno::Reference< css::ui::XUIElementFactory > SAL_CALL getFactory( const OUString& ResourceURL, const OUString& ModuleIdentifier ) override;
+    virtual void SAL_CALL registerFactory( const OUString& aType, const OUString& aName, const OUString& aModuleIdentifier, const OUString& aFactoryImplementationName ) override;
+    virtual void SAL_CALL deregisterFactory( const OUString& aType, const OUString& aName, const OUString& aModuleIdentifier ) override;
 
 private:
     bool                                                  m_bConfigRead;
@@ -398,8 +391,6 @@ UIElementFactoryManager::UIElementFactoryManager( const Reference< XComponentCon
             "/org.openoffice.Office.UI.Factories/Registered/UIElementFactories"))
 {}
 
-UIElementFactoryManager::~UIElementFactoryManager() {}
-
 void SAL_CALL UIElementFactoryManager::disposing()
 {
     m_pConfigAccess.clear();
@@ -409,7 +400,6 @@ void SAL_CALL UIElementFactoryManager::disposing()
 Reference< XUIElement > SAL_CALL UIElementFactoryManager::createUIElement(
     const OUString& ResourceURL,
     const Sequence< PropertyValue >& Args )
-throw ( css::container::NoSuchElementException, css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception )
 {
     Reference< XFrame > xFrame;
     OUString aModuleId;
@@ -459,7 +449,6 @@ throw ( css::container::NoSuchElementException, css::lang::IllegalArgumentExcept
 
 // XUIElementFactoryRegistration
 Sequence< Sequence< PropertyValue > > SAL_CALL UIElementFactoryManager::getRegisteredFactories()
-throw ( RuntimeException, std::exception )
 {
     // SAFE
     osl::MutexGuard g(rBHelper.rMutex);
@@ -478,7 +467,6 @@ throw ( RuntimeException, std::exception )
 }
 
 Reference< XUIElementFactory > SAL_CALL UIElementFactoryManager::getFactory( const OUString& aResourceURL, const OUString& aModuleId )
-throw ( RuntimeException, std::exception )
 {
     OUString aServiceSpecifier;
     { // SAFE
@@ -518,7 +506,6 @@ throw ( RuntimeException, std::exception )
 }
 
 void SAL_CALL UIElementFactoryManager::registerFactory( const OUString& aType, const OUString& aName, const OUString& aModuleId, const OUString& aFactoryImplementationName )
-throw ( ElementExistException, RuntimeException, std::exception )
 {
     // SAFE
     osl::MutexGuard g(rBHelper.rMutex);
@@ -538,7 +525,6 @@ throw ( ElementExistException, RuntimeException, std::exception )
 }
 
 void SAL_CALL UIElementFactoryManager::deregisterFactory( const OUString& aType, const OUString& aName, const OUString& aModuleId )
-throw ( NoSuchElementException, RuntimeException, std::exception )
 {
     // SAFE
     osl::MutexGuard g(rBHelper.rMutex);
@@ -575,7 +561,7 @@ struct Singleton:
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_framework_UIElementFactoryManager_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)

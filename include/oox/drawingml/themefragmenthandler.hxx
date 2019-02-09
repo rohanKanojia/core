@@ -20,8 +20,14 @@
 #ifndef INCLUDED_OOX_DRAWINGML_THEMEFRAGMENTHANDLER_HXX
 #define INCLUDED_OOX_DRAWINGML_THEMEFRAGMENTHANDLER_HXX
 
+#include <oox/core/contexthandler.hxx>
 #include <oox/core/fragmenthandler2.hxx>
 #include <oox/dllapi.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+
+namespace oox { class AttributeList; }
+namespace oox { namespace core { class XmlFilterBase; } }
 
 namespace oox {
 namespace drawingml {
@@ -36,7 +42,7 @@ public:
                             ::oox::core::XmlFilterBase& rFilter,
                             const OUString& rFragmentPath,
                             Theme& rTheme );
-    virtual             ~ThemeFragmentHandler();
+    virtual             ~ThemeFragmentHandler() override;
 
     virtual ::oox::core::ContextHandlerRef onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs ) override;
 

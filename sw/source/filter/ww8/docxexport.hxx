@@ -27,6 +27,7 @@
 #include <rtl/ustring.hxx>
 
 #include <cstdio>
+#include <memory>
 #include <vector>
 #include <boost/optional.hpp>
 #include <ndole.hxx>
@@ -49,6 +50,7 @@ namespace oox {
 namespace com { namespace sun { namespace star {
     namespace frame { class XModel; }
     namespace drawing { class XShape; }
+    namespace awt { class XControlModel; }
 } } }
 
 /// Data to be written in the document settings part of the document
@@ -74,13 +76,13 @@ class DocxExport : public MSWordExportBase
     ::sax_fastparser::FSHelperPtr mpFS;
 
     /// Access to the DrawingML writer.
-    oox::drawingml::DrawingML *m_pDrawingML;
+    std::unique_ptr<oox::drawingml::DrawingML> m_pDrawingML;
 
     /// Attribute output for document.
-    DocxAttributeOutput *m_pAttrOutput;
+    std::unique_ptr<DocxAttributeOutput> m_pAttrOutput;
 
     /// Sections/headers/footers
-    MSWordSections *m_pSections;
+    std::unique_ptr<MSWordSections> m_pSections;
 
     /// Header counter.
     sal_Int32 m_nHeaders;
@@ -91,14 +93,23 @@ class DocxExport : public MSWordExportBase
     /// OLE objects counter.
     sal_Int32 m_nOLEObjects;
 
+    /// ActiveX controls counter
+    sal_Int32 m_nActiveXControls;
+
     ///Footer and Header counter in Section properties
     sal_Int32 m_nHeadersFootersInSection;
 
     /// Exporter of the VML shapes.
-    oox::vml::VMLExport *m_pVMLExport;
+    std::unique_ptr<oox::vml::VMLExport> m_pVMLExport;
 
     /// Exporter of drawings.
-    DocxSdrExport* m_pSdrExport;
+    std::unique_ptr<DocxSdrExport> m_pSdrExport;
+
+    /// If the result will be a .docm file or not.
+    bool const m_bDocm;
+
+    /// Export is done into template (.dotx)
+    bool const m_bTemplate;
 
     DocxSettingsData m_aSettings;
 
@@ -129,11 +140,11 @@ public:
     /// Guess the script (asian/western).
     virtual bool CollapseScriptsforWordOk( sal_uInt16 nScript, sal_uInt16 nWhich ) override;
 
-    virtual void AppendBookmarks( const SwTextNode& rNode, sal_Int32 nAktPos, sal_Int32 nLen ) override;
+    virtual void AppendBookmarks( const SwTextNode& rNode, sal_Int32 nCurrentPos, sal_Int32 nLen ) override;
 
     virtual void AppendBookmark( const OUString& rName ) override;
 
-    virtual void AppendAnnotationMarks( const SwTextNode& rNode, sal_Int32 nAktPos, sal_Int32 nLen ) override;
+    virtual void AppendAnnotationMarks( const SwTextNode& rNode, sal_Int32 nCurrentPos, sal_Int32 nLen ) override;
 
     virtual void ExportGrfBullet(const SwTextNode&) override;
 
@@ -152,7 +163,7 @@ public:
 
     /// Write the field
     virtual void OutputField( const SwField* pField, ww::eField eFieldType,
-            const OUString& rFieldCmd, sal_uInt8 nMode = nsFieldFlags::WRITEFIELD_ALL ) override;
+            const OUString& rFieldCmd, FieldFlags nMode = FieldFlags::All ) override;
 
     /// Write the data of the form field
     virtual void WriteFormData( const ::sw::mark::IFieldmark& rFieldmark ) override;
@@ -169,17 +180,21 @@ public:
     virtual sal_uLong ReplaceCr( sal_uInt8 nChar ) override;
 
     /// Returns the relationd id
-    OString OutputChart( css::uno::Reference< css::frame::XModel >& xModel, sal_Int32 nCount, ::sax_fastparser::FSHelperPtr m_pSerializer );
+    OString OutputChart( css::uno::Reference< css::frame::XModel > const & xModel, sal_Int32 nCount, ::sax_fastparser::FSHelperPtr const & m_pSerializer );
     OString WriteOLEObject(SwOLEObj& rObject, OUString & io_rProgID);
+    std::pair<OString,OString> WriteActiveXObject(const uno::Reference<css::drawing::XShape>& rxShape,
+                                                  const uno::Reference<awt::XControlModel>& rxControlModel);
 
     /// Writes the shape using drawingML syntax.
-    void OutputDML( css::uno::Reference< css::drawing::XShape >& xShape );
+    void OutputDML( css::uno::Reference< css::drawing::XShape > const & xShape );
 
     void WriteOutliner(const OutlinerParaObject& rOutliner, sal_uInt8 nTyp);
 
+    virtual ExportFormat GetExportFormat() const override { return ExportFormat::DOCX; }
+
 protected:
     /// Format-dependent part of the actual export.
-    virtual void ExportDocument_Impl() override;
+    virtual ErrCode ExportDocument_Impl() override;
 
     /// Output SwEndNode
     virtual void OutputEndNode( const SwEndNode& ) override;
@@ -199,8 +214,8 @@ protected:
     /// Get ready for a new section.
     virtual void PrepareNewPageDesc( const SfxItemSet* pSet,
                                      const SwNode& rNd,
-                                     const SwFormatPageDesc* pNewPgDescFormat = nullptr,
-                                     const SwPageDesc* pNewPgDesc = nullptr ) override;
+                                     const SwFormatPageDesc* pNewPgDescFormat,
+                                     const SwPageDesc* pNewPgDesc ) override;
 
 private:
     /// Setup pStyles and write styles.xml
@@ -216,7 +231,7 @@ private:
     virtual void WriteNumbering() override;
 
     /// Write reference to a header/footer + the actual xml containing the text.
-    void WriteHeaderFooter( const SwFormat& rFormat, bool bHeader, const char* pType );
+    void WriteHeaderFooter( const SwFormat* pFormat, bool bHeader, const char* pType );
 
     /// Write word/fontTable.xml.
     void WriteFonts();
@@ -235,29 +250,29 @@ private:
     /// Write customXml/item[n].xml and customXml/itemProps[n].xml
     void WriteCustomXml();
 
-    /// Write word/activeX/activeX[n].xml
-    void WriteActiveX();
-
     /// Write word/embeddings/Worksheet[n].xlsx
     void WriteEmbeddings();
+
+    /// Writes word/vbaProject.bin.
+    void WriteVBA();
 
     /// return true if Page Layout is set as Mirrored
     bool isMirroredMargin();
 
 public:
     /// All xml namespaces to be used at the top of any text .xml file (main doc, headers, footers,...)
-    static sax_fastparser::XFastAttributeListRef MainXmlNamespaces();
+    sax_fastparser::XFastAttributeListRef MainXmlNamespaces();
 
     /// FIXME this is temporary, remotely reminding the method of the same
     /// name in WW8Export.
     void WriteMainText();
 
     /// Pass the pDocument, pCurrentPam and pOriginalPam to the base class.
-    DocxExport( DocxExportFilter *pFilter, SwDoc *pDocument,
-            SwPaM *pCurrentPam, SwPaM *pOriginalPam );
+    DocxExport( DocxExportFilter *pFilter, SwDoc *pDocument, SwPaM* pCurrentPam, SwPaM* pOriginalPam,
+               bool bDocm, bool bTemplate);
 
     /// Destructor.
-    virtual ~DocxExport();
+    virtual ~DocxExport() override;
 
     /// Reference to the VMLExport instance for the main document.
     oox::vml::VMLExport& VMLExporter() { return *m_pVMLExport; }
@@ -268,9 +283,9 @@ public:
     /// Set the document default tab stop.
     void setDefaultTabStop( int stop ) { m_aSettings.defaultTabStop = stop; }
 
-    ::sax_fastparser::FSHelperPtr GetFS() { return mpFS; }
+    const ::sax_fastparser::FSHelperPtr& GetFS() { return mpFS; }
 
-    void SetFS(::sax_fastparser::FSHelperPtr mpFS);
+    void SetFS(::sax_fastparser::FSHelperPtr const & mpFS);
 
 private:
     DocxExport( const DocxExport& ) = delete;

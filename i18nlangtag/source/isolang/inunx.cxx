@@ -31,8 +31,8 @@
 
 #include <osl/mutex.hxx>
 #include <rtl/instance.hxx>
-#include "i18nlangtag/languagetag.hxx"
-#include "i18nlangtag/mslangid.hxx"
+#include <i18nlangtag/languagetag.hxx>
+#include <i18nlangtag/mslangid.hxx>
 
 
 static LanguageType nImplSystemLanguage = LANGUAGE_DONTKNOW;
@@ -42,7 +42,7 @@ static LanguageType nImplSystemUILanguage = LANGUAGE_DONTKNOW;
 // Get locale of category LC_CTYPE of environment variables
 static const sal_Char* getLangFromEnvironment()
 {
-    static const sal_Char* pFallback = "C";
+    static const sal_Char* const pFallback = "C";
     const sal_Char *pLang = nullptr;
 
     pLang = getenv ( "LC_ALL" );
@@ -60,7 +60,7 @@ static const sal_Char* getLangFromEnvironment()
 // Get locale of category LC_MESSAGES of environment variables
 static const sal_Char* getUILangFromEnvironment()
 {
-    static const sal_Char* pFallback = "C";
+    static const sal_Char* const pFallback = "C";
     const sal_Char *pLang = nullptr;
 
     pLang = getenv ( "LANGUAGE" );      // respect the GNU extension
@@ -105,7 +105,7 @@ static void getPlatformSystemLanguageImpl( LanguageType& rSystemLanguage,
 #endif
             }
 #else   /* MACOSX */
-            OString aUnxLang( (pGetLangFromEnv)() );
+            OString aUnxLang( pGetLangFromEnv() );
             nLang = MsLangId::convertUnxByteStringToLanguage( aUnxLang );
             OSL_DOUBLE_CHECKED_LOCKING_MEMORY_BARRIER();
             rSystemLanguage = nLang;

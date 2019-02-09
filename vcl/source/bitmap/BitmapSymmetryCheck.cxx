@@ -22,7 +22,7 @@ bool BitmapSymmetryCheck::check(Bitmap& rBitmap)
     return checkImpl(aReadAccess.get());
 }
 
-bool BitmapSymmetryCheck::checkImpl(BitmapReadAccess* pReadAccess)
+bool BitmapSymmetryCheck::checkImpl(BitmapReadAccess const * pReadAccess)
 {
     long nHeight = pReadAccess->Height();
     long nWidth = pReadAccess->Width();
@@ -35,17 +35,19 @@ bool BitmapSymmetryCheck::checkImpl(BitmapReadAccess* pReadAccess)
 
     for (long y = 0; y < nHeightHalf; ++y)
     {
+        Scanline pScanlineRead = pReadAccess->GetScanline( y );
+        Scanline pScanlineRead2 = pReadAccess->GetScanline( nHeight - y - 1 );
         for (long x = 0; x < nWidthHalf; ++x)
         {
-            if (pReadAccess->GetPixel(y, x) != pReadAccess->GetPixel(nHeight - y - 1, x))
+            if (pReadAccess->GetPixelFromData(pScanlineRead, x) != pReadAccess->GetPixelFromData(pScanlineRead2, x))
             {
                 return false;
             }
-            if (pReadAccess->GetPixel(y, x) != pReadAccess->GetPixel(y, nWidth - x - 1))
+            if (pReadAccess->GetPixelFromData(pScanlineRead, x) != pReadAccess->GetPixelFromData(pScanlineRead, nWidth - x - 1))
             {
                 return false;
             }
-            if (pReadAccess->GetPixel(y, x) != pReadAccess->GetPixel(nHeight - y - 1, nWidth - x - 1))
+            if (pReadAccess->GetPixelFromData(pScanlineRead, x) != pReadAccess->GetPixelFromData(pScanlineRead2, nWidth - x - 1))
             {
                 return false;
             }
@@ -65,9 +67,10 @@ bool BitmapSymmetryCheck::checkImpl(BitmapReadAccess* pReadAccess)
 
     if (bHeightEven)
     {
+        Scanline pScanlineRead = pReadAccess->GetScanline( nHeightHalf );
         for (long x = 0; x < nWidthHalf; ++x)
         {
-            if (pReadAccess->GetPixel(nHeightHalf, x) != pReadAccess->GetPixel(nHeightHalf, nWidth - x - 1))
+            if (pReadAccess->GetPixelFromData(pScanlineRead, x) != pReadAccess->GetPixelFromData(pScanlineRead, nWidth - x - 1))
             {
                 return false;
             }

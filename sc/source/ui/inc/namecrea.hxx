@@ -20,23 +20,19 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_NAMECREA_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_NAMECREA_HXX
 
-#include <vcl/dialog.hxx>
-#include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
+#include <vcl/weld.hxx>
 #include "scui_def.hxx"
 
-class ScNameCreateDlg : public ModalDialog
+class ScNameCreateDlg final : public weld::GenericDialogController
 {
-protected:
-    VclPtr<CheckBox> m_pTopBox;
-    VclPtr<CheckBox> m_pLeftBox;
-    VclPtr<CheckBox> m_pBottomBox;
-    VclPtr<CheckBox> m_pRightBox;
+    std::unique_ptr<weld::CheckButton> m_xTopBox;
+    std::unique_ptr<weld::CheckButton> m_xLeftBox;
+    std::unique_ptr<weld::CheckButton> m_xBottomBox;
+    std::unique_ptr<weld::CheckButton> m_xRightBox;
 public:
-    ScNameCreateDlg( vcl::Window * pParent, sal_uInt16 nFlags );
-    virtual ~ScNameCreateDlg();
-    virtual void dispose() override;
-    sal_uInt16          GetFlags() const;
+    ScNameCreateDlg(weld::Window * pParent, CreateNameFlags nFlags);
+    virtual ~ScNameCreateDlg() override;
+    CreateNameFlags GetFlags() const;
 };
 
 #endif // INCLUDED_SC_SOURCE_UI_INC_NAMECREA_HXX

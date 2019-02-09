@@ -18,7 +18,6 @@
  */
 
 #include <comphelper/attributelist.hxx>
-#include <osl/diagnose.h>
 
 #include <vector>
 
@@ -33,9 +32,9 @@ struct TagAttribute_Impl
     TagAttribute_Impl( const OUString &aName, const OUString &aType,
                          const OUString &aValue )
     {
-        this->sName     = aName;
-        this->sType     = aType;
-        this->sValue    = aValue;
+        sName     = aName;
+        sType     = aType;
+        sValue    = aValue;
     }
 
     OUString sName;
@@ -50,20 +49,20 @@ struct AttributeList_Impl
         // performance improvement during adding
         vecAttribute.reserve(20);
     }
-    ::std::vector<struct TagAttribute_Impl> vecAttribute;
+    std::vector<struct TagAttribute_Impl> vecAttribute;
 };
 
-sal_Int16 SAL_CALL AttributeList::getLength() throw( css::uno::RuntimeException, std::exception )
+sal_Int16 SAL_CALL AttributeList::getLength()
 {
-    return (sal_Int16)(m_pImpl->vecAttribute.size());
+    return static_cast<sal_Int16>(m_pImpl->vecAttribute.size());
 }
 
-OUString SAL_CALL AttributeList::getNameByIndex(sal_Int16 i) throw( css::uno::RuntimeException, std::exception )
+OUString SAL_CALL AttributeList::getNameByIndex(sal_Int16 i)
 {
     return ( i < static_cast < sal_Int16 > (m_pImpl->vecAttribute.size()) ) ? m_pImpl->vecAttribute[i].sName : OUString();
 }
 
-OUString SAL_CALL AttributeList::getTypeByIndex(sal_Int16 i) throw( css::uno::RuntimeException, std::exception )
+OUString SAL_CALL AttributeList::getTypeByIndex(sal_Int16 i)
 {
     if( i < static_cast < sal_Int16 > (m_pImpl->vecAttribute.size() ) ) {
         return m_pImpl->vecAttribute[i].sType;
@@ -71,30 +70,28 @@ OUString SAL_CALL AttributeList::getTypeByIndex(sal_Int16 i) throw( css::uno::Ru
     return OUString();
 }
 
-OUString SAL_CALL  AttributeList::getValueByIndex(sal_Int16 i) throw( css::uno::RuntimeException, std::exception )
+OUString SAL_CALL  AttributeList::getValueByIndex(sal_Int16 i)
 {
     return ( i < static_cast < sal_Int16 > (m_pImpl->vecAttribute.size() ) ) ? m_pImpl->vecAttribute[i].sValue : OUString();
 }
 
-OUString SAL_CALL AttributeList::getTypeByName( const OUString& sName ) throw( css::uno::RuntimeException, std::exception )
+OUString SAL_CALL AttributeList::getTypeByName( const OUString& sName )
 {
-    ::std::vector<struct TagAttribute_Impl>::iterator ii = m_pImpl->vecAttribute.begin();
-
-    for( ; ii != m_pImpl->vecAttribute.end() ; ++ii ) {
-        if( (*ii).sName == sName ) {
-            return (*ii).sType;
+    for (auto const& attribute : m_pImpl->vecAttribute)
+    {
+        if( attribute.sName == sName ) {
+            return attribute.sType;
         }
     }
     return OUString();
 }
 
-OUString SAL_CALL AttributeList::getValueByName(const OUString& sName) throw( css::uno::RuntimeException, std::exception )
+OUString SAL_CALL AttributeList::getValueByName(const OUString& sName)
 {
-    ::std::vector<struct TagAttribute_Impl>::iterator ii = m_pImpl->vecAttribute.begin();
-
-    for( ; ii != m_pImpl->vecAttribute.end() ; ++ii ) {
-        if( (*ii).sName == sName ) {
-            return (*ii).sValue;
+    for (auto const& attribute : m_pImpl->vecAttribute)
+    {
+        if( attribute.sName == sName ) {
+            return attribute.sValue;
         }
     }
     return OUString();
@@ -106,7 +103,7 @@ AttributeList::AttributeList()
 }
 
 AttributeList::AttributeList(const AttributeList &r)
-    : cppu::WeakImplHelper<XAttributeList, XCloneable>()
+    : cppu::WeakImplHelper<XAttributeList, XCloneable>(r)
     , m_pImpl(new AttributeList_Impl)
 {
     *m_pImpl = *(r.m_pImpl);
@@ -119,7 +116,7 @@ AttributeList::~AttributeList()
 void AttributeList::AddAttribute(const OUString &sName,
         const OUString &sType, const OUString &sValue)
 {
-    m_pImpl->vecAttribute.push_back( TagAttribute_Impl(sName, sType, sValue) );
+    m_pImpl->vecAttribute.emplace_back(sName, sType, sValue );
 }
 
 void AttributeList::Clear()
@@ -127,7 +124,7 @@ void AttributeList::Clear()
     m_pImpl->vecAttribute.clear();
 }
 
-css::uno::Reference< css::util::XCloneable > AttributeList::createClone() throw (css::uno::RuntimeException, std::exception)
+css::uno::Reference< css::util::XCloneable > AttributeList::createClone()
 
 {
     AttributeList *p = new AttributeList( *this );

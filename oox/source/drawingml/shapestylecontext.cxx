@@ -17,10 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/shapestylecontext.hxx"
+#include <drawingml/shapestylecontext.hxx>
 
-#include "oox/helper/attributelist.hxx"
-#include "drawingml/colorchoicecontext.hxx"
+#include <oox/helper/attributelist.hxx>
+#include <drawingml/colorchoicecontext.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star::uno;
@@ -30,7 +32,7 @@ namespace oox { namespace drawingml {
 
 // CT_ShapeStyle
 
-ShapeStyleContext::ShapeStyleContext( ContextHandler2Helper& rParent, Shape& rShape )
+ShapeStyleContext::ShapeStyleContext( ContextHandler2Helper const & rParent, Shape& rShape )
 : ContextHandler2( rParent )
 , mrShape( rShape )
 {

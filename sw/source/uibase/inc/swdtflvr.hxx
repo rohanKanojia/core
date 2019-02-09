@@ -21,10 +21,14 @@
 
 #include <sfx2/objsh.hxx>
 
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <vcl/graph.hxx>
 #include <sfx2/lnkbase.hxx>
 #include <com/sun/star/embed/XEmbeddedObject.hpp>
+#include <o3tl/deleter.hxx>
+#include <o3tl/typed_flags_set.hxx>
+#include <svx/swframetypes.hxx>
+#include <memory>
 
 class Graphic;
 class ImageMap;
@@ -37,20 +41,22 @@ class SwWrtShell;
 class SvxClipboardFormatItem;
 class SwFrameShell;
 class SwView_Impl;
+class SwPasteContext;
 enum class SwPasteSdr;
 
-typedef sal_uInt16 TransferBufferType;
-namespace nsTransferBufferType
+enum class TransferBufferType : sal_uInt16
 {
-    const sal_uInt16 TRNSFR_NONE            = 0x0000;
-    const sal_uInt16 TRNSFR_DOCUMENT        = 0x0001;
-    const sal_uInt16 TRNSFR_DOCUMENT_WORD   = 0x0002;
-    const sal_uInt16 TRNSFR_GRAPHIC         = 0x0004;
-    const sal_uInt16 TRNSFR_TABELLE         = 0x0008;
-    const sal_uInt16 TRNSFR_DDELINK         = 0x0010;
-    const sal_uInt16 TRNSFR_OLE             = 0x0020;
-    const sal_uInt16 TRNSFR_INETFLD         = 0x0040;
-    const sal_uInt16 TRNSFR_DRAWING         = 0x0081;   // drawing is internal too!
+        NONE          = 0x0000,
+        Document      = 0x0001,
+        DocumentWord  = 0x0002,
+        Graphic       = 0x0004,
+        Table         = 0x0008,
+        Ole           = 0x0020,
+        InetField     = 0x0040,
+        Drawing       = 0x0081,   // drawing is internal too!
+};
+namespace o3tl {
+    template<> struct typed_flags<TransferBufferType> : is_typed_flags<TransferBufferType, 0x00ef> {};
 }
 
 class SW_DLLPUBLIC SwTransferable : public TransferableHelper
@@ -64,11 +70,13 @@ class SW_DLLPUBLIC SwTransferable : public TransferableHelper
     /* #96392# Added pCreatorView to distinguish SwFrameShell from
        SwWrtShell. */
     const SwFrameShell *m_pCreatorView;
-    SwDocFac        *m_pClpDocFac;
-    Graphic         *m_pClpGraphic, *m_pClpBitmap, *m_pOrigGraphic;
-    INetBookmark    *m_pBookmark;     // URL and description!
-    ImageMap        *m_pImageMap;
-    INetImage       *m_pTargetURL;
+    std::unique_ptr<SwDocFac, o3tl::default_delete<SwDocFac>> m_pClpDocFac;
+    std::unique_ptr<Graphic>        m_pClpGraphic;
+    std::unique_ptr<Graphic>        m_pClpBitmap;
+    Graphic                         *m_pOrigGraphic;
+    std::unique_ptr<INetBookmark>   m_pBookmark;     // URL and description!
+    std::unique_ptr<ImageMap>       m_pImageMap;
+    std::unique_ptr<INetImage>      m_pTargetURL;
 
     TransferBufferType m_eBufferType;
 
@@ -83,50 +91,50 @@ class SW_DLLPUBLIC SwTransferable : public TransferableHelper
     // helper methods for the paste
     static SwTransferable* GetSwTransferable( const TransferableDataHelper& rData );
     static void SetSelInShell( SwWrtShell& , bool , const Point* );
-    static bool _CheckForURLOrLNKFile( TransferableDataHelper& rData,
+    static bool CheckForURLOrLNKFile( TransferableDataHelper& rData,
                                 OUString& rFileName, OUString* pTitle = nullptr );
-    static bool _TestAllowedFormat( const TransferableDataHelper& rData,
+    static bool TestAllowedFormat( const TransferableDataHelper& rData,
                                         SotClipboardFormatId nFormat, SotExchangeDest nDestination );
 
-    static bool _PasteFileContent( TransferableDataHelper&,
+    static bool PasteFileContent( TransferableDataHelper&,
                                     SwWrtShell& rSh, SotClipboardFormatId nFormat, bool bMsg );
-    static bool _PasteOLE( TransferableDataHelper& rData, SwWrtShell& rSh,
-                            SotClipboardFormatId nFormat, sal_uInt8 nActionFlags, bool bMsg );
-    static bool _PasteTargetURL( TransferableDataHelper& rData, SwWrtShell& rSh,
+    static bool PasteOLE( TransferableDataHelper& rData, SwWrtShell& rSh,
+                            SotClipboardFormatId nFormat, SotExchangeActionFlags nActionFlags, bool bMsg );
+    static bool PasteTargetURL( TransferableDataHelper& rData, SwWrtShell& rSh,
                         SwPasteSdr nAction, const Point* pPt, bool bInsertGRF );
 
-    static bool _PasteDDE( TransferableDataHelper& rData, SwWrtShell& rWrtShell,
+    static bool PasteDDE( TransferableDataHelper& rData, SwWrtShell& rWrtShell,
                             bool bReReadGrf, bool bMsg );
 
-    static bool _PasteSdrFormat(  TransferableDataHelper& rData,
+    static bool PasteSdrFormat(  TransferableDataHelper& rData,
                                     SwWrtShell& rSh, SwPasteSdr nAction,
-                                    const Point* pPt, sal_uInt8 nActionFlags, bool bNeedToSelectBeforePaste);
+                                    const Point* pPt, SotExchangeActionFlags nActionFlags, bool bNeedToSelectBeforePaste);
 
-    static bool _PasteGrf( TransferableDataHelper& rData, SwWrtShell& rSh,
+    static bool PasteGrf( TransferableDataHelper& rData, SwWrtShell& rSh,
                                 SotClipboardFormatId nFormat, SwPasteSdr nAction, const Point* pPt,
-                                sal_uInt8 nActionFlags, sal_Int8 nDropAction, bool bNeedToSelectBeforePaste, sal_uInt16 nAnchorType = 0 );
+                                SotExchangeActionFlags nActionFlags, sal_Int8 nDropAction, bool bNeedToSelectBeforePaste, RndStdIds nAnchorType = RndStdIds::FLY_AT_PARA );
 
-    static bool _PasteImageMap( TransferableDataHelper& rData,
+    static bool PasteImageMap( TransferableDataHelper& rData,
                                     SwWrtShell& rSh );
 
-    static bool _PasteAsHyperlink( TransferableDataHelper& rData,
+    static bool PasteAsHyperlink( TransferableDataHelper& rData,
                                         SwWrtShell& rSh, SotClipboardFormatId nFormat );
 
-    static bool _PasteFileName( TransferableDataHelper& rData,
+    static bool PasteFileName( TransferableDataHelper& rData,
                             SwWrtShell& rSh, SotClipboardFormatId nFormat, SwPasteSdr nAction,
-                            const Point* pPt, sal_uInt8 nActionFlags, bool bMsg, bool * graphicInserted );
+                            const Point* pPt, SotExchangeActionFlags nActionFlags, bool * graphicInserted );
 
-    static bool _PasteDBData( TransferableDataHelper& rData, SwWrtShell& rSh,
+    static bool PasteDBData( TransferableDataHelper& rData, SwWrtShell& rSh,
                             SotClipboardFormatId nFormat, bool bLink, const Point* pDragPt,
                             bool bMsg );
 
-    static bool _PasteFileList( TransferableDataHelper& rData,
+    static bool PasteFileList( TransferableDataHelper& rData,
                                 SwWrtShell& rSh, bool bLink,
                                 const Point* pPt, bool bMsg );
 
     bool PrivateDrop( SwWrtShell& rSh, const Point& rDragPt, bool bMove,
                         bool bIsXSelection );
-    bool PrivatePaste( SwWrtShell& rShell );
+    bool PrivatePaste( SwWrtShell& rShell, SwPasteContext* pContext = nullptr );
 
     void SetDataForDragAndDrop( const Point& rSttPos );
 
@@ -138,7 +146,7 @@ protected:
     virtual bool GetData( const css::datatransfer::DataFlavor& rFlavor, const OUString& rDestDoc ) override;
     virtual bool        WriteObject( tools::SvRef<SotStorageStream>& rxOStm,
                                         void* pUserObject,
-                                        SotClipboardFormatId nUserObjectId,
+                                        sal_uInt32 nUserObjectId,
                                         const css::datatransfer::DataFlavor& rFlavor ) override;
     virtual void        DragFinished( sal_Int8 nDropAction ) override;
     virtual void        ObjectReleased() override;
@@ -147,33 +155,35 @@ protected:
 
 public:
     SwTransferable( SwWrtShell& );
-    virtual ~SwTransferable();
+    virtual ~SwTransferable() override;
 
     static SotExchangeDest GetSotDestination( const SwWrtShell& rSh );
 
     // set properties on the document, like PageMargin, VisArea.
     // And set real Size
-    static void InitOle( SfxObjectShell* pDoc, SwDoc& rDoc );
+    static void InitOle( SfxObjectShell* pDoc );
 
     // copy - methods and helper methods for the copy
     int  Cut();
     int  Copy( bool bIsCut = false );
     int  PrepareForCopy( bool bIsCut = false );
     void  CalculateAndCopy();                // special for Calculator
-    int  CopyGlossary( SwTextBlocks& rGlossary, const OUString& rStr );
+    bool  CopyGlossary( SwTextBlocks& rGlossary, const OUString& rStr );
 
     // remove the DDE-Link format promise
     void RemoveDDELinkFormat( const vcl::Window& rWin );
 
     // paste - methods and helper methods for the paste
     static bool IsPaste( const SwWrtShell&, const TransferableDataHelper& );
-    static bool Paste( SwWrtShell&, TransferableDataHelper&, sal_uInt16 nAnchorType = 0 );
+    static bool Paste( SwWrtShell&, TransferableDataHelper&, RndStdIds nAnchorType = RndStdIds::FLY_AT_PARA );
     static bool PasteData( TransferableDataHelper& rData,
-                          SwWrtShell& rSh, sal_uInt16 nAction, SotClipboardFormatId nFormat,
+                          SwWrtShell& rSh, sal_uInt8 nAction, SotExchangeActionFlags nActionFlags,
+                          SotClipboardFormatId nFormat,
                           SotExchangeDest nDestination, bool bIsPasteFormat,
                           bool bIsDefault,
                           const Point* pDDPos = nullptr, sal_Int8 nDropAction = 0,
-                          bool bPasteSelection = false, sal_uInt16 nAnchorType = 0 );
+                          bool bPasteSelection = false, RndStdIds nAnchorType = RndStdIds::FLY_AT_PARA,
+                          SwPasteContext* pContext = nullptr );
 
     static bool IsPasteSpecial( const SwWrtShell& rWrtShell,
                                 const TransferableDataHelper& );
@@ -203,7 +213,7 @@ public:
     void    Invalidate() {m_pWrtShell = nullptr;}
     static const css::uno::Sequence< sal_Int8 >& getUnoTunnelId();
 
-    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& rId ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& rId ) override;
 };
 
 #endif

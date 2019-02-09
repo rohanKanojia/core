@@ -26,10 +26,11 @@
 namespace utl
 {
     /** provides configuration information needed for application startup.
-        <p>This class handles the startup information for the office application.
-           It encapsulates knowledge of how to retriev such information and how
-           to diagnose failures to retriev required data.
-        </p>
+
+        This class handles the startup information for the office application.
+           It encapsulates knowledge of how to retrieve such information and how
+           to diagnose failures to retrieve required data.
+
     */
     class UNOTOOLS_DLLPUBLIC Bootstrap
     {
@@ -105,6 +106,10 @@ namespace utl
             message and error code corresponding to this status
         */
         static Status checkBootstrapStatus(OUString& _rDiagnosticMessage, FailureCode& _rErrCode);
+
+    public:
+        /// get the working directory of the process
+        static bool getProcessWorkingDir(OUString &rUrl);
 
     public:
         // singleton impl-class

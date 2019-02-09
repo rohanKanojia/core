@@ -20,40 +20,44 @@
 #ifndef INCLUDED_OOX_CORE_FILTERBASE_HXX
 #define INCLUDED_OOX_CORE_FILTERBASE_HXX
 
-#include <com/sun/star/beans/NamedValue.hpp>
+#include <exception>
+#include <memory>
+
 #include <com/sun/star/document/XExporter.hpp>
 #include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/document/XImporter.hpp>
-#include <com/sun/star/io/XInputStream.hpp>
-#include <com/sun/star/io/XOutputStream.hpp>
-#include <com/sun/star/io/XStream.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Exception.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
 #include <cppuhelper/basemutex.hxx>
 #include <cppuhelper/implbase.hxx>
-#include <comphelper/sequenceashashmap.hxx>
+#include <oox/dllapi.h>
 #include <oox/helper/binarystreambase.hxx>
 #include <oox/helper/storagebase.hxx>
-#include <oox/dllapi.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 namespace com { namespace sun { namespace star {
-    namespace awt { struct DeviceInfo; }
+    namespace beans { struct PropertyValue; }
+    namespace drawing { class XShape; }
     namespace frame { class XFrame; }
     namespace frame { class XModel; }
-    namespace drawing { class XShape; }
-    namespace graphic { class XGraphic; }
     namespace io { class XInputStream; }
     namespace io { class XOutputStream; }
     namespace io { class XStream; }
-    namespace lang { class XMultiComponentFactory; }
+    namespace lang { class XComponent; }
     namespace lang { class XMultiServiceFactory; }
-    namespace task { class XInteractionHandler; }
     namespace task { class XStatusIndicator; }
     namespace uno { class XComponentContext; }
 } } }
 
 namespace comphelper {
-    class IDocPasswordVerifier;
+    class SequenceAsHashMap;
 }
 namespace utl {
     class MediaDescriptor;
@@ -91,11 +95,11 @@ typedef ::cppu::WeakImplHelper<
 class OOX_DLLPUBLIC FilterBase : public FilterBase_BASE, public ::cppu::BaseMutex
 {
 public:
+    /// @throws css::uno::RuntimeException
     explicit            FilterBase(
-                            const css::uno::Reference< css::uno::XComponentContext >& rxContext )
-                            throw( css::uno::RuntimeException );
+                            const css::uno::Reference< css::uno::XComponentContext >& rxContext );
 
-    virtual             ~FilterBase();
+    virtual             ~FilterBase() override;
 
     /** Returns true, if filter is an import filter. */
     bool                isImportFilter() const;
@@ -127,10 +131,6 @@ public:
     const css::uno::Reference< css::frame::XFrame >&
                         getTargetFrame() const;
 
-    /// Returns the parent shape to load into (if any)
-    const css::uno::Reference< css::drawing::XShape >&
-                        getParentShape() const;
-
     /** Returns the status indicator (may be null). */
     const css::uno::Reference< css::task::XStatusIndicator >&
                         getStatusIndicator() const;
@@ -148,7 +148,7 @@ public:
     OUString     getAbsoluteUrl( const OUString& rUrl ) const;
 
     /** Returns the base storage of the imported/exported file. */
-    StorageRef          getStorage() const;
+    StorageRef const & getStorage() const;
 
     /** Opens and returns the specified input stream from the base storage.
 
@@ -192,17 +192,15 @@ public:
 
     /** Imports the raw binary data from the specified stream.
         @return  True, if the data could be imported from the stream. */
-    bool                importBinaryData( StreamDataSequence& orDataSeq, const OUString& rStreamName );
+    bool                importBinaryData( StreamDataSequence & orDataSeq, const OUString& rStreamName );
 
     // com.sun.star.lang.XServiceInfo interface -------------------------------
 
     virtual sal_Bool SAL_CALL
-                        supportsService( const OUString& rServiceName )
-                            throw( css::uno::RuntimeException, std::exception ) override;
+                        supportsService( const OUString& rServiceName ) override;
 
     virtual css::uno::Sequence< OUString > SAL_CALL
-                        getSupportedServiceNames()
-                            throw( css::uno::RuntimeException, std::exception ) override;
+                        getSupportedServiceNames() override;
 
     // com.sun.star.lang.XInitialization interface ----------------------------
 
@@ -217,34 +215,28 @@ public:
             filter implementations may support different arguments.
      */
     virtual void SAL_CALL initialize(
-                            const css::uno::Sequence< css::uno::Any >& rArgs )
-                            throw(  css::uno::Exception,
-                                    css::uno::RuntimeException, std::exception ) override;
+                            const css::uno::Sequence< css::uno::Any >& rArgs ) override;
 
     // com.sun.star.document.XImporter interface ------------------------------
 
     virtual void SAL_CALL setTargetDocument(
-                            const css::uno::Reference< css::lang::XComponent >& rxDocument )
-                            throw(  css::lang::IllegalArgumentException,
-                                    css::uno::RuntimeException, std::exception ) override;
+                            const css::uno::Reference< css::lang::XComponent >& rxDocument ) override;
 
     // com.sun.star.document.XExporter interface ------------------------------
 
     virtual void SAL_CALL setSourceDocument(
-                            const css::uno::Reference< css::lang::XComponent >& rxDocument )
-                            throw(  css::lang::IllegalArgumentException,
-                                    css::uno::RuntimeException, std::exception ) override;
+                            const css::uno::Reference< css::lang::XComponent >& rxDocument ) override;
 
     // com.sun.star.document.XFilter interface --------------------------------
 
     virtual sal_Bool SAL_CALL filter(
-                            const css::uno::Sequence< css::beans::PropertyValue >& rMediaDescSeq )
-                            throw( css::uno::RuntimeException, std::exception ) override;
+                            const css::uno::Sequence< css::beans::PropertyValue >& rMediaDescSeq ) override;
 
-    virtual void SAL_CALL cancel()
-                            throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL cancel() override;
 
     bool exportVBA() const;
+
+    bool isExportTemplate() const;
 
 protected:
     virtual css::uno::Reference< css::io::XInputStream >
@@ -254,7 +246,7 @@ protected:
 
     virtual bool        implFinalizeExport( utl::MediaDescriptor& rMediaDescriptor );
 
-    css::uno::Reference< css::io::XStream >
+    css::uno::Reference< css::io::XStream > const &
                         getMainDocumentStream( ) const;
 
 private:

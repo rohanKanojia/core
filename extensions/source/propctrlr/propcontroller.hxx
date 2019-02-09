@@ -36,10 +36,8 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/form/XForm.hpp>
-#include <com/sun/star/script/XEventAttacherManager.hpp>
 #include <com/sun/star/sdbc/XRowSet.hpp>
 #include <com/sun/star/uno/Sequence.hxx>
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XEventListener.hpp>
 #include <com/sun/star/sdbc/XConnection.hpp>
@@ -90,8 +88,8 @@ namespace pcr
                 ,public IPropertyExistenceCheck
     {
     private:
-        typedef ::std::multimap< sal_Int32, css::beans::Property >  OrderedPropertyMap;
-        typedef ::std::vector< css::uno::Reference< css::uno::XInterface > >
+        typedef std::multimap< sal_Int32, css::beans::Property >  OrderedPropertyMap;
+        typedef std::vector< css::uno::Reference< css::uno::XInterface > >
                                                                             InterfaceArray;
 
     protected:
@@ -111,16 +109,16 @@ namespace pcr
 
         typedef css::uno::Reference< css::inspection::XPropertyHandler >
                                                         PropertyHandlerRef;
-        typedef ::std::vector< PropertyHandlerRef >     PropertyHandlerArray;
-        typedef std::unordered_map< OUString, PropertyHandlerRef, OUStringHash >
+        typedef std::vector< PropertyHandlerRef >     PropertyHandlerArray;
+        typedef std::unordered_map< OUString, PropertyHandlerRef >
                                                         PropertyHandlerRepository;
-        typedef std::unordered_multimap< OUString, PropertyHandlerRef, OUStringHash >
+        typedef std::unordered_multimap< OUString, PropertyHandlerRef >
                                                         PropertyHandlerMultiRepository;
         PropertyHandlerRepository                       m_aPropertyHandlers;
         PropertyHandlerMultiRepository                  m_aDependencyHandlers;
         PropertyHandlerRef                              m_xInteractiveHandler;
 
-        ::std::unique_ptr< ComposedPropertyUIUpdate >   m_pUIRequestComposer;
+        std::unique_ptr< ComposedPropertyUIUpdate >   m_pUIRequestComposer;
 
         /// our InspectorModel
         css::uno::Reference< css::inspection::XObjectInspectorModel >
@@ -132,7 +130,7 @@ namespace pcr
         /// the property we're just committing
         OUString                                        m_sCommittingProperty;
 
-        typedef std::unordered_map< OUString, sal_uInt16, OUStringHash >     HashString2Int16;
+        typedef std::unordered_map< OUString, sal_uInt16 >     HashString2Int16;
         HashString2Int16                                m_aPageIds;
 
         bool        m_bContainerFocusListening;
@@ -144,55 +142,57 @@ namespace pcr
         DECLARE_XINTERFACE()
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName(  ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getImplementationName(  ) override;
+        virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 
         // XController
-        virtual void SAL_CALL attachFrame( const css::uno::Reference< css::frame::XFrame >& xFrame ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL attachModel( const css::uno::Reference< css::frame::XModel >& xModel ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL suspend( sal_Bool bSuspend ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Any SAL_CALL getViewData(  ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL restoreViewData( const css::uno::Any& Data ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Reference< css::frame::XModel > SAL_CALL getModel(  ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Reference< css::frame::XFrame > SAL_CALL getFrame(  ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL attachFrame( const css::uno::Reference< css::frame::XFrame >& xFrame ) override;
+        virtual sal_Bool SAL_CALL attachModel( const css::uno::Reference< css::frame::XModel >& xModel ) override;
+        virtual sal_Bool SAL_CALL suspend( sal_Bool bSuspend ) override;
+        virtual css::uno::Any SAL_CALL getViewData(  ) override;
+        virtual void SAL_CALL restoreViewData( const css::uno::Any& Data ) override;
+        virtual css::uno::Reference< css::frame::XModel > SAL_CALL getModel(  ) override;
+        virtual css::uno::Reference< css::frame::XFrame > SAL_CALL getFrame(  ) override;
 
         // XComponent
-        virtual void SAL_CALL dispose(  ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL dispose(  ) override;
+        virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
+        virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
         // XFocusListener
-        virtual void SAL_CALL focusGained( const css::awt::FocusEvent& _rSource ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL focusLost( const css::awt::FocusEvent& _rSource ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL focusGained( const css::awt::FocusEvent& _rSource ) override;
+        virtual void SAL_CALL focusLost( const css::awt::FocusEvent& _rSource ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
         // XLayoutConstrains
-        virtual css::awt::Size SAL_CALL getMinimumSize(  ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::awt::Size SAL_CALL getPreferredSize(  ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::awt::Size SAL_CALL calcAdjustedSize( const css::awt::Size& aNewSize ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::awt::Size SAL_CALL getMinimumSize(  ) override;
+        virtual css::awt::Size SAL_CALL getPreferredSize(  ) override;
+        virtual css::awt::Size SAL_CALL calcAdjustedSize( const css::awt::Size& aNewSize ) override;
 
         // XPropertyChangeListener
-        virtual void SAL_CALL propertyChange( const css::beans::PropertyChangeEvent& _rEvent ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL propertyChange( const css::beans::PropertyChangeEvent& _rEvent ) override;
 
         /** XPropertyControlFactory
         */
-        virtual css::uno::Reference< css::inspection::XPropertyControl > SAL_CALL createPropertyControl( ::sal_Int16 ControlType, sal_Bool CreateReadOnly ) throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::inspection::XPropertyControl > SAL_CALL createPropertyControl( ::sal_Int16 ControlType, sal_Bool CreateReadOnly ) override;
 
     public:
         explicit OPropertyBrowserController(
             const css::uno::Reference< css::uno::XComponentContext >& _rxContext);
 
     protected:
-        virtual ~OPropertyBrowserController();
+        virtual ~OPropertyBrowserController() override;
 
     public:
         // XServiceInfo - static versions
-        static OUString getImplementationName_static(  ) throw(css::uno::RuntimeException);
-        static css::uno::Sequence< OUString > getSupportedServiceNames_static(  ) throw(css::uno::RuntimeException);
-        static css::uno::Reference< css::uno::XInterface > SAL_CALL
+        /// @throws css::uno::RuntimeException
+        static OUString getImplementationName_static(  );
+        /// @throws css::uno::RuntimeException
+        static css::uno::Sequence< OUString > getSupportedServiceNames_static(  );
+        static css::uno::Reference< css::uno::XInterface >
                         Create(const css::uno::Reference< css::uno::XComponentContext >&);
 
     protected:
@@ -201,36 +201,36 @@ namespace pcr
         virtual void    Commit(     const OUString& _rName, const css::uno::Any& _rVal ) override;
 
         // IPropertyControlObserver
-        virtual void    focusGained( const css::uno::Reference< css::inspection::XPropertyControl >& _Control ) override;
-        virtual void    valueChanged( const css::uno::Reference< css::inspection::XPropertyControl >& _Control ) override;
+        virtual void    focusGained( const css::uno::Reference< css::inspection::XPropertyControl >& Control ) override;
+        virtual void    valueChanged( const css::uno::Reference< css::inspection::XPropertyControl >& Control ) override;
 
         // IPropertyExistenceCheck
-        virtual bool SAL_CALL hasPropertyByName( const OUString& _rName ) throw (css::uno::RuntimeException) override;
+        virtual bool hasPropertyByName( const OUString& _rName ) override;
 
         // XObjectInspectorUI
-        virtual void SAL_CALL enablePropertyUI( const OUString& _rPropertyName, sal_Bool _bEnable ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL enablePropertyUIElements( const OUString& _rPropertyName, ::sal_Int16 _nElements, sal_Bool _bEnable ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL rebuildPropertyUI( const OUString& _rPropertyName ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL showPropertyUI( const OUString& _rPropertyName ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL hidePropertyUI( const OUString& _rPropertyName ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL showCategory( const OUString& _rCategory, sal_Bool _bShow ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Reference< css::inspection::XPropertyControl > SAL_CALL getPropertyControl( const OUString& _rPropertyName ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL registerControlObserver( const css::uno::Reference< css::inspection::XPropertyControlObserver >& _Observer ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL revokeControlObserver( const css::uno::Reference< css::inspection::XPropertyControlObserver >& _Observer ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL setHelpSectionText( const OUString& HelpText ) throw (css::lang::NoSupportException, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL enablePropertyUI( const OUString& _rPropertyName, sal_Bool _bEnable ) override;
+        virtual void SAL_CALL enablePropertyUIElements( const OUString& _rPropertyName, ::sal_Int16 _nElements, sal_Bool _bEnable ) override;
+        virtual void SAL_CALL rebuildPropertyUI( const OUString& _rPropertyName ) override;
+        virtual void SAL_CALL showPropertyUI( const OUString& _rPropertyName ) override;
+        virtual void SAL_CALL hidePropertyUI( const OUString& _rPropertyName ) override;
+        virtual void SAL_CALL showCategory( const OUString& _rCategory, sal_Bool _bShow ) override;
+        virtual css::uno::Reference< css::inspection::XPropertyControl > SAL_CALL getPropertyControl( const OUString& _rPropertyName ) override;
+        virtual void SAL_CALL registerControlObserver( const css::uno::Reference< css::inspection::XPropertyControlObserver >& Observer ) override;
+        virtual void SAL_CALL revokeControlObserver( const css::uno::Reference< css::inspection::XPropertyControlObserver >& Observer ) override;
+        virtual void SAL_CALL setHelpSectionText( const OUString& HelpText ) override;
 
         // XObjectInspector
-        virtual css::uno::Reference< css::inspection::XObjectInspectorModel > SAL_CALL getInspectorModel() throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL setInspectorModel( const css::uno::Reference< css::inspection::XObjectInspectorModel >& _inspectormodel ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Reference< css::inspection::XObjectInspectorUI > SAL_CALL getInspectorUI() throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL inspect( const css::uno::Sequence< css::uno::Reference< css::uno::XInterface > >& Objects ) throw (css::util::VetoException, css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::inspection::XObjectInspectorModel > SAL_CALL getInspectorModel() override;
+        virtual void SAL_CALL setInspectorModel( const css::uno::Reference< css::inspection::XObjectInspectorModel >& _inspectormodel ) override;
+        virtual css::uno::Reference< css::inspection::XObjectInspectorUI > SAL_CALL getInspectorUI() override;
+        virtual void SAL_CALL inspect( const css::uno::Sequence< css::uno::Reference< css::uno::XInterface > >& Objects ) override;
 
         // XDispatchProvider
-        virtual css::uno::Reference< css::frame::XDispatch > SAL_CALL queryDispatch( const css::util::URL& URL, const OUString& TargetFrameName, ::sal_Int32 SearchFlags ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL queryDispatches( const css::uno::Sequence< css::frame::DispatchDescriptor >& Requests ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::frame::XDispatch > SAL_CALL queryDispatch( const css::util::URL& URL, const OUString& TargetFrameName, ::sal_Int32 SearchFlags ) override;
+        virtual css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL queryDispatches( const css::uno::Sequence< css::frame::DispatchDescriptor >& Requests ) override;
 
         // XInitialization
-        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
     private:
         void UpdateUI();
@@ -266,7 +266,7 @@ namespace pcr
         /** determines whether the given property is an actuating property, that is, at least one
             handler expressed interest in changes to this property's value.
         */
-        inline bool impl_isActuatingProperty_nothrow( const OUString& _rPropertyName ) const
+        bool impl_isActuatingProperty_nothrow( const OUString& _rPropertyName ) const
         {
             return ( m_aDependencyHandlers.find( _rPropertyName ) != m_aDependencyHandlers.end() );
         }
@@ -307,7 +307,7 @@ namespace pcr
         */
         bool impl_findObjectProperty_nothrow( const OUString& _rName, OrderedPropertyMap::const_iterator* _pProperty = nullptr );
 
-        bool Construct(vcl::Window* _pParentWin);
+        void Construct(vcl::Window* _pParentWin);
 
         /** retrieves the property handler for a given property name
             @param  _rPropertyName
@@ -318,7 +318,7 @@ namespace pcr
             @return
                 the handler which is responsible for the given property
         */
-        PropertyHandlerRef
+        PropertyHandlerRef const &
             impl_getHandlerForProperty_throw( const OUString& _rPropertyName ) const;
 
         /** determines whether we have a handler for the given property
@@ -374,21 +374,15 @@ namespace pcr
         */
         bool    impl_isReadOnlyModel_throw() const;
 
-        /** updates our view so that it is read-only, as indicated by the model property
-            @see impl_isReadOnlyModel_throw
-        */
-        void    impl_updateReadOnlyView_nothrow();
-
         /** starts or stops listening at the model
         */
         void    impl_startOrStopModelListening_nothrow( bool _bDoListen ) const;
 
     private:
-        DECL_LINK_TYPED(OnPageActivation, LinkParamNone*, void);
+        DECL_LINK(OnPageActivation, LinkParamNone*, void);
 
     private:
         // constructors
-        void    createDefault();
         void    createWithModel( const css::uno::Reference< css::inspection::XObjectInspectorModel >& _rxModel );
     };
 

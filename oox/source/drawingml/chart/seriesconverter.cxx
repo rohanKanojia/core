@@ -17,25 +17,39 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/chart/seriesconverter.hxx"
+#include <drawingml/chart/seriesconverter.hxx>
 
 #include <com/sun/star/chart/DataLabelPlacement.hpp>
 #include <com/sun/star/chart/ErrorBarStyle.hpp>
 #include <com/sun/star/chart2/DataPointLabel.hpp>
+#include <com/sun/star/chart2/XDataPointCustomLabelField.hpp>
+#include <com/sun/star/chart2/DataPointCustomLabelField.hpp>
+#include <com/sun/star/chart2/DataPointCustomLabelFieldType.hpp>
 #include <com/sun/star/chart2/XDataSeries.hpp>
 #include <com/sun/star/chart2/XRegressionCurve.hpp>
 #include <com/sun/star/chart2/XRegressionCurveContainer.hpp>
 #include <com/sun/star/chart2/data/XDataSink.hpp>
 #include <com/sun/star/chart2/data/LabeledDataSequence.hpp>
+#include <com/sun/star/chart2/XFormattedString2.hpp>
+#include <com/sun/star/chart2/FormattedString.hpp>
 #include <osl/diagnose.h>
 #include <basegfx/numeric/ftools.hxx>
-#include "drawingml/chart/datasourceconverter.hxx"
-#include "drawingml/chart/seriesmodel.hxx"
-#include "drawingml/chart/titleconverter.hxx"
-#include "drawingml/chart/typegroupconverter.hxx"
-#include "drawingml/chart/typegroupmodel.hxx"
-#include "oox/helper/containerhelper.hxx"
-#include <oox/drawingml/lineproperties.hxx>
+#include <drawingml/chart/datasourceconverter.hxx>
+#include <drawingml/chart/seriesmodel.hxx>
+#include <drawingml/chart/titleconverter.hxx>
+#include <drawingml/chart/typegroupconverter.hxx>
+#include <drawingml/chart/typegroupmodel.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/helper/containerhelper.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
+#include <drawingml/lineproperties.hxx>
+#include <drawingml/textparagraph.hxx>
+#include <drawingml/textrun.hxx>
+#include <drawingml/textfield.hxx>
+#include <drawingml/textbody.hxx>
 
 namespace oox {
 namespace drawingml {
@@ -49,13 +63,30 @@ using namespace ::com::sun::star::uno;
 
 namespace {
 
-/** nested-up sgn function - employs some gratuity around 0 - values
-   smaller than 0.33 are clamped to 0
+/** Function to get vertical position of label from chart height factor.
+    Value can be negative, prefer top placement.
  */
-int lclSgn( double nVal )
+int lclGetPositionY( double nVal )
 {
-    const int intVal=nVal*3;
-    return intVal == 0 ? 0 : (intVal < 0 ? -1 : 1);
+    if( nVal <= 0.1 )
+        return -1;
+    else if( nVal <= 0.6 )
+        return 0;
+    else
+        return 1;
+}
+
+/** Function to get horizontal position of label from chart width factor.
+    Value can be negative, prefer center placement.
+*/
+int lclGetPositionX( double nVal )
+{
+    if( nVal <= -0.2 )
+        return -1;
+    else if( nVal <= 0.2 )
+        return 0;
+    else
+        return 1;
 }
 
 Reference< XLabeledDataSequence > lclCreateLabeledDataSequence(
@@ -93,8 +124,17 @@ Reference< XLabeledDataSequence > lclCreateLabeledDataSequence(
     return xLabeledSeq;
 }
 
+void convertTextProperty(PropertySet& rPropSet, ObjectFormatter& rFormatter,
+        DataLabelModelBase::TextBodyRef xTextProps)
+{
+    rFormatter.convertTextFormatting( rPropSet, xTextProps, OBJECTTYPE_DATALABEL );
+    ObjectFormatter::convertTextRotation( rPropSet, xTextProps, false );
+    ObjectFormatter::convertTextWrap( rPropSet, xTextProps );
+}
+
 void lclConvertLabelFormatting( PropertySet& rPropSet, ObjectFormatter& rFormatter,
-        const DataLabelModelBase& rDataLabel, const TypeGroupConverter& rTypeGroup, bool bDataSeriesLabel, bool bMSO2007Doc )
+                                const DataLabelModelBase& rDataLabel, const TypeGroupConverter& rTypeGroup,
+                                bool bDataSeriesLabel, bool bMSO2007Doc, const PropertySet* pSeriesPropSet )
 {
     const TypeGroupInfo& rTypeInfo = rTypeGroup.getTypeInfo();
 
@@ -139,10 +179,7 @@ void lclConvertLabelFormatting( PropertySet& rPropSet, ObjectFormatter& rFormatt
         rFormatter.convertNumberFormat( rPropSet, rDataLabel.maNumberFormat, false, bShowPercent );
 
         // data label text formatting (frame formatting not supported by Chart2)
-        rFormatter.convertTextFormatting( rPropSet, rDataLabel.mxTextProp, OBJECTTYPE_DATALABEL );
-        ObjectFormatter::convertTextRotation( rPropSet, rDataLabel.mxTextProp, false );
-        ObjectFormatter::convertTextWrap( rPropSet, rDataLabel.mxTextProp );
-
+        convertTextProperty(rPropSet, rFormatter, rDataLabel.mxTextProp);
 
         // data label separator (do not overwrite series separator, if no explicit point separator is present)
         if( bDataSeriesLabel || rDataLabel.moaSeparator.has() )
@@ -165,6 +202,12 @@ void lclConvertLabelFormatting( PropertySet& rPropSet, ObjectFormatter& rFormatt
                 case XML_r:         nPlacement = csscd::RIGHT;          break;
                 case XML_bestFit:   nPlacement = csscd::AVOID_OVERLAP;  break;
             }
+
+            sal_Int32 nGlobalPlacement = 0;
+            if ( !bDataSeriesLabel && nPlacement == rTypeInfo.mnDefLabelPos && pSeriesPropSet &&
+                 pSeriesPropSet->getProperty( nGlobalPlacement, PROP_LabelPlacement ) )
+                nPlacement = nGlobalPlacement;
+
             rPropSet.setProperty( PROP_LabelPlacement, nPlacement );
         }
     }
@@ -184,8 +227,22 @@ void importBorderProperties( PropertySet& rPropSet, Shape& rShape, const Graphic
         rPropSet.setProperty(PROP_LabelBorderStyle, uno::makeAny(drawing::LineStyle_SOLID));
     }
     const Color& aColor = rLP.maLineFill.maFillColor;
-    sal_Int32 nColor = aColor.getColor(rGraphicHelper);
+    ::Color nColor = aColor.getColor(rGraphicHelper);
     rPropSet.setProperty(PROP_LabelBorderColor, uno::makeAny(nColor));
+}
+
+DataPointCustomLabelFieldType lcl_ConvertFieldNameToFieldEnum( const OUString& rField )
+{
+    if (rField == "VALUE")
+        return DataPointCustomLabelFieldType::DataPointCustomLabelFieldType_VALUE;
+    else if (rField == "SERIESNAME")
+        return DataPointCustomLabelFieldType::DataPointCustomLabelFieldType_SERIESNAME;
+    else if (rField == "CATEGORYNAME")
+        return DataPointCustomLabelFieldType::DataPointCustomLabelFieldType_CATEGORYNAME;
+    else if (rField == "CELLREF")
+        return DataPointCustomLabelFieldType::DataPointCustomLabelFieldType_CELLREF;
+    else
+        return DataPointCustomLabelFieldType::DataPointCustomLabelFieldType_TEXT;
 }
 
 } // namespace
@@ -199,7 +256,8 @@ DataLabelConverter::~DataLabelConverter()
 {
 }
 
-void DataLabelConverter::convertFromModel( const Reference< XDataSeries >& rxDataSeries, const TypeGroupConverter& rTypeGroup )
+void DataLabelConverter::convertFromModel( const Reference< XDataSeries >& rxDataSeries, const TypeGroupConverter& rTypeGroup,
+                                           const PropertySet& rSeriesPropSet )
 {
     if (!rxDataSeries.is())
         return;
@@ -208,7 +266,7 @@ void DataLabelConverter::convertFromModel( const Reference< XDataSeries >& rxDat
     {
         bool bMSO2007Doc = getFilter().isMSO2007Document();
         PropertySet aPropSet( rxDataSeries->getDataPointByIndex( mrModel.mnIndex ) );
-        lclConvertLabelFormatting( aPropSet, getFormatter(), mrModel, rTypeGroup, false, bMSO2007Doc );
+        lclConvertLabelFormatting( aPropSet, getFormatter(), mrModel, rTypeGroup, false, bMSO2007Doc, &rSeriesPropSet );
         const TypeGroupInfo& rTypeInfo = rTypeGroup.getTypeInfo();
         bool bIsPie = rTypeInfo.meTypeCategory == TYPECATEGORY_PIE;
         if( mrModel.mxLayout && !mrModel.mxLayout->mbAutoLayout && !bIsPie )
@@ -223,17 +281,70 @@ void DataLabelConverter::convertFromModel( const Reference< XDataSeries >& rxDat
                     csscd::LEFT,        csscd::CENTER, csscd::RIGHT,
                     csscd::BOTTOM_LEFT, csscd::BOTTOM, csscd::BOTTOM_RIGHT
                 };
-            const double nMax=std::max(
-                fabs(mrModel.mxLayout->mfX),
-                fabs(mrModel.mxLayout->mfY));
-            const int simplifiedX=lclSgn(mrModel.mxLayout->mfX/nMax);
-            const int simplifiedY=lclSgn(mrModel.mxLayout->mfY/nMax);
+            const int simplifiedX = lclGetPositionX(mrModel.mxLayout->mfX);
+            const int simplifiedY = lclGetPositionY(mrModel.mxLayout->mfY);
             aPropSet.setProperty( PROP_LabelPlacement,
                                   aPositionsLookupTable[ simplifiedX+1 + 3*(simplifiedY+1) ] );
         }
 
         if (mrModel.mxShapeProp)
             importBorderProperties(aPropSet, *mrModel.mxShapeProp, getFilter().getGraphicHelper());
+
+        if( mrModel.mxText && mrModel.mxText->mxTextBody && !mrModel.mxText->mxTextBody->getParagraphs().empty() )
+        {
+            css::uno::Reference< XComponentContext > xContext = getComponentContext();
+            uno::Sequence< css::uno::Reference< XDataPointCustomLabelField > > aSequence;
+
+            auto& rParagraphs = mrModel.mxText->mxTextBody->getParagraphs();
+
+            int nSequenceSize = 0;
+            for( auto& pParagraph : rParagraphs )
+                nSequenceSize += pParagraph->getRuns().size();
+
+            int nParagraphs = rParagraphs.size();
+            if( nParagraphs > 1 )
+                nSequenceSize += nParagraphs - 1;
+
+            aSequence.realloc( nSequenceSize );
+
+            int nPos = 0;
+            for( auto& pParagraph : rParagraphs )
+            {
+                for( auto& pRun : pParagraph->getRuns() )
+                {
+                    css::uno::Reference< XDataPointCustomLabelField > xCustomLabel = DataPointCustomLabelField::create( xContext );
+
+                    // Store properties
+                    oox::PropertySet aPropertySet( xCustomLabel );
+                    pRun->getTextCharacterProperties().pushToPropSet( aPropertySet, getFilter() );
+
+                    TextField* pField = nullptr;
+                    if( ( pField = dynamic_cast< TextField* >( pRun.get() ) ) )
+                    {
+                        xCustomLabel->setString( pField->getText() );
+                        xCustomLabel->setFieldType( lcl_ConvertFieldNameToFieldEnum( pField->getType() ) );
+                        xCustomLabel->setGuid( pField->getUuid() );
+                    }
+                    else if( pRun.get() )
+                    {
+                        xCustomLabel->setString( pRun->getText() );
+                        xCustomLabel->setFieldType( DataPointCustomLabelFieldType::DataPointCustomLabelFieldType_TEXT );
+                    }
+                    aSequence[ nPos++ ] = xCustomLabel;
+                }
+
+                if( nParagraphs > 1 && nPos < nSequenceSize )
+                {
+                    css::uno::Reference< XDataPointCustomLabelField > xCustomLabel = DataPointCustomLabelField::create( xContext );
+                    xCustomLabel->setFieldType( DataPointCustomLabelFieldType::DataPointCustomLabelFieldType_NEWLINE );
+                    xCustomLabel->setString("\n");
+                    aSequence[ nPos++ ] = xCustomLabel;
+                }
+            }
+
+            aPropSet.setProperty( PROP_CustomLabelFields, makeAny( aSequence ) );
+            convertTextProperty(aPropSet, getFormatter(), mrModel.mxText->mxTextBody);
+        }
     }
     catch( Exception& )
     {
@@ -251,11 +362,11 @@ DataLabelsConverter::~DataLabelsConverter()
 
 void DataLabelsConverter::convertFromModel( const Reference< XDataSeries >& rxDataSeries, const TypeGroupConverter& rTypeGroup )
 {
+    PropertySet aPropSet( rxDataSeries );
     if( !mrModel.mbDeleted )
     {
         bool bMSO2007Doc = getFilter().isMSO2007Document();
-        PropertySet aPropSet( rxDataSeries );
-        lclConvertLabelFormatting( aPropSet, getFormatter(), mrModel, rTypeGroup, true, bMSO2007Doc );
+        lclConvertLabelFormatting( aPropSet, getFormatter(), mrModel, rTypeGroup, true, bMSO2007Doc, nullptr );
 
         if (mrModel.mxShapeProp)
             // Import baseline border properties for these data labels.
@@ -263,13 +374,13 @@ void DataLabelsConverter::convertFromModel( const Reference< XDataSeries >& rxDa
     }
 
     // data point label settings
-    for( DataLabelsModel::DataLabelVector::iterator aIt = mrModel.maPointLabels.begin(), aEnd = mrModel.maPointLabels.end(); aIt != aEnd; ++aIt )
+    for (auto const& pointLabel : mrModel.maPointLabels)
     {
-        if ((*aIt)->maNumberFormat.maFormatCode.isEmpty())
-            (*aIt)->maNumberFormat = mrModel.maNumberFormat;
+        if (pointLabel->maNumberFormat.maFormatCode.isEmpty())
+            pointLabel->maNumberFormat = mrModel.maNumberFormat;
 
-        DataLabelConverter aLabelConv( *this, **aIt );
-        aLabelConv.convertFromModel( rxDataSeries, rTypeGroup );
+        DataLabelConverter aLabelConv(*this, *pointLabel);
+        aLabelConv.convertFromModel( rxDataSeries, rTypeGroup, aPropSet );
     }
 }
 
@@ -303,7 +414,7 @@ void ErrorBarConverter::convertFromModel( const Reference< XDataSeries >& rxData
             {
                 // #i87806# manual error bars
                 aBarProp.setProperty( PROP_ErrorBarStyle, cssc::ErrorBarStyle::FROM_DATA );
-                // attach data sequences to erorr bar
+                // attach data sequences to error bar
                 Reference< XDataSink > xDataSink( xErrorBar, UNO_QUERY );
                 if( xDataSink.is() )
                 {
@@ -534,6 +645,10 @@ void DataPointConverter::convertFromModel( const Reference< XDataSeries >& rxDat
             else
                 getFormatter().convertFrameFormatting( aPropSet, mrModel.mxShapeProp, rTypeGroup.getSeriesObjectType(), rSeries.mnIndex );
         }
+        else if (rSeries.mxShapeProp.is())
+        {
+            getFormatter().convertFrameFormatting( aPropSet, rSeries.mxShapeProp, rTypeGroup.getSeriesObjectType(), rSeries.mnIndex );
+        }
     }
     catch( Exception& )
     {
@@ -607,16 +722,16 @@ Reference< XDataSeries > SeriesConverter::createDataSeries( const TypeGroupConve
     }
 
     // error bars
-    for( SeriesModel::ErrorBarVector::iterator aIt = mrModel.maErrorBars.begin(), aEnd = mrModel.maErrorBars.end(); aIt != aEnd; ++aIt )
+    for (auto const& errorBar : mrModel.maErrorBars)
     {
-        ErrorBarConverter aErrorBarConv( *this, **aIt );
+        ErrorBarConverter aErrorBarConv(*this, *errorBar);
         aErrorBarConv.convertFromModel( xDataSeries );
     }
 
     // trendlines
-    for( SeriesModel::TrendlineVector::iterator aIt = mrModel.maTrendlines.begin(), aEnd = mrModel.maTrendlines.end(); aIt != aEnd; ++aIt )
+    for (auto const& trendLine : mrModel.maTrendlines)
     {
-        TrendlineConverter aTrendlineConv( *this, **aIt );
+        TrendlineConverter aTrendlineConv(*this, *trendLine);
         aTrendlineConv.convertFromModel( xDataSeries );
     }
 
@@ -670,9 +785,9 @@ Reference< XDataSeries > SeriesConverter::createDataSeries( const TypeGroupConve
     }
 
     // data point settings
-    for( SeriesModel::DataPointVector::iterator aIt = mrModel.maPoints.begin(), aEnd = mrModel.maPoints.end(); aIt != aEnd; ++aIt )
+    for (auto const& point : mrModel.maPoints)
     {
-        DataPointConverter aPointConv( *this, **aIt );
+        DataPointConverter aPointConv(*this, *point);
         aPointConv.convertFromModel( xDataSeries, rTypeGroup, mrModel );
     }
 

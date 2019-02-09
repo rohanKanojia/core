@@ -26,15 +26,11 @@ namespace ucb { namespace ucp { namespace ext
 {
 
 
-    using ::com::sun::star::uno::XInterface;
-    using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
-    using ::com::sun::star::lang::XSingleComponentFactory;
 
 
     //= descriptors for the services implemented in this component
 
-    static struct ::cppu::ImplementationEntry s_aServiceEntries[] =
+    static struct ::cppu::ImplementationEntry const s_aServiceEntries[] =
     {
         {
             ContentProvider::Create,
@@ -52,7 +48,7 @@ namespace ucb { namespace ucp { namespace ext
 extern "C"
 {
 
-    SAL_DLLPUBLIC_EXPORT void * SAL_CALL ucpext_component_getFactory( const sal_Char * pImplName, void * pServiceManager, void * pRegistryKey )
+    SAL_DLLPUBLIC_EXPORT void * ucpext_component_getFactory( const sal_Char * pImplName, void * pServiceManager, void * pRegistryKey )
     {
         return ::cppu::component_getFactoryHelper( pImplName, pServiceManager, pRegistryKey , ::ucb::ucp::ext::s_aServiceEntries );
     }

@@ -50,7 +50,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sd_html_export_tests, \
     utl \
     vcl \
     xo \
-    $(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sd_html_export_tests,\
@@ -59,10 +58,7 @@ $(eval $(call gb_CppunitTest_set_include,sd_html_export_tests,\
     $$(INCLUDE) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,sd_html_export_tests,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,sd_html_export_tests))
 
 $(eval $(call gb_CppunitTest_use_ure,sd_html_export_tests))
 $(eval $(call gb_CppunitTest_use_vcl,sd_html_export_tests))
@@ -104,13 +100,12 @@ $(eval $(call gb_CppunitTest_use_components,sd_html_export_tests,\
     unotools/util/utl \
     unoxml/source/rdf/unordf \
     unoxml/source/service/unoxml \
+    uui/util/uui \
+    vcl/vcl.common \
     xmloff/util/xo \
-    xmlsecurity/util/xsec_fw \
     xmlsecurity/util/xmlsecurity \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,sd_html_export_tests))
-
-$(call gb_CppunitTest_get_target,sd_html_export_tests) : $(call gb_AllLangResTarget_get_target,sd)
 
 # vim: set noet sw=4 ts=4:

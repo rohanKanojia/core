@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "swcache.hxx"
-#include "fntcache.hxx"
-#include "swfntcch.hxx"
-#include "txtfrm.hxx"
+#include <swcache.hxx>
+#include <fntcache.hxx>
+#include <swfntcch.hxx>
+#include <txtfrm.hxx>
 #include "txtcache.hxx"
 #include "porlay.hxx"
 #include "porglue.hxx"
@@ -33,48 +33,39 @@
 #include "porftn.hxx"
 #include "porhyph.hxx"
 #include "pordrop.hxx"
-#include "blink.hxx"
-#include "init.hxx"
-#include "txtfly.hxx"
-#include "dbg_lay.hxx"
+#include <blink.hxx>
+#include <init.hxx>
+#include <txtfly.hxx>
+#include <dbg_lay.hxx>
 
-SwCache *SwTextFrame::pTextCache = nullptr;
-long SwTextFrame::nMinPrtLine = 0;
+SwCache *SwTextFrame::s_pTextCache = nullptr;
 SwContourCache *pContourCache = nullptr;
 SwDropCapCache *pDropCapCache = nullptr;
 
-IMPL_FIXEDMEMPOOL_NEWDEL( SwTextLine )
-IMPL_FIXEDMEMPOOL_NEWDEL( SwParaPortion ) // Paragraphs
-IMPL_FIXEDMEMPOOL_NEWDEL( SwLineLayout ) // Lines
-IMPL_FIXEDMEMPOOL_NEWDEL( SwHolePortion ) // e.g. Blanks at the line end
-IMPL_FIXEDMEMPOOL_NEWDEL( SwTextPortion ) // Attribute change
-
 // Are ONLY used in init.cxx.
-// There we have extern void _TextFinit()
-// and extern void _TextInit(...)
+// There we have extern void TextFinit()
+// and extern void TextInit_(...)
 
-void _TextInit()
+void TextInit_()
 {
     pFntCache = new SwFntCache; // Cache for SwSubFont -> SwFntObj = { Font aFont, Font* pScrFont, Font* pPrtFont, OutputDevice* pPrinter, ... }
     pSwFontCache = new SwFontCache; // Cache for SwTextFormatColl -> SwFontObj = { SwFont aSwFont, SfxPoolItem* pDefaultArray }
     SwCache *pTextCache = new SwCache( 250 // Cache for SwTextFrame -> SwTextLine = { SwParaPortion* pLine }
 #ifdef DBG_UTIL
-    , "static SwTextFrame::pTextCache"
+    , "static SwTextFrame::s_pTextCache"
 #endif
     );
     SwTextFrame::SetTextCache( pTextCache );
-    pWaveCol = new Color( COL_GRAY );
     PROTOCOL_INIT
 }
 
-void _TextFinit()
+void TextFinit()
 {
     PROTOCOL_STOP
     delete SwTextFrame::GetTextCache();
     delete pSwFontCache;
     delete pFntCache;
     delete pBlink;
-    delete pWaveCol;
     delete pContourCache;
     SwDropPortion::DeleteDropCapCache();
 }

@@ -52,11 +52,6 @@ $(eval $(call gb_CppunitTest_use_libraries,dbaccess_dialog_save, \
     vbahelper \
     vcl \
     xo \
-	$(gb_UWINAPI) \
-))
-
-$(eval $(call gb_CppunitTest_set_include,dbaccess_dialog_save,\
-    $$(INCLUDE) \
 ))
 
 $(eval $(call gb_CppunitTest_use_api,dbaccess_dialog_save,\
@@ -98,6 +93,7 @@ $(eval $(call gb_CppunitTest_use_components,dbaccess_dialog_save,\
     unotools/util/utl \
     unoxml/source/rdf/unordf \
     unoxml/source/service/unoxml \
+    uui/util/uui \
     xmloff/util/xo \
 ))
 
@@ -108,8 +104,5 @@ $(WORKDIR)/CppunitTest/testDialogSave.odb : $(SRCDIR)/dbaccess/qa/extras/testdoc
 	mkdir -p $(dir $@)
 	cp -P -f "$<" "$@"
 .PHONY: $(WORKDIR)/CppunitTest/testDialogSave.odb
-
-$(call gb_CppunitTest_get_target,dbaccess_dialog_save): \
-    $(call gb_AllLangResTarget_get_target,ofa)
 
 # vim: set noet sw=4 ts=4:

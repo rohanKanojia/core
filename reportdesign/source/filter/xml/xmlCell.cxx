@@ -23,16 +23,14 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
-#include <tools/debug.hxx>
 #include "xmlStyleImport.hxx"
-#include <comphelper/namecontainer.hxx>
-#include <comphelper/genericpropertyset.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/report/XShape.hpp>
 #include <com/sun/star/report/XFixedLine.hpp>
 #include <com/sun/star/table/BorderLine2.hpp>
-#include "xmlstrings.hrc"
+#include <strings.hxx>
 #include "xmlTable.hxx"
 #include "xmlFormattedField.hxx"
 #include "xmlImage.hxx"
@@ -41,7 +39,6 @@
 
 namespace rptxml
 {
-    using namespace ::comphelper;
     using namespace ::com::sun::star;
     using namespace uno;
     using namespace beans;
@@ -96,7 +93,7 @@ OXMLCell::~OXMLCell()
 {
 }
 
-SvXMLImportContext* OXMLCell::CreateChildContext(
+SvXMLImportContextRef OXMLCell::CreateChildContext(
         sal_uInt16 _nPrefix,
         const OUString& _rLocalName,
         const Reference< XAttributeList > & xAttrList )
@@ -234,7 +231,7 @@ void OXMLCell::EndElement()
                }
             catch(uno::Exception&)
             {
-                OSL_FAIL("OXMLCell::EndElement -> exception catched");
+                OSL_FAIL("OXMLCell::EndElement -> exception caught");
             }
         }
     }

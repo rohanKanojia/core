@@ -21,30 +21,33 @@
 #include "pdfinteract.hxx"
 #include "impdialog.hxx"
 
-#include "com/sun/star/task/XInteractionRequest.hpp"
-#include "com/sun/star/task/PDFExportException.hpp"
+#include <com/sun/star/task/XInteractionRequest.hpp>
+#include <com/sun/star/task/PDFExportException.hpp>
+#include <comphelper/namedvaluecollection.hxx>
 #include <cppuhelper/supportsservice.hxx>
-
+#include <toolkit/helper/vclunohelper.hxx>
 
 PDFInteractionHandler::PDFInteractionHandler()
 {
 }
 
-
 PDFInteractionHandler::~PDFInteractionHandler()
 {
 }
 
-
 void SAL_CALL PDFInteractionHandler::handle( const Reference< task::XInteractionRequest >& i_xRequest )
-    throw (RuntimeException, std::exception)
 {
     handleInteractionRequest( i_xRequest );
 }
 
+void SAL_CALL PDFInteractionHandler::initialize(const css::uno::Sequence<css::uno::Any>& rArguments)
+{
+    comphelper::NamedValueCollection aProperties(rArguments);
+    if (aProperties.has("Parent"))
+        aProperties.get("Parent") >>= m_xParent;
+}
 
 sal_Bool SAL_CALL PDFInteractionHandler::handleInteractionRequest( const Reference< task::XInteractionRequest >& i_xRequest )
-    throw (RuntimeException, std::exception)
 {
     bool bHandled = false;
 
@@ -55,9 +58,10 @@ sal_Bool SAL_CALL PDFInteractionHandler::handleInteractionRequest( const Referen
         std::set< vcl::PDFWriter::ErrorCode > aCodes;
         sal_Int32 nCodes = aExc.ErrorCodes.getLength();
         for( sal_Int32 i = 0; i < nCodes; i++ )
-            aCodes.insert( (vcl::PDFWriter::ErrorCode)aExc.ErrorCodes.getConstArray()[i] );
-        ScopedVclPtrInstance< ImplErrorDialog > aDlg( aCodes );
-        aDlg->Execute();
+            aCodes.insert( static_cast<vcl::PDFWriter::ErrorCode>(aExc.ErrorCodes.getConstArray()[i]) );
+
+        ImplErrorDialog aDlg(Application::GetFrameWeld(m_xParent), aCodes);
+        aDlg.run();
         bHandled = true;
     }
     return bHandled;
@@ -65,40 +69,37 @@ sal_Bool SAL_CALL PDFInteractionHandler::handleInteractionRequest( const Referen
 
 
 OUString PDFInteractionHandler_getImplementationName ()
-    throw (RuntimeException)
 {
     return OUString ( "com.sun.star.comp.PDF.PDFExportInteractionHandler" );
 }
 
 
-Sequence< OUString > SAL_CALL PDFInteractionHandler_getSupportedServiceNames(  ) throw (RuntimeException)
+Sequence< OUString > PDFInteractionHandler_getSupportedServiceNames(  )
 {
     Sequence<OUString> aRet { "com.sun.star.filter.pdfexport.PDFExportInteractionHandler" };
     return aRet;
 }
 
 
-Reference< XInterface > SAL_CALL PDFInteractionHandler_createInstance( const Reference< XMultiServiceFactory > & ) throw( Exception )
+Reference< XInterface > PDFInteractionHandler_createInstance( const Reference< XMultiServiceFactory > & )
 {
     return static_cast<cppu::OWeakObject*>(new PDFInteractionHandler);
 }
 
 
 OUString SAL_CALL PDFInteractionHandler::getImplementationName()
-    throw (RuntimeException, std::exception)
 {
     return PDFInteractionHandler_getImplementationName();
 }
 
 
 sal_Bool SAL_CALL PDFInteractionHandler::supportsService( const OUString& rServiceName )
-    throw (RuntimeException, std::exception)
 {
     return cppu::supportsService( this, rServiceName );
 }
 
 
-css::uno::Sequence< OUString > SAL_CALL PDFInteractionHandler::getSupportedServiceNames(  ) throw (RuntimeException, std::exception)
+css::uno::Sequence< OUString > SAL_CALL PDFInteractionHandler::getSupportedServiceNames(  )
 {
     return PDFInteractionHandler_getSupportedServiceNames();
 }

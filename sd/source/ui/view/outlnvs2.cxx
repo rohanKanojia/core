@@ -17,12 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "OutlineViewShell.hxx"
+#include <OutlineViewShell.hxx>
 
-#include <com/sun/star/presentation/XPresentation2.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 
-#include "app.hrc"
+#include <app.hrc>
 #include <svx/hlnkitem.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/dispatch.hxx>
@@ -30,42 +29,42 @@
 #include <svl/eitem.hxx>
 #include <sfx2/zoomitem.hxx>
 #include <svx/svxids.hrc>
-#include <vcl/msgbox.hxx>
 #include <editeng/eeitem.hxx>
 #include <editeng/flditem.hxx>
 #include <editeng/editstat.hxx>
-#include "optsitem.hxx"
+#include <optsitem.hxx>
 #include <unotools/useroptions.hxx>
 
 #include <sfx2/viewfrm.hxx>
-#include "Outliner.hxx"
-#include "Window.hxx"
-#include "fubullet.hxx"
-#include "fuolbull.hxx"
-#include "FrameView.hxx"
-#include "fuzoom.hxx"
-#include "fuscale.hxx"
-#include "fuchar.hxx"
-#include "fuinsfil.hxx"
-#include "fuprobjs.hxx"
-#include "futhes.hxx"
-#include "futempl.hxx"
-#include "fusldlg.hxx"
-#include "zoomlist.hxx"
-#include "fuexpand.hxx"
-#include "fusumry.hxx"
-#include "fucushow.hxx"
-#include "drawdoc.hxx"
-#include "sdattr.hxx"
-#include "ViewShellBase.hxx"
-#include "sdabstdlg.hxx"
-#include "framework/FrameworkHelper.hxx"
-#include "DrawViewShell.hxx"
-#include "slideshow.hxx"
+#include <Outliner.hxx>
+#include <Window.hxx>
+#include <fubullet.hxx>
+#include <fuolbull.hxx>
+#include <FrameView.hxx>
+#include <fuzoom.hxx>
+#include <fuscale.hxx>
+#include <fuchar.hxx>
+#include <fuinsfil.hxx>
+#include <fuprobjs.hxx>
+#include <futhes.hxx>
+#include <futempl.hxx>
+#include <fusldlg.hxx>
+#include <zoomlist.hxx>
+#include <fuexpand.hxx>
+#include <fusumry.hxx>
+#include <fucushow.hxx>
+#include <drawdoc.hxx>
+#include <sdattr.hxx>
+#include <ViewShellBase.hxx>
+#include <sdabstdlg.hxx>
+#include <framework/FrameworkHelper.hxx>
+#include <DrawDocShell.hxx>
+#include <DrawViewShell.hxx>
+#include <OutlineView.hxx>
+#include <slideshow.hxx>
 #include <memory>
 
 using namespace ::com::sun::star::uno;
-using namespace ::com::sun::star::presentation;
 using namespace ::com::sun::star::beans;
 
 namespace sd {
@@ -91,13 +90,11 @@ void OutlineViewShell::FuTemporary(SfxRequest &rReq)
 
             if ( pArgs )
             {
-                SvxZoomType eZT = static_cast<const SvxZoomItem&>( pArgs->
-                                            Get( SID_ATTR_ZOOM ) ).GetType();
+                SvxZoomType eZT = pArgs->Get( SID_ATTR_ZOOM ).GetType();
                 switch( eZT )
                 {
                     case SvxZoomType::PERCENT:
-                        SetZoom( (long) static_cast<const SvxZoomItem&>( pArgs->
-                                            Get( SID_ATTR_ZOOM ) ).GetValue() );
+                        SetZoom( static_cast<long>( pArgs->Get( SID_ATTR_ZOOM ).GetValue()) );
                         Invalidate( SID_ATTR_ZOOM );
                         Invalidate( SID_ATTR_ZOOMSLIDER );
                         break;
@@ -109,7 +106,7 @@ void OutlineViewShell::FuTemporary(SfxRequest &rReq)
             else
             {
                 // open the zoom dialog here
-                SetCurrentFunction( FuScale::Create( this, GetActiveWindow(), pOlView, GetDoc(), rReq ) );
+                SetCurrentFunction( FuScale::Create( this, GetActiveWindow(), pOlView.get(), GetDoc(), rReq ) );
             }
             Cancel();
         }
@@ -119,20 +116,18 @@ void OutlineViewShell::FuTemporary(SfxRequest &rReq)
         {
             const SfxItemSet* pArgs = rReq.GetArgs();
 
-            if (pArgs && pArgs->Count () == 1 )
+            const SfxUInt16Item* pScale = (pArgs && pArgs->Count () == 1) ?
+                rReq.GetArg<SfxUInt16Item>(SID_ATTR_ZOOMSLIDER) : nullptr;
+            if (pScale && CHECK_RANGE (5, pScale->GetValue (), 3000))
             {
-                const SfxUInt16Item* pScale = rReq.GetArg<SfxUInt16Item>(SID_ATTR_ZOOMSLIDER);
-                if (CHECK_RANGE (5, pScale->GetValue (), 3000))
-                {
-                    SetZoom (pScale->GetValue ());
+                SetZoom (pScale->GetValue ());
 
-                    SfxBindings& rBindings = GetViewFrame()->GetBindings();
-                    rBindings.Invalidate( SID_ATTR_ZOOM );
-                    rBindings.Invalidate( SID_ZOOM_IN );
-                    rBindings.Invalidate( SID_ZOOM_OUT );
-                    rBindings.Invalidate( SID_ATTR_ZOOMSLIDER );
+                SfxBindings& rBindings = GetViewFrame()->GetBindings();
+                rBindings.Invalidate( SID_ATTR_ZOOM );
+                rBindings.Invalidate( SID_ZOOM_IN );
+                rBindings.Invalidate( SID_ZOOM_OUT );
+                rBindings.Invalidate( SID_ATTR_ZOOMSLIDER );
 
-                }
             }
 
             Cancel();
@@ -142,8 +137,8 @@ void OutlineViewShell::FuTemporary(SfxRequest &rReq)
 
         case SID_ZOOM_OUT:
         {
-            SetZoom( std::min( (long) ( GetActiveWindow()->GetZoom() * 2 ), (long) GetActiveWindow()->GetMaxZoom() ) );
-            Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0),
+            SetZoom( std::min<long>( GetActiveWindow()->GetZoom() * 2, GetActiveWindow()->GetMaxZoom() ) );
+            ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0),
                                              GetActiveWindow()->GetOutputSizePixel()) );
             mpZoomList->InsertZoomRect(aVisAreaWin);
             Invalidate( SID_ATTR_ZOOM );
@@ -157,7 +152,7 @@ void OutlineViewShell::FuTemporary(SfxRequest &rReq)
         case SID_SIZE_REAL:
         {
             SetZoom( 100 );
-            Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0),
+            ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0),
                                              GetActiveWindow()->GetOutputSizePixel()) );
             mpZoomList->InsertZoomRect(aVisAreaWin);
             Invalidate( SID_ATTR_ZOOM );
@@ -169,8 +164,8 @@ void OutlineViewShell::FuTemporary(SfxRequest &rReq)
 
         case SID_ZOOM_IN:
         {
-            SetZoom( std::max( (long) ( GetActiveWindow()->GetZoom() / 2 ), (long) GetActiveWindow()->GetMinZoom() ) );
-            Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0),
+            SetZoom( std::max<long>( GetActiveWindow()->GetZoom() / 2, GetActiveWindow()->GetMinZoom() ) );
+            ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0),
                                              GetActiveWindow()->GetOutputSizePixel()) );
             mpZoomList->InsertZoomRect(aVisAreaWin);
             Invalidate( SID_ATTR_ZOOM );
@@ -241,7 +236,7 @@ void OutlineViewShell::FuTemporary(SfxRequest &rReq)
         case SID_REHEARSE_TIMINGS:
         {
             pOlView->PrepareClose();
-            ShowSlideShow(rReq);
+            slideshowhelp::ShowSlideShow(rReq, *GetDoc());
             Cancel();
             rReq.Done();
         }
@@ -275,7 +270,7 @@ void OutlineViewShell::FuTemporary(SfxRequest &rReq)
         {
             if( rReq.GetArgs() )
             {
-                SetCurrentFunction( FuTemplate::Create( this, GetActiveWindow(), pOlView, GetDoc(), rReq ) );
+                SetCurrentFunction( FuTemplate::Create( this, GetActiveWindow(), pOlView.get(), GetDoc(), rReq ) );
                 Cancel();
             }
 
@@ -285,7 +280,7 @@ void OutlineViewShell::FuTemporary(SfxRequest &rReq)
 
         case SID_PRESENTATION_DLG:
         {
-            SetCurrentFunction( FuSlideShowDlg::Create( this, GetActiveWindow(), pOlView, GetDoc(), rReq ) );
+            SetCurrentFunction( FuSlideShowDlg::Create( this, GetActiveWindow(), pOlView.get(), GetDoc(), rReq ) );
             Cancel();
         }
         break;
@@ -294,16 +289,15 @@ void OutlineViewShell::FuTemporary(SfxRequest &rReq)
         {
 #ifdef ENABLE_SDREMOTE
              SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
-             VclAbstractDialog* pDlg = pFact ? pFact->CreateRemoteDialog(GetActiveWindow()) : nullptr;
-             if (pDlg)
-                 pDlg->Execute();
+             ScopedVclPtr<VclAbstractDialog> pDlg(pFact->CreateRemoteDialog(GetActiveWindow()));
+             pDlg->Execute();
 #endif
         }
         break;
 
         case SID_CUSTOMSHOW_DLG:
         {
-            SetCurrentFunction( FuCustomShowDlg::Create( this, GetActiveWindow(), pOlView, GetDoc(), rReq ) );
+            SetCurrentFunction( FuCustomShowDlg::Create( this, GetActiveWindow(), pOlView.get(), GetDoc(), rReq ) );
             Cancel();
         }
         break;
@@ -311,15 +305,13 @@ void OutlineViewShell::FuTemporary(SfxRequest &rReq)
         case SID_PHOTOALBUM:
         {
             SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
-            std::unique_ptr<VclAbstractDialog> pDlg(pFact ? pFact->CreateSdPhotoAlbumDialog(
-                GetActiveWindow(),
-                GetDoc()) : nullptr);
+            vcl::Window* pWin = GetActiveWindow();
+            ScopedVclPtr<VclAbstractDialog> pDlg(pFact->CreateSdPhotoAlbumDialog(
+                pWin ? pWin->GetFrameWeld() : nullptr,
+                GetDoc()));
 
-            if (pDlg)
-            {
-                pDlg->Execute();
-                pDlg.reset();
-            }
+            pDlg->Execute();
+
             Cancel();
             rReq.Ignore ();
         }
@@ -348,15 +340,10 @@ void OutlineViewShell::FuTemporary(SfxRequest &rReq)
     Invalidate(SID_PASTE_UNFORMATTED);
 }
 
-void OutlineViewShell::ShowSlideShow(SfxRequest& rReq)
-{
-    slideshowhelp::ShowSlideShow(rReq, *GetDoc());
-}
-
 void OutlineViewShell::FuTemporaryModify(SfxRequest &rReq)
 {
     sal_uInt16 nSId = rReq.GetSlot();
-    std::unique_ptr< OutlineViewModelChangeGuard > aGuard;
+    std::unique_ptr<OutlineViewModelChangeGuard, o3tl::default_delete<OutlineViewModelChangeGuard>> aGuard;
     if (nSId != SID_OUTLINE_BULLET && nSId != FN_SVX_SET_BULLET && nSId != FN_SVX_SET_NUMBER)
     {
         aGuard.reset( new OutlineViewModelChangeGuard(*pOlView) );
@@ -375,11 +362,11 @@ void OutlineViewShell::FuTemporaryModify(SfxRequest &rReq)
             if (pReqArgs)
             {
                 const SvxHyperlinkItem* pHLItem =
-                    static_cast<const SvxHyperlinkItem*>( &pReqArgs->Get(SID_HYPERLINK_SETLINK) );
+                    &pReqArgs->Get(SID_HYPERLINK_SETLINK);
 
                 SvxFieldItem aURLItem(SvxURLField(pHLItem->GetURL(),
                                                   pHLItem->GetName(),
-                                                  SVXURLFORMAT_REPR), EE_FEATURE_FIELD);
+                                                  SvxURLFormat::Repr), EE_FEATURE_FIELD);
                 ESelection aSel( pOutlinerView->GetSelection() );
                 pOutlinerView->InsertField(aURLItem);
                 if ( aSel.nStartPos <= aSel.nEndPos )
@@ -403,7 +390,7 @@ void OutlineViewShell::FuTemporaryModify(SfxRequest &rReq)
         case SID_INSERT_ZWSP:
         case SID_CHARMAP:
         {
-            SetCurrentFunction( FuBullet::Create( this, GetActiveWindow(), pOlView, GetDoc(), rReq ) );
+            SetCurrentFunction( FuBullet::Create( this, GetActiveWindow(), pOlView.get(), GetDoc(), rReq ) );
             Cancel();
         }
         break;
@@ -412,14 +399,14 @@ void OutlineViewShell::FuTemporaryModify(SfxRequest &rReq)
         case FN_SVX_SET_BULLET:
         case FN_SVX_SET_NUMBER:
         {
-            SetCurrentFunction( FuOutlineBullet::Create( this, GetActiveWindow(), pOlView, GetDoc(), rReq ) );
+            SetCurrentFunction( FuOutlineBullet::Create( this, GetActiveWindow(), pOlView.get(), GetDoc(), rReq ) );
             Cancel();
         }
         break;
 
         case SID_THESAURUS:
         {
-            SetCurrentFunction( FuThesaurus::Create( this, GetActiveWindow(), pOlView, GetDoc(), rReq ) );
+            SetCurrentFunction( FuThesaurus::Create( this, GetActiveWindow(), pOlView.get(), GetDoc(), rReq ) );
             Cancel();
             rReq.Ignore ();
         }
@@ -428,21 +415,21 @@ void OutlineViewShell::FuTemporaryModify(SfxRequest &rReq)
         case SID_CHAR_DLG_EFFECT:
         case SID_CHAR_DLG:
         {
-            SetCurrentFunction( FuChar::Create( this, GetActiveWindow(), pOlView, GetDoc(), rReq ) );
+            SetCurrentFunction( FuChar::Create( this, GetActiveWindow(), pOlView.get(), GetDoc(), rReq ) );
             Cancel();
         }
         break;
 
         case SID_INSERTFILE:
         {
-            SetCurrentFunction( FuInsertFile::Create(this, GetActiveWindow(), pOlView, GetDoc(), rReq) );
+            SetCurrentFunction( FuInsertFile::Create(this, GetActiveWindow(), pOlView.get(), GetDoc(), rReq) );
             Cancel();
         }
         break;
 
         case SID_PRESENTATIONOBJECT:
         {
-            SetCurrentFunction( FuPresentationObjects::Create(this, GetActiveWindow(), pOlView, GetDoc(), rReq) );
+            SetCurrentFunction( FuPresentationObjects::Create(this, GetActiveWindow(), pOlView.get(), GetDoc(), rReq) );
             Cancel();
         }
         break;
@@ -458,7 +445,7 @@ void OutlineViewShell::FuTemporaryModify(SfxRequest &rReq)
         case SID_SUMMARY_PAGE:
         {
             pOlView->SetSelectedPages();
-            SetCurrentFunction( FuSummaryPage::Create( this, GetActiveWindow(), pOlView, GetDoc(), rReq ) );
+            SetCurrentFunction( FuSummaryPage::Create( this, GetActiveWindow(), pOlView.get(), GetDoc(), rReq ) );
             pOlView->GetOutliner().Clear();
             pOlView->FillOutliner();
             pOlView->GetActualPage();
@@ -469,7 +456,7 @@ void OutlineViewShell::FuTemporaryModify(SfxRequest &rReq)
         case SID_EXPAND_PAGE:
         {
             pOlView->SetSelectedPages();
-            SetCurrentFunction( FuExpandPage::Create( this, GetActiveWindow(), pOlView, GetDoc(), rReq ) );
+            SetCurrentFunction( FuExpandPage::Create( this, GetActiveWindow(), pOlView.get(), GetDoc(), rReq ) );
             pOlView->GetOutliner().Clear();
             pOlView->FillOutliner();
             pOlView->GetActualPage();
@@ -493,7 +480,7 @@ void OutlineViewShell::FuTemporaryModify(SfxRequest &rReq)
             {
                 case SID_INSERT_FLD_DATE_FIX:
                     pFieldItem.reset(new SvxFieldItem(
-                        SvxDateField( Date( Date::SYSTEM ), SVXDATETYPE_FIX ), EE_FEATURE_FIELD ));
+                        SvxDateField( Date( Date::SYSTEM ), SvxDateType::Fix ), EE_FEATURE_FIELD ));
                 break;
 
                 case SID_INSERT_FLD_DATE_VAR:
@@ -502,7 +489,7 @@ void OutlineViewShell::FuTemporaryModify(SfxRequest &rReq)
 
                 case SID_INSERT_FLD_TIME_FIX:
                     pFieldItem.reset(new SvxFieldItem(
-                        SvxExtTimeField( ::tools::Time( ::tools::Time::SYSTEM ), SVXTIMETYPE_FIX ), EE_FEATURE_FIELD ));
+                        SvxExtTimeField( ::tools::Time( ::tools::Time::SYSTEM ), SvxTimeType::Fix ), EE_FEATURE_FIELD ));
                 break;
 
                 case SID_INSERT_FLD_TIME_VAR:
@@ -582,8 +569,9 @@ void OutlineViewShell::FuTemporaryModify(SfxRequest &rReq)
             {
                 // Dialog...
                 SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
-                std::unique_ptr<AbstractSdModifyFieldDlg> pDlg(pFact ? pFact->CreateSdModifyFieldDlg(GetActiveWindow(), pFldItem->GetField(), pOutlinerView->GetAttribs() ) : nullptr);
-                if( pDlg && (pDlg->Execute() == RET_OK) )
+                vcl::Window* pWin = GetActiveWindow();
+                ScopedVclPtr<AbstractSdModifyFieldDlg> pDlg(pFact->CreateSdModifyFieldDlg(pWin ? pWin->GetFrameWeld() : nullptr, pFldItem->GetField(), pOutlinerView->GetAttribs() ));
+                if( pDlg->Execute() == RET_OK )
                 {
                     std::unique_ptr<SvxFieldData> pField(pDlg->GetField());
                     if( pField )

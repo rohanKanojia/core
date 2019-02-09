@@ -80,15 +80,14 @@ void RootAccess::initBroadcaster(
         modifications, broadcaster, changesListeners_.empty() ? nullptr : &changes);
     if (!changes.empty()) {
         css::util::ChangesSet set(comphelper::containerToSequence(changes));
-        for (ChangesListeners::iterator i(changesListeners_.begin());
-             i != changesListeners_.end(); ++i)
+        for (auto const& changesListener : changesListeners_)
         {
             cppu::OWeakObject* pSource = static_cast< cppu::OWeakObject * >(this);
             css::uno::Reference< css::uno::XInterface > xBase( pSource, css::uno::UNO_QUERY );
             broadcaster->addChangesNotification(
-                *i,
+                changesListener,
                 css::util::ChangesEvent(
-                    pSource, makeAny( xBase ), set));
+                    pSource, css::uno::Any( xBase ), set));
         }
     }
 }
@@ -101,7 +100,7 @@ void RootAccess::release() throw () {
     Access::release();
 }
 
-OUString RootAccess::getAbsolutePathRepresentation() {
+OUString const & RootAccess::getAbsolutePathRepresentation() {
     getNode(); // turn pathRepresentation_ into canonic form
     return pathRepresentation_;
 }
@@ -113,7 +112,6 @@ void RootAccess::setAlive(bool b) {
 
 void RootAccess::addChangesListener(
     css::uno::Reference< css::util::XChangesListener > const & aListener)
-    throw (css::uno::RuntimeException, std::exception)
 {
     assert(thisIs(IS_ANY));
     {
@@ -136,7 +134,6 @@ void RootAccess::addChangesListener(
 
 void RootAccess::removeChangesListener(
     css::uno::Reference< css::util::XChangesListener > const & aListener)
-    throw (css::uno::RuntimeException, std::exception)
 {
     assert(thisIs(IS_ANY));
     osl::MutexGuard g(*lock_);
@@ -148,9 +145,6 @@ void RootAccess::removeChangesListener(
 }
 
 void RootAccess::commitChanges()
-    throw (css::lang::WrappedTargetException,
-           css::uno::RuntimeException,
-           std::exception)
 {
     assert(thisIs(IS_UPDATE));
     if (!alive_)
@@ -176,7 +170,7 @@ void RootAccess::commitChanges()
     bc.send();
 }
 
-sal_Bool RootAccess::hasPendingChanges() throw (css::uno::RuntimeException, std::exception) {
+sal_Bool RootAccess::hasPendingChanges() {
     assert(thisIs(IS_UPDATE));
     osl::MutexGuard g(*lock_);
     checkLocalizedPropertyAccess();
@@ -187,7 +181,6 @@ sal_Bool RootAccess::hasPendingChanges() throw (css::uno::RuntimeException, std:
 }
 
 css::util::ChangesSet RootAccess::getPendingChanges()
-    throw (css::uno::RuntimeException, std::exception)
 {
     assert(thisIs(IS_UPDATE));
     osl::MutexGuard g(*lock_);
@@ -273,11 +266,10 @@ void RootAccess::addSupportedServiceNames(
 
 void RootAccess::initDisposeBroadcaster(Broadcaster * broadcaster) {
     assert(broadcaster != nullptr);
-    for (ChangesListeners::iterator i(changesListeners_.begin());
-         i != changesListeners_.end(); ++i)
+    for (auto const& changesListener : changesListeners_)
     {
         broadcaster->addDisposeNotification(
-            i->get(),
+            changesListener.get(),
             css::lang::EventObject(static_cast< cppu::OWeakObject * >(this)));
     }
     Access::initDisposeBroadcaster(broadcaster);
@@ -289,7 +281,6 @@ void RootAccess::clearListeners() throw() {
 }
 
 css::uno::Any RootAccess::queryInterface(css::uno::Type const & aType)
-    throw (css::uno::RuntimeException, std::exception)
 {
     assert(thisIs(IS_ANY));
     osl::MutexGuard g(*lock_);
@@ -311,7 +302,6 @@ css::uno::Any RootAccess::queryInterface(css::uno::Type const & aType)
 }
 
 OUString RootAccess::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     assert(thisIs(IS_ANY));
     osl::MutexGuard g(*lock_);

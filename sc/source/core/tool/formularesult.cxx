@@ -7,28 +7,37 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "formularesult.hxx"
-#include "scmatrix.hxx"
+#include <formularesult.hxx>
+#include <scmatrix.hxx>
+#include <token.hxx>
+
+#include <sal/log.hxx>
 
 namespace sc {
 
-FormulaResultValue::FormulaResultValue() : meType(Invalid), mfValue(0.0), mnError(0) {}
-FormulaResultValue::FormulaResultValue( double fValue ) : meType(Value), mfValue(fValue), mnError(0) {}
-FormulaResultValue::FormulaResultValue( const svl::SharedString& rStr ) : meType(String), mfValue(0.0), maString(rStr), mnError(0) {}
-FormulaResultValue::FormulaResultValue( sal_uInt16 nErr ) : meType(Error), mfValue(0.0), mnError(nErr) {}
+FormulaResultValue::FormulaResultValue() : meType(Invalid), mfValue(0.0), mnError(FormulaError::NONE) {}
+FormulaResultValue::FormulaResultValue( double fValue ) : meType(Value), mfValue(fValue), mnError(FormulaError::NONE) {}
+FormulaResultValue::FormulaResultValue( const svl::SharedString& rStr ) : meType(String), mfValue(0.0), maString(rStr), mnError(FormulaError::NONE) {}
+FormulaResultValue::FormulaResultValue( FormulaError nErr ) : meType(Error), mfValue(0.0), mnError(nErr) {}
 
 }
 
 ScFormulaResult::ScFormulaResult() :
-    mpToken(nullptr), mnError(0), mbToken(true),
-    mbEmpty(false), mbEmptyDisplayedAsString(false),
-    meMultiline(MULTILINE_UNKNOWN) {}
+    mpToken(nullptr),
+    mbToken(true),
+    mbEmpty(false),
+    mbEmptyDisplayedAsString(false),
+    mbValueCached(false),
+    meMultiline(MULTILINE_UNKNOWN),
+    mnError(FormulaError::NONE) {}
 
 ScFormulaResult::ScFormulaResult( const ScFormulaResult & r ) :
-    mnError( r.mnError), mbToken( r.mbToken),
+    mbToken( r.mbToken),
     mbEmpty( r.mbEmpty),
     mbEmptyDisplayedAsString( r.mbEmptyDisplayedAsString),
-    meMultiline( r.meMultiline)
+    mbValueCached( r.mbValueCached),
+    meMultiline( r.meMultiline),
+    mnError( r.mnError)
 {
     if (mbToken)
     {
@@ -55,8 +64,12 @@ ScFormulaResult::ScFormulaResult( const ScFormulaResult & r ) :
 }
 
 ScFormulaResult::ScFormulaResult( const formula::FormulaToken* p ) :
-    mnError(0), mbToken(false), mbEmpty(false), mbEmptyDisplayedAsString(false),
-    meMultiline(MULTILINE_UNKNOWN)
+    mbToken(false),
+    mbEmpty(false),
+    mbEmptyDisplayedAsString(false),
+    mbValueCached(false),
+    meMultiline(MULTILINE_UNKNOWN),
+    mnError(FormulaError::NONE)
 {
     SetToken( p);
 }
@@ -69,10 +82,11 @@ ScFormulaResult::~ScFormulaResult()
 
 void ScFormulaResult::ResetToDefaults()
 {
-    mnError = 0;
+    mnError = FormulaError::NONE;
     mbEmpty = false;
     mbEmptyDisplayedAsString = false;
     meMultiline = MULTILINE_UNKNOWN;
+    mbValueCached = false;
 }
 
 void ScFormulaResult::ResolveToken( const formula::FormulaToken * p )
@@ -101,12 +115,17 @@ void ScFormulaResult::ResolveToken( const formula::FormulaToken * p )
                 p->DecRef();
                 mbToken = false;
                 meMultiline = MULTILINE_FALSE;
+                // Take advantage of fast double result return for empty result token.
+                // by setting mfValue to 0 and turning on mbValueCached flag.
+                mfValue = 0.0;
+                mbValueCached = true;
                 break;
             case formula::svDouble:
                 mfValue = p->GetDouble();
                 p->DecRef();
                 mbToken = false;
                 meMultiline = MULTILINE_FALSE;
+                mbValueCached = true;
                 break;
             default:
                 mpToken = p;
@@ -125,6 +144,11 @@ void ScFormulaResult::Assign( const ScFormulaResult & r )
 {
     if (this == &r)
         return;
+
+    // It is important to reset the value-cache flag to that of the source
+    // unconditionally.
+    mbValueCached = r.mbValueCached;
+
     if (r.mbEmpty)
     {
         if (mbToken && mpToken)
@@ -133,6 +157,8 @@ void ScFormulaResult::Assign( const ScFormulaResult & r )
         mbEmpty = true;
         mbEmptyDisplayedAsString = r.mbEmptyDisplayedAsString;
         meMultiline = r.meMultiline;
+        // here r.mfValue will be 0.0 which is ensured in ResolveToken().
+        mfValue = 0.0;
     }
     else if (r.mbToken)
     {
@@ -148,7 +174,7 @@ void ScFormulaResult::Assign( const ScFormulaResult & r )
         SetDouble( r.mfValue);
     // If there was an error there will be an error, no matter what Set...()
     // methods did.
-    mnError = r.mnError;
+    SetResultError(r.mnError);
 }
 
 void ScFormulaResult::SetToken( const formula::FormulaToken* p )
@@ -213,13 +239,14 @@ void ScFormulaResult::SetDouble( double f )
         mfValue = f;
         mbToken = false;
         meMultiline = MULTILINE_FALSE;
+        mbValueCached = true;
     }
 }
 
 formula::StackVar ScFormulaResult::GetType() const
 {
     // Order is significant.
-    if (mnError)
+    if (mnError != FormulaError::NONE)
         return formula::svError;
     if (mbEmpty)
         return formula::svEmptyCell;
@@ -243,33 +270,50 @@ bool ScFormulaResult::IsEmptyDisplayedAsString() const
 {
     if (mbEmpty)
         return mbEmptyDisplayedAsString;
-    if (GetType() == formula::svMatrixCell)
+    switch (GetType())
     {
-        // don't need to test for mpToken here, GetType() already did it
-        const ScEmptyCellToken* p = dynamic_cast<const ScEmptyCellToken*>(
-                static_cast<const ScMatrixCellResultToken*>(
-                    mpToken)->GetUpperLeftToken().get());
-        if (p)
-            return p->IsDisplayedAsString();
+        case formula::svMatrixCell:
+            {
+                // don't need to test for mpToken here, GetType() already did it
+                const ScEmptyCellToken* p = dynamic_cast<const ScEmptyCellToken*>(
+                        static_cast<const ScMatrixCellResultToken*>(
+                            mpToken)->GetUpperLeftToken().get());
+                if (p)
+                    return p->IsDisplayedAsString();
+            }
+        break;
+        case formula::svHybridCell:
+            {
+                const ScHybridCellToken* p = dynamic_cast<const ScHybridCellToken*>(mpToken);
+                if (p)
+                    return p->IsEmptyDisplayedAsString();
+            }
+        break;
+        default:
+        break;
     }
     return false;
 }
 
 namespace {
 
-inline bool isValue( formula::StackVar sv )
+bool isValue( formula::StackVar sv )
 {
     return sv == formula::svDouble || sv == formula::svError
-        || sv == formula::svEmptyCell || sv == formula::svHybridValueCell;
+        || sv == formula::svEmptyCell
+        // The initial uninitialized result value is double 0.0, even if the type
+        // is unknown, so the interpreter asking for it gets that double
+        // instead of having to convert a string which may result in #VALUE!
+        // (otherwise the unknown would be neither error nor double nor string)
+        || sv == formula::svUnknown;
 }
 
-inline bool isString( formula::StackVar sv )
+bool isString( formula::StackVar sv )
 {
     switch (sv)
     {
         case formula::svString:
         case formula::svHybridCell:
-        case formula::svHybridValueCell:
             return true;
         default:
             break;
@@ -282,6 +326,9 @@ inline bool isString( formula::StackVar sv )
 
 bool ScFormulaResult::IsValue() const
 {
+    if (IsEmptyDisplayedAsString())
+        return true;
+
     return isValue(GetCellResultType());
 }
 
@@ -291,7 +338,6 @@ bool ScFormulaResult::IsValueNoError() const
     {
         case formula::svDouble:
         case formula::svEmptyCell:
-        case formula::svHybridValueCell:
             return true;
         default:
             return false;
@@ -311,9 +357,15 @@ bool ScFormulaResult::IsMultiline() const
     return meMultiline == MULTILINE_TRUE;
 }
 
-bool ScFormulaResult::GetErrorOrDouble( sal_uInt16& rErr, double& rVal ) const
+bool ScFormulaResult::GetErrorOrDouble( FormulaError& rErr, double& rVal ) const
 {
-    if (mnError)
+    if (mbValueCached)
+    {
+        rVal = mfValue;
+        return true;
+    }
+
+    if (mnError != FormulaError::NONE)
     {
         rErr = mnError;
         return true;
@@ -334,7 +386,7 @@ bool ScFormulaResult::GetErrorOrDouble( sal_uInt16& rErr, double& rVal ) const
         }
     }
 
-    if (rErr)
+    if (rErr != FormulaError::NONE)
         return true;
 
     if (!isValue(sv))
@@ -346,11 +398,14 @@ bool ScFormulaResult::GetErrorOrDouble( sal_uInt16& rErr, double& rVal ) const
 
 sc::FormulaResultValue ScFormulaResult::GetResult() const
 {
-    if (mnError)
+    if (mbValueCached)
+        return sc::FormulaResultValue(mfValue);
+
+    if (mnError != FormulaError::NONE)
         return sc::FormulaResultValue(mnError);
 
     formula::StackVar sv = GetCellResultType();
-    sal_uInt16 nErr = 0;
+    FormulaError nErr = FormulaError::NONE;
     if (sv == formula::svError)
     {
         if (GetType() == formula::svMatrixCell)
@@ -365,7 +420,7 @@ sc::FormulaResultValue ScFormulaResult::GetResult() const
         }
     }
 
-    if (nErr)
+    if (nErr != FormulaError::NONE)
         return sc::FormulaResultValue(nErr);
 
     if (isValue(sv))
@@ -382,9 +437,9 @@ sc::FormulaResultValue ScFormulaResult::GetResult() const
     return sc::FormulaResultValue();
 }
 
-sal_uInt16 ScFormulaResult::GetResultError() const
+FormulaError ScFormulaResult::GetResultError() const
 {
-    if (mnError)
+    if (mnError != FormulaError::NONE)
         return mnError;
     formula::StackVar sv = GetCellResultType();
     if (sv == formula::svError)
@@ -396,12 +451,14 @@ sal_uInt16 ScFormulaResult::GetResultError() const
         if (mpToken)
             return mpToken->GetError();
     }
-    return 0;
+    return FormulaError::NONE;
 }
 
-void ScFormulaResult::SetResultError( sal_uInt16 nErr )
+void ScFormulaResult::SetResultError( FormulaError nErr )
 {
     mnError = nErr;
+    if (mnError != FormulaError::NONE)
+        mbValueCached = false;
 }
 
 formula::FormulaConstTokenRef ScFormulaResult::GetToken() const
@@ -421,6 +478,9 @@ formula::FormulaConstTokenRef ScFormulaResult::GetCellResultToken() const
 
 double ScFormulaResult::GetDouble() const
 {
+    if (mbValueCached)
+        return mfValue;
+
     if (mbToken)
     {
         // Should really not be of type formula::svDouble here.
@@ -429,7 +489,6 @@ double ScFormulaResult::GetDouble() const
             switch (mpToken->GetType())
             {
                 case formula::svHybridCell:
-                case formula::svHybridValueCell:
                     return mpToken->GetDouble();
                 case formula::svMatrixCell:
                     {
@@ -443,6 +502,8 @@ double ScFormulaResult::GetDouble() const
                     ;   // nothing
             }
         }
+        // Note that we reach here also for the default ctor and
+        // formula::svUnknown from GetType().
         return 0.0;
     }
     if (mbEmpty)
@@ -458,7 +519,6 @@ svl::SharedString ScFormulaResult::GetString() const
         {
             case formula::svString:
             case formula::svHybridCell:
-            case formula::svHybridValueCell:
                 return mpToken->GetString();
             case formula::svMatrixCell:
                 {
@@ -505,7 +565,7 @@ void ScFormulaResult::SetHybridDouble( double f )
             svl::SharedString aString = GetString();
             OUString aFormula( GetHybridFormula());
             mpToken->DecRef();
-            mpToken = new ScHybridCellToken( f, aString, aFormula);
+            mpToken = new ScHybridCellToken( f, aString, aFormula, false);
             mpToken->IncRef();
         }
     }
@@ -514,6 +574,7 @@ void ScFormulaResult::SetHybridDouble( double f )
         mfValue = f;
         mbToken = false;
         meMultiline = MULTILINE_FALSE;
+        mbValueCached = true;
     }
 }
 
@@ -525,7 +586,24 @@ void ScFormulaResult::SetHybridString( const svl::SharedString& rStr )
     ResetToDefaults();
     if (mbToken && mpToken)
         mpToken->DecRef();
-    mpToken = new ScHybridCellToken( f, rStr, aFormula);
+    mpToken = new ScHybridCellToken( f, rStr, aFormula, false);
+    mpToken->IncRef();
+    mbToken = true;
+}
+
+void ScFormulaResult::SetHybridEmptyDisplayedAsString()
+{
+    // Obtain values before changing anything.
+    double f = GetDouble();
+    OUString aFormula( GetHybridFormula());
+    svl::SharedString aStr = GetString();
+    ResetToDefaults();
+    if (mbToken && mpToken)
+        mpToken->DecRef();
+    // XXX NOTE: we can't use mbEmpty and mbEmptyDisplayedAsString here because
+    // GetType() intentionally returns svEmptyCell if mbEmpty==true. So stick
+    // it into the ScHybridCellToken.
+    mpToken = new ScHybridCellToken( f, aStr, aFormula, true);
     mpToken->IncRef();
     mbToken = true;
 }
@@ -538,12 +616,12 @@ void ScFormulaResult::SetHybridFormula( const OUString & rFormula )
     ResetToDefaults();
     if (mbToken && mpToken)
         mpToken->DecRef();
-    mpToken = new ScHybridCellToken( f, aStr, rFormula);
+    mpToken = new ScHybridCellToken( f, aStr, rFormula, false);
     mpToken->IncRef();
     mbToken = true;
 }
 
-void ScFormulaResult::SetMatrix( SCCOL nCols, SCROW nRows, const ScConstMatrixRef& pMat, formula::FormulaToken* pUL )
+void ScFormulaResult::SetMatrix( SCCOL nCols, SCROW nRows, const ScConstMatrixRef& pMat, const formula::FormulaToken* pUL )
 {
     ResetToDefaults();
     if (mbToken && mpToken)

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<interface domain="dkt">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="UpdateInstallDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Download and Installation</property>
+    <property name="title" translatable="yes" context="updateinstalldialog|UpdateInstallDialog">Download and Installation</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
@@ -17,9 +17,8 @@
             <property name="can_focus">False</property>
             <property name="layout_style">end</property>
             <child>
-              <object class="GtkButton" id="HELP">
+              <object class="GtkButton" id="help">
                 <property name="label">gtk-help</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -33,9 +32,8 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="OK">
+              <object class="GtkButton" id="ok">
                 <property name="label">gtk-ok</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="sensitive">False</property>
                 <property name="can_focus">True</property>
@@ -49,9 +47,8 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="CANCEL">
+              <object class="GtkButton" id="cancel">
                 <property name="label">gtk-cancel</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -84,7 +81,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="halign">start</property>
-                <property name="label" translatable="yes">Downloading extensions...</property>
+                <property name="label" translatable="yes" context="updateinstalldialog|DOWNLOADING">Downloading extensions...</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">STATUSBAR</property>
               </object>
@@ -122,7 +119,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="halign">start</property>
-                <property name="label" translatable="yes">Result</property>
+                <property name="label" translatable="yes" context="updateinstalldialog|RESULTS">Result</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">INFO</property>
               </object>
@@ -157,9 +154,9 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">HELP</action-widget>
-      <action-widget response="0">OK</action-widget>
-      <action-widget response="0">CANCEL</action-widget>
+      <action-widget response="-11">help</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
     </action-widgets>
   </object>
 </interface>

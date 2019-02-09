@@ -28,21 +28,19 @@
 #include <paratr.hxx>
 #include <swcache.hxx>
 #include <swtblfmt.hxx>
+#include <frmatr.hxx>
 #include <svl/grabbagitem.hxx>
-#include <com/sun/star/beans/PropertyValues.hpp>
-
-//UUUU
 #include <svx/sdr/attribute/sdrallfillattributeshelper.hxx>
 #include <svx/unobrushitemhelper.hxx>
 #include <svx/xdef.hxx>
+#include <sal/log.hxx>
 
 using namespace com::sun::star;
 
 
 SwFormat::SwFormat( SwAttrPool& rPool, const sal_Char* pFormatNm,
               const sal_uInt16* pWhichRanges, SwFormat *pDrvdFrame,
-              sal_uInt16 nFormatWhich )
-    : SwModify( pDrvdFrame ),
+              sal_uInt16 nFormatWhich ) :
     m_aFormatName( OUString::createFromAscii(pFormatNm) ),
     m_aSet( rPool, pWhichRanges ),
     m_nWhichId( nFormatWhich ),
@@ -52,16 +50,18 @@ SwFormat::SwFormat( SwAttrPool& rPool, const sal_Char* pFormatNm,
 {
     m_bAutoUpdateFormat = false; // LAYER_IMPL
     m_bAutoFormat = true;
-    m_bWritten = m_bFormatInDTOR = m_bHidden = false;
+    m_bFormatInDTOR = m_bHidden = false;
 
     if( pDrvdFrame )
+    {
+        pDrvdFrame->Add(this);
         m_aSet.SetParent( &pDrvdFrame->m_aSet );
+    }
 }
 
 SwFormat::SwFormat( SwAttrPool& rPool, const OUString& rFormatNm,
               const sal_uInt16* pWhichRanges, SwFormat* pDrvdFrame,
-              sal_uInt16 nFormatWhich )
-    : SwModify( pDrvdFrame ),
+              sal_uInt16 nFormatWhich ) :
     m_aFormatName( rFormatNm ),
     m_aSet( rPool, pWhichRanges ),
     m_nWhichId( nFormatWhich ),
@@ -71,14 +71,16 @@ SwFormat::SwFormat( SwAttrPool& rPool, const OUString& rFormatNm,
 {
     m_bAutoUpdateFormat = false; // LAYER_IMPL
     m_bAutoFormat = true;
-    m_bWritten = m_bFormatInDTOR = m_bHidden = false;
+    m_bFormatInDTOR = m_bHidden = false;
 
     if( pDrvdFrame )
+    {
+        pDrvdFrame->Add(this);
         m_aSet.SetParent( &pDrvdFrame->m_aSet );
+    }
 }
 
-SwFormat::SwFormat( const SwFormat& rFormat )
-    : SwModify( rFormat.DerivedFrom() ),
+SwFormat::SwFormat( const SwFormat& rFormat ) :
     m_aFormatName( rFormat.m_aFormatName ),
     m_aSet( rFormat.m_aSet ),
     m_nWhichId( rFormat.m_nWhichId ),
@@ -86,13 +88,16 @@ SwFormat::SwFormat( const SwFormat& rFormat )
     m_nPoolHelpId( rFormat.GetPoolHelpId() ),
     m_nPoolHlpFileId( rFormat.GetPoolHlpFileId() )
 {
-    m_bWritten = m_bFormatInDTOR = false; // LAYER_IMPL
+    m_bFormatInDTOR = false; // LAYER_IMPL
     m_bAutoFormat = rFormat.m_bAutoFormat;
     m_bHidden = rFormat.m_bHidden;
     m_bAutoUpdateFormat = rFormat.m_bAutoUpdateFormat;
 
-    if( rFormat.DerivedFrom() )
-        m_aSet.SetParent( &rFormat.DerivedFrom()->m_aSet );
+    if( auto pDerived = rFormat.DerivedFrom() )
+    {
+        pDerived->Add(this);
+        m_aSet.SetParent( &pDerived->m_aSet );
+    }
     // a few special treatments for attributes
     m_aSet.SetModifyAtAttr( this );
 }
@@ -128,20 +133,14 @@ SwFormat &SwFormat::operator=(const SwFormat& rFormat)
         ModifyNotification( &aChgOld, &aChgNew ); // send all modified ones
     }
 
-    if( GetRegisteredIn() != rFormat.GetRegisteredIn() )
+    if(GetRegisteredIn() != rFormat.GetRegisteredIn())
     {
-        if( GetRegisteredIn() )
-            GetRegisteredInNonConst()->Remove(this);
-        if( rFormat.GetRegisteredIn() )
-        {
-            const_cast<SwFormat&>(rFormat).GetRegisteredInNonConst()->Add(this);
-            m_aSet.SetParent( &rFormat.m_aSet );
-        }
-        else
-        {
-            m_aSet.SetParent( nullptr );
-        }
+        StartListeningToSameModifyAs(rFormat);
+        m_aSet.SetParent( GetRegisteredIn()
+            ? &rFormat.m_aSet
+            : nullptr);
     }
+
     m_bAutoFormat = rFormat.m_bAutoFormat;
     m_bHidden = rFormat.m_bHidden;
     m_bAutoUpdateFormat = rFormat.m_bAutoUpdateFormat;
@@ -217,8 +216,6 @@ SwFormat::~SwFormat()
     // ones on DerivedFrom.
     if( HasWriterListeners() )
     {
-        OSL_ENSURE( DerivedFrom(), "SwFormat::~SwFormat: Def dependents!" );
-
         m_bFormatInDTOR = true;
 
         SwFormat* pParentFormat = DerivedFrom();
@@ -272,7 +269,7 @@ void SwFormat::Modify( const SfxPoolItem* pOldValue, const SfxPoolItem* pNewValu
                 else
                 {
                     // otherwise de-register at least from dying one
-                    GetRegisteredIn()->Remove( this );
+                    EndListeningAll();
                     m_aSet.SetParent( nullptr );
                 }
             }
@@ -304,19 +301,6 @@ void SwFormat::Modify( const SfxPoolItem* pOldValue, const SfxPoolItem* pNewValu
         {
             // attach Set to new parent
             m_aSet.SetParent( DerivedFrom() ? &DerivedFrom()->m_aSet : nullptr );
-        }
-        break;
-    case RES_RESET_FMTWRITTEN:
-        {
-            ResetWritten();
-
-            // mba: here we don't use the additional stuff from NotifyClients().
-            // should we?!
-            // mba: move the code that ignores this event to the clients
-
-            // pass Hint only to dependent formats (no Frames)
-            //ModifyBroadcast( pOldValue, pNewValue, TYPE(SwFormat) );
-            //bContinue = false;
         }
         break;
     default:
@@ -361,11 +345,11 @@ bool SwFormat::SetDerivedFrom(SwFormat *pDerFrom)
     if ( (pDerFrom == DerivedFrom()) || (pDerFrom == this) )
         return false;
 
-    OSL_ENSURE( Which()==pDerFrom->Which()
-            || ( Which()==RES_CONDTXTFMTCOLL && pDerFrom->Which()==RES_TXTFMTCOLL)
-            || ( Which()==RES_TXTFMTCOLL && pDerFrom->Which()==RES_CONDTXTFMTCOLL)
-            || ( Which()==RES_FLYFRMFMT && pDerFrom->Which()==RES_FRMFMT ),
-            "SetDerivedFrom: derive apples from oranges?");
+    assert(    Which()==pDerFrom->Which()
+            || (Which()==RES_CONDTXTFMTCOLL && pDerFrom->Which()==RES_TXTFMTCOLL)
+            || (Which()==RES_TXTFMTCOLL && pDerFrom->Which()==RES_CONDTXTFMTCOLL)
+            || (Which()==RES_FLYFRMFMT && pDerFrom->Which()==RES_FRMFMT)
+            );
 
     if ( IsInCache() )
     {
@@ -393,7 +377,7 @@ const SfxPoolItem& SwFormat::GetFormatAttr( sal_uInt16 nWhich, bool bInParents )
 {
     if (RES_BACKGROUND == nWhich && supportsFullDrawingLayerFillAttributeSet())
     {
-        //UUUU FALLBACKBREAKHERE should not be used; instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST]
+        // FALLBACKBREAKHERE should not be used; instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST]
         SAL_INFO("sw.core", "Do no longer use SvxBrushItem, instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST] FillAttributes or makeBackgroundBrushItem (simple fallback is in place and used)");
         static SvxBrushItem aSvxBrushItem(RES_BACKGROUND);
 
@@ -412,7 +396,7 @@ SfxItemState SwFormat::GetItemState( sal_uInt16 nWhich, bool bSrchInParent, cons
 {
     if (RES_BACKGROUND == nWhich && supportsFullDrawingLayerFillAttributeSet())
     {
-        //UUUU FALLBACKBREAKHERE should not be used; instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST]
+        // FALLBACKBREAKHERE should not be used; instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST]
         SAL_INFO("sw.core", "Do no longer use SvxBrushItem, instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST] FillAttributes or SwFormat::GetBackgroundStat (simple fallback is in place and used)");
         const drawinglayer::attribute::SdrAllFillAttributesHelperPtr aFill = getSdrAllFillAttributesHelper();
 
@@ -447,7 +431,7 @@ SfxItemState SwFormat::GetBackgroundState(SvxBrushItem &rItem) const
 {
     if (supportsFullDrawingLayerFillAttributeSet())
     {
-        //UUUU FALLBACKBREAKHERE should not be used; instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST]
+        // FALLBACKBREAKHERE should not be used; instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST]
         const drawinglayer::attribute::SdrAllFillAttributesHelperPtr aFill = getSdrAllFillAttributesHelper();
 
         // check if the new fill attributes are used
@@ -481,12 +465,11 @@ bool SwFormat::SetFormatAttr( const SfxPoolItem& rAttr )
 
     bool bRet = false;
 
-    //UUUU
     if (RES_BACKGROUND == rAttr.Which() && supportsFullDrawingLayerFillAttributeSet())
     {
-        //UUUU FALLBACKBREAKHERE should not be used; instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST]
+        // FALLBACKBREAKHERE should not be used; instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST]
         SAL_INFO("sw.core", "Do no longer use SvxBrushItem, instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST] FillAttributes (simple fallback is in place and used)");
-        SfxItemSet aTempSet(*m_aSet.GetPool(), XATTR_FILL_FIRST, XATTR_FILL_LAST, 0, 0);
+        SfxItemSet aTempSet(*m_aSet.GetPool(), svl::Items<XATTR_FILL_FIRST, XATTR_FILL_LAST>{});
         const SvxBrushItem& rSource = static_cast< const SvxBrushItem& >(rAttr);
 
         // fill a local ItemSet with the attributes corresponding as good as possible
@@ -496,7 +479,8 @@ bool SwFormat::SetFormatAttr( const SfxPoolItem& rAttr )
 
         if(IsModifyLocked())
         {
-            if( ( bRet = m_aSet.Put( aTempSet ) ) )
+            bRet = m_aSet.Put( aTempSet );
+            if( bRet )
             {
                 m_aSet.SetModifyAtAttr( this );
             }
@@ -529,7 +513,8 @@ bool SwFormat::SetFormatAttr( const SfxPoolItem& rAttr )
           (RES_GRFFMTCOLL == nFormatWhich  ||
            RES_TXTFMTCOLL == nFormatWhich ) ) )
     {
-        if( ( bRet = (nullptr != m_aSet.Put( rAttr ))) )
+        bRet = nullptr != m_aSet.Put( rAttr );
+        if( bRet )
             m_aSet.SetModifyAtAttr( this );
         // #i71574#
         if ( nFormatWhich == RES_TXTFMTCOLL && rAttr.Which() == RES_PARATR_NUMRULE )
@@ -571,11 +556,11 @@ bool SwFormat::SetFormatAttr( const SfxItemSet& rSet )
 
     bool bRet = false;
 
-    //UUUU Use local copy to be able to apply needed changes, e.g. call
+    // Use local copy to be able to apply needed changes, e.g. call
     // CheckForUniqueItemForLineFillNameOrIndex which is needed for NameOrIndex stuff
     SfxItemSet aTempSet(rSet);
 
-    //UUUU Need to check for unique item for DrawingLayer items of type NameOrIndex
+    // Need to check for unique item for DrawingLayer items of type NameOrIndex
     // and evtl. correct that item to ensure unique names for that type. This call may
     // modify/correct entries inside of the given SfxItemSet
     if(GetDoc())
@@ -589,7 +574,7 @@ bool SwFormat::SetFormatAttr( const SfxItemSet& rSet )
 
         if(SfxItemState::SET == aTempSet.GetItemState(RES_BACKGROUND, false, &pSource))
         {
-            //UUUU FALLBACKBREAKHERE should not be used; instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST]
+            // FALLBACKBREAKHERE should not be used; instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST]
             SAL_INFO("sw.core", "Do no longer use SvxBrushItem, instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST] FillAttributes (simple fallback is in place and used)");
 
             // copy all items to be set anyways to a local ItemSet with is also prepared for the new
@@ -600,7 +585,8 @@ bool SwFormat::SetFormatAttr( const SfxItemSet& rSet )
 
             if(IsModifyLocked())
             {
-                if( ( bRet = m_aSet.Put( aTempSet ) ) )
+                bRet = m_aSet.Put( aTempSet );
+                if( bRet )
                 {
                     m_aSet.SetModifyAtAttr( this );
                 }
@@ -634,7 +620,8 @@ bool SwFormat::SetFormatAttr( const SfxItemSet& rSet )
            ( RES_GRFFMTCOLL == nFormatWhich ||
              RES_TXTFMTCOLL == nFormatWhich ) ) )
     {
-        if( ( bRet = m_aSet.Put( aTempSet )) )
+        bRet = m_aSet.Put( aTempSet );
+        if( bRet )
             m_aSet.SetModifyAtAttr( this );
         // #i71574#
         if ( nFormatWhich == RES_TXTFMTCOLL )
@@ -721,11 +708,6 @@ sal_uInt16 SwFormat::ResetAllFormatAttr()
     return aNew.Count();
 }
 
-bool SwFormat::GetInfo( SfxPoolItem& rInfo ) const
-{
-    return SwModify::GetInfo( rInfo );
-}
-
 void SwFormat::DelDiffs( const SfxItemSet& rSet )
 {
     if( !m_aSet.Count() )
@@ -786,10 +768,7 @@ void SwFormat::GetGrabBagItem(uno::Any& rVal) const
     if (m_pGrabBagItem.get())
         m_pGrabBagItem->QueryValue(rVal);
     else
-    {
-        uno::Sequence<beans::PropertyValue> aValue(0);
-        rVal = uno::makeAny(aValue);
-    }
+        rVal <<= uno::Sequence<beans::PropertyValue>();
 }
 
 void SwFormat::SetGrabBagItem(const uno::Any& rVal)
@@ -800,12 +779,11 @@ void SwFormat::SetGrabBagItem(const uno::Any& rVal)
     m_pGrabBagItem->PutValue(rVal, 0);
 }
 
-//UUUU
 SvxBrushItem SwFormat::makeBackgroundBrushItem(bool bInP) const
 {
     if (supportsFullDrawingLayerFillAttributeSet())
     {
-        //UUUU FALLBACKBREAKHERE should not be used; instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST]
+        // FALLBACKBREAKHERE should not be used; instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST]
         SAL_INFO("sw.core", "Do no longer use SvxBrushItem, instead use [XATTR_FILL_FIRST .. XATTR_FILL_LAST] FillAttributes (simple fallback is in place and used)");
 
         // fill the local static SvxBrushItem from the current ItemSet so that
@@ -817,7 +795,6 @@ SvxBrushItem SwFormat::makeBackgroundBrushItem(bool bInP) const
     return m_aSet.GetBackground(bInP);
 }
 
-//UUUU
 drawinglayer::attribute::SdrAllFillAttributesHelperPtr SwFormat::getSdrAllFillAttributesHelper() const
 {
     return drawinglayer::attribute::SdrAllFillAttributesHelperPtr();

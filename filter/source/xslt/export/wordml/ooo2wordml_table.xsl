@@ -184,7 +184,7 @@
         </xsl:variable>
         <xsl:choose>
             <!-- if table:table-column has attribute table:number-columns-repeated, then call the recursion
-			temple repeat-gridcol to produce multiple w:gridCol in MS word. Gary.Yang   -->
+            temple repeat-gridcol to produce multiple w:gridCol in MS word. Gary.Yang   -->
             <xsl:when test="@table:number-columns-repeated">
                 <xsl:call-template name="repeat-gridcol">
                     <xsl:with-param name="grid-repeat-count" select="@table:number-columns-repeated"/>
@@ -229,9 +229,9 @@
     <xsl:template match="table:table-cell ">
         <xsl:element name="w:tc">
             <xsl:element name="w:tcPr">
-                <!-- to caclate the table-cell width Gary.Yang -->
+                <!-- to calculate the table-cell width Gary.Yang -->
                 <xsl:choose>
-                    <!--when the table-cell  contains the sub-table -->
+                    <!--when the table-cell contains the sub-table -->
                     <xsl:when test="table:table/@table:is-sub-table= 'true' ">
                         <xsl:variable name="table-cell-width">
                             <xsl:call-template name="calculate-sub-table-width">

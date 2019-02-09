@@ -19,20 +19,11 @@
 #ifndef INCLUDED_SVX_DIALMGR_HXX
 #define INCLUDED_SVX_DIALMGR_HXX
 
-#include <tools/resid.hxx>
+#include <rtl/ustring.hxx>
 #include <svx/svxdllapi.h>
 
-// forward ---------------------------------------------------------------
-
-class ResMgr;
-struct SVX_DLLPUBLIC DialogsResMgr
-{
-    static ResMgr*      GetResMgr();
-};
-
-#define DIALOG_MGR()    (*DialogsResMgr::GetResMgr())
-#define SVX_RES(i)      ResId(i,DIALOG_MGR())
-#define SVX_RESSTR(i)   SVX_RES(i).toString()
+SVX_DLLPUBLIC std::locale SvxResLocale();
+SVX_DLLPUBLIC OUString SvxResId(const char* pId);
 
 #endif
 

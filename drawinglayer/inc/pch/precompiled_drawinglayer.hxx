@@ -13,7 +13,7 @@
  manual changes will be rewritten by the next run of update_pch.sh (which presumably
  also fixes all possible problems, so it's usually better to use it).
 
- Generated on 2016-02-06 12:33:25 using:
+ Generated on 2017-09-20 22:52:28 using:
  ./bin/update_pch drawinglayer drawinglayer --cutoff=4 --exclude:system --exclude:module --exclude:local
 
  If after updating build fails, use the following command to locate conflicting headers:
@@ -24,6 +24,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdlib>
+#include <deque>
 #include <limits.h>
 #include <memory>
 #include <new>
@@ -31,12 +32,12 @@
 #include <ostream>
 #include <string.h>
 #include <vector>
-#include <boost/intrusive_ptr.hpp>
 #include <osl/diagnose.h>
 #include <osl/mutex.hxx>
 #include <osl/process.h>
 #include <rtl/alloc.h>
 #include <rtl/instance.hxx>
+#include <rtl/locale.h>
 #include <rtl/ref.hxx>
 #include <rtl/strbuf.hxx>
 #include <rtl/string.hxx>
@@ -52,6 +53,7 @@
 #include <sal/saldllapi.h>
 #include <sal/types.h>
 #include <vcl/bitmapex.hxx>
+#include <vcl/canvastools.hxx>
 #include <vcl/cursor.hxx>
 #include <vcl/dllapi.h>
 #include <vcl/event.hxx>
@@ -66,6 +68,7 @@
 #include <vcl/region.hxx>
 #include <vcl/salnativewidgets.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/uitest/factory.hxx>
 #include <vcl/vclenum.hxx>
 #include <vcl/vclevent.hxx>
 #include <vcl/vclptr.hxx>
@@ -78,7 +81,9 @@
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <basegfx/matrix/b3dhommatrix.hxx>
 #include <basegfx/numeric/ftools.hxx>
+#include <basegfx/point/b2dpoint.hxx>
 #include <basegfx/point/b3dpoint.hxx>
+#include <basegfx/polygon/b2dlinegeometry.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolygonclipper.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
@@ -89,11 +94,15 @@
 #include <basegfx/polygon/b3dpolypolygon.hxx>
 #include <basegfx/polygon/b3dpolypolygontools.hxx>
 #include <basegfx/range/b2drange.hxx>
+#include <basegfx/range/b2drectangle.hxx>
 #include <basegfx/range/b3drange.hxx>
 #include <basegfx/range/basicrange.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
+#include <basegfx/utils/gradienttools.hxx>
+#include <basegfx/utils/tools.hxx>
 #include <basegfx/tuple/b2dtuple.hxx>
 #include <basegfx/tuple/b3dtuple.hxx>
+#include <basegfx/vector/b2dsize.hxx>
 #include <basegfx/vector/b2dvector.hxx>
 #include <basegfx/vector/b2enums.hxx>
 #include <basegfx/vector/b2ivector.hxx>
@@ -107,30 +116,33 @@
 #include <com/sun/star/graphic/XPrimitive2D.hpp>
 #include <com/sun/star/graphic/XPrimitive3D.hpp>
 #include <com/sun/star/lang/Locale.hpp>
+#include <com/sun/star/rendering/PathCapType.hpp>
+#include <com/sun/star/rendering/PathJoinType.hpp>
+#include <com/sun/star/rendering/TexturingMode.hpp>
+#include <com/sun/star/rendering/XCanvas.hpp>
 #include <com/sun/star/uno/Reference.hxx>
-#include <comphelper/broadcasthelper.hxx>
+#include <com/sun/star/util/XAccounting.hpp>
+#include <comphelper/comphelperdllapi.h>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/sequence.hxx>
-#include <cppuhelper/compbase1.hxx>
-#include <cppuhelper/interfacecontainer.h>
+#include <cppuhelper/basemutex.hxx>
+#include <cppuhelper/compbase.hxx>
 #include <cppuhelper/weakref.hxx>
 #include <i18nlangtag/i18nlangtagdllapi.h>
 #include <i18nlangtag/lang.h>
 #include <i18nlangtag/languagetag.hxx>
 #include <o3tl/cow_wrapper.hxx>
+#include <o3tl/strong_int.hxx>
 #include <o3tl/typed_flags_set.hxx>
-#include <rsc/rsc-vcl-shared-types.hxx>
 #include <svtools/optionsdrawinglayer.hxx>
 #include <svtools/svtdllapi.h>
 #include <tools/color.hxx>
 #include <tools/fontenum.hxx>
 #include <tools/gen.hxx>
-#include <tools/resid.hxx>
 #include <tools/solar.h>
 #include <tools/toolsdllapi.h>
 #include <tools/wintypes.hxx>
 #include <drawinglayer/attribute/fillgradientattribute.hxx>
-#include <drawinglayer/attribute/lineattribute.hxx>
 #include <drawinglayer/attribute/materialattribute3d.hxx>
 #include <drawinglayer/attribute/sdrallattribute3d.hxx>
 #include <drawinglayer/attribute/sdrfillattribute.hxx>
@@ -163,6 +175,7 @@
 #include <drawinglayer/primitive2d/polygonprimitive2d.hxx>
 #include <drawinglayer/primitive2d/polypolygonprimitive2d.hxx>
 #include <drawinglayer/primitive2d/primitivetools2d.hxx>
+#include <drawinglayer/primitive2d/svggradientprimitive2d.hxx>
 #include <drawinglayer/primitive2d/textdecoratedprimitive2d.hxx>
 #include <drawinglayer/primitive2d/textlayoutdevice.hxx>
 #include <drawinglayer/primitive2d/textprimitive2d.hxx>

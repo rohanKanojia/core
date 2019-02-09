@@ -32,11 +32,8 @@ class SvxSearchItem;
 namespace basctl
 {
 
-class ExtraData
+class ExtraData final
 {
-private:
-    std::unique_ptr<SvxSearchItem> pSearchItem;
-
     LibInfo        aLibInfo;
 
     EntryDescriptor m_aLastEntryDesc;
@@ -47,8 +44,7 @@ private:
     bool            bChoosingMacro;
     bool            bShellInCriticalSection;
 
-protected:
-    DECL_STATIC_LINK_TYPED( ExtraData, GlobalBasicBreakHdl, StarBASIC *, sal_uInt16 );
+    DECL_STATIC_LINK( ExtraData, GlobalBasicBreakHdl, StarBASIC *, BasicDebugFlags );
 
 public:
     ExtraData();
@@ -57,13 +53,10 @@ public:
     LibInfo&         GetLibInfo () { return aLibInfo; }
 
     EntryDescriptor&  GetLastEntryDescriptor () { return m_aLastEntryDesc; }
-    void              SetLastEntryDescriptor (EntryDescriptor& rDesc) { m_aLastEntryDesc = rDesc; }
+    void              SetLastEntryDescriptor (EntryDescriptor const & rDesc) { m_aLastEntryDesc = rDesc; }
 
     bool&             ChoosingMacro()          { return bChoosingMacro; }
     bool&             ShellInCriticalSection() { return bShellInCriticalSection; }
-
-    SvxSearchItem&    GetSearchItem() const { return *pSearchItem; }
-    void              SetSearchItem( const SvxSearchItem& rItem );
 
     const OUString&   GetAddLibPath() const   { return aAddLibPath; }
     void              SetAddLibPath( const OUString& rPath ) { aAddLibPath = rPath; }

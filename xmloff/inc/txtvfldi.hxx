@@ -31,14 +31,8 @@
 
 
 /** helper class: parses value-type and associated value attributes */
-class XMLValueImportHelper
+class XMLValueImportHelper final
 {
-
-    const OUString sPropertyContent;
-    const OUString sPropertyValue;
-    const OUString sPropertyNumberFormat;
-    const OUString sPropertyIsFixedLanguage;
-
     SvXMLImport& rImport;
     XMLTextImportHelper& rHelper;
 
@@ -51,18 +45,13 @@ class XMLValueImportHelper
 
     bool bStringType;       /// is this a string (or a float) type?
     bool bFormatOK;         /// have we read a style:data-style-name attr.?
-    bool bTypeOK;           /// have we read a value-type attribute?
     bool bStringValueOK;    /// have we read a string-value attr.?
-    bool bFloatValueOK;     /// have we read any of the float attr.s?
     bool bFormulaOK;        /// have we read the formula attribute?
 
     const bool bSetType;    /// should PrepareField set the SetExp subtype?
     const bool bSetValue;   /// should PrepareField set content/value?
     const bool bSetStyle;   /// should PrepareField set NumberFormat?
     const bool bSetFormula; /// should PrepareField set Formula?
-
-    const bool bStringDefault;  /// default: string-value = content
-    const bool bFormulaDefault; /// default: formula = content
 
 public:
     XMLValueImportHelper(
@@ -73,8 +62,6 @@ public:
         bool bValue,                        /// process value (Prep.Field)
         bool bFormula);                     /// process formula (Prep.F.)
 
-    virtual ~XMLValueImportHelper();
-
     /// process attribute values
     void ProcessAttribute( sal_uInt16 nAttrToken,
                                    const OUString& sAttrValue );
@@ -84,12 +71,12 @@ public:
         const css::uno::Reference<css::beans::XPropertySet> & xPropertySet);
 
     /// is value a string (rather than double)?
-    inline bool IsStringValue() { return bStringType; }
+    bool IsStringValue() { return bStringType; }
 
     /// has format been read?
-    inline bool IsFormatOK() { return bFormatOK; }
+    bool IsFormatOK() { return bFormatOK; }
 
-    inline void SetDefault(const OUString& sStr) { sDefault = sStr; }
+    void SetDefault(const OUString& sStr) { sDefault = sStr; }
 };
 
 
@@ -119,15 +106,6 @@ public:
  */
 class XMLVarFieldImportContext : public XMLTextFieldImportContext
 {
-protected:
-    const OUString sPropertyContent;
-    const OUString sPropertyHint;
-    const OUString sPropertyHelp;
-    const OUString sPropertyTooltip;
-    const OUString sPropertyIsVisible;
-    const OUString sPropertyIsDisplayFormula;
-    const OUString sPropertyCurrentPresentation;
-
 private:
     OUString sName;              /// name attribute
     OUString sFormula;           /// formula attribute
@@ -138,21 +116,20 @@ private:
     bool bDisplayFormula;           /// display formula?(rather than value)
     bool bDisplayNone;              /// hide field?
 
-    bool bNameOK;                   /// sName was set
     bool bFormulaOK;                /// sFormula was set
     bool bDescriptionOK;            /// sDescription was set
     bool bHelpOK;                   /// sHelp was set
     bool bHintOK;                   /// sHint was set
     bool bDisplayOK;                /// sDisplayFormula/-None were set
 
-    bool bSetFormula;               /// set Formula property
-    bool bSetFormulaDefault;        /// use content as default for formula
-    bool bSetDescription;           /// set sDescription with Hint-property
-    bool bSetHelp;
-    bool bSetHint;
-    bool bSetVisible;               /// set IsVisible
+    bool const bSetFormula;               /// set Formula property
+    bool const bSetFormulaDefault;        /// use content as default for formula
+    bool const bSetDescription;           /// set sDescription with Hint-property
+    bool const bSetHelp;
+    bool const bSetHint;
+    bool const bSetVisible;               /// set IsVisible
     bool bSetDisplayFormula;        /// set DisplayFormula (sub type???)
-    bool bSetPresentation;          /// set presentation frm elem. content?
+    bool const bSetPresentation;          /// set presentation frm elem. content?
 
 public:
 
@@ -188,8 +165,8 @@ protected:
         css::beans::XPropertySet> & xPropertySet) override;
 
     // various accessor methods:
-    inline OUString GetName()    { return sName; }
-    inline bool IsStringValue()     { return aValueHelper.IsStringValue();}
+    const OUString& GetName()       { return sName; }
+    bool IsStringValue()     { return aValueHelper.IsStringValue();}
 };
 
 
@@ -217,10 +194,7 @@ protected:
 /** import expression fields (<text:expression>) */
 class XMLExpressionFieldImportContext : public XMLVarFieldImportContext
 {
-    const OUString sPropertySubType;
-
 public:
-
 
     XMLExpressionFieldImportContext(
         SvXMLImport& rImport,                   /// XML Import
@@ -237,10 +211,7 @@ protected:
 /*** import text input fields (<text:text-input>) */
 class XMLTextInputFieldImportContext : public XMLVarFieldImportContext
 {
-    const OUString sPropertyContent;
-
 public:
-
 
     XMLTextInputFieldImportContext(
         SvXMLImport& rImport,                   /// XML Import
@@ -256,7 +227,7 @@ protected:
 
 
 /**
- * uperclass for variable/user-set, var/user-input, and sequence fields
+ * upperclass for variable/user-set, var/user-input, and sequence fields
  * inds field master of appropriate type and attaches field to it.
  */
 class XMLSetVarFieldImportContext : public XMLVarFieldImportContext
@@ -304,10 +275,7 @@ protected:
 /** import variable set fields (<text:variable-set>) */
 class XMLVariableSetFieldImportContext : public XMLSetVarFieldImportContext
 {
-    const OUString sPropertySubType;
-
 public:
-
 
     XMLVariableSetFieldImportContext(
         SvXMLImport& rImport,                   /// XML Import
@@ -325,9 +293,6 @@ protected:
 /** variable input fields (<text:variable-input>) */
 class XMLVariableInputFieldImportContext : public XMLSetVarFieldImportContext
 {
-    const OUString sPropertySubType;
-    const OUString sPropertyIsInput;
-
 public:
 
 
@@ -380,8 +345,6 @@ public:
 /** sequence fields (<text:sequence>) */
 class XMLSequenceFieldImportContext : public XMLSetVarFieldImportContext
 {
-    const OUString sPropertyNumberFormat;
-    const OUString sPropertySequenceValue;
     OUString sNumFormat;
     OUString sNumFormatSync;
     OUString sRefName;
@@ -415,7 +378,7 @@ protected:
  */
 class XMLVariableDeclsImportContext : public SvXMLImportContext
 {
-    enum VarType eVarDeclsContextType;
+    enum VarType const eVarDeclsContextType;
     XMLTextImportHelper& rImportHelper;
 
 public:
@@ -428,7 +391,7 @@ public:
         const OUString& rLocalName,      /// element name w/o prefix
         enum VarType eVarType);                 /// variable type
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList ) override;
@@ -440,14 +403,7 @@ public:
  */
 class XMLVariableDeclImportContext : public SvXMLImportContext
 {
-    const OUString sPropertySubType;
-    const OUString sPropertyNumberingLevel;
-    const OUString sPropertyNumberingSeparator;
-    const OUString sPropertyIsExpression;
-
-    OUString sName;
     XMLValueImportHelper aValueHelper;
-    sal_Int8 nNumLevel;
     sal_Unicode cSeparationChar;
 
 public:
@@ -473,22 +429,17 @@ public:
 /** import table formula fields (deprecated; for Writer 2.0 compatibility) */
 class XMLTableFormulaImportContext : public XMLTextFieldImportContext
 {
-    const OUString sPropertyIsShowFormula;
-    const OUString sPropertyCurrentPresentation;
-
     XMLValueImportHelper aValueHelper;
 
     bool bIsShowFormula;
 
 public:
 
-
     XMLTableFormulaImportContext(
         SvXMLImport& rImport,                   /// XML Import
         XMLTextImportHelper& rHlp,              /// text import helper
         sal_uInt16 nPrfx,                       /// namespace prefix
         const OUString& rLocalName);     /// element name w/o prefix
-    virtual ~XMLTableFormulaImportContext();
 
 protected:
 
@@ -505,11 +456,6 @@ protected:
 /** import database display fields (<text:database-display>) */
 class XMLDatabaseDisplayImportContext : public XMLDatabaseFieldImportContext
 {
-    const OUString sPropertyColumnName;
-    const OUString sPropertyDatabaseFormat;
-    const OUString sPropertyCurrentPresentation;
-    const OUString sPropertyIsVisible;
-
     XMLValueImportHelper aValueHelper;
 
     OUString sColumnName;

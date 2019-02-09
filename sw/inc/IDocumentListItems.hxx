@@ -22,6 +22,8 @@
 
 #include <vector>
 #include <rtl/ustring.hxx>
+
+class SwRootFrame;
 class SwNodeNum;
 
 /** Provides numbered items of a document.
@@ -29,12 +31,16 @@ class SwNodeNum;
 class IDocumentListItems
 {
 public:
-    typedef ::std::vector< const SwNodeNum* > tSortedNodeNumList;
+    typedef std::vector< const SwNodeNum* > tSortedNodeNumList;
 
     virtual void addListItem( const SwNodeNum& rNodeNum ) = 0;
     virtual void removeListItem( const SwNodeNum& rNodeNum ) = 0;
 
-    virtual OUString getListItemText( const SwNodeNum& rNodeNum ) const = 0;
+    virtual OUString getListItemText(const SwNodeNum& rNodeNum,
+                                     SwRootFrame const& rLayout) const = 0;
+
+    virtual bool isNumberedInLayout(SwNodeNum const& rNodeNum,
+            SwRootFrame const& rLayout) const = 0;
 
     /** get vector of all list items, which are numbered
     */

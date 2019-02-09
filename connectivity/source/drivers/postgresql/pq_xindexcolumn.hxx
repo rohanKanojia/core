@@ -53,13 +53,13 @@ class IndexColumn : public ReflectionBase
 {
 public:
     IndexColumn(
-        const ::rtl::Reference< RefCountedMutex > & refMutex,
-        const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection > & connection,
+        const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+        const css::uno::Reference< css::sdbc::XConnection > & connection,
         ConnectionSettings *pSettings);
 
 public: // XDataDescriptorFactory
-    virtual ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > SAL_CALL
-    createDataDescriptor(  ) throw (::com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL
+    createDataDescriptor(  ) override;
 
 };
 
@@ -67,13 +67,13 @@ class IndexColumnDescriptor : public ReflectionBase
 {
 public:
     IndexColumnDescriptor(
-        const ::rtl::Reference< RefCountedMutex > & refMutex,
-        const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection > & connection,
+        const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+        const css::uno::Reference< css::sdbc::XConnection > & connection,
         ConnectionSettings *pSettings);
 
 public: // XDataDescriptorFactory
-    virtual ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > SAL_CALL
-    createDataDescriptor(  ) throw (::com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL
+    createDataDescriptor(  ) override;
 
 };
 

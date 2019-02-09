@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "model/SlsPageDescriptor.hxx"
+#include <model/SlsPageDescriptor.hxx>
 
-#include "sdpage.hxx"
-#include "drawdoc.hxx"
+#include <sdpage.hxx>
+#include <drawdoc.hxx>
 
 #include <svx/svdopage.hxx>
 #include <svx/svdpagv.hxx>
@@ -50,8 +50,8 @@ PageDescriptor::PageDescriptor (
       mbIsMouseOver(false),
       mbHasTransition(false)
 {
-    OSL_ASSERT(mpPage);
-    OSL_ASSERT(mpPage == SdPage::getImplementation(rxPage));
+    assert(mpPage);
+    assert(mpPage == SdPage::getImplementation(rxPage));
     if (mpPage != nullptr)
     {
         if (mpPage->TRG_HasMasterPage())
@@ -125,7 +125,7 @@ bool PageDescriptor::HasState (const State eState) const
             return mpPage!=nullptr && mpPage->IsExcluded();
 
         default:
-            OSL_ASSERT(false);
+            assert(false);
             return false;
     }
 }
@@ -183,8 +183,6 @@ bool PageDescriptor::SetState (const State eState, const bool bNewStateValue)
             break;
     }
 
-    if (bModified)
-        maVisualState.UpdateVisualState(*this);
     return bModified;
 }
 
@@ -205,13 +203,13 @@ void PageDescriptor::SetCoreSelection()
             mpPage->SetSelected(false);
     else
     {
-        OSL_ASSERT(mpPage!=nullptr);
+        assert(mpPage!=nullptr);
     }
 }
 
-Rectangle PageDescriptor::GetBoundingBox() const
+::tools::Rectangle PageDescriptor::GetBoundingBox() const
 {
-    Rectangle aBox (maBoundingBox);
+    ::tools::Rectangle aBox (maBoundingBox);
     const Point aOffset (maVisualState.GetLocationOffset());
     aBox.Move(aOffset.X(), aOffset.Y());
     return aBox;
@@ -225,7 +223,7 @@ Point PageDescriptor::GetLocation (const bool bIgnoreOffset) const
         return maBoundingBox.TopLeft() + maVisualState.GetLocationOffset();
 }
 
-void PageDescriptor::SetBoundingBox (const Rectangle& rBoundingBox)
+void PageDescriptor::SetBoundingBox (const ::tools::Rectangle& rBoundingBox)
 {
     maBoundingBox = rBoundingBox;
 }

@@ -12,15 +12,20 @@
 
 #include <vcl/dllapi.h>
 #include <vcl/button.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/fixed.hxx>
+#include <vcl/help.hxx>
 #include <vcl/scrbar.hxx>
-#include <vcl/vclmedit.hxx>
+#include <vcl/split.hxx>
+#include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
+#include <vcl/settings.hxx>
+#include <vcl/event.hxx>
 #include <vcl/vclptr.hxx>
+#include <vcl/IContext.hxx>
+#include <vcl/commandevent.hxx>
 #include <set>
 
-class VCL_DLLPUBLIC VclContainer : public vcl::Window
+class VCL_DLLPUBLIC VclContainer : public vcl::Window,
+                                   public vcl::IContext
 {
 public:
     VclContainer(vcl::Window *pParent, WinBits nStyle = WB_HIDE | WB_CLIPCHILDREN);
@@ -35,11 +40,6 @@ public:
     //the rWindows alignment desires within that allocation
     static void setLayoutAllocation(vcl::Window &rWindow, const Point &rPos, const Size &rSize);
 
-    void markLayoutDirty()
-    {
-        m_bLayoutDirty = true;
-    }
-
     virtual void queue_resize(StateChangedType eReason = StateChangedType::Layout) override;
 protected:
     //these are the two that need to be implemented by
@@ -49,6 +49,10 @@ protected:
     virtual void setAllocation(const Size &rAllocation) = 0;
 
     virtual sal_uInt16 getDefaultAccessibleRole() const override;
+
+    // evtl. support for screenshot context menu
+    virtual void Command(const CommandEvent& rCEvt) override;
+
 public:
     //you don't want to override these
     virtual Size GetOptimalSize() const override;
@@ -85,7 +89,7 @@ public:
     {
         m_bHomogeneous = bHomogeneous;
     }
-    virtual bool set_property(const OString &rKey, const OString &rValue) override;
+    virtual bool set_property(const OString &rKey, const OUString &rValue) override;
 protected:
     virtual sal_uInt16 getDefaultAccessibleRole() const override;
     void accumulateMaxes(const Size &rChildSize, Size &rSize) const;
@@ -182,29 +186,25 @@ protected:
     }
 };
 
-enum VclButtonBoxStyle
+enum class VclButtonBoxStyle
 {
-    VCL_BUTTONBOX_DEFAULT_STYLE,
-    VCL_BUTTONBOX_SPREAD,
-    VCL_BUTTONBOX_EDGE,
-    VCL_BUTTONBOX_START,
-    VCL_BUTTONBOX_END,
-    VCL_BUTTONBOX_CENTER
+    Default,
+    Spread,
+    Edge,
+    Start,
+    End,
+    Center
 };
 
 class VCL_DLLPUBLIC VclButtonBox : public VclBox
 {
 public:
-    VclButtonBox(vcl::Window *pParent, int nSpacing)
-        : VclBox(pParent, false, nSpacing)
-        , m_eLayoutStyle(VCL_BUTTONBOX_DEFAULT_STYLE)
+    VclButtonBox(vcl::Window *pParent)
+        : VclBox(pParent, false, Application::GetSettings().GetStyleSettings().GetDialogStyle().button_spacing)
+        , m_eLayoutStyle(VclButtonBoxStyle::Default)
     {
     }
-    void set_layout(VclButtonBoxStyle eStyle)
-    {
-        m_eLayoutStyle = eStyle;
-    }
-    virtual bool set_property(const OString &rKey, const OString &rValue) override;
+    virtual bool set_property(const OString &rKey, const OUString &rValue) override;
     void sort_native_button_order();
 protected:
     virtual Size calculateRequisition() const override;
@@ -227,7 +227,7 @@ class VCL_DLLPUBLIC VclVButtonBox : public VclButtonBox
 {
 public:
     VclVButtonBox(vcl::Window *pParent)
-        : VclButtonBox(pParent, 0)
+        : VclButtonBox(pParent)
     {
         m_bVerticalContainer = true;
     }
@@ -266,7 +266,7 @@ class VCL_DLLPUBLIC VclHButtonBox : public VclButtonBox
 {
 public:
     VclHButtonBox(vcl::Window *pParent)
-        : VclButtonBox(pParent, 0)
+        : VclButtonBox(pParent)
     {
         m_bVerticalContainer = false;
     }
@@ -328,14 +328,6 @@ public:
         , m_nRowSpacing(0), m_nColumnSpacing(0)
     {
     }
-    void set_row_homogeneous(bool bHomogeneous)
-    {
-        m_bRowHomogeneous = bHomogeneous;
-    }
-    void set_column_homogeneous(bool bHomogeneous)
-    {
-        m_bColumnHomogeneous = bHomogeneous;
-    }
     bool get_row_homogeneous() const
     {
         return m_bRowHomogeneous;
@@ -360,7 +352,7 @@ public:
     {
         return m_nColumnSpacing;
     }
-    virtual bool set_property(const OString &rKey, const OString &rValue) override;
+    virtual bool set_property(const OString &rKey, const OUString &rValue) override;
 };
 
 class VCL_DLLPUBLIC VclBin : public VclContainer
@@ -376,6 +368,23 @@ public:
     virtual void setAllocation(const Size &rAllocation) override;
 };
 
+class VCL_DLLPUBLIC VclVPaned : public VclContainer
+{
+private:
+    VclPtr<Splitter> m_pSplitter;
+    long m_nPosition;
+    DECL_LINK(SplitHdl, Splitter*, void);
+    void arrange(const Size& rAllocation, long nFirstHeight, long nSecondHeight);
+public:
+    VclVPaned(vcl::Window *pParent);
+    virtual ~VclVPaned() override { disposeOnce(); }
+    virtual void dispose() override;
+    virtual Size calculateRequisition() const override;
+    virtual void setAllocation(const Size &rAllocation) override;
+    long get_position() const { return m_nPosition; }
+    void set_position(long nPosition) { m_nPosition = nPosition; }
+};
+
 class VCL_DLLPUBLIC VclFrame : public VclBin
 {
 private:
@@ -383,14 +392,14 @@ private:
 private:
     friend class VclBuilder;
     void designate_label(vcl::Window *pWindow);
-    DECL_LINK_TYPED(WindowEventListener, VclWindowEvent&, void);
+    DECL_LINK(WindowEventListener, VclWindowEvent&, void);
 public:
     VclFrame(vcl::Window *pParent)
         : VclBin(pParent)
         , m_pLabel(nullptr)
     {
     }
-    virtual ~VclFrame();
+    virtual ~VclFrame() override;
     virtual void dispose() override;
     void set_label(const OUString &rLabel);
     OUString get_label() const;
@@ -413,13 +422,9 @@ public:
         , m_nLeftPadding(0)
         , m_nRightPadding(0)
         , m_nTopPadding(0)
-        , m_fXAlign(0.0)
-        , m_fXScale(1.0)
-        , m_fYAlign(0.0)
-        , m_fYScale(1.0)
     {
     }
-    virtual bool set_property(const OString &rKey, const OString &rValue) override;
+    virtual bool set_property(const OString &rKey, const OUString &rValue) override;
 protected:
     virtual Size calculateRequisition() const override;
     virtual void setAllocation(const Size &rAllocation) override;
@@ -428,10 +433,6 @@ private:
     sal_Int32 m_nLeftPadding;
     sal_Int32 m_nRightPadding;
     sal_Int32 m_nTopPadding;
-    float m_fXAlign;
-    float m_fXScale;
-    float m_fYAlign;
-    float m_fYScale;
 };
 
 class VCL_DLLPUBLIC VclExpander : public VclBin
@@ -445,11 +446,11 @@ public:
         m_pDisclosureButton->SetToggleHdl(LINK(this, VclExpander, ClickHdl));
         m_pDisclosureButton->Show();
     }
-    virtual ~VclExpander() { disposeOnce(); }
+    virtual ~VclExpander() override { disposeOnce(); }
     virtual void dispose() override;
     virtual vcl::Window *get_child() override;
     virtual const vcl::Window *get_child() const override;
-    virtual bool set_property(const OString &rKey, const OString &rValue) override;
+    virtual bool set_property(const OString &rKey, const OUString &rValue) override;
     bool get_expanded() const
     {
         return m_pDisclosureButton->IsChecked();
@@ -471,31 +472,31 @@ private:
     bool m_bResizeTopLevel;
     VclPtr<DisclosureButton> m_pDisclosureButton;
     Link<VclExpander&,void> maExpandedHdl;
-    DECL_DLLPRIVATE_LINK_TYPED(ClickHdl, CheckBox&, void);
+    DECL_DLLPRIVATE_LINK(ClickHdl, CheckBox&, void);
 };
 
 class VCL_DLLPUBLIC VclScrolledWindow : public VclBin
 {
 public:
-    VclScrolledWindow(vcl::Window *pParent, WinBits nStyle = WB_HIDE | WB_CLIPCHILDREN | WB_AUTOHSCROLL | WB_AUTOVSCROLL | WB_TABSTOP );
-    virtual ~VclScrolledWindow() { disposeOnce(); }
+    VclScrolledWindow(vcl::Window *pParent );
+    virtual ~VclScrolledWindow() override { disposeOnce(); }
     virtual void dispose() override;
     virtual vcl::Window *get_child() override;
     virtual const vcl::Window *get_child() const override;
-    virtual bool set_property(const OString &rKey, const OString &rValue) override;
+    virtual bool set_property(const OString &rKey, const OUString &rValue) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
     ScrollBar& getVertScrollBar() { return *m_pVScroll; }
     ScrollBar& getHorzScrollBar() { return *m_pHScroll; }
     Size getVisibleChildSize() const;
     //set to true to disable the built-in scrolling callbacks to allow the user
     //to override it
     void setUserManagedScrolling(bool bUserManagedScrolling) { m_bUserManagedScrolling = bUserManagedScrolling;}
-protected:
+private:
     virtual Size calculateRequisition() const override;
     virtual void setAllocation(const Size &rAllocation) override;
-    DECL_LINK_TYPED(ScrollBarHdl, ScrollBar*, void);
+    DECL_LINK(ScrollBarHdl, ScrollBar*, void);
     void InitScrollBars(const Size &rRequest);
-    virtual bool Notify(NotifyEvent& rNEvt) override;
-private:
+    virtual bool EventNotify(NotifyEvent& rNEvt) override;
     bool m_bUserManagedScrolling;
     VclPtr<ScrollBar> m_pVScroll;
     VclPtr<ScrollBar> m_pHScroll;
@@ -505,12 +506,15 @@ private:
 class VCL_DLLPUBLIC VclViewport : public VclBin
 {
 public:
-    VclViewport(vcl::Window *pParent, WinBits nStyle = WB_HIDE | WB_CLIPCHILDREN)
-        : VclBin(pParent, nStyle)
+    VclViewport(vcl::Window *pParent)
+        : VclBin(pParent, WB_HIDE | WB_CLIPCHILDREN)
+        , m_bInitialAllocation(true)
     {
     }
 protected:
     virtual void setAllocation(const Size &rAllocation) override;
+private:
+    bool m_bInitialAllocation;
 };
 
 //Enforces that its children are always the same size as itself.
@@ -544,7 +548,7 @@ private:
     VclPtr<EventBoxHelper> m_aEventBoxHelper;
 protected:
     virtual void dispose() override;
-    virtual ~VclEventBox();
+    virtual ~VclEventBox() override;
 public:
     VclEventBox(vcl::Window* pParent)
         : VclBin(pParent)
@@ -560,14 +564,6 @@ public:
     virtual void Command(const CommandEvent& rCEvt) override;
 };
 
-enum VclSizeGroupMode
-{
-    VCL_SIZE_GROUP_NONE,
-    VCL_SIZE_GROUP_HORIZONTAL,
-    VCL_SIZE_GROUP_VERTICAL,
-    VCL_SIZE_GROUP_BOTH
-};
-
 class VCL_DLLPUBLIC VclSizeGroup
 {
 private:
@@ -579,7 +575,7 @@ private:
 public:
     VclSizeGroup()
         : m_bIgnoreHidden(false)
-        , m_eMode(VCL_SIZE_GROUP_HORIZONTAL)
+        , m_eMode(VclSizeGroupMode::Horizontal)
     {
     }
     void insert(vcl::Window *pWindow)
@@ -608,94 +604,191 @@ public:
     {
         return m_eMode;
     }
-    bool set_property(const OString &rKey, const OString &rValue);
+    void set_property(const OString &rKey, const OUString &rValue);
 };
 
-enum VclButtonsType
-{
-    VCL_BUTTONS_NONE,
-    VCL_BUTTONS_OK,
-    VCL_BUTTONS_CLOSE,
-    VCL_BUTTONS_CANCEL,
-    VCL_BUTTONS_YES_NO,
-    VCL_BUTTONS_OK_CANCEL
-};
-
-enum VclMessageType
-{
-    VCL_MESSAGE_INFO,
-    VCL_MESSAGE_WARNING,
-    VCL_MESSAGE_QUESTION,
-    VCL_MESSAGE_ERROR
-};
-
-class VCL_DLLPUBLIC MessageDialog : public Dialog
+class VCL_DLLPUBLIC VclDrawingArea : public Control
 {
 private:
-    VclButtonsType m_eButtonsType;
-    VclMessageType m_eMessageType;
-    VclPtr<VclBox> m_pOwnedContentArea;
-    VclPtr<VclButtonBox> m_pOwnedActionArea;
-    VclPtr<VclGrid> m_pGrid;
-    VclPtr<FixedImage> m_pImage;
-    VclPtr<VclMultiLineEdit> m_pPrimaryMessage;
-    VclPtr<VclMultiLineEdit> m_pSecondaryMessage;
-    std::vector<VclPtr<PushButton> > m_aOwnedButtons;
-    std::map< VclPtr<const vcl::Window>, short> m_aResponses;
-    OUString m_sPrimaryString;
-    OUString m_sSecondaryString;
-    DECL_DLLPRIVATE_LINK_TYPED(ButtonHdl, Button *, void);
-    void setButtonHandlers(VclButtonBox *pButtonBox);
-    short get_response(const vcl::Window *pWindow) const;
-    void create_owned_areas();
+    FactoryFunction m_pFactoryFunction;
+    void* m_pUserData;
+    Link<std::pair<vcl::RenderContext&, const tools::Rectangle&>, void> m_aPaintHdl;
+    Link<const Size&, void> m_aResizeHdl;
+    Link<const MouseEvent&, void> m_aMousePressHdl;
+    Link<const MouseEvent&, void> m_aMouseMotionHdl;
+    Link<const MouseEvent&, void> m_aMouseReleaseHdl;
+    Link<const KeyEvent&, bool> m_aKeyPressHdl;
+    Link<const KeyEvent&, bool> m_aKeyReleaseHdl;
+    Link<VclDrawingArea&, void> m_aStyleUpdatedHdl;
+    Link<const Point&, bool> m_aPopupMenuHdl;
+    Link<tools::Rectangle&, OUString> m_aQueryTooltipHdl;
 
-    friend class VclPtr<MessageDialog>;
-    MessageDialog(vcl::Window* pParent, WinBits nStyle = WB_MOVEABLE | WB_3DLOOK | WB_CLOSEABLE);
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override
+    {
+        m_aPaintHdl.Call(std::pair<vcl::RenderContext&, const tools::Rectangle&>(rRenderContext, rRect));
+    }
+    virtual void Resize() override
+    {
+        m_aResizeHdl.Call(GetOutputSizePixel());
+    }
+    virtual void MouseMove(const MouseEvent& rMEvt) override
+    {
+        m_aMouseMotionHdl.Call(rMEvt);
+    }
+    virtual void MouseButtonDown(const MouseEvent& rMEvt) override
+    {
+        m_aMousePressHdl.Call(rMEvt);
+    }
+    virtual void MouseButtonUp(const MouseEvent& rMEvt) override
+    {
+        m_aMouseReleaseHdl.Call(rMEvt);
+    }
+    virtual void KeyInput(const KeyEvent& rKEvt) override
+    {
+        if (!m_aKeyPressHdl.Call(rKEvt))
+            Control::KeyInput(rKEvt);
+
+    }
+    virtual void KeyUp(const KeyEvent& rKEvt) override
+    {
+        if (!m_aKeyReleaseHdl.Call(rKEvt))
+            Control::KeyUp(rKEvt);
+    }
+    virtual void StateChanged(StateChangedType nType) override
+    {
+        Control::StateChanged(nType);
+        if (nType == StateChangedType::ControlForeground || nType == StateChangedType::ControlBackground)
+        {
+            m_aStyleUpdatedHdl.Call(*this);
+            Invalidate();
+        }
+    }
+    virtual void DataChanged(const DataChangedEvent& rDCEvt) override
+    {
+        Control::DataChanged(rDCEvt);
+        if ((rDCEvt.GetType() == DataChangedEventType::SETTINGS) && (rDCEvt.GetFlags() & AllSettingsFlags::STYLE))
+        {
+            m_aStyleUpdatedHdl.Call(*this);
+            Invalidate();
+        }
+    }
+    virtual void Command(const CommandEvent& rEvent) override
+    {
+        if (rEvent.GetCommand() == CommandEventId::ContextMenu && m_aPopupMenuHdl.Call(rEvent.GetMousePosPixel()))
+            return;
+        Control::Command(rEvent);
+    }
+    virtual void RequestHelp(const HelpEvent& rHelpEvent) override
+    {
+        if (rHelpEvent.GetMode() & (HelpEventMode::QUICK | HelpEventMode::BALLOON))
+        {
+            Point aPos(ScreenToOutputPixel(rHelpEvent.GetMousePosPixel()));
+            tools::Rectangle aHelpArea(aPos.X(), aPos.Y());
+            OUString sHelpTip = m_aQueryTooltipHdl.Call(aHelpArea);
+            if (sHelpTip.isEmpty())
+                return;
+            Point aPt = OutputToScreenPixel(aHelpArea.TopLeft());
+            aHelpArea.SetLeft(aPt.X());
+            aHelpArea.SetTop(aPt.Y());
+            aPt = OutputToScreenPixel(aHelpArea.BottomRight());
+            aHelpArea.SetRight(aPt.X());
+            aHelpArea.SetBottom(aPt.Y());
+            Help::ShowQuickHelp(this, aHelpArea, sHelpTip);
+        }
+    }
+    virtual FactoryFunction GetUITestFactory() const override
+    {
+        if (m_pFactoryFunction)
+            return m_pFactoryFunction;
+        return Control::GetUITestFactory();
+    }
+
 public:
-
-    MessageDialog(vcl::Window* pParent,
-        const OUString &rMessage,
-        VclMessageType eMessageType = VCL_MESSAGE_ERROR,
-        VclButtonsType eButtonsType = VCL_BUTTONS_OK,
-        WinBits nStyle = WB_MOVEABLE | WB_3DLOOK | WB_CLOSEABLE);
-    MessageDialog(vcl::Window* pParent, const OString& rID, const OUString& rUIXMLDescription);
-    virtual bool set_property(const OString &rKey, const OString &rValue) override;
-    virtual short Execute() override;
-    ///Emitted when an action widget is clicked
-    virtual void response(short nResponseId);
-    OUString get_primary_text() const;
-    OUString get_secondary_text() const;
-    void set_primary_text(const OUString &rPrimaryString);
-    void set_secondary_text(const OUString &rSecondaryString);
-    virtual ~MessageDialog();
-    virtual void dispose() override;
-
-    static void SetMessagesWidths(vcl::Window *pParent, VclMultiLineEdit *pPrimaryMessage,
-        VclMultiLineEdit *pSecondaryMessage);
+    VclDrawingArea(vcl::Window *pParent, WinBits nStyle)
+        : Control(pParent, nStyle)
+        , m_pFactoryFunction(nullptr)
+        , m_pUserData(nullptr)
+    {
+        SetBackground();
+    }
+    void SetUITestFactory(FactoryFunction pFactoryFunction, void* pUserData)
+    {
+        m_pFactoryFunction = pFactoryFunction;
+        m_pUserData = pUserData;
+    }
+    void* GetUserData() const
+    {
+        return m_pUserData;
+    }
+    void SetPaintHdl(const Link<std::pair<vcl::RenderContext&, const tools::Rectangle&>, void>& rLink)
+    {
+        m_aPaintHdl = rLink;
+    }
+    void SetResizeHdl(const Link<const Size&, void>& rLink)
+    {
+        m_aResizeHdl = rLink;
+    }
+    void SetMousePressHdl(const Link<const MouseEvent&, void>& rLink)
+    {
+        m_aMousePressHdl = rLink;
+    }
+    void SetMouseMoveHdl(const Link<const MouseEvent&, void>& rLink)
+    {
+        m_aMouseMotionHdl = rLink;
+    }
+    void SetMouseReleaseHdl(const Link<const MouseEvent&, void>& rLink)
+    {
+        m_aMouseReleaseHdl = rLink;
+    }
+    void SetKeyPressHdl(const Link<const KeyEvent&, bool>& rLink)
+    {
+        m_aKeyPressHdl = rLink;
+    }
+    void SetKeyReleaseHdl(const Link<const KeyEvent&, bool>& rLink)
+    {
+        m_aKeyReleaseHdl = rLink;
+    }
+    void SetStyleUpdatedHdl(const Link<VclDrawingArea&, void>& rLink)
+    {
+        m_aStyleUpdatedHdl = rLink;
+    }
+    void SetPopupMenuHdl(const Link<const Point&, bool>& rLink)
+    {
+        m_aPopupMenuHdl = rLink;
+    }
+    void SetQueryTooltipHdl(const Link<tools::Rectangle&, OUString>& rLink)
+    {
+        m_aQueryTooltipHdl = rLink;
+    }
 };
-
-VCL_DLLPUBLIC Size bestmaxFrameSizeForScreenSize(const Size &rScreenSize);
 
 //Get first window of a pTopLevel window as
 //if any intermediate layout widgets didn't exist
 //i.e. acts like pChild = pChild->GetWindow(GetWindowType::FirstChild);
 //in a flat hierarchy where dialogs only have one layer
 //of children
-VCL_DLLPUBLIC vcl::Window* firstLogicalChildOfParent(vcl::Window *pTopLevel);
+VCL_DLLPUBLIC vcl::Window* firstLogicalChildOfParent(const vcl::Window *pTopLevel);
+
+//Get last window of a pTopLevel window as
+//if any intermediate layout widgets didn't exist
+//i.e. acts like pChild = pChild->GetWindow(GetWindowType::LastChild);
+//in a flat hierarchy where dialogs only have one layer
+//of children
+VCL_DLLPUBLIC vcl::Window* lastLogicalChildOfParent(const vcl::Window *pTopLevel);
 
 //Get next window after pChild of a pTopLevel window as
 //if any intermediate layout widgets didn't exist
 //i.e. acts like pChild = pChild->GetWindow(GetWindowType::Next);
 //in a flat hierarchy where dialogs only have one layer
 //of children
-VCL_DLLPUBLIC vcl::Window* nextLogicalChildOfParent(vcl::Window *pTopLevel, vcl::Window *pChild);
+VCL_DLLPUBLIC vcl::Window* nextLogicalChildOfParent(const vcl::Window *pTopLevel, const vcl::Window *pChild);
 
 //Get previous window before pChild of a pTopLevel window as
 //if any intermediate layout widgets didn't exist
 //i.e. acts like pChild = pChild->GetWindow(GetWindowType::Prev);
 //in a flat hierarchy where dialogs only have one layer
 //of children
-VCL_DLLPUBLIC vcl::Window* prevLogicalChildOfParent(vcl::Window *pTopLevel, vcl::Window *pChild);
+VCL_DLLPUBLIC vcl::Window* prevLogicalChildOfParent(const vcl::Window *pTopLevel, const vcl::Window *pChild);
 
 //Returns true is the Window has a single child which is a container
 VCL_DLLPUBLIC bool isLayoutEnabled(const vcl::Window *pWindow);
@@ -703,8 +796,8 @@ VCL_DLLPUBLIC bool isLayoutEnabled(const vcl::Window *pWindow);
 inline bool isContainerWindow(const vcl::Window &rWindow)
 {
     WindowType eType = rWindow.GetType();
-    return eType == WINDOW_CONTAINER || eType == WINDOW_SCROLLWINDOW ||
-           (eType == WINDOW_DOCKINGWINDOW && ::isLayoutEnabled(&rWindow));
+    return eType == WindowType::CONTAINER || eType == WindowType::SCROLLWINDOW ||
+           (eType == WindowType::DOCKINGWINDOW && ::isLayoutEnabled(&rWindow));
 }
 
 inline bool isContainerWindow(const vcl::Window *pWindow)
@@ -724,15 +817,6 @@ Size getLegacyBestSizeForChildren(const vcl::Window &rWindow);
 
 //Get first parent which is not a layout widget
 VCL_DLLPUBLIC vcl::Window* getNonLayoutParent(vcl::Window *pParent);
-
-//Get first real parent which is not a layout widget
-vcl::Window* getNonLayoutRealParent(vcl::Window *pParent);
-
-//return true if this window and its stack of containers are all shown
-bool isVisibleInLayout(const vcl::Window *pWindow);
-
-//return true if this window and its stack of containers are all enabled
-bool isEnabledInLayout(const vcl::Window *pWindow);
 
 #endif
 

@@ -20,20 +20,18 @@
 #ifndef INCLUDED_SW_INC_FMTFLD_HXX
 #define INCLUDED_SW_INC_FMTFLD_HXX
 
-#include <com/sun/star/text/XTextField.hpp>
-
 #include <cppuhelper/weakref.hxx>
 #include <svl/poolitem.hxx>
 #include <svl/SfxBroadcaster.hxx>
-#include <svl/smplhint.hxx>
 
 #include "swdllapi.h"
-#include <calbck.hxx>
+#include "calbck.hxx"
 
 class SwField;
 class SwTextField;
 class SwView;
 class SwFieldType;
+namespace com { namespace sun { namespace star { namespace text { class XTextField; } } } }
 
 // ATT_FLD
 class SW_DLLPUBLIC SwFormatField
@@ -41,16 +39,13 @@ class SW_DLLPUBLIC SwFormatField
     , public SwModify
     , public SfxBroadcaster
 {
-    friend void _InitCore();
-    SwFormatField( sal_uInt16 nWhich ); // for default-Attibute
+    friend void InitCore();
+    SwFormatField( sal_uInt16 nWhich ); // for default-Attribute
 
     css::uno::WeakReference<css::text::XTextField> m_wXTextField;
 
-    SwField* mpField;
+    std::unique_ptr<SwField> mpField;
     SwTextField* mpTextField; // the TextAttribute
-
-    // @@@ copy construction allowed, but copy assignment is not? @@@
-    SwFormatField& operator=(const SwFormatField& rField) = delete;
 
 protected:
     virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem *pNew) override;
@@ -61,10 +56,9 @@ public:
     /// Single argument constructors shall be explicit.
     explicit SwFormatField( const SwField &rField );
 
-    /// @@@ copy construction allowed, but copy assignment is not? @@@
     SwFormatField( const SwFormatField& rAttr );
 
-    virtual ~SwFormatField();
+    virtual ~SwFormatField() override;
 
     /// "Pure virtual methods" of SfxPoolItem.
     virtual bool            operator==( const SfxPoolItem& ) const override;
@@ -76,11 +70,11 @@ public:
 
     const SwField* GetField() const
     {
-        return mpField;
+        return mpField.get();
     }
     SwField* GetField()
     {
-        return mpField;
+        return mpField.get();
     }
 
     /**
@@ -90,7 +84,7 @@ public:
 
        @attention The current field will be destroyed before setting the new field.
      */
-    void SetField( SwField * pField );
+    void SetField( std::unique_ptr<SwField> pField );
 
     const SwTextField* GetTextField() const
     {
@@ -125,20 +119,20 @@ enum class SwFormatFieldHintWhich
 
 class SW_DLLPUBLIC SwFormatFieldHint : public SfxHint
 {
-    const SwFormatField*   pField;
-    SwFormatFieldHintWhich nWhich;
-    const SwView*     pView;
+    const SwFormatField*   m_pField;
+    SwFormatFieldHintWhich const m_nWhich;
+    const SwView*     m_pView;
 
 public:
-    SwFormatFieldHint( const SwFormatField* p, SwFormatFieldHintWhich n, const SwView* pV = nullptr)
-        : pField(p)
-        , nWhich(n)
-        , pView(pV)
+    SwFormatFieldHint( const SwFormatField* pField, SwFormatFieldHintWhich nWhich, const SwView* pView = nullptr)
+        : m_pField(pField)
+        , m_nWhich(nWhich)
+        , m_pView(pView)
     {}
 
-    const SwFormatField* GetField() const { return pField; }
-    SwFormatFieldHintWhich Which() const { return nWhich; }
-    const SwView* GetView() const { return pView; }
+    const SwFormatField* GetField() const { return m_pField; }
+    SwFormatFieldHintWhich Which() const { return m_nWhich; }
+    const SwView* GetView() const { return m_pView; }
 };
 
 #endif

@@ -19,89 +19,181 @@
 
 #include <config_folders.h>
 
-#include "sal/config.h"
+#include <sal/config.h>
+#include <sal/log.hxx>
 
-#include "com/sun/star/container/XNameAccess.hpp"
-#include "com/sun/star/io/XInputStream.hpp"
-#include "com/sun/star/lang/Locale.hpp"
-#include "com/sun/star/lang/XMultiServiceFactory.hpp"
-#include "com/sun/star/packages/zip/ZipFileAccess.hpp"
-#include "com/sun/star/uno/Exception.hpp"
-#include "com/sun/star/uno/RuntimeException.hpp"
-#include "com/sun/star/uno/Sequence.hxx"
-#include "comphelper/processfactory.hxx"
-#include "osl/file.hxx"
-#include "osl/diagnose.h"
-#include "rtl/bootstrap.hxx"
-#include "rtl/uri.hxx"
+#include <deque>
 
-#include "tools/stream.hxx"
-#include "tools/urlobj.hxx"
+#include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/lang/Locale.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/packages/zip/ZipFileAccess.hpp>
+#include <com/sun/star/uno/Exception.hpp>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <comphelper/processfactory.hxx>
+#include <osl/file.hxx>
+#include <osl/diagnose.h>
+#include <rtl/bootstrap.hxx>
+#include <rtl/uri.hxx>
+
+#include <tools/stream.hxx>
+#include <tools/urlobj.hxx>
+#include <implimagetree.hxx>
+
 #include <vcl/bitmapex.hxx>
 #include <vcl/dibtools.hxx>
-#include <vcl/implimagetree.hxx>
 #include <vcl/pngread.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/svapp.hxx>
-#include <vcldemo-debug.hxx>
-
-#include <vcl/BitmapProcessor.hxx>
 #include <vcl/BitmapTools.hxx>
+#include <vcl/IconThemeScanner.hxx>
+#include <vcl/pngwrite.hxx>
+#include <vcl/outdev.hxx>
+
+#include <BitmapLightenFilter.hxx>
 
 using namespace css;
 
-namespace {
+bool ImageRequestParameters::convertToDarkTheme()
+{
+    static bool bIconsForDarkTheme = !!getenv("VCL_ICONS_FOR_DARK_THEME");
+
+    bool bConvertToDarkTheme = false;
+    if (!(meFlags & ImageLoadFlags::IgnoreDarkTheme))
+        bConvertToDarkTheme = bIconsForDarkTheme;
+
+    return bConvertToDarkTheme;
+}
+
+sal_Int32 ImageRequestParameters::scalePercentage()
+{
+    sal_Int32 aScalePercentage = 100;
+    if (!(meFlags & ImageLoadFlags::IgnoreScalingFactor))
+        aScalePercentage = Application::GetDefaultDevice()->GetDPIScalePercentage();
+    else if (mnScalePercentage > 0)
+        aScalePercentage = mnScalePercentage;
+    return aScalePercentage;
+}
+
+namespace
+{
+
+OUString convertLcTo32Path(OUString const & rPath)
+{
+    OUString aResult;
+    if (rPath.lastIndexOf('/') != -1)
+    {
+        sal_Int32 nCopyFrom = rPath.lastIndexOf('/') + 1;
+        OUString sFile = rPath.copy(nCopyFrom);
+        OUString sDir = rPath.copy(0, rPath.lastIndexOf('/'));
+        if (!sFile.isEmpty() && sFile.startsWith("lc_"))
+        {
+            aResult = sDir + "/32/" + sFile.copy(3);
+        }
+    }
+    return aResult;
+}
 
 OUString createPath(OUString const & name, sal_Int32 pos, OUString const & locale)
 {
     return name.copy(0, pos + 1) + locale + name.copy(pos);
 }
 
-std::shared_ptr<SvStream> wrapStream(css::uno::Reference< css::io::XInputStream > const & stream)
+OUString getIconCacheUrl(OUString const & sVariant, ImageRequestParameters const & rParameters)
+{
+    OUString sUrl("${$BRAND_BASE_DIR/" LIBO_ETC_FOLDER "/" SAL_CONFIGFILE("bootstrap") ":UserInstallation}/cache/");
+    sUrl += rParameters.msStyle + "/" + sVariant + "/" + rParameters.msName;
+    rtl::Bootstrap::expandMacros(sUrl);
+    return sUrl;
+}
+
+OUString createIconCacheUrl(OUString const & sVariant, ImageRequestParameters const & rParameters)
+{
+    OUString sUrl(getIconCacheUrl(sVariant, rParameters));
+    OUString sDir = sUrl.copy(0, sUrl.lastIndexOf('/'));
+    osl::Directory::createPath(sDir);
+    return sUrl;
+}
+
+bool urlExists(OUString const & sUrl)
+{
+    osl::File aFile(sUrl);
+    osl::FileBase::RC eRC = aFile.open(osl_File_OpenFlag_Read);
+    return osl::FileBase::E_None == eRC;
+}
+
+OUString getNameNoExtension(OUString const & sName)
+{
+    sal_Int32 nDotPosition = sName.lastIndexOf('.');
+    return sName.copy(0, nDotPosition);
+}
+
+std::shared_ptr<SvMemoryStream> wrapStream(uno::Reference<io::XInputStream> const & rInputStream)
 {
     // This could use SvInputStream instead if that did not have a broken
     // SeekPos implementation for an XInputStream that is not also XSeekable
     // (cf. "@@@" at tags/DEV300_m37/svtools/source/misc1/strmadpt.cxx@264807
     // l. 593):
-    OSL_ASSERT(stream.is());
-    std::shared_ptr<SvStream> s(std::make_shared<SvMemoryStream>());
+    OSL_ASSERT(rInputStream.is());
+    std::shared_ptr<SvMemoryStream> aMemoryStream(std::make_shared<SvMemoryStream>());
     for (;;)
     {
-        sal_Int32 const size = 2048;
-        css::uno::Sequence< sal_Int8 > data(size);
-        sal_Int32 n = stream->readBytes(data, size);
-        s->Write(data.getConstArray(), n);
-        if (n < size)
+        const sal_Int32 nSize(2048);
+        uno::Sequence<sal_Int8> aData(nSize);
+        sal_Int32 nRead = rInputStream->readBytes(aData, nSize);
+        aMemoryStream->WriteBytes(aData.getConstArray(), nRead);
+        if (nRead < nSize)
             break;
     }
-    s->Seek(0);
-    return s;
+    aMemoryStream->Seek(0);
+    return aMemoryStream;
 }
 
-void loadImageFromStream(std::shared_ptr<SvStream> xStream, OUString const & rPath, BitmapEx & rBitmap)
+void loadImageFromStream(std::shared_ptr<SvStream> const & xStream, OUString const & rPath, ImageRequestParameters& rParameters)
 {
+    bool bConvertToDarkTheme = rParameters.convertToDarkTheme();
+    sal_Int32 aScalePercentage = rParameters.scalePercentage();
+
     if (rPath.endsWith(".png"))
     {
         vcl::PNGReader aPNGReader(*xStream);
-        aPNGReader.SetIgnoreGammaChunk( true );
-        rBitmap = aPNGReader.Read();
+        aPNGReader.SetIgnoreGammaChunk(true);
+        rParameters.mrBitmap = aPNGReader.Read();
     }
     else if (rPath.endsWith(".svg"))
     {
-        vcl::BitmapTools::loadFromSvg(*xStream.get(), rPath, rBitmap);
+        rParameters.mbWriteImageToCache = true; // We always want to cache a SVG image
+        vcl::bitmap::loadFromSvg(*xStream, rPath, rParameters.mrBitmap, aScalePercentage / 100.0);
+
+        if (bConvertToDarkTheme)
+            BitmapFilter::Filter(rParameters.mrBitmap, BitmapLightenFilter());
+
+        return;
     }
     else
     {
-        ReadDIBBitmapEx(rBitmap, *xStream);
+        ReadDIBBitmapEx(rParameters.mrBitmap, *xStream);
+    }
+
+    if (bConvertToDarkTheme)
+    {
+        rParameters.mbWriteImageToCache = true; // Cache the dark variant
+        BitmapFilter::Filter(rParameters.mrBitmap, BitmapLightenFilter());
+    }
+
+    if (aScalePercentage > 100)
+    {
+        rParameters.mbWriteImageToCache = true; // Cache the scaled variant
+        double aScaleFactor(aScalePercentage / 100.0);
+        // when scaling use the full 24bit RGB values
+        rParameters.mrBitmap.Convert(BmpConversion::N24Bit);
+        rParameters.mrBitmap.Scale(aScaleFactor, aScaleFactor, BmpScaleFlag::Fast);
     }
 }
 
-}
-
-ImplImageTree & ImplImageTree::get() {
-    static ImplImageTree s_ImplImageTree;
-    return s_ImplImageTree;
-}
+} // end anonymous namespace
 
 ImplImageTree::ImplImageTree()
 {
@@ -111,162 +203,236 @@ ImplImageTree::~ImplImageTree()
 {
 }
 
-OUString ImplImageTree::getImageUrl(
-    OUString const & name, OUString const & style, OUString const & lang)
+std::vector<OUString> ImplImageTree::getPaths(OUString const & name, LanguageTag const & rLanguageTag)
 {
-    OUString aStyle(style);
+    std::vector<OUString> sPaths;
+
+    sal_Int32 pos = name.lastIndexOf('/');
+    if (pos != -1)
+    {
+        for (OUString& rFallback : rLanguageTag.getFallbackStrings(true))
+        {
+            OUString aFallbackName = getNameNoExtension(getRealImageName(createPath(name, pos, rFallback)));
+            sPaths.emplace_back(aFallbackName + ".png");
+            sPaths.emplace_back(aFallbackName + ".svg");
+        }
+    }
+
+    OUString aRealName = getNameNoExtension(getRealImageName(name));
+    sPaths.emplace_back(aRealName + ".png");
+    sPaths.emplace_back(aRealName + ".svg");
+
+    return sPaths;
+}
+
+OUString ImplImageTree::getImageUrl(OUString const & rName, OUString const & rStyle, OUString const & rLang)
+{
+    OUString aStyle(rStyle);
+
     while (!aStyle.isEmpty())
     {
-        try {
+        try
+        {
             setStyle(aStyle);
 
-            std::vector< OUString > paths;
-            paths.push_back(getRealImageName(name));
-
-            if (!lang.isEmpty())
+            if (checkPathAccess())
             {
-                sal_Int32 pos = name.lastIndexOf('/');
-                if (pos != -1)
+                IconSet& rIconSet = getCurrentIconSet();
+                const uno::Reference<container::XNameAccess> & rNameAccess = rIconSet.maNameAccess;
+
+                LanguageTag aLanguageTag(rLang);
+
+                for (OUString& rPath: getPaths(rName, aLanguageTag))
                 {
-                    std::vector<OUString> aFallbacks(
-                        LanguageTag(lang).getFallbackStrings(true));
-                    for (std::vector< OUString >::reverse_iterator it( aFallbacks.rbegin());
-                         it != aFallbacks.rend(); ++it)
+                    if (rNameAccess->hasByName(rPath))
                     {
-                        paths.push_back( getRealImageName( createPath(name, pos, *it) ) );
+                        return "vnd.sun.star.zip://"
+                            + rtl::Uri::encode(rIconSet.maURL, rtl_UriCharClassRegName,
+                                               rtl_UriEncodeIgnoreEscapes, RTL_TEXTENCODING_UTF8)
+                            + "/" + rPath;
                     }
                 }
-            }
-
-            try {
-                if (checkPathAccess()) {
-                    const uno::Reference<container::XNameAccess> &rNameAccess = maIconSet[maCurrentStyle].maNameAccess;
-
-                    for (std::vector<OUString>::const_reverse_iterator j(paths.rbegin()); j != paths.rend(); ++j)
-                    {
-                        if (rNameAccess->hasByName(*j))
-                        {
-                            return "vnd.sun.star.zip://"
-                                + rtl::Uri::encode(
-                                    maIconSet[maCurrentStyle].maURL + ".zip",
-                                    rtl_UriCharClassRegName,
-                                    rtl_UriEncodeIgnoreEscapes,
-                                    RTL_TEXTENCODING_UTF8)
-                                + "/" + *j;
-                                // assuming *j contains no problematic chars
-                        }
-                    }
-                }
-            } catch (css::uno::RuntimeException &) {
-                throw;
-            } catch (const css::uno::Exception & e) {
-                SAL_INFO("vcl", "exception " << e.Message);
             }
         }
-        catch (css::uno::RuntimeException &) {}
+        catch (const uno::Exception & e)
+        {
+            SAL_INFO("vcl", e);
+        }
 
         aStyle = fallbackStyle(aStyle);
     }
     return OUString();
 }
 
-OUString ImplImageTree::fallbackStyle(const OUString &style)
+std::shared_ptr<SvMemoryStream> ImplImageTree::getImageStream(OUString const & rName, OUString const & rStyle, OUString const & rLang)
 {
-    if (style == "galaxy")
-        return OUString();
-    else if (style == "industrial")
-        return OUString("galaxy");
-    else if (style == "tango")
-        return OUString("galaxy");
-    else if (style == "breeze")
-        return OUString("galaxy");
-    else if (style == "sifr")
-        return OUString("breeze");
+    OUString aStyle(rStyle);
 
-    return OUString("tango");
-}
-
-bool ImplImageTree::loadImage(OUString const & name, OUString const & style, BitmapEx & bitmap,
-    bool localized)
-{
-    OUString aStyle(style);
     while (!aStyle.isEmpty())
     {
-        try {
-            if (doLoadImage(name, aStyle, bitmap, localized))
+        try
+        {
+            setStyle(aStyle);
+
+            if (checkPathAccess())
             {
-                static bool bIconsForDarkTheme = !!getenv("VCL_ICONS_FOR_DARK_THEME");
-                if (bIconsForDarkTheme)
-                    bitmap = BitmapProcessor::createLightImage(bitmap);
-                return true;
+                IconSet& rIconSet = getCurrentIconSet();
+                const uno::Reference<container::XNameAccess>& rNameAccess = rIconSet.maNameAccess;
+
+                LanguageTag aLanguageTag(rLang);
+
+                for (OUString& rPath: getPaths(rName, aLanguageTag))
+                {
+                    if (rNameAccess->hasByName(rPath))
+                    {
+                        uno::Reference<io::XInputStream> aStream;
+                        bool ok = rNameAccess->getByName(rPath) >>= aStream;
+                        assert(ok);
+                        (void)ok; // prevent unused warning in release build
+                        return wrapStream(aStream);
+                    }
+                }
             }
         }
-        catch (css::uno::RuntimeException &) {}
+        catch (const uno::Exception & e)
+        {
+            SAL_INFO("vcl", e);
+        }
 
         aStyle = fallbackStyle(aStyle);
     }
+    return std::shared_ptr<SvMemoryStream>();
+}
 
+OUString ImplImageTree::fallbackStyle(const OUString& rsStyle)
+{
+    OUString sResult;
+
+    if (rsStyle == "colibre" || rsStyle == "helpimg")
+        sResult = "";
+    else if (rsStyle == "sifr" || rsStyle == "breeze_dark")
+        sResult = "breeze";
+    else if (rsStyle == "sifr_dark" )
+        sResult = "breeze_dark";
+    else
+        sResult = "colibre";
+
+    return sResult;
+}
+
+bool ImplImageTree::loadImage(OUString const & rName, OUString const & rStyle, BitmapEx & rBitmap, bool localized,
+                              const ImageLoadFlags eFlags, sal_Int32 nScalePercentage)
+{
+    OUString aCurrentStyle(rStyle);
+    while (!aCurrentStyle.isEmpty())
+    {
+        try
+        {
+            ImageRequestParameters aParameters(rName, aCurrentStyle, rBitmap, localized, eFlags, nScalePercentage);
+            if (doLoadImage(aParameters))
+                return true;
+        }
+        catch (uno::RuntimeException &)
+        {}
+
+        aCurrentStyle = fallbackStyle(aCurrentStyle);
+    }
     return false;
 }
 
-bool ImplImageTree::loadDefaultImage(OUString const & style, BitmapEx& bitmap)
+namespace
 {
-    return doLoadImage(
-        "res/grafikde.png",
-        style, bitmap, false);
+
+OUString createVariant(ImageRequestParameters& rParameters)
+{
+    bool bConvertToDarkTheme = rParameters.convertToDarkTheme();
+    sal_Int32 aScalePercentage = rParameters.scalePercentage();
+
+    OUString aVariant = OUString::number(aScalePercentage);
+
+    if (bConvertToDarkTheme)
+        aVariant += "-dark";
+
+    return aVariant;
 }
 
-bool ImplImageTree::doLoadImage(OUString const & name, OUString const & style, BitmapEx & bitmap,
-    bool localized)
+bool loadDiskCachedVersion(OUString const & sVariant, ImageRequestParameters& rParameters)
 {
-    setStyle(style);
-    if (iconCacheLookup(name, localized, bitmap))
+    OUString sUrl(getIconCacheUrl(sVariant, rParameters));
+    if (!urlExists(sUrl))
+        return false;
+    SvFileStream aFileStream(sUrl, StreamMode::READ);
+    vcl::PNGReader aPNGReader(aFileStream);
+    aPNGReader.SetIgnoreGammaChunk(true);
+    rParameters.mrBitmap = aPNGReader.Read();
+    return true;
+}
+
+void cacheBitmapToDisk(OUString const & sVariant, ImageRequestParameters const & rParameters)
+{
+    OUString sUrl(createIconCacheUrl(sVariant, rParameters));
+    vcl::PNGWriter aWriter(rParameters.mrBitmap);
+    try
+    {
+        SvFileStream aStream(sUrl, StreamMode::WRITE);
+        aWriter.Write(aStream);
+        aStream.Close();
+    }
+    catch (...)
+    {}
+}
+
+} // end anonymous namespace
+
+bool ImplImageTree::doLoadImage(ImageRequestParameters& rParameters)
+{
+    setStyle(rParameters.msStyle);
+
+    if (iconCacheLookup(rParameters))
         return true;
 
-    if (!bitmap.IsEmpty())
-        bitmap.SetEmpty();
+    OUString aVariant = createVariant(rParameters);
+    if (loadDiskCachedVersion(aVariant, rParameters))
+        return true;
 
-    std::vector< OUString > paths;
-    paths.push_back(getRealImageName(name));
+    if (!rParameters.mrBitmap.IsEmpty())
+        rParameters.mrBitmap.SetEmpty();
 
-    if (localized)
+    LanguageTag aLanguageTag = Application::GetSettings().GetUILanguageTag();
+
+    std::vector<OUString> aPaths = getPaths(rParameters.msName, aLanguageTag);
+
+    bool bFound = false;
+
+    try
     {
-        sal_Int32 pos = name.lastIndexOf('/');
-        if (pos != -1)
-        {
-            // findImage() uses a reverse iterator, so push in reverse order.
-            std::vector< OUString > aFallbacks( Application::GetSettings().GetUILanguageTag().getFallbackStrings(true));
-            for (std::vector< OUString >::reverse_iterator it( aFallbacks.rbegin());
-                    it != aFallbacks.rend(); ++it)
-            {
-                paths.push_back( getRealImageName( createPath(name, pos, *it) ) );
-            }
-        }
+        bFound = findImage(aPaths, rParameters);
     }
-
-    bool found = false;
-    try {
-        found = findImage(paths, bitmap);
-    } catch (css::uno::RuntimeException &) {
+    catch (uno::RuntimeException&)
+    {
         throw;
-    } catch (const css::uno::Exception & e) {
-        SAL_INFO("vcl", "ImplImageTree::doLoadImage exception " << e.Message);
+    }
+    catch (const uno::Exception& e)
+    {
+        SAL_INFO("vcl", "ImplImageTree::doLoadImage exception: " << e);
     }
 
-    if (found)
-        maIconSet[maCurrentStyle].maIconCache[name] = std::make_pair(localized, bitmap);
+    if (bFound)
+    {
+        if (rParameters.mbWriteImageToCache)
+        {
+            cacheBitmapToDisk(aVariant, rParameters);
+        }
+        getIconCache(rParameters)[rParameters.msName] = std::make_pair(rParameters.mbLocalized, rParameters.mrBitmap);
+    }
 
-    return found;
+    return bFound;
 }
 
-void ImplImageTree::shutDown()
+void ImplImageTree::shutdown()
 {
     maCurrentStyle.clear();
-    for (StyleIconSet::iterator it = maIconSet.begin(); it != maIconSet.end(); ++it)
-    {
-        it->second.maIconCache.clear();
-        it->second.maLinkHash.clear();
-    }
+    maIconSets.clear();
 }
 
 void ImplImageTree::setStyle(OUString const & style)
@@ -281,57 +447,93 @@ void ImplImageTree::setStyle(OUString const & style)
 
 void ImplImageTree::createStyle()
 {
-    if (maIconSet.find(maCurrentStyle) != maIconSet.end())
+    if (maIconSets.find(maCurrentStyle) != maIconSets.end())
         return;
 
-    OUString url( "$BRAND_BASE_DIR/" LIBO_SHARE_FOLDER "/config/" );
-    rtl::Bootstrap::expandMacros(url);
+    OUString sThemeUrl;
+
     if (maCurrentStyle != "default")
     {
-        INetURLObject u(url);
-        OSL_ASSERT(!u.HasError());
-        bool ok = u.Append("images_" + maCurrentStyle, INetURLObject::ENCODE_ALL);
-        OSL_ASSERT(ok); (void) ok;
-        url = u.GetMainURL(INetURLObject::NO_DECODE);
+        OUString paths = vcl::IconThemeScanner::GetStandardIconThemePath();
+        std::deque<OUString> aPaths;
+        sal_Int32 nIndex = 0;
+        do
+        {
+            aPaths.push_front(paths.getToken(0, ';', nIndex));
+        }
+        while (nIndex >= 0);
+
+        for (const auto& path : aPaths)
+        {
+            INetURLObject aUrl(path);
+            OSL_ASSERT(!aUrl.HasError());
+
+            bool ok = aUrl.Append("images_" + maCurrentStyle, INetURLObject::EncodeMechanism::All);
+            OSL_ASSERT(ok);
+            sThemeUrl = aUrl.GetMainURL(INetURLObject::DecodeMechanism::NONE) + ".zip";
+            if (urlExists(sThemeUrl))
+                break;
+            sThemeUrl.clear();
+        }
+
+        if (sThemeUrl.isEmpty())
+            return;
     }
     else
-        url += "images";
+    {
+        sThemeUrl += "images";
+        if (!urlExists(sThemeUrl))
+            return;
+    }
 
-    maIconSet[maCurrentStyle] = IconSet(url);
+    maIconSets[maCurrentStyle] = IconSet(sThemeUrl);
 
     loadImageLinks();
 }
 
-bool ImplImageTree::iconCacheLookup(OUString const & name, bool localized, BitmapEx & bitmap)
+/// Find an icon cache for the right scale factor
+ImplImageTree::IconCache &ImplImageTree::getIconCache(const ImageRequestParameters& rParameters)
 {
-    IconCache &rIconCache = maIconSet[maCurrentStyle].maIconCache;
+    IconSet &rSet = getCurrentIconSet();
+    auto it = rSet.maScaledIconCaches.find(rParameters.mnScalePercentage);
+    if ( it != rSet.maScaledIconCaches.end() )
+        return *it->second.get();
+    rSet.maScaledIconCaches[rParameters.mnScalePercentage] = std::unique_ptr<IconCache>(new IconCache);
+    return *rSet.maScaledIconCaches[rParameters.mnScalePercentage].get();
+}
 
-    IconCache::iterator i(rIconCache.find(getRealImageName(name)));
-    if (i != rIconCache.end() && i->second.first == localized)
+bool ImplImageTree::iconCacheLookup(ImageRequestParameters& rParameters)
+{
+    IconCache& rIconCache = getIconCache(rParameters);
+
+    IconCache::iterator i(rIconCache.find(getRealImageName(rParameters.msName)));
+    if (i != rIconCache.end() && i->second.first == rParameters.mbLocalized)
     {
-        bitmap = i->second.second;
+        rParameters.mrBitmap = i->second.second;
         return true;
     }
+
     return false;
 }
 
-bool ImplImageTree::findImage(std::vector<OUString> const & paths, BitmapEx & bitmap)
+bool ImplImageTree::findImage(std::vector<OUString> const & rPaths, ImageRequestParameters& rParameters)
 {
     if (!checkPathAccess())
         return false;
 
-    const uno::Reference<container::XNameAccess> &rNameAccess = maIconSet[maCurrentStyle].maNameAccess;
+    uno::Reference<container::XNameAccess> const & rNameAccess = getCurrentIconSet().maNameAccess;
 
-    for (std::vector<OUString>::const_reverse_iterator j(paths.rbegin()); j != paths.rend(); ++j)
+    for (OUString const & rPath : rPaths)
     {
-        if (rNameAccess->hasByName(*j))
+        if (rNameAccess->hasByName(rPath))
         {
-            css::uno::Reference< css::io::XInputStream > s;
-            bool ok = rNameAccess->getByName(*j) >>= s;
+            uno::Reference<io::XInputStream> aStream;
+            bool ok = rNameAccess->getByName(rPath) >>= aStream;
             assert(ok);
             (void)ok; // prevent unused warning in release build
 
-            loadImageFromStream( wrapStream(s), *j, bitmap );
+            loadImageFromStream(wrapStream(aStream), rPath, rParameters);
+
             return true;
         }
     }
@@ -345,21 +547,21 @@ void ImplImageTree::loadImageLinks()
     if (!checkPathAccess())
         return;
 
-    const uno::Reference<container::XNameAccess> &rNameAccess = maIconSet[maCurrentStyle].maNameAccess;
+    const uno::Reference<container::XNameAccess> &rNameAccess = getCurrentIconSet().maNameAccess;
 
     if (rNameAccess->hasByName(aLinkFilename))
     {
-        css::uno::Reference< css::io::XInputStream > s;
-        bool ok = rNameAccess->getByName(aLinkFilename) >>= s;
+        uno::Reference<io::XInputStream> xStream;
+        bool ok = rNameAccess->getByName(aLinkFilename) >>= xStream;
         assert(ok);
         (void)ok; // prevent unused warning in release build
 
-        parseLinkFile( wrapStream(s) );
+        parseLinkFile(wrapStream(xStream));
         return;
     }
 }
 
-void ImplImageTree::parseLinkFile(std::shared_ptr<SvStream> xStream)
+void ImplImageTree::parseLinkFile(std::shared_ptr<SvStream> const & xStream)
 {
     OString aLine;
     OUString aLink, aOriginal;
@@ -367,12 +569,12 @@ void ImplImageTree::parseLinkFile(std::shared_ptr<SvStream> xStream)
     while (xStream->ReadLine(aLine))
     {
         ++nLineNo;
-        if ( aLine.isEmpty() )
+        if (aLine.isEmpty())
             continue;
 
         sal_Int32 nIndex = 0;
-        aLink = OStringToOUString( aLine.getToken(0, ' ', nIndex), RTL_TEXTENCODING_UTF8 );
-        aOriginal = OStringToOUString( aLine.getToken(0, ' ', nIndex), RTL_TEXTENCODING_UTF8 );
+        aLink = OStringToOUString(aLine.getToken(0, ' ', nIndex), RTL_TEXTENCODING_UTF8);
+        aOriginal = OStringToOUString(aLine.getToken(0, ' ', nIndex), RTL_TEXTENCODING_UTF8);
 
         // skip comments, or incomplete entries
         if (aLink.isEmpty() || aLink[0] == '#' || aOriginal.isEmpty())
@@ -382,52 +584,65 @@ void ImplImageTree::parseLinkFile(std::shared_ptr<SvStream> xStream)
             continue;
         }
 
-        maIconSet[maCurrentStyle].maLinkHash[aLink] = aOriginal;
+        getCurrentIconSet().maLinkHash[aLink] = aOriginal;
+
+        OUString aOriginal32 = convertLcTo32Path(aOriginal);
+        OUString aLink32 = convertLcTo32Path(aLink);
+
+        if (!aOriginal32.isEmpty() && !aLink32.isEmpty())
+            getCurrentIconSet().maLinkHash[aLink32] = aOriginal32;
     }
 }
 
-OUString const & ImplImageTree::getRealImageName(OUString const & name)
+OUString const & ImplImageTree::getRealImageName(OUString const & rIconName)
 {
-    IconLinkHash &rLinkHash = maIconSet[maCurrentStyle].maLinkHash;
+    IconLinkHash & rLinkHash = maIconSets[maCurrentStyle].maLinkHash;
 
-    IconLinkHash::iterator it(rLinkHash.find(name));
-    if (it == rLinkHash.end())
-        return name;
+    OUString sNameWithNoExtension = getNameNoExtension(rIconName);
 
-    return it->second;
+    IconLinkHash::iterator it;
+
+    // PNG is priority
+    it = rLinkHash.find(sNameWithNoExtension + ".png");
+    if (it != rLinkHash.end())
+        return it->second;
+
+    // also check SVG name
+    it = rLinkHash.find(sNameWithNoExtension + ".svg");
+    if (it != rLinkHash.end())
+        return it->second;
+
+    // neither was found so just return the original name
+    return rIconName;
 }
 
 bool ImplImageTree::checkPathAccess()
 {
-    uno::Reference<container::XNameAccess> &rNameAccess = maIconSet[maCurrentStyle].maNameAccess;
+    IconSet& rIconSet = getCurrentIconSet();
+    uno::Reference<container::XNameAccess> & rNameAccess = rIconSet.maNameAccess;
     if (rNameAccess.is())
         return true;
 
-    try {
-        rNameAccess = css::packages::zip::ZipFileAccess::createWithURL(comphelper::getProcessComponentContext(), maIconSet[maCurrentStyle].maURL + ".zip");
+    try
+    {
+        rNameAccess = packages::zip::ZipFileAccess::createWithURL(comphelper::getProcessComponentContext(), rIconSet.maURL);
     }
-    catch (const css::uno::RuntimeException &) {
+    catch (const uno::RuntimeException &)
+    {
         throw;
     }
-    catch (const css::uno::Exception & e) {
-        SAL_INFO("vcl", "ImplImageTree::zip file location exception " << e.Message << " for " << maIconSet[maCurrentStyle].maURL);
+    catch (const uno::Exception & e)
+    {
+        SAL_INFO("vcl", "ImplImageTree::zip file location " << e << " for " << rIconSet.maURL);
         return false;
     }
     return rNameAccess.is();
 }
 
-css::uno::Reference<css::container::XNameAccess> ImplImageTree::getNameAccess()
+uno::Reference<container::XNameAccess> const & ImplImageTree::getNameAccess()
 {
-    checkPathAccess();
-    return maIconSet[maCurrentStyle].maNameAccess;
-}
-
-/// Recursively dump all names ...
-css::uno::Sequence<OUString> ImageTree_getAllImageNames()
-{
-    css::uno::Reference<css::container::XNameAccess> xRef(ImplImageTree::get().getNameAccess());
-
-    return xRef->getElementNames();
+    (void)checkPathAccess();
+    return getCurrentIconSet().maNameAccess;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -18,6 +18,7 @@
  */
 
 #include <algorithm>
+#include <utility>
 #include <helper/statusindicatorfactory.hxx>
 #include <helper/statusindicator.hxx>
 #include <helper/vclstatusindicator.hxx>
@@ -67,8 +68,6 @@ StatusIndicatorFactory::~StatusIndicatorFactory()
 }
 
 void SAL_CALL StatusIndicatorFactory::initialize(const css::uno::Sequence< css::uno::Any >& lArguments)
-    throw(css::uno::Exception       ,
-          css::uno::RuntimeException, std::exception)
 {
     if (lArguments.getLength() > 0) {
         osl::MutexGuard g(m_mutex);
@@ -102,7 +101,6 @@ void SAL_CALL StatusIndicatorFactory::initialize(const css::uno::Sequence< css::
 }
 
 css::uno::Reference< css::task::XStatusIndicator > SAL_CALL StatusIndicatorFactory::createStatusIndicator()
-    throw(css::uno::RuntimeException, std::exception)
 {
     StatusIndicator* pIndicator = new StatusIndicator(this);
     css::uno::Reference< css::task::XStatusIndicator > xIndicator(static_cast< ::cppu::OWeakObject* >(pIndicator), css::uno::UNO_QUERY_THROW);
@@ -111,7 +109,6 @@ css::uno::Reference< css::task::XStatusIndicator > SAL_CALL StatusIndicatorFacto
 }
 
 void SAL_CALL StatusIndicatorFactory::update()
-    throw(css::uno::RuntimeException, std::exception)
 {
     osl::MutexGuard g(m_mutex);
     m_bAllowReschedule = true;
@@ -128,7 +125,7 @@ void StatusIndicatorFactory::start(const css::uno::Reference< css::task::XStatus
     IndicatorStack::iterator pItem = ::std::find(m_aStack.begin(), m_aStack.end(), xChild);
     if (pItem != m_aStack.end())
         m_aStack.erase(pItem);
-    IndicatorInfo aInfo(xChild, sText, nRange);
+    IndicatorInfo aInfo(xChild, sText);
     m_aStack.push_back (aInfo                );
 
     m_xActiveChild = xChild;
@@ -156,7 +153,7 @@ void StatusIndicatorFactory::reset(const css::uno::Reference< css::task::XStatus
     if (pItem != m_aStack.end())
     {
         pItem->m_nValue = 0;
-        (pItem->m_sText).clear();
+        pItem->m_sText.clear();
     }
 
     css::uno::Reference< css::task::XStatusIndicator > xActive   = m_xActiveChild;
@@ -373,7 +370,7 @@ void StatusIndicatorFactory::implts_makeParentVisibleIfAllowed()
     impl_showProgress();
 
     SolarMutexGuard aSolarGuard;
-    vcl::Window* pWindow = VCLUnoHelper::GetWindow(xParentWindow);
+    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow(xParentWindow);
     if ( pWindow )
     {
         bool bForceFrontAndFocus(officecfg::Office::Common::View::NewDocumentHandling::ForceFocusAndToFront::get(xContext));
@@ -434,7 +431,6 @@ void StatusIndicatorFactory::impl_showProgress()
     osl::ClearableMutexGuard aReadLock(m_mutex);
 
     css::uno::Reference< css::frame::XFrame >              xFrame (m_xFrame.get()      , css::uno::UNO_QUERY);
-    css::uno::Reference< css::awt::XWindow >               xWindow(m_xPluggWindow.get(), css::uno::UNO_QUERY);
 
     aReadLock.clear();
     // <- SAFE ----------------------------------
@@ -475,7 +471,6 @@ void StatusIndicatorFactory::impl_hideProgress()
     osl::ClearableMutexGuard aReadLock(m_mutex);
 
     css::uno::Reference< css::frame::XFrame >              xFrame (m_xFrame.get()      , css::uno::UNO_QUERY);
-    css::uno::Reference< css::awt::XWindow >               xWindow(m_xPluggWindow.get(), css::uno::UNO_QUERY);
 
     aReadLock.clear();
     // <- SAFE ----------------------------------
@@ -553,7 +548,7 @@ void StatusIndicatorFactory::impl_stopWakeUpThread()
     rtl::Reference<WakeUpThread> wakeUp;
     {
         osl::MutexGuard g(m_mutex);
-        wakeUp = m_pWakeUp;
+        std::swap(wakeUp, m_pWakeUp);
     }
     if (wakeUp.is())
     {
@@ -563,7 +558,7 @@ void StatusIndicatorFactory::impl_stopWakeUpThread()
 
 } // namespace framework
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_framework_StatusIndicatorFactory_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)

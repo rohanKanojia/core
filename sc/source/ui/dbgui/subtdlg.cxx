@@ -19,9 +19,9 @@
 
 #undef SC_DLLIMPLEMENTATION
 
-#include "tpsubt.hxx"
-#include "scresid.hxx"
-#include "subtdlg.hxx"
+#include <tpsubt.hxx>
+#include <subtdlg.hxx>
+#include <scui_def.hxx>
 
 ScSubTotalDlg::ScSubTotalDlg(vcl::Window* pParent, const SfxItemSet* pArgSet)
     : SfxTabDialog(pParent, "SubTotalDialog",
@@ -29,10 +29,10 @@ ScSubTotalDlg::ScSubTotalDlg(vcl::Window* pParent, const SfxItemSet* pArgSet)
 {
     get(m_pBtnRemove, "remove");
 
-    AddTabPage("1stgroup",  ScTpSubTotalGroup1::Create, nullptr);
-    AddTabPage("2ndgroup",  ScTpSubTotalGroup2::Create, nullptr);
-    AddTabPage("3rdgroup",  ScTpSubTotalGroup3::Create, nullptr);
-    AddTabPage("options", ScTpSubTotalOptions::Create, nullptr);
+    AddTabPage("1stgroup",  ScTpSubTotalGroup1::Create);
+    AddTabPage("2ndgroup",  ScTpSubTotalGroup2::Create);
+    AddTabPage("3rdgroup",  ScTpSubTotalGroup3::Create);
+    AddTabPage("options", ScTpSubTotalOptions::Create);
     m_pBtnRemove->SetClickHdl( LINK( this, ScSubTotalDlg, RemoveHdl ) );
 }
 
@@ -47,7 +47,7 @@ void ScSubTotalDlg::dispose()
     SfxTabDialog::dispose();
 }
 
-IMPL_LINK_TYPED( ScSubTotalDlg, RemoveHdl, Button *, pBtn, void )
+IMPL_LINK( ScSubTotalDlg, RemoveHdl, Button *, pBtn, void )
 {
     if (pBtn == m_pBtnRemove)
     {

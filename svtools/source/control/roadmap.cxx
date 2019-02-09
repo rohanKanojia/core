@@ -22,6 +22,7 @@
 #include <vector>
 #include <algorithm>
 #include <vcl/bitmap.hxx>
+#include <vcl/event.hxx>
 #include <vcl/settings.hxx>
 #include <tools/color.hxx>
 #include <rtl/ustring.hxx>
@@ -40,8 +41,9 @@ typedef std::vector< RoadmapItem* > HL_Vector;
 class IDLabel :  public FixedText
 {
 public:
-    IDLabel( vcl::Window* _pParent, WinBits _nWinStyle = 0 );
-    virtual void    DataChanged( const DataChangedEvent& rDCEvt ) override;
+    IDLabel( vcl::Window* _pParent, WinBits _nWinStyle );
+    virtual void DataChanged( const DataChangedEvent& rDCEvt ) override;
+    virtual void ApplySettings(vcl::RenderContext& rRenderContext) override;
 };
 
 class RoadmapItem : public RoadmapTypes
@@ -63,19 +65,17 @@ public:
 
     void                    Update( ItemIndex RMIndex, const OUString& _rText );
 
-    void                    SetPosition( RoadmapItem* OldHyperLabel );
+    void                    SetPosition( RoadmapItem const * OldHyperLabel );
 
     void                    ToggleBackgroundColor( const Color& _rGBColor );
     void                    SetInteractive( bool _bInteractive );
 
     void                    SetClickHdl( const Link<HyperLabel*,void>& rLink );
-    void                    Enable( bool bEnable = true);
+    void                    Enable( bool bEnable );
     bool                    IsEnabled() const;
     void                    GrabFocus();
 
     bool                    Contains( const vcl::Window* _pWindow ) const;
-
-    HyperLabel*             GetDescriptionHyperLabel() const { return mpDescription; }
 
 private:
     void                    ImplUpdateIndex( const ItemIndex _nIndex );
@@ -189,8 +189,8 @@ public:
 void RoadmapImpl::initItemSize()
 {
     Size aLabelSize( m_rAntiImpl.GetOutputSizePixel() );
-    aLabelSize.Height() = m_rAntiImpl.LogicToPixel( Size( 0, LABELBASEMAPHEIGHT ), MAP_APPFONT ).Height();
-    aLabelSize.Width() -= m_rAntiImpl.LogicToPixel( Size( 2 * ROADMAP_INDENT_X, 0 ), MAP_APPFONT ).Width();
+    aLabelSize.setHeight( m_rAntiImpl.LogicToPixel(Size(0, LABELBASEMAPHEIGHT), MapMode(MapUnit::MapAppFont)).Height() );
+    aLabelSize.AdjustWidth( -(m_rAntiImpl.LogicToPixel(Size(2 * ROADMAP_INDENT_X, 0), MapMode(MapUnit::MapAppFont)).Width()) );
     m_aItemSizePixel = aLabelSize;
 }
 
@@ -204,14 +204,6 @@ ORoadmap::ORoadmap(vcl::Window* _pParent, WinBits _nWinStyle)
 
 void ORoadmap::implInit(vcl::RenderContext& rRenderContext)
 {
-    const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
-    Color aTextColor = rStyleSettings.GetFieldTextColor();
-    vcl::Font aFont = rRenderContext.GetFont();
-    aFont.SetColor(aTextColor);
-    aFont.SetWeight(WEIGHT_BOLD);
-    aFont.SetUnderline(LINESTYLE_SINGLE);
-    rRenderContext.SetFont(aFont);
-    rRenderContext.SetBackground(Wallpaper(rStyleSettings.GetFieldColor()));
     m_pImpl->InCompleteHyperLabel = nullptr;
     m_pImpl->setCurItemID(-1);
     m_pImpl->setComplete(true);
@@ -230,7 +222,7 @@ void ORoadmap::implInit(vcl::RenderContext& rRenderContext)
 // TODO: if somebody sets a new font from outside (OutputDevice::SetFont), we would have to react
 // on this with calculating a new bold font.
 // Unfortunately, the OutputDevice does not offer a notify mechanism for a changed font.
-// So settings the font from outside is simply a forbidded scenario at the moment
+// So settings the font from outside is simply a forbidden scenario at the moment
     rRenderContext.EnableMapMode(false);
 }
 
@@ -243,14 +235,13 @@ void ORoadmap::dispose()
 {
     HL_Vector aItemsCopy = m_pImpl->getHyperLabels();
     m_pImpl->getHyperLabels().clear();
-    for ( HL_Vector::iterator i = aItemsCopy.begin(); i != aItemsCopy.end(); ++i )
+    for (auto const& itemCopy : aItemsCopy)
     {
-        delete *i;
+        delete itemCopy;
     }
     if ( ! m_pImpl->isComplete() )
         delete m_pImpl->InCompleteHyperLabel;
-    delete m_pImpl;
-    m_pImpl = nullptr;
+    m_pImpl.reset();
     Control::dispose();
 }
 
@@ -306,12 +297,9 @@ void ORoadmap::SetRoadmapInteractive(bool _bInteractive)
     m_pImpl->setInteractive( _bInteractive );
 
     const HL_Vector& rItems = m_pImpl->getHyperLabels();
-    for (   HL_Vector::const_iterator i = rItems.begin();
-            i != rItems.end();
-            ++i
-        )
+    for (auto const& item : rItems)
     {
-        (*i)->SetInteractive( _bInteractive );
+        item->SetInteractive( _bInteractive );
     }
 }
 
@@ -339,11 +327,11 @@ void ORoadmap::SetRoadmapComplete(bool _bComplete)
 void ORoadmap::UpdatefollowingHyperLabels(ItemIndex _nIndex)
 {
     const HL_Vector& rItems = m_pImpl->getHyperLabels();
-    if ( _nIndex < (ItemIndex)rItems.size() )
+    if ( _nIndex < static_cast<ItemIndex>(rItems.size()) )
     {
-        for (   HL_Vector::const_iterator i = rItems.begin() + _nIndex;
-                i != rItems.end();
-                ++i, ++_nIndex
+        for ( HL_Vector::const_iterator i = rItems.begin() + _nIndex;
+              i != rItems.end();
+              ++i, ++_nIndex
             )
         {
             RoadmapItem* pItem = *i;
@@ -351,6 +339,7 @@ void ORoadmap::UpdatefollowingHyperLabels(ItemIndex _nIndex)
             pItem->SetIndex( _nIndex );
             pItem->SetPosition( GetPreviousHyperLabel( _nIndex ) );
         }
+
     }
     if ( ! m_pImpl->isComplete() )
     {
@@ -415,18 +404,17 @@ void ORoadmap::EnableRoadmapItem( ItemId _nItemId, bool _bEnable )
 void ORoadmap::ChangeRoadmapItemLabel( ItemId _nID, const OUString& _sLabel )
 {
     RoadmapItem* pItem = GetByID( _nID );
-    if ( pItem != nullptr )
-    {
-        pItem->Update( pItem->GetIndex(), _sLabel );
+    if ( pItem == nullptr )
+        return;
 
-        const HL_Vector& rItems = m_pImpl->getHyperLabels();
-        for (   HL_Vector::const_iterator i = rItems.begin();
-                i != rItems.end();
-                ++i
-            )
-        {
-            (*i)->SetPosition( GetPreviousHyperLabel( i - rItems.begin() ) );
-        }
+    pItem->Update( pItem->GetIndex(), _sLabel );
+
+    const HL_Vector& rItems = m_pImpl->getHyperLabels();
+    size_t nPos = 0;
+    for (auto const& item : rItems)
+    {
+        item->SetPosition( GetPreviousHyperLabel(nPos) );
+        ++nPos;
     }
 }
 
@@ -441,14 +429,11 @@ RoadmapItem* ORoadmap::GetByID(ItemId _nID)
 {
     ItemId nLocID = 0;
     const HL_Vector& rItems = m_pImpl->getHyperLabels();
-    for ( HL_Vector::const_iterator i = rItems.begin();
-          i != rItems.end();
-          ++i
-        )
+    for (auto const& item : rItems)
     {
-        nLocID = (*i)->GetID();
+        nLocID = item->GetID();
         if ( nLocID == _nID )
-            return *i;
+            return item;
     }
     return nullptr;
 }
@@ -461,7 +446,7 @@ const RoadmapItem* ORoadmap::GetByID(ItemId _nID) const
 RoadmapItem* ORoadmap::GetByIndex(ItemIndex _nItemIndex)
 {
     const HL_Vector& rItems = m_pImpl->getHyperLabels();
-    if ( ( _nItemIndex > -1 ) && ( _nItemIndex < (ItemIndex)rItems.size() ) )
+    if ( ( _nItemIndex > -1 ) && ( _nItemIndex < static_cast<ItemIndex>(rItems.size()) ) )
     {
         return rItems.at( _nItemIndex );
     }
@@ -504,12 +489,9 @@ RoadmapTypes::ItemId ORoadmap::GetPreviousAvailableItemId(ItemIndex _nNewIndex)
 void ORoadmap::DeselectOldRoadmapItems()
 {
     const HL_Vector& rItems = m_pImpl->getHyperLabels();
-    for (   HL_Vector::const_iterator i = rItems.begin();
-            i != rItems.end();
-            ++i
-        )
+    for (auto const& item : rItems)
     {
-        (*i)->ToggleBackgroundColor( COL_TRANSPARENT );
+        item->ToggleBackgroundColor( COL_TRANSPARENT );
     }
 }
 
@@ -518,7 +500,7 @@ void ORoadmap::SetItemSelectHdl(const Link<LinkParamNone*,void>& _rHdl)
     m_pImpl->setSelectHdl(_rHdl);
 }
 
-Link<LinkParamNone*,void> ORoadmap::GetItemSelectHdl() const
+Link<LinkParamNone*,void> const & ORoadmap::GetItemSelectHdl() const
 {
     return m_pImpl->getSelectHdl();
 }
@@ -526,7 +508,7 @@ Link<LinkParamNone*,void> ORoadmap::GetItemSelectHdl() const
 void ORoadmap::Select()
 {
     GetItemSelectHdl().Call( nullptr );
-    CallEventListeners( VCLEVENT_ROADMAP_ITEMSELECTED );
+    CallEventListeners( VclEventId::RoadmapItemSelected );
 }
 
 void ORoadmap::GetFocus()
@@ -557,7 +539,7 @@ bool ORoadmap::SelectRoadmapItemByID( ItemId _nNewID )
     return false;
 }
 
-void ORoadmap::Paint(vcl::RenderContext& rRenderContext, const Rectangle& _rRect)
+void ORoadmap::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& _rRect)
 {
     if (!m_pImpl->m_bPaintInitialized)
         implInit(rRenderContext);
@@ -581,12 +563,12 @@ void ORoadmap::Paint(vcl::RenderContext& rRenderContext, const Rectangle& _rRect
 
 void ORoadmap::DrawHeadline(vcl::RenderContext& rRenderContext)
 {
-    Point aTextPos = LogicToPixel(Point(ROADMAP_INDENT_X, 8), MAP_APPFONT);
+    Point aTextPos = LogicToPixel(Point(ROADMAP_INDENT_X, 8), MapMode(MapUnit::MapAppFont));
 
     Size aOutputSize(GetOutputSizePixel());
 
     // draw it
-    rRenderContext.DrawText(Rectangle(aTextPos, aOutputSize), GetText(),
+    rRenderContext.DrawText(tools::Rectangle(aTextPos, aOutputSize), GetText(),
                             DrawTextFlags::Left | DrawTextFlags::Top | DrawTextFlags::MultiLine | DrawTextFlags::WordBreak);
     rRenderContext.DrawTextLine(aTextPos, aOutputSize.Width(), STRIKEOUT_NONE, LINESTYLE_SINGLE, LINESTYLE_NONE);
     const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
@@ -594,16 +576,13 @@ void ORoadmap::DrawHeadline(vcl::RenderContext& rRenderContext)
     rRenderContext.SetTextColor(rStyleSettings.GetFieldTextColor());
 }
 
-RoadmapItem* ORoadmap::GetByPointer(vcl::Window* pWindow)
+RoadmapItem* ORoadmap::GetByPointer(vcl::Window const * pWindow)
 {
     const HL_Vector& rItems = m_pImpl->getHyperLabels();
-    for (   HL_Vector::const_iterator i = rItems.begin();
-            i != rItems.end();
-            ++i
-        )
+    for (auto const& item : rItems)
     {
-        if ( (*i)->Contains( pWindow ) )
-            return *i;
+        if ( item->Contains( pWindow ) )
+            return item;
     }
     return nullptr;
 }
@@ -644,38 +623,49 @@ bool ORoadmap::PreNotify(NotifyEvent& _rNEvt)
     return Window::PreNotify( _rNEvt );
 }
 
-IMPL_LINK_TYPED(ORoadmap, ImplClickHdl, HyperLabel*, CurHyperLabel, void)
+IMPL_LINK(ORoadmap, ImplClickHdl, HyperLabel*, CurHyperLabel, void)
 {
    SelectRoadmapItemByID( CurHyperLabel->GetID() );
 }
 
 void ORoadmap::DataChanged(const DataChangedEvent& rDCEvt)
 {
-    if ((( rDCEvt.GetType() == DataChangedEventType::SETTINGS )   ||
+    if (!((( rDCEvt.GetType() == DataChangedEventType::SETTINGS )   ||
         ( rDCEvt.GetType() == DataChangedEventType::DISPLAY   ))  &&
-        ( rDCEvt.GetFlags() & AllSettingsFlags::STYLE        ))
+        ( rDCEvt.GetFlags() & AllSettingsFlags::STYLE        )))
+        return;
+
+    const StyleSettings& rStyleSettings = GetSettings().GetStyleSettings();
+    SetBackground( Wallpaper( rStyleSettings.GetFieldColor() ) );
+    Color aTextColor = rStyleSettings.GetFieldTextColor();
+    vcl::Font aFont = GetFont();
+    aFont.SetColor( aTextColor );
+    SetFont( aFont );
+    RoadmapTypes::ItemId curItemID = GetCurrentRoadmapItemID();
+    RoadmapItem* pLabelItem = GetByID( curItemID );
+    if (pLabelItem != nullptr)
     {
-        const StyleSettings& rStyleSettings = GetSettings().GetStyleSettings();
-        SetBackground( Wallpaper( rStyleSettings.GetFieldColor() ) );
-        Color aTextColor = rStyleSettings.GetFieldTextColor();
-        vcl::Font aFont = GetFont();
-        aFont.SetColor( aTextColor );
-        SetFont( aFont );
-        RoadmapTypes::ItemId curItemID = GetCurrentRoadmapItemID();
-        RoadmapItem* pLabelItem = GetByID( curItemID );
-        if (pLabelItem != nullptr)
-        {
-            pLabelItem->ToggleBackgroundColor(rStyleSettings.GetHighlightColor());
-        }
-        Invalidate();
+        pLabelItem->ToggleBackgroundColor(rStyleSettings.GetHighlightColor());
     }
+    Invalidate();
+}
+
+void ORoadmap::ApplySettings(vcl::RenderContext& rRenderContext)
+{
+    const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
+    Color aTextColor = rStyleSettings.GetFieldTextColor();
+    vcl::Font aFont = rRenderContext.GetFont();
+    aFont.SetColor(aTextColor);
+    aFont.SetWeight(WEIGHT_BOLD);
+    aFont.SetUnderline(LINESTYLE_SINGLE);
+    rRenderContext.SetFont(aFont);
+    rRenderContext.SetBackground(rStyleSettings.GetFieldColor());
 }
 
 RoadmapItem::RoadmapItem(ORoadmap& _rParent, const Size& _rItemPlayground)
     : m_aItemPlayground(_rItemPlayground)
 {
     mpID = VclPtr<IDLabel>::Create( &_rParent, WB_WORDBREAK );
-    mpID->SetTextColor( mpID->GetSettings().GetStyleSettings().GetFieldTextColor( ) );
     mpID->Show();
     mpDescription = VclPtr<HyperLabel>::Create( &_rParent, WB_NOTABSTOP | WB_WORDBREAK );
     mpDescription->Show();
@@ -736,20 +726,20 @@ RoadmapTypes::ItemIndex RoadmapItem::GetIndex() const
     return mpDescription ? mpDescription->GetIndex() : ItemIndex(-1);
 }
 
-void RoadmapItem::SetPosition(RoadmapItem* _pOldItem)
+void RoadmapItem::SetPosition(RoadmapItem const * _pOldItem)
 {
     Point aIDPos;
     if ( _pOldItem == nullptr )
     {
-        aIDPos = mpID->LogicToPixel( Point( ROADMAP_INDENT_X, ROADMAP_INDENT_Y ), MAP_APPFONT );
+        aIDPos = mpID->LogicToPixel(Point(ROADMAP_INDENT_X, ROADMAP_INDENT_Y), MapMode(MapUnit::MapAppFont));
     }
     else
     {
-        Size aOldSize = _pOldItem->GetDescriptionHyperLabel()->GetSizePixel();
+        Size aOldSize = _pOldItem->mpDescription->GetSizePixel();
 
         aIDPos = _pOldItem->mpID->GetPosPixel();
-        aIDPos.Y() += aOldSize.Height();
-        aIDPos.Y() += mpID->GetParent()->LogicToPixel( Size( 0, ROADMAP_ITEM_DISTANCE_Y ) ).Height();
+        aIDPos.AdjustY(aOldSize.Height() );
+        aIDPos.AdjustY(mpID->GetParent()->LogicToPixel( Size( 0, ROADMAP_ITEM_DISTANCE_Y ) ).Height() );
     }
     mpID->SetPosPixel( aIDPos );
 
@@ -771,15 +761,9 @@ bool RoadmapItem::IsEnabled() const
 void RoadmapItem::ToggleBackgroundColor(const Color& _rGBColor)
 {
     if (_rGBColor == COL_TRANSPARENT)
-    {
-        mpID->SetTextColor( mpID->GetSettings().GetStyleSettings().GetFieldTextColor( ) );
-        mpID->SetControlBackground( COL_TRANSPARENT );
-    }
+        mpID->SetControlBackground();
     else
-    {
         mpID->SetControlBackground( mpID->GetSettings().GetStyleSettings().GetHighlightColor() );
-        mpID->SetTextColor( mpID->GetSettings().GetStyleSettings().GetHighlightTextColor( ) );
-    }
     mpDescription->ToggleBackgroundColor(_rGBColor);
 }
 
@@ -822,22 +806,28 @@ IDLabel::IDLabel(vcl::Window* _pParent, WinBits _nWinStyle)
 {
 }
 
+void IDLabel::ApplySettings(vcl::RenderContext& rRenderContext)
+{
+    FixedText::ApplySettings(rRenderContext);
+
+    const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
+    if (GetControlBackground() == COL_TRANSPARENT)
+        rRenderContext.SetTextColor(rStyleSettings.GetFieldTextColor());
+    else
+        rRenderContext.SetTextColor(rStyleSettings.GetHighlightTextColor());
+}
+
 void IDLabel::DataChanged(const DataChangedEvent& rDCEvt)
 {
-    const StyleSettings& rStyleSettings = GetSettings().GetStyleSettings();
     FixedText::DataChanged( rDCEvt );
+
     if ((( rDCEvt.GetType() == DataChangedEventType::SETTINGS )   ||
         ( rDCEvt.GetType() == DataChangedEventType::DISPLAY   ))  &&
         ( rDCEvt.GetFlags() & AllSettingsFlags::STYLE        ))
     {
-        const Color& rGBColor = GetControlBackground();
-        if (rGBColor == COL_TRANSPARENT)
-            SetTextColor( rStyleSettings.GetFieldTextColor( ) );
-        else
-        {
+        const StyleSettings& rStyleSettings = GetSettings().GetStyleSettings();
+        if (GetControlBackground() != COL_TRANSPARENT)
             SetControlBackground(rStyleSettings.GetHighlightColor());
-            SetTextColor( rStyleSettings.GetHighlightTextColor( ) );
-        }
         Invalidate();
     }
 }

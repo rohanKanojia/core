@@ -17,25 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ChartModelHelper.hxx"
-#include "macros.hxx"
-#include "DiagramHelper.hxx"
-#include "DataSourceHelper.hxx"
-#include "ControllerLockGuard.hxx"
-#include "RangeHighlighter.hxx"
-#include "InternalDataProvider.hxx"
-#include "ChartModel.hxx"
+#include <ChartModelHelper.hxx>
+#include <DiagramHelper.hxx>
+#include <DataSourceHelper.hxx>
+#include <ControllerLockGuard.hxx>
+#include <RangeHighlighter.hxx>
+#include <InternalDataProvider.hxx>
+#include <ChartModel.hxx>
 
 #include <com/sun/star/chart/ChartDataRowSource.hpp>
 #include <com/sun/star/chart/XChartDocument.hpp>
 #include <com/sun/star/chart2/data/XDataReceiver.hpp>
 #include <com/sun/star/chart2/XChartDocument.hpp>
-#include <com/sun/star/chart2/XChartTypeContainer.hpp>
 #include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
-#include <com/sun/star/chart2/XDataSeriesContainer.hpp>
 #include <com/sun/star/embed/Aspects.hpp>
 #include <com/sun/star/embed/XVisualObject.hpp>
 #include <com/sun/star/view/XSelectionChangeListener.hpp>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 namespace chart
 {
@@ -73,7 +72,7 @@ uno::Reference< chart2::data::XDataProvider > ChartModelHelper::createInternalDa
 
                     xProp->getPropertyValue( "DataRowSource" ) >>= aDataRowSource;
 
-                    bDefaultDataInColumns = (css::chart::ChartDataRowSource_COLUMNS == aDataRowSource);
+                    bDefaultDataInColumns = (aDataRowSource == css::chart::ChartDataRowSource_COLUMNS);
                 }
             }
         }
@@ -97,9 +96,9 @@ uno::Reference< XDiagram > ChartModelHelper::findDiagram( const uno::Reference< 
         if( xChartDoc.is())
             return xChartDoc->getFirstDiagram();
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
     return nullptr;
 }
@@ -130,10 +129,10 @@ uno::Reference< XCoordinateSystem > ChartModelHelper::getFirstCoordinateSystem( 
     return XCooSys;
 }
 
-::std::vector< uno::Reference< XDataSeries > > ChartModelHelper::getDataSeries(
+std::vector< uno::Reference< XDataSeries > > ChartModelHelper::getDataSeries(
     ChartModel& rModel )
 {
-    ::std::vector< uno::Reference< XDataSeries > > aResult;
+    std::vector< uno::Reference< XDataSeries > > aResult;
 
     uno::Reference< XDiagram > xDiagram = rModel.getFirstDiagram();
     if( xDiagram.is())
@@ -142,10 +141,10 @@ uno::Reference< XCoordinateSystem > ChartModelHelper::getFirstCoordinateSystem( 
     return aResult;
 }
 
-::std::vector< uno::Reference< XDataSeries > > ChartModelHelper::getDataSeries(
+std::vector< uno::Reference< XDataSeries > > ChartModelHelper::getDataSeries(
     const uno::Reference< XChartDocument > & xChartDoc )
 {
-    ::std::vector< uno::Reference< XDataSeries > > aResult;
+    std::vector< uno::Reference< XDataSeries > > aResult;
 
     uno::Reference< XDiagram > xDiagram = ChartModelHelper::findDiagram( xChartDoc );
     if( xDiagram.is())
@@ -154,7 +153,7 @@ uno::Reference< XCoordinateSystem > ChartModelHelper::getFirstCoordinateSystem( 
     return aResult;
 }
 
-::std::vector< uno::Reference< XDataSeries > > ChartModelHelper::getDataSeries(
+std::vector< uno::Reference< XDataSeries > > ChartModelHelper::getDataSeries(
     const uno::Reference< frame::XModel > & xModel )
 {
     return getDataSeries( uno::Reference< chart2::XChartDocument >( xModel, uno::UNO_QUERY ));
@@ -237,7 +236,7 @@ bool ChartModelHelper::setIncludeHiddenCells( bool bIncludeHiddenCells, ChartMod
 
             //set the property on all instances in all cases to get the different objects in sync!
 
-            uno::Any aNewValue = uno::makeAny(bIncludeHiddenCells);
+            uno::Any aNewValue(bIncludeHiddenCells);
 
             try
             {
@@ -278,7 +277,7 @@ bool ChartModelHelper::setIncludeHiddenCells( bool bIncludeHiddenCells, ChartMod
     }
     catch (const uno::Exception& e)
     {
-        ASSERT_EXCEPTION(e);
+        SAL_WARN("chart2", "Exception caught. " << e);
     }
     return bChanged;
 }

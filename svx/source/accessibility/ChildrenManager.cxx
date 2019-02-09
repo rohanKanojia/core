@@ -20,6 +20,7 @@
 #include <svx/ChildrenManager.hxx>
 #include "ChildrenManagerImpl.hxx"
 #include <svx/AccessibleShape.hxx>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
@@ -45,8 +46,8 @@ ChildrenManager::~ChildrenManager()
 {
     mpImpl->dispose();
 
-    // emtpy
-    OSL_TRACE ("~ChildrenManager");
+    // empty
+    SAL_INFO("svx", "~ChildrenManager");
 }
 
 long ChildrenManager::GetChildCount() const throw ()
@@ -55,21 +56,16 @@ long ChildrenManager::GetChildCount() const throw ()
 }
 
 css::uno::Reference<XAccessible> ChildrenManager::GetChild (long nIndex)
-    throw (css::uno::RuntimeException,
-           css::lang::IndexOutOfBoundsException)
 {
     return mpImpl->GetChild (nIndex);
 }
 
 Reference<XAccessible> ChildrenManager::GetChild (const Reference<drawing::XShape>& xShape)
-    throw (css::uno::RuntimeException)
 {
     return mpImpl->GetChild (xShape);
 }
 
 css::uno::Reference<css::drawing::XShape> ChildrenManager::GetChildShape(long nIndex)
-    throw (css::uno::RuntimeException,
-           css::lang::IndexOutOfBoundsException)
 {
     return mpImpl->GetChildShape(nIndex);
 }
@@ -94,7 +90,7 @@ void ChildrenManager::ClearAccessibleShapeList()
     mpImpl->ClearAccessibleShapeList ();
 }
 
-void ChildrenManager::SetInfo (AccessibleShapeTreeInfo& rShapeTreeInfo)
+void ChildrenManager::SetInfo (AccessibleShapeTreeInfo const & rShapeTreeInfo)
 {
     mpImpl->SetInfo (rShapeTreeInfo);
 }
@@ -115,11 +111,9 @@ void ChildrenManager::RemoveFocus()
 }
 
 // IAccessibleViewForwarderListener
-void ChildrenManager::ViewForwarderChanged(
-    IAccessibleViewForwarderListener::ChangeType aChangeType,
-    const IAccessibleViewForwarder* pViewForwarder)
+void ChildrenManager::ViewForwarderChanged()
 {
-    mpImpl->ViewForwarderChanged (aChangeType, pViewForwarder);
+    mpImpl->ViewForwarderChanged();
 }
 
 } // end of namespace accessibility

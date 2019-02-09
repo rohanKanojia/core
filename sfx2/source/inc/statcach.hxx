@@ -19,16 +19,13 @@
 #ifndef INCLUDED_SFX2_SOURCE_INC_STATCACH_HXX
 #define INCLUDED_SFX2_SOURCE_INC_STATCACH_HXX
 
-#include <com/sun/star/frame/XDispatchProviderInterceptor.hpp>
 #include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/frame/XStatusListener.hpp>
-#include <com/sun/star/frame/FrameSearchFlag.hpp>
-#include <com/sun/star/frame/XDispatchProviderInterception.hpp>
 #include <com/sun/star/frame/FeatureStateEvent.hpp>
-#include <com/sun/star/frame/DispatchDescriptor.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <cppuhelper/implbase.hxx>
+#include <tools/debug.hxx>
 
 #include <sfx2/bindings.hxx>
 
@@ -40,7 +37,7 @@ class BindDispatch_Impl :   public ::cppu::WeakImplHelper< css::frame::XStatusLi
 {
 friend class SfxStateCache;
     css::uno::Reference< css::frame::XDispatch >   xDisp;
-    css::util::URL                     aURL;
+    css::util::URL const               aURL;
     css::frame::FeatureStateEvent      aStatus;
     SfxStateCache*          pCache;
     const SfxSlot*          pSlot;
@@ -51,19 +48,20 @@ public:
                                 const css::util::URL& rURL,
                                 SfxStateCache* pStateCache, const SfxSlot* pSlot );
 
-    virtual void SAL_CALL           statusChanged( const css::frame::FeatureStateEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL           disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL   statusChanged( const css::frame::FeatureStateEvent& Event ) override;
+    virtual void SAL_CALL   disposing( const css::lang::EventObject& Source ) override;
 
-    void                    Release();
     const css::frame::FeatureStateEvent& GetStatus() const { return aStatus;}
-    void                    Dispatch( const css::uno::Sequence < css::beans::PropertyValue >& aProps, bool bForceSynchron = false );
+    sal_Int16               Dispatch( const css::uno::Sequence < css::beans::PropertyValue >& aProps, bool bForceSynchron );
+    void                    Release();
 };
 
 class SfxStateCache
 {
 friend class BindDispatch_Impl;
-    BindDispatch_Impl*      pDispatch;
-    sal_uInt16              nId;           // Slot-Id
+    rtl::Reference<BindDispatch_Impl>
+                            mxDispatch;
+    sal_uInt16 const        nId;           // Slot-Id
     SfxControllerItem*      pInternalController;
     css::uno::Reference < css::frame::XDispatch > xMyDispatch;
     SfxControllerItem*      pController;    // Pointer to first bound Controller (interlinked with each other)
@@ -71,13 +69,13 @@ friend class BindDispatch_Impl;
     SfxPoolItem*            pLastItem;      // Last sent Item, never -1
     SfxItemState            eLastState;     // Last sent State
     bool                    bCtrlDirty:1;   // Update Controller?
-    bool                    bSlotDirty:1;   // Present Funktion, must be updated
+    bool                    bSlotDirty:1;   // Present Function, must be updated
     bool                    bItemVisible:1; // item visibility
     bool                    bItemDirty;     // Validity of pLastItem
 
 private:
                             SfxStateCache( const SfxStateCache& rOrig ) = delete;
-    void                    SetState_Impl( SfxItemState, const SfxPoolItem*, bool bMaybeDirty=false );
+    void                    SetState_Impl( SfxItemState, const SfxPoolItem*, bool bMaybeDirty );
 
 public:
                             SfxStateCache( sal_uInt16 nFuncId );
@@ -89,15 +87,15 @@ public:
     const SfxSlotServer*    GetSlotServer( SfxDispatcher &rDispat )
                             { return GetSlotServer( rDispat, css::uno::Reference< css::frame::XDispatchProvider > () ); }
     css::uno::Reference< css::frame::XDispatch >          GetDispatch() const;
-    void                    Dispatch( const SfxItemSet* pSet, bool bForceSynchron = false );
+    sal_Int16               Dispatch( const SfxItemSet* pSet, bool bForceSynchron );
     bool                    IsControllerDirty() const
                             { return bCtrlDirty; }
     void                    ClearCache();
 
     void                    SetState( SfxItemState, const SfxPoolItem*, bool bMaybeDirty=false );
-    void                    SetCachedState(bool bAlways = false);
+    void                    SetCachedState(bool bAlways);
     void                    Invalidate( bool bWithSlot );
-    void                    SetVisibleState( bool bShow=true );
+    void                    SetVisibleState( bool bShow );
 
     SfxControllerItem*      ChangeItemLink( SfxControllerItem* pNewBinding );
     SfxControllerItem*      GetItemLink() const;
@@ -121,7 +119,7 @@ inline void SfxStateCache::ClearCache()
 }
 
 
-// registeres a item representing this function
+// registers a item representing this function
 
 inline SfxControllerItem* SfxStateCache::ChangeItemLink( SfxControllerItem* pNewBinding )
 {

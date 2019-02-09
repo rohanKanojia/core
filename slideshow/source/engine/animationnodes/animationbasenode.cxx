@@ -20,17 +20,17 @@
 
 #include <cppuhelper/exc_hlp.hxx>
 #include <comphelper/anytostring.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/presentation/ParagraphTarget.hpp>
-#include <com/sun/star/animations/AnimationNodeType.hpp>
 #include <com/sun/star/animations/Timing.hpp>
 #include <com/sun/star/animations/AnimationAdditiveMode.hpp>
 #include <com/sun/star/presentation/ShapeAnimationSubType.hpp>
 
 #include "nodetools.hxx"
-#include "doctreenode.hxx"
+#include <doctreenode.hxx>
 #include "animationbasenode.hxx"
-#include "delayevent.hxx"
-#include "framerate.hxx"
+#include <delayevent.hxx>
+#include <framerate.hxx>
 
 #include <boost/optional.hpp>
 #include <algorithm>
@@ -131,12 +131,12 @@ AnimationBaseNode::AnimationBaseNode(
             // provide the given paragraph?
             if( aTarget.Paragraph >= 0 &&
                 mpShape->getTreeNodeSupplier().getNumberOfTreeNodes(
-                    DocTreeNode::NODETYPE_LOGICAL_PARAGRAPH) > aTarget.Paragraph )
+                    DocTreeNode::NodeType::LogicalParagraph) > aTarget.Paragraph )
             {
                 const DocTreeNode& rTreeNode(
                     mpShape->getTreeNodeSupplier().getTreeNode(
                         aTarget.Paragraph,
-                        DocTreeNode::NODETYPE_LOGICAL_PARAGRAPH ) );
+                        DocTreeNode::NodeType::LogicalParagraph ) );
 
                 // CAUTION: the creation of the subset shape
                 // _must_ stay in the node constructor, since
@@ -208,9 +208,7 @@ bool AnimationBaseNode::init_st()
         mpActivity = createActivity();
     }
     catch (uno::Exception const&) {
-        OSL_FAIL( OUStringToOString(
-                        comphelper::anyToString(cppu::getCaughtException()),
-                        RTL_TEXTENCODING_UTF8).getStr() );
+        SAL_WARN( "slideshow",  comphelper::anyToString(cppu::getCaughtException()) );
         // catch and ignore. We later handle empty activities, but for
         // other nodes to function properly, the core functionality of
         // this node must remain up and running.
@@ -306,10 +304,8 @@ void AnimationBaseNode::activate_st()
 
 void AnimationBaseNode::deactivate_st( NodeState eDestState )
 {
-    if (eDestState == FROZEN) {
-        if (mpActivity)
-            mpActivity->end();
-    }
+    if (eDestState == FROZEN && mpActivity)
+        mpActivity->end();
 
     if (isDependentSubsettedShape()) {
         // for dependent subsets, remove subset shape
@@ -331,30 +327,30 @@ void AnimationBaseNode::deactivate_st( NodeState eDestState )
         }
     }
 
-    if (eDestState == ENDED) {
+    if (eDestState != ENDED)
+        return;
 
-        // no shape anymore, no layer needed:
-        maAttributeLayerHolder.reset();
+    // no shape anymore, no layer needed:
+    maAttributeLayerHolder.reset();
 
-        if (! isDependentSubsettedShape()) {
+    if (! isDependentSubsettedShape()) {
 
-            // for all other shapes, removing the
-            // attribute layer quite possibly changes
-            // shape display. Thus, force update
-            AttributableShapeSharedPtr const pShape( getShape() );
+        // for all other shapes, removing the
+        // attribute layer quite possibly changes
+        // shape display. Thus, force update
+        AttributableShapeSharedPtr const pShape( getShape() );
 
-            // don't anybody dare to check against
-            // pShape->isVisible() here, removing the
-            // attribute layer might actually make the
-            // shape invisible!
-            getContext().mpSubsettableShapeManager->notifyShapeUpdate( pShape );
-        }
+        // don't anybody dare to check against
+        // pShape->isVisible() here, removing the
+        // attribute layer might actually make the
+        // shape invisible!
+        getContext().mpSubsettableShapeManager->notifyShapeUpdate( pShape );
+    }
 
-        if (mpActivity) {
-            // kill activity, if still running
-            mpActivity->dispose();
-            mpActivity.reset();
-        }
+    if (mpActivity) {
+        // kill activity, if still running
+        mpActivity->dispose();
+        mpActivity.reset();
     }
 }
 
@@ -392,11 +388,11 @@ AnimationBaseNode::fillCommonParameters() const
 
     boost::optional<double> aRepeats;
     double nRepeats = 0;
-    if( (mxAnimateNode->getRepeatCount() >>= nRepeats) ) {
-        aRepeats.reset( nRepeats );
+    if( mxAnimateNode->getRepeatCount() >>= nRepeats ) {
+        aRepeats = nRepeats;
     }
     else {
-        if( (mxAnimateNode->getRepeatDuration() >>= nRepeats) ) {
+        if( mxAnimateNode->getRepeatDuration() >>= nRepeats ) {
             // when repeatDuration is given,
             // autoreverse does _not_ modify the
             // active duration. Thus, calc repeat
@@ -405,9 +401,9 @@ AnimationBaseNode::fillCommonParameters() const
 
             // convert duration back to repeat counts
             if( bAutoReverse )
-                aRepeats.reset( nRepeats / (2.0 * nDuration) );
+                aRepeats = nRepeats / (2.0 * nDuration);
             else
-                aRepeats.reset( nRepeats / nDuration );
+                aRepeats = nRepeats / nDuration;
         }
         else
         {
@@ -422,7 +418,7 @@ AnimationBaseNode::fillCommonParameters() const
                 {
                     // no indefinite timing, no other values given -
                     // use simple run, i.e. repeat of 1.0
-                    aRepeats.reset( 1.0 );
+                    aRepeats = 1.0;
                 }
             }
         }
@@ -451,7 +447,7 @@ AnimationBaseNode::fillCommonParameters() const
 
     // Calculate the minimum frame count that depends on the duration and
     // the minimum frame count.
-    const sal_Int32 nMinFrameCount (basegfx::clamp<sal_Int32>(
+    const sal_Int32 nMinFrameCount (std::clamp<sal_Int32>(
         basegfx::fround(nDuration * FrameRate::MinimumFramesPerSecond), 1, 10));
 
     return ActivitiesFactory::CommonParameters(
@@ -468,7 +464,7 @@ AnimationBaseNode::fillCommonParameters() const
         getSlideSize());
 }
 
-AttributableShapeSharedPtr AnimationBaseNode::getShape() const
+AttributableShapeSharedPtr const & AnimationBaseNode::getShape() const
 {
     // any subsetting at all?
     if (mpShapeSubset)

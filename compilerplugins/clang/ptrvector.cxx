@@ -7,13 +7,15 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <memory>
 #include <cassert>
 #include <string>
 #include <iostream>
 #include <fstream>
 #include <set>
+
+#include "check.hxx"
 #include "plugin.hxx"
-#include "compat.hxx"
 
 /**
   Check for calls to operator== on a std::container< std::unique_ptr >, which is not useful,
@@ -23,10 +25,11 @@
 namespace {
 
 class PtrVector:
-    public RecursiveASTVisitor<PtrVector>, public loplugin::Plugin
+    public loplugin::FilteringPlugin<PtrVector>
 {
 public:
-    explicit PtrVector(InstantiationData const & data): Plugin(data) {}
+    explicit PtrVector(loplugin::InstantiationData const & data): FilteringPlugin(data)
+    {}
 
     virtual void run() override
     {
@@ -53,7 +56,10 @@ bool PtrVector::VisitCXXOperatorCallExpr(const CXXOperatorCallExpr* expr)
     }
     const Expr* argExpr = expr->getArg(0);
     std::string s = argExpr->getType().getDesugaredType(compiler.getASTContext()).getAsString();
-    if (s.find("iterator") != std::string::npos) {
+    if (s.find("iterator") != std::string::npos
+        || (loplugin::TypeCheck(argExpr->getType()).Class("__wrap_iter").Namespace("__1")
+            .StdNamespace()))
+    {
         return true;
     }
     if (s.find("array") == std::string::npos && s.find("deque") == std::string::npos

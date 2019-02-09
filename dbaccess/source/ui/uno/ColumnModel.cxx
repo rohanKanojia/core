@@ -18,19 +18,16 @@
  */
 
 #include "ColumnModel.hxx"
-#include "uiservices.hxx"
+#include <uiservices.hxx>
 #include <com/sun/star/awt/FontRelief.hpp>
 #include <com/sun/star/awt/FontEmphasisMark.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 
 #include <cppuhelper/queryinterface.hxx>
-#include <comphelper/extract.hxx>
-#include "dbustrings.hrc"
-#include "dbu_reghelper.hxx"
-#include <toolkit/helper/vclunohelper.hxx>
-#include <comphelper/property.hxx>
+#include <stringconstants.hxx>
+#include <dbu_reghelper.hxx>
 
-extern "C" void SAL_CALL createRegistryInfo_OColumnControlModel()
+extern "C" void createRegistryInfo_OColumnControlModel()
 {
     static ::dbaui::OMultiInstanceAutoRegistration< ::dbaui::OColumnControlModel> aAutoRegistration;
 }
@@ -102,13 +99,12 @@ void OColumnControlModel::registerProperties()
 }
 
 // XCloneable
-Reference< XCloneable > SAL_CALL OColumnControlModel::createClone( ) throw (RuntimeException, std::exception)
+Reference< XCloneable > SAL_CALL OColumnControlModel::createClone( )
 {
-    return new OColumnControlModel( this, getORB() );
+    return new OColumnControlModel( this, m_xORB );
 }
 
 css::uno::Sequence<sal_Int8> OColumnControlModel::getImplementationId()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -117,13 +113,13 @@ IMPLEMENT_GETTYPES2(OColumnControlModel,OColumnControlModel_BASE,comphelper::OPr
 IMPLEMENT_PROPERTYCONTAINER_DEFAULTS(OColumnControlModel)
 IMPLEMENT_SERVICE_INFO2_STATIC(OColumnControlModel,"com.sun.star.comp.dbu.OColumnControlModel","com.sun.star.awt.UnoControlModel","com.sun.star.sdb.ColumnDescriptorControlModel")
 IMPLEMENT_FORWARD_REFCOUNT( OColumnControlModel, OColumnControlModel_BASE )
-Any SAL_CALL OColumnControlModel::queryInterface( const Type& _rType ) throw (RuntimeException, std::exception)
+Any SAL_CALL OColumnControlModel::queryInterface( const Type& _rType )
 {
     return OColumnControlModel_BASE::queryInterface( _rType );
 }
 
 // css::XAggregation
-Any SAL_CALL OColumnControlModel::queryAggregation( const Type& rType ) throw(RuntimeException, std::exception)
+Any SAL_CALL OColumnControlModel::queryAggregation( const Type& rType )
 {
     Any aRet(OColumnControlModel_BASE::queryAggregation(rType));
     if (!aRet.hasValue())
@@ -131,17 +127,17 @@ Any SAL_CALL OColumnControlModel::queryAggregation( const Type& rType ) throw(Ru
     return aRet;
 }
 
-OUString SAL_CALL OColumnControlModel::getServiceName() throw ( RuntimeException, std::exception)
+OUString SAL_CALL OColumnControlModel::getServiceName()
 {
     return OUString();
 }
 
-void OColumnControlModel::write(const Reference<XObjectOutputStream>& /*_rxOutStream*/) throw ( css::io::IOException, RuntimeException, std::exception)
+void OColumnControlModel::write(const Reference<XObjectOutputStream>& /*_rxOutStream*/)
 {
     // TODO
 }
 
-void OColumnControlModel::read(const Reference<XObjectInputStream>& /*_rxInStream*/) throw ( css::io::IOException, RuntimeException, std::exception)
+void OColumnControlModel::read(const Reference<XObjectInputStream>& /*_rxInStream*/)
 {
     // TODO
 }

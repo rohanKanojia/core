@@ -17,10 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <string.h>
 
 #include <com/sun/star/i18n/UnicodeType.hpp>
 #include <com/sun/star/i18n/WordType.hpp>
+#include <com/sun/star/i18n/XBreakIterator.hpp>
 
 #include <unotools/charclass.hxx>
 
@@ -45,11 +47,10 @@ using namespace ::com::sun::star::i18n;
  *   - String - the orig text
  *   - SwFormatRuby - the ruby attribute
  */
-sal_uInt16 SwDoc::FillRubyList( const SwPaM& rPam, SwRubyList& rList,
-                            sal_uInt16 nMode )
+sal_uInt16 SwDoc::FillRubyList( const SwPaM& rPam, SwRubyList& rList )
 {
     const SwPaM *_pStartCursor = rPam.GetNext(),
-                *__pStartCursor = _pStartCursor;
+                *_pStartCursor2 = _pStartCursor;
     bool bCheckEmpty = &rPam != _pStartCursor;
     do {
         const SwPosition* pStt = _pStartCursor->Start(),
@@ -66,7 +67,7 @@ sal_uInt16 SwDoc::FillRubyList( const SwPaM& rPam, SwRubyList& rList,
                     aPam.SetMark();
                     *aPam.GetMark() = *pEnd;
                 }
-                if( _SelectNextRubyChars( aPam, *pNew, nMode ))
+                if( SelectNextRubyChars( aPam, *pNew ))
                 {
                     rList.push_back(std::move(pNew));
                     aPam.DeleteMark();
@@ -77,7 +78,7 @@ sal_uInt16 SwDoc::FillRubyList( const SwPaM& rPam, SwRubyList& rList,
                      {
                         // goto next paragraph
                         aPam.DeleteMark();
-                        aPam.Move( fnMoveForward, fnGoNode );
+                        aPam.Move( fnMoveForward, GoInNode );
                      }
                      else
                         break;
@@ -85,22 +86,21 @@ sal_uInt16 SwDoc::FillRubyList( const SwPaM& rPam, SwRubyList& rList,
             } while( 30 > rList.size() && *aPam.GetPoint() < *pEnd );
         }
     } while( 30 > rList.size() &&
-        (_pStartCursor = _pStartCursor->GetNext()) != __pStartCursor );
+        (_pStartCursor = _pStartCursor->GetNext()) != _pStartCursor2 );
 
     return rList.size();
 }
 
-void SwDoc::SetRubyList( const SwPaM& rPam, const SwRubyList& rList,
-                            sal_uInt16 nMode )
+void SwDoc::SetRubyList( const SwPaM& rPam, const SwRubyList& rList )
 {
-    GetIDocumentUndoRedo().StartUndo( UNDO_SETRUBYATTR, nullptr );
+    GetIDocumentUndoRedo().StartUndo( SwUndoId::SETRUBYATTR, nullptr );
     std::set<sal_uInt16> aDelArr;
     aDelArr.insert( RES_TXTATR_CJK_RUBY );
 
-    sal_uInt16 nListEntry = 0;
+    SwRubyList::size_type nListEntry = 0;
 
     const SwPaM *_pStartCursor = rPam.GetNext(),
-                *__pStartCursor = _pStartCursor;
+                *_pStartCursor2 = _pStartCursor;
     bool bCheckEmpty = &rPam != _pStartCursor;
     do {
         const SwPosition* pStt = _pStartCursor->Start(),
@@ -118,7 +118,7 @@ void SwDoc::SetRubyList( const SwPaM& rPam, const SwRubyList& rList,
                     aPam.SetMark();
                     *aPam.GetMark() = *pEnd;
                 }
-                if( _SelectNextRubyChars( aPam, aCheckEntry, nMode ))
+                if( SelectNextRubyChars( aPam, aCheckEntry ))
                 {
                     const SwRubyListEntry* pEntry = rList[ nListEntry++ ].get();
                     if( aCheckEntry.GetRubyAttr() != pEntry->GetRubyAttr() )
@@ -148,7 +148,7 @@ void SwDoc::SetRubyList( const SwPaM& rPam, const SwRubyList& rList,
                      {
                         // goto next paragraph
                         aPam.DeleteMark();
-                        aPam.Move( fnMoveForward, fnGoNode );
+                        aPam.Move( fnMoveForward, GoInNode );
                      }
                      else
                     {
@@ -172,12 +172,12 @@ void SwDoc::SetRubyList( const SwPaM& rPam, const SwRubyList& rList,
             } while( nListEntry < rList.size() && *aPam.GetPoint() < *pEnd );
         }
     } while( 30 > rList.size() &&
-        (_pStartCursor = _pStartCursor->GetNext()) != __pStartCursor );
+        (_pStartCursor = _pStartCursor->GetNext()) != _pStartCursor2 );
 
-    GetIDocumentUndoRedo().EndUndo( UNDO_SETRUBYATTR, nullptr );
+    GetIDocumentUndoRedo().EndUndo( SwUndoId::SETRUBYATTR, nullptr );
 }
 
-bool SwDoc::_SelectNextRubyChars( SwPaM& rPam, SwRubyListEntry& rEntry, sal_uInt16 )
+bool SwDoc::SelectNextRubyChars( SwPaM& rPam, SwRubyListEntry& rEntry )
 {
     // Point must be the startposition, Mark is optional the end position
     SwPosition* pPos = rPam.GetPoint();
@@ -281,7 +281,7 @@ bool SwDoc::_SelectNextRubyChars( SwPaM& rPam, SwRubyListEntry& rEntry, sal_uInt
 
         case UnicodeType::OTHER_LETTER:
             bChkNxtWrd = true;
-            //fall-through
+            [[fallthrough]];
         default:
                 bIsAlphaNum = false;
                 break;
@@ -296,7 +296,7 @@ bool SwDoc::_SelectNextRubyChars( SwPaM& rPam, SwRubyListEntry& rEntry, sal_uInt
         {
             rPam.SetMark();
             bAlphaNum = bIsAlphaNum;
-            if( bChkNxtWrd && g_pBreakIt->GetBreakIter().is() )
+            if (bChkNxtWrd)
             {
                 // search the end of this word
                 nWordEnd = g_pBreakIt->GetBreakIter()->getWordBoundary(

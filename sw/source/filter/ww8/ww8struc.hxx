@@ -27,8 +27,10 @@
 
 #include <editeng/borderline.hxx>
 #include <filter/msfilter/util.hxx>
+#include <i18nlangtag/lang.h>
+#include <tools/color.hxx>
 
-#ifdef SAL_W32
+#ifdef _WIN32
 #   pragma pack(push, 2)
 #endif
 
@@ -196,7 +198,7 @@ static_assert(sizeof (WW8_STD) == 10, "this has to match the msword size");
 /** base for reading AND working on (will have different subclasses */
 struct WW8_FFN_BASE     // Font Descriptor
 {
-    // ab Ver6
+    // from Ver6 on
     sal_uInt8    cbFfnM1;        //  0x0     total length of FFN - 1.
 
     sal_uInt8    prg: 2;         //  0x1:03  pitch request
@@ -214,9 +216,9 @@ static_assert(sizeof (WW8_FFN_BASE) == 6, "this has to match the msword size");
 
 /** This is what we use in the Parser (and Dumper)
 */
-struct WW8_FFN : public WW8_FFN_BASE
+struct WW8_FFN
 {
-    // ab Ver8 als Unicode
+    // from Ver8 on as Unicode
     OUString sFontname;// 0x6 or 0x40 resp. from Ver8 on zero terminated string that
                                         // records name of font.
                                         // Maximal size of szFfn is 65 characters.
@@ -224,6 +226,7 @@ struct WW8_FFN : public WW8_FFN_BASE
                                         // Possibly followed by a second sz which records the
                                         // name of an alternate font to use if the first named
                                         // font does not exist on this system.
+    WW8_FFN_BASE aFFNBase;
 };
 
 struct WW8_BRCVer6  // BoRder Code (WW6 version)
@@ -253,17 +256,6 @@ struct WW8_BRCVer6  // BoRder Code (WW6 version)
         { return ((aBits1[0] & 0xc0) >> 6) | ((aBits1[1] & 0x07) << 2); }
     sal_uInt8 dxpSpace() const
         { return aBits1[1] >> 3; }
-
-    WW8_BRCVer6(sal_uInt8 _dxpLineWidth, sal_uInt8 _brcType, sal_uInt8 _ico,
-        sal_uInt8 _dxpSpace, bool _fShadow)
-    {
-        assert(_dxpSpace < 0x20);
-        assert(_brcType <= 3);
-        assert(_ico < 32);
-        aBits1[0] = _dxpLineWidth | (_brcType << 3) | ((sal_uInt8)_fShadow << 5)
-            | ((_ico << 6) & 0xc0);
-        aBits1[1] = (_ico >> 2) | (_dxpSpace << 3);
-    }
 };
 
 struct WW8_BRC  // BoRder Code (WW8 version)
@@ -306,14 +298,14 @@ struct WW8_BRC  // BoRder Code (WW8 version)
         aBits1[0] = _dptLineWidth;
         aBits1[1] = _brcType;
         aBits2[0] = _ico;
-        aBits2[1] = _dptSpace | ((sal_uInt8)_fShadow << 5)
-            | ((sal_uInt8)_fFrame << 6);
+        aBits2[1] = _dptSpace | (static_cast<sal_uInt8>(_fShadow) << 5)
+            | (static_cast<sal_uInt8>(_fFrame) << 6);
     }
     // Convert BRC from WW6 to WW8 format
     explicit WW8_BRC(const WW8_BRCVer6& brcVer6);
 
     // Returns LO border width in twips=1/20pt, taking into account brcType
-    short DetermineBorderProperties(short *pSpace=nullptr) const;
+    short DetermineBorderProperties(short *pSpace) const;
 };
 
 typedef WW8_BRC WW8_BRC5[5];        // 5 * Border Code
@@ -357,8 +349,8 @@ struct WW8_BRCVer9  // BoRder Code (WW9 version)
         UInt32ToSVBT32(_cv, aBits1);
         aBits2[0] = _dptLineWidth;
         aBits2[1] = _brcType;
-        aBits2[2] = _dptSpace | ((sal_uInt8)_fShadow << 5)
-            | ((sal_uInt8)_fFrame << 6);
+        aBits2[2] = _dptSpace | (static_cast<sal_uInt8>(_fShadow) << 5)
+            | (static_cast<sal_uInt8>(_fFrame) << 6);
         aBits2[3] = 0;
     }
     // Convert BRC from WW8 to WW9 format
@@ -386,7 +378,7 @@ public:
     void WriteToMem(sal_uInt8 *&pData) const;
 
     //Maps what I think is the language this is to affect to the OOo language
-    sal_uInt16 GetConvertedLang() const;
+    LanguageType GetConvertedLang() const;
 
     sal_uInt16 fKerningPunct  : 1;  // true if we're kerning punctuation
     sal_uInt16 iJustification : 2;  // Kinsoku method of justification:
@@ -593,10 +585,10 @@ private:
 public:
     WW8_SHD() : maBits(0) {}
 
-    sal_uInt8 GetFore() const { return (sal_uInt8)( maBits & 0x1f); }
-    sal_uInt8 GetBack() const { return (sal_uInt8)((maBits >> 5 ) & 0x1f); }
+    sal_uInt8 GetFore() const { return static_cast<sal_uInt8>( maBits & 0x1f); }
+    sal_uInt8 GetBack() const { return static_cast<sal_uInt8>((maBits >> 5 ) & 0x1f); }
     sal_uInt8 GetStyle(bool bVer67)  const
-        { return (sal_uInt8)((maBits >> 10) & ( bVer67 ? 0x1f : 0x3f ) ); }
+        { return static_cast<sal_uInt8>((maBits >> 10) & ( bVer67 ? 0x1f : 0x3f ) ); }
 
     sal_uInt16 GetValue() const { return maBits; }
 
@@ -660,7 +652,7 @@ struct WW8_ANLD
     sal_uInt8 fNumberAcross;    // 0x11     number across cells in table rows(instead of down)
     sal_uInt8 fRestartHdn;  // 0x12     restart heading number on section boundary
     sal_uInt8 fSpareX;      // 0x13     unused( should be 0)
-    sal_uInt8  rgchAnld[32]; // 0x14 characters displayed before/after autonumber
+    sal_uInt8 rgchAnld[32]; // 0x14 characters displayed before/after autonumber
 };
 
 struct WW8_OLST
@@ -711,7 +703,7 @@ struct WW8_DPHEAD
     SVBT16 dpk;         //  0   Drawn Primitive Kind  REVIEW davebu
   //        0=start of grouping, 1=line, 2=textbox, 3=rectangle,
   //        4=arc, 5=elipse, 6=polyline, 7=callout textbox,
-  //        8=end of grouping, 9=sample primitve holding default values
+  //        8=end of grouping, 9=sample primitive holding default values
     SVBT16 cb;          // 2    size (count of bytes) of this DP
     SVBT16 xa;          // 4    These 2 points describe the rectangle
     SVBT16 ya;          // 6    enclosing this DP relative to the origin of
@@ -998,7 +990,7 @@ struct WW8_WKB
     SVBT16 reserved5;
 };
 
-#ifdef SAL_W32
+#ifdef _WIN32
 #   pragma pack(pop)
 #endif
 
@@ -1076,7 +1068,7 @@ struct SEPr
     // Fixed array - two entries for each SEP column to store width of column and spacing to next column.
     // At odd index values [1,3,5,...] the column widths are stored.
     // At even index values [2,4,6,...] the spacings to the next columns are stored.
-    // Value at index 0 is initialized with 0 and used for easier interation on the array
+    // Value at index 0 is initialized with 0 and used for easier iteration on the array
     sal_Int32 rgdxaColumnWidthSpacing[MAX_NO_OF_SEP_COLUMNS*2 + 1];
 
     sal_Int32 dxaColumnWidth;
@@ -1087,7 +1079,11 @@ struct SEPr
 
 namespace wwUtility
 {
-    inline sal_uInt32 RGBToBGR(sal_uInt32 nColour) { return msfilter::util::BGRToRGB(nColour); }
+    inline sal_uInt32 RGBToBGR(::Color nColour)
+    {
+        // we can use this because the translation is symmetric
+        return msfilter::util::BGRToRGB(sal_uInt32(nColour));
+    }
 }
 
 /// [MS-OSHARED] FactoidType: one smart tag type.
@@ -1133,7 +1129,7 @@ class MSOPropertyBag
 {
 public:
     MSOPropertyBag();
-    void Read(SvStream& rStream);
+    bool Read(SvStream& rStream);
     void Write(WW8Export& rExport);
 
     /// Matches MSOFactoidType::m_nId in MSOPropertyBagStore::m_aFactoidTypes.

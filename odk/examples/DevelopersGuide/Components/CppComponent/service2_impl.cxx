@@ -60,7 +60,8 @@ extern Reference< XInterface > SAL_CALL create_MyService1Impl(
 
 static Sequence< OUString > getSupportedServiceNames_MyService2Impl()
 {
-    Sequence<OUString> names { "my_module.MyService2" };
+    Sequence<OUString> names(1);
+    names[0] = "my_module.MyService2";
     return names;
 }
 
@@ -112,7 +113,7 @@ void MyService2Impl::initialize( Sequence< Any > const & args )
     {
         throw lang::IllegalArgumentException(
             OUString(
-                          "give a string instanciating this component!"),
+                          "give a string instantiating this component!"),
             // resolve to XInterface reference:
             static_cast< ::cppu::OWeakObject * >(this),
             0 ); // argument pos

@@ -24,7 +24,6 @@
 #include <com/sun/star/lang/WrappedTargetException.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/container/XIndexContainer.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
@@ -33,22 +32,13 @@
 #include <framework/fwedllapi.h>
 
 #include <cppuhelper/weak.hxx>
+#include <cppuhelper/weakref.hxx>
 #include <vcl/menu.hxx>
 #include <vcl/toolbox.hxx>
 
-// Prepare for inclusion by framework and sfx
-// Please consider that there is a corresponding define also in sfxsids.hrc!! (SID_SFX_START)/(SID_ADDONS)
-#define FWK_SID_SFX_START 5000
-#define FWK_SID_ADDONS (FWK_SID_SFX_START+1678)
-#define FWK_SID_ADDONHELP (FWK_SID_SFX_START+1684)
-
-const sal_uInt16 START_ITEMID_PICKLIST      = 4500;
-const sal_uInt16 END_ITEMID_PICKLIST        = 4599;
-const sal_uInt16 MAX_ITEMCOUNT_PICKLIST     =   99; // difference between START_... & END_... for picklist / must be changed too, if these values are changed!
 const sal_uInt16 START_ITEMID_WINDOWLIST    = 4600;
 const sal_uInt16 END_ITEMID_WINDOWLIST      = 4699;
-const sal_uInt16 ITEMID_ADDONLIST           = FWK_SID_ADDONS;
-const sal_uInt16 ITEMID_ADDONHELP           = FWK_SID_ADDONHELP;
+const sal_uInt16 ITEMID_ADDONLIST           = 6678; // used to be a SID in sfx2, now just a unique id...
 
 namespace framework
 {
@@ -78,9 +68,9 @@ public:
     OUString aImageId;
     css::uno::WeakReference<css::frame::XDispatchProvider> xDispatchProvider;
 
-    static sal_uIntPtr CreateAttribute(const OUString& rFrame, const OUString& rImageIdStr);
-    static sal_uIntPtr CreateAttribute(const css::uno::WeakReference<css::frame::XDispatchProvider>& rDispatchProvider);
-    static void ReleaseAttribute(sal_uIntPtr nAttributePtr);
+    static void* CreateAttribute(const OUString& rFrame, const OUString& rImageIdStr);
+    static void* CreateAttribute(const css::uno::WeakReference<css::frame::XDispatchProvider>& rDispatchProvider);
+    static void ReleaseAttribute(void* nAttributePtr);
 
     void acquire()
     {
@@ -94,24 +84,26 @@ public:
     }
 };
 
-class FWE_DLLPUBLIC MenuConfiguration
+class FWE_DLLPUBLIC MenuConfiguration final
 {
 public:
         MenuConfiguration(
             // use const when giving a uno reference by reference
             const css::uno::Reference< css::uno::XComponentContext >& rxContext );
 
-        virtual ~MenuConfiguration();
+        ~MenuConfiguration();
 
+        /// @throws css::lang::WrappedTargetException
+        /// @throws css::uno::RuntimeException
         css::uno::Reference< css::container::XIndexAccess > CreateMenuBarConfigurationFromXML(
-            css::uno::Reference< css::io::XInputStream >& rInputStream )
-            throw (css::lang::WrappedTargetException, css::uno::RuntimeException);
+            css::uno::Reference< css::io::XInputStream > const & rInputStream );
 
+        /// @throws css::lang::WrappedTargetException
+        /// @throws css::uno::RuntimeException
         void StoreMenuBarConfigurationToXML(
-                      css::uno::Reference< css::container::XIndexAccess >& rMenuBarConfiguration,
-                      css::uno::Reference< css::io::XOutputStream >& rOutputStream,
-                      bool bIsMenuBar )
-            throw (css::lang::WrappedTargetException, css::uno::RuntimeException);
+                      css::uno::Reference< css::container::XIndexAccess > const & rMenuBarConfiguration,
+                      css::uno::Reference< css::io::XOutputStream > const & rOutputStream,
+                      bool bIsMenuBar );
 
 private:
         css::uno::Reference< css::uno::XComponentContext> m_xContext;

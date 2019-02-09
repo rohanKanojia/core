@@ -30,6 +30,10 @@ interface Documents
     [
         ExecMethod = OpenRemoteExec_Impl ;
     ]
+    SID_SIGNPDF
+    [
+        ExecMethod = SignPDFExec_Impl ;
+    ]
     SID_OPENHYPERLINK // ole(no) api(final/play/rec)
     [
         ExecMethod = OpenDocExec_Impl ;
@@ -198,6 +202,10 @@ interface OfficeDocument : Document
         ExecMethod = ExecFile_Impl;
         StateMethod = GetState_Impl;
     ]
+    SID_DOC_REPAIR
+    [
+        StateMethod = GetState_Impl;
+    ]
 }
 
 
@@ -230,7 +238,17 @@ shell SfxObjectShell
         ExecMethod = ExecFile_Impl ;
         StateMethod = GetState_Impl ;
     ]
-    SID_SAVE_VERSION_ON_CLOSE
+    SID_EXPORTDOCASEPUB
+    [
+        ExecMethod = ExecFile_Impl ;
+        StateMethod = GetState_Impl ;
+    ]
+    SID_DIRECTEXPORTDOCASEPUB
+    [
+        ExecMethod = ExecFile_Impl ;
+        StateMethod = GetState_Impl ;
+    ]
+    SID_REDACTDOC
     [
         ExecMethod = ExecFile_Impl ;
         StateMethod = GetState_Impl ;

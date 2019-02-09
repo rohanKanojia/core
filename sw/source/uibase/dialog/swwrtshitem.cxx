@@ -17,16 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "swwrtshitem.hxx"
-SwWrtShellItem::SwWrtShellItem( sal_uInt16 _nWhich, SwWrtShell* pSh )
-    : SfxPoolItem( _nWhich ), pWrtSh( pSh )
+#include <swwrtshitem.hxx>
+#include <globals.hrc>
+
+SwWrtShellItem::SwWrtShellItem( SwWrtShell* pSh )
+    : SfxPoolItem( SID_WRT_SHELL ), pWrtSh( pSh )
 {
 
-}
-SwWrtShellItem::SwWrtShellItem( const SwWrtShellItem& rItem) :
-    SfxPoolItem( rItem.Which() ),
-    pWrtSh( rItem.pWrtSh )
-{
 }
 
 bool SwWrtShellItem::operator==( const SfxPoolItem& rItem) const

@@ -8,23 +8,23 @@
  *
  */
 
+#include <memory>
 #include <sfx2/dispatch.hxx>
 #include <svl/zforlist.hxx>
 #include <svl/undo.hxx>
 
-#include "formulacell.hxx"
-#include "rangelst.hxx"
-#include "scitems.hxx"
-#include "docsh.hxx"
-#include "document.hxx"
-#include "uiitems.hxx"
-#include "reffact.hxx"
-#include "strload.hxx"
-#include "docfunc.hxx"
-#include "StatisticsDialogs.hrc"
-#include "TableFillingAndNavigationTools.hxx"
-
-#include "MovingAverageDialog.hxx"
+#include <formulacell.hxx>
+#include <rangelst.hxx>
+#include <scitems.hxx>
+#include <docsh.hxx>
+#include <document.hxx>
+#include <uiitems.hxx>
+#include <reffact.hxx>
+#include <docfunc.hxx>
+#include <TableFillingAndNavigationTools.hxx>
+#include <MovingAverageDialog.hxx>
+#include <scresid.hxx>
+#include <strings.hrc>
 
 ScMovingAverageDialog::ScMovingAverageDialog(
                     SfxBindings* pSfxBindings, SfxChildWindow* pChildWindow,
@@ -52,7 +52,7 @@ bool ScMovingAverageDialog::Close()
     return DoClose( ScMovingAverageDialogWrapper::GetChildWindowId() );
 }
 
-sal_Int16 ScMovingAverageDialog::GetUndoNameId()
+const char* ScMovingAverageDialog::GetUndoNameId()
 {
     return STR_MOVING_AVERAGE_UNDO_NAME;
 }
@@ -78,9 +78,9 @@ ScRange ScMovingAverageDialog::ApplyOutput(ScDocShell* pDocShell)
 
         // Write label
         if (mGroupedBy == BY_COLUMN)
-            aTemplate.setTemplate(SC_STRLOAD(RID_STATISTICS_DLGS, STR_COLUMN_LABEL_TEMPLATE));
+            aTemplate.setTemplate(ScResId(STR_COLUMN_LABEL_TEMPLATE));
         else
-            aTemplate.setTemplate(SC_STRLOAD(RID_STATISTICS_DLGS, STR_ROW_LABEL_TEMPLATE));
+            aTemplate.setTemplate(ScResId(STR_ROW_LABEL_TEMPLATE));
 
         aTemplate.applyNumber("%NUMBER%", pIterator->index() + 1);
         output.writeBoldString(aTemplate.getTemplate());

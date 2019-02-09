@@ -16,7 +16,7 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "vbahelper/vbapropvalue.hxx"
+#include <vbahelper/vbapropvalue.hxx>
 
 using namespace com::sun::star;
 
@@ -25,13 +25,13 @@ ScVbaPropValue::ScVbaPropValue( PropListener* pListener ) : m_pListener( pListen
 }
 
 css::uno::Any SAL_CALL
-ScVbaPropValue::getValue() throw (css::uno::RuntimeException, std::exception)
+ScVbaPropValue::getValue()
 {
     return m_pListener->getValueEvent();
 }
 
 void SAL_CALL
-ScVbaPropValue::setValue( const css::uno::Any& _value ) throw (css::uno::RuntimeException, std::exception)
+ScVbaPropValue::setValue( const css::uno::Any& _value )
 {
     m_pListener->setValueEvent( _value );
 }

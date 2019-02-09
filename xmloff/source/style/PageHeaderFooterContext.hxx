@@ -20,12 +20,13 @@
 #define INCLUDED_XMLOFF_SOURCE_STYLE_PAGEHEADERFOOTERCONTEXT_HXX
 
 #include <xmloff/xmlimp.hxx>
+#include <xmloff/maptype.hxx>
 
 class PageHeaderFooterContext : public SvXMLImportContext
 {
     ::std::vector< XMLPropertyState > &     rProperties;
-    sal_Int32                               nStartIndex;
-    sal_Int32                               nEndIndex;
+    sal_Int32 const                         nStartIndex;
+    sal_Int32 const                         nEndIndex;
     bool                                bHeader;
     const rtl::Reference < SvXMLImportPropertyMapper > rMap;
 
@@ -39,9 +40,9 @@ public:
                         sal_Int32 nStartIndex, sal_Int32 nEndIndex,
                         const bool bHeader);
 
-    virtual ~PageHeaderFooterContext();
+    virtual ~PageHeaderFooterContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                                      const OUString& rLocalName,
                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
 

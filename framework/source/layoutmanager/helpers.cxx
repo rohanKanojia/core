@@ -29,7 +29,6 @@
 #include <com/sun/star/awt/XWindowListener.hpp>
 #include <com/sun/star/ui/XUIElement.hpp>
 
-#include <comphelper/processfactory.hxx>
 #include <unotools/mediadescriptor.hxx>
 #include <vcl/svapp.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
@@ -61,7 +60,7 @@ bool isReverseOrderDockingArea( const sal_Int32 nDockArea )
             ( eDockArea == ui::DockingArea_DOCKINGAREA_RIGHT ));
 }
 
-bool isToolboxHorizontalAligned( ToolBox* pToolBox )
+bool isToolboxHorizontalAligned( ToolBox const * pToolBox )
 {
     if ( pToolBox )
         return (( pToolBox->GetAlign() == WindowAlign::Top ) || ( pToolBox->GetAlign() == WindowAlign::Bottom ));
@@ -83,7 +82,7 @@ OUString retrieveToolbarNameFromHelpURL( vcl::Window* pWindow )
 {
     OUString aToolbarName;
 
-    if ( pWindow->GetType() == WINDOW_TOOLBOX )
+    if ( pWindow->GetType() == WindowType::TOOLBOX )
     {
         ToolBox* pToolBox = dynamic_cast<ToolBox *>( pWindow );
         if ( pToolBox )
@@ -102,7 +101,7 @@ OUString retrieveToolbarNameFromHelpURL( vcl::Window* pWindow )
 ToolBox* getToolboxPtr( vcl::Window* pWindow )
 {
     ToolBox* pToolbox(nullptr);
-    if ( pWindow->GetType() == WINDOW_TOOLBOX )
+    if ( pWindow->GetType() == WindowType::TOOLBOX )
         pToolbox = dynamic_cast<ToolBox*>( pWindow );
     return pToolbox;
 }
@@ -118,17 +117,17 @@ vcl::Window* getWindowFromXUIElement( const uno::Reference< ui::XUIElement >& xU
 
 SystemWindow* getTopSystemWindow( const uno::Reference< awt::XWindow >& xWindow )
 {
-    vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
+    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
     while ( pWindow && !pWindow->IsSystemWindow() )
         pWindow = pWindow->GetParent();
 
     if ( pWindow )
-        return static_cast<SystemWindow *>(pWindow);
+        return static_cast<SystemWindow *>(pWindow.get());
     else
         return nullptr;
 }
 
-void setZeroRectangle( ::Rectangle& rRect )
+void setZeroRectangle( ::tools::Rectangle& rRect )
 {
     rRect.setX(0);
     rRect.setY(0);
@@ -150,10 +149,10 @@ bool lcl_checkUIElement(const uno::Reference< ui::XUIElement >& xUIElement, awt:
         _xWindow.set( xUIElement->getRealInterface(), uno::UNO_QUERY );
         _rPosSize = _xWindow->getPosSize();
 
-        vcl::Window* pWindow = VCLUnoHelper::GetWindow( _xWindow );
-        if ( pWindow->GetType() == WINDOW_TOOLBOX )
+        VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( _xWindow );
+        if ( pWindow->GetType() == WindowType::TOOLBOX )
         {
-            ::Size aSize = static_cast<ToolBox*>(pWindow)->CalcWindowSizePixel( 1 );
+            ::Size aSize = static_cast<ToolBox*>(pWindow.get())->CalcWindowSizePixel( 1 );
             _rPosSize.Width = aSize.Width();
             _rPosSize.Height = aSize.Height();
         }
@@ -181,7 +180,7 @@ uno::Reference< awt::XWindowPeer > createToolkitWindow( const uno::Reference< un
 }
 
 // convert alignment constant to vcl's WindowAlign type
-WindowAlign ImplConvertAlignment( sal_Int16 aAlignment )
+WindowAlign ImplConvertAlignment( ui::DockingArea aAlignment )
 {
     if ( aAlignment == ui::DockingArea_DOCKINGAREA_LEFT )
         return WindowAlign::Left;
@@ -195,19 +194,17 @@ WindowAlign ImplConvertAlignment( sal_Int16 aAlignment )
 
 OUString getElementTypeFromResourceURL( const OUString& aResourceURL )
 {
-    OUString aType;
-
     OUString aUIResourceURL( UIRESOURCE_URL );
     if ( aResourceURL.startsWith( aUIResourceURL ) )
     {
         sal_Int32       nIndex = 0;
         OUString aPathPart   = aResourceURL.copy( aUIResourceURL.getLength() );
-        aPathPart.getToken( 0, (sal_Unicode)'/', nIndex );
+        aPathPart.getToken( 0, '/', nIndex );
 
-        return aPathPart.getToken( 0, (sal_Unicode)'/', nIndex );
+        return aPathPart.getToken( 0, '/', nIndex );
     }
 
-    return aType;
+    return OUString();
 }
 
 void parseResourceURL( const OUString& aResourceURL, OUString& aElementType, OUString& aElementName )
@@ -217,14 +214,14 @@ void parseResourceURL( const OUString& aResourceURL, OUString& aElementType, OUS
     {
         sal_Int32       nIndex = 0;
         OUString aPathPart   = aResourceURL.copy( aUIResourceURL.getLength() );
-        aPathPart.getToken( 0, (sal_Unicode)'/', nIndex );
+        aPathPart.getToken( 0, '/', nIndex );
 
-        aElementType = aPathPart.getToken( 0, (sal_Unicode)'/', nIndex );
-        aElementName = aPathPart.getToken( 0, (sal_Unicode)'/', nIndex );
+        aElementType = aPathPart.getToken( 0, '/', nIndex );
+        aElementName = aPathPart.getToken( 0, '/', nIndex );
     }
 }
 
-css::awt::Rectangle putRectangleValueToAWT( const ::Rectangle& rRect )
+css::awt::Rectangle putRectangleValueToAWT( const ::tools::Rectangle& rRect )
 {
     css::awt::Rectangle aRect;
     aRect.X = rRect.Left();
@@ -235,13 +232,13 @@ css::awt::Rectangle putRectangleValueToAWT( const ::Rectangle& rRect )
     return aRect;
 }
 
-::Rectangle putAWTToRectangle( const css::awt::Rectangle& rRect )
+::tools::Rectangle putAWTToRectangle( const css::awt::Rectangle& rRect )
 {
-    ::Rectangle aRect;
-    aRect.Left() = rRect.X;
-    aRect.Top() = rRect.Y;
-    aRect.Right() = rRect.Width;
-    aRect.Bottom() = rRect.Height;
+    ::tools::Rectangle aRect;
+    aRect.SetLeft( rRect.X );
+    aRect.SetTop( rRect.Y );
+    aRect.SetRight( rRect.Width );
+    aRect.SetBottom( rRect.Height );
 
     return aRect;
 }
@@ -291,8 +288,8 @@ bool implts_isFrameOrWindowTop( const uno::Reference< frame::XFrame >& xFrame )
         // #i76867# top and system window is required.
         SolarMutexGuard aGuard;
         uno::Reference< awt::XWindow > xWindow( xWindowCheck, uno::UNO_QUERY );
-        vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
-        return ( pWindow && pWindow->IsSystemWindow() );
+        VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
+        return pWindow && pWindow->IsSystemWindow();
     }
 
     return false;
@@ -310,7 +307,7 @@ void impl_setDockingWindowVisibility( const css::uno::Reference< css::uno::XComp
 
         css::uno::Sequence< css::beans::PropertyValue > aArgs(1);
         aArgs[0].Name  = aDockWinArgName;
-        aArgs[0].Value = css::uno::makeAny( bVisible );
+        aArgs[0].Value <<= bVisible;
 
         css::uno::Reference< css::frame::XDispatchHelper > xDispatcher = css::frame::DispatchHelper::create( rxContext );
 
@@ -340,7 +337,7 @@ void impl_addWindowListeners(
             xWindow->addWindowListener(
                 css::uno::Reference< css::awt::XWindowListener >(
                     xThis, css::uno::UNO_QUERY ));
-            xDockWindow->enableDocking( sal_True );
+            xDockWindow->enableDocking( true );
         }
         catch ( const css::uno::Exception& )
         {

@@ -7,12 +7,13 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "sharedformula.hxx"
-#include "calcmacros.hxx"
-#include "tokenarray.hxx"
+#include <sharedformula.hxx>
+#include <calcmacros.hxx>
+#include <tokenarray.hxx>
 #include <listenercontext.hxx>
 #include <document.hxx>
 #include <grouparealistener.hxx>
+#include <refdata.hxx>
 
 namespace sc {
 
@@ -82,7 +83,7 @@ void SharedFormulaUtil::splitFormulaCellGroup(const CellStoreType::position_type
 
     // Apply the lower group object to the lower cells.
 #if DEBUG_COLUMN_STORAGE
-    if (xGroup2->mpTopCell->aPos.Row() + xGroup2->mnLength > aPos.first->position + aPos.first->size)
+    if (xGroup2->mpTopCell->aPos.Row() + size_t(xGroup2->mnLength) > aPos.first->position + aPos.first->size)
     {
         cerr << "ScColumn::SplitFormulaCellGroup: Shared formula region goes beyond the formula block. Not good." << endl;
         cerr.flush();
@@ -132,6 +133,13 @@ void SharedFormulaUtil::splitFormulaCellGroups(CellStoreType& rCells, std::vecto
 bool SharedFormulaUtil::joinFormulaCells(
     const CellStoreType::position_type& rPos, ScFormulaCell& rCell1, ScFormulaCell& rCell2 )
 {
+    if( rCell1.GetDocument()->IsDelayedFormulaGrouping())
+    {
+        rCell1.GetDocument()->AddDelayedFormulaGroupingCell( &rCell1 );
+        rCell1.GetDocument()->AddDelayedFormulaGroupingCell( &rCell2 );
+        return false;
+    }
+
     ScFormulaCell::CompareState eState = rCell1.CompareByTokenArray(rCell2);
     if (eState == ScFormulaCell::NotEqual)
         return false;
@@ -176,7 +184,7 @@ bool SharedFormulaUtil::joinFormulaCells(
         else
         {
             // neither cells are shared.
-            assert(rCell1.aPos.Row() == (SCROW)(rPos.first->position + rPos.second));
+            assert(rCell1.aPos.Row() == static_cast<SCROW>(rPos.first->position + rPos.second));
             xGroup1 = rCell1.CreateCellGroup(2, eState == ScFormulaCell::EqualInvariant);
             rCell2.SetCellGroup(xGroup1);
         }
@@ -215,10 +223,10 @@ void SharedFormulaUtil::unshareFormulaCell(const CellStoreType::position_type& a
     if (rCell.aPos.Row() == rCell.GetSharedTopRow())
     {
         // Top of the shared range.
-        ScFormulaCellGroupRef xGroup = rCell.GetCellGroup();
+        const ScFormulaCellGroupRef& xGroup = rCell.GetCellGroup();
         if (xGroup->mnLength == 2)
         {
-            // Group consists only only two cells. Mark the second one non-shared.
+            // Group consists of only two cells. Mark the second one non-shared.
 #if DEBUG_COLUMN_STORAGE
             if (aPos.second+1 >= aPos.first->size)
             {
@@ -241,7 +249,7 @@ void SharedFormulaUtil::unshareFormulaCell(const CellStoreType::position_type& a
     else if (rCell.aPos.Row() == rCell.GetSharedTopRow() + rCell.GetSharedLength() - 1)
     {
         // Bottom of the shared range.
-        ScFormulaCellGroupRef xGroup = rCell.GetCellGroup();
+        const ScFormulaCellGroupRef& xGroup = rCell.GetCellGroup();
         if (xGroup->mnLength == 2)
         {
             // Mark the top cell non-shared.
@@ -294,7 +302,7 @@ void SharedFormulaUtil::unshareFormulaCell(const CellStoreType::position_type& a
             xGroup2->mbInvariant = xGroup->mbInvariant;
             xGroup2->mpCode = xGroup->mpCode->Clone();
 #if DEBUG_COLUMN_STORAGE
-            if (xGroup2->mpTopCell->aPos.Row() + xGroup2->mnLength > it->position + it->size)
+            if (xGroup2->mpTopCell->aPos.Row() + size_t(xGroup2->mnLength) > it->position + it->size)
             {
                 cerr << "ScColumn::UnshareFormulaCell: Shared formula region goes beyond the formula block. Not good." << endl;
                 cerr.flush();
@@ -335,16 +343,15 @@ void SharedFormulaUtil::unshareFormulaCells(CellStoreType& rCells, std::vector<S
 
     // Add next cell positions to the list (to ensure that each position becomes a single cell).
     std::vector<SCROW> aRows2;
-    std::vector<SCROW>::const_iterator it = rRows.begin(), itEnd = rRows.end();
-    for (; it != itEnd; ++it)
+    for (const auto& rRow : rRows)
     {
-        if (*it > MAXROW)
+        if (rRow > MAXROW)
             break;
 
-        aRows2.push_back(*it);
+        aRows2.push_back(rRow);
 
-        if (*it < MAXROW)
-            aRows2.push_back(*it+1);
+        if (rRow < MAXROW)
+            aRows2.push_back(rRow+1);
     }
 
     // Remove duplicates again (the vector should still be sorted).
@@ -363,7 +370,7 @@ void SharedFormulaUtil::startListeningAsGroup( sc::StartListeningContext& rCxt, 
     rDoc.SetDetectiveDirty(true);
 
     ScFormulaCellGroupRef xGroup = rTopCell.GetCellGroup();
-    const ScTokenArray* pCode = xGroup->mpCode;
+    const ScTokenArray* pCode = xGroup->mpCode.get();
     assert(pCode == rTopCell.GetCode());
     if (pCode->IsRecalcModeAlways())
     {

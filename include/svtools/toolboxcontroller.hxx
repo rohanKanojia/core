@@ -21,32 +21,34 @@
 #define INCLUDED_SVTOOLS_TOOLBOXCONTROLLER_HXX
 
 #include <svtools/svtdllapi.h>
-#include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/frame/XStatusListener.hpp>
 #include <com/sun/star/frame/XToolbarController.hpp>
-#include <com/sun/star/frame/XLayoutManager.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/util/XUpdatable.hpp>
-#include <com/sun/star/util/XURLTransformer.hpp>
-#include <cppuhelper/implbase5.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <cppuhelper/implbase.hxx>
 #include <cppuhelper/interfacecontainer.hxx>
 #include <comphelper/broadcasthelper.hxx>
 #include <comphelper/proparrhlp.hxx>
-#include <comphelper/property.hxx>
 #include <comphelper/propertycontainer.hxx>
 #include <cppuhelper/propshlp.hxx>
 #include <tools/link.hxx>
 
 #include <unordered_map>
 
+namespace com :: sun :: star :: frame { class XDispatch; }
+namespace com :: sun :: star :: frame { class XFrame; }
+namespace com :: sun :: star :: frame { class XLayoutManager; }
+namespace com :: sun :: star :: uno { class XComponentContext; }
+namespace com :: sun :: star :: util { class XURLTransformer; }
+
 class ToolBox;
 
 namespace svt
 {
 
-typedef cppu::WeakImplHelper5<
+typedef cppu::WeakImplHelper<
         css::frame::XStatusListener, css::frame::XToolbarController,
         css::lang::XInitialization, css::util::XUpdatable,
         css::lang::XComponent >
@@ -65,7 +67,7 @@ class SVT_DLLPUBLIC ToolboxController :
                            const css::uno::Reference< css::frame::XFrame >& xFrame,
                            const OUString& aCommandURL );
         ToolboxController();
-        virtual ~ToolboxController();
+        virtual ~ToolboxController() override;
 
         css::uno::Reference< css::frame::XFrame > getFrameInterface() const;
         const css::uno::Reference< css::uno::XComponentContext >& getContext() const;
@@ -75,41 +77,40 @@ class SVT_DLLPUBLIC ToolboxController :
         void updateStatus();
 
         // XInterface
-        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) override;
         virtual void SAL_CALL acquire() throw () override;
         virtual void SAL_CALL release() throw () override;
-        virtual css::uno::Sequence<css::uno::Type> SAL_CALL getTypes()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence<css::uno::Type> SAL_CALL getTypes() override;
 
         // XInitialization
-        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
         // XUpdatable
-        virtual void SAL_CALL update() throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL update() override;
 
         // XComponent
-        virtual void SAL_CALL dispose() throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL dispose() override;
+        virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
+        virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
         // XEventListener
         using cppu::OPropertySetHelper::disposing;
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
         // XStatusListener
-        virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override = 0;
+        virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override = 0;
 
         // XToolbarController
-        virtual void SAL_CALL execute( sal_Int16 KeyModifier ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL click() throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL doubleClick() throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Reference< css::awt::XWindow > SAL_CALL createPopupWindow() throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Reference< css::awt::XWindow > SAL_CALL createItemWindow( const css::uno::Reference< css::awt::XWindow >& Parent ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL execute( sal_Int16 KeyModifier ) override;
+        virtual void SAL_CALL click() override;
+        virtual void SAL_CALL doubleClick() override;
+        virtual css::uno::Reference< css::awt::XWindow > SAL_CALL createPopupWindow() override;
+        virtual css::uno::Reference< css::awt::XWindow > SAL_CALL createItemWindow( const css::uno::Reference< css::awt::XWindow >& Parent ) override;
         // OPropertySetHelper
-        virtual void SAL_CALL setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const css::uno::Any& rValue ) throw(css::uno::Exception, std::exception) override;
-        virtual sal_Bool SAL_CALL convertFastPropertyValue( css::uno::Any& rConvertedValue, css::uno::Any& rOldValue, sal_Int32 nHandle, const css::uno::Any& rValue) throw(css::lang::IllegalArgumentException) override;
+        virtual void SAL_CALL setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const css::uno::Any& rValue ) override;
+        virtual sal_Bool SAL_CALL convertFastPropertyValue( css::uno::Any& rConvertedValue, css::uno::Any& rOldValue, sal_Int32 nHandle, const css::uno::Any& rValue) override;
         // XPropertySet
-        virtual css::uno::Reference< css::beans::XPropertySetInfo>  SAL_CALL getPropertySetInfo() throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::beans::XPropertySetInfo>  SAL_CALL getPropertySetInfo() override;
         virtual ::cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
         // OPropertyArrayUsageHelper
         virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
@@ -124,13 +125,12 @@ class SVT_DLLPUBLIC ToolboxController :
 
     protected:
         bool getToolboxId( sal_uInt16& rItemId, ToolBox** ppToolBox );
-        void setSupportVisibleProperty(bool bValue);
         struct Listener
         {
             Listener( const css::util::URL& rURL, const css::uno::Reference< css::frame::XDispatch >& rDispatch ) :
                 aURL( rURL ), xDispatch( rDispatch ) {}
 
-            css::util::URL aURL;
+            css::util::URL const aURL;
             css::uno::Reference< css::frame::XDispatch > xDispatch;
         };
 
@@ -149,11 +149,10 @@ class SVT_DLLPUBLIC ToolboxController :
                 {}
         };
 
-        DECL_STATIC_LINK_TYPED( ToolboxController, ExecuteHdl_Impl, void*, void );
+        DECL_STATIC_LINK( ToolboxController, ExecuteHdl_Impl, void*, void );
 
         typedef std::unordered_map< OUString,
-                                    css::uno::Reference< css::frame::XDispatch >,
-                                    OUStringHash > URLToDispatchMap;
+                                    css::uno::Reference< css::frame::XDispatch > > URLToDispatchMap;
 
         // methods to support status forwarder, known by the old sfx2 toolbox controller implementation
         void addStatusListener( const OUString& aCommandURL );

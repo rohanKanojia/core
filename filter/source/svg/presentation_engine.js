@@ -68,7 +68,6 @@
  *  @source http://code.google.com/p/jessyink/
  */
 
-
 /** Convenience function to get an element depending on whether it has a
  *  property with a particular name.
  *
@@ -320,7 +319,6 @@ function mouseHandlerDispatch( aEvt, anAction )
 
 //Set mouse event handler.
 document.onmouseup = function( aEvt ) { return mouseHandlerDispatch( aEvt, MOUSE_UP ); };
-//document.onmousemove = function( aEvt ) { return mouseHandlerDispatch( aEvt, MOUSE_MOVE ); };
 
 
 /** mouseClickHelper
@@ -402,19 +400,13 @@ function getDefaultMouseHandlerDictionary()
     // slide mode
     mouseHandlerDict[SLIDE_MODE][MOUSE_UP]
         = mouseClickHelper;
-        //= function( aEvt ) { return slideOnMouseDown( aEvt ); };
-//        = function( aEvt ) { return ( aSlideShow.aEventMultiplexer ) ?
-//                                        aSlideShow.aEventMultiplexer.notifyMouseClick( aEvt )
-//                                        : slideOnMouseUp( aEvt ); };
 
     mouseHandlerDict[SLIDE_MODE][MOUSE_WHEEL]
         = function( aEvt ) { return slideOnMouseWheel( aEvt ); };
 
     // index mode
     mouseHandlerDict[INDEX_MODE][MOUSE_UP]
-        = function( aEvt ) { return toggleSlideIndex(); };
-//    mouseHandlerDict[INDEX_MODE][MOUSE_MOVE]
-//        = function( aEvt ) { return theSlideIndexPage.updateSelection( aEvt ); };
+        = function( ) { return toggleSlideIndex(); };
 
     return mouseHandlerDict;
 }
@@ -675,6 +667,1024 @@ function configureDetectionTools()
  *  @source http://svn.dojotoolkit.org/src/dojox/trunk/_base/sniff.js
  */
 
+/*****
+ * @licstart
+ *
+ * The following is the license notice for the part of JavaScript code of this
+ * file included between the '@svgpathstart' and the '@svgpathend' notes.
+ */
+
+/*****  **********************************************************************
+ *
+ *   Copyright 2015 The Chromium Authors. All rights reserved.
+ *
+ *   The Chromium Authors can be found at
+ *   http://src.chromium.org/svn/trunk/src/AUTHORS
+ *
+ *   Redistribution and use in source and binary forms, with or without
+ *   modification, are permitted provided that the following conditions are
+ *   met:
+ *
+ *   * Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ *   * Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following disclaimer
+ *   in the documentation and/or other materials provided with the
+ *   distribution.
+ *   * Neither the name of Google Inc. nor the names of its
+ *   contributors may be used to endorse or promote products derived from
+ *   this software without specific prior written permission.
+ *
+ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *   'AS IS' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ ****************************************************************************/
+
+/*****
+ * @licend
+ *
+ * The above is the license notice for the part of JavaScript code of this
+ * file included between the '@svgpathstart' and the '@svgpathend' notes.
+ */
+
+
+/*****
+ * @svgpathstart
+ *
+ *  The following code is a derivative work of some part of the SVGPathSeg API.
+ *
+ *  This API is a drop-in replacement for the SVGPathSeg and SVGPathSegList APIs that were removed from
+ *  SVG2 (https://lists.w3.org/Archives/Public/www-svg/2015Jun/0044.html), including the latest spec
+ *  changes which were implemented in Firefox 43 and Chrome 46.
+ *
+ *  @source https://github.com/progers/pathseg
+ */
+
+(function() { 'use strict';
+    if (!('SVGPathSeg' in window)) {
+        // Spec: http://www.w3.org/TR/SVG11/single-page.html#paths-InterfaceSVGPathSeg
+        window.SVGPathSeg = function(type, typeAsLetter, owningPathSegList) {
+            this.pathSegType = type;
+            this.pathSegTypeAsLetter = typeAsLetter;
+            this._owningPathSegList = owningPathSegList;
+        }
+
+        window.SVGPathSeg.prototype.classname = 'SVGPathSeg';
+
+        window.SVGPathSeg.PATHSEG_UNKNOWN = 0;
+        window.SVGPathSeg.PATHSEG_CLOSEPATH = 1;
+        window.SVGPathSeg.PATHSEG_MOVETO_ABS = 2;
+        window.SVGPathSeg.PATHSEG_MOVETO_REL = 3;
+        window.SVGPathSeg.PATHSEG_LINETO_ABS = 4;
+        window.SVGPathSeg.PATHSEG_LINETO_REL = 5;
+        window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_ABS = 6;
+        window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_REL = 7;
+        window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_ABS = 8;
+        window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_REL = 9;
+        window.SVGPathSeg.PATHSEG_ARC_ABS = 10;
+        window.SVGPathSeg.PATHSEG_ARC_REL = 11;
+        window.SVGPathSeg.PATHSEG_LINETO_HORIZONTAL_ABS = 12;
+        window.SVGPathSeg.PATHSEG_LINETO_HORIZONTAL_REL = 13;
+        window.SVGPathSeg.PATHSEG_LINETO_VERTICAL_ABS = 14;
+        window.SVGPathSeg.PATHSEG_LINETO_VERTICAL_REL = 15;
+        window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_SMOOTH_ABS = 16;
+        window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_SMOOTH_REL = 17;
+        window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_SMOOTH_ABS = 18;
+        window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_SMOOTH_REL = 19;
+
+        // Notify owning PathSegList on any changes so they can be synchronized back to the path element.
+        window.SVGPathSeg.prototype._segmentChanged = function() {
+            if (this._owningPathSegList)
+                this._owningPathSegList.segmentChanged(this);
+        }
+
+        window.SVGPathSegClosePath = function(owningPathSegList) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_CLOSEPATH, 'z', owningPathSegList);
+        }
+        window.SVGPathSegClosePath.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegClosePath.prototype.toString = function() { return '[object SVGPathSegClosePath]'; }
+        window.SVGPathSegClosePath.prototype._asPathString = function() { return this.pathSegTypeAsLetter; }
+        window.SVGPathSegClosePath.prototype.clone = function() { return new window.SVGPathSegClosePath(undefined); }
+
+        window.SVGPathSegMovetoAbs = function(owningPathSegList, x, y) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_MOVETO_ABS, 'M', owningPathSegList);
+            this._x = x;
+            this._y = y;
+        }
+        window.SVGPathSegMovetoAbs.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegMovetoAbs.prototype.toString = function() { return '[object SVGPathSegMovetoAbs]'; }
+        window.SVGPathSegMovetoAbs.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._x + ' ' + this._y; }
+        window.SVGPathSegMovetoAbs.prototype.clone = function() { return new window.SVGPathSegMovetoAbs(undefined, this._x, this._y); }
+        Object.defineProperty(window.SVGPathSegMovetoAbs.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegMovetoAbs.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegMovetoRel = function(owningPathSegList, x, y) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_MOVETO_REL, 'm', owningPathSegList);
+            this._x = x;
+            this._y = y;
+        }
+        window.SVGPathSegMovetoRel.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegMovetoRel.prototype.toString = function() { return '[object SVGPathSegMovetoRel]'; }
+        window.SVGPathSegMovetoRel.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._x + ' ' + this._y; }
+        window.SVGPathSegMovetoRel.prototype.clone = function() { return new window.SVGPathSegMovetoRel(undefined, this._x, this._y); }
+        Object.defineProperty(window.SVGPathSegMovetoRel.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegMovetoRel.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegLinetoAbs = function(owningPathSegList, x, y) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_LINETO_ABS, 'L', owningPathSegList);
+            this._x = x;
+            this._y = y;
+        }
+        window.SVGPathSegLinetoAbs.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegLinetoAbs.prototype.toString = function() { return '[object SVGPathSegLinetoAbs]'; }
+        window.SVGPathSegLinetoAbs.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._x + ' ' + this._y; }
+        window.SVGPathSegLinetoAbs.prototype.clone = function() { return new window.SVGPathSegLinetoAbs(undefined, this._x, this._y); }
+        Object.defineProperty(window.SVGPathSegLinetoAbs.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegLinetoAbs.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegLinetoRel = function(owningPathSegList, x, y) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_LINETO_REL, 'l', owningPathSegList);
+            this._x = x;
+            this._y = y;
+        }
+        window.SVGPathSegLinetoRel.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegLinetoRel.prototype.toString = function() { return '[object SVGPathSegLinetoRel]'; }
+        window.SVGPathSegLinetoRel.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._x + ' ' + this._y; }
+        window.SVGPathSegLinetoRel.prototype.clone = function() { return new window.SVGPathSegLinetoRel(undefined, this._x, this._y); }
+        Object.defineProperty(window.SVGPathSegLinetoRel.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegLinetoRel.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegCurvetoCubicAbs = function(owningPathSegList, x, y, x1, y1, x2, y2) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_ABS, 'C', owningPathSegList);
+            this._x = x;
+            this._y = y;
+            this._x1 = x1;
+            this._y1 = y1;
+            this._x2 = x2;
+            this._y2 = y2;
+        }
+        window.SVGPathSegCurvetoCubicAbs.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegCurvetoCubicAbs.prototype.toString = function() { return '[object SVGPathSegCurvetoCubicAbs]'; }
+        window.SVGPathSegCurvetoCubicAbs.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._x1 + ' ' + this._y1 + ' ' + this._x2 + ' ' + this._y2 + ' ' + this._x + ' ' + this._y; }
+        window.SVGPathSegCurvetoCubicAbs.prototype.clone = function() { return new window.SVGPathSegCurvetoCubicAbs(undefined, this._x, this._y, this._x1, this._y1, this._x2, this._y2); }
+        Object.defineProperty(window.SVGPathSegCurvetoCubicAbs.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicAbs.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicAbs.prototype, 'x1', { get: function() { return this._x1; }, set: function(x1) { this._x1 = x1; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicAbs.prototype, 'y1', { get: function() { return this._y1; }, set: function(y1) { this._y1 = y1; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicAbs.prototype, 'x2', { get: function() { return this._x2; }, set: function(x2) { this._x2 = x2; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicAbs.prototype, 'y2', { get: function() { return this._y2; }, set: function(y2) { this._y2 = y2; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegCurvetoCubicRel = function(owningPathSegList, x, y, x1, y1, x2, y2) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_REL, 'c', owningPathSegList);
+            this._x = x;
+            this._y = y;
+            this._x1 = x1;
+            this._y1 = y1;
+            this._x2 = x2;
+            this._y2 = y2;
+        }
+        window.SVGPathSegCurvetoCubicRel.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegCurvetoCubicRel.prototype.toString = function() { return '[object SVGPathSegCurvetoCubicRel]'; }
+        window.SVGPathSegCurvetoCubicRel.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._x1 + ' ' + this._y1 + ' ' + this._x2 + ' ' + this._y2 + ' ' + this._x + ' ' + this._y; }
+        window.SVGPathSegCurvetoCubicRel.prototype.clone = function() { return new window.SVGPathSegCurvetoCubicRel(undefined, this._x, this._y, this._x1, this._y1, this._x2, this._y2); }
+        Object.defineProperty(window.SVGPathSegCurvetoCubicRel.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicRel.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicRel.prototype, 'x1', { get: function() { return this._x1; }, set: function(x1) { this._x1 = x1; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicRel.prototype, 'y1', { get: function() { return this._y1; }, set: function(y1) { this._y1 = y1; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicRel.prototype, 'x2', { get: function() { return this._x2; }, set: function(x2) { this._x2 = x2; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicRel.prototype, 'y2', { get: function() { return this._y2; }, set: function(y2) { this._y2 = y2; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegCurvetoQuadraticAbs = function(owningPathSegList, x, y, x1, y1) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_ABS, 'Q', owningPathSegList);
+            this._x = x;
+            this._y = y;
+            this._x1 = x1;
+            this._y1 = y1;
+        }
+        window.SVGPathSegCurvetoQuadraticAbs.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegCurvetoQuadraticAbs.prototype.toString = function() { return '[object SVGPathSegCurvetoQuadraticAbs]'; }
+        window.SVGPathSegCurvetoQuadraticAbs.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._x1 + ' ' + this._y1 + ' ' + this._x + ' ' + this._y; }
+        window.SVGPathSegCurvetoQuadraticAbs.prototype.clone = function() { return new window.SVGPathSegCurvetoQuadraticAbs(undefined, this._x, this._y, this._x1, this._y1); }
+        Object.defineProperty(window.SVGPathSegCurvetoQuadraticAbs.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoQuadraticAbs.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoQuadraticAbs.prototype, 'x1', { get: function() { return this._x1; }, set: function(x1) { this._x1 = x1; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoQuadraticAbs.prototype, 'y1', { get: function() { return this._y1; }, set: function(y1) { this._y1 = y1; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegCurvetoQuadraticRel = function(owningPathSegList, x, y, x1, y1) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_REL, 'q', owningPathSegList);
+            this._x = x;
+            this._y = y;
+            this._x1 = x1;
+            this._y1 = y1;
+        }
+        window.SVGPathSegCurvetoQuadraticRel.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegCurvetoQuadraticRel.prototype.toString = function() { return '[object SVGPathSegCurvetoQuadraticRel]'; }
+        window.SVGPathSegCurvetoQuadraticRel.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._x1 + ' ' + this._y1 + ' ' + this._x + ' ' + this._y; }
+        window.SVGPathSegCurvetoQuadraticRel.prototype.clone = function() { return new window.SVGPathSegCurvetoQuadraticRel(undefined, this._x, this._y, this._x1, this._y1); }
+        Object.defineProperty(window.SVGPathSegCurvetoQuadraticRel.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoQuadraticRel.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoQuadraticRel.prototype, 'x1', { get: function() { return this._x1; }, set: function(x1) { this._x1 = x1; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoQuadraticRel.prototype, 'y1', { get: function() { return this._y1; }, set: function(y1) { this._y1 = y1; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegArcAbs = function(owningPathSegList, x, y, r1, r2, angle, largeArcFlag, sweepFlag) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_ARC_ABS, 'A', owningPathSegList);
+            this._x = x;
+            this._y = y;
+            this._r1 = r1;
+            this._r2 = r2;
+            this._angle = angle;
+            this._largeArcFlag = largeArcFlag;
+            this._sweepFlag = sweepFlag;
+        }
+        window.SVGPathSegArcAbs.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegArcAbs.prototype.toString = function() { return '[object SVGPathSegArcAbs]'; }
+        window.SVGPathSegArcAbs.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._r1 + ' ' + this._r2 + ' ' + this._angle + ' ' + (this._largeArcFlag ? '1' : '0') + ' ' + (this._sweepFlag ? '1' : '0') + ' ' + this._x + ' ' + this._y; }
+        window.SVGPathSegArcAbs.prototype.clone = function() { return new window.SVGPathSegArcAbs(undefined, this._x, this._y, this._r1, this._r2, this._angle, this._largeArcFlag, this._sweepFlag); }
+        Object.defineProperty(window.SVGPathSegArcAbs.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegArcAbs.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegArcAbs.prototype, 'r1', { get: function() { return this._r1; }, set: function(r1) { this._r1 = r1; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegArcAbs.prototype, 'r2', { get: function() { return this._r2; }, set: function(r2) { this._r2 = r2; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegArcAbs.prototype, 'angle', { get: function() { return this._angle; }, set: function(angle) { this._angle = angle; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegArcAbs.prototype, 'largeArcFlag', { get: function() { return this._largeArcFlag; }, set: function(largeArcFlag) { this._largeArcFlag = largeArcFlag; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegArcAbs.prototype, 'sweepFlag', { get: function() { return this._sweepFlag; }, set: function(sweepFlag) { this._sweepFlag = sweepFlag; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegArcRel = function(owningPathSegList, x, y, r1, r2, angle, largeArcFlag, sweepFlag) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_ARC_REL, 'a', owningPathSegList);
+            this._x = x;
+            this._y = y;
+            this._r1 = r1;
+            this._r2 = r2;
+            this._angle = angle;
+            this._largeArcFlag = largeArcFlag;
+            this._sweepFlag = sweepFlag;
+        }
+        window.SVGPathSegArcRel.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegArcRel.prototype.toString = function() { return '[object SVGPathSegArcRel]'; }
+        window.SVGPathSegArcRel.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._r1 + ' ' + this._r2 + ' ' + this._angle + ' ' + (this._largeArcFlag ? '1' : '0') + ' ' + (this._sweepFlag ? '1' : '0') + ' ' + this._x + ' ' + this._y; }
+        window.SVGPathSegArcRel.prototype.clone = function() { return new window.SVGPathSegArcRel(undefined, this._x, this._y, this._r1, this._r2, this._angle, this._largeArcFlag, this._sweepFlag); }
+        Object.defineProperty(window.SVGPathSegArcRel.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegArcRel.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegArcRel.prototype, 'r1', { get: function() { return this._r1; }, set: function(r1) { this._r1 = r1; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegArcRel.prototype, 'r2', { get: function() { return this._r2; }, set: function(r2) { this._r2 = r2; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegArcRel.prototype, 'angle', { get: function() { return this._angle; }, set: function(angle) { this._angle = angle; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegArcRel.prototype, 'largeArcFlag', { get: function() { return this._largeArcFlag; }, set: function(largeArcFlag) { this._largeArcFlag = largeArcFlag; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegArcRel.prototype, 'sweepFlag', { get: function() { return this._sweepFlag; }, set: function(sweepFlag) { this._sweepFlag = sweepFlag; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegLinetoHorizontalAbs = function(owningPathSegList, x) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_LINETO_HORIZONTAL_ABS, 'H', owningPathSegList);
+            this._x = x;
+        }
+        window.SVGPathSegLinetoHorizontalAbs.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegLinetoHorizontalAbs.prototype.toString = function() { return '[object SVGPathSegLinetoHorizontalAbs]'; }
+        window.SVGPathSegLinetoHorizontalAbs.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._x; }
+        window.SVGPathSegLinetoHorizontalAbs.prototype.clone = function() { return new window.SVGPathSegLinetoHorizontalAbs(undefined, this._x); }
+        Object.defineProperty(window.SVGPathSegLinetoHorizontalAbs.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegLinetoHorizontalRel = function(owningPathSegList, x) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_LINETO_HORIZONTAL_REL, 'h', owningPathSegList);
+            this._x = x;
+        }
+        window.SVGPathSegLinetoHorizontalRel.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegLinetoHorizontalRel.prototype.toString = function() { return '[object SVGPathSegLinetoHorizontalRel]'; }
+        window.SVGPathSegLinetoHorizontalRel.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._x; }
+        window.SVGPathSegLinetoHorizontalRel.prototype.clone = function() { return new window.SVGPathSegLinetoHorizontalRel(undefined, this._x); }
+        Object.defineProperty(window.SVGPathSegLinetoHorizontalRel.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegLinetoVerticalAbs = function(owningPathSegList, y) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_LINETO_VERTICAL_ABS, 'V', owningPathSegList);
+            this._y = y;
+        }
+        window.SVGPathSegLinetoVerticalAbs.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegLinetoVerticalAbs.prototype.toString = function() { return '[object SVGPathSegLinetoVerticalAbs]'; }
+        window.SVGPathSegLinetoVerticalAbs.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._y; }
+        window.SVGPathSegLinetoVerticalAbs.prototype.clone = function() { return new window.SVGPathSegLinetoVerticalAbs(undefined, this._y); }
+        Object.defineProperty(window.SVGPathSegLinetoVerticalAbs.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegLinetoVerticalRel = function(owningPathSegList, y) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_LINETO_VERTICAL_REL, 'v', owningPathSegList);
+            this._y = y;
+        }
+        window.SVGPathSegLinetoVerticalRel.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegLinetoVerticalRel.prototype.toString = function() { return '[object SVGPathSegLinetoVerticalRel]'; }
+        window.SVGPathSegLinetoVerticalRel.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._y; }
+        window.SVGPathSegLinetoVerticalRel.prototype.clone = function() { return new window.SVGPathSegLinetoVerticalRel(undefined, this._y); }
+        Object.defineProperty(window.SVGPathSegLinetoVerticalRel.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegCurvetoCubicSmoothAbs = function(owningPathSegList, x, y, x2, y2) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_SMOOTH_ABS, 'S', owningPathSegList);
+            this._x = x;
+            this._y = y;
+            this._x2 = x2;
+            this._y2 = y2;
+        }
+        window.SVGPathSegCurvetoCubicSmoothAbs.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegCurvetoCubicSmoothAbs.prototype.toString = function() { return '[object SVGPathSegCurvetoCubicSmoothAbs]'; }
+        window.SVGPathSegCurvetoCubicSmoothAbs.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._x2 + ' ' + this._y2 + ' ' + this._x + ' ' + this._y; }
+        window.SVGPathSegCurvetoCubicSmoothAbs.prototype.clone = function() { return new window.SVGPathSegCurvetoCubicSmoothAbs(undefined, this._x, this._y, this._x2, this._y2); }
+        Object.defineProperty(window.SVGPathSegCurvetoCubicSmoothAbs.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicSmoothAbs.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicSmoothAbs.prototype, 'x2', { get: function() { return this._x2; }, set: function(x2) { this._x2 = x2; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicSmoothAbs.prototype, 'y2', { get: function() { return this._y2; }, set: function(y2) { this._y2 = y2; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegCurvetoCubicSmoothRel = function(owningPathSegList, x, y, x2, y2) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_SMOOTH_REL, 's', owningPathSegList);
+            this._x = x;
+            this._y = y;
+            this._x2 = x2;
+            this._y2 = y2;
+        }
+        window.SVGPathSegCurvetoCubicSmoothRel.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegCurvetoCubicSmoothRel.prototype.toString = function() { return '[object SVGPathSegCurvetoCubicSmoothRel]'; }
+        window.SVGPathSegCurvetoCubicSmoothRel.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._x2 + ' ' + this._y2 + ' ' + this._x + ' ' + this._y; }
+        window.SVGPathSegCurvetoCubicSmoothRel.prototype.clone = function() { return new window.SVGPathSegCurvetoCubicSmoothRel(undefined, this._x, this._y, this._x2, this._y2); }
+        Object.defineProperty(window.SVGPathSegCurvetoCubicSmoothRel.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicSmoothRel.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicSmoothRel.prototype, 'x2', { get: function() { return this._x2; }, set: function(x2) { this._x2 = x2; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoCubicSmoothRel.prototype, 'y2', { get: function() { return this._y2; }, set: function(y2) { this._y2 = y2; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegCurvetoQuadraticSmoothAbs = function(owningPathSegList, x, y) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_SMOOTH_ABS, 'T', owningPathSegList);
+            this._x = x;
+            this._y = y;
+        }
+        window.SVGPathSegCurvetoQuadraticSmoothAbs.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegCurvetoQuadraticSmoothAbs.prototype.toString = function() { return '[object SVGPathSegCurvetoQuadraticSmoothAbs]'; }
+        window.SVGPathSegCurvetoQuadraticSmoothAbs.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._x + ' ' + this._y; }
+        window.SVGPathSegCurvetoQuadraticSmoothAbs.prototype.clone = function() { return new window.SVGPathSegCurvetoQuadraticSmoothAbs(undefined, this._x, this._y); }
+        Object.defineProperty(window.SVGPathSegCurvetoQuadraticSmoothAbs.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoQuadraticSmoothAbs.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+
+        window.SVGPathSegCurvetoQuadraticSmoothRel = function(owningPathSegList, x, y) {
+            window.SVGPathSeg.call(this, window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_SMOOTH_REL, 't', owningPathSegList);
+            this._x = x;
+            this._y = y;
+        }
+        window.SVGPathSegCurvetoQuadraticSmoothRel.prototype = Object.create(window.SVGPathSeg.prototype);
+        window.SVGPathSegCurvetoQuadraticSmoothRel.prototype.toString = function() { return '[object SVGPathSegCurvetoQuadraticSmoothRel]'; }
+        window.SVGPathSegCurvetoQuadraticSmoothRel.prototype._asPathString = function() { return this.pathSegTypeAsLetter + ' ' + this._x + ' ' + this._y; }
+        window.SVGPathSegCurvetoQuadraticSmoothRel.prototype.clone = function() { return new window.SVGPathSegCurvetoQuadraticSmoothRel(undefined, this._x, this._y); }
+        Object.defineProperty(window.SVGPathSegCurvetoQuadraticSmoothRel.prototype, 'x', { get: function() { return this._x; }, set: function(x) { this._x = x; this._segmentChanged(); }, enumerable: true });
+        Object.defineProperty(window.SVGPathSegCurvetoQuadraticSmoothRel.prototype, 'y', { get: function() { return this._y; }, set: function(y) { this._y = y; this._segmentChanged(); }, enumerable: true });
+
+        // Add createSVGPathSeg* functions to window.SVGPathElement.
+        // Spec: http://www.w3.org/TR/SVG11/single-page.html#paths-Interfacewindow.SVGPathElement.
+        window.SVGPathElement.prototype.createSVGPathSegClosePath = function() { return new window.SVGPathSegClosePath(undefined); }
+        window.SVGPathElement.prototype.createSVGPathSegMovetoAbs = function(x, y) { return new window.SVGPathSegMovetoAbs(undefined, x, y); }
+        window.SVGPathElement.prototype.createSVGPathSegMovetoRel = function(x, y) { return new window.SVGPathSegMovetoRel(undefined, x, y); }
+        window.SVGPathElement.prototype.createSVGPathSegLinetoAbs = function(x, y) { return new window.SVGPathSegLinetoAbs(undefined, x, y); }
+        window.SVGPathElement.prototype.createSVGPathSegLinetoRel = function(x, y) { return new window.SVGPathSegLinetoRel(undefined, x, y); }
+        window.SVGPathElement.prototype.createSVGPathSegCurvetoCubicAbs = function(x, y, x1, y1, x2, y2) { return new window.SVGPathSegCurvetoCubicAbs(undefined, x, y, x1, y1, x2, y2); }
+        window.SVGPathElement.prototype.createSVGPathSegCurvetoCubicRel = function(x, y, x1, y1, x2, y2) { return new window.SVGPathSegCurvetoCubicRel(undefined, x, y, x1, y1, x2, y2); }
+        window.SVGPathElement.prototype.createSVGPathSegCurvetoQuadraticAbs = function(x, y, x1, y1) { return new window.SVGPathSegCurvetoQuadraticAbs(undefined, x, y, x1, y1); }
+        window.SVGPathElement.prototype.createSVGPathSegCurvetoQuadraticRel = function(x, y, x1, y1) { return new window.SVGPathSegCurvetoQuadraticRel(undefined, x, y, x1, y1); }
+        window.SVGPathElement.prototype.createSVGPathSegArcAbs = function(x, y, r1, r2, angle, largeArcFlag, sweepFlag) { return new window.SVGPathSegArcAbs(undefined, x, y, r1, r2, angle, largeArcFlag, sweepFlag); }
+        window.SVGPathElement.prototype.createSVGPathSegArcRel = function(x, y, r1, r2, angle, largeArcFlag, sweepFlag) { return new window.SVGPathSegArcRel(undefined, x, y, r1, r2, angle, largeArcFlag, sweepFlag); }
+        window.SVGPathElement.prototype.createSVGPathSegLinetoHorizontalAbs = function(x) { return new window.SVGPathSegLinetoHorizontalAbs(undefined, x); }
+        window.SVGPathElement.prototype.createSVGPathSegLinetoHorizontalRel = function(x) { return new window.SVGPathSegLinetoHorizontalRel(undefined, x); }
+        window.SVGPathElement.prototype.createSVGPathSegLinetoVerticalAbs = function(y) { return new window.SVGPathSegLinetoVerticalAbs(undefined, y); }
+        window.SVGPathElement.prototype.createSVGPathSegLinetoVerticalRel = function(y) { return new window.SVGPathSegLinetoVerticalRel(undefined, y); }
+        window.SVGPathElement.prototype.createSVGPathSegCurvetoCubicSmoothAbs = function(x, y, x2, y2) { return new window.SVGPathSegCurvetoCubicSmoothAbs(undefined, x, y, x2, y2); }
+        window.SVGPathElement.prototype.createSVGPathSegCurvetoCubicSmoothRel = function(x, y, x2, y2) { return new window.SVGPathSegCurvetoCubicSmoothRel(undefined, x, y, x2, y2); }
+        window.SVGPathElement.prototype.createSVGPathSegCurvetoQuadraticSmoothAbs = function(x, y) { return new window.SVGPathSegCurvetoQuadraticSmoothAbs(undefined, x, y); }
+        window.SVGPathElement.prototype.createSVGPathSegCurvetoQuadraticSmoothRel = function(x, y) { return new window.SVGPathSegCurvetoQuadraticSmoothRel(undefined, x, y); }
+
+        if (!('getPathSegAtLength' in window.SVGPathElement.prototype)) {
+            // Add getPathSegAtLength to SVGPathElement.
+            // Spec: https://www.w3.org/TR/SVG11/single-page.html#paths-__svg__SVGPathElement__getPathSegAtLength
+            // This polyfill requires SVGPathElement.getTotalLength to implement the distance-along-a-path algorithm.
+            window.SVGPathElement.prototype.getPathSegAtLength = function(distance) {
+                if (distance === undefined || !isFinite(distance))
+                    throw 'Invalid arguments.';
+
+                var measurementElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                measurementElement.setAttribute('d', this.getAttribute('d'));
+                var lastPathSegment = measurementElement.pathSegList.numberOfItems - 1;
+
+                // If the path is empty, return 0.
+                if (lastPathSegment <= 0)
+                    return 0;
+
+                do {
+                    measurementElement.pathSegList.removeItem(lastPathSegment);
+                    if (distance > measurementElement.getTotalLength())
+                        break;
+                    lastPathSegment--;
+                } while (lastPathSegment > 0);
+                return lastPathSegment;
+            }
+        }
+    }
+
+    // Checking for SVGPathSegList in window checks for the case of an implementation without the
+    // SVGPathSegList API.
+    // The second check for appendItem is specific to Firefox 59+ which removed only parts of the
+    // SVGPathSegList API (e.g., appendItem). In this case we need to re-implement the entire API
+    // so the polyfill data (i.e., _list) is used throughout.
+    if (!('SVGPathSegList' in window) || !('appendItem' in window.SVGPathSegList.prototype)) {
+        // Spec: http://www.w3.org/TR/SVG11/single-page.html#paths-InterfaceSVGPathSegList
+        window.SVGPathSegList = function(pathElement) {
+            this._pathElement = pathElement;
+            this._list = this._parsePath(this._pathElement.getAttribute('d'));
+
+            // Use a MutationObserver to catch changes to the path's 'd' attribute.
+            this._mutationObserverConfig = { 'attributes': true, 'attributeFilter': ['d'] };
+            this._pathElementMutationObserver = new MutationObserver(this._updateListFromPathMutations.bind(this));
+            this._pathElementMutationObserver.observe(this._pathElement, this._mutationObserverConfig);
+        }
+
+        window.SVGPathSegList.prototype.classname = 'SVGPathSegList';
+
+        Object.defineProperty(window.SVGPathSegList.prototype, 'numberOfItems', {
+            get: function() {
+                this._checkPathSynchronizedToList();
+                return this._list.length;
+            },
+            enumerable: true
+        });
+
+        // The length property was not specified but was in Firefox 58.
+        Object.defineProperty(window.SVGPathSegList.prototype, 'length', {
+            get: function() {
+                this._checkPathSynchronizedToList();
+                return this._list.length;
+            },
+            enumerable: true
+        });
+
+        // Add the pathSegList accessors to window.SVGPathElement.
+        // Spec: http://www.w3.org/TR/SVG11/single-page.html#paths-InterfaceSVGAnimatedPathData
+        Object.defineProperty(window.SVGPathElement.prototype, 'pathSegList', {
+            get: function() {
+                if (!this._pathSegList)
+                    this._pathSegList = new window.SVGPathSegList(this);
+                return this._pathSegList;
+            },
+            enumerable: true
+        });
+        // FIXME: The following are not implemented and simply return window.SVGPathElement.pathSegList.
+        Object.defineProperty(window.SVGPathElement.prototype, 'normalizedPathSegList', { get: function() { return this.pathSegList; }, enumerable: true });
+        Object.defineProperty(window.SVGPathElement.prototype, 'animatedPathSegList', { get: function() { return this.pathSegList; }, enumerable: true });
+        Object.defineProperty(window.SVGPathElement.prototype, 'animatedNormalizedPathSegList', { get: function() { return this.pathSegList; }, enumerable: true });
+
+        // Process any pending mutations to the path element and update the list as needed.
+        // This should be the first call of all public functions and is needed because
+        // MutationObservers are not synchronous so we can have pending asynchronous mutations.
+        window.SVGPathSegList.prototype._checkPathSynchronizedToList = function() {
+            this._updateListFromPathMutations(this._pathElementMutationObserver.takeRecords());
+        }
+
+        window.SVGPathSegList.prototype._updateListFromPathMutations = function(mutationRecords) {
+            if (!this._pathElement)
+                return;
+            var hasPathMutations = false;
+            mutationRecords.forEach(function(record) {
+                if (record.attributeName == 'd')
+                    hasPathMutations = true;
+            });
+            if (hasPathMutations)
+                this._list = this._parsePath(this._pathElement.getAttribute('d'));
+        }
+
+        // Serialize the list and update the path's 'd' attribute.
+        window.SVGPathSegList.prototype._writeListToPath = function() {
+            this._pathElementMutationObserver.disconnect();
+            this._pathElement.setAttribute('d', window.SVGPathSegList._pathSegArrayAsString(this._list));
+            this._pathElementMutationObserver.observe(this._pathElement, this._mutationObserverConfig);
+        }
+
+        // When a path segment changes the list needs to be synchronized back to the path element.
+        window.SVGPathSegList.prototype.segmentChanged = function(pathSeg) {
+            this._writeListToPath();
+        }
+
+        window.SVGPathSegList.prototype.clear = function() {
+            this._checkPathSynchronizedToList();
+
+            this._list.forEach(function(pathSeg) {
+                pathSeg._owningPathSegList = null;
+            });
+            this._list = [];
+            this._writeListToPath();
+        }
+
+        window.SVGPathSegList.prototype.initialize = function(newItem) {
+            this._checkPathSynchronizedToList();
+
+            this._list = [newItem];
+            newItem._owningPathSegList = this;
+            this._writeListToPath();
+            return newItem;
+        }
+
+        window.SVGPathSegList.prototype._checkValidIndex = function(index) {
+            if (isNaN(index) || index < 0 || index >= this.numberOfItems)
+                throw 'INDEX_SIZE_ERR';
+        }
+
+        window.SVGPathSegList.prototype.getItem = function(index) {
+            this._checkPathSynchronizedToList();
+
+            this._checkValidIndex(index);
+            return this._list[index];
+        }
+
+        window.SVGPathSegList.prototype.insertItemBefore = function(newItem, index) {
+            this._checkPathSynchronizedToList();
+
+            // Spec: If the index is greater than or equal to numberOfItems, then the new item is appended to the end of the list.
+            if (index > this.numberOfItems)
+                index = this.numberOfItems;
+            if (newItem._owningPathSegList) {
+                // SVG2 spec says to make a copy.
+                newItem = newItem.clone();
+            }
+            this._list.splice(index, 0, newItem);
+            newItem._owningPathSegList = this;
+            this._writeListToPath();
+            return newItem;
+        }
+
+        window.SVGPathSegList.prototype.replaceItem = function(newItem, index) {
+            this._checkPathSynchronizedToList();
+
+            if (newItem._owningPathSegList) {
+                // SVG2 spec says to make a copy.
+                newItem = newItem.clone();
+            }
+            this._checkValidIndex(index);
+            this._list[index] = newItem;
+            newItem._owningPathSegList = this;
+            this._writeListToPath();
+            return newItem;
+        }
+
+        window.SVGPathSegList.prototype.removeItem = function(index) {
+            this._checkPathSynchronizedToList();
+
+            this._checkValidIndex(index);
+            var item = this._list[index];
+            this._list.splice(index, 1);
+            this._writeListToPath();
+            return item;
+        }
+
+        window.SVGPathSegList.prototype.appendItem = function(newItem) {
+            this._checkPathSynchronizedToList();
+
+            if (newItem._owningPathSegList) {
+                // SVG2 spec says to make a copy.
+                newItem = newItem.clone();
+            }
+            this._list.push(newItem);
+            newItem._owningPathSegList = this;
+            // TODO: Optimize this to just append to the existing attribute.
+            this._writeListToPath();
+            return newItem;
+        };
+
+        window.SVGPathSegList.prototype.matrixTransform = function(aSVGMatrix) {
+            this._checkPathSynchronizedToList();
+
+            var nLength = this._list.length;
+            for( var i = 0; i < nLength; ++i )
+            {
+                var nX;
+                var aPathSeg = this._list[i];
+                switch( aPathSeg.pathSegTypeAsLetter )
+                {
+                    case 'C':
+                        nX = aPathSeg._x2;
+                        aPathSeg._x2 = aSVGMatrix.a * nX + aSVGMatrix.c * aPathSeg._y2 + aSVGMatrix.e;
+                        aPathSeg._y2 = aSVGMatrix.b * nX + aSVGMatrix.d * aPathSeg._y2 + aSVGMatrix.f;
+                    // fall through intended
+                    case 'Q':
+                        nX = aPathSeg._x1;
+                        aPathSeg._x1 = aSVGMatrix.a * nX + aSVGMatrix.c * aPathSeg._y1 + aSVGMatrix.e;
+                        aPathSeg._y1 = aSVGMatrix.b * nX + aSVGMatrix.d * aPathSeg._y1 + aSVGMatrix.f;
+                    // fall through intended
+                    case 'M':
+                    case 'L':
+                        nX = aPathSeg._x;
+                        aPathSeg._x = aSVGMatrix.a * nX + aSVGMatrix.c * aPathSeg._y + aSVGMatrix.e;
+                        aPathSeg._y = aSVGMatrix.b * nX + aSVGMatrix.d * aPathSeg._y + aSVGMatrix.f;
+                        break;
+                    default:
+                        log( 'SVGPathSeg.matrixTransform: unexpected path segment type: '
+                            + aPathSeg.pathSegTypeAsLetter );
+                }
+            }
+
+            this._writeListToPath();
+        };
+
+        window.SVGPathSegList.prototype.changeOrientation = function() {
+            this._checkPathSynchronizedToList();
+
+            var aPathSegList = this._list;
+            var nLength = aPathSegList.length;
+            if( nLength == 0 ) return;
+
+            var nCurrentX = 0;
+            var nCurrentY = 0;
+
+            var aPathSeg = aPathSegList[0];
+            if( aPathSeg.pathSegTypeAsLetter == 'M' )
+            {
+                nCurrentX = aPathSeg.x;
+                nCurrentY = aPathSeg.y;
+                aPathSegList.shift();
+                --nLength;
+            }
+
+            var i;
+            for( i = 0; i < nLength; ++i )
+            {
+                aPathSeg = aPathSegList[i];
+                switch( aPathSeg.pathSegTypeAsLetter )
+                {
+                    case 'C':
+                        var nX = aPathSeg._x1;
+                        aPathSeg._x1 = aPathSeg._x2;
+                        aPathSeg._x2 = nX;
+                        var nY = aPathSeg._y1;
+                        aPathSeg._y1 = aPathSeg._y2;
+                        aPathSeg._y2 = nY;
+                    // fall through intended
+                    case 'M':
+                    case 'L':
+                    case 'Q':
+                        var aPoint = { x: aPathSeg._x, y: aPathSeg._y };
+                        aPathSeg._x = nCurrentX;
+                        aPathSeg._y = nCurrentY;
+                        nCurrentX = aPoint.x;
+                        nCurrentY = aPoint.y;
+                        break;
+                    default:
+                        log( 'SVGPathSegList.changeOrientation: unexpected path segment type: '
+                            + aPathSeg.pathSegTypeAsLetter );
+                }
+
+        }
+
+            aPathSegList.reverse();
+
+            var aMovePathSeg = new window.SVGPathSegMovetoAbs( this, nCurrentX, nCurrentY );
+            aPathSegList.unshift( aMovePathSeg );
+
+            this._writeListToPath();
+        };
+
+        window.SVGPathSegList._pathSegArrayAsString = function(pathSegArray) {
+            var string = '';
+            var first = true;
+            pathSegArray.forEach(function(pathSeg) {
+                if (first) {
+                    first = false;
+                    string += pathSeg._asPathString();
+                } else {
+                    string += ' ' + pathSeg._asPathString();
+                }
+            });
+            return string;
+        }
+
+        // This closely follows SVGPathParser::parsePath from Source/core/svg/SVGPathParser.cpp.
+        window.SVGPathSegList.prototype._parsePath = function(string) {
+            if (!string || string.length == 0)
+                return [];
+
+            var owningPathSegList = this;
+
+            var Builder = function() {
+                this.pathSegList = [];
+            }
+
+            Builder.prototype.appendSegment = function(pathSeg) {
+                this.pathSegList.push(pathSeg);
+            }
+
+            var Source = function(string) {
+                this._string = string;
+                this._currentIndex = 0;
+                this._endIndex = this._string.length;
+                this._previousCommand = window.SVGPathSeg.PATHSEG_UNKNOWN;
+
+                this._skipOptionalSpaces();
+            }
+
+            Source.prototype._isCurrentSpace = function() {
+                var character = this._string[this._currentIndex];
+                return character <= ' ' && (character == ' ' || character == '\n' || character == '\t' || character == '\r' || character == '\f');
+            }
+
+            Source.prototype._skipOptionalSpaces = function() {
+                while (this._currentIndex < this._endIndex && this._isCurrentSpace())
+                    this._currentIndex++;
+                return this._currentIndex < this._endIndex;
+            }
+
+            Source.prototype._skipOptionalSpacesOrDelimiter = function() {
+                if (this._currentIndex < this._endIndex && !this._isCurrentSpace() && this._string.charAt(this._currentIndex) != ',')
+                    return false;
+                if (this._skipOptionalSpaces()) {
+                    if (this._currentIndex < this._endIndex && this._string.charAt(this._currentIndex) == ',') {
+                        this._currentIndex++;
+                        this._skipOptionalSpaces();
+                    }
+                }
+                return this._currentIndex < this._endIndex;
+            }
+
+            Source.prototype.hasMoreData = function() {
+                return this._currentIndex < this._endIndex;
+            }
+
+            Source.prototype.peekSegmentType = function() {
+                var lookahead = this._string[this._currentIndex];
+                return this._pathSegTypeFromChar(lookahead);
+            }
+
+            Source.prototype._pathSegTypeFromChar = function(lookahead) {
+                switch (lookahead) {
+                    case 'Z':
+                    case 'z':
+                        return window.SVGPathSeg.PATHSEG_CLOSEPATH;
+                    case 'M':
+                        return window.SVGPathSeg.PATHSEG_MOVETO_ABS;
+                    case 'm':
+                        return window.SVGPathSeg.PATHSEG_MOVETO_REL;
+                    case 'L':
+                        return window.SVGPathSeg.PATHSEG_LINETO_ABS;
+                    case 'l':
+                        return window.SVGPathSeg.PATHSEG_LINETO_REL;
+                    case 'C':
+                        return window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_ABS;
+                    case 'c':
+                        return window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_REL;
+                    case 'Q':
+                        return window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_ABS;
+                    case 'q':
+                        return window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_REL;
+                    case 'A':
+                        return window.SVGPathSeg.PATHSEG_ARC_ABS;
+                    case 'a':
+                        return window.SVGPathSeg.PATHSEG_ARC_REL;
+                    case 'H':
+                        return window.SVGPathSeg.PATHSEG_LINETO_HORIZONTAL_ABS;
+                    case 'h':
+                        return window.SVGPathSeg.PATHSEG_LINETO_HORIZONTAL_REL;
+                    case 'V':
+                        return window.SVGPathSeg.PATHSEG_LINETO_VERTICAL_ABS;
+                    case 'v':
+                        return window.SVGPathSeg.PATHSEG_LINETO_VERTICAL_REL;
+                    case 'S':
+                        return window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_SMOOTH_ABS;
+                    case 's':
+                        return window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_SMOOTH_REL;
+                    case 'T':
+                        return window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_SMOOTH_ABS;
+                    case 't':
+                        return window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_SMOOTH_REL;
+                    default:
+                        return window.SVGPathSeg.PATHSEG_UNKNOWN;
+                }
+            }
+
+            Source.prototype._nextCommandHelper = function(lookahead, previousCommand) {
+                // Check for remaining coordinates in the current command.
+                if ((lookahead == '+' || lookahead == '-' || lookahead == '.' || (lookahead >= '0' && lookahead <= '9')) && previousCommand != window.SVGPathSeg.PATHSEG_CLOSEPATH) {
+                    if (previousCommand == window.SVGPathSeg.PATHSEG_MOVETO_ABS)
+                        return window.SVGPathSeg.PATHSEG_LINETO_ABS;
+                    if (previousCommand == window.SVGPathSeg.PATHSEG_MOVETO_REL)
+                        return window.SVGPathSeg.PATHSEG_LINETO_REL;
+                    return previousCommand;
+                }
+                return window.SVGPathSeg.PATHSEG_UNKNOWN;
+            }
+
+            Source.prototype.initialCommandIsMoveTo = function() {
+                // If the path is empty it is still valid, so return true.
+                if (!this.hasMoreData())
+                    return true;
+                var command = this.peekSegmentType();
+                // Path must start with moveTo.
+                return command == window.SVGPathSeg.PATHSEG_MOVETO_ABS || command == window.SVGPathSeg.PATHSEG_MOVETO_REL;
+            }
+
+            // Parse a number from an SVG path. This very closely follows genericParseNumber(...) from Source/core/svg/SVGParserUtilities.cpp.
+            // Spec: http://www.w3.org/TR/SVG11/single-page.html#paths-PathDataBNF
+            Source.prototype._parseNumber = function() {
+                var exponent = 0;
+                var integer = 0;
+                var frac = 1;
+                var decimal = 0;
+                var sign = 1;
+                var expsign = 1;
+
+                var startIndex = this._currentIndex;
+
+                this._skipOptionalSpaces();
+
+                // Read the sign.
+                if (this._currentIndex < this._endIndex && this._string.charAt(this._currentIndex) == '+')
+                    this._currentIndex++;
+                else if (this._currentIndex < this._endIndex && this._string.charAt(this._currentIndex) == '-') {
+                    this._currentIndex++;
+                    sign = -1;
+                }
+
+                if (this._currentIndex == this._endIndex || ((this._string.charAt(this._currentIndex) < '0' || this._string.charAt(this._currentIndex) > '9') && this._string.charAt(this._currentIndex) != '.'))
+                // The first character of a number must be one of [0-9+-.].
+                    return undefined;
+
+                // Read the integer part, build right-to-left.
+                var startIntPartIndex = this._currentIndex;
+                while (this._currentIndex < this._endIndex && this._string.charAt(this._currentIndex) >= '0' && this._string.charAt(this._currentIndex) <= '9')
+                    this._currentIndex++; // Advance to first non-digit.
+
+                if (this._currentIndex != startIntPartIndex) {
+                    var scanIntPartIndex = this._currentIndex - 1;
+                    var multiplier = 1;
+                    while (scanIntPartIndex >= startIntPartIndex) {
+                        integer += multiplier * (this._string.charAt(scanIntPartIndex--) - '0');
+                        multiplier *= 10;
+                    }
+                }
+
+                // Read the decimals.
+                if (this._currentIndex < this._endIndex && this._string.charAt(this._currentIndex) == '.') {
+                    this._currentIndex++;
+
+                    // There must be a least one digit following the .
+                    if (this._currentIndex >= this._endIndex || this._string.charAt(this._currentIndex) < '0' || this._string.charAt(this._currentIndex) > '9')
+                        return undefined;
+                    while (this._currentIndex < this._endIndex && this._string.charAt(this._currentIndex) >= '0' && this._string.charAt(this._currentIndex) <= '9') {
+                        frac *= 10;
+                        decimal += (this._string.charAt(this._currentIndex) - '0') / frac;
+                        this._currentIndex += 1;
+                    }
+                }
+
+                // Read the exponent part.
+                if (this._currentIndex != startIndex && this._currentIndex + 1 < this._endIndex && (this._string.charAt(this._currentIndex) == 'e' || this._string.charAt(this._currentIndex) == 'E') && (this._string.charAt(this._currentIndex + 1) != 'x' && this._string.charAt(this._currentIndex + 1) != 'm')) {
+                    this._currentIndex++;
+
+                    // Read the sign of the exponent.
+                    if (this._string.charAt(this._currentIndex) == '+') {
+                        this._currentIndex++;
+                    } else if (this._string.charAt(this._currentIndex) == '-') {
+                        this._currentIndex++;
+                        expsign = -1;
+                    }
+
+                    // There must be an exponent.
+                    if (this._currentIndex >= this._endIndex || this._string.charAt(this._currentIndex) < '0' || this._string.charAt(this._currentIndex) > '9')
+                        return undefined;
+
+                    while (this._currentIndex < this._endIndex && this._string.charAt(this._currentIndex) >= '0' && this._string.charAt(this._currentIndex) <= '9') {
+                        exponent *= 10;
+                        exponent += (this._string.charAt(this._currentIndex) - '0');
+                        this._currentIndex++;
+                    }
+                }
+
+                var number = integer + decimal;
+                number *= sign;
+
+                if (exponent)
+                    number *= Math.pow(10, expsign * exponent);
+
+                if (startIndex == this._currentIndex)
+                    return undefined;
+
+                this._skipOptionalSpacesOrDelimiter();
+
+                return number;
+            }
+
+            Source.prototype._parseArcFlag = function() {
+                if (this._currentIndex >= this._endIndex)
+                    return undefined;
+                var flag = false;
+                var flagChar = this._string.charAt(this._currentIndex++);
+                if (flagChar == '0')
+                    flag = false;
+                else if (flagChar == '1')
+                    flag = true;
+                else
+                    return undefined;
+
+                this._skipOptionalSpacesOrDelimiter();
+                return flag;
+            }
+
+            Source.prototype.parseSegment = function() {
+                var lookahead = this._string[this._currentIndex];
+                var command = this._pathSegTypeFromChar(lookahead);
+                if (command == window.SVGPathSeg.PATHSEG_UNKNOWN) {
+                    // Possibly an implicit command. Not allowed if this is the first command.
+                    if (this._previousCommand == window.SVGPathSeg.PATHSEG_UNKNOWN)
+                        return null;
+                    command = this._nextCommandHelper(lookahead, this._previousCommand);
+                    if (command == window.SVGPathSeg.PATHSEG_UNKNOWN)
+                        return null;
+                } else {
+                    this._currentIndex++;
+                }
+
+                this._previousCommand = command;
+
+                switch (command) {
+                    case window.SVGPathSeg.PATHSEG_MOVETO_REL:
+                        return new window.SVGPathSegMovetoRel(owningPathSegList, this._parseNumber(), this._parseNumber());
+                    case window.SVGPathSeg.PATHSEG_MOVETO_ABS:
+                        return new window.SVGPathSegMovetoAbs(owningPathSegList, this._parseNumber(), this._parseNumber());
+                    case window.SVGPathSeg.PATHSEG_LINETO_REL:
+                        return new window.SVGPathSegLinetoRel(owningPathSegList, this._parseNumber(), this._parseNumber());
+                    case window.SVGPathSeg.PATHSEG_LINETO_ABS:
+                        return new window.SVGPathSegLinetoAbs(owningPathSegList, this._parseNumber(), this._parseNumber());
+                    case window.SVGPathSeg.PATHSEG_LINETO_HORIZONTAL_REL:
+                        return new window.SVGPathSegLinetoHorizontalRel(owningPathSegList, this._parseNumber());
+                    case window.SVGPathSeg.PATHSEG_LINETO_HORIZONTAL_ABS:
+                        return new window.SVGPathSegLinetoHorizontalAbs(owningPathSegList, this._parseNumber());
+                    case window.SVGPathSeg.PATHSEG_LINETO_VERTICAL_REL:
+                        return new window.SVGPathSegLinetoVerticalRel(owningPathSegList, this._parseNumber());
+                    case window.SVGPathSeg.PATHSEG_LINETO_VERTICAL_ABS:
+                        return new window.SVGPathSegLinetoVerticalAbs(owningPathSegList, this._parseNumber());
+                    case window.SVGPathSeg.PATHSEG_CLOSEPATH:
+                        this._skipOptionalSpaces();
+                        return new window.SVGPathSegClosePath(owningPathSegList);
+                    case window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_REL:
+                        var points = {x1: this._parseNumber(), y1: this._parseNumber(), x2: this._parseNumber(), y2: this._parseNumber(), x: this._parseNumber(), y: this._parseNumber()};
+                        return new window.SVGPathSegCurvetoCubicRel(owningPathSegList, points.x, points.y, points.x1, points.y1, points.x2, points.y2);
+                    case window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_ABS:
+                        var points = {x1: this._parseNumber(), y1: this._parseNumber(), x2: this._parseNumber(), y2: this._parseNumber(), x: this._parseNumber(), y: this._parseNumber()};
+                        return new window.SVGPathSegCurvetoCubicAbs(owningPathSegList, points.x, points.y, points.x1, points.y1, points.x2, points.y2);
+                    case window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_SMOOTH_REL:
+                        var points = {x2: this._parseNumber(), y2: this._parseNumber(), x: this._parseNumber(), y: this._parseNumber()};
+                        return new window.SVGPathSegCurvetoCubicSmoothRel(owningPathSegList, points.x, points.y, points.x2, points.y2);
+                    case window.SVGPathSeg.PATHSEG_CURVETO_CUBIC_SMOOTH_ABS:
+                        var points = {x2: this._parseNumber(), y2: this._parseNumber(), x: this._parseNumber(), y: this._parseNumber()};
+                        return new window.SVGPathSegCurvetoCubicSmoothAbs(owningPathSegList, points.x, points.y, points.x2, points.y2);
+                    case window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_REL:
+                        var points = {x1: this._parseNumber(), y1: this._parseNumber(), x: this._parseNumber(), y: this._parseNumber()};
+                        return new window.SVGPathSegCurvetoQuadraticRel(owningPathSegList, points.x, points.y, points.x1, points.y1);
+                    case window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_ABS:
+                        var points = {x1: this._parseNumber(), y1: this._parseNumber(), x: this._parseNumber(), y: this._parseNumber()};
+                        return new window.SVGPathSegCurvetoQuadraticAbs(owningPathSegList, points.x, points.y, points.x1, points.y1);
+                    case window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_SMOOTH_REL:
+                        return new window.SVGPathSegCurvetoQuadraticSmoothRel(owningPathSegList, this._parseNumber(), this._parseNumber());
+                    case window.SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_SMOOTH_ABS:
+                        return new window.SVGPathSegCurvetoQuadraticSmoothAbs(owningPathSegList, this._parseNumber(), this._parseNumber());
+                    case window.SVGPathSeg.PATHSEG_ARC_REL:
+                        var points = {x1: this._parseNumber(), y1: this._parseNumber(), arcAngle: this._parseNumber(), arcLarge: this._parseArcFlag(), arcSweep: this._parseArcFlag(), x: this._parseNumber(), y: this._parseNumber()};
+                        return new window.SVGPathSegArcRel(owningPathSegList, points.x, points.y, points.x1, points.y1, points.arcAngle, points.arcLarge, points.arcSweep);
+                    case window.SVGPathSeg.PATHSEG_ARC_ABS:
+                        var points = {x1: this._parseNumber(), y1: this._parseNumber(), arcAngle: this._parseNumber(), arcLarge: this._parseArcFlag(), arcSweep: this._parseArcFlag(), x: this._parseNumber(), y: this._parseNumber()};
+                        return new window.SVGPathSegArcAbs(owningPathSegList, points.x, points.y, points.x1, points.y1, points.arcAngle, points.arcLarge, points.arcSweep);
+                    default:
+                        throw 'Unknown path seg type.'
+                }
+            }
+
+            var builder = new Builder();
+            var source = new Source(string);
+
+            if (!source.initialCommandIsMoveTo())
+                return [];
+            while (source.hasMoreData()) {
+                var pathSeg = source.parseSegment();
+                if (!pathSeg)
+                    return [];
+                builder.appendSegment(pathSeg);
+            }
+
+            return builder.pathSegList;
+        }
+    }
+}());
+
+/*****
+ * @svgpathend
+ *
+ *  The above code is a derivative work of some part of the SVGPathSeg API.
+ *
+ *  This API is a drop-in replacement for the SVGPathSeg and SVGPathSegList APIs that were removed from
+ *  SVG2 (https://lists.w3.org/Archives/Public/www-svg/2015Jun/0044.html), including the latest spec
+ *  changes which were implemented in Firefox 43 and Chrome 46.
+ *
+ *  @source https://github.com/progers/pathseg
+ */
+
 
 /*****
  * @licstart
@@ -713,7 +1723,6 @@ function configureDetectionTools()
  */
 
 
-
 /*****
  * @libreofficestart
  *
@@ -722,7 +1731,7 @@ function configureDetectionTools()
  * files placed under the folder '/slideshow/source' and
  * sub-folders. This got later rebased onto the AL2-licensed versions
  * of those files in early 2013.
- * @source http://cgit.freedesktop.org/libreoffice/core/tree/slideshow/source
+ * @source https://cgit.freedesktop.org/libreoffice/core/tree/slideshow/source
  *
  */
 
@@ -786,8 +1795,8 @@ var INDEX_MODE = 2;
 
 // Mouse handler actions.
 var MOUSE_UP = 1;
-var MOUSE_DOWN = 2;
-var MOUSE_MOVE = 3;
+var MOUSE_DOWN = 2; // eslint-disable-line no-unused-vars
+var MOUSE_MOVE = 3; // eslint-disable-line no-unused-vars
 var MOUSE_WHEEL = 4;
 
 // Key-codes.
@@ -807,7 +1816,7 @@ var ESCAPE_KEY = 27;
 var HIDDEN = 0;
 var VISIBLE = 1;
 var INHERIT = 2;
-var aVisibilityAttributeValue = [ 'hidden', 'visible', 'inherit' ];
+var aVisibilityAttributeValue = [ 'hidden', 'visible', 'inherit' ];  // eslint-disable-line no-unused-vars
 var aVisibilityValue = { 'hidden' : HIDDEN, 'visible' : VISIBLE, 'inherit' : INHERIT };
 
 // Parameters
@@ -910,27 +1919,37 @@ function Rectangle( aSVGRectElem )
     this.bottom = y + height;
 }
 
+/*
+ * Returns key corresponding to a value in object, null otherwise.
+ *
+ * @param Object
+ * @param value
+ */
+function getKeyByValue(aObj, value) {
+  for(var key in aObj) {
+    if(aObj[key] == value)
+      return key;
+  }
+  return null;
+}
+
 function log( message )
 {
     if( typeof console == 'object' )
     {
+        // eslint-disable-next-line no-console
         console.log( message );
     }
     else if( typeof opera == 'object' )
     {
         opera.postError( message );
     }
+    // eslint-disable-next-line no-undef
     else if( typeof java == 'object' && typeof java.lang == 'object' )
     {
+        // eslint-disable-next-line no-undef
         java.lang.System.out.println( message );
     }
-}
-
-function warning( bCondition, sMessage )
-{
-    if( bCondition )
-        log( sMessage );
-    return bCondition;
 }
 
 function getNSAttribute( sNSPrefix, aElem, sAttrName )
@@ -944,11 +1963,6 @@ function getNSAttribute( sNSPrefix, aElem, sAttrName )
     {
         return aElem.getAttribute( sNSPrefix + ':' + sAttrName );
     }
-//    if( aElem.hasAttributeNS( NSS[sNSPrefix], sAttrName ) )
-//    {
-//        return aElem.getAttributeNS( NSS[sNSPrefix], sAttrName );
-//    }
-//    return null;
 }
 
 function getOOOAttribute( aElem, sAttrName )
@@ -969,17 +1983,6 @@ function setNSAttribute( sNSPrefix, aElem, sAttrName, aValue )
         aElem.setAttribute(sNSPrefix + ':' + sAttrName, aValue );
         return true;
     }
-}
-
-function setOOOAttribute( aElem, sAttrName, aValue )
-{
-    return setNSAttribute( 'ooo', aElem, sAttrName, aValue );
-}
-
-function checkElemAndSetAttribute( aElem, sAttrName, aValue )
-{
-    if( aElem )
-        aElem.setAttribute( sAttrName, aValue );
 }
 
 function getElementsByClassName( aElem, sClassName )
@@ -1058,16 +2061,6 @@ function initVisibilityProperty( aElement )
     return nVisibility;
 }
 
-function setElementVisibility( aElement, nCurrentVisibility, nNewVisibility )
-{
-    if( nCurrentVisibility !=  nNewVisibility )
-    {
-        checkElemAndSetAttribute( aElement, 'visibility', aVisibilityAttributeValue[nNewVisibility] );
-        return nNewVisibility;
-    }
-    return nCurrentVisibility;
-}
-
 function getSafeIndex( nIndex, nMin, nMax )
 {
     if( nIndex < nMin )
@@ -1089,7 +2082,7 @@ function getRandomInt( nMax )
     return Math.floor( Math.random() * nMax );
 }
 
-function isTextFieldElement( aElement )
+function isTextFieldElement( aElement ) // eslint-disable-line no-unused-vars
 {
     var sClassName = aElement.getAttribute( 'class' );
     return ( sClassName === aSlideNumberClassName ) ||
@@ -1398,8 +2391,6 @@ function MetaSlide( sMetaSlideId, aMetaDoc )
     if( this.bHasTransition )
     {
         this.aTransitionHandler = new SlideTransition( this.getSlideAnimationsRoot(), this.slideId );
-        //if( this.aTransitionHandler.isValid() )
-        //    log( this.aTransitionHandler.info() );
     }
 
     // We initialize the SlideAnimationsHandler object
@@ -1408,6 +2399,7 @@ function MetaSlide( sMetaSlideId, aMetaDoc )
     this.aSlideAnimationsHandler.parseElements();
 
     // this statement is used only for debugging
+    // eslint-disable-next-line no-constant-condition
     if( false && this.aSlideAnimationsHandler.aRootNode )
         log( this.aSlideAnimationsHandler.aRootNode.info( true ) );
 
@@ -1464,7 +2456,7 @@ initMasterPage : function()
     var sMasterPageId = this.element.getAttributeNS( NSS['ooo'], aOOOAttrMaster );
 
     // Check that the master page handler object has not already been
-    // created by an other slide that target the same master page.
+    // created by another slide that target the same master page.
     if( !this.theMetaDoc.aMasterPageSet.hasOwnProperty( sMasterPageId ) )
     {
         this.theMetaDoc.aMasterPageSet[ sMasterPageId ] = new MasterPage( sMasterPageId, this );
@@ -1563,7 +2555,6 @@ collectTextShapes : function()
                 var sTextShapeIds = getOOOAttribute( aIndexEntryList[i], 'id-list' );
                 if( sTextShapeIds )
                 {
-                    //log( 'slide id: ' + this.slideId + ' text shape id list: ' + sTextShapeIds );
                     var aTextShapeIdSet =  sTextShapeIds.split( ' ' );
                     var j;
                     for( j = 0; j < aTextShapeIdSet.length; ++j )
@@ -1605,7 +2596,6 @@ initHyperlinks : function()
                     for( j = 0; j < aHyperlinkIdSet.length; ++j )
                     {
                         var sId = aHyperlinkIdSet[j];
-                        //log( 'initHyperlinks: j=' + j + ' id: <' + sId + '>' );
                         aHyperlinkSet[ sId ] = new HyperlinkElement( sId, this.aSlideAnimationsHandler.aEventMultiplexer );
                     }
                 }
@@ -2326,7 +3316,7 @@ CurrentDateTimeProvider.prototype.update = function( aDateTimeField )
 
 /*** private methods ***/
 
-CurrentDateTimeProvider.prototype.createDateTimeText = function( sDateTimeFormat )
+CurrentDateTimeProvider.prototype.createDateTimeText = function( /*sDateTimeFormat*/ )
 {
     // TODO handle date/time format
     var aDate = new Date();
@@ -2384,7 +3374,7 @@ SlideNumberProvider.prototype.update = function( aSlideNumberField, nSlideNumber
 
 /*** private methods ***/
 
-SlideNumberProvider.prototype.createSlideNumberText = function( nSlideNumber, sNumberingType )
+SlideNumberProvider.prototype.createSlideNumberText = function( nSlideNumber /*, sNumberingType*/ )
 {
     // TODO handle page numbering type
     return String( nSlideNumber );
@@ -2441,9 +3431,7 @@ function SlideIndexPage()
         this.aThumbnailSet[i].updateView();
     }
 
-//  this.curThumbnailIndex = this.selectedSlideIndex % this.totalThumbnails;
     this.curThumbnailIndex = 0;
-//    this.aThumbnailSet[ this.curThumbnailIndex ].select();
 }
 
 
@@ -2635,8 +3623,6 @@ function Thumbnail( aSlideIndexPage, nIndex )
     this.slideElement = getElementByClassName( this.thumbnailElement, 'Slide' );
     this.borderElement = getElementByClassName( this.thumbnailElement, 'Border' );
     this.mouseAreaElement = getElementByClassName( this.thumbnailElement, 'MouseArea' );
-    //this.mouseAreaElement.setAttribute( 'onmouseover', 'theSlideIndexPage.aThumbnailSet[' + this.index  + '].onMouseOver()' );
-    //this.mouseAreaElement.onmousedown = mouseHandlerDictionary[INDEX_MODE][MOUSE_DOWN];
     this.aTransformSet = new Array( 3 );
     this.visibility = VISIBLE;
     this.isSelected = false;
@@ -2727,7 +3713,7 @@ Thumbnail.prototype.update = function( nIndex )
     this.slideIndex = nIndex;
 };
 
-Thumbnail.prototype.clear = function( nIndex )
+Thumbnail.prototype.clear = function( )
 {
     setNSAttribute( 'xlink', this.slideElement, 'href', '' );
 };
@@ -2805,30 +3791,6 @@ function init()
     aSlideShow.bIsEnabled = theMetaDoc.bIsAnimated;
     theSlideIndexPage = new SlideIndexPage();
     aSlideShow.displaySlide( theMetaDoc.nStartSlideNumber, false );
-
-    //=====================================//
-    //      ===== timing test =====        //
-    //=====================================//
-//        var aTimingAttributeList = [ '0.001s', '-12:16.123', 'next', 'id23.click', 'id3.end + 5s', 'id4.begin - 12:45' ];
-//
-//        for( var i = 0; i < aTimingAttributeList.length; ++i)
-//        {
-//            var aTiming = new Timing( aTimingAttributeList[i] );
-//            aTiming.parse();
-//            aTiming.info();
-//        }
-
-
-
-    //  == animations parsing test ==
-
-
-//        var aSlideShowContext = aSlideShow.getContext();
-//        var aSlideAnimations = new SlideAnimations( aSlideShowContext );
-//        aSlideAnimations.importAnimations( getSlideAnimationsRoot( 'id7' ) );
-//        aSlideAnimations.parseElements();
-//        log( aSlideAnimations.aRootNode.info( true ) );
-
 }
 
 function presentationEngineStop()
@@ -2846,6 +3808,7 @@ function assert( condition, message )
     {
         presentationEngineStop();
         if (typeof console == 'object')
+            // eslint-disable-next-line no-console
             console.trace();
         throw new Error( message );
     }
@@ -2935,8 +3898,6 @@ function displayIndex( offsetNumber )
  */
 function toggleSlideIndex()
 {
-    //var suspendHandle = ROOT_NODE.suspendRedraw(500);
-
     if( currentMode == SLIDE_MODE )
     {
 
@@ -2954,9 +3915,6 @@ function toggleSlideIndex()
         aSlideShow.displaySlide( nNewSlide, true );
         currentMode = SLIDE_MODE;
     }
-
-    //ROOT_NODE.unsuspendRedraw(suspendHandle);
-    //ROOT_NODE.forceRedraw();
 }
 
 /** Function that exit from the index mode without changing the shown slide
@@ -3074,9 +4032,9 @@ function bind2( aFunction )
 function getCurrentSystemTime()
 {
     return ( new Date() ).getTime();
-    //return ROOT_NODE.getCurrentTime();
 }
 
+// eslint-disable-next-line no-unused-vars
 function getSlideAnimationsRoot( sSlideId )
 {
     return theMetaDoc.aSlideAnimationsMap[ sSlideId ];
@@ -3144,6 +4102,7 @@ function makeMatrixString( a, b, c, d, e, f )
     return s;
 }
 
+// eslint-disable-next-line no-unused-vars
 function matrixToString( aSVGMatrix )
 {
     return makeMatrixString( aSVGMatrix.a, aSVGMatrix.b, aSVGMatrix.c,
@@ -3155,6 +4114,7 @@ function matrixToString( aSVGMatrix )
 
 // Attribute Parsers
 
+// eslint-disable-next-line no-unused-vars
 function numberParser( sValue )
 {
     if( sValue === '.' )
@@ -3180,17 +4140,22 @@ function booleanParser( sValue )
 
 function colorParser( sValue )
 {
+    // The following 3 color functions are used in evaluating sValue string
+    // so don't remove them.
 
+    // eslint-disable-next-line no-unused-vars
     function hsl( nHue, nSaturation, nLuminance )
     {
         return new HSLColor( nHue, nSaturation / 100, nLuminance / 100 );
     }
 
+    // eslint-disable-next-line no-unused-vars
     function rgb( nRed, nGreen, nBlue )
     {
         return new RGBColor( nRed / 255, nGreen / 255, nBlue / 255 );
     }
 
+    // eslint-disable-next-line no-unused-vars
     function prgb( nRed, nGreen, nBlue )
     {
         return new RGBColor( nRed / 100, nGreen / 100, nBlue / 100 );
@@ -3531,7 +4496,7 @@ HSLColor.interpolate = function( aFrom, aTo, nT, bCCW )
  *      SVGMatrix extensions
  **********************************************************************************************/
 
-SVGIdentityMatrix = document.documentElement.createSVGMatrix();
+var SVGIdentityMatrix = document.documentElement.createSVGMatrix();
 
 SVGMatrix.prototype.setToIdentity = function()
 {
@@ -3582,6 +4547,38 @@ SVGPathElement.prototype.appendPath = function( aPath )
     this.setAttribute( 'd', sPathData );
 };
 
+/** flipOnYAxis
+ *  Flips the SVG Path element along y-axis.
+ *
+ *  @param aPath
+ *      An object of type SVGPathElement to be flipped.
+ */
+function flipOnYAxis( aPath )
+{
+    var aPolyPath = aPath.cloneNode(true);
+    var aTransform = document.documentElement.createSVGMatrix();
+    aTransform.a = -1;
+    aTransform.e = 1;
+    aPolyPath.matrixTransform(aTransform);
+    return aPolyPath;
+}
+
+/** flipOnXAxis
+ *  Flips the SVG Path element along x-axis
+ *
+ *  @param aPath
+ *      An object of type SVGPathElement to be flipped
+ */
+function flipOnXAxis( aPath )
+{
+    var aPolyPath = aPath.cloneNode(true);
+    var aTransform = document.documentElement.createSVGMatrix();
+    aTransform.d = -1;
+    aTransform.f = 1;
+    aPolyPath.matrixTransform(aTransform);
+    return aPolyPath;
+}
+
 /** SVGPathElement.matrixTransform
  *  Apply the transformation defined by the passed matrix to the referenced
  *  svg <path> element.
@@ -3593,6 +4590,12 @@ SVGPathElement.prototype.appendPath = function( aPath )
  */
 SVGPathElement.prototype.matrixTransform = function( aSVGMatrix )
 {
+    if( SVGPathSegList.prototype.matrixTransform )
+    {
+        this.pathSegList.matrixTransform( aSVGMatrix );
+        return;
+    }
+
     var aPathSegList = this.pathSegList;
     var nLength = aPathSegList.numberOfItems;
     var i;
@@ -3611,6 +4614,12 @@ SVGPathElement.prototype.changeOrientation = function()
     var aPathSegList = this.pathSegList;
     var nLength = aPathSegList.numberOfItems;
     if( nLength == 0 ) return;
+
+    if( SVGPathSegList.prototype.changeOrientation )
+    {
+        aPathSegList.changeOrientation();
+        return;
+    }
 
     var nCurrentX = 0;
     var nCurrentY = 0;
@@ -3652,6 +4661,8 @@ SVGPathElement.prototype.changeOrientation = function()
  *  Note: Opera doesn't have any SVGPathSeg* class and rises an error.
  *  We exploit this fact for providing a different implementation.
  */
+
+
 try
 {   // Firefox, Google Chrome, Internet Explorer, Safari.
 
@@ -3867,7 +4878,7 @@ var ANIMATION_NODE_TRANSITIONFILTER     = 9;
 var ANIMATION_NODE_AUDIO                = 10;
 var ANIMATION_NODE_COMMAND              = 11;
 
-aAnimationNodeTypeInMap = {
+var aAnimationNodeTypeInMap = {
     'par'               : ANIMATION_NODE_PAR,
     'seq'               : ANIMATION_NODE_SEQ,
     'iterate'           : ANIMATION_NODE_ITERATE,
@@ -3887,7 +4898,6 @@ aAnimationNodeTypeInMap = {
 function getAnimationElementType( aElement )
 {
     var sName = aElement.localName.toLowerCase();
-    //log( 'getAnimationElementType: ' + sName );
 
     if( sName && aAnimationNodeTypeInMap[ sName ] )
         return aAnimationNodeTypeInMap[ sName ];
@@ -3930,15 +4940,15 @@ function getNodeStateName( eNodeState )
 
 
 // Impress Node Types
-IMPRESS_DEFAULT_NODE                    = 0;
-IMPRESS_ON_CLICK_NODE                   = 1;
-IMPRESS_WITH_PREVIOUS_NODE              = 2;
-IMPRESS_AFTER_PREVIOUS_NODE             = 3;
-IMPRESS_MAIN_SEQUENCE_NODE              = 4;
-IMPRESS_TIMING_ROOT_NODE                = 5;
-IMPRESS_INTERACTIVE_SEQUENCE_NODE       = 6;
+var IMPRESS_DEFAULT_NODE                    = 0;
+var IMPRESS_ON_CLICK_NODE                   = 1;
+var IMPRESS_WITH_PREVIOUS_NODE              = 2;
+var IMPRESS_AFTER_PREVIOUS_NODE             = 3;
+var IMPRESS_MAIN_SEQUENCE_NODE              = 4;
+var IMPRESS_TIMING_ROOT_NODE                = 5;
+var IMPRESS_INTERACTIVE_SEQUENCE_NODE       = 6;
 
-aImpressNodeTypeInMap = {
+var aImpressNodeTypeInMap = {
     'on-click'                  : IMPRESS_ON_CLICK_NODE,
     'with-previous'             : IMPRESS_WITH_PREVIOUS_NODE,
     'after-previous'            : IMPRESS_AFTER_PREVIOUS_NODE,
@@ -3947,45 +4957,45 @@ aImpressNodeTypeInMap = {
     'interactive-sequence'      : IMPRESS_INTERACTIVE_SEQUENCE_NODE
 };
 
-aImpressNodeTypeOutMap = [ 'default', 'on-click', 'with-previous', 'after-previous',
+var aImpressNodeTypeOutMap = [ 'default', 'on-click', 'with-previous', 'after-previous',
                             'main-sequence', 'timing-root', 'interactive-sequence' ];
 
 
 // Preset Classes
-aPresetClassInMap = {};
+var aPresetClassInMap = {};
 
 
 // Preset Ids
-aPresetIdInMap = {};
+var aPresetIdInMap = {};
 
 
 // Restart Modes
 var RESTART_MODE_DEFAULT            = 0;
-var RESTART_MODE_INHERIT            = 0;
+var RESTART_MODE_INHERIT            = 0; // eslint-disable-line no-unused-vars
 var RESTART_MODE_ALWAYS             = 1;
 var RESTART_MODE_WHEN_NOT_ACTIVE    = 2;
 var RESTART_MODE_NEVER              = 3;
 
-aRestartModeInMap = {
+var aRestartModeInMap = {
     'inherit'       : RESTART_MODE_DEFAULT,
     'always'        : RESTART_MODE_ALWAYS,
     'whenNotActive' : RESTART_MODE_WHEN_NOT_ACTIVE,
     'never'         : RESTART_MODE_NEVER
 };
 
-aRestartModeOutMap = [ 'inherit','always', 'whenNotActive', 'never' ];
+var aRestartModeOutMap = [ 'inherit','always', 'whenNotActive', 'never' ];
 
 
 // Fill Modes
 var FILL_MODE_DEFAULT           = 0;
-var FILL_MODE_INHERIT           = 0;
+var FILL_MODE_INHERIT           = 0; // eslint-disable-line no-unused-vars
 var FILL_MODE_REMOVE            = 1;
 var FILL_MODE_FREEZE            = 2;
 var FILL_MODE_HOLD              = 3;
 var FILL_MODE_TRANSITION        = 4;
 var FILL_MODE_AUTO              = 5;
 
-aFillModeInMap = {
+var aFillModeInMap = {
     'inherit'       : FILL_MODE_DEFAULT,
     'remove'        : FILL_MODE_REMOVE,
     'freeze'        : FILL_MODE_FREEZE,
@@ -3994,17 +5004,18 @@ aFillModeInMap = {
     'auto'          : FILL_MODE_AUTO
 };
 
-aFillModeOutMap = [ 'inherit', 'remove', 'freeze', 'hold', 'transition', 'auto' ];
+var aFillModeOutMap = [ 'inherit', 'remove', 'freeze', 'hold', 'transition', 'auto' ];
 
 
 // Additive Modes
-var ADDITIVE_MODE_BASE          = 0;
-var ADDITIVE_MODE_SUM           = 1;
-var ADDITIVE_MODE_REPLACE       = 2;
-var ADDITIVE_MODE_MULTIPLY      = 3;
-var ADDITIVE_MODE_NONE          = 4;
+var ADDITIVE_MODE_UNKNOWN       = 0; // eslint-disable-line no-unused-vars
+var ADDITIVE_MODE_BASE          = 1;
+var ADDITIVE_MODE_SUM           = 2;
+var ADDITIVE_MODE_REPLACE       = 3;
+var ADDITIVE_MODE_MULTIPLY      = 4;
+var ADDITIVE_MODE_NONE          = 5;
 
-aAddittiveModeInMap = {
+var aAddittiveModeInMap = {
     'base'          : ADDITIVE_MODE_BASE,
     'sum'           : ADDITIVE_MODE_SUM,
     'replace'       : ADDITIVE_MODE_REPLACE,
@@ -4012,58 +5023,58 @@ aAddittiveModeInMap = {
     'none'          : ADDITIVE_MODE_NONE
 };
 
-aAddittiveModeOutMap = [ 'base', 'sum', 'replace', 'multiply', 'none' ];
+var aAddittiveModeOutMap = [ 'unknown', 'base', 'sum', 'replace', 'multiply', 'none' ];
 
 
 // Accumulate Modes
 var ACCUMULATE_MODE_NONE        = 0;
 var ACCUMULATE_MODE_SUM         = 1;
 
-aAccumulateModeOutMap = [ 'none', 'sum' ];
+var aAccumulateModeOutMap = [ 'none', 'sum' ];
 
 // Calculation Modes
-var CALC_MODE_DISCRETE          = 0;
-var CALC_MODE_LINEAR            = 1;
-var CALC_MODE_PACED             = 2;
-var CALC_MODE_SPLINE            = 3;
+var CALC_MODE_DISCRETE          = 1;
+var CALC_MODE_LINEAR            = 2;
+var CALC_MODE_PACED             = 3;
+var CALC_MODE_SPLINE            = 4;
 
-aCalcModeInMap = {
+var aCalcModeInMap = {
     'discrete'      : CALC_MODE_DISCRETE,
     'linear'        : CALC_MODE_LINEAR,
     'paced'         : CALC_MODE_PACED,
     'spline'        : CALC_MODE_SPLINE
 };
 
-aCalcModeOutMap = [ 'discrete', 'linear', 'paced', 'spline' ];
+var aCalcModeOutMap = [ 'unknown', 'discrete', 'linear', 'paced', 'spline' ];
 
 
 // Color Spaces
 var COLOR_SPACE_RGB = 0;
 var COLOR_SPACE_HSL = 1;
 
-aColorSpaceInMap = { 'rgb': COLOR_SPACE_RGB, 'hsl': COLOR_SPACE_HSL };
+var aColorSpaceInMap = { 'rgb': COLOR_SPACE_RGB, 'hsl': COLOR_SPACE_HSL };
 
-aColorSpaceOutMap = [ 'rgb', 'hsl' ];
+var aColorSpaceOutMap = [ 'rgb', 'hsl' ];
 
 
 // Clock Directions
 var CLOCKWISE               = 0;
 var COUNTERCLOCKWISE        = 1;
 
-aClockDirectionInMap = { 'clockwise': CLOCKWISE, 'counter-clockwise': COUNTERCLOCKWISE };
+var aClockDirectionInMap = { 'clockwise': CLOCKWISE, 'counter-clockwise': COUNTERCLOCKWISE };
 
-aClockDirectionOutMap = [ 'clockwise', 'counter-clockwise' ];
+var aClockDirectionOutMap = [ 'clockwise', 'counter-clockwise' ];
 
 
 // Attribute Value Types
-UNKNOWN_PROPERTY        = 0;
-NUMBER_PROPERTY         = 1;
-ENUM_PROPERTY           = 2;
-COLOR_PROPERTY          = 3;
-STRING_PROPERTY         = 4;
-BOOL_PROPERTY           = 5;
+var UNKNOWN_PROPERTY        = 0; // eslint-disable-line no-unused-vars
+var NUMBER_PROPERTY         = 1;
+var ENUM_PROPERTY           = 2;
+var COLOR_PROPERTY          = 3;
+var STRING_PROPERTY         = 4;
+var BOOL_PROPERTY           = 5;
 
-aValueTypeOutMap = [ 'unknown', 'number', 'enum', 'color', 'string', 'boolean' ];
+var aValueTypeOutMap = [ 'unknown', 'number', 'enum', 'color', 'string', 'boolean' ];
 
 
 // Attribute Map
@@ -4078,6 +5089,10 @@ var aAttributeMap =
         'opacity':          {   'type':         NUMBER_PROPERTY,
                                 'get':          'getOpacity',
                                 'set':          'setOpacity'                    },
+
+        'rotate':           {   'type':         NUMBER_PROPERTY,
+                                'get':          'getRotationAngle',
+                                'set':          'setRotationAngle'              },
 
         'width':            {   'type':         NUMBER_PROPERTY,
                                 'get':          'getWidth',
@@ -4125,147 +5140,292 @@ var aAttributeMap =
 
 
 // Transition Classes
-TRANSITION_INVALID              = 0;    // Invalid type
-TRANSITION_CLIP_POLYPOLYGON     = 1;    // Transition expressed by parametric clip polygon
-TRANSITION_SPECIAL              = 2;    // Transition expressed by hand-crafted function
+var TRANSITION_INVALID              = 0;    // Invalid type
+var TRANSITION_CLIP_POLYPOLYGON     = 1;    // Transition expressed by parametric clip polygon
+var TRANSITION_SPECIAL              = 2;    // Transition expressed by hand-crafted function
 
-aTransitionClassOutMap = ['invalid', 'clip polypolygon', 'special'];
-
+/*
+ * All Transition types should be in sync with aTransitionTypeInMap:
+ * Comments '//' followed by integers represent the transition values in their
+ * C++ implementations.
+ */
 
 // Transition Types
-BARWIPE_TRANSITION          = 1;
-BOXWIPE_TRANSITION          = 2;
-FOURBOXWIPE_TRANSITION      = 3;
-ELLIPSEWIPE_TRANSITION      = 4; // 17
-CLOCKWIPE_TRANSITION        = 5; // 22
-PINWHEELWIPE_TRANSITION     = 6; // 23
-PUSHWIPE_TRANSITION         = 7; // 35
-SLIDEWIPE_TRANSITION        = 8; // 36
-FADE_TRANSITION             = 9; // 37
-RANDOMBARWIPE_TRANSITION    = 10; // 38
-CHECKERBOARDWIPE_TRANSITION = 11; // 39
-DISSOLVE_TRANSITION         = 12; // 40
+var BARWIPE_TRANSITION              = 1;
+var BOXWIPE_TRANSITION              = 2;
+var FOURBOXWIPE_TRANSITION          = 3;
+var ELLIPSEWIPE_TRANSITION          = 4; // 17
+var CLOCKWIPE_TRANSITION            = 5; // 22
+var PINWHEELWIPE_TRANSITION         = 6; // 23
+var PUSHWIPE_TRANSITION             = 7; // 35
+var SLIDEWIPE_TRANSITION            = 8; // 36
+var FADE_TRANSITION                 = 9; // 37
+var RANDOMBARWIPE_TRANSITION        = 10; // 38
+var CHECKERBOARDWIPE_TRANSITION     = 11; // 39
+var DISSOLVE_TRANSITION             = 12; // 40
+var SNAKEWIPE_TRANSITION            = 13; // 30
+var PARALLELSNAKESWIPE_TRANSITION   = 14; // 32
+var IRISWIPE_TRANSITION             = 15; // 12
+var BARNDOORWIPE_TRANSITION         = 16; // 4
+var VEEWIPE_TRANSITION              = 17; // 8
+var ZIGZAGWIPE_TRANSITION           = 18; // 10
+var BARNZIGZAGWIPE_TRANSITION       = 19; // 11
+var FANWIPE_TRANSITION              = 20; // 25
+var SINGLESWEEPWIPE_TRANSITION      = 21; // 24
+var WATERFALLWIPE_TRANSITION        = 22; // 34
+var SPIRALWIPE_TRANSITION           = 23; // 31
+var MISCDIAGONALWIPE_TRANSITION     = 24; // 7
+var BOXSNAKESWIPE_TRANSITION        = 25; // 33
 
-aTransitionTypeInMap = {
+var aTransitionTypeInMap = {
     'barWipe'           : BARWIPE_TRANSITION,
     'boxWipe'           : BOXWIPE_TRANSITION,
+    'barnDoorWipe'      : BARNDOORWIPE_TRANSITION,
     'fourBoxWipe'       : FOURBOXWIPE_TRANSITION,
     'ellipseWipe'       : ELLIPSEWIPE_TRANSITION,
     'clockWipe'         : CLOCKWIPE_TRANSITION,
     'pinWheelWipe'      : PINWHEELWIPE_TRANSITION,
+    'miscDiagonalWipe'  : MISCDIAGONALWIPE_TRANSITION,
     'pushWipe'          : PUSHWIPE_TRANSITION,
     'slideWipe'         : SLIDEWIPE_TRANSITION,
     'fade'              : FADE_TRANSITION,
+    'fanWipe'           : FANWIPE_TRANSITION,
     'randomBarWipe'     : RANDOMBARWIPE_TRANSITION,
     'checkerBoardWipe'  : CHECKERBOARDWIPE_TRANSITION,
-    'dissolve'          : DISSOLVE_TRANSITION
+    'dissolve'          : DISSOLVE_TRANSITION,
+    'singleSweepWipe'   : SINGLESWEEPWIPE_TRANSITION,
+    'snakeWipe'         : SNAKEWIPE_TRANSITION,
+    'parallelSnakesWipe': PARALLELSNAKESWIPE_TRANSITION,
+    'spiralWipe'        : SPIRALWIPE_TRANSITION,
+    'boxSnakesWipe'     : BOXSNAKESWIPE_TRANSITION,
+    'irisWipe'          : IRISWIPE_TRANSITION,
+    'veeWipe'           : VEEWIPE_TRANSITION,
+    'zigZagWipe'        : ZIGZAGWIPE_TRANSITION,
+    'barnZigZagWipe'    : BARNZIGZAGWIPE_TRANSITION,
+    'waterfallWipe'     : WATERFALLWIPE_TRANSITION
 };
 
-aTransitionTypeOutMap = [ '', 'barWipe', 'boxWipe', 'fourBoxWipe', 'ellipseWipe',
-                          'clockWipe', 'pinWheelWipe', 'pushWipe', 'slideWipe',
-                          'fade', 'randomBarWipe', 'checkerBoardWipe', 'dissolve' ];
-
-
+/*
+ * All Transition subtypes should be in sync with aTransitionSubtypeInMap:
+ * Comments '//' followed by integers represent the transition values in their
+ * C++ implementations.
+ */
 // Transition Subtypes
-DEFAULT_TRANS_SUBTYPE               = 0;
-LEFTTORIGHT_TRANS_SUBTYPE           = 1;
-TOPTOBOTTOM_TRANS_SUBTYPE           = 2;
-CORNERSIN_TRANS_SUBTYPE             = 3; // 11
-CORNERSOUT_TRANS_SUBTYPE            = 4;
-VERTICAL_TRANS_SUBTYPE              = 5;
-HORIZONTAL_TRANS_SUBTYPE            = 6; // 14
-DOWN_TRANS_SUBTYPE                  = 7; // 19
-CIRCLE_TRANS_SUBTYPE                = 8; // 27
-CLOCKWISETWELVE_TRANS_SUBTYPE       = 9; // 33
-CLOCKWISETHREE_TRANS_SUBTYPE        = 10;
-CLOCKWISESIX_TRANS_SUBTYPE          = 11;
-CLOCKWISENINE_TRANS_SUBTYPE         = 12;
-TWOBLADEVERTICAL_TRANS_SUBTYPE      = 13;
-TWOBLADEHORIZONTAL_TRANS_SUBTYPE    = 14;
-FOURBLADE_TRANS_SUBTYPE             = 15; // 39
-FROMLEFT_TRANS_SUBTYPE              = 16; // 97
-FROMTOP_TRANS_SUBTYPE               = 17;
-FROMRIGHT_TRANS_SUBTYPE             = 18;
-FROMBOTTOM_TRANS_SUBTYPE            = 19;
-CROSSFADE_TRANS_SUBTYPE             = 20;
-FADETOCOLOR_TRANS_SUBTYPE           = 21;
-FADEFROMCOLOR_TRANS_SUBTYPE         = 22;
-FADEOVERCOLOR_TRANS_SUBTYPE         = 23;
-THREEBLADE_TRANS_SUBTYPE            = 24;
-EIGHTBLADE_TRANS_SUBTYPE            = 25;
-ONEBLADE_TRANS_SUBTYPE              = 26; // 107
-ACROSS_TRANS_SUBTYPE                = 27;
+var DEFAULT_TRANS_SUBTYPE                       = 0;
+var LEFTTORIGHT_TRANS_SUBTYPE                   = 1;
+var TOPTOBOTTOM_TRANS_SUBTYPE                   = 2;
+var CORNERSIN_TRANS_SUBTYPE                     = 3; // 11
+var CORNERSOUT_TRANS_SUBTYPE                    = 4;
+var VERTICAL_TRANS_SUBTYPE                      = 5;
+var HORIZONTAL_TRANS_SUBTYPE                    = 6; // 14
+var DOWN_TRANS_SUBTYPE                          = 7; // 19
+var CIRCLE_TRANS_SUBTYPE                        = 8; // 27
+var CLOCKWISETWELVE_TRANS_SUBTYPE               = 9; // 33
+var CLOCKWISETHREE_TRANS_SUBTYPE                = 10;
+var CLOCKWISESIX_TRANS_SUBTYPE                  = 11;
+var CLOCKWISENINE_TRANS_SUBTYPE                 = 12;
+var TWOBLADEVERTICAL_TRANS_SUBTYPE              = 13;
+var TWOBLADEHORIZONTAL_TRANS_SUBTYPE            = 14;
+var FOURBLADE_TRANS_SUBTYPE                     = 15; // 39
+var FROMLEFT_TRANS_SUBTYPE                      = 16; // 97
+var FROMTOP_TRANS_SUBTYPE                       = 17;
+var FROMRIGHT_TRANS_SUBTYPE                     = 18;
+var FROMBOTTOM_TRANS_SUBTYPE                    = 19;
+var CROSSFADE_TRANS_SUBTYPE                     = 20;
+var FADETOCOLOR_TRANS_SUBTYPE                   = 21;
+var FADEFROMCOLOR_TRANS_SUBTYPE                 = 22;
+var FADEOVERCOLOR_TRANS_SUBTYPE                 = 23;
+var THREEBLADE_TRANS_SUBTYPE                    = 24;
+var EIGHTBLADE_TRANS_SUBTYPE                    = 25;
+var ONEBLADE_TRANS_SUBTYPE                      = 26; // 107
+var ACROSS_TRANS_SUBTYPE                        = 27;
+var TOPLEFTVERTICAL_TRANS_SUBTYPE               = 28; // 109
+var TOPLEFTHORIZONTAL_TRANS_SUBTYPE             = 29; // 64
+var TOPLEFTDIAGONAL_TRANS_SUBTYPE               = 30; // 65
+var TOPRIGHTDIAGONAL_TRANS_SUBTYPE              = 31; // 66
+var BOTTOMRIGHTDIAGONAL_TRANS_SUBTYPE           = 32; // 67
+var BOTTOMLEFTDIAGONAL_TRANS_SUBTYPE            = 33; // 68
+var RECTANGLE_TRANS_SUBTYPE                     = 34; // 101
+var DIAMOND_TRANS_SUBTYPE                       = 35; // 102
+var TOPLEFT_TRANS_SUBTYPE                       = 36; // 3
+var TOPRIGHT_TRANS_SUBTYPE                      = 37; // 4
+var BOTTOMRIGHT_TRANS_SUBTYPE                   = 38; // 5
+var BOTTOMLEFT_TRANS_SUBTYPE                    = 39; // 6
+var TOPCENTER_TRANS_SUBTYPE                     = 40; // 7
+var RIGHTCENTER_TRANS_SUBTYPE                   = 41; // 8
+var BOTTOMCENTER_TRANS_SUBTYPE                  = 42; // 9
+var LEFTCENTER_TRANS_SUBTYPE                    = 43; // 10
+var LEFT_TRANS_SUBTYPE                          = 44; // 20
+var UP_TRANS_SUBTYPE                            = 45; // 21
+var RIGHT_TRANS_SUBTYPE                         = 46; // 22
+var DIAGONALBOTTOMLEFT_TRANS_SUBTYPE            = 47; // 15
+var DIAGONALTOPLEFT_TRANS_SUBTYPE               = 48; // 16
+var CENTERTOP_TRANS_SUBTYPE                     = 49; // 48
+var CENTERRIGHT_TRANS_SUBTYPE                   = 50; // 49
+var TOP_TRANS_SUBTYPE                           = 51; // 50
+var BOTTOM_TRANS_SUBTYPE                        = 52; // 52
+var CLOCKWISETOP_TRANS_SUBTYPE                  = 53; // 40
+var CLOCKWISERIGHT_TRANS_SUBTYPE                = 54; // 41
+var CLOCKWISEBOTTOM_TRANS_SUBTYPE               = 55; // 42
+var CLOCKWISELEFT_TRANS_SUBTYPE                 = 56; // 43
+var CLOCKWISETOPLEFT_TRANS_SUBTYPE              = 57; // 44
+var COUNTERCLOCKWISEBOTTOMLEFT_TRANS_SUBTYPE    = 58; // 45
+var CLOCKWISEBOTTOMRIGHT_TRANS_SUBTYPE          = 59; // 46
+var COUNTERCLOCKWISETOPRIGHT_TRANS_SUBTYPE      = 60; // 47
+var VERTICALLEFT_TRANS_SUBTYPE                  = 61; // 93
+var VERTICALRIGHT_TRANS_SUBTYPE                 = 62; // 94
+var HORIZONTALLEFT_TRANS_SUBTYPE                = 63; // 95
+var HORIZONTALRIGHT_TRANS_SUBTYPE               = 64; // 96
+var TOPLEFTCLOCKWISE_TRANS_SUBTYPE              = 65; // 69
+var TOPRIGHTCLOCKWISE_TRANS_SUBTYPE             = 66; // 70
+var BOTTOMRIGHTCLOCKWISE_TRANS_SUBTYPE          = 67; // 71
+var BOTTOMLEFTCLOCKWISE_TRANS_SUBTYPE           = 68; // 72
+var TOPLEFTCOUNTERCLOCKWISE_TRANS_SUBTYPE       = 69; // 73
+var TOPRIGHTCOUNTERCLOCKWISE_TRANS_SUBTYPE      = 70; // 74
+var BOTTOMRIGHTCOUNTERCLOCKWISE_TRANS_SUBTYPE   = 71; // 75
+var BOTTOMLEFTCOUNTERCLOCKWISE_TRANS_SUBTYPE    = 72; // 76
+var DOUBLEBARNDOOR_TRANS_SUBTYPE                = 73; // 17
+var DOUBLEDIAMOND_TRANS_SUBTYPE                 = 74; // 18
+var VERTICALTOPSAME_TRANS_SUBTYPE               = 75; // 77
+var VERTICALBOTTOMSAME_TRANS_SUBTYPE            = 76; // 78
+var VERTICALTOPLEFTOPPOSITE_TRANS_SUBTYPE       = 77; // 79
+var VERTICALBOTTOMLEFTOPPOSITE_TRANS_SUBTYPE    = 78; // 80
+var HORIZONTALLEFTSAME_TRANS_SUBTYPE            = 79; // 81
+var HORIZONTALRIGHTSAME_TRANS_SUBTYPE           = 80; // 82
+var HORIZONTALTOPLEFTOPPOSITE_TRANS_SUBTYPE     = 81; // 83
+var HORIZONTALTOPRIGHTOPPOSITE_TRANS_SUBTYPE    = 82; // 84
+var DIAGONALBOTTOMLEFTOPPOSITE_TRANS_SUBTYPE    = 83; // 85
+var DIAGONALTOPLEFTOPPOSITE_TRANS_SUBTYPE       = 84; // 86
+var TWOBOXTOP_TRANS_SUBTYPE                     = 85; // 87
+var TWOBOXBOTTOM_TRANS_SUBTYPE                  = 86; // 88
+var TWOBOXLEFT_TRANS_SUBTYPE                    = 87; // 89
+var TWOBOXRIGHT_TRANS_SUBTYPE                   = 88; // 90
+var FOURBOXVERTICAL_TRANS_SUBTYPE               = 89; // 91
+var FOURBOXHORIZONTAL_TRANS_SUBTYPE             = 90; // 92
 
-aTransitionSubtypeInMap = {
-    'default'           : DEFAULT_TRANS_SUBTYPE,
-    'leftToRight'       : LEFTTORIGHT_TRANS_SUBTYPE,
-    'topToBottom'       : TOPTOBOTTOM_TRANS_SUBTYPE,
-    'cornersIn'         : CORNERSIN_TRANS_SUBTYPE,
-    'cornersOut'        : CORNERSOUT_TRANS_SUBTYPE,
-    'vertical'          : VERTICAL_TRANS_SUBTYPE,
-    'horizontal'        : HORIZONTAL_TRANS_SUBTYPE,
-    'down'              : DOWN_TRANS_SUBTYPE,
-    'circle'            : CIRCLE_TRANS_SUBTYPE,
-    'clockwiseTwelve'   : CLOCKWISETWELVE_TRANS_SUBTYPE,
-    'clockwiseThree'    : CLOCKWISETHREE_TRANS_SUBTYPE,
-    'clockwiseSix'      : CLOCKWISESIX_TRANS_SUBTYPE,
-    'clockwiseNine'     : CLOCKWISENINE_TRANS_SUBTYPE,
-    'twoBladeVertical'  : TWOBLADEVERTICAL_TRANS_SUBTYPE,
-    'twoBladeHorizontal': TWOBLADEHORIZONTAL_TRANS_SUBTYPE,
-    'fourBlade'         : FOURBLADE_TRANS_SUBTYPE,
-    'fromLeft'          : FROMLEFT_TRANS_SUBTYPE,
-    'fromTop'           : FROMTOP_TRANS_SUBTYPE,
-    'fromRight'         : FROMRIGHT_TRANS_SUBTYPE,
-    'fromBottom'        : FROMBOTTOM_TRANS_SUBTYPE,
-    'crossfade'         : CROSSFADE_TRANS_SUBTYPE,
-    'fadeToColor'       : FADETOCOLOR_TRANS_SUBTYPE,
-    'fadeFromColor'     : FADEFROMCOLOR_TRANS_SUBTYPE,
-    'fadeOverColor'     : FADEOVERCOLOR_TRANS_SUBTYPE,
-    'threeBlade'        : THREEBLADE_TRANS_SUBTYPE,
-    'eightBlade'        : EIGHTBLADE_TRANS_SUBTYPE,
-    'oneBlade'          : ONEBLADE_TRANS_SUBTYPE,
-    'across'            : ACROSS_TRANS_SUBTYPE
+var aTransitionSubtypeInMap = {
+    'default'                       : DEFAULT_TRANS_SUBTYPE,
+    'leftToRight'                   : LEFTTORIGHT_TRANS_SUBTYPE,
+    'topToBottom'                   : TOPTOBOTTOM_TRANS_SUBTYPE,
+    'cornersIn'                     : CORNERSIN_TRANS_SUBTYPE,
+    'cornersOut'                    : CORNERSOUT_TRANS_SUBTYPE,
+    'vertical'                      : VERTICAL_TRANS_SUBTYPE,
+    'centerTop'                     : CENTERTOP_TRANS_SUBTYPE,
+    'centerRight'                   : CENTERRIGHT_TRANS_SUBTYPE,
+    'top'                           : TOP_TRANS_SUBTYPE,
+    'right'                         : RIGHT_TRANS_SUBTYPE,
+    'bottom'                        : BOTTOM_TRANS_SUBTYPE,
+    'left'                          : LEFT_TRANS_SUBTYPE,
+    'horizontal'                    : HORIZONTAL_TRANS_SUBTYPE,
+    'down'                          : DOWN_TRANS_SUBTYPE,
+    'circle'                        : CIRCLE_TRANS_SUBTYPE,
+    'clockwiseTwelve'               : CLOCKWISETWELVE_TRANS_SUBTYPE,
+    'clockwiseThree'                : CLOCKWISETHREE_TRANS_SUBTYPE,
+    'clockwiseSix'                  : CLOCKWISESIX_TRANS_SUBTYPE,
+    'clockwiseNine'                 : CLOCKWISENINE_TRANS_SUBTYPE,
+    'clockwiseRight'                : CLOCKWISERIGHT_TRANS_SUBTYPE,
+    'clockwiseTop'                  : CLOCKWISETOP_TRANS_SUBTYPE,
+    'clockwiseBottom'               : CLOCKWISEBOTTOM_TRANS_SUBTYPE,
+    'clockwiseLeft'                 : CLOCKWISELEFT_TRANS_SUBTYPE,
+    'clockwiseTopLeft'              : CLOCKWISETOPLEFT_TRANS_SUBTYPE,
+    'counterClockwiseBottomLeft'    : COUNTERCLOCKWISEBOTTOMLEFT_TRANS_SUBTYPE,
+    'clockwiseBottomRight'          : CLOCKWISEBOTTOMRIGHT_TRANS_SUBTYPE,
+    'counterClockwiseTopRight'      : COUNTERCLOCKWISETOPRIGHT_TRANS_SUBTYPE,
+    'twoBladeVertical'              : TWOBLADEVERTICAL_TRANS_SUBTYPE,
+    'twoBladeHorizontal'            : TWOBLADEHORIZONTAL_TRANS_SUBTYPE,
+    'fourBlade'                     : FOURBLADE_TRANS_SUBTYPE,
+    'fromLeft'                      : FROMLEFT_TRANS_SUBTYPE,
+    'fromTop'                       : FROMTOP_TRANS_SUBTYPE,
+    'fromRight'                     : FROMRIGHT_TRANS_SUBTYPE,
+    'fromBottom'                    : FROMBOTTOM_TRANS_SUBTYPE,
+    'crossfade'                     : CROSSFADE_TRANS_SUBTYPE,
+    'fadeToColor'                   : FADETOCOLOR_TRANS_SUBTYPE,
+    'fadeFromColor'                 : FADEFROMCOLOR_TRANS_SUBTYPE,
+    'fadeOverColor'                 : FADEOVERCOLOR_TRANS_SUBTYPE,
+    'threeBlade'                    : THREEBLADE_TRANS_SUBTYPE,
+    'eightBlade'                    : EIGHTBLADE_TRANS_SUBTYPE,
+    'oneBlade'                      : ONEBLADE_TRANS_SUBTYPE,
+    'across'                        : ACROSS_TRANS_SUBTYPE,
+    'topLeftVertical'               : TOPLEFTVERTICAL_TRANS_SUBTYPE,
+    'topLeftHorizontal'             : TOPLEFTHORIZONTAL_TRANS_SUBTYPE,
+    'topLeftDiagonal'               : TOPLEFTDIAGONAL_TRANS_SUBTYPE,
+    'topRightDiagonal'              : TOPRIGHTDIAGONAL_TRANS_SUBTYPE,
+    'bottomRightDiagonal'           : BOTTOMRIGHTDIAGONAL_TRANS_SUBTYPE,
+    'topLeftClockwise'              : TOPLEFTCLOCKWISE_TRANS_SUBTYPE,
+    'topRightClockwise'             : TOPRIGHTCLOCKWISE_TRANS_SUBTYPE,
+    'bottomRightClockwise'          : BOTTOMRIGHTCLOCKWISE_TRANS_SUBTYPE,
+    'bottomLeftClockwise'           : BOTTOMLEFTCLOCKWISE_TRANS_SUBTYPE,
+    'topLeftCounterClockwise'       : TOPLEFTCOUNTERCLOCKWISE_TRANS_SUBTYPE,
+    'topRightCounterClockwise'      : TOPRIGHTCOUNTERCLOCKWISE_TRANS_SUBTYPE,
+    'bottomRightCounterClockwise'   : BOTTOMRIGHTCOUNTERCLOCKWISE_TRANS_SUBTYPE,
+    'bottomLeftCounterClockwise'    : BOTTOMLEFTCOUNTERCLOCKWISE_TRANS_SUBTYPE,
+    'bottomLeftDiagonal'            : BOTTOMLEFTDIAGONAL_TRANS_SUBTYPE,
+    'rectangle'                     : RECTANGLE_TRANS_SUBTYPE,
+    'diamond'                       : DIAMOND_TRANS_SUBTYPE,
+    'topLeft'                       : TOPLEFT_TRANS_SUBTYPE,
+    'topRight'                      : TOPRIGHT_TRANS_SUBTYPE,
+    'bottomRight'                   : BOTTOMRIGHT_TRANS_SUBTYPE,
+    'bottomLeft'                    : BOTTOMLEFT_TRANS_SUBTYPE,
+    'topCenter'                     : TOPCENTER_TRANS_SUBTYPE,
+    'rightCenter'                   : RIGHTCENTER_TRANS_SUBTYPE,
+    'bottomCenter'                  : BOTTOMCENTER_TRANS_SUBTYPE,
+    'leftCenter'                    : LEFTCENTER_TRANS_SUBTYPE,
+    'up'                            : UP_TRANS_SUBTYPE,
+    'diagonalBottomLeft'            : DIAGONALBOTTOMLEFT_TRANS_SUBTYPE,
+    'diagonalTopLeft'               : DIAGONALTOPLEFT_TRANS_SUBTYPE,
+    'verticalLeft'                  : VERTICALLEFT_TRANS_SUBTYPE,
+    'verticalRight'                 : VERTICALRIGHT_TRANS_SUBTYPE,
+    'horizontalLeft'                : HORIZONTALLEFT_TRANS_SUBTYPE,
+    'horizontalRight'               : HORIZONTALRIGHT_TRANS_SUBTYPE,
+    'doubleBarnDoor'                : DOUBLEBARNDOOR_TRANS_SUBTYPE,
+    'doubleDiamond'                 : DOUBLEDIAMOND_TRANS_SUBTYPE,
+    'verticalTopSame'               : VERTICALTOPSAME_TRANS_SUBTYPE,
+    'verticalBottomSame'            : VERTICALBOTTOMSAME_TRANS_SUBTYPE,
+    'verticalTopLeftOpposite'       : VERTICALTOPLEFTOPPOSITE_TRANS_SUBTYPE,
+    'verticalBottomLeftOpposite'    : VERTICALBOTTOMLEFTOPPOSITE_TRANS_SUBTYPE,
+    'horizontalLeftSame'            : HORIZONTALLEFTSAME_TRANS_SUBTYPE,
+    'horizontalRightSame'           : HORIZONTALRIGHTSAME_TRANS_SUBTYPE,
+    'horizontalTopLeftOpposite'     : HORIZONTALTOPLEFTOPPOSITE_TRANS_SUBTYPE,
+    'horizontalTopRightOpposite'    : HORIZONTALTOPRIGHTOPPOSITE_TRANS_SUBTYPE,
+    'diagonalBottomLeftOpposite'    : DIAGONALBOTTOMLEFTOPPOSITE_TRANS_SUBTYPE,
+    'diagonalTopLeftOpposite'       : DIAGONALTOPLEFTOPPOSITE_TRANS_SUBTYPE,
+    'twoBoxTop'                     : TWOBOXTOP_TRANS_SUBTYPE,
+    'twoBoxBottom'                  : TWOBOXBOTTOM_TRANS_SUBTYPE,
+    'twoBoxLeft'                    : TWOBOXLEFT_TRANS_SUBTYPE,
+    'twoBoxRight'                   : TWOBOXRIGHT_TRANS_SUBTYPE,
+    'fourBoxVertical'               : FOURBOXVERTICAL_TRANS_SUBTYPE,
+    'fourBoxHorizontal'             : FOURBOXHORIZONTAL_TRANS_SUBTYPE
 };
-
-aTransitionSubtypeOutMap = [ 'default', 'leftToRight', 'topToBottom', 'cornersIn',
-                             'cornersOut', 'vertical', 'horizontal', 'down', 'circle',
-                             'clockwiseTwelve', 'clockwiseThree', 'clockwiseSix',
-                             'clockwiseNine', 'twoBladeVertical', 'twoBladeHorizontal',
-                             'fourBlade', 'fromLeft', 'fromTop', 'fromRight',
-                             'fromBottom', 'crossfade', 'fadeToColor', 'fadeFromColor',
-                             'fadeOverColor', 'threeBlade', 'eightBlade', 'oneBlade',
-                             'across' ];
-
 
 // Transition Modes
-TRANSITION_MODE_IN  = 1;
-TRANSITION_MODE_OUT = 0;
+var TRANSITION_MODE_IN  = 1;
+var TRANSITION_MODE_OUT = 0;
 
-aTransitionModeInMap = { 'out': TRANSITION_MODE_OUT, 'in': TRANSITION_MODE_IN };
-aTransitionModeOutMap = [ 'out', 'in' ];
+var aTransitionModeOutMap = [ 'out', 'in' ];
 
 
 // Transition Reverse Methods
 
 // Ignore direction attribute altogether.
 // (If it has no sensible meaning for this transition.)
-REVERSEMETHOD_IGNORE                    = 0;
+var REVERSEMETHOD_IGNORE                    = 0;
 // Revert by changing the direction of the parameter sweep.
 // (From 1->0 instead of 0->1)
-REVERSEMETHOD_INVERT_SWEEP              = 1;
+var REVERSEMETHOD_INVERT_SWEEP              = 1;
 // Revert by subtracting the generated polygon from the target bound rect.
-REVERSEMETHOD_SUBTRACT_POLYGON          = 2;
+var REVERSEMETHOD_SUBTRACT_POLYGON          = 2;
 // Combination of REVERSEMETHOD_INVERT_SWEEP and REVERSEMETHOD_SUBTRACT_POLYGON.
-REVERSEMETHOD_SUBTRACT_AND_INVERT       = 3;
+var REVERSEMETHOD_SUBTRACT_AND_INVERT       = 3;
 // Reverse by rotating polygon 180 degrees.
-REVERSEMETHOD_ROTATE_180                = 4;
+var REVERSEMETHOD_ROTATE_180                = 4;
 // Reverse by flipping polygon at the y axis.
-REVERSEMETHOD_FLIP_X                    = 5;
+var REVERSEMETHOD_FLIP_X                    = 5;
 // Reverse by flipping polygon at the x axis.
-REVERSEMETHOD_FLIP_Y                    = 6;
+var REVERSEMETHOD_FLIP_Y                    = 6;
 
-aReverseMethodOutMap = ['ignore', 'invert sweep', 'subtract polygon',
-                        'subtract and invert', 'rotate 180', 'flip x', 'flip y'];
+// eslint-disable-next-line no-unused-vars
+var aReverseMethodOutMap = ['ignore', 'invert sweep', 'subtract polygon',
+                            'subtract and invert', 'rotate 180', 'flip x', 'flip y'];
 
 
 // Transition filter info table
@@ -4286,6 +5446,444 @@ aTransitionInfoTable[0][0] =
     'scaleIsotropically' : false
 };
 
+aTransitionInfoTable[SNAKEWIPE_TRANSITION] = {};
+aTransitionInfoTable[SNAKEWIPE_TRANSITION][TOPLEFTVERTICAL_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : -90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_ROTATE_180,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SNAKEWIPE_TRANSITION][TOPLEFTHORIZONTAL_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_ROTATE_180,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SNAKEWIPE_TRANSITION][TOPLEFTDIAGONAL_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_ROTATE_180,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SNAKEWIPE_TRANSITION][TOPRIGHTDIAGONAL_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_ROTATE_180,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SNAKEWIPE_TRANSITION][BOTTOMRIGHTDIAGONAL_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 180.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_ROTATE_180,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SNAKEWIPE_TRANSITION][BOTTOMLEFTDIAGONAL_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 180.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_ROTATE_180,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+}
+
+aTransitionInfoTable[PARALLELSNAKESWIPE_TRANSITION] = {};
+aTransitionInfoTable[PARALLELSNAKESWIPE_TRANSITION][VERTICALTOPSAME_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[PARALLELSNAKESWIPE_TRANSITION][VERTICALBOTTOMSAME_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 180.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[PARALLELSNAKESWIPE_TRANSITION][VERTICALTOPLEFTOPPOSITE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[PARALLELSNAKESWIPE_TRANSITION][VERTICALBOTTOMLEFTOPPOSITE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[PARALLELSNAKESWIPE_TRANSITION][HORIZONTALLEFTSAME_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : -90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[PARALLELSNAKESWIPE_TRANSITION][HORIZONTALRIGHTSAME_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[PARALLELSNAKESWIPE_TRANSITION][HORIZONTALTOPLEFTOPPOSITE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : -90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[PARALLELSNAKESWIPE_TRANSITION][HORIZONTALTOPRIGHTOPPOSITE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : -90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[PARALLELSNAKESWIPE_TRANSITION][DIAGONALTOPLEFTOPPOSITE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[PARALLELSNAKESWIPE_TRANSITION][DIAGONALBOTTOMLEFTOPPOSITE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+
+aTransitionInfoTable[SPIRALWIPE_TRANSITION] = {};
+aTransitionInfoTable[SPIRALWIPE_TRANSITION][TOPLEFTCLOCKWISE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SPIRALWIPE_TRANSITION][TOPRIGHTCLOCKWISE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SPIRALWIPE_TRANSITION][BOTTOMRIGHTCLOCKWISE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 180.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SPIRALWIPE_TRANSITION][BOTTOMLEFTCLOCKWISE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 270.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SPIRALWIPE_TRANSITION][TOPLEFTCOUNTERCLOCKWISE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SPIRALWIPE_TRANSITION][TOPRIGHTCOUNTERCLOCKWISE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 180.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SPIRALWIPE_TRANSITION][BOTTOMRIGHTCOUNTERCLOCKWISE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 270.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SPIRALWIPE_TRANSITION][BOTTOMLEFTCOUNTERCLOCKWISE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+
+aTransitionInfoTable[BOXSNAKESWIPE_TRANSITION] = {};
+aTransitionInfoTable[BOXSNAKESWIPE_TRANSITION][TWOBOXTOP_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[BOXSNAKESWIPE_TRANSITION][TWOBOXBOTTOM_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : -90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[BOXSNAKESWIPE_TRANSITION][TWOBOXLEFT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[BOXSNAKESWIPE_TRANSITION][TWOBOXRIGHT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 180.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[BOXSNAKESWIPE_TRANSITION][FOURBOXVERTICAL_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[BOXSNAKESWIPE_TRANSITION][FOURBOXHORIZONTAL_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertSweep' : true,
+    'scaleIsotropically' : false
+};
+
+aTransitionInfoTable[BARNDOORWIPE_TRANSITION] = {};
+aTransitionInfoTable[BARNDOORWIPE_TRANSITION][VERTICAL_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle': 0.0,
+    'scaleX': 1.0,
+    'scaleY': 1.0,
+    'reverseMethod': REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertsSweep': true,
+    'scaleIsotropically': false
+};
+aTransitionInfoTable[BARNDOORWIPE_TRANSITION][HORIZONTAL_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle': 90.0,
+    'scaleX': 1.0,
+    'scaleY': 1.0,
+    'reverseMethod': REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertsSweep': true,
+    'scaleIsotropically': false
+};
+aTransitionInfoTable[BARNDOORWIPE_TRANSITION][DIAGONALBOTTOMLEFT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle': 45.0,
+    'scaleX': Math.SQRT2,
+    'scaleY': Math.SQRT2,
+    'reverseMethod': REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertsSweep': true,
+    'scaleIsotropically': false
+};
+aTransitionInfoTable[BARNDOORWIPE_TRANSITION][DIAGONALTOPLEFT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle': -45.0,
+    'scaleX': Math.SQRT2,
+    'scaleY': Math.SQRT2,
+    'reverseMethod': REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertsSweep': true,
+    'scaleIsotropically': false
+};
+
+aTransitionInfoTable[MISCDIAGONALWIPE_TRANSITION] = {};
+aTransitionInfoTable[MISCDIAGONALWIPE_TRANSITION][DOUBLEBARNDOOR_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle': 45.0,
+    'scaleX': Math.SQRT2,
+    'scaleY': Math.SQRT2,
+    'reverseMethod': REVERSEMETHOD_IGNORE,
+    'outInvertsSweep': true,
+    'scaleIsotropically': false
+};
+aTransitionInfoTable[MISCDIAGONALWIPE_TRANSITION][DOUBLEDIAMOND_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle': 0.0,
+    'scaleX': 1,
+    'scaleY': 1,
+    'reverseMethod': REVERSEMETHOD_IGNORE,
+    'outInvertsSweep': true,
+    'scaleIsotropically': false
+};
+
+aTransitionInfoTable[IRISWIPE_TRANSITION] = {};
+aTransitionInfoTable[IRISWIPE_TRANSITION][RECTANGLE_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle': 0.0,
+    'scaleX': 1.0,
+    'scaleY': 1.0,
+    'reverseMethod': REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertsSweep': true,
+    'scaleIsotropically': false
+};
+
+aTransitionInfoTable[IRISWIPE_TRANSITION][DIAMOND_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle': 45.0,
+    'scaleX': Math.SQRT2,
+    'scaleY': Math.SQRT2,
+    'reverseMethod': REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertsSweep': true,
+    'scaleIsotropically': false
+};
+
+aTransitionInfoTable[ZIGZAGWIPE_TRANSITION] = {};
+aTransitionInfoTable[ZIGZAGWIPE_TRANSITION][LEFTTORIGHT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_X,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[ZIGZAGWIPE_TRANSITION][TOPTOBOTTOM_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_Y,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+
+aTransitionInfoTable[BARNZIGZAGWIPE_TRANSITION] = {};
+aTransitionInfoTable[BARNZIGZAGWIPE_TRANSITION][VERTICAL_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[BARNZIGZAGWIPE_TRANSITION][HORIZONTAL_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
 
 aTransitionInfoTable[BARWIPE_TRANSITION] = {};
 aTransitionInfoTable[BARWIPE_TRANSITION][LEFTTORIGHT_TRANS_SUBTYPE] =
@@ -4306,6 +5904,130 @@ aTransitionInfoTable[BARWIPE_TRANSITION][TOPTOBOTTOM_TRANS_SUBTYPE] =
     'scaleY' : 1.0,
     'reverseMethod' : REVERSEMETHOD_FLIP_Y,
     'outInvertsSweep' : false,
+    'scaleIsotropically' : false
+};
+
+aTransitionInfoTable[WATERFALLWIPE_TRANSITION] = {};
+aTransitionInfoTable[WATERFALLWIPE_TRANSITION][VERTICALLEFT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_ROTATE_180,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[WATERFALLWIPE_TRANSITION][VERTICALRIGHT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_ROTATE_180,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[WATERFALLWIPE_TRANSITION][HORIZONTALLEFT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : -90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_ROTATE_180,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[WATERFALLWIPE_TRANSITION][HORIZONTALRIGHT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_ROTATE_180,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+
+aTransitionInfoTable[BOXWIPE_TRANSITION] = {};
+aTransitionInfoTable[BOXWIPE_TRANSITION][TOPLEFT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[BOXWIPE_TRANSITION][TOPRIGHT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[BOXWIPE_TRANSITION][BOTTOMRIGHT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 180.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[BOXWIPE_TRANSITION][BOTTOMLEFT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : -90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[BOXWIPE_TRANSITION][TOPCENTER_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_Y,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[BOXWIPE_TRANSITION][RIGHTCENTER_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_X,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[BOXWIPE_TRANSITION][BOTTOMCENTER_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 180.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_Y,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[BOXWIPE_TRANSITION][LEFTCENTER_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : -90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_X,
+    'outInvertsSweep' : true,
     'scaleIsotropically' : false
 };
 
@@ -4396,6 +6118,111 @@ aTransitionInfoTable[CLOCKWIPE_TRANSITION][CLOCKWISENINE_TRANS_SUBTYPE] =
     'scaleIsotropically' : false
 };
 
+aTransitionInfoTable[VEEWIPE_TRANSITION] = {};
+aTransitionInfoTable[VEEWIPE_TRANSITION][DOWN_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_Y,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[VEEWIPE_TRANSITION][LEFT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_X,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[VEEWIPE_TRANSITION][UP_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 180.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_Y,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[VEEWIPE_TRANSITION][RIGHT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : -90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_X,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+
+aTransitionInfoTable[FANWIPE_TRANSITION] = {};
+aTransitionInfoTable[FANWIPE_TRANSITION][CENTERTOP_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_Y,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[FANWIPE_TRANSITION][CENTERRIGHT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_X,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[FANWIPE_TRANSITION][TOP_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 180.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_Y,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[FANWIPE_TRANSITION][RIGHT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : -90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_X,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[FANWIPE_TRANSITION][BOTTOM_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 180.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_Y,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[FANWIPE_TRANSITION][LEFT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_FLIP_X,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+
+
 aTransitionInfoTable[PINWHEELWIPE_TRANSITION] = {};
 aTransitionInfoTable[PINWHEELWIPE_TRANSITION][ONEBLADE_TRANS_SUBTYPE] =
 aTransitionInfoTable[PINWHEELWIPE_TRANSITION][TWOBLADEVERTICAL_TRANS_SUBTYPE] =
@@ -4433,6 +6260,89 @@ aTransitionInfoTable[PUSHWIPE_TRANSITION][FROMBOTTOM_TRANS_SUBTYPE] =
     'scaleX' : 1.0,
     'scaleY' : 1.0,
     'reverseMethod' : REVERSEMETHOD_IGNORE,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+
+
+aTransitionInfoTable[SINGLESWEEPWIPE_TRANSITION] = {};
+aTransitionInfoTable[SINGLESWEEPWIPE_TRANSITION][CLOCKWISETOP_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SINGLESWEEPWIPE_TRANSITION][CLOCKWISERIGHT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 90.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SINGLESWEEPWIPE_TRANSITION][CLOCKWISEBOTTOM_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 180.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SINGLESWEEPWIPE_TRANSITION][CLOCKWISELEFT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 270.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SINGLESWEEPWIPE_TRANSITION][CLOCKWISETOPLEFT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SINGLESWEEPWIPE_TRANSITION][COUNTERCLOCKWISEBOTTOMLEFT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 180.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SINGLESWEEPWIPE_TRANSITION][CLOCKWISEBOTTOMRIGHT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 180.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
+    'outInvertsSweep' : true,
+    'scaleIsotropically' : false
+};
+aTransitionInfoTable[SINGLESWEEPWIPE_TRANSITION][COUNTERCLOCKWISETOPRIGHT_TRANS_SUBTYPE] =
+{
+    'class' : TRANSITION_CLIP_POLYPOLYGON,
+    'rotationAngle' : 0.0,
+    'scaleX' : 1.0,
+    'scaleY' : 1.0,
+    'reverseMethod' : REVERSEMETHOD_SUBTRACT_AND_INVERT,
     'outInvertsSweep' : true,
     'scaleIsotropically' : false
 };
@@ -4636,20 +6546,20 @@ function getTransitionTable( eRestartMode, eFillMode )
 
 // Event Triggers
 var EVENT_TRIGGER_UNKNOWN               = 0;
-var EVENT_TRIGGER_ON_SLIDE_BEGIN        = 1;
-var EVENT_TRIGGER_ON_SLIDE_END          = 2;
+var EVENT_TRIGGER_ON_SLIDE_BEGIN        = 1; // eslint-disable-line no-unused-vars
+var EVENT_TRIGGER_ON_SLIDE_END          = 2; // eslint-disable-line no-unused-vars
 var EVENT_TRIGGER_BEGIN_EVENT           = 3;
 var EVENT_TRIGGER_END_EVENT             = 4;
 var EVENT_TRIGGER_ON_CLICK              = 5;
-var EVENT_TRIGGER_ON_DBL_CLICK          = 6;
-var EVENT_TRIGGER_ON_MOUSE_ENTER        = 7;
-var EVENT_TRIGGER_ON_MOUSE_LEAVE        = 8;
+var EVENT_TRIGGER_ON_DBL_CLICK          = 6; // eslint-disable-line no-unused-vars
+var EVENT_TRIGGER_ON_MOUSE_ENTER        = 7; // eslint-disable-line no-unused-vars
+var EVENT_TRIGGER_ON_MOUSE_LEAVE        = 8; // eslint-disable-line no-unused-vars
 var EVENT_TRIGGER_ON_NEXT_EFFECT        = 9;
 var EVENT_TRIGGER_ON_PREV_EFFECT        = 10;
-var EVENT_TRIGGER_REPEAT                = 11;
+var EVENT_TRIGGER_REPEAT                = 11; // eslint-disable-line no-unused-vars
 
-aEventTriggerOutMap = [ 'unknown', 'slideBegin', 'slideEnd', 'begin', 'end', 'click',
-                        'doubleClick', 'mouseEnter', 'mouseLeave', 'next', 'previous', 'repeat' ];
+var aEventTriggerOutMap = [ 'unknown', 'slideBegin', 'slideEnd', 'begin', 'end', 'click',
+                            'doubleClick', 'mouseEnter', 'mouseLeave', 'next', 'previous', 'repeat' ];
 
 
 function getEventTriggerType( sEventTrigger )
@@ -4675,13 +6585,13 @@ function getEventTriggerType( sEventTrigger )
 // Timing Types
 var UNKNOWN_TIMING          = 0;
 var OFFSET_TIMING           = 1;
-var WALLCLOCK_TIMING        = 2;
+var WALLCLOCK_TIMING        = 2; // eslint-disable-line no-unused-vars
 var INDEFINITE_TIMING       = 3;
 var EVENT_TIMING            = 4;
 var SYNCBASE_TIMING         = 5;
-var MEDIA_TIMING            = 6;
+var MEDIA_TIMING            = 6; // eslint-disable-line no-unused-vars
 
-aTimingTypeOutMap = [ 'unknown', 'offset', 'wallclock', 'indefinite', 'event', 'syncbase', 'media' ];
+var aTimingTypeOutMap = [ 'unknown', 'offset', 'wallclock', 'indefinite', 'event', 'syncbase', 'media' ];
 
 
 // Char Codes
@@ -5435,7 +7345,7 @@ BaseNode.prototype.registerDeactivatingListener = function( aNotifiee )
 
     if( !aNotifiee )
     {
-        log( 'BaseNode.registerDeactivatingListener(): invalid notifee' );
+        log( 'BaseNode.registerDeactivatingListener(): invalid notifiee' );
         return false;
     }
     this.aDeactivatingListenerArray.push( aNotifiee );
@@ -5510,7 +7420,7 @@ BaseNode.prototype.activate_st = function()
     this.scheduleDeactivationEvent();
 };
 
-BaseNode.prototype.deactivate_st = function( aNodeState )
+BaseNode.prototype.deactivate_st = function( /*aNodeState*/ )
 {
     // empty body
 };
@@ -5787,9 +7697,6 @@ AnimationBaseNode.prototype.activate_st = function()
     {
         AnimationBaseNode.superclass.scheduleDeactivationEvent.call( this );
     }
-
-    // TODO: only for testing! to be removed!
-    //AnimationBaseNode.superclass.scheduleDeactivationEvent.call( this );
 };
 
 AnimationBaseNode.prototype.deactivate_st = function( eDestState )
@@ -6104,7 +8011,7 @@ AnimationBaseNode3.prototype.info = function( bVerbose )
             sInfo += ';  keyTimes: ' + this.getKeyTimes().join( ',' );
 
         // values
-        if( this.getKeyTimes().length )
+        if( this.getValues().length )
             sInfo += ';  values: ' + this.getValues().join( ',' );
 
         // formula
@@ -6188,6 +8095,11 @@ BaseContainerNode.prototype.appendChildNode = function( aAnimationNode )
         this.aChildrenArray.push( aAnimationNode );
 };
 
+BaseContainerNode.prototype.removeAllChildrenNodes = function()
+{
+    this.aChildrenArray = [];
+};
+
 BaseContainerNode.prototype.init_st = function()
 {
     this.nLeftIterations = this.getRepeatCount();
@@ -6244,7 +8156,7 @@ BaseContainerNode.prototype.activate_st = function()
     log( 'BaseContainerNode.activate_st: abstract method called' );
 };
 
-BaseContainerNode.prototype.notifyDeactivating = function( aAnimationNode )
+BaseContainerNode.prototype.notifyDeactivating = function( /*aAnimationNode*/ )
 {
     log( 'BaseContainerNode.notifyDeactivating: abstract method called' );
 };
@@ -6728,79 +8640,6 @@ extend( PropertyAnimationNode, AnimationBaseNode3 );
 
 PropertyAnimationNode.prototype.createActivity = function()
 {
-
-    /*
-    var aActivityParamSet = this.fillActivityParams();
-    var aAnimation = createPropertyAnimation( 'opacity',
-                                              this.getAnimatedElement(),
-                                              this.aNodeContext.aSlideWidth,
-                                              this.aNodeContext.aSlideHeight );
-
-    return new SimpleActivity( aActivityParamSet, aAnimation, FORWARD );
-    */
-
-
-    /*
-        if( true && this.getAttributeName() === 'x' )
-        {
-            var sAttributeName = 'x';
-
-            this.aDuration = new Duration( '2s' );
-            this.sAttributeName = sAttributeName;
-            this.aKeyTimes = [ 0.0, 0.25, 0.50, 0.75, 1.0 ];
-            //this.aKeyTimes = [ 0.0, 1.0 ];
-            var aM = 5000 / this.aNodeContext.aSlideWidth;
-            this.aValues = [ 'x', 'x - ' + aM, 'x', 'x + ' + aM, 'x' ];
-            //this.aValues = [ '0', 'width' ];
-
-            //this.aFromValue = '';
-            //this.aToValue = '0 + ' + aTranslationValue;
-            //this.aByValue = aTranslationValue;
-            //this.nRepeatCount = 3;
-
-            var aActivityParamSet = this.fillActivityParams();
-
-            var aAnimation = createPropertyAnimation( this.getAttributeName(),
-                                                      this.getAnimatedElement(),
-                                                      this.aNodeContext.aSlideWidth,
-                                                      this.aNodeContext.aSlideHeight );
-
-            var aInterpolator = null;
-            return createActivity( aActivityParamSet, this, aAnimation, aInterpolator );
-        }
-
-        if( true && this.getAttributeName() === 'y' )
-        {
-            var sAttributeName = 'height';
-            this.aDuration = new Duration( '2s' );
-            this.sAttributeName = sAttributeName;
-            this.aKeyTimes = [ 0.0, 0.25, 0.50, 0.75, 1.0 ];
-            //this.aKeyTimes = [ 0.0, 1.0 ];
-            var aM = 5000 / this.aNodeContext.aSlideHeight;
-            this.aValues = new Array();
-            //this.aValues = [ 'y', 'y', 'y - ' + aM, 'y - ' + aM, 'y' ];
-            this.aValues = [ 'height', '0', 'height', '2*height', 'height' ];
-            //this.aValues = [ '0', 'height' ];
-
-            //this.aFromValue = '2 * height';
-            //this.aToValue = 'width';
-            //this.aByValue = 'width';//aTranslationValue;
-
-
-            var aActivityParamSet = this.fillActivityParams();
-
-            var aAnimation = createPropertyAnimation( this.getAttributeName(),
-                                                      this.getAnimatedElement(),
-                                                      this.aNodeContext.aSlideWidth,
-                                                      this.aNodeContext.aSlideHeight );
-
-            var aInterpolator = null;
-            return createActivity( aActivityParamSet, this, aAnimation, aInterpolator );
-        }
-        */
-
-
-
     var aActivityParamSet = this.fillActivityParams();
 
     var aAnimation = createPropertyAnimation( this.getAttributeName(),
@@ -6810,7 +8649,6 @@ PropertyAnimationNode.prototype.createActivity = function()
 
     var aInterpolator = null;  // createActivity will compute it;
     return createActivity( aActivityParamSet, this, aAnimation, aInterpolator );
-
 };
 
 
@@ -6875,67 +8713,6 @@ AnimationColorNode.prototype.parseElement = function()
 
 AnimationColorNode.prototype.createActivity = function()
 {
-    /*
-    var aActivityParamSet = this.fillActivityParams();
-
-    var aAnimation = createPropertyAnimation( 'opacity',
-    this.getAnimatedElement(),
-    this.aNodeContext.aSlideWidth,
-    this.aNodeContext.aSlideHeight );
-
-    return new SimpleActivity( aActivityParamSet, aAnimation, FORWARD );
-    */
-
-    /*
-    if( false && this.getAttributeName() === 'fill-color' )
-    {
-        var sAttributeName = 'stroke-color';
-
-        this.aDuration = new Duration( '2s' );
-        this.nAccelerate = 0.0;
-        this.nDecelerate = 0.0;
-        this.eColorInterpolation = COLOR_SPACE_RGB;
-        this.eColorInterpolationDirection = COUNTERCLOCKWISE;
-
-        this.sAttributeName = sAttributeName;
-
-        this.aFromValue = 'rgb( 0%, 0%, 0% )';
-        this.aToValue = 'rgb( 0%, 0%, 100% )';
-        //this.aByValue = 'hsl( 0, -12%, -25% )';
-
-
-
-        var aActivityParamSet = this.fillActivityParams();
-
-        var aAnimation = createPropertyAnimation( this.getAttributeName(),
-                                                  this.getAnimatedElement(),
-                                                  this.aNodeContext.aSlideWidth,
-                                                  this.aNodeContext.aSlideHeight );
-        var aColorAnimation;
-        var aInterpolator;
-        if( this.getColorInterpolation() === COLOR_SPACE_HSL )
-        {
-            ANIMDBG.print( 'AnimationColorNode.createActivity: color space hsl'  );
-            aColorAnimation = new HSLAnimationWrapper( aAnimation );
-            var aInterpolatorMaker = aInterpolatorHandler.getInterpolator( this.getCalcMode(),
-                                                                           COLOR_PROPERTY,
-                                                                           COLOR_SPACE_HSL );
-            aInterpolator = aInterpolatorMaker( this.getColorInterpolationDirection() );
-        }
-        else
-        {
-            ANIMDBG.print( 'AnimationColorNode.createActivity: color space rgb'  );
-            aColorAnimation = aAnimation;
-            aInterpolator = aInterpolatorHandler.getInterpolator( this.getCalcMode(),
-                                                                  COLOR_PROPERTY,
-                                                                  COLOR_SPACE_RGB );
-        }
-
-        return createActivity( aActivityParamSet, this, aColorAnimation, aInterpolator );
-    }
-     */
-
-
     var aActivityParamSet = this.fillActivityParams();
 
     var aAnimation = createPropertyAnimation( this.getAttributeName(),
@@ -6964,8 +8741,6 @@ AnimationColorNode.prototype.createActivity = function()
     }
 
     return createActivity( aActivityParamSet, this, aColorAnimation, aInterpolator );
-
-
 };
 
 AnimationColorNode.prototype.getColorInterpolation = function()
@@ -7108,10 +8883,10 @@ AnimationTransitionFilterNode.prototype.info = function( bVerbose )
     if( bVerbose )
     {
         // transition type
-        sInfo += ';  type: ' + aTransitionTypeOutMap[ String( this.getTransitionType() ) ];
+        sInfo += ';  type: ' + getKeyByValue(aTransitionTypeInMap, this.getTransitionType());
 
         // transition subtype
-        sInfo += ';  subtype: ' + aTransitionSubtypeOutMap[ this.getTransitionSubType() ];
+        sInfo += ';  subtype: ' + getKeyByValue(aTransitionSubtypeInMap, this.getTransitionSubType());
 
         // transition direction
         if( this.getReverseDirection() )
@@ -7208,7 +8983,8 @@ function createAnimationNode( aElement, aParentNode, aNodeContext )
             {
                 if( !createChildNode( aChildrenArray[i], aCreatedContainer, aNodeContext ) )
                 {
-                    return null;
+                    aCreatedContainer.removeAllChildrenNodes();
+                    break;
                 }
             }
         }
@@ -7239,7 +9015,7 @@ function createChildNode( aElement, aParentNode, aNodeContext )
 
 
 
-function createIteratedNodes( aElement, aContainerNode, aNodeContext )
+function createIteratedNodes( /*aElement, aContainerNode, aNodeContext*/ )
 {
     // not implemented
 }
@@ -7250,8 +9026,8 @@ function createIteratedNodes( aElement, aContainerNode, aNodeContext )
  *      Animation Factory
  **********************************************************************************************/
 
-
-
+// makeScaler is used in aAttributeMap:
+// eslint-disable-next-line no-unused-vars
 function makeScaler( nScale )
 {
     if( ( typeof( nScale ) !== typeof( 0 ) ) || !isFinite( nScale ) )
@@ -7268,7 +9044,7 @@ function makeScaler( nScale )
 
 
 
-
+// eslint-disable-next-line no-unused-vars
 function createPropertyAnimation( sAttrName, aAnimatedElement, nWidth, nHeight )
 {
     if( !aAttributeMap[ sAttrName ] )
@@ -7596,12 +9372,12 @@ SlideChangeBase.prototype.getUnderlyingValue = function()
     return 0.0;
 };
 
-SlideChangeBase.prototype.performIn = function( nValue )
+SlideChangeBase.prototype.performIn = function( )
 {
     log( 'SlideChangeBase.performIn: abstract method called' );
 };
 
-SlideChangeBase.prototype.performOut = function( nValue )
+SlideChangeBase.prototype.performOut = function( )
 {
     log( 'SlideChangeBase.performOut: abstract method called' );
 };
@@ -7883,7 +9659,7 @@ ClippedSlideChange.prototype.performIn = function( nT )
     this.aEnteringSlide.setClipPath( aPolyPolygonElement );
 };
 
-ClippedSlideChange.prototype.performOut = function( nT )
+ClippedSlideChange.prototype.performOut = function( )
 {
     // empty body
 };
@@ -8031,7 +9807,6 @@ ClippingFunctor.prototype.perform = function( nT, nWidth, nHeight )
     if( this.bScaleIsotropically )
     {
         var nScaleFactor = Math.max( nWidth, nHeight );
-        // translate( scale( aStaticTransformation() ) )
         // note: operations must be defined in reverse order.
         aMatrix = SVGIdentityMatrix.translate( -( nScaleFactor - nWidth ) / 2.0,
                                                   -( nScaleFactor - nHeight ) / 2.0 );
@@ -8072,8 +9847,16 @@ function createClipPolyPolygon( nType, nSubtype )
             return new BarWipePath( 1 );
         case FOURBOXWIPE_TRANSITION:
             return new FourBoxWipePath( nSubtype === CORNERSOUT_TRANS_SUBTYPE );
+        case BOXWIPE_TRANSITION:
+            return new BoxWipePath( nSubtype == LEFTCENTER_TRANS_SUBTYPE ||
+                                    nSubtype == TOPCENTER_TRANS_SUBTYPE ||
+                                    nSubtype == RIGHTCENTER_TRANS_SUBTYPE ||
+                                    nSubtype == BOTTOMCENTER_TRANS_SUBTYPE );
         case ELLIPSEWIPE_TRANSITION:
             return new EllipseWipePath( nSubtype );
+        case FANWIPE_TRANSITION:
+            return new FanWipePath(nSubtype == CENTERTOP_TRANS_SUBTYPE ||
+                                   nSubtype == CENTERRIGHT_TRANS_SUBTYPE, true, false);
         case PINWHEELWIPE_TRANSITION:
             var nBlades;
             switch( nSubtype )
@@ -8102,12 +9885,106 @@ function createClipPolyPolygon( nType, nSubtype )
                     return null;
             }
             return new PinWheelWipePath( nBlades );
+        case CLOCKWIPE_TRANSITION:
+            return new ClockWipePath();
         case RANDOMBARWIPE_TRANSITION:
             return new RandomWipePath( 128, true /* bars */ );
         case CHECKERBOARDWIPE_TRANSITION:
             return new CheckerBoardWipePath( 10 );
+        case ZIGZAGWIPE_TRANSITION:
+            return new ZigZagWipePath( 5 );
+        case BARNZIGZAGWIPE_TRANSITION:
+            return new BarnZigZagWipePath( 5 );
+        case IRISWIPE_TRANSITION:
+            switch(nSubtype)
+            {
+                case RECTANGLE_TRANS_SUBTYPE:
+                    return new IrisWipePath(0);
+                case DIAMOND_TRANS_SUBTYPE:
+                    return new IrisWipePath(1);
+                default:
+                    log( 'createClipPolyPolygon: unknown subtype: ' + nSubtype );
+                    return null;
+            }
+        case BARNDOORWIPE_TRANSITION:
+            return new BarnDoorWipePath(false);
+        case SINGLESWEEPWIPE_TRANSITION:
+            return new SweepWipePath(
+                // center
+                nSubtype == CLOCKWISETOP_TRANS_SUBTYPE ||
+                nSubtype == CLOCKWISERIGHT_TRANS_SUBTYPE ||
+                nSubtype == CLOCKWISEBOTTOM_TRANS_SUBTYPE ||
+                nSubtype == CLOCKWISELEFT_TRANS_SUBTYPE,
+                // single
+                true,
+                // oppositeVertical
+                false,
+                // flipOnYAxis
+                nSubtype == COUNTERCLOCKWISEBOTTOMLEFT_TRANS_SUBTYPE ||
+                nSubtype == COUNTERCLOCKWISETOPRIGHT_TRANS_SUBTYPE );
+        case WATERFALLWIPE_TRANSITION:
+            return new WaterfallWipePath(128, // flipOnYAxis
+                                              nSubtype == VERTICALRIGHT_TRANS_SUBTYPE ||
+                                              nSubtype == HORIZONTALLEFT_TRANS_SUBTYPE);
+        case MISCDIAGONALWIPE_TRANSITION:
+            switch(nSubtype) {
+                case DOUBLEBARNDOOR_TRANS_SUBTYPE:
+                    return new BarnDoorWipePath(true /* Doubled */);
+                case DOUBLEDIAMOND_TRANS_SUBTYPE:
+                    return new DoubleDiamondWipePath();
+                default:
+                    log( 'createClipPolyPolygon: unhandled subtype: ' + nSubtype );
+                    return null;
+            }
         case DISSOLVE_TRANSITION:
             return new RandomWipePath( 16 * 16, false /* dissolve */ );
+        case VEEWIPE_TRANSITION:
+            return new VeeWipePath();
+        case SNAKEWIPE_TRANSITION:
+            return new SnakeWipePath( 8 * 8, // diagonal
+                                             nSubtype == TOPLEFTDIAGONAL_TRANS_SUBTYPE     ||
+                                             nSubtype == TOPRIGHTDIAGONAL_TRANS_SUBTYPE    ||
+                                             nSubtype == BOTTOMRIGHTDIAGONAL_TRANS_SUBTYPE ||
+                                             nSubtype == BOTTOMLEFTDIAGONAL_TRANS_SUBTYPE   ,
+                                             // flipOnYAxis
+                                             nSubtype == TOPLEFTVERTICAL_TRANS_SUBTYPE     ||
+                                             nSubtype == TOPRIGHTDIAGONAL_TRANS_SUBTYPE    ||
+                                             nSubtype == BOTTOMLEFTDIAGONAL_TRANS_SUBTYPE
+                                             );
+        case PARALLELSNAKESWIPE_TRANSITION:
+            return new ParallelSnakesWipePath(
+                8 * 8, // elements
+                // diagonal
+                nSubtype == DIAGONALBOTTOMLEFTOPPOSITE_TRANS_SUBTYPE ||
+                nSubtype == DIAGONALTOPLEFTOPPOSITE_TRANS_SUBTYPE,
+                // flipOnYAxis
+                nSubtype == VERTICALBOTTOMLEFTOPPOSITE_TRANS_SUBTYPE ||
+                nSubtype == HORIZONTALTOPLEFTOPPOSITE_TRANS_SUBTYPE  ||
+                nSubtype == DIAGONALTOPLEFTOPPOSITE_TRANS_SUBTYPE,
+                // opposite
+                nSubtype == VERTICALTOPLEFTOPPOSITE_TRANS_SUBTYPE    ||
+                nSubtype == VERTICALBOTTOMLEFTOPPOSITE_TRANS_SUBTYPE ||
+                nSubtype == HORIZONTALTOPLEFTOPPOSITE_TRANS_SUBTYPE  ||
+                nSubtype == HORIZONTALTOPRIGHTOPPOSITE_TRANS_SUBTYPE ||
+                nSubtype == DIAGONALBOTTOMLEFTOPPOSITE_TRANS_SUBTYPE ||
+                nSubtype == DIAGONALTOPLEFTOPPOSITE_TRANS_SUBTYPE
+                );
+
+        case SPIRALWIPE_TRANSITION:
+            return new SpiralWipePath(
+                8 * 8, // elements
+                nSubtype == TOPLEFTCOUNTERCLOCKWISE_TRANS_SUBTYPE     ||
+                nSubtype == TOPRIGHTCOUNTERCLOCKWISE_TRANS_SUBTYPE    ||
+                nSubtype == BOTTOMRIGHTCOUNTERCLOCKWISE_TRANS_SUBTYPE ||
+                nSubtype == BOTTOMLEFTCOUNTERCLOCKWISE_TRANS_SUBTYPE );
+
+        case BOXSNAKESWIPE_TRANSITION:
+            return new BoxSnakesWipePath(
+                // elements
+                8 * 8,
+                // fourBox
+                nSubtype == FOURBOXVERTICAL_TRANS_SUBTYPE ||
+                nSubtype == FOURBOXHORIZONTAL_TRANS_SUBTYPE );
     }
 }
 
@@ -8188,7 +10065,77 @@ BarWipePath.prototype.perform = function( nT )
 };
 
 
+/** Class BoxWipePath
+ *  This class handles a path made up by one square and is utilized for
+ *  performing BoxWipe transitions.
+ *
+ *  @param bIsTopCentered
+ *      if true the transition subtype is top centered else not.
+ */
+function BoxWipePath(bIsTopCentered) {
+    this.bIsTopCentered = bIsTopCentered;
+    this.aBasePath = createUnitSquarePath();
+}
 
+BoxWipePath.prototype.perform = function( nT ) {
+    var d = pruneScaleValue(nT);
+    var aTransform = SVGIdentityMatrix;
+    if(this.bIsTopCentered) {
+        aTransform = aTransform.translate(-0.5, 0.0).scale(d, d).translate(0.5, 0.0);
+    }
+    else {
+        aTransform = aTransform.scale(d, d);
+    }
+    var aPath = this.aBasePath.cloneNode(true);
+    aPath.matrixTransform(aTransform);
+    return aPath;
+}
+
+/* Class SweepWipePath
+ *
+ *
+ */
+function SweepWipePath(bCenter, bSingle, bOppositeVertical, bFlipOnYAxis) {
+  this.bCenter = bCenter;
+  this.bSingle = bSingle;
+  this.bOppositeVertical = bOppositeVertical;
+  this.bFlipOnYAxis = bFlipOnYAxis;
+  this.aBasePath = createUnitSquarePath();
+}
+
+SweepWipePath.prototype.perform = function( nT ) {
+    nT /= 2.0;
+    if(!this.bCenter)
+        nT /= 2.0;
+    if(!this.bSingle && !this.bOppositeVertical)
+        nT /= 2.0;
+
+    var poly = PinWheelWipePath.calcCenteredClock( nT + 0.25, 1.0 );
+    var aTransform;
+
+    if(this.bCenter) {
+        aTransform = SVGIdentityMatrix.translate(0.5, 0.0);
+        poly.matrixTransform(aTransform);
+    }
+    var res = poly;
+
+    if(!this.bSingle) {
+        if(this.bOppositeVertical) {
+            aTransform = SVGIdentityMatrix.scale(1.0, -1.0);
+            aTransform.translate(0.0, 1.0);
+            poly.matrixTransform(aTransform);
+            poly.changeOrientation();
+        }
+        else {
+            aTransform = SVGIdentityMatrix.translate(-0.5, -0.5);
+            aTransform.rotate(Math.PI);
+            aTransform.translate(0.5, 0.5);
+            poly.matrixTransform(aTransform);
+        }
+        res.appendPath(poly);
+    }
+    return this.bFlipOnYAxis ? flipOnYAxis(res) : res;
+}
 
 /** Class FourBoxWipePath
  *  This class handles a path made up by four squares and is utilized for
@@ -8294,8 +10241,55 @@ EllipseWipePath.prototype.perform = function( nT )
     return aEllipse;
 };
 
+/*
+ * Class FanWipePath
+ *
+ */
+function FanWipePath(bIsCenter, bIsSingle, bIsFanIn) {
+    this.bCenter = bIsCenter;
+    this.bSingle = bIsSingle;
+    this.bFanIn  = bIsFanIn;
+    this.aBasePath = createUnitSquarePath();
+}
 
+FanWipePath.prototype.perform = function( nT ) {
+  var res = this.aBasePath.cloneNode(true);
+  var poly = PinWheelWipePath.calcCenteredClock(
+          nT / ((this.bCenter && this.bSingle) ? 2.0 : 4.0), 1.0);
+  res.appendPath(poly);
+  // flip on y-axis
+  var aTransform = SVGIdentityMatrix.flipY();
+  aTransform = aTransform.scaleNonUniform(-1.0, 1.0);
+  poly.matrixTransform(aTransform);
+  res.appendPath(poly);
 
+  if(this.bCenter) {
+      aTransform = SVGIdentityMatrix.scaleNonUniform(0.5, 0.5).translate(0.5, 0.5);
+      res.matrixTransform(aTransform);
+
+      if(!this.bSingle)
+          res.appendPath(flipOnXAxis(res));
+  }
+  else {
+      aTransform = SVGIdentityMatrix.scaleNonUniform(0.5, 1.0).translate(0.5, 1.0);
+      res.matrixTransform(aTransform);
+  }
+  return res;
+}
+
+/**
+ * Class ClockWipePath
+ *
+ */
+function ClockWipePath() { }
+
+ClockWipePath.prototype.perform = function( nT ) {
+    const aTransform = SVGIdentityMatrix.scaleNonUniform(0.5, 0.5).translate(0.5, 0.5);
+    var aPolyPath = PinWheelWipePath.calcCenteredClock(nT, 1.0);
+    aPolyPath.matrixTransform( aTransform );
+
+    return aPolyPath;
+}
 
 /** Class PinWheelWipePath
  *  This class handles a parametric poly-path that is used for performing
@@ -8369,7 +10363,191 @@ PinWheelWipePath.prototype.perform = function( nT )
     return aPolyPath;
 };
 
+/** Class BarnDoorWipe
+  *
+  * @param doubled
+  */
+function BarnDoorWipePath(doubled) {
+    this.aBasePath = createUnitSquarePath();
+    this.doubled   = doubled;
+}
 
+BarnDoorWipePath.prototype.perform = function( nT ) {
+    if(this.doubled)
+        nT /= 2.0;
+    var aTransform = SVGIdentityMatrix.translate(-0.5, -0.5);
+    aTransform = aTransform.scaleNonUniform(pruneScaleValue(nT), 1.0).translate(0.5, 0.5);
+    var aPath = this.aBasePath.cloneNode(true);
+    aPath.matrixTransform(aTransform);
+    var res = aPath;
+
+    if(this.doubled) {
+        aTransform = SVGIdentityMatrix.translate(-0.5, -0.5);
+        aTransform = aTransform.rotate(Math.PI / 2).translate(0.5, 0.5);
+        aPath.matrixTransform(aTransform);
+        res.appendPath(aPath);
+    }
+    return res;
+}
+
+/** Class WaterfallWipe
+  *
+  * @param nElements
+  *     Number of cells to be used
+  * @param bFlipOnYAxis
+  *     Whether to flip on y-axis or not.
+  */
+function WaterfallWipePath(nElements, bFlipOnYAxis) {
+    this.bFlipOnYAxis = bFlipOnYAxis;
+
+    var sqrtElements = Math.floor(Math.sqrt(nElements));
+    var elementEdge = 1.0/sqrtElements;
+
+    var aPath = 'M '+ 0.0 + ' ' + -1.0 + ' ';
+    for(var pos = sqrtElements; pos--; ) {
+        var xPos = sqrtElements - pos - 1;
+        var yPos = pruneScaleValue( ((pos+1) * elementEdge) - 1.0);
+
+        aPath += 'L ' + pruneScaleValue(xPos * elementEdge) + ' ' + yPos + ' ';
+        aPath += 'L ' + pruneScaleValue((xPos+1)*elementEdge) + ' ' + yPos + ' ';
+    }
+    aPath += 'L ' + 1.0 + ' ' + -1.0 + ' ';
+    aPath += 'L ' + 0.0 + ' ' + -1.0 + ' ';
+    this.aBasePath = document.createElementNS( NSS['svg'], 'path');
+    this.aBasePath.setAttribute('d', aPath);
+}
+
+WaterfallWipePath.prototype.perform = function( nT ) {
+    var poly = this.aBasePath.cloneNode(true);
+    var aTransform = SVGIdentityMatrix.translate(0.0, pruneScaleValue(2.0 * nT));
+    poly.matrixTransform(aTransform);
+    var aHead = 'M ' + 0.0 + ' ' + -1.0 + ' ';
+    var aHeadPath= document.createElementNS( NSS['svg'], 'path');
+    aHeadPath.setAttribute('d', aHead);
+
+    var aTail = 'M ' + 1.0 + ' ' + -1.0 + ' ';
+    var aTailPath = document.createElementNS( NSS['svg'], 'path');
+    aTailPath.setAttribute('d', aTail);
+
+    poly.prependPath(aHeadPath);
+    poly.appendPath(aTailPath);
+
+    return this.bFlipOnYAxis ? flipOnYAxis(poly) : poly;
+}
+
+/** Class DoubleDiamondWipePath
+ *
+ */
+function DoubleDiamondWipePath() { }
+
+DoubleDiamondWipePath.prototype.perform = function( nT ) {
+    var a = pruneScaleValue(0.25 + (nT * 0.75));
+    var aPath = 'M ' + (0.5 + a) + ' ' + 0.5 + ' ';
+    aPath += 'L ' + 0.5 + ' ' + (0.5 - a) + ' ';
+    aPath += 'L ' + (0.5 - a) + ' ' + 0.5 + ' ';
+    aPath += 'L ' + 0.5 + ' ' + (0.5 + a) + ' ';
+    aPath += 'L ' + (0.5 + a) + ' ' + 0.5 + ' ';
+    var poly = document.createElementNS( NSS['svg'], 'path');
+    poly.setAttribute('d', aPath);
+    var res = poly.cloneNode(true);
+
+    var b = pruneScaleValue( (1.0 - nT) * 0.25);
+    aPath = 'M ' + (0.5 + b) + ' ' + 0.5 + ' ';
+    aPath += 'L ' + 0.5 + ' ' + (0.5 + b) + ' ';
+    aPath += 'L ' + (0.5 - b) + ' ' + 0.5 + ' ';
+    aPath += 'L ' + 0.5 + ' ' + (0.5 - b) + ' ';
+    aPath += 'L ' + (0.5 + b) + ' ' + 0.5 + ' ';
+    poly = document.createElementNS( NSS['svg'], 'path');
+    poly.setAttribute('d', aPath);
+    res.appendPath(poly);
+
+    return res;
+}
+
+/** Class Iriswipe
+  *
+  * @param unitRect
+  *
+  */
+function IrisWipePath(unitRect) {
+    this.unitRect = unitRect;
+    this.aBasePath = createUnitSquarePath();
+}
+
+
+/** perform
+  *
+  *  @param nT
+  *      A parameter in [0,1] representing the diamond or rectangle.
+  *  @return SVGPathElement
+  *      A svg <path> element representing a transition.
+  */
+IrisWipePath.prototype.perform = function( nT ) {
+    var d = pruneScaleValue(nT);
+    var aTransform = SVGIdentityMatrix.translate(-0.5, -0.5);
+    aTransform = aTransform.multiply(SVGIdentityMatrix.scaleNonUniform(d, d).translate(0.5, 0.5));
+    var aPath = this.aBasePath.cloneNode(true);
+    aPath.matrixTransform(aTransform);
+    return aPath;
+}
+
+/**
+ * Class ZigZagWipePath
+ *
+ * @param nZigs
+ *
+ */
+function ZigZagWipePath(nZigs) {
+    this.zigEdge = 1.0/nZigs;
+    const d = this.zigEdge;
+    const d2 = (d / 2.0);
+    this.aBasePath = 'M ' + (-1.0 - d) + ' ' + -d + ' ';
+    this.aBasePath += 'L ' + (-1.0 - d) + ' ' + (1.0 + d) + ' ';
+    this.aBasePath += 'L ' + -d + ' ' + (1.0 + d) + ' ';
+
+    for(var pos = (nZigs + 2); pos--; ) {
+        this.aBasePath += 'L ' + 0.0 + ' ' + ((pos - 1) * d + d2) + ' ';
+        this.aBasePath += 'L ' + -d + ' ' + (pos - 1) * d + ' ';
+    }
+    this.aBasePath += 'L ' + (-1.0 - d) + ' ' + -d + ' ';
+}
+
+ZigZagWipePath.prototype.perform = function( nT ) {
+    var res = document.createElementNS( NSS['svg'], 'path');
+    res.setAttribute('d', this.aBasePath);
+    res.matrixTransform(SVGIdentityMatrix.translate((1.0 + this.zigEdge) * nT, 0.0));
+    return res;
+}
+
+/*
+ * Class BarnZigZagWipePath
+ *
+ * @param nZigs
+ *
+ */
+function BarnZigZagWipePath( nZigs ) { ZigZagWipePath.call(this, nZigs); }
+
+BarnZigZagWipePath.prototype = Object.create(ZigZagWipePath);
+
+BarnZigZagWipePath.prototype.perform = function( nT ) {
+    var res = createEmptyPath();
+    var poly = document.createElementNS( NSS['svg'], 'path');
+    var aTransform = SVGIdentityMatrix.translate(
+        ((1.0 + this.zigEdge) * (1.0 - nT)) / 2.0, 0.0);
+    poly.setAttribute('d', this.aBasePath);
+    poly.changeOrientation();
+    poly.matrixTransform(aTransform);
+    res.appendPath(poly);
+
+    aTransform = SVGIdentityMatrix.scale(-1.0, 1.0);
+    aTransform.translate(1.0, this.zigEdge / 2.0);
+    poly = document.createElementNS( NSS['svg'], 'path');
+    poly.setAttribute('d', this.aBasePath);
+    poly.matrixTransform(aTransform);
+    res.appendPath(poly);
+
+    return res;
+}
 
 /** Class CheckerBoardWipePath
  *
@@ -8519,6 +10697,344 @@ RandomWipePath.prototype.perform = function( nT )
     return this.aClipPath.cloneNode( true );
 };
 
+/** Class SnakeWipeSlide
+ *
+ *  @param nElements
+ *  @param bDiagonal
+ *  @param bFlipOnYaxis
+ */
+function SnakeWipePath(nElements, bDiagonal, bflipOnYAxis)
+{
+    this.sqrtElements = Math.floor(Math.sqrt(nElements));
+    this.elementEdge  = (1.0 / this.sqrtElements);
+    this.diagonal     = bDiagonal;
+    this.flipOnYAxis  = bflipOnYAxis;
+    this.aBasePath    = createUnitSquarePath();
+}
+
+SnakeWipePath.prototype.calcSnake = function(t)
+{
+    var aPolyPath = createEmptyPath();
+    const area   = (t * this.sqrtElements * this.sqrtElements);
+    const line_  = Math.floor(area) / this.sqrtElements;
+    const line   = pruneScaleValue(line_ / this.sqrtElements);
+    const col    = pruneScaleValue((area - (line_ * this.sqrtElements)) / this.sqrtElements);
+
+    if(line != 0) {
+        let aPath = 'M '+ 0.0 + ' ' + 0.0 + ' ';
+        aPath += 'L ' + 0.0 + ' ' + line + ' ';
+        aPath += 'L ' + 1.0 + ' ' + line + ' ';
+        aPath += 'L ' + 1.0 + ' ' + 0.0 + ' ';
+        aPath += 'L 0 0 ';
+        let poly = document.createElementNS( NSS['svg'], 'path');
+        poly.setAttribute('d', aPath);
+        aPolyPath.appendPath(poly);
+    }
+    if(col != 0) {
+        var offset = 0.0;
+        if((line_ & 1) == 1) {
+            // odd line: => right to left
+            offset = (1.0 - col);
+        }
+        let aPath = 'M ' + offset + ' ' + line + ' ';
+        aPath += 'L '+ offset + ' ' + (line + this.elementEdge) + ' ';
+        aPath += 'L ' + (offset+col) + ' ' + (line + this.elementEdge) + ' ';
+        aPath += 'L ' + (offset+col) + ' ' + line + ' ';
+        aPath += 'L ' + offset + ' ' + line + ' ';
+        let poly = document.createElementNS( NSS['svg'], 'path');
+        poly.setAttribute('d', aPath);
+        aPolyPath.appendPath(poly);
+    }
+
+    return aPolyPath;
+}
+
+SnakeWipePath.prototype.calcHalfDiagonalSnake = function(nT, bIn) {
+    var res = createEmptyPath();
+
+    if(bIn) {
+        const sqrtArea2 = Math.sqrt(nT * this.sqrtElements * this.sqrtElements);
+        const edge = pruneScaleValue(sqrtArea2 / this.sqrtElements);
+
+        var aPath, aPoint = document.documentElement.createSVGPoint();
+        if(edge) {
+            aPath = 'M ' + aPoint.x + ' ' + aPoint.y + ' ';
+            aPoint.y = edge;
+            aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+            aPoint.x = edge;
+            aPoint.y = 0.0;
+            aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+            aPoint.x = 0.0;
+            aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+            const poly = document.createElementNS( NSS['svg'], 'path');
+            poly.setAttribute('d', aPath);
+            res.appendPath(poly);
+        }
+        const a = (Math.SQRT1_2 / this.sqrtElements);
+        const d = (sqrtArea2 - Math.floor(sqrtArea2));
+        const len = (nT * Math.SQRT1_2 * d);
+        const height = pruneScaleValue(Math.SQRT1_2 / this.sqrtElements);
+        aPath = 'M ' + aPoint.x + ' ' + aPoint.y + ' ';
+        aPoint.y = height;
+        aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+        aPoint.x = len + a;
+        aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+        aPoint.y = 0.0;
+        aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+        aPoint.x = 0.0;
+        aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+        const poly = document.createElementNS( NSS['svg'], 'path');
+        poly.setAttribute('d', aPath);
+        let aTransform;
+
+        if((Math.floor(sqrtArea2) & 1) == 1) {
+            // odd line
+            aTransform = SVGIdentityMatrix.rotate((Math.PI)/2 + (Math.PI)/4);
+            aTransform.translate(edge + this.elementEdge, 0.0);
+        }
+        else {
+            aTransform = SVGIdentityMatrix.translate(-a, 0.0);
+            aTransform.rotate(-(Math.PI/4));
+            aTransform.translate(0.0, edge);
+        }
+
+        poly.matrixTransform(aTransform);
+        res.appendPath(poly);
+    }
+    else { //out
+        const sqrtArea2 = Math.sqrt(nT * this.sqrtElements * this.sqrtElements);
+        const edge = pruneScaleValue(Math.floor(sqrtArea2)/this.sqrtElements);
+
+        let aPath, aPoint = document.documentElement.createSVGPoint();
+        if(edge != 0) {
+            aPoint.y = 1.0;
+            aPath = 'M ' + aPoint.x + ' ' + aPoint.y + ' ';
+            aPoint.x = edge;
+            aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+            aPoint.x = 1.0;
+            aPoint.y = edge;
+            aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+            aPoint.y = 0.0;
+            aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+            aPoint.x = 0.0;
+            aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+            const poly = document.createElementNS( NSS['svg'], 'path');
+            poly.setAttribute('d', aPath);
+            res.appendPath(poly);
+        }
+        const a = (Math.SQRT1_2 / this.sqrtElements);
+        const d = (sqrtArea2 - Math.floor(sqrtArea2));
+        const len = ((1.0 - nT) * Math.SQRT2 * d);
+        const height = pruneScaleValue(Math.SQRT1_2 / this.sqrtElements);
+        aPath = 'M ' + aPoint.x + ' ' + aPoint.y + ' ';
+        aPoint.y = height;
+        aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+        aPoint.x = len + a;
+        aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+        aPoint.y = 0.0;
+        aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+        aPoint.x = 0.0;
+        aPath += 'L ' + aPoint.x + ' ' + aPoint.y + ' ';
+        const poly = document.createElementNS( NSS['svg'], 'path');
+        poly.setAttribute('d', aPath);
+        let aTransform;
+
+        if((Math.floor(sqrtArea2) & 1) == 1) {
+            // odd line
+            aTransform = SVGIdentityMatrix.translate(0.0, -height);
+            aTransform.rotate(Math.PI/2 + Math.PI/4);
+            aTransform.translate(1.0, edge);
+        }
+        else {
+            aTransform = SVGIdentityMatrix.rotate(-(Math.PI/4));
+            aTransform = aTransform.translate(edge, 1.0);
+        }
+        poly.matrixTransform(aTransform);
+        res.appendPath(poly);
+    }
+    return res;
+}
+
+SnakeWipePath.prototype.perform = function(nT) {
+    var res = createEmptyPath();
+    if(this.diagonal) {
+        if(nT >= 0.5) {
+            res.appendPath(this.calcHalfDiagonalSnake(1.0, true));
+            res.appendPath(this.calcHalfDiagonalSnake(2.0*(nT-0.5), false));
+        }
+        else
+            res.appendPath(this.calcHalfDiagonalSnake(2.0*nT, true));
+    }
+    else
+        res = this.calcSnake(nT);
+
+    return this.flipOnYAxis ? flipOnYAxis(res) : res;
+}
+
+/** Class ParallelSnakesWipePath
+ *  Generates a parallel snakes wipe:
+ *
+ *  @param nElements
+ *  @param bDiagonal
+ *  @param bFlipOnYAxis
+ *  @param bOpposite
+ */
+function ParallelSnakesWipePath(nElements, bDiagonal, bFlipOnYAxis, bOpposite) {
+    SnakeWipePath.call(this, nElements, bDiagonal, bFlipOnYAxis);
+    this.bOpposite = bOpposite;
+}
+
+ParallelSnakesWipePath.prototype = Object.create(SnakeWipePath);
+
+ParallelSnakesWipePath.prototype.perform = function( nT ) {
+    var res = createEmptyPath(), half, aTransform;
+    if(this.diagonal) {
+        assert(this.bOpposite);
+        half = SnakeWipePath.prototype.calcHalfDiagonalSnake.call(this, nT, false);
+        // flip on x axis and rotate 90 degrees:
+        aTransform = SVGIdentityMatrix.scale(1, -1);
+        aTransform.translate(-0.5, 0.5);
+        aTransform.rotate(Math.PI/2);
+        aTransform.translate(0.5, 0.5);
+        half.matrixTransform(aTransform);
+        half.changeOrientation();
+        res.appendPath(half);
+
+        // rotate 180 degrees:
+        aTransform = SVGIdentityMatrix.translate(-0.5, -0.5);
+        aTransform.rotate(Math.PI);
+        aTransform.translate(0.5, 0.5);
+        half.matrixTransform(aTransform);
+        res.appendPath(half);
+    }
+    else {
+        half = SnakeWipePath.prototype.calcSnake.call(this, nT / 2.0 );
+        // rotate 90 degrees
+        aTransform = SVGIdentityMatrix.translate(-0.5, -0.5);
+        aTransform = aTransform.rotate(Math.PI/2);
+        aTransform = aTransform.translate(0.5, 0.5);
+        half.matrixTransform(aTransform);
+        res.appendPath(flipOnYAxis(half));
+        res.appendPath(this.bOpposite ? flipOnXAxis(half) : half);
+    }
+
+    return this.flipOnYAxis ? flipOnYAxis(res) : res;
+}
+
+/** SpiralWipePath
+ *
+ *  @param nElements
+ *      number of elements in the spiral animation
+ *  @param bFlipOnYAxis
+ *      boolean value indicating whether to flip on y-axis or not.
+ */
+function SpiralWipePath(nElements, bFlipOnYAxis) {
+    this.nElements    = nElements;
+    this.sqrtElements = Math.floor(Math.sqrt(nElements));
+    this.bFlipOnYAxis = bFlipOnYAxis;
+}
+
+SpiralWipePath.prototype.calcNegSpiral = function( nT ) {
+    var area  = nT * this.nElements;
+    var e     = (Math.sqrt(area) / 2.0);
+    var edge  = Math.floor(e) * 2;
+
+    var aTransform = SVGIdentityMatrix.translate(-0.5, -0.5);
+    var edge_ = pruneScaleValue(edge / this.sqrtElements);
+
+    aTransform = aTransform.scale(edge_, edge_);
+    aTransform = aTransform.translate(0.5, 0.5);
+    var poly = createUnitSquarePath();
+    poly.matrixTransform(aTransform);
+    var res = poly.cloneNode(true);
+
+    if(1.0 - nT != 0) {
+        var edge1 = edge + 1;
+        var len   = Math.floor( (e - edge/2) * edge1 * 4);
+        var w     = Math.PI / 2;
+
+        while(len > 0) {
+            var alen = Math.min(len, edge1);
+            len -= alen;
+            poly = createUnitSquarePath();
+            aTransform = SVGIdentityMatrix.scale(
+                            pruneScaleValue( alen / this.sqrtElements ),
+                            pruneScaleValue( 1.0 / this.sqrtElements ));
+            aTransform = aTransform.translate(
+                            - pruneScaleValue( (edge / 2) / this.sqrtElements ),
+                            pruneScaleValue( (edge / 2) / this.sqrtElements ));
+            aTransform = aTransform.rotate( w );
+            w -= Math.PI / 2;
+            aTransform = aTransform.translate(0.5, 0.5);
+            poly.matrixTransform(aTransform);
+            res.appendPath(poly);
+        }
+    }
+
+    return res;
+}
+
+SpiralWipePath.prototype.perform = function( nT ) {
+    var res         = createUnitSquarePath();
+    var innerSpiral = this.calcNegSpiral( 1.0 - nT );
+    innerSpiral.changeOrientation();
+    res.appendPath(innerSpiral);
+
+    return this.bFlipOnYAxis ? flipOnYAxis(res) : res;
+}
+
+/** Class BoxSnakesWipePath
+ *  Generates a twoBoxLeft or fourBoxHorizontal wipe:
+ *
+ */
+function BoxSnakesWipePath(nElements, bFourBox) {
+    SpiralWipePath.call(this, nElements);
+    this.bFourBox = bFourBox;
+}
+
+BoxSnakesWipePath.prototype = Object.create(SpiralWipePath);
+
+BoxSnakesWipePath.prototype.perform = function( nT ) {
+    var res = createUnitSquarePath(), aTransform;
+    var innerSpiral = SpiralWipePath.prototype.calcNegSpiral.call(this, 1.0 - nT);
+    innerSpiral.changeOrientation();
+
+    if(this.bFourBox) {
+        aTransform = SVGIdentityMatrix.scale(0.5, 0.5);
+        innerSpiral.matrixTransform(aTransform);
+        res.appendPath(innerSpiral);
+        res.appendPath(flipOnXAxis(innerSpiral));
+        innerSpiral = flipOnYAxis(innerSpiral);
+        res.appendPath(innerSpiral);
+        res.appendPath(flipOnXAxis(innerSpiral));
+    }
+    else {
+        aTransform = SVGIdentityMatrix.scale(1.0, 0.5);
+        innerSpiral.matrixTransform(aTransform);
+        res.appendPath(innerSpiral);
+        res.appendPath(flipOnXAxis(innerSpiral));
+    }
+    return this.bFlipOnYAxis ? flipOnYAxis(res) : res;
+}
+
+/** Class VeeWipePath
+  *
+  */
+function VeeWipePath() { }
+
+VeeWipePath.prototype.perform = function( nT ) {
+    const d = pruneScaleValue(2.0 * nT);
+    var polyPath = 'M ' + 0.0 + ' ' + -1.0 + ' ';
+    polyPath += 'L ' + 0.0 + ' ' + (d - 1.0) + ' ';
+    polyPath += 'L ' + 0.5 + ' ' + d + ' ';
+    polyPath += 'L ' + 1.0 + ' ' + (d - 1.0) + ' ';
+    polyPath += 'L ' + 1.0 + ' ' + -1.0 + ' ';
+    polyPath += 'L ' + 0.0 + ' ' + -1.0 + ' ';
+
+    var aPolyPolyPath = document.createElementNS( NSS['svg'], 'path');
+    aPolyPolyPath.setAttribute('d', polyPath);
+    return aPolyPolyPath;
+}
 
 
 /** Class AnimatedSlide
@@ -8750,8 +11266,6 @@ AnimatedSlide.prototype.setClipPath = function( aClipPathContent )
     // anyway that does not work in IE9, so we replace the 'd' attribute, only.
     if( this.aClipPathContent )
     {
-//        this.aClipPathElement.replaceChild( aClipPathContent, this.aClipPathContent );
-//        this.aClipPathContent = aClipPathContent;
         var sPathData = aClipPathContent.getAttribute( 'd' );
         this.aClipPathContent.setAttribute( 'd', sPathData );
     }
@@ -8799,6 +11313,7 @@ AnimatedElement.prototype.initElement = function()
     this.nCenterY = this.nBaseCenterY;
     this.nScaleFactorX = 1.0;
     this.nScaleFactorY = 1.0;
+    this.nRotationAngle = 0.0;
 
     // add a transform attribute of type matrix
     this.aActiveElement.setAttribute( 'transform', makeMatrixString( 1, 0, 0, 1, 0, 0 ) );
@@ -8917,7 +11432,7 @@ AnimatedElement.prototype.notifyAnimationEnd = function()
     // empty body
 };
 
-AnimatedElement.prototype.notifyNextEffectStart = function( nEffectIndex )
+AnimatedElement.prototype.notifyNextEffectStart = function( /*nEffectIndex*/ )
 {
     // empty body
 };
@@ -8942,6 +11457,7 @@ AnimatedElement.prototype.saveState = function( nAnimationNodeId )
     aState.nCenterY = this.nCenterY;
     aState.nScaleFactorX = this.nScaleFactorX;
     aState.nScaleFactorY = this.nScaleFactorY;
+    aState.nRotationAngle = this.nRotationAngle;
 
 };
 
@@ -8973,6 +11489,7 @@ AnimatedElement.prototype.restoreState = function( nAnimationNodeId )
         this.nCenterY = aState.nCenterY;
         this.nScaleFactorX = aState.nScaleFactorX;
         this.nScaleFactorY = aState.nScaleFactorY;
+        this.nRotationAngle = aState.nRotationAngle;
     }
     return bRet;
 };
@@ -9089,7 +11606,6 @@ AnimatedElement.prototype.getHeight = function()
 
 AnimatedElement.prototype.updateTransformAttribute = function()
 {
-    //this.aActiveElement.setAttribute( 'transform', matrixToString( this.aTMatrix ) );
     this.aTransformAttrList = this.aActiveElement.transform.baseVal;
     this.aTransformAttr = this.aTransformAttrList.getItem( 0 );
     this.aTransformAttr.setMatrix( this.aTMatrix );
@@ -9134,6 +11650,7 @@ AnimatedElement.prototype.setWidth = function( nNewWidth )
 
     this.aTMatrix = document.documentElement.createSVGMatrix()
         .translate( this.nCenterX, this.nCenterY )
+        .rotate(this.nRotationAngle)
         .scaleNonUniform( nScaleFactorX, this.nScaleFactorY )
         .translate( -this.nBaseCenterX, -this.nBaseCenterY );
     this.updateTransformAttribute();
@@ -9158,6 +11675,7 @@ AnimatedElement.prototype.setHeight = function( nNewHeight )
 
     this.aTMatrix = document.documentElement.createSVGMatrix()
         .translate( this.nCenterX, this.nCenterY )
+        .rotate(this.nRotationAngle)
         .scaleNonUniform( this.nScaleFactorX, nScaleFactorY )
         .translate( -this.nBaseCenterX, -this.nBaseCenterY );
     this.updateTransformAttribute();
@@ -9173,6 +11691,23 @@ AnimatedElement.prototype.getOpacity = function()
 AnimatedElement.prototype.setOpacity = function( nValue )
 {
     this.aActiveElement.setAttribute( 'opacity', nValue );
+};
+
+AnimatedElement.prototype.getRotationAngle = function()
+{
+    return this.nRotationAngle;
+};
+
+AnimatedElement.prototype.setRotationAngle = function( nNewRotAngle )
+{
+    this.aTMatrix = document.documentElement.createSVGMatrix()
+        .translate( this.nCenterX, this.nCenterY )
+        .rotate(nNewRotAngle)
+        .scaleNonUniform( this.nScaleFactorX, this.nScaleFactorY )
+        .translate( -this.nBaseCenterX, -this.nBaseCenterY );
+    this.updateTransformAttribute();
+
+    this.nRotationAngle = nNewRotAngle;
 };
 
 AnimatedElement.prototype.getVisibility = function()
@@ -9659,7 +12194,6 @@ SlideTransition.prototype.createSlideTransition = function( aLeavingSlide, aEnte
 
                 case PUSHWIPE_TRANSITION:
                 {
-                    var bCombined = false;
                     var aDirection = null;
                     switch( this.eTransitionSubType )
                     {
@@ -9681,10 +12215,7 @@ SlideTransition.prototype.createSlideTransition = function( aLeavingSlide, aEnte
                             aDirection = { x: -1.0, y: 0.0 };
                             break;
                     }
-                    if( bCombined )
-                        return null;
-                    else
-                        return new MovingSlideChange( aLeavingSlide, aEnteringSlide, aDirection, aDirection );
+                    return new MovingSlideChange( aLeavingSlide, aEnteringSlide, aDirection, aDirection );
                 }
 
                 case SLIDEWIPE_TRANSITION:
@@ -9863,10 +12394,10 @@ SlideTransition.prototype.info = function()
 
     var sInfo ='slide transition <' + this.sSlideId + '>: ';
     // transition type
-    sInfo += ';  type: ' + aTransitionTypeOutMap[ String( this.getTransitionType() ) ];
+    sInfo += ';  type: ' + getKeyByValue(aTransitionTypeInMap, this.getTransitionType());
 
     // transition subtype
-    sInfo += ';  subtype: ' + aTransitionSubtypeOutMap[ this.getTransitionSubType() ];
+    sInfo += ';  subtype: ' + getKeyByValue(aTransitionSubtypeInMap, this.getTransitionSubType());
 
     // transition direction
     if( !this.isDirectionForward() )
@@ -10100,6 +12631,70 @@ DelayEvent.prototype.charge = function()
 
 
 
+function WakeupEvent( aTimer, aActivityQueue )
+{
+    WakeupEvent.superclass.constructor.call( this );
+
+    this.aTimer = new ElapsedTime( aTimer );
+    this.nNextTime = 0.0;
+    this.aActivity = null;
+    this.aActivityQueue = aActivityQueue;
+}
+extend( WakeupEvent, Event );
+
+
+WakeupEvent.prototype.clone = function()
+{
+    var aWakeupEvent = new WakeupEvent( this.aTimer.getTimeBase(), this.aActivityQueue );
+    aWakeupEvent.nNextTime = this.nNextTime;
+    aWakeupEvent.aActivity = this.aActivity;
+    return aWakeupEvent;
+};
+
+WakeupEvent.prototype.dispose = function()
+{
+    this.aActivity = null;
+};
+
+WakeupEvent.prototype.fire = function()
+{
+    if( !this.aActivity )
+        return false;
+
+    return this.aActivityQueue.addActivity( this.aActivity );
+};
+
+WakeupEvent.prototype.isCharged = function()
+{
+    // this event won't expire, we fire every time we're
+    // re-inserted into the event queue.
+    return true;
+};
+
+WakeupEvent.prototype.getActivationTime = function( nCurrentTime )
+{
+    var nElapsedTime = this.aTimer.getElapsedTime();
+
+    return Math.max( nCurrentTime, nCurrentTime - nElapsedTime + this.nNextTime );
+};
+
+WakeupEvent.prototype.start = function()
+{
+    this.aTimer.reset();
+};
+
+WakeupEvent.prototype.setNextTimeout = function( nNextTime )
+{
+    this.nNextTime = nNextTime;
+};
+
+WakeupEvent.prototype.setActivity = function( aActivity )
+{
+    this.aActivity = aActivity;
+};
+
+
+
 function makeEvent( aFunctor )
 {
     return new DelayEvent( aFunctor, 0.0 );
@@ -10280,7 +12875,7 @@ SourceEventElement.prototype.charge = function()
     this.setPointerCursor();
 };
 
-SourceEventElement.prototype.handleClick = function( aMouseEvent )
+SourceEventElement.prototype.handleClick = function( /*aMouseEvent*/ )
 {
     if( !this.bIsPointerOver ) return false;
 
@@ -10356,7 +12951,6 @@ function HyperlinkElement( sId, aEventMultiplexer )
 
 HyperlinkElement.prototype.onElementChanged = function( aElement )
 {
-    //var aElement = document.getElementById( this.sId );
     if( !aElement )
     {
         log( 'error: HyperlinkElement: passed element is not valid' );
@@ -10385,11 +12979,9 @@ HyperlinkElement.prototype.onMouseLeave = function()
     this.setDefaultCursor();
 };
 
-HyperlinkElement.prototype.handleClick = function( aMouseEvent )
+HyperlinkElement.prototype.handleClick = function( )
 {
     if( !this.bIsPointerOver ) return false;
-
-    //log( 'hyperlink: ' + this.sURL );
 
     if( this.nTargetSlideIndex !== undefined )
     {
@@ -10773,7 +13365,7 @@ aInterpolatorHandler.getInterpolator = function( eCalcMode, eValueType, eValueSu
     else
     {
         log( 'aInterpolatorHandler.getInterpolator: not found any valid interpolator for calc mode '
-             + aCalcModeOutMap[eCalcMode]  + 'and value type ' + aValueTypeOutMap[eValueType]  );
+             + aCalcModeOutMap[eCalcMode]  + ' and value type ' + aValueTypeOutMap[eValueType]  );
         return null;
     }
 };
@@ -10953,6 +13545,31 @@ aOperatorSetMap[ COLOR_PROPERTY ].scale = function( k, v )
     return r;
 };
 
+// enum operators
+aOperatorSetMap[ ENUM_PROPERTY ] = {};
+
+aOperatorSetMap[ ENUM_PROPERTY ].equal = function( a, b )
+{
+    return ( a === b );
+};
+
+aOperatorSetMap[ ENUM_PROPERTY ].add = function( a )
+{
+    return a;
+};
+
+aOperatorSetMap[ ENUM_PROPERTY ].scale = function( k, v )
+{
+    return v;
+};
+
+// string operators
+aOperatorSetMap[ STRING_PROPERTY ] = aOperatorSetMap[ ENUM_PROPERTY ];
+
+// bool operators
+aOperatorSetMap[ BOOL_PROPERTY ] = aOperatorSetMap[ ENUM_PROPERTY ];
+
+
 
 
 /**********************************************************************************************
@@ -10963,6 +13580,7 @@ aOperatorSetMap[ COLOR_PROPERTY ].scale = function( k, v )
 function ActivityParamSet()
 {
     this.aEndEvent = null;
+    this.aWakeupEvent = null;
     this.aTimerEventQueue = null;
     this.aActivityQueue = null;
     this.nMinDuration = undefined;
@@ -11284,6 +13902,148 @@ ActivityBase.prototype.performEnd = function()
 
 
 
+function DiscreteActivityBase( aCommonParamSet )
+{
+    DiscreteActivityBase.superclass.constructor.call( this, aCommonParamSet );
+
+    this.aOriginalWakeupEvent = aCommonParamSet.aWakeupEvent;
+    this.aOriginalWakeupEvent.setActivity( this );
+    this.aWakeupEvent = this.aOriginalWakeupEvent;
+    this.aWakeupEvent = aCommonParamSet.aWakeupEvent;
+    this.aDiscreteTimes = aCommonParamSet.aDiscreteTimes;
+    // Simple duration of activity
+    this.nMinSimpleDuration = aCommonParamSet.nMinDuration;
+    // Actual number of frames shown until now.
+    this.nCurrPerformCalls = 0;
+}
+extend( DiscreteActivityBase, ActivityBase );
+
+
+DiscreteActivityBase.prototype.activate = function( aEndElement )
+{
+    DiscreteActivityBase.superclass.activate.call( this, aEndElement );
+
+    this.aWakeupEvent = this.aOriginalWakeupEvent;
+    this.aWakeupEvent.setNextTimeout( 0 );
+    this.nCurrPerformCalls = 0;
+};
+
+DiscreteActivityBase.prototype.startAnimation = function()
+{
+    this.aWakeupEvent.start();
+};
+
+DiscreteActivityBase.prototype.calcFrameIndex = function( nCurrCalls, nVectorSize )
+{
+    if( this.isAutoReverse() )
+    {
+        // every full repeat run consists of one
+        // forward and one backward traversal.
+        var nFrameIndex = nCurrCalls % (2 * nVectorSize);
+
+        // nFrameIndex values >= nVectorSize belong to
+        // the backward traversal
+        if( nFrameIndex >= nVectorSize )
+            nFrameIndex = 2*nVectorSize - nFrameIndex; // invert sweep
+
+        return nFrameIndex;
+    }
+    else
+    {
+        return nCurrCalls % nVectorSize;
+    }
+};
+
+DiscreteActivityBase.prototype.calcRepeatCount = function( nCurrCalls, nVectorSize )
+{
+    if( this.isAutoReverse() )
+    {
+        return Math.floor( nCurrCalls / (2*nVectorSize) ); // we've got 2 cycles per repeat
+    }
+    else
+    {
+        return Math.floor( nCurrCalls / nVectorSize );
+    }
+};
+
+DiscreteActivityBase.prototype.performDiscreteHook = function( /*nFrame, nRepeatCount*/ )
+{
+    throw ( 'DiscreteActivityBase.performDiscreteHook: abstract method invoked' );
+};
+
+DiscreteActivityBase.prototype.perform = function()
+{
+    // call base class, for start() calls and end handling
+    if( !SimpleContinuousActivityBase.superclass.perform.call( this ) )
+        return false; // done, we're ended
+
+    var nVectorSize = this.aDiscreteTimes.length;
+
+    var nFrameIndex = this.calcFrameIndex(this.nCurrPerformCalls, nVectorSize);
+    var nRepeatCount = this.calcRepeatCount( this.nCurrPerformCalls, nVectorSize );
+    this.performDiscreteHook( nFrameIndex, nRepeatCount );
+
+    // one more frame successfully performed
+    ++this.nCurrPerformCalls;
+
+    // calc currently reached repeat count
+    var nCurrRepeat = this.nCurrPerformCalls / nVectorSize;
+
+    // if auto-reverse is specified, halve the
+    // effective repeat count, since we pass every
+    // repeat run twice: once forward, once backward.
+    if( this.isAutoReverse() )
+        nCurrRepeat /= 2;
+
+    // schedule next frame, if either repeat is indefinite
+    // (repeat forever), or we've not yet reached the requested
+    // repeat count
+    if( !this.isRepeatCountValid() || nCurrRepeat < this.getRepeatCount() )
+    {
+        // add wake-up event to queue (modulo vector size, to cope with repeats).
+
+        // repeat is handled locally, only apply acceleration/deceleration.
+        // Scale time vector with simple duration, offset with full repeat
+        // times.
+
+        // Note that calcAcceleratedTime() is only applied to the current repeat's value,
+        // not to the total resulting time. This is in accordance with the SMIL spec.
+
+        nFrameIndex = this.calcFrameIndex(this.nCurrPerformCalls, nVectorSize);
+        var nCurrentRepeatTime = this.aDiscreteTimes[nFrameIndex];
+        nRepeatCount = this.calcRepeatCount( this.nCurrPerformCalls, nVectorSize );
+        var nNextTimeout = this.nMinSimpleDuration * ( nRepeatCount + this.calcAcceleratedTime( nCurrentRepeatTime ) );
+        this.aWakeupEvent.setNextTimeout( nNextTimeout );
+
+        this.getEventQueue().addEvent( this.aWakeupEvent );
+    }
+    else
+    {
+        // release event reference (relation to wake up event is circular!)
+        this.aWakeupEvent = null;
+
+        // done with this activity
+        this.endActivity();
+    }
+
+    return false; // remove from queue, will be added back by the wakeup event.
+};
+
+DiscreteActivityBase.prototype.dispose = function()
+{
+    // dispose event
+    if( this.aWakeupEvent )
+        this.aWakeupEvent.dispose();
+
+    // release references
+    this.aWakeupEvent = null;
+
+    DiscreteActivityBase.superclass.dispose.call(this);
+};
+
+
+
+
 function SimpleContinuousActivityBase( aCommonParamSet )
 {
     SimpleContinuousActivityBase.superclass.constructor.call( this, aCommonParamSet );
@@ -11481,7 +14241,7 @@ SimpleContinuousActivityBase.prototype.perform = function()
     return this.isActive();
 };
 
-SimpleContinuousActivityBase.prototype.simplePerform = function( nSimpleTime, nRepeatCount )
+SimpleContinuousActivityBase.prototype.simplePerform = function( /*nSimpleTime, nRepeatCount*/ )
 {
     throw ( 'SimpleContinuousActivityBase.simplePerform: abstract method invoked' );
 };
@@ -11515,9 +14275,9 @@ ContinuousKeyTimeActivityBase.prototype.activate = function( aEndElement )
     this.aLerper.reset();
 };
 
-ContinuousKeyTimeActivityBase.prototype.performHook = function( nIndex, nFractionalIndex, nRepeatCount )
+ContinuousKeyTimeActivityBase.prototype.performContinuousHook = function( /*nIndex, nFractionalIndex, nRepeatCount*/ )
 {
-    throw ( 'ContinuousKeyTimeActivityBase.performHook: abstract method invoked' );
+    throw ( 'ContinuousKeyTimeActivityBase.performContinuousHook: abstract method invoked' );
 };
 
 ContinuousKeyTimeActivityBase.prototype.simplePerform = function( nSimpleTime, nRepeatCount )
@@ -11526,7 +14286,7 @@ ContinuousKeyTimeActivityBase.prototype.simplePerform = function( nSimpleTime, n
 
     var aLerpResult = this.aLerper.lerp( nAlpha );
 
-    this.performHook( aLerpResult.nIndex, aLerpResult.nLerp, nRepeatCount );
+    this.performContinuousHook( aLerpResult.nIndex, aLerpResult.nLerp, nRepeatCount );
 };
 
 
@@ -11540,14 +14300,14 @@ function ContinuousActivityBase( aCommonParamSet )
 extend( ContinuousActivityBase, SimpleContinuousActivityBase );
 
 
-ContinuousActivityBase.prototype.performHook = function( nModifiedTime, nRepeatCount )
+ContinuousActivityBase.prototype.performContinuousHook = function( /*nModifiedTime, nRepeatCount*/ )
 {
-    throw ( 'ContinuousActivityBase.performHook: abstract method invoked' );
+    throw ( 'ContinuousActivityBase.performContinuousHook: abstract method invoked' );
 };
 
 ContinuousActivityBase.prototype.simplePerform = function( nSimpleTime, nRepeatCount )
 {
-    this.performHook( this.calcAcceleratedTime( nSimpleTime ), nRepeatCount );
+    this.performContinuousHook( this.calcAcceleratedTime( nSimpleTime ), nRepeatCount );
 };
 
 
@@ -11587,7 +14347,7 @@ SimpleActivity.prototype.endAnimation = function()
 
 };
 
-SimpleActivity.prototype.performHook = function( nModifiedTime, nRepeatCount )
+SimpleActivity.prototype.performContinuousHook = function( nModifiedTime /*, nRepeatCount*/ )
 {
     // nRepeatCount is not used
 
@@ -11595,7 +14355,6 @@ SimpleActivity.prototype.performHook = function( nModifiedTime, nRepeatCount )
         return;
 
     var nT = 1.0 - this.nDirection + nModifiedTime * ( 2.0*this.nDirection - 1.0 );
-    //ANIMDBG.print( 'SimpleActivity.performHook: nT = ' + nT );
     this.aAnimation.perform( nT );
 };
 
@@ -11640,9 +14399,6 @@ function FromToByActivityTemplate( BaseType ) // template parameter
         this.nIteration = 0;
         this.bCumulative = bAccumulate;
         this.aFormula = aActivityParamSet.aFormula;
-
-        //this.initAnimatedElement();
-
     }
     extend( FromToByActivity, BaseType );
 
@@ -11691,7 +14447,6 @@ function FromToByActivityTemplate( BaseType ) // template parameter
                 // From-By animation
                 this.aStartValue = this.aFrom;
 
-                // this.aEndValue = this.aStartValue + this.aBy;
                 this.aEndValue = this.add( this.aStartValue, this.aBy );
             }
         }
@@ -11720,7 +14475,6 @@ function FromToByActivityTemplate( BaseType ) // template parameter
                 // By animation
                 this.aStartValue = aAnimationStartValue;
 
-                // this.aEndValue = this.aStartValue + this.aBy;
                 this.aEndValue = this.add( this.aStartValue, this.aBy );
             }
         }
@@ -11734,12 +14488,12 @@ function FromToByActivityTemplate( BaseType ) // template parameter
             this.aAnimation.end();
     };
 
-    // performHook override for ContinuousActivityBase
-    FromToByActivity.prototype.performHook = function( nModifiedTime, nRepeatCount )
+    // perform hook override for ContinuousActivityBase
+    FromToByActivity.prototype.performContinuousHook = function( nModifiedTime, nRepeatCount )
     {
         if( this.isDisposed() || !this.aAnimation  )
         {
-            log( 'FromToByActivity.performHook: activity disposed or not valid animation' );
+            log( 'FromToByActivity.performContinuousHook: activity disposed or not valid animation' );
             return;
         }
 
@@ -11801,6 +14555,15 @@ function FromToByActivityTemplate( BaseType ) // template parameter
 
     };
 
+    // perform hook override for DiscreteActivityBase
+    FromToByActivity.prototype.performDiscreteHook = function( /*nFrame, nRepeatCount*/ )
+    {
+        if (this.isDisposed() || !this.aAnimation) {
+            log('FromToByActivity.performDiscreteHook: activity disposed or not valid animation');
+            return;
+        }
+    };
+
     FromToByActivity.prototype.performEnd = function()
     {
         if( this.aAnimation )
@@ -11823,6 +14586,8 @@ function FromToByActivityTemplate( BaseType ) // template parameter
 
 // FromToByActivity< ContinuousActivityBase > instantiation
 var LinearFromToByActivity = instantiate( FromToByActivityTemplate, ContinuousActivityBase );
+// FromToByActivity< DiscreteActivityBase > instantiation
+var DiscreteFromToByActivity = instantiate( FromToByActivityTemplate, DiscreteActivityBase );
 
 
 
@@ -11850,8 +14615,6 @@ function  ValueListActivityTemplate( BaseType ) // template parameter
         this.bCumulative = bAccumulate;
         this.aLastValue = this.aValueList[ this.aValueList.length - 1 ];
         this.aFormula = aActivityParamSet.aFormula;
-
-        //this.initAnimatedElement();
     }
     extend( ValueListActivity, BaseType );
 
@@ -11862,8 +14625,6 @@ function  ValueListActivityTemplate( BaseType ) // template parameter
         {
             ANIMDBG.print( 'createValueListActivity: value[' + i + '] = ' + this.aValueList[i] );
         }
-
-        //this.initAnimatedElement();
     };
 
     ValueListActivity.prototype.initAnimatedElement = function()
@@ -11895,17 +14656,17 @@ function  ValueListActivityTemplate( BaseType ) // template parameter
             this.aAnimation.end();
     };
 
-    // performHook override for ContinuousKeyTimeActivityBase base
-    ValueListActivity.prototype.performHook = function( nIndex, nFractionalIndex, nRepeatCount )
+    // perform hook override for ContinuousKeyTimeActivityBase base
+    ValueListActivity.prototype.performContinuousHook = function( nIndex, nFractionalIndex, nRepeatCount )
     {
         if( this.isDisposed() || !this.aAnimation  )
         {
-            log( 'ValueListActivity.performHook: activity disposed or not valid animation' );
+            log( 'ValueListActivity.performContinuousHook: activity disposed or not valid animation' );
             return;
         }
 
         assert( ( nIndex + 1 ) < this.aValueList.length,
-                'ValueListActivity.performHook: assertion (nIndex + 1 < this.aValueList.length) failed' );
+                'ValueListActivity.performContinuousHook: assertion (nIndex + 1 < this.aValueList.length) failed' );
 
         // interpolate between nIndex and nIndex+1 values
 
@@ -11915,8 +14676,34 @@ function  ValueListActivityTemplate( BaseType ) // template parameter
 
         if( this.bCumulative )
         {
-            aValue = this.add( aValue, this.scale( nRepeatCount, this.aLastValue ) );
             //aValue = aValue + nRepeatCount * this.aLastValue;
+            aValue = this.add( aValue, this.scale( nRepeatCount, this.aLastValue ) );
+        }
+
+        aValue = this.aFormula ? this.aFormula( aValue ) : aValue;
+        this.aAnimation.perform( aValue );
+    };
+
+    // perform hook override for DiscreteActivityBase base
+    ValueListActivity.prototype.performDiscreteHook = function( nFrame, nRepeatCount )
+    {
+        if( this.isDisposed() || !this.aAnimation  )
+        {
+            log( 'ValueListActivity.performDiscreteHook: activity disposed or not valid animation' );
+            return;
+        }
+
+        assert( nFrame < this.aValueList.length,
+               'ValueListActivity.performDiscreteHook: assertion ( nFrame < this.aValueList.length) failed' );
+
+        // this is discrete, thus no lerp here.
+        var aValue = this.aValueList[nFrame];
+
+        if( this.bCumulative )
+        {
+            aValue = this.add( aValue, this.scale( nRepeatCount, this.aLastValue ) );
+            // for numbers:   aValue = aValue + nRepeatCount * this.aLastValue;
+            // for enums, bools or strings:   aValue = aValue;
         }
 
         aValue = this.aFormula ? this.aFormula( aValue ) : aValue;
@@ -11944,6 +14731,8 @@ function  ValueListActivityTemplate( BaseType ) // template parameter
 
 //  ValueListActivity< ContinuousKeyTimeActivityBase > instantiation
 var LinearValueListActivity = instantiate( ValueListActivityTemplate, ContinuousKeyTimeActivityBase );
+//  ValueListActivity< DiscreteActivityBase > instantiation
+var DiscreteValueListActivity = instantiate( ValueListActivityTemplate, DiscreteActivityBase );
 
 
 
@@ -11987,6 +14776,9 @@ function createActivity( aActivityParamSet, aAnimationNode, aAnimation, aInterpo
 
         var aAnimatedElement = aAnimationNode.getAnimatedElement();
         var aBBox = aAnimatedElement.getBaseBBox();
+
+        // the following variable are used for evaluating sFormula
+        /* eslint-disable no-unused-vars */
         var width = aBBox.width / aActivityParamSet.nSlideWidth;
         var height = aBBox.height / aActivityParamSet.nSlideHeight;
         var x = ( aBBox.x + aBBox.width / 2 ) / aActivityParamSet.nSlideWidth;
@@ -11996,6 +14788,7 @@ function createActivity( aActivityParamSet, aAnimationNode, aAnimation, aInterpo
 
             return eval(sFormula);
         };
+        /* eslint-enable no-unused-vars */
     }
 
     aActivityParamSet.aDiscreteTimes = aAnimationNode.getKeyTimes();
@@ -12017,16 +14810,23 @@ function createActivity( aActivityParamSet, aAnimationNode, aAnimation, aInterpo
         switch( eCalcMode )
         {
             case CALC_MODE_DISCRETE:
-                log( 'createActivity: discrete calculation case not yet implemented' );
-                break;
+                aActivityParamSet.aWakeupEvent =
+                        new WakeupEvent( aActivityParamSet.aTimerEventQueue.getTimer(),
+                                         aActivityParamSet.aActivityQueue );
+
+                return createValueListActivity( aActivityParamSet,
+                                                aAnimationNode,
+                                                aAnimation,
+                                                aInterpolator,
+                                                DiscreteValueListActivity,
+                                                bAccumulate,
+                                                eValueType );
 
             default:
                 log( 'createActivity: unexpected calculation mode: ' + eCalcMode );
                 // FALLTHROUGH intended
             case CALC_MODE_PACED :
-                // FALLTHROUGH intended
             case CALC_MODE_SPLINE :
-                // FALLTHROUGH intended
             case CALC_MODE_LINEAR:
                 return createValueListActivity( aActivityParamSet,
                                                 aAnimationNode,
@@ -12044,15 +14844,22 @@ function createActivity( aActivityParamSet, aAnimationNode, aAnimation, aInterpo
         {
             case CALC_MODE_DISCRETE:
                 log( 'createActivity: discrete calculation case not yet implemented' );
-                break;
+                aActivityParamSet.aWakeupEvent =
+                        new WakeupEvent( aActivityParamSet.aTimerEventQueue.getTimer(),
+                                         aActivityParamSet.aActivityQueue );
+                return createFromToByActivity(  aActivityParamSet,
+                                                aAnimationNode,
+                                                aAnimation,
+                                                aInterpolator,
+                                                DiscreteFromToByActivity,
+                                                bAccumulate,
+                                                eValueType );
 
             default:
                 log( 'createActivity: unexpected calculation mode: ' + eCalcMode );
                 // FALLTHROUGH intended
             case CALC_MODE_PACED :
-                // FALLTHROUGH intended
             case CALC_MODE_SPLINE :
-                // FALLTHROUGH intended
             case CALC_MODE_LINEAR:
                 return createFromToByActivity(  aActivityParamSet,
                                                 aAnimationNode,
@@ -12073,7 +14880,7 @@ function createValueListActivity( aActivityParamSet, aAnimationNode, aAnimation,
 {
     var aAnimatedElement = aAnimationNode.getAnimatedElement();
     var aOperatorSet = aOperatorSetMap[ eValueType ];
-    assert( aOperatorSet, 'createFromToByActivity: no operator set found' );
+    assert( aOperatorSet, 'createValueListActivity: no operator set found' );
 
     var aValueSet = aAnimationNode.getValues();
 
@@ -12180,10 +14987,13 @@ function extractAttributeValues( eValueType, aValueList, aValueSet, aBBox, nSlid
 
 function evalValuesAttribute( aValueList, aValueSet, aBBox, nSlideWidth, nSlideHeight )
 {
+    // the following variables are used for evaluating sValue later
+    /* eslint-disable no-unused-vars */
     var width = aBBox.width / nSlideWidth;
     var height = aBBox.height / nSlideHeight;
     var x = ( aBBox.x + aBBox.width / 2 ) / nSlideWidth;
     var y = ( aBBox.y + aBBox.height / 2 ) / nSlideHeight;
+    /* eslint-enable no-unused-vars */
 
     var reMath = /abs|sqrt|asin|acos|atan|sin|cos|tan|exp|log|min|max/g;
 
@@ -12954,7 +15764,6 @@ SlideShow.prototype.displaySlide = function( nNewSlide, bSkipSlideTransition )
 SlideShow.prototype.update = function()
 {
     this.aTimer.holdTimer();
-    //var suspendHandle = ROOT_NODE.suspendRedraw( PREFERRED_FRAME_RATE * 1000 );
 
     // process queues
     this.aTimerEventQueue.process();
@@ -12964,8 +15773,6 @@ SlideShow.prototype.update = function()
 
     this.aActivityQueue.processDequeued();
 
-    //ROOT_NODE.unsuspendRedraw(suspendHandle);
-    //ROOT_NODE.forceRedraw();
     this.aTimer.releaseTimer();
 
     var bActivitiesLeft = ( ! this.aActivityQueue.isEmpty() );
@@ -13464,18 +16271,10 @@ ElapsedTime.prototype.getCurrentTime = function()
     if ( !this.aTimeBase )
     {
         nCurrentTime = this.getSystemTime();
-//            if( !isFinite(nCurrentTime) )
-//            {
-//                log( 'ElapsedTime.getCurrentTime: this.getSystemTime() == ' + nCurrentTime );
-//            }
     }
     else
     {
         nCurrentTime = this.aTimeBase.getElapsedTimeImpl();
-//            if( !isFinite(nCurrentTime) )
-//            {
-//                log( 'ElapsedTime.getCurrentTime: this.aTimeBase.getElapsedTimeImpl() == ' + nCurrentTime );
-//            }
     }
 
     assert( ( typeof( nCurrentTime ) === typeof( 0 ) ) && isFinite( nCurrentTime ),
@@ -13489,11 +16288,6 @@ ElapsedTime.prototype.getElapsedTimeImpl = function()
 {
     if( this.bInHoldMode || this.bInPauseMode )
     {
-//            if( !isFinite(this.nFrozenTime) )
-//            {
-//                log( 'ElapsedTime.getElapsedTimeImpl: nFrozenTime == ' + this.nFrozenTime );
-//            }
-
         return this.nFrozenTime;
     }
 
@@ -13502,13 +16296,14 @@ ElapsedTime.prototype.getElapsedTimeImpl = function()
 };
 
 
+
 /*****
  * @libreofficeend
  *
  * Several parts of the above code are the result of the porting,
  * started on August 2011, of the C++ code included in the source files
  * placed under the folder '/slideshow/source' and subfolders.
- * @source http://cgit.freedesktop.org/libreoffice/core/tree/slideshow/source
+ * @source https://cgit.freedesktop.org/libreoffice/core/tree/slideshow/source
  *
  */
 

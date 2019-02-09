@@ -28,9 +28,12 @@
 #include <sfx2/sidebar/Tools.hxx>
 #include <sfx2/sidebar/Theme.hxx>
 
+#include <vcl/event.hxx>
 #include <vcl/dockwin.hxx>
 #include <vcl/scrbar.hxx>
+#include <vcl/commandevent.hxx>
 #include <tools/svborder.hxx>
+#include <sal/log.hxx>
 
 using namespace css;
 using namespace css::uno;
@@ -79,9 +82,10 @@ void Deck::dispose()
     // We have to explicitly trigger the destruction of panels.
     // Otherwise that is done by one of our base class destructors
     // without updating maPanels.
-    for (size_t i = 0; i < aPanels.size(); i++)
-        aPanels[i].disposeAndClear();
+    for (VclPtr<Panel> & rpPanel : aPanels)
+        rpPanel.disposeAndClear();
 
+    maPanels.clear(); // just to keep the loplugin:vclwidgets happy
     mpTitleBar.disposeAndClear();
     mpFiller.disposeAndClear();
     mpVerticalScrollBar.disposeAndClear();
@@ -91,17 +95,17 @@ void Deck::dispose()
     vcl::Window::dispose();
 }
 
-DeckTitleBar* Deck::GetTitleBar() const
+VclPtr<DeckTitleBar> const & Deck::GetTitleBar() const
 {
-    return mpTitleBar.get();
+    return mpTitleBar;
 }
 
-Rectangle Deck::GetContentArea() const
+tools::Rectangle Deck::GetContentArea() const
 {
     const Size aWindowSize (GetSizePixel());
     const int nBorderSize (Theme::GetInteger(Theme::Int_DeckBorderSize));
 
-    return Rectangle(
+    return tools::Rectangle(
         Theme::GetInteger(Theme::Int_DeckLeftPadding) + nBorderSize,
         Theme::GetInteger(Theme::Int_DeckTopPadding) + nBorderSize,
         aWindowSize.Width() - 1 - Theme::GetInteger(Theme::Int_DeckRightPadding) - nBorderSize,
@@ -113,7 +117,7 @@ void Deck::ApplySettings(vcl::RenderContext& rRenderContext)
     rRenderContext.SetBackground(Wallpaper());
 }
 
-void Deck::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rUpdateArea*/)
+void Deck::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& /*rUpdateArea*/)
 {
     const Size aWindowSize (GetSizePixel());
     const SvBorder aPadding(Theme::GetInteger(Theme::Int_DeckLeftPadding),
@@ -122,17 +126,17 @@ void Deck::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rUpdateA
                             Theme::GetInteger(Theme::Int_DeckBottomPadding));
 
     // Paint deck background outside the border.
-    Rectangle aBox(0, 0, aWindowSize.Width() - 1, aWindowSize.Height() - 1);
+    tools::Rectangle aBox(0, 0, aWindowSize.Width() - 1, aWindowSize.Height() - 1);
     DrawHelper::DrawBorder(rRenderContext, aBox, aPadding,
                            Theme::GetPaint(Theme::Paint_DeckBackground),
                            Theme::GetPaint(Theme::Paint_DeckBackground));
 
     // Paint the border.
     const int nBorderSize(Theme::GetInteger(Theme::Int_DeckBorderSize));
-    aBox.Left() += aPadding.Left();
-    aBox.Top() += aPadding.Top();
-    aBox.Right() -= aPadding.Right();
-    aBox.Bottom() -= aPadding.Bottom();
+    aBox.AdjustLeft(aPadding.Left() );
+    aBox.AdjustTop(aPadding.Top() );
+    aBox.AdjustRight( -(aPadding.Right()) );
+    aBox.AdjustBottom( -(aPadding.Bottom()) );
     const sfx2::sidebar::Paint& rHorizontalBorderPaint(Theme::GetPaint(Theme::Paint_HorizontalBorder));
     DrawHelper::DrawBorder(rRenderContext, aBox,
                            SvBorder(nBorderSize, nBorderSize, nBorderSize, nBorderSize),
@@ -140,13 +144,12 @@ void Deck::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rUpdateA
                            Theme::GetPaint(Theme::Paint_VerticalBorder));
 }
 
-void Deck::DataChanged (const DataChangedEvent& rEvent)
+void Deck::DataChanged (const DataChangedEvent&)
 {
-    (void)rEvent;
     RequestLayout();
 }
 
-bool Deck::Notify (NotifyEvent& rEvent)
+bool Deck::EventNotify(NotifyEvent& rEvent)
 {
     if (rEvent.GetType() == MouseNotifyEvent::COMMAND)
     {
@@ -162,10 +165,10 @@ bool Deck::Notify (NotifyEvent& rEvent)
             }
     }
 
-    return Window::Notify(rEvent);
+    return Window::EventNotify(rEvent);
 }
 
-bool Deck::ProcessWheelEvent(CommandEvent* pCommandEvent)
+bool Deck::ProcessWheelEvent(CommandEvent const * pCommandEvent)
 {
     if ( ! mpVerticalScrollBar)
         return false;
@@ -192,18 +195,18 @@ bool Deck::ProcessWheelEvent(CommandEvent* pCommandEvent)
  * This container may contain existing panels that are
  * being re-used, and new ones too.
  */
-void Deck::ResetPanels(const SharedPanelContainer& rPanels)
+void Deck::ResetPanels(const SharedPanelContainer& rPanelContainer)
 {
     // First dispose old panels we no longer need.
-    for (size_t i = 0; i < maPanels.size(); i++)
+    for (VclPtr<Panel> & rpPanel : maPanels)
     {
         bool bFound = false;
-        for (size_t j = 0; j < rPanels.size(); j++)
-            bFound = bFound || (maPanels[i].get() == rPanels[j].get());
+        for (const auto & i : rPanelContainer)
+            bFound = bFound || (rpPanel.get() == i.get());
         if (!bFound) // this one didn't survive.
-            maPanels[i].disposeAndClear();
+            rpPanel.disposeAndClear();
     }
-    maPanels = rPanels;
+    maPanels = rPanelContainer;
 
     RequestLayout();
 }
@@ -224,11 +227,11 @@ vcl::Window* Deck::GetPanelParentWindow()
 
 Panel* Deck::GetPanel(const OUString & panelId)
 {
-    for (size_t i = 0; i < maPanels.size(); i++)
+    for (VclPtr<Panel> & pPanel : maPanels)
     {
-        if(maPanels[i].get()->GetId() == panelId)
+        if(pPanel->GetId() == panelId)
         {
-            return maPanels[i].get();
+            return pPanel.get();
         }
     }
     return nullptr;
@@ -237,34 +240,33 @@ Panel* Deck::GetPanel(const OUString & panelId)
 
 void Deck::ShowPanel(const Panel& rPanel)
 {
-    if (mpVerticalScrollBar && mpVerticalScrollBar->IsVisible())
-    {
-        // Get vertical extent of the panel.
-        sal_Int32 nPanelTop (rPanel.GetPosPixel().Y());
-        const sal_Int32 nPanelBottom (nPanelTop + rPanel.GetSizePixel().Height() - 1);
-        // Add the title bar into the extent.
-        if (rPanel.GetTitleBar() != nullptr && rPanel.GetTitleBar()->IsVisible())
-            nPanelTop = rPanel.GetTitleBar()->GetPosPixel().Y();
+    if (!mpVerticalScrollBar || !mpVerticalScrollBar->IsVisible())
+        return;
 
-        // Determine what the new thumb position should be like.
-        // When the whole panel does not fit then make its top visible
-        // and it off at the bottom.
-        sal_Int32 nNewThumbPos (mpVerticalScrollBar->GetThumbPos());
-        if (nPanelBottom >= nNewThumbPos+mpVerticalScrollBar->GetVisibleSize())
-            nNewThumbPos = nPanelBottom - mpVerticalScrollBar->GetVisibleSize();
-        if (nPanelTop < nNewThumbPos)
-            nNewThumbPos = nPanelTop;
+    // Get vertical extent of the panel.
+    sal_Int32 nPanelTop (rPanel.GetPosPixel().Y());
+    const sal_Int32 nPanelBottom (nPanelTop + rPanel.GetSizePixel().Height() - 1);
+    // Add the title bar into the extent.
+    if (rPanel.GetTitleBar() && rPanel.GetTitleBar()->IsVisible())
+        nPanelTop = rPanel.GetTitleBar()->GetPosPixel().Y();
 
-        mpVerticalScrollBar->SetThumbPos(nNewThumbPos);
-        mpScrollContainer->SetPosPixel(
-            Point(
-                mpScrollContainer->GetPosPixel().X(),
-                -nNewThumbPos));
+    // Determine what the new thumb position should be like.
+    // When the whole panel does not fit then make its top visible
+    // and it off at the bottom.
+    sal_Int32 nNewThumbPos (mpVerticalScrollBar->GetThumbPos());
+    if (nPanelBottom >= nNewThumbPos+mpVerticalScrollBar->GetVisibleSize())
+        nNewThumbPos = nPanelBottom - mpVerticalScrollBar->GetVisibleSize();
+    if (nPanelTop < nNewThumbPos)
+        nNewThumbPos = nPanelTop;
 
-    }
+    mpVerticalScrollBar->SetThumbPos(nNewThumbPos);
+    mpScrollContainer->SetPosPixel(
+        Point(
+            mpScrollContainer->GetPosPixel().X(),
+            -nNewThumbPos));
 }
 
-const OUString GetWindowClassification(const vcl::Window* pWindow)
+static const OUString GetWindowClassification(const vcl::Window* pWindow)
 {
     const OUString& rsName (pWindow->GetText());
     if (!rsName.isEmpty())
@@ -279,7 +281,7 @@ const OUString GetWindowClassification(const vcl::Window* pWindow)
 
 void Deck::PrintWindowSubTree(vcl::Window* pRoot, int nIndentation)
 {
-    static const char* sIndentation = "                                                                  ";
+    static const char* const sIndentation = "                                                                  ";
     const Point aLocation (pRoot->GetPosPixel());
     const Size aSize (pRoot->GetSizePixel());
     SAL_INFO(
@@ -295,7 +297,7 @@ void Deck::PrintWindowSubTree(vcl::Window* pRoot, int nIndentation)
         PrintWindowSubTree(pRoot->GetChild(nIndex), nIndentation + 1);
 }
 
-IMPL_LINK_NOARG_TYPED(Deck, HandleVerticalScrollBarChange, ScrollBar*, void)
+IMPL_LINK_NOARG(Deck, HandleVerticalScrollBarChange, ScrollBar*, void)
 {
     const sal_Int32 nYOffset (-mpVerticalScrollBar->GetThumbPos());
     mpScrollContainer->SetPosPixel(Point(mpScrollContainer->GetPosPixel().X(),
@@ -313,16 +315,16 @@ Deck::ScrollContainerWindow::ScrollContainerWindow (vcl::Window* pParentWindow)
 #endif
 }
 
-void Deck::ScrollContainerWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rUpdateArea*/)
+void Deck::ScrollContainerWindow::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& /*rUpdateArea*/)
 {
     // Paint the separators.
     const sal_Int32 nSeparatorHeight(Theme::GetInteger(Theme::Int_DeckSeparatorHeight));
     const sal_Int32 nLeft(0);
     const sal_Int32 nRight(GetSizePixel().Width() - 1);
     const sfx2::sidebar::Paint& rHorizontalBorderPaint(Theme::GetPaint(Theme::Paint_HorizontalBorder));
-    for (std::vector<sal_Int32>::const_iterator iY(maSeparators.begin()); iY != maSeparators.end(); ++iY)
+    for (auto const& separator : maSeparators)
     {
-        DrawHelper::DrawHorizontalLine(rRenderContext, nLeft, nRight, *iY,
+        DrawHelper::DrawHorizontalLine(rRenderContext, nLeft, nRight, separator,
                                        nSeparatorHeight, rHorizontalBorderPaint);
     }
 }

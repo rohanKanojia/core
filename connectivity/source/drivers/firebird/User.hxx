@@ -12,8 +12,6 @@
 
 #include <connectivity/sdbcx/VUser.hxx>
 
-#include <com/sun/star/sdbc/XConnection.hpp>
-
 namespace connectivity
 {
     namespace firebird
@@ -29,12 +27,11 @@ namespace connectivity
             /**
              * Create a "new" descriptor, which isn't yet in the database.
              */
-            explicit User(const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XConnection >& rConnection);
+            User();
             /**
              * For a user that already exists in the db.
              */
-            User(const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XConnection >& rConnection,
-                 const ::rtl::OUString& rName);
+            User(const OUString& rName);
 
             // IRefreshableGroups::
             virtual void refreshGroups() override;

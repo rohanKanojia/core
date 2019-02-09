@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl_Module_Const.h>
+#include "osl_Module_Const.h"
 
 #include <stdio.h>
 #include <sal/types.h>
@@ -27,9 +27,9 @@
 // But we instantiate a test plugin to fake the build process.
 CPPUNIT_PLUGIN_IMPLEMENT();
 
-extern "C" SAL_DLLPUBLIC_EXPORT sal_Bool SAL_CALL firstfunc( sal_Bool )
+extern "C" SAL_DLLPUBLIC_EXPORT sal_Bool firstfunc( sal_Bool )
 {
-   return sal_True;
+   return true;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

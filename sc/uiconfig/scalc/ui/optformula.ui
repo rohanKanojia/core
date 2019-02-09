@@ -1,13 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.0 -->
-  <object class="GtkAdjustment" id="adjustment1">
-    <property name="lower">1</property>
-    <property name="upper">32000</property>
-    <property name="value">1</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
-  </object>
+<!-- Generated with glade 3.20.0 -->
+<interface domain="sc">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkGrid" id="OptFormula">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -33,7 +27,7 @@
                 <property name="row_spacing">6</property>
                 <child>
                   <object class="GtkCheckButton" id="englishfuncname">
-                    <property name="label" translatable="yes">Use English function names</property>
+                    <property name="label" translatable="yes" context="optformula|englishfuncname">Use English function names</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -44,8 +38,6 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -63,31 +55,25 @@
                       <packing>
                         <property name="left_attach">1</property>
                         <property name="top_attach">0</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkLabel" id="formulasyntaxlabel">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Formula _syntax:</property>
+                        <property name="label" translatable="yes" context="optformula|formulasyntaxlabel">Formula _syntax:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">formulasyntax</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">0</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
               </object>
@@ -98,7 +84,7 @@
           <object class="GtkLabel" id="label1">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Formula Options</property>
+            <property name="label" translatable="yes" context="optformula|label1">Formula Options</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -108,8 +94,6 @@
       <packing>
         <property name="left_attach">0</property>
         <property name="top_attach">0</property>
-        <property name="width">1</property>
-        <property name="height">1</property>
       </packing>
     </child>
     <child>
@@ -134,32 +118,28 @@
                   <object class="GtkLabel" id="label9">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">Excel 2007 and newer:</property>
+                    <property name="label" translatable="yes" context="optformula|label9">Excel 2007 and newer:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">ooxmlrecalc</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkLabel" id="label10">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">ODF spreadsheet (not saved by %PRODUCTNAME):</property>
+                    <property name="label" translatable="yes" context="optformula|label10">ODF spreadsheet (not saved by %PRODUCTNAME):</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">odfrecalc</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -167,19 +147,15 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="hexpand">True</property>
-                    <property name="entry_text_column">0</property>
-                    <property name="id_column">1</property>
                     <items>
-                      <item translatable="yes">Always recalculate</item>
-                      <item translatable="yes">Never recalculate</item>
-                      <item translatable="yes">Prompt user</item>
+                      <item translatable="yes" context="optformula|ooxmlrecalc">Always recalculate</item>
+                      <item translatable="yes" context="optformula|ooxmlrecalc">Never recalculate</item>
+                      <item translatable="yes" context="optformula|ooxmlrecalc">Prompt user</item>
                     </items>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -187,19 +163,15 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="hexpand">True</property>
-                    <property name="entry_text_column">0</property>
-                    <property name="id_column">1</property>
                     <items>
-                      <item translatable="yes">Always recalculate</item>
-                      <item translatable="yes">Never recalculate</item>
-                      <item translatable="yes">Prompt user</item>
+                      <item translatable="yes" context="optformula|odfrecalc">Always recalculate</item>
+                      <item translatable="yes" context="optformula|odfrecalc">Never recalculate</item>
+                      <item translatable="yes" context="optformula|odfrecalc">Prompt user</item>
                     </items>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
               </object>
@@ -210,7 +182,7 @@
           <object class="GtkLabel" id="label4">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Recalculation on File Load</property>
+            <property name="label" translatable="yes" context="optformula|label4">Recalculation on File Load</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -220,8 +192,6 @@
       <packing>
         <property name="left_attach">0</property>
         <property name="top_attach">3</property>
-        <property name="width">1</property>
-        <property name="height">1</property>
       </packing>
     </child>
     <child>
@@ -246,7 +216,7 @@
                 <property name="row_spacing">6</property>
                 <child>
                   <object class="GtkRadioButton" id="calcdefault">
-                    <property name="label" translatable="yes">Default settings</property>
+                    <property name="label" translatable="yes" context="optformula|calcdefault">Default settings</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -258,8 +228,6 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -269,7 +237,7 @@
                     <property name="column_spacing">12</property>
                     <child>
                       <object class="GtkRadioButton" id="calccustom">
-                        <property name="label" translatable="yes">Custom (use OpenCL, conversion of text to numbers, and more):</property>
+                        <property name="label" translatable="yes" context="optformula|calccustom">Custom (conversion of text to numbers and more):</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -281,13 +249,11 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">0</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkButton" id="details">
-                        <property name="label" translatable="yes">Details…</property>
+                        <property name="label" translatable="yes" context="optformula|details">Details…</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
@@ -296,16 +262,12 @@
                       <packing>
                         <property name="left_attach">1</property>
                         <property name="top_attach">0</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
               </object>
@@ -316,7 +278,7 @@
           <object class="GtkLabel" id="label2">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Detailed Calculation Settings</property>
+            <property name="label" translatable="yes" context="optformula|label2">Detailed Calculation Settings</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -326,8 +288,6 @@
       <packing>
         <property name="left_attach">0</property>
         <property name="top_attach">2</property>
-        <property name="width">1</property>
-        <property name="height">1</property>
       </packing>
     </child>
     <child>
@@ -355,101 +315,83 @@
                   <object class="GtkLabel" id="label6">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Function:</property>
+                    <property name="label" translatable="yes" context="optformula|label6">_Function:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">function</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkLabel" id="label7">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">Array co_lumn:</property>
+                    <property name="label" translatable="yes" context="optformula|label7">Array co_lumn:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">arraycolumn</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkLabel" id="label8">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">Array _row:</property>
+                    <property name="label" translatable="yes" context="optformula|label8">Array _row:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">arrayrow</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkEntry" id="function">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
-                    <property name="hexpand">True</property>
-                    <property name="invisible_char">●</property>
-                    <property name="width_chars">10</property>
-                    <property name="invisible_char_set">True</property>
+                    <property name="width_chars">5</property>
+                    <property name="max_width_chars">1</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkEntry" id="arraycolumn">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
-                    <property name="hexpand">True</property>
-                    <property name="invisible_char">●</property>
-                    <property name="width_chars">10</property>
-                    <property name="invisible_char_set">True</property>
+                    <property name="width_chars">5</property>
+                    <property name="max_width_chars">1</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkEntry" id="arrayrow">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
-                    <property name="hexpand">True</property>
-                    <property name="invisible_char">●</property>
-                    <property name="width_chars">10</property>
-                    <property name="invisible_char_set">True</property>
+                    <property name="width_chars">5</property>
+                    <property name="max_width_chars">1</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkButton" id="reset">
-                    <property name="label" translatable="yes">Rese_t Separators Settings</property>
+                    <property name="label" translatable="yes" context="optformula|reset">Rese_t Separators Settings</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
@@ -459,8 +401,6 @@
                   <packing>
                     <property name="left_attach">2</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -477,7 +417,7 @@
           <object class="GtkLabel" id="label3">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Separators</property>
+            <property name="label" translatable="yes" context="optformula|label3">Separators</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -487,8 +427,6 @@
       <packing>
         <property name="left_attach">0</property>
         <property name="top_attach">1</property>
-        <property name="width">1</property>
-        <property name="height">1</property>
       </packing>
     </child>
   </object>
@@ -497,5 +435,12 @@
       <widget name="grid7"/>
       <widget name="grid8"/>
     </widgets>
+  </object>
+  <object class="GtkAdjustment" id="adjustment1">
+    <property name="lower">1</property>
+    <property name="upper">32000</property>
+    <property name="value">1</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
   </object>
 </interface>

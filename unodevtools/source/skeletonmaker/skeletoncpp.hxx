@@ -21,7 +21,7 @@
 
 #include <fstream>
 
-#include "codemaker/generatedtypeset.hxx"
+#include <codemaker/generatedtypeset.hxx>
 #include "skeletoncommon.hxx"
 
 namespace skeletonmaker { namespace cpp {
@@ -43,8 +43,8 @@ void printMethods(std::ostream & o,
                   OUString const & name,
                   codemaker::GeneratedTypeSet & generated,
                   OString const & delegate,
-                  OString const & classname=OString(),
-                  OString const & indentation=OString(),
+                  OString const & classname,
+                  OString const & indentation,
                   bool defaultvalue=false,
                   OUString const & propertyhelper=OUString());
 

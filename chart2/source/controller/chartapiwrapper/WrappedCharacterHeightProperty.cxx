@@ -18,9 +18,10 @@
  */
 
 #include "WrappedCharacterHeightProperty.hxx"
-#include "macros.hxx"
-#include "RelativeSizeHelper.hxx"
+#include <RelativeSizeHelper.hxx>
 #include "ReferenceSizePropertyProvider.hxx"
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XPropertyState.hpp>
 #include <osl/diagnose.h>
 
 using namespace ::com::sun::star;
@@ -42,16 +43,15 @@ WrappedCharacterHeightProperty_Base::~WrappedCharacterHeightProperty_Base()
 {
 }
 
-void WrappedCharacterHeightProperty::addWrappedProperties( std::vector< WrappedProperty* >& rList
+void WrappedCharacterHeightProperty::addWrappedProperties( std::vector< std::unique_ptr<WrappedProperty> >& rList
             , ReferenceSizePropertyProvider* pRefSizePropProvider  )
 {
-    rList.push_back( new WrappedCharacterHeightProperty( pRefSizePropProvider ) );
-    rList.push_back( new WrappedAsianCharacterHeightProperty( pRefSizePropProvider ) );
-    rList.push_back( new WrappedComplexCharacterHeightProperty( pRefSizePropProvider ) );
+    rList.emplace_back( new WrappedCharacterHeightProperty( pRefSizePropProvider ) );
+    rList.emplace_back( new WrappedAsianCharacterHeightProperty( pRefSizePropProvider ) );
+    rList.emplace_back( new WrappedComplexCharacterHeightProperty( pRefSizePropProvider ) );
 }
 
 void WrappedCharacterHeightProperty_Base::setPropertyValue( const Any& rOuterValue, const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException)
 {
     if(xInnerPropertySet.is())
     {
@@ -62,7 +62,6 @@ void WrappedCharacterHeightProperty_Base::setPropertyValue( const Any& rOuterVal
 }
 
 Any WrappedCharacterHeightProperty_Base::getPropertyValue( const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
     Any aRet;
     if( xInnerPropertySet.is() )
@@ -87,7 +86,6 @@ Any WrappedCharacterHeightProperty_Base::getPropertyValue( const Reference< bean
 }
 
 Any WrappedCharacterHeightProperty_Base::getPropertyDefault( const Reference< beans::XPropertyState >& xInnerPropertyState ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
     Any aRet;
     if( xInnerPropertyState.is() )
@@ -98,7 +96,6 @@ Any WrappedCharacterHeightProperty_Base::getPropertyDefault( const Reference< be
 }
 
 beans::PropertyState WrappedCharacterHeightProperty_Base::getPropertyState( const Reference< beans::XPropertyState >& /*xInnerPropertyState*/ ) const
-                        throw (beans::UnknownPropertyException, uno::RuntimeException)
 {
     return beans::PropertyState_DIRECT_VALUE;
 }

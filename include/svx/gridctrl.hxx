@@ -26,6 +26,7 @@
 #include <com/sun/star/util/XNumberFormatter.hpp>
 #include <com/sun/star/util/Date.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <vcl/fixed.hxx>
 #include <vcl/field.hxx>
 
@@ -34,8 +35,10 @@
 #include <svtools/editbrowsebox.hxx>
 #include <osl/mutex.hxx>
 #include <comphelper/propmultiplex.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <svx/svxdllapi.h>
+#include <o3tl/typed_flags_set.hxx>
+#include <memory>
 #include <vector>
 
 class DbGridControl;
@@ -48,12 +51,12 @@ namespace svxform
     class DataColumn;
 }
 
-enum GridRowStatus
+enum class GridRowStatus
 {
-    GRS_CLEAN,
-    GRS_MODIFIED,
-    GRS_DELETED,
-    GRS_INVALID
+    Clean,
+    Modified,
+    Deleted,
+    Invalid
 };
 
 
@@ -63,18 +66,18 @@ enum GridRowStatus
 class DbGridRow : public SvRefBase
 {
     css::uno::Any  m_aBookmark;        // Bookmark of the row, can be set
-    ::std::vector< ::svxform::DataColumn* >
+    ::std::vector< std::unique_ptr<::svxform::DataColumn> >
                                 m_aVariants;
     GridRowStatus               m_eStatus;
     bool                        m_bIsNew;
                                                     // row is no longer valid
                                                     // is removed on the next positioning
 public:
-    DbGridRow():m_eStatus(GRS_CLEAN), m_bIsNew(true) { }
+    DbGridRow();
     DbGridRow(CursorWrapper* pCur, bool bPaintCursor);
     void SetState(CursorWrapper* pCur, bool bPaintCursor);
 
-    virtual ~DbGridRow();
+    virtual ~DbGridRow() override;
 
     bool HasField(sal_uInt32 nPos) const { return nPos < m_aVariants.size(); }
     const ::svxform::DataColumn& GetField(sal_uInt32 nPos) const { return *m_aVariants[ nPos ]; }
@@ -86,8 +89,8 @@ public:
 
     const css::uno::Any& GetBookmark() const { return m_aBookmark; }
 
-    bool    IsValid() const { return m_eStatus == GRS_CLEAN || m_eStatus == GRS_MODIFIED; }
-    bool    IsModified() const { return m_eStatus == GRS_MODIFIED; }
+    bool    IsValid() const { return m_eStatus == GridRowStatus::Clean || m_eStatus == GridRowStatus::Modified; }
+    bool    IsModified() const { return m_eStatus == GridRowStatus::Modified; }
 };
 
 typedef tools::SvRef<DbGridRow> DbGridRowRef;
@@ -96,8 +99,6 @@ typedef tools::SvRef<DbGridRow> DbGridRowRef;
 // DbGridControl
 
 class DbGridColumn;
-typedef ::std::vector< DbGridColumn* > DbGridColumns;
-
 
 class FmGridListener
 {
@@ -114,20 +115,54 @@ protected:
 
 // InitWindowFacet, describing which aspect of a column's Window to (re-)initialize
 
-enum InitWindowFacet
+enum class InitWindowFacet
 {
-    InitFontFacet   = 0x01,
-    InitForeground  = 0x02,
-    InitBackground  = 0x04,
-    InitWritingMode = 0x08,
-    InitAll         = 0xFF
+    Font        = 0x01,
+    Foreground  = 0x02,
+    Background  = 0x04,
+    WritingMode = 0x08,
+    All         = 0x0F
 };
+namespace o3tl
+{
+    template<> struct typed_flags<InitWindowFacet> : is_typed_flags<InitWindowFacet, 0x0f> {};
+}
 
+
+// these options are or'ed and indicate, which of the single
+// features can be released, default is readonly which means 0
+enum class DbGridControlOptions
+{
+    Readonly    = 0x00,
+    Insert      = 0x01,
+    Update      = 0x02,
+    Delete      = 0x04
+};
+namespace o3tl
+{
+    template<> struct typed_flags<DbGridControlOptions> : is_typed_flags<DbGridControlOptions, 0x07> {};
+}
+
+//  StatusIds for Controls of the Bar
+//  important for invalidation
+enum class DbGridControlNavigationBarState
+{
+    NONE,
+    Text,
+    Absolute,
+    Of,
+    Count,
+    First,
+    Next,
+    Prev,
+    Last,
+    New,
+    Undo // related to SID_FM_RECORD_UNDO
+};
 
 class FmXGridSourcePropListener;
 class DisposeListenerGridBridge;
-typedef ::svt::EditBrowseBox    DbGridControl_Base;
-class SVX_DLLPUBLIC DbGridControl : public DbGridControl_Base
+class SVX_DLLPUBLIC DbGridControl : public svt::EditBrowseBox
 {
     friend class FmXGridSourcePropListener;
     friend class GridFieldValueListener;
@@ -142,7 +177,7 @@ public:
         class AbsolutePos : public NumericField
         {
         public:
-            AbsolutePos(vcl::Window* pParent, WinBits nStyle = 0);
+            AbsolutePos(vcl::Window* pParent, WinBits nStyle);
 
             virtual void KeyInput(const KeyEvent& rEvt) override;
             virtual void LoseFocus() override;
@@ -150,7 +185,7 @@ public:
 
         friend class NavigationBar::AbsolutePos;
 
-        //  zusaetzliche Controls
+        //  additional controls
         VclPtr<FixedText>    m_aRecordText;
         VclPtr<AbsolutePos>  m_aAbsolute;            // absolute positioning
         VclPtr<FixedText>    m_aRecordOf;
@@ -166,64 +201,38 @@ public:
         bool                 m_bPositioning;     // protect PositionDataSource against recursion
 
     public:
-        //  StatusIds for Controls of the Bar
-        //  important for invalidation
-        enum State
-        {
-            RECORD_TEXT = 1,
-            RECORD_ABSOLUTE,
-            RECORD_OF,
-            RECORD_COUNT,
-            RECORD_FIRST,
-            RECORD_NEXT,
-            RECORD_PREV,
-            RECORD_LAST,
-            RECORD_NEW
-        };
-
         NavigationBar(vcl::Window* pParent);
-        virtual ~NavigationBar();
+        virtual ~NavigationBar() override;
         virtual void dispose() override;
 
         // Status methods for Controls
-        void InvalidateAll(sal_Int32 nCurrentPos = -1, bool bAll = false);
-        void InvalidateState(sal_uInt16 nWhich) {SetState(nWhich);}
-        void SetState(sal_uInt16 nWhich);
-        bool GetState(sal_uInt16 nWhich) const;
+        void InvalidateAll(sal_Int32 nCurrentPos, bool bAll = false);
+        void InvalidateState(DbGridControlNavigationBarState nWhich) {SetState(nWhich);}
+        void SetState(DbGridControlNavigationBarState nWhich);
+        bool GetState(DbGridControlNavigationBarState nWhich) const;
         sal_uInt16 ArrangeControls();
 
     protected:
         virtual void Resize() override;
-        virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+        virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
         virtual void StateChanged( StateChangedType nType ) override;
 
     private:
-        DECL_LINK_TYPED(OnClick, Button*, void);
+        DECL_LINK(OnClick, Button*, void);
 
         void PositionDataSource(sal_Int32 nRecord);
     };
 
     friend class DbGridControl::NavigationBar;
 
-public:
-    // these options are or'ed and indicate, which of the single
-    // features can be released, default is readonly which means 0
-    enum Option
-    {
-        OPT_READONLY    = 0x00,
-        OPT_INSERT      = 0x01,
-        OPT_UPDATE      = 0x02,
-        OPT_DELETE      = 0x04
-    };
-
 private:
-    Link<sal_uInt16,int>   m_aMasterStateProvider;
-    Link<sal_uInt16,bool>   m_aMasterSlotExecutor;
+    Link<DbGridControlNavigationBarState,int>    m_aMasterStateProvider;
+    Link<DbGridControlNavigationBarState,bool>   m_aMasterSlotExecutor;
 
     css::uno::Reference< css::util::XNumberFormatter >    m_xFormatter;
     css::uno::Reference< css::uno::XComponentContext >    m_xContext;
 
-    DbGridColumns   m_aColumns;         // Column description
+    std::vector< std::unique_ptr<DbGridColumn> > m_aColumns;         // Column description
     VclPtr<NavigationBar>   m_aBar;
     DbGridRowRef    m_xDataRow;         // Row which can be modified
                                         // comes from the data cursor
@@ -237,7 +246,7 @@ private:
     // if we modify the row for the new record, we automatically insert a "new new row".
     // But if somebody else inserts a new record into the data source, we have to do the same.
     // For that reason we have to listen to some properties of our data source.
-    ::comphelper::OPropertyChangeMultiplexer*       m_pDataSourcePropMultiplexer;
+    rtl::Reference<::comphelper::OPropertyChangeMultiplexer>  m_pDataSourcePropMultiplexer;
     FmXGridSourcePropListener*                      m_pDataSourcePropListener;
     css::uno::Reference< css::sdb::XRowsChangeListener>
                                                     m_xRowSetListener; // get notification when rows were changed
@@ -245,16 +254,16 @@ private:
     void*                                           m_pFieldListeners;
         // property listeners for field values
 
-    DisposeListenerGridBridge*                      m_pCursorDisposeListener;
-        // need to know about the diposing of the seek cursor
+    std::unique_ptr<DisposeListenerGridBridge>      m_pCursorDisposeListener;
+        // need to know about the disposing of the seek cursor
         // construct analogous to the data source proplistener/multiplexer above :
         // DisposeListenerGridBridge is a bridge from FmXDisposeListener which I don't want to be derived from
 
     FmGridListener*                                 m_pGridListener;
 
 protected:
-    CursorWrapper*  m_pDataCursor;      // Cursor for Updates
-    CursorWrapper*  m_pSeekCursor;      // Cursor for Seeking
+    std::unique_ptr<CursorWrapper> m_pDataCursor;      // Cursor for Updates
+    std::unique_ptr<CursorWrapper> m_pSeekCursor;      // Cursor for Seeking
 
 private:
     // iteration variables
@@ -272,25 +281,22 @@ private:
     BrowserMode         m_nMode;
     sal_Int32           m_nCurrentPos;      // Current position;
     ImplSVEvent *       m_nDeleteEvent;     // EventId for asychronous deletion of rows
-    sal_uInt16          m_nOptions;         // What is the able to do (Insert, Update, Delete)
-                                        // default readonly
-    sal_uInt16          m_nOptionMask;      // the mask of options to be enabled in setDataSource
-                                        // (with respect to the data source capabilities)
-                                        // defaults to (insert | update | delete)
+    DbGridControlOptions m_nOptions;        // What is the able to do (Insert, Update, Delete)
+                                            // default readonly
+    DbGridControlOptions m_nOptionMask;     // the mask of options to be enabled in setDataSource
+                                            // (with respect to the data source capabilities)
+                                            // defaults to (insert | update | delete)
     sal_uInt16          m_nLastColId;
     long                m_nLastRowId;
 
     bool                m_bDesignMode : 1;      // default = sal_False
     bool                m_bRecordCountFinal : 1;
-    bool                m_bMultiSelection   : 1;
     bool                m_bNavigationBar      : 1;
 
     bool                m_bSynchDisplay : 1;
-    bool                m_bForceROController : 1;
     bool                m_bHandle : 1;
     bool                m_bFilterMode : 1;
     bool                m_bWantDestruction : 1;
-    bool                m_bInAdjustDataSource : 1;
     bool                m_bPendingAdjustRows : 1;   // if an async adjust is pending, is it for AdjustRows or AdjustDataSource ?
     bool                m_bHideScrollbars : 1;
 
@@ -300,8 +306,7 @@ protected:
 protected:
     virtual bool SeekRow(long nRow) override;
     virtual void VisibleRowsChanged( long nNewTopRow, sal_uInt16 nNumRows) override;
-    virtual void PaintStatusCell(OutputDevice& rDev, const Rectangle& rRect) const override;
-    virtual void PaintCell(OutputDevice& rDev, const Rectangle& rRect, sal_uInt16 nColId) const override;
+    virtual void PaintCell(OutputDevice& rDev, const tools::Rectangle& rRect, sal_uInt16 nColId) const override;
     virtual RowStatus GetRowStatus(long nRow) const override;
     virtual bool CursorMoving(long nNewRow, sal_uInt16 nNewCol) override;
     virtual void CursorMoved() override;
@@ -320,9 +325,9 @@ protected:
     virtual bool SaveModified() override;
     virtual bool IsModified() const override;
 
-    virtual sal_uInt16 AppendColumn(const OUString& rName, sal_uInt16 nWidth = 0, sal_uInt16 nPos = HEADERBAR_APPEND, sal_uInt16 nId = (sal_uInt16)-1) override;
+    virtual sal_uInt16 AppendColumn(const OUString& rName, sal_uInt16 nWidth, sal_uInt16 nPos = HEADERBAR_APPEND, sal_uInt16 nId = sal_uInt16(-1)) override;
     void RemoveColumn(sal_uInt16 nId);
-    DbGridColumn* CreateColumn(sal_uInt16 nId) const;
+    std::unique_ptr<DbGridColumn> CreateColumn(sal_uInt16 nId) const;
     virtual void ColumnMoved(sal_uInt16 nId) override;
     virtual bool SaveRow() override;
     virtual bool IsTabAllowed(bool bForward) const override;
@@ -344,12 +349,13 @@ protected:
     */
     virtual void PostExecuteRowContextMenu(sal_uInt16 nRow, const PopupMenu& rMenu, sal_uInt16 nExecutionResult);
 
-    void DataSourcePropertyChanged(const css::beans::PropertyChangeEvent& evt) throw(css::uno::RuntimeException, std::exception);
+    /// @throws css::uno::RuntimeException
+    void DataSourcePropertyChanged(const css::beans::PropertyChangeEvent& evt);
 
-    void FieldValueChanged(sal_uInt16 _nId, const css::beans::PropertyChangeEvent& _evt);
+    void FieldValueChanged(sal_uInt16 _nId);
     void FieldListenerDisposing(sal_uInt16 _nId);
 
-    void disposing(sal_uInt16 _nId, const css::lang::EventObject& _rEvt);
+    void disposing(sal_uInt16 _nId);
 
     // own overridables
     /// called when the current row changed
@@ -364,11 +370,11 @@ protected:
 
 public:
     DbGridControl(
-        css::uno::Reference< css::uno::XComponentContext >,
+        css::uno::Reference< css::uno::XComponentContext > const & _rxContext,
         vcl::Window* pParent,
-        WinBits nBits = WB_BORDER);
+        WinBits nBits);
 
-    virtual ~DbGridControl();
+    virtual ~DbGridControl() override;
     virtual void dispose() override;
 
     virtual void Init() override;
@@ -392,11 +398,11 @@ public:
     // the data source
     // the options can restrict but not extend the update abilities
     void setDataSource(const css::uno::Reference< css::sdbc::XRowSet >& rCursor,
-        sal_uInt16 nOpts = OPT_INSERT | OPT_UPDATE | OPT_DELETE);
+        DbGridControlOptions nOpts = DbGridControlOptions::Insert | DbGridControlOptions::Update | DbGridControlOptions::Delete);
     virtual void Dispatch(sal_uInt16 nId) override;
 
-    CursorWrapper* getDataSource() const {return m_pDataCursor;}
-    const DbGridColumns& GetColumns() const {return m_aColumns;}
+    CursorWrapper* getDataSource() const {return m_pDataCursor.get();}
+    const std::vector< std::unique_ptr<DbGridColumn> >& GetColumns() const {return m_aColumns;}
 
     void EnableHandle(bool bEnable);
     bool HasHandle() const {return m_bHandle;}
@@ -412,7 +418,7 @@ public:
 
     // the number of columns in the model
     sal_uInt16 GetViewColCount() const { return ColCount() - 1; }
-    sal_uInt16 GetModelColCount() const { return (sal_uInt16)m_aColumns.size(); }
+    sal_uInt16 GetModelColCount() const { return static_cast<sal_uInt16>(m_aColumns.size()); }
     // reverse to GetViewColumnPos: Id of position, the first non-handle column has position 0
     sal_uInt16 GetColumnIdFromViewPos( sal_uInt16 nPos ) const { return GetColumnId(nPos + 1); }
     sal_uInt16 GetColumnIdFromModelPos( sal_uInt16 nPos ) const;
@@ -428,9 +434,9 @@ public:
     void EnableNavigationBar(bool bEnable);
     bool HasNavigationBar() const {return m_bNavigationBar;}
 
-    sal_uInt16 GetOptions() const {return m_nOptions;}
+    DbGridControlOptions GetOptions() const {return m_nOptions;}
     NavigationBar& GetNavigationBar() {return *m_aBar.get();}
-    sal_uInt16 SetOptions(sal_uInt16 nOpt);
+    DbGridControlOptions SetOptions(DbGridControlOptions nOpt);
         // The new options are interpreted with respect to the current data source. If it is unable
         // to update, to insert or to restore, the according options are ignored. If the grid isn't
         // connected to a data source, all options except OPT_READONLY are ignored.
@@ -460,7 +466,7 @@ public:
 
     void RowRemoved( long nRow, long nNumRows = 1, bool bDoPaint = true );
     void RowInserted( long nRow, long nNumRows = 1, bool bDoPaint = true );
-    void RowModified( long nRow, sal_uInt16 nColId = USHRT_MAX );
+    void RowModified( long nRow );
 
     void resetCurrentRow();
 
@@ -473,13 +479,13 @@ public:
 
     const DbGridRowRef& GetCurrentRow() const {return m_xCurrentRow;}
 
-    void SetStateProvider(const Link<sal_uInt16,int>& rProvider) { m_aMasterStateProvider = rProvider; }
+    void SetStateProvider(const Link<DbGridControlNavigationBarState,int>& rProvider) { m_aMasterStateProvider = rProvider; }
         // if this link is set the given provider will be asked for the state of my items.
         // the return values are interpreted as follows :
         // <0 -> not specified (use default mechanism to determine the state)
         // ==0 -> the item is disabled
         // >0 -> the item is enabled
-    void SetSlotExecutor(const Link<sal_uInt16,bool>& rExecutor) { m_aMasterSlotExecutor = rExecutor; }
+    void SetSlotExecutor(const Link<DbGridControlNavigationBarState,bool>& rExecutor) { m_aMasterSlotExecutor = rExecutor; }
         // analogous : if this link is set, all nav-bar slots will be routed through it when executed
         // if the handler returns nonzero, no further handling of the slot occurs
 
@@ -494,30 +500,29 @@ public:
     */
     void        ForceHideScrollbars();
 
-    css::uno::Reference< css::uno::XComponentContext >
+    const css::uno::Reference< css::uno::XComponentContext >&
         getContext() const { return m_xContext; }
 
     /// returns <TRUE/> if the text of the given cell can be copied into the clipboard
-    bool    canCopyCellText(sal_Int32 _nRow, sal_Int16 _nColId);
+    bool    canCopyCellText(sal_Int32 _nRow, sal_uInt16 _nColId);
     /// copies the text of the given cell into the clipboard
-    void        copyCellText(sal_Int32 _nRow, sal_Int16 _nColId);
+    void        copyCellText(sal_Int32 _nRow, sal_uInt16 _nColId);
 
     // select in listener handling
     void                        setGridListener( FmGridListener* _pListener ) { m_pGridListener = _pListener; }
 
     // helper class to grant access to selected methods from within the DbCellControl class
-    struct GrantControlAccess
+    struct GrantControlAccess final
     {
         friend class DbCellControl;
         friend class RowSetEventListener;
-    protected:
         GrantControlAccess() { }
     };
 
     /// called when a controller needs to be re-initialized
     void refreshController(sal_uInt16 _nColId, GrantControlAccess _aAccess);
 
-    CursorWrapper* GetSeekCursor(GrantControlAccess /*_aAccess*/) const    { return m_pSeekCursor; }
+    CursorWrapper* GetSeekCursor(GrantControlAccess /*_aAccess*/) const    { return m_pSeekCursor.get(); }
     const DbGridRowRef& GetSeekRow(GrantControlAccess /*_aAccess*/) const  { return m_xSeekRow;    }
     void  SetSeekPos(sal_Int32 nPos,GrantControlAccess /*_aAccess*/) {m_nSeekPos = nPos;}
 
@@ -554,9 +559,9 @@ protected:
     sal_Int32 AlignSeekCursor();
     bool SetCurrent(long nNewRow);
 
-    OUString GetCurrentRowCellText(DbGridColumn* pCol,const DbGridRowRef& _rRow) const;
+    OUString GetCurrentRowCellText(DbGridColumn const * pCol,const DbGridRowRef& _rRow) const;
     virtual void DeleteSelectedRows();
-    static bool IsValid(const DbGridRowRef& _xRow) { return _xRow && _xRow->IsValid(); }
+    static bool IsValid(const DbGridRowRef& _xRow) { return _xRow.is() && _xRow->IsValid(); }
 
     // row which is currently being appended
     bool IsCurrentAppending() const;
@@ -581,9 +586,9 @@ protected:
 
 protected:
     void ImplInitWindow( const InitWindowFacet _eInitWhat );
-    DECL_LINK_TYPED(OnDelete, void*, void);
+    DECL_LINK(OnDelete, void*, void);
 
-    DECL_LINK_TYPED(OnAsyncAdjust, void*, void);
+    DECL_LINK(OnAsyncAdjust, void*, void);
         // if the param is != NULL, AdjustRows will be called, else AdjustDataSource
 
 private:

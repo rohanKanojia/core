@@ -19,49 +19,55 @@
 #ifndef INCLUDED_SW_INC_DOCARY_HXX
 #define INCLUDED_SW_INC_DOCARY_HXX
 
-#include <com/sun/star/i18n/ForbiddenCharacters.hpp>
 #include <vector>
-#include <set>
-#include <algorithm>
+#include <type_traits>
 #include <o3tl/sorted_vector.hxx>
+
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/composite_key.hpp>
+#include <boost/multi_index/identity.hpp>
+#include <boost/multi_index/mem_fun.hpp>
+#include <boost/multi_index/ordered_index.hpp>
+#include <boost/multi_index/random_access_index.hpp>
+
+#include "fmtcol.hxx"
+#include "frmfmt.hxx"
+#include "section.hxx"
+#include "tox.hxx"
+#include "numrule.hxx"
+#include "fldbas.hxx"
 
 class SwRangeRedline;
 class SwExtraRedline;
-class SwUnoCursor;
 class SwOLENode;
 class SwTable;
 class SwTableLine;
 class SwTableBox;
+struct SwPosition;
 
-namespace com { namespace sun { namespace star { namespace i18n {
-    struct ForbiddenCharacters;    ///< comes from the I18N UNO interface
-}}}}
-
-#include <swtypes.hxx>
-#include <ndarr.hxx>
-#include <charfmt.hxx>
-#include <fmtcol.hxx>
-#include <frmfmt.hxx>
-#include <section.hxx>
-#include <fldbas.hxx>
-#include <tox.hxx>
-#include <numrule.hxx>
-
-/** provides some methods for generic operations on lists that contain
-SwFormat* subclasses. */
+/** provides some methods for generic operations on lists that contain SwFormat* subclasses. */
 class SwFormatsBase
 {
 public:
     virtual size_t GetFormatCount() const = 0;
     virtual SwFormat* GetFormat(size_t idx) const = 0;
     virtual ~SwFormatsBase() {};
+
+    SwFormatsBase() = default;
+    SwFormatsBase(SwFormatsBase const &) = default;
+    SwFormatsBase(SwFormatsBase &&) = default;
+    SwFormatsBase & operator =(SwFormatsBase const &) = default;
+    SwFormatsBase & operator =(SwFormatsBase &&) = default;
 };
 
 template<typename Value>
-class SwVectorModifyBase : public std::vector<Value>
+class SwVectorModifyBase
 {
 public:
+    typedef typename std::vector<Value>::iterator iterator;
     typedef typename std::vector<Value>::const_iterator const_iterator;
+    typedef typename std::vector<Value>::size_type size_type;
+    typedef typename std::vector<Value>::value_type value_type;
 
 protected:
     enum class DestructorPolicy {
@@ -70,6 +76,7 @@ protected:
     };
 
 private:
+    typename std::vector<Value> mvVals;
     const DestructorPolicy mPolicy;
 
 protected:
@@ -78,8 +85,27 @@ protected:
         : mPolicy(policy) {}
 
 public:
-    using std::vector<Value>::begin;
-    using std::vector<Value>::end;
+    bool empty() const { return mvVals.empty(); }
+    Value const& front() const { return mvVals.front(); }
+    size_t size() const { return mvVals.size(); }
+    iterator begin() { return mvVals.begin(); }
+    const_iterator begin() const { return mvVals.begin(); }
+    iterator end() { return mvVals.end(); }
+    const_iterator end() const { return mvVals.end(); }
+    void clear() { mvVals.clear(); }
+    iterator erase(iterator aIt) { return mvVals.erase(aIt); }
+    iterator erase(iterator aFirst, iterator aLast) { return mvVals.erase(aFirst, aLast); }
+    iterator insert(iterator aIt, Value const& rVal) { return mvVals.insert(aIt, rVal); }
+    template<typename TInputIterator>
+    void insert(iterator aIt, TInputIterator aFirst, TInputIterator aLast)
+    {
+        mvVals.insert(aIt, aFirst, aLast);
+    }
+    void push_back(Value const& rVal) { mvVals.push_back(rVal); }
+    void reserve(size_type nSize) { mvVals.reserve(nSize); }
+    Value const& at(size_type nPos) const { return mvVals.at(nPos); }
+    Value const& operator[](size_type nPos) const { return mvVals[nPos]; }
+    Value& operator[](size_type nPos) { return mvVals[nPos]; }
 
     // free any remaining child objects based on mPolicy
     virtual ~SwVectorModifyBase()
@@ -89,6 +115,14 @@ public:
                 delete *it;
     }
 
+    //TODO: These functions are apparently brittle (but the copy functions are actually used by the
+    // code; the move functions will be implicitly-defined as deleted anyway) and should probably
+    // only be used with DestructorPolicy::KeepELements:
+    SwVectorModifyBase(SwVectorModifyBase const &) = default;
+    SwVectorModifyBase(SwVectorModifyBase &&) = default;
+    SwVectorModifyBase & operator =(SwVectorModifyBase const &) = default;
+    SwVectorModifyBase & operator =(SwVectorModifyBase &&) = default;
+
     void DeleteAndDestroy(int aStartIdx, int aEndIdx)
     {
         if (aEndIdx < aStartIdx)
@@ -96,7 +130,7 @@ public:
         for (const_iterator it = begin() + aStartIdx;
                             it != begin() + aEndIdx; ++it)
             delete *it;
-        this->erase( begin() + aStartIdx, begin() + aEndIdx);
+        erase( begin() + aStartIdx, begin() + aEndIdx);
     }
 
     size_t GetPos(Value const& p) const
@@ -105,7 +139,8 @@ public:
         return it == end() ? SIZE_MAX : it - begin();
     }
 
-    bool Contains(Value const& p) const
+    /// check that given format is still alive (i.e. contained here)
+    bool IsAlive(typename std::remove_pointer<Value>::type const*const p) const
         { return std::find(begin(), end(), p) != end(); }
 
     static void dumpAsXml(struct _xmlTextWriter* /*pWriter*/) {};
@@ -121,16 +156,19 @@ protected:
 
 public:
     virtual size_t GetFormatCount() const override
-        { return std::vector<Value>::size(); }
+        { return SwVectorModifyBase<Value>::size(); }
 
     virtual Value GetFormat(size_t idx) const override
-        { return std::vector<Value>::operator[](idx); }
+        { return SwVectorModifyBase<Value>::operator[](idx); }
 
-    inline size_t GetPos(const SwFormat *p) const
+    size_t GetPos(const SwFormat *p) const
         { return SwVectorModifyBase<Value>::GetPos( static_cast<Value>( const_cast<SwFormat*>( p ) ) ); }
-    inline bool Contains(const SwFormat *p) const {
-        Value p2 = dynamic_cast<Value>(const_cast<SwFormat*>(p));
-        return p2 != nullptr && SwVectorModifyBase<Value>::Contains(p2);
+
+    /// check if given format is contained here
+    /// @precond pFormat must not have been deleted
+    bool ContainsFormat(SwFormat const*const pFormat) const {
+        Value p = dynamic_cast<Value>(const_cast<SwFormat*>(pFormat));
+        return p != nullptr && SwVectorModifyBase<Value>::IsAlive(p);
     }
 };
 
@@ -140,11 +178,107 @@ public:
     SwGrfFormatColls() : SwFormatsModifyBase( DestructorPolicy::KeepElements ) {}
 };
 
+// Like o3tl::find_partialorder_ptrequals
+// We don't allow duplicated object entries!
+struct type_name_key:boost::multi_index::composite_key<
+    SwFrameFormat*,
+    boost::multi_index::const_mem_fun<SwFormat,sal_uInt16,&SwFormat::Which>,
+    boost::multi_index::const_mem_fun<SwFormat,const OUString&,&SwFormat::GetName>,
+    boost::multi_index::identity<SwFrameFormat*> // the actual object pointer
+>{};
+
+typedef boost::multi_index_container<
+        SwFrameFormat*,
+        boost::multi_index::indexed_by<
+            boost::multi_index::random_access<>,
+            boost::multi_index::ordered_unique< type_name_key >
+        >
+    >
+    SwFrameFormatsBase;
+
 /// Specific frame formats (frames, DrawObjects).
-class SW_DLLPUBLIC SwFrameFormats : public SwFormatsModifyBase<SwFrameFormat*>
+class SW_DLLPUBLIC SwFrameFormats : public SwFormatsBase
+{
+    // function updating ByName index via modify
+    friend void SwFrameFormat::SetName( const OUString&, bool );
+
+    typedef SwFrameFormatsBase::nth_index<0>::type ByPos;
+    typedef SwFrameFormatsBase::nth_index<1>::type ByTypeAndName;
+    typedef ByPos::iterator iterator;
+
+    SwFrameFormatsBase   m_Array;
+    ByPos               &m_PosIndex;
+    ByTypeAndName       &m_TypeAndNameIndex;
+
+public:
+    typedef ByPos::const_iterator const_iterator;
+    typedef ByTypeAndName::const_iterator const_range_iterator;
+    typedef SwFrameFormatsBase::size_type size_type;
+    typedef SwFrameFormatsBase::value_type value_type;
+
+    SwFrameFormats();
+    // frees all SwFrameFormat!
+    virtual ~SwFrameFormats() override;
+
+    bool empty()  const { return m_Array.empty(); }
+    size_t size() const { return m_Array.size(); }
+
+    // Only fails, if you try to insert the same object twice
+    std::pair<const_iterator,bool> push_back( const value_type& x );
+
+    // This will try to remove the exact object!
+    bool erase( const value_type& x );
+    void erase( size_type index );
+    void erase( const_iterator const& position );
+
+    // Get the iterator of the exact object (includes pointer!),
+    // e.g for position with std::distance.
+    // There is also ContainsFormat, if you don't need the position.
+    const_iterator find( const value_type& x ) const;
+
+    // As this array is non-unique related to type and name,
+    // we always get ranges for the "key" values.
+    std::pair<const_range_iterator,const_range_iterator>
+        rangeFind( sal_uInt16 type, const OUString& name ) const;
+    // Convenience function, which just uses type and name!
+    // To look for the exact object use find.
+    std::pair<const_range_iterator,const_range_iterator>
+        rangeFind( const value_type& x ) const;
+    // So we can actually check for end()
+    const_range_iterator rangeEnd() const { return m_TypeAndNameIndex.end(); }
+    const_iterator rangeProject( const_range_iterator const& position )
+        { return m_Array.project<0>( position ); }
+
+    const value_type& operator[]( size_t index_ ) const
+        { return m_PosIndex.operator[]( index_ ); }
+    const value_type& front() const { return m_PosIndex.front(); }
+    const value_type& back() const { return m_PosIndex.back(); }
+    const_iterator begin() const { return m_PosIndex.begin(); }
+    const_iterator end() const { return m_PosIndex.end(); }
+
+    void dumpAsXml(struct _xmlTextWriter* pWriter, const char* pName) const;
+
+    virtual size_t GetFormatCount() const override { return m_Array.size(); }
+    virtual SwFormat* GetFormat(size_t idx) const override { return operator[]( idx ); }
+
+    /// fast check if given format is contained here
+    /// @precond pFormat must not have been deleted
+    bool ContainsFormat(SwFrameFormat const& rFormat) const;
+    /// not so fast check that given format is still alive (i.e. contained here)
+    bool IsAlive(SwFrameFormat const*) const;
+
+    void DeleteAndDestroyAll( bool keepDefault = false );
+
+    bool newDefault( const value_type& x );
+    void newDefault( const_iterator const& position );
+};
+
+
+/// Unsorted, undeleting SwFrameFormat vector
+class SwFrameFormatsV : public SwFormatsModifyBase<SwFrameFormat*>
 {
 public:
-    void dumpAsXml(struct _xmlTextWriter* pWriter, const char* pName) const;
+    SwFrameFormatsV() : SwFormatsModifyBase( DestructorPolicy::KeepElements ) {}
 };
 
 class SwCharFormats : public SwFormatsModifyBase<SwCharFormat*>
@@ -184,37 +318,44 @@ struct CompareSwRedlineTable
     bool operator()(SwRangeRedline* const &lhs, SwRangeRedline* const &rhs) const;
 };
 
+// Notification type for notifying about redlines to LOK clients
+enum class RedlineNotification { Add, Remove, Modify };
+
+typedef SwRangeRedline* SwRangeRedlinePtr;
+
 class SwRedlineTable
 {
 public:
     typedef o3tl::sorted_vector<SwRangeRedline*, CompareSwRedlineTable,
                 o3tl::find_partialorder_ptrequals> vector_type;
     typedef vector_type::size_type size_type;
+    static constexpr size_type npos = USHRT_MAX;
+        //TODO: std::numeric_limits<size_type>::max()
 private:
     vector_type maVector;
 public:
     ~SwRedlineTable();
-    bool Contains(const SwRangeRedline* p) const { return maVector.find(const_cast<SwRangeRedline* const>(p)) != maVector.end(); }
-    sal_uInt16 GetPos(const SwRangeRedline* p) const;
+    bool Contains(const SwRangeRedline* p) const { return maVector.find(const_cast<SwRangeRedline*>(p)) != maVector.end(); }
+    size_type GetPos(const SwRangeRedline* p) const;
 
-    bool Insert( SwRangeRedline* p );
-    bool Insert( SwRangeRedline* p, sal_uInt16& rInsPos );
-    bool InsertWithValidRanges( SwRangeRedline* p, sal_uInt16* pInsPos = nullptr );
+    bool Insert(SwRangeRedlinePtr& p);
+    bool Insert(SwRangeRedlinePtr& p, size_type& rInsPos);
+    bool InsertWithValidRanges(SwRangeRedlinePtr& p, size_type* pInsPos = nullptr);
 
-    void Remove( sal_uInt16 nPos );
-    bool Remove( const SwRangeRedline* p );
-    void DeleteAndDestroy( sal_uInt16 nPos, sal_uInt16 nLen = 1 );
+    void Remove( size_type nPos );
+    void Remove( const SwRangeRedline* p );
+    void DeleteAndDestroy(size_type nPos);
     void DeleteAndDestroyAll();
 
     void dumpAsXml(struct _xmlTextWriter* pWriter) const;
 
-    sal_uInt16 FindNextOfSeqNo( sal_uInt16 nSttPos ) const;
-    sal_uInt16 FindPrevOfSeqNo( sal_uInt16 nSttPos ) const;
+    size_type FindNextOfSeqNo( size_type nSttPos ) const;
+    size_type FindPrevOfSeqNo( size_type nSttPos ) const;
     /** Search next or previous Redline with the same Seq. No.
        Search can be restricted via Lookahead.
        Using 0 makes search the whole array. */
-    sal_uInt16 FindNextSeqNo( sal_uInt16 nSeqNo, sal_uInt16 nSttPos ) const;
-    sal_uInt16 FindPrevSeqNo( sal_uInt16 nSeqNo, sal_uInt16 nSttPos ) const;
+    size_type FindNextSeqNo( sal_uInt16 nSeqNo, size_type nSttPos ) const;
+    size_type FindPrevSeqNo( sal_uInt16 nSeqNo, size_type nSttPos ) const;
 
     /**
      Find the redline at the given position.
@@ -223,7 +364,7 @@ public:
                        redline (or the next redline after the given position if not found)
      @param next true: redline starts at position and ends after, false: redline starts before position and ends at or after
     */
-    const SwRangeRedline* FindAtPosition( const SwPosition& startPosition, sal_uInt16& tableIndex, bool next = true ) const;
+    const SwRangeRedline* FindAtPosition( const SwPosition& startPosition, size_type& tableIndex, bool next = true ) const;
 
     bool                        empty() const { return maVector.empty(); }
     size_type                   size() const { return maVector.size(); }
@@ -231,9 +372,12 @@ public:
     vector_type::const_iterator begin() const { return maVector.begin(); }
     vector_type::const_iterator end() const { return maVector.end(); }
     void                        Resort() { maVector.Resort(); }
+
+    // Notifies all LOK clients when redlines are added/modified/removed
+    static void                 LOKRedlineNotification(RedlineNotification eType, SwRangeRedline* pRedline);
 };
 
-/// Table that holds 'extra' redlines, such as 'table row insert\delete', 'paragraph moves' etc...
+/// Table that holds 'extra' redlines, such as 'table row insert/delete', 'paragraph moves' etc...
 class SwExtraRedlineTable
 {
 private:
@@ -242,9 +386,9 @@ private:
 public:
     ~SwExtraRedlineTable();
 
-    bool Insert( SwExtraRedline* p );
+    void Insert( SwExtraRedline* p );
 
-    void DeleteAndDestroy( sal_uInt16 nPos, sal_uInt16 nLen = 1 );
+    void DeleteAndDestroy( sal_uInt16 nPos);
     void DeleteAndDestroyAll();
 
     void dumpAsXml(struct _xmlTextWriter* pWriter) const;

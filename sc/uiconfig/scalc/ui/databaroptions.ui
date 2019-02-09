@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.20.0 -->
+<interface domain="sc">
+  <requires lib="gtk+" version="3.18"/>
   <requires lib="LibreOffice" version="1.0"/>
   <object class="GtkDialog" id="DataBarOptions">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Data Bar</property>
+    <property name="title" translatable="yes" context="databaroptions|DataBarOptions">Data Bar</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
@@ -86,7 +86,7 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">end</property>
-                            <property name="label" translatable="yes">Minimum:</property>
+                            <property name="label" translatable="yes" context="databaroptions|label4">Minimum:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">min</property>
                           </object>
@@ -100,7 +100,7 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">end</property>
-                            <property name="label" translatable="yes">Maximum:</property>
+                            <property name="label" translatable="yes" context="databaroptions|label5">Maximum:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">max</property>
                           </object>
@@ -115,13 +115,13 @@
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
                             <items>
-                              <item translatable="yes">Automatic</item>
-                              <item translatable="yes">Minimum</item>
-                              <item translatable="yes">Maximum</item>
-                              <item translatable="yes">Percentile</item>
-                              <item translatable="yes">Value</item>
-                              <item translatable="yes">Percent</item>
-                              <item translatable="yes">Formula</item>
+                              <item translatable="yes" context="databaroptions|min">Automatic</item>
+                              <item translatable="yes" context="databaroptions|min">Minimum</item>
+                              <item translatable="yes" context="databaroptions|min">Maximum</item>
+                              <item translatable="yes" context="databaroptions|min">Percentile</item>
+                              <item translatable="yes" context="databaroptions|min">Value</item>
+                              <item translatable="yes" context="databaroptions|min">Percent</item>
+                              <item translatable="yes" context="databaroptions|min">Formula</item>
                             </items>
                           </object>
                           <packing>
@@ -135,13 +135,13 @@
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
                             <items>
-                              <item translatable="yes">Automatic</item>
-                              <item translatable="yes">Minimum</item>
-                              <item translatable="yes">Maximum</item>
-                              <item translatable="yes">Percentile</item>
-                              <item translatable="yes">Value</item>
-                              <item translatable="yes">Percent</item>
-                              <item translatable="yes">Formula</item>
+                              <item translatable="yes" context="databaroptions|max">Automatic</item>
+                              <item translatable="yes" context="databaroptions|max">Minimum</item>
+                              <item translatable="yes" context="databaroptions|max">Maximum</item>
+                              <item translatable="yes" context="databaroptions|max">Percentile</item>
+                              <item translatable="yes" context="databaroptions|max">Value</item>
+                              <item translatable="yes" context="databaroptions|max">Percent</item>
+                              <item translatable="yes" context="databaroptions|max">Formula</item>
                             </items>
                           </object>
                           <packing>
@@ -153,7 +153,6 @@
                           <object class="GtkEntry" id="min_value">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="invisible_char">●</property>
                           </object>
                           <packing>
                             <property name="left_attach">2</property>
@@ -164,7 +163,6 @@
                           <object class="GtkEntry" id="max_value">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="invisible_char">●</property>
                           </object>
                           <packing>
                             <property name="left_attach">2</property>
@@ -179,7 +177,7 @@
                   <object class="GtkLabel" id="label1">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Entry Values</property>
+                    <property name="label" translatable="yes" context="databaroptions|label1">Entry Values</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -217,7 +215,7 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">end</property>
-                            <property name="label" translatable="yes">Positive:</property>
+                            <property name="label" translatable="yes" context="databaroptions|label6">Positive:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">positive_colour</property>
                           </object>
@@ -231,7 +229,7 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">end</property>
-                            <property name="label" translatable="yes">Negative:</property>
+                            <property name="label" translatable="yes" context="databaroptions|label7">Negative:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">negative_colour</property>
                           </object>
@@ -241,7 +239,7 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="svtlo-ColorListBox" id="positive_colour">
+                          <object class="svxcorelo-SvxColorListBox" id="positive_colour">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
@@ -252,7 +250,7 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="svtlo-ColorListBox" id="negative_colour">
+                          <object class="svxcorelo-SvxColorListBox" id="negative_colour">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
@@ -267,7 +265,9 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">end</property>
-                            <property name="label" translatable="yes">Fill:</property>
+                            <property name="label" translatable="yes" context="databaroptions|label10">Fill:</property>
+                            <property name="use_underline">True</property>
+                            <property name="mnemonic_widget">fill_type</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -279,8 +279,8 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <items>
-                              <item translatable="yes">Color</item>
-                              <item translatable="yes">Gradient</item>
+                              <item translatable="yes" context="databaroptions|fill_type">Color</item>
+                              <item translatable="yes" context="databaroptions|fill_type">Gradient</item>
                             </items>
                           </object>
                           <packing>
@@ -296,7 +296,7 @@
                   <object class="GtkLabel" id="label2">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Bar Colors</property>
+                    <property name="label" translatable="yes" context="databaroptions|label2">Bar Colors</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -334,7 +334,7 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">end</property>
-                            <property name="label" translatable="yes">Position of vertical axis:</property>
+                            <property name="label" translatable="yes" context="databaroptions|label8">Position of vertical axis:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">axis_pos</property>
                           </object>
@@ -348,7 +348,7 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">end</property>
-                            <property name="label" translatable="yes">Color of vertical axis:</property>
+                            <property name="label" translatable="yes" context="databaroptions|label9">Color of vertical axis:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">axis_colour</property>
                           </object>
@@ -363,9 +363,9 @@
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
                             <items>
-                              <item translatable="yes">Automatic</item>
-                              <item translatable="yes">Middle</item>
-                              <item translatable="yes">None</item>
+                              <item translatable="yes" context="databaroptions|axis_pos">Automatic</item>
+                              <item translatable="yes" context="databaroptions|axis_pos">Middle</item>
+                              <item translatable="yes" context="databaroptions|axis_pos">None</item>
                             </items>
                           </object>
                           <packing>
@@ -374,7 +374,7 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="svtlo-ColorListBox" id="axis_colour">
+                          <object class="svxcorelo-SvxColorListBox" id="axis_colour">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
@@ -392,7 +392,7 @@
                   <object class="GtkLabel" id="label3">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Axis</property>
+                    <property name="label" translatable="yes" context="databaroptions|label3">Axis</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -430,7 +430,7 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">end</property>
-                            <property name="label" translatable="yes">Minimum bar length (%):</property>
+                            <property name="label" translatable="yes" context="databaroptions|label12">Minimum bar length (%):</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">min_length</property>
                           </object>
@@ -444,7 +444,7 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">end</property>
-                            <property name="label" translatable="yes">Maximum bar length (%):</property>
+                            <property name="label" translatable="yes" context="databaroptions|label13">Maximum bar length (%):</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">max_length</property>
                           </object>
@@ -457,7 +457,6 @@
                           <object class="GtkEntry" id="min_length">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="invisible_char">●</property>
                           </object>
                           <packing>
                             <property name="left_attach">1</property>
@@ -468,7 +467,6 @@
                           <object class="GtkEntry" id="max_length">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="invisible_char">●</property>
                           </object>
                           <packing>
                             <property name="left_attach">1</property>
@@ -483,7 +481,7 @@
                   <object class="GtkLabel" id="label11">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Bar Lengths</property>
+                    <property name="label" translatable="yes" context="databaroptions|label11">Bar Lengths</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -498,10 +496,11 @@
             </child>
             <child>
               <object class="GtkCheckButton" id="only_bar">
-                <property name="label" translatable="yes">Display bar only</property>
+                <property name="label" translatable="yes" context="databaroptions|only_bar">Display bar only</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
+                <property name="use_underline">True</property>
                 <property name="xalign">0</property>
                 <property name="draw_indicator">True</property>
               </object>
@@ -514,24 +513,13 @@
             <child>
               <object class="GtkLabel" id="str_same_value">
                 <property name="can_focus">False</property>
+                <property name="label" translatable="yes" context="databaroptions|str_same_value">The minimum value must be less than the maximum value.</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">The minimum value must be less than the maximum value.</property>
               </object>
               <packing>
                 <property name="expand">False</property>
                 <property name="fill">True</property>
                 <property name="position">5</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkLabel" id="custom_color">
-                <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Custom</property>
-              </object>
-              <packing>
-                <property name="expand">False</property>
-                <property name="fill">True</property>
-                <property name="position">6</property>
               </packing>
             </child>
           </object>
@@ -544,8 +532,8 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">cancel</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
     </action-widgets>
   </object>
   <object class="GtkSizeGroup" id="sizegroup1">

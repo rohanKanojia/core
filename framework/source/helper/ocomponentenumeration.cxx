@@ -20,6 +20,7 @@
 #include <helper/ocomponentenumeration.hxx>
 
 #include <vcl/svapp.hxx>
+#include <sal/log.hxx>
 
 namespace framework{
 
@@ -45,13 +46,12 @@ OComponentEnumeration::~OComponentEnumeration()
 }
 
 //  XEventListener
-void SAL_CALL OComponentEnumeration::disposing( const EventObject& aEvent ) throw( RuntimeException, std::exception )
+void SAL_CALL OComponentEnumeration::disposing( const EventObject& aEvent )
 {
     SolarMutexGuard g;
 
     // Safe impossible cases
     // This method is not specified for all incoming parameters.
-    (void) aEvent;
     SAL_WARN_IF( !aEvent.Source.is(), "fwk", "OComponentEnumeration::disposing(): Invalid parameter detected!" );
 
     // Reset instance to defaults, release references and free memory.
@@ -59,7 +59,7 @@ void SAL_CALL OComponentEnumeration::disposing( const EventObject& aEvent ) thro
 }
 
 //  XEnumeration
-sal_Bool SAL_CALL OComponentEnumeration::hasMoreElements() throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL OComponentEnumeration::hasMoreElements()
 {
     SolarMutexGuard g;
 
@@ -67,14 +67,12 @@ sal_Bool SAL_CALL OComponentEnumeration::hasMoreElements() throw( RuntimeExcepti
     // => The last one is getLength() - 1!
     // m_nPosition's current value is the position for the next element, which will be return, if user call "nextElement()"
     // => We have more elements if current position less then the length of the list!
-    return ( m_nPosition < (sal_uInt32)(m_seqComponents.size()) );
+    return ( m_nPosition < static_cast<sal_uInt32>(m_seqComponents.size()) );
 }
 
 //  XEnumeration
 
-Any SAL_CALL OComponentEnumeration::nextElement() throw(    NoSuchElementException  ,
-                                                             WrappedTargetException ,
-                                                            RuntimeException, std::exception        )
+Any SAL_CALL OComponentEnumeration::nextElement()
 {
     SolarMutexGuard g;
 
@@ -95,7 +93,7 @@ Any SAL_CALL OComponentEnumeration::nextElement() throw(    NoSuchElementExcepti
     return aComponent;
 }
 
-//  proteced method
+//  protected method
 
 void OComponentEnumeration::impl_resetObject()
 {

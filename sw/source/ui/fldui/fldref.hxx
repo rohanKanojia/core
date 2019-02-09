@@ -23,13 +23,12 @@
 #include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/button.hxx>
-#include <vcl/group.hxx>
 #include <vcl/edit.hxx>
 
 #include "fldpage.hxx"
 #include <IDocumentOutlineNodes.hxx>
 #include <IDocumentListItems.hxx>
-#include <FldRefTreeListBox.hxx>
+#include "FldRefTreeListBox.hxx"
 class SwTextNode;
 
 class SwFieldRefPage : public SwFieldPage
@@ -61,15 +60,15 @@ class SwFieldRefPage : public SwFieldPage
     // fallback, if previously selected text node doesn't exist anymore
     size_t mnSavedSelectedPos;
 
-    DECL_LINK_TYPED(TypeHdl, ListBox&, void);
-    DECL_LINK_TYPED(SubTypeListBoxHdl, ListBox&, void);
-    DECL_LINK_TYPED(SubTypeTreeListBoxHdl, SvTreeListBox*, void);
-    DECL_LINK_TYPED(ModifyHdl, Edit&, void);
-    DECL_LINK_TYPED(ModifyHdl_Impl, Edit&, void);
+    DECL_LINK(TypeHdl, ListBox&, void);
+    DECL_LINK(SubTypeListBoxHdl, ListBox&, void);
+    DECL_LINK(SubTypeTreeListBoxHdl, SvTreeListBox*, void);
+    DECL_LINK(ModifyHdl, Edit&, void);
+    DECL_LINK(ModifyHdl_Impl, Edit&, void);
 
     void SubTypeHdl();
 
-    void                UpdateSubType(const OUString& filterString = OUString());
+    void                UpdateSubType(const OUString& filterString);
 
     static bool                MatchSubstring( const OUString& list_string, const OUString& substr );
 
@@ -82,12 +81,12 @@ protected:
     virtual sal_uInt16      GetGroup() override;
 
 public:
-                        SwFieldRefPage(vcl::Window* pParent, const SfxItemSet& rSet);
+                        SwFieldRefPage(vcl::Window* pParent, const SfxItemSet* pSet);
 
-                        virtual ~SwFieldRefPage();
+                        virtual ~SwFieldRefPage() override;
     virtual void        dispose() override;
 
-    static VclPtr<SfxTabPage>  Create(vcl::Window* pParent, const SfxItemSet* rAttrSet);
+    static VclPtr<SfxTabPage>  Create(TabPageParent pParent, const SfxItemSet* rAttrSet);
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;

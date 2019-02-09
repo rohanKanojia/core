@@ -41,23 +41,20 @@ namespace svxform
         css::uno::Reference< css::sdb::XColumnUpdate>     m_xColumnUpdate;
 
     public:
-        DataColumn() { };
         DataColumn(const css::uno::Reference< css::beans::XPropertySet>& _rxIFace);
         // if the object behind _rxIFace doesn't fully support the DataColumn service,
         // (which is checked via the supported interfaces) _all_ members will be set to
         // void !, even if the object has some of the needed interfaces.
 
         // 'conversions'
-        inline const css::uno::Reference< css::sdb::XColumn>& getColumn() const
+        const css::uno::Reference< css::sdb::XColumn>& getColumn() const
         {
             return m_xColumn;
         }
     };
 
-#endif // INCLUDED_SVX_SOURCE_INC_SDBDATACOLUMN_HXX
-
-
 }
 
+#endif // INCLUDED_SVX_SOURCE_INC_SDBDATACOLUMN_HXX
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

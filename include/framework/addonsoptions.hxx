@@ -27,6 +27,7 @@
 #include <com/sun/star/uno/Sequence.h>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <framework/fwedllapi.h>
+#include <memory>
 
 /*-************************************************************************************************************
     @descr          The method GetAddonsMenu() returns a list of property values.
@@ -70,11 +71,10 @@ typedef ::std::vector< MergeToolbarInstruction > MergeToolbarInstructionContaine
 
 struct FWE_DLLPUBLIC MergeStatusbarInstruction
 {
-    ::rtl::OUString     aMergePoint;
-    ::rtl::OUString     aMergeCommand;
-    ::rtl::OUString     aMergeCommandParameter;
-    ::rtl::OUString     aMergeFallback;
-    ::rtl::OUString     aMergeContext;
+    OUString     aMergePoint;
+    OUString     aMergeCommand;
+    OUString     aMergeCommandParameter;
+    OUString     aMergeContext;
     css::uno::Sequence< css::uno::Sequence< css::beans::PropertyValue > > aMergeStatusbarItems;
 };
 
@@ -97,25 +97,12 @@ class AddonsOptions_Impl;
 class FWE_DLLPUBLIC AddonsOptions
 {
     public:
-
-        /*-****************************************************************************************************
-            @short      standard constructor and destructor
-            @descr      This will initialize an instance with default values.
-                        We implement these class with a refcount mechanism! Every instance of this class increase it
-                        at create and decrease it at delete time - but all instances use the same data container!
-                        He is implemented as a static member ...
-
-            @seealso    member m_nRefCount
-            @seealso    member m_pDataContainer
-        *//*-*****************************************************************************************************/
-
          AddonsOptions();
         ~AddonsOptions();
 
         /*-****************************************************************************************************
             @short      returns if an addons menu is available
             @descr      Call to retrieve if a addons menu is available
-
 
             @return     true if there is a menu otherwise false
         *//*-*****************************************************************************************************/
@@ -126,7 +113,6 @@ class FWE_DLLPUBLIC AddonsOptions
             @short      returns number of addons toolbars
             @descr      Call to retrieve the number of addons toolbars
 
-
             @return     number of addons toolbars
         *//*-*****************************************************************************************************/
         sal_Int32   GetAddonsToolBarCount() const ;
@@ -134,7 +120,7 @@ class FWE_DLLPUBLIC AddonsOptions
         /*-****************************************************************************************************
             @short      returns the  complete addons menu
             @descr      Call it to get all entries of the addon menu.
-                        We return a list of all nodes with his names and properties.
+                        We return a list of all nodes with its names and properties.
             @return     A list of menu items is returned.
 
             @onerror    We return an empty list.
@@ -208,42 +194,20 @@ class FWE_DLLPUBLIC AddonsOptions
         Image GetImageFromURL( const OUString& aURL, bool bBig, bool bNoScale ) const;
         Image GetImageFromURL( const OUString& aURL, bool bBig ) const;
 
-
     //  private methods
-
 
         /*-****************************************************************************************************
             @short      return a reference to a static mutex
             @descr      These class is partially threadsafe (for de-/initialization only).
-                        All access methods are'nt safe!
+                        All access methods aren't safe!
                         We create a static mutex only for one ime and use at different times.
             @return     A reference to a static mutex member.
         *//*-*****************************************************************************************************/
 
         static ::osl::Mutex& GetOwnStaticMutex();
 
-        /*-****************************************************************************************************
-            @short      return a reference to a static mutex
-            @descr      These class is partially threadsafe (for de-/initialization only).
-                        All access methods are'nt safe!
-                        We create a static mutex only for one ime and use at different times.
-            @return     A reference to a static mutex member.
-        *//*-*****************************************************************************************************/
-        DECL_STATIC_LINK_TYPED( AddonsOptions, Notify, void*, void );
-
     private:
-
-        /*Attention
-
-            Don't initialize these static members in these headers!
-            a) Double defined symbols will be detected ...
-            b) and unresolved externals exist at linking time.
-            Do it in your source only.
-         */
-
-        static AddonsOptions_Impl*  m_pDataContainer    ;
-        static sal_Int32            m_nRefCount         ;
-
+        std::shared_ptr<AddonsOptions_Impl>  m_pImpl;
 };
 
 }

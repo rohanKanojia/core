@@ -17,7 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <idlc/idlc.hxx>
+#include <idlc.hxx>
+#include <rtl/alloc.h>
 #include <rtl/ustring.hxx>
 #include <rtl/strbuf.hxx>
 #include <osl/process.h>
@@ -25,7 +26,7 @@
 #include <osl/thread.h>
 #include <osl/file.hxx>
 
-#if defined(SAL_W32)
+#if defined(_WIN32)
 #include <io.h>
 #endif
 
@@ -33,7 +34,7 @@
 #include <errno.h>
 #include <unistd.h>
 #if defined(MACOSX) || defined(FREEBSD) || defined(NETBSD) || \
-    defined(AIX) || defined(OPENBSD) || defined(DRAGONFLY)
+    defined(AIX) || defined(OPENBSD) || defined(DRAGONFLY) || defined(HAIKU)
 #include <sys/wait.h>
 #else
 #include <wait.h>
@@ -48,18 +49,11 @@ extern int yyparse();
 extern FILE* yyin;
 extern int yydebug;
 
-sal_Int32 lineNumber = 1;
-
-
-static const char TMP[] = "TMP";
-static const char TEMP[] = "TEMP";
 static sal_Char tmpFilePattern[512];
 
 bool isFileUrl(const OString& fileName)
 {
-    if (fileName.startsWith("file://") )
-        return true;
-    return false;
+    return fileName.startsWith("file://");
 }
 
 OString convertToAbsoluteSystemPath(const OString& fileName)
@@ -118,16 +112,16 @@ OString convertToFileUrl(const OString& fileName)
     return fileName;
 }
 
-OString makeTempName(const OString& prefix)
+static OString makeTempName(const OString& prefix)
 {
     OUString uTmpPath;
     OString tmpPath;
 
-    if ( osl_getEnvironment(OUString(TMP).pData, &uTmpPath.pData) != osl_Process_E_None )
+    if ( osl_getEnvironment(OUString("TMP").pData, &uTmpPath.pData) != osl_Process_E_None )
     {
-        if ( osl_getEnvironment(OUString(TEMP).pData, &uTmpPath.pData) != osl_Process_E_None )
+        if ( osl_getEnvironment(OUString("TEMP").pData, &uTmpPath.pData) != osl_Process_E_None )
         {
-#if defined(SAL_W32)
+#if defined(_WIN32)
             tmpPath = OString("c:\\temp");
 #else
             tmpPath = OString("/tmp");
@@ -138,10 +132,10 @@ OString makeTempName(const OString& prefix)
     if ( !uTmpPath.isEmpty() )
         tmpPath = OUStringToOString(uTmpPath, RTL_TEXTENCODING_UTF8);
 
-#if defined(SAL_W32) || defined(SAL_UNX)
+#if defined(_WIN32) || defined(SAL_UNX)
 
     OSL_ASSERT( sizeof(tmpFilePattern) >
-                (size_t) ( tmpPath.getLength()
+                static_cast<size_t>( tmpPath.getLength()
                            + RTL_CONSTASCII_LENGTH( PATH_SEPARATOR )
                            + prefix.getLength()
                            + RTL_CONSTASCII_LENGTH( "XXXXXX") ) );
@@ -185,8 +179,8 @@ bool copyFile(const OString* source, const OString& target)
         return false;
     }
 
-    size_t totalSize = 512;
-    char   pBuffer[513];
+    size_t const totalSize = 512;
+    char   pBuffer[totalSize + 1];
 
     while ( !feof(pSource) )
     {
@@ -207,9 +201,8 @@ bool copyFile(const OString* source, const OString& target)
     if (source != nullptr) {
         fclose(pSource);
     }
-    if ( fflush(pTarget) )
+    if ( fclose(pTarget) )
         bRet = false;
-    fclose(pTarget);
 
     return bRet;
 }
@@ -217,8 +210,8 @@ bool copyFile(const OString* source, const OString& target)
 sal_Int32 compileFile(const OString * pathname)
 {
     // preprocess input file
-    OString tmpFile = makeTempName(OString("idli_"));
-    OString preprocFile = makeTempName(OString("idlf_"));
+    OString tmpFile = makeTempName("idli_");
+    OString preprocFile = makeTempName("idlf_");
 
     OString fileName;
     if (pathname == nullptr) {
@@ -241,9 +234,9 @@ sal_Int32 compileFile(const OString * pathname)
     idlc()->setRealFileName(tmpFile);
 
     ::std::vector< OUString> lCppArgs;
-    lCppArgs.push_back("-DIDL");
-    lCppArgs.push_back("-C");
-    lCppArgs.push_back("-zI");
+    lCppArgs.emplace_back("-DIDL");
+    lCppArgs.emplace_back("-C");
+    lCppArgs.emplace_back("-zI");
 
     OStringBuffer cppArgs(256);
     Options* pOptions = idlc()->getOptions();
@@ -289,7 +282,7 @@ sal_Int32 compileFile(const OString * pathname)
         } while( nIndex != -1 );
     }
 
-    lCppArgs.push_back(OUString("-o"));
+    lCppArgs.emplace_back("-o");
 
     cppArgs.append(preprocFile);
     lCppArgs.push_back(OStringToOUString(cppArgs.makeStringAndClear(), RTL_TEXTENCODING_UTF8));
@@ -307,7 +300,7 @@ sal_Int32 compileFile(const OString * pathname)
     sal_Int32 idx= cpp.lastIndexOf("idlc");
     cpp = cpp.copy(0, idx);
 
-#if defined(SAL_W32)
+#if defined(_WIN32)
     cpp += "ucpp.exe";
 #else
     cpp += "ucpp";
@@ -319,22 +312,19 @@ sal_Int32 compileFile(const OString * pathname)
     oslProcessError procError = osl_Process_E_None;
 
     const int nCmdArgs = lCppArgs.size();
-    rtl_uString** pCmdArgs = nullptr;
-    pCmdArgs = static_cast<rtl_uString**>(rtl_allocateZeroMemory(nCmdArgs * sizeof(rtl_uString*)));
+    std::unique_ptr<rtl_uString*[]> pCmdArgs(new rtl_uString*[nCmdArgs]);
 
-    ::std::vector< OUString >::iterator iter = lCppArgs.begin();
-    ::std::vector< OUString >::iterator end = lCppArgs.end();
     int i = 0;
-    while ( iter != end ) {
-        pCmdArgs[i++] = (*iter).pData;
-        ++iter;
+    for (auto const& elem : lCppArgs)
+    {
+        pCmdArgs[i++] = elem.pData;
     }
 
-    procError = osl_executeProcess( cpp.pData, pCmdArgs, nCmdArgs, osl_Process_WAIT,
+    procError = osl_executeProcess( cpp.pData, pCmdArgs.get(), nCmdArgs, osl_Process_WAIT,
                                     nullptr, startDir.pData, nullptr, 0, &hProcess );
 
     oslProcessInfo hInfo;
-    hInfo.Size = (sal_uInt32)(sizeof(oslProcessInfo));
+    hInfo.Size = sal_uInt32(sizeof(oslProcessInfo));
     if (osl_getProcessInfo(hProcess, osl_Process_EXITCODE, &hInfo)
         != osl_Process_E_None)
     {
@@ -351,11 +341,9 @@ sal_Int32 compileFile(const OString * pathname)
                     pathname == nullptr ? "" : "file ", fileName.getStr());
 
         osl_freeProcessHandle(hProcess);
-        rtl_freeMemory(pCmdArgs);
         exit(hInfo.Code ? hInfo.Code : 99);
     }
     osl_freeProcessHandle(hProcess);
-    rtl_freeMemory(pCmdArgs);
 
     if (unlink(tmpFile.getStr()) != 0)
     {

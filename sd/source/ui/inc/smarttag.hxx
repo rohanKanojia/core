@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_SMARTTAG_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_SMARTTAG_HXX
 
-#include "helper/simplereferencecomponent.hxx"
+#include <helper/simplereferencecomponent.hxx>
 #include <rtl/ref.hxx>
 #include <set>
 #include <svx/svdhdl.hxx>
@@ -28,7 +28,6 @@
 
 class KeyEvent;
 class MouseEvent;
-class SdrHdlList;
 
 namespace sd {
 
@@ -48,7 +47,7 @@ class SmartTag : public SimpleReferenceComponent
 
 public:
     explicit SmartTag( ::sd::View& rView );
-    virtual ~SmartTag();
+    virtual ~SmartTag() override;
 
     /** returns true if the SmartTag consumes this event. */
     virtual bool MouseButtonDown( const MouseEvent&, SmartHdl& );
@@ -68,11 +67,11 @@ public:
     ::sd::View& getView() const { return mrView; }
 
 protected:
-    virtual sal_uLong GetMarkablePointCount() const;
-    virtual sal_uLong GetMarkedPointCount() const;
-    virtual bool MarkPoint(SdrHdl& rHdl, bool bUnmark=false);
+    virtual sal_Int32 GetMarkablePointCount() const;
+    virtual sal_Int32 GetMarkedPointCount() const;
+    virtual bool MarkPoint(SdrHdl& rHdl, bool bUnmark);
     virtual void CheckPossibilities();
-    virtual bool MarkPoints(const Rectangle* pRect, bool bUnmark);
+    virtual bool MarkPoints(const ::tools::Rectangle* pRect, bool bUnmark);
 
     virtual void addCustomHandles( SdrHdlList& rHandlerList );
     virtual void select();
@@ -136,8 +135,8 @@ public:
     bool HasMarkedPoints() const;
     sal_uLong GetMarkedPointCount() const;
     static bool IsPointMarkable(const SdrHdl& rHdl);
-    bool MarkPoint(SdrHdl& rHdl, bool bUnmark=false);
-    bool MarkPoints(const Rectangle* pRect, bool bUnmark);
+    bool MarkPoint(SdrHdl& rHdl, bool bUnmark);
+    bool MarkPoints(const ::tools::Rectangle* pRect, bool bUnmark);
 
     void CheckPossibilities();
 
@@ -164,14 +163,14 @@ private:
 class SmartHdl : public SdrHdl
 {
 public:
-    SmartHdl( const SmartTagReference& xTag, SdrObject* pObject, const Point& rPnt, SdrHdlKind eNewKind=HDL_SMARTTAG );
-    SmartHdl( const SmartTagReference& xTag, const Point& rPnt, SdrHdlKind eNewKind=HDL_SMARTTAG );
+    SmartHdl( const SmartTagReference& xTag, SdrObject* pObject, const Point& rPnt, SdrHdlKind eNewKind );
+    SmartHdl( const SmartTagReference& xTag, const Point& rPnt, SdrHdlKind eNewKind );
 
-    const SmartTagReference& getTag() const { return mxTag; }
+    const SmartTagReference& getTag() const { return mxSmartTag; }
 
     virtual bool isMarkable() const;
 protected:
-    SmartTagReference mxTag;
+    SmartTagReference const mxSmartTag;
 };
 
 } // end of namespace sd

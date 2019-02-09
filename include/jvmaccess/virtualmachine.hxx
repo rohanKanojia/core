@@ -24,7 +24,7 @@
 #include <rtl/ref.hxx>
 #include <salhelper/simplereferenceobject.hxx>
 
-#include "jni.h"
+#include <jni.h>
 
 namespace jvmaccess {
 
@@ -48,14 +48,14 @@ public:
     public:
         /** An exception indicating failure to create an AttachGuard.
          */
-        class JVMACCESS_DLLPUBLIC CreationException
+        class JVMACCESS_DLLPUBLIC CreationException final
         {
         public:
             CreationException();
 
             CreationException(CreationException const &);
 
-            virtual ~CreationException();
+            ~CreationException();
 
             CreationException & operator =(CreationException const &);
         };
@@ -79,11 +79,11 @@ public:
             @return
             A valid JNI environment pointer.  Will never be null.
          */
-        inline JNIEnv * getEnvironment() const { return m_pEnvironment; }
+        JNIEnv * getEnvironment() const { return m_pEnvironment; }
 
     private:
-        AttachGuard(AttachGuard &) = delete;
-        void operator =(AttachGuard) = delete;
+        AttachGuard(AttachGuard const &) = delete;
+        AttachGuard& operator =(AttachGuard const &) = delete;
 
         rtl::Reference< VirtualMachine > m_xMachine;
         JNIEnv * m_pEnvironment;
@@ -125,13 +125,13 @@ public:
         the future).
      */
     VirtualMachine(JavaVM * pVm, int nVersion, bool bDestroy,
-                   JNIEnv * pMainThreadEnv);
+                   JNIEnv const * pMainThreadEnv);
 
 private:
-    VirtualMachine(VirtualMachine &) = delete;
-    void operator =(VirtualMachine) = delete;
+    VirtualMachine(VirtualMachine const &) = delete;
+    VirtualMachine& operator =(VirtualMachine const & ) = delete;
 
-    virtual ~VirtualMachine();
+    virtual ~VirtualMachine() override;
 
     JNIEnv * attachThread(bool * pAttached) const;
 

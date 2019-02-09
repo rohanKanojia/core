@@ -25,13 +25,18 @@ namespace rptxml
 {
     enum XMLDocTokens
     {
-        XML_TOK_DOC_AUTOSTYLES,
         XML_TOK_DOC_SETTINGS,
-        XML_TOK_DOC_REPORT,
         XML_TOK_DOC_STYLES,
-        XML_TOK_DOC_FONTDECLS,
-        XML_TOK_DOC_MASTERSTYLES,
+        XML_TOK_DOC_CONTENT,
         XML_TOK_DOC_META
+    };
+    enum XMLDocContentTokens
+    {
+        XML_TOK_CONTENT_AUTOSTYLES,
+        XML_TOK_CONTENT_STYLES,
+        XML_TOK_CONTENT_FONTDECLS,
+        XML_TOK_CONTENT_MASTERSTYLES,
+        XML_TOK_CONTENT_BODY,
     };
     enum XMLReportToken
     {
@@ -53,7 +58,8 @@ namespace rptxml
         XML_TOK_REPORT_MIMETYPE         ,
         XML_TOK_REPORT_NAME             ,
         XML_TOK_MASTER_DETAIL_FIELDS    ,
-        XML_TOK_SUB_FRAME
+        XML_TOK_SUB_FRAME               ,
+        XML_TOK_SUB_BODY                ,
     };
     enum XMLGroup
     {
@@ -137,8 +143,6 @@ namespace rptxml
         ,XML_TOK_PROPERTIES
         ,XML_TOK_SIZE
         ,XML_TOK_IMAGE_DATA
-        ,XML_TOK_IMAGE_POSITION
-        ,XML_TOK_IMAGE_ALIGN
         ,XML_TOK_SCALE
         ,XML_TOK_LABEL
         ,XML_TOK_DATA_FORMULA

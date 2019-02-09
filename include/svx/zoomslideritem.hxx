@@ -35,19 +35,15 @@ public:
     static SfxPoolItem* CreateDefault();
 
     SvxZoomSliderItem( sal_uInt16 nCurrentZoom = 100, sal_uInt16 nMinZoom = 20, sal_uInt16 nMaxZoom = 600, sal_uInt16 nWhich = SID_ATTR_ZOOMSLIDER );
-    SvxZoomSliderItem( const SvxZoomSliderItem& );
-    virtual ~SvxZoomSliderItem();
 
     void AddSnappingPoint( sal_Int32 nNew );
     const css::uno::Sequence < sal_Int32 >& GetSnappingPoints() const { return maValues;}
     sal_uInt16 GetMinZoom() const {return mnMinZoom;}
     sal_uInt16 GetMaxZoom() const {return mnMaxZoom;}
 
-    // "pure virtual Methoden" vom SfxPoolItem
+    // "purely virtual methods" from the SfxPoolItem
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual SfxPoolItem*    Create( SvStream& rStrm, sal_uInt16 nVersion ) const override;                       // leer
-    virtual SvStream&       Store( SvStream& rStrm , sal_uInt16 nItemVersion ) const override;                   // leer
     virtual bool            QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool            PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 };

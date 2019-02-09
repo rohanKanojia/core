@@ -18,11 +18,8 @@
 
 #include "sal/config.h"
 
-#include <new>
-
 #include "com/sun/star/uno/Exception.hpp"
 #include "com/sun/star/uno/Reference.hxx"
-#include "com/sun/star/uno/RuntimeException.hpp"
 #include "com/sun/star/uno/Sequence.hxx"
 #include "com/sun/star/uno/XComponentContext.hpp"
 #include "com/sun/star/uno/XInterface.hpp"
@@ -44,10 +41,8 @@ class Service: public ::cppu::WeakImplHelper1< ::test::types::XServer > {
 public:
     Service() {}
 
-    virtual ::test::types::Data SAL_CALL getData()
-        throw (css::uno::RuntimeException)
-    {
-        return ::test::types::Data(rtl::OUString("Hello"), 42);
+    virtual ::test::types::Data SAL_CALL getData() {
+        return ::test::types::Data(OUString("Hello"), 42);
     }
 
 private:
@@ -62,19 +57,15 @@ namespace CppServer {
 css::uno::Reference< css::uno::XInterface > create(
     css::uno::Reference< css::uno::XComponentContext > const &)
 {
-    try {
-        return static_cast< ::cppu::OWeakObject * >(new Service);
-    } catch (::std::bad_alloc &) {
-        throw css::uno::RuntimeException("std::bad_alloc");
-    }
+    return static_cast< ::cppu::OWeakObject * >(new Service);
 }
 
-rtl::OUString getImplementationName() {
-    return rtl::OUString("test.cpp.cppserver.Component");
+OUString getImplementationName() {
+    return OUString("test.cpp.cppserver.Component");
 }
 
-css::uno::Sequence< rtl::OUString > getSupportedServiceNames() {
-    return css::uno::Sequence< rtl::OUString >();
+css::uno::Sequence< OUString > getSupportedServiceNames() {
+    return css::uno::Sequence< OUString >();
 }
 
 }

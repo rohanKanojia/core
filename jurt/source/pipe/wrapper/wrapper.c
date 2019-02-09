@@ -17,21 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <stddef.h>
+#include <stdlib.h>
 
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include "jni.h"
-#include "sal/types.h"
+#include <jni.h>
+#include <sal/types.h>
 
 
 static HMODULE   module   = NULL;
 static HINSTANCE hInstDLL = NULL;
 static CRITICAL_SECTION CriticalSection;
 
-void InitWrapper(void) {
+static void InitWrapper(void) {
     #define MAXPATH 512
     wchar_t path[MAXPATH];
     DWORD size;

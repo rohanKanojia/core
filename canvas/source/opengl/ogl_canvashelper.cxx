@@ -11,12 +11,12 @@
 
 #include <memory>
 #include <functional>
-#include <GL/glew.h>
+#include <epoxy/gl.h>
 
 #include <basegfx/polygon/b2dpolygontriangulator.hxx>
 #include <basegfx/polygon/b2dpolypolygon.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <com/sun/star/rendering/CompositeOperation.hpp>
 #include <com/sun/star/rendering/PathCapType.hpp>
 #include <com/sun/star/rendering/PathJoinType.hpp>
@@ -38,7 +38,7 @@
 #include "ogl_canvashelper.hxx"
 
 using namespace ::com::sun::star;
-using namespace ::std::placeholders;
+using namespace std::placeholders;
 
 namespace oglcanvas
 {
@@ -81,7 +81,7 @@ namespace oglcanvas
         rendering::ARGBColor            maARGBColor;
         ::basegfx::B2DPolyPolygonVector maPolyPolys;
 
-        ::std::function< bool (
+        std::function< bool (
                             const CanvasHelper&,
                             const ::basegfx::B2DHomMatrix&,
                             GLenum,
@@ -92,23 +92,6 @@ namespace oglcanvas
 
     namespace
     {
-        bool lcl_drawPoint( const CanvasHelper&              /*rHelper*/,
-                            const ::basegfx::B2DHomMatrix&   rTransform,
-                            GLenum                           eSrcBlend,
-                            GLenum                           eDstBlend,
-                            const rendering::ARGBColor&      rColor,
-                            const geometry::RealPoint2D&     rPoint )
-        {
-            TransformationPreserver aPreserver;
-            setupState(rTransform, eSrcBlend, eDstBlend, rColor);
-
-            glBegin(GL_POINTS);
-            glVertex2d(rPoint.X, rPoint.Y);
-            glEnd();
-
-            return true;
-        }
-
         bool lcl_drawLine( const CanvasHelper&              /*rHelper*/,
                            const ::basegfx::B2DHomMatrix&   rTransform,
                            GLenum                           eSrcBlend,
@@ -182,7 +165,7 @@ namespace oglcanvas
                                                             rTexture.AffineTransform );
             ::basegfx::B2DRange aBounds;
             for( const auto& rPoly : rPolyPolygons )
-                aBounds.expand( ::basegfx::tools::getRange( rPoly ) );
+                aBounds.expand( ::basegfx::utils::getRange( rPoly ) );
             aTextureTransform.translate(-aBounds.getMinX(), -aBounds.getMinY());
             aTextureTransform.scale(1/aBounds.getWidth(), 1/aBounds.getHeight());
 
@@ -326,7 +309,7 @@ namespace oglcanvas
                                                             rTexture.AffineTransform );
             ::basegfx::B2DRange aBounds;
             for( const auto& rPolyPolygon : rPolyPolygons )
-                aBounds.expand( ::basegfx::tools::getRange( rPolyPolygon ) );
+                aBounds.expand( ::basegfx::utils::getRange( rPolyPolygon ) );
             aTextureTransform.translate(-aBounds.getMinX(), -aBounds.getMinY());
             aTextureTransform.scale(1/aBounds.getWidth(), 1/aBounds.getHeight());
             aTextureTransform.invert();
@@ -398,23 +381,6 @@ namespace oglcanvas
         mpRecordedActions->clear();
     }
 
-    void CanvasHelper::drawPoint( const rendering::XCanvas*     /*pCanvas*/,
-                                  const geometry::RealPoint2D&  aPoint,
-                                  const rendering::ViewState&   viewState,
-                                  const rendering::RenderState& renderState )
-    {
-        if( mpDevice )
-        {
-            mpRecordedActions->push_back( Action() );
-            Action& rAct=mpRecordedActions->back();
-
-            setupGraphicsState( rAct, viewState, renderState );
-            rAct.maFunction = ::std::bind(&lcl_drawPoint,
-                                            _1,_2,_3,_4,_5,
-                                            aPoint);
-        }
-    }
-
     void CanvasHelper::drawLine( const rendering::XCanvas*      /*pCanvas*/,
                                  const geometry::RealPoint2D&   aStartPoint,
                                  const geometry::RealPoint2D&   aEndPoint,
@@ -427,7 +393,7 @@ namespace oglcanvas
             Action& rAct=mpRecordedActions->back();
 
             setupGraphicsState( rAct, viewState, renderState );
-            rAct.maFunction = ::std::bind(&lcl_drawLine,
+            rAct.maFunction = std::bind(&lcl_drawLine,
                                           _1, _2, _3, _4, _5,
                                           aStartPoint, aEndPoint);
         }
@@ -447,7 +413,7 @@ namespace oglcanvas
             setupGraphicsState( rAct, viewState, renderState );
 
             // TODO(F2): subdivide&render whole curve
-            rAct.maFunction = ::std::bind(&lcl_drawLine,
+            rAct.maFunction = std::bind(&lcl_drawLine,
                                             _1,_2,_3,_4,_5,
                                             geometry::RealPoint2D(
                                                 aBezierSegment.Px,
@@ -600,7 +566,7 @@ namespace oglcanvas
                     const ::canvas::ParametricPolyPolygon::Values& rValues(
                         pGradient->getValues() );
 
-                    rAct.maFunction = ::std::bind(&lcl_fillGradientPolyPolygon,
+                    rAct.maFunction = std::bind(&lcl_fillGradientPolyPolygon,
                                                     _1,_2,_3,_4,
                                                     rValues,
                                                     textures[0],
@@ -643,7 +609,7 @@ namespace oglcanvas
                                 aPixelData,
                                 canvas::tools::getStdColorSpace()));
 
-                        rAct.maFunction = ::std::bind(&lcl_fillTexturedPolyPolygon,
+                        rAct.maFunction = std::bind(&lcl_fillTexturedPolyPolygon,
                                                         _1,_2,_3,_4,
                                                         textures[0],
                                                         aSize,
@@ -735,12 +701,15 @@ namespace oglcanvas
                 aFont.SetWeight( static_cast<FontWeight>(rFontRequest.FontDescription.FontDescription.Weight) );
                 aFont.SetItalic( (rFontRequest.FontDescription.FontDescription.Letterform<=8) ? ITALIC_NONE : ITALIC_NORMAL );
 
+                if (pFont->getEmphasisMark())
+                    aFont.SetEmphasisMark(FontEmphasisMark(pFont->getEmphasisMark()));
+
                 // adjust to stretched font
                 if(!::rtl::math::approxEqual(rFontMatrix.m00, rFontMatrix.m11))
                 {
                     const Size aSize = pVDev->GetFontMetric( aFont ).GetFontSize();
                     const double fDividend( rFontMatrix.m10 + rFontMatrix.m11 );
-                    double fStretch = (rFontMatrix.m00 + rFontMatrix.m01);
+                    double fStretch = rFontMatrix.m00 + rFontMatrix.m01;
 
                     if( !::basegfx::fTools::equalZero( fDividend) )
                         fStretch /= fDividend;
@@ -764,7 +733,7 @@ namespace oglcanvas
                 {
                     // create the DXArray
                     const sal_Int32 nLen( aLogicalAdvancements.getLength() );
-                    ::std::unique_ptr<long[]> pDXArray( new long[nLen] );
+                    std::unique_ptr<long[]> pDXArray( new long[nLen] );
                     for( sal_Int32 i=0; i<nLen; ++i )
                         pDXArray[i] = basegfx::fround( aLogicalAdvancements[i] );
 
@@ -774,7 +743,6 @@ namespace oglcanvas
                                           0,
                                           rTxt.StartPosition,
                                           rTxt.Length,
-                                          true,
                                           0,
                                           pDXArray.get() );
                 }
@@ -821,7 +789,7 @@ namespace oglcanvas
                 Action& rAct=mpRecordedActions->back();
 
                 setupGraphicsState( rAct, viewState, renderState );
-                rAct.maFunction = ::std::bind(&lcl_drawOwnBitmap,
+                rAct.maFunction = std::bind(&lcl_drawOwnBitmap,
                                                 _1,_2,_3,_4,_5,
                                                 *pOwnBitmap);
             }
@@ -850,7 +818,7 @@ namespace oglcanvas
                     Action& rAct=mpRecordedActions->back();
 
                     setupGraphicsState( rAct, viewState, renderState );
-                    rAct.maFunction = ::std::bind(&lcl_drawGenericBitmap,
+                    rAct.maFunction = std::bind(&lcl_drawGenericBitmap,
                                                     _1,_2,_3,_4,_5,
                                                     aSize, aARGBBytes,
                                                     rtl_crc32(0,
@@ -887,7 +855,6 @@ namespace oglcanvas
 
         // setup overall transform only now. View clip above was
         // relative to view transform
-        ::basegfx::B2DHomMatrix aTransform;
         ::canvas::tools::mergeViewAndRenderTransform(o_action.maTransform,
                                                      viewState,
                                                      renderState);
@@ -908,7 +875,6 @@ namespace oglcanvas
                 o_action.meDstBlendMode=GL_ZERO;
                 break;
             case rendering::CompositeOperation::UNDER:
-                // FALLTHROUGH intended - but correct?!
             case rendering::CompositeOperation::DESTINATION:
                 o_action.meSrcBlendMode=GL_ZERO;
                 o_action.meDstBlendMode=GL_ONE;

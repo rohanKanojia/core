@@ -17,17 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/ppt/pptshape.hxx"
-#include "oox/core/xmlfilterbase.hxx"
-#include "drawingml/textbody.hxx"
+#include <oox/ppt/pptshape.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <drawingml/textbody.hxx>
+#include <drawingml/table/tableproperties.hxx>
 
+#include <com/sun/star/awt/Rectangle.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 #include <com/sun/star/beans/XMultiPropertySet.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/drawing/HomogenMatrix3.hpp>
+#include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/text/XText.hpp>
 #include <basegfx/matrix/b2dhommatrix.hxx>
-#include "oox/ppt/slidepersist.hxx"
+#include <sal/log.hxx>
+#include <oox/ppt/slidepersist.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::oox::core;
 using namespace ::oox::drawingml;
@@ -35,7 +40,6 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::drawing;
 
@@ -111,7 +115,6 @@ void PPTShape::addShape(
         const oox::drawingml::Theme* pTheme,
         const Reference< XShapes >& rxShapes,
         basegfx::B2DHomMatrix& aTransformation,
-        const awt::Rectangle* pShapeRect,
         ::oox::drawingml::ShapeIdMap* pShapeMap )
 {
     SAL_INFO("oox.ppt","add shape id: " << msId << " location: " << ((meShapeLocation == Master) ? "master" : ((meShapeLocation == Slide) ? "slide" : ((meShapeLocation == Layout) ? "layout" : "other"))) << " subtype: " << mnSubType << " service: " << msServiceName);
@@ -140,7 +143,6 @@ void PPTShape::addShape(
                 {
                     sServiceName = "com.sun.star.presentation.TitleTextShape";
                     aMasterTextListStyle = rSlidePersist.getMasterPersist().get() ? rSlidePersist.getMasterPersist()->getTitleTextStyle() : rSlidePersist.getTitleTextStyle();
-                    bClearText = true;
                 }
                 break;
                 case XML_subTitle :
@@ -220,6 +222,23 @@ void PPTShape::addShape(
                     if (mnSubType && meShapeLocation == Layout)
                         sServiceName = sOutlinerShapeService;
                 break;
+            }
+        }
+
+        if (sServiceName != "com.sun.star.drawing.TableShape")
+        {
+            if (TextBodyPtr pTextBody = getTextBody())
+            {
+                sal_Int32 nNumCol = pTextBody->getTextProperties().mnNumCol;
+                if (nNumCol > 1)
+                {
+                    // This shape is not a table, but has multiple columns,
+                    // represent that as a table.
+                    sServiceName = "com.sun.star.drawing.TableShape";
+                    oox::drawingml::table::TablePropertiesPtr pTableProperties = getTableProperties();
+                    pTableProperties->pullFromTextBody(pTextBody, maSize.Width);
+                    setTextBody(nullptr);
+                }
             }
         }
 
@@ -309,7 +328,7 @@ void PPTShape::addShape(
                 {
                     aMasterTextListStyle = isOther ? rSlidePersist.getMasterPersist()->getOtherTextStyle() : rSlidePersist.getMasterPersist()->getDefaultTextStyle();
                     if (aSlideStyle.get())
-                        aMasterTextListStyle->apply( *aSlideStyle.get() );
+                        aMasterTextListStyle->apply( *aSlideStyle );
                 }
                 else
                 {
@@ -320,7 +339,7 @@ void PPTShape::addShape(
             if( aMasterTextListStyle.get() && getTextBody().get() ) {
                 TextListStylePtr aCombinedTextListStyle (new TextListStyle());
 
-                aCombinedTextListStyle->apply( *aMasterTextListStyle.get() );
+                aCombinedTextListStyle->apply( *aMasterTextListStyle );
 
                 if( mpPlaceholder.get() && mpPlaceholder->getTextBody().get() )
                     aCombinedTextListStyle->apply( mpPlaceholder->getTextBody()->getTextListStyle() );
@@ -330,8 +349,8 @@ void PPTShape::addShape(
             } else
                 setMasterTextListStyle( aMasterTextListStyle );
 
-            Reference< XShape > xShape( createAndInsert( rFilterBase, sServiceName, pTheme, rxShapes, pShapeRect, bClearText, mpPlaceholder.get() != nullptr, aTransformation, getFillProperties() ) );
-            if (!rSlidePersist.isMasterPage() && rSlidePersist.getPage().is() && ((sal_Int32)mnSubType == XML_title))
+            Reference< XShape > xShape( createAndInsert( rFilterBase, sServiceName, pTheme, rxShapes, bClearText, mpPlaceholder.get() != nullptr, aTransformation, getFillProperties() ) );
+            if (!rSlidePersist.isMasterPage() && rSlidePersist.getPage().is() && mnSubType == XML_title)
              {
                 try
                 {
@@ -347,6 +366,17 @@ void PPTShape::addShape(
                 catch (uno::Exception&)
                 {
 
+                }
+            }
+
+            // Apply text properties on placeholder text inside this placeholder shape
+            if (meShapeLocation == Slide && mpPlaceholder.get() != nullptr && getTextBody() && getTextBody()->isEmpty())
+            {
+                Reference < XText > xText(mxShape, UNO_QUERY);
+                if (xText.is())
+                {
+                    TextCharacterProperties aCharStyleProperties;
+                    getTextBody()->ApplyStyleEmpty(rFilterBase, xText, aCharStyleProperties, mpMasterTextListStyle);
                 }
             }
             if (pShapeMap)
@@ -366,17 +396,12 @@ void PPTShape::addShape(
             // if this is a group shape, we have to add also each child shape
             Reference<XShapes> xShapes(xShape, UNO_QUERY);
             if (xShapes.is())
-                addChildren( rFilterBase, *this, pTheme, xShapes, pShapeRect ? *pShapeRect : awt::Rectangle( maPosition.X, maPosition.Y, maSize.Width, maSize.Height ), pShapeMap, aTransformation );
+                addChildren( rFilterBase, *this, pTheme, xShapes, pShapeMap, aTransformation );
         }
     }
     catch (const Exception&)
     {
     }
-}
-
-void PPTShape::applyShapeReference( const oox::drawingml::Shape& rReferencedShape, bool bUseText )
-{
-    Shape::applyShapeReference( rReferencedShape, bUseText );
 }
 
 namespace

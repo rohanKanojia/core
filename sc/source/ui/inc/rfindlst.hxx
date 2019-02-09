@@ -21,25 +21,27 @@
 #define INCLUDED_SC_SOURCE_UI_INC_RFINDLST_HXX
 
 #include <tools/color.hxx>
-#include "global.hxx"
-#include "address.hxx"
+#include <address.hxx>
+#include <tools/solar.h>
+
+#include <vector>
 
 struct ScRangeFindData
 {
     ScRange    aRef;
-    ScRefFlags nFlags;
+    ScRefFlags const nFlags;
     sal_Int32  nSelStart;
     sal_Int32  nSelEnd;
-    ColorData nColorData;
+    Color      nColor;
 
     ScRangeFindData( const ScRange& rR, ScRefFlags nF, sal_Int32 nS, sal_Int32 nE ) :
-        aRef(rR), nFlags(nF), nSelStart(nS), nSelEnd(nE), nColorData(0) {}
+        aRef(rR), nFlags(nF), nSelStart(nS), nSelEnd(nE) {}
 };
 
 class ScRangeFindList
 {
     std::vector<ScRangeFindData> maEntries;
-    OUString    aDocName;
+    OUString const    aDocName;
     bool        bHidden;
     sal_uInt16  nIndexColor;
 
@@ -47,7 +49,7 @@ public:
                      ScRangeFindList(const OUString& rName);
 
     sal_uLong        Count() const                       { return maEntries.size(); }
-    ColorData        Insert( const ScRangeFindData &rNew );
+    Color            Insert( const ScRangeFindData &rNew );
 
     ScRangeFindData& GetObject( sal_uLong nIndex ) { return maEntries[nIndex]; }
 
@@ -56,8 +58,8 @@ public:
     const OUString&  GetDocName() const { return aDocName; }
     bool             IsHidden() const   { return bHidden; }
 
-    static ColorData GetColorName(const size_t nIndex);
-    ColorData        FindColor(const ScRange& rRef, const size_t nIndex);
+    static Color     GetColorName(const size_t nIndex);
+    Color            FindColor(const ScRange& rRef, const size_t nIndex);
 };
 
 #endif

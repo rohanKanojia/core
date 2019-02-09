@@ -20,13 +20,12 @@
 #define INCLUDED_CHART2_SOURCE_VIEW_AXES_VCARTESIANGRID_HXX
 
 #include "VAxisOrGridBase.hxx"
-#include "VLineProperties.hxx"
+#include <com/sun/star/beans/XPropertySet.hpp>
+
+namespace chart { struct VLineProperties; }
 
 namespace chart
 {
-
-/**
-*/
 
 class VCartesianGrid : public VAxisOrGridBase
 {
@@ -36,11 +35,11 @@ public:
         , const css::uno::Sequence<
             css::uno::Reference< css::beans::XPropertySet > >& rGridPropertiesList //main grid, subgrid, subsubgrid etc
         );
-    virtual ~VCartesianGrid();
+    virtual ~VCartesianGrid() override;
 
     virtual void createShapes() override;
 
-    static void fillLinePropertiesFromGridModel( ::std::vector<VLineProperties>& rLinePropertiesList
+    static void fillLinePropertiesFromGridModel( std::vector<VLineProperties>& rLinePropertiesList
                     , const css::uno::Sequence<
                         css::uno::Reference< css::beans::XPropertySet > >& rGridPropertiesList );
 

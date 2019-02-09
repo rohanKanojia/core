@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "odbc/OFunctions.hxx"
+#include <odbc/OFunctions.hxx>
 #include <osl/process.h>
 
-// Implib-Definitionen fuer ODBC-DLL/shared library:
+// Implib definitions for ODBC-DLL/shared library:
 
 namespace connectivity
 {
@@ -79,9 +79,9 @@ T3SQLFreeHandle pODBC3SQLFreeHandle;
 T3SQLGetCursorName pODBC3SQLGetCursorName;
 T3SQLNativeSql pODBC3SQLNativeSql;
 
-bool LoadFunctions(oslModule pODBCso);
+static bool LoadFunctions(oslModule pODBCso);
 
-// Take care of Dynamicly loading of the DLL/shared lib and Addresses:
+// Take care of Dynamically loading of the DLL/shared lib and Addresses:
 // Returns sal_True at success
 bool LoadLibrary_ODBC3(OUString &_rPath)
 {
@@ -90,6 +90,7 @@ bool LoadLibrary_ODBC3(OUString &_rPath)
 
     if (bLoaded)
         return true;
+#ifndef DISABLE_DYNLOADING
 #ifdef _WIN32
     _rPath = "ODBC32.DLL";
 #endif
@@ -106,6 +107,7 @@ bool LoadLibrary_ODBC3(OUString &_rPath)
 
     if ( !pODBCso )
         pODBCso = osl_loadModule( _rPath.pData,SAL_LOADMODULE_NOW );
+#endif
     if( !pODBCso)
         return false;
 

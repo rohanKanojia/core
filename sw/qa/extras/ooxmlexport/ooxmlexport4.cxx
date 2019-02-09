@@ -11,7 +11,6 @@
 
 #include <com/sun/star/awt/XBitmap.hpp>
 #include <com/sun/star/graphic/XGraphic.hpp>
-#include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/LineJoint.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
@@ -25,6 +24,7 @@
 #include <com/sun/star/text/XTextFramesSupplier.hpp>
 #include <com/sun/star/text/XTextViewCursorSupplier.hpp>
 #include <com/sun/star/text/XTextSection.hpp>
+#include <com/sun/star/text/XTextColumns.hpp>
 #include <com/sun/star/style/CaseMap.hpp>
 #include <com/sun/star/style/ParagraphAdjust.hpp>
 #include <com/sun/star/style/LineSpacing.hpp>
@@ -32,7 +32,6 @@
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <com/sun/star/table/BorderLine2.hpp>
 #include <com/sun/star/table/ShadowFormat.hpp>
-#include <com/sun/star/text/GraphicCrop.hpp>
 #include <com/sun/star/text/XPageCursor.hpp>
 #include <com/sun/star/awt/FontWeight.hpp>
 #include <com/sun/star/awt/FontUnderline.hpp>
@@ -42,7 +41,6 @@
 #include <com/sun/star/xml/dom/XDocument.hpp>
 #include <com/sun/star/style/BreakType.hpp>
 #include <unotools/tempfile.hxx>
-#include <comphelper/sequenceashashmap.hxx>
 #include <com/sun/star/text/XDocumentIndex.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeSegment.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeSegmentCommand.hpp>
@@ -65,9 +63,6 @@ protected:
         const char* aBlacklist[] = {
             "math-escape.docx",
             "math-mso2k7.docx",
-            "ImageCrop.docx",
-            "test_GIF_ImageCrop.docx",
-            "test_PNG_ImageCrop.docx"
         };
         std::vector<const char*> vBlacklist(aBlacklist, aBlacklist + SAL_N_ELEMENTS(aBlacklist));
 
@@ -80,7 +75,7 @@ DECLARE_OOXMLEXPORT_TEST(testRelorientation, "relorientation.docx")
 {
     uno::Reference<drawing::XShape> xShape = getShape(1);
     // This was text::RelOrientation::FRAME, when handling relativeFrom=page, align=right
-    CPPUNIT_ASSERT_EQUAL(text::RelOrientation::PAGE_RIGHT, getProperty<sal_Int16>(xShape, "HoriOrientRelation"));
+    CPPUNIT_ASSERT_EQUAL(text::RelOrientation::PAGE_FRAME, getProperty<sal_Int16>(xShape, "HoriOrientRelation"));
 
     uno::Reference<drawing::XShapes> xGroup(xShape, uno::UNO_QUERY);
     // This resulted in lang::IndexOutOfBoundsException, as nested groupshapes weren't handled.
@@ -125,8 +120,8 @@ DECLARE_OOXMLEXPORT_TEST(testGroupshapePicture, "groupshape-picture.docx")
 
 DECLARE_OOXMLEXPORT_TEST(testAutofit, "autofit.docx")
 {
-    CPPUNIT_ASSERT_EQUAL(true, bool(getProperty<sal_Bool>(getShape(1), "TextAutoGrowHeight")));
-    CPPUNIT_ASSERT_EQUAL(false, bool(getProperty<sal_Bool>(getShape(2), "TextAutoGrowHeight")));
+    CPPUNIT_ASSERT_EQUAL(true, getProperty<bool>(getShape(1), "TextAutoGrowHeight"));
+    CPPUNIT_ASSERT_EQUAL(false, getProperty<bool>(getShape(2), "TextAutoGrowHeight"));
 }
 
 DECLARE_OOXMLEXPORT_TEST(testTrackChangesDeletedParagraphMark, "testTrackChangesDeletedParagraphMark.docx")
@@ -181,7 +176,15 @@ DECLARE_OOXMLEXPORT_TEST(testTextBoxPictureFill, "textbox_picturefill.docx")
 {
     uno::Reference<beans::XPropertySet> xFrame(getShape(1), uno::UNO_QUERY);
     CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_BITMAP, getProperty<drawing::FillStyle>(xFrame, "FillStyle"));
-    CPPUNIT_ASSERT(!(getProperty<OUString>(xFrame,"FillBitmapURL")).isEmpty());
+    auto xBitmap = getProperty<uno::Reference<awt::XBitmap>>(xFrame, "FillBitmap");
+    CPPUNIT_ASSERT(xBitmap.is());
+    uno::Reference<graphic::XGraphic> xGraphic(xBitmap, uno::UNO_QUERY);
+    CPPUNIT_ASSERT(xGraphic.is());
+    Graphic aGraphic(xGraphic);
+    CPPUNIT_ASSERT(aGraphic);
+    CPPUNIT_ASSERT(aGraphic.GetSizeBytes() > 0L);
+    CPPUNIT_ASSERT_EQUAL(447L, aGraphic.GetSizePixel().Width());
+    CPPUNIT_ASSERT_EQUAL(528L, aGraphic.GetSizePixel().Height());
 }
 
 DECLARE_OOXMLEXPORT_TEST(testFDO73034, "FDO73034.docx")
@@ -253,7 +256,7 @@ DECLARE_OOXMLEXPORT_TEST(testRelSizeRound, "rel-size-round.docx")
 
 DECLARE_OOXMLEXPORT_TEST(testTestTitlePage, "testTitlePage.docx")
 {
-    CPPUNIT_ASSERT_EQUAL(OUString("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), parseDump("/root/page[2]/footer/txt/text()"));
+    CPPUNIT_ASSERT_EQUAL(OUString("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), parseDump("/root/page[last()]/footer/txt/text()"));
 }
 
 DECLARE_OOXMLEXPORT_TEST(testTableRowDataDisplayedTwice,"table-row-data-displayed-twice.docx")
@@ -296,6 +299,9 @@ DECLARE_OOXMLEXPORT_TEST(testSegFaultWhileSave, "test_segfault_while_save.docx")
     if (!pXmlDoc)
         return;
     CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(6137), getXPath(pXmlDoc, "/w:document/w:body/w:tbl/w:tblGrid/w:gridCol[2]", "w").toInt32());
+
+    // tdf#106572 - preventative test matching danger conditions, but imported OK anyway
+    CPPUNIT_ASSERT_EQUAL(OUString("First Page"), getProperty<OUString>(getParagraphOrTable(1), "PageDescName"));
 }
 
 DECLARE_OOXMLEXPORT_TEST(fdo69656, "Table_cell_auto_width_fdo69656.docx")
@@ -340,6 +346,14 @@ DECLARE_OOXMLEXPORT_TEST(testFdo73541,"fdo73541.docx")
     assertXPath(pXmlDoc, "/w:settings/w:mirrorMargins");
 }
 
+DECLARE_OOXMLEXPORT_TEST(testFdo106029,"fdo106029.docx")
+{
+    xmlDocPtr pXmlDoc = parseExport("word/settings.xml");
+    if (!pXmlDoc)
+        return;
+    assertXPath(pXmlDoc, "/w:settings/w:compat/w:doNotExpandShiftReturn");
+}
+
 DECLARE_OOXMLEXPORT_TEST(testFDO74106, "FDO74106.docx")
 {
     xmlDocPtr pXmlDoc = parseExport("word/numbering.xml");
@@ -353,7 +367,32 @@ DECLARE_OOXMLEXPORT_TEST(testFDO74215, "FDO74215.docx")
     xmlDocPtr pXmlDoc = parseExport("word/numbering.xml");
     if (!pXmlDoc)
         return;
-    assertXPath(pXmlDoc, "/w:numbering/w:numPicBullet[2]/w:pict/v:shape", "style", "width:7.9pt;height:7.9pt");
+    // tdf#106849 NumPicBullet xShape should not to be resized.
+
+    // This is dependent on the running system: see MSWordExportBase::BulletDefinitions
+    // FIXME: the size of a bullet is defined by GraphicSize property
+    // (stored in SvxNumberFormat::aGraphicSize) so use that for the size
+    // (properly convert from 100mm to pt (1 inch is 72 pt, 1 pt is 20 twips).
+
+    // On 96 DPI "width:11.25pt;height:11.25pt"; on 120 DPI "width:9pt;height:9pt"
+    const OUString sStyle
+        = getXPath(pXmlDoc, "/w:numbering/w:numPicBullet[2]/w:pict/v:shape", "style");
+    {
+        const OUString sWidth = sStyle.getToken(0, ';');
+        CPPUNIT_ASSERT(sWidth.startsWith("width:"));
+        CPPUNIT_ASSERT(sWidth.endsWith("pt"));
+        const double fWidth = sWidth.copy(6, sWidth.getLength() - 8).toDouble();
+        const double fXScaleFactor = 96.0 / Application::GetDefaultDevice()->GetDPIX();
+        CPPUNIT_ASSERT_DOUBLES_EQUAL(11.25 * fXScaleFactor, fWidth, 0.001);
+    }
+    {
+        const OUString sHeight = sStyle.getToken(1, ';');
+        CPPUNIT_ASSERT(sHeight.startsWith("height:"));
+        CPPUNIT_ASSERT(sHeight.endsWith("pt"));
+        const double fHeight = sHeight.copy(7, sHeight.getLength() - 9).toDouble();
+        const double fYScaleFactor = 96.0 / Application::GetDefaultDevice()->GetDPIY();
+        CPPUNIT_ASSERT_DOUBLES_EQUAL(11.25 * fYScaleFactor, fHeight, 0.001);
+    }
 }
 
 DECLARE_OOXMLEXPORT_TEST(testColumnBreak_ColumnCountIsZero,"fdo74153.docx")
@@ -362,9 +401,31 @@ DECLARE_OOXMLEXPORT_TEST(testColumnBreak_ColumnCountIsZero,"fdo74153.docx")
      * The <w:br w:type="column" /> was missing after roundtrip
      */
     xmlDocPtr pXmlDoc = parseExport("word/document.xml");
-    if (!pXmlDoc)
-        return;
-    assertXPath(pXmlDoc, "/w:document/w:body/w:p[3]/w:r[1]/w:br","type","column");
+    if (pXmlDoc)
+        assertXPath(pXmlDoc, "/w:document/w:body/w:p[3]/w:r[1]/w:br","type","column");
+
+    //tdf76349 match Word's behavior of treating breaks in single columns as page breaks.
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<text::XTextViewCursorSupplier> xTextViewCursorSupplier(xModel->getCurrentController(), uno::UNO_QUERY);
+    uno::Reference<text::XPageCursor> xCursor(xTextViewCursorSupplier->getViewCursor(), uno::UNO_QUERY);
+    xCursor->jumpToLastPage();
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(2), xCursor->getPage());
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf90697_complexBreaksHeaders,"tdf90697_complexBreaksHeaders.docx")
+{
+// This is a complex document using many types of section breaks and re-defined headers.
+// Paragraphs 44-47 were in two columns
+    uno::Reference<beans::XPropertySet> xTextSection = getProperty< uno::Reference<beans::XPropertySet> >(getParagraph(45), "TextSection");
+    CPPUNIT_ASSERT(xTextSection.is());
+    uno::Reference<text::XTextColumns> xTextColumns = getProperty< uno::Reference<text::XTextColumns> >(xTextSection, "TextColumns");
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(2), xTextColumns->getColumnCount());
+
+// after that, the section break should switch things back to one column.
+    xTextSection = getProperty< uno::Reference<beans::XPropertySet> >(getParagraph(50), "TextSection");
+    CPPUNIT_ASSERT(xTextSection.is());
+    xTextColumns = getProperty< uno::Reference<text::XTextColumns> >(xTextSection, "TextColumns");
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(0), xTextColumns->getColumnCount());
 }
 
 DECLARE_OOXMLEXPORT_TEST(testIndentation, "test_indentation.docx")
@@ -415,7 +476,7 @@ DECLARE_OOXMLEXPORT_TEST(testChartInFooter, "chart-in-footer.docx")
     uno::Reference<drawing::XDrawPageSupplier> xDrawPageSupplier(mxComponent, uno::UNO_QUERY);
     if (xDrawPageSupplier.is())
     {
-        // If xDrawPage->getCount()==1, then document conatins one shape.
+        // If xDrawPage->getCount()==1, then document contains one shape.
         uno::Reference<container::XIndexAccess> xDrawPage(xDrawPageSupplier->getDrawPage(), uno::UNO_QUERY);
         CPPUNIT_ASSERT_EQUAL(sal_Int32(1), xDrawPage->getCount()); // One shape in the doc
     }
@@ -466,8 +527,6 @@ DECLARE_OOXMLEXPORT_TEST(testAbi11739, "abi11739.docx")
     CPPUNIT_ASSERT(getXPathPosition(pXmlDoc, "/w:styles/w:style[11]", "unhideWhenUsed") < getXPathPosition(pXmlDoc, "/w:styles/w:style[11]", "qFormat"));
 }
 
-//This test gives error due to ATL
-#if HAVE_FEATURE_ATL
 DECLARE_OOXMLEXPORT_TEST(testEmbeddedXlsx, "embedded-xlsx.docx")
 {
     // check there are two objects and they are FrameShapes
@@ -498,7 +557,6 @@ DECLARE_OOXMLEXPORT_TEST(testEmbeddedXlsx, "embedded-xlsx.docx")
     CPPUNIT_ASSERT_EQUAL(2, nSheetFiles);
     CPPUNIT_ASSERT_EQUAL(2, nImageFiles);
 }
-#endif
 
 DECLARE_OOXMLEXPORT_TEST(testNumberedLists_StartingWithZero, "FDO74105.docx")
 {
@@ -534,8 +592,6 @@ DECLARE_OOXMLEXPORT_TEST(testPageBreak,"fdo74566.docx")
     getRun(xParagraph4, 1, "Second Page First line after Page Break");
 }
 
-//This test gives errors due to ATL
-#if HAVE_FEATURE_ATL
 DECLARE_OOXMLEXPORT_TEST(testOleObject, "test_ole_object.docx")
 {
     xmlDocPtr pXmlDoc = parseExport("word/document.xml");
@@ -563,7 +619,6 @@ DECLARE_OOXMLEXPORT_TEST(testOleObject, "test_ole_object.docx")
         "application/vnd.openxmlformats-officedocument.oleObject");
 
 }
-#endif
 
 DECLARE_OOXMLEXPORT_TEST(testFdo74792, "fdo74792.docx")
 {
@@ -580,7 +635,7 @@ DECLARE_OOXMLEXPORT_TEST(testFdo74792, "fdo74792.docx")
                          comphelper::getComponentContext(m_xSFactory), maTempFile.GetURL());
 
     //check that images are also saved
-    OUString sImageFile( "word/media/OOXDiagramDataRels1_0.jpeg" ); //added anchor id to form a uniqe name
+    OUString const sImageFile( "word/media/OOXDiagramDataRels1_0.jpeg" ); //added anchor id to form a unique name
     uno::Reference<io::XInputStream> xInputStream(xNameAccess->getByName( sImageFile ), uno::UNO_QUERY);
     CPPUNIT_ASSERT( xInputStream.is() );
 }
@@ -607,12 +662,12 @@ DECLARE_OOXMLEXPORT_TEST(testFdo77718, "fdo77718.docx")
                          comphelper::getComponentContext(m_xSFactory), maTempFile.GetURL());
 
     //check that images are also saved
-    OUString sImageFile1( "word/media/OOXDiagramDataRels1_0.jpeg" ); //added anchor id to form a uniqe name
+    OUString const sImageFile1( "word/media/OOXDiagramDataRels1_0.jpeg" ); //added anchor id to form a unique name
     uno::Reference<io::XInputStream> xInputStream1(xNameAccess->getByName( sImageFile1 ), uno::UNO_QUERY);
     CPPUNIT_ASSERT( xInputStream1.is() );
 
     //check that images are saved for other smart-arts as well.
-    OUString sImageFile2( "word/media/OOXDiagramDataRels2_0.jpeg" ); //added anchor id to form a uniqe name
+    OUString const sImageFile2( "word/media/OOXDiagramDataRels2_0.jpeg" ); //added anchor id to form a unique name
     uno::Reference<io::XInputStream> xInputStream2(xNameAccess->getByName( sImageFile2 ), uno::UNO_QUERY);
     CPPUNIT_ASSERT( xInputStream2.is() );
 }
@@ -624,6 +679,11 @@ DECLARE_OOXMLEXPORT_TEST(testTableCurruption, "tableCurrupt.docx")
         return;
     CPPUNIT_ASSERT(pXmlDoc) ;
     assertXPath(pXmlDoc, "/w:hdr/w:tbl[1]/w:tr[1]/w:tc[1]",1);
+
+    // tdf#116549: header paragraph should not have a bottom border.
+    uno::Reference<text::XText> xHeaderText = getProperty< uno::Reference<text::XText> >(getStyles("PageStyles")->getByName("First Page"), "HeaderText");
+    table::BorderLine2 aHeaderBottomBorder = getProperty<table::BorderLine2>( getParagraphOfText( 1, xHeaderText ), "BottomBorder");
+    CPPUNIT_ASSERT_EQUAL(sal_uInt32(0), aHeaderBottomBorder.LineWidth);
 }
 
 DECLARE_OOXMLEXPORT_TEST(testDateControl, "date-control.docx")
@@ -635,7 +695,7 @@ DECLARE_OOXMLEXPORT_TEST(testDateControl, "date-control.docx")
     assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:sdt/w:sdtPr/w:date", "fullDate", "2014-03-05T00:00:00Z");
     assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:sdt/w:sdtPr/w:date/w:dateFormat", "val", "dddd, dd' de 'MMMM' de 'yyyy");
     assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:sdt/w:sdtPr/w:date/w:lid", "val", "es-ES");
-    assertXPathContent(pXmlDoc, "/w:document/w:body/w:p/w:sdt/w:sdtContent/w:r/w:t", OUString::fromUtf8("mi\xC3\xA9rcoles, 05 de marzo de 2014"));
+    assertXPathContent(pXmlDoc, "/w:document/w:body/w:p/w:sdt/w:sdtContent/w:r/w:t", u"mi\u00E9rcoles, 05 de marzo de 2014");
 
     // check imported control
     uno::Reference<drawing::XControlShape> xControl(getShape(1), uno::UNO_QUERY);
@@ -652,6 +712,73 @@ DECLARE_OOXMLEXPORT_TEST(test_OpeningBrace, "2120112713_OpenBrace.docx")
         return;
     // Checking for OpeningBrace tag
     assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/m:oMath[1]/m:d[1]/m:dPr[1]/m:begChr[1]","val","");
+}
+
+// Checks that all runs of the field have text properties.
+// Old behaviour: only first run has text properties of the field
+//
+// There are several runs are used in fields:
+//     <w:r>
+//         <w:rPr>
+//             <!-- properties written with DocxAttributeOutput::StartRunProperties() / DocxAttributeOutput::EndRunProperties().
+//         </w:rPr>
+//         <w:fldChar w:fldCharType="begin" />
+//     </w:r>
+//         <w:r>
+//         <w:rPr>
+//             <!-- properties written with DocxAttributeOutput::DoWriteFieldRunProperties()
+//         </w:rPr>
+//         <w:instrText>TIME \@"HH:mm:ss"</w:instrText>
+//     </w:r>
+//     <w:r>
+//         <w:rPr>
+//             <!-- properties written with DocxAttributeOutput::DoWriteFieldRunProperties()
+//         </w:rPr>
+//         <w:fldChar w:fldCharType="separate" />
+//     </w:r>
+//     <w:r>
+//         <w:rPr>
+//             <!-- properties written with DocxAttributeOutput::DoWriteFieldRunProperties()
+//         </w:rPr>
+//         <w:t>14:01:13</w:t>
+//         </w:r>
+//     <w:r>
+//         <w:rPr>
+//             <!-- properties written with DocxAttributeOutput::DoWriteFieldRunProperties()
+//         </w:rPr>
+//         <w:fldChar w:fldCharType="end" />
+//     </w:r>
+// See, tdf#38778
+DECLARE_OOXMLEXPORT_TEST(testTdf38778, "tdf38778_properties_in_run_for_field.doc")
+{
+    xmlDocPtr pXmlDoc = parseExport("word/document.xml");
+    if (!pXmlDoc)
+        return;
+
+    const OUString psz("20");
+    const OUString pszCs("20");
+
+    // w:fldCharType="begin"
+    assertXPath(pXmlDoc,        "/w:document/w:body/w:p[1]/w:r[3]/w:rPr/w:sz",   "val", psz);
+    assertXPath(pXmlDoc,        "/w:document/w:body/w:p[1]/w:r[3]/w:rPr/w:szCs", "val", pszCs);
+
+    // PAGE
+    assertXPath(pXmlDoc,        "/w:document/w:body/w:p[1]/w:r[4]/w:rPr/w:sz",   "val", psz);
+    assertXPath(pXmlDoc,        "/w:document/w:body/w:p[1]/w:r[4]/w:rPr/w:szCs", "val", pszCs);
+    assertXPathContent(pXmlDoc, "/w:document/w:body/w:p[1]/w:r[4]/w:instrText",  " PAGE ");
+
+    // w:fldCharType="separate"
+    assertXPath(pXmlDoc,        "/w:document/w:body/w:p[1]/w:r[5]/w:rPr/w:sz",   "val", psz);
+    assertXPath(pXmlDoc,        "/w:document/w:body/w:p[1]/w:r[5]/w:rPr/w:szCs", "val", pszCs);
+
+    // field result: 1
+    assertXPath(pXmlDoc,        "/w:document/w:body/w:p[1]/w:r[6]/w:rPr/w:sz",   "val", psz);
+    assertXPath(pXmlDoc,        "/w:document/w:body/w:p[1]/w:r[6]/w:rPr/w:szCs", "val", pszCs);
+    assertXPathContent(pXmlDoc, "/w:document/w:body/w:p[1]/w:r[6]/w:t",          "1"); // field result
+
+    // w:fldCharType="end"
+    assertXPath(pXmlDoc,        "/w:document/w:body/w:p[1]/w:r[7]/w:rPr/w:sz",   "val", psz);
+    assertXPath(pXmlDoc,        "/w:document/w:body/w:p[1]/w:r[7]/w:rPr/w:szCs", "val", pszCs);
 }
 
 DECLARE_OOXMLEXPORT_TEST(testFDO76312, "FDO76312.docx")
@@ -679,7 +806,7 @@ DECLARE_OOXMLEXPORT_TEST(testComboBoxControl, "combobox-control.docx")
     CPPUNIT_ASSERT_EQUAL(OUString("Manolo"), getProperty<OUString>(xControl->getControl(), "Text"));
 
     uno::Sequence<OUString> aItems = getProperty< uno::Sequence<OUString> >(xControl->getControl(), "StringItemList");
-    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), sal_Int32(aItems.getLength()));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), aItems.getLength());
     CPPUNIT_ASSERT_EQUAL(OUString("manolo"), aItems[0]);
     CPPUNIT_ASSERT_EQUAL(OUString("pepito"), aItems[1]);
 }
@@ -713,8 +840,13 @@ DECLARE_OOXMLEXPORT_TEST(testParagraphWithComments, "paragraphWithComments.docx"
     CPPUNIT_ASSERT_EQUAL( idInDocXml, idInCommentXml );
 }
 
-//This features gives error due to ATL
-#if HAVE_FEATURE_ATL
+DECLARE_OOXMLEXPORT_TEST(testTdf104707_urlComment, "tdf104707_urlComment.odt")
+{
+    xmlDocPtr pXmlComm = parseExport("word/comments.xml");
+    CPPUNIT_ASSERT(pXmlComm);
+    CPPUNIT_ASSERT_EQUAL( OUString("https://bugs.documentfoundation.org/show_bug.cgi?id=104707"), getXPathContent(pXmlComm,"/w:comments/w:comment/w:p/w:hyperlink/w:r/w:t") );
+}
+
 DECLARE_OOXMLEXPORT_TEST(testOLEObjectinHeader, "2129393649.docx")
 {
     // fdo#76015 : Document contains oleobject in header xml.
@@ -747,7 +879,6 @@ DECLARE_OOXMLEXPORT_TEST(testOLEObjectinHeader, "2129393649.docx")
         "ProgID",
         "Word.Picture.8");
 }
-#endif
 
 DECLARE_OOXMLEXPORT_TEST(test_ClosingBrace, "2120112713.docx")
 {
@@ -893,8 +1024,6 @@ DECLARE_OOXMLEXPORT_TEST(testSimpleSdts, "simple-sdts.docx")
     assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:sdt/w:sdtPr/w:citation", 1);
 }
 
-//This feature gives error due to ATL
-#if HAVE_FEATURE_ATL
 DECLARE_OOXMLEXPORT_TEST(testEmbeddedExcelChart, "EmbeddedExcelChart.docx")
 {
     xmlDocPtr pXmlDoc = parseExport("[Content_Types].xml");
@@ -921,7 +1050,6 @@ DECLARE_OOXMLEXPORT_TEST(testEmbeddedExcelChart, "EmbeddedExcelChart.docx")
         "ProgID",
         "Excel.Chart.8");
 }
-#endif
 
 DECLARE_OOXMLEXPORT_TEST(testTdf83227, "tdf83227.docx")
 {
@@ -935,12 +1063,179 @@ DECLARE_OOXMLEXPORT_TEST(testTdf83227, "tdf83227.docx")
     CPPUNIT_ASSERT_EQUAL(false, bool(xNameAccess->hasByName("word/media/image2.png")));
 }
 
+DECLARE_OOXMLEXPORT_TEST(testTdf103001, "tdf103001.docx")
+{
+    // The same image is featured in the header and in the body text, make sure
+    // the header relation is still written, even when caching is enabled.
+    if (!mbExported)
+        return;
+
+    uno::Reference<packages::zip::XZipFileAccess2> xNameAccess = packages::zip::ZipFileAccess::createWithURL(comphelper::getComponentContext(m_xSFactory), maTempFile.GetURL());
+    // This failed: header reused the RelId of the body text, even if RelIds
+    // are local to their stream.
+    CPPUNIT_ASSERT(xNameAccess->hasByName("word/_rels/header1.xml.rels"));
+}
+
 DECLARE_OOXMLEXPORT_TEST(testTdf92521, "tdf92521.odt")
 {
     if (xmlDocPtr pXmlDoc = parseExport("word/document.xml"))
         // There should be a section break that's in the middle of the document: right after the table.
         assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:pPr/w:sectPr", 1);
 }
+
+DECLARE_OOXMLEXPORT_TEST(testTdf102466, "tdf102466.docx")
+{
+    // the problem was: file is truncated: the first page is missing.
+    // More precisely, the table in the first page was clipped.
+    {
+        xmlDocPtr pXmlDoc = parseLayoutDump();
+        sal_Int32 nFlyPrtHeight = getXPath(pXmlDoc, "(/root/page[1]//fly)[1]/infos/prtBounds", "height").toInt32();
+        sal_Int32 nTableHeight = getXPath(pXmlDoc, "(/root/page[1]//fly)[1]/tab/infos/bounds", "height").toInt32();
+        CPPUNIT_ASSERT_MESSAGE("The table is clipped in a fly frame.", nFlyPrtHeight >= nTableHeight);
+    }
+
+    // check how much pages we have
+    CPPUNIT_ASSERT_EQUAL(10, getPages());
+
+    // check content of the first page
+    {
+        uno::Reference<drawing::XDrawPageSupplier> xDrawPageSupplier(mxComponent, uno::UNO_QUERY);
+        uno::Reference<container::XIndexAccess> xIndexAccess(xDrawPageSupplier->getDrawPage(), uno::UNO_QUERY);
+        uno::Reference<beans::XPropertySet> xFrame(xIndexAccess->getByIndex(0), uno::UNO_QUERY);
+
+        // no border
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(0), getProperty<sal_Int32>(xFrame, "LineWidth"));
+    }
+
+    // Make sure we have 19 tables created
+    {
+        uno::Reference<text::XTextTablesSupplier> xTablesSupplier(mxComponent, uno::UNO_QUERY);
+        uno::Reference<container::XIndexAccess> xTables(xTablesSupplier->getTextTables( ), uno::UNO_QUERY);
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(19), xTables->getCount( ));
+
+        // check the text inside first cell of the first table
+        uno::Reference<text::XTextTable> xTable(xTables->getByIndex(0), uno::UNO_QUERY);
+        uno::Reference<text::XTextRange> xCell(xTable->getCellByName("A1"), uno::UNO_QUERY);
+
+        const OUString aMustHaveText = "Requerimientos del  Cliente";
+        const OUString aActualText   = xCell->getString();
+
+        CPPUNIT_ASSERT(aActualText.indexOf(aMustHaveText) > 0);
+    }
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf99090_pgbrkAfterTable, "tdf99090_pgbrkAfterTable.docx")
+{
+    if (xmlDocPtr pXmlDoc = parseExport("word/document.xml"))
+        // There should be a regular page break that's in the middle of the document: right after the table.
+        assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/w:br", 1);
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf96750_landscapeFollow, "tdf96750_landscapeFollow.docx")
+{
+    uno::Reference<beans::XPropertySet> xStyle(getStyles("PageStyles")->getByName("Standard"), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(true, getProperty<bool>(xStyle, "IsLandscape"));
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf86926_A3, "tdf86926_A3.docx")
+{
+    uno::Reference<beans::XPropertySet> xStyle(getStyles("PageStyles")->getByName("Standard"), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(42000), getProperty<sal_Int32>(xStyle, "Height"));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(29700), getProperty<sal_Int32>(xStyle, "Width"));
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf64372_continuousBreaks,"tdf64372_continuousBreaks.docx")
+{
+    //There are no page breaks, so everything should be on the first page.
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<text::XTextViewCursorSupplier> xTextViewCursorSupplier(xModel->getCurrentController(), uno::UNO_QUERY);
+    uno::Reference<text::XPageCursor> xCursor(xTextViewCursorSupplier->getViewCursor(), uno::UNO_QUERY);
+    xCursor->jumpToLastPage();
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(1), xCursor->getPage());
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf92724_continuousBreaksComplex,"tdf92724_continuousBreaksComplex.docx")
+{
+    //There are 2 page breaks, so there should be 3 pages.
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<text::XTextViewCursorSupplier> xTextViewCursorSupplier(xModel->getCurrentController(), uno::UNO_QUERY);
+    uno::Reference<text::XPageCursor> xCursor(xTextViewCursorSupplier->getViewCursor(), uno::UNO_QUERY);
+    xCursor->jumpToLastPage();
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(3), xCursor->getPage());
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf90697_continuousBreaksComplex2,"tdf92724_continuousBreaksComplex2.docx")
+{
+// Continuous section breaks with new headers/footers should not immediately switch to a new page style.
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<text::XTextViewCursorSupplier> xTextViewCursorSupplier(xModel->getCurrentController(), uno::UNO_QUERY);
+    uno::Reference<text::XPageCursor> xCursor(xTextViewCursorSupplier->getViewCursor(), uno::UNO_QUERY);
+    xCursor->jumpToLastPage();
+
+    sal_Int16 nPages = xCursor->getPage();
+    while( nPages > 0 )
+    {
+        OUString sPageStyleName = getProperty<OUString>( xCursor, "PageStyleName" );
+        uno::Reference<text::XText> xHeaderText = getProperty< uno::Reference<text::XText> >(getStyles("PageStyles")->getByName(sPageStyleName), "HeaderText");
+// Specific case to avoid.  Testing separately (even though redundant).
+// The first header (defined on page 3) ONLY is shown IF the section happens to start on a new page (which it doesn't in this document).
+        CPPUNIT_ASSERT( xHeaderText->getString() != "Third section - First page header. No follow defined" );
+// Same test stated differently: Pages 4 and 5 OUGHT to use "Second section header", but currently don't.  Page 6 does.
+        if( nPages <= 3 )
+            CPPUNIT_ASSERT_EQUAL( OUString("First section header"), xHeaderText->getString() );
+        else
+            CPPUNIT_ASSERT( xHeaderText->getString() == "First section header" || xHeaderText->getString() == "Second section header" );
+
+        xCursor->jumpToPage( --nPages );
+    }
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf95367_inheritFollowStyle, "tdf95367_inheritFollowStyle.docx")
+{
+    CPPUNIT_ASSERT_EQUAL(OUString("header"),  parseDump("/root/page[2]/header/txt/text()"));
+}
+
+DECLARE_OOXMLEXPORT_TEST(testInheritFirstHeader,"inheritFirstHeader.docx")
+{
+// First page headers always link to last used first header, never to a follow header
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<text::XTextViewCursorSupplier> xTextViewCursorSupplier(xModel->getCurrentController(), uno::UNO_QUERY);
+    uno::Reference<text::XPageCursor> xCursor(xTextViewCursorSupplier->getViewCursor(), uno::UNO_QUERY);
+
+    xCursor->jumpToLastPage();
+    OUString sPageStyleName = getProperty<OUString>( xCursor, "PageStyleName" );
+    uno::Reference<text::XText> xHeaderText = getProperty< uno::Reference<text::XText> >(getStyles("PageStyles")->getByName(sPageStyleName), "HeaderText");
+    CPPUNIT_ASSERT_EQUAL( OUString("Last Header"), xHeaderText->getString() );
+
+    xCursor->jumpToPreviousPage();
+    sPageStyleName = getProperty<OUString>( xCursor, "PageStyleName" );
+    xHeaderText = getProperty< uno::Reference<text::XText> >(getStyles("PageStyles")->getByName(sPageStyleName), "HeaderText");
+    CPPUNIT_ASSERT_EQUAL( OUString("First Header"), xHeaderText->getString() );
+
+    xCursor->jumpToPreviousPage();
+    sPageStyleName = getProperty<OUString>( xCursor, "PageStyleName" );
+    xHeaderText = getProperty< uno::Reference<text::XText> >(getStyles("PageStyles")->getByName(sPageStyleName), "HeaderText");
+    CPPUNIT_ASSERT_EQUAL( OUString("Follow Header"), xHeaderText->getString() );
+}
+
+#if HAVE_MORE_FONTS
+DECLARE_OOXMLEXPORT_TEST(testTdf81345_045Original,"tdf81345.docx")
+{
+    //Header wasn't replaced  and columns were missing because no new style was created.
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
+    uno::Reference<text::XTextViewCursorSupplier> xTextViewCursorSupplier(xModel->getCurrentController(), uno::UNO_QUERY);
+    uno::Reference<text::XPageCursor> xCursor(xTextViewCursorSupplier->getViewCursor(), uno::UNO_QUERY);
+
+    xCursor->jumpToPage(2);
+    OUString pageStyleName = getProperty<OUString>(xCursor, "PageStyleName");
+    CPPUNIT_ASSERT(pageStyleName != "Standard");
+
+    // tdf89297 Styles were being added before their base/parent/inherited-from style existed, and so were using default settings.
+    uno::Reference<container::XNameAccess> xParaStyles(getStyles("ParagraphStyles"));
+    uno::Reference<beans::XPropertySet> xStyle(xParaStyles->getByName("Pull quote"), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(6736947), getProperty<sal_Int32>(xStyle, "CharColor"));
+}
+#endif
 
 CPPUNIT_PLUGIN_IMPLEMENT();
 

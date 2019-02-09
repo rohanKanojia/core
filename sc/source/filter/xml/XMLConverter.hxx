@@ -20,25 +20,25 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_XML_XMLCONVERTER_HXX
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLCONVERTER_HXX
 
-#include "global.hxx"
-#include "detfunc.hxx"
-#include "detdata.hxx"
+#include <global.hxx>
+#include <detfunc.hxx>
+#include <detdata.hxx>
 #include <rtl/ustrbuf.hxx>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/sheet/ConditionOperator.hpp>
 #include <com/sun/star/sheet/DataPilotFieldOrientation.hpp>
 #include <com/sun/star/sheet/GeneralFunction.hpp>
 #include <com/sun/star/sheet/ValidationType.hpp>
-#include <com/sun/star/util/DateTime.hpp>
+
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
 
 class ScDocument;
 class DateTime;
+enum class ScGeneralFunction;
 
 class ScXMLConverter
 {
 public:
-    inline              ScXMLConverter()    {}
-    inline              ~ScXMLConverter()   {}
+                        ScXMLConverter() = delete;
 
 // helper methods
     static ScDocument*  GetScDocument(
@@ -48,13 +48,17 @@ public:
     static css::sheet::GeneralFunction
                         GetFunctionFromString(
                             const OUString& rString );
+    static ScGeneralFunction
+                        GetFunctionFromString2(
+                            const OUString& rString );
+
     static ScSubTotalFunc GetSubTotalFuncFromString(
                             const OUString& rString );
 
-// EXPORT: GeneralFunction / ScSubTotalFunc
+// EXPORT: GeneralFunctio2 / ScSubTotalFunc
     static void         GetStringFromFunction(
                             OUString& rString,
-                            const css::sheet::GeneralFunction eFunction );
+                            const sal_Int16 eFunction );
     static void         GetStringFromFunction(
                             OUString& rString,
                             const ScSubTotalFunc eFunction );

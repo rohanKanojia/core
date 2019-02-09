@@ -24,6 +24,7 @@
 #include <rtl/ref.hxx>
 #include <rtl/string.hxx>
 
+#include <memory>
 #include <vector>
 
 class TypeManager;
@@ -34,7 +35,7 @@ namespace codemaker {
    Represents a node of the hierarchy from the ExceptionTree class.
  */
 struct ExceptionTreeNode {
-    typedef std::vector< ExceptionTreeNode * > Children;
+    typedef std::vector< std::unique_ptr<ExceptionTreeNode> > Children;
 
     // Internally used by ExceptionTree:
     ExceptionTreeNode(rtl::OString const & theName):
@@ -54,8 +55,8 @@ struct ExceptionTreeNode {
     Children children;
 
 private:
-    ExceptionTreeNode(ExceptionTreeNode &) = delete;
-    void operator =(ExceptionTreeNode) = delete;
+    ExceptionTreeNode(ExceptionTreeNode const &) = delete;
+    ExceptionTreeNode& operator =(ExceptionTreeNode const &) = delete;
 
     void clearChildren();
 };
@@ -78,8 +79,6 @@ private:
 class ExceptionTree {
 public:
     ExceptionTree(): m_root("com.sun.star.uno.Exception") {}
-
-    ~ExceptionTree() {}
 
     /**
        Builds the exception hierarchy, by adding one exception type at a time.
@@ -107,8 +106,8 @@ public:
     ExceptionTreeNode const & getRoot() const { return m_root; }
 
 private:
-    ExceptionTree(ExceptionTree &) = delete;
-    void operator =(const ExceptionTree&) = delete;
+    ExceptionTree(ExceptionTree const &) = delete;
+    ExceptionTree& operator =(const ExceptionTree&) = delete;
 
     ExceptionTreeNode m_root;
 };

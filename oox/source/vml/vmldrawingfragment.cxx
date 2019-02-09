@@ -17,12 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/vml/vmldrawingfragment.hxx"
+#include <oox/vml/vmldrawingfragment.hxx>
 
-#include "oox/core/xmlfilterbase.hxx"
-#include "oox/vml/vmldrawing.hxx"
-#include "oox/vml/vmlinputstream.hxx"
-#include "oox/vml/vmlshapecontext.hxx"
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
+#include <oox/vml/vmldrawing.hxx>
+#include <oox/vml/vmlinputstream.hxx>
+#include <oox/vml/vmlshapecontext.hxx>
 
 namespace oox {
 namespace vml {
@@ -49,7 +51,8 @@ ContextHandlerRef DrawingFragment::onCreateContext( sal_Int32 nElement, const At
     {
         // DOCX filter handles plain shape elements with this fragment handler
         case VMLDRAWING_WORD:
-            if ( getNamespace( nElement ) == NMSP_vml )
+            if ( getNamespace( nElement ) == NMSP_vml
+                 || nElement == W_TOKEN(control) ) // Control shape also defined as a vml shape
                 return ShapeContextBase::createShapeContext( *this, mrDrawing.getShapes(), nElement, rAttribs );
         break;
 

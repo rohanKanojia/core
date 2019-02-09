@@ -49,11 +49,13 @@ namespace basegfx
     public:
         B2DPolyPolygon();
         B2DPolyPolygon(const B2DPolyPolygon& rPolyPolygon);
+        B2DPolyPolygon(B2DPolyPolygon&& rPolyPolygon);
         explicit B2DPolyPolygon(const B2DPolygon& rPolygon);
         ~B2DPolyPolygon();
 
         // assignment operator
         B2DPolyPolygon& operator=(const B2DPolyPolygon& rPolyPolygon);
+        B2DPolyPolygon& operator=(B2DPolyPolygon&& rPolyPolygon);
 
         /// unshare this poly-polygon (and all included polygons) with all internally shared instances
         void makeUnique();
@@ -65,7 +67,7 @@ namespace basegfx
         // polygon interface
         sal_uInt32 count() const;
 
-        B2DPolygon getB2DPolygon(sal_uInt32 nIndex) const;
+        B2DPolygon const & getB2DPolygon(sal_uInt32 nIndex) const;
         void setB2DPolygon(sal_uInt32 nIndex, const B2DPolygon& rPolygon);
 
         // test for curve
@@ -124,28 +126,48 @@ namespace basegfx
         const B2DPolygon* end() const;
         B2DPolygon* begin();
         B2DPolygon* end();
+
+        // exclusive management op's for SystemDependentData at B2DPolygon
+        template<class T>
+        std::shared_ptr<T> getSystemDependentData() const
+        {
+            return std::static_pointer_cast<T>(getSystemDependantDataInternal(typeid(T).hash_code()));
+        }
+
+        template<class T, class... Args>
+        std::shared_ptr<T> addOrReplaceSystemDependentData(SystemDependentDataManager& manager, Args&&... args) const
+        {
+            std::shared_ptr<T> r = std::make_shared<T>(manager, std::forward<Args>(args)...);
+            basegfx::SystemDependentData_SharedPtr r2(r);
+            addOrReplaceSystemDependentDataInternal(r2);
+            return r;
+        }
+
+    private:
+        void addOrReplaceSystemDependentDataInternal(SystemDependentData_SharedPtr& rData) const;
+        SystemDependentData_SharedPtr getSystemDependantDataInternal(size_t hash_code) const;
     };
 
     // typedef for a vector of B2DPolyPolygons
     typedef ::std::vector< B2DPolyPolygon > B2DPolyPolygonVector;
 
-} // end of namespace basegfx
-
-template< typename charT, typename traits >
-inline std::basic_ostream<charT, traits> & operator <<(
-    std::basic_ostream<charT, traits> & stream, const basegfx::B2DPolyPolygon& poly )
-{
-    stream << "[" << poly.count() << ":";
-    for (sal_uInt32 i = 0; i < poly.count(); i++)
+    template< typename charT, typename traits >
+    inline std::basic_ostream<charT, traits> & operator <<(
+        std::basic_ostream<charT, traits> & stream, const B2DPolyPolygon& poly )
     {
-        if (i > 0)
-            stream << ",";
-        stream << poly.getB2DPolygon(i);
-    }
-    stream << "]";
+        stream << "[" << poly.count() << ":";
+        for (sal_uInt32 i = 0; i < poly.count(); i++)
+        {
+            if (i > 0)
+                stream << ",";
+            stream << poly.getB2DPolygon(i);
+        }
+        stream << "]";
 
-    return stream;
-}
+        return stream;
+    }
+
+} // end of namespace basegfx
 
 #endif // INCLUDED_BASEGFX_POLYGON_B2DPOLYPOLYGON_HXX
 

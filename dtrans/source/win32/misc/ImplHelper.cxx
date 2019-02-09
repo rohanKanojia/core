@@ -20,33 +20,25 @@
 #include <osl/diagnose.h>
 #include "ImplHelper.hxx"
 #include <rtl/tencinfo.h>
+#include <o3tl/char16_t2wchar_t.hxx>
 #include <string.h>
 #include <memory>
 
-#if defined _MSC_VER
-#pragma warning(push,1)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
 #include <vector>
-
-#if defined ( __MINGW32__ )
-#include <sehandler.hxx>
-#endif
 
 #define FORMATETC_EXACT_MATCH    1
 #define FORMATETC_PARTIAL_MATCH -1
 #define FORMATETC_NO_MATCH       0
 
-// namespace directives
-
 // returns a windows codepage appropriate to the
 // given mime charset parameter value
 
-sal_uInt32 SAL_CALL getWinCPFromMimeCharset( const OUString& charset )
+sal_uInt32 getWinCPFromMimeCharset( const OUString& charset )
 {
     sal_uInt32 winCP = GetACP( );
 
@@ -61,8 +53,7 @@ sal_uInt32 SAL_CALL getWinCPFromMimeCharset( const OUString& charset )
         sal_uIntPtr winChrs = rtl_getBestWindowsCharsetFromTextEncoding( txtEnc );
 
         CHARSETINFO chrsInf;
-        sal_Bool bRet = TranslateCharsetInfo( (DWORD*)winChrs, &chrsInf, TCI_SRCCHARSET ) ?
-                        sal_True : sal_False;
+        bool bRet = TranslateCharsetInfo( reinterpret_cast<DWORD*>(winChrs), &chrsInf, TCI_SRCCHARSET );
 
         // if one of the above functions fails
         // we will return the current ANSI codepage
@@ -77,7 +68,7 @@ sal_uInt32 SAL_CALL getWinCPFromMimeCharset( const OUString& charset )
 // returns a windows codepage appropriate to the
 // given locale and locale type
 
-OUString SAL_CALL getWinCPFromLocaleId( LCID lcid, LCTYPE lctype )
+OUString getWinCPFromLocaleId( LCID lcid, LCTYPE lctype )
 {
     OSL_ASSERT( IsValidLocale( lcid, LCID_SUPPORTED ) );
 
@@ -94,29 +85,25 @@ OUString SAL_CALL getWinCPFromLocaleId( LCID lcid, LCTYPE lctype )
         winCP = OUString::number( static_cast<sal_Int32>(GetACP( )) );
     }
     else
-        OSL_ASSERT( sal_False );
+        OSL_ASSERT( false );
 
-    // we use the GetLocaleInfoA because don't want to provide
-    // a unicode wrapper function for Win9x in sal/systools
-    char buff[6];
-    sal_Int32 nResult = GetLocaleInfoA(
-        lcid, lctype | LOCALE_USE_CP_ACP, buff, sizeof( buff ) );
+    // First, get required buffer size, in characters
+    int nResult = GetLocaleInfoW(
+        lcid, lctype, nullptr, 0 );
 
     OSL_ASSERT( nResult );
 
     if ( nResult )
     {
-        sal_Int32 len = MultiByteToWideChar(
-            CP_ACP, 0, buff, -1, NULL, 0 );
+        std::unique_ptr<wchar_t[]> buff( new wchar_t[nResult] );
+        // Now get the actual data
+        nResult = GetLocaleInfoW( lcid, lctype, buff.get(), nResult );
 
-        OSL_ASSERT( len > 0 );
+        OSL_ASSERT(nResult);
 
-        std::vector< sal_Unicode > lpwchBuff(len);
+        if (nResult)
+            winCP = o3tl::toU( buff.get() );
 
-        len = MultiByteToWideChar(
-            CP_ACP, 0, buff, -1, reinterpret_cast<LPWSTR>(&lpwchBuff[0]), len );
-
-        winCP = OUString( &lpwchBuff[0], (len - 1) );
     }
 
     return winCP;
@@ -126,7 +113,7 @@ OUString SAL_CALL getWinCPFromLocaleId( LCID lcid, LCTYPE lctype )
 // to the given codepage, optional a prefix can be
 // given, e.g. "windows-" or "cp"
 
-OUString SAL_CALL getMimeCharsetFromWinCP( sal_uInt32 cp, const OUString& aPrefix )
+OUString getMimeCharsetFromWinCP( sal_uInt32 cp, const OUString& aPrefix )
 {
     return aPrefix + cptostr( cp );
 }
@@ -135,7 +122,7 @@ OUString SAL_CALL getMimeCharsetFromWinCP( sal_uInt32 cp, const OUString& aPrefi
 // to the given locale id and locale type, optional a
 // prefix can be given, e.g. "windows-" or "cp"
 
-OUString SAL_CALL getMimeCharsetFromLocaleId( LCID lcid, LCTYPE lctype, const OUString& aPrefix  )
+OUString getMimeCharsetFromLocaleId( LCID lcid, LCTYPE lctype, const OUString& aPrefix  )
 {
     OUString charset = getWinCPFromLocaleId( lcid, lctype );
     return aPrefix + charset;
@@ -143,7 +130,7 @@ OUString SAL_CALL getMimeCharsetFromLocaleId( LCID lcid, LCTYPE lctype, const OU
 
 // IsOEMCP
 
-sal_Bool SAL_CALL IsOEMCP( sal_uInt32 codepage )
+bool IsOEMCP( sal_uInt32 codepage )
 {
     OSL_ASSERT( IsValidCodePage( codepage ) );
 
@@ -154,14 +141,14 @@ sal_Bool SAL_CALL IsOEMCP( sal_uInt32 codepage )
 
     for ( size_t i = 0; i < SAL_N_ELEMENTS( arrOEMCP ); ++i )
         if ( arrOEMCP[i] == codepage )
-            return sal_True;
+            return true;
 
-    return sal_False;
+    return false;
 }
 
 // converts a codepage into its string representation
 
-OUString SAL_CALL cptostr( sal_uInt32 codepage )
+OUString cptostr( sal_uInt32 codepage )
 {
     OSL_ASSERT( IsValidCodePage( codepage ) );
 
@@ -176,31 +163,16 @@ OUString SAL_CALL cptostr( sal_uInt32 codepage )
 //
 // Return Value:
 //    SCODE  -  S_OK if successful
-void SAL_CALL DeleteTargetDevice( DVTARGETDEVICE* ptd )
+void DeleteTargetDevice( DVTARGETDEVICE* ptd )
 {
-#if defined ( __MINGW32__ ) && !defined ( _WIN64 )
-    jmp_buf jmpbuf;
-    __SEHandler han;
-    if (__builtin_setjmp(jmpbuf) == 0)
-    {
-        han.Set(jmpbuf, NULL, (__SEHandler::PF)EXCEPTION_EXECUTE_HANDLER);
-#else
     __try
     {
-#endif
         CoTaskMemFree( ptd );
     }
-#if defined ( __MINGW32__ ) && !defined ( _WIN64 )
-    else
-#else
     __except( EXCEPTION_EXECUTE_HANDLER )
-#endif
     {
         OSL_FAIL( "Error DeleteTargetDevice" );
     }
-#if defined ( __MINGW32__ ) && !defined ( _WIN64 )
-    han.Reset();
-#endif
 }
 
 // OleStdCopyTargetDevice()
@@ -218,33 +190,21 @@ void SAL_CALL DeleteTargetDevice( DVTARGETDEVICE* ptd )
 //    pointer to allocated copy of ptdSrc
 //    if ptdSrc==NULL then returns NULL is returned.
 //    if ptdSrc!=NULL and memory allocation fails, then NULL is returned
-DVTARGETDEVICE* SAL_CALL CopyTargetDevice( DVTARGETDEVICE* ptdSrc )
+DVTARGETDEVICE* CopyTargetDevice( DVTARGETDEVICE* ptdSrc )
 {
-    DVTARGETDEVICE* ptdDest = NULL;
+    DVTARGETDEVICE* ptdDest = nullptr;
 
-#if defined ( __MINGW32__ ) && !defined ( _WIN64 )
-    jmp_buf jmpbuf;
-    __SEHandler han;
-    if (__builtin_setjmp(jmpbuf) == 0)
-    {
-        han.Set(jmpbuf, NULL, (__SEHandler::PF)EXCEPTION_EXECUTE_HANDLER);
-#else
     __try
     {
-#endif
-        if ( NULL != ptdSrc )
+        if ( nullptr != ptdSrc )
         {
             ptdDest = static_cast< DVTARGETDEVICE* >( CoTaskMemAlloc( ptdSrc->tdSize ) );
             memcpy( ptdDest, ptdSrc, static_cast< size_t >( ptdSrc->tdSize ) );
         }
     }
-#if defined ( __MINGW32__ ) && !defined ( _WIN64 )
-    han.Reset();
-#else
     __except( EXCEPTION_EXECUTE_HANDLER )
     {
     }
-#endif
 
     return ptdDest;
 }
@@ -272,47 +232,32 @@ DVTARGETDEVICE* SAL_CALL CopyTargetDevice( DVTARGETDEVICE* ptdSrc )
 //  returns TRUE if copy was successful;
 //  returns FALSE if not successful, e.g. one or both of the pointers
 //  were invalid or the pointers were equal
-sal_Bool SAL_CALL CopyFormatEtc( LPFORMATETC petcDest, LPFORMATETC petcSrc )
+bool CopyFormatEtc( LPFORMATETC petcDest, LPFORMATETC petcSrc )
 {
-    sal_Bool bRet = sal_False;
+    bool bRet = false;
 
-#if defined ( __MINGW32__ ) && !defined ( _WIN64 )
-    jmp_buf jmpbuf;
-    __SEHandler han;
-    if (__builtin_setjmp(jmpbuf) == 0)
-    {
-        han.Set(jmpbuf, NULL, (__SEHandler::PF)EXCEPTION_EXECUTE_HANDLER);
-#else
     __try
     {
-#endif
         if ( petcDest != petcSrc )
         {
 
         petcDest->cfFormat = petcSrc->cfFormat;
 
-        petcDest->ptd      = NULL;
-        if ( NULL != petcSrc->ptd )
+        petcDest->ptd      = nullptr;
+        if ( nullptr != petcSrc->ptd )
             petcDest->ptd  = CopyTargetDevice(petcSrc->ptd);
 
         petcDest->dwAspect = petcSrc->dwAspect;
         petcDest->lindex   = petcSrc->lindex;
         petcDest->tymed    = petcSrc->tymed;
 
-        bRet = sal_True;
+        bRet = true;
         }
     }
-#if defined ( __MINGW32__ ) && !defined ( _WIN64 )
-    else
-#else
     __except( EXCEPTION_EXECUTE_HANDLER )
-#endif
     {
         OSL_FAIL( "Error CopyFormatEtc" );
     }
-#if defined ( __MINGW32__ ) && !defined ( _WIN64 )
-    han.Reset();
-#endif
 
     return bRet;
 }
@@ -323,20 +268,12 @@ sal_Bool SAL_CALL CopyFormatEtc( LPFORMATETC petcDest, LPFORMATETC petcSrc )
 // -1 for partial match (which is defined to mean the left is a subset
 //    of the right: fewer aspects, null target device, fewer medium).
 
-sal_Int32 SAL_CALL CompareFormatEtc( const FORMATETC* pFetcLhs, const FORMATETC* pFetcRhs )
+sal_Int32 CompareFormatEtc( const FORMATETC* pFetcLhs, const FORMATETC* pFetcRhs )
 {
     sal_Int32 nMatch = FORMATETC_EXACT_MATCH;
 
-#if defined ( __MINGW32__ ) && !defined ( _WIN64 )
-    jmp_buf jmpbuf;
-    __SEHandler han;
-    if (__builtin_setjmp(jmpbuf) == 0)
-    {
-        han.Set(jmpbuf, NULL, (__SEHandler::PF)EXCEPTION_EXECUTE_HANDLER);
-#else
     __try
     {
-#endif
         if ( pFetcLhs != pFetcRhs )
         {
             if ( ( pFetcLhs->cfFormat != pFetcRhs->cfFormat ) ||
@@ -374,62 +311,40 @@ sal_Int32 SAL_CALL CompareFormatEtc( const FORMATETC* pFetcLhs, const FORMATETC*
             }
         }
     }
-#if defined ( __MINGW32__ ) && !defined ( _WIN64 )
-    else
-#else
     __except( EXCEPTION_EXECUTE_HANDLER )
-#endif
     {
         OSL_FAIL( "Error CompareFormatEtc" );
         nMatch = FORMATETC_NO_MATCH;
     }
-#if defined ( __MINGW32__ ) && !defined ( _WIN64 )
-    han.Reset();
-#endif
 
     return nMatch;
 }
 
-sal_Bool SAL_CALL CompareTargetDevice( DVTARGETDEVICE* ptdLeft, DVTARGETDEVICE* ptdRight )
+bool CompareTargetDevice( DVTARGETDEVICE* ptdLeft, DVTARGETDEVICE const * ptdRight )
 {
-    sal_Bool bRet = sal_False;
+    bool bRet = false;
 
-#if defined ( __MINGW32__ ) && !defined ( _WIN64 )
-    jmp_buf jmpbuf;
-    __SEHandler han;
-    if (__builtin_setjmp(jmpbuf) == 0)
-    {
-        han.Set(jmpbuf, NULL, (__SEHandler::PF)EXCEPTION_EXECUTE_HANDLER);
-#else
     __try
     {
-#endif
         if ( ptdLeft == ptdRight )
         {
             // same address of td; must be same (handles NULL case)
-            bRet = sal_True;
+            bRet = true;
         }
 
-        // one ot the two is NULL
-        else if ( ( NULL != ptdRight ) && ( NULL != ptdLeft ) )
+        // one of the two is NULL
+        else if ( ( nullptr != ptdRight ) && ( nullptr != ptdLeft ) )
 
         if ( ptdLeft->tdSize == ptdRight->tdSize )
 
         if ( memcmp( ptdLeft, ptdRight, ptdLeft->tdSize ) == 0 )
-            bRet = sal_True;
+            bRet = true;
     }
-#if defined ( __MINGW32__ ) && !defined ( _WIN64 )
-    else
-#else
     __except( EXCEPTION_EXECUTE_HANDLER )
-#endif
     {
         OSL_FAIL( "Error CompareTargetDevice" );
-        bRet = sal_False;
+        bRet = false;
     }
-#if defined ( __MINGW32__ ) && !defined ( _WIN64 )
-    han.Reset();
-#endif
 
     return bRet;
 }

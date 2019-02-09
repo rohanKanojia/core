@@ -14,54 +14,87 @@
 
 #include <saldatabasic.hxx>
 
+#include <memory>
+
+class GlyphCache;
 class SalGenericDisplay;
-
-enum SalGenericDataType { SAL_DATA_GTK, SAL_DATA_GTK3,
-                          SAL_DATA_TDE3, SAL_DATA_KDE3, SAL_DATA_KDE4,
-                          SAL_DATA_UNX, SAL_DATA_SVP,
-                          SAL_DATA_ANDROID, SAL_DATA_IOS,
-                          SAL_DATA_HEADLESS };
-
-class VCL_DLLPUBLIC SalGenericData : public SalData
+namespace psp
 {
- protected:
-    SalGenericDataType m_eType;
-    SalGenericDisplay *m_pDisplay;
+class PrintFontManager;
+}
+
+enum GenericUnixSalDataType
+{
+    SAL_DATA_GTK,
+    SAL_DATA_GTK3,
+    SAL_DATA_KDE5,
+    SAL_DATA_UNX,
+    SAL_DATA_SVP,
+    SAL_DATA_ANDROID,
+    SAL_DATA_IOS,
+    SAL_DATA_HEADLESS,
+    SAL_DATA_QT5
+};
+
+class VCL_DLLPUBLIC GenericUnixSalData : public SalData
+{
+private:
+    GenericUnixSalDataType const m_eType;
+    SalGenericDisplay* m_pDisplay;
     // cached hostname to avoid slow lookup
-    OUString      m_aHostname;
+    OUString m_aHostname;
     // for transient storage of unicode strings eg. 'u123' by input methods
-    OUString      m_aUnicodeEntry;
- public:
-    SalGenericData( SalGenericDataType t, SalInstance *pInstance ) : SalData(), m_eType( t ), m_pDisplay( nullptr ) { m_pInstance = pInstance; SetSalData( this ); }
-    virtual ~SalGenericData() {}
+    OUString m_aUnicodeEntry;
+
+    std::unique_ptr<GlyphCache> m_pGlyphCache;
+    std::unique_ptr<psp::PrintFontManager> m_pPrintFontManager;
+
+    void InitGlyphCache();
+    void InitPrintFontManager();
+
+public:
+    GenericUnixSalData(GenericUnixSalDataType const t, SalInstance* const pInstance);
+    virtual ~GenericUnixSalData() override;
     virtual void Dispose() {}
 
-    SalGenericDisplay *GetDisplay() const { return m_pDisplay; }
-    void               SetDisplay( SalGenericDisplay *pDisp ) { m_pDisplay = pDisp; }
+    SalGenericDisplay* GetDisplay() const { return m_pDisplay; }
+    void SetDisplay(SalGenericDisplay* pDisp) { m_pDisplay = pDisp; }
 
     const OUString& GetHostname()
     {
         if (m_aHostname.isEmpty())
-            osl_getLocalHostname( &m_aHostname.pData );
+            osl_getLocalHostname(&m_aHostname.pData);
         return m_aHostname;
     }
-    OUString &GetUnicodeCommand()
+
+    OUString& GetUnicodeCommand() { return m_aUnicodeEntry; }
+
+    GenericUnixSalDataType GetType() const { return m_eType; }
+
+    GlyphCache* GetGlyphCache()
     {
-        return m_aUnicodeEntry;
+        if (!m_pGlyphCache)
+            InitGlyphCache();
+        return m_pGlyphCache.get();
     }
-    inline SalGenericDataType GetType() const
+
+    psp::PrintFontManager* GetPrintFontManager()
     {
-        return m_eType;
+        if (!m_pPrintFontManager)
+            InitPrintFontManager();
+        // PrintFontManager needs the GlyphCache
+        assert(m_pGlyphCache.get());
+        return m_pPrintFontManager.get();
     }
 
     // Mostly useful for remote protocol backends
     virtual void ErrorTrapPush() = 0;
-    virtual bool ErrorTrapPop( bool bIgnoreError = true ) = 0; // true on error
+    virtual bool ErrorTrapPop(bool bIgnoreError = true) = 0; // true on error
 };
 
-inline SalGenericData * GetGenericData()
+inline GenericUnixSalData* GetGenericUnixSalData()
 {
-    return static_cast<SalGenericData *>(ImplGetSVData()->mpSalData);
+    return static_cast<GenericUnixSalData*>(ImplGetSVData()->mpSalData);
 }
 
 #endif

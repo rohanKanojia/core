@@ -18,13 +18,11 @@
  */
 
 #include "ScatterChartType.hxx"
-#include "PropertyHelper.hxx"
-#include "macros.hxx"
-#include "servicenames_charttypes.hxx"
-#include "ContainerHelper.hxx"
-#include "CartesianCoordinateSystem.hxx"
-#include "AxisHelper.hxx"
-#include "AxisIndexDefines.hxx"
+#include <PropertyHelper.hxx>
+#include <servicenames_charttypes.hxx>
+#include <CartesianCoordinateSystem.hxx>
+#include <AxisHelper.hxx>
+#include <AxisIndexDefines.hxx>
 #include <unonames.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
@@ -37,7 +35,6 @@ using namespace ::com::sun::star;
 using ::com::sun::star::beans::Property;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Reference;
-using ::osl::MutexGuard;
 
 namespace
 {
@@ -50,27 +47,24 @@ enum
 };
 
 void lcl_AddPropertiesToVector(
-    ::std::vector< Property > & rOutProperties )
+    std::vector< Property > & rOutProperties )
 {
-    rOutProperties.push_back(
-        Property( CHART_UNONAME_CURVE_STYLE,
+    rOutProperties.emplace_back( CHART_UNONAME_CURVE_STYLE,
                   PROP_SCATTERCHARTTYPE_CURVE_STYLE,
                   cppu::UnoType<chart2::CurveStyle>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( CHART_UNONAME_CURVE_RESOLUTION,
+    rOutProperties.emplace_back( CHART_UNONAME_CURVE_RESOLUTION,
                   PROP_SCATTERCHARTTYPE_CURVE_RESOLUTION,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
-    rOutProperties.push_back(
-        Property( CHART_UNONAME_SPLINE_ORDER,
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( CHART_UNONAME_SPLINE_ORDER,
                   PROP_SCATTERCHARTTYPE_SPLINE_ORDER,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 }
 
 struct StaticScatterChartTypeDefaults_Initializer
@@ -108,10 +102,10 @@ struct StaticScatterChartTypeInfoHelper_Initializer
 private:
     static Sequence< Property > lcl_GetPropertySequence()
     {
-        ::std::vector< css::beans::Property > aProperties;
+        std::vector< css::beans::Property > aProperties;
         lcl_AddPropertiesToVector( aProperties );
 
-        ::std::sort( aProperties.begin(), aProperties.end(),
+        std::sort( aProperties.begin(), aProperties.end(),
                      ::chart::PropertyNameLess() );
 
         return comphelper::containerToSequence( aProperties );
@@ -142,22 +136,8 @@ struct StaticScatterChartTypeInfo : public rtl::StaticAggregate< uno::Reference<
 namespace chart
 {
 
-ScatterChartType::ScatterChartType(
-    const uno::Reference< uno::XComponentContext > & xContext,
-    chart2::CurveStyle eCurveStyle /* chart2::CurveStyle_LINES */ ,
-    sal_Int32 nResolution /* = 20 */,
-    sal_Int32 nOrder /* = 3 */ ) :
-        ChartType( xContext )
+ScatterChartType::ScatterChartType()
 {
-    if( eCurveStyle != chart2::CurveStyle_LINES )
-        setFastPropertyValue_NoBroadcast( PROP_SCATTERCHARTTYPE_CURVE_STYLE,
-                                          uno::makeAny( eCurveStyle ));
-    if( nResolution != 20 )
-        setFastPropertyValue_NoBroadcast( PROP_SCATTERCHARTTYPE_CURVE_RESOLUTION,
-                                          uno::makeAny( nResolution ));
-    if( nOrder != 3 )
-        setFastPropertyValue_NoBroadcast( PROP_SCATTERCHARTTYPE_SPLINE_ORDER,
-                                          uno::makeAny( nOrder ));
 }
 
 ScatterChartType::ScatterChartType( const ScatterChartType & rOther ) :
@@ -170,7 +150,6 @@ ScatterChartType::~ScatterChartType()
 
 // ____ XCloneable ____
 uno::Reference< util::XCloneable > SAL_CALL ScatterChartType::createClone()
-    throw (uno::RuntimeException, std::exception)
 {
     return uno::Reference< util::XCloneable >( new ScatterChartType( *this ));
 }
@@ -178,11 +157,9 @@ uno::Reference< util::XCloneable > SAL_CALL ScatterChartType::createClone()
 // ____ XChartType ____
 Reference< chart2::XCoordinateSystem > SAL_CALL
     ScatterChartType::createCoordinateSystem( ::sal_Int32 DimensionCount )
-    throw (lang::IllegalArgumentException,
-           uno::RuntimeException, std::exception)
 {
     Reference< chart2::XCoordinateSystem > xResult(
-        new CartesianCoordinateSystem( GetComponentContext(), DimensionCount ));
+        new CartesianCoordinateSystem( DimensionCount ));
 
     for( sal_Int32 i=0; i<DimensionCount; ++i )
     {
@@ -209,13 +186,11 @@ Reference< chart2::XCoordinateSystem > SAL_CALL
 }
 
 OUString SAL_CALL ScatterChartType::getChartType()
-    throw (uno::RuntimeException, std::exception)
 {
     return OUString(CHART2_SERVICE_NAME_CHARTTYPE_SCATTER);
 }
 
 uno::Sequence< OUString > SAL_CALL ScatterChartType::getSupportedMandatoryRoles()
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Sequence< OUString > aMandRolesSeq(3);
     aMandRolesSeq[0] = "label";
@@ -226,7 +201,6 @@ uno::Sequence< OUString > SAL_CALL ScatterChartType::getSupportedMandatoryRoles(
 
 // ____ OPropertySet ____
 uno::Any ScatterChartType::GetDefaultValue( sal_Int32 nHandle ) const
-    throw(beans::UnknownPropertyException)
 {
     const tPropertyValueMap& rStaticDefaults = *StaticScatterChartTypeDefaults::get();
     tPropertyValueMap::const_iterator aFound( rStaticDefaults.find( nHandle ) );
@@ -243,51 +217,35 @@ uno::Any ScatterChartType::GetDefaultValue( sal_Int32 nHandle ) const
 
 // ____ XPropertySet ____
 uno::Reference< beans::XPropertySetInfo > SAL_CALL ScatterChartType::getPropertySetInfo()
-    throw (uno::RuntimeException, std::exception)
 {
     return *StaticScatterChartTypeInfo::get();
 }
 
-uno::Sequence< OUString > ScatterChartType::getSupportedServiceNames_Static()
-{
-    uno::Sequence< OUString > aServices( 3 );
-    aServices[ 0 ] = CHART2_SERVICE_NAME_CHARTTYPE_SCATTER;
-    aServices[ 1 ] = "com.sun.star.chart2.ChartType";
-    aServices[ 2 ] = "com.sun.star.beans.PropertySet";
-    return aServices;
-}
-
-// implement XServiceInfo methods basing upon getSupportedServiceNames_Static
 OUString SAL_CALL ScatterChartType::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
-OUString ScatterChartType::getImplementationName_Static()
 {
     return OUString("com.sun.star.comp.chart.ScatterChartType");
 }
 
 sal_Bool SAL_CALL ScatterChartType::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL ScatterChartType::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return {
+        CHART2_SERVICE_NAME_CHARTTYPE_SCATTER,
+        "com.sun.star.chart2.ChartType",
+        "com.sun.star.beans.PropertySet" };
 }
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
-com_sun_star_comp_chart_ScatterChartType_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+com_sun_star_comp_chart_ScatterChartType_get_implementation(css::uno::XComponentContext * /*context*/,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new ::chart::ScatterChartType(context));
+    return cppu::acquire(new ::chart::ScatterChartType);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

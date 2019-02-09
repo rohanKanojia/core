@@ -19,9 +19,14 @@
 #ifndef INCLUDED_SVX_AFFINEMATRIXITEM_HXX
 #define INCLUDED_SVX_AFFINEMATRIXITEM_HXX
 
-#include <svx/svxdllapi.h>
-#include <svl/poolitem.hxx>
 #include <com/sun/star/geometry/AffineMatrix2D.hpp>
+#include <com/sun/star/uno/Any.hxx>
+#include <sal/types.h>
+#include <svl/poolitem.hxx>
+#include <svx/svxdllapi.h>
+
+class SfxItemPool;
+class SvStream;
 
 class SVX_DLLPUBLIC AffineMatrixItem : public SfxPoolItem
 {
@@ -29,15 +34,12 @@ private:
     css::geometry::AffineMatrix2D        maMatrix;
 
 public:
-    AffineMatrixItem(const css::geometry::AffineMatrix2D* pMatrix = nullptr);
-    AffineMatrixItem(SvStream& rIn);
+    AffineMatrixItem(const css::geometry::AffineMatrix2D* pMatrix);
     AffineMatrixItem(const AffineMatrixItem&);
-    virtual ~AffineMatrixItem();
+    virtual ~AffineMatrixItem() override;
 
     virtual bool operator==(const SfxPoolItem&) const override;
     virtual SfxPoolItem* Clone( SfxItemPool* pPool = nullptr ) const override;
-    virtual SfxPoolItem* Create( SvStream& rIn, sal_uInt16 nVer ) const override;
-    virtual SvStream& Store(SvStream &, sal_uInt16 nItemVersion ) const override;
 
     virtual bool QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;

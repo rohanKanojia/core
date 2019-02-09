@@ -20,8 +20,8 @@
 #ifndef INCLUDED_CODEMAKER_SOURCE_CPPUMAKER_INCLUDES_HXX
 #define INCLUDED_CODEMAKER_SOURCE_CPPUMAKER_INCLUDES_HXX
 
-#include "rtl/ref.hxx"
-#include "rtl/ustring.hxx"
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
 
 #include "dependencies.hxx"
 
@@ -40,7 +40,6 @@ public:
 
     void add(OString const & entityName);
     void addCassert() { m_includeCassert = true; }
-    void addException() { m_includeException = true; }
     void addAny() { m_includeAny = true; }
     void addReference() { m_includeReference = true; }
     void addSequence() { m_includeSequence = true; }
@@ -59,14 +58,15 @@ public:
     void addTypelibTypeclassH() { m_includeTypelibTypeclassH = true; }
     void addTypelibTypedescriptionH()
         { m_includeTypelibTypedescriptionH = true; }
-    void dump(FileStream & out, OUString const * companionHdl);
+    void dump(
+        FileStream & out, OUString const * companionHdl, bool exceptions);
 
     static void dumpInclude(
         FileStream & out, OString const & entityName, bool hpp);
 
 private:
-    Includes(Includes &) = delete;
-    void operator =(const Includes&) = delete;
+    Includes(Includes const &) = delete;
+    Includes& operator =(const Includes&) = delete;
 
     bool isInterfaceType(OString const & entityName) const;
 
@@ -74,14 +74,12 @@ private:
     Dependencies::Map m_map;
     bool m_hpp;
     bool m_includeCassert;
-    bool m_includeException;
     bool m_includeAny;
     bool m_includeReference;
     bool m_includeSequence;
     bool m_includeType;
     bool m_includeCppuMacrosHxx;
     bool m_includeCppuUnotypeHxx;
-    bool m_includeOslDoublecheckedlockingH;
     bool m_includeOslMutexHxx;
     bool m_includeRtlStrbufHxx;
     bool m_includeRtlStringH;

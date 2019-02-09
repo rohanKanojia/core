@@ -33,7 +33,18 @@
 #include <txtftn.hxx>
 #include <ftnidx.hxx>
 #include <viscrs.hxx>
-#include <callnk.hxx>
+#include "callnk.hxx"
+#include <svx/srchdlg.hxx>
+
+bool SwCursorShell::CallCursorShellFN( FNCursorShell fnCursor )
+{
+    SwCallLink aLk( *this ); // watch Cursor-Moves
+    bool bRet = (this->*fnCursor)();
+    if( bRet )
+        UpdateCursor( SwCursorShell::SCROLLWIN | SwCursorShell::CHKRANGE |
+                    SwCursorShell::READONLY );
+    return bRet;
+}
 
 bool SwCursorShell::CallCursorFN( FNCursor fnCursor )
 {
@@ -52,7 +63,7 @@ bool SwCursor::GotoFootnoteText()
     bool bRet = false;
     SwTextNode* pTextNd = GetPoint()->nNode.GetNode().GetTextNode();
 
-    SwTextAttr *const pFootnote( (pTextNd)
+    SwTextAttr *const pFootnote( pTextNd
         ? pTextNd->GetTextAttrForCharAt(
             GetPoint()->nContent.GetIndex(), RES_TXTATR_FTN)
         : nullptr);
@@ -67,8 +78,8 @@ bool SwCursor::GotoFootnoteText()
         if( pCNd )
         {
             GetPoint()->nContent.Assign( pCNd, 0 );
-            bRet = !IsSelOvr( nsSwCursorSelOverFlags::SELOVER_CHECKNODESSECTION |
-                              nsSwCursorSelOverFlags::SELOVER_TOGGLE );
+            bRet = !IsSelOvr( SwCursorSelOverFlags::CheckNodeSection |
+                              SwCursorSelOverFlags::Toggle );
         }
     }
     return bRet;
@@ -79,12 +90,13 @@ bool SwCursorShell::GotoFootnoteText()
     bool bRet = CallCursorFN( &SwCursor::GotoFootnoteText );
     if( !bRet )
     {
-        SwTextNode* pTextNd = _GetCursor() ?
-                   _GetCursor()->GetPoint()->nNode.GetNode().GetTextNode() : nullptr;
+        SwTextNode* pTextNd = GetCursor_() ?
+                   GetCursor_()->GetPoint()->nNode.GetNode().GetTextNode() : nullptr;
         if( pTextNd )
         {
-            const SwFrame *pFrame = pTextNd->getLayoutFrame( GetLayout(), &_GetCursor()->GetSttPos(),
-                                                 _GetCursor()->Start() );
+            std::pair<Point, bool> const tmp(GetCursor_()->GetSttPos(), true);
+            const SwFrame *pFrame = pTextNd->getLayoutFrame( GetLayout(),
+                                                 GetCursor_()->Start(), &tmp);
             const SwFootnoteBossFrame* pFootnoteBoss;
             bool bSkip = pFrame && pFrame->IsInFootnote();
             while( pFrame && nullptr != ( pFootnoteBoss = pFrame->FindFootnoteBossFrame() ) )
@@ -99,11 +111,10 @@ bool SwCursorShell::GotoFootnoteText()
                                                         (pFrame)->ContainsContent();
                         if( pCnt )
                         {
-                            const SwContentNode* pNode = pCnt->GetNode();
-                            _GetCursor()->GetPoint()->nNode = *pNode;
-                            _GetCursor()->GetPoint()->nContent.Assign(
-                                const_cast<SwContentNode*>(pNode),
-                                static_cast<const SwTextFrame*>(pCnt)->GetOfst() );
+                            SwTextFrame const*const pTF(
+                                    static_cast<const SwTextFrame*>(pCnt));
+                            *GetCursor_()->GetPoint() =
+                                    pTF->MapViewToModelPos(pTF->GetOfst());
                             UpdateCursor( SwCursorShell::SCROLLWIN |
                                 SwCursorShell::CHKRANGE | SwCursorShell::READONLY );
                             bRet = true;
@@ -136,12 +147,12 @@ bool SwCursor::GotoFootnoteAnchor()
             {
                 SwCursorSaveState aSaveState( *this );
 
-                SwTextNode& rTNd = (SwTextNode&)pTextFootnote->GetTextNode();
+                SwTextNode& rTNd = const_cast<SwTextNode&>(pTextFootnote->GetTextNode());
                 GetPoint()->nNode = rTNd;
                 GetPoint()->nContent.Assign( &rTNd, pTextFootnote->GetStart() );
 
-                return !IsSelOvr( nsSwCursorSelOverFlags::SELOVER_CHECKNODESSECTION |
-                                  nsSwCursorSelOverFlags::SELOVER_TOGGLE );
+                return !IsSelOvr( SwCursorSelOverFlags::CheckNodeSection |
+                                  SwCursorSelOverFlags::Toggle );
             }
     }
     return false;
@@ -162,13 +173,13 @@ bool SwCursorShell::GotoFootnoteAnchor()
     return bRet;
 }
 
-inline bool CmpLE( const SwTextFootnote& rFootnote, sal_uLong nNd, sal_Int32 nCnt )
+static bool CmpLE( const SwTextFootnote& rFootnote, sal_uLong nNd, sal_Int32 nCnt )
 {
     const sal_uLong nTNd = rFootnote.GetTextNode().GetIndex();
     return nTNd < nNd || ( nTNd == nNd && rFootnote.GetStart() <= nCnt );
 }
 
-inline bool CmpL( const SwTextFootnote& rFootnote, sal_uLong nNd, sal_Int32 nCnt )
+static bool CmpL( const SwTextFootnote& rFootnote, sal_uLong nNd, sal_Int32 nCnt )
 {
     const sal_uLong nTNd = rFootnote.GetTextNode().GetIndex();
     return nTNd < nNd || ( nTNd == nNd && rFootnote.GetStart() < nCnt );
@@ -179,6 +190,12 @@ bool SwCursor::GotoNextFootnoteAnchor()
     const SwFootnoteIdxs& rFootnoteArr = GetDoc()->GetFootnoteIdxs();
     const SwTextFootnote* pTextFootnote = nullptr;
     size_t nPos = 0;
+
+    if( rFootnoteArr.empty() )
+    {
+        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::NavElementNotFound );
+        return false;
+    }
 
     if( rFootnoteArr.SeekEntry( GetPoint()->nNode, &nPos ))
     {
@@ -220,12 +237,20 @@ bool SwCursor::GotoNextFootnoteAnchor()
     else if( nPos < rFootnoteArr.size() )
         pTextFootnote = rFootnoteArr[ nPos ];
 
+    if (pTextFootnote == nullptr)
+    {
+        pTextFootnote = rFootnoteArr[ 0 ];
+        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::EndWrapped );
+    }
+    else
+        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::Empty );
+
     bool bRet = nullptr != pTextFootnote;
     if( bRet )
     {
         SwCursorSaveState aSaveState( *this );
 
-        SwTextNode& rTNd = (SwTextNode&)pTextFootnote->GetTextNode();
+        SwTextNode& rTNd = const_cast<SwTextNode&>(pTextFootnote->GetTextNode());
         GetPoint()->nNode = rTNd;
         GetPoint()->nContent.Assign( &rTNd, pTextFootnote->GetStart() );
         bRet = !IsSelOvr();
@@ -238,6 +263,12 @@ bool SwCursor::GotoPrevFootnoteAnchor()
     const SwFootnoteIdxs& rFootnoteArr = GetDoc()->GetFootnoteIdxs();
     const SwTextFootnote* pTextFootnote = nullptr;
     size_t nPos = 0;
+
+    if( rFootnoteArr.empty() )
+    {
+        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::NavElementNotFound );
+        return false;
+    }
 
     if( rFootnoteArr.SeekEntry( GetPoint()->nNode, &nPos ) )
     {
@@ -277,12 +308,20 @@ bool SwCursor::GotoPrevFootnoteAnchor()
     else if( nPos )
         pTextFootnote = rFootnoteArr[ nPos-1 ];
 
+    if( pTextFootnote == nullptr )
+    {
+        pTextFootnote = rFootnoteArr[ rFootnoteArr.size() - 1 ];
+        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::StartWrapped );
+    }
+    else
+        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::Empty );
+
     bool bRet = nullptr != pTextFootnote;
     if( bRet )
     {
         SwCursorSaveState aSaveState( *this );
 
-        SwTextNode& rTNd = (SwTextNode&)pTextFootnote->GetTextNode();
+        SwTextNode& rTNd = const_cast<SwTextNode&>(pTextFootnote->GetTextNode());
         GetPoint()->nNode = rTNd;
         GetPoint()->nContent.Assign( &rTNd, pTextFootnote->GetStart() );
         bRet = !IsSelOvr();
@@ -301,7 +340,7 @@ bool SwCursorShell::GotoPrevFootnoteAnchor()
 }
 
 /// jump from border to anchor
-bool SwCursorShell::GotoFlyAnchor()
+void SwCursorShell::GotoFlyAnchor()
 {
     SET_CURR_SHELL( this );
     const SwFrame* pFrame = GetCurrFrame();
@@ -310,20 +349,20 @@ bool SwCursorShell::GotoFlyAnchor()
     } while( pFrame && !pFrame->IsFlyFrame() );
 
     if( !pFrame ) // no FlyFrame
-        return false;
+        return;
 
     SwCallLink aLk( *this ); // watch Cursor-Moves
     SwCursorSaveState aSaveState( *m_pCurrentCursor );
 
     // jump in BodyFrame closest to FlyFrame
     SwRect aTmpRect( m_aCharRect );
-    if( !pFrame->Frame().IsInside( aTmpRect ))
-        aTmpRect = pFrame->Frame();
+    if( !pFrame->getFrameArea().IsInside( aTmpRect ))
+        aTmpRect = pFrame->getFrameArea();
     Point aPt( aTmpRect.Left(), aTmpRect.Top() +
                 ( aTmpRect.Bottom() - aTmpRect.Top() ) / 2 );
-    aPt.setX(aPt.getX() > (pFrame->Frame().Left() + (pFrame->Frame().SSize().Width() / 2 ))
-                ? pFrame->Frame().Right()
-                : pFrame->Frame().Left());
+    aPt.setX(aPt.getX() > (pFrame->getFrameArea().Left() + (pFrame->getFrameArea().SSize().Width() / 2 ))
+                ? pFrame->getFrameArea().Right()
+                : pFrame->getFrameArea().Left());
 
     const SwPageFrame* pPageFrame = pFrame->FindPageFrame();
     const SwContentFrame* pFndFrame = pPageFrame->GetContentPos( aPt, false, true );
@@ -333,7 +372,6 @@ bool SwCursorShell::GotoFlyAnchor()
     if( bRet )
         UpdateCursor( SwCursorShell::SCROLLWIN | SwCursorShell::CHKRANGE |
                     SwCursorShell::READONLY );
-    return bRet;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sdpage.hxx"
-#include "View.hxx"
-#include "pres.hxx"
+#include <sdpage.hxx>
+#include <View.hxx>
+#include <pres.hxx>
 
 namespace sd {
 
@@ -33,7 +33,6 @@ static bool implIsMultiPresObj( PresObjKind eKind )
     case PRESOBJ_CHART:
     case PRESOBJ_ORGCHART:
     case PRESOBJ_TABLE:
-    case PRESOBJ_IMAGE:
     case PRESOBJ_MEDIA:
         return true;
     default:
@@ -54,7 +53,7 @@ SdPage* View::GetPage()
 }
 
 // returns selected object in case there's just one object in the selection
-SdrObject* View::GetSelectedSingleObject(SdPage* pPage)
+SdrObject* View::GetSelectedSingleObject(SdPage const * pPage)
 {
     SdrObject* pRet = nullptr;
     if( pPage )
@@ -102,14 +101,10 @@ SdrObject* View::GetEmptyPresentationObject( PresObjKind eKind )
         {
             const std::list< SdrObject* >& rShapes = pPage->GetPresentationShapeList().getList();
 
-            for( std::list< SdrObject* >::const_iterator iter( rShapes.begin() ); iter != rShapes.end(); ++iter )
-            {
-                if( (*iter)->IsEmptyPresObj() && implIsMultiPresObj(pPage->GetPresObjKind(*iter)) )
-                {
-                    pEmptyObj = (*iter);
-                    break;
-                }
-            }
+            auto iter = std::find_if(rShapes.begin(), rShapes.end(),
+                [&pPage](SdrObject* pShape) { return pShape->IsEmptyPresObj() && implIsMultiPresObj(pPage->GetPresObjKind(pShape)); });
+            if (iter != rShapes.end())
+                pEmptyObj = (*iter);
         }
     }
 

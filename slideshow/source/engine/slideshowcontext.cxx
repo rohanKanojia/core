@@ -20,14 +20,14 @@
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/uno/XComponentContext.hpp>
 
-#include "slideshowcontext.hxx"
-#include "subsettableshapemanager.hxx"
-#include "screenupdater.hxx"
-#include "eventqueue.hxx"
-#include "activitiesqueue.hxx"
-#include "usereventqueue.hxx"
-#include "eventmultiplexer.hxx"
-#include "unoviewcontainer.hxx"
+#include <slideshowcontext.hxx>
+#include <subsettableshapemanager.hxx>
+#include <screenupdater.hxx>
+#include <eventqueue.hxx>
+#include <activitiesqueue.hxx>
+#include <usereventqueue.hxx>
+#include <eventmultiplexer.hxx>
+#include <unoviewcontainer.hxx>
 
 
 using namespace ::com::sun::star;
@@ -44,6 +44,7 @@ SlideShowContext::SlideShowContext( SubsettableShapeManagerSharedPtr& rSubsettab
                                     ActivitiesQueue&                  rActivitiesQueue,
                                     UserEventQueue&                   rUserEventQueue,
                                     CursorManager&                    rCursorManager,
+                                    MediaFileManager&                    rMediaFileManager,
                                     const UnoViewContainer&           rViewContainer,
                                     const uno::Reference<
                                           uno::XComponentContext>&    rComponentContext ) :
@@ -54,6 +55,7 @@ SlideShowContext::SlideShowContext( SubsettableShapeManagerSharedPtr& rSubsettab
         mrActivitiesQueue( rActivitiesQueue ),
         mrUserEventQueue( rUserEventQueue ),
         mrCursorManager( rCursorManager ),
+        mrMediaFileManager( rMediaFileManager ),
         mrViewContainer( rViewContainer ),
         mxComponentContext( rComponentContext )
     {}

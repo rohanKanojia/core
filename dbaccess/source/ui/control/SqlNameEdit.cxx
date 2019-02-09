@@ -17,19 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "SqlNameEdit.hxx"
+#include <SqlNameEdit.hxx>
 #include <vcl/builderfactory.hxx>
 
 namespace dbaui
 {
-    bool isCharOk(sal_Unicode _cChar,bool _bFirstChar,bool _bUpperCase,const OUString& _sAllowedChars)
+    static bool isCharOk(sal_Unicode _cChar,bool _bFirstChar, const OUString& _sAllowedChars)
     {
         return  (
                  (_cChar >= 'A' && _cChar <= 'Z') ||
                  _cChar == '_' ||
                  _sAllowedChars.indexOf(_cChar) != -1 ||
                  (!_bFirstChar && (_cChar >= '0' && _cChar <= '9')) ||
-                 (!_bUpperCase && (_cChar >= 'a' && _cChar <= 'z'))
+                 (_cChar >= 'a' && _cChar <= 'z')
                 );
     }
     bool OSQLNameChecker::checkString(const OUString& _sToCheck,
@@ -38,18 +38,17 @@ namespace dbaui
         bool bCorrected = false;
         if ( m_bCheck )
         {
-            OUString sText = _sToCheck;
             sal_Int32 nMatch = 0;
-            for (sal_Int32 i = nMatch; i < sText.getLength(); ++i)
+            for (sal_Int32 i = nMatch; i < _sToCheck.getLength(); ++i)
             {
-                if ( !isCharOk( sText[i], i == 0, m_bOnlyUpperCase, m_sAllowedChars ) )
+                if ( !isCharOk( _sToCheck[i], i == 0, m_sAllowedChars ) )
                 {
-                    _rsCorrected += sText.copy(nMatch, i - nMatch);
+                    _rsCorrected += _sToCheck.copy(nMatch, i - nMatch);
                     bCorrected = true;
                     nMatch = i + 1;
                 }
             }
-            _rsCorrected += sText.copy( nMatch, sText.getLength() - nMatch );
+            _rsCorrected += _sToCheck.copy( nMatch );
         }
         return bCorrected;
     }

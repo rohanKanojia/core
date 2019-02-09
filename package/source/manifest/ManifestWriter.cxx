@@ -17,18 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <ManifestWriter.hxx>
-#include <ManifestExport.hxx>
+#include "ManifestWriter.hxx"
+#include "ManifestExport.hxx"
+#include <cppuhelper/exc_hlp.hxx>
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/factory.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/io/XActiveDataSource.hpp>
 #include <com/sun/star/xml/sax/Writer.hpp>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <com/sun/star/xml/sax/SAXException.hpp>
 
 #include <osl/diagnose.hxx>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -55,7 +58,6 @@ ManifestWriter::~ManifestWriter()
 
 // XManifestWriter methods
 void SAL_CALL ManifestWriter::writeManifestSequence( const Reference< XOutputStream >& rStream, const Sequence< Sequence< PropertyValue > >& rSequence )
-        throw (RuntimeException, std::exception)
 {
     Reference < XWriter > xSource = Writer::create( m_xContext );
     xSource->setOutputStream ( rStream );
@@ -64,12 +66,14 @@ void SAL_CALL ManifestWriter::writeManifestSequence( const Reference< XOutputStr
     }
     catch( SAXException& )
     {
-        throw RuntimeException( THROW_WHERE );
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw css::lang::WrappedTargetRuntimeException( THROW_WHERE,
+                        nullptr, anyEx );
     }
 }
 
 // Component methods
-Reference < XInterface > SAL_CALL ManifestWriter_createInstance( Reference< XMultiServiceFactory > const & rServiceFactory )
+static Reference < XInterface > ManifestWriter_createInstance( Reference< XMultiServiceFactory > const & rServiceFactory )
 {
     return *new ManifestWriter( comphelper::getComponentContext(rServiceFactory) );
 }
@@ -86,18 +90,15 @@ Sequence < OUString > ManifestWriter::static_getSupportedServiceNames()
 }
 
 OUString ManifestWriter::getImplementationName()
-    throw (RuntimeException, std::exception)
 {
     return static_getImplementationName();
 }
 
 sal_Bool SAL_CALL ManifestWriter::supportsService(OUString const & rServiceName)
-    throw (RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 Sequence < OUString > ManifestWriter::getSupportedServiceNames()
-    throw (RuntimeException, std::exception)
 {
     return static_getSupportedServiceNames();
 }

@@ -23,10 +23,9 @@
 class SdrUndoAction;
 class ScDocument;
 
-SdrUndoAction*  GetSdrUndoAction    ( ScDocument* pDoc );
+std::unique_ptr<SdrUndoAction>  GetSdrUndoAction( ScDocument* pDoc );
 void            DoSdrUndoAction     ( SdrUndoAction* pUndoAction, ScDocument* pDoc );
 void            RedoSdrUndoAction   ( SdrUndoAction* pUndoAction );
-void            DeleteSdrUndoAction ( SdrUndoAction* pUndoAction );
 void            EnableDrawAdjust    ( ScDocument* pDoc, bool bEnable );
 
 #endif

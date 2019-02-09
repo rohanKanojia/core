@@ -17,17 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "doubleref.hxx"
-#include "formulacell.hxx"
-#include "global.hxx"
-#include "document.hxx"
-#include "queryparam.hxx"
-#include "queryentry.hxx"
-#include "globstr.hrc"
-#include "scmatrix.hxx"
+#include <doubleref.hxx>
+#include <formulacell.hxx>
+#include <global.hxx>
+#include <document.hxx>
+#include <queryparam.hxx>
+#include <queryentry.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <scmatrix.hxx>
 
 #include <svl/sharedstringpool.hxx>
 #include <osl/diagnose.h>
+#include <unotools/charclass.hxx>
 
 #include <memory>
 #include <utility>
@@ -77,12 +79,12 @@ bool lcl_createStarQuery(
             // For all entries after the first one, check the and/or connector in the first column.
             aCellStr = pQueryRef->getString(0, nRow);
             lcl_uppercase(aCellStr);
-            if ( aCellStr.equals(ScGlobal::GetRscString(STR_TABLE_UND)) )
+            if ( aCellStr == ScResId(STR_TABLE_AND) )
             {
                 rEntry.eConnect = SC_AND;
                 bValid = true;
             }
-            else if ( aCellStr.equals(ScGlobal::GetRscString(STR_TABLE_ODER)) )
+            else if ( aCellStr == ScResId(STR_TABLE_OR) )
             {
                 rEntry.eConnect = SC_OR;
                 bValid = true;
@@ -226,13 +228,13 @@ bool lcl_fillQueryEntries(
     nCount = pParam->GetEntryCount();
     if (bValid)
     {
-        //  bQueryByString muss gesetzt sein
+        //  bQueryByString must be set
         for (SCSIZE i = 0; i < nCount; ++i)
             pParam->GetEntry(i).GetQueryItem().meType = ScQueryEntry::ByString;
     }
     else
     {
-        //  nix
+        //  nothing
         for (SCSIZE i = 0; i < nCount; ++i)
             pParam->GetEntry(i).Clear();
     }
@@ -264,7 +266,7 @@ void ScDBRangeBase::fillQueryOptions(ScQueryParamBase* pParam)
     pParam->bByRow = true;
     pParam->bInplace = true;
     pParam->bCaseSens = false;
-    pParam->eSearchType = utl::SearchParam::SRCH_NORMAL;
+    pParam->eSearchType = utl::SearchParam::SearchType::Normal;
     pParam->bDuplicate = true;
 }
 
@@ -324,7 +326,7 @@ SCCOL ScDBInternalRange::findFieldColumn(SCCOL nIndex) const
     return nIndex + nDBCol1 - 1;
 }
 
-SCCOL ScDBInternalRange::findFieldColumn(const OUString& rStr, sal_uInt16* pErr) const
+SCCOL ScDBInternalRange::findFieldColumn(const OUString& rStr, FormulaError* pErr) const
 {
     const ScAddress& s = maRange.aStart;
     const ScAddress& e = maRange.aEnd;
@@ -336,14 +338,13 @@ SCCOL ScDBInternalRange::findFieldColumn(const OUString& rStr, sal_uInt16* pErr)
     SCTAB nDBTab1 = s.Tab();
     SCCOL nDBCol2 = e.Col();
 
-    SCCOL   nField = nDBCol1;
     bool bFound = false;
 
     OUString aCellStr;
     ScAddress aLook( nDBCol1, nDBRow1, nDBTab1 );
     while (!bFound && (aLook.Col() <= nDBCol2))
     {
-        sal_uInt16 nErr = getDoc()->GetStringForFormula( aLook, aCellStr );
+        FormulaError nErr = getDoc()->GetStringForFormula( aLook, aCellStr );
         if (pErr)
             *pErr = nErr;
         lcl_uppercase(aCellStr);
@@ -351,7 +352,7 @@ SCCOL ScDBInternalRange::findFieldColumn(const OUString& rStr, sal_uInt16* pErr)
         if (!bFound)
             aLook.IncCol();
     }
-    nField = aLook.Col();
+    SCCOL nField = aLook.Col();
 
     return bFound ? nField : -1;
 }
@@ -434,10 +435,10 @@ SCCOL ScDBExternalRange::findFieldColumn(SCCOL nIndex) const
     return nIndex - 1;
 }
 
-SCCOL ScDBExternalRange::findFieldColumn(const OUString& rStr, sal_uInt16* pErr) const
+SCCOL ScDBExternalRange::findFieldColumn(const OUString& rStr, FormulaError* pErr) const
 {
     if (pErr)
-        pErr = nullptr;
+        *pErr = FormulaError::NONE;
 
     OUString aUpper = rStr;
     lcl_uppercase(aUpper);
@@ -445,7 +446,7 @@ SCCOL ScDBExternalRange::findFieldColumn(const OUString& rStr, sal_uInt16* pErr)
     {
         OUString aUpperVal = mpMatrix->GetString(i, 0).getString();
         lcl_uppercase(aUpperVal);
-        if (aUpper.equals(aUpperVal))
+        if (aUpper == aUpperVal)
             return i;
     }
     return -1;

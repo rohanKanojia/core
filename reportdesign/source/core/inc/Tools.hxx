@@ -19,30 +19,19 @@
 #ifndef INCLUDED_REPORTDESIGN_SOURCE_CORE_INC_TOOLS_HXX
 #define INCLUDED_REPORTDESIGN_SOURCE_CORE_INC_TOOLS_HXX
 
-#include <com/sun/star/report/XReportDefinition.hpp>
 #include <com/sun/star/report/XSection.hpp>
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/awt/Size.hpp>
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/report/XFixedText.hpp>
-#include <com/sun/star/report/XFormattedField.hpp>
 
 
 #include "Section.hxx"
-#include "corestrings.hrc"
+#include <strings.hxx>
 
 namespace reportdesign
 {
-    template <class T> void lcl_createSectionIfNeeded(bool _bOn,const T& _xParent,css::uno::Reference< css::report::XSection>& _xSection/*in/out*/,bool _bPageSection = false)
-    {
-        if ( _bOn && !_xSection.is() )
-            _xSection = OSection::createOSection(_xParent,_xParent->getContext(),_bPageSection);
-        else if ( !_bOn )
-            ::comphelper::disposeComponent(_xSection);
-    }
-
     /** uses the XChild interface to get the section from any child of it.
      *
      * \param _xReportComponent A report component which is a child of the section.
@@ -55,12 +44,10 @@ namespace reportdesign
      * \param _sTypeName The reference where to look for the correct values.
      * \param ExceptionContext_ The exception context.
      * \param ArgumentPosition_ The argument position.
-     * \param Context_ The context to get the factory service.
      */
     void throwIllegallArgumentException(const OUString& _sTypeName
                                         ,const css::uno::Reference< css::uno::XInterface >& ExceptionContext_
-                                        ,const ::sal_Int16& ArgumentPosition_
-                                        ,const css::uno::Reference< css::uno::XComponentContext >& Context_);
+                                        ,sal_Int16 ArgumentPosition_);
 
     /** clones the given object
     *

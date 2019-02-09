@@ -20,9 +20,12 @@
 #include "ConfigurationControllerResourceManager.hxx"
 #include "ConfigurationControllerBroadcaster.hxx"
 #include "ResourceFactoryManager.hxx"
-#include "framework/FrameworkHelper.hxx"
+#include <framework/FrameworkHelper.hxx>
 #include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/drawing/framework/XConfiguration.hpp>
+#include <com/sun/star/drawing/framework/XResourceFactory.hpp>
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 #include <algorithm>
 
 using namespace ::com::sun::star;
@@ -70,7 +73,7 @@ void ConfigurationControllerResourceManager::ActivateResources (
         rResources.begin(),
         rResources.end(),
         [&] (Reference<XResourceId> const& xResource) {
-            return this->ActivateResource(xResource, rxConfiguration);
+            return ActivateResource(xResource, rxConfiguration);
         } );
 }
 
@@ -86,7 +89,7 @@ void ConfigurationControllerResourceManager::DeactivateResources (
         rResources.rbegin(),
         rResources.rend(),
         [&] (Reference<XResourceId> const& xResource) {
-            return this->DeactivateResource(xResource, rxConfiguration);
+            return DeactivateResource(xResource, rxConfiguration);
         } );
 }
 
@@ -108,16 +111,15 @@ void ConfigurationControllerResourceManager::ActivateResource (
        return;
    }
 
-    SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": activating resource " << OUStringToOString(
-        FrameworkHelper::ResourceIdToString(rxResourceId), RTL_TEXTENCODING_UTF8).getStr());
+    SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": activating resource " <<
+        FrameworkHelper::ResourceIdToString(rxResourceId));
 
     // 1. Get the factory.
     const OUString sResourceURL (rxResourceId->getResourceURL());
     Reference<XResourceFactory> xFactory (mpResourceFactoryContainer->GetFactory(sResourceURL));
     if ( ! xFactory.is())
     {
-        SAL_INFO("sd.fwk", OSL_THIS_FUNC << ":    no factory found for " <<
-            OUStringToOString(sResourceURL, RTL_TEXTENCODING_UTF8).getStr());
+        SAL_INFO("sd.fwk", OSL_THIS_FUNC << ":    no factory found for " << sResourceURL);
         return;
     }
 
@@ -135,10 +137,7 @@ void ConfigurationControllerResourceManager::ActivateResource (
             // of registered factories.
             mpResourceFactoryContainer->RemoveFactoryForReference(xFactory);
         }
-        catch (Exception& e)
-        {
-            (void)e;
-        }
+        catch (Exception&) {}
 
         if (xResource.is())
         {
@@ -162,7 +161,7 @@ void ConfigurationControllerResourceManager::ActivateResource (
     }
     catch (RuntimeException&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("sd");
     }
 }
 
@@ -191,7 +190,7 @@ void ConfigurationControllerResourceManager::DeactivateResource (
 
         if (aDescriptor.mxResource.is() && aDescriptor.mxResourceFactory.is())
         {
-            // 2.  Notifiy listeners that the resource is being deactivated.
+            // 2.  Notify listeners that the resource is being deactivated.
             mpBroadcaster->NotifyListeners(
                 FrameworkHelper::msResourceDeactivationEvent,
                 rxResourceId,
@@ -224,10 +223,10 @@ void ConfigurationControllerResourceManager::DeactivateResource (
     }
     catch (RuntimeException&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("sd");
     }
 
-    // 5.  Notifiy listeners that the resource is being deactivated.
+    // 5.  Notify listeners that the resource is being deactivated.
     mpBroadcaster->NotifyListeners(
         FrameworkHelper::msResourceDeactivationEndEvent,
         rxResourceId,
@@ -235,11 +234,11 @@ void ConfigurationControllerResourceManager::DeactivateResource (
 
 #if OSL_DEBUG_LEVEL >= 1
     if (bSuccess)
-        SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": successfully deactivated " << OUStringToOString(
-            FrameworkHelper::ResourceIdToString(rxResourceId), RTL_TEXTENCODING_UTF8).getStr());
+        SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": successfully deactivated " <<
+            FrameworkHelper::ResourceIdToString(rxResourceId));
     else
-        SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": activating resource " << OUStringToOString(
-            FrameworkHelper::ResourceIdToString(rxResourceId), RTL_TEXTENCODING_UTF8).getStr()
+        SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": activating resource " <<
+            FrameworkHelper::ResourceIdToString(rxResourceId)
             << " failed");
 #endif
 }
@@ -262,9 +261,8 @@ void ConfigurationControllerResourceManager::AddResource (
 
 #if OSL_DEBUG_LEVEL >= 2
     SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": ConfigurationControllerResourceManager::AddResource(): added " <<
-        OUStringToOString(
-            FrameworkHelper::ResourceIdToString(rxResource->getResourceId()),
-            RTL_TEXTENCODING_UTF8).getStr() << " -> " << rxResource.get());
+            FrameworkHelper::ResourceIdToString(rxResource->getResourceId()) <<
+            " -> " << rxResource.get());
 #endif
 }
 
@@ -279,9 +277,7 @@ ConfigurationControllerResourceManager::ResourceDescriptor
     {
 #if OSL_DEBUG_LEVEL >= 2
         SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": ConfigurationControllerResourceManager::RemoveResource(): removing " <<
-            OUStringToOString(
-                FrameworkHelper::ResourceIdToString(rxResourceId),
-                RTL_TEXTENCODING_UTF8).getStr() <<
+                FrameworkHelper::ResourceIdToString(rxResourceId) <<
                 " -> " << &iResource);
 #endif
 

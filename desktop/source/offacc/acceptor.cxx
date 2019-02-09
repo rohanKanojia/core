@@ -23,6 +23,7 @@
 #include <com/sun/star/bridge/BridgeFactory.hpp>
 #include <com/sun/star/connection/Acceptor.hpp>
 #include <com/sun/star/uno/XNamingService.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/factory.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -30,18 +31,21 @@
 
 using namespace css::bridge;
 using namespace css::connection;
-using namespace css::container;
 using namespace css::lang;
 using namespace css::uno;
 
 namespace desktop
 {
 
-extern "C" void offacc_workerfunc (void * acc)
+extern "C" {
+
+static void offacc_workerfunc (void * acc)
 {
     osl_setThreadName("URP Acceptor");
 
     static_cast<Acceptor*>(acc)->run();
+}
+
 }
 
 Acceptor::Acceptor( const Reference< XComponentContext >& rxContext )
@@ -119,7 +123,7 @@ void Acceptor::run()
             osl::MutexGuard g(m_aMutex);
             m_bridges.add(rBridge);
         } catch (const Exception& e) {
-            SAL_WARN("desktop.offacc", "caught Exception \"" << e.Message << "\"");
+            SAL_WARN("desktop.offacc", "caught " << e);
             // connection failed...
             // something went wrong during connection setup.
             // just wait for a new connection to accept
@@ -129,7 +133,6 @@ void Acceptor::run()
 
 // XInitialize
 void Acceptor::initialize( const Sequence<Any>& aArguments )
-    throw( Exception, std::exception )
 {
     // prevent multiple initialization
     osl::ClearableMutexGuard aGuard( m_aMutex );
@@ -185,23 +188,19 @@ OUString Acceptor::impl_getImplementationName()
     return OUString("com.sun.star.office.comp.Acceptor");
 }
 OUString Acceptor::getImplementationName()
-    throw (RuntimeException, std::exception)
 {
     return Acceptor::impl_getImplementationName();
 }
 Sequence<OUString> Acceptor::impl_getSupportedServiceNames()
 {
-    Sequence<OUString> aSequence { "com.sun.star.office.Acceptor" };
-    return aSequence;
+    return { "com.sun.star.office.Acceptor" };
 }
 Sequence<OUString> Acceptor::getSupportedServiceNames()
-    throw (RuntimeException, std::exception)
 {
     return Acceptor::impl_getSupportedServiceNames();
 }
 
 sal_Bool Acceptor::supportsService(OUString const & ServiceName)
-    throw (css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, ServiceName);
 }
@@ -229,7 +228,6 @@ AccInstanceProvider::~AccInstanceProvider()
 }
 
 Reference<XInterface> AccInstanceProvider::getInstance (const OUString& aName )
-        throw ( NoSuchElementException, std::exception )
 {
 
     Reference<XInterface> rInstance;
@@ -265,7 +263,7 @@ extern "C"
 {
 using namespace desktop;
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL offacc_component_getFactory(char const *pImplementationName, void *pServiceManager, void *)
+SAL_DLLPUBLIC_EXPORT void * offacc_component_getFactory(char const *pImplementationName, void *pServiceManager, void *)
 {
     void* pReturn = nullptr ;
     if  ( pImplementationName && pServiceManager )

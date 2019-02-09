@@ -20,8 +20,8 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_FILE_FDATEFUNCTIONS_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_FILE_FDATEFUNCTIONS_HXX
 
-#include "file/fcode.hxx"
-#include "file/filedllapi.hxx"
+#include <file/fcode.hxx>
+#include <file/filedllapi.hxx>
 
 namespace connectivity
 {
@@ -137,7 +137,7 @@ namespace connectivity
         class OOp_Week : public ONthOperator
         {
         protected:
-            virtual ORowSetValue operate(const ::std::vector<ORowSetValue>& lhs) const override;
+            virtual ORowSetValue operate(const std::vector<ORowSetValue>& lhs) const override;
         };
 
         /** YEAR(date)
@@ -199,7 +199,7 @@ namespace connectivity
         class OOp_CurDate : public ONthOperator
         {
         protected:
-            virtual ORowSetValue operate(const ::std::vector<ORowSetValue>& lhs) const override;
+            virtual ORowSetValue operate(const std::vector<ORowSetValue>& lhs) const override;
         };
 
         /** CURTIME()
@@ -212,7 +212,7 @@ namespace connectivity
         class OOp_CurTime : public ONthOperator
         {
         protected:
-            virtual ORowSetValue operate(const ::std::vector<ORowSetValue>& lhs) const override;
+            virtual ORowSetValue operate(const std::vector<ORowSetValue>& lhs) const override;
         };
 
         /** NOW()
@@ -224,7 +224,7 @@ namespace connectivity
         class OOp_Now : public ONthOperator
         {
         protected:
-            virtual ORowSetValue operate(const ::std::vector<ORowSetValue>& lhs) const override;
+            virtual ORowSetValue operate(const std::vector<ORowSetValue>& lhs) const override;
         };
     }
 }

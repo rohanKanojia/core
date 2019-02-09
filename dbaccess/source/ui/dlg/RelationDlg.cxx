@@ -17,25 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "RelationDlg.hxx"
+#include <RelationDlg.hxx>
 
 #include <vcl/wrkwin.hxx>
 
 #include <vcl/svapp.hxx>
-#include "dbu_dlg.hrc"
-#include "dbaccess_helpid.hrc"
+#include <dbu_dlg.hxx>
 #include <com/sun/star/sdbc/KeyRule.hpp>
 
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
-#include "UITools.hxx"
-#include "JoinDesignView.hxx"
-#include "JoinController.hxx"
+#include <UITools.hxx>
+#include <JoinDesignView.hxx>
+#include <JoinController.hxx>
 #include <connectivity/dbexception.hxx>
-#include "RTableConnectionData.hxx"
-#include "RelationControl.hxx"
+#include <RTableConnectionData.hxx>
+#include <RelationControl.hxx>
 #include <cppuhelper/exc_hlp.hxx>
-#include <comphelper/processfactory.hxx>
 
 #include <algorithm>
 
@@ -52,7 +50,6 @@ ORelationDialog::ORelationDialog( OJoinTableView* pParent,
                                  bool bAllowTableSelect )
     : ModalDialog(pParent, "RelationDialog",
         "dbaccess/ui/relationdialog.ui")
-    , m_pTableMap(&pParent->GetTabWinMap())
     , m_pOrigConnData(pConnectionData)
     , m_bTriedOneUpdate(false)
 {
@@ -68,12 +65,12 @@ ORelationDialog::ORelationDialog( OJoinTableView* pParent,
 
     m_xConnection = pParent->getDesignView()->getController().getConnection();
 
-    // Connection kopieren
+    // Copy connection
     m_pConnData.reset( static_cast<ORelationTableConnectionData*>(pConnectionData->NewInstance()) );
     m_pConnData->CopyFrom( *pConnectionData );
 
     Init(m_pConnData);
-    m_xTableControl.reset( new OTableListBoxControl(this, m_pTableMap, this) );
+    m_xTableControl.reset( new OTableListBoxControl(this, &pParent->GetTabWinMap(), this) );
 
     m_pPB_OK->SetClickHdl( LINK(this, ORelationDialog, OKClickHdl) );
 
@@ -152,9 +149,9 @@ void ORelationDialog::Init(const TTableConnectionData::value_type& _pConnectionD
     }
 }
 
-IMPL_LINK_NOARG_TYPED( ORelationDialog, OKClickHdl, Button*, void )
+IMPL_LINK_NOARG( ORelationDialog, OKClickHdl, Button*, void )
 {
-    // RadioButtons auslesen
+    // Read out RadioButtons
     sal_uInt16 nAttrib = 0;
 
     // Delete Rules
@@ -184,8 +181,8 @@ IMPL_LINK_NOARG_TYPED( ORelationDialog, OKClickHdl, Button*, void )
 
     m_xTableControl->SaveModified();
 
-    //// wenn die ComboBoxen fuer die Tabellenauswahl enabled sind (Constructor mit bAllowTableSelect==sal_True), dann muss ich in die
-    //// Connection auch die Tabellennamen stecken
+    //// if the ComboBoxes for the table selection are enabled (constructor with bAllowTableSelect==sal_True),
+    //// then I must also put the table names into the connection
     //m_pConnData->SetSourceWinName(m_xTableControl->getSourceWinName());
     //m_pConnData->SetDestWinName(m_xTableControl->getDestWinName());
 
@@ -202,13 +199,13 @@ IMPL_LINK_NOARG_TYPED( ORelationDialog, OKClickHdl, Button*, void )
     }
     catch( const SQLException& )
     {
-        ::dbaui::showError( SQLExceptionInfo( ::cppu::getCaughtException() ),
-                            this,
+        ::dbtools::showError( SQLExceptionInfo( ::cppu::getCaughtException() ),
+                            VCLUnoHelper::GetInterface(this),
                             static_cast<OJoinTableView*>(GetParent())->getDesignView()->getController().getORB());
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 
     m_bTriedOneUpdate = true;

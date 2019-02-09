@@ -46,7 +46,7 @@ typedef long Py_hash_t;
 #  define Py_TPFLAGS_HAVE_SEQUENCE_IN 0
 #endif
 
-#include <pyuno/pyuno.hxx>
+#include <pyuno.hxx>
 
 #include <unordered_map>
 #include <unordered_set>
@@ -80,19 +80,19 @@ inline PyObject* PyStr_FromString(const char *string)
     return PyUnicode_FromString(string);
 }
 
-inline char * PyStr_AsString(PyObject *object)
+inline char const * PyStr_AsString(PyObject *object)
 {
     return PyUnicode_AsUTF8(object);
 }
 
-inline bool PyStr_Check(PyObject *object)
+inline bool PyStr_Check(PyObject const *object)
 {
     return PyUnicode_Check(object);
 }
 
 // compatibility wrappers for Python non-Unicode string/buffer type
 // (PyBytes in 3, PyString in 2)
-inline bool PyStrBytes_Check(PyObject *object)
+inline bool PyStrBytes_Check(PyObject const *object)
 {
     return PyBytes_Check(object);
 }
@@ -162,7 +162,7 @@ static const sal_Int32 CALL = 1;
 static const sal_Int32 ARGS = 2;
 }
 
-bool isLog( RuntimeCargo *cargo, sal_Int32 loglevel );
+bool isLog( RuntimeCargo const *cargo, sal_Int32 loglevel );
 void log( RuntimeCargo *cargo, sal_Int32 level, const OUString &logString );
 void log( RuntimeCargo *cargo, sal_Int32 level, const char *str );
 void logCall( RuntimeCargo *cargo, const char *intro,
@@ -190,16 +190,14 @@ typedef std::unordered_map
 
 typedef std::unordered_map
 <
-OUString,
-PyRef,
-OUStringHash
+    OUString,
+    PyRef
 > ExceptionClassMap;
 
 typedef std::unordered_map
 <
     OUString,
-    css::uno::Sequence< sal_Int16 >,
-    OUStringHash
+    css::uno::Sequence< sal_Int16 >
 > MethodOutIndexMap;
 
 typedef std::unordered_set< PyRef , PyRef::Hash > ClassSet;
@@ -228,7 +226,7 @@ typedef struct
 } PyUNO;
 
 PyObject* PyUNO_iterator_new (
-    const css::uno::Reference<css::container::XEnumeration> xEnumeration);
+    const css::uno::Reference<css::container::XEnumeration>& xEnumeration);
 
 typedef struct
 {
@@ -260,9 +258,9 @@ PyRef ustring2PyUnicode( const OUString &source );
 PyRef ustring2PyString( const OUString & source );
 OUString pyString2ustring( PyObject *str );
 
-
-void raiseInvocationTargetExceptionWhenNeeded( const Runtime &runtime )
-    throw ( css::reflection::InvocationTargetException );
+/// @throws css::reflection::InvocationTargetException
+/// @throws css::uno::RuntimeException
+void raiseInvocationTargetExceptionWhenNeeded( const Runtime &runtime );
 
 PyRef PyUNO_callable_new (
     const css::uno::Reference<css::script::XInvocation2> &xInv,
@@ -284,18 +282,18 @@ PyRef getClass( const OUString & name , const Runtime & runtime );
 PyRef getAnyClass( const Runtime &);
 PyObject *PyUNO_invoke( PyObject *object, const char *name , PyObject *args );
 
-css::uno::Any PyEnum2Enum( PyObject *obj )
-    throw ( css::uno::RuntimeException );
-sal_Unicode PyChar2Unicode( PyObject *o )
-    throw ( css::uno::RuntimeException );
-css::uno::Type PyType2Type( PyObject * o )
-    throw( css::uno::RuntimeException );
+/// @throws css::uno::RuntimeException
+css::uno::Any PyEnum2Enum( PyObject *obj );
+/// @throws css::uno::RuntimeException
+sal_Unicode PyChar2Unicode( PyObject *o );
+/// @throws css::uno::RuntimeException
+css::uno::Type PyType2Type( PyObject * o );
 
 void raisePyExceptionWithAny( const css::uno::Any &a );
 const char *typeClassToString( css::uno::TypeClass t );
 
-PyRef getObjectFromUnoModule( const Runtime &runtime, const char * object )
-    throw ( css::uno::RuntimeException );
+/// @throws css::uno::RuntimeException
+PyRef getObjectFromUnoModule( const Runtime &runtime, const char * object );
 
 bool isInterfaceClass( const Runtime &, PyObject *obj );
 bool isInstanceOfStructOrException( PyObject *obj);
@@ -318,7 +316,7 @@ struct RuntimeCargo
     FILE *logFile;
     sal_Int32 logLevel;
 
-    PyRef getUnoModule();
+    PyRef const & getUnoModule();
 };
 
 struct stRuntimeImpl
@@ -328,9 +326,9 @@ struct stRuntimeImpl
 public:
     static void del( PyObject *self );
 
+    /// @throws css::uno::RuntimeException
     static PyRef create(
-        const css::uno::Reference< css::uno::XComponentContext > & xContext )
-        throw ( css::uno::RuntimeException, std::exception );
+        const css::uno::Reference< css::uno::XComponentContext > & xContext );
 };
 
 
@@ -338,8 +336,8 @@ class Adapter : public cppu::WeakImplHelper<
     css::script::XInvocation, css::lang::XUnoTunnel >
 {
     PyRef mWrappedObject;
-    PyInterpreterState *mInterpreter;  // interpreters don't seem to be refcounted !
-    css::uno::Sequence< css::uno::Type > mTypes;
+    PyInterpreterState * const mInterpreter;  // interpreters don't seem to be refcounted !
+    css::uno::Sequence< css::uno::Type > const mTypes;
     MethodOutIndexMap m_methodOutIndexMap;
 
 private:
@@ -351,43 +349,30 @@ public:
              const css::uno::Sequence< css::uno::Type > & types );
 
     static css::uno::Sequence< sal_Int8 > getUnoTunnelImplementationId();
-    PyRef getWrappedObject() { return mWrappedObject; }
-    css::uno::Sequence< css::uno::Type > getWrappedTypes() { return mTypes; }
-    virtual ~Adapter();
+    const PyRef& getWrappedObject() const { return mWrappedObject; }
+    const css::uno::Sequence< css::uno::Type >& getWrappedTypes() const { return mTypes; }
+    virtual ~Adapter() override;
 
     // XInvocation
     virtual css::uno::Reference< css::beans::XIntrospectionAccess >
-           SAL_CALL getIntrospection(  ) throw (css::uno::RuntimeException, std::exception) override;
+           SAL_CALL getIntrospection(  ) override;
     virtual css::uno::Any SAL_CALL invoke(
         const OUString& aFunctionName,
         const css::uno::Sequence< css::uno::Any >& aParams,
         css::uno::Sequence< sal_Int16 >& aOutParamIndex,
-        css::uno::Sequence< css::uno::Any >& aOutParam )
-        throw (css::lang::IllegalArgumentException,
-               css::script::CannotConvertException,
-               css::reflection::InvocationTargetException,
-               css::uno::RuntimeException, std::exception) override;
+        css::uno::Sequence< css::uno::Any >& aOutParam ) override;
 
     virtual void SAL_CALL setValue(
         const OUString& aPropertyName,
-        const css::uno::Any& aValue )
-        throw (css::beans::UnknownPropertyException,
-               css::script::CannotConvertException,
-               css::reflection::InvocationTargetException,
-               css::uno::RuntimeException, std::exception) override;
+        const css::uno::Any& aValue ) override;
 
-    virtual css::uno::Any SAL_CALL getValue( const OUString& aPropertyName )
-        throw (css::beans::UnknownPropertyException,
-               css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasMethod( const OUString& aName )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasProperty( const OUString& aName )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL getValue( const OUString& aPropertyName ) override;
+    virtual sal_Bool SAL_CALL hasMethod( const OUString& aName ) override;
+    virtual sal_Bool SAL_CALL hasProperty( const OUString& aName ) override;
 
     // XUnoTunnel
     virtual sal_Int64 SAL_CALL getSomething(
-        const css::uno::Sequence< sal_Int8 >& aIdentifier )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
 };
 
 

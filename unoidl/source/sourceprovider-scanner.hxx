@@ -10,21 +10,21 @@
 #ifndef INCLUDED_UNOIDL_SOURCE_SOURCEPROVIDER_SCANNER_HXX
 #define INCLUDED_UNOIDL_SOURCE_SOURCEPROVIDER_SCANNER_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 #include <map>
 #include <set>
 #include <vector>
 
-#include "rtl/ref.hxx"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
-#include "salhelper/simplereferenceobject.hxx"
-#include "unoidl/unoidl.hxx"
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <salhelper/simplereferenceobject.hxx>
+#include <unoidl/unoidl.hxx>
 
 #include "sourceprovider-parser-requires.hxx"
-#include "sourceprovider-parser.hxx"
+#include <sourceprovider-parser.hxx>
 
 namespace unoidl { namespace detail {
 
@@ -37,7 +37,7 @@ public:
 protected:
     explicit SourceProviderEntityPad(bool published): published_(published) {}
 
-    virtual ~SourceProviderEntityPad() {}
+    virtual ~SourceProviderEntityPad() override {}
 
 private:
     bool const published_;
@@ -52,7 +52,7 @@ public:
     std::vector<unoidl::EnumTypeEntity::Member> members;
 
 private:
-    virtual ~SourceProviderEnumTypeEntityPad() throw () {}
+    virtual ~SourceProviderEnumTypeEntityPad() throw () override {}
 };
 
 class SourceProviderPlainStructTypeEntityPad: public SourceProviderEntityPad {
@@ -62,14 +62,14 @@ public:
         rtl::Reference<unoidl::PlainStructTypeEntity> const & theBaseEntity):
         SourceProviderEntityPad(published), baseName(theBaseName),
         baseEntity(theBaseEntity)
-    { assert(theBaseName.isEmpty() != (bool) theBaseEntity.is()); }
+    { assert(theBaseName.isEmpty() != theBaseEntity.is()); }
 
     OUString const baseName;
     rtl::Reference<unoidl::PlainStructTypeEntity> const baseEntity;
     std::vector<unoidl::PlainStructTypeEntity::Member> members;
 
 private:
-    virtual ~SourceProviderPlainStructTypeEntityPad() throw () {}
+    virtual ~SourceProviderPlainStructTypeEntityPad() throw () override {}
 };
 
 class SourceProviderPolymorphicStructTypeTemplateEntityPad:
@@ -84,7 +84,7 @@ public:
     std::vector<unoidl::PolymorphicStructTypeTemplateEntity::Member> members;
 
 private:
-    virtual ~SourceProviderPolymorphicStructTypeTemplateEntityPad() throw () {}
+    virtual ~SourceProviderPolymorphicStructTypeTemplateEntityPad() throw () override {}
 };
 
 class SourceProviderExceptionTypeEntityPad: public SourceProviderEntityPad {
@@ -94,14 +94,14 @@ public:
         rtl::Reference<unoidl::ExceptionTypeEntity> const & theBaseEntity):
         SourceProviderEntityPad(published), baseName(theBaseName),
         baseEntity(theBaseEntity)
-    { assert(theBaseName.isEmpty() != (bool) theBaseEntity.is()); }
+    { assert(theBaseName.isEmpty() != theBaseEntity.is()); }
 
     OUString const baseName;
     rtl::Reference<unoidl::ExceptionTypeEntity> const baseEntity;
     std::vector<unoidl::ExceptionTypeEntity::Member> members;
 
 private:
-    virtual ~SourceProviderExceptionTypeEntityPad() throw () {}
+    virtual ~SourceProviderExceptionTypeEntityPad() throw () override {}
 };
 
 class SourceProviderInterfaceTypeEntityPad: public SourceProviderEntityPad {
@@ -125,7 +125,7 @@ public:
     };
 
     struct Member {
-        OUString mandatory;
+        OUString const mandatory;
         std::set<OUString> optional;
 
         explicit Member(const OUString & theMandatory): mandatory(theMandatory) {}
@@ -143,7 +143,7 @@ public:
         YYLTYPE location, yyscan_t yyscanner, SourceProviderScannerData * data,
         OUString const & name);
 
-    bool singleBase;
+    bool const singleBase;
     std::vector<DirectBase> directMandatoryBases;
     std::vector<DirectBase> directOptionalBases;
     std::vector<unoidl::InterfaceTypeEntity::Attribute> directAttributes;
@@ -152,7 +152,7 @@ public:
     std::map<OUString, Member> allMembers;
 
 private:
-    virtual ~SourceProviderInterfaceTypeEntityPad() throw () {}
+    virtual ~SourceProviderInterfaceTypeEntityPad() throw () override {}
 
     bool checkBaseClashes(
         YYLTYPE location, yyscan_t yyscanner, SourceProviderScannerData * data,
@@ -187,7 +187,7 @@ public:
     std::vector<unoidl::ConstantGroupEntity::Member> members;
 
 private:
-    virtual ~SourceProviderConstantGroupEntityPad() throw () {}
+    virtual ~SourceProviderConstantGroupEntityPad() throw () override {}
 };
 
 class SourceProviderSingleInterfaceBasedServiceEntityPad:
@@ -197,31 +197,31 @@ public:
     struct Constructor {
         struct Parameter {
             Parameter(
-                rtl::OUString const & theName,
+                OUString const & theName,
                 SourceProviderType const & theType, bool theRest):
                 name(theName), type(theType), rest(theRest)
             {}
 
-            rtl::OUString name;
+            OUString name;
 
-            SourceProviderType type;
+            SourceProviderType const type;
 
             bool rest;
         };
 
         Constructor(
-            rtl::OUString const & theName,
-            std::vector< rtl::OUString > const & theAnnotations):
+            OUString const & theName,
+            std::vector< OUString > const & theAnnotations):
             name(theName), annotations(theAnnotations)
         {}
 
-        rtl::OUString name;
+        OUString const name;
 
         std::vector< Parameter > parameters;
 
-        std::vector< rtl::OUString > exceptions;
+        std::vector< OUString > exceptions;
 
-        std::vector< rtl::OUString > annotations;
+        std::vector< OUString > const annotations;
     };
 
     explicit SourceProviderSingleInterfaceBasedServiceEntityPad(
@@ -233,7 +233,7 @@ public:
     std::vector<Constructor> constructors;
 
 private:
-    virtual ~SourceProviderSingleInterfaceBasedServiceEntityPad() throw () {}
+    virtual ~SourceProviderSingleInterfaceBasedServiceEntityPad() throw () override {}
 };
 
 class SourceProviderAccumulationBasedServiceEntityPad:
@@ -252,7 +252,7 @@ public:
         directProperties;
 
 private:
-    virtual ~SourceProviderAccumulationBasedServiceEntityPad() throw () {}
+    virtual ~SourceProviderAccumulationBasedServiceEntityPad() throw () override {}
 };
 
 struct SourceProviderEntity {

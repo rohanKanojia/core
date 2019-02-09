@@ -20,29 +20,28 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_DBASE_DCONNECTION_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_DBASE_DCONNECTION_HXX
 
-#include "file/FConnection.hxx"
+#include <file/FConnection.hxx>
 
 namespace connectivity
 {
     namespace dbase
     {
         class ODriver;
-        typedef file::OConnection ODbaseConnection_Base;
-        class ODbaseConnection : public ODbaseConnection_Base
+        class ODbaseConnection : public file::OConnection
         {
         protected:
-            virtual ~ODbaseConnection();
+            virtual ~ODbaseConnection() override;
         public:
             ODbaseConnection(ODriver*   _pDriver);
             // XServiceInfo
             DECLARE_SERVICE_INFO();
 
             // XConnection
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XDatabaseMetaData > SAL_CALL getMetaData(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::sdbcx::XTablesSupplier > createCatalog() override;
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XStatement > SAL_CALL createStatement(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XPreparedStatement > SAL_CALL prepareStatement( const OUString& sql ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XPreparedStatement > SAL_CALL prepareCall( const OUString& sql ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Reference< css::sdbc::XDatabaseMetaData > SAL_CALL getMetaData(  ) override;
+            virtual css::uno::Reference< css::sdbcx::XTablesSupplier > createCatalog() override;
+            virtual css::uno::Reference< css::sdbc::XStatement > SAL_CALL createStatement(  ) override;
+            virtual css::uno::Reference< css::sdbc::XPreparedStatement > SAL_CALL prepareStatement( const OUString& sql ) override;
+            virtual css::uno::Reference< css::sdbc::XPreparedStatement > SAL_CALL prepareCall( const OUString& sql ) override;
         };
     }
 }

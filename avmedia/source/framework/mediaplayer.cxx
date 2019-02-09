@@ -20,9 +20,9 @@
 #include <avmedia/mediaplayer.hxx>
 #include <avmedia/mediawindow.hxx>
 #include <avmedia/mediaitem.hxx>
-#include "mediamisc.hxx"
-#include "mediacontrol.hrc"
-#include "helpids.hrc"
+#include <mediamisc.hxx>
+#include <strings.hrc>
+#include <helpids.h>
 
 #include <svl/stritem.hxx>
 #include <sfx2/app.hxx>
@@ -53,11 +53,11 @@ MediaFloater::MediaFloater( SfxBindings* _pBindings, SfxChildWindow* pCW, vcl::W
     SfxDockingWindow( _pBindings, pCW, pParent, WB_CLOSEABLE | WB_MOVEABLE | WB_SIZEABLE | WB_DOCKABLE ),
     mpMediaWindow( new MediaWindow( this, true ) )
 {
-    const Size aSize( 378, 256 );
+    const Size aSize( mpMediaWindow->getPreferredSize() );
 
     SetPosSizePixel( Point( 0, 0 ), aSize );
     SetMinOutputSizePixel( aSize );
-    SetText( OUString( AVMEDIA_RESID( AVMEDIA_STR_MEDIAPLAYER ) ) );
+    SetText( AvmResId( AVMEDIA_STR_MEDIAPLAYER ) );
     mpMediaWindow->show();
 }
 
@@ -67,23 +67,24 @@ MediaFloater::~MediaFloater()
     disposeOnce();
 }
 
-
 void MediaFloater::dispose()
 {
-    delete mpMediaWindow;
-    mpMediaWindow = nullptr;
+    if (IsFloatingMode())
+    {
+        Show(false, ShowFlags::NoFocusChange);
+        SetFloatingMode(false);
+    }
+    mpMediaWindow.reset();
     SfxDockingWindow::dispose();
 }
-
 
 void MediaFloater::Resize()
 {
     SfxDockingWindow::Resize();
 
     if( mpMediaWindow )
-        mpMediaWindow->setPosSize( Rectangle( Point(), GetOutputSizePixel() ) );
+        mpMediaWindow->setPosSize( tools::Rectangle( Point(), GetOutputSizePixel() ) );
 }
-
 
 void MediaFloater::ToggleFloatingMode()
 {
@@ -91,17 +92,16 @@ void MediaFloater::ToggleFloatingMode()
 
     if (mpMediaWindow)
         mpMediaWindow->updateMediaItem( aRestoreItem );
-    delete mpMediaWindow;
-    mpMediaWindow = nullptr;
+    mpMediaWindow.reset();
 
     SfxDockingWindow::ToggleFloatingMode();
 
     if (isDisposed())
         return;
 
-    mpMediaWindow = new MediaWindow( this, true );
+    mpMediaWindow.reset( new MediaWindow( this, true ) );
 
-    mpMediaWindow->setPosSize( Rectangle( Point(), GetOutputSizePixel() ) );
+    mpMediaWindow->setPosSize( tools::Rectangle( Point(), GetOutputSizePixel() ) );
     mpMediaWindow->executeMediaItem( aRestoreItem );
 
     vcl::Window* pWindow = mpMediaWindow->getWindow();

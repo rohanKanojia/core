@@ -12,15 +12,16 @@
 
 #include <sal/config.h>
 #include "scdllapi.h"
+#include <memory>
 
 class ScRefreshTimerControl;
 
 class SC_DLLPUBLIC ScRefreshTimerProtector
 {
-    ScRefreshTimerControl * const & m_rpControl;
+    std::unique_ptr<ScRefreshTimerControl> const & m_rpControl;
 
 public:
-    ScRefreshTimerProtector( ScRefreshTimerControl * const & rp );
+    ScRefreshTimerProtector( std::unique_ptr<ScRefreshTimerControl> const & rp );
     ~ScRefreshTimerProtector();
 };
 

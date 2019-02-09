@@ -12,7 +12,6 @@
 
 #include <formula/grammar.hxx>
 #include <tools/color.hxx>
-#include "rangelst.hxx"
 #include "conditio.hxx"
 #include "document.hxx"
 
@@ -21,7 +20,6 @@
 
 //TODO: merge this with conditio.hxx
 
-class ScDocument;
 class ScFormulaCell;
 class ScTokenArray;
 struct ScDataBarInfo;
@@ -49,13 +47,16 @@ private:
     std::unique_ptr<ScFormulaCell> mpCell;
     std::unique_ptr<ScFormulaListener> mpListener;
     ScColorScaleEntryType meType;
+    ScConditionalFormat* mpFormat;
+
+    void setListener();
 
 public:
-    ScColorScaleEntry(double nVal, const Color& rCol);
+    ScColorScaleEntry(double nVal, const Color& rCol, ScColorScaleEntryType eType = COLORSCALE_VALUE);
     ScColorScaleEntry();
     ScColorScaleEntry(const ScColorScaleEntry& rEntry);
     ScColorScaleEntry(ScDocument* pDoc, const ScColorScaleEntry& rEntry);
-    ~ScColorScaleEntry();
+    ~ScColorScaleEntry() COVERITY_NOEXCEPT_FALSE;
 
     const Color& GetColor() const { return maColor;}
     void SetColor(const Color&);
@@ -64,10 +65,10 @@ public:
     void SetFormula(const OUString& rFormula, ScDocument* pDoc, const ScAddress& rAddr,
             formula::FormulaGrammar::Grammar eGrammar = formula::FormulaGrammar::GRAM_DEFAULT);
 
-    void UpdateReference( sc::RefUpdateContext& rCxt );
-    void UpdateInsertTab( sc::RefUpdateInsertTabContext& rCxt );
-    void UpdateDeleteTab( sc::RefUpdateDeleteTabContext& rCxt );
-    void UpdateMoveTab( sc::RefUpdateMoveTabContext& rCxt );
+    void UpdateReference( const sc::RefUpdateContext& rCxt );
+    void UpdateInsertTab( const sc::RefUpdateInsertTabContext& rCxt );
+    void UpdateDeleteTab( const sc::RefUpdateDeleteTabContext& rCxt );
+    void UpdateMoveTab( const sc::RefUpdateMoveTabContext& rCxt );
 
     const ScTokenArray* GetFormula() const;
     OUString GetFormula( formula::FormulaGrammar::Grammar eGrammar ) const;
@@ -75,7 +76,8 @@ public:
     ScColorScaleEntryType GetType() const { return meType;}
     void SetType( ScColorScaleEntryType eType );
 
-    bool NeedsRepaint() const;
+    void SetRepaintCallback(ScConditionalFormat* pParent);
+    void SetRepaintCallback(const std::function<void()>& func);
 };
 
 namespace databar
@@ -99,7 +101,10 @@ struct SC_DLLPUBLIC ScDataBarFormatData
         meAxisPosition(databar::AUTOMATIC),
         mnMinLength(0),
         mnMaxLength(100),
-        mbOnlyBar(false){}
+        mbOnlyBar(false),
+        mpUpperLimit(new ScColorScaleEntry()),
+        mpLowerLimit(new ScColorScaleEntry())
+    {}
 
     ScDataBarFormatData(const ScDataBarFormatData& r):
         maPositiveColor(r.maPositiveColor),
@@ -116,8 +121,12 @@ struct SC_DLLPUBLIC ScDataBarFormatData
 
         if(r.mpLowerLimit)
             mpLowerLimit.reset( new ScColorScaleEntry(*r.mpLowerLimit));
+        else
+            mpLowerLimit.reset(new ScColorScaleEntry());
         if(r.mpUpperLimit)
             mpUpperLimit.reset( new ScColorScaleEntry(*r.mpUpperLimit));
+        else
+            mpUpperLimit.reset(new ScColorScaleEntry());
     }
 
     /**
@@ -205,15 +214,15 @@ enum ScIconSetType
 
 struct ScIconSetMap {
     const char* pName;
-    ScIconSetType eType;
-    sal_Int32 nElements;
+    ScIconSetType const eType;
+    sal_Int32 const nElements;
 };
 
 class SC_DLLPUBLIC ScColorFormat : public ScFormatEntry
 {
 public:
     ScColorFormat(ScDocument* pDoc);
-    virtual ~ScColorFormat();
+    virtual ~ScColorFormat() override;
 
     const ScRangeList& GetRange() const;
 
@@ -221,8 +230,6 @@ public:
 
     virtual void startRendering() override;
     virtual void endRendering() override;
-
-    virtual bool NeedsRepaint() const = 0;
 
 protected:
     std::vector<double>& getValues() const;
@@ -252,14 +259,16 @@ private:
     double GetMaxValue() const;
 
     void calcMinMax(double& nMin, double& nMax) const;
-    double CalcValue(double nMin, double nMax, ScColorScaleEntries::const_iterator& rItr) const;
+    double CalcValue(double nMin, double nMax, const ScColorScaleEntries::const_iterator& rItr) const;
 public:
     ScColorScaleFormat(ScDocument* pDoc);
     ScColorScaleFormat(ScDocument* pDoc, const ScColorScaleFormat& rFormat);
-    virtual ~ScColorScaleFormat();
-    virtual ScColorFormat* Clone(ScDocument* pDoc = nullptr) const override;
+    virtual ~ScColorScaleFormat() override;
+    virtual ScColorFormat* Clone(ScDocument* pDoc) const override;
 
-    Color* GetColor(const ScAddress& rAddr) const;
+    virtual void SetParent(ScConditionalFormat* pParent) override;
+
+    boost::optional<Color> GetColor(const ScAddress& rAddr) const;
     void AddEntry(ScColorScaleEntry* pEntry);
 
     virtual void UpdateReference( sc::RefUpdateContext& rCxt ) override;
@@ -267,9 +276,7 @@ public:
     virtual void UpdateDeleteTab( sc::RefUpdateDeleteTabContext& rCxt ) override;
     virtual void UpdateMoveTab( sc::RefUpdateMoveTabContext& rCxt ) override;
 
-    virtual bool NeedsRepaint() const override;
-
-    virtual condformat::ScFormatEntryType GetType() const override;
+    virtual Type GetType() const override;
     ScColorScaleEntries::iterator begin();
     ScColorScaleEntries::const_iterator begin() const;
     ScColorScaleEntries::iterator end();
@@ -292,9 +299,11 @@ class SC_DLLPUBLIC ScDataBarFormat : public ScColorFormat
 public:
     ScDataBarFormat(ScDocument* pDoc);
     ScDataBarFormat(ScDocument* pDoc, const ScDataBarFormat& rFormat);
-    virtual ScColorFormat* Clone(ScDocument* pDoc = nullptr) const override;
+    virtual ScColorFormat* Clone(ScDocument* pDoc) const override;
 
-    ScDataBarInfo* GetDataBarInfo(const ScAddress& rAddr) const;
+    virtual void SetParent(ScConditionalFormat* pParent) override;
+
+    std::unique_ptr<ScDataBarInfo> GetDataBarInfo(const ScAddress& rAddr) const;
 
     void SetDataBarData( ScDataBarFormatData* pData );
     const ScDataBarFormatData* GetDataBarData() const;
@@ -305,9 +314,7 @@ public:
     virtual void UpdateDeleteTab( sc::RefUpdateDeleteTabContext& rCxt ) override;
     virtual void UpdateMoveTab( sc::RefUpdateMoveTabContext& rCxt ) override;
 
-    virtual bool NeedsRepaint() const override;
-
-    virtual condformat::ScFormatEntryType GetType() const override;
+    virtual Type GetType() const override;
 
     /**
      * Makes sure that the mpFormatData does not contain valid entries.
@@ -337,8 +344,8 @@ struct ScIconSetFormatData
     // std..pair::second == -1 means no image
     std::vector<std::pair<ScIconSetType, sal_Int32> > maCustomVector;
 
-    ScIconSetFormatData():
-        eIconSetType(IconSet_3Arrows),
+    ScIconSetFormatData(ScIconSetType eType = IconSet_3Arrows):
+        eIconSetType(eType),
         mbShowValue(true),
         mbReverse(false),
         mbCustom(false)
@@ -354,9 +361,11 @@ public:
     ScIconSetFormat(ScDocument* pDoc);
     ScIconSetFormat(ScDocument* pDoc, const ScIconSetFormat& rFormat);
 
-    virtual ScColorFormat* Clone(ScDocument* pDoc = nullptr) const override;
+    virtual ScColorFormat* Clone(ScDocument* pDoc) const override;
 
-    ScIconSetInfo* GetIconSetInfo(const ScAddress& rAddr) const;
+    virtual void SetParent(ScConditionalFormat* pParent) override;
+
+    std::unique_ptr<ScIconSetInfo> GetIconSetInfo(const ScAddress& rAddr) const;
 
     void SetIconSetData( ScIconSetFormatData* pData );
     const ScIconSetFormatData* GetIconSetData() const;
@@ -367,11 +376,11 @@ public:
     virtual void UpdateDeleteTab( sc::RefUpdateDeleteTabContext& rCxt ) override;
     virtual void UpdateMoveTab( sc::RefUpdateMoveTabContext& rCxt ) override;
 
-    virtual bool NeedsRepaint() const override;
+    virtual Type GetType() const override;
 
-    virtual condformat::ScFormatEntryType GetType() const override;
-
-    static ScIconSetMap* getIconSetMap();
+    static const ScIconSetMap g_IconSetMap[];
+    static const char* getIconSetName( ScIconSetType eType );
+    static sal_Int32 getIconSetElements( ScIconSetType eType );
     static BitmapEx& getBitmap(sc::IconSetBitmapMap& rBitmapMap, ScIconSetType eType, sal_Int32 nIndex);
 
     typedef ScIconSetFormatData::Entries_t::iterator iterator;
@@ -394,7 +403,7 @@ private:
 
     double GetMinValue() const;
     double GetMaxValue() const;
-    double CalcValue(double nMin, double nMax, ScIconSetFormat::const_iterator& itr) const;
+    double CalcValue(double nMin, double nMax, const ScIconSetFormat::const_iterator& itr) const;
 
     std::unique_ptr<ScIconSetFormatData> mpFormatData;
 };

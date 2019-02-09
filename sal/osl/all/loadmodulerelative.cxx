@@ -17,18 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstddef>
 
-#include "sal/log.hxx"
-#include "osl/module.h"
-#include "osl/module.hxx"
-#include "rtl/malformeduriexception.hxx"
-#include "rtl/uri.hxx"
-#include "rtl/ustring.h"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
+#include <sal/log.hxx>
+#include <osl/module.h>
+#include <osl/module.hxx>
+#include <rtl/malformeduriexception.hxx>
+#include <rtl/uri.hxx>
+#include <rtl/ustring.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 extern "C" {
 
@@ -38,19 +38,16 @@ oslModule SAL_CALL osl_loadModuleRelative(
     oslGenericFunction const baseModule, rtl_uString * const relativePath,
     sal_Int32 const mode)
 {
-    rtl::OUString base;
+    OUString base;
     if (!osl::Module::getUrlFromAddress(baseModule, base)) {
         SAL_INFO("sal.osl","osl::Module::getUrlFromAddress failed");
         return nullptr;
     }
-    rtl::OUString abs;
+    OUString abs;
     try {
         abs = rtl::Uri::convertRelToAbs(base, relativePath);
     } catch (const rtl::MalformedUriException & e) {
-        (void) e; // avoid warnings
-        SAL_INFO("sal.osl",
-            "rtl::MalformedUriException <" << e.getMessage() << ">");
-            //TODO: let some OSL_TRACE variant take care of text conversion?
+        SAL_INFO("sal.osl", "rtl::MalformedUriException <" << e.getMessage() << ">");
         return nullptr;
     }
     return osl_loadModule(abs.pData, mode);

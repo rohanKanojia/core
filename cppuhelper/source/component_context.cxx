@@ -17,19 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-
-#ifdef DIAG
-#define CONTEXT_DIAG
-#endif
-
-#if OSL_DEBUG_LEVEL > 0
-#include <stdio.h>
-#endif
-
 #include <unordered_map>
-#ifdef CONTEXT_DIAG
-#include <map>
-#endif
 
 #include <osl/diagnose.h>
 #include <osl/mutex.hxx>
@@ -40,10 +28,10 @@
 #include <uno/lbnames.h>
 #include <uno/mapping.hxx>
 
-#include <cppuhelper/implbase1.hxx>
 #include <cppuhelper/compbase.hxx>
 #include <cppuhelper/component_context.hxx>
 #include <cppuhelper/exc_hlp.hxx>
+#include <cppuhelper/implbase.hxx>
 
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
@@ -65,210 +53,10 @@ using namespace ::osl;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star;
 
-using rtl::OUString;
-using rtl::OUStringBuffer;
-using rtl::OUStringHash;
-
 namespace cppu
 {
 
-#ifdef CONTEXT_DIAG
-
-static OUString val2str( void const * pVal, typelib_TypeDescriptionReference * pTypeRef )
-{
-    OSL_ASSERT( pVal );
-    if (pTypeRef->eTypeClass == typelib_TypeClass_VOID)
-        return "void";
-
-    OUStringBuffer buf( 64 );
-    buf.append( "(" + pTypeRef->pTypeName + ")" );
-
-    switch (pTypeRef->eTypeClass)
-    {
-    case typelib_TypeClass_INTERFACE:
-        buf.append( "0x" );
-        buf.append( (sal_Int64)*(void **)pVal, 16 );
-        break;
-    case typelib_TypeClass_STRUCT:
-    case typelib_TypeClass_EXCEPTION:
-    {
-        buf.append( "{ " );
-        typelib_TypeDescription * pTypeDescr = 0;
-        ::typelib_typedescriptionreference_getDescription( &pTypeDescr, pTypeRef );
-        OSL_ASSERT( pTypeDescr );
-        if (! pTypeDescr->bComplete)
-            ::typelib_typedescription_complete( &pTypeDescr );
-
-        typelib_CompoundTypeDescription * pCompType = (typelib_CompoundTypeDescription *)pTypeDescr;
-        sal_Int32 nDescr = pCompType->nMembers;
-
-        if (pCompType->pBaseTypeDescription)
-        {
-            buf.append( val2str( pVal, ((typelib_TypeDescription *)pCompType->pBaseTypeDescription)->pWeakRef ) );
-            if (nDescr)
-                buf.append( ", " );
-        }
-
-        typelib_TypeDescriptionReference ** ppTypeRefs = pCompType->ppTypeRefs;
-        sal_Int32 * pMemberOffsets = pCompType->pMemberOffsets;
-        rtl_uString ** ppMemberNames = pCompType->ppMemberNames;
-
-        for ( sal_Int32 nPos = 0; nPos < nDescr; ++nPos )
-        {
-            buf.append( ppMemberNames[ nPos ] );
-            buf.append( " = " );
-            typelib_TypeDescription * pMemberType = 0;
-            TYPELIB_DANGER_GET( &pMemberType, ppTypeRefs[ nPos ] );
-            buf.append( val2str( (char *)pVal + pMemberOffsets[ nPos ], pMemberType->pWeakRef ) );
-            TYPELIB_DANGER_RELEASE( pMemberType );
-            if (nPos < (nDescr -1))
-                buf.append( ", " );
-        }
-
-        ::typelib_typedescription_release( pTypeDescr );
-
-        buf.append( " }" );
-        break;
-    }
-    case typelib_TypeClass_SEQUENCE:
-    {
-        typelib_TypeDescription * pTypeDescr = 0;
-        TYPELIB_DANGER_GET( &pTypeDescr, pTypeRef );
-
-        uno_Sequence * pSequence = *(uno_Sequence **)pVal;
-        typelib_TypeDescription * pElementTypeDescr = 0;
-        TYPELIB_DANGER_GET( &pElementTypeDescr, ((typelib_IndirectTypeDescription *)pTypeDescr)->pType );
-
-        sal_Int32 nElementSize = pElementTypeDescr->nSize;
-        sal_Int32 nElements    = pSequence->nElements;
-
-        if (nElements)
-        {
-            buf.append( "{ " );
-            char * pElements = pSequence->elements;
-            for ( sal_Int32 nPos = 0; nPos < nElements; ++nPos )
-            {
-                buf.append( val2str( pElements + (nElementSize * nPos), pElementTypeDescr->pWeakRef ) );
-                if (nPos < (nElements -1))
-                    buf.append( ", " );
-            }
-            buf.append( " }" );
-        }
-        else
-        {
-            buf.append( "{}" );
-        }
-        TYPELIB_DANGER_RELEASE( pElementTypeDescr );
-        TYPELIB_DANGER_RELEASE( pTypeDescr );
-        break;
-    }
-    case typelib_TypeClass_ANY:
-        buf.append( "{ " );
-        buf.append( val2str( ((uno_Any *)pVal)->pData,
-                             ((uno_Any *)pVal)->pType ) );
-        buf.append( " }" );
-        break;
-    case typelib_TypeClass_TYPE:
-        buf.append( (*(typelib_TypeDescriptionReference **)pVal)->pTypeName );
-        break;
-    case typelib_TypeClass_STRING:
-        buf.append( '\"' );
-        buf.append( *(rtl_uString **)pVal );
-        buf.append( '\"' );
-        break;
-    case typelib_TypeClass_ENUM:
-    {
-        typelib_TypeDescription * pTypeDescr = 0;
-        ::typelib_typedescriptionreference_getDescription( &pTypeDescr, pTypeRef );
-        OSL_ASSERT( pTypeDescr );
-        if (! pTypeDescr->bComplete)
-            ::typelib_typedescription_complete( &pTypeDescr );
-
-        sal_Int32 * pValues = ((typelib_EnumTypeDescription *)pTypeDescr)->pEnumValues;
-        sal_Int32 nPos = ((typelib_EnumTypeDescription *)pTypeDescr)->nEnumValues;
-        while (nPos--)
-        {
-            if (pValues[ nPos ] == *(sal_Int32 *)pVal)
-                break;
-        }
-        if (nPos >= 0)
-            buf.append( ((typelib_EnumTypeDescription *)pTypeDescr)->ppEnumNames[ nPos ] );
-        else
-            buf.append( '?' );
-
-        ::typelib_typedescription_release( pTypeDescr );
-        break;
-    }
-    case typelib_TypeClass_BOOLEAN:
-        if (*(sal_Bool *)pVal)
-            buf.append( "true" );
-        else
-            buf.append( "false" );
-        break;
-    case typelib_TypeClass_CHAR:
-        buf.append( '\'' );
-        buf.append( *(sal_Unicode *)pVal );
-        buf.append( '\'' );
-        break;
-    case typelib_TypeClass_FLOAT:
-        buf.append( *(float *)pVal );
-        break;
-    case typelib_TypeClass_DOUBLE:
-        buf.append( *(double *)pVal );
-        break;
-    case typelib_TypeClass_BYTE:
-        buf.append( "0x" );
-        buf.append( (sal_Int32)*(sal_Int8 *)pVal, 16 );
-        break;
-    case typelib_TypeClass_SHORT:
-        buf.append( "0x" );
-        buf.append( (sal_Int32)*(sal_Int16 *)pVal, 16 );
-        break;
-    case typelib_TypeClass_UNSIGNED_SHORT:
-        buf.append( "0x" );
-        buf.append( (sal_Int32)*(sal_uInt16 *)pVal, 16 );
-        break;
-    case typelib_TypeClass_LONG:
-        buf.append( "0x" );
-        buf.append( *(sal_Int32 *)pVal, 16 );
-        break;
-    case typelib_TypeClass_UNSIGNED_LONG:
-        buf.append( "0x" );
-        buf.append( (sal_Int64)*(sal_uInt32 *)pVal, 16 );
-        break;
-    case typelib_TypeClass_HYPER:
-    case typelib_TypeClass_UNSIGNED_HYPER:
-        buf.append( "0x" );
-#if defined(__GNUC__) && defined(SPARC)
-// I guess this really should check if there are strict alignment
-// requirements, not just "GCC on SPARC".
-        {
-            sal_Int64 aVal;
-            *(sal_Int32 *)&aVal = *(sal_Int32 *)pVal;
-            *((sal_Int32 *)&aVal +1)= *((sal_Int32 *)pVal +1);
-            buf.append( aVal, 16 );
-        }
-#else
-        buf.append( *(sal_Int64 *)pVal, 16 );
-#endif
-        break;
-    default:
-        buf.append( '?' );
-    }
-
-    return buf.makeStringAndClear();
-}
-
-static void dumpEntry( OUString const & key, Any const & value )
-{
-    OUString val( val2str( value.getValue(), value.getValueTypeRef() ) );
-    OString key_str( OUStringToOString( key, RTL_TEXTENCODING_ASCII_US ) );
-    OString val_str( OUStringToOString( val, RTL_TEXTENCODING_ASCII_US ) );
-    ::fprintf( stderr, "| %s = %s\n", key_str.getStr(), val_str.getStr() );
-}
-#endif
-
-static inline void try_dispose( Reference< XInterface > const & xInstance )
+static void try_dispose( Reference< XInterface > const & xInstance )
 {
     Reference< lang::XComponent > xComp( xInstance, UNO_QUERY );
     if (xComp.is())
@@ -277,7 +65,7 @@ static inline void try_dispose( Reference< XInterface > const & xInstance )
     }
 }
 
-static inline void try_dispose( Reference< lang::XComponent > const & xComp )
+static void try_dispose( Reference< lang::XComponent > const & xComp )
 {
     if (xComp.is())
     {
@@ -286,7 +74,7 @@ static inline void try_dispose( Reference< lang::XComponent > const & xComp )
 }
 
 class DisposingForwarder
-    : public WeakImplHelper1< lang::XEventListener >
+    : public WeakImplHelper< lang::XEventListener >
 {
     Reference< lang::XComponent > m_xTarget;
 
@@ -301,8 +89,7 @@ public:
         Reference< lang::XComponent > const & xSource,
         Reference< lang::XComponent > const & xTarget );
 
-    virtual void SAL_CALL disposing( lang::EventObject const & rSource )
-        throw (RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing( lang::EventObject const & rSource ) override;
 };
 
 inline void DisposingForwarder::listen(
@@ -316,7 +103,6 @@ inline void DisposingForwarder::listen(
 }
 
 void DisposingForwarder::disposing( lang::EventObject const & )
-    throw (RuntimeException, std::exception)
 {
     m_xTarget->dispose();
     m_xTarget.clear();
@@ -343,12 +129,12 @@ protected:
         Any value;
         bool lateInit;
 
-        inline ContextEntry( Any const & value_, bool lateInit_ )
+        ContextEntry( Any const & value_, bool lateInit_ )
             : value( value_ )
             , lateInit( lateInit_ )
             {}
     };
-    typedef std::unordered_map< OUString, ContextEntry * , OUStringHash > t_map;
+    typedef std::unordered_map< OUString, ContextEntry  > t_map;
     t_map m_map;
 
     Reference< lang::XMultiComponentFactory > m_xSMgr;
@@ -361,56 +147,40 @@ public:
     ComponentContext(
         ContextEntry_Init const * pEntries, sal_Int32 nEntries,
         Reference< XComponentContext > const & xDelegate );
-    virtual ~ComponentContext();
 
     // XComponentContext
-    virtual Any SAL_CALL getValueByName( OUString const & rName )
-        throw (RuntimeException, std::exception) override;
-    virtual Reference<lang::XMultiComponentFactory> SAL_CALL getServiceManager()
-        throw (RuntimeException, std::exception) override;
+    virtual Any SAL_CALL getValueByName( OUString const & rName ) override;
+    virtual Reference<lang::XMultiComponentFactory> SAL_CALL getServiceManager() override;
 
     // XNameContainer
     virtual void SAL_CALL insertByName(
-        OUString const & name, Any const & element )
-        throw (lang::IllegalArgumentException, container::ElementExistException,
-               lang::WrappedTargetException, RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeByName( OUString const & name )
-        throw (container::NoSuchElementException,
-               lang::WrappedTargetException, RuntimeException, std::exception) override;
+        OUString const & name, Any const & element ) override;
+    virtual void SAL_CALL removeByName( OUString const & name ) override;
     // XNameReplace
     virtual void SAL_CALL replaceByName(
-        OUString const & name, Any const & element )
-        throw (lang::IllegalArgumentException,container::NoSuchElementException,
-               lang::WrappedTargetException, RuntimeException, std::exception) override;
+        OUString const & name, Any const & element ) override;
     // XNameAccess
-    virtual Any SAL_CALL getByName( OUString const & name )
-        throw (container::NoSuchElementException,
-               lang::WrappedTargetException, RuntimeException, std::exception) override;
-    virtual Sequence<OUString> SAL_CALL getElementNames()
-        throw (RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasByName( OUString const & name )
-        throw (RuntimeException, std::exception) override;
+    virtual Any SAL_CALL getByName( OUString const & name ) override;
+    virtual Sequence<OUString> SAL_CALL getElementNames() override;
+    virtual sal_Bool SAL_CALL hasByName( OUString const & name ) override;
     // XElementAccess
-    virtual Type SAL_CALL getElementType() throw (RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasElements() throw (RuntimeException, std::exception) override;
+    virtual Type SAL_CALL getElementType() override;
+    virtual sal_Bool SAL_CALL hasElements() override;
 };
 
 // XNameContainer
 
 void ComponentContext::insertByName(
     OUString const & name, Any const & element )
-    throw (lang::IllegalArgumentException, container::ElementExistException,
-           lang::WrappedTargetException, RuntimeException, std::exception)
 {
-    t_map::mapped_type entry(
-        new ContextEntry(
+    ContextEntry entry(
             element,
             /* lateInit_: */
             name.startsWith( "/singletons/" ) &&
-            !element.hasValue() ) );
+            !element.hasValue() );
     MutexGuard guard( m_mutex );
-    ::std::pair<t_map::iterator, bool> insertion( m_map.insert(
-        t_map::value_type( name, entry ) ) );
+    std::pair<t_map::iterator, bool> insertion( m_map.emplace(
+        name, entry ) );
     if (! insertion.second)
         throw container::ElementExistException(
             "element already exists: " + name,
@@ -419,8 +189,6 @@ void ComponentContext::insertByName(
 
 
 void ComponentContext::removeByName( OUString const & name )
-        throw (container::NoSuchElementException,
-               lang::WrappedTargetException, RuntimeException, std::exception)
 {
     MutexGuard guard( m_mutex );
     t_map::iterator iFind( m_map.find( name ) );
@@ -429,7 +197,6 @@ void ComponentContext::removeByName( OUString const & name )
             "no such element: " + name,
             static_cast<OWeakObject *>(this) );
 
-    delete iFind->second;
     m_map.erase(iFind);
 }
 
@@ -437,11 +204,9 @@ void ComponentContext::removeByName( OUString const & name )
 
 void ComponentContext::replaceByName(
     OUString const & name, Any const & element )
-    throw (lang::IllegalArgumentException,container::NoSuchElementException,
-           lang::WrappedTargetException, RuntimeException, std::exception)
 {
     MutexGuard guard( m_mutex );
-    t_map::const_iterator const iFind( m_map.find( name ) );
+    t_map::iterator iFind( m_map.find( name ) );
     if (iFind == m_map.end())
         throw container::NoSuchElementException(
             "no such element: " + name,
@@ -449,28 +214,25 @@ void ComponentContext::replaceByName(
     if (name.startsWith( "/singletons/" ) &&
         !element.hasValue())
     {
-        iFind->second->value.clear();
-        iFind->second->lateInit = true;
+        iFind->second.value.clear();
+        iFind->second.lateInit = true;
     }
     else
     {
-        iFind->second->value = element;
-        iFind->second->lateInit = false;
+        iFind->second.value = element;
+        iFind->second.lateInit = false;
     }
 }
 
 // XNameAccess
 
 Any ComponentContext::getByName( OUString const & name )
-    throw (container::NoSuchElementException,
-           lang::WrappedTargetException, RuntimeException, std::exception)
 {
     return getValueByName( name );
 }
 
 
 Sequence<OUString> ComponentContext::getElementNames()
-    throw (RuntimeException, std::exception)
 {
     MutexGuard guard( m_mutex );
     Sequence<OUString> ret( m_map.size() );
@@ -485,7 +247,6 @@ Sequence<OUString> ComponentContext::getElementNames()
 
 
 sal_Bool ComponentContext::hasByName( OUString const & name )
-    throw (RuntimeException, std::exception)
 {
     MutexGuard guard( m_mutex );
     return m_map.find( name ) != m_map.end();
@@ -493,13 +254,13 @@ sal_Bool ComponentContext::hasByName( OUString const & name )
 
 // XElementAccess
 
-Type ComponentContext::getElementType() throw (RuntimeException, std::exception)
+Type ComponentContext::getElementType()
 {
     return cppu::UnoType<void>::get();
 }
 
 
-sal_Bool ComponentContext::hasElements() throw (RuntimeException, std::exception)
+sal_Bool ComponentContext::hasElements()
 {
     MutexGuard guard( m_mutex );
     return ! m_map.empty();
@@ -508,34 +269,14 @@ sal_Bool ComponentContext::hasElements() throw (RuntimeException, std::exception
 
 Any ComponentContext::lookupMap( OUString const & rName )
 {
-#ifdef CONTEXT_DIAG
-    if ( rName == "dump_maps" )
-    {
-        ::fprintf( stderr, ">>> dumping out ComponentContext %p m_map:\n", this );
-        typedef ::std::map< OUString, ContextEntry * > t_sorted; // sorted map
-        t_sorted sorted;
-        for ( t_map::const_iterator iPos( m_map.begin() ); iPos != m_map.end(); ++iPos )
-        {
-            sorted[ iPos->first ] = iPos->second;
-        }
-        {
-        for ( t_sorted::const_iterator iPos( sorted.begin() ); iPos != sorted.end(); ++iPos )
-        {
-            dumpEntry( iPos->first, iPos->second->value );
-        }
-        }
-        return Any();
-    }
-#endif
-
     ResettableMutexGuard guard( m_mutex );
-    t_map::const_iterator iFind( m_map.find( rName ) );
+    t_map::iterator iFind( m_map.find( rName ) );
     if (iFind == m_map.end())
         return Any();
 
-    t_map::mapped_type pEntry = iFind->second;
-    if (! pEntry->lateInit)
-        return pEntry->value;
+    ContextEntry& rFindEntry = iFind->second;
+    if (! rFindEntry.lateInit)
+        return rFindEntry.value;
 
     // late init singleton entry
     Reference< XInterface > xInstance;
@@ -565,11 +306,6 @@ Any ComponentContext::lookupMap( OUString const & rName )
             if (usesService >>= xFac2)
             {
                 // try via old XSingleServiceFactory
-#if OSL_DEBUG_LEVEL > 0
-                ::fprintf(
-                    stderr,
-                    "### omitting context for service instantiation!\n" );
-#endif
                 xInstance = args.getLength()
                     ? xFac2->createInstanceWithArguments( args )
                     : xFac2->createInstance();
@@ -598,7 +334,7 @@ Any ComponentContext::lookupMap( OUString const & rName )
         SAL_WARN(
             "cppuhelper",
             "exception occurred raising singleton \"" << rName << "\": "
-            << exc.Message);
+            << exc);
     }
 
     SAL_WARN_IF(!xInstance.is(),
@@ -609,15 +345,14 @@ Any ComponentContext::lookupMap( OUString const & rName )
     iFind = m_map.find( rName );
     if (iFind != m_map.end())
     {
-        pEntry = iFind->second;
-        if (pEntry->lateInit)
+        ContextEntry & rEntry = iFind->second;
+        if (rEntry.lateInit)
         {
-            pEntry->value <<= xInstance;
-            pEntry->lateInit = false;
-            return pEntry->value;
+            rEntry.value <<= xInstance;
+            rEntry.lateInit = false;
+            return rEntry.value;
         }
-        else
-            ret = pEntry->value;
+        ret = rEntry.value;
     }
     guard.clear();
     if (ret != xInstance) {
@@ -628,15 +363,13 @@ Any ComponentContext::lookupMap( OUString const & rName )
 
 
 Any ComponentContext::getValueByName( OUString const & rName )
-    throw (RuntimeException, std::exception)
 {
     // to determine the root context:
     if ( rName == "_root" )
     {
         if (m_xDelegate.is())
             return m_xDelegate->getValueByName( rName );
-        else
-            return makeAny( Reference<XComponentContext>(this) );
+        return Any( Reference<XComponentContext>(this) );
     }
 
     Any ret( lookupMap( rName ) );
@@ -648,7 +381,6 @@ Any ComponentContext::getValueByName( OUString const & rName )
 }
 
 Reference< lang::XMultiComponentFactory > ComponentContext::getServiceManager()
-    throw (RuntimeException, std::exception)
 {
     if ( !m_xSMgr.is() )
     {
@@ -659,51 +391,35 @@ Reference< lang::XMultiComponentFactory > ComponentContext::getServiceManager()
     return m_xSMgr;
 }
 
-ComponentContext::~ComponentContext()
-{
-#ifdef CONTEXT_DIAG
-    ::fprintf( stderr, "> destructed context %p\n", this );
-#endif
-    t_map::const_iterator iPos( m_map.begin() );
-    t_map::const_iterator const iEnd( m_map.end() );
-    for ( ; iPos != iEnd; ++iPos )
-        delete iPos->second;
-    m_map.clear();
-}
-
 void ComponentContext::disposing()
 {
-#ifdef CONTEXT_DIAG
-    ::fprintf( stderr, "> disposing context %p\n", this );
-#endif
-
     Reference< lang::XComponent > xTDMgr, xAC; // to be disposed separately
 
     // dispose all context objects
-    t_map::const_iterator iPos( m_map.begin() );
-    t_map::const_iterator const iEnd( m_map.end() );
+    t_map::iterator iPos( m_map.begin() );
+    t_map::iterator const iEnd( m_map.end() );
     for ( ; iPos != iEnd; ++iPos )
     {
-        t_map::mapped_type pEntry = iPos->second;
-
         // service manager disposed separately
         if (!m_xSMgr.is() ||
             !iPos->first.startsWith( SMGR_SINGLETON ))
         {
-            if (pEntry->lateInit)
+            ContextEntry& rEntry = iPos->second;
+
+            if (rEntry.lateInit)
             {
                 // late init
                 MutexGuard guard( m_mutex );
-                if (pEntry->lateInit)
+                if (rEntry.lateInit)
                 {
-                    pEntry->value.clear(); // release factory
-                    pEntry->lateInit = false;
+                    rEntry.value.clear(); // release factory
+                    rEntry.lateInit = false;
                     continue;
                 }
             }
 
             Reference< lang::XComponent > xComp;
-            pEntry->value >>= xComp;
+            rEntry.value >>= xComp;
             if (xComp.is())
             {
                 if ( iPos->first == TDMGR_SINGLETON )
@@ -730,9 +446,6 @@ void ComponentContext::disposing()
     // dispose tdmgr; revokes callback from cppu runtime
     try_dispose( xTDMgr );
 
-    iPos = m_map.begin();
-    for ( ; iPos != iEnd; ++iPos )
-        delete iPos->second;
     m_map.clear();
 
     // Hack to terminate any JNI bridge's AsynchronousFinalizer thread (as JNI
@@ -750,7 +463,7 @@ void ComponentContext::disposing()
             assert(envs[i]->dispose != nullptr);
             (*envs[i]->dispose)(envs[i]);
         }
-        rtl_freeMemory(envs);
+        std::free(envs);
     }
 }
 
@@ -772,15 +485,15 @@ ComponentContext::ComponentContext(
         if (rEntry.bLateInitService)
         {
             // singleton entry
-            m_map[ rEntry.name ] = new ContextEntry( Any(), true );
+            m_map.emplace( rEntry.name, ContextEntry( Any(), true ) );
             // service
-            m_map[ rEntry.name + "/service" ] = new ContextEntry( rEntry.value, false );
+            m_map.emplace( rEntry.name + "/service", ContextEntry( rEntry.value, false ) );
             // initial-arguments are provided as optional context entry
         }
         else
         {
             // only value, no late init factory nor string
-            m_map[ rEntry.name ] = new ContextEntry( rEntry.value, false );
+            m_map.emplace( rEntry.name, ContextEntry( rEntry.value, false ) );
         }
     }
 
@@ -804,7 +517,7 @@ ComponentContext::ComponentContext(
                 if (xProps.is())
                 {
                     Reference< XComponentContext > xThis( this );
-                    xProps->setPropertyValue( "DefaultContext", makeAny( xThis ) );
+                    xProps->setPropertyValue( "DefaultContext", Any( xThis ) );
                 }
             }
             catch (...)
@@ -841,9 +554,7 @@ extern "C" { static void s_createComponentContext_v(va_list * pParam)
         }
         catch (Exception & exc)
         {
-            (void) exc; // avoid warning about unused variable
-            OSL_FAIL( OUStringToOString(
-                            exc.Message, RTL_TEXTENCODING_ASCII_US ).getStr() );
+            SAL_WARN( "cppuhelper", exc );
             xContext.clear();
         }
     }

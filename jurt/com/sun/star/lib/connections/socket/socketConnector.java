@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -108,7 +109,7 @@ public final class socketConnector implements XConnector {
         throws NoConnectException, ConnectionSetupException
     {
         if (connected)
-            throw new ConnectionSetupException("alread connected");
+            throw new ConnectionSetupException("already connected");
 
         ConnectionDescriptor desc;
         try {
@@ -153,6 +154,12 @@ public final class socketConnector implements XConnector {
 
             con = new SocketConnection(connectionDescription, socket);
         } catch (IOException e) {
+            if (socket != null) {
+                try {
+                    socket.close();
+                } catch(IOException ioException) {
+                }
+            }
             throw new NoConnectException(e);
         }
         connected = true;
@@ -161,3 +168,5 @@ public final class socketConnector implements XConnector {
 
     private boolean connected = false;
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

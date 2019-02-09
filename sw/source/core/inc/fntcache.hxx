@@ -20,11 +20,14 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_FNTCACHE_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_FNTCACHE_HXX
 
+#include <map>
+
 #include <vcl/font.hxx>
 #include <vcl/vclptr.hxx>
-#include <tools/mempool.hxx>
-#include "swtypes.hxx"
+#include <vcl/vcllayout.hxx>
+#include <swtypes.hxx>
 #include "swcache.hxx"
+#include "TextFrameIndex.hxx"
 
 class OutputDevice;
 class FontMetric;
@@ -38,7 +41,7 @@ class Point;
 class SwFntCache : public SwCache
 {
 public:
-    inline SwFntCache() : SwCache(50
+    SwFntCache() : SwCache(50
 #ifdef DBG_UTIL
     , OString(RTL_CONSTASCII_STRINGPARAM("Global Font-Cache pFntCache"))
 #endif
@@ -49,51 +52,67 @@ public:
     void Flush();
 };
 
+/// Clears the pre-calculated text glyphs in all SwFntObj instances.
+void SwClearFntCacheTextGlyphs();
+
 // Font cache, global variable, created/destroyed in txtinit.cxx
 extern SwFntCache *pFntCache;
 extern SwFntObj *pLastFont;
-extern sal_uInt8 *pMagicNo;
-extern Color *pWaveCol;
+extern sal_uInt8* mnFontCacheIdCounter;
+
+/**
+ * Defines a substring on a given output device, to be used as an std::map<>
+ * key.
+ */
+struct SwTextGlyphsKey
+{
+    VclPtr<OutputDevice> m_pOutputDevice;
+    OUString m_aText;
+    sal_Int32 m_nIndex;
+    sal_Int32 m_nLength;
+
+};
+bool operator<(const SwTextGlyphsKey& l, const SwTextGlyphsKey& r);
 
 class SwFntObj : public SwCacheObj
 {
     friend class SwFntAccess;
-    friend void _InitCore();
-    friend void _FinitCore();
+    friend void InitCore();
+    friend void FinitCore();
 
-    vcl::Font aFont;
-    vcl::Font *pScrFont;
-    vcl::Font *pPrtFont;
-    VclPtr<OutputDevice> pPrinter;
-    sal_uInt16 nGuessedLeading;
-    sal_uInt16 nExtLeading;
-    sal_uInt16 nScrAscent;
-    sal_uInt16 nPrtAscent;
-    sal_uInt16 nScrHeight;
-    sal_uInt16 nPrtHeight;
-    sal_uInt16 nPropWidth;
-    sal_uInt16 nZoom;
-    bool bSymbol : 1;
-    bool bPaintBlank : 1;
+    vcl::Font m_aFont;
+    vcl::Font *m_pScrFont;
+    vcl::Font *m_pPrtFont;
+    VclPtr<OutputDevice> m_pPrinter;
+    sal_uInt16 m_nGuessedLeading;
+    sal_uInt16 m_nExtLeading;
+    sal_uInt16 m_nScrAscent;
+    sal_uInt16 m_nPrtAscent;
+    sal_uInt16 m_nScrHeight;
+    sal_uInt16 m_nPrtHeight;
+    sal_uInt16 const m_nPropWidth;
+    sal_uInt16 m_nZoom;
+    bool m_bSymbol : 1;
+    bool m_bPaintBlank : 1;
+
+    /// Cache of already calculated layout glyphs.
+    std::map<SwTextGlyphsKey, SalLayoutGlyphs> m_aTextGlyphs;
 
     static long nPixWidth;
     static MapMode *pPixMap;
-    static VclPtr<OutputDevice> pPixOut;
 
 public:
-    DECL_FIXEDMEMPOOL_NEWDEL(SwFntObj)
-
-    SwFntObj( const SwSubFont &rFont, const void* pOwner,
+    SwFntObj( const SwSubFont &rFont, const void* nFontCacheId,
               SwViewShell const *pSh );
 
-    virtual ~SwFntObj();
+    virtual ~SwFntObj() override;
 
-    inline       vcl::Font *GetScrFont()     { return pScrFont; }
-    inline       vcl::Font& GetFont()        { return aFont; }
-    inline const vcl::Font& GetFont() const  { return aFont; }
+    vcl::Font *GetScrFont()     { return m_pScrFont; }
+    vcl::Font& GetFont()        { return m_aFont; }
+    const vcl::Font& GetFont() const  { return m_aFont; }
 
-    inline sal_uInt16 GetGuessedLeading() const  { return nGuessedLeading; }
-    inline sal_uInt16 GetExternalLeading() const  { return nExtLeading; }
+    sal_uInt16 GetGuessedLeading() const  { return m_nGuessedLeading; }
+    sal_uInt16 GetExternalLeading() const  { return m_nExtLeading; }
 
     sal_uInt16 GetFontAscent( const SwViewShell *pSh, const OutputDevice& rOut );
     sal_uInt16 GetFontHeight( const SwViewShell *pSh, const OutputDevice& rOut );
@@ -102,15 +121,16 @@ public:
     void GuessLeading( const SwViewShell& rSh, const FontMetric& rMet );
 
     void SetDevFont( const SwViewShell *pSh, OutputDevice& rOut );
-    inline OutputDevice* GetPrt() const { return pPrinter; }
-    inline sal_uInt16   GetZoom() const { return nZoom; }
-    inline sal_uInt16   GetPropWidth() const { return nPropWidth; }
-    inline bool     IsSymbol() const { return bSymbol; }
+    OutputDevice* GetPrt() const { return m_pPrinter; }
+    sal_uInt16   GetZoom() const { return m_nZoom; }
+    sal_uInt16   GetPropWidth() const { return m_nPropWidth; }
+    bool     IsSymbol() const { return m_bSymbol; }
+    std::map<SwTextGlyphsKey, SalLayoutGlyphs>& GetTextGlyphs() { return m_aTextGlyphs; }
 
     void   DrawText( SwDrawTextInfo &rInf );
     /// determine the TextSize (of the printer)
     Size  GetTextSize( SwDrawTextInfo &rInf );
-    sal_Int32 GetCursorOfst( SwDrawTextInfo &rInf );
+    TextFrameIndex GetCursorOfst(SwDrawTextInfo &rInf);
 
     void CreateScrFont( const SwViewShell& rSh, const OutputDevice& rOut );
     void CreatePrtFont( const OutputDevice& rOut );
@@ -133,10 +153,10 @@ protected:
     virtual SwCacheObj *NewObj( ) override;
 
 public:
-    SwFntAccess( const void * &rMagic, sal_uInt16 &rIndex, const void *pOwner,
+    SwFntAccess( const void*& rnFontCacheId, sal_uInt16 &rIndex, const void *pOwner,
                  SwViewShell const *pShell,
                  bool bCheck = false  );
-    inline SwFntObj* Get() { return static_cast<SwFntObj*>( SwCacheAccess::Get() ); }
+    SwFntObj* Get() { return static_cast<SwFntObj*>( SwCacheAccess::Get() ); }
 };
 
 #endif

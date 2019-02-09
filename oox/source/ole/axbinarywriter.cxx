@@ -6,9 +6,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#include "oox/ole/axbinarywriter.hxx"
+#include <oox/ole/axbinarywriter.hxx>
 
-#include "oox/ole/olehelper.hxx"
+#include <oox/ole/olehelper.hxx>
 
 namespace oox {
 namespace ole {
@@ -86,10 +86,10 @@ void AxAlignedOutputStream::align( size_t nSize )
 
 namespace {
 
-void lclWriteString( AxAlignedOutputStream& rOutStrm, OUString& rValue, sal_uInt32 nSize, bool bArrayString )
+void lclWriteString( AxAlignedOutputStream& rOutStrm, OUString const & rValue, sal_uInt32 nSize )
 {
     bool bCompressed = getFlag( nSize, AX_STRING_COMPRESSED );
-    rOutStrm.writeCompressedUnicodeArray( rValue, bCompressed || bArrayString );
+    rOutStrm.writeCompressedUnicodeArray( rValue, bCompressed );
 }
 
 } // namespace
@@ -106,7 +106,7 @@ bool AxBinaryPropertyWriter::PairProperty::writeProperty( AxAlignedOutputStream&
 
 bool AxBinaryPropertyWriter::StringProperty::writeProperty( AxAlignedOutputStream& rOutStrm )
 {
-    lclWriteString( rOutStrm, mrValue, mnSize, false );
+    lclWriteString( rOutStrm, mrValue, mnSize );
     return true;
 }
 
@@ -138,8 +138,8 @@ void AxBinaryPropertyWriter::writeBoolProperty( bool orbValue )
 
 void AxBinaryPropertyWriter::writePairProperty( AxPairData& orPairData )
 {
-    if( startNextProperty() )
-        maLargeProps.push_back( ComplexPropVector::value_type( new PairProperty( orPairData ) ) );
+    startNextProperty();
+    maLargeProps.push_back( ComplexPropVector::value_type( new PairProperty( orPairData ) ) );
 }
 
 void AxBinaryPropertyWriter::writeStringProperty( OUString& orValue )
@@ -155,21 +155,23 @@ void AxBinaryPropertyWriter::finalizeExport()
 {
     // write large properties
     maOutStrm.align( 4 );
-    if( !maLargeProps.empty() )
+    for (auto const& largeProp : maLargeProps)
     {
-        for( ComplexPropVector::iterator aIt = maLargeProps.begin(), aEnd = maLargeProps.end(); ensureValid() && (aIt != aEnd); ++aIt )
-        {
-            (*aIt)->writeProperty( maOutStrm );
-            maOutStrm.align( 4 );
-        }
+        if (!ensureValid())
+            break;
+        largeProp->writeProperty( maOutStrm );
+        maOutStrm.align( 4 );
     }
 
     mnBlockSize = maOutStrm.tell() - mnPropFlagsStart;
 
     // write stream properties (no stream alignment between properties!)
-    if( !maStreamProps.empty() )
-        for( ComplexPropVector::iterator aIt = maStreamProps.begin(), aEnd = maStreamProps.end(); ensureValid() && (aIt != aEnd); ++aIt )
-           (*aIt)->writeProperty( maOutStrm );
+    for (auto const& streamProp : maStreamProps)
+    {
+        if (!ensureValid())
+            break;
+        streamProp->writeProperty( maOutStrm );
+    }
 
     sal_Int64 nPos = maOutStrm.tell();
     maOutStrm.seek( mnPropFlagsStart - sizeof( mnBlockSize ) );
@@ -190,12 +192,11 @@ bool AxBinaryPropertyWriter::ensureValid()
     return mbValid;
 }
 
-bool AxBinaryPropertyWriter::startNextProperty( bool bSkip )
+void AxBinaryPropertyWriter::startNextProperty( bool bSkip )
 {
     // if we are skipping then we clear the flag
     setFlag( mnPropFlags, mnNextProp, !bSkip );
     mnNextProp <<= 1;
-    return true;
 }
 
 } // namespace exp

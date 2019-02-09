@@ -28,26 +28,24 @@
 #include <comphelper/processfactory.hxx>
 #include <unotools/pathoptions.hxx>
 #include <unotools/moduleoptions.hxx>
-#include <unotools/ucbstreamhelper.hxx>
 #include <comphelper/sequenceashashmap.hxx>
 #include <comphelper/configurationhelper.hxx>
 
-#include <sfx2/sfx.hrc>
 #include <sfx2/docfilt.hxx>
 #include <sfx2/docfac.hxx>
 #include <sfx2/viewfac.hxx>
 #include <sfx2/fcontnr.hxx>
-#include "arrdecl.hxx"
+#include <arrdecl.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/module.hxx>
-#include <sfx2/sfxresid.hxx>
 #include <sfx2/sfxuno.hxx>
 #include "syspath.hxx"
 #include <osl/file.hxx>
 #include <osl/security.hxx>
-#include "doc.hrc"
 
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
+#include <tools/debug.hxx>
 #include <tools/globname.hxx>
 
 #include <assert.h>
@@ -61,60 +59,35 @@ typedef std::vector<SfxViewFactory*> SfxViewFactoryArr_Impl;
 struct SfxObjectFactory_Impl
 {
     SfxViewFactoryArr_Impl      aViewFactoryArr;// List of <SfxViewFactory>s
-    ResId*                      pNameResId;
     OUString             aServiceName;
     SfxFilterContainer*         pFilterContainer;
     SfxModule*                  pModule;
     SvGlobalName                aClassName;
 
     SfxObjectFactory_Impl() :
-        pNameResId          ( nullptr ),
         pFilterContainer    ( nullptr ),
         pModule             ( nullptr )
         {}
 };
-
 
 SfxFilterContainer* SfxObjectFactory::GetFilterContainer() const
 {
     return pImpl->pFilterContainer;
 }
 
-
 SfxObjectFactory::SfxObjectFactory
 (
     const SvGlobalName&     rName,
-    SfxObjectShellFlags     nFlagsP,
-    const char*             pName
-) :    pShortName( pName ),
-       pImpl( new SfxObjectFactory_Impl ),
-       nFlags( nFlagsP )
+    const OUString&         sName
+) :    m_sFactoryName( sName ),
+       pImpl( new SfxObjectFactory_Impl )
 {
-    pImpl->pFilterContainer = new SfxFilterContainer( OUString::createFromAscii( pName ) );
-
-    OUString aShortName( OUString::createFromAscii( pShortName ) );
-    aShortName = aShortName.toAsciiLowerCase();
+    pImpl->pFilterContainer = new SfxFilterContainer( m_sFactoryName );
     pImpl->aClassName = rName;
-    if ( aShortName == "swriter" )
-        pImpl->pNameResId = new SfxResId( STR_DOCTYPENAME_SW );
-    else if ( aShortName == "swriter/web" )
-        pImpl->pNameResId = new SfxResId( STR_DOCTYPENAME_SWWEB );
-    else if ( aShortName == "swriter/globaldocument" )
-        pImpl->pNameResId = new SfxResId( STR_DOCTYPENAME_SWGLOB );
-    else if ( aShortName == "scalc" )
-        pImpl->pNameResId = new SfxResId( STR_DOCTYPENAME_SC );
-    else if ( aShortName == "simpress" )
-        pImpl->pNameResId = new SfxResId( STR_DOCTYPENAME_SI );
-    else if ( aShortName == "sdraw" )
-        pImpl->pNameResId = new SfxResId( STR_DOCTYPENAME_SD );
-    else if ( aShortName == "message" )
-        pImpl->pNameResId = new SfxResId( STR_DOCTYPENAME_MESSAGE );
 }
-
 
 SfxObjectFactory::~SfxObjectFactory()
 {
-    delete pImpl->pNameResId;
     delete pImpl->pFilterContainer;
 }
 
@@ -127,23 +100,17 @@ void SfxObjectFactory::RegisterViewFactory
 #if OSL_DEBUG_LEVEL > 0
     {
         const OUString sViewName( rFactory.GetAPIViewName() );
-        for ( SfxViewFactoryArr_Impl::const_iterator it = pImpl->aViewFactoryArr.begin(); it != pImpl->aViewFactoryArr.end(); ++it )
+        for (auto const& viewFactory : pImpl->aViewFactoryArr)
         {
-            if ( (*it)->GetAPIViewName() != sViewName )
+            if ( viewFactory->GetAPIViewName() != sViewName )
                 continue;
-            OStringBuffer aStr("SfxObjectFactory::RegisterViewFactory: duplicate view name '");
-            aStr.append(OUStringToOString(sViewName, RTL_TEXTENCODING_ASCII_US));
-            aStr.append("'!");
-            OSL_FAIL(aStr.getStr());
+            SAL_WARN( "sfx", "SfxObjectFactory::RegisterViewFactory: duplicate view name: " << sViewName );
             break;
         }
     }
 #endif
-    SfxViewFactoryArr_Impl::iterator it = pImpl->aViewFactoryArr.begin();
-    for ( ; it != pImpl->aViewFactoryArr.end() &&
-          (*it)->GetOrdinal() <= rFactory.GetOrdinal();
-          ++it )
-    /* empty loop */;
+    auto it = std::find_if(pImpl->aViewFactoryArr.begin(), pImpl->aViewFactoryArr.end(),
+        [&rFactory](SfxViewFactory* pFactory) { return pFactory->GetOrdinal() > rFactory.GetOrdinal(); });
     pImpl->aViewFactoryArr.insert(it, &rFactory);
 }
 
@@ -173,113 +140,106 @@ void SfxObjectFactory::SetModule_Impl( SfxModule *pMod )
 void SfxObjectFactory::SetSystemTemplate( const OUString& rServiceName, const OUString& rTemplateName )
 {
     static const int nMaxPathSize = 16000;
-    static const char SERVICE_FILTER_FACTORY[] = "com.sun.star.document.FilterFactory";
-    static const char SERVICE_TYPE_DECTECTION[] = "com.sun.star.document.TypeDetection";
 
-    static const char CONF_ROOT[] = "/org.openoffice.Setup";
-    OUString CONF_PATH = "Office/Factories/" + rServiceName;
+    const OUString sConfPath = "Office/Factories/" + rServiceName;
     static const char PROP_DEF_TEMPL_CHANGED[] = "ooSetupFactorySystemDefaultTemplateChanged";
-    static const char PROP_ACTUAL_FILTER[] = "ooSetupFactoryActualFilter";
 
     static const char DEF_TPL_STR[] = "/soffice.";
 
-    OUString sURL;
+    OUString sUserTemplateURL;
     OUString sPath;
     sal_Unicode aPathBuffer[nMaxPathSize];
     if ( SystemPath::GetUserTemplateLocation( aPathBuffer, nMaxPathSize ))
         sPath = OUString( aPathBuffer );
-    osl::FileBase::getFileURLFromSystemPath( sPath, sURL );
+    osl::FileBase::getFileURLFromSystemPath( sPath, sUserTemplateURL );
 
-    OUString aUserTemplateURL( sURL );
-    if ( !aUserTemplateURL.isEmpty())
+    if ( sUserTemplateURL.isEmpty())
+        return;
+
+    try
     {
-        try
+        uno::Reference< lang::XMultiServiceFactory > xFactory = ::comphelper::getProcessServiceFactory();
+        uno::Reference< uno::XInterface > xConfig = ::comphelper::ConfigurationHelper::openConfig(
+            ::comphelper::getProcessComponentContext(), "/org.openoffice.Setup", ::comphelper::EConfigurationModes::Standard );
+
+        OUString aActualFilter;
+        ::comphelper::ConfigurationHelper::readRelativeKey( xConfig, sConfPath, "ooSetupFactoryActualFilter" ) >>= aActualFilter;
+        bool bChanged(false);
+        ::comphelper::ConfigurationHelper::readRelativeKey( xConfig, sConfPath, PROP_DEF_TEMPL_CHANGED ) >>= bChanged;
+
+        uno::Reference< container::XNameAccess > xFilterFactory(
+            xFactory->createInstance( "com.sun.star.document.FilterFactory" ), uno::UNO_QUERY_THROW );
+        uno::Reference< container::XNameAccess > xTypeDetection(
+            xFactory->createInstance( "com.sun.star.document.TypeDetection" ), uno::UNO_QUERY_THROW );
+
+        OUString aActualFilterTypeName;
+        uno::Sequence< beans::PropertyValue > aActuralFilterData;
+        xFilterFactory->getByName( aActualFilter ) >>= aActuralFilterData;
+        for ( sal_Int32 nInd = 0; nInd < aActuralFilterData.getLength(); nInd++ )
+            if ( aActuralFilterData[nInd].Name == "Type" )
+                aActuralFilterData[nInd].Value >>= aActualFilterTypeName;
+        ::comphelper::SequenceAsHashMap aProps1( xTypeDetection->getByName( aActualFilterTypeName ) );
+        uno::Sequence< OUString > aAllExt =
+            aProps1.getUnpackedValueOrDefault("Extensions", uno::Sequence< OUString >() );
+        //To-do: check if aAllExt is empty first
+        const OUString aExt = DEF_TPL_STR + aAllExt[0];
+
+        sUserTemplateURL += aExt;
+
+        uno::Reference<ucb::XSimpleFileAccess3> xSimpleFileAccess(
+            ucb::SimpleFileAccess::create( ::comphelper::getComponentContext(xFactory) ) );
+
+        OUString aBackupURL;
+        ::osl::Security().getConfigDir(aBackupURL);
+        aBackupURL += "/temp";
+
+        if ( !xSimpleFileAccess->exists( aBackupURL ) )
+            xSimpleFileAccess->createFolder( aBackupURL );
+
+        aBackupURL += aExt;
+
+        if ( !rTemplateName.isEmpty() )
         {
-            uno::Reference< lang::XMultiServiceFactory > xFactory = ::comphelper::getProcessServiceFactory();
-            uno::Reference< uno::XInterface > xConfig = ::comphelper::ConfigurationHelper::openConfig(
-                ::comphelper::getProcessComponentContext(), CONF_ROOT, ::comphelper::EConfigurationModes::Standard );
+            if ( xSimpleFileAccess->exists( sUserTemplateURL ) && !bChanged )
+                xSimpleFileAccess->copy( sUserTemplateURL, aBackupURL );
 
-            OUString aActualFilter;
-            ::comphelper::ConfigurationHelper::readRelativeKey( xConfig, CONF_PATH, PROP_ACTUAL_FILTER ) >>= aActualFilter;
-            bool bChanged(false);
-            ::comphelper::ConfigurationHelper::readRelativeKey( xConfig, CONF_PATH, PROP_DEF_TEMPL_CHANGED ) >>= bChanged;
+            uno::Reference< document::XTypeDetection > xTypeDetector( xTypeDetection, uno::UNO_QUERY );
+            ::comphelper::SequenceAsHashMap aProps2( xTypeDetection->getByName( xTypeDetector->queryTypeByURL( rTemplateName ) ) );
+            OUString aFilterName =
+                aProps2.getUnpackedValueOrDefault("PreferredFilter", OUString() );
 
-            uno::Reference< container::XNameAccess > xFilterFactory(
-                xFactory->createInstance( SERVICE_FILTER_FACTORY ), uno::UNO_QUERY_THROW );
-            uno::Reference< container::XNameAccess > xTypeDetection(
-                xFactory->createInstance( SERVICE_TYPE_DECTECTION ), uno::UNO_QUERY_THROW );
+            uno::Sequence< beans::PropertyValue > aArgs( 3 );
+            aArgs[0].Name = "FilterName";
+            aArgs[0].Value <<= aFilterName;
+            aArgs[1].Name = "AsTemplate";
+            aArgs[1].Value <<= true;
+            aArgs[2].Name = "URL";
+            aArgs[2].Value <<= rTemplateName;
 
-            OUString aActualFilterTypeName;
-            uno::Sequence< beans::PropertyValue > aActuralFilterData;
-            xFilterFactory->getByName( aActualFilter ) >>= aActuralFilterData;
-            for ( sal_Int32 nInd = 0; nInd < aActuralFilterData.getLength(); nInd++ )
-                if ( aActuralFilterData[nInd].Name == "Type" )
-                    aActuralFilterData[nInd].Value >>= aActualFilterTypeName;
-            ::comphelper::SequenceAsHashMap aProps1( xTypeDetection->getByName( aActualFilterTypeName ) );
-            uno::Sequence< OUString > aAllExt =
-                aProps1.getUnpackedValueOrDefault("Extensions", uno::Sequence< OUString >() );
-            //To-do: check if aAllExt is empty first
-            OUString aExt = aAllExt[0];
+            uno::Reference< frame::XLoadable > xLoadable( xFactory->createInstance( rServiceName ), uno::UNO_QUERY );
+            xLoadable->load( aArgs );
 
-            aUserTemplateURL += DEF_TPL_STR;
-            aUserTemplateURL += aExt;
+            aArgs.realloc( 2 );
+            aArgs[1].Name = "Overwrite";
+            aArgs[1].Value <<= true;
 
-            uno::Reference<ucb::XSimpleFileAccess3> xSimpleFileAccess(
-                ucb::SimpleFileAccess::create( ::comphelper::getComponentContext(xFactory) ) );
-
-            OUString aBackupURL;
-            ::osl::Security().getConfigDir(aBackupURL);
-            aBackupURL += "/temp";
-
-            if ( !xSimpleFileAccess->exists( aBackupURL ) )
-                xSimpleFileAccess->createFolder( aBackupURL );
-
-            aBackupURL += DEF_TPL_STR;
-            aBackupURL += aExt;
-
-            if ( !rTemplateName.isEmpty() )
-            {
-                if ( xSimpleFileAccess->exists( aUserTemplateURL ) && !bChanged )
-                    xSimpleFileAccess->copy( aUserTemplateURL, aBackupURL );
-
-                uno::Reference< document::XTypeDetection > xTypeDetector( xTypeDetection, uno::UNO_QUERY );
-                ::comphelper::SequenceAsHashMap aProps2( xTypeDetection->getByName( xTypeDetector->queryTypeByURL( rTemplateName ) ) );
-                OUString aFilterName =
-                    aProps2.getUnpackedValueOrDefault("PreferredFilter", OUString() );
-
-                uno::Sequence< beans::PropertyValue > aArgs( 3 );
-                aArgs[0].Name = "FilterName";
-                aArgs[0].Value <<= aFilterName;
-                aArgs[1].Name = "AsTemplate";
-                aArgs[1].Value <<= sal_True;
-                aArgs[2].Name = "URL";
-                aArgs[2].Value <<= OUString( rTemplateName );
-
-                uno::Reference< frame::XLoadable > xLoadable( xFactory->createInstance( rServiceName ), uno::UNO_QUERY );
-                xLoadable->load( aArgs );
-
-                aArgs.realloc( 2 );
-                aArgs[1].Name = "Overwrite";
-                aArgs[1].Value <<= sal_True;
-
-                uno::Reference< frame::XStorable > xStorable( xLoadable, uno::UNO_QUERY );
-                xStorable->storeToURL( aUserTemplateURL, aArgs );
-                ::comphelper::ConfigurationHelper::writeRelativeKey( xConfig, CONF_PATH, PROP_DEF_TEMPL_CHANGED, uno::makeAny( sal_True ));
-                ::comphelper::ConfigurationHelper::flush( xConfig );
-            }
-            else
-            {
-                DBG_ASSERT( bChanged, "invalid ooSetupFactorySystemDefaultTemplateChanged value!" );
-
-                xSimpleFileAccess->copy( aBackupURL, aUserTemplateURL );
-                xSimpleFileAccess->kill( aBackupURL );
-                ::comphelper::ConfigurationHelper::writeRelativeKey( xConfig, CONF_PATH, PROP_DEF_TEMPL_CHANGED, uno::makeAny( sal_False ));
-                ::comphelper::ConfigurationHelper::flush( xConfig );
-            }
+            uno::Reference< frame::XStorable > xStorable( xLoadable, uno::UNO_QUERY );
+            xStorable->storeToURL( sUserTemplateURL, aArgs );
+            ::comphelper::ConfigurationHelper::writeRelativeKey( xConfig, sConfPath, PROP_DEF_TEMPL_CHANGED, uno::makeAny( true ));
+            ::comphelper::ConfigurationHelper::flush( xConfig );
         }
-        catch(const uno::Exception&)
+        else
         {
+            DBG_ASSERT( bChanged, "invalid ooSetupFactorySystemDefaultTemplateChanged value!" );
+
+            xSimpleFileAccess->copy( aBackupURL, sUserTemplateURL );
+            xSimpleFileAccess->kill( aBackupURL );
+            ::comphelper::ConfigurationHelper::writeRelativeKey( xConfig, sConfPath, PROP_DEF_TEMPL_CHANGED, uno::makeAny( false ));
+            ::comphelper::ConfigurationHelper::flush( xConfig );
         }
+    }
+    catch(const uno::Exception&)
+    {
     }
 }
 
@@ -301,17 +261,16 @@ OUString SfxObjectFactory::GetStandardTemplate( const OUString& rServiceName )
     if (eFac == SvtModuleOptions::EFactory::UNKNOWN_FACTORY)
         eFac = SvtModuleOptions::ClassifyFactoryByShortName(rServiceName);
 
-    OUString sTemplate;
     if (eFac != SvtModuleOptions::EFactory::UNKNOWN_FACTORY)
-        sTemplate = SvtModuleOptions().GetFactoryStandardTemplate(eFac);
+        return SvtModuleOptions().GetFactoryStandardTemplate(eFac);
 
-    return sTemplate;
+    return OUString();
 }
 
 std::shared_ptr<const SfxFilter> SfxObjectFactory::GetTemplateFilter() const
 {
     sal_uInt16 nVersion=0;
-    SfxFilterMatcher aMatcher ( OUString::createFromAscii( pShortName ) );
+    SfxFilterMatcher aMatcher ( m_sFactoryName );
     SfxFilterMatcherIter aIter( aMatcher );
     std::shared_ptr<const SfxFilter> pFilter;
     std::shared_ptr<const SfxFilter> pTemp = aIter.First();
@@ -320,7 +279,7 @@ std::shared_ptr<const SfxFilter> SfxObjectFactory::GetTemplateFilter() const
         if( pTemp->IsOwnFormat() && pTemp->IsOwnTemplateFormat() && ( pTemp->GetVersion() > nVersion ) )
         {
             pFilter = pTemp;
-            nVersion = (sal_uInt16) pTemp->GetVersion();
+            nVersion = static_cast<sal_uInt16>(pTemp->GetVersion());
         }
 
         pTemp = aIter.Next();
@@ -346,10 +305,7 @@ const SvGlobalName& SfxObjectFactory::GetClassId() const
 
 OUString SfxObjectFactory::GetFactoryURL() const
 {
-    OUStringBuffer aURLComposer;
-    aURLComposer.append("private:factory/");
-    aURLComposer.appendAscii(GetShortName());
-    return aURLComposer.makeStringAndClear();
+    return "private:factory/" + m_sFactoryName;
 }
 
 OUString SfxObjectFactory::GetModuleName() const
@@ -361,10 +317,8 @@ OUString SfxObjectFactory::GetModuleName() const
         css::uno::Reference< css::frame::XModuleManager2 > xModuleManager(
             css::frame::ModuleManager::create(xContext));
 
-        OUString sDocService(GetDocumentServiceName());
-        ::comphelper::SequenceAsHashMap aPropSet( xModuleManager->getByName(sDocService) );
-        OUString sModuleName = aPropSet.getUnpackedValueOrDefault("ooSetupFactoryUIName", OUString());
-        return sModuleName;
+        ::comphelper::SequenceAsHashMap aPropSet( xModuleManager->getByName(GetDocumentServiceName()) );
+        return aPropSet.getUnpackedValueOrDefault("ooSetupFactoryUIName", OUString());
     }
     catch(const css::uno::RuntimeException&)
     {
@@ -378,11 +332,11 @@ OUString SfxObjectFactory::GetModuleName() const
 }
 
 
-sal_uInt16 SfxObjectFactory::GetViewNo_Impl( const sal_uInt16 i_nViewId, const sal_uInt16 i_nFallback ) const
+sal_uInt16 SfxObjectFactory::GetViewNo_Impl( const SfxInterfaceId i_nViewId, const sal_uInt16 i_nFallback ) const
 {
     for ( sal_uInt16 curViewNo = 0; curViewNo < GetViewFactoryCount(); ++curViewNo )
     {
-        const sal_uInt16 curViewId = GetViewFactory( curViewNo ).GetOrdinal();
+        const SfxInterfaceId curViewId = GetViewFactory( curViewNo ).GetOrdinal();
         if ( i_nViewId == curViewId )
            return curViewNo;
     }

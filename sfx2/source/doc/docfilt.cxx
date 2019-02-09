@@ -17,15 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#ifdef SOLARIS
+#ifdef __sun
 #include <ctime>
 #endif
 
 #include <string>
 #include <sot/exchange.hxx>
 #include <sot/storage.hxx>
-#include <comphelper/processfactory.hxx>
-#include <comphelper/string.hxx>
+#include <comphelper/fileformat.h>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 
@@ -43,7 +42,7 @@ SfxFilter::SfxFilter( const OUString& rProvider, const OUString &rFilterName ) :
     nFormatType(SfxFilterFlags::NONE),
     nVersion(0),
     lFormat(SotClipboardFormatId::NONE),
-    nDocIcon(0)
+    mbEnabled(true)
 {
 }
 
@@ -52,10 +51,10 @@ SfxFilter::SfxFilter( const OUString &rName,
                       SfxFilterFlags nType,
                       SotClipboardFormatId lFmt,
                       const OUString &rTypNm,
-                      sal_uInt16 nIcon,
                       const OUString &rMimeType,
                       const OUString &rUsrDat,
-                      const OUString &rServiceName ):
+                      const OUString &rServiceName,
+                      bool bEnabled ):
     aWildCard(rWildCard, ';'),
     aTypeName(rTypNm),
     aUserData(rUsrDat),
@@ -66,37 +65,19 @@ SfxFilter::SfxFilter( const OUString &rName,
     nFormatType(nType),
     nVersion(SOFFICE_FILEFORMAT_50),
     lFormat(lFmt),
-    nDocIcon(nIcon)
+    mbEnabled(bEnabled)
 {
     OUString aExts = GetWildcard().getGlob();
-    OUString aShort, aLong;
+    OUStringBuffer glob;
     OUString aRet;
-    sal_uInt16 nMaxLength = USHRT_MAX;
-    OUString aTest;
     sal_uInt16 nPos = 0;
     while (!(aRet = aExts.getToken(nPos++, ';')).isEmpty() )
     {
-        aTest = aRet;
-        aTest = aTest.replaceFirst( "*." , "" );
-        if( aTest.getLength() <= nMaxLength )
-        {
-            if (!aShort.isEmpty())
-                aShort += ";";
-            aShort += aRet;
-        }
-        else
-        {
-            if (!aLong.isEmpty())
-                aLong += ";";
-            aLong += aRet;
-        }
+        if (!glob.isEmpty())
+            glob.append(";");
+        glob.append(aRet);
     }
-    if (!aShort.isEmpty() && !aLong.isEmpty())
-    {
-        aShort += ";";
-        aShort += aLong;
-    }
-    aWildCard.setGlob(aShort);
+    aWildCard.setGlob(glob.makeStringAndClear());
 }
 
 SfxFilter::~SfxFilter()
@@ -166,7 +147,7 @@ OUString SfxFilter::GetTypeFromStorage( const SotStorage& rStg )
     }
     else
     {
-        SotClipboardFormatId nClipId = ((SotStorage&)rStg).GetFormat();
+        SotClipboardFormatId nClipId = const_cast<SotStorage&>(rStg).GetFormat();
         if ( nClipId != SotClipboardFormatId::NONE )
         {
             std::shared_ptr<const SfxFilter> pFilter = SfxFilterMatcher().GetFilter4ClipBoardId( nClipId );
@@ -179,9 +160,7 @@ OUString SfxFilter::GetTypeFromStorage( const SotStorage& rStg )
 }
 
 OUString SfxFilter::GetTypeFromStorage(
-    const uno::Reference<embed::XStorage>& xStorage, bool bTemplate )
-        throw ( beans::UnknownPropertyException, lang::WrappedTargetException,
-                uno::RuntimeException, std::exception )
+    const uno::Reference<embed::XStorage>& xStorage )
 {
     SfxFilterMatcher aMatcher;
 
@@ -197,13 +176,9 @@ OUString SfxFilter::GetTypeFromStorage(
             SotClipboardFormatId nClipId = SotExchange::GetFormat( aDataFlavor );
             if ( nClipId != SotClipboardFormatId::NONE )
             {
-                SfxFilterFlags nMust = SfxFilterFlags::IMPORT, nDont = SFX_FILTER_NOTINSTALLED;
-                if ( bTemplate )
-                    // template filter was preselected, try to verify
-                    nMust |= SfxFilterFlags::TEMPLATEPATH;
-                else
-                    // template filters shouldn't be detected if not explicitly asked for
-                    nDont |= SfxFilterFlags::TEMPLATEPATH;
+                SfxFilterFlags const nMust = SfxFilterFlags::IMPORT;
+                // template filters shouldn't be detected if not explicitly asked for
+                SfxFilterFlags const nDont = SFX_FILTER_NOTINSTALLED | SfxFilterFlags::TEMPLATEPATH;
 
                 // get filter from storage MediaType
                 std::shared_ptr<const SfxFilter> pFilter = aMatcher.GetFilter4ClipBoardId( nClipId, nMust, nDont );

@@ -19,6 +19,7 @@
 
 
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 #include <comphelper/anytostring.hxx>
 #include <cppuhelper/exc_hlp.hxx>
@@ -41,7 +42,7 @@ namespace slideshow
         {
             // negate comparison, we want priority queue to be sorted
             // in increasing order of activation times
-            return this->nTime > rEvent.nTime;
+            return nTime > rEvent.nTime;
         }
 
 
@@ -58,11 +59,9 @@ namespace slideshow
         EventQueue::~EventQueue()
         {
             // add in all that have been added explicitly for this round:
-            EventEntryVector::const_iterator const iEnd( maNextEvents.end() );
-            for ( EventEntryVector::const_iterator iPos( maNextEvents.begin() );
-                  iPos != iEnd; ++iPos )
+            for ( const auto& rEvent : maNextEvents )
             {
-                maEvents.push(*iPos);
+                maEvents.push(rEvent);
             }
             EventEntryVector().swap( maNextEvents );
 
@@ -73,12 +72,9 @@ namespace slideshow
                 {
                     maEvents.top().pEvent->dispose();
                 }
-                catch (uno::Exception &)
+                catch (const uno::Exception& e)
                 {
-                    OSL_FAIL( OUStringToOString(
-                                    comphelper::anyToString(
-                                        cppu::getCaughtException() ),
-                                    RTL_TEXTENCODING_UTF8 ).getStr() );
+                    SAL_WARN("slideshow", e);
                 }
                 maEvents.pop();
             }
@@ -122,9 +118,8 @@ namespace slideshow
 
             ENSURE_OR_RETURN_FALSE( rEvent.get() != nullptr,
                                "EventQueue::addEvent: event ptr NULL" );
-            maNextEvents.push_back(
-                EventEntry( rEvent, rEvent->getActivationTime(
-                                mpTimer->getElapsedTime()) ) );
+            maNextEvents.emplace_back( rEvent, rEvent->getActivationTime(
+                                mpTimer->getElapsedTime()) );
             return true;
         }
 
@@ -169,10 +164,8 @@ namespace slideshow
             SAL_INFO("slideshow.verbose", "EventQueue: heartbeat" );
 
             // add in all that have been added explicitly for this round:
-            EventEntryVector::const_iterator const iEnd( maNextEvents.end() );
-            for ( EventEntryVector::const_iterator iPos( maNextEvents.begin() );
-                  iPos != iEnd; ++iPos ) {
-                maEvents.push(*iPos);
+            for ( const auto& rEvent : maNextEvents ) {
+                maEvents.push(rEvent);
             }
             EventEntryVector().swap( maNextEvents );
 
@@ -241,9 +234,7 @@ namespace slideshow
                         // since this will also capture segmentation
                         // violations and the like. In such a case, we
                         // still better let our clients now...
-                        OSL_FAIL( OUStringToOString(
-                                        comphelper::anyToString( cppu::getCaughtException() ),
-                                        RTL_TEXTENCODING_UTF8 ).getStr() );
+                        SAL_WARN( "slideshow", comphelper::anyToString( cppu::getCaughtException() ) );
                     }
                     catch( SlideShowException& )
                     {
@@ -257,7 +248,7 @@ namespace slideshow
                         // since this will also capture segmentation
                         // violations and the like. In such a case, we
                         // still better let our clients now...
-                        OSL_TRACE( "::presentation::internal::EventQueue: Event threw a SlideShowException, action might not have been fully performed" );
+                        SAL_WARN("slideshow.eventqueue", "::presentation::internal::EventQueue: Event threw a SlideShowException, action might not have been fully performed" );
                     }
                 }
                 else

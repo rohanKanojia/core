@@ -19,7 +19,10 @@
 
 #include "eppt.hxx"
 #include "epptdef.hxx"
+#include "pptexanimations.hxx"
+#include "../ppt/pptanimations.hxx"
 
+#include <o3tl/any.hxx>
 #include <tools/globname.hxx>
 #include <tools/datetime.hxx>
 #include <tools/poly.hxx>
@@ -30,6 +33,7 @@
 #include <vcl/virdev.hxx>
 #include <rtl/ustring.hxx>
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
 #include <vcl/fltcall.hxx>
 #include <vcl/wmf.hxx>
 #include <sfx2/docfile.hxx>
@@ -42,6 +46,10 @@
 #include <com/sun/star/view/PaperOrientation.hpp>
 #include <com/sun/star/view/PaperFormat.hpp>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
+#include <com/sun/star/drawing/XMasterPageTarget.hpp>
+#include <com/sun/star/drawing/XMasterPagesSupplier.hpp>
+#include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
+#include <com/sun/star/drawing/XDrawPages.hpp>
 #include <com/sun/star/office/XAnnotation.hpp>
 #include <com/sun/star/office/XAnnotationAccess.hpp>
 #include <com/sun/star/office/XAnnotationEnumeration.hpp>
@@ -49,7 +57,6 @@
 #include <com/sun/star/util/DateTime.hpp>
 #include <com/sun/star/animations/TransitionType.hpp>
 #include <com/sun/star/animations/TransitionSubType.hpp>
-#include <com/sun/star/awt/FontDescriptor.hpp>
 #include <com/sun/star/awt/FontFamily.hpp>
 #include <com/sun/star/awt/FontPitch.hpp>
 #include <com/sun/star/container/XNamed.hpp>
@@ -58,6 +65,7 @@
 #include <com/sun/star/text/XSimpleText.hpp>
 #include <com/sun/star/style/XStyle.hpp>
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
+#include <com/sun/star/task/XStatusIndicator.hpp>
 #include <editeng/svxenum.hxx>
 #include <editeng/flditem.hxx>
 #include <sot/storinfo.hxx>
@@ -65,12 +73,6 @@
 #include <filter/msfilter/msdffimp.hxx>
 #include <filter/msfilter/svxmsbas.hxx>
 
-#ifdef DEBUG
-#define DBG(x) x
-#include <stdio.h>
-#else
-#define DBG(x)
-#endif
 
 using namespace com::sun::star;
 
@@ -79,13 +81,9 @@ using namespace ::com::sun::star::awt::FontFamily;
 using namespace ::com::sun::star::awt::FontPitch;
 using namespace ::com::sun::star::presentation;
 
-using ::com::sun::star::awt::FontDescriptor;
 using ::com::sun::star::beans::XPropertySet;
 using ::com::sun::star::container::XNameAccess;
 using ::com::sun::star::container::XNamed;
-using ::com::sun::star::drawing::XDrawPagesSupplier;
-using ::com::sun::star::drawing::XMasterPagesSupplier;
-using ::com::sun::star::drawing::XShapes;
 using ::com::sun::star::drawing::XMasterPageTarget;
 using ::com::sun::star::drawing::XDrawPage;
 using ::com::sun::star::frame::XModel;
@@ -98,7 +96,7 @@ using ::com::sun::star::uno::Exception;
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::UNO_QUERY;
 
-static PHLayout pPHLayout[] =
+static PHLayout const pPHLayout[] =
 {
     { EppLayout::TITLESLIDE,            { 0x0d, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, 0x00, 0x0d, 0x10, true, true, false },
     { EppLayout::TITLEANDBODYSLIDE,     { 0x0d, 0x0e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, 0x00, 0x0d, 0x0e, true, true, false },
@@ -128,9 +126,7 @@ static PHLayout pPHLayout[] =
 };
 
 PPTWriterBase::PPTWriterBase()
-    : mXModel(nullptr)
-    , mXStatusIndicator(nullptr)
-    , mbStatusIndicator(false)
+    : mbStatusIndicator(false)
     , mbPresObj(false)
     , mbEmptyPresObj(false)
     , mbIsBackgroundDark(false)
@@ -138,12 +134,12 @@ PPTWriterBase::PPTWriterBase()
     , mnPages(0)
     , mnMasterPages(0)
     , maFraction(1, 576)
-    , maMapModeSrc(MAP_100TH_MM)
-    , maMapModeDest(MAP_INCH, Point(), maFraction, maFraction)
+    , maMapModeSrc(MapUnit::Map100thMM)
+    , maMapModeDest(MapUnit::MapInch, Point(), maFraction, maFraction)
     , meLatestPageType(NORMAL)
     , mpStyleSheet(nullptr)
 {
-    DBG(printf ("PPTWriterBase::PPTWriterBase()\n"));
+    SAL_INFO("sd.eppt", "PPTWriterBase::PPTWriterBase()");
 }
 
 PPTWriterBase::PPTWriterBase( const Reference< XModel > & rXModel,
@@ -158,8 +154,8 @@ PPTWriterBase::PPTWriterBase( const Reference< XModel > & rXModel,
     , mnPages(0)
     , mnMasterPages(0)
     , maFraction(1, 576)
-    , maMapModeSrc(MAP_100TH_MM)
-    , maMapModeDest(MAP_INCH, Point(), maFraction, maFraction)
+    , maMapModeSrc(MapUnit::Map100thMM)
+    , maMapModeDest(MapUnit::MapInch, Point(), maFraction, maFraction)
     , meLatestPageType (NORMAL)
     , mpStyleSheet(nullptr)
 {
@@ -180,7 +176,7 @@ void PPTWriterBase::exportPPT( const std::vector< css::beans::PropertyValue >& r
     if ( !InitSOIface() )
         return;
 
-    FontCollectionEntry aDefaultFontDesc( OUString( "Times New Roman" ),
+    FontCollectionEntry aDefaultFontDesc( "Times New Roman",
                                           ROMAN,
                                           awt::FontPitch::VARIABLE,
                                                     RTL_TEXTENCODING_MS_1252 );
@@ -210,7 +206,7 @@ void PPTWriterBase::exportPPT( const std::vector< css::beans::PropertyValue >& r
     maDestPageSize = MapSize( awt::Size( nWidth, nHeight ) );
     maPageSize = awt::Size(nWidth, nHeight);
 
-    DBG(printf( "call exportDocumentPre()\n"));
+    SAL_INFO("sd.eppt", "call exportDocumentPre()");
     exportPPTPre(rMediaData);
 
     if ( !GetStyleSheets() )
@@ -220,14 +216,6 @@ void PPTWriterBase::exportPPT( const std::vector< css::beans::PropertyValue >& r
          return;
 
     sal_uInt32 i;
-
-    for ( i = 0; i < mnPages; i++ )
-    {
-    if ( GetPageByIndex( i, NORMAL ) ) {
-        sal_uInt32 nMasterNum = GetMasterIndex( NORMAL );
-        ImplWriteLayout( GetLayoutOffset( mXPagePropSet ), nMasterNum );
-    }
-    }
 
     for ( i = 0; i < mnMasterPages; i++ )
     {
@@ -239,7 +227,7 @@ void PPTWriterBase::exportPPT( const std::vector< css::beans::PropertyValue >& r
 
     for ( i = 0; i < mnPages; i++ )
     {
-        DBG(printf( "call ImplCreateSlide( %" SAL_PRIuUINT32 " )\n", i));
+        SAL_INFO("sd.eppt", "call ImplCreateSlide( " << i << " )");
         if ( !CreateSlide( i ) )
             return;
     }
@@ -250,7 +238,7 @@ void PPTWriterBase::exportPPT( const std::vector< css::beans::PropertyValue >& r
             return;
     }
 
-    DBG(printf( "call exportDocumentPost()\n"));
+    SAL_INFO("sd.eppt", "call exportDocumentPost()");
     exportPPTPost();
 }
 
@@ -446,7 +434,7 @@ sal_Int32 PPTWriterBase::GetLayoutOffset( const css::uno::Reference< css::beans:
     if ( GetPropertyValue( aAny, rXPropSet, "Layout", true ) )
         aAny >>= nLayout;
 
-    DBG(printf("GetLayoutOffset %" SAL_PRIdINT32 "\n", nLayout));
+    SAL_INFO("sd.eppt", "GetLayoutOffset " << nLayout);
 
     return nLayout;
 }
@@ -465,17 +453,17 @@ sal_Int32 PPTWriterBase::GetLayoutOffsetFixed( const css::uno::Reference< css::b
     return nLayout;
 }
 
-PHLayout& PPTWriterBase::GetLayout(  const css::uno::Reference< css::beans::XPropertySet >& rXPropSet )
+PHLayout const & PPTWriterBase::GetLayout(  const css::uno::Reference< css::beans::XPropertySet >& rXPropSet )
 {
     return pPHLayout[ GetLayoutOffsetFixed( rXPropSet ) ];
 }
 
-PHLayout& PPTWriterBase::GetLayout( sal_Int32 nOffset )
+PHLayout const & PPTWriterBase::GetLayout( sal_Int32 nOffset )
 {
     if( nOffset >= 0 && nOffset < EPP_LAYOUT_SIZE )
         return pPHLayout[ nOffset ];
 
-    DBG(printf("asked %" SAL_PRIdINT32 " for layout outside of 0,%d array scope\n", nOffset, EPP_LAYOUT_SIZE ));
+    SAL_INFO("sd.eppt", "asked " << nOffset << " for layout outside of 0, " << EPP_LAYOUT_SIZE  << " array scope");
 
     return pPHLayout[ 0 ];
 }
@@ -494,7 +482,7 @@ sal_uInt32 PPTWriterBase::GetMasterIndex( PageType ePageType )
             if ( aXPropertySet.is() )
             {
                 if ( ImplGetPropertyValue( aXPropertySet, "Number" ) )
-                    nRetValue |= *static_cast<sal_Int16 const *>(mAny.getValue());
+                    nRetValue |= *o3tl::doAccess<sal_Int16>(mAny);
                 if ( nRetValue & 0xffff )           // avoid overflow
                     nRetValue--;
             }
@@ -509,7 +497,7 @@ void PPTWriterBase::SetCurrentStyleSheet( sal_uInt32 nPageNum )
 {
     if ( nPageNum >= maStyleSheetList.size() )
         nPageNum = 0;
-    mpStyleSheet = maStyleSheetList[ nPageNum ];
+    mpStyleSheet = maStyleSheetList[ nPageNum ].get();
 }
 
 bool PPTWriterBase::GetStyleSheets()
@@ -533,10 +521,10 @@ bool PPTWriterBase::GetStyleSheets()
             aXPropSet( mXModel, UNO_QUERY );
 
         sal_uInt16 nDefaultTab = ( aXPropSet.is() && ImplGetPropertyValue( aXPropSet, "TabStop" ) )
-            ? (sal_uInt16)( *static_cast<sal_Int32 const *>(mAny.getValue()) / 4.40972 )
+            ? static_cast<sal_uInt16>( *o3tl::doAccess<sal_Int32>(mAny) / 4.40972 )
             : 1250;
 
-        maStyleSheetList.push_back( new PPTExStyleSheet( nDefaultTab, dynamic_cast<PPTExBulletProvider*>(this) ) );
+        maStyleSheetList.emplace_back( new PPTExStyleSheet( nDefaultTab, dynamic_cast<PPTExBulletProvider*>(this) ) );
         SetCurrentStyleSheet( nPageNum );
         if ( GetPageByIndex( nPageNum, MASTER ) )
             aXNamed.set( mXDrawPage, UNO_QUERY );
@@ -611,7 +599,7 @@ bool PPTWriterBase::GetStyleSheets()
                                                 if ( nInstance == EPP_TEXTTYPE_Body )
                                                 {
                                                     sal_Unicode cTemp = aStyle[aStyle.getLength() - 1];
-                                                    aStyle = aStyle.copy(0, aStyle.getLength() - 1) + OUString(++cTemp);
+                                                    aStyle = aStyle.copy(0, aStyle.getLength() - 1) + OUStringLiteral1(++cTemp);
                                                     if ( aXFamily->hasByName( aStyle ) )
                                                     {
                                                         aXFamily->getByName( aStyle ) >>= xStyle;
@@ -679,9 +667,9 @@ awt::Size PPTWriterBase::MapSize( const awt::Size& rSize )
     Size aRetSize( OutputDevice::LogicToLogic( Size( rSize.Width, rSize.Height ), maMapModeSrc, maMapModeDest ) );
 
     if ( !aRetSize.Width() )
-        aRetSize.Width()++;
+        aRetSize.AdjustWidth( 1 );
     if ( !aRetSize.Height() )
-        aRetSize.Height()++;
+        aRetSize.AdjustHeight( 1 );
     return awt::Size( aRetSize.Width(), aRetSize.Height() );
 }
 
@@ -691,13 +679,13 @@ awt::Point PPTWriterBase::MapPoint( const awt::Point& rPoint )
     return awt::Point( aRet.X(), aRet.Y() );
 }
 
-Rectangle PPTWriterBase::MapRectangle( const awt::Rectangle& rRect )
+::tools::Rectangle PPTWriterBase::MapRectangle( const awt::Rectangle& rRect )
 {
     css::awt::Point    aPoint( rRect.X, rRect.Y );
     css::awt::Size     aSize( rRect.Width, rRect.Height );
     css::awt::Point    aP( MapPoint( aPoint ) );
     css::awt::Size     aS( MapSize( aSize ) );
-    return Rectangle( Point( aP.X, aP.Y ), Size( aS.Width, aS.Height ) );
+    return ::tools::Rectangle( Point( aP.X, aP.Y ), Size( aS.Width, aS.Height ) );
 }
 
 bool PPTWriterBase::GetShapeByIndex( sal_uInt32 nIndex, bool bGroup )
@@ -724,7 +712,7 @@ bool PPTWriterBase::GetShapeByIndex( sal_uInt32 nIndex, bool bGroup )
             break;
         maPosition = MapPoint( mXShape->getPosition() );
         maSize = MapSize( mXShape->getSize() );
-        maRect = Rectangle( Point( maPosition.X, maPosition.Y ), Size( maSize.Width, maSize.Height ) );
+        maRect = ::tools::Rectangle( Point( maPosition.X, maPosition.Y ), Size( maSize.Width, maSize.Height ) );
 
         OStringBuffer aTypeBuffer(OUStringToOString(
             mXShape->getShapeType(), RTL_TEXTENCODING_UTF8));
@@ -744,7 +732,7 @@ bool PPTWriterBase::GetShapeByIndex( sal_uInt32 nIndex, bool bGroup )
 
         mnAngle = ( PropValue::GetPropertyValue( aAny,
             mXPropSet, "RotateAngle", true ) )
-                ? *static_cast<sal_Int32 const *>(aAny.getValue())
+                ? *o3tl::doAccess<sal_Int32>(aAny)
                 : 0;
 
         return true;
@@ -809,7 +797,13 @@ sal_Int8 PPTWriterBase::GetTransition( sal_Int16 nTransitionType, sal_Int16 nTra
     break;
     case TransitionType::ELLIPSEWIPE :
     {
-        nPPTTransitionType = PPT_TRANSITION_TYPE_CIRCLE;
+        switch( nTransitionSubtype ) {
+        case TransitionSubType::VERTICAL:
+        case TransitionSubType::HORIZONTAL:
+            // no ellipse or oval in PPT or OOXML, fallback to circle
+        default:
+            nPPTTransitionType = PPT_TRANSITION_TYPE_CIRCLE;
+        }
     }
     break;
     case TransitionType::FOURBOXWIPE :
@@ -860,30 +854,39 @@ sal_Int8 PPTWriterBase::GetTransition( FadeEffect eEffect, sal_uInt8& nDirection
 
     case FadeEffect_HORIZONTAL_STRIPES :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_VERTICAL_STRIPES :
         nPPTTransitionType = PPT_TRANSITION_TYPE_BLINDS;
         break;
 
     case FadeEffect_VERTICAL_CHECKERBOARD :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_HORIZONTAL_CHECKERBOARD :
         nPPTTransitionType = PPT_TRANSITION_TYPE_CHECKER;
         break;
 
     case FadeEffect_MOVE_FROM_UPPERLEFT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_MOVE_FROM_UPPERRIGHT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_MOVE_FROM_LOWERLEFT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_MOVE_FROM_LOWERRIGHT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_MOVE_FROM_TOP :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_MOVE_FROM_LEFT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_MOVE_FROM_BOTTOM :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_MOVE_FROM_RIGHT :
         nPPTTransitionType = PPT_TRANSITION_TYPE_COVER;
         break;
@@ -894,26 +897,33 @@ sal_Int8 PPTWriterBase::GetTransition( FadeEffect eEffect, sal_uInt8& nDirection
 
     case FadeEffect_VERTICAL_LINES :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_HORIZONTAL_LINES :
         nPPTTransitionType = PPT_TRANSITION_TYPE_RANDOM_BARS;
         break;
 
     case FadeEffect_CLOSE_HORIZONTAL :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_OPEN_HORIZONTAL :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_CLOSE_VERTICAL :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_OPEN_VERTICAL :
         nPPTTransitionType = PPT_TRANSITION_TYPE_SPLIT;
         break;
 
     case FadeEffect_FADE_FROM_UPPERLEFT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_FADE_FROM_UPPERRIGHT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_FADE_FROM_LOWERLEFT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_FADE_FROM_LOWERRIGHT :
         nDirection += 4;
         nPPTTransitionType = PPT_TRANSITION_TYPE_STRIPS;
@@ -921,44 +931,58 @@ sal_Int8 PPTWriterBase::GetTransition( FadeEffect eEffect, sal_uInt8& nDirection
 
     case FadeEffect_UNCOVER_TO_LOWERRIGHT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_UNCOVER_TO_LOWERLEFT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_UNCOVER_TO_UPPERRIGHT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_UNCOVER_TO_UPPERLEFT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_UNCOVER_TO_BOTTOM :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_UNCOVER_TO_RIGHT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_UNCOVER_TO_TOP :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_UNCOVER_TO_LEFT :
         nPPTTransitionType = PPT_TRANSITION_TYPE_PULL;
         break;
 
     case FadeEffect_FADE_FROM_TOP :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_FADE_FROM_LEFT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_FADE_FROM_BOTTOM :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_FADE_FROM_RIGHT :
         nPPTTransitionType = PPT_TRANSITION_TYPE_WIPE;
         break;
 
     case FadeEffect_ROLL_FROM_TOP :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_ROLL_FROM_LEFT :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_ROLL_FROM_BOTTOM :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_ROLL_FROM_RIGHT :
         nPPTTransitionType = PPT_TRANSITION_TYPE_WIPE;
         break;
 
     case FadeEffect_FADE_TO_CENTER :
         nDirection++;
+        [[fallthrough]];
     case FadeEffect_FADE_FROM_CENTER :
         nPPTTransitionType = PPT_TRANSITION_TYPE_ZOOM;
         break;
@@ -979,7 +1003,7 @@ bool PPTWriterBase::ContainsOtherShapeThanPlaceholders()
     if ( nShapes )
         for ( sal_uInt32 nIndex = 0; ( nIndex < nShapes ) && !bOtherThanPlaceHolders; nIndex++ )
         {
-            if ( GetShapeByIndex( nIndex ) && mType != "drawing.Page" )
+            if ( GetShapeByIndex( nIndex, false ) && mType != "drawing.Page" )
             {
                 if( mType == "presentation.Page" || mType == "presentation.Notes" )
                 {
@@ -991,7 +1015,7 @@ bool PPTWriterBase::ContainsOtherShapeThanPlaceholders()
                 else
                     bOtherThanPlaceHolders = true;
         }
-        DBG(printf("mType == %s\n", mType.getStr()));
+        SAL_INFO("sd.eppt", "mType == " << mType);
     }
 
     return bOtherThanPlaceHolders;

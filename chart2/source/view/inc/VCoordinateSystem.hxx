@@ -20,47 +20,51 @@
 #define INCLUDED_CHART2_SOURCE_VIEW_INC_VCOORDINATESYSTEM_HXX
 
 #include "MinimumAndMaximumSupplier.hxx"
-#include "ScaleAutomatism.hxx"
-#include "ThreeDHelper.hxx"
-#include "ExplicitCategoriesProvider.hxx"
-#include "chartview/ExplicitScaleValues.hxx"
-
-#include <com/sun/star/chart2/XCoordinateSystem.hpp>
-#include <com/sun/star/awt/Rectangle.hpp>
+#include <ThreeDHelper.hxx>
+#include <chartview/ExplicitScaleValues.hxx>
 #include <com/sun/star/drawing/HomogenMatrix.hpp>
-#include <com/sun/star/drawing/XShapes.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/util/XNumberFormatsSupplier.hpp>
+#include <com/sun/star/uno/Sequence.h>
 
 #include <map>
 #include <memory>
 #include <vector>
 
+namespace chart { class ExplicitCategoriesProvider; }
+namespace chart { class ScaleAutomatism; }
+namespace com { namespace sun { namespace star { namespace awt { struct Rectangle; } } } }
+namespace com { namespace sun { namespace star { namespace awt { struct Size; } } } }
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XAxis; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XChartDocument; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XCoordinateSystem; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShapes; } } } }
+namespace com { namespace sun { namespace star { namespace lang { class XMultiServiceFactory; } } } }
+
+
 namespace chart
 {
 
-/**
-*/
 class VAxisBase;
+
 class VCoordinateSystem
 {
 public:
     virtual ~VCoordinateSystem();
 
-    static VCoordinateSystem* createCoordinateSystem( const css::uno::Reference<
+    static std::unique_ptr<VCoordinateSystem> createCoordinateSystem( const css::uno::Reference<
                                 css::chart2::XCoordinateSystem >& xCooSysModel );
 
+    /// @throws css::uno::RuntimeException
     void initPlottingTargets(
                   const css::uno::Reference< css::drawing::XShapes >& xLogicTarget
                 , const css::uno::Reference< css::drawing::XShapes >& xFinalTarget
                 , const css::uno::Reference< css::lang::XMultiServiceFactory >& xFactory
-                , css::uno::Reference< css::drawing::XShapes >& xLogicTargetForSeriesBehindAxis )
-                        throw (css::uno::RuntimeException, std::exception);
+                , css::uno::Reference< css::drawing::XShapes >& xLogicTargetForSeriesBehindAxis );
 
     void setParticle( const OUString& rCooSysParticle );
 
     void setTransformationSceneToScreen( const css::drawing::HomogenMatrix& rMatrix );
-    css::drawing::HomogenMatrix getTransformationSceneToScreen() { return m_aMatrixSceneToScreen;}
+    const css::drawing::HomogenMatrix& getTransformationSceneToScreen() { return m_aMatrixSceneToScreen;}
 
     //better performance for big data
     virtual css::uno::Sequence< sal_Int32 > getCoordinateSystemResolution( const css::awt::Size& rPageSize
@@ -72,10 +76,10 @@ public:
     void setExplicitCategoriesProvider( ExplicitCategoriesProvider* /*takes ownership*/ );
     ExplicitCategoriesProvider* getExplicitCategoriesProvider();
 
-    // returns a coplete scale set for a given dimension and index; for example if nDimensionIndex==1 and nAxisIndex==2 you get returned the secondary x axis, main y axis and main z axis
-    ::std::vector< ExplicitScaleData > getExplicitScales( sal_Int32 nDimensionIndex, sal_Int32 nAxisIndex ) const;
-    // returns a coplete increment set for a given dimension and index; for example if nDimensionIndex==1 and nAxisIndex==2 you get returned the secondary x axis, main y axis and main z axis
-    ::std::vector< ExplicitIncrementData > getExplicitIncrements( sal_Int32 nDimensionIndex, sal_Int32 nAxisIndex ) const;
+    // returns a complete scale set for a given dimension and index; for example if nDimensionIndex==1 and nAxisIndex==2 you get returned the secondary x axis, main y axis and main z axis
+    std::vector< ExplicitScaleData > getExplicitScales( sal_Int32 nDimensionIndex, sal_Int32 nAxisIndex ) const;
+    // returns a complete increment set for a given dimension and index; for example if nDimensionIndex==1 and nAxisIndex==2 you get returned the secondary x axis, main y axis and main z axis
+    std::vector< ExplicitIncrementData > getExplicitIncrements( sal_Int32 nDimensionIndex, sal_Int32 nAxisIndex ) const;
 
     void addMinimumAndMaximumSupplier( MinimumAndMaximumSupplier* pMinimumAndMaximumSupplier );
     bool hasMinimumAndMaximumSupplier( MinimumAndMaximumSupplier* pMinimumAndMaximumSupplier );
@@ -103,8 +107,7 @@ public:
 
     void set3DWallPositions( CuboidPlanePosition eLeftWallPos, CuboidPlanePosition eBackWallPos, CuboidPlanePosition eBottomPos );
 
-    css::uno::Reference<
-        css::chart2::XCoordinateSystem >
+    const css::uno::Reference< css::chart2::XCoordinateSystem >&
         getModel() const { return m_xCooSysModel;}
 
     /**
@@ -113,7 +116,8 @@ public:
     virtual void createVAxisList(
             const css::uno::Reference< css::chart2::XChartDocument> & xChartDoc
             , const css::awt::Size& rFontReferenceSize
-            , const css::awt::Rectangle& rMaximumSpaceForLabels );
+            , const css::awt::Rectangle& rMaximumSpaceForLabels
+            , bool bLimitSpaceForLabels );
 
     virtual void initVAxisInList();
     virtual void updateScalesAndIncrementsOnAxes();
@@ -143,12 +147,8 @@ protected: //methods
 
     VAxisBase* getVAxis( sal_Int32 nDimensionIndex, sal_Int32 nAxisIndex );
 
-    OUString createCIDForAxis( const css::uno::Reference<
-                    css::chart2::XAxis >& xAxis
-                    , sal_Int32 nDimensionIndex, sal_Int32 nAxisIndex );
-    OUString createCIDForGrid( const css::uno::Reference<
-                    css::chart2::XAxis >& xAxis
-                    , sal_Int32 nDimensionIndex, sal_Int32 nAxisIndex );
+    OUString createCIDForAxis( sal_Int32 nDimensionIndex, sal_Int32 nAxisIndex );
+    OUString createCIDForGrid( sal_Int32 nDimensionIndex, sal_Int32 nAxisIndex );
 
     sal_Int32 getNumberFormatKeyForAxis( const css::uno::Reference<
                      css::chart2::XAxis >& xAxis

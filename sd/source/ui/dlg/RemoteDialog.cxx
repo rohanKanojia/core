@@ -7,12 +7,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "sdattr.hxx"
-#include "sdresid.hxx"
-#include "cusshow.hxx"
+#include <sdattr.hxx>
+#include <cusshow.hxx>
 
 #include "RemoteDialog.hxx"
-#include "RemoteServer.hxx"
+#include <RemoteServer.hxx>
 
 using namespace ::sd;
 using namespace ::std;
@@ -43,7 +42,7 @@ void RemoteDialog::dispose()
     ModalDialog::dispose();
 }
 
-IMPL_LINK_NOARG_TYPED(RemoteDialog, HandleConnectButton, Button*, void)
+IMPL_LINK_NOARG(RemoteDialog, HandleConnectButton, Button*, void)
 {
 //     setBusy( true );
     // Fixme: Try and connect
@@ -57,14 +56,16 @@ IMPL_LINK_NOARG_TYPED(RemoteDialog, HandleConnectButton, Button*, void)
     {
         CloseHdl( *this );
     }
+#else
+    (void) this;
 #endif
 }
 
-IMPL_LINK_NOARG_TYPED( RemoteDialog, CloseClickHdl, Button*, void )
+IMPL_LINK_NOARG( RemoteDialog, CloseClickHdl, Button*, void )
 {
     CloseHdl(*this);
 }
-IMPL_LINK_NOARG_TYPED( RemoteDialog, CloseHdl, SystemWindow&, void )
+IMPL_LINK_NOARG( RemoteDialog, CloseHdl, SystemWindow&, void )
 {
 #ifdef ENABLE_SDREMOTE
     RemoteServer::restoreDiscoverable();

@@ -17,6 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <com/sun/star/beans/IllegalTypeException.hpp>
+#include <com/sun/star/beans/PropertyExistException.hpp>
 #include <com/sun/star/beans/XPropertyAccess.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/container/XNamed.hpp>
@@ -24,13 +28,15 @@
 #include <com/sun/star/ucb/XPropertySetRegistry.hpp>
 #include <com/sun/star/ucb/XPropertySetRegistryFactory.hpp>
 #include <cppuhelper/supportsservice.hxx>
+#include <cppuhelper/queryinterface.hxx>
 #include <ucbhelper/contenthelper.hxx>
 #include <ucbhelper/contentidentifier.hxx>
 #include <ucbhelper/providerhelper.hxx>
+#include <ucbhelper/macros.hxx>
 
-#include "osl/diagnose.h"
-#include "osl/mutex.hxx"
-#include "cppuhelper/weakref.hxx"
+#include <osl/diagnose.h>
+#include <osl/mutex.hxx>
+#include <cppuhelper/weakref.hxx>
 
 #include <unordered_map>
 
@@ -42,8 +48,7 @@ namespace ucbhelper_impl
 typedef std::unordered_map
 <
     OUString,
-    uno::WeakReference< ucb::XContent >,
-    OUStringHash
+    uno::WeakReference< ucb::XContent >
 >
 Contents;
 
@@ -83,12 +88,11 @@ void SAL_CALL ContentProviderImplHelper::release()
 }
 
 css::uno::Any SAL_CALL ContentProviderImplHelper::queryInterface( const css::uno::Type & rType )
-    throw( css::uno::RuntimeException, std::exception )
 {
     css::uno::Any aRet = cppu::queryInterface( rType,
-                                               (static_cast< lang::XTypeProvider* >(this)),
-                                               (static_cast< lang::XServiceInfo* >(this)),
-                                               (static_cast< css::ucb::XContentProvider* >(this))
+                                               static_cast< lang::XTypeProvider* >(this),
+                                               static_cast< lang::XServiceInfo* >(this),
+                                               static_cast< css::ucb::XContentProvider* >(this)
                                                );
     return aRet.hasValue() ? aRet : OWeakObject::queryInterface( rType );
 }
@@ -101,7 +105,6 @@ XTYPEPROVIDER_IMPL_3( ContentProviderImplHelper,
 // virtual
 sal_Bool SAL_CALL ContentProviderImplHelper::supportsService(
                                             const OUString& ServiceName )
-    throw( uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, ServiceName);
 }
@@ -110,7 +113,6 @@ sal_Bool SAL_CALL ContentProviderImplHelper::supportsService(
 sal_Int32 SAL_CALL ContentProviderImplHelper::compareContentIds(
         const uno::Reference< css::ucb::XContentIdentifier >& Id1,
         const uno::Reference< css::ucb::XContentIdentifier >& Id2 )
-    throw( uno::RuntimeException, std::exception )
 {
     // Simply do a string compare.
 
@@ -194,21 +196,14 @@ void ContentProviderImplHelper::queryExistingContents(
 
     cleanupRegisteredContents();
 
-    ucbhelper_impl::Contents::const_iterator it
-        = m_pImpl->m_aContents.begin();
-    ucbhelper_impl::Contents::const_iterator end
-        = m_pImpl->m_aContents.end();
-
-    while ( it != end )
+    for ( const auto& rContent : m_pImpl->m_aContents )
     {
-        uno::Reference< ucb::XContent > xContent( (*it).second );
+        uno::Reference< ucb::XContent > xContent( rContent.second );
         if ( xContent.is() )
         {
-            rContents.push_back(
-                rtl::Reference< ContentImplHelper >(
-                    static_cast< ContentImplHelper * >( xContent.get() ) ) );
+            rContents.emplace_back(
+                    static_cast< ContentImplHelper * >( xContent.get() ) );
         }
-        ++it;
     }
 }
 
@@ -264,9 +259,8 @@ ContentProviderImplHelper::getAdditionalPropertySet(
     if ( m_pImpl->m_xPropertySetRegistry.is() )
     {
         // Open/create persistent property set.
-        return uno::Reference< css::ucb::XPersistentPropertySet >(
-            m_pImpl->m_xPropertySetRegistry->openPropertySet(
-                rKey, bCreate ) );
+        return m_pImpl->m_xPropertySetRegistry->openPropertySet(
+                rKey, bCreate );
     }
 
     return uno::Reference< css::ucb::XPersistentPropertySet >();
@@ -313,10 +307,8 @@ bool ContentProviderImplHelper::renameAdditionalPropertySet(
                     for ( sal_Int32 n = 0; n < nCount; ++n )
                     {
                         const OUString& rKey = pKeys[ n ];
-                        if ( rKey.compareTo(
-                                 aOldKeyWithSlash,
-                                 aOldKeyWithSlash.getLength() ) == 0
-                             || rKey.equals( aOldKeyWithoutSlash ) )
+                        if ( rKey.startsWith( aOldKeyWithSlash )
+                             || rKey == aOldKeyWithoutSlash )
                         {
                             OUString aNewKey
                                 = rKey.replaceAt(
@@ -397,10 +389,8 @@ bool ContentProviderImplHelper::copyAdditionalPropertySet(
                     for ( sal_Int32 n = 0; n < nCount; ++n )
                     {
                         const OUString& rKey = pKeys[ n ];
-                        if ( rKey.compareTo(
-                                 aSrcKeyWithSlash,
-                                 aSrcKeyWithSlash.getLength() ) == 0
-                             || rKey.equals( aSrcKeyWithoutSlash ) )
+                        if ( rKey.startsWith(aSrcKeyWithSlash )
+                             || rKey == aSrcKeyWithoutSlash )
                         {
                             OUString aNewKey
                                 = rKey.replaceAt(
@@ -533,10 +523,8 @@ bool ContentProviderImplHelper::removeAdditionalPropertySet(
                     for ( sal_Int32 n = 0; n < nCount; ++n )
                     {
                         const OUString& rCurrKey = pKeys[ n ];
-                        if ( rCurrKey.compareTo(
-                                 aKeyWithSlash,
-                                 aKeyWithSlash.getLength() ) == 0
-                             || rCurrKey.equals( aKeyWithoutSlash ) )
+                        if ( rCurrKey.startsWith(aKeyWithSlash )
+                             || rCurrKey == aKeyWithoutSlash )
                         {
                             if ( !removeAdditionalPropertySet(
                                      rCurrKey, false ) )

@@ -25,8 +25,9 @@
 
 using namespace ::com::sun::star;
 
+/// @throws uno::RuntimeException
 static css::uno::Reference<css::accessibility::XAccessibleValue>
-    getValue( AtkValue *pValue ) throw (uno::RuntimeException)
+    getValue( AtkValue *pValue )
 {
     AtkObjectWrapper *pWrap = ATK_OBJECT_WRAPPER( pValue );
     if( pWrap )
@@ -111,9 +112,7 @@ value_wrapper_set_current_value( AtkValue     *value,
         {
             // FIXME - this needs expanding
             double aDouble = g_value_get_double( gval );
-            uno::Any aAny;
-            aAny <<= aDouble;
-            return pValue->setCurrentValue( aAny );
+            return pValue->setCurrentValue( uno::Any(aDouble) );
         }
     }
     catch(const uno::Exception&) {

@@ -20,57 +20,59 @@
 #include <comphelper/accessiblekeybindinghelper.hxx>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/frame/XDesktop.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
 #include <com/sun/star/document/XLinkTargetSupplier.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <swurl.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 #include <ndtxt.hxx>
 #include <txtinet.hxx>
-#include <accpara.hxx>
-#include <acchyperlink.hxx>
+#include "accpara.hxx"
+#include "acchyperlink.hxx"
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
 using ::com::sun::star::lang::IndexOutOfBoundsException;
 
-SwAccessibleHyperlink::SwAccessibleHyperlink( size_t nHPos,
-    SwAccessibleParagraph *p, sal_Int32 nStt, sal_Int32 nEnd ) :
-    nHintPos( nHPos ),
-    xPara( p ),
-    nStartIdx( nStt ),
-    nEndIdx( nEnd )
+SwAccessibleHyperlink::SwAccessibleHyperlink(const SwTextAttr & rTextAttr,
+        SwAccessibleParagraph & rAccPara,
+        sal_Int32 const nStt, sal_Int32 const nEnd)
+    : m_pHyperlink(const_cast<SwFormatINetFormat*>(&rTextAttr.GetINetFormat()))
+    , m_xParagraph(&rAccPara)
+    , m_nStartIndex( nStt )
+    , m_nEndIndex( nEnd )
 {
+    StartListening(m_pHyperlink->GetNotifier());
 }
 
-const SwTextAttr *SwAccessibleHyperlink::GetTextAttr() const
+SwAccessibleHyperlink::~SwAccessibleHyperlink()
 {
-    const SwTextAttr *pTextAttr = nullptr;
-    if( xPara.is() && xPara->GetMap() )
-    {
-        const SwTextNode *pTextNd = xPara->GetTextNode();
-        const SwpHints *pHints = pTextNd->GetpSwpHints();
-        if( pHints && nHintPos < pHints->Count() )
-        {
-            const SwTextAttr *pHt = pHints->Get(nHintPos);
-            if( RES_TXTATR_INETFMT == pHt->Which() )
-                pTextAttr = pHt;
-        }
-    }
+    Invalidate(); // with SolarMutex!
+}
 
-    return pTextAttr;
+// when the pool item dies, invalidate! this is the only reason for Listener...
+void SwAccessibleHyperlink::Notify(SfxHint const& rHint)
+{
+    if (rHint.GetId() == SfxHintId::Dying)
+    {
+        Invalidate();
+    }
+}
+
+// both the parent SwAccessibleParagraph and the pool-item must be valid
+const SwFormatINetFormat *SwAccessibleHyperlink::GetTextAttr() const
+{
+    return (m_xParagraph.is() && m_xParagraph->GetMap())
+        ? m_pHyperlink
+        : nullptr;
 }
 
 // XAccessibleAction
 sal_Int32 SAL_CALL SwAccessibleHyperlink::getAccessibleActionCount()
-        throw (uno::RuntimeException, std::exception)
 {
      return isValid() ? 1 : 0;
 }
 
 sal_Bool SAL_CALL SwAccessibleHyperlink::doAccessibleAction( sal_Int32 nIndex )
-        throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -78,27 +80,21 @@ sal_Bool SAL_CALL SwAccessibleHyperlink::doAccessibleAction( sal_Int32 nIndex )
 
     if(nIndex != 0)
         throw lang::IndexOutOfBoundsException();
-    const SwTextAttr *pTextAttr = GetTextAttr();
-    if( pTextAttr )
+    SwFormatINetFormat const*const pINetFormat = GetTextAttr();
+    if (pINetFormat && !pINetFormat->GetValue().isEmpty())
     {
-        const SwFormatINetFormat& rINetFormat = pTextAttr->GetINetFormat();
-        if( !rINetFormat.GetValue().isEmpty() )
+        SwViewShell *pVSh = m_xParagraph->GetShell();
+        if (pVSh)
         {
-            SwViewShell *pVSh = xPara->GetShell();
-            if( pVSh )
+            LoadURL(*pVSh, pINetFormat->GetValue(), LoadUrlFlags::NONE,
+                     pINetFormat->GetTargetFrame());
+            const SwTextINetFormat *const pTextAttr = pINetFormat->GetTextINetFormat();
+            if (pTextAttr)
             {
-                LoadURL(*pVSh, rINetFormat.GetValue(), URLLOAD_NOFILTER,
-                         rINetFormat.GetTargetFrame());
-                OSL_ENSURE( pTextAttr == rINetFormat.GetTextINetFormat(),
-                         "lost my txt attr" );
-                const SwTextINetFormat* pTextAttr2 = rINetFormat.GetTextINetFormat();
-                if( pTextAttr2 )
-                {
-                    const_cast<SwTextINetFormat*>(pTextAttr2)->SetVisited(true);
-                    const_cast<SwTextINetFormat*>(pTextAttr2)->SetVisitedValid(true);
-                }
-                bRet = true;
+                const_cast<SwTextINetFormat*>(pTextAttr)->SetVisited(true);
+                const_cast<SwTextINetFormat*>(pTextAttr)->SetVisitedValid(true);
             }
+            bRet = true;
         }
     }
 
@@ -107,16 +103,14 @@ sal_Bool SAL_CALL SwAccessibleHyperlink::doAccessibleAction( sal_Int32 nIndex )
 
 OUString SAL_CALL SwAccessibleHyperlink::getAccessibleActionDescription(
         sal_Int32 nIndex )
-        throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     if(nIndex != 0)
         throw lang::IndexOutOfBoundsException();
 
-    const SwTextAttr *pTextAttr = GetTextAttr();
-    if( pTextAttr )
+    SolarMutexGuard g;
+    if (SwFormatINetFormat const*const pINetFormat = GetTextAttr())
     {
-        const SwFormatINetFormat& rINetFormat = pTextAttr->GetINetFormat();
-        return rINetFormat.GetValue();
+        return pINetFormat->GetValue();
     }
 
     return OUString();
@@ -124,7 +118,6 @@ OUString SAL_CALL SwAccessibleHyperlink::getAccessibleActionDescription(
 
 uno::Reference< XAccessibleKeyBinding > SAL_CALL
     SwAccessibleHyperlink::getAccessibleActionKeyBinding( sal_Int32 )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     uno::Reference< XAccessibleKeyBinding > xKeyBinding;
 
@@ -148,33 +141,29 @@ uno::Reference< XAccessibleKeyBinding > SAL_CALL
 // XAccessibleHyperlink
 uno::Any SAL_CALL SwAccessibleHyperlink::getAccessibleActionAnchor(
         sal_Int32 nIndex)
-        throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
     uno::Any aRet;
     if(nIndex != 0)
         throw lang::IndexOutOfBoundsException();
-    OUString text( xPara->GetString() );
-    OUString retText =  text.copy(nStartIdx, nEndIdx - nStartIdx);
+    OUString text( m_xParagraph->GetString() );
+    OUString retText =  text.copy(m_nStartIndex, m_nEndIndex - m_nStartIndex);
     aRet <<= retText;
     return aRet;
 }
 
 uno::Any SAL_CALL SwAccessibleHyperlink::getAccessibleActionObject(
             sal_Int32 nIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
     if(nIndex != 0)
         throw lang::IndexOutOfBoundsException();
-    const SwTextAttr *pTextAttr = GetTextAttr();
     OUString retText;
-    if( pTextAttr )
+    if (SwFormatINetFormat const*const pINetFormat = GetTextAttr())
     {
-        const SwFormatINetFormat& rINetFormat = pTextAttr->GetINetFormat();
-        retText = OUString( rINetFormat.GetValue() );
+        retText = pINetFormat->GetValue();
     }
     uno::Any aRet;
     aRet <<= retText;
@@ -182,47 +171,41 @@ uno::Any SAL_CALL SwAccessibleHyperlink::getAccessibleActionObject(
 }
 
 sal_Int32 SAL_CALL SwAccessibleHyperlink::getStartIndex()
-        throw (uno::RuntimeException, std::exception)
 {
-    return nStartIdx;
+    return m_nStartIndex;
 }
 
 sal_Int32 SAL_CALL SwAccessibleHyperlink::getEndIndex()
-        throw (uno::RuntimeException, std::exception)
 {
-    return nEndIdx;
+    return m_nEndIndex;
 }
 
 sal_Bool SAL_CALL SwAccessibleHyperlink::isValid(  )
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    if (xPara.is())
+    if (m_xParagraph.is())
     {
-        const SwTextAttr *pTextAttr = GetTextAttr();
-        OUString sText;
-        if( pTextAttr )
+        if (SwFormatINetFormat const*const pINetFormat = GetTextAttr())
         {
-            const SwFormatINetFormat& rINetFormat = pTextAttr->GetINetFormat();
-            sText = OUString( rINetFormat.GetValue() );
+            OUString const sText(pINetFormat->GetValue());
             OUString sToken = "#";
             sal_Int32 nPos = sText.indexOf(sToken);
             if (nPos==0)//document link
             {
                 uno::Reference< lang::XMultiServiceFactory > xFactory( ::comphelper::getProcessServiceFactory() );
                 if( ! xFactory.is() )
-                    return sal_False;
+                    return false;
                 uno::Reference< css::frame::XDesktop > xDesktop( xFactory->createInstance( "com.sun.star.frame.Desktop" ),
                     uno::UNO_QUERY );
                 if( !xDesktop.is() )
-                    return sal_False;
+                    return false;
                 uno::Reference< lang::XComponent > xComp;
                 xComp = xDesktop->getCurrentComponent();
                 if( !xComp.is() )
-                    return sal_False;
+                    return false;
                 uno::Reference< css::document::XLinkTargetSupplier >  xLTS(xComp, uno::UNO_QUERY);
                 if ( !xLTS.is())
-                    return sal_False;
+                    return false;
 
                 uno::Reference< css::container::XNameAccess > xLinks = xLTS->getLinks();
                 uno::Reference< css::container::XNameAccess > xSubLinks;
@@ -237,20 +220,22 @@ sal_Bool SAL_CALL SwAccessibleHyperlink::isValid(  )
                     aAny = xLinks->getByName( aLink );
                     aAny >>= xSubLinks;
                     if (xSubLinks->hasByName(sText.copy(1)) )
-                        return sal_True;
+                        return true;
                 }
             }
             else//internet
-                return sal_True;
+                return true;
         }
     }//xpara valid
-    return sal_False;
+    return false;
 }
 
 void SwAccessibleHyperlink::Invalidate()
 {
     SolarMutexGuard aGuard;
-    xPara = nullptr;
+    m_xParagraph = nullptr;
+    m_pHyperlink = nullptr;
+    EndListeningAll();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

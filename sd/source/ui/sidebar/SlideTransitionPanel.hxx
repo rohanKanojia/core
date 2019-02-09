@@ -20,7 +20,8 @@
 #define INCLUDED_SD_SOURCE_UI_SIDEBAR_SLIDETRANSITIONPANEL_HXX
 
 #include "PanelBase.hxx"
-#include <sfx2/sidebar/ControlFactory.hxx>
+
+namespace com { namespace sun { namespace star { namespace frame { class XFrame; } } } }
 
 namespace sd { namespace sidebar {
 
@@ -32,7 +33,7 @@ public:
         vcl::Window* pParentWindow,
         ViewShellBase& rViewShellBase,
         const css::uno::Reference<css::frame::XFrame>& rxFrame );
-    virtual ~SlideTransitionPanel();
+    virtual ~SlideTransitionPanel() override;
 
     // ILayoutableWindow
     virtual css::ui::LayoutSize GetHeightForWidth (const sal_Int32 nWidth) override;

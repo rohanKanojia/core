@@ -24,12 +24,10 @@
 
 namespace psp {
 
-namespace orientation {
-enum type {
+enum class orientation {
     Portrait,
     Landscape
 };
-}
 
 struct VCL_DLLPUBLIC JobData
 {
@@ -44,8 +42,9 @@ struct VCL_DLLPUBLIC JobData
     int                     m_nPSLevel;     // 0: no override, else languagelevel to use
     int                     m_nColorDevice; // 0: no override, -1 grey scale, +1 color
     int                     m_nPDFDevice;   // 0: no override, -1 PostScript, +1: Automatically PDF, +2: Explicitly PDF
-    orientation::type       m_eOrientation;
-    OUString         m_aPrinterName;
+    orientation             m_eOrientation;
+    OUString                m_aPrinterName;
+    bool                    m_bPapersizeFromSetup;
     const PPDParser*        m_pParser;
     PPDContext              m_aContext;
 
@@ -61,6 +60,7 @@ struct VCL_DLLPUBLIC JobData
             m_nColorDevice( 0 ),
             m_nPDFDevice( 0 ),
             m_eOrientation( orientation::Portrait ),
+            m_bPapersizeFromSetup( false ),
             m_pParser( nullptr ) {}
 
     JobData& operator=(const psp::JobData& rRight);
@@ -68,15 +68,15 @@ struct VCL_DLLPUBLIC JobData
     JobData( const JobData& rData ) { *this = rData; }
 
     void setCollate( bool bCollate );
-    bool setPaper( int nWidth, int nHeight ); // dimensions in pt
-    bool setPaperBin( int nPaperBin );
+    void setPaper( int nWidth, int nHeight ); // dimensions in pt
+    void setPaperBin( int nPaperBin );
     void resolveDefaultBackend();
     void setDefaultBackend(bool bUsePDF);
 
     // creates a new buffer using new
     // it is up to the user to delete it again
     bool getStreamBuffer( void*& pData, sal_uInt32& bytes );
-    static bool constructFromStreamBuffer( void* pData, sal_uInt32 bytes, JobData& rJobData );
+    static bool constructFromStreamBuffer( const void* pData, sal_uInt32 bytes, JobData& rJobData );
 };
 
 } // namespace

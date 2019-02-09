@@ -19,13 +19,16 @@
 
 #include <sal/config.h>
 
-#include <cerrno>
+#include <algorithm>
 
 #if defined(_WIN32)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
+#include <mmsystem.h>
 #elif defined UNX
 #include <unistd.h>
-#include <limits.h>
 #include <math.h>
 #include <sys/time.h>
 #endif
@@ -34,21 +37,22 @@
 #ifdef __MACH__
 #include <mach/clock.h>
 #include <mach/mach.h>
+#include <mach/mach_time.h>
 #endif
 
 #include <sal/log.hxx>
+#include <rtl/math.hxx>
 #include <tools/time.hxx>
 #include <osl/diagnose.h>
+#include <com/sun/star/util/DateTime.hpp>
 
-#if defined(SOLARIS) && defined(__GNUC__)
+#include <systemdatetime.hxx>
+
+#if defined(__sun) && defined(__GNUC__)
 extern long altzone;
 #endif
 
 namespace {
-
-    const sal_Int64 secMask  = SAL_CONST_INT64(1000000000);
-    const sal_Int64 minMask  = SAL_CONST_INT64(100000000000);
-    const sal_Int64 hourMask = SAL_CONST_INT64(10000000000000);
 
     const sal_Int64 nanoSecInSec = 1000000000;
     const sal_Int16 secInMin     = 60;
@@ -92,52 +96,8 @@ namespace tools {
 
 Time::Time( TimeInitSystem )
 {
-#if defined(_WIN32)
-    SYSTEMTIME aDateTime;
-    GetLocalTime( &aDateTime );
-
-    // construct time
-    nTime = aDateTime.wHour         * hourMask +
-            aDateTime.wMinute       * minMask +
-            aDateTime.wSecond       * secMask +
-            aDateTime.wMilliseconds * 1000000;
-#else
-    // determine time
-    struct timespec tsTime;
-#if defined( __MACH__ )
-    // OS X does not have clock_gettime, use clock_get_time
-    clock_serv_t cclock;
-    mach_timespec_t mts;
-    host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
-    clock_get_time(cclock, &mts);
-    mach_port_deallocate(mach_task_self(), cclock);
-    tsTime.tv_sec  = mts.tv_sec;
-    tsTime.tv_nsec = mts.tv_nsec;
-#else
-    // CLOCK_REALTIME should be supported
-    // on any modern Unix, but be extra cautious
-    if (clock_gettime(CLOCK_REALTIME, &tsTime) != 0)
-    {
-        struct timeval tvTime;
-        OSL_VERIFY( gettimeofday(&tvTime, nullptr) != 0 );
-        tsTime.tv_sec  = tvTime.tv_sec;
-        tsTime.tv_nsec = tvTime.tv_usec * 1000;
-    }
-#endif // __MACH__
-
-    // construct time
-    struct tm aTime;
-    time_t nTmpTime = tsTime.tv_sec;
-    if ( localtime_r( &nTmpTime, &aTime ) )
-    {
-        nTime = aTime.tm_hour * hourMask +
-                aTime.tm_min  * minMask +
-                aTime.tm_sec  * secMask +
-                tsTime.tv_nsec;
-    }
-    else
+    if ( !GetSystemDateTime( nullptr, &nTime ) )
         nTime = 0;
-#endif // WNT
 }
 
 Time::Time( const tools::Time& rTime )
@@ -170,9 +130,9 @@ void tools::Time::init( sal_uInt32 nHour, sal_uInt32 nMin, sal_uInt32 nSec, sal_
 
     // construct time
     nTime = nNanoSec +
-            nSec  * secMask +
-            nMin  * minMask +
-            nHour * hourMask;
+            nSec  * SEC_MASK +
+            nMin  * MIN_MASK +
+            nHour * HOUR_MASK;
 }
 
 void tools::Time::SetHour( sal_uInt16 nNewHour )
@@ -184,9 +144,9 @@ void tools::Time::SetHour( sal_uInt16 nNewHour )
 
     nTime = nSign *
             ( nNanoSec +
-              nSec  * secMask +
-              nMin  * minMask +
-              nNewHour * hourMask );
+              nSec  * SEC_MASK +
+              nMin  * MIN_MASK +
+              nNewHour * HOUR_MASK );
 }
 
 void tools::Time::SetMin( sal_uInt16 nNewMin )
@@ -201,9 +161,9 @@ void tools::Time::SetMin( sal_uInt16 nNewMin )
 
     nTime = nSign *
             ( nNanoSec +
-              nSec  * secMask +
-              nNewMin  * minMask +
-              nHour * hourMask );
+              nSec  * SEC_MASK +
+              nNewMin  * MIN_MASK +
+              nHour * HOUR_MASK );
 }
 
 void tools::Time::SetSec( sal_uInt16 nNewSec )
@@ -218,9 +178,9 @@ void tools::Time::SetSec( sal_uInt16 nNewSec )
 
     nTime = nSign *
             ( nNanoSec +
-              nNewSec  * secMask +
-              nMin  * minMask +
-              nHour * hourMask );
+              nNewSec  * SEC_MASK +
+              nMin  * MIN_MASK +
+              nHour * HOUR_MASK );
 }
 
 void tools::Time::SetNanoSec( sal_uInt32 nNewNanoSec )
@@ -235,9 +195,9 @@ void tools::Time::SetNanoSec( sal_uInt32 nNewNanoSec )
 
     nTime = nSign *
             ( nNewNanoSec +
-              nSec  * secMask +
-              nMin  * minMask +
-              nHour * hourMask );
+              nSec  * SEC_MASK +
+              nMin  * MIN_MASK +
+              nHour * HOUR_MASK );
 }
 
 sal_Int64 tools::Time::GetNSFromTime() const
@@ -283,7 +243,7 @@ sal_Int32 tools::Time::GetMSFromTime() const
            ( nNanoSec/1000000 +
              nSec  * 1000 +
              nMin  * 60000 +
-             nHour * 360000 );
+             nHour * 3600000 );
 }
 
 void tools::Time::MakeTimeFromMS( sal_Int32 nMS )
@@ -311,6 +271,78 @@ double tools::Time::GetTimeInDays() const
     double nNanoSec   = GetNanoSec();
 
     return (nHour + (nMin / 60) + (nSec / (minInHour * secInMin)) + (nNanoSec / (minInHour * secInMin * nanoSecInSec))) / 24 * nSign;
+}
+
+// static
+void tools::Time::GetClock( double fTimeInDays,
+                            sal_uInt16& nHour, sal_uInt16& nMinute, sal_uInt16& nSecond,
+                            double& fFractionOfSecond, int nFractionDecimals )
+{
+    const double fTime = fTimeInDays - rtl::math::approxFloor(fTimeInDays); // date part absent
+
+    // If 0 then full day (or no day), shortcut.
+    // If < 0 then approxFloor() effectively returned the ceiling (note this
+    // also holds for negative fTimeInDays values) because of a near identical
+    // value, shortcut this to a full day as well.
+    // If >= 1.0 (actually == 1.0) then fTimeInDays is a negative small value
+    // not significant for a representable time and approxFloor() returned -1,
+    // shortcut to 0:0:0, otherwise it would become 24:0:0.
+    if (fTime <= 0.0 || fTime >= 1.0)
+    {
+        nHour = nMinute = nSecond = 0;
+        fFractionOfSecond = 0.0;
+        return;
+    }
+
+    // In seconds, including milli and nano.
+    const double fRawSeconds = fTime * tools::Time::secondPerDay;
+
+    // Round to nanoseconds most, which is the highest resolution this could be
+    // influenced by, but if the original value included a date round to at
+    // most 14 significant digits (including adding 4 for *86400), otherwise we
+    // might end up with a fake precision of h:m:s.999999986 which in fact
+    // should had been h:m:s+1
+    // BUT, leave at least 2 decimals to round. Which shouldn't be a problem in
+    // practice because class Date can calculate only 8-digit days for it's
+    // sal_Int16 year range, which exactly leaves us with 14-4-8=2.
+    int nDec = 9;
+    const double fAbsTimeInDays = fabs( fTimeInDays);
+    if (fAbsTimeInDays >= 1.0)
+    {
+        const int nDig = static_cast<int>(ceil( log10( fAbsTimeInDays)));
+        nDec = std::max( std::min( 10 - nDig, 9), 2);
+    }
+    double fSeconds = rtl::math::round( fRawSeconds, nDec);
+
+    // If this ended up as a full day the original value was very very close
+    // but not quite. Take that.
+    if (fSeconds >= tools::Time::secondPerDay)
+        fSeconds = fRawSeconds;
+
+    // Now do not round values (specifically not up), but truncate to the next
+    // magnitude, so 23:59:59.99 is still 23:59:59 and not 24:00:00 (or even
+    // 00:00:00 which Excel does).
+    nHour = fSeconds / tools::Time::secondPerHour;
+    fSeconds -= nHour * tools::Time::secondPerHour;
+    nMinute = fSeconds / tools::Time::secondPerMinute;
+    fSeconds -= nMinute * tools::Time::secondPerMinute;
+    nSecond = fSeconds;
+    fSeconds -= nSecond;
+
+    assert(fSeconds < 1.0);     // or back to the drawing board..
+
+    if (nFractionDecimals > 0)
+    {
+        // Do not simply round the fraction, otherwise .999 would end up as .00
+        // again. Truncate instead if rounding would round up into an integer
+        // value.
+        fFractionOfSecond = rtl::math::round( fSeconds, nFractionDecimals);
+        if (fFractionOfSecond >= 1.0)
+            fFractionOfSecond = rtl::math::pow10Exp( std::trunc(
+                        rtl::math::pow10Exp( fSeconds, nFractionDecimals)), -nFractionDecimals);
+    }
+    else
+        fFractionOfSecond = fSeconds;
 }
 
 Time& tools::Time::operator =( const tools::Time& rTime )
@@ -363,7 +395,7 @@ Time tools::Time::GetUTCOffset()
         nTempTime += aTimeZone.StandardBias;
     else if ( nTimeZoneRet == TIME_ZONE_ID_DAYLIGHT )
         nTempTime += aTimeZone.DaylightBias;
-    tools::Time aTime( 0, (sal_uInt16)abs( nTempTime ) );
+    tools::Time aTime( 0, static_cast<sal_uInt16>(abs( nTempTime )) );
     if ( nTempTime > 0 )
         aTime = -aTime;
     return aTime;
@@ -386,7 +418,7 @@ Time tools::Time::GetUTCOffset()
         nTime = time( nullptr );
         localtime_r( &nTime, &aTM );
         nLocalTime = mktime( &aTM );
-#if defined( SOLARIS )
+#if defined(__sun)
         // Solaris gmtime_r() seems not to handle daylight saving time
         // flags correctly
         nUTC = nLocalTime + ( aTM.tm_isdst == 0 ? timezone : altzone );
@@ -402,7 +434,7 @@ Time tools::Time::GetUTCOffset()
     }
 
     nTempTime = abs( nCacheSecOffset );
-    tools::Time aTime( 0, (sal_uInt16)nTempTime );
+    tools::Time aTime( 0, static_cast<sal_uInt16>(nTempTime) );
     if ( nCacheSecOffset < 0 )
         aTime = -aTime;
     return aTime;
@@ -411,30 +443,54 @@ Time tools::Time::GetUTCOffset()
 
 sal_uInt64 tools::Time::GetSystemTicks()
 {
-#if defined(_WIN32)
-    static LARGE_INTEGER nTicksPerSecond;
-    static bool bTicksPerSecondInitialized = false;
-    if (!bTicksPerSecondInitialized)
-    {
-        QueryPerformanceFrequency(&nTicksPerSecond);
-        bTicksPerSecondInitialized = true;
-    }
+    return tools::Time::GetMonotonicTicks() / 1000;
+}
 
-    LARGE_INTEGER nPerformanceCount;
-    QueryPerformanceCounter(&nPerformanceCount);
-
-    return static_cast<sal_uInt64>(
-        (nPerformanceCount.QuadPart*1000)/nTicksPerSecond.QuadPart);
-#else
-    timeval tv;
-    int n = gettimeofday (&tv, nullptr);
-    if (n == -1) {
-        int e = errno;
-        SAL_WARN("tools.datetime", "gettimeofday failed: " << e);
-    }
-    return static_cast<sal_uInt64>(tv.tv_sec) * 1000
-        + (static_cast<sal_uInt64>(tv.tv_usec) + 500) / 1000;
+#ifdef _WIN32
+static LARGE_INTEGER initPerformanceFrequency()
+{
+    LARGE_INTEGER nTicksPerSecond = { 0, 0 };
+    if (!QueryPerformanceFrequency(&nTicksPerSecond))
+        nTicksPerSecond.QuadPart = 0;
+    return nTicksPerSecond;
+}
 #endif
+
+sal_uInt64 tools::Time::GetMonotonicTicks()
+{
+#ifdef _WIN32
+    static const LARGE_INTEGER nTicksPerSecond = initPerformanceFrequency();
+    if (nTicksPerSecond.QuadPart > 0)
+    {
+        LARGE_INTEGER nPerformanceCount;
+        QueryPerformanceCounter(&nPerformanceCount);
+        return static_cast<sal_uInt64>(
+            ( nPerformanceCount.QuadPart * 1000 * 1000 ) / nTicksPerSecond.QuadPart );
+    }
+    else
+    {
+        return static_cast<sal_uInt64>( timeGetTime() * 1000 );
+    }
+#else
+    sal_uInt64 nMicroSeconds;
+#ifdef __MACH__
+    static mach_timebase_info_data_t info = { 0, 0 };
+    if ( 0 == info.numer )
+        mach_timebase_info( &info );
+    nMicroSeconds = mach_absolute_time() * static_cast<double>(info.numer / info.denom) / 1000;
+#else
+#if defined(USE_CLOCK_GETTIME)
+    struct timespec currentTime;
+    clock_gettime( CLOCK_MONOTONIC, &currentTime );
+    nMicroSeconds = currentTime.tv_sec * 1000 * 1000 + currentTime.tv_nsec / 1000;
+#else
+    struct timeval currentTime;
+    gettimeofday( &currentTime, nullptr );
+    nMicroSeconds = currentTime.tv_sec * 1000 * 1000 + currentTime.tv_usec;
+#endif
+#endif // __MACH__
+    return nMicroSeconds;
+#endif // _WIN32
 }
 
 } /* namespace tools */

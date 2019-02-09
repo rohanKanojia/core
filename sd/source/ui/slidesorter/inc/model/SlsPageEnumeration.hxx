@@ -20,12 +20,8 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_MODEL_SLSPAGEENUMERATION_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_MODEL_SLSPAGEENUMERATION_HXX
 
-#include <sal/types.h>
-
-#include "pres.hxx"
-
-#include "model/SlsEnumeration.hxx"
-#include "model/SlsSharedPageDescriptor.hxx"
+#include <model/SlsEnumeration.hxx>
+#include <model/SlsSharedPageDescriptor.hxx>
 
 #include <functional>
 #include <memory>
@@ -63,7 +59,7 @@ public:
     */
     PageEnumeration (const PageEnumeration& rEnumeration);
 
-    virtual ~PageEnumeration();
+    virtual ~PageEnumeration() override;
 
     /** Create and return an exact copy of the called object.
     */
@@ -97,8 +93,6 @@ private:
     */
     PageEnumeration (::std::unique_ptr<Enumeration<SharedPageDescriptor> > && pImpl);
 
-    // Default constructor not implemented.
-    PageEnumeration();
 };
 
 } } } // end of namespace ::sd::slidesorter::model

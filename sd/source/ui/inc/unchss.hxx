@@ -20,7 +20,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_UNCHSS_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_UNCHSS_HXX
 
-#include "sdundo.hxx"
+#include <memory>
+
+#include <sdundo.hxx>
 
 class SfxItemSet;
 class SfxStyleSheet;
@@ -28,22 +30,18 @@ class SdDrawDocument;
 
 class StyleSheetUndoAction : public SdUndoAction
 {
-    SfxStyleSheet*  pStyleSheet;
+    SfxStyleSheet*  mpStyleSheet;
 
-    SfxItemSet*     pNewSet;
-    SfxItemSet*     pOldSet;
-    OUString        aComment;
+    std::unique_ptr<SfxItemSet> mpNewSet;
+    std::unique_ptr<SfxItemSet> mpOldSet;
 
 public:
     StyleSheetUndoAction(SdDrawDocument* pTheDoc,
                          SfxStyleSheet*  pTheStyleSheet,
                          const SfxItemSet* pTheNewItemSet);
 
-    virtual ~StyleSheetUndoAction();
     virtual void Undo() override;
     virtual void Redo() override;
-
-    virtual OUString GetComment() const override;
 };
 
 #endif // INCLUDED_SD_SOURCE_UI_INC_UNCHSS_HXX

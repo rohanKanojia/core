@@ -28,27 +28,25 @@ using namespace ZipUtils;
 
 Inflater::Inflater(bool bNoWrap)
 : bFinished(false),
-  bSetParams(false),
   bNeedDict(false),
   nOffset(0),
   nLength(0),
-  nLastInflateError(0),
-  pStream(nullptr)
+  nLastInflateError(0)
 {
-    pStream = new z_stream;
+    pStream.reset(new z_stream);
     /* memset to 0 to set zalloc/opaque etc */
-    memset (pStream, 0, sizeof(*pStream));
+    memset (pStream.get(), 0, sizeof(*pStream));
     sal_Int32 nRes;
-    nRes = inflateInit2(pStream, bNoWrap ? -MAX_WBITS : MAX_WBITS);
+    nRes = inflateInit2(pStream.get(), bNoWrap ? -MAX_WBITS : MAX_WBITS);
     switch (nRes)
     {
         case Z_OK:
             break;
         case Z_MEM_ERROR:
-            delete pStream;
+            pStream.reset();
             break;
         case Z_STREAM_ERROR:
-            delete pStream;
+            pStream.reset();
             break;
         default:
             break;
@@ -60,7 +58,7 @@ Inflater::~Inflater()
     end();
 }
 
-void SAL_CALL Inflater::setInput( const Sequence< sal_Int8 >& rBuffer )
+void Inflater::setInput( const Sequence< sal_Int8 >& rBuffer )
 {
     sInBuffer = rBuffer;
     nOffset = 0;
@@ -68,7 +66,7 @@ void SAL_CALL Inflater::setInput( const Sequence< sal_Int8 >& rBuffer )
 }
 
 
-sal_Int32 SAL_CALL Inflater::doInflateSegment( Sequence< sal_Int8 >& rBuffer, sal_Int32 nNewOffset, sal_Int32 nNewLength )
+sal_Int32 Inflater::doInflateSegment( Sequence< sal_Int8 >& rBuffer, sal_Int32 nNewOffset, sal_Int32 nNewLength )
 {
     if (nNewOffset < 0 || nNewLength < 0 || nNewOffset + nNewLength > rBuffer.getLength())
     {
@@ -77,18 +75,17 @@ sal_Int32 SAL_CALL Inflater::doInflateSegment( Sequence< sal_Int8 >& rBuffer, sa
     return doInflateBytes(rBuffer, nNewOffset, nNewLength);
 }
 
-void SAL_CALL Inflater::end(  )
+void Inflater::end(  )
 {
-    if (pStream != nullptr)
+    if (pStream)
     {
 #if !defined Z_PREFIX
-        inflateEnd(pStream);
+        inflateEnd(pStream.get());
 #else
-        z_inflateEnd(pStream);
+        z_inflateEnd(pStream.get());
 #endif
-        delete pStream;
+        pStream.reset();
     }
-    pStream = nullptr;
 }
 
 sal_Int32 Inflater::doInflateBytes (Sequence < sal_Int8 >  &rBuffer, sal_Int32 nNewOffset, sal_Int32 nNewLength)
@@ -107,15 +104,16 @@ sal_Int32 Inflater::doInflateBytes (Sequence < sal_Int8 >  &rBuffer, sal_Int32 n
     pStream->avail_out = nNewLength;
 
 #if !defined Z_PREFIX
-    sal_Int32 nResult = ::inflate(pStream, Z_PARTIAL_FLUSH);
+    sal_Int32 nResult = ::inflate(pStream.get(), Z_PARTIAL_FLUSH);
 #else
-    sal_Int32 nResult = ::z_inflate(pStream, Z_PARTIAL_FLUSH);
+    sal_Int32 nResult = ::z_inflate(pStream.get(), Z_PARTIAL_FLUSH);
 #endif
 
     switch (nResult)
     {
         case Z_STREAM_END:
             bFinished = true;
+            [[fallthrough]];
         case Z_OK:
             nOffset += nLength - pStream->avail_in;
             nLength = pStream->avail_in;

@@ -26,33 +26,27 @@
 class SVX_DLLPUBLIC XFillBmpTileOffsetXItem : public SfxUInt16Item
 {
 public:
-                            static SfxPoolItem* CreateDefault();
                             XFillBmpTileOffsetXItem( sal_uInt16 nOffX = 0 );
-                            SVX_DLLPRIVATE XFillBmpTileOffsetXItem( SvStream& rIn );
 
     SVX_DLLPRIVATE virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
-    SVX_DLLPRIVATE virtual SfxPoolItem*    Create( SvStream& rIn, sal_uInt16 nVer ) const override;
 
     SVX_DLLPRIVATE virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                                 MapUnit eCoreMetric,
+                                                 MapUnit ePresMetric,
+                                                 OUString &rText, const IntlWrapper& ) const override;
 };
 
 class SVX_DLLPUBLIC XFillBmpTileOffsetYItem : public SfxUInt16Item
 {
 public:
-                            static SfxPoolItem* CreateDefault();
                             XFillBmpTileOffsetYItem( sal_uInt16 nOffX = 0 );
-                            SVX_DLLPRIVATE XFillBmpTileOffsetYItem( SvStream& rIn );
 
     SVX_DLLPRIVATE virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
-    SVX_DLLPRIVATE virtual SfxPoolItem*    Create( SvStream& rIn, sal_uInt16 nVer ) const override;
 
     SVX_DLLPRIVATE virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                                 MapUnit eCoreMetric,
+                                                 MapUnit ePresMetric,
+                                                 OUString &rText, const IntlWrapper& ) const override;
 };
 
 #endif

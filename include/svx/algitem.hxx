@@ -19,21 +19,23 @@
 #ifndef INCLUDED_SVX_ALGITEM_HXX
 #define INCLUDED_SVX_ALGITEM_HXX
 
-#include <svx/svxids.hrc>
+#include <com/sun/star/uno/Any.hxx>
+#include <editeng/svxenum.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 #include <svl/poolitem.hxx>
 #include <svl/eitem.hxx>
-#include <editeng/svxenum.hxx>
 #include <svx/svxdllapi.h>
 
+class IntlWrapper;
+class SfxItemPool;
 class SvStream;
 
-class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxOrientationItem: public SfxEnumItem
+class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxOrientationItem: public SfxEnumItem<SvxCellOrientation>
 {
 public:
-    static SfxPoolItem* CreateDefault();
-
     SvxOrientationItem(
-        const SvxCellOrientation eOrientation /*= SVX_ORIENTATION_STANDARD*/,
+        const SvxCellOrientation eOrientation,
         const sal_uInt16 nId );
 
     SvxOrientationItem(
@@ -41,30 +43,29 @@ public:
         const sal_uInt16 nId );
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     virtual bool            QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool            PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
     virtual sal_uInt16      GetValueCount() const override;
-    static OUString         GetValueText( sal_uInt16 nVal );
+    static OUString         GetValueText( SvxCellOrientation nVal );
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual SfxPoolItem*    Create( SvStream& rStream, sal_uInt16 nVer ) const override;
 
-    inline  SvxOrientationItem& operator=(const SvxOrientationItem& rOrientation)
+    SvxOrientationItem& operator=(const SvxOrientationItem& rOrientation)
             {
                 SetValue( rOrientation.GetValue() );
                 return *this;
             }
+    SvxOrientationItem(SvxOrientationItem const &) = default; // SfxPoolItem copy function dichotomy
 
     /** Returns sal_True, if the item represents STACKED state. */
     bool                    IsStacked() const;
     /** Returns the rotation this item represents (returns nStdAngle for STANDARD and STACKED state). */
-    sal_Int32               GetRotation( sal_Int32 nStdAngle = 0 ) const;
-    /** Fills this item according to passed item values. */
-    void                    SetFromRotation( sal_Int32 nRotation, bool bStacked );
+    sal_Int32               GetRotation( sal_Int32 nStdAngle ) const;
 };
 
 class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxMarginItem: public SfxPoolItem
@@ -79,12 +80,11 @@ public:
     SvxMarginItem( sal_Int16 nLeft, sal_Int16 nTop /*= 0*/,
                    sal_Int16 nRight /*= 0*/, sal_Int16 nBottom /*= 0*/,
                    const sal_uInt16 nId  );
-    SvxMarginItem( const SvxMarginItem& );
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     virtual bool             operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*     Clone( SfxItemPool *pPool = nullptr ) const override;
@@ -103,7 +103,7 @@ public:
             sal_Int16       GetBottomMargin() const {return nBottomMargin; }
             void            SetBottomMargin(sal_Int16 nBottom);
 
-    inline  SvxMarginItem& operator=(const SvxMarginItem& rMargin)
+    SvxMarginItem& operator=(const SvxMarginItem& rMargin)
             {
                 nLeftMargin = rMargin.nLeftMargin;
                 nTopMargin = rMargin.nTopMargin;
@@ -111,6 +111,7 @@ public:
                 nBottomMargin = rMargin.nBottomMargin;
                 return *this;
             }
+    SvxMarginItem(SvxMarginItem const &) = default; // SfxPoolItem copy function dichotomy
 };
 
 #endif

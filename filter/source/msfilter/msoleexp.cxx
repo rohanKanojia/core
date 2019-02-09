@@ -23,12 +23,14 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/embed/XEmbeddedObject.hpp>
 #include <com/sun/star/embed/XEmbedPersist.hpp>
 #include <com/sun/star/embed/NoVisualAreaSizeException.hpp>
 #include <com/sun/star/embed/EmbedStates.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/awt/Size.hpp>
 #include <com/sun/star/embed/Aspects.hpp>
+#include <osl/diagnose.h>
 #include <comphelper/classids.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/docfac.hxx>
@@ -37,17 +39,18 @@
 #include <sfx2/fcontnr.hxx>
 #include <sot/formats.hxx>
 #include <sot/storage.hxx>
+#include <comphelper/fileformat.h>
 #include <comphelper/processfactory.hxx>
 #include <unotools/streamwrap.hxx>
 #include <comphelper/storagehelper.hxx>
 #include <svtools/embedhlp.hxx>
 #include <filter/msfilter/msdffimp.hxx>
 
-#include "filter/msfilter/msoleexp.hxx"
+#include <filter/msfilter/msoleexp.hxx>
 
 using namespace ::com::sun::star;
 
-SvGlobalName GetEmbeddedVersion( const SvGlobalName& aAppName )
+static SvGlobalName GetEmbeddedVersion( const SvGlobalName& aAppName )
 {
     if ( aAppName == SvGlobalName( SO3_SM_CLASSID_60 ) )
             return SvGlobalName( SO3_SM_OLE_EMBED_CLASSID_8 );
@@ -65,7 +68,7 @@ SvGlobalName GetEmbeddedVersion( const SvGlobalName& aAppName )
     return SvGlobalName();
 }
 
-OUString GetStorageType( const SvGlobalName& aEmbName )
+static OUString GetStorageType( const SvGlobalName& aEmbName )
 {
     if ( aEmbName == SvGlobalName( SO3_SM_OLE_EMBED_CLASSID_8 ) )
         return OUString( "LibreOffice.MathDocument.1" );
@@ -82,7 +85,7 @@ OUString GetStorageType( const SvGlobalName& aEmbName )
     return OUString();
 }
 
-bool UseOldMSExport()
+static bool UseOldMSExport()
 {
     uno::Reference< lang::XMultiServiceFactory > xProvider(
         configuration::theDefaultProvider::get(
@@ -108,7 +111,7 @@ bool UseOldMSExport()
     {
     }
 
-    OSL_FAIL( "Could not get access to configuration entry!\n" );
+    OSL_FAIL( "Could not get access to configuration entry!" );
     return false;
 }
 
@@ -118,23 +121,23 @@ void SvxMSExportOLEObjects::ExportOLEObject( const css::uno::Reference < css::em
     ExportOLEObject( aObj, rDestStg );
 }
 
-void SvxMSExportOLEObjects::ExportOLEObject( svt::EmbeddedObjectRef& rObj, SotStorage& rDestStg )
+void SvxMSExportOLEObjects::ExportOLEObject( svt::EmbeddedObjectRef const & rObj, SotStorage& rDestStg )
 {
     SvGlobalName aOwnGlobalName;
     SvGlobalName aObjName( rObj->getClassID() );
     std::shared_ptr<const SfxFilter> pExpFilter;
     {
-        static struct _ObjExpType {
+        static struct ObjExpType {
             sal_uInt32 nFlag;
             const char* pFilterNm;
             // GlobalNameId
-            struct _GlobalNameIds {
+            struct GlobalNameIds {
                 sal_uInt32 n1;
                 sal_uInt16 n2, n3;
                 sal_uInt8 b8, b9, b10, b11, b12, b13, b14, b15;
             }
             aGlNmIds[4];
-        } aArr[] = {
+        } const aArr[] = {
             { OLE_STARMATH_2_MATHTYPE, "MathType 3.x",
                 {{SO3_SM_CLASSID_60}, {SO3_SM_CLASSID_50},
                  {SO3_SM_CLASSID_40}, {SO3_SM_CLASSID_30 }}},
@@ -152,18 +155,17 @@ void SvxMSExportOLEObjects::ExportOLEObject( svt::EmbeddedObjectRef& rObj, SotSt
                  {SO3_SCH_CLASSID_40}, {SO3_SCH_CLASSID_30 }}},
             { 0, "",
                 {{SO3_SDRAW_CLASSID_60}, {SO3_SDRAW_CLASSID_50},    // SJ: !!!! SO3_SDRAW_CLASSID is only available up from
-                 {SO3_SDRAW_CLASSID_60}, {SO3_SDRAW_CLASSID_50 }}}, // ver 5.0, it is purpose to have double entrys here.
+                 {SO3_SDRAW_CLASSID_60}, {SO3_SDRAW_CLASSID_50 }}}, // ver 5.0, it is purpose to have double entries here.
 
             { 0xffff,nullptr,
                 {{SO3_SDRAW_CLASSID_60}, {SO3_SDRAW_CLASSID_50},
                 {SO3_SDRAW_CLASSID_60}, {SO3_SDRAW_CLASSID_50}}}
         };
 
-        for( const _ObjExpType* pArr = aArr; !pExpFilter && ( pArr->nFlag != 0xffff ); ++pArr )
+        for( const ObjExpType* pArr = aArr; !pExpFilter && ( pArr->nFlag != 0xffff ); ++pArr )
         {
-            for ( int n = 0; n < 4; ++n )
+            for (const ObjExpType::GlobalNameIds& rId : pArr->aGlNmIds)
             {
-                const _ObjExpType::_GlobalNameIds& rId = pArr->aGlNmIds[ n ];
                 SvGlobalName aGlbNm( rId.n1, rId.n2, rId.n3,
                             rId.b8, rId.b9, rId.b10, rId.b11,
                             rId.b12, rId.b13, rId.b14, rId.b15 );
@@ -172,7 +174,7 @@ void SvxMSExportOLEObjects::ExportOLEObject( svt::EmbeddedObjectRef& rObj, SotSt
                     aOwnGlobalName = aGlbNm;
 
                     // flags for checking if conversion is wanted at all (SaveOptions?!)
-                    if( GetFlags() & pArr->nFlag )
+                    if( nConvertFlags & pArr->nFlag )
                     {
                         pExpFilter = SfxFilterMatcher().GetFilter4FilterName(OUString::createFromAscii(pArr->pFilterNm));
                         break;
@@ -196,7 +198,7 @@ void SvxMSExportOLEObjects::ExportOLEObject( svt::EmbeddedObjectRef& rObj, SotSt
             ::uno::Reference < io::XOutputStream > xOut = new ::utl::OOutputStreamWrapper( *pStream );
             aSeq[0].Value <<= xOut;
             aSeq[1].Name = "FilterName";
-            aSeq[1].Value <<= OUString( pExpFilter->GetName() );
+            aSeq[1].Value <<= pExpFilter->GetName();
             uno::Reference < frame::XStorable > xStor( rObj->getComponent(), uno::UNO_QUERY );
         try
         {
@@ -245,13 +247,13 @@ void SvxMSExportOLEObjects::ExportOLEObject( svt::EmbeddedObjectRef& rObj, SotSt
                     }
                     catch( const embed::NoVisualAreaSizeException& )
                     {
-                        OSL_FAIL( "Could not get visual area size!\n" );
+                        OSL_FAIL( "Could not get visual area size!" );
                         aSize.Width = 5000;
                         aSize.Height = 5000;
                     }
                     catch( const uno::Exception& )
                     {
-                        OSL_FAIL( "Unexpected exception while getting visual area size!\n" );
+                        OSL_FAIL( "Unexpected exception while getting visual area size!" );
                         aSize.Width = 5000;
                         aSize.Height = 5000;
                     }
@@ -268,12 +270,12 @@ void SvxMSExportOLEObjects::ExportOLEObject( svt::EmbeddedObjectRef& rObj, SotSt
                         sal_Int32 nVal = pRect[ind];
                         for ( int nByte = 0; nByte < 4; nByte++ )
                         {
-                            aWriteSet[ind*4+nByte] = (sal_Int8) nVal % 0x100;
+                            aWriteSet[ind*4+nByte] = static_cast<sal_Int8>(nVal) % 0x100;
                             nVal /= 0x100;
                         }
                     }
 
-                    bExtentSuccess = ( xExtStm->Write( aWriteSet, 16 ) == 16 );
+                    bExtentSuccess = (xExtStm->WriteBytes(aWriteSet, 16) == 16);
                 }
             }
 
@@ -327,7 +329,7 @@ void SvxMSExportOLEObjects::ExportOLEObject( svt::EmbeddedObjectRef& rObj, SotSt
             catch ( const uno::Exception& )
             {}
 
-            tools::SvRef<SotStorage> xOLEStor = SotStorage::OpenOLEStorage( xStor, aTempName, STREAM_STD_READ );
+            tools::SvRef<SotStorage> xOLEStor = SotStorage::OpenOLEStorage( xStor, aTempName, StreamMode::STD_READ );
             xOLEStor->CopyTo( &rDestStg );
             rDestStg.Commit();
         }

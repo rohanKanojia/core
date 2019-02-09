@@ -21,7 +21,7 @@
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <drawinglayer/primitive2d/polypolygonprimitive2d.hxx>
-#include <svtools/grfmgr.hxx>
+#include <vcl/GraphicObject.hxx>
 #include <drawinglayer/primitive2d/graphicprimitive2d.hxx>
 #include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <drawinglayer/primitive2d/transformprimitive2d.hxx>
@@ -33,13 +33,13 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        Primitive2DContainer MediaPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const
+        void MediaPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const
         {
             Primitive2DContainer xRetval;
             xRetval.resize(1);
 
             // create background object
-            basegfx::B2DPolygon aBackgroundPolygon(basegfx::tools::createUnitPolygon());
+            basegfx::B2DPolygon aBackgroundPolygon(basegfx::utils::createUnitPolygon());
             aBackgroundPolygon.transform(getTransform());
             const Primitive2DReference xRefBackground(
                 new PolyPolygonColorPrimitive2D(
@@ -47,19 +47,18 @@ namespace drawinglayer
                     getBackgroundColor()));
             xRetval[0] = xRefBackground;
 
-            if(GRAPHIC_BITMAP == maSnapshot.GetType() || GRAPHIC_GDIMETAFILE == maSnapshot.GetType())
+            if(GraphicType::Bitmap == maSnapshot.GetType() || GraphicType::GdiMetafile == maSnapshot.GetType())
             {
                 const GraphicObject aGraphicObject(maSnapshot);
                 const GraphicAttr aGraphicAttr;
                 xRetval.resize(2);
-                xRetval[0] = xRefBackground;
-                xRetval[1] = Primitive2DReference(new GraphicPrimitive2D(getTransform(), aGraphicObject, aGraphicAttr));
+                xRetval[1] = new GraphicPrimitive2D(getTransform(), aGraphicObject, aGraphicAttr);
             }
 
             if(getDiscreteBorder())
             {
                 const basegfx::B2DVector aDiscreteInLogic(rViewInformation.getInverseObjectToViewTransformation() *
-                    basegfx::B2DVector((double)getDiscreteBorder(), (double)getDiscreteBorder()));
+                    basegfx::B2DVector(static_cast<double>(getDiscreteBorder()), static_cast<double>(getDiscreteBorder())));
                 const double fDiscreteSize(aDiscreteInLogic.getX() + aDiscreteInLogic.getY());
 
                 basegfx::B2DRange aSourceRange(0.0, 0.0, 1.0, 1.0);
@@ -90,7 +89,7 @@ namespace drawinglayer
                 }
             }
 
-            return xRetval;
+            rContainer.insert(rContainer.end(), xRetval.begin(), xRetval.end());
         }
 
         MediaPrimitive2D::MediaPrimitive2D(
@@ -115,7 +114,7 @@ namespace drawinglayer
                 const MediaPrimitive2D& rCompare = static_cast<const MediaPrimitive2D&>(rPrimitive);
 
                 return (getTransform() == rCompare.getTransform()
-                    && getURL() == rCompare.getURL()
+                    && maURL == rCompare.maURL
                     && getBackgroundColor() == rCompare.getBackgroundColor()
                     && getDiscreteBorder() == rCompare.getDiscreteBorder());
             }
@@ -131,7 +130,7 @@ namespace drawinglayer
             if(getDiscreteBorder())
             {
                 const basegfx::B2DVector aDiscreteInLogic(rViewInformation.getInverseObjectToViewTransformation() *
-                    basegfx::B2DVector((double)getDiscreteBorder(), (double)getDiscreteBorder()));
+                    basegfx::B2DVector(static_cast<double>(getDiscreteBorder()), static_cast<double>(getDiscreteBorder())));
                 const double fDiscreteSize(aDiscreteInLogic.getX() + aDiscreteInLogic.getY());
 
                 aRetval.grow(-0.5 * fDiscreteSize);

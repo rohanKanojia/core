@@ -17,23 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuparagr.hxx"
+#include <fuparagr.hxx>
 #include <editeng/eeitem.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/viewfrm.hxx>
+#include <sfx2/sfxdlg.hxx>
 #include <svx/svxids.hrc>
 #include <editeng/editdata.hxx>
 #include <editeng/lrspitem.hxx>
 #include <svx/svdoutl.hxx>
 
-#include "app.hrc"
-#include "View.hxx"
-#include "ViewShell.hxx"
-#include "drawdoc.hxx"
-#include "sdabstdlg.hxx"
-#include "sdattr.hrc"
+#include <app.hrc>
+#include <View.hxx>
+#include <ViewShell.hxx>
+#include <Window.hxx>
+#include <drawdoc.hxx>
+#include <sdabstdlg.hxx>
+#include <sdattr.hrc>
 #include <memory>
 
 namespace sd {
@@ -69,15 +70,14 @@ void FuParagraph::DoExecute( SfxRequest& rReq )
         mpView->GetAttributes( aEditAttr );
         SfxItemPool *pPool =  aEditAttr.GetPool();
         SfxItemSet aNewAttr( *pPool,
-                             EE_ITEMS_START, EE_ITEMS_END,
+                             svl::Items<EE_ITEMS_START, EE_ITEMS_END,
                              SID_ATTR_TABSTOP_OFFSET, SID_ATTR_TABSTOP_OFFSET,
-                             ATTR_PARANUMBERING_START, ATTR_PARANUMBERING_END,
-                             0 );
+                             ATTR_PARANUMBERING_START, ATTR_PARANUMBERING_END>{} );
 
         aNewAttr.Put( aEditAttr );
 
         // left border is offset
-        const long nOff = static_cast<const SvxLRSpaceItem&>(aNewAttr.Get( EE_PARA_LRSPACE ) ).GetTextLeft();
+        const long nOff = aNewAttr.Get( EE_PARA_LRSPACE ).GetTextLeft();
         // conversion since TabulatorTabPage always uses Twips!
         SfxInt32Item aOff( SID_ATTR_TABSTOP_OFFSET, nOff );
         aNewAttr.Put( aOff );
@@ -90,9 +90,7 @@ void FuParagraph::DoExecute( SfxRequest& rReq )
         }
 
         SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
-        std::unique_ptr<SfxAbstractTabDialog> pDlg(pFact ? pFact->CreateSdParagraphTabDlg( &aNewAttr ) : nullptr);
-        if (!pDlg)
-            return;
+        ScopedVclPtr<SfxAbstractTabDialog> pDlg(pFact->CreateSdParagraphTabDlg(mpViewShell->GetFrameWeld(), &aNewAttr));
 
         sal_uInt16 nResult = pDlg->Execute();
 
@@ -131,7 +129,7 @@ void FuParagraph::DoExecute( SfxRequest& rReq )
     }
 
     // invalidate slots
-    static sal_uInt16 SidArray[] = {
+    static const sal_uInt16 SidArray[] = {
         SID_ATTR_TABSTOP,
         SID_ATTR_PARA_ADJUST_LEFT,
         SID_ATTR_PARA_ADJUST_RIGHT,

@@ -36,11 +36,11 @@
 #include <com/sun/star/presentation/XPresentation2.hpp>
 #include <com/sun/star/presentation/XPresentationSupplier.hpp>
 #include <com/sun/star/document/XEventBroadcaster.hpp>
-#include <boost/bind.hpp>
 #include <cppuhelper/compbase.hxx>
 
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <vcl/svapp.hxx>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -67,7 +67,6 @@ namespace {
         PresenterScreenListener (
             const css::uno::Reference<css::uno::XComponentContext>& rxContext,
             const css::uno::Reference<css::frame::XModel2>& rxModel);
-        virtual ~PresenterScreenListener();
         PresenterScreenListener(const PresenterScreenListener&) = delete;
         PresenterScreenListener& operator=(const PresenterScreenListener&) = delete;
 
@@ -76,18 +75,16 @@ namespace {
 
         // document::XEventListener
 
-        virtual void SAL_CALL notifyEvent( const css::document::EventObject& Event ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL notifyEvent( const css::document::EventObject& Event ) override;
 
         // XEventListener
 
-        virtual void SAL_CALL disposing ( const css::lang::EventObject& rEvent) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing ( const css::lang::EventObject& rEvent) override;
 
     private:
         css::uno::Reference<css::frame::XModel2 > mxModel;
         css::uno::Reference<css::uno::XComponentContext> mxComponentContext;
         rtl::Reference<PresenterScreen> mpPresenterScreen;
-
-        void ThrowIfDisposed() const throw (css::lang::DisposedException);
     };
 }
 
@@ -129,7 +126,6 @@ void SAL_CALL PresenterScreenJob::disposing()
 
 Any SAL_CALL PresenterScreenJob::execute(
     const Sequence< beans::NamedValue >& Arguments )
-    throw (lang::IllegalArgumentException, Exception, RuntimeException, std::exception)
 {
     Sequence< beans::NamedValue > lEnv;
 
@@ -193,10 +189,6 @@ void PresenterScreenListener::Initialize()
         xDocBroadcaster->addEventListener(xDocListener);
 }
 
-PresenterScreenListener::~PresenterScreenListener()
-{
-}
-
 void SAL_CALL PresenterScreenListener::disposing()
 {
     Reference< document::XEventBroadcaster > xDocBroadcaster( mxModel, UNO_QUERY );
@@ -214,9 +206,14 @@ void SAL_CALL PresenterScreenListener::disposing()
 
 // document::XEventListener
 
-void SAL_CALL PresenterScreenListener::notifyEvent( const css::document::EventObject& Event ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterScreenListener::notifyEvent( const css::document::EventObject& Event )
 {
-    ThrowIfDisposed();
+    if (rBHelper.bDisposed || rBHelper.bInDispose)
+    {
+        throw lang::DisposedException (
+            "PresenterScreenListener object has already been disposed",
+            static_cast<uno::XWeak*>(this));
+    }
 
     if ( Event.EventName == "OnStartPresentation" )
     {
@@ -236,27 +233,12 @@ void SAL_CALL PresenterScreenListener::notifyEvent( const css::document::EventOb
 
 // XEventListener
 
-void SAL_CALL PresenterScreenListener::disposing (const css::lang::EventObject& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterScreenListener::disposing (const css::lang::EventObject&)
 {
-    (void)rEvent;
-
     if (mpPresenterScreen.is())
     {
         mpPresenterScreen->RequestShutdownPresenterScreen();
         mpPresenterScreen = nullptr;
-    }
-}
-
-void PresenterScreenListener::ThrowIfDisposed() const throw (
-    css::lang::DisposedException)
-{
-    if (rBHelper.bDisposed || rBHelper.bInDispose)
-    {
-        throw lang::DisposedException (
-            OUString(
-                "PresenterScreenListener object has already been disposed"),
-            const_cast<uno::XWeak*>(static_cast<const uno::XWeak*>(this)));
     }
 }
 
@@ -276,7 +258,6 @@ PresenterScreen::PresenterScreen (
       mpPresenterController(),
       mxSavedConfiguration(),
       mpPaneContainer(),
-      mnComponentIndex(0),
       mxPaneFactory(),
       mxViewFactory(),
       maViewDescriptors()
@@ -292,7 +273,7 @@ bool PresenterScreen::isPresenterScreenEnabled(const css::uno::Reference<css::un
         bool dEnablePresenterScreen=true;
         PresenterConfigurationAccess aConfiguration (
             rxContext,
-            OUString("/org.openoffice.Office.Impress/"),
+            "/org.openoffice.Office.Impress/",
             PresenterConfigurationAccess::READ_ONLY);
         aConfiguration.GetConfigurationNode("Misc/Start/EnablePresenterScreen")
             >>= dEnablePresenterScreen;
@@ -320,7 +301,6 @@ void SAL_CALL PresenterScreen::disposing()
 //----- XEventListener --------------------------------------------------------
 
 void SAL_CALL PresenterScreen::disposing (const lang::EventObject& /*rEvent*/)
-    throw (RuntimeException, std::exception)
 {
     mxSlideShowControllerWeak = WeakReference<presentation::XSlideShowController>();
     RequestShutdownPresenterScreen();
@@ -332,8 +312,7 @@ void PresenterScreen::InitializePresenterScreen()
     try
     {
         Reference<XComponentContext> xContext (mxContextWeak);
-        mpPaneContainer =
-            new PresenterPaneContainer(Reference<XComponentContext>(xContext));
+        mpPaneContainer = new PresenterPaneContainer(xContext);
 
         Reference<XPresentationSupplier> xPS ( mxModel, UNO_QUERY_THROW);
         Reference<XPresentation2> xPresentation(xPS->getPresentation(), UNO_QUERY_THROW);
@@ -440,9 +419,7 @@ void PresenterScreen::SwitchMonitors()
 
         // Set the new presentation display
         Reference<beans::XPropertySet> xProperties (xPresentation, UNO_QUERY_THROW);
-        uno::Any aDisplay;
-        aDisplay <<= nNewScreen;
-        xProperties->setPropertyValue("Display", aDisplay);
+        xProperties->setPropertyValue("Display", Any(nNewScreen));
     } catch (const uno::Exception &) {
     }
 }
@@ -485,8 +462,7 @@ sal_Int32 PresenterScreen::GetPresenterScreenNumber (
         {
             // A display number value of 0 indicates the primary screen.
             // Find out which screen number that is.
-            if (nDisplayNumber <= 0)
-                nScreenNumber = Application::GetDisplayExternalScreen();
+            nScreenNumber = Application::GetDisplayExternalScreen();
         }
 
         // We still have to determine the number of screens to decide
@@ -502,7 +478,7 @@ sal_Int32 PresenterScreen::GetPresenterScreenNumber (
             Reference<XComponentContext> xContext (mxContextWeak);
             PresenterConfigurationAccess aConfiguration (
                 xContext,
-                OUString("/org.openoffice.Office.PresenterScreen/"),
+                "/org.openoffice.Office.PresenterScreen/",
                 PresenterConfigurationAccess::READ_ONLY);
             bool bStartAlways (false);
             if (aConfiguration.GetConfigurationNode(
@@ -588,7 +564,7 @@ void PresenterScreen::RequestShutdownPresenterScreen()
         rtl::Reference<PresenterScreen> pSelf (this);
         PresenterFrameworkObserver::RunOnUpdateEnd(
             xCC,
-            ::boost::bind(&PresenterScreen::ShutdownPresenterScreen, pSelf));
+            [pSelf](bool){ return pSelf->ShutdownPresenterScreen(); });
         xCC->update();
     }
 }
@@ -653,7 +629,7 @@ void PresenterScreen::SetupConfiguration (
     {
         PresenterConfigurationAccess aConfiguration (
             rxContext,
-            OUString("org.openoffice.Office.PresenterScreen"),
+            "org.openoffice.Office.PresenterScreen",
             PresenterConfigurationAccess::READ_ONLY);
         maViewDescriptors.clear();
         ProcessViewDescriptions(aConfiguration);
@@ -706,15 +682,13 @@ void PresenterScreen::ProcessLayout (
         aProperties[3] = "RelativeY";
         aProperties[4] = "RelativeWidth";
         aProperties[5] = "RelativeHeight";
-        mnComponentIndex = 1;
         PresenterConfigurationAccess::ForAll(
             xList,
             aProperties,
-            ::boost::bind(&PresenterScreen::ProcessComponent, this,
-                _1,
-                _2,
-                rxContext,
-                rxAnchorId));
+            [this, rxContext, rxAnchorId](std::vector<uno::Any> const& rArgs)
+            {
+                this->ProcessComponent(rArgs, rxContext, rxAnchorId);
+            });
     }
     catch (const RuntimeException&)
     {
@@ -735,11 +709,13 @@ void PresenterScreen::ProcessViewDescriptions (
         aProperties[1] = "Title";
         aProperties[2] = "AccessibleTitle";
         aProperties[3] = "IsOpaque";
-        mnComponentIndex = 1;
         PresenterConfigurationAccess::ForAll(
             xViewDescriptionsNode,
             aProperties,
-            ::boost::bind(&PresenterScreen::ProcessViewDescription, this, _1, _2));
+            [this](std::vector<uno::Any> const& rArgs)
+            {
+                return this->ProcessViewDescription(rArgs);
+            });
     }
     catch (const RuntimeException&)
     {
@@ -748,13 +724,10 @@ void PresenterScreen::ProcessViewDescriptions (
 }
 
 void PresenterScreen::ProcessComponent (
-    const OUString& rsKey,
     const ::std::vector<Any>& rValues,
     const Reference<XComponentContext>& rxContext,
     const Reference<XResourceId>& rxAnchorId)
 {
-    (void)rsKey;
-
     if (rValues.size() != 6)
         return;
 
@@ -780,11 +753,7 @@ void PresenterScreen::ProcessComponent (
                 rxAnchorId,
                 sPaneURL,
                 sViewURL,
-                PresenterPaneContainer::ViewInitializationFunction(),
-                nX,
-                nY,
-                nX+nWidth,
-                nY+nHeight);
+                PresenterPaneContainer::ViewInitializationFunction());
         }
        }
     catch (const Exception&)
@@ -794,11 +763,8 @@ void PresenterScreen::ProcessComponent (
 }
 
 void PresenterScreen::ProcessViewDescription (
-    const OUString& rsKey,
     const ::std::vector<Any>& rValues)
 {
-    (void)rsKey;
-
     if (rValues.size() != 4)
         return;
 
@@ -825,11 +791,7 @@ void PresenterScreen::SetupView(
     const Reference<XResourceId>& rxAnchorId,
     const OUString& rsPaneURL,
     const OUString& rsViewURL,
-    const PresenterPaneContainer::ViewInitializationFunction& rViewInitialization,
-    const double nLeft,
-    const double nTop,
-    const double nRight,
-    const double nBottom)
+    const PresenterPaneContainer::ViewInitializationFunction& rViewInitialization)
 {
     Reference<XConfigurationController> xCC (mxConfigurationControllerWeak);
     if (xCC.is())
@@ -849,11 +811,7 @@ void PresenterScreen::SetupView(
             aViewDescriptor.msTitle,
             aViewDescriptor.msAccessibleTitle,
             aViewDescriptor.mbIsOpaque,
-            rViewInitialization,
-            nLeft,
-            nTop,
-            nRight,
-            nBottom);
+            rViewInitialization);
     }
 }
 

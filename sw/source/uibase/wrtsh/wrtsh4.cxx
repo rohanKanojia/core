@@ -27,51 +27,49 @@
 // non-sentence separators on sentence separator.
 // The begin of paragraph is also the word beginning.
 
-bool SwWrtShell::_SttWrd()
+void SwWrtShell::SttWrd()
 {
     if ( IsSttPara() )
-        return true;
+        return;
         // Create temporary cursor without selection.
     Push();
     ClearMark();
     if( !GoStartWord() )
             // not found --> go to the beginning of the paragraph.
-        SwCursorShell::MovePara( fnParaCurr, fnParaStart );
+        SwCursorShell::MovePara( GoCurrPara, fnParaStart );
     ClearMark();
         // If Mark was previously set, summarize.
     Combine();
-    return true;
 }
 
 // The end of a word is the follow of separator to nonseparator.
-// The end of a word is also the sequence of wordseparators to
+// The end of a word is also the sequence of word separators to
 // punctuation marks.
 // The end of a paragraph is also the end of a word.
 
-bool SwWrtShell::_EndWrd()
+void SwWrtShell::EndWrd()
 {
     if ( IsEndWrd() )
-        return true;
+        return;
         // Create temporary cursor without selection.
     Push();
     ClearMark();
     if( !GoEndWord() )
             // not found --> go to the end of the paragraph.
-        SwCursorShell::MovePara(fnParaCurr, fnParaEnd);
+        SwCursorShell::MovePara(GoCurrPara, fnParaEnd);
     ClearMark();
         // If Mark was previously set, summarize.
     Combine();
-    return true;
 }
 
-bool SwWrtShell::_NxtWrd()
+bool SwWrtShell::NxtWrd_()
 {
     bool bRet = false;
     while( IsEndPara() )               // If already at the end, then the next???
     {
         if(!SwCursorShell::Right(1,CRSR_SKIP_CHARS))  // Document - end ??
         {
-            Pop( false );
+            Pop(SwCursorShell::PopMode::DeleteCurrent);
             return bRet;
         }
         bRet = IsStartWord();
@@ -82,7 +80,7 @@ bool SwWrtShell::_NxtWrd()
     {
         if( !GoNextWord() )
         {
-            if( (!IsEndPara() && !SwCursorShell::MovePara( fnParaCurr, fnParaEnd ) )
+            if( (!IsEndPara() && !SwCursorShell::MovePara( GoCurrPara, fnParaEnd ) )
                 || !SwCursorShell::Right(1,CRSR_SKIP_CHARS) )
                 break;
             bRet = IsStartWord();
@@ -95,14 +93,14 @@ bool SwWrtShell::_NxtWrd()
     return bRet;
 }
 
-bool SwWrtShell::_PrvWrd()
+bool SwWrtShell::PrvWrd_()
 {
     bool bRet = false;
     while( IsSttPara() )
     {                            // if already at the beginning, then the next???
         if(!SwCursorShell::Left(1,CRSR_SKIP_CHARS))
         {                        // Document - beginning ??
-            Pop( false );
+            Pop(SwCursorShell::PopMode::DeleteCurrent);
             return bRet;
         }
         bRet = IsStartWord() || IsEndPara();
@@ -113,7 +111,7 @@ bool SwWrtShell::_PrvWrd()
     {
         if( !GoPrevWord() )
         {
-            if( (!IsSttPara() && !SwCursorShell::MovePara( fnParaCurr, fnParaStart ) )
+            if( (!IsSttPara() && !SwCursorShell::MovePara( GoCurrPara, fnParaStart ) )
                 || !SwCursorShell::Left(1,CRSR_SKIP_CHARS) )
                 break;
             bRet = IsStartWord();
@@ -127,14 +125,14 @@ bool SwWrtShell::_PrvWrd()
 }
 
 // #i92468#
-// method code of <SwWrtShell::_NxtWrd()> before fix for issue i72162
-bool SwWrtShell::_NxtWrdForDelete()
+// method code of <SwWrtShell::NxtWrd_()> before fix for issue i72162
+bool SwWrtShell::NxtWrdForDelete()
 {
     if ( IsEndPara() )
     {
         if ( !SwCursorShell::Right(1,CRSR_SKIP_CHARS) )
         {
-            Pop( false );
+            Pop(SwCursorShell::PopMode::DeleteCurrent);
             return false;
         }
         return true;
@@ -143,21 +141,21 @@ bool SwWrtShell::_NxtWrdForDelete()
     ClearMark();
     if ( !GoNextWord() )
     {
-        SwCursorShell::MovePara( fnParaCurr, fnParaEnd );
+        SwCursorShell::MovePara( GoCurrPara, fnParaEnd );
     }
     ClearMark();
     Combine();
     return true;
 }
 
-// method code of <SwWrtShell::_PrvWrd()> before fix for issue i72162
-bool SwWrtShell::_PrvWrdForDelete()
+// method code of <SwWrtShell::PrvWrd_()> before fix for issue i72162
+bool SwWrtShell::PrvWrdForDelete()
 {
     if ( IsSttPara() )
     {
         if ( !SwCursorShell::Left(1,CRSR_SKIP_CHARS) )
         {
-            Pop( false );
+            Pop(SwCursorShell::PopMode::DeleteCurrent);
             return false;
         }
         return true;
@@ -166,64 +164,64 @@ bool SwWrtShell::_PrvWrdForDelete()
     ClearMark();
     if( !GoPrevWord() )
     {
-        SwCursorShell::MovePara( fnParaCurr, fnParaStart );
+        SwCursorShell::MovePara( GoCurrPara, fnParaStart );
     }
     ClearMark();
     Combine();
     return true;
 }
 
-bool SwWrtShell::_FwdSentence()
+bool SwWrtShell::FwdSentence_()
 {
     Push();
     ClearMark();
     if(!SwCursorShell::Right(1,CRSR_SKIP_CHARS))
     {
-        Pop(false);
+        Pop(SwCursorShell::PopMode::DeleteCurrent);
         return false;
     }
     if( !GoNextSentence() && !IsEndPara() )
-        SwCursorShell::MovePara(fnParaCurr, fnParaEnd);
+        SwCursorShell::MovePara(GoCurrPara, fnParaEnd);
 
     ClearMark();
     Combine();
     return true;
 }
 
-bool SwWrtShell::_BwdSentence()
+bool SwWrtShell::BwdSentence_()
 {
     Push();
     ClearMark();
     if(!SwCursorShell::Left(1,CRSR_SKIP_CHARS))
     {
-        Pop(false);
+        Pop(SwCursorShell::PopMode::DeleteCurrent);
         return false;
     }
     if( !GoStartSentence()  && !IsSttPara() )
             // not found --> go to the beginning of the paragraph
-        SwCursorShell::MovePara( fnParaCurr, fnParaStart );
+        SwCursorShell::MovePara( GoCurrPara, fnParaStart );
     ClearMark();
     Combine();
     return true;
 }
 
-bool SwWrtShell::_FwdPara()
+bool SwWrtShell::FwdPara_()
 {
     Push();
     ClearMark();
-    bool bRet = SwCursorShell::MovePara(fnParaNext, fnParaStart);
+    bool bRet = SwCursorShell::MovePara(GoNextPara, fnParaStart);
 
     ClearMark();
     Combine();
     return bRet;
 }
 
-bool SwWrtShell::_BwdPara()
+bool SwWrtShell::BwdPara_()
 {
     Push();
     ClearMark();
 
-    bool bRet = SwCursorShell::MovePara(fnParaPrev, fnParaStart);
+    bool bRet = SwCursorShell::MovePara(GoPrevPara, fnParaStart);
     if ( !bRet && !IsSttOfPara() )
     {
         SttPara();

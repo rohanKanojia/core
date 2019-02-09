@@ -17,9 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#pragma warning(push, 1)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include "windows.h"
-#pragma warning(pop)
+#include <ole2.h>
 
 #include <memory>
 
@@ -553,7 +555,7 @@ System::String^ mapPolymorphicName(System::String^ unoName, bool bCliToUno)
     builder->Append(unoName->Substring(0, index +1 ));
 
     //Find the first occurrence of ','
-    //If the parameter is a polymorphic struct then we neede to ignore everything
+    //If the parameter is a polymorphic struct then we need to ignore everything
     //between the brackets because it can also contain commas
     //get the type list within < and >
     int endIndex = unoName->Length - 1;
@@ -716,9 +718,11 @@ OUString mapCliString(System::String ^ data)
 
     if (data != nullptr)
     {
-        OSL_ASSERT(sizeof(wchar_t) == sizeof(sal_Unicode));
+        static_assert(sizeof(wchar_t) == sizeof(sal_Unicode), "char mismatch");
         pin_ptr<wchar_t const> pdata= PtrToStringChars(data);
-        return OUString(pdata, const_cast<System::String^>(data)->Length);
+        return OUString(
+            reinterpret_cast<sal_Unicode const *>(pdata),
+            const_cast<System::String^>(data)->Length);
     }
     else
     {
@@ -818,8 +822,9 @@ void Bridge::map_to_uno(void * uno_data, System::Object^ cli_data,
             {
                 System::String ^s= safe_cast<System::String^>(cli_data);
                 pin_ptr<const wchar_t> pdata= PtrToStringChars(s);
-                rtl_uString_newFromStr_WithLength( (rtl_uString**) uno_data,
-                                                  pdata, s->Length );
+                rtl_uString_newFromStr_WithLength(
+                    reinterpret_cast<rtl_uString **>(uno_data),
+                    reinterpret_cast<sal_Unicode const *>(pdata), s->Length);
             }
             break;
         }
@@ -1294,8 +1299,10 @@ void Bridge::map_to_uno(void * uno_data, System::Object^ cli_data,
                             rtl_uString** pStr=  & ((rtl_uString**) &
                                                     ((uno_Sequence*) seq.get())->elements)[i];
                             *pStr= NULL;
-                            rtl_uString_newFromStr_WithLength( pStr, pdata,
-                                                               arStr[i]->Length);
+                            rtl_uString_newFromStr_WithLength(
+                                pStr,
+                                reinterpret_cast<sal_Unicode const *>(pdata),
+                                arStr[i]->Length);
                         }
                         break;
                     }
@@ -1436,7 +1443,7 @@ void Bridge::map_to_uno(void * uno_data, System::Object^ cli_data,
        cli_data.
        true - cli_data already contains the newly constructed object. This is the case if
        a struct is converted then on the first call to map_to_cli the new object is created.
-       If the struct inherits another struct then this function is called recursivly while the
+       If the struct inherits another struct then this function is called recursively while the
        newly created object is passed in cli_data.
  */
 void Bridge::map_to_cli(
@@ -1536,7 +1543,7 @@ void Bridge::map_to_cli(
 
         //create the type
         System::Type^ cliType= loadCliType(td.get()->pTypeName);
-        //detect if we recursivly convert inherited structures
+        //detect if we recursively convert inherited structures
         //If this point is reached because of a recursive call during covering a
         //struct then we must not create a new object rather we use the one in
         // cli_data argument.

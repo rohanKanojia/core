@@ -17,13 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ChartViewHelper.hxx"
-#include "macros.hxx"
-#include "servicenames.hxx"
+#include <ChartViewHelper.hxx>
+#include <servicenames.hxx>
 
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/util/XModifyListener.hpp>
+#include <tools/diagnose_ex.h>
 
 namespace chart
 {
@@ -46,9 +46,9 @@ void ChartViewHelper::setViewToDirtyState( const uno::Reference< frame::XModel >
             }
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 } //namespace chart

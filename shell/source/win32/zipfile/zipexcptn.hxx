@@ -25,13 +25,11 @@
 #include <stdexcept>
 
 
-/**
-*/
 class RuntimeException : public std::exception
 {
 public:
     explicit RuntimeException(int Error);
-    virtual ~RuntimeException() throw();
+    virtual ~RuntimeException() throw() override;
 
     int GetErrorCode() const;
 
@@ -40,34 +38,28 @@ private:
 };
 
 
-/**
-*/
 class ZipException : public RuntimeException
 {
 public:
     explicit ZipException(int Error);
 
-    virtual const char* what() const throw();
+    virtual const char* what() const throw() override;
 };
 
 
-/**
-*/
 class Win32Exception : public RuntimeException
 {
 public:
     explicit Win32Exception(int Error);
-    virtual ~Win32Exception() throw();
+    virtual ~Win32Exception() throw() override;
 
-    virtual const char* what() const throw();
+    virtual const char* what() const throw() override;
 
 private:
-    void* m_MsgBuff;
+    mutable char* m_MsgBuff;
 };
 
 
-/**
-*/
 class ZipContentMissException : public ZipException
 {
 public:
@@ -75,8 +67,6 @@ public:
 };
 
 
-/**
-*/
 class AccessViolationException : public Win32Exception
 {
 public:
@@ -84,8 +74,6 @@ public:
 };
 
 
-/**
-*/
 class IOException : public Win32Exception
 {
 public:

@@ -21,8 +21,9 @@
 #include <com/sun/star/uno/Sequence.hxx>
 #include <osl/diagnose.h>
 
-#include "printopt.hxx"
-#include "miscuno.hxx"
+#include <printopt.hxx>
+#include <miscuno.hxx>
+#include <sc.hrc>
 
 using namespace utl;
 using namespace com::sun::star::uno;
@@ -33,30 +34,11 @@ ScPrintOptions::ScPrintOptions()
     SetDefaults();
 }
 
-ScPrintOptions::ScPrintOptions( const ScPrintOptions& rCpy ) :
-    bSkipEmpty( rCpy.bSkipEmpty ),
-    bAllSheets( rCpy.bAllSheets ),
-    bForceBreaks( rCpy.bForceBreaks )
-{
-}
-
-ScPrintOptions::~ScPrintOptions()
-{
-}
-
 void ScPrintOptions::SetDefaults()
 {
     bSkipEmpty = true;
     bAllSheets = false;
     bForceBreaks = false;
-}
-
-const ScPrintOptions& ScPrintOptions::operator=( const ScPrintOptions& rCpy )
-{
-    bSkipEmpty = rCpy.bSkipEmpty;
-    bAllSheets = rCpy.bAllSheets;
-    bForceBreaks = rCpy.bForceBreaks;
-    return *this;
 }
 
 bool ScPrintOptions::operator==( const ScPrintOptions& rOpt ) const
@@ -66,15 +48,9 @@ bool ScPrintOptions::operator==( const ScPrintOptions& rOpt ) const
         && bForceBreaks == rOpt.bForceBreaks;
 }
 
-ScTpPrintItem::ScTpPrintItem( sal_uInt16 nWhichP, const ScPrintOptions& rOpt ) :
-    SfxPoolItem ( nWhichP ),
+ScTpPrintItem::ScTpPrintItem( const ScPrintOptions& rOpt ) :
+    SfxPoolItem ( SID_SCPRINTOPTIONS ),
     theOptions  ( rOpt )
-{
-}
-
-ScTpPrintItem::ScTpPrintItem( const ScTpPrintItem& rItem ) :
-    SfxPoolItem ( rItem ),
-    theOptions  ( rItem.theOptions )
 {
 }
 
@@ -100,26 +76,16 @@ SfxPoolItem* ScTpPrintItem::Clone( SfxItemPool * ) const
 #define SCPRINTOPT_EMPTYPAGES       0
 #define SCPRINTOPT_ALLSHEETS        1
 #define SCPRINTOPT_FORCEBREAKS      2
-#define SCPRINTOPT_COUNT            3
 
 Sequence<OUString> ScPrintCfg::GetPropertyNames()
 {
-    static const char* aPropNames[] =
-    {
-        "Page/EmptyPages",          // SCPRINTOPT_EMPTYPAGES
-        "Other/AllSheets",          // SCPRINTOPT_ALLSHEETS
-        "Page/ForceBreaks"          // SCPRINTOPT_FORCEBREAKS
-    };
-    Sequence<OUString> aNames(SCPRINTOPT_COUNT);
-    OUString* pNames = aNames.getArray();
-    for(int i = 0; i < SCPRINTOPT_COUNT; i++)
-        pNames[i] = OUString::createFromAscii(aPropNames[i]);
-
-    return aNames;
+    return {"Page/EmptyPages",          // SCPRINTOPT_EMPTYPAGES
+            "Other/AllSheets",          // SCPRINTOPT_ALLSHEETS
+            "Page/ForceBreaks"};        // SCPRINTOPT_FORCEBREAKS;
 }
 
 ScPrintCfg::ScPrintCfg() :
-    ConfigItem( OUString( CFGPATH_PRINT ) )
+    ConfigItem( CFGPATH_PRINT )
 {
     Sequence<OUString> aNames = GetPropertyNames();
     Sequence<Any> aValues = GetProperties(aNames);
@@ -162,13 +128,13 @@ void ScPrintCfg::ImplCommit()
         {
             case SCPRINTOPT_EMPTYPAGES:
                 // reversed
-                ScUnoHelpFunctions::SetBoolInAny( pValues[nProp], !GetSkipEmpty() );
+                pValues[nProp] <<= !GetSkipEmpty();
                 break;
             case SCPRINTOPT_ALLSHEETS:
-                ScUnoHelpFunctions::SetBoolInAny( pValues[nProp], GetAllSheets() );
+                pValues[nProp] <<= GetAllSheets();
                 break;
             case SCPRINTOPT_FORCEBREAKS:
-                ScUnoHelpFunctions::SetBoolInAny( pValues[nProp], GetForceBreaks() );
+                pValues[nProp] <<= GetForceBreaks();
                 break;
         }
     }

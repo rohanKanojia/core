@@ -20,20 +20,18 @@
 #ifndef INCLUDED_SVX_GALCTRL_HXX
 #define INCLUDED_SVX_GALCTRL_HXX
 
-#include <vcl/dialog.hxx>
 #include <vcl/graph.hxx>
 #include <vcl/fixed.hxx>
-#include <vcl/group.hxx>
 #include <vcl/button.hxx>
-#include <vcl/lstbox.hxx>
 #include <vcl/menu.hxx>
 #include <vcl/edit.hxx>
 #include <vcl/combobox.hxx>
+#include <vcl/customweld.hxx>
 #include <svl/slstitm.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <svtools/valueset.hxx>
 #include <svtools/brwbox.hxx>
-#include <svtools/grfmgr.hxx>
+#include <vcl/GraphicObject.hxx>
 #include <svx/galmisc.hxx>
 #include <svx/svxdllapi.h>
 
@@ -45,14 +43,14 @@ class SVX_DLLPUBLIC GalleryPreview : public vcl::Window, public DropTargetHelper
 private:
 
     GraphicObject       aGraphicObj;
-    Rectangle           aPreviewRect;
-    GalleryTheme*       mpTheme;
+    tools::Rectangle           aPreviewRect;
+    GalleryTheme* const       mpTheme;
 
-    SVX_DLLPRIVATE bool             ImplGetGraphicCenterRect( const Graphic& rGraphic, Rectangle& rResultRect ) const;
+    SVX_DLLPRIVATE bool             ImplGetGraphicCenterRect( const Graphic& rGraphic, tools::Rectangle& rResultRect ) const;
     SVX_DLLPRIVATE void             InitSettings();
 
     // Window
-    SVX_DLLPRIVATE virtual void     Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    SVX_DLLPRIVATE virtual void     Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
     SVX_DLLPRIVATE virtual Size     GetOptimalSize() const override;
     SVX_DLLPRIVATE virtual void     MouseButtonDown(const MouseEvent& rMEvt) override;
     SVX_DLLPRIVATE virtual void     Command(const CommandEvent& rCEvt) override;
@@ -74,8 +72,26 @@ public:
         GalleryTheme* pTheme = nullptr);
 
     void                SetGraphic( const Graphic& rGraphic ) { aGraphicObj.SetGraphic( rGraphic ); }
-    bool                SetGraphic( const INetURLObject& );
     static void         PreviewMedia( const INetURLObject& rURL );
+};
+
+class SVX_DLLPUBLIC SvxGalleryPreview : public weld::CustomWidgetController
+{
+private:
+    GraphicObject aGraphicObj;
+    tools::Rectangle aPreviewRect;
+
+    SVX_DLLPRIVATE bool             ImplGetGraphicCenterRect( const Graphic& rGraphic, tools::Rectangle& rResultRect ) const;
+
+    SVX_DLLPRIVATE virtual void     Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
+
+public:
+
+    SvxGalleryPreview();
+
+    virtual void        SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
+    void                SetGraphic( const Graphic& rGraphic ) { aGraphicObj.SetGraphic( rGraphic ); }
+    bool                SetGraphic( const INetURLObject& );
 };
 
 class GalleryIconView : public ValueSet, public DropTargetHelper, public DragSourceHelper
@@ -118,13 +134,13 @@ private:
 
     Link<GalleryListView*,void>  maSelectHdl;
     GalleryTheme*       mpTheme;
-    long                mnCurRow;
+    sal_uInt32          mnCurRow;
 
     void                InitSettings();
 
     // BrowseBox
     virtual bool        SeekRow( long nRow ) override;
-    virtual void        PaintField( OutputDevice& rDev, const Rectangle& rRect, sal_uInt16 nColumnId ) const override;
+    virtual void        PaintField( OutputDevice& rDev, const tools::Rectangle& rRect, sal_uInt16 nColumnId ) const override;
     virtual void        DoubleClick( const BrowserMouseEvent& rEvt ) override;
     virtual void        Select() override;
     virtual sal_Int8    AcceptDrop( const BrowserAcceptDropEvent& rEvt ) override;
@@ -155,7 +171,7 @@ public:
     virtual OUString  GetCellText(long _nRow, sal_uInt16 _nColId) const override;
 
     // from IAccessibleTableProvider
-    virtual Rectangle GetFieldCharacterBounds(sal_Int32 _nRow,sal_Int32 _nColumnPos,sal_Int32 nIndex) override;
+    virtual tools::Rectangle GetFieldCharacterBounds(sal_Int32 _nRow,sal_Int32 _nColumnPos,sal_Int32 nIndex) override;
     virtual sal_Int32 GetFieldIndexAtPoint(sal_Int32 _nRow,sal_Int32 _nColumnPos,const Point& _rPoint) override;
 };
 

@@ -18,17 +18,17 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/numeric/ftools.hxx>
 #include <basegfx/point/b2dpoint.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <com/sun/star/lang/NoSupportException.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <com/sun/star/registry/XRegistryKey.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <osl/mutex.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <tools/diagnose_ex.h>
 #include <vcl/sysdata.hxx>
 #include <vcl/opengl/OpenGLWrapper.hxx>
@@ -43,9 +43,8 @@ using namespace ::com::sun::star;
 namespace cairocanvas
 {
     Canvas::Canvas( const uno::Sequence< uno::Any >&                aArguments,
-                    const uno::Reference< uno::XComponentContext >& rxContext ) :
-        maArguments(aArguments),
-        mxComponentContext( rxContext )
+                    const uno::Reference< uno::XComponentContext >& /*rxContext*/ ) :
+        maArguments(aArguments)
     {
     }
 
@@ -115,13 +114,11 @@ namespace cairocanvas
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        mxComponentContext.clear();
-
         // forward to parent
         CanvasBaseT::disposeThis();
     }
 
-    OUString SAL_CALL Canvas::getServiceName(  ) throw (uno::RuntimeException, std::exception)
+    OUString SAL_CALL Canvas::getServiceName(  )
     {
         return OUString( CANVAS_SERVICE_NAME );
     }
@@ -157,7 +154,7 @@ namespace cairocanvas
         return pSurface;
     }
 
-    SurfaceSharedPtr Canvas::changeSurface( bool, bool )
+    SurfaceSharedPtr Canvas::changeSurface()
     {
         // non-modifiable surface here
         return SurfaceSharedPtr();

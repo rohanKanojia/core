@@ -9,10 +9,7 @@
 
 $(eval $(call gb_CppunitTest_CppunitTest,i18npool_test_textsearch))
 
-$(eval $(call gb_CppunitTest_use_api,i18npool_test_textsearch,\
-	udkapi \
-	offapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,i18npool_test_textsearch))
 
 $(eval $(call gb_CppunitTest_use_ure,i18npool_test_textsearch))
 
@@ -36,7 +33,6 @@ $(eval $(call gb_CppunitTest_use_libraries,i18npool_test_textsearch,\
 	cppuhelper \
 	sal \
 	unotest \
-	$(gb_UWINAPI) \
 ))
 
 # vim: set noet sw=4 ts=4:

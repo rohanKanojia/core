@@ -2,34 +2,12 @@
 
 #include <sal/config.h>
 #include <test/bootstrapfixture.hxx>
-#include <rtl/strbuf.hxx>
-#include <osl/file.hxx>
-
-#include "scdll.hxx"
-#include <opencl/platforminfo.hxx>
-#include <sfx2/app.hxx>
-#include <sfx2/docfilt.hxx>
-#include <sfx2/docfile.hxx>
-#include <sfx2/sfxmodelfactory.hxx>
-#include <svl/stritem.hxx>
 
 #include "helper/qahelper.hxx"
 
-#include "calcconfig.hxx"
-#include "interpre.hxx"
-
-#include "docsh.hxx"
-#include "postit.hxx"
-#include "patattr.hxx"
-#include "scitems.hxx"
-#include "document.hxx"
-#include "cellform.hxx"
-#include "drwlayer.hxx"
-#include "userdat.hxx"
-#include "formulacell.hxx"
-#include "formulagroup.hxx"
-
-#include <svx/svdpage.hxx>
+#include <docsh.hxx>
+#include <document.hxx>
+#include <formulagroup.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -141,7 +119,6 @@ public:
     void testMathFormulaArcCos();
     void testMathFormulaSqrt();
     void testMathFormulaArcCosHyp();
-    void testFinancialXirrFormula();
     void testFinacialNPVFormula();
     void testStatisticalFormulaNormsdist();
     void testStatisticalFormulaNorminv();
@@ -370,7 +347,6 @@ public:
     CPPUNIT_TEST(testMathFormulaArcCos);
     CPPUNIT_TEST(testMathFormulaSqrt);
     CPPUNIT_TEST(testMathFormulaArcCosHyp);
-    CPPUNIT_TEST(testFinancialXirrFormula);
     CPPUNIT_TEST(testFinacialNPVFormula);
     CPPUNIT_TEST(testStatisticalFormulaNormsdist);
     CPPUNIT_TEST(testStatisticalFormulaNorminv);
@@ -538,11 +514,11 @@ bool ScOpenCLTest::initTestEnv(const OUString& fileName, sal_Int32 nFormat,
         return false;
 
     xDocSh = loadDoc(fileName, nFormat, bReadWrite);
-    CPPUNIT_ASSERT_MESSAGE("Failed to load document.", xDocSh.Is());
+    CPPUNIT_ASSERT_MESSAGE("Failed to load document.", xDocSh.is());
     enableOpenCL();
 
     xDocShRes = loadDoc(fileName, nFormat, bReadWrite);
-    CPPUNIT_ASSERT_MESSAGE("Failed to load document.", xDocShRes.Is());
+    CPPUNIT_ASSERT_MESSAGE("Failed to load document.", xDocShRes.is());
 
     return true;
 }
@@ -643,7 +619,7 @@ void ScOpenCLTest::testSharedFormulaXLSStockHistory()
         return;
     ScDocument& rDoc = xDocSh->GetDocument();
     ScDocument& rDocRes = xDocShRes->GetDocument();
-    xDocSh->DoHardRecalc(true);
+    xDocSh->DoHardRecalc();
 
     // Check the results of formula cells in the shared formula range.
     for (SCROW i = 33; i < 44; ++i)
@@ -667,7 +643,7 @@ void ScOpenCLTest::testSharedFormulaXLSGroundWater()
         return;
     ScDocument& rDoc = xDocSh->GetDocument();
     ScDocument& rDocRes = xDocShRes->GetDocument();
-    xDocSh->DoHardRecalc(true);
+    xDocSh->DoHardRecalc();
 
     // Check the results of formula cells in the shared formula range.
     for (SCROW i = 5; i <= 77; ++i)
@@ -749,10 +725,10 @@ void ScOpenCLTest::testSystematic()
     CPPUNIT_ASSERT(nBVertBegin != 0);
     CPPUNIT_ASSERT(nAVertEnd > nAVertBegin + 100);
     CPPUNIT_ASSERT(nBVertEnd > nBVertBegin + 100);
-    CPPUNIT_ASSERT((nAVertEnd-nAVertBegin) == (nBVertEnd-nBVertBegin));
+    CPPUNIT_ASSERT_EQUAL(nAVertEnd-nAVertBegin, nBVertEnd-nBVertBegin);
     CPPUNIT_ASSERT(nAHorEnd > 10);
     CPPUNIT_ASSERT(nBHorEnd > 10);
-    CPPUNIT_ASSERT(nAHorEnd == nBHorEnd);
+    CPPUNIT_ASSERT_EQUAL(nAHorEnd, nBHorEnd);
 
     for (SCROW i = nAVertBegin; i < nAVertEnd; ++i)
     {
@@ -884,7 +860,7 @@ void ScOpenCLTest::testMathFormulaSinh()
         return;
     ScDocument& rDoc = xDocSh->GetDocument();
     ScDocument& rDocRes = xDocShRes->GetDocument();
-    xDocSh->DoHardRecalc(true);
+    xDocSh->DoHardRecalc();
 
     for (SCROW i = 0; i <= 15; ++i)
     {
@@ -920,11 +896,9 @@ void ScOpenCLTest::testMathFormulaRandom()
 
     for (SCROW i = 0; i <= 15; ++i)
     {
-        double fLibre = rDoc.GetValue(ScAddress(0,i,0));
-        double fExcel = rDocRes.GetValue(ScAddress(0,i,0));
+        rDoc.GetValue(ScAddress(0,i,0)); // LO
+        rDocRes.GetValue(ScAddress(0,i,0)); // Excel
         //because the random numbers will always change,so give the test "true"
-        (void) fLibre;
-        (void) fExcel;
         CPPUNIT_ASSERT(true);
     }
 }
@@ -2640,7 +2614,7 @@ void ScOpenCLTest::testMathSumIfsFormula()
         return;
     ScDocument& rDoc = xDocSh->GetDocument();
     ScDocument& rDocRes = xDocShRes->GetDocument();
-    xDocSh->DoHardRecalc(true);
+    xDocSh->DoHardRecalc();
 
     for (SCROW i = 2; i <= 11; ++i)
     {
@@ -2744,29 +2718,6 @@ void ScOpenCLTest:: testFinancialIPMTFormula()
         double fExcel = rDocRes.GetValue(ScAddress(6, i, 0));
         CPPUNIT_ASSERT_DOUBLES_EQUAL(fExcel, fLibre, fabs(0.0001*fExcel));
     }
-}
-
-void ScOpenCLTest:: testFinancialXirrFormula()
-{
-    if(!initTestEnv("opencl/financial/XIRR.", FORMAT_ODS, false))
-        return;
-    ScDocument& rDoc = xDocSh->GetDocument();
-    rDoc.CalcAll();
-
-    for (SCROW i = 1; i <= 10; ++i)
-    {
-        double fFormula  = rDoc.GetValue(ScAddress(2, i, 0));
-        double fExpected = rDoc.GetValue(ScAddress(3, i, 0));
-        CPPUNIT_ASSERT(rtl::math::approxEqual(fExpected, fFormula));
-    }
-    for (SCROW i = 18; i <= 27; ++i)
-    {
-        double fFormula = rDoc.GetValue(ScAddress(2, i, 0));
-        double fExpected = rDoc.GetValue(ScAddress(3, i, 0));
-        CPPUNIT_ASSERT(rtl::math::approxEqual(fExpected, fFormula));
-    }
-
-
 }
 
 void ScOpenCLTest::testStatisticalFormulaChiSqDist()
@@ -3410,7 +3361,7 @@ void ScOpenCLTest::testMathCountIfsFormula()
         return;
     ScDocument& rDoc = xDocSh->GetDocument();
     ScDocument& rDocRes = xDocShRes->GetDocument();
-    xDocSh->DoHardRecalc(true);
+    xDocSh->DoHardRecalc();
 
     for (SCROW i = 1; i < 10; ++i)
     {
@@ -3444,7 +3395,7 @@ void ScOpenCLTest::testMathAverageIfsFormula()
     ScDocument& rDoc = xDocSh->GetDocument();
     ScDocument& rDocRes = xDocShRes->GetDocument();
 
-    xDocSh->DoHardRecalc(true);
+    xDocSh->DoHardRecalc();
 
     for (SCROW i = 1; i <= 11; ++i)
     {
@@ -4729,7 +4680,7 @@ void ScOpenCLTest::testStatisticalFormulaStDevPA1()
 }
 
 ScOpenCLTest::ScOpenCLTest()
-      : ScBootstrapFixture( "/sc/qa/unit/data" )
+      : ScBootstrapFixture( "sc/qa/unit/data" )
 {
 }
 
@@ -4747,15 +4698,15 @@ void ScOpenCLTest::setUp()
 void ScOpenCLTest::tearDown()
 {
     //close test env
-    if(xDocSh.Is())
+    if(xDocSh.is())
     {
         xDocSh->DoClose();
-        xDocSh.Clear();
+        xDocSh.clear();
     }
-    if(xDocShRes.Is())
+    if(xDocShRes.is())
     {
         xDocShRes->DoClose();
-        xDocShRes.Clear();
+        xDocShRes.clear();
     }
 
     uno::Reference< lang::XComponent >

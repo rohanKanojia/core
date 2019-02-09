@@ -30,15 +30,11 @@ namespace com { namespace sun { namespace star { namespace lang {
     class XMultiServiceFactory;
 } } } }
 
-// module
-css::uno::Sequence< OUString > SAL_CALL SwUnoModule_getSupportedServiceNames() throw();
-OUString SAL_CALL SwUnoModule_getImplementationName() throw();
-css::uno::Reference< css::uno::XInterface > SAL_CALL SwUnoModule_createInstance( const css::uno::Reference< css::lang::XMultiServiceFactory > &rSMgr ) throw( css::uno::Exception );
-
 // writer documents
-css::uno::Sequence< OUString > SAL_CALL SwTextDocument_getSupportedServiceNames() throw();
-OUString SAL_CALL SwTextDocument_getImplementationName() throw();
-css::uno::Reference< css::uno::XInterface > SAL_CALL SwTextDocument_createInstance( const css::uno::Reference< css::lang::XMultiServiceFactory > &rSMgr, SfxModelFlags _nCreationFlags ) throw( css::uno::Exception );
+css::uno::Sequence< OUString > SwTextDocument_getSupportedServiceNames() throw();
+OUString SwTextDocument_getImplementationName() throw();
+/// @throws css::uno::Exception
+css::uno::Reference< css::uno::XInterface > SwTextDocument_createInstance( const css::uno::Reference< css::lang::XMultiServiceFactory > &rSMgr, SfxModelFlags _nCreationFlags );
 
 #endif
 

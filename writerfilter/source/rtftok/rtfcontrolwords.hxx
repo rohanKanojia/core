@@ -14,7 +14,6 @@ namespace writerfilter
 {
 namespace rtftok
 {
-
 /**
  * An RTF destination state is the last open destination control word.
  *
@@ -302,8 +301,6 @@ enum RTFKeyword
     RTF_BRDRDASH,
     RTF_BRDRDASHD,
     RTF_BRDRDASHDD,
-    RTF_BRDRDASHDOT,
-    RTF_BRDRDASHDOTDOT,
     RTF_BRDRDASHDOTSTR,
     RTF_BRDRDASHSM,
     RTF_BRDRDB,
@@ -1980,6 +1977,7 @@ enum RTFKeyword
     RTF_FLYHORZ,
     RTF_FLYANCHOR
 };
+const char* keywordToString(RTFKeyword nKeyword);
 
 /// Types of an RTF Control Word
 enum RTFControlTypes
@@ -1991,31 +1989,64 @@ enum RTFControlTypes
     CONTROL_VALUE // eg \fs (requires parameter)
 };
 
-/// Respresents an RTF Control Word
-struct RTFSymbol
+/// Represents an RTF Control Word
+class RTFSymbol
 {
-    const char* sKeyword;
-    int nControlType;
-    RTFKeyword nIndex;
+    const char* m_sKeyword;
+    int m_nControlType;
+    RTFKeyword m_nIndex;
+
+    int m_nDefValue; ///< Most of the control words default to 0.
+
+public:
+    RTFSymbol() = default;
+    RTFSymbol(const char* sKeyword, int nControlType = 0, RTFKeyword nIndex = RTF_invalid,
+              int nDefValue = 0)
+        : m_sKeyword(sKeyword)
+        , m_nControlType(nControlType)
+        , m_nIndex(nIndex)
+        , m_nDefValue(nDefValue)
+    {
+    }
+
+    const char* GetKeyword() const { return m_sKeyword; }
+
+    int GetControlType() const { return m_nControlType; }
+
+    RTFKeyword GetIndex() const { return m_nIndex; }
+
+    int GetDefValue() const { return m_nDefValue; }
 
     bool operator<(const RTFSymbol& rOther) const;
 };
 
-extern RTFSymbol aRTFControlWords[];
+extern RTFSymbol const aRTFControlWords[];
 extern int nRTFControlWords;
 
-/// Respresents an RTF Math Control Word
-struct RTFMathSymbol
+/// Represents an RTF Math Control Word
+class RTFMathSymbol
 {
-    RTFKeyword eKeyword;
-    int nToken; ///< This is the OOXML token equivalent.
-    Destination eDestination;
+    RTFKeyword m_eKeyword;
+    int m_nToken; ///< This is the OOXML token equivalent.
+    Destination m_eDestination;
+
+public:
+    RTFMathSymbol(RTFKeyword eKeyword, int nToken = 0,
+                  Destination eDestination = Destination::NORMAL)
+        : m_eKeyword(eKeyword)
+        , m_nToken(nToken)
+        , m_eDestination(eDestination)
+    {
+    }
+
+    int GetToken() const { return m_nToken; }
+
+    Destination GetDestination() const { return m_eDestination; }
+
     bool operator<(const RTFMathSymbol& rOther) const;
 };
 
-#define M_TOKEN(token) OOX_TOKEN(officeMath, token)
-
-extern RTFMathSymbol aRTFMathControlWords[];
+extern RTFMathSymbol const aRTFMathControlWords[];
 extern int nRTFMathControlWords;
 
 } // namespace rtftok

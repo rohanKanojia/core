@@ -65,8 +65,8 @@ namespace slideshow
             // perform general transformations _before_ the reverse
             // mode changes. This allows the Transition table to be
             // filled more consistently (otherwise, when e.g. rotating
-            // a clip 90 degrees, the REVERSEMETHOD_FLIP_X becomes
-            // REVERSEMETHOD_FLIP_Y instead)
+            // a clip 90 degrees, the ReverseMethod::FlipX becomes
+            // ReverseMethod::FlipY instead)
             if (rTransitionInfo.mnRotationAngle != 0.0 ||
                 rTransitionInfo.mnScaleX != 1.0 ||
                 rTransitionInfo.mnScaleY != 1.0)
@@ -101,35 +101,27 @@ namespace slideshow
                             "TransitionFactory::TransitionFactory(): Unexpected reverse method" );
                         break;
 
-                    case TransitionInfo::REVERSEMETHOD_IGNORE:
+                    case TransitionInfo::ReverseMethod::Ignore:
                         break;
 
-                    case TransitionInfo::REVERSEMETHOD_INVERT_SWEEP:
-                        mbForwardParameterSweep = !mbForwardParameterSweep;
-                        break;
-
-                    case TransitionInfo::REVERSEMETHOD_SUBTRACT_POLYGON:
-                        mbSubtractPolygon = !mbSubtractPolygon;
-                        break;
-
-                    case TransitionInfo::REVERSEMETHOD_SUBTRACT_AND_INVERT:
+                    case TransitionInfo::ReverseMethod::SubtractAndInvert:
                         mbForwardParameterSweep = !mbForwardParameterSweep;
                         mbSubtractPolygon = !mbSubtractPolygon;
                         break;
 
-                    case TransitionInfo::REVERSEMETHOD_ROTATE_180:
-                        maStaticTransformation = basegfx::tools::createRotateAroundPoint(0.5, 0.5, M_PI)
+                    case TransitionInfo::ReverseMethod::Rotate180:
+                        maStaticTransformation = basegfx::utils::createRotateAroundPoint(0.5, 0.5, M_PI)
                             * maStaticTransformation;
                         break;
 
-                    case TransitionInfo::REVERSEMETHOD_FLIP_X:
-                        maStaticTransformation = basegfx::tools::createScaleTranslateB2DHomMatrix(-1.0, 1.0, 1.0, 0.0)
+                    case TransitionInfo::ReverseMethod::FlipX:
+                        maStaticTransformation = basegfx::utils::createScaleTranslateB2DHomMatrix(-1.0, 1.0, 1.0, 0.0)
                             * maStaticTransformation;
                         mbFlip = true;
                         break;
 
-                    case TransitionInfo::REVERSEMETHOD_FLIP_Y:
-                        maStaticTransformation = basegfx::tools::createScaleTranslateB2DHomMatrix(1.0, -1.0, 0.0, 1.0)
+                    case TransitionInfo::ReverseMethod::FlipY:
+                        maStaticTransformation = basegfx::utils::createScaleTranslateB2DHomMatrix(1.0, -1.0, 0.0, 1.0)
                             * maStaticTransformation;
                         mbFlip = true;
                         break;
@@ -168,7 +160,7 @@ namespace slideshow
             // currently, clipper cannot cope with curves. Subdivide first
             // AW: Should be no longer necessary; clipping tools are now bezier-safe
             // if( aClipPoly.areControlPointsUsed() )
-            //    aClipPoly = ::basegfx::tools::adaptiveSubdivideByAngle(aClipPoly);
+            //    aClipPoly = ::basegfx::utils::adaptiveSubdivideByAngle(aClipPoly);
 
             if( mbSubtractPolygon )
             {
@@ -186,16 +178,16 @@ namespace slideshow
                 if(aBackgroundRange.isInside(aClipPolyRange))
                 {
                     // combine polygons; make the clip polygon the hole
-                    aClipPoly = ::basegfx::tools::correctOrientations(aClipPoly);
+                    aClipPoly = ::basegfx::utils::correctOrientations(aClipPoly);
                     aClipPoly.flip();
-                    aClipPoly.insert(0, basegfx::tools::createPolygonFromRect(aBackgroundRange));
+                    aClipPoly.insert(0, basegfx::utils::createPolygonFromRect(aBackgroundRange));
                 }
                 else
                 {
                     // when not completely inside aBackgroundRange clipping is needed
                     // subtract aClipPoly from aBackgroundRange
-                    const basegfx::B2DPolyPolygon aBackgroundPolyPoly(basegfx::tools::createPolygonFromRect(aBackgroundRange));
-                    aClipPoly = basegfx::tools::solvePolygonOperationDiff(aBackgroundPolyPoly, aClipPoly);
+                    const basegfx::B2DPolyPolygon aBackgroundPolyPoly(basegfx::utils::createPolygonFromRect(aBackgroundRange));
+                    aClipPoly = basegfx::utils::solvePolygonOperationDiff(aBackgroundPolyPoly, aClipPoly);
                 }
             }
 

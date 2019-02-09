@@ -20,16 +20,13 @@
 #ifndef INCLUDED_EXTENSIONS_SOURCE_INC_COMPONENTMODULE_HXX
 #define INCLUDED_EXTENSIONS_SOURCE_INC_COMPONENTMODULE_HXX
 
-/** you may find this file helpful if you implement a component (in it's own library) which can't use
+/** you may find this file helpful if you implement a component (in its own library) which can't use
     the usual infrastructure.<br/>
     More precise, you find helper classes to ease the use of resources and the registration of services.
-    <p>
-    You need to define a preprocessor variable COMPMOD_NAMESPACE in order to use this file. Set it to a string
-    which should be used as namespace for the classes defined herein.</p>
 */
 
 #include <osl/mutex.hxx>
-#include <tools/resid.hxx>
+#include <unotools/resmgr.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <com/sun/star/uno/Sequence.hxx>
@@ -38,14 +35,10 @@
 #include <rtl/string.hxx>
 #include <vector>
 
-class ResMgr;
-
-
-namespace COMPMOD_NAMESPACE
+namespace compmodule
 {
 
-
-typedef css::uno::Reference< css::lang::XSingleServiceFactory > (SAL_CALL *FactoryInstantiation)
+typedef css::uno::Reference< css::lang::XSingleServiceFactory > (*FactoryInstantiation)
         (
             const css::uno::Reference< css::lang::XMultiServiceFactory >& _rServiceManager,
             const OUString & _rComponentName,
@@ -54,21 +47,12 @@ typedef css::uno::Reference< css::lang::XSingleServiceFactory > (SAL_CALL *Facto
             rtl_ModuleCount*
         );
 
-    class OModuleImpl;
     class OModule
     {
-        friend class OModuleResourceClient;
-
     private:
         OModule() = delete; //TODO: get rid of this class
 
     protected:
-        // resource administration
-        static ::osl::Mutex     s_aMutex;       /// access safety
-        static sal_Int32        s_nClients;     /// number of registered clients
-        static OModuleImpl*     s_pImpl;        /// impl class. lives as long as at least one client for the module is registered
-        static OString   s_sResPrefix;
-
         // auto registration administration
         static  std::vector< OUString >*
             s_pImplementationNames;
@@ -80,12 +64,6 @@ typedef css::uno::Reference< css::lang::XSingleServiceFactory > (SAL_CALL *Facto
             s_pFactoryFunctionPointers;
 
     public:
-        // can be set as long as no resource has been accessed ...
-        static void     setResourceFilePrefix(const OString& _rPrefix);
-
-        /// get the vcl res manager of the module
-        static ResMgr*  getResManager();
-
         /** register a component implementing a service with the given data.
             @param  _rImplementationName
                         the implementation name of the component
@@ -123,43 +101,16 @@ typedef css::uno::Reference< css::lang::XSingleServiceFactory > (SAL_CALL *Facto
             const OUString& _rImplementationName,
             const css::uno::Reference< css::lang::XMultiServiceFactory >& _rxServiceManager
             );
-
-    protected:
-        /// register a client for the module
-        static void registerClient();
-        /// revoke a client for the module
-        static void revokeClient();
-
-    private:
-        /** ensure that the impl class exists
-            @precond m_aMutex is guarded when this method gets called
-        */
-        static void ensureImpl();
     };
 
-
-    // base class for objects which uses any global module-specific resources
-    class OModuleResourceClient
-    {
-    public:
-        OModuleResourceClient()     { OModule::registerClient(); }
-        ~OModuleResourceClient()    { OModule::revokeClient(); }
-    };
-
-
-    // specialized ResId, using the resource manager provided by the global module
-    class ModuleRes : public ::ResId
-    {
-    public:
-        explicit ModuleRes(sal_uInt16 _nId) : ResId(_nId, *OModule::getResManager()) { }
-    };
-
+    // specialized ResId, using the resource locale provided by the global module
+    OUString ModuleRes(const char* pId);
 
     template <class TYPE>
     class OMultiInstanceAutoRegistration
     {
     public:
-        /** automatically registeres a multi instance component
+        /** automatically registers a multi instance component
             <p>Assumed that the template argument has the three methods
                 <ul>
                     <li><code>static OUString getImplementationName_Static()</code><li/>
@@ -193,7 +144,7 @@ typedef css::uno::Reference< css::lang::XSingleServiceFactory > (SAL_CALL *Facto
         OModule::revokeComponent(TYPE::getImplementationName_Static());
     }
 
-}   // namespace COMPMOD_NAMESPACE
+}   // namespace compmodule
 
 
 #endif // INCLUDED_EXTENSIONS_SOURCE_INC_COMPONENTMODULE_HXX

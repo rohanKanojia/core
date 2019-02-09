@@ -22,7 +22,7 @@
 #include <rtl/ustring.hxx>
 #include <com/sun/star/lang/Locale.hpp>
 #include <unotools/charclass.hxx>
-#include "sot/stg.hxx"
+#include <sot/stg.hxx>
 #include "stgelem.hxx"
 #include "stgcache.hxx"
 #include "stgstrms.hxx"
@@ -129,14 +129,17 @@ bool StgHeader::Load( StgIo& rIo )
 
 bool StgHeader::Load( SvStream& r )
 {
-    r.Seek( 0L );
-    r.Read( m_cSignature, 8 );
+    r.Seek( 0 );
+    r.ReadBytes( m_cSignature, 8 );
     ReadClsId( r, m_aClsId );         // 08 Class ID
     r.ReadInt32( m_nVersion )                   // 1A version number
      .ReadUInt16( m_nByteOrder )                 // 1C Unicode byte order indicator
      .ReadInt16( m_nPageSize )                  // 1E 1 << nPageSize = block size
      .ReadInt16( m_nDataPageSize );             // 20 1 << this size == data block size
-    r.SeekRel( 10 );
+    if (!r.good())
+        return false;
+    if (!checkSeek(r, r.Tell() + 10))
+        return false;
     r.ReadInt32( m_nFATSize )                   // 2C total number of FAT pages
      .ReadInt32( m_nTOCstrm )                   // 30 starting page for the TOC stream
      .ReadInt32( m_nReserved )                  // 34
@@ -145,10 +148,10 @@ bool StgHeader::Load( SvStream& r )
      .ReadInt32( m_nDataFATSize )               // 40 # of data FATpages
      .ReadInt32( m_nMasterChain )               // 44 chain to the next master block
      .ReadInt32( m_nMaster );                   // 48 # of additional master blocks
-    for( short i = 0; i < cFATPagesInHeader; i++ )
-        r.ReadInt32( m_nMasterFAT[ i ] );
+    for(sal_Int32 & i : m_nMasterFAT)
+        r.ReadInt32( i );
 
-    return (r.GetErrorCode() == ERRCODE_NONE) && Check();
+    return r.good() && Check();
 }
 
 bool StgHeader::Store( StgIo& rIo )
@@ -157,8 +160,8 @@ bool StgHeader::Store( StgIo& rIo )
         return true;
 
     SvStream& r = *rIo.GetStrm();
-    r.Seek( 0L );
-    r.Write( m_cSignature, 8 );
+    r.Seek( 0 );
+    r.WriteBytes( m_cSignature, 8 );
     WriteClsId( r, m_aClsId );                   // 08 Class ID
     r.WriteInt32( m_nVersion )                   // 1A version number
      .WriteUInt16( m_nByteOrder )                 // 1C Unicode byte order indicator
@@ -173,15 +176,15 @@ bool StgHeader::Store( StgIo& rIo )
      .WriteInt32( m_nDataFATSize )               // 40 # of data FAT pages
      .WriteInt32( m_nMasterChain )               // 44 chain to the next master block
      .WriteInt32( m_nMaster );                   // 48 # of additional master blocks
-    for( short i = 0; i < cFATPagesInHeader; i++ )
-        r.WriteInt32( m_nMasterFAT[ i ] );
+    for(sal_Int32 i : m_nMasterFAT)
+        r.WriteInt32( i );
     m_bDirty = sal_uInt8(!rIo.Good());
     return !m_bDirty;
 }
 
 static bool lcl_wontoverflow(short shift)
 {
-    return shift >= 0 && shift < (short)sizeof(short) * 8 - 1;
+    return shift >= 0 && shift < short(sizeof(short)) * 8 - 1;
 }
 
 static bool isKnownSpecial(sal_Int32 nLocation)
@@ -196,7 +199,7 @@ static bool isKnownSpecial(sal_Int32 nLocation)
 bool StgHeader::Check()
 {
     return  memcmp( m_cSignature, cStgSignature, 8 ) == 0
-            && (short) ( m_nVersion >> 16 ) == 3
+            && static_cast<short>( m_nVersion >> 16 ) == 3
             && m_nPageSize == 9
             && lcl_wontoverflow(m_nPageSize)
             && lcl_wontoverflow(m_nDataPageSize)
@@ -314,7 +317,7 @@ static OUString ToUpperUnicode( const OUString & rStr )
     return aCC.uppercase( rStr );
 }
 
-bool StgEntry::SetName( const OUString& rName )
+void StgEntry::SetName( const OUString& rName )
 {
     // I don't know the locale, so en_US is hopefully fine
     m_aName = ToUpperUnicode( rName );
@@ -323,7 +326,7 @@ bool StgEntry::SetName( const OUString& rName )
         m_aName = m_aName.copy(0, nMaxLegalStr);
     }
 
-    sal_uInt16 i;
+    sal_Int32 i;
     for( i = 0; i < rName.getLength() && i <= nMaxLegalStr; i++ )
     {
         m_nName[ i ] = rName[ i ];
@@ -333,7 +336,6 @@ bool StgEntry::SetName( const OUString& rName )
         m_nName[ i++ ] = 0;
     }
     m_nNameLen = ( rName.getLength() + 1 ) << 1;
-    return true;
 }
 
 sal_Int32 StgEntry::GetLeaf( StgEntryRef eRef ) const
@@ -392,8 +394,8 @@ bool StgEntry::Load(const void* pFrom, sal_uInt32 nBufSize, sal_uInt64 nUnderlyi
         return false;
 
     SvMemoryStream r( const_cast<void *>(pFrom), nBufSize, StreamMode::READ );
-    for( short i = 0; i < 32; i++ )
-        r.ReadUtf16( m_nName[ i ] );             // 00 name as WCHAR
+    for(sal_Unicode & i : m_nName)
+        r.ReadUtf16( i );             // 00 name as WCHAR
     r.ReadUInt16( m_nNameLen )                   // 40 size of name in bytes including 00H
      .ReadUChar( m_cType )                      // 42 entry type
      .ReadUChar( m_cFlags )                     // 43 0 or 1 (tree balance?)
@@ -424,6 +426,18 @@ bool StgEntry::Load(const void* pFrom, sal_uInt32 nBufSize, sal_uInt64 nUnderlyi
             //bad pageid
             return false;
         }
+        if (m_cType == STG_EMPTY)
+        {
+            /*
+             tdf#112399 opens fine in MSOffice 2013 despite a massive m_nSize field
+
+             Free (unused) directory entries are marked with Object Type 0x0
+             (unknown or unallocated). The entire directory entry must consist of
+             all zeroes except for the child, right sibling, and left sibling
+             pointers, which must be initialized to NOSTREAM (0xFFFFFFFF).
+            */
+            m_nSize = 0;
+        }
         if (m_nSize < 0)
         {
             // the size makes no sense for the substorage
@@ -453,8 +467,8 @@ bool StgEntry::Load(const void* pFrom, sal_uInt32 nBufSize, sal_uInt64 nUnderlyi
 void StgEntry::Store( void* pTo )
 {
     SvMemoryStream r( pTo, 128, StreamMode::WRITE );
-    for( short i = 0; i < 32; i++ )
-        r.WriteUInt16( m_nName[ i ] );            // 00 name as WCHAR
+    for(sal_Unicode i : m_nName)
+        r.WriteUInt16( i );            // 00 name as WCHAR
     r.WriteUInt16( m_nNameLen )                   // 40 size of name in bytes including 00H
      .WriteUChar( m_cType )                      // 42 entry type
      .WriteUChar( m_cFlags )                     // 43 0 or 1 (tree balance?)

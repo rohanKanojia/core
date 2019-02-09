@@ -19,10 +19,9 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_RETRIEVEINPUTSTREAM_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_RETRIEVEINPUTSTREAM_HXX
 
-#include <observablethread.hxx>
+#include "observablethread.hxx"
 #include <rtl/ustring.hxx>
-#include <com/sun/star/io/XInputStream.hpp>
-#include <retrievedinputstreamdata.hxx>
+#include "retrievedinputstreamdata.hxx"
 
 /** class for a thread to retrieve an input stream given by an URL
 
@@ -36,7 +35,7 @@ class SwAsyncRetrieveInputStreamThread : public ObservableThread
                     const SwRetrievedInputStreamDataManager::tDataKey nDataKey,
                     const OUString& rLinkedURL, const OUString& rReferer );
 
-        virtual ~SwAsyncRetrieveInputStreamThread();
+        virtual ~SwAsyncRetrieveInputStreamThread() override;
 
     protected:
 

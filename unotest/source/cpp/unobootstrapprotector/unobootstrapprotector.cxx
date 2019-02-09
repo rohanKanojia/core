@@ -21,7 +21,7 @@
 #include <string>
 #include <iostream>
 
-#include "com/sun/star/uno/Exception.hpp"
+#include <com/sun/star/uno/Exception.hpp>
 
 #include <cppuhelper/bootstrap.hxx>
 #include <comphelper/processfactory.hxx>
@@ -29,16 +29,17 @@
 #include <com/sun/star/lang/Locale.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
-#include "cppuhelper/exc_hlp.hxx"
-#include "cppunit/Message.h"
-#include "osl/thread.h"
-#include "rtl/string.hxx"
-#include "rtl/ustring.h"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
+#include <cppuhelper/exc_hlp.hxx>
+#include <cppunit/Message.h>
+#include <osl/thread.h>
+#include <rtl/string.hxx>
+#include <rtl/ustring.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
-#include "cppunittester/protectorfactory.hxx"
+#include <cppunittester/protectorfactory.hxx>
 
 namespace {
 
@@ -47,7 +48,7 @@ using namespace com::sun::star;
 //cppunit calls instantiates a new TextFixture for each test and calls setUp
 //and tearDown on that for every test in a fixture
 
-//We basically need to call dispose on our root component context context to
+//We basically need to call dispose on our root component context to
 //shut down cleanly in the right order.
 
 //But we can't setup and tear down the root component context for
@@ -60,7 +61,7 @@ class Prot : public CppUnit::Protector
 public:
     Prot();
 
-    virtual ~Prot();
+    virtual ~Prot() override;
 
     Prot(const Prot&) = delete;
     Prot& operator=(const Prot&) = delete;
@@ -74,9 +75,8 @@ private:
 
 
 Prot::Prot()
+    : m_xContext(cppu::defaultBootstrap_InitialComponentContext())
 {
-    m_xContext = cppu::defaultBootstrap_InitialComponentContext();
-
     uno::Reference<lang::XMultiComponentFactory> xFactory = m_xContext->getServiceManager();
     uno::Reference<lang::XMultiServiceFactory> xSFactory(xFactory, uno::UNO_QUERY_THROW);
 
@@ -96,7 +96,7 @@ Prot::~Prot()
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT CppUnit::Protector * SAL_CALL unobootstrapprotector()
+extern "C" SAL_DLLPUBLIC_EXPORT CppUnit::Protector * unobootstrapprotector()
 {
     return new Prot;
 }

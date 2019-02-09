@@ -13,9 +13,10 @@
 #include <svtools/valueset.hxx>
 #include <vcl/toolbox.hxx>
 
-#include "strings.hrc"
-#include "res_bmp.hrc"
-#include "sdresid.hxx"
+#include <strings.hrc>
+
+#include <bitmaps.hlst>
+#include <sdresid.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -37,14 +38,13 @@ public:
     virtual VclPtr<vcl::Window> createPopupWindow( vcl::Window* pParent ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments )
-        throw ( css::uno::Exception, css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
-    void setToolboxItemImage( sal_uInt16 nImage );
+    void setToolboxItemImage(const OUString& rImage);
 
     using svt::PopupWindowController::createPopupWindow;
 };
@@ -52,15 +52,14 @@ public:
 class DisplayModeToolbarMenu : public svtools::ToolbarMenu
 {
 public:
-    DisplayModeToolbarMenu( DisplayModeController& rController,
-        const Reference< XFrame >& xFrame, vcl::Window* pParent );
-    virtual ~DisplayModeToolbarMenu();
+    DisplayModeToolbarMenu( DisplayModeController& rController, vcl::Window* pParent );
+    virtual ~DisplayModeToolbarMenu() override;
     virtual void dispose() override;
 
 protected:
-    DECL_LINK_TYPED( SelectToolbarMenuHdl, ToolbarMenu*, void );
-    DECL_LINK_TYPED( SelectValueSetHdl, ValueSet*, void );
-    void SelectHdl(void*);
+    DECL_LINK( SelectToolbarMenuHdl, ToolbarMenu*, void );
+    DECL_LINK( SelectValueSetHdl, ValueSet*, void );
+    void SelectHdl(void const *);
 
 private:
     DisplayModeController& mrController;
@@ -70,10 +69,10 @@ private:
 
 struct snewfoil_value_info
 {
-    sal_uInt16  mnId;
-    sal_uInt16  mnBmpResId;
-    sal_uInt16  mnStrResId;
-    OUString    msUnoCommand;
+    sal_uInt16 const mnId;
+    const char* msBmpResId;
+    const char* mpStrResId;
+    const char* msUnoCommand;
 };
 
 static const snewfoil_value_info editmodes[] =
@@ -81,20 +80,20 @@ static const snewfoil_value_info editmodes[] =
     {1,
         BMP_DISPLAYMODE_SLIDE,
         STR_NORMAL_MODE,
-        OUString(".uno:NormalMultiPaneGUI") },
+        ".uno:NormalMultiPaneGUI" },
     {2,
-        BMP_DISPLAYMODE_NOTES,
-        STR_NOTES_MODE,
-        OUString(".uno:NotesMode") },
-    {3,
         BMP_DISPLAYMODE_OUTLINE,
         STR_OUTLINE_MODE,
-        OUString(".uno:OutlineMode") },
+        ".uno:OutlineMode" },
+    {3,
+        BMP_DISPLAYMODE_NOTES,
+        STR_NOTES_MODE,
+        ".uno:NotesMode" },
     {4,
         BMP_DISPLAYMODE_SLIDE_SORTER,
         STR_SLIDE_SORTER_MODE,
-        OUString(".uno:DiaMode") },
-    {0, 0, 0, OUString() }
+        ".uno:DiaMode" },
+    {0, "", nullptr, "" }
 };
 
 static const snewfoil_value_info mastermodes[] =
@@ -102,16 +101,16 @@ static const snewfoil_value_info mastermodes[] =
     {5,
         BMP_DISPLAYMODE_SLIDE_MASTER,
         STR_SLIDE_MASTER_MODE,
-        OUString(".uno:SlideMasterPage") },
+        ".uno:SlideMasterPage" },
     {6,
         BMP_DISPLAYMODE_NOTES_MASTER,
         STR_NOTES_MASTER_MODE,
-        OUString(".uno:NotesMasterPage") },
+        ".uno:NotesMasterPage" },
     {7,
         BMP_DISPLAYMODE_HANDOUT_MASTER,
         STR_HANDOUT_MASTER_MODE,
-        OUString(".uno:HandoutMode") },
-    {0, 0, 0, OUString() }
+        ".uno:HandoutMode" },
+    {0, "", nullptr, "" }
 };
 
 
@@ -120,30 +119,29 @@ static void fillLayoutValueSet( ValueSet* pValue, const snewfoil_value_info* pIn
     Size aLayoutItemSize;
     for( ; pInfo->mnId; pInfo++ )
     {
-        OUString aText( SD_RESSTR( pInfo->mnStrResId ) );
-        BitmapEx aBmp(  SdResId( pInfo->mnBmpResId ) );
+        OUString aText(SdResId(pInfo->mpStrResId));
+        BitmapEx aBmp(OUString::createFromAscii(pInfo->msBmpResId));
 
         pValue->InsertItem(pInfo->mnId, Image(aBmp), aText);
 
-        aLayoutItemSize.Width()  = std::max( aLayoutItemSize.Width(),  aBmp.GetSizePixel().Width()  );
-        aLayoutItemSize.Height() = std::max( aLayoutItemSize.Height(), aBmp.GetSizePixel().Height() );
+        aLayoutItemSize.setWidth( std::max( aLayoutItemSize.Width(),  aBmp.GetSizePixel().Width()  ) );
+        aLayoutItemSize.setHeight( std::max( aLayoutItemSize.Height(), aBmp.GetSizePixel().Height() ) );
     }
 
     aLayoutItemSize = pValue->CalcItemSizePixel( aLayoutItemSize );
     pValue->SetSizePixel( pValue->CalcWindowSizePixel( aLayoutItemSize ) );
 }
 
-DisplayModeToolbarMenu::DisplayModeToolbarMenu( DisplayModeController& rController,
-    const Reference< XFrame >& xFrame, vcl::Window* pParent )
-: svtools::ToolbarMenu(xFrame, pParent, WB_CLIPCHILDREN )
+DisplayModeToolbarMenu::DisplayModeToolbarMenu( DisplayModeController& rController, vcl::Window* pParent )
+: svtools::ToolbarMenu( rController.getFrameInterface(), pParent, WB_CLIPCHILDREN )
 , mrController( rController )
 , mpDisplayModeSet1( nullptr )
 , mpDisplayModeSet2( nullptr )
 {
     const sal_Int32 LAYOUT_BORDER_PIX = 7;
 
-    OUString aTitle1( SD_RESSTR( STR_DISPLAYMODE_EDITMODES ) );
-    OUString aTitle2( SD_RESSTR( STR_DISPLAYMODE_MASTERMODES ) );
+    OUString aTitle1( SdResId( STR_DISPLAYMODE_EDITMODES ) );
+    OUString aTitle2( SdResId( STR_DISPLAYMODE_MASTERMODES ) );
 
     SetSelectHdl( LINK( this, DisplayModeToolbarMenu, SelectToolbarMenuHdl ) );
 
@@ -155,25 +153,23 @@ DisplayModeToolbarMenu::DisplayModeToolbarMenu( DisplayModeController& rControll
     fillLayoutValueSet( mpDisplayModeSet1, &editmodes[0] );
 
     Size aSize( mpDisplayModeSet1->GetOutputSizePixel() );
-    aSize.Width() += (mpDisplayModeSet1->GetColCount() + 1) * LAYOUT_BORDER_PIX;
-    aSize.Height() += (mpDisplayModeSet1->GetLineCount() +1) * LAYOUT_BORDER_PIX;
+    aSize.AdjustWidth((mpDisplayModeSet1->GetColCount() + 1) * LAYOUT_BORDER_PIX );
+    aSize.AdjustHeight((mpDisplayModeSet1->GetLineCount() +1) * LAYOUT_BORDER_PIX );
     mpDisplayModeSet1->SetOutputSizePixel( aSize );
 
     appendEntry( -1, aTitle1 );
     appendEntry( 1, mpDisplayModeSet1 );
 
-    mpDisplayModeSet2 = VclPtr<ValueSet>::Create( this, WB_TABSTOP | WB_MENUSTYLEVALUESET | WB_FLATVALUESET | WB_NOBORDER | WB_NO_DIRECTSELECT );
+    mpDisplayModeSet2 = createEmptyValueSetControl();
 
     mpDisplayModeSet2->SetSelectHdl( LINK( this, DisplayModeToolbarMenu, SelectValueSetHdl ) );
     mpDisplayModeSet2->SetColCount( nColCount );
-    mpDisplayModeSet2->EnableFullItemMode( false );
-    mpDisplayModeSet2->SetColor( GetControlBackground() );
 
     fillLayoutValueSet( mpDisplayModeSet2, &mastermodes[0] );
 
     aSize = mpDisplayModeSet2->GetOutputSizePixel();
-    aSize.Width() += (mpDisplayModeSet2->GetColCount() + 1) * LAYOUT_BORDER_PIX;
-    aSize.Height() += (mpDisplayModeSet2->GetLineCount() + 1) * LAYOUT_BORDER_PIX;
+    aSize.AdjustWidth((mpDisplayModeSet2->GetColCount() + 1) * LAYOUT_BORDER_PIX );
+    aSize.AdjustHeight((mpDisplayModeSet2->GetLineCount() + 1) * LAYOUT_BORDER_PIX );
     mpDisplayModeSet2->SetOutputSizePixel( aSize );
 
     appendEntry( -1, aTitle2 );
@@ -194,36 +190,36 @@ void DisplayModeToolbarMenu::dispose()
     svtools::ToolbarMenu::dispose();
 }
 
-IMPL_LINK_TYPED( DisplayModeToolbarMenu, SelectValueSetHdl, ValueSet*, pControl, void )
+IMPL_LINK( DisplayModeToolbarMenu, SelectValueSetHdl, ValueSet*, pControl, void )
 {
     SelectHdl(pControl);
 }
-IMPL_LINK_TYPED( DisplayModeToolbarMenu, SelectToolbarMenuHdl, ToolbarMenu *, pControl, void )
+IMPL_LINK( DisplayModeToolbarMenu, SelectToolbarMenuHdl, ToolbarMenu *, pControl, void )
 {
     SelectHdl(pControl);
 }
 
-void DisplayModeToolbarMenu::SelectHdl(void * pControl)
+void DisplayModeToolbarMenu::SelectHdl(void const * pControl)
 {
     if ( IsInPopupMode() )
         EndPopupMode();
 
     OUString sCommandURL;
-    sal_uInt16 nImage = 0;
+    OUString sImage;
 
     if( pControl == mpDisplayModeSet1 ) {
-        sCommandURL = editmodes[mpDisplayModeSet1->GetSelectItemId() - 1 ].msUnoCommand;
-        nImage = editmodes[mpDisplayModeSet1->GetSelectItemId() - 1 ].mnBmpResId;
+        sCommandURL = OUString::createFromAscii(editmodes[mpDisplayModeSet1->GetSelectedItemId() - 1 ].msUnoCommand);
+        sImage = OUString::createFromAscii(editmodes[mpDisplayModeSet1->GetSelectedItemId() - 1 ].msBmpResId);
     }
     else if( pControl == mpDisplayModeSet2 ) {
-        sCommandURL = mastermodes[mpDisplayModeSet2->GetSelectItemId() - 5 ].msUnoCommand;
-        nImage = mastermodes[mpDisplayModeSet2->GetSelectItemId() - 5 ].mnBmpResId;
+        sCommandURL = OUString::createFromAscii(mastermodes[mpDisplayModeSet2->GetSelectedItemId() - 5 ].msUnoCommand);
+        sImage = OUString::createFromAscii(mastermodes[mpDisplayModeSet2->GetSelectedItemId() - 5 ].msBmpResId);
     }
 
     if (!sCommandURL.isEmpty())
         mrController.dispatchCommand( sCommandURL, Sequence< PropertyValue >() );
 
-    mrController.setToolboxItemImage( nImage );
+    mrController.setToolboxItemImage(sImage);
 }
 
 DisplayModeController::DisplayModeController( const css::uno::Reference< css::uno::XComponentContext >& rxContext )
@@ -232,35 +228,33 @@ DisplayModeController::DisplayModeController( const css::uno::Reference< css::un
 }
 
 void SAL_CALL DisplayModeController::initialize( const css::uno::Sequence< css::uno::Any >& aArguments )
-        throw ( css::uno::Exception, css::uno::RuntimeException, std::exception )
 {
     svt::PopupWindowController::initialize( aArguments );
     ToolBox* pToolBox = nullptr;
     sal_uInt16 nId = 0;
     if ( getToolboxId( nId, &pToolBox ) )
         pToolBox->SetItemBits( nId, pToolBox->GetItemBits( nId ) | ToolBoxItemBits::DROPDOWNONLY );
-    setToolboxItemImage( BMP_DISPLAYMODE_SLIDE );
+    setToolboxItemImage(BMP_DISPLAYMODE_SLIDE);
 }
 
 VclPtr<vcl::Window> DisplayModeController::createPopupWindow( vcl::Window* pParent )
 {
-    return VclPtr<sd::DisplayModeToolbarMenu>::Create( *this, m_xFrame, pParent );
+    return VclPtr<sd::DisplayModeToolbarMenu>::Create( *this, pParent );
 }
 
-void DisplayModeController::setToolboxItemImage( sal_uInt16 nImage )
+void DisplayModeController::setToolboxItemImage(const OUString& rImage)
 {
     sal_uInt16 nId;
     ToolBox* pToolBox = nullptr;
     if (getToolboxId( nId, &pToolBox )) {
-        SdResId resId( nImage );
-        BitmapEx aBmp( resId );
-        int targetSize = (pToolBox->GetToolboxButtonSize() == TOOLBOX_BUTTONSIZE_LARGE) ? 32 : 16;
+        BitmapEx aBmp(rImage);
+        int targetSize = (pToolBox->GetToolboxButtonSize() == ToolBoxButtonSize::Large) ? 32 : 16;
         double scale = 1.0f;
         Size size = aBmp.GetSizePixel();
         if (size.Width() > targetSize)
-            scale = (double)targetSize / (double)size.Width();
+            scale = static_cast<double>(targetSize) / static_cast<double>(size.Width());
         if (size.Height() > targetSize)
-            scale = ::std::min( scale, (double)targetSize / (double)size.Height() );
+            scale = ::std::min( scale, static_cast<double>(targetSize) / static_cast<double>(size.Height()) );
         aBmp.Scale( scale, scale );
         pToolBox->SetItemImage( nId, Image( aBmp ) );
     }
@@ -268,12 +262,12 @@ void DisplayModeController::setToolboxItemImage( sal_uInt16 nImage )
 
 // XServiceInfo
 
-OUString SAL_CALL DisplayModeController::getImplementationName() throw( RuntimeException, std::exception )
+OUString SAL_CALL DisplayModeController::getImplementationName()
 {
     return OUString( "com.sun.star.comp.sd.DisplayModeController" );
 }
 
-Sequence< OUString > SAL_CALL DisplayModeController::getSupportedServiceNames(  ) throw( RuntimeException, std::exception )
+Sequence< OUString > SAL_CALL DisplayModeController::getSupportedServiceNames(  )
 {
     css::uno::Sequence<OUString> aRet { "com.sun.star.frame.ToolbarController" };
     return aRet;
@@ -281,7 +275,7 @@ Sequence< OUString > SAL_CALL DisplayModeController::getSupportedServiceNames(  
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT ::com::sun::star::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT ::com::sun::star::uno::XInterface*
 com_sun_star_comp_sd_DisplayModeController_get_implementation( css::uno::XComponentContext* context,
                                                                css::uno::Sequence<css::uno::Any> const &)
 {

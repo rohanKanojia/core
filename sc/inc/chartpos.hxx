@@ -21,37 +21,38 @@
 #define INCLUDED_SC_INC_CHARTPOS_HXX
 
 #include "rangelst.hxx"
+#include <tools/solar.h>
+#include <memory>
 #include <map>
 
-class ScAddress;
-
 // map of row number to ScAddress*
-typedef std::map<sal_uLong, ScAddress*> RowMap;
-// map of column number to RowMap*
-typedef std::map<sal_uLong, RowMap*>    ColumnMap;
+typedef std::map<sal_uLong, std::unique_ptr<ScAddress>> RowMap;
+// map of column number to RowMap
+typedef std::map<sal_uLong, RowMap>    ColumnMap;
 
 class ScChartPositionMap
 {
     friend class ScChartPositioner;
 
-            ScAddress**         ppData;
-            ScAddress**         ppColHeader;
-            ScAddress**         ppRowHeader;
-            sal_uLong               nCount;
-            SCCOL               nColCount;
-            SCROW               nRowCount;
+            std::unique_ptr<std::unique_ptr<ScAddress>[]> ppData;
+            std::unique_ptr<std::unique_ptr<ScAddress>[]> ppColHeader;
+            std::unique_ptr<std::unique_ptr<ScAddress>[]> ppRowHeader;
+            sal_uLong const           nCount;
+            SCCOL const               nColCount;
+            SCROW const               nRowCount;
 
                                 ScChartPositionMap( SCCOL nChartCols, SCROW nChartRows,
                                     SCCOL nColAdd,      // header columns
                                     SCROW nRowAdd,      // header rows
                                     ColumnMap& rCols        // table with col tables with address*
                                     );
-                                ~ScChartPositionMap();  //! deletes all ScAddress*
 
                                 ScChartPositionMap( const ScChartPositionMap& ) = delete;
             ScChartPositionMap& operator=( const ScChartPositionMap& ) = delete;
 
 public:
+                                ~ScChartPositionMap();  //! deletes all ScAddress*
+
             SCCOL               GetColCount() const { return nColCount; }
             SCROW               GetRowCount() const { return nRowCount; }
 
@@ -59,12 +60,12 @@ public:
                                     { return nCol < nColCount && nRow < nRowCount; }
                                 // data column by column
             sal_uLong               GetIndex( SCCOL nCol, SCROW nRow ) const
-                                    { return (sal_uLong) nCol * nRowCount + nRow; }
+                                    { return static_cast<sal_uLong>(nCol) * nRowCount + nRow; }
 
             const ScAddress*    GetPosition( sal_uLong nIndex ) const
                                     {
                                         if ( nIndex < nCount )
-                                            return ppData[ nIndex ];
+                                            return ppData[ nIndex ].get();
                                         return nullptr;
                                     }
 
@@ -72,38 +73,38 @@ public:
             const ScAddress*    GetPosition( SCCOL nChartCol, SCROW nChartRow ) const
                                     {
                                         if ( IsValid( nChartCol, nChartRow ) )
-                                            return ppData[ GetIndex( nChartCol, nChartRow ) ];
+                                            return ppData[ GetIndex( nChartCol, nChartRow ) ].get();
                                         return nullptr;
                                     }
             const ScAddress*    GetColHeaderPosition( SCCOL nChartCol ) const
                                     {
                                         if ( nChartCol < nColCount )
-                                            return ppColHeader[ nChartCol ];
+                                            return ppColHeader[ nChartCol ].get();
                                         return nullptr;
                                     }
             const ScAddress*    GetRowHeaderPosition( SCROW nChartRow ) const
                                     {
                                         if ( nChartRow < nRowCount )
-                                            return ppRowHeader[ nChartRow ];
+                                            return ppRowHeader[ nChartRow ].get();
                                         return nullptr;
                                     }
 };
 
-enum ScChartGlue {
-    SC_CHARTGLUE_NA,
-    SC_CHARTGLUE_NONE,      // old mimic
-    SC_CHARTGLUE_COLS,      // old mimic
-    SC_CHARTGLUE_ROWS,
-    SC_CHARTGLUE_BOTH
+enum class ScChartGlue {
+    NA,
+    NONE,      // old mimic
+    Cols,      // old mimic
+    Rows,
+    Both
 };
 
 class ScDocument;
 
-class ScChartPositioner             // only parameter struct
+class ScChartPositioner final             // only parameter struct
 {
     ScRangeListRef  aRangeListRef;
-    ScDocument* pDocument;
-    ScChartPositionMap* pPositionMap;
+    ScDocument* const pDocument;
+    std::unique_ptr<ScChartPositionMap> pPositionMap;
     ScChartGlue eGlue;
     SCCOL       nStartCol;
     SCROW       nStartRow;
@@ -111,7 +112,6 @@ class ScChartPositioner             // only parameter struct
     bool        bRowHeaders;
     bool        bDummyUpperLeft;
 
-private:
     void        CheckColRowHeaders();
 
     void        GlueState();        // summarised areas
@@ -124,7 +124,7 @@ public:
     ScChartPositioner( ScDocument* pDoc, const ScRangeListRef& rRangeList );
     ScChartPositioner( const ScChartPositioner& rPositioner );
 
-    virtual ~ScChartPositioner();
+    ~ScChartPositioner();
 
     const ScRangeListRef&   GetRangeList() const { return aRangeListRef; }
     void    SetRangeList( const ScRange& rNew );
@@ -133,15 +133,7 @@ public:
     bool    HasColHeaders() const            { return bColHeaders; }
     bool    HasRowHeaders() const            { return bRowHeaders; }
 
-    void                    InvalidateGlue()
-                                {
-                                    eGlue = SC_CHARTGLUE_NA;
-                                    if ( pPositionMap )
-                                    {
-                                        delete pPositionMap;
-                                        pPositionMap = nullptr;
-                                    }
-                                }
+    void                        InvalidateGlue();
     const ScChartPositionMap*   GetPositionMap();
 };
 

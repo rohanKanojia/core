@@ -26,13 +26,13 @@ namespace sw {
 class DocumentSettingManager :
     public IDocumentSettingAccess
 {
-    rtl::Reference<SvxForbiddenCharactersTable> mxForbiddenCharsTable;
+    std::shared_ptr<SvxForbiddenCharactersTable> mxForbiddenCharsTable;
     SwDoc &m_rDoc;
 
     sal_uInt16  mnLinkUpdMode;       //< UpdateMode for links.
 
     SwFieldUpdateFlags    meFieldUpdMode;//< Automatically Update Mode for fields/charts.
-    SwCharCompressType meChrCmprType;//< for ASIAN: compress punctuation/kana
+    CharCompressType meChrCmprType;//< for ASIAN: compress punctuation/kana
 
     sal_uInt32  mn32DummyCompatibilityOptions1;
     sal_uInt32  mn32DummyCompatibilityOptions2;
@@ -122,7 +122,11 @@ class DocumentSettingManager :
     bool mbMathBaselineAlignment            : 1;    // TL  2010-10-29 #i972#
     bool mbStylesNoDefault                  : 1;
     bool mbFloattableNomargins              : 1; //< If paragraph margins next to a floating table should be ignored.
-    bool mEmbedFonts                        : 1;  //< Whether to embed fonts used by the document when saving.
+    bool mEmbedFonts                        : 1;  //< Whether to embed fonts when saving.
+    bool mEmbedUsedFonts                    : 1;  //< Whether to embed fonts that are used by the document when saving.
+    bool mEmbedLatinScriptFonts             : 1;  //< Whether to embed latin script fonts when saving.
+    bool mEmbedAsianScriptFonts             : 1;  //< Whether to embed asian script fonts when saving.
+    bool mEmbedComplexScriptFonts           : 1;  //< Whether to embed complex script fonts when saving.
     bool mEmbedSystemFonts                  : 1;  //< Whether to embed also system fonts.
 
     // non-ui-compatibility flags:
@@ -133,11 +137,11 @@ class DocumentSettingManager :
     bool mbTableRowKeep                             : 1;
     bool mbIgnoreTabsAndBlanksForLineCalculation    : 1;   // #i3952#
     bool mbDoNotCaptureDrawObjsOnPage               : 1;   // #i62875#
-    bool mbOutlineLevelYieldsOutlineRule            : 1;
     bool mbClipAsCharacterAnchoredWriterFlyFrames   : 1;
     bool mbUnixForceZeroExtLeading                  : 1;   // #i60945#
     bool mbTabRelativeToIndent                      : 1;   // #i24363# tab stops relative to indent
     bool mbProtectForm                              : 1;
+    bool mbMsWordCompTrailingBlanks                 : 1;   // tdf#104349 tdf#104668
     bool mbInvertBorderSpacing                      : 1;
     bool mbCollapseEmptyCellPara                    : 1;
     bool mbTabAtLeftIndentForParagraphsInList;             // #i89181# - see above
@@ -147,31 +151,34 @@ class DocumentSettingManager :
     bool mbClippedPictures;
     bool mbBackgroundParaOverDrawings;
     bool mbTabOverMargin;
+    bool mbTreatSingleColumnBreakAsPageBreak;              // tdf#76349
     bool mbSurroundTextWrapSmall;
     bool mbPropLineSpacingShrinksFirstLine; // fdo#79602
     bool mbSubtractFlys; // tdf#86578
     bool mApplyParagraphMarkFormatToNumbering;
 
     bool mbLastBrowseMode                           : 1;
+    bool mbDisableOffPagePositioning; // tdf#112443
+    bool mbEmptyDbFieldHidesPara;
 
 public:
 
     DocumentSettingManager(SwDoc &rDoc);
-    virtual ~DocumentSettingManager();
+    virtual ~DocumentSettingManager() override;
 
     // IDocumentSettingAccess
     virtual bool get(/*[in]*/ DocumentSettingId id) const override;
     virtual void set(/*[in]*/ DocumentSettingId id, /*[in]*/ bool value) override;
-    virtual const css::i18n::ForbiddenCharacters* getForbiddenCharacters(/*[in]*/ sal_uInt16 nLang, /*[in]*/ bool bLocaleData ) const override;
-    virtual void setForbiddenCharacters(/*[in]*/ sal_uInt16 nLang, /*[in]*/ const css::i18n::ForbiddenCharacters& rForbiddenCharacters ) override;
-    virtual rtl::Reference<SvxForbiddenCharactersTable>& getForbiddenCharacterTable() override;
-    virtual const rtl::Reference<SvxForbiddenCharactersTable>& getForbiddenCharacterTable() const override;
+    virtual const css::i18n::ForbiddenCharacters* getForbiddenCharacters(/*[in]*/ LanguageType nLang, /*[in]*/ bool bLocaleData ) const override;
+    virtual void setForbiddenCharacters(/*[in]*/ LanguageType nLang, /*[in]*/ const css::i18n::ForbiddenCharacters& rForbiddenCharacters ) override;
+    virtual std::shared_ptr<SvxForbiddenCharactersTable>& getForbiddenCharacterTable() override;
+    virtual const std::shared_ptr<SvxForbiddenCharactersTable>& getForbiddenCharacterTable() const override;
     virtual sal_uInt16 getLinkUpdateMode( /*[in]*/bool bGlobalSettings ) const override;
     virtual void setLinkUpdateMode( /*[in]*/ sal_uInt16 nMode ) override;
     virtual SwFieldUpdateFlags getFieldUpdateFlags( /*[in]*/bool bGlobalSettings ) const override;
     virtual void setFieldUpdateFlags( /*[in]*/ SwFieldUpdateFlags eMode ) override;
-    virtual SwCharCompressType getCharacterCompressionType() const override;
-    virtual void setCharacterCompressionType( /*[in]*/SwCharCompressType nType ) override;
+    virtual CharCompressType getCharacterCompressionType() const override;
+    virtual void setCharacterCompressionType( /*[in]*/CharCompressType nType ) override;
 
 
 // Replace all compatibility options with those from rSource.

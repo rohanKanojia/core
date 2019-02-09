@@ -20,17 +20,11 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_SHELLFACTORY_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_SHELLFACTORY_HXX
 
-#include <sal/types.h>
-
-namespace vcl { class Window; }
+#include <sfx2/toolbarids.hxx>
 
 namespace sd {
 
-class FrameView;
-
-typedef sal_Int32 ShellId;
-// This shell id is a reserved value and does not specify any valid shell.
-static const sal_Int32 snInvalidShellId = -1;
+typedef ToolbarId ShellId;
 
 template<class ShellType>
 class ShellFactory
@@ -47,10 +41,7 @@ public:
             Return the new view shell or NULL when a creation is not
             possible.
         */
-    virtual ShellType* CreateShell (
-        ShellId nId,
-        vcl::Window* pParentWindow,
-        FrameView* pFrameView = nullptr) = 0;
+    virtual ShellType* CreateShell(ShellId nId) = 0;
 
     /** Tell the factory that a shell is no longer in use.  It may destroy
         it or put it for future use in a cache.

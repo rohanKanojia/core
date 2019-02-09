@@ -20,30 +20,47 @@
 #ifndef INCLUDED_VCL_IDLE_HXX
 #define INCLUDED_VCL_IDLE_HXX
 
-#include <tools/link.hxx>
-#include <vcl/scheduler.hxx>
+#include <vcl/timer.hxx>
 
-class VCL_DLLPUBLIC Idle : public Scheduler
+/**
+ * An idle is a timer to be scheduled immediately.
+ *
+ * It's - more or less - just a convenience class.
+ */
+class VCL_DLLPUBLIC Idle : public Timer
 {
+private:
+    // Delete all timeout specific functions, we don't want in an Idle
+    void          SetTimeout( sal_uInt64 nTimeoutMs ) = delete;
+    sal_uInt64    GetTimeout() const = delete;
+
 protected:
-    Link<Idle *, void> maIdleHdl;          // Callback Link
+    virtual sal_uInt64 UpdateMinPeriod(
+        sal_uInt64 nMinPeriod, sal_uInt64 nTimeNow ) const override;
+
+    Idle( bool bAuto, const sal_Char *pDebugName );
 
 public:
     Idle( const sal_Char *pDebugName = nullptr );
-    Idle( const Idle& rIdle );
 
-    virtual void    Start() override;
-
-    /// Make it possible to associate a callback with this idle handler
-    /// of course, you can also sub-class and override 'Invoke'
-    void            SetIdleHdl( const Link<Idle *, void>& rLink ) { maIdleHdl = rLink; }
-    const Link<Idle *, void>& GetIdleHdl() const { return maIdleHdl; }
-    virtual void Invoke() override;
-    virtual bool ReadyForSchedule( bool bTimerOnly, sal_uInt64 nTimeNow ) const override;
-    virtual bool IsIdle() const override;
-    virtual sal_uInt64 UpdateMinPeriod( sal_uInt64 nMinPeriod, sal_uInt64 nTime ) const override;
-    Idle&           operator=( const Idle& rIdle );
+    virtual void  Start() override;
 };
+
+/**
+ * An auto-idle is long running task processing small chunks of data, which
+ * is re-scheduled multiple times.
+ *
+ * Remember to stop the Idle when finished, as it would otherwise busy loop the CPU!
+ *
+ * It probably makes sense to re-implement ReadyForSchedule and UpdateMinPeriod,
+ * in case there is a quick check and it can otherwise sleep.
+ */
+class VCL_DLLPUBLIC AutoIdle : public Idle
+{
+public:
+    AutoIdle( const sal_Char *pDebugName );
+};
+
 
 #endif // INCLUDED_VCL_IDLE_HXX
 

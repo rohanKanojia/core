@@ -25,64 +25,68 @@
 #include <svx/sdmetitm.hxx>
 #include <svx/svxdllapi.h>
 
-enum SdrCaptionEscDir {SDRCAPT_ESCHORIZONTAL,SDRCAPT_ESCVERTICAL,SDRCAPT_ESCBESTFIT};
+enum class SdrCaptionEscDir { Horizontal, Vertical, BestFit };
 
 
 // class SdrCaptionEscDirItem
 
-class SVX_DLLPUBLIC SdrCaptionEscDirItem: public SfxEnumItem {
+class SVX_DLLPUBLIC SdrCaptionEscDirItem: public SfxEnumItem<SdrCaptionEscDir> {
 public:
-    SdrCaptionEscDirItem(SdrCaptionEscDir eDir=SDRCAPT_ESCHORIZONTAL): SfxEnumItem(SDRATTR_CAPTIONESCDIR,sal::static_int_cast< sal_uInt16 >(eDir)) {}
-    SdrCaptionEscDirItem(SvStream& rIn)                              : SfxEnumItem(SDRATTR_CAPTIONESCDIR,rIn)  {}
+    SdrCaptionEscDirItem(SdrCaptionEscDir eDir=SdrCaptionEscDir::Horizontal): SfxEnumItem(SDRATTR_CAPTIONESCDIR, eDir) {}
     virtual SfxPoolItem*     Clone(SfxItemPool* pPool=nullptr) const override;
-    virtual SfxPoolItem*     Create(SvStream& rIn, sal_uInt16 nVer) const override;
-    virtual sal_uInt16           GetValueCount() const override; // { return 3; }
-    SdrCaptionEscDir GetValue() const      { return (SdrCaptionEscDir)SfxEnumItem::GetValue(); }
+    virtual sal_uInt16       GetValueCount() const override; // { return 3; }
 
-    virtual OUString GetValueTextByPos(sal_uInt16 nPos) const override;
+    static OUString GetValueTextByPos(sal_uInt16 nPos);
 
-    virtual bool GetPresentation(SfxItemPresentation ePres, SfxMapUnit eCoreMetric, SfxMapUnit ePresMetric, OUString& rText, const IntlWrapper * = nullptr) const override;
+    virtual bool GetPresentation(SfxItemPresentation ePres, MapUnit eCoreMetric, MapUnit ePresMetric, OUString& rText, const IntlWrapper&) const override;
 };
 
 
 // class SdrCaptionEscIsRelItem
-// sal_True=Linienaustrittsposition relativ
-// sal_False=Linienaustrittsposition absolut
+// sal_True = line escape position is relative
+// sal_False = line escape position is absolute
 
 class SVX_DLLPUBLIC SdrCaptionEscIsRelItem: public SdrYesNoItem {
 public:
     SdrCaptionEscIsRelItem(bool bRel=true): SdrYesNoItem(SDRATTR_CAPTIONESCISREL,bRel) {}
-    SdrCaptionEscIsRelItem(SvStream& rIn) : SdrYesNoItem(SDRATTR_CAPTIONESCISREL,rIn)  {}
-    virtual ~SdrCaptionEscIsRelItem();
+    virtual ~SdrCaptionEscIsRelItem() override;
     virtual SfxPoolItem* Clone(SfxItemPool* pPool=nullptr) const override;
+
+    SdrCaptionEscIsRelItem(SdrCaptionEscIsRelItem const &) = default;
+    SdrCaptionEscIsRelItem(SdrCaptionEscIsRelItem &&) = default;
+    SdrCaptionEscIsRelItem & operator =(SdrCaptionEscIsRelItem const &) = delete; // due to SdrYesNoItem
+    SdrCaptionEscIsRelItem & operator =(SdrCaptionEscIsRelItem &&) = delete; // due to SdrYesNoItem
 };
 
 
 // class SdrCaptionEscRelItem
-// Relativer Linienaustritt
-//     0 =   0.00% = oben bzw. links,
-// 10000 = 100.00% = rechts bzw. unten
-// nur wenn SdrCaptionEscIsRelItem=TRUE
+// relative line escape
+//     0 =   0.00% = up resp. left,
+// 10000 = 100.00% = right resp. down
+// only when SdrCaptionEscIsRelItem=TRUE
 
 class SVX_DLLPUBLIC SdrCaptionEscRelItem: public SfxInt32Item {
 public:
     SdrCaptionEscRelItem(long nEscRel=5000): SfxInt32Item(SDRATTR_CAPTIONESCREL,nEscRel) {}
-    SdrCaptionEscRelItem(SvStream& rIn)    : SfxInt32Item(SDRATTR_CAPTIONESCREL,rIn)     {}
-    virtual ~SdrCaptionEscRelItem();
+    virtual ~SdrCaptionEscRelItem() override;
     virtual SfxPoolItem* Clone(SfxItemPool* pPool=nullptr) const override;
+
+    SdrCaptionEscRelItem(SdrCaptionEscRelItem const &) = default;
+    SdrCaptionEscRelItem(SdrCaptionEscRelItem &&) = default;
+    SdrCaptionEscRelItem & operator =(SdrCaptionEscRelItem const &) = delete; // due to SfxInt32Item
+    SdrCaptionEscRelItem & operator =(SdrCaptionEscRelItem &&) = delete; // due to SfxInt32Item
 };
 
 
 // class SdrCaptionEscAbsItem
-// Absoluter Linienaustritt
-// 0  = oben bzw. links,
-// >0 = in Richtung rechts bzw. unten
-// nur wenn SdrCaptionEscIsRelItem=FALSE
+// absolute line escape
+// 0  = up resp. left,
+// >0 = in direction right resp. down
+// only when SdrCaptionEscIsRelItem=FALSE
 
 class SdrCaptionEscAbsItem: public SdrMetricItem {
 public:
     SdrCaptionEscAbsItem(long nEscAbs=0): SdrMetricItem(SDRATTR_CAPTIONESCABS,nEscAbs) {}
-    SdrCaptionEscAbsItem(SvStream& rIn) : SdrMetricItem(SDRATTR_CAPTIONESCABS,rIn)     {}
     virtual SfxPoolItem* Clone(SfxItemPool*) const override
     {
         return new SdrCaptionEscAbsItem(*this);

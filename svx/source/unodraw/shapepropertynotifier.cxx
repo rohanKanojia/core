@@ -18,7 +18,7 @@
  */
 
 
-#include "svx/shapepropertynotifier.hxx"
+#include <svx/shapepropertynotifier.hxx>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 
@@ -33,9 +33,9 @@ namespace
 
     struct ShapePropertyHash
     {
-        size_t operator()( svx::ShapeProperty __x ) const
+        size_t operator()( svx::ShapeProperty x ) const
         {
-            return size_t( __x );
+            return size_t( x );
         }
     };
 }
@@ -46,18 +46,15 @@ namespace svx
 
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::uno::UNO_QUERY_THROW;
     using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Any;
-    using ::com::sun::star::uno::makeAny;
     using ::com::sun::star::beans::PropertyChangeEvent;
     using ::com::sun::star::beans::XPropertyChangeListener;
     using ::com::sun::star::lang::EventObject;
     using ::com::sun::star::beans::XPropertySet;
 
-    typedef std::unordered_map< ShapeProperty, PPropertyValueProvider, ShapePropertyHash  >    PropertyProviders;
+    typedef std::unordered_map< ShapeProperty, std::shared_ptr<IPropertyValueProvider>, ShapePropertyHash  >    PropertyProviders;
 
     typedef cppu::OMultiTypeInterfaceContainerHelperVar<OUString>
         PropertyChangeListenerContainer;
@@ -103,9 +100,8 @@ namespace svx
     {
     }
 
-    void PropertyChangeNotifier::registerProvider(const ShapeProperty _eProperty, const PPropertyValueProvider& _rProvider)
+    void PropertyChangeNotifier::registerProvider(const ShapeProperty _eProperty, const std::shared_ptr<IPropertyValueProvider>& _rProvider)
     {
-        ENSURE_OR_THROW( _eProperty != eInvalidShapeProperty, "Illegal ShapeProperty value!" );
         ENSURE_OR_THROW( !!_rProvider, "NULL factory not allowed." );
 
         OSL_ENSURE( m_xData->m_aProviders.find( _eProperty ) == m_xData->m_aProviders.end(),
@@ -116,8 +112,6 @@ namespace svx
 
     void PropertyChangeNotifier::notifyPropertyChange( const ShapeProperty _eProperty ) const
     {
-        ENSURE_OR_THROW( _eProperty != eInvalidShapeProperty, "Illegal ShapeProperty value!" );
-
         PropertyProviders::const_iterator provPos = m_xData->m_aProviders.find( _eProperty );
         OSL_ENSURE( provPos != m_xData->m_aProviders.end(), "PropertyChangeNotifier::notifyPropertyChange: no factory!" );
         if ( provPos == m_xData->m_aProviders.end() )
@@ -145,7 +139,7 @@ namespace svx
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
     }
 

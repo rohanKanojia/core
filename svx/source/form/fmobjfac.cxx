@@ -21,31 +21,28 @@
 
 #include <tools/diagnose_ex.h>
 #include <svx/svdobj.hxx>
-#include "svx/fmtools.hxx"
-#include "fmservs.hxx"
+#include <svx/fmtools.hxx>
+#include <fmservs.hxx>
 
-#include "svx/fmobjfac.hxx"
+#include <svx/fmobjfac.hxx>
 
 #include <svx/fmglob.hxx>
 
-#include "fmobj.hxx"
-#include "fmshimp.hxx"
+#include <fmobj.hxx>
+#include <fmshimp.hxx>
 
 #include <svx/fmshell.hxx>
 
 #include <svx/svxids.hrc>
-#include "tbxform.hxx"
-#include <tools/resid.hxx>
+#include <tbxform.hxx>
 
-#include "svx/fmresids.hrc"
-#include <svx/dialmgr.hxx>
-#include "tabwin.hxx"
-#include "fmexpl.hxx"
-#include "filtnav.hxx"
+#include <tabwin.hxx>
+#include <fmexpl.hxx>
+#include <filtnav.hxx>
 
-#include "fmprop.hrc"
-#include "fmPropBrw.hxx"
-#include "datanavi.hxx"
+#include <fmprop.hxx>
+#include <fmPropBrw.hxx>
+#include <datanavi.hxx>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::beans;
@@ -55,44 +52,44 @@ static bool bInit = false;
 
 FmFormObjFactory::FmFormObjFactory()
 {
-    if ( !bInit )
-    {
-        SdrObjFactory::InsertMakeObjectHdl(LINK(this, FmFormObjFactory, MakeObject));
+    if ( bInit )
+        return;
+
+    SdrObjFactory::InsertMakeObjectHdl(LINK(this, FmFormObjFactory, MakeObject));
 
 
-        // Konfigurations-css::frame::Controller und NavigationBar registrieren
-        SvxFmTbxCtlAbsRec::RegisterControl( SID_FM_RECORD_ABSOLUTE );
-        SvxFmTbxCtlRecText::RegisterControl( SID_FM_RECORD_TEXT );
-        SvxFmTbxCtlRecFromText::RegisterControl( SID_FM_RECORD_FROM_TEXT );
-        SvxFmTbxCtlRecTotal::RegisterControl( SID_FM_RECORD_TOTAL );
-        SvxFmTbxPrevRec::RegisterControl( SID_FM_RECORD_PREV );
-        SvxFmTbxNextRec::RegisterControl( SID_FM_RECORD_NEXT );
+    // register the configuration css::frame::Controller and the NavigationBar
+    SvxFmTbxCtlAbsRec::RegisterControl( SID_FM_RECORD_ABSOLUTE );
+    SvxFmTbxCtlRecText::RegisterControl( SID_FM_RECORD_TEXT );
+    SvxFmTbxCtlRecFromText::RegisterControl( SID_FM_RECORD_FROM_TEXT );
+    SvxFmTbxCtlRecTotal::RegisterControl( SID_FM_RECORD_TOTAL );
+    SvxFmTbxPrevRec::RegisterControl( SID_FM_RECORD_PREV );
+    SvxFmTbxNextRec::RegisterControl( SID_FM_RECORD_NEXT );
 
-        // Registrieung von globalen fenstern
-        FmFieldWinMgr::RegisterChildWindow();
-        FmPropBrwMgr::RegisterChildWindow();
-        NavigatorFrameManager::RegisterChildWindow();
-        DataNavigatorManager::RegisterChildWindow();
+    // registering global windows
+    FmFieldWinMgr::RegisterChildWindow();
+    FmPropBrwMgr::RegisterChildWindow();
+    NavigatorFrameManager::RegisterChildWindow();
+    DataNavigatorManager::RegisterChildWindow();
 #if HAVE_FEATURE_DBCONNECTIVITY
-        FmFilterNavigatorWinMgr::RegisterChildWindow();
+    FmFilterNavigatorWinMgr::RegisterChildWindow();
 #endif
 
-        // Interface fuer die Formshell registrieren
-        FmFormShell::RegisterInterface();
+    // register the interface for the Formshell
+    FmFormShell::RegisterInterface();
 
-        ImplSmartRegisterUnoServices();
-        bInit = true;
-    }
+    ImplSmartRegisterUnoServices();
+    bInit = true;
 }
 
 FmFormObjFactory::~FmFormObjFactory()
 {
 }
 
-// css::form::Form-Objekte erzeugen
+// create css::form::Form objects
 namespace
 {
-    void    lcl_initProperty( FmFormObj* _pObject, const OUString& _rPropName, const Any& _rValue )
+    void    lcl_initProperty( FmFormObj const * _pObject, const OUString& _rPropName, const Any& _rValue )
     {
         try
         {
@@ -102,23 +99,24 @@ namespace
         }
         catch( const Exception& )
         {
+            DBG_UNHANDLED_EXCEPTION("svx");
             OSL_FAIL( "lcl_initProperty: caught an exception!" );
-            DBG_UNHANDLED_EXCEPTION();
         }
     }
 }
 
-IMPL_STATIC_LINK_TYPED(
-    FmFormObjFactory, MakeObject, SdrObjFactory*, pObjFactory, void)
+IMPL_STATIC_LINK(FmFormObjFactory, MakeObject, SdrObjCreatorParams, aParams, SdrObject*)
 {
-    if (pObjFactory->nInventor == FmFormInventor)
+    SdrObject* pNewObj = nullptr;
+
+    if (aParams.nInventor == SdrInventor::FmForm)
     {
         OUString sServiceSpecifier;
 
         typedef ::std::vector< ::std::pair< OUString, Any > > PropertyValueArray;
         PropertyValueArray aInitialProperties;
 
-        switch ( pObjFactory->nIdentifier )
+        switch ( aParams.nObjIdentifier )
         {
             case OBJ_FM_EDIT:
                 sServiceSpecifier = FM_COMPONENT_EDIT;
@@ -170,7 +168,7 @@ IMPL_STATIC_LINK_TYPED(
 
             case OBJ_FM_TIMEFIELD:
                 sServiceSpecifier = FM_COMPONENT_TIMEFIELD;
-                aInitialProperties.push_back( PropertyValueArray::value_type( FM_PROP_TIMEMAX, makeAny( tools::Time( 23, 59, 59, 999999999 ).GetUNOTime() ) ) );
+                aInitialProperties.emplace_back( FM_PROP_TIMEMAX, makeAny( tools::Time( 23, 59, 59, 999999999 ).GetUNOTime() ) );
                 break;
 
             case OBJ_FM_NUMERICFIELD:
@@ -203,34 +201,32 @@ IMPL_STATIC_LINK_TYPED(
 
             case OBJ_FM_SCROLLBAR:
                 sServiceSpecifier = FM_SUN_COMPONENT_SCROLLBAR;
-                aInitialProperties.push_back( PropertyValueArray::value_type( FM_PROP_BORDER, makeAny( (sal_Int16)0 ) ) );
+                aInitialProperties.emplace_back( FM_PROP_BORDER, makeAny( sal_Int16(0) ) );
                 break;
 
             case OBJ_FM_SPINBUTTON:
                 sServiceSpecifier = FM_SUN_COMPONENT_SPINBUTTON;
-                aInitialProperties.push_back( PropertyValueArray::value_type( FM_PROP_BORDER, makeAny( (sal_Int16)0 ) ) );
+                aInitialProperties.emplace_back( FM_PROP_BORDER, makeAny( sal_Int16(0) ) );
                 break;
         }
 
         // create the actual object
         if ( !sServiceSpecifier.isEmpty() )
-            pObjFactory->pNewObj = new FmFormObj(sServiceSpecifier);
+            pNewObj = new FmFormObj(aParams.rSdrModel, sServiceSpecifier);
         else
-            pObjFactory->pNewObj = new FmFormObj();
+            pNewObj = new FmFormObj(aParams.rSdrModel);
 
         // initialize some properties which we want to differ from the defaults
-        for (   PropertyValueArray::const_iterator aInitProp = aInitialProperties.begin();
-                aInitProp != aInitialProperties.end();
-                ++aInitProp
-            )
+        for (const auto& rInitProp : aInitialProperties)
         {
             lcl_initProperty(
-                static_cast< FmFormObj* >( pObjFactory->pNewObj ),
-                aInitProp->first,
-                aInitProp->second
+                static_cast< FmFormObj* >( pNewObj ),
+                rInitProp.first,
+                rInitProp.second
             );
         }
     }
+    return pNewObj;
 }
 
 

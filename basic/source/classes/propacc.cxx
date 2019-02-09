@@ -18,7 +18,7 @@
  */
 
 
-#include "propacc.hxx"
+#include <propacc.hxx>
 
 #include <basic/sbstar.hxx>
 #include <basic/sbuno.hxx>
@@ -26,6 +26,7 @@
 
 #include <comphelper/propertysetinfo.hxx>
 #include <comphelper/sequence.hxx>
+#include <o3tl/any.hxx>
 
 #include <algorithm>
 #include <limits.h>
@@ -37,13 +38,10 @@ using namespace com::sun::star::lang;
 using namespace com::sun::star::beans;
 using namespace cppu;
 
-struct SbCompare_UString_PropertyValue_Impl
+static bool SbCompare_UString_PropertyValue_Impl(PropertyValue const & lhs, const OUString& rhs)
 {
-   bool operator() (PropertyValue const & lhs, const OUString& rhs)
-   {
-      return lhs.Name.compareTo(rhs) < 0;
-   }
-};
+    return lhs.Name.compareTo(rhs) < 0;
+}
 
 
 SbPropertyValues::SbPropertyValues()
@@ -56,7 +54,7 @@ SbPropertyValues::~SbPropertyValues()
     m_xInfo.clear();
 }
 
-Reference< XPropertySetInfo > SbPropertyValues::getPropertySetInfo() throw( RuntimeException, std::exception )
+Reference< XPropertySetInfo > SbPropertyValues::getPropertySetInfo()
 {
     // create on demand?
     if (!m_xInfo.is())
@@ -81,8 +79,8 @@ size_t SbPropertyValues::GetIndex_Impl( const OUString &rPropName ) const
 {
     SbPropertyValueArr_Impl::const_iterator it = std::lower_bound(
           m_aPropVals.begin(), m_aPropVals.end(), rPropName,
-          SbCompare_UString_PropertyValue_Impl() );
-    if (it == m_aPropVals.end())
+          SbCompare_UString_PropertyValue_Impl );
+    if (it == m_aPropVals.end() || !SbCompare_UString_PropertyValue_Impl(*it, rPropName))
     {
         throw beans::UnknownPropertyException(
                 "Property not found: " + rPropName,
@@ -95,11 +93,6 @@ size_t SbPropertyValues::GetIndex_Impl( const OUString &rPropName ) const
 void SbPropertyValues::setPropertyValue(
                     const OUString& aPropertyName,
                     const Any& aValue)
-                    throw (css::beans::UnknownPropertyException,
-                    css::beans::PropertyVetoException,
-                    css::lang::IllegalArgumentException,
-                    css::lang::WrappedTargetException,
-                    css::uno::RuntimeException, std::exception)
 {
     size_t const nIndex = GetIndex_Impl( aPropertyName );
     PropertyValue & rPropVal = m_aPropVals[nIndex];
@@ -109,9 +102,6 @@ void SbPropertyValues::setPropertyValue(
 
 Any SbPropertyValues::getPropertyValue(
                     const OUString& aPropertyName)
-                    throw(css::beans::UnknownPropertyException,
-                    css::lang::WrappedTargetException,
-                    css::uno::RuntimeException, std::exception)
 {
     size_t const nIndex = GetIndex_Impl( aPropertyName );
     return m_aPropVals[nIndex].Value;
@@ -119,53 +109,36 @@ Any SbPropertyValues::getPropertyValue(
 
 
 void SbPropertyValues::addPropertyChangeListener(
-                    const OUString& aPropertyName,
+                    const OUString&,
                     const Reference< XPropertyChangeListener >& )
-                    throw (std::exception)
-{
-    (void)aPropertyName;
-}
+{}
 
 
 void SbPropertyValues::removePropertyChangeListener(
-                    const OUString& aPropertyName,
+                    const OUString&,
                     const Reference< XPropertyChangeListener >& )
-                    throw (std::exception)
-{
-    (void)aPropertyName;
-}
+{}
 
 
 void SbPropertyValues::addVetoableChangeListener(
-                    const OUString& aPropertyName,
+                    const OUString&,
                     const Reference< XVetoableChangeListener >& )
-                    throw(std::exception)
-{
-    (void)aPropertyName;
-}
+{}
 
 
 void SbPropertyValues::removeVetoableChangeListener(
-                    const OUString& aPropertyName,
+                    const OUString&,
                     const Reference< XVetoableChangeListener >& )
-                    throw(std::exception)
-{
-    (void)aPropertyName;
-}
+{}
 
 
-Sequence< PropertyValue > SbPropertyValues::getPropertyValues() throw (css::uno::RuntimeException, std::exception)
+Sequence< PropertyValue > SbPropertyValues::getPropertyValues()
 {
     return comphelper::containerToSequence(m_aPropVals);
 }
 
 
 void SbPropertyValues::setPropertyValues(const Sequence< PropertyValue >& rPropertyValues )
-                     throw (css::beans::UnknownPropertyException,
-                     css::beans::PropertyVetoException,
-                     css::lang::IllegalArgumentException,
-                     css::lang::WrappedTargetException,
-                     css::uno::RuntimeException, std::exception)
 {
     if (!m_aPropVals.empty())
         throw IllegalArgumentException();
@@ -178,11 +151,8 @@ void SbPropertyValues::setPropertyValues(const Sequence< PropertyValue >& rPrope
 }
 
 
-void RTL_Impl_CreatePropertySet( StarBASIC* pBasic, SbxArray& rPar, bool bWrite )
+void RTL_Impl_CreatePropertySet( SbxArray& rPar )
 {
-    (void)pBasic;
-    (void)bWrite;
-
     // We need at least one parameter
     // TODO: In this case < 2 is not correct ;-)
     if ( rPar.Count() < 2 )
@@ -201,16 +171,13 @@ void RTL_Impl_CreatePropertySet( StarBASIC* pBasic, SbxArray& rPar, bool bWrite 
         // Set PropertyValues
         Any aArgAsAny = sbxToUnoValue( rPar.Get(1),
                 cppu::UnoType<Sequence<PropertyValue>>::get() );
-        Sequence<PropertyValue> const *pArg =
-                static_cast<Sequence<PropertyValue> const *>(aArgAsAny.getValue());
+        auto pArg = o3tl::doAccess<Sequence<PropertyValue>>(aArgAsAny);
         Reference< XPropertyAccess > xPropAcc( xInterface, UNO_QUERY );
         xPropAcc->setPropertyValues( *pArg );
 
         // Build a SbUnoObject and return it
-        Any aAny;
-        aAny <<= xInterface;
-        auto xUnoObj = tools::make_ref<SbUnoObject>( "stardiv.uno.beans.PropertySet", aAny );
-        if( xUnoObj->getUnoAny().getValueType().getTypeClass() != TypeClass_VOID )
+        auto xUnoObj = tools::make_ref<SbUnoObject>( "stardiv.uno.beans.PropertySet", Any(xInterface) );
+        if( xUnoObj->getUnoAny().hasValue() )
         {
             // Return object
             refVar->PutObject( xUnoObj.get() );

@@ -21,30 +21,31 @@
 #define INCLUDED_SC_SOURCE_UI_INC_CELLSH_HXX
 
 #include <sfx2/shell.hxx>
-#include "shellids.hxx"
-#include <sfx2/module.hxx>
-#include <svx/svdmark.hxx>
+#include <shellids.hxx>
 #include <unotools/caserotate.hxx>
 #include <tools/link.hxx>
 #include <memory>
 #include "formatsh.hxx"
-#include "address.hxx"
+#include <rtl/ref.hxx>
+#include <sot/formats.hxx>
+#include <vcl/vclptr.hxx>
+#include <tools/solar.h>
 
 class SvxClipboardFormatItem;
 class TransferableDataHelper;
 class TransferableClipboardListener;
 class AbstractScLinkedAreaDlg;
+class Dialog;
 
 struct CellShell_Impl
 {
-    TransferableClipboardListener*  m_pClipEvtLstnr;
-    AbstractScLinkedAreaDlg*        m_pLinkedDlg;
+    rtl::Reference<TransferableClipboardListener>
+                                    m_xClipEvtLstnr;
+    VclPtr<AbstractScLinkedAreaDlg> m_pLinkedDlg;
     SfxRequest*                     m_pRequest;
 
-    CellShell_Impl() :
-        m_pClipEvtLstnr( nullptr ),
-        m_pLinkedDlg( nullptr ),
-        m_pRequest( nullptr ) {}
+    CellShell_Impl();
+    ~CellShell_Impl();
 };
 
 class ScCellShell: public ScFormatShell
@@ -54,6 +55,7 @@ private:
     bool            bPastePossible;
 
     void        GetPossibleClipboardFormats( SvxClipboardFormatItem& rFormats );
+    bool        HasClipboardFormat( SotClipboardFormatId nFormatId );
     void        ExecuteExternalSource(
                     const OUString& _rFile, const OUString& _rFilter, const OUString& _rOptions,
                     const OUString& _rSource, sal_uLong _nRefresh, SfxRequest& _rRequest );
@@ -64,10 +66,12 @@ private:
 
     void ExecuteFillSingleEdit();
 
-    DECL_LINK_TYPED( ClipboardChanged, TransferableDataHelper*, void );
-    DECL_LINK_TYPED( DialogClosed, Dialog&, void );
+    DECL_LINK( ClipboardChanged, TransferableDataHelper*, void );
+    DECL_LINK( DialogClosed, Dialog&, void );
 
     RotateTransliteration m_aRotateCase;
+
+    VclPtr<vcl::Window> pFrameWin;
 
 public:
     SFX_DECL_INTERFACE(SCID_CELL_SHELL)
@@ -77,15 +81,15 @@ private:
     static void InitInterface_Impl();
 
 public:
-                ScCellShell(ScViewData* pData);
-    virtual     ~ScCellShell();
+                ScCellShell( ScViewData* pData, const VclPtr<vcl::Window>& pFrameWin );
+    virtual     ~ScCellShell() override;
 
     void        Execute(SfxRequest &);
     void        GetState(SfxItemSet &);
 
     void        ExecuteEdit( SfxRequest& rReq );
     void        ExecuteTrans( SfxRequest& rReq );
-    void                ExecuteRotateTrans( SfxRequest& rReq );
+    void        ExecuteRotateTrans( const SfxRequest& rReq );
 
     void        GetBlockState( SfxItemSet& rSet );
     void        GetCellState( SfxItemSet& rSet );
@@ -101,6 +105,9 @@ public:
     void        ExecutePage( SfxRequest& rReq );
     void        ExecutePageSel( SfxRequest& rReq );
     void        ExecuteMove( SfxRequest& rReq );
+
+    const VclPtr<vcl::Window>& GetFrameWin();
+
     static void GetStateCursor( SfxItemSet& rSet );
 };
 

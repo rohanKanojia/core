@@ -32,9 +32,8 @@
 namespace com { namespace sun { namespace star {
     namespace io { class XSeekable; class XInputStream; }
 } } }
-class ByteGrabber
+class ByteGrabber final
 {
-protected:
     ::osl::Mutex m_aMutex;
 
     css::uno::Reference < css::io::XInputStream > xStream;
@@ -43,20 +42,27 @@ protected:
     const sal_Int8 *pSequence;
 
 public:
-    ByteGrabber (css::uno::Reference < css::io::XInputStream > xIstream);
+    ByteGrabber (css::uno::Reference < css::io::XInputStream > const & xIstream);
     ~ByteGrabber();
 
-    void setInputStream (css::uno::Reference < css::io::XInputStream > xNewStream);
+    void setInputStream (const css::uno::Reference < css::io::XInputStream >& xNewStream);
     // XInputStream
-    sal_Int32 SAL_CALL readBytes( css::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead )
-        throw(css::io::NotConnectedException, css::io::BufferSizeExceededException, css::io::IOException, css::uno::RuntimeException);
+    /// @throws css::io::NotConnectedException
+    /// @throws css::io::BufferSizeExceededException
+    /// @throws css::io::IOException
+    /// @throws css::uno::RuntimeException
+    sal_Int32 readBytes( css::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead );
     // XSeekable
-    void SAL_CALL seek( sal_Int64 location )
-        throw(css::lang::IllegalArgumentException, css::io::IOException, css::uno::RuntimeException);
-    sal_Int64 SAL_CALL getPosition(  )
-        throw(css::io::IOException, css::uno::RuntimeException);
-    sal_Int64 SAL_CALL getLength(  )
-        throw(css::io::IOException, css::uno::RuntimeException);
+    /// @throws css::lang::IllegalArgumentException
+    /// @throws css::io::IOException
+    /// @throws css::uno::RuntimeException
+    void seek( sal_Int64 location );
+    /// @throws css::io::IOException
+    /// @throws css::uno::RuntimeException
+    sal_Int64 getPosition(  );
+    /// @throws css::io::IOException
+    /// @throws css::uno::RuntimeException
+    sal_Int64 getLength(  );
 
     sal_uInt16 ReadUInt16();
     sal_uInt32 ReadUInt32();

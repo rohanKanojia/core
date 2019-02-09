@@ -10,7 +10,7 @@
 #ifndef INCLUDED_SC_OOX_XLS_REVISIONFRAGMENT_HXX
 #define INCLUDED_SC_OOX_XLS_REVISIONFRAGMENT_HXX
 
-#include <excelhandlers.hxx>
+#include "excelhandlers.hxx"
 #include <memory>
 
 class ScChangeTrack;
@@ -26,7 +26,7 @@ public:
     explicit RevisionHeadersFragment(
         const WorkbookHelper& rHelper, const OUString& rFragmentPath );
 
-    virtual ~RevisionHeadersFragment();
+    virtual ~RevisionHeadersFragment() override;
 
 protected:
     virtual oox::core::ContextHandlerRef onCreateContext(
@@ -51,7 +51,7 @@ public:
     explicit RevisionLogFragment(
         const WorkbookHelper& rHelper, const OUString& rFragmentPath, ScChangeTrack& rChangeTrack );
 
-    virtual ~RevisionLogFragment();
+    virtual ~RevisionLogFragment() override;
 
 protected:
     virtual oox::core::ContextHandlerRef onCreateContext(

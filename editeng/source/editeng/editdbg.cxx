@@ -18,10 +18,9 @@
  */
 
 
-#include <vcl/wrkwin.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/msgbox.hxx>
+#include <memory>
 #include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 
 #include <editeng/lspcitem.hxx>
 #include <editeng/lrspitem.hxx>
@@ -48,13 +47,14 @@
 #include <editeng/charreliefitem.hxx>
 #include <editeng/frmdiritem.hxx>
 
-#include <impedit.hxx>
+#include "impedit.hxx"
 #include <editeng/editeng.hxx>
 #include <editeng/editview.hxx>
 #include <editdoc.hxx>
-#include <editdbg.hxx>
+#include "editdbg.hxx"
 
 #include <rtl/strbuf.hxx>
+#include <osl/diagnose.h>
 
 #if defined( DBG_UTIL ) || ( OSL_DEBUG_LEVEL > 1 )
 
@@ -87,9 +87,9 @@ OString DbgOutItem(const SfxItemPool& rPool, const SfxPoolItem& rItem)
                 if ( pFmt )
                 {
                     aDebStr.append('(');
-                    aDebStr.append(static_cast<sal_Int32>(pFmt->GetFirstLineOffset()));
+                    aDebStr.append(pFmt->GetFirstLineOffset());
                     aDebStr.append(',');
-                    aDebStr.append(static_cast<sal_Int32>(pFmt->GetAbsLSpace()));
+                    aDebStr.append(pFmt->GetAbsLSpace());
                     aDebStr.append(',');
                     if ( pFmt->GetNumberingType() == SVX_NUM_BITMAP )
                         aDebStr.append("Bitmap");
@@ -125,12 +125,12 @@ OString DbgOutItem(const SfxItemPool& rPool, const SfxPoolItem& rItem)
         break;
         case EE_PARA_SBL:
             aDebStr.append("SBL=");
-            if ( static_cast<const SvxLineSpacingItem&>(rItem).GetLineSpaceRule() == SVX_LINE_SPACE_MIN )
+            if ( static_cast<const SvxLineSpacingItem&>(rItem).GetLineSpaceRule() == SvxLineSpaceRule::Min )
             {
                 aDebStr.append("Min: ");
                 aDebStr.append(static_cast<sal_Int32>(static_cast<const SvxLineSpacingItem&>(rItem).GetInterLineSpace()));
             }
-            else if ( static_cast<const SvxLineSpacingItem&>(rItem).GetInterLineSpaceRule() == SVX_INTER_LINE_SPACE_PROP )
+            else if ( static_cast<const SvxLineSpacingItem&>(rItem).GetInterLineSpaceRule() == SvxInterLineSpaceRule::Prop )
             {
                 aDebStr.append("Prop: ");
                 aDebStr.append(static_cast<sal_Int32>(static_cast<const SvxLineSpacingItem&>(rItem).GetPropLineSpace()));
@@ -153,7 +153,7 @@ OString DbgOutItem(const SfxItemPool& rPool, const SfxPoolItem& rItem)
                 for (sal_uInt16 i = 0; i < rTabs.Count(); ++i)
                 {
                     const SvxTabStop& rTab = rTabs[i];
-                    aDebStr.append(static_cast<sal_Int32>(rTab.GetTabPos()));
+                    aDebStr.append(rTab.GetTabPos());
                     aDebStr.append(' ');
                 }
                 aDebStr.append(')');
@@ -164,7 +164,7 @@ OString DbgOutItem(const SfxItemPool& rPool, const SfxPoolItem& rItem)
         case EE_CHAR_LANGUAGE_CJK:
         case EE_CHAR_LANGUAGE_CTL:
             aDebStr.append("Language=");
-            aDebStr.append(static_cast<sal_Int32>(static_cast<const SvxLanguageItem&>(rItem).GetLanguage()));
+            aDebStr.append(static_cast<sal_Int32>(static_cast<sal_uInt16>(static_cast<const SvxLanguageItem&>(rItem).GetLanguage())));
         break;
         case EE_CHAR_COLOR:
         {
@@ -206,9 +206,9 @@ OString DbgOutItem(const SfxItemPool& rPool, const SfxPoolItem& rItem)
             aDebStr.append("Groesse=");
             aDebStr.append(static_cast<sal_Int32>(static_cast<const SvxFontHeightItem&>(rItem).GetHeight()));
             Size aSz( 0, static_cast<const SvxFontHeightItem&>(rItem).GetHeight() );
-            SfxMapUnit eUnit = rPool.GetMetric( rItem.Which() );
-            MapMode aItemMapMode( (MapUnit) eUnit );
-            MapMode aPntMap( MAP_POINT );
+            MapUnit eUnit = rPool.GetMetric( rItem.Which() );
+            MapMode aItemMapMode(eUnit);
+            MapMode aPntMap( MapUnit::MapPoint );
             aSz = OutputDevice::LogicToLogic( aSz, aItemMapMode, aPntMap );
             aDebStr.append(" Points=");
             aDebStr.append(static_cast<sal_Int32>(aSz.Height()));
@@ -275,10 +275,10 @@ OString DbgOutItem(const SfxItemPool& rPool, const SfxPoolItem& rItem)
         {
             aDebStr.append("Kerning=");
             aDebStr.append(static_cast<sal_Int32>(static_cast<const SvxKerningItem&>(rItem).GetValue()));
-            Size aSz( 0, (short)static_cast<const SvxKerningItem&>(rItem).GetValue() );
-            SfxMapUnit eUnit = rPool.GetMetric( rItem.Which() );
-            MapMode aItemMapMode( (MapUnit) eUnit );
-            MapMode aPntMap( MAP_POINT );
+            Size aSz( 0, static_cast<short>(static_cast<const SvxKerningItem&>(rItem).GetValue()) );
+            MapUnit eUnit = rPool.GetMetric( rItem.Which() );
+            MapMode aItemMapMode(eUnit);
+            MapMode aPntMap( MapUnit::MapPoint );
             aSz = OutputDevice::LogicToLogic( aSz, aItemMapMode, aPntMap );
             aDebStr.append(" Points=");
             aDebStr.append(static_cast<sal_Int32>(aSz.Height()));
@@ -354,13 +354,13 @@ void EditDbg::ShowEditEngineData( EditEngine* pEE, bool bInfoBox )
             const std::unique_ptr<EditCharAttrib>& rAttr = pPPortion->GetNode()->GetCharAttribs().GetAttribs()[z];
             OStringBuffer aCharAttribs;
             aCharAttribs.append("\nA");
-            aCharAttribs.append(static_cast<sal_Int32>(nPortion));
+            aCharAttribs.append(nPortion);
             aCharAttribs.append(":  ");
             aCharAttribs.append(static_cast<sal_Int32>(rAttr->GetItem()->Which()));
             aCharAttribs.append('\t');
-            aCharAttribs.append(static_cast<sal_Int32>(rAttr->GetStart()));
+            aCharAttribs.append(rAttr->GetStart());
             aCharAttribs.append('\t');
-            aCharAttribs.append(static_cast<sal_Int32>(rAttr->GetEnd()));
+            aCharAttribs.append(rAttr->GetEnd());
             if ( rAttr->IsEmpty() )
                 bZeroAttr = true;
             fprintf(fp, "%s => ", aCharAttribs.getStr());
@@ -373,20 +373,20 @@ void EditDbg::ShowEditEngineData( EditEngine* pEE, bool bInfoBox )
 
         const sal_Int32 nTextPortions = pPPortion->GetTextPortions().Count();
         OStringBuffer aPortionStr("\nText portions: #");
-        aPortionStr.append(static_cast<sal_Int32>(nTextPortions));
+        aPortionStr.append(nTextPortions);
         aPortionStr.append(" \nA");
-        aPortionStr.append(static_cast<sal_Int32>(nPortion));
+        aPortionStr.append(nPortion);
         aPortionStr.append(": Paragraph Length = ");
-        aPortionStr.append(static_cast<sal_Int32>(pPPortion->GetNode()->Len()));
+        aPortionStr.append(pPPortion->GetNode()->Len());
         aPortionStr.append("\nA");
-        aPortionStr.append(static_cast<sal_Int32>(nPortion));
+        aPortionStr.append(nPortion);
         aPortionStr.append(": ");
         sal_Int32 n = 0;
         for ( sal_Int32 z = 0; z < nTextPortions; ++z )
         {
             TextPortion& rPortion = pPPortion->GetTextPortions()[z];
             aPortionStr.append(' ');
-            aPortionStr.append(static_cast<sal_Int32>(rPortion.GetLen()));
+            aPortionStr.append(rPortion.GetLen());
             aPortionStr.append('(');
             aPortionStr.append(static_cast<sal_Int32>(rPortion.GetSize().Width()));
             aPortionStr.append(')');
@@ -397,28 +397,27 @@ void EditDbg::ShowEditEngineData( EditEngine* pEE, bool bInfoBox )
             n += rPortion.GetLen();
         }
         aPortionStr.append("\nA");
-        aPortionStr.append(static_cast<sal_Int32>(nPortion));
+        aPortionStr.append(nPortion);
         aPortionStr.append(": Total length: ");
-        aPortionStr.append(static_cast<sal_Int32>(n));
+        aPortionStr.append(n);
         if ( pPPortion->GetNode()->Len() != n )
             aPortionStr.append(" => Error !!!");
         fprintf(fp, "%s", aPortionStr.getStr());
 
         fprintf( fp, "\n\nLines:" );
         // First the content ...
-        sal_uInt16 nLine;
-        for ( nLine = 0; nLine < pPPortion->GetLines().Count(); nLine++ )
+        for ( sal_Int32 nLine = 0; nLine < pPPortion->GetLines().Count(); nLine++ )
         {
             EditLine& rLine = pPPortion->GetLines()[nLine];
 
             OString aLine(OUStringToOString(pPPortion->GetNode()->Copy(rLine.GetStart(), rLine.GetEnd() - rLine.GetStart()), RTL_TEXTENCODING_ASCII_US));
-            fprintf( fp, "\nLine %i\t>%s<", nLine, aLine.getStr() );
+            fprintf( fp, "\nLine %" SAL_PRIdINT32 "\t>%s<", nLine, aLine.getStr() );
         }
         // then the internal data ...
-        for ( nLine = 0; nLine < pPPortion->GetLines().Count(); nLine++ )
+        for ( sal_Int32 nLine = 0; nLine < pPPortion->GetLines().Count(); nLine++ )
         {
             EditLine& rLine = pPPortion->GetLines()[nLine];
-            fprintf( fp, "\nZeile %i:\tStart: %" SAL_PRIdINT32 ",\tEnd: %" SAL_PRIdINT32, nLine, rLine.GetStart(), rLine.GetEnd() );
+            fprintf( fp, "\nLine %" SAL_PRIdINT32 ":\tStart: %" SAL_PRIdINT32 ",\tEnd: %" SAL_PRIdINT32, nLine, rLine.GetStart(), rLine.GetEnd() );
             fprintf( fp, "\t\tPortions: %" SAL_PRIdINT32 " - %" SAL_PRIdINT32 ".\tHight: %i, Ascent=%i", rLine.GetStartPortion(), rLine.GetEndPortion(), rLine.GetHeight(), rLine.GetMaxAscent() );
         }
 
@@ -432,7 +431,7 @@ void EditDbg::ShowEditEngineData( EditEngine* pEE, bool bInfoBox )
         fprintf( fp, "\n==================   Stylesheets   =============================================" );
         fprintf( fp, "\n================================================================================" );
         fprintf( fp, "\n#Template:   %" SAL_PRIuUINT32 "\n", sal_uInt32(nStyles) );
-        SfxStyleSheetIterator aIter( pEE->pImpEditEngine->GetStyleSheetPool(), SFX_STYLE_FAMILY_ALL );
+        SfxStyleSheetIterator aIter( pEE->pImpEditEngine->GetStyleSheetPool(), SfxStyleFamily::All );
         SfxStyleSheetBase* pStyle = aIter.First();
         while ( pStyle )
         {
@@ -455,7 +454,7 @@ void EditDbg::ShowEditEngineData( EditEngine* pEE, bool bInfoBox )
     fprintf( fp, "\n==================   EditEngine & Views   ======================================" );
     fprintf( fp, "\n================================================================================" );
     fprintf( fp, "\nControl: %x", unsigned( pEE->GetControlWord() ) );
-    fprintf( fp, "\nRefMapMode: %i", pEE->pImpEditEngine->pRefDev->GetMapMode().GetMapUnit() );
+    fprintf( fp, "\nRefMapMode: %i", int( pEE->pImpEditEngine->pRefDev->GetMapMode().GetMapUnit() ) );
     fprintf( fp, "\nPaperSize: %li x %li", pEE->GetPaperSize().Width(), pEE->GetPaperSize().Height() );
     fprintf( fp, "\nMaxAutoPaperSize: %li x %li", pEE->GetMaxAutoPaperSize().Width(), pEE->GetMaxAutoPaperSize().Height() );
     fprintf( fp, "\nMinAutoPaperSize: %li x %li", pEE->GetMinAutoPaperSize().Width(), pEE->GetMinAutoPaperSize().Height() );
@@ -466,8 +465,8 @@ void EditDbg::ShowEditEngineData( EditEngine* pEE, bool bInfoBox )
         EditView* pV = pEE->GetView( nView );
         DBG_ASSERT( pV, "View not found!" );
         fprintf( fp, "\nView %zu: Focus=%i", nView, pV->GetWindow()->HasFocus() );
-        Rectangle aR( pV->GetOutputArea() );
-        fprintf( fp, "\n  OutputArea: nX=%li, nY=%li, dX=%li, dY=%li, MapMode = %i", aR.TopLeft().X(), aR.TopLeft().Y(), aR.GetSize().Width(), aR.GetSize().Height() , pV->GetWindow()->GetMapMode().GetMapUnit() );
+        tools::Rectangle aR( pV->GetOutputArea() );
+        fprintf( fp, "\n  OutputArea: nX=%li, nY=%li, dX=%li, dY=%li, MapMode = %i", aR.TopLeft().X(), aR.TopLeft().Y(), aR.GetSize().Width(), aR.GetSize().Height() , int( pV->GetWindow()->GetMapMode().GetMapUnit() ) );
         aR = pV->GetVisArea();
         fprintf( fp, "\n  VisArea: nX=%li, nY=%li, dX=%li, dY=%li", aR.TopLeft().X(), aR.TopLeft().Y(), aR.GetSize().Width(), aR.GetSize().Height() );
         ESelection aSel = pV->GetSelection();
@@ -482,7 +481,12 @@ void EditDbg::ShowEditEngineData( EditEngine* pEE, bool bInfoBox )
     }
     fclose( fp );
     if ( bInfoBox )
-        ScopedVclPtr<InfoBox>::Create(nullptr, OUString( "D:\\DEBUG.LOG !" ) )->Execute();
+    {
+        std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(nullptr,
+                                                      VclMessageType::Info, VclButtonsType::Ok,
+                                                      "D:\\DEBUG.LOG !" ));
+        xInfoBox->run();
+    }
 }
 #endif
 
@@ -497,13 +501,15 @@ bool ParaPortion::DbgCheckTextPortions(ParaPortion const& rPara)
     }
     return nXLen == rPara.pNode->Len();
 }
+#endif
 
-void CheckOrderedList(const CharAttribList::AttribsType& rAttribs, bool bStart)
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
+void CheckOrderedList(const CharAttribList::AttribsType& rAttribs)
 {
     sal_Int32 nPrev = 0;
     for (const std::unique_ptr<EditCharAttrib>& rAttr : rAttribs)
     {
-        sal_Int32 const nCur = bStart ? rAttr->GetStart() : rAttr->GetEnd();
+        sal_Int32 const nCur = rAttr->GetStart();
         assert(nCur >= nPrev);
         nPrev = nCur;
     }

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.16.1 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
-  <!-- interface-requires LibreOffice 1.0 -->
+<!-- Generated with glade 3.20.0 -->
+<interface domain="svx">
+  <requires lib="gtk+" version="3.18"/>
+  <requires lib="LibreOffice" version="1.0"/>
   <object class="GtkAdjustment" id="adjustment1">
     <property name="upper">100</property>
     <property name="step_increment">10</property>
@@ -35,11 +35,15 @@
                   <object class="GtkComboBoxText" id="beginarrowstyle">
                     <property name="width_request">65</property>
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
+                    <property name="can_focus">True</property>
                     <property name="has_tooltip">True</property>
-                    <property name="tooltip_markup" translatable="yes">Select the style of the beginning arrowhead.</property>
-                    <property name="tooltip_text" translatable="yes">Select the style of the beginning arrowhead.</property>
+                    <property name="tooltip_text" translatable="yes" context="sidebarline|beginarrowstyle|tooltip_text">Select the style of the beginning arrowhead.</property>
                     <property name="hexpand">True</property>
+                    <child internal-child="accessible">
+                      <object class="AtkObject" id="beginarrowstyle-atkobject">
+                        <property name="AtkObject::accessible-name" translatable="yes" context="sidebarline|beginarrowstyle-atkobject">Beginning Style</property>
+                      </object>
+                    </child>
                   </object>
                   <packing>
                     <property name="expand">False</property>
@@ -51,11 +55,15 @@
                   <object class="GtkComboBoxText" id="linestyle">
                     <property name="width_request">105</property>
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
+                    <property name="can_focus">True</property>
                     <property name="has_tooltip">True</property>
-                    <property name="tooltip_markup" translatable="yes">Select the style of the line.</property>
-                    <property name="tooltip_text" translatable="yes">Select the style of the line.</property>
+                    <property name="tooltip_text" translatable="yes" context="sidebarline|linestyle|tooltip_text">Select the style of the line.</property>
                     <property name="hexpand">True</property>
+                    <child internal-child="accessible">
+                      <object class="AtkObject" id="linestyle-atkobject">
+                        <property name="AtkObject::accessible-name" translatable="yes" context="sidebarline|linestyle-atkobject">Style</property>
+                      </object>
+                    </child>
                   </object>
                   <packing>
                     <property name="expand">False</property>
@@ -67,12 +75,16 @@
                   <object class="GtkComboBoxText" id="endarrowstyle">
                     <property name="width_request">65</property>
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
+                    <property name="can_focus">True</property>
                     <property name="has_tooltip">True</property>
-                    <property name="tooltip_markup" translatable="yes">Select the style of the ending arrowhead.</property>
-                    <property name="tooltip_text" translatable="yes">Select the style of the ending arrowhead.</property>
+                    <property name="tooltip_text" translatable="yes" context="sidebarline|endarrowstyle|tooltip_text">Select the style of the ending arrowhead.</property>
                     <property name="margin_right">6</property>
                     <property name="hexpand">True</property>
+                    <child internal-child="accessible">
+                      <object class="AtkObject" id="endarrowstyle-atkobject">
+                        <property name="AtkObject::accessible-name" translatable="yes" context="sidebarline|endarrowstyle-atkobject">Ending Style</property>
+                      </object>
+                    </child>
                   </object>
                   <packing>
                     <property name="expand">False</property>
@@ -90,7 +102,7 @@
             <child>
               <object class="GtkGrid" id="lineproperties">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
+                <property name="can_focus">True</property>
                 <property name="hexpand">True</property>
                 <property name="row_spacing">6</property>
                 <property name="column_spacing">6</property>
@@ -98,9 +110,9 @@
                   <object class="GtkLabel" id="widthlabel">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Width:</property>
+                    <property name="label" translatable="yes" context="sidebarline|widthlabel">_Width:</property>
                     <property name="use_underline">True</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
@@ -113,10 +125,9 @@
                   <object class="GtkToolbar" id="width">
                     <property name="width_request">120</property>
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
+                    <property name="can_focus">True</property>
                     <property name="has_tooltip">True</property>
-                    <property name="tooltip_markup" translatable="yes">Select the width of the line.</property>
-                    <property name="tooltip_text" translatable="yes">Select the width of the line.</property>
+                    <property name="tooltip_text" translatable="yes" context="sidebarline|width|tooltip_text">Select the width of the line.</property>
                     <child>
                       <object class="GtkMenuToolButton" id="setwidth">
                         <property name="width_request">105</property>
@@ -145,9 +156,9 @@
                   <object class="GtkLabel" id="colorlabel">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Color:</property>
+                    <property name="label" translatable="yes" context="sidebarline|colorlabel">_Color:</property>
                     <property name="use_underline">True</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
@@ -159,18 +170,16 @@
                 <child>
                   <object class="sfxlo-SidebarToolBox" id="color">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
+                    <property name="can_focus">True</property>
                     <property name="has_tooltip">True</property>
-                    <property name="tooltip_markup" translatable="yes">Select the color of the line.</property>
-                    <property name="tooltip_text" translatable="yes">Select the color of the line.</property>
+                    <property name="tooltip_text" translatable="yes" context="sidebarline|color|tooltip_text">Select the color of the line.</property>
                     <child>
                       <object class="GtkMenuToolButton" id="setcolor">
                         <property name="width_request">105</property>
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="has_tooltip">True</property>
-                        <property name="tooltip_markup" translatable="yes">Select the color of the line.</property>
-                        <property name="tooltip_text" translatable="yes">Select the color of the line.</property>
+                        <property name="tooltip_text" translatable="yes" context="sidebarline|setcolor|tooltip_text">Select the color of the line.</property>
                         <property name="margin_left">20</property>
                         <property name="action_name">.uno:XLineColor</property>
                         <property name="use_underline">True</property>
@@ -192,9 +201,9 @@
                   <object class="GtkLabel" id="translabel">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Transparency:</property>
+                    <property name="label" translatable="yes" context="sidebarline|translabel">_Transparency:</property>
                     <property name="use_underline">True</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
@@ -208,10 +217,8 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="has_tooltip">True</property>
-                    <property name="tooltip_markup" translatable="yes">Specify the transparency of the line.</property>
-                    <property name="tooltip_text" translatable="yes">Specify the transparency of the line.</property>
+                    <property name="tooltip_text" translatable="yes" context="sidebarline|linetransparency|tooltip_text">Specify the transparency of the line.</property>
                     <property name="halign">start</property>
-                    <property name="invisible_char">•</property>
                     <property name="adjustment">adjustment1</property>
                     <property name="climb_rate">5</property>
                     <accessibility>
@@ -219,7 +226,7 @@
                     </accessibility>
                     <child internal-child="accessible">
                       <object class="AtkObject" id="linetransparency:0%-atkobject">
-                          <property name="AtkObject::accessible-name" translatable="yes">Transparency</property>
+                        <property name="AtkObject::accessible-name" translatable="yes" context="sidebarline|linetransparency-atkobject">Transparency</property>
                       </object>
                     </child>
                   </object>
@@ -251,10 +258,10 @@
                       <object class="GtkLabel" id="cornerlabel">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">0</property>
-                        <property name="label" translatable="yes">_Corner style:</property>
+                        <property name="label" translatable="yes" context="sidebarline|cornerlabel">_Corner style:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">edgestyle</property>
+                        <property name="xalign">0</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -266,22 +273,20 @@
                     <child>
                       <object class="GtkComboBoxText" id="edgestyle">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can_focus">True</property>
                         <property name="has_tooltip">True</property>
-                        <property name="tooltip_markup" translatable="yes">Select the style of the edge connections.</property>
-                        <property name="tooltip_text" translatable="yes">Select the style of the edge connections.</property>
+                        <property name="tooltip_text" translatable="yes" context="sidebarline|edgestyle|tooltip_text">Select the style of the edge connections.</property>
                         <items>
-                          <item translatable="yes">Rounded</item>
-                          <item translatable="yes">- none -</item>
-                          <item translatable="yes">Mitered</item>
-                          <item translatable="yes">Beveled</item>
+                          <item translatable="yes" context="sidebarline|edgestyle">Rounded</item>
+                          <item translatable="yes" context="sidebarline|edgestyle">- none -</item>
+                          <item translatable="yes" context="sidebarline|edgestyle">Mitered</item>
+                          <item translatable="yes" context="sidebarline|edgestyle">Beveled</item>
                         </items>
-                        <style>
-                          <class name="Rounded"/>
-                          <class name="- none -"/>
-                          <class name="Mitered"/>
-                          <class name="Beveled"/>
-                        </style>
+                        <child internal-child="accessible">
+                          <object class="AtkObject" id="edgestyle-atkobject">
+                            <property name="AtkObject::accessible-name" translatable="yes" context="sidebarline|edgestyle-atkobject">Corner Style</property>
+                          </object>
+                        </child>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -294,10 +299,10 @@
                       <object class="GtkLabel" id="caplabel">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">0</property>
-                        <property name="label" translatable="yes">Ca_p style:</property>
+                        <property name="label" translatable="yes" context="sidebarline|caplabel">Ca_p style:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">linecapstyle</property>
+                        <property name="xalign">0</property>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
@@ -309,20 +314,19 @@
                     <child>
                       <object class="GtkComboBoxText" id="linecapstyle">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can_focus">True</property>
                         <property name="has_tooltip">True</property>
-                        <property name="tooltip_markup" translatable="yes">Select the style of the line caps.</property>
-                        <property name="tooltip_text" translatable="yes">Select the style of the line caps.</property>
+                        <property name="tooltip_text" translatable="yes" context="sidebarline|linecapstyle|tooltip_text">Select the style of the line caps.</property>
                         <items>
-                          <item translatable="yes">Flat</item>
-                          <item translatable="yes">Round</item>
-                          <item translatable="yes">Square</item>
+                          <item translatable="yes" context="sidebarline|linecapstyle">Flat</item>
+                          <item translatable="yes" context="sidebarline|linecapstyle">Round</item>
+                          <item translatable="yes" context="sidebarline|linecapstyle">Square</item>
                         </items>
-                        <style>
-                          <class name="Flat"/>
-                          <class name="Round"/>
-                          <class name="Square"/>
-                        </style>
+                        <child internal-child="accessible">
+                          <object class="AtkObject" id="linecapstyle-atkobject">
+                            <property name="AtkObject::accessible-name" translatable="yes" context="sidebarline|linecapstyle-atkobject">Cap Style</property>
+                          </object>
+                        </child>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>

@@ -29,7 +29,6 @@
 
 class OutputDevice;
 class MetaAction;
-class MetaCommentAction;
 class SvStream;
 class Color;
 class BitmapEx;
@@ -38,36 +37,37 @@ namespace tools {
     class PolyPolygon;
 }
 class Gradient;
+struct ImplMetaReadData;
 
+#define GDI_METAFILE_END                (size_t(0xFFFFFFFF))
 
-#define GDI_METAFILE_END                ((size_t)0xFFFFFFFF)
-#define GDI_METAFILE_LABEL_NOTFOUND     ((size_t)0xFFFFFFFF)
-
-enum MtfConversion
+enum class MtfConversion
 {
-    MTF_CONVERSION_NONE = 0,
-    MTF_CONVERSION_1BIT_THRESHOLD = 1,
-    MTF_CONVERSION_8BIT_GREYS = 2
+    N1BitThreshold,
+    N8BitGreys
 };
 
 
 typedef Color (*ColorExchangeFnc)( const Color& rColor, const void* pColParam );
 typedef BitmapEx (*BmpExchangeFnc)( const BitmapEx& rBmpEx, const void* pBmpParam );
 
-class VCL_DLLPUBLIC GDIMetaFile
+VCL_DLLPUBLIC SvStream& ReadGDIMetaFile(SvStream& rIStm, GDIMetaFile& rGDIMetaFile, ImplMetaReadData* pReadData = nullptr);
+VCL_DLLPUBLIC SvStream& WriteGDIMetaFile( SvStream& rOStm, const GDIMetaFile& rGDIMetaFile );
+
+class VCL_DLLPUBLIC GDIMetaFile final
 {
 private:
-    ::std::vector< MetaAction* > aList;
-    size_t          nCurrentActionElement;
+    ::std::vector< rtl::Reference<MetaAction> > m_aList;
+    size_t          m_nCurrentActionElement;
 
-    MapMode         aPrefMapMode;
-    Size            aPrefSize;
-    GDIMetaFile*    pPrev;
-    GDIMetaFile*    pNext;
-    VclPtr<OutputDevice> pOutDev;
-    bool            bPause;
-    bool            bRecord;
-    bool            bUseCanvas;
+    MapMode         m_aPrefMapMode;
+    Size            m_aPrefSize;
+    GDIMetaFile*    m_pPrev;
+    GDIMetaFile*    m_pNext;
+    VclPtr<OutputDevice> m_pOutDev;
+    bool            m_bPause;
+    bool            m_bRecord;
+    bool            m_bUseCanvas;
 
 
     SAL_DLLPRIVATE static Color         ImplColAdjustFnc( const Color& rColor, const void* pColParam );
@@ -85,43 +85,39 @@ private:
     SAL_DLLPRIVATE void                 ImplExchangeColors( ColorExchangeFnc pFncCol, const void* pColParam,
                                                             BmpExchangeFnc pFncBmp, const void* pBmpParam );
 
-    SAL_DLLPRIVATE Point                ImplGetRotatedPoint( const Point& rPt, const Point& rRotatePt,
+    SAL_DLLPRIVATE static Point         ImplGetRotatedPoint( const Point& rPt, const Point& rRotatePt,
                                                              const Size& rOffset, double fSin, double fCos );
-    SAL_DLLPRIVATE tools::Polygon       ImplGetRotatedPolygon( const tools::Polygon& rPoly, const Point& rRotatePt,
+    SAL_DLLPRIVATE static tools::Polygon ImplGetRotatedPolygon( const tools::Polygon& rPoly, const Point& rRotatePt,
                                                                const Size& rOffset, double fSin, double fCos );
-    SAL_DLLPRIVATE tools::PolyPolygon   ImplGetRotatedPolyPolygon( const tools::PolyPolygon& rPoly, const Point& rRotatePt,
+    SAL_DLLPRIVATE static tools::PolyPolygon ImplGetRotatedPolyPolygon( const tools::PolyPolygon& rPoly, const Point& rRotatePt,
                                                                    const Size& rOffset, double fSin, double fCos );
-    SAL_DLLPRIVATE void                 ImplAddGradientEx( GDIMetaFile& rMtf,
+    SAL_DLLPRIVATE static void          ImplAddGradientEx( GDIMetaFile& rMtf,
                                                            const OutputDevice& rMapDev,
                                                            const tools::PolyPolygon& rPolyPoly,
                                                            const Gradient& rGrad );
 
     SAL_DLLPRIVATE bool                 ImplPlayWithRenderer( OutputDevice* pOut, const Point& rPos, Size rLogicDestSize );
-    SAL_DLLPRIVATE void                 ImplDelegate2PluggableRenderer( const MetaCommentAction* pAct, OutputDevice* pOut );
-
-
-protected:
 
     void                                Linker( OutputDevice* pOut, bool bLink );
 
 public:
                     GDIMetaFile();
                     GDIMetaFile( const GDIMetaFile& rMtf );
-    virtual         ~GDIMetaFile();
+                    ~GDIMetaFile();
 
     GDIMetaFile&    operator=( const GDIMetaFile& rMtf );
     bool            operator==( const GDIMetaFile& rMtf ) const;
     bool            operator!=( const GDIMetaFile& rMtf ) const { return !( *this == rMtf ); }
 
     void            Clear();
-    bool            Mirror( BmpMirrorFlags nMirrorFlags );
+    void            Mirror( BmpMirrorFlags nMirrorFlags );
     void            Move( long nX, long nY );
-    // additional Move method getting specifics how to handle MapMode( MAP_PIXEL )
+    // additional Move method getting specifics how to handle MapMode( MapUnit::MapPixel )
     void            Move( long nX, long nY, long nDPIX, long nDPIY );
     void            Scale( double fScaleX, double fScaleY );
     void            Scale( const Fraction& rScaleX, const Fraction& rScaleY );
     void            Rotate( long nAngle10 );
-    void            Clip( const Rectangle& );
+    void            Clip( const tools::Rectangle& );
     /* get the bound rect of the contained actions
      * caveats:
      * - clip actions will limit the contained actions,
@@ -129,9 +125,9 @@ public:
      * - coordinates of actions will be transformed to preferred mapmode
      * - the returned rectangle is relative to the preferred mapmode of the metafile
     */
-    Rectangle       GetBoundRect( OutputDevice& i_rReference, Rectangle* pHairline = nullptr ) const;
+    tools::Rectangle       GetBoundRect( OutputDevice& i_rReference, tools::Rectangle* pHairline = nullptr ) const;
 
-    void            Adjust( short nLuminancePercent = 0, short nContrastPercent = 0,
+    void            Adjust( short nLuminancePercent, short nContrastPercent,
                             short nChannelRPercent = 0,  short nChannelGPercent = 0,
                             short nChannelBPercent = 0,  double fGamma = 1.0,
                             bool bInvert = false, bool msoBrightness = false );
@@ -143,7 +139,7 @@ public:
     GDIMetaFile     GetMonochromeMtf( const Color& rCol ) const;
 
     void            Record( OutputDevice* pOutDev );
-    bool            IsRecord() const { return bRecord; }
+    bool            IsRecord() const { return m_bRecord; }
 
     void            Play( GDIMetaFile& rMtf );
     void            Play( OutputDevice* pOutDev, size_t nPos = GDI_METAFILE_END );
@@ -151,7 +147,7 @@ public:
                           const Size& rSize );
 
     void            Pause( bool bPause );
-    bool            IsPause() const { return bPause; }
+    bool            IsPause() const { return m_bPause; }
 
     void            Stop();
 
@@ -160,26 +156,25 @@ public:
 
     size_t          GetActionSize() const;
 
-    void            AddAction( MetaAction* pAction );
-    void            AddAction( MetaAction* pAction, size_t nPos );
-    void            RemoveAction( size_t nPos );
-    void            push_back( MetaAction* pAction );
+    void            AddAction(const rtl::Reference<MetaAction>& pAction);
+    void            AddAction(const rtl::Reference<MetaAction>& pAction, size_t nPos);
+    void            push_back(const rtl::Reference<MetaAction>& pAction);
     /**
      * @param pAction takes ownership
      * @param nAction the action to replace
      */
-    MetaAction*     ReplaceAction( MetaAction* pAction, size_t nAction );
+    void ReplaceAction( rtl::Reference<MetaAction> pAction, size_t nAction );
 
     MetaAction*     FirstAction();
     MetaAction*     NextAction();
     MetaAction*     GetAction( size_t nAction ) const;
-    MetaAction*     GetCurAction() const { return GetAction( nCurrentActionElement ); }
+    MetaAction*     GetCurAction() const { return GetAction( m_nCurrentActionElement ); }
 
-    const Size&     GetPrefSize() const { return aPrefSize; }
-    void            SetPrefSize( const Size& rSize ) { aPrefSize = rSize; }
+    const Size&     GetPrefSize() const { return m_aPrefSize; }
+    void            SetPrefSize( const Size& rSize ) { m_aPrefSize = rSize; }
 
-    const MapMode&  GetPrefMapMode() const { return aPrefMapMode; }
-    void            SetPrefMapMode( const MapMode& rMapMode ) { aPrefMapMode = rMapMode; }
+    const MapMode&  GetPrefMapMode() const { return m_aPrefMapMode; }
+    void            SetPrefMapMode( const MapMode& rMapMode ) { m_aPrefMapMode = rMapMode; }
 
 
     BitmapChecksum  GetChecksum() const;
@@ -192,17 +187,19 @@ public:
 
     // Stream-operators write (still) the old format
     // and read both the old and the new format
-    friend VCL_DLLPUBLIC SvStream& ReadGDIMetaFile( SvStream& rIStm, GDIMetaFile& rGDIMetaFile );
-    friend VCL_DLLPUBLIC SvStream& WriteGDIMetaFile( SvStream& rOStm, const GDIMetaFile& rGDIMetaFile );
+    friend VCL_DLLPUBLIC SvStream& ReadGDIMetaFile(SvStream& rIStm, GDIMetaFile& rGDIMetaFile, ImplMetaReadData* pReadData);
+    friend VCL_DLLPUBLIC SvStream& WriteGDIMetaFile(SvStream& rOStm, const GDIMetaFile& rGDIMetaFile);
 
-    /// Creates an antialiased thumbnail, with maximum width or height of nMaximumExtent.
+    /// Creates an antialiased thumbnail
     bool            CreateThumbnail(BitmapEx& rBitmapEx,
-                                    sal_uInt32 nMaximumExtent = 256,
-                                    BmpConversion nColorConversion = BMP_CONVERSION_24BIT,
+                                    BmpConversion nColorConversion = BmpConversion::N24Bit,
                                     BmpScaleFlag nScaleFlag = BmpScaleFlag::BestQuality) const;
 
     void            UseCanvas( bool _bUseCanvas );
-    bool            GetUseCanvas() const { return bUseCanvas; }
+    bool            GetUseCanvas() const { return m_bUseCanvas; }
+
+    /// Dumps the meta actions as XML in metafile.xml.
+    void dumpAsXml( const OUString& sFileName = OUString() ) const;
 };
 
 #endif // INCLUDED_VCL_GDIMTF_HXX

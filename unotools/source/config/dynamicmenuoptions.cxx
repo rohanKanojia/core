@@ -27,6 +27,7 @@
 #include <tools/debug.hxx>
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
+#include <com/sun/star/beans/PropertyValue.hpp>
 
 #include <vector>
 
@@ -40,12 +41,11 @@ using namespace ::osl;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::beans;
 
-#define ROOTNODE_MENUS                                  OUString("Office.Common/Menus/")
+#define ROOTNODE_MENUS                                  "Office.Common/Menus/"
 #define PATHDELIMITER                                   "/"
 
 #define SETNODE_NEWMENU                                 "New"
 #define SETNODE_WIZARDMENU                              "Wizard"
-#define SETNODE_HELPBOOKMARKS                           "HelpBookmarks"
 
 #define PROPERTYNAME_URL                                DYNAMICMENU_PROPERTYNAME_URL
 #define PROPERTYNAME_TITLE                              DYNAMICMENU_PROPERTYNAME_TITLE
@@ -80,11 +80,11 @@ class SvtDynMenu
     public:
         // append setup written menu entry
         // Don't touch name of entry. It was defined by setup and must be the same every time!
-        // Look for double menu entries here too... may be some separator items are superflous...
+        // Look for double menu entries here too... may be some separator items are superfluous...
         void AppendSetupEntry( const SvtDynMenuEntry& rEntry )
         {
             if(
-                ( lSetupEntries.size()         <  1           )  ||
+                ( lSetupEntries.empty()           )  ||
                 ( lSetupEntries.rbegin()->sURL != rEntry.sURL )
               )
             {
@@ -95,32 +95,27 @@ class SvtDynMenu
         // convert internal list to external format
         // for using it on right menus really
         // Notice:   We build a property list with 4 entries and set it on result list then.
-        //           The while-loop starts with pointer on internal member list lSetupEntries, change to
-        //           lUserEntries then and stop after that with NULL!
         //           Separator entries will be packed in another way then normal entries! We define
         //           special string "sSeparator" to perform too ...
         Sequence< Sequence< PropertyValue > > GetList() const
         {
-            sal_Int32                             nSetupCount = (sal_Int32)lSetupEntries.size();
-            sal_Int32                             nUserCount  = (sal_Int32)lUserEntries.size();
+            sal_Int32                             nSetupCount = static_cast<sal_Int32>(lSetupEntries.size());
+            sal_Int32                             nUserCount  = static_cast<sal_Int32>(lUserEntries.size());
             sal_Int32                             nStep       = 0;
             Sequence< PropertyValue >             lProperties ( PROPERTYCOUNT );
             Sequence< Sequence< PropertyValue > > lResult     ( nSetupCount+nUserCount );
             OUString                              sSeparator  ( "private:separator" );
-            const vector< SvtDynMenuEntry >*            pList       = &lSetupEntries;
 
             lProperties[OFFSET_URL            ].Name = PROPERTYNAME_URL;
             lProperties[OFFSET_TITLE          ].Name = PROPERTYNAME_TITLE;
             lProperties[OFFSET_IMAGEIDENTIFIER].Name = PROPERTYNAME_IMAGEIDENTIFIER;
             lProperties[OFFSET_TARGETNAME     ].Name = PROPERTYNAME_TARGETNAME;
 
-            while( pList != nullptr )
+            for( const auto& pList : {&lSetupEntries, &lUserEntries} )
             {
-                for( vector< SvtDynMenuEntry >::const_iterator pItem =pList->begin();
-                                                         pItem!=pList->end();
-                                                         ++pItem              )
+                for( const auto& rItem : *pList )
                 {
-                    if( pItem->sURL == sSeparator )
+                    if( rItem.sURL == sSeparator )
                     {
                         lProperties[OFFSET_URL              ].Value <<= sSeparator;
                         lProperties[OFFSET_TITLE            ].Value <<= OUString();
@@ -129,18 +124,14 @@ class SvtDynMenu
                     }
                     else
                     {
-                        lProperties[OFFSET_URL              ].Value <<= pItem->sURL;
-                        lProperties[OFFSET_TITLE            ].Value <<= pItem->sTitle;
-                        lProperties[OFFSET_IMAGEIDENTIFIER  ].Value <<= pItem->sImageIdentifier;
-                        lProperties[OFFSET_TARGETNAME       ].Value <<= pItem->sTargetName;
+                        lProperties[OFFSET_URL              ].Value <<= rItem.sURL;
+                        lProperties[OFFSET_TITLE            ].Value <<= rItem.sTitle;
+                        lProperties[OFFSET_IMAGEIDENTIFIER  ].Value <<= rItem.sImageIdentifier;
+                        lProperties[OFFSET_TARGETNAME       ].Value <<= rItem.sTargetName;
                     }
                     lResult[nStep] = lProperties;
                     ++nStep;
                 }
-                if( pList == &lSetupEntries )
-                    pList = &lUserEntries;
-                else
-                    pList = nullptr;
             }
             return lResult;
         }
@@ -155,11 +146,11 @@ class SvtDynamicMenuOptions_Impl : public ConfigItem
     public:
 
          SvtDynamicMenuOptions_Impl();
-        virtual ~SvtDynamicMenuOptions_Impl();
+        virtual ~SvtDynamicMenuOptions_Impl() override;
 
         /*-****************************************************************************************************
             @short      called for notify of configmanager
-            @descr      These method is called from the ConfigManager before application ends or from the
+            @descr      This method is called from the ConfigManager before the application ends or from the
                          PropertyChangeListener if the sub tree broadcasts changes. You must update your
                         internal values.
 
@@ -183,15 +174,15 @@ class SvtDynamicMenuOptions_Impl : public ConfigItem
         virtual void ImplCommit() override;
 
         /*-****************************************************************************************************
-            @short      return list of key names of our configuration management which represent oue module tree
-            @descr      These methods return the current list of key names! We need it to get needed values from our
+            @short      return list of key names of our configuration management which represent our module tree
+            @descr      This method returns the current list of key names! We need it to get needed values from our
                         configuration management and support dynamical menu item lists!
             @param      "nNewCount"     ,   returns count of menu entries for "new"
             @param      "nWizardCount"  ,   returns count of menu entries for "wizard"
             @return     A list of configuration key names is returned.
         *//*-*****************************************************************************************************/
 
-        Sequence< OUString > impl_GetPropertyNames( sal_uInt32& nNewCount, sal_uInt32& nWizardCount, sal_uInt32& nHelpBookmarksCount );
+        Sequence< OUString > impl_GetPropertyNames( sal_uInt32& nNewCount, sal_uInt32& nWizardCount );
 
         /*-****************************************************************************************************
             @short      sort given source list and expand it for all well known properties to destination
@@ -240,7 +231,6 @@ class SvtDynamicMenuOptions_Impl : public ConfigItem
 
         SvtDynMenu  m_aNewMenu;
         SvtDynMenu  m_aWizardMenu;
-        SvtDynMenu  m_aHelpBookmarksMenu;
 };
 
 //  constructor
@@ -254,10 +244,8 @@ SvtDynamicMenuOptions_Impl::SvtDynamicMenuOptions_Impl()
     // See impl_GetPropertyNames() for further information.
     sal_uInt32              nNewCount           = 0;
     sal_uInt32              nWizardCount        = 0;
-    sal_uInt32              nHelpBookmarksCount = 0;
     Sequence< OUString >    lNames              = impl_GetPropertyNames ( nNewCount           ,
-                                                                          nWizardCount        ,
-                                                                          nHelpBookmarksCount );
+                                                                          nWizardCount        );
     Sequence< Any >         lValues             = GetProperties         ( lNames              );
 
     // Safe impossible cases.
@@ -271,18 +259,18 @@ SvtDynamicMenuOptions_Impl::SvtDynamicMenuOptions_Impl()
     // first "New" menu ...
     //      Name                            Value
     //      /New/1/URL                      "private:factory/swriter"
-    //      /New/1/Title                    "Neues Writer Dokument"
+    //      /New/1/Title                    "New Writer Document"
     //      /New/1/ImageIdentifier          "icon_writer"
     //      /New/1/TargetName               "_blank"
 
     //      /New/2/URL                      "private:factory/scalc"
-    //      /New/2/Title                    "Neues Calc Dokument"
+    //      /New/2/Title                    "New Calc Document"
     //      /New/2/ImageIdentifier          "icon_calc"
     //      /New/2/TargetName               "_blank"
 
     // second "Wizard" menu ...
     //      /Wizard/1/URL                   "file://b"
-    //      /Wizard/1/Title                 "MalWas"
+    //      /Wizard/1/Title                 "PaintSomething"
     //      /Wizard/1/ImageIdentifier       "icon_?"
     //      /Wizard/1/TargetName            "_self"
 
@@ -327,22 +315,6 @@ SvtDynamicMenuOptions_Impl::SvtDynamicMenuOptions_Impl()
 
     // Attention: Don't reset nPosition here!
 
-    // Get names/values for wizard menu.
-    // 4 subkeys for every item!
-    for( nItem=0; nItem<nHelpBookmarksCount; ++nItem )
-    {
-        SvtDynMenuEntry   aItem;
-        lValues[nPosition] >>= aItem.sURL;
-        ++nPosition;
-        lValues[nPosition] >>= aItem.sTitle;
-        ++nPosition;
-        lValues[nPosition] >>= aItem.sImageIdentifier;
-        ++nPosition;
-        lValues[nPosition] >>= aItem.sTargetName;
-        ++nPosition;
-        m_aHelpBookmarksMenu.AppendSetupEntry( aItem );
-    }
-
 /*TODO: Not used in the moment! see Notify() ...
     // Enable notification mechanism of our baseclass.
     // We need it to get information about changes outside these class on our used configuration keys!
@@ -361,7 +333,7 @@ SvtDynamicMenuOptions_Impl::~SvtDynamicMenuOptions_Impl()
 
 void SvtDynamicMenuOptions_Impl::Notify( const Sequence< OUString >& )
 {
-    DBG_ASSERT( false, "SvtDynamicMenuOptions_Impl::Notify()\nNot implemented yet! I don't know how I can handle a dynamical list of unknown properties ...\n" );
+    SAL_WARN( "unotools.config", "SvtDynamicMenuOptions_Impl::Notify() Not implemented yet! I don't know how I can handle a dynamical list of unknown properties ..." );
 }
 
 //  public method
@@ -374,7 +346,6 @@ void SvtDynamicMenuOptions_Impl::ImplCommit()
     // Delete complete sets first.
     ClearNodeSet( SETNODE_NEWMENU    );
     ClearNodeSet( SETNODE_WIZARDMENU );
-    ClearNodeSet( SETNODE_HELPBOOKMARKS );
 
     MenuEntry                    aItem;
     OUString                    sNode;
@@ -427,28 +398,6 @@ void SvtDynamicMenuOptions_Impl::ImplCommit()
         SetSetProperties( SETNODE_WIZARDMENU, lPropertyValues );
     }
 
-    // Copy help bookmarks entries to save-list!
-    sal_uInt32 nHelpBookmarksCount = m_aHelpBookmarksMenu.size();
-    for( nItem=0; nItem<nHelpBookmarksCount; ++nItem )
-    {
-        aItem = m_aHelpBookmarksMenu[nItem];
-        // Format:  "HelpBookmarks/1/URL"
-        //          "HelpBookmarks/1/Title"
-        //          ...
-        sNode = SETNODE_HELPBOOKMARKS + PATHDELIMITER + PATHPREFIX + OUString::valueOf( (sal_Int32)nItem ) + PATHDELIMITER;
-
-        lPropertyValues[OFFSET_URL             ].Name  =   sNode + PROPERTYNAME_URL;
-        lPropertyValues[OFFSET_TITLE           ].Name  =   sNode + PROPERTYNAME_TITLE;
-        lPropertyValues[OFFSET_IMAGEIDENTIFIER ].Name  =   sNode + PROPERTYNAME_IMAGEIDENTIFIER;
-        lPropertyValues[OFFSET_TARGETNAME      ].Name  =   sNode + PROPERTYNAME_TARGETNAME;
-
-        lPropertyValues[OFFSET_URL             ].Value <<= aItem.sURL;
-        lPropertyValues[OFFSET_TITLE           ].Value <<= aItem.sTitle;
-        lPropertyValues[OFFSET_IMAGEIDENTIFIER ].Value <<= aItem.sImageIdentifier;
-        lPropertyValues[OFFSET_TARGETNAME      ].Value <<= aItem.sTargetName;
-
-        SetSetProperties( SETNODE_HELPBOOKMARKS, lPropertyValues );
-    }
     */
 }
 
@@ -459,43 +408,33 @@ Sequence< Sequence< PropertyValue > > SvtDynamicMenuOptions_Impl::GetMenu( EDyna
     Sequence< Sequence< PropertyValue > > lReturn;
     switch( eMenu )
     {
-        case E_NEWMENU      :   {
-                                    lReturn = m_aNewMenu.GetList();
-                                }
-                                break;
+        case EDynamicMenuType::NewMenu      :
+            lReturn = m_aNewMenu.GetList();
+            break;
 
-        case E_WIZARDMENU   :   {
-                                    lReturn = m_aWizardMenu.GetList();
-                                }
-                                break;
-
-        case E_HELPBOOKMARKS :  {
-                                    lReturn = m_aHelpBookmarksMenu.GetList();
-                                }
-                                break;
+        case EDynamicMenuType::WizardMenu   :
+            lReturn = m_aWizardMenu.GetList();
+            break;
     }
     return lReturn;
 }
 
 //  private method
 
-Sequence< OUString > SvtDynamicMenuOptions_Impl::impl_GetPropertyNames( sal_uInt32& nNewCount, sal_uInt32& nWizardCount, sal_uInt32& nHelpBookmarksCount )
+Sequence< OUString > SvtDynamicMenuOptions_Impl::impl_GetPropertyNames( sal_uInt32& nNewCount, sal_uInt32& nWizardCount )
 {
     // First get ALL names of current existing list items in configuration!
     Sequence< OUString > lNewItems           = GetNodeNames( SETNODE_NEWMENU       );
     Sequence< OUString > lWizardItems        = GetNodeNames( SETNODE_WIZARDMENU    );
-    Sequence< OUString > lHelpBookmarksItems = GetNodeNames( SETNODE_HELPBOOKMARKS );
 
     // Get information about list counts ...
     nNewCount           = lNewItems.getLength          ();
     nWizardCount        = lWizardItems.getLength       ();
-    nHelpBookmarksCount = lHelpBookmarksItems.getLength();
 
     // Sort and expand all three list to result list ...
     Sequence< OUString > lProperties;
     impl_SortAndExpandPropertyNames( lNewItems          , lProperties, SETNODE_NEWMENU       );
     impl_SortAndExpandPropertyNames( lWizardItems       , lProperties, SETNODE_WIZARDMENU    );
-    impl_SortAndExpandPropertyNames( lHelpBookmarksItems, lProperties, SETNODE_HELPBOOKMARKS );
 
     // Return result.
     return lProperties;
@@ -512,8 +451,8 @@ class CountWithPrefixSort
             // Get order numbers from entry name without prefix.
             // e.g. "m10" => 10
             //      "m5"  => 5
-            sal_Int32 n1 = s1.copy( 1, s1.getLength()-1 ).toInt32();
-            sal_Int32 n2 = s2.copy( 1, s2.getLength()-1 ).toInt32();
+            sal_Int32 n1 = s1.copy( 1 ).toInt32();
+            sal_Int32 n2 = s2.copy( 1 ).toInt32();
             // MUST be in [0,1] ... because it's a difference between
             // insert-positions of given entries in sorted list!
             return( n1<n2 );
@@ -543,7 +482,8 @@ void SvtDynamicMenuOptions_Impl::impl_SortAndExpandPropertyNames( const Sequence
     lDestination.realloc( (nSourceCount*PROPERTYCOUNT)+nDestinationStep ); // get enough memory for copy operations after nDestination ...
 
     // Copy all items to temp. vector to use fast sort operations :-)
-    for( sal_Int32 nSourceStep=0; nSourceStep<nSourceCount; ++nSourceStep )
+    lTemp.reserve(nSourceCount);
+    for (sal_Int32 nSourceStep = 0; nSourceStep < nSourceCount; ++nSourceStep)
         lTemp.push_back( lSource[nSourceStep] );
 
     // Sort all entries by number ...
@@ -553,57 +493,41 @@ void SvtDynamicMenuOptions_Impl::impl_SortAndExpandPropertyNames( const Sequence
 
     // Copy sorted entries to destination and expand every item with
     // 4 supported sub properties.
-    for( vector< OUString >::const_iterator pItem =lTemp.begin();
-                                            pItem!=lTemp.end();
-                                            ++pItem              )
+    for( const auto& rItem : lTemp )
     {
-        OUString sFixPath(sSetNode + PATHDELIMITER + *pItem + PATHDELIMITER);
+        OUString sFixPath(sSetNode + PATHDELIMITER + rItem + PATHDELIMITER);
         lDestination[nDestinationStep++] = sFixPath + PROPERTYNAME_URL;
         lDestination[nDestinationStep++] = sFixPath + PROPERTYNAME_TITLE;
-        lDestination[nDestinationStep++] = sFixPath
-            + PROPERTYNAME_IMAGEIDENTIFIER;
+        lDestination[nDestinationStep++] = sFixPath + PROPERTYNAME_IMAGEIDENTIFIER;
         lDestination[nDestinationStep++] = sFixPath + PROPERTYNAME_TARGETNAME;
     }
 }
 
-//  initialize static member
-//  DON'T DO IT IN YOUR HEADER!
-//  see definition for further information
-
-SvtDynamicMenuOptions_Impl*     SvtDynamicMenuOptions::m_pDataContainer = nullptr;
-sal_Int32                       SvtDynamicMenuOptions::m_nRefCount      = 0;
-
-//  constructor
+namespace {
+    // global
+    std::weak_ptr<SvtDynamicMenuOptions_Impl> g_pDynamicMenuOptions;
+}
 
 SvtDynamicMenuOptions::SvtDynamicMenuOptions()
 {
     // Global access, must be guarded (multithreading!).
     MutexGuard aGuard( GetOwnStaticMutex() );
-    // Increase our refcount ...
-    ++m_nRefCount;
-    // ... and initialize our data container only if it not already exist!
-    if( m_pDataContainer == nullptr )
+
+    m_pImpl = g_pDynamicMenuOptions.lock();
+    if( !m_pImpl )
     {
-        m_pDataContainer = new SvtDynamicMenuOptions_Impl;
-        ItemHolder1::holdConfigItem(E_DYNAMICMENUOPTIONS);
+        m_pImpl = std::make_shared<SvtDynamicMenuOptions_Impl>();
+        g_pDynamicMenuOptions = m_pImpl;
+        ItemHolder1::holdConfigItem(EItem::DynamicMenuOptions);
     }
 }
-
-//  destructor
 
 SvtDynamicMenuOptions::~SvtDynamicMenuOptions()
 {
     // Global access, must be guarded (multithreading!)
     MutexGuard aGuard( GetOwnStaticMutex() );
-    // Decrease our refcount.
-    --m_nRefCount;
-    // If last instance was deleted ...
-    // we must destroy our static data container!
-    if( m_nRefCount <= 0 )
-    {
-        delete m_pDataContainer;
-        m_pDataContainer = nullptr;
-    }
+
+    m_pImpl.reset();
 }
 
 //  public method
@@ -611,7 +535,7 @@ SvtDynamicMenuOptions::~SvtDynamicMenuOptions()
 Sequence< Sequence< PropertyValue > > SvtDynamicMenuOptions::GetMenu( EDynamicMenuType eMenu ) const
 {
     MutexGuard aGuard( GetOwnStaticMutex() );
-    return m_pDataContainer->GetMenu( eMenu );
+    return m_pImpl->GetMenu( eMenu );
 }
 
 namespace

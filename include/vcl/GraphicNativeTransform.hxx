@@ -20,22 +20,24 @@
 #ifndef INCLUDED_VCL_GRAPHICNATIVETRANSFORM_HXX
 #define INCLUDED_VCL_GRAPHICNATIVETRANSFORM_HXX
 
-#include <vcl/graph.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <vcl/dllapi.h>
+class Graphic;
 
-class VCL_DLLPUBLIC GraphicNativeTransform
+class VCL_DLLPUBLIC GraphicNativeTransform final
 {
     Graphic& mrGraphic;
 
     bool rotateBitmapOnly (sal_uInt16 aRotation);
-    bool rotateJPEG       (sal_uInt16 aRotation);
+    void rotateJPEG       (sal_uInt16 aRotation);
     bool rotateGeneric    (sal_uInt16 aRotation, const OUString& aType);
 
 public:
     GraphicNativeTransform(Graphic& rGraphic);
-    virtual ~GraphicNativeTransform();
+    ~GraphicNativeTransform();
 
-    bool canBeRotated();
-    bool rotate(sal_uInt16 aRotation);
+    void rotate(sal_uInt16 aRotation);
 };
 
 #endif // INCLUDED_VCL_GRAPHICNATIVETRANSFORM_HXX

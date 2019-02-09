@@ -44,8 +44,10 @@
 #include <com/sun/star/text/XFlatParagraphIterator.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XSingleComponentFactory.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 #include <osl/conditn.hxx>
 #include <osl/thread.hxx>
 #include <cppuhelper/implementationentry.hxx>
@@ -54,13 +56,14 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <comphelper/processfactory.hxx>
-#include <comphelper/extract.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <tools/debug.hxx>
 
 #include <deque>
 #include <map>
 #include <vector>
 
-#include "linguistic/misc.hxx"
+#include <linguistic/misc.hxx>
 #include "defs.hxx"
 #include "lngopt.hxx"
 #include "lngreg.hxx"
@@ -158,14 +161,15 @@ static sal_Int32 lcl_SkipWhiteSpaces( const OUString &rText, sal_Int32 nStartPos
     }
     if (bIllegalArgument)
     {
-        DBG_ASSERT( false, "lcl_SkipWhiteSpaces: illegal arguments" );
+        SAL_WARN( "linguistic", "lcl_SkipWhiteSpaces: illegal arguments" );
     }
 
     sal_Int32 nRes = nStartPos;
     if (0 <= nStartPos && nStartPos < nLen)
     {
+        const sal_Unicode* const pEnd = rText.getStr() + nLen;
         const sal_Unicode *pText = rText.getStr() + nStartPos;
-        while (nStartPos < nLen && lcl_IsWhiteSpace( *pText ))
+        while (pText != pEnd && lcl_IsWhiteSpace(*pText))
             ++pText;
         nRes = pText - rText.getStr();
     }
@@ -193,7 +197,7 @@ static sal_Int32 lcl_BacktraceWhiteSpaces( const OUString &rText, sal_Int32 nSta
     }
     if (bIllegalArgument)
     {
-        DBG_ASSERT( false, "lcl_BacktraceWhiteSpaces: illegal arguments" );
+        SAL_WARN( "linguistic", "lcl_BacktraceWhiteSpaces: illegal arguments" );
     }
 
     sal_Int32 nRes = nStartPos;
@@ -202,14 +206,11 @@ static sal_Int32 lcl_BacktraceWhiteSpaces( const OUString &rText, sal_Int32 nSta
     if (0 <= nPosBefore && nPosBefore < nLen && lcl_IsWhiteSpace( pStart[ nPosBefore ] ))
     {
         nStartPos = nPosBefore;
-        if (0 <= nStartPos && nStartPos < nLen)
-        {
-            const sal_Unicode *pText = rText.getStr() + nStartPos;
-            while (pText > pStart && lcl_IsWhiteSpace( *pText ))
-                --pText;
-            // now add 1 since we want to point to the first char after the last char in the sentence...
-            nRes = pText - pStart + 1;
-        }
+        const sal_Unicode *pText = rText.getStr() + nStartPos;
+        while (pText > pStart && lcl_IsWhiteSpace( *pText ))
+            --pText;
+        // now add 1 since we want to point to the first char after the last char in the sentence...
+        nRes = pText - pStart + 1;
     }
 
     DBG_ASSERT( 0 <= nRes && nRes <= nLen, "lcl_BacktraceWhiteSpaces return value out of range" );
@@ -217,19 +218,67 @@ static sal_Int32 lcl_BacktraceWhiteSpaces( const OUString &rText, sal_Int32 nSta
 }
 
 
-extern "C" void lcl_workerfunc (void * gci)
+extern "C" {
+
+static void lcl_workerfunc (void * gci)
 {
     osl_setThreadName("GrammarCheckingIterator");
 
     static_cast<GrammarCheckingIterator*>(gci)->DequeueAndCheck();
 }
 
+}
+
 static lang::Locale lcl_GetPrimaryLanguageOfSentence(
-    uno::Reference< text::XFlatParagraph > xFlatPara,
+    const uno::Reference< text::XFlatParagraph >& xFlatPara,
     sal_Int32 nStartIndex )
 {
     //get the language of the first word
     return xFlatPara->getLanguageOfText( nStartIndex, 1 );
+}
+
+
+LngXStringKeyMap::LngXStringKeyMap() {}
+
+void SAL_CALL LngXStringKeyMap::insertValue(const OUString& aKey, const css::uno::Any& aValue)
+{
+    std::map<OUString, css::uno::Any>::const_iterator aIter = maMap.find(aKey);
+    if (aIter != maMap.end())
+        throw css::container::ElementExistException();
+
+    maMap[aKey] = aValue;
+}
+
+css::uno::Any SAL_CALL LngXStringKeyMap::getValue(const OUString& aKey)
+{
+    std::map<OUString, css::uno::Any>::const_iterator aIter = maMap.find(aKey);
+    if (aIter == maMap.end())
+        throw css::container::NoSuchElementException();
+
+    return (*aIter).second;
+}
+
+sal_Bool SAL_CALL LngXStringKeyMap::hasValue(const OUString& aKey)
+{
+    return maMap.find(aKey) != maMap.end();
+}
+
+::sal_Int32 SAL_CALL LngXStringKeyMap::getCount() { return maMap.size(); }
+
+OUString SAL_CALL LngXStringKeyMap::getKeyByIndex(::sal_Int32 nIndex)
+{
+    if (static_cast<sal_uInt32>(nIndex) >= maMap.size())
+        throw css::lang::IndexOutOfBoundsException();
+
+    return OUString();
+}
+
+css::uno::Any SAL_CALL LngXStringKeyMap::getValueByIndex(::sal_Int32 nIndex)
+{
+    if (static_cast<sal_uInt32>(nIndex) >= maMap.size())
+        throw css::lang::IndexOutOfBoundsException();
+
+    return css::uno::Any();
 }
 
 
@@ -241,7 +290,7 @@ GrammarCheckingIterator::GrammarCheckingIterator() :
     m_aEventListeners( MyMutex::get() ),
     m_aNotifyListeners( MyMutex::get() )
 {
-    m_thread = osl_createThread( lcl_workerfunc, this );
+    m_thread = nullptr;
 }
 
 
@@ -301,8 +350,8 @@ OUString GrammarCheckingIterator::GetOrCreateDocId(
 
 
 void GrammarCheckingIterator::AddEntry(
-    uno::WeakReference< text::XFlatParagraphIterator > xFlatParaIterator,
-    uno::WeakReference< text::XFlatParagraph > xFlatPara,
+    const uno::WeakReference< text::XFlatParagraphIterator >& xFlatParaIterator,
+    const uno::WeakReference< text::XFlatParagraph >& xFlatPara,
     const OUString & rDocId,
     sal_Int32 nStartIndex,
     bool bAutomatic )
@@ -321,6 +370,8 @@ void GrammarCheckingIterator::AddEntry(
 
         // add new entry to the end of this queue
         ::osl::Guard< ::osl::Mutex > aGuard( MyMutex::get() );
+        if (!m_thread)
+            m_thread = osl_createThread( lcl_workerfunc, this );
         m_aFPEntriesQueue.push_back( aNewFPEntry );
 
         // wake up the thread in order to do grammar checking
@@ -352,7 +403,6 @@ void GrammarCheckingIterator::ProcessResult(
                              0 <= rRes.nStartOfNextSentencePosition && rRes.nStartOfNextSentencePosition <= nTextLen &&
                              rRes.nStartOfSentencePosition      <= rRes.nBehindEndOfSentencePosition &&
                              rRes.nBehindEndOfSentencePosition  <= rRes.nStartOfNextSentencePosition;
-        (void) bBoundariesOk;
         DBG_ASSERT( bBoundariesOk, "inconsistent sentence boundaries" );
 
         uno::Reference< text::XMultiTextMarkup > xMulti( rRes.xFlatParagraph, uno::UNO_QUERY );
@@ -381,6 +431,24 @@ void GrammarCheckingIterator::ProcessResult(
                     // differently for example. But no special handling right now.
                     if (rDesc.nType == text::TextMarkupType::SPELLCHECK)
                         rDesc.nType = text::TextMarkupType::PROOFREADING;
+
+                    uno::Reference< container::XStringKeyMap > xKeyMap(
+                        new LngXStringKeyMap());
+                    for( const beans::PropertyValue& rProperty : rError.aProperties )
+                    {
+                        if ( rProperty.Name == "LineColor" )
+                        {
+                            xKeyMap->insertValue(rProperty.Name,
+                                                 rProperty.Value);
+                            rDesc.xMarkupInfoContainer = xKeyMap;
+                        }
+                        else if ( rProperty.Name == "LineType" )
+                        {
+                            xKeyMap->insertValue(rProperty.Name,
+                                                 rProperty.Value);
+                            rDesc.xMarkupInfoContainer = xKeyMap;
+                        }
+                    }
                 }
 
                 // at pos nErrors -> sentence markup
@@ -429,7 +497,6 @@ void GrammarCheckingIterator::ProcessResult(
 uno::Reference< linguistic2::XProofreader > GrammarCheckingIterator::GetGrammarChecker(
     const lang::Locale &rLocale )
 {
-    (void) rLocale;
     uno::Reference< linguistic2::XProofreader > xRes;
 
     // ---- THREAD SAFE START ----
@@ -473,12 +540,12 @@ uno::Reference< linguistic2::XProofreader > GrammarCheckingIterator::GetGrammarC
                 }
                 else
                 {
-                    DBG_ASSERT( false, "grammar checker does not support required locale" );
+                    SAL_WARN( "linguistic", "grammar checker does not support required locale" );
                 }
             }
             catch (uno::Exception &)
             {
-                DBG_ASSERT( false, "instantiating grammar checker failed" );
+                SAL_WARN( "linguistic", "instantiating grammar checker failed" );
             }
         }
     }
@@ -490,16 +557,12 @@ uno::Reference< linguistic2::XProofreader > GrammarCheckingIterator::GetGrammarC
 static uno::Sequence<beans::PropertyValue>
 lcl_makeProperties(uno::Reference<text::XFlatParagraph> const& xFlatPara)
 {
-    uno::Sequence<beans::PropertyValue> ret(2);
     uno::Reference<beans::XPropertySet> const xProps(
             xFlatPara, uno::UNO_QUERY_THROW);
-    ret[0] = beans::PropertyValue("FieldPositions", -1,
-        xProps->getPropertyValue("FieldPositions"),
-        beans::PropertyState_DIRECT_VALUE);
-    ret[1] = beans::PropertyValue("FootnotePositions", -1,
-        xProps->getPropertyValue("FootnotePositions"),
-        beans::PropertyState_DIRECT_VALUE);
-    return ret;
+    return comphelper::InitPropertySequence({
+        { "FieldPositions", xProps->getPropertyValue("FieldPositions") },
+        { "FootnotePositions", xProps->getPropertyValue("FootnotePositions") }
+    });
 }
 
 void GrammarCheckingIterator::DequeueAndCheck()
@@ -573,7 +636,7 @@ void GrammarCheckingIterator::DequeueAndCheck()
                                 aRes.nBehindEndOfSentencePosition != nSuggestedEnd
                             )
                             {
-                                DBG_ASSERT( false, "!! Grammarchecker failed to provide end of sentence !!" );
+                                SAL_WARN( "linguistic", "!! Grammarchecker failed to provide end of sentence !!" );
                                 aRes.nBehindEndOfSentencePosition = nSuggestedEnd;
                             }
 
@@ -611,8 +674,7 @@ void GrammarCheckingIterator::DequeueAndCheck()
                 {
                     SAL_WARN(
                         "linguistic",
-                        "GrammarCheckingIterator::DequeueAndCheck ignoring UNO"
-                            " exception " << e.Message);
+                        "GrammarCheckingIterator::DequeueAndCheck ignoring " << e);
                 }
             }
 
@@ -652,7 +714,6 @@ void GrammarCheckingIterator::DequeueAndCheck()
 void SAL_CALL GrammarCheckingIterator::startProofreading(
     const uno::Reference< ::uno::XInterface > & xDoc,
     const uno::Reference< text::XFlatParagraphIteratorProvider > & xIteratorProvider )
-throw (uno::RuntimeException, lang::IllegalArgumentException, std::exception)
 {
     // get paragraph to start checking with
     const bool bAutomatic = true;
@@ -678,14 +739,11 @@ linguistic2::ProofreadingResult SAL_CALL GrammarCheckingIterator::checkSentenceA
     const uno::Reference< uno::XInterface >& xDoc,
     const uno::Reference< text::XFlatParagraph >& xFlatPara,
     const OUString& rText,
-    const lang::Locale& rLocale,
+    const lang::Locale&,
     sal_Int32 nStartOfSentencePos,
     sal_Int32 nSuggestedEndOfSentencePos,
     sal_Int32 nErrorPosInPara )
-throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 {
-    (void) rLocale;
-
     // for the context menu...
 
     linguistic2::ProofreadingResult aRes;
@@ -728,7 +786,7 @@ throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
                 //!! failed to properly identify the sentence end
                 if (aTmpRes.nBehindEndOfSentencePosition <= nStartPos)
                 {
-                    DBG_ASSERT( false, "!! Grammarchecker failed to provide end of sentence !!" );
+                    SAL_WARN( "linguistic", "!! Grammarchecker failed to provide end of sentence !!" );
                     aTmpRes.nBehindEndOfSentencePosition = nSuggestedEndOfSentencePos;
                 }
 
@@ -749,7 +807,7 @@ throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
             // prevent endless loop by forcefully advancing if needs be...
             if (nStartPos <= nOldStartOfSentencePos)
             {
-                DBG_ASSERT( false, "end-of-sentence detection failed?" );
+                SAL_WARN( "linguistic", "end-of-sentence detection failed?" );
                 nStartPos = nOldStartOfSentencePos + 1;
             }
         }
@@ -806,22 +864,18 @@ sal_Int32 GrammarCheckingIterator::GetSuggestedEndOfSentence(
 
 
 void SAL_CALL GrammarCheckingIterator::resetIgnoreRules(  )
-throw (uno::RuntimeException, std::exception)
 {
-    GCReferences_t::iterator aIt( m_aGCReferencesByService.begin() );
-    while (aIt != m_aGCReferencesByService.end())
+    for (auto const& elem : m_aGCReferencesByService)
     {
-        uno::Reference< linguistic2::XProofreader > xGC( aIt->second );
+        uno::Reference< linguistic2::XProofreader > xGC(elem.second);
         if (xGC.is())
             xGC->resetIgnoreRules();
-        ++aIt;
     }
 }
 
 
 sal_Bool SAL_CALL GrammarCheckingIterator::isProofreading(
     const uno::Reference< uno::XInterface >& xDoc )
-throw (uno::RuntimeException, std::exception)
 {
     // ---- THREAD SAFE START ----
     ::osl::Guard< ::osl::Mutex > aGuard( MyMutex::get() );
@@ -867,7 +921,6 @@ throw (uno::RuntimeException, std::exception)
 
 void SAL_CALL GrammarCheckingIterator::processLinguServiceEvent(
     const linguistic2::LinguServiceEvent& rLngSvcEvent )
-throw (uno::RuntimeException, std::exception)
 {
     if (rLngSvcEvent.nEvent == linguistic2::LinguServiceEventFlags::PROOFREAD_AGAIN)
     {
@@ -886,7 +939,7 @@ throw (uno::RuntimeException, std::exception)
         catch (const ::uno::Exception &rE)
         {
             // ignore
-            SAL_WARN("linguistic", "processLinguServiceEvent: exception: " << rE.Message);
+            SAL_WARN("linguistic", "processLinguServiceEvent: exception: " << rE);
         }
     }
 }
@@ -894,30 +947,27 @@ throw (uno::RuntimeException, std::exception)
 
 sal_Bool SAL_CALL GrammarCheckingIterator::addLinguServiceEventListener(
     const uno::Reference< linguistic2::XLinguServiceEventListener >& xListener )
-throw (uno::RuntimeException, std::exception)
 {
     if (xListener.is())
     {
         m_aNotifyListeners.addInterface( xListener );
     }
-    return sal_True;
+    return true;
 }
 
 
 sal_Bool SAL_CALL GrammarCheckingIterator::removeLinguServiceEventListener(
     const uno::Reference< linguistic2::XLinguServiceEventListener >& xListener )
-throw (uno::RuntimeException, std::exception)
 {
     if (xListener.is())
     {
         m_aNotifyListeners.removeInterface( xListener );
     }
-    return sal_True;
+    return true;
 }
 
 
 void SAL_CALL GrammarCheckingIterator::dispose()
-throw (uno::RuntimeException, std::exception)
 {
     lang::EventObject aEvt( static_cast<linguistic2::XProofreadingIterator *>(this) );
     m_aEventListeners.disposeAndClear( aEvt );
@@ -946,7 +996,6 @@ throw (uno::RuntimeException, std::exception)
 
 void SAL_CALL GrammarCheckingIterator::addEventListener(
     const uno::Reference< lang::XEventListener >& xListener )
-throw (uno::RuntimeException, std::exception)
 {
     if (xListener.is())
     {
@@ -957,7 +1006,6 @@ throw (uno::RuntimeException, std::exception)
 
 void SAL_CALL GrammarCheckingIterator::removeEventListener(
     const uno::Reference< lang::XEventListener >& xListener )
-throw (uno::RuntimeException, std::exception)
 {
     if (xListener.is())
     {
@@ -967,7 +1015,6 @@ throw (uno::RuntimeException, std::exception)
 
 
 void SAL_CALL GrammarCheckingIterator::disposing( const lang::EventObject &rSource )
-throw (uno::RuntimeException, std::exception)
 {
     // if the component (document) is disposing release all references
     //!! There is no need to remove entries from the queue that are from this document
@@ -988,7 +1035,7 @@ throw (uno::RuntimeException, std::exception)
 }
 
 
-uno::Reference< util::XChangesBatch > GrammarCheckingIterator::GetUpdateAccess() const
+uno::Reference< util::XChangesBatch > const & GrammarCheckingIterator::GetUpdateAccess() const
 {
     if (!m_xUpdateAccess.is())
     {
@@ -1002,7 +1049,7 @@ uno::Reference< util::XChangesBatch > GrammarCheckingIterator::GetUpdateAccess()
             // get configuration update access
             beans::PropertyValue aValue;
             aValue.Name  = "nodepath";
-            aValue.Value = uno::makeAny( OUString("org.openoffice.Office.Linguistic/ServiceManager") );
+            aValue.Value <<= OUString("org.openoffice.Office.Linguistic/ServiceManager");
             uno::Sequence< uno::Any > aProps(1);
             aProps[0] <<= aValue;
             m_xUpdateAccess.set(
@@ -1042,19 +1089,19 @@ void GrammarCheckingIterator::GetConfiguredGCSvcs_Impl()
                 {
                     // only the first entry is used, there should be only one grammar checker per language
                     const OUString aImplName( aImplNames[0] );
-                    const LanguageType nLang = LanguageTag::convertToLanguageTypeWithFallback( pElementNames[i] );
+                    const LanguageType nLang = LanguageTag::convertToLanguageType( pElementNames[i] );
                     aTmpGCImplNamesByLang[ nLang ] = aImplName;
                 }
             }
             else
             {
-                DBG_ASSERT( false, "failed to get aImplNames. Wrong type?" );
+                SAL_WARN( "linguistic", "failed to get aImplNames. Wrong type?" );
             }
         }
     }
     catch (uno::Exception &)
     {
-        DBG_ASSERT( false, "exception caught. Failed to get configured services" );
+        SAL_WARN( "linguistic", "exception caught. Failed to get configured services" );
     }
 
     {
@@ -1068,19 +1115,18 @@ void GrammarCheckingIterator::GetConfiguredGCSvcs_Impl()
 
 sal_Bool SAL_CALL GrammarCheckingIterator::supportsService(
     const OUString & rServiceName )
-throw(uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 
-OUString SAL_CALL GrammarCheckingIterator::getImplementationName(  ) throw (uno::RuntimeException, std::exception)
+OUString SAL_CALL GrammarCheckingIterator::getImplementationName(  )
 {
     return GrammarCheckingIterator_getImplementationName();
 }
 
 
-uno::Sequence< OUString > SAL_CALL GrammarCheckingIterator::getSupportedServiceNames(  ) throw (uno::RuntimeException, std::exception)
+uno::Sequence< OUString > SAL_CALL GrammarCheckingIterator::getSupportedServiceNames(  )
 {
     return GrammarCheckingIterator_getSupportedServiceNames();
 }
@@ -1141,19 +1187,17 @@ static uno::Sequence< OUString > GrammarCheckingIterator_getSupportedServiceName
     return aSNS;
 }
 
-
-static uno::Reference< uno::XInterface > SAL_CALL GrammarCheckingIterator_createInstance(
+/// @throws uno::Exception
+static uno::Reference< uno::XInterface > GrammarCheckingIterator_createInstance(
     const uno::Reference< lang::XMultiServiceFactory > & /*rxSMgr*/ )
-throw(uno::Exception)
 {
     return static_cast< ::cppu::OWeakObject * >(new GrammarCheckingIterator());
 }
 
 
-void * SAL_CALL GrammarCheckingIterator_getFactory(
+void * GrammarCheckingIterator_getFactory(
     const sal_Char *pImplName,
-    lang::XMultiServiceFactory *pServiceManager,
-    void * /*pRegistryKey*/ )
+    lang::XMultiServiceFactory *pServiceManager )
 {
     void * pRet = nullptr;
     if ( GrammarCheckingIterator_getImplementationName().equalsAscii( pImplName ) )

@@ -20,24 +20,31 @@
 #ifndef INCLUDED_RTL_STRING_HXX
 #define INCLUDED_RTL_STRING_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <cassert>
 #include <cstddef>
 #include <new>
 #include <ostream>
+#include <utility>
 #include <string.h>
 
-#include <rtl/textenc.h>
-#include <rtl/string.h>
-#include <rtl/stringutils.hxx>
-
-#ifdef LIBO_INTERNAL_ONLY // "RTL_FAST_STRING"
-#include <config_global.h>
-#include <rtl/stringconcat.hxx>
+#if defined LIBO_INTERNAL_ONLY
+#include <string_view>
 #endif
 
-#include <sal/log.hxx>
+#include "rtl/textenc.h"
+#include "rtl/string.h"
+#include "rtl/stringutils.hxx"
+
+#ifdef LIBO_INTERNAL_ONLY // "RTL_FAST_STRING"
+#include "rtl/stringconcat.hxx"
+#endif
+
+#ifdef RTL_STRING_UNITTEST
+extern bool rtl_string_unittest_const_literal;
+extern bool rtl_string_unittest_const_literal_function;
+#endif
 
 // The unittest uses slightly different code to help check that the proper
 // calls are made. The class is put into a different namespace to make
@@ -66,21 +73,21 @@ namespace rtl
 /**
   This String class provide base functionality for C++ like 8-Bit
   character array handling. The advantage of this class is, that it
-  handle all the memory managament for you - and it do it
+  handle all the memory management for you - and it do it
   more efficient. If you assign a string to another string, the
   data of both strings are shared (without any copy operation or
   memory allocation) as long as you do not change the string. This class
   stores also the length of the string, so that many operations are
   faster as the C-str-functions.
 
-  This class provide only readonly string handling. So you could create
+  This class provides only readonly string handling. So you could create
   a string and you could only query the content from this string.
-  It provide also functionality to change the string, but this results
+  It provides also functionality to change the string, but this results
   in every case in a new string instance (in the most cases with an
   memory allocation). You don't have functionality to change the
-  content of the string. If you want change the string content, than
-  you should us the OStringBuffer class, which provide these
-  functionality and avoid to much memory allocation.
+  content of the string. If you want to change the string content, then
+  you should use the OStringBuffer class, which provides these
+  functionalities and avoid too much memory allocation.
 
   The design of this class is similar to the string classes in Java
   and so more people should have fewer understanding problems when they
@@ -149,7 +156,7 @@ public:
 
       @param    str         a OString data.
     */
-    inline OString( rtl_String * str, __sal_NoAcquire )
+    OString( rtl_String * str, __sal_NoAcquire )
     {
         pData = str;
     }
@@ -262,7 +269,7 @@ public:
      @internal
     */
     template< typename T1, typename T2 >
-    OString( const OStringConcat< T1, T2 >& c )
+    OString( OStringConcat< T1, T2 >&& c )
     {
         const sal_Int32 l = c.length();
         pData = rtl_string_alloc( l );
@@ -346,14 +353,14 @@ public:
       @param    str         a OString.
     */
     OString & operator+=( const OString & str )
-#if defined LIBO_INTERNAL_ONLY && HAVE_CXX11_REF_QUALIFIER
+#if defined LIBO_INTERNAL_ONLY
         &
 #endif
     {
         rtl_string_newConcat( &pData, pData, str.pData );
         return *this;
     }
-#if defined LIBO_INTERNAL_ONLY && HAVE_CXX11_REF_QUALIFIER
+#if defined LIBO_INTERNAL_ONLY
     void operator+=(OString const &) && = delete;
 #endif
 
@@ -363,11 +370,7 @@ public:
      @internal
     */
     template< typename T1, typename T2 >
-    OString& operator+=( const OStringConcat< T1, T2 >& c )
-#if HAVE_CXX11_REF_QUALIFIER
-        &
-#endif
-    {
+    OString& operator+=( OStringConcat< T1, T2 >&& c ) & {
         sal_Int32 l = c.length();
         if( l == 0 )
             return *this;
@@ -378,10 +381,8 @@ public:
         pData->length = l;
         return *this;
     }
-#if HAVE_CXX11_REF_QUALIFIER
     template<typename T1, typename T2> void operator +=(
-        OStringConcat<T1, T2> const &) && = delete;
-#endif
+        OStringConcat<T1, T2> &&) && = delete;
 #endif
 
     /**
@@ -427,7 +428,7 @@ public:
       @return a pointer to a null-terminated byte string representing the
       characters of this string object.
     */
-    const sal_Char * getStr() const { return pData->buffer; }
+    const sal_Char * getStr() const SAL_RETURNS_NONNULL { return pData->buffer; }
 
     /**
       Access to individual characters.
@@ -1791,6 +1792,9 @@ public:
         return number(d);
     }
 
+#if defined LIBO_INTERNAL_ONLY
+    operator std::string_view() const { return {getStr(), sal_uInt32(getLength())}; }
+#endif
 };
 
 /* ======================================================================= */
@@ -1808,6 +1812,10 @@ struct SAL_WARN_UNUSED OStringLiteral
 {
     template< int N >
     explicit OStringLiteral( const char (&str)[ N ] ) : size( N - 1 ), data( str ) { assert( strlen( str ) == N - 1 ); }
+#if defined __cpp_char8_t
+    template< int N >
+    explicit OStringLiteral( const char8_t (&str)[ N ] ) : size( N - 1 ), data( reinterpret_cast<char const *>(str) ) { assert( strlen( data ) == N - 1 ); }
+#endif
     int size;
     const char* data;
 };
@@ -1841,9 +1849,9 @@ struct ToStringHelper< OStringLiteral >
 */
 template< typename charT, typename traits, typename T1, typename T2 >
 inline std::basic_ostream<charT, traits> & operator <<(
-    std::basic_ostream<charT, traits> & stream, const OStringConcat< T1, T2 >& concat)
+    std::basic_ostream<charT, traits> & stream, OStringConcat< T1, T2 >&& concat)
 {
-    return stream << OString( concat );
+    return stream << OString( std::move(concat) );
 }
 #endif
 
@@ -1865,7 +1873,7 @@ struct OStringHash
         persistently, as its computation may change in later revisions.
      */
     size_t operator()( const OString& rString ) const
-        { return (size_t)rString.hashCode(); }
+        { return static_cast<size_t>(rString.hashCode()); }
 };
 
 /** Equality functor for classic c-strings (i.e., null-terminated char* strings). */
@@ -1892,9 +1900,9 @@ struct CStringHash
  */
 template< typename charT, typename traits > std::basic_ostream<charT, traits> &
 operator <<(
-    std::basic_ostream<charT, traits> & stream, OString const & string)
+    std::basic_ostream<charT, traits> & stream, OString const & rString)
 {
-    return stream << string.getStr();
+    return stream << rString.getStr();
         // best effort; potentially loses data due to embedded null characters
 }
 
@@ -1913,6 +1921,27 @@ using ::rtl::OString;
 using ::rtl::OStringHash;
 using ::rtl::OStringLiteral;
 #endif
+
+/// @cond INTERNAL
+/**
+  Make OString hashable by default for use in STL containers.
+
+  @since LibreOffice 6.0
+*/
+#if defined LIBO_INTERNAL_ONLY
+namespace std {
+
+template<>
+struct hash<::rtl::OString>
+{
+    std::size_t operator()(::rtl::OString const & s) const
+    { return std::size_t(s.hashCode()); }
+};
+
+}
+
+#endif
+/// @endcond
 
 #endif // INCLUDED_RTL_STRING_HXX
 

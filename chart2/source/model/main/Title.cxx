@@ -18,25 +18,25 @@
  */
 
 #include "Title.hxx"
-#include "macros.hxx"
-#include "FormattedString.hxx"
-#include "LinePropertiesHelper.hxx"
-#include "FillProperties.hxx"
-#include "ContainerHelper.hxx"
-#include "CloneHelper.hxx"
-#include "PropertyHelper.hxx"
+#include <LinePropertiesHelper.hxx>
+#include <FillProperties.hxx>
+#include <ContainerHelper.hxx>
+#include <CloneHelper.hxx>
+#include <PropertyHelper.hxx>
+#include <ModifyListenerHelper.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/style/ParagraphAdjust.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/chart2/RelativePosition.hpp>
 #include <com/sun/star/awt/Size.hpp>
-#include <rtl/uuid.h>
-#include <cppuhelper/queryinterface.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <tools/diagnose_ex.h>
 
 #include <vector>
 #include <algorithm>
+
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans::PropertyAttribute;
@@ -47,8 +47,6 @@ using ::osl::MutexGuard;
 namespace
 {
 
-static const char lcl_aServiceName[] = "com.sun.star.comp.chart2.Title";
-
 enum
 {
     PROP_TITLE_PARA_ADJUST,
@@ -58,6 +56,7 @@ enum
     PROP_TITLE_PARA_TOP_MARGIN,
     PROP_TITLE_PARA_BOTTOM_MARGIN,
     PROP_TITLE_PARA_IS_HYPHENATION,
+    PROP_TITLE_VISIBLE,
 
     PROP_TITLE_TEXT_ROTATION,
     PROP_TITLE_TEXT_STACKED,
@@ -67,83 +66,79 @@ enum
 };
 
 void lcl_AddPropertiesToVector(
-    ::std::vector< Property > & rOutProperties )
+    std::vector< Property > & rOutProperties )
 {
-    rOutProperties.push_back(
-        Property( "ParaAdjust",
+    rOutProperties.emplace_back( "ParaAdjust",
                   PROP_TITLE_PARA_ADJUST,
                   cppu::UnoType<css::style::ParagraphAdjust>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "ParaLastLineAdjust",
+    rOutProperties.emplace_back( "ParaLastLineAdjust",
                   PROP_TITLE_PARA_LAST_LINE_ADJUST,
                   cppu::UnoType<sal_Int16>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "ParaLeftMargin",
+    rOutProperties.emplace_back( "ParaLeftMargin",
                   PROP_TITLE_PARA_LEFT_MARGIN,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "ParaRightMargin",
+    rOutProperties.emplace_back( "ParaRightMargin",
                   PROP_TITLE_PARA_RIGHT_MARGIN,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "ParaTopMargin",
+    rOutProperties.emplace_back( "ParaTopMargin",
                   PROP_TITLE_PARA_TOP_MARGIN,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "ParaBottomMargin",
+    rOutProperties.emplace_back( "ParaBottomMargin",
                   PROP_TITLE_PARA_BOTTOM_MARGIN,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "ParaIsHyphenation",
+    rOutProperties.emplace_back( "ParaIsHyphenation",
                   PROP_TITLE_PARA_IS_HYPHENATION,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "TextRotation",
+
+    rOutProperties.emplace_back( "Visible",
+                  PROP_TITLE_VISIBLE,
+                  cppu::UnoType<bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+
+    rOutProperties.emplace_back( "TextRotation",
                   PROP_TITLE_TEXT_ROTATION,
                   cppu::UnoType<double>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
-    rOutProperties.push_back(
-        Property( "StackCharacters",
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( "StackCharacters",
                   PROP_TITLE_TEXT_STACKED,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "RelativePosition",
+    rOutProperties.emplace_back( "RelativePosition",
                   PROP_TITLE_REL_POS,
                   cppu::UnoType<chart2::RelativePosition>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEVOID ));
+                  | beans::PropertyAttribute::MAYBEVOID );
 
-    rOutProperties.push_back(
-        Property( "ReferencePageSize",
+    rOutProperties.emplace_back( "ReferencePageSize",
                   PROP_TITLE_REF_PAGE_SIZE,
                   cppu::UnoType<awt::Size>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEVOID ));
+                  | beans::PropertyAttribute::MAYBEVOID );
 }
 
 struct StaticTitleDefaults_Initializer
@@ -170,6 +165,7 @@ private:
         ::chart::PropertyHelper::setPropertyValueDefault< sal_Int32 >( rOutMap, PROP_TITLE_PARA_TOP_MARGIN, 0 );
         ::chart::PropertyHelper::setPropertyValueDefault< sal_Int32 >( rOutMap, PROP_TITLE_PARA_BOTTOM_MARGIN, 0 );
         ::chart::PropertyHelper::setPropertyValueDefault( rOutMap, PROP_TITLE_PARA_IS_HYPHENATION, true );
+        ::chart::PropertyHelper::setPropertyValueDefault( rOutMap, PROP_TITLE_VISIBLE, true );
 
         // own properties
         ::chart::PropertyHelper::setPropertyValueDefault< double >( rOutMap, PROP_TITLE_TEXT_ROTATION, 0.0 );
@@ -196,12 +192,12 @@ struct StaticTitleInfoHelper_Initializer
 private:
     static uno::Sequence< Property > lcl_GetPropertySequence()
     {
-        ::std::vector< css::beans::Property > aProperties;
+        std::vector< css::beans::Property > aProperties;
         lcl_AddPropertiesToVector( aProperties );
         ::chart::LinePropertiesHelper::AddPropertiesToVector( aProperties );
         ::chart::FillProperties::AddPropertiesToVector( aProperties );
 
-        ::std::sort( aProperties.begin(), aProperties.end(),
+        std::sort( aProperties.begin(), aProperties.end(),
                      ::chart::PropertyNameLess() );
 
         return comphelper::containerToSequence( aProperties );
@@ -232,18 +228,18 @@ struct StaticTitleInfo : public rtl::StaticAggregate< uno::Reference< beans::XPr
 namespace chart
 {
 
-Title::Title( uno::Reference< uno::XComponentContext > const & /* xContext */ ) :
+Title::Title() :
         ::property::OPropertySet( m_aMutex ),
         m_xModifyEventForwarder( ModifyListenerHelper::createModifyEventForwarder())
 {}
 
 Title::Title( const Title & rOther ) :
         MutexContainer(),
-        impl::Title_Base(),
+        impl::Title_Base(rOther),
         ::property::OPropertySet( rOther, m_aMutex ),
         m_xModifyEventForwarder( ModifyListenerHelper::createModifyEventForwarder())
 {
-    CloneHelper::CloneRefSequence< uno::Reference< chart2::XFormattedString > >(
+    CloneHelper::CloneRefSequence<chart2::XFormattedString>(
         rOther.m_aStrings, m_aStrings );
     ModifyListenerHelper::addListenerToAllElements(
         ContainerHelper::SequenceToVector( m_aStrings ), m_xModifyEventForwarder );
@@ -257,21 +253,18 @@ Title::~Title()
 
 // ____ XCloneable ____
 uno::Reference< util::XCloneable > SAL_CALL Title::createClone()
-    throw (uno::RuntimeException, std::exception)
 {
     return uno::Reference< util::XCloneable >( new Title( *this ));
 }
 
 // ____ XTitle ____
 uno::Sequence< uno::Reference< chart2::XFormattedString > > SAL_CALL Title::getText()
-    throw (uno::RuntimeException, std::exception)
 {
     MutexGuard aGuard( GetMutex() );
     return m_aStrings;
 }
 
 void SAL_CALL Title::setText( const uno::Sequence< uno::Reference< chart2::XFormattedString > >& rNewStrings )
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Sequence< uno::Reference< chart2::XFormattedString > > aOldStrings;
     {
@@ -289,7 +282,6 @@ void SAL_CALL Title::setText( const uno::Sequence< uno::Reference< chart2::XForm
 
 // ____ OPropertySet ____
 uno::Any Title::GetDefaultValue( sal_Int32 nHandle ) const
-    throw(beans::UnknownPropertyException)
 {
     const tPropertyValueMap& rStaticDefaults = *StaticTitleDefaults::get();
     tPropertyValueMap::const_iterator aFound( rStaticDefaults.find( nHandle ) );
@@ -305,50 +297,45 @@ uno::Any Title::GetDefaultValue( sal_Int32 nHandle ) const
 
 // ____ XPropertySet ____
 uno::Reference< beans::XPropertySetInfo > SAL_CALL Title::getPropertySetInfo()
-    throw (uno::RuntimeException, std::exception)
 {
     return *StaticTitleInfo::get();
 }
 
 // ____ XModifyBroadcaster ____
 void SAL_CALL Title::addModifyListener( const uno::Reference< util::XModifyListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
         uno::Reference< util::XModifyBroadcaster > xBroadcaster( m_xModifyEventForwarder, uno::UNO_QUERY_THROW );
         xBroadcaster->addModifyListener( aListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 void SAL_CALL Title::removeModifyListener( const uno::Reference< util::XModifyListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
         uno::Reference< util::XModifyBroadcaster > xBroadcaster( m_xModifyEventForwarder, uno::UNO_QUERY_THROW );
         xBroadcaster->removeModifyListener( aListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 // ____ XModifyListener ____
 void SAL_CALL Title::modified( const lang::EventObject& aEvent )
-    throw (uno::RuntimeException, std::exception)
 {
     m_xModifyEventForwarder->modified( aEvent );
 }
 
 // ____ XEventListener (base of XModifyListener) ____
 void SAL_CALL Title::disposing( const lang::EventObject& /* Source */ )
-    throw (uno::RuntimeException, std::exception)
 {
     // nothing
 }
@@ -364,38 +351,23 @@ void Title::fireModifyEvent()
     m_xModifyEventForwarder->modified( lang::EventObject( static_cast< uno::XWeak* >( this )));
 }
 
-uno::Sequence< OUString > Title::getSupportedServiceNames_Static()
-{
-    uno::Sequence< OUString > aServices( 4 );
-    aServices[ 0 ] = "com.sun.star.chart2.Title";
-    aServices[ 1 ] = "com.sun.star.style.ParagraphProperties";
-    aServices[ 2 ] = "com.sun.star.beans.PropertySet";
-    aServices[ 3 ] = "com.sun.star.layout.LayoutElement";
-    return aServices;
-}
-
-// implement XServiceInfo methods basing upon getSupportedServiceNames_Static
 OUString SAL_CALL Title::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getImplementationName_Static();
-}
-
-OUString Title::getImplementationName_Static()
-{
-    return OUString(lcl_aServiceName);
+    return OUString("com.sun.star.comp.chart2.Title");
 }
 
 sal_Bool SAL_CALL Title::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL Title::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return {
+        "com.sun.star.chart2.Title",
+        "com.sun.star.style.ParagraphProperties",
+        "com.sun.star.beans.PropertySet",
+        "com.sun.star.layout.LayoutElement" };
 }
 
 // needed by MSC compiler
@@ -406,11 +378,11 @@ IMPLEMENT_FORWARD_XTYPEPROVIDER2( Title, Title_Base, ::property::OPropertySet )
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
-com_sun_star_comp_chart2_Title_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+com_sun_star_comp_chart2_Title_get_implementation(css::uno::XComponentContext *,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new ::chart::Title(context));
+    return cppu::acquire(new ::chart::Title);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

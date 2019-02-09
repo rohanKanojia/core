@@ -21,11 +21,11 @@
 #include <svx/svdview.hxx>
 #include <svx/svdopath.hxx>
 
-#include "view.hxx"
-#include "edtwin.hxx"
-#include "wrtsh.hxx"
-#include "drawbase.hxx"
-#include "conpoly.hxx"
+#include <view.hxx>
+#include <edtwin.hxx>
+#include <wrtsh.hxx>
+#include <drawbase.hxx>
+#include <conpoly.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 
 ConstPolygon::ConstPolygon(SwWrtShell* pWrtShell, SwEditWin* pEditWin, SwView* pSwView) :
@@ -35,9 +35,8 @@ ConstPolygon::ConstPolygon(SwWrtShell* pWrtShell, SwEditWin* pEditWin, SwView* p
 
 bool ConstPolygon::MouseButtonDown(const MouseEvent& rMEvt)
 {
-    bool bReturn;
-
-    if ((bReturn = SwDrawBase::MouseButtonDown(rMEvt)))
+    bool bReturn = SwDrawBase::MouseButtonDown(rMEvt);
+    if (bReturn)
         aLastPos = rMEvt.GetPosPixel();
 
     return bReturn;
@@ -60,7 +59,7 @@ bool ConstPolygon::MouseButtonUp(const MouseEvent& rMEvt)
                                         m_pWin->GetSdrDrawMode() != OBJ_FREELINE &&
                                         m_pWin->GetSdrDrawMode() != OBJ_FREEFILL)
         {
-            if (!m_pSh->EndCreate(SDRCREATE_NEXTPOINT))
+            if (!m_pSh->EndCreate(SdrCreateCmd::NextPoint))
             {
                 m_pSh->BreakCreate();
                 EnterSelectMode(rMEvt);

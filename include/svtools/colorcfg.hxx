@@ -61,6 +61,10 @@ enum ColorConfigEntry
     CALCDETECTIVEERROR       ,
     CALCREFERENCE       ,
     CALCNOTESBACKGROUND     ,
+    CALCVALUE,
+    CALCFORMULA,
+    CALCTEXT,
+    CALCPROTECTEDBACKGROUND,
     DRAWGRID            ,
     BASICIDENTIFIER,
     BASICCOMMENT   ,
@@ -84,7 +88,7 @@ struct ColorConfigValue
 {
 
     bool        bIsVisible; //validity depends on the element type
-    sal_Int32   nColor;
+    ::Color     nColor;
     ColorConfigValue() : bIsVisible(false), nColor(0) {}
     bool operator !=(const ColorConfigValue& rCmp) const
         { return nColor != rCmp.nColor || bIsVisible != rCmp.bIsVisible;}
@@ -98,13 +102,12 @@ private:
     static ColorConfig_Impl* m_pImpl;
 public:
     ColorConfig();
-    virtual ~ColorConfig();
+    virtual ~ColorConfig() override;
 
     // get the configured value - if bSmart is set the default color setting is provided
     // instead of the automatic color
     ColorConfigValue        GetColorValue(ColorConfigEntry eEntry, bool bSmart = true) const;
     static Color            GetDefaultColor(ColorConfigEntry eEntry);
-    void Reload();
 };
 
 class SVT_DLLPUBLIC EditableColorConfig
@@ -118,7 +121,7 @@ public:
     css::uno::Sequence< OUString >  GetSchemeNames() const;
     void                        DeleteScheme(const OUString& rScheme );
     void                        AddScheme(const OUString& rScheme );
-    bool                        LoadScheme(const OUString& rScheme );
+    void                        LoadScheme(const OUString& rScheme );
     const OUString&             GetCurrentSchemeName() const;
     void                        SetCurrentSchemeName(const OUString& rScheme);
 

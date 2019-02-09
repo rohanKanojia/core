@@ -324,7 +324,7 @@ OUString StripScriptFromName(const OUString& _aName)
 {
     // I worry that someone will have a font which *does* have
     // e.g. "Greek" legitimately at the end of its name :-(
-    const char*suffixes[] = { " baltic",
+    const char*const suffixes[] = { " baltic",
                               " ce",
                               " cyr",
                               " greek",
@@ -341,10 +341,10 @@ OUString StripScriptFromName(const OUString& _aName)
     while (!bFinished)
     {
         bFinished = true;
-        for (size_t i = 0; i < SAL_N_ELEMENTS(suffixes); ++i)
+        for (const char* suffix : suffixes)
         {
-            size_t nLen = strlen(suffixes[i]);
-            if (aName.endsWithIgnoreAsciiCaseAsciiL(suffixes[i], nLen))
+            size_t nLen = strlen(suffix);
+            if (aName.endsWithIgnoreAsciiCaseAsciiL(suffix, nLen))
             {
                 bFinished = false;
                 aName = aName.copy(0, aName.getLength() - nLen);
@@ -419,9 +419,9 @@ OUString GetEnglishSearchFontName(const OUString& rInName)
     // translate normalized localized name to its normalized English ASCII name
     if( bNeedTranslation )
     {
-        typedef std::unordered_map<OUString, const char*, OUStringHash> FontNameDictionary;
+        typedef std::unordered_map<OUString, const char*> FontNameDictionary;
         static FontNameDictionary aDictionary( SAL_N_ELEMENTS(aImplLocalizedNamesList) );
-        // the font name dictionary needs to be intialized once
+        // the font name dictionary needs to be initialized once
         if( aDictionary.empty() )
         {
             // TODO: check if all dictionary entries are already normalized?
@@ -479,7 +479,7 @@ OUString GetNextFontToken( const OUString& rTokenStr, sal_Int32& rIndex )
         }
     }
 
-    return OUString( rTokenStr.getStr() + nTokenStart, nTokenLen );
+    return rTokenStr.copy( nTokenStart, nTokenLen );
 }
 
 static bool ImplIsFontToken( const OUString& rName, const OUString& rToken )
@@ -529,37 +529,18 @@ OUString GetSubsFontName( const OUString& rName, SubsFontFlags nFlags )
     const utl::FontNameAttr* pAttr = utl::FontSubstConfiguration::get().getSubstInfo( aOrgName );
     if ( pAttr )
     {
-        for( int i = 0; i < 3; i++ )
-        {
-            const ::std::vector< OUString >* pVector = nullptr;
-            switch( i )
+            if( nFlags & SubsFontFlags::MS )
             {
-                case 0:
-                    if( nFlags & SubsFontFlags::MS  &&  pAttr->MSSubstitutions.size() )
-                        pVector = &pAttr->MSSubstitutions;
-                    break;
-                case 1:
-                    if( nFlags & SubsFontFlags::PS  &&  pAttr->PSSubstitutions.size() )
-                        pVector = &pAttr->PSSubstitutions;
-                    break;
-                case 2:
-                    if( nFlags & SubsFontFlags::HTML  &&  pAttr->HTMLSubstitutions.size() )
-                        pVector = &pAttr->HTMLSubstitutions;
-                    break;
-            }
-            if( ! pVector )
-                continue;
-            for( ::std::vector< OUString >::const_iterator it = pVector->begin(); it != pVector->end(); ++it )
-                if( ! ImplIsFontToken( rName, *it ) )
-                {
-                    ImplAppendFontToken( aName, *it );
-                    if( nFlags & SubsFontFlags::ONLYONE )
+                for( const auto& rSubstitution : pAttr->MSSubstitutions )
+                    if( ! ImplIsFontToken( rName, rSubstitution ) )
                     {
-                        i = 4;
-                        break;
+                        ImplAppendFontToken( aName, rSubstitution );
+                        if( nFlags & SubsFontFlags::ONLYONE )
+                        {
+                            break;
+                        }
                     }
-                }
-        }
+            }
     }
 
     return aName;

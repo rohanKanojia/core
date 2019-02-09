@@ -33,7 +33,7 @@ namespace com { namespace sun { namespace star {
     }
 } } }
 
-namespace vcl { class Window; }
+namespace weld { class Window; }
 
 
 namespace abp
@@ -77,7 +77,7 @@ namespace abp
         /// creates a new KDE address book data source
         ODataSource createNewKab( const OUString& _rName );
 
-        /// creates a new Mac OS X address book data source
+        /// creates a new macOS address book data source
         ODataSource createNewMacab( const OUString& _rName );
 
         /// creates a new dBase data source
@@ -96,7 +96,7 @@ namespace abp
     class ODataSource
     {
     private:
-        ODataSourceImpl*    m_pImpl;
+        std::unique_ptr<ODataSourceImpl>    m_pImpl;
 
     public:
 
@@ -113,9 +113,11 @@ namespace abp
         /// dtor
         ~ODataSource( );
 
-        /// assignment
+        /// copy assignment
         ODataSource& operator=( const ODataSource& _rSource );
 
+        /// move assignment
+        ODataSource& operator=( ODataSource&& _rSource );
 
         /// checks whether or not the object represents a valid data source
         bool    isValid() const;
@@ -142,7 +144,7 @@ namespace abp
                 at all.
             @see isConnected
         */
-        bool    connect( vcl::Window* _pMessageParent );
+        bool    connect(weld::Window* _pMessageParent);
 
         /// returns <TRUE/> if the object has a valid connection, obtained from its data source
         bool    isConnected( ) const;
@@ -158,7 +160,7 @@ namespace abp
 
 
         /** retrieves the tables names from the connection
-            <p>to be called when <method>isConnection</method> returns <TRUE/> only</p>
+            <p>to be called when <method>isConnected</method> returns <TRUE/> only</p>
         */
         const StringBag&    getTableNames() const;
 
@@ -178,9 +180,6 @@ namespace abp
             ,const OUString& _sName
             ,PackageAccessControl
         );
-
-    private:
-        ODataSource( ); // never implemented
     };
 
 

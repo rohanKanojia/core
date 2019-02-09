@@ -46,7 +46,7 @@ private:
 public:
     // basic constructor/destructor
     explicit PagePrimitiveExtractor(ViewObjectContactOfPageObj& rVOC);
-    virtual ~PagePrimitiveExtractor();
+    virtual ~PagePrimitiveExtractor() override;
 
     // LazyInvalidate request. Supported here to not automatically
     // invalidate the second interaction state all the time at the
@@ -54,22 +54,19 @@ public:
     virtual void setLazyInvalidate(ViewObjectContact& rVOC) override;
 
     // From baseclass Timer, the timeout call triggered by the LazyInvalidate mechanism
-    virtual void Invoke() override;
+    virtual void Invoke() final override;
 
     // get primitive visualization
-    drawinglayer::primitive2d::Primitive2DContainer createPrimitive2DSequenceForPage(const DisplayInfo& rDisplayInfo);
+    drawinglayer::primitive2d::Primitive2DContainer createPrimitive2DSequenceForPage();
 
     // Own reaction on changes which will be forwarded to the OC of the owner-VOC
     virtual void InvalidatePartOfView(const basegfx::B2DRange& rRange) const override;
 
     // forward access to SdrPageView of ViewObjectContactOfPageObj
     virtual bool isOutputToPrinter() const override;
-    virtual bool isOutputToWindow() const override;
-    virtual bool isOutputToVirtualDevice() const override;
     virtual bool isOutputToRecordingMetaFile() const override;
     virtual bool isOutputToPDFFile() const override;
     virtual bool isDrawModeGray() const override;
-    virtual bool isDrawModeBlackWhite() const override;
     virtual bool isDrawModeHighContrast() const override;
     virtual SdrPageView* TryToGetSdrPageView() const override;
     virtual OutputDevice* TryToGetOutputDevice() const override;
@@ -77,14 +74,14 @@ public:
 
 PagePrimitiveExtractor::PagePrimitiveExtractor(
     ViewObjectContactOfPageObj& rVOC)
-:   ObjectContactOfPagePainter(nullptr, rVOC.GetObjectContact()),
+:   ObjectContactOfPagePainter(rVOC.GetObjectContact()),
     mrViewObjectContactOfPageObj(rVOC)
 {
     // make this renderer a preview renderer
     setPreviewRenderer(true);
 
     // init timer
-    SetPriority(SchedulerPriority::HIGH);
+    SetPriority(TaskPriority::HIGH_IDLE);
     Stop();
 }
 
@@ -117,7 +114,7 @@ void PagePrimitiveExtractor::Invoke()
     }
 }
 
-drawinglayer::primitive2d::Primitive2DContainer PagePrimitiveExtractor::createPrimitive2DSequenceForPage(const DisplayInfo& /*rDisplayInfo*/)
+drawinglayer::primitive2d::Primitive2DContainer PagePrimitiveExtractor::createPrimitive2DSequenceForPage()
 {
     drawinglayer::primitive2d::Primitive2DContainer xRetval;
     SdrPage* pStartPage = GetStartPage();
@@ -164,7 +161,7 @@ void PagePrimitiveExtractor::InvalidatePartOfView(const basegfx::B2DRange& rRang
 
     if(pStartPage && !rRange.isEmpty())
     {
-        const basegfx::B2DRange aPageRange(0.0, 0.0, (double)pStartPage->GetWdt(), (double)pStartPage->GetHgt());
+        const basegfx::B2DRange aPageRange(0.0, 0.0, static_cast<double>(pStartPage->GetWidth()), static_cast<double>(pStartPage->GetHeight()));
 
         if(rRange.overlaps(aPageRange))
         {
@@ -177,27 +174,24 @@ void PagePrimitiveExtractor::InvalidatePartOfView(const basegfx::B2DRange& rRang
 
 // forward access to SdrPageView to VOCOfPageObj
 bool PagePrimitiveExtractor::isOutputToPrinter() const { return mrViewObjectContactOfPageObj.GetObjectContact().isOutputToPrinter(); }
-bool PagePrimitiveExtractor::isOutputToWindow() const { return mrViewObjectContactOfPageObj.GetObjectContact().isOutputToWindow(); }
-bool PagePrimitiveExtractor::isOutputToVirtualDevice() const { return mrViewObjectContactOfPageObj.GetObjectContact().isOutputToVirtualDevice(); }
 bool PagePrimitiveExtractor::isOutputToRecordingMetaFile() const { return mrViewObjectContactOfPageObj.GetObjectContact().isOutputToRecordingMetaFile(); }
 bool PagePrimitiveExtractor::isOutputToPDFFile() const { return mrViewObjectContactOfPageObj.GetObjectContact().isOutputToPDFFile(); }
 bool PagePrimitiveExtractor::isDrawModeGray() const { return mrViewObjectContactOfPageObj.GetObjectContact().isDrawModeGray(); }
-bool PagePrimitiveExtractor::isDrawModeBlackWhite() const { return mrViewObjectContactOfPageObj.GetObjectContact().isDrawModeBlackWhite(); }
 bool PagePrimitiveExtractor::isDrawModeHighContrast() const { return mrViewObjectContactOfPageObj.GetObjectContact().isDrawModeHighContrast(); }
 SdrPageView* PagePrimitiveExtractor::TryToGetSdrPageView() const { return mrViewObjectContactOfPageObj.GetObjectContact().TryToGetSdrPageView(); }
 OutputDevice* PagePrimitiveExtractor::TryToGetOutputDevice() const { return mrViewObjectContactOfPageObj.GetObjectContact().TryToGetOutputDevice(); }
 
-drawinglayer::primitive2d::Primitive2DContainer ViewObjectContactOfPageObj::createPrimitive2DSequence(const DisplayInfo& rDisplayInfo) const
+drawinglayer::primitive2d::Primitive2DContainer ViewObjectContactOfPageObj::createPrimitive2DSequence(const DisplayInfo& /*rDisplayInfo*/) const
 {
     drawinglayer::primitive2d::Primitive2DContainer xRetval;
-    const SdrPageObj& rPageObject((static_cast< ViewContactOfPageObj& >(GetViewContact())).GetPageObj());
+    const SdrPageObj& rPageObject(static_cast< ViewContactOfPageObj& >(GetViewContact()).GetPageObj());
     const SdrPage* pPage = rPageObject.GetReferencedPage();
     const svtools::ColorConfig aColorConfig;
 
     // get PageObject's geometry
     basegfx::B2DHomMatrix aPageObjectTransform;
     {
-        const Rectangle aPageObjectModelData(rPageObject.GetLastBoundRect());
+        const tools::Rectangle aPageObjectModelData(rPageObject.GetLastBoundRect());
         const basegfx::B2DRange aPageObjectBound(
             aPageObjectModelData.Left(), aPageObjectModelData.Top(),
             aPageObjectModelData.Right(), aPageObjectModelData.Bottom());
@@ -233,7 +227,7 @@ drawinglayer::primitive2d::Primitive2DContainer ViewObjectContactOfPageObj::crea
             svtools::ColorConfigValue aBorderConfig = aColorConfig.GetColorValue(svtools::DOCBOUNDARIES);
             const Color aBorderColor = aBorderConfig.bIsVisible ? aBorderConfig.nColor : aDocColor;
             const basegfx::B2DRange aPageBound(0.0, 0.0, fPageWidth, fPageHeight);
-            const basegfx::B2DPolygon aOutline(basegfx::tools::createPolygonFromRect(aPageBound));
+            const basegfx::B2DPolygon aOutline(basegfx::utils::createPolygonFromRect(aPageBound));
 
             // add replacement fill
             xPageContent[0L] = drawinglayer::primitive2d::Primitive2DReference(
@@ -255,7 +249,7 @@ drawinglayer::primitive2d::Primitive2DContainer ViewObjectContactOfPageObj::crea
             mpExtractor->SetViewObjectContactRedirector(GetObjectContact().GetViewObjectContactRedirector());
 
             // create page content
-            xPageContent = mpExtractor->createPrimitive2DSequenceForPage(rDisplayInfo);
+            xPageContent = mpExtractor->createPrimitive2DSequenceForPage();
 
             // #i105548# reset VOCRedirector to not accidentally have a pointer to a
             // temporary class, so calls to it are avoided safely
@@ -270,7 +264,7 @@ drawinglayer::primitive2d::Primitive2DContainer ViewObjectContactOfPageObj::crea
         {
             const uno::Reference< drawing::XDrawPage > xDrawPage(GetXDrawPageForSdrPage(const_cast< SdrPage*>(pPage)));
             const drawinglayer::primitive2d::Primitive2DReference xPagePreview(new drawinglayer::primitive2d::PagePreviewPrimitive2D(
-                xDrawPage, aPageObjectTransform, fPageWidth, fPageHeight, xPageContent, true));
+                xDrawPage, aPageObjectTransform, fPageWidth, fPageHeight, xPageContent));
             xRetval = drawinglayer::primitive2d::Primitive2DContainer { xPagePreview };
         }
     }
@@ -288,7 +282,7 @@ drawinglayer::primitive2d::Primitive2DContainer ViewObjectContactOfPageObj::crea
     if(bCreateGrayFrame)
     {
         const Color aFrameColor(aColorConfig.GetColorValue(svtools::OBJECTBOUNDARIES).nColor);
-        basegfx::B2DPolygon aOwnOutline(basegfx::tools::createUnitPolygon());
+        basegfx::B2DPolygon aOwnOutline(basegfx::utils::createUnitPolygon());
         aOwnOutline.transform(aPageObjectTransform);
 
         const drawinglayer::primitive2d::Primitive2DReference xGrayFrame(
@@ -313,13 +307,11 @@ ViewObjectContactOfPageObj::~ViewObjectContactOfPageObj()
     {
         // remember candidate and reset own pointer to avoid action when createPrimitive2DSequence()
         // would be called for any reason
-        PagePrimitiveExtractor* pCandidate = mpExtractor;
-        mpExtractor = nullptr;
+        std::unique_ptr<PagePrimitiveExtractor> pCandidate = std::move(mpExtractor);
 
         // also reset the StartPage to avoid ActionChanged() forwardings in the
         // PagePrimitiveExtractor::InvalidatePartOfView() implementation
         pCandidate->SetStartPage(nullptr);
-        delete pCandidate;
     }
 }
 

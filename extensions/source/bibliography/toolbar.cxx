@@ -23,27 +23,29 @@
 #include <com/sun/star/util/URLTransformer.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
 #include <com/sun/star/frame/FrameSearchFlag.hpp>
-#include <datman.hxx>
+#include "datman.hxx"
+#include <o3tl/any.hxx>
 #include <svx/svxids.hrc>
 #include <svtools/miscopt.hxx>
 #include <svtools/imgdef.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/mnemonic.hxx>
+#include <vcl/event.hxx>
 #include "bibbeam.hxx"
 #include "bibview.hxx"
 #include "bibresid.hxx"
-#include "bib.hrc"
+#include <strings.hrc>
+#include <bitmaps.hlst>
 
 #include "bibtools.hxx"
-#include <osl/mutex.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::beans;
 
 
-// Konstanten -------------------------------------------------------------
+// Constants --------------------------------------------------------------
 
 
 BibToolBarListener::BibToolBarListener(BibToolBar *pTB, const OUString& aStr, sal_uInt16 nId):
@@ -57,7 +59,7 @@ BibToolBarListener::~BibToolBarListener()
 {
 }
 
-void BibToolBarListener::statusChanged(const css::frame::FeatureStateEvent& rEvt)throw( css::uno::RuntimeException, std::exception )
+void BibToolBarListener::statusChanged(const css::frame::FeatureStateEvent& rEvt)
 {
     if(rEvt.FeatureURL.Complete == aCommand)
     {
@@ -65,10 +67,9 @@ void BibToolBarListener::statusChanged(const css::frame::FeatureStateEvent& rEvt
         pToolBar->EnableItem(nIndex,rEvt.IsEnabled);
 
         css::uno::Any aState=rEvt.State;
-        if(aState.getValueType()==cppu::UnoType<bool>::get())
+        if(auto bChecked = o3tl::tryAccess<bool>(aState))
         {
-            bool bChecked= *static_cast<sal_Bool const *>(aState.getValue());
-            pToolBar->CheckItem(nIndex, bChecked);
+            pToolBar->CheckItem(nIndex, *bChecked);
         }
 
     }
@@ -84,7 +85,7 @@ BibTBListBoxListener::~BibTBListBoxListener()
 {
 }
 
-void BibTBListBoxListener::statusChanged(const css::frame::FeatureStateEvent& rEvt)throw( css::uno::RuntimeException, std::exception )
+void BibTBListBoxListener::statusChanged(const css::frame::FeatureStateEvent& rEvt)
 {
     if(rEvt.FeatureURL.Complete == GetCommand())
     {
@@ -92,12 +93,11 @@ void BibTBListBoxListener::statusChanged(const css::frame::FeatureStateEvent& rE
         pToolBar->EnableSourceList(rEvt.IsEnabled);
 
         Any aState = rEvt.State;
-        if(aState.getValueType() == cppu::UnoType<Sequence<OUString>>::get())
+        if(auto pStringSeq = o3tl::tryAccess<Sequence<OUString>>(aState))
         {
             pToolBar->UpdateSourceList(false);
             pToolBar->ClearSourceList();
 
-            Sequence<OUString> const * pStringSeq = static_cast<Sequence<OUString> const *>(aState.getValue());
             const OUString* pStringArray = pStringSeq->getConstArray();
 
             sal_uInt32 nCount = pStringSeq->getLength();
@@ -107,7 +107,7 @@ void BibTBListBoxListener::statusChanged(const css::frame::FeatureStateEvent& rE
                 aEntry = pStringArray[i];
                 pToolBar->InsertSourceEntry(aEntry);
             }
-            pToolBar->UpdateSourceList();
+            pToolBar->UpdateSourceList(true);
         }
 
         pToolBar->SelectSourceEntry(rEvt.FeatureDescriptor);
@@ -123,7 +123,7 @@ BibTBQueryMenuListener::~BibTBQueryMenuListener()
 {
 }
 
-void BibTBQueryMenuListener::statusChanged(const frame::FeatureStateEvent& rEvt)throw( uno::RuntimeException, std::exception )
+void BibTBQueryMenuListener::statusChanged(const frame::FeatureStateEvent& rEvt)
 {
     if(rEvt.FeatureURL.Complete == GetCommand())
     {
@@ -131,11 +131,10 @@ void BibTBQueryMenuListener::statusChanged(const frame::FeatureStateEvent& rEvt)
         pToolBar->EnableSourceList(rEvt.IsEnabled);
 
         uno::Any aState=rEvt.State;
-        if(aState.getValueType()==cppu::UnoType<Sequence<OUString>>::get())
+        if(auto pStringSeq = o3tl::tryAccess<Sequence<OUString>>(aState))
         {
             pToolBar->ClearFilterMenu();
 
-            Sequence<OUString> const * pStringSeq = static_cast<Sequence<OUString> const *>(aState.getValue());
             const OUString* pStringArray = pStringSeq->getConstArray();
 
             sal_uInt32 nCount = pStringSeq->getLength();
@@ -160,7 +159,7 @@ BibTBEditListener::~BibTBEditListener()
 {
 }
 
-void BibTBEditListener::statusChanged(const frame::FeatureStateEvent& rEvt)throw( uno::RuntimeException, std::exception )
+void BibTBEditListener::statusChanged(const frame::FeatureStateEvent& rEvt)
 {
     if(rEvt.FeatureURL.Complete == GetCommand())
     {
@@ -168,27 +167,25 @@ void BibTBEditListener::statusChanged(const frame::FeatureStateEvent& rEvt)throw
         pToolBar->EnableQuery(rEvt.IsEnabled);
 
         uno::Any aState=rEvt.State;
-        if(aState.getValueType()== ::cppu::UnoType<OUString>::get())
+        if(auto aStr = o3tl::tryAccess<OUString>(aState))
         {
-            OUString aStr = *static_cast<OUString const *>(aState.getValue());
-            pToolBar->SetQueryString(aStr);
+            pToolBar->SetQueryString(*aStr);
         }
     }
 }
 
 BibToolBar::BibToolBar(vcl::Window* pParent, Link<void*,void> aLink)
     : ToolBox(pParent, "toolbar", "modules/sbibliography/ui/toolbar.ui")
-    , aImgLst(BibResId(  RID_TOOLBAR_IMGLIST     )),
-    aBigImgLst(BibResId( RID_TOOLBAR_BIGIMGLIST )),
-    aFtSource(VclPtr<FixedText>::Create(this,WB_VCENTER)),
-    aLBSource(VclPtr<ListBox>::Create(this,WB_DROPDOWN)),
-    aFtQuery(VclPtr<FixedText>::Create(this,WB_VCENTER)),
-    aEdQuery(VclPtr<Edit>::Create(this)),
-    nMenuId(0),
-    nSelMenuItem(0),
-    aLayoutManager( aLink ),
-    nSymbolsSize( SFX_SYMBOLS_SIZE_SMALL ),
-    nOutStyle( 0 )
+    , aFtSource(VclPtr<FixedText>::Create(this,WB_VCENTER))
+    , aLBSource(VclPtr<ListBox>::Create(this,WB_DROPDOWN))
+    , aFtQuery(VclPtr<FixedText>::Create(this,WB_VCENTER))
+    , aEdQuery(VclPtr<Edit>::Create(this))
+    , pPopupMenu(VclPtr<PopupMenu>::Create())
+    , nMenuId(0)
+    , nSelMenuItem(0)
+    , aLayoutManager(aLink)
+    , nSymbolsSize(SFX_SYMBOLS_SIZE_SMALL)
+    , nOutStyle(0)
 {
     SvtMiscOptions aSvtMiscOptions;
     nSymbolsSize = aSvtMiscOptions.GetCurrentSymbolsSize();
@@ -196,7 +193,7 @@ BibToolBar::BibToolBar(vcl::Window* pParent, Link<void*,void> aLink)
 
     SetOutStyle(TOOLBOX_STYLE_FLAT);
     Size a2Size(GetOutputSizePixel());
-    a2Size.Width()=100;
+    a2Size.setWidth(100 );
     aLBSource->SetSizePixel(a2Size);
     aLBSource->SetDropDownLineCount(9);
     aLBSource->Show();
@@ -205,8 +202,8 @@ BibToolBar::BibToolBar(vcl::Window* pParent, Link<void*,void> aLink)
     SvtMiscOptions().AddListenerLink( LINK( this, BibToolBar, OptionsChanged_Impl ) );
     Application::AddEventListener( LINK( this, BibToolBar, SettingsChanged_Impl ) );
 
-    aIdle.SetIdleHdl(LINK( this, BibToolBar, SendSelHdl));
-    aIdle.SetPriority(SchedulerPriority::LOWEST);
+    aIdle.SetInvokeHandler(LINK( this, BibToolBar, SendSelHdl));
+    aIdle.SetPriority(TaskPriority::LOWEST);
 
     SetDropdownClickHdl( LINK( this, BibToolBar, MenuHdl));
 
@@ -262,7 +259,7 @@ void BibToolBar::dispose()
 
 void BibToolBar::InitListener()
 {
-    sal_uInt16  nCount=GetItemCount();
+    ToolBox::ImplToolItems::size_type nCount=GetItemCount();
 
     uno::Reference< frame::XDispatch >  xDisp(xController,UNO_QUERY);
     uno::Reference< util::XURLTransformer > xTrans( util::URLTransformer::create(comphelper::getProcessComponentContext()) );
@@ -274,7 +271,7 @@ void BibToolBar::InitListener()
         BibToolBarListener* pQuery=new BibTBQueryMenuListener(this, aQueryURL.Complete, nTBC_BT_AUTOFILTER);
         xDisp->addStatusListener(uno::Reference< frame::XStatusListener > (pQuery),aQueryURL);
 
-        for(sal_uInt16 nPos=0;nPos<nCount;nPos++)
+        for(ToolBox::ImplToolItems::size_type nPos=0;nPos<nCount;nPos++)
         {
             sal_uInt16 nId=GetItemId(nPos);
             if(!nId || nId== nTBC_FT_SOURCE || nId == nTBC_FT_QUERY)
@@ -347,7 +344,7 @@ void BibToolBar::SendDispatch(sal_uInt16 nId, const Sequence< PropertyValue >& r
         uno::Reference< util::XURLTransformer >  xTrans( util::URLTransformer::create(comphelper::getProcessComponentContext()) );
         if( xTrans.is() )
         {
-            // Datei laden
+            // load the file
             util::URL aURL;
             aURL.Complete = aCommand;
 
@@ -386,21 +383,21 @@ void BibToolBar::Click()
 
 void BibToolBar::ClearFilterMenu()
 {
-    aPopupMenu.Clear();
+    pPopupMenu->Clear();
     nMenuId=0;
 }
 sal_uInt16 BibToolBar::InsertFilterItem(const OUString& aMenuEntry)
 {
     nMenuId++;
-    aPopupMenu.InsertItem(nMenuId,aMenuEntry);
+    pPopupMenu->InsertItem(nMenuId,aMenuEntry);
 
     return nMenuId;
 }
 void BibToolBar::SelectFilterItem(sal_uInt16    nId)
 {
-    aPopupMenu.CheckItem(nId);
+    pPopupMenu->CheckItem(nId);
     nSelMenuItem=nId;
-    aQueryField = MnemonicGenerator::EraseAllMnemonicChars( aPopupMenu.GetItemText(nId) );
+    aQueryField = MnemonicGenerator::EraseAllMnemonicChars( pPopupMenu->GetItemText(nId) );
 }
 
 void BibToolBar::EnableSourceList(bool bFlag)
@@ -470,39 +467,38 @@ bool BibToolBar::PreNotify( NotifyEvent& rNEvt )
     return bResult;
 }
 
-IMPL_LINK_NOARG_TYPED( BibToolBar, SelHdl, ListBox&, void )
+IMPL_LINK_NOARG( BibToolBar, SelHdl, ListBox&, void )
 {
     aIdle.Start();
 }
 
-IMPL_LINK_NOARG_TYPED( BibToolBar, SendSelHdl, Idle*, void )
+IMPL_LINK_NOARG( BibToolBar, SendSelHdl, Timer*, void )
 {
     Sequence<PropertyValue> aPropVal(1);
     PropertyValue* pPropertyVal = const_cast<PropertyValue*>(aPropVal.getConstArray());
     pPropertyVal[0].Name = "DataSourceName";
-    OUString aEntry( MnemonicGenerator::EraseAllMnemonicChars( aLBSource->GetSelectEntry() ) );
-    OUString aSelection = aEntry;
-    pPropertyVal[0].Value <<= aSelection;
+    OUString aEntry( MnemonicGenerator::EraseAllMnemonicChars( aLBSource->GetSelectedEntry() ) );
+    pPropertyVal[0].Value <<= aEntry;
     SendDispatch(nTBC_LB_SOURCE, aPropVal);
 }
 
-IMPL_LINK_NOARG_TYPED( BibToolBar, MenuHdl, ToolBox*, void)
+IMPL_LINK_NOARG( BibToolBar, MenuHdl, ToolBox*, void)
 {
     sal_uInt16  nId=GetCurItemId();
     if (nId == nTBC_BT_AUTOFILTER)
     {
-        EndSelection();     // vor SetDropMode (SetDropMode ruft SetItemImage)
+        EndSelection();     // before SetDropMode (SetDropMode calls SetItemImage)
 
         SetItemDown(nTBC_BT_AUTOFILTER, true);
-        nId = aPopupMenu.Execute(this, GetItemRect(nTBC_BT_AUTOFILTER));
+        nId = pPopupMenu->Execute(this, GetItemRect(nTBC_BT_AUTOFILTER));
 
 
         if(nId>0)
         {
-            aPopupMenu.CheckItem(nSelMenuItem,false);
-            aPopupMenu.CheckItem(nId);
+            pPopupMenu->CheckItem(nSelMenuItem,false);
+            pPopupMenu->CheckItem(nId);
             nSelMenuItem=nId;
-            aQueryField = MnemonicGenerator::EraseAllMnemonicChars( aPopupMenu.GetItemText(nId) );
+            aQueryField = MnemonicGenerator::EraseAllMnemonicChars( pPopupMenu->GetItemText(nId) );
             Sequence<PropertyValue> aPropVal(2);
             PropertyValue* pPropertyVal = const_cast<PropertyValue*>(aPropVal.getConstArray());
             pPropertyVal[0].Name = "QueryText";
@@ -513,8 +509,7 @@ IMPL_LINK_NOARG_TYPED( BibToolBar, MenuHdl, ToolBox*, void)
             SendDispatch(nTBC_BT_AUTOFILTER, aPropVal);
         }
 
-        Point aPoint;
-        MouseEvent aLeave( aPoint, 0, MouseEventModifiers::LEAVEWINDOW | MouseEventModifiers::SYNTHETIC );
+        MouseEvent aLeave( Point(), 0, MouseEventModifiers::LEAVEWINDOW | MouseEventModifiers::SYNTHETIC );
         MouseMove( aLeave );
         SetItemDown(nTBC_BT_AUTOFILTER, false);
 
@@ -523,11 +518,9 @@ IMPL_LINK_NOARG_TYPED( BibToolBar, MenuHdl, ToolBox*, void)
 }
 
 void    BibToolBar::statusChanged(const frame::FeatureStateEvent& rEvent)
-                                            throw( uno::RuntimeException )
 {
-    for(size_t i = 0; i < aListenerArr.size(); i++)
+    for(uno::Reference<frame::XStatusListener> & rListener : aListenerArr)
     {
-        css::uno::Reference< css::frame::XStatusListener>& rListener = aListenerArr[i];
         rListener->statusChanged(rEvent);
     }
 }
@@ -540,7 +533,7 @@ void BibToolBar::DataChanged( const DataChangedEvent& rDCEvt )
     ToolBox::DataChanged( rDCEvt );
 }
 
-IMPL_LINK_NOARG_TYPED( BibToolBar, OptionsChanged_Impl, LinkParamNone*, void )
+IMPL_LINK_NOARG( BibToolBar, OptionsChanged_Impl, LinkParamNone*, void )
 {
     bool bRebuildToolBar = false;
     sal_Int16 eSymbolsSize = SvtMiscOptions().GetCurrentSymbolsSize();
@@ -560,8 +553,7 @@ IMPL_LINK_NOARG_TYPED( BibToolBar, OptionsChanged_Impl, LinkParamNone*, void )
         RebuildToolbar();
 }
 
-
-IMPL_LINK_NOARG_TYPED( BibToolBar, SettingsChanged_Impl, VclSimpleEvent&, void )
+IMPL_LINK_NOARG( BibToolBar, SettingsChanged_Impl, VclSimpleEvent&, void )
 {
     // Check if toolbar button size have changed and we have to use system settings
     sal_Int16 eSymbolsSize = SvtMiscOptions().GetCurrentSymbolsSize();
@@ -572,7 +564,6 @@ IMPL_LINK_NOARG_TYPED( BibToolBar, SettingsChanged_Impl, VclSimpleEvent&, void )
     }
 }
 
-
 void BibToolBar::RebuildToolbar()
 {
     ApplyImageList();
@@ -580,16 +571,11 @@ void BibToolBar::RebuildToolbar()
     Application::PostUserEvent( aLayoutManager );
 }
 
-
 void BibToolBar::ApplyImageList()
 {
-    ImageList& rList = ( nSymbolsSize == SFX_SYMBOLS_SIZE_SMALL ) ?
-                       ( aImgLst ) :
-                       ( aBigImgLst );
-
-    SetItemImage(nTBC_BT_AUTOFILTER  , rList.GetImage(SID_FM_AUTOFILTER));
-    SetItemImage(nTBC_BT_FILTERCRIT  , rList.GetImage(SID_FM_FILTERCRIT));
-    SetItemImage(nTBC_BT_REMOVEFILTER, rList.GetImage(SID_FM_REMOVE_FILTER_SORT ));
+    SetItemImage(nTBC_BT_AUTOFILTER, Image(StockImage::Yes, nSymbolsSize == SFX_SYMBOLS_SIZE_SMALL ? OUStringLiteral(RID_EXTBMP_AUTOFILTER_SC) : OUStringLiteral(RID_EXTBMP_AUTOFILTER_LC)));
+    SetItemImage(nTBC_BT_FILTERCRIT, Image(StockImage::Yes, nSymbolsSize == SFX_SYMBOLS_SIZE_SMALL ? OUStringLiteral(RID_EXTBMP_FILTERCRIT_SC) : OUStringLiteral(RID_EXTBMP_FILTERCRIT_LC)));
+    SetItemImage(nTBC_BT_REMOVEFILTER, Image(StockImage::Yes, nSymbolsSize == SFX_SYMBOLS_SIZE_SMALL ? OUStringLiteral(RID_EXTBMP_REMOVE_FILTER_SORT_SC) : OUStringLiteral(RID_EXTBMP_REMOVE_FILTER_SORT_LC)));
     AdjustToolBox();
 }
 
@@ -598,9 +584,9 @@ void BibToolBar::AdjustToolBox()
     Size aOldSize = GetSizePixel();
     Size aSize = CalcWindowSizePixel();
     if ( !aSize.Width() )
-        aSize.Width() = aOldSize.Width();
+        aSize.setWidth( aOldSize.Width() );
     else if ( !aSize.Height() )
-        aSize.Height() = aOldSize.Height();
+        aSize.setHeight( aOldSize.Height() );
 
     Size aTbSize = GetSizePixel();
     if (

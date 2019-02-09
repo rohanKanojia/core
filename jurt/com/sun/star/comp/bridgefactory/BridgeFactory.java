@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -37,7 +38,7 @@ import com.sun.star.uno.UnoRuntime;
 /**
  * The BridgeFactory class implements the <code>XBridgeFactory</code> Interface.
  *
- * <p>It wrapps the <code>UnoRuntime#getBridgeByName</code>method and delivers a
+ * <p>It wraps the <code>UnoRuntime#getBridgeByName</code>method and delivers a
  * XBridge component.</p>
  *
  * <p>This component is only usable for remote bridges.</p>
@@ -208,3 +209,4 @@ public class BridgeFactory implements XBridgeFactory/*, XEventListener*/ {
     }
 }
 
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

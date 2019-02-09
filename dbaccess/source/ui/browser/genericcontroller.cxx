@@ -18,21 +18,19 @@
  */
 
 #include <dbaccess/genericcontroller.hxx>
-#include <comphelper/uno3.hxx>
 #include <toolkit/awt/vclxwindow.hxx>
-#include "browserids.hxx"
+#include <browserids.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <dbaccess/dataview.hxx>
 #include <tools/diagnose_ex.h>
 #include <osl/diagnose.h>
-#include "dbustrings.hrc"
+#include <stringconstants.hxx>
 #include <vcl/stdtext.hxx>
-#include <comphelper/processfactory.hxx>
 #include <cppuhelper/typeprovider.hxx>
 #include <framework/titlehelper.hxx>
 #include <comphelper/sequence.hxx>
-#include <comphelper/extract.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/sdbc/XDataSource.hpp>
 #include <com/sun/star/sdb/DatabaseContext.hpp>
@@ -42,23 +40,23 @@
 #include <com/sun/star/task/XInteractionHandler.hpp>
 #include <com/sun/star/util/URLTransformer.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
-#include "UITools.hxx"
-#include "commontypes.hxx"
+#include <UITools.hxx>
+#include <commontypes.hxx>
 
 #include <com/sun/star/ui/XSidebarProvider.hpp>
 #include <sfx2/sidebar/UnoSidebar.hxx>
-
+#include <sfx2/userinputinterception.hxx>
 
 #include <vcl/waitobj.hxx>
 #include <svl/urihelper.hxx>
-#include "datasourceconnector.hxx"
+#include <datasourceconnector.hxx>
 #include <unotools/moduleoptions.hxx>
 #include <com/sun/star/frame/FrameSearchFlag.hpp>
 #include <com/sun/star/frame/status/Visibility.hpp>
 #include <com/sun/star/util/XModifiable.hpp>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 #include <o3tl/functional.hxx>
-#include <cppuhelper/implbase1.hxx>
 #include <limits>
 #include <unordered_map>
 
@@ -79,8 +77,8 @@ using namespace ::dbtools;
 using namespace ::comphelper;
 
 #define ALL_FEATURES                -1
-#define FIRST_USER_DEFINED_FEATURE  ( ::std::numeric_limits< sal_uInt16 >::max() - 1000 )
-#define LAST_USER_DEFINED_FEATURE   ( ::std::numeric_limits< sal_uInt16 >::max()        )
+#define FIRST_USER_DEFINED_FEATURE  ( std::numeric_limits< sal_uInt16 >::max() - 1000 )
+#define LAST_USER_DEFINED_FEATURE   ( std::numeric_limits< sal_uInt16 >::max()        )
 
 typedef std::unordered_map< sal_Int16, sal_Int16 > CommandHashMap;
 
@@ -93,7 +91,6 @@ class UserDefinedFeatures
 public:
     explicit UserDefinedFeatures( const Reference< XController >& _rxController );
 
-    static FeatureState getState( const URL& _rFeatureURL );
     void            execute( const URL& _rFeatureURL, const Sequence< PropertyValue>& _rArgs );
 
 private:
@@ -103,16 +100,6 @@ private:
 UserDefinedFeatures::UserDefinedFeatures( const Reference< XController >& _rxController )
     :m_aController( _rxController )
 {
-}
-
-FeatureState UserDefinedFeatures::getState( const URL& /*_rFeatureURL*/ )
-{
-    // for now, enable all the time
-    // TODO: we should ask the dispatcher. However, this is laborious, since you cannot ask a dispatcher
-    // directly, but need to add a status listener.
-    FeatureState aState;
-    aState.bEnabled = true;
-    return aState;
 }
 
 void UserDefinedFeatures::execute( const URL& _rFeatureURL, const Sequence< PropertyValue>& _rArgs )
@@ -138,7 +125,7 @@ void UserDefinedFeatures::execute( const URL& _rFeatureURL, const Sequence< Prop
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -184,38 +171,9 @@ OGenericUnoController::OGenericUnoController(const Reference< XComponentContext 
     }
     catch(Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
-
-#ifdef _MSC_VER
-
-#pragma warning(push)
-#pragma warning(disable:4702)
-
-OGenericUnoController::OGenericUnoController()
-    :OGenericUnoController_Base( getMutex() )
-    ,m_pView(NULL)
-#ifdef DBG_UTIL
-    ,m_bDescribingSupportedFeatures( false )
-#endif
-    ,m_aAsyncInvalidateAll(LINK(this, OGenericUnoController, OnAsyncInvalidateAll))
-    ,m_aAsyncCloseTask(LINK(this, OGenericUnoController, OnAsyncCloseTask))
-    ,m_aCurrentFrame( *this )
-    ,m_bPreview(sal_False)
-    ,m_bReadOnly(sal_False)
-    ,m_bCurrentlyModified(sal_False)
-{
-    SAL_WARN("dbaccess.ui", "OGenericUnoController::OGenericUnoController: illegal call!" );
-    // This ctor only exists because the MSVC compiler complained about an unresolved external
-    // symbol. It should not be used at all. Since using it yields strange runtime problems,
-    // we simply abort here.
-    abort();
-}
-
-#pragma warning(pop)
-
-#endif
 
 OGenericUnoController::~OGenericUnoController()
 {
@@ -245,13 +203,13 @@ bool OGenericUnoController::Construct(vcl::Window* /*pParent*/)
     {
         SAL_WARN("dbaccess.ui","OGenericUnoController::Construct: could not create (or start listening at) the database context!");
         // at least notify the user. Though the whole component does not make any sense without the database context ...
-        ShowServiceNotAvailableError(getView(), "com.sun.star.sdb.DatabaseContext", true);
+        ShowServiceNotAvailableError(getFrameWeld(), "com.sun.star.sdb.DatabaseContext", true);
     }
 
     return true;
 }
 
-IMPL_LINK_NOARG_TYPED(OGenericUnoController, OnAsyncInvalidateAll, void*, void)
+IMPL_LINK_NOARG(OGenericUnoController, OnAsyncInvalidateAll, void*, void)
 {
     if ( !OGenericUnoController_Base::rBHelper.bInDispose && !OGenericUnoController_Base::rBHelper.bDisposed )
         InvalidateFeature_Impl();
@@ -261,7 +219,7 @@ void OGenericUnoController::impl_initialize()
 {
 }
 
-void SAL_CALL OGenericUnoController::initialize( const Sequence< Any >& aArguments ) throw(Exception, RuntimeException, std::exception)
+void SAL_CALL OGenericUnoController::initialize( const Sequence< Any >& aArguments )
 {
     SolarMutexGuard aSolarGuard;
     ::osl::MutexGuard aGuard( getMutex() );
@@ -340,14 +298,14 @@ void OGenericUnoController::stopFrameListening( const Reference< XFrame >& _rxFr
         _rxFrame->removeFrameActionListener( this );
 }
 
-void OGenericUnoController::disposing(const EventObject& Source) throw( RuntimeException, std::exception )
+void OGenericUnoController::disposing(const EventObject& Source)
 {
     // our frame ?
     if ( Source.Source == getFrame() )
         stopFrameListening( getFrame() );
 }
 
-void OGenericUnoController::modified(const EventObject& aEvent) throw( RuntimeException, std::exception )
+void OGenericUnoController::modified(const EventObject& aEvent)
 {
     ::osl::MutexGuard aGuard( getMutex() );
     if ( !isDataSourceReadOnly() )
@@ -362,30 +320,30 @@ void OGenericUnoController::modified(const EventObject& aEvent) throw( RuntimeEx
     InvalidateFeature(ID_BROWSER_UNDO);
 }
 
-Reference< XWindow > SAL_CALL OGenericUnoController::getComponentWindow() throw (RuntimeException, std::exception)
+Reference< XWindow > SAL_CALL OGenericUnoController::getComponentWindow()
 {
     SolarMutexGuard g;
     return VCLUnoHelper::GetInterface( getView() );
 }
 
-Reference<XSidebarProvider> SAL_CALL OGenericUnoController::getSidebar() throw (RuntimeException, std::exception)
+Reference<XSidebarProvider> SAL_CALL OGenericUnoController::getSidebar()
 {
         return nullptr;
 }
 
-OUString SAL_CALL OGenericUnoController::getViewControllerName() throw (css::uno::RuntimeException, std::exception)
+OUString SAL_CALL OGenericUnoController::getViewControllerName()
 {
     return OUString( "Default" );
 }
 
-Sequence< PropertyValue > SAL_CALL OGenericUnoController::getCreationArguments() throw (RuntimeException, std::exception)
+Sequence< PropertyValue > SAL_CALL OGenericUnoController::getCreationArguments()
 {
     // currently we do not support any creation args, so anything passed to XModel2::createViewController would be
     // lost, so we can equally return an empty sequence here
     return Sequence< PropertyValue >();
 }
 
-void OGenericUnoController::attachFrame( const Reference< XFrame >& _rxFrame ) throw( RuntimeException, std::exception )
+void OGenericUnoController::attachFrame( const Reference< XFrame >& _rxFrame )
 {
     SolarMutexGuard aSolarGuard;
     ::osl::MutexGuard aGuard( getMutex() );
@@ -402,16 +360,13 @@ void OGenericUnoController::attachFrame( const Reference< XFrame >& _rxFrame ) t
 
 namespace
 {
-    typedef ::std::vector< Any >    States;
+    typedef std::vector< Any >    States;
 
     void    lcl_notifyMultipleStates( XStatusListener& _rListener, FeatureStateEvent& _rEvent, const States& _rStates )
     {
-        for (   States::const_iterator state = _rStates.begin();
-                state != _rStates.end();
-                ++state
-            )
+        for (auto const& elem : _rStates)
         {
-            _rEvent.State = *state;
+            _rEvent.State = elem;
             _rListener.statusChanged( _rEvent );
         }
     }
@@ -433,7 +388,7 @@ namespace
         if ( _rFeatureState.aValue.hasValue() )
             _out_rStates.push_back( _rFeatureState.aValue );
         if ( _out_rStates.empty() )
-            _out_rStates.push_back( Any() );
+            _out_rStates.emplace_back( );
     }
 }
 
@@ -471,10 +426,10 @@ void OGenericUnoController::ImplBroadcastFeatureState(const OUString& _rFeature,
 
     // a special listener ?
     if ( xListener.is() )
-        lcl_notifyMultipleStates( *xListener.get(), aEvent, aStates );
+        lcl_notifyMultipleStates( *xListener, aEvent, aStates );
     else
     {   // no -> iterate through all listeners responsible for the URL
-        StringBag aFeatureCommands;
+        std::set<OUString> aFeatureCommands;
         for( const auto& rFeature : m_aSupportedFeatures )
         {
             if( rFeature.second.nFeatureId == nFeat )
@@ -485,18 +440,14 @@ void OGenericUnoController::ImplBroadcastFeatureState(const OUString& _rFeature,
         // we are notifying them, so we must use a copy of m_arrStatusListener, not
         // m_arrStatusListener itself
         Dispatch aNotifyLoop( m_arrStatusListener );
-        Dispatch::iterator iterSearch = aNotifyLoop.begin();
-        Dispatch::const_iterator iterEnd = aNotifyLoop.end();
 
-        while (iterSearch != iterEnd)
+        for (auto const& elem : aNotifyLoop)
         {
-            DispatchTarget& rCurrent = *iterSearch;
-            if ( aFeatureCommands.find( rCurrent.aURL.Complete ) != aFeatureCommands.end() )
+            if ( aFeatureCommands.find( elem.aURL.Complete ) != aFeatureCommands.end() )
             {
-                aEvent.FeatureURL = rCurrent.aURL;
-                lcl_notifyMultipleStates( *rCurrent.xListener.get(), aEvent, aStates );
+                aEvent.FeatureURL = elem.aURL;
+                lcl_notifyMultipleStates( *elem.xListener.get(), aEvent, aStates );
             }
-            ++iterSearch;
         }
     }
 
@@ -504,10 +455,10 @@ void OGenericUnoController::ImplBroadcastFeatureState(const OUString& _rFeature,
 
 bool OGenericUnoController::isFeatureSupported( sal_Int32 _nId )
 {
-    SupportedFeatures::const_iterator aFeaturePos = ::std::find_if(
+    SupportedFeatures::const_iterator aFeaturePos = std::find_if(
         m_aSupportedFeatures.begin(),
         m_aSupportedFeatures.end(),
-        ::std::bind2nd( CompareFeatureById(), _nId )
+        CompareFeatureById(_nId)
     );
 
     return ( m_aSupportedFeatures.end() != aFeaturePos && !aFeaturePos->first.isEmpty());
@@ -537,19 +488,18 @@ void OGenericUnoController::InvalidateFeature_Impl()
         }
         else
         {
-            SupportedFeatures::const_iterator aFeaturePos = ::std::find_if(
+            SupportedFeatures::const_iterator aFeaturePos = std::find_if(
                 m_aSupportedFeatures.begin(),
                 m_aSupportedFeatures.end(),
-                ::std::bind2nd( CompareFeatureById(), aNextFeature.nId )
+                CompareFeatureById( aNextFeature.nId )
             );
 
 #if OSL_DEBUG_LEVEL > 0
             if ( m_aSupportedFeatures.end() == aFeaturePos )
             {
-                OString sMessage( "OGenericUnoController::InvalidateFeature_Impl: feature id " );
-                sMessage += OString::number( aNextFeature.nId );
-                sMessage += OString( " has been invalidated, but is not supported!" );
-                SAL_WARN("dbaccess.ui", sMessage.getStr() );
+                SAL_WARN( "dbaccess.ui", "OGenericUnoController::InvalidateFeature_Impl: feature id "
+                            << aNextFeature.nId
+                            << " has been invalidated, but is not supported!" );
             }
 #endif
             if ( m_aSupportedFeatures.end() != aFeaturePos )
@@ -574,12 +524,12 @@ void OGenericUnoController::ImplInvalidateFeature( sal_Int32 _nId, const Referen
 #if OSL_DEBUG_LEVEL > 0
     if ( _nId != -1 )
     {
-        SupportedFeatures::const_iterator aFeaturePos = ::std::find_if(
+        auto isSupportedFeature = std::any_of(
             m_aSupportedFeatures.begin(),
             m_aSupportedFeatures.end(),
-            ::std::bind2nd( CompareFeatureById(), _nId )
+            CompareFeatureById( _nId )
         );
-        OSL_ENSURE( aFeaturePos != m_aSupportedFeatures.end(), "OGenericUnoController::ImplInvalidateFeature: invalidating an unsupported feature is suspicious, at least!" );
+        OSL_ENSURE( isSupportedFeature, "OGenericUnoController::ImplInvalidateFeature: invalidating an unsupported feature is suspicious, at least!" );
     }
 #endif
 
@@ -612,12 +562,8 @@ void OGenericUnoController::InvalidateAll()
 void OGenericUnoController::InvalidateAll_Impl()
 {
     // invalidate all supported features
-
-    for (   SupportedFeatures::const_iterator aIter = m_aSupportedFeatures.begin();
-            aIter != m_aSupportedFeatures.end();
-            ++aIter
-        )
-        ImplBroadcastFeatureState( aIter->first, nullptr, true );
+    for (auto const& supportedFeature : m_aSupportedFeatures)
+        ImplBroadcastFeatureState( supportedFeature.first, nullptr, true );
 
     {
         ::osl::MutexGuard aGuard( m_aFeatureMutex);
@@ -628,7 +574,7 @@ void OGenericUnoController::InvalidateAll_Impl()
     }
 }
 
-Reference< XDispatch >  OGenericUnoController::queryDispatch(const URL& aURL, const OUString& aTargetFrameName, sal_Int32 nSearchFlags) throw( RuntimeException, std::exception )
+Reference< XDispatch >  OGenericUnoController::queryDispatch(const URL& aURL, const OUString& aTargetFrameName, sal_Int32 nSearchFlags)
 {
     Reference< XDispatch > xReturn;
 
@@ -655,14 +601,14 @@ Reference< XDispatch >  OGenericUnoController::queryDispatch(const URL& aURL, co
     return xReturn;
 }
 
-Sequence< Reference< XDispatch > > OGenericUnoController::queryDispatches(const Sequence< DispatchDescriptor >& aDescripts) throw( RuntimeException, std::exception )
+Sequence< Reference< XDispatch > > OGenericUnoController::queryDispatches(const Sequence< DispatchDescriptor >& aDescripts)
 {
     Sequence< Reference< XDispatch > > aReturn;
     sal_Int32 nLen = aDescripts.getLength();
     if ( nLen )
     {
         aReturn.realloc( nLen );
-                Reference< XDispatch >* pReturn     = aReturn.getArray();
+        Reference< XDispatch >* pReturn     = aReturn.getArray();
         const   Reference< XDispatch >* pReturnEnd  = aReturn.getArray() + nLen;
         const   DispatchDescriptor*     pDescripts  = aDescripts.getConstArray();
 
@@ -675,27 +621,27 @@ Sequence< Reference< XDispatch > > OGenericUnoController::queryDispatches(const 
     return aReturn;
 }
 
-Reference< XDispatchProvider >  OGenericUnoController::getSlaveDispatchProvider() throw( RuntimeException, std::exception )
+Reference< XDispatchProvider >  OGenericUnoController::getSlaveDispatchProvider()
 {
     return m_xSlaveDispatcher;
 }
 
-void OGenericUnoController::setSlaveDispatchProvider(const Reference< XDispatchProvider > & _xNewProvider) throw( RuntimeException, std::exception )
+void OGenericUnoController::setSlaveDispatchProvider(const Reference< XDispatchProvider > & _xNewProvider)
 {
     m_xSlaveDispatcher = _xNewProvider;
 }
 
-Reference< XDispatchProvider >  OGenericUnoController::getMasterDispatchProvider() throw( RuntimeException, std::exception )
+Reference< XDispatchProvider >  OGenericUnoController::getMasterDispatchProvider()
 {
     return m_xMasterDispatcher;
 }
 
-void OGenericUnoController::setMasterDispatchProvider(const Reference< XDispatchProvider > & _xNewProvider) throw( RuntimeException, std::exception )
+void OGenericUnoController::setMasterDispatchProvider(const Reference< XDispatchProvider > & _xNewProvider)
 {
     m_xMasterDispatcher = _xNewProvider;
 }
 
-void OGenericUnoController::dispatch(const URL& _aURL, const Sequence< PropertyValue >& aArgs) throw(RuntimeException, std::exception)
+void OGenericUnoController::dispatch(const URL& _aURL, const Sequence< PropertyValue >& aArgs)
 {
     SolarMutexGuard aSolarGuard;
     // The SolarMutex is not locked anymore when the framework calls into
@@ -707,7 +653,7 @@ void OGenericUnoController::dispatch(const URL& _aURL, const Sequence< PropertyV
     executeChecked(_aURL,aArgs);
 }
 
-void OGenericUnoController::addStatusListener(const Reference< XStatusListener > & aListener, const URL& _rURL) throw(RuntimeException, std::exception)
+void OGenericUnoController::addStatusListener(const Reference< XStatusListener > & aListener, const URL& _rURL)
 {
     // parse the URL now and here, this saves later parsing in each notification round
     URL aParsedURL( _rURL );
@@ -722,7 +668,7 @@ void OGenericUnoController::addStatusListener(const Reference< XStatusListener >
         // force the new state to be broadcast to the new listener
 }
 
-void OGenericUnoController::removeStatusListener(const Reference< XStatusListener > & aListener, const URL& _rURL) throw(RuntimeException, std::exception)
+void OGenericUnoController::removeStatusListener(const Reference< XStatusListener > & aListener, const URL& _rURL)
 {
     Dispatch::iterator iterSearch = m_arrStatusListener.begin();
 
@@ -732,7 +678,7 @@ void OGenericUnoController::removeStatusListener(const Reference< XStatusListene
         DispatchTarget& rCurrent = *iterSearch;
         if  (   (rCurrent.xListener == aListener)
             &&  (   bRemoveForAll
-                ||  (rCurrent.aURL.Complete.equals(_rURL.Complete))
+                ||  (rCurrent.aURL.Complete == _rURL.Complete)
                 )
             )
         {
@@ -760,9 +706,9 @@ void OGenericUnoController::removeStatusListener(const Reference< XStatusListene
     // now remove the listener from the deque
     ::osl::MutexGuard aGuard( m_aFeatureMutex );
     m_aFeaturesToInvalidate.erase(
-        ::std::remove_if(   m_aFeaturesToInvalidate.begin(),
+        std::remove_if(   m_aFeaturesToInvalidate.begin(),
                             m_aFeaturesToInvalidate.end(),
-                            ::std::bind2nd(FindFeatureListener(),aListener))
+                            FindFeatureListener(aListener))
         ,m_aFeaturesToInvalidate.end());
 }
 
@@ -786,10 +732,9 @@ void OGenericUnoController::disposing()
         EventObject aDisposeEvent;
         aDisposeEvent.Source = static_cast<XWeak*>(this);
         Dispatch aStatusListener = m_arrStatusListener;
-        Dispatch::const_iterator aEnd = aStatusListener.end();
-        for (Dispatch::const_iterator aIter = aStatusListener.begin(); aIter != aEnd; ++aIter)
+        for (auto const& statusListener : aStatusListener)
         {
-            aIter->xListener->disposing(aDisposeEvent);
+            statusListener.xListener->disposing(aDisposeEvent);
         }
         m_arrStatusListener.clear();
     }
@@ -815,19 +760,19 @@ void OGenericUnoController::disposing()
     m_aInitParameters.clear();
 }
 
-void SAL_CALL OGenericUnoController::addEventListener( const Reference< XEventListener >& xListener ) throw (RuntimeException, std::exception)
+void SAL_CALL OGenericUnoController::addEventListener( const Reference< XEventListener >& xListener )
 {
     // disambiguate
     OGenericUnoController_Base::WeakComponentImplHelperBase::addEventListener( xListener );
 }
 
-void SAL_CALL OGenericUnoController::removeEventListener( const Reference< XEventListener >& xListener ) throw (RuntimeException, std::exception)
+void SAL_CALL OGenericUnoController::removeEventListener( const Reference< XEventListener >& xListener )
 {
     // disambiguate
     OGenericUnoController_Base::WeakComponentImplHelperBase::removeEventListener( xListener );
 }
 
-void OGenericUnoController::frameAction(const FrameActionEvent& aEvent) throw( RuntimeException, std::exception )
+void OGenericUnoController::frameAction(const FrameActionEvent& aEvent)
 {
     ::osl::MutexGuard aGuard( getMutex() );
     if ( aEvent.Frame == m_aCurrentFrame.getFrame() )
@@ -876,7 +821,10 @@ FeatureState OGenericUnoController::GetState( sal_uInt16 _nId ) const
             aReturn.bEnabled = true;
             break;
         default:
-            aReturn = UserDefinedFeatures::getState( getURLForId( _nId ) );
+            // for now, enable all the time
+            // TODO: we should ask the dispatcher. However, this is laborious, since you cannot ask a dispatcher
+            // directly, but need to add a status listener.
+            aReturn.bEnabled = true;
             break;
     }
 
@@ -898,10 +846,10 @@ URL OGenericUnoController::getURLForId(sal_Int32 _nId) const
     URL aReturn;
     if ( m_xUrlTransformer.is() )
     {
-        SupportedFeatures::const_iterator aIter = ::std::find_if(
+        SupportedFeatures::const_iterator aIter = std::find_if(
             m_aSupportedFeatures.begin(),
             m_aSupportedFeatures.end(),
-            ::std::bind2nd( CompareFeatureById(), _nId )
+            CompareFeatureById( _nId )
         );
 
         if ( m_aSupportedFeatures.end() != aIter && !aIter->first.isEmpty() )
@@ -927,7 +875,7 @@ bool OGenericUnoController::isUserDefinedFeature( const OUString& _rFeatureURL )
     return ( pos != m_aSupportedFeatures.end() ) && isUserDefinedFeature( pos->second.nFeatureId );
 }
 
-sal_Bool SAL_CALL OGenericUnoController::supportsService(const OUString& ServiceName) throw(RuntimeException, std::exception)
+sal_Bool SAL_CALL OGenericUnoController::supportsService(const OUString& ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
@@ -948,13 +896,12 @@ void OGenericUnoController::stopConnectionListening(const Reference< XConnection
         xComponent->removeEventListener(static_cast<XFrameActionListener*>(this));
 }
 
-Reference< XConnection > OGenericUnoController::connect( const Reference< XDataSource>& _xDataSource,
-    ::dbtools::SQLExceptionInfo* _pErrorInfo )
+Reference< XConnection > OGenericUnoController::connect( const Reference< XDataSource>& _xDataSource )
 {
     WaitObject aWaitCursor( getView() );
 
     ODatasourceConnector aConnector( getORB(), getView(), OUString() );
-    Reference< XConnection > xConnection = aConnector.connect( _xDataSource, _pErrorInfo );
+    Reference< XConnection > xConnection = aConnector.connect( _xDataSource, nullptr );
     startConnectionListening( xConnection );
 
     return xConnection;
@@ -984,7 +931,7 @@ void OGenericUnoController::clearView()
 
 void OGenericUnoController::showError(const SQLExceptionInfo& _rInfo)
 {
-    ::dbaui::showError(_rInfo,getView(),getORB());
+    ::dbtools::showError(_rInfo,VCLUnoHelper::GetInterface(getView()),getORB());
 }
 
 Reference< XLayoutManager > OGenericUnoController::getLayoutManager(const Reference< XFrame >& _xFrame)
@@ -1029,46 +976,46 @@ void OGenericUnoController::closeTask()
     m_aAsyncCloseTask.Call();
 }
 
-IMPL_LINK_NOARG_TYPED(OGenericUnoController, OnAsyncCloseTask, void*, void)
+IMPL_LINK_NOARG(OGenericUnoController, OnAsyncCloseTask, void*, void)
 {
     if ( !OGenericUnoController_Base::rBHelper.bInDispose )
     {
         try
         {
             Reference< util::XCloseable > xCloseable( m_aCurrentFrame.getFrame(), UNO_QUERY_THROW );
-            xCloseable->close( sal_False ); // false - holds the owner ship for this frame inside this object!
+            xCloseable->close( false ); // false - holds the owner ship for this frame inside this object!
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 }
 
-Any SAL_CALL OGenericUnoController::getViewData() throw( RuntimeException, std::exception )
+Any SAL_CALL OGenericUnoController::getViewData()
 {
     return Any();
 }
 
-void SAL_CALL OGenericUnoController::restoreViewData(const Any& /*Data*/) throw( RuntimeException, std::exception )
+void SAL_CALL OGenericUnoController::restoreViewData(const Any& /*Data*/)
 {
 }
 
-Reference< XModel > SAL_CALL OGenericUnoController::getModel() throw( RuntimeException, std::exception )
+Reference< XModel > SAL_CALL OGenericUnoController::getModel()
 {
     return Reference< XModel >();
 }
 
-Reference< XFrame > SAL_CALL OGenericUnoController::getFrame() throw( RuntimeException, std::exception )
+Reference< XFrame > SAL_CALL OGenericUnoController::getFrame()
 {
     ::osl::MutexGuard aGuard( getMutex() );
     return m_aCurrentFrame.getFrame();
 }
 
-sal_Bool SAL_CALL OGenericUnoController::attachModel(const Reference< XModel > & /*xModel*/) throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL OGenericUnoController::attachModel(const Reference< XModel > & /*xModel*/)
 {
     SAL_WARN("dbaccess.ui", "OGenericUnoController::attachModel: not supported!" );
-    return sal_False;
+    return false;
 }
 
 void OGenericUnoController::executeUnChecked(sal_uInt16 _nCommandId, const Sequence< PropertyValue >& aArgs)
@@ -1099,160 +1046,6 @@ void OGenericUnoController::executeChecked(const util::URL& _rCommand, const Seq
         sal_uInt16 nFeatureId = aIter->second.nFeatureId;
         if ( GetState( nFeatureId ).bEnabled )
             Execute( nFeatureId, aArgs );
-    }
-}
-
-namespace
-{
-    OUString lcl_getModuleHelpModuleName( const Reference< XFrame >& _rxFrame )
-    {
-        const sal_Char* pReturn = nullptr;
-
-        try
-        {
-            // get the model of the document in the given frame
-            Reference< XController > xController;
-            if ( _rxFrame.is() )
-                xController = _rxFrame->getController();
-            Reference< XModel > xModel;
-            if ( xController.is() )
-                xModel = xController->getModel();
-            Reference< XServiceInfo > xSI( xModel, UNO_QUERY );
-
-            if ( !xSI.is() )
-            {   // try to go up the frame hierarchy
-
-                Reference< XFrame > xParentFrame;
-                if ( _rxFrame.is() )
-                    xParentFrame.set(_rxFrame->getCreator(), css::uno::UNO_QUERY);
-                // did we find a parent frame? Which is no top-level frame?
-                if ( xParentFrame.is() && !_rxFrame->isTop() )
-                    // TODO: to prevent framework assertions, re-insert this "isTop" once 98303 is fixed
-                    return lcl_getModuleHelpModuleName( xParentFrame );
-            }
-            else
-            {
-#if OSL_DEBUG_LEVEL > 0
-                Sequence< OUString > sServiceNames = xSI->getSupportedServiceNames();
-                const OUString* pLoop = sServiceNames.getConstArray();
-                for ( sal_Int32 i=0; i<sServiceNames.getLength(); ++i, ++pLoop )
-                {
-                    sal_Int32 nDummy = 0;
-                    (void)nDummy;
-                }
-#endif
-
-                // check which service we know ....
-                static const sal_Char* pTransTable[] = {
-                    "com.sun.star.sdb.OfficeDatabaseDocument","sdatabase",
-                    "com.sun.star.report.ReportDefinition","sdatabase",
-                    "com.sun.star.text.TextDocument",   "swriter",
-                    "com.sun.star.sheet.SpreadsheetDocument", "scalc",
-                    "com.sun.star.presentation.PresentationDocument", "simpress",
-                    "com.sun.star.drawing.DrawingDocument", "sdraw",
-                    "com.sun.star.formula.FormularProperties", "smath",
-                    "com.sun.star.chart.ChartDocument", "schart"
-                };
-                OSL_ENSURE( SAL_N_ELEMENTS( pTransTable ) % 2 == 0,
-                    "lcl_getModuleHelpModuleName: odd size of translation table!" );
-
-                // loop through the table
-                sal_Int32 nTableEntries = SAL_N_ELEMENTS( pTransTable ) / 2;
-                const sal_Char** pDocumentService = pTransTable;
-                const sal_Char** pHelpModuleName = pTransTable + 1;
-                for ( sal_Int32 j=0; j<nTableEntries; ++j )
-                {
-                    if ( xSI->supportsService( OUString::createFromAscii( *pDocumentService ) ) )
-                    {   // found a table entry which matches the model's services
-                        pReturn = *pHelpModuleName;
-                        break;
-                    }
-
-                    ++pDocumentService; ++pDocumentService;
-                    ++pHelpModuleName; ++pHelpModuleName;
-                }
-            }
-
-            if ( !pReturn )
-            {
-                // could not determine the document type we're living in
-                // ->fallback
-                SvtModuleOptions aModOpt;
-                if ( aModOpt.IsModuleInstalled( SvtModuleOptions::EModule::WRITER ) )
-                    pReturn = "swriter";
-                else if ( aModOpt.IsModuleInstalled( SvtModuleOptions::EModule::DATABASE ) )
-                    pReturn = "sdatabase";
-                else if ( aModOpt.IsModuleInstalled( SvtModuleOptions::EModule::CALC ) )
-                    pReturn = "scalc";
-                else if ( aModOpt.IsModuleInstalled( SvtModuleOptions::EModule::IMPRESS ) )
-                    pReturn = "simpress";
-                else if ( aModOpt.IsModuleInstalled( SvtModuleOptions::EModule::DRAW ) )
-                    pReturn = "sdraw";
-                else if ( aModOpt.IsModuleInstalled( SvtModuleOptions::EModule::MATH ) )
-                    pReturn = "smath";
-                else if ( aModOpt.IsModuleInstalled( SvtModuleOptions::EModule::CHART ) )
-                    pReturn = "schart";
-                else if ( aModOpt.IsModuleInstalled( SvtModuleOptions::EModule::BASIC ) )
-                    pReturn = "sbasic";
-                else
-                {
-                    SAL_WARN("dbaccess.ui", "lcl_getModuleHelpModuleName: no installed module found" );
-                }
-            }
-        }
-        catch( const Exception& )
-        {
-            DBG_UNHANDLED_EXCEPTION();
-        }
-
-        if ( !pReturn )
-            pReturn = "swriter";
-
-        return OUString::createFromAscii( pReturn );
-    }
-}
-
-void OGenericUnoController::openHelpAgent(OUString const& _suHelpStringURL )
-{
-    OUString suURL(_suHelpStringURL);
-    OUString sLanguage( "Language=" );
-    if (suURL.indexOf(sLanguage) == -1)
-    {
-        AppendConfigToken(suURL, false /* sal_False := add '&' */ );
-    }
-    URL aURL;
-    aURL.Complete = suURL;
-
-    openHelpAgent( aURL );
-}
-
-void OGenericUnoController::openHelpAgent(const OString& _sHelpId)
-{
-    openHelpAgent( createHelpAgentURL( lcl_getModuleHelpModuleName( getFrame() ), _sHelpId ) );
-}
-
-void OGenericUnoController::openHelpAgent( const URL& _rURL )
-{
-    try
-    {
-        URL aURL( _rURL );
-
-        if ( m_xUrlTransformer.is() )
-            m_xUrlTransformer->parseStrict(aURL);
-
-        Reference< XDispatchProvider > xDispProv( m_aCurrentFrame.getFrame(), UNO_QUERY );
-        Reference< XDispatch > xHelpDispatch;
-        if ( xDispProv.is() )
-            xHelpDispatch = xDispProv->queryDispatch(aURL, "_helpagent", FrameSearchFlag::PARENT | FrameSearchFlag::SELF);
-        OSL_ENSURE(xHelpDispatch.is(), "SbaTableQueryBrowser::openHelpAgent: could not get a dispatcher!");
-        if (xHelpDispatch.is())
-        {
-            xHelpDispatch->dispatch(aURL, Sequence< PropertyValue >());
-        }
-    }
-    catch( const Exception& )
-    {
-        DBG_UNHANDLED_EXCEPTION();
     }
 }
 
@@ -1298,7 +1091,6 @@ Reference< XTitle > OGenericUnoController::impl_getTitleHelper_throw()
 
 // XTitle
 OUString SAL_CALL OGenericUnoController::getTitle()
-    throw (RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( getMutex() );
     if ( m_bExternalTitle )
@@ -1308,7 +1100,6 @@ OUString SAL_CALL OGenericUnoController::getTitle()
 
 // XTitle
 void SAL_CALL OGenericUnoController::setTitle(const OUString& sTitle)
-    throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aSolarGuard;
     ::osl::MutexGuard aGuard( getMutex() );
@@ -1318,7 +1109,6 @@ void SAL_CALL OGenericUnoController::setTitle(const OUString& sTitle)
 
 // XTitleChangeBroadcaster
 void SAL_CALL OGenericUnoController::addTitleChangeListener(const Reference< XTitleChangeListener >& xListener)
-    throw (RuntimeException, std::exception)
 {
     Reference< XTitleChangeBroadcaster > xBroadcaster(impl_getTitleHelper_throw(), UNO_QUERY);
     if (xBroadcaster.is ())
@@ -1326,7 +1116,6 @@ void SAL_CALL OGenericUnoController::addTitleChangeListener(const Reference< XTi
 }
 
 void SAL_CALL OGenericUnoController::removeTitleChangeListener(const Reference< XTitleChangeListener >& xListener)
-    throw (RuntimeException, std::exception)
 {
     Reference< XTitleChangeBroadcaster > xBroadcaster(impl_getTitleHelper_throw(), UNO_QUERY);
     if (xBroadcaster.is ())
@@ -1334,24 +1123,24 @@ void SAL_CALL OGenericUnoController::removeTitleChangeListener(const Reference< 
 }
 
 // XUserInputInterception
-void SAL_CALL OGenericUnoController::addKeyHandler( const Reference< XKeyHandler >& _rxHandler ) throw (RuntimeException, std::exception)
+void SAL_CALL OGenericUnoController::addKeyHandler( const Reference< XKeyHandler >& _rxHandler )
 {
     if ( _rxHandler.is() )
         m_pData->m_aUserInputInterception.addKeyHandler( _rxHandler );
 }
 
-void SAL_CALL OGenericUnoController::removeKeyHandler( const Reference< XKeyHandler >& _rxHandler ) throw (RuntimeException, std::exception)
+void SAL_CALL OGenericUnoController::removeKeyHandler( const Reference< XKeyHandler >& _rxHandler )
 {
     m_pData->m_aUserInputInterception.removeKeyHandler( _rxHandler );
 }
 
-void SAL_CALL OGenericUnoController::addMouseClickHandler( const Reference< XMouseClickHandler >& _rxHandler ) throw (RuntimeException, std::exception)
+void SAL_CALL OGenericUnoController::addMouseClickHandler( const Reference< XMouseClickHandler >& _rxHandler )
 {
     if ( _rxHandler.is() )
         m_pData->m_aUserInputInterception.addMouseClickHandler( _rxHandler );
 }
 
-void SAL_CALL OGenericUnoController::removeMouseClickHandler( const Reference< XMouseClickHandler >& _rxHandler ) throw (RuntimeException, std::exception)
+void SAL_CALL OGenericUnoController::removeMouseClickHandler( const Reference< XMouseClickHandler >& _rxHandler )
 {
     m_pData->m_aUserInputInterception.removeMouseClickHandler( _rxHandler );
 }
@@ -1367,34 +1156,6 @@ bool OGenericUnoController::isCommandEnabled(sal_uInt16 _nCommandId) const
     return GetState( _nCommandId ).bEnabled;
 }
 
-sal_uInt16 OGenericUnoController::registerCommandURL( const OUString& _rCompleteCommandURL )
-{
-    if ( _rCompleteCommandURL.isEmpty() )
-        return 0;
-
-    SupportedFeatures::const_iterator aIter = m_aSupportedFeatures.find( _rCompleteCommandURL );
-    if ( aIter != m_aSupportedFeatures.end() )
-        return aIter->second.nFeatureId;
-
-    // this is a previously unknown command
-    sal_uInt16 nFeatureId = FIRST_USER_DEFINED_FEATURE;
-    while ( isFeatureSupported( nFeatureId ) && ( nFeatureId < LAST_USER_DEFINED_FEATURE ) )
-        ++nFeatureId;
-    if ( nFeatureId == LAST_USER_DEFINED_FEATURE )
-    {
-        SAL_WARN("dbaccess.ui", "OGenericUnoController::registerCommandURL: no more space for user defined features!" );
-        return 0L;
-    }
-
-    ControllerFeature aFeature;
-    aFeature.Command = _rCompleteCommandURL;
-    aFeature.nFeatureId = nFeatureId;
-    aFeature.GroupId = CommandGroup::INTERNAL;
-    m_aSupportedFeatures[ aFeature.Command ] = aFeature;
-
-    return nFeatureId;
-}
-
 void OGenericUnoController::notifyHiContrastChanged()
 {
 }
@@ -1404,7 +1165,7 @@ bool OGenericUnoController::isDataSourceReadOnly() const
     return false;
 }
 
-Reference< XController > OGenericUnoController::getXController() throw( RuntimeException )
+Reference< XController > OGenericUnoController::getXController()
 {
     return this;
 }
@@ -1433,53 +1194,28 @@ bool OGenericUnoController::isCommandEnabled( const OUString& _rCompleteCommandU
     return bIsEnabled;
 }
 
-Sequence< ::sal_Int16 > SAL_CALL OGenericUnoController::getSupportedCommandGroups() throw (RuntimeException, std::exception)
+Sequence< ::sal_Int16 > SAL_CALL OGenericUnoController::getSupportedCommandGroups()
 {
     CommandHashMap aCmdHashMap;
-    for (   SupportedFeatures::const_iterator aIter = m_aSupportedFeatures.begin();
-            aIter != m_aSupportedFeatures.end();
-            ++aIter
-        )
-        if ( aIter->second.GroupId != CommandGroup::INTERNAL )
-            aCmdHashMap.insert( CommandHashMap::value_type( aIter->second.GroupId, 0 ));
+    for (auto const& supportedFeature : m_aSupportedFeatures)
+        if ( supportedFeature.second.GroupId != CommandGroup::INTERNAL )
+            aCmdHashMap.emplace( supportedFeature.second.GroupId, 0 );
 
     return comphelper::mapKeysToSequence( aCmdHashMap );
 }
 
-namespace
+Sequence< DispatchInformation > SAL_CALL OGenericUnoController::getConfigurableDispatchInformation( ::sal_Int16 CommandGroup )
 {
-    //Current c++0x draft (apparently) has std::identity, but not operator()
-    template<typename T> struct SGI_identity : public std::unary_function<T,T>
+    std::vector< DispatchInformation > aInformationVector;
+    for (auto const& supportedFeature : m_aSupportedFeatures)
     {
-        T& operator()(T& x) const { return x; }
-        const T& operator()(const T& x) const { return x; }
-    };
-}
-
-Sequence< DispatchInformation > SAL_CALL OGenericUnoController::getConfigurableDispatchInformation( ::sal_Int16 CommandGroup ) throw (RuntimeException, std::exception)
-{
-    ::std::list< DispatchInformation > aInformationList;
-    DispatchInformation aDispatchInfo;
-    for (   SupportedFeatures::const_iterator aIter = m_aSupportedFeatures.begin();
-            aIter != m_aSupportedFeatures.end();
-            ++aIter
-        )
-    {
-        if ( sal_Int16( aIter->second.GroupId ) == CommandGroup )
+        if ( sal_Int16( supportedFeature.second.GroupId ) == CommandGroup )
         {
-            aDispatchInfo = aIter->second;
-            aInformationList.push_back( aDispatchInfo );
+            aInformationVector.push_back( supportedFeature.second );
         }
     }
 
-    Sequence< DispatchInformation > aInformation( aInformationList.size() );
-    ::std::transform( aInformationList.begin(),
-        aInformationList.end(),
-        aInformation.getArray(),
-        SGI_identity< DispatchInformation >()
-    );
-
-    return aInformation;
+    return comphelper::containerToSequence( aInformationVector );
 }
 
 void OGenericUnoController::fillSupportedFeatures()
@@ -1493,10 +1229,15 @@ void OGenericUnoController::fillSupportedFeatures()
 #endif
 }
 
-void SAL_CALL OGenericUnoController::dispose() throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL OGenericUnoController::dispose()
 {
     SolarMutexGuard aSolarGuard;
     OGenericUnoController_Base::dispose();
+}
+
+weld::Window* OGenericUnoController::getFrameWeld() const
+{
+    return m_pView ? m_pView->GetFrameWeld() : nullptr;
 }
 
 }   // namespace dbaui

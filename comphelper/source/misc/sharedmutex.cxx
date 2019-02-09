@@ -19,6 +19,7 @@
 
 
 #include <comphelper/sharedmutex.hxx>
+#include <comphelper/refcountedmutex.hxx>
 
 
 namespace comphelper
@@ -30,17 +31,8 @@ namespace comphelper
     }
 
 
-    SharedMutex::SharedMutex( const SharedMutex& _rhs )
-        :m_pMutexImpl()
+    RefCountedMutex::~RefCountedMutex()
     {
-        *this = _rhs;
-    }
-
-
-    SharedMutex& SharedMutex::operator=( const SharedMutex& _rhs )
-    {
-        m_pMutexImpl = _rhs.m_pMutexImpl;
-        return *this;
     }
 
 

@@ -20,6 +20,7 @@
 #define INCLUDED_SW_SOURCE_CORE_INC_LAYFRM_HXX
 
 #include "frame.hxx"
+#include <swdllapi.h>
 
 class SwAnchoredObject;
 class SwContentFrame;
@@ -31,7 +32,7 @@ class SwBorderAttrs;
 class SwFormatFrameSize;
 class SwCellFrame;
 
-class SwLayoutFrame: public SwFrame
+class SW_DLLPUBLIC SwLayoutFrame: public SwFrame
 {
     // The SwFrame in disguise
     friend class SwFlowFrame;
@@ -39,17 +40,12 @@ class SwLayoutFrame: public SwFrame
 
     // Releases the Lower while restructuring columns
     friend SwFrame* SaveContent( SwLayoutFrame *, SwFrame * );
-    friend void   RestoreContent( SwFrame *, SwLayoutFrame *, SwFrame *pSibling, bool bGrow );
-
-#ifdef DBG_UTIL
-    //removes empty SwSectionFrames from a chain
-    friend SwFrame* SwClearDummies( SwFrame* pFrame );
-#endif
+    friend void   RestoreContent( SwFrame *, SwLayoutFrame *, SwFrame *pSibling );
 
 protected:
 
     virtual void DestroyImpl() override;
-    virtual ~SwLayoutFrame();
+    virtual ~SwLayoutFrame() override;
 
     virtual void Format( vcl::RenderContext* pRenderContext, const SwBorderAttrs *pAttrs = nullptr ) override;
     virtual void MakeAll(vcl::RenderContext* pRenderContext) override;
@@ -95,12 +91,12 @@ public:
      */
     const SwContentFrame* GetContentPos( Point &rPoint, const bool bDontLeave,
                                    const bool bBodyOnly = false,
-                                   const SwCursorMoveState *pCMS = nullptr,
+                                   SwCursorMoveState *pCMS = nullptr,
                                    const bool bDefaultExpand = true ) const;
 
     SwLayoutFrame( SwFrameFormat*, SwFrame* );
 
-    virtual void Paint( vcl::RenderContext& rRenderContext, SwRect const&,
+    virtual void PaintSwFrame( vcl::RenderContext& rRenderContext, SwRect const&,
                         SwPrintData const*const pPrintData = nullptr ) const override;
     const SwFrame *Lower() const { return m_pLower; }
           SwFrame *Lower()       { return m_pLower; }

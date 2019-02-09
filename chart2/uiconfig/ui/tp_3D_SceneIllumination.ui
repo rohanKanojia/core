@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.0 -->
-  <!-- interface-requires LibreOffice 1.0 -->
+<interface domain="chart">
+  <requires lib="gtk+" version="3.18"/>
+  <requires lib="LibreOffice" version="1.0"/>
   <object class="GtkImage" id="IMG_AMBIENT_COLOR">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -101,8 +101,7 @@
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
                             <property name="has_tooltip">True</property>
-                            <property name="tooltip_markup" translatable="yes">Light source 1</property>
-                            <property name="tooltip_text" translatable="yes">Light source 1</property>
+                            <property name="tooltip_text" translatable="yes" context="tp_3D_SceneIllumination|BTN_LIGHT_1|tooltip_text">Light source 1</property>
                             <property name="image">IMG_LIGHT_1</property>
                           </object>
                           <packing>
@@ -118,8 +117,7 @@
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
                             <property name="has_tooltip">True</property>
-                            <property name="tooltip_markup" translatable="yes">Light source 2</property>
-                            <property name="tooltip_text" translatable="yes">Light source 2</property>
+                            <property name="tooltip_text" translatable="yes" context="tp_3D_SceneIllumination|BTN_LIGHT_2|tooltip_text">Light source 2</property>
                             <property name="image">IMG_LIGHT_2</property>
                           </object>
                           <packing>
@@ -135,8 +133,7 @@
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
                             <property name="has_tooltip">True</property>
-                            <property name="tooltip_markup" translatable="yes">Light source 3</property>
-                            <property name="tooltip_text" translatable="yes">Light source 3</property>
+                            <property name="tooltip_text" translatable="yes" context="tp_3D_SceneIllumination|BTN_LIGHT_3|tooltip_text">Light source 3</property>
                             <property name="image">IMG_LIGHT_3</property>
                           </object>
                           <packing>
@@ -152,8 +149,7 @@
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
                             <property name="has_tooltip">True</property>
-                            <property name="tooltip_markup" translatable="yes">Light source 4</property>
-                            <property name="tooltip_text" translatable="yes">Light source 4</property>
+                            <property name="tooltip_text" translatable="yes" context="tp_3D_SceneIllumination|BTN_LIGHT_4|tooltip_text">Light source 4</property>
                             <property name="image">IMG_LIGHT_4</property>
                           </object>
                           <packing>
@@ -169,8 +165,7 @@
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
                             <property name="has_tooltip">True</property>
-                            <property name="tooltip_markup" translatable="yes">Light source 5</property>
-                            <property name="tooltip_text" translatable="yes">Light source 5</property>
+                            <property name="tooltip_text" translatable="yes" context="tp_3D_SceneIllumination|BTN_LIGHT_5|tooltip_text">Light source 5</property>
                             <property name="image">IMG_LIGHT_5</property>
                           </object>
                           <packing>
@@ -186,8 +181,7 @@
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
                             <property name="has_tooltip">True</property>
-                            <property name="tooltip_markup" translatable="yes">Light source 6</property>
-                            <property name="tooltip_text" translatable="yes">Light source 6</property>
+                            <property name="tooltip_text" translatable="yes" context="tp_3D_SceneIllumination|BTN_LIGHT_6|tooltip_text">Light source 6</property>
                             <property name="image">IMG_LIGHT_6</property>
                           </object>
                           <packing>
@@ -203,8 +197,7 @@
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
                             <property name="has_tooltip">True</property>
-                            <property name="tooltip_markup" translatable="yes">Light source 7</property>
-                            <property name="tooltip_text" translatable="yes">Light source 7</property>
+                            <property name="tooltip_text" translatable="yes" context="tp_3D_SceneIllumination|BTN_LIGHT_7|tooltip_text">Light source 7</property>
                             <property name="image">IMG_LIGHT_7</property>
                           </object>
                           <packing>
@@ -220,8 +213,7 @@
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
                             <property name="has_tooltip">True</property>
-                            <property name="tooltip_markup" translatable="yes">Light source 8</property>
-                            <property name="tooltip_text" translatable="yes">Light source 8</property>
+                            <property name="tooltip_text" translatable="yes" context="tp_3D_SceneIllumination|BTN_LIGHT_8|tooltip_text">Light source 8</property>
                             <property name="image">IMG_LIGHT_8</property>
                           </object>
                           <packing>
@@ -244,7 +236,7 @@
                         <property name="can_focus">False</property>
                         <property name="spacing">12</property>
                         <child>
-                          <object class="svxlo-ColorLB" id="LB_LIGHTSOURCE">
+                          <object class="svxcorelo-SvxColorListBox" id="LB_LIGHTSOURCE">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                           </object>
@@ -260,8 +252,7 @@
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
                             <property name="has_tooltip">True</property>
-                            <property name="tooltip_markup" translatable="yes">Select a color using the color dialog</property>
-                            <property name="tooltip_text" translatable="yes">Select a color using the color dialog</property>
+                            <property name="tooltip_text" translatable="yes" context="tp_3D_SceneIllumination|BTN_LIGHTSOURCE_COLOR|tooltip_text">Select a color using the color dialog</property>
                             <property name="image">IMG_LIGHTSOURCE_COLOR</property>
                           </object>
                           <packing>
@@ -286,7 +277,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">_Light source</property>
+                <property name="label" translatable="yes" context="tp_3D_SceneIllumination|FT_LIGHTSOURCE">_Light source</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">BTN_LIGHT_1</property>
                 <attributes>
@@ -319,7 +310,7 @@
                     <property name="can_focus">False</property>
                     <property name="spacing">12</property>
                     <child>
-                      <object class="svxlo-ColorLB" id="LB_AMBIENTLIGHT">
+                      <object class="svxcorelo-SvxColorListBox" id="LB_AMBIENTLIGHT">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                       </object>
@@ -335,8 +326,7 @@
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
                         <property name="has_tooltip">True</property>
-                        <property name="tooltip_markup" translatable="yes">Select a color using the color dialog</property>
-                        <property name="tooltip_text" translatable="yes">Select a color using the color dialog</property>
+                        <property name="tooltip_text" translatable="yes" context="tp_3D_SceneIllumination|BTN_AMBIENT_COLOR|tooltip_text">Select a color using the color dialog</property>
                         <property name="image">IMG_AMBIENT_COLOR</property>
                       </object>
                       <packing>
@@ -354,7 +344,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">_Ambient light</property>
+                <property name="label" translatable="yes" context="tp_3D_SceneIllumination|FT_AMBIENTLIGHT">_Ambient light</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">LB_AMBIENTLIGHT</property>
                 <attributes>
@@ -380,7 +370,7 @@
       <object class="svxlo-SvxLightCtl3D" id="CTL_LIGHT_PREVIEW">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="tooltip_text" translatable="yes">Light Preview</property>
+        <property name="tooltip_text" translatable="yes" context="tp_3D_SceneIllumination|CTL_LIGHT_PREVIEW|tooltip_text">Light Preview</property>
         <property name="hexpand">True</property>
         <property name="vexpand">True</property>
       </object>

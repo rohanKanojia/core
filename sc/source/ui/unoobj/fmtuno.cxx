@@ -17,27 +17,31 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <osl/diagnose.h>
 #include <vcl/svapp.hxx>
 #include <comphelper/servicehelper.hxx>
-
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
+#include <com/sun/star/sheet/ConditionOperator2.hpp>
 #include <com/sun/star/sheet/ValidationAlertStyle.hpp>
 #include <com/sun/star/sheet/ValidationType.hpp>
 #include <com/sun/star/sheet/TableValidationVisibility.hpp>
 
-#include "fmtuno.hxx"
-#include "miscuno.hxx"
-#include "validat.hxx"
-#include "document.hxx"
-#include "unonames.hxx"
-#include "styleuno.hxx"
-#include "tokenarray.hxx"
-#include "tokenuno.hxx"
-#include "stylehelper.hxx"
+#include <fmtuno.hxx>
+#include <miscuno.hxx>
+#include <validat.hxx>
+#include <document.hxx>
+#include <unonames.hxx>
+#include <styleuno.hxx>
+#include <tokenarray.hxx>
+#include <tokenuno.hxx>
+#include <stylehelper.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::formula;
 
-//  Map nur fuer PropertySetInfo
+//  map only for PropertySetInfo
 
 static const SfxItemPropertyMapEntry* lcl_GetValidatePropertyMap()
 {
@@ -67,16 +71,16 @@ static sal_Int32 lcl_ConditionModeToOperatorNew( ScConditionMode eMode )
     sal_Int32 eOper = sheet::ConditionOperator2::NONE;
     switch (eMode)
     {
-        case SC_COND_EQUAL:         eOper = sheet::ConditionOperator2::EQUAL;           break;
-        case SC_COND_LESS:          eOper = sheet::ConditionOperator2::LESS;            break;
-        case SC_COND_GREATER:       eOper = sheet::ConditionOperator2::GREATER;         break;
-        case SC_COND_EQLESS:        eOper = sheet::ConditionOperator2::LESS_EQUAL;      break;
-        case SC_COND_EQGREATER:     eOper = sheet::ConditionOperator2::GREATER_EQUAL;   break;
-        case SC_COND_NOTEQUAL:      eOper = sheet::ConditionOperator2::NOT_EQUAL;       break;
-        case SC_COND_BETWEEN:       eOper = sheet::ConditionOperator2::BETWEEN;         break;
-        case SC_COND_NOTBETWEEN:    eOper = sheet::ConditionOperator2::NOT_BETWEEN;     break;
-        case SC_COND_DIRECT:        eOper = sheet::ConditionOperator2::FORMULA;         break;
-        case SC_COND_DUPLICATE:     eOper = sheet::ConditionOperator2::DUPLICATE;       break;
+        case ScConditionMode::Equal:         eOper = sheet::ConditionOperator2::EQUAL;           break;
+        case ScConditionMode::Less:          eOper = sheet::ConditionOperator2::LESS;            break;
+        case ScConditionMode::Greater:       eOper = sheet::ConditionOperator2::GREATER;         break;
+        case ScConditionMode::EqLess:        eOper = sheet::ConditionOperator2::LESS_EQUAL;      break;
+        case ScConditionMode::EqGreater:     eOper = sheet::ConditionOperator2::GREATER_EQUAL;   break;
+        case ScConditionMode::NotEqual:      eOper = sheet::ConditionOperator2::NOT_EQUAL;       break;
+        case ScConditionMode::Between:       eOper = sheet::ConditionOperator2::BETWEEN;         break;
+        case ScConditionMode::NotBetween:    eOper = sheet::ConditionOperator2::NOT_BETWEEN;     break;
+        case ScConditionMode::Direct:        eOper = sheet::ConditionOperator2::FORMULA;         break;
+        case ScConditionMode::Duplicate:     eOper = sheet::ConditionOperator2::DUPLICATE;       break;
         default:
         {
             // added to avoid warnings
@@ -90,15 +94,15 @@ static sheet::ConditionOperator lcl_ConditionModeToOperator( ScConditionMode eMo
     sheet::ConditionOperator eOper = sheet::ConditionOperator_NONE;
     switch (eMode)
     {
-        case SC_COND_EQUAL:         eOper = sheet::ConditionOperator_EQUAL;         break;
-        case SC_COND_LESS:          eOper = sheet::ConditionOperator_LESS;          break;
-        case SC_COND_GREATER:       eOper = sheet::ConditionOperator_GREATER;       break;
-        case SC_COND_EQLESS:        eOper = sheet::ConditionOperator_LESS_EQUAL;    break;
-        case SC_COND_EQGREATER:     eOper = sheet::ConditionOperator_GREATER_EQUAL; break;
-        case SC_COND_NOTEQUAL:      eOper = sheet::ConditionOperator_NOT_EQUAL;     break;
-        case SC_COND_BETWEEN:       eOper = sheet::ConditionOperator_BETWEEN;       break;
-        case SC_COND_NOTBETWEEN:    eOper = sheet::ConditionOperator_NOT_BETWEEN;   break;
-        case SC_COND_DIRECT:        eOper = sheet::ConditionOperator_FORMULA;       break;
+        case ScConditionMode::Equal:         eOper = sheet::ConditionOperator_EQUAL;         break;
+        case ScConditionMode::Less:          eOper = sheet::ConditionOperator_LESS;          break;
+        case ScConditionMode::Greater:       eOper = sheet::ConditionOperator_GREATER;       break;
+        case ScConditionMode::EqLess:        eOper = sheet::ConditionOperator_LESS_EQUAL;    break;
+        case ScConditionMode::EqGreater:     eOper = sheet::ConditionOperator_GREATER_EQUAL; break;
+        case ScConditionMode::NotEqual:      eOper = sheet::ConditionOperator_NOT_EQUAL;     break;
+        case ScConditionMode::Between:       eOper = sheet::ConditionOperator_BETWEEN;       break;
+        case ScConditionMode::NotBetween:    eOper = sheet::ConditionOperator_NOT_BETWEEN;   break;
+        case ScConditionMode::Direct:        eOper = sheet::ConditionOperator_FORMULA;       break;
         default:
         {
             // added to avoid warnings
@@ -109,18 +113,18 @@ static sheet::ConditionOperator lcl_ConditionModeToOperator( ScConditionMode eMo
 
 static ScConditionMode lcl_ConditionOperatorToMode( sheet::ConditionOperator eOper )
 {
-    ScConditionMode eMode = SC_COND_NONE;
+    ScConditionMode eMode = ScConditionMode::NONE;
     switch (eOper)
     {
-        case sheet::ConditionOperator_EQUAL:            eMode = SC_COND_EQUAL;      break;
-        case sheet::ConditionOperator_LESS:             eMode = SC_COND_LESS;       break;
-        case sheet::ConditionOperator_GREATER:          eMode = SC_COND_GREATER;    break;
-        case sheet::ConditionOperator_LESS_EQUAL:       eMode = SC_COND_EQLESS;     break;
-        case sheet::ConditionOperator_GREATER_EQUAL:    eMode = SC_COND_EQGREATER;  break;
-        case sheet::ConditionOperator_NOT_EQUAL:        eMode = SC_COND_NOTEQUAL;   break;
-        case sheet::ConditionOperator_BETWEEN:          eMode = SC_COND_BETWEEN;    break;
-        case sheet::ConditionOperator_NOT_BETWEEN:      eMode = SC_COND_NOTBETWEEN; break;
-        case sheet::ConditionOperator_FORMULA:          eMode = SC_COND_DIRECT;     break;
+        case sheet::ConditionOperator_EQUAL:            eMode = ScConditionMode::Equal;      break;
+        case sheet::ConditionOperator_LESS:             eMode = ScConditionMode::Less;       break;
+        case sheet::ConditionOperator_GREATER:          eMode = ScConditionMode::Greater;    break;
+        case sheet::ConditionOperator_LESS_EQUAL:       eMode = ScConditionMode::EqLess;     break;
+        case sheet::ConditionOperator_GREATER_EQUAL:    eMode = ScConditionMode::EqGreater;  break;
+        case sheet::ConditionOperator_NOT_EQUAL:        eMode = ScConditionMode::NotEqual;   break;
+        case sheet::ConditionOperator_BETWEEN:          eMode = ScConditionMode::Between;    break;
+        case sheet::ConditionOperator_NOT_BETWEEN:      eMode = ScConditionMode::NotBetween; break;
+        case sheet::ConditionOperator_FORMULA:          eMode = ScConditionMode::Direct;     break;
         default:
         {
             // added to avoid warnings
@@ -132,14 +136,14 @@ static ScConditionMode lcl_ConditionOperatorToMode( sheet::ConditionOperator eOp
 ScCondFormatEntryItem::ScCondFormatEntryItem() :
     meGrammar1( FormulaGrammar::GRAM_UNSPECIFIED ),
     meGrammar2( FormulaGrammar::GRAM_UNSPECIFIED ),
-    meMode( SC_COND_NONE )
+    meMode( ScConditionMode::NONE )
 {
 }
 
 ScTableConditionalFormat::ScTableConditionalFormat(
-        ScDocument* pDoc, sal_uLong nKey, SCTAB nTab, FormulaGrammar::Grammar eGrammar)
+        const ScDocument* pDoc, sal_uLong nKey, SCTAB nTab, FormulaGrammar::Grammar eGrammar)
 {
-    //  Eintrag aus dem Dokument lesen...
+    //  read the entry from the document...
 
     if ( pDoc && nKey )
     {
@@ -158,7 +162,7 @@ ScTableConditionalFormat::ScTableConditionalFormat(
                 {
                     ScCondFormatEntryItem aItem;
                     const ScFormatEntry* pFrmtEntry = pFormat->GetEntry(i);
-                    if(pFrmtEntry->GetType() != condformat::CONDITION)
+                    if(pFrmtEntry->GetType() != ScFormatEntry::Type::Condition)
                         continue;
 
                     const ScCondFormatEntry* pFormatEntry = static_cast<const ScCondFormatEntry*>(pFrmtEntry);
@@ -182,8 +186,8 @@ FormulaGrammar::Grammar lclResolveGrammar( FormulaGrammar::Grammar eExtGrammar, 
 {
     if( eExtGrammar != FormulaGrammar::GRAM_UNSPECIFIED )
         return eExtGrammar;
-    OSL_ENSURE( eIntGrammar != FormulaGrammar::GRAM_UNSPECIFIED, "lclResolveGrammar - unspecified grammar, using GRAM_PODF_A1" );
-    return (eIntGrammar == FormulaGrammar::GRAM_UNSPECIFIED) ? FormulaGrammar::GRAM_PODF_A1 : eIntGrammar;
+    OSL_ENSURE( eIntGrammar != FormulaGrammar::GRAM_UNSPECIFIED, "lclResolveGrammar - unspecified grammar, using GRAM_API" );
+    return (eIntGrammar == FormulaGrammar::GRAM_UNSPECIFIED) ? FormulaGrammar::GRAM_API : eIntGrammar;
 }
 
 } // namespace
@@ -191,15 +195,14 @@ FormulaGrammar::Grammar lclResolveGrammar( FormulaGrammar::Grammar eExtGrammar, 
 void ScTableConditionalFormat::FillFormat( ScConditionalFormat& rFormat,
         ScDocument* pDoc, FormulaGrammar::Grammar eGrammar) const
 {
-    //  ScConditionalFormat = Core-Struktur, muss leer sein
+    //  ScConditionalFormat = Core-Struktur, has to be empty
 
-    OSL_ENSURE( rFormat.IsEmpty(), "FillFormat: Format nicht leer" );
+    OSL_ENSURE( rFormat.IsEmpty(), "FillFormat: format not empty" );
 
-    std::vector<ScTableConditionalEntry*>::const_iterator iter;
-    for (iter = aEntries.begin(); iter != aEntries.end(); ++iter)
+    for (const auto & i : maEntries)
     {
         ScCondFormatEntryItem aData;
-        (*iter)->GetData(aData);
+        i->GetData(aData);
 
         FormulaGrammar::Grammar eGrammar1 = lclResolveGrammar( eGrammar, aData.meGrammar1 );
         FormulaGrammar::Grammar eGrammar2 = lclResolveGrammar( eGrammar, aData.meGrammar2 );
@@ -229,32 +232,27 @@ void ScTableConditionalFormat::FillFormat( ScConditionalFormat& rFormat,
 
 ScTableConditionalFormat::~ScTableConditionalFormat()
 {
-    std::for_each(aEntries.begin(), aEntries.end(),
-        [] (ScTableConditionalEntry *const pEntry) { pEntry->release(); } );
-
 }
 
 void ScTableConditionalFormat::AddEntry_Impl(const ScCondFormatEntryItem& aEntry)
 {
     ScTableConditionalEntry* pNew = new ScTableConditionalEntry(aEntry);
-    pNew->acquire();
-    aEntries.push_back(pNew);
+    maEntries.emplace_back(pNew);
 }
 
 // XSheetConditionalFormat
 
 ScTableConditionalEntry* ScTableConditionalFormat::GetObjectByIndex_Impl(sal_uInt16 nIndex) const
 {
-    return nIndex < aEntries.size() ? aEntries[nIndex] : nullptr;
+    return nIndex < maEntries.size() ? maEntries[nIndex].get() : nullptr;
 }
 
 void SAL_CALL ScTableConditionalFormat::addNew(
                     const uno::Sequence<beans::PropertyValue >& aConditionalEntry )
-                    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     ScCondFormatEntryItem aEntry;
-    aEntry.meMode = SC_COND_NONE;
+    aEntry.meMode = ScConditionMode::NONE;
 
     const beans::PropertyValue* pPropArray = aConditionalEntry.getConstArray();
     long nPropCount = aConditionalEntry.getLength();
@@ -265,7 +263,7 @@ void SAL_CALL ScTableConditionalFormat::addNew(
         if ( rProp.Name == SC_UNONAME_OPERATOR )
         {
             sal_Int32 eOper = ScUnoHelpFunctions::GetEnumFromAny( rProp.Value );
-            aEntry.meMode = ScConditionEntry::GetModeFromApi( eOper );
+            aEntry.meMode = ScConditionEntry::GetModeFromApi( static_cast<sheet::ConditionOperator>(eOper) );
         }
         else if ( rProp.Name == SC_UNONAME_FORMULA1 )
         {
@@ -295,7 +293,7 @@ void SAL_CALL ScTableConditionalFormat::addNew(
         {
             table::CellAddress aAddress;
             if ( rProp.Value >>= aAddress )
-                aEntry.maPos = ScAddress( (SCCOL)aAddress.Column, (SCROW)aAddress.Row, aAddress.Sheet );
+                aEntry.maPos = ScAddress( static_cast<SCCOL>(aAddress.Column), static_cast<SCROW>(aAddress.Row), aAddress.Sheet );
         }
         else if ( rProp.Name == SC_UNONAME_SOURCESTR )
         {
@@ -308,7 +306,7 @@ void SAL_CALL ScTableConditionalFormat::addNew(
             OUString aStrVal;
             if ( rProp.Value >>= aStrVal )
                 aEntry.maStyle = ScStyleNameConversion::ProgrammaticToDisplayName(
-                                                aStrVal, SFX_STYLE_FAMILY_PARA );
+                                                aStrVal, SfxStyleFamily::Para );
         }
         else if ( rProp.Name == SC_UNONAME_FORMULANMSP1 )
         {
@@ -336,7 +334,7 @@ void SAL_CALL ScTableConditionalFormat::addNew(
         }
         else
         {
-            OSL_FAIL("falsche Property");
+            OSL_FAIL("wrong property");
             //! Exception...
         }
     }
@@ -345,64 +343,54 @@ void SAL_CALL ScTableConditionalFormat::addNew(
 }
 
 void SAL_CALL ScTableConditionalFormat::removeByIndex( sal_Int32 nIndex )
-                                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    if (nIndex < static_cast<sal_Int32>(aEntries.size()) && nIndex >= 0)
+    if (nIndex < static_cast<sal_Int32>(maEntries.size()) && nIndex >= 0)
     {
-        std::vector<ScTableConditionalEntry*>::iterator iter = aEntries.begin()+nIndex;
-
-        (*iter)->release();
-        aEntries.erase(iter);
+        maEntries.erase(maEntries.begin()+nIndex);
     }
 }
 
-void SAL_CALL ScTableConditionalFormat::clear() throw(uno::RuntimeException, std::exception)
+void SAL_CALL ScTableConditionalFormat::clear()
 {
     SolarMutexGuard aGuard;
-    std::for_each(aEntries.begin(),aEntries.end(),
-        [] (ScTableConditionalEntry *const pEntry) { pEntry->release(); } );
-
-    aEntries.clear();
+    maEntries.clear();
 }
 
 // XEnumerationAccess
 
 uno::Reference<container::XEnumeration> SAL_CALL ScTableConditionalFormat::createEnumeration()
-                                                    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    return new ScIndexEnumeration(this, OUString("com.sun.star.sheet.TableConditionalEntryEnumeration"));
+    return new ScIndexEnumeration(this, "com.sun.star.sheet.TableConditionalEntryEnumeration");
 }
 
 // XIndexAccess
 
-sal_Int32 SAL_CALL ScTableConditionalFormat::getCount() throw(uno::RuntimeException, std::exception)
+sal_Int32 SAL_CALL ScTableConditionalFormat::getCount()
 {
     SolarMutexGuard aGuard;
-    return aEntries.size();
+    return maEntries.size();
 }
 
 uno::Any SAL_CALL ScTableConditionalFormat::getByIndex( sal_Int32 nIndex )
-                            throw(lang::IndexOutOfBoundsException,
-                                    lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    uno::Reference<sheet::XSheetConditionalEntry> xEntry(GetObjectByIndex_Impl((sal_uInt16)nIndex));
-    if (xEntry.is())
-        return uno::makeAny(xEntry);
-    else
+    uno::Reference<sheet::XSheetConditionalEntry> xEntry(GetObjectByIndex_Impl(static_cast<sal_uInt16>(nIndex)));
+    if (!xEntry.is())
         throw lang::IndexOutOfBoundsException();
+
+    return uno::makeAny(xEntry);
 }
 
-uno::Type SAL_CALL ScTableConditionalFormat::getElementType() throw(uno::RuntimeException, std::exception)
+uno::Type SAL_CALL ScTableConditionalFormat::getElementType()
 {
     SolarMutexGuard aGuard;
     return cppu::UnoType<sheet::XSheetConditionalEntry>::get();
 }
 
-sal_Bool SAL_CALL ScTableConditionalFormat::hasElements() throw(uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL ScTableConditionalFormat::hasElements()
 {
     SolarMutexGuard aGuard;
     return ( getCount() != 0 );
@@ -419,32 +407,29 @@ static OUString lcl_GetEntryNameFromIndex( sal_Int32 nIndex )
 }
 
 uno::Any SAL_CALL ScTableConditionalFormat::getByName( const OUString& aName )
-            throw(container::NoSuchElementException,
-                    lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     uno::Reference<sheet::XSheetConditionalEntry> xEntry;
-    long nCount = aEntries.size();
+    long nCount = maEntries.size();
     for (long i=0; i<nCount; i++)
         if ( aName == lcl_GetEntryNameFromIndex(i) )
         {
-            xEntry.set(GetObjectByIndex_Impl((sal_uInt16)i));
+            xEntry.set(GetObjectByIndex_Impl(static_cast<sal_uInt16>(i)));
             break;
         }
 
-    if (xEntry.is())
-        return uno::makeAny(xEntry);
-    else
+    if (!xEntry.is())
         throw container::NoSuchElementException();
+
+    return uno::makeAny(xEntry);
 }
 
 uno::Sequence<OUString> SAL_CALL ScTableConditionalFormat::getElementNames()
-                                                    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    long nCount = aEntries.size();
+    long nCount = maEntries.size();
     uno::Sequence<OUString> aNames(nCount);
     OUString* pArray = aNames.getArray();
     for (long i=0; i<nCount; i++)
@@ -454,14 +439,13 @@ uno::Sequence<OUString> SAL_CALL ScTableConditionalFormat::getElementNames()
 }
 
 sal_Bool SAL_CALL ScTableConditionalFormat::hasByName( const OUString& aName )
-                                                    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    long nCount = aEntries.size();
+    long nCount = maEntries.size();
     for (long i=0; i<nCount; i++)
         if ( aName == lcl_GetEntryNameFromIndex(i) )
-            return sal_True;
+            return true;
 
     return false;
 }
@@ -469,7 +453,7 @@ sal_Bool SAL_CALL ScTableConditionalFormat::hasByName( const OUString& aName )
 // XUnoTunnel
 
 sal_Int64 SAL_CALL ScTableConditionalFormat::getSomething(
-                const uno::Sequence<sal_Int8 >& rId ) throw(uno::RuntimeException, std::exception)
+                const uno::Sequence<sal_Int8 >& rId )
 {
     if ( rId.getLength() == 16 &&
           0 == memcmp( getUnoTunnelId().getConstArray(),
@@ -517,60 +501,54 @@ void ScTableConditionalEntry::GetData(ScCondFormatEntryItem& rData) const
 // XSheetCondition
 
 sheet::ConditionOperator SAL_CALL ScTableConditionalEntry::getOperator()
-                                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     return lcl_ConditionModeToOperator( aData.meMode );
 }
 
 void SAL_CALL ScTableConditionalEntry::setOperator( sheet::ConditionOperator nOperator )
-                                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     aData.meMode = lcl_ConditionOperatorToMode( nOperator );
 }
 
 sal_Int32 SAL_CALL ScTableConditionalEntry::getConditionOperator()
-                                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     return lcl_ConditionModeToOperatorNew( aData.meMode );
 }
 
 void SAL_CALL ScTableConditionalEntry::setConditionOperator( sal_Int32 nOperator )
-                                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    aData.meMode = ScConditionEntry::GetModeFromApi( nOperator );
+    aData.meMode = ScConditionEntry::GetModeFromApi( static_cast<sheet::ConditionOperator>(nOperator) );
 }
 
-OUString SAL_CALL ScTableConditionalEntry::getFormula1() throw(uno::RuntimeException, std::exception)
+OUString SAL_CALL ScTableConditionalEntry::getFormula1()
 {
     SolarMutexGuard aGuard;
     return aData.maExpr1;
 }
 
 void SAL_CALL ScTableConditionalEntry::setFormula1( const OUString& aFormula1 )
-                                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     aData.maExpr1 = aFormula1;
 }
 
-OUString SAL_CALL ScTableConditionalEntry::getFormula2() throw(uno::RuntimeException, std::exception)
+OUString SAL_CALL ScTableConditionalEntry::getFormula2()
 {
     SolarMutexGuard aGuard;
     return aData.maExpr2;
 }
 
 void SAL_CALL ScTableConditionalEntry::setFormula2( const OUString& aFormula2 )
-                                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     aData.maExpr2 = aFormula2;
 }
 
-table::CellAddress SAL_CALL ScTableConditionalEntry::getSourcePosition() throw(uno::RuntimeException, std::exception)
+table::CellAddress SAL_CALL ScTableConditionalEntry::getSourcePosition()
 {
     SolarMutexGuard aGuard;
     table::CellAddress aRet;
@@ -581,32 +559,30 @@ table::CellAddress SAL_CALL ScTableConditionalEntry::getSourcePosition() throw(u
 }
 
 void SAL_CALL ScTableConditionalEntry::setSourcePosition( const table::CellAddress& aSourcePosition )
-                                            throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    aData.maPos.Set( (SCCOL)aSourcePosition.Column, (SCROW)aSourcePosition.Row, aSourcePosition.Sheet );
+    aData.maPos.Set( static_cast<SCCOL>(aSourcePosition.Column), static_cast<SCROW>(aSourcePosition.Row), aSourcePosition.Sheet );
 }
 
 // XSheetConditionalEntry
 
-OUString SAL_CALL ScTableConditionalEntry::getStyleName() throw(uno::RuntimeException, std::exception)
+OUString SAL_CALL ScTableConditionalEntry::getStyleName()
 {
     SolarMutexGuard aGuard;
-    return ScStyleNameConversion::DisplayToProgrammaticName( aData.maStyle, SFX_STYLE_FAMILY_PARA );
+    return ScStyleNameConversion::DisplayToProgrammaticName( aData.maStyle, SfxStyleFamily::Para );
 }
 
 void SAL_CALL ScTableConditionalEntry::setStyleName( const OUString& aStyleName )
-                                            throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    aData.maStyle = ScStyleNameConversion::ProgrammaticToDisplayName( aStyleName, SFX_STYLE_FAMILY_PARA );
+    aData.maStyle = ScStyleNameConversion::ProgrammaticToDisplayName( aStyleName, SfxStyleFamily::Para );
 }
 
-ScTableValidationObj::ScTableValidationObj(ScDocument* pDoc, sal_uLong nKey,
+ScTableValidationObj::ScTableValidationObj(const ScDocument* pDoc, sal_uLong nKey,
                                             const formula::FormulaGrammar::Grammar eGrammar) :
     aPropSet( lcl_GetValidatePropertyMap() )
 {
-    //  Eintrag aus dem Dokument lesen...
+    //  read the entry from the document...
 
     bool bFound = false;
     if ( pDoc && nKey )
@@ -614,7 +590,7 @@ ScTableValidationObj::ScTableValidationObj(ScDocument* pDoc, sal_uLong nKey,
         const ScValidationData* pData = pDoc->GetValidationEntry( nKey );
         if (pData)
         {
-            nMode = sal::static_int_cast<sal_uInt16>( pData->GetOperation() );
+            nMode = pData->GetOperation();
             aSrcPos = pData->GetValidSrcPos();  // valid pos for expressions
             aExpr1 = pData->GetExpression( aSrcPos, 0, 0, eGrammar );
             aExpr2 = pData->GetExpression( aSrcPos, 1, 0, eGrammar );
@@ -649,8 +625,8 @@ ScValidationData* ScTableValidationObj::CreateValidationData( ScDocument* pDoc,
     FormulaGrammar::Grammar eGrammar1 = lclResolveGrammar( eGrammar, meGrammar1 );
     FormulaGrammar::Grammar eGrammar2 = lclResolveGrammar( eGrammar, meGrammar2 );
 
-    ScValidationData* pRet = new ScValidationData( (ScValidationMode)nValMode,
-                                                   (ScConditionMode)nMode,
+    ScValidationData* pRet = new ScValidationData( static_cast<ScValidationMode>(nValMode),
+                                                   nMode,
                                                    aExpr1, aExpr2, pDoc, aSrcPos,
                                                    maExprNmsp1, maExprNmsp2,
                                                    eGrammar1, eGrammar2 );
@@ -675,7 +651,7 @@ ScValidationData* ScTableValidationObj::CreateValidationData( ScDocument* pDoc,
     pRet->SetInput( aInputTitle, aInputMessage );
     if (!bShowInput)
         pRet->ResetInput();
-    pRet->SetError( aErrorTitle, aErrorMessage, (ScValidErrorStyle)nErrorStyle );
+    pRet->SetError( aErrorTitle, aErrorMessage, static_cast<ScValidErrorStyle>(nErrorStyle) );
     if (!bShowError)
         pRet->ResetError();
 
@@ -687,7 +663,7 @@ ScValidationData* ScTableValidationObj::CreateValidationData( ScDocument* pDoc,
 
 void ScTableValidationObj::ClearData_Impl()
 {
-    nMode        = SC_COND_NONE;
+    nMode        = ScConditionMode::NONE;
     nValMode     = SC_VALID_ANY;
     bIgnoreBlank = true;
     nShowList    = sheet::TableValidationVisibility::UNSORTED;
@@ -713,60 +689,54 @@ ScTableValidationObj::~ScTableValidationObj()
 // XSheetCondition
 
 sheet::ConditionOperator SAL_CALL ScTableValidationObj::getOperator()
-                                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    return lcl_ConditionModeToOperator( (ScConditionMode)nMode );
+    return lcl_ConditionModeToOperator( nMode );
 }
 
 void SAL_CALL ScTableValidationObj::setOperator( sheet::ConditionOperator nOperator )
-                                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    nMode = sal::static_int_cast<sal_uInt16>( lcl_ConditionOperatorToMode( nOperator ) );
+    nMode = lcl_ConditionOperatorToMode( nOperator );
 }
 
 sal_Int32 SAL_CALL ScTableValidationObj::getConditionOperator()
-                                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    return lcl_ConditionModeToOperatorNew( (ScConditionMode)nMode );
+    return lcl_ConditionModeToOperatorNew( nMode );
 }
 
 void SAL_CALL ScTableValidationObj::setConditionOperator( sal_Int32 nOperator )
-                                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    nMode = sal::static_int_cast<sal_uInt16>( ScConditionEntry::GetModeFromApi( nOperator ) );
+    nMode = ScConditionEntry::GetModeFromApi( static_cast<css::sheet::ConditionOperator>(nOperator) );
 }
 
-OUString SAL_CALL ScTableValidationObj::getFormula1() throw(uno::RuntimeException, std::exception)
+OUString SAL_CALL ScTableValidationObj::getFormula1()
 {
     SolarMutexGuard aGuard;
     return aExpr1;
 }
 
 void SAL_CALL ScTableValidationObj::setFormula1( const OUString& aFormula1 )
-                                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     aExpr1 = aFormula1;
 }
 
-OUString SAL_CALL ScTableValidationObj::getFormula2() throw(uno::RuntimeException, std::exception)
+OUString SAL_CALL ScTableValidationObj::getFormula2()
 {
     SolarMutexGuard aGuard;
     return aExpr2;
 }
 
 void SAL_CALL ScTableValidationObj::setFormula2( const OUString& aFormula2 )
-                                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     aExpr2 = aFormula2;
 }
 
-table::CellAddress SAL_CALL ScTableValidationObj::getSourcePosition() throw(uno::RuntimeException, std::exception)
+table::CellAddress SAL_CALL ScTableValidationObj::getSourcePosition()
 {
     SolarMutexGuard aGuard;
     table::CellAddress aRet;
@@ -777,14 +747,12 @@ table::CellAddress SAL_CALL ScTableValidationObj::getSourcePosition() throw(uno:
 }
 
 void SAL_CALL ScTableValidationObj::setSourcePosition( const table::CellAddress& aSourcePosition )
-                                            throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    aSrcPos.Set( (SCCOL)aSourcePosition.Column, (SCROW)aSourcePosition.Row, aSourcePosition.Sheet );
+    aSrcPos.Set( static_cast<SCCOL>(aSourcePosition.Column), static_cast<SCROW>(aSourcePosition.Row), aSourcePosition.Sheet );
 }
 
 uno::Sequence<sheet::FormulaToken> SAL_CALL ScTableValidationObj::getTokens( sal_Int32 nIndex )
-                                            throw(uno::RuntimeException,lang::IndexOutOfBoundsException, std::exception)
 {
     SolarMutexGuard aGuard;
     if (nIndex >= 2 || nIndex < 0)
@@ -794,7 +762,6 @@ uno::Sequence<sheet::FormulaToken> SAL_CALL ScTableValidationObj::getTokens( sal
 }
 
 void SAL_CALL ScTableValidationObj::setTokens( sal_Int32 nIndex, const uno::Sequence<sheet::FormulaToken>& aTokens )
-                                            throw(uno::RuntimeException,lang::IndexOutOfBoundsException, std::exception)
 {
     SolarMutexGuard aGuard;
     if (nIndex >= 2 || nIndex < 0)
@@ -812,13 +779,12 @@ void SAL_CALL ScTableValidationObj::setTokens( sal_Int32 nIndex, const uno::Sequ
     }
 }
 
-sal_Int32 SAL_CALL ScTableValidationObj::getCount() throw(uno::RuntimeException, std::exception)
+sal_Int32 SAL_CALL ScTableValidationObj::getCount()
 {
     return 2;
 }
 
 uno::Reference<beans::XPropertySetInfo> SAL_CALL ScTableValidationObj::getPropertySetInfo()
-                                                        throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     static uno::Reference<beans::XPropertySetInfo> aRef(
@@ -828,45 +794,40 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScTableValidationObj::getProper
 
 void SAL_CALL ScTableValidationObj::setPropertyValue(
                         const OUString& aPropertyName, const uno::Any& aValue )
-                throw(beans::UnknownPropertyException, beans::PropertyVetoException,
-                        lang::IllegalArgumentException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    OUString aString(aPropertyName);
 
-    if ( aString == SC_UNONAME_SHOWINP )       bShowInput = ScUnoHelpFunctions::GetBoolFromAny( aValue );
-    else if ( aString == SC_UNONAME_SHOWERR )  bShowError = ScUnoHelpFunctions::GetBoolFromAny( aValue );
-    else if ( aString == SC_UNONAME_IGNOREBL ) bIgnoreBlank = ScUnoHelpFunctions::GetBoolFromAny( aValue );
-    else if ( aString == SC_UNONAME_SHOWLIST ) aValue >>= nShowList;
-    else if ( aString == SC_UNONAME_INPTITLE )
+    if ( aPropertyName == SC_UNONAME_SHOWINP )       bShowInput = ScUnoHelpFunctions::GetBoolFromAny( aValue );
+    else if ( aPropertyName == SC_UNONAME_SHOWERR )  bShowError = ScUnoHelpFunctions::GetBoolFromAny( aValue );
+    else if ( aPropertyName == SC_UNONAME_IGNOREBL ) bIgnoreBlank = ScUnoHelpFunctions::GetBoolFromAny( aValue );
+    else if ( aPropertyName == SC_UNONAME_SHOWLIST ) aValue >>= nShowList;
+    else if ( aPropertyName == SC_UNONAME_INPTITLE )
     {
         OUString aStrVal;
         if ( aValue >>= aStrVal )
             aInputTitle = aStrVal;
     }
-    else if ( aString == SC_UNONAME_INPMESS )
+    else if ( aPropertyName == SC_UNONAME_INPMESS )
     {
         OUString aStrVal;
         if ( aValue >>= aStrVal )
             aInputMessage = aStrVal;
     }
-    else if ( aString == SC_UNONAME_ERRTITLE )
+    else if ( aPropertyName == SC_UNONAME_ERRTITLE )
     {
         OUString aStrVal;
         if ( aValue >>= aStrVal )
             aErrorTitle = aStrVal;
     }
-    else if ( aString == SC_UNONAME_ERRMESS )
+    else if ( aPropertyName == SC_UNONAME_ERRMESS )
     {
         OUString aStrVal;
         if ( aValue >>= aStrVal )
             aErrorMessage = aStrVal;
     }
-    else if ( aString == SC_UNONAME_TYPE )
+    else if ( aPropertyName == SC_UNONAME_TYPE )
     {
-        sheet::ValidationType eType = (sheet::ValidationType)
-                                ScUnoHelpFunctions::GetEnumFromAny( aValue );
+        sheet::ValidationType eType = static_cast<sheet::ValidationType>(ScUnoHelpFunctions::GetEnumFromAny( aValue ));
         switch (eType)
         {
             case sheet::ValidationType_ANY:      nValMode = SC_VALID_ANY;     break;
@@ -883,10 +844,9 @@ void SAL_CALL ScTableValidationObj::setPropertyValue(
             }
         }
     }
-    else if ( aString == SC_UNONAME_ERRALSTY )
+    else if ( aPropertyName == SC_UNONAME_ERRALSTY )
     {
-        sheet::ValidationAlertStyle eStyle = (sheet::ValidationAlertStyle)
-                                ScUnoHelpFunctions::GetEnumFromAny( aValue );
+        sheet::ValidationAlertStyle eStyle = static_cast<sheet::ValidationAlertStyle>(ScUnoHelpFunctions::GetEnumFromAny( aValue ));
         switch (eStyle)
         {
             case sheet::ValidationAlertStyle_STOP:    nErrorStyle = SC_VALERR_STOP;    break;
@@ -899,7 +859,7 @@ void SAL_CALL ScTableValidationObj::setPropertyValue(
             }
         }
     }
-    else if ( aString == SC_UNONAME_SOURCESTR )
+    else if ( aPropertyName == SC_UNONAME_SOURCESTR )
     {
         // internal - only for XML filter, not in PropertySetInfo, only set
 
@@ -907,7 +867,7 @@ void SAL_CALL ScTableValidationObj::setPropertyValue(
         if ( aValue >>= aStrVal )
             aPosString =  aStrVal;
     }
-    else if ( aString == SC_UNONAME_FORMULANMSP1 )
+    else if ( aPropertyName == SC_UNONAME_FORMULANMSP1 )
     {
         // internal - only for XML filter, not in PropertySetInfo, only set
 
@@ -915,7 +875,7 @@ void SAL_CALL ScTableValidationObj::setPropertyValue(
         if ( aValue >>= aStrVal )
             maExprNmsp1 = aStrVal;
     }
-    else if ( aString == SC_UNONAME_FORMULANMSP2 )
+    else if ( aPropertyName == SC_UNONAME_FORMULANMSP2 )
     {
         // internal - only for XML filter, not in PropertySetInfo, only set
 
@@ -923,7 +883,7 @@ void SAL_CALL ScTableValidationObj::setPropertyValue(
         if ( aValue >>= aStrVal )
             maExprNmsp2 = aStrVal;
     }
-    else if ( aString == SC_UNONAME_GRAMMAR1 )
+    else if ( aPropertyName == SC_UNONAME_GRAMMAR1 )
     {
         // internal - only for XML filter, not in PropertySetInfo, only set
 
@@ -931,7 +891,7 @@ void SAL_CALL ScTableValidationObj::setPropertyValue(
         if ( aValue >>= nVal )
             meGrammar1 = static_cast< FormulaGrammar::Grammar >(nVal);
     }
-    else if ( aString == SC_UNONAME_GRAMMAR2 )
+    else if ( aPropertyName == SC_UNONAME_GRAMMAR2 )
     {
         // internal - only for XML filter, not in PropertySetInfo, only set
 
@@ -942,22 +902,19 @@ void SAL_CALL ScTableValidationObj::setPropertyValue(
 }
 
 uno::Any SAL_CALL ScTableValidationObj::getPropertyValue( const OUString& aPropertyName )
-                throw(beans::UnknownPropertyException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    OUString aString(aPropertyName);
     uno::Any aRet;
 
-    if ( aString == SC_UNONAME_SHOWINP )       ScUnoHelpFunctions::SetBoolInAny( aRet, bShowInput );
-    else if ( aString == SC_UNONAME_SHOWERR )  ScUnoHelpFunctions::SetBoolInAny( aRet, bShowError );
-    else if ( aString == SC_UNONAME_IGNOREBL ) ScUnoHelpFunctions::SetBoolInAny( aRet, bIgnoreBlank );
-    else if ( aString == SC_UNONAME_SHOWLIST ) aRet <<= nShowList;
-    else if ( aString == SC_UNONAME_INPTITLE ) aRet <<= OUString( aInputTitle );
-    else if ( aString == SC_UNONAME_INPMESS )  aRet <<= OUString( aInputMessage );
-    else if ( aString == SC_UNONAME_ERRTITLE ) aRet <<= OUString( aErrorTitle );
-    else if ( aString == SC_UNONAME_ERRMESS )  aRet <<= OUString( aErrorMessage );
-    else if ( aString == SC_UNONAME_TYPE )
+    if ( aPropertyName == SC_UNONAME_SHOWINP )       aRet <<= bShowInput;
+    else if ( aPropertyName == SC_UNONAME_SHOWERR )  aRet <<= bShowError;
+    else if ( aPropertyName == SC_UNONAME_IGNOREBL ) aRet <<= bIgnoreBlank;
+    else if ( aPropertyName == SC_UNONAME_SHOWLIST ) aRet <<= nShowList;
+    else if ( aPropertyName == SC_UNONAME_INPTITLE ) aRet <<= aInputTitle;
+    else if ( aPropertyName == SC_UNONAME_INPMESS )  aRet <<= aInputMessage;
+    else if ( aPropertyName == SC_UNONAME_ERRTITLE ) aRet <<= aErrorTitle;
+    else if ( aPropertyName == SC_UNONAME_ERRMESS )  aRet <<= aErrorMessage;
+    else if ( aPropertyName == SC_UNONAME_TYPE )
     {
         sheet::ValidationType eType = sheet::ValidationType_ANY;
         switch (nValMode)
@@ -973,7 +930,7 @@ uno::Any SAL_CALL ScTableValidationObj::getPropertyValue( const OUString& aPrope
         }
         aRet <<= eType;
     }
-    else if ( aString == SC_UNONAME_ERRALSTY )
+    else if ( aPropertyName == SC_UNONAME_ERRALSTY )
     {
         sheet::ValidationAlertStyle eStyle = sheet::ValidationAlertStyle_STOP;
         switch (nErrorStyle)
@@ -994,7 +951,7 @@ SC_IMPL_DUMMY_PROPERTY_LISTENER( ScTableValidationObj )
 // XUnoTunnel
 
 sal_Int64 SAL_CALL ScTableValidationObj::getSomething(
-                const uno::Sequence<sal_Int8 >& rId ) throw(uno::RuntimeException, std::exception)
+                const uno::Sequence<sal_Int8 >& rId )
 {
     if ( rId.getLength() == 16 &&
           0 == memcmp( getUnoTunnelId().getConstArray(),

@@ -19,13 +19,11 @@
 #ifndef INCLUDED_SVX_SRCHDLG_HXX
 #define INCLUDED_SVX_SRCHDLG_HXX
 
-#include <svtools/stdctrl.hxx>
 #include <vcl/combobox.hxx>
 #include <vcl/edit.hxx>
 #include <vcl/button.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/lstbox.hxx>
-#include <vcl/group.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/dialog.hxx>
 #include <sfx2/childwin.hxx>
@@ -33,22 +31,23 @@
 #include <svtools/svmedit.hxx>
 #include <svl/srchdefs.hxx>
 #include <svx/svxdllapi.h>
+#include <memory>
 #include <vector>
 
 class SvxSearchItem;
 class SfxStyleSheetBasePool;
 class SvxJSearchOptionsPage;
 class SvxSearchController;
-
+class VclAbstractDialog;
 struct SearchDlg_Impl;
+enum class ModifyFlags;
+enum class TransliterationFlags;
 
 struct SearchAttrItem
 {
     sal_uInt16          nSlot;
     SfxPoolItem*    pItem;
 };
-
-// class SearchAttrItemList ----------------------------------------------
 
 typedef std::vector<SearchAttrItem> SrchAttrItemList;
 
@@ -75,16 +74,16 @@ public:
     void Remove(size_t nPos);
 };
 
-
-// class SvxSearchDialogWrapper ------------------------------------------
-
-enum SearchLabel
+enum class SearchLabel
 {
-    SL_Empty,
-    SL_End,
-    SL_Start,
-    SL_EndSheet,
-    SL_NotFound
+    Empty,
+    End,
+    Start,
+    EndSheet,
+    NotFound,
+    StartWrapped,
+    EndWrapped,
+    NavElementNotFound
 };
 
 class SvxSearchDialog;
@@ -93,25 +92,22 @@ class SVX_DLLPUBLIC SvxSearchDialogWrapper : public SfxChildWindow
     VclPtr<SvxSearchDialog> dialog;
 public:
     SvxSearchDialogWrapper( vcl::Window*pParent, sal_uInt16 nId,
-                            SfxBindings* pBindings, SfxChildWinInfo* pInfo );
+                            SfxBindings* pBindings, SfxChildWinInfo const * pInfo );
 
-    virtual ~SvxSearchDialogWrapper ();
+    virtual ~SvxSearchDialogWrapper () override;
     SvxSearchDialog *getDialog () { return dialog;}
     static void SetSearchLabel(const SearchLabel& rSL);
     static void SetSearchLabel(const OUString& sStr);
+    static OUString GetSearchLabel();
     SFX_DECL_CHILDWINDOW_WITHID(SvxSearchDialogWrapper);
 };
 
-// class SvxSearchDialog -------------------------------------------------
-/*
-    [Description]
+/**
     In this modeless dialog the attributes for a search are configured
     and a search is started from it. Several search types
     (search, search all, replace, replace all) are possible.
 
-    [Items]
-    <SvxSearchItem><SID_ATTR_SEARCH>
-*/
+ */
 
 class SvxSearchDialog : public SfxModelessDialog
 {
@@ -121,7 +117,7 @@ friend class SvxJSearchOptionsDialog;
 
 public:
     SvxSearchDialog( vcl::Window* pParent, SfxChildWindow* pChildWin, SfxBindings& rBind );
-    virtual ~SvxSearchDialog();
+    virtual ~SvxSearchDialog() override;
     virtual void dispose() override;
 
     virtual bool    Close() override;
@@ -130,18 +126,18 @@ public:
     virtual void    Activate() override;
 
     const SearchAttrItemList*   GetSearchItemList() const
-                                    { return pSearchList; }
+                                    { return pSearchList.get(); }
     const SearchAttrItemList*   GetReplaceItemList() const
-                                    { return pReplaceList; }
+                                    { return pReplaceList.get(); }
 
-    sal_Int32       GetTransliterationFlags() const;
+    TransliterationFlags        GetTransliterationFlags() const;
 
     void SetDocWin( vcl::Window* pDocWin ) { mpDocWin = pDocWin; }
     vcl::Window* GetDocWin() { return mpDocWin; }
     void SetSrchFlag( bool bSuccess ) { mbSuccess = bSuccess; }
     bool GetSrchFlag() { return mbSuccess; }
     virtual css::uno::Reference< css::awt::XWindowPeer >
-        GetComponentInterface( bool bCreate ) override;
+        GetComponentInterface( bool bCreate = true ) override;
 
     void            SetSaveToModule(bool b);
 
@@ -177,8 +173,9 @@ private:
     VclPtr<CheckBox>       m_pWordBtn;
 
     VclPtr<PushButton>     m_pCloseBtn;
-    VclPtr<CheckBox>       m_pIgnoreDiacritics;
-    VclPtr<CheckBox>       m_pIgnoreKashida;
+    VclPtr<CheckBox>       m_pIncludeDiacritics;
+    VclPtr<CheckBox>       m_pIncludeKashida;
+    VclPtr<VclExpander>    m_pOtherOptionsExpander;
     VclPtr<CheckBox>       m_pSelectionBtn;
     VclPtr<CheckBox>       m_pRegExpBtn;
     VclPtr<CheckBox>       m_pWildcardBtn;
@@ -211,7 +208,7 @@ private:
     SearchOptionFlags  nOptions;
     bool            bSet;
     bool            bConstruct;
-    sal_uIntPtr         nModifyFlag;
+    ModifyFlags     nModifyFlag;
     OUString        aStylesStr;
     OUString        aLayoutStr;
     OUString        aLayoutWriterStr;
@@ -221,31 +218,32 @@ private:
     std::vector<OUString> aSearchStrings;
     std::vector<OUString> aReplaceStrings;
 
-    SearchDlg_Impl*         pImpl;
-    SearchAttrItemList*     pSearchList;
-    SearchAttrItemList*     pReplaceList;
-    SvxSearchItem*          pSearchItem;
+    std::unique_ptr<SearchDlg_Impl>      pImpl;
+    std::unique_ptr<SearchAttrItemList>  pSearchList;
+    std::unique_ptr<SearchAttrItemList>  pReplaceList;
+    std::unique_ptr<SvxSearchItem>       pSearchItem;
 
-    SvxSearchController*    pSearchController;
-    SvxSearchController*    pOptionsController;
-    SvxSearchController*    pFamilyController;
-    SvxSearchController*    pSearchSetController;
-    SvxSearchController*    pReplaceSetController;
+    std::unique_ptr<SvxSearchController> pSearchController;
+    std::unique_ptr<SvxSearchController> pOptionsController;
+    std::unique_ptr<SvxSearchController> pFamilyController;
 
-    mutable sal_Int32           nTransliterationFlags;
+    mutable TransliterationFlags
+                            nTransliterationFlags;
 
-    DECL_LINK_TYPED( ModifyHdl_Impl, Edit&, void );
-    DECL_LINK_TYPED( FlagHdl_Impl, Button*, void );
-    DECL_LINK_TYPED( CommandHdl_Impl, Button*, void );
-    DECL_LINK_TYPED(TemplateHdl_Impl, Button*, void);
-    DECL_LINK_TYPED( FocusHdl_Impl, Control&, void );
-    DECL_LINK_TYPED( LBSelectHdl_Impl, ListBox&, void );
-    DECL_LINK_TYPED(LoseFocusHdl_Impl, Control&, void);
-    DECL_LINK_TYPED(FormatHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(NoFormatHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(AttributeHdl_Impl, Button*, void);
-    DECL_LINK_TYPED( TimeoutHdl_Impl, Timer*, void );
-    void            ClickHdl_Impl(void* pCtrl);
+    bool m_executingSubDialog = false;
+
+    DECL_LINK( ModifyHdl_Impl, Edit&, void );
+    DECL_LINK( FlagHdl_Impl, Button*, void );
+    DECL_LINK( CommandHdl_Impl, Button*, void );
+    DECL_LINK(TemplateHdl_Impl, Button*, void);
+    DECL_LINK( FocusHdl_Impl, Control&, void );
+    DECL_LINK( LBSelectHdl_Impl, ListBox&, void );
+    DECL_LINK(LoseFocusHdl_Impl, Control&, void);
+    DECL_LINK(FormatHdl_Impl, Button*, void);
+    DECL_LINK(NoFormatHdl_Impl, Button*, void);
+    DECL_LINK(AttributeHdl_Impl, Button*, void);
+    DECL_LINK( TimeoutHdl_Impl, Timer*, void );
+    void            ClickHdl_Impl(void const * pCtrl);
 
     void            Construct_Impl();
     void            InitControls_Impl();
@@ -259,13 +257,16 @@ private:
 
     void            TemplatesChanged_Impl( SfxStyleSheetBasePool& rPool );
     void            EnableControls_Impl( const SearchOptionFlags nFlags );
-    void            EnableControl_Impl( Control* pCtrl );
+    void            EnableControl_Impl( Control const * pCtrl );
     void            SetItem_Impl( const SvxSearchItem* pItem );
 
     void            SetModifyFlag_Impl( const Control* pCtrl );
     void            SaveToModule_Impl();
 
-    void            ApplyTransliterationFlags_Impl( sal_Int32 nSettings );
+    void            ApplyTransliterationFlags_Impl( TransliterationFlags nSettings );
+    bool            IsOtherOptionsExpanded();
+
+    short executeSubDialog(VclAbstractDialog * dialog);
 };
 
 #endif

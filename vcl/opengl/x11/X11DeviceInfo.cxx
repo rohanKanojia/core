@@ -7,12 +7,13 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "opengl/x11/X11DeviceInfo.hxx"
-#include "opengl/x11//glxtest.hxx"
+#include <opengl/x11/X11DeviceInfo.hxx>
+#include <opengl/x11/glxtest.hxx>
 
 #include <config_features.h>
 
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -109,17 +110,12 @@ X11OpenGLDeviceInfo::X11OpenGLDeviceInfo():
     mbIsIntel(false),
     mbIsOldSwrast(false),
     mbIsLlvmpipe(false),
-    mbHasTextureFromPixmap(false),
     mnGLMajorVersion(0),
     mnMajorVersion(0),
     mnMinorVersion(0),
     mnRevisionVersion(0)
 {
     GetData();
-}
-
-X11OpenGLDeviceInfo::~X11OpenGLDeviceInfo()
-{
 }
 
 void X11OpenGLDeviceInfo::GetData()
@@ -206,9 +202,6 @@ void X11OpenGLDeviceInfo::GetData()
         }
     }
 
-    if (!strcmp(textureFromPixmap.getStr(), "TRUE"))
-        mbHasTextureFromPixmap = true;
-
     // only useful for Linux kernel version check for FGLRX driver.
     // assumes X client == X server, which is sad.
     struct utsname unameobj;
@@ -290,8 +283,8 @@ bool X11OpenGLDeviceInfo::isDeviceBlocked()
     if (mnGLMajorVersion == 1)
         return true;
 
-    CrashReporter::AddKeyValue("AdapterVendorId", rtl::OStringToOUString(maVendor, RTL_TEXTENCODING_UTF8));
-    CrashReporter::AddKeyValue("AdapterDeviceId", rtl::OStringToOUString(maRenderer, RTL_TEXTENCODING_UTF8));
+    CrashReporter::AddKeyValue("AdapterVendorId", OStringToOUString(maVendor, RTL_TEXTENCODING_UTF8));
+    CrashReporter::AddKeyValue("AdapterDeviceId", OStringToOUString(maRenderer, RTL_TEXTENCODING_UTF8));
 
     SAL_INFO("vcl.opengl", "Vendor: " << maVendor);
     SAL_INFO("vcl.opengl", "Renderer: " << maRenderer);

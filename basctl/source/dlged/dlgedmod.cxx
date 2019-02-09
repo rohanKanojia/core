@@ -17,14 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dlgedmod.hxx"
-#include "dlgedpage.hxx"
+#include <dlgedmod.hxx>
+#include <dlgedpage.hxx>
 
 namespace basctl
 {
 
 DlgEdModel::DlgEdModel()
-    :SdrModel()
+:   SdrModel()
 {
 }
 

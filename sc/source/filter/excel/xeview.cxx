@@ -17,12 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xeview.hxx"
-#include "document.hxx"
-#include "scextopt.hxx"
-#include "viewopti.hxx"
-#include "xelink.hxx"
-#include "xestyle.hxx"
+#include <xeview.hxx>
+#include <document.hxx>
+#include <scextopt.hxx>
+#include <viewopti.hxx>
+#include <xelink.hxx>
+#include <xestyle.hxx>
+#include <xehelper.hxx>
+#include <xltools.hxx>
+#include <oox/token/tokens.hxx>
+#include <oox/export/utils.hxx>
 
 using namespace ::oox;
 
@@ -50,9 +54,9 @@ void XclExpWindow1::SaveXml( XclExpXmlStream& rStrm )
     rStrm.GetCurrentStream()->singleElement( XML_workbookView,
             // OOXTODO: XML_visibility, // ST_visibilty
             // OOXTODO: XML_minimized,  // bool
-            XML_showHorizontalScroll,   XclXmlUtils::ToPsz( ::get_flag( mnFlags, EXC_WIN1_HOR_SCROLLBAR ) ),
-            XML_showVerticalScroll,     XclXmlUtils::ToPsz( ::get_flag( mnFlags, EXC_WIN1_VER_SCROLLBAR ) ),
-            XML_showSheetTabs,          XclXmlUtils::ToPsz( ::get_flag( mnFlags, EXC_WIN1_TABBAR ) ),
+            XML_showHorizontalScroll,   ToPsz( ::get_flag( mnFlags, EXC_WIN1_HOR_SCROLLBAR ) ),
+            XML_showVerticalScroll,     ToPsz( ::get_flag( mnFlags, EXC_WIN1_VER_SCROLLBAR ) ),
+            XML_showSheetTabs,          ToPsz( ::get_flag( mnFlags, EXC_WIN1_TABBAR ) ),
             XML_xWindow,                "0",
             XML_yWindow,                "0",
             XML_windowWidth,            OString::number( 0x4000 ).getStr(),
@@ -207,15 +211,17 @@ XclExpSelection::XclExpSelection( const XclTabViewData& rData, sal_uInt8 nPane )
 
     // find the cursor position in the selection list (or add it)
     XclRangeList& rXclSel = maSelData.maXclSelection;
-    bool bFound = false;
-    for( XclRangeVector::const_iterator aIt = rXclSel.begin(), aEnd = rXclSel.end(); !bFound && (aIt != aEnd); ++aIt )
-        if( (bFound = aIt->Contains( maSelData.maXclCursor )) )
-            maSelData.mnCursorIdx = static_cast< sal_uInt16 >( aIt - rXclSel.begin() );
-    /*  Cursor cell not found in list? (e.g. inactive pane, or removed in
-        ConvertRangeList(), because Calc cursor on invalid pos)
-        -> insert the valid Excel cursor. */
-    if( !bFound )
+    auto aIt = std::find_if(rXclSel.begin(), rXclSel.end(),
+        [this](const XclRange& rRange) { return rRange.Contains(maSelData.maXclCursor); });
+    if (aIt != rXclSel.end())
     {
+        maSelData.mnCursorIdx = static_cast< sal_uInt16 >( std::distance(rXclSel.begin(), aIt) );
+    }
+    else
+    {
+        /*  Cursor cell not found in list? (e.g. inactive pane, or removed in
+            ConvertRangeList(), because Calc cursor on invalid pos)
+            -> insert the valid Excel cursor. */
         maSelData.mnCursorIdx = static_cast< sal_uInt16 >( rXclSel.size() );
         rXclSel.push_back( XclRange( maSelData.maXclCursor ) );
     }
@@ -253,11 +259,11 @@ void XclExpTabBgColor::WriteBody( XclExpStream& rStrm )
 {
     if ( mrTabViewData.IsDefaultTabBgColor() )
         return;
-    sal_uInt16 rt = 0x0862; //rt
-    sal_uInt16 grbitFrt = 0x0000; //grbit must be set to 0
+    sal_uInt16 const rt = 0x0862; //rt
+    sal_uInt16 const grbitFrt = 0x0000; //grbit must be set to 0
     sal_uInt32 unused = 0x00000000; //Use twice...
-    sal_uInt32 cb = 0x00000014; // Record Size, may be larger in future...
-    sal_uInt16 reserved = 0x0000; //trailing bits are 0
+    sal_uInt32 const cb = 0x00000014; // Record Size, may be larger in future...
+    sal_uInt16 const reserved = 0x0000; //trailing bits are 0
     sal_uInt16 TabBgColorIndex;
     XclExpPalette& rPal = rStrm.GetRoot().GetPalette();
     TabBgColorIndex = rPal.GetColorIndex(mrTabViewData.mnTabBgColorId);
@@ -358,7 +364,7 @@ XclExpTabViewSettings::XclExpTabViewSettings( const XclExpRoot& rRoot, SCTAB nSc
 
         // grid color
         const Color& rGridColor = rTabSett.maGridColor;
-        maData.mbDefGridColor = rGridColor.GetColor() == COL_AUTO;
+        maData.mbDefGridColor = rGridColor == COL_AUTO;
         if( !maData.mbDefGridColor )
         {
             if( GetBiff() == EXC_BIFF8 )
@@ -414,15 +420,15 @@ void XclExpTabViewSettings::SaveXml( XclExpXmlStream& rStrm )
     sax_fastparser::FSHelperPtr& rWorksheet = rStrm.GetCurrentStream();
     rWorksheet->startElement( XML_sheetViews, FSEND );
     rWorksheet->startElement( XML_sheetView,
-            XML_windowProtection,           XclXmlUtils::ToPsz( maData.mbFrozenPanes ),
-            XML_showFormulas,               XclXmlUtils::ToPsz( maData.mbShowFormulas ),
-            XML_showGridLines,              XclXmlUtils::ToPsz( maData.mbShowGrid ),
-            XML_showRowColHeaders,          XclXmlUtils::ToPsz( maData.mbShowHeadings ),
-            XML_showZeros,                  XclXmlUtils::ToPsz( maData.mbShowZeros ),
-            XML_rightToLeft,                XclXmlUtils::ToPsz( maData.mbMirrored ),
-            XML_tabSelected,                XclXmlUtils::ToPsz( maData.mbSelected ),
+            // OOXTODO: XML_windowProtection,
+            XML_showFormulas,               ToPsz( maData.mbShowFormulas ),
+            XML_showGridLines,              ToPsz( maData.mbShowGrid ),
+            XML_showRowColHeaders,          ToPsz( maData.mbShowHeadings ),
+            XML_showZeros,                  ToPsz( maData.mbShowZeros ),
+            XML_rightToLeft,                ToPsz( maData.mbMirrored ),
+            XML_tabSelected,                ToPsz( maData.mbSelected ),
             // OOXTODO: XML_showRuler,
-            XML_showOutlineSymbols,         XclXmlUtils::ToPsz( maData.mbShowOutline ),
+            XML_showOutlineSymbols,         ToPsz( maData.mbShowOutline ),
             XML_defaultGridColor,           mnGridColorId == XclExpPalette::GetColorIdFromIndex( EXC_COLOR_WINDOWTEXT ) ? "true" : "false",
             // OOXTODO: XML_showWhiteSpace,
             XML_view,                       maData.mbPageMode ? "pageBreakPreview" : "normal",  // OOXTODO: pageLayout

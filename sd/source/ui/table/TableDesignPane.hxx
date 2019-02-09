@@ -20,19 +20,13 @@
 #ifndef INCLUDED_SD_SOURCE_UI_TABLE_TABLEDESIGNPANE_HXX
 #define INCLUDED_SD_SOURCE_UI_TABLE_TABLEDESIGNPANE_HXX
 
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/ui/XUIElement.hpp>
-#include <com/sun/star/ui/LayoutSize.hpp>
-#include <com/sun/star/drawing/XDrawView.hpp>
-#include <com/sun/star/container/XIndexAccess.hpp>
-
 #include <svtools/valueset.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/fixed.hxx>
 #include <vcl/button.hxx>
 #include <svx/sidebar/PanelLayout.hxx>
 
-#include <memory>
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace container { class XIndexAccess; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawView; } } } }
 
 namespace sd
 {
@@ -43,13 +37,16 @@ class EventMultiplexerEvent;
 
 class ViewShellBase;
 
-#define CB_HEADER_ROW       0
-#define CB_TOTAL_ROW        1
-#define CB_BANDED_ROWS      2
-#define CB_FIRST_COLUMN     3
-#define CB_LAST_COLUMN      4
-#define CB_BANDED_COLUMNS   5
-#define CB_COUNT CB_BANDED_COLUMNS-CB_HEADER_ROW+1
+enum TableCheckBox : sal_uInt16
+{
+    CB_HEADER_ROW       = 0,
+    CB_TOTAL_ROW        = 1,
+    CB_BANDED_ROWS      = 2,
+    CB_FIRST_COLUMN     = 3,
+    CB_LAST_COLUMN      = 4,
+    CB_BANDED_COLUMNS   = 5,
+    CB_COUNT            = CB_BANDED_COLUMNS + 1
+};
 
 class TableValueSet : public ValueSet
 {
@@ -63,20 +60,17 @@ public:
     void setModal(bool bModal) { m_bModal = bModal; }
 };
 
-class TableDesignWidget
+class TableDesignWidget final
 {
 public:
-    TableDesignWidget( VclBuilderContainer* pParent, ViewShellBase& rBase, bool bModal );
-    virtual ~TableDesignWidget();
+    TableDesignWidget( VclBuilderContainer* pParent, ViewShellBase& rBase );
+    ~TableDesignWidget();
 
     // callbacks
     void onSelectionChanged();
 
     void ApplyOptions();
     void ApplyStyle();
-
-    bool isStyleChanged() const { return mbStyleSelected; }
-    bool isOptionsChanged() const { return mbOptionsChanged; }
 
 private:
     void addListener();
@@ -85,9 +79,9 @@ private:
 
     void FillDesignPreviewControl();
 
-    DECL_LINK_TYPED(EventMultiplexerListener, tools::EventMultiplexerEvent&, void);
-    DECL_LINK_TYPED(implValueSetHdl, ValueSet*, void);
-    DECL_LINK_TYPED(implCheckBoxHdl, Button*, void);
+    DECL_LINK(EventMultiplexerListener, tools::EventMultiplexerEvent&, void);
+    DECL_LINK(implValueSetHdl, ValueSet*, void);
+    DECL_LINK(implCheckBoxHdl, Button*, void);
 
 private:
     ViewShellBase& mrBase;
@@ -98,40 +92,26 @@ private:
     css::uno::Reference< css::beans::XPropertySet > mxSelectedTable;
     css::uno::Reference< css::drawing::XDrawView > mxView;
     css::uno::Reference< css::container::XIndexAccess > mxTableFamily;
-
-    bool mbModal;
-    bool mbStyleSelected;
-    bool mbOptionsChanged;
 };
 
 class TableDesignPane : public PanelLayout
 {
 private:
-    TableDesignWidget aImpl;
+    TableDesignWidget const aImpl;
 public:
     TableDesignPane( vcl::Window* pParent, ViewShellBase& rBase )
         : PanelLayout(pParent, "TableDesignPanel",
         "modules/simpress/ui/tabledesignpanel.ui", css::uno::Reference<css::frame::XFrame>())
-        , aImpl(this, rBase, false)
+        , aImpl(this, rBase)
+    {
+    }
+    TableDesignPane( vcl::Window* pParent, ViewShellBase& rBase, bool )
+        : PanelLayout(pParent, "TableDesignPanel",
+        "modules/simpress/ui/tabledesignpanelhorizontal.ui", css::uno::Reference<css::frame::XFrame>())
+        , aImpl(this, rBase)
     {
     }
 };
-
-class TableDesignDialog : public ModalDialog
-{
-private:
-    TableDesignWidget aImpl;
-public:
-    TableDesignDialog( vcl::Window* pParent, ViewShellBase& rBase )
-        : ModalDialog(pParent, "TableDesignDialog",
-        "modules/sdraw/ui/tabledesigndialog.ui")
-        , aImpl(this, rBase, true)
-    {
-    }
-    virtual short Execute() override;
-};
-
-void showTableDesignDialog( vcl::Window*, ViewShellBase& );
 
 }
 

@@ -17,40 +17,41 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fubullet.hxx"
+#include <fubullet.hxx>
 
 #include <sfx2/bindings.hxx>
 #include <editeng/eeitem.hxx>
 #include <svl/poolitem.hxx>
 #include <editeng/fontitem.hxx>
-#include "OutlineViewShell.hxx"
-#include "DrawViewShell.hxx"
-#include "Window.hxx"
-#include "drawdoc.hxx"
-#include "strings.hrc"
-#include "sdresid.hxx"
+#include <OutlineView.hxx>
+#include <OutlineViewShell.hxx>
+#include <DrawViewShell.hxx>
+#include <ViewShellBase.hxx>
+#include <Window.hxx>
+#include <drawdoc.hxx>
+#include <strings.hrc>
+#include <sdresid.hxx>
 #include <svx/svdoutl.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/request.hxx>
 #include <svl/ctloptions.hxx>
 #include <svl/itempool.hxx>
 
 #include <svx/svxdlg.hxx>
 #include <svx/dialogs.hrc>
-#include "drawview.hxx"
+#include <drawview.hxx>
 #include <memory>
 
-#include "app.hrc"
+#include <app.hrc>
 
 namespace sd {
 
-const sal_Unicode CHAR_HARDBLANK    =   ((sal_Unicode)0x00A0);
-const sal_Unicode CHAR_HARDHYPHEN   =   ((sal_Unicode)0x2011);
-const sal_Unicode CHAR_SOFTHYPHEN   =   ((sal_Unicode)0x00AD);
-const sal_Unicode CHAR_RLM          =   ((sal_Unicode)0x200F);
-const sal_Unicode CHAR_LRM          =   ((sal_Unicode)0x200E);
-const sal_Unicode CHAR_ZWSP         =   ((sal_Unicode)0x200B);
-const sal_Unicode CHAR_ZWNBSP       =   ((sal_Unicode)0x2060);
+const sal_Unicode CHAR_HARDBLANK    =   u'\x00A0';
+const sal_Unicode CHAR_HARDHYPHEN   =   u'\x2011';
+const sal_Unicode CHAR_SOFTHYPHEN   =   u'\x00AD';
+const sal_Unicode CHAR_RLM          =   u'\x200F';
+const sal_Unicode CHAR_LRM          =   u'\x200E';
+const sal_Unicode CHAR_ZWSP         =   u'\x200B';
+const sal_Unicode CHAR_ZWNBSP       =   u'\x2060';
 
 
 FuBullet::FuBullet (
@@ -126,9 +127,9 @@ void FuBullet::InsertFormattingMark( sal_Unicode cMark )
         pOV->InsertText( "" );
 
         // prepare undo
-        ::svl::IUndoManager& rUndoMgr =  pOL->GetUndoManager();
-        rUndoMgr.EnterListAction(SD_RESSTR(STR_UNDO_INSERT_SPECCHAR),
-                                    "" );
+        SfxUndoManager& rUndoMgr =  pOL->GetUndoManager();
+        rUndoMgr.EnterListAction(SdResId(STR_UNDO_INSERT_SPECCHAR),
+                                    "", 0, mpViewShell->GetViewShellBase().GetViewShellId() );
 
         // insert given text
         OUString aStr( cMark );
@@ -147,7 +148,7 @@ void FuBullet::InsertFormattingMark( sal_Unicode cMark )
     }
 }
 
-void FuBullet::InsertSpecialCharacter( SfxRequest& rReq )
+void FuBullet::InsertSpecialCharacter( SfxRequest const & rReq )
 {
     const SfxItemSet *pArgs = rReq.GetArgs();
     const SfxPoolItem* pItem = nullptr;
@@ -164,7 +165,7 @@ void FuBullet::InsertSpecialCharacter( SfxRequest& rReq )
         const SfxStringItem* pFontItem = dynamic_cast<const SfxStringItem*>( pFtItem  );
         if ( pFontItem )
         {
-            OUString aFontName = pFontItem->GetValue();
+            const OUString& aFontName = pFontItem->GetValue();
             aFont = vcl::Font( aFontName, Size(1,1) );
         }
         else
@@ -189,31 +190,14 @@ void FuBullet::InsertSpecialCharacter( SfxRequest& rReq )
             aSet.Put( *pFontItem );
 
         SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-        std::unique_ptr<SfxAbstractDialog> pDlg(pFact ? pFact->CreateSfxDialog( &mpView->GetViewShell()->GetViewFrame()->GetWindow(), aSet,
-            mpView->GetViewShell()->GetViewFrame()->GetFrame().GetFrameInterface(),
-            RID_SVXDLG_CHARMAP ) : nullptr);
-        if( !pDlg )
-            return;
+        ScopedVclPtr<SfxAbstractDialog> pDlg( pFact->CreateCharMapDialog(mpView->GetViewShell()->GetFrameWeld(), aSet,
+            true ) );
 
         // If a character is selected, it can be shown
         // pDLg->SetFont( );
         // pDlg->SetChar( );
-        sal_uInt16 nResult = pDlg->Execute();
-        if( nResult == RET_OK )
-        {
-            const SfxStringItem* pCItem = SfxItemSet::GetItem<SfxStringItem>(pDlg->GetOutputItemSet(), SID_CHARMAP, false);
-            const SvxFontItem* pFItem = SfxItemSet::GetItem<SvxFontItem>(pDlg->GetOutputItemSet(), SID_ATTR_CHAR_FONT, false);
-            if ( pFItem )
-            {
-                aFont.SetFamilyName( pFItem->GetFamilyName() );
-                aFont.SetStyleName( pFItem->GetStyleName() );
-                aFont.SetCharSet( pFItem->GetCharSet() );
-                aFont.SetPitch( pFItem->GetPitch() );
-            }
-
-            if ( pCItem )
-                aChars  = pCItem->GetValue();
-        }
+        pDlg->Execute();
+        return;
     }
 
     if (!aChars.isEmpty())
@@ -222,7 +206,7 @@ void FuBullet::InsertSpecialCharacter( SfxRequest& rReq )
         ::Outliner*   pOL = nullptr;
 
         // determine depending on ViewShell Outliner and OutlinerView
-        if(mpViewShell && dynamic_cast< const DrawViewShell *>( mpViewShell ) !=  nullptr)
+        if(dynamic_cast< const DrawViewShell *>( mpViewShell ))
         {
             pOV = mpView->GetTextEditOutlinerView();
             if (pOV)
@@ -230,7 +214,7 @@ void FuBullet::InsertSpecialCharacter( SfxRequest& rReq )
                 pOL = mpView->GetTextEditOutliner();
             }
         }
-        else if(mpViewShell && dynamic_cast< const OutlineViewShell *>( mpViewShell ) !=  nullptr)
+        else if(dynamic_cast< const OutlineViewShell *>( mpViewShell ))
         {
             pOL = &static_cast<OutlineView*>(mpView)->GetOutliner();
             pOV = static_cast<OutlineView*>(mpView)->GetViewByWindow(
@@ -251,12 +235,13 @@ void FuBullet::InsertSpecialCharacter( SfxRequest& rReq )
                empty string). */
             pOV->InsertText( "" );
 
-            SfxItemSet aOldSet( mpDoc->GetPool(), EE_CHAR_FONTINFO, EE_CHAR_FONTINFO, 0 );
+            SfxItemSet aOldSet( mpDoc->GetPool(), svl::Items<EE_CHAR_FONTINFO, EE_CHAR_FONTINFO>{} );
             aOldSet.Put( pOV->GetAttribs() );
 
-            ::svl::IUndoManager& rUndoMgr =  pOL->GetUndoManager();
-            rUndoMgr.EnterListAction(SD_RESSTR(STR_UNDO_INSERT_SPECCHAR),
-                                     "" );
+            SfxUndoManager& rUndoMgr =  pOL->GetUndoManager();
+            ViewShellId nViewShellId = mpViewShell ? mpViewShell->GetViewShellBase().GetViewShellId() : ViewShellId(-1);
+            rUndoMgr.EnterListAction(SdResId(STR_UNDO_INSERT_SPECCHAR),
+                                     "", 0, nViewShellId );
             pOV->InsertText(aChars, true);
 
             // set attributes (set font)
@@ -266,8 +251,10 @@ void FuBullet::InsertSpecialCharacter( SfxRequest& rReq )
                                    aFont.GetCharSet(),
                                    EE_CHAR_FONTINFO);
             aSet.Put(aFontItem);
-            aSet.Put(aFontItem, EE_CHAR_FONTINFO_CJK);
-            aSet.Put(aFontItem, EE_CHAR_FONTINFO_CTL);
+            aFontItem.SetWhich(EE_CHAR_FONTINFO_CJK);
+            aSet.Put(aFontItem);
+            aFontItem.SetWhich(EE_CHAR_FONTINFO_CTL);
+            aSet.Put(aFontItem);
             pOV->SetAttribs(aSet);
 
             ESelection aSel = pOV->GetSelection();
@@ -287,9 +274,10 @@ void FuBullet::InsertSpecialCharacter( SfxRequest& rReq )
     }
 }
 
-void FuBullet::GetSlotState( SfxItemSet& rSet, ViewShell* pViewShell, SfxViewFrame* pViewFrame )
+void FuBullet::GetSlotState( SfxItemSet& rSet, ViewShell const * pViewShell, SfxViewFrame* pViewFrame )
 {
     if( SfxItemState::DEFAULT == rSet.GetItemState( SID_CHARMAP ) ||
+        SfxItemState::DEFAULT == rSet.GetItemState( SID_CHARMAP_CONTROL ) ||
         SfxItemState::DEFAULT == rSet.GetItemState( FN_INSERT_SOFT_HYPHEN ) ||
         SfxItemState::DEFAULT == rSet.GetItemState( FN_INSERT_HARDHYPHEN ) ||
         SfxItemState::DEFAULT == rSet.GetItemState( FN_INSERT_HARD_SPACE ) ||
@@ -311,17 +299,20 @@ void FuBullet::GetSlotState( SfxItemSet& rSet, ViewShell* pViewShell, SfxViewFra
             rSet.DisableItem(FN_INSERT_SOFT_HYPHEN);
             rSet.DisableItem(FN_INSERT_HARDHYPHEN);
             rSet.DisableItem(FN_INSERT_HARD_SPACE);
+            rSet.DisableItem(SID_INSERT_ZWNBSP);
+            rSet.DisableItem(SID_INSERT_ZWSP);
         }
 
-        if( !bTextEdit && (dynamic_cast<OutlineViewShell*>( pViewShell ) == nullptr) )
+        if( !bTextEdit && (dynamic_cast<OutlineViewShell const *>( pViewShell ) == nullptr) )
+        {
             rSet.DisableItem(SID_CHARMAP);
+            rSet.DisableItem(SID_CHARMAP_CONTROL);
+        }
 
         if(!bTextEdit || !bCtlEnabled )
         {
             rSet.DisableItem(SID_INSERT_RLM);
             rSet.DisableItem(SID_INSERT_LRM);
-            rSet.DisableItem(SID_INSERT_ZWNBSP);
-            rSet.DisableItem(SID_INSERT_ZWSP);
         }
 
         if( pViewFrame )
@@ -330,8 +321,6 @@ void FuBullet::GetSlotState( SfxItemSet& rSet, ViewShell* pViewShell, SfxViewFra
 
             rBindings.SetVisibleState( SID_INSERT_RLM, bCtlEnabled );
             rBindings.SetVisibleState( SID_INSERT_LRM, bCtlEnabled );
-            rBindings.SetVisibleState( SID_INSERT_ZWNBSP, bCtlEnabled );
-            rBindings.SetVisibleState( SID_INSERT_ZWSP, bCtlEnabled );
         }
     }
 }

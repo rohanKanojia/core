@@ -20,7 +20,7 @@
 #define INCLUDED_SW_SOURCE_CORE_TEXT_WIDORP_HXX
 class SwTextFrame;
 
-#include "swtypes.hxx"
+#include <swtypes.hxx>
 #include "itrtxt.hxx"
 
 class SwTextFrameBreak
@@ -37,9 +37,9 @@ public:
     bool IsBreakNow( SwTextMargin &rLine );
     bool IsKeepAlways() const { return m_bKeep; }
 
-    inline void SetKeep( const bool bNew ) { m_bKeep = bNew; }
+    void SetKeep( const bool bNew ) { m_bKeep = bNew; }
 
-    bool IsInside( SwTextMargin &rLine ) const;
+    bool IsInside( SwTextMargin const &rLine ) const;
 
     // In order to be able to handle special cases with Footnote.
     // SetRstHeight sets the rest height for SwTextFrameBreak. This is needed
@@ -58,8 +58,6 @@ public:
     WidowsAndOrphans( SwTextFrame *pFrame, const SwTwips nRst = 0,
         bool bCheckKeep = true );
     bool FindWidows( SwTextFrame *pFrame, SwTextMargin &rLine );
-    sal_uInt16 GetWidowsLines() const
-    { return nWidLines; }
     sal_uInt16 GetOrphansLines() const
     { return nOrphLines; }
     void ClrOrphLines(){ nOrphLines = 0; }

@@ -17,8 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "AccessiblePageShape.hxx"
+#include <AccessiblePageShape.hxx>
 #include <svx/AccessibleShapeInfo.hxx>
+#include <svx/IAccessibleViewForwarder.hxx>
+#include <tools/gen.hxx>
+#include <sal/log.hxx>
 
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
@@ -51,19 +54,12 @@ AccessiblePageShape::AccessiblePageShape (
 
 AccessiblePageShape::~AccessiblePageShape()
 {
-    OSL_TRACE ("~AccessiblePageShape");
-}
-
-void AccessiblePageShape::Init()
-{
-    AccessibleShape::Init ();
 }
 
 //=====  XAccessibleContext  ==================================================
 
 sal_Int32 SAL_CALL
        AccessiblePageShape::getAccessibleChildCount()
-    throw (std::exception)
 {
     return 0;
 }
@@ -73,7 +69,6 @@ sal_Int32 SAL_CALL
 */
 uno::Reference<XAccessible> SAL_CALL
     AccessiblePageShape::getAccessibleChild( sal_Int32 )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     throw lang::IndexOutOfBoundsException ("page shape has no children",
         static_cast<uno::XWeak*>(this));
@@ -82,7 +77,6 @@ uno::Reference<XAccessible> SAL_CALL
 //=====  XAccessibleComponent  ================================================
 
 awt::Rectangle SAL_CALL AccessiblePageShape::getBounds()
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed ();
 
@@ -123,10 +117,10 @@ awt::Rectangle SAL_CALL AccessiblePageShape::getBounds()
             int y = aPixelPosition.getY() - aParentLocation.Y;
 
             // Clip with parent (with coordinates relative to itself).
-            ::Rectangle aBBox (
+            ::tools::Rectangle aBBox (
                 x, y, x + aPixelSize.getWidth(), y + aPixelSize.getHeight());
             awt::Size aParentSize (xParentComponent->getSize());
-            ::Rectangle aParentBBox (0,0, aParentSize.Width, aParentSize.Height);
+            ::tools::Rectangle aParentBBox (0,0, aParentSize.Width, aParentSize.Height);
             aBBox = aBBox.GetIntersection (aParentBBox);
             aBoundingBox = awt::Rectangle (
                 aBBox.getX(),
@@ -144,7 +138,6 @@ awt::Rectangle SAL_CALL AccessiblePageShape::getBounds()
 }
 
 sal_Int32 SAL_CALL AccessiblePageShape::getForeground()
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed ();
     sal_Int32 nColor (0x0ffffffL);
@@ -170,7 +163,6 @@ sal_Int32 SAL_CALL AccessiblePageShape::getForeground()
     draw page or its master page.
 */
 sal_Int32 SAL_CALL AccessiblePageShape::getBackground()
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed ();
     sal_Int32 nColor (0x01020ffL);
@@ -204,12 +196,12 @@ sal_Int32 SAL_CALL AccessiblePageShape::getBackground()
                 aColor >>= nColor;
             }
             else
-                OSL_TRACE ("no Background property in page");
+                SAL_WARN("sd", "no Background property in page");
         }
     }
     catch (const css::beans::UnknownPropertyException&)
     {
-        OSL_TRACE ("caught exception due to unknown property");
+        SAL_WARN("sd", "caught exception due to unknown property");
         // Ignore exception and return default color.
     }
     return nColor;
@@ -219,7 +211,6 @@ sal_Int32 SAL_CALL AccessiblePageShape::getBackground()
 
 OUString SAL_CALL
     AccessiblePageShape::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed ();
     return OUString("AccessiblePageShape");
@@ -227,7 +218,6 @@ OUString SAL_CALL
 
 css::uno::Sequence< OUString> SAL_CALL
     AccessiblePageShape::getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed ();
     return AccessibleShape::getSupportedServiceNames();
@@ -237,7 +227,6 @@ css::uno::Sequence< OUString> SAL_CALL
 
 void SAL_CALL
     AccessiblePageShape::disposing (const css::lang::EventObject& aEvent)
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed ();
     AccessibleShape::disposing (aEvent);
@@ -246,10 +235,7 @@ void SAL_CALL
 //=====  XComponent  ==========================================================
 
 void AccessiblePageShape::dispose()
-    throw (css::uno::RuntimeException, std::exception)
 {
-    OSL_TRACE ("AccessiblePageShape::dispose");
-
     // Unregister listeners.
     Reference<lang::XComponent> xComponent (mxShape, uno::UNO_QUERY);
     if (xComponent.is())
@@ -266,14 +252,12 @@ void AccessiblePageShape::dispose()
 
 OUString
     AccessiblePageShape::CreateAccessibleBaseName()
-    throw (css::uno::RuntimeException)
 {
     return OUString ("PageShape");
 }
 
 OUString
     AccessiblePageShape::CreateAccessibleName()
-    throw (css::uno::RuntimeException)
 {
     Reference<beans::XPropertySet> xPageProperties (mxPage, UNO_QUERY);
 
@@ -295,7 +279,6 @@ OUString
 
 OUString
     AccessiblePageShape::CreateAccessibleDescription()
-    throw (css::uno::RuntimeException)
 {
     return OUString ("Page Shape");
 }

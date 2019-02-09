@@ -20,6 +20,7 @@
 #include "framegrabber.hxx"
 #include "player.hxx"
 
+#include <sal/log.hxx>
 #include <tools/stream.hxx>
 #include <vcl/graph.hxx>
 #include <vcl/cvtgrf.hxx>
@@ -41,29 +42,11 @@ FrameGrabber::~FrameGrabber()
 }
 
 
-bool FrameGrabber::create( const ::rtl::OUString& rURL )
-{
-    NSString* pNSStr = [NSString stringWithCharacters:reinterpret_cast<unichar const *>(rURL.getStr()) length:rURL.getLength()];
-    SAL_WNODEPRECATED_DECLARATIONS_PUSH
-        //TODO: 10.11 stringByAddingPercentEscapesUsingEncoding
-    NSURL* pNSURL = [NSURL URLWithString: [pNSStr stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]];
-    SAL_WNODEPRECATED_DECLARATIONS_POP
-    AVAsset* pMovie = [AVURLAsset URLAssetWithURL:pNSURL options:nil];
-    if( !pMovie )
-    {
-        OSL_TRACE( "AVGrabber::create() cannot load url=\"%s\"", [pNSStr UTF8String] );
-        return false;
-    }
-
-    return create( pMovie );
-}
-
-
 bool FrameGrabber::create( AVAsset* pMovie )
 {
     if( [[pMovie tracksWithMediaType:AVMediaTypeVideo] count] == 0)
     {
-        OSL_TRACE( "AVGrabber::create() found no video content!" );
+        SAL_WARN("avmedia", "AVGrabber::create() found no video content!" );
         return false;
     }
 
@@ -74,12 +57,10 @@ bool FrameGrabber::create( AVAsset* pMovie )
 
 
 uno::Reference< graphic::XGraphic > SAL_CALL FrameGrabber::grabFrame( double fMediaTime )
-    throw (uno::RuntimeException)
 {
     uno::Reference< graphic::XGraphic > xRet;
     if( !mpImageGen )
         return xRet;
-    OSL_TRACE( "AVPlayer::grabFrame( %.3fsec)", fMediaTime );
 
     // get the requested image from the movie
     CGImage* pCGImage = [mpImageGen copyCGImageAtTime:CMTimeMakeWithSeconds(fMediaTime,1000) actualTime:nullptr error:nullptr];
@@ -105,26 +86,19 @@ uno::Reference< graphic::XGraphic > SAL_CALL FrameGrabber::grabFrame( double fMe
 }
 
 
-::rtl::OUString SAL_CALL FrameGrabber::getImplementationName(  )
-    throw (uno::RuntimeException)
+OUString SAL_CALL FrameGrabber::getImplementationName(  )
 {
-    return ::rtl::OUString( RTL_CONSTASCII_USTRINGPARAM( AVMEDIA_MACAVF_FRAMEGRABBER_IMPLEMENTATIONNAME ) );
+    return OUString( AVMEDIA_MACAVF_FRAMEGRABBER_IMPLEMENTATIONNAME );
 }
 
-
-sal_Bool SAL_CALL FrameGrabber::supportsService( const ::rtl::OUString& ServiceName )
-    throw (uno::RuntimeException)
+sal_Bool SAL_CALL FrameGrabber::supportsService( const OUString& ServiceName )
 {
-    return ServiceName.equalsAsciiL( RTL_CONSTASCII_STRINGPARAM ( AVMEDIA_MACAVF_FRAMEGRABBER_SERVICENAME ) );
+    return ServiceName == AVMEDIA_MACAVF_FRAMEGRABBER_SERVICENAME;
 }
 
-
-uno::Sequence< ::rtl::OUString > SAL_CALL FrameGrabber::getSupportedServiceNames(  )
-    throw (uno::RuntimeException)
+uno::Sequence< OUString > SAL_CALL FrameGrabber::getSupportedServiceNames(  )
 {
-    uno::Sequence< ::rtl::OUString > aRet { AVMEDIA_MACAVF_FRAMEGRABBER_SERVICENAME };
-
-    return aRet;
+    return { AVMEDIA_MACAVF_FRAMEGRABBER_SERVICENAME };
 }
 
 } // namespace macavf

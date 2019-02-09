@@ -41,6 +41,12 @@ class SvxObjectItem;
 class SfxBoolItem;
 struct SvxRuler_Impl;
 
+enum class RulerChangeType
+{
+    MARGIN1,
+    MARGIN2
+};
+
 enum class SvxRulerDragFlags
 {
     NONE                       = 0x00,
@@ -77,7 +83,6 @@ namespace o3tl
 class SVX_DLLPUBLIC SvxRuler: public Ruler, public SfxListener
 {
     friend class SvxRulerItem;
-    using Window::Notify;
 
     std::vector<std::unique_ptr<SvxRulerItem> > pCtrlItems;
 
@@ -99,9 +104,8 @@ class SVX_DLLPUBLIC SvxRuler: public Ruler, public SfxListener
     bool            bHorz :1;
     long            lLogicNullOffset;     // in logic coordinates
     long            lAppNullOffset;       // in logic coordinates
-    long            lMinFrame;            // minimal frame width in pixels
     long            lInitialDragPos;
-    SvxRulerSupportFlags nFlags;
+    SvxRulerSupportFlags const nFlags;
     SvxRulerDragFlags    nDragType;
     sal_uInt16      nDefTabType;
     sal_uInt16      nTabCount;
@@ -127,7 +131,7 @@ class SVX_DLLPUBLIC SvxRuler: public Ruler, public SfxListener
 
     void StartListening_Impl();
     long GetCorrectedDragPos(bool bLeft = true, bool bRight = true );
-    void DrawLine_Impl(long &lTabPos, int, bool Horizontal = true);
+    void DrawLine_Impl(long &lTabPos, int, bool Horizontal);
     sal_uInt16 GetObjectBordersOff(sal_uInt16 nIdx) const;
 
     // page borders or surrounding frame
@@ -214,17 +218,16 @@ class SVX_DLLPUBLIC SvxRuler: public Ruler, public SfxListener
     long GetLeftMin() const;
     long GetRightMax() const;
 
-    DECL_LINK_TYPED( TabMenuSelect, Menu *, bool );
-    DECL_LINK_TYPED( MenuSelect, Menu *, bool );
+    DECL_LINK( TabMenuSelect, Menu *, bool );
+    DECL_LINK( MenuSelect, Menu *, bool );
     void PrepareProportional_Impl(RulerType);
 
-    enum UpdateType
+    enum class UpdateType
     {
-        MOVE_ALL,
-        MOVE_LEFT,
-        MOVE_RIGHT
+        MoveLeft,
+        MoveRight
     };
-    void UpdateParaContents_Impl(long lDiff, UpdateType = MOVE_ALL);
+    void UpdateParaContents_Impl(long lDiff, UpdateType);
 
 protected:
     virtual void    Command( const CommandEvent& rCEvt ) override;
@@ -239,9 +242,6 @@ protected:
 
     virtual void    Update();
 
-    // calculation of boundary values for object borders
-    // values refer to the page
-    static bool     CalcLimits(long &nMax1, long &nMax2, bool bFirst);
     bool IsActLastColumn(
                 bool bForceDontConsiderHidden = false,
                 sal_uInt16 nAct=USHRT_MAX) const;
@@ -255,19 +255,18 @@ protected:
                 bool bForceDontConsiderHidden = false,
                 sal_uInt16 nAct=USHRT_MAX ) const;
     long CalcPropMaxRight(sal_uInt16 nCol = USHRT_MAX) const;
-    long GetPageWidth() const;
 
 public:
 
     SvxRuler(vcl::Window* pParent, vcl::Window *pEditWin, SvxRulerSupportFlags nRulerFlags,
-             SfxBindings &rBindings, WinBits nWinStyle = WB_STDRULER);
-    virtual ~SvxRuler();
+             SfxBindings &rBindings, WinBits nWinStyle);
+    virtual ~SvxRuler() override;
     virtual void dispose() override;
 
     void SetDefTabDist(long);
 
     // set/get NullOffset in logic units
-    void SetNullOffsetLogic(long lOff = 0);
+    void SetNullOffsetLogic(long lOff);
 
     void SetActive(bool bOn = true);
 
@@ -277,7 +276,9 @@ public:
     }
 
     //#i24363# tab stops relative to indent
-    void SetTabsRelativeToIndent( bool bRel = true );
+    void SetTabsRelativeToIndent( bool bRel );
+    void SetValues(RulerChangeType type, long value);
+    long GetPageWidth() const;
 };
 
 #endif

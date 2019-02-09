@@ -17,12 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <cmdid.h>
 
 #include <com/sun/star/i18n/ScriptType.hpp>
 
+#include <sal/log.hxx>
 #include <hintids.hxx>
-#include <vcl/msgbox.hxx>
 #include <svl/eitem.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/app.hxx>
@@ -63,7 +64,7 @@
 #include <globals.hrc>
 #include <globals.h>
 #include <svl/slstitm.hxx>
-#include "swabstdlg.hxx"
+#include <swabstdlg.hxx>
 #include <swwrtshitem.hxx>
 
 #include <unomid.h>
@@ -71,22 +72,22 @@
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 
-SfxItemSet*  SwModule::CreateItemSet( sal_uInt16 nId )
+std::unique_ptr<SfxItemSet> SwModule::CreateItemSet( sal_uInt16 nId )
 {
     bool bTextDialog = (nId == SID_SW_EDITOPTIONS);
 
     // the options for the Web- and Textdialog are put together here
         SwViewOption aViewOpt = *GetUsrPref(!bTextDialog);
-        SwMasterUsrPref* pPref = bTextDialog ? m_pUsrPref : m_pWebUsrPref;
+        SwMasterUsrPref* pPref = bTextDialog ? m_pUsrPref.get() : m_pWebUsrPref.get();
         // no MakeUsrPref, because only options from textdoks can be used here
         SwView* pAppView = GetView();
         if(pAppView && pAppView->GetViewFrame() != SfxViewFrame::Current())
             pAppView = nullptr;
         if(pAppView)
         {
-        // if Text then no WebView and vice versa
             bool bWebView = dynamic_cast<SwWebView*>( pAppView ) !=  nullptr;
-            if( (bWebView &&  !bTextDialog) ||(!bWebView &&  bTextDialog))
+            // if Text then no WebView and vice versa
+            if (bWebView != bTextDialog)
             {
                 aViewOpt = *pAppView->GetWrtShell().GetViewOptions();
             }
@@ -95,36 +96,32 @@ SfxItemSet*  SwModule::CreateItemSet( sal_uInt16 nId )
         }
 
     // Options/Edit
-    SfxItemSet* pRet = new SfxItemSet (GetPool(),   FN_PARAM_DOCDISP,       FN_PARAM_ELEM,
-                                    SID_PRINTPREVIEW,       SID_PRINTPREVIEW,
-                                    SID_ATTR_GRID_OPTIONS,  SID_ATTR_GRID_OPTIONS,
-                                    FN_PARAM_PRINTER,       FN_PARAM_STDFONTS,
-                                    FN_PARAM_WRTSHELL,      FN_PARAM_WRTSHELL,
-                                    FN_PARAM_ADDPRINTER,    FN_PARAM_ADDPRINTER,
-                                    SID_ATTR_METRIC,        SID_ATTR_METRIC,
-                                    SID_ATTR_APPLYCHARUNIT, SID_ATTR_APPLYCHARUNIT,
-                                    SID_ATTR_DEFTABSTOP,    SID_ATTR_DEFTABSTOP,
-                                    RES_BACKGROUND,         RES_BACKGROUND,
-                                    SID_HTML_MODE,          SID_HTML_MODE,
-                                    FN_PARAM_SHADOWCURSOR,  FN_PARAM_SHADOWCURSOR,
-                                    FN_PARAM_CRSR_IN_PROTECTED, FN_PARAM_CRSR_IN_PROTECTED,
-                                    FN_PARAM_IGNORE_PROTECTED, FN_PARAM_IGNORE_PROTECTED,
-                                    FN_HSCROLL_METRIC,      FN_VSCROLL_METRIC,
-                                    SID_ATTR_LANGUAGE,      SID_ATTR_LANGUAGE,
-                                    SID_ATTR_CHAR_CJK_LANGUAGE,   SID_ATTR_CHAR_CJK_LANGUAGE,
-                                    SID_ATTR_CHAR_CTL_LANGUAGE, SID_ATTR_CHAR_CTL_LANGUAGE,
-#if OSL_DEBUG_LEVEL > 1
-                                    FN_PARAM_SWTEST,        FN_PARAM_SWTEST,
-#endif
-                                    0);
+    auto pRet = std::make_unique<SfxItemSet>(
+        GetPool(),
+        svl::Items<
+            RES_BACKGROUND, RES_BACKGROUND,
+            SID_PRINTPREVIEW, SID_PRINTPREVIEW,
+            SID_ATTR_GRID_OPTIONS, SID_ATTR_GRID_OPTIONS,
+            SID_HTML_MODE, SID_HTML_MODE,
+            SID_ATTR_CHAR_CJK_LANGUAGE, SID_ATTR_CHAR_CJK_LANGUAGE,
+            SID_ATTR_CHAR_CTL_LANGUAGE, SID_ATTR_CHAR_CTL_LANGUAGE,
+            SID_ATTR_LANGUAGE, SID_ATTR_METRIC,
+            SID_ATTR_DEFTABSTOP, SID_ATTR_DEFTABSTOP,
+            SID_ATTR_APPLYCHARUNIT, SID_ATTR_APPLYCHARUNIT,
+            FN_HSCROLL_METRIC, FN_VSCROLL_METRIC,
+            FN_PARAM_ADDPRINTER, FN_PARAM_ADDPRINTER,
+            FN_PARAM_DOCDISP, FN_PARAM_ELEM,
+            FN_PARAM_PRINTER, FN_PARAM_STDFONTS,
+            FN_PARAM_WRTSHELL, FN_PARAM_WRTSHELL,
+            FN_PARAM_SHADOWCURSOR, FN_PARAM_SHADOWCURSOR,
+            FN_PARAM_CRSR_IN_PROTECTED, FN_PARAM_CRSR_IN_PROTECTED>{});
 
-    pRet->Put( SwDocDisplayItem( aViewOpt, FN_PARAM_DOCDISP) );
-    pRet->Put( SwElemItem( aViewOpt, FN_PARAM_ELEM) );
+    pRet->Put( SwDocDisplayItem( aViewOpt ) );
+    pRet->Put( SwElemItem( aViewOpt ) );
     if( bTextDialog )
     {
-        pRet->Put( SwShadowCursorItem( aViewOpt, FN_PARAM_SHADOWCURSOR ));
+        pRet->Put( SwShadowCursorItem( aViewOpt ));
         pRet->Put( SfxBoolItem(FN_PARAM_CRSR_IN_PROTECTED, aViewOpt.IsCursorInProtectedArea()));
-        pRet->Put(SfxBoolItem(FN_PARAM_IGNORE_PROTECTED, aViewOpt.IsIgnoreProtectedArea()));
     }
 
     if( pAppView )
@@ -136,14 +133,15 @@ SfxItemSet*  SwModule::CreateItemSet( sal_uInt16 nId )
             pRet->Put(SwPtrItem(FN_PARAM_PRINTER, pPrt));
         pRet->Put(SwPtrItem(FN_PARAM_WRTSHELL, &rWrtShell));
 
-        pRet->Put(static_cast<const SvxLanguageItem&>(
-            rWrtShell.GetDefault(RES_CHRATR_LANGUAGE)), SID_ATTR_LANGUAGE);
+        std::unique_ptr<SfxPoolItem> pNewItem(
+            rWrtShell.GetDefault(RES_CHRATR_LANGUAGE).CloneSetWhich(SID_ATTR_LANGUAGE) );
+        pRet->Put(*pNewItem);
 
-        pRet->Put(static_cast<const SvxLanguageItem&>(
-            rWrtShell.GetDefault(RES_CHRATR_CJK_LANGUAGE)), SID_ATTR_CHAR_CJK_LANGUAGE);
+        pNewItem = rWrtShell.GetDefault(RES_CHRATR_CJK_LANGUAGE).CloneSetWhich(SID_ATTR_CHAR_CJK_LANGUAGE);
+        pRet->Put(*pNewItem);
 
-        pRet->Put(static_cast<const SvxLanguageItem&>(
-            rWrtShell.GetDefault(RES_CHRATR_CTL_LANGUAGE)), SID_ATTR_CHAR_CTL_LANGUAGE);
+        pNewItem = rWrtShell.GetDefault(RES_CHRATR_CTL_LANGUAGE).CloneSetWhich(SID_ATTR_CHAR_CTL_LANGUAGE);
+        pRet->Put(*pNewItem);
     }
     else
     {
@@ -192,12 +190,11 @@ SfxItemSet*  SwModule::CreateItemSet( sal_uInt16 nId )
         if(pAppView)
         {
             const SvxTabStopItem& rDefTabs =
-                    static_cast<const SvxTabStopItem&>(pAppView->GetWrtShell().
-                                        GetDefault(RES_PARATR_TABSTOP));
-                pRet->Put( SfxUInt16Item( SID_ATTR_DEFTABSTOP, (sal_uInt16)::GetTabDist(rDefTabs)));
+                    pAppView->GetWrtShell().GetDefault(RES_PARATR_TABSTOP);
+                pRet->Put( SfxUInt16Item( SID_ATTR_DEFTABSTOP, static_cast<sal_uInt16>(::GetTabDist(rDefTabs))));
         }
         else
-            pRet->Put(SfxUInt16Item( SID_ATTR_DEFTABSTOP, (sal_uInt16)pPref->GetDefTab()));
+            pRet->Put(SfxUInt16Item( SID_ATTR_DEFTABSTOP, static_cast<sal_uInt16>(convertMm100ToTwip(pPref->GetDefTabInMm100()))));
     }
 
     // Options for GridTabPage
@@ -208,8 +205,8 @@ SfxItemSet*  SwModule::CreateItemSet( sal_uInt16 nId )
     aGridItem.SetGridVisible( aViewOpt.IsGridVisible());
 
     const Size& rSnapSize = aViewOpt.GetSnapSize();
-    aGridItem.SetFieldDrawX( (sal_uInt16) (rSnapSize.Width() ));
-    aGridItem.SetFieldDrawY( (sal_uInt16) (rSnapSize.Height()));
+    aGridItem.SetFieldDrawX( static_cast<sal_uInt16>(rSnapSize.Width() ));
+    aGridItem.SetFieldDrawY( static_cast<sal_uInt16>(rSnapSize.Height()));
 
     aGridItem.SetFieldDivisionX( aViewOpt.GetDivisionX());
     aGridItem.SetFieldDivisionY( aViewOpt.GetDivisionY());
@@ -224,7 +221,7 @@ SfxItemSet*  SwModule::CreateItemSet( sal_uInt16 nId )
     if(!pOpt)
         pOpt = GetPrtOptions(!bTextDialog);
 
-    SwAddPrinterItem aAddPrinterItem (FN_PARAM_ADDPRINTER, *pOpt );
+    SwAddPrinterItem aAddPrinterItem(*pOpt );
     pRet->Put(aAddPrinterItem);
 
     // Options for Web background
@@ -253,7 +250,7 @@ void SwModule::ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet )
     }
 
     SwViewOption aViewOpt = *GetUsrPref(!bTextDialog);
-    SwMasterUsrPref* pPref = bTextDialog ? m_pUsrPref : m_pWebUsrPref;
+    SwMasterUsrPref* pPref = bTextDialog ? m_pUsrPref.get() : m_pWebUsrPref.get();
 
     const SfxPoolItem* pItem;
     SfxBindings *pBindings = pAppView ? &pAppView->GetViewFrame()->GetBindings()
@@ -298,7 +295,7 @@ void SwModule::ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet )
         SfxGetpApp()->SetOptions(rSet);
         PutItem(*pItem);
         const SfxUInt16Item* pMetricItem = static_cast<const SfxUInt16Item*>(pItem);
-        ::SetDfltMetric((FieldUnit)pMetricItem->GetValue(), !bTextDialog);
+        ::SetDfltMetric(static_cast<FieldUnit>(pMetricItem->GetValue()), !bTextDialog);
     }
     if( SfxItemState::SET == rSet.GetItemState(SID_ATTR_APPLYCHARUNIT,
                                                     false, &pItem ) )
@@ -311,7 +308,7 @@ void SwModule::ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet )
     if( SfxItemState::SET == rSet.GetItemState(FN_HSCROLL_METRIC, false, &pItem ) )
     {
         const SfxUInt16Item* pMetricItem = static_cast<const SfxUInt16Item*>(pItem);
-        FieldUnit eUnit = (FieldUnit)pMetricItem->GetValue();
+        FieldUnit eUnit = static_cast<FieldUnit>(pMetricItem->GetValue());
         pPref->SetHScrollMetric(eUnit);
         if(pAppView)
             pAppView->ChangeTabMetric(eUnit);
@@ -320,7 +317,7 @@ void SwModule::ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet )
     if( SfxItemState::SET == rSet.GetItemState(FN_VSCROLL_METRIC, false, &pItem ) )
     {
         const SfxUInt16Item* pMetricItem = static_cast<const SfxUInt16Item*>(pItem);
-        FieldUnit eUnit = (FieldUnit)pMetricItem->GetValue();
+        FieldUnit eUnit = static_cast<FieldUnit>(pMetricItem->GetValue());
         pPref->SetVScrollMetric(eUnit);
         if(pAppView)
             pAppView->ChangeVRulerMetric(eUnit);
@@ -329,10 +326,10 @@ void SwModule::ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet )
     if( SfxItemState::SET == rSet.GetItemState(SID_ATTR_DEFTABSTOP, false, &pItem ) )
     {
         sal_uInt16 nTabDist = static_cast<const SfxUInt16Item*>(pItem)->GetValue();
-        pPref->SetDefTab(nTabDist);
+        pPref->SetDefTabInMm100(convertTwipToMm100(nTabDist));
         if(pAppView)
         {
-            SvxTabStopItem aDefTabs( 0, 0, SVX_TAB_ADJUST_DEFAULT, RES_PARATR_TABSTOP );
+            SvxTabStopItem aDefTabs( 0, 0, SvxTabAdjust::Default, RES_PARATR_TABSTOP );
             MakeDefTabs( nTabDist, aDefTabs );
             pAppView->GetWrtShell().SetDefault( aDefTabs );
         }
@@ -341,8 +338,7 @@ void SwModule::ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet )
     // Background only in WebDialog
     if(SfxItemState::SET == rSet.GetItemState(RES_BACKGROUND))
     {
-        const SvxBrushItem& rBrushItem = static_cast<const SvxBrushItem&>(rSet.Get(
-                                RES_BACKGROUND));
+        const SvxBrushItem& rBrushItem = rSet.Get(RES_BACKGROUND);
         aViewOpt.SetRetoucheColor( rBrushItem.GetColor() );
     }
 
@@ -358,10 +354,10 @@ void SwModule::ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet )
         Size aSize( pGridItem->GetFieldDrawX(), pGridItem->GetFieldDrawY()  );
         if( aViewOpt.GetSnapSize() != aSize )
             aViewOpt.SetSnapSize( aSize );
-        short nDiv = (short)pGridItem->GetFieldDivisionX() ;
+        short nDiv = static_cast<short>(pGridItem->GetFieldDivisionX()) ;
         if( aViewOpt.GetDivisionX() != nDiv  )
             aViewOpt.SetDivisionX( nDiv );
-        nDiv = (short)pGridItem->GetFieldDivisionY();
+        nDiv = static_cast<short>(pGridItem->GetFieldDivisionY());
         if( aViewOpt.GetDivisionY() != nDiv  )
             aViewOpt.SetDivisionY( nDiv  );
 
@@ -410,14 +406,11 @@ void SwModule::ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet )
         aViewOpt.SetCursorInProtectedArea(static_cast<const SfxBoolItem*>(pItem)->GetValue());
     }
 
-    if (rSet.GetItemState(FN_PARAM_IGNORE_PROTECTED, false, &pItem) == SfxItemState::SET)
-        aViewOpt.SetIgnoreProtectedArea(static_cast<const SfxBoolItem*>(pItem)->GetValue());
-
-        // set elements for the current view and shell
+    // set elements for the current view and shell
     ApplyUsrPref( aViewOpt, pAppView, bTextDialog? SvViewOpt::DestText : SvViewOpt::DestWeb);
 }
 
-VclPtr<SfxTabPage> SwModule::CreateTabPage( sal_uInt16 nId, vcl::Window* pParent, const SfxItemSet& rSet )
+VclPtr<SfxTabPage> SwModule::CreateTabPage( sal_uInt16 nId, TabPageParent pParent, const SfxItemSet& rSet )
 {
     VclPtr<SfxTabPage> pRet;
     SfxAllItemSet aSet(*(rSet.GetPool()));
@@ -474,7 +467,7 @@ VclPtr<SfxTabPage> SwModule::CreateTabPage( sal_uInt16 nId, vcl::Window* pParent
                 if( (bWebView &&  RID_SW_TP_HTML_OPTTABLE_PAGE == nId) ||
                     (!bWebView &&  RID_SW_TP_HTML_OPTTABLE_PAGE != nId) )
                 {
-                    aSet.Put (SwWrtShellItem(SID_WRT_SHELL,pCurrView->GetWrtShellPtr()));
+                    aSet.Put (SwWrtShellItem(pCurrView->GetWrtShellPtr()));
                     pRet->PageCreated(aSet);
                 }
             }
@@ -496,7 +489,7 @@ VclPtr<SfxTabPage> SwModule::CreateTabPage( sal_uInt16 nId, vcl::Window* pParent
                 SwView* pCurrView = GetView();
                 if(pCurrView)
                 {
-                    aSet.Put( SwWrtShellItem( SID_WRT_SHELL, pCurrView->GetWrtShellPtr() ) );
+                    aSet.Put( SwWrtShellItem( pCurrView->GetWrtShellPtr() ) );
                     pRet->PageCreated(aSet);
                 }
             }

@@ -77,10 +77,10 @@ namespace connectivity
 
     struct OSQLParseTreeIteratorImpl;
 
-    class OOO_DLLPUBLIC_DBTOOLS OSQLParseTreeIterator
+    class OOO_DLLPUBLIC_DBTOOLS OSQLParseTreeIterator final
     {
     private:
-        css::sdbc::SQLException                             m_aErrors;          // conatins the error while iterating through the statement
+        css::sdbc::SQLException                             m_aErrors;          // contains the error while iterating through the statement
         const OSQLParseNode*                                m_pParseTree;       // current ParseTree
         const OSQLParser&                                   m_rParser;          // if set used for general error messages from the context
         OSQLStatementType                                   m_eStatementType;
@@ -95,11 +95,11 @@ namespace connectivity
         void                traverseParameter(const OSQLParseNode* _pParseNode,const OSQLParseNode* _pColumnRef,const OUString& _aColumnName, OUString& _aTableRange, const OUString& _rColumnAlias);
         // inserts a table into the map
         void                traverseOneTableName( OSQLTables& _rTables,const OSQLParseNode * pTableName, const OUString & rTableRange );
-        void                traverseSearchCondition(OSQLParseNode * pSearchCondition);
+        void                traverseSearchCondition(OSQLParseNode const * pSearchCondition);
         void                traverseOnePredicate(
-                                                OSQLParseNode * pColumnRef,
+                                                OSQLParseNode const * pColumnRef,
                                                 OUString& aValue,
-                                                OSQLParseNode * pParameter);
+                                                OSQLParseNode const * pParameter);
         void traverseByColumnNames(const OSQLParseNode* pSelectNode, bool _bOrder);
         void                traverseParameters(const OSQLParseNode* pSelectNode);
 
@@ -142,41 +142,27 @@ namespace connectivity
         css::uno::Reference< css::beans::XPropertySet > findSelectColumn(
             const OUString & rColumnName );
 
-      protected:
-        void setSelectColumnName(::rtl::Reference<OSQLColumns>& _rColumns,const OUString & rColumnName,const OUString & rColumnAlias, const OUString & rTableRange, bool bFkt=false, sal_Int32 _nType = css::sdbc::DataType::VARCHAR, bool bAggFkt=false);
-        void appendColumns(::rtl::Reference<OSQLColumns>& _rColumns,const OUString& _rTableAlias,const OSQLTable& _rTable);
+        void setSelectColumnName(::rtl::Reference<OSQLColumns> const & _rColumns,const OUString & rColumnName,const OUString & rColumnAlias, const OUString & rTableRange, bool bFkt=false, sal_Int32 _nType = css::sdbc::DataType::VARCHAR, bool bAggFkt=false);
+        void appendColumns(::rtl::Reference<OSQLColumns> const & _rColumns,const OUString& _rTableAlias,const OSQLTable& _rTable);
         // Other member variables that should be available in the "set" functions
         // can be defined in the derived class. They can be initialized
         // in its constructor and, after the "traverse" routines have been used,
         // they can be queried using other functions.
 
-
-      private:
         OSQLParseTreeIterator(const OSQLParseTreeIterator & rIter) = delete;
 
       public:
         OSQLParseTreeIterator(
             const css::uno::Reference< css::sdbc::XConnection >& _rxConnection,
             const css::uno::Reference< css::container::XNameAccess >& _rxTables,
-            const OSQLParser& _rParser,
-            const OSQLParseNode* pRoot = nullptr );
+            const OSQLParser& _rParser );
         ~OSQLParseTreeIterator();
-
-        inline static void * SAL_CALL operator new( size_t nSize )
-            { return ::rtl_allocateMemory( nSize ); }
-        inline static void * SAL_CALL operator new( size_t,void* _pHint )
-            { return _pHint; }
-        inline static void SAL_CALL operator delete( void * pMem )
-            { ::rtl_freeMemory( pMem ); }
-        inline static void SAL_CALL operator delete( void *,void* )
-            {  }
 
         void dispose();
         bool isCaseSensitive() const;
         // The parse tree to be analysed/traversed:
         // If NULL is passed, the current parse tree will be deleted and the error status cleared.
         void setParseTree(const OSQLParseNode * pNewParseTree);
-//      void setParser(const OSQLParser* _pParser) { m_pParser = _pParser; }
         const OSQLParseNode * getParseTree() const { return m_pParseTree; };
 
         // subtrees in case of a select statement
@@ -194,8 +180,8 @@ namespace connectivity
 
             The returned object contains a chain (via SQLException::NextException) of SQLExceptions.
         */
-        inline const css::sdbc::SQLException&   getErrors() const { return m_aErrors; }
-        inline bool hasErrors() const { return !m_aErrors.Message.isEmpty(); }
+        const css::sdbc::SQLException&   getErrors() const { return m_aErrors; }
+        bool hasErrors() const { return !m_aErrors.Message.isEmpty(); }
 
         // statement type (already set in setParseTree):
         OSQLStatementType getStatementType() const { return m_eStatementType; }
@@ -207,15 +193,6 @@ namespace connectivity
             order (depending on the statement type).
         */
         void traverseAll();
-
-        /** traverses selected parts of the statement tree, and fills our data with
-            the information obtained during traversal
-
-            @param _nIncludeMask
-                set of TraversalParts bits, specifying which information is to be collected.
-                Note TraversalParts is currently not
-        */
-        void traverseSome( TraversalParts _nIncludeMask );
 
         // The TableRangeMap contains all tables associated with the range name found first.
         const OSQLTables& getTables() const;
@@ -278,9 +255,6 @@ namespace connectivity
                                     OUString &_rColumnName,
                                     OUString& _rTableRange);
 
-        // empty if ambiguous
-        bool getColumnTableRange(const OSQLParseNode* pNode, OUString &rTableRange) const;
-
         // return true when the tableNode is a rule like catalog_name, schema_name or table_name
         static bool isTableNode(const OSQLParseNode* _pTableNode);
 
@@ -291,10 +265,8 @@ namespace connectivity
         ::std::vector< TNodePair >& getJoinConditions() const;
 
     private:
-        // helper to implement getColumnTableRange
-        bool impl_getColumnTableRange(const OSQLParseNode* pNode, OUString &rTableRange) const;
 
-        /** traverses the list of table names, and filles _rTables
+        /** traverses the list of table names, and fills _rTables
         */
         bool traverseTableNames( OSQLTables& _rTables );
 
@@ -308,7 +280,6 @@ namespace connectivity
 
         bool traverseSelectionCriteria(const OSQLParseNode* pSelectNode);
 
-    private:
         /** constructs a new iterator, which inherits some of the settings from a parent iterator
         */
         OSQLParseTreeIterator(
@@ -340,7 +311,6 @@ namespace connectivity
         void setOrderByColumnName(const OUString & rColumnName, OUString & rTableRange, bool bAscending);
         void setGroupByColumnName(const OUString & rColumnName, OUString & rTableRange);
 
-    private:
         /** appends an SQLException corresponding to the given error code to our error collection
 
             @param  _eError
@@ -359,12 +329,6 @@ namespace connectivity
         */
         void impl_appendError( const css::sdbc::SQLException& _rError );
 
-        /** resets our errors
-        */
-        inline void impl_resetErrors()
-        {
-            m_aErrors = css::sdbc::SQLException();
-        }
         void impl_fillJoinConditions(const OSQLParseNode* i_pJoinCondition);
     };
 }

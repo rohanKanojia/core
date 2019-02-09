@@ -16,33 +16,35 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "AddField.hxx"
-#include "UITools.hxx"
+#include <AddField.hxx>
+#include <UITools.hxx>
 #include <svx/dbaexchange.hxx>
 #include <svx/svdpagv.hxx>
 #include <com/sun/star/sdb/CommandType.hpp>
 #include <com/sun/star/util/URL.hpp>
 #include <com/sun/star/sdb/XDocumentDataSource.hpp>
 #include <com/sun/star/i18n/XCollator.hpp>
+#include <com/sun/star/beans/XPropertyChangeListener.hpp>
 
+#include <vcl/event.hxx>
 #include <vcl/waitobj.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 
 #include <tools/diagnose_ex.h>
-#include "rptui_slotid.hrc"
+#include <rptui_slotid.hrc>
 
 #include <connectivity/dbtools.hxx>
-#include "helpids.hrc"
-#include "RptResId.hrc"
-#include "CondFormat.hrc"
-#include "ModuleHelper.hxx"
-#include "uistrings.hrc"
-#include "ColumnInfo.hxx"
+#include <core_resource.hxx>
+#include <helpids.h>
+#include <strings.hrc>
+#include <strings.hxx>
+#include <ColumnInfo.hxx>
 
+#include <comphelper/processfactory.hxx>
 #include <comphelper/property.hxx>
 #include <svtools/imgdef.hxx>
-#include <svtools/treelistentry.hxx>
+#include <vcl/treelistentry.hxx>
 
 namespace rptui
 {
@@ -64,8 +66,8 @@ class OAddFieldWindowListBox: public SvTreeListBox
     VclPtr<OAddFieldWindow>                    m_pTabWin;
 
 public:
-    explicit OAddFieldWindowListBox( OAddFieldWindow* _pParent );
-    virtual ~OAddFieldWindowListBox();
+    explicit OAddFieldWindowListBox(Window* pParent, OAddFieldWindow* pFieldWindow);
+    virtual ~OAddFieldWindowListBox() override;
     virtual void dispose() override;
 
     sal_Int8 AcceptDrop( const AcceptDropEvent& rEvt ) override;
@@ -100,12 +102,12 @@ uno::Sequence< beans::PropertyValue > OAddFieldWindowListBox::getSelectedFieldDe
 // class OAddFieldWindowListBox
 
 
-OAddFieldWindowListBox::OAddFieldWindowListBox( OAddFieldWindow* _pParent )
-    :SvTreeListBox( _pParent, WB_TABSTOP|WB_BORDER|WB_SORT )
-    ,m_pTabWin( _pParent )
+OAddFieldWindowListBox::OAddFieldWindowListBox(Window *pParent, OAddFieldWindow* pFieldWindow)
+    : SvTreeListBox(pParent, WB_TABSTOP|WB_BORDER|WB_SORT)
+    , m_pTabWin(pFieldWindow)
 {
     SetHelpId( HID_RPT_FIELD_SEL );
-    SetSelectionMode(MULTIPLE_SELECTION);
+    SetSelectionMode(SelectionMode::Multiple);
     SetDragDropMode( DragDropMode::ALL );
     SetHighlightRange( );
 }
@@ -140,56 +142,49 @@ void OAddFieldWindowListBox::StartDrag( sal_Int8 /*_nAction*/, const Point& /*_r
         // no drag without a field
         return;
 
-    OMultiColumnTransferable* pDataContainer = new OMultiColumnTransferable(getSelectedFieldDescriptors());
-    Reference< XTransferable> xEnsureDelete = pDataContainer;
+    rtl::Reference<OMultiColumnTransferable> pDataContainer = new OMultiColumnTransferable(getSelectedFieldDescriptors());
 
     EndSelection();
     pDataContainer->StartDrag( this, DND_ACTION_COPYMOVE | DND_ACTION_LINK );
 }
 
-// class OAddFieldWindow
-
-
-OAddFieldWindow::OAddFieldWindow(vcl::Window* pParent
-                                 ,const uno::Reference< beans::XPropertySet >& _xRowSet
-                                 )
-            :FloatingWindow(pParent, WinBits(WB_STDMODELESS|WB_SIZEABLE))
-            ,::comphelper::OPropertyChangeListener(m_aMutex)
-            ,::comphelper::OContainerListener(m_aMutex)
-            ,m_xRowSet(_xRowSet)
-            ,m_aActions(VclPtr<ToolBox>::Create(this,ModuleRes(RID_TB_SORTING)))
-            ,m_pListBox(VclPtr<OAddFieldWindowListBox>::Create( this ))
-            ,m_aFixedLine(VclPtr<FixedLine>::Create(this, ModuleRes(ADDFIELD_FL_HELP_SEPARATOR) ))
-            ,m_aHelpText(VclPtr<FixedText>::Create(this, ModuleRes(ADDFIELD_HELP_FIELD) ))
-            ,m_aInsertButton(VclPtr<PushButton>::Create(this, WB_TABSTOP|WB_CENTER))
-            ,m_nCommandType(0)
-            ,m_bEscapeProcessing(false)
-            ,m_pChangeListener(nullptr)
-            ,m_pContainerListener(nullptr)
+OAddFieldWindow::OAddFieldWindow(vcl::Window* pParent ,const uno::Reference< beans::XPropertySet >& _xRowSet)
+    : FloatingWindow(pParent, "FloatingField", "modules/dbreport/ui/floatingfield.ui")
+    , ::comphelper::OPropertyChangeListener(m_aMutex)
+    , ::comphelper::OContainerListener(m_aMutex)
+    , m_xRowSet(_xRowSet)
+    , m_pListBox(VclPtr<OAddFieldWindowListBox>::Create(get<vcl::Window>("box"), this))
+    , m_nCommandType(0)
+    , m_bEscapeProcessing(false)
 {
+    get(m_aActions, "toolbox");
+    m_nSortUpId = m_aActions->GetItemId(0);
+    m_nSortDownId = m_aActions->GetItemId(1);
+    m_nRemoveSortId = m_aActions->GetItemId(2);
+    m_nInsertId = m_aActions->GetItemId(4);
+    get(m_aHelpText, "helptext");
+
     SetHelpId( HID_RPT_FIELD_SEL_WIN );
     SetBackground( Wallpaper( Application::GetSettings().GetStyleSettings().GetFaceColor()) );
     SetMinOutputSizePixel(Size(STD_WIN_SIZE_X,STD_WIN_SIZE_Y));
 
-    m_aActions->SetStyle(m_aActions->GetStyle()|WB_LINESPACING);
+    m_aActions->SetLineSpacing(true);
     m_aActions->SetBackground( Wallpaper( Application::GetSettings().GetStyleSettings().GetFaceColor()) );
 
     m_aActions->SetSelectHdl(LINK(this, OAddFieldWindow, OnSortAction));
     setToolBox(m_aActions.get());
-    m_aActions->CheckItem(SID_FM_SORTUP);
-    m_aActions->EnableItem(SID_ADD_CONTROL_PAIR, false);
+    m_aActions->CheckItem(m_nSortUpId);
+    m_aActions->EnableItem(m_nInsertId, false);
 
     m_pListBox->SetDoubleClickHdl(LINK( this, OAddFieldWindow, OnDoubleClickHdl ) );
     m_pListBox->SetSelectHdl(LINK( this, OAddFieldWindow, OnSelectHdl ) );
     m_pListBox->SetDeselectHdl(LINK( this, OAddFieldWindow, OnSelectHdl ) );
     m_pListBox->SetDoubleClickHdl(LINK( this, OAddFieldWindow, OnDoubleClickHdl ) );
+    m_pListBox->set_expand(true);
+    m_pListBox->set_height_request(m_pListBox->GetTextHeight() * 8);
+    m_pListBox->set_width_request(m_pListBox->approximate_char_width() * 40);
     m_pListBox->Show();
-    const OUString sTitle(ModuleRes(RID_STR_INSERT));
-    m_aInsertButton->SetText(sTitle);
-    m_aInsertButton->SetClickHdl(LINK( this, OAddFieldWindow, OnClickHdl ) );
-    m_aInsertButton->Show();
 
-    m_aFixedLine->SetControlBackground( GetSettings().GetStyleSettings().GetFaceColor() );
     m_aHelpText->SetControlBackground( GetSettings().GetStyleSettings().GetFaceColor() );
 
     SetSizePixel(Size(STD_WIN_SIZE_X,STD_WIN_SIZE_Y));
@@ -207,11 +202,10 @@ OAddFieldWindow::OAddFieldWindow(vcl::Window* pParent
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("reportdesign");
         }
     }
 }
-
 
 OAddFieldWindow::~OAddFieldWindow()
 {
@@ -234,14 +228,11 @@ void OAddFieldWindow::dispose()
     if ( m_pContainerListener.is() )
         m_pContainerListener->dispose();
 
-    m_aActions.disposeAndClear();
-    m_aFixedLine.disposeAndClear();
-    m_aHelpText.disposeAndClear();
-    m_aInsertButton.disposeAndClear();
+    m_aActions.clear();
+    m_aHelpText.clear();
     m_pListBox.disposeAndClear();
     FloatingWindow::dispose();
 }
-
 
 void OAddFieldWindow::GetFocus()
 {
@@ -275,10 +266,9 @@ bool OAddFieldWindow::PreNotify( NotifyEvent& _rNEvt )
     return FloatingWindow::PreNotify( _rNEvt );
 }
 
-void OAddFieldWindow::_propertyChanged( const beans::PropertyChangeEvent& _evt ) throw( uno::RuntimeException, std::exception )
+void OAddFieldWindow::_propertyChanged( const beans::PropertyChangeEvent& _evt )
 {
     OSL_ENSURE( _evt.Source == m_xRowSet, "OAddFieldWindow::_propertyChanged: where did this come from?" );
-    (void)_evt;
     Update();
 }
 
@@ -325,13 +315,13 @@ void OAddFieldWindow::Update()
     {
         // ListBox loeschen
         m_pListBox->Clear();
-        const sal_uInt16 nItemCount = m_aActions->GetItemCount();
-        for (sal_uInt16 j = 0; j< nItemCount; ++j)
+        const ToolBox::ImplToolItems::size_type nItemCount = m_aActions->GetItemCount();
+        for (ToolBox::ImplToolItems::size_type j = 0; j< nItemCount; ++j)
         {
             m_aActions->EnableItem(m_aActions->GetItemId(j),false);
         }
 
-        OUString aTitle(ModuleRes(RID_STR_FIELDSELECTION));
+        OUString aTitle(RptResId(RID_STR_FIELDSELECTION));
         SetText(aTitle);
         if ( m_xRowSet.is() )
         {
@@ -368,11 +358,11 @@ void OAddFieldWindow::Update()
             lcl_addToList( *m_pListBox, aParamNames );
 
             // set title
-            aTitle += " " + OUString( m_aCommandName.getStr() );
+            aTitle += " " + m_aCommandName;
             SetText( aTitle );
             if ( !m_aCommandName.isEmpty() )
             {
-                for (sal_uInt16 i = 0; i < nItemCount; ++i)
+                for (ToolBox::ImplToolItems::size_type i = 0; i < nItemCount; ++i)
                 {
                     m_aActions->EnableItem(m_aActions->GetItemId(i));
                 }
@@ -382,49 +372,8 @@ void OAddFieldWindow::Update()
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("reportdesign");
     }
-}
-
-
-void OAddFieldWindow::Resize()
-{
-    FloatingWindow::Resize();
-
-    const Size aWindowSize( GetOutputSizePixel() );
-
-
-    const Size aRelated(LogicToPixel( Size( RELATED_CONTROLS, RELATED_CONTROLS ), MAP_APPFONT ));
-    const Size aFixedTextSize(LogicToPixel( Size( FIXEDTEXT_WIDTH, FIXEDTEXT_HEIGHT ), MAP_APPFONT ));
-
-    // ToolBar
-    Size aToolbarSize( m_aActions->GetSizePixel() );
-    Point aToolbarPos( aRelated.Width(), aRelated.Height());
-    m_aActions->SetPosPixel(Point(aToolbarPos.X(), aToolbarPos.Y()));
-
-    Size aLBSize( aWindowSize );
-    aLBSize.Width()  -= ( 2 * aRelated.Width() );
-
-    // help text
-    const Size aHelpTextSize = m_aHelpText->CalcMinimumSize(aLBSize.Width());
-
-    // ListBox
-    Point aLBPos( aRelated.Width(), aRelated.Height() + aToolbarSize.Height() + aRelated.Height() );
-
-    aLBSize.Height() -= aToolbarSize.Height();   //         Toolbar
-    aLBSize.Height() -= (6*aRelated.Height());   //         6 * gap
-    aLBSize.Height() -= aFixedTextSize.Height(); //         fixed line
-    aLBSize.Height() -= aHelpTextSize.Height();  //         help text
-    m_pListBox->SetPosSizePixel( aLBPos, aLBSize );
-
-    // FixedLine
-    Size aFLSize( aLBSize.Width(),aFixedTextSize.Height() );
-    Point aFLPos( aRelated.Width(), aLBPos.Y() + aLBSize.Height() + aRelated.Height());
-    m_aFixedLine->SetPosSizePixel( aFLPos, aFLSize );
-
-    // Help text
-    Point aFTPos( aRelated.Width(), aFLPos.Y() + aFLSize.Height() + aRelated.Height() );
-    m_aHelpText->SetPosSizePixel( aFTPos, aHelpTextSize );
 }
 
 uno::Reference< sdbc::XConnection> OAddFieldWindow::getConnection() const
@@ -432,7 +381,7 @@ uno::Reference< sdbc::XConnection> OAddFieldWindow::getConnection() const
     return uno::Reference< sdbc::XConnection>(m_xRowSet->getPropertyValue( PROPERTY_ACTIVECONNECTION ),uno::UNO_QUERY);
 }
 
-void OAddFieldWindow::fillDescriptor(SvTreeListEntry* _pSelected,svx::ODataAccessDescriptor& _rDescriptor)
+void OAddFieldWindow::fillDescriptor(SvTreeListEntry const * _pSelected,svx::ODataAccessDescriptor& _rDescriptor)
 {
     if ( _pSelected && m_xColumns.is() )
     {
@@ -444,23 +393,23 @@ void OAddFieldWindow::fillDescriptor(SvTreeListEntry* _pSelected,svx::ODataAcces
             {
                 uno::Reference<frame::XModel> xModel(xDocument->getDatabaseDocument(),uno::UNO_QUERY);
                 if ( xModel.is() )
-                    _rDescriptor[ daDatabaseLocation ] <<= xModel->getURL();
+                    _rDescriptor[ DataAccessDescriptorProperty::DatabaseLocation ] <<= xModel->getURL();
             }
         }
 
-        _rDescriptor[ svx::daCommand ]            <<= GetCommand();
-        _rDescriptor[ svx::daCommandType ]        <<= GetCommandType();
-        _rDescriptor[ svx::daEscapeProcessing ]   <<= GetEscapeProcessing();
-        _rDescriptor[ svx::daConnection ]         <<= getConnection();
+        _rDescriptor[ svx::DataAccessDescriptorProperty::Command ]            <<= GetCommand();
+        _rDescriptor[ svx::DataAccessDescriptorProperty::CommandType ]        <<= GetCommandType();
+        _rDescriptor[ svx::DataAccessDescriptorProperty::EscapeProcessing ]   <<= GetEscapeProcessing();
+        _rDescriptor[ svx::DataAccessDescriptorProperty::Connection ]         <<= getConnection();
 
         ColumnInfo* pInfo = static_cast<ColumnInfo*>(_pSelected->GetUserData());
-        _rDescriptor[ svx::daColumnName ]         <<= pInfo->sColumnName;
+        _rDescriptor[ svx::DataAccessDescriptorProperty::ColumnName ]         <<= pInfo->sColumnName;
         if ( m_xColumns->hasByName( pInfo->sColumnName ) )
-            _rDescriptor[ svx::daColumnObject ] <<= m_xColumns->getByName(pInfo->sColumnName);
+            _rDescriptor[ svx::DataAccessDescriptorProperty::ColumnObject ] = m_xColumns->getByName(pInfo->sColumnName);
     }
 }
 
-void OAddFieldWindow::_elementInserted( const container::ContainerEvent& _rEvent )  throw(css::uno::RuntimeException, std::exception)
+void OAddFieldWindow::_elementInserted( const container::ContainerEvent& _rEvent )
 {
     if ( m_pListBox.get() )
     {
@@ -479,7 +428,7 @@ void OAddFieldWindow::_elementInserted( const container::ContainerEvent& _rEvent
     }
 }
 
-void OAddFieldWindow::_elementRemoved( const container::ContainerEvent& /*_rEvent*/ ) throw(css::uno::RuntimeException, std::exception)
+void OAddFieldWindow::_elementRemoved( const container::ContainerEvent& /*_rEvent*/ )
 {
     if ( m_pListBox.get() )
     {
@@ -489,33 +438,20 @@ void OAddFieldWindow::_elementRemoved( const container::ContainerEvent& /*_rEven
     }
 }
 
-void OAddFieldWindow::_elementReplaced( const container::ContainerEvent& /*_rEvent*/ ) throw(css::uno::RuntimeException, std::exception)
+void OAddFieldWindow::_elementReplaced( const container::ContainerEvent& /*_rEvent*/ )
 {
 }
 
-IMPL_LINK_NOARG_TYPED( OAddFieldWindow, OnSelectHdl, SvTreeListBox*, void )
+IMPL_LINK_NOARG( OAddFieldWindow, OnSelectHdl, SvTreeListBox*, void )
 {
-    m_aActions->EnableItem(SID_ADD_CONTROL_PAIR, ( m_pListBox.get() && m_pListBox->GetSelectionCount() > 0 ));
+    m_aActions->EnableItem(m_nInsertId, ( m_pListBox.get() && m_pListBox->GetSelectionCount() > 0 ));
 }
 
-IMPL_LINK_NOARG_TYPED( OAddFieldWindow, OnClickHdl, Button*, void )
-{
-    OnDoubleClickHdl(nullptr);
-}
-
-IMPL_LINK_NOARG_TYPED( OAddFieldWindow, OnDoubleClickHdl, SvTreeListBox*, bool )
+IMPL_LINK_NOARG( OAddFieldWindow, OnDoubleClickHdl, SvTreeListBox*, bool )
 {
     m_aCreateLink.Call(*this);
 
     return false;
-}
-
-void OAddFieldWindow::setImageList(sal_Int16 _eBitmapSet)
-{
-    sal_Int16 nN = IMG_ADDFIELD_DLG_SC;
-    if ( _eBitmapSet == SFX_SYMBOLS_SIZE_LARGE )
-        nN = IMG_ADDFIELD_DLG_LC;
-    m_aActions->SetImageList(ImageList(ModuleRes(nN)));
 }
 
 void OAddFieldWindow::resizeControls(const Size& _rDiff)
@@ -527,34 +463,34 @@ void OAddFieldWindow::resizeControls(const Size& _rDiff)
     }
 }
 
-IMPL_LINK_NOARG_TYPED( OAddFieldWindow, OnSortAction, ToolBox*, void )
+IMPL_LINK_NOARG( OAddFieldWindow, OnSortAction, ToolBox*, void )
 {
     const sal_uInt16 nCurItem = m_aActions->GetCurItemId();
-    if ( SID_ADD_CONTROL_PAIR == nCurItem )
+    if (nCurItem == m_nInsertId)
         OnDoubleClickHdl(nullptr);
     else
     {
-        if ( SID_FM_REMOVE_FILTER_SORT == nCurItem || !m_aActions->IsItemChecked(nCurItem) )
+        if (nCurItem == m_nRemoveSortId || !m_aActions->IsItemChecked(nCurItem))
         {
-            const sal_uInt16 nItemCount = m_aActions->GetItemCount();
-            for (sal_uInt16 j = 0; j< nItemCount; ++j)
+            const ToolBox::ImplToolItems::size_type nItemCount = m_aActions->GetItemCount();
+            for (ToolBox::ImplToolItems::size_type j = 0; j< nItemCount; ++j)
             {
                 const sal_uInt16 nItemId = m_aActions->GetItemId(j);
                 if ( nCurItem != nItemId )
                     m_aActions->CheckItem(nItemId,false);
             }
             SvSortMode eSortMode = SortNone;
-            if ( SID_FM_REMOVE_FILTER_SORT != nCurItem )
+            if (nCurItem != m_nRemoveSortId)
             {
                 m_aActions->CheckItem(nCurItem,!m_aActions->IsItemChecked(nCurItem));
-                if ( m_aActions->IsItemChecked(SID_FM_SORTUP) )
+                if (m_aActions->IsItemChecked(m_nSortUpId))
                     eSortMode = SortAscending;
-                else if ( m_aActions->IsItemChecked(SID_FM_SORTDOWN) )
+                else if (m_aActions->IsItemChecked(m_nSortDownId))
                     eSortMode = SortDescending;
             }
 
             m_pListBox->GetModel()->SetSortMode(eSortMode);
-            if ( SID_FM_REMOVE_FILTER_SORT == nCurItem )
+            if (nCurItem == m_nRemoveSortId)
                 Update();
 
             m_pListBox->GetModel()->Resort();

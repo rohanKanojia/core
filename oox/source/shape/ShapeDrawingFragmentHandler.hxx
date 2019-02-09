@@ -10,8 +10,8 @@
 #ifndef INCLUDED_OOX_SOURCE_SHAPE_SHAPEDRAWINGFRAGMENTHANDLER_HXX
 #define INCLUDED_OOX_SOURCE_SHAPE_SHAPEDRAWINGFRAGMENTHANDLER_HXX
 
-#include "oox/core/fragmenthandler2.hxx"
-#include "oox/drawingml/shapegroupcontext.hxx"
+#include <oox/core/fragmenthandler2.hxx>
+#include <oox/drawingml/shapegroupcontext.hxx>
 
 namespace oox { namespace shape {
 
@@ -19,13 +19,13 @@ namespace oox { namespace shape {
 class ShapeDrawingFragmentHandler : public oox::core::FragmentHandler2
 {
 public:
-    ShapeDrawingFragmentHandler( oox::core::XmlFilterBase& rFilter, const OUString& rFragmentPath, oox::drawingml::ShapePtr pGroupShapePtr ) throw();
-    virtual ~ShapeDrawingFragmentHandler() throw();
-    virtual void SAL_CALL endDocument() throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    ShapeDrawingFragmentHandler(oox::core::XmlFilterBase& rFilter, const OUString& rFragmentPath, oox::drawingml::ShapePtr const & pGroupShapePtr);
+    virtual ~ShapeDrawingFragmentHandler() throw() override;
+    virtual void SAL_CALL endDocument() override;
     virtual ::oox::core::ContextHandlerRef onCreateContext(sal_Int32 Element, const AttributeList& rAttribs ) override;
 
 private:
-        oox::drawingml::ShapePtr        mpGroupShapePtr;
+        oox::drawingml::ShapePtr const  mpGroupShapePtr;
 };
 
 } }

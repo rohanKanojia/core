@@ -21,21 +21,20 @@
 
 #include <vcl/waitobj.hxx>
 
-#include "viewdata.hxx"
-#include "document.hxx"
-#include "uiitems.hxx"
-#include "global.hxx"
-#include "globalnames.hxx"
-#include "dbdata.hxx"
-#include "scresid.hxx"
-#include "queryentry.hxx"
-#include "typedstrdata.hxx"
+#include <viewdata.hxx>
+#include <document.hxx>
+#include <uiitems.hxx>
+#include <global.hxx>
+#include <globalnames.hxx>
+#include <dbdata.hxx>
+#include <scresid.hxx>
+#include <queryentry.hxx>
+#include <filterentries.hxx>
 
-#include "sc.hrc"
-#include "filter.hrc"
-#include "globstr.hrc"
+#include <sc.hrc>
+#include <strings.hrc>
 
-#include "pfiltdlg.hxx"
+#include <pfiltdlg.hxx>
 #include <svl/zforlist.hxx>
 #include <svl/sharedstringpool.hxx>
 
@@ -45,19 +44,17 @@ ScPivotFilterDlg::ScPivotFilterDlg(vcl::Window* pParent, const SfxItemSet& rArgS
             "modules/scalc/ui/pivotfilterdialog.ui" )
     ,
 
-        aStrNone        ( SC_RESSTR(SCSTR_NONE) ),
-        aStrEmpty       ( SC_RESSTR(SCSTR_FILTER_EMPTY) ),
-        aStrNotEmpty    ( SC_RESSTR(SCSTR_FILTER_NOTEMPTY) ),
-        aStrColumn      ( SC_RESSTR(SCSTR_COLUMN) ),
+        aStrNone        ( ScResId(SCSTR_NONE) ),
+        aStrEmpty       ( ScResId(SCSTR_FILTER_EMPTY) ),
+        aStrNotEmpty    ( ScResId(SCSTR_FILTER_NOTEMPTY) ),
+        aStrColumn      ( ScResId(SCSTR_COLUMN) ),
 
         nWhichQuery     ( rArgSet.GetPool()->GetWhich( SID_QUERY ) ),
         theQueryData    ( static_cast<const ScQueryItem&>(
                            rArgSet.Get( nWhichQuery )).GetQueryData() ),
-        pOutItem        ( nullptr ),
         pViewData       ( nullptr ),
         pDoc            ( nullptr ),
-        nSrcTab         ( nSourceTab ),     // is not in QueryParam
-        nFieldCount     ( 0 )
+        nSrcTab         ( nSourceTab )     // is not in QueryParam
 {
     get(m_pLbField1, "field1");
     get(m_pLbCond1, "cond1");
@@ -75,9 +72,6 @@ ScPivotFilterDlg::ScPivotFilterDlg(vcl::Window* pParent, const SfxItemSet& rArgS
     get(m_pBtnUnique, "unique");
     get(m_pFtDbArea, "dbarea");
 
-    for (sal_uInt16 i=0; i<=MAXCOL; i++)
-        pEntryLists[i] = nullptr;
-
     Init( rArgSet );
 }
 
@@ -88,10 +82,9 @@ ScPivotFilterDlg::~ScPivotFilterDlg()
 
 void ScPivotFilterDlg::dispose()
 {
-    for (sal_uInt16 i=0; i<=MAXCOL; i++)
-        delete pEntryLists[i];
+    for (auto& a : m_pEntryLists) a.reset();
 
-    delete pOutItem;
+    pOutItem.reset();
     m_pLbField1.clear();
     m_pLbCond1.clear();
     m_pEdVal1.clear();
@@ -127,7 +120,7 @@ void ScPivotFilterDlg::Init( const SfxItemSet& rArgSet )
     m_pLbConnect2->SetSelectHdl( LINK( this, ScPivotFilterDlg, LbSelectHdl ) );
 
     m_pBtnCase->Check( theQueryData.bCaseSens );
-    m_pBtnRegExp->Check( theQueryData.eSearchType == utl::SearchParam::SRCH_REGEXP );
+    m_pBtnRegExp->Check( theQueryData.eSearchType == utl::SearchParam::SearchType::Regexp );
     m_pBtnUnique->Check( !theQueryData.bDuplicate );
 
     pViewData   = rQueryItem.GetViewData();
@@ -194,14 +187,14 @@ void ScPivotFilterDlg::Init( const SfxItemSet& rArgSet )
                 aValStr = aStrEmpty;
             else if (rEntry.IsQueryByNonEmpty())
                 aValStr = aStrNotEmpty;
-            sal_uInt16  nCondPos     = (sal_uInt16)rEntry.eOp;
+            sal_uInt16  nCondPos     = static_cast<sal_uInt16>(rEntry.eOp);
             sal_uInt16  nFieldSelPos = GetFieldSelPos( static_cast<SCCOL>(rEntry.nField) );
 
             aFieldLbArr[i]->SelectEntryPos( nFieldSelPos );
             aCondLbArr [i]->SelectEntryPos( nCondPos );
             UpdateValueList( static_cast<sal_uInt16>(i+1) );
             aValueEdArr[i]->SetText( aValStr );
-            if (aValStr.equals(aStrEmpty) || aValStr.equals(aStrNotEmpty))
+            if (aValStr == aStrEmpty || aValStr == aStrNotEmpty)
                 aCondLbArr[i]->Disable();
         }
         else
@@ -216,38 +209,38 @@ void ScPivotFilterDlg::Init( const SfxItemSet& rArgSet )
 
     // disable/enable logic:
 
-       (m_pLbField1->GetSelectEntryPos() != 0)
-    && (m_pLbField2->GetSelectEntryPos() != 0)
-        ? m_pLbConnect1->SelectEntryPos( (sal_uInt16)theQueryData.GetEntry(1).eConnect )
+       (m_pLbField1->GetSelectedEntryPos() != 0)
+    && (m_pLbField2->GetSelectedEntryPos() != 0)
+        ? m_pLbConnect1->SelectEntryPos( static_cast<sal_uInt16>(theQueryData.GetEntry(1).eConnect) )
         : m_pLbConnect1->SetNoSelection();
 
-       (m_pLbField2->GetSelectEntryPos() != 0)
-    && (m_pLbField3->GetSelectEntryPos() != 0)
-        ? m_pLbConnect2->SelectEntryPos( (sal_uInt16)theQueryData.GetEntry(2).eConnect )
+       (m_pLbField2->GetSelectedEntryPos() != 0)
+    && (m_pLbField3->GetSelectedEntryPos() != 0)
+        ? m_pLbConnect2->SelectEntryPos( static_cast<sal_uInt16>(theQueryData.GetEntry(2).eConnect) )
         : m_pLbConnect2->SetNoSelection();
 
-    if ( m_pLbField1->GetSelectEntryPos() == 0 )
+    if ( m_pLbField1->GetSelectedEntryPos() == 0 )
     {
         m_pLbConnect1->Disable();
         m_pLbField2->Disable();
         m_pLbCond2->Disable();
         m_pEdVal2->Disable();
     }
-    else if ( m_pLbConnect1->GetSelectEntryCount() == 0 )
+    else if ( m_pLbConnect1->GetSelectedEntryCount() == 0 )
     {
         m_pLbField2->Disable();
         m_pLbCond2->Disable();
         m_pEdVal2->Disable();
     }
 
-    if ( m_pLbField2->GetSelectEntryPos() == 0 )
+    if ( m_pLbField2->GetSelectedEntryPos() == 0 )
     {
         m_pLbConnect2->Disable();
         m_pLbField3->Disable();
         m_pLbCond3->Disable();
         m_pEdVal3->Disable();
     }
-    else if ( m_pLbConnect2->GetSelectEntryCount() == 0 )
+    else if ( m_pLbConnect2->GetSelectedEntryCount() == 0 )
     {
         m_pLbField3->Disable();
         m_pLbCond3->Disable();
@@ -286,7 +279,6 @@ void ScPivotFilterDlg::FillFieldLists()
             m_pLbField3->InsertEntry( aFieldName, i );
             i++;
         }
-        nFieldCount = i;
     }
 }
 
@@ -294,8 +286,8 @@ void ScPivotFilterDlg::UpdateValueList( sal_uInt16 nList )
 {
     if ( pDoc && nList>0 && nList<=3 )
     {
-        ComboBox*   pValList        = aValueEdArr[nList-1];
-        sal_Int32   nFieldSelPos    = aFieldLbArr[nList-1]->GetSelectEntryPos();
+        ComboBox*   pValList        = aValueEdArr[nList-1].get();
+        sal_Int32   nFieldSelPos    = aFieldLbArr[nList-1]->GetSelectedEntryPos();
         sal_Int32   nListPos        = 0;
         OUString    aCurValue       = pValList->GetText();
 
@@ -307,7 +299,7 @@ void ScPivotFilterDlg::UpdateValueList( sal_uInt16 nList )
         if ( pDoc && nFieldSelPos )
         {
             SCCOL nColumn = theQueryData.nCol1 + static_cast<SCCOL>(nFieldSelPos) - 1;
-            if (!pEntryLists[nColumn])
+            if (!m_pEntryLists[nColumn])
             {
                 WaitObject aWaiter( this );
 
@@ -315,18 +307,16 @@ void ScPivotFilterDlg::UpdateValueList( sal_uInt16 nList )
                 SCROW   nFirstRow   = theQueryData.nRow1;
                 SCROW   nLastRow    = theQueryData.nRow2;
                 nFirstRow++;
-                bool bHasDates = false;
                 bool bCaseSens = m_pBtnCase->IsChecked();
-                pEntryLists[nColumn] = new std::vector<ScTypedStrData>;
+                m_pEntryLists[nColumn].reset( new ScFilterEntries);
                 pDoc->GetFilterEntriesArea(
-                    nColumn, nFirstRow, nLastRow, nTab, bCaseSens, *pEntryLists[nColumn], bHasDates);
+                    nColumn, nFirstRow, nLastRow, nTab, bCaseSens, *m_pEntryLists[nColumn]);
             }
 
-            std::vector<ScTypedStrData>* pColl = pEntryLists[nColumn];
-            std::vector<ScTypedStrData>::const_iterator it = pColl->begin(), itEnd = pColl->end();
-            for (; it != itEnd; ++it)
+            const ScFilterEntries* pColl = m_pEntryLists[nColumn].get();
+            for (const auto& rEntry : *pColl)
             {
-                pValList->InsertEntry(it->GetString(), nListPos);
+                pValList->InsertEntry(rEntry.GetString(), nListPos);
                 nListPos++;
             }
         }
@@ -338,7 +328,7 @@ void ScPivotFilterDlg::ClearValueList( sal_uInt16 nList )
 {
     if ( nList>0 && nList<=3 )
     {
-        ComboBox* pValList = aValueEdArr[nList-1];
+        ComboBox* pValList = aValueEdArr[nList-1].get();
         pValList->Clear();
         pValList->InsertEntry( aStrNotEmpty, 0 );
         pValList->InsertEntry( aStrEmpty, 1 );
@@ -357,17 +347,17 @@ sal_uInt16 ScPivotFilterDlg::GetFieldSelPos( SCCOL nField )
 const ScQueryItem& ScPivotFilterDlg::GetOutputItem()
 {
     ScQueryParam    theParam( theQueryData );
-    sal_Int32          nConnect1 = m_pLbConnect1->GetSelectEntryPos();
-    sal_Int32          nConnect2 = m_pLbConnect2->GetSelectEntryPos();
+    sal_Int32          nConnect1 = m_pLbConnect1->GetSelectedEntryPos();
+    sal_Int32          nConnect2 = m_pLbConnect2->GetSelectedEntryPos();
 
     svl::SharedStringPool& rPool = pViewData->GetDocument()->GetSharedStringPool();
 
     for ( SCSIZE i=0; i<3; i++ )
     {
-        const sal_Int32 nField = aFieldLbArr[i]->GetSelectEntryPos();
-        ScQueryOp   eOp     = (ScQueryOp)aCondLbArr[i]->GetSelectEntryPos();
+        const sal_Int32 nField = aFieldLbArr[i]->GetSelectedEntryPos();
+        ScQueryOp   eOp     = static_cast<ScQueryOp>(aCondLbArr[i]->GetSelectedEntryPos());
 
-        bool bDoThis = (aFieldLbArr[i]->GetSelectEntryPos() != 0);
+        bool bDoThis = (aFieldLbArr[i]->GetSelectedEntryPos() != 0);
         theParam.GetEntry(i).bDoQuery = bDoThis;
 
         if ( bDoThis )
@@ -378,16 +368,16 @@ const ScQueryItem& ScPivotFilterDlg::GetOutputItem()
             OUString aStrVal = aValueEdArr[i]->GetText();
 
             /*
-             * The dialog returns the specifc field values "empty"/"non empty"
+             * The dialog returns the specific field values "empty"/"non empty"
              * as constant in nVal in connection with the bQueryByString switch
              * set to false
              */
-            if ( aStrVal.equals(aStrEmpty) )
+            if ( aStrVal == aStrEmpty )
             {
                 OSL_ASSERT(eOp == SC_EQUAL);
                 rEntry.SetQueryByEmpty();
             }
-            else if ( aStrVal.equals(aStrNotEmpty) )
+            else if ( aStrVal == aStrNotEmpty )
             {
                 OSL_ASSERT(eOp == SC_EQUAL);
                 rEntry.SetQueryByNonEmpty();
@@ -406,10 +396,10 @@ const ScQueryItem& ScPivotFilterDlg::GetOutputItem()
     }
 
     theParam.GetEntry(1).eConnect = (nConnect1 != LISTBOX_ENTRY_NOTFOUND)
-                                    ? (ScQueryConnect)nConnect1
+                                    ? static_cast<ScQueryConnect>(nConnect1)
                                     : SC_AND;
     theParam.GetEntry(2).eConnect = (nConnect2 != LISTBOX_ENTRY_NOTFOUND)
-                                    ? (ScQueryConnect)nConnect2
+                                    ? static_cast<ScQueryConnect>(nConnect2)
                                     : SC_AND;
 
     theParam.bInplace   = false;
@@ -419,17 +409,16 @@ const ScQueryItem& ScPivotFilterDlg::GetOutputItem()
 
     theParam.bDuplicate     = !m_pBtnUnique->IsChecked();
     theParam.bCaseSens      = m_pBtnCase->IsChecked();
-    theParam.eSearchType    = m_pBtnRegExp->IsChecked() ? utl::SearchParam::SRCH_REGEXP : utl::SearchParam::SRCH_NORMAL;
+    theParam.eSearchType    = m_pBtnRegExp->IsChecked() ? utl::SearchParam::SearchType::Regexp : utl::SearchParam::SearchType::Normal;
 
-    if ( pOutItem ) DELETEZ( pOutItem );
-    pOutItem = new ScQueryItem( nWhichQuery, &theParam );
+    pOutItem.reset( new ScQueryItem( nWhichQuery, &theParam ) );
 
     return *pOutItem;
 }
 
 // Handler:
 
-IMPL_LINK_TYPED( ScPivotFilterDlg, LbSelectHdl, ListBox&, rLb, void )
+IMPL_LINK( ScPivotFilterDlg, LbSelectHdl, ListBox&, rLb, void )
 {
 
     /*
@@ -456,7 +445,7 @@ IMPL_LINK_TYPED( ScPivotFilterDlg, LbSelectHdl, ListBox&, rLb, void )
     }
     else if (&rLb == m_pLbField1)
     {
-        if ( m_pLbField1->GetSelectEntryPos() == 0 )
+        if ( m_pLbField1->GetSelectedEntryPos() == 0 )
         {
             m_pLbConnect1->SetNoSelection();
             m_pLbConnect2->SetNoSelection();
@@ -488,7 +477,7 @@ IMPL_LINK_TYPED( ScPivotFilterDlg, LbSelectHdl, ListBox&, rLb, void )
     }
     else if (&rLb == m_pLbField2)
     {
-        if ( m_pLbField2->GetSelectEntryPos() == 0 )
+        if ( m_pLbField2->GetSelectedEntryPos() == 0 )
         {
             m_pLbConnect2->SetNoSelection();
             m_pLbField3->SelectEntryPos( 0 );
@@ -512,20 +501,20 @@ IMPL_LINK_TYPED( ScPivotFilterDlg, LbSelectHdl, ListBox&, rLb, void )
     }
     else if (&rLb == m_pLbField3)
     {
-        ( m_pLbField3->GetSelectEntryPos() == 0 )
+        ( m_pLbField3->GetSelectedEntryPos() == 0 )
             ? ClearValueList( 3 )
             : UpdateValueList( 3 );
     }
 }
 
-IMPL_LINK_TYPED( ScPivotFilterDlg, CheckBoxHdl, Button*, pBox, void )
+IMPL_LINK( ScPivotFilterDlg, CheckBoxHdl, Button*, pBox, void )
 {
     // update the value lists when dealing with uppercase/lowercase
 
     if (pBox == m_pBtnCase)                    // value lists
     {
-        for (sal_uInt16 i=0; i<=MAXCOL; i++)
-            DELETEZ( pEntryLists[i] );
+        for (auto& a : m_pEntryLists)
+            a.reset();
 
         OUString aCurVal1 = m_pEdVal1->GetText();
         OUString aCurVal2 = m_pEdVal2->GetText();
@@ -539,7 +528,7 @@ IMPL_LINK_TYPED( ScPivotFilterDlg, CheckBoxHdl, Button*, pBox, void )
     }
 }
 
-IMPL_LINK_TYPED( ScPivotFilterDlg, ValModifyHdl, Edit&, rEd, void )
+IMPL_LINK( ScPivotFilterDlg, ValModifyHdl, Edit&, rEd, void )
 {
     OUString aStrVal = rEd.GetText();
     ListBox* pLb = m_pLbCond1;
@@ -547,10 +536,10 @@ IMPL_LINK_TYPED( ScPivotFilterDlg, ValModifyHdl, Edit&, rEd, void )
     if ( &rEd == m_pEdVal2 ) pLb = m_pLbCond2;
     else if ( &rEd == m_pEdVal3 ) pLb = m_pLbCond3;
 
-    // if ond of the special values "empty"/"non-empty" was chosen only the
+    // if cond of the special values "empty"/"non-empty" was chosen only the
     // =-operand makes sense:
 
-    if ( aStrEmpty.equals(aStrVal) || aStrNotEmpty.equals(aStrVal) )
+    if ( aStrEmpty == aStrVal || aStrNotEmpty == aStrVal )
     {
         pLb->SelectEntry(OUString('='));
         pLb->Disable();

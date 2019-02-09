@@ -10,18 +10,18 @@
 #include <unx/gendata.hxx>
 #include <headless/svpinst.hxx>
 
-class SvpSalData : public SalGenericData
+class SvpSalData : public GenericUnixSalData
 {
 public:
-    explicit SvpSalData( SalInstance *pInstance ) : SalGenericData( SAL_DATA_SVP, pInstance ) {}
+    explicit SvpSalData( SalInstance *pInstance ) : GenericUnixSalData( SAL_DATA_SVP, pInstance ) {}
     virtual void ErrorTrapPush() override {}
-    virtual bool ErrorTrapPop( bool ) override { return false; }
+    virtual bool ErrorTrapPop( bool /*bIgnoreError*/ = true ) override { return false; }
 };
 
 // plugin factory function
 SalInstance* svp_create_SalInstance()
 {
-    SvpSalInstance* pInstance = new SvpSalInstance( new SalYieldMutex() );
+    SvpSalInstance* pInstance = new SvpSalInstance( std::make_unique<SvpSalYieldMutex>() );
     new SvpSalData( pInstance );
     return pInstance;
 }

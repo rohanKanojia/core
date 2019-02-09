@@ -25,6 +25,7 @@
 
 #include <cppuhelper/implbase.hxx>
 
+#include <memory>
 #include <vector>
 #include <svl/lstner.hxx>
 #include <svx/xit.hxx>
@@ -35,7 +36,7 @@ class SdrModel;
 class SfxItemPool;
 class SfxItemSet;
 
-typedef std::vector< SfxItemSet* > ItemPoolVector;
+typedef std::vector< std::unique_ptr< SfxItemSet > > ItemPoolVector;
 class SvxUnoNameItemTable : public cppu::WeakImplHelper< css::container::XNameContainer, css::lang::XServiceInfo >,
                             public SfxListener
 {
@@ -43,17 +44,17 @@ private:
     SdrModel*       mpModel;
     SfxItemPool*    mpModelPool;
     sal_uInt16          mnWhich;
-    sal_uInt8           mnMemberId;
+    sal_uInt8 const     mnMemberId;
 
     ItemPoolVector maItemSetVector;
 
-    void SAL_CALL ImplInsertByName( const OUString& aName, const css::uno::Any& aElement );
+    void ImplInsertByName( const OUString& aName, const css::uno::Any& aElement );
 
 public:
     SvxUnoNameItemTable( SdrModel* pModel, sal_uInt16 nWhich, sal_uInt8 nMemberId ) throw();
-    virtual ~SvxUnoNameItemTable() throw();
+    virtual ~SvxUnoNameItemTable() throw() override;
 
-    virtual NameOrIndex* createItem() const throw() = 0;
+    virtual NameOrIndex* createItem() const = 0;
     virtual bool isValid( const NameOrIndex* pItem ) const;
 
     void dispose();
@@ -62,22 +63,22 @@ public:
     virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) throw () override;
 
     // XServiceInfo
-    virtual sal_Bool SAL_CALL supportsService( const  OUString& ServiceName ) throw( css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL supportsService( const  OUString& ServiceName ) override;
 
     // XNameContainer
-    virtual void SAL_CALL insertByName( const  OUString& aName, const  css::uno::Any& aElement ) throw( css::lang::IllegalArgumentException, css::container::ElementExistException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeByName( const  OUString& Name ) throw( css::container::NoSuchElementException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL insertByName( const  OUString& aName, const  css::uno::Any& aElement ) override;
+    virtual void SAL_CALL removeByName( const  OUString& Name ) override;
 
     // XNameReplace
-    virtual void SAL_CALL replaceByName( const  OUString& aName, const  css::uno::Any& aElement ) throw( css::lang::IllegalArgumentException, css::container::NoSuchElementException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL replaceByName( const  OUString& aName, const  css::uno::Any& aElement ) override;
 
     // XNameAccess
-    virtual css::uno::Any SAL_CALL getByName( const  OUString& aName ) throw( css::container::NoSuchElementException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence<  OUString > SAL_CALL getElementNames(  ) throw( css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasByName( const  OUString& aName ) throw( css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL getByName( const  OUString& aName ) override;
+    virtual css::uno::Sequence<  OUString > SAL_CALL getElementNames(  ) override;
+    virtual sal_Bool SAL_CALL hasByName( const  OUString& aName ) override;
 
     // XElementAccess
-    virtual sal_Bool SAL_CALL hasElements(  ) throw( css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL hasElements(  ) override;
 };
 
 #endif // INCLUDED_SVX_SOURCE_UNODRAW_UNONAMEITEMTABLE_HXX

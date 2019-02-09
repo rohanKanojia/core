@@ -24,10 +24,8 @@
 #include <vcl/lstbox.hxx>
 #include <vcl/button.hxx>
 #include <vcl/dialog.hxx>
-#include <vcl/group.hxx>
-#include "TableGrantCtrl.hxx"
+#include <TableGrantCtrl.hxx>
 #include "adminpages.hxx"
-#include <comphelper/uno3.hxx>
 
 namespace com { namespace sun { namespace star {
     namespace sdbc {
@@ -38,10 +36,9 @@ namespace com { namespace sun { namespace star {
 namespace dbaui
 {
 
-class OUserAdmin : public OGenericAdministrationPage
+class OUserAdmin final : public OGenericAdministrationPage
 {
     friend class VclPtr<OUserAdmin>;
-protected:
     VclPtr<ListBox>             m_pUSER;
     VclPtr<PushButton>          m_pNEWUSER;
     VclPtr<PushButton>          m_pCHANGEPWD;
@@ -55,16 +52,16 @@ protected:
     OUString            m_UserName;
 
     // methods
-    DECL_LINK_TYPED( ListDblClickHdl, ListBox&, void );
-    DECL_LINK_TYPED( UserHdl,   Button *, void );
+    DECL_LINK( ListDblClickHdl, ListBox&, void );
+    DECL_LINK( UserHdl,   Button *, void );
 
     void        FillUserNames();
 
     OUserAdmin( vcl::Window* pParent, const SfxItemSet& _rCoreAttrs);
 public:
-    static  VclPtr<SfxTabPage> Create( vcl::Window* pParent, const SfxItemSet* _rAttrSet );
+    static  VclPtr<SfxTabPage> Create( TabPageParent pParent, const SfxItemSet* _rAttrSet );
 
-    virtual ~OUserAdmin();
+    virtual ~OUserAdmin() override;
     virtual void dispose() override;
     OUString GetUser();
 
@@ -72,10 +69,10 @@ public:
     virtual void implInitControls(const SfxItemSet& _rSet, bool _bSaveValue) override;
 
     // <method>OGenericAdministrationPage::fillControls</method>
-    virtual void fillControls(::std::vector< ISaveValueWrapper* >& _rControlList) override;
+    virtual void fillControls(std::vector< std::unique_ptr<ISaveValueWrapper> >& _rControlList) override;
 
     // <method>OGenericAdministrationPage::fillWindows</method>
-    virtual void fillWindows(::std::vector< ISaveValueWrapper* >& _rControlList) override;
+    virtual void fillWindows(std::vector< std::unique_ptr<ISaveValueWrapper> >& _rControlList) override;
 };
 }
 #endif // INCLUDED_DBACCESS_SOURCE_UI_DLG_USERADMIN_HXX

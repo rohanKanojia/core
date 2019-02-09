@@ -35,17 +35,16 @@
 
 namespace comphelper
 {
-    class ResourceBasedEventLogger;
+    class EventLogger;
 }
 
 namespace connectivity
 {
-    typedef std::shared_ptr< jvmaccess::VirtualMachine::AttachGuard> TGuard;
     class SDBThreadAttach
     {
         jvmaccess::VirtualMachine::AttachGuard m_aGuard;
-        SDBThreadAttach(SDBThreadAttach&) = delete;
-        SDBThreadAttach& operator= (SDBThreadAttach&) = delete;
+        SDBThreadAttach(SDBThreadAttach const &) = delete;
+        SDBThreadAttach& operator= (SDBThreadAttach const &) = delete;
     public:
         SDBThreadAttach();
         ~SDBThreadAttach();
@@ -66,8 +65,8 @@ namespace connectivity
 
     class  java_lang_Object
     {
-        java_lang_Object& operator= (java_lang_Object&) = delete;
-        java_lang_Object(java_lang_Object&) = delete;
+        java_lang_Object& operator= (java_lang_Object const &) = delete;
+        java_lang_Object(java_lang_Object const &) = delete;
 
     protected:
         // The Java handle to this class
@@ -86,7 +85,7 @@ namespace connectivity
         // The actual ctor
         java_lang_Object();
 
-        virtual ~java_lang_Object();
+        virtual ~java_lang_Object() COVERITY_NOEXCEPT_FALSE;
 
         void                saveRef( JNIEnv * pEnv, jobject myObj );
         jobject             getJavaObject() const { return object; }
@@ -95,15 +94,15 @@ namespace connectivity
 
         OUString toString() const;
 
-        static void ThrowSQLException(JNIEnv * pEnv,const ::com::sun::star::uno::Reference< ::com::sun::star::uno::XInterface> & _rContext);
+        static void ThrowSQLException(JNIEnv * pEnv,const css::uno::Reference< css::uno::XInterface> & _rContext);
         static void ThrowLoggedSQLException(
-            const ::comphelper::ResourceBasedEventLogger& _rLogger,
+            const ::comphelper::EventLogger& _rLogger,
             JNIEnv* pEnvironment,
-            const ::com::sun::star::uno::Reference< ::com::sun::star::uno::XInterface >& _rxContext
+            const css::uno::Reference< css::uno::XInterface >& _rxContext
         );
-        static void ThrowRuntimeException(JNIEnv * pEnv,const ::com::sun::star::uno::Reference< ::com::sun::star::uno::XInterface> & _rContext);
+        static void ThrowRuntimeException(JNIEnv * pEnv,const css::uno::Reference< css::uno::XInterface> & _rContext);
 
-        static ::rtl::Reference< jvmaccess::VirtualMachine > getVM(const ::com::sun::star::uno::Reference< ::com::sun::star::uno::XComponentContext >& _rxContext=nullptr);
+        static ::rtl::Reference< jvmaccess::VirtualMachine > getVM(const css::uno::Reference< css::uno::XComponentContext >& _rxContext=nullptr);
 
         static jclass   findMyClass(const char* _pClassName);
         void            obtainMethodId_throwSQL(JNIEnv* _pEnv, const char* _pMethodName, const char* _pSignature, jmethodID& _inout_MethodID) const;
@@ -151,7 +150,7 @@ namespace connectivity
 
     };
 }
-#endif //_CONNECTIVITY_JAVA_LANG_OBJJECT_HXX_
+#endif //_CONNECTIVITY_JAVA_LANG_OBJECT_HXX_
 
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

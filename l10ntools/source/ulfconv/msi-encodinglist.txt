@@ -44,6 +44,7 @@ cy       0  1106   # Welsh
 da       0  1030
 de       0  1031
 dgo      0  1604   # Dogri (India)
+dsb      0  2094   # Lower Sorbian
 dz       0  3153   # Dzongkha
 el       0  1032
 en-GB    0  2057
@@ -58,6 +59,7 @@ fi       0  1035
 fo       0  1080   # Faroese
 fr       0  1036
 fr-CA    0  3084
+fy       0  1122   # Frisian
 fur      0  1585
 ga       0  2108   # Irish
 gd       0  1084   # Gaelic (Scotland)
@@ -70,6 +72,7 @@ hi       0  1081
 hr       0  1050   # Croatian
 ht       0  1626   # Haitian
 hu       0  1038
+hsb      0  1070   # Upper Sorbian
 hy       0  1067   # Armenian
 id       0  1057   # Indonesian
 is       0  1039   # Icelandic
@@ -166,6 +169,7 @@ ur       0  1056   # Urdu
 ur-IN    0  2080
 uz       0  1091   # Uzbek (Latin)
 ve       0  1075   # Venda
+vec      0  1685   # Venetian
 vi       0  1066   # Vietnamese
 xh       0  1076   # Xhosa
 yi       0  1085   # Yiddish

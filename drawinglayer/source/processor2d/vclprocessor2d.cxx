@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <cmath>
 #include <comphelper/string.hxx>
 #include "vclprocessor2d.hxx"
 #include <drawinglayer/primitive2d/textprimitive2d.hxx>
@@ -32,7 +33,7 @@
 #include <drawinglayer/primitive2d/metafileprimitive2d.hxx>
 #include <drawinglayer/primitive2d/maskprimitive2d.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include <vclhelperbufferdevice.hxx>
+#include "vclhelperbufferdevice.hxx"
 #include <drawinglayer/primitive2d/modifiedcolorprimitive2d.hxx>
 #include <drawinglayer/primitive2d/unifiedtransparenceprimitive2d.hxx>
 #include <drawinglayer/primitive2d/transparenceprimitive2d.hxx>
@@ -42,6 +43,7 @@
 #include <drawinglayer/primitive2d/pagepreviewprimitive2d.hxx>
 #include <tools/diagnose_ex.h>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <vcl/metric.hxx>
 #include <drawinglayer/primitive2d/textenumsprimitive2d.hxx>
 #include <drawinglayer/primitive2d/epsprimitive2d.hxx>
@@ -59,6 +61,9 @@
 
 #include <basegfx/polygon/b2dpolygonclipper.hxx>
 #include <basegfx/polygon/b2dtrapezoid.hxx>
+
+// for support of Title/Description in all apps when embedding pictures
+#include <drawinglayer/primitive2d/objectinfoprimitive2d.hxx>
 
 using namespace com::sun::star;
 
@@ -107,7 +112,9 @@ namespace drawinglayer
             aLocalTransform.decompose(aFontScaling, aTranslate, fRotate, fShearX);
             bool bPrimitiveAccepted(false);
 
-            if(basegfx::fTools::equalZero(fShearX))
+            // tdf#95581: Assume tiny shears are rounding artefacts or whatever and can be ignored,
+            // especially if the effect is less than a pixel.
+            if(std::abs(aFontScaling.getY() * fShearX) < 1)
             {
                 if(basegfx::fTools::less(aFontScaling.getX(), 0.0) && basegfx::fTools::less(aFontScaling.getY(), 0.0))
                 {
@@ -179,43 +186,43 @@ namespace drawinglayer
 
 
                         // set EmphasisMark attribute
-                        FontEmphasisMark eFontEmphasisMark = EMPHASISMARK_NONE;
+                        FontEmphasisMark eFontEmphasisMark = FontEmphasisMark::NONE;
                         switch( pTCPP->getTextEmphasisMark() )
                         {
                             default:
                                 SAL_WARN("drawinglayer", "Unknown EmphasisMark style " << pTCPP->getTextEmphasisMark() );
-                                // fall through
-                            case primitive2d::TEXT_EMPHASISMARK_NONE:   eFontEmphasisMark = EMPHASISMARK_NONE; break;
-                            case primitive2d::TEXT_EMPHASISMARK_DOT:    eFontEmphasisMark = EMPHASISMARK_DOT; break;
-                            case primitive2d::TEXT_EMPHASISMARK_CIRCLE: eFontEmphasisMark = EMPHASISMARK_CIRCLE; break;
-                            case primitive2d::TEXT_EMPHASISMARK_DISC:   eFontEmphasisMark = EMPHASISMARK_DISC; break;
-                            case primitive2d::TEXT_EMPHASISMARK_ACCENT: eFontEmphasisMark = EMPHASISMARK_ACCENT; break;
+                                [[fallthrough]];
+                            case primitive2d::TEXT_FONT_EMPHASIS_MARK_NONE:   eFontEmphasisMark = FontEmphasisMark::NONE; break;
+                            case primitive2d::TEXT_FONT_EMPHASIS_MARK_DOT:    eFontEmphasisMark = FontEmphasisMark::Dot; break;
+                            case primitive2d::TEXT_FONT_EMPHASIS_MARK_CIRCLE: eFontEmphasisMark = FontEmphasisMark::Circle; break;
+                            case primitive2d::TEXT_FONT_EMPHASIS_MARK_DISC:   eFontEmphasisMark = FontEmphasisMark::Disc; break;
+                            case primitive2d::TEXT_FONT_EMPHASIS_MARK_ACCENT: eFontEmphasisMark = FontEmphasisMark::Accent; break;
                         }
 
-                        if( eFontEmphasisMark != EMPHASISMARK_NONE )
+                        if( eFontEmphasisMark != FontEmphasisMark::NONE )
                         {
                             DBG_ASSERT( (pTCPP->getEmphasisMarkAbove() != pTCPP->getEmphasisMarkBelow()),
                                 "DrawingLayer: Bad EmphasisMark position!" );
                             if( pTCPP->getEmphasisMarkAbove() )
-                                eFontEmphasisMark |= EMPHASISMARK_POS_ABOVE;
+                                eFontEmphasisMark |= FontEmphasisMark::PosAbove;
                             else
-                                eFontEmphasisMark |= EMPHASISMARK_POS_BELOW;
+                                eFontEmphasisMark |= FontEmphasisMark::PosBelow;
                             aFont.SetEmphasisMark( eFontEmphasisMark );
                         }
 
                         // set Relief attribute
-                        FontRelief eFontRelief = RELIEF_NONE;
+                        FontRelief eFontRelief = FontRelief::NONE;
                         switch( pTCPP->getTextRelief() )
                         {
                             default:
                                 SAL_WARN( "drawinglayer", "Unknown Relief style " << pTCPP->getTextRelief() );
-                                // fall through
-                            case primitive2d::TEXT_RELIEF_NONE:     eFontRelief = RELIEF_NONE; break;
-                            case primitive2d::TEXT_RELIEF_EMBOSSED: eFontRelief = RELIEF_EMBOSSED; break;
-                            case primitive2d::TEXT_RELIEF_ENGRAVED: eFontRelief = RELIEF_ENGRAVED; break;
+                                [[fallthrough]];
+                            case primitive2d::TEXT_RELIEF_NONE:     eFontRelief = FontRelief::NONE; break;
+                            case primitive2d::TEXT_RELIEF_EMBOSSED: eFontRelief = FontRelief::Embossed; break;
+                            case primitive2d::TEXT_RELIEF_ENGRAVED: eFontRelief = FontRelief::Engraved; break;
                         }
 
-                        if( eFontRelief != RELIEF_NONE )
+                        if( eFontRelief != FontRelief::NONE )
                             aFont.SetRelief( eFontRelief );
 
                         // set Shadow attribute
@@ -224,18 +231,17 @@ namespace drawinglayer
                     }
 
                     // create transformed integer DXArray in view coordinate system
-                    ::std::vector< long > aTransformedDXArray;
+                    std::vector< long > aTransformedDXArray;
 
-                    if(rTextCandidate.getDXArray().size())
+                    if(!rTextCandidate.getDXArray().empty())
                     {
                         aTransformedDXArray.reserve(rTextCandidate.getDXArray().size());
                         const basegfx::B2DVector aPixelVector(maCurrentTransformation * basegfx::B2DVector(1.0, 0.0));
                         const double fPixelVectorFactor(aPixelVector.getLength());
 
-                        for(::std::vector< double >::const_iterator aStart(rTextCandidate.getDXArray().begin());
-                            aStart != rTextCandidate.getDXArray().end(); ++aStart)
+                        for (auto const& elem : rTextCandidate.getDXArray())
                         {
-                            aTransformedDXArray.push_back(basegfx::fround((*aStart) * fPixelVectorFactor));
+                            aTransformedDXArray.push_back(basegfx::fround(elem * fPixelVectorFactor));
                         }
                     }
 
@@ -243,12 +249,12 @@ namespace drawinglayer
                     const basegfx::BColor aRGBFontColor(maBColorModifierStack.getModifiedColor(rTextCandidate.getFontColor()));
                     const basegfx::B2DPoint aPoint(aLocalTransform * basegfx::B2DPoint(0.0, 0.0));
                     const Point aStartPoint(basegfx::fround(aPoint.getX()), basegfx::fround(aPoint.getY()));
-                    const ComplexTextLayoutMode nOldLayoutMode(mpOutputDevice->GetLayoutMode());
+                    const ComplexTextLayoutFlags nOldLayoutMode(mpOutputDevice->GetLayoutMode());
 
                     if(rTextCandidate.getFontAttribute().getRTL())
                     {
-                        ComplexTextLayoutMode nRTLLayoutMode(nOldLayoutMode & ~(TEXT_LAYOUT_COMPLEX_DISABLED|TEXT_LAYOUT_BIDI_STRONG));
-                        nRTLLayoutMode |= TEXT_LAYOUT_BIDI_RTL|TEXT_LAYOUT_TEXTORIGIN_LEFT;
+                        ComplexTextLayoutFlags nRTLLayoutMode(nOldLayoutMode & ~ComplexTextLayoutFlags::BiDiStrong);
+                        nRTLLayoutMode |= ComplexTextLayoutFlags::BiDiRtl|ComplexTextLayoutFlags::TextOriginLeft;
                         mpOutputDevice->SetLayoutMode(nRTLLayoutMode);
                     }
 
@@ -259,7 +265,7 @@ namespace drawinglayer
                     sal_Int32 nPos = rTextCandidate.getTextPosition();
                     sal_Int32 nLen = rTextCandidate.getTextLength();
 
-                    long* pDXArray = aTransformedDXArray.size() ? &(aTransformedDXArray[0]) : nullptr ;
+                    long* pDXArray = !aTransformedDXArray.empty() ? &(aTransformedDXArray[0]) : nullptr ;
 
                     if ( rTextCandidate.isFilled() )
                     {
@@ -311,7 +317,7 @@ namespace drawinglayer
             if(!bPrimitiveAccepted)
             {
                 // let break down
-                process(rTextCandidate.get2DDecomposition(getViewInformation2D()));
+                process(rTextCandidate);
             }
         }
 
@@ -325,69 +331,17 @@ namespace drawinglayer
             basegfx::B2DPolygon aLocalPolygon(rPolygonCandidate.getB2DPolygon());
             aLocalPolygon.transform(maCurrentTransformation);
 
-            static bool bCheckTrapezoidDecomposition(false);
-            static bool bShowOutlinesThere(false);
-            if(bCheckTrapezoidDecomposition)
+            if(bPixelBased && getOptionsDrawinglayer().IsAntiAliasing() && getOptionsDrawinglayer().IsSnapHorVerLinesToDiscrete())
             {
-                // clip against discrete ViewPort
-                const basegfx::B2DRange& rDiscreteViewport = getViewInformation2D().getDiscreteViewport();
-                basegfx::B2DPolyPolygon aLocalPolyPolygon(basegfx::tools::clipPolygonOnRange(
-                    aLocalPolygon, rDiscreteViewport, true, false));
-
-                if(aLocalPolyPolygon.count())
-                {
-                    // subdivide
-                    aLocalPolyPolygon = basegfx::tools::adaptiveSubdivideByDistance(
-                        aLocalPolyPolygon, 0.5);
-
-                    // trapezoidize
-                    static double fLineWidth(2.0);
-                    basegfx::B2DTrapezoidVector aB2DTrapezoidVector;
-                    basegfx::tools::createLineTrapezoidFromB2DPolyPolygon(aB2DTrapezoidVector, aLocalPolyPolygon, fLineWidth);
-
-                    const sal_uInt32 nCount(aB2DTrapezoidVector.size());
-
-                    if(nCount)
-                    {
-                        basegfx::BColor aInvPolygonColor(aHairlineColor);
-                        aInvPolygonColor.invert();
-
-                        for(sal_uInt32 a(0); a < nCount; a++)
-                        {
-                            const basegfx::B2DPolygon aTempPolygon(aB2DTrapezoidVector[a].getB2DPolygon());
-
-                            if(bShowOutlinesThere)
-                            {
-                                mpOutputDevice->SetFillColor(Color(aHairlineColor));
-                                mpOutputDevice->SetLineColor();
-                            }
-
-                            mpOutputDevice->DrawPolygon(aTempPolygon);
-
-                            if(bShowOutlinesThere)
-                            {
-                                mpOutputDevice->SetFillColor();
-                                mpOutputDevice->SetLineColor(Color(aInvPolygonColor));
-                                mpOutputDevice->DrawPolyLine(aTempPolygon, 0.0);
-                            }
-                        }
-                    }
-                }
+                // #i98289#
+                // when a Hairline is painted and AntiAliasing is on the option SnapHorVerLinesToDiscrete
+                // allows to suppress AntiAliasing for pure horizontal or vertical lines. This is done since
+                // not-AntiAliased such lines look more pleasing to the eye (e.g. 2D chart content). This
+                // NEEDS to be done in discrete coordinates, so only useful for pixel based rendering.
+                aLocalPolygon = basegfx::utils::snapPointsOfHorizontalOrVerticalEdges(aLocalPolygon);
             }
-            else
-            {
-                if(bPixelBased && getOptionsDrawinglayer().IsAntiAliasing() && getOptionsDrawinglayer().IsSnapHorVerLinesToDiscrete())
-                {
-                    // #i98289#
-                    // when a Hairline is painted and AntiAliasing is on the option SnapHorVerLinesToDiscrete
-                    // allows to suppress AntiAliasing for pure horizontal or vertical lines. This is done since
-                    // not-AntiAliased such lines look more pleasing to the eye (e.g. 2D chart content). This
-                    // NEEDS to be done in discrete coordinates, so only useful for pixel based rendering.
-                    aLocalPolygon = basegfx::tools::snapPointsOfHorizontalOrVerticalEdges(aLocalPolygon);
-                }
 
-                mpOutputDevice->DrawPolyLine(aLocalPolygon, 0.0);
-            }
+            mpOutputDevice->DrawPolyLine(aLocalPolygon, 0.0);
         }
 
         // direct draw of transformed BitmapEx primitive
@@ -404,7 +358,7 @@ namespace drawinglayer
                 {
                     // color gets completely replaced, get it
                     const basegfx::BColor aModifiedColor(maBColorModifierStack.getModifiedColor(basegfx::BColor()));
-                    basegfx::B2DPolygon aPolygon(basegfx::tools::createUnitPolygon());
+                    basegfx::B2DPolygon aPolygon(basegfx::utils::createUnitPolygon());
                     aPolygon.transform(aLocalTransform);
 
                     mpOutputDevice->SetFillColor(Color(aModifiedColor));
@@ -426,24 +380,21 @@ namespace drawinglayer
         {
             const attribute::FillGraphicAttribute& rFillGraphicAttribute(rFillBitmapCandidate.getFillGraphic());
             bool bPrimitiveAccepted(false);
-            static bool bTryTilingDirect = true;
 
             // #121194# when tiling is used and content is bitmap-based, do direct tiling in the
             // renderer on pixel base to ensure tight fitting. Do not do this when
             // the fill is rotated or sheared.
-
-            // override static bool (for debug) and tiling is active
-            if(bTryTilingDirect && rFillGraphicAttribute.getTiling())
+            if(rFillGraphicAttribute.getTiling())
             {
                 // content is bitmap(ex)
                 //
-                // for SVG support, force decomposition when SVG is present. This will lead to use
-                // the primitive representation of the svg directly.
+                // for Vector Graphic Data (SVG, EMF+) support, force decomposition when present. This will lead to use
+                // the primitive representation of the vector data directly.
                 //
                 // when graphic is animated, force decomposition to use the correct graphic, else
                 // fill style will not be animated
-                if(GRAPHIC_BITMAP == rFillGraphicAttribute.getGraphic().GetType()
-                    && !rFillGraphicAttribute.getGraphic().getSvgData().get()
+                if(GraphicType::Bitmap == rFillGraphicAttribute.getGraphic().GetType()
+                    && !rFillGraphicAttribute.getGraphic().getVectorGraphicData().get()
                     && !rFillGraphicAttribute.getGraphic().IsAnimated())
                 {
                     // decompose matrix to check for shear, rotate and mirroring
@@ -483,12 +434,11 @@ namespace drawinglayer
                             // only do something when bitmap fill has a size in discrete units
                             if(nBWidth > 0 && nBHeight > 0)
                             {
-                                // nBWidth, nBHeight is the pixel size of the neede bitmap. To not need to scale it
+                                // nBWidth, nBHeight is the pixel size of the needed bitmap. To not need to scale it
                                 // in vcl many times, create a size-optimized version
                                 const Size aNeededBitmapSizePixel(nBWidth, nBHeight);
                                 BitmapEx aBitmapEx(rFillGraphicAttribute.getGraphic().GetBitmapEx());
-                                static bool bEnablePreScaling(true);
-                                const bool bPreScaled(bEnablePreScaling && nBWidth * nBHeight < (250 * 250));
+                                const bool bPreScaled(nBWidth * nBHeight < (250 * 250));
 
                                 // ... but only up to a maximum size, else it gets too expensive
                                 if(bPreScaled)
@@ -498,7 +448,7 @@ namespace drawinglayer
                                     // a bitmap in gray or Black/White (!)
                                     if(aBitmapEx.GetBitCount() < 24)
                                     {
-                                        aBitmapEx.Convert(BMP_CONVERSION_24BIT);
+                                        aBitmapEx.Convert(BmpConversion::N24Bit);
                                     }
 
                                     aBitmapEx.Scale(aNeededBitmapSizePixel, BmpScaleFlag::Interpolate);
@@ -517,7 +467,7 @@ namespace drawinglayer
                                     {
                                         // color gets completely replaced, get it
                                         const basegfx::BColor aModifiedColor(maBColorModifierStack.getModifiedColor(basegfx::BColor()));
-                                        basegfx::B2DPolygon aPolygon(basegfx::tools::createUnitPolygon());
+                                        basegfx::B2DPolygon aPolygon(basegfx::utils::createUnitPolygon());
                                         aPolygon.transform(aLocalTransform);
 
                                         mpOutputDevice->SetFillColor(Color(aModifiedColor));
@@ -571,7 +521,7 @@ namespace drawinglayer
 
                                     // prepare OutDev
                                     const Point aEmptyPoint(0, 0);
-                                    const Rectangle aVisiblePixel(aEmptyPoint, mpOutputDevice->GetOutputSizePixel());
+                                    const ::tools::Rectangle aVisiblePixel(aEmptyPoint, mpOutputDevice->GetOutputSizePixel());
                                     const bool bWasEnabled(mpOutputDevice->IsMapModeEnabled());
                                     mpOutputDevice->EnableMapMode(false);
 
@@ -586,7 +536,7 @@ namespace drawinglayer
                                             for(sal_Int32 nXPos((nPosY % 2) ? nBLeft - nBWidth + nOffsetX : nBLeft);
                                                 nXPos < nOLeft + nOWidth; nXPos += nBWidth)
                                             {
-                                                const Rectangle aOutRectPixel(Point(nXPos, nYPos), aNeededBitmapSizePixel);
+                                                const ::tools::Rectangle aOutRectPixel(Point(nXPos, nYPos), aNeededBitmapSizePixel);
 
                                                 if(aOutRectPixel.IsOver(aVisiblePixel))
                                                 {
@@ -613,7 +563,7 @@ namespace drawinglayer
                                             for(sal_Int32 nYPos((nPosX % 2) ? nBTop - nBHeight + nOffsetY : nBTop);
                                                 nYPos < nOTop + nOHeight; nYPos += nBHeight)
                                             {
-                                                const Rectangle aOutRectPixel(Point(nXPos, nYPos), aNeededBitmapSizePixel);
+                                                const ::tools::Rectangle aOutRectPixel(Point(nXPos, nYPos), aNeededBitmapSizePixel);
 
                                                 if(aOutRectPixel.IsOver(aVisiblePixel))
                                                 {
@@ -642,7 +592,7 @@ namespace drawinglayer
             if(!bPrimitiveAccepted)
             {
                 // do not accept, use decomposition
-                process(rFillBitmapCandidate.get2DDecomposition(getViewInformation2D()));
+                process(rFillBitmapCandidate);
             }
         }
 
@@ -666,12 +616,12 @@ namespace drawinglayer
                 // color (e.g. shadow)
                 switch(rFillGraphicAttribute.getGraphic().GetType())
                 {
-                    case GRAPHIC_GDIMETAFILE:
+                    case GraphicType::GdiMetafile:
                     {
                         // metafiles are potentially transparent, cannot optimize, not done
                         break;
                     }
-                    case GRAPHIC_BITMAP:
+                    case GraphicType::Bitmap:
                     {
                         if(!rFillGraphicAttribute.getGraphic().IsTransparent() && !rFillGraphicAttribute.getGraphic().IsAlpha())
                         {
@@ -703,12 +653,12 @@ namespace drawinglayer
                                         // tools::PolyPolygon is filled. Create the bitmap tile area in object
                                         // coordinates. For this, the object transformation needs to be created
                                         // from the already scaled PolyPolygon. The tile area in object
-                                        // coordinates wil always be non-rotated, so it's not necessary to
+                                        // coordinates will always be non-rotated, so it's not necessary to
                                         // work with a polygon here
                                         basegfx::B2DRange aTileRange(rFillGraphicAttribute.getGraphicRange());
                                         const basegfx::B2DRange aPolyPolygonRange(rPolyPolygon.getB2DRange());
                                         const basegfx::B2DHomMatrix aNewObjectTransform(
-                                            basegfx::tools::createScaleTranslateB2DHomMatrix(
+                                            basegfx::utils::createScaleTranslateB2DHomMatrix(
                                                 aPolyPolygonRange.getRange(),
                                                 aPolyPolygonRange.getMinimum()));
 
@@ -716,7 +666,7 @@ namespace drawinglayer
 
                                         // now clip the object polyPolygon against the tile range
                                         // to get the common area
-                                        basegfx::B2DPolyPolygon aTarget = basegfx::tools::clipPolyPolygonOnRange(
+                                        basegfx::B2DPolyPolygon aTarget = basegfx::utils::clipPolyPolygonOnRange(
                                             rPolyPolygon,
                                             aTileRange,
                                             true,
@@ -738,7 +688,7 @@ namespace drawinglayer
                         }
                         break;
                     }
-                    default: //GRAPHIC_NONE, GRAPHIC_DEFAULT
+                    default: //GraphicType::NONE, GraphicType::Default
                     {
                         // empty graphic, we are done
                         bDone = true;
@@ -750,98 +700,7 @@ namespace drawinglayer
             if(!bDone)
             {
                 // use default decomposition
-                process(rPolygonCandidate.get2DDecomposition(getViewInformation2D()));
-            }
-        }
-
-        // direct draw of MetaFile
-        void VclProcessor2D::RenderMetafilePrimitive2D(const primitive2d::MetafilePrimitive2D& rMetaCandidate)
-        {
-            // decompose matrix to check for shear, rotate and mirroring
-            basegfx::B2DHomMatrix aLocalTransform(maCurrentTransformation * rMetaCandidate.getTransform());
-            basegfx::B2DVector aScale, aTranslate;
-            double fRotate, fShearX;
-            aLocalTransform.decompose(aScale, aTranslate, fRotate, fShearX);
-
-            if(basegfx::fTools::less(aScale.getX(), 0.0) && basegfx::fTools::less(aScale.getY(), 0.0))
-            {
-                // #i102175# handle special case: If scale is negative in (x,y) (3rd quadrant), it can
-                // be expressed as rotation by PI. This needs to be done for Metafiles since
-                // these can be rotated, but not really mirrored
-                aScale = basegfx::absolute(aScale);
-                fRotate += F_PI;
-            }
-
-            // get BoundRect
-            basegfx::B2DRange aOutlineRange(rMetaCandidate.getB2DRange(getViewInformation2D()));
-            aOutlineRange.transform(maCurrentTransformation);
-
-            // Due to the integer MapModes used from VCL aind inside MetaFiles errors of up to three
-            // pixels in size may happen. As long as there is no better way (e.g. convert the MetaFile
-            // to primitives) it is necessary to reduce maximum pixel size by 1 in X and Y and to use
-            // the inner pixel bounds accordingly (ceil resp. floor). This will also be done for logic
-            // units e.g. when creating a new MetaFile, but since much huger value ranges are used
-            // there typically will be okay for this compromise.
-            Rectangle aDestRectView(
-                // !!CAUTION!! Here, ceil and floor are exchanged BY PURPOSE, do NOT copy when
-                // looking for a standard conversion to rectangle (!)
-                (sal_Int32)ceil(aOutlineRange.getMinX()), (sal_Int32)ceil(aOutlineRange.getMinY()),
-                (sal_Int32)floor(aOutlineRange.getMaxX()), (sal_Int32)floor(aOutlineRange.getMaxY()));
-
-            // get metafile (copy it)
-            GDIMetaFile aMetaFile;
-
-            if(maBColorModifierStack.count())
-            {
-                const basegfx::BColor aRGBBaseColor(0, 0, 0);
-                const basegfx::BColor aRGBColor(maBColorModifierStack.getModifiedColor(aRGBBaseColor));
-                aMetaFile = rMetaCandidate.getMetaFile().GetMonochromeMtf(Color(aRGBColor));
-            }
-            else
-            {
-                aMetaFile = rMetaCandidate.getMetaFile();
-            }
-
-            // rotation
-            if(!basegfx::fTools::equalZero(fRotate))
-            {
-                // #i103530#
-                // MetaFile::Rotate has no input parameter check, so the parameter needs to be
-                // well-aligned to the old range [0..3600] 10th degrees with inverse orientation
-                sal_Int16 nRotation((sal_Int16)((fRotate / F_PI180) * -10.0));
-
-                while(nRotation < 0)
-                    nRotation += 3600;
-
-                while(nRotation >= 3600)
-                    nRotation -= 3600;
-
-                aMetaFile.Rotate(nRotation);
-            }
-
-            // Prepare target output size
-            Size aDestSize(aDestRectView.GetSize());
-
-            if(aDestSize.getWidth() > 0 && aDestSize.getHeight() > 0)
-            {
-                // Get preferred Metafile output size. When it's very equal to the output size, it's probably
-                // a rounding error somewhere, so correct it to get a 1:1 output without single pixel scalings
-                // of the Metafile (esp. for contaned Bitmaps, e.g 3D charts)
-                const Size aPrefSize(mpOutputDevice->LogicToPixel(aMetaFile.GetPrefSize(), aMetaFile.GetPrefMapMode()));
-
-                if(aPrefSize.getWidth() && (aPrefSize.getWidth() - 1 == aDestSize.getWidth() || aPrefSize.getWidth() + 1 == aDestSize.getWidth()))
-                {
-                    aDestSize.setWidth(aPrefSize.getWidth());
-                }
-
-                if(aPrefSize.getHeight() && (aPrefSize.getHeight() - 1 == aDestSize.getHeight() || aPrefSize.getHeight() + 1 == aDestSize.getHeight()))
-                {
-                    aDestSize.setHeight(aPrefSize.getHeight());
-                }
-
-                // paint it
-                aMetaFile.WindStart();
-                aMetaFile.Play(mpOutputDevice, aDestRectView.TopLeft(), aDestSize);
+                process(rPolygonCandidate);
             }
         }
 
@@ -855,7 +714,7 @@ namespace drawinglayer
                 if(aMask.count())
                 {
                     aMask.transform(maCurrentTransformation);
-                    const basegfx::B2DRange aRange(basegfx::tools::getRange(aMask));
+                    const basegfx::B2DRange aRange(basegfx::utils::getRange(aMask));
                     impBufferDevice aBufferDevice(*mpOutputDevice, aRange);
 
                     if(aBufferDevice.isVisible())
@@ -912,44 +771,34 @@ namespace drawinglayer
         // unified sub-transparence. Draw to VDev first.
         void VclProcessor2D::RenderUnifiedTransparencePrimitive2D(const primitive2d::UnifiedTransparencePrimitive2D& rTransCandidate)
         {
-            static bool bForceToDecomposition(false);
-
             if(!rTransCandidate.getChildren().empty())
             {
-                if(bForceToDecomposition)
+                if(0.0 == rTransCandidate.getTransparence())
                 {
-                    // use decomposition
-                    process(rTransCandidate.get2DDecomposition(getViewInformation2D()));
+                    // no transparence used, so just use the content
+                    process(rTransCandidate.getChildren());
                 }
-                else
+                else if(rTransCandidate.getTransparence() > 0.0 && rTransCandidate.getTransparence() < 1.0)
                 {
-                    if(0.0 == rTransCandidate.getTransparence())
+                    // transparence is in visible range
+                    basegfx::B2DRange aRange(rTransCandidate.getChildren().getB2DRange(getViewInformation2D()));
+                    aRange.transform(maCurrentTransformation);
+                    impBufferDevice aBufferDevice(*mpOutputDevice, aRange);
+
+                    if(aBufferDevice.isVisible())
                     {
-                        // no transparence used, so just use the content
+                        // remember last OutDev and set to content
+                        OutputDevice* pLastOutputDevice = mpOutputDevice;
+                        mpOutputDevice = &aBufferDevice.getContent();
+
+                        // paint content to it
                         process(rTransCandidate.getChildren());
-                    }
-                    else if(rTransCandidate.getTransparence() > 0.0 && rTransCandidate.getTransparence() < 1.0)
-                    {
-                        // transparence is in visible range
-                        basegfx::B2DRange aRange(rTransCandidate.getChildren().getB2DRange(getViewInformation2D()));
-                        aRange.transform(maCurrentTransformation);
-                        impBufferDevice aBufferDevice(*mpOutputDevice, aRange);
 
-                        if(aBufferDevice.isVisible())
-                        {
-                            // remember last OutDev and set to content
-                            OutputDevice* pLastOutputDevice = mpOutputDevice;
-                            mpOutputDevice = &aBufferDevice.getContent();
+                        // back to old OutDev
+                        mpOutputDevice = pLastOutputDevice;
 
-                            // paint content to it
-                            process(rTransCandidate.getChildren());
-
-                            // back to old OutDev
-                            mpOutputDevice = pLastOutputDevice;
-
-                            // dump buffer to outdev using given transparence
-                            aBufferDevice.paint(rTransCandidate.getTransparence());
-                        }
+                        // dump buffer to outdev using given transparence
+                        aBufferDevice.paint(rTransCandidate.getTransparence());
                     }
                 }
             }
@@ -1039,7 +888,7 @@ namespace drawinglayer
             updateViewInformation(aViewInformation2D);
 
             // process decomposed content
-            process(rPagePreviewCandidate.get2DDecomposition(getViewInformation2D()));
+            process(rPagePreviewCandidate);
 
             // restore transformations
             updateViewInformation(aLastViewInformation2D);
@@ -1048,13 +897,6 @@ namespace drawinglayer
         // marker
         void VclProcessor2D::RenderMarkerArrayPrimitive2D(const primitive2d::MarkerArrayPrimitive2D& rMarkArrayCandidate)
         {
-            static bool bCheckCompleteMarkerDecompose(false);
-            if(bCheckCompleteMarkerDecompose)
-            {
-                process(rMarkArrayCandidate.get2DDecomposition(getViewInformation2D()));
-                return;
-            }
-
             // get data
             const std::vector< basegfx::B2DPoint >& rPositions = rMarkArrayCandidate.getPositions();
             const sal_uInt32 nCount(rPositions.size());
@@ -1082,9 +924,9 @@ namespace drawinglayer
 
                     mpOutputDevice->EnableMapMode(false);
 
-                    for(std::vector< basegfx::B2DPoint >::const_iterator aIter(rPositions.begin()); aIter != rPositions.end(); ++aIter)
+                    for (auto const& pos : rPositions)
                     {
-                        const basegfx::B2DPoint aDiscreteTopLeft((maCurrentTransformation * (*aIter)) - aDiscreteHalfSize);
+                        const basegfx::B2DPoint aDiscreteTopLeft((maCurrentTransformation * pos) - aDiscreteHalfSize);
                         const Point aDiscretePoint(basegfx::fround(aDiscreteTopLeft.getX()), basegfx::fround(aDiscreteTopLeft.getY()));
 
                         mpOutputDevice->DrawBitmapEx(aDiscretePoint + aOrigin, rMarker);
@@ -1102,9 +944,9 @@ namespace drawinglayer
             const basegfx::BColor aRGBColor(maBColorModifierStack.getModifiedColor(rPointArrayCandidate.getRGBColor()));
             const Color aVCLColor(aRGBColor);
 
-            for(std::vector< basegfx::B2DPoint >::const_iterator aIter(rPositions.begin()); aIter != rPositions.end(); ++aIter)
+            for (auto const& pos : rPositions)
             {
-                const basegfx::B2DPoint aViewPosition(maCurrentTransformation * (*aIter));
+                const basegfx::B2DPoint aViewPosition(maCurrentTransformation * pos);
                 const Point aPos(basegfx::fround(aViewPosition.getX()), basegfx::fround(aViewPosition.getY()));
 
                 mpOutputDevice->DrawPixel(aPos, aVCLColor);
@@ -1138,7 +980,7 @@ namespace drawinglayer
                 else
                 {
                     // else apply LineStyle
-                    basegfx::tools::applyLineDashing(rPolygonStrokeCandidate.getB2DPolygon(),
+                    basegfx::utils::applyLineDashing(rPolygonStrokeCandidate.getB2DPolygon(),
                         rStrokeAttribute.getDotDashArray(),
                         &aHairlinePolyPolygon, nullptr, rStrokeAttribute.getFullDotDashLen());
                 }
@@ -1292,7 +1134,7 @@ namespace drawinglayer
                     if(!bDone && rPolygonStrokeCandidate.getB2DPolygon().count() > 1000)
                     {
                         // #i101491# If the polygon complexity uses more than a given amount, do
-                        // use OuputDevice::DrawPolyLine directly; this will avoid buffering all
+                        // use OutputDevice::DrawPolyLine directly; this will avoid buffering all
                         // decompositions in primitives (memory) and fallback to old line painting
                         // for very complex polygons, too
                         for(sal_uInt32 a(0); a < nCount; a++)
@@ -1301,7 +1143,8 @@ namespace drawinglayer
                                 aHairlinePolyPolygon.getB2DPolygon(a),
                                 fDiscreteLineWidth,
                                 rLineAttribute.getLineJoin(),
-                                rLineAttribute.getLineCap());
+                                rLineAttribute.getLineCap(),
+                                rLineAttribute.getMiterMinimumAngle());
                         }
 
                         bDone = true;
@@ -1316,7 +1159,7 @@ namespace drawinglayer
                 mnPolygonStrokePrimitive2D++;
 
                 // line width is big enough for standard filled polygon visualisation or zero
-                process(rPolygonStrokeCandidate.get2DDecomposition(getViewInformation2D()));
+                process(rPolygonStrokeCandidate);
 
                 // leave PolygonStrokePrimitive2D
                 mnPolygonStrokePrimitive2D--;
@@ -1337,9 +1180,9 @@ namespace drawinglayer
 
             if(!aRange.isEmpty())
             {
-                const Rectangle aRectangle(
-                    (sal_Int32)floor(aRange.getMinX()), (sal_Int32)floor(aRange.getMinY()),
-                    (sal_Int32)ceil(aRange.getMaxX()), (sal_Int32)ceil(aRange.getMaxY()));
+                const ::tools::Rectangle aRectangle(
+                    static_cast<sal_Int32>(floor(aRange.getMinX())), static_cast<sal_Int32>(floor(aRange.getMinY())),
+                    static_cast<sal_Int32>(ceil(aRange.getMaxX())), static_cast<sal_Int32>(ceil(aRange.getMaxY())));
 
                 if(!aRectangle.IsEmpty())
                 {
@@ -1355,10 +1198,23 @@ namespace drawinglayer
                     {
                         // use the decomposition which will correctly handle the
                         // fallback visualisation using full transformation (e.g. rotation)
-                        process(rEpsPrimitive2D.get2DDecomposition(getViewInformation2D()));
+                        process(rEpsPrimitive2D);
                     }
                 }
             }
+        }
+
+        void VclProcessor2D::RenderObjectInfoPrimitive2D(const primitive2d::ObjectInfoPrimitive2D& rObjectInfoPrimitive2D)
+        {
+            // remember current ObjectInfoPrimitive2D and set new current one (build a stack - push)
+            const primitive2d::ObjectInfoPrimitive2D* pLast(getObjectInfoPrimitive2D());
+            mpObjectInfoPrimitive2D = &rObjectInfoPrimitive2D;
+
+            // process content
+            process(rObjectInfoPrimitive2D.getChildren());
+
+            // restore current ObjectInfoPrimitive2D (pop)
+            mpObjectInfoPrimitive2D = pLast;
         }
 
         void VclProcessor2D::RenderSvgLinearAtomPrimitive2D(const primitive2d::SvgLinearAtomPrimitive2D& rCandidate)
@@ -1382,7 +1238,7 @@ namespace drawinglayer
 
                 // prepare polygon in needed width at start position (with discrete overlap)
                 const basegfx::B2DPolygon aPolygon(
-                    basegfx::tools::createPolygonFromRect(
+                    basegfx::utils::createPolygonFromRect(
                         basegfx::B2DRange(
                             rCandidate.getOffsetA() - fDiscreteUnit,
                             0.0,
@@ -1399,7 +1255,7 @@ namespace drawinglayer
                 {
                     basegfx::B2DPolygon aNew(aPolygon);
 
-                    aNew.transform(maCurrentTransformation * basegfx::tools::createTranslateB2DHomMatrix(fDelta * fUnitScale, 0.0));
+                    aNew.transform(maCurrentTransformation * basegfx::utils::createTranslateB2DHomMatrix(fDelta * fUnitScale, 0.0));
                     mpOutputDevice->SetFillColor(Color(basegfx::interpolate(aColorA, aColorB, fUnitScale)));
                     mpOutputDevice->DrawPolyPolygon(basegfx::B2DPolyPolygon(aNew));
                 }
@@ -1442,7 +1298,7 @@ namespace drawinglayer
                                 rCandidate.getTranslateA(),
                                 fUnitScale));
 
-                        aTransform = basegfx::tools::createScaleTranslateB2DHomMatrix(
+                        aTransform = basegfx::utils::createScaleTranslateB2DHomMatrix(
                             fEndScale,
                             fEndScale,
                             aTranslate.getX(),
@@ -1450,12 +1306,12 @@ namespace drawinglayer
                     }
                     else
                     {
-                        aTransform = basegfx::tools::createScaleB2DHomMatrix(
+                        aTransform = basegfx::utils::createScaleB2DHomMatrix(
                             fEndScale,
                             fEndScale);
                     }
 
-                    basegfx::B2DPolygon aNew(basegfx::tools::createPolygonFromUnitCircle());
+                    basegfx::B2DPolygon aNew(basegfx::utils::createPolygonFromUnitCircle());
 
                     aNew.transform(maCurrentTransformation * aTransform);
                     mpOutputDevice->SetFillColor(Color(basegfx::interpolate(aColorB, aColorA, fUnitScale)));
@@ -1468,7 +1324,7 @@ namespace drawinglayer
         {
             const DrawModeFlags nOriginalDrawMode(mpOutputDevice->GetDrawMode());
 
-            if(nOriginalDrawMode & (DrawModeFlags::BlackLine|DrawModeFlags::GrayLine|DrawModeFlags::GhostedLine|DrawModeFlags::WhiteLine|DrawModeFlags::SettingsLine))
+            if(nOriginalDrawMode & (DrawModeFlags::BlackLine|DrawModeFlags::GrayLine|DrawModeFlags::WhiteLine|DrawModeFlags::SettingsLine))
             {
                 DrawModeFlags nAdaptedDrawMode(nOriginalDrawMode);
 
@@ -1488,15 +1344,6 @@ namespace drawinglayer
                 else
                 {
                     nAdaptedDrawMode &= ~DrawModeFlags::GrayFill;
-                }
-
-                if(nOriginalDrawMode & DrawModeFlags::GhostedLine)
-                {
-                    nAdaptedDrawMode |= DrawModeFlags::GhostedFill;
-                }
-                else
-                {
-                    nAdaptedDrawMode &= ~DrawModeFlags::GhostedFill;
                 }
 
                 if(nOriginalDrawMode & DrawModeFlags::WhiteLine)
@@ -1524,7 +1371,7 @@ namespace drawinglayer
         void VclProcessor2D::adaptTextToFillDrawMode() const
         {
             const DrawModeFlags nOriginalDrawMode(mpOutputDevice->GetDrawMode());
-            if(nOriginalDrawMode & (DrawModeFlags::BlackText|DrawModeFlags::GrayText|DrawModeFlags::GhostedText|DrawModeFlags::WhiteText|DrawModeFlags::SettingsText))
+            if(nOriginalDrawMode & (DrawModeFlags::BlackText|DrawModeFlags::GrayText|DrawModeFlags::WhiteText|DrawModeFlags::SettingsText))
             {
                 DrawModeFlags nAdaptedDrawMode(nOriginalDrawMode);
 
@@ -1544,15 +1391,6 @@ namespace drawinglayer
                 else
                 {
                     nAdaptedDrawMode &= ~DrawModeFlags::GrayFill;
-                }
-
-                if(nOriginalDrawMode & DrawModeFlags::GhostedText)
-                {
-                    nAdaptedDrawMode |= DrawModeFlags::GhostedFill;
-                }
-                else
-                {
-                    nAdaptedDrawMode &= ~DrawModeFlags::GhostedFill;
                 }
 
                 if(nOriginalDrawMode & DrawModeFlags::WhiteText)
@@ -1587,7 +1425,8 @@ namespace drawinglayer
             maBColorModifierStack(),
             maCurrentTransformation(),
             maDrawinglayerOpt(),
-            mnPolygonStrokePrimitive2D(0)
+            mnPolygonStrokePrimitive2D(0),
+            mpObjectInfoPrimitive2D(nullptr)
         {
             // set digit language, derived from SvtCTLOptions to have the correct
             // number display for arabic/hindi numerals

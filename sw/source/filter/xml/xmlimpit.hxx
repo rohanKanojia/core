@@ -35,16 +35,14 @@ class SvXMLImportItemMapper
 {
 protected:
     SvXMLItemMapEntriesRef mrMapEntries;
-    sal_uInt16 nUnknownWhich;
 
 public:
-    SvXMLImportItemMapper( SvXMLItemMapEntriesRef rMapEntries ,
-                           sal_uInt16 nUnknWhich=USHRT_MAX );
+    explicit SvXMLImportItemMapper( SvXMLItemMapEntriesRef const & rMapEntries );
     virtual ~SvXMLImportItemMapper();
 
     /** fills the given itemset with the attributes in the given list */
     void importXML( SfxItemSet& rSet,
-                    css::uno::Reference< css::xml::sax::XAttributeList > xAttrList,
+                    css::uno::Reference< css::xml::sax::XAttributeList > const & xAttrList,
                     const SvXMLUnitConverter& rUnitConverter,
                     const SvXMLNamespaceMap& rNamespaceMap );
 
@@ -71,7 +69,7 @@ public:
                           SvXMLUnitConverter const& rUnitConverter) const;
 
     virtual void setMapEntries( SvXMLItemMapEntriesRef rMapEntries );
-    inline SvXMLItemMapEntriesRef getMapEntries() const;
+    inline const SvXMLItemMapEntriesRef& getMapEntries() const;
 
     /** This method is called for every item that should be set based
         upon an XML attribute value. */
@@ -82,7 +80,7 @@ public:
         const SvXMLUnitConverter& rUnitConverter );
 };
 
-inline SvXMLItemMapEntriesRef
+inline const SvXMLItemMapEntriesRef&
 SvXMLImportItemMapper::getMapEntries() const
 {
     return mrMapEntries;

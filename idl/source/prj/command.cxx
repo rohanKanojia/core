@@ -22,16 +22,16 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <ctype.h>
 
 #include <osl/diagnose.h>
+#include <rtl/character.hxx>
 
 #include <command.hxx>
 #include <globals.hxx>
 #include <database.hxx>
 #include <parser.hxx>
 
-char const * SyntaxStrings[] = {
+char const * const SyntaxStrings[] = {
 "basic-type:",
 "\tvoid|        char|       int|        float|      double|",
 "\tUINT16|      INT16|      UINT32|     INT32|      BOOL|",
@@ -54,7 +54,7 @@ char const * SyntaxStrings[] = {
 "\ttype definition:",
 "\tstruct identifier",
 "\t'{'",
-"\t\t{ type idetifier }",
+"\t\t{ type identifier }",
 "\t'}'",
 "\t|",
 "\tenum identifier",
@@ -83,10 +83,6 @@ char const * SyntaxStrings[] = {
 "\t\tFastCall",
 "\t\tGet, Set",
 "\t\tGroupId        = Identifier",
-"\t\tImageRotation",
-"\t\tImageReflection",
-"\t\tPseudoPrefix   = Identifier",
-"\t\tPseudoSlots",
 "\t\tReadOnlyDoc*",
 "\t\tRecordPerSet*, RecordPerItem, NoRecord",
 "\t\tRecordAbsolute",
@@ -103,7 +99,7 @@ char const * SyntaxStrings[] = {
 "---syntax example is sfx.idl---\n",
 nullptr };
 
-char CommandLineSyntax[] =
+char const CommandLineSyntax[] =
 "-fs<slotmap file>\n"
 "-fm<makefile target file>\n"
 "-help, ?                   @<file> response file\n"
@@ -112,9 +108,9 @@ char CommandLineSyntax[] =
 void Init()
 {
     if( !GetIdlApp().pHashTable )
-        GetIdlApp().pHashTable      = new SvStringHashTable( 2801 );
+        GetIdlApp().pHashTable.reset( new SvStringHashTable );
     if( !GetIdlApp().pGlobalNames )
-        GetIdlApp().pGlobalNames    = new SvGlobalHashNames();
+        GetIdlApp().pGlobalNames.reset( new SvGlobalHashNames() );
 }
 
 bool ReadIdl( SvIdlWorkingBase * pDataBase, const SvCommand & rCommand )
@@ -136,7 +132,7 @@ bool ReadIdl( SvIdlWorkingBase * pDataBase, const SvCommand & rCommand )
     return true;
 }
 
-static bool ResponseFile( StringList * pList, int argc, char ** argv )
+static bool ResponseFile( std::vector<OUString> * pList, int argc, char ** argv )
 {
     // program name
     pList->push_back( OUString::createFromAscii(*argv) );
@@ -144,8 +140,8 @@ static bool ResponseFile( StringList * pList, int argc, char ** argv )
     {
         if( '@' == **(argv +i) )
         { // when @, then response file
-            SvFileStream aStm( OUString::createFromAscii((*(argv +i)) +1), STREAM_STD_READ | StreamMode::NOCREATE );
-            if( aStm.GetError() != SVSTREAM_OK )
+            SvFileStream aStm( OUString::createFromAscii((*(argv +i)) +1), StreamMode::STD_READ );
+            if( aStm.GetError() != ERRCODE_NONE )
                 return false;
 
             OString aStr;
@@ -155,10 +151,14 @@ static bool ResponseFile( StringList * pList, int argc, char ** argv )
                 sal_uInt16 nPos = 1;
                 while( n != nPos )
                 {
-                    while( aStr[n] && isspace( aStr[n] ) )
+                    while( aStr[n]
+                           && rtl::isAsciiWhiteSpace(
+                               static_cast<unsigned char>(aStr[n]) ) )
                         n++;
                     nPos = n;
-                    while( aStr[n] && !isspace( aStr[n] ) )
+                    while( aStr[n]
+                           && !rtl::isAsciiWhiteSpace(
+                               static_cast<unsigned char>(aStr[n]) ) )
                         n++;
                     if( n != nPos )
                         pList->push_back( OStringToOUString(aStr.copy(nPos, n - nPos), RTL_TEXTENCODING_ASCII_US) );
@@ -174,7 +174,7 @@ static bool ResponseFile( StringList * pList, int argc, char ** argv )
 SvCommand::SvCommand( int argc, char ** argv )
     : nVerbosity(1)
 {
-    StringList aList;
+    std::vector<OUString> aList;
 
     if( ResponseFile( &aList, argc, argv ) )
     {
@@ -250,7 +250,7 @@ SvCommand::SvCommand( int argc, char ** argv )
                 { // define include paths
                     OUString aName( aParam.copy( 1 ) );
                     if( !aPath.isEmpty() )
-                        aPath += OUStringLiteral1<SAL_PATHSEPARATOR>();
+                        aPath += OUStringLiteral1(SAL_PATHSEPARATOR);
                     aPath += aName;
                 }
                 else if( aParam.startsWithIgnoreAsciiCase( "rsc" ) )
@@ -289,7 +289,7 @@ SvCommand::SvCommand( int argc, char ** argv )
     if( aInc.getLength() )
     {
         if( !aPath.isEmpty() )
-            aPath += OUStringLiteral1<SAL_PATHSEPARATOR>();
+            aPath += OUStringLiteral1(SAL_PATHSEPARATOR);
         aPath += OStringToOUString(aInc, RTL_TEXTENCODING_ASCII_US);
     }
 }

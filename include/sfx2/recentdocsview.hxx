@@ -14,18 +14,22 @@
 #include <sfx2/recentdocsviewitem.hxx>
 #include <vcl/image.hxx>
 
-#include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
+#include <o3tl/typed_flags_set.hxx>
+
 #include <com/sun/star/frame/XDispatch.hpp>
+
+namespace sfx2
+{
 
 struct LoadRecentFile
 {
     css::util::URL                                    aTargetURL;
     css::uno::Sequence< css::beans::PropertyValue >   aArgSeq;
     css::uno::Reference< css::frame::XDispatch >      xDispatch;
+    VclPtr< ThumbnailView >                           pView;
 };
 
-enum ApplicationType
+enum class ApplicationType
 {
     TYPE_NONE     =      0,
     TYPE_WRITER   = 1 << 0,
@@ -37,52 +41,59 @@ enum ApplicationType
     TYPE_OTHER    = 1 << 6
 };
 
+} // namespace sfx2
 
-class SFX2_DLLPUBLIC RecentDocsView : public ThumbnailView
+namespace o3tl {
+
+template<> struct typed_flags<sfx2::ApplicationType> : is_typed_flags<sfx2::ApplicationType, 0x7f> {};
+
+} // namespace o3tl
+
+namespace sfx2
+{
+
+class SFX2_DLLPUBLIC RecentDocsView final : public ThumbnailView
 {
 public:
     RecentDocsView( vcl::Window* pParent );
 
     void insertItem(const OUString &rURL, const OUString &rTitle, const BitmapEx &rThumbnail, sal_uInt16 nId);
 
-    long GetThumbnailSize() const { return mnItemMaxSize;}
-
     static bool typeMatchesExtension(ApplicationType type, const OUString &rExt);
     static BitmapEx getDefaultThumbnail(const OUString &rURL);
 
-    int     mnFileTypes;
+    ApplicationType mnFileTypes;
 
     virtual void Clear() override;
 
     /// Update the information in the view.
     virtual void Reload() override;
 
-    DECL_STATIC_LINK_TYPED( RecentDocsView, ExecuteHdl_Impl, void*, void );
+    DECL_STATIC_LINK( RecentDocsView, ExecuteHdl_Impl, void*, void );
 
-protected:
+private:
     virtual void MouseButtonDown( const MouseEvent& rMEvt ) override;
 
     virtual void MouseButtonUp( const MouseEvent& rMEvt ) override;
 
     virtual void OnItemDblClicked(ThumbnailViewItem *pItem) override;
 
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
 
     virtual void LoseFocus() override;
 
     bool isAcceptedFile(const OUString &rURL) const;
 
     long mnItemMaxSize;
-    long mnTextHeight;
-    long mnItemPadding;
-    long mnItemMaxTextLength;
     size_t mnLastMouseDownItem;
 
     /// Image that appears when there is no recent document.
-    Image maWelcomeImage;
-    OUString maWelcomeLine1;
-    OUString maWelcomeLine2;
+    Image const maWelcomeImage;
+    OUString const maWelcomeLine1;
+    OUString const maWelcomeLine2;
 };
+
+} // namespace sfx2
 
 #endif // INCLUDED_SFX2_RECENTDOCSVIEW_HXX
 

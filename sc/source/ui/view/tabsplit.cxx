@@ -17,13 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "tabsplit.hxx"
-#include "viewdata.hxx"
-#include "dbfunc.hxx"
+#include <tabsplit.hxx>
+#include <viewdata.hxx>
+#include <dbfunc.hxx>
 
 #include <vcl/settings.hxx>
 
-ScTabSplitter::ScTabSplitter( vcl::Window* pParent, WinBits nWinStyle, ScViewData* pData ) :
+ScTabSplitter::ScTabSplitter( vcl::Window* pParent, WinBits nWinStyle, const ScViewData* pData ) :
     Splitter(pParent, nWinStyle),
     pViewData(pData)
 {
@@ -54,7 +54,7 @@ void ScTabSplitter::SetFixed(bool bSet)
         SetPointer(PointerStyle::VSplit);
 }
 
-void ScTabSplitter::Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect )
+void ScTabSplitter::Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect )
 {
     rRenderContext.Push(PushFlags::FILLCOLOR | PushFlags::LINECOLOR);
     const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
@@ -67,23 +67,23 @@ void ScTabSplitter::Paint( vcl::RenderContext& rRenderContext, const Rectangle& 
             {
                 rRenderContext.SetLineColor(rStyleSettings.GetShadowColor());
                 rRenderContext.SetFillColor(rStyleSettings.GetShadowColor());
-                rRenderContext.DrawRect(Rectangle(rRect.Left(), rRect.Top(), rRect.Right(), rRect.Bottom()));
+                rRenderContext.DrawRect(tools::Rectangle(rRect.Left(), rRect.Top(), rRect.Right(), rRect.Bottom()));
 
                 // Draw handle
-                rRenderContext.SetLineColor(Color(COL_BLACK));
-                rRenderContext.SetFillColor(Color(COL_BLACK));
+                rRenderContext.SetLineColor(COL_BLACK);
+                rRenderContext.SetFillColor(COL_BLACK);
                 const long xc = rRect.Right() + rRect.Left();
                 const long h4 = rRect.GetHeight() / 4;
                 // First xc fraction is truncated, second one is rounded. This will draw a centered line
                 // in handlers with odd width and a centered rectangle in those with even width.
-                rRenderContext.DrawRect(Rectangle(Point(xc / 2, rRect.Top() + h4),
+                rRenderContext.DrawRect(tools::Rectangle(Point(xc / 2, rRect.Top() + h4),
                                                   Point((xc + 1) / 2, rRect.Bottom() - h4)));
                 break;
             }
             case SC_SPLIT_NORMAL:
                 rRenderContext.SetLineColor(rStyleSettings.GetShadowColor());
                 rRenderContext.SetFillColor(rStyleSettings.GetShadowColor());
-                rRenderContext.DrawRect(Rectangle(rRect.Left(), rRect.Top(), rRect.Right(), rRect.Bottom()));
+                rRenderContext.DrawRect(tools::Rectangle(rRect.Left(), rRect.Top(), rRect.Right(), rRect.Bottom()));
                 break;
             case SC_SPLIT_FIX:
                 // Nothing to draw
@@ -98,23 +98,23 @@ void ScTabSplitter::Paint( vcl::RenderContext& rRenderContext, const Rectangle& 
             {
                 rRenderContext.SetLineColor(rStyleSettings.GetShadowColor());
                 rRenderContext.SetFillColor(rStyleSettings.GetShadowColor());
-                rRenderContext.DrawRect(Rectangle(rRect.Left(), rRect.Top(), rRect.Right(), rRect.Bottom()));
+                rRenderContext.DrawRect(tools::Rectangle(rRect.Left(), rRect.Top(), rRect.Right(), rRect.Bottom()));
 
                  // Draw handle
-                rRenderContext.SetLineColor(Color(COL_BLACK));
-                rRenderContext.SetFillColor(Color(COL_BLACK));
+                rRenderContext.SetLineColor(COL_BLACK);
+                rRenderContext.SetFillColor(COL_BLACK);
                 const long yc = rRect.Top() + rRect.Bottom();
                 const long w4 = rRect.GetWidth() / 4;
                 // First yc fraction is truncated, second one is rounded. This will draw a centered line
                 // in handlers with odd height and a centered rectangle in those with even height.
-                DrawRect(Rectangle(Point(rRect.Left() + w4, yc / 2),
+                DrawRect(tools::Rectangle(Point(rRect.Left() + w4, yc / 2),
                                    Point(rRect.Right() - w4, (yc + 1) / 2)));
                 break;
             }
             case SC_SPLIT_NORMAL:
                 rRenderContext.SetLineColor(rStyleSettings.GetShadowColor());
                 rRenderContext.SetFillColor(rStyleSettings.GetShadowColor());
-                rRenderContext.DrawRect(Rectangle(rRect.Left(), rRect.Top(), rRect.Right(), rRect.Bottom()));
+                rRenderContext.DrawRect(tools::Rectangle(rRect.Left(), rRect.Top(), rRect.Right(), rRect.Bottom()));
                 break;
             case SC_SPLIT_FIX:
                 // Nothing to draw

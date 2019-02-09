@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <typeinfo>
 #include <exception>
@@ -29,9 +29,9 @@
 #endif
 #include <unwind.h>
 
-#include "config_cxxabi.h"
-#include "uno/any2.h"
-#include "uno/mapping.h"
+#include <config_cxxabi.h>
+#include <uno/any2.h>
+#include <uno/mapping.h>
 
 #if !HAVE_CXXABI_H_CLASS_TYPE_INFO
 // <https://mentorembedded.github.io/cxx-abi/abi.html>,
@@ -113,7 +113,7 @@ struct __cxa_exception {
 #endif
     std::type_info * exceptionType;
     void (* exceptionDestructor)(void *);
-    std::unexpected_handler unexpectedHandler;
+    void (*unexpectedHandler)(); // std::unexpected_handler dropped from C++17
     std::terminate_handler terminateHandler;
     __cxa_exception * nextException;
     int handlerCount;
@@ -143,6 +143,12 @@ extern "C" __cxa_eh_globals * __cxa_get_globals() throw();
 }
 #endif
 
+#if !HAVE_CXXABI_H_CXA_CURRENT_EXCEPTION_TYPE
+namespace __cxxabiv1 {
+extern "C" std::type_info *__cxa_current_exception_type() throw();
+}
+#endif
+
 #if !HAVE_CXXABI_H_CXA_ALLOCATE_EXCEPTION
 namespace __cxxabiv1 {
 extern "C" void * __cxa_allocate_exception(std::size_t thrown_size) throw();
@@ -165,8 +171,7 @@ namespace CPPU_CURRENT_NAMESPACE
 void raiseException(
     uno_Any * pUnoExc, uno_Mapping * pUno2Cpp );
 
-void fillUnoException(
-    __cxxabiv1::__cxa_exception * header, uno_Any *, uno_Mapping * pCpp2Uno );
+void fillUnoException(uno_Any *, uno_Mapping * pCpp2Uno);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

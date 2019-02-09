@@ -18,15 +18,15 @@
  */
 
 #include <com/sun/star/sdbcx/CompareBookmark.hpp>
-#include "dbase/DResultSet.hxx"
+#include <dbase/DResultSet.hxx>
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <comphelper/sequence.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include "dbase/DIndex.hxx"
-#include "dbase/DIndexIter.hxx"
+#include <dbase/DIndex.hxx>
+#include <dbase/DIndexIter.hxx>
 #include <comphelper/types.hxx>
 #include <connectivity/dbexception.hxx>
-#include "resource/dbase_res.hrc"
+#include <strings.hrc>
 
 using namespace ::comphelper;
 
@@ -46,47 +46,47 @@ ODbaseResultSet::ODbaseResultSet( OStatement_Base* pStmt,connectivity::OSQLParse
     registerProperty(OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_ISBOOKMARKABLE),         PROPERTY_ID_ISBOOKMARKABLE,       PropertyAttribute::READONLY,&m_bBookmarkable,                cppu::UnoType<bool>::get());
 }
 
-OUString SAL_CALL ODbaseResultSet::getImplementationName(  ) throw ( RuntimeException, std::exception)
+OUString SAL_CALL ODbaseResultSet::getImplementationName(  )
 {
     return OUString("com.sun.star.sdbcx.dbase.ResultSet");
 }
 
-Sequence< OUString > SAL_CALL ODbaseResultSet::getSupportedServiceNames(  ) throw( RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL ODbaseResultSet::getSupportedServiceNames(  )
 {
-     Sequence< OUString > aSupported(2);
+    Sequence< OUString > aSupported(2);
     aSupported[0] = "com.sun.star.sdbc.ResultSet";
     aSupported[1] = "com.sun.star.sdbcx.ResultSet";
     return aSupported;
 }
 
-sal_Bool SAL_CALL ODbaseResultSet::supportsService( const OUString& _rServiceName ) throw( RuntimeException, std::exception)
+sal_Bool SAL_CALL ODbaseResultSet::supportsService( const OUString& _rServiceName )
 {
     return cppu::supportsService(this, _rServiceName);
 }
 
-Any SAL_CALL ODbaseResultSet::queryInterface( const Type & rType ) throw(RuntimeException, std::exception)
+Any SAL_CALL ODbaseResultSet::queryInterface( const Type & rType )
 {
     Any aRet = ODbaseResultSet_BASE::queryInterface(rType);
     return aRet.hasValue() ? aRet : OResultSet::queryInterface(rType);
 }
 
- Sequence<  Type > SAL_CALL ODbaseResultSet::getTypes(  ) throw( RuntimeException, std::exception)
+ Sequence<  Type > SAL_CALL ODbaseResultSet::getTypes(  )
 {
     return ::comphelper::concatSequences(OResultSet::getTypes(),ODbaseResultSet_BASE::getTypes());
 }
 
 
 // XRowLocate
-Any SAL_CALL ODbaseResultSet::getBookmark(  ) throw( SQLException,  RuntimeException, std::exception)
+Any SAL_CALL ODbaseResultSet::getBookmark(  )
 {
-     ::osl::MutexGuard aGuard( m_aMutex );
+    ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
     OSL_ENSURE((m_bShowDeleted || !m_aRow->isDeleted()),"getBookmark called for deleted row");
 
-    return makeAny((sal_Int32)(m_aRow->get())[0]->getValue());
+    return makeAny(static_cast<sal_Int32>((m_aRow->get())[0]->getValue()));
 }
 
-sal_Bool SAL_CALL ODbaseResultSet::moveToBookmark( const  Any& bookmark ) throw( SQLException,  RuntimeException, std::exception)
+sal_Bool SAL_CALL ODbaseResultSet::moveToBookmark( const  Any& bookmark )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
@@ -94,15 +94,15 @@ sal_Bool SAL_CALL ODbaseResultSet::moveToBookmark( const  Any& bookmark ) throw(
 
     m_bRowDeleted = m_bRowInserted = m_bRowUpdated = false;
 
-    return m_pTable && Move(IResultSetHelper::BOOKMARK,comphelper::getINT32(bookmark),true);
+    return m_pTable.is() && Move(IResultSetHelper::BOOKMARK,comphelper::getINT32(bookmark),true);
 }
 
-sal_Bool SAL_CALL ODbaseResultSet::moveRelativeToBookmark( const  Any& bookmark, sal_Int32 rows ) throw( SQLException,  RuntimeException, std::exception)
+sal_Bool SAL_CALL ODbaseResultSet::moveRelativeToBookmark( const  Any& bookmark, sal_Int32 rows )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
-    if(!m_pTable)
-        return sal_False;
+    if(!m_pTable.is())
+        return false;
 
 
     Move(IResultSetHelper::BOOKMARK,comphelper::getINT32(bookmark),false);
@@ -111,7 +111,7 @@ sal_Bool SAL_CALL ODbaseResultSet::moveRelativeToBookmark( const  Any& bookmark,
 }
 
 
-sal_Int32 SAL_CALL ODbaseResultSet::compareBookmarks( const Any& lhs, const Any& rhs ) throw( SQLException,  RuntimeException, std::exception)
+sal_Int32 SAL_CALL ODbaseResultSet::compareBookmarks( const Any& lhs, const Any& rhs )
 {
     sal_Int32 nFirst(0),nSecond(0),nResult(0);
     if ( !( lhs  >>= nFirst ) || !( rhs >>= nSecond ) )
@@ -131,12 +131,12 @@ sal_Int32 SAL_CALL ODbaseResultSet::compareBookmarks( const Any& lhs, const Any&
     return  nResult;
 }
 
-sal_Bool SAL_CALL ODbaseResultSet::hasOrderedBookmarks(  ) throw( SQLException,  RuntimeException, std::exception)
+sal_Bool SAL_CALL ODbaseResultSet::hasOrderedBookmarks(  )
 {
-    return sal_True;
+    return true;
 }
 
-sal_Int32 SAL_CALL ODbaseResultSet::hashBookmark( const  Any& bookmark ) throw( SQLException,  RuntimeException, std::exception)
+sal_Int32 SAL_CALL ODbaseResultSet::hashBookmark( const  Any& bookmark )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
@@ -146,7 +146,7 @@ sal_Int32 SAL_CALL ODbaseResultSet::hashBookmark( const  Any& bookmark ) throw( 
 }
 
 // XDeleteRows
-Sequence< sal_Int32 > SAL_CALL ODbaseResultSet::deleteRows( const  Sequence<  Any >& /*rows*/ ) throw( SQLException,  RuntimeException, std::exception)
+Sequence< sal_Int32 > SAL_CALL ODbaseResultSet::deleteRows( const  Sequence<  Any >& /*rows*/ )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OResultSet_BASE::rBHelper.bDisposed);
@@ -163,21 +163,17 @@ bool ODbaseResultSet::fillIndexValues(const Reference< XColumnsSupplier> &_xInde
         dbase::ODbaseIndex* pIndex = reinterpret_cast< dbase::ODbaseIndex* >( xTunnel->getSomething(dbase::ODbaseIndex::getUnoTunnelImplementationId()) );
         if(pIndex)
         {
-            dbase::OIndexIterator* pIter = pIndex->createIterator();
+            std::unique_ptr<dbase::OIndexIterator> pIter = pIndex->createIterator();
 
             if (pIter)
             {
                 sal_uInt32 nRec = pIter->First();
                 while (nRec != NODE_NOTFOUND)
                 {
-                    if (m_aOrderbyAscending[0])
-                        m_pFileSet->get().push_back(nRec);
-                    else
-                        m_pFileSet->get().insert(m_pFileSet->get().begin(),nRec);
+                    m_pFileSet->get().push_back(nRec);
                     nRec = pIter->Next();
                 }
                 m_pFileSet->setFrozen();
-                delete pIter;
                 return true;
             }
         }
@@ -207,7 +203,7 @@ void SAL_CALL ODbaseResultSet::release() throw()
     ODbaseResultSet_BASE2::release();
 }
 
-::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySetInfo > SAL_CALL ODbaseResultSet::getPropertySetInfo(  ) throw(::com::sun::star::uno::RuntimeException, std::exception)
+css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL ODbaseResultSet::getPropertySetInfo(  )
 {
     return ::cppu::OPropertySetHelper::createPropertySetInfo(getInfoHelper());
 }

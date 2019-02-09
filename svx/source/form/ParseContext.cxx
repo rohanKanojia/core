@@ -19,38 +19,35 @@
 
 
 #include <sal/macros.h>
-#include "svx/ParseContext.hxx"
-#include "stringlistresource.hxx"
-#include "svx/fmresids.hrc"
+#include <svx/ParseContext.hxx>
+#include <svx/strings.hrc>
 
 #include <svx/dialmgr.hxx>
 
 #include <unotools/syslocale.hxx>
 #include <vcl/svapp.hxx>
+#include <osl/diagnose.h>
 #include <osl/mutex.hxx>
+#include <fmstring.hrc>
 
 using namespace svxform;
 using namespace ::connectivity;
 
-OSystemParseContext::OSystemParseContext() : IParseContext()
+OSystemParseContext::OSystemParseContext()
+    : IParseContext()
 {
-    SolarMutexGuard aGuard;
-
-    svx::StringListResource aKeywords( SVX_RES( RID_RSC_SQL_INTERNATIONAL ) );
-    aKeywords.get( m_aLocalizedKeywords );
+    for (size_t i = 0; i < SAL_N_ELEMENTS(RID_RSC_SQL_INTERNATIONAL); ++i)
+        m_aLocalizedKeywords.push_back(SvxResId(RID_RSC_SQL_INTERNATIONAL[i]));
 }
-
 
 OSystemParseContext::~OSystemParseContext()
 {
 }
 
-
 css::lang::Locale OSystemParseContext::getPreferredLocale( ) const
 {
     return SvtSysLocale().GetLanguageTag().getLocale();
 }
-
 
 OUString OSystemParseContext::getErrorMessage(ErrorCode _eCode) const
 {
@@ -58,23 +55,22 @@ OUString OSystemParseContext::getErrorMessage(ErrorCode _eCode) const
     SolarMutexGuard aGuard;
     switch (_eCode)
     {
-        case ErrorCode::General:               aMsg = SVX_RESSTR(RID_STR_SVT_SQL_SYNTAX_ERROR); break;
-        case ErrorCode::ValueNoLike:           aMsg = SVX_RESSTR(RID_STR_SVT_SQL_SYNTAX_VALUE_NO_LIKE); break;
-        case ErrorCode::FieldNoLike:           aMsg = SVX_RESSTR(RID_STR_SVT_SQL_SYNTAX_FIELD_NO_LIKE); break;
-        case ErrorCode::InvalidCompare:        aMsg = SVX_RESSTR(RID_STR_SVT_SQL_SYNTAX_CRIT_NO_COMPARE); break;
-        case ErrorCode::InvalidIntCompare:     aMsg = SVX_RESSTR(RID_STR_SVT_SQL_SYNTAX_INT_NO_VALID); break;
-        case ErrorCode::InvalidDateCompare:    aMsg = SVX_RESSTR(RID_STR_SVT_SQL_SYNTAX_ACCESS_DAT_NO_VALID); break;
-        case ErrorCode::InvalidRealCompare:    aMsg = SVX_RESSTR(RID_STR_SVT_SQL_SYNTAX_REAL_NO_VALID); break;
-        case ErrorCode::InvalidTableNosuch:    aMsg = SVX_RESSTR(RID_STR_SVT_SQL_SYNTAX_TABLE); break;
-        case ErrorCode::InvalidTableOrQuery:   aMsg = SVX_RESSTR(RID_STR_SVT_SQL_SYNTAX_TABLE_OR_QUERY); break;
-        case ErrorCode::InvalidColumn:         aMsg = SVX_RESSTR(RID_STR_SVT_SQL_SYNTAX_COLUMN); break;
-        case ErrorCode::InvalidTableExist:     aMsg = SVX_RESSTR(RID_STR_SVT_SQL_SYNTAX_TABLE_EXISTS); break;
-        case ErrorCode::InvalidQueryExist:     aMsg = SVX_RESSTR(RID_STR_SVT_SQL_SYNTAX_QUERY_EXISTS); break;
-        case ErrorCode::None: break;
+        case ErrorCode::General:               aMsg = SvxResId(RID_STR_SVT_SQL_SYNTAX_ERROR); break;
+        case ErrorCode::ValueNoLike:           aMsg = SvxResId(RID_STR_SVT_SQL_SYNTAX_VALUE_NO_LIKE); break;
+        case ErrorCode::FieldNoLike:           aMsg = SvxResId(RID_STR_SVT_SQL_SYNTAX_FIELD_NO_LIKE); break;
+        case ErrorCode::InvalidCompare:        aMsg = SvxResId(RID_STR_SVT_SQL_SYNTAX_CRIT_NO_COMPARE); break;
+        case ErrorCode::InvalidIntCompare:     aMsg = SvxResId(RID_STR_SVT_SQL_SYNTAX_INT_NO_VALID); break;
+        case ErrorCode::InvalidDateCompare:    aMsg = SvxResId(RID_STR_SVT_SQL_SYNTAX_ACCESS_DAT_NO_VALID); break;
+        case ErrorCode::InvalidRealCompare:    aMsg = SvxResId(RID_STR_SVT_SQL_SYNTAX_REAL_NO_VALID); break;
+        case ErrorCode::InvalidTableNosuch:    aMsg = SvxResId(RID_STR_SVT_SQL_SYNTAX_TABLE); break;
+        case ErrorCode::InvalidTableOrQuery:   aMsg = SvxResId(RID_STR_SVT_SQL_SYNTAX_TABLE_OR_QUERY); break;
+        case ErrorCode::InvalidColumn:         aMsg = SvxResId(RID_STR_SVT_SQL_SYNTAX_COLUMN); break;
+        case ErrorCode::InvalidTableExist:     aMsg = SvxResId(RID_STR_SVT_SQL_SYNTAX_TABLE_EXISTS); break;
+        case ErrorCode::InvalidQueryExist:     aMsg = SvxResId(RID_STR_SVT_SQL_SYNTAX_QUERY_EXISTS); break;
+        default: break;
     }
     return aMsg;
 }
-
 
 OString OSystemParseContext::getIntlKeywordAscii(InternationalKeyCode _eKey) const
 {
@@ -132,7 +128,7 @@ IParseContext::InternationalKeyCode OSystemParseContext::getIntlKeyCode(const OS
         InternationalKeyCode::Collect, InternationalKeyCode::Fusion, InternationalKeyCode::Intersection
     };
 
-    sal_uInt32 nCount = SAL_N_ELEMENTS(Intl_TokenID);
+    sal_uInt32 const nCount = SAL_N_ELEMENTS(Intl_TokenID);
     for (sal_uInt32 i = 0; i < nCount; i++)
     {
         OString aKey = getIntlKeywordAscii(Intl_TokenID[i]);
@@ -159,7 +155,7 @@ namespace
         return s_nCounter;
     }
 
-    OSystemParseContext* getSharedContext(OSystemParseContext* _pContext = nullptr,bool _bSet = false)
+    OSystemParseContext* getSharedContext(OSystemParseContext* _pContext, bool _bSet)
     {
         static OSystemParseContext* s_pSharedContext = nullptr;
         if ( _pContext && !s_pSharedContext )
@@ -183,23 +179,21 @@ OParseContextClient::OParseContextClient()
     ::osl::MutexGuard aGuard( getSafteyMutex() );
     if ( 1 == osl_atomic_increment( &getCounter() ) )
     {   // first instance
-        getSharedContext( new OSystemParseContext );
+        getSharedContext( new OSystemParseContext, false );
     }
 }
 
 
 OParseContextClient::~OParseContextClient()
 {
-    {
-        ::osl::MutexGuard aGuard( getSafteyMutex() );
-        if ( 0 == osl_atomic_decrement( &getCounter() ) )
-            delete getSharedContext(nullptr,true);
-    }
+    ::osl::MutexGuard aGuard( getSafteyMutex() );
+    if ( 0 == osl_atomic_decrement( &getCounter() ) )
+        delete getSharedContext(nullptr,true);
 }
 
 const OSystemParseContext* OParseContextClient::getParseContext() const
 {
-    return getSharedContext();
+    return getSharedContext(nullptr, false);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

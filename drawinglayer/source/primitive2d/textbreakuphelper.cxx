@@ -21,7 +21,7 @@
 #include <drawinglayer/primitive2d/textdecoratedprimitive2d.hxx>
 #include <com/sun/star/i18n/BreakIterator.hpp>
 #include <comphelper/processfactory.hxx>
-#include <com/sun/star/i18n/CharacterIteratorMode.hdl>
+#include <com/sun/star/i18n/CharacterIteratorMode.hpp>
 #include <com/sun/star/i18n/WordType.hpp>
 #include <com/sun/star/i18n/CharType.hpp>
 
@@ -37,7 +37,6 @@ namespace drawinglayer
             maDecTrans(),
             mbNoDXArray(false)
         {
-            OSL_ENSURE(dynamic_cast< const TextSimplePortionPrimitive2D* >(&mrSource), "TextBreakupHelper with illegal primitive created (!)");
             maDecTrans = mrSource.getTextTransform();
             mbNoDXArray = mrSource.getDXArray().empty();
 
@@ -62,13 +61,13 @@ namespace drawinglayer
             {
                 // prepare values for new portion
                 basegfx::B2DHomMatrix aNewTransform;
-                ::std::vector< double > aNewDXArray;
+                std::vector< double > aNewDXArray;
                 const bool bNewStartIsNotOldStart(nIndex > mrSource.getTextPosition());
 
                 if(!mbNoDXArray)
                 {
                     // prepare new DXArray for the single word
-                    aNewDXArray = ::std::vector< double >(
+                    aNewDXArray = std::vector< double >(
                         mrSource.getDXArray().begin() + (nIndex - mrSource.getTextPosition()),
                         mrSource.getDXArray().begin() + ((nIndex + nLength) - mrSource.getTextPosition()));
                 }
@@ -152,7 +151,7 @@ namespace drawinglayer
                                 pTextDecoratedPortionPrimitive2D->getUnderlineAbove(),
                                 pTextDecoratedPortionPrimitive2D->getTextStrikeout(),
 
-                                // reset WordLineMode when BreakupUnit_word is executed; else copy original
+                                // reset WordLineMode when BreakupUnit::Word is executed; else copy original
                                 !bWordLineMode && pTextDecoratedPortionPrimitive2D->getWordLineMode(),
 
                                 pTextDecoratedPortionPrimitive2D->getTextEmphasisMark(),
@@ -205,7 +204,7 @@ namespace drawinglayer
 
                 switch(aBreakupUnit)
                 {
-                    case BreakupUnit_character:
+                    case BreakupUnit::Character:
                     {
                         sal_Int32 nDone;
                         sal_Int32 nNextCellBreak(xBreakIterator->nextCharacters(rTxt, nTextPosition, rLocale, css::i18n::CharacterIteratorMode::SKIPCELL, 0, nDone));
@@ -224,9 +223,9 @@ namespace drawinglayer
                         breakupPortion(aTempResult, nCurrent, a - nCurrent, false);
                         break;
                     }
-                    case BreakupUnit_word:
+                    case BreakupUnit::Word:
                     {
-                        css::i18n::Boundary nNextWordBoundary(xBreakIterator->getWordBoundary(rTxt, nTextPosition, rLocale, css::i18n::WordType::ANY_WORD, sal_True));
+                        css::i18n::Boundary nNextWordBoundary(xBreakIterator->getWordBoundary(rTxt, nTextPosition, rLocale, css::i18n::WordType::ANY_WORD, true));
                         sal_Int32 a(nTextPosition);
 
                         for(; a < nTextPosition + nTextLength; a++)
@@ -250,7 +249,7 @@ namespace drawinglayer
                                     }
                                 }
 
-                                nNextWordBoundary = xBreakIterator->getWordBoundary(rTxt, a + 1, rLocale, css::i18n::WordType::ANY_WORD, sal_True);
+                                nNextWordBoundary = xBreakIterator->getWordBoundary(rTxt, a + 1, rLocale, css::i18n::WordType::ANY_WORD, true);
                             }
                         }
 
@@ -258,24 +257,6 @@ namespace drawinglayer
                         {
                             breakupPortion(aTempResult, nCurrent, a - nCurrent, true);
                         }
-                        break;
-                    }
-                    case BreakupUnit_sentence:
-                    {
-                        sal_Int32 nNextSentenceBreak(xBreakIterator->endOfSentence(rTxt, nTextPosition, rLocale));
-                        sal_Int32 a(nTextPosition);
-
-                        for(; a < nTextPosition + nTextLength; a++)
-                        {
-                            if(a == nNextSentenceBreak)
-                            {
-                                breakupPortion(aTempResult, nCurrent, a - nCurrent, false);
-                                nCurrent = a;
-                                nNextSentenceBreak = xBreakIterator->endOfSentence(rTxt, a + 1, rLocale);
-                            }
-                        }
-
-                        breakupPortion(aTempResult, nCurrent, a - nCurrent, false);
                         break;
                     }
                 }

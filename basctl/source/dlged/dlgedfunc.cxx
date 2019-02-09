@@ -19,17 +19,16 @@
 
 #include <vcl/scrbar.hxx>
 #include <svx/svdview.hxx>
-#include "dlgedfunc.hxx"
-#include "dlged.hxx"
-#include "dlgedview.hxx"
+#include <dlgedfunc.hxx>
+#include <dlged.hxx>
+#include <dlgedview.hxx>
 #include <vcl/seleng.hxx>
 
 namespace basctl
 {
 
-IMPL_LINK_TYPED( DlgEdFunc, ScrollTimeout, Timer *, pTimer, void )
+IMPL_LINK_NOARG( DlgEdFunc, ScrollTimeout, Timer *, void )
 {
-    (void)pTimer;
     vcl::Window& rWindow = rParent.GetWindow();
     Point aPos = rWindow.ScreenToOutputPixel( rWindow.GetPointerPosPixel() );
     aPos = rWindow.PixelToLogic( aPos );
@@ -43,7 +42,7 @@ void DlgEdFunc::ForceScroll( const Point& rPos )
     vcl::Window& rWindow  = rParent.GetWindow();
 
     static Point aDefPoint;
-    Rectangle aOutRect( aDefPoint, rWindow.GetOutputSizePixel() );
+    tools::Rectangle aOutRect( aDefPoint, rWindow.GetOutputSizePixel() );
     aOutRect = rWindow.PixelToLogic( aOutRect );
 
     ScrollBar* pHScroll = rParent.GetHScroll();
@@ -69,9 +68,9 @@ void DlgEdFunc::ForceScroll( const Point& rPos )
             pVScroll->SetThumbPos( pVScroll->GetThumbPos() + nDeltaY );
 
         if( nDeltaX )
-            rParent.DoScroll( pHScroll );
+            rParent.DoScroll();
         if( nDeltaY )
-            rParent.DoScroll( pVScroll );
+            rParent.DoScroll();
     }
 
     aScrollTimer.Start();
@@ -80,7 +79,7 @@ void DlgEdFunc::ForceScroll( const Point& rPos )
 DlgEdFunc::DlgEdFunc (DlgEditor& rParent_) :
     rParent(rParent_)
 {
-    aScrollTimer.SetTimeoutHdl( LINK( this, DlgEdFunc, ScrollTimeout ) );
+    aScrollTimer.SetInvokeHandler( LINK( this, DlgEdFunc, ScrollTimeout ) );
     aScrollTimer.SetTimeout( SELENG_AUTOREPEAT_INTERVAL );
 }
 
@@ -161,7 +160,7 @@ bool DlgEdFunc::KeyInput( const KeyEvent& rKEvt )
                 if (SdrHdl* pHdl = rHdlList.GetFocusHdl())
                 {
                     Point aHdlPosition( pHdl->GetPos() );
-                    Rectangle aVisRect( aHdlPosition - Point( 100, 100 ), Size( 200, 200 ) );
+                    tools::Rectangle aVisRect( aHdlPosition - Point( 100, 100 ), Size( 200, 200 ) );
                     rView.MakeVisible( aVisRect, rWindow );
                 }
 
@@ -227,11 +226,11 @@ bool DlgEdFunc::KeyInput( const KeyEvent& rKEvt )
                     if ( rView.IsMoveAllowed() )
                     {
                         // restrict movement to work area
-                        const Rectangle& rWorkArea = rView.GetWorkArea();
+                        const tools::Rectangle& rWorkArea = rView.GetWorkArea();
 
                         if ( !rWorkArea.IsEmpty() )
                         {
-                            Rectangle aMarkRect( rView.GetMarkedObjRect() );
+                            tools::Rectangle aMarkRect( rView.GetMarkedObjRect() );
                             aMarkRect.Move( nX, nY );
 
                             if ( !rWorkArea.IsInside( aMarkRect ) )
@@ -257,43 +256,39 @@ bool DlgEdFunc::KeyInput( const KeyEvent& rKEvt )
                         }
                     }
                 }
-                else
+                else if (nX || nY)
                 {
-                    // move the handle
-                    if ( pHdl && ( nX || nY ) )
+                    Point aStartPoint(pHdl->GetPos());
+                    Point aEndPoint(pHdl->GetPos() + Point(nX, nY));
+                    const SdrDragStat& rDragStat = rView.GetDragStat();
+
+                    // start dragging
+                    rView.BegDragObj(aStartPoint, nullptr, pHdl, 0);
+
+                    if (rView.IsDragObj())
                     {
-                        Point aStartPoint( pHdl->GetPos() );
-                        Point aEndPoint( pHdl->GetPos() + Point( nX, nY ) );
-                        const SdrDragStat& rDragStat = rView.GetDragStat();
+                        bool const bWasNoSnap = rDragStat.IsNoSnap();
+                        bool const bWasSnapEnabled = rView.IsSnapEnabled();
 
-                        // start dragging
-                        rView.BegDragObj( aStartPoint, nullptr, pHdl, 0 );
+                        // switch snapping off
+                        if (!bWasNoSnap)
+                            const_cast<SdrDragStat&>(rDragStat).SetNoSnap();
+                        if (bWasSnapEnabled)
+                            rView.SetSnapEnabled(false);
 
-                        if ( rView.IsDragObj() )
-                        {
-                            bool const bWasNoSnap = rDragStat.IsNoSnap();
-                            bool const bWasSnapEnabled = rView.IsSnapEnabled();
+                        rView.MovAction(aEndPoint);
+                        rView.EndDragObj();
 
-                            // switch snapping off
-                            if ( !bWasNoSnap )
-                                const_cast<SdrDragStat&>(rDragStat).SetNoSnap();
-                            if ( bWasSnapEnabled )
-                                rView.SetSnapEnabled(false);
-
-                            rView.MovAction( aEndPoint );
-                            rView.EndDragObj();
-
-                            // restore snap
-                            if ( !bWasNoSnap )
-                                const_cast<SdrDragStat&>(rDragStat).SetNoSnap( bWasNoSnap );
-                            if ( bWasSnapEnabled )
-                                rView.SetSnapEnabled( bWasSnapEnabled );
-                        }
-
-                        // make moved handle visible
-                        Rectangle aVisRect( aEndPoint - Point( 100, 100 ), Size( 200, 200 ) );
-                        rView.MakeVisible( aVisRect, rWindow );
+                        // restore snap
+                        if (!bWasNoSnap)
+                            const_cast<SdrDragStat&>(rDragStat).SetNoSnap(bWasNoSnap);
+                        if (bWasSnapEnabled)
+                            rView.SetSnapEnabled(bWasSnapEnabled);
                     }
+
+                    // make moved handle visible
+                    tools::Rectangle aVisRect(aEndPoint - Point(100, 100), Size(200, 200));
+                    rView.MakeVisible(aVisRect, rWindow);
                 }
             }
             else
@@ -310,7 +305,7 @@ bool DlgEdFunc::KeyInput( const KeyEvent& rKEvt )
                     if ( nThumbPos > nRangeMax )
                         nThumbPos = nRangeMax;
                     pScrollBar->SetThumbPos( nThumbPos );
-                    rParent.DoScroll( pScrollBar );
+                    rParent.DoScroll();
                 }
             }
 
@@ -390,7 +385,7 @@ bool DlgEdFuncInsert::MouseButtonUp( const MouseEvent& rMEvt )
     // object creation active?
     if ( rView.IsCreateObj() )
     {
-        rView.EndCreateObj(SDRCREATE_FORCEEND);
+        rView.EndCreateObj(SdrCreateCmd::ForceEnd);
 
         if ( !rView.AreObjectsMarked() )
         {
@@ -428,8 +423,7 @@ void DlgEdFuncInsert::MouseMove( const MouseEvent& rMEvt )
 }
 
 DlgEdFuncSelect::DlgEdFuncSelect (DlgEditor& rParent_) :
-    DlgEdFunc(rParent_),
-    bMarkAction(false)
+    DlgEdFunc(rParent_)
 {
 }
 
@@ -464,9 +458,9 @@ void DlgEdFuncSelect::MouseButtonDown( const MouseEvent& rMEvt )
                 rView.UnmarkAll();
             else
             {
-                SdrObject* pObj;
                 SdrPageView* pPV;
-                if( rView.PickObj( aMDPos, nHitLog, pObj, pPV ) )
+                SdrObject* pObj = rView.PickObj(aMDPos, nHitLog, pPV);
+                if (pObj)
                 {
                     //if (dynamic_cast<DlgEdForm*>(pObj))
                     //  rView.UnmarkAll();
@@ -485,7 +479,6 @@ void DlgEdFuncSelect::MouseButtonDown( const MouseEvent& rMEvt )
             {
                 // select object
                 rView.BegMarkObj(aMDPos);
-                bMarkAction = true;
             }
         }
     }
@@ -522,8 +515,6 @@ bool DlgEdFuncSelect::MouseButtonUp( const MouseEvent& rMEvt )
             rView.EndAction();
         }
     }
-
-    bMarkAction = false;
 
     rWindow.SetPointer( rView.GetPreferredPointer( aPnt, &rWindow, nHitLog ) );
     rWindow.ReleaseMouse();

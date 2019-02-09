@@ -20,28 +20,28 @@
 #ifndef INCLUDED_BINARYURP_SOURCE_BRIDGEFACTORY_HXX
 #define INCLUDED_BINARYURP_SOURCE_BRIDGEFACTORY_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <exception>
-#include <list>
+#include <vector>
 #include <map>
 
-#include "com/sun/star/bridge/XBridgeFactory2.hpp"
-#include "com/sun/star/lang/XServiceInfo.hpp"
-#include "com/sun/star/uno/Exception.hpp"
-#include "com/sun/star/uno/Reference.hxx"
-#include "com/sun/star/uno/RuntimeException.hpp"
-#include "cppuhelper/basemutex.hxx"
-#include "cppuhelper/compbase.hxx"
-#include "sal/types.h"
+#include <com/sun/star/bridge/XBridgeFactory2.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/uno/Exception.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cppuhelper/basemutex.hxx>
+#include <cppuhelper/compbase.hxx>
+#include <sal/types.h>
 
-namespace com { namespace sun { namespace star {
+namespace com::sun::star {
     namespace connection { class XConnection; }
     namespace uno {
         class XComponentContext;
         class XInterface;
     }
-} } }
+}
 
 namespace binaryurp {
 
@@ -78,20 +78,16 @@ private:
     BridgeFactory(const BridgeFactory&) = delete;
     BridgeFactory& operator=(const BridgeFactory&) = delete;
 
-    explicit BridgeFactory(
-        com::sun::star::uno::Reference< com::sun::star::uno::XComponentContext >
-            const & context);
+    BridgeFactory();
 
-    virtual ~BridgeFactory();
+    virtual ~BridgeFactory() override;
 
-    virtual OUString SAL_CALL getImplementationName()
-        throw (com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
 
-    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-        throw (com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override;
 
     virtual com::sun::star::uno::Sequence< OUString > SAL_CALL
-    getSupportedServiceNames() throw (com::sun::star::uno::RuntimeException, std::exception) override;
+    getSupportedServiceNames() override;
 
     virtual com::sun::star::uno::Reference< com::sun::star::bridge::XBridge >
     SAL_CALL createBridge(
@@ -100,28 +96,23 @@ private:
             com::sun::star::connection::XConnection > const & aConnection,
         com::sun::star::uno::Reference<
             com::sun::star::bridge::XInstanceProvider > const &
-                anInstanceProvider)
-        throw (
-            com::sun::star::bridge::BridgeExistsException,
-            com::sun::star::lang::IllegalArgumentException,
-            com::sun::star::uno::RuntimeException, std::exception) override;
+                anInstanceProvider) override;
 
     virtual com::sun::star::uno::Reference< com::sun::star::bridge::XBridge >
     SAL_CALL getBridge(
-        OUString const & sName)
-        throw (com::sun::star::uno::RuntimeException, std::exception) override;
+        OUString const & sName) override;
 
     virtual
     com::sun::star::uno::Sequence<
         com::sun::star::uno::Reference< com::sun::star::bridge::XBridge > >
-    SAL_CALL getExistingBridges() throw (com::sun::star::uno::RuntimeException, std::exception) override;
+    SAL_CALL getExistingBridges() override;
 
     void SAL_CALL disposing() override;
 
     typedef
-        std::list<
+        std::vector<
             com::sun::star::uno::Reference< com::sun::star::bridge::XBridge > >
-        BridgeList;
+        BridgeVector;
 
     typedef
         std::map<
@@ -129,9 +120,7 @@ private:
             com::sun::star::uno::Reference< com::sun::star::bridge::XBridge > >
         BridgeMap;
 
-    com::sun::star::uno::Reference< com::sun::star::uno::XComponentContext >
-        context_;
-    BridgeList unnamed_;
+    BridgeVector unnamed_;
     BridgeMap named_;
 };
 

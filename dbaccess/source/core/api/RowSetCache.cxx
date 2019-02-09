@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include "BookmarkSet.hxx"
 #include "CRowSetColumn.hxx"
 #include "CRowSetDataColumn.hxx"
@@ -26,9 +27,11 @@
 #include "RowSetCache.hxx"
 #include "StaticSet.hxx"
 #include "WrappedResultSet.hxx"
-#include "core_resource.hrc"
-#include "core_resource.hxx"
-#include "dbastrings.hrc"
+#include <sal/log.hxx>
+#include <core_resource.hxx>
+#include <strings.hrc>
+#include <strings.hxx>
+#include <stringconstants.hxx>
 
 #include <com/sun/star/sdbc/ColumnValue.hpp>
 #include <com/sun/star/sdbc/ResultSetConcurrency.hpp>
@@ -41,15 +44,13 @@
 
 #include <comphelper/extract.hxx>
 #include <comphelper/property.hxx>
-#include <comphelper/seqstream.hxx>
-#include <comphelper/uno3.hxx>
+#include <comphelper/types.hxx>
 #include <connectivity/dbexception.hxx>
 #include <connectivity/dbtools.hxx>
 #include <connectivity/sqliterator.hxx>
 #include <connectivity/sqlnode.hxx>
 #include <connectivity/sqlparse.hxx>
-#include "sqlbison.hxx"
-#include <tools/debug.hxx>
+#include <sqlbison.hxx>
 #include <tools/diagnose_ex.h>
 #include <osl/diagnose.h>
 
@@ -91,9 +92,6 @@ ORowSetCache::ORowSetCache(const Reference< XResultSet >& _xRs,
     :m_xSet(_xRs)
     ,m_xMetaData(Reference< XResultSetMetaDataSupplier >(_xRs,UNO_QUERY)->getMetaData())
     ,m_aContext( _rContext )
-    ,m_pCacheSet(nullptr)
-    ,m_pMatrix(nullptr)
-    ,m_pInsertMatrix(nullptr)
     ,m_nFetchSize(0)
     ,m_nRowCount(0)
     ,m_nPrivileges( Privilege::SELECT )
@@ -103,7 +101,6 @@ ORowSetCache::ORowSetCache(const Reference< XResultSet >& _xRs,
     ,m_bRowCountFinal(false)
     ,m_bBeforeFirst(true)
     ,m_bAfterLast( false )
-    ,m_bUpdated(false)
     ,m_bModified(_bModified)
     ,m_bNew(_bNew)
 {
@@ -123,15 +120,14 @@ ORowSetCache::ORowSetCache(const Reference< XResultSet >& _xRs,
             xUp->cancelRowUpdates();
             _xRs->beforeFirst();
             m_nPrivileges = Privilege::SELECT|Privilege::DELETE|Privilege::INSERT|Privilege::UPDATE;
-            m_pCacheSet = new WrappedResultSet(i_nMaxRows);
-            m_xCacheSet = m_pCacheSet;
-            m_pCacheSet->construct(_xRs,i_sRowSetFilter);
+            m_xCacheSet = new WrappedResultSet(i_nMaxRows);
+            m_xCacheSet->construct(_xRs,i_sRowSetFilter);
             return;
         }
     }
-    catch(const Exception& ex)
+    catch(const Exception&)
     {
-        SAL_WARN("dbaccess.core", "ORowSetCache: exception: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("dbaccess.core");
     }
     try
     {
@@ -141,7 +137,7 @@ ORowSetCache::ORowSetCache(const Reference< XResultSet >& _xRs,
     }
     catch(const SQLException& e)
     {
-        SAL_WARN("dbaccess.core", "ORowSetCache: exception: " << e.Message);
+        SAL_WARN("dbaccess.core", "ORowSetCache: " << e);
     }
 
     // check if all keys of the updateable table are fetched
@@ -176,11 +172,10 @@ ORowSetCache::ORowSetCache(const Reference< XResultSet >& _xRs,
             {// here we have a join or union and nobody told us which table to update, so we update them all
                 m_nPrivileges = Privilege::SELECT|Privilege::DELETE|Privilege::INSERT|Privilege::UPDATE;
                 OptimisticSet* pCursor = new OptimisticSet(m_aContext,xConnection,_xAnalyzer,_aParameterValueForCache,i_nMaxRows,m_nRowCount);
-                m_pCacheSet = pCursor;
-                m_xCacheSet = m_pCacheSet;
+                m_xCacheSet = pCursor;
                 try
                 {
-                    m_pCacheSet->construct(_xRs,i_sRowSetFilter);
+                    m_xCacheSet->construct(_xRs,i_sRowSetFilter);
                     if ( pCursor->isReadOnly() )
                         m_nPrivileges = Privilege::SELECT;
                     m_aKeyColumns = pCursor->getJoinedKeyColumns();
@@ -188,9 +183,8 @@ ORowSetCache::ORowSetCache(const Reference< XResultSet >& _xRs,
                 }
                 catch (const Exception& e)
                 {
-                    SAL_WARN("dbaccess.core", "ORowSetCache: exception: " << e.Message);
+                    SAL_WARN("dbaccess.core", "ORowSetCache: " << e);
                 }
-                m_pCacheSet = nullptr;
                 m_xCacheSet.clear();
             }
             else
@@ -229,7 +223,7 @@ ORowSetCache::ORowSetCache(const Reference< XResultSet >& _xRs,
         }
         catch (Exception const& e)
         {
-            SAL_WARN("dbaccess.core", "ORowSetCache: exception: " << e.Message);
+            SAL_WARN("dbaccess.core", "ORowSetCache: " << e);
         }
     }
 
@@ -238,9 +232,8 @@ ORowSetCache::ORowSetCache(const Reference< XResultSet >& _xRs,
     {
         try
         {
-            m_pCacheSet = new OBookmarkSet(i_nMaxRows);
-            m_xCacheSet = m_pCacheSet;
-            m_pCacheSet->construct(_xRs,i_sRowSetFilter);
+            m_xCacheSet = new OBookmarkSet(i_nMaxRows);
+            m_xCacheSet->construct(_xRs,i_sRowSetFilter);
 
             // check privileges
             m_nPrivileges = Privilege::SELECT;
@@ -258,7 +251,7 @@ ORowSetCache::ORowSetCache(const Reference< XResultSet >& _xRs,
         }
         catch (const SQLException& e)
         {
-            SAL_WARN("dbaccess.core", "ORowSetCache: exception: " << e.Message);
+            SAL_WARN("dbaccess.core", "ORowSetCache: " << e);
             bNeedKeySet = true;
         }
 
@@ -275,14 +268,12 @@ ORowSetCache::ORowSetCache(const Reference< XResultSet >& _xRs,
                 // here I know that we have a read only bookmarkable cursor
                 _xRs->beforeFirst();
                 m_nPrivileges = Privilege::SELECT;
-                m_pCacheSet = new WrappedResultSet(i_nMaxRows);
-                m_xCacheSet = m_pCacheSet;
-                m_pCacheSet->construct(_xRs,i_sRowSetFilter);
+                m_xCacheSet = new WrappedResultSet(i_nMaxRows);
+                m_xCacheSet->construct(_xRs,i_sRowSetFilter);
                 return;
             }
-            m_pCacheSet = new OStaticSet(i_nMaxRows);
-            m_xCacheSet = m_pCacheSet;
-            m_pCacheSet->construct(_xRs,i_sRowSetFilter);
+            m_xCacheSet = new OStaticSet(i_nMaxRows);
+            m_xCacheSet->construct(_xRs,i_sRowSetFilter);
             m_nPrivileges = Privilege::SELECT;
         }
         else
@@ -320,8 +311,7 @@ ORowSetCache::ORowSetCache(const Reference< XResultSet >& _xRs,
             OKeySet* pKeySet = new OKeySet(m_aUpdateTable,xUpdateTableKeys,aUpdateTableName ,_xAnalyzer,_aParameterValueForCache,i_nMaxRows,m_nRowCount);
             try
             {
-                m_pCacheSet = pKeySet;
-                m_xCacheSet = m_pCacheSet;
+                m_xCacheSet = pKeySet;
                 pKeySet->construct(_xRs,i_sRowSetFilter);
 
                 if(Reference<XResultSetUpdate>(_xRs,UNO_QUERY).is())  // this interface is optional so we have to check it
@@ -340,14 +330,10 @@ ORowSetCache::ORowSetCache(const Reference< XResultSet >& _xRs,
             }
             catch (const SQLException& e)
             {
-                SAL_WARN("dbaccess.core", "ORowSetCache: exception: " << e.Message);
+                SAL_WARN("dbaccess.core", "ORowSetCache: " << e);
                 // we couldn't create a keyset here so we have to create a static cache
-                if ( m_pCacheSet )
-                    m_pCacheSet = nullptr;
-                m_xCacheSet = nullptr;
-                m_pCacheSet = new OStaticSet(i_nMaxRows);
-                m_xCacheSet = m_pCacheSet;
-                m_pCacheSet->construct(_xRs,i_sRowSetFilter);
+                m_xCacheSet = new OStaticSet(i_nMaxRows);
+                m_xCacheSet->construct(_xRs,i_sRowSetFilter);
                 m_nPrivileges = Privilege::SELECT;
             }
         }
@@ -361,23 +347,21 @@ ORowSetCache::ORowSetCache(const Reference< XResultSet >& _xRs,
 
 ORowSetCache::~ORowSetCache()
 {
-    m_pCacheSet = nullptr;
-    m_xCacheSet = nullptr;
+    m_xCacheSet.clear();
     if(m_pMatrix)
     {
         m_pMatrix->clear();
-        delete m_pMatrix;
+        m_pMatrix.reset();
     }
 
     if(m_pInsertMatrix)
     {
         m_pInsertMatrix->clear();
-        delete m_pInsertMatrix;
+        m_pInsertMatrix.reset();
     }
     m_xSet          = WeakReference< XResultSet>();
     m_xMetaData     = nullptr;
     m_aUpdateTable  = nullptr;
-
 }
 
 void ORowSetCache::setFetchSize(sal_Int32 _nSize)
@@ -388,33 +372,33 @@ void ORowSetCache::setFetchSize(sal_Int32 _nSize)
     m_nFetchSize = _nSize;
     if(!m_pMatrix)
     {
-        m_pMatrix = new ORowSetMatrix(_nSize);
+        m_pMatrix.reset( new ORowSetMatrix(_nSize) );
         m_aMatrixIter = m_pMatrix->end();
         m_aMatrixEnd = m_pMatrix->end();
 
-        m_pInsertMatrix = new ORowSetMatrix(1); // a little bit overkill but ??? :-)
+        m_pInsertMatrix.reset( new ORowSetMatrix(1) ); // a little bit overkill but ??? :-)
         m_aInsertRow    = m_pInsertMatrix->end();
     }
     else
     {
         // now correct the iterator in our iterator vector
-        ::std::vector<sal_Int32> aPositions;
-        ::std::map<sal_Int32,sal_Bool> aCacheIterToChange;
+        std::vector<sal_Int32> aPositions;
+        std::map<sal_Int32,bool> aCacheIterToChange;
         // first get the positions where they stand now
         ORowSetCacheMap::iterator aCacheIter = m_aCacheIterators.begin();
         ORowSetCacheMap::const_iterator aCacheEnd = m_aCacheIterators.end();
         for(;aCacheIter != aCacheEnd;++aCacheIter)
         {
-            aCacheIterToChange[aCacheIter->first] = sal_False;
+            aCacheIterToChange[aCacheIter->first] = false;
             if ( !aCacheIter->second.pRowSet->isInsertRow()
                 /*&& aCacheIter->second.aIterator != m_pMatrix->end()*/ && !m_bModified )
             {
-                ptrdiff_t nDist = (aCacheIter->second.aIterator - m_pMatrix->begin());
+                ptrdiff_t nDist = aCacheIter->second.aIterator - m_pMatrix->begin();
                 aPositions.push_back(nDist);
-                aCacheIterToChange[aCacheIter->first] = sal_True;
+                aCacheIterToChange[aCacheIter->first] = true;
             }
         }
-        sal_Int32 nKeyPos = (m_aMatrixIter - m_pMatrix->begin());
+        sal_Int32 nKeyPos = m_aMatrixIter - m_pMatrix->begin();
         m_pMatrix->resize(_nSize);
 
         if ( nKeyPos < _nSize )
@@ -424,8 +408,8 @@ void ORowSetCache::setFetchSize(sal_Int32 _nSize)
         m_aMatrixEnd = m_pMatrix->end();
 
         // now adjust their positions because a resize invalidates all iterators
-        ::std::vector<sal_Int32>::const_iterator aIter = aPositions.begin();
-        ::std::map<sal_Int32,sal_Bool>::const_iterator aPosChangeIter = aCacheIterToChange.begin();
+        std::vector<sal_Int32>::const_iterator aIter = aPositions.begin();
+        std::map<sal_Int32,bool>::const_iterator aPosChangeIter = aCacheIterToChange.begin();
         for(    aCacheIter = m_aCacheIterators.begin();
                 aPosChangeIter != aCacheIterToChange.end();
                 ++aPosChangeIter,++aCacheIter)
@@ -482,7 +466,7 @@ static Any lcl_getBookmark(ORowSetValue& i_aValue,OCacheSet* i_pCacheSet)
         case DataType::TINYINT:
         case DataType::SMALLINT:
         case DataType::INTEGER:
-            return makeAny((sal_Int32)i_aValue);
+            return makeAny(static_cast<sal_Int32>(i_aValue));
         default:
             if ( i_pCacheSet && i_aValue.isNull())
                 i_aValue = i_pCacheSet->getBookmark();
@@ -501,15 +485,15 @@ Any ORowSetCache::getBookmark(  )
         return Any(); // this is allowed here because the rowset knows what it is doing
     }
 
-    return lcl_getBookmark(((*m_aMatrixIter)->get())[0],m_pCacheSet);
+    return lcl_getBookmark(((*m_aMatrixIter)->get())[0],m_xCacheSet.get());
 }
 
 bool ORowSetCache::moveToBookmark( const Any& bookmark )
 {
-    if ( m_pCacheSet->moveToBookmark(bookmark) )
+    if ( m_xCacheSet->moveToBookmark(bookmark) )
     {
         m_bBeforeFirst = false;
-        m_nPosition = m_pCacheSet->getRow();
+        m_nPosition = m_xCacheSet->getRow();
 
         checkPositionFlags();
 
@@ -539,7 +523,7 @@ bool ORowSetCache::moveRelativeToBookmark( const Any& bookmark, sal_Int32 rows )
     bool bRet( moveToBookmark( bookmark ) );
     if ( bRet )
     {
-        m_nPosition = m_pCacheSet->getRow() + rows;
+        m_nPosition = m_xCacheSet->getRow() + rows;
         absolute(m_nPosition);
 
         bRet = m_aMatrixIter != m_pMatrix->end() && (*m_aMatrixIter).is();
@@ -550,62 +534,62 @@ bool ORowSetCache::moveRelativeToBookmark( const Any& bookmark, sal_Int32 rows )
 
 sal_Int32 ORowSetCache::compareBookmarks( const Any& _first, const Any& _second )
 {
-    return (!_first.hasValue() || !_second.hasValue()) ? CompareBookmark::NOT_COMPARABLE : m_pCacheSet->compareBookmarks(_first,_second);
+    return (!_first.hasValue() || !_second.hasValue()) ? CompareBookmark::NOT_COMPARABLE : m_xCacheSet->compareBookmarks(_first,_second);
 }
 
 bool ORowSetCache::hasOrderedBookmarks(  )
 {
-    return m_pCacheSet->hasOrderedBookmarks();
+    return m_xCacheSet->hasOrderedBookmarks();
 }
 
 sal_Int32 ORowSetCache::hashBookmark( const Any& bookmark )
 {
-    return m_pCacheSet->hashBookmark(bookmark);
+    return m_xCacheSet->hashBookmark(bookmark);
 }
 
 // XRowUpdate
 void ORowSetCache::updateNull(sal_Int32 columnIndex,ORowSetValueVector::Vector& io_aRow
-                              ,::std::vector<sal_Int32>& o_ChangedColumns
+                              ,std::vector<sal_Int32>& o_ChangedColumns
                               )
 {
     checkUpdateConditions(columnIndex);
 
-    ORowSetValueVector::Vector& rInsert = ((*m_aInsertRow)->get());
+    ORowSetValueVector::Vector& rInsert = (*m_aInsertRow)->get();
     if ( !rInsert[columnIndex].isNull() )
     {
         rInsert[columnIndex].setBound(true);
         rInsert[columnIndex].setNull();
-        rInsert[columnIndex].setModified();
+        rInsert[columnIndex].setModified(true);
         io_aRow[columnIndex].setNull();
 
-        m_pCacheSet->mergeColumnValues(columnIndex,rInsert,io_aRow,o_ChangedColumns);
+        m_xCacheSet->mergeColumnValues(columnIndex,rInsert,io_aRow,o_ChangedColumns);
         impl_updateRowFromCache_throw(io_aRow,o_ChangedColumns);
     }
 }
 
 void ORowSetCache::updateValue(sal_Int32 columnIndex,const ORowSetValue& x
                                ,ORowSetValueVector::Vector& io_aRow
-                               ,::std::vector<sal_Int32>& o_ChangedColumns
+                               ,std::vector<sal_Int32>& o_ChangedColumns
                                )
 {
     checkUpdateConditions(columnIndex);
 
-    ORowSetValueVector::Vector& rInsert = ((*m_aInsertRow)->get());
+    ORowSetValueVector::Vector& rInsert = (*m_aInsertRow)->get();
     if ( rInsert[columnIndex] != x )
     {
         rInsert[columnIndex].setBound(true);
         rInsert[columnIndex] = x;
-        rInsert[columnIndex].setModified();
+        rInsert[columnIndex].setModified(true);
         io_aRow[columnIndex] = rInsert[columnIndex];
 
-        m_pCacheSet->mergeColumnValues(columnIndex,rInsert,io_aRow,o_ChangedColumns);
+        m_xCacheSet->mergeColumnValues(columnIndex,rInsert,io_aRow,o_ChangedColumns);
         impl_updateRowFromCache_throw(io_aRow,o_ChangedColumns);
     }
 }
 
 void ORowSetCache::updateCharacterStream( sal_Int32 columnIndex, const Reference< css::io::XInputStream >& x
                                          , sal_Int32 length,ORowSetValueVector::Vector& io_aRow
-                                         ,::std::vector<sal_Int32>& o_ChangedColumns
+                                         ,std::vector<sal_Int32>& o_ChangedColumns
                                          )
 {
     checkUpdateConditions(columnIndex);
@@ -614,56 +598,56 @@ void ORowSetCache::updateCharacterStream( sal_Int32 columnIndex, const Reference
     if(x.is())
         x->readBytes(aSeq,length);
 
-    ORowSetValueVector::Vector& rInsert = ((*m_aInsertRow)->get());
+    ORowSetValueVector::Vector& rInsert = (*m_aInsertRow)->get();
     rInsert[columnIndex].setBound(true);
     rInsert[columnIndex] = aSeq;
-    rInsert[columnIndex].setModified();
+    rInsert[columnIndex].setModified(true);
     io_aRow[columnIndex] = makeAny(x);
 
-    m_pCacheSet->mergeColumnValues(columnIndex,rInsert,io_aRow,o_ChangedColumns);
+    m_xCacheSet->mergeColumnValues(columnIndex,rInsert,io_aRow,o_ChangedColumns);
     impl_updateRowFromCache_throw(io_aRow,o_ChangedColumns);
 }
 
 void ORowSetCache::updateObject( sal_Int32 columnIndex, const Any& x
                                 ,ORowSetValueVector::Vector& io_aRow
-                                ,::std::vector<sal_Int32>& o_ChangedColumns
+                                ,std::vector<sal_Int32>& o_ChangedColumns
                                 )
 {
     checkUpdateConditions(columnIndex);
 
-    ORowSetValueVector::Vector& rInsert = ((*m_aInsertRow)->get());
+    ORowSetValueVector::Vector& rInsert = (*m_aInsertRow)->get();
     ORowSetValue aTemp;
     aTemp.fill(x);
     if ( rInsert[columnIndex] != aTemp )
     {
         rInsert[columnIndex].setBound(true);
         rInsert[columnIndex] = aTemp;
-        rInsert[columnIndex].setModified();
+        rInsert[columnIndex].setModified(true);
         io_aRow[columnIndex] = rInsert[columnIndex];
 
-        m_pCacheSet->mergeColumnValues(columnIndex,rInsert,io_aRow,o_ChangedColumns);
+        m_xCacheSet->mergeColumnValues(columnIndex,rInsert,io_aRow,o_ChangedColumns);
         impl_updateRowFromCache_throw(io_aRow,o_ChangedColumns);
     }
 }
 
-void ORowSetCache::updateNumericObject( sal_Int32 columnIndex, const Any& x, sal_Int32 /*scale*/
+void ORowSetCache::updateNumericObject( sal_Int32 columnIndex, const Any& x
                                        ,ORowSetValueVector::Vector& io_aRow
-                                       ,::std::vector<sal_Int32>& o_ChangedColumns
+                                       ,std::vector<sal_Int32>& o_ChangedColumns
                                        )
 {
     checkUpdateConditions(columnIndex);
 
-    ORowSetValueVector::Vector& rInsert = ((*m_aInsertRow)->get());
+    ORowSetValueVector::Vector& rInsert = (*m_aInsertRow)->get();
     ORowSetValue aTemp;
     aTemp.fill(x);
     if ( rInsert[columnIndex] != aTemp )
     {
         rInsert[columnIndex].setBound(true);
         rInsert[columnIndex] = aTemp;
-        rInsert[columnIndex].setModified();
+        rInsert[columnIndex].setModified(true);
         io_aRow[columnIndex] = rInsert[columnIndex];
 
-        m_pCacheSet->mergeColumnValues(columnIndex,rInsert,io_aRow,o_ChangedColumns);
+        m_xCacheSet->mergeColumnValues(columnIndex,rInsert,io_aRow,o_ChangedColumns);
         impl_updateRowFromCache_throw(io_aRow,o_ChangedColumns);
     }
 }
@@ -682,7 +666,7 @@ bool ORowSetCache::next(  )
         {
             moveWindow();
 
-            OSL_ENSURE(((m_nPosition - m_nStartPos) - 1) < (sal_Int32)m_pMatrix->size(),"Position is behind end()!");
+            OSL_ENSURE(((m_nPosition - m_nStartPos) - 1) < static_cast<sal_Int32>(m_pMatrix->size()),"Position is behind end()!");
             m_aMatrixIter = calcPosition();
             checkPositionFlags();
         }
@@ -702,21 +686,20 @@ bool ORowSetCache::isLast(  )
     return m_nPosition == m_nRowCount;
 }
 
-bool ORowSetCache::beforeFirst(  )
+void ORowSetCache::beforeFirst(  )
 {
     if(!m_bBeforeFirst)
     {
         m_bAfterLast    = false;
         m_nPosition     = 0;
         m_bBeforeFirst  = true;
-        m_pCacheSet->beforeFirst();
+        m_xCacheSet->beforeFirst();
         moveWindow();
         m_aMatrixIter = m_pMatrix->end();
     }
-    return true;
 }
 
-bool ORowSetCache::afterLast(  )
+void ORowSetCache::afterLast(  )
 {
     if(!m_bAfterLast)
     {
@@ -725,16 +708,15 @@ bool ORowSetCache::afterLast(  )
 
         if(!m_bRowCountFinal)
         {
-            m_pCacheSet->last_checked(false);
+            m_xCacheSet->last_checked(false);
             m_bRowCountFinal = true;
-            m_nRowCount = m_pCacheSet->getRow();// + 1 removed
+            m_nRowCount = m_xCacheSet->getRow();// + 1 removed
         }
-        m_pCacheSet->afterLast();
+        m_xCacheSet->afterLast();
 
         m_nPosition = 0;
         m_aMatrixIter = m_pMatrix->end();
     }
-    return true;
 }
 
 bool ORowSetCache::fillMatrix(sal_Int32& _nNewStartPos, sal_Int32 &_nNewEndPos)
@@ -762,7 +744,7 @@ bool ORowSetCache::fillMatrix(sal_Int32& _nNewStartPos, sal_Int32 &_nNewEndPos)
         i = _nNewStartPos + 1;
         requestedStartPos = _nNewStartPos;
     }
-    bCheck = m_pCacheSet->absolute(i);
+    bCheck = m_xCacheSet->absolute(i);
 
 
     for(; i <= _nNewEndPos; ++i,++aIter)
@@ -771,15 +753,15 @@ bool ORowSetCache::fillMatrix(sal_Int32& _nNewStartPos, sal_Int32 &_nNewEndPos)
         {
             if(!aIter->is())
                 *aIter = new ORowSetValueVector(m_xMetaData->getColumnCount());
-            m_pCacheSet->fillValueRow(*aIter,i);
+            m_xCacheSet->fillValueRow(*aIter,i);
         }
         else
         {   // there are no more rows found so we can fetch some before start
 
             if(!m_bRowCountFinal)
             {
-                if(m_pCacheSet->previous_checked(false)) // because we stand after the last row
-                    m_nRowCount = m_pCacheSet->getRow(); // here we have the row count
+                if(m_xCacheSet->previous_checked(false)) // because we stand after the last row
+                    m_nRowCount = m_xCacheSet->getRow(); // here we have the row count
                 if(!m_nRowCount)
                     m_nRowCount = i-1; // it can be that getRow return zero
                 m_bRowCountFinal = true;
@@ -798,29 +780,29 @@ bool ORowSetCache::fillMatrix(sal_Int32& _nNewStartPos, sal_Int32 &_nNewEndPos)
             _nNewStartPos = nPos;
             _nNewEndPos = m_nRowCount;
             ++nPos;
-            bCheck = m_pCacheSet->absolute(nPos);
+            bCheck = m_xCacheSet->absolute(nPos);
 
             for(;bCheck && nPos <= requestedStartPos && aIter != aRealEnd; ++aIter, ++nPos)
             {
                 if(!aIter->is())
                     *aIter = new ORowSetValueVector(m_xMetaData->getColumnCount());
-                m_pCacheSet->fillValueRow(*aIter, nPos);
-                bCheck = m_pCacheSet->next();
+                m_xCacheSet->fillValueRow(*aIter, nPos);
+                bCheck = m_xCacheSet->next();
             }
             if(aIter != aEnd)
-                ::std::rotate(m_pMatrix->begin(),aEnd,aIter);
+                std::rotate(m_pMatrix->begin(),aEnd,aIter);
             break;
         }
-        bCheck = m_pCacheSet->next();
+        bCheck = m_xCacheSet->next();
     }
     // we have to read one row forward to ensure that we know when we are on last row
     // but only when we don't know it already
     if(!m_bRowCountFinal)
     {
-        if(!m_pCacheSet->next())
+        if(!m_xCacheSet->next())
         {
-            if(m_pCacheSet->previous_checked(false)) // because we stand after the last row
-                m_nRowCount = m_pCacheSet->getRow(); // here we have the row count
+            if(m_xCacheSet->previous_checked(false)) // because we stand after the last row
+                m_nRowCount = m_xCacheSet->getRow(); // here we have the row count
             m_bRowCountFinal = true;
         }
         else
@@ -842,22 +824,22 @@ void ORowSetCache::moveWindow()
     if ( m_nStartPos < m_nPosition && m_nPosition <= m_nEndPos )
     {
         // just move inside the window
-        OSL_ENSURE((m_nPosition - m_nStartPos) <= (sal_Int32)m_pMatrix->size(),"Position is behind end()!");
+        OSL_ENSURE((m_nPosition - m_nStartPos) <= static_cast<sal_Int32>(m_pMatrix->size()),"Position is behind end()!");
         // make double plus sure that we have fetched that row
         m_aMatrixIter = calcPosition();
         OSL_ENSURE(m_aMatrixIter != m_pMatrix->end(), "New m_aMatrixIter is at end(), but should not.");
         if(!m_aMatrixIter->is())
         {
-            bool bOk( m_pCacheSet->absolute( m_nPosition ) );
+            bool bOk( m_xCacheSet->absolute( m_nPosition ) );
             if ( bOk )
             {
                 *m_aMatrixIter = new ORowSetValueVector(m_xMetaData->getColumnCount());
-                m_pCacheSet->fillValueRow(*m_aMatrixIter,m_nPosition);
+                m_xCacheSet->fillValueRow(*m_aMatrixIter,m_nPosition);
                 // we have to read one row forward to ensure that we know when we are on last row
                 // but only when we don't know it already
                 if ( !m_bRowCountFinal )
                 {
-                    bOk = m_pCacheSet->absolute_checked( m_nPosition + 1,false );
+                    bOk = m_xCacheSet->absolute_checked( m_nPosition + 1,false );
                     if ( bOk )
                         m_nRowCount = std::max(sal_Int32(m_nPosition+1),m_nRowCount);
                 }
@@ -865,7 +847,7 @@ void ORowSetCache::moveWindow()
             if(!bOk && !m_bRowCountFinal)
             {
                 // because we stand after the last row
-                m_nRowCount = m_pCacheSet->previous_checked(false) ? m_pCacheSet->getRow() : 0;
+                m_nRowCount = m_xCacheSet->previous_checked(false) ? m_xCacheSet->getRow() : 0;
                 m_bRowCountFinal = true;
             }
         }
@@ -894,7 +876,7 @@ void ORowSetCache::moveWindow()
             // then we fill in the rows between new and old start pos.
 
             bool bCheck;
-            bCheck = m_pCacheSet->absolute(nNewStartPos + 1);
+            bCheck = m_xCacheSet->absolute(nNewStartPos + 1);
 
             // m_nEndPos < nNewEndPos when window not filled (e.g. there are less rows in total than window size)
             m_nEndPos = std::min(nNewEndPos, m_nEndPos);
@@ -925,29 +907,32 @@ void ORowSetCache::moveWindow()
                     fill(aIter, aNewEnd, nPos, bCheck);
                 }
 
-                ::std::rotate(m_pMatrix->begin(), aEnd, aNewEnd);
-                // now correct the iterator in our iterator vector
-                //  rotateCacheIterator(aEnd-m_pMatrix->begin()); //can't be used because they decrement and here we need to increment
-                ORowSetCacheMap::iterator aCacheIter = m_aCacheIterators.begin();
-                const ORowSetCacheMap::const_iterator aCacheEnd  = m_aCacheIterators.end();
-                for(;aCacheIter != aCacheEnd;++aCacheIter)
+                std::rotate(m_pMatrix->begin(), aEnd, aNewEnd);
+                if (!m_bModified)
                 {
-                    if ( !aCacheIter->second.pRowSet->isInsertRow()
-                        && aCacheIter->second.aIterator != m_pMatrix->end() && !m_bModified )
+                    // now correct the iterator in our iterator vector
+                    //  rotateCacheIterator(aEnd-m_pMatrix->begin()); //can't be used because they decrement and here we need to increment
+                    ORowSetCacheMap::iterator aCacheIter = m_aCacheIterators.begin();
+                    const ORowSetCacheMap::const_iterator aCacheEnd  = m_aCacheIterators.end();
+                    for(;aCacheIter != aCacheEnd;++aCacheIter)
                     {
-                        const ptrdiff_t nDist = (aCacheIter->second.aIterator - m_pMatrix->begin());
-                        if ( nDist >= nOverlapSize )
+                        if ( !aCacheIter->second.pRowSet->isInsertRow()
+                            && aCacheIter->second.aIterator != m_pMatrix->end() )
                         {
-                            // That's from outside the overlap area; invalidate iterator.
-                            aCacheIter->second.aIterator = m_pMatrix->end();
-                        }
-                        else
-                        {
-                            // Inside overlap area: move to correct position
-                            CHECK_MATRIX_POS( (nDist + nStartPosOffset) );
-                            aCacheIter->second.aIterator += nStartPosOffset;
-                            OSL_ENSURE(aCacheIter->second.aIterator >= m_pMatrix->begin()
+                            const ptrdiff_t nDist = aCacheIter->second.aIterator - m_pMatrix->begin();
+                            if ( nDist >= nOverlapSize )
+                            {
+                                // That's from outside the overlap area; invalidate iterator.
+                                aCacheIter->second.aIterator = m_pMatrix->end();
+                            }
+                            else
+                            {
+                                // Inside overlap area: move to correct position
+                                CHECK_MATRIX_POS( (nDist + nStartPosOffset) );
+                                aCacheIter->second.aIterator += nStartPosOffset;
+                                OSL_ENSURE(aCacheIter->second.aIterator >= m_pMatrix->begin()
                                     && aCacheIter->second.aIterator < m_pMatrix->end(),"Iterator out of area!");
+                            }
                         }
                     }
                 }
@@ -975,7 +960,7 @@ void ORowSetCache::moveWindow()
                 // There is some unused space in *m_pMatrix; fill it
                 CHECK_MATRIX_POS(nRowsInCache);
                 sal_Int32 nPos = m_nEndPos + 1;
-                bool bCheck = m_pCacheSet->absolute(nPos);
+                bool bCheck = m_xCacheSet->absolute(nPos);
                 ORowSetMatrix::iterator aIter = m_pMatrix->begin() + nRowsInCache;
                 const sal_Int32 nRowsToFetch = std::min(nNewEndPos-m_nEndPos, m_nFetchSize-nRowsInCache);
                 const ORowSetMatrix::const_iterator aEnd = aIter + nRowsToFetch;
@@ -998,7 +983,7 @@ void ORowSetCache::moveWindow()
             ORowSetMatrix::iterator aDataEnd  = m_pMatrix->begin() + (m_nEndPos - m_nStartPos);
 
             sal_Int32 nPos = m_nEndPos + 1;
-            bool bCheck = m_pCacheSet->absolute(nPos);
+            bool bCheck = m_xCacheSet->absolute(nPos);
             bCheck = fill(aIter, aEnd, nPos, bCheck); // refill the region we don't need anymore
             //aIter and nPos are now the position *after* last filled in one!
 
@@ -1007,7 +992,7 @@ void ORowSetCache::moveWindow()
             {
                 OSL_ENSURE(aIter == aEnd, "fill() said went till end, but did not.");
                 // rotate the end to the front
-                ::std::rotate(m_pMatrix->begin(), aIter, aDataEnd);
+                std::rotate(m_pMatrix->begin(), aIter, aDataEnd);
                 // now correct the iterator in our iterator vector
                 rotateCacheIterator( nNewStartPosInMatrix );
                 m_nStartPos = nNewStartPos;
@@ -1017,12 +1002,12 @@ void ORowSetCache::moveWindow()
                 // but only when we don't know it already
                 bool bOk = true;
                 if(!m_bRowCountFinal)
-                    bOk = m_pCacheSet->next();
+                    bOk = m_xCacheSet->next();
                 if(!bOk)
                 {
-                    m_pCacheSet->previous_checked(false); // because we stand after the last row
+                    m_xCacheSet->previous_checked(false); // because we stand after the last row
                     m_nRowCount      = nPos; // here we have the row count
-                    OSL_ENSURE(nPos == m_pCacheSet->getRow(),"nPos is not valid!");
+                    OSL_ENSURE(nPos == m_xCacheSet->getRow(),"nPos is not valid!");
                     m_bRowCountFinal = true;
                 }
                 else if(!m_bRowCountFinal)
@@ -1041,15 +1026,15 @@ void ORowSetCache::moveWindow()
                 nPos -= 1;
                 m_nStartPos += nFetchedRows;
                 m_nEndPos = nPos;
-                ::std::rotate(m_pMatrix->begin(), aIter, aDataEnd);
+                std::rotate(m_pMatrix->begin(), aIter, aDataEnd);
                 // now correct the iterator in our iterator vector
                 rotateCacheIterator( nFetchedRows );
 
                 if ( !m_bRowCountFinal )
                 {
-                    m_pCacheSet->previous_checked(false);                   // because we stand after the last row
+                    m_xCacheSet->previous_checked(false);                   // because we stand after the last row
                     m_nRowCount      = std::max(m_nRowCount, nPos);    // here we have the row count
-                    OSL_ENSURE(nPos == m_pCacheSet->getRow(),"nPos isn't valid!");
+                    OSL_ENSURE(nPos == m_xCacheSet->getRow(),"nPos isn't valid!");
                     m_bRowCountFinal = true;
                 }
 
@@ -1060,15 +1045,15 @@ void ORowSetCache::moveWindow()
                 aIter = m_pMatrix->begin();
 
                 nPos    = m_nStartPos + 1;
-                bCheck  = m_pCacheSet->absolute_checked(nPos, true);
+                bCheck  = m_xCacheSet->absolute_checked(nPos, true);
                 for(; !aIter->is() && bCheck;++aIter, ++nPos)
                 {
                     OSL_ENSURE(aIter != m_pMatrix->end(),"Invalid iterator");
 
                     *aIter = new ORowSetValueVector(m_xMetaData->getColumnCount());
-                    m_pCacheSet->fillValueRow(*aIter, nPos);
+                    m_xCacheSet->fillValueRow(*aIter, nPos);
 
-                    bCheck = m_pCacheSet->next();
+                    bCheck = m_xCacheSet->next();
                 }
             }
         }
@@ -1089,7 +1074,7 @@ bool ORowSetCache::first(  )
     // Then check if the cache window is at the beginning.
     // If not, then position the window and fill it with data.
     // We move the window smartly, i.e. we clear only the rows that are out of range
-    bool bRet = m_pCacheSet->first();
+    bool bRet = m_xCacheSet->first();
     if(bRet)
     {
         m_bBeforeFirst  = m_bAfterLast = false;
@@ -1110,20 +1095,20 @@ bool ORowSetCache::first(  )
 
 bool ORowSetCache::last(  )
 {
-    bool bRet = m_pCacheSet->last();
+    bool bRet = m_xCacheSet->last();
     if(bRet)
     {
         m_bBeforeFirst = m_bAfterLast = false;
         if(!m_bRowCountFinal)
         {
             m_bRowCountFinal = true;
-            m_nRowCount = m_pCacheSet->getRow(); // not  + 1
+            m_nRowCount = m_xCacheSet->getRow(); // not  + 1
         }
-        m_nPosition = m_pCacheSet->getRow();
+        m_nPosition = m_xCacheSet->getRow();
         moveWindow();
         // we have to repositioning because moveWindow can modify the cache
-        m_pCacheSet->last();
-        OSL_ENSURE(((m_nPosition - m_nStartPos) - 1) < (sal_Int32)m_pMatrix->size(),"Position is behind end()!");
+        m_xCacheSet->last();
+        OSL_ENSURE(((m_nPosition - m_nStartPos) - 1) < static_cast<sal_Int32>(m_pMatrix->size()),"Position is behind end()!");
         m_aMatrixIter = calcPosition();
     }
     else
@@ -1151,7 +1136,7 @@ sal_Int32 ORowSetCache::getRow(  )
 bool ORowSetCache::absolute( sal_Int32 row )
 {
     if(!row )
-        throw SQLException(DBACORE_RESSTRING(RID_STR_NO_ABS_ZERO),nullptr,SQLSTATE_GENERAL,1000,Any() );
+        throw SQLException(DBA_RES(RID_STR_NO_ABS_ZERO),nullptr,SQLSTATE_GENERAL,1000,Any() );
 
     if(row < 0)
     {
@@ -1171,7 +1156,7 @@ bool ORowSetCache::absolute( sal_Int32 row )
                 m_bBeforeFirst  = false;
                 m_bAfterLast    = m_nPosition > m_nRowCount;
                 moveWindow();
-                OSL_ENSURE(((m_nPosition - m_nStartPos) - 1) < (sal_Int32)m_pMatrix->size(),"Position is behind end()!");
+                OSL_ENSURE(((m_nPosition - m_nStartPos) - 1) < static_cast<sal_Int32>(m_pMatrix->size()),"Position is behind end()!");
                 m_aMatrixIter = calcPosition();
             }
         }
@@ -1214,7 +1199,7 @@ bool ORowSetCache::relative( sal_Int32 rows )
             nNewPosition = m_nRowCount + 1 + rows;
         else
             if ( m_bBeforeFirst || ( m_bRowCountFinal && m_bAfterLast ) )
-                throw SQLException( DBACORE_RESSTRING( RID_STR_NO_RELATIVE ), nullptr, SQLSTATE_GENERAL, 1000, Any() );
+                throw SQLException( DBA_RES( RID_STR_NO_RELATIVE ), nullptr, SQLSTATE_GENERAL, 1000, Any() );
         if ( nNewPosition )
         {
             bErg = absolute( nNewPosition );
@@ -1241,7 +1226,7 @@ bool ORowSetCache::previous(  )
             m_bAfterLast = false;
             --m_nPosition;
             moveWindow();
-            OSL_ENSURE(((m_nPosition - m_nStartPos) - 1) < (sal_Int32)m_pMatrix->size(),"Position is behind end()!");
+            OSL_ENSURE(((m_nPosition - m_nStartPos) - 1) < static_cast<sal_Int32>(m_pMatrix->size()),"Position is behind end()!");
 
             checkPositionFlags();
 
@@ -1263,10 +1248,10 @@ bool ORowSetCache::previous(  )
 void ORowSetCache::refreshRow(  )
 {
     if(isAfterLast())
-        throw SQLException(DBACORE_RESSTRING(RID_STR_NO_REFESH_AFTERLAST),nullptr,SQLSTATE_GENERAL,1000,Any() );
+        throw SQLException(DBA_RES(RID_STR_NO_REFRESH_AFTERLAST),nullptr,SQLSTATE_GENERAL,1000,Any() );
     OSL_ENSURE(m_aMatrixIter != m_pMatrix->end(),"refreshRow() called for invalid row!");
-    m_pCacheSet->refreshRow();
-    m_pCacheSet->fillValueRow(*m_aMatrixIter,m_nPosition);
+    m_xCacheSet->refreshRow();
+    m_xCacheSet->fillValueRow(*m_aMatrixIter,m_nPosition);
     if ( m_bNew )
     {
         cancelRowModification();
@@ -1275,21 +1260,21 @@ void ORowSetCache::refreshRow(  )
 
 bool ORowSetCache::rowUpdated(  )
 {
-    return m_pCacheSet->rowUpdated();
+    return m_xCacheSet->rowUpdated();
 }
 
 bool ORowSetCache::rowInserted(  )
 {
-    return m_pCacheSet->rowInserted();
+    return m_xCacheSet->rowInserted();
 }
 
 // XResultSetUpdate
-bool ORowSetCache::insertRow(::std::vector< Any >& o_aBookmarks)
+bool ORowSetCache::insertRow(std::vector< Any >& o_aBookmarks)
 {
     if ( !m_bNew || !m_aInsertRow->is() )
-        throw SQLException(DBACORE_RESSTRING(RID_STR_NO_MOVETOINSERTROW_CALLED),nullptr,SQLSTATE_GENERAL,1000,Any() );
+        throw SQLException(DBA_RES(RID_STR_NO_MOVETOINSERTROW_CALLED),nullptr,SQLSTATE_GENERAL,1000,Any() );
 
-    m_pCacheSet->insertRow(*m_aInsertRow,m_aUpdateTable);
+    m_xCacheSet->insertRow(*m_aInsertRow,m_aUpdateTable);
 
     bool bRet( rowInserted() );
     if ( bRet )
@@ -1301,13 +1286,13 @@ bool ORowSetCache::insertRow(::std::vector< Any >& o_aBookmarks)
         {
             moveToBookmark(aBookmark);
             // update the cached values
-            ORowSetValueVector::Vector& rCurrentRow = ((*m_aMatrixIter))->get();
+            ORowSetValueVector::Vector& rCurrentRow = (*m_aMatrixIter)->get();
             ORowSetMatrix::const_iterator aIter = m_pMatrix->begin();
             for(;aIter != m_pMatrix->end();++aIter)
             {
-                if ( m_aMatrixIter != aIter && aIter->is() && m_pCacheSet->columnValuesUpdated((*aIter)->get(),rCurrentRow) )
+                if ( m_aMatrixIter != aIter && aIter->is() && m_xCacheSet->columnValuesUpdated((*aIter)->get(),rCurrentRow) )
                 {
-                    o_aBookmarks.push_back(lcl_getBookmark((*aIter)->get()[0],m_pCacheSet));
+                    o_aBookmarks.push_back(lcl_getBookmark((*aIter)->get()[0], m_xCacheSet.get()));
                 }
             }
         }
@@ -1340,30 +1325,30 @@ void ORowSetCache::cancelRowModification()
     resetInsertRow(false);
 }
 
-void ORowSetCache::updateRow( ORowSetMatrix::iterator& _rUpdateRow,::std::vector< Any >& o_aBookmarks )
+void ORowSetCache::updateRow( ORowSetMatrix::iterator const & _rUpdateRow, std::vector< Any >& o_aBookmarks )
 {
     if(isAfterLast() || isBeforeFirst())
-        throw SQLException(DBACORE_RESSTRING(RID_STR_NO_UPDATEROW),nullptr,SQLSTATE_GENERAL,1000,Any() );
+        throw SQLException(DBA_RES(RID_STR_NO_UPDATEROW),nullptr,SQLSTATE_GENERAL,1000,Any() );
 
     Any aBookmark = ((*_rUpdateRow)->get())[0].makeAny();
     OSL_ENSURE(aBookmark.hasValue(),"Bookmark must have a value!");
     // here we don't have to reposition our CacheSet, when we try to update a row,
     // the row was already fetched
     moveToBookmark(aBookmark);
-    m_pCacheSet->updateRow(*_rUpdateRow,*m_aMatrixIter,m_aUpdateTable);
+    m_xCacheSet->updateRow(*_rUpdateRow,*m_aMatrixIter,m_aUpdateTable);
     // refetch the whole row
     (*m_aMatrixIter) = nullptr;
 
     if ( moveToBookmark(aBookmark) )
     {
         // update the cached values
-        ORowSetValueVector::Vector& rCurrentRow = ((*m_aMatrixIter))->get();
+        ORowSetValueVector::Vector& rCurrentRow = (*m_aMatrixIter)->get();
         ORowSetMatrix::const_iterator aIter = m_pMatrix->begin();
         for(;aIter != m_pMatrix->end();++aIter)
         {
-            if ( m_aMatrixIter != aIter && aIter->is() && m_pCacheSet->columnValuesUpdated((*aIter)->get(),rCurrentRow) )
+            if ( m_aMatrixIter != aIter && aIter->is() && m_xCacheSet->columnValuesUpdated((*aIter)->get(),rCurrentRow) )
             {
-                o_aBookmarks.push_back(lcl_getBookmark((*aIter)->get()[0],m_pCacheSet));
+                o_aBookmarks.push_back(lcl_getBookmark((*aIter)->get()[0], m_xCacheSet.get()));
             }
         }
     }
@@ -1374,14 +1359,14 @@ void ORowSetCache::updateRow( ORowSetMatrix::iterator& _rUpdateRow,::std::vector
 bool ORowSetCache::deleteRow(  )
 {
     if(isAfterLast() || isBeforeFirst())
-        throw SQLException(DBACORE_RESSTRING(RID_STR_NO_DELETEROW),nullptr,SQLSTATE_GENERAL,1000,Any() );
+        throw SQLException(DBA_RES(RID_STR_NO_DELETEROW),nullptr,SQLSTATE_GENERAL,1000,Any() );
 
-    m_pCacheSet->deleteRow(*m_aMatrixIter,m_aUpdateTable);
-    if ( !m_pCacheSet->rowDeleted() )
+    m_xCacheSet->deleteRow(*m_aMatrixIter,m_aUpdateTable);
+    if ( !m_xCacheSet->rowDeleted() )
         return false;
 
     --m_nRowCount;
-    OSL_ENSURE(((m_nPosition - m_nStartPos) - 1) < (sal_Int32)m_pMatrix->size(),"Position is behind end()!");
+    OSL_ENSURE(((m_nPosition - m_nStartPos) - 1) < static_cast<sal_Int32>(m_pMatrix->size()),"Position is behind end()!");
     ORowSetMatrix::iterator aPos = calcPosition();
     (*aPos)   = nullptr;
 
@@ -1406,8 +1391,8 @@ void ORowSetCache::cancelRowUpdates(  )
         ::dbtools::throwFunctionSequenceException(nullptr);
     }
 
-    if(m_pCacheSet->absolute(m_nPosition))
-        m_pCacheSet->fillValueRow(*m_aMatrixIter,m_nPosition);
+    if(m_xCacheSet->absolute(m_nPosition))
+        m_xCacheSet->fillValueRow(*m_aMatrixIter,m_nPosition);
     else
     {
         OSL_FAIL("cancelRowUpdates couldn't position right with absolute");
@@ -1418,7 +1403,7 @@ void ORowSetCache::cancelRowUpdates(  )
 void ORowSetCache::moveToInsertRow(  )
 {
     m_bNew      = true;
-    m_bUpdated  = m_bAfterLast = false;
+    m_bAfterLast = false;
 
     m_aInsertRow = m_pInsertMatrix->begin();
     if(!m_aInsertRow->is())
@@ -1451,8 +1436,7 @@ void ORowSetCache::deleteIterator(const ORowSetBase* _pRowSet)
     {
         if ( aCacheIter->second.pRowSet == _pRowSet )
         {
-            m_aCacheIterators.erase(aCacheIter);
-            aCacheIter = m_aCacheIterators.begin();
+            aCacheIter = m_aCacheIterators.erase(aCacheIter);
         }
         else
             ++aCacheIter;
@@ -1461,6 +1445,9 @@ void ORowSetCache::deleteIterator(const ORowSetBase* _pRowSet)
 
 void ORowSetCache::rotateCacheIterator(ORowSetMatrix::difference_type _nDist)
 {
+    if (m_bModified)
+        return;
+
     if(_nDist)
     {
         // now correct the iterator in our iterator vector
@@ -1469,9 +1456,9 @@ void ORowSetCache::rotateCacheIterator(ORowSetMatrix::difference_type _nDist)
         for(;aCacheIter != aCacheEnd;++aCacheIter)
         {
             if ( !aCacheIter->second.pRowSet->isInsertRow()
-                && aCacheIter->second.aIterator != m_pMatrix->end() && !m_bModified )
+                && aCacheIter->second.aIterator != m_pMatrix->end())
             {
-                ptrdiff_t nDist = (aCacheIter->second.aIterator - m_pMatrix->begin());
+                ptrdiff_t nDist = aCacheIter->second.aIterator - m_pMatrix->begin();
                 if(nDist < _nDist)
                 {
                     aCacheIter->second.aIterator = m_pMatrix->end();
@@ -1490,11 +1477,14 @@ void ORowSetCache::rotateCacheIterator(ORowSetMatrix::difference_type _nDist)
 
 void ORowSetCache::rotateAllCacheIterators()
 {
+    if (m_bModified)
+        return;
+
     // now correct the iterator in our iterator vector
     auto aCacheEnd  = m_aCacheIterators.end();
     for (auto aCacheIter = m_aCacheIterators.begin(); aCacheIter != aCacheEnd; ++aCacheIter)
     {
-        if (!aCacheIter->second.pRowSet->isInsertRow() && !m_bModified)
+        if (!aCacheIter->second.pRowSet->isInsertRow())
         {
             aCacheIter->second.aIterator = m_pMatrix->end();
         }
@@ -1507,7 +1497,7 @@ void ORowSetCache::setUpdateIterator(const ORowSetMatrix::iterator& _rOriginalRo
     if(!m_aInsertRow->is())
         *m_aInsertRow = new ORowSetValueVector(m_xMetaData->getColumnCount());
 
-    (*(*m_aInsertRow)) = (*(*_rOriginalRow));
+    (*(*m_aInsertRow)) = *(*_rOriginalRow);
     // we don't unbound the bookmark column
     ORowSetValueVector::Vector::iterator aIter = (*m_aInsertRow)->get().begin();
     ORowSetValueVector::Vector::const_iterator aEnd = (*m_aInsertRow)->get().end();
@@ -1527,7 +1517,7 @@ void ORowSetCache::checkPositionFlags()
 
 void ORowSetCache::checkUpdateConditions(sal_Int32 columnIndex)
 {
-    if(m_bAfterLast || columnIndex >= (sal_Int32)(*m_aInsertRow)->get().size())
+    if(m_bAfterLast || columnIndex >= static_cast<sal_Int32>((*m_aInsertRow)->get().size()))
         throwFunctionSequenceException(m_xSet.get());
 }
 
@@ -1551,7 +1541,7 @@ bool ORowSetCache::checkInnerJoin(const ::connectivity::OSQLParseNode *pNode,con
     else if (SQL_ISRULE(pNode,comparison_predicate))
     {
         // only the comparison of columns is allowed
-        OSL_ENSURE(pNode->count() == 3,"checkInnerJoin: Fehler im Parse Tree");
+        OSL_ENSURE(pNode->count() == 3,"checkInnerJoin: Error in Parse Tree");
         if (!(SQL_ISRULE(pNode->getChild(0),column_ref) &&
                 SQL_ISRULE(pNode->getChild(2),column_ref) &&
                 pNode->getChild(1)->getNodeType() == SQLNodeType::Equal))
@@ -1581,7 +1571,7 @@ bool ORowSetCache::checkJoin(const Reference< XConnection>& _xConnection,
     OUString sSql = _xAnalyzer->getQuery();
     OUString sErrorMsg;
     ::connectivity::OSQLParser aSqlParser( m_aContext );
-    ::std::unique_ptr< ::connectivity::OSQLParseNode> pSqlParseNode( aSqlParser.parseTree(sErrorMsg,sSql));
+    std::unique_ptr< ::connectivity::OSQLParseNode> pSqlParseNode( aSqlParser.parseTree(sErrorMsg,sSql));
     if ( pSqlParseNode.get() && SQL_ISRULE(pSqlParseNode, select_statement) )
     {
         OSQLParseNode* pTableRefCommalist = pSqlParseNode->getByRule(::connectivity::OSQLParseNode::table_ref_commalist);
@@ -1709,22 +1699,22 @@ bool ORowSetCache::fill(ORowSetMatrix::iterator& _aIter, const ORowSetMatrix::co
                     *_aIter = new ORowSetValueVector(nColumnCount);
             }
         }
-        m_pCacheSet->fillValueRow(*_aIter, _nPos);
-        _bCheck = m_pCacheSet->next();
+        m_xCacheSet->fillValueRow(*_aIter, _nPos);
+        _bCheck = m_xCacheSet->next();
     }
     return _bCheck;
 }
 
 bool ORowSetCache::isResultSetChanged() const
 {
-    return m_pCacheSet->isResultSetChanged();
+    return m_xCacheSet->isResultSetChanged();
 }
 
 void ORowSetCache::reset(const Reference< XResultSet>& _xDriverSet)
 {
     m_xSet = _xDriverSet;
     m_xMetaData.set(Reference< XResultSetMetaDataSupplier >(_xDriverSet,UNO_QUERY)->getMetaData());
-    m_pCacheSet->reset(_xDriverSet);
+    m_xCacheSet->reset(_xDriverSet);
 
     m_bRowCountFinal = false;
     m_nRowCount = 0;
@@ -1732,23 +1722,18 @@ void ORowSetCache::reset(const Reference< XResultSet>& _xDriverSet)
 }
 
 void ORowSetCache::impl_updateRowFromCache_throw(ORowSetValueVector::Vector& io_aRow
-                                           ,::std::vector<sal_Int32>& o_ChangedColumns)
+                                           ,std::vector<sal_Int32> const & o_ChangedColumns)
 {
     if ( o_ChangedColumns.size() > 1 )
     {
-        ORowSetMatrix::const_iterator aIter = m_pMatrix->begin();
-        for(;aIter != m_pMatrix->end();++aIter)
+        for (auto const& elem : *m_pMatrix)
         {
-            if ( aIter->is() && m_pCacheSet->updateColumnValues((*aIter)->get(),io_aRow,o_ChangedColumns))
+            if ( elem.is() && m_xCacheSet->updateColumnValues(elem->get(),io_aRow,o_ChangedColumns))
             {
-                break;
+                return;
             }
         }
-
-        if ( aIter == m_pMatrix->end() )
-        {
-            m_pCacheSet->fillMissingValues(io_aRow);
-        }
+        m_xCacheSet->fillMissingValues(io_aRow);
     }
 }
 

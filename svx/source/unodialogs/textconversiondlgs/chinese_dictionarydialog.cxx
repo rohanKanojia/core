@@ -27,17 +27,15 @@
 #include <com/sun/star/linguistic2/XConversionPropertyType.hpp>
 #include <com/sun/star/util/XFlushable.hpp>
 #include <com/sun/star/lang/Locale.hpp>
-#include <svtools/headbar.hxx>
-#include <svtools/svlbitm.hxx>
-#include "svtools/treelistentry.hxx"
-#include <vcl/msgbox.hxx>
+#include <vcl/headbar.hxx>
+#include <vcl/svlbitm.hxx>
+#include <vcl/treelistentry.hxx>
 #include <vcl/settings.hxx>
 #include <unotools/lingucfg.hxx>
 #include <unotools/linguprops.hxx>
 #include <unotools/intlwrapper.hxx>
-#include <comphelper/processfactory.hxx>
 #include <vcl/svapp.hxx>
-#include "helpid.hrc"
+#include <osl/diagnose.h>
 
 
 namespace textconversiondlgs
@@ -47,11 +45,10 @@ namespace textconversiondlgs
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 
-#define HEADER_BAR_BITS ( HeaderBarItemBits::LEFT | HeaderBarItemBits::VCENTER | HeaderBarItemBits::CLICKABLE | HeaderBarItemBits::FIXED | HeaderBarItemBits::FIXEDPOS )
+#define HEADER_BAR_BITS ( HeaderBarItemBits::LEFT | HeaderBarItemBits::CLICKABLE | HeaderBarItemBits::FIXED | HeaderBarItemBits::FIXEDPOS )
 
 DictionaryList::DictionaryList(SvSimpleTableContainer& rParent, WinBits nBits)
     : SvSimpleTable(rParent, nBits)
-    , m_xDictionary(nullptr)
     , m_pED_Term(nullptr)
     , m_pED_Mapping(nullptr)
     , m_pLB_Property(nullptr)
@@ -213,7 +210,7 @@ DictionaryEntry* DictionaryList::getTermEntry( const OUString& rTerm ) const
     for( sal_Int32 nN=GetRowCount(); nN--; )
     {
         DictionaryEntry* pE = getEntryOnPos( nN );
-        if( pE && rTerm.equals( pE->m_aTerm ) )
+        if( pE && rTerm == pE->m_aTerm )
             return pE;
     }
     return nullptr;
@@ -257,7 +254,7 @@ sal_uIntPtr DictionaryList::deleteEntries( const OUString& rTerm )
     for( sal_Int32 nN=GetRowCount(); nN--; )
     {
         DictionaryEntry* pCurEntry = getEntryOnPos( nN );
-        if( rTerm.equals( pCurEntry->m_aTerm ) )
+        if( rTerm == pCurEntry->m_aTerm )
         {
             nPos = nN;
             SvTreeListEntry* pCurLBEntry = GetEntryOnPos( nN );
@@ -289,7 +286,7 @@ void DictionaryList::sortByColumn( sal_uInt16 nSortColumnIndex, bool bSortAtoZ )
 }
 
 
-IMPL_LINK_TYPED( DictionaryList, CompareHdl, const SvSortData&, rData, sal_Int32 )
+IMPL_LINK( DictionaryList, CompareHdl, const SvSortData&, rData, sal_Int32 )
 {
     SvTreeListEntry* pLeft = const_cast<SvTreeListEntry*>(rData.pLeft);
     SvTreeListEntry* pRight = const_cast<SvTreeListEntry*>(rData.pRight);
@@ -305,13 +302,13 @@ sal_Int32 DictionaryList::ColumnCompare( SvTreeListEntry* pLeft, SvTreeListEntry
 
     if(pLeftItem != nullptr && pRightItem != nullptr)
     {
-        sal_uInt16 nLeftKind = pLeftItem->GetType();
-        sal_uInt16 nRightKind = pRightItem->GetType();
+        SvLBoxItemType nLeftKind = pLeftItem->GetType();
+        SvLBoxItemType nRightKind = pRightItem->GetType();
 
-        if(nRightKind == SV_ITEM_ID_LBOXSTRING &&
-            nLeftKind == SV_ITEM_ID_LBOXSTRING )
+        if (nRightKind == SvLBoxItemType::String &&
+             nLeftKind == SvLBoxItemType::String)
         {
-            IntlWrapper aIntlWrapper( Application::GetSettings().GetLanguageTag() );
+            IntlWrapper aIntlWrapper(SvtSysLocale().GetUILanguageTag());
             const CollatorWrapper* pCollator = aIntlWrapper.getCaseCollator();
 
             nCompare = pCollator->compareString( static_cast<SvLBoxString*>(pLeftItem)->GetText(),
@@ -370,8 +367,8 @@ void DictionaryList::setColSizes()
     long nPos3 = nWidth - nWidth3;
     long nRemainder = nWidth - (nWidth1 + nWidth2 + nWidth3);
 
-    long aStaticTabs[] = { 3, 0, nWidth1 + (nRemainder/2), nPos3 };
-    SvSimpleTable::SetTabs(aStaticTabs, MAP_PIXEL);
+    long aTabPositions[] = { 0, nWidth1 + (nRemainder/2), nPos3 };
+    SvSimpleTable::SetTabs(SAL_N_ELEMENTS(aTabPositions), aTabPositions, MapUnit::MapPixel);
 }
 
 void DictionaryList::Resize()
@@ -382,10 +379,10 @@ void DictionaryList::Resize()
 
 void DictionaryList::init(const Reference< linguistic2::XConversionDictionary>& xDictionary,
     vcl::Window *pED_Term, vcl::Window *pED_Mapping, ListBox *pLB_Property,
-    vcl::Window *pFT_Term, vcl::Window *pFT_Mapping, vcl::Window *pFT_Property)
+    vcl::Window const *pFT_Term, vcl::Window const *pFT_Mapping, vcl::Window const *pFT_Property)
 {
     SetStyle( WB_VSCROLL | WB_TABSTOP );
-    SetSelectionMode( SINGLE_SELECTION );
+    SetSelectionMode( SelectionMode::Single );
     SetBorderStyle( WindowBorderStyle::MONO );
     SetHighlightRange();
 
@@ -413,8 +410,8 @@ void DictionaryList::init(const Reference< linguistic2::XConversionDictionary>& 
     rHeaderBar.InsertItem( 2, aColumn2, nWidth2, nBits );
     rHeaderBar.InsertItem( 3, aColumn3, nWidth3, nBits );
 
-    long pTabs[] = { 3, 0, nWidth1, nWidth1 + nWidth2 };
-    SetTabs( &pTabs[0], MAP_PIXEL );
+    long aTabPositions[] = { 0, nWidth1, nWidth1 + nWidth2 };
+    SetTabs( SAL_N_ELEMENTS(aTabPositions), aTabPositions, MapUnit::MapPixel );
 }
 
 void ChineseDictionaryDialog::initDictionaryControl(DictionaryList *pList,
@@ -434,7 +431,6 @@ ChineseDictionaryDialog::ChineseDictionaryDialog( vcl::Window* pParent )
     : ModalDialog(pParent, "ChineseDictionaryDialog",
          "svx/ui/chinesedictionary.ui")
     , m_nTextConversionOptions(i18n::TextConversionOption::NONE)
-    , m_xContext(nullptr)
 {
     get(m_pRB_To_Simplified, "tradtosimple");
     get(m_pRB_To_Traditional, "simpletotrad");
@@ -466,8 +462,8 @@ ChineseDictionaryDialog::ChineseDictionaryDialog( vcl::Window* pParent )
     m_pLB_Property->SetDropDownLineCount( m_pLB_Property->GetEntryCount() );
     m_pLB_Property->SelectEntryPos(0);
 
-    Reference< linguistic2::XConversionDictionary > xDictionary_To_Simplified(nullptr);
-    Reference< linguistic2::XConversionDictionary > xDictionary_To_Traditional(nullptr);
+    Reference< linguistic2::XConversionDictionary > xDictionary_To_Simplified;
+    Reference< linguistic2::XConversionDictionary > xDictionary_To_Traditional;
     //get dictionaries
     {
         if(!m_xContext.is())
@@ -497,7 +493,7 @@ ChineseDictionaryDialog::ChineseDictionaryDialog( vcl::Window* pParent )
                                 ), UNO_QUERY );
                     }
                     if (xDictionary_To_Simplified.is())
-                        xDictionary_To_Simplified->setActive( sal_True );
+                        xDictionary_To_Simplified->setActive( true );
 
 
                     if( xContainer->hasByName( aNameTo_Traditional ) )
@@ -512,7 +508,7 @@ ChineseDictionaryDialog::ChineseDictionaryDialog( vcl::Window* pParent )
                                 UNO_QUERY );
                     }
                     if (xDictionary_To_Traditional.is())
-                        xDictionary_To_Traditional->setActive( sal_True );
+                        xDictionary_To_Traditional->setActive( true );
 
                 }
                 catch(const uno::Exception& )
@@ -572,7 +568,7 @@ void ChineseDictionaryDialog::dispose()
 
 void ChineseDictionaryDialog::setDirectionAndTextConversionOptions( bool bDirectionToSimplified, sal_Int32 nTextConversionOptions /*i18n::TextConversionOption*/ )
 {
-    if( bDirectionToSimplified == bool(m_pRB_To_Simplified->IsChecked())
+    if( bDirectionToSimplified == m_pRB_To_Simplified->IsChecked()
         && nTextConversionOptions == m_nTextConversionOptions )
         return;
 
@@ -585,14 +581,14 @@ void ChineseDictionaryDialog::setDirectionAndTextConversionOptions( bool bDirect
     updateAfterDirectionChange();
 }
 
-IMPL_LINK_NOARG_TYPED(ChineseDictionaryDialog, DirectionHdl, Button*, void)
+IMPL_LINK_NOARG(ChineseDictionaryDialog, DirectionHdl, Button*, void)
 {
     updateAfterDirectionChange();
 }
 
 void ChineseDictionaryDialog::updateAfterDirectionChange()
 {
-    Reference< linguistic2::XConversionDictionary > xDictionary(nullptr);
+    Reference< linguistic2::XConversionDictionary > xDictionary;
 
     if( m_pRB_To_Simplified->IsChecked() )
     {
@@ -610,15 +606,15 @@ void ChineseDictionaryDialog::updateAfterDirectionChange()
     updateButtons();
 }
 
-IMPL_LINK_NOARG_TYPED(ChineseDictionaryDialog, EditFieldsListBoxHdl, ListBox&, void)
+IMPL_LINK_NOARG(ChineseDictionaryDialog, EditFieldsListBoxHdl, ListBox&, void)
 {
     updateButtons();
 }
-IMPL_LINK_NOARG_TYPED(ChineseDictionaryDialog, EditFieldsHdl, Edit&, void)
+IMPL_LINK_NOARG(ChineseDictionaryDialog, EditFieldsHdl, Edit&, void)
 {
     updateButtons();
 }
-IMPL_LINK_NOARG_TYPED(ChineseDictionaryDialog, MappingSelectHdl, SvTreeListBox*, void)
+IMPL_LINK_NOARG(ChineseDictionaryDialog, MappingSelectHdl, SvTreeListBox*, void)
 {
     DictionaryEntry* pE = getActiveDictionary().getFirstSelectedEntry();
     if(pE)
@@ -649,7 +645,7 @@ bool ChineseDictionaryDialog::isEditFieldsContentEqualsSelectedListContent() con
             return false;
         if( pE->m_aMapping != m_pED_Mapping->GetText() )
             return false;
-        if( pE->m_nConversionPropertyType != m_pLB_Property->GetSelectEntryPos()+1 )
+        if( pE->m_nConversionPropertyType != m_pLB_Property->GetSelectedEntryPos()+1 )
             return false;
         return true;
     }
@@ -697,19 +693,19 @@ void ChineseDictionaryDialog::updateButtons()
     {
         DictionaryEntry* pFirstSelectedEntry = getActiveDictionary().getFirstSelectedEntry();
         bModify = !bAdd && getActiveDictionary().GetSelectedRowCount()==1
-                        && pFirstSelectedEntry && pFirstSelectedEntry->m_aTerm.equals( m_pED_Term->GetText() );
+                        && pFirstSelectedEntry && pFirstSelectedEntry->m_aTerm == m_pED_Term->GetText();
         if( bModify && isEditFieldsContentEqualsSelectedListContent() )
             bModify = false;
     }
     m_pPB_Modify->Enable( bModify );
 }
 
-IMPL_LINK_NOARG_TYPED(ChineseDictionaryDialog, AddHdl, Button*, void)
+IMPL_LINK_NOARG(ChineseDictionaryDialog, AddHdl, Button*, void)
 {
     if( !isEditFieldsHaveContent() )
         return;
 
-    sal_Int16 nConversionPropertyType = m_pLB_Property->GetSelectEntryPos()+1;
+    sal_Int16 nConversionPropertyType = m_pLB_Property->GetSelectedEntryPos()+1;
 
     getActiveDictionary().addEntry( m_pED_Term->GetText(), m_pED_Mapping->GetText(), nConversionPropertyType );
 
@@ -722,11 +718,11 @@ IMPL_LINK_NOARG_TYPED(ChineseDictionaryDialog, AddHdl, Button*, void)
     updateButtons();
 }
 
-IMPL_LINK_NOARG_TYPED(ChineseDictionaryDialog, ModifyHdl, Button*, void)
+IMPL_LINK_NOARG(ChineseDictionaryDialog, ModifyHdl, Button*, void)
 {
     OUString aTerm( m_pED_Term->GetText() );
     OUString aMapping( m_pED_Mapping->GetText() );
-    sal_Int16 nConversionPropertyType = m_pLB_Property->GetSelectEntryPos()+1;
+    sal_Int16 nConversionPropertyType = m_pLB_Property->GetSelectedEntryPos()+1;
 
     DictionaryList& rActive  = getActiveDictionary();
     DictionaryList& rReverse = getReverseDictionary();
@@ -754,7 +750,7 @@ IMPL_LINK_NOARG_TYPED(ChineseDictionaryDialog, ModifyHdl, Button*, void)
     updateButtons();
 }
 
-IMPL_LINK_NOARG_TYPED(ChineseDictionaryDialog, DeleteHdl, Button*, void)
+IMPL_LINK_NOARG(ChineseDictionaryDialog, DeleteHdl, Button*, void)
 {
     DictionaryList& rActive  = getActiveDictionary();
     DictionaryList& rReverse = getReverseDictionary();
@@ -799,9 +795,7 @@ short ChineseDictionaryDialog::Execute()
     {
         //save settings to configuration
         SvtLinguConfig  aLngCfg;
-        Any aAny;
-        aAny <<= m_pCB_Reverse->IsChecked();
-        aLngCfg.SetProperty( OUString( UPN_IS_REVERSE_MAPPING ), aAny );
+        aLngCfg.SetProperty( OUString( UPN_IS_REVERSE_MAPPING ), uno::Any(m_pCB_Reverse->IsChecked()) );
 
         m_pCT_DictionaryToSimplified->save();
         m_pCT_DictionaryToTraditional->save();
@@ -813,7 +807,7 @@ short ChineseDictionaryDialog::Execute()
     return nRet;
 }
 
-IMPL_LINK_TYPED(ChineseDictionaryDialog, HeaderBarClick, HeaderBar*, pHeaderBar, void)
+IMPL_LINK(ChineseDictionaryDialog, HeaderBarClick, HeaderBar*, pHeaderBar, void)
 {
     sal_uInt16 nId = pHeaderBar->GetCurItemId();
     HeaderBarItemBits nBits = pHeaderBar->GetItemBits(nId);

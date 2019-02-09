@@ -20,20 +20,20 @@
 #include <zlib.h>
 
 #include "outputwrap.hxx"
-#include "contentsink.hxx"
-#include "pdfihelper.hxx"
-#include "wrapper.hxx"
-#include "pdfparse.hxx"
+#include <contentsink.hxx>
+#include <pdfihelper.hxx>
+#include <wrapper.hxx>
+#include <pdfparse.hxx>
 #include "../pdfiadaptor.hxx"
 
 #include <rtl/math.hxx>
 #include <osl/file.hxx>
 #include <comphelper/sequence.hxx>
 
-#include "cppunit/TestAssert.h"
-#include "cppunit/TestFixture.h"
-#include "cppunit/extensions/HelperMacros.h"
-#include "cppunit/plugin/TestPlugIn.h"
+#include <cppunit/TestAssert.h>
+#include <cppunit/TestFixture.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
 #include <test/bootstrapfixture.hxx>
 
 #include <com/sun/star/rendering/XCanvas.hpp>
@@ -43,7 +43,7 @@
 #include <com/sun/star/rendering/BlendMode.hpp>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolypolygon.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
@@ -54,6 +54,7 @@
 
 #include <cassert>
 #include <rtl/ustring.hxx>
+#include <rtl/ref.hxx>
 
 using namespace ::pdfparse;
 using namespace ::pdfi;
@@ -82,14 +83,12 @@ namespace
             m_bImageSeen(false)
         {}
 
-        virtual ~TestSink() {}
-
         void check()
         {
             CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE( "A4 page size (in 100th of points): Width", 79400, m_aPageSize.Width, 0.00000001);
             CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE( "A4 page size (in 100th of points): Height", 59500, m_aPageSize.Height, 0.0000001 );
             CPPUNIT_ASSERT_MESSAGE( "endPage() called", m_bPageEnded );
-            CPPUNIT_ASSERT_EQUAL_MESSAGE( "Num pages equal one", (sal_Int32) 1, m_nNumPages );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "Num pages equal one", sal_Int32(1), m_nNumPages );
             CPPUNIT_ASSERT_MESSAGE( "Correct hyperlink bounding box",
                                     rtl::math::approxEqual(m_aHyperlinkBounds.X1,34.7 ) &&
                                     rtl::math::approxEqual(m_aHyperlinkBounds.Y1,386.0) &&
@@ -97,7 +96,7 @@ namespace
                                     rtl::math::approxEqual(m_aHyperlinkBounds.Y2,406.2) );
             CPPUNIT_ASSERT_EQUAL_MESSAGE( "Correct hyperlink URI", OUString("http://download.openoffice.org/"), m_aURI );
 
-            const char* sText = " \n \nThis is a testtext\nNew paragraph,\nnew line\n"
+            const char* const sText = " \n \nThis is a testtext\nNew paragraph,\nnew line\n"
                 "Hyperlink, this is\n?\nThis is more text\noutline mode\n?\nNew paragraph\n";
             OString aTmp;
             m_aTextOut.makeStringAndClear().convertToString( &aTmp,
@@ -231,20 +230,19 @@ namespace
                 CPPUNIT_ASSERT_MESSAGE( "Line width is 0",
                                         rtl::math::approxEqual(rContext.LineWidth, 28.3) );
 
-                const char* sExportString = "m53570 7650-35430 24100";
-                CPPUNIT_ASSERT_MESSAGE( "Stroke is m535.7 518.5-354.3-241",
-                                        basegfx::tools::exportToSvgD( aPath, true, true, false ).equalsAscii(sExportString) );
+                const char sExportString[] = "m53570 7650-35430 24100";
+                CPPUNIT_ASSERT_EQUAL_MESSAGE( "Stroke is m535.7 518.5-354.3-241",
+                                        OUString(sExportString), basegfx::utils::exportToSvgD( aPath, true, true, false ) );
 
                 m_bGreenStrokeSeen = true;
             }
             else
             {
-                CPPUNIT_ASSERT_MESSAGE( "Dash array consists of four entries",
-                                        rContext.DashArray.size() == 4 &&
-                                        rtl::math::approxEqual(rContext.DashArray[0],14.3764) &&
-                                        rContext.DashArray[0] == rContext.DashArray[1] &&
-                                        rContext.DashArray[1] == rContext.DashArray[2] &&
-                                        rContext.DashArray[2] == rContext.DashArray[3] );
+                CPPUNIT_ASSERT_EQUAL_MESSAGE( "Dash array consists of four entries", std::vector<double>::size_type(4), rContext.DashArray.size());
+                CPPUNIT_ASSERT_DOUBLES_EQUAL( 14.3764, rContext.DashArray[0], 1E-12 );
+                CPPUNIT_ASSERT_DOUBLES_EQUAL( rContext.DashArray[0], rContext.DashArray[1], 1E-12 );
+                CPPUNIT_ASSERT_DOUBLES_EQUAL( rContext.DashArray[1], rContext.DashArray[2], 1E-12 );
+                CPPUNIT_ASSERT_DOUBLES_EQUAL( rContext.DashArray[2], rContext.DashArray[3], 1E-12 );
 
                 CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE( "Line color is black", 1.0, rContext.LineColor.Alpha, 0.00000001);
                 CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE( "Line color is black", 0.0, rContext.LineColor.Blue, 0.00000001);
@@ -254,24 +252,24 @@ namespace
                 CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE( "Line width is 0",
                                         0, rContext.LineWidth, 0.0000001 );
 
-                const char* sExportString = "m49890 5670.00000000001-35430 24090";
-                CPPUNIT_ASSERT_MESSAGE( "Stroke is m49890 5670.00000000001-35430 24090",
-                                        basegfx::tools::exportToSvgD( aPath, true, true, false ).equalsAscii(sExportString) );
+                const char sExportString[] = "m49890 5670.00000000001-35430 24090";
+                CPPUNIT_ASSERT_EQUAL_MESSAGE( "Stroke is m49890 5670.00000000001-35430 24090",
+                                        OUString(sExportString), basegfx::utils::exportToSvgD( aPath, true, true, false ) );
 
                 m_bDashedLineSeen = true;
             }
-            CPPUNIT_ASSERT_MESSAGE( "Blend mode is normal",
-                                    rContext.BlendMode == rendering::BlendMode::NORMAL );
-            CPPUNIT_ASSERT_MESSAGE( "Join type is round",
-                                    rContext.LineJoin == rendering::PathJoinType::ROUND );
-            CPPUNIT_ASSERT_MESSAGE( "Cap type is butt",
-                                    rContext.LineCap == rendering::PathCapType::BUTT );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "Blend mode is normal",
+                                    rendering::BlendMode::NORMAL, rContext.BlendMode );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "Join type is round",
+                                    rendering::PathJoinType::ROUND, rContext.LineJoin );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "Cap type is butt",
+                                    rendering::PathCapType::BUTT, rContext.LineCap );
             CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE( "Line miter limit is 10",
                                     10, rContext.MiterLimit, 0.0000001 );
             CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE( "Flatness is 0",
                                     1, rContext.Flatness, 0.00000001 );
             CPPUNIT_ASSERT_EQUAL_MESSAGE( "Font id is 0",
-                                    (sal_Int32) 0, rContext.FontId );
+                                    sal_Int32(0), rContext.FontId );
         }
 
         virtual void fillPath( const uno::Reference<rendering::XPolyPolygon2D>& rPath ) override
@@ -285,12 +283,12 @@ namespace
             CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE( "Line color is black", 0.0, rContext.LineColor.Green, 0.00000001);
             CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE( "Line color is black", 0.0, rContext.LineColor.Red, 0.00000001);
 
-            CPPUNIT_ASSERT_MESSAGE( "Blend mode is normal",
-                                    rContext.BlendMode == rendering::BlendMode::NORMAL );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "Blend mode is normal",
+                                    rendering::BlendMode::NORMAL, rContext.BlendMode );
             CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE( "Flatness is 10",
                                     10, rContext.Flatness, 0.00000001 );
             CPPUNIT_ASSERT_EQUAL_MESSAGE( "Font id is 0",
-                                    (sal_Int32) 0, rContext.FontId );
+                                    sal_Int32(0), rContext.FontId );
         }
 
         virtual void eoFillPath( const uno::Reference<rendering::XPolyPolygon2D>& rPath ) override
@@ -304,17 +302,17 @@ namespace
             CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE( "Line color is black", 0.0, rContext.LineColor.Green, 0.00000001);
             CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE( "Line color is black", 0.0, rContext.LineColor.Red, 0.00000001);
 
-            CPPUNIT_ASSERT_MESSAGE( "Blend mode is normal",
-                                    rContext.BlendMode == rendering::BlendMode::NORMAL );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "Blend mode is normal",
+                                    rendering::BlendMode::NORMAL, rContext.BlendMode );
             CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE( "Flatness is 0",
                                     1, rContext.Flatness, 0.00000001 );
             CPPUNIT_ASSERT_EQUAL_MESSAGE( "Font id is 0",
-                                    (sal_Int32) 0, rContext.FontId );
+                                    sal_Int32(0), rContext.FontId );
 
-            const char* sExportString = "m12050 49610c-4310 0-7800-3490-7800-7800 0-4300 "
+            const char sExportString[] = "m12050 49610c-4310 0-7800-3490-7800-7800 0-4300 "
                 "3490-7790 7800-7790 4300 0 7790 3490 7790 7790 0 4310-3490 7800-7790 7800z";
-            CPPUNIT_ASSERT_MESSAGE( "Stroke is a 4-bezier circle",
-                                    basegfx::tools::exportToSvgD( aPath, true, true, false ).equalsAscii(sExportString) );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "Stroke is a 4-bezier circle",
+                                    OUString(sExportString), basegfx::utils::exportToSvgD( aPath, true, true, false ) );
 
             m_bRedCircleSeen = true;
         }
@@ -325,7 +323,7 @@ namespace
             basegfx::B2DPolyPolygon aCurClip = getCurrentContext().Clip;
 
             if( aCurClip.count() )  // #i92985# adapted API from (..., false, false) to (..., true, false)
-                aNewClip = basegfx::tools::clipPolyPolygonOnPolyPolygon( aCurClip, aNewClip, true, false );
+                aNewClip = basegfx::utils::clipPolyPolygonOnPolyPolygon( aCurClip, aNewClip, true, false );
 
             getCurrentContext().Clip = aNewClip;
         }
@@ -336,7 +334,7 @@ namespace
             basegfx::B2DPolyPolygon aCurClip = getCurrentContext().Clip;
 
             if( aCurClip.count() )  // #i92985# adapted API from (..., false, false) to (..., true, false)
-                aNewClip = basegfx::tools::clipPolyPolygonOnPolyPolygon( aCurClip, aNewClip, true, false );
+                aNewClip = basegfx::utils::clipPolyPolygonOnPolyPolygon( aCurClip, aNewClip, true, false );
 
             getCurrentContext().Clip = aNewClip;
         }
@@ -358,21 +356,21 @@ namespace
                               bool                                       /*bInvert*/ ) override
         {
             CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawMask received two properties",
-                                    (sal_Int32) 3, xBitmap.getLength() );
-            CPPUNIT_ASSERT_MESSAGE( "drawMask got URL param",
-                                    xBitmap[0].Name == "URL" );
-            CPPUNIT_ASSERT_MESSAGE( "drawMask got InputStream param",
-                                    xBitmap[1].Name == "InputStream" );
+                                    sal_Int32(3), xBitmap.getLength() );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawMask got URL param",
+                                    OUString("URL"), xBitmap[0].Name );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawMask got InputStream param",
+                                    OUString("InputStream"), xBitmap[1].Name );
         }
 
         virtual void drawImage(const uno::Sequence<beans::PropertyValue>& xBitmap ) override
         {
             CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawImage received two properties",
-                                    (sal_Int32) 3, xBitmap.getLength() );
-            CPPUNIT_ASSERT_MESSAGE( "drawImage got URL param",
-                                    xBitmap[0].Name == "URL" );
-            CPPUNIT_ASSERT_MESSAGE( "drawImage got InputStream param",
-                                    xBitmap[1].Name == "InputStream" );
+                                    sal_Int32(3), xBitmap.getLength() );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawImage got URL param",
+                                    OUString("URL"), xBitmap[0].Name );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawImage got InputStream param",
+                                    OUString("InputStream"), xBitmap[1].Name );
             m_bImageSeen = true;
         }
 
@@ -380,11 +378,11 @@ namespace
                                           const uno::Sequence<uno::Any>&             /*xMaskColors*/ ) override
         {
             CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawColorMaskedImage received two properties",
-                                    (sal_Int32) 3, xBitmap.getLength() );
-            CPPUNIT_ASSERT_MESSAGE( "drawColorMaskedImage got URL param",
-                                    xBitmap[0].Name == "URL" );
-            CPPUNIT_ASSERT_MESSAGE( "drawColorMaskedImage got InputStream param",
-                                    xBitmap[1].Name == "InputStream" );
+                                    sal_Int32(3), xBitmap.getLength() );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawColorMaskedImage got URL param",
+                                    OUString("URL"), xBitmap[0].Name );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawColorMaskedImage got InputStream param",
+                                    OUString("InputStream"), xBitmap[1].Name );
         }
 
         virtual void drawMaskedImage(const uno::Sequence<beans::PropertyValue>& xBitmap,
@@ -392,36 +390,36 @@ namespace
                                      bool                                       /*bInvertMask*/) override
         {
             CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawMaskedImage received two properties #1",
-                                    (sal_Int32) 3, xBitmap.getLength() );
-            CPPUNIT_ASSERT_MESSAGE( "drawMaskedImage got URL param #1",
-                                    xBitmap[0].Name == "URL" );
-            CPPUNIT_ASSERT_MESSAGE( "drawMaskedImage got InputStream param #1",
-                                    xBitmap[1].Name == "InputStream" );
+                                    sal_Int32(3), xBitmap.getLength() );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawMaskedImage got URL param #1",
+                                    OUString("URL"), xBitmap[0].Name );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawMaskedImage got InputStream param #1",
+                                    OUString("InputStream"), xBitmap[1].Name );
 
             CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawMaskedImage received two properties #2",
-                                    (sal_Int32) 3, xMask.getLength() );
-            CPPUNIT_ASSERT_MESSAGE( "drawMaskedImage got URL param #2",
-                                    xMask[0].Name == "URL" );
-            CPPUNIT_ASSERT_MESSAGE( "drawMaskedImage got InputStream param #2",
-                                    xMask[1].Name == "InputStream" );
+                                    sal_Int32(3), xMask.getLength() );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawMaskedImage got URL param #2",
+                                    OUString("URL"), xMask[0].Name );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawMaskedImage got InputStream param #2",
+                                    OUString("InputStream"), xMask[1].Name );
         }
 
         virtual void drawAlphaMaskedImage(const uno::Sequence<beans::PropertyValue>& xBitmap,
                                           const uno::Sequence<beans::PropertyValue>& xMask) override
         {
             CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawAlphaMaskedImage received two properties #1",
-                                    (sal_Int32) 3, xBitmap.getLength() );
-            CPPUNIT_ASSERT_MESSAGE( "drawAlphaMaskedImage got URL param #1",
-                                    xBitmap[0].Name == "URL" );
-            CPPUNIT_ASSERT_MESSAGE( "drawAlphaMaskedImage got InputStream param #1",
-                                    xBitmap[1].Name == "InputStream" );
+                                    sal_Int32(3), xBitmap.getLength() );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawAlphaMaskedImage got URL param #1",
+                                    OUString("URL"), xBitmap[0].Name );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawAlphaMaskedImage got InputStream param #1",
+                                    OUString("InputStream"), xBitmap[1].Name );
 
             CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawAlphaMaskedImage received two properties #2",
-                                    (sal_Int32) 3, xMask.getLength() );
-            CPPUNIT_ASSERT_MESSAGE( "drawAlphaMaskedImage got URL param #2",
-                                    xMask[0].Name == "URL" );
-            CPPUNIT_ASSERT_MESSAGE( "drawAlphaMaskedImage got InputStream param #2",
-                                    xMask[1].Name == "InputStream" );
+                                    sal_Int32(3), xMask.getLength() );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawAlphaMaskedImage got URL param #2",
+                                    OUString("URL"), xMask[0].Name );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "drawAlphaMaskedImage got InputStream param #2",
+                                    OUString("InputStream"), xMask[1].Name );
         }
 
         virtual void setTextRenderMode( sal_Int32 ) override
@@ -462,17 +460,17 @@ namespace
                     pSink,
                     uno::Reference< task::XInteractionHandler >(),
                     OUString(),
-                    getComponentContext() ) );
+                    getComponentContext(), "" ) );
             pSink->check();
         }
 
         void testOdfDrawExport()
         {
-            uno::Reference<pdfi::PDFIRawAdaptor> xAdaptor( new pdfi::PDFIRawAdaptor(OUString(), getComponentContext()) );
+            rtl::Reference<pdfi::PDFIRawAdaptor> xAdaptor( new pdfi::PDFIRawAdaptor(OUString(), getComponentContext()) );
             xAdaptor->setTreeVisitorFactory( createDrawTreeVisitorFactory() );
 
             OUString tempFileURL;
-            CPPUNIT_ASSERT( osl::File::createTempFile( nullptr, nullptr, &tempFileURL ) == osl::File::E_None );
+            CPPUNIT_ASSERT_EQUAL( osl::File::E_None, osl::File::createTempFile( nullptr, nullptr, &tempFileURL ) );
             osl::File::remove( tempFileURL ); // FIXME the below apparently fails silently if the file already exists
             CPPUNIT_ASSERT_MESSAGE("Exporting to ODF",
                                    xAdaptor->odfConvert( m_directories.getURLFromSrc("/sdext/source/pdfimport/test/testinput.pdf"),
@@ -483,11 +481,11 @@ namespace
 
         void testOdfWriterExport()
         {
-            uno::Reference<pdfi::PDFIRawAdaptor> xAdaptor( new pdfi::PDFIRawAdaptor(OUString(), getComponentContext()) );
+            rtl::Reference<pdfi::PDFIRawAdaptor> xAdaptor( new pdfi::PDFIRawAdaptor(OUString(), getComponentContext()) );
             xAdaptor->setTreeVisitorFactory( createWriterTreeVisitorFactory() );
 
             OUString tempFileURL;
-            CPPUNIT_ASSERT( osl::File::createTempFile( nullptr, nullptr, &tempFileURL ) == osl::File::E_None );
+            CPPUNIT_ASSERT_EQUAL( osl::File::E_None, osl::File::createTempFile( nullptr, nullptr, &tempFileURL ) );
             osl::File::remove( tempFileURL ); // FIXME the below apparently fails silently if the file already exists
             CPPUNIT_ASSERT_MESSAGE("Exporting to ODF",
                                    xAdaptor->odfConvert( m_directories.getURLFromSrc("/sdext/source/pdfimport/test/testinput.pdf"),
@@ -498,7 +496,7 @@ namespace
 
         void testTdf96993()
         {
-            uno::Reference<pdfi::PDFIRawAdaptor> xAdaptor(new pdfi::PDFIRawAdaptor(OUString(), getComponentContext()));
+            rtl::Reference<pdfi::PDFIRawAdaptor> xAdaptor(new pdfi::PDFIRawAdaptor(OUString(), getComponentContext()));
             xAdaptor->setTreeVisitorFactory(createDrawTreeVisitorFactory());
 
             OString aOutput;
@@ -512,7 +510,7 @@ namespace
 
         void testTdf98421()
         {
-            uno::Reference<pdfi::PDFIRawAdaptor> xAdaptor(new pdfi::PDFIRawAdaptor(OUString(), getComponentContext()));
+            rtl::Reference<pdfi::PDFIRawAdaptor> xAdaptor(new pdfi::PDFIRawAdaptor(OUString(), getComponentContext()));
             xAdaptor->setTreeVisitorFactory(createWriterTreeVisitorFactory());
 
             OString aOutput;
@@ -525,12 +523,27 @@ namespace
             CPPUNIT_ASSERT(aOutput.indexOf("svg:height=\"-262.82mm\"") != -1);
         }
 
+        void testTdf105536()
+        {
+            rtl::Reference<pdfi::PDFIRawAdaptor> xAdaptor(new pdfi::PDFIRawAdaptor(OUString(), getComponentContext()));
+            xAdaptor->setTreeVisitorFactory(createDrawTreeVisitorFactory());
+
+            OString aOutput;
+            CPPUNIT_ASSERT_MESSAGE("Exporting to ODF",
+                xAdaptor->odfConvert(m_directories.getURLFromSrc("/sdext/source/pdfimport/test/testTdf105536.pdf"),
+                new OutputWrapString(aOutput),
+                nullptr));
+            // This ensures that the imported image arrives properly flipped
+            CPPUNIT_ASSERT(aOutput.indexOf("draw:transform=\"matrix(-21488.4 0 0 -27978.1 21488.4 27978.1)\"") != -1);
+        }
+
         CPPUNIT_TEST_SUITE(PDFITest);
         CPPUNIT_TEST(testXPDFParser);
         CPPUNIT_TEST(testOdfWriterExport);
         CPPUNIT_TEST(testOdfDrawExport);
         CPPUNIT_TEST(testTdf96993);
         CPPUNIT_TEST(testTdf98421);
+        CPPUNIT_TEST(testTdf105536);
         CPPUNIT_TEST_SUITE_END();
     };
 

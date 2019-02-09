@@ -9,6 +9,7 @@
 
 #include <cstdio>
 
+#include <com/sun/star/beans/IllegalTypeException.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/PropertyValues.hpp>
@@ -17,6 +18,7 @@
 #include <com/sun/star/io/XActiveDataSink.hpp>
 #include <com/sun/star/io/XActiveDataStreamer.hpp>
 #include <com/sun/star/lang/IllegalAccessException.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/task/InteractionClassification.hpp>
 #include <com/sun/star/ucb/ContentInfo.hpp>
@@ -28,6 +30,7 @@
 #include <com/sun/star/ucb/NameClash.hpp>
 #include <com/sun/star/ucb/NameClashException.hpp>
 #include <com/sun/star/ucb/OpenMode.hpp>
+#include <com/sun/star/ucb/UnsupportedCommandException.hpp>
 #include <com/sun/star/ucb/UnsupportedDataSinkException.hpp>
 #include <com/sun/star/ucb/UnsupportedNameClashException.hpp>
 #include <com/sun/star/ucb/UnsupportedOpenModeException.hpp>
@@ -41,15 +44,17 @@
 #endif
 
 #include <comphelper/processfactory.hxx>
+#include <comphelper/sequence.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <config_oauth2.h>
+#include <o3tl/runtimetooustring.hxx>
+#include <sal/log.hxx>
 #include <ucbhelper/cancelcommandexecution.hxx>
 #include <ucbhelper/content.hxx>
 #include <ucbhelper/contentidentifier.hxx>
-#include <ucbhelper/std_inputstream.hxx>
-#include <ucbhelper/std_outputstream.hxx>
 #include <ucbhelper/propertyvalueset.hxx>
 #include <ucbhelper/proxydecider.hxx>
+#include <ucbhelper/macros.hxx>
 #include <sax/tools/converter.hxx>
 
 #include "auth_provider.hxx"
@@ -58,6 +63,8 @@
 #include "cmis_provider.hxx"
 #include "cmis_resultset.hxx"
 #include "cmis_strings.hxx"
+#include "std_inputstream.hxx"
+#include "std_outputstream.hxx"
 
 #define OUSTR_TO_STDSTR(s) string( OUStringToOString( s, RTL_TEXTENCODING_UTF8 ).getStr() )
 #define STD_TO_OUSTR( str ) OUString( str.c_str(), str.length( ), RTL_TEXTENCODING_UTF8 )
@@ -88,7 +95,7 @@ namespace
         return unoTime;
     }
 
-    uno::Any lcl_cmisPropertyToUno( libcmis::PropertyPtr pProperty )
+    uno::Any lcl_cmisPropertyToUno( const libcmis::PropertyPtr& pProperty )
     {
         uno::Any aValue;
         switch ( pProperty->getPropertyType( )->getType( ) )
@@ -100,11 +107,9 @@ namespace
                     uno::Sequence< OUString > aStrings( aCmisStrings.size( ) );
                     OUString* aStringsArr = aStrings.getArray( );
                     sal_Int32 i = 0;
-                    for ( vector< string >::iterator it = aCmisStrings.begin( );
-                            it != aCmisStrings.end( ); ++it, ++i )
+                    for ( const auto& rCmisStr : aCmisStrings )
                     {
-                        string str = *it;
-                        aStringsArr[i] = STD_TO_OUSTR( str );
+                        aStringsArr[i++] = STD_TO_OUSTR( rCmisStr );
                     }
                     aValue <<= aStrings;
                 }
@@ -115,10 +120,9 @@ namespace
                     uno::Sequence< sal_Int64 > aLongs( aCmisLongs.size( ) );
                     sal_Int64* aLongsArr = aLongs.getArray( );
                     sal_Int32 i = 0;
-                    for ( vector< long >::iterator it = aCmisLongs.begin( );
-                            it != aCmisLongs.end( ); ++it, ++i )
+                    for ( const auto& rCmisLong : aCmisLongs )
                     {
-                        aLongsArr[i] = *it;
+                        aLongsArr[i++] = rCmisLong;
                     }
                     aValue <<= aLongs;
                 }
@@ -126,14 +130,7 @@ namespace
             case libcmis::PropertyType::Decimal:
                 {
                     vector< double > aCmisDoubles = pProperty->getDoubles( );
-                    uno::Sequence< double > aDoubles( aCmisDoubles.size( ) );
-                    double* aDoublesArr = aDoubles.getArray( );
-                    sal_Int32 i = 0;
-                    for ( vector< double >::iterator it = aCmisDoubles.begin( );
-                            it != aCmisDoubles.end( ); ++it, ++i )
-                    {
-                        aDoublesArr[i] = *it;
-                    }
+                    uno::Sequence< double > aDoubles = comphelper::containerToSequence(aCmisDoubles);
                     aValue <<= aDoubles;
                 }
                 break;
@@ -143,10 +140,9 @@ namespace
                     uno::Sequence< sal_Bool > aBools( aCmisBools.size( ) );
                     sal_Bool* aBoolsArr = aBools.getArray( );
                     sal_Int32 i = 0;
-                    for ( vector< bool >::iterator it = aCmisBools.begin( );
-                            it != aCmisBools.end( ); ++it, ++i )
+                    for ( const auto& rCmisBool : aCmisBools )
                     {
-                        aBoolsArr[i] = *it;
+                        aBoolsArr[i++] = rCmisBool;
                     }
                     aValue <<= aBools;
                 }
@@ -157,10 +153,9 @@ namespace
                     uno::Sequence< util::DateTime > aTimes( aCmisTimes.size( ) );
                     util::DateTime* aTimesArr = aTimes.getArray( );
                     sal_Int32 i = 0;
-                    for ( vector< boost::posix_time::ptime >::iterator it = aCmisTimes.begin( );
-                            it != aCmisTimes.end( ); ++it, ++i )
+                    for ( const auto& rCmisTime : aCmisTimes )
                     {
-                        aTimesArr[i] = lcl_boostToUnoTime( *it );
+                        aTimesArr[i++] = lcl_boostToUnoTime( rCmisTime );
                     }
                     aValue <<= aTimes;
                 }
@@ -187,8 +182,8 @@ namespace
         {
             uno::Sequence< OUString > seqValue;
             value >>= seqValue;
-            sal_Int32 m_nNumValue = seqValue.getLength( );
-            for ( sal_Int32 i = 0; i < m_nNumValue; ++i )
+            sal_Int32 nNumValue = seqValue.getLength( );
+            for ( sal_Int32 i = 0; i < nNumValue; ++i )
             {
                 values.push_back( OUSTR_TO_STDSTR( seqValue[i] ) );
             }
@@ -198,8 +193,8 @@ namespace
         {
             uno::Sequence< sal_Bool > seqValue;
             value >>= seqValue;
-            sal_Int32 m_nNumValue = seqValue.getLength( );
-            for ( sal_Int32 i = 0; i < m_nNumValue; ++i )
+            sal_Int32 nNumValue = seqValue.getLength( );
+            for ( sal_Int32 i = 0; i < nNumValue; ++i )
             {
                 values.push_back( OUSTR_TO_STDSTR( OUString::boolean( seqValue[i] ) ) );
             }
@@ -209,8 +204,8 @@ namespace
         {
             uno::Sequence< sal_Int64 > seqValue;
             value >>= seqValue;
-            sal_Int32 m_nNumValue = seqValue.getLength( );
-            for ( sal_Int32 i = 0; i < m_nNumValue; ++i )
+            sal_Int32 nNumValue = seqValue.getLength( );
+            for ( sal_Int32 i = 0; i < nNumValue; ++i )
             {
                 values.push_back( OUSTR_TO_STDSTR( OUString::number( seqValue[i] ) ) );
             }
@@ -220,8 +215,8 @@ namespace
         {
             uno::Sequence< double > seqValue;
             value >>= seqValue;
-            sal_Int32 m_nNumValue = seqValue.getLength( );
-            for ( sal_Int32 i = 0; i < m_nNumValue; ++i )
+            sal_Int32 nNumValue = seqValue.getLength( );
+            for ( sal_Int32 i = 0; i < nNumValue; ++i )
             {
                 values.push_back( OUSTR_TO_STDSTR( OUString::number( seqValue[i] ) ) );
             }
@@ -231,8 +226,8 @@ namespace
         {
             uno::Sequence< util::DateTime > seqValue;
             value >>= seqValue;
-            sal_Int32 m_nNumValue = seqValue.getLength( );
-            for ( sal_Int32 i = 0; i < m_nNumValue; ++i )
+            sal_Int32 nNumValue = seqValue.getLength( );
+            for ( sal_Int32 i = 0; i < nNumValue; ++i )
             {
                 OUStringBuffer aBuffer;
                 ::sax::Converter::convertDateTime( aBuffer, seqValue[i], nullptr );
@@ -260,19 +255,19 @@ namespace
 
         size_t i = 0;
         aArguments[i++] <<= beans::PropertyValue(
-            OUString( "Binding URL" ),
+            "Binding URL",
             - 1,
             uno::makeAny( rURL.getBindingUrl() ),
             beans::PropertyState_DIRECT_VALUE );
 
         aArguments[i++] <<= beans::PropertyValue(
-            OUString( "Username" ),
+            "Username",
             -1,
             uno::makeAny( rURL.getUsername() ),
             beans::PropertyState_DIRECT_VALUE );
 
         aArguments[i++] <<= beans::PropertyValue(
-            OUString( "Repository Id" ),
+            "Repository Id",
             -1,
             uno::makeAny( rURL.getRepositoryId() ),
             beans::PropertyState_DIRECT_VALUE );
@@ -285,8 +280,7 @@ namespace cmis
 {
     Content::Content( const uno::Reference< uno::XComponentContext >& rxContext,
         ContentProvider *pProvider, const uno::Reference< ucb::XContentIdentifier >& Identifier,
-        libcmis::ObjectPtr pObject )
-            throw ( ucb::ContentCreationException )
+        libcmis::ObjectPtr const & pObject )
         : ContentImplHelper( rxContext, pProvider, Identifier ),
         m_pProvider( pProvider ),
         m_pSession( nullptr ),
@@ -305,7 +299,6 @@ namespace cmis
     Content::Content( const uno::Reference< uno::XComponentContext >& rxContext, ContentProvider *pProvider,
         const uno::Reference< ucb::XContentIdentifier >& Identifier,
         bool bIsFolder )
-            throw ( ucb::ContentCreationException )
         : ContentImplHelper( rxContext, pProvider, Identifier ),
         m_pProvider( pProvider ),
         m_pSession( nullptr ),
@@ -361,72 +354,92 @@ namespace cmis
             libcmis::SessionFactory::setCertificateValidationHandler( certHandler );
 
             // Get the auth credentials
-            AuthProvider authProvider( xEnv, m_xIdentifier->getContentIdentifier( ), m_aURL.getBindingUrl( ) );
+            AuthProvider aAuthProvider(xEnv, m_xIdentifier->getContentIdentifier(), m_aURL.getBindingUrl());
             AuthProvider::setXEnv( xEnv );
 
             string rUsername = OUSTR_TO_STDSTR( m_aURL.getUsername( ) );
             string rPassword = OUSTR_TO_STDSTR( m_aURL.getPassword( ) );
-            if ( authProvider.authenticationQuery( rUsername, rPassword ) )
+
+            bool bIsDone = false;
+
+            while ( !bIsDone )
             {
-                // Initiate a CMIS session and register it as we found nothing
-                libcmis::OAuth2DataPtr oauth2Data;
-                if ( m_aURL.getBindingUrl( ) == GDRIVE_BASE_URL )
-                    oauth2Data.reset( new libcmis::OAuth2Data(
-                        GDRIVE_AUTH_URL, GDRIVE_TOKEN_URL,
-                        GDRIVE_SCOPE, GDRIVE_REDIRECT_URI,
-                        GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET ) );
-                if ( m_aURL.getBindingUrl().startsWith( ALFRESCO_CLOUD_BASE_URL ) )
-                    oauth2Data.reset( new libcmis::OAuth2Data(
-                        ALFRESCO_CLOUD_AUTH_URL, ALFRESCO_CLOUD_TOKEN_URL,
-                        ALFRESCO_CLOUD_SCOPE, ALFRESCO_CLOUD_REDIRECT_URI,
-                        ALFRESCO_CLOUD_CLIENT_ID, ALFRESCO_CLOUD_CLIENT_SECRET ) );
-                if ( m_aURL.getBindingUrl( ) == ONEDRIVE_BASE_URL )
+                if (aAuthProvider.authenticationQuery(rUsername, rPassword))
                 {
-                    libcmis::SessionFactory::setOAuth2AuthCodeProvider( authProvider.onedriveAuthCodeFallback );
-                    oauth2Data.reset( new libcmis::OAuth2Data(
-                        ONEDRIVE_AUTH_URL, ONEDRIVE_TOKEN_URL,
-                        ONEDRIVE_SCOPE, ONEDRIVE_REDIRECT_URI,
-                        ONEDRIVE_CLIENT_ID, ONEDRIVE_CLIENT_SECRET ) );
-                }
-                m_pSession = libcmis::SessionFactory::createSession(
-                        OUSTR_TO_STDSTR( m_aURL.getBindingUrl( ) ),
-                        rUsername, rPassword, OUSTR_TO_STDSTR( m_aURL.getRepositoryId( ) ), false, oauth2Data );
-                if ( m_pSession == nullptr )
-                {
-                    // Fail: session was not created
-                    ucbhelper::cancelCommandExecution(
-                        ucb::IOErrorCode_INVALID_DEVICE,
-                        generateErrorArguments(m_aURL),
-                        xEnv);
-                }
-                else if ( m_pSession->getRepository() == nullptr )
-                {
-                    // Fail: no repository or repository is invalid
-                    ucbhelper::cancelCommandExecution(
-                        ucb::IOErrorCode_INVALID_DEVICE,
-                        generateErrorArguments(m_aURL),
-                        xEnv,
-                        "error accessing a repository");
+                    // Initiate a CMIS session and register it as we found nothing
+                    libcmis::OAuth2DataPtr oauth2Data;
+                    if ( m_aURL.getBindingUrl( ) == GDRIVE_BASE_URL )
+                    {
+                        libcmis::SessionFactory::setOAuth2AuthCodeProvider(AuthProvider::gdriveAuthCodeFallback);
+                        oauth2Data.reset( new libcmis::OAuth2Data(
+                            GDRIVE_AUTH_URL, GDRIVE_TOKEN_URL,
+                            GDRIVE_SCOPE, GDRIVE_REDIRECT_URI,
+                            GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET ) );
+                    }
+                    if ( m_aURL.getBindingUrl().startsWith( ALFRESCO_CLOUD_BASE_URL ) )
+                        oauth2Data.reset( new libcmis::OAuth2Data(
+                            ALFRESCO_CLOUD_AUTH_URL, ALFRESCO_CLOUD_TOKEN_URL,
+                            ALFRESCO_CLOUD_SCOPE, ALFRESCO_CLOUD_REDIRECT_URI,
+                            ALFRESCO_CLOUD_CLIENT_ID, ALFRESCO_CLOUD_CLIENT_SECRET ) );
+                    if ( m_aURL.getBindingUrl( ) == ONEDRIVE_BASE_URL )
+                    {
+                        libcmis::SessionFactory::setOAuth2AuthCodeProvider(AuthProvider::onedriveAuthCodeFallback);
+                        oauth2Data.reset( new libcmis::OAuth2Data(
+                            ONEDRIVE_AUTH_URL, ONEDRIVE_TOKEN_URL,
+                            ONEDRIVE_SCOPE, ONEDRIVE_REDIRECT_URI,
+                            ONEDRIVE_CLIENT_ID, ONEDRIVE_CLIENT_SECRET ) );
+                    }
+                    try
+                    {
+                        m_pSession = libcmis::SessionFactory::createSession(
+                            OUSTR_TO_STDSTR( m_aURL.getBindingUrl( ) ),
+                            rUsername, rPassword, OUSTR_TO_STDSTR( m_aURL.getRepositoryId( ) ), false, oauth2Data );
+
+                        if ( m_pSession == nullptr )
+                        {
+                            // Fail: session was not created
+                            ucbhelper::cancelCommandExecution(
+                                ucb::IOErrorCode_INVALID_DEVICE,
+                                generateErrorArguments(m_aURL),
+                                xEnv);
+                        }
+                        else if ( m_pSession->getRepository() == nullptr )
+                        {
+                            // Fail: no repository or repository is invalid
+                            ucbhelper::cancelCommandExecution(
+                                ucb::IOErrorCode_INVALID_DEVICE,
+                                generateErrorArguments(m_aURL),
+                                xEnv,
+                                "error accessing a repository");
+                        }
+                        else
+                        {
+                            m_pProvider->registerSession(sSessionId, m_aURL.getUsername( ), m_pSession);
+                        }
+
+                        bIsDone = true;
+                    }
+                    catch( const libcmis::Exception & e )
+                    {
+                        if ( e.getType() != "permissionDenied" )
+                            throw;
+                    }
                 }
                 else
                 {
-                    m_pProvider->registerSession(sSessionId, m_aURL.getUsername( ), m_pSession);
+                    // Silently fail as the user cancelled the authentication
+                    ucbhelper::cancelCommandExecution(
+                                        ucb::IOErrorCode_ABORT,
+                                        uno::Sequence< uno::Any >( 0 ),
+                                        xEnv );
+                    throw uno::RuntimeException( );
                 }
-            }
-            else
-            {
-                // Silently fail as the user cancelled the authentication
-                ucbhelper::cancelCommandExecution(
-                                    ucb::IOErrorCode_ABORT,
-                                    uno::Sequence< uno::Any >( 0 ),
-                                    xEnv );
-                throw uno::RuntimeException( );
             }
         }
         return m_pSession;
     }
 
-    libcmis::ObjectTypePtr Content::getObjectType( const uno::Reference< ucb::XCommandEnvironment >& xEnv )
+    libcmis::ObjectTypePtr const & Content::getObjectType( const uno::Reference< ucb::XCommandEnvironment >& xEnv )
     {
         if ( nullptr == m_pObjectType.get( ) && m_bTransient )
         {
@@ -455,15 +468,17 @@ namespace cmis
                     if ( pProperty )
                     {
                         vector< string > typesIds = pProperty->getStrings( );
-                        for ( vector< string >::iterator typeIt = typesIds.begin();
-                                typeIt != typesIds.end() && !m_pObjectType; ++typeIt )
+                        for ( const auto& rType : typesIds )
                         {
                             bTypeRestricted = true;
-                            libcmis::ObjectTypePtr type = getSession( xEnv )->getType( *typeIt );
+                            libcmis::ObjectTypePtr type = getSession( xEnv )->getType( rType );
 
                             // FIXME Improve performances by adding getBaseTypeId( ) method to libcmis
                             if ( type->getBaseType( )->getId( ) == typeId )
+                            {
                                 m_pObjectType = type;
+                                break;
+                            }
                         }
                     }
                 }
@@ -476,7 +491,7 @@ namespace cmis
     }
 
 
-    libcmis::ObjectPtr Content::getObject( const uno::Reference< ucb::XCommandEnvironment >& xEnv ) throw (css::uno::RuntimeException, css::ucb::CommandFailedException, libcmis::Exception)
+    libcmis::ObjectPtr const & Content::getObject( const uno::Reference< ucb::XCommandEnvironment >& xEnv )
     {
         // can't get the session for some reason
         // the recent file opening at start up is an example.
@@ -502,7 +517,7 @@ namespace cmis
                     throw libcmis::Exception( "Object not found" );
                 }
             }
-            else if ( !m_sObjectPath.isEmpty( ) )
+            else if (!(m_sObjectPath.isEmpty() || m_sObjectPath == "/"))
             {
                 try
                 {
@@ -515,19 +530,20 @@ namespace cmis
                     // It's weird, but needed to handle case where the path isn't the folders/files
                     // names separated by '/' (as in Lotus Live)
                     INetURLObject aParentUrl( m_sURL );
-                    string sName = OUSTR_TO_STDSTR( aParentUrl.getName( INetURLObject::LAST_SEGMENT, true, INetURLObject::DECODE_WITH_CHARSET ) );
+                    string sName = OUSTR_TO_STDSTR( aParentUrl.getName( INetURLObject::LAST_SEGMENT, true, INetURLObject::DecodeMechanism::WithCharset ) );
                     aParentUrl.removeSegment( );
-                    OUString sParentUrl = aParentUrl.GetMainURL( INetURLObject::NO_DECODE );
-
-                    uno::Reference<Content> xParent( new Content(m_xContext, m_pProvider, new ucbhelper::ContentIdentifier( sParentUrl )) );
-                    libcmis::FolderPtr pParentFolder = boost::dynamic_pointer_cast< libcmis::Folder >( xParent->getObject( xEnv ) );
-                    if ( pParentFolder )
+                    OUString sParentUrl = aParentUrl.GetMainURL( INetURLObject::DecodeMechanism::NONE );
+                    // Avoid infinite recursion if sParentUrl == m_sURL
+                    if (sParentUrl != m_sURL)
                     {
-                        vector< libcmis::ObjectPtr > children = pParentFolder->getChildren( );
-                        for ( vector< libcmis::ObjectPtr >::iterator it = children.begin( );
-                                it != children.end() && !m_pObject; ++it )
+                        rtl::Reference<Content> xParent(new Content(m_xContext, m_pProvider, new ucbhelper::ContentIdentifier(sParentUrl)));
+                        libcmis::FolderPtr pParentFolder = boost::dynamic_pointer_cast< libcmis::Folder >(xParent->getObject(xEnv));
+                        if (pParentFolder)
                         {
-                            if ( ( *it )->getName( ) == sName )
+                            vector< libcmis::ObjectPtr > children = pParentFolder->getChildren();
+                            auto it = std::find_if(children.begin(), children.end(),
+                                [&sName](const libcmis::ObjectPtr& rChild) { return rChild->getName() == sName; });
+                            if (it != children.end())
                                 m_pObject = *it;
                         }
                     }
@@ -559,11 +575,13 @@ namespace cmis
         catch ( const libcmis::Exception& e )
         {
             SAL_INFO( "ucb.ucp.cmis", "Unexpected libcmis exception: " << e.what( ) );
+
             ucbhelper::cancelCommandExecution(
-                                ucb::IOErrorCode_GENERAL,
-                                uno::Sequence< uno::Any >( 0 ),
-                                xEnv,
-                                OUString::createFromAscii( e.what( ) ) );
+                            ucb::IOErrorCode_GENERAL,
+                            uno::Sequence< uno::Any >( 0 ),
+                            xEnv,
+                            OUString::createFromAscii( e.what( ) ) );
+
         }
         return bIsFolder;
     }
@@ -571,7 +589,7 @@ namespace cmis
     uno::Any Content::getBadArgExcept()
     {
         return uno::makeAny( lang::IllegalArgumentException(
-            OUString("Wrong argument type!"),
+            "Wrong argument type!",
             static_cast< cppu::OWeakObject * >( this ), -1) );
     }
 
@@ -822,15 +840,14 @@ namespace cmis
                         uno::Sequence< document::CmisProperty > aCmisProperties( aProperties.size( ) );
                         document::CmisProperty* pCmisProps = aCmisProperties.getArray( );
                         sal_Int32 i = 0;
-                        for ( map< string, libcmis::PropertyPtr >::iterator it = aProperties.begin();
-                                it != aProperties.end( ); ++it, ++i )
+                        for ( const auto& rProperty : aProperties )
                         {
-                            string sId = it->first;
-                            string sDisplayName =  it->second->getPropertyType()->getDisplayName( );
-                            bool bUpdatable = it->second->getPropertyType()->isUpdatable( );
-                            bool bRequired = it->second->getPropertyType()->isRequired( );
-                            bool bMultiValued = it->second->getPropertyType()->isMultiValued();
-                            bool bOpenChoice = it->second->getPropertyType()->isOpenChoice();
+                            string sId = rProperty.first;
+                            string sDisplayName = rProperty.second->getPropertyType()->getDisplayName( );
+                            bool bUpdatable = rProperty.second->getPropertyType()->isUpdatable( );
+                            bool bRequired = rProperty.second->getPropertyType()->isRequired( );
+                            bool bMultiValued = rProperty.second->getPropertyType()->isMultiValued();
+                            bool bOpenChoice = rProperty.second->getPropertyType()->isOpenChoice();
 
                             pCmisProps[i].Id = STD_TO_OUSTR( sId );
                             pCmisProps[i].Name = STD_TO_OUSTR( sDisplayName );
@@ -838,8 +855,8 @@ namespace cmis
                             pCmisProps[i].Required = bRequired;
                             pCmisProps[i].MultiValued = bMultiValued;
                             pCmisProps[i].OpenChoice = bOpenChoice;
-                            pCmisProps[i].Value = lcl_cmisPropertyToUno( it->second );
-                            switch ( it->second->getPropertyType( )->getType( ) )
+                            pCmisProps[i].Value = lcl_cmisPropertyToUno( rProperty.second );
+                            switch ( rProperty.second->getPropertyType( )->getType( ) )
                             {
                                 default:
                                 case libcmis::PropertyType::String:
@@ -858,7 +875,7 @@ namespace cmis
                                     pCmisProps[i].Type = CMIS_TYPE_DATETIME;
                                 break;
                             }
-
+                            ++i;
                         }
                         xRow->appendObject( rProp.Name, uno::makeAny( aCmisProperties ) );
                     }
@@ -948,7 +965,6 @@ namespace cmis
 
     uno::Any Content::open(const ucb::OpenCommandArgument2 & rOpenCommand,
         const uno::Reference< ucb::XCommandEnvironment > & xEnv )
-            throw( uno::Exception, libcmis::Exception )
     {
         bool bIsFolder = isFolder( xEnv );
 
@@ -1016,7 +1032,6 @@ namespace cmis
 
     OUString Content::checkIn( const ucb::CheckinArgument& rArg,
         const uno::Reference< ucb::XCommandEnvironment > & xEnv )
-            throw( uno::Exception )
     {
         ucbhelper::Content aSourceContent( rArg.SourceURL, xEnv, comphelper::getProcessComponentContext( ) );
         uno::Reference< io::XInputStream > xIn = aSourceContent.openStream( );
@@ -1026,8 +1041,14 @@ namespace cmis
         {
             object = getObject( xEnv );
         }
-        catch ( const libcmis::Exception& )
+        catch ( const libcmis::Exception& e )
         {
+            SAL_INFO( "ucb.ucp.cmis", "Unexpected libcmis exception: " << e.what( ) );
+            ucbhelper::cancelCommandExecution(
+                                ucb::IOErrorCode_GENERAL,
+                                uno::Sequence< uno::Any >( 0 ),
+                                xEnv,
+                                OUString::createFromAscii( e.what() ) );
         }
 
         libcmis::Document* pPwc = dynamic_cast< libcmis::Document* >( object.get( ) );
@@ -1041,12 +1062,26 @@ namespace cmis
         }
 
         boost::shared_ptr< ostream > pOut( new ostringstream ( ios_base::binary | ios_base::in | ios_base::out ) );
-        uno::Reference < io::XOutputStream > xOutput = new ucbhelper::StdOutputStream( pOut );
+        uno::Reference < io::XOutputStream > xOutput = new StdOutputStream( pOut );
         copyData( xIn, xOutput );
 
         map< string, libcmis::PropertyPtr > newProperties;
-        libcmis::DocumentPtr pDoc = pPwc->checkIn( rArg.MajorVersion, OUSTR_TO_STDSTR( rArg.VersionComment ), newProperties,
-                           pOut, OUSTR_TO_STDSTR( rArg.MimeType ), OUSTR_TO_STDSTR( rArg.NewTitle ) );
+        libcmis::DocumentPtr pDoc;
+
+        try
+        {
+            pDoc = pPwc->checkIn( rArg.MajorVersion, OUSTR_TO_STDSTR( rArg.VersionComment ), newProperties,
+                                  pOut, OUSTR_TO_STDSTR( rArg.MimeType ), OUSTR_TO_STDSTR( rArg.NewTitle ) );
+        }
+        catch ( const libcmis::Exception& e )
+        {
+            SAL_INFO( "ucb.ucp.cmis", "Unexpected libcmis exception: " << e.what( ) );
+            ucbhelper::cancelCommandExecution(
+                                ucb::IOErrorCode_GENERAL,
+                                uno::Sequence< uno::Any >( 0 ),
+                                xEnv,
+                                OUString::createFromAscii( e.what() ) );
+        }
 
         // Get the URL and send it back as a result
         URL aCmisUrl( m_sURL );
@@ -1067,7 +1102,6 @@ namespace cmis
     }
 
     OUString Content::checkOut( const uno::Reference< ucb::XCommandEnvironment > & xEnv )
-            throw( uno::Exception )
     {
         OUString aRet;
         try
@@ -1108,13 +1142,12 @@ namespace cmis
                                 ucb::IOErrorCode_GENERAL,
                                 uno::Sequence< uno::Any >( 0 ),
                                 xEnv,
-                                OUString::createFromAscii( e.what() ) );
+                                o3tl::runtimeToOUString(e.what()));
         }
         return aRet;
     }
 
     OUString Content::cancelCheckOut( const uno::Reference< ucb::XCommandEnvironment > & xEnv )
-            throw( uno::Exception )
     {
         OUString aRet;
         try
@@ -1132,11 +1165,9 @@ namespace cmis
 
             // Get the Original document (latest version)
             vector< libcmis::DocumentPtr > aVersions = pPwc->getAllVersions( );
-            bool bFound = false;
-            for ( vector< libcmis::DocumentPtr >::iterator it = aVersions.begin();
-                    it != aVersions.end( ) && !bFound; ++it )
+            for ( const auto& rVersion : aVersions )
             {
-                libcmis::DocumentPtr pVersion = *it;
+                libcmis::DocumentPtr pVersion = rVersion;
                 map< string, libcmis::PropertyPtr > aProps = pVersion->getProperties( );
                 bool bIsLatestVersion = false;
                 map< string, libcmis::PropertyPtr >::iterator propIt = aProps.find( string( "cmis:isLatestVersion" ) );
@@ -1147,7 +1178,6 @@ namespace cmis
 
                 if ( bIsLatestVersion )
                 {
-                    bFound = true;
                     // Compute the URL of the Document
                     URL aCmisUrl( m_sURL );
                     vector< string > aPaths = pVersion->getPaths( );
@@ -1164,6 +1194,7 @@ namespace cmis
                         aCmisUrl.setObjectId( STD_TO_OUSTR( sId ) );
                     }
                     aRet = aCmisUrl.asString( );
+                    break;
                 }
             }
         }
@@ -1174,13 +1205,12 @@ namespace cmis
                                 ucb::IOErrorCode_GENERAL,
                                 uno::Sequence< uno::Any >( 0 ),
                                 xEnv,
-                                OUString::createFromAscii( e.what() ) );
+                                o3tl::runtimeToOUString(e.what()));
         }
         return aRet;
     }
 
     uno::Sequence< document::CmisVersion> Content::getAllVersions( const uno::Reference< ucb::XCommandEnvironment > & xEnv )
-            throw( uno::Exception, std::exception )
     {
         try
         {
@@ -1197,14 +1227,14 @@ namespace cmis
             vector< libcmis::DocumentPtr > aCmisVersions = pDoc->getAllVersions( );
             uno::Sequence< document::CmisVersion > aVersions( aCmisVersions.size( ) );
             int i = 0;
-            for ( vector< libcmis::DocumentPtr >::iterator it = aCmisVersions.begin();
-                    it != aCmisVersions.end( ); ++it, ++i )
+            for ( const auto& rVersion : aCmisVersions )
             {
-                libcmis::DocumentPtr pVersion = *it;
+                libcmis::DocumentPtr pVersion = rVersion;
                 aVersions[i].Id = STD_TO_OUSTR( pVersion->getId( ) );
                 aVersions[i].Author = STD_TO_OUSTR( pVersion->getCreatedBy( ) );
                 aVersions[i].TimeStamp = lcl_boostToUnoTime( pVersion->getLastModificationDate( ) );
                 aVersions[i].Comment = STD_TO_OUSTR( pVersion->getStringProperty("cmis:checkinComment") );
+                ++i;
             }
             return aVersions;
         }
@@ -1215,14 +1245,13 @@ namespace cmis
                     ucb::IOErrorCode_GENERAL,
                     uno::Sequence< uno::Any >( 0 ),
                     xEnv,
-                    OUString::createFromAscii( e.what() ) );
+                    o3tl::runtimeToOUString(e.what()));
         }
         return uno::Sequence< document::CmisVersion > ( );
     }
 
     void Content::transfer( const ucb::TransferInfo& rTransferInfo,
         const uno::Reference< ucb::XCommandEnvironment > & xEnv )
-            throw( uno::Exception )
     {
         // If the source isn't on the same CMIS repository, then simply copy
         INetURLObject aSourceUrl( rTransferInfo.SourceURL );
@@ -1234,7 +1263,7 @@ namespace cmis
                 ucbhelper::cancelCommandExecution(
                     uno::makeAny(
                         ucb::InteractiveBadTransferURLException(
-                            OUString("Unsupported URL scheme!"),
+                            "Unsupported URL scheme!",
                             static_cast< cppu::OWeakObject * >( this ) ) ),
                     xEnv );
             }
@@ -1246,7 +1275,6 @@ namespace cmis
     void Content::insert( const uno::Reference< io::XInputStream > & xInputStream,
         bool bReplaceExisting, const OUString& rMimeType,
         const uno::Reference< ucb::XCommandEnvironment >& xEnv )
-            throw (uno::Exception, std::exception)
     {
         if ( !xInputStream.is() )
         {
@@ -1316,7 +1344,7 @@ namespace cmis
                     if ( nullptr != document )
                     {
                         boost::shared_ptr< ostream > pOut( new ostringstream ( ios_base::binary | ios_base::in | ios_base::out ) );
-                        uno::Reference < io::XOutputStream > xOutput = new ucbhelper::StdOutputStream( pOut );
+                        uno::Reference < io::XOutputStream > xOutput = new StdOutputStream( pOut );
                         copyData( xInputStream, xOutput );
                         try
                         {
@@ -1355,7 +1383,7 @@ namespace cmis
                     else
                     {
                         boost::shared_ptr< ostream > pOut( new ostringstream ( ios_base::binary | ios_base::in | ios_base::out ) );
-                        uno::Reference < io::XOutputStream > xOutput = new ucbhelper::StdOutputStream( pOut );
+                        uno::Reference < io::XOutputStream > xOutput = new StdOutputStream( pOut );
                         copyData( xInputStream, xOutput );
                         try
                         {
@@ -1393,8 +1421,8 @@ namespace cmis
     const int TRANSFER_BUFFER_SIZE = 65536;
 
     void Content::copyData(
-        uno::Reference< io::XInputStream > xIn,
-        uno::Reference< io::XOutputStream > xOut )
+        const uno::Reference< io::XInputStream >& xIn,
+        const uno::Reference< io::XOutputStream >& xOut )
     {
         uno::Sequence< sal_Int8 > theData( TRANSFER_BUFFER_SIZE );
 
@@ -1424,7 +1452,7 @@ namespace cmis
                                 ucb::IOErrorCode_GENERAL,
                                 uno::Sequence< uno::Any >( 0 ),
                                 xEnv,
-                                OUString::createFromAscii( e.what() ) );
+                                o3tl::runtimeToOUString(e.what()));
         }
 
         sal_Int32 nCount = rValues.getLength();
@@ -1442,7 +1470,7 @@ namespace cmis
                  rValue.Name == "Size" ||
                  rValue.Name == "CreatableContentsInfo" )
             {
-                lang::IllegalAccessException e ( OUString("Property is read-only!"),
+                lang::IllegalAccessException e ( "Property is read-only!",
                        static_cast< cppu::OWeakObject* >( this ) );
                 aRet[ n ] <<= e;
             }
@@ -1452,7 +1480,7 @@ namespace cmis
                 if (!( rValue.Value >>= aNewTitle ))
                 {
                     aRet[ n ] <<= beans::IllegalTypeException
-                        ( OUString("Property value has wrong type!"),
+                        ( "Property value has wrong type!",
                           static_cast< cppu::OWeakObject * >( this ) );
                     continue;
                 }
@@ -1460,7 +1488,7 @@ namespace cmis
                 if ( aNewTitle.getLength() <= 0 )
                 {
                     aRet[ n ] <<= lang::IllegalArgumentException
-                        ( OUString("Empty title not allowed!"),
+                        ( "Empty title not allowed!",
                           static_cast< cppu::OWeakObject * >( this ), -1 );
                     continue;
 
@@ -1472,7 +1500,7 @@ namespace cmis
             else
             {
                 SAL_INFO( "ucb.ucp.cmis", "Couldn't set property: " << rValue.Name );
-                lang::IllegalAccessException e ( OUString("Property is read-only!"),
+                lang::IllegalAccessException e ( "Property is read-only!",
                        static_cast< cppu::OWeakObject* >( this ) );
                 aRet[ n ] <<= e;
             }
@@ -1492,13 +1520,13 @@ namespace cmis
                                 ucb::IOErrorCode_GENERAL,
                                 uno::Sequence< uno::Any >( 0 ),
                                 xEnv,
-                                OUString::createFromAscii( e.what() ) );
+                                o3tl::runtimeToOUString(e.what()));
         }
 
         return aRet;
     }
 
-    bool Content::feedSink( uno::Reference< uno::XInterface> xSink,
+    bool Content::feedSink( const uno::Reference< uno::XInterface>& xSink,
         const uno::Reference< ucb::XCommandEnvironment >& xEnv )
     {
         if ( !xSink.is() )
@@ -1523,7 +1551,7 @@ namespace cmis
 
             boost::shared_ptr< istream > aIn = document->getContentStream( );
 
-            uno::Reference< io::XInputStream > xIn = new ucbhelper::StdInputStream( aIn );
+            uno::Reference< io::XInputStream > xIn = new StdInputStream( aIn );
             if( !xIn.is( ) )
                 return false;
 
@@ -1539,7 +1567,7 @@ namespace cmis
                                 ucb::IOErrorCode_GENERAL,
                                 uno::Sequence< uno::Any >( 0 ),
                                 xEnv,
-                                OUString::createFromAscii( e.what() ) );
+                                o3tl::runtimeToOUString(e.what()));
         }
 
         return true;
@@ -1550,52 +1578,52 @@ namespace cmis
     {
         static const beans::Property aGenericProperties[] =
         {
-            beans::Property( OUString( "IsDocument" ),
+            beans::Property( "IsDocument",
                 -1, cppu::UnoType<bool>::get(),
                 beans::PropertyAttribute::BOUND | beans::PropertyAttribute::READONLY ),
-            beans::Property( OUString( "IsFolder" ),
+            beans::Property( "IsFolder",
                 -1, cppu::UnoType<bool>::get(),
                 beans::PropertyAttribute::BOUND | beans::PropertyAttribute::READONLY ),
-            beans::Property( OUString( "Title" ),
+            beans::Property( "Title",
                 -1, cppu::UnoType<OUString>::get(),
                 beans::PropertyAttribute::BOUND ),
-            beans::Property( OUString( "ObjectId" ),
+            beans::Property( "ObjectId",
                 -1, cppu::UnoType<OUString>::get(),
                 beans::PropertyAttribute::BOUND ),
-            beans::Property( OUString( "TitleOnServer" ),
+            beans::Property( "TitleOnServer",
                 -1, cppu::UnoType<OUString>::get(),
                 beans::PropertyAttribute::BOUND ),
-            beans::Property( OUString( "IsReadOnly" ),
+            beans::Property( "IsReadOnly",
                 -1, cppu::UnoType<bool>::get(),
                 beans::PropertyAttribute::BOUND | beans::PropertyAttribute::READONLY ),
-            beans::Property( OUString( "DateCreated" ),
+            beans::Property( "DateCreated",
                 -1, cppu::UnoType<util::DateTime>::get(),
                 beans::PropertyAttribute::BOUND | beans::PropertyAttribute::READONLY ),
-            beans::Property( OUString( "DateModified" ),
+            beans::Property( "DateModified",
                 -1, cppu::UnoType<util::DateTime>::get(),
                 beans::PropertyAttribute::BOUND | beans::PropertyAttribute::READONLY ),
-            beans::Property( OUString( "Size" ),
+            beans::Property( "Size",
                 -1, cppu::UnoType<sal_Int64>::get(),
                 beans::PropertyAttribute::BOUND | beans::PropertyAttribute::READONLY ),
-            beans::Property( OUString( "CreatableContentsInfo" ),
+            beans::Property( "CreatableContentsInfo",
                 -1, cppu::UnoType<uno::Sequence< ucb::ContentInfo >>::get(),
                 beans::PropertyAttribute::BOUND | beans::PropertyAttribute::READONLY ),
-            beans::Property( OUString( "MediaType" ),
+            beans::Property( "MediaType",
                 -1, cppu::UnoType<OUString>::get(),
                 beans::PropertyAttribute::BOUND ),
-            beans::Property( OUString( "CmisProperties" ),
+            beans::Property( "CmisProperties",
                 -1, cppu::UnoType<uno::Sequence< document::CmisProperty>>::get(),
                 beans::PropertyAttribute::BOUND ),
-            beans::Property( OUString( "IsVersionable" ),
+            beans::Property( "IsVersionable",
                 -1, cppu::UnoType<bool>::get(),
                 beans::PropertyAttribute::BOUND | beans::PropertyAttribute::READONLY ),
-            beans::Property( OUString( "CanCheckOut" ),
+            beans::Property( "CanCheckOut",
                 -1, cppu::UnoType<bool>::get(),
                 beans::PropertyAttribute::BOUND | beans::PropertyAttribute::READONLY ),
-            beans::Property( OUString( "CanCancelCheckOut" ),
+            beans::Property( "CanCancelCheckOut",
                 -1, cppu::UnoType<bool>::get(),
                 beans::PropertyAttribute::BOUND | beans::PropertyAttribute::READONLY ),
-            beans::Property( OUString( "CanCheckIn" ),
+            beans::Property( "CanCheckIn",
                 -1, cppu::UnoType<bool>::get(),
                 beans::PropertyAttribute::BOUND | beans::PropertyAttribute::READONLY ),
         };
@@ -1611,46 +1639,46 @@ namespace cmis
         {
             // Required commands
             ucb::CommandInfo
-            ( OUString( "getCommandInfo" ),
+            ( "getCommandInfo",
               -1, cppu::UnoType<void>::get() ),
             ucb::CommandInfo
-            ( OUString( "getPropertySetInfo" ),
+            ( "getPropertySetInfo",
               -1, cppu::UnoType<void>::get() ),
             ucb::CommandInfo
-            ( OUString( "getPropertyValues" ),
+            ( "getPropertyValues",
               -1, cppu::UnoType<uno::Sequence< beans::Property >>::get() ),
             ucb::CommandInfo
-            ( OUString( "setPropertyValues" ),
+            ( "setPropertyValues",
               -1, cppu::UnoType<uno::Sequence< beans::PropertyValue >>::get() ),
 
             // Optional standard commands
             ucb::CommandInfo
-            ( OUString( "delete" ),
+            ( "delete",
               -1, cppu::UnoType<bool>::get() ),
             ucb::CommandInfo
-            ( OUString( "insert" ),
+            ( "insert",
               -1, cppu::UnoType<ucb::InsertCommandArgument2>::get() ),
             ucb::CommandInfo
-            ( OUString( "open" ),
+            ( "open",
               -1, cppu::UnoType<ucb::OpenCommandArgument2>::get() ),
 
             // Mandatory CMIS-only commands
-            ucb::CommandInfo ( OUString( "checkout" ), -1, cppu::UnoType<void>::get() ),
-            ucb::CommandInfo ( OUString( "cancelCheckout" ), -1, cppu::UnoType<void>::get() ),
-            ucb::CommandInfo ( OUString( "checkIn" ), -1,
+            ucb::CommandInfo ( "checkout", -1, cppu::UnoType<void>::get() ),
+            ucb::CommandInfo ( "cancelCheckout", -1, cppu::UnoType<void>::get() ),
+            ucb::CommandInfo ( "checkIn", -1,
                     cppu::UnoType<ucb::TransferInfo>::get() ),
-            ucb::CommandInfo ( OUString( "updateProperties" ), -1, cppu::UnoType<void>::get() ),
+            ucb::CommandInfo ( "updateProperties", -1, cppu::UnoType<void>::get() ),
             ucb::CommandInfo
-            ( OUString( "getAllVersions" ),
+            ( "getAllVersions",
               -1, cppu::UnoType<uno::Sequence< document::CmisVersion >>::get() ),
 
 
             // Folder Only, omitted if not a folder
             ucb::CommandInfo
-            ( OUString( "transfer" ),
+            ( "transfer",
               -1, cppu::UnoType<ucb::TransferInfo>::get() ),
             ucb::CommandInfo
-            ( OUString( "createNewContent" ),
+            ( "createNewContent",
               -1, cppu::UnoType<ucb::ContentInfo>::get() )
         };
 
@@ -1671,7 +1699,7 @@ namespace cmis
             {
                 URL aCmisUrl( m_sURL );
                 aUrl.removeSegment( );
-                aCmisUrl.setObjectPath( aUrl.GetURLPath( INetURLObject::DECODE_WITH_CHARSET ) );
+                aCmisUrl.setObjectPath( aUrl.GetURLPath( INetURLObject::DecodeMechanism::WithCharset ) );
                 parentUrl = aCmisUrl.asString( );
             }
         }
@@ -1690,25 +1718,24 @@ namespace cmis
         ContentImplHelper::release();
     }
 
-    uno::Any SAL_CALL Content::queryInterface( const uno::Type & rType ) throw ( uno::RuntimeException, std::exception )
+    uno::Any SAL_CALL Content::queryInterface( const uno::Type & rType )
     {
         uno::Any aRet = cppu::queryInterface( rType, static_cast< ucb::XContentCreator * >( this ) );
         return aRet.hasValue() ? aRet : ContentImplHelper::queryInterface(rType);
     }
 
-    OUString SAL_CALL Content::getImplementationName() throw( uno::RuntimeException, std::exception )
+    OUString SAL_CALL Content::getImplementationName()
     {
        return OUString("com.sun.star.comp.CmisContent");
     }
 
     uno::Sequence< OUString > SAL_CALL Content::getSupportedServiceNames()
-           throw( uno::RuntimeException, std::exception )
     {
            uno::Sequence<OUString> aSNS { "com.sun.star.ucb.CmisContent" };
            return aSNS;
     }
 
-    OUString SAL_CALL Content::getContentType() throw( uno::RuntimeException, std::exception )
+    OUString SAL_CALL Content::getContentType()
     {
         OUString sRet;
         try
@@ -1735,7 +1762,6 @@ namespace cmis
         const ucb::Command& aCommand,
         sal_Int32 /*CommandId*/,
         const uno::Reference< ucb::XCommandEnvironment >& xEnv )
-            throw( uno::Exception, ucb::CommandAbortedException, uno::RuntimeException, std::exception )
     {
         SAL_INFO( "ucb.ucp.cmis", "Content::execute( ) - " << aCommand.Name );
         uno::Any aRet;
@@ -1818,7 +1844,7 @@ namespace cmis
                                     ucb::IOErrorCode_GENERAL,
                                     uno::Sequence< uno::Any >( 0 ),
                                     xEnv,
-                                    OUString::createFromAscii( e.what() ) );
+                                    o3tl::runtimeToOUString(e.what()));
             }
         }
         else if ( aCommand.Name == "checkout" )
@@ -1860,20 +1886,19 @@ namespace cmis
         return aRet;
     }
 
-    void SAL_CALL Content::abort( sal_Int32 /*CommandId*/ ) throw( uno::RuntimeException, std::exception )
+    void SAL_CALL Content::abort( sal_Int32 /*CommandId*/ )
     {
         SAL_INFO( "ucb.ucp.cmis", "TODO - Content::abort()" );
         // TODO Implement me
     }
 
     uno::Sequence< ucb::ContentInfo > SAL_CALL Content::queryCreatableContentsInfo()
-            throw( uno::RuntimeException, std::exception )
     {
         return queryCreatableContentsInfo( uno::Reference< ucb::XCommandEnvironment >() );
     }
 
     uno::Reference< ucb::XContent > SAL_CALL Content::createNewContent(
-            const ucb::ContentInfo& Info ) throw( uno::RuntimeException, std::exception )
+            const ucb::ContentInfo& Info )
     {
         bool create_document;
 
@@ -1903,13 +1928,13 @@ namespace cmis
         }
     }
 
-    uno::Sequence< uno::Type > SAL_CALL Content::getTypes() throw( uno::RuntimeException, std::exception )
+    uno::Sequence< uno::Type > SAL_CALL Content::getTypes()
     {
         try
         {
             if ( isFolder( uno::Reference< ucb::XCommandEnvironment >() ) )
             {
-                static cppu::OTypeCollection aFolderCollection
+                static cppu::OTypeCollection s_aFolderCollection
                     (CPPU_TYPE_REF( lang::XTypeProvider ),
                      CPPU_TYPE_REF( lang::XServiceInfo ),
                      CPPU_TYPE_REF( lang::XComponent ),
@@ -1921,7 +1946,7 @@ namespace cmis
                      CPPU_TYPE_REF( beans::XPropertySetInfoChangeNotifier ),
                      CPPU_TYPE_REF( container::XChild ),
                      CPPU_TYPE_REF( ucb::XContentCreator ) );
-                return aFolderCollection.getTypes();
+                return s_aFolderCollection.getTypes();
             }
         }
         catch (const uno::RuntimeException&)
@@ -1936,7 +1961,7 @@ namespace cmis
                 uno::Reference<uno::XInterface>(), a);
         }
 
-        static cppu::OTypeCollection aFileCollection
+        static cppu::OTypeCollection s_aFileCollection
             (CPPU_TYPE_REF( lang::XTypeProvider ),
              CPPU_TYPE_REF( lang::XServiceInfo ),
              CPPU_TYPE_REF( lang::XComponent ),
@@ -1948,12 +1973,11 @@ namespace cmis
              CPPU_TYPE_REF( beans::XPropertySetInfoChangeNotifier ),
              CPPU_TYPE_REF( container::XChild ) );
 
-        return aFileCollection.getTypes();
+        return s_aFileCollection.getTypes();
     }
 
     uno::Sequence< ucb::ContentInfo > Content::queryCreatableContentsInfo(
         const uno::Reference< ucb::XCommandEnvironment >& xEnv)
-            throw( uno::RuntimeException )
     {
         try
         {
@@ -1964,7 +1988,7 @@ namespace cmis
                 // Minimum set of props we really need
                 uno::Sequence< beans::Property > props( 1 );
                 props[0] = beans::Property(
-                    OUString("Title"),
+                    "Title",
                     -1,
                     cppu::UnoType<OUString>::get(),
                     beans::PropertyAttribute::MAYBEVOID | beans::PropertyAttribute::BOUND );
@@ -1997,9 +2021,9 @@ namespace cmis
         return uno::Sequence< ucb::ContentInfo >();
     }
 
-    list< uno::Reference< ucb::XContent > > Content::getChildren( )
+    std::vector< uno::Reference< ucb::XContent > > Content::getChildren( )
     {
-        list< uno::Reference< ucb::XContent > > results;
+        std::vector< uno::Reference< ucb::XContent > > results;
         SAL_INFO( "ucb.ucp.cmis", "Content::getChildren() " << m_sURL );
 
         libcmis::FolderPtr pFolder = boost::dynamic_pointer_cast< libcmis::Folder >( getObject( uno::Reference< ucb::XCommandEnvironment >() ) );
@@ -2011,27 +2035,26 @@ namespace cmis
                 vector< libcmis::ObjectPtr > children = pFolder->getChildren( );
 
                 // Loop over the results
-                for ( vector< libcmis::ObjectPtr >::iterator it = children.begin();
-                        it != children.end(); ++it )
+                for ( const auto& rChild : children )
                 {
                     // TODO Cache the objects
 
                     INetURLObject aURL( m_sURL );
-                    OUString sUser = aURL.GetUser( INetURLObject::DECODE_WITH_CHARSET );
+                    OUString sUser = aURL.GetUser( INetURLObject::DecodeMechanism::WithCharset );
 
                     URL aUrl( m_sURL );
                     OUString sPath( m_sObjectPath );
                     if ( !sPath.endsWith("/") )
                         sPath += "/";
-                    sPath += STD_TO_OUSTR( ( *it )->getName( ) );
-                    OUString sId = STD_TO_OUSTR( ( *it )->getId( ) );
+                    sPath += STD_TO_OUSTR( rChild->getName( ) );
+                    OUString sId = STD_TO_OUSTR( rChild->getId( ) );
 
                     aUrl.setObjectId( sId );
                     aUrl.setObjectPath( sPath );
                     aUrl.setUsername( sUser );
 
                     uno::Reference< ucb::XContentIdentifier > xId = new ucbhelper::ContentIdentifier( aUrl.asString( ) );
-                    uno::Reference< ucb::XContent > xContent = new Content( m_xContext, m_pProvider, xId, *it );
+                    uno::Reference< ucb::XContent > xContent = new Content( m_xContext, m_pProvider, xId, rChild );
 
                     results.push_back( xContent );
                 }

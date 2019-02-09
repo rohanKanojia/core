@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "RangeSelectionListener.hxx"
+#include <RangeSelectionListener.hxx>
 
 using namespace ::com::sun::star;
 
@@ -40,21 +40,18 @@ RangeSelectionListener::~RangeSelectionListener()
 
 // ____ XRangeSelectionListener ____
 void SAL_CALL RangeSelectionListener::done( const sheet::RangeSelectionEvent& aEvent )
-    throw (uno::RuntimeException, std::exception)
 {
     m_aRange = aEvent.RangeDescriptor;
     m_rParent.listeningFinished( m_aRange );
 }
 
 void SAL_CALL RangeSelectionListener::aborted( const sheet::RangeSelectionEvent& /*aEvent*/ )
-    throw (uno::RuntimeException, std::exception)
 {
     m_rParent.listeningFinished( m_aRange );
 }
 
 // ____ XEventListener ____
 void SAL_CALL RangeSelectionListener::disposing( const lang::EventObject& /*Source*/ )
-    throw (uno::RuntimeException, std::exception)
 {
     m_rParent.disposingRangeSelection();
 }

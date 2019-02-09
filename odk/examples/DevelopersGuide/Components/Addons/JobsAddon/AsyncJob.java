@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -230,9 +231,9 @@ public class AsyncJob extends    WeakBase implements XServiceInfo, XAsyncJob
      *  the info box can be shown in modal mode. If a parent is missing
      *  (because this job is called inside an EXECUTOR environment, which
      *  does not set any frame context here) the info box can't be created!
-     *  Because the toolkit needs parents for non top level windows ...
+     *  Because the toolkit needs parents for non top level windows...
      *  In that case the only way is to implement this info box
-     *  native or make it non modal using java dialogs inside it's own thread ...
+     *  native or make it non modal using java dialogs inside its own thread...
      *  (see showInfoNonModal() too)
      *
      *  @param  xParent
@@ -296,14 +297,14 @@ public class AsyncJob extends    WeakBase implements XServiceInfo, XAsyncJob
     private void showInfoNonModal( String sTitle   ,
                                    String sMessage )
     {
-        // Couldnt be implemented really using the toolkit ...
+        // Couldn't be implemented really using the toolkit...
         // Because we need a parent anytime.
-        // And showing e.g. a java dialog can make some trouble
-        // inside office ... but we have no chance here.
+        // And showing e.g. a Java dialog can make some trouble
+        // inside office... but we have no chance here.
     final String sFinalTitle = sTitle;
     final String sFinalMessage = sMessage;
 
-    // On Mac OS X, AWT/Swing must not be accessed from the AppKit thread, so call
+    // On macOS, AWT/Swing must not be accessed from the AppKit thread, so call
     // SwingUtilities.invokeLater always on a fresh thread to avoid that problem
     // (also, the current thread must not wait for that fresh thread to terminate,
     // as that would cause a deadlock if this thread is the AppKit thread):
@@ -420,3 +421,5 @@ public class AsyncJob extends    WeakBase implements XServiceInfo, XAsyncJob
 
 
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

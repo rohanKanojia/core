@@ -20,11 +20,10 @@
 
 #include <string.h>
 
-#include "iprcache.hxx"
-#include "linguistic/misc.hxx"
+#include <iprcache.hxx>
+#include <linguistic/misc.hxx>
 
 #include <com/sun/star/linguistic2/DictionaryListEventFlags.hpp>
-#include <tools/debug.hxx>
 #include <osl/mutex.hxx>
 #include <linguistic/lngprops.hxx>
 
@@ -58,30 +57,30 @@ static const struct
 
 
 static void lcl_AddAsPropertyChangeListener(
-        Reference< XPropertyChangeListener > xListener,
-        Reference< XLinguProperties > &rPropSet )
+        const Reference< XPropertyChangeListener >& xListener,
+        Reference< XLinguProperties > const &rPropSet )
 {
     if (xListener.is() && rPropSet.is())
     {
-        for (int i = 0;  i < NUM_FLUSH_PROPS;  ++i)
+        for (auto& aFlushPropertie : aFlushProperties)
         {
             rPropSet->addPropertyChangeListener(
-                    OUString::createFromAscii(aFlushProperties[i].pPropName), xListener );
+                    OUString::createFromAscii(aFlushPropertie.pPropName), xListener );
         }
     }
 }
 
 
 static void lcl_RemoveAsPropertyChangeListener(
-        Reference< XPropertyChangeListener > xListener,
-        Reference< XLinguProperties > &rPropSet )
+        const Reference< XPropertyChangeListener >& xListener,
+        Reference< XLinguProperties > const &rPropSet )
 {
     if (xListener.is() && rPropSet.is())
     {
-        for (int i = 0;  i < NUM_FLUSH_PROPS;  ++i)
+        for (auto& aFlushPropertie : aFlushProperties)
         {
             rPropSet->removePropertyChangeListener(
-                    OUString::createFromAscii(aFlushProperties[i].pPropName), xListener );
+                    OUString::createFromAscii(aFlushPropertie.pPropName), xListener );
         }
     }
 }
@@ -99,7 +98,7 @@ static bool lcl_IsFlushProperty( sal_Int32 nHandle )
 }
 
 
-void FlushListener::SetDicList( Reference<XSearchableDictionaryList> &rDL )
+void FlushListener::SetDicList( Reference<XSearchableDictionaryList> const &rDL )
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -110,12 +109,12 @@ void FlushListener::SetDicList( Reference<XSearchableDictionaryList> &rDL )
 
         xDicList = rDL;
         if (xDicList.is())
-            xDicList->addDictionaryListEventListener( this, sal_False );
+            xDicList->addDictionaryListEventListener( this, false );
     }
 }
 
 
-void FlushListener::SetPropSet( Reference< XLinguProperties > &rPS )
+void FlushListener::SetPropSet( Reference< XLinguProperties > const &rPS )
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -132,7 +131,6 @@ void FlushListener::SetPropSet( Reference< XLinguProperties > &rPS )
 
 
 void SAL_CALL FlushListener::disposing( const EventObject& rSource )
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -151,14 +149,13 @@ void SAL_CALL FlushListener::disposing( const EventObject& rSource )
 
 void SAL_CALL FlushListener::processDictionaryListEvent(
             const DictionaryListEvent& rDicListEvent )
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
     if (rDicListEvent.Source == xDicList)
     {
         sal_Int16 nEvt = rDicListEvent.nCondensedEvent;
-        sal_Int16 nFlushFlags =
+        sal_Int16 const nFlushFlags =
                 DictionaryListEventFlags::ADD_NEG_ENTRY     |
                 DictionaryListEventFlags::DEL_POS_ENTRY     |
                 DictionaryListEventFlags::ACTIVATE_NEG_DIC  |
@@ -173,7 +170,6 @@ void SAL_CALL FlushListener::processDictionaryListEvent(
 
 void SAL_CALL FlushListener::propertyChange(
             const PropertyChangeEvent& rEvt )
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -189,20 +185,19 @@ void SAL_CALL FlushListener::propertyChange(
 
 SpellCache::SpellCache()
 {
-    pFlushLstnr = new FlushListener( *this );
-    xFlushLstnr = pFlushLstnr;
+    mxFlushLstnr = new FlushListener( *this );
     Reference<XSearchableDictionaryList> aDictionaryList(GetDictionaryList());
-    pFlushLstnr->SetDicList( aDictionaryList ); //! after reference is established
+    mxFlushLstnr->SetDicList( aDictionaryList ); //! after reference is established
     Reference<XLinguProperties> aPropertySet(GetLinguProperties());
-    pFlushLstnr->SetPropSet( aPropertySet );    //! after reference is established
+    mxFlushLstnr->SetPropSet( aPropertySet );    //! after reference is established
 }
 
 SpellCache::~SpellCache()
 {
     Reference<XSearchableDictionaryList>  aEmptyList;
     Reference<XLinguProperties>     aEmptySet;
-    pFlushLstnr->SetDicList( aEmptyList );
-    pFlushLstnr->SetPropSet( aEmptySet );
+    mxFlushLstnr->SetDicList( aEmptyList );
+    mxFlushLstnr->SetPropSet( aEmptySet );
 }
 
 void SpellCache::Flush()

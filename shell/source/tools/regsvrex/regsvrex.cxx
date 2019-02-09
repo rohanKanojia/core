@@ -18,39 +18,30 @@
  */
 
 
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#endif
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
 typedef HRESULT (__stdcall *lpfnDllRegisterServer)();
 typedef HRESULT (__stdcall *lpfnDllUnregisterServer)();
 
-/**
-*/
-bool IsUnregisterParameter(const char* Param)
+static bool IsUnregisterParameter(const wchar_t* Param)
 {
-    return ((0 == _stricmp(Param, "/u")) ||
-            (0 == _stricmp(Param, "-u")));
+    return ((0 == _wcsicmp(Param, L"/u")) ||
+            (0 == _wcsicmp(Param, L"-u")));
 }
 
-/**
-*/
-int main(int argc, char* argv[])
+int wmain(int argc, wchar_t* argv[])
 {
     HMODULE hmod;
 
     if (2 == argc)
     {
-        hmod = LoadLibraryA(argv[1]);
+        hmod = LoadLibraryW(argv[1]);
 
         if (hmod)
         {
-            lpfnDllRegisterServer lpfn_register = (lpfnDllRegisterServer)GetProcAddress(
-                hmod, "DllRegisterServer");
+            lpfnDllRegisterServer lpfn_register = reinterpret_cast<lpfnDllRegisterServer>(GetProcAddress(
+                hmod, "DllRegisterServer"));
 
             if (lpfn_register)
                 lpfn_register();
@@ -60,12 +51,12 @@ int main(int argc, char* argv[])
     }
     else if (3 == argc && IsUnregisterParameter(argv[1]))
     {
-        hmod = LoadLibraryA(argv[2]);
+        hmod = LoadLibraryW(argv[2]);
 
         if (hmod)
         {
-            lpfnDllUnregisterServer lpfn_unregister = (lpfnDllUnregisterServer)GetProcAddress(
-                hmod, "DllUnregisterServer");
+            lpfnDllUnregisterServer lpfn_unregister = reinterpret_cast<lpfnDllUnregisterServer>(GetProcAddress(
+                hmod, "DllUnregisterServer"));
 
             if (lpfn_unregister)
                 lpfn_unregister();

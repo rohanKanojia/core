@@ -29,7 +29,6 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
-#include <ctype.h>
 
 #include <libxml/xmlmemory.h>
 #include <libxml/debugXML.h>
@@ -39,11 +38,13 @@
 #include <libxml/catalog.h>
 
 #include <rtl/ustring.hxx>
+#include <rtl/character.hxx>
 #include <osl/thread.h>
 #include <osl/process.h>
 #include <osl/file.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
-#include <BasCodeTagger.hxx>
+#include "BasCodeTagger.hxx"
 #include <helpcompiler/compilehelp.hxx>
 
 #if OSL_DEBUG_LEVEL > 2
@@ -64,7 +65,6 @@ namespace fs
         OUString data;
     public:
         path() {}
-        path(const path &rOther) : data(rOther.data) {}
         path(const std::string &in, convert)
         {
             OUString sWorkingDir;
@@ -88,11 +88,11 @@ namespace fs
             return std::string(tmp.getStr());
         }
 #ifdef _WIN32
-        wchar_t const * native_file_string_w() const
+        std::wstring native_file_string_w() const
         {
             OUString ustrSystemPath;
             osl::File::getSystemPathFromFileURL(data, ustrSystemPath);
-            return (wchar_t const *) ustrSystemPath.getStr();
+            return std::wstring(o3tl::toW(ustrSystemPath.getStr()));
         }
 #endif
         std::string toUTF8() const
@@ -151,8 +151,7 @@ struct joaat_hash
 #define pref_hash joaat_hash
 
 typedef std::unordered_map<std::string, std::string, pref_hash> Stringtable;
-typedef std::list<std::string> LinkedList;
-typedef std::vector<std::string> HashSet;
+typedef std::deque<std::string> LinkedList;
 
 typedef std::unordered_map<std::string, LinkedList, pref_hash> Hashtable;
 
@@ -164,38 +163,24 @@ public:
     std::string document_module;
     std::string document_title;
 
-    HashSet *appl_hidlist;
-    Hashtable *appl_keywords;
-    Stringtable *appl_helptexts;
+    std::unique_ptr< std::vector<std::string> > appl_hidlist;
+    std::unique_ptr<Hashtable> appl_keywords;
+    std::unique_ptr<Stringtable> appl_helptexts;
     xmlDocPtr appl_doc;
 
-    HashSet *default_hidlist;
-    Hashtable *default_keywords;
-    Stringtable *default_helptexts;
-    xmlDocPtr default_doc;
-
     StreamTable() :
-        appl_hidlist(nullptr), appl_keywords(nullptr), appl_helptexts(nullptr), appl_doc(nullptr),
-        default_hidlist(nullptr), default_keywords(nullptr), default_helptexts(nullptr), default_doc(nullptr)
+        appl_doc(nullptr)
     {}
-    void dropdefault()
-    {
-        delete default_hidlist;
-        delete default_keywords;
-        delete default_helptexts;
-        if (default_doc) xmlFreeDoc(default_doc);
-    }
     void dropappl()
     {
-        delete appl_hidlist;
-        delete appl_keywords;
-        delete appl_helptexts;
+        appl_hidlist.reset();
+        appl_keywords.reset();
+        appl_helptexts.reset();
         if (appl_doc) xmlFreeDoc(appl_doc);
     }
     ~StreamTable()
     {
         dropappl();
-        dropdefault();
     }
 };
 
@@ -212,7 +197,7 @@ struct HelpProcessingException
         , m_nXMLParsingLine( 0 )
     {}
     HelpProcessingException( const std::string& aErrorMsg, const std::string& aXMLParsingFile, int nXMLParsingLine )
-        : m_eErrorClass( HELPPROCESSING_XMLPARSING_ERROR )
+        : m_eErrorClass( HelpProcessingErrorClass::XmlParsing )
         , m_aErrorMsg( aErrorMsg )
         , m_aXMLParsingFile( aXMLParsingFile )
         , m_nXMLParsingLine( nXMLParsingLine )
@@ -231,7 +216,9 @@ public:
                 const std::string &in_module,
                 const std::string &in_lang,
                 bool in_bExtensionMode);
-    bool compile() throw (HelpProcessingException, BasicCodeTagger::TaggerException, std::exception);
+    /// @throws HelpProcessingException
+    /// @throws BasicCodeTagger::TaggerException
+    void compile();
 private:
     xmlDocPtr getSourceDocument(const fs::path &filePath);
     static void tagBasicCodeExamples(xmlDocPtr doc);
@@ -249,7 +236,8 @@ private:
 
 inline char tocharlower(char c)
 {
-    return static_cast<char>(tolower(c));
+    return static_cast<char>(
+        rtl::toAsciiLowerCase(static_cast<unsigned char>(c)));
 }
 
 #endif

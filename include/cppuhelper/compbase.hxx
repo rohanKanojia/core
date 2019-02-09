@@ -20,20 +20,17 @@
 #ifndef INCLUDED_CPPUHELPER_COMPBASE_HXX
 #define INCLUDED_CPPUHELPER_COMPBASE_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
-#include <exception>
-
-#include <com/sun/star/lang/XTypeProvider.hpp>
-#include <com/sun/star/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/Sequence.hxx>
-#include <com/sun/star/uno/Type.hxx>
-#include <cppuhelper/compbase_ex.hxx>
-#include <cppuhelper/implbase.hxx>
-#include <rtl/instance.hxx>
-#include <sal/types.h>
+#include "com/sun/star/lang/XTypeProvider.hpp"
+#include "com/sun/star/uno/Any.h"
+#include "com/sun/star/uno/Reference.h"
+#include "com/sun/star/uno/Sequence.h"
+#include "com/sun/star/uno/Type.h"
+#include "cppuhelper/compbase_ex.hxx"
+#include "cppuhelper/implbase.hxx"
+#include "rtl/instance.hxx"
+#include "sal/types.h"
 
 namespace com { namespace sun { namespace star { namespace lang {
     class XEventListener;
@@ -79,8 +76,7 @@ public:
     PartialWeakComponentImplHelper(osl::Mutex & mutex) throw ():
         WeakComponentImplHelperBase(mutex) {}
 
-    css::uno::Any SAL_CALL queryInterface(css::uno::Type const & aType)
-        throw (css::uno::RuntimeException, std::exception) SAL_OVERRIDE
+    css::uno::Any SAL_CALL queryInterface(css::uno::Type const & aType) SAL_OVERRIDE
     { return WeakComponentImplHelper_query(aType, cd::get(), this, this); }
 
     void SAL_CALL acquire() throw () SAL_OVERRIDE
@@ -89,16 +85,14 @@ public:
     void SAL_CALL release() throw () SAL_OVERRIDE
     { WeakComponentImplHelperBase::release(); }
 
-    void SAL_CALL dispose() throw (css::uno::RuntimeException, std::exception)
+    void SAL_CALL dispose()
         SAL_OVERRIDE
     { WeakComponentImplHelperBase::dispose(); }
 
-    css::uno::Sequence<css::uno::Type> SAL_CALL getTypes()
-        throw (css::uno::RuntimeException, std::exception) SAL_OVERRIDE
+    css::uno::Sequence<css::uno::Type> SAL_CALL getTypes() SAL_OVERRIDE
     { return WeakComponentImplHelper_getTypes(cd::get()); }
 
-    css::uno::Sequence<sal_Int8> SAL_CALL getImplementationId()
-        throw (css::uno::RuntimeException, std::exception) SAL_OVERRIDE
+    css::uno::Sequence<sal_Int8> SAL_CALL getImplementationId() SAL_OVERRIDE
     { return css::uno::Sequence<sal_Int8>(); }
 };
 
@@ -122,13 +116,11 @@ public:
         PartialWeakComponentImplHelper<Ifc...>(mutex) {}
 
     void SAL_CALL addEventListener(
-        css::uno::Reference<css::lang::XEventListener> const & xListener)
-        throw (css::uno::RuntimeException, std::exception) SAL_OVERRIDE
+        css::uno::Reference<css::lang::XEventListener> const & xListener) SAL_OVERRIDE
     { WeakComponentImplHelperBase::addEventListener(xListener); }
 
     void SAL_CALL removeEventListener(
-        css::uno::Reference<css::lang::XEventListener> const & aListener)
-        throw (css::uno::RuntimeException, std::exception) SAL_OVERRIDE
+        css::uno::Reference<css::lang::XEventListener> const & aListener) SAL_OVERRIDE
     { WeakComponentImplHelperBase::removeEventListener(aListener); }
 };
 

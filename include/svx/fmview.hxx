@@ -21,7 +21,6 @@
 #define INCLUDED_SVX_FMVIEW_HXX
 
 #include <svx/view3d.hxx>
-#include <comphelper/uno3.hxx>
 #include <svx/svxdllapi.h>
 
 namespace com { namespace sun { namespace star {
@@ -55,15 +54,17 @@ namespace com { namespace sun { namespace star { namespace form {
 
 class SVX_DLLPUBLIC FmFormView : public E3dView
 {
-    FmXFormView*    pImpl;
+    rtl::Reference<FmXFormView> pImpl;
     FmFormShell*    pFormShell;
 
     void Init();
 
 public:
+    FmFormView(
+        SdrModel& rSdrModel,
+        OutputDevice* pOut);
 
-    FmFormView(FmFormModel* pModel, OutputDevice* pOut = nullptr);
-    virtual ~FmFormView();
+    virtual ~FmFormView() override;
 
     /** create a control pair (label/bound control) for the database field description given.
         @param rFieldDesc
@@ -71,42 +72,40 @@ public:
         @deprecated
             This method is deprecated. Use the version with a ODataAccessDescriptor instead.
     */
-    SdrObject*   CreateFieldControl(const OUString& rFieldDesc) const;
+    SdrObjectUniquePtr CreateFieldControl(const OUString& rFieldDesc) const;
 
     /** create a control pair (label/bound control) for the database field description given.
     */
-    SdrObject*   CreateFieldControl( const svx::ODataAccessDescriptor& _rColumnDescriptor );
+    SdrObjectUniquePtr CreateFieldControl( const svx::ODataAccessDescriptor& _rColumnDescriptor );
 
     /** create a control pair (label/bound control) for the xforms description given.
     */
-    SdrObject*   CreateXFormsControl( const svx::OXFormsDescriptor &_rDesc );
+    SdrObjectUniquePtr CreateXFormsControl( const svx::OXFormsDescriptor &_rDesc );
 
     virtual void MarkListHasChanged() override;
     virtual void AddWindowToPaintView(OutputDevice* pNewWin, vcl::Window* pWindow) override;
     virtual void DeleteWindowFromPaintView(OutputDevice* pOldWin) override;
 
     static void createControlLabelPair(
-        OutputDevice* _pOutDev,
+        OutputDevice const * _pOutDev,
         sal_Int32 _nXOffsetMM,
         sal_Int32 _nYOffsetMM,
         const css::uno::Reference< css::beans::XPropertySet >& _rxField,
         const css::uno::Reference< css::util::XNumberFormats >& _rxNumberFormats,
         sal_uInt16 _nControlObjectID,
-        const OUString& _rFieldPostfix,
-        sal_uInt32 _nInventor,
+        SdrInventor _nInventor,
         sal_uInt16 _nLabelObjectID,
-        SdrPage* _pLabelPage,
-        SdrPage* _pControlPage,
-        SdrModel* _pModel,
-        SdrUnoObj*& _rpLabel,
-        SdrUnoObj*& _rpControl
+
+        // tdf#118963 Need a SdrModel for SdrObject creation. To make the
+        // demand clear, hand over a SdrMldel&
+        SdrModel& _rModel,
+
+        std::unique_ptr<SdrUnoObj, SdrObjectFreeOp>& _rpLabel,
+        std::unique_ptr<SdrUnoObj, SdrObjectFreeOp>& _rpControl
     );
 
     virtual SdrPageView* ShowSdrPage(SdrPage* pPage) override;
     virtual void HideSdrPage() override;
-
-    // for copying complete form structures, not only control models
-    virtual SdrModel* GetMarkedObjModel() const override;
 
     virtual bool MouseButtonDown( const MouseEvent& _rMEvt, vcl::Window* _pWin ) override;
 
@@ -125,12 +124,12 @@ public:
     /// shortcut to "GetSdrPageView() ? PTR_CAST( FmFormPage, GetSdrPageView() ) : NULL"
     FmFormPage* GetCurPage();
 
-    SVX_DLLPRIVATE void ActivateControls(SdrPageView*);
-    SVX_DLLPRIVATE void DeactivateControls(SdrPageView*);
+    SVX_DLLPRIVATE void ActivateControls(SdrPageView const *);
+    SVX_DLLPRIVATE void DeactivateControls(SdrPageView const *);
 
     SVX_DLLPRIVATE void ChangeDesignMode(bool bDesign);
 
-    SVX_DLLPRIVATE FmXFormView* GetImpl() const { return pImpl; }
+    SVX_DLLPRIVATE FmXFormView* GetImpl() const { return pImpl.get(); }
     SVX_DLLPRIVATE FmFormShell* GetFormShell() const { return pFormShell; }
 
     struct FormShellAccess { friend class FmFormShell; private: FormShellAccess() { } };

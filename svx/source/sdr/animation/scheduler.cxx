@@ -19,6 +19,7 @@
 
 #include <svx/sdr/animation/scheduler.hxx>
 
+#include <algorithm>
 #include <vector>
 
 
@@ -28,23 +29,12 @@ namespace sdr
 {
     namespace animation
     {
-        Event::Event()
-        :   mnTime(0),
-            mpNext(nullptr)
+        Event::Event() : mnTime(0)
         {
         }
 
         Event::~Event()
         {
-        }
-
-
-        void Event::SetNext(Event* pNew)
-        {
-            if(pNew != mpNext)
-            {
-                mpNext = pNew;
-            }
         }
 
 
@@ -55,101 +45,10 @@ namespace sdr
                 mnTime = nNew;
             }
         }
-    } // end of namespace animation
-} // end of namespace sdr
 
-
-// eventlist class
-
-namespace sdr
-{
-    namespace animation
-    {
-        EventList::EventList()
-        :   mpHead(nullptr)
-        {
-        }
-
-        EventList::~EventList()
-        {
-            Clear();
-        }
-
-        void EventList::Insert(Event* pNew)
-        {
-            if(pNew)
-            {
-                Event* pCurrent = mpHead;
-                Event* pPrev = nullptr;
-
-                while(pCurrent && pCurrent->GetTime() < pNew->GetTime())
-                {
-                    pPrev = pCurrent;
-                    pCurrent = pCurrent->GetNext();
-                }
-
-                if(pPrev)
-                {
-                    pNew->SetNext(pPrev->GetNext());
-                    pPrev->SetNext(pNew);
-                }
-                else
-                {
-                    pNew->SetNext(mpHead);
-                    mpHead = pNew;
-                }
-            }
-        }
-
-        void EventList::Remove(Event* pOld)
-        {
-            if(pOld && mpHead)
-            {
-                Event* pCurrent = mpHead;
-                Event* pPrev = nullptr;
-
-                while(pCurrent && pCurrent != pOld)
-                {
-                    pPrev = pCurrent;
-                    pCurrent = pCurrent->GetNext();
-                }
-
-                if(pPrev)
-                {
-                    pPrev->SetNext(pOld->GetNext());
-                }
-                else
-                {
-                    mpHead = pOld->GetNext();
-                }
-
-                pOld->SetNext(nullptr);
-            }
-        }
-
-        void EventList::Clear()
-        {
-            while(mpHead)
-            {
-                Event* pNext = mpHead->GetNext();
-                mpHead->SetNext(nullptr);
-                mpHead = pNext;
-            }
-        }
-
-    } // end of namespace animation
-} // end of namespace sdr
-
-
-// scheduler class
-
-namespace sdr
-{
-    namespace animation
-    {
         Scheduler::Scheduler()
-        :   mnTime(0L),
-            mnDeltaTime(0L),
+        :   mnTime(0),
+            mnDeltaTime(0),
             mbIsPaused(false)
         {
         }
@@ -174,37 +73,34 @@ namespace sdr
 
         void Scheduler::triggerEvents()
         {
-            Event* pNextEvent = maList.GetFirst();
+            if (mvEvents.empty())
+                return;
 
-            if(pNextEvent)
+            // copy events which need to be executed to a vector. Remove them from
+            // the scheduler
+            ::std::vector< Event* > aToBeExecutedList;
+
+            while(!mvEvents.empty() && mvEvents.front()->GetTime() <= mnTime)
             {
-                // copy events which need to be executed to a vector. Remove them from
-                // the scheduler
-                ::std::vector< Event* > EventPointerVector;
+                Event* pNextEvent = mvEvents.front();
+                mvEvents.erase(mvEvents.begin());
+                aToBeExecutedList.push_back(pNextEvent);
+            }
 
-                while(pNextEvent && pNextEvent->GetTime() <= mnTime)
-                {
-                    maList.Remove(pNextEvent);
-                    EventPointerVector.push_back(pNextEvent);
-                    pNextEvent = maList.GetFirst();
-                }
-
-                // execute events from the vector
-                for(::std::vector< Event* >::iterator aCandidate = EventPointerVector.begin();
-                    aCandidate != EventPointerVector.end(); ++aCandidate)
-                {
-                    // trigger event. This may re-insert the event to the scheduler again
-                    (*aCandidate)->Trigger(mnTime);
-                }
+            // execute events from the vector
+            for(auto& rpCandidate : aToBeExecutedList)
+            {
+                // trigger event. This may re-insert the event to the scheduler again
+                rpCandidate->Trigger(mnTime);
             }
         }
 
         void Scheduler::checkTimeout()
         {
             // re-start or stop timer according to event list
-            if(!IsPaused() && maList.GetFirst())
+            if(!IsPaused() && !mvEvents.empty())
             {
-                mnDeltaTime = maList.GetFirst()->GetTime() - mnTime;
+                mnDeltaTime = mvEvents.front()->GetTime() - mnTime;
 
                 if(0L != mnDeltaTime)
                 {
@@ -226,43 +122,39 @@ namespace sdr
             Stop();
             mnTime = nTime;
 
-            // get event pointer
-            Event* pEvent = maList.GetFirst();
+            if (mvEvents.empty())
+                return;
 
-            if(pEvent)
+            // reset event time points
+            for (auto & rEvent : mvEvents)
             {
-                // retet event time points
-                while(pEvent)
-                {
-                    pEvent->SetTime(nTime);
-                    pEvent = pEvent->GetNext();
-                }
-
-                if(!IsPaused())
-                {
-                    // without delta time, init events by triggering them. This will invalidate
-                    // painted objects and add them to the scheduler again
-                    mnDeltaTime = 0L;
-                    triggerEvents();
-                    checkTimeout();
-                }
+                rEvent->SetTime(nTime);
             }
+
+            if(!IsPaused())
+            {
+                // without delta time, init events by triggering them. This will invalidate
+                // painted objects and add them to the scheduler again
+                mnDeltaTime = 0;
+                triggerEvents();
+                checkTimeout();
+             }
         }
 
-        void Scheduler::InsertEvent(Event* pNew)
+        void Scheduler::InsertEvent(Event& rNew)
         {
-            if(pNew)
-            {
-                maList.Insert(pNew);
-                checkTimeout();
-            }
+            // insert maintaining time ordering
+            auto it = std::find_if(mvEvents.begin(), mvEvents.end(),
+                [&rNew](const Event* pEvent) { return rNew.GetTime() < pEvent->GetTime(); });
+            mvEvents.insert(it, &rNew);
+            checkTimeout();
         }
 
         void Scheduler::RemoveEvent(Event* pOld)
         {
-            if(pOld && maList.GetFirst())
+            if(!mvEvents.empty())
             {
-                maList.Remove(pOld);
+                mvEvents.erase(std::remove(mvEvents.begin(), mvEvents.end(), pOld), mvEvents.end());
                 checkTimeout();
             }
         }

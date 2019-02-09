@@ -57,13 +57,12 @@
  * @file
  * Font decl of all used fonts.
  ************************************************************************/
-#include "xffontdecl.hxx"
+#include <xfilter/xffontdecl.hxx>
 
 XFFontDecl::XFFontDecl(const OUString& name, const OUString& family)
 {
     m_strFontName = name;
     m_strFontFamily = family;
-    m_bPitchFixed = false;
 }
 
 

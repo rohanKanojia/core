@@ -17,17 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "PropertyHelper.hxx"
-#include "ContainerHelper.hxx"
-#include "macros.hxx"
-#include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <PropertyHelper.hxx>
+#include <ContainerHelper.hxx>
 #include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <osl/diagnose.h>
+#include <tools/diagnose_ex.h>
 
 #include <vector>
 #include <algorithm>
 #include <iterator>
-#include <functional>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans;
@@ -36,7 +35,7 @@ using ::com::sun::star::uno::Reference;
 
 namespace
 {
-struct lcl_EqualsElement : public ::std::unary_function< OUString, bool >
+struct lcl_EqualsElement
 {
     explicit lcl_EqualsElement( const Any & rValue, const Reference< container::XNameAccess > & xAccess )
             : m_aValue( rValue ), m_xAccess( xAccess )
@@ -50,9 +49,9 @@ struct lcl_EqualsElement : public ::std::unary_function< OUString, bool >
         {
             return (m_xAccess->getByName( rName ) == m_aValue);
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
         return false;
     }
@@ -62,7 +61,7 @@ private:
     Reference< container::XNameAccess > m_xAccess;
 };
 
-struct lcl_StringMatches : public ::std::unary_function< OUString ,bool >
+struct lcl_StringMatches
 {
     explicit lcl_StringMatches( const OUString & rCmpStr ) :
             m_aCmpStr( rCmpStr )
@@ -77,7 +76,7 @@ private:
     OUString m_aCmpStr;
 };
 
-struct lcl_OUStringRestToInt32 : public ::std::unary_function< OUString, sal_Int32 >
+struct lcl_OUStringRestToInt32
 {
     explicit lcl_OUStringRestToInt32( sal_Int32 nPrefixLength ) :
             m_nPrefixLength( nPrefixLength )
@@ -119,9 +118,9 @@ OUString lcl_addNamedPropertyUniqueNameToTable(
     try
     {
         Reference< container::XNameAccess > xNameAccess( xNameContainer, uno::UNO_QUERY_THROW );
-        ::std::vector< OUString > aNames( ::chart::ContainerHelper::SequenceToVector( xNameAccess->getElementNames()));
-        ::std::vector< OUString >::const_iterator aIt(
-            ::std::find_if( aNames.begin(), aNames.end(), lcl_EqualsElement( rValue, xNameAccess )));
+        std::vector< OUString > aNames( ::chart::ContainerHelper::SequenceToVector( xNameAccess->getElementNames()));
+        std::vector< OUString >::const_iterator aIt(
+            std::find_if( aNames.begin(), aNames.end(), lcl_EqualsElement( rValue, xNameAccess )));
 
         // element not found in container
         if( aIt == aNames.end())
@@ -131,7 +130,7 @@ OUString lcl_addNamedPropertyUniqueNameToTable(
             // check if preferred name is already used
             if( !rPreferredName.isEmpty())
             {
-                aIt = ::std::find( aNames.begin(), aNames.end(), rPreferredName );
+                aIt = std::find( aNames.begin(), aNames.end(), rPreferredName );
                 if( aIt == aNames.end())
                     aUniqueName = rPreferredName;
             }
@@ -139,14 +138,14 @@ OUString lcl_addNamedPropertyUniqueNameToTable(
             if( aUniqueName.isEmpty())
             {
                 // create a unique id using the prefix plus a number
-                ::std::vector< sal_Int32 > aNumbers;
-                ::std::vector< OUString >::iterator aNonConstIt(
-                    ::std::partition( aNames.begin(), aNames.end(), lcl_StringMatches( rPrefix )));
-                ::std::transform( aNames.begin(), aNonConstIt,
+                std::vector< sal_Int32 > aNumbers;
+                std::vector< OUString >::iterator aNonConstIt(
+                    std::partition( aNames.begin(), aNames.end(), lcl_StringMatches( rPrefix )));
+                std::transform( aNames.begin(), aNonConstIt,
                                   back_inserter( aNumbers ),
                                   lcl_OUStringRestToInt32( rPrefix.getLength() ));
-                ::std::vector< sal_Int32 >::const_iterator aMaxIt(
-                    ::std::max_element( aNumbers.begin(), aNumbers.end()));
+                std::vector< sal_Int32 >::const_iterator aMaxIt(
+                    std::max_element( aNumbers.begin(), aNumbers.end()));
 
                 sal_Int32 nIndex = 1;
                 if( aMaxIt != aNumbers.end())
@@ -163,9 +162,9 @@ OUString lcl_addNamedPropertyUniqueNameToTable(
             // element found => return name
             return *aIt;
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return rPreferredName;
@@ -267,7 +266,7 @@ void setPropertyValueAny( tPropertyValueMap & rOutMap, tPropertyValueMapKey key,
 {
     tPropertyValueMap::iterator aIt( rOutMap.find( key ));
     if( aIt == rOutMap.end())
-        rOutMap.insert( tPropertyValueMap::value_type( key, rAny ));
+        rOutMap.emplace( key, rAny );
     else
         (*aIt).second = rAny;
 }

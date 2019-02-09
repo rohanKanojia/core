@@ -20,78 +20,46 @@
 #ifndef DONT_HAVE_GDIPLUS
 
 
-#include "global.hxx"
+#include <global.hxx>
 
-#include "thumbviewer.hxx"
-#include "shlxthdl.hxx"
-#include "registry.hxx"
-#include "fileextensions.hxx"
-#include "config.hxx"
-#include "zipfile.hxx"
-#include "utilities.hxx"
+#include <thumbviewer.hxx>
+#include <shlxthdl.hxx>
+#include <registry.hxx>
+#include <fileextensions.hxx>
+#include <config.hxx>
+#include <zipfile.hxx>
+#include <utilities.hxx>
 
-#include "resource.h"
+#include <resource.h>
 
 #include <stdio.h>
 #include <utility>
 #include <stdlib.h>
 
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#endif
 #include <shellapi.h>
-#ifdef _WIN32_WINNT_WINBLUE
-#include <VersionHelpers.h>
-#endif
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
-#include <memory>
 
-extern HINSTANCE g_hModule;
+#include <memory>
 
 namespace internal
 {
     /* The signet.png used for thumbnails of signed documents
        is contained as resource in this module, the resource
        id is 2000 */
-    void LoadSignetImageFromResource(ZipFile::ZipContentBuffer_t& buffer)
+    static void LoadSignetImageFromResource(ZipFile::ZipContentBuffer_t& buffer)
     {
-        HRSRC hrc = FindResource(g_hModule, TEXT("#2000"), RT_RCDATA);
+        HRSRC hrc = FindResourceW(g_hModule, L"#2000", RT_RCDATA);
         DWORD size = SizeofResource(g_hModule, hrc);
         HGLOBAL hglob = LoadResource(g_hModule, hrc);
-        char* data = reinterpret_cast<char*>(LockResource(hglob));
+        char* data = static_cast<char*>(LockResource(hglob));
         buffer = ZipFile::ZipContentBuffer_t(data, data + size);
     }
 
-    bool IsSignedDocument(const ZipFile* zipfile)
+    static bool IsSignedDocument(const ZipFile* zipfile)
     {
         return zipfile->HasContent("META-INF/documentsignatures.xml");
     }
 
-    bool IsWindowsXP()
-    {
-// the Win32 SDK 8.1 deprecates GetVersionEx()
-#ifdef _WIN32_WINNT_WINBLUE
-        return IsWindowsXPOrGreater() ? true : false;
-#else
-        OSVERSIONINFO osvi;
-        ZeroMemory(&osvi, sizeof(osvi));
-        osvi.dwOSVersionInfoSize = sizeof(osvi);
-        GetVersionEx(&osvi);
-
-        return ((osvi.dwPlatformId == VER_PLATFORM_WIN32_NT) &&
-                ((osvi.dwMajorVersion >= 5) && (osvi.dwMinorVersion >= 1)));
-#endif
-    }
-
-    /* Calculate where to position the signet image.
-       On Windows ME we need to shift the signet a
-       little bit to the left because Windows ME
-       puts an overlay icon to the lower right
-       corner of a thumbnail image so that our signet
-       we be hidden. */
-    Gdiplus::Point CalcSignetPosition(
+    static Gdiplus::Point CalcSignetPosition(
         const Gdiplus::Rect& canvas, const Gdiplus::Rect& thumbnail_border, const Gdiplus::Rect& signet)
     {
         int x = 0;
@@ -110,11 +78,23 @@ namespace internal
             y = thumbnail_border.GetBottom() - signet.GetBottom() + min(signet.GetBottom() / 2, voffset);
         }
 
-        if (!IsWindowsXP())
-            x -= 15;
-
         return Gdiplus::Point(x,y);
     }
+}
+
+namespace {
+
+Gdiplus::Rect CalcScaledAspectRatio(const Gdiplus::Rect& src, const Gdiplus::Rect& dest)
+{
+    Gdiplus::Rect result;
+    if (src.Width >= src.Height)
+        result = Gdiplus::Rect(0, 0, dest.Width, src.Height * dest.Width / src.Width);
+    else
+        result = Gdiplus::Rect(0, 0, src.Width * dest.Height / src.Height, dest.Height);
+
+    return result;
+}
+
 }
 
 class StreamOnZipBuffer final : public IStream
@@ -123,22 +103,22 @@ public:
     explicit StreamOnZipBuffer(const ZipFile::ZipContentBuffer_t& zip_buffer);
 
     // IUnknown
-    virtual ULONG STDMETHODCALLTYPE AddRef();
-    virtual ULONG STDMETHODCALLTYPE Release();
-    virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void __RPC_FAR *__RPC_FAR *ppvObject);
+    virtual ULONG STDMETHODCALLTYPE AddRef() override;
+    virtual ULONG STDMETHODCALLTYPE Release() override;
+    virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void __RPC_FAR *__RPC_FAR *ppvObject) override;
 
     // IStream
-    virtual HRESULT STDMETHODCALLTYPE Read(void *pv, ULONG cb, ULONG *pcbRead);
-    virtual HRESULT STDMETHODCALLTYPE Write(void const *pv, ULONG cb, ULONG *pcbWritten);
-    virtual HRESULT STDMETHODCALLTYPE Seek(LARGE_INTEGER dlibMove, DWORD dwOrigin, ULARGE_INTEGER *plibNewPosition);
-    virtual HRESULT STDMETHODCALLTYPE SetSize(ULARGE_INTEGER libNewSize);
-    virtual HRESULT STDMETHODCALLTYPE CopyTo(IStream *pstm, ULARGE_INTEGER cb, ULARGE_INTEGER *pcbRead, ULARGE_INTEGER *pcbWritten);
-    virtual HRESULT STDMETHODCALLTYPE Commit(DWORD grfCommitFlags);
-    virtual HRESULT STDMETHODCALLTYPE Revert();
-    virtual HRESULT STDMETHODCALLTYPE LockRegion(ULARGE_INTEGER libOffset, ULARGE_INTEGER cb, DWORD dwLockType);
-    virtual HRESULT STDMETHODCALLTYPE UnlockRegion(ULARGE_INTEGER libOffset, ULARGE_INTEGER cb, DWORD dwLockType);
-    virtual HRESULT STDMETHODCALLTYPE Stat(STATSTG *pstatstg, DWORD grfStatFlag);
-    virtual HRESULT STDMETHODCALLTYPE Clone(IStream **ppstm);
+    virtual HRESULT STDMETHODCALLTYPE Read(void *pv, ULONG cb, ULONG *pcbRead) override;
+    virtual HRESULT STDMETHODCALLTYPE Write(void const *pv, ULONG cb, ULONG *pcbWritten) override;
+    virtual HRESULT STDMETHODCALLTYPE Seek(LARGE_INTEGER dlibMove, DWORD dwOrigin, ULARGE_INTEGER *plibNewPosition) override;
+    virtual HRESULT STDMETHODCALLTYPE SetSize(ULARGE_INTEGER libNewSize) override;
+    virtual HRESULT STDMETHODCALLTYPE CopyTo(IStream *pstm, ULARGE_INTEGER cb, ULARGE_INTEGER *pcbRead, ULARGE_INTEGER *pcbWritten) override;
+    virtual HRESULT STDMETHODCALLTYPE Commit(DWORD grfCommitFlags) override;
+    virtual HRESULT STDMETHODCALLTYPE Revert() override;
+    virtual HRESULT STDMETHODCALLTYPE LockRegion(ULARGE_INTEGER libOffset, ULARGE_INTEGER cb, DWORD dwLockType) override;
+    virtual HRESULT STDMETHODCALLTYPE UnlockRegion(ULARGE_INTEGER libOffset, ULARGE_INTEGER cb, DWORD dwLockType) override;
+    virtual HRESULT STDMETHODCALLTYPE Stat(STATSTG *pstatstg, DWORD grfStatFlag) override;
+    virtual HRESULT STDMETHODCALLTYPE Clone(IStream **ppstm) override;
 
 private:
     LONG ref_count_;
@@ -172,8 +152,8 @@ ULONG STDMETHODCALLTYPE StreamOnZipBuffer::Release()
 
 HRESULT STDMETHODCALLTYPE StreamOnZipBuffer::QueryInterface(REFIID riid, void __RPC_FAR *__RPC_FAR *ppvObject)
 {
-    *ppvObject = 0;
-    IUnknown* pUnk = 0;
+    *ppvObject = nullptr;
+    IUnknown* pUnk = nullptr;
 
     if ((IID_IUnknown == riid) || (IID_IStream == riid))
     {
@@ -187,7 +167,7 @@ HRESULT STDMETHODCALLTYPE StreamOnZipBuffer::QueryInterface(REFIID riid, void __
 
 HRESULT STDMETHODCALLTYPE StreamOnZipBuffer::Read(void *pv, ULONG cb, ULONG *pcbRead)
 {
-    if (pv == NULL)
+    if (pv == nullptr)
         return STG_E_INVALIDPOINTER;
 
     size_t size = ref_zip_buffer_.size();
@@ -195,7 +175,7 @@ HRESULT STDMETHODCALLTYPE StreamOnZipBuffer::Read(void *pv, ULONG cb, ULONG *pcb
     if (pos_ > size)
         return S_FALSE;
 
-    char* p = reinterpret_cast<char*>(pv);
+    char* p = static_cast<char*>(pv);
     ULONG read = 0;
 
     for ( ;(pos_ < size) && (cb > 0); pos_++, cb--, read++)
@@ -209,7 +189,7 @@ HRESULT STDMETHODCALLTYPE StreamOnZipBuffer::Read(void *pv, ULONG cb, ULONG *pcb
 
 HRESULT STDMETHODCALLTYPE StreamOnZipBuffer::Seek(LARGE_INTEGER dlibMove, DWORD dwOrigin, ULARGE_INTEGER *)
 {
-    __int64 size = (__int64) ref_zip_buffer_.size();
+    __int64 size = static_cast<__int64>(ref_zip_buffer_.size());
     __int64 p = 0;
 
     switch (dwOrigin)
@@ -217,7 +197,7 @@ HRESULT STDMETHODCALLTYPE StreamOnZipBuffer::Seek(LARGE_INTEGER dlibMove, DWORD 
         case STREAM_SEEK_SET:
             break;
         case STREAM_SEEK_CUR:
-            p = (__int64) pos_;
+            p = static_cast<__int64>(pos_);
             break;
         case STREAM_SEEK_END:
             p = size - 1;
@@ -230,7 +210,7 @@ HRESULT STDMETHODCALLTYPE StreamOnZipBuffer::Seek(LARGE_INTEGER dlibMove, DWORD 
 
    if ( ( p >= 0 ) && (p < size) )
    {
-        pos_ = (size_t) p;
+        pos_ = static_cast<size_t>(p);
         hr = S_OK;
    }
    return hr;
@@ -238,7 +218,7 @@ HRESULT STDMETHODCALLTYPE StreamOnZipBuffer::Seek(LARGE_INTEGER dlibMove, DWORD 
 
 HRESULT STDMETHODCALLTYPE StreamOnZipBuffer::Stat(STATSTG *pstatstg, DWORD grfStatFlag)
 {
-    if (pstatstg == NULL)
+    if (pstatstg == nullptr)
         return STG_E_INVALIDPOINTER;
 
     ZeroMemory(pstatstg, sizeof(STATSTG));
@@ -246,7 +226,7 @@ HRESULT STDMETHODCALLTYPE StreamOnZipBuffer::Stat(STATSTG *pstatstg, DWORD grfSt
     if (grfStatFlag == STATFLAG_DEFAULT)
     {
         size_t sz = 4 * sizeof(wchar_t);
-        wchar_t* name = reinterpret_cast<wchar_t*>(CoTaskMemAlloc(sz));
+        wchar_t* name = static_cast<wchar_t*>(CoTaskMemAlloc(sz));
         ZeroMemory(name, sz);
         memcpy(name, L"png", 3 * sizeof(wchar_t));
         pstatstg->pwcsName = name;
@@ -297,7 +277,7 @@ CThumbviewer::CThumbviewer(long RefCnt) :
     thumbnail_size_.cy = 0;
 
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-    Gdiplus::GdiplusStartup(&gdiplus_token_, &gdiplusStartupInput, NULL);
+    Gdiplus::GdiplusStartup(&gdiplus_token_, &gdiplusStartupInput, nullptr);
 
     ZipFile::ZipContentBuffer_t img_data;
     internal::LoadSignetImageFromResource(img_data);
@@ -317,8 +297,8 @@ CThumbviewer::~CThumbviewer()
 
 HRESULT STDMETHODCALLTYPE CThumbviewer::QueryInterface(REFIID riid, void __RPC_FAR *__RPC_FAR *ppvObject)
 {
-    *ppvObject = 0;
-    IUnknown* pUnk = 0;
+    *ppvObject = nullptr;
+    IUnknown* pUnk = nullptr;
 
     if ((IID_IUnknown == riid) || (IID_IPersistFile == riid))
     {
@@ -363,7 +343,7 @@ HRESULT STDMETHODCALLTYPE CThumbviewer::Extract(HBITMAP *phBmpImage)
     try
     {
         std::wstring fname = getShortPathName( filename_ );
-        std::unique_ptr<ZipFile> zipfile( new ZipFile( WStringToString( fname ) ) );
+        std::unique_ptr<ZipFile> zipfile( new ZipFile( fname ) );
 
         if (zipfile->HasContent(THUMBNAIL_CONTENT))
         {
@@ -408,7 +388,7 @@ HRESULT STDMETHODCALLTYPE CThumbviewer::Extract(HBITMAP *phBmpImage)
                 dib.bi.biCompression = BI_RGB;
 
                 LPVOID lpBits;
-                HBITMAP hMemBmp = CreateDIBSection(memDC, (LPBITMAPINFO)&dib, DIB_RGB_COLORS, &lpBits, NULL, 0);
+                HBITMAP hMemBmp = CreateDIBSection(memDC, reinterpret_cast<LPBITMAPINFO>(&dib), DIB_RGB_COLORS, &lpBits, nullptr, 0);
                 HGDIOBJ hOldObj = SelectObject(memDC, hMemBmp);
 
                 Gdiplus::Graphics graphics(memDC);
@@ -464,7 +444,7 @@ HRESULT STDMETHODCALLTYPE CThumbviewer::Extract(HBITMAP *phBmpImage)
     }
     catch(std::exception&)
     {
-        OutputDebugStringFormat( "CThumbviewer Extract ERROR!\n" );
+        OutputDebugStringFormatW( L"CThumbviewer Extract ERROR!\n" );
         hr = E_FAIL;
     }
     return hr;
@@ -473,7 +453,7 @@ HRESULT STDMETHODCALLTYPE CThumbviewer::Extract(HBITMAP *phBmpImage)
 HRESULT STDMETHODCALLTYPE CThumbviewer::GetLocation(
     LPWSTR pszPathBuffer, DWORD cchMax, DWORD *pdwPriority, const SIZE *prgSize, DWORD dwRecClrDepth, DWORD *pdwFlags)
 {
-    if ((prgSize == NULL) || (pdwFlags == NULL) || ((*pdwFlags & IEIFLAG_ASYNC) && (pdwPriority == NULL)))
+    if ((prgSize == nullptr) || (pdwFlags == nullptr) || ((*pdwFlags & IEIFLAG_ASYNC) && (pdwPriority == nullptr)))
         return E_INVALIDARG;
 
     thumbnail_size_ = *prgSize;
@@ -514,17 +494,6 @@ HRESULT STDMETHODCALLTYPE CThumbviewer::SaveCompleted(LPCOLESTR)
 HRESULT STDMETHODCALLTYPE CThumbviewer::GetCurFile(LPOLESTR __RPC_FAR*)
 { return E_NOTIMPL; }
 
-
-Gdiplus::Rect CThumbviewer::CalcScaledAspectRatio(const Gdiplus::Rect& src, const Gdiplus::Rect& dest)
-{
-    Gdiplus::Rect result;
-    if (src.Width >= src.Height)
-        result = Gdiplus::Rect(0, 0, dest.Width, src.Height * dest.Width / src.Width);
-    else
-        result = Gdiplus::Rect(0, 0, src.Width * dest.Height / src.Height, dest.Height);
-
-    return result;
-}
 
 #endif // DONT_HAVE_GDIPLUS
 

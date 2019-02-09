@@ -20,13 +20,15 @@
 #ifndef INCLUDED_OOX_HELPER_PROPERTYMAP_HXX
 #define INCLUDED_OOX_HELPER_PROPERTYMAP_HXX
 
-#include <vector>
 #include <map>
+#include <utility>
+
 #include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
-#include <rtl/ustring.hxx>
-#include <oox/token/properties.hxx>
 #include <oox/dllapi.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 namespace com { namespace sun { namespace star { namespace beans {
     struct PropertyValue;
@@ -66,14 +68,17 @@ public:
     /** Sets the specified property to the passed value. Does nothing, if the
         identifier is invalid. */
     template< typename Type >
-    bool                setProperty( sal_Int32 nPropId, const Type& rValue )
+    bool                setProperty( sal_Int32 nPropId, Type&& rValue )
     {
         if( nPropId < 0 )
             return false;
 
-        maProperties[ nPropId ] <<= rValue;
+        maProperties[ nPropId ] <<= std::forward<Type>(rValue);
         return true;
     }
+
+    /** setAnyProperty should be used */
+    bool                setProperty( sal_Int32, const css::uno::Any& ) = delete;
 
     css::uno::Any       getProperty( sal_Int32 nPropId );
 

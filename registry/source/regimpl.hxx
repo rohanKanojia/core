@@ -28,8 +28,6 @@
 #include <osl/mutex.hxx>
 #include <store/store.hxx>
 
-#define REG_PAGESIZE 512
-
 // 5 bytes = 1 (byte for the type) + 4 (bytes for the size of the data)
 #define VALUE_HEADERSIZE    5
 #define VALUE_TYPEOFFSET    1
@@ -77,8 +75,8 @@ public:
 
     RegError    loadKey(RegKeyHandle hKey,
                         const OUString& regFileName,
-                        bool bWarings=false,
-                        bool bReport=false);
+                        bool bWarnings,
+                        bool bReport);
 
     RegError    dumpRegistry(RegKeyHandle hKey) const;
 
@@ -105,29 +103,29 @@ private:
 
     RegError    deleteSubkeysAndValues(ORegKey* pKey);
 
-    RegError    loadAndSaveValue(ORegKey* pTargetKey,
-                                 ORegKey* pSourceKey,
+    static RegError loadAndSaveValue(ORegKey* pTargetKey,
+                                 ORegKey const * pSourceKey,
                                  const OUString& valueName,
                                  sal_uInt32 nCut,
-                                 bool bWarnings=false,
-                                 bool bReport=false);
+                                 bool bWarnings,
+                                 bool bReport);
 
     static RegError checkBlop(store::OStoreStream& rValue,
                           const OUString& sTargetPath,
                           sal_uInt32 srcValueSize,
-                          sal_uInt8* pSrcBuffer,
-                          bool bReport=false);
+                          sal_uInt8 const * pSrcBuffer,
+                          bool bReport);
 
     static RegError mergeModuleValue(store::OStoreStream& rTargetValue,
-                                 RegistryTypeReader& reader,
-                                 RegistryTypeReader& reader2);
+                                 RegistryTypeReader const & reader,
+                                 RegistryTypeReader const & reader2);
 
     RegError    loadAndSaveKeys(ORegKey* pTargetKey,
                                 ORegKey* pSourceKey,
                                 const OUString& keyName,
                                 sal_uInt32 nCut,
-                                bool bWarnings=false,
-                                bool bReport=false);
+                                bool bWarnings,
+                                bool bReport);
 
     RegError    dumpValue(const OUString& sPath,
                           const OUString& sName,
@@ -137,17 +135,17 @@ private:
                         const OUString& sName,
                         sal_Int16 nSpace) const;
 
-    typedef std::unordered_map< OUString, ORegKey*, OUStringHash > KeyMap;
+    typedef std::unordered_map< OUString, ORegKey* > KeyMap;
 
-    sal_uInt32      m_refCount;
+    sal_uInt32          m_refCount;
     osl::Mutex          m_mutex;
-    bool            m_readOnly;
-    bool            m_isOpen;
-    OUString       m_name;
+    bool                m_readOnly;
+    bool                m_isOpen;
+    OUString            m_name;
     store::OStoreFile   m_file;
-    KeyMap          m_openKeyTable;
+    KeyMap              m_openKeyTable;
 
-    const OUString ROOT;
+    static constexpr OUStringLiteral ROOT { "/" };
 };
 
 #endif

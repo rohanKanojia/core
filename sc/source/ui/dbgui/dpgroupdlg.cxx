@@ -21,10 +21,10 @@
 #undef SC_DLLIMPLEMENTATION
 #endif
 
-#include "dpgroupdlg.hxx"
-#include "scresid.hxx"
-#include "sc.hrc"
-#include "globstr.hrc"
+#include <dpgroupdlg.hxx>
+#include <sc.hrc>
+#include <globstr.hrc>
+#include <scresid.hxx>
 
 #include <com/sun/star/sheet/DataPilotFieldGroupBy.hpp>
 
@@ -42,7 +42,7 @@ static const sal_Int32 spnDateParts[] =
     css::sheet::DataPilotFieldGroupBy::YEARS
 };
 
-static const sal_uInt16 nDatePartResIds[] =
+static const char* aDatePartResIds[] =
 {
     STR_DPFIELD_GROUP_BY_SECONDS,
     STR_DPFIELD_GROUP_BY_MINUTES,
@@ -92,7 +92,7 @@ void ScDPGroupEditHelper::SetValue( bool bAuto, double fValue )
     ImplSetValue( fValue );
 }
 
-IMPL_LINK_TYPED( ScDPGroupEditHelper, ClickHdl, Button*, pButton, void )
+IMPL_LINK( ScDPGroupEditHelper, ClickHdl, Button*, pButton, void )
 {
     if( pButton == mpRbAuto )
     {
@@ -141,7 +141,7 @@ bool ScDPDateGroupEditHelper::ImplGetValue( double& rfValue ) const
 void ScDPDateGroupEditHelper::ImplSetValue( double fValue )
 {
     Date aDate( maNullDate );
-    aDate += static_cast< sal_Int32 >( fValue );
+    aDate.AddDays( fValue );
     mpEdValue->SetDate( aDate );
 }
 
@@ -227,9 +227,9 @@ ScDPDateGroupDlg::ScDPDateGroupDlg( vcl::Window* pParent,
     maStartHelper   ( mpRbAutoStart, mpRbManStart, mpEdStart, rNullDate ),
     maEndHelper     ( mpRbAutoEnd, mpRbManEnd, mpEdEnd, rNullDate )
 {
-    static const size_t nCount = SAL_N_ELEMENTS( nDatePartResIds );
-    for( size_t nIdx = 0 ; nIdx < nCount; ++nIdx )
-        mpLbUnits->InsertEntry( ScGlobal::GetRscString( nDatePartResIds[nIdx] ) );
+    static const size_t nCount = SAL_N_ELEMENTS(aDatePartResIds);
+    for (const char* pDatePartResId : aDatePartResIds)
+        mpLbUnits->InsertEntry(ScResId(pDatePartResId));
 
     mpEdStart->SetShowDateCentury( true );
     mpEdEnd->SetShowDateCentury( true );
@@ -331,7 +331,7 @@ sal_Int32 ScDPDateGroupDlg::GetDatePart() const
     return nDatePart;
 }
 
-IMPL_LINK_TYPED( ScDPDateGroupDlg, ClickHdl, Button*, pButton, void )
+IMPL_LINK( ScDPDateGroupDlg, ClickHdl, Button*, pButton, void )
 {
     if( pButton == mpRbNumDays )
     {
@@ -352,7 +352,7 @@ IMPL_LINK_TYPED( ScDPDateGroupDlg, ClickHdl, Button*, pButton, void )
     }
 }
 
-IMPL_LINK_TYPED( ScDPDateGroupDlg, CheckHdl, SvTreeListBox*, pListBox, void )
+IMPL_LINK( ScDPDateGroupDlg, CheckHdl, SvTreeListBox*, pListBox, void )
 {
     // enable/disable OK button on modifying check list box
     if( pListBox == mpLbUnits )

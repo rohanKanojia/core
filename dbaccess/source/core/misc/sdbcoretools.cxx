@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sdbcoretools.hxx"
-#include "dbastrings.hrc"
+#include <sdbcoretools.hxx>
+#include <stringconstants.hxx>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
@@ -49,7 +49,7 @@ namespace dbaccess
     using namespace ::com::sun::star::embed;
     using namespace ::com::sun::star::container;
 
-    void notifyDataSourceModified(const css::uno::Reference< css::uno::XInterface >& _rxObject,bool _bModified)
+    void notifyDataSourceModified(const css::uno::Reference< css::uno::XInterface >& _rxObject)
     {
         Reference< XInterface > xDs = getDataSource( _rxObject );
         Reference<XDocumentDataSource> xDocumentDataSource(xDs,UNO_QUERY);
@@ -57,7 +57,7 @@ namespace dbaccess
             xDs = xDocumentDataSource->getDatabaseDocument();
         Reference< XModifiable > xModi( xDs, UNO_QUERY );
         if ( xModi.is() )
-            xModi->setModified(_bModified);
+            xModi->setModified(true);
     }
 
     Reference< XInterface > getDataSource( const Reference< XInterface >& _rxDependentObject )
@@ -90,7 +90,7 @@ namespace dbaccess
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
 
         if ( sDisplayMessage.isEmpty() )
@@ -124,7 +124,7 @@ namespace dbaccess
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
         return ( nMode & ElementModes::WRITE ) != 0;
     }

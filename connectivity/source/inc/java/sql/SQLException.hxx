@@ -19,7 +19,7 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_SQL_SQLEXCEPTION_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_SQL_SQLEXCEPTION_HXX
 
-#include "java/lang/Exception.hxx"
+#include <java/lang/Exception.hxx>
 #include <com/sun/star/sdbc/SQLException.hpp>
 
 namespace connectivity
@@ -31,8 +31,7 @@ namespace connectivity
     {
     public:
         // A ctor that is needed for returning the object
-        java_sql_SQLException(){}
-        java_sql_SQLException( const java_sql_SQLException_BASE& _rException,const ::com::sun::star::uno::Reference< ::com::sun::star::uno::XInterface> & _rContext);
+        java_sql_SQLException( const java_sql_SQLException_BASE& _rException,const css::uno::Reference< css::uno::XInterface> & _rContext);
     };
 
     class java_sql_SQLException_BASE :  public java_lang_Exception
@@ -42,7 +41,7 @@ namespace connectivity
         static jclass theClass;
     public:
         virtual jclass getMyClass() const override;
-        virtual ~java_sql_SQLException_BASE();
+        virtual ~java_sql_SQLException_BASE() override;
         // A ctor that is needed for returning the object
         java_sql_SQLException_BASE( JNIEnv * pEnv, jobject myObj );
 

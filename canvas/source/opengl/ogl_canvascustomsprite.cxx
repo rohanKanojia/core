@@ -9,14 +9,14 @@
 
 #include <sal/config.h>
 
-#include <GL/glew.h>
+#include <epoxy/gl.h>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/point/b2dpoint.hxx>
 #include <basegfx/polygon/b2dpolygonclipper.hxx>
 #include <basegfx/polygon/b2dpolygontriangulator.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <canvas/canvastools.hxx>
 #include <canvas/verifyinput.hxx>
 #include <tools/diagnose_ex.h>
@@ -44,7 +44,7 @@ namespace oglcanvas
                          "CanvasCustomSprite::CanvasCustomSprite(): Invalid sprite canvas" );
 
         ::canvas::tools::setIdentityAffineMatrix2D(maTransformation);
-        maCanvasHelper.init( *rRefDevice.get(),
+        maCanvasHelper.init( *rRefDevice,
                              rDeviceHelper );
     }
 
@@ -58,8 +58,7 @@ namespace oglcanvas
         CanvasCustomSpriteBaseT::disposeThis();
     }
 
-    void SAL_CALL CanvasCustomSprite::setAlpha( double alpha ) throw (lang::IllegalArgumentException,
-                                                                      uno::RuntimeException, std::exception)
+    void SAL_CALL CanvasCustomSprite::setAlpha( double alpha )
     {
         canvas::tools::verifyRange( alpha, 0.0, 1.0 );
 
@@ -69,8 +68,7 @@ namespace oglcanvas
 
     void SAL_CALL CanvasCustomSprite::move( const geometry::RealPoint2D&  aNewPos,
                                             const rendering::ViewState&   viewState,
-                                            const rendering::RenderState& renderState ) throw (lang::IllegalArgumentException,
-                                                                                               uno::RuntimeException, std::exception)
+                                            const rendering::RenderState& renderState )
     {
         canvas::tools::verifyArgs(aNewPos, viewState, renderState,
                                   OSL_THIS_FUNC,
@@ -87,39 +85,38 @@ namespace oglcanvas
         maPosition *= aTransform;
     }
 
-    void SAL_CALL CanvasCustomSprite::transform( const geometry::AffineMatrix2D& aTransformation ) throw (lang::IllegalArgumentException,
-                                                                                                          uno::RuntimeException, std::exception)
+    void SAL_CALL CanvasCustomSprite::transform( const geometry::AffineMatrix2D& aTransformation )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         maTransformation = aTransformation;
     }
 
-    void SAL_CALL CanvasCustomSprite::clip( const uno::Reference< rendering::XPolyPolygon2D >& xClip ) throw (uno::RuntimeException, std::exception)
+    void SAL_CALL CanvasCustomSprite::clip( const uno::Reference< rendering::XPolyPolygon2D >& xClip )
     {
         mxClip = xClip;
     }
 
-    void SAL_CALL CanvasCustomSprite::setPriority( double nPriority ) throw (uno::RuntimeException, std::exception)
+    void SAL_CALL CanvasCustomSprite::setPriority( double nPriority )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         mfPriority = nPriority;
     }
 
-    void SAL_CALL CanvasCustomSprite::show() throw (uno::RuntimeException, std::exception)
+    void SAL_CALL CanvasCustomSprite::show()
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         if( mpSpriteCanvas.is() )
             mpSpriteCanvas->show(this);
     }
 
-    void SAL_CALL CanvasCustomSprite::hide() throw (uno::RuntimeException, std::exception)
+    void SAL_CALL CanvasCustomSprite::hide()
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         if( mpSpriteCanvas.is() )
             mpSpriteCanvas->hide(this);
     }
 
-    uno::Reference< rendering::XCanvas > SAL_CALL CanvasCustomSprite::getContentCanvas() throw (uno::RuntimeException, std::exception)
+    uno::Reference< rendering::XCanvas > SAL_CALL CanvasCustomSprite::getContentCanvas()
     {
         return this;
     }
@@ -194,26 +191,35 @@ namespace oglcanvas
                     const double fHeight=maSize.Height;
 
                     // TODO(P3): buffer triangulation
-                    const ::basegfx::B2DPolygon& rTriangulatedPolygon(
+                    const ::basegfx::triangulator::B2DTriangleVector rTriangulatedPolygon(
                         ::basegfx::triangulator::triangulate(
                             ::basegfx::unotools::b2DPolyPolygonFromXPolyPolygon2D(mxClip)));
 
-                    basegfx::B2DPolygon rTriangleList(
-                        basegfx::tools::clipTriangleListOnRange(
-                            rTriangulatedPolygon,
-                            basegfx::B2DRange(
-                                0,0,
-                                aSpriteSizePixel.getX(),
-                                aSpriteSizePixel.getY())));
-
                     glBegin(GL_TRIANGLES);
-                    for( sal_uInt32 i=0; i<rTriangulatedPolygon.count(); i++ )
+                    for( size_t i=0; i<rTriangulatedPolygon.size(); i++ )
                     {
-                        const ::basegfx::B2DPoint& rPt( rTriangulatedPolygon.getB2DPoint(i) );
-                        const double s(rPt.getX()/fWidth);
-                        const double t(rPt.getY()/fHeight);
-                        glTexCoord2f(s,t); glVertex2d(rPt.getX(), rPt.getY());
-                    }
+                        const::basegfx::triangulator::B2DTriangle& rCandidate(rTriangulatedPolygon[i]);
+                        glTexCoord2f(
+                            rCandidate.getA().getX()/fWidth,
+                            rCandidate.getA().getY()/fHeight);
+                        glVertex2d(
+                            rCandidate.getA().getX(),
+                            rCandidate.getA().getY());
+
+                        glTexCoord2f(
+                            rCandidate.getB().getX()/fWidth,
+                            rCandidate.getB().getY()/fHeight);
+                        glVertex2d(
+                            rCandidate.getB().getX(),
+                            rCandidate.getB().getY());
+
+                        glTexCoord2f(
+                            rCandidate.getC().getX()/fWidth,
+                            rCandidate.getC().getY()/fHeight);
+                        glVertex2d(
+                            rCandidate.getC().getX(),
+                            rCandidate.getC().getY());
+                     }
                     glEnd();
                 }
                 else

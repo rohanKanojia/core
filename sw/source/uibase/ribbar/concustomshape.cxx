@@ -47,18 +47,18 @@
 
 using namespace com::sun::star;
 
-ConstCustomShape::ConstCustomShape( SwWrtShell* pWrtShell, SwEditWin* pEditWin, SwView* pSwView, SfxRequest& rReq )
+ConstCustomShape::ConstCustomShape( SwWrtShell* pWrtShell, SwEditWin* pEditWin, SwView* pSwView, SfxRequest const & rReq )
     : SwDrawBase( pWrtShell, pEditWin, pSwView )
 {
     aCustomShape = ConstCustomShape::GetShapeTypeFromRequest( rReq );
 }
 
-OUString ConstCustomShape::GetShapeType() const
+const OUString& ConstCustomShape::GetShapeType() const
 {
     return aCustomShape;
 }
 
-OUString ConstCustomShape::GetShapeTypeFromRequest( SfxRequest& rReq )
+OUString ConstCustomShape::GetShapeTypeFromRequest( SfxRequest const & rReq )
 {
     OUString aRet;
     const SfxItemSet* pArgs = rReq.GetArgs();
@@ -96,11 +96,6 @@ bool ConstCustomShape::MouseButtonDown(const MouseEvent& rMEvt)
     return bReturn;
 }
 
-bool ConstCustomShape::MouseButtonUp(const MouseEvent& rMEvt)
-{
-    return SwDrawBase::MouseButtonUp(rMEvt);
-}
-
 void ConstCustomShape::Activate(const sal_uInt16 nSlotId)
 {
     m_pWin->SetSdrDrawMode( OBJ_CUSTOMSHAPE );
@@ -119,34 +114,34 @@ void ConstCustomShape::SetAttributes( SdrObject* pObj )
         std::vector< OUString > aObjList;
         if ( GalleryExplorer::FillObjListTitle( GALLERY_THEME_POWERPOINT, aObjList ) )
         {
-            sal_uInt16 i;
-            for ( i = 0; i < aObjList.size(); i++ )
+            for ( std::vector<OUString>::size_type i = 0; i < aObjList.size(); i++ )
             {
                 if ( aObjList[ i ].equalsIgnoreAsciiCase( aCustomShape ) )
                 {
                     FmFormModel aFormModel;
-                    SfxItemPool& rPool = aFormModel.GetItemPool();
+                    SfxItemPool& rPool(aFormModel.GetItemPool());
                     rPool.FreezeIdRanges();
+
                     if ( GalleryExplorer::GetSdrObj( GALLERY_THEME_POWERPOINT, i, &aFormModel ) )
                     {
                         const SdrObject* pSourceObj = aFormModel.GetPage( 0 )->GetObj( 0 );
                         if( pSourceObj )
                         {
                             const SfxItemSet& rSource = pSourceObj->GetMergedItemSet();
-                            SfxItemSet aDest( pObj->GetModel()->GetItemPool(),              // ranges from SdrAttrObj
-                            SDRATTR_START, SDRATTR_SHADOW_LAST,
-                            SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST,
-                            SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION,
-                            // Graphic Attributes
-                            SDRATTR_GRAF_FIRST, SDRATTR_GRAF_LAST,
-                            // 3d Properties
-                            SDRATTR_3D_FIRST, SDRATTR_3D_LAST,
-                            // CustomShape properties
-                            SDRATTR_CUSTOMSHAPE_FIRST, SDRATTR_CUSTOMSHAPE_LAST,
-                            // range from SdrTextObj
-                            EE_ITEMS_START, EE_ITEMS_END,
-                            // end
-                            0, 0);
+                            SfxItemSet aDest(
+                                pObj->getSdrModelFromSdrObject().GetItemPool(),
+                                svl::Items<
+                                    // Ranges from SdrAttrObj:
+                                    SDRATTR_START, SDRATTR_SHADOW_LAST,
+                                    SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST,
+                                    SDRATTR_TEXTDIRECTION,
+                                        SDRATTR_TEXTDIRECTION,
+                                    // Graphic attributes, 3D properties,
+                                    // CustomShape properties:
+                                    SDRATTR_GRAF_FIRST,
+                                        SDRATTR_CUSTOMSHAPE_LAST,
+                                    // Range from SdrTextObj:
+                                    EE_ITEMS_START, EE_ITEMS_END>{});
                             aDest.Set( rSource );
                             pObj->SetMergedItemSet( aDest );
                             sal_Int32 nAngle = pSourceObj->GetRotateAngle();
@@ -165,7 +160,7 @@ void ConstCustomShape::SetAttributes( SdrObject* pObj )
     }
     if ( !bAttributesAppliedFromGallery )
     {
-        pObj->SetMergedItem( SvxAdjustItem( SVX_ADJUST_CENTER, RES_PARATR_ADJUST ) );
+        pObj->SetMergedItem( SvxAdjustItem( SvxAdjust::Center, RES_PARATR_ADJUST ) );
         pObj->SetMergedItem( SdrTextVertAdjustItem( SDRTEXTVERTADJUST_CENTER ) );
         pObj->SetMergedItem( SdrTextHorzAdjustItem( SDRTEXTHORZADJUST_BLOCK ) );
         pObj->SetMergedItem( makeSdrTextAutoGrowHeightItem( false ) );
@@ -183,7 +178,7 @@ void ConstCustomShape::CreateDefaultObject()
         if ( rMarkList.GetMarkCount() == 1 )
         {
             SdrObject* pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
-            if ( pObj && dynamic_cast< const SdrObjCustomShape *>( pObj ) !=  nullptr )
+            if ( dynamic_cast< const SdrObjCustomShape *>( pObj ) )
                 SetAttributes( pObj );
         }
     }

@@ -17,16 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/textcharacterpropertiescontext.hxx"
+#include <drawingml/textcharacterpropertiescontext.hxx>
 
-#include "oox/helper/attributelist.hxx"
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "drawingml/colorchoicecontext.hxx"
-#include "drawingml/texteffectscontext.hxx"
-#include "oox/drawingml/lineproperties.hxx"
-#include "drawingml/textparagraphproperties.hxx"
-#include "oox/core/relations.hxx"
+#include <oox/helper/attributelist.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <drawingml/colorchoicecontext.hxx>
+#include <drawingml/texteffectscontext.hxx>
+#include <drawingml/lineproperties.hxx>
+#include <drawingml/textparagraphproperties.hxx>
+#include <oox/core/relations.hxx>
 #include "hyperlinkcontext.hxx"
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
+
+#include <sal/log.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star::uno;
@@ -37,7 +41,7 @@ namespace oox { namespace drawingml {
 
 // CT_TextCharacterProperties
 TextCharacterPropertiesContext::TextCharacterPropertiesContext(
-        ContextHandler2Helper& rParent,
+        ContextHandler2Helper const & rParent,
         const AttributeList& rAttribs,
         TextCharacterProperties& rTextCharacterProperties )
 : ContextHandler2( rParent )
@@ -201,6 +205,17 @@ ContextHandlerRef TextCharacterPropertiesContext::onCreateContext( sal_Int32 aEl
                     mrTextCharacterProperties.moCaseMap = XML_none;
             }
             break;
+        case W_TOKEN(vertAlign):
+        {
+            // Map wordprocessingML <w:vertAlign w:val="..."/> to drawingML
+            // <a:rPr baseline="...">.
+            sal_Int32 nVal = rAttribs.getToken(W_TOKEN(val), 0);
+            if (nVal == XML_superscript)
+                mrTextCharacterProperties.moBaseline = 30000;
+            else if (nVal == XML_subscript)
+                mrTextCharacterProperties.moBaseline = -25000;
+            break;
+        }
         case OOX_TOKEN(w14, glow):
         case OOX_TOKEN(w14, shadow):
         case OOX_TOKEN(w14, reflection):

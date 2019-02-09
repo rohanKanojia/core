@@ -16,15 +16,15 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "EndMarker.hxx"
-#include "ColorChanger.hxx"
-#include "SectionWindow.hxx"
-#include "helpids.hrc"
+#include <EndMarker.hxx>
+#include <ColorChanger.hxx>
+#include <SectionWindow.hxx>
 
 #include <vcl/settings.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/gradient.hxx>
 #include <vcl/lineinfo.hxx>
+#include <vcl/event.hxx>
 
 
 #define CORNER_SPACE    5
@@ -33,9 +33,8 @@ namespace rptui
 {
 
 OEndMarker::OEndMarker(vcl::Window* _pParent ,const OUString& _sColorEntry)
-: OColorListener(_pParent,_sColorEntry)
+    : OColorListener(_pParent, _sColorEntry)
 {
-    SetUniqueId(HID_RPT_ENDMARKER);
     ImplInitSettings();
 }
 
@@ -43,15 +42,15 @@ OEndMarker::~OEndMarker()
 {
 }
 
-void OEndMarker::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rRect*/)
+void OEndMarker::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& /*rRect*/)
 {
     Fraction aCornerSpace(long(CORNER_SPACE));
     aCornerSpace *= rRenderContext.GetMapMode().GetScaleX();
-    const long nCornerSpace = aCornerSpace;
+    const long nCornerSpace = long(aCornerSpace);
 
     Size aSize = GetSizePixel();
-    aSize.Width() += nCornerSpace;
-    Rectangle aWholeRect(Point(-nCornerSpace,0),aSize);
+    aSize.AdjustWidth(nCornerSpace );
+    tools::Rectangle aWholeRect(Point(-nCornerSpace,0),aSize);
     tools::PolyPolygon aPoly;
     aPoly.Insert( tools::Polygon(aWholeRect,nCornerSpace,nCornerSpace));
 
@@ -63,17 +62,17 @@ void OEndMarker::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rR
     aStartColor.RGBtoHSB(nHue, nSat, nBri);
     nSat += 40;
     Color aEndColor(Color::HSBtoRGB(nHue, nSat, nBri));
-    Gradient aGradient(GradientStyle_LINEAR, aStartColor, aEndColor);
+    Gradient aGradient(GradientStyle::Linear, aStartColor, aEndColor);
     aGradient.SetSteps(static_cast<sal_uInt16>(aSize.Height()));
 
     rRenderContext.DrawGradient(PixelToLogic(aPoly), aGradient);
     if (m_bMarked)
     {
-        Rectangle aRect(Point(-nCornerSpace, nCornerSpace),
+        tools::Rectangle aRect(Point(-nCornerSpace, nCornerSpace),
                          Size(aSize.Width() - nCornerSpace,
                               aSize.Height() - nCornerSpace - nCornerSpace));
         ColorChanger aColors(this, COL_WHITE, COL_WHITE);
-        rRenderContext.DrawPolyLine( tools::Polygon(PixelToLogic(aRect)), LineInfo(LINE_SOLID, 2));
+        rRenderContext.DrawPolyLine( tools::Polygon(PixelToLogic(aRect)), LineInfo(LineStyle::Solid, 2));
     }
 }
 

@@ -18,10 +18,10 @@
  */
 
 
-#include "fmprop.hrc"
-#include "fmservs.hxx"
-#include "svx/fmtools.hxx"
-#include "svx/fmglob.hxx"
+#include <fmprop.hxx>
+#include <fmservs.hxx>
+#include <svx/fmtools.hxx>
+#include <svx/fmglob.hxx>
 
 #include <com/sun/star/awt/LineEndFormat.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
@@ -62,13 +62,9 @@
 #include <basic/sbxvar.hxx>
 #include <svl/eitem.hxx>
 #include <svl/stritem.hxx>
-#include <comphelper/container.hxx>
-#include <comphelper/extract.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/property.hxx>
-#include <comphelper/sequence.hxx>
 #include <comphelper/types.hxx>
-#include <comphelper/uno3.hxx>
 #include <connectivity/dbexception.hxx>
 #include <connectivity/dbtools.hxx>
 #include <cppuhelper/typeprovider.hxx>
@@ -84,7 +80,6 @@
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::container;
@@ -154,9 +149,9 @@ void displayException(const css::sdb::SQLContext& _rExcept, vcl::Window* _pParen
 }
 
 
-void displayException(const css::sdb::SQLErrorEvent& _rEvent)
+void displayException(const css::sdb::SQLErrorEvent& _rEvent, vcl::Window* _pParent)
 {
-    displayException(_rEvent.Reason);
+    displayException(_rEvent.Reason, _pParent);
 }
 
 
@@ -259,8 +254,7 @@ void CursorWrapper::ImplConstruct(const Reference< css::sdbc::XResultSet>& _rxCu
         m_xGeneric = m_xMoveOperations.get();
 }
 
-
-const CursorWrapper& CursorWrapper::operator=(const Reference< css::sdbc::XRowSet>& _rxCursor)
+CursorWrapper& CursorWrapper::operator=(const Reference< css::sdbc::XRowSet>& _rxCursor)
 {
     m_xMoveOperations.set(_rxCursor, UNO_QUERY);
     m_xBookmarkOperations.set(_rxCursor, UNO_QUERY);
@@ -274,35 +268,20 @@ const CursorWrapper& CursorWrapper::operator=(const Reference< css::sdbc::XRowSe
     return *this;
 }
 
-
 FmXDisposeListener::~FmXDisposeListener()
 {
     setAdapter(nullptr);
 }
 
-
 void FmXDisposeListener::setAdapter(FmXDisposeMultiplexer* pAdapter)
 {
-    if (m_pAdapter)
-    {
-        ::osl::MutexGuard aGuard(m_rMutex);
-        m_pAdapter->release();
-        m_pAdapter = nullptr;
-    }
-
-    if (pAdapter)
-    {
-        ::osl::MutexGuard aGuard(m_rMutex);
-        m_pAdapter = pAdapter;
-        m_pAdapter->acquire();
-    }
+    ::osl::MutexGuard aGuard(m_aMutex);
+    m_pAdapter = pAdapter;
 }
-
 
 FmXDisposeMultiplexer::FmXDisposeMultiplexer(FmXDisposeListener* _pListener, const Reference< css::lang::XComponent>& _rxObject)
     :m_xObject(_rxObject)
     ,m_pListener(_pListener)
-    ,m_nId(0)
 {
     m_pListener->setAdapter(this);
 
@@ -310,20 +289,19 @@ FmXDisposeMultiplexer::FmXDisposeMultiplexer(FmXDisposeListener* _pListener, con
         m_xObject->addEventListener(this);
 }
 
-
 FmXDisposeMultiplexer::~FmXDisposeMultiplexer()
 {
 }
 
 // css::lang::XEventListener
 
-void FmXDisposeMultiplexer::disposing(const css::lang::EventObject& _Source) throw( RuntimeException, std::exception )
+void FmXDisposeMultiplexer::disposing(const css::lang::EventObject& Source)
 {
     Reference< css::lang::XEventListener> xPreventDelete(this);
 
     if (m_pListener)
     {
-        m_pListener->disposing(_Source, m_nId);
+        m_pListener->disposing(Source, 0);
         m_pListener->setAdapter(nullptr);
         m_pListener = nullptr;
     }

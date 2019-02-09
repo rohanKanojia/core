@@ -22,6 +22,7 @@
 
 #include <svl/poolitem.hxx>
 #include <editeng/editengdllapi.h>
+#include <memory>
 
 class SvXMLNamespaceMap;
 
@@ -30,22 +31,21 @@ class SvXMLAttrContainerData;
 
 class EDITENG_DLLPUBLIC SvXMLAttrContainerItem: public SfxPoolItem
 {
-    SvXMLAttrContainerData  *pImpl;
+    std::unique_ptr<SvXMLAttrContainerData> pImpl;
 
 public:
 
     SvXMLAttrContainerItem( sal_uInt16 nWhich = 0 );
     SvXMLAttrContainerItem( const SvXMLAttrContainerItem& );
-    virtual ~SvXMLAttrContainerItem();
+    virtual ~SvXMLAttrContainerItem() override;
 
     virtual bool operator==( const SfxPoolItem& ) const override;
 
-    virtual bool GetPresentation(
-                                SfxItemPresentation ePresentation,
-                                SfxMapUnit eCoreMetric,
-                                SfxMapUnit ePresentationMetric,
-                                OUString &rText,
-                                const IntlWrapper *pIntlWrapper = nullptr ) const override;
+    virtual bool GetPresentation(SfxItemPresentation ePresentation,
+                                 MapUnit eCoreMetric,
+                                 MapUnit ePresentationMetric,
+                                 OUString &rText,
+                                 const IntlWrapper& rIntlWrapper) const override;
 
     virtual sal_uInt16 GetVersion( sal_uInt16 nFileFormatVersion ) const override;
 

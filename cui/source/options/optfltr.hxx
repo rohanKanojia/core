@@ -20,7 +20,6 @@
 #define INCLUDED_CUI_SOURCE_OPTIONS_OPTFLTR_HXX
 
 #include <vcl/button.hxx>
-#include <vcl/group.hxx>
 #include <vcl/fixed.hxx>
 #include <sfx2/tabdlg.hxx>
 #include <svtools/simptabl.hxx>
@@ -37,14 +36,14 @@ class OfaMSFilterTabPage : public SfxTabPage
     VclPtr<CheckBox>       aPBasicStgCB;
 
 
-    DECL_LINK_TYPED(LoadWordBasicCheckHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(LoadExcelBasicCheckHdl_Impl, Button*, void);
+    DECL_LINK(LoadWordBasicCheckHdl_Impl, Button*, void);
+    DECL_LINK(LoadExcelBasicCheckHdl_Impl, Button*, void);
 public:
     OfaMSFilterTabPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual ~OfaMSFilterTabPage();
+    virtual ~OfaMSFilterTabPage() override;
     virtual void dispose() override;
 
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent,
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent,
                                 const SfxItemSet* rAttrSet );
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
@@ -68,7 +67,7 @@ class OfaMSFilterTabPage2 : public SfxTabPage
         virtual void    KeyInput( const KeyEvent& rKEvt ) override;
 
     public:
-        MSFltrSimpleTable(SvSimpleTableContainer& rParent)
+        explicit MSFltrSimpleTable(SvSimpleTableContainer& rParent)
             : SvSimpleTable(rParent, 0)
         {
         }
@@ -82,12 +81,12 @@ class OfaMSFilterTabPage2 : public SfxTabPage
            sChgToFromCalc,
            sChgToFromImpress,
            sChgToFromSmartArt;
-    SvLBoxButtonData*   pCheckButtonData;
+    std::unique_ptr<SvLBoxButtonData> m_xCheckButtonData;
 
     VclPtr<RadioButton> aHighlightingRB;
     VclPtr<RadioButton> aShadingRB;
 
-    virtual ~OfaMSFilterTabPage2();
+    virtual ~OfaMSFilterTabPage2() override;
     virtual void dispose() override;
 
     void                InsertEntry( const OUString& _rTxt, sal_IntPtr _nType );
@@ -97,7 +96,7 @@ class OfaMSFilterTabPage2 : public SfxTabPage
 
 public:
     OfaMSFilterTabPage2( vcl::Window* pParent, const SfxItemSet& rSet );
-    static VclPtr<SfxTabPage> Create( vcl::Window* pParent, const SfxItemSet* rAttrSet );
+    static VclPtr<SfxTabPage> Create( TabPageParent pParent, const SfxItemSet* rAttrSet );
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;

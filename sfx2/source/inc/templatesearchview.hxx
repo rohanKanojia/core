@@ -12,23 +12,54 @@
 
 #include <sfx2/thumbnailview.hxx>
 
-class TemplateSearchView : public ThumbnailView
+class TemplateViewItem;
+class PopupMenu;
+class Menu;
+
+class TemplateSearchView final : public ThumbnailView
 {
 public:
 
-    TemplateSearchView ( vcl::Window* pParent, WinBits nWinStyle = WB_TABSTOP | WB_VSCROLL);
+    TemplateSearchView ( vcl::Window* pParent);
 
     void setOpenTemplateHdl (const Link<ThumbnailViewItem*, void> &rLink);
+
+    DECL_LINK(ContextMenuSelectHdl, Menu*, bool);
+
+    void setCreateContextMenuHdl(const Link<ThumbnailViewItem*,void> &rLink);
+
+    void setEditTemplateHdl(const Link<ThumbnailViewItem*,void> &rLink);
+
+    void setDeleteTemplateHdl(const Link<ThumbnailViewItem*,void> &rLink);
+
+    void setDefaultTemplateHdl(const Link<ThumbnailViewItem*,void> &rLink);
+
+    void createContextMenu(const bool bIsDefault);
 
     void AppendItem(sal_uInt16 nAssocItemId, sal_uInt16 nRegionId, sal_uInt16 nIdx,
                     const OUString &rTitle, const OUString &rSubtitle,
                     const OUString &rPath, const BitmapEx &rImage );
 
-protected:
+    static BitmapEx getDefaultThumbnail( const OUString& rPath );
+
+private:
     virtual void OnItemDblClicked(ThumbnailViewItem *pItem) override;
 
-protected:
+    virtual void MouseButtonDown( const MouseEvent& rMEvt ) override;
+
+    virtual void Command( const CommandEvent& rCEvt ) override;
+
+    virtual void KeyInput( const KeyEvent& rKEvt ) override;
+
+    TemplateViewItem *maSelectedItem;
+
+    Point maPosition;
+
     Link<ThumbnailViewItem*, void> maOpenTemplateHdl;
+    Link<ThumbnailViewItem*, void> maCreateContextMenuHdl;
+    Link<ThumbnailViewItem*,void> maEditTemplateHdl;
+    Link<ThumbnailViewItem*,void> maDeleteTemplateHdl;
+    Link<ThumbnailViewItem*,void> maDefaultTemplateHdl;
 };
 
 #endif // INCLUDED_SFX2_SOURCE_INC_TEMPLATESEARCHVIEW_HXX

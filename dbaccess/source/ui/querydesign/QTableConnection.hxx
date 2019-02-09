@@ -19,9 +19,9 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_UI_QUERYDESIGN_QTABLECONNECTION_HXX
 #define INCLUDED_DBACCESS_SOURCE_UI_QUERYDESIGN_QTABLECONNECTION_HXX
 
-#include "TableConnection.hxx"
+#include <TableConnection.hxx>
 #include "QTableConnectionData.hxx"
-#include "QEnumTypes.hxx"
+#include <QEnumTypes.hxx>
 
 namespace dbaui
 {
@@ -36,10 +36,10 @@ namespace dbaui
         OQueryTableConnection& operator=(const OQueryTableConnection& rConn);
         bool operator==(const OQueryTableConnection& rCompare);
 
-        inline OUString  GetAliasName(EConnectionSide nWhich) const { return static_cast<OQueryTableConnectionData*>(GetData().get())->GetAliasName(nWhich); }
+        OUString const & GetAliasName(EConnectionSide nWhich) const { return static_cast<OQueryTableConnectionData*>(GetData().get())->GetAliasName(nWhich); }
 
-        inline bool     IsVisited() const               { return m_bVisited; }
-        inline void     SetVisited(bool bVisited)   { m_bVisited = bVisited; }
+        bool     IsVisited() const               { return m_bVisited; }
+        void     SetVisited(bool bVisited)   { m_bVisited = bVisited; }
 
     };
 }

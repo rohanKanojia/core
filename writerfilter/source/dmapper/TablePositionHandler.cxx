@@ -6,9 +6,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#include <TablePositionHandler.hxx>
-#include <ConversionHelper.hxx>
+#include "TablePositionHandler.hxx"
+#include "ConversionHelper.hxx"
 #include <ooxml/resourceids.hxx>
+#include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/text/HoriOrientation.hpp>
 #include <com/sun/star/text/VertOrientation.hpp>
 #include <com/sun/star/text/RelOrientation.hpp>
@@ -24,26 +25,15 @@ using namespace ::com::sun::star;
 TablePositionHandler::TablePositionHandler() :
     LoggedProperties("TablePositionHandler"),
     m_aVertAnchor("margin"),
-    m_aYSpec(),
-    m_aHorzAnchor("text"),
-    m_aXSpec(),
-    m_nY(0),
-    m_nX(0),
-    m_nLeftFromText(0),
-    m_nRightFromText(0),
-    m_nTopFromText(0),
-    m_nBottomFromText(0)
+    m_aHorzAnchor("text")
 {
 }
 
-TablePositionHandler::~TablePositionHandler()
-{
-}
+TablePositionHandler::~TablePositionHandler() = default;
 
-
-void TablePositionHandler::lcl_attribute(Id rName, Value& rVal)
+void TablePositionHandler::lcl_attribute(Id nId, Value& rVal)
 {
-    switch (rName)
+    switch (nId)
     {
     case NS_ooxml::LN_CT_TblPPr_vertAnchor:
         m_aVertAnchor = rVal.getString();

@@ -20,7 +20,10 @@
 #ifndef INCLUDED_VCL_SALGTYPE_HXX
 #define INCLUDED_VCL_SALGTYPE_HXX
 
-#include <sal/types.h>
+#include <o3tl/typed_flags_set.hxx>
+#include <tools/color.hxx>
+#include <tools/gen.hxx>
+#include <ostream>
 
 enum class DeviceFormat {
                             NONE = -1,
@@ -31,12 +34,7 @@ enum class DeviceFormat {
 #endif
                         };
 
-typedef sal_uInt32 SalColor;
-#define MAKE_SALCOLOR( r, g, b )    ((SalColor)(((sal_uInt32)((sal_uInt8)(b))))|(((sal_uInt32)((sal_uInt8)(g)))<<8)|(((sal_uInt32)((sal_uInt8)(r)))<<16))
-#define SALCOLOR_RED( n )           ((sal_uInt8)((n)>>16))
-#define SALCOLOR_GREEN( n )         ((sal_uInt8)(((sal_uInt16)(n)) >> 8))
-#define SALCOLOR_BLUE( n )          ((sal_uInt8)(n))
-#define SALCOLOR_NONE           (~(SalColor)0)
+constexpr ::Color SALCOLOR_NONE ( 0xFF, 0xFF, 0xFF, 0xFF );
 
 // must equal to class Point
 struct SalPoint
@@ -66,15 +64,32 @@ struct SalTwoRect
     }
 };
 
-typedef sal_uInt16 SalROPColor;
-#define SAL_ROP_0                   ((SalROPColor)0)
-#define SAL_ROP_1                   ((SalROPColor)1)
-#define SAL_ROP_INVERT              ((SalROPColor)2)
+template <typename charT, typename traits>
+inline std::basic_ostream<charT, traits>& operator<<(std::basic_ostream<charT, traits>& stream,
+                                                     const SalTwoRect& rPosAry)
+{
+    tools::Rectangle aSrcRect(rPosAry.mnSrcX, rPosAry.mnSrcY, rPosAry.mnSrcX + rPosAry.mnSrcWidth,
+                              rPosAry.mnSrcY + rPosAry.mnSrcHeight);
+    tools::Rectangle aDestRect(rPosAry.mnDestX, rPosAry.mnDestY,
+                               rPosAry.mnDestX + rPosAry.mnDestWidth,
+                               rPosAry.mnDestY + rPosAry.mnDestHeight);
+    stream << aSrcRect << " => " << aDestRect;
+    return stream;
+}
 
-typedef sal_uInt16 SalInvert;
-#define SAL_INVERT_HIGHLIGHT        ((SalInvert)0x0001)
-#define SAL_INVERT_50               ((SalInvert)0x0002)
-#define SAL_INVERT_TRACKFRAME       ((SalInvert)0x0004)
+enum class SalROPColor {
+    N0, N1, Invert
+};
+
+enum class SalInvert {
+    NONE       = 0x00,
+    N50        = 0x01,
+    TrackFrame = 0x02
+};
+namespace o3tl
+{
+    template<> struct typed_flags<SalInvert> : is_typed_flags<SalInvert, 0x03> {};
+}
 
 #endif // INCLUDED_VCL_SALGTYPE_HXX
 

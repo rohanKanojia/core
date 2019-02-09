@@ -20,7 +20,7 @@
 #define INCLUDED_SW_SOURCE_UIBASE_INC_TABSH_HXX
 
 #include "basesh.hxx"
-#include "swdllapi.h"
+#include <swdllapi.h>
 
 class SfxItemSet;
 class SwWrtShell;
@@ -45,7 +45,7 @@ public:
     void    GetLineStyleState(SfxItemSet &rSet);
     void    ExecTableStyle(SfxRequest& rReq);
 
-    void    ExecNumberFormat(SfxRequest& rReq);
+    void    ExecNumberFormat(SfxRequest const & rReq);
 
             SwTableShell(SwView &rView);
 };

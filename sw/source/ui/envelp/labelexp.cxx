@@ -21,10 +21,9 @@
 #include <com/sun/star/text/AutoTextContainer.hpp>
 #include <com/sun/star/text/XTextFieldsSupplier.hpp>
 #include <com/sun/star/util/XRefreshable.hpp>
-#include <comphelper/processfactory.hxx>
-#include <svtools/treelistentry.hxx>
+#include <vcl/treelistentry.hxx>
 #include <swtypes.hxx>
-#include <labfmt.hxx>
+#include "labfmt.hxx"
 #include <unotools.hxx>
 #include <unoatxt.hxx>
 #include <unomid.h>
@@ -34,150 +33,15 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::uno;
-using namespace ::comphelper;
 
-void SwVisitingCardPage::InitFrameControl()
-{
-    Link<SwOneExampleFrame&,void> aLink(LINK(this, SwVisitingCardPage, FrameControlInitializedHdl));
-    m_pExampleWIN->Show();
-    pExampleFrame = new SwOneExampleFrame( *m_pExampleWIN,
-                                    EX_SHOW_BUSINESS_CARDS, &aLink );
-
-    Reference< XComponentContext > xContext = comphelper::getProcessComponentContext();
-
-    //now the AutoText ListBoxes have to be filled
-
-    m_xAutoText = text::AutoTextContainer::create( xContext );
-
-    uno::Sequence<OUString> aNames = m_xAutoText->getElementNames();
-    const OUString* pGroups = aNames.getConstArray();
-
-    for(sal_Int32 i = 0; i < aNames.getLength(); ++i)
-    {
-        uno::Any aGroup = m_xAutoText->getByName(pGroups[i]);
-        uno::Reference< text::XAutoTextGroup >  xGroup;
-        aGroup >>= xGroup;
-        uno::Reference< container::XIndexAccess >  xIdxAcc(xGroup, uno::UNO_QUERY);
-        try
-        {
-            if(!xIdxAcc.is() || xIdxAcc->getCount())
-            {
-                uno::Reference< beans::XPropertySet >  xPrSet(xGroup, uno::UNO_QUERY);
-                uno::Any aTitle = xPrSet->getPropertyValue( UNO_NAME_TITLE );
-                OUString uTitle;
-                aTitle >>= uTitle;
-                const sal_Int32 nEntry = m_pAutoTextGroupLB->InsertEntry(uTitle);
-                m_pAutoTextGroupLB->SetEntryData(nEntry, new OUString(pGroups[i]));
-            }
-        }
-        catch (const Exception&)
-        {
-        }
-    }
-    if(m_pAutoTextGroupLB->GetEntryCount())
-    {
-        if(LISTBOX_ENTRY_NOTFOUND == m_pAutoTextGroupLB->GetSelectEntryPos())
-            m_pAutoTextGroupLB->SelectEntryPos(0);
-        const OUString *pCurGroupName(
-            static_cast<const OUString*>(m_pAutoTextGroupLB->GetSelectEntryData()));
-        if(m_xAutoText->hasByName(*pCurGroupName))
-        {
-            uno::Any aGroup = m_xAutoText->getByName(*pCurGroupName);
-            try
-            {
-                uno::Reference< text::XAutoTextGroup >  xGroup;
-                aGroup >>= xGroup;
-                uno::Sequence< OUString > aBlockNames = xGroup->getElementNames();
-                uno::Sequence< OUString > aTitles = xGroup->getTitles() ;
-
-                SetUserData( aBlockNames.getLength(), aTitles.getConstArray(),
-                            aBlockNames.getConstArray() );
-            }
-            catch (const uno::RuntimeException&)
-            {
-                // we'll be her if path settings were wrong
-            }
-        }
-    }
-}
-
-IMPL_LINK_NOARG_TYPED(SwVisitingCardPage, FrameControlInitializedHdl, SwOneExampleFrame&, void)
-{
-    SvTreeListEntry* pSel = m_pAutoTextLB->FirstSelected();
-    OUString sEntry;
-    if( pSel )
-        sEntry = *static_cast<OUString*>(pSel->GetUserData());
-    uno::Reference< text::XTextCursor > & xCursor = pExampleFrame->GetTextCursor();
-    OUString uEntry(sEntry);
-
-    if(LISTBOX_ENTRY_NOTFOUND != m_pAutoTextGroupLB->GetSelectEntryPos())
-    {
-        const OUString *pGroup( static_cast<const OUString*>(m_pAutoTextGroupLB->GetSelectEntryData()) );
-        uno::Any aGroup = m_xAutoText->getByName(*pGroup);
-        uno::Reference< text::XAutoTextGroup >  xGroup;
-        aGroup >>= xGroup;
-
-        if( !sEntry.isEmpty() && xGroup->hasByName( uEntry ) )
-        {
-            uno::Any aEntry(xGroup->getByName(uEntry));
-            uno::Reference< text::XAutoTextEntry >  xEntry;
-            aEntry >>= xEntry;
-            if(xEntry.is())
-            {
-                uno::Reference< text::XTextRange >  xRange(xCursor, uno::UNO_QUERY);
-                xEntry->applyTo(xRange);
-            }
-            UpdateFields();
-        }
-    }
-}
-
-IMPL_LINK_NOARG_TYPED( SwVisitingCardPage, AutoTextSelectTreeListBoxHdl, SvTreeListBox*, void )
-{
-    if(m_xAutoText.is() && pExampleFrame->IsInitialized())
-        pExampleFrame->ClearDocument();
-}
-IMPL_LINK_TYPED( SwVisitingCardPage, AutoTextSelectHdl, ListBox&, rBox, void )
-{
-    if(m_xAutoText.is())
-    {
-        if (m_pAutoTextGroupLB == &rBox)
-        {
-            const OUString *pGroup( static_cast<const OUString*>(m_pAutoTextGroupLB->GetSelectEntryData()));
-            uno::Any aGroup = m_xAutoText->getByName(*pGroup);
-            uno::Reference< text::XAutoTextGroup >  xGroup;
-            aGroup >>= xGroup;
-
-            ClearUserData();
-            m_pAutoTextLB->Clear();
-
-            uno::Sequence<OUString> aBlockNames = xGroup->getElementNames();
-            uno::Sequence< OUString > aTitles = xGroup->getTitles() ;
-            SetUserData( aBlockNames.getLength(), aTitles.getConstArray(),
-                        aBlockNames.getConstArray() );
-        }
-        if(pExampleFrame->IsInitialized())
-            pExampleFrame->ClearDocument();
-    }
-}
-
-void SwVisitingCardPage::UpdateFields()
-{
-    uno::Reference< frame::XModel >  xModel;
-    if( pExampleFrame && (xModel = pExampleFrame->GetModel()).is())
-    {
-        SwLabDlg::UpdateFieldInformation(xModel, aLabItem);
-    }
-}
-
-void SwLabDlg::UpdateFieldInformation(uno::Reference< frame::XModel > & xModel, const SwLabItem& rItem)
+void SwLabDlg::UpdateFieldInformation(uno::Reference< frame::XModel > const & xModel, const SwLabItem& rItem)
 {
     uno::Reference< text::XTextFieldsSupplier >  xFields(xModel, uno::UNO_QUERY);
     uno::Reference< container::XNameAccess >  xFieldMasters = xFields->getTextFieldMasters();
 
-    static const struct _SwLabItemMap {
+    static const struct SwLabItemMap {
         const char* pName;
-        OUString SwLabItem:: *pValue;
+        OUString SwLabItem:: * const pValue;
     }  aArr[] = {
         { "BC_PRIV_FIRSTNAME"  , &SwLabItem::m_aPrivFirstName },
         { "BC_PRIV_NAME"       , &SwLabItem::m_aPrivName },
@@ -216,7 +80,7 @@ void SwLabDlg::UpdateFieldInformation(uno::Reference< frame::XModel > & xModel, 
 
     try
     {
-        for( const _SwLabItemMap* p = aArr; p->pName; ++p )
+        for( const SwLabItemMap* p = aArr; p->pName; ++p )
         {
             OUString uFieldName(
                 "com.sun.star.text.FieldMaster.User."

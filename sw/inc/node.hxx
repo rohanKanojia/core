@@ -21,13 +21,12 @@
 #define INCLUDED_SW_INC_NODE_HXX
 
 #include <sal/types.h>
-#include <tools/mempool.hxx>
 
 #include "swdllapi.h"
-#include <ndarr.hxx>
-#include <ndtyp.hxx>
-#include <index.hxx>
-#include <fmtcol.hxx>
+#include "ndarr.hxx"
+#include "ndtyp.hxx"
+#include "index.hxx"
+#include "fmtcol.hxx"
 
 #include <memory>
 #include <vector>
@@ -68,9 +67,9 @@ class IDocumentFieldsAccess;
 class IDocumentContentOperations;
 class IDocumentListItems;
 class Point;
+enum class SvxFrameDirection;
 typedef std::vector<SwOLENode*> SwOLENodes; // docary.hxx
 
-//UUUU
 namespace drawinglayer { namespace attribute {
     class SdrAllFillAttributesHelper;
     typedef std::shared_ptr< SdrAllFillAttributesHelper > SdrAllFillAttributesHelperPtr;
@@ -82,16 +81,26 @@ class SW_DLLPUBLIC SwNode
 {
     friend class SwNodes;
 
-    sal_uInt8 m_nNodeType;
+    SwNodeType const m_nNodeType;
 
     /// For text nodes: level of auto format. Was put here because we had still free bits.
     sal_uInt8 m_nAFormatNumLvl : 3;
-    bool m_bSetNumLSpace : 1;         ///< For numbering: TRUE: set indent.
     bool m_bIgnoreDontExpand : 1;     ///< for Text Attributes - ignore the flag
+
+public:
+    /// sw_redlinehide: redline node merge state
+    enum class Merge { None, First, NonFirst, Hidden };
+    bool IsCreateFrameWhenHidingRedlines() {
+        return m_eMerge == Merge::None || m_eMerge == Merge::First;
+    }
+    void SetRedlineMergeFlag(Merge const eMerge) { m_eMerge = eMerge; }
+    Merge GetRedlineMergeFlag() const { return m_eMerge; }
+private:
+    Merge m_eMerge;
 
 #ifdef DBG_UTIL
     static long s_nSerial;
-    long m_nSerial;
+    long const m_nSerial;
 #endif
 
     /// all SwFrameFormat that are anchored at the node
@@ -102,15 +111,15 @@ class SW_DLLPUBLIC SwNode
 protected:
     SwStartNode* m_pStartOfSection;
 
-    SwNode( const SwNodeIndex &rWhere, const sal_uInt8 nNodeId );
+    SwNode( const SwNodeIndex &rWhere, const SwNodeType nNodeId );
 
     /// for the initial StartNode
-    SwNode( SwNodes& rNodes, sal_uLong nPos, const sal_uInt8 nNodeId );
+    SwNode( SwNodes& rNodes, sal_uLong nPos, const SwNodeType nNodeId );
 
 public:
     /** the = 0 forces the class to be an abstract base class, but the dtor can be still called
        from subclasses */
-    virtual ~SwNode() = 0;
+    virtual ~SwNode() override = 0;
 
 #ifdef DBG_UTIL
     long GetSerial() const { return m_nSerial; }
@@ -119,22 +128,20 @@ public:
     sal_uInt16 GetSectionLevel() const;
 
     inline sal_uLong StartOfSectionIndex() const;
-    inline const SwStartNode* StartOfSectionNode() const { return m_pStartOfSection; }
-    inline       SwStartNode* StartOfSectionNode() { return m_pStartOfSection; }
+    const SwStartNode* StartOfSectionNode() const { return m_pStartOfSection; }
+    SwStartNode* StartOfSectionNode() { return m_pStartOfSection; }
 
     inline sal_uLong EndOfSectionIndex() const;
     inline const SwEndNode* EndOfSectionNode() const;
     inline         SwEndNode* EndOfSectionNode();
 
-    inline sal_uInt8 GetAutoFormatLvl() const     { return m_nAFormatNumLvl; }
-    inline void SetAutoFormatLvl( sal_uInt8 nVal )      { m_nAFormatNumLvl = nVal; }
+    sal_uInt8 GetAutoFormatLvl() const     { return m_nAFormatNumLvl; }
+    void SetAutoFormatLvl( sal_uInt8 nVal )      { m_nAFormatNumLvl = nVal; }
 
-    inline void SetNumLSpace( bool bFlag )        { m_bSetNumLSpace = bFlag; }
+    bool IsIgnoreDontExpand() const  { return m_bIgnoreDontExpand; }
+    void SetIgnoreDontExpand( bool bNew )  { m_bIgnoreDontExpand = bNew; }
 
-    inline bool IsIgnoreDontExpand() const  { return m_bIgnoreDontExpand; }
-    inline void SetIgnoreDontExpand( bool bNew )  { m_bIgnoreDontExpand = bNew; }
-
-    sal_uInt8   GetNodeType() const { return m_nNodeType; }
+    SwNodeType   GetNodeType() const { return m_nNodeType; }
 
     inline       SwStartNode *GetStartNode();
     inline const SwStartNode *GetStartNode() const;
@@ -250,14 +257,11 @@ public:
      */
           IStyleAccess& getIDocumentStyleAccess();
 
-    /** Provides access to the document's numbered items interface
-
-        @author OD
-    */
+    /** Provides access to the document's numbered items interface */
     IDocumentListItems& getIDocumentListItems();
 
     /// Is node in the visible area of the Shell?
-    bool IsInVisibleArea( SwViewShell const * pSh = nullptr ) const;
+    bool IsInVisibleArea( SwViewShell const * pSh ) const;
     /// Is node in an protected area?
     bool IsInProtectSect() const;
     /**  Is node in something that is protected (range, frame,
@@ -275,9 +279,9 @@ public:
     /// If node is in a table return the respective table box.
     SwTableBox* GetTableBox() const;
 
-    inline sal_uLong GetIndex() const { return GetPos(); }
+    sal_uLong GetIndex() const { return GetPos(); }
 
-    const SwTextNode* FindOutlineNodeOfLevel( sal_uInt8 nLvl ) const;
+    const SwTextNode* FindOutlineNodeOfLevel(sal_uInt8 nLvl, SwRootFrame const* pLayout = nullptr) const;
 
     sal_uInt8 HasPrevNextLayNode() const;
 
@@ -287,7 +291,6 @@ public:
 
     /**
      * Dumps the node structure to the given destination (file nodes.xml in the current directory by default)
-     * @since 3.5
      */
     virtual void dumpAsXml(struct _xmlTextWriter* pWriter) const;
 
@@ -297,25 +300,23 @@ private:
 };
 
 /// Starts a section of nodes in the document model.
-class SwStartNode: public SwNode
+class SAL_DLLPUBLIC_RTTI SwStartNode: public SwNode
 {
     friend class SwNode;
     friend class SwNodes;
     friend class SwEndNode;     ///< to set the theEndOfSection !!
 
     SwEndNode* m_pEndOfSection;
-    SwStartNodeType m_eStartNodeType;
+    SwStartNodeType const m_eStartNodeType;
 
     /// for the initial StartNode
     SwStartNode( SwNodes& rNodes, sal_uLong nPos );
 
 protected:
     SwStartNode( const SwNodeIndex &rWhere,
-                 const sal_uInt8 nNodeType = ND_STARTNODE,
+                 const SwNodeType nNodeType = SwNodeType::Start,
                  SwStartNodeType = SwNormalStartNode );
 public:
-    DECL_FIXEDMEMPOOL_NEWDEL(SwStartNode)
-
     SwStartNodeType GetStartNodeType() const        { return m_eStartNodeType; }
 
     /// Call ChkCondcoll to all ContentNodes of section.
@@ -341,8 +342,6 @@ class SwEndNode : public SwNode
 protected:
     SwEndNode( const SwNodeIndex &rWhere, SwStartNode& rSttNd );
 
-    DECL_FIXEDMEMPOOL_NEWDEL(SwEndNode)
-
 private:
     SwEndNode( const SwEndNode & rNode ) = delete;
     SwEndNode & operator= ( const SwEndNode & rNode ) = delete;
@@ -353,17 +352,16 @@ private:
 class SW_DLLPUBLIC SwContentNode: public SwModify, public SwNode, public SwIndexReg
 {
 
-//FEATURE::CONDCOLL
-    SwDepend* m_pCondColl;
-//FEATURE::CONDCOLL
+    sw::WriterMultiListener m_aCondCollListener;
+    SwFormatColl* m_pCondColl;
     mutable bool mbSetModifyAtAttr;
 
 protected:
-    SwContentNode( const SwNodeIndex &rWhere, const sal_uInt8 nNodeType,
+    SwContentNode( const SwNodeIndex &rWhere, const SwNodeType nNodeType,
                 SwFormatColl *pFormatColl );
     /** the = 0 forces the class to be an abstract base class, but the dtor can be still called
        from subclasses */
-    virtual ~SwContentNode() = 0;
+    virtual ~SwContentNode() override = 0;
 
     /**  Attribute-set for all auto attributes of a ContentNode.
       (e.g. TextNode or NoTextNode). */
@@ -376,7 +374,7 @@ protected:
        SwAttrSet (handle): */
     sal_uInt16 ClearItemsFromAttrSet( const std::vector<sal_uInt16>& rWhichIds );
 
-    virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem *pNew) override;
+    virtual void SwClientNotify( const SwModify&, const SfxHint& rHint) override;
 
 public:
 
@@ -384,10 +382,7 @@ public:
        pSib is another SwFrame of the same layout (e.g. the SwRootFrame itself, a sibling, the parent) */
     virtual SwContentFrame *MakeFrame( SwFrame* pSib ) = 0;
 
-    virtual SwContentNode *SplitContentNode(const SwPosition & ) = 0;
-
     virtual SwContentNode *JoinNext();
-    virtual void           JoinPrev();
     /** Is it possible to join two nodes?
        In pIdx the second position can be returned. */
     bool CanJoinNext( SwNodeIndex* pIdx =nullptr ) const;
@@ -399,11 +394,10 @@ public:
     bool GoNext(SwIndex *, sal_uInt16 nMode ) const;
     bool GoPrevious(SwIndex *, sal_uInt16 nMode ) const;
 
-    /// Replacement for good old GetFrame(..):
+    /// @see GetFrameOfModify
     SwContentFrame *getLayoutFrame( const SwRootFrame*,
-                        const Point* pDocPos = nullptr,
-                        const SwPosition *pPos = nullptr,
-                        const bool bCalcFrame = true ) const;
+            const SwPosition *pPos = nullptr,
+            std::pair<Point, bool> const* pViewPosAndCalcFrame = nullptr) const;
     /** @return the real size of the frame or an empty rectangle if
        no layout exists. Needed for export filters. */
     SwRect FindLayoutRect( const bool bPrtArea = false,
@@ -412,20 +406,18 @@ public:
 
     /** Method creates all views of document for given node. The content
        frames that are created are put in the respective layout. */
-    void MakeFrames( SwContentNode& rNode );
+    void MakeFramesForAdjacentContentNode(SwContentNode& rNode);
 
     /** Method deletes all views of document for the node. The content-
         frames are removed from the respective layout.
-
-        Add an input param to identify if acc table should be disposed
     */
-    void DelFrames( bool bIsAccTableDispose = true );
+    void DelFrames(SwRootFrame const* pLayout);
 
     /** @return count of elements of node content. Default is 1.
        There are differences between text node and formula node. */
     virtual sal_Int32 Len() const;
 
-    virtual SwContentNode* MakeCopy( SwDoc*, const SwNodeIndex& ) const = 0;
+    virtual SwContentNode* MakeCopy(SwDoc*, const SwNodeIndex&, bool bNewFrames) const = 0;
 
     /// Get information from Client.
     virtual bool GetInfo( SfxPoolItem& ) const override;
@@ -448,8 +440,8 @@ public:
     /** Does node has already its own auto-attributes?
      Access to SwAttrSet. */
     inline const SwAttrSet &GetSwAttrSet() const;
-    inline const SwAttrSet *GetpSwAttrSet() const { return static_cast<const SwAttrSet*>(mpAttrSet.get()); }
-    inline bool  HasSwAttrSet() const { return mpAttrSet != nullptr; }
+    const SwAttrSet *GetpSwAttrSet() const { return static_cast<const SwAttrSet*>(mpAttrSet.get()); }
+    bool  HasSwAttrSet() const { return mpAttrSet != nullptr; }
 
     virtual SwFormatColl* ChgFormatColl( SwFormatColl* );
     SwFormatColl* GetFormatColl() const { return const_cast<SwFormatColl*>(static_cast<const SwFormatColl*>(GetRegisteredIn())); }
@@ -469,16 +461,21 @@ public:
 
     /** determines the text direction for a certain
        position. @return -1, if text direction could *not* be determined. */
-    short GetTextDirection( const SwPosition& rPos,
+    SvxFrameDirection GetTextDirection( const SwPosition& rPos,
                             const Point* pPt ) const;
 
-    inline void SetModifyAtAttr( bool bSetModifyAtAttr ) const { mbSetModifyAtAttr = bSetModifyAtAttr; }
-    inline bool GetModifyAtAttr() const { return mbSetModifyAtAttr; }
+    void SetModifyAtAttr( bool bSetModifyAtAttr ) const { mbSetModifyAtAttr = bSetModifyAtAttr; }
+    bool GetModifyAtAttr() const { return mbSetModifyAtAttr; }
 
-    static SwOLENodes* CreateOLENodesArray( const SwFormatColl& rColl, bool bOnlyWithInvalidSize );
+    static std::unique_ptr<SwOLENodes> CreateOLENodesArray( const SwFormatColl& rColl, bool bOnlyWithInvalidSize );
 
-    //UUUU Access to DrawingLayer FillAttributes in a preprocessed form for primitive usage
+    // Access to DrawingLayer FillAttributes in a preprocessed form for primitive usage
     virtual drawinglayer::attribute::SdrAllFillAttributesHelperPtr getSdrAllFillAttributesHelper() const;
+
+    virtual void ModifyNotification(const SfxPoolItem* pOld, const SfxPoolItem* pNew) override
+    {
+        SwClientNotify(*this, sw::LegacyModifyHint(pOld, pNew));
+    }
 
 private:
     SwContentNode( const SwContentNode & rNode ) = delete;
@@ -490,9 +487,9 @@ private:
 class SW_DLLPUBLIC SwTableNode : public SwStartNode, public SwModify
 {
     friend class SwNodes;
-    SwTable* m_pTable;
+    std::unique_ptr<SwTable> m_pTable;
 protected:
-    virtual ~SwTableNode();
+    virtual ~SwTableNode() override;
 
 public:
     SwTableNode( const SwNodeIndex & );
@@ -502,18 +499,18 @@ public:
     SwTabFrame *MakeFrame( SwFrame* );
 
     /// Creates the frms for the table node (i.e. the TabFrames).
-    void MakeFrames( SwNodeIndex* pIdxBehind );
+    void MakeOwnFrames(SwNodeIndex* pIdxBehind);
 
     /** Method deletes all views of document for the node.
        The content frames are removed from the respective layout. */
-    void DelFrames();
+    void DelFrames(SwRootFrame const* pLayout = nullptr);
 
     /** Method creates all views of the document for the previous node.
        The content frames that are created are put into the respective layout. */
-    void MakeFrames( const SwNodeIndex & rIdx );
+    void MakeFramesForAdjacentContentNode(const SwNodeIndex & rIdx);
 
     SwTableNode* MakeCopy( SwDoc*, const SwNodeIndex& ) const;
-    void SetNewTable( SwTable* , bool bNewFrames=true );
+    void SetNewTable( std::unique_ptr<SwTable> , bool bNewFrames=true );
 
     // Removes redline objects that relate to this table from the 'Extra Redlines' table
     void RemoveRedlines();
@@ -535,7 +532,7 @@ private:
     std::unique_ptr<SwSection> const m_pSection;
 
 protected:
-    virtual ~SwSectionNode();
+    virtual ~SwSectionNode() override;
 
 public:
     SwSectionNode(SwNodeIndex const&,
@@ -550,15 +547,15 @@ public:
        On default the frames are created until the end of the range.
        When another NodeIndex pEnd is passed a MakeFrames is called up to it.
        Used by TableToText. */
-    void MakeFrames( SwNodeIndex* pIdxBehind, SwNodeIndex* pEnd = nullptr );
+    void MakeOwnFrames(SwNodeIndex* pIdxBehind, SwNodeIndex* pEnd = nullptr);
 
     /** Method deletes all views of document for the node. The
      content frames are removed from the respective layout. */
-    void DelFrames();
+    void DelFrames(SwRootFrame const* pLayout = nullptr);
 
     /** Method creates all views of document for the previous node.
        The content frames created are put into the respective layout. */
-    void MakeFrames( const SwNodeIndex & rIdx );
+    void MakeFramesForAdjacentContentNode(const SwNodeIndex & rIdx);
 
     SwSectionNode* MakeCopy( SwDoc*, const SwNodeIndex& ) const;
 
@@ -585,80 +582,80 @@ private:
 
 inline       SwEndNode   *SwNode::GetEndNode()
 {
-     return ND_ENDNODE == m_nNodeType ? static_cast<SwEndNode*>(this) : nullptr;
+     return SwNodeType::End == m_nNodeType ? static_cast<SwEndNode*>(this) : nullptr;
 }
 inline const SwEndNode   *SwNode::GetEndNode() const
 {
-     return ND_ENDNODE == m_nNodeType ? static_cast<const SwEndNode*>(this) : nullptr;
+     return SwNodeType::End == m_nNodeType ? static_cast<const SwEndNode*>(this) : nullptr;
 }
 inline       SwStartNode *SwNode::GetStartNode()
 {
-     return ND_STARTNODE & m_nNodeType ? static_cast<SwStartNode*>(this) : nullptr;
+     return SwNodeType::Start & m_nNodeType ? static_cast<SwStartNode*>(this) : nullptr;
 }
 inline const SwStartNode *SwNode::GetStartNode() const
 {
-     return ND_STARTNODE & m_nNodeType ? static_cast<const SwStartNode*>(this) : nullptr;
+     return SwNodeType::Start & m_nNodeType ? static_cast<const SwStartNode*>(this) : nullptr;
 }
 inline       SwTableNode *SwNode::GetTableNode()
 {
-     return ND_TABLENODE == m_nNodeType ? static_cast<SwTableNode*>(this) : nullptr;
+     return SwNodeType::Table == m_nNodeType ? static_cast<SwTableNode*>(this) : nullptr;
 }
 inline const SwTableNode *SwNode::GetTableNode() const
 {
-     return ND_TABLENODE == m_nNodeType ? static_cast<const SwTableNode*>(this) : nullptr;
+     return SwNodeType::Table == m_nNodeType ? static_cast<const SwTableNode*>(this) : nullptr;
 }
 inline       SwSectionNode *SwNode::GetSectionNode()
 {
-     return ND_SECTIONNODE == m_nNodeType ? static_cast<SwSectionNode*>(this) : nullptr;
+     return SwNodeType::Section == m_nNodeType ? static_cast<SwSectionNode*>(this) : nullptr;
 }
 inline const SwSectionNode *SwNode::GetSectionNode() const
 {
-     return ND_SECTIONNODE == m_nNodeType ? static_cast<const SwSectionNode*>(this) : nullptr;
+     return SwNodeType::Section == m_nNodeType ? static_cast<const SwSectionNode*>(this) : nullptr;
 }
 inline       SwContentNode *SwNode::GetContentNode()
 {
-     return ND_CONTENTNODE & m_nNodeType ? static_cast<SwContentNode*>(this) : nullptr;
+     return SwNodeType::ContentMask & m_nNodeType ? static_cast<SwContentNode*>(this) : nullptr;
 }
 inline const SwContentNode *SwNode::GetContentNode() const
 {
-     return ND_CONTENTNODE & m_nNodeType ? static_cast<const SwContentNode*>(this) : nullptr;
+     return SwNodeType::ContentMask & m_nNodeType ? static_cast<const SwContentNode*>(this) : nullptr;
 }
 
 inline bool SwNode::IsStartNode() const
 {
-    return (ND_STARTNODE & m_nNodeType) != 0;
+    return bool(SwNodeType::Start & m_nNodeType);
 }
 inline bool SwNode::IsContentNode() const
 {
-    return (ND_CONTENTNODE & m_nNodeType) != 0;
+    return bool(SwNodeType::ContentMask & m_nNodeType);
 }
 inline bool SwNode::IsEndNode() const
 {
-    return ND_ENDNODE == m_nNodeType;
+    return SwNodeType::End == m_nNodeType;
 }
 inline bool SwNode::IsTextNode() const
 {
-    return ND_TEXTNODE == m_nNodeType;
+    return SwNodeType::Text == m_nNodeType;
 }
 inline bool SwNode::IsTableNode() const
 {
-    return ND_TABLENODE == m_nNodeType;
+    return SwNodeType::Table == m_nNodeType;
 }
 inline bool SwNode::IsSectionNode() const
 {
-    return ND_SECTIONNODE == m_nNodeType;
+    return SwNodeType::Section == m_nNodeType;
 }
 inline bool SwNode::IsNoTextNode() const
 {
-    return (ND_NOTXTNODE & m_nNodeType) != 0;
+    return bool(SwNodeType::NoTextMask & m_nNodeType);
 }
 inline bool SwNode::IsOLENode() const
 {
-    return ND_OLENODE == m_nNodeType;
+    return SwNodeType::Ole == m_nNodeType;
 }
 inline bool SwNode::IsGrfNode() const
 {
-    return ND_GRFNODE == m_nNodeType;
+    return SwNodeType::Grf == m_nNodeType;
 }
 
 inline const SwStartNode* SwNode::FindSttNodeByType( SwStartNodeType eTyp ) const
@@ -713,14 +710,14 @@ inline const SwDoc* SwNode::GetDoc() const
 
 inline SwFormatColl* SwContentNode::GetCondFormatColl() const
 {
-    return m_pCondColl ? static_cast<SwFormatColl*>(m_pCondColl->GetRegisteredIn()) : nullptr;
+    return m_pCondColl;
 }
 
 inline SwFormatColl& SwContentNode::GetAnyFormatColl() const
 {
-    return m_pCondColl && m_pCondColl->GetRegisteredIn()
-                ? *static_cast<SwFormatColl*>(m_pCondColl->GetRegisteredIn())
-                : *const_cast<SwFormatColl*>(static_cast<const SwFormatColl*>(GetRegisteredIn()));
+    return m_pCondColl
+            ? *m_pCondColl
+            : *const_cast<SwFormatColl*>(static_cast<const SwFormatColl*>(GetRegisteredIn()));
 }
 
 inline const SwAttrSet& SwContentNode::GetSwAttrSet() const
@@ -737,7 +734,7 @@ inline const SfxPoolItem& SwContentNode::GetAttr( sal_uInt16 nWhich,
 }
 
 inline SwPlaceholderNode::SwPlaceholderNode(const SwNodeIndex &rWhere)
-    : SwNode(rWhere, ND_PLACEHOLDER)
+    : SwNode(rWhere, SwNodeType::PlaceHolder)
 {
 }
 

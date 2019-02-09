@@ -17,20 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scenariobuffer.hxx"
+#include <scenariobuffer.hxx>
 
-#include <com/sun/star/container/XIndexAccess.hpp>
-#include <com/sun/star/sheet/XScenario.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/sheet/XScenarios.hpp>
 #include <com/sun/star/sheet/XScenariosSupplier.hpp>
 #include <com/sun/star/sheet/XSpreadsheet.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
+#include <oox/helper/binaryinputstream.hxx>
 #include <oox/helper/attributelist.hxx>
 #include <oox/helper/containerhelper.hxx>
 #include <oox/helper/propertyset.hxx>
 #include <oox/token/properties.hxx>
-#include "addressconverter.hxx"
-#include "biffinputstream.hxx"
+#include <oox/token/tokens.hxx>
+#include <addressconverter.hxx>
+#include <biffhelper.hxx>
 
 namespace oox {
 namespace xls {
@@ -48,14 +49,16 @@ ScenarioCellModel::ScenarioCellModel() :
 
 ScenarioModel::ScenarioModel() :
     mbLocked( false ),
-    mbHidden( false )
+    mbHidden( false ),
+    mbActive( false )
 {
 }
 
-Scenario::Scenario( const WorkbookHelper& rHelper, sal_Int16 nSheet ) :
+Scenario::Scenario( const WorkbookHelper& rHelper, sal_Int16 nSheet, bool bIsActive ) :
     WorkbookHelper( rHelper ),
     mnSheet( nSheet )
 {
+    maModel.mbActive = bIsActive;
 }
 
 void Scenario::importScenario( const AttributeList& rAttribs )
@@ -102,10 +105,10 @@ void Scenario::importInputCells( SequenceInputStream& rStrm )
 void Scenario::finalizeImport()
 {
     AddressConverter& rAddrConv = getAddressConverter();
-    ::std::vector< CellRangeAddress > aRanges;
-    for( ScenarioCellVector::iterator aIt = maCells.begin(), aEnd = maCells.end(); aIt != aEnd; ++aIt )
-        if( !aIt->mbDeleted && rAddrConv.checkCellAddress( aIt->maPos, true ) )
-            aRanges.push_back( CellRangeAddress( aIt->maPos.Tab(), aIt->maPos.Col(), aIt->maPos.Row(), aIt->maPos.Col(), aIt->maPos.Row() ) );
+    ScRangeList aRanges;
+    for( const auto& rCell : maCells )
+        if( !rCell.mbDeleted && rAddrConv.checkCellAddress( rCell.maPos, true ) )
+            aRanges.push_back( ScRange(rCell.maPos, rCell.maPos) );
 
     if( !aRanges.empty() && !maModel.maName.isEmpty() ) try
     {
@@ -117,17 +120,17 @@ void Scenario::finalizeImport()
         // create the new scenario sheet
         Reference< XScenariosSupplier > xScenariosSupp( getSheetFromDoc( mnSheet ), UNO_QUERY_THROW );
         Reference< XScenarios > xScenarios( xScenariosSupp->getScenarios(), UNO_SET_THROW );
-        xScenarios->addNewByName( aScenName, ContainerHelper::vectorToSequence( aRanges ), maModel.maComment );
+        xScenarios->addNewByName( aScenName, AddressConverter::toApiSequence(aRanges), maModel.maComment );
 
         // write scenario cell values
         Reference< XSpreadsheet > xSheet( getSheetFromDoc( aScenName ), UNO_SET_THROW );
-        for( ScenarioCellVector::iterator aIt = maCells.begin(), aEnd = maCells.end(); aIt != aEnd; ++aIt )
+        for( const auto& rCell : maCells )
         {
-            if( !aIt->mbDeleted ) try
+            if( !rCell.mbDeleted ) try
             {
                 // use XCell::setFormula to auto-detect values and strings
-                Reference< XCell > xCell( xSheet->getCellByPosition( aIt->maPos.Col(), aIt->maPos.Row() ), UNO_SET_THROW );
-                xCell->setFormula( aIt->maValue );
+                Reference< XCell > xCell( xSheet->getCellByPosition( rCell.maPos.Col(), rCell.maPos.Row() ), UNO_SET_THROW );
+                xCell->setFormula( rCell.maValue );
             }
             catch( Exception& )
             {
@@ -136,7 +139,7 @@ void Scenario::finalizeImport()
 
         // scenario properties
         PropertySet aPropSet( xScenarios->getByName( aScenName ) );
-        aPropSet.setProperty( PROP_IsActive, false );
+        aPropSet.setProperty( PROP_IsActive, maModel.mbActive );
         aPropSet.setProperty( PROP_CopyBack, false );
         aPropSet.setProperty( PROP_CopyStyles, false );
         aPropSet.setProperty( PROP_CopyFormulas, false );
@@ -176,7 +179,8 @@ void SheetScenarios::importScenarios( SequenceInputStream& rStrm )
 
 Scenario& SheetScenarios::createScenario()
 {
-    ScenarioVector::value_type xScenario( new Scenario( *this, mnSheet ) );
+    bool bIsActive = maScenarios.size() == static_cast<sal_uInt32>(maModel.mnShown);
+    ScenarioVector::value_type xScenario( new Scenario( *this, mnSheet, bIsActive ) );
     maScenarios.push_back( xScenario );
     return *xScenario;
 }
@@ -184,18 +188,6 @@ Scenario& SheetScenarios::createScenario()
 void SheetScenarios::finalizeImport()
 {
     maScenarios.forEachMem( &Scenario::finalizeImport );
-
-    // activate a scenario
-    try
-    {
-        Reference< XScenariosSupplier > xScenariosSupp( getSheetFromDoc( mnSheet ), UNO_QUERY_THROW );
-        Reference< XIndexAccess > xScenariosIA( xScenariosSupp->getScenarios(), UNO_QUERY_THROW );
-        Reference< XScenario > xScenario( xScenariosIA->getByIndex( maModel.mnShown ), UNO_QUERY_THROW );
-        xScenario->apply();
-    }
-    catch( Exception& )
-    {
-    }
 }
 
 ScenarioBuffer::ScenarioBuffer( const WorkbookHelper& rHelper ) :

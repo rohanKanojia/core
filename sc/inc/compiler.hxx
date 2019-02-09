@@ -22,17 +22,20 @@
 
 #include <string.h>
 
-#include <tools/mempool.hxx>
 #include "scdllapi.h"
 #include "global.hxx"
 #include "refdata.hxx"
 #include "token.hxx"
 #include <formula/token.hxx>
 #include <formula/grammar.hxx>
-#include <unotools/charclass.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <com/sun/star/sheet/ExternalLinkInfo.hpp>
+#include <com/sun/star/i18n/ParseResult.hpp>
 #include <vector>
+#include <memory>
+#include <set>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <o3tl/typed_flags_set.hxx>
 
 #include <formula/FormulaCompiler.hxx>
 
@@ -41,40 +44,47 @@
 #define MAXSTRLEN    1024   /* maximum length of input string of one symbol */
 
 // flag values of CharTable
-#define SC_COMPILER_C_ILLEGAL         0x00000000
-#define SC_COMPILER_C_CHAR            0x00000001
-#define SC_COMPILER_C_CHAR_BOOL       0x00000002
-#define SC_COMPILER_C_CHAR_WORD       0x00000004
-#define SC_COMPILER_C_CHAR_VALUE      0x00000008
-#define SC_COMPILER_C_CHAR_STRING     0x00000010
-#define SC_COMPILER_C_CHAR_DONTCARE   0x00000020
-#define SC_COMPILER_C_BOOL            0x00000040
-#define SC_COMPILER_C_WORD            0x00000080
-#define SC_COMPILER_C_WORD_SEP        0x00000100
-#define SC_COMPILER_C_VALUE           0x00000200
-#define SC_COMPILER_C_VALUE_SEP       0x00000400
-#define SC_COMPILER_C_VALUE_EXP       0x00000800
-#define SC_COMPILER_C_VALUE_SIGN      0x00001000
-#define SC_COMPILER_C_VALUE_VALUE     0x00002000
-#define SC_COMPILER_C_STRING_SEP      0x00004000
-#define SC_COMPILER_C_NAME_SEP        0x00008000  // there can be only one! '\''
-#define SC_COMPILER_C_CHAR_IDENT      0x00010000  // identifier (built-in function) or reference start
-#define SC_COMPILER_C_IDENT           0x00020000  // identifier or reference continuation
-#define SC_COMPILER_C_ODF_LBRACKET    0x00040000  // ODF '[' reference bracket
-#define SC_COMPILER_C_ODF_RBRACKET    0x00080000  // ODF ']' reference bracket
-#define SC_COMPILER_C_ODF_LABEL_OP    0x00100000  // ODF '!!' automatic intersection of labels
-#define SC_COMPILER_C_ODF_NAME_MARKER 0x00200000  // ODF '$$' marker that starts a defined (range) name
-#define SC_COMPILER_C_CHAR_NAME       0x00400000  // start character of a defined name
-#define SC_COMPILER_C_NAME            0x00800000  // continuation character of a defined name
-#define SC_COMPILER_C_CHAR_ERRCONST   0x01000000  // start character of an error constant ('#')
+enum class ScCharFlags : sal_uInt32 {
+    NONE            = 0x00000000,
+    Illegal         = 0x00000000,
+    Char            = 0x00000001,
+    CharBool        = 0x00000002,
+    CharWord        = 0x00000004,
+    CharValue       = 0x00000008,
+    CharString      = 0x00000010,
+    CharDontCare    = 0x00000020,
+    Bool            = 0x00000040,
+    Word            = 0x00000080,
+    WordSep         = 0x00000100,
+    Value           = 0x00000200,
+    ValueSep        = 0x00000400,
+    ValueExp        = 0x00000800,
+    ValueSign       = 0x00001000,
+    ValueValue      = 0x00002000,
+    StringSep       = 0x00004000,
+    NameSep         = 0x00008000,  // there can be only one! '\''
+    CharIdent       = 0x00010000,  // identifier (built-in function) or reference start
+    Ident           = 0x00020000,  // identifier or reference continuation
+    OdfLBracket     = 0x00040000,  // ODF '[' reference bracket
+    OdfRBracket     = 0x00080000,  // ODF ']' reference bracket
+    OdfLabelOp      = 0x00100000,  // ODF '!!' automatic intersection of labels
+    OdfNameMarker   = 0x00200000,  // ODF '$$' marker that starts a defined (range) name
+    CharName        = 0x00400000,  // start character of a defined name
+    Name            = 0x00800000,  // continuation character of a defined name
+    CharErrConst    = 0x01000000,  // start character of an error constant ('#')
+};
+namespace o3tl {
+    template<> struct typed_flags<ScCharFlags> : is_typed_flags<ScCharFlags, 0x01ffffff> {};
+}
 
 #define SC_COMPILER_FILE_TAB_SEP      '#'         // 'Doc'#Tab
 
 class ScDocument;
 class ScMatrix;
 class ScRangeData;
-class ScExternalRefManager;
 class ScTokenArray;
+struct ScInterpreterContext;
+class CharClass;
 
 namespace sc {
 
@@ -84,40 +94,28 @@ class CompileFormulaContext;
 
 // constants and data types internal to compiler
 
-/*
-    OpCode              eOp;        // OpCode
-    formula::StackVar   eType;      // type of data
- */
-
-struct ScRawTokenBase
-{
-protected:
-    OpCode   eOp;
-    formula::StackVar eType;
-};
-
-struct ScRawToken: private ScRawTokenBase
+struct ScRawToken final
 {
     friend class ScCompiler;
     // Friends that use a temporary ScRawToken on the stack (and therefore need
     // the private dtor) and know what they're doing..
     friend class ScTokenArray;
+    OpCode              eOp;
+    formula::StackVar   eType;  // type of data; this determines how the unions are used
 public:
     union {
         double       nValue;
         struct {
-            sal_uInt8        cByte;
-            bool        bIsInForceArray;
+            sal_uInt8           cByte;
+            formula::ParamClass eInForceArray;
         } sbyte;
         ScComplexRefData aRef;
         struct {
-            sal_uInt16      nFileId;
-            sal_Unicode     cTabName[MAXSTRLEN+1];
+            sal_uInt16          nFileId;
             ScComplexRefData    aRef;
         } extref;
         struct {
             sal_uInt16  nFileId;
-            sal_Unicode cName[MAXSTRLEN+1];
         } extname;
         struct {
             sal_Int16   nSheet;
@@ -125,24 +123,23 @@ public:
         } name;
         struct {
             sal_uInt16              nIndex;
-            ScTableRefToken::Item   eItem;
-        } table;
+            ScTableRefToken::Item const   eItem;
+        } const table;
         struct {
             rtl_uString* mpData;
             rtl_uString* mpDataIgnoreCase;
         } sharedstring;
-        ScMatrix*    pMat;
-        sal_uInt16   nError;
-        sal_Unicode  cStr[ MAXSTRLEN+1 ];   // string (up to 255 characters + 0)
+        ScMatrix* const    pMat;
+        FormulaError nError;
         short        nJump[ FORMULA_MAXJUMPCOUNT + 1 ];     // If/Chose token
     };
+    OUString   maExternalName; // depending on the opcode, this is either the external, or the external name, or the external table name
 
-                //! members not initialized
-                ScRawToken() {}
+    // coverity[uninit_member] - members deliberately not initialized
+    ScRawToken() {}
 private:
                 ~ScRawToken() {}                //! only delete via Delete()
 public:
-                DECL_FIXEDMEMPOOL_NEWDEL( ScRawToken );
     formula::StackVar    GetType()   const       { return eType; }
     OpCode      GetOpCode() const       { return eOp; }
     void        NewOpCode( OpCode e )   { eOp = e; }
@@ -154,14 +151,14 @@ public:
     void SetSingleReference( const ScSingleRefData& rRef );
     void SetDoubleReference( const ScComplexRefData& rRef );
     void SetDouble( double fVal );
-    void SetErrorConstant( sal_uInt16 nErr );
+    void SetErrorConstant( FormulaError nErr );
 
     // These methods are ok to use, reference count not cleared.
     void SetName(sal_Int16 nSheet, sal_uInt16 nIndex);
     void SetExternalSingleRef( sal_uInt16 nFileId, const OUString& rTabName, const ScSingleRefData& rRef );
     void SetExternalDoubleRef( sal_uInt16 nFileId, const OUString& rTabName, const ScComplexRefData& rRef );
     void SetExternalName( sal_uInt16 nFileId, const OUString& rName );
-    void SetExternal(const sal_Unicode* pStr);
+    void SetExternal(const OUString& rStr);
 
     /** If the token is a non-external reference, determine if the reference is
         valid. If the token is an external reference, return true. Else return
@@ -171,10 +168,6 @@ public:
     bool IsValidReference() const;
 
     formula::FormulaToken* CreateToken() const;   // create typified token
-
-    static sal_Int32 GetStrLen( const sal_Unicode* pStr ); // as long as a "string" is an array
-    static size_t GetStrLenBytes( sal_Int32 nLen )
-        { return nLen * sizeof(sal_Unicode); }
 };
 
 class SC_DLLPUBLIC ScCompiler : public formula::FormulaCompiler
@@ -245,10 +238,10 @@ public:
         };
         virtual sal_Unicode getSpecialSymbol( SpecialSymbolType eSymType ) const = 0;
 
-        virtual sal_uLong getCharTableFlags( sal_Unicode c, sal_Unicode cLast ) const = 0;
+        virtual ScCharFlags getCharTableFlags( sal_Unicode c, sal_Unicode cLast ) const = 0;
 
     protected:
-        const sal_uLong* mpCharTable;
+        std::unique_ptr<ScCharFlags[]> mpCharTable;
     };
     friend struct Convention;
 
@@ -257,20 +250,20 @@ private:
     static CharClass            *pCharClassEnglish;                      // character classification for en_US locale
     static const Convention     *pConventions[ formula::FormulaGrammar::CONV_LAST ];
 
-    static struct AddInMap
+    static const struct AddInMap
     {
         const char* pODFF;
         const char* pEnglish;
         const char* pOriginal;              // programmatical name
         const char* pUpper;                 // upper case programmatical name
-    } maAddInMap[];
-    static const AddInMap* GetAddInMap();
+    } g_aAddInMap[];
     static size_t GetAddInMapCount();
 
     ScDocument* pDoc;
     ScAddress   aPos;
 
     SvNumberFormatter* mpFormatter;
+    const ScInterpreterContext* mpInterpreterContext;
 
     SCTAB       mnCurrentSheetTab;      // indicates current sheet number parsed so far
     sal_Int32   mnCurrentSheetEndPos;   // position after current sheet name if parsed
@@ -278,14 +271,13 @@ private:
     // For CONV_XL_OOX, may be set via API by MOOXML filter.
     css::uno::Sequence<css::sheet::ExternalLinkInfo> maExternalLinks;
 
-    sal_Unicode cSymbol[MAXSTRLEN];                 // current Symbol
+    sal_Unicode cSymbol[MAXSTRLEN+1];               // current Symbol + 0
     OUString    aFormula;                           // formula source code
     sal_Int32   nSrcPos;                            // tokenizer position (source code)
     mutable ScRawToken maRawToken;
 
     const CharClass*    pCharClass;         // which character classification is used for parseAnyToken
     sal_uInt16      mnPredetectedReference;     // reference when reading ODF, 0 (none), 1 (single) or 2 (double)
-    SCsTAB      nMaxTab;                    // last sheet in document
     sal_Int32   mnRangeOpPosInSymbol;       // if and where a range operator is in symbol
     const Convention *pConv;
     ExtendedErrorDetection  meExtendedErrorDetection;
@@ -298,24 +290,41 @@ private:
 
     struct TableRefEntry
     {
-        ScTokenRef  mxToken;
+        ScTokenRef const  mxToken;
         sal_uInt16  mnLevel;
         TableRefEntry( formula::FormulaToken* p ) : mxToken(p), mnLevel(0) {}
     };
     std::vector<TableRefEntry> maTableRefs;     /// "stack" of currently active ocTableRef tokens
 
-    bool   NextNewToken(bool bInArray = false);
+    // Optimizing implicit intersection is done only at the end of code generation, because the usage context may
+    // be important. Store candidate parameters and the operation they are the argument for.
+    struct PendingImplicitIntersectionOptimization
+    {
+        PendingImplicitIntersectionOptimization(formula::FormulaToken** p, formula::FormulaToken* o)
+            : parameterLocation( p ), parameter( *p ), operation( o ) {}
+        formula::FormulaToken** const parameterLocation;
+        formula::FormulaTokenRef const parameter;
+        formula::FormulaTokenRef const operation;
+    };
+    std::vector< PendingImplicitIntersectionOptimization > mPendingImplicitIntersectionOptimizations;
+    std::set<formula::FormulaTokenRef> mUnhandledPossibleImplicitIntersections;
+#ifdef DBG_UTIL
+    std::set<OpCode> mUnhandledPossibleImplicitIntersectionsOpCodes;
+#endif
 
-    virtual void SetError(sal_uInt16 nError) override;
+    bool   NextNewToken(bool bInArray);
+
+    virtual void SetError(FormulaError nError) override;
     sal_Int32 NextSymbol(bool bInArray);
     bool IsValue( const OUString& );
     bool IsOpCode( const OUString&, bool bInArray );
     bool IsOpCode2( const OUString& );
     bool IsString();
-    bool IsReference( const OUString& );
-    bool IsSingleReference( const OUString& );
-    bool IsPredetectedReference(const OUString&);
-    bool IsDoubleReference( const OUString& );
+    bool IsReference( const OUString& rSymbol, const OUString* pErrRef = nullptr );
+    bool IsSingleReference( const OUString& rSymbol, const OUString* pErrRef = nullptr );
+    bool IsDoubleReference( const OUString& rSymbol, const OUString* pErrRef = nullptr );
+    bool IsPredetectedReference( const OUString& rSymbol );
+    bool IsPredetectedErrRefReference( const OUString& rName, const OUString* pErrRef );
     bool IsMacro( const OUString& );
     bool IsNamedRange( const OUString& );
     bool IsExternalNamedRange( const OUString& rSymbol, bool& rbInvalidExternalNameRange );
@@ -337,15 +346,27 @@ private:
     static void InitCharClassEnglish();
 
 public:
-    ScCompiler( sc::CompileFormulaContext& rCxt, const ScAddress& rPos );
+    ScCompiler( sc::CompileFormulaContext& rCxt, const ScAddress& rPos,
+            bool bComputeII = false, bool bMatrixFlag = false, const ScInterpreterContext* pContext = nullptr );
 
-    ScCompiler( ScDocument* pDocument, const ScAddress&);
+    /** If eGrammar == GRAM_UNSPECIFIED then the grammar of pDocument is used,
+        if pDocument==nullptr then GRAM_DEFAULT.
+     */
+    ScCompiler( ScDocument* pDocument, const ScAddress&,
+            formula::FormulaGrammar::Grammar eGrammar = formula::FormulaGrammar::GRAM_UNSPECIFIED,
+            bool bComputeII = false, bool bMatrixFlag = false, const ScInterpreterContext* pContext = nullptr );
 
-    ScCompiler( sc::CompileFormulaContext& rCxt, const ScAddress& rPos, ScTokenArray& rArr );
+    ScCompiler( sc::CompileFormulaContext& rCxt, const ScAddress& rPos, ScTokenArray& rArr,
+            bool bComputeII = false, bool bMatrixFlag = false, const ScInterpreterContext* pContext = nullptr );
 
-    ScCompiler( ScDocument* pDocument, const ScAddress&,ScTokenArray& rArr);
+    /** If eGrammar == GRAM_UNSPECIFIED then the grammar of pDocument is used,
+        if pDocument==nullptr then GRAM_DEFAULT.
+     */
+    ScCompiler( ScDocument* pDocument, const ScAddress&, ScTokenArray& rArr,
+            formula::FormulaGrammar::Grammar eGrammar = formula::FormulaGrammar::GRAM_UNSPECIFIED,
+            bool bComputeII = false, bool bMatrixFlag = false, const ScInterpreterContext* pContext = nullptr );
 
-    virtual ~ScCompiler();
+    virtual ~ScCompiler() override;
 
 public:
     static void DeInit();               /// all
@@ -428,19 +449,28 @@ public:
      * @return heap allocated token array object. The caller <i>must</i>
      *         manage the life cycle of this object.
      */
-    ScTokenArray* CompileString( const OUString& rFormula );
-    ScTokenArray* CompileString( const OUString& rFormula, const OUString& rFormulaNmsp );
+    std::unique_ptr<ScTokenArray> CompileString( const OUString& rFormula );
+    std::unique_ptr<ScTokenArray> CompileString( const OUString& rFormula, const OUString& rFormulaNmsp );
     const ScAddress& GetPos() const { return aPos; }
 
-    void MoveRelWrap( SCCOL nMaxCol, SCROW nMaxRow );
-    static void MoveRelWrap( ScTokenArray& rArr, ScDocument* pDoc, const ScAddress& rPos,
+    void MoveRelWrap();
+    static void MoveRelWrap( const ScTokenArray& rArr, const ScDocument* pDoc, const ScAddress& rPos,
                              SCCOL nMaxCol, SCROW nMaxRow );
 
     /** If the character is allowed as tested by nFlags (SC_COMPILER_C_...
         bits) for all known address conventions. If more than one bit is given
         in nFlags, all bits must match. */
     static bool IsCharFlagAllConventions(
-        OUString const & rStr, sal_Int32 nPos, sal_uLong nFlags );
+        OUString const & rStr, sal_Int32 nPos, ScCharFlags nFlags );
+
+    /** TODO : Move this to somewhere appropriate. */
+    static bool DoubleRefToPosSingleRefScalarCase(const ScRange& rRange, ScAddress& rAdr,
+                                                  const ScAddress& rFormulaPos);
+
+    bool HasUnhandledPossibleImplicitIntersections() const { return !mUnhandledPossibleImplicitIntersections.empty(); }
+#ifdef DBG_UTIL
+    const std::set<OpCode>& UnhandledPossibleImplicitIntersectionsOpCodes() { return mUnhandledPossibleImplicitIntersectionsOpCodes; }
+#endif
 
 private:
     // FormulaCompiler
@@ -464,11 +494,20 @@ private:
     virtual void CreateStringFromIndex( OUStringBuffer& rBuffer, const formula::FormulaToken* pToken ) const override;
     virtual void LocalizeString( OUString& rName ) const override;   // modify rName - input: exact name
 
-    virtual bool IsForceArrayParameter( const formula::FormulaToken* pToken, sal_uInt16 nParam ) const override;
+    virtual formula::ParamClass GetForceArrayParameter( const formula::FormulaToken* pToken, sal_uInt16 nParam ) const override;
 
     /// Access the CharTable flags
-    inline sal_uLong GetCharTableFlags( sal_Unicode c, sal_Unicode cLast )
-        { return c < 128 ? pConv->getCharTableFlags(c, cLast) : 0; }
+    ScCharFlags GetCharTableFlags( sal_Unicode c, sal_Unicode cLast )
+        { return c < 128 ? pConv->getCharTableFlags(c, cLast) : ScCharFlags::NONE; }
+
+    virtual void HandleIIOpCode(formula::FormulaToken* token, formula::FormulaToken*** pppToken, sal_uInt8 nNumParams) override;
+    bool HandleIIOpCodeInternal(formula::FormulaToken* token, formula::FormulaToken*** pppToken, sal_uInt8 nNumParams);
+    bool SkipImplicitIntersectionOptimization(const formula::FormulaToken* token) const;
+    virtual void PostProcessCode() override;
+    static bool ParameterMayBeImplicitIntersection(const formula::FormulaToken* token, int parameter);
+    void ReplaceDoubleRefII(formula::FormulaToken** ppDoubleRefTok);
+    bool AdjustSumRangeShape(const ScComplexRefData& rBaseRange, ScComplexRefData& rSumRange);
+    void CorrectSumRange(const ScComplexRefData& rBaseRange, ScComplexRefData& rSumRange, formula::FormulaToken** ppSumRangeToken);
 };
 
 #endif

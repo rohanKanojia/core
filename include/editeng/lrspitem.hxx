@@ -43,10 +43,8 @@
     700       -500       200       700         -500
 */
 
-#define LRSPACE_16_VERSION      ((sal_uInt16)0x0001)
-#define LRSPACE_TXTLEFT_VERSION ((sal_uInt16)0x0002)
-#define LRSPACE_AUTOFIRST_VERSION ((sal_uInt16)0x0003)
-#define LRSPACE_NEGATIVE_VERSION ((sal_uInt16)0x0004)
+#define LRSPACE_TXTLEFT_VERSION (sal_uInt16(0x0002))
+#define LRSPACE_NEGATIVE_VERSION (sal_uInt16(0x0004))
 
 class EDITENG_DLLPUBLIC SvxLRSpaceItem : public SfxPoolItem
 {
@@ -71,6 +69,7 @@ public:
                     const long nTLeft /*= 0*/, const short nOfset /*= 0*/,
                     const sal_uInt16 nId  );
     inline SvxLRSpaceItem& operator=( const SvxLRSpaceItem &rCpy );
+    SvxLRSpaceItem(SvxLRSpaceItem const &) = default; // SfxPoolItem copy function dichotomy
 
     // "pure virtual Methods" from SfxPoolItem
     virtual bool            operator==( const SfxPoolItem& ) const override;
@@ -79,47 +78,45 @@ public:
     virtual bool            PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     virtual SfxPoolItem*     Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual SfxPoolItem*     Create(SvStream &, sal_uInt16) const override;
-    virtual SvStream&        Store(SvStream &, sal_uInt16 nItemVersion ) const override;
     virtual sal_uInt16           GetVersion( sal_uInt16 nFileVersion ) const override;
     virtual void                 ScaleMetrics( long nMult, long nDiv ) override;
     virtual bool                 HasMetrics() const override;
 
-    // Die "Layout-Schnittstelle":
+    // The "layout interface":
     inline void   SetLeft ( const long nL, const sal_uInt16 nProp = 100 );
     inline void   SetRight( const long nR, const sal_uInt16 nProp = 100 );
 
     // Query/direct setting of the absolute values
-    inline long GetLeft()  const { return nLeftMargin; }
-    inline long GetRight() const { return nRightMargin;}
-    inline void SetLeftValue( const long nL ) { nTxtLeft = nLeftMargin = nL; }
-    inline void SetRightValue( const long nR ) { nRightMargin = nR; }
-    inline bool IsAutoFirst()  const { return bAutoFirst; }
-    inline void SetAutoFirst( const bool bNew ) { bAutoFirst = bNew; }
+    long GetLeft()  const { return nLeftMargin; }
+    long GetRight() const { return nRightMargin;}
+    void SetLeftValue( const long nL ) { nTxtLeft = nLeftMargin = nL; }
+    void SetRightValue( const long nR ) { nRightMargin = nR; }
+    bool IsAutoFirst()  const { return bAutoFirst; }
+    void SetAutoFirst( const bool bNew ) { bAutoFirst = bNew; }
 
-    inline bool IsExplicitZeroMarginValRight()  const { return bExplicitZeroMarginValRight; }
-    inline bool IsExplicitZeroMarginValLeft()  const { return bExplicitZeroMarginValLeft; }
-    inline void SetExplicitZeroMarginValRight( const bool eR ) { bExplicitZeroMarginValRight = eR; }
-    inline void SetExplicitZeroMarginValLeft( const bool eL ) { bExplicitZeroMarginValLeft = eL; }
-    inline sal_uInt16 GetPropLeft()  const { return nPropLeftMargin; }
-    inline sal_uInt16 GetPropRight() const { return nPropRightMargin;}
+    bool IsExplicitZeroMarginValRight()  const { return bExplicitZeroMarginValRight; }
+    bool IsExplicitZeroMarginValLeft()  const { return bExplicitZeroMarginValLeft; }
+    void SetExplicitZeroMarginValRight( const bool eR ) { bExplicitZeroMarginValRight = eR; }
+    void SetExplicitZeroMarginValLeft( const bool eL ) { bExplicitZeroMarginValLeft = eL; }
+    sal_uInt16 GetPropLeft()  const { return nPropLeftMargin; }
+    sal_uInt16 GetPropRight() const { return nPropRightMargin;}
 
     // The UI/text interface:
     inline void SetTextLeft( const long nL, const sal_uInt16 nProp = 100 );
-    inline long GetTextLeft() const { return nTxtLeft; }
+    long GetTextLeft() const { return nTxtLeft; }
 
     inline void   SetTextFirstLineOfst( const short nF, const sal_uInt16 nProp = 100 );
-    inline short  GetTextFirstLineOfst() const { return nFirstLineOfst; }
-    inline void SetPropTextFirstLineOfst( const sal_uInt16 nProp = 100 )
+    short  GetTextFirstLineOfst() const { return nFirstLineOfst; }
+    void SetPropTextFirstLineOfst( const sal_uInt16 nProp )
                     { nPropFirstLineOfst = nProp; }
-    inline sal_uInt16 GetPropTextFirstLineOfst() const
+    sal_uInt16 GetPropTextFirstLineOfst() const
                     { return nPropFirstLineOfst; }
-    inline void SetTextFirstLineOfstValue( const short nValue )
+    void SetTextFirstLineOfstValue( const short nValue )
                     { nFirstLineOfst = nValue; }
     void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
 };

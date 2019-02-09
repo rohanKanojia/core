@@ -17,21 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dbexchange.hxx"
+#include <dbexchange.hxx>
 #include <sot/formats.hxx>
 #include <sot/storage.hxx>
 #include <osl/diagnose.h>
 #include <com/sun/star/sdb/CommandType.hpp>
 #include <com/sun/star/sdb/XResultSetAccess.hpp>
-#include "TokenWriter.hxx"
-#include "dbustrings.hrc"
-#include <comphelper/uno3.hxx>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <TokenWriter.hxx>
+#include <stringconstants.hxx>
 #include <svx/dataaccessdescriptor.hxx>
-#include "UITools.hxx"
-#include <comphelper/processfactory.hxx>
+#include <UITools.hxx>
 
 namespace dbaui
 {
+    constexpr sal_uInt32 FORMAT_OBJECT_ID_RTF  = 1;
+    constexpr sal_uInt32 FORMAT_OBJECT_ID_HTML = 2;
+
     using namespace ::com::sun::star::uno;
     using namespace ::com::sun::star::beans;
     using namespace ::com::sun::star::sdb;
@@ -64,9 +66,7 @@ namespace dbaui
                     const Reference< XConnection >& _rxConnection,
                     const Reference< XNumberFormatter >& _rxFormatter,
                     const Reference< XComponentContext >& _rxORB)
-                    :ODataAccessObjectTransferable( _rDatasource,OUString(), _nCommandType, _rCommand, _rxConnection )
-        ,m_pHtml(nullptr)
-        ,m_pRtf(nullptr)
+                    :ODataAccessObjectTransferable( _rDatasource, _nCommandType, _rCommand, _rxConnection )
     {
         osl_atomic_increment( &m_refCount );
         lcl_setListener( _rxConnection, this, true );
@@ -83,9 +83,7 @@ namespace dbaui
                     const OUString&  _rCommand,
                     const Reference< XNumberFormatter >& _rxFormatter,
                     const Reference< XComponentContext >& _rxORB)
-        :ODataAccessObjectTransferable( _rDatasource, OUString(),_nCommandType, _rCommand)
-        ,m_pHtml(nullptr)
-        ,m_pRtf(nullptr)
+        :ODataAccessObjectTransferable( _rDatasource, _nCommandType, _rCommand)
     {
         m_pHtml.set( new OHTMLImportExport( getDescriptor(),_rxORB, _rxFormatter ) );
         m_pRtf.set( new ORTFImportExport( getDescriptor(),_rxORB, _rxFormatter ) );
@@ -96,15 +94,13 @@ namespace dbaui
                                     const bool i_bBookmarkSelection,
                                     const Reference< XComponentContext >& i_rORB )
         :ODataAccessObjectTransferable( i_rAliveForm )
-        ,m_pHtml(nullptr)
-        ,m_pRtf(nullptr)
     {
         OSL_PRECOND( i_rORB.is(), "ODataClipboard::ODataClipboard: having no factory is not good ..." );
 
         osl_atomic_increment( &m_refCount );
 
         Reference<XConnection> xConnection;
-        getDescriptor()[ daConnection ] >>= xConnection;
+        getDescriptor()[ DataAccessDescriptorProperty::Connection ] >>= xConnection;
         lcl_setListener( xConnection, this, true );
 
         // do not pass the form itself as source result set, since the client might operate on the form, which
@@ -116,9 +112,9 @@ namespace dbaui
         OSL_ENSURE( xResultSetClone.is(), "ODataClipboard::ODataClipboard: could not clone the form's result set" );
         lcl_setListener( xResultSetClone, this, true );
 
-        getDescriptor()[daCursor]           <<= xResultSetClone;
-        getDescriptor()[daSelection]        <<= i_rSelectedRows;
-        getDescriptor()[daBookmarkSelection]<<= i_bBookmarkSelection;
+        getDescriptor()[DataAccessDescriptorProperty::Cursor]           <<= xResultSetClone;
+        getDescriptor()[DataAccessDescriptorProperty::Selection]        <<= i_rSelectedRows;
+        getDescriptor()[DataAccessDescriptorProperty::BookmarkSelection]<<= i_bBookmarkSelection;
         addCompatibleSelectionDescription( i_rSelectedRows );
 
         if ( xConnection.is() && i_rORB.is() )
@@ -134,14 +130,14 @@ namespace dbaui
         osl_atomic_decrement( &m_refCount );
     }
 
-    bool ODataClipboard::WriteObject( ::tools::SvRef<SotStorageStream>& rxOStm, void* pUserObject, SotClipboardFormatId nUserObjectId, const css::datatransfer::DataFlavor& /*rFlavor*/ )
+    bool ODataClipboard::WriteObject( ::tools::SvRef<SotStorageStream>& rxOStm, void* pUserObject, sal_uInt32 nUserObjectId, const css::datatransfer::DataFlavor& /*rFlavor*/ )
     {
-        if (nUserObjectId == SotClipboardFormatId::RTF || nUserObjectId == SotClipboardFormatId::HTML )
+        if (nUserObjectId == FORMAT_OBJECT_ID_RTF || nUserObjectId == FORMAT_OBJECT_ID_HTML )
         {
             ODatabaseImportExport* pExport = static_cast<ODatabaseImportExport*>(pUserObject);
-            if ( pExport && rxOStm.Is() )
+            if ( pExport && rxOStm.is() )
             {
-                pExport->setStream(&rxOStm);
+                pExport->setStream(rxOStm.get());
                 return pExport->Write();
             }
         }
@@ -167,12 +163,12 @@ namespace dbaui
             case SotClipboardFormatId::RTF:
                 if ( m_pRtf.is() )
                     m_pRtf->initialize(getDescriptor());
-                return m_pRtf.is() && SetObject( m_pRtf.get(), SotClipboardFormatId::RTF, rFlavor );
+                return m_pRtf.is() && SetObject( m_pRtf.get(), FORMAT_OBJECT_ID_RTF, rFlavor );
 
             case SotClipboardFormatId::HTML:
                 if ( m_pHtml.is() )
                     m_pHtml->initialize(getDescriptor());
-                return m_pHtml.is() && SetObject( m_pHtml.get(), SotClipboardFormatId::HTML, rFlavor );
+                return m_pHtml.is() && SetObject( m_pHtml.get(), FORMAT_OBJECT_ID_HTML, rFlavor );
 
             default: break;
         }
@@ -194,45 +190,45 @@ namespace dbaui
             m_pRtf.clear();
         }
 
-        if ( getDescriptor().has( daConnection ) )
+        if ( getDescriptor().has( DataAccessDescriptorProperty::Connection ) )
         {
-            Reference<XConnection> xConnection( getDescriptor()[daConnection], UNO_QUERY );
+            Reference<XConnection> xConnection( getDescriptor()[DataAccessDescriptorProperty::Connection], UNO_QUERY );
             lcl_setListener( xConnection, this, false );
         }
 
-        if ( getDescriptor().has( daCursor ) )
+        if ( getDescriptor().has( DataAccessDescriptorProperty::Cursor ) )
         {
-            Reference< XResultSet > xResultSet( getDescriptor()[ daCursor ], UNO_QUERY );
+            Reference< XResultSet > xResultSet( getDescriptor()[ DataAccessDescriptorProperty::Cursor ], UNO_QUERY );
             lcl_setListener( xResultSet, this, false );
         }
 
         ODataAccessObjectTransferable::ObjectReleased( );
     }
 
-    void SAL_CALL ODataClipboard::disposing( const css::lang::EventObject& i_rSource ) throw (css::uno::RuntimeException, std::exception)
+    void SAL_CALL ODataClipboard::disposing( const css::lang::EventObject& i_rSource )
     {
         ODataAccessDescriptor& rDescriptor( getDescriptor() );
 
-        if ( rDescriptor.has( daConnection ) )
+        if ( rDescriptor.has( DataAccessDescriptorProperty::Connection ) )
         {
-            Reference< XConnection > xConnection( rDescriptor[daConnection], UNO_QUERY );
+            Reference< XConnection > xConnection( rDescriptor[DataAccessDescriptorProperty::Connection], UNO_QUERY );
             if ( xConnection == i_rSource.Source )
             {
-                rDescriptor.erase( daConnection );
+                rDescriptor.erase( DataAccessDescriptorProperty::Connection );
             }
         }
 
-        if ( rDescriptor.has( daCursor ) )
+        if ( rDescriptor.has( DataAccessDescriptorProperty::Cursor ) )
         {
-            Reference< XResultSet > xResultSet( rDescriptor[ daCursor ], UNO_QUERY );
+            Reference< XResultSet > xResultSet( rDescriptor[ DataAccessDescriptorProperty::Cursor ], UNO_QUERY );
             if ( xResultSet == i_rSource.Source )
             {
-                rDescriptor.erase( daCursor );
+                rDescriptor.erase( DataAccessDescriptorProperty::Cursor );
                 // Selection and BookmarkSelection are meaningless without a result set
-                if ( rDescriptor.has( daSelection ) )
-                    rDescriptor.erase( daSelection );
-                if ( rDescriptor.has( daBookmarkSelection ) )
-                    rDescriptor.erase( daBookmarkSelection );
+                if ( rDescriptor.has( DataAccessDescriptorProperty::Selection ) )
+                    rDescriptor.erase( DataAccessDescriptorProperty::Selection );
+                if ( rDescriptor.has( DataAccessDescriptorProperty::BookmarkSelection ) )
+                    rDescriptor.erase( DataAccessDescriptorProperty::BookmarkSelection );
             }
         }
 

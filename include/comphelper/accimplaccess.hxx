@@ -24,18 +24,12 @@
 #include <com/sun/star/lang/XUnoTunnel.hpp>
 #include <comphelper/comphelperdllapi.h>
 
-namespace com { namespace sun { namespace star { namespace accessibility {
-    class XAccessible;
-    class XAccessibleContext;
-}}}}
-
 namespace comphelper
 {
     //= OAccessibleImplementationAccess
 
     typedef ::cppu::ImplHelper1 <   css::lang::XUnoTunnel
                                 >   OAccImpl_Base;
-    struct OAccImpl_Impl;
 
     /** This is a helper class which allows accessing several aspects of the implementation
         of an AccessibleContext.
@@ -61,26 +55,12 @@ namespace comphelper
     */
     class COMPHELPER_DLLPUBLIC OAccessibleImplementationAccess : public OAccImpl_Base
     {
-    private:
-        OAccImpl_Impl*  m_pImpl;
-
-    protected:
-        /// retrieves the parent previously set via <method>setAccessibleParent</method>
-        const css::uno::Reference< css::accessibility::XAccessible >&
-                implGetForeignControlledParent( ) const;
-
-        /** retrieves the set of currently set states which are controlled by a foreign instance
-        @return
-            a bit mask, where a set bit 2^n means that the AccessibleStateType n has been set
-        */
-        sal_Int64   implGetForeignControlledStates( ) const;
-
     protected:
         OAccessibleImplementationAccess( );
         virtual ~OAccessibleImplementationAccess( );
 
         // XUnoTunnel
-        virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& _rIdentifier ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& _rIdentifier ) override;
 
     public:
 

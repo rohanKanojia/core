@@ -17,19 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "SlideSorter.hxx"
-#include "model/SlideSorterModel.hxx"
-#include "model/SlsPageDescriptor.hxx"
-#include "controller/SlsPageSelector.hxx"
-#include "controller/SlideSorterController.hxx"
-#include "controller/SlsCurrentSlideManager.hxx"
-#include "controller/SlsFocusManager.hxx"
-#include "view/SlideSorterView.hxx"
-#include "ViewShellBase.hxx"
-#include "ViewShell.hxx"
-#include "DrawViewShell.hxx"
-#include "sdpage.hxx"
-#include "FrameView.hxx"
+#include <SlideSorter.hxx>
+#include <model/SlideSorterModel.hxx>
+#include <model/SlsPageDescriptor.hxx>
+#include <controller/SlsPageSelector.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <controller/SlsCurrentSlideManager.hxx>
+#include <controller/SlsFocusManager.hxx>
+#include <view/SlideSorterView.hxx>
+#include <ViewShellBase.hxx>
+#include <ViewShell.hxx>
+#include <DrawViewShell.hxx>
+#include <sdpage.hxx>
+#include <FrameView.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
 
 using namespace ::com::sun::star;
@@ -46,7 +46,7 @@ CurrentSlideManager::CurrentSlideManager (SlideSorter& rSlideSorter)
       maSwitchPageDelayTimer()
 {
     maSwitchPageDelayTimer.SetTimeout(100);
-    maSwitchPageDelayTimer.SetTimeoutHdl(LINK(this,CurrentSlideManager,SwitchPageCallback));
+    maSwitchPageDelayTimer.SetInvokeHandler(LINK(this,CurrentSlideManager,SwitchPageCallback));
 }
 
 CurrentSlideManager::~CurrentSlideManager()
@@ -94,16 +94,12 @@ void CurrentSlideManager::ReleaseCurrentSlide()
     mnCurrentSlideIndex = -1;
 }
 
-bool CurrentSlideManager::IsCurrentSlideIsValid()
-{
-    return mnCurrentSlideIndex >= 0 && mnCurrentSlideIndex<mrSlideSorter.GetModel().GetPageCount();
-}
-
 void CurrentSlideManager::AcquireCurrentSlide (const sal_Int32 nSlideIndex)
 {
     mnCurrentSlideIndex = nSlideIndex;
 
-    if (IsCurrentSlideIsValid())
+    // if current slide valid
+    if (mnCurrentSlideIndex >= 0 && mnCurrentSlideIndex<mrSlideSorter.GetModel().GetPageCount())
     {
         // Get a descriptor for the XDrawPage reference.  Note that the
         // given XDrawPage may or may not be member of the slide sorter
@@ -177,7 +173,8 @@ void CurrentSlideManager::SetCurrentSlideAtViewShellBase (const SharedPageDescri
         {
             sal_uInt16 nPageNumber = (rpDescriptor->GetPage()->GetPageNum()-1)/2;
             pDrawViewShell->SwitchPage(nPageNumber);
-            pDrawViewShell->GetPageTabControl().SetCurPageId(nPageNumber+1);
+            TabControl& rPageTabControl = pDrawViewShell->GetPageTabControl();
+            rPageTabControl.SetCurPageId(rPageTabControl.GetPageId(nPageNumber));
         }
     }
 }
@@ -194,7 +191,8 @@ void CurrentSlideManager::SetCurrentSlideAtTabControl (const SharedPageDescripto
         if (pDrawViewShell)
         {
             sal_uInt16 nPageNumber = (rpDescriptor->GetPage()->GetPageNum()-1)/2;
-            pDrawViewShell->GetPageTabControl().SetCurPageId(nPageNumber+1);
+            TabControl& rPageTabControl = pDrawViewShell->GetPageTabControl();
+            rPageTabControl.SetCurPageId(rPageTabControl.GetPageId(nPageNumber));
         }
     }
 }
@@ -236,7 +234,7 @@ void CurrentSlideManager::HandleModelChange()
     }
 }
 
-IMPL_LINK_NOARG_TYPED(CurrentSlideManager, SwitchPageCallback, Timer *, void)
+IMPL_LINK_NOARG(CurrentSlideManager, SwitchPageCallback, Timer *, void)
 {
     if (mpCurrentSlide)
     {

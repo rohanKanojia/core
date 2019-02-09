@@ -17,12 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <map>
 #include <optasian.hxx>
+#include <osl/diagnose.h>
+#include <tools/debug.hxx>
 #include <editeng/langitem.hxx>
 #include <editeng/unolingu.hxx>
-#include <dialmgr.hxx>
-#include <cuires.hrc>
+#include <o3tl/any.hxx>
 #include <i18nlangtag/mslangid.hxx>
 #include <svl/asiancfg.hxx>
 #include <com/sun/star/lang/Locale.hpp>
@@ -33,7 +35,6 @@
 #include <sfx2/objsh.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
-#include <comphelper/processfactory.hxx>
 #include <unotools/localedatawrapper.hxx>
 
 using namespace com::sun::star::uno;
@@ -47,44 +48,25 @@ const sal_Char cCharacterCompressionType[] = "CharacterCompressionType";
 
 struct SvxForbiddenChars_Impl
 {
-    ~SvxForbiddenChars_Impl();
-
-    bool                bRemoved;
-    ForbiddenCharacters*    pCharacters;
+    bool                                  bRemoved;
+    std::unique_ptr<ForbiddenCharacters>  pCharacters;
 };
-
-SvxForbiddenChars_Impl::~SvxForbiddenChars_Impl()
-{
-    delete pCharacters;
-}
-
-typedef ::std::map< LanguageType, SvxForbiddenChars_Impl* > SvxForbiddenCharacterMap_Impl;
 
 struct SvxAsianLayoutPage_Impl
 {
     SvxAsianConfig  aConfig;
     SvxAsianLayoutPage_Impl() {}
 
-    ~SvxAsianLayoutPage_Impl();
-
     Reference< XForbiddenCharacters >   xForbidden;
     Reference< XPropertySet >           xPrSet;
     Reference< XPropertySetInfo >       xPrSetInfo;
-    SvxForbiddenCharacterMap_Impl       aChangedLanguagesMap;
+    std::map< LanguageType, std::unique_ptr<SvxForbiddenChars_Impl> >
+                                        aChangedLanguagesMap;
 
     bool                hasForbiddenCharacters(LanguageType eLang);
     SvxForbiddenChars_Impl* getForbiddenCharacters(LanguageType eLang);
-    void                    addForbiddenCharacters(LanguageType eLang, ForbiddenCharacters* pForbidden);
+    void                    addForbiddenCharacters(LanguageType eLang, std::unique_ptr<ForbiddenCharacters> pForbidden);
 };
-
-SvxAsianLayoutPage_Impl::~SvxAsianLayoutPage_Impl()
-{
-    SvxForbiddenCharacterMap_Impl::iterator it;
-    for( it = aChangedLanguagesMap.begin(); it != aChangedLanguagesMap.end(); ++it )
-    {
-        delete it->second;
-    }
-}
 
 bool    SvxAsianLayoutPage_Impl::hasForbiddenCharacters(LanguageType eLang)
 {
@@ -93,33 +75,32 @@ bool    SvxAsianLayoutPage_Impl::hasForbiddenCharacters(LanguageType eLang)
 
 SvxForbiddenChars_Impl* SvxAsianLayoutPage_Impl::getForbiddenCharacters(LanguageType eLang)
 {
-    SvxForbiddenCharacterMap_Impl::iterator it = aChangedLanguagesMap.find( eLang );
+    auto it = aChangedLanguagesMap.find( eLang );
     DBG_ASSERT( ( it != aChangedLanguagesMap.end() ), "language not available");
     if( it != aChangedLanguagesMap.end() )
-        return it->second;
+        return it->second.get();
     return nullptr;
 }
 
 void SvxAsianLayoutPage_Impl::addForbiddenCharacters(
-    LanguageType eLang, ForbiddenCharacters* pForbidden)
+    LanguageType eLang, std::unique_ptr<ForbiddenCharacters> pForbidden)
 {
-    SvxForbiddenCharacterMap_Impl::iterator itOld = aChangedLanguagesMap.find( eLang );
+    auto itOld = aChangedLanguagesMap.find( eLang );
     if( itOld == aChangedLanguagesMap.end() )
     {
-        SvxForbiddenChars_Impl* pChar = new SvxForbiddenChars_Impl;
+        std::unique_ptr<SvxForbiddenChars_Impl> pChar(new SvxForbiddenChars_Impl);
         pChar->bRemoved = nullptr == pForbidden;
-        pChar->pCharacters = pForbidden ? new ForbiddenCharacters(*pForbidden) : nullptr;
-        aChangedLanguagesMap.insert( ::std::make_pair( eLang, pChar ) );
+        pChar->pCharacters = std::move(pForbidden);
+        aChangedLanguagesMap.emplace( eLang, std::move(pChar) );
     }
     else
     {
         itOld->second->bRemoved = nullptr == pForbidden;
-        delete itOld->second->pCharacters;
-        itOld->second->pCharacters = pForbidden ? new ForbiddenCharacters(*pForbidden) : nullptr;
+        itOld->second->pCharacters = std::move(pForbidden);
     }
 }
 
-static LanguageType eLastUsedLanguageTypeForForbiddenCharacters = USHRT_MAX;
+static LanguageType eLastUsedLanguageTypeForForbiddenCharacters(USHRT_MAX);
 
 SvxAsianLayoutPage::SvxAsianLayoutPage( vcl::Window* pParent, const SfxItemSet& rSet ) :
     SfxTabPage(pParent, "OptAsianPage", "cui/ui/optasianpage.ui", &rSet),
@@ -156,8 +137,7 @@ SvxAsianLayoutPage::~SvxAsianLayoutPage()
 
 void SvxAsianLayoutPage::dispose()
 {
-    delete pImpl;
-    pImpl = nullptr;
+    pImpl.reset();
     m_pCharKerningRB.clear();
     m_pCharPunctKerningRB.clear();
     m_pNoCompressionRB.clear();
@@ -174,9 +154,9 @@ void SvxAsianLayoutPage::dispose()
     SfxTabPage::dispose();
 }
 
-VclPtr<SfxTabPage> SvxAsianLayoutPage::Create( vcl::Window* pParent, const SfxItemSet* rAttrSet )
+VclPtr<SfxTabPage> SvxAsianLayoutPage::Create( TabPageParent pParent, const SfxItemSet* rAttrSet )
 {
-    return VclPtr<SvxAsianLayoutPage>::Create(pParent, *rAttrSet);
+    return VclPtr<SvxAsianLayoutPage>::Create(pParent.pParent, *rAttrSet);
 }
 
 bool SvxAsianLayoutPage::FillItemSet( SfxItemSet* )
@@ -187,25 +167,22 @@ bool SvxAsianLayoutPage::FillItemSet( SfxItemSet* )
         OUString sPunct(cIsKernAsianPunctuation);
         if(pImpl->xPrSetInfo.is() && pImpl->xPrSetInfo->hasPropertyByName(sPunct))
         {
-            Any aVal;
-            sal_Bool bVal = !m_pCharKerningRB->IsChecked();
-            aVal.setValue(&bVal, cppu::UnoType<bool>::get());
-            pImpl->xPrSet->setPropertyValue(sPunct, aVal);
+            bool bVal = !m_pCharKerningRB->IsChecked();
+            pImpl->xPrSet->setPropertyValue(sPunct, Any(bVal));
         }
     }
 
     if(m_pNoCompressionRB->IsValueChangedFromSaved() ||
        m_pPunctCompressionRB->IsValueChangedFromSaved())
     {
-        sal_Int16 nSet = m_pNoCompressionRB->IsChecked() ? 0 :
-                            m_pPunctCompressionRB->IsChecked() ? 1 : 2;
+        CharCompressType nSet = m_pNoCompressionRB->IsChecked() ? CharCompressType::NONE :
+                            m_pPunctCompressionRB->IsChecked() ? CharCompressType::PunctuationOnly :
+                            CharCompressType::PunctuationAndKana;
         pImpl->aConfig.SetCharDistanceCompression(nSet);
         OUString sCompress(cCharacterCompressionType);
         if(pImpl->xPrSetInfo.is() && pImpl->xPrSetInfo->hasPropertyByName(sCompress))
         {
-            Any aVal;
-            aVal <<= nSet;
-            pImpl->xPrSet->setPropertyValue(sCompress, aVal);
+            pImpl->xPrSet->setPropertyValue(sCompress, Any(static_cast<sal_uInt16>(nSet)));
         }
     }
     pImpl->aConfig.Commit();
@@ -213,15 +190,13 @@ bool SvxAsianLayoutPage::FillItemSet( SfxItemSet* )
     {
         try
         {
-            SvxForbiddenCharacterMap_Impl::iterator itElem;
-            for( itElem = pImpl->aChangedLanguagesMap.begin();
-                itElem != pImpl->aChangedLanguagesMap.end(); ++itElem )
+            for (auto const& changedLanguage : pImpl->aChangedLanguagesMap)
             {
-                Locale aLocale( LanguageTag::convertToLocale( itElem->first ));
-                if(itElem->second->bRemoved)
+                Locale aLocale( LanguageTag::convertToLocale(changedLanguage.first));
+                if(changedLanguage.second->bRemoved)
                     pImpl->xForbidden->removeForbiddenCharacters( aLocale );
-                else if(itElem->second->pCharacters)
-                    pImpl->xForbidden->setForbiddenCharacters( aLocale, *( itElem->second->pCharacters ) );
+                else if(changedLanguage.second->pCharacters)
+                    pImpl->xForbidden->setForbiddenCharacters( aLocale, *( changedLanguage.second->pCharacters ) );
             }
         }
         catch (const Exception&)
@@ -229,7 +204,7 @@ bool SvxAsianLayoutPage::FillItemSet( SfxItemSet* )
             OSL_FAIL("exception in XForbiddenCharacters");
         }
     }
-    eLastUsedLanguageTypeForForbiddenCharacters = m_pLanguageLB->GetSelectLanguage();
+    eLastUsedLanguageTypeForForbiddenCharacters = m_pLanguageLB->GetSelectedLanguage();
 
     return false;
 }
@@ -250,7 +225,7 @@ void SvxAsianLayoutPage::Reset( const SfxItemSet* )
         pImpl->xPrSetInfo = pImpl->xPrSet->getPropertySetInfo();
     OUString sForbidden("ForbiddenCharacters");
     bool bKernWesternText = pImpl->aConfig.IsKerningWesternTextOnly();
-    sal_Int16 nCompress = pImpl->aConfig.GetCharDistanceCompression();
+    CharCompressType nCompress = pImpl->aConfig.GetCharDistanceCompression();
     if(pImpl->xPrSetInfo.is())
     {
         if(pImpl->xPrSetInfo->hasPropertyByName(sForbidden))
@@ -262,13 +237,15 @@ void SvxAsianLayoutPage::Reset( const SfxItemSet* )
         if(pImpl->xPrSetInfo->hasPropertyByName(sCompress))
         {
             Any aVal = pImpl->xPrSet->getPropertyValue(sCompress);
-            aVal >>= nCompress;
+            sal_uInt16 nTmp;
+            if (aVal >>= nTmp)
+                nCompress = static_cast<CharCompressType>(nTmp);
         }
         OUString sPunct(cIsKernAsianPunctuation);
         if(pImpl->xPrSetInfo->hasPropertyByName(sPunct))
         {
             Any aVal = pImpl->xPrSet->getPropertyValue(sPunct);
-            bKernWesternText = !*static_cast<sal_Bool const *>(aVal.getValue());
+            bKernWesternText = !*o3tl::doAccess<bool>(aVal);
         }
     }
     else
@@ -288,8 +265,8 @@ void SvxAsianLayoutPage::Reset( const SfxItemSet* )
         m_pCharPunctKerningRB->Check();
     switch(nCompress)
     {
-        case 0 : m_pNoCompressionRB->Check();        break;
-        case 1 : m_pPunctCompressionRB->Check();     break;
+        case CharCompressType::NONE : m_pNoCompressionRB->Check();        break;
+        case CharCompressType::PunctuationOnly : m_pPunctCompressionRB->Check();     break;
         default: m_pPunctKanaCompressionRB->Check();
     }
     m_pCharKerningRB->SaveValue();
@@ -299,7 +276,7 @@ void SvxAsianLayoutPage::Reset( const SfxItemSet* )
 
     m_pLanguageLB->SelectEntryPos(0);
     //preselect the system language in the box - if available
-    if(USHRT_MAX == eLastUsedLanguageTypeForForbiddenCharacters)
+    if(LanguageType(USHRT_MAX) == eLastUsedLanguageTypeForForbiddenCharacters)
     {
         eLastUsedLanguageTypeForForbiddenCharacters =
             Application::GetSettings().GetLanguageTag().getLanguageType();
@@ -312,12 +289,12 @@ void SvxAsianLayoutPage::Reset( const SfxItemSet* )
     LanguageHdl(*m_pLanguageLB);
 }
 
-IMPL_LINK_NOARG_TYPED(SvxAsianLayoutPage, LanguageHdl, ListBox&, void)
+IMPL_LINK_NOARG(SvxAsianLayoutPage, LanguageHdl, ListBox&, void)
 {
     //set current value
-    LanguageType eSelectLanguage = m_pLanguageLB->GetSelectLanguage();
+    LanguageType eSelectLanguage = m_pLanguageLB->GetSelectedLanguage();
     LanguageTag aLanguageTag( eSelectLanguage);
-    Locale aLocale( aLanguageTag.getLocale());
+    const Locale& aLocale( aLanguageTag.getLocale());
 
     OUString sStart, sEnd;
     bool bAvail;
@@ -375,7 +352,7 @@ IMPL_LINK_NOARG_TYPED(SvxAsianLayoutPage, LanguageHdl, ListBox&, void)
     m_pEndED->SetText(sEnd);
 }
 
-IMPL_LINK_TYPED(SvxAsianLayoutPage, ChangeStandardHdl, Button*, pBox, void)
+IMPL_LINK(SvxAsianLayoutPage, ChangeStandardHdl, Button*, pBox, void)
 {
     bool bCheck = static_cast<CheckBox*>(pBox)->IsChecked();
     m_pStartED->Enable(!bCheck);
@@ -386,9 +363,9 @@ IMPL_LINK_TYPED(SvxAsianLayoutPage, ChangeStandardHdl, Button*, pBox, void)
     ModifyHdl(*m_pStartED);
 }
 
-IMPL_LINK_TYPED(SvxAsianLayoutPage, ModifyHdl, Edit&, rEdit, void)
+IMPL_LINK(SvxAsianLayoutPage, ModifyHdl, Edit&, rEdit, void)
 {
-    LanguageType eSelectLanguage = m_pLanguageLB->GetSelectLanguage();
+    LanguageType eSelectLanguage = m_pLanguageLB->GetSelectedLanguage();
     Locale aLocale( LanguageTag::convertToLocale( eSelectLanguage ));
     OUString sStart = m_pStartED->GetText();
     OUString sEnd = m_pEndED->GetText();
@@ -399,10 +376,10 @@ IMPL_LINK_TYPED(SvxAsianLayoutPage, ModifyHdl, Edit&, rEdit, void)
         {
             if(bEnable)
             {
-                ForbiddenCharacters aSet;
-                aSet.beginLine = sStart;
-                aSet.endLine = sEnd;
-                pImpl->addForbiddenCharacters(eSelectLanguage, &aSet);
+                std::unique_ptr<ForbiddenCharacters> pFCSet(new ForbiddenCharacters);
+                pFCSet->beginLine = sStart;
+                pFCSet->endLine = sEnd;
+                pImpl->addForbiddenCharacters(eSelectLanguage, std::move(pFCSet));
             }
             else
                 pImpl->addForbiddenCharacters(eSelectLanguage, nullptr);

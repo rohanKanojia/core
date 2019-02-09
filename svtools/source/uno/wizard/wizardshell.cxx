@@ -25,20 +25,14 @@
 
 #include <com/sun/star/ui/dialogs/WizardTravelType.hpp>
 
-#include <vcl/msgbox.hxx>
-
-
 namespace svt { namespace uno
 {
 
 
     using css::uno::Reference;
-    using css::uno::XInterface;
     using css::uno::Exception;
-    using css::uno::RuntimeException;
     using css::uno::Sequence;
     using css::ui::dialogs::XWizardController;
-    using css::ui::dialogs::XWizard;
     using css::ui::dialogs::XWizardPage;
 
     namespace WizardTravelType = css::ui::dialogs::WizardTravelType;
@@ -58,7 +52,7 @@ namespace svt { namespace uno
     //= WizardShell
     WizardShell::WizardShell( vcl::Window* i_pParent, const Reference< XWizardController >& i_rController,
             const Sequence< Sequence< sal_Int16 > >& i_rPaths )
-        :WizardShell_Base( i_pParent, WB_MOVEABLE | WB_CLOSEABLE )
+        :WizardShell_Base( i_pParent )
         ,m_xController( i_rController )
         ,m_nFirstPageID( lcl_determineFirstPageID( i_rPaths ) )
     {
@@ -125,7 +119,7 @@ namespace svt { namespace uno
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svtools.uno");
         }
     }
 
@@ -144,7 +138,7 @@ namespace svt { namespace uno
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svtools.uno");
         }
 
         return true;
@@ -187,7 +181,7 @@ namespace svt { namespace uno
         {
             // fallback for ill-behaved clients: empty page
             pPage = VclPtr<TabPage>::Create( this, 0 );
-            pPage->SetSizePixel( LogicToPixel( Size( 280, 185 ), MAP_APPFONT ) );
+            pPage->SetSizePixel(LogicToPixel(Size(280, 185), MapMode(MapUnit::MapAppFont)));
         }
 
         m_aPageControllers[ pPage ] = pController;
@@ -209,7 +203,7 @@ namespace svt { namespace uno
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svtools.uno");
         }
         // fallback for ill-behaved clients: the numeric state
         return OUString::number(i_nState);
@@ -225,7 +219,7 @@ namespace svt { namespace uno
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svtools.uno");
         }
 
         return WizardShell_Base::canAdvance();
@@ -241,7 +235,7 @@ namespace svt { namespace uno
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svtools.uno");
         }
 
         return WizardShell_Base::onFinish();

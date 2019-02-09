@@ -17,31 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/token/namespacemap.hxx"
+#include <oox/token/namespacemap.hxx>
 
 namespace oox {
 
 NamespaceMap::NamespaceMap()
 {
-    static const struct NamespaceUrl { sal_Int32 mnId; const sal_Char* mpcUrl; } spNamespaceUrls[] =
-    {
-// include auto-generated C array with namespace URLs as C strings
-#include "namespacenames.inc"
-        { -1, "" }
+    maTransitionalNamespaceMap = std::map<sal_Int32, OUString>{
+#include <namespacenames.inc>
     };
 
-    static const struct NamespaceStrictUrl { sal_Int32 mnId; const sal_Char* mpcUrl; } spNamespaceStrictUrls[] =
-    {
-// include auto-generated C array with namespace URLs as C strings
-#include "namespaces-strictnames.inc"
-        { -1, "" }
+    maStrictNamespaceMap = std::map<sal_Int32, OUString>{
+#include <namespaces-strictnames.inc>
     };
-
-    for( const NamespaceUrl* pNamespaceUrl = spNamespaceUrls; pNamespaceUrl->mnId != -1; ++pNamespaceUrl )
-        maTransitionalNamespaceMap[ pNamespaceUrl->mnId ] = OUString::createFromAscii( pNamespaceUrl->mpcUrl );
-
-    for( const NamespaceStrictUrl* pNamespaceUrl = spNamespaceStrictUrls; pNamespaceUrl->mnId != -1; ++pNamespaceUrl )
-        maStrictNamespaceMap[ pNamespaceUrl->mnId ] = OUString::createFromAscii( pNamespaceUrl->mpcUrl );
 }
 
 }

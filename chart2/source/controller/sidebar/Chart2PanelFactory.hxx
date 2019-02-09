@@ -21,19 +21,15 @@
 
 #include <cppuhelper/compbase.hxx>
 #include <cppuhelper/basemutex.hxx>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/ui/XUIElementFactory.hpp>
 
 
 namespace chart { namespace sidebar {
 
-namespace
-{
-    typedef ::cppu::WeakComponentImplHelper <
-        css::ui::XUIElementFactory, css::lang::XServiceInfo
-        > PanelFactoryInterfaceBase;
-}
+typedef ::cppu::WeakComponentImplHelper <
+    css::ui::XUIElementFactory, css::lang::XServiceInfo
+    > PanelFactoryInterfaceBase;
 
 class ChartPanelFactory
     : private ::cppu::BaseMutex,
@@ -41,28 +37,21 @@ class ChartPanelFactory
 {
 public:
     ChartPanelFactory();
-    virtual ~ChartPanelFactory();
+    virtual ~ChartPanelFactory() override;
 
     ChartPanelFactory(const ChartPanelFactory&) = delete;
     const ChartPanelFactory& operator=(const ChartPanelFactory&) = delete;
 
     // XUIElementFactory
     virtual css::uno::Reference<css::ui::XUIElement> SAL_CALL createUIElement(
-        const ::rtl::OUString& rsResourceURL,
-        const ::css::uno::Sequence<css::beans::PropertyValue>& rArguments)
-        throw(
-            css::container::NoSuchElementException,
-            css::lang::IllegalArgumentException,
-            css::uno::RuntimeException, std::exception ) override;
+        const OUString& rsResourceURL,
+        const ::css::uno::Sequence<css::beans::PropertyValue>& rArguments) override;
 
-    virtual OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
 
-    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override;
 
-    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
 };
 
 } } // end of namespace sc::sidebar

@@ -17,9 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <basegfx/color/bcolormodifier.hxx>
+#include <sal/config.h>
 
-#include <osl/diagnose.h>
+#include <algorithm>
+
+#include <basegfx/color/bcolormodifier.hxx>
 
 namespace basegfx
 {
@@ -36,7 +38,7 @@ namespace basegfx
 
     bool BColorModifier_gray::operator==(const BColorModifier& rCompare) const
     {
-        return nullptr != dynamic_cast< const BColorModifier_gray* >(&rCompare);
+        return dynamic_cast< const BColorModifier_gray* >(&rCompare) != nullptr;
     }
 
     ::basegfx::BColor BColorModifier_gray::getModifiedColor(const ::basegfx::BColor& aSourceColor) const
@@ -55,7 +57,7 @@ namespace basegfx
 
     bool BColorModifier_invert::operator==(const BColorModifier& rCompare) const
     {
-        return nullptr != dynamic_cast< const BColorModifier_invert* >(&rCompare);
+        return dynamic_cast< const BColorModifier_invert* >(&rCompare) != nullptr;
     }
 
     ::basegfx::BColor BColorModifier_invert::getModifiedColor(const ::basegfx::BColor& aSourceColor) const
@@ -72,7 +74,7 @@ namespace basegfx
 
     bool BColorModifier_luminance_to_alpha::operator==(const BColorModifier& rCompare) const
     {
-        return nullptr != dynamic_cast< const BColorModifier_luminance_to_alpha* >(&rCompare);
+        return dynamic_cast< const BColorModifier_luminance_to_alpha* >(&rCompare) != nullptr;
     }
 
     ::basegfx::BColor BColorModifier_luminance_to_alpha::getModifiedColor(const ::basegfx::BColor& aSourceColor) const
@@ -218,11 +220,11 @@ namespace basegfx
 {
     BColorModifier_RGBLuminanceContrast::BColorModifier_RGBLuminanceContrast(double fRed, double fGreen, double fBlue, double fLuminance, double fContrast)
     :   BColorModifier(),
-        mfRed(basegfx::clamp(fRed, -1.0, 1.0)),
-        mfGreen(basegfx::clamp(fGreen, -1.0, 1.0)),
-        mfBlue(basegfx::clamp(fBlue, -1.0, 1.0)),
-        mfLuminance(basegfx::clamp(fLuminance, -1.0, 1.0)),
-        mfContrast(basegfx::clamp(fContrast, -1.0, 1.0)),
+        mfRed(std::clamp(fRed, -1.0, 1.0)),
+        mfGreen(std::clamp(fGreen, -1.0, 1.0)),
+        mfBlue(std::clamp(fBlue, -1.0, 1.0)),
+        mfLuminance(std::clamp(fLuminance, -1.0, 1.0)),
+        mfContrast(std::clamp(fContrast, -1.0, 1.0)),
         mfContrastOff(1.0),
         mfRedOff(0.0),
         mfGreenOff(0.0),
@@ -284,9 +286,9 @@ namespace basegfx
         if(mbUseIt)
         {
             return basegfx::BColor(
-                basegfx::clamp(aSourceColor.getRed() * mfContrastOff + mfRedOff, 0.0, 1.0),
-                basegfx::clamp(aSourceColor.getGreen() * mfContrastOff + mfGreenOff, 0.0, 1.0),
-                basegfx::clamp(aSourceColor.getBlue() * mfContrastOff + mfBlueOff, 0.0, 1.0));
+                std::clamp(aSourceColor.getRed() * mfContrastOff + mfRedOff, 0.0, 1.0),
+                std::clamp(aSourceColor.getGreen() * mfContrastOff + mfGreenOff, 0.0, 1.0),
+                std::clamp(aSourceColor.getBlue() * mfContrastOff + mfBlueOff, 0.0, 1.0));
         }
         else
         {

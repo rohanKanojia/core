@@ -95,7 +95,7 @@ class ScVbaColorFormat : public ScVbaColorFormat_BASE
 private:
     css::uno::Reference< css::beans::XPropertySet > m_xPropertySet;
     ScVbaFillFormat *m_pFillFormat;
-    sal_Int16 m_nColorFormatType;
+    sal_Int16 const m_nColorFormatType;
     sal_Int32 m_nFillFormatBackColor;
 protected:
     virtual OUString getServiceImplName() override;
@@ -104,10 +104,10 @@ public:
     ScVbaColorFormat( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext >& xContext, const css::uno::Reference< ov::XHelperInterface >& xInternalParent, const css::uno::Reference< css::drawing::XShape >& xShape, const sal_Int16 nColorFormatType );
 
     // Attributes
-    virtual sal_Int32 SAL_CALL getRGB() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setRGB( sal_Int32 _rgb ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int32 SAL_CALL getSchemeColor() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setSchemeColor( sal_Int32 _schemecolor ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL getRGB() override;
+    virtual void SAL_CALL setRGB( sal_Int32 _rgb ) override;
+    virtual sal_Int32 SAL_CALL getSchemeColor() override;
+    virtual void SAL_CALL setSchemeColor( sal_Int32 _schemecolor ) override;
 
 };
 

@@ -25,11 +25,13 @@
 #include <osl/process.h>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/byteseq.h>
+#include <sal/log.hxx>
 
 #include <rtl/instance.hxx>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/beans/Optional.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
+#include <comphelper/scopeguard.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <osl/security.hxx>
 
@@ -42,6 +44,8 @@ LdapUserProfileBe::LdapUserProfileBe( const uno::Reference<uno::XComponentContex
 {
     LdapDefinition aDefinition;
     OUString loggedOnUser;
+    // true initially to handle reentrant call; will become false if readLdapConfiguration fails
+    bool bHaveLdapConfiguration = true;
 
     // This whole rigmarole is to prevent an infinite recursion where reading
     // the configuration for the backend would create another instance of the
@@ -55,30 +59,26 @@ LdapUserProfileBe::LdapUserProfileBe( const uno::Reference<uno::XComponentContex
 
         if (!bReentrantCall)
         {
-            try
-            {
-                bReentrantCall = true ;
-                if (!readLdapConfiguration(
-                        xContext, &aDefinition, &loggedOnUser))
-                {
-                    throw css::uno::RuntimeException(
-                        OUString("LdapUserProfileBe- LDAP not configured"),
-                        nullptr);
-                }
-
-                bReentrantCall = false ;
-            }
-            catch (...)
-            {
-                bReentrantCall = false;
-                throw;
-            }
+            bReentrantCall = true ;
+            comphelper::ScopeGuard aReentrantCallGuard([]() { bReentrantCall = false; });
+            // Don't throw on fail: this will crash if LDAP is misconfigured, and user opens
+            // Expert Configuration dialog. Instead, just don't fill data_, which will make the
+            // backend return empty values. This happens in SvtUserOptions::Impl::GetValue_Impl
+            // anyway even in throwing scenario, but doing it here also improves performance
+            // because of avoiding repeated attempts to create the backend.
+            bHaveLdapConfiguration = readLdapConfiguration(
+                xContext, &aDefinition, &loggedOnUser);
+            if (!bHaveLdapConfiguration)
+                SAL_WARN("extensions.config", "LdapUserProfileBackend: LDAP not configured");
         }
     }
 
-    LdapConnection connection;
-    connection.connectSimple(aDefinition);
-    connection.getUserProfile(loggedOnUser, &data_);
+    if (bHaveLdapConfiguration)
+    {
+        LdapConnection connection;
+        connection.connectSimple(aDefinition);
+        connection.getUserProfile(loggedOnUser, &data_);
+    }
 }
 
 LdapUserProfileBe::~LdapUserProfileBe()
@@ -108,7 +108,7 @@ bool LdapUserProfileBe::readLdapConfiguration(
         uno::Reference< lang::XMultiServiceFactory > xCfgProvider(
             css::configuration::theDefaultProvider::get(context));
 
-        css::beans::NamedValue aPath(OUString("nodepath"), uno::makeAny(kComponent) );
+        css::beans::NamedValue aPath("nodepath", uno::makeAny(kComponent) );
 
         uno::Sequence< uno::Any > aArgs(1);
         aArgs[0] <<=  aPath;
@@ -140,28 +140,24 @@ bool LdapUserProfileBe::readLdapConfiguration(
     }
     catch (const uno::Exception & e)
     {
-        OSL_TRACE("LdapUserProfileBackend: access to configuration data failed: %s",
-                OUStringToOString( e.Message, RTL_TEXTENCODING_ASCII_US ).getStr() );
+        SAL_WARN("extensions.config", "LdapUserProfileBackend: access to configuration data failed: " << e);
         return false;
     }
 
     osl::Security aSecurityContext;
     if (!aSecurityContext.getUserName(*loggedOnUser))
-        OSL_TRACE("LdapUserProfileBackend - could not get Logged on user from system");
+        SAL_WARN("extensions.config", "LdapUserProfileBackend - could not get Logged on user from system");
 
     sal_Int32 nIndex = loggedOnUser->indexOf('/');
     if (nIndex > 0)
         *loggedOnUser = loggedOnUser->copy(nIndex+1);
-
-    //Remember to remove
-    OSL_TRACE("Logged on user is %s", OUStringToOString(*loggedOnUser,RTL_TEXTENCODING_ASCII_US).getStr());
 
     return true;
 }
 
 
 bool LdapUserProfileBe::getLdapStringParam(
-    uno::Reference<container::XNameAccess>& xAccess,
+    uno::Reference<container::XNameAccess> const & xAccess,
     const OUString& aLdapSetting,
     OUString& aServerParameter)
 {
@@ -172,21 +168,14 @@ bool LdapUserProfileBe::getLdapStringParam(
 
 void LdapUserProfileBe::setPropertyValue(
     OUString const &, css::uno::Any const &)
-    throw (
-        css::beans::UnknownPropertyException, css::beans::PropertyVetoException,
-        css::lang::IllegalArgumentException, css::lang::WrappedTargetException,
-        css::uno::RuntimeException, std::exception)
 {
     throw css::lang::IllegalArgumentException(
-        OUString("setPropertyValue not supported"),
+        "setPropertyValue not supported",
         static_cast< cppu::OWeakObject * >(this), -1);
 }
 
 css::uno::Any LdapUserProfileBe::getPropertyValue(
     OUString const & PropertyName)
-    throw (
-        css::beans::UnknownPropertyException, css::lang::WrappedTargetException,
-        css::uno::RuntimeException, std::exception)
 {
     for (sal_Int32 i = 0;;) {
         sal_Int32 j = PropertyName.indexOf(',', i);
@@ -212,33 +201,30 @@ css::uno::Any LdapUserProfileBe::getPropertyValue(
 }
 
 
-OUString SAL_CALL LdapUserProfileBe::getLdapUserProfileBeName() {
+OUString LdapUserProfileBe::getLdapUserProfileBeName() {
     return OUString("com.sun.star.comp.configuration.backend.LdapUserProfileBe");
 }
 
 
 OUString SAL_CALL LdapUserProfileBe::getImplementationName()
-    throw (uno::RuntimeException, std::exception)
 {
     return getLdapUserProfileBeName() ;
 }
 
 
-uno::Sequence<OUString> SAL_CALL LdapUserProfileBe::getLdapUserProfileBeServiceNames()
+uno::Sequence<OUString> LdapUserProfileBe::getLdapUserProfileBeServiceNames()
 {
     uno::Sequence<OUString> aServices { "com.sun.star.configuration.backend.LdapUserProfileBe" };
     return aServices ;
 }
 
 sal_Bool SAL_CALL LdapUserProfileBe::supportsService(const OUString& aServiceName)
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, aServiceName);
 }
 
 uno::Sequence<OUString>
 SAL_CALL LdapUserProfileBe::getSupportedServiceNames()
-    throw (uno::RuntimeException, std::exception)
 {
     return getLdapUserProfileBeServiceNames() ;
 }

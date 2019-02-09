@@ -38,15 +38,12 @@
  *
  * -----------------------------------------------------------------------
  *
- * Methodes
+ * Methods
  *
  * Use SetValue() to set a percentage between 0 and 100. A value larger
  * than 100 will cause the last rectangle to start flashing
  *
  ************************************************************************/
-
-
-#define WB_STDPROGRESSBAR       WB_BORDER
 
 
 class VCL_DLLPUBLIC ProgressBar : public vcl::Window
@@ -66,9 +63,9 @@ private:
     SAL_DLLPRIVATE void ImplDrawProgress(vcl::RenderContext& rRenderContext, sal_uInt16 nOldPerc, sal_uInt16 nNewPerc);
 
 public:
-                        ProgressBar( vcl::Window* pParent, WinBits nWinBits = WB_STDPROGRESSBAR );
+                        ProgressBar( vcl::Window* pParent, WinBits nWinBits );
 
-    virtual void        Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void        Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void        Resize() override;
     virtual void        StateChanged( StateChangedType nStateChange ) override;
     virtual void        DataChanged( const DataChangedEvent& rDCEvt ) override;

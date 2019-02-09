@@ -27,7 +27,6 @@
 #include <xmloff/xmluconv.hxx>
 #include "xmlReportElement.hxx"
 #include "xmlComponent.hxx"
-#include <tools/debug.hxx>
 
 
 namespace rptxml
@@ -43,7 +42,7 @@ OXMLFormattedField::OXMLFormattedField( ORptFilter& rImport,
                 ,bool _bPageCount) :
     OXMLReportElementBase( rImport, nPrfx, rLName,_xComponent.get(),_pContainer)
 {
-    OSL_ENSURE(m_xComponent.is(),"Component is NULL!");
+    OSL_ENSURE(m_xReportComponent.is(),"Component is NULL!");
     const SvXMLNamespaceMap& rMap = rImport.GetNamespaceMap();
     const SvXMLTokenMap& rTokenMap = rImport.GetControlElemTokenMap();
 
@@ -63,10 +62,7 @@ OXMLFormattedField::OXMLFormattedField( ORptFilter& rImport,
                     _xComponent->setDataField(ORptFilter::convertFormula(sValue));
                     break;
                 case XML_TOK_SELECT_PAGE:
-                    {
-                        static const char s_sPageNumber[] = "rpt:PageNumber()";
-                        _xComponent->setDataField(s_sPageNumber);
-                    }
+                    _xComponent->setDataField("rpt:PageNumber()");
                     break;
                 default:
                     break;
@@ -74,13 +70,12 @@ OXMLFormattedField::OXMLFormattedField( ORptFilter& rImport,
         }
         if ( _bPageCount )
         {
-            static const char s_sPageNumber[] = "rpt:PageCount()";
-            _xComponent->setDataField(s_sPageNumber);
+            _xComponent->setDataField("rpt:PageCount()");
         }
     }
     catch(Exception&)
     {
-        OSL_FAIL("Exception catched while filling the report definition props");
+        OSL_FAIL("Exception caught while filling the report definition props");
     }
 }
 

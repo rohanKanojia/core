@@ -18,8 +18,8 @@
  */
 
 
-#include "osl/file.hxx"
-#include "osl/thread.h"
+#include <osl/file.hxx>
+#include <osl/thread.h>
 #include "gnujre.hxx"
 #include "util.hxx"
 
@@ -47,7 +47,7 @@ char const* const* GnuInfo::getJavaExePaths(int * size)
         "gij-4.1",
         "bin/gij-4.1"
     };
-    *size = sizeof (ar) / sizeof (char*);
+    *size = SAL_N_ELEMENTS (ar);
     return ar;
 }
 
@@ -82,7 +82,7 @@ char const* const* GnuInfo::getRuntimePaths(int * size)
         "/libgcj.so.7",
         "/libgcj.so.6"
     };
-    *size = sizeof(ar) / sizeof (char*);
+    *size = SAL_N_ELEMENTS(ar);
     return ar;
 }
 
@@ -97,13 +97,12 @@ bool GnuInfo::initialize(vector<pair<OUString, OUString> > props)
     //javax.accessibility.assistive_technologies from system properties
 
     OUString sJavaLibraryPath;
-    typedef vector<pair<OUString, OUString> >::const_iterator it_prop;
-    OUString sVendorProperty("java.vendor");
-    OUString sVersionProperty("java.version");
-    OUString sJavaHomeProperty("java.home");
-    OUString sJavaLibraryPathProperty("java.library.path");
-    OUString sGNUHomeProperty("gnu.classpath.home.url");
-    OUString sAccessProperty("javax.accessibility.assistive_technologies");
+    OUString const sVendorProperty("java.vendor");
+    OUString const sVersionProperty("java.version");
+    OUString const sJavaHomeProperty("java.home");
+    OUString const sJavaLibraryPathProperty("java.library.path");
+    OUString const sGNUHomeProperty("gnu.classpath.home.url");
+    OUString const sAccessProperty("javax.accessibility.assistive_technologies");
 
     bool bVersion = false;
     bool bVendor = false;
@@ -112,28 +111,27 @@ bool GnuInfo::initialize(vector<pair<OUString, OUString> > props)
     bool bJavaLibraryPath = false;
     bool bAccess = false;
 
-    typedef vector<pair<OUString, OUString> >::const_iterator it_prop;
-    for (it_prop i = props.begin(); i != props.end(); ++i)
+    for (auto const& prop : props)
     {
-        if(! bVendor && sVendorProperty.equals(i->first))
+        if(! bVendor && sVendorProperty == prop.first)
         {
-            m_sVendor = i->second;
+            m_sVendor = prop.second;
             bVendor = true;
         }
-        else if (!bVersion && sVersionProperty.equals(i->first))
+        else if (!bVersion && sVersionProperty == prop.first)
         {
-            m_sVersion = i->second;
+            m_sVersion = prop.second;
             bVersion = true;
         }
-        else if (!bHome && sGNUHomeProperty.equals(i->first))
+        else if (!bHome && sGNUHomeProperty == prop.first)
         {
-            m_sHome = i->second;
+            m_sHome = prop.second;
             bHome = true;
         }
-        else if (!bJavaHome && sJavaHomeProperty.equals(i->first))
+        else if (!bJavaHome && sJavaHomeProperty == prop.first)
         {
            OUString fileURL;
-           if (osl_getFileURLFromSystemPath(i->second.pData,& fileURL.pData) ==
+           if (osl_getFileURLFromSystemPath(prop.second.pData,& fileURL.pData) ==
                osl_File_E_None)
            {
                //make sure that the drive letter have all the same case
@@ -146,15 +144,15 @@ bool GnuInfo::initialize(vector<pair<OUString, OUString> > props)
                }
            }
         }
-        else if (!bJavaLibraryPath && sJavaLibraryPathProperty.equals(i->first))
+        else if (!bJavaLibraryPath && sJavaLibraryPathProperty == prop.first)
         {
             sal_Int32 nIndex = 0;
-            osl_getFileURLFromSystemPath(i->second.getToken(0, ':', nIndex).pData, &sJavaLibraryPath.pData);
+            osl_getFileURLFromSystemPath(prop.second.getToken(0, ':', nIndex).pData, &sJavaLibraryPath.pData);
             bJavaLibraryPath = true;
         }
-        else if (!bAccess && sAccessProperty.equals(i->first))
+        else if (!bAccess && sAccessProperty == prop.first)
         {
-            if (!i->second.isEmpty())
+            if (!prop.second.isEmpty())
             {
                 m_bAccessibility = true;
                 bAccess = true;
@@ -179,11 +177,10 @@ bool GnuInfo::initialize(vector<pair<OUString, OUString> > props)
     vector<OUString> libpaths = getVectorFromCharArray(arRtPaths, size);
 
     bool bRt = false;
-    typedef vector<OUString>::const_iterator i_path;
-    for(i_path ip = libpaths.begin(); ip != libpaths.end(); ++ip)
+    for (auto const& libpath : libpaths)
     {
         //Construct an absolute path to the possible runtime
-        OUString usRt= m_sHome + *ip;
+        OUString usRt= m_sHome + libpath;
         DirectoryItem item;
         if(DirectoryItem::get(usRt, item) == File::E_None)
         {
@@ -197,10 +194,10 @@ bool GnuInfo::initialize(vector<pair<OUString, OUString> > props)
     if (!bRt)
     {
         m_sHome = m_sJavaHome;
-        for(i_path ip = libpaths.begin(); ip != libpaths.end(); ++ip)
+        for (auto const& libpath : libpaths)
         {
             //Construct an absolute path to the possible runtime
-            OUString usRt= m_sHome + *ip;
+            OUString usRt= m_sHome + libpath;
             DirectoryItem item;
             if(DirectoryItem::get(usRt, item) == File::E_None)
             {
@@ -216,10 +213,10 @@ bool GnuInfo::initialize(vector<pair<OUString, OUString> > props)
     if (!bRt && m_sJavaHome != sJavaLibraryPath)
     {
         m_sHome = sJavaLibraryPath;
-        for(i_path ip = libpaths.begin(); ip != libpaths.end(); ++ip)
+        for (auto const& libpath : libpaths)
         {
             //Construct an absolute path to the possible runtime
-            OUString usRt= m_sHome + *ip;
+            OUString usRt= m_sHome + libpath;
             DirectoryItem item;
             if(DirectoryItem::get(usRt, item) == File::E_None)
             {
@@ -236,10 +233,10 @@ bool GnuInfo::initialize(vector<pair<OUString, OUString> > props)
     if (!bRt && m_sJavaHome != "file:///usr/lib")
     {
         m_sHome = "file:///usr/lib64";
-        for(i_path ip = libpaths.begin(); ip != libpaths.end(); ++ip)
+        for (auto const& libpath : libpaths)
         {
             //Construct an absolute path to the possible runtime
-            OUString usRt= m_sHome + *ip;
+            OUString usRt= m_sHome + libpath;
             DirectoryItem item;
             if(DirectoryItem::get(usRt, item) == File::E_None)
             {
@@ -261,20 +258,18 @@ bool GnuInfo::initialize(vector<pair<OUString, OUString> > props)
     char const * const * arLDPaths = getLibraryPaths( & size);
     vector<OUString> ld_paths = getVectorFromCharArray(arLDPaths, size);
 
-    char arSep[]= {SAL_PATHSEPARATOR, 0};
-    OUString sPathSep= OUString::createFromAscii(arSep);
     bool bLdPath = true;
     int c = 0;
-    for(i_path il = ld_paths.begin(); il != ld_paths.end(); ++il, ++c)
+    for (auto const& ld_path : ld_paths)
     {
-        OUString usAbsUrl= m_sHome + *il;
+        OUString usAbsUrl= m_sHome + ld_path;
         // convert to system path
         OUString usSysPath;
         if(File::getSystemPathFromFileURL(usAbsUrl, usSysPath) == File::E_None)
         {
 
             if(c > 0)
-                m_sLD_LIBRARY_PATH+= sPathSep;
+                m_sLD_LIBRARY_PATH+= OUStringLiteral1(SAL_PATHSEPARATOR);
             m_sLD_LIBRARY_PATH+= usSysPath;
         }
         else
@@ -282,11 +277,9 @@ bool GnuInfo::initialize(vector<pair<OUString, OUString> > props)
             bLdPath = false;
             break;
         }
+        ++c;
     }
-    if (!bLdPath)
-        return false;
-
-    return true;
+    return bLdPath;
 }
 
 int GnuInfo::compareVersions(const OUString&) const

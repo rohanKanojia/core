@@ -27,7 +27,7 @@
 #include <cppcanvas/basegfxfactory.hxx>
 
 #include "slidechangebase.hxx"
-#include "tools.hxx"
+#include <tools.hxx>
 
 #include <algorithm>
 
@@ -148,24 +148,24 @@ void SlideChangeBase::renderBitmap(
     SlideBitmapSharedPtr const & pSlideBitmap,
     cppcanvas::CanvasSharedPtr const & pCanvas )
 {
-    if( pSlideBitmap && pCanvas )
-    {
-        // need to render without any transformation (we
-        // assume device units):
-        const basegfx::B2DHomMatrix viewTransform(
-            pCanvas->getTransformation() );
-        const basegfx::B2DPoint pageOrigin(
-            viewTransform * basegfx::B2DPoint() );
-        const cppcanvas::CanvasSharedPtr pDevicePixelCanvas(
-            pCanvas->clone() );
+    if( !(pSlideBitmap && pCanvas) )
+        return;
 
-        // render at output position, don't modify bitmap object (no move!):
-        const basegfx::B2DHomMatrix transform(basegfx::tools::createTranslateB2DHomMatrix(
-            pageOrigin.getX(), pageOrigin.getY()));
+    // need to render without any transformation (we
+    // assume device units):
+    const basegfx::B2DHomMatrix viewTransform(
+        pCanvas->getTransformation() );
+    const basegfx::B2DPoint pageOrigin(
+        viewTransform * basegfx::B2DPoint() );
+    const cppcanvas::CanvasSharedPtr pDevicePixelCanvas(
+        pCanvas->clone() );
 
-        pDevicePixelCanvas->setTransformation( transform );
-        pSlideBitmap->draw( pDevicePixelCanvas );
-    }
+    // render at output position, don't modify bitmap object (no move!):
+    const basegfx::B2DHomMatrix transform(basegfx::utils::createTranslateB2DHomMatrix(
+        pageOrigin.getX(), pageOrigin.getY()));
+
+    pDevicePixelCanvas->setTransformation( transform );
+    pSlideBitmap->draw( pDevicePixelCanvas );
 }
 
 void SlideChangeBase::prefetch( const AnimatableShapeSharedPtr&,
@@ -180,7 +180,7 @@ void SlideChangeBase::prefetch( const AnimatableShapeSharedPtr&,
 
     // init views and create slide bitmaps
     for( const auto& pView : mrViewContainer )
-        this->viewAdded( pView );
+        viewAdded( pView );
 
     mbPrefetched = true;
 }
@@ -392,7 +392,7 @@ void SlideChangeBase::viewAdded( const UnoViewSharedPtr& rView )
     if( mbFinished )
         return;
 
-    maViewData.push_back( ViewEntry(rView) );
+    maViewData.emplace_back(rView );
 
     ViewEntry& rEntry( maViewData.back() );
     getEnteringBitmap( rEntry );
@@ -446,12 +446,12 @@ void SlideChangeBase::viewsChanged()
     if( mbFinished )
         return;
 
-    for( auto& pView : maViewData )
+    for( auto& rView : maViewData )
     {
         // clear stale info (both bitmaps and sprites prolly need a
         // resize)
-        clearViewEntry( pView );
-        addSprites( pView );
+        clearViewEntry( rView );
+        addSprites( rView );
     }
 }
 

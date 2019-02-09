@@ -17,18 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-
-#include <ctype.h>
 #include <comphelper/string.hxx>
+#include <o3tl/safeint.hxx>
 #include <tools/stream.hxx>
 #include <tools/debug.hxx>
 #include <tools/color.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/strbuf.hxx>
 #include <rtl/character.hxx>
-
+#include <rtl/tencinfo.h>
+#include <sal/log.hxx>
 #include <tools/tenccvt.hxx>
 #include <tools/datetime.hxx>
+#include <unotools/datetime.hxx>
 #include <svl/inettype.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/document/XDocumentProperties.hpp>
@@ -43,117 +44,85 @@
 using namespace ::com::sun::star;
 
 
-const sal_Int32 MAX_LEN( 1024L );
+const sal_Int32 MAX_LEN( 1024 );
 
-const sal_Int32 MAX_ENTITY_LEN( 8L );
+const sal_Int32 MAX_ENTITY_LEN( 8 );
 
 
 // Tables to convert option values into strings
 
 // <INPUT TYPE=xxx>
-static HTMLOptionEnum const aInputTypeOptEnums[] =
+static HTMLOptionEnum<HTMLInputType> const aInputTypeOptEnums[] =
 {
-    { OOO_STRING_SVTOOLS_HTML_IT_text,      HTML_IT_TEXT        },
-    { OOO_STRING_SVTOOLS_HTML_IT_password,  HTML_IT_PASSWORD    },
-    { OOO_STRING_SVTOOLS_HTML_IT_checkbox,  HTML_IT_CHECKBOX    },
-    { OOO_STRING_SVTOOLS_HTML_IT_radio,     HTML_IT_RADIO       },
-    { OOO_STRING_SVTOOLS_HTML_IT_range,     HTML_IT_RANGE       },
-    { OOO_STRING_SVTOOLS_HTML_IT_scribble,  HTML_IT_SCRIBBLE    },
-    { OOO_STRING_SVTOOLS_HTML_IT_file,      HTML_IT_FILE        },
-    { OOO_STRING_SVTOOLS_HTML_IT_hidden,    HTML_IT_HIDDEN      },
-    { OOO_STRING_SVTOOLS_HTML_IT_submit,    HTML_IT_SUBMIT      },
-    { OOO_STRING_SVTOOLS_HTML_IT_image,     HTML_IT_IMAGE       },
-    { OOO_STRING_SVTOOLS_HTML_IT_reset,     HTML_IT_RESET       },
-    { OOO_STRING_SVTOOLS_HTML_IT_button,    HTML_IT_BUTTON      },
-    { nullptr,                    0                   }
+    { OOO_STRING_SVTOOLS_HTML_IT_text,      HTMLInputType::Text        },
+    { OOO_STRING_SVTOOLS_HTML_IT_password,  HTMLInputType::Password    },
+    { OOO_STRING_SVTOOLS_HTML_IT_checkbox,  HTMLInputType::Checkbox    },
+    { OOO_STRING_SVTOOLS_HTML_IT_radio,     HTMLInputType::Radio       },
+    { OOO_STRING_SVTOOLS_HTML_IT_range,     HTMLInputType::Range       },
+    { OOO_STRING_SVTOOLS_HTML_IT_scribble,  HTMLInputType::Scribble    },
+    { OOO_STRING_SVTOOLS_HTML_IT_file,      HTMLInputType::File        },
+    { OOO_STRING_SVTOOLS_HTML_IT_hidden,    HTMLInputType::Hidden      },
+    { OOO_STRING_SVTOOLS_HTML_IT_submit,    HTMLInputType::Submit      },
+    { OOO_STRING_SVTOOLS_HTML_IT_image,     HTMLInputType::Image       },
+    { OOO_STRING_SVTOOLS_HTML_IT_reset,     HTMLInputType::Reset       },
+    { OOO_STRING_SVTOOLS_HTML_IT_button,    HTMLInputType::Button      },
+    { nullptr,                              HTMLInputType(0)    }
 };
 
 // <TABLE FRAME=xxx>
-static HTMLOptionEnum const aTableFrameOptEnums[] =
+static HTMLOptionEnum<HTMLTableFrame> const aTableFrameOptEnums[] =
 {
-    { OOO_STRING_SVTOOLS_HTML_TF_void,  HTML_TF_VOID    },
-    { OOO_STRING_SVTOOLS_HTML_TF_above, HTML_TF_ABOVE   },
-    { OOO_STRING_SVTOOLS_HTML_TF_below, HTML_TF_BELOW   },
-    { OOO_STRING_SVTOOLS_HTML_TF_hsides,    HTML_TF_HSIDES  },
-    { OOO_STRING_SVTOOLS_HTML_TF_lhs,       HTML_TF_LHS     },
-    { OOO_STRING_SVTOOLS_HTML_TF_rhs,       HTML_TF_RHS     },
-    { OOO_STRING_SVTOOLS_HTML_TF_vsides,    HTML_TF_VSIDES  },
-    { OOO_STRING_SVTOOLS_HTML_TF_box,       HTML_TF_BOX     },
-    { OOO_STRING_SVTOOLS_HTML_TF_border,    HTML_TF_BOX     },
-    { nullptr,                0               }
+    { OOO_STRING_SVTOOLS_HTML_TF_void,    HTMLTableFrame::Void    },
+    { OOO_STRING_SVTOOLS_HTML_TF_above,   HTMLTableFrame::Above   },
+    { OOO_STRING_SVTOOLS_HTML_TF_below,   HTMLTableFrame::Below   },
+    { OOO_STRING_SVTOOLS_HTML_TF_hsides,  HTMLTableFrame::HSides  },
+    { OOO_STRING_SVTOOLS_HTML_TF_lhs,     HTMLTableFrame::LHS     },
+    { OOO_STRING_SVTOOLS_HTML_TF_rhs,     HTMLTableFrame::RHS     },
+    { OOO_STRING_SVTOOLS_HTML_TF_vsides,  HTMLTableFrame::VSides  },
+    { OOO_STRING_SVTOOLS_HTML_TF_box,     HTMLTableFrame::Box     },
+    { OOO_STRING_SVTOOLS_HTML_TF_border,  HTMLTableFrame::Box     },
+    { nullptr,                            HTMLTableFrame(0) }
 };
 
 // <TABLE RULES=xxx>
-static HTMLOptionEnum const aTableRulesOptEnums[] =
+static HTMLOptionEnum<HTMLTableRules> const aTableRulesOptEnums[] =
 {
-    { OOO_STRING_SVTOOLS_HTML_TR_none,  HTML_TR_NONE    },
-    { OOO_STRING_SVTOOLS_HTML_TR_groups,    HTML_TR_GROUPS  },
-    { OOO_STRING_SVTOOLS_HTML_TR_rows,  HTML_TR_ROWS    },
-    { OOO_STRING_SVTOOLS_HTML_TR_cols,  HTML_TR_COLS    },
-    { OOO_STRING_SVTOOLS_HTML_TR_all,       HTML_TR_ALL     },
-    { nullptr,                0               }
+    { OOO_STRING_SVTOOLS_HTML_TR_none,   HTMLTableRules::NONE      },
+    { OOO_STRING_SVTOOLS_HTML_TR_groups, HTMLTableRules::Groups    },
+    { OOO_STRING_SVTOOLS_HTML_TR_rows,   HTMLTableRules::Rows      },
+    { OOO_STRING_SVTOOLS_HTML_TR_cols,   HTMLTableRules::Cols      },
+    { OOO_STRING_SVTOOLS_HTML_TR_all,    HTMLTableRules::All       },
+    { nullptr,                           HTMLTableRules(0) }
 };
 
-sal_uInt16 HTMLOption::GetEnum( const HTMLOptionEnum *pOptEnums, sal_uInt16 nDflt ) const
-{
-    sal_uInt16 nValue = nDflt;
 
-    while( pOptEnums->pName )
-        if( aValue.equalsIgnoreAsciiCaseAscii( pOptEnums->pName ) )
-            break;
-        else
-            pOptEnums++;
-
-    if( pOptEnums->pName )
-        nValue = pOptEnums->nValue;
-
-    return nValue;
-}
-
-bool HTMLOption::GetEnum( sal_uInt16 &rEnum, const HTMLOptionEnum *pOptEnums ) const
-{
-    while( pOptEnums->pName )
-    {
-        if( aValue.equalsIgnoreAsciiCaseAscii( pOptEnums->pName ) )
-            break;
-        else
-            pOptEnums++;
-    }
-
-    const sal_Char *pName = pOptEnums->pName;
-    if( pName )
-        rEnum = pOptEnums->nValue;
-
-    return (pName != nullptr);
-}
-
-HTMLOption::HTMLOption( sal_uInt16 nTok, const OUString& rToken,
+HTMLOption::HTMLOption( HtmlOptionId nTok, const OUString& rToken,
                         const OUString& rValue )
     : aValue(rValue)
     , aToken(rToken)
     , nToken( nTok )
 {
-    DBG_ASSERT( nToken>=HTML_OPTION_START && nToken<HTML_OPTION_END,
+    DBG_ASSERT( nToken>=HtmlOptionId::BOOL_START && nToken<HtmlOptionId::END,
         "HTMLOption: unknown token" );
 }
 
 sal_uInt32 HTMLOption::GetNumber() const
 {
-    DBG_ASSERT( (nToken>=HTML_OPTION_NUMBER_START &&
-                 nToken<HTML_OPTION_NUMBER_END) ||
-                (nToken>=HTML_OPTION_CONTEXT_START &&
-                 nToken<HTML_OPTION_CONTEXT_END) ||
-                nToken==HTML_O_VALUE,
+    DBG_ASSERT( (nToken>=HtmlOptionId::NUMBER_START &&
+                 nToken<HtmlOptionId::NUMBER_END) ||
+                (nToken>=HtmlOptionId::CONTEXT_START &&
+                 nToken<HtmlOptionId::CONTEXT_END) ||
+                nToken==HtmlOptionId::VALUE,
         "GetNumber: Option not numerical" );
     OUString aTmp(comphelper::string::stripStart(aValue, ' '));
     sal_Int32 nTmp = aTmp.toInt32();
-    return nTmp >= 0 ? (sal_uInt32)nTmp : 0;
+    return nTmp >= 0 ? static_cast<sal_uInt32>(nTmp) : 0;
 }
 
 sal_Int32 HTMLOption::GetSNumber() const
 {
-    DBG_ASSERT( (nToken>=HTML_OPTION_NUMBER_START && nToken<HTML_OPTION_NUMBER_END) ||
-                (nToken>=HTML_OPTION_CONTEXT_START && nToken<HTML_OPTION_CONTEXT_END),
+    DBG_ASSERT( (nToken>=HtmlOptionId::NUMBER_START && nToken<HtmlOptionId::NUMBER_END) ||
+                (nToken>=HtmlOptionId::CONTEXT_START && nToken<HtmlOptionId::CONTEXT_END),
         "GetSNumber: Option not numerical" );
     OUString aTmp(comphelper::string::stripStart(aValue, ' '));
     return aTmp.toInt32();
@@ -191,7 +160,7 @@ void HTMLOption::GetNumbers( std::vector<sal_uInt32> &rNumbers ) const
 
 void HTMLOption::GetColor( Color& rColor ) const
 {
-    DBG_ASSERT( (nToken>=HTML_OPTION_COLOR_START && nToken<HTML_OPTION_COLOR_END) || nToken==HTML_O_SIZE,
+    DBG_ASSERT( (nToken>=HtmlOptionId::COLOR_START && nToken<HtmlOptionId::COLOR_END) || nToken==HtmlOptionId::SIZE,
         "GetColor: Option is not a color." );
 
     OUString aTmp(aValue.toAsciiLowerCase());
@@ -222,34 +191,33 @@ void HTMLOption::GetColor( Color& rColor ) const
         }
     }
 
-    rColor.SetRed(   (sal_uInt8)((nColor & 0x00ff0000) >> 16) );
-    rColor.SetGreen( (sal_uInt8)((nColor & 0x0000ff00) >> 8));
-    rColor.SetBlue(  (sal_uInt8)(nColor & 0x000000ff) );
+    rColor.SetRed(   static_cast<sal_uInt8>((nColor & 0x00ff0000) >> 16) );
+    rColor.SetGreen( static_cast<sal_uInt8>((nColor & 0x0000ff00) >> 8));
+    rColor.SetBlue(  static_cast<sal_uInt8>(nColor & 0x000000ff) );
 }
 
 HTMLInputType HTMLOption::GetInputType() const
 {
-    DBG_ASSERT( nToken==HTML_O_TYPE, "GetInputType: Option not TYPE" );
-    return (HTMLInputType)GetEnum( aInputTypeOptEnums, HTML_IT_TEXT );
+    DBG_ASSERT( nToken==HtmlOptionId::TYPE, "GetInputType: Option not TYPE" );
+    return GetEnum( aInputTypeOptEnums, HTMLInputType::Text );
 }
 
 HTMLTableFrame HTMLOption::GetTableFrame() const
 {
-    DBG_ASSERT( nToken==HTML_O_FRAME, "GetTableFrame: Option not FRAME" );
-    return (HTMLTableFrame)GetEnum( aTableFrameOptEnums );
+    DBG_ASSERT( nToken==HtmlOptionId::FRAME, "GetTableFrame: Option not FRAME" );
+    return GetEnum( aTableFrameOptEnums );
 }
 
 HTMLTableRules HTMLOption::GetTableRules() const
 {
-    DBG_ASSERT( nToken==HTML_O_RULES, "GetTableRules: Option not RULES" );
-    return (HTMLTableRules)GetEnum( aTableRulesOptEnums );
+    DBG_ASSERT( nToken==HtmlOptionId::RULES, "GetTableRules: Option not RULES" );
+    return GetEnum( aTableRulesOptEnums );
 }
 
 HTMLParser::HTMLParser( SvStream& rIn, bool bReadNewDoc ) :
-    SvParser( rIn ),
+    SvParser<HtmlTokenId>( rIn ),
     bNewDoc(bReadNewDoc),
     bIsInHeader(true),
-    bIsInBody(false),
     bReadListing(false),
     bReadXMP(false),
     bReadPRE(false),
@@ -261,7 +229,7 @@ HTMLParser::HTMLParser( SvStream& rIn, bool bReadNewDoc ) :
     bReadNextChar(false),
     bReadComment(false),
     nPre_LinePos(0),
-    mnPendingOffToken(0)
+    mnPendingOffToken(HtmlTokenId::NONE)
 {
     //#i76649, default to UTF-8 for HTML unless we know differently
     SetSrcEncoding(RTL_TEXTENCODING_UTF8);
@@ -271,26 +239,52 @@ HTMLParser::~HTMLParser()
 {
 }
 
+void HTMLParser::SetNamespace(const OUString& rNamespace)
+{
+    // Convert namespace alias to a prefix.
+    maNamespace = rNamespace + ":";
+}
+
+namespace
+{
+    class RefGuard
+    {
+    private:
+        HTMLParser& m_rParser;
+    public:
+        RefGuard(HTMLParser& rParser)
+            : m_rParser(rParser)
+        {
+            m_rParser.AddFirstRef();
+        }
+
+        ~RefGuard()
+        {
+            if (m_rParser.GetStatus() != SvParserState::Pending)
+                m_rParser.ReleaseRef(); // Parser not needed anymore
+        }
+    };
+}
+
 SvParserState HTMLParser::CallParser()
 {
-    eState = SVPAR_WORKING;
+    eState = SvParserState::Working;
     nNextCh = GetNextChar();
-    SaveState( 0 );
+    SaveState( HtmlTokenId::NONE );
 
     nPre_LinePos = 0;
     bPre_IgnoreNewPara = false;
 
-    AddFirstRef();
-    Continue( 0 );
-    if( SVPAR_PENDING != eState )
-        ReleaseRef();       // Parser not needed anymore
+    RefGuard aRefGuard(*this);
+
+    Continue( HtmlTokenId::NONE );
 
     return eState;
 }
 
-void HTMLParser::Continue( int nToken )
+void HTMLParser::Continue( HtmlTokenId nToken )
 {
-    if( !nToken )
+    if( nToken == HtmlTokenId::NONE )
         nToken = GetNextToken();
 
     while( IsParserWorking() )
@@ -298,73 +292,70 @@ void HTMLParser::Continue( int nToken )
         SaveState( nToken );
         nToken = FilterToken( nToken );
 
-        if( nToken )
+        if( nToken != HtmlTokenId::NONE )
             NextToken( nToken );
 
         if( IsParserWorking() )
-            SaveState( 0 );         // continue with new token
+            SaveState( HtmlTokenId::NONE );         // continue with new token
 
         nToken = GetNextToken();
     }
 }
 
-int HTMLParser::FilterToken( int nToken )
+HtmlTokenId HTMLParser::FilterToken( HtmlTokenId nToken )
 {
     switch( nToken )
     {
-    case sal_Unicode(EOF):
-        nToken = 0;
+    case HtmlTokenId(EOF):
+        nToken = HtmlTokenId::NONE;
         break;          // don't pass
 
-    case HTML_HEAD_OFF:
-        bIsInBody = true;
+    case HtmlTokenId::HEAD_OFF:
         bIsInHeader = false;
         break;
 
-    case HTML_HEAD_ON:
+    case HtmlTokenId::HEAD_ON:
         bIsInHeader = true;
         break;
 
-    case HTML_BODY_ON:
+    case HtmlTokenId::BODY_ON:
         bIsInHeader = false;
-        bIsInBody = true;
         break;
 
-    case HTML_FRAMESET_ON:
+    case HtmlTokenId::FRAMESET_ON:
         bIsInHeader = false;
-        bIsInBody = false;
         break;
 
-    case HTML_BODY_OFF:
-        bIsInBody = bReadPRE = bReadListing = bReadXMP = false;
-        break;
-
-    case HTML_HTML_OFF:
-        nToken = 0;
+    case HtmlTokenId::BODY_OFF:
         bReadPRE = bReadListing = bReadXMP = false;
-        break;      // HTML_ON hasn't been passed either !
+        break;
 
-    case HTML_PREFORMTXT_ON:
+    case HtmlTokenId::HTML_OFF:
+        nToken = HtmlTokenId::NONE;
+        bReadPRE = bReadListing = bReadXMP = false;
+        break;      // HtmlTokenId::ON hasn't been passed either !
+
+    case HtmlTokenId::PREFORMTXT_ON:
         StartPRE();
         break;
 
-    case HTML_PREFORMTXT_OFF:
+    case HtmlTokenId::PREFORMTXT_OFF:
         FinishPRE();
         break;
 
-    case HTML_LISTING_ON:
+    case HtmlTokenId::LISTING_ON:
         StartListing();
         break;
 
-    case HTML_LISTING_OFF:
+    case HtmlTokenId::LISTING_OFF:
         FinishListing();
         break;
 
-    case HTML_XMP_ON:
+    case HtmlTokenId::XMP_ON:
         StartXMP();
         break;
 
-    case HTML_XMP_OFF:
+    case HtmlTokenId::XMP_OFF:
         FinishXMP();
         break;
 
@@ -382,14 +373,13 @@ int HTMLParser::FilterToken( int nToken )
     return nToken;
 }
 
-#define HTML_ISDIGIT( c ) rtl::isAsciiDigit(c)
-#define HTML_ISALPHA( c ) rtl::isAsciiAlpha(c)
-#define HTML_ISALNUM( c ) rtl::isAsciiAlphanumeric(c)
-#define HTML_ISSPACE( c ) ( ' ' == c || (c >= 0x09 && c <= 0x0d) )
-#define HTML_ISPRINTABLE( c ) ( c >= 32 && c != 127)
-#define HTML_ISHEXDIGIT( c ) rtl::isAsciiHexDigit(c)
+namespace {
 
-int HTMLParser::ScanText( const sal_Unicode cBreak )
+constexpr bool HTML_ISPRINTABLE(sal_Unicode c) { return c >= 32 && c != 127; }
+
+}
+
+HtmlTokenId HTMLParser::ScanText( const sal_Unicode cBreak )
 {
     OUStringBuffer sTmpBuffer( MAX_LEN );
     bool bContinue = true;
@@ -407,7 +397,7 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                 sTmpBuffer.append( '&' );
             else
             {
-                sal_uLong nStreamPos = rInput.Tell();
+                sal_uInt64 nStreamPos = rInput.Tell();
                 sal_uLong nLinePos = GetLinePos();
 
                 sal_uInt32 cChar = 0U;
@@ -415,13 +405,13 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                 {
                     nNextCh = GetNextChar();
                     const bool bIsHex( 'x' == nNextCh );
-                    const bool bIsDecOrHex( bIsHex || HTML_ISDIGIT(nNextCh) );
+                    const bool bIsDecOrHex( bIsHex || rtl::isAsciiDigit(nNextCh) );
                     if ( bIsDecOrHex )
                     {
                         if ( bIsHex )
                         {
                             nNextCh = GetNextChar();
-                            while ( HTML_ISHEXDIGIT(nNextCh) )
+                            while ( rtl::isAsciiHexDigit(nNextCh) )
                             {
                                 cChar = cChar * 16U +
                                         ( nNextCh <= '9'
@@ -439,7 +429,7 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                                 cChar = cChar * 10U + sal_uInt32( nNextCh - '0');
                                 nNextCh = GetNextChar();
                             }
-                            while( HTML_ISDIGIT(nNextCh) );
+                            while( rtl::isAsciiDigit(nNextCh) );
                         }
 
                         if( RTL_TEXTENCODING_DONTKNOW != eSrcEnc &&
@@ -469,20 +459,20 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                     if ( ! rtl::isUnicodeCodePoint( cChar ) )
                         cChar = '?';
                 }
-                else if( HTML_ISALPHA( nNextCh ) )
+                else if( rtl::isAsciiAlpha( nNextCh ) )
                 {
                     OUStringBuffer sEntityBuffer( MAX_ENTITY_LEN );
-                    sal_Int32 nPos = 0L;
+                    sal_Int32 nPos = 0;
                     do
                     {
                         sEntityBuffer.appendUtf32( nNextCh );
                         nPos++;
                         nNextCh = GetNextChar();
                     }
-                    while( nPos < MAX_ENTITY_LEN && HTML_ISALNUM( nNextCh ) &&
-                           !rInput.IsEof() );
+                    while( nPos < MAX_ENTITY_LEN && rtl::isAsciiAlphanumeric( nNextCh ) &&
+                           !rInput.eof() );
 
-                    if( IsParserWorking() && !rInput.IsEof() )
+                    if( IsParserWorking() && !rInput.eof() )
                     {
                         OUString sEntity(sEntityBuffer.getStr(), nPos);
                         cChar = GetHTMLCharName( sEntity );
@@ -492,7 +482,7 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                         if( 0U == cChar && ';' != nNextCh )
                         {
                             DBG_ASSERT( rInput.Tell() - nStreamPos ==
-                                        (sal_uLong)(nPos+1L)*GetCharSize(),
+                                        static_cast<sal_uInt64>(nPos+1)*GetCharSize(),
                                         "UTF-8 is failing here" );
                             for( sal_Int32 i = nPos-1; i>1; i-- )
                             {
@@ -502,8 +492,8 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                                 cChar = GetHTMLCharName( sEntity );
                                 if( cChar )
                                 {
-                                    rInput.SeekRel( -(long)
-                                            ((nPos-i)*GetCharSize()) );
+                                    rInput.SeekRel( -static_cast<sal_Int64>
+                                            (nPos-i)*GetCharSize() );
                                     nlLinePos -= sal_uInt32(nPos-i);
                                     nPos = i;
                                     ClearTxtConvContext();
@@ -519,10 +509,10 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                             sTmpBuffer.append( '&' );
 
                             DBG_ASSERT( rInput.Tell()-nStreamPos ==
-                                        (sal_uLong)(nPos+1)*GetCharSize(),
+                                        static_cast<sal_uInt64>(nPos+1)*GetCharSize(),
                                         "Wrong stream position" );
                             DBG_ASSERT( nlLinePos-nLinePos ==
-                                        (sal_uLong)(nPos+1),
+                                        static_cast<sal_uLong>(nPos+1),
                                         "Wrong line position" );
                             rInput.Seek( nStreamPos );
                             nlLinePos = nLinePos;
@@ -549,22 +539,23 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                             else
                             {
                                 // If not scanning a tag return token
-                                aToken += sTmpBuffer.makeStringAndClear();
+                                aToken += sTmpBuffer;
+                                sTmpBuffer.setLength(0);
 
                                 if( !aToken.isEmpty() )
                                 {
                                     // restart with character
                                     nNextCh = '&';
                                     DBG_ASSERT( rInput.Tell()-nStreamPos ==
-                                                (sal_uLong)(nPos+1)*GetCharSize(),
+                                                static_cast<sal_uInt64>(nPos+1)*GetCharSize(),
                                                 "Wrong stream position" );
                                     DBG_ASSERT( nlLinePos-nLinePos ==
-                                                (sal_uLong)(nPos+1),
+                                                static_cast<sal_uLong>(nPos+1),
                                                 "Wrong line position" );
                                     rInput.Seek( nStreamPos );
                                     nlLinePos = nLinePos;
                                     ClearTxtConvContext();
-                                    return HTML_TEXTTOKEN;
+                                    return HtmlTokenId::TEXTTOKEN;
                                 }
 
                                 // Hack: _GetNextChar shall not read the
@@ -572,9 +563,9 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                                 if( ';' != nNextCh )
                                     aToken += " ";
                                 if( 1U == cChar )
-                                    return HTML_NONBREAKSPACE;
+                                    return HtmlTokenId::NONBREAKSPACE;
                                 else //2U
-                                    return HTML_SOFTHYPH;
+                                    return HtmlTokenId::SOFTHYPH;
                             }
                         }
                     }
@@ -600,14 +591,17 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                     // options.
                     sTmpBuffer.append( '\\' );
                     if( MAX_LEN == sTmpBuffer.getLength() )
-                        aToken += sTmpBuffer.makeStringAndClear();
+                    {
+                        aToken += sTmpBuffer;
+                        sTmpBuffer.setLength(0);
+                    }
                 }
                 if( IsParserWorking() )
                 {
                     if( cChar )
                         sTmpBuffer.appendUtf32( cChar );
                 }
-                else if( SVPAR_PENDING==eState && '>'!=cBreak )
+                else if( SvParserState::Pending==eState && '>'!=cBreak )
                 {
                     // Restart with '&', the remainder is returned as
                     // text token.
@@ -617,7 +611,7 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                         // during the next execution a new character is read.
                         // Thus we have to position in front of the '&'.
                         nNextCh = 0U;
-                        rInput.Seek( nStreamPos-(sal_uInt32)GetCharSize() );
+                        rInput.Seek( nStreamPos - GetCharSize() );
                         nlLinePos = nLinePos-1;
                         ClearTxtConvContext();
                         bReadNextChar = true;
@@ -635,10 +629,13 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
         case '\\':
             if( '>'==cBreak )
             {
-                // Innerhalb von Tags kennzeichnen
+                // mark within tags
                 sTmpBuffer.append( '\\' );
                 if( MAX_LEN == sTmpBuffer.getLength() )
-                    aToken += sTmpBuffer.makeStringAndClear();
+                {
+                    aToken += sTmpBuffer;
+                    sTmpBuffer.setLength(0);
+                }
             }
             sTmpBuffer.append( '\\' );
             break;
@@ -657,7 +654,7 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
             break;
 
         case sal_Unicode(EOF):
-            if( rInput.IsEof() )
+            if( rInput.eof() )
             {
                 bContinue = false;
             }
@@ -673,7 +670,7 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
             if( '>'==cBreak )
                 sTmpBuffer.appendUtf32( nNextCh );
             else
-                bContinue = false;      // break, String zusammen
+                bContinue = false;      // break, string is together
             break;
 
         case '\f':
@@ -703,7 +700,7 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                 break;
             }
             // Reduce sequence of CR/LF/BLANK/TAB to a single blank
-            // no break!!
+            [[fallthrough]];
         case '\t':
             if( '\t'==nNextCh && bReadPRE && '>'!=cBreak )
             {
@@ -711,7 +708,7 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                 bContinue = false;
                 break;
             }
-            // no break
+            [[fallthrough]];
         case '\x0b':
             if( '\x0b'==nNextCh && (bReadPRE || bReadXMP ||bReadListing) &&
                 '>'!=cBreak )
@@ -719,7 +716,7 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                 break;
             }
             nNextCh = ' ';
-            // no break;
+            [[fallthrough]];
         case ' ':
             sTmpBuffer.appendUtf32( nNextCh );
             if( '>'!=cBreak && (!bReadListing && !bReadXMP &&
@@ -728,18 +725,19 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                 // Reduce sequences of Blanks/Tabs/CR/LF to a single blank
                 do {
                     if( sal_Unicode(EOF) == (nNextCh = GetNextChar()) &&
-                        rInput.IsEof() )
+                        rInput.eof() )
                     {
-                        if( !aToken.isEmpty() || sTmpBuffer.getLength() > 1L )
+                        if( !aToken.isEmpty() || sTmpBuffer.getLength() > 1 )
                         {
                             // Have seen s.th. aside from blanks?
-                            aToken += sTmpBuffer.makeStringAndClear();
-                            return HTML_TEXTTOKEN;
+                            aToken += sTmpBuffer;
+                            sTmpBuffer.setLength(0);
+                            return HtmlTokenId::TEXTTOKEN;
                         }
                         else
                             // Only read blanks: no text must be returned
                             // and GetNextToken_ has to read until EOF
-                            return 0;
+                            return HtmlTokenId::NONE;
                     }
                 } while ( ' ' == nNextCh || '\t' == nNextCh ||
                           '\r' == nNextCh || '\n' == nNextCh ||
@@ -759,35 +757,39 @@ int HTMLParser::ScanText( const sal_Unicode cBreak )
                     sTmpBuffer.appendUtf32( nNextCh );
                     if( MAX_LEN == sTmpBuffer.getLength() )
                     {
-                        aToken += sTmpBuffer.makeStringAndClear();
+                        aToken += sTmpBuffer;
+                        sTmpBuffer.setLength(0);
                     }
                     if( ( sal_Unicode(EOF) == (nNextCh = GetNextChar()) &&
-                          rInput.IsEof() ) ||
+                          rInput.eof() ) ||
                         !IsParserWorking() )
                     {
                         if( !sTmpBuffer.isEmpty() )
-                            aToken += sTmpBuffer.makeStringAndClear();
-                        return HTML_TEXTTOKEN;
+                            aToken += sTmpBuffer;
+                        return HtmlTokenId::TEXTTOKEN;
                     }
-                } while( HTML_ISALPHA( nNextCh ) || HTML_ISDIGIT( nNextCh ) );
+                } while( rtl::isAsciiAlpha( nNextCh ) || rtl::isAsciiDigit( nNextCh ) );
                 bNextCh = false;
             }
         }
 
         if( MAX_LEN == sTmpBuffer.getLength() )
-            aToken += sTmpBuffer.makeStringAndClear();
+        {
+            aToken += sTmpBuffer;
+            sTmpBuffer.setLength(0);
+        }
 
         if( bContinue && bNextCh )
             nNextCh = GetNextChar();
     }
 
     if( !sTmpBuffer.isEmpty() )
-        aToken += sTmpBuffer.makeStringAndClear();
+        aToken += sTmpBuffer;
 
-    return HTML_TEXTTOKEN;
+    return HtmlTokenId::TEXTTOKEN;
 }
 
-int HTMLParser::GetNextRawToken()
+HtmlTokenId HTMLParser::GetNextRawToken()
 {
     OUStringBuffer sTmpBuffer( MAX_LEN );
 
@@ -800,13 +802,13 @@ int HTMLParser::GetNextRawToken()
         aEndToken.clear();
         bEndTokenFound = false;
 
-        return 0;
+        return HtmlTokenId::NONE;
     }
 
-    // Default return value: HTML_RAWDATA
+    // Default return value: HtmlTokenId::RAWDATA
     bool bContinue = true;
-    int nToken = HTML_RAWDATA;
-    SaveState( 0 );
+    HtmlTokenId nToken = HtmlTokenId::RAWDATA;
+    SaveState( HtmlTokenId::NONE );
     while( bContinue && IsParserWorking() )
     {
         bool bNextCh = true;
@@ -817,10 +819,11 @@ int HTMLParser::GetNextRawToken()
                 // Maybe we've reached the end.
 
                 // Save what we have read previously...
-                aToken += sTmpBuffer.makeStringAndClear();
+                aToken += sTmpBuffer;
+                sTmpBuffer.setLength(0);
 
                 // and remember position in stream.
-                sal_uLong nStreamPos = rInput.Tell();
+                sal_uInt64 nStreamPos = rInput.Tell();
                 sal_uLong nLineNr = GetLineNr();
                 sal_uLong nLinePos = GetLinePos();
 
@@ -838,7 +841,7 @@ int HTMLParser::GetNextRawToken()
                 }
 
                 // Read following letters
-                while( (HTML_ISALPHA(nNextCh) || '-'==nNextCh) &&
+                while( (rtl::isAsciiAlpha(nNextCh) || '-'==nNextCh) &&
                        IsParserWorking() && sTmpBuffer.getLength() < MAX_LEN )
                 {
                     sTmpBuffer.appendUtf32( nNextCh );
@@ -863,7 +866,7 @@ int HTMLParser::GetNextRawToken()
                             bDone = bOffState &&
                             ( bReadScript
                                 ? aTok == OOO_STRING_SVTOOLS_HTML_script
-                                : aTok.equals(aEndToken) );
+                                : aTok == aEndToken );
                         }
                     }
                     if( bReadComment && '>'==nNextCh && aTok.endsWith( "--" ) )
@@ -897,7 +900,7 @@ int HTMLParser::GetNextRawToken()
                         bReadScript = false;
                         bReadStyle = false;
                         aEndToken.clear();
-                        nToken = 0;
+                        nToken = HtmlTokenId::NONE;
                     }
                     else
                     {
@@ -914,7 +917,7 @@ int HTMLParser::GetNextRawToken()
                     nNextCh = '<';
 
                     // Don't append string to token.
-                    sTmpBuffer.setLength( 0L );
+                    sTmpBuffer.setLength( 0 );
                 }
                 else
                 {
@@ -938,7 +941,10 @@ int HTMLParser::GetNextRawToken()
                     bTwoMinus = true;
 
                     if( MAX_LEN == sTmpBuffer.getLength() )
-                        aToken += sTmpBuffer.makeStringAndClear();
+                    {
+                        aToken += sTmpBuffer;
+                        sTmpBuffer.setLength(0);
+                    }
                     sTmpBuffer.appendUtf32( nNextCh );
                     nNextCh = GetNextChar();
                 }
@@ -965,7 +971,7 @@ int HTMLParser::GetNextRawToken()
         case sal_Unicode(EOF):
             // eof closes the current text token and behaves like having read
             // an end token
-            if( rInput.IsEof() )
+            if( rInput.eof() )
             {
                 bContinue = false;
                 if( !aToken.isEmpty() || !sTmpBuffer.isEmpty() )
@@ -977,11 +983,11 @@ int HTMLParser::GetNextRawToken()
                     bReadScript = false;
                     bReadStyle = false;
                     aEndToken.clear();
-                    nToken = 0;
+                    nToken = HtmlTokenId::NONE;
                 }
                 break;
             }
-            // no break
+            [[fallthrough]];
         default:
             // all remaining characters are appended to the buffer
             sTmpBuffer.appendUtf32( nNextCh );
@@ -990,41 +996,43 @@ int HTMLParser::GetNextRawToken()
 
         if( (!bContinue && !sTmpBuffer.isEmpty()) ||
             MAX_LEN == sTmpBuffer.getLength() )
-            aToken += sTmpBuffer.makeStringAndClear();
+        {
+            aToken += sTmpBuffer;
+            sTmpBuffer.setLength(0);
+        }
 
         if( bContinue && bNextCh )
             nNextCh = GetNextChar();
     }
 
     if( IsParserWorking() )
-        SaveState( 0 );
+        SaveState( HtmlTokenId::NONE );
     else
-        nToken = 0;
+        nToken = HtmlTokenId::NONE;
 
     return nToken;
 }
 
 // Scan next token
-int HTMLParser::GetNextToken_()
+HtmlTokenId HTMLParser::GetNextToken_()
 {
-    int nRet = 0;
+    HtmlTokenId nRet = HtmlTokenId::NONE;
     sSaveToken.clear();
 
-    if (mnPendingOffToken)
+    if (mnPendingOffToken != HtmlTokenId::NONE)
     {
-        // HTML_<TOKEN>_OFF generated for HTML_<TOKEN>_ON
+        // HtmlTokenId::<TOKEN>_OFF generated for HtmlTokenId::<TOKEN>_ON
         nRet = mnPendingOffToken;
-        mnPendingOffToken = 0;
+        mnPendingOffToken = HtmlTokenId::NONE;
         aToken.clear();
         return nRet;
     }
 
     // Delete options
-    if (!maOptions.empty())
-        maOptions.clear();
+    maOptions.clear();
 
     if( !IsParserWorking() )        // Don't continue if already an error occurred
-        return 0;
+        return HtmlTokenId::NONE;
 
     bool bReadNextCharSave = bReadNextChar;
     if( bReadNextChar )
@@ -1033,14 +1041,14 @@ int HTMLParser::GetNextToken_()
                     "Read a character despite </SCRIPT> was read?" );
         nNextCh = GetNextChar();
         if( !IsParserWorking() )        // Don't continue if already an error occurred
-            return 0;
+            return HtmlTokenId::NONE;
         bReadNextChar = false;
     }
 
     if( bReadScript || bReadStyle || !aEndToken.isEmpty() )
     {
         nRet = GetNextRawToken();
-        if( nRet || !IsParserWorking() )
+        if( nRet != HtmlTokenId::NONE || !IsParserWorking() )
             return nRet;
     }
 
@@ -1050,7 +1058,7 @@ int HTMLParser::GetNextToken_()
         {
         case '<':
             {
-                sal_uLong nStreamPos = rInput.Tell();
+                sal_uInt64 nStreamPos = rInput.Tell();
                 sal_uLong nLineNr = GetLineNr();
                 sal_uLong nLinePos = GetLinePos();
 
@@ -1060,27 +1068,34 @@ int HTMLParser::GetNextToken_()
                     bOffState = true;
                     nNextCh = GetNextChar();
                 }
-                if( HTML_ISALPHA( nNextCh ) || '!'==nNextCh )
+                // Assume '<?' is a start of an XML declaration, ignore it.
+                if (rtl::isAsciiAlpha(nNextCh) || nNextCh == '!' || nNextCh == '?')
                 {
                     OUStringBuffer sTmpBuffer;
                     do {
                         sTmpBuffer.appendUtf32( nNextCh );
                         if( MAX_LEN == sTmpBuffer.getLength() )
-                            aToken += sTmpBuffer.makeStringAndClear();
+                        {
+                            aToken += sTmpBuffer;
+                            sTmpBuffer.setLength(0);
+                        }
                         nNextCh = GetNextChar();
-                    } while( '>' != nNextCh && '/' != nNextCh && !HTML_ISSPACE( nNextCh ) &&
-                             IsParserWorking() && !rInput.IsEof() );
+                    } while( '>' != nNextCh && '/' != nNextCh && !rtl::isAsciiWhiteSpace( nNextCh ) &&
+                             IsParserWorking() && !rInput.eof() );
 
                     if( !sTmpBuffer.isEmpty() )
-                        aToken += sTmpBuffer.makeStringAndClear();
+                    {
+                        aToken += sTmpBuffer;
+                        sTmpBuffer.setLength(0);
+                    }
 
                     // Skip blanks
-                    while( HTML_ISSPACE( nNextCh ) && IsParserWorking() )
+                    while( rtl::isAsciiWhiteSpace( nNextCh ) && IsParserWorking() )
                         nNextCh = GetNextChar();
 
                     if( !IsParserWorking() )
                     {
-                        if( SVPAR_PENDING == eState )
+                        if( SvParserState::Pending == eState )
                             bReadNextChar = bReadNextCharSave;
                         break;
                     }
@@ -1088,60 +1103,67 @@ int HTMLParser::GetNextToken_()
                     // Search token in table:
                     sSaveToken = aToken;
                     aToken = aToken.toAsciiLowerCase();
-                    if( 0 == (nRet = GetHTMLToken( aToken )) )
+
+                    if (!maNamespace.isEmpty() && aToken.startsWith(maNamespace))
+                        aToken = aToken.copy(maNamespace.getLength());
+
+                    if( HtmlTokenId::NONE == (nRet = GetHTMLToken( aToken )) )
                         // Unknown control
-                        nRet = HTML_UNKNOWNCONTROL_ON;
+                        nRet = HtmlTokenId::UNKNOWNCONTROL_ON;
 
                     // If it's a token which can be switched off...
                     if( bOffState )
                     {
-                         if( HTML_TOKEN_ONOFF & nRet )
+                         if( nRet >= HtmlTokenId::ONOFF_START )
                          {
                             // and there is an off token, return off token instead
-                            ++nRet;
+                            nRet = static_cast<HtmlTokenId>(static_cast<int>(nRet) + 1);
                          }
-                         else if( HTML_LINEBREAK!=nRet )
+                         else if( HtmlTokenId::LINEBREAK!=nRet || !maNamespace.isEmpty())
                          {
                             // and there is no off token, return unknown token.
                             // (except for </BR>, that is treated like <BR>)
-                            nRet = HTML_UNKNOWNCONTROL_OFF;
+                            // No exception for XHTML, though.
+                            nRet = HtmlTokenId::UNKNOWNCONTROL_OFF;
                          }
                     }
 
-                    if( nRet == HTML_COMMENT )
+                    if( nRet == HtmlTokenId::COMMENT )
                     {
                         // fix: due to being case sensitive use sSaveToken as start of comment
                         //      and append a blank.
                         aToken = sSaveToken;
                         if( '>'!=nNextCh )
                             aToken += " ";
-                        sal_uLong nCStreamPos = 0;
+                        sal_uInt64 nCStreamPos = 0;
                         sal_uLong nCLineNr = 0;
                         sal_uLong nCLinePos = 0;
                         sal_Int32 nCStrLen = 0;
 
                         bool bDone = false;
                         // Read until closing -->. If not found restart at first >
-                        while( !bDone && !rInput.IsEof() && IsParserWorking() )
+                        sTmpBuffer = aToken;
+                        while( !bDone && !rInput.eof() && IsParserWorking() )
                         {
                             if( '>'==nNextCh )
                             {
                                 if( !nCStreamPos )
                                 {
                                     nCStreamPos = rInput.Tell();
-                                    nCStrLen = aToken.getLength();
+                                    nCStrLen = sTmpBuffer.getLength();
                                     nCLineNr = GetLineNr();
                                     nCLinePos = GetLinePos();
                                 }
-                                bDone = aToken.endsWith( "--" );
+                                bDone = sTmpBuffer.getLength() >= 2 && sTmpBuffer[sTmpBuffer.getLength() - 2] == '-' && sTmpBuffer[sTmpBuffer.getLength() - 1] == '-';
                                 if( !bDone )
-                                aToken += OUString(&nNextCh,1);
+                                    sTmpBuffer.appendUtf32(nNextCh);
                             }
                             else
-                                aToken += OUString(&nNextCh,1);
+                                sTmpBuffer.appendUtf32(nNextCh);
                             if( !bDone )
                                 nNextCh = GetNextChar();
                         }
+                        aToken = sTmpBuffer.makeStringAndClear();
                         if( !bDone && IsParserWorking() && nCStreamPos )
                         {
                             rInput.Seek( nCStreamPos );
@@ -1164,15 +1186,15 @@ int HTMLParser::GetNextToken_()
                         ScanText( '>' );
 
                         // fdo#34666 fdo#36080 fdo#36390: closing "/>"?:
-                        // generate pending HTML_<TOKEN>_OFF for HTML_<TOKEN>_ON
-                        // Do not convert this to a single HTML_<TOKEN>_OFF
+                        // generate pending HtmlTokenId::<TOKEN>_OFF for HtmlTokenId::<TOKEN>_ON
+                        // Do not convert this to a single HtmlTokenId::<TOKEN>_OFF
                         // which lead to fdo#56772.
-                        if ((HTML_TOKEN_ONOFF & nRet) && aToken.endsWith("/"))
+                        if ((nRet >= HtmlTokenId::ONOFF_START) && aToken.endsWith("/"))
                         {
-                            mnPendingOffToken = nRet + 1;       // HTML_<TOKEN>_ON -> HTML_<TOKEN>_OFF
+                            mnPendingOffToken = static_cast<HtmlTokenId>(static_cast<int>(nRet) + 1);       // HtmlTokenId::<TOKEN>_ON -> HtmlTokenId::<TOKEN>_OFF
                             aToken = aToken.replaceAt( aToken.getLength()-1, 1, "");   // remove trailing '/'
                         }
-                        if( sal_Unicode(EOF) == nNextCh && rInput.IsEof() )
+                        if( sal_Unicode(EOF) == nNextCh && rInput.eof() )
                         {
                             // Move back in front of < and restart there.
                             // Return < as text.
@@ -1182,22 +1204,22 @@ int HTMLParser::GetNextToken_()
                             ClearTxtConvContext();
 
                             aToken = "<";
-                            nRet = HTML_TEXTTOKEN;
+                            nRet = HtmlTokenId::TEXTTOKEN;
                             nNextCh = GetNextChar();
                             bNextCh = false;
                             break;
                         }
                     }
-                    if( SVPAR_PENDING == eState )
+                    if( SvParserState::Pending == eState )
                         bReadNextChar = bReadNextCharSave;
                 }
                 else
                 {
                     if( bOffState )
                     {
-                        // einfach alles wegschmeissen
+                        // simply throw away everything
                         ScanText( '>' );
-                        if( sal_Unicode(EOF) == nNextCh && rInput.IsEof() )
+                        if( sal_Unicode(EOF) == nNextCh && rInput.eof() )
                         {
                             // Move back in front of < and restart there.
                             // Return < as text.
@@ -1207,30 +1229,33 @@ int HTMLParser::GetNextToken_()
                             ClearTxtConvContext();
 
                             aToken = "<";
-                            nRet = HTML_TEXTTOKEN;
+                            nRet = HtmlTokenId::TEXTTOKEN;
                             nNextCh = GetNextChar();
                             bNextCh = false;
                             break;
                         }
-                        if( SVPAR_PENDING == eState )
+                        if( SvParserState::Pending == eState )
                             bReadNextChar = bReadNextCharSave;
                         aToken.clear();
                     }
                     else if( '%' == nNextCh )
                     {
-                        nRet = HTML_UNKNOWNCONTROL_ON;
+                        nRet = HtmlTokenId::UNKNOWNCONTROL_ON;
 
-                        sal_uLong nCStreamPos = rInput.Tell();
+                        sal_uInt64 nCStreamPos = rInput.Tell();
                         sal_uLong nCLineNr = GetLineNr(), nCLinePos = GetLinePos();
 
                         bool bDone = false;
                         // Read until closing %>. If not found restart at first >.
-                        while( !bDone && !rInput.IsEof() && IsParserWorking() )
+                        sal_Unicode nLastTokenChar = !aToken.isEmpty() ? aToken[aToken.getLength() - 1] : 0;
+                        OUStringBuffer aTmpBuffer(aToken);
+                        while( !bDone && !rInput.eof() && IsParserWorking() )
                         {
-                            bDone = '>'==nNextCh && aToken.endsWith("%");
+                            bDone = '>'==nNextCh && nLastTokenChar == '%';
                             if( !bDone )
                             {
-                                aToken += OUString(&nNextCh,1);
+                                aTmpBuffer.appendUtf32(nNextCh);
+                                nLastTokenChar = aTmpBuffer[aTmpBuffer.getLength() - 1];
                                 nNextCh = GetNextChar();
                             }
                         }
@@ -1241,9 +1266,10 @@ int HTMLParser::GetNextToken_()
                             SetLinePos( nCLinePos );
                             ClearTxtConvContext();
                             aToken = "<%";
-                            nRet = HTML_TEXTTOKEN;
+                            nRet = HtmlTokenId::TEXTTOKEN;
                             break;
                         }
+                        aToken = aTmpBuffer.makeStringAndClear();
                         if( IsParserWorking() )
                         {
                             sSaveToken = aToken;
@@ -1253,7 +1279,7 @@ int HTMLParser::GetNextToken_()
                     else
                     {
                         aToken = "<";
-                        nRet = HTML_TEXTTOKEN;
+                        nRet = HtmlTokenId::TEXTTOKEN;
                         bNextCh = false;
                         break;
                     }
@@ -1264,17 +1290,17 @@ int HTMLParser::GetNextToken_()
                     bNextCh = '>' == nNextCh;
                     switch( nRet )
                     {
-                    case HTML_TEXTAREA_ON:
+                    case HtmlTokenId::TEXTAREA_ON:
                         bReadTextArea = true;
                         break;
-                    case HTML_TEXTAREA_OFF:
+                    case HtmlTokenId::TEXTAREA_OFF:
                         bReadTextArea = false;
                         break;
-                    case HTML_SCRIPT_ON:
+                    case HtmlTokenId::SCRIPT_ON:
                         if( !bReadTextArea )
                             bReadScript = true;
                         break;
-                    case HTML_SCRIPT_OFF:
+                    case HtmlTokenId::SCRIPT_OFF:
                         if( !bReadTextArea )
                         {
                             bReadScript = false;
@@ -1285,22 +1311,23 @@ int HTMLParser::GetNextToken_()
                         }
                         break;
 
-                    case HTML_STYLE_ON:
+                    case HtmlTokenId::STYLE_ON:
                         bReadStyle = true;
                         break;
-                    case HTML_STYLE_OFF:
+                    case HtmlTokenId::STYLE_OFF:
                         bReadStyle = false;
                         break;
+                    default: break;
                     }
                 }
             }
             break;
 
         case sal_Unicode(EOF):
-            if( rInput.IsEof() )
+            if( rInput.eof() )
             {
-                eState = SVPAR_ACCEPTED;
-                nRet = nNextCh;
+                eState = SvParserState::Accepted;
+                nRet = HtmlTokenId(nNextCh);
             }
             else
             {
@@ -1311,7 +1338,7 @@ int HTMLParser::GetNextToken_()
 
         case '\f':
             // form feeds are passed upwards separately
-            nRet = HTML_LINEFEEDCHAR; // !!! should be FORMFEEDCHAR
+            nRet = HtmlTokenId::LINEFEEDCHAR; // !!! should be FORMFEEDCHAR
             break;
 
         case '\n':
@@ -1325,19 +1352,19 @@ int HTMLParser::GetNextToken_()
                     bNextCh = false;
                     nNextCh = c;
                 }
-                nRet = HTML_NEWPARA;
+                nRet = HtmlTokenId::NEWPARA;
                 break;
             }
-            // no break !
+            [[fallthrough]];
         case '\t':
             if( bReadPRE )
             {
-                nRet = HTML_TABCHAR;
+                nRet = HtmlTokenId::TABCHAR;
                 break;
             }
-            // no break !
+            [[fallthrough]];
         case ' ':
-            // no break !
+            [[fallthrough]];
         default:
 
 scan_text:
@@ -1346,29 +1373,29 @@ scan_text:
             bNextCh = 0 == aToken.getLength();
 
             // the text should be processed
-            if( !bNextCh && eState == SVPAR_PENDING )
+            if( !bNextCh && eState == SvParserState::Pending )
             {
-                eState = SVPAR_WORKING;
+                eState = SvParserState::Working;
                 bReadNextChar = true;
             }
 
             break;
         }
 
-        if( bNextCh && SVPAR_WORKING == eState )
+        if( bNextCh && SvParserState::Working == eState )
         {
             nNextCh = GetNextChar();
-            if( SVPAR_PENDING == eState && nRet && HTML_TEXTTOKEN != nRet )
+            if( SvParserState::Pending == eState && nRet != HtmlTokenId::NONE && HtmlTokenId::TEXTTOKEN != nRet )
             {
                 bReadNextChar = true;
-                eState = SVPAR_WORKING;
+                eState = SvParserState::Working;
             }
         }
 
-    } while( !nRet && SVPAR_WORKING == eState );
+    } while( nRet == HtmlTokenId::NONE && SvParserState::Working == eState );
 
-    if( SVPAR_PENDING == eState )
-        nRet = -1;      // s.th. invalid
+    if( SvParserState::Pending == eState )
+        nRet = HtmlTokenId::INVALID;      // s.th. invalid
 
     return nRet;
 }
@@ -1394,7 +1421,7 @@ void HTMLParser::UnescapeToken()
     }
 }
 
-const HTMLOptions& HTMLParser::GetOptions( sal_uInt16 *pNoConvertToken )
+const HTMLOptions& HTMLParser::GetOptions( HtmlOptionId const *pNoConvertToken )
 {
     // If the options for the current token have already been returned,
     // return them once again.
@@ -1405,9 +1432,9 @@ const HTMLOptions& HTMLParser::GetOptions( sal_uInt16 *pNoConvertToken )
     while( nPos < aToken.getLength() )
     {
         // A letter? Option beginning here.
-        if( HTML_ISALPHA( aToken[nPos] ) )
+        if( rtl::isAsciiAlpha( aToken[nPos] ) )
         {
-            int nToken;
+            HtmlOptionId nToken;
             OUString aValue;
             sal_Int32 nStt = nPos;
             sal_Unicode cChar = 0;
@@ -1416,22 +1443,22 @@ const HTMLOptions& HTMLParser::GetOptions( sal_uInt16 *pNoConvertToken )
             // Netscape only looks for "=" and white space (c.f.
             // Mozilla: PA_FetchRequestedNameValues in libparse/pa_mdl.c)
             while( nPos < aToken.getLength() && '=' != (cChar=aToken[nPos]) &&
-                   HTML_ISPRINTABLE(cChar) && !HTML_ISSPACE(cChar) )
+                   HTML_ISPRINTABLE(cChar) && !rtl::isAsciiWhiteSpace(cChar) )
                 nPos++;
 
             OUString sName( aToken.copy( nStt, nPos-nStt ) );
 
             // PlugIns require original token name. Convert to lower case only for searching.
             nToken = GetHTMLOption( sName.toAsciiLowerCase() ); // Name is ready
-            SAL_WARN_IF( nToken==HTML_O_UNKNOWN, "svtools",
-                        "GetOption: unknown HTML option" );
-            bool bStripCRLF = (nToken < HTML_OPTION_SCRIPT_START ||
-                               nToken >= HTML_OPTION_SCRIPT_END) &&
+            SAL_WARN_IF( nToken==HtmlOptionId::UNKNOWN, "svtools",
+                        "GetOption: unknown HTML option '" << sName << "'" );
+            bool bStripCRLF = (nToken < HtmlOptionId::SCRIPT_START ||
+                               nToken >= HtmlOptionId::SCRIPT_END) &&
                               (!pNoConvertToken || nToken != *pNoConvertToken);
 
             while( nPos < aToken.getLength() &&
                    ( !HTML_ISPRINTABLE( (cChar=aToken[nPos]) ) ||
-                     HTML_ISSPACE(cChar) ) )
+                     rtl::isAsciiWhiteSpace(cChar) ) )
                 nPos++;
 
             // Option with value?
@@ -1448,7 +1475,7 @@ const HTMLOptions& HTMLParser::GetOptions( sal_uInt16 *pNoConvertToken )
                 {
                     sal_Int32 nLen = 0;
                     nStt = nPos;
-                    if( ('"'==cChar) || ('\'')==cChar )
+                    if( ('"'==cChar) || '\''==cChar )
                     {
                         sal_Unicode cEnd = cChar;
                         nPos++; nStt++;
@@ -1560,8 +1587,7 @@ const HTMLOptions& HTMLParser::GetOptions( sal_uInt16 *pNoConvertToken )
             }
 
             // Token is known and can be saved
-            maOptions.push_back(
-                HTMLOption(sal::static_int_cast<sal_uInt16>(nToken), sName, aValue));
+            maOptions.emplace_back(nToken, sName, aValue);
 
         }
         else
@@ -1572,24 +1598,24 @@ const HTMLOptions& HTMLParser::GetOptions( sal_uInt16 *pNoConvertToken )
     return maOptions;
 }
 
-int HTMLParser::FilterPRE( int nToken )
+HtmlTokenId HTMLParser::FilterPRE( HtmlTokenId nToken )
 {
     switch( nToken )
     {
     // in Netscape they only have impact in not empty paragraphs
-    case HTML_PARABREAK_ON:
-        nToken = HTML_LINEBREAK;
-        //fall-through
-    case HTML_LINEBREAK:
-    case HTML_NEWPARA:
+    case HtmlTokenId::PARABREAK_ON:
+        nToken = HtmlTokenId::LINEBREAK;
+        [[fallthrough]];
+    case HtmlTokenId::LINEBREAK:
+    case HtmlTokenId::NEWPARA:
         nPre_LinePos = 0;
         if( bPre_IgnoreNewPara )
-            nToken = 0;
+            nToken = HtmlTokenId::NONE;
         break;
 
-    case HTML_TABCHAR:
+    case HtmlTokenId::TABCHAR:
         {
-            sal_Int32 nSpaces = (8 - (nPre_LinePos % 8));
+            sal_Int32 nSpaces = 8 - (nPre_LinePos % 8);
             DBG_ASSERT( aToken.isEmpty(), "Why is the token not empty?" );
             if (aToken.getLength() < nSpaces)
             {
@@ -1598,152 +1624,152 @@ int HTMLParser::FilterPRE( int nToken )
                 aToken = padToLength(aBuf, nSpaces, ' ').makeStringAndClear();
             }
             nPre_LinePos += nSpaces;
-            nToken = HTML_TEXTTOKEN;
+            nToken = HtmlTokenId::TEXTTOKEN;
         }
         break;
     // Keep those
-    case HTML_TEXTTOKEN:
+    case HtmlTokenId::TEXTTOKEN:
         nPre_LinePos += aToken.getLength();
         break;
 
-    case HTML_SELECT_ON:
-    case HTML_SELECT_OFF:
-    case HTML_BODY_ON:
-    case HTML_FORM_ON:
-    case HTML_FORM_OFF:
-    case HTML_INPUT:
-    case HTML_OPTION:
-    case HTML_TEXTAREA_ON:
-    case HTML_TEXTAREA_OFF:
+    case HtmlTokenId::SELECT_ON:
+    case HtmlTokenId::SELECT_OFF:
+    case HtmlTokenId::BODY_ON:
+    case HtmlTokenId::FORM_ON:
+    case HtmlTokenId::FORM_OFF:
+    case HtmlTokenId::INPUT:
+    case HtmlTokenId::OPTION:
+    case HtmlTokenId::TEXTAREA_ON:
+    case HtmlTokenId::TEXTAREA_OFF:
 
-    case HTML_IMAGE:
-    case HTML_APPLET_ON:
-    case HTML_APPLET_OFF:
-    case HTML_PARAM:
-    case HTML_EMBED:
+    case HtmlTokenId::IMAGE:
+    case HtmlTokenId::APPLET_ON:
+    case HtmlTokenId::APPLET_OFF:
+    case HtmlTokenId::PARAM:
+    case HtmlTokenId::EMBED:
 
-    case HTML_HEAD1_ON:
-    case HTML_HEAD1_OFF:
-    case HTML_HEAD2_ON:
-    case HTML_HEAD2_OFF:
-    case HTML_HEAD3_ON:
-    case HTML_HEAD3_OFF:
-    case HTML_HEAD4_ON:
-    case HTML_HEAD4_OFF:
-    case HTML_HEAD5_ON:
-    case HTML_HEAD5_OFF:
-    case HTML_HEAD6_ON:
-    case HTML_HEAD6_OFF:
-    case HTML_BLOCKQUOTE_ON:
-    case HTML_BLOCKQUOTE_OFF:
-    case HTML_ADDRESS_ON:
-    case HTML_ADDRESS_OFF:
-    case HTML_HORZRULE:
+    case HtmlTokenId::HEAD1_ON:
+    case HtmlTokenId::HEAD1_OFF:
+    case HtmlTokenId::HEAD2_ON:
+    case HtmlTokenId::HEAD2_OFF:
+    case HtmlTokenId::HEAD3_ON:
+    case HtmlTokenId::HEAD3_OFF:
+    case HtmlTokenId::HEAD4_ON:
+    case HtmlTokenId::HEAD4_OFF:
+    case HtmlTokenId::HEAD5_ON:
+    case HtmlTokenId::HEAD5_OFF:
+    case HtmlTokenId::HEAD6_ON:
+    case HtmlTokenId::HEAD6_OFF:
+    case HtmlTokenId::BLOCKQUOTE_ON:
+    case HtmlTokenId::BLOCKQUOTE_OFF:
+    case HtmlTokenId::ADDRESS_ON:
+    case HtmlTokenId::ADDRESS_OFF:
+    case HtmlTokenId::HORZRULE:
 
-    case HTML_CENTER_ON:
-    case HTML_CENTER_OFF:
-    case HTML_DIVISION_ON:
-    case HTML_DIVISION_OFF:
+    case HtmlTokenId::CENTER_ON:
+    case HtmlTokenId::CENTER_OFF:
+    case HtmlTokenId::DIVISION_ON:
+    case HtmlTokenId::DIVISION_OFF:
 
-    case HTML_SCRIPT_ON:
-    case HTML_SCRIPT_OFF:
-    case HTML_RAWDATA:
+    case HtmlTokenId::SCRIPT_ON:
+    case HtmlTokenId::SCRIPT_OFF:
+    case HtmlTokenId::RAWDATA:
 
-    case HTML_TABLE_ON:
-    case HTML_TABLE_OFF:
-    case HTML_CAPTION_ON:
-    case HTML_CAPTION_OFF:
-    case HTML_COLGROUP_ON:
-    case HTML_COLGROUP_OFF:
-    case HTML_COL_ON:
-    case HTML_COL_OFF:
-    case HTML_THEAD_ON:
-    case HTML_THEAD_OFF:
-    case HTML_TFOOT_ON:
-    case HTML_TFOOT_OFF:
-    case HTML_TBODY_ON:
-    case HTML_TBODY_OFF:
-    case HTML_TABLEROW_ON:
-    case HTML_TABLEROW_OFF:
-    case HTML_TABLEDATA_ON:
-    case HTML_TABLEDATA_OFF:
-    case HTML_TABLEHEADER_ON:
-    case HTML_TABLEHEADER_OFF:
+    case HtmlTokenId::TABLE_ON:
+    case HtmlTokenId::TABLE_OFF:
+    case HtmlTokenId::CAPTION_ON:
+    case HtmlTokenId::CAPTION_OFF:
+    case HtmlTokenId::COLGROUP_ON:
+    case HtmlTokenId::COLGROUP_OFF:
+    case HtmlTokenId::COL_ON:
+    case HtmlTokenId::COL_OFF:
+    case HtmlTokenId::THEAD_ON:
+    case HtmlTokenId::THEAD_OFF:
+    case HtmlTokenId::TFOOT_ON:
+    case HtmlTokenId::TFOOT_OFF:
+    case HtmlTokenId::TBODY_ON:
+    case HtmlTokenId::TBODY_OFF:
+    case HtmlTokenId::TABLEROW_ON:
+    case HtmlTokenId::TABLEROW_OFF:
+    case HtmlTokenId::TABLEDATA_ON:
+    case HtmlTokenId::TABLEDATA_OFF:
+    case HtmlTokenId::TABLEHEADER_ON:
+    case HtmlTokenId::TABLEHEADER_OFF:
 
-    case HTML_ANCHOR_ON:
-    case HTML_ANCHOR_OFF:
-    case HTML_BOLD_ON:
-    case HTML_BOLD_OFF:
-    case HTML_ITALIC_ON:
-    case HTML_ITALIC_OFF:
-    case HTML_STRIKE_ON:
-    case HTML_STRIKE_OFF:
-    case HTML_STRIKETHROUGH_ON:
-    case HTML_STRIKETHROUGH_OFF:
-    case HTML_UNDERLINE_ON:
-    case HTML_UNDERLINE_OFF:
-    case HTML_BASEFONT_ON:
-    case HTML_BASEFONT_OFF:
-    case HTML_FONT_ON:
-    case HTML_FONT_OFF:
-    case HTML_BLINK_ON:
-    case HTML_BLINK_OFF:
-    case HTML_SPAN_ON:
-    case HTML_SPAN_OFF:
-    case HTML_SUBSCRIPT_ON:
-    case HTML_SUBSCRIPT_OFF:
-    case HTML_SUPERSCRIPT_ON:
-    case HTML_SUPERSCRIPT_OFF:
-    case HTML_BIGPRINT_ON:
-    case HTML_BIGPRINT_OFF:
-    case HTML_SMALLPRINT_OFF:
-    case HTML_SMALLPRINT_ON:
+    case HtmlTokenId::ANCHOR_ON:
+    case HtmlTokenId::ANCHOR_OFF:
+    case HtmlTokenId::BOLD_ON:
+    case HtmlTokenId::BOLD_OFF:
+    case HtmlTokenId::ITALIC_ON:
+    case HtmlTokenId::ITALIC_OFF:
+    case HtmlTokenId::STRIKE_ON:
+    case HtmlTokenId::STRIKE_OFF:
+    case HtmlTokenId::STRIKETHROUGH_ON:
+    case HtmlTokenId::STRIKETHROUGH_OFF:
+    case HtmlTokenId::UNDERLINE_ON:
+    case HtmlTokenId::UNDERLINE_OFF:
+    case HtmlTokenId::BASEFONT_ON:
+    case HtmlTokenId::BASEFONT_OFF:
+    case HtmlTokenId::FONT_ON:
+    case HtmlTokenId::FONT_OFF:
+    case HtmlTokenId::BLINK_ON:
+    case HtmlTokenId::BLINK_OFF:
+    case HtmlTokenId::SPAN_ON:
+    case HtmlTokenId::SPAN_OFF:
+    case HtmlTokenId::SUBSCRIPT_ON:
+    case HtmlTokenId::SUBSCRIPT_OFF:
+    case HtmlTokenId::SUPERSCRIPT_ON:
+    case HtmlTokenId::SUPERSCRIPT_OFF:
+    case HtmlTokenId::BIGPRINT_ON:
+    case HtmlTokenId::BIGPRINT_OFF:
+    case HtmlTokenId::SMALLPRINT_OFF:
+    case HtmlTokenId::SMALLPRINT_ON:
 
-    case HTML_EMPHASIS_ON:
-    case HTML_EMPHASIS_OFF:
-    case HTML_CITIATION_ON:
-    case HTML_CITIATION_OFF:
-    case HTML_STRONG_ON:
-    case HTML_STRONG_OFF:
-    case HTML_CODE_ON:
-    case HTML_CODE_OFF:
-    case HTML_SAMPLE_ON:
-    case HTML_SAMPLE_OFF:
-    case HTML_KEYBOARD_ON:
-    case HTML_KEYBOARD_OFF:
-    case HTML_VARIABLE_ON:
-    case HTML_VARIABLE_OFF:
-    case HTML_DEFINSTANCE_ON:
-    case HTML_DEFINSTANCE_OFF:
-    case HTML_SHORTQUOTE_ON:
-    case HTML_SHORTQUOTE_OFF:
-    case HTML_LANGUAGE_ON:
-    case HTML_LANGUAGE_OFF:
-    case HTML_AUTHOR_ON:
-    case HTML_AUTHOR_OFF:
-    case HTML_PERSON_ON:
-    case HTML_PERSON_OFF:
-    case HTML_ACRONYM_ON:
-    case HTML_ACRONYM_OFF:
-    case HTML_ABBREVIATION_ON:
-    case HTML_ABBREVIATION_OFF:
-    case HTML_INSERTEDTEXT_ON:
-    case HTML_INSERTEDTEXT_OFF:
-    case HTML_DELETEDTEXT_ON:
-    case HTML_DELETEDTEXT_OFF:
-    case HTML_TELETYPE_ON:
-    case HTML_TELETYPE_OFF:
+    case HtmlTokenId::EMPHASIS_ON:
+    case HtmlTokenId::EMPHASIS_OFF:
+    case HtmlTokenId::CITIATION_ON:
+    case HtmlTokenId::CITIATION_OFF:
+    case HtmlTokenId::STRONG_ON:
+    case HtmlTokenId::STRONG_OFF:
+    case HtmlTokenId::CODE_ON:
+    case HtmlTokenId::CODE_OFF:
+    case HtmlTokenId::SAMPLE_ON:
+    case HtmlTokenId::SAMPLE_OFF:
+    case HtmlTokenId::KEYBOARD_ON:
+    case HtmlTokenId::KEYBOARD_OFF:
+    case HtmlTokenId::VARIABLE_ON:
+    case HtmlTokenId::VARIABLE_OFF:
+    case HtmlTokenId::DEFINSTANCE_ON:
+    case HtmlTokenId::DEFINSTANCE_OFF:
+    case HtmlTokenId::SHORTQUOTE_ON:
+    case HtmlTokenId::SHORTQUOTE_OFF:
+    case HtmlTokenId::LANGUAGE_ON:
+    case HtmlTokenId::LANGUAGE_OFF:
+    case HtmlTokenId::AUTHOR_ON:
+    case HtmlTokenId::AUTHOR_OFF:
+    case HtmlTokenId::PERSON_ON:
+    case HtmlTokenId::PERSON_OFF:
+    case HtmlTokenId::ACRONYM_ON:
+    case HtmlTokenId::ACRONYM_OFF:
+    case HtmlTokenId::ABBREVIATION_ON:
+    case HtmlTokenId::ABBREVIATION_OFF:
+    case HtmlTokenId::INSERTEDTEXT_ON:
+    case HtmlTokenId::INSERTEDTEXT_OFF:
+    case HtmlTokenId::DELETEDTEXT_ON:
+    case HtmlTokenId::DELETEDTEXT_OFF:
+    case HtmlTokenId::TELETYPE_ON:
+    case HtmlTokenId::TELETYPE_OFF:
 
         break;
 
     // The remainder is treated as an unknown token.
     default:
-        if( nToken )
+        if( nToken != HtmlTokenId::NONE )
         {
             nToken =
-                ( ((HTML_TOKEN_ONOFF & nToken) && (1 & nToken))
-                    ? HTML_UNKNOWNCONTROL_OFF
-                    : HTML_UNKNOWNCONTROL_ON );
+                ( ((nToken >= HtmlTokenId::ONOFF_START) && isOffToken(nToken))
+                    ? HtmlTokenId::UNKNOWNCONTROL_OFF
+                    : HtmlTokenId::UNKNOWNCONTROL_ON );
         }
         break;
     }
@@ -1753,22 +1779,23 @@ int HTMLParser::FilterPRE( int nToken )
     return nToken;
 }
 
-int HTMLParser::FilterXMP( int nToken )
+HtmlTokenId HTMLParser::FilterXMP( HtmlTokenId nToken )
 {
     switch( nToken )
     {
-    case HTML_NEWPARA:
+    case HtmlTokenId::NEWPARA:
         if( bPre_IgnoreNewPara )
-            nToken = 0;
-    case HTML_TEXTTOKEN:
-    case HTML_NONBREAKSPACE:
-    case HTML_SOFTHYPH:
+            nToken = HtmlTokenId::NONE;
+        [[fallthrough]];
+    case HtmlTokenId::TEXTTOKEN:
+    case HtmlTokenId::NONBREAKSPACE:
+    case HtmlTokenId::SOFTHYPH:
         break;              // kept
 
     default:
-        if( nToken )
+        if( nToken != HtmlTokenId::NONE )
         {
-            if( (HTML_TOKEN_ONOFF & nToken) && (1 & nToken) )
+            if( (nToken >= HtmlTokenId::ONOFF_START) && isOffToken(nToken) )
             {
                 sSaveToken = "</" + sSaveToken;
             }
@@ -1783,7 +1810,7 @@ int HTMLParser::FilterXMP( int nToken )
             else
                 aToken = sSaveToken;
             aToken += ">";
-            nToken = HTML_TEXTTOKEN;
+            nToken = HtmlTokenId::TEXTTOKEN;
         }
         break;
     }
@@ -1793,25 +1820,26 @@ int HTMLParser::FilterXMP( int nToken )
     return nToken;
 }
 
-int HTMLParser::FilterListing( int nToken )
+HtmlTokenId HTMLParser::FilterListing( HtmlTokenId nToken )
 {
     switch( nToken )
     {
-    case HTML_NEWPARA:
+    case HtmlTokenId::NEWPARA:
         if( bPre_IgnoreNewPara )
-            nToken = 0;
-    case HTML_TEXTTOKEN:
-    case HTML_NONBREAKSPACE:
-    case HTML_SOFTHYPH:
+            nToken = HtmlTokenId::NONE;
+        [[fallthrough]];
+    case HtmlTokenId::TEXTTOKEN:
+    case HtmlTokenId::NONBREAKSPACE:
+    case HtmlTokenId::SOFTHYPH:
         break;      // kept
 
     default:
-        if( nToken )
+        if( nToken != HtmlTokenId::NONE )
         {
             nToken =
-                ( ((HTML_TOKEN_ONOFF & nToken) && (1 & nToken))
-                    ? HTML_UNKNOWNCONTROL_OFF
-                    : HTML_UNKNOWNCONTROL_ON );
+                ( ((nToken >= HtmlTokenId::ONOFF_START) && isOffToken(nToken))
+                    ? HtmlTokenId::UNKNOWNCONTROL_OFF
+                    : HtmlTokenId::UNKNOWNCONTROL_ON );
         }
         break;
     }
@@ -1857,38 +1885,38 @@ bool HTMLParser::InternalImgToPrivateURL( OUString& rURL )
     return bFound;
 }
 
-enum eHtmlMetas {
-    HTML_META_NONE = 0,
-    HTML_META_AUTHOR,
-    HTML_META_DESCRIPTION,
-    HTML_META_KEYWORDS,
-    HTML_META_REFRESH,
-    HTML_META_CLASSIFICATION,
-    HTML_META_CREATED,
-    HTML_META_CHANGEDBY,
-    HTML_META_CHANGED,
-    HTML_META_GENERATOR,
-    HTML_META_SDFOOTNOTE,
-    HTML_META_SDENDNOTE,
-    HTML_META_CONTENT_TYPE
+enum class HtmlMeta {
+    NONE = 0,
+    Author,
+    Description,
+    Keywords,
+    Refresh,
+    Classification,
+    Created,
+    ChangedBy,
+    Changed,
+    Generator,
+    SDFootnote,
+    SDEndnote,
+    ContentType
 };
 
 // <META NAME=xxx>
-static HTMLOptionEnum const aHTMLMetaNameTable[] =
+static HTMLOptionEnum<HtmlMeta> const aHTMLMetaNameTable[] =
 {
-    { OOO_STRING_SVTOOLS_HTML_META_author,        HTML_META_AUTHOR        },
-    { OOO_STRING_SVTOOLS_HTML_META_changed,       HTML_META_CHANGED       },
-    { OOO_STRING_SVTOOLS_HTML_META_changedby,     HTML_META_CHANGEDBY     },
-    { OOO_STRING_SVTOOLS_HTML_META_classification,HTML_META_CLASSIFICATION},
-    { OOO_STRING_SVTOOLS_HTML_META_content_type,  HTML_META_CONTENT_TYPE  },
-    { OOO_STRING_SVTOOLS_HTML_META_created,       HTML_META_CREATED       },
-    { OOO_STRING_SVTOOLS_HTML_META_description,   HTML_META_DESCRIPTION   },
-    { OOO_STRING_SVTOOLS_HTML_META_keywords,      HTML_META_KEYWORDS      },
-    { OOO_STRING_SVTOOLS_HTML_META_generator,     HTML_META_GENERATOR     },
-    { OOO_STRING_SVTOOLS_HTML_META_refresh,       HTML_META_REFRESH       },
-    { OOO_STRING_SVTOOLS_HTML_META_sdendnote,     HTML_META_SDENDNOTE     },
-    { OOO_STRING_SVTOOLS_HTML_META_sdfootnote,    HTML_META_SDFOOTNOTE    },
-    { nullptr,                                          0                       }
+    { OOO_STRING_SVTOOLS_HTML_META_author,        HtmlMeta::Author        },
+    { OOO_STRING_SVTOOLS_HTML_META_changed,       HtmlMeta::Changed       },
+    { OOO_STRING_SVTOOLS_HTML_META_changedby,     HtmlMeta::ChangedBy     },
+    { OOO_STRING_SVTOOLS_HTML_META_classification,HtmlMeta::Classification},
+    { OOO_STRING_SVTOOLS_HTML_META_content_type,  HtmlMeta::ContentType   },
+    { OOO_STRING_SVTOOLS_HTML_META_created,       HtmlMeta::Created       },
+    { OOO_STRING_SVTOOLS_HTML_META_description,   HtmlMeta::Description   },
+    { OOO_STRING_SVTOOLS_HTML_META_keywords,      HtmlMeta::Keywords      },
+    { OOO_STRING_SVTOOLS_HTML_META_generator,     HtmlMeta::Generator     },
+    { OOO_STRING_SVTOOLS_HTML_META_refresh,       HtmlMeta::Refresh       },
+    { OOO_STRING_SVTOOLS_HTML_META_sdendnote,     HtmlMeta::SDEndnote     },
+    { OOO_STRING_SVTOOLS_HTML_META_sdfootnote,    HtmlMeta::SDFootnote    },
+    { nullptr,                                    HtmlMeta(0)             }
 };
 
 
@@ -1903,7 +1931,7 @@ bool HTMLParser::ParseMetaOptionsImpl(
         rtl_TextEncoding& o_rEnc )
 {
     OUString aName, aContent;
-    sal_uInt16 nAction = HTML_META_NONE;
+    HtmlMeta nAction = HtmlMeta::NONE;
     bool bHTTPEquiv = false, bChanged = false;
 
     for ( size_t i = aOptions.size(); i; )
@@ -1911,36 +1939,41 @@ bool HTMLParser::ParseMetaOptionsImpl(
         const HTMLOption& aOption = aOptions[--i];
         switch ( aOption.GetToken() )
         {
-            case HTML_O_NAME:
+            case HtmlOptionId::NAME:
                 aName = aOption.GetString();
-                if ( HTML_META_NONE==nAction )
+                if ( HtmlMeta::NONE==nAction )
                 {
                     aOption.GetEnum( nAction, aHTMLMetaNameTable );
                 }
                 break;
-            case HTML_O_HTTPEQUIV:
+            case HtmlOptionId::HTTPEQUIV:
                 aName = aOption.GetString();
                 aOption.GetEnum( nAction, aHTMLMetaNameTable );
                 bHTTPEquiv = true;
                 break;
-            case HTML_O_CONTENT:
+            case HtmlOptionId::CONTENT:
                 aContent = aOption.GetString();
                 break;
+            case HtmlOptionId::CHARSET:
+            {
+                OString sValue(OUStringToOString(aOption.GetString(), RTL_TEXTENCODING_ASCII_US));
+                o_rEnc = GetExtendedCompatibilityTextEncoding(rtl_getTextEncodingFromMimeCharset(sValue.getStr()));
+                break;
+            }
+            default: break;
         }
     }
 
-    if ( bHTTPEquiv || HTML_META_DESCRIPTION != nAction )
+    if ( bHTTPEquiv || HtmlMeta::Description != nAction )
     {
         // if it is not a Description, remove CRs and LFs from CONTENT
-        aContent = comphelper::string::remove(aContent, '\r');
-        aContent = comphelper::string::remove(aContent, '\n');
+        aContent = aContent.replaceAll("\r", "").replaceAll("\n", "");
     }
     else
     {
         // convert line endings for Description
         aContent = convertLineEnd(aContent, GetSystemLineEnd());
     }
-
 
     if ( bHTTPEquiv && i_pHTTPHeader )
     {
@@ -1955,68 +1988,82 @@ bool HTMLParser::ParseMetaOptionsImpl(
 
     switch ( nAction )
     {
-        case HTML_META_AUTHOR:
+        case HtmlMeta::Author:
             if (i_xDocProps.is()) {
                 i_xDocProps->setAuthor( aContent );
                 bChanged = true;
             }
             break;
-        case HTML_META_DESCRIPTION:
+        case HtmlMeta::Description:
             if (i_xDocProps.is()) {
                 i_xDocProps->setDescription( aContent );
                 bChanged = true;
             }
             break;
-        case HTML_META_KEYWORDS:
+        case HtmlMeta::Keywords:
             if (i_xDocProps.is()) {
                 i_xDocProps->setKeywords(
                     ::comphelper::string::convertCommaSeparated(aContent));
                 bChanged = true;
             }
             break;
-        case HTML_META_CLASSIFICATION:
+        case HtmlMeta::Classification:
             if (i_xDocProps.is()) {
                 i_xDocProps->setSubject( aContent );
                 bChanged = true;
             }
             break;
 
-        case HTML_META_CHANGEDBY:
+        case HtmlMeta::ChangedBy:
             if (i_xDocProps.is()) {
                 i_xDocProps->setModifiedBy( aContent );
-            }
-            break;
-
-        case HTML_META_CREATED:
-        case HTML_META_CHANGED:
-            if ( i_xDocProps.is() && !aContent.isEmpty() &&
-                 comphelper::string::getTokenCount(aContent, ';') == 2 )
-            {
-                Date aDate( (sal_uLong)aContent.getToken(0, ';').toInt32() );
-                tools::Time aTime( (sal_uLong)aContent.getToken(1, ';').toInt32() );
-                DateTime aDateTime( aDate, aTime );
-                ::util::DateTime uDT = aDateTime.GetUNODateTime();
-                if ( HTML_META_CREATED==nAction )
-                    i_xDocProps->setCreationDate( uDT );
-                else
-                    i_xDocProps->setModificationDate( uDT );
                 bChanged = true;
             }
             break;
 
-        case HTML_META_REFRESH:
-            DBG_ASSERT( !bHTTPEquiv || i_pHTTPHeader,
-        "Reload-URL aufgrund unterlassener MUSS-Aenderung verlorengegangen" );
+        case HtmlMeta::Created:
+        case HtmlMeta::Changed:
+            if (i_xDocProps.is() && !aContent.isEmpty())
+            {
+                ::util::DateTime uDT;
+                bool valid = false;
+                if (comphelper::string::getTokenCount(aContent, ';') == 2)
+                {
+                    Date aDate(aContent.getToken(0, ';').toInt32());
+                    auto nTime = aContent.getToken(1, ';').toInt64();
+                    if (nTime < 0)
+                        nTime = o3tl::saturating_toggle_sign(nTime);
+                    tools::Time aTime(nTime);
+                    DateTime aDateTime(aDate, aTime);
+                    uDT = aDateTime.GetUNODateTime();
+                    valid = true;
+                }
+                else if (utl::ISO8601parseDateTime(aContent, uDT))
+                    valid = true;
+
+                if (valid)
+                {
+                    bChanged = true;
+                    if (HtmlMeta::Created == nAction)
+                        i_xDocProps->setCreationDate(uDT);
+                    else
+                        i_xDocProps->setModificationDate(uDT);
+                }
+            }
             break;
 
-        case HTML_META_CONTENT_TYPE:
+        case HtmlMeta::Refresh:
+            DBG_ASSERT( !bHTTPEquiv || i_pHTTPHeader, "Lost Reload-URL because of omitted MUST change." );
+            break;
+
+        case HtmlMeta::ContentType:
             if ( !aContent.isEmpty() )
             {
                 o_rEnc = GetEncodingByMIME( aContent );
             }
             break;
 
-        case HTML_META_NONE:
+        case HtmlMeta::NONE:
             if ( !bHTTPEquiv )
             {
                 if (i_xDocProps.is())
@@ -2026,7 +2073,7 @@ bool HTMLParser::ParseMetaOptionsImpl(
                     try {
                         xUDProps->addProperty(aName,
                             beans::PropertyAttribute::REMOVABLE,
-                            uno::makeAny(OUString(aContent)));
+                            uno::makeAny(aContent));
                         AddMetaUserDefined(aName);
                         bChanged = true;
                     } catch (uno::Exception &) {
@@ -2046,7 +2093,7 @@ bool HTMLParser::ParseMetaOptions(
         const uno::Reference<document::XDocumentProperties> & i_xDocProps,
         SvKeyValueIterator *i_pHeader )
 {
-    sal_uInt16 nContentOption = HTML_O_CONTENT;
+    HtmlOptionId nContentOption = HtmlOptionId::CONTENT;
     rtl_TextEncoding eEnc = RTL_TEXTENCODING_DONTKNOW;
 
     bool bRet = ParseMetaOptionsImpl( i_xDocProps, i_pHeader,

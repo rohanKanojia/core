@@ -19,20 +19,22 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_INC_TIMERTRIGGEREDCONTROLLERLOCK_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_TIMERTRIGGEREDCONTROLLERLOCK_HXX
 
-#include "ControllerLockGuard.hxx"
+#include <com/sun/star/uno/Reference.h>
 #include <vcl/timer.hxx>
-#include <com/sun/star/frame/XModel.hpp>
 
 #include <memory>
+
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace chart { class ControllerLockGuardUNO; }
 
 namespace chart
 {
 
-class TimerTriggeredControllerLock
+class TimerTriggeredControllerLock final
 {
 public:
     TimerTriggeredControllerLock( const css::uno::Reference< css::frame::XModel >& xModel );
-    virtual ~TimerTriggeredControllerLock();
+    ~TimerTriggeredControllerLock();
 
     void startTimer();
 
@@ -41,7 +43,7 @@ private:
     std::unique_ptr< ControllerLockGuardUNO > m_apControllerLockGuard;
     AutoTimer       m_aTimer;
 
-    DECL_LINK_TYPED( TimerTimeout, Timer*, void );
+    DECL_LINK( TimerTimeout, Timer*, void );
 };
 
 } //namespace chart

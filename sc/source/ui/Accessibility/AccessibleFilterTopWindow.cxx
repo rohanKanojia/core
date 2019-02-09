@@ -17,11 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "AccessibleFilterTopWindow.hxx"
-#include "AccessibleFilterMenu.hxx"
-#include "checklistmenu.hxx"
+#include <AccessibleFilterTopWindow.hxx>
+#include <AccessibleFilterMenu.hxx>
+#include <checklistmenu.hxx>
 
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
@@ -42,14 +43,14 @@ ScAccessibleFilterTopWindow::~ScAccessibleFilterTopWindow()
 
 // XAccessibleContext
 
-sal_Int32 ScAccessibleFilterTopWindow::getAccessibleChildCount() throw (RuntimeException, std::exception)
+sal_Int32 ScAccessibleFilterTopWindow::getAccessibleChildCount()
 {
     sal_Int32 nMenuCount = getMenuItemCount();
     return nMenuCount + 6;
 }
 
 Reference<XAccessible> ScAccessibleFilterTopWindow::getAccessibleChild(
-    sal_Int32 nIndex) throw (RuntimeException, IndexOutOfBoundsException, std::exception)
+    sal_Int32 nIndex)
 {
     if (nIndex >= getAccessibleChildCount())
         throw IndexOutOfBoundsException();
@@ -82,7 +83,7 @@ Reference<XAccessible> ScAccessibleFilterTopWindow::getAccessibleChild(
     return Reference<XAccessible>();
 }
 
-OUString ScAccessibleFilterTopWindow::getImplementationName() throw (RuntimeException, std::exception)
+OUString ScAccessibleFilterTopWindow::getImplementationName()
 {
     return OUString("ScAccessibleFilterTopWindow");
 }

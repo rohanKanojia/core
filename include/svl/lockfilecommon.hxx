@@ -22,11 +22,7 @@
 
 #include <svl/svldllapi.h>
 
-#include <com/sun/star/io/XStream.hpp>
-#include <com/sun/star/io/XInputStream.hpp>
-#include <com/sun/star/io/XOutputStream.hpp>
-#include <com/sun/star/io/XSeekable.hpp>
-#include <com/sun/star/io/XTruncate.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
 
 #include <osl/mutex.hxx>
 #include <tools/urlobj.hxx>
@@ -49,7 +45,7 @@ protected:
     ::osl::Mutex m_aMutex;
     OUString m_aURL;
 
-    INetURLObject ResolveLinks( const INetURLObject& aDocURL );
+    INetURLObject ResolveLinks( const INetURLObject& aDocURL ) const;
 
 public:
     LockFileCommon( const OUString& aOrigURL, const OUString& aPrefix );

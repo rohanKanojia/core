@@ -9,10 +9,10 @@
 
 # create ID file for the whole LibO tree. run it in toplevel dir
 
-# TODO: should this include workdir headers?
 if [ "$1" = "--with-outpath" ]; then
-    dirs="`ls -d */* | sed -e '/\(\/\(cscope\.\|tags\|ID\)\)\|^\(clone\|workdir\|instdir\)\//d'`"
+    # Include workdir generated files but without  workdir/UnpackedTarball  workdir/UnpackedTarget
+    dirs="$(ls -d ./*/* | sed -e '/\(\/\(cscope\.\|tags\|ID\)\)\|^\.\/\(workdir\/UnpackedTar\|\(instdir\/\)\)/d')"
 else
-    dirs="`ls -d */* | sed -e '/\(\/\(cscope\.\|tags\|ID\)\)\|^\(clone\|workdir\|instdir\)\//d'`"
+    dirs="$(ls -d ./*/* | sed -e '/\(\/\(cscope\.\|tags\|ID\)\)\|^\.\/\(workdir\|instdir\)\//d')"
 fi
-mkid --lang-map=`dirname $0`/id-lang.map --include='C C++ asm perl java make' --statistics $dirs
+mkid --lang-map="$(dirname "$0")"/id-lang.map --include='C C++ asm perl java make' --statistics $dirs

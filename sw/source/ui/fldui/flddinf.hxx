@@ -24,10 +24,9 @@
 #include <vcl/layout.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/button.hxx>
-#include <vcl/group.hxx>
-#include <svtools/treelistbox.hxx>
+#include <vcl/treelistbox.hxx>
 
-#include "numfmtlb.hxx"
+#include <numfmtlb.hxx>
 #include "fldpage.hxx"
 
 namespace com{namespace sun{ namespace star{ namespace beans{
@@ -50,8 +49,8 @@ class SwFieldDokInfPage : public SwFieldPage
     sal_uLong               nOldFormat;
     OUString                m_sOldCustomFieldName;
 
-    DECL_LINK_TYPED(TypeHdl, SvTreeListBox*, void);
-    DECL_LINK_TYPED(SubTypeHdl, ListBox&, void);
+    DECL_LINK(TypeHdl, SvTreeListBox*, void);
+    DECL_LINK(SubTypeHdl, ListBox&, void);
 
     sal_Int32               FillSelectionLB(sal_uInt16 nSubTypeId);
 
@@ -59,18 +58,20 @@ protected:
     virtual sal_uInt16      GetGroup() override;
 
 public:
-                        SwFieldDokInfPage(vcl::Window* pWindow, const SfxItemSet& rSet);
+                        SwFieldDokInfPage(vcl::Window* pWindow, const SfxItemSet* pSet);
 
-                        virtual ~SwFieldDokInfPage();
+                        virtual ~SwFieldDokInfPage() override;
     virtual void        dispose() override;
 
-    static VclPtr<SfxTabPage>  Create(vcl::Window* pParent, const SfxItemSet* rAttrSet);
+    static VclPtr<SfxTabPage>  Create(TabPageParent pParent, const SfxItemSet* rAttrSet);
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;
 
     virtual void        FillUserData() override;
 };
+
+void FillFieldSelect(ListBox& rListBox);
 
 #endif
 

@@ -18,7 +18,7 @@
  */
 
 #include "formatnormalizer.hxx"
-#include "RptModel.hxx"
+#include <RptModel.hxx>
 
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
 #include <com/sun/star/sdb/XParametersSupplier.hpp>
@@ -29,6 +29,7 @@
 #include <connectivity/statementcomposer.hxx>
 #include <connectivity/dbtools.hxx>
 #include <tools/diagnose_ex.h>
+#include <i18nlangtag/languagetag.hxx>
 
 
 namespace rptui
@@ -36,7 +37,6 @@ namespace rptui
 
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::report::XReportDefinition;
     using ::com::sun::star::report::XFormattedField;
     using ::com::sun::star::uno::UNO_QUERY;
     using ::com::sun::star::sdb::XSingleSelectQueryComposer;
@@ -133,7 +133,7 @@ namespace rptui
             try
             {
                 sal_Int32 nCount( _rxColumns->getCount() );
-                _inout_rFields.reserve( _inout_rFields.size() + (size_t)nCount );
+                _inout_rFields.reserve( _inout_rFields.size() + static_cast<size_t>(nCount) );
 
                 Reference< XPropertySet > xColumn;
                 FormatNormalizer::Field aField;
@@ -150,7 +150,7 @@ namespace rptui
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("reportdesign");
             }
         }
     }
@@ -196,7 +196,7 @@ namespace rptui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("reportdesign");
         }
 
         m_bFieldListDirty = false;
@@ -250,7 +250,7 @@ namespace rptui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("reportdesign");
         }
     }
 

@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DrawModelBroadcaster.hxx"
-#include <osl/diagnose.h>
+#include <DrawModelBroadcaster.hxx>
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
 #include <svx/svdmodel.hxx>
 #include <svx/unomod.hxx>
 
@@ -40,13 +40,11 @@ ScDrawModelBroadcaster::~ScDrawModelBroadcaster()
 }
 
 void SAL_CALL ScDrawModelBroadcaster::addEventListener( const uno::Reference< document::XEventListener >& xListener )
-    throw (uno::RuntimeException, std::exception)
 {
     maEventListeners.addInterface( xListener );
 }
 
 void SAL_CALL ScDrawModelBroadcaster::removeEventListener( const uno::Reference< document::XEventListener >& xListener )
-    throw (uno::RuntimeException, std::exception)
 {
     maEventListeners.removeInterface( xListener );
 }
@@ -72,8 +70,7 @@ void ScDrawModelBroadcaster::Notify( SfxBroadcaster&,
         }
         catch( const uno::RuntimeException& r )
         {
-            (void) r;
-            SAL_WARN("sc.ui", "Runtime exception caught while notifying shape. : " << r.Message);
+            SAL_WARN("sc.ui", "Runtime exception caught while notifying shape. : " << r);
         }
     }
 }

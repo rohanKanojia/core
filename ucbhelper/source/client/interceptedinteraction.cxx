@@ -64,7 +64,6 @@ css::uno::Reference< css::task::XInteractionContinuation > InterceptedInteractio
 }
 
 void SAL_CALL InterceptedInteraction::handle(const css::uno::Reference< css::task::XInteractionRequest >& xRequest)
-    throw(css::uno::RuntimeException, std::exception)
 {
     impl_handleDefault(xRequest);
 }
@@ -88,7 +87,7 @@ void InterceptedInteraction::impl_handleDefault(const css::uno::Reference< css::
         {
             // Runtime error! The defined continuation could not be located
             // inside the set of available continuations of the incoming request.
-            // Whats wrong - the interception list or the request?
+            // What's wrong - the interception list or the request?
             OSL_FAIL("InterceptedInteraction::handle()\nCould intercept this interaction request - but can't locate the right continuation!");
         }
         break;
@@ -101,45 +100,28 @@ void InterceptedInteraction::impl_handleDefault(const css::uno::Reference< css::
 InterceptedInteraction::EInterceptionState InterceptedInteraction::impl_interceptRequest(const css::uno::Reference< css::task::XInteractionRequest >& xRequest)
 {
     css::uno::Any                                                                    aRequest       = xRequest->getRequest();
-    css::uno::Type                                                                   aRequestType   = aRequest.getValueType();
+    const css::uno::Type&                                                            aRequestType   = aRequest.getValueType();
     css::uno::Sequence< css::uno::Reference< css::task::XInteractionContinuation > > lContinuations = xRequest->getContinuations();
 
     // check against the list of static requests
-    sal_Int32 nHandle = 0;
-    ::std::vector< InterceptedRequest >::const_iterator pIt;
-    for (  pIt  = m_lInterceptions.begin();
-           pIt != m_lInterceptions.end()  ;
-         ++pIt                            )
+    auto pIt = std::find_if(m_lInterceptions.begin(), m_lInterceptions.end(),
+        [&aRequestType](const InterceptedRequest& rInterception) {
+            // check the request
+            // don't change intercepted and request type here -> it will check the wrong direction!
+            return rInterception.Request.getValueType().isAssignableFrom(aRequestType);
+        });
+
+    if (pIt != m_lInterceptions.end()) // intercepted ...
     {
         const InterceptedRequest& rInterception = *pIt;
-        css::uno::Type aInterceptedType = rInterception.Request.getValueType();
 
-        // check the request
-        bool bMatch = false;
-        if (rInterception.MatchExact)
-            bMatch = aInterceptedType.equals(aRequestType);
-        else
-            bMatch = aInterceptedType.isAssignableFrom(aRequestType); // don't change intercepted and request type here -> it will check the wrong direction!
-
-        // intercepted ...
         // Call they might existing derived class, so they can handle that by its own.
-        // If its not interested on that (may be its not overwritten and the default implementation
-        // returns E_NOT_INTERCEPTED as default) -> break this loop and search for the right continuation.
-        if (bMatch)
-        {
-            EInterceptionState eState = intercepted(rInterception, xRequest);
-            if (eState == E_NOT_INTERCEPTED)
-                break;
+        // If it's not interested on that (maybe it's not overwritten and the default implementation
+        // returns E_NOT_INTERCEPTED as default) -> search required continuation
+        EInterceptionState eState = intercepted(rInterception, xRequest);
+        if (eState != E_NOT_INTERCEPTED)
             return eState;
-        }
 
-        ++nHandle;
-    }
-
-    if (pIt != m_lInterceptions.end()) // => can be true only if bMatch=TRUE!
-    {
-        // match -> search required continuation
-        const InterceptedRequest& rInterception = *pIt;
         css::uno::Reference< css::task::XInteractionContinuation > xContinuation = InterceptedInteraction::extractContinuation(lContinuations, rInterception.Continuation);
         if (xContinuation.is())
         {

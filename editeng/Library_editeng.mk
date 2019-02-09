@@ -70,6 +70,7 @@ $(eval $(call gb_Library_add_exception_objects,editeng,\
     editeng/source/editeng/textconv \
     editeng/source/items/borderline \
     editeng/source/items/bulitem \
+    editeng/source/items/CustomPropertyField \
     editeng/source/items/charhiddenitem \
     editeng/source/items/flditem \
     editeng/source/items/frmitems \
@@ -136,6 +137,7 @@ $(eval $(call gb_Library_use_libraries,editeng,\
     vcl \
     svl \
     sot \
+    sfx \
     utl \
     tl \
     comphelper \
@@ -147,7 +149,6 @@ $(eval $(call gb_Library_use_libraries,editeng,\
     sax \
     i18nlangtag \
     i18nutil \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_externals,editeng,\
@@ -156,8 +157,5 @@ $(eval $(call gb_Library_use_externals,editeng,\
 	icu_headers \
 	libxml2 \
 ))
-
-# Runtime dependency for unit-tests
-$(eval $(call gb_Library_use_restarget,editeng,editeng))
 
 # vim: set noet sw=4 ts=4:

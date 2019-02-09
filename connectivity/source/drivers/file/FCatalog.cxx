@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "file/FCatalog.hxx"
-#include "file/FConnection.hxx"
-#include "file/FTables.hxx"
+#include <file/FCatalog.hxx>
+#include <file/FConnection.hxx>
+#include <file/FTables.hxx>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 
@@ -42,7 +42,7 @@ void SAL_CALL OFileCatalog::disposing()
     ::osl::MutexGuard aGuard(m_aMutex);
 
     typedef connectivity::sdbcx::OCatalog OFileCatalog_BASE;
-m_xMetaData.clear();
+    m_xMetaData.clear();
     OFileCatalog_BASE::disposing();
 }
 
@@ -53,7 +53,7 @@ OUString OFileCatalog::buildName(const Reference< XRow >& _xRow)
 
 void OFileCatalog::refreshTables()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
     Sequence< OUString > aTypes;
     Reference< XResultSet > xResult = m_xMetaData->getTables(Any(),
         "%", "%", aTypes);
@@ -62,11 +62,11 @@ void OFileCatalog::refreshTables()
     if(m_pTables)
         m_pTables->reFill(aVector);
     else
-        m_pTables = new OTables(m_xMetaData,*this,m_aMutex,aVector);
+        m_pTables.reset( new OTables(m_xMetaData,*this,m_aMutex,aVector) );
 }
 
 
-Any SAL_CALL OFileCatalog::queryInterface( const Type & rType ) throw(RuntimeException, std::exception)
+Any SAL_CALL OFileCatalog::queryInterface( const Type & rType )
 {
     if( rType == cppu::UnoType<XGroupsSupplier>::get()||
         rType == cppu::UnoType<XUsersSupplier>::get()||
@@ -78,12 +78,12 @@ Any SAL_CALL OFileCatalog::queryInterface( const Type & rType ) throw(RuntimeExc
     return OFileCatalog_BASE::queryInterface(rType);
 }
 
-Sequence< Type > SAL_CALL OFileCatalog::getTypes(  ) throw(RuntimeException, std::exception)
+Sequence< Type > SAL_CALL OFileCatalog::getTypes(  )
 {
     typedef sdbcx::OCatalog OFileCatalog_BASE;
 
     Sequence< Type > aTypes = OFileCatalog_BASE::getTypes();
-    ::std::vector<Type> aOwnTypes;
+    std::vector<Type> aOwnTypes;
     aOwnTypes.reserve(aTypes.getLength());
     const Type* pBegin = aTypes.getConstArray();
     const Type* pEnd = pBegin + aTypes.getLength();

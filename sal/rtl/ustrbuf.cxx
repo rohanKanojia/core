@@ -23,7 +23,7 @@
 #include <osl/diagnose.h>
 #include <rtl/character.hxx>
 #include <rtl/ustrbuf.hxx>
-#include <strimp.hxx>
+#include "strimp.hxx"
 
 #if USE_SDT_PROBES
 #define RTL_LOG_STRING_BITS         16
@@ -41,11 +41,14 @@ void SAL_CALL rtl_uStringbuffer_newFromStr_WithLength( rtl_uString ** newStr,
         return;
     }
 
-    rtl_uString_new_WithLength( newStr, count + 16 );
+    // use raw alloc to avoid overwriting the buffer twice
+    if ( *newStr)
+        rtl_uString_release( *newStr );
+    *newStr = rtl_uString_ImplAlloc( count + 16 );
     (*newStr)->length = count;
-    memcpy( (*newStr)->buffer, value, count * sizeof(sal_Unicode));
+    memcpy( (*newStr)->buffer, value, count * sizeof(sal_Unicode) );
+    memset( (*newStr)->buffer + count, 0, 16 * sizeof(sal_Unicode) );
     RTL_LOG_STRING_NEW( *newStr );
-    return;
 }
 
 rtl_uString * SAL_CALL rtl_uStringBuffer_refReturn( rtl_uString * pThis )
@@ -104,16 +107,19 @@ void SAL_CALL rtl_uStringbuffer_ensureCapacity
     {
         rtl_uString * pTmp = *This;
         rtl_uString * pNew = nullptr;
-        *capacity = ((*This)->length + 1) * 2;
+        auto nLength = (*This)->length;
+        *capacity = (nLength + 1) * 2;
         if (minimumCapacity > *capacity)
             /* still lower, set to the minimum capacity */
             *capacity = minimumCapacity;
 
-        rtl_uString_new_WithLength(&pNew, *capacity);
-        pNew->length = (*This)->length;
+        // use raw alloc to avoid overwriting the buffer twice
+        pNew = rtl_uString_ImplAlloc( *capacity );
+        pNew->length = nLength;
         *This = pNew;
 
-        memcpy( (*This)->buffer, pTmp->buffer, pTmp->length * sizeof(sal_Unicode) );
+        memcpy( (*This)->buffer, pTmp->buffer, nLength * sizeof(sal_Unicode) );
+        memset( (*This)->buffer + nLength, 0, (*capacity - nLength) * sizeof(sal_Unicode) );
 
         RTL_LOG_STRING_NEW( pTmp ); // with accurate contents
         rtl_uString_release( pTmp );
@@ -169,14 +175,14 @@ void rtl_uStringbuffer_insertUtf32(
 {
     sal_Unicode buf[2];
     sal_Int32 len;
-    OSL_ASSERT(rtl::isUnicodeCodePoint(c) && !(c >= 0xD800 && c <= 0xDFFF));
+    OSL_ASSERT(rtl::isUnicodeScalarValue(c));
     if (c <= 0xFFFF) {
-        buf[0] = (sal_Unicode) c;
+        buf[0] = static_cast<sal_Unicode>(c);
         len = 1;
     } else {
         c -= 0x10000;
-        buf[0] = (sal_Unicode) ((c >> 10) | 0xD800);
-        buf[1] = (sal_Unicode) ((c & 0x3FF) | 0xDC00);
+        buf[0] = static_cast<sal_Unicode>((c >> 10) | 0xD800);
+        buf[1] = static_cast<sal_Unicode>((c & 0x3FF) | 0xDC00);
         len = 2;
     }
     rtl_uStringbuffer_insert(pThis, capacity, offset, buf, len);
@@ -218,7 +224,7 @@ void SAL_CALL rtl_uStringbuffer_insert_ascii(   /*inout*/rtl_uString ** This,
             /* Check ASCII range */
             OSL_ENSURE( (*str & 0x80) == 0, "Found ASCII char > 127");
 
-            pBuf[offset + n] = (sal_Unicode)*(str++);
+            pBuf[offset + n] = static_cast<sal_Unicode>(*(str++));
         }
 
         (*This)->length = nOldLen + len;

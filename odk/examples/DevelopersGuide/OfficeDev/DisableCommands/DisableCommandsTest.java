@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -375,7 +376,7 @@ public class DisableCommandsTest {
      * reset URL so it can be reused
      *
      * @param aURL
-     *          the URL that should be reseted
+     *          the URL that should be reset
      */
     private static void resetURL( com.sun.star.util.URL aURL )
     {
@@ -392,3 +393,5 @@ public class DisableCommandsTest {
         aURL.Complete   = "";
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

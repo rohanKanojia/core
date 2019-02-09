@@ -20,8 +20,10 @@
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_MULTIPLECHARTCONVERTERS_HXX
 
 #include "MultipleItemConverter.hxx"
-#include <com/sun/star/awt/Size.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+
+namespace com { namespace sun { namespace star { namespace awt { struct Size; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace lang { class XMultiServiceFactory; } } } }
 
 class SdrModel;
 
@@ -34,10 +36,9 @@ public:
         const css::uno::Reference<css::frame::XModel> & xChartModel,
         SfxItemPool& rItemPool,
         SdrModel& rDrawModel,
-        const css::uno::Reference<css::lang::XMultiServiceFactory>& xNamedPropertyContainerFactory,
-        const css::awt::Size* pRefSize = nullptr );
+        const css::awt::Size* pRefSize );
 
-    virtual ~AllAxisItemConverter();
+    virtual ~AllAxisItemConverter() override;
 
 protected:
     virtual const sal_uInt16 * GetWhichPairs() const override;
@@ -51,7 +52,7 @@ public:
         SfxItemPool& rItemPool,
         SdrModel& rDrawModel,
         const css::uno::Reference<css::lang::XMultiServiceFactory> & xNamedPropertyContainerFactory );
-    virtual ~AllGridItemConverter();
+    virtual ~AllGridItemConverter() override;
 
 protected:
     virtual const sal_uInt16 * GetWhichPairs() const override;
@@ -64,10 +65,9 @@ public:
         const css::uno::Reference<css::frame::XModel>& xChartModel,
         SfxItemPool& rItemPool,
         SdrModel& rDrawModel,
-        const css::uno::Reference<css::lang::XMultiServiceFactory>& xNamedPropertyContainerFactory,
-        const css::awt::Size* pRefSize = nullptr );
+        const css::uno::Reference<css::lang::XMultiServiceFactory>& xNamedPropertyContainerFactory );
 
-    virtual ~AllDataLabelItemConverter();
+    virtual ~AllDataLabelItemConverter() override;
 
 protected:
     virtual const sal_uInt16 * GetWhichPairs() const override;
@@ -79,10 +79,9 @@ public:
     AllTitleItemConverter(
         const css::uno::Reference<css::frame::XModel>& xChartModel,
         SfxItemPool& rItemPool, SdrModel& rDrawModel,
-        const css::uno::Reference<css::lang::XMultiServiceFactory>& xNamedPropertyContainerFactory,
-        const css::awt::Size* pRefSize = nullptr );
+        const css::uno::Reference<css::lang::XMultiServiceFactory>& xNamedPropertyContainerFactory );
 
-    virtual ~AllTitleItemConverter();
+    virtual ~AllTitleItemConverter() override;
 
 protected:
     virtual const sal_uInt16 * GetWhichPairs() const override;
@@ -93,7 +92,7 @@ class AllSeriesStatisticsConverter : public MultipleItemConverter
 public:
     AllSeriesStatisticsConverter(
         const css::uno::Reference<css::frame::XModel>& xChartModel, SfxItemPool& rItemPool );
-    virtual ~AllSeriesStatisticsConverter();
+    virtual ~AllSeriesStatisticsConverter() override;
 
 protected:
     virtual const sal_uInt16 * GetWhichPairs() const override;

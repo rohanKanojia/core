@@ -8,6 +8,8 @@
  */
 
 #include <svtools/breadcrumb.hxx>
+#include <tools/urlobj.hxx>
+#include <vcl/fixedhyper.hxx>
 
 class CustomLink : public FixedHyperlink
 {
@@ -114,8 +116,8 @@ void Breadcrumb::SetURL( const OUString& rURL )
         sHostPort += OUString::number( aURL.GetPort() );
     }
 
-    OUString sUser = aURL.GetUser( INetURLObject::NO_DECODE );
-    OUString sPath = aURL.GetURLPath(INetURLObject::DECODE_WITH_CHARSET);
+    OUString sUser = aURL.GetUser( INetURLObject::DecodeMechanism::NONE );
+    OUString sPath = aURL.GetURLPath(INetURLObject::DecodeMechanism::WithCharset);
     OUString sRootPath = INetURLObject::GetScheme( aURL.GetProtocol() )
                         + sUser
                         + ( sUser.isEmpty() ? OUString() : "@" )
@@ -135,13 +137,13 @@ void Breadcrumb::SetURL( const OUString& rURL )
 
     // fill the other fields
 
-    for( unsigned int i = 1; i < (unsigned int)nSegments + 1; i++ )
+    for( unsigned int i = 1; i < static_cast<unsigned int>(nSegments) + 1; i++ )
     {
         if( i >= m_aLinks.size() )
             appendField();
 
         unsigned int nEnd = sPath.indexOf( '/', nPos + 1 );
-        OUString sLabel = OUString( sPath.getStr() + nPos + 1, nEnd - nPos - 1 );
+        OUString sLabel = sPath.copy( nPos + 1, nEnd - nPos - 1 );
 
         if( m_eMode == SvtBreadcrumbMode::ALL_VISITED )
         {
@@ -150,7 +152,7 @@ void Breadcrumb::SetURL( const OUString& rURL )
         }
 
         m_aLinks[i]->SetText( sLabel );
-        m_aLinks[i]->SetURL( sRootPath + OUString( sPath.getStr(), nEnd ) );
+        m_aLinks[i]->SetURL( sRootPath + sPath.copy( 0, nEnd ) );
         m_aLinks[i]->Hide();
         m_aLinks[i]->Enable();
 
@@ -210,7 +212,7 @@ void Breadcrumb::SetURL( const OUString& rURL )
             }
         }
 
-        if( nSegments + i == (int)m_aLinks.size() )
+        if( nSegments + i == static_cast<int>(m_aLinks.size()) )
             bRight = false;
 
         if( i != 0 && bRight )
@@ -282,7 +284,7 @@ bool Breadcrumb::showField( unsigned int nIndex, unsigned int nWidthMax )
     return true;
 }
 
-IMPL_LINK_TYPED( Breadcrumb, ClickLinkHdl, FixedHyperlink&, rLink, void )
+IMPL_LINK( Breadcrumb, ClickLinkHdl, FixedHyperlink&, rLink, void )
 {
     m_sClickedURL = rLink.GetURL();
     m_aClickHdl.Call( this );

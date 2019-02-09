@@ -17,8 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/rc.h>
-
+#include <vcl/accel.hxx>
 #include <vcl/event.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/svapp.hxx>
@@ -40,16 +39,16 @@ void TabPage::ImplInit( vcl::Window* pParent, WinBits nStyle )
 
     ImplInitSettings();
 
-    // if the tabpage is drawn (ie filled) by a native widget, make sure all contols will have transparent background
+    // if the tabpage is drawn (ie filled) by a native widget, make sure all controls will have transparent background
     // otherwise they will paint with a wrong background
-    if( IsNativeControlSupported(CTRL_TAB_BODY, PART_ENTIRE_CONTROL) && GetParent() && (GetParent()->GetType() == WINDOW_TABCONTROL) )
+    if( IsNativeControlSupported(ControlType::TabBody, ControlPart::Entire) && GetParent() && (GetParent()->GetType() == WindowType::TABCONTROL) )
         EnableChildTransparentMode();
 }
 
 void TabPage::ImplInitSettings()
 {
     vcl::Window* pParent = GetParent();
-    if ( pParent->IsChildTransparentModeEnabled() && !IsControlBackground() )
+    if (pParent && pParent->IsChildTransparentModeEnabled() && !IsControlBackground())
     {
         EnableChildTransparentMode();
         SetParentClipMode( ParentClipMode::NoClip );
@@ -62,7 +61,7 @@ void TabPage::ImplInitSettings()
         SetParentClipMode();
         SetPaintTransparent( false );
 
-        if ( IsControlBackground() )
+        if (IsControlBackground() || !pParent)
             SetBackground( GetControlBackground() );
         else
             SetBackground( pParent->GetBackground() );
@@ -70,16 +69,18 @@ void TabPage::ImplInitSettings()
 }
 
 TabPage::TabPage( vcl::Window* pParent, WinBits nStyle ) :
-    Window( WINDOW_TABPAGE )
+    Window( WindowType::TABPAGE )
+    , IContext()
 {
     ImplInit( pParent, nStyle );
 }
 
 TabPage::TabPage(vcl::Window *pParent, const OString& rID, const OUString& rUIXMLDescription)
-    : Window(WINDOW_TABPAGE)
+    : Window(WindowType::TABPAGE)
+    , IContext()
 {
     ImplInit(pParent, 0);
-    m_pUIBuilder = new VclBuilder(this, getUIRootDir(), rUIXMLDescription, rID);
+    m_pUIBuilder.reset( new VclBuilder(this, getUIRootDir(), rUIXMLDescription, rID) );
     set_hexpand(true);
     set_vexpand(true);
     set_expand(true);
@@ -102,8 +103,8 @@ void TabPage::StateChanged( StateChangedType nType )
 
     if ( nType == StateChangedType::InitShow )
     {
-        if ( GetSettings().GetStyleSettings().GetAutoMnemonic() )
-            ImplWindowAutoMnemonic( this );
+        if (GetSettings().GetStyleSettings().GetAutoMnemonic())
+            Accelerator::GenerateAutoMnemonicsOnHierarchy(this);
         // FIXME: no layouting, workaround some clipping issues
         ImplAdjustNWFSizes();
     }
@@ -126,24 +127,22 @@ void TabPage::DataChanged( const DataChangedEvent& rDCEvt )
     }
 }
 
-void TabPage::Paint( vcl::RenderContext& rRenderContext, const Rectangle& )
+void TabPage::Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& )
 {
     // draw native tabpage only inside tabcontrols, standalone tabpages look ugly (due to bad dialog design)
-    if( IsNativeControlSupported(CTRL_TAB_BODY, PART_ENTIRE_CONTROL) && GetParent() && (GetParent()->GetType() == WINDOW_TABCONTROL) )
+    if( IsNativeControlSupported(ControlType::TabBody, ControlPart::Entire) && GetParent() && (GetParent()->GetType() == WindowType::TABCONTROL) )
     {
         const ImplControlValue aControlValue;
 
         ControlState nState = ControlState::ENABLED;
-        int part = PART_ENTIRE_CONTROL;
         if ( !IsEnabled() )
             nState &= ~ControlState::ENABLED;
         if ( HasFocus() )
             nState |= ControlState::FOCUSED;
-        Point aPoint;
         // pass the whole window region to NWF as the tab body might be a gradient or bitmap
         // that has to be scaled properly, clipping makes sure that we do not paint too much
-        Rectangle aCtrlRegion( aPoint, GetOutputSizePixel() );
-        rRenderContext.DrawNativeControl( CTRL_TAB_BODY, part, aCtrlRegion, nState,
+        tools::Rectangle aCtrlRegion( Point(), GetOutputSizePixel() );
+        rRenderContext.DrawNativeControl( ControlType::TabBody, ControlPart::Entire, aCtrlRegion, nState,
                 aControlValue, OUString() );
     }
 }
@@ -169,7 +168,7 @@ void TabPage::Draw( OutputDevice* pDev, const Point& rPos, const Size& rSize, Dr
             pDev->SetFillColor( GetSettings().GetStyleSettings().GetDialogColor() );
         else
             pDev->SetFillColor( aWallpaper.GetColor() );
-        pDev->DrawRect( Rectangle( aPos, aSize ) );
+        pDev->DrawRect( tools::Rectangle( aPos, aSize ) );
     }
 
     pDev->Pop();
@@ -181,14 +180,6 @@ void TabPage::ActivatePage()
 
 void TabPage::DeactivatePage()
 {
-}
-
-OString TabPage::GetConfigId() const
-{
-    OString sId(GetHelpId());
-    if (sId.isEmpty() && isLayoutEnabled(this))
-        sId = GetWindow(GetWindowType::FirstChild)->GetHelpId();
-    return sId;
 }
 
 Size TabPage::GetOptimalSize() const

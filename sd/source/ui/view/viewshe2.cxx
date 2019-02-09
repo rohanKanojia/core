@@ -24,11 +24,11 @@
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
 
-#include "ViewShell.hxx"
-#include "ViewShellHint.hxx"
+#include <ViewShell.hxx>
+#include <ViewShellHint.hxx>
 
-#include "ViewShellImplementation.hxx"
-#include "FactoryIds.hxx"
+#include <ViewShellImplementation.hxx>
+#include <FactoryIds.hxx>
 
 #include <svx/svxids.hrc>
 #include <vcl/scrbar.hxx>
@@ -36,6 +36,7 @@
 #include <sfx2/dispatch.hxx>
 #include <sfx2/app.hxx>
 #include <svx/ruler.hxx>
+#include <editeng/outlobj.hxx>
 #include <editeng/outliner.hxx>
 #include <svtools/ehdl.hxx>
 #include <svx/svdoole2.hxx>
@@ -46,30 +47,29 @@
 #include <svx/dialogs.hrc>
 #include <comphelper/classids.hxx>
 
-#include "strings.hrc"
-#include "app.hrc"
-#include "unokywds.hxx"
+#include <strings.hrc>
+#include <app.hrc>
+#include <unokywds.hxx>
 
-#include "sdundogr.hxx"
-#include "FrameView.hxx"
-#include "undopage.hxx"
-#include "sdresid.hxx"
-#include "drawdoc.hxx"
-#include "View.hxx"
-#include "fupoor.hxx"
-#include "Client.hxx"
-#include "DrawDocShell.hxx"
-#include "fusearch.hxx"
-#include "slideshow.hxx"
-#include "sdpage.hxx"
-#include "DrawViewShell.hxx"
-#include "ViewShellBase.hxx"
+#include <sdundogr.hxx>
+#include <FrameView.hxx>
+#include <undopage.hxx>
+#include <sdresid.hxx>
+#include <drawdoc.hxx>
+#include <View.hxx>
+#include <fupoor.hxx>
+#include <Client.hxx>
+#include <DrawDocShell.hxx>
+#include <fusearch.hxx>
+#include <slideshow.hxx>
+#include <sdpage.hxx>
+#include <DrawViewShell.hxx>
+#include <ViewShellBase.hxx>
 
-#include "Window.hxx"
+#include <Window.hxx>
 
 #include <sfx2/viewfrm.hxx>
 #include <svtools/soerr.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <svx/charthelper.hxx>
 #include <comphelper/lok.hxx>
 
@@ -84,21 +84,21 @@ void ViewShell::UpdateScrollBars()
 {
     if (mpHorizontalScrollBar.get() != nullptr)
     {
-        long nW = (long)(mpContentWindow->GetVisibleWidth() * 32000);
-        long nX = (long)(mpContentWindow->GetVisibleX() * 32000);
+        long nW = static_cast<long>(mpContentWindow->GetVisibleWidth() * 32000);
+        long nX = static_cast<long>(mpContentWindow->GetVisibleX() * 32000);
         mpHorizontalScrollBar->SetVisibleSize(nW);
         mpHorizontalScrollBar->SetThumbPos(nX);
         nW = 32000 - nW;
-        long nLine = (long) (mpContentWindow->GetScrlLineWidth() * nW);
-        long nPage = (long) (mpContentWindow->GetScrlPageWidth() * nW);
+        long nLine = static_cast<long>(mpContentWindow->GetScrlLineWidth() * nW);
+        long nPage = static_cast<long>(mpContentWindow->GetScrlPageWidth() * nW);
         mpHorizontalScrollBar->SetLineSize(nLine);
         mpHorizontalScrollBar->SetPageSize(nPage);
     }
 
     if (mpVerticalScrollBar.get() != nullptr)
     {
-        long nH = (long)(mpContentWindow->GetVisibleHeight() * 32000);
-        long nY = (long)(mpContentWindow->GetVisibleY() * 32000);
+        long nH = static_cast<long>(mpContentWindow->GetVisibleHeight() * 32000);
+        long nY = static_cast<long>(mpContentWindow->GetVisibleY() * 32000);
 
         if(IsPageFlipMode()) // ie in zoom mode where no panning
         {
@@ -117,8 +117,8 @@ void ViewShell::UpdateScrollBars()
             mpVerticalScrollBar->SetVisibleSize(nH);
             mpVerticalScrollBar->SetThumbPos(nY);
             nH = 32000 - nH;
-            long nLine = (long) (mpContentWindow->GetScrlLineHeight() * nH);
-            long nPage = (long) (mpContentWindow->GetScrlPageHeight() * nH);
+            long nLine = static_cast<long>(mpContentWindow->GetScrlLineHeight() * nH);
+            long nPage = static_cast<long>(mpContentWindow->GetScrlPageHeight() * nH);
             mpVerticalScrollBar->SetLineSize(nLine);
             mpVerticalScrollBar->SetPageSize(nPage);
         }
@@ -134,7 +134,7 @@ void ViewShell::UpdateScrollBars()
 /**
  * Handling for horizontal Scrollbars
  */
-IMPL_LINK_TYPED(ViewShell, HScrollHdl, ScrollBar *, pHScroll, void )
+IMPL_LINK(ViewShell, HScrollHdl, ScrollBar *, pHScroll, void )
 {
     VirtHScrollHdl(pHScroll);
 }
@@ -148,7 +148,7 @@ void ViewShell::VirtHScrollHdl(ScrollBar* pHScroll)
 
     if (nDelta != 0)
     {
-        double fX = (double) pHScroll->GetThumbPos() / pHScroll->GetRange().Len();
+        double fX = static_cast<double>(pHScroll->GetThumbPos()) / pHScroll->GetRange().Len();
 
         // scroll all windows of the column
         ::sd::View* pView = GetView();
@@ -162,13 +162,13 @@ void ViewShell::VirtHScrollHdl(ScrollBar* pHScroll)
 
         mpContentWindow->SetVisibleXY(fX, -1);
 
-        Rectangle aVisArea = GetDocSh()->GetVisArea(ASPECT_CONTENT);
+        ::tools::Rectangle aVisArea = GetDocSh()->GetVisArea(ASPECT_CONTENT);
         Point aVisAreaPos = GetActiveWindow()->PixelToLogic( Point(0,0) );
         aVisArea.SetPos(aVisAreaPos);
         GetDocSh()->SetVisArea(aVisArea);
 
         Size aVisSizePixel = GetActiveWindow()->GetOutputSizePixel();
-        Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0), aVisSizePixel) );
+        ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0), aVisSizePixel) );
         VisAreaChanged(aVisAreaWin);
 
         if (pView)
@@ -188,7 +188,7 @@ void ViewShell::VirtHScrollHdl(ScrollBar* pHScroll)
 /**
  * handling for vertical Scrollbars
  */
-IMPL_LINK_TYPED(ViewShell, VScrollHdl, ScrollBar *, pVScroll, void )
+IMPL_LINK(ViewShell, VScrollHdl, ScrollBar *, pVScroll, void )
 {
     VirtVScrollHdl(pVScroll);
 }
@@ -202,13 +202,13 @@ void ViewShell::VirtVScrollHdl(ScrollBar* pVScroll)
     {
         SdPage* pPage = static_cast<DrawViewShell*>(this)->GetActualPage();
         sal_uInt16 nCurPage = (pPage->GetPageNum() - 1) >> 1;
-        sal_uInt16 nNewPage = (sal_uInt16)pVScroll->GetThumbPos()/256;
+        sal_uInt16 nNewPage = static_cast<sal_uInt16>(pVScroll->GetThumbPos())/256;
         if( nCurPage != nNewPage )
             static_cast<DrawViewShell*>(this)->SwitchPage(nNewPage);
     }
     else //panning mode
     {
-        double fY = (double) pVScroll->GetThumbPos() / pVScroll->GetRange().Len();
+        double fY = static_cast<double>(pVScroll->GetThumbPos()) / pVScroll->GetRange().Len();
 
         ::sd::View* pView = GetView();
         OutlinerView* pOLV = nullptr;
@@ -221,13 +221,13 @@ void ViewShell::VirtVScrollHdl(ScrollBar* pVScroll)
 
         mpContentWindow->SetVisibleXY(-1, fY);
 
-        Rectangle aVisArea = GetDocSh()->GetVisArea(ASPECT_CONTENT);
+        ::tools::Rectangle aVisArea = GetDocSh()->GetVisArea(ASPECT_CONTENT);
         Point aVisAreaPos = GetActiveWindow()->PixelToLogic( Point(0,0) );
         aVisArea.SetPos(aVisAreaPos);
         GetDocSh()->SetVisArea(aVisArea);
 
         Size aVisSizePixel = GetActiveWindow()->GetOutputSizePixel();
-        Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0), aVisSizePixel) );
+        ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0), aVisSizePixel) );
         VisAreaChanged(aVisAreaWin);
 
         if (pView)
@@ -244,12 +244,12 @@ void ViewShell::VirtVScrollHdl(ScrollBar* pVScroll)
     }
 }
 
-SvxRuler* ViewShell::CreateHRuler(::sd::Window* )
+VclPtr<SvxRuler> ViewShell::CreateHRuler(::sd::Window* )
 {
     return nullptr;
 }
 
-SvxRuler* ViewShell::CreateVRuler(::sd::Window* )
+VclPtr<SvxRuler> ViewShell::CreateVRuler(::sd::Window* )
 {
     return nullptr;
 }
@@ -292,20 +292,20 @@ void ViewShell::Scroll(long nScrollX, long nScrollY)
         long nNewThumb = mpVerticalScrollBar->GetThumbPos() + nScrollY;
         mpVerticalScrollBar->SetThumbPos(nNewThumb);
     }
-    double  fX = (double) mpHorizontalScrollBar->GetThumbPos() /
+    double  fX = static_cast<double>(mpHorizontalScrollBar->GetThumbPos()) /
                             mpHorizontalScrollBar->GetRange().Len();
-    double  fY = (double) mpVerticalScrollBar->GetThumbPos() /
+    double  fY = static_cast<double>(mpVerticalScrollBar->GetThumbPos()) /
                             mpVerticalScrollBar->GetRange().Len();
 
     GetActiveWindow()->SetVisibleXY(fX, fY);
 
-    Rectangle aVisArea = GetDocSh()->GetVisArea(ASPECT_CONTENT);
+    ::tools::Rectangle aVisArea = GetDocSh()->GetVisArea(ASPECT_CONTENT);
     Point aVisAreaPos = GetActiveWindow()->PixelToLogic( Point(0,0) );
     aVisArea.SetPos(aVisAreaPos);
     GetDocSh()->SetVisArea(aVisArea);
 
     Size aVisSizePixel = GetActiveWindow()->GetOutputSizePixel();
-    Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0), aVisSizePixel) );
+    ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0), aVisSizePixel) );
     VisAreaChanged(aVisAreaWin);
 
     ::sd::View* pView = GetView();
@@ -347,7 +347,7 @@ void ViewShell::SetZoom(long nZoom)
     }
 
     Size aVisSizePixel = GetActiveWindow()->GetOutputSizePixel();
-    Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0), aVisSizePixel) );
+    ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0), aVisSizePixel) );
     VisAreaChanged(aVisAreaWin);
 
     ::sd::View* pView = GetView();
@@ -359,11 +359,21 @@ void ViewShell::SetZoom(long nZoom)
     UpdateScrollBars();
 }
 
+long ViewShell::GetZoom() const
+{
+    if (mpContentWindow)
+    {
+        return mpContentWindow->GetZoom();
+    }
+
+    return 0;
+}
+
 /**
  * Set zoom rectangle for active window. Sets all split windows to the same zoom
  * factor.
  */
-void ViewShell::SetZoomRect(const Rectangle& rZoomRect)
+void ViewShell::SetZoomRect(const ::tools::Rectangle& rZoomRect)
 {
     long nZoom = GetActiveWindow()->SetZoomRect(rZoomRect);
     Fraction aUIScale(nZoom, 100);
@@ -380,8 +390,8 @@ void ViewShell::SetZoomRect(const Rectangle& rZoomRect)
     if (mpContentWindow.get() != nullptr)
     {
         Point aNewPos = mpContentWindow->GetWinViewPos();
-        aNewPos.X() = aPos.X();
-        aNewPos.Y() = aPos.Y();
+        aNewPos.setX( aPos.X() );
+        aNewPos.setY( aPos.Y() );
         mpContentWindow->SetZoomIntegral(nZoom);
         mpContentWindow->SetWinViewPos(aNewPos);
         mpContentWindow->UpdateMapOrigin();
@@ -393,7 +403,7 @@ void ViewShell::SetZoomRect(const Rectangle& rZoomRect)
     }
 
     Size aVisSizePixel = GetActiveWindow()->GetOutputSizePixel();
-    Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0), aVisSizePixel) );
+    ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0), aVisSizePixel) );
     VisAreaChanged(aVisAreaWin);
 
     ::sd::View* pView = GetView();
@@ -425,7 +435,7 @@ void ViewShell::InitWindows(const Point& rViewOrigin, const Size& rViewSize,
     }
 
     Size aVisSizePixel = GetActiveWindow()->GetOutputSizePixel();
-    Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0), aVisSizePixel) );
+    ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0), aVisSizePixel) );
     VisAreaChanged(aVisAreaWin);
 
     ::sd::View* pView = GetView();
@@ -447,11 +457,11 @@ void ViewShell::InvalidateWindows()
 /**
  * Draw a selection rectangle with the ?provided pen on all split windows.
  */
-void ViewShell::DrawMarkRect(const Rectangle& rRect) const
+void ViewShell::DrawMarkRect(const ::tools::Rectangle& rRect) const
 {
     if (mpContentWindow.get() != nullptr)
     {
-        mpContentWindow->InvertTracking(rRect, SHOWTRACK_OBJECT | SHOWTRACK_WINDOW);
+        mpContentWindow->InvertTracking(rRect, ShowTrackFlags::Object | ShowTrackFlags::TrackWindow);
     }
 }
 
@@ -461,160 +471,88 @@ void ViewShell::SetPageSizeAndBorder(PageKind ePageKind, const Size& rNewSize,
                                        Orientation eOrientation, sal_uInt16 nPaperBin,
                                        bool bBackgroundFullSize)
 {
-    SdPage* pPage = nullptr;
-    SdUndoGroup* pUndoGroup = nullptr;
-    pUndoGroup = new SdUndoGroup(GetDoc());
-    OUString aString(SdResId(STR_UNDO_CHANGE_PAGEFORMAT));
-    pUndoGroup->SetComment(aString);
-    SfxViewShell* pViewShell = GetViewShell();
-    OSL_ASSERT (pViewShell!=nullptr);
+    const sal_uInt16 nMasterPageCnt(GetDoc()->GetMasterSdPageCount(ePageKind));
+    const sal_uInt16 nPageCnt(GetDoc()->GetSdPageCount(ePageKind));
 
-    sal_uInt16 i, nPageCnt = GetDoc()->GetMasterSdPageCount(ePageKind);
+    if(0 == nPageCnt && 0 == nMasterPageCnt)
+    {
+        return;
+    }
 
+    std::unique_ptr<SdUndoGroup> pUndoGroup;
+    SfxViewShell* pViewShell(GetViewShell());
+    if (pViewShell)
+    {
+        pUndoGroup.reset(new SdUndoGroup(GetDoc()));
+        pUndoGroup->SetComment(SdResId(STR_UNDO_CHANGE_PAGEFORMAT));
+    }
     Broadcast (ViewShellHint(ViewShellHint::HINT_PAGE_RESIZE_START));
 
-    for (i = 0; i < nPageCnt; i++)
-    {
-        // first, handle all master pages
-        pPage = GetDoc()->GetMasterSdPage(i, ePageKind);
-
-        SdUndoAction* pUndo = new SdPageFormatUndoAction(GetDoc(), pPage,
-                            pPage->GetSize(),
-                            pPage->GetLftBorder(), pPage->GetRgtBorder(),
-                            pPage->GetUppBorder(), pPage->GetLwrBorder(),
-                            pPage->GetOrientation(),
-                            pPage->GetPaperBin(),
-                            pPage->IsBackgroundFullSize(),
-                            rNewSize,
-                            nLeft, nRight,
-                            nUpper, nLower,
-                            bScaleAll,
-                            eOrientation,
-                            nPaperBin,
-                            bBackgroundFullSize);
-        pUndoGroup->AddAction(pUndo);
-
-        if (rNewSize.Width() > 0 ||
-            nLeft  >= 0 || nRight >= 0 || nUpper >= 0 || nLower >= 0)
-        {
-            Rectangle aNewBorderRect(nLeft, nUpper, nRight, nLower);
-            pPage->ScaleObjects(rNewSize, aNewBorderRect, bScaleAll);
-
-            if (rNewSize.Width() > 0)
-                pPage->SetSize(rNewSize);
-        }
-
-        if( nLeft  >= 0 || nRight >= 0 || nUpper >= 0 || nLower >= 0 )
-        {
-            pPage->SetBorder(nLeft, nUpper, nRight, nLower);
-        }
-
-        pPage->SetOrientation(eOrientation);
-        pPage->SetPaperBin( nPaperBin );
-        pPage->SetBackgroundFullSize( bBackgroundFullSize );
-
-        if ( ePageKind == PK_STANDARD )
-            GetDoc()->GetMasterSdPage(i, PK_NOTES)->CreateTitleAndLayout();
-
-        pPage->CreateTitleAndLayout();
-    }
-
-    nPageCnt = GetDoc()->GetSdPageCount(ePageKind);
-
-    for (i = 0; i < nPageCnt; i++)
-    {
-        // then, handle all pages
-        pPage = GetDoc()->GetSdPage(i, ePageKind);
-
-        SdUndoAction* pUndo = new SdPageFormatUndoAction(GetDoc(), pPage,
-                                pPage->GetSize(),
-                                pPage->GetLftBorder(), pPage->GetRgtBorder(),
-                                pPage->GetUppBorder(), pPage->GetLwrBorder(),
-                                pPage->GetOrientation(),
-                                pPage->GetPaperBin(),
-                                pPage->IsBackgroundFullSize(),
-                                rNewSize,
-                                nLeft, nRight,
-                                nUpper, nLower,
-                                bScaleAll,
-                                eOrientation,
-                                nPaperBin,
-                                bBackgroundFullSize);
-        pUndoGroup->AddAction(pUndo);
-
-        if (rNewSize.Width() > 0 ||
-            nLeft  >= 0 || nRight >= 0 || nUpper >= 0 || nLower >= 0)
-        {
-            Rectangle aNewBorderRect(nLeft, nUpper, nRight, nLower);
-            pPage->ScaleObjects(rNewSize, aNewBorderRect, bScaleAll);
-
-            if (rNewSize.Width() > 0)
-                pPage->SetSize(rNewSize);
-        }
-
-        if( nLeft  >= 0 || nRight >= 0 || nUpper >= 0 || nLower >= 0 )
-        {
-            pPage->SetBorder(nLeft, nUpper, nRight, nLower);
-        }
-
-        pPage->SetOrientation(eOrientation);
-        pPage->SetPaperBin( nPaperBin );
-        pPage->SetBackgroundFullSize( bBackgroundFullSize );
-
-        if ( ePageKind == PK_STANDARD )
-        {
-            SdPage* pNotesPage = GetDoc()->GetSdPage(i, PK_NOTES);
-            pNotesPage->SetAutoLayout( pNotesPage->GetAutoLayout() );
-        }
-
-        pPage->SetAutoLayout( pPage->GetAutoLayout() );
-    }
+    // use Model-based method at SdDrawDocument
+    GetDoc()->AdaptPageSizeForAllPages(
+        rNewSize,
+        ePageKind,
+        pUndoGroup.get(),
+        nLeft,
+        nRight,
+        nUpper,
+        nLower,
+        bScaleAll,
+        eOrientation,
+        nPaperBin,
+        bBackgroundFullSize);
 
     // adjust handout page to new format of the standard page
-    if( (ePageKind == PK_STANDARD) || (ePageKind == PK_HANDOUT) )
-        GetDoc()->GetSdPage(0, PK_HANDOUT)->CreateTitleAndLayout(true);
+    if(0 != nPageCnt && ((ePageKind == PageKind::Standard) || (ePageKind == PageKind::Handout)))
+    {
+        GetDoc()->GetSdPage(0, PageKind::Handout)->CreateTitleAndLayout(true);
+    }
 
     // handed over undo group to undo manager
-    pViewShell->GetViewFrame()->GetObjectShell()
-        ->GetUndoManager()->AddUndoAction(pUndoGroup);
+    if (pViewShell)
+    {
+        pViewShell->GetViewFrame()->GetObjectShell()->GetUndoManager()->AddUndoAction(std::move(pUndoGroup));
+    }
 
-    long nWidth = pPage->GetSize().Width();
-    long nHeight = pPage->GetSize().Height();
-
-    Point aPageOrg(nWidth, nHeight / 2);
-    Size aViewSize(nWidth * 3, nHeight * 2);
+    // calculate View-Sizes
+    SdPage* pPage(0 != nPageCnt
+        ? GetDoc()->GetSdPage(0, ePageKind)
+        : GetDoc()->GetMasterSdPage(0, ePageKind));
+    const long nWidth(pPage->GetSize().Width());
+    const long nHeight(pPage->GetSize().Height());
+    const Point aPageOrg(nWidth, nHeight / 2);
+    const Size aViewSize(nWidth * 3, nHeight * 2);
+    Point aVisAreaPos;
+    ::sd::View* pView(GetView());
+    const Point aNewOrigin(pPage->GetLeftBorder(), pPage->GetUpperBorder());
 
     InitWindows(aPageOrg, aViewSize, Point(-1, -1), true);
-
-    Point aVisAreaPos;
 
     if ( GetDocSh()->GetCreateMode() == SfxObjectCreateMode::EMBEDDED )
     {
         aVisAreaPos = GetDocSh()->GetVisArea(ASPECT_CONTENT).TopLeft();
     }
 
-    ::sd::View* pView = GetView();
     if (pView)
     {
-        pView->SetWorkArea(Rectangle(Point() - aVisAreaPos - aPageOrg, aViewSize));
+        pView->SetWorkArea(::tools::Rectangle(Point() - aVisAreaPos - aPageOrg, aViewSize));
     }
 
     UpdateScrollBars();
-
-    Point aNewOrigin(pPage->GetLftBorder(), pPage->GetUppBorder());
 
     if (pView)
     {
         pView->GetSdrPageView()->SetPageOrigin(aNewOrigin);
     }
 
-    pViewShell->GetViewFrame()->GetBindings().Invalidate(SID_RULER_NULL_OFFSET);
+    if(nullptr != pViewShell)
+    {
+        pViewShell->GetViewFrame()->GetBindings().Invalidate(SID_RULER_NULL_OFFSET);
+        // zoom onto (new) page size
+        pViewShell->GetViewFrame()->GetDispatcher()->Execute(SID_SIZE_PAGE, SfxCallMode::ASYNCHRON | SfxCallMode::RECORD);
+    }
 
-    // zoom onto (new) page size
-    pViewShell->GetViewFrame()->GetDispatcher()->Execute(SID_SIZE_PAGE,
-            SfxCallMode::ASYNCHRON | SfxCallMode::RECORD);
-
-    Broadcast (ViewShellHint(ViewShellHint::HINT_PAGE_RESIZE_END));
+    Broadcast(ViewShellHint(ViewShellHint::HINT_PAGE_RESIZE_END));
 }
 
 /**
@@ -622,7 +560,7 @@ void ViewShell::SetPageSizeAndBorder(PageKind ePageKind, const Size& rNewSize,
  */
 void ViewShell::SetZoomFactor(const Fraction& rZoomX, const Fraction&)
 {
-    long nZoom = (long)((double) rZoomX * 100);
+    long nZoom = static_cast<long>(static_cast<double>(rZoomX) * 100);
     SetZoom(nZoom);
 }
 
@@ -660,7 +598,7 @@ void ViewShell::SetActiveWindow (::sd::Window* pWin)
     }
 }
 
-bool ViewShell::RequestHelp(const HelpEvent& rHEvt, ::sd::Window*)
+bool ViewShell::RequestHelp(const HelpEvent& rHEvt)
 {
     bool bReturn = false;
 
@@ -706,9 +644,9 @@ void ViewShell::WriteFrameViewData()
 
 bool ViewShell::ActivateObject(SdrOle2Obj* pObj, long nVerb)
 {
-    ErrCode aErrCode = 0;
+    ErrCode aErrCode = ERRCODE_NONE;
 
-    SfxErrorContext aEC(ERRCTX_SO_DOVERB, GetActiveWindow(), RID_SO_ERRCTX);
+    SfxErrorContext aEC(ERRCTX_SO_DOVERB, GetFrameWeld(), RID_SO_ERRCTX);
     bool bAbort = false;
     GetDocSh()->SetWaitCursor( true );
     SfxViewShell* pViewShell = GetViewShell();
@@ -769,7 +707,7 @@ bool ViewShell::ActivateObject(SdrOle2Obj* pObj, long nVerb)
             // OLE object is no longer empty
             pObj->SetEmptyPresObj(false);
             pObj->SetOutlinerParaObject(nullptr);
-            pObj->SetGraphic(nullptr);
+            pObj->ClearGraphic();
 
             // the empty OLE object gets a new IPObj
             if (!aName.isEmpty())
@@ -784,7 +722,7 @@ bool ViewShell::ActivateObject(SdrOle2Obj* pObj, long nVerb)
                 pObj->SetObjRef(xObj);
             }
 
-            Rectangle aRect = pObj->GetLogicRect();
+            ::tools::Rectangle aRect = pObj->GetLogicRect();
 
             if ( pObj->GetAspect() != embed::Aspects::MSOLE_ICON )
             {
@@ -804,7 +742,7 @@ bool ViewShell::ActivateObject(SdrOle2Obj* pObj, long nVerb)
         }
     }
 
-    if( aErrCode == 0 )
+    if( aErrCode == ERRCODE_NONE )
     {
         ::sd::View* pView = GetView();
 
@@ -822,12 +760,12 @@ bool ViewShell::ActivateObject(SdrOle2Obj* pObj, long nVerb)
             pSdClient = new Client(pObj, this, GetActiveWindow());
         }
 
-        Rectangle aRect = pObj->GetLogicRect();
+        ::tools::Rectangle aRect = pObj->GetLogicRect();
 
         {
             // #i118485# center on BoundRect for activation,
             // OLE may be sheared/rotated now
-            const Rectangle& rBoundRect = pObj->GetCurrentBoundRect();
+            const ::tools::Rectangle& rBoundRect = pObj->GetCurrentBoundRect();
             const Point aDelta(rBoundRect.Center() - aRect.Center());
             aRect.Move(aDelta.X(), aDelta.Y());
         }
@@ -841,7 +779,7 @@ bool ViewShell::ActivateObject(SdrOle2Obj* pObj, long nVerb)
 
         Fraction aScaleWidth (aDrawSize.Width(),  aObjAreaSize.Width() );
         Fraction aScaleHeight(aDrawSize.Height(), aObjAreaSize.Height() );
-        aScaleWidth.ReduceInaccurate(10);       // kompatibel zum SdrOle2Obj
+        aScaleWidth.ReduceInaccurate(10);       // compatible to the SdrOle2Obj
         aScaleHeight.ReduceInaccurate(10);
         pSdClient->SetSizeScale(aScaleWidth, aScaleHeight);
 
@@ -862,32 +800,32 @@ bool ViewShell::ActivateObject(SdrOle2Obj* pObj, long nVerb)
 
     GetDocSh()->SetWaitCursor( false );
 
-    if (aErrCode != 0 && !bAbort)
+    if (aErrCode != ERRCODE_NONE && !bAbort)
     {
         ErrorHandler::HandleError(* new StringErrorInfo(aErrCode, OUString() ) );
     }
 
-    return aErrCode == 0;
+    return aErrCode == ERRCODE_NONE;
 }
 
 /**
  * @returns enclosing rectangle of all (split-) windows.
  */
-const Rectangle& ViewShell::GetAllWindowRect()
+const ::tools::Rectangle& ViewShell::GetAllWindowRect()
 {
     maAllWindowRectangle.SetPos(
         mpContentWindow->OutputToScreenPixel(Point(0,0)));
     return maAllWindowRectangle;
 }
 
-void ViewShell::ReadUserData(const OUString&)
+void ViewShell::ReadUserData()
 {
     // zoom onto VisArea from FrameView
     GetViewShell()->GetViewFrame()->GetDispatcher()->Execute(SID_SIZE_VISAREA,
         SfxCallMode::ASYNCHRON | SfxCallMode::RECORD);
 }
 
-void ViewShell::WriteUserData(OUString&)
+void ViewShell::WriteUserData()
 {
     // writing of our data is always done in WriteFrameViewData()
     WriteFrameViewData();
@@ -929,12 +867,24 @@ void ViewShell::SetRuler(bool bRuler)
         GetViewShell()->InvalidateBorder();
 }
 
+void ViewShell::SetScrollBarsVisible(bool bVisible)
+{
+    if (mpVerticalScrollBar.get() != nullptr)
+        mpVerticalScrollBar->Show( bVisible );
+
+    if (mpHorizontalScrollBar.get() != nullptr)
+        mpHorizontalScrollBar->Show( bVisible );
+
+    if (mpScrollBarBox.get() != nullptr)
+        mpScrollBarBox->Show(bVisible);
+}
+
 sal_Int8 ViewShell::AcceptDrop (
     const AcceptDropEvent& rEvt,
     DropTargetHelper& rTargetHelper,
     ::sd::Window* pTargetWindow,
     sal_uInt16 nPage,
-    sal_uInt16 nLayer)
+    SdrLayerID nLayer)
 {
     ::sd::View* pView = GetView();
     return( pView ? pView->AcceptDrop( rEvt, rTargetHelper, pTargetWindow, nPage, nLayer ) : DND_ACTION_NONE );
@@ -945,13 +895,13 @@ sal_Int8 ViewShell::ExecuteDrop (
     DropTargetHelper& /*rTargetHelper*/,
     ::sd::Window* pTargetWindow,
     sal_uInt16 nPage,
-    sal_uInt16 nLayer)
+    SdrLayerID nLayer)
 {
     ::sd::View* pView = GetView();
     return pView ? pView->ExecuteDrop( rEvt, pTargetWindow, nPage, nLayer ) : DND_ACTION_NONE;
 }
 
-void ViewShell::WriteUserDataSequence ( css::uno::Sequence < css::beans::PropertyValue >& rSequence, bool bBrowse)
+void ViewShell::WriteUserDataSequence ( css::uno::Sequence < css::beans::PropertyValue >& rSequence )
 {
     const sal_Int32 nIndex = rSequence.getLength();
     rSequence.realloc( nIndex + 1 );
@@ -960,26 +910,24 @@ void ViewShell::WriteUserDataSequence ( css::uno::Sequence < css::beans::Propert
     // Get the view id from the view shell in the center pane.  This will
     // usually be the called view shell, but to be on the safe side we call
     // the main view shell explicitly.
-    sal_uInt16 nViewID (IMPRESS_FACTORY_ID);
-    if (GetViewShellBase().GetMainViewShell().get() != nullptr)
+    SfxInterfaceId nViewID (IMPRESS_FACTORY_ID);
+    if (GetViewShellBase().GetMainViewShell() != nullptr)
         nViewID = GetViewShellBase().GetMainViewShell()->mpImpl->GetViewId();
     rSequence[nIndex].Name = sUNO_View_ViewId;
-    OUStringBuffer sBuffer( "view" );
-    sBuffer.append( static_cast<sal_Int32>(nViewID));
-    rSequence[nIndex].Value <<= sBuffer.makeStringAndClear();
+    rSequence[nIndex].Value <<= "view" + OUString::number( static_cast<sal_uInt16>(nViewID));
 
-    mpFrameView->WriteUserDataSequence( rSequence, bBrowse );
+    mpFrameView->WriteUserDataSequence( rSequence );
 }
 
-void ViewShell::ReadUserDataSequence ( const css::uno::Sequence < css::beans::PropertyValue >& rSequence, bool bBrowse )
+void ViewShell::ReadUserDataSequence ( const css::uno::Sequence < css::beans::PropertyValue >& rSequence )
 {
-    mpFrameView->ReadUserDataSequence( rSequence, bBrowse );
+    mpFrameView->ReadUserDataSequence( rSequence );
 }
 
-void ViewShell::VisAreaChanged(const Rectangle& rRect)
+void ViewShell::VisAreaChanged(const ::tools::Rectangle& /*rRect*/)
 {
     OSL_ASSERT (GetViewShell()!=nullptr);
-    GetViewShell()->VisAreaChanged(rRect);
+    GetViewShell()->VisAreaChanged();
 }
 
 void ViewShell::SetWinViewPos(const Point& rWinPos)
@@ -1001,7 +949,7 @@ void ViewShell::SetWinViewPos(const Point& rWinPos)
     UpdateScrollBars();
 
     Size aVisSizePixel = GetActiveWindow()->GetOutputSizePixel();
-    Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( Rectangle( Point(0,0), aVisSizePixel) );
+    ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0), aVisSizePixel) );
     VisAreaChanged(aVisAreaWin);
 
     ::sd::View* pView = GetView();
@@ -1011,12 +959,12 @@ void ViewShell::SetWinViewPos(const Point& rWinPos)
     }
 }
 
-Point ViewShell::GetWinViewPos() const
+Point const & ViewShell::GetWinViewPos() const
 {
     return mpContentWindow->GetWinViewPos();
 }
 
-Point ViewShell::GetViewOrigin() const
+Point const & ViewShell::GetViewOrigin() const
 {
     return mpContentWindow->GetViewOrigin();
 }

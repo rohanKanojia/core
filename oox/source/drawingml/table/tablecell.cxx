@@ -17,19 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/table/tablecell.hxx"
-#include "drawingml/table/tableproperties.hxx"
+#include <drawingml/table/tablecell.hxx>
+#include <drawingml/table/tableproperties.hxx>
 #include <basegfx/color/bcolor.hxx>
-#include "oox/drawingml/shapepropertymap.hxx"
-#include "drawingml/textbody.hxx"
-#include "oox/drawingml/theme.hxx"
-#include "oox/core/xmlfilterbase.hxx"
-#include "oox/helper/propertyset.hxx"
+#include <oox/drawingml/shapepropertymap.hxx>
+#include <drawingml/textbody.hxx>
+#include <oox/drawingml/theme.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/helper/propertyset.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
 #include <tools/color.hxx>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/beans/XMultiPropertySet.hpp>
 #include <com/sun/star/table/XTable.hpp>
 #include <com/sun/star/table/XMergeableCellRange.hpp>
+#include <com/sun/star/table/BorderLineStyle.hpp>
 #include <com/sun/star/table/BorderLine2.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/drawing/TextVerticalAdjust.hpp>
@@ -65,15 +69,15 @@ TableCell::~TableCell()
 {
 }
 
-void applyLineAttributes( const ::oox::core::XmlFilterBase& rFilterBase,
-        Reference< XPropertySet >& rxPropSet, oox::drawingml::LineProperties& rLineProperties,
+static void applyLineAttributes( const ::oox::core::XmlFilterBase& rFilterBase,
+        Reference< XPropertySet > const & rxPropSet, oox::drawingml::LineProperties const & rLineProperties,
         sal_Int32 nPropId )
 {
     BorderLine2 aBorderLine;
-    if( rLineProperties.maLineFill.moFillType.differsFrom( XML_noFill ))
+    if ( rLineProperties.maLineFill.moFillType.differsFrom( XML_noFill ))
     {
         Color aColor = rLineProperties.maLineFill.getBestSolidColor();
-        aBorderLine.Color = aColor.getColor( rFilterBase.getGraphicHelper() );
+        aBorderLine.Color = sal_Int32(aColor.getColor( rFilterBase.getGraphicHelper() ));
         aBorderLine.OuterLineWidth = static_cast< sal_Int16 >( GetCoordinate( rLineProperties.moLineWidth.get( 0 ) ) / 4 );
         aBorderLine.InnerLineWidth = static_cast< sal_Int16 >( GetCoordinate( rLineProperties.moLineWidth.get( 0 ) ) / 4 );
         aBorderLine.LineWidth = static_cast< sal_Int16 >( GetCoordinate( rLineProperties.moLineWidth.get( 0 ) ) / 2 );
@@ -81,19 +85,57 @@ void applyLineAttributes( const ::oox::core::XmlFilterBase& rFilterBase,
     }
     else if ( rLineProperties.moLineWidth.get(0)!=0 )
     {
-        // Default color of Line is black.
-        rLineProperties.maLineFill.maFillColor.setSrgbClr( 0 );
+        aBorderLine.Color = sal_Int32( COL_AUTO );
         aBorderLine.OuterLineWidth = static_cast< sal_Int16 >( GetCoordinate( rLineProperties.moLineWidth.get( 0 ) ) / 4 );
         aBorderLine.InnerLineWidth = static_cast< sal_Int16 >( GetCoordinate( rLineProperties.moLineWidth.get( 0 ) ) / 4 );
         aBorderLine.LineWidth = static_cast< sal_Int16 >( GetCoordinate( rLineProperties.moLineWidth.get( 0 ) ) / 2 );
         aBorderLine.LineDistance = 0;
     }
 
+    if ( rLineProperties.moPresetDash.has() )
+    {
+        switch ( rLineProperties.moPresetDash.get() )
+        {
+        case XML_dot:
+        case XML_sysDot:
+            aBorderLine.LineStyle = ::table::BorderLineStyle::DOTTED;
+            break;
+        case XML_dash:
+        case XML_lgDash:
+        case XML_sysDash:
+            aBorderLine.LineStyle = ::table::BorderLineStyle::DASHED;
+            break;
+        case XML_dashDot:
+        case XML_lgDashDot:
+        case XML_sysDashDot:
+            aBorderLine.LineStyle = ::table::BorderLineStyle::DASH_DOT;
+            break;
+        case XML_lgDashDotDot:
+        case XML_sysDashDotDot:
+            aBorderLine.LineStyle = ::table::BorderLineStyle::DASH_DOT_DOT;
+            break;
+        case XML_solid:
+            aBorderLine.LineStyle = ::table::BorderLineStyle::SOLID;
+            break;
+        default:
+            aBorderLine.LineStyle = ::table::BorderLineStyle::DASHED;
+            break;
+        }
+    }
+    else if ( !rLineProperties.maCustomDash.empty() )
+    {
+        aBorderLine.LineStyle = ::table::BorderLineStyle::DASHED;
+    }
+    else
+    {
+        aBorderLine.LineStyle = ::table::BorderLineStyle::NONE;
+    }
+
     PropertySet aPropSet( rxPropSet );
     aPropSet.setProperty( nPropId, aBorderLine );
 }
 
-void applyBorder( const ::oox::core::XmlFilterBase& rFilterBase, TableStylePart& rTableStylePart, sal_Int32 nLineType, oox::drawingml::LineProperties& rLineProperties )
+static void applyBorder( const ::oox::core::XmlFilterBase& rFilterBase, TableStylePart& rTableStylePart, sal_Int32 nLineType, oox::drawingml::LineProperties& rLineProperties )
 {
     std::map < sal_Int32, ::oox::drawingml::LinePropertiesPtr >& rPartLineBorders( rTableStylePart.getLineBorders() );
     ::oox::drawingml::ShapeStyleRef& rLineStyleRef = rTableStylePart.getStyleRefs()[ nLineType ];
@@ -105,13 +147,13 @@ void applyBorder( const ::oox::core::XmlFilterBase& rFilterBase, TableStylePart&
         if (const Theme* pTheme = rFilterBase.getCurrentTheme())
         {
             rLineProperties.assignUsed( *pTheme->getLineStyle(rLineStyleRef.mnThemedIdx) );
-            sal_Int32 nPhClr = rLineStyleRef.maPhClr.getColor( rFilterBase.getGraphicHelper() );
+            ::Color nPhClr = rLineStyleRef.maPhClr.getColor( rFilterBase.getGraphicHelper() );
             rLineProperties.maLineFill.maFillColor.setSrgbClr( nPhClr );
         }
     }
 }
 
-void applyTableStylePart( const ::oox::core::XmlFilterBase& rFilterBase,
+static void applyTableStylePart( const ::oox::core::XmlFilterBase& rFilterBase,
                           oox::drawingml::FillProperties& rFillProperties,
                           TextCharacterProperties& aTextCharProps,
                           oox::drawingml::LineProperties& rLeftBorder,
@@ -132,7 +174,7 @@ void applyTableStylePart( const ::oox::core::XmlFilterBase& rFilterBase,
         if (pTheme && rFillStyleRef.mnThemedIdx != 0 )
         {
             rFillProperties.assignUsed( *pTheme->getFillStyle( rFillStyleRef.mnThemedIdx ) );
-            sal_Int32 nPhClr = rFillStyleRef.maPhClr.getColor( rFilterBase.getGraphicHelper() );
+            ::Color nPhClr = rFillStyleRef.maPhClr.getColor( rFilterBase.getGraphicHelper() );
             rFillProperties.maFillColor.setSrgbClr( nPhClr );
         }
     }
@@ -159,7 +201,7 @@ void applyTableStylePart( const ::oox::core::XmlFilterBase& rFilterBase,
         aTextCharProps.moItalic = *rTableStylePart.getTextItalicStyle();
 }
 
-void applyTableCellProperties( const Reference < css::table::XCell >& rxCell, const TableCell& rTableCell )
+static void applyTableCellProperties( const Reference < css::table::XCell >& rxCell, const TableCell& rTableCell )
 {
     Reference< XPropertySet > xPropSet( rxCell, UNO_QUERY_THROW );
     xPropSet->setPropertyValue( "TextUpperDistance", Any( static_cast< sal_Int32 >( rTableCell.getTopMargin() / 360 ) ) );
@@ -192,9 +234,8 @@ void TableCell::pushToXCell( const ::oox::core::XmlFilterBase& rFilterBase, cons
 
     applyTableCellProperties( rxCell, *this );
     TextCharacterProperties aTextStyleProps;
-    xAt->gotoStart( sal_True );
-    Reference< text::XTextRange > xStart( xAt, UNO_QUERY );
-    xAt->gotoEnd( sal_True );
+    xAt->gotoStart( true );
+    xAt->gotoEnd( true );
 
     Reference< XPropertySet > xPropSet( rxCell, UNO_QUERY_THROW );
     oox::drawingml::FillProperties aFillProperties;
@@ -387,7 +428,7 @@ void TableCell::pushToXCell( const ::oox::core::XmlFilterBase& rFilterBase, cons
     ShapePropertyMap aPropMap( rFilterBase.getModelObjectHelper() );
 
     Color aBgColor;
-    sal_Int32 nPhClr = API_RGB_TRANSPARENT;
+    ::Color nPhClr = API_RGB_TRANSPARENT;
     std::shared_ptr< ::oox::drawingml::FillProperties >& rBackgroundFillPropertiesPtr( rTable.getBackgroundFillProperties() );
     ::oox::drawingml::ShapeStyleRef& rBackgroundFillStyle( rTable.getBackgroundFillStyleRef() );
     if (rBackgroundFillPropertiesPtr.get())
@@ -408,7 +449,7 @@ void TableCell::pushToXCell( const ::oox::core::XmlFilterBase& rFilterBase, cons
         ::Color nCellColor( rCellColor.getColor(rFilterBase.getGraphicHelper()) );
         ::Color aResult( basegfx::interpolate(nBgColor.getBColor(), nCellColor.getBColor(), 1.0 - fTransparency) );
         aFillProperties.maFillColor.clearTransformations();
-        aFillProperties.maFillColor.setSrgbClr(aResult.GetRGBColor());
+        aFillProperties.maFillColor.setSrgbClr(sal_Int32(aResult.GetRGBColor()));
         aFillProperties.moFillType.set(XML_solidFill);
     }
     if (!aFillProperties.moFillType.has())
@@ -424,6 +465,11 @@ void TableCell::pushToXCell( const ::oox::core::XmlFilterBase& rFilterBase, cons
     }
 
     getTextBody()->insertAt( rFilterBase, xText, xAt, aTextStyleProps, pMasterTextListStyle );
+
+    if (getVertToken() == XML_vert)
+        xPropSet->setPropertyValue("RotateAngle", Any(short(27000)));
+    else if (getVertToken() == XML_vert270)
+        xPropSet->setPropertyValue("RotateAngle", Any(short(9000)));
 }
 
 } } }

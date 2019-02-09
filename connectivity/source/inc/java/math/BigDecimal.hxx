@@ -19,7 +19,7 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_MATH_BIGDECIMAL_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_MATH_BIGDECIMAL_HXX
 
-#include "java/lang/Object.hxx"
+#include <java/lang/Object.hxx>
 
 //************ Class: java.lang.Boolean
 
@@ -31,9 +31,7 @@ namespace connectivity
         static jclass theClass;
     public:
         virtual jclass getMyClass() const override;
-        virtual ~java_math_BigDecimal();
-        // a Constructor, that is needed for when Returning the Object is needed:
-        java_math_BigDecimal( JNIEnv * pEnv, jobject myObj ) : java_lang_Object( pEnv, myObj ){}
+        virtual ~java_math_BigDecimal() override;
 
         java_math_BigDecimal( const OUString& _par0 );
         java_math_BigDecimal( const double& _par0 );

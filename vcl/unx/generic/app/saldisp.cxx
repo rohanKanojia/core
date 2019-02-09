@@ -24,9 +24,8 @@
 #include <sys/time.h>
 #include <pthread.h>
 #include <unistd.h>
-#include <ctype.h>
 
-#if defined(SOLARIS) || defined(AIX)
+#if defined(__sun) || defined(AIX)
 #include <osl/module.h>
 #endif
 
@@ -35,9 +34,9 @@
 #include <X11/XKBlib.h>
 
 #include <X11/cursorfont.h>
-#include "unx/x11_cursors/salcursors.h"
-#include "unx/x11_cursors/invert50.h"
-#ifdef SOLARIS
+#include <unx/x11_cursors/salcursors.h>
+#include <unx/x11_cursors/invert50.h>
+#ifdef __sun
 #define XK_KOREAN
 #endif
 #include <X11/keysym.h>
@@ -47,14 +46,17 @@
 #include <X11/extensions/Xinerama.h>
 #endif
 
+#include <opengl/zone.hxx>
+
+#include <tools/debug.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 
 #include <unx/salunx.h>
 #include <sal/log.hxx>
 #include <sal/types.h>
-#include "unx/i18n_im.hxx"
-#include "unx/i18n_xkb.hxx"
+#include <unx/i18n_im.hxx>
+#include <unx/i18n_xkb.hxx>
 #include <unx/saldisp.hxx>
 #include <unx/saldata.hxx>
 #include <salinst.hxx>
@@ -66,6 +68,8 @@
 #include <unx/salobj.h>
 #include <unx/sm.hxx>
 #include <unx/wmadaptor.hxx>
+#include <unx/x11/xrender_peer.hxx>
+#include <unx/glyphcache.hxx>
 
 #include <vcl/opengl/OpenGLHelper.hxx>
 
@@ -74,7 +78,6 @@
 #include <memory>
 #include <vector>
 
-#include <com/sun/star/uno/DeploymentException.hpp>
 #include <officecfg/Office/Common.hxx>
 
 /* From <X11/Intrinsic.h> */
@@ -82,28 +85,25 @@ typedef unsigned long Pixel;
 
 using namespace vcl_sal;
 
-#define SALCOLOR_WHITE      MAKE_SALCOLOR( 0xFF, 0xFF, 0xFF )
-#define SALCOLOR_BLACK      MAKE_SALCOLOR( 0x00, 0x00, 0x00 )
-
 #ifdef DBG_UTIL
-inline const char *Null( const char *p ) { return p ? p : ""; }
-inline const char *GetEnv( const char *p ) { return Null( getenv( p ) ); }
-inline const char *KeyStr( KeySym n ) { return Null( XKeysymToString( n ) ); }
+static const char *Null( const char *p ) { return p ? p : ""; }
+static const char *GetEnv( const char *p ) { return Null( getenv( p ) ); }
+static const char *KeyStr( KeySym n ) { return Null( XKeysymToString( n ) ); }
 
-inline const char *GetAtomName( Display *d, Atom a )
+static const char *GetAtomName( Display *d, Atom a )
 { return Null( XGetAtomName( d, a ) ); }
 
-inline double Hypothenuse( long w, long h )
-{ return sqrt( (double)((w*w)+(h*h)) ); }
+static double Hypothenuse( long w, long h )
+{ return sqrt( static_cast<double>((w*w)+(h*h)) ); }
 #endif
 
-inline int ColorDiff( int r, int g, int b )
+static int ColorDiff( int r, int g, int b )
 { return (r*r)+(g*g)+(b*b); }
 
-inline int ColorDiff( SalColor c1, int r, int g, int b )
-{ return ColorDiff( (int)SALCOLOR_RED  (c1)-r,
-                    (int)SALCOLOR_GREEN(c1)-g,
-                    (int)SALCOLOR_BLUE (c1)-b ); }
+static int ColorDiff( Color c1, int r, int g, int b )
+{ return ColorDiff( static_cast<int>(c1.GetRed())-r,
+                    static_cast<int>(c1.GetGreen())-g,
+                    static_cast<int>(c1.GetBlue())-b ); }
 
 static int sal_Shift( Pixel nMask )
 {
@@ -150,7 +150,7 @@ static bool sal_GetVisualInfo( Display *pDisplay, XID nVID, XVisualInfo &rVI )
     rVI = *pInfo;
     XFree( pInfo );
 
-    DBG_ASSERT( rVI.visualid == nVID,
+    SAL_WARN_IF( rVI.visualid != nVID, "vcl",
                 "sal_GetVisualInfo: could not get correct visual by visualId" );
     return true;
 }
@@ -159,28 +159,49 @@ extern "C" srv_vendor_t
 sal_GetServerVendor( Display *p_display )
 {
     typedef struct {
-        srv_vendor_t    e_vendor;   // vendor as enum
-        const char      *p_name;    // vendor name as returned by VendorString()
-        unsigned int    n_len;  // number of chars to compare
+        srv_vendor_t  e_vendor; // vendor as enum
+        const char*   p_name;   // vendor name as returned by VendorString()
+        unsigned int  n_len;    // number of chars to compare
     } vendor_t;
 
-    const vendor_t p_vendorlist[] = {
+    static const vendor_t vendorlist[] = {
         { vendor_sun,         "Sun Microsystems, Inc.",          10 },
-        // always the last entry: vendor_none to indicate eol
-        { vendor_none,        nullptr,                               0 },
     };
 
     // handle regular server vendors
     char     *p_name   = ServerVendor( p_display );
-    vendor_t *p_vendor;
-    for (p_vendor = const_cast<vendor_t*>(p_vendorlist); p_vendor->e_vendor != vendor_none; p_vendor++)
+    for (auto const & vendor : vendorlist)
     {
-        if ( strncmp (p_name, p_vendor->p_name, p_vendor->n_len) == 0 )
-            return p_vendor->e_vendor;
+        if ( strncmp (p_name, vendor.p_name, vendor.n_len) == 0 )
+            return vendor.e_vendor;
     }
 
     // vendor not found in list
     return vendor_unknown;
+}
+
+bool SalDisplay::BestOpenGLVisual(Display* pDisplay, int nScreen, XVisualInfo& rVI)
+{
+    OpenGLZone aZone;
+
+    XVisualInfo* pVI;
+    int aAttrib[] = { GLX_RGBA,
+                      GLX_RED_SIZE, 8,
+                      GLX_GREEN_SIZE, 8,
+                      GLX_BLUE_SIZE, 8,
+                      GLX_DEPTH_SIZE, 24,
+                      GLX_STENCIL_SIZE, 8,
+                      None };
+
+    pVI = glXChooseVisual( pDisplay, nScreen, aAttrib );
+    if( !pVI )
+        return false;
+
+    rVI = *pVI;
+    XFree( pVI );
+
+    CHECK_GL_ERROR();
+    return true;
 }
 
 bool SalDisplay::BestVisual( Display     *pDisplay,
@@ -196,15 +217,9 @@ bool SalDisplay::BestVisual( Display     *pDisplay,
     if( nVID && sal_GetVisualInfo( pDisplay, nVID, rVI ) )
         return rVI.visualid == nDefVID;
 
-    try {
-        bool bUseOpenGL = OpenGLHelper::isVCLOpenGLEnabled();
-        if( bUseOpenGL && OpenGLHelper::GetVisualInfo( pDisplay, nScreen, rVI ) )
-            return rVI.visualid == nDefVID;
-    }
-    catch (const css::uno::DeploymentException&)
-    {
-        // too early to try to access configmgr
-    }
+    bool bUseOpenGL = OpenGLHelper::isVCLOpenGLEnabled();
+    if (bUseOpenGL && BestOpenGLVisual(pDisplay, nScreen, rVI))
+        return rVI.visualid == nDefVID;
 
     XVisualInfo aVI;
     aVI.screen = nScreen;
@@ -258,20 +273,16 @@ bool SalDisplay::BestVisual( Display     *pDisplay,
 
 SalDisplay::SalDisplay( Display *display ) :
         pXLib_( nullptr ),
-        mpInputMethod( nullptr ),
         mpKbdExtension( nullptr ),
-        mpFactory( nullptr ),
         pDisp_( display ),
         m_nXDefaultScreen( 0 ),
         nMaxRequestSize_( 0 ),
         meServerVendor( vendor_unknown ),
         bNumLockFromXS_( false ),
         nNumLockIndex_( 0 ),
-        nNumLockMask_( 0 ),
         nShiftKeySym_( 0 ),
         nCtrlKeySym_( 0 ),
         nMod1KeySym_( 0 ),
-        m_pWMAdaptor( nullptr ),
         m_bXinerama( false ),
         m_bUseRandRWrapper( true ),
         m_nLastUserEventTime( CurrentTime )
@@ -279,9 +290,9 @@ SalDisplay::SalDisplay( Display *display ) :
 #if OSL_DEBUG_LEVEL > 1
     fprintf( stderr, "SalDisplay::SalDisplay()\n" );
 #endif
-    SalGenericData *pData = GetGenericData();
+    GenericUnixSalData *pData = GetGenericUnixSalData();
 
-    DBG_ASSERT( ! pData->GetDisplay(), "Second SalDisplay created !!!\n" );
+    SAL_WARN_IF(  pData->GetDisplay(), "vcl", "Second SalDisplay created !!!" );
     pData->SetDisplay( this );
 
     m_nXDefaultScreen = SalX11Screen( DefaultScreen( pDisp_ ) );
@@ -307,17 +318,35 @@ SalDisplay::~SalDisplay()
 
 void SalDisplay::doDestruct()
 {
-    SalGenericData *pData = GetGenericData();
+    GenericUnixSalData *pData = GetGenericUnixSalData();
 
-    delete m_pWMAdaptor;
-    m_pWMAdaptor = nullptr;
+    m_pWMAdaptor.reset();
     X11SalBitmap::ImplDestroyCache();
-    X11SalGraphics::releaseGlyphPeer();
+
+    if (ImplGetSVData())
+    {
+        SalDisplay* pSalDisp = vcl_sal::getSalDisplay(pData);
+        Display* const pX11Disp = pSalDisp->GetDisplay();
+        int nMaxScreens = pSalDisp->GetXScreenCount();
+        XRenderPeer& rRenderPeer = XRenderPeer::GetInstance();
+
+        for (int i = 0; i < nMaxScreens; i++)
+        {
+            SalDisplay::RenderEntryMap& rMap = pSalDisp->GetRenderEntries(SalX11Screen(i));
+            for (auto const& elem : rMap)
+            {
+                if (elem.second.m_aPixmap)
+                    ::XFreePixmap(pX11Disp, elem.second.m_aPixmap);
+                if (elem.second.m_aPicture)
+                    rRenderPeer.FreePicture(elem.second.m_aPicture);
+            }
+            rMap.clear();
+        }
+    }
+    GlyphCache::GetInstance().ClearFontCache();
 
     if( IsDisplay() )
     {
-        delete mpInputMethod;
-        mpInputMethod = nullptr;
         delete mpKbdExtension;
         mpKbdExtension = nullptr;
 
@@ -355,44 +384,40 @@ void SalDisplay::doDestruct()
         pData->SetDisplay( nullptr );
 }
 
-static int DisplayHasEvent( int fd, SalX11Display *pDisplay  )
+static int DisplayHasEvent( int fd, void * data )
 {
-  (void)fd;
-  DBG_ASSERT( ConnectionNumber( pDisplay->GetDisplay() ) == fd,
+  auto pDisplay = static_cast<SalX11Display *>(data);
+  SAL_WARN_IF( ConnectionNumber( pDisplay->GetDisplay() ) != fd, "vcl",
               "wrong fd in DisplayHasEvent" );
   if( ! pDisplay->IsDisplay() )
       return 0;
 
   bool result;
 
-  GetSalData()->m_pInstance->GetYieldMutex()->acquire();
+  SolarMutexGuard aGuard;
   result = pDisplay->IsEvent();
-  GetSalData()->m_pInstance->GetYieldMutex()->release();
   return int(result);
 }
-static int DisplayQueue( int fd, SalX11Display *pDisplay )
+static int DisplayQueue( int fd, void * data )
 {
-  (void)fd;
-  DBG_ASSERT( ConnectionNumber( pDisplay->GetDisplay() ) == fd,
+  auto pDisplay = static_cast<SalX11Display *>(data);
+  SAL_WARN_IF( ConnectionNumber( pDisplay->GetDisplay() ) != fd, "vcl",
               "wrong fd in DisplayHasEvent" );
   int result;
 
-  GetSalData()->m_pInstance->GetYieldMutex()->acquire();
+  SolarMutexGuard aGuard;
   result =  XEventsQueued( pDisplay->GetDisplay(),
                         QueuedAfterReading );
-  GetSalData()->m_pInstance->GetYieldMutex()->release();
-
   return result;
 }
-static int DisplayYield( int fd, SalX11Display *pDisplay )
+static int DisplayYield( int fd, void * data )
 {
-  (void)fd;
-  DBG_ASSERT( ConnectionNumber( pDisplay->GetDisplay() ) == fd,
+  auto pDisplay = static_cast<SalX11Display *>(data);
+  SAL_WARN_IF( ConnectionNumber( pDisplay->GetDisplay() ) != fd, "vcl",
               "wrong fd in DisplayHasEvent" );
 
-  GetSalData()->m_pInstance->GetYieldMutex()->acquire();
+  SolarMutexGuard aGuard;
   pDisplay->Yield();
-  GetSalData()->m_pInstance->GetYieldMutex()->release();
   return 1;
 }
 
@@ -422,10 +447,10 @@ SalX11Display::~SalX11Display()
     }
 }
 
-void SalX11Display::PostUserEvent()
+void SalX11Display::TriggerUserEventProcessing()
 {
     if( pXLib_ )
-        pXLib_->PostUserEvent();
+        pXLib_->TriggerUserEventProcessing();
 }
 
 SalDisplay::ScreenData *
@@ -565,7 +590,6 @@ void SalDisplay::Init()
     for( Cursor & aCsr : aPointerCache_ )
         aCsr = None;
 
-    mpFactory           = nullptr;
     m_bXinerama         = false;
 
     int nDisplayScreens = ScreenCount( pDisp_ );
@@ -580,7 +604,7 @@ void SalDisplay::Init()
     if( pValStr != nullptr )
     {
         const OString aValStr( pValStr );
-        const long nDPI = (long) aValStr.toDouble();
+        const long nDPI = static_cast<long>(aValStr.toDouble());
         // guard against insane resolution
         if( sal_ValidDPI(nDPI) )
         {
@@ -597,8 +621,8 @@ void SalDisplay::Init()
         long xDPI = 96;
         long yDPI = 96;
         if (m_aScreens.size() == 1) {
-            xDPI = (long)round(DisplayWidth(pDisp_, 0)*25.4/DisplayWidthMM(pDisp_, 0));
-            yDPI = (long)round(DisplayHeight(pDisp_, 0)*25.4/DisplayHeightMM(pDisp_, 0));
+            xDPI = static_cast<long>(round(DisplayWidth(pDisp_, 0)*25.4/DisplayWidthMM(pDisp_, 0)));
+            yDPI = static_cast<long>(round(DisplayHeight(pDisp_, 0)*25.4/DisplayHeightMM(pDisp_, 0)));
             // if either is invalid set it equal to the other
             if (!sal_ValidDPI(xDPI) && sal_ValidDPI(yDPI))
                 xDPI = yDPI;
@@ -615,7 +639,7 @@ void SalDisplay::Init()
     if( !nMaxRequestSize_ )
         nMaxRequestSize_ = XMaxRequestSize( pDisp_ ) * 4;
 
-    SetServerVendor();
+    meServerVendor = sal_GetServerVendor(pDisp_);
     X11SalBitmap::ImplCreateCache();
 
     // - - - - - - - - - - Synchronize - - - - - - - - - - - - -
@@ -635,18 +659,16 @@ void SalDisplay::Init()
 #endif
 }
 
-void SalX11Display::SetupInput( SalI18N_InputMethod *pInputMethod )
+void SalX11Display::SetupInput()
 {
-    SetInputMethod( pInputMethod );
-
-    GetGenericData()->ErrorTrapPush();
+    GetGenericUnixSalData()->ErrorTrapPush();
     SalI18N_KeyboardExtension *pKbdExtension = new SalI18N_KeyboardExtension( pDisp_ );
     XSync( pDisp_, False );
 
-    bool bError = GetGenericData()->ErrorTrapPop( false );
-    GetGenericData()->ErrorTrapPush();
+    bool bError = GetGenericUnixSalData()->ErrorTrapPop( false );
+    GetGenericUnixSalData()->ErrorTrapPush();
     pKbdExtension->UseExtension( ! bError );
-    GetGenericData()->ErrorTrapPop();
+    GetGenericUnixSalData()->ErrorTrapPop();
 
     SetKbdExtension( pKbdExtension );
 }
@@ -719,11 +741,11 @@ KeyIndicatorState SalDisplay::GetIndicatorState() const
     KeyIndicatorState nState = KeyIndicatorState::NONE;
     XkbGetIndicatorState(pDisp_, XkbUseCoreKbd, &_state);
 
-    if ((_state & 0x00000001))
+    if (_state & 0x00000001)
         nState |= KeyIndicatorState::CAPSLOCK;
-    if ((_state & 0x00000002))
+    if (_state & 0x00000002)
         nState |= KeyIndicatorState::NUMLOCK;
-    if ((_state & 0x00000004))
+    if (_state & 0x00000004)
         nState |= KeyIndicatorState::SCROLLLOCK;
 
     return nState;
@@ -737,7 +759,8 @@ OUString SalDisplay::GetKeyNameFromKeySym( KeySym nKeySym ) const
     // return an empty string for keysyms that are not bound to
     // any key code
     KeyCode aKeyCode = XKeysymToKeycode( GetDisplay(), nKeySym );
-    if( aKeyCode != 0 && aKeyCode != NoSymbol )
+    static_assert(NoSymbol == 0, "X11 inconsistency");
+    if( aKeyCode != NoSymbol )
     {
         if( !nKeySym )
             aRet = "???";
@@ -763,8 +786,8 @@ OUString SalDisplay::GetKeyNameFromKeySym( KeySym nKeySym ) const
     return aRet;
 }
 
-inline KeySym sal_XModifier2Keysym( Display         *pDisplay,
-                                    XModifierKeymap *pXModMap,
+static KeySym sal_XModifier2Keysym( Display         *pDisplay,
+                                    XModifierKeymap const *pXModMap,
                                     int              n )
 {
     return XkbKeycodeToKeysym( pDisplay,
@@ -791,7 +814,6 @@ void SalDisplay::ModifierMapping()
             {
                 bNumLockFromXS_ = False;
                 nNumLockIndex_  = i;
-                nNumLockMask_   = 1<<i;
                 break;
             }
         }
@@ -880,6 +902,8 @@ OUString SalDisplay::GetKeyName( sal_uInt16 nKeyCode ) const
             break;
 
         #if !defined (SunXK_Undo)
+            // we don't intend to use SunXK_Undo, but if it has not been
+            // defined already, then we _do_ need the following:
             #define SunXK_Props     0x1005FF70
             #define SunXK_Front     0x1005FF71
             #define SunXK_Copy      0x1005FF72
@@ -887,6 +911,12 @@ OUString SalDisplay::GetKeyName( sal_uInt16 nKeyCode ) const
             #define SunXK_Paste     0x1005FF74
             #define SunXK_Cut       0x1005FF75
         #endif
+            // the following are for XF86 systems
+            #define XF86XK_Copy     0x1008FF57
+            #define XF86XK_Cut      0x1008FF58
+            #define XF86XK_Open     0x1008FF6B
+            #define XF86XK_Paste    0x1008FF6D
+            // which leaves Apollo and OSF systems in the lurch
 
         case KEY_REPEAT:
             nKeySym = XK_Redo;
@@ -901,19 +931,25 @@ OUString SalDisplay::GetKeyName( sal_uInt16 nKeyCode ) const
             nKeySym = SunXK_Front;
             break;
         case KEY_COPY:
-            nKeySym = SunXK_Copy;
+            nKeySym = GetServerVendor() == vendor_sun ? SunXK_Copy : XF86XK_Copy;
             break;
         case KEY_OPEN:
-            nKeySym = SunXK_Open;
+            nKeySym = GetServerVendor() == vendor_sun ? SunXK_Open : XF86XK_Open;
             break;
         case KEY_PASTE:
-            nKeySym = SunXK_Paste;
+            nKeySym = GetServerVendor() == vendor_sun ? SunXK_Paste : XF86XK_Paste;
             break;
         case KEY_FIND:
             nKeySym = XK_Find;
             break;
         case KEY_CUT:
+            nKeySym = GetServerVendor() == vendor_sun ? SunXK_Cut : XF86XK_Cut;
+            /* The original code here had:
             nKeySym = GetServerVendor() == vendor_sun ? SunXK_Cut   : XK_L10;
+            if anyone can remember which non-vendor_sun system used this
+            XK_L10 keysym, and why this hack only applied to KEY_CUT,
+            then please re-hack this code to put it back
+            */
             break;
         case KEY_ADD:
             aCustomKeyName = "+";
@@ -985,7 +1021,7 @@ OUString SalDisplay::GetKeyName( sal_uInt16 nKeyCode ) const
     }
     else if (!aCustomKeyName.isEmpty())
     {
-        // For semicolumn, bracket left and bracket right, it's better to use
+        // For semicolon, bracket left and bracket right, it's better to use
         // their keys than their names. (fdo#32891)
         if (!aStrMap.isEmpty())
             aStrMap += "+";
@@ -1006,22 +1042,22 @@ sal_uInt16 SalDisplay::GetKeyCode( KeySym keysym, char*pcPrintable ) const
     sal_uInt16 nKey = 0;
 
     if( XK_a <= keysym && XK_z >= keysym )
-        nKey = (sal_uInt16)(KEY_A + (keysym - XK_a));
+        nKey = static_cast<sal_uInt16>(KEY_A + (keysym - XK_a));
     else if( XK_A <= keysym && XK_Z >= keysym )
-        nKey = (sal_uInt16)(KEY_A + (keysym - XK_A));
+        nKey = static_cast<sal_uInt16>(KEY_A + (keysym - XK_A));
     else if( XK_0 <= keysym && XK_9 >= keysym )
-        nKey = (sal_uInt16)(KEY_0 + (keysym - XK_0));
+        nKey = static_cast<sal_uInt16>(KEY_0 + (keysym - XK_0));
     else if( IsModifierKey( keysym ) )
         ;
     else if( IsKeypadKey( keysym ) )
     {
         if( (keysym >= XK_KP_0) && (keysym <= XK_KP_9) )
         {
-            nKey = (sal_uInt16)(KEY_0 + (keysym - XK_KP_0));
+            nKey = static_cast<sal_uInt16>(KEY_0 + (keysym - XK_KP_0));
             *pcPrintable = '0' + nKey - KEY_0;
         }
         else if( IsPFKey( keysym ) )
-            nKey = (sal_uInt16)(KEY_F1 + (keysym - XK_KP_F1));
+            nKey = static_cast<sal_uInt16>(KEY_F1 + (keysym - XK_KP_F1));
         else switch( keysym )
         {
             case XK_KP_Space:
@@ -1100,7 +1136,7 @@ sal_uInt16 SalDisplay::GetKeyCode( KeySym keysym, char*pcPrintable ) const
         if( bNumLockFromXS_ )
         {
             if( keysym >= XK_F1 && keysym <= XK_F26 )
-                nKey = (sal_uInt16)(KEY_F1 + keysym - XK_F1);
+                nKey = static_cast<sal_uInt16>(KEY_F1 + keysym - XK_F1);
         }
         else switch( keysym )
         {
@@ -1135,7 +1171,7 @@ sal_uInt16 SalDisplay::GetKeyCode( KeySym keysym, char*pcPrintable ) const
             // - - - - - Sun X-Server keyboard ??? - - - - - - - - - - - -
             case XK_L1: // XK_F11:
                 nKey = KEY_F11; // on a sun keyboard this actually is usually SunXK_Stop = 0x0000FF69 (XK_Cancel),
-                // but VCL doesn't have a key definition for that
+                                // but VCL doesn't have a key definition for that
                 break;
             case XK_L2: // XK_F12:
                 if ( GetServerVendor() == vendor_sun )
@@ -1169,7 +1205,7 @@ sal_uInt16 SalDisplay::GetKeyCode( KeySym keysym, char*pcPrintable ) const
                 break;
             default:
                 if( keysym >= XK_F1 && keysym <= XK_F26 )
-                    nKey = (sal_uInt16)(KEY_F1 + keysym - XK_F1);
+                    nKey = static_cast<sal_uInt16>(KEY_F1 + keysym - XK_F1);
                 break;
         }
     }
@@ -1392,7 +1428,7 @@ sal_uInt16 SalDisplay::GetKeyCode( KeySym keysym, char*pcPrintable ) const
 }
 
 KeySym SalDisplay::GetKeySym( XKeyEvent        *pEvent,
-                                    unsigned char    *pPrintable,
+                                    char             *pPrintable,
                                     int              *pLen,
                                     KeySym           *pUnmodifiedKeySym,
                                     Status           *pStatusReturn,
@@ -1402,24 +1438,27 @@ KeySym SalDisplay::GetKeySym( XKeyEvent        *pEvent,
     memset( pPrintable, 0, *pLen );
     *pStatusReturn = 0;
 
+    SalI18N_InputMethod* const pInputMethod =
+        ( pXLib_ ) ? pXLib_->GetInputMethod() : nullptr;
+
     // first get the printable of the possibly modified KeySym
     if (   (aInputContext == nullptr)
         || (pEvent->type == KeyRelease)
-        || (mpInputMethod != nullptr && mpInputMethod->PosixLocale()) )
+        || (pInputMethod != nullptr && pInputMethod->PosixLocale()) )
     {
         // XmbLookupString must not be called for KeyRelease events
         // Cannot enter space in c locale problem #89616# #88978# btraq #4478197
-        *pLen = XLookupString( pEvent, reinterpret_cast<char*>(pPrintable), 1, &nKeySym, nullptr );
+        *pLen = XLookupString( pEvent, pPrintable, 1, &nKeySym, nullptr );
     }
     else
     {
         *pLen = XmbLookupString( aInputContext,
-                        pEvent, reinterpret_cast<char*>(pPrintable), *pLen - 1, &nKeySym, pStatusReturn );
+                        pEvent, pPrintable, *pLen - 1, &nKeySym, pStatusReturn );
 
         // Lookup the string again, now with appropriate size
         if ( *pStatusReturn == XBufferOverflow )
         {
-            pPrintable[ 0 ] = (char)0;
+            pPrintable[ 0 ] = '\0';
             return 0;
         }
 
@@ -1440,7 +1479,7 @@ KeySym SalDisplay::GetKeySym( XKeyEvent        *pEvent,
                 if ( (XK_space <= nKeySym) && (XK_asciitilde >= nKeySym) )
                 {
                     *pLen = 1;
-                    pPrintable[ 0 ] = (char)nKeySym;
+                    pPrintable[ 0 ] = static_cast<char>(nKeySym);
                 }
                 break;
             case XLookupBoth:
@@ -1475,6 +1514,9 @@ KeySym SalDisplay::GetKeySym( XKeyEvent        *pEvent,
 }
 
 // Pointer
+static unsigned char nullmask_bits[] = { 0x00, 0x00, 0x00, 0x00 };
+static unsigned char nullcurs_bits[] = { 0x00, 0x00, 0x00, 0x00 };
+
 #define MAKE_BITMAP( name ) \
     XCreateBitmapFromData( pDisp_, \
                            DefaultRootWindow( pDisp_ ), \
@@ -1505,54 +1547,54 @@ Cursor SalDisplay::GetPointer( PointerStyle ePointerStyle )
             break;
         case PointerStyle::Arrow:
             aCur = XCreateFontCursor( pDisp_, XC_left_ptr );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::Wait:
             aCur = XCreateFontCursor( pDisp_, XC_watch );
             break;
         case PointerStyle::Text:          // Mouse Pointer is a "I" Beam
             aCur = XCreateFontCursor( pDisp_, XC_xterm );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::Help:
             aCur = XCreateFontCursor( pDisp_, XC_question_arrow );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::Cross:         // Mouse Pointer is a cross
             aCur = XCreateFontCursor( pDisp_, XC_crosshair );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::NSize:
             aCur = XCreateFontCursor( pDisp_, XC_sb_v_double_arrow );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::SSize:
             aCur = XCreateFontCursor( pDisp_, XC_sb_v_double_arrow );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::WSize:
             aCur = XCreateFontCursor( pDisp_, XC_sb_h_double_arrow );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::ESize:
             aCur = XCreateFontCursor( pDisp_, XC_sb_h_double_arrow );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::WindowNSize:
             aCur = XCreateFontCursor( pDisp_, XC_top_side );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::WindowSSize:
             aCur = XCreateFontCursor( pDisp_, XC_bottom_side );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::WindowWSize:
             aCur = XCreateFontCursor( pDisp_, XC_left_side );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::WindowESize:
             aCur = XCreateFontCursor( pDisp_, XC_right_side );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::NWSize:
             aCur = XCreateFontCursor( pDisp_, XC_top_left_corner );
@@ -1568,19 +1610,19 @@ Cursor SalDisplay::GetPointer( PointerStyle ePointerStyle )
             break;
         case PointerStyle::WindowNWSize:
             aCur = XCreateFontCursor( pDisp_, XC_top_left_corner );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::WindowNESize:
             aCur = XCreateFontCursor( pDisp_, XC_top_right_corner );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::WindowSWSize:
             aCur = XCreateFontCursor( pDisp_, XC_bottom_left_corner );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::WindowSESize:
             aCur = XCreateFontCursor( pDisp_, XC_bottom_right_corner );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::HSplit:
             aCur = XCreateFontCursor( pDisp_, XC_sb_h_double_arrow );
@@ -1590,15 +1632,15 @@ Cursor SalDisplay::GetPointer( PointerStyle ePointerStyle )
             break;
         case PointerStyle::HSizeBar:
             aCur = XCreateFontCursor( pDisp_, XC_sb_h_double_arrow ); // ???
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::VSizeBar:
             aCur = XCreateFontCursor( pDisp_, XC_sb_v_double_arrow ); // ???
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::RefHand:
             aCur = XCreateFontCursor( pDisp_, XC_hand1 );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::Hand:
             aCur = XCreateFontCursor( pDisp_, XC_hand2 );
@@ -1695,7 +1737,7 @@ Cursor SalDisplay::GetPointer( PointerStyle ePointerStyle )
             break;
         case PointerStyle::Pen:       // Mouse Pointer is a pencil
             aCur = XCreateFontCursor( pDisp_, XC_pencil );
-            DBG_ASSERT( aCur != None, "GetPointer: Could not define cursor" );
+            SAL_WARN_IF( aCur == None, "vcl", "GetPointer: Could not define cursor" );
             break;
         case PointerStyle::LinkData:
             MAKE_CURSOR( linkdata_ );
@@ -1739,12 +1781,6 @@ Cursor SalDisplay::GetPointer( PointerStyle ePointerStyle )
         case PointerStyle::ChainNotAllowed:
             MAKE_CURSOR( chainnot_ );
             break;
-        case PointerStyle::TimeEventMove:
-            MAKE_CURSOR( timemove_ );
-            break;
-        case PointerStyle::TimeEventSize:
-            MAKE_CURSOR( timesize_ );
-            break;
         case PointerStyle::AutoScrollN:
             MAKE_CURSOR(asn_ );
             break;
@@ -1778,9 +1814,6 @@ Cursor SalDisplay::GetPointer( PointerStyle ePointerStyle )
         case PointerStyle::AutoScrollNSWE:
             MAKE_CURSOR( asnswe_ );
             break;
-        case PointerStyle::Airbrush:
-            MAKE_CURSOR( airbrush_ );
-            break;
         case PointerStyle::TextVertical:
             MAKE_CURSOR( vertcurs_ );
             break;
@@ -1800,11 +1833,6 @@ Cursor SalDisplay::GetPointer( PointerStyle ePointerStyle )
             break;
         case PointerStyle::TabSelectSW:
             MAKE_CURSOR( tblselsw_ );
-            break;
-
-        // #i20119# Paintbrush tool
-        case PointerStyle::Paintbrush:
-            MAKE_CURSOR( paintbrush_ );
             break;
 
         case PointerStyle::HideWhitespace:
@@ -1860,7 +1888,7 @@ int SalDisplay::CaptureMouse( SalFrame *pCapture )
     if( !pEnv || !*pEnv )
     {
         int ret = XGrabPointer( GetDisplay(),
-                                (::Window)pEnvData->aWindow,
+                                static_cast<::Window>(pEnvData->aWindow),
                                 False,
                                 PointerMotionMask| ButtonPressMask|ButtonReleaseMask,
                                 GrabModeAsync,
@@ -1897,8 +1925,7 @@ void SalX11Display::Yield()
         return;
 
     XEvent aEvent;
-    DBG_ASSERT( static_cast<SalYieldMutex*>(GetSalData()->m_pInstance->GetYieldMutex())->GetThreadId() ==
-                osl::Thread::getCurrentIdentifier(),
+    DBG_ASSERT( GetSalData()->m_pInstance->GetYieldMutex()->IsCurrentThread(),
                 "will crash soon since solar mutex not locked in SalDisplay::Yield" );
 
     XNextEvent( pDisp_, &aEvent );
@@ -1918,29 +1945,29 @@ void SalX11Display::Yield()
 
 bool SalX11Display::Dispatch( XEvent *pEvent )
 {
-    if( pEvent->type == KeyPress || pEvent->type == KeyRelease )
-    {
-        ::Window aWindow = pEvent->xkey.window;
+    SalI18N_InputMethod* const pInputMethod =
+        ( pXLib_ ) ? pXLib_->GetInputMethod() : nullptr;
 
-        std::list< SalFrame* >::const_iterator it;
-        for( it = m_aFrames.begin(); it != m_aFrames.end(); ++it )
+    if( pInputMethod )
+    {
+        ::Window aFrameWindow = None;
+        if( pEvent->type == KeyPress || pEvent->type == KeyRelease )
         {
-            const X11SalFrame* pFrame = static_cast< const X11SalFrame* >(*it);
-            if( pFrame->GetWindow() == aWindow || pFrame->GetShellWindow() == aWindow )
+            const ::Window aWindow = pEvent->xkey.window;
+            for( auto pSalFrame : m_aFrames )
             {
-                aWindow = pFrame->GetWindow();
-                break;
+                const X11SalFrame* pFrame = static_cast< const X11SalFrame* >( pSalFrame );
+                const ::Window aCurFrameWindow = pFrame->GetWindow();
+                if( aCurFrameWindow == aWindow || pFrame->GetShellWindow() == aWindow )
+                {
+                    aFrameWindow = aCurFrameWindow;
+                    break;
+                }
             }
         }
-        if( it != m_aFrames.end() )
-        {
-            if ( mpInputMethod->FilterEvent( pEvent , aWindow ) )
-                return false;
-        }
-    }
-    else
-        if ( mpInputMethod->FilterEvent( pEvent, None ) )
+        if( pInputMethod->FilterEvent( pEvent, aFrameWindow ) )
             return false;
+    }
 
     SalInstance* pInstance = GetSalData()->m_pInstance;
     pInstance->CallEventCallback( pEvent, sizeof( XEvent ) );
@@ -1958,13 +1985,12 @@ bool SalX11Display::Dispatch( XEvent *pEvent )
         case PropertyNotify:
             if( pEvent->xproperty.atom == getWMAdaptor()->getAtom( WMAdaptor::VCL_SYSTEM_SETTINGS ) )
             {
-                for( size_t i = 0; i < m_aScreens.size(); i++ )
+                for(ScreenData & rScreen : m_aScreens)
                 {
-                    if( pEvent->xproperty.window == m_aScreens[i].m_aRefWindow )
+                    if( pEvent->xproperty.window == rScreen.m_aRefWindow )
                     {
-                        std::list< SalFrame* >::const_iterator it;
-                        for( it = m_aFrames.begin(); it != m_aFrames.end(); ++it )
-                            (*it)->CallCallback( SALEVENT_SETTINGSCHANGED, nullptr );
+                        for (auto pSalFrame : m_aFrames )
+                             pSalFrame->CallCallback( SalEvent::SettingsChanged, nullptr );
                         return false;
                     }
                 }
@@ -1996,10 +2022,10 @@ bool SalX11Display::Dispatch( XEvent *pEvent )
             break;
     }
 
-    std::list< SalFrame* >::iterator it;
-    for( it = m_aFrames.begin(); it != m_aFrames.end(); ++it )
+    for (auto pSalFrame : m_aFrames )
     {
-        X11SalFrame* pFrame = static_cast< X11SalFrame* >(*it);
+        X11SalFrame* pFrame = static_cast<X11SalFrame*>( pSalFrame );
+
         ::Window aDispatchWindow = pEvent->xany.window;
         if( pFrame->GetWindow() == aDispatchWindow
             || pFrame->GetShellWindow() == aDispatchWindow
@@ -2214,7 +2240,7 @@ void SalDisplay::PrintInfo() const
 
         char sHostname[ 120 ];
         gethostname (sHostname, 120 );
-        SAL_INFO( "vcl", "Client\n" );
+        SAL_INFO( "vcl", "Client" );
         SAL_INFO( "vcl", "\tHost              \t\"" << sHostname << "\"");
 
         SAL_INFO( "vcl", "Display" );
@@ -2225,7 +2251,7 @@ void SalDisplay::PrintInfo() const
         SAL_INFO( "vcl", "\tshift ctrl alt    \t" << KeyStr( nShiftKeySym_ ) << " (0x" << std::hex << sal::static_int_cast< unsigned int >(nShiftKeySym_) << ") "
                 << KeyStr( nCtrlKeySym_ ) << " (0x" << sal::static_int_cast< unsigned int >(nCtrlKeySym_) << ") "
                 << KeyStr( nMod1KeySym_ ) << " (0x" << sal::static_int_cast< unsigned int >(nMod1KeySym_) << ")");
-        if( XExtendedMaxRequestSize(pDisp_) * 4 )
+        if( XExtendedMaxRequestSize(pDisp_) != 0 )
             SAL_INFO( "vcl", "\tXMaxRequestSize   \t" << XMaxRequestSize(pDisp_) * 4 << " " << XExtendedMaxRequestSize(pDisp_) * 4 << " [bytes]");
         SAL_INFO( "vcl", "\tWMName            \t" << getWMAdaptor()->getWindowManagerName() );
     }
@@ -2263,7 +2289,7 @@ void SalDisplay::addXineramaScreenUnique( int i, long i_nX, long i_nY, long i_nW
         }
     }
     m_aXineramaScreenIndexMap[i] = m_aXineramaScreens.size();
-    m_aXineramaScreens.push_back( Rectangle( Point( i_nX, i_nY ), Size( i_nWidth, i_nHeight ) ) );
+    m_aXineramaScreens.emplace_back( Point( i_nX, i_nY ), Size( i_nWidth, i_nHeight ) );
 }
 
 void SalDisplay::InitXinerama()
@@ -2282,7 +2308,7 @@ void SalDisplay::InitXinerama()
         {
             if( nFramebuffers > 1 )
             {
-                m_aXineramaScreens = std::vector<Rectangle>();
+                m_aXineramaScreens = std::vector<tools::Rectangle>();
                 m_aXineramaScreenIndexMap = std::vector<int>(nFramebuffers);
                 for( int i = 0; i < nFramebuffers; i++ )
                 {
@@ -2300,8 +2326,8 @@ void SalDisplay::InitXinerama()
 #if OSL_DEBUG_LEVEL > 1
     if( m_bXinerama )
     {
-        for( std::vector< Rectangle >::const_iterator it = m_aXineramaScreens.begin(); it != m_aXineramaScreens.end(); ++it )
-            fprintf( stderr, "Xinerama screen: %ldx%ld+%ld+%ld\n", it->GetWidth(), it->GetHeight(), it->Left(), it->Top() );
+        for (auto const& screen : m_aXineramaScreens)
+            fprintf( stderr, "Xinerama screen: %ldx%ld+%ld+%ld\n", screen.GetWidth(), screen.GetHeight(), screen.Left(), screen.Top() );
     }
 #endif
 }
@@ -2321,7 +2347,7 @@ extern "C"
     }
 }
 
-Time SalDisplay::GetLastUserEventTime( bool i_bAlwaysReget ) const
+Time SalDisplay::GetEventTimeImpl( bool i_bAlwaysReget ) const
 {
     if( m_nLastUserEventTime == CurrentTime || i_bAlwaysReget )
     {
@@ -2340,7 +2366,6 @@ Time SalDisplay::GetLastUserEventTime( bool i_bAlwaysReget ) const
 bool SalDisplay::XIfEventWithTimeout( XEvent* o_pEvent, XPointer i_pPredicateData,
                                       X_if_predicate i_pPredicate ) const
 {
-    long nTimeout = 1000;
     /* #i99360# ugly workaround an X11 library bug
        this replaces the following call:
        XIfEvent( GetDisplay(), o_pEvent, i_pPredicate, i_pPredicateData );
@@ -2354,6 +2379,7 @@ bool SalDisplay::XIfEventWithTimeout( XEvent* o_pEvent, XPointer i_pPredicateDat
         aFD.fd = ConnectionNumber(GetDisplay());
         aFD.events = POLLIN;
         aFD.revents = 0;
+        long nTimeout = 1000;
         (void)poll(&aFD, 1, nTimeout);
         if( ! XCheckIfEvent( GetDisplay(), o_pEvent, i_pPredicate, i_pPredicateData ) )
         {
@@ -2367,10 +2393,10 @@ bool SalDisplay::XIfEventWithTimeout( XEvent* o_pEvent, XPointer i_pPredicateDat
     return bRet;
 }
 
-SalVisual::SalVisual()
-{
-    memset( this, 0, sizeof( SalVisual ) );
-}
+SalVisual::SalVisual():
+    eRGBMode_(SalRGB::RGB), nRedShift_(0), nGreenShift_(0), nBlueShift_(0), nRedBits_(0), nGreenBits_(0),
+    nBlueBits_(0)
+{}
 
 SalVisual::SalVisual( const XVisualInfo* pXVI )
 {
@@ -2389,69 +2415,64 @@ SalVisual::SalVisual( const XVisualInfo* pXVI )
             if( red_mask == 0xFF0000 )
                 if( green_mask == 0xFF00 )
                     if( blue_mask  == 0xFF )
-                        eRGBMode_ = RGB;
+                        eRGBMode_ = SalRGB::RGB;
                     else
-                        eRGBMode_ = otherSalRGB;
+                        eRGBMode_ = SalRGB::otherSalRGB;
                 else if( blue_mask  == 0xFF00 )
                     if( green_mask == 0xFF )
-                        eRGBMode_ = RBG;
+                        eRGBMode_ = SalRGB::RBG;
                     else
-                        eRGBMode_ = otherSalRGB;
+                        eRGBMode_ = SalRGB::otherSalRGB;
                 else
-                    eRGBMode_ = otherSalRGB;
+                    eRGBMode_ = SalRGB::otherSalRGB;
             else if( green_mask == 0xFF0000 )
                 if( red_mask == 0xFF00 )
                     if( blue_mask  == 0xFF )
-                        eRGBMode_ = GRB;
+                        eRGBMode_ = SalRGB::GRB;
                     else
-                        eRGBMode_ = otherSalRGB;
+                        eRGBMode_ = SalRGB::otherSalRGB;
                 else if( blue_mask == 0xFF00 )
                     if( red_mask  == 0xFF )
-                        eRGBMode_ = GBR;
+                        eRGBMode_ = SalRGB::GBR;
                     else
-                        eRGBMode_ = otherSalRGB;
+                        eRGBMode_ = SalRGB::otherSalRGB;
                 else
-                    eRGBMode_ = otherSalRGB;
+                    eRGBMode_ = SalRGB::otherSalRGB;
             else if( blue_mask == 0xFF0000 )
                 if( red_mask == 0xFF00 )
                     if( green_mask  == 0xFF )
-                        eRGBMode_ = BRG;
+                        eRGBMode_ = SalRGB::BRG;
                     else
-                        eRGBMode_ = otherSalRGB;
+                        eRGBMode_ = SalRGB::otherSalRGB;
                 else if( green_mask == 0xFF00 )
                     if( red_mask == 0xFF )
-                        eRGBMode_ = BGR;
+                        eRGBMode_ = SalRGB::BGR;
                     else
-                        eRGBMode_ = otherSalRGB;
+                        eRGBMode_ = SalRGB::otherSalRGB;
                 else
-                    eRGBMode_ = otherSalRGB;
+                    eRGBMode_ = SalRGB::otherSalRGB;
             else
-                eRGBMode_ = otherSalRGB;
+                eRGBMode_ = SalRGB::otherSalRGB;
         else
-            eRGBMode_ = otherSalRGB;
+            eRGBMode_ = SalRGB::otherSalRGB;
     }
 }
 
-SalVisual::~SalVisual()
-{
-    if( -1 == screen && VisualID(-1) == visualid ) delete visual;
-}
-
-// Converts the order of bytes of a Pixel into bytes of a SalColor
+// Converts the order of bytes of a Pixel into bytes of a Color
 // This is not reversible for the 6 XXXA
 
-// SalColor is RGB (ABGR) a=0xFF000000, r=0xFF0000, g=0xFF00, b=0xFF
+// Color is RGB (ABGR) a=0xFF000000, r=0xFF0000, g=0xFF00, b=0xFF
 
-#define SALCOLOR        RGB
-#define SALCOLORREVERSE BGR
+#define SALCOLOR        SalRGB::RGB
+#define SALCOLORREVERSE SalRGB::BGR
 
-SalColor SalVisual::GetTCColor( Pixel nPixel ) const
+Color SalVisual::GetTCColor( Pixel nPixel ) const
 {
     if( SALCOLOR == eRGBMode_ )
-        return (SalColor)nPixel;
+        return static_cast<Color>(nPixel);
 
     if( SALCOLORREVERSE == eRGBMode_ )
-        return MAKE_SALCOLOR( (nPixel & 0x0000FF),
+        return Color( (nPixel & 0x0000FF),
                               (nPixel & 0x00FF00) >>  8,
                               (nPixel & 0xFF0000) >> 16);
 
@@ -2459,8 +2480,8 @@ SalColor SalVisual::GetTCColor( Pixel nPixel ) const
     Pixel g = nPixel & green_mask;
     Pixel b = nPixel & blue_mask;
 
-    if( otherSalRGB != eRGBMode_ ) // 8+8+8=24
-        return MAKE_SALCOLOR( r >> nRedShift_,
+    if( SalRGB::otherSalRGB != eRGBMode_ ) // 8+8+8=24
+        return Color( r >> nRedShift_,
                               g >> nGreenShift_,
                               b >> nBlueShift_ );
 
@@ -2475,22 +2496,22 @@ SalColor SalVisual::GetTCColor( Pixel nPixel ) const
     if( nBlueBits_ != 8 )
         b |= (b & 0xff) >> (8-nBlueBits_);
 
-    return MAKE_SALCOLOR( r, g, b );
+    return Color( r, g, b );
 }
 
-Pixel SalVisual::GetTCPixel( SalColor nSalColor ) const
+Pixel SalVisual::GetTCPixel( Color nColor ) const
 {
     if( SALCOLOR == eRGBMode_ )
-        return (Pixel)nSalColor;
+        return static_cast<Pixel>(sal_uInt32(nColor));
 
-    Pixel r = (Pixel)SALCOLOR_RED( nSalColor );
-    Pixel g = (Pixel)SALCOLOR_GREEN( nSalColor );
-    Pixel b = (Pixel)SALCOLOR_BLUE( nSalColor );
+    Pixel r = static_cast<Pixel>( nColor.GetRed() );
+    Pixel g = static_cast<Pixel>( nColor.GetGreen() );
+    Pixel b = static_cast<Pixel>( nColor.GetBlue() );
 
     if( SALCOLORREVERSE == eRGBMode_ )
-        return (b << 16) | (g << 8) | (r);
+        return (b << 16) | (g << 8) | r;
 
-    if( otherSalRGB != eRGBMode_ ) // 8+8+8=24
+    if( SalRGB::otherSalRGB != eRGBMode_ ) // 8+8+8=24
         return (r << nRedShift_) | (g << nGreenShift_) | (b << nBlueShift_);
 
     if( nRedShift_ > 0 )   r <<= nRedShift_;   else r >>= -nRedShift_;
@@ -2518,76 +2539,77 @@ SalColormap::SalColormap( const SalDisplay *pDisplay, Colormap hColormap,
 
     m_nUsed = 1 << m_aVisual.GetDepth();
 
-    if( m_aVisual.GetClass() == PseudoColor )
-    {
-        int r, g, b;
+    if( m_aVisual.GetClass() != PseudoColor )
+        return;
 
-        // black, white, gray, ~gray = 4
-        GetXPixels( aColor, 0xC0, 0xC0, 0xC0 );
+    int r, g, b;
 
-        // light colors: 3 * 2 = 6
+    // black, white, gray, ~gray = 4
+    GetXPixels( aColor, 0xC0, 0xC0, 0xC0 );
 
-        GetXPixels( aColor, 0x00, 0x00, 0xFF );
-        GetXPixels( aColor, 0x00, 0xFF, 0x00 );
-        GetXPixels( aColor, 0x00, 0xFF, 0xFF );
+    // light colors: 3 * 2 = 6
 
-        // standard colors: 7 * 2 = 14
-        GetXPixels( aColor, 0x00, 0x00, 0x80 );
-        GetXPixels( aColor, 0x00, 0x80, 0x00 );
-        GetXPixels( aColor, 0x00, 0x80, 0x80 );
-        GetXPixels( aColor, 0x80, 0x00, 0x00 );
-        GetXPixels( aColor, 0x80, 0x00, 0x80 );
-        GetXPixels( aColor, 0x80, 0x80, 0x00 );
-        GetXPixels( aColor, 0x80, 0x80, 0x80 );
-        GetXPixels( aColor, 0x00, 0xB8, 0xFF ); // Blue 7
+    GetXPixels( aColor, 0x00, 0x00, 0xFF );
+    GetXPixels( aColor, 0x00, 0xFF, 0x00 );
+    GetXPixels( aColor, 0x00, 0xFF, 0xFF );
 
-        // cube: 6*6*6 - 8 = 208
-        for( r = 0; r < 0x100; r += 0x33 ) // 0x33, 0x66, 0x99, 0xCC, 0xFF
-            for( g = 0; g < 0x100; g += 0x33 )
-                for( b = 0; b < 0x100; b += 0x33 )
-                    GetXPixels( aColor, r, g, b );
+    // standard colors: 7 * 2 = 14
+    GetXPixels( aColor, 0x00, 0x00, 0x80 );
+    GetXPixels( aColor, 0x00, 0x80, 0x00 );
+    GetXPixels( aColor, 0x00, 0x80, 0x80 );
+    GetXPixels( aColor, 0x80, 0x00, 0x00 );
+    GetXPixels( aColor, 0x80, 0x00, 0x80 );
+    GetXPixels( aColor, 0x80, 0x80, 0x00 );
+    GetXPixels( aColor, 0x80, 0x80, 0x80 );
+    GetXPixels( aColor, 0x00, 0xB8, 0xFF ); // Blue 7
 
-        // gray: 16 - 6 = 10
-        for( g = 0x11; g < 0xFF; g += 0x11 )
-            GetXPixels( aColor, g, g, g );
+    // cube: 6*6*6 - 8 = 208
+    for( r = 0; r < 0x100; r += 0x33 ) // 0x33, 0x66, 0x99, 0xCC, 0xFF
+        for( g = 0; g < 0x100; g += 0x33 )
+            for( b = 0; b < 0x100; b += 0x33 )
+                GetXPixels( aColor, r, g, b );
 
-        // green: 16 - 6 = 10
-        for( g = 0x11; g < 0xFF; g += 0x11 )
-            GetXPixels( aColor, 0, g, 0 );
+    // gray: 16 - 6 = 10
+    for( g = 0x11; g < 0xFF; g += 0x11 )
+        GetXPixels( aColor, g, g, g );
 
-        // red: 16 - 6 = 10
-        for( r = 0x11; r < 0xFF; r += 0x11 )
-            GetXPixels( aColor, r, 0, 0 );
+    // green: 16 - 6 = 10
+    for( g = 0x11; g < 0xFF; g += 0x11 )
+        GetXPixels( aColor, 0, g, 0 );
 
-        // blue: 16 - 6 = 10
-        for( b = 0x11; b < 0xFF; b += 0x11 )
-            GetXPixels( aColor, 0, 0, b );
-    }
+    // red: 16 - 6 = 10
+    for( r = 0x11; r < 0xFF; r += 0x11 )
+        GetXPixels( aColor, r, 0, 0 );
+
+    // blue: 16 - 6 = 10
+    for( b = 0x11; b < 0xFF; b += 0x11 )
+        GetXPixels( aColor, 0, 0, b );
+
 }
 
 // MonoChrome
 SalColormap::SalColormap()
-    : m_pDisplay( vcl_sal::getSalDisplay(GetGenericData()) ),
+    : m_pDisplay( vcl_sal::getSalDisplay(GetGenericUnixSalData()) ),
       m_hColormap( None ),
       m_nWhitePixel( 1 ),
       m_nBlackPixel( 0 ),
       m_nUsed( 2 ),
       m_nXScreen( m_pDisplay != nullptr ? m_pDisplay->GetDefaultXScreen() : SalX11Screen( 0 ) )
 {
-    m_aPalette = std::vector<SalColor>(m_nUsed);
+    m_aPalette = std::vector<Color>(m_nUsed);
 
-    m_aPalette[m_nBlackPixel] = SALCOLOR_BLACK;
-    m_aPalette[m_nWhitePixel] = SALCOLOR_WHITE;
+    m_aPalette[m_nBlackPixel] = COL_BLACK;
+    m_aPalette[m_nWhitePixel] = COL_WHITE;
 }
 
 // TrueColor
 SalColormap::SalColormap( sal_uInt16 nDepth )
-    : m_pDisplay( vcl_sal::getSalDisplay(GetGenericData()) ),
+    : m_pDisplay( vcl_sal::getSalDisplay(GetGenericUnixSalData()) ),
       m_hColormap( None ),
       m_nWhitePixel( (1 << nDepth) - 1 ),
       m_nBlackPixel( 0x00000000 ),
       m_nUsed( 1 << nDepth ),
-      m_nXScreen( vcl_sal::getSalDisplay(GetGenericData())->GetDefaultXScreen() )
+      m_nXScreen( vcl_sal::getSalDisplay(GetGenericUnixSalData())->GetDefaultXScreen() )
 {
     const SalVisual *pVisual = &m_pDisplay->GetVisual( m_nXScreen );
 
@@ -2603,9 +2625,9 @@ SalColormap::SalColormap( sal_uInt16 nDepth )
                                TrueColor,
                                &aVI ) )
         {
-            aVI.visual          = new Visual();
-            aVI.visualid        = (VisualID)0; // beware of temporary destructor below
-            aVI.screen          = 0;
+            aVI.visual          = new Visual;
+            aVI.visualid        = VisualID(-1);
+            aVI.screen          = -1;
             aVI.depth           = nDepth;
             aVI.c_class         = TrueColor;
             if( 24 == nDepth ) // 888
@@ -2657,10 +2679,7 @@ SalColormap::SalColormap( sal_uInt16 nDepth )
             aVI.visual->map_entries     = aVI.colormap_size;
 
             m_aVisual = SalVisual( &aVI );
-            // give ownership of constructed Visual() to m_aVisual
-            // see SalVisual destructor
-            m_aVisual.visualid        = (VisualID)-1;
-            m_aVisual.screen          = -1;
+            m_aVisualOwnership.owner = true;
         }
         else
             m_aVisual = SalVisual( &aVI );
@@ -2669,16 +2688,16 @@ SalColormap::SalColormap( sal_uInt16 nDepth )
 
 SalColormap::~SalColormap()
 {
-#ifdef DBG_UTIL
-    m_hColormap      = None;
-    m_pDisplay       = nullptr;
-#endif
+    if (m_aVisualOwnership.owner)
+    {
+        delete m_aVisual.visual;
+    }
 }
 
 void SalColormap::GetPalette()
 {
     Pixel i;
-    m_aPalette = std::vector<SalColor>(m_nUsed);
+    m_aPalette = std::vector<Color>(m_nUsed);
 
     std::unique_ptr<XColor[]> aColor(new XColor[m_nUsed]);
 
@@ -2692,13 +2711,13 @@ void SalColormap::GetPalette()
 
     for( i = 0; i < m_nUsed; i++ )
     {
-        m_aPalette[i] = MAKE_SALCOLOR( aColor[i].red   >> 8,
+        m_aPalette[i] = Color( aColor[i].red   >> 8,
                                        aColor[i].green >> 8,
                                        aColor[i].blue  >> 8 );
     }
 }
 
-static sal_uInt16 sal_Lookup( const std::vector<SalColor>& rPalette,
+static sal_uInt16 sal_Lookup( const std::vector<Color>& rPalette,
                                 int r, int g, int b,
                                 Pixel nUsed )
 {
@@ -2732,10 +2751,10 @@ void SalColormap::GetLookupTable()
                 m_aLookupTable[i++] = sal_Lookup( m_aPalette, r, g, b, m_nUsed );
 }
 
-SalColor SalColormap::GetColor( Pixel nPixel ) const
+Color SalColormap::GetColor( Pixel nPixel ) const
 {
-    if( m_nBlackPixel == nPixel ) return SALCOLOR_BLACK;
-    if( m_nWhitePixel == nPixel ) return SALCOLOR_WHITE;
+    if( m_nBlackPixel == nPixel ) return COL_BLACK;
+    if( m_nWhitePixel == nPixel ) return COL_WHITE;
 
     if( m_aVisual.GetVisual() )
     {
@@ -2765,7 +2784,7 @@ SalColor SalColormap::GetColor( Pixel nPixel ) const
 
     XQueryColor( m_pDisplay->GetDisplay(), m_hColormap, &aColor );
 
-    return MAKE_SALCOLOR( aColor.red>>8, aColor.green>>8, aColor.blue>>8 );
+    return Color( aColor.red>>8, aColor.green>>8, aColor.blue>>8 );
 }
 
 inline bool SalColormap::GetXPixel( XColor &rColor,
@@ -2791,14 +2810,14 @@ bool SalColormap::GetXPixels( XColor &rColor,
     return GetXPixel( rColor, r^0xFF, g^0xFF, b^0xFF );
 }
 
-Pixel SalColormap::GetPixel( SalColor nSalColor ) const
+Pixel SalColormap::GetPixel( Color nColor ) const
 {
-    if( SALCOLOR_NONE == nSalColor )  return 0;
-    if( SALCOLOR_BLACK == nSalColor ) return m_nBlackPixel;
-    if( SALCOLOR_WHITE == nSalColor ) return m_nWhitePixel;
+    if( SALCOLOR_NONE == nColor )  return 0;
+    if( COL_BLACK == nColor ) return m_nBlackPixel;
+    if( COL_WHITE == nColor ) return m_nWhitePixel;
 
     if( m_aVisual.GetClass() == TrueColor )
-        return m_aVisual.GetTCPixel( nSalColor );
+        return m_aVisual.GetTCPixel( nColor );
 
     if( m_aLookupTable.empty() )
     {
@@ -2810,7 +2829,7 @@ Pixel SalColormap::GetPixel( SalColor nSalColor ) const
 
         if( !m_aPalette.empty() )
             for( Pixel i = 0; i < m_nUsed; i++ )
-                if( m_aPalette[i] == nSalColor )
+                if( m_aPalette[i] == nColor )
                     return i;
 
         if( m_hColormap )
@@ -2819,32 +2838,32 @@ Pixel SalColormap::GetPixel( SalColor nSalColor ) const
             XColor aColor;
 
             if( GetXPixel( aColor,
-                           SALCOLOR_RED  ( nSalColor ),
-                           SALCOLOR_GREEN( nSalColor ),
-                           SALCOLOR_BLUE ( nSalColor ) ) )
+                            nColor.GetRed(),
+                            nColor.GetGreen(),
+                            nColor.GetBlue() ) )
             {
-                if( !m_aPalette.empty() && !m_aPalette[aColor.pixel] )
+                if( !m_aPalette.empty() && m_aPalette[aColor.pixel] == Color(0) )
                 {
-                    const_cast<SalColormap*>(this)->m_aPalette[aColor.pixel] = nSalColor;
+                    const_cast<SalColormap*>(this)->m_aPalette[aColor.pixel] = nColor;
 
-                    if( !(aColor.pixel & 1) && !m_aPalette[aColor.pixel+1] )
+                    if( !(aColor.pixel & 1) && m_aPalette[aColor.pixel+1] == Color(0) )
                     {
                         XColor aInversColor;
 
-                        SalColor nInversColor = nSalColor ^ 0xFFFFFF;
+                        Color nInversColor = sal_uInt32(nColor) ^ 0xFFFFFF;
 
                         GetXPixel( aInversColor,
-                                   SALCOLOR_RED  ( nInversColor ),
-                                   SALCOLOR_GREEN( nInversColor ),
-                                   SALCOLOR_BLUE ( nInversColor ) );
+                                   nInversColor.GetRed(),
+                                   nInversColor.GetGreen(),
+                                   nInversColor.GetBlue() );
 
-                        if( !m_aPalette[aInversColor.pixel] )
+                        if( m_aPalette[aInversColor.pixel] == Color(0) )
                             const_cast<SalColormap*>(this)->m_aPalette[aInversColor.pixel] = nInversColor;
 #ifdef DBG_UTIL
                         else
                             fprintf( stderr, "SalColormap::GetPixel() 0x%06lx=%lu 0x%06lx=%lu\n",
-                                     static_cast< unsigned long >(nSalColor), aColor.pixel,
-                                     static_cast< unsigned long >(nInversColor), aInversColor.pixel);
+                                     static_cast< unsigned long >(sal_uInt32(nColor)), aColor.pixel,
+                                     static_cast< unsigned long >(sal_uInt32(nInversColor)), aInversColor.pixel);
 #endif
                     }
                 }
@@ -2854,7 +2873,7 @@ Pixel SalColormap::GetPixel( SalColor nSalColor ) const
 
 #ifdef DBG_UTIL
             fprintf( stderr, "SalColormap::GetPixel() !XAllocColor %lx\n",
-                     static_cast< unsigned long >(nSalColor) );
+                     static_cast< unsigned long >(sal_uInt32(nColor)) );
 #endif
         }
 
@@ -2862,18 +2881,18 @@ Pixel SalColormap::GetPixel( SalColor nSalColor ) const
         {
 #ifdef DBG_UTIL
             fprintf( stderr, "SalColormap::GetPixel() Palette empty %lx\n",
-                     static_cast< unsigned long >(nSalColor));
+                     static_cast< unsigned long >(sal_uInt32(nColor)));
 #endif
-            return nSalColor;
+            return sal_uInt32(nColor);
         }
 
         const_cast<SalColormap*>(this)->GetLookupTable();
     }
 
-    // Colormatching ueber Palette
-    sal_uInt16 r = SALCOLOR_RED  ( nSalColor );
-    sal_uInt16 g = SALCOLOR_GREEN( nSalColor );
-    sal_uInt16 b = SALCOLOR_BLUE ( nSalColor );
+    // color matching via palette
+    sal_uInt16 r = nColor.GetRed();
+    sal_uInt16 g = nColor.GetGreen();
+    sal_uInt16 b = nColor.GetBlue();
     return m_aLookupTable[ (((r+8)/17) << 8)
                          + (((g+8)/17) << 4)
                          +  ((b+8)/17) ];

@@ -19,9 +19,10 @@
 
 #include <com/sun/star/text/WritingMode.hpp>
 #include <com/sun/star/drawing/TextHorizontalAdjust.hpp>
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "drawingml/textbodyproperties.hxx"
-#include "oox/token/tokens.hxx"
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <drawingml/textbodyproperties.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::com::sun::star::drawing;
 using namespace ::com::sun::star::text;
@@ -32,6 +33,7 @@ namespace drawingml {
 TextBodyProperties::TextBodyProperties()
     : mbAnchorCtr(false)
     , meVA( TextVerticalAdjust_TOP )
+    , msPrst()
 {
 }
 
@@ -61,14 +63,14 @@ void TextBodyProperties::pushVertSimulation()
 void TextBodyProperties::pushRotationAdjustments()
 {
     sal_Int32 nOff      = 0;
-    sal_Int32 aProps[]  = { PROP_TextLeftDistance, PROP_TextUpperDistance, PROP_TextRightDistance, PROP_TextLowerDistance };
-    sal_Int32 n         = ( sal_Int32 )( sizeof( aProps ) / sizeof( sal_Int32 ) );
+    static sal_Int32 const aProps[] { PROP_TextLeftDistance, PROP_TextUpperDistance, PROP_TextRightDistance, PROP_TextLowerDistance };
+    sal_Int32 n         = SAL_N_ELEMENTS( aProps );
 
     switch( moRotation.get(0) )
     {
-        case (90*1*60000): nOff = 3; break;
-        case (90*2*60000): nOff = 2; break;
-        case (90*3*60000): nOff = 1; break;
+        case 90*1*60000: nOff = 3; break;
+        case 90*2*60000: nOff = 2; break;
+        case 90*3*60000: nOff = 1; break;
         default: break;
     }
 
@@ -88,7 +90,7 @@ void TextBodyProperties::pushRotationAdjustments()
         if( moInsets[i] )
             maPropertyMap.setProperty( aProps[ nOff ], static_cast< sal_Int32 >( *moInsets[i] + nVal ));
         else if( nVal )
-            maPropertyMap.setProperty( aProps[ nOff ], static_cast< sal_Int32 >( nVal ));
+            maPropertyMap.setProperty( aProps[ nOff ], nVal );
 
         nOff = (nOff+1) % n;
     }

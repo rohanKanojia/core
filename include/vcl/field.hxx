@@ -20,6 +20,7 @@
 #ifndef INCLUDED_VCL_FIELD_HXX
 #define INCLUDED_VCL_FIELD_HXX
 
+#include <memory>
 #include <vcl/dllapi.h>
 #include <tools/link.hxx>
 #include <tools/date.hxx>
@@ -39,30 +40,29 @@ class VCL_DLLPUBLIC FormatterBase
 {
 private:
     VclPtr<Edit>            mpField;
-    LocaleDataWrapper*      mpLocaleDataWrapper;
+    std::unique_ptr<LocaleDataWrapper>
+                            mpLocaleDataWrapper;
     bool                    mbReformat;
     bool                    mbStrictFormat;
     bool                    mbEmptyFieldValue;
     bool                    mbEmptyFieldValueEnabled;
-    bool                    mbDefaultLocale;
 
 protected:
-    SAL_DLLPRIVATE void     ImplSetText( const OUString& rText, Selection* pNewSel = nullptr );
+    SAL_DLLPRIVATE void     ImplSetText( const OUString& rText, Selection const * pNewSel = nullptr );
     SAL_DLLPRIVATE bool     ImplGetEmptyFieldValue() const  { return mbEmptyFieldValue; }
 
     void                    SetEmptyFieldValueData( bool bValue ) { mbEmptyFieldValue = bValue; }
 
     SAL_DLLPRIVATE LocaleDataWrapper& ImplGetLocaleDataWrapper() const;
-    bool                    IsDefaultLocale() const { return mbDefaultLocale; }
+
+    Edit*                   GetField() const            { return mpField; }
+    void                    ClearField() { mpField.clear(); }
 
 public:
-    explicit                FormatterBase( Edit* pField = nullptr );
+    explicit                FormatterBase(Edit* pField);
     virtual                 ~FormatterBase();
 
     const LocaleDataWrapper& GetLocaleDataWrapper() const;
-
-    void                    SetField( Edit* pField )    { mpField = pField; }
-    Edit*                   GetField() const            { return mpField; }
 
     bool                    MustBeReformatted() const   { return mbReformat; }
     void                    MarkToBeReformatted( bool b ) { mbReformat = b; }
@@ -73,11 +73,8 @@ public:
     virtual void            Reformat();
     virtual void            ReformatAll();
 
-    virtual void            SetLocale( const css::lang::Locale& rLocale );
     const css::lang::Locale& GetLocale() const;
     const LanguageTag&      GetLanguageTag() const;
-
-    const AllSettings&      GetFieldSettings() const;
 
     void                    SetEmptyFieldValue();
     bool                    IsEmptyFieldValue() const;
@@ -86,8 +83,7 @@ public:
     bool                    IsEmptyFieldValueEnabled() const        { return mbEmptyFieldValueEnabled; }
 };
 
-
-#define PATTERN_FORMAT_EMPTYLITERALS    ((sal_uInt16)0x0001)
+#define PATTERN_FORMAT_EMPTYLITERALS    (sal_uInt16(0x0001))
 
 class VCL_DLLPUBLIC PatternFormatter : public FormatterBase
 {
@@ -95,12 +91,11 @@ private:
     OString                m_aEditMask;
     OUString               maFieldString;
     OUString               maLiteralMask;
-    sal_uInt16             mnFormatFlags;
     bool                   mbSameMask;
-    bool               mbInPattKeyInput;
+    bool                   mbInPattKeyInput;
 
 protected:
-                            PatternFormatter();
+                            PatternFormatter(Edit* pEdit);
 
     SAL_DLLPRIVATE void ImplSetMask(const OString& rEditMask,
         const OUString& rLiteralMask);
@@ -108,15 +103,13 @@ protected:
     SAL_DLLPRIVATE bool&    ImplGetInPattKeyInput() { return mbInPattKeyInput; }
 
 public:
-    virtual                 ~PatternFormatter();
+    virtual                 ~PatternFormatter() override;
 
     virtual void            Reformat() override;
 
     void SetMask(const OString& rEditMask, const OUString& rLiteralMask );
     const OString& GetEditMask() const { return m_aEditMask; }
     const OUString&        GetLiteralMask() const  { return maLiteralMask; }
-
-    sal_uInt16              GetFormatFlags() const { return mnFormatFlags; }
 
     void                    SetString( const OUString& rStr );
     OUString                GetString() const;
@@ -125,42 +118,8 @@ public:
 
 class VCL_DLLPUBLIC NumericFormatter : public FormatterBase
 {
-private:
-    SAL_DLLPRIVATE void     ImplInit();
-
-protected:
-    sal_Int64               mnFieldValue;
-    sal_Int64               mnLastValue;
-    sal_Int64               mnMin;
-    sal_Int64               mnMax;
-    sal_Int64               mnCorrectedValue;
-    sal_uInt16                  mnType;
-    sal_uInt16                  mnDecimalDigits;
-    bool                    mbThousandSep;
-    bool                    mbShowTrailingZeros;
-    bool                    mbWrapOnLimits;
-
-    // the members below are used in all derivatives of NumericFormatter
-    // not in NumericFormatter itself.
-    sal_Int64               mnSpinSize;
-    sal_Int64               mnFirst;
-    sal_Int64               mnLast;
-
-protected:
-                            NumericFormatter();
-
-    void                    FieldUp();
-    void                    FieldDown();
-    void                    FieldFirst();
-    void                    FieldLast();
-
-    SAL_DLLPRIVATE void     ImplLoadRes( const ResId& rResId );
-    SAL_DLLPRIVATE bool ImplNumericReformat( const OUString& rStr, sal_Int64& rValue, OUString& rOutStr );
-    SAL_DLLPRIVATE void     ImplNewFieldValue( sal_Int64 nNewValue );
-    SAL_DLLPRIVATE void     ImplSetUserValue( sal_Int64 nNewValue, Selection* pNewSelection = nullptr );
-
 public:
-    virtual                 ~NumericFormatter();
+    virtual                 ~NumericFormatter() override;
 
     virtual void            Reformat() override;
 
@@ -187,38 +146,57 @@ public:
     void                    SetShowTrailingZeros( bool bShowTrailingZeros );
     bool                    IsShowTrailingZeros() const { return mbShowTrailingZeros; }
 
-
     void                    SetUserValue( sal_Int64 nNewValue );
     virtual void            SetValue( sal_Int64 nNewValue );
-    virtual sal_Int64       GetValue() const;
+    sal_Int64               GetValue() const;
     virtual OUString        CreateFieldText( sal_Int64 nValue ) const;
     bool                    IsValueModified() const;
 
     sal_Int64               Normalize( sal_Int64 nValue ) const;
     sal_Int64               Denormalize( sal_Int64 nValue ) const;
+
+protected:
+    sal_Int64               mnFieldValue;
+    sal_Int64               mnLastValue;
+    sal_Int64               mnMin;
+    sal_Int64               mnMax;
+    bool                    mbWrapOnLimits;
+    bool                    mbFormatting;
+
+    // the members below are used in all derivatives of NumericFormatter
+    // not in NumericFormatter itself.
+    sal_Int64               mnSpinSize;
+    sal_Int64               mnFirst;
+    sal_Int64               mnLast;
+
+                            NumericFormatter(Edit* pEdit);
+
+    void                    FieldUp();
+    void                    FieldDown();
+    void                    FieldFirst();
+    void                    FieldLast();
+    void                    FormatValue(Selection const * pNewSelection = nullptr);
+
+    SAL_DLLPRIVATE void     ImplNumericReformat();
+    SAL_DLLPRIVATE void     ImplNewFieldValue( sal_Int64 nNewValue );
+    SAL_DLLPRIVATE void     ImplSetUserValue( sal_Int64 nNewValue, Selection const * pNewSelection = nullptr );
+
+    virtual sal_Int64       GetValueFromString(const OUString& rStr) const;
+
+private:
+    SAL_DLLPRIVATE void     ImplInit();
+
+    sal_uInt16              mnDecimalDigits;
+    bool                    mbThousandSep;
+    bool                    mbShowTrailingZeros;
+
 };
 
 
 class VCL_DLLPUBLIC MetricFormatter : public NumericFormatter
 {
-private:
-    SAL_DLLPRIVATE  void    ImplInit();
-
-protected:
-    OUString                maCustomUnitText;
-    OUString                maCurUnitText;
-    sal_Int64               mnBaseValue;
-    FieldUnit               meUnit;
-    Link<MetricFormatter&,void> maCustomConvertLink;
-
-protected:
-                            MetricFormatter();
-
-    SAL_DLLPRIVATE void     ImplLoadRes( const ResId& rResId );
-    SAL_DLLPRIVATE bool     ImplMetricReformat( const OUString& rStr, double& rValue, OUString& rOutStr );
-
 public:
-    virtual                 ~MetricFormatter();
+    virtual                 ~MetricFormatter() override;
 
     virtual void            CustomConvert() = 0;
     virtual void            Reformat() override;
@@ -237,40 +215,56 @@ public:
     void                    SetMin( sal_Int64 nNewMin, FieldUnit eInUnit );
     using NumericFormatter::GetMin;
     sal_Int64               GetMin( FieldUnit eOutUnit ) const;
-    void                    SetBaseValue( sal_Int64 nNewBase, FieldUnit eInUnit = FUNIT_NONE );
+    void                    SetBaseValue( sal_Int64 nNewBase, FieldUnit eInUnit = FieldUnit::NONE );
     sal_Int64               GetBaseValue() const;
 
     virtual void            SetValue( sal_Int64 nNewValue, FieldUnit eInUnit );
     virtual void            SetValue( sal_Int64 nValue ) override;
     using NumericFormatter::SetUserValue;
     void                    SetUserValue( sal_Int64 nNewValue, FieldUnit eInUnit );
-    virtual sal_Int64       GetValue( FieldUnit eOutUnit ) const;
-    virtual sal_Int64       GetValue() const override;
+    using NumericFormatter::GetValue;
+    sal_Int64               GetValue( FieldUnit eOutUnit ) const;
     virtual OUString        CreateFieldText( sal_Int64 nValue ) const override;
     sal_Int64               GetCorrectedValue( FieldUnit eOutUnit ) const;
 
     void                    SetCustomConvertHdl( const Link<MetricFormatter&,void>& rLink ) { maCustomConvertLink = rLink; }
+
+    static FieldUnit        StringToMetric(const OUString &rMetricString);
+    static bool             TextToValue(const OUString& rStr, double& rValue, sal_Int64 nBaseValue, sal_uInt16 nDecDigits, const LocaleDataWrapper& rLocaleDataWrapper, FieldUnit eUnit);
+
+protected:
+    sal_Int64               mnBaseValue;
+    FieldUnit               meUnit;
+    Link<MetricFormatter&,void> maCustomConvertLink;
+
+                            MetricFormatter(Edit* pEdit);
+
+    SAL_DLLPRIVATE void     ImplMetricReformat( const OUString& rStr, double& rValue, OUString& rOutStr );
+
+    virtual sal_Int64       GetValueFromString(const OUString& rStr) const override;
+    virtual sal_Int64       GetValueFromStringUnit(const OUString& rStr, FieldUnit eOutUnit) const;
+
+private:
+    SAL_DLLPRIVATE  void    ImplInit();
+
+    OUString                maCustomUnitText;
+    OUString                maCurUnitText;
 };
 
 
 class VCL_DLLPUBLIC CurrencyFormatter : public NumericFormatter
 {
-private:
-    SAL_DLLPRIVATE void     ImplInit();
-
 protected:
-                            CurrencyFormatter();
-    SAL_DLLPRIVATE bool     ImplCurrencyReformat( const OUString& rStr, OUString& rOutStr );
+                            CurrencyFormatter(Edit* pEdit);
+    SAL_DLLPRIVATE void     ImplCurrencyReformat( const OUString& rStr, OUString& rOutStr );
+    virtual sal_Int64       GetValueFromString(const OUString& rStr) const override;
 
 public:
-    virtual                 ~CurrencyFormatter();
+    virtual                 ~CurrencyFormatter() override;
 
     virtual void            Reformat() override;
 
-    OUString                GetCurrencySymbol() const;
-
     virtual void            SetValue( sal_Int64 nNewValue ) override;
-    virtual sal_Int64       GetValue() const override;
     virtual OUString        CreateFieldText( sal_Int64 nValue ) const override;
 };
 
@@ -278,42 +272,36 @@ public:
 class VCL_DLLPUBLIC DateFormatter : public FormatterBase
 {
 private:
-    CalendarWrapper*        mpCalendarWrapper;
+    std::unique_ptr<CalendarWrapper> mpCalendarWrapper;
     Date                    maFieldDate;
     Date                    maLastDate;
     Date                    maMin;
     Date                    maMax;
     bool                    mbLongFormat;
     bool                    mbShowDateCentury;
-    sal_uInt16                  mnDateFormat;
-    sal_uLong                   mnExtDateFormat;
+    ExtDateFieldFormat      mnExtDateFormat;
     bool                    mbEnforceValidValue;
 
     SAL_DLLPRIVATE void     ImplInit();
 
 protected:
-                            DateFormatter();
+                            DateFormatter(Edit* pEdit);
 
     SAL_DLLPRIVATE const Date& ImplGetFieldDate() const    { return maFieldDate; }
-    SAL_DLLPRIVATE bool     ImplDateReformat( const OUString& rStr, OUString& rOutStr,
-                                              const AllSettings& rSettings );
+    SAL_DLLPRIVATE void     ImplDateReformat( const OUString& rStr, OUString& rOutStr );
     SAL_DLLPRIVATE void     ImplSetUserDate( const Date& rNewDate,
-                                             Selection* pNewSelection = nullptr );
-    SAL_DLLPRIVATE OUString ImplGetDateAsText( const Date& rDate,
-                                               const AllSettings& rSettings ) const;
+                                             Selection const * pNewSelection = nullptr );
+    SAL_DLLPRIVATE OUString ImplGetDateAsText( const Date& rDate ) const;
     SAL_DLLPRIVATE void     ImplNewFieldValue( const Date& rDate );
     CalendarWrapper&        GetCalendarWrapper() const;
 
     SAL_DLLPRIVATE bool     ImplAllowMalformedInput() const;
 
 public:
-    virtual                 ~DateFormatter();
+    virtual                 ~DateFormatter() override;
 
     virtual void            Reformat() override;
     virtual void            ReformatAll() override;
-
-    virtual void            SetLocale( const css::lang::Locale& rLocale ) override;
-
 
     void                    SetExtDateFormat( ExtDateFieldFormat eFormat );
     ExtDateFieldFormat      GetExtDateFormat( bool bResolveSystemFormat = false ) const;
@@ -335,23 +323,20 @@ public:
 
 
     void                    SetDate( const Date& rNewDate );
-    void                    SetUserDate( const Date& rNewDate );
     Date                    GetDate() const;
     void                    SetEmptyDate();
     bool                    IsEmptyDate() const;
 
-    void                    ResetLastDate() { maLastDate = Date( 0, 0, 0 ); }
+    void                    ResetLastDate() { maLastDate = Date( Date::EMPTY ); }
 
     static void             ExpandCentury( Date& rDate );
     static void             ExpandCentury( Date& rDate, sal_uInt16 nTwoDigitYearStart );
-
-    static Date             GetInvalidDate() { return Date( 0, 0, 0 ); }
 
     /** enables or disables the enforcement of valid values
 
         If this is set to true (which is the default), then GetDate will always return a valid
         date, no matter whether the current text can really be interpreted as date. (Note: this
-        is the compatible bahavior).
+        is the compatible behavior).
 
         If this is set to false, the GetDate will return GetInvalidDate, in case the current text
         cannot be interpreted as date.
@@ -360,7 +345,7 @@ public:
         when the control loses the focus - instead, the invalid input will be preserved.
     */
     void                    EnforceValidValue( bool _bEnforce ) { mbEnforceValidValue = _bEnforce; }
-    inline bool             IsEnforceValidValue( ) const { return mbEnforceValidValue; }
+    bool             IsEnforceValidValue( ) const { return mbEnforceValidValue; }
 };
 
 
@@ -371,7 +356,7 @@ private:
     tools::Time             maMin;
     tools::Time             maMax;
     TimeFieldFormat         meFormat;
-    sal_uInt16              mnTimeFormat;
+    TimeFormat              mnTimeFormat;
     bool                    mbDuration;
     bool                    mbEnforceValidValue;
 
@@ -380,21 +365,23 @@ private:
 protected:
     tools::Time             maFieldTime;
 
-                            TimeFormatter();
+                            TimeFormatter(Edit* pEdit);
 
-    SAL_DLLPRIVATE bool     ImplTimeReformat( const OUString& rStr, OUString& rOutStr );
+    SAL_DLLPRIVATE void     ImplTimeReformat( const OUString& rStr, OUString& rOutStr );
     SAL_DLLPRIVATE void     ImplNewFieldValue( const tools::Time& rTime );
-    SAL_DLLPRIVATE void     ImplSetUserTime( const tools::Time& rNewTime, Selection* pNewSelection = nullptr );
+    SAL_DLLPRIVATE void     ImplSetUserTime( const tools::Time& rNewTime, Selection const * pNewSelection = nullptr );
     SAL_DLLPRIVATE bool     ImplAllowMalformedInput() const;
 
 public:
+    static OUString         FormatTime(const tools::Time& rNewTime, TimeFieldFormat eFormat, TimeFormat eHourFormat, bool bDuration, const LocaleDataWrapper& rLocaleData);
+    static bool             TextToTime(const OUString& rStr, tools::Time& rTime, TimeFieldFormat eFormat, bool bDuration, const LocaleDataWrapper& rLocaleDataWrapper, bool _bSkipInvalidCharacters = true);
+    static int              GetTimeArea(TimeFieldFormat eFormat, const OUString& rText, int nCursor,
+                                        const LocaleDataWrapper& rLocaleDataWrapper);
+    static tools::Time      SpinTime(bool bUp, const tools::Time& rTime, TimeFieldFormat eFormat,
+                                     bool bDuration, const OUString& rText, int nCursor,
+                                     const LocaleDataWrapper& rLocaleDataWrapper);
 
-                            enum TimeFormat {
-                                HOUR_12,
-                                HOUR_24
-                            };
-
-    virtual                 ~TimeFormatter();
+    virtual                 ~TimeFormatter() override;
 
     virtual void            Reformat() override;
     virtual void            ReformatAll() override;
@@ -405,7 +392,7 @@ public:
     const tools::Time&             GetMax() const { return maMax; }
 
     void                    SetTimeFormat( TimeFormat eNewFormat );
-    TimeFormat              GetTimeFormat() const { return (TimeFormat)mnTimeFormat;}
+    TimeFormat              GetTimeFormat() const { return mnTimeFormat;}
 
     void                    SetFormat( TimeFieldFormat eNewFormat );
     TimeFieldFormat         GetFormat() const { return meFormat; }
@@ -419,13 +406,11 @@ public:
     void                    SetEmptyTime() { FormatterBase::SetEmptyFieldValue(); }
     bool                    IsEmptyTime() const { return FormatterBase::IsEmptyFieldValue(); }
 
-    static tools::Time      GetInvalidTime() { return tools::Time( 99, 99, 99 ); }
-
     /** enables or disables the enforcement of valid values
 
         If this is set to true (which is the default), then GetTime will always return a valid
         time, no matter whether the current text can really be interpreted as time. (Note: this
-        is the compatible bahavior).
+        is the compatible behavior).
 
         If this is set to false, the GetTime will return GetInvalidTime, in case the current text
         cannot be interpreted as time.
@@ -434,7 +419,7 @@ public:
         when the control loses the focus - instead, the invalid input will be preserved.
     */
     void                    EnforceValidValue( bool _bEnforce ) { mbEnforceValidValue = _bEnforce; }
-    inline bool             IsEnforceValidValue( ) const { return mbEnforceValidValue; }
+    bool             IsEnforceValidValue( ) const { return mbEnforceValidValue; }
 };
 
 
@@ -444,7 +429,7 @@ public:
     explicit                PatternField( vcl::Window* pParent, WinBits nWinStyle );
 
     virtual bool            PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    virtual bool            EventNotify( NotifyEvent& rNEvt ) override;
     virtual void            Modify() override;
     virtual void            dispose() override;
 };
@@ -452,15 +437,11 @@ public:
 
 class VCL_DLLPUBLIC NumericField : public SpinField, public NumericFormatter
 {
-protected:
-    SAL_DLLPRIVATE void     ImplLoadRes( const ResId& rResId );
-
 public:
     explicit                NumericField( vcl::Window* pParent, WinBits nWinStyle );
-    explicit                NumericField( vcl::Window* pParent, const ResId& );
 
     virtual bool            PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    virtual bool            EventNotify( NotifyEvent& rNEvt ) override;
     virtual void            DataChanged( const DataChangedEvent& rDCEvt ) override;
 
     virtual Size            CalcMinimumSize() const override;
@@ -471,22 +452,18 @@ public:
     virtual void            Down() override;
     virtual void            First() override;
     virtual void            Last() override;
-    virtual bool            set_property(const OString &rKey, const OString &rValue) override;
+    virtual bool            set_property(const OString &rKey, const OUString &rValue) override;
     virtual void            dispose() override;
 };
 
 
 class VCL_DLLPUBLIC MetricField : public SpinField, public MetricFormatter
 {
-protected:
-    SAL_DLLPRIVATE void     ImplLoadRes( const ResId& rResId );
-
 public:
     explicit                MetricField( vcl::Window* pParent, WinBits nWinStyle );
-    explicit                MetricField( vcl::Window* pParent, const ResId& );
 
     virtual bool            PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    virtual bool            EventNotify( NotifyEvent& rNEvt ) override;
     virtual void            DataChanged( const DataChangedEvent& rDCEvt ) override;
 
     virtual Size            CalcMinimumSize() const override;
@@ -502,13 +479,11 @@ public:
     virtual void            SetUnit( FieldUnit meUnit ) override;
 
     void                    SetFirst( sal_Int64 nNewFirst, FieldUnit eInUnit );
-    inline void             SetFirst(sal_Int64 first) { SetFirst(first, FUNIT_NONE); }
+    void             SetFirst(sal_Int64 first) { SetFirst(first, FieldUnit::NONE); }
     sal_Int64               GetFirst( FieldUnit eOutUnit ) const;
-    inline sal_Int64        GetFirst() const { return GetFirst(FUNIT_NONE); }
     void                    SetLast( sal_Int64 nNewLast, FieldUnit eInUnit );
-    inline void             SetLast(sal_Int64 last) { SetLast(last, FUNIT_NONE); }
+    void             SetLast(sal_Int64 last) { SetLast(last, FieldUnit::NONE); }
     sal_Int64               GetLast( FieldUnit eOutUnit ) const;
-    inline sal_Int64        GetLast() const { return GetLast(FUNIT_NONE); }
 
     static void             SetDefaultUnit( FieldUnit eDefaultUnit );
     static FieldUnit        GetDefaultUnit();
@@ -538,7 +513,7 @@ public:
                                                 MapUnit eInUnit, FieldUnit eOutUnit )
     { return ConvertDoubleValue( static_cast<double>(nValue), nDecDigits, eInUnit, eOutUnit ); }
 
-    virtual bool            set_property(const OString &rKey, const OString &rValue) override;
+    virtual bool            set_property(const OString &rKey, const OUString &rValue) override;
     virtual void            dispose() override;
 };
 
@@ -549,7 +524,7 @@ public:
     CurrencyField( vcl::Window* pParent, WinBits nWinStyle );
 
     virtual bool            PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    virtual bool            EventNotify( NotifyEvent& rNEvt ) override;
     virtual void            DataChanged( const DataChangedEvent& rDCEvt ) override;
 
     virtual void            Modify() override;
@@ -575,7 +550,7 @@ public:
     explicit                DateField( vcl::Window* pParent, WinBits nWinStyle );
 
     virtual bool            PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    virtual bool            EventNotify( NotifyEvent& rNEvt ) override;
     virtual void            DataChanged( const DataChangedEvent& rDCEvt ) override;
 
     virtual void            Modify() override;
@@ -586,9 +561,9 @@ public:
     virtual void            Last() override;
 
     void                    SetFirst( const Date& rNewFirst )   { maFirst = rNewFirst; }
-    Date                    GetFirst() const                    { return maFirst; }
+    const Date&             GetFirst() const                    { return maFirst; }
     void                    SetLast( const Date& rNewLast )     { maLast = rNewLast; }
-    Date                    GetLast() const                     { return maLast; }
+    const Date&             GetLast() const                     { return maLast; }
     virtual void            dispose() override;
 };
 
@@ -606,7 +581,7 @@ public:
     explicit                TimeField( vcl::Window* pParent, WinBits nWinStyle );
 
     virtual bool            PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    virtual bool            EventNotify( NotifyEvent& rNEvt ) override;
     virtual void            DataChanged( const DataChangedEvent& rDCEvt ) override;
 
     virtual void            Modify() override;
@@ -617,9 +592,9 @@ public:
     virtual void            Last() override;
 
     void                    SetFirst( const tools::Time& rNewFirst )   { maFirst = rNewFirst; }
-    tools::Time             GetFirst() const                    { return maFirst; }
+    const tools::Time&      GetFirst() const                    { return maFirst; }
     void                    SetLast( const tools::Time& rNewLast )     { maLast = rNewLast; }
-    tools::Time             GetLast() const                     { return maLast; }
+    const tools::Time&      GetLast() const                     { return maLast; }
 
     void                    SetExtFormat( ExtTimeFieldFormat eFormat );
     virtual void            dispose() override;
@@ -632,7 +607,7 @@ public:
                             PatternBox( vcl::Window* pParent, WinBits nWinStyle );
 
     virtual bool            PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    virtual bool            EventNotify( NotifyEvent& rNEvt ) override;
 
     virtual void            Modify() override;
 
@@ -643,13 +618,14 @@ public:
 
 class VCL_DLLPUBLIC NumericBox : public ComboBox, public NumericFormatter
 {
+    SAL_DLLPRIVATE void     ImplNumericReformat( const OUString& rStr, sal_Int64& rValue, OUString& rOutStr );
 public:
     explicit                NumericBox( vcl::Window* pParent, WinBits nWinStyle );
 
     virtual Size            CalcMinimumSize() const override;
 
     virtual bool            PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    virtual bool            EventNotify( NotifyEvent& rNEvt ) override;
     virtual void            DataChanged( const DataChangedEvent& rDCEvt ) override;
 
     virtual void            Modify() override;
@@ -667,7 +643,7 @@ public:
     explicit                MetricBox( vcl::Window* pParent, WinBits nWinStyle );
 
     virtual bool            PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    virtual bool            EventNotify( NotifyEvent& rNEvt ) override;
     virtual void            DataChanged( const DataChangedEvent& rDCEvt ) override;
 
     virtual Size            CalcMinimumSize() const override;
@@ -677,15 +653,11 @@ public:
     virtual void            CustomConvert() override;
     virtual void            ReformatAll() override;
 
-    void                    InsertValue( sal_Int64 nValue, FieldUnit eInUnit = FUNIT_NONE,
+    void                    InsertValue( sal_Int64 nValue, FieldUnit eInUnit = FieldUnit::NONE,
                                          sal_Int32  nPos = COMBOBOX_APPEND );
-    sal_Int64               GetValue( sal_Int32  nPos ) const;
-    sal_Int32               GetValuePos( sal_Int64 nValue,
-                                         FieldUnit eInUnit = FUNIT_NONE ) const;
 
     // Needed, because GetValue() with nPos hide these functions
-    virtual sal_Int64       GetValue( FieldUnit eOutUnit ) const override;
-    virtual sal_Int64       GetValue() const override;
+    using MetricFormatter::GetValue;
 
     virtual void            dispose() override;
 };
@@ -697,14 +669,13 @@ public:
     explicit                CurrencyBox( vcl::Window* pParent, WinBits nWinStyle );
 
     virtual bool            PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    virtual bool            EventNotify( NotifyEvent& rNEvt ) override;
     virtual void            DataChanged( const DataChangedEvent& rDCEvt ) override;
 
     virtual void            Modify() override;
 
     virtual void            ReformatAll() override;
 
-    virtual sal_Int64       GetValue() const override;
     virtual void            dispose() override;
 };
 
@@ -715,7 +686,7 @@ public:
     explicit                DateBox( vcl::Window* pParent, WinBits nWinStyle );
 
     virtual bool            PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    virtual bool            EventNotify( NotifyEvent& rNEvt ) override;
     virtual void            DataChanged( const DataChangedEvent& rDCEvt ) override;
 
     virtual void            Modify() override;
@@ -731,7 +702,7 @@ public:
     explicit                TimeBox( vcl::Window* pParent, WinBits nWinStyle );
 
     virtual bool            PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    virtual bool            EventNotify( NotifyEvent& rNEvt ) override;
     virtual void            DataChanged( const DataChangedEvent& rDCEvt ) override;
 
     virtual void            Modify() override;

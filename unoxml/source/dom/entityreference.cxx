@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <entityreference.hxx>
+#include "entityreference.hxx"
 
 #include <string.h>
 
@@ -49,20 +49,20 @@ namespace DOM
         }
     }
 
-    OUString SAL_CALL CEntityReference::getNodeName()throw (RuntimeException, std::exception)
+    OUString SAL_CALL CEntityReference::getNodeName()
     {
         ::osl::MutexGuard const g(m_rMutex);
 
        OUString aName;
         if (m_aNodePtr != nullptr)
         {
-            const xmlChar* xName = m_aNodePtr->name;
-            aName = OUString(reinterpret_cast<char const *>(xName), strlen(reinterpret_cast<char const *>(xName)), RTL_TEXTENCODING_UTF8);
+            const xmlChar* pName = m_aNodePtr->name;
+            aName = OUString(reinterpret_cast<char const *>(pName), strlen(reinterpret_cast<char const *>(pName)), RTL_TEXTENCODING_UTF8);
         }
         return aName;
     }
 
-    OUString SAL_CALL CEntityReference::getNodeValue() throw (RuntimeException, std::exception)
+    OUString SAL_CALL CEntityReference::getNodeValue()
     {
         return OUString();
     }

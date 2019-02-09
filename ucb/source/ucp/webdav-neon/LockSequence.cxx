@@ -29,16 +29,16 @@
 #include <config_lgpl.h>
 #include <string.h>
 #include <ne_xml.h>
-#include <osl/diagnose.h>
 #include "LockSequence.hxx"
 #include <memory>
+#include <sal/log.hxx>
 
 using namespace webdav_ucp;
 using namespace com::sun::star;
 
 struct LockSequenceParseContext
 {
-    ucb::Lock * pLock;
+    std::unique_ptr<ucb::Lock> pLock;
     bool hasLockScope;
     bool hasLockType;
     bool hasDepth;
@@ -46,10 +46,8 @@ struct LockSequenceParseContext
     bool hasTimeout;
 
     LockSequenceParseContext()
-    : pLock( nullptr ), hasLockScope( false ), hasLockType( false ),
+    : hasLockScope( false ), hasLockType( false ),
       hasDepth( false ), hasHREF( false ), hasTimeout( false ) {}
-
-    ~LockSequenceParseContext() { delete pLock; }
 };
 
 #define STATE_TOP (1)
@@ -67,7 +65,9 @@ struct LockSequenceParseContext
 #define STATE_HREF          (STATE_TOP + 10)
 
 
-extern "C" int LockSequence_startelement_callback(
+extern "C" {
+
+static int LockSequence_startelement_callback(
     void *,
     int parent,
     const char * /*nspace*/,
@@ -124,7 +124,7 @@ extern "C" int LockSequence_startelement_callback(
 }
 
 
-extern "C" int LockSequence_chardata_callback(
+static int LockSequence_chardata_callback(
     void *userdata,
     int state,
     const char *buf,
@@ -133,7 +133,7 @@ extern "C" int LockSequence_chardata_callback(
     LockSequenceParseContext * pCtx
                     = static_cast< LockSequenceParseContext * >( userdata );
     if ( !pCtx->pLock )
-        pCtx->pLock = new ucb::Lock;
+        pCtx->pLock.reset( new ucb::Lock );
 
     // Beehive sends XML values containing trailing newlines.
     if ( buf[ len - 1 ] == 0x0a )
@@ -233,7 +233,7 @@ extern "C" int LockSequence_chardata_callback(
 }
 
 
-extern "C" int LockSequence_endelement_callback(
+static int LockSequence_endelement_callback(
     void *userdata,
     int state,
     const char *,
@@ -242,7 +242,7 @@ extern "C" int LockSequence_endelement_callback(
     LockSequenceParseContext * pCtx
                     = static_cast< LockSequenceParseContext * >( userdata );
     if ( !pCtx->pLock )
-        pCtx->pLock = new ucb::Lock;
+        pCtx->pLock.reset( new ucb::Lock );
 
     switch ( state )
     {
@@ -297,6 +297,7 @@ extern "C" int LockSequence_endelement_callback(
     return 0; // zero to continue, non-zero to abort parsing
 }
 
+}
 
 // static
 bool LockSequence::createFromXML( const OString & rInData,

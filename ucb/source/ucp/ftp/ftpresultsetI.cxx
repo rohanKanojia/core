@@ -18,13 +18,12 @@
  */
 
 
-#include "comphelper/processfactory.hxx"
-#include "ucbhelper/propertyvalueset.hxx"
-#include "rtl/ref.hxx"
-#include "com/sun/star/ucb/Command.hpp"
-#include "com/sun/star/ucb/XCommandEnvironment.hpp"
-#include "com/sun/star/ucb/XCommandProcessor.hpp"
-#include "com/sun/star/sdbc/XRow.hpp"
+#include <ucbhelper/propertyvalueset.hxx>
+#include <rtl/ref.hxx>
+#include <com/sun/star/ucb/Command.hpp>
+#include <com/sun/star/ucb/XCommandEnvironment.hpp>
+#include <com/sun/star/ucb/XCommandProcessor.hpp>
+#include <com/sun/star/sdbc/XRow.hpp>
 #include "ftpresultsetI.hxx"
 #include "ftpcontent.hxx"
 
@@ -44,8 +43,8 @@ ResultSetI::ResultSetI(const Reference<XComponentContext>&  rxContext,
                        const std::vector<FTPDirentry>&  dirvec)
     : ResultSetBase(rxContext,xProvider,seqProp)
 {
-    for( size_t i = 0; i < dirvec.size(); ++i)
-        m_aPath.push_back(dirvec[i].m_aURL);
+    for(const auto & i : dirvec)
+        m_aPath.push_back(i.m_aURL);
 
     // m_aIdents holds the content identifiers
 

@@ -26,13 +26,14 @@
 #include <comphelper/anytostring.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 
+#include <sal/log.hxx>
 #include <vcl/canvastools.hxx>
 #include <vcl/syschild.hxx>
 #include <vcl/sysdata.hxx>
 #include <vcl/window.hxx>
 #include <vcl/graph.hxx>
 
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <basegfx/numeric/ftools.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
@@ -44,26 +45,26 @@
 #include <cppcanvas/vclfactory.hxx>
 #include <cppcanvas/basegfxfactory.hxx>
 #include <avmedia/mediawindow.hxx>
-#include <avmedia/modeltools.hxx>
 
 #if HAVE_FEATURE_OPENGL
 #include <vcl/opengl/OpenGLContext.hxx>
 #endif
 
+#include <com/sun/star/awt/XWindow.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/lang/XMultiComponentFactory.hpp>
+#include <com/sun/star/lang/NoSupportException.hpp>
 #include <com/sun/star/media/XManager.hpp>
 #include <com/sun/star/media/XPlayer.hpp>
 #include <com/sun/star/media/XPlayerWindow.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/lang/XMultiComponentFactory.hpp>
-#include <com/sun/star/lang/NoSupportException.hpp>
-#include <com/sun/star/awt/XWindow.hpp>
+#include <com/sun/star/presentation/XSlideShowView.hpp>
 #include <com/sun/star/rendering/XCanvas.hpp>
-#include <com/sun/star/lang/XComponent.hpp>
 
 #include "viewmediashape.hxx"
 #include "mediashape.hxx"
-#include "tools.hxx"
-#include "unoview.hxx"
+#include <tools.hxx>
+#include <unoview.hxx>
 
 using namespace ::com::sun::star;
 
@@ -75,7 +76,6 @@ namespace slideshow
                                         const uno::Reference< drawing::XShape >&        rxShape,
                                         const uno::Reference< uno::XComponentContext >& rxContext ) :
             mpViewLayer( rViewLayer ),
-            mpEventHandlerParent(nullptr),
             maWindowOffset( 0, 0 ),
             maBounds(),
             mxShape( rxShape ),
@@ -96,28 +96,22 @@ namespace slideshow
             }
         }
 
-
         ViewMediaShape::~ViewMediaShape()
         {
             try
             {
                 endMedia();
             }
-            catch (uno::Exception &)
+            catch (const uno::Exception &e)
             {
-                OSL_FAIL( OUStringToOString(
-                                comphelper::anyToString(
-                                    cppu::getCaughtException() ),
-                                RTL_TEXTENCODING_UTF8 ).getStr() );
+                SAL_WARN("slideshow", e);
             }
         }
 
-
-        ViewLayerSharedPtr ViewMediaShape::getViewLayer() const
+        const ViewLayerSharedPtr& ViewMediaShape::getViewLayer() const
         {
             return mpViewLayer;
         }
-
 
         void ViewMediaShape::startMedia()
         {
@@ -127,7 +121,6 @@ namespace slideshow
             if (mxPlayer.is())
                 mxPlayer->start();
         }
-
 
         void ViewMediaShape::endMedia()
         {
@@ -143,7 +136,6 @@ namespace slideshow
             }
 
             mpMediaWindow.disposeAndClear();
-            mpEventHandlerParent.disposeAndClear();
 
             // shutdown player
             if( mxPlayer.is() )
@@ -159,20 +151,17 @@ namespace slideshow
             }
         }
 
-
         void ViewMediaShape::pauseMedia()
         {
             if (mxPlayer.is())
                 mxPlayer->stop();
         }
 
-
         void ViewMediaShape::setMediaTime(double fTime)
         {
             if (mxPlayer.is())
                 mxPlayer->setMediaTime(fTime);
         }
-
 
         bool ViewMediaShape::render( const ::basegfx::B2DRectangle& rBounds ) const
         {
@@ -196,8 +185,7 @@ namespace slideshow
                 Graphic aGraphic(xGraphic);
                 const BitmapEx aBmp = aGraphic.GetBitmapEx();
 
-                uno::Reference< rendering::XBitmap > xBitmap(vcl::unotools::xBitmapFromBitmapEx(
-                    pCanvas->getUNOCanvas()->getDevice(), aBmp));
+                uno::Reference< rendering::XBitmap > xBitmap(vcl::unotools::xBitmapFromBitmapEx(aBmp));
 
                 rendering::ViewState aViewState;
                 aViewState.AffineTransform = pCanvas->getViewState().AffineTransform;
@@ -209,7 +197,7 @@ namespace slideshow
 
                 const ::basegfx::B2DVector aScale( rBounds.getWidth() / aBmpSize.Width(),
                                                    rBounds.getHeight() / aBmpSize.Height() );
-                const basegfx::B2DHomMatrix aTranslation(basegfx::tools::createScaleTranslateB2DHomMatrix(
+                const basegfx::B2DHomMatrix aTranslation(basegfx::utils::createScaleTranslateB2DHomMatrix(
                     aScale, rBounds.getMinimum()));
                 ::canvas::tools::setRenderStateTransform( aRenderState, aTranslation );
 
@@ -267,15 +255,7 @@ namespace slideshow
 
             if( mpMediaWindow.get() )
             {
-                if( mpEventHandlerParent )
-                {
-                    mpEventHandlerParent->SetPosSizePixel( aPosPixel, aSizePixel );
-                    mpMediaWindow->SetPosSizePixel( Point(0,0), aSizePixel );
-                }
-                else
-                {
-                    mpMediaWindow->SetPosSizePixel( aPosPixel, aSizePixel );
-                }
+                mpMediaWindow->SetPosSizePixel( aPosPixel, aSizePixel );
                 mxPlayerWindow->setPosSize( 0, 0,
                                             aSizePixel.Width(), aSizePixel.Height(),
                                             0 );
@@ -341,9 +321,7 @@ namespace slideshow
                     }
                     catch( uno::Exception& )
                     {
-                        OSL_FAIL( OUStringToOString(
-                                        comphelper::anyToString( cppu::getCaughtException() ),
-                                        RTL_TEXTENCODING_UTF8 ).getStr() );
+                        SAL_WARN( "slideshow", comphelper::anyToString( cppu::getCaughtException() ) );
                     }
                 }
             }
@@ -354,39 +332,39 @@ namespace slideshow
 
         void ViewMediaShape::implSetMediaProperties( const uno::Reference< beans::XPropertySet >& rxProps )
         {
-            if( mxPlayer.is() )
+            if( !mxPlayer.is() )
+                return;
+
+            mxPlayer->setMediaTime( 0.0 );
+
+            if( !rxProps.is() )
+                return;
+
+            bool bLoop( false );
+            getPropertyValue( bLoop,
+                              rxProps,
+                              "Loop");
+            mxPlayer->setPlaybackLoop( bLoop );
+
+            bool bMute( false );
+            getPropertyValue( bMute,
+                              rxProps,
+                              "Mute");
+            mxPlayer->setMute( bMute || !mbIsSoundEnabled);
+
+            sal_Int16 nVolumeDB(0);
+            getPropertyValue( nVolumeDB,
+                              rxProps,
+                              "VolumeDB");
+            mxPlayer->setVolumeDB( nVolumeDB );
+
+            if( mxPlayerWindow.is() )
             {
-                mxPlayer->setMediaTime( 0.0 );
-
-                if( rxProps.is() )
-                {
-                    bool bLoop( false );
-                    getPropertyValue( bLoop,
-                                      rxProps,
-                                      "Loop");
-                    mxPlayer->setPlaybackLoop( bLoop );
-
-                    bool bMute( false );
-                    getPropertyValue( bMute,
-                                      rxProps,
-                                      "Mute");
-                    mxPlayer->setMute( bMute || !mbIsSoundEnabled);
-
-                    sal_Int16 nVolumeDB(0);
-                    getPropertyValue( nVolumeDB,
-                                      rxProps,
-                                      "VolumeDB");
-                    mxPlayer->setVolumeDB( nVolumeDB );
-
-                    if( mxPlayerWindow.is() )
-                    {
-                        media::ZoomLevel eZoom(media::ZoomLevel_FIT_TO_WINDOW);
-                        getPropertyValue( eZoom,
-                                          rxProps,
-                                          "Zoom");
-                        mxPlayerWindow->setZoomLevel( eZoom );
-                    }
-                }
+                media::ZoomLevel eZoom(media::ZoomLevel_FIT_TO_WINDOW);
+                getPropertyValue( eZoom,
+                                  rxProps,
+                                  "Zoom");
+                mxPlayerWindow->setZoomLevel( eZoom );
             }
         }
 
@@ -397,24 +375,24 @@ namespace slideshow
             (void) rMediaURL;
             (void) rMimeType;
 #else
-            if( !mxPlayer.is() )
+            if( mxPlayer.is() )
+                return;
+
+            try
             {
-                try
+                if( !rMediaURL.isEmpty() )
                 {
-                    if( !rMediaURL.isEmpty() )
-                    {
-                        mxPlayer.set( avmedia::MediaWindow::createPlayer( rMediaURL, ""/*TODO!*/, &rMimeType ),
-                            uno::UNO_QUERY );
-                    }
+                    mxPlayer.set( avmedia::MediaWindow::createPlayer( rMediaURL, ""/*TODO!*/, &rMimeType ),
+                        uno::UNO_QUERY );
                 }
-                catch( uno::RuntimeException& )
-                {
-                    throw;
-                }
-                catch( const uno::Exception& )
-                {
-                    throw lang::NoSupportException( "No video support for " + rMediaURL );
-                }
+            }
+            catch( uno::RuntimeException& )
+            {
+                throw;
+            }
+            catch( const uno::Exception& )
+            {
+                throw lang::NoSupportException( "No video support for " + rMediaURL );
             }
 #endif
         }
@@ -422,106 +400,91 @@ namespace slideshow
 
         void ViewMediaShape::implInitializePlayerWindow( const ::basegfx::B2DRectangle&   rBounds,
                                                                  const uno::Sequence< uno::Any >& rVCLDeviceParams,
-                                                                 const OUString& rMimeType )
+                                                                 const OUString& )
         {
-            OSL_TRACE( "ViewMediaShape::implInitializePlayerWindow" );
-            if( !mpMediaWindow.get() && !rBounds.isEmpty() )
+            SAL_INFO("slideshow", "ViewMediaShape::implInitializePlayerWindow" );
+            if( mpMediaWindow.get() || rBounds.isEmpty() )
+                return;
+
+            try
             {
-                try
+                sal_Int64 aVal=0;
+
+                rVCLDeviceParams[ 1 ] >>= aVal;
+
+                vcl::Window* pWindow = reinterpret_cast< vcl::Window* >( aVal );
+
+                if( pWindow )
                 {
-                    sal_Int64 aVal=0;
+                    ::basegfx::B2DRange aTmpRange;
+                    ::canvas::tools::calcTransformedRectBounds( aTmpRange,
+                                                                rBounds,
+                                                                mpViewLayer->getTransformation() );
+                    const ::basegfx::B2IRange& rRangePix(
+                        ::basegfx::unotools::b2ISurroundingRangeFromB2DRange( aTmpRange ));
 
-                    rVCLDeviceParams[ 1 ] >>= aVal;
-
-                    vcl::Window* pWindow = reinterpret_cast< vcl::Window* >( aVal );
-
-                    if( pWindow )
+                    if( !rRangePix.isEmpty() )
                     {
-                        ::basegfx::B2DRange aTmpRange;
-                        ::canvas::tools::calcTransformedRectBounds( aTmpRange,
-                                                                    rBounds,
-                                                                    mpViewLayer->getTransformation() );
-                        const ::basegfx::B2IRange& rRangePix(
-                            ::basegfx::unotools::b2ISurroundingRangeFromB2DRange( aTmpRange ));
-
-                        if( !rRangePix.isEmpty() )
+                        uno::Sequence< uno::Any >   aArgs( 3 );
+                        awt::Rectangle              aAWTRect( rRangePix.getMinX(),
+                                                              rRangePix.getMinY(),
+                                                                rRangePix.getMaxX() - rRangePix.getMinX(),
+                                                                rRangePix.getMaxY() - rRangePix.getMinY() );
                         {
-                            uno::Sequence< uno::Any >   aArgs( 3 );
-                            awt::Rectangle              aAWTRect( rRangePix.getMinX(),
-                                                                  rRangePix.getMinY(),
-                                                                    rRangePix.getMaxX() - rRangePix.getMinX(),
-                                                                    rRangePix.getMaxY() - rRangePix.getMinY() );
-#if !HAVE_FEATURE_GLTF || !HAVE_FEATURE_OPENGL
-                            (void)rMimeType;
-#else
-                            if( avmedia::IsModel(rMimeType) )
+                            mpMediaWindow.disposeAndClear();
+                            mpMediaWindow = VclPtr<SystemChildWindow>::Create( pWindow, WB_CLIPCHILDREN );
+                            UnoViewSharedPtr xUnoView(std::dynamic_pointer_cast<UnoView>(mpViewLayer));
+                            if (xUnoView)
                             {
-                                mpMediaWindow.disposeAndClear();
-                                mpEventHandlerParent.disposeAndClear();
-                                mpEventHandlerParent = VclPtr<vcl::Window>::Create(pWindow, WB_NOBORDER|WB_NODIALOGCONTROL);
-                                mpEventHandlerParent->SetPosSizePixel( Point( aAWTRect.X, aAWTRect.Y ),
-                                                           Size( aAWTRect.Width, aAWTRect.Height ) );
-                                mpEventHandlerParent->EnablePaint(false);
-                                mpEventHandlerParent->Show();
-                                SystemWindowData aWinData = OpenGLContext::generateWinData(mpEventHandlerParent.get(), false);
-                                mpMediaWindow = VclPtr<SystemChildWindow>::Create(mpEventHandlerParent.get(), 0, &aWinData);
-                                mpMediaWindow->SetPosSizePixel( Point( 0, 0 ),
-                                                           Size( aAWTRect.Width, aAWTRect.Height ) );
+                                awt::Rectangle aCanvasArea = xUnoView->getUnoView()->getCanvasArea();
+                                aAWTRect.X += aCanvasArea.X;
+                                aAWTRect.Y += aCanvasArea.Y;
                             }
-                            else
-#endif
+                            mpMediaWindow->SetPosSizePixel( Point( aAWTRect.X, aAWTRect.Y ),
+                                                       Size( aAWTRect.Width, aAWTRect.Height ) );
+                        }
+                        mpMediaWindow->SetBackground( COL_BLACK );
+                        mpMediaWindow->SetParentClipMode( ParentClipMode::NoClip );
+                        mpMediaWindow->EnableEraseBackground( false );
+                        mpMediaWindow->EnablePaint( false );
+                        mpMediaWindow->SetForwardKey( true );
+                        mpMediaWindow->SetMouseTransparent( true );
+                        mpMediaWindow->Show();
+
+                        if( mxPlayer.is() )
+                        {
+                            aArgs[ 0 ] <<=
+                                sal::static_int_cast< sal_IntPtr >( mpMediaWindow->GetParentWindowHandle() );
+
+                            aAWTRect.X = aAWTRect.Y = 0;
+                            aArgs[ 1 ] <<= aAWTRect;
+                            aArgs[ 2 ] <<= reinterpret_cast< sal_IntPtr >( mpMediaWindow.get() );
+
+                            mxPlayerWindow.set( mxPlayer->createPlayerWindow( aArgs ) );
+
+                            if( mxPlayerWindow.is() )
                             {
-                                mpMediaWindow.disposeAndClear();
-                                mpMediaWindow = VclPtr<SystemChildWindow>::Create( pWindow, WB_CLIPCHILDREN );
-                                mpMediaWindow->SetPosSizePixel( Point( aAWTRect.X, aAWTRect.Y ),
-                                                           Size( aAWTRect.Width, aAWTRect.Height ) );
+                                mxPlayerWindow->setVisible( true );
+                                mxPlayerWindow->setEnable( true );
                             }
-                            mpMediaWindow->SetBackground( Color( COL_BLACK ) );
-                            mpMediaWindow->SetParentClipMode( ParentClipMode::NoClip );
-                            mpMediaWindow->EnableEraseBackground( false );
-                            mpMediaWindow->EnablePaint( false );
-                            mpMediaWindow->SetForwardKey( true );
-                            mpMediaWindow->SetMouseTransparent( true );
-                            mpMediaWindow->Show();
+                        }
 
-                            if( mxPlayer.is() )
-                            {
-                                aArgs[ 0 ] = uno::makeAny(
-                                    sal::static_int_cast< sal_IntPtr >( mpMediaWindow->GetParentWindowHandle() ) );
-
-                                aAWTRect.X = aAWTRect.Y = 0;
-                                aArgs[ 1 ] = uno::makeAny( aAWTRect );
-                                aArgs[ 2 ] = uno::makeAny( reinterpret_cast< sal_IntPtr >( mpMediaWindow.get() ) );
-
-                                mxPlayerWindow.set( mxPlayer->createPlayerWindow( aArgs ) );
-
-                                if( mxPlayerWindow.is() )
-                                {
-                                    mxPlayerWindow->setVisible( true );
-                                    mxPlayerWindow->setEnable( true );
-                                }
-                            }
-
-                            if( !mxPlayerWindow.is() )
-                            {
-                                //if there was no playerwindow, then clear the mpMediaWindow too
-                                //so that we can draw a placeholder instead in that space
-                                mpMediaWindow.disposeAndClear();
-                                mpEventHandlerParent.disposeAndClear();
-                            }
+                        if( !mxPlayerWindow.is() )
+                        {
+                            //if there was no playerwindow, then clear the mpMediaWindow too
+                            //so that we can draw a placeholder instead in that space
+                            mpMediaWindow.disposeAndClear();
                         }
                     }
                 }
-                catch( uno::RuntimeException& )
-                {
-                    throw;
-                }
-                catch( uno::Exception& )
-                {
-                    OSL_FAIL( OUStringToOString(
-                                    comphelper::anyToString( cppu::getCaughtException() ),
-                                    RTL_TEXTENCODING_UTF8 ).getStr() );
-                }
+            }
+            catch( uno::RuntimeException& )
+            {
+                throw;
+            }
+            catch( uno::Exception& )
+            {
+                SAL_WARN( "slideshow", comphelper::anyToString( cppu::getCaughtException() ) );
             }
         }
     }

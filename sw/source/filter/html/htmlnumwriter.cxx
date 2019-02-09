@@ -33,12 +33,14 @@
 #include <poolfmt.hxx>
 #include <ndtxt.hxx>
 #include <paratr.hxx>
+#include <pam.hxx>
 
 #include "htmlnum.hxx"
 #include "wrthtml.hxx"
 
 #include <SwNodeNum.hxx>
 #include <rtl/strbuf.hxx>
+#include <osl/diagnose.h>
 
 using namespace css;
 
@@ -47,22 +49,20 @@ void SwHTMLWriter::FillNextNumInfo()
 {
     m_pNextNumRuleInfo = nullptr;
 
-    sal_uLong nPos = pCurPam->GetPoint()->nNode.GetIndex() + 1;
+    sal_uLong nPos = m_pCurrentPam->GetPoint()->nNode.GetIndex() + 1;
 
     bool bTable = false;
     do
     {
-        const SwNode* pNd = pDoc->GetNodes()[nPos];
+        const SwNode* pNd = m_pDoc->GetNodes()[nPos];
         if( pNd->IsTextNode() )
         {
-            // Der naechste wird als naechstes ausgegeben.
-            m_pNextNumRuleInfo = new SwHTMLNumRuleInfo( *pNd->GetTextNode() );
+            m_pNextNumRuleInfo.reset( new SwHTMLNumRuleInfo( *pNd->GetTextNode() ) );
 
-            // Vor einer Tabelle behalten wir erst einmal die alte Ebene bei,
-            // wenn die gleiche Numerierung hinter der Tabelle
-            // fortgesetzt wird und dort nicht von vorne numeriert
-            // wird. Die Tabelle wird ann beim Import so weit eingeruckt,
-            // wie es der Num-Ebene entspricht.
+            // Before a table we keep the old level if the same numbering is
+            // continued after the table and no new numbering is started.
+            // The table will get the indentation that corresponds to its
+            // numbering level during import.
             if( bTable &&
                 m_pNextNumRuleInfo->GetNumRule()==GetNumInfo().GetNumRule() &&
                 !m_pNextNumRuleInfo->IsRestart() )
@@ -72,16 +72,14 @@ void SwHTMLWriter::FillNextNumInfo()
         }
         else if( pNd->IsTableNode() )
         {
-            // Eine Tabelle wird uebersprungen, also den Node
-            // hinter der Tabelle betrachten.
+            // A table is skipped so the node after table is viewed.
             nPos = pNd->EndOfSectionIndex() + 1;
             bTable = true;
         }
         else
         {
-            // In allen anderen Faellen ist die Numerierung erstmal
-            // zu Ende.
-            m_pNextNumRuleInfo = new SwHTMLNumRuleInfo;
+            // In all other case the numbering is over.
+            m_pNextNumRuleInfo.reset(new SwHTMLNumRuleInfo);
         }
     }
     while( !m_pNextNumRuleInfo );
@@ -89,8 +87,12 @@ void SwHTMLWriter::FillNextNumInfo()
 
 void SwHTMLWriter::ClearNextNumInfo()
 {
-    delete m_pNextNumRuleInfo;
-    m_pNextNumRuleInfo = nullptr;
+    m_pNextNumRuleInfo.reset();
+}
+
+void SwHTMLWriter::SetNextNumInfo( std::unique_ptr<SwHTMLNumRuleInfo> pNxt )
+{
+    m_pNextNumRuleInfo = std::move(pNxt);
 }
 
 Writer& OutHTML_NumBulListStart( SwHTMLWriter& rWrt,
@@ -122,10 +124,10 @@ Writer& OutHTML_NumBulListStart( SwHTMLWriter& rWrt,
                 if( rInfo.GetDepth() > 1 )
                 {
                     sal_uLong nPos =
-                        rWrt.pCurPam->GetPoint()->nNode.GetIndex() + 1;
+                        rWrt.m_pCurrentPam->GetPoint()->nNode.GetIndex() + 1;
                     do
                     {
-                        const SwNode* pNd = rWrt.pDoc->GetNodes()[nPos];
+                        const SwNode* pNd = rWrt.m_pDoc->GetNodes()[nPos];
                         if( pNd->IsTextNode() )
                         {
                             const SwTextNode *pTextNd = pNd->GetTextNode();
@@ -174,25 +176,26 @@ Writer& OutHTML_NumBulListStart( SwHTMLWriter& rWrt,
         }
     }
 
-    OSL_ENSURE( rWrt.m_nLastParaToken == 0,
-                "<PRE> wurde nicht vor <OL> beendet." );
+    OSL_ENSURE( rWrt.m_nLastParaToken == HtmlTokenId::NONE,
+                "<PRE> was not closed before <OL>." );
     sal_uInt16 nPrevDepth =
         (bSameRule && !rInfo.IsRestart()) ? rPrevInfo.GetDepth() : 0;
 
     for( sal_uInt16 i=nPrevDepth; i<rInfo.GetDepth(); i++ )
     {
-        rWrt.OutNewLine(); // <OL>/<UL> in eine neue Zeile
+        rWrt.OutNewLine(); // <OL>/<UL> in a new row
 
         rWrt.m_aBulletGrfs[i].clear();
         OString sOut = "<";
+        sOut += rWrt.GetNamespace();
         const SwNumFormat& rNumFormat = rInfo.GetNumRule()->Get( i );
         sal_Int16 eType = rNumFormat.GetNumberingType();
         if( SVX_NUM_CHAR_SPECIAL == eType )
         {
-            // Aufzaehlungs-Liste: <OL>
+            // ordered list: <OL>
             sOut += OString(OOO_STRING_SVTOOLS_HTML_unorderlist);
 
-            // den Typ ueber das Bullet-Zeichen bestimmen
+            // determine the type by the bullet character
             const sal_Char *pStr = nullptr;
             switch( rNumFormat.GetBulletChar() )
             {
@@ -227,7 +230,7 @@ Writer& OutHTML_NumBulListStart( SwHTMLWriter& rWrt,
             // Ordered list: <OL>
             sOut += OString(OOO_STRING_SVTOOLS_HTML_orderlist);
 
-            // den Typ ueber das Format bestimmen
+            // determine the type by the format
             sal_Char cType = 0;
             switch( eType )
             {
@@ -254,9 +257,9 @@ Writer& OutHTML_NumBulListStart( SwHTMLWriter& rWrt,
             sal_uInt16 nStartVal = rNumFormat.GetStart();
             if( bStartValue && 1 == nStartVal && i == rInfo.GetDepth()-1 )
             {
-                if ( rWrt.pCurPam->GetNode().GetTextNode()->GetNum() )
+                if ( rWrt.m_pCurrentPam->GetNode().GetTextNode()->GetNum() )
                 {
-                    nStartVal = static_cast< sal_uInt16 >( rWrt.pCurPam->GetNode()
+                    nStartVal = static_cast< sal_uInt16 >( rWrt.m_pCurrentPam->GetNode()
                                 .GetTextNode()->GetNumberVector()[i] );
                 }
                 else
@@ -274,11 +277,11 @@ Writer& OutHTML_NumBulListStart( SwHTMLWriter& rWrt,
             rWrt.Strm().WriteOString( sOut );
 
         if( rWrt.m_bCfgOutStyles )
-            OutCSS1_NumBulListStyleOpt( rWrt, *rInfo.GetNumRule(), (sal_uInt8)i );
+            OutCSS1_NumBulListStyleOpt( rWrt, *rInfo.GetNumRule(), static_cast<sal_uInt8>(i) );
 
         rWrt.Strm().WriteChar( '>' );
 
-        rWrt.IncIndentLevel(); // Inhalt von <OL> einruecken
+        rWrt.IncIndentLevel(); // indent content of <OL>
     }
 
     return rWrt;
@@ -295,27 +298,26 @@ Writer& OutHTML_NumBulListEnd( SwHTMLWriter& rWrt,
         return rWrt;
     }
 
-    OSL_ENSURE( rWrt.m_nLastParaToken == 0,
-                "<PRE> wurde nicht vor </OL> beendet." );
+    OSL_ENSURE( rWrt.m_nLastParaToken == HtmlTokenId::NONE,
+                "<PRE> was not closed before </OL>." );
     sal_uInt16 nNextDepth =
         (bSameRule && !rNextInfo.IsRestart()) ? rNextInfo.GetDepth() : 0;
 
-    // MIB 23.7.97: Die Schleife muss doch rueckwaerts durchlaufen
-    // werden, weil die Reihenfolge von </OL>/</UL> stimmen muss
+    // MIB 23.7.97: We must loop backwards, to get the right order of </OL>/</UL>
     for( sal_uInt16 i=rInfo.GetDepth(); i>nNextDepth; i-- )
     {
-        rWrt.DecIndentLevel(); // Inhalt von <OL> einruecken
+        rWrt.DecIndentLevel(); // indent content of <OL>
         if( rWrt.m_bLFPossible )
-            rWrt.OutNewLine(); // </OL>/</UL> in eine neue Zeile
+            rWrt.OutNewLine(); // </OL>/</UL> in a new line
 
-        // es wird also eine Liste angefangen oder beendet:
+        // a list is started or ended:
         sal_Int16 eType = rInfo.GetNumRule()->Get( i-1 ).GetNumberingType();
-        const sal_Char *pStr;
+        OString aTag;
         if( SVX_NUM_CHAR_SPECIAL == eType || SVX_NUM_BITMAP == eType)
-            pStr = OOO_STRING_SVTOOLS_HTML_unorderlist;
+            aTag = OOO_STRING_SVTOOLS_HTML_unorderlist;
         else
-            pStr = OOO_STRING_SVTOOLS_HTML_orderlist;
-        HTMLOutFuncs::Out_AsciiTag( rWrt.Strm(), pStr, false );
+            aTag = OOO_STRING_SVTOOLS_HTML_orderlist;
+        HTMLOutFuncs::Out_AsciiTag( rWrt.Strm(), rWrt.GetNamespace() + aTag, false );
         rWrt.m_bLFPossible = true;
     }
 

@@ -13,16 +13,16 @@
 #include "clang/AST/Attr.h"
 #include "clang/Sema/SemaInternal.h" // warn_unused_function
 
-#include "compat.hxx"
 #include "plugin.hxx"
 
 namespace {
 
 class InlineVisible:
-    public RecursiveASTVisitor<InlineVisible>, public loplugin::Plugin
+    public loplugin::FilteringPlugin<InlineVisible>
 {
 public:
-    explicit InlineVisible(InstantiationData const & data): Plugin(data) {}
+    explicit InlineVisible(loplugin::InstantiationData const & data):
+        FilteringPlugin(data) {}
 
     void run() override
     { TraverseDecl(compiler.getASTContext().getTranslationUnitDecl()); }

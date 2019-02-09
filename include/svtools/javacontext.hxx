@@ -21,12 +21,11 @@
 #define INCLUDED_SVTOOLS_JAVACONTEXT_HXX
 
 #include <svtools/svtdllapi.h>
-#include <osl/mutex.hxx>
 
-#include <com/sun/star/task/XInteractionHandler.hpp>
-#include <com/sun/star/task/XInteractionRequest.hpp>
 #include <com/sun/star/uno/XCurrentContext.hpp>
 
+
+namespace com :: sun :: star :: task { class XInteractionHandler; }
 
 namespace svt
 {
@@ -49,25 +48,22 @@ namespace svt
 
         // XInterface
         virtual css::uno::Any SAL_CALL queryInterface(
-            const css::uno::Type& aType )
-            throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Type& aType ) override;
 
         virtual void SAL_CALL acquire() throw () override;
 
         virtual void SAL_CALL release() throw () override;
 
         // XCurrentContext
-        virtual css::uno::Any SAL_CALL getValueByName( const OUString& Name )
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL getValueByName( const OUString& Name ) override;
 
     private:
-        JavaContext(JavaContext&) = delete;
-        JavaContext& operator = (JavaContext&) = delete;
+        JavaContext(JavaContext const &) = delete;
+        JavaContext& operator = (JavaContext const &) = delete;
 
         oslInterlockedCount                                  m_aRefCount;
         css::uno::Reference< css::uno::XCurrentContext >     m_xNextContext;
         css::uno::Reference< css::task::XInteractionHandler> m_xHandler;
-        bool                                                 m_bShowErrorsOnce;
     };
 }
 

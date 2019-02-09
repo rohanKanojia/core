@@ -36,15 +36,13 @@ namespace com { namespace sun { namespace star {
 class SchXMLExport : public SvXMLExport
 {
 private:
-    css::uno::Reference< css::task::XStatusIndicator > mxStatusIndicator;
     rtl::Reference<SchXMLAutoStylePoolP> maAutoStylePool;
 
     rtl::Reference<SchXMLExportHelper> maExportHelper;
 
 protected:
-    virtual sal_uInt32 exportDoc( enum ::xmloff::token::XMLTokenEnum eClass = ::xmloff::token::XML_TOKEN_INVALID ) override;
+    virtual ErrCode exportDoc( enum ::xmloff::token::XMLTokenEnum eClass = ::xmloff::token::XML_TOKEN_INVALID ) override;
 
-    virtual void ExportStyles_( bool bUsed ) override;
     virtual void ExportAutoStyles_() override;
     virtual void ExportMasterStyles_() override;
     virtual void ExportContent_() override;
@@ -53,10 +51,11 @@ public:
     SchXMLExport(
         const css::uno::Reference< css::uno::XComponentContext >& xContext,
         OUString const & implementationName,
-        SvXMLExportFlags nExportFlags = SvXMLExportFlags::ALL );
-    virtual ~SchXMLExport();
+        SvXMLExportFlags nExportFlags );
+    virtual ~SchXMLExport() override;
 
-    rtl::Reference< XMLPropertySetMapper > GetPropertySetMapper() const;
+    void collectAutoStyles() override;
+    rtl::Reference< XMLPropertySetMapper > const & GetPropertySetMapper() const;
 };
 
 #endif // INCLUDED_XMLOFF_INC_SCHXMLEXPORT_HXX

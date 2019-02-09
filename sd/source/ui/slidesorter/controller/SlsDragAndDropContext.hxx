@@ -20,11 +20,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_CONTROLLER_SLSDRAGANDDROPCONTEXT_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_CONTROLLER_SLSDRAGANDDROPCONTEXT_HXX
 
-#include <tools/gen.hxx>
+#include <controller/SlsInsertionIndicatorHandler.hxx>
 
-#include "model/SlsSharedPageDescriptor.hxx"
-#include "controller/SlsInsertionIndicatorHandler.hxx"
-#include <vector>
+class Point;
 
 namespace sd { namespace slidesorter {
 class SlideSorter;
@@ -43,7 +41,7 @@ public:
         when provided, the pages in the transferable.
     */
     explicit DragAndDropContext (SlideSorter& rSlideSorter);
-    ~DragAndDropContext();
+    ~DragAndDropContext() COVERITY_NOEXCEPT_FALSE;
 
     /** Call this method (for example as reaction to ESC key press) to avoid
         processing (ie moving or inserting) the substition when the called
@@ -58,11 +56,9 @@ public:
     void UpdatePosition (
         const Point& rMousePosition,
         const InsertionIndicatorHandler::Mode eMode,
-        const bool bAllowAutoScroll = true);
+        const bool bAllowAutoScroll);
 
-    void SetTargetSlideSorter (
-        const Point& rMousePosition = Point(0,0),
-        const InsertionIndicatorHandler::Mode eMode = InsertionIndicatorHandler::UnknownMode);
+    void SetTargetSlideSorter();
 
 private:
     SlideSorter* mpTargetSlideSorter;

@@ -19,9 +19,26 @@
 #ifndef INCLUDED_VBAHELPER_VBAFONTBASE_HXX
 #define INCLUDED_VBAHELPER_VBAFONTBASE_HXX
 
+#include <exception>
+
+#include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/RuntimeException.hpp>
 #include <ooo/vba/XFontBase.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
+#include <sal/types.h>
+#include <vbahelper/vbadllapi.h>
+#include <vbahelper/vbahelper.hxx>
 #include <vbahelper/vbahelperinterface.hxx>
+
+namespace com { namespace sun { namespace star {
+    namespace beans { class XPropertySet; }
+    namespace container { class XIndexAccess; }
+    namespace uno { class XComponentContext; }
+} } }
+
+namespace ooo { namespace vba {
+    class XHelperInterface;
+} }
 
 typedef  InheritedHelperInterfaceWeakImpl< ov::XFontBase > VbaFontBase_BASE;
 
@@ -30,13 +47,13 @@ class VBAHELPER_DLLPUBLIC VbaFontBase : public VbaFontBase_BASE
 protected:
     css::uno::Reference< css::beans::XPropertySet > mxFont;
     css::uno::Reference< css::container::XIndexAccess > mxPalette;
-    bool mbFormControl;
+    bool const mbFormControl;
 
 public:
     // use local constants there is no need to expose these constants
     // externally. Looking at the Format->Character dialog it seem that
     // these may in fact even be calculated. Leave hardcoded for now
-    // #FIXEME #TBD investigate the code for dialog mentioned above
+    // #FIXME #TBD investigate the code for dialog mentioned above
 
     // The font baseline is not specified.
     static const short NORMAL = 0;
@@ -47,46 +64,47 @@ public:
     // specifies a subscripted.
     static const short SUBSCRIPT = -33;
 
-    // specifies a hight of superscripted font
+    // specifies a height of superscripted font
     static const sal_Int8 SUPERSCRIPTHEIGHT = 58;
 
-    // specifies a hight of subscripted font
+    // specifies a height of subscripted font
     static const sal_Int8 SUBSCRIPTHEIGHT = 58;
 
-    // specifies a hight of normal font
+    // specifies a height of normal font
     static const short NORMALHEIGHT = 100;
 
+    /// @throws css::uno::RuntimeException
     VbaFontBase(
         const css::uno::Reference< ov::XHelperInterface >& xParent,
         const css::uno::Reference< css::uno::XComponentContext >& xContext,
         const css::uno::Reference< css::container::XIndexAccess >& xPalette,
         const css::uno::Reference< css::beans::XPropertySet >& xPropertySet,
-        bool bFormControl = false ) throw ( css::uno::RuntimeException );
-    virtual ~VbaFontBase();// {}
+        bool bFormControl = false );
+    virtual ~VbaFontBase() override;// {}
 
     // Attributes
-    virtual css::uno::Any SAL_CALL getSize() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setSize( const css::uno::Any& _size ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getColorIndex() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setColorIndex( const css::uno::Any& _colorindex ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getBold() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setBold( const css::uno::Any& _bold ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getUnderline() throw (css::uno::RuntimeException, std::exception) override = 0;
-    virtual void SAL_CALL setUnderline( const css::uno::Any& _underline ) throw (css::uno::RuntimeException, std::exception) override = 0;
-    virtual css::uno::Any SAL_CALL getStrikethrough() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setStrikethrough( const css::uno::Any& _strikethrough ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getShadow() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setShadow( const css::uno::Any& _shadow ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getItalic() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setItalic( const css::uno::Any& _italic ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getSubscript() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setSubscript( const css::uno::Any& _subscript ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getSuperscript() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setSuperscript( const css::uno::Any& _superscript ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getName() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setName( const css::uno::Any& _name ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getColor() throw (css::uno::RuntimeException, std::exception) override ;
-    virtual void SAL_CALL setColor( const css::uno::Any& _color ) throw (css::uno::RuntimeException, std::exception) override ;
+    virtual css::uno::Any SAL_CALL getSize() override;
+    virtual void SAL_CALL setSize( const css::uno::Any& _size ) override;
+    virtual css::uno::Any SAL_CALL getColorIndex() override;
+    virtual void SAL_CALL setColorIndex( const css::uno::Any& _colorindex ) override;
+    virtual css::uno::Any SAL_CALL getBold() override;
+    virtual void SAL_CALL setBold( const css::uno::Any& _bold ) override;
+    virtual css::uno::Any SAL_CALL getUnderline() override = 0;
+    virtual void SAL_CALL setUnderline( const css::uno::Any& _underline ) override = 0;
+    virtual css::uno::Any SAL_CALL getStrikethrough() override;
+    virtual void SAL_CALL setStrikethrough( const css::uno::Any& _strikethrough ) override;
+    virtual css::uno::Any SAL_CALL getShadow() override;
+    virtual void SAL_CALL setShadow( const css::uno::Any& _shadow ) override;
+    virtual css::uno::Any SAL_CALL getItalic() override;
+    virtual void SAL_CALL setItalic( const css::uno::Any& _italic ) override;
+    virtual css::uno::Any SAL_CALL getSubscript() override;
+    virtual void SAL_CALL setSubscript( const css::uno::Any& _subscript ) override;
+    virtual css::uno::Any SAL_CALL getSuperscript() override;
+    virtual void SAL_CALL setSuperscript( const css::uno::Any& _superscript ) override;
+    virtual css::uno::Any SAL_CALL getName() override;
+    virtual void SAL_CALL setName( const css::uno::Any& _name ) override;
+    virtual css::uno::Any SAL_CALL getColor() override ;
+    virtual void SAL_CALL setColor( const css::uno::Any& _color ) override ;
 };
 
 #endif

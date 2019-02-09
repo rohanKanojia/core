@@ -41,8 +41,8 @@ class BibWindowContainer : public BibWindow     //Window
         virtual void            Resize() override;
 
     public:
-        BibWindowContainer( vcl::Window* pParent, BibShortCutHandler* pChild, WinBits nStyle = WB_3DLOOK);
-        virtual ~BibWindowContainer();
+        BibWindowContainer( vcl::Window* pParent, BibShortCutHandler* pChild);
+        virtual ~BibWindowContainer() override;
         virtual void            dispose() override;
 
         inline vcl::Window*     GetChild();
@@ -64,15 +64,12 @@ class BibBookContainer: public BibSplitWindow
 {
     private:
 
-        css::uno::Reference< css::frame::XFrame >             xTopFrameRef;
-        css::uno::Reference< css::frame::XFrame >             xBottomFrameRef;
-
         VclPtr<BibWindowContainer>     pTopWin;
         VclPtr<BibWindowContainer>     pBottomWin;
         HdlBibModul             pBibMod;
         Idle                    aIdle;
 
-        DECL_LINK_TYPED( SplitHdl, Idle*, void );
+        DECL_LINK( SplitHdl, Timer*, void );
 
     protected:
 
@@ -82,8 +79,8 @@ class BibBookContainer: public BibSplitWindow
 
     public:
 
-        BibBookContainer(vcl::Window* pParent, WinBits nStyle = WB_3DLOOK );
-        virtual ~BibBookContainer();
+        explicit BibBookContainer(vcl::Window* pParent );
+        virtual ~BibBookContainer() override;
         virtual void dispose() override;
 
         // !BibShortCutHandler is also always a Window!

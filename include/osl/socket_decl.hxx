@@ -20,19 +20,19 @@
 #ifndef INCLUDED_OSL_SOCKET_DECL_HXX
 #define INCLUDED_OSL_SOCKET_DECL_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <cstddef>
 
-#include <osl/socket.h>
-#include <rtl/ustring.hxx>
-#include <rtl/byteseq.hxx>
+#include "osl/socket.h"
+#include "rtl/ustring.hxx"
+#include "rtl/byteseq.hxx"
 
 namespace osl
 {
     enum __osl_socket_NoCopy { SAL_NO_COPY };
 
-    /** The class should be understood as a reference to a socket address handle ( struct sockaddr ).
+    /** The class should be understood as a reference to a socket address handle (struct sockaddr).
 
         The handle is mutable.
      */
@@ -50,74 +50,99 @@ namespace osl
          */
         inline SocketAddr(const SocketAddr& Addr);
 
-        /** The SocketAddr takes over the responsibility of the handle ( which means,
+#if defined LIBO_INTERNAL_ONLY
+        inline SocketAddr(SocketAddr && other);
+#endif
+
+        /** The SocketAddr takes over the responsibility of the handle (which means
             that the handle gets destructed by the destructor of this reference)
-            @param Addr a handle
-            @param nocopy use SAL_NO_COPY
+
+            @param Addr     a handle
+            @param nocopy   use SAL_NO_COPY
          */
         inline SocketAddr(const oslSocketAddr Addr, __osl_socket_NoCopy nocopy );
 
         /** Copyconstructs the oslSocketAddr handle.
+
+            @param Addr     a handle
          */
         inline SocketAddr(oslSocketAddr Addr);
 
-        /** tcpip-specific constructor.
+        /** TCP/IP-specific constructor.
+
             @param strAddrOrHostName strAddrOrHostName hostname or dotted ip-number of the network
                                      interface, the socket shall be created on.
             @param nPort             tcp-ip port number
          */
-        inline SocketAddr( const ::rtl::OUString& strAddrOrHostName, sal_Int32 nPort );
+        inline SocketAddr(const ::rtl::OUString& strAddrOrHostName, sal_Int32 nPort);
 
         /** destroys underlying oslSocketAddress
          */
         inline ~SocketAddr();
 
-        /** checks, if the SocketAddr was created successful.
-            @return <code>true</code> if there is a valid underlying handle,
-                    otherwise false.
+        /** Checks if the SocketAddr was created successful.
+
+            @retval true    if there is a valid underlying handle
+            @retval false   no valid underlying handle
          */
         inline bool is() const;
 
         /** Converts the address to a (human readable) domain-name.
 
-            @param pResult 0, if you are not interested in errors,
+            @param[out] pResult value of 0 if you are not interested in errors,
                            otherwise *pResult contains an error code on failure
                            or osl_Socket_Ok on success
-            @return the hostname of this SocketAddr or an empty string on failure.
-            @see osl_getHostnameOfSocketAddr()
-        */
-        inline ::rtl::OUString SAL_CALL getHostname( oslSocketResult *pResult = NULL ) const;
 
-        /** Sets the ipaddress or hostname of the SocketAddress
+            @return the hostname of this SocketAddr or an empty string on failure.
+
+            @see osl_getHostnameOfSocketAddr
+        */
+        inline ::rtl::OUString SAL_CALL getHostname(oslSocketResult *pResult = NULL) const;
+
+        /** Sets the IP address or hostname of the SocketAddress
+
+           @param[in] sDottedIpOrHostname   IP address or hostname
+
+           @retval true     success
+           @retval false    failure
          */
-        inline bool SAL_CALL setHostname( const ::rtl::OUString &sDottedIpOrHostname );
+        inline bool SAL_CALL setHostname(const ::rtl::OUString &sDottedIpOrHostname);
 
         /** Returns the port number of the address.
+
             @return the port in host-byte order or OSL_INVALID_PORT on errors.
         */
         inline sal_Int32 SAL_CALL getPort() const;
 
         /** Sets the port number of the address.
-           @return true if successfule.
+
+           @param[in] nPort port number
+
+           @retval true     success
+           @retval false    failure
          */
-        inline bool SAL_CALL setPort( sal_Int32 nPort );
+        inline bool SAL_CALL setPort(sal_Int32 nPort);
 
         /** Sets the address of the underlying socket address struct in network byte order.
-            @return true on success, false signales failure.
+
+           @retval true     success
+           @retval false    failure
          */
-        inline bool SAL_CALL setAddr( const ::rtl::ByteSequence & address );
+        inline bool SAL_CALL setAddr(const ::rtl::ByteSequence & address);
 
         /** Returns the address of the underlying socket in network byte order
           */
-        inline ::rtl::ByteSequence  SAL_CALL getAddr( oslSocketResult *pResult = NULL ) const;
+        inline ::rtl::ByteSequence SAL_CALL getAddr(oslSocketResult *pResult = NULL) const;
 
         /** assign the handle to this reference. The previous handle is released.
         */
         inline SocketAddr & SAL_CALL operator= (oslSocketAddr Addr);
 
-        /**
-         */
         inline SocketAddr & SAL_CALL operator= (const SocketAddr& Addr);
+
+#if defined LIBO_INTERNAL_ONLY
+        inline SocketAddr & operator =(SocketAddr && other);
+#endif
 
         /** Assigns the socket addr without copyconstructing it.
             @param Addr the socket address.
@@ -275,7 +300,7 @@ namespace osl
             will NOT block; <code>false</code> if it would block or if an error occurred.
 
             @param pTimeout if 0, the operation will block without a timeout. Otherwise
-            the specified amout of time.
+            the specified amount of time.
         */
         inline bool SAL_CALL isRecvReady(const TimeValue *pTimeout = NULL) const;
 
@@ -287,7 +312,7 @@ namespace osl
             will NOT block; <code>false</code> if it would block or if an error occurred.
 
             @param pTimeout if 0, the operation will block without a timeout. Otherwise
-            the specified amout of time.
+            the specified amount of time.
         */
         inline bool SAL_CALL isSendReady(const TimeValue *pTimeout = NULL) const;
 
@@ -302,21 +327,19 @@ namespace osl
             an error occurred.
 
             @param pTimeout if 0, the operation will block without a timeout. Otherwise
-            the specified amout of time.
+            the specified amount of time.
         */
         inline bool SAL_CALL isExceptionPending(const TimeValue *pTimeout = NULL) const;
 
 
         /** Queries the socket for its type.
-            @return one of:
-            <ul>
-            <li> <code>osl_Socket_TypeStream</code>
-            <li> <code>osl_Socket_TypeDgram</code>
-            <li> <code>osl_Socket_TypeRaw</code>
-            <li> <code>osl_Socket_TypeRdm</code>
-            <li> <code>osl_Socket_TypeSeqPacket</code>
-            <li> <code>osl_invalid_SocketType</code>, if an error occurred
-            </ul>
+
+            @retval osl_Socket_TypeStream
+            @retval osl_Socket_TypeDgram
+            @retval osl_Socket_TypeRaw
+            @retval osl_Socket_TypeRdm
+            @retval osl_Socket_TypeSeqPacket
+            @retval osl_invalid_SocketType if an error occurred
         */
         inline oslSocketType    SAL_CALL getType() const;
 
@@ -514,8 +537,6 @@ namespace osl
           inline StreamSocket(oslAddrFamily Family = osl_Socket_FamilyInet,
                             oslProtocol Protocol = osl_Socket_ProtocolIp,
                             oslSocketType   Type = osl_Socket_TypeStream);
-
-        inline StreamSocket( const StreamSocket & );
 
         inline StreamSocket( oslSocket Socket , __sal_NoAcquire noacquire );
 

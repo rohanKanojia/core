@@ -21,6 +21,7 @@
 #define INCLUDED_SC_INC_MARKARR_HXX
 
 #include "address.hxx"
+#include <memory>
 
 #define SC_MARKARRAY_DELTA    4
 
@@ -32,9 +33,9 @@ struct ScMarkEntry
 
 class ScMarkArray
 {
-    SCSIZE          nCount;
-    SCSIZE          nLimit;
-    ScMarkEntry*    pData;
+    SCSIZE                            nCount;
+    SCSIZE                            nLimit;
+    std::unique_ptr<ScMarkEntry[]>    pData;
 
 friend class ScMarkArrayIter;
 friend class ScDocument;                // for FillInfo
@@ -43,7 +44,7 @@ public:
             ScMarkArray();
             ScMarkArray( ScMarkArray&& rArray );
             ~ScMarkArray();
-    void    Reset( bool bMarked = false );
+    void    Reset( bool bMarked = false, SCSIZE nNeeded = 1 );
     bool    GetMark( SCROW nRow ) const;
     void    SetMarkArea( SCROW nStartRow, SCROW nEndRow, bool bMarked );
     bool    IsAllMarked( SCROW nStartRow, SCROW nEndRow ) const;
@@ -57,8 +58,11 @@ public:
     bool    Search( SCROW nRow, SCSIZE& nIndex ) const;
 
     /// Including current row, may return -1 if bUp and not found
-    SCsROW  GetNextMarked( SCsROW nRow, bool bUp ) const;
+    SCROW   GetNextMarked( SCROW nRow, bool bUp ) const;
     SCROW   GetMarkEnd( SCROW nRow, bool bUp ) const;
+
+    void    Shift( SCROW nStartRow, long nOffset );
+    void    Intersect( const ScMarkArray& rOther );
 };
 
 class ScMarkArrayIter                   // iterate over selected range
@@ -70,6 +74,7 @@ public:
                 ~ScMarkArrayIter();
 
     bool        Next( SCROW& rTop, SCROW& rBottom );
+    void        reset( const ScMarkArray* pNewArray );
 };
 
 #endif

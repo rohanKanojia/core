@@ -101,7 +101,7 @@ sal_Size IsciiDevanagariToUnicode::convert(
     {
         if (pDestBufPtr == pDestBufEnd)
         {
-            nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+            nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
             break;
         }
 
@@ -194,11 +194,9 @@ sal_Size IsciiDevanagariToUnicode::convert(
                 continue;
             if (eAction == BAD_INPUT_STOP)
                 break;
-            else if (eAction == BAD_INPUT_NO_OUTPUT)
-            {
-                nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
-                break;
-            }
+            assert(eAction == BAD_INPUT_NO_OUTPUT);
+            nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
+            break;
         }
         ++nConverted;
         if (bDouble)
@@ -234,7 +232,7 @@ sal_Size UnicodeToIsciiDevanagari::convert(sal_Unicode const* pSrcBuf, sal_Size 
     char* pDestBuf, sal_Size nDestBytes, sal_uInt32 nFlags,
     sal_uInt32 * pInfo, sal_Size* pSrcCvtChars)
 {
-    size_t entries = SAL_N_ELEMENTS(unicodeToISCIIEncoding);
+    size_t const entries = SAL_N_ELEMENTS(unicodeToISCIIEncoding);
     BmpUnicodeToSingleByteRange const * ranges = unicodeToISCIIEncoding;
 
     sal_Unicode cHighSurrogate = m_cHighSurrogate;
@@ -358,7 +356,7 @@ sal_Size UnicodeToIsciiDevanagari::convert(sal_Unicode const* pSrcBuf, sal_Size 
             {
                 break;
             }
-            else if (c <= sal::static_int_cast< sal_uInt32 >(
+            if (c <= sal::static_int_cast< sal_uInt32 >(
                            ranges[i].unicode + ranges[i].range))
             {
                 if (pDestBufEnd - pDestBufPtr < 1)

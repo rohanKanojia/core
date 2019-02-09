@@ -19,12 +19,12 @@
 #ifndef INCLUDED_COM_SUN_STAR_UNO_REFERENCE_H
 #define INCLUDED_COM_SUN_STAR_UNO_REFERENCE_H
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <cassert>
 #include <cstddef>
 
-#include <rtl/alloc.h>
+#include "rtl/alloc.h"
 
 namespace com
 {
@@ -83,15 +83,24 @@ public:
 
         @return UNacquired interface pointer
     */
-    inline XInterface * SAL_CALL get() const
+    XInterface * SAL_CALL get() const
         { return _pInterface; }
 
     /** Checks if reference is null.
 
         @return true if reference acquires an interface, i.e. true if it is not null
     */
-    inline bool SAL_CALL is() const
+    bool SAL_CALL is() const
         { return (NULL != _pInterface); }
+
+#if defined LIBO_INTERNAL_ONLY
+    /** Checks if reference is null.
+
+        @return true if reference acquires an interface, i.e. true if it is not null
+    */
+    explicit operator bool() const
+        { return is(); }
+#endif
 
     /** Equality operator: compares two interfaces
         Checks if both references are null or refer to the same object.
@@ -247,7 +256,7 @@ class SAL_DLLPUBLIC_RTTI Reference : public BaseReference
         principle, this is not guaranteed to work.  In practice, it seems to
         work on all supported platforms.
     */
-    static inline interface_type * castFromXInterface(XInterface * p) {
+    static interface_type * castFromXInterface(XInterface * p) {
         return static_cast< interface_type * >(static_cast< void * >(p));
     }
 
@@ -262,26 +271,26 @@ class SAL_DLLPUBLIC_RTTI Reference : public BaseReference
         principle, this is not guaranteed to work.  In practice, it seems to
         work on all supported platforms.
     */
-    static inline XInterface * castToXInterface(interface_type * p) {
+    static XInterface * castToXInterface(interface_type * p) {
         return static_cast< XInterface * >(static_cast< void * >(p));
     }
 
 public:
     /// @cond INTERNAL
     // these are here to force memory de/allocation to sal lib.
-    inline static void * SAL_CALL operator new ( ::size_t nSize )
+    static void * SAL_CALL operator new ( ::size_t nSize )
         { return ::rtl_allocateMemory( nSize ); }
-    inline static void SAL_CALL operator delete ( void * pMem )
+    static void SAL_CALL operator delete ( void * pMem )
         { ::rtl_freeMemory( pMem ); }
-    inline static void * SAL_CALL operator new ( ::size_t, void * pMem )
+    static void * SAL_CALL operator new ( ::size_t, void * pMem )
         { return pMem; }
-    inline static void SAL_CALL operator delete ( void *, void * )
+    static void SAL_CALL operator delete ( void *, void * )
         {}
     /// @endcond
 
     /** Destructor: Releases interface if set.
     */
-    inline ~Reference();
+    inline ~Reference() COVERITY_NOEXCEPT_FALSE;
 
     /** Default Constructor: Sets null reference.
     */
@@ -333,7 +342,7 @@ public:
         @param pInterface another reference
         @param dummy UNO_REF_NO_ACQUIRE to force obvious distinction to other constructors
     */
-    inline Reference( interface_type * pInterface, UnoReference_NoAcquire dummy );
+    inline SAL_DEPRECATED("use SAL_NO_ACQUIRE version") Reference( interface_type * pInterface, UnoReference_NoAcquire dummy );
 
     /** Constructor: Queries given interface for reference interface type (interface_type).
 
@@ -400,23 +409,33 @@ public:
         any interface must be derived from com.sun.star.uno.XInterface.
         This a useful direct cast possibility.
     */
-    inline SAL_CALL operator const Reference< XInterface > & () const
+    SAL_CALL operator const Reference< XInterface > & () const
         { return * reinterpret_cast< const Reference< XInterface > * >( this ); }
 
     /** Dereference operator: Used to call interface methods.
 
         @return UNacquired interface pointer
     */
-    inline interface_type * SAL_CALL operator -> () const {
+    interface_type * SAL_CALL operator -> () const {
         assert(_pInterface != NULL);
         return castFromXInterface(_pInterface);
+    }
+
+    /** Indirection operator.
+
+        @since LibreOffice 6.3
+        @return UNacquired interface reference
+    */
+    interface_type & SAL_CALL operator * () const {
+        assert(_pInterface != NULL);
+        return *castFromXInterface(_pInterface);
     }
 
     /** Gets interface pointer. This call does not acquire the interface.
 
         @return UNacquired interface pointer
     */
-    inline interface_type * SAL_CALL get() const
+    interface_type * SAL_CALL get() const
         { return castFromXInterface(_pInterface); }
 
     /** Clears reference, i.e. releases interface. Reference is null after clear() call.
@@ -451,7 +470,7 @@ public:
         @param dummy UNO_REF_NO_ACQUIRE to force obvious distinction to set methods
         @return true, if non-null interface was set
     */
-    inline bool SAL_CALL set( interface_type * pInterface, UnoReference_NoAcquire dummy);
+    inline SAL_DEPRECATED("use SAL_NO_ACQUIRE version") bool SAL_CALL set( interface_type * pInterface, UnoReference_NoAcquire dummy);
 
     /** Queries given interface for reference interface type (interface_type) and sets it.
         An interface already set will be released.
@@ -562,24 +581,14 @@ public:
         @param rRef interface reference
         @return interface reference of demanded type (may be null)
     */
-    inline static SAL_WARN_UNUSED_RESULT Reference< interface_type > SAL_CALL query( const BaseReference & rRef );
+    SAL_WARN_UNUSED_RESULT inline static Reference< interface_type > SAL_CALL query( const BaseReference & rRef );
     /** Queries given interface for type interface_type.
 
         @param pInterface interface pointer
         @return interface reference of demanded type (may be null)
     */
-    inline static SAL_WARN_UNUSED_RESULT Reference< interface_type > SAL_CALL query( XInterface * pInterface );
+    SAL_WARN_UNUSED_RESULT inline static Reference< interface_type > SAL_CALL query( XInterface * pInterface );
 };
-
-/// @cond INTERNAL
-/** Enables boost::mem_fn and boost::bind to recognize Reference.
-*/
-template <typename T>
-inline T * get_pointer( Reference<T> const& r )
-{
-    return r.get();
-}
-/// @endcond
 
 }
 }

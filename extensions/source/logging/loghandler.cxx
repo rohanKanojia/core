@@ -48,7 +48,6 @@ namespace logging
     LogHandlerHelper::LogHandlerHelper( const Reference< XComponentContext >& _rxContext, ::osl::Mutex& _rMutex, ::cppu::OBroadcastHelper& _rBHelper )
         :m_eEncoding( RTL_TEXTENCODING_UTF8 )
         ,m_nLevel( LogLevel::SEVERE )
-        ,m_xFormatter( nullptr )
         ,m_xContext( _rxContext )
         ,m_rMutex( _rMutex )
         ,m_rBHelper( _rBHelper )
@@ -75,7 +74,7 @@ namespace logging
     {
         m_rMutex.acquire();
 
-        if ( !getIsInitialized() )
+        if ( !m_bInitialized )
             throw DisposedException("component not initialized" );
 
         if ( m_rBHelper.bDisposed )
@@ -91,7 +90,7 @@ namespace logging
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("extensions.logging");
             }
         }
     }
@@ -138,7 +137,7 @@ namespace logging
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.logging");
         }
         return false;
     }
@@ -155,7 +154,7 @@ namespace logging
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.logging");
         }
         return false;
     }
@@ -172,7 +171,7 @@ namespace logging
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.logging");
         }
         return false;
     }

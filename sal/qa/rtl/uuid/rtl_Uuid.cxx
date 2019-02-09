@@ -29,15 +29,15 @@
 #include <cppunit/plugin/TestPlugIn.h>
 
 #ifdef _WIN32
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #elif defined UNX
 #include <unistd.h>
 #include <time.h>
 #endif
 
-using ::rtl::OUString;
-using ::rtl::OUStringToOString;
-using ::rtl::OString;
 
 namespace rtl_Uuid
 {
@@ -51,7 +51,7 @@ public:
     sal_Int32 i,i2;
     for( i = 0 ; i < TEST_UUID ; i ++ )
     {
-        rtl_createUuid( aNode[i], nullptr, sal_False );
+        rtl_createUuid( aNode[i], nullptr, false );
     }
     bool bRes = true;
     for( i = 0 ; i < TEST_UUID ; i ++ )
@@ -153,9 +153,5 @@ public:
 CPPUNIT_TEST_SUITE_REGISTRATION(rtl_Uuid::createUuid);
 CPPUNIT_TEST_SUITE_REGISTRATION(rtl_Uuid::createNamedUuid);
 } // namespace rtl_Uuid
-
-// this macro creates an empty function, which will called by the RegisterAllFunctions()
-// to let the user the possibility to also register some functions by hand.
-CPPUNIT_PLUGIN_IMPLEMENT();
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

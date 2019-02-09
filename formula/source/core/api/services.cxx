@@ -16,11 +16,10 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "sal/types.h"
+#include <sal/types.h>
 #include <cppuhelper/factory.hxx>
-#include <osl/diagnose.h>
 #include <cppuhelper/implementationentry.hxx>
-#include "formula/FormulaOpCodeMapperObj.hxx"
+#include <formula/FormulaOpCodeMapperObj.hxx>
 
 /********************************************************************************************/
 
@@ -34,7 +33,7 @@ using namespace ::com::sun::star::registry;
 namespace
 {
 
-cppu::ImplementationEntry entries[] = {
+cppu::ImplementationEntry const entries[] = {
     { &FormulaOpCodeMapperObj::create, &FormulaOpCodeMapperObj::getImplementationName_Static, &FormulaOpCodeMapperObj::getSupportedServiceNames_Static,
         &cppu::createSingleComponentFactory, nullptr, 0 },
     { nullptr, nullptr, nullptr, nullptr, nullptr, 0 }
@@ -43,7 +42,7 @@ cppu::ImplementationEntry entries[] = {
 
 extern "C"
 {
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL for_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * for_component_getFactory(
     char const * implName, void * serviceManager, void * registryKey)
 {
     return cppu::component_getFactoryHelper(

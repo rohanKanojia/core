@@ -24,7 +24,7 @@
 
 // define ----------------------------------------------------------------
 
-#define PAPERBIN_PRINTER_SETTINGS   ((sal_uInt8)0xFF)
+#define PAPERBIN_PRINTER_SETTINGS   (sal_uInt8(0xFF))
 
 // class SvxPaperBinItem -------------------------------------------------
 
@@ -40,28 +40,18 @@ public:
 
     explicit inline SvxPaperBinItem( const sal_uInt16 nId ,
                             const sal_uInt8 nTray = PAPERBIN_PRINTER_SETTINGS );
-    inline SvxPaperBinItem &operator=( const SvxPaperBinItem &rCpy );
 
     // "pure virtual Methods" from SfxPoolItem
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual SfxPoolItem*    Create( SvStream &, sal_uInt16 ) const override;
-    virtual SvStream&       Store( SvStream &, sal_uInt16 nItemVersion ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                             SfxMapUnit eCoreMetric,
-                                             SfxMapUnit ePresMetric,
-                                             OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 };
 
 inline SvxPaperBinItem::SvxPaperBinItem( const sal_uInt16 nId, const sal_uInt8 nT )
     : SfxByteItem( nId, nT )
 {}
-
-inline SvxPaperBinItem &SvxPaperBinItem::operator=(
-    const SvxPaperBinItem &rCpy )
-{
-    SetValue( rCpy.GetValue() );
-    return *this;
-}
 
 #endif
 

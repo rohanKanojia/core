@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DrawViewShell.hxx"
+#include <DrawViewShell.hxx>
 
 #include <svx/svxids.hrc>
 #include <svl/aeitem.hxx>
@@ -30,15 +30,15 @@
 
 #include <sfx2/viewfrm.hxx>
 
-#include "app.hrc"
-
-#include "sdpage.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "pgjump.hxx"
-#include "NavigatorChildWindow.hxx"
-#include "navigatr.hxx"
-#include "drawview.hxx"
+#include <app.hrc>
+#include <sdmod.hxx>
+#include <sdpage.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <pgjump.hxx>
+#include <NavigatorChildWindow.hxx>
+#include <navigatr.hxx>
+#include <drawview.hxx>
 
 namespace sd {
 
@@ -55,8 +55,7 @@ void DrawViewShell::ExecNavigatorWin( SfxRequest& rReq )
     {
         case SID_NAVIGATOR_INIT:
         {
-            sal_uInt16 nId = SID_NAVIGATOR;
-            SfxChildWindow* pWindow = GetViewFrame()->GetChildWindow( nId );
+            SfxChildWindow* pWindow = GetViewFrame()->GetChildWindow( SID_NAVIGATOR );
             if( pWindow )
             {
                 SdNavigatorWin* pNavWin = static_cast<SdNavigatorWin*>( pWindow->GetContextWindow( SD_MOD() ) );
@@ -75,8 +74,8 @@ void DrawViewShell::ExecNavigatorWin( SfxRequest& rReq )
                     mpDrawView->SdrEndTextEdit();
 
                 const SfxItemSet* pArgs = rReq.GetArgs();
-                PageJump eJump = (PageJump)static_cast<const SfxAllEnumItem&>( pArgs->
-                                  Get(SID_NAVIGATOR_PAGE)).GetValue();
+                PageJump eJump = static_cast<PageJump>(static_cast<const SfxAllEnumItem&>( pArgs->
+                                  Get(SID_NAVIGATOR_PAGE)).GetValue());
 
                 switch (eJump)
                 {
@@ -152,13 +151,12 @@ void DrawViewShell::ExecNavigatorWin( SfxRequest& rReq )
 
 void DrawViewShell::GetNavigatorWinState( SfxItemSet& rSet )
 {
-    sal_uInt32 nState = NAVSTATE_NONE;
+    NavState nState = NavState::NONE;
     sal_uInt16 nCurrentPage = 0;
-    sal_uInt16 nFirstPage = 0;
     sal_uInt16 nLastPage;
     OUString aPageName;
 
-    nState |= NAVTLB_UPDATE;
+    nState |= NavState::TableUpdate;
 
     if (mpActualPage != nullptr)
     {
@@ -169,26 +167,26 @@ void DrawViewShell::GetNavigatorWinState( SfxItemSet& rSet )
 
 
     // first page / previous page
-    if( nCurrentPage == nFirstPage )
+    if( nCurrentPage == 0 )
     {
-        nState |= NAVBTN_FIRST_DISABLED | NAVBTN_PREV_DISABLED;
+        nState |= NavState::BtnFirstDisabled | NavState::BtnPrevDisabled;
     }
     else
     {
-        nState |= NAVBTN_FIRST_ENABLED | NAVBTN_PREV_ENABLED;
+        nState |= NavState::BtnFirstEnabled | NavState::BtnPrevEnabled;
     }
 
     // last page / next page
     if( nCurrentPage == nLastPage )
     {
-        nState |= NAVBTN_LAST_DISABLED | NAVBTN_NEXT_DISABLED;
+        nState |= NavState::BtnLastDisabled | NavState::BtnNextDisabled;
     }
     else
     {
-        nState |= NAVBTN_LAST_ENABLED | NAVBTN_NEXT_ENABLED;
+        nState |= NavState::BtnLastEnabled | NavState::BtnNextEnabled;
     }
 
-    rSet.Put( SfxUInt32Item( SID_NAVIGATOR_STATE, nState ) );
+    rSet.Put( SfxUInt32Item( SID_NAVIGATOR_STATE, static_cast<sal_uInt32>(nState) ) );
     rSet.Put( SfxStringItem( SID_NAVIGATOR_PAGENAME, aPageName ) );
 }
 

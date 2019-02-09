@@ -17,15 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/mutex.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/awt/PosSize.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
-#include "bibliography.hrc"
-#include <vcl/lstbox.hxx>
 #include <vcl/edit.hxx>
 #include <tools/debug.hxx>
 #include "bibbeam.hxx"
@@ -44,8 +41,6 @@ using namespace ::com::sun::star::uno;
 
 namespace bib
 {
-
-    using namespace ::com::sun::star::uno;
 
     void HandleTaskPaneList( vcl::Window* pWindow, bool bAddToList )
     {
@@ -84,8 +79,8 @@ namespace bib
 
     public:
 
-            BibGridwin(vcl::Window* pParent, WinBits nStyle = WB_3DLOOK );
-            virtual ~BibGridwin();
+            BibGridwin(vcl::Window* pParent, WinBits nStyle );
+            virtual ~BibGridwin() override;
             virtual void dispose() override;
 
             void createGridWin(const Reference< awt::XControlModel > & xDbForm);
@@ -154,8 +149,8 @@ namespace bib
                     m_xControlContainer->addControl("GridControl", m_xControl);
                     m_xGridWin.set(m_xControl, UNO_QUERY );
                     m_xDispatchProviderInterception.set(m_xControl, UNO_QUERY );
-                    m_xGridWin->setVisible( sal_True );
-                    m_xControl->setDesignMode( sal_True );
+                    m_xGridWin->setVisible( true );
+                    m_xControl->setDesignMode( true );
                     // initially switch on the design mode - switch it off _after_ loading the form
 
                     ::Size aSize = GetOutputSizePixel();
@@ -184,8 +179,8 @@ namespace bib
             m_xGridWin->setFocus();
     }
 
-    BibBeamer::BibBeamer( vcl::Window* _pParent, BibDataManager* _pDM, WinBits _nStyle )
-        :BibSplitWindow( _pParent, _nStyle | WB_NOSPLITDRAW )
+    BibBeamer::BibBeamer( vcl::Window* _pParent, BibDataManager* _pDM )
+        :BibSplitWindow( _pParent, WB_3DLOOK | WB_NOSPLITDRAW )
         ,pDatMan( _pDM )
         ,pToolBar( nullptr )
         ,pGridWin( nullptr )
@@ -206,9 +201,6 @@ namespace bib
     {
         if ( isFormConnected() )
             disconnectForm();
-
-        if ( m_xToolBarRef.is() )
-            m_xToolBarRef->dispose();
 
         if ( pToolBar )
             pDatMan->SetToolbar(nullptr);
@@ -267,7 +259,7 @@ namespace bib
             pGridWin->GrabFocus();
     }
 
-    IMPL_LINK_NOARG_TYPED( BibBeamer, RecalcLayout_Impl, void*, void )
+    IMPL_LINK_NOARG( BibBeamer, RecalcLayout_Impl, void*, void )
     {
         long nHeight = pToolBar->get_preferred_size().Height();
         SetItemSize( ID_TOOLBAR, nHeight );

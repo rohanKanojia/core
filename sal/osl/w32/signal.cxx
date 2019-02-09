@@ -19,39 +19,30 @@
 
 #include <sal/config.h>
 
+#include <stdlib.h>
+
+#include <config_features.h>
+
 #include <signalshared.hxx>
 
-/* system headers */
-#include "system.h"
-#include <tchar.h>
-
-#include "file_url.h"
-#include "path_helper.hxx"
-
-#include <osl/diagnose.h>
-#include <osl/signal.h>
-#ifndef __MINGW32__
-#include <DbgHelp.h>
-#endif
-#include <errorrep.h>
 #include <systools/win32/uwinapi.h>
-#include <sal/macros.h>
-#include <eh.h>
-#include <stdexcept>
+#include <errorrep.h>
 
 namespace
 {
 long WINAPI signalHandlerFunction(LPEXCEPTION_POINTERS lpEP);
+
+LPTOP_LEVEL_EXCEPTION_FILTER pPreviousHandler = nullptr;
 }
 
 bool onInitSignal()
 {
-    SetUnhandledExceptionFilter(signalHandlerFunction);
+    pPreviousHandler = SetUnhandledExceptionFilter(signalHandlerFunction);
 
-    HMODULE hFaultRep = LoadLibrary( "faultrep.dll" );
+    HMODULE hFaultRep = LoadLibraryW( L"faultrep.dll" );
     if ( hFaultRep )
     {
-        pfn_ADDEREXCLUDEDAPPLICATIONW pfn = (pfn_ADDEREXCLUDEDAPPLICATIONW)GetProcAddress( hFaultRep, "AddERExcludedApplicationW" );
+        pfn_ADDEREXCLUDEDAPPLICATIONW pfn = reinterpret_cast<pfn_ADDEREXCLUDEDAPPLICATIONW>(GetProcAddress( hFaultRep, "AddERExcludedApplicationW" ));
         if ( pfn )
             pfn( L"SOFFICE.EXE" );
         FreeLibrary( hFaultRep );
@@ -62,7 +53,7 @@ bool onInitSignal()
 
 bool onDeInitSignal()
 {
-    SetUnhandledExceptionFilter(nullptr);
+    SetUnhandledExceptionFilter(pPreviousHandler);
 
     return false;
 }
@@ -74,6 +65,13 @@ namespace
 
 long WINAPI signalHandlerFunction(LPEXCEPTION_POINTERS lpEP)
 {
+#if HAVE_FEATURE_BREAKPAD
+    // we should make sure to call the breakpad handler as
+    // first step when we hit a problem
+    if (pPreviousHandler)
+        pPreviousHandler(lpEP);
+#endif
+
     static bool bNested = false;
 
     oslSignalInfo info;
@@ -137,52 +135,6 @@ long WINAPI signalHandlerFunction(LPEXCEPTION_POINTERS lpEP)
     return EXCEPTION_CONTINUE_EXECUTION;
 }
 
-void win_seh_translator( unsigned nSEHCode, _EXCEPTION_POINTERS* /* pExcPtrs */)
-{
-    const char* pSEHName = nullptr;
-    switch( nSEHCode)
-    {
-        case EXCEPTION_ACCESS_VIOLATION:         pSEHName = "SEH Exception: ACCESS VIOLATION"; break;
-        case EXCEPTION_DATATYPE_MISALIGNMENT:    pSEHName = "SEH Exception: DATATYPE MISALIGNMENT"; break;
-        case EXCEPTION_BREAKPOINT:               /*pSEHName = "SEH Exception: BREAKPOINT";*/ break;
-        case EXCEPTION_SINGLE_STEP:              /*pSEHName = "SEH Exception: SINGLE STEP";*/ break;
-        case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:    pSEHName = "SEH Exception: ARRAY BOUNDS EXCEEDED"; break;
-        case EXCEPTION_FLT_DENORMAL_OPERAND:     pSEHName = "SEH Exception: DENORMAL FLOAT OPERAND"; break;
-        case EXCEPTION_FLT_DIVIDE_BY_ZERO:       pSEHName = "SEH Exception: FLOAT DIVIDE_BY_ZERO"; break;
-        case EXCEPTION_FLT_INEXACT_RESULT:       pSEHName = "SEH Exception: FLOAT INEXACT RESULT"; break;
-        case EXCEPTION_FLT_INVALID_OPERATION:    pSEHName = "SEH Exception: INVALID FLOAT OPERATION"; break;
-        case EXCEPTION_FLT_OVERFLOW:             pSEHName = "SEH Exception: FLOAT OVERFLOW"; break;
-        case EXCEPTION_FLT_STACK_CHECK:          pSEHName = "SEH Exception: FLOAT STACK_CHECK"; break;
-        case EXCEPTION_FLT_UNDERFLOW:            pSEHName = "SEH Exception: FLOAT UNDERFLOW"; break;
-        case EXCEPTION_INT_DIVIDE_BY_ZERO:       pSEHName = "SEH Exception: INTEGER DIVIDE_BY_ZERO"; break;
-        case EXCEPTION_INT_OVERFLOW:             pSEHName = "SEH Exception: INTEGER OVERFLOW"; break;
-        case EXCEPTION_PRIV_INSTRUCTION:         pSEHName = "SEH Exception: PRIVILEGED INSTRUCTION"; break;
-        case EXCEPTION_IN_PAGE_ERROR:            pSEHName = "SEH Exception: IN_PAGE_ERROR"; break;
-        case EXCEPTION_ILLEGAL_INSTRUCTION:      pSEHName = "SEH Exception: ILLEGAL INSTRUCTION"; break;
-        case EXCEPTION_NONCONTINUABLE_EXCEPTION: pSEHName = "SEH Exception: NONCONTINUABLE EXCEPTION"; break;
-        case EXCEPTION_STACK_OVERFLOW:           pSEHName = "SEH Exception: STACK OVERFLOW"; break;
-        case EXCEPTION_INVALID_DISPOSITION:      pSEHName = "SEH Exception: INVALID DISPOSITION"; break;
-        case EXCEPTION_GUARD_PAGE:               pSEHName = "SEH Exception: GUARD PAGE"; break;
-        case EXCEPTION_INVALID_HANDLE:           pSEHName = "SEH Exception: INVALID HANDLE"; break;
-//      case EXCEPTION_POSSIBLE_DEADLOCK:        pSEHName = "SEH Exception: POSSIBLE DEADLOCK"; break;
-        default:                                 pSEHName = "Unknown SEH Exception"; break;
-    }
-
-    if( pSEHName)
-        throw std::runtime_error( pSEHName);
-}
-
-}
-
-void onErrorReportingChanged(bool bEnable)
-{
-#if defined _MSC_VER
-    if( !bEnable) // if the crash reporter is disabled
-    {
-        // fall back to handle Window's SEH events as C++ exceptions
-        _set_se_translator( win_seh_translator);
-    }
-#endif
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

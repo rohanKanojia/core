@@ -28,7 +28,6 @@
 #include <com/sun/star/lang/XEventListener.hpp>
 
 #include <com/sun/star/script/provider/XScriptProvider.hpp>
-#include <com/sun/star/script/browse/XBrowseNode.hpp>
 #include <com/sun/star/document/XScriptInvocationContext.hpp>
 
 #include <comphelper/stl_types.hxx>
@@ -46,8 +45,7 @@ typedef std::map  <   css::uno::Reference< css::uno::XInterface >
                   >   ScriptComponent_map;
 
 typedef std::unordered_map< OUString,
-    css::uno::Reference< css::script::provider::XScriptProvider >,
-    OUStringHash > Msp_hash;
+    css::uno::Reference< css::script::provider::XScriptProvider > > Msp_hash;
 
 class NonDocMSPCreator;
 
@@ -58,7 +56,7 @@ public:
 
     explicit ActiveMSPList(  const css::uno::Reference<
         css::uno::XComponentContext > & xContext  );
-    virtual ~ActiveMSPList();
+    virtual ~ActiveMSPList() override;
 
     css::uno::Reference< css::script::provider::XScriptProvider >
         getMSPFromStringContext( const OUString& context );
@@ -72,8 +70,7 @@ public:
     //XEventListener
 
 
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source )
-        throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
 private:
     void addActiveMSP( const css::uno::Reference< css::uno::XInterface >& xComponent,

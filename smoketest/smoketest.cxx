@@ -19,39 +19,38 @@
 
 #include <sal/types.h>
 #include <chrono>
-#include "com/sun/star/awt/AsyncCallback.hpp"
-#include "com/sun/star/awt/XCallback.hpp"
-#include "com/sun/star/beans/PropertyState.hpp"
-#include "com/sun/star/beans/PropertyValue.hpp"
-#include "com/sun/star/document/MacroExecMode.hpp"
-#include "com/sun/star/frame/Desktop.hpp"
-#include "com/sun/star/frame/DispatchResultEvent.hpp"
-#include "com/sun/star/frame/DispatchResultState.hpp"
-#include "com/sun/star/frame/XComponentLoader.hpp"
-#include "com/sun/star/frame/XController.hpp"
-#include "com/sun/star/frame/XDispatchProvider.hpp"
-#include "com/sun/star/frame/XDispatchResultListener.hpp"
-#include "com/sun/star/frame/XModel.hpp"
-#include "com/sun/star/frame/XNotifyingDispatch.hpp"
-#include "com/sun/star/lang/EventObject.hpp"
-#include "com/sun/star/uno/Any.hxx"
-#include "com/sun/star/uno/Reference.hxx"
-#include "com/sun/star/uno/RuntimeException.hpp"
-#include "com/sun/star/uno/Sequence.hxx"
-#include "com/sun/star/util/URL.hpp"
+#include <com/sun/star/awt/AsyncCallback.hpp>
+#include <com/sun/star/awt/XCallback.hpp>
+#include <com/sun/star/beans/PropertyState.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/document/MacroExecMode.hpp>
+#include <com/sun/star/frame/Desktop.hpp>
+#include <com/sun/star/frame/DispatchResultEvent.hpp>
+#include <com/sun/star/frame/DispatchResultState.hpp>
+#include <com/sun/star/frame/XController.hpp>
+#include <com/sun/star/frame/XDispatchProvider.hpp>
+#include <com/sun/star/frame/XDispatchResultListener.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/frame/XNotifyingDispatch.hpp>
+#include <com/sun/star/lang/EventObject.hpp>
+#include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <com/sun/star/util/URL.hpp>
 #include <cppuhelper/implbase.hxx>
-#include "cppunit/TestAssert.h"
-#include "cppunit/TestFixture.h"
-#include "cppunit/extensions/HelperMacros.h"
-#include "cppunit/plugin/TestPlugIn.h"
-#include "osl/conditn.hxx"
-#include "osl/diagnose.h"
-#include "osl/time.h"
-#include "rtl/ustring.h"
-#include "rtl/ustring.hxx"
-#include "unotest/gettestargument.hxx"
-#include "unotest/officeconnection.hxx"
-#include "unotest/toabsolutefileurl.hxx"
+#include <cppunit/TestAssert.h>
+#include <cppunit/TestFixture.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
+#include <osl/conditn.hxx>
+#include <osl/diagnose.h>
+#include <osl/time.h>
+#include <rtl/ustring.h>
+#include <rtl/ustring.hxx>
+#include <unotest/gettestargument.hxx>
+#include <unotest/officeconnection.hxx>
+#include <unotest/toabsolutefileurl.hxx>
 
 namespace {
 
@@ -59,7 +58,10 @@ struct Result {
     osl::Condition condition;
     bool success;
     OUString result;
-    Result() = default;
+    Result()
+        : success(false)
+    {
+    }
     Result(const Result&) = delete;
     Result& operator=(const Result&) = delete;
 };
@@ -71,18 +73,15 @@ public:
     explicit Listener(Result * result): result_(result) { OSL_ASSERT(result != nullptr); }
 
 private:
-    virtual void SAL_CALL disposing(css::lang::EventObject const &)
-        throw (css::uno::RuntimeException, std::exception) override {}
+    virtual void SAL_CALL disposing(css::lang::EventObject const &) override {}
 
     virtual void SAL_CALL dispatchFinished(
-        css::frame::DispatchResultEvent const & Result)
-        throw (css::uno::RuntimeException, std::exception) override;
+        css::frame::DispatchResultEvent const & Result) override;
 
     Result * result_;
 };
 
 void Listener::dispatchFinished(css::frame::DispatchResultEvent const & Result)
-    throw (css::uno::RuntimeException, std::exception)
 {
     result_->success =
         (Result.State == css::frame::DispatchResultState::SUCCESS) &&
@@ -103,13 +102,12 @@ public:
     { OSL_ASSERT(dispatch.is()); }
 
 private:
-    virtual void SAL_CALL notify(css::uno::Any const &)
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual void SAL_CALL notify(css::uno::Any const &) override
     { dispatch_->dispatchWithNotification(url_, arguments_, listener_); }
 
     css::uno::Reference< css::frame::XNotifyingDispatch > dispatch_;
-    css::util::URL url_;
-    css::uno::Sequence< css::beans::PropertyValue > arguments_;
+    css::util::URL const url_;
+    css::uno::Sequence< css::beans::PropertyValue > const arguments_;
     css::uno::Reference< css::frame::XDispatchResultListener > listener_;
 };
 
@@ -149,7 +147,7 @@ void Test::test() {
     args[0].State = css::beans::PropertyState_DIRECT_VALUE;
     args[1].Name = "ReadOnly";
     args[1].Handle = -1;
-    args[1].Value <<= sal_True;
+    args[1].Value <<= true;
     args[1].State = css::beans::PropertyState_DIRECT_VALUE;
     css::util::URL url;
     url.Complete = "vnd.sun.star.script:Standard.Global.StartTestWithDefaultOptions?"

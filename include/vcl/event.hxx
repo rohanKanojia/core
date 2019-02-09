@@ -20,28 +20,21 @@
 #ifndef INCLUDED_VCL_EVENT_HXX
 #define INCLUDED_VCL_EVENT_HXX
 
-#include <tools/solar.h>
 #include <vcl/dllapi.h>
 #include <tools/gen.hxx>
 #include <vcl/keycod.hxx>
-#include <vcl/commandevent.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/vclptr.hxx>
 #include <vcl/outdev.hxx>
 #include <vcl/window.hxx>
 
-class AllSettings;
-struct IDataObject;
+class CommandEvent;
 
-namespace com { namespace sun { namespace star { namespace awt {
-    struct KeyEvent;
-    struct MouseEvent;
-} } } }
-
-enum TextDirectionality {
-    TextDirectionality_LeftToRight_TopToBottom,
-    TextDirectionality_RightToLeft_TopToBottom,
-    TextDirectionality_TopToBottom_RightToLeft
+enum class TextDirectionality {
+    LeftToRight_TopToBottom,
+    RightToLeft_TopToBottom,
+    TopToBottom_RightToLeft,
+    BottomToTop_LeftToRight
 };
 
 class VCL_DLLPUBLIC KeyEvent
@@ -61,8 +54,6 @@ public:
     sal_uInt16          GetRepeat() const       { return mnRepeat;   }
 
     KeyEvent        LogicalTextDirectionality (TextDirectionality eMode) const;
-                    KeyEvent (const KeyEvent& rKeyEvent);
-
 };
 
 inline KeyEvent::KeyEvent()
@@ -103,10 +94,10 @@ namespace o3tl
     template<> struct typed_flags<MouseEventModifiers> : is_typed_flags<MouseEventModifiers, 0xff7> {};
 }
 
-// Maus-Buttons
-#define MOUSE_LEFT              ((sal_uInt16)0x0001)
-#define MOUSE_MIDDLE            ((sal_uInt16)0x0002)
-#define MOUSE_RIGHT             ((sal_uInt16)0x0004)
+// Mouse buttons
+#define MOUSE_LEFT              (sal_uInt16(0x0001))
+#define MOUSE_MIDDLE            (sal_uInt16(0x0002))
+#define MOUSE_RIGHT             (sal_uInt16(0x0004))
 
 
 class VCL_DLLPUBLIC MouseEvent
@@ -125,8 +116,6 @@ public:
 
     const Point&    GetPosPixel() const     { return maPos; }
     MouseEventModifiers GetMode() const         { return mnMode; }
-                    /** inits this vcl KeyEvent with all settings from the given awt event **/
-                    MouseEvent( const css::awt::MouseEvent& rEvent );
 
     sal_uInt16      GetClicks() const       { return mnClicks; }
 
@@ -177,90 +166,26 @@ inline MouseEvent::MouseEvent( const Point& rPos, sal_uInt16 nClicks,
     mnCode      = nButtons | nModifier;
 }
 
-class VCL_DLLPUBLIC ZoomEvent
-{
-private:
-    Point           maCenter;
-    float           mfScale;
-
-public:
-    ZoomEvent() :
-        mfScale( 1 )
-    {
-    }
-
-    ZoomEvent( const Point& rCenter,
-               float fScale ) :
-        maCenter( rCenter ),
-        mfScale( fScale )
-    {
-    }
-
-    const Point& GetCenter() const
-    {
-        return maCenter;
-    }
-
-    float GetScale() const
-    {
-        return mfScale;
-    }
-};
-
-class VCL_DLLPUBLIC ScrollEvent
-{
-private:
-    int mnXOffset;
-    int mnYOffset;
-
-public:
-    ScrollEvent() :
-        mnXOffset( 0 ),
-        mnYOffset( 0 )
-    {
-    }
-
-    ScrollEvent( int xOffset, int yOffset ) :
-        mnXOffset( xOffset ),
-        mnYOffset( yOffset )
-    {
-    }
-
-    int GetXOffset() const
-    {
-        return mnXOffset;
-    }
-
-    int GetYOffset() const
-    {
-        return mnYOffset;
-    }
-};
-
-
 enum class HelpEventMode
 {
     NONE           = 0x0000,
     CONTEXT        = 0x0001,
-    EXTENDED       = 0x0002,
-    BALLOON        = 0x0004,
-    QUICK          = 0x0008
+    BALLOON        = 0x0002,
+    QUICK          = 0x0004
 };
 namespace o3tl
 {
-    template<> struct typed_flags<HelpEventMode> : is_typed_flags<HelpEventMode, 0x0f> {};
+    template<> struct typed_flags<HelpEventMode> : is_typed_flags<HelpEventMode, 0x07> {};
 }
 
 class VCL_DLLPUBLIC HelpEvent
 {
 private:
-    Point           maPos;
+    Point const     maPos;
     HelpEventMode   mnMode;
     bool            mbKeyboardActivated;
 
 public:
-    explicit        HelpEvent();
-    explicit        HelpEvent( HelpEventMode nHelpMode );
     explicit        HelpEvent( const Point& rMousePos, HelpEventMode nHelpMode );
 
     const Point&    GetMousePosPixel() const { return maPos; }
@@ -269,23 +194,11 @@ public:
     void            SetKeyboardActivated( bool bKeyboard ) { mbKeyboardActivated = bKeyboard; }
 };
 
-inline HelpEvent::HelpEvent()
-{
-    mnMode  = HelpEventMode::CONTEXT;
-    mbKeyboardActivated = true;
-}
-
 inline HelpEvent::HelpEvent( const Point& rMousePos, HelpEventMode nHelpMode ) :
             maPos( rMousePos )
 {
     mnMode  = nHelpMode;
     mbKeyboardActivated = false;
-}
-
-inline HelpEvent::HelpEvent( HelpEventMode nHelpMode )
-{
-    mnMode  = nHelpMode;
-    mbKeyboardActivated = true;
 }
 
 /// Event to pass information for UserDraw() handling eg. in comboboxes.
@@ -298,32 +211,23 @@ private:
     /// RenderContext to which we should draw - can be a VirtualDevice or anything.
     VclPtr<vcl::RenderContext> mpRenderContext;
 
-    Rectangle           maOutRect;
-    sal_uInt16          mnItemId;
-    sal_uInt16          mnStyle;
+    tools::Rectangle const    maOutRect;
+    sal_uInt16 const          mnItemId;
+    sal_uInt16 const          mnStyle;
 
 public:
-    UserDrawEvent();
     UserDrawEvent(vcl::Window* pWindow, vcl::RenderContext* pRenderContext,
-            const Rectangle& rOutRect, sal_uInt16 nId, sal_uInt16 nStyle = 0);
+            const tools::Rectangle& rOutRect, sal_uInt16 nId, sal_uInt16 nStyle = 0);
 
     vcl::Window*        GetWindow() const { return mpWindow; }
     vcl::RenderContext* GetRenderContext() const { return mpRenderContext; }
-    const Rectangle&    GetRect() const { return maOutRect; }
+    const tools::Rectangle&    GetRect() const { return maOutRect; }
     sal_uInt16          GetItemId() const { return mnItemId; }
     sal_uInt16          GetStyle() const { return mnStyle; }
 };
 
-inline UserDrawEvent::UserDrawEvent()
-    : mpWindow(nullptr)
-    , mpRenderContext(nullptr)
-    , mnItemId(0)
-    , mnStyle(0)
-{
-}
-
 inline UserDrawEvent::UserDrawEvent(vcl::Window* pWindow, vcl::RenderContext* pRenderContext,
-        const Rectangle& rOutRect, sal_uInt16 nId, sal_uInt16 nStyle)
+        const tools::Rectangle& rOutRect, sal_uInt16 nId, sal_uInt16 nStyle)
     : mpWindow(pWindow)
     , mpRenderContext(pRenderContext)
     , maOutRect( rOutRect )
@@ -336,11 +240,10 @@ inline UserDrawEvent::UserDrawEvent(vcl::Window* pWindow, vcl::RenderContext* pR
 class VCL_DLLPUBLIC TrackingEvent
 {
 private:
-    MouseEvent          maMEvt;
+    MouseEvent const    maMEvt;
     TrackingEventFlags  mnFlags;
 
 public:
-    explicit            TrackingEvent();
     explicit            TrackingEvent( const MouseEvent&,
                                        TrackingEventFlags nTrackFlags = TrackingEventFlags::NONE );
 
@@ -353,11 +256,6 @@ public:
     bool                IsTrackingCanceled() const
                             { return bool(mnFlags & TrackingEventFlags::Cancel); }
 };
-
-inline TrackingEvent::TrackingEvent()
-{
-    mnFlags = TrackingEventFlags::NONE;
-}
 
 inline TrackingEvent::TrackingEvent( const MouseEvent& rMEvt,
                                      TrackingEventFlags nTrackFlags ) :
@@ -378,9 +276,7 @@ enum class MouseNotifyEvent
     GETFOCUS         = 6,
     LOSEFOCUS        = 7,
     COMMAND          = 8,
-    DESTROY          = 9,
     INPUTENABLE      = 10,
-    INPUTDISABLE     = 11,
     EXECUTEDIALOG    = 100,
     ENDEXECUTEDIALOG = 101
 };
@@ -391,7 +287,6 @@ private:
     VclPtr<vcl::Window>     mpWindow;
     void*                   mpData;
     MouseNotifyEvent        mnEventType;
-    long                    mnRetValue;
 
 public:
                             NotifyEvent( MouseNotifyEvent nEventType,
@@ -437,8 +332,7 @@ enum class DataChangedEventType {
     DISPLAY            = 2,
     FONTS              = 4,
     PRINTER            = 5,
-    FONTSUBSTITUTION   = 6,
-    USER               = 10000
+    FONTSUBSTITUTION   = 6
 };
 
 class VCL_DLLPUBLIC DataChangedEvent
@@ -449,7 +343,6 @@ private:
     DataChangedEventType    mnType;
 
 public:
-    explicit                DataChangedEvent();
     explicit                DataChangedEvent( DataChangedEventType nType,
                                               const void* pData = nullptr,
                                               AllSettingsFlags nFlags = AllSettingsFlags::NONE );
@@ -459,13 +352,6 @@ public:
 
     const AllSettings*      GetOldSettings() const;
 };
-
-inline DataChangedEvent::DataChangedEvent()
-{
-    mpData  = nullptr;
-    mnFlags = AllSettingsFlags::NONE;
-    mnType  = DataChangedEventType::NONE;
-}
 
 inline DataChangedEvent::DataChangedEvent( DataChangedEventType nType,
                                            const void* pData,

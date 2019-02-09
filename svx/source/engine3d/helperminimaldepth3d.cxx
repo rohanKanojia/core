@@ -18,7 +18,7 @@
  */
 
 
-#include <helperminimaldepth3d.hxx>
+#include "helperminimaldepth3d.hxx"
 #include <drawinglayer/processor3d/baseprocessor3d.hxx>
 #include <drawinglayer/primitive3d/drawinglayer_primitivetypes3d.hxx>
 #include <drawinglayer/primitive3d/transformprimitive3d.hxx>
@@ -110,7 +110,7 @@ namespace drawinglayer
 
                     for(sal_uInt32 a(0); a < nPolyCount; a++)
                     {
-                           const basegfx::B3DPolygon aPolygon(rPolyPolygon.getB3DPolygon(a));
+                        const basegfx::B3DPolygon& aPolygon(rPolyPolygon.getB3DPolygon(a));
                         const sal_uInt32 nCount(aPolygon.count());
 
                         for(sal_uInt32 b(0); b < nCount; b++)
@@ -155,13 +155,13 @@ double getMinimalDepthInViewCoordinates(const E3dCompoundObject& rObject)
 
     if(!aPrimitives.empty())
     {
-        const E3dScene* pScene = rObject.GetScene();
+        const E3dScene* pScene(rObject.getRootE3dSceneFromE3dObject());
 
         if(pScene)
         {
             // get ViewInformation3D from scene using VC
             const sdr::contact::ViewContactOfE3dScene& rVCScene = static_cast< sdr::contact::ViewContactOfE3dScene& >(pScene->GetViewContact());
-            const drawinglayer::geometry::ViewInformation3D aViewInfo3D(rVCScene.getViewInformation3D());
+            const drawinglayer::geometry::ViewInformation3D& aViewInfo3D(rVCScene.getViewInformation3D());
 
             // the scene's object transformation is already part of aViewInfo3D.getObjectTransformation()
             // for historical reasons (see ViewContactOfE3dScene::createViewInformation3D for more info)
@@ -170,12 +170,12 @@ double getMinimalDepthInViewCoordinates(const E3dCompoundObject& rObject)
             // some Scene SdrObjects lying in-between which may need to be added. This is e.g. used in chart,
             // and generally allowed in 3d scenes an their 3d object hierarchy
             basegfx::B3DHomMatrix aInBetweenSceneMatrix;
-            E3dScene* pParentScene = dynamic_cast< E3dScene* >(rObject.GetParentObj());
+            E3dScene* pParentScene(rObject.getParentE3dSceneFromE3dObject());
 
             while(pParentScene && pParentScene != pScene)
             {
                 aInBetweenSceneMatrix = pParentScene->GetTransform() * aInBetweenSceneMatrix;
-                pParentScene = dynamic_cast< E3dScene* >(pParentScene->GetParentObj());
+                pParentScene = pParentScene->getParentE3dSceneFromE3dObject();
             }
 
             // build new ViewInformation containing all transforms

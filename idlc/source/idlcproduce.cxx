@@ -17,13 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <idlc/idlc.hxx>
-#include <idlc/astmodule.hxx>
+#include <idlc.hxx>
+#include <astmodule.hxx>
 #include <rtl/strbuf.hxx>
 #include <osl/file.hxx>
 #include <osl/thread.h>
 
-#if defined(SAL_W32)
+#if defined(_WIN32)
 #include <io.h>
 #include <direct.h>
 #include <errno.h>
@@ -39,7 +39,7 @@
 
 using namespace ::osl;
 
-StringList* pCreatedDirectories = nullptr;
+static std::list< OString >* pCreatedDirectories = nullptr;
 
 static bool checkOutputPath(const OString& completeName)
 {
@@ -51,10 +51,9 @@ static bool checkOutputPath(const OString& completeName)
 
     sal_Int32 nIndex = 0;
     OString token(sysPathName.getToken(0, SEPARATOR, nIndex));
-    const sal_Char* p = token.getStr();
-    if (strcmp(p, "..") == 0
-        || *(p+1) == ':'
-        || strcmp(p, ".") == 0)
+    if (token.startsWith("..")
+        || (token.getLength() >= 2 && token[1] == ':')
+        || token.startsWith("."))
     {
         buffer.append(token);
         buffer.append(SEPARATOR);
@@ -71,7 +70,7 @@ static bool checkOutputPath(const OString& completeName)
 #if defined(SAL_UNX)
             if (mkdir(buffer.getStr(), 0777) == -1)
 #else
-            if (mkdir((char*)buffer.getStr()) == -1)
+            if (mkdir(buffer.getStr()) == -1)
 #endif
             {
                 if (errno == ENOENT)
@@ -83,7 +82,7 @@ static bool checkOutputPath(const OString& completeName)
             } else
             {
                 if ( !pCreatedDirectories )
-                    pCreatedDirectories = new StringList();
+                    pCreatedDirectories = new std::list< OString >;
                 pCreatedDirectories->push_front(buffer.getStr());
             }
         }
@@ -96,21 +95,18 @@ static bool cleanPath()
 {
     if ( pCreatedDirectories )
     {
-        StringList::iterator iter = pCreatedDirectories->begin();
-        StringList::iterator end = pCreatedDirectories->end();
-        while ( iter != end )
+        for (auto const& createdDirectory : *pCreatedDirectories)
         {
 //#ifdef SAL_UNX
-//          if (rmdir((char*)(*iter).getStr(), 0777) == -1)
+//          if (rmdir((char*)createdDirectory.getStr(), 0777) == -1)
 //#else
-            if (rmdir((*iter).getStr()) == -1)
+            if (rmdir(createdDirectory.getStr()) == -1)
 //#endif
             {
                 fprintf(stderr, "%s: cannot remove directory '%s'\n",
-                        idlc()->getOptions()->getProgramName().getStr(), (*iter).getStr());
+                        idlc()->getOptions()->getProgramName().getStr(), createdDirectory.getStr());
                 return false;
             }
-            ++iter;
         }
         delete pCreatedDirectories;
     }
@@ -122,7 +118,7 @@ void removeIfExists(const OString& pathname)
     osl::File::remove(OStringToOUString(pathname, RTL_TEXTENCODING_UTF8));
 }
 
-sal_Int32 SAL_CALL
+sal_Int32
 produceFile(const OString& regFileName, sPair_t const*const pDepFile)
 {
     Options* pOptions = idlc()->getOptions();

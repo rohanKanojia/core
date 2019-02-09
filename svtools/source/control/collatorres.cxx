@@ -17,70 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-
 #include <svtools/svtresid.hxx>
-#include <svtools/svtools.hrc>
+#include <svtools/strings.hrc>
 #include <svtools/collatorres.hxx>
 
-
-//  wrapper for locale specific translations data of collator algorithm
-
-
-class CollatorResourceData
-{
-    friend class CollatorResource;
-    private: /* data */
-        OUString ma_Name;
-        OUString ma_Translation;
-    private: /* member functions */
-        CollatorResourceData () {}
-    public:
-        CollatorResourceData ( const OUString &r_Algorithm, const OUString &r_Translation)
-                    : ma_Name (r_Algorithm), ma_Translation (r_Translation) {}
-
-        const OUString& GetAlgorithm () const { return ma_Name; }
-
-        const OUString& GetTranslation () const { return ma_Translation; }
-
-        ~CollatorResourceData () {}
-
-        CollatorResourceData& operator= (const CollatorResourceData& r_From)
-        {
-            ma_Name         = r_From.GetAlgorithm();
-            ma_Translation  = r_From.GetTranslation();
-            return *this;
-        }
-};
-
-
 //  implementation of the collator-algorithm-name translation
-
-
-#define COLLATOR_RESOURCE_COUNT (STR_SVT_COLLATE_END - STR_SVT_COLLATE_START + 1)
-
 CollatorResource::CollatorResource()
 {
-    mp_Data = new CollatorResourceData[COLLATOR_RESOURCE_COUNT];
-
-    #define RESSTR(rid) SvtResId(rid).toString()
-
-    mp_Data[0] = CollatorResourceData ("alphanumeric", RESSTR(STR_SVT_COLLATE_ALPHANUMERIC));
-    mp_Data[1] = CollatorResourceData ("charset", RESSTR(STR_SVT_COLLATE_CHARSET));
-    mp_Data[2] = CollatorResourceData ("dict", RESSTR(STR_SVT_COLLATE_DICTIONARY));
-    mp_Data[3] = CollatorResourceData ("normal", RESSTR(STR_SVT_COLLATE_NORMAL));
-    mp_Data[4] = CollatorResourceData ("pinyin", RESSTR(STR_SVT_COLLATE_PINYIN));
-    mp_Data[5] = CollatorResourceData ("radical", RESSTR(STR_SVT_COLLATE_RADICAL));
-    mp_Data[6] = CollatorResourceData ("stroke", RESSTR(STR_SVT_COLLATE_STROKE));
-    mp_Data[7] = CollatorResourceData ("unicode", RESSTR(STR_SVT_COLLATE_UNICODE));
-    mp_Data[8] = CollatorResourceData ("zhuyin", RESSTR(STR_SVT_COLLATE_ZHUYIN));
-    mp_Data[9] = CollatorResourceData ("phonebook", RESSTR(STR_SVT_COLLATE_PHONEBOOK));
-    mp_Data[10] = CollatorResourceData ("phonetic (alphanumeric first)", RESSTR(STR_SVT_COLLATE_PHONETIC_F));
-    mp_Data[11] = CollatorResourceData ("phonetic (alphanumeric last)", RESSTR(STR_SVT_COLLATE_PHONETIC_L));
-}
-
-CollatorResource::~CollatorResource()
-{
-    delete[] mp_Data;
+    m_aData.emplace_back("alphanumeric", SvtResId(STR_SVT_COLLATE_ALPHANUMERIC));
+    m_aData.emplace_back("charset", SvtResId(STR_SVT_COLLATE_CHARSET));
+    m_aData.emplace_back("dict", SvtResId(STR_SVT_COLLATE_DICTIONARY));
+    m_aData.emplace_back("normal", SvtResId(STR_SVT_COLLATE_NORMAL));
+    m_aData.emplace_back("pinyin", SvtResId(STR_SVT_COLLATE_PINYIN));
+    m_aData.emplace_back("radical", SvtResId(STR_SVT_COLLATE_RADICAL));
+    m_aData.emplace_back("stroke", SvtResId(STR_SVT_COLLATE_STROKE));
+    m_aData.emplace_back("unicode", SvtResId(STR_SVT_COLLATE_UNICODE));
+    m_aData.emplace_back("zhuyin", SvtResId(STR_SVT_COLLATE_ZHUYIN));
+    m_aData.emplace_back("phonebook", SvtResId(STR_SVT_COLLATE_PHONEBOOK));
+    m_aData.emplace_back("phonetic (alphanumeric first)", SvtResId(STR_SVT_COLLATE_PHONETIC_F));
+    m_aData.emplace_back("phonetic (alphanumeric last)", SvtResId(STR_SVT_COLLATE_PHONETIC_L));
 }
 
 const OUString&
@@ -96,13 +51,13 @@ CollatorResource::GetTranslation(const OUString &r_Algorithm)
     else
     {
         nIndex += 1;
-        aLocaleFreeAlgorithm = r_Algorithm.copy(nIndex, r_Algorithm.getLength() - nIndex);
+        aLocaleFreeAlgorithm = r_Algorithm.copy(nIndex);
     }
 
-    for (sal_uInt32 i = 0; i < COLLATOR_RESOURCE_COUNT; i++)
+    for (size_t i = 0; i < m_aData.size(); ++i)
     {
-        if (aLocaleFreeAlgorithm == mp_Data[i].GetAlgorithm())
-            return mp_Data[i].GetTranslation();
+        if (aLocaleFreeAlgorithm == m_aData[i].GetAlgorithm())
+            return m_aData[i].GetTranslation();
     }
 
     return r_Algorithm;

@@ -17,11 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "eventuno.hxx"
-#include "miscuno.hxx"
-#include "docsh.hxx"
-#include "sheetevents.hxx"
-#include "unonames.hxx"
+#include <eventuno.hxx>
+#include <miscuno.hxx>
+#include <docsh.hxx>
+#include <sheetevents.hxx>
+#include <unonames.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <vcl/svapp.hxx>
 
 using namespace ::com::sun::star;
@@ -46,8 +47,7 @@ ScSheetEventsObj::~ScSheetEventsObj()
 void ScSheetEventsObj::Notify( SfxBroadcaster&, const SfxHint& rHint )
 {
     //! reference update
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if ( pSimpleHint && pSimpleHint->GetId() == SFX_HINT_DYING )
+    if ( rHint.GetId() == SfxHintId::Dying )
     {
         mpDocShell = nullptr;
     }
@@ -65,8 +65,6 @@ static ScSheetEventId lcl_GetEventFromName( const OUString& aName )
 // XNameReplace
 
 void SAL_CALL ScSheetEventsObj::replaceByName( const OUString& aName, const uno::Any& aElement )
-    throw(lang::IllegalArgumentException, container::NoSuchElementException,
-          lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if (!mpDocShell)
@@ -76,10 +74,10 @@ void SAL_CALL ScSheetEventsObj::replaceByName( const OUString& aName, const uno:
     if (nEvent == ScSheetEventId::NOTFOUND)
         throw container::NoSuchElementException();
 
-    ScSheetEvents aNewEvents;
+    std::unique_ptr<ScSheetEvents> pNewEvents(new ScSheetEvents);
     const ScSheetEvents* pOldEvents = mpDocShell->GetDocument().GetSheetEvents(mnTab);
     if (pOldEvents)
-        aNewEvents = *pOldEvents;
+        *pNewEvents = *pOldEvents;
 
     OUString aScript;
     if ( aElement.hasValue() )      // empty Any -> reset event
@@ -107,18 +105,17 @@ void SAL_CALL ScSheetEventsObj::replaceByName( const OUString& aName, const uno:
         }
     }
     if (!aScript.isEmpty())
-        aNewEvents.SetScript( nEvent, &aScript );
+        pNewEvents->SetScript( nEvent, &aScript );
     else
-        aNewEvents.SetScript( nEvent, nullptr );       // reset
+        pNewEvents->SetScript( nEvent, nullptr );       // reset
 
-    mpDocShell->GetDocument().SetSheetEvents( mnTab, &aNewEvents );
+    mpDocShell->GetDocument().SetSheetEvents( mnTab, std::move(pNewEvents) );
     mpDocShell->SetDocumentModified();
 }
 
 // XNameAccess
 
 uno::Any SAL_CALL ScSheetEventsObj::getByName( const OUString& aName )
-    throw(container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     ScSheetEventId nEvent = lcl_GetEventFromName(aName);
@@ -136,29 +133,26 @@ uno::Any SAL_CALL ScSheetEventsObj::getByName( const OUString& aName )
     uno::Any aRet;
     if (pScript)
     {
-        uno::Sequence<beans::PropertyValue> aPropSeq( 2 );
-        aPropSeq[0] = beans::PropertyValue(
-                        OUString("EventType"), -1,
-                        uno::makeAny( OUString("Script") ), beans::PropertyState_DIRECT_VALUE );
-        aPropSeq[1] = beans::PropertyValue(
-                        OUString("Script"), -1,
-                        uno::makeAny( *pScript ), beans::PropertyState_DIRECT_VALUE );
+        uno::Sequence<beans::PropertyValue> aPropSeq( comphelper::InitPropertySequence({
+                { "EventType", uno::Any( OUString("Script") ) },
+                { "Script", uno::Any( *pScript ) }
+            }));
         aRet <<= aPropSeq;
     }
     // empty Any if nothing was set
     return aRet;
 }
 
-uno::Sequence<OUString> SAL_CALL ScSheetEventsObj::getElementNames() throw(uno::RuntimeException, std::exception)
+uno::Sequence<OUString> SAL_CALL ScSheetEventsObj::getElementNames()
 {
     SolarMutexGuard aGuard;
-    uno::Sequence<OUString> aNames((int)ScSheetEventId::COUNT);
-    for (sal_Int32 nEvent=0; nEvent<(int)ScSheetEventId::COUNT; ++nEvent)
-        aNames[nEvent] = ScSheetEvents::GetEventName((ScSheetEventId)nEvent);
+    auto aNames = uno::Sequence<OUString>(int(ScSheetEventId::COUNT));
+    for (sal_Int32 nEvent=0; nEvent<int(ScSheetEventId::COUNT); ++nEvent)
+        aNames[nEvent] = ScSheetEvents::GetEventName(static_cast<ScSheetEventId>(nEvent));
     return aNames;
 }
 
-sal_Bool SAL_CALL ScSheetEventsObj::hasByName( const OUString& aName ) throw(uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL ScSheetEventsObj::hasByName( const OUString& aName )
 {
     SolarMutexGuard aGuard;
     ScSheetEventId nEvent = lcl_GetEventFromName(aName);
@@ -167,17 +161,17 @@ sal_Bool SAL_CALL ScSheetEventsObj::hasByName( const OUString& aName ) throw(uno
 
 // XElementAccess
 
-uno::Type SAL_CALL ScSheetEventsObj::getElementType() throw(uno::RuntimeException, std::exception)
+uno::Type SAL_CALL ScSheetEventsObj::getElementType()
 {
     SolarMutexGuard aGuard;
     return cppu::UnoType<uno::Sequence<beans::PropertyValue>>::get();
 }
 
-sal_Bool SAL_CALL ScSheetEventsObj::hasElements() throw(uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL ScSheetEventsObj::hasElements()
 {
     SolarMutexGuard aGuard;
     if (mpDocShell)
-        return sal_True;
+        return true;
     return false;
 }
 

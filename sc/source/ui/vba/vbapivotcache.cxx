@@ -26,7 +26,7 @@ ScVbaPivotCache::ScVbaPivotCache( const uno::Reference< XHelperInterface >& xPar
 }
 
 void SAL_CALL
-ScVbaPivotCache::Refresh() throw (css::uno::RuntimeException, std::exception)
+ScVbaPivotCache::Refresh()
 {
     m_xTable->refresh();
 }
@@ -40,12 +40,10 @@ ScVbaPivotCache::getServiceImplName()
 uno::Sequence< OUString >
 ScVbaPivotCache::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.excel.PivotCache";
-    }
+        "ooo.vba.excel.PivotCache"
+    };
     return aServiceNames;
 }
 

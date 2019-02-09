@@ -29,7 +29,7 @@
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
 
-SwVbaColumn::SwVbaColumn( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, const uno::Reference< text::XTextTable >& xTextTable, sal_Int32 nIndex ) throw ( uno::RuntimeException ) :
+SwVbaColumn::SwVbaColumn( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, const uno::Reference< text::XTextTable >& xTextTable, sal_Int32 nIndex ) :
     SwVbaColumn_BASE( rParent, rContext ), mxTextTable( xTextTable ), mnIndex( nIndex )
 {
     mxTableColumns = mxTextTable->getColumns();
@@ -40,14 +40,14 @@ SwVbaColumn::~SwVbaColumn()
 }
 
 sal_Int32 SAL_CALL
-SwVbaColumn::getWidth( ) throw ( css::uno::RuntimeException, std::exception )
+SwVbaColumn::getWidth( )
 {
     SwVbaTableHelper aTableHelper( mxTextTable );
     return aTableHelper.GetColWidth( mnIndex );
 }
 
 void SAL_CALL
-SwVbaColumn::setWidth( sal_Int32 _width ) throw ( css::uno::RuntimeException, std::exception )
+SwVbaColumn::setWidth( sal_Int32 _width )
 {
 
     SwVbaTableHelper aTableHelper( mxTextTable );
@@ -55,23 +55,21 @@ SwVbaColumn::setWidth( sal_Int32 _width ) throw ( css::uno::RuntimeException, st
 }
 
 void SAL_CALL
-SwVbaColumn::Select( ) throw ( uno::RuntimeException, std::exception )
+SwVbaColumn::Select( )
 {
     SelectColumn( getCurrentWordDoc(mxContext), mxTextTable, mnIndex, mnIndex );
 }
 
-void SwVbaColumn::SelectColumn( const uno::Reference< frame::XModel >& xModel, const uno::Reference< text::XTextTable >& xTextTable, sal_Int32 nStartColumn, sal_Int32 nEndColumn ) throw ( uno::RuntimeException )
+void SwVbaColumn::SelectColumn( const uno::Reference< frame::XModel >& xModel, const uno::Reference< text::XTextTable >& xTextTable, sal_Int32 nStartColumn, sal_Int32 nEndColumn )
 {
-    OUStringBuffer aRangeName;
     OUString sStartCol = SwVbaTableHelper::getColumnStr( nStartColumn );
-    aRangeName.append(sStartCol).append(sal_Int32( 1 ) );
+    OUString aRangeName = sStartCol + OUString::number( 1 );
     OUString sEndCol = SwVbaTableHelper::getColumnStr( nEndColumn );
     sal_Int32 nRowCount = xTextTable->getRows()->getCount();
-    aRangeName.append(':').append( sEndCol ).append( sal_Int32( nRowCount ) );
+    aRangeName += ":" + sEndCol + OUString::number(nRowCount);
 
     uno::Reference< table::XCellRange > xCellRange( xTextTable, uno::UNO_QUERY_THROW );
-    OUString sSelRange = aRangeName.makeStringAndClear();
-    uno::Reference< table::XCellRange > xSelRange = xCellRange->getCellRangeByName( sSelRange );
+    uno::Reference< table::XCellRange > xSelRange = xCellRange->getCellRangeByName( aRangeName );
 
     uno::Reference< view::XSelectionSupplier > xSelection( xModel->getCurrentController(), uno::UNO_QUERY_THROW );
     xSelection->select( uno::makeAny( xSelRange ) );
@@ -86,12 +84,10 @@ SwVbaColumn::getServiceImplName()
 uno::Sequence< OUString >
 SwVbaColumn::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.word.Column";
-    }
+        "ooo.vba.word.Column"
+    };
     return aServiceNames;
 }
 

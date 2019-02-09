@@ -20,14 +20,14 @@
 #ifndef INCLUDED_SALHELPER_SINGLETONREF_HXX
 #define INCLUDED_SALHELPER_SINGLETONREF_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <cstddef>
 
-#include <osl/mutex.hxx>
-#include <rtl/instance.hxx>
-#include <osl/diagnose.h>
-#include <osl/getglobalmutex.hxx>
+#include "osl/mutex.hxx"
+#include "rtl/instance.hxx"
+#include "osl/diagnose.h"
+#include "osl/getglobalmutex.hxx"
 
 
 namespace salhelper{
@@ -46,7 +46,7 @@ namespace salhelper{
             its state) must be made threadsafe by the object itself
             or from outside.
 
-    @attention  To prevent the code against race conditions, its not
+    @attention  To prevent the code against race conditions, it's not
                 allowed to start operations inside the ctor
                 of the internal wrapped object - especially operations
                 which needs a reference to the same singleton too.
@@ -111,7 +111,7 @@ class SingletonRef
         /** @short  standard dtor.
 
                     The internal wrapped object is removed only,
-                    if its ref count wil be 0. Otherwise this method
+                    if its ref count will be 0. Otherwise this method
                     does nothing ... except decreasing of the internal
                     ref count!
          */
@@ -131,6 +131,9 @@ class SingletonRef
             // <- GLOBAL SAFE
         }
 
+#if defined LIBO_INTERNAL_ONLY
+        SingletonRef & operator =(SingletonRef const &) = default;
+#endif
 
         /** @short  Allows rSingle->someBodyOp().
          */
@@ -157,7 +160,7 @@ class SingletonRef
     // helper
 
     private:
-
+        SingletonRef(SingletonRef &) SAL_DELETED_FUNCTION;
 
         /** @short  creates an own mutex for guarding static contents.
 

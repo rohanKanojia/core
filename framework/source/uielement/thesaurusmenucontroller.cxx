@@ -17,12 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <i18nlangtag/languagetag.hxx>
 #include <svl/lngmisc.hxx>
 #include <svtools/popupmenucontrollerbase.hxx>
 #include <unotools/lingucfg.hxx>
+#include <toolkit/awt/vclxmenu.hxx>
 #include <vcl/commandinfoprovider.hxx>
 #include <vcl/image.hxx>
 #include <vcl/menu.hxx>
+#include <sal/log.hxx>
 
 #include <com/sun/star/linguistic2/LinguServiceManager.hpp>
 
@@ -30,14 +33,13 @@ class ThesaurusMenuController : public svt::PopupMenuControllerBase
 {
 public:
     explicit ThesaurusMenuController( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
-    virtual ~ThesaurusMenuController();
 
     // XStatusListener
-    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
 private:
     void fillPopupMenu();
@@ -55,12 +57,7 @@ ThesaurusMenuController::ThesaurusMenuController( const css::uno::Reference< css
 {
 }
 
-ThesaurusMenuController::~ThesaurusMenuController()
-{
-}
-
 void ThesaurusMenuController::statusChanged( const css::frame::FeatureStateEvent& rEvent )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     rEvent.State >>= m_aLastWord;
     m_xPopupMenu->clear();
@@ -82,7 +79,7 @@ void ThesaurusMenuController::fillPopupMenu()
     VCLXMenu* pAwtMenu = VCLXMenu::GetImplementation( m_xPopupMenu );
     Menu* pVCLMenu = pAwtMenu->GetMenu();
     pVCLMenu->SetMenuFlags( MenuFlags::NoAutoMnemonics );
-    if ( aSynonyms.size() > 0 )
+    if ( !aSynonyms.empty() )
     {
         SvtLinguConfig aCfg;
         Image aImage;
@@ -105,7 +102,7 @@ void ThesaurusMenuController::fillPopupMenu()
 
         pVCLMenu->InsertSeparator();
         OUString aThesaurusDialogCmd( ".uno:ThesaurusDialog" );
-        pVCLMenu->InsertItem( nId, vcl::CommandInfoProvider::Instance().GetPopupLabelForCommand( aThesaurusDialogCmd, m_xFrame ) );
+        pVCLMenu->InsertItem( nId, vcl::CommandInfoProvider::GetPopupLabelForCommand( aThesaurusDialogCmd, m_aModuleName ) );
         pVCLMenu->SetItemCommand( nId, aThesaurusDialogCmd );
     }
 }
@@ -151,18 +148,16 @@ OUString ThesaurusMenuController::getThesImplName( const css::lang::Locale& rLoc
 }
 
 OUString ThesaurusMenuController::getImplementationName()
-    throw ( css::uno::RuntimeException, std::exception )
 {
     return OUString( "com.sun.star.comp.framework.ThesaurusMenuController" );
 }
 
 css::uno::Sequence< OUString > ThesaurusMenuController::getSupportedServiceNames()
-    throw ( css::uno::RuntimeException, std::exception )
 {
     return { "com.sun.star.frame.PopupMenuController" };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_framework_ThesaurusMenuController_get_implementation(
     css::uno::XComponentContext* xContext,
     css::uno::Sequence< css::uno::Any > const & )

@@ -154,7 +154,7 @@ namespace cairocanvas
                                           const css::uno::Sequence< css::rendering::Texture >&       textures,
                                           const css::uno::Reference< css::geometry::XMapping2D >&     xMapping );
 
-        css::uno::Reference< css::rendering::XCanvasFont > SAL_CALL
+        css::uno::Reference< css::rendering::XCanvasFont >
             createFont( const css::rendering::XCanvas*             pCanvas,
                         const css::rendering::FontRequest&         fontRequest,
                         const css::uno::Sequence< css::beans::PropertyValue >&       extraFontProperties,
@@ -211,18 +211,10 @@ namespace cairocanvas
 
         css::rendering::IntegerBitmapLayout getMemoryLayout();
 
-        bool hasAlpha() const { return mbHaveAlpha; }
-
-        enum ColorType
-        {
-            LINE_COLOR, FILL_COLOR, TEXT_COLOR, IGNORE_COLOR
-        };
-
         void doPolyPolygonPath( const css::uno::Reference< css::rendering::XPolyPolygon2D >& xPolyPolygon,
                                 Operation aOperation,
                                 bool bNoLineJoin = false,
-                                const css::uno::Sequence< css::rendering::Texture >* pTextures=nullptr,
-                                cairo_t* pCairo=nullptr ) const;
+                                const css::uno::Sequence< css::rendering::Texture >* pTextures=nullptr ) const;
 
         css::uno::Reference< css::rendering::XCachedPrimitive > implDrawBitmapSurface(
                    const css::rendering::XCanvas*      pCanvas,
@@ -270,12 +262,12 @@ namespace cairocanvas
         ::cairo::SurfaceSharedPtr   mpSurface;
         ::basegfx::B2ISize maSize;
 
-        void clip_cairo_from_dev(::OutputDevice& rOutDev);
+        void clip_cairo_from_dev(::OutputDevice const & rOutDev);
 
     };
 
     /// also needed from SpriteHelper
-    void doPolyPolygonImplementation( ::basegfx::B2DPolyPolygon aPolyPolygon,
+    void doPolyPolygonImplementation( const ::basegfx::B2DPolyPolygon& aPolyPolygon,
                                       Operation aOperation,
                                       cairo_t* pCairo,
                                       const css::uno::Sequence< css::rendering::Texture >* pTextures,

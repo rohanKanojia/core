@@ -9,12 +9,8 @@
 #ifndef INCLUDED_SD_SOURCE_UI_DLG_REMOTEDIALOG_HXX
 #define INCLUDED_SD_SOURCE_UI_DLG_REMOTEDIALOG_HXX
 
-#include <vcl/lstbox.hxx>
-#include <vcl/fixed.hxx>
 #include <vcl/button.hxx>
 #include <vcl/dialog.hxx>
-#include <vcl/field.hxx>
-#include <svtools/treelistbox.hxx>
 
 #include "RemoteDialogClientBox.hxx"
 
@@ -28,12 +24,12 @@ private:
     VclPtr<CloseButton>    m_pButtonClose;
     VclPtr<ClientBox>      m_pClientBox;
 
-    DECL_DLLPRIVATE_LINK_TYPED( HandleConnectButton, Button*, void );
-    DECL_LINK_TYPED( CloseHdl, SystemWindow&, void );
-    DECL_LINK_TYPED( CloseClickHdl, Button*, void );
+    DECL_LINK( HandleConnectButton, Button*, void );
+    DECL_LINK( CloseHdl, SystemWindow&, void );
+    DECL_LINK( CloseClickHdl, Button*, void );
 public:
     explicit RemoteDialog( vcl::Window* pWindow );
-    virtual ~RemoteDialog();
+    virtual ~RemoteDialog() override;
     virtual void dispose() override;
 };
 

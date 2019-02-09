@@ -24,20 +24,22 @@
 #include <com/sun/star/sdb/CommandType.hpp>
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
 #include <com/sun/star/awt/XWindow.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <vcl/builder.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/fixed.hxx>
 #include "general.hxx"
 #include "bibresid.hxx"
 #include "datman.hxx"
 #include "bibconfig.hxx"
-#include "bibprop.hrc"
-#include "bib.hrc"
+#include "bibprop.hxx"
+#include <strings.hrc>
 #include "bibmod.hxx"
 #include "bibview.hxx"
 #include "bibtools.hxx"
-#include "bibliography.hrc"
+#include <helpids.h>
 #include <tools/debug.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/i18nhelp.hxx>
@@ -57,11 +59,11 @@ static OUString lcl_GetColumnName( const Mapping* pMapping, sal_uInt16 nIndexPos
     BibConfig* pBibConfig = BibModul::GetConfig();
     OUString sRet = pBibConfig->GetDefColumnName(nIndexPos);
     if(pMapping)
-        for(sal_uInt16 i = 0; i < COLUMN_COUNT; i++)
+        for(const auto & aColumnPair : pMapping->aColumnPairs)
         {
-            if(pMapping->aColumnPairs[i].sLogicalColumnName == sRet)
+            if(aColumnPair.sLogicalColumnName == sRet)
             {
-                sRet = pMapping->aColumnPairs[i].sRealColumnName;
+                sRet = aColumnPair.sRealColumnName;
                 break;
             }
         }
@@ -75,12 +77,12 @@ public:
     explicit BibPosListener(BibGeneralPage* pParent);
 
     //XPositioningListener
-    virtual void SAL_CALL cursorMoved(const lang::EventObject& event) throw( uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL rowChanged(const lang::EventObject& /*event*/) throw( uno::RuntimeException, std::exception ) override { /* not interested in */ }
-    virtual void SAL_CALL rowSetChanged(const lang::EventObject& /*event*/) throw( uno::RuntimeException, std::exception ) override { /* not interested in */ }
+    virtual void SAL_CALL cursorMoved(const lang::EventObject& event) override;
+    virtual void SAL_CALL rowChanged(const lang::EventObject& /*event*/) override { /* not interested in */ }
+    virtual void SAL_CALL rowSetChanged(const lang::EventObject& /*event*/) override { /* not interested in */ }
 
     //XEventListener
-    virtual void SAL_CALL disposing(const lang::EventObject& Source) throw( uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL disposing(const lang::EventObject& Source) override;
 
 };
 
@@ -89,7 +91,7 @@ BibPosListener::BibPosListener(BibGeneralPage* pParent) :
 {
 }
 
-void BibPosListener::cursorMoved(const lang::EventObject& /*aEvent*/) throw( uno::RuntimeException, std::exception )
+void BibPosListener::cursorMoved(const lang::EventObject& /*aEvent*/)
 {
     try
     {
@@ -108,11 +110,11 @@ void BibPosListener::cursorMoved(const lang::EventObject& /*aEvent*/) throw( uno
             OUString sTypeMapping = pBibConfig->GetDefColumnName(AUTHORITYTYPE_POS);
             if(pMapping)
             {
-                for(sal_uInt16 nEntry = 0; nEntry < COLUMN_COUNT; nEntry++)
+                for(const auto & aColumnPair : pMapping->aColumnPairs)
                 {
-                    if(pMapping->aColumnPairs[nEntry].sLogicalColumnName == sTypeMapping)
+                    if(aColumnPair.sLogicalColumnName == sTypeMapping)
                     {
-                        sTypeMapping = pMapping->aColumnPairs[nEntry].sRealColumnName;
+                        sTypeMapping = aColumnPair.sRealColumnName;
                         break;
                     }
                 }
@@ -129,8 +131,7 @@ void BibPosListener::cursorMoved(const lang::EventObject& /*aEvent*/) throw( uno
             if(xValueAcc.is() && xValueAcc->hasByName(uTypeMapping))
             {
                 uno::Any aVal = xValueAcc->getByName(uTypeMapping);
-                uno::Reference< uno::XInterface >  xInt = *static_cast<uno::Reference< uno::XInterface > const *>(aVal.getValue());
-                uno::Reference< sdb::XColumn >  xCol(xInt, UNO_QUERY);
+                uno::Reference< sdb::XColumn >  xCol(aVal, UNO_QUERY);
                 DBG_ASSERT(xCol.is(), "BibPosListener::cursorMoved : invalid column (no sdb::XColumn) !");
                 if (xCol.is())
                 {
@@ -150,7 +151,7 @@ void BibPosListener::cursorMoved(const lang::EventObject& /*aEvent*/) throw( uno
                 uno::Sequence<sal_Int16> aSelSeq(1);
                 sal_Int16* pArr = aSelSeq.getArray();
                 pArr[0] = TYPE_COUNT;
-                aSel.setValue(&aSelSeq, cppu::UnoType<Sequence<sal_Int16>>::get());
+                aSel <<= aSelSeq;
                 xPropSet->setPropertyValue("SelectedItems", aSel);
             }
         }
@@ -161,13 +162,13 @@ void BibPosListener::cursorMoved(const lang::EventObject& /*aEvent*/) throw( uno
     }
 }
 
-void BibPosListener::disposing(const lang::EventObject& /*Source*/) throw( uno::RuntimeException, std::exception )
+void BibPosListener::disposing(const lang::EventObject& /*Source*/)
 {
 }
 
 BibGeneralPage::BibGeneralPage(vcl::Window* pParent, BibDataManager* pMan):
-    BibTabPage(pParent, "GeneralPage", "modules/sbibliography/ui/generalpage.ui"),
-    sErrorPrefix(BIB_RESSTR(ST_ERROR_PREFIX)),
+    TabPage(pParent, "GeneralPage", "modules/sbibliography/ui/generalpage.ui"),
+    BibShortCutHandler( this ),
     mxBibGeneralPageFocusListener(new BibGeneralPageFocusListener(this)),
     pDatMan(pMan)
 {
@@ -321,7 +322,7 @@ BibGeneralPage::BibGeneralPage(vcl::Window* pParent, BibDataManager* pMan):
     AddControlWithError(lcl_GetColumnName(pMapping, CUSTOM5_POS), *pCustom5FT,
         sTableErrorString, HID_BIB_CUSTOM5_POS, 30, aChildren);
 
-    VclBuilder::reorderWithinParent(aChildren, false);
+    BuilderUtils::reorderWithinParent(aChildren, false);
 
     xPosListener = new BibPosListener(this);
     uno::Reference< sdbc::XRowSet >  xRowSet(pDatMan->getForm(), UNO_QUERY);
@@ -332,11 +333,11 @@ BibGeneralPage::BibGeneralPage(vcl::Window* pParent, BibDataManager* pMan):
     xFormCtrl->activateTabOrder();
 
     if(!sTableErrorString.isEmpty())
-        sTableErrorString = sErrorPrefix + sTableErrorString;
+        sTableErrorString = BibResId(ST_ERROR_PREFIX) + sTableErrorString;
 
-    SetText(BIB_RESSTR(ST_TYPE_TITLE));
+    SetText(BibResId(ST_TYPE_TITLE));
 
-    Size aSize(LogicToPixel(Size(0, 209), MapMode(MAP_APPFONT)));
+    Size aSize(LogicToPixel(Size(0, 209), MapMode(MapUnit::MapAppFont)));
     set_height_request(aSize.Height());
 }
 
@@ -388,18 +389,18 @@ void BibGeneralPage::dispose()
     pCustom5FT.clear();
     for (auto & a: aFixedTexts) a.clear();
     mxBibGeneralPageFocusListener.clear();
-    BibTabPage::dispose();
+    TabPage::dispose();
 }
 
 void BibGeneralPage::RemoveListeners()
 {
-    for(sal_uInt16 i = 0; i < FIELD_COUNT; i++)
+    for(uno::Reference<awt::XWindow> & aControl : aControls)
     {
-        if(aControls[i].is())
+        if(aControl.is())
         {
-            uno::Reference< awt::XWindow > xCtrWin(aControls[i], uno::UNO_QUERY );
+            uno::Reference< awt::XWindow > xCtrWin(aControl, uno::UNO_QUERY );
             xCtrWin->removeFocusListener( mxBibGeneralPageFocusListener.get() );
-            aControls[i] = nullptr;
+            aControl = nullptr;
         }
     }
 }
@@ -499,13 +500,13 @@ uno::Reference< awt::XControlModel >  BibGeneralPage::AddXControl(
                             break;
                         }
                     // initially switch on the design mode - switch it off _after_ loading the form
-                    xCtrWin->setVisible( sal_True );
-                    xControl->setDesignMode( sal_True );
+                    xCtrWin->setVisible( true );
+                    xControl->setDesignMode( true );
 
-                    vcl::Window* pWindow = VCLUnoHelper::GetWindow(xControl->getPeer());
+                    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow(xControl->getPeer());
                     pWindow->set_grid_top_attach(rLabel.get_grid_top_attach());
                     pWindow->set_grid_left_attach(rLabel.get_grid_left_attach()+1);
-                    pWindow->set_valign(VCL_ALIGN_CENTER);
+                    pWindow->set_valign(VclAlign::Center);
                     rLabel.set_mnemonic_widget(pWindow);
                     if (&rLabel == pTitleFT)
                         pWindow->set_grid_width(3);
@@ -517,9 +518,8 @@ uno::Reference< awt::XControlModel >  BibGeneralPage::AddXControl(
             }
         }
     }
-    catch(const Exception& rEx)
+    catch(const Exception&)
     {
-        (void) rEx; // make compiler happy
         OSL_FAIL("BibGeneralPage::AddXControl: something went wrong!");
     }
     return xCtrModel;
@@ -583,7 +583,7 @@ void BibGeneralPage::InitFixedTexts()
         aFixedTexts[ i ]->SetText( aFixedStrings[ i ] );
 }
 
-void BibGeneralPage::focusGained(const awt::FocusEvent& rEvent) throw( uno::RuntimeException, std::exception )
+void BibGeneralPage::focusGained(const awt::FocusEvent& rEvent)
 {
     Reference<awt::XWindow> xCtrWin(rEvent.Source, UNO_QUERY );
     if(xCtrWin.is())
@@ -605,7 +605,7 @@ void BibGeneralPage::focusGained(const awt::FocusEvent& rEvent) throw( uno::Runt
     }
 }
 
-void BibGeneralPage::focusLost(const awt::FocusEvent& ) throw( uno::RuntimeException, std::exception )
+void BibGeneralPage::focusLost()
 {
     CommitActiveControl();
 }
@@ -637,12 +637,10 @@ bool BibGeneralPage::HandleShortCutKey( const KeyEvent& rKeyEvent )
 
     sal_Int16                   i;
 
-    typedef std::vector< sal_Int16 >    sal_Int16_vector;
-
-    sal_Int16_vector::size_type nFocused = 0xFFFF;  // index of focused in vector, no one focused initial
+    std::vector<sal_Int16>::size_type nFocused = 0xFFFF;  // index of focused in vector, no one focused initial
     DBG_ASSERT( nFocused > 0, "*BibGeneralPage::HandleShortCutKey(): size_type works not as expected!" );
 
-    sal_Int16_vector            aMatchList;
+    std::vector<sal_Int16>            aMatchList;
 
     for( i = 0 ; i < FIELD_COUNT ; ++i )
     {
@@ -658,7 +656,7 @@ bool BibGeneralPage::HandleShortCutKey( const KeyEvent& rKeyEvent )
                 uno::Reference< awt::XControl >  xControl( aControls[ nCtrlIndex ], UNO_QUERY );
                 DBG_ASSERT( xControl.is(), "-BibGeneralPage::HandleShortCutKey(): a control which is not a control!" );
 
-                vcl::Window*         pWindow = VCLUnoHelper::GetWindow( xControl->getPeer() );
+                VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xControl->getPeer() );
 
                 if( pWindow )
                 {
@@ -695,17 +693,17 @@ bool BibGeneralPage::HandleShortCutKey( const KeyEvent& rKeyEvent )
 BibGeneralPageFocusListener::BibGeneralPageFocusListener(BibGeneralPage *pBibGeneralPage): mpBibGeneralPage(pBibGeneralPage)
 {}
 
-void BibGeneralPageFocusListener::focusGained( const css::awt::FocusEvent& e ) throw( css::uno::RuntimeException, std::exception )
+void BibGeneralPageFocusListener::focusGained( const css::awt::FocusEvent& e )
 {
     mpBibGeneralPage->focusGained(e);
 }
 
-void BibGeneralPageFocusListener::focusLost( const css::awt::FocusEvent& e ) throw( css::uno::RuntimeException, std::exception )
+void BibGeneralPageFocusListener::focusLost( const css::awt::FocusEvent& )
 {
-    mpBibGeneralPage->focusLost(e);
+    mpBibGeneralPage->focusLost();
 }
 
-void BibGeneralPageFocusListener::disposing( const css::lang::EventObject& ) throw( css::uno::RuntimeException, std::exception )
+void BibGeneralPageFocusListener::disposing( const css::lang::EventObject& )
 {}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -17,12 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "PaneDockingWindow.hxx"
-#include "Window.hxx"
-#include "ViewShellBase.hxx"
-#include "framework/FrameworkHelper.hxx"
-#include "sdresid.hxx"
-#include "res_bmp.hrc"
+#include <PaneDockingWindow.hxx>
+#include <Window.hxx>
+#include <ViewShellBase.hxx>
+#include <framework/FrameworkHelper.hxx>
+
 #include <sfx2/dispatch.hxx>
 #include <vcl/toolbox.hxx>
 #include <vcl/taskpanelist.hxx>
@@ -40,10 +39,10 @@ namespace sd {
 PaneDockingWindow::PaneDockingWindow(
         SfxBindings *_pBindings, SfxChildWindow *pChildWindow, vcl::Window* pParent,
         const OUString& rsTitle )
-        : TitledDockingWindow(_pBindings, pChildWindow, pParent, WB_MOVEABLE|WB_CLOSEABLE|WB_HIDE|WB_3DLOOK)
+        : TitledDockingWindow(_pBindings, pChildWindow, pParent)
 {
     SetTitle(rsTitle);
-    SetSizePixel(LogicToPixel(Size(80,200), MAP_APPFONT));
+    SetSizePixel(LogicToPixel(Size(80,200), MapMode(MapUnit::MapAppFont)));
 }
 
 PaneDockingWindow::~PaneDockingWindow()

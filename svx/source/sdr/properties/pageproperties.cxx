@@ -17,11 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <o3tl/make_unique.hxx>
 #include <sdr/properties/pageproperties.hxx>
 #include <svl/itemset.hxx>
 #include <svx/svdobj.hxx>
 #include <svx/svdpool.hxx>
 #include <vcl/outdev.hxx>
+#include <tools/debug.hxx>
 
 
 namespace sdr
@@ -29,10 +33,10 @@ namespace sdr
     namespace properties
     {
         // create a new itemset
-        SfxItemSet* PageProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
+        std::unique_ptr<SfxItemSet> PageProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
         {
             // override to legally return a valid ItemSet
-            return new SfxItemSet(rPool);
+            return o3tl::make_unique<SfxItemSet>(rPool);
         }
 
         PageProperties::PageProperties(SdrObject& rObj)
@@ -40,8 +44,8 @@ namespace sdr
         {
         }
 
-        PageProperties::PageProperties(const PageProperties& rProps, SdrObject& rObj)
-        :   EmptyProperties(rProps, rObj)
+        PageProperties::PageProperties(const PageProperties& /*rProps*/, SdrObject& rObj)
+        :   EmptyProperties(rObj)
         {
         }
 
@@ -49,9 +53,9 @@ namespace sdr
         {
         }
 
-        BaseProperties& PageProperties::Clone(SdrObject& rObj) const
+        std::unique_ptr<BaseProperties> PageProperties::Clone(SdrObject& rObj) const
         {
-            return *(new PageProperties(*this, rObj));
+            return std::unique_ptr<BaseProperties>(new PageProperties(*this, rObj));
         }
 
         // get itemset. Override here to allow creating the empty itemset

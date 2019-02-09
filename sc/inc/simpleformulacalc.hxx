@@ -22,19 +22,18 @@ class ScTokenArray;
 class ScSimpleFormulaCalculator
 {
 private:
-    short mnFormatType;
-    sal_uLong mnFormatIndex;
+    SvNumFormatType mnFormatType;
 
     bool mbCalculated;
     std::unique_ptr<ScTokenArray> mpCode;
-    ScAddress maAddr;
+    ScAddress const maAddr;
     ScDocument* mpDoc;
     ScFormulaResult maResult;
-    formula::FormulaGrammar::Grammar maGram;
+    formula::FormulaGrammar::Grammar const maGram;
     bool mbMatrixResult;
     OUString maMatrixFormulaResult;
     bool mbLimitString;
-    bool mbMatrixFormula;
+    bool const mbMatrixFormula;
 
 public:
     ScSimpleFormulaCalculator(ScDocument* pDoc, const ScAddress& rAddr,
@@ -45,10 +44,10 @@ public:
     void Calculate();
     bool IsValue();
     bool IsMatrix();
-    sal_uInt16 GetErrCode();
+    FormulaError GetErrCode();
     double GetValue();
     svl::SharedString GetString();
-    short GetFormatType() const { return mnFormatType; }
+    SvNumFormatType GetFormatType() const { return mnFormatType; }
 
     bool HasColRowName();
 

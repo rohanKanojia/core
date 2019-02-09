@@ -32,8 +32,7 @@ private:
     TextCharAttribList(const TextCharAttribList&) = delete;
     TextCharAttribList& operator=(const TextCharAttribList&) = delete;
 
-    typedef std::vector<std::unique_ptr<TextCharAttrib> > TextCharAttribs;
-    TextCharAttribs maAttribs;
+    std::vector<std::unique_ptr<TextCharAttrib> > maAttribs;
     bool            mbHasEmptyAttribs;
 
 public:
@@ -45,9 +44,14 @@ public:
 
     const TextCharAttrib& GetAttrib( sal_uInt16 n ) const { return *maAttribs[n].get(); }
     TextCharAttrib& GetAttrib( sal_uInt16 n )       { return *maAttribs[n].get(); }
-    void            RemoveAttrib( sal_uInt16 n )    { maAttribs[n].release(); maAttribs.erase( maAttribs.begin() + n ); }
+    std::unique_ptr<TextCharAttrib>  RemoveAttrib( sal_uInt16 n )
+    {
+        std::unique_ptr<TextCharAttrib> pReleased = std::move(maAttribs[n]);
+        maAttribs.erase( maAttribs.begin() + n );
+        return pReleased;
+    }
 
-    void            InsertAttrib( TextCharAttrib* pAttrib );
+    void            InsertAttrib( std::unique_ptr<TextCharAttrib> pAttrib );
 
     void            DeleteEmptyAttribs();
     void            ResortAttribs();
@@ -55,21 +59,17 @@ public:
     bool&           HasEmptyAttribs()       { return mbHasEmptyAttribs; }
 
     TextCharAttrib* FindAttrib( sal_uInt16 nWhich, sal_Int32 nPos );
-    const TextCharAttrib* FindNextAttrib( sal_uInt16 nWhich, sal_Int32 nFromPos, sal_Int32 nMaxPos = SAL_MAX_INT32 ) const;
     TextCharAttrib* FindEmptyAttrib( sal_uInt16 nWhich, sal_Int32 nPos );
-    bool            HasAttrib( sal_uInt16 nWhich ) const;
     bool            HasBoundingAttrib( sal_Int32 nBound );
 };
 
 class TextNode
 {
-private:
     OUString            maText;
     TextCharAttribList  maCharAttribs;
 
-protected:
     void                ExpandAttribs( sal_Int32 nIndex, sal_Int32 nNewChars );
-    void                CollapsAttribs( sal_Int32 nIndex, sal_Int32 nDelChars );
+    void                CollapseAttribs( sal_Int32 nIndex, sal_Int32 nDelChars );
 
 public:
                         TextNode( const OUString& rText );
@@ -87,17 +87,15 @@ public:
     void                InsertText( sal_Int32 nPos, sal_Unicode c );
     void                RemoveText( sal_Int32 nPos, sal_Int32 nChars );
 
-    TextNode*           Split( sal_Int32 nPos );
+    std::unique_ptr<TextNode> Split( sal_Int32 nPos );
     void                Append( const TextNode& rNode );
 };
 
 class TextDoc
 {
-private:
-    std::vector<TextNode*>  maTextNodes;
+    std::vector<std::unique_ptr<TextNode>>  maTextNodes;
     sal_uInt16              mnLeftMargin;
 
-protected:
     void                DestroyTextNodes();
 
 public:
@@ -106,15 +104,15 @@ public:
 
     void                Clear();
 
-    std::vector<TextNode*>&       GetNodes()              { return maTextNodes; }
-    const std::vector<TextNode*>& GetNodes() const        { return maTextNodes; }
+    std::vector<std::unique_ptr<TextNode>>&       GetNodes()              { return maTextNodes; }
+    const std::vector<std::unique_ptr<TextNode>>& GetNodes() const        { return maTextNodes; }
 
     void                RemoveChars( const TextPaM& rPaM, sal_Int32 nChars );
     TextPaM             InsertText( const TextPaM& rPaM, sal_Unicode c );
     TextPaM             InsertText( const TextPaM& rPaM, const OUString& rStr );
 
     TextPaM             InsertParaBreak( const TextPaM& rPaM );
-    TextPaM             ConnectParagraphs( TextNode* pLeft, TextNode* pRight );
+    TextPaM             ConnectParagraphs( TextNode* pLeft, const TextNode* pRight );
 
     sal_Int32           GetTextLen( const sal_Unicode* pSep, const TextSelection* pSel = nullptr ) const;
     OUString            GetText( const sal_Unicode* pSep ) const;

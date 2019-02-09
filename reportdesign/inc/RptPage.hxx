@@ -35,19 +35,18 @@ class OReportModel;
 class REPORTDESIGN_DLLPUBLIC OReportPage : public SdrPage
 {
     OReportPage& operator=(const OReportPage&) = delete;
+    OReportPage(const OReportPage&) = delete;
 
     OReportModel&           rModel;
     css::uno::Reference< css::report::XSection > m_xSection;
     bool                    m_bSpecialInsertMode;
     std::vector<SdrObject*> m_aTemporaryObjectList;
 
-    OReportPage(const OReportPage&);
-
-    // methode to remove temporary objects, created by 'special mode'
+    // method to remove temporary objects, created by 'special mode'
     // (BegDragObj)
-    void removeTempObject(SdrObject *_pToRemoveObj);
+    void removeTempObject(SdrObject const *_pToRemoveObj);
 
-    virtual ~OReportPage();
+    virtual ~OReportPage() override;
 
 protected:
     virtual css::uno::Reference< css::uno::XInterface > createUnoPage() override;
@@ -56,11 +55,9 @@ public:
     OReportPage( OReportModel& rModel
                 ,const css::uno::Reference< css::report::XSection >& _xSection );
 
+    virtual SdrPage* CloneSdrPage(SdrModel& rTargetModel) const override;
 
-    virtual SdrPage* Clone() const override;
-    virtual SdrPage* Clone( SdrModel* pNewModel ) const override;
-
-    virtual void NbcInsertObject(SdrObject* pObj, size_t nPos, const SdrInsertReason* pReason) override;
+    virtual void NbcInsertObject(SdrObject* pObj, size_t nPos=SAL_MAX_SIZE) override;
     virtual SdrObject* RemoveObject(size_t nObjNum) override;
 
     /** returns the index inside the object list which belongs to the report component.
@@ -83,7 +80,7 @@ public:
     */
     void insertObject(const css::uno::Reference< css::report::XReportComponent >& _xObject);
 
-    css::uno::Reference< css::report::XSection > getSection() const { return m_xSection;}
+    const css::uno::Reference< css::report::XSection >& getSection() const { return m_xSection;}
 };
 }
 #endif // INCLUDED_REPORTDESIGN_INC_RPTPAGE_HXX

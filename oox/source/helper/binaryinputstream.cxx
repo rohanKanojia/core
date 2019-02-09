@@ -17,16 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/helper/binaryinputstream.hxx"
+#include <oox/helper/binaryinputstream.hxx>
 
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XSeekable.hpp>
 #include <string.h>
+#include <algorithm>
 #include <vector>
 #include <rtl/strbuf.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <osl/diagnose.h>
-#include "oox/helper/binaryoutputstream.hxx"
+#include <oox/helper/binaryoutputstream.hxx>
 
 namespace oox {
 
@@ -51,7 +52,7 @@ OUString BinaryInputStream::readNulUnicodeArray()
     return aBuffer.makeStringAndClear();
 }
 
-OString BinaryInputStream::readCharArray( sal_Int32 nChars, bool bAllowNulChars )
+OString BinaryInputStream::readCharArray( sal_Int32 nChars )
 {
     if( nChars <= 0 )
         return OString();
@@ -62,18 +63,18 @@ OString BinaryInputStream::readCharArray( sal_Int32 nChars, bool bAllowNulChars 
         return OString();
 
     aBuffer.resize( static_cast< size_t >( nCharsRead ) );
-    if( !bAllowNulChars )
-        ::std::replace( aBuffer.begin(), aBuffer.end(), '\0', '?' );
+    // NUL characters are replaced by question marks.
+    ::std::replace( aBuffer.begin(), aBuffer.end(), '\0', '?' );
 
-    return OString( reinterpret_cast< sal_Char* >( &aBuffer.front() ), nCharsRead );
+    return OString(reinterpret_cast<sal_Char*>(aBuffer.data()), nCharsRead);
 }
 
-OUString BinaryInputStream::readCharArrayUC( sal_Int32 nChars, rtl_TextEncoding eTextEnc, bool bAllowNulChars )
+OUString BinaryInputStream::readCharArrayUC( sal_Int32 nChars, rtl_TextEncoding eTextEnc )
 {
-    return OStringToOUString( readCharArray( nChars, bAllowNulChars ), eTextEnc );
+    return OStringToOUString( readCharArray( nChars ), eTextEnc );
 }
 
-OUString BinaryInputStream::readUnicodeArray( sal_Int32 nChars, bool bAllowNulChars )
+OUString BinaryInputStream::readUnicodeArray( sal_Int32 nChars )
 {
     if( nChars <= 0 )
         return OUString();
@@ -84,22 +85,22 @@ OUString BinaryInputStream::readUnicodeArray( sal_Int32 nChars, bool bAllowNulCh
         return OUString();
 
     aBuffer.resize( static_cast< size_t >( nCharsRead ) );
-    if( !bAllowNulChars )
-        ::std::replace( aBuffer.begin(), aBuffer.begin() + nCharsRead, '\0', '?' );
+    // don't allow nul chars
+    ::std::replace( aBuffer.begin(), aBuffer.begin() + nCharsRead, '\0', '?' );
 
     OUStringBuffer aStringBuffer;
     aStringBuffer.ensureCapacity( nCharsRead );
-    for( ::std::vector< sal_uInt16 >::iterator aIt = aBuffer.begin(), aEnd = aBuffer.end(); aIt != aEnd; ++aIt )
-        aStringBuffer.append( static_cast< sal_Unicode >( *aIt ) );
+    for (auto const& elem : aBuffer)
+        aStringBuffer.append( static_cast< sal_Unicode >(elem) );
     return aStringBuffer.makeStringAndClear();
 }
 
-OUString BinaryInputStream::readCompressedUnicodeArray( sal_Int32 nChars, bool bCompressed, bool bAllowNulChars )
+OUString BinaryInputStream::readCompressedUnicodeArray( sal_Int32 nChars, bool bCompressed )
 {
     return bCompressed ?
          // ISO-8859-1 maps all byte values 0xHH to the same Unicode code point U+00HH
-        readCharArrayUC( nChars, RTL_TEXTENCODING_ISO_8859_1, bAllowNulChars ) :
-        readUnicodeArray( nChars, bAllowNulChars );
+        readCharArrayUC( nChars, RTL_TEXTENCODING_ISO_8859_1 ) :
+        readUnicodeArray( nChars );
 }
 
 void BinaryInputStream::copyToStream( BinaryOutputStream& rOutStrm )

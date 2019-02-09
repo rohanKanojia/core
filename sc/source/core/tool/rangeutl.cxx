@@ -17,23 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "rangeutl.hxx"
-#include "document.hxx"
-#include "global.hxx"
-#include "dbdata.hxx"
-#include "rangenam.hxx"
-#include "scresid.hxx"
-#include "globstr.hrc"
-#include "convuno.hxx"
-#include "externalrefmgr.hxx"
-#include "compiler.hxx"
+#include <memory>
+#include <osl/diagnose.h>
+#include <unotools/charclass.hxx>
+#include <rangeutl.hxx>
+#include <document.hxx>
+#include <global.hxx>
+#include <dbdata.hxx>
+#include <rangenam.hxx>
+#include <convuno.hxx>
+#include <externalrefmgr.hxx>
+#include <compiler.hxx>
+#include <refupdatecontext.hxx>
 
 using ::formula::FormulaGrammar;
 using namespace ::com::sun::star;
 
 bool ScRangeUtil::MakeArea( const OUString&   rAreaStr,
                             ScArea&         rArea,
-                            ScDocument*     pDoc,
+                            const ScDocument* pDoc,
                             SCTAB           nTab,
                             ScAddress::Details const & rDetails )
 {
@@ -83,8 +85,8 @@ void ScRangeUtil::CutPosString( const OUString&   theAreaStr,
 }
 
 bool ScRangeUtil::IsAbsTabArea( const OUString&   rAreaStr,
-                                ScDocument*     pDoc,
-                                ScArea***       pppAreas,
+                                const ScDocument* pDoc,
+                                std::unique_ptr<ScArea[]>*  ppAreas,
                                 sal_uInt16*         pAreaCount,
                                 bool            /* bAcceptCellRef */,
                                 ScAddress::Details const & rDetails )
@@ -141,12 +143,12 @@ bool ScRangeUtil::IsAbsTabArea( const OUString&   rAreaStr,
 
                 bStrOk = true;
 
-                if ( pppAreas && pAreaCount ) // Array returned ?
+                if ( ppAreas && pAreaCount ) // Array returned ?
                 {
                     SCTAB       nStartTab   = aStartPos.Tab();
                     SCTAB       nEndTab     = aEndPos.Tab();
                     sal_uInt16      nTabCount   = static_cast<sal_uInt16>(nEndTab-nStartTab+1);
-                    ScArea**    theAreas    = new ScArea*[nTabCount];
+                    ppAreas->reset(new ScArea[nTabCount]);
                     SCTAB       nTab        = 0;
                     sal_uInt16      i           = 0;
                     ScArea      theArea( 0, aStartPos.Col(), aStartPos.Row(),
@@ -155,11 +157,10 @@ bool ScRangeUtil::IsAbsTabArea( const OUString&   rAreaStr,
                     nTab = nStartTab;
                     for ( i=0; i<nTabCount; i++ )
                     {
-                        theAreas[i] = new ScArea( theArea );
-                        theAreas[i]->nTab = nTab;
+                        (*ppAreas)[i] = theArea;
+                        (*ppAreas)[i].nTab = nTab;
                         nTab++;
                     }
-                    *pppAreas   = theAreas;
                     *pAreaCount = nTabCount;
                 }
             }
@@ -170,7 +171,7 @@ bool ScRangeUtil::IsAbsTabArea( const OUString&   rAreaStr,
 }
 
 bool ScRangeUtil::IsAbsArea( const OUString&  rAreaStr,
-                             ScDocument*    pDoc,
+                             const ScDocument* pDoc,
                              SCTAB          nTab,
                              OUString*      pCompleteStr,
                              ScRefAddress*  pStartPos,
@@ -209,7 +210,7 @@ bool ScRangeUtil::IsAbsArea( const OUString&  rAreaStr,
 }
 
 bool ScRangeUtil::IsAbsPos( const OUString&   rPosStr,
-                            ScDocument*     pDoc,
+                            const ScDocument* pDoc,
                             SCTAB           nTab,
                             OUString*       pCompleteStr,
                             ScRefAddress*   pPosTripel,
@@ -235,7 +236,7 @@ bool ScRangeUtil::IsAbsPos( const OUString&   rPosStr,
 
 bool ScRangeUtil::MakeRangeFromName (
     const OUString& rName,
-    ScDocument*     pDoc,
+    const ScDocument* pDoc,
     SCTAB           nCurTab,
     ScRange&        rRange,
     RutlNameScope   eScope,
@@ -340,7 +341,7 @@ void ScRangeStringConverter::AssignString(
         if( !rNewStr.isEmpty() )
         {
             if( !rString.isEmpty() )
-                rString += OUString(cSeparator);
+                rString += OUStringLiteral1(cSeparator);
             rString += rNewStr;
         }
     }
@@ -448,11 +449,11 @@ bool ScRangeStringConverter::GetAddressFromString(
     GetTokenByOffset( sToken, rAddressStr, nOffset, cSeparator, cQuote );
     if( nOffset >= 0 )
     {
-        if ((rAddress.Parse( sToken, const_cast<ScDocument*>(pDocument), eConv ) & ScRefFlags::VALID) == ScRefFlags::VALID)
+        if ((rAddress.Parse( sToken, pDocument, eConv ) & ScRefFlags::VALID) == ScRefFlags::VALID)
             return true;
         ::formula::FormulaGrammar::AddressConvention eConvUI = pDocument->GetAddressConvention();
         if (eConv != eConvUI)
-            return ((rAddress.Parse(sToken, const_cast<ScDocument*>(pDocument), eConvUI) & ScRefFlags::VALID) == ScRefFlags::VALID);
+            return ((rAddress.Parse(sToken, pDocument, eConvUI) & ScRefFlags::VALID) == ScRefFlags::VALID);
     }
     return false;
 }
@@ -478,11 +479,11 @@ bool ScRangeStringConverter::GetRangeFromString(
         {
             if ( aUIString[0] == '.' )
                 aUIString = aUIString.copy( 1 );
-            bResult = (rRange.aStart.Parse( aUIString, const_cast<ScDocument*> (pDocument), eConv) & ScRefFlags::VALID) ==
+            bResult = (rRange.aStart.Parse( aUIString, pDocument, eConv) & ScRefFlags::VALID) ==
                                                                                                      ScRefFlags::VALID;
             ::formula::FormulaGrammar::AddressConvention eConvUI = pDocument->GetAddressConvention();
             if (!bResult && eConv != eConvUI)
-                bResult = (rRange.aStart.Parse(aUIString, const_cast<ScDocument*>(pDocument), eConvUI) & ScRefFlags::VALID) ==
+                bResult = (rRange.aStart.Parse(aUIString, pDocument, eConvUI) & ScRefFlags::VALID) ==
                                                                                                          ScRefFlags::VALID;
             rRange.aEnd = rRange.aStart;
         }
@@ -498,26 +499,26 @@ bool ScRangeStringConverter::GetRangeFromString(
                     aUIString[ nIndex + 1 ] == '.' )
                 aUIString = aUIString.replaceAt( nIndex + 1, 1, "" );
 
-            bResult = ((rRange.Parse(aUIString, const_cast<ScDocument*> (pDocument), eConv) & ScRefFlags::VALID) ==
+            bResult = ((rRange.Parse(aUIString, pDocument, eConv) & ScRefFlags::VALID) ==
                                                                                               ScRefFlags::VALID);
 
             // #i77703# chart ranges in the file format contain both sheet names, even for an external reference sheet.
             // This isn't parsed by ScRange, so try to parse the two Addresses then.
             if (!bResult)
             {
-                bResult = ((rRange.aStart.Parse( aUIString.copy(0, nIndex), const_cast<ScDocument*>(pDocument), eConv)
+                bResult = ((rRange.aStart.Parse( aUIString.copy(0, nIndex), pDocument, eConv)
                                & ScRefFlags::VALID) == ScRefFlags::VALID)
                           &&
-                          ((rRange.aEnd.Parse( aUIString.copy(nIndex+1), const_cast<ScDocument*>(pDocument), eConv)
+                          ((rRange.aEnd.Parse( aUIString.copy(nIndex+1), pDocument, eConv)
                                & ScRefFlags::VALID) == ScRefFlags::VALID);
 
                 ::formula::FormulaGrammar::AddressConvention eConvUI = pDocument->GetAddressConvention();
                 if (!bResult && eConv != eConvUI)
                 {
-                    bResult = ((rRange.aStart.Parse( aUIString.copy(0, nIndex), const_cast<ScDocument*>(pDocument), eConvUI)
+                    bResult = ((rRange.aStart.Parse( aUIString.copy(0, nIndex), pDocument, eConvUI)
                                    & ScRefFlags::VALID) == ScRefFlags::VALID)
                               &&
-                              ((rRange.aEnd.Parse( aUIString.copy(nIndex+1), const_cast<ScDocument*>(pDocument), eConvUI)
+                              ((rRange.aEnd.Parse( aUIString.copy(nIndex+1), pDocument, eConvUI)
                                    & ScRefFlags::VALID) == ScRefFlags::VALID);
                 }
             }
@@ -539,20 +540,16 @@ bool ScRangeStringConverter::GetRangeListFromString(
     sal_Int32 nOffset = 0;
     while( nOffset >= 0 )
     {
-        ScRange* pRange = new ScRange;
+        ScRange aRange;
         if (
-             GetRangeFromString( *pRange, rRangeListStr, pDocument, eConv, nOffset, cSeparator, cQuote ) &&
+             GetRangeFromString( aRange, rRangeListStr, pDocument, eConv, nOffset, cSeparator, cQuote ) &&
              (nOffset >= 0)
            )
         {
-            rRangeList.push_back( pRange );
-            pRange = nullptr;
+            rRangeList.push_back( aRange );
         }
         else if (nOffset > -1)
             bRet = false;
-        //if ownership transferred to rRangeList pRange was NULLed, otherwwise
-        //delete it
-        delete pRange;
     }
     return bRet;
 }
@@ -574,24 +571,6 @@ bool ScRangeStringConverter::GetAreaFromString(
         rArea.nRowStart = aScRange.aStart.Row();
         rArea.nColEnd = aScRange.aEnd.Col();
         rArea.nRowEnd = aScRange.aEnd.Row();
-        bResult = true;
-    }
-    return bResult;
-}
-
-bool ScRangeStringConverter::GetAddressFromString(
-        table::CellAddress& rAddress,
-        const OUString& rAddressStr,
-        const ScDocument* pDocument,
-        FormulaGrammar::AddressConvention eConv,
-        sal_Int32& nOffset,
-        sal_Unicode cSeparator )
-{
-    ScAddress aScAddress;
-    bool bResult(false);
-    if( GetAddressFromString( aScAddress, rAddressStr, pDocument, eConv, nOffset, cSeparator ) && (nOffset >= 0) )
-    {
-        ScUnoConversion::FillApiAddress( rAddress, aScAddress );
         bResult = true;
     }
     return bResult;
@@ -663,9 +642,8 @@ void ScRangeStringConverter::GetStringFromRangeList(
     {
         for( size_t nIndex = 0, nCount = pRangeList->size(); nIndex < nCount; nIndex++ )
         {
-            const ScRange* pRange = (*pRangeList)[nIndex];
-            if( pRange )
-                GetStringFromRange( sRangeListStr, *pRange, pDocument, eConv, cSeparator, true );
+            const ScRange & rRange = (*pRangeList)[nIndex];
+            GetStringFromRange( sRangeListStr, rRange, pDocument, eConv, cSeparator, true );
         }
     }
     rString = sRangeListStr;
@@ -728,7 +706,7 @@ void ScRangeStringConverter::GetStringFromRangeList(
 }
 
 static void lcl_appendCellAddress(
-    OUStringBuffer& rBuf, ScDocument* pDoc, const ScAddress& rCell,
+    OUStringBuffer& rBuf, const ScDocument* pDoc, const ScAddress& rCell,
     const ScAddress::ExternalInfo& rExtInfo)
 {
     if (rExtInfo.mbExternal)
@@ -758,7 +736,7 @@ static void lcl_appendCellAddress(
 }
 
 static void lcl_appendCellRangeAddress(
-    OUStringBuffer& rBuf, ScDocument* pDoc, const ScAddress& rCell1, const ScAddress& rCell2,
+    OUStringBuffer& rBuf, const ScDocument* pDoc, const ScAddress& rCell1, const ScAddress& rCell2,
     const ScAddress::ExternalInfo& rExtInfo1, const ScAddress::ExternalInfo& rExtInfo2)
 {
     if (rExtInfo1.mbExternal)
@@ -805,7 +783,7 @@ static void lcl_appendCellRangeAddress(
     }
 }
 
-void ScRangeStringConverter::GetStringFromXMLRangeString( OUString& rString, const OUString& rXMLRange, ScDocument* pDoc )
+void ScRangeStringConverter::GetStringFromXMLRangeString( OUString& rString, const OUString& rXMLRange, const ScDocument* pDoc )
 {
     FormulaGrammar::AddressConvention eConv = pDoc->GetAddressConvention();
     const sal_Unicode cSepNew = ScCompiler::GetNativeSymbolChar(ocSep);
@@ -951,23 +929,6 @@ ScArea::ScArea( SCTAB tab,
 {
 }
 
-ScArea::ScArea( const ScArea& r ) :
-        nTab     ( r.nTab ),
-        nColStart( r.nColStart ),   nRowStart( r.nRowStart ),
-        nColEnd  ( r.nColEnd ),     nRowEnd  ( r.nRowEnd )
-{
-}
-
-ScArea& ScArea::operator=( const ScArea& r )
-{
-    nTab        = r.nTab;
-    nColStart   = r.nColStart;
-    nRowStart   = r.nRowStart;
-    nColEnd     = r.nColEnd;
-    nRowEnd     = r.nRowEnd;
-    return *this;
-}
-
 bool ScArea::operator==( const ScArea& r ) const
 {
     return (   (nTab        == r.nTab)
@@ -977,7 +938,7 @@ bool ScArea::operator==( const ScArea& r ) const
             && (nRowEnd     == r.nRowEnd) );
 }
 
-ScAreaNameIterator::ScAreaNameIterator( ScDocument* pDoc ) :
+ScAreaNameIterator::ScAreaNameIterator( const ScDocument* pDoc ) :
     pRangeName(pDoc->GetRangeName()),
     pDBCollection(pDoc->GetDBCollection()),
     bFirstPass(true)
@@ -993,7 +954,7 @@ bool ScAreaNameIterator::Next( OUString& rName, ScRange& rRange )
 {
     for (;;)
     {
-        if ( bFirstPass )                                   // erst Bereichsnamen
+        if ( bFirstPass )                                   // first the area names
         {
             if ( pRangeName && maRNPos != maRNEnd )
             {
@@ -1018,7 +979,7 @@ bool ScAreaNameIterator::Next( OUString& rName, ScRange& rRange )
             }
         }
 
-        if ( !bFirstPass )                                  // dann DB-Bereiche
+        if ( !bFirstPass )                                  // then the DB areas
         {
             if (pDBCollection && maDBPos != maDBEnd)
             {
@@ -1031,6 +992,22 @@ bool ScAreaNameIterator::Next( OUString& rName, ScRange& rRange )
             else
                 return false;                               // nothing left
         }
+    }
+}
+
+void ScRangeUpdater::UpdateInsertTab(ScAddress& rAddr, const sc::RefUpdateInsertTabContext& rCxt)
+{
+    if (rCxt.mnInsertPos <= rAddr.Tab())
+    {
+        rAddr.IncTab(rCxt.mnSheets);
+    }
+}
+
+void ScRangeUpdater::UpdateDeleteTab(ScAddress& rAddr, const sc::RefUpdateDeleteTabContext& rCxt)
+{
+    if (rCxt.mnDeletePos <= rAddr.Tab())
+    {
+        rAddr.IncTab(-rCxt.mnSheets);
     }
 }
 

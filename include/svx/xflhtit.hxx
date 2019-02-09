@@ -37,29 +37,25 @@ public:
                             static SfxPoolItem* CreateDefault();
                             XFillHatchItem() : NameOrIndex(XATTR_FILLHATCH, -1) {}
                             XFillHatchItem(const OUString& rName, const XHatch& rTheHatch);
-                            XFillHatchItem(SfxItemPool* pPool, const XHatch& rTheHatch);
+                            XFillHatchItem(const XHatch& rTheHatch);
                             XFillHatchItem(const XFillHatchItem& rItem);
-                            XFillHatchItem(SvStream& rIn);
 
     virtual bool            operator==(const SfxPoolItem& rItem) const override;
     virtual SfxPoolItem*    Clone(SfxItemPool* pPool = nullptr) const override;
-    virtual SfxPoolItem*    Create(SvStream& rIn, sal_uInt16 nVer) const override;
-    virtual SvStream&       Store(SvStream& rOut, sal_uInt16 nItemVersion ) const override;
 
     virtual bool            QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool            PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
     virtual bool            HasMetrics() const override;
     virtual void            ScaleMetrics(long nMul, long nDiv) override;
 
     const XHatch&           GetHatchValue() const { return aHatch;} // GetValue -> GetHatchValue
-    void                    SetHatchValue(const XHatch& rNew)  { aHatch = rNew; Detach(); } // SetValue -> SetHatchValue
 
     static bool CompareValueFunc( const NameOrIndex* p1, const NameOrIndex* p2 );
-    XFillHatchItem* checkForUniqueItem( SdrModel* pModel ) const;
+    std::unique_ptr<XFillHatchItem> checkForUniqueItem( SdrModel* pModel ) const;
 };
 
 #endif

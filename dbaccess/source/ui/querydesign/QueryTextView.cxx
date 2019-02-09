@@ -17,25 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "QueryTextView.hxx"
-#include "querycontainerwindow.hxx"
-#include "QueryViewSwitch.hxx"
-#include "sqledit.hxx"
-#include "undosqledit.hxx"
-#include "browserids.hxx"
-#include "querycontroller.hxx"
-#include "dbu_qry.hrc"
-#include "dbustrings.hrc"
-#include <toolkit/helper/vclunohelper.hxx>
+#include <QueryTextView.hxx>
+#include <querycontainerwindow.hxx>
+#include <QueryViewSwitch.hxx>
+#include <sqledit.hxx>
+#include <undosqledit.hxx>
+#include <browserids.hxx>
+#include <querycontroller.hxx>
+#include <stringconstants.hxx>
 #include <vcl/split.hxx>
 #include <vcl/svapp.hxx>
-#include <comphelper/types.hxx>
-#include "QueryDesignView.hxx"
+#include <QueryDesignView.hxx>
 
 using namespace dbaui;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::frame;
 
 // end of temp classes
 OQueryTextView::OQueryTextView(OQueryContainerWindow* _pParent)
@@ -79,10 +75,10 @@ OUString OQueryTextView::getStatement()
 
 void OQueryTextView::clear()
 {
-    OSqlEditUndoAct* pUndoAct = new OSqlEditUndoAct( m_pEdit );
+    std::unique_ptr<OSqlEditUndoAct> pUndoAct(new OSqlEditUndoAct( m_pEdit ));
 
     pUndoAct->SetOriginalText( m_pEdit->GetText() );
-    getContainerWindow()->getDesignView()->getController().addUndoActionAndInvalidate( pUndoAct );
+    getContainerWindow()->getDesignView()->getController().addUndoActionAndInvalidate( std::move(pUndoAct) );
 
     m_pEdit->SetText(OUString());
 }
@@ -107,14 +103,14 @@ void OQueryTextView::cut()
 {
     if(!m_pEdit->IsInAccelAct() )
         m_pEdit->Cut();
-    getContainerWindow()->getDesignView()->getController().setModified(sal_True);
+    getContainerWindow()->getDesignView()->getController().setModified(true);
 }
 
 void OQueryTextView::paste()
 {
     if(!m_pEdit->IsInAccelAct() )
         m_pEdit->Paste();
-    getContainerWindow()->getDesignView()->getController().setModified(sal_True);
+    getContainerWindow()->getDesignView()->getController().setModified(true);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

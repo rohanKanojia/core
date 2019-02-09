@@ -20,18 +20,22 @@
 #ifndef INCLUDED_SVX_ACCESSIBLESHAPETREEINFO_HXX
 #define INCLUDED_SVX_ACCESSIBLESHAPETREEINFO_HXX
 
-#include <com/sun/star/accessibility/XAccessibleComponent.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/document/XEventBroadcaster.hpp>
-#include <com/sun/star/frame/XController.hpp>
-#include <svx/IAccessibleViewForwarder.hxx>
+#include <com/sun/star/uno/Reference.hxx>
 #include <svx/svxdllapi.h>
 #include <vcl/vclptr.hxx>
+
+namespace com { namespace sun { namespace star {
+    namespace accessibility { class XAccessibleComponent; }
+    namespace document { class XEventBroadcaster; }
+    namespace frame { class XController; }
+} } }
 
 class SdrView;
 namespace vcl { class Window; }
 
 namespace accessibility {
+
+class IAccessibleViewForwarder;
 
 /** This class bundles all information that is passed down the tree of
     accessible shapes so that each shape has access to that info.
@@ -52,7 +56,7 @@ class SVX_DLLPUBLIC AccessibleShapeTreeInfo
 {
 public:
     /** Use this constructor to create an empty object that is filled later
-        with more meaningfull data.
+        with more meaningful data.
     */
     AccessibleShapeTreeInfo();
 
@@ -66,6 +70,8 @@ public:
 
     AccessibleShapeTreeInfo& operator= (const AccessibleShapeTreeInfo& rInfo);
 
+    void dispose();
+
     /** Deprecated.  Don't use this method.
     */
     void SetDocumentWindow (const css::uno::Reference<
@@ -73,8 +79,8 @@ public:
 
     /** Deprecated.  Don't use this method.
     */
-    css::uno::Reference<
-        css::accessibility::XAccessibleComponent>
+    const css::uno::Reference<
+        css::accessibility::XAccessibleComponent>&
         GetDocumentWindow() const { return mxDocumentWindow;}
 
     /** Set a new broadcaster that sends events indicating shape changes.
@@ -91,8 +97,8 @@ public:
             The returned reference may be empty if the broadcaster has not
             been set or has been set to an empty reference.
     */
-    css::uno::Reference<
-        css::document::XEventBroadcaster>
+    const css::uno::Reference<
+        css::document::XEventBroadcaster>&
         GetModelBroadcaster() const { return mxModelBroadcaster;}
 
     /** Set the view that will be used to construct SvxTextEditSources which
@@ -122,8 +128,8 @@ public:
         @return
             The reference to the currently set controller may be empty.
     */
-    css::uno::Reference<
-        css::frame::XController>
+    const css::uno::Reference<
+        css::frame::XController>&
         GetController() const { return mxController;}
 
     /** Set the window that is used to construct SvxTextEditSources which in

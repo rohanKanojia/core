@@ -24,13 +24,14 @@
 #include <IDocumentStylePoolAccess.hxx>
 
 #include <algorithm>
-#include <functional>
 
 #include <rtl/tencinfo.h>
+#include <sal/log.hxx>
 
 #include <unicode/ubidi.h>
 #include <tools/tenccvt.hxx>
 #include <com/sun/star/i18n/ScriptType.hpp>
+#include <com/sun/star/i18n/XBreakIterator.hpp>
 
 #include <unotools/fontcvt.hxx>
 #include <editeng/paperinf.hxx>
@@ -53,7 +54,7 @@ using namespace css;
 
 namespace myImplHelpers
 {
-    SwTwips CalcHdFtDist(const SwFrameFormat& rFormat, sal_uInt16 nSpacing)
+    static SwTwips CalcHdFtDist(const SwFrameFormat& rFormat, sal_uInt16 nSpacing)
     {
         /*
         The normal case for reexporting word docs is to have dynamic spacing,
@@ -93,12 +94,12 @@ namespace myImplHelpers
         return nDist;
     }
 
-    SwTwips CalcHdDist(const SwFrameFormat& rFormat)
+    static SwTwips CalcHdDist(const SwFrameFormat& rFormat)
     {
         return CalcHdFtDist(rFormat, rFormat.GetULSpace().GetUpper());
     }
 
-    SwTwips CalcFtDist(const SwFrameFormat& rFormat)
+    static SwTwips CalcFtDist(const SwFrameFormat& rFormat)
     {
         return CalcHdFtDist(rFormat, rFormat.GetULSpace().GetLower());
     }
@@ -305,15 +306,14 @@ namespace myImplHelpers
                     (nI < SAL_MAX_INT32)
                   )
             {
-                aName = aBaseName;
-                aName += OUString::number(nI++);
+                aName = aBaseName + OUString::number(nI++);
             }
         }
 
         return pColl ? 0 : maHelper.MakeStyle(aName);
     }
 
-    OUString FindBestMSSubstituteFont(const OUString &rFont)
+    static OUString FindBestMSSubstituteFont(const OUString &rFont)
     {
         if (IsStarSymbol(rFont))
             return OUString("Arial Unicode MS");
@@ -322,10 +322,9 @@ namespace myImplHelpers
 
     //Utility to remove entries before a given starting position
     class IfBeforeStart
-        : public std::unary_function<const sw::util::CharRunEntry&, bool>
     {
     private:
-        sal_Int32 mnStart;
+        sal_Int32 const mnStart;
     public:
         explicit IfBeforeStart(sal_Int32 nStart) : mnStart(nStart) {}
         bool operator()(const sw::util::CharRunEntry &rEntry) const
@@ -394,18 +393,17 @@ namespace sw
         {
             if (const SvxBoxItem *pBox = rPage.GetItem<SvxBoxItem>(RES_BOX))
             {
-                dyaHdrTop = pBox->CalcLineSpace(SvxBoxItemLine::TOP);
-                dyaHdrBottom = pBox->CalcLineSpace(SvxBoxItemLine::BOTTOM);
+                dyaHdrTop = pBox->CalcLineSpace( SvxBoxItemLine::TOP, /*bEvenIfNoLine*/true );
+                dyaHdrBottom = pBox->CalcLineSpace( SvxBoxItemLine::BOTTOM, /*bEvenIfNoLine*/true );
             }
             else
             {
                 dyaHdrTop = dyaHdrBottom = 0;
-                dyaHdrBottom = 0;
             }
             const SvxULSpaceItem &rUL =
                 ItemGet<SvxULSpaceItem>(rPage, RES_UL_SPACE);
-            dyaHdrTop = dyaHdrTop + rUL.GetUpper();
-            dyaHdrBottom = dyaHdrBottom + rUL.GetLower();
+            dyaHdrTop += rUL.GetUpper();
+            dyaHdrBottom += rUL.GetLower();
 
             dyaTop = dyaHdrTop;
             dyaBottom = dyaHdrBottom;
@@ -434,8 +432,7 @@ namespace sw
         {
             // Check top only if both object have a header or if
             // both object don't have a header
-            if ( (  HasHeader() &&  rOther.HasHeader() ) ||
-                 ( !HasHeader() && !rOther.HasHeader() ) )
+            if (HasHeader() == rOther.HasHeader())
             {
                 if (dyaTop != rOther.dyaTop)
                     return false;
@@ -443,8 +440,7 @@ namespace sw
 
             // Check bottom only if both object have a footer or if
             // both object don't have a footer
-            if ( (  HasFooter() &&  rOther.HasFooter() ) ||
-                 ( !HasFooter() && !rOther.HasFooter() ) )
+            if (HasFooter() == rOther.HasFooter())
             {
                 if (dyaBottom != rOther.dyaBottom)
                     return false;
@@ -475,7 +471,6 @@ namespace sw
 
         CharStyleMapper::~CharStyleMapper()
         {
-            delete mpImpl;
         }
 
         CharStyleMapper::StyleResult CharStyleMapper::GetStyle(
@@ -524,7 +519,7 @@ namespace sw
             OSL_ENSURE(rTextNd.GetDoc(), "No document for node?, suspicious");
             if (rTextNd.GetDoc())
             {
-                if (FRMDIR_HORI_RIGHT_TOP ==
+                if (SvxFrameDirection::Horizontal_RL_TB ==
                     rTextNd.GetDoc()->GetTextDirection(SwPosition(rTextNd)))
                 {
                     bParaIsRTL = true;
@@ -534,7 +529,8 @@ namespace sw
             using namespace ::com::sun::star::i18n;
 
             sal_uInt16 nScript = i18n::ScriptType::LATIN;
-            if (!rText.isEmpty() && g_pBreakIt && g_pBreakIt->GetBreakIter().is())
+            assert(g_pBreakIt && g_pBreakIt->GetBreakIter().is());
+            if (!rText.isEmpty())
                 nScript = g_pBreakIt->GetBreakIter()->getScriptType(rText, 0);
 
             rtl_TextEncoding eChrSet = ItemGet<SvxFontItem>(rTextNd,
@@ -545,18 +541,16 @@ namespace sw
 
             if (rText.isEmpty())
             {
-                aRunChanges.push_back(CharRunEntry(0, nScript, eChrSet,
-                    bParaIsRTL));
+                aRunChanges.emplace_back(0, nScript, eChrSet,
+                    bParaIsRTL);
                 return aRunChanges;
             }
 
             typedef std::pair<int32_t, bool> DirEntry;
             typedef std::vector<DirEntry> DirChanges;
-            typedef DirChanges::const_iterator cDirIter;
 
             typedef std::pair<sal_Int32, sal_uInt16> ScriptEntry;
             typedef std::vector<ScriptEntry> ScriptChanges;
-            typedef ScriptChanges::const_iterator cScriptIter;
 
             DirChanges aDirChanges;
             ScriptChanges aScripts;
@@ -587,34 +581,31 @@ namespace sw
                 The value for UBIDI_DEFAULT_LTR is even and the one for
                 UBIDI_DEFAULT_RTL is odd
                 */
-                aDirChanges.push_back(DirEntry(nEnd, nCurrDir & 0x1));
+                aDirChanges.emplace_back(nEnd, nCurrDir & 0x1);
                 nStart = nEnd;
             }
             ubidi_close(pBidi);
 
-            using sw::types::writer_cast;
+            assert(g_pBreakIt && g_pBreakIt->GetBreakIter().is());
 
-            if (g_pBreakIt && g_pBreakIt->GetBreakIter().is())
+            sal_Int32 nLen = rText.getLength();
+            sal_Int32 nPos = 0;
+            while (nPos < nLen)
             {
-                sal_Int32 nLen = rText.getLength();
-                sal_Int32 nPos = 0;
-                while (nPos < nLen)
-                {
-                    sal_Int32 nEnd2 = g_pBreakIt->GetBreakIter()->endOfScript(rText, nPos,
-                        nScript);
-                    if (nEnd2 < 0)
-                        break;
-                    nPos = nEnd2;
-                    aScripts.push_back(ScriptEntry(nPos, nScript));
-                    nScript = g_pBreakIt->GetBreakIter()->getScriptType(rText, nPos);
-                }
+                sal_Int32 nEnd2 = g_pBreakIt->GetBreakIter()->endOfScript(rText, nPos,
+                    nScript);
+                if (nEnd2 < 0)
+                    break;
+                nPos = nEnd2;
+                aScripts.emplace_back(nPos, nScript);
+                nScript = g_pBreakIt->GetBreakIter()->getScriptType(rText, nPos);
             }
 
-            cDirIter aBiDiEnd = aDirChanges.end();
-            cScriptIter aScriptEnd = aScripts.end();
+            auto aBiDiEnd = aDirChanges.cend();
+            auto aScriptEnd = aScripts.cend();
 
-            cDirIter aBiDiIter = aDirChanges.begin();
-            cScriptIter aScriptIter = aScripts.begin();
+            auto aBiDiIter = aDirChanges.cbegin();
+            auto aScriptIter = aScripts.cbegin();
 
             bool bCharIsRTL = bParaIsRTL;
 
@@ -639,8 +630,7 @@ namespace sw
                     nScript = aScriptIter->second;
                 }
 
-                aRunChanges.push_back(
-                    CharRunEntry(nMinPos, nScript, eChrSet, bCharIsRTL));
+                aRunChanges.emplace_back(nMinPos, nScript, eChrSet, bCharIsRTL);
 
                 if (aBiDiIter != aBiDiEnd)
                 {
@@ -686,7 +676,7 @@ namespace sw
         static bool
         CanEncode(OUString const& rString, rtl_TextEncoding const eEncoding)
         {
-            rtl::OString tmp;
+            OString tmp;
             return rString.convertToString(&tmp, eEncoding,
                     RTL_TEXTTOUNICODE_FLAGS_UNDEFINED_ERROR |
                     RTL_TEXTTOUNICODE_FLAGS_INVALID_ERROR);
@@ -709,14 +699,14 @@ namespace sw
                     { RTL_TEXTENCODING_MS_950, 0x88 }, // Big5
                     { RTL_TEXTENCODING_MS_949, 0x81 }, // EUC-KR
                 };
-                for (size_t i = 0; i < SAL_N_ELEMENTS(s_fallbacks); ++i)
+                for (const auto & i : s_fallbacks)
                 {
                     // fall back to a charset that can at least encode the
                     // font's name
-                    if (CanEncode(rFontName, s_fallbacks[i].enc)
-                        && CanEncode(rAltName, s_fallbacks[i].enc))
+                    if (CanEncode(rFontName, i.enc)
+                        && CanEncode(rAltName, i.enc))
                     {
-                        return s_fallbacks[i].charset;
+                        return i.charset;
                     }
                 }
                 SAL_INFO("sw.rtf", "no fallback charset found for font: "
@@ -726,7 +716,7 @@ namespace sw
             return nRet;
         }
 
-        long DateTime2DTTM( const DateTime& rDT )
+        sal_uInt32 DateTime2DTTM( const DateTime& rDT )
         {
         /*
         mint    short   :6  0000003F    minutes (0-59)
@@ -743,9 +733,9 @@ namespace sw
                                                 Saturday=6)
         */
 
-            if ( rDT.GetDate() == 0L )
-                return 0L;
-            long nDT = ( rDT.GetDayOfWeek() + 1 ) % 7;
+            if ( rDT.GetDate() == 0 )
+                return 0;
+            sal_uInt32 nDT = ( rDT.GetDayOfWeek() + 1 ) % 7;
             nDT <<= 9;
             nDT += ( rDT.GetYear() - 1900 ) & 0x1ff;
             nDT <<= 4;
@@ -763,7 +753,7 @@ namespace sw
         /** Find cFind in rParams if not embedded in " double quotes.
             Will NOT find '\\' or '"'.
          */
-        sal_Int32 findUnquoted( const OUString& rParams, sal_Unicode cFind, sal_Int32 nFromPos )
+        static sal_Int32 findUnquoted( const OUString& rParams, sal_Unicode cFind, sal_Int32 nFromPos )
         {
             const sal_Int32 nLen = rParams.getLength();
             if (nFromPos < 0 || nLen <= nFromPos)
@@ -796,7 +786,7 @@ namespace sw
         /** Find all rFind in rParams if not embedded in " double quotes and
             replace with rReplace. Will NOT find '\\' or '"'.
          */
-        bool replaceUnquoted( OUString& rParams, const OUString& rFind, const OUString& rReplace )
+        static bool replaceUnquoted( OUString& rParams, const OUString& rFind, const OUString& rReplace )
         {
             bool bReplaced = false;
             if (rFind.isEmpty())
@@ -837,12 +827,12 @@ namespace sw
         }
 
         sal_uLong MSDateTimeFormatToSwFormat(OUString& rParams,
-            SvNumberFormatter *pFormatter, sal_uInt16 &rLang, bool bHijri,
-            sal_uInt16 nDocLang)
+            SvNumberFormatter *pFormatter, LanguageType &rLang, bool bHijri,
+            LanguageType nDocLang)
         {
             // tell the Formatter about the new entry
             sal_Int32 nCheckPos = 0;
-            short  nType = css::util::NumberFormat::DEFINED;
+            SvNumFormatType nType = SvNumFormatType::DEFINED;
             sal_uInt32  nKey = 0;
 
             SwapQuotesInField(rParams);
@@ -909,14 +899,10 @@ namespace sw
                     sal_Unicode nChar = rParams[nI];
 
                     // Change the localized word string to english
-                    switch ( nDocLang )
+                    if ( nDocLang == LANGUAGE_FRENCH )
                     {
-                        case LANGUAGE_FRENCH:
-                            if ( ( nChar == 'a' || nChar == 'A' ) && IsNotAM(rParams, nI) )
-                                rParams = rParams.replaceAt(nI, 1, "Y");
-                            break;
-                        default:
-                            ;
+                        if ( ( nChar == 'a' || nChar == 'A' ) && IsNotAM(rParams, nI) )
+                            rParams = rParams.replaceAt(nI, 1, "Y");
                     }
                     if (nChar == '/')
                     {
@@ -937,111 +923,103 @@ namespace sw
                     if ( !bForceJapanese && !bForceNatNum )
                     {
                         // Convert to the localized equivalent for OOo
-                        switch ( rLang )
+                        if ( rLang == LANGUAGE_FINNISH )
                         {
-                        case LANGUAGE_FINNISH:
-                            {
-                                if (nChar == 'y' || nChar == 'Y')
-                                    rParams = rParams.replaceAt(nI, 1, "V");
-                                else if (nChar == 'm' || nChar == 'M')
-                                    rParams = rParams.replaceAt(nI, 1, "K");
-                                else if (nChar == 'd' || nChar == 'D')
-                                    rParams = rParams.replaceAt(nI, 1, "P");
-                                else if (nChar == 'h' || nChar == 'H')
-                                    rParams = rParams.replaceAt(nI, 1, "T");
-                            }
-                            break;
-                        case LANGUAGE_DANISH:
-                        case LANGUAGE_NORWEGIAN:
-                        case LANGUAGE_NORWEGIAN_BOKMAL:
-                        case LANGUAGE_NORWEGIAN_NYNORSK:
-                        case LANGUAGE_SWEDISH:
-                        case LANGUAGE_SWEDISH_FINLAND:
-                            {
-                                if (nChar == 'h' || nChar == 'H')
-                                    rParams = rParams.replaceAt(nI, 1, "T");
-                            }
-                            break;
-                        case LANGUAGE_PORTUGUESE:
-                        case LANGUAGE_PORTUGUESE_BRAZILIAN:
-                        case LANGUAGE_SPANISH_MODERN:
-                        case LANGUAGE_SPANISH_DATED:
-                        case LANGUAGE_SPANISH_MEXICAN:
-                        case LANGUAGE_SPANISH_GUATEMALA:
-                        case LANGUAGE_SPANISH_COSTARICA:
-                        case LANGUAGE_SPANISH_PANAMA:
-                        case LANGUAGE_SPANISH_DOMINICAN_REPUBLIC:
-                        case LANGUAGE_SPANISH_VENEZUELA:
-                        case LANGUAGE_SPANISH_COLOMBIA:
-                        case LANGUAGE_SPANISH_PERU:
-                        case LANGUAGE_SPANISH_ARGENTINA:
-                        case LANGUAGE_SPANISH_ECUADOR:
-                        case LANGUAGE_SPANISH_CHILE:
-                        case LANGUAGE_SPANISH_URUGUAY:
-                        case LANGUAGE_SPANISH_PARAGUAY:
-                        case LANGUAGE_SPANISH_BOLIVIA:
-                        case LANGUAGE_SPANISH_EL_SALVADOR:
-                        case LANGUAGE_SPANISH_HONDURAS:
-                        case LANGUAGE_SPANISH_NICARAGUA:
-                        case LANGUAGE_SPANISH_PUERTO_RICO:
-                            {
-                                if (nChar == 'a' || nChar == 'A')
-                                    rParams = rParams.replaceAt(nI, 1, "O");
-                                else if (nChar == 'y' || nChar == 'Y')
-                                    rParams = rParams.replaceAt(nI, 1, "A");
-                            }
-                            break;
-                        case LANGUAGE_DUTCH:
-                        case LANGUAGE_DUTCH_BELGIAN:
-                            {
-                                if (nChar == 'y' || nChar == 'Y')
-                                    rParams = rParams.replaceAt(nI, 1, "J");
-                                else if (nChar == 'u' || nChar == 'U')
-                                    rParams = rParams.replaceAt(nI, 1, "H");
-                            }
-                            break;
-                        case LANGUAGE_ITALIAN:
-                        case LANGUAGE_ITALIAN_SWISS:
-                            {
-                                if (nChar == 'a' || nChar == 'A')
-                                    rParams = rParams.replaceAt(nI, 1, "O");
-                                else if (nChar == 'g' || nChar == 'G')
-                                    rParams = rParams.replaceAt(nI, 1, "X");
-                                else if (nChar == 'y' || nChar == 'Y')
-                                    rParams = rParams.replaceAt(nI, 1, "A");
-                                else if (nChar == 'd' || nChar == 'D')
-                                    rParams = rParams.replaceAt(nI, 1, "G");
-                            }
-                            break;
-                        case LANGUAGE_GERMAN:
-                        case LANGUAGE_GERMAN_SWISS:
-                        case LANGUAGE_GERMAN_AUSTRIAN:
-                        case LANGUAGE_GERMAN_LUXEMBOURG:
-                        case LANGUAGE_GERMAN_LIECHTENSTEIN:
-                            {
-                                if (nChar == 'y' || nChar == 'Y')
-                                    rParams = rParams.replaceAt(nI, 1, "J");
-                                else if (nChar == 'd' || nChar == 'D')
-                                    rParams = rParams.replaceAt(nI, 1, "T");
-                            }
-                            break;
-                        case LANGUAGE_FRENCH:
-                        case LANGUAGE_FRENCH_BELGIAN:
-                        case LANGUAGE_FRENCH_CANADIAN:
-                        case LANGUAGE_FRENCH_SWISS:
-                        case LANGUAGE_FRENCH_LUXEMBOURG:
-                        case LANGUAGE_FRENCH_MONACO:
-                            {
-                                if (nChar == 'y' || nChar == 'Y' || nChar == 'a')
-                                    rParams = rParams.replaceAt(nI, 1, "A");
-                                else if (nChar == 'd' || nChar == 'D' || nChar == 'j')
-                                    rParams = rParams.replaceAt(nI, 1, "J");
-                            }
-                            break;
-                        default:
-                            {
-                                ; // Nothing
-                            }
+                            if (nChar == 'y' || nChar == 'Y')
+                                rParams = rParams.replaceAt(nI, 1, "V");
+                            else if (nChar == 'm' || nChar == 'M')
+                                rParams = rParams.replaceAt(nI, 1, "K");
+                            else if (nChar == 'd' || nChar == 'D')
+                                rParams = rParams.replaceAt(nI, 1, "P");
+                            else if (nChar == 'h' || nChar == 'H')
+                                rParams = rParams.replaceAt(nI, 1, "T");
+                        }
+                        else if ( rLang.anyOf(
+                            LANGUAGE_DANISH,
+                            LANGUAGE_NORWEGIAN,
+                            LANGUAGE_NORWEGIAN_BOKMAL,
+                            LANGUAGE_NORWEGIAN_NYNORSK,
+                            LANGUAGE_SWEDISH,
+                            LANGUAGE_SWEDISH_FINLAND))
+                        {
+                            if (nChar == 'h' || nChar == 'H')
+                                rParams = rParams.replaceAt(nI, 1, "T");
+                        }
+                        else if ( rLang.anyOf(
+                            LANGUAGE_PORTUGUESE,
+                            LANGUAGE_PORTUGUESE_BRAZILIAN,
+                            LANGUAGE_SPANISH_MODERN,
+                            LANGUAGE_SPANISH_DATED,
+                            LANGUAGE_SPANISH_MEXICAN,
+                            LANGUAGE_SPANISH_GUATEMALA,
+                            LANGUAGE_SPANISH_COSTARICA,
+                            LANGUAGE_SPANISH_PANAMA,
+                            LANGUAGE_SPANISH_DOMINICAN_REPUBLIC,
+                            LANGUAGE_SPANISH_VENEZUELA,
+                            LANGUAGE_SPANISH_COLOMBIA,
+                            LANGUAGE_SPANISH_PERU,
+                            LANGUAGE_SPANISH_ARGENTINA,
+                            LANGUAGE_SPANISH_ECUADOR,
+                            LANGUAGE_SPANISH_CHILE,
+                            LANGUAGE_SPANISH_URUGUAY,
+                            LANGUAGE_SPANISH_PARAGUAY,
+                            LANGUAGE_SPANISH_BOLIVIA,
+                            LANGUAGE_SPANISH_EL_SALVADOR,
+                            LANGUAGE_SPANISH_HONDURAS,
+                            LANGUAGE_SPANISH_NICARAGUA,
+                            LANGUAGE_SPANISH_PUERTO_RICO))
+                        {
+                            if (nChar == 'a' || nChar == 'A')
+                                rParams = rParams.replaceAt(nI, 1, "O");
+                            else if (nChar == 'y' || nChar == 'Y')
+                                rParams = rParams.replaceAt(nI, 1, "A");
+                        }
+                        else if ( rLang.anyOf(
+                            LANGUAGE_DUTCH,
+                            LANGUAGE_DUTCH_BELGIAN))
+                        {
+                            if (nChar == 'y' || nChar == 'Y')
+                                rParams = rParams.replaceAt(nI, 1, "J");
+                            else if (nChar == 'u' || nChar == 'U')
+                                rParams = rParams.replaceAt(nI, 1, "H");
+                        }
+                        else if ( rLang.anyOf(
+                                LANGUAGE_ITALIAN,
+                                LANGUAGE_ITALIAN_SWISS))
+                        {
+                            if (nChar == 'a' || nChar == 'A')
+                                rParams = rParams.replaceAt(nI, 1, "O");
+                            else if (nChar == 'g' || nChar == 'G')
+                                rParams = rParams.replaceAt(nI, 1, "X");
+                            else if (nChar == 'y' || nChar == 'Y')
+                                rParams = rParams.replaceAt(nI, 1, "A");
+                            else if (nChar == 'd' || nChar == 'D')
+                                rParams = rParams.replaceAt(nI, 1, "G");
+                        }
+                        else if ( rLang.anyOf(
+                            LANGUAGE_GERMAN,
+                            LANGUAGE_GERMAN_SWISS,
+                            LANGUAGE_GERMAN_AUSTRIAN,
+                            LANGUAGE_GERMAN_LUXEMBOURG,
+                            LANGUAGE_GERMAN_LIECHTENSTEIN))
+                        {
+                            if (nChar == 'y' || nChar == 'Y')
+                                rParams = rParams.replaceAt(nI, 1, "J");
+                            else if (nChar == 'd' || nChar == 'D')
+                                rParams = rParams.replaceAt(nI, 1, "T");
+                        }
+                        else if ( rLang.anyOf(
+                            LANGUAGE_FRENCH,
+                            LANGUAGE_FRENCH_BELGIAN,
+                            LANGUAGE_FRENCH_CANADIAN,
+                            LANGUAGE_FRENCH_SWISS,
+                            LANGUAGE_FRENCH_LUXEMBOURG,
+                            LANGUAGE_FRENCH_MONACO))
+                        {
+                            if (nChar == 'y' || nChar == 'Y' || nChar == 'a')
+                                rParams = rParams.replaceAt(nI, 1, "A");
+                            else if (nChar == 'd' || nChar == 'D' || nChar == 'j')
+                                rParams = rParams.replaceAt(nI, 1, "J");
                         }
                     }
                 }
@@ -1064,15 +1042,15 @@ namespace sw
             return nKey;
         }
 
-        bool IsPreviousAM(OUString& rParams, sal_Int32 nPos)
+        bool IsPreviousAM(OUString const & rParams, sal_Int32 nPos)
         {
             return nPos>=2 && rParams.matchIgnoreAsciiCase("am", nPos-2);
         }
-        bool IsNextPM(OUString& rParams, sal_Int32 nPos)
+        bool IsNextPM(OUString const & rParams, sal_Int32 nPos)
         {
             return nPos+2<rParams.getLength() && rParams.matchIgnoreAsciiCase("pm", nPos+1);
         }
-        bool IsNotAM(OUString& rParams, sal_Int32 nPos)
+        bool IsNotAM(OUString const & rParams, sal_Int32 nPos)
         {
             ++nPos;
             return nPos>=rParams.getLength() || (rParams[nPos]!='M' && rParams[nPos]!='m');

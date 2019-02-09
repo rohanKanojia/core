@@ -37,8 +37,6 @@ BEGIN
 
     @languageproducts = ();
     $build = "";
-    $minor = "";
-    $lastminor = "";
     $os = "";
     $cpuname = "";
     $com = "";
@@ -159,6 +157,7 @@ BEGIN
     %merge_media_line = ();
     %merge_allfeature_hash = ();
     %merge_alldirectory_hash = ();
+    %merge_directory_hash = ();
     %copy_msm_files = ();
     $mergefeaturecollected = 0;
     $mergedirectoriescollected = 0;
@@ -255,7 +254,6 @@ BEGIN
     %allcabinetassigns = ();
     %cabfilecounter = ();
     %lastsequence = ();
-    %dontdeletecomponents = ();
     %allcalculated_guids = ();
     %calculated_component_guids = ();
     %all_english_languagestrings = ();

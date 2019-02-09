@@ -1,5 +1,5 @@
 # LibreOffice
-[![Coverity Scan Build Status](https://scan.coverity.com/projects/211/badge.svg)](https://scan.coverity.com/projects/211)
+[![Coverity Scan Build Status](https://scan.coverity.com/projects/211/badge.svg)](https://scan.coverity.com/projects/211) [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/307/badge)](https://bestpractices.coreinfrastructure.org/projects/307)
 
 LibreOffice is an integrated office suite based on copyleft licenses
 and compatible with most document formats and standards. Libreoffice
@@ -16,8 +16,8 @@ A quick overview of the LibreOffice code structure.
 You can develop for LibreOffice in one of two ways, one
 recommended and one much less so. First the somewhat less recommended
 way: it is possible to use the SDK to develop an extension,
-for which you can read the API docs [here](http://api.libreoffice.org/)
-and [here](http://wiki.services.openoffice.org/wiki/Documentation/DevGuide).
+for which you can read the API docs [here](https://api.libreoffice.org/)
+and [here](https://wiki.openoffice.org/wiki/Documentation/DevGuide).
 This re-uses the (extremely generic) UNO APIs that are also used by
 macro scripting in StarBasic.
 
@@ -27,6 +27,36 @@ to compile and build your code, it avoids any arbitrary limitations of
 our scripting APIs, and in general is far more simple and intuitive -
 if you are a reasonably able C++ programmer.
 
+## The build chain and runtime baselines
+
+These are the current minimal operating system and compiler versions to
+run and compile LibreOffice, also used by the TDF builds:
+
+* Windows:
+    * Runtime: Windows 7
+    * Build: Cygwin + Visual Studio 2017
+* macOS:
+    * Runtime: 10.10
+    * Build: 10.13.2 + Xcode 9.3
+* Linux:
+    * Runtime: RHEL 6 or CentOS 6
+    * Build: either GCC 7.0.0; or Clang 5.0.2 with libstdc++ 7.3.0
+* iOS (only for LibreOfficeKit):
+    * Runtime: 11.4 (only support for newer i devices == 64 bit)
+    * Build: Xcode 9.3 and iPhone SDK 11.4
+
+If you want to use Clang with the LibreOffice compiler plugins, the minimal
+version of Clang is 5.0.2. Since Xcode doesn't provide the compiler plugin
+headers, you have to compile your own Clang to use them on macOS.
+
+You can find the TDF configure switches in the distro-configs/ directory.
+
+To setup your initial build environment on Windows and macOS, we provide
+the LibreOffice Development Environment
+([LODE](https://wiki.documentfoundation.org/Development/lode)) scripts.
+
+For more information see the build instructions for your platform in the
+[TDF wiki](https://wiki.documentfoundation.org/Development).
 
 ## The important bits of code
 
@@ -34,7 +64,7 @@ Each module should have a `README` file inside it which has some
 degree of documentation for that module; patches are most welcome to
 improve those. We have those turned into a web page here:
 
-http://docs.libreoffice.org/
+https://docs.libreoffice.org/
 
 However, there are two hundred modules, many of them of only
 peripheral interest for a specialist audience. So - where is the
@@ -67,6 +97,18 @@ basegfx/  | algorithms and data-types for graphics as used in the canvas
 canvas/   | new (UNO) canvas rendering model with various backends
 cppcanvas/ | C++ helper classes for using the UNO canvas
 drawinglayer/ | View code to render drawable objects and break them down into primitives we can render more easily.
+
+## Rules for #include directives (C/C++)
+
+Use the `"..."` form if and only if the included file is found next to the
+including file. Otherwise, use the `<...>` form. (For further details, see the
+mail [Re: C[++]: Normalizing include syntax ("" vs
+<>)](https://lists.freedesktop.org/archives/libreoffice/2017-November/078778.html).)
+
+The UNO API include files should consistently use double quotes, for the
+benefit of external users of this API.
+
+loplugin:includeform (compilerplugins/clang/includeform.cxx) enforces these rules.
 
 
 ## Finding out more

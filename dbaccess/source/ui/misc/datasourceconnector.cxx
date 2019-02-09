@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "datasourceconnector.hxx"
+#include <core_resource.hxx>
+#include <datasourceconnector.hxx>
 #include <osl/diagnose.h>
-#include "dbustrings.hrc"
+#include <stringconstants.hxx>
 #include <com/sun/star/sdbc/XWarningsSupplier.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/sdb/XCompletedConnection.hpp>
@@ -28,19 +29,18 @@
 #include <com/sun/star/sdb/SQLContext.hpp>
 #include <com/sun/star/sdbc/SQLWarning.hpp>
 #include <osl/thread.h>
-#include <comphelper/processfactory.hxx>
-#include <comphelper/extract.hxx>
 #include <comphelper/namedvaluecollection.hxx>
 #include <connectivity/dbexception.hxx>
 #include <com/sun/star/sdbc/XDataSource.hpp>
-#include "UITools.hxx"
+#include <UITools.hxx>
 #include <vcl/stdtext.hxx>
 #include <vcl/button.hxx>
 #include <svl/filenotation.hxx>
+#include <toolkit/helper/vclunohelper.hxx>
 #include <tools/diagnose_ex.h>
 #include <cppuhelper/exc_hlp.hxx>
-#include "dbu_misc.hrc"
-#include "moduledbu.hxx"
+#include <strings.hrc>
+#include <strings.hxx>
 
 namespace dbaui
 {
@@ -54,7 +54,6 @@ namespace dbaui
     using namespace ::com::sun::star::container;
     using namespace ::com::sun::star::frame;
     using namespace ::dbtools;
-    using ::svt::OFileNotation;
 
     // ODatasourceConnector
     ODatasourceConnector::ODatasourceConnector(const Reference< XComponentContext >& _rxContext, vcl::Window* _pMessageParent)
@@ -112,7 +111,7 @@ namespace dbaui
         }
         catch(Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
 
         // try to connect
@@ -130,7 +129,7 @@ namespace dbaui
                 if ( !xHandler.is() )
                 {
                     // instantiate the default SDB interaction handler
-                    xHandler.set( InteractionHandler::createWithParent(m_xContext, nullptr), UNO_QUERY );
+                    xHandler.set( InteractionHandler::createWithParent(m_xContext, VCLUnoHelper::GetInterface(m_pErrorMessageParent)), UNO_QUERY );
                 }
 
                 xConnection = xConnectionCompletion->connectWithCompletion(xHandler);
@@ -146,7 +145,7 @@ namespace dbaui
         }
         catch(const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
 
         if ( !aInfo.isValid() )
@@ -160,7 +159,7 @@ namespace dbaui
                     Any aWarnings( xConnectionWarnings->getWarnings() );
                     if ( aWarnings.hasValue() )
                     {
-                        OUString sMessage( ModuleRes( STR_WARNINGS_DURING_CONNECT ) );
+                        OUString sMessage( DBA_RES( STR_WARNINGS_DURING_CONNECT ) );
                         sMessage = sMessage.replaceFirst( "$buttontext$", Button::GetStandardText( StandardButtonType::More ) );
                         sMessage = OutputDevice::GetNonMnemonicString( sMessage );
 
@@ -173,7 +172,7 @@ namespace dbaui
                 }
                 catch( const Exception& )
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    DBG_UNHANDLED_EXCEPTION("dbaccess");
                 }
             }
         }
@@ -198,7 +197,7 @@ namespace dbaui
             }
             else
             {
-                showError( aInfo, m_pErrorMessageParent, m_xContext );
+                showError(aInfo, VCLUnoHelper::GetInterface(m_pErrorMessageParent), m_xContext);
             }
         }
         return xConnection;

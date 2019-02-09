@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.20.2 -->
+<interface domain="cui">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkAdjustment" id="adjustment1">
     <property name="lower">2</property>
     <property name="upper">20</property>
@@ -12,18 +12,21 @@
   <object class="GtkImage" id="image1">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
-    <property name="pixbuf">svx/res/zetlhor2.png</property>
+    <property name="icon_name">svx/res/zetlhor2.png</property>
   </object>
   <object class="GtkImage" id="image2">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
-    <property name="pixbuf">svx/res/zetlver2.png</property>
+    <property name="icon_name">svx/res/zetlver2.png</property>
   </object>
   <object class="GtkDialog" id="SplitCellsDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Split Cells</property>
+    <property name="title" translatable="yes" context="splitcellsdialog|SplitCellsDialog">Split Cells</property>
     <property name="resizable">False</property>
+    <property name="modal">True</property>
+    <property name="default_width">0</property>
+    <property name="default_height">0</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
@@ -35,7 +38,7 @@
             <property name="can_focus">False</property>
             <property name="layout_style">end</property>
             <child>
-              <object class="GtkButton" id="button1">
+              <object class="GtkButton" id="ok">
                 <property name="label">gtk-ok</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
@@ -51,7 +54,7 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="button2">
+              <object class="GtkButton" id="cancel">
                 <property name="label">gtk-cancel</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
@@ -65,7 +68,7 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="button3">
+              <object class="GtkButton" id="help">
                 <property name="label">gtk-help</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
@@ -114,7 +117,7 @@
                           <object class="GtkLabel" id="label3">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">_Split cell into:</property>
+                            <property name="label" translatable="yes" context="splitcellsdialog|label3">_Split cell into:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">countnf</property>
                           </object>
@@ -127,7 +130,7 @@
                           <object class="GtkSpinButton" id="countnf">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="invisible_char">●</property>
+                            <property name="activates_default">True</property>
                             <property name="adjustment">adjustment1</property>
                           </object>
                           <packing>
@@ -143,7 +146,7 @@
                   <object class="GtkLabel" id="label1">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Split</property>
+                    <property name="label" translatable="yes" context="splitcellsdialog|label1">Split</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -175,13 +178,14 @@
                         <property name="row_spacing">6</property>
                         <child>
                           <object class="GtkRadioButton" id="hori">
-                            <property name="label" translatable="yes">H_orizontally</property>
+                            <property name="label" translatable="yes" context="splitcellsdialog|hori">H_orizontally</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
                             <property name="image">image1</property>
                             <property name="use_underline">True</property>
                             <property name="xalign">0</property>
+                            <property name="always_show_image">True</property>
                             <property name="active">True</property>
                             <property name="draw_indicator">True</property>
                             <property name="group">vert</property>
@@ -193,13 +197,14 @@
                         </child>
                         <child>
                           <object class="GtkRadioButton" id="vert">
-                            <property name="label" translatable="yes">_Vertically</property>
+                            <property name="label" translatable="yes" context="splitcellsdialog|vert">_Vertically</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
                             <property name="image">image2</property>
                             <property name="use_underline">True</property>
                             <property name="xalign">0</property>
+                            <property name="always_show_image">True</property>
                             <property name="draw_indicator">True</property>
                             <property name="group">hori</property>
                           </object>
@@ -215,7 +220,7 @@
                             <property name="left_padding">12</property>
                             <child>
                               <object class="GtkCheckButton" id="prop">
-                                <property name="label" translatable="yes">_Into equal proportions</property>
+                                <property name="label" translatable="yes" context="splitcellsdialog|prop">_Into equal proportions</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
@@ -238,7 +243,7 @@
                   <object class="GtkLabel" id="label2">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Direction</property>
+                    <property name="label" translatable="yes" context="splitcellsdialog|label2">Direction</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -261,9 +266,12 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">button1</action-widget>
-      <action-widget response="0">button2</action-widget>
-      <action-widget response="0">button3</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
+    <child>
+      <placeholder/>
+    </child>
   </object>
 </interface>

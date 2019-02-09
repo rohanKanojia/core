@@ -21,11 +21,12 @@
 
 #include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/uno/Reference.hxx>
-#include <tools/resary.hxx>
+#include <com/sun/star/view/XSelectionChangeListener.hpp>
 #include <memory>
 #include <set>
+#include <vector>
 #include <swdbdata.hxx>
-#include "swdllapi.h"
+#include <swdllapi.h>
 #include "sharedconnection.hxx"
 
 namespace com{namespace sun{namespace star{
@@ -53,14 +54,11 @@ class SW_DLLPUBLIC SwMailMergeConfigItem
     std::unique_ptr<SwMailMergeConfigItem_Impl> m_pImpl;
     //session information - not stored in configuration
     bool m_bAddressInserted;
-    bool m_bMergeDone;
     bool m_bGreetingInserted;
     sal_Int32 m_nGreetingMoves;
     OUString m_rAddressBlockFrame;
     std::set<sal_Int32> m_aExcludedRecords;
-
-    sal_uInt16 m_nStartPrint;
-    sal_uInt16 m_nEndPrint;
+    css::uno::Reference<css::view::XSelectionChangeListener> m_xDBChangedListener;
 
     OUString m_sSelectedPrinter;
 
@@ -79,26 +77,26 @@ public:
 
     void Commit();
 
-    const ResStringArray& GetDefaultAddressHeaders() const;
+    const std::vector<std::pair<OUString, int>>& GetDefaultAddressHeaders() const;
 
     void SetCurrentConnection(
-        css::uno::Reference< css::sdbc::XDataSource> xSource,
+        css::uno::Reference< css::sdbc::XDataSource> const & xSource,
         const SharedConnection& rConnection,
-        css::uno::Reference< css::sdbcx::XColumnsSupplier> xColumnsSupplier,
+        css::uno::Reference< css::sdbcx::XColumnsSupplier> const & xColumnsSupplier,
         const SwDBData& rDBData);
 
-    css::uno::Reference< css::sdbc::XDataSource> GetSource();
+    css::uno::Reference< css::sdbc::XDataSource> const & GetSource();
 
-    SharedConnection GetConnection();
+    SharedConnection const & GetConnection();
 
-    css::uno::Reference< css::sdbcx::XColumnsSupplier> GetColumnsSupplier();
+    css::uno::Reference< css::sdbcx::XColumnsSupplier> const & GetColumnsSupplier();
 
-    css::uno::Reference< css::sdbc::XResultSet> GetResultSet() const;
+    css::uno::Reference< css::sdbc::XResultSet> const & GetResultSet() const;
 
     void DisposeResultSet();
 
     OUString& GetFilter() const;
-    void SetFilter(OUString&);
+    void SetFilter(OUString const &);
 
     void SetCurrentDBData( const SwDBData& rDBData);
     const SwDBData& GetCurrentDBData() const;
@@ -113,7 +111,6 @@ public:
     css::uno::Sequence< css::uno::Any> GetSelection() const;
 
     const css::uno::Sequence<OUString>& GetSavedDocuments() const;
-    void AddSavedDocument(const OUString& rName);
 
     bool IsOutputToLetter()const;
     void SetOutputToLetter(bool bSet);
@@ -160,19 +157,19 @@ public:
     bool IsGreetingFieldsAssigned() const;
 
     //e-Mail settings:
-    OUString GetMailDisplayName() const;
+    OUString const & GetMailDisplayName() const;
     void SetMailDisplayName(const OUString& rName);
 
-    OUString GetMailAddress() const;
+    OUString const & GetMailAddress() const;
     void SetMailAddress(const OUString& rAddress);
 
     bool IsMailReplyTo() const;
     void SetMailReplyTo(bool bSet);
 
-    OUString GetMailReplyTo() const;
+    OUString const & GetMailReplyTo() const;
     void SetMailReplyTo(const OUString& rReplyTo);
 
-    OUString GetMailServer() const;
+    OUString const & GetMailServer() const;
     void SetMailServer(const OUString& rAddress);
 
     sal_Int16 GetMailPort() const;
@@ -184,16 +181,16 @@ public:
     bool IsAuthentication() const;
     void SetAuthentication(bool bSet);
 
-    OUString GetMailUserName() const;
+    OUString const & GetMailUserName() const;
     void SetMailUserName(const OUString& rName);
 
-    OUString GetMailPassword() const;
+    OUString const & GetMailPassword() const;
     void SetMailPassword(const OUString& rPassword);
 
     bool IsSMTPAfterPOP() const;
     void SetSMTPAfterPOP(bool bSet);
 
-    OUString GetInServerName() const;
+    OUString const & GetInServerName() const;
     void SetInServerName(const OUString& rServer);
 
     sal_Int16 GetInServerPort() const;
@@ -202,10 +199,10 @@ public:
     bool IsInServerPOP() const;
     void SetInServerPOP(bool bSet);
 
-    OUString GetInServerUserName() const;
+    OUString const & GetInServerUserName() const;
     void SetInServerUserName(const OUString& rName);
 
-    OUString GetInServerPassword() const;
+    OUString const & GetInServerPassword() const;
     void SetInServerPassword(const OUString& rPassword);
 
     //session information
@@ -225,24 +222,16 @@ public:
     void MoveGreeting( sal_Int32 nMove) { m_nGreetingMoves += nMove;}
     sal_Int32 GetGreetingMoves() const { return m_nGreetingMoves;}
 
-    bool IsMergeDone() const
-        { return m_bMergeDone; }
-    void SetMergeDone(  )
-        { m_bMergeDone = true; }
-
     // new source document - reset some flags
     void DocumentReloaded();
 
     bool IsMailAvailable() const;
 
     // notify a completed merge, provid the appropriate e-Mail address if available
-    void AddMergedDocument(SwDocMergeInfo& rInfo);
+    void AddMergedDocument(SwDocMergeInfo const & rInfo);
     //returns the page and database cursor information of each merged document
     SwDocMergeInfo& GetDocumentMergeInfo(sal_uInt32 nDocument);
-    sal_uInt32 GetMergedDocumentCount() const;
-
-    void SetPrintRange( sal_uInt16 nStartDocument, sal_uInt16 nEndDocument)
-        { m_nStartPrint = nStartDocument; m_nEndPrint = nEndDocument; }
+    sal_uInt32 GetMergedDocumentCount();
 
     const OUString&  GetSelectedPrinter() const
         { return m_sSelectedPrinter; }
@@ -256,7 +245,9 @@ public:
     void SetSourceView(SwView* pView);
 
     //helper methods
-    OUString GetAssignedColumn(sal_uInt32 nColumn)const;
+    OUString GetAssignedColumn(sal_uInt32 nColumn) const;
+    void stopDBChangeListening();
+    void updateCurrentDBDataFromDocument();
 };
 
 #endif

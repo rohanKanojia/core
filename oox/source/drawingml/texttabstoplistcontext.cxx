@@ -17,12 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <list>
+#include <vector>
 #include <algorithm>
 
 #include <rtl/ustring.hxx>
 
-#include "oox/drawingml/drawingmltypes.hxx"
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 #include "texttabstoplistcontext.hxx"
 
 using namespace ::oox::core;
@@ -32,7 +35,7 @@ using namespace ::com::sun::star::xml::sax;
 
 namespace oox { namespace drawingml {
 
-        TextTabStopListContext::TextTabStopListContext( ContextHandler2Helper& rParent, std::list< TabStop >  & aTabList )
+        TextTabStopListContext::TextTabStopListContext( ContextHandler2Helper const & rParent, std::vector< TabStop >  & aTabList )
             : ContextHandler2( rParent )
             , maTabList( aTabList )
         {

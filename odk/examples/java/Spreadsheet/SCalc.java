@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -37,7 +38,7 @@
 //          Step 2: open an empty calc document
 //          Step 3: create cell styles
 //          Step 4: get the sheet an insert some data
-//          Step 5: apply the created cell syles
+//          Step 5: apply the created cell styles
 //          Step 6: insert a 3D Chart
 
 
@@ -120,7 +121,7 @@ public class SCalc  {
 
         //oooooooooooooooooooooooooooStep 3oooooooooooooooooooooooooooooooooooooooooo
         // create cell styles.
-        // For this purpose get the StyleFamiliesSupplier and the familiy
+        // For this purpose get the StyleFamiliesSupplier and the family
         // CellStyle. Create an instance of com.sun.star.style.CellStyle and
         // add it to the family. Now change some properties
 
@@ -403,3 +404,5 @@ public class SCalc  {
     }
 
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

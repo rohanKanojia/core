@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/ole/vbainputstream.hxx"
+#include <oox/ole/vbainputstream.hxx>
 #include <osl/diagnose.h>
 
 namespace oox {
@@ -122,7 +122,7 @@ bool VbaInputStream::updateChunk()
     if( mbEof ) return false;
 
     // check header signature
-    bool bIgnoreBrokenSig = !( (nHeader & VBACHUNK_SIGMASK) == VBACHUNK_SIG );
+    bool bIgnoreBrokenSig = ( (nHeader & VBACHUNK_SIGMASK) != VBACHUNK_SIG );
 
     // decode length of chunk data and compression flag
     bool bCompressed = getFlag( nHeader, VBACHUNK_COMPRESSED );
@@ -157,7 +157,7 @@ bool VbaInputStream::updateChunk()
                     sal_uInt16 nCopyToken = mpInStrm->readuInt16();
                     nChunkPos = nChunkPos + 2;
                     // update bit count used for offset/length in the token
-                    while( static_cast< size_t >( 1 << nBitCount ) < maChunk.size() ) ++nBitCount;
+                    while( ( static_cast<size_t>(1) << nBitCount ) < maChunk.size() ) ++nBitCount;
                     // extract length from lower (16-nBitCount) bits, plus 3
                     sal_uInt16 nLength = extractValue< sal_uInt16 >( nCopyToken, 0, 16 - nBitCount ) + 3;
                     // extract offset from high nBitCount bits, plus 1
@@ -184,7 +184,7 @@ bool VbaInputStream::updateChunk()
                 // we suspect this will never be called
                 else
                 {
-                    maChunk.resize( maChunk.size() + 1 );
+                    maChunk.emplace_back();
                     maChunk.back() = mpInStrm->readuChar();
                     ++nChunkPos;
                 }
@@ -194,7 +194,7 @@ bool VbaInputStream::updateChunk()
     else
     {
         maChunk.resize( nChunkLen );
-        mpInStrm->readMemory( &maChunk.front(), nChunkLen );
+        mpInStrm->readMemory(maChunk.data(), nChunkLen);
     }
     // decompression sometimes leaves the stream pos offset 1 place ( at
     // least ) past or before the expected stream pos.

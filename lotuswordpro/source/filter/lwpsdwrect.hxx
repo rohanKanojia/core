@@ -61,8 +61,9 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPSDWRECT_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPSDWRECT_HXX
 
-#include "lwpheader.hxx"
+#include <lwpheader.hxx>
 #include <tools/gen.hxx>
+#include <array>
 
 /**
  * @brief
@@ -90,7 +91,7 @@ private:
     bool m_bRotated;
 
 public:
-    Point m_nRectCorner[4];
+    std::array<Point, 4> m_nRectCorner;
 
 public:
 
@@ -98,10 +99,6 @@ public:
 
     SdwRectangle(const Point& rPt0, const Point& rPt1,
         const Point& rPt2, const Point& rPt3);
-
-    SdwRectangle(const SdwRectangle& rOther);
-
-    ~SdwRectangle();
 
 public:
     /*
@@ -116,7 +113,7 @@ public:
 
     long GetHeight() const;
 
-    Rectangle GetOriginalRect() const;
+    tools::Rectangle GetOriginalRect() const;
 
     double GetRotationAngle() const;
 

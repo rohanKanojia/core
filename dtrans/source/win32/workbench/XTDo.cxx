@@ -32,15 +32,10 @@
 #pragma warning(pop)
 #endif
 #include <memory>
-#include <tchar.h>
-
-// namespace directives
 
 using namespace ::std;
 
 // OTWrapperDataObject
-
-// ctor
 
 /*
     in the constructor we enumerate all formats offered by the transferable
@@ -215,16 +210,10 @@ STDMETHODIMP CXTDataObject::EnumDAdvise( LPENUMSTATDATA * )
     return E_NOTIMPL;
 }
 
-// for our convenience
-
 CXTDataObject::operator IDataObject*( )
 {
     return static_cast< IDataObject* >( this );
 }
-
-// CEnumFormatEtc
-
-// ctor
 
 CEnumFormatEtc::CEnumFormatEtc( LPUNKNOWN pUnkDataObj ) :
     m_nRefCnt( 0 ),

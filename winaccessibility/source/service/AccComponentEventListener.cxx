@@ -25,9 +25,9 @@
 
 #include <vcl/svapp.hxx>
 
-#include "AccComponentEventListener.hxx"
-#include "AccObjectManagerAgent.hxx"
-#include "unomsaaevent.hxx"
+#include <AccComponentEventListener.hxx>
+#include <AccObjectManagerAgent.hxx>
+#include <unomsaaevent.hxx>
 
 using namespace com::sun::star::uno;
 using namespace com::sun::star::accessibility;
@@ -47,7 +47,6 @@ AccComponentEventListener::~AccComponentEventListener()
  * @param   AccessibleEventObject   the event object which contains information about event
  */
 void  AccComponentEventListener::notifyEvent( const css::accessibility::AccessibleEventObject& aEvent )
-throw (css::uno::RuntimeException)
 {
     SolarMutexGuard g;
 
@@ -175,8 +174,9 @@ void AccComponentEventListener::SetComponentState(short state, bool enable)
         {
             pAgent->UpdateState(m_xAccessible.get());
             pAgent->DecreaseState(m_xAccessible.get(), AccessibleStateType::DEFUNC);
-            // 8. label should have no FOCUSABLE state state, Firefox has READONLY state, we can also have.
+            // 8. label should have no FOCUSABLE state, Firefox has READONLY state, we can also have.
             if (    GetRole() != AccessibleRole::LABEL
+                &&  GetRole() != AccessibleRole::STATIC
                 &&  GetRole() != AccessibleRole::SCROLL_BAR)
             {
                 pAgent->IncreaseState(m_xAccessible.get(), AccessibleStateType::FOCUSABLE);

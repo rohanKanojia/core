@@ -25,9 +25,10 @@
 #include <osl/module.h>
 #include <osl/diagnose.h>
 #include <osl/mutex.hxx>
-#include <tools/solar.h>
+#include <rtl/ref.hxx>
+#include <tools/svlibrary.h>
 
-#include "helper/accessibilityclient.hxx"
+#include <helper/accessibilityclient.hxx>
 
 namespace toolkit
 {
@@ -57,7 +58,7 @@ namespace toolkit
         AccessibleDummyFactory& operator=(const AccessibleDummyFactory&) = delete;
 
     protected:
-        virtual ~AccessibleDummyFactory();
+        virtual ~AccessibleDummyFactory() override;
 
     public:
         // IAccessibleFactory
@@ -112,6 +113,11 @@ namespace toolkit
             return nullptr;
         }
         css::uno::Reference< css::accessibility::XAccessibleContext >
+                createAccessibleContext( VCLXHeaderBar* /*_pXWindow*/ ) override
+        {
+            return nullptr;
+        }
+        css::uno::Reference< css::accessibility::XAccessibleContext >
                 createAccessibleContext( VCLXWindow* /*_pXWindow*/ ) override
         {
             return nullptr;
@@ -144,7 +150,7 @@ namespace toolkit
 
 #if HAVE_FEATURE_DESKTOP
 #ifndef DISABLE_DYNLOADING
-    extern "C" { static void SAL_CALL thisModule() {} }
+    extern "C" { static void thisModule() {} }
 #else
     extern "C" void *getStandardAccessibleFactory();
 #endif
@@ -159,7 +165,7 @@ namespace toolkit
 
 #if HAVE_FEATURE_DESKTOP
         // load the library implementing the factory
-        if ( !s_pFactory.get() )
+        if (!s_pFactory)
         {
 #ifndef DISABLE_DYNLOADING
             const OUString sModuleName( SVLIBRARY( "acc" ) );
@@ -191,7 +197,7 @@ namespace toolkit
         }
 #endif // HAVE_FEATURE_DESKTOP
 
-        if ( !s_pFactory.get() )
+        if (!s_pFactory)
             // the attempt to load the lib, or to create the factory, failed
             // -> fall back to a dummy factory
             s_pFactory = new AccessibleDummyFactory;

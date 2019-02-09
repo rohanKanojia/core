@@ -24,7 +24,7 @@
 #include <vcl/idle.hxx>
 #include <vcl/scrbar.hxx>
 #include <vcl/vclptr.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 
 #include "callbacks.hxx"
 #include "TableConnectionData.hxx"
@@ -46,7 +46,7 @@ namespace dbaui
     class OTableWindowData;
     class OJoinDesignViewAccess;
 
-    // this class conatins only the scrollbars to avoid that
+    // this class contains only the scrollbars to avoid that
     // the tablewindows clip the scrollbars
     class OJoinTableView;
     class OScrollWindowHelper : public vcl::Window
@@ -61,7 +61,7 @@ namespace dbaui
 
     public:
         OScrollWindowHelper( vcl::Window* pParent);
-        virtual ~OScrollWindowHelper();
+        virtual ~OScrollWindowHelper() override;
         virtual void dispose() override;
 
         void setTableView(OJoinTableView* _pTableView);
@@ -85,11 +85,11 @@ namespace dbaui
 
     private:
         OTableWindowMap     m_aTableMap;
-        ::std::vector<VclPtr<OTableConnection> >    m_vTableConnection;
+        std::vector<VclPtr<OTableConnection> >    m_vTableConnection;
 
         Idle                m_aDragScrollIdle;
-        Rectangle           m_aDragRect;
-        Rectangle           m_aSizingRect;
+        tools::Rectangle           m_aDragRect;
+        tools::Rectangle           m_aSizingRect;
         Point               m_aDragOffset;
         Point               m_aScrollOffset;
         Point               m_ptPrevDraggingPos;
@@ -101,9 +101,7 @@ namespace dbaui
         VclPtr<OTableConnection>       m_pSelectedConn;
 
 
-        bool                    m_bTrackingInitiallyMoved;
-
-        DECL_LINK_TYPED(OnDragScrollTimer, Idle*, void);
+        DECL_LINK(OnDragScrollTimer, Timer*, void);
 
     protected:
         VclPtr<OTableWindow>               m_pLastFocusTabWin;
@@ -112,7 +110,7 @@ namespace dbaui
 
     public:
         OJoinTableView( vcl::Window* pParent, OJoinDesignView* pView );
-        virtual ~OJoinTableView();
+        virtual ~OJoinTableView() override;
         virtual void dispose() override;
 
         // window override
@@ -126,9 +124,9 @@ namespace dbaui
         // own methods
         ScrollBar& GetHScrollBar() { return static_cast<OScrollWindowHelper*>(GetParent())->GetHScrollBar(); }
         ScrollBar& GetVScrollBar() { return static_cast<OScrollWindowHelper*>(GetParent())->GetVScrollBar(); }
-        DECL_LINK_TYPED( ScrollHdl, ScrollBar*, void );
+        DECL_LINK( ScrollHdl, ScrollBar*, void );
 
-        void DrawConnections(vcl::RenderContext& rRenderContext, const Rectangle& rRect);
+        void DrawConnections(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect);
         void InvalidateConnections();
 
         void BeginChildMove( OTableWindow* pTabWin, const Point& rMousePos );
@@ -148,12 +146,12 @@ namespace dbaui
 
             it implies that the same as addConnection
 
-            @param  _pConnection the connection which should be removed
-            @param  _bDelete     when true then the connection will be deleted
+            @param  rConnection the connection which should be removed
+            @param  bDelete     when true then the connection will be deleted
 
             @return an iterator to next valid connection, so it can be used in any loop
         */
-        virtual bool RemoveConnection(OTableConnection* _pConnection,bool _bDelete);
+        virtual bool RemoveConnection(VclPtr<OTableConnection>& rConnection, bool bDelete);
 
         /** allows to add new connections to join table view
 
@@ -172,7 +170,7 @@ namespace dbaui
         OJoinDesignView* getDesignView() const { return m_pView; }
         OTableWindow* GetTabWindow( const OUString& rName );
 
-        OTableConnection* GetSelectedConn() { return m_pSelectedConn; }
+        VclPtr<OTableConnection>& GetSelectedConn() { return m_pSelectedConn; }
         /** @note NULL is explicitly allowed (then no-op) */
         void DeselectConn(OTableConnection* pConn);
         void SelectConn(OTableConnection* pConn);
@@ -181,7 +179,7 @@ namespace dbaui
 
         /** gives a read only access to the connection vector
         */
-        const ::std::vector<VclPtr<OTableConnection> >& getTableConnections() const { return m_vTableConnection; }
+        const std::vector<VclPtr<OTableConnection> >& getTableConnections() const { return m_vTableConnection; }
 
         bool ExistsAConn(const OTableWindow* pFromWin) const;
 
@@ -190,7 +188,7 @@ namespace dbaui
             @param  _pFromWin   the table for which connections should be found
             @return an iterator which can be used to travel all connections of the table
         */
-        ::std::vector<VclPtr<OTableConnection> >::const_iterator getTableConnections(const OTableWindow* _pFromWin) const;
+        std::vector<VclPtr<OTableConnection> >::const_iterator getTableConnections(const OTableWindow* _pFromWin) const;
 
         /** how many connection belongs to single table
 
@@ -199,7 +197,7 @@ namespace dbaui
         */
         sal_Int32 getConnectionCount(const OTableWindow* _pFromWin) const;
 
-        OTableConnection* GetTabConn(const OTableWindow* pLhs,const OTableWindow* pRhs,bool _bSupressCrossOrNaturalJoin = false,const OTableConnection* _rpFirstAfter = nullptr) const;
+        OTableConnection* GetTabConn(const OTableWindow* pLhs,const OTableWindow* pRhs,bool _bSupressCrossOrNaturalJoin = false) const;
 
         /** clear the window map and connection vector without destroying it
 
@@ -216,7 +214,7 @@ namespace dbaui
             corresponding Wins and Conns */
         virtual void ReSync() { }
 
-        /** Hart deletion
+        /** Hard deletion
 
             That means that all Conns and Wins are deleted from their respective
             lists and the corresponding Datas removed from the document */
@@ -270,8 +268,8 @@ namespace dbaui
         virtual void MouseButtonUp( const MouseEvent& rEvt ) override;
         virtual void MouseButtonDown( const MouseEvent& rEvt ) override;
         virtual void Tracking( const TrackingEvent& rTEvt ) override;
-        virtual void Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
-        virtual void ConnDoubleClicked( OTableConnection* pConnection );
+        virtual void Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
+        virtual void ConnDoubleClicked(VclPtr<OTableConnection>& rConnection);
         void SetDefaultTabWinPosSize( OTableWindow* pTabWin );
         virtual void DataChanged( const DataChangedEvent& rDCEvt ) override;
 
@@ -312,13 +310,13 @@ namespace dbaui
             @param _aPos the position where the popup menu should appear
             @param _pSelConnection the connection which should be deleted
         */
-        void executePopup(const Point& _aPos,OTableConnection* _pSelConnection);
+        void executePopup(const Point& _aPos, VclPtr<OTableConnection>& rSelConnection);
 
         /** invalidates this window without children and set the controller
             modified
             @param _pAction a possible undo action to add at the controller
         */
-        void invalidateAndModify(SfxUndoAction *_pAction=nullptr);
+        void invalidateAndModify(std::unique_ptr<SfxUndoAction> _pAction);
 
     private:
         using Window::Scroll;

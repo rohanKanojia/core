@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "asyncmodaldialog.hxx"
+#include <asyncmodaldialog.hxx>
 
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 
@@ -54,10 +54,10 @@ namespace dbaui
         }
 
     private:
-        DECL_LINK_TYPED( onExecute, void*, void );
+        DECL_LINK( onExecute, void*, void );
     };
 
-    IMPL_LINK_NOARG_TYPED( DialogExecutor_Impl, onExecute, void*, void )
+    IMPL_LINK_NOARG( DialogExecutor_Impl, onExecute, void*, void )
     {
         try
         {
@@ -65,7 +65,7 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
 
         delete this;

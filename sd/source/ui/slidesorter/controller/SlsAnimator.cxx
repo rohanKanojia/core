@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "controller/SlsAnimator.hxx"
-#include "view/SlideSorterView.hxx"
-#include "View.hxx"
+#include <controller/SlsAnimator.hxx>
+#include <view/SlideSorterView.hxx>
+#include <View.hxx>
 
 namespace sd { namespace slidesorter { namespace controller {
 
@@ -36,7 +36,6 @@ public:
         const double nGlobalTime,
         const Animator::AnimationId nAnimationId,
         const Animator::FinishFunctor& rFinishFunctor);
-    ~Animation();
     /** Run next animation step.  If animation has reached its end it is
         expired.
     */
@@ -49,8 +48,8 @@ public:
     void Expire();
     bool IsExpired() { return mbIsExpired;}
 
-    Animator::AnimationFunctor maAnimation;
-    Animator::FinishFunctor maFinishFunctor;
+    Animator::AnimationFunctor const maAnimation;
+    Animator::FinishFunctor const maFinishFunctor;
     const Animator::AnimationId mnAnimationId;
     const double mnDuration;
     const double mnEnd;
@@ -60,15 +59,15 @@ public:
 
 Animator::Animator (SlideSorter& rSlideSorter)
     : mrSlideSorter(rSlideSorter),
-      maIdle(),
+      maIdle("sd slidesorter controller Animator"),
       mbIsDisposed(false),
       maAnimations(),
       maElapsedTime(),
       mpDrawLock(),
       mnNextAnimationId(0)
 {
-    maIdle.SetPriority(SchedulerPriority::REPAINT);
-    maIdle.SetIdleHdl(LINK(this,Animator,TimeoutHandler));
+    maIdle.SetPriority(TaskPriority::REPAINT);
+    maIdle.SetInvokeHandler(LINK(this,Animator,TimeoutHandler));
 }
 
 Animator::~Animator()
@@ -85,9 +84,8 @@ void Animator::Dispose()
     mbIsDisposed = true;
 
     AnimationList aCopy (maAnimations);
-    AnimationList::const_iterator iAnimation;
-    for (iAnimation=aCopy.begin(); iAnimation!=aCopy.end(); ++iAnimation)
-        (*iAnimation)->Expire();
+    for (const auto& rxAnimation : aCopy)
+        rxAnimation->Expire();
 
     maIdle.Stop();
     if (mpDrawLock)
@@ -99,7 +97,6 @@ void Animator::Dispose()
 
 Animator::AnimationId Animator::AddAnimation (
     const AnimationFunctor& rAnimation,
-    const sal_Int32 nDuration,
     const FinishFunctor& rFinishFunctor)
 {
     // When the animator is already disposed then ignore this call
@@ -112,7 +109,7 @@ Animator::AnimationId Animator::AddAnimation (
         new Animation(
             rAnimation,
             0,
-            nDuration / 1000.0,
+            300 / 1000.0,
             maElapsedTime.getElapsedTime(),
             ++mnNextAnimationId,
             rFinishFunctor));
@@ -173,10 +170,9 @@ bool Animator::ProcessAnimations (const double nTime)
         return bExpired;
 
     AnimationList aCopy (maAnimations);
-    AnimationList::const_iterator iAnimation;
-    for (iAnimation=aCopy.begin(); iAnimation!=aCopy.end(); ++iAnimation)
+    for (const auto& rxAnimation : aCopy)
     {
-        bExpired |= (*iAnimation)->Run(nTime);
+        bExpired |= rxAnimation->Run(nTime);
     }
 
     return bExpired;
@@ -190,11 +186,10 @@ void Animator::CleanUpAnimationList()
 
     AnimationList aActiveAnimations;
 
-    AnimationList::const_iterator iAnimation;
-    for (iAnimation=maAnimations.begin(); iAnimation!=maAnimations.end(); ++iAnimation)
+    for (const auto& rxAnimation : maAnimations)
     {
-        if ( ! (*iAnimation)->IsExpired())
-            aActiveAnimations.push_back(*iAnimation);
+        if ( ! rxAnimation->IsExpired())
+            aActiveAnimations.push_back(rxAnimation);
     }
 
     maAnimations.swap(aActiveAnimations);
@@ -212,7 +207,7 @@ void Animator::RequestNextFrame ()
     }
 }
 
-IMPL_LINK_NOARG_TYPED(Animator, TimeoutHandler, Idle *, void)
+IMPL_LINK_NOARG(Animator, TimeoutHandler, Timer *, void)
 {
     if (mbIsDisposed)
         return;
@@ -245,10 +240,6 @@ Animator::Animation::Animation (
       mbIsExpired(false)
 {
     Run(nGlobalTime);
-}
-
-Animator::Animation::~Animation()
-{
 }
 
 bool Animator::Animation::Run (const double nGlobalTime)

@@ -19,8 +19,9 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <list>
+#include <vector>
 
+#include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/queryinterface.hxx>
 #include <cppuhelper/weak.hxx>
 #include <cppuhelper/implbase.hxx>
@@ -36,6 +37,7 @@
 #include <rtl/ustrbuf.hxx>
 #include <osl/process.h>
 
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/loader/XImplementationLoader.hpp>
@@ -44,10 +46,11 @@
 #include <com/sun/star/reflection/XServiceTypeDescription.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include "mergekeys.hxx"
 
-#if defined(SAL_W32)
+#if defined(_WIN32)
 #include <io.h>
 #else
 #include <unistd.h>
@@ -65,51 +68,28 @@ using namespace osl;
 
 namespace {
 
-struct StringPool
-{
-    OUString slash_UNO_slash_REGISTRY_LINKS;
-    OUString slash_IMPLEMENTATIONS;
-    OUString slash_UNO;
-    OUString slash_UNO_slash_SERVICES;
-    OUString slash_UNO_slash_SINGLETONS;
-    OUString slash_SERVICES;
-    OUString slash_UNO_slash_LOCATION;
-    OUString slash_UNO_slash_ACTIVATOR;
-    OUString colon_old;
-    OUString com_sun_star_registry_SimpleRegistry;
-    OUString Registry;
-    StringPool()
-        : slash_UNO_slash_REGISTRY_LINKS( "/UNO/REGISTRY_LINKS")
-        , slash_IMPLEMENTATIONS( "/IMPLEMENTATIONS" )
-        , slash_UNO( "/UNO")
-        , slash_UNO_slash_SERVICES( "/UNO/SERVICES")
-        , slash_UNO_slash_SINGLETONS( "/UNO/SINGLETONS")
-        , slash_SERVICES( "/SERVICES/" )
-        , slash_UNO_slash_LOCATION( "/UNO/LOCATION" )
-        , slash_UNO_slash_ACTIVATOR( "/UNO/ACTIVATOR" )
-        , colon_old( ":old")
-        , com_sun_star_registry_SimpleRegistry("com.sun.star.registry.SimpleRegistry" )
-        , Registry( "Registry" )
-        {}
-    StringPool(const StringPool&) = delete;
-    StringPool& operator=(const StringPool&) = delete;
-};
-
-const StringPool &spool()
-{
-    static StringPool *pPool = nullptr;
-    if( ! pPool )
-    {
-        MutexGuard guard( Mutex::getGlobalMutex() );
-        if( ! pPool )
-        {
-            static StringPool pool;
-            pPool = &pool;
-        }
-    }
-    return *pPool;
-}
-
+static constexpr OUStringLiteral slash_UNO_slash_REGISTRY_LINKS
+        = "/UNO/REGISTRY_LINKS";
+static constexpr OUStringLiteral slash_IMPLEMENTATIONS
+        =  "/IMPLEMENTATIONS";
+static constexpr OUStringLiteral slash_UNO
+        = "/UNO";
+static constexpr OUStringLiteral slash_UNO_slash_SERVICES
+        = "/UNO/SERVICES";
+static constexpr OUStringLiteral slash_UNO_slash_SINGLETONS
+        = "/UNO/SINGLETONS";
+static constexpr OUStringLiteral slash_SERVICES
+        = "/SERVICES/";
+static constexpr OUStringLiteral slash_UNO_slash_LOCATION
+        = "/UNO/LOCATION";
+static constexpr OUStringLiteral slash_UNO_slash_ACTIVATOR
+        = "/UNO/ACTIVATOR";
+static constexpr OUStringLiteral colon_old
+        = ":old";
+static constexpr OUStringLiteral com_sun_star_registry_SimpleRegistry
+        = "com.sun.star.registry.SimpleRegistry";
+static constexpr OUStringLiteral Registry
+        = "Registry";
 
 //  static deleteAllLinkReferences()
 
@@ -118,76 +98,76 @@ void deleteAllLinkReferences(const Reference < XSimpleRegistry >& xReg,
     // throw ( InvalidRegistryException, RuntimeException )
 {
     Reference < XRegistryKey > xKey = xSource->openKey(
-        spool().slash_UNO_slash_REGISTRY_LINKS );
+        slash_UNO_slash_REGISTRY_LINKS );
 
-    if (xKey.is() && (xKey->getValueType() == RegistryValueType_ASCIILIST))
+    if (!(xKey.is() && (xKey->getValueType() == RegistryValueType_ASCIILIST)))
+        return;
+
+    Sequence<OUString> linkNames = xKey->getAsciiListValue();
+
+    if (!linkNames.getLength())
+        return;
+
+    const OUString* pLinkNames = linkNames.getConstArray();
+
+    OUString            aLinkName;
+    OUString            aLinkParent;
+    Reference < XRegistryKey >  xLinkParent;
+    const sal_Unicode*  pTmpName = nullptr;
+    const sal_Unicode*  pShortName = nullptr;
+    sal_Int32           sEnd = 0;
+
+    for (sal_Int32 i = 0; i < linkNames.getLength(); i++)
     {
-        Sequence<OUString> linkNames = xKey->getAsciiListValue();
+        aLinkName = pLinkNames[i];
 
-        if (linkNames.getLength())
+        pTmpName = aLinkName.getStr();
+
+        if (pTmpName[0] != L'/')
+            continue;
+
+        sal_Int32 nIndex = rtl_ustr_indexOfChar( pTmpName, '%' );
+        if ( nIndex == -1 )
+            pShortName = nullptr;
+        else
+            pShortName = pTmpName+nIndex;
+
+        while (pShortName && pShortName[1] == L'%')
         {
-            const OUString* pLinkNames = linkNames.getConstArray();
+            nIndex = rtl_ustr_indexOfChar( pShortName+2, '%' );
+            if ( nIndex == -1 )
+                pShortName = nullptr;
+            else
+                pShortName += nIndex+2;
+        }
 
-            OUString            aLinkName;
-            OUString            aLinkParent;
-            Reference < XRegistryKey >  xLinkParent;
-            const sal_Unicode*  pTmpName = nullptr;
-            const sal_Unicode*  pShortName = nullptr;
-            sal_Int32           sEnd = 0;
+        if (pShortName)
+        {
+            aLinkName = aLinkName.copy(0, pShortName - pTmpName);
+        }
 
-            for (sal_Int32 i = 0; i < linkNames.getLength(); i++)
+        xReg->getRootKey()->deleteLink(aLinkName);
+
+        sEnd = aLinkName.lastIndexOf( '/' );
+
+        aLinkParent = aLinkName.copy(0, sEnd);
+
+        while(!aLinkParent.isEmpty())
+        {
+            xLinkParent = xReg->getRootKey()->openKey(aLinkParent);
+
+            if (xLinkParent.is() && (xLinkParent->getKeyNames().getLength() == 0))
             {
-                aLinkName = pLinkNames[i];
+                aLinkName = aLinkParent;
 
-                pTmpName = aLinkName.getStr();
+                xReg->getRootKey()->deleteKey(aLinkParent);
 
-                if (pTmpName[0] != L'/')
-                    continue;
-
-                sal_Int32 nIndex = rtl_ustr_indexOfChar( pTmpName, '%' );
-                if ( nIndex == -1 )
-                    pShortName = nullptr;
-                else
-                    pShortName = pTmpName+nIndex;
-
-                while (pShortName && pShortName[1] == L'%')
-                {
-                    nIndex = rtl_ustr_indexOfChar( pShortName+2, '%' );
-                    if ( nIndex == -1 )
-                        pShortName = nullptr;
-                    else
-                        pShortName += nIndex+2;
-                }
-
-                if (pShortName)
-                {
-                    aLinkName = aLinkName.copy(0, pShortName - pTmpName);
-                }
-
-                xReg->getRootKey()->deleteLink(aLinkName);
-
-                sEnd = rtl_ustr_lastIndexOfChar( aLinkName.getStr(), '/' );
+                sEnd = aLinkName.lastIndexOf( '/' );
 
                 aLinkParent = aLinkName.copy(0, sEnd);
-
-                while(!aLinkParent.isEmpty())
-                {
-                    xLinkParent = xReg->getRootKey()->openKey(aLinkParent);
-
-                    if (xLinkParent.is() && (xLinkParent->getKeyNames().getLength() == 0))
-                    {
-                        aLinkName = aLinkParent;
-
-                        xReg->getRootKey()->deleteKey(aLinkParent);
-
-                        sEnd = rtl_ustr_lastIndexOfChar( aLinkName.getStr(), '/' );
-
-                        aLinkParent = aLinkName.copy(0, sEnd);
-                    } else
-                    {
-                        break;
-                    }
-                }
+            } else
+            {
+                break;
             }
         }
     }
@@ -246,13 +226,12 @@ OUString searchImplForLink(
     const OUString& implName )
     // throw ( InvalidRegistryException, RuntimeException )
 {
-    const StringPool & pool = spool();
-    Reference < XRegistryKey > xKey = xRootKey->openKey( pool.slash_IMPLEMENTATIONS );
+    Reference < XRegistryKey > xKey = xRootKey->openKey( slash_IMPLEMENTATIONS );
     if (xKey.is())
     {
         Sequence< Reference < XRegistryKey > > subKeys( xKey->openKeys() );
         const Reference < XRegistryKey > * pSubKeys = subKeys.getConstArray();
-        OUString key_name( pool.slash_UNO + linkName );
+        OUString key_name( slash_UNO + linkName );
 
         for (sal_Int32 i = 0; i < subKeys.getLength(); i++)
         {
@@ -285,12 +264,9 @@ OUString searchLinkTargetForImpl(const Reference < XRegistryKey >& xRootKey,
                                         const OUString& implName)
     // throw ( InvalidRegistryException, RuntimeException )
 {
-    OUString ret;
-
 //      try
 //      {
-        const StringPool & pool = spool();
-        Reference < XRegistryKey > xKey = xRootKey->openKey( pool.slash_IMPLEMENTATIONS );
+        Reference < XRegistryKey > xKey = xRootKey->openKey( slash_IMPLEMENTATIONS );
 
         if (xKey.is())
         {
@@ -304,7 +280,7 @@ OUString searchLinkTargetForImpl(const Reference < XRegistryKey >& xRootKey,
                 xImplKey = pSubKeys[i];
 
                 OUString tmpImplName = xImplKey->getKeyName().copy(strlen("/IMPLEMENTATIONS/"));
-                OUString qualifiedLinkName( pool.slash_UNO );
+                OUString qualifiedLinkName( slash_UNO );
                 qualifiedLinkName += linkName;
                 if (tmpImplName == implName &&
                     xImplKey->getKeyType( qualifiedLinkName ) == RegistryKeyType_LINK)
@@ -318,7 +294,7 @@ OUString searchLinkTargetForImpl(const Reference < XRegistryKey >& xRootKey,
 //      {
 //      }
 
-    return ret;
+    return OUString();
 }
 
 
@@ -328,55 +304,49 @@ void createUniqueSubEntry(const Reference < XRegistryKey > & xSuperKey,
                                  const OUString& value)
     // throw ( InvalidRegistryException, RuntimeException )
 {
-    if (xSuperKey.is())
+    if (!xSuperKey.is())
+        return;
+
+    if (xSuperKey->getValueType() == RegistryValueType_ASCIILIST)
     {
-//          try
-//          {
-        if (xSuperKey->getValueType() == RegistryValueType_ASCIILIST)
+        sal_Int32 length = 0;
+        bool bReady = false;
+
+        Sequence<OUString> implEntries = xSuperKey->getAsciiListValue();
+        length = implEntries.getLength();
+
+        for (sal_Int32 i = 0; !bReady && (i < length); i++)
         {
-            sal_Int32 length = 0;
-            bool bReady = false;
+            bReady = (implEntries.getConstArray()[i] == value);
+        }
 
-            Sequence<OUString> implEntries = xSuperKey->getAsciiListValue();
-            length = implEntries.getLength();
+        if (bReady)
+        {
+            Sequence<OUString> implEntriesNew(length);
+            implEntriesNew.getArray()[0] = value;
 
-            for (sal_Int32 i = 0; !bReady && (i < length); i++)
+            for (sal_Int32 i=0, j=1; i < length; i++)
             {
-                bReady = (implEntries.getConstArray()[i] == value);
+                if (implEntries.getConstArray()[i] != value)
+                    implEntriesNew.getArray()[j++] = implEntries.getConstArray()[i];
             }
-
-            if (bReady)
-            {
-                Sequence<OUString> implEntriesNew(length);
-                implEntriesNew.getArray()[0] = value;
-
-                for (sal_Int32 i=0, j=1; i < length; i++)
-                {
-                    if (implEntries.getConstArray()[i] != value)
-                        implEntriesNew.getArray()[j++] = implEntries.getConstArray()[i];
-                }
-                xSuperKey->setAsciiListValue(implEntriesNew);
-            } else
-            {
-                Sequence<OUString> implEntriesNew(length+1);
-                implEntriesNew.getArray()[0] = value;
-
-                for (sal_Int32 i = 0; i < length; i++)
-                {
-                    implEntriesNew.getArray()[i+1] = implEntries.getConstArray()[i];
-                }
-                xSuperKey->setAsciiListValue(implEntriesNew);
-            }
+            xSuperKey->setAsciiListValue(implEntriesNew);
         } else
         {
-            Sequence<OUString> implEntriesNew { value };
+            Sequence<OUString> implEntriesNew(length+1);
+            implEntriesNew.getArray()[0] = value;
 
+            for (sal_Int32 i = 0; i < length; i++)
+            {
+                implEntriesNew.getArray()[i+1] = implEntries.getConstArray()[i];
+            }
             xSuperKey->setAsciiListValue(implEntriesNew);
         }
-//          }
-//          catch(InvalidRegistryException&)
-//          {
-//          }
+    } else
+    {
+        Sequence<OUString> implEntriesNew { value };
+
+        xSuperKey->setAsciiListValue(implEntriesNew);
     }
 }
 
@@ -444,7 +414,7 @@ void prepareUserLink(const Reference < XSimpleRegistry >& xDest,
         if (!oldImplName.isEmpty())
         {
             createUniqueSubEntry(xDest->getRootKey()->createKey(
-                linkName + spool().colon_old ), oldImplName);
+                linkName + colon_old ), oldImplName);
         }
     }
 
@@ -467,8 +437,7 @@ void deletePathIfPossible(const Reference < XRegistryKey >& xRootKey,
         {
             xRootKey->deleteKey(path);
 
-            OUString tmpPath(path);
-            OUString newPath = tmpPath.copy(0, tmpPath.lastIndexOf('/'));
+            OUString newPath = path.copy(0, path.lastIndexOf('/'));
 
             if (newPath.getLength() > 1)
                 deletePathIfPossible(xRootKey, newPath);
@@ -501,7 +470,7 @@ void deleteUserLink(const Reference < XRegistryKey >& xRootKey,
     }
 
     Reference < XRegistryKey > xOldKey = xRootKey->openKey(
-        linkName + spool().colon_old );
+        linkName + colon_old );
     if (xOldKey.is())
     {
         if (xOldKey->getValueType() == RegistryValueType_ASCIILIST)
@@ -576,8 +545,7 @@ void deleteUserLink(const Reference < XRegistryKey >& xRootKey,
 
     if (bClean)
     {
-        OUString tmpName(linkName);
-        OUString path = tmpName.copy(0, tmpName.lastIndexOf('/'));
+        OUString path = linkName.copy(0, linkName.lastIndexOf('/'));
         deletePathIfPossible(xRootKey, path);
     }
 }
@@ -632,29 +600,29 @@ void prepareUserKeys(const Reference < XSimpleRegistry >& xDest,
         }
     }
 
-    if (! hasSubKeys)
+    if (hasSubKeys)
+        return;
+
+    OUString keyName(xKey->getKeyName().copy(xUnoKey->getKeyName().getLength()));
+
+    Reference < XRegistryKey > xRootKey = xDest->getRootKey();
+    if (bRegister)
     {
-        OUString keyName(xKey->getKeyName().copy(xUnoKey->getKeyName().getLength()));
-
-        Reference < XRegistryKey > xRootKey = xDest->getRootKey();
-        if (bRegister)
+        createUniqueSubEntry(xRootKey->createKey(keyName), implName);
+    }
+    else
+    {
+        Reference< XRegistryKey > rKey = xRootKey->openKey(keyName);
+        if( rKey.is() )
         {
-            createUniqueSubEntry(xRootKey->createKey(keyName), implName);
+            deleteSubEntry(rKey, implName);
+            xRootKey->deleteKey(keyName);
         }
-        else
-        {
-            Reference< XRegistryKey > rKey = xRootKey->openKey(keyName);
-            if( rKey.is() )
-            {
-                deleteSubEntry(rKey, implName);
-                xRootKey->deleteKey(keyName);
-            }
 
-            OUString path = keyName.copy(0, keyName.lastIndexOf('/'));
-            if( !path.isEmpty() )
-            {
-                deletePathIfPossible(xRootKey, path);
-            }
+        OUString path = keyName.copy(0, keyName.lastIndexOf('/'));
+        if( !path.isEmpty() )
+        {
+            deletePathIfPossible(xRootKey, path);
         }
     }
 }
@@ -665,7 +633,7 @@ void prepareUserKeys(const Reference < XSimpleRegistry >& xDest,
 void deleteAllImplementations(   const Reference < XSimpleRegistry >& xReg,
                                         const Reference < XRegistryKey >& xSource,
                                         const OUString& locationUrl,
-                                        std::list<OUString> & implNames)
+                                        std::vector<OUString> & implNames)
     // throw (InvalidRegistryException, RuntimeException)
 {
     Sequence < Reference < XRegistryKey > > subKeys = xSource->openKeys();
@@ -676,12 +644,11 @@ void deleteAllImplementations(   const Reference < XSimpleRegistry >& xReg,
         Reference < XRegistryKey > xImplKey;
         bool hasLocationUrl = false;
 
-        const StringPool &pool = spool();
         for (sal_Int32 i = 0; i < subKeys.getLength(); i++)
         {
             xImplKey = pSubKeys[i];
             Reference < XRegistryKey > xKey = xImplKey->openKey(
-                pool.slash_UNO_slash_LOCATION );
+                slash_UNO_slash_LOCATION );
 
             if (xKey.is() && (xKey->getValueType() == RegistryValueType_ASCII))
             {
@@ -689,7 +656,7 @@ void deleteAllImplementations(   const Reference < XSimpleRegistry >& xReg,
                 {
                     hasLocationUrl = true;
 
-                    OUString implName(xImplKey->getKeyName().getStr() + 1);
+                    OUString implName(xImplKey->getKeyName().copy(1));
                     sal_Int32 firstDot = implName.indexOf('/');
 
                     if (firstDot >= 0)
@@ -699,7 +666,7 @@ void deleteAllImplementations(   const Reference < XSimpleRegistry >& xReg,
 
                     deleteAllLinkReferences(xReg, xImplKey);
 
-                    xKey = xImplKey->openKey( pool.slash_UNO );
+                    xKey = xImplKey->openKey( slash_UNO );
                     if (xKey.is())
                     {
                         Sequence< Reference < XRegistryKey > > subKeys2 = xKey->openKeys();
@@ -710,11 +677,11 @@ void deleteAllImplementations(   const Reference < XSimpleRegistry >& xReg,
 
                             for (sal_Int32 j = 0; j < subKeys2.getLength(); j++)
                             {
-                                if (pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + pool.slash_UNO_slash_SERVICES ) &&
-                                    pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + pool.slash_UNO_slash_REGISTRY_LINKS ) &&
-                                    pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + pool.slash_UNO_slash_ACTIVATOR ) &&
-                                    pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + pool.slash_UNO_slash_SINGLETONS ) &&
-                                    pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + pool.slash_UNO_slash_LOCATION) )
+                                if (pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + slash_UNO_slash_SERVICES ) &&
+                                    pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + slash_UNO_slash_REGISTRY_LINKS ) &&
+                                    pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + slash_UNO_slash_ACTIVATOR ) &&
+                                    pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + slash_UNO_slash_SINGLETONS ) &&
+                                    pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + slash_UNO_slash_LOCATION) )
                                 {
                                     prepareUserKeys(xReg, xKey, pSubKeys2[j], implName, false);
                                 }
@@ -751,7 +718,7 @@ void deleteAllImplementations(   const Reference < XSimpleRegistry >& xReg,
 
 void delete_all_singleton_entries(
     Reference < registry::XRegistryKey > const & xSingletons_section,
-    ::std::list< OUString > const & impl_names )
+    ::std::vector< OUString > const & impl_names )
     // throw (InvalidRegistryException, RuntimeException)
 {
     Sequence< Reference< registry::XRegistryKey > > singletons( xSingletons_section->openKeys() );
@@ -778,11 +745,9 @@ void delete_all_singleton_entries(
             {
                 OUString const & registered_implname = p[ n ];
 
-                ::std::list< OUString >::const_iterator iPos( impl_names.begin() );
-                ::std::list< OUString >::const_iterator const iEnd( impl_names.end() );
-                for ( ; iPos != iEnd; ++iPos )
+                for (auto const& impl_name : impl_names)
                 {
-                    if (iPos->equals( registered_implname ))
+                    if (impl_name == registered_implname)
                     {
                         registered_implnames[ n ] = p[ nNewLength -1 ];
                         --nNewLength;
@@ -895,7 +860,7 @@ bool is_supported_service(
     OUString const & service_name,
     Reference< reflection::XServiceTypeDescription > const & xService_td )
 {
-    if (xService_td->getName().equals( service_name ))
+    if (xService_td->getName() == service_name)
         return true;
     Sequence< Reference< reflection::XServiceTypeDescription > > seq(
         xService_td->getMandatoryServices() );
@@ -917,112 +882,108 @@ void insert_singletons(
 {
     // singletons
     Reference< registry::XRegistryKey > xKey( xImplKey->openKey( "UNO/SINGLETONS" ) );
-    if (xKey.is() && xKey->isValid())
+    if (!(xKey.is() && xKey->isValid()))
+        return;
+
+    OUString implname( xImplKey->getKeyName().copy( sizeof ("/IMPLEMENTATIONS/") -1 ) );
+    // singleton entries
+    Sequence< Reference< registry::XRegistryKey > > xSingletons_section( xKey->openKeys() );
+    Reference< registry::XRegistryKey > const * p = xSingletons_section.getConstArray();
+    for ( sal_Int32 nPos = xSingletons_section.getLength(); nPos--; )
     {
-        OUString implname( xImplKey->getKeyName().copy( sizeof ("/IMPLEMENTATIONS/") -1 ) );
-        // singleton entries
-        Sequence< Reference< registry::XRegistryKey > > xSingletons_section( xKey->openKeys() );
-        Reference< registry::XRegistryKey > const * p = xSingletons_section.getConstArray();
-        for ( sal_Int32 nPos = xSingletons_section.getLength(); nPos--; )
+        Reference< registry::XRegistryKey > const & xSingleton = p[ nPos ];
+        OUString singleton_name(
+            xSingleton->getKeyName().copy(
+                implname.getLength() + sizeof ("/IMPLEMENTATIONS//UNO/SINGLETONS/") -1 ) );
+        OUString service_name( xSingleton->getStringValue() );
+
+        OUString keyname( "/SINGLETONS/" + singleton_name );
+        Reference< registry::XRegistryKey > xKey2( xDest->getRootKey()->openKey( keyname ) );
+        if (xKey2.is() && xKey2->isValid())
         {
-            Reference< registry::XRegistryKey > const & xSingleton = p[ nPos ];
-            OUString singleton_name(
-                xSingleton->getKeyName().copy(
-                    implname.getLength() + sizeof ("/IMPLEMENTATIONS//UNO/SINGLETONS/") -1 ) );
-            OUString service_name( xSingleton->getStringValue() );
-
-            OUString keyname( "/SINGLETONS/" + singleton_name );
-            Reference< registry::XRegistryKey > xKey2( xDest->getRootKey()->openKey( keyname ) );
-            if (xKey2.is() && xKey2->isValid())
-            {
-                try
-                {
-                    OUString existing_name( xKey2->getStringValue() );
-                    if (! existing_name.equals( service_name ))
-                    {
-                        Reference< container::XHierarchicalNameAccess > xTDMgr;
-                        OUString the_tdmgr =
-                            "/singletons/com.sun.star.reflection.theTypeDescriptionManager";
-                        xContext->getValueByName( the_tdmgr ) >>= xTDMgr;
-                        if (! xTDMgr.is())
-                        {
-                            throw RuntimeException( "cannot get singleton " + the_tdmgr );
-                        }
-                        try
-                        {
-                            Reference< reflection::XServiceTypeDescription > xExistingService_td;
-                            xTDMgr->getByHierarchicalName( existing_name ) >>= xExistingService_td;
-                            if (! xExistingService_td.is())
-                            {
-                                throw RuntimeException( "cannot get service type description: " + existing_name );
-                            }
-
-                            // everything's fine if existing service entry supports the one
-                            // to be registered
-                            if (! is_supported_service( service_name, xExistingService_td ))
-                            {
-                                OUStringBuffer buf( 64 );
-                                buf.append( "existing singleton service (" );
-                                buf.append( singleton_name );
-                                buf.append( '=' );
-                                buf.append( existing_name );
-                                buf.append( ") does not support given one: " );
-                                buf.append( service_name );
-                                throw registry::CannotRegisterImplementationException(
-                                    buf.makeStringAndClear() );
-                            }
-                        }
-                        catch (const container::NoSuchElementException & exc)
-                        {
-                            throw RuntimeException(
-                                "cannot get service type description: " + exc.Message );
-                        }
-                    }
-                }
-                catch (registry::InvalidValueException &)
-                {
-                    // repair
-                    xKey2->setStringValue( service_name );
-                }
-            }
-            else
-            {
-                // insert singleton entry
-                xKey2 = xDest->getRootKey()->createKey( keyname );
-                xKey2->setStringValue( service_name );
-            }
-
-            Reference< registry::XRegistryKey > xRegisteredImplNames(
-                xKey2->openKey( "REGISTERED_BY" ) );
-            if (!xRegisteredImplNames.is() || !xRegisteredImplNames->isValid())
-            {
-                // create
-                xRegisteredImplNames = xKey2->createKey( "REGISTERED_BY" );
-            }
-
-            Sequence< OUString > implnames;
             try
             {
-                implnames = xRegisteredImplNames->getAsciiListValue();
+                OUString existing_name( xKey2->getStringValue() );
+                if ( existing_name != service_name )
+                {
+                    Reference< container::XHierarchicalNameAccess > xTDMgr;
+                    OUString the_tdmgr =
+                        "/singletons/com.sun.star.reflection.theTypeDescriptionManager";
+                    xContext->getValueByName( the_tdmgr ) >>= xTDMgr;
+                    if (! xTDMgr.is())
+                    {
+                        throw RuntimeException( "cannot get singleton " + the_tdmgr );
+                    }
+                    try
+                    {
+                        Reference< reflection::XServiceTypeDescription > xExistingService_td;
+                        xTDMgr->getByHierarchicalName( existing_name ) >>= xExistingService_td;
+                        if (! xExistingService_td.is())
+                        {
+                            throw RuntimeException( "cannot get service type description: " + existing_name );
+                        }
+
+                        // everything's fine if existing service entry supports the one
+                        // to be registered
+                        if (! is_supported_service( service_name, xExistingService_td ))
+                        {
+                            throw registry::CannotRegisterImplementationException(
+                                "existing singleton service (" + singleton_name + "=" + existing_name + ") "
+                                " does not support given one: " + service_name);
+                        }
+                    }
+                    catch (const container::NoSuchElementException & exc)
+                    {
+                        css::uno::Any anyEx = cppu::getCaughtException();
+                        throw css::lang::WrappedTargetRuntimeException(
+                                "cannot get service type description: " + exc.Message,
+                                nullptr, anyEx );
+                    }
+                }
             }
             catch (registry::InvalidValueException &)
             {
+                // repair
+                xKey2->setStringValue( service_name );
             }
-            // check implname is already in
-            sal_Int32 nPos_implnames = implnames.getLength();
-            OUString const * pImplnames = implnames.getConstArray();
-            while (nPos_implnames--)
-            {
-                if (implname.equals( pImplnames[ nPos_implnames ] ))
-                    break;
-            }
-            if (nPos_implnames < 0)
-            {
-                // append and write back
-                implnames.realloc( implnames.getLength() +1 );
-                implnames[ implnames.getLength() -1 ] = implname;
-                xRegisteredImplNames->setAsciiListValue( implnames );
-            }
+        }
+        else
+        {
+            // insert singleton entry
+            xKey2 = xDest->getRootKey()->createKey( keyname );
+            xKey2->setStringValue( service_name );
+        }
+
+        Reference< registry::XRegistryKey > xRegisteredImplNames(
+            xKey2->openKey( "REGISTERED_BY" ) );
+        if (!xRegisteredImplNames.is() || !xRegisteredImplNames->isValid())
+        {
+            // create
+            xRegisteredImplNames = xKey2->createKey( "REGISTERED_BY" );
+        }
+
+        Sequence< OUString > implnames;
+        try
+        {
+            implnames = xRegisteredImplNames->getAsciiListValue();
+        }
+        catch (registry::InvalidValueException &)
+        {
+        }
+        // check implname is already in
+        sal_Int32 nPos_implnames = implnames.getLength();
+        OUString const * pImplnames = implnames.getConstArray();
+        while (nPos_implnames--)
+        {
+            if (implname == pImplnames[ nPos_implnames ])
+                break;
+        }
+        if (nPos_implnames < 0)
+        {
+            // append and write back
+            implnames.realloc( implnames.getLength() +1 );
+            implnames[ implnames.getLength() -1 ] = implname;
+            xRegisteredImplNames->setAsciiListValue( implnames );
         }
     }
 }
@@ -1046,8 +1007,6 @@ void prepareRegistry(
             "prepareRegistry(): source registry is empty" );
     }
 
-    const StringPool & pool = spool();
-
     const Reference < XRegistryKey >* pSubKeys = subKeys.getConstArray();
     Reference < XRegistryKey > xImplKey;
 
@@ -1056,7 +1015,7 @@ void prepareRegistry(
         xImplKey = pSubKeys[i];
 
         Reference < XRegistryKey >  xKey = xImplKey->openKey(
-            pool.slash_UNO_slash_SERVICES );
+            slash_UNO_slash_SERVICES );
 
         if (xKey.is())
         {
@@ -1064,7 +1023,7 @@ void prepareRegistry(
             Sequence< Reference < XRegistryKey > > serviceKeys = xKey->openKeys();
             const Reference < XRegistryKey > * pServiceKeys = serviceKeys.getConstArray();
 
-            OUString implName = OUString(xImplKey->getKeyName().getStr() + 1);
+            OUString implName = xImplKey->getKeyName().copy(1);
             sal_Int32 firstDot = implName.indexOf('/');
 
             if (firstDot >= 0)
@@ -1078,11 +1037,11 @@ void prepareRegistry(
 
                 createUniqueSubEntry(
                     xDest->getRootKey()->createKey(
-                        pool.slash_SERVICES + serviceName ),
+                        slash_SERVICES + serviceName ),
                     implName);
             }
 
-            xKey = xImplKey->openKey( pool.slash_UNO );
+            xKey = xImplKey->openKey( slash_UNO );
             if (xKey.is())
             {
                 Sequence< Reference < XRegistryKey > > subKeys2 = xKey->openKeys();
@@ -1093,9 +1052,9 @@ void prepareRegistry(
 
                     for (sal_Int32 j = 0; j < subKeys2.getLength(); j++)
                     {
-                        if (pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + pool.slash_UNO_slash_SERVICES) &&
-                            pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + pool.slash_UNO_slash_REGISTRY_LINKS ) &&
-                            pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + pool.slash_UNO_slash_SINGLETONS ))
+                        if (pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + slash_UNO_slash_SERVICES) &&
+                            pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + slash_UNO_slash_REGISTRY_LINKS ) &&
+                            pSubKeys2[j]->getKeyName() != (xImplKey->getKeyName() + slash_UNO_slash_SINGLETONS ))
                         {
                             prepareUserKeys(xDest, xKey, pSubKeys2[j], implName, true);
                         }
@@ -1105,7 +1064,7 @@ void prepareRegistry(
         }
 
         // update LOCATION entry
-        xKey = xImplKey->createKey( pool.slash_UNO_slash_LOCATION );
+        xKey = xImplKey->createKey( slash_UNO_slash_LOCATION );
 
         if (xKey.is())
         {
@@ -1113,14 +1072,14 @@ void prepareRegistry(
         }
 
         // update ACTIVATOR entry
-        xKey = xImplKey->createKey( pool.slash_UNO_slash_ACTIVATOR );
+        xKey = xImplKey->createKey( slash_UNO_slash_ACTIVATOR );
 
         if (xKey.is())
         {
             xKey->setAsciiValue(implementationLoaderUrl);
         }
 
-        xKey = xImplKey->openKey( pool.slash_UNO_slash_SERVICES );
+        xKey = xImplKey->openKey( slash_UNO_slash_SERVICES );
 
         if (xKey.is() && (xKey->getValueType() == RegistryValueType_ASCIILIST))
         {
@@ -1144,20 +1103,20 @@ void prepareRegistry(
 
 
 void findImplementations(    const Reference < XRegistryKey > & xSource,
-                                    std::list <OUString>& implNames)
+                                    std::vector<OUString>& implNames)
 {
     bool isImplKey = false;
 
     try
     {
         Reference < XRegistryKey > xKey = xSource->openKey(
-            spool().slash_UNO_slash_SERVICES );
+            slash_UNO_slash_SERVICES );
 
         if (xKey.is() && (xKey->getKeyNames().getLength() > 0))
         {
             isImplKey = true;
 
-            OUString implName = OUString(xSource->getKeyName().getStr() + 1).replace('/', '.').getStr();
+            OUString implName = xSource->getKeyName().copy(1).replace('/', '.');
             sal_Int32 firstDot = implName.indexOf('.');
 
             if (firstDot >= 0)
@@ -1198,45 +1157,38 @@ class ImplementationRegistration
 {
 public:
     explicit ImplementationRegistration( const Reference < XComponentContext > & rSMgr );
-    virtual ~ImplementationRegistration();
 
     // XServiceInfo
-    OUString                        SAL_CALL getImplementationName() throw(RuntimeException, std::exception) override;
-    sal_Bool                        SAL_CALL supportsService(const OUString& ServiceName) throw(RuntimeException, std::exception) override;
-    Sequence< OUString >            SAL_CALL getSupportedServiceNames() throw(RuntimeException, std::exception) override;
+    OUString                        SAL_CALL getImplementationName() override;
+    sal_Bool                        SAL_CALL supportsService(const OUString& ServiceName) override;
+    Sequence< OUString >            SAL_CALL getSupportedServiceNames() override;
 
     // XImplementationRegistration
     virtual void SAL_CALL registerImplementation(
         const OUString& implementationLoader,
         const OUString& location,
-        const Reference < XSimpleRegistry > & xReg)
-        throw(  CannotRegisterImplementationException, RuntimeException, std::exception ) override;
+        const Reference < XSimpleRegistry > & xReg) override;
 
     virtual sal_Bool SAL_CALL revokeImplementation(
         const OUString& location,
-        const Reference < XSimpleRegistry >& xReg)
-        throw( RuntimeException, std::exception ) override;
+        const Reference < XSimpleRegistry >& xReg) override;
 
     virtual Sequence< OUString > SAL_CALL getImplementations(
         const OUString& implementationLoader,
-        const OUString& location)
-        throw( RuntimeException, std::exception ) override;
+        const OUString& location) override;
     virtual Sequence< OUString > SAL_CALL checkInstantiation(
-        const OUString& implementationName)
-        throw( RuntimeException, std::exception ) override;
+        const OUString& implementationName) override;
 
     // XImplementationRegistration2
     virtual void SAL_CALL registerImplementationWithLocation(
         const OUString& implementationLoader,
         const OUString& location,
         const OUString& registeredLocation,
-        const Reference < XSimpleRegistry > & xReg)
-        throw(  CannotRegisterImplementationException, RuntimeException, std::exception ) override;
+        const Reference < XSimpleRegistry > & xReg) override;
 
     // XInitialization
     virtual void SAL_CALL initialize(
-        const css::uno::Sequence< css::uno::Any >& aArguments )
-        throw(  css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
 private: // helper methods
     void prepareRegister(
@@ -1260,7 +1212,7 @@ private: // helper methods
     static void doRevoke( const Reference < XSimpleRegistry >& xDest,
                           const OUString& locationUrl );
         // throw( InvalidRegistryException, RuntimeException )
-    Reference< XSimpleRegistry > getRegistryFromServiceManager();
+    Reference< XSimpleRegistry > getRegistryFromServiceManager() const;
 
     static Reference< XSimpleRegistry > createTemporarySimpleRegistry(
         const Reference< XMultiComponentFactory > &rSMgr,
@@ -1279,31 +1231,26 @@ ImplementationRegistration::ImplementationRegistration( const Reference < XCompo
     , m_xCtx( xCtx )
 {}
 
-
-// ~ImplementationRegistration()
-
-ImplementationRegistration::~ImplementationRegistration() {}
-
 // XServiceInfo
-OUString ImplementationRegistration::getImplementationName() throw(RuntimeException, std::exception)
+OUString ImplementationRegistration::getImplementationName()
 {
     return OUString("com.sun.star.comp.stoc.ImplementationRegistration");
 }
 
 // XServiceInfo
-sal_Bool ImplementationRegistration::supportsService(const OUString& ServiceName) throw(RuntimeException, std::exception)
+sal_Bool ImplementationRegistration::supportsService(const OUString& ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 // XServiceInfo
-Sequence< OUString > ImplementationRegistration::getSupportedServiceNames() throw(RuntimeException, std::exception)
+Sequence< OUString > ImplementationRegistration::getSupportedServiceNames()
 {
     Sequence< OUString > seqNames { "com.sun.star.registry.ImplementationRegistration" };
     return seqNames;
 }
 
-Reference< XSimpleRegistry > ImplementationRegistration::getRegistryFromServiceManager()
+Reference< XSimpleRegistry > ImplementationRegistration::getRegistryFromServiceManager() const
 {
     Reference < XPropertySet > xPropSet( m_xSMgr, UNO_QUERY );
     Reference < XSimpleRegistry > xRegistry;
@@ -1312,7 +1259,7 @@ Reference< XSimpleRegistry > ImplementationRegistration::getRegistryFromServiceM
 
         try {  // the implementation does not support XIntrospectionAccess !
 
-            Any aAny = xPropSet->getPropertyValue( spool().Registry );
+            Any aAny = xPropSet->getPropertyValue( Registry );
 
             if( aAny.getValueType().getTypeClass() == TypeClass_INTERFACE ) {
                 aAny >>= xRegistry;
@@ -1331,16 +1278,12 @@ Reference< XSimpleRegistry > ImplementationRegistration::getRegistryFromServiceM
 
 void ImplementationRegistration::initialize(
     const css::uno::Sequence< css::uno::Any >& aArgs )
-    throw(  css::uno::Exception, css::uno::RuntimeException, std::exception)
 {
 
     if( aArgs.getLength() != 4 ) {
-        OUStringBuffer buf;
-        buf.append( "ImplementationRegistration::initialize() expects 4 parameters, got " );
-        buf.append( (sal_Int32) aArgs.getLength() );
-        throw IllegalArgumentException( buf.makeStringAndClear(),
-                                        Reference<XInterface > (),
-                                        0 );
+        throw IllegalArgumentException(
+            "ImplementationRegistration::initialize() expects 4 parameters, got "  + OUString::number( aArgs.getLength() ),
+            Reference<XInterface > (), 0 );
     }
 
     Reference< XImplementationLoader > rLoader;
@@ -1353,15 +1296,11 @@ void ImplementationRegistration::initialize(
         aArgs.getConstArray()[0] >>= rLoader;
     }
     if( !rLoader.is()) {
-        OUStringBuffer buf;
-        buf.append( "ImplementationRegistration::initialize() invalid first parameter,"
-                    "expected " );
-        buf.append( cppu::UnoType<decltype(rLoader)>::get().getTypeName() );
-        buf.append( ", got " );
-        buf.append( aArgs.getConstArray()[0].getValueTypeName() );
-        throw IllegalArgumentException( buf.makeStringAndClear(),
-                                        Reference< XInterface > (),
-                                        0 );
+        throw IllegalArgumentException(
+            "ImplementationRegistration::initialize() invalid first parameter,"
+            "expected " + cppu::UnoType<decltype(rLoader)>::get().getTypeName() +
+            ", got " + aArgs.getConstArray()[0].getValueTypeName(),
+            Reference< XInterface > (), 0 );
     }
 
     // 2nd argument : The service name of the loader. This name is written into the registry
@@ -1369,13 +1308,10 @@ void ImplementationRegistration::initialize(
         aArgs.getConstArray()[1] >>= loaderServiceName;
     }
     if( loaderServiceName.isEmpty() ) {
-        OUStringBuffer buf;
-        buf.append( "ImplementationRegistration::initialize() invalid second parameter,"
-                    "expected string, got " );
-        buf.append( aArgs.getConstArray()[1].getValueTypeName() );
-        throw IllegalArgumentException( buf.makeStringAndClear(),
-                                        Reference< XInterface > (),
-                                        0 );
+        throw IllegalArgumentException(
+            "ImplementationRegistration::initialize() invalid second parameter,"
+            "expected string, got " + aArgs.getConstArray()[1].getValueTypeName(),
+            Reference< XInterface > (), 0 );
     }
 
     // 3rd argument : The file name of the dll, that contains the loader
@@ -1383,13 +1319,10 @@ void ImplementationRegistration::initialize(
         aArgs.getConstArray()[2] >>= locationUrl;
     }
     if( locationUrl.isEmpty() ) {
-        OUStringBuffer buf;
-        buf.append( "ImplementationRegistration::initialize() invalid third parameter,"
-                    "expected string, got " );
-        buf.append( aArgs.getConstArray()[2].getValueTypeName() );
-        throw IllegalArgumentException( buf.makeStringAndClear(),
-                                        Reference< XInterface > (),
-                                        0 );
+        throw IllegalArgumentException(
+            "ImplementationRegistration::initialize() invalid third parameter,"
+            "expected string, got " + aArgs.getConstArray()[2].getValueTypeName(),
+            Reference< XInterface > (), 0 );
     }
 
     // 4th argument : The registry, the service should be written to
@@ -1400,15 +1333,11 @@ void ImplementationRegistration::initialize(
     if( !rReg.is() ) {
         rReg = getRegistryFromServiceManager();
         if( !rReg.is() ) {
-            OUStringBuffer buf;
-            buf.append( "ImplementationRegistration::initialize() invalid fourth parameter,"
-                        "expected " );
-            buf.append( cppu::UnoType<decltype(rReg)>::get().getTypeName() );
-            buf.append( ", got " );
-            buf.append( aArgs.getConstArray()[3].getValueTypeName() );
-            throw IllegalArgumentException( buf.makeStringAndClear(),
-                                            Reference< XInterface > (),
-                                            0 );
+            throw IllegalArgumentException(
+                "ImplementationRegistration::initialize() invalid fourth parameter,"
+                "expected " + cppu::UnoType<decltype(rReg)>::get().getTypeName() +
+                ", got " + aArgs.getConstArray()[3].getValueTypeName(),
+                Reference< XInterface > (), 0 );
         }
     }
 
@@ -1423,7 +1352,6 @@ void ImplementationRegistration::registerImplementationWithLocation(
     const OUString& locationUrl,
     const OUString& registeredLocationUrl,
     const Reference < XSimpleRegistry > & xReg)
-    throw( CannotRegisterImplementationException, RuntimeException, std::exception )
 {
     prepareRegister(
         implementationLoaderUrl, locationUrl, registeredLocationUrl, xReg);
@@ -1437,86 +1365,71 @@ void ImplementationRegistration::prepareRegister(
     const Reference < XSimpleRegistry > & xReg)
     // throw( CannotRegisterImplementationException, RuntimeException )
 {
-    OUString implLoaderUrl(implementationLoaderUrl);
     OUString activatorName;
 
     if (!implementationLoaderUrl.isEmpty())
     {
-        OUString tmpActivator(implementationLoaderUrl);
         sal_Int32 nIndex = 0;
-        activatorName = tmpActivator.getToken(0, ':', nIndex );
+        activatorName = implementationLoaderUrl.getToken(0, ':', nIndex );
     } else
     {
         // check locationUrl to find out what kind of loader is needed
-        // set iimplLoaderUrl
+        // set implLoaderUrl
     }
 
-    if( m_xSMgr.is() ) {
-        try
-        {
-            Reference < XImplementationLoader > xAct(
-                m_xSMgr->createInstanceWithContext(activatorName, m_xCtx) , UNO_QUERY );
-            if (xAct.is())
-            {
-                Reference < XSimpleRegistry > xRegistry;
-
-                if (xReg.is())
-                {
-                    // registry supplied by user
-                    xRegistry = xReg;
-                }
-                else
-                {
-                    xRegistry = getRegistryFromServiceManager();
-                }
-
-                if ( xRegistry.is())
-                {
-                    doRegister(m_xSMgr, m_xCtx, xAct, xRegistry, implLoaderUrl,
-                               locationUrl, registeredLocationUrl);
-                }
-            }
-            else
-            {
-                OUStringBuffer buf( 128 );
-                buf.append( "ImplementationRegistration::registerImplementation() - The service " );
-                buf.append( activatorName );
-                buf.append( " cannot be instantiated\n" );
-                throw CannotRegisterImplementationException(
-                    buf.makeStringAndClear() );
-            }
-        }
-        catch( CannotRegisterImplementationException & )
-        {
-            throw;
-        }
-        catch( const InvalidRegistryException & e )
-        {
-            OUStringBuffer buf;
-            buf.append( "ImplementationRegistration::registerImplementation() "
-                        "InvalidRegistryException during registration (" );
-            buf.append( e.Message );
-            buf.append( ")" );
-            throw CannotRegisterImplementationException(
-                buf.makeStringAndClear() );
-        }
-        catch( const MergeConflictException & e )
-        {
-            OUStringBuffer buf;
-            buf.append( "ImplementationRegistration::registerImplementation() "
-                        "MergeConflictException during registration (" );
-            buf.append( e.Message );
-            buf.append( ")" );
-            throw CannotRegisterImplementationException(
-                buf.makeStringAndClear() );
-        }
-    }
-    else
-    {
+    if( !m_xSMgr.is() )    {
         throw CannotRegisterImplementationException(
                 "ImplementationRegistration::registerImplementation() "
                 "no componentcontext available to instantiate loader" );
     }
+
+    try
+    {
+        Reference < XImplementationLoader > xAct(
+            m_xSMgr->createInstanceWithContext(activatorName, m_xCtx) , UNO_QUERY );
+        if (!xAct.is())
+        {
+            throw CannotRegisterImplementationException(
+                "ImplementationRegistration::registerImplementation() - The service "
+                + activatorName + " cannot be instantiated" );
+        }
+
+        Reference < XSimpleRegistry > xRegistry;
+
+        if (xReg.is())
+        {
+            // registry supplied by user
+            xRegistry = xReg;
+        }
+        else
+        {
+            xRegistry = getRegistryFromServiceManager();
+        }
+
+        if ( xRegistry.is())
+        {
+            doRegister(m_xSMgr, m_xCtx, xAct, xRegistry, implementationLoaderUrl,
+                       locationUrl, registeredLocationUrl);
+        }
+
+    }
+    catch( CannotRegisterImplementationException & )
+    {
+        throw;
+    }
+    catch( const InvalidRegistryException & e )
+    {
+        throw CannotRegisterImplementationException(
+            "ImplementationRegistration::registerImplementation() "
+            "InvalidRegistryException during registration (" + e.Message + ")" );
+    }
+    catch( const MergeConflictException & e )
+    {
+        throw CannotRegisterImplementationException(
+            "ImplementationRegistration::registerImplementation() "
+            "MergeConflictException during registration (" + e.Message + ")" );
+    }
+
 }
 
 
@@ -1526,7 +1439,6 @@ void ImplementationRegistration::registerImplementation(
     const OUString& implementationLoaderUrl,
     const OUString& locationUrl,
     const Reference < XSimpleRegistry > & xReg)
-    throw( CannotRegisterImplementationException, RuntimeException, std::exception )
 {
     prepareRegister(implementationLoaderUrl, locationUrl, locationUrl, xReg);
 }
@@ -1536,7 +1448,6 @@ void ImplementationRegistration::registerImplementation(
 
 sal_Bool ImplementationRegistration::revokeImplementation(const OUString& location,
                                                       const Reference < XSimpleRegistry >& xReg)
-    throw ( RuntimeException, std::exception )
 {
     bool ret = false;
 
@@ -1549,7 +1460,7 @@ sal_Bool ImplementationRegistration::revokeImplementation(const OUString& locati
         Reference < XPropertySet > xPropSet( m_xSMgr, UNO_QUERY );
         if( xPropSet.is() ) {
             try {
-                Any aAny = xPropSet->getPropertyValue( spool().Registry );
+                Any aAny = xPropSet->getPropertyValue( Registry );
 
                 if( aAny.getValueType().getTypeClass() == TypeClass_INTERFACE )
                 {
@@ -1585,15 +1496,13 @@ sal_Bool ImplementationRegistration::revokeImplementation(const OUString& locati
 Sequence< OUString > ImplementationRegistration::getImplementations(
     const OUString & implementationLoaderUrl,
     const OUString & locationUrl)
-    throw ( RuntimeException, std::exception )
 {
     OUString activatorName;
 
     if (!implementationLoaderUrl.isEmpty())
     {
-        OUString tmpActivator(implementationLoaderUrl);
         sal_Int32 nIndex = 0;
-        activatorName = tmpActivator.getToken(0, ':', nIndex );
+        activatorName = implementationLoaderUrl.getToken(0, ':', nIndex );
     } else
     {
         // check locationUrl to find out what kind of loader is needed
@@ -1615,21 +1524,21 @@ Sequence< OUString > ImplementationRegistration::getImplementations(
             {
                 try
                 {
-                    xReg->open(OUString() /* in mem */, sal_False, sal_True);
+                    xReg->open(OUString() /* in mem */, false, true);
                     Reference < XRegistryKey > xImpl;
 
                     { // only necessary for deleting the temporary variable of rootkey
-                        xImpl = xReg->getRootKey()->createKey( spool().slash_IMPLEMENTATIONS );
+                        xImpl = xReg->getRootKey()->createKey( slash_IMPLEMENTATIONS );
                     }
                     if (xAct->writeRegistryInfo(xImpl, implementationLoaderUrl, locationUrl))
                     {
-                        std::list <OUString> implNames;
+                        std::vector<OUString> implNames;
 
                         findImplementations(xImpl, implNames);
 
                         if (!implNames.empty())
                         {
-                            Sequence<OUString> seqImpl(comphelper::containerToSequence<OUString>(implNames));
+                            Sequence<OUString> seqImpl(comphelper::containerToSequence(implNames));
                             xImpl->closeKey();
                             return seqImpl;
                         }
@@ -1654,7 +1563,6 @@ Sequence< OUString > ImplementationRegistration::getImplementations(
 // virtual function checkInstantiation of XImplementationRegistration
 
 Sequence< OUString > ImplementationRegistration::checkInstantiation(const OUString&)
-    throw ( RuntimeException, std::exception )
 {
     OSL_FAIL( "ImplementationRegistration::checkInstantiation not implemented" );
     return Sequence<OUString>();
@@ -1669,43 +1577,39 @@ void ImplementationRegistration::doRevoke(
     const OUString& locationUrl)
     // throw ( InvalidRegistryException, RuntimeException )
 {
-    if( xDest.is() )
+    if( !xDest.is() )
+        return;
+
+    std::vector<OUString> aNames;
+
+    Reference < XRegistryKey > xRootKey( xDest->getRootKey() );
+
+    Reference < XRegistryKey > xKey =
+        xRootKey->openKey( slash_IMPLEMENTATIONS );
+    if (xKey.is() && xKey->isValid())
     {
-        std::list<OUString> aNames;
-
-        const StringPool &pool = spool();
-        Reference < XRegistryKey > xRootKey( xDest->getRootKey() );
-
-        Reference < XRegistryKey > xKey =
-            xRootKey->openKey( pool.slash_IMPLEMENTATIONS );
-        if (xKey.is() && xKey->isValid())
-        {
-            deleteAllImplementations(xDest, xKey, locationUrl, aNames);
-        }
-
-        xKey = xRootKey->openKey( pool.slash_SERVICES );
-        if (xKey.is())
-        {
-            std::list<OUString>::const_iterator iter = aNames.begin();
-
-            while (iter != aNames.end())
-            {
-                deleteAllServiceEntries(xDest, xKey, *iter);
-                ++iter;
-            }
-        }
-
-        xKey = xRootKey->openKey( "/SINGLETONS" );
-        if (xKey.is() && xKey->isValid())
-        {
-            delete_all_singleton_entries( xKey, aNames );
-        }
-
-        if (xRootKey.is())
-            xRootKey->closeKey();
-        if (xKey.is() && xKey->isValid() )
-            xKey->closeKey();
+        deleteAllImplementations(xDest, xKey, locationUrl, aNames);
     }
+
+    xKey = xRootKey->openKey( slash_SERVICES );
+    if (xKey.is())
+    {
+        for (auto const& name : aNames)
+        {
+            deleteAllServiceEntries(xDest, xKey, name);
+        }
+    }
+
+    xKey = xRootKey->openKey( "/SINGLETONS" );
+    if (xKey.is() && xKey->isValid())
+    {
+        delete_all_singleton_entries( xKey, aNames );
+    }
+
+    if (xRootKey.is())
+        xRootKey->closeKey();
+    if (xKey.is() && xKey->isValid() )
+        xKey->closeKey();
 }
 
 void ImplementationRegistration::doRegister(
@@ -1724,47 +1628,46 @@ void ImplementationRegistration::doRegister(
         createTemporarySimpleRegistry( xSMgr, xCtx );
     Reference < XRegistryKey >      xSourceKey;
 
-    if (xAct.is() && xReg.is() && xDest.is())
+    if (!(xAct.is() && xReg.is() && xDest.is()))
+        return;
+
+    try
     {
-        try
-        {
-            xReg->open(OUString() /* in mem */, sal_False, sal_True);
+        xReg->open(OUString() /* in mem */, false, true);
 
-            { // only necessary for deleting the temporary variable of rootkey
-                xSourceKey = xReg->getRootKey()->createKey( spool().slash_IMPLEMENTATIONS );
-            }
-
-            bool bSuccess =
-                xAct->writeRegistryInfo(xSourceKey, implementationLoaderUrl, locationUrl);
-            if ( bSuccess )
-            {
-                prepareRegistry(xDest, xSourceKey, implementationLoaderUrl, registeredLocationUrl, xCtx);
-
-                xSourceKey->closeKey();
-
-                xSourceKey = xReg->getRootKey();
-                Reference < XRegistryKey > xDestKey = xDest->getRootKey();
-                stoc_impreg::mergeKeys( xDestKey, xSourceKey );
-                xDestKey->closeKey();
-                xSourceKey->closeKey();
-            }
-            else
-            {
-                throw CannotRegisterImplementationException(
-                    "ImplementationRegistration::doRegistration() component registration signaled failure" );
-            }
-
-            // Cleanup Source registry.
-            if ( xSourceKey->isValid() )
-                xSourceKey->closeKey();
+        { // only necessary for deleting the temporary variable of rootkey
+            xSourceKey = xReg->getRootKey()->createKey( slash_IMPLEMENTATIONS );
         }
-        catch(CannotRegisterImplementationException&)
+
+        bool bSuccess =
+            xAct->writeRegistryInfo(xSourceKey, implementationLoaderUrl, locationUrl);
+        if ( !bSuccess )
         {
-            if ( xSourceKey->isValid() )
-                xSourceKey->closeKey();
-            // and throw again
-            throw;
+            throw CannotRegisterImplementationException(
+                "ImplementationRegistration::doRegistration() component registration signaled failure" );
         }
+
+        prepareRegistry(xDest, xSourceKey, implementationLoaderUrl, registeredLocationUrl, xCtx);
+
+        xSourceKey->closeKey();
+
+        xSourceKey = xReg->getRootKey();
+        Reference < XRegistryKey > xDestKey = xDest->getRootKey();
+        stoc_impreg::mergeKeys( xDestKey, xSourceKey );
+        xDestKey->closeKey();
+        xSourceKey->closeKey();
+
+
+        // Cleanup Source registry.
+        if ( xSourceKey->isValid() )
+            xSourceKey->closeKey();
+    }
+    catch(CannotRegisterImplementationException&)
+    {
+        if ( xSourceKey->isValid() )
+            xSourceKey->closeKey();
+        // and throw again
+        throw;
     }
 }
 
@@ -1776,7 +1679,7 @@ Reference< XSimpleRegistry > ImplementationRegistration::createTemporarySimpleRe
 
     Reference < XSimpleRegistry > xReg(
         rSMgr->createInstanceWithContext(
-            spool().com_sun_star_registry_SimpleRegistry,   xCtx ),
+            com_sun_star_registry_SimpleRegistry,   xCtx ),
         UNO_QUERY);
     OSL_ASSERT( xReg.is() );
     return xReg;
@@ -1784,7 +1687,7 @@ Reference< XSimpleRegistry > ImplementationRegistration::createTemporarySimpleRe
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_stoc_ImplementationRegistration_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)

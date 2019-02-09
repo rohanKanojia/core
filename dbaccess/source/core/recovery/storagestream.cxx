@@ -27,12 +27,8 @@ namespace dbaccess
 {
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::uno::UNO_QUERY_THROW;
     using ::com::sun::star::uno::UNO_SET_THROW;
-    using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
-    using ::com::sun::star::uno::XComponentContext;
     using ::com::sun::star::embed::XStorage;
     using ::com::sun::star::io::XStream;
 
@@ -51,32 +47,6 @@ namespace dbaccess
     }
 
     StorageOutputStream::~StorageOutputStream()
-    {
-    }
-
-    void StorageOutputStream::close()
-    {
-        ENSURE_OR_RETURN_VOID( m_xOutputStream.is(), "already closed" );
-        m_xOutputStream->closeOutput();
-        m_xOutputStream.clear();
-
-        // if you add additional functionality here, be aware that there are derived classes which
-        // (legitimately) do not call this method here.
-    }
-
-    // StorageInputStream
-    StorageInputStream::StorageInputStream( const Reference< XStorage >& i_rParentStorage,
-                                            const OUString& i_rStreamName
-                                          )
-    {
-        ENSURE_OR_THROW( i_rParentStorage.is(), "illegal stream" );
-
-        const Reference< XStream > xStream(
-            i_rParentStorage->openStreamElement( i_rStreamName, ElementModes::READ ), UNO_QUERY_THROW );
-        m_xInputStream.set( xStream->getInputStream(), UNO_SET_THROW );
-    }
-
-    StorageInputStream::~StorageInputStream()
     {
     }
 

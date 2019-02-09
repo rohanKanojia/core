@@ -33,7 +33,6 @@ class XMLTextListBlockContext : public SvXMLImportContext
 
     // text:style-name property of <list> element
     OUString         msListStyleName;
-    OUString         sXmlId;
 
     SvXMLImportContextRef   mxParentListBlock;
 
@@ -57,15 +56,14 @@ public:
                 const OUString& rLName,
                 const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList,
                 const bool bRestartNumberingAtSubList = false );
-    virtual ~XMLTextListBlockContext();
+    virtual ~XMLTextListBlockContext() override;
 
     virtual void EndElement() override;
 
-    SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                 const OUString& rLocalName,
                  const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
 
-    const OUString& GetListStyleName() const { return msListStyleName; }
     sal_Int16 GetLevel() const { return mnLevel; }
     bool IsRestartNumbering() const { return mbRestartNumbering; }
     void ResetRestartNumbering() { mbRestartNumbering = false; }

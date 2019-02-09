@@ -22,9 +22,8 @@
 
 #include <sfx2/tabdlg.hxx>
 #include <svx/checklbx.hxx>
-#include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
-#include "global.hxx"
+#include <global.hxx>
 
 // +1 because one field is reserved for the "- none -" entry
 #define SC_MAXFIELDS    MAXCOLCOUNT+1
@@ -40,7 +39,7 @@ protected:
                        const SfxItemSet& rArgSet );
 
 public:
-    virtual ~ScTpSubTotalGroup();
+    virtual ~ScTpSubTotalGroup() override;
     virtual void dispose() override;
 
     bool            DoReset         ( sal_uInt16            nGroupNo,
@@ -60,7 +59,7 @@ protected:
     const sal_uInt16            nWhichSubTotals;
     const ScSubTotalParam&  rSubTotalData;
     SCCOL                   nFieldArr[SC_MAXFIELDS];
-    const sal_uInt16            nFieldCount;
+    sal_uInt16              nFieldCount;
 
 private:
     void            Init            ();
@@ -70,97 +69,90 @@ private:
     sal_uInt16          GetFieldSelPos  ( SCCOL nField );
 
     // Handler ------------------------
-    DECL_LINK_TYPED( SelectListBoxHdl, ListBox&, void );
-    DECL_LINK_TYPED( SelectTreeListBoxHdl, SvTreeListBox*, void );
-    DECL_LINK_TYPED( CheckHdl, SvTreeListBox*, void );
-    void SelectHdl(void *);
+    DECL_LINK( SelectListBoxHdl, ListBox&, void );
+    DECL_LINK( SelectTreeListBoxHdl, SvTreeListBox*, void );
+    DECL_LINK( CheckHdl, SvTreeListBox*, void );
+    void SelectHdl(const void *);
 };
 
-class ScTpSubTotalGroup1 : public ScTpSubTotalGroup
+class ScTpSubTotalGroup1 final : public ScTpSubTotalGroup
 {
     friend class VclPtr<ScTpSubTotalGroup1>;
-protected:
     ScTpSubTotalGroup1( vcl::Window*              pParent,
                         const SfxItemSet&    rArgSet );
 
 public:
-    virtual ~ScTpSubTotalGroup1();
+    virtual ~ScTpSubTotalGroup1() override;
 
-    static  VclPtr<SfxTabPage> Create      ( vcl::Window*               pParent,
+    static  VclPtr<SfxTabPage> Create      ( TabPageParent pParent,
             const SfxItemSet*     rArgSet );
     virtual bool        FillItemSet ( SfxItemSet* rArgSet ) override;
     virtual void        Reset       ( const SfxItemSet* rArgSet ) override;
 };
 
-class ScTpSubTotalGroup2 : public ScTpSubTotalGroup
+class ScTpSubTotalGroup2 final : public ScTpSubTotalGroup
 {
     friend class VclPtr<ScTpSubTotalGroup2>;
-protected:
     ScTpSubTotalGroup2( vcl::Window*              pParent,
                         const SfxItemSet&    rArgSet );
 
 public:
-    virtual ~ScTpSubTotalGroup2();
+    virtual ~ScTpSubTotalGroup2() override;
 
-    static  VclPtr<SfxTabPage> Create      ( vcl::Window*               pParent,
+    static  VclPtr<SfxTabPage> Create      ( TabPageParent pParent,
             const SfxItemSet*     rArgSet );
     virtual bool        FillItemSet ( SfxItemSet* rArgSet ) override;
     virtual void        Reset       ( const SfxItemSet* rArgSet ) override;
 };
 
-class ScTpSubTotalGroup3 : public ScTpSubTotalGroup
+class ScTpSubTotalGroup3 final : public ScTpSubTotalGroup
 {
     friend class VclPtr<ScTpSubTotalGroup3>;
-protected:
     ScTpSubTotalGroup3( vcl::Window*              pParent,
                         const SfxItemSet&    rArgSet );
 
 public:
-    virtual ~ScTpSubTotalGroup3();
+    virtual ~ScTpSubTotalGroup3() override;
 
-    static  VclPtr<SfxTabPage> Create      ( vcl::Window*               pParent,
+    static  VclPtr<SfxTabPage> Create      ( TabPageParent pParent,
             const SfxItemSet*     rArgSet );
     virtual bool        FillItemSet ( SfxItemSet* rArgSet ) override;
     virtual void        Reset       ( const SfxItemSet* rArgSet ) override;
 };
 
-class ScTpSubTotalOptions : public SfxTabPage
+class ScTpSubTotalOptions final : public SfxTabPage
 {
-    friend class VclPtr<ScTpSubTotalOptions>;
-protected:
-    ScTpSubTotalOptions( vcl::Window*             pParent,
-                         const SfxItemSet&  rArgSet );
-
 public:
-    virtual ~ScTpSubTotalOptions();
-    virtual void        dispose() override;
-    static VclPtr<SfxTabPage>  Create      ( vcl::Window*               pParent,
+    virtual ~ScTpSubTotalOptions() override;
+    static VclPtr<SfxTabPage>  Create      ( TabPageParent pParent,
             const SfxItemSet*     rArgSet );
     virtual bool        FillItemSet ( SfxItemSet* rArgSet ) override;
     virtual void        Reset       ( const SfxItemSet* rArgSet ) override;
 
 private:
-    VclPtr<CheckBox>    pBtnPagebreak;
-    VclPtr<CheckBox>    pBtnCase;
-    VclPtr<CheckBox>    pBtnSort;
-    VclPtr<FixedText>   pFlSort;
-    VclPtr<RadioButton> pBtnAscending;
-    VclPtr<RadioButton> pBtnDescending;
-    VclPtr<CheckBox>    pBtnFormats;
-    VclPtr<CheckBox>    pBtnUserDef;
-    VclPtr<ListBox>     pLbUserDef;
+    friend class VclPtr<ScTpSubTotalOptions>;
+    ScTpSubTotalOptions(TabPageParent pParent, const SfxItemSet& rArgSet);
 
-    ScViewData*             pViewData;
-    ScDocument*             pDoc;
-    const sal_uInt16            nWhichSubTotals;
-    const ScSubTotalParam&  rSubTotalData;
-
-private:
     void Init                   ();
     void FillUserSortListBox    ();
 
     // Handler ------------------------
-    DECL_LINK_TYPED( CheckHdl, Button*, void );
+    DECL_LINK(CheckHdl, weld::Button&, void);
+
+    ScViewData*             pViewData;
+    ScDocument*             pDoc;
+    const sal_uInt16        nWhichSubTotals;
+    const ScSubTotalParam&  rSubTotalData;
+
+    std::unique_ptr<weld::CheckButton> m_xBtnPagebreak;
+    std::unique_ptr<weld::CheckButton> m_xBtnCase;
+    std::unique_ptr<weld::CheckButton> m_xBtnSort;
+    std::unique_ptr<weld::Label> m_xFlSort;
+    std::unique_ptr<weld::RadioButton> m_xBtnAscending;
+    std::unique_ptr<weld::RadioButton> m_xBtnDescending;
+    std::unique_ptr<weld::CheckButton> m_xBtnFormats;
+    std::unique_ptr<weld::CheckButton> m_xBtnUserDef;
+    std::unique_ptr<weld::ComboBox> m_xLbUserDef;
 };
 
 #endif // INCLUDED_SC_SOURCE_UI_INC_TPSUBT_HXX

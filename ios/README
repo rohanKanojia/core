@@ -1,29 +1,49 @@
-experimental iOS apps that use LibreOffice code.
+Somewhat obsolete README for the LibreOfficeLight iOS app and LibreOfficeKit.
 
-experimental/LibreOffice - Uses the "normal" desktop-style main loop
-and output mechanism to display the document, and also accepts input
-and selections. Broken since the tiled rendering changes. As tiled
-rendering seems to be what will/should be used, this app is of limited
-usefulness now. (Don't get excited by the name of this app, it was
-never intended to become a "complete" LibreOffice in any sense. In
-retrospect it was silly to call it just "LibreOffice.)
+-- LibreOfficeLight
+a swift based UI, very much work in progress
 
-Note that this app is built using gbuild: The executable as a normal
-executable from gbuild's perspective, and the app bundle then using a
-CustomTarget that constructs it. Its Xcode project has no normal
-"Compile Sources" or "Link Binary" build phases but instead a "Run
-Script" one that runs make.
+-- support
+the arm64 and simulator are the only supported processors,
+old 32 bit iPhones are not supported.
 
-experimental/TiledLibreOffice - Uses tiled rendering and CATiledLayer.
-No input handling, but scrolling around and zooming around works
-nicely. Displays the number of tiles rendered per second. Also the
-name of this app is a bit too grandiose. Built by an Xcode project.
-(When built from the shell, running xcodebuild).
+The swift app are done for 3 structures
+  simulator + full debug libraries
+  arm64 + full debug libraries
+  arm64 + optimized libraries
 
-MobileLibreOffice - Uses the code in "shared" subdirectory. Can be
-built in two configurations: 1) the "normal" configurations (Debug and
-Release) that matches experimental/LibreOffice in functionality, more
-or less. (But the coded is entirely differently structured.) But also
-this is currently broken, 2) the Debug_tile_tester configuration,
-where one can tweak tiling parameters and see a tile rendered. Also
-built by an Xcode project.
+-- SETUP
+Due to the 3 modes, at least 3 workdirs are needed together with a
+separated UI workdir.
+
+Because the main work is done on the UI, where it is convenient to
+switch fast between arm64 and simulator, it is advantageous to compile
+the 3 configurations of LO first, and then link against those.
+
+Due to the multiple workdirs a separate work directories are needed as follows:
+(names/locations can be changes, they are "linked" together by running autogen.sh)
+   ./core - libreoffice git clone (name can be changed)
+   ./ios-arm64 - workdir for production
+   ./ios-arm64-debug - workdir for debug on device
+   ./ios-simulator - workdir for simulator-debug
+
+-- Steps to generate
+1) copy ./core/distro-configs/LibreOfficeiOS.conf to autogen.input in
+   ./ios-arm64, ./ios-arm64-debug, ./ios-simulator
+   Correct as defined in the conf file,
+   add your local setup (e.g. location of tarballs)
+2) run ../core/autogen.sh in ios-arm64, ios-arm64-debug and ios-simulator
+3) run make in ios-arm64, ios-arm64-debug and ios-simulator
+   this will generate core/loApp.xcconfig which prepares LO to be compiled
+   and build LOkit is 3 configurations and store the preparedLibreOfficeKit
+   in ./core/ios/generated as:
+           release/libKit.a
+           release/libKit.dylib
+           debug/libKit.a
+           debug/libKit.dylib
+           simulator/libKit.a
+           simulator/libKit.dylib
+5) open xcode with LibreOfficeLight select scheme and build/test/run.
+6) enjoy
+
+

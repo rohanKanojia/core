@@ -24,36 +24,28 @@
 #include <rtl/ustring.hxx>
 #include <tools/link.hxx>
 #include <vcl/keycod.hxx>
+#include <o3tl/typed_flags_set.hxx>
 
-#include <IShellCursorSupplier.hxx>
+#include "IShellCursorSupplier.hxx"
 #include "swdllapi.h"
-#include <swtypes.hxx>
-#include <viewsh.hxx>
-#include <calbck.hxx>
-#include <cshtyp.hxx>
-#include <crstate.hxx>
-#include <toxe.hxx>
-#include <tblsel.hxx>
-#include <viscrs.hxx>
-#include <node.hxx>
-#include <IDocumentMarkAccess.hxx>
+#include "docary.hxx"
+#include "viewsh.hxx"
+#include "calbck.hxx"
+#include "cshtyp.hxx"
+#include "crstate.hxx"
+#include "toxe.hxx"
+#include "tblsel.hxx"
+#include "viscrs.hxx"
+#include "node.hxx"
+#include "fldbas.hxx"
+#include "IDocumentMarkAccess.hxx"
 
 class SfxItemSet;
 class SfxPoolItem;
 class SwContentFrame;
-class SwCursorShell;
-class SwCursor;
-class SwField;
-class SwFieldType;
-class SwFormat;
+class SwUnoCursor;
 class SwFormatField;
-class SwNodeIndex;
-class SwPaM;
-class SwShellCursor;
-class SwShellTableCursor;
-class SwTableNode;
 class SwTextFormatColl;
-class SwVisibleCursor;
 class SwTextINetFormat;
 class SwFormatINetFormat;
 class SwTextAttr;
@@ -61,48 +53,49 @@ class SwTableBox;
 class SwTOXMark;
 class SwRangeRedline;
 class SwBlockCursor;
-class SwContentNode;
 class SwPostItField;
 class SwTextField;
-struct SwPosition;
 
-namespace com { namespace sun { namespace star { namespace util {
+namespace i18nutil {
     struct SearchOptions2;
-} } } }
-
+}
 namespace com { namespace sun { namespace star { namespace text {
     class XTextRange;
 }}}}
-
 namespace com { namespace sun { namespace star { namespace container {
     class XStringKeyMap;
 }}}}
 
 // enum and struct to get information via the Doc-Position
 
+enum class IsAttrAtPos
+{
+    NONE             = 0x0000,
+    Field            = 0x0001,
+    ClickField       = 0x0002,
+    Ftn              = 0x0004,
+    InetAttr         = 0x0008,
+    TableBoxFml      = 0x0010,
+    Redline          = 0x0020,
+    Outline          = 0x0040,
+    ToxMark          = 0x0080,
+    RefMark          = 0x0100,
+    NumLabel         = 0x0200,
+    ContentCheck     = 0x0400,
+    SmartTag         = 0x0800,
+    FormControl      = 0x1000
+#ifdef DBG_UTIL
+    ,CurrAttrs       = 0x2000        ///< only for debugging
+    ,TableBoxValue   = 0x4000        ///< only for debugging
+#endif
+};
+namespace o3tl {
+    template<> struct typed_flags<IsAttrAtPos> : is_typed_flags<IsAttrAtPos, 0x7fff> {};
+}
+
 struct SwContentAtPos
 {
-    enum IsAttrAtPos
-    {
-        SW_NOTHING          = 0x0000,
-        SW_FIELD            = 0x0001,
-        SW_CLICKFIELD       = 0x0002,
-        SW_FTN              = 0x0004,
-        SW_INETATTR         = 0x0008,
-        SW_TABLEBOXFML      = 0x0010,
-        SW_REDLINE          = 0x0020,
-        SW_OUTLINE          = 0x0040,
-        SW_TOXMARK          = 0x0080,
-        SW_REFMARK          = 0x0100,
-        SW_NUMLABEL         = 0x0200,
-        SW_CONTENT_CHECK    = 0x0400,
-        SW_SMARTTAG         = 0x0800,
-        SW_FORMCTRL         = 0x1000
-#ifdef DBG_UTIL
-        ,SW_CURR_ATTRS      = 0x4000        ///< only for debugging
-        ,SW_TABLEBOXVALUE   = 0x8000        ///< only for debugging
-#endif
-    } eContentAtPos;
+    IsAttrAtPos eContentAtPos;
 
     union {
         const SwField* pField;
@@ -117,8 +110,8 @@ struct SwContentAtPos
     OUString sStr;
     const SwTextAttr* pFndTextAttr;
 
-    SwContentAtPos( int eGetAtPos = 0xffff )
-        : eContentAtPos( (IsAttrAtPos)eGetAtPos )
+    SwContentAtPos( IsAttrAtPos eGetAtPos )
+        : eContentAtPos( eGetAtPos )
     {
         aFnd.pField = nullptr;
         pFndTextAttr = nullptr;
@@ -126,15 +119,26 @@ struct SwContentAtPos
     }
 
     bool IsInProtectSect() const;
-    bool     IsInRTLText()const;
+    bool IsInRTLText() const;
 };
 
 // return values of SetCursor (can be combined via ||)
 const int CRSR_POSOLD = 0x01,   // cursor stays at old position
           CRSR_POSCHG = 0x02;   // position changed by the layout
 
+namespace sw {
+
+bool ReplaceImpl(SwPaM & rCursor, OUString const& rReplacement,
+        bool const bRegExp, SwDoc & rDoc, SwRootFrame const*const pLayout);
+
 /// Helperfunction to resolve backward references in regular expressions
-OUString *ReplaceBackReferences( const css::util::SearchOptions2& rSearchOpt, SwPaM* pPam );
+boost::optional<OUString> ReplaceBackReferences(const i18nutil::SearchOptions2& rSearchOpt,
+        SwPaM* pPam, SwRootFrame const* pLayout );
+
+bool GetRanges(std::vector<std::shared_ptr<SwUnoCursor>> & rRanges,
+        SwDoc & rDoc, SwPaM const& rDelPam);
+
+} // namespace sw
 
 class SW_DLLPUBLIC SwCursorShell
     : public SwViewShell
@@ -172,7 +176,7 @@ private:
     Link<SwCursorShell&,void> m_aGrfArrivedLnk;      ///< Link calls to UI if a graphic is arrived
 
     SwShellCursor* m_pCurrentCursor;      ///< current cursor
-    SwShellCursor* m_pCursorStack;      ///< stack for the cursor
+    SwShellCursor* m_pStackCursor;      ///< stack for the cursor
     SwVisibleCursor *m_pVisibleCursor;        ///< the visible cursor
 
     SwBlockCursor *m_pBlockCursor;   ///< interface of cursor for block (=rectangular) selection
@@ -186,10 +190,9 @@ private:
     long m_nUpDownX;              /**< try to move the cursor on up/down always
                                    in the same column */
     long m_nLeftFramePos;
-    sal_uLong m_nAktNode;             // save CursorPos at Start-Action
-    sal_Int32 m_nAktContent;
-    sal_uInt16 m_nAktNdTyp;
-    bool m_bAktSelection;
+    sal_uLong m_nCurrentNode;     // save CursorPos at Start-Action
+    sal_Int32 m_nCurrentContent;
+    SwNodeType m_nCurrentNdTyp;
 
     /*
      * Via the Method SttCursorMove and EndCursorMove this counter gets
@@ -198,7 +201,6 @@ private:
      * (via Find()) can be realised.
      */
     sal_uInt16 m_nCursorMove;
-    sal_uInt16 m_nBasicActionCnt;     ///< Actions which are parenthesized by Basic
     CursorMoveState m_eMvState;     ///< Status for Cursor-Travelling - GetCursorOfst
 
     OUString m_sMarkedListId;
@@ -236,7 +238,7 @@ private:
 
     SAL_DLLPRIVATE void MoveCursorToNum();
 
-    SAL_DLLPRIVATE void _ParkPams( SwPaM* pDelRg, SwShellCursor** ppDelRing );
+    SAL_DLLPRIVATE void ParkPams( SwPaM* pDelRg, SwShellCursor** ppDelRing );
 
     /** Mark a certain list level of a certain list
 
@@ -256,35 +258,36 @@ private:
     SAL_DLLPRIVATE bool LRMargin( bool, bool bAPI = false );
     SAL_DLLPRIVATE bool IsAtLRMargin( bool, bool bAPI = false ) const;
 
-    SAL_DLLPRIVATE short GetTextDirection( const Point* pPt = nullptr ) const;
+    SAL_DLLPRIVATE SvxFrameDirection GetTextDirection( const Point* pPt = nullptr ) const;
 
     SAL_DLLPRIVATE bool isInHiddenTextFrame(SwShellCursor* pShellCursor);
 
-typedef bool (SwCursor:: *FNCursor)();
-    SAL_DLLPRIVATE bool CallCursorFN( FNCursor );
+    SAL_DLLPRIVATE bool GoStartWordImpl();
+    SAL_DLLPRIVATE bool GoEndWordImpl();
+    SAL_DLLPRIVATE bool GoNextWordImpl();
+    SAL_DLLPRIVATE bool GoPrevWordImpl();
+    SAL_DLLPRIVATE bool GoNextSentenceImpl();
+    SAL_DLLPRIVATE bool GoEndSentenceImpl();
+    SAL_DLLPRIVATE bool GoStartSentenceImpl();
 
-    SAL_DLLPRIVATE const SwRangeRedline* _GotoRedline( sal_uInt16 nArrPos, bool bSelect );
+    typedef bool (SwCursor::*FNCursor)();
+    typedef bool (SwCursorShell::*FNCursorShell)();
+    SAL_DLLPRIVATE bool CallCursorFN( FNCursor );
+    SAL_DLLPRIVATE bool CallCursorShellFN( FNCursorShell );
+
+    SAL_DLLPRIVATE const SwRangeRedline* GotoRedline_( SwRedlineTable::size_type nArrPos, bool bSelect );
 
 protected:
 
-    inline SwMoveFnCollection* MakeFindRange( sal_uInt16, sal_uInt16, SwPaM* ) const;
+    inline SwMoveFnCollection const & MakeFindRange( SwDocPositions, SwDocPositions, SwPaM* ) const;
 
     /*
-     * Compare-Methode for the StackCursor and the current Cursor.
-     * The Methods return -1, 0, 1 for lower, equal, greater. The enum
-     * CursorCompareType says which position is compared.
+     * Compare-Method for the StackCursor and the current Cursor.
+     * The Methods return -1, 0, 1 for lower, equal, greater.
      */
-    enum CursorCompareType {
-        StackPtStackMk,
-        StackPtCurrPt,
-        StackPtCurrMk,
-        StackMkCurrPt,
-        StackMkCurrMk,
-        CurrPtCurrMk
-    };
-    int CompareCursor( CursorCompareType eType ) const;
+    int CompareCursorStackMkCurrPt() const;
 
-    bool _SelTableRowOrCol( bool bRow, bool bRowSimple = false );
+    bool SelTableRowOrCol( bool bRow, bool bRowSimple = false );
 
     bool SetInFrontOfLabel( bool bNew );
 
@@ -298,10 +301,10 @@ protected:
     virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem *pNew) override;
 
 public:
-    SwCursorShell( SwDoc& rDoc, vcl::Window *pWin, const SwViewOption *pOpt = nullptr );
+    SwCursorShell( SwDoc& rDoc, vcl::Window *pWin, const SwViewOption *pOpt );
     // disguised copy constructor
     SwCursorShell( SwCursorShell& rShell, vcl::Window *pWin );
-    virtual ~SwCursorShell();
+    virtual ~SwCursorShell() override;
 
     // create new cursor and append the old one
     virtual SwPaM & CreateNewShellCursor() override;
@@ -309,7 +312,7 @@ public:
 
     SwPaM * CreateCursor();
     ///< delete the current cursor and make the following into the current
-    bool DestroyCursor();
+    void DestroyCursor();
     ///< transform TableCursor to normal cursor, nullify Tablemode
     void TableCursorToCursor();
     ///< enter block mode, change normal cursor into block cursor
@@ -329,8 +332,8 @@ public:
     SwPaM* GetCursor( bool bMakeTableCursor = true ) const;
     inline SwCursor* GetSwCursor() const;
     // return only the current cursor
-          SwShellCursor* _GetCursor()                       { return m_pCurrentCursor; }
-    const SwShellCursor* _GetCursor() const                 { return m_pCurrentCursor; }
+          SwShellCursor* GetCursor_()                       { return m_pCurrentCursor; }
+    const SwShellCursor* GetCursor_() const                 { return m_pCurrentCursor; }
 
     // show passed cursor - for UNO
     void    SetSelection(const SwPaM& rCursor);
@@ -361,29 +364,30 @@ public:
     bool SttEndDoc( bool bStt );
 
     bool MovePage( SwWhichPage, SwPosPage );
-    bool MovePara( SwWhichPara, SwPosPara );
-    bool MoveSection( SwWhichSection, SwPosSection );
-    bool MoveTable( SwWhichTable, SwPosTable );
-    bool MoveColumn( SwWhichColumn, SwPosColumn );
-    bool MoveRegion( SwWhichRegion, SwPosRegion );
+    bool MovePara( SwWhichPara, SwMoveFnCollection const & );
+    bool MoveSection( SwWhichSection, SwMoveFnCollection const & );
+    bool MoveTable( SwWhichTable, SwMoveFnCollection const & );
+    void MoveColumn( SwWhichColumn, SwPosColumn );
+    bool MoveRegion( SwWhichRegion, SwMoveFnCollection const & );
 
-    sal_uLong Find( const css::util::SearchOptions2& rSearchOpt,
+    // note: DO NOT call it FindText because windows.h
+    sal_uLong Find_Text( const i18nutil::SearchOptions2& rSearchOpt,
                 bool bSearchInNotes,
                 SwDocPositions eStart, SwDocPositions eEnd,
                 bool& bCancel,
                 FindRanges eRng, bool bReplace = false );
 
-    sal_uLong Find( const SwTextFormatColl& rFormatColl,
+    sal_uLong FindFormat( const SwTextFormatColl& rFormatColl,
                 SwDocPositions eStart, SwDocPositions eEnd,
                 bool& bCancel,
-                FindRanges eRng, const SwTextFormatColl* pReplFormat = nullptr );
+                FindRanges eRng, const SwTextFormatColl* pReplFormat );
 
-    sal_uLong Find( const SfxItemSet& rSet, bool bNoCollections,
+    sal_uLong FindAttrs( const SfxItemSet& rSet, bool bNoCollections,
                 SwDocPositions eStart, SwDocPositions eEnd,
                 bool& bCancel,
                 FindRanges eRng,
-                const css::util::SearchOptions2* pSearchOpt = nullptr,
-                const SfxItemSet* rReplSet = nullptr );
+                const i18nutil::SearchOptions2* pSearchOpt,
+                const SfxItemSet* rReplSet );
 
     //  Position the Cursor
     //  return values:
@@ -401,7 +405,7 @@ public:
     /*
      * virtual paint method to make selection visible again after Paint
      */
-    void Paint(vcl::RenderContext& rRenderContext, const Rectangle & rRect) override;
+    void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle & rRect) override;
 
     // Areas
     inline void SetMark();
@@ -423,16 +427,17 @@ public:
                       bool bTstHit = false);   // only exact matches
     void KillPams();
 
-    // story a copy of the cursor in the stack
+    /// store a copy of the current cursor on the cursor stack
     void Push();
+    enum class PopMode { DeleteCurrent, DeleteStack };
     /*
-     * Delete a cursor (controlled by bOldCursor)
-     *      - from stack or (bOldCursor = true)
-     *      - delete the current one and replace it with the cursor from the
+     * Delete a cursor
+     *    - either from the top of the stack
+     *    - or delete the current one and replace it with the cursor from the
      *      stack
-     * Return: whether there was one left one the stack
+     *  @return <true> if there was one on the stack, <false> otherwise
      */
-    bool Pop( bool bOldCursor = true );
+    bool Pop(PopMode);
     /*
      * Combine 2 Cursors.
      * Delete the topmost from the stack and move its Mark into the current.
@@ -470,7 +475,7 @@ public:
 
     // Cursor is placed in something that is protected or selection contains
     // something that is protected.
-    bool HasReadonlySel(bool bAnnotationMode = false) const;
+    bool HasReadonlySel() const;
 
     // Can the cursor be set to read only ranges?
     bool IsReadOnlyAvailable() const { return m_bSetCursorInReadOnly; }
@@ -481,7 +486,7 @@ public:
     void        SetFlyMacroLnk( const Link<const SwFlyFrameFormat*,void>& rLnk ) { m_aFlyMacroLnk = rLnk; }
     const Link<const SwFlyFrameFormat*,void>& GetFlyMacroLnk() const           { return m_aFlyMacroLnk; }
 
-    // Methods returning/altering link for changes of attributes/formates.
+    // Methods returning/altering link for changes of attributes/formats.
     void        SetChgLnk( const Link<SwCursorShell*,void> &rLnk ) { m_aChgLnk = rLnk; }
     const Link<SwCursorShell*,void>& GetChgLnk() const           { return m_aChgLnk; }
 
@@ -510,7 +515,7 @@ public:
     bool ShouldWait() const;
 
     // Check if selection is within one paragraph.
-    inline bool IsSelOnePara() const;
+    bool IsSelOnePara() const;
 
     /*
      * Returns SRectangle, at which the cursor is located.
@@ -523,13 +528,16 @@ public:
     /*
      * Returns SwRect, at which the character is located.
      */
-    bool GetCharRectAt(SwRect& rRect, const SwPosition* pPos);
+    void GetCharRectAt(SwRect& rRect, const SwPosition* pPos);
 
     // Return current page number:
     // true:  in which cursor is located.
     // false: which is visible at the upper margin.
     void GetPageNum( sal_uInt16 &rnPhyNum, sal_uInt16 &rnVirtNum,
                      bool bAtCursorPos = true, const bool bCalcFrame = true );
+    // Returns current page's sequential number (1-based),in which cursor is located, ignoring autoinserted empty pages.
+    // Returns 0 on error
+    sal_uInt16 GetPageNumSeqNonEmpty();
     // Determine how "empty pages" are handled
     // (used in PhyPage).
     sal_uInt16 GetNextPrevPageNum( bool bNext = true );
@@ -547,8 +555,12 @@ public:
     ::sw::mark::IMark* SetBookmark(
         const vcl::KeyCode&,
         const OUString& rName,
-        const OUString& rShortName,
         IDocumentMarkAccess::MarkType eMark = IDocumentMarkAccess::MarkType::BOOKMARK);
+    ::sw::mark::IMark* SetBookmark2(
+        const vcl::KeyCode&,
+        const OUString& rName,
+        bool bHide,
+        const OUString& rCondition);
     bool GotoMark( const ::sw::mark::IMark* const pMark );    // sets CurrentCursor.SPoint
     bool GotoMark( const ::sw::mark::IMark* const pMark, bool bAtStart );
     bool GoNextBookmark(); // true, if there was one
@@ -567,12 +579,11 @@ public:
     // get the selected text at the current cursor. it will be filled with
     // fields etc.
     OUString GetSelText() const;
-    // return only the text starting from the current cursor position (to the
-    // end of the node)
-    OUString GetText() const;
 
     // Check of SPoint or Mark of current cursor are placed within a table.
     inline const SwTableNode* IsCursorInTable() const;
+
+    bool IsCursorInFootnote() const;
 
     inline Point& GetCursorDocPos() const;
     inline bool IsCursorPtAtEnd() const;
@@ -591,24 +602,24 @@ public:
     bool GotoTable( const OUString& rName );
 
     // select a table row, column or box (based on the current cursor)
-    bool SelTableRow() { return _SelTableRowOrCol( true  ); }
-    bool SelTableCol() { return _SelTableRowOrCol( false ); }
+    bool SelTableRow() { return SelTableRowOrCol( true  ); }
+    bool SelTableCol() { return SelTableRowOrCol( false ); }
     bool SelTableBox();
 
     bool SelTable();
 
-    bool GotoNextNum();
-    bool GotoPrevNum();
+    void GotoNextNum();
+    void GotoPrevNum();
 
     bool GotoOutline( const OUString& rName );
     // to the next/previous or the given OutlineNode
-    void GotoOutline( sal_uInt16 nIdx );
+    void GotoOutline( SwOutlineNodes::size_type nIdx );
     // find the "outline position" in the nodes array of the current chapter
-    sal_uInt16 GetOutlinePos( sal_uInt8 nLevel = UCHAR_MAX );
+    SwOutlineNodes::size_type GetOutlinePos( sal_uInt8 nLevel = UCHAR_MAX );
     // select the given range of OutlineNodes. Optionally including the children
     // the sal_uInt16s are the positions in OutlineNodes-Array (EditShell)
-    bool MakeOutlineSel( sal_uInt16 nSttPos, sal_uInt16 nEndPos,
-                         bool bWithChildren = false );
+    bool MakeOutlineSel( SwOutlineNodes::size_type nSttPos, SwOutlineNodes::size_type nEndPos,
+                         bool bWithChildren );
 
     bool GotoNextOutline();
     bool GotoPrevOutline();
@@ -629,7 +640,7 @@ public:
     */
     SwShellCursor* getShellCursor( bool bBlock );
     const SwShellCursor* getShellCursor( bool bBlock ) const
-        { return (const_cast<SwCursorShell*>(this))->getShellCursor( bBlock ); }
+        { return const_cast<SwCursorShell*>(this)->getShellCursor( bBlock ); }
 
     bool IsBlockMode() const { return nullptr != m_pBlockCursor; }
 
@@ -645,19 +656,18 @@ public:
     bool GotoPrevFootnoteAnchor();
     bool GotoNextFootnoteAnchor();
 
-    bool GotoFlyAnchor();       ///< jump from the frame to the anchor
+    void GotoFlyAnchor();       ///< jump from the frame to the anchor
     bool GotoHeaderText();       ///< jump from the content to the header
     bool GotoFooterText();       ///< jump from the content to the footer
     // jump to the header/footer of the given or current PageDesc
-    bool SetCursorInHdFt( size_t nDescNo = SIZE_MAX,
-                        bool bInHeader = true );
+    bool SetCursorInHdFt( size_t nDescNo, bool bInHeader );
     // is point of cursor in header/footer. pbInHeader return true if it is
     // in a headerframe otherwise in a footerframe
     bool IsInHeaderFooter( bool* pbInHeader = nullptr ) const;
 
     bool GotoNextTOXBase( const OUString* = nullptr );
     bool GotoPrevTOXBase( const OUString* = nullptr );
-    bool GotoTOXMarkBase();
+    void GotoTOXMarkBase();
     // jump to the next or previous index entry
     bool GotoNxtPrvTOXMark( bool bNext = true );
     // jump to the next/previous index mark of this type
@@ -669,10 +679,10 @@ public:
                                bool bOnlyErrors = false );
     // jump to the next / previous hyperlink - inside text and also
     // on graphics
-    bool SelectNxtPrvHyperlink( bool bNext = true );
+    bool SelectNxtPrvHyperlink( bool bNext );
 
-    bool GotoRefMark( const OUString& rRefMark, sal_uInt16 nSubType = 0,
-                            sal_uInt16 nSeqNo = 0 );
+    bool GotoRefMark( const OUString& rRefMark, sal_uInt16 nSubType,
+                            sal_uInt16 nSeqNo );
 
     // get the nth character from the start or end of the  current selection
     sal_Unicode GetChar( bool bEnd = true, long nOffset = 0 );
@@ -688,7 +698,7 @@ public:
     bool MoveFieldType(
         const SwFieldType* pFieldType,
         const bool bNext,
-        const sal_uInt16 nResType = USHRT_MAX,
+        const SwFieldIds nResType = SwFieldIds::Unknown,
         const bool bAddSetExpressionFieldsToInputFields = true );
 
     bool GotoFormatField( const SwFormatField& rField );
@@ -718,8 +728,8 @@ public:
     bool GoNextSentence();
     bool GoStartSentence();
     bool GoEndSentence();
-    bool SelectWord( const Point* pPt = nullptr );
-    bool ExpandToSentenceBorders();
+    bool SelectWord( const Point* pPt );
+    void ExpandToSentenceBorders();
 
     // get position from current cursor
     bool IsStartWord( sal_Int16 nWordType = css::i18n::WordType::ANYWORD_IGNOREWHITESPACES )const;
@@ -750,15 +760,13 @@ public:
     // is the whole document protected/hidden (for UI...)
     bool IsAllProtect() const { return m_bAllProtect; }
 
-    bool BasicActionPend() const    { return m_nBasicActionCnt != mnStartAction; }
-
     bool GotoRegion( const OUString& rName );
 
     // show the current selection
     virtual void MakeSelVisible();
 
     // set the cursor to a NOT protected/hidden node
-    bool FindValidContentNode( bool bOnlyText = false );
+    bool FindValidContentNode( bool bOnlyText );
 
     bool GetContentAtPos( const Point& rPt,
                           SwContentAtPos& rContentAtPos,
@@ -801,7 +809,7 @@ public:
 
     const SwRangeRedline* SelNextRedline();
     const SwRangeRedline* SelPrevRedline();
-    const SwRangeRedline* GotoRedline( sal_uInt16 nArrPos, bool bSelect = false );
+    const SwRangeRedline* GotoRedline( SwRedlineTable::size_type nArrPos, bool bSelect );
 
     // is cursor or the point in/over a vertical formatted text?
     bool IsInVerticalText( const Point* pPt = nullptr ) const;
@@ -819,11 +827,11 @@ public:
     // remove all invalid cursors
     void ClearUpCursors();
 
-    inline void SetMacroExecAllowed( const bool _bMacroExecAllowed )
+    void SetMacroExecAllowed( const bool _bMacroExecAllowed )
     {
         m_bMacroExecAllowed = _bMacroExecAllowed;
     }
-    inline bool IsMacroExecAllowed()
+    bool IsMacroExecAllowed()
     {
         return m_bMacroExecAllowed;
     }
@@ -842,13 +850,16 @@ public:
     virtual void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
     /// Implementation of lok::Document::getPartPageRectangles() for Writer.
     OUString getPageRectangles();
+
+    /// See SwView::NotifyCursor().
+    void NotifyCursor(SfxViewShell* pViewShell) const;
 };
 
 // Cursor Inlines:
-inline SwMoveFnCollection* SwCursorShell::MakeFindRange(
-            sal_uInt16 nStt, sal_uInt16 nEnd, SwPaM* pPam ) const
+inline SwMoveFnCollection const & SwCursorShell::MakeFindRange(
+            SwDocPositions nStt, SwDocPositions nEnd, SwPaM* pPam ) const
 {
-    return m_pCurrentCursor->MakeFindRange( (SwDocPositions)nStt, (SwDocPositions)nEnd, pPam );
+    return m_pCurrentCursor->MakeFindRange( nStt, nEnd, pPam );
 }
 
 inline SwCursor* SwCursorShell::GetSwCursor() const
@@ -856,11 +867,11 @@ inline SwCursor* SwCursorShell::GetSwCursor() const
     return static_cast<SwCursor*>(GetCursor());
 }
 
-inline SwPaM* SwCursorShell::GetStackCursor() const { return m_pCursorStack; }
+inline SwPaM* SwCursorShell::GetStackCursor() const { return m_pStackCursor; }
 
 inline void SwCursorShell::SetMark() { m_pCurrentCursor->SetMark(); }
 
-inline bool SwCursorShell::HasMark() { return( m_pCurrentCursor->HasMark() ); }
+inline bool SwCursorShell::HasMark() { return m_pCurrentCursor->HasMark(); }
 
 inline bool SwCursorShell::IsSelection() const
 {
@@ -870,12 +881,6 @@ inline bool SwCursorShell::IsSelection() const
 inline bool SwCursorShell::IsMultiSelection() const
 {
     return m_pCurrentCursor->GetNext() != m_pCurrentCursor;
-}
-
-inline bool SwCursorShell::IsSelOnePara() const
-{
-    return !m_pCurrentCursor->IsMultiSelection() &&
-           m_pCurrentCursor->GetPoint()->nNode == m_pCurrentCursor->GetMark()->nNode;
 }
 
 inline const SwTableNode* SwCursorShell::IsCursorInTable() const

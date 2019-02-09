@@ -21,13 +21,15 @@
 #define INCLUDED_UNOTOOLS_MODULEOPTIONS_HXX
 
 #include <unotools/unotoolsdllapi.h>
-#include <salhelper/singletonref.hxx>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
-#include <osl/mutex.hxx>
 #include <unotools/options.hxx>
+#include <memory>
+
+namespace osl { class Mutex; }
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
 
 /*-************************************************************************************************************
     @short          forward declaration to our private date container implementation
@@ -86,9 +88,8 @@ class SAL_WARN_UNUSED UNOTOOLS_DLLPUBLIC SvtModuleOptions : public utl::detail::
         };
 
     public:
-
          SvtModuleOptions();
-        virtual ~SvtModuleOptions();
+        virtual ~SvtModuleOptions() override;
 
         bool        IsModuleInstalled         (       EModule          eModule    ) const;
         OUString GetModuleName             (       EModule          eModule    ) const;
@@ -153,7 +154,7 @@ class SAL_WARN_UNUSED UNOTOOLS_DLLPUBLIC SvtModuleOptions : public utl::detail::
 
         static OUString GetFactoryShortName(EFactory eFactory);
 
-        OUString GetDefaultModuleName();
+        OUString GetDefaultModuleName() const;
 
         bool   IsMath     () const;
         bool   IsChart    () const;
@@ -169,16 +170,7 @@ class SAL_WARN_UNUSED UNOTOOLS_DLLPUBLIC SvtModuleOptions : public utl::detail::
     private:
         UNOTOOLS_DLLPRIVATE static ::osl::Mutex& impl_GetOwnStaticMutex();
 
-        /*Attention
-
-            Don't initialize these static members in these headers!
-            a) Double defined symbols will be detected ...
-            b) and unresolved externals exist at linking time.
-            Do it in your source only.
-         */
-
-        static SvtModuleOptions_Impl*   m_pDataContainer;
-        static sal_Int32                m_nRefCount;
+        std::shared_ptr<SvtModuleOptions_Impl>   m_pImpl;
 
 };      // class SvtModuleOptions
 

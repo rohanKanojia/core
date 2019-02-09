@@ -19,13 +19,15 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_INC_TEXTLABELITEMCONVERTER_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_TEXTLABELITEMCONVERTER_HXX
 
-#include <ItemConverter.hxx>
+#include "ItemConverter.hxx"
 
-#include <com/sun/star/chart2/XDataSeries.hpp>
-#include <com/sun/star/awt/Size.hpp>
-#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/uno/Sequence.h>
 
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace awt { struct Size; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XDataSeries; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
 
 namespace chart { namespace wrapper {
 
@@ -37,12 +39,12 @@ public:
         const css::uno::Reference<css::beans::XPropertySet>& rPropertySet,
         const css::uno::Reference<css::chart2::XDataSeries>& xSeries,
         SfxItemPool& rItemPool,
-        const css::awt::Size* pRefSize = nullptr,
-        bool bDataSeries = false,
-        sal_Int32 nNumberFormat = 0,
-        sal_Int32 nPercentNumberFormat = 0 );
+        const css::awt::Size* pRefSize,
+        bool bDataSeries,
+        sal_Int32 nNumberFormat,
+        sal_Int32 nPercentNumberFormat );
 
-    virtual ~TextLabelItemConverter();
+    virtual ~TextLabelItemConverter() override;
 
     virtual void FillItemSet( SfxItemSet & rOutItemSet ) const override;
     virtual bool ApplyItemSet( const SfxItemSet & rItemSet ) override;
@@ -51,13 +53,11 @@ protected:
     virtual const sal_uInt16* GetWhichPairs() const override;
     virtual bool GetItemProperty( tWhichIdType nWhichId, tPropertyNameWithMemberId & rOutProperty ) const override;
 
-    virtual void FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const
-        throw (css::uno::Exception) override;
-    virtual bool ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet )
-        throw (css::uno::Exception) override;
+    virtual void FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const override;
+    virtual bool ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet ) override;
 
 private:
-    std::vector<ItemConverter*> maConverters;
+    std::vector<std::unique_ptr<ItemConverter>> maConverters;
     sal_Int32                           mnNumberFormat;
     sal_Int32                           mnPercentNumberFormat;
     css::uno::Sequence<sal_Int32>       maAvailableLabelPlacements;

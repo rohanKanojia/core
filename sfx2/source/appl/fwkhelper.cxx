@@ -23,31 +23,30 @@
 #include <com/sun/star/frame/XFrame.hpp>
 #include <framework/sfxhelperfunctions.hxx>
 
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 
-#include "fwkhelper.hxx"
-#include "workwin.hxx"
+#include <fwkhelper.hxx>
+#include <workwin.hxx>
 #include <sfx2/frame.hxx>
 
-void SAL_CALL RefreshToolbars( css::uno::Reference< css::frame::XFrame >& xFrame )
+void RefreshToolbars( css::uno::Reference< css::frame::XFrame > const & xFrame )
 {
     SolarMutexGuard aGuard;
-    if ( xFrame.is() )
-    {
-        SfxFrame* pFrame=nullptr;
-        for ( pFrame = SfxFrame::GetFirst(); pFrame; pFrame = SfxFrame::GetNext( *pFrame ) )
-        {
-            if ( pFrame->GetFrameInterface() == xFrame )
-                break;
-        }
+    if ( !xFrame.is() )
+        return;
 
-        if ( pFrame )
-        {
-            SfxWorkWindow* pWrkWin = pFrame->GetWorkWindow_Impl();
-            if ( pWrkWin )
-                pWrkWin->UpdateObjectBars_Impl();
-        }
+    SfxFrame* pFrame=nullptr;
+    for ( pFrame = SfxFrame::GetFirst(); pFrame; pFrame = SfxFrame::GetNext( *pFrame ) )
+    {
+        if ( pFrame->GetFrameInterface() == xFrame )
+            break;
+    }
+
+    if ( pFrame )
+    {
+        SfxWorkWindow* pWrkWin = pFrame->GetWorkWindow_Impl();
+        if ( pWrkWin )
+            pWrkWin->UpdateObjectBars_Impl();
     }
 }
 

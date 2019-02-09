@@ -24,10 +24,8 @@ using ::comphelper::PropertyInfo;
 using ::comphelper::ChainablePropertySetInfo;
 using ::com::sun::star::uno::Type;
 using ::com::sun::star::uno::Sequence;
-using ::com::sun::star::uno::XInterface;
 using ::com::sun::star::uno::RuntimeException;
 using ::com::sun::star::beans::Property;
-using ::com::sun::star::beans::XPropertySetInfo;
 using ::com::sun::star::beans::UnknownPropertyException;
 
 ChainablePropertySetInfo::ChainablePropertySetInfo( PropertyInfo const * pMap )
@@ -54,7 +52,6 @@ void ChainablePropertySetInfo::remove( const OUString& aName )
 }
 
 Sequence< ::Property > SAL_CALL ChainablePropertySetInfo::getProperties()
-    throw(css::uno::RuntimeException, std::exception)
 {
     sal_Int32 nSize = maMap.size();
     if( maProperties.getLength() != nSize )
@@ -62,21 +59,21 @@ Sequence< ::Property > SAL_CALL ChainablePropertySetInfo::getProperties()
         maProperties.realloc ( nSize );
         Property* pProperties = maProperties.getArray();
 
-        for (PropertyInfoHash::const_iterator aIter(maMap.begin()), aEnd(maMap.end()); aIter != aEnd; ++aIter, ++pProperties)
+        for (auto const& elem : maMap)
         {
-            PropertyInfo const * pInfo = (*aIter).second;
+            PropertyInfo const * pInfo = elem.second;
 
             pProperties->Name = pInfo->maName;
             pProperties->Handle = pInfo->mnHandle;
             pProperties->Type = pInfo->maType;
             pProperties->Attributes = pInfo->mnAttributes;
+            ++pProperties;
         }
     }
     return maProperties;
 }
 
 Property SAL_CALL ChainablePropertySetInfo::getPropertyByName( const OUString& rName )
-    throw(::UnknownPropertyException, css::uno::RuntimeException, std::exception)
 {
     PropertyInfoHash::iterator aIter = maMap.find( rName );
 
@@ -93,7 +90,6 @@ Property SAL_CALL ChainablePropertySetInfo::getPropertyByName( const OUString& r
 }
 
 sal_Bool SAL_CALL ChainablePropertySetInfo::hasPropertyByName( const OUString& rName )
-    throw(css::uno::RuntimeException, std::exception)
 {
     return maMap.find ( rName ) != maMap.end();
 }

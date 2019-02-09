@@ -25,14 +25,13 @@
 #include <vcl/vclenum.hxx>
 #include <basegfx/vector/b2enums.hxx>
 #include <com/sun/star/drawing/LineCap.hpp>
-
+#include <o3tl/cow_wrapper.hxx>
 
 class SvStream;
 namespace basegfx { class B2DPolyPolygon; }
 
 struct ImplLineInfo
 {
-    sal_uInt32              mnRefCount;
     LineStyle               meStyle;
     long                    mnWidth;
     sal_uInt16              mnDashCount;
@@ -45,30 +44,21 @@ struct ImplLineInfo
     css::drawing::LineCap   meLineCap;
 
                         ImplLineInfo();
-                        ImplLineInfo( const ImplLineInfo& rImplLineInfo );
 
     bool operator==( const ImplLineInfo& ) const;
-
-    friend SvStream&    ReadImplLineInfo( SvStream& rIStm, ImplLineInfo& rImplLineInfo );
-    friend SvStream&    WriteImplLineInfo( SvStream& rOStm, const ImplLineInfo& rImplLineInfo );
 };
 
 
 class VCL_DLLPUBLIC LineInfo
 {
-private:
-
-    ImplLineInfo*   mpImplLineInfo;
-
-    SAL_DLLPRIVATE void ImplMakeUnique();
-
 public:
-
-                    LineInfo( LineStyle eLineStyle = LINE_SOLID, long nWidth = 0L );
+                    LineInfo( LineStyle eLineStyle = LineStyle::Solid, long nWidth = 0 );
                     LineInfo( const LineInfo& rLineInfo );
+                    LineInfo( LineInfo&& rLineInfo );
                     ~LineInfo();
 
     LineInfo&       operator=( const LineInfo& rLineInfo );
+    LineInfo&       operator=( LineInfo&& rLineInfo );
     bool            operator==( const LineInfo& rLineInfo ) const;
     bool            operator!=( const LineInfo& rLineInfo ) const { return !(LineInfo::operator==( rLineInfo ) ); }
 
@@ -113,6 +103,9 @@ public:
     void applyToB2DPolyPolygon(
         basegfx::B2DPolyPolygon& io_rLinePolyPolygon,
         basegfx::B2DPolyPolygon& o_rFillPolyPolygon) const;
+
+private:
+    o3tl::cow_wrapper< ImplLineInfo >          mpImplLineInfo;
 };
 
 #endif // INCLUDED_VCL_LINEINFO_HXX

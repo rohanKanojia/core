@@ -19,19 +19,18 @@
 
 #include <rtl/string.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <cppuhelper/component.hxx>
+#include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/queryinterface.hxx>
 #include <cppuhelper/typeprovider.hxx>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/uno/RuntimeException.hpp>
 
 using namespace osl;
 using namespace com::sun::star;
 using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
-
-using ::rtl::OUString;
-using ::rtl::OString;
-using ::rtl::OUStringToOString;
 
 namespace cppu
 {
@@ -48,18 +47,18 @@ OComponentHelper::~OComponentHelper()
 {
 }
 
-Any OComponentHelper::queryInterface( Type const & rType ) throw (RuntimeException, std::exception)
+Any OComponentHelper::queryInterface( Type const & rType )
 {
     return OWeakAggObject::queryInterface( rType );
 }
-Any OComponentHelper::queryAggregation( Type const & rType ) throw (RuntimeException, std::exception)
+Any OComponentHelper::queryAggregation( Type const & rType )
 {
     if (rType == cppu::UnoType<lang::XComponent>::get())
     {
         void * p = static_cast< lang::XComponent * >( this );
         return Any( &p, rType );
     }
-    else if (rType == cppu::UnoType<lang::XTypeProvider>::get())
+    if (rType == cppu::UnoType<lang::XTypeProvider>::get())
     {
         void * p = static_cast< lang::XTypeProvider * >( this );
         return Any( &p, rType );
@@ -93,12 +92,7 @@ void OComponentHelper::release() throw()
                 catch (css::uno::RuntimeException & exc)
                 {
                     // release should not throw exceptions
-#if OSL_DEBUG_LEVEL > 0
-                    OString msg( OUStringToOString( exc.Message, RTL_TEXTENCODING_ASCII_US ) );
-                    OSL_FAIL( msg.getStr() );
-#else
-                    (void) exc; // avoid warning about unused variable
-#endif
+                    SAL_WARN( "cppuhelper", exc );
                 }
 
                 // only the alive ref holds the object
@@ -113,23 +107,15 @@ void OComponentHelper::release() throw()
     OWeakAggObject::release();
 }
 
-Sequence< Type > OComponentHelper::getTypes() throw (RuntimeException, std::exception)
+Sequence< Type > OComponentHelper::getTypes()
 {
-    static OTypeCollection * s_pTypes = nullptr;
-    if (! s_pTypes)
-    {
-        MutexGuard aGuard( Mutex::getGlobalMutex() );
-        if (! s_pTypes)
-        {
-            static OTypeCollection s_aTypes(
-                cppu::UnoType<lang::XComponent>::get(),
-                cppu::UnoType<lang::XTypeProvider>::get(),
-                cppu::UnoType<XAggregation>::get(),
-                cppu::UnoType<XWeak>::get() );
-            s_pTypes = &s_aTypes;
-        }
-    }
-    return s_pTypes->getTypes();
+    static OTypeCollection s_aTypes(
+        cppu::UnoType<lang::XComponent>::get(),
+        cppu::UnoType<lang::XTypeProvider>::get(),
+        cppu::UnoType<XAggregation>::get(),
+        cppu::UnoType<XWeak>::get() );
+
+    return s_aTypes.getTypes();
 }
 
 // XComponent
@@ -139,7 +125,6 @@ void OComponentHelper::disposing()
 
 // XComponent
 void OComponentHelper::dispose()
-    throw(css::uno::RuntimeException, std::exception)
 {
     // An frequently programming error is to release the last
     // reference to this object in the disposing message.
@@ -154,7 +139,7 @@ void OComponentHelper::dispose()
         if( !rBHelper.bDisposed && !rBHelper.bInDispose )
         {
             // only one call go into this section
-            rBHelper.bInDispose = sal_True;
+            rBHelper.bInDispose = true;
             bDoDispose = true;
         }
     }
@@ -181,14 +166,14 @@ void OComponentHelper::dispose()
             {
                 MutexGuard aGuard( rBHelper.rMutex );
                 // bDispose and bInDisposing must be set in this order:
-                rBHelper.bDisposed = sal_True;
-                rBHelper.bInDispose = sal_False;
+                rBHelper.bDisposed = true;
+                rBHelper.bInDispose = false;
                 throw;
             }
             MutexGuard aGuard( rBHelper.rMutex );
             // bDispose and bInDisposing must be set in this order:
-            rBHelper.bDisposed = sal_True;
-            rBHelper.bInDispose = sal_False;
+            rBHelper.bDisposed = true;
+            rBHelper.bInDispose = false;
         }
         catch (RuntimeException &)
         {
@@ -196,8 +181,10 @@ void OComponentHelper::dispose()
         }
         catch (Exception & exc)
         {
-            throw RuntimeException(
-                "unexpected UNO exception caught: " + exc.Message );
+            css::uno::Any anyEx = cppu::getCaughtException();
+            throw lang::WrappedTargetRuntimeException(
+                "unexpected UNO exception caught: " + exc.Message,
+                nullptr, anyEx );
         }
     }
     else
@@ -205,14 +192,13 @@ void OComponentHelper::dispose()
         // in a multithreaded environment, it can't be avoided
         // that dispose is called twice.
         // However this condition is traced, because it MAY indicate an error.
-        OSL_TRACE( "OComponentHelper::dispose() - dispose called twice" );
+        SAL_WARN("cppuhelper",  "OComponentHelper::dispose() - dispose called twice" );
     }
 }
 
 // XComponent
 void OComponentHelper::addEventListener(
     const Reference<XEventListener > & rxListener )
-    throw(css::uno::RuntimeException, std::exception)
 {
     ClearableMutexGuard aGuard( rBHelper.rMutex );
     if (rBHelper.bDisposed || rBHelper.bInDispose)
@@ -230,7 +216,6 @@ void OComponentHelper::addEventListener(
 // XComponent
 void OComponentHelper::removeEventListener(
     const Reference<XEventListener > & rxListener )
-    throw(css::uno::RuntimeException, std::exception)
 {
     rBHelper.removeListener( cppu::UnoType<decltype(rxListener)>::get(), rxListener );
 }

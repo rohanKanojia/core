@@ -16,9 +16,9 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "Tools.hxx"
-#include "core_resource.hrc"
-#include "core_resource.hxx"
+#include <Tools.hxx>
+#include <strings.hrc>
+#include <core_resource.hxx>
 #include <comphelper/property.hxx>
 
 
@@ -42,11 +42,10 @@ uno::Reference< report::XSection> lcl_getSection(const uno::Reference< uno::XInt
 
 void throwIllegallArgumentException( const OUString& _sTypeName
                                     ,const uno::Reference< uno::XInterface >& ExceptionContext_
-                                    ,const ::sal_Int16& ArgumentPosition_
-                                    ,const css::uno::Reference< css::uno::XComponentContext >& Context_
+                                    ,sal_Int16 ArgumentPosition_
                                     )
 {
-    OUString sErrorMessage(RPT_RESSTRING(RID_STR_ERROR_WRONG_ARGUMENT,Context_->getServiceManager()));
+    OUString sErrorMessage(RptResId(RID_STR_ERROR_WRONG_ARGUMENT));
     sErrorMessage = sErrorMessage.replaceAt(sErrorMessage.indexOf('#'),2,_sTypeName);
     throw lang::IllegalArgumentException(sErrorMessage,ExceptionContext_,ArgumentPosition_);
 }

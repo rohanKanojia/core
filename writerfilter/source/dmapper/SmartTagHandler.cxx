@@ -7,12 +7,15 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <SmartTagHandler.hxx>
+#include "SmartTagHandler.hxx"
 
 #include <com/sun/star/rdf/Literal.hpp>
 #include <com/sun/star/rdf/URI.hpp>
+#include <com/sun/star/rdf/XDocumentMetadataAccess.hpp>
 
 #include <ooxml/resourceids.hxx>
+
+#include <sal/log.hxx>
 
 namespace
 {
@@ -35,20 +38,18 @@ namespace dmapper
 
 using namespace ::com::sun::star;
 
-SmartTagHandler::SmartTagHandler(const uno::Reference<uno::XComponentContext>& xComponentContext, const uno::Reference<text::XTextDocument>& xTextDocument)
+SmartTagHandler::SmartTagHandler(uno::Reference<uno::XComponentContext> xComponentContext, const uno::Reference<text::XTextDocument>& xTextDocument)
     : LoggedProperties("SmartTagHandler"),
-      m_xComponentContext(xComponentContext),
+      m_xComponentContext(std::move(xComponentContext)),
       m_xDocumentMetadataAccess(xTextDocument, uno::UNO_QUERY)
 {
 }
 
-SmartTagHandler::~SmartTagHandler()
-{
-}
+SmartTagHandler::~SmartTagHandler() = default;
 
-void SmartTagHandler::lcl_attribute(Id nName, Value& rValue)
+void SmartTagHandler::lcl_attribute(Id nId, Value& rValue)
 {
-    switch (nName)
+    switch (nId)
     {
     case NS_ooxml::LN_CT_Attr_name:
         m_aAttributes.emplace_back(rValue.getString(), OUString());
@@ -58,7 +59,7 @@ void SmartTagHandler::lcl_attribute(Id nName, Value& rValue)
             m_aAttributes.back().second = rValue.getString();
         break;
     default:
-        SAL_WARN("writerfilter", "SmartTagHandler::lcl_attribute: unhandled attribute " << nName << " (string value: '"<<rValue.getString()<<"')");
+        SAL_WARN("writerfilter", "SmartTagHandler::lcl_attribute: unhandled attribute " << nId << " (string value: '"<<rValue.getString()<<"')");
         break;
     }
 }
@@ -70,7 +71,7 @@ void SmartTagHandler::lcl_sprm(Sprm& rSprm)
     case NS_ooxml::LN_CT_SmartTagPr_attr:
     {
         writerfilter::Reference<Properties>::Pointer_t pProperties = rSprm.getProps();
-        if (pProperties.get())
+        if (pProperties)
             pProperties->resolve(*this);
         break;
     }

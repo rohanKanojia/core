@@ -52,11 +52,6 @@ $(eval $(call gb_CppunitTest_use_libraries,dbaccess_empty_stdlib_save, \
     vbahelper \
     vcl \
     xo \
-	$(gb_UWINAPI) \
-))
-
-$(eval $(call gb_CppunitTest_set_include,dbaccess_empty_stdlib_save,\
-    $$(INCLUDE) \
 ))
 
 $(eval $(call gb_CppunitTest_use_api,dbaccess_empty_stdlib_save,\
@@ -98,6 +93,7 @@ $(eval $(call gb_CppunitTest_use_components,dbaccess_empty_stdlib_save,\
     unotools/util/utl \
     unoxml/source/rdf/unordf \
     unoxml/source/service/unoxml \
+    uui/util/uui \
     xmloff/util/xo \
 ))
 
@@ -108,8 +104,5 @@ $(WORKDIR)/CppunitTest/testEmptyStdlibSave.odb : $(SRCDIR)/dbaccess/qa/extras/te
 	mkdir -p $(dir $@)
 	cp -P -f "$<" "$@"
 .PHONY: $(WORKDIR)/CppunitTest/testEmptyStdlibSave.odb
-
-$(call gb_CppunitTest_get_target,dbaccess_empty_stdlib_save): \
-    $(call gb_AllLangResTarget_get_target,ofa)
 
 # vim: set noet sw=4 ts=4:

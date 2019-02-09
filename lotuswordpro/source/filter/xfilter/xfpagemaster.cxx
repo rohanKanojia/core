@@ -58,19 +58,18 @@
  * Page master used bye XFMasterPage.
  * It is the real object to define header and footer of pages.
  ************************************************************************/
-#include "xfpagemaster.hxx"
-#include "ixfstream.hxx"
-#include "ixfattrlist.hxx"
-#include "xfborders.hxx"
-#include "xfshadow.hxx"
-#include "xfcolumns.hxx"
-#include "xfheaderstyle.hxx"
-#include "xffooterstyle.hxx"
-#include "xfbgimage.hxx"
+#include <xfilter/xfpagemaster.hxx>
+#include <xfilter/ixfstream.hxx>
+#include <xfilter/ixfattrlist.hxx>
+#include <xfilter/xfborders.hxx>
+#include <xfilter/xfshadow.hxx>
+#include <xfilter/xfcolumns.hxx>
+#include <xfilter/xfheaderstyle.hxx>
+#include <xfilter/xffooterstyle.hxx>
+#include <xfilter/xfbgimage.hxx>
 
 XFPageMaster::XFPageMaster() : m_fPageWidth(0), m_fPageHeight(0), m_eUsage(enumXFPageUsageNone),
-m_eTextDir(enumXFTextDirNone), m_bPrintOrient(true), m_pBorders(nullptr), m_pShadow(nullptr),
-m_pColumns(nullptr), m_pBGImage(nullptr), m_pHeaderStyle(nullptr), m_pFooterStyle(nullptr),
+m_eTextDir(enumXFTextDirNone),
 m_eSepAlign(enumXFAlignNone), m_fSepWidth(0), m_aSepColor(0), m_fSepSpaceAbove(0),
 m_fSepSpaceBelow(0), m_nSepLengthPercent(0)
 {
@@ -78,12 +77,6 @@ m_fSepSpaceBelow(0), m_nSepLengthPercent(0)
 
 XFPageMaster::~XFPageMaster()
 {
-    delete m_pBorders;
-    delete m_pShadow;
-    delete m_pColumns;
-    delete m_pHeaderStyle;
-    delete m_pFooterStyle;
-    delete m_pBGImage;
 }
 
 enumXFStyle XFPageMaster::GetStyleFamily()
@@ -113,18 +106,16 @@ void    XFPageMaster::SetMargins(double left, double right,double top, double bo
         m_aMargin.SetBottom(bottom);
 }
 
-void    XFPageMaster::SetBorders(XFBorders *pBorders)
+void    XFPageMaster::SetBorders(std::unique_ptr<XFBorders> pBorders)
 {
-    if( m_pBorders && (pBorders != m_pBorders) )
-        delete m_pBorders;
-    m_pBorders = pBorders;
+    m_pBorders = std::move( pBorders );
 }
 
 void    XFPageMaster::SetShadow(XFShadow *pShadow)
 {
-    if( m_pShadow && (pShadow != m_pShadow) )
-        delete m_pShadow;
-    m_pShadow = pShadow;
+    if( pShadow == m_pShadow.get() )
+        return;
+    m_pShadow.reset( pShadow );
 }
 
 void    XFPageMaster::SetBackColor(XFColor color)
@@ -132,31 +123,30 @@ void    XFPageMaster::SetBackColor(XFColor color)
     m_aBackColor = color;
 }
 
-void    XFPageMaster::SetBackImage(XFBGImage *image)
+void    XFPageMaster::SetBackImage(std::unique_ptr<XFBGImage>& rImage)
 {
-    delete m_pBGImage;
-    m_pBGImage = image;
+    m_pBGImage = std::move(rImage);
 }
 
 void    XFPageMaster::SetColumns(XFColumns *pColumns)
 {
-    if( m_pColumns && (pColumns != m_pColumns) )
-        delete m_pColumns;
-    m_pColumns = pColumns;
+    if( pColumns == m_pColumns.get() )
+        return;
+    m_pColumns.reset(pColumns);
 }
 
  void   XFPageMaster::SetHeaderStyle(XFHeaderStyle *pHeaderStyle)
 {
-    if( m_pHeaderStyle && (pHeaderStyle != m_pHeaderStyle) )
-        delete m_pHeaderStyle;
-    m_pHeaderStyle = pHeaderStyle;
+    if( pHeaderStyle == m_pHeaderStyle.get() )
+        return;
+    m_pHeaderStyle.reset( pHeaderStyle );
 }
 
 void    XFPageMaster::SetFooterStyle(XFFooterStyle *pFooterStyle)
 {
-    if( m_pFooterStyle && (pFooterStyle != m_pFooterStyle) )
-        delete m_pFooterStyle;
-    m_pFooterStyle = pFooterStyle;
+    if( pFooterStyle == m_pFooterStyle.get() )
+        return;
+    m_pFooterStyle.reset( pFooterStyle );
 }
 
 void    XFPageMaster::SetFootNoteSeparator(
@@ -219,10 +209,7 @@ void    XFPageMaster::ToXml(IXFStream *pStream)
 
     m_aMargin.ToXml(pStream);
 
-    if( m_bPrintOrient )
-        pAttrList->AddAttribute( "style:print-orientation", "portrait" );
-    else
-        pAttrList->AddAttribute( "style:print-orientation", "landscape" );
+    pAttrList->AddAttribute( "style:print-orientation", "portrait" );
 
     if( m_pBorders )
         m_pBorders->ToXml(pStream);

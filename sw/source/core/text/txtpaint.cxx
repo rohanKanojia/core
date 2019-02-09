@@ -18,10 +18,10 @@
  */
 
 #include "txtpaint.hxx"
-#include "swrect.hxx"
-#include "rootfrm.hxx"
+#include <swrect.hxx>
+#include <rootfrm.hxx>
 
-void SwSaveClip::Reset()
+SwSaveClip::~SwSaveClip()
 {
     // We recover the old state
     if( pOut && bChg )
@@ -39,21 +39,21 @@ void SwSaveClip::Reset()
     }
 }
 
-void SwSaveClip::_ChgClip( const SwRect &rRect, const SwTextFrame* pFrame,
+void SwSaveClip::ChgClip_( const SwRect &rRect, const SwTextFrame* pFrame,
                            bool bEnlargeRect )
 {
     SwRect aOldRect( rRect );
     const bool bVertical = pFrame && pFrame->IsVertical();
 
     if ( pFrame && pFrame->IsRightToLeft() )
-        pFrame->SwitchLTRtoRTL( (SwRect&)rRect );
+        pFrame->SwitchLTRtoRTL( const_cast<SwRect&>(rRect) );
 
     if ( bVertical )
-        pFrame->SwitchHorizontalToVertical( (SwRect&)rRect );
+        pFrame->SwitchHorizontalToVertical( const_cast<SwRect&>(rRect) );
 
     if ( !pOut || (!rRect.HasArea() && !pOut->IsClipRegion()) )
     {
-        (SwRect&)rRect = aOldRect;
+        const_cast<SwRect&>(rRect) = aOldRect;
         return;
     }
 
@@ -69,20 +69,20 @@ void SwSaveClip::_ChgClip( const SwRect &rRect, const SwTextFrame* pFrame,
         pOut->SetClipRegion();
     else
     {
-        Rectangle aRect( rRect.SVRect() );
+        tools::Rectangle aRect( rRect.SVRect() );
 
         // Having underscores in our line, we enlarged the repaint area
         // (see frmform.cxx) because for some fonts it could be too small.
         // Consequently, we have to enlarge the clipping rectangle as well.
         if ( bEnlargeRect && ! bVertical )
-            aRect.Bottom() += 40;
+            aRect.AdjustBottom(40 );
 
         // If the ClipRect is identical, nothing will happen
         if( pOut->IsClipRegion() ) // no && because of Mac
         {
             if ( aRect == pOut->GetClipRegion().GetBoundRect() )
             {
-                (SwRect&)rRect = aOldRect;
+                const_cast<SwRect&>(rRect) = aOldRect;
                 return;
             }
         }
@@ -98,14 +98,14 @@ void SwSaveClip::_ChgClip( const SwRect &rRect, const SwTextFrame* pFrame,
         static bool bDbg = false;
         if( bDbg )
         {
-            DbgBackColor aDbg( pOut, bDbg, COL_RED );
+            DbgBackColor aDbg( pOut, bDbg );
             pOut->DrawRect( aRect );
         }
 #endif
     }
     bChg = true;
 
-    (SwRect&)rRect = aOldRect;
+    const_cast<SwRect&>(rRect) = aOldRect;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

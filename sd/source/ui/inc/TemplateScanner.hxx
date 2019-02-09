@@ -21,9 +21,9 @@
 #define INCLUDED_SD_SOURCE_UI_INC_TEMPLATESCANNER_HXX
 
 #include "tools/AsynchronousTask.hxx"
-#include "sddllapi.h"
+#include <sddllapi.h>
 #include <ucbhelper/content.hxx>
-#include "com/sun/star/uno/Reference.hxx"
+#include <com/sun/star/uno/Reference.h>
 
 #include <memory>
 #include <vector>
@@ -37,10 +37,6 @@ namespace com { namespace sun { namespace star { namespace sdbc {
 class XResultSet;
 } } } }
 
-namespace comphelper { namespace string {
-class NaturalStringSorter;
-} }
-
 namespace sd {
 
 /** Representation of a template or layout file.
@@ -51,40 +47,8 @@ public:
     TemplateEntry   (const OUString& rsTitle, const OUString& rsPath)
         :   msTitle(rsTitle), msPath(rsPath) {}
 
-    OUString msTitle;
-    OUString msPath;
-};
-
-/** Functor that compares two TemplateEntries based on their titles
-*/
-class TemplateEntryCompare
-{
-public:
-    TemplateEntryCompare();
-    bool operator()(TemplateEntry* pA, TemplateEntry* pB) const;
-
-private:
-    std::shared_ptr<comphelper::string::NaturalStringSorter> mpStringSorter;
-};
-
-/** Representation of a template or layout folder.
-*/
-class TemplateDir
-{
-public:
-    TemplateDir (const OUString& rsRegion )
-        :   msRegion(rsRegion), maEntries(),
-            mbSortingEnabled(false), mpEntryCompare(nullptr) {}
-
-    OUString msRegion;
-    ::std::vector<TemplateEntry*> maEntries;
-
-    void EnableSorting(bool bSortingEnabled = true);
-    void InsertEntry(TemplateEntry* pNewEntry);
-
-private:
-    bool mbSortingEnabled;
-    std::unique_ptr<TemplateEntryCompare> mpEntryCompare;
+    OUString const msTitle;
+    OUString const msPath;
 };
 
 /** This class scans the template folders for impress templates.  There are
@@ -111,19 +75,6 @@ public:
     */
     virtual ~TemplateScanner();
 
-    /** Execute the actual scanning of templates.  When this method
-        terminates the result can be obtained by calling the
-        <member>GetTemplateList</member> method.
-    */
-    void Scan();
-
-    /** Return the list of template folders.  It lies in the responsibility
-        of the caller to take ownership of some or all entries and remove
-        them from the returned list.  All entries that remain until the
-        destructor is called will be destroyed.
-    */
-    std::vector<TemplateDir*>& GetFolderList() { return maFolderList;}
-
     /** Implementation of the AsynchronousTask interface method.
     */
     virtual void RunNextStep() override;
@@ -133,17 +84,12 @@ public:
     virtual bool HasNextStep() override;
 
     /** Return the TemplateDir object that was last added to
-        mpTemplateDirectory.
+        mpTemplateEntries.
         @return
             <nullptr/> is returned either before the template scanning is
             started or after it has ended.
     */
-    const TemplateEntry* GetLastAddedEntry() const { return mpLastAddedEntry;}
-
-    /** Set whether to sort the template entries inside the regions.
-    */
-    void EnableEntrySorting ()
-        {mbEntrySortingEnabled = true;}
+    const TemplateEntry* GetLastAddedEntry() const { return mpTemplateEntries.empty()?nullptr:mpTemplateEntries.back().get();}
 
 private:
     /** The current state determines which step will be executed next by
@@ -162,21 +108,7 @@ private:
     State meState;
 
     ::ucbhelper::Content maFolderContent;
-    TemplateDir* mpTemplateDirectory;
-
-    /** The data structure that is to be filled with information about the
-        template files.
-    */
-     std::vector<TemplateDir*> maFolderList;
-
-    /** Whether the template entries have to be sorted.
-    */
-    bool mbEntrySortingEnabled;
-
-    /** This member points into the maFolderList to the member that was most
-        recently added.
-    */
-    TemplateEntry* mpLastAddedEntry;
+    ::std::vector< std::unique_ptr<TemplateEntry> > mpTemplateEntries;
 
     /** The folders that are collected by GatherFolderList().
     */
@@ -214,7 +146,7 @@ private:
     /** From the list of top-level folders collected by GatherFolderList()
         the one with highest priority is processed.
         @return
-            Returns one of the states ERROR, DONE, or INITILIZE_ENTRY_SCAN.
+            Returns one of the states ERROR, DONE, or INITIALIZE_ENTRY_SCAN.
     */
     State ScanFolder();
 

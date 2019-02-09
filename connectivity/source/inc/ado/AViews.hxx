@@ -21,8 +21,8 @@
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_ADO_AVIEWS_HXX
 
 #include <connectivity/sdbcx/VCollection.hxx>
-#include "ado/Awrapadox.hxx"
-#include "ado/ACatalog.hxx"
+#include <ado/Awrapadox.hxx>
+#include <ado/ACatalog.hxx>
 
 
 namespace connectivity
@@ -35,16 +35,15 @@ namespace connectivity
             WpADOViews  m_aCollection;
             OCatalog*   m_pCatalog;
         protected:
-            virtual sdbcx::ObjectType createObject(const OUString& _rName);
-            virtual void impl_refresh() throw(::com::sun::star::uno::RuntimeException);
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > createDescriptor();
-            virtual sdbcx::ObjectType appendObject( const OUString& _rForName, const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& descriptor );
-            void setComments(const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& descriptor ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException);
-            virtual void dropObject(sal_Int32 _nPos,const OUString& _sElementName);
+            virtual sdbcx::ObjectType createObject(const OUString& _rName) override;
+            virtual void impl_refresh() override;
+            virtual css::uno::Reference< css::beans::XPropertySet > createDescriptor() override;
+            virtual sdbcx::ObjectType appendObject( const OUString& _rForName, const css::uno::Reference< css::beans::XPropertySet >& descriptor ) override;
+            virtual void dropObject(sal_Int32 _nPos,const OUString& _sElementName) override;
         public:
             OViews(OCatalog* _pParent, ::osl::Mutex& _rMutex,
-                const TStringVector &_rVector,
-                WpADOViews& _rCollection,sal_Bool _bCase) : sdbcx::OCollection(*_pParent,_bCase,_rMutex,_rVector)
+                const ::std::vector< OUString> &_rVector,
+                WpADOViews const & _rCollection,bool _bCase) : sdbcx::OCollection(*_pParent,_bCase,_rMutex,_rVector)
                 ,m_aCollection(_rCollection)
                 ,m_pCatalog(_pParent)
             {

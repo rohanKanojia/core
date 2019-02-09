@@ -17,10 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dbu_reghelper.hxx"
-#include "dbustrings.hrc"
-#include "uiservices.hxx"
-#include "UITools.hxx"
+#include <dbu_reghelper.hxx>
+#include <stringconstants.hxx>
+#include <strings.hxx>
+#include <uiservices.hxx>
+#include <UITools.hxx>
 
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
@@ -42,10 +43,10 @@
 #include <com/sun/star/sdbc/XDataSource.hpp>
 #include <comphelper/namedvaluecollection.hxx>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/types.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <toolkit/awt/vclxwindow.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <tools/diagnose_ex.h>
 #include <tools/urlobj.hxx>
 #include <vcl/svapp.hxx>
@@ -71,12 +72,11 @@ private:
     Reference< XComponentContext >      m_xContext;
 public:
     explicit DBContentLoader(const Reference< XComponentContext >&);
-    virtual ~DBContentLoader();
 
     // XServiceInfo
-    OUString                 SAL_CALL getImplementationName() throw(std::exception  ) override;
-    sal_Bool                        SAL_CALL supportsService(const OUString& ServiceName) throw(std::exception  ) override;
-    Sequence< OUString >     SAL_CALL getSupportedServiceNames() throw(std::exception  ) override;
+    OUString                 SAL_CALL getImplementationName() override;
+    sal_Bool                        SAL_CALL supportsService(const OUString& ServiceName) override;
+    Sequence< OUString >     SAL_CALL getSupportedServiceNames() override;
 
     // static methods
     static OUString          getImplementationName_Static() throw(  )
@@ -85,13 +85,13 @@ public:
     }
     static Sequence< OUString> getSupportedServiceNames_Static() throw(  );
     static css::uno::Reference< css::uno::XInterface >
-            SAL_CALL Create(const css::uno::Reference< css::lang::XMultiServiceFactory >&);
+            Create(const css::uno::Reference< css::lang::XMultiServiceFactory >&);
 
     // XLoader
     virtual void SAL_CALL load( const Reference< XFrame > & _rFrame, const OUString& _rURL,
                                 const Sequence< PropertyValue >& _rArgs,
-                                const Reference< XLoadEventListener > & _rListener) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL cancel() throw(std::exception) override;
+                                const Reference< XLoadEventListener > & _rListener) override;
+    virtual void SAL_CALL cancel() override;
 };
 
 
@@ -101,35 +101,30 @@ DBContentLoader::DBContentLoader(const Reference< XComponentContext >& _rxContex
 
 }
 
-DBContentLoader::~DBContentLoader()
-{
-
-}
-
-extern "C" void SAL_CALL createRegistryInfo_DBContentLoader()
+extern "C" void createRegistryInfo_DBContentLoader()
 {
     static ::dbaui::OMultiInstanceAutoRegistration< DBContentLoader > aAutoRegistration;
 }
 
-Reference< XInterface > SAL_CALL DBContentLoader::Create( const Reference< XMultiServiceFactory >  & rSMgr )
+Reference< XInterface > DBContentLoader::Create( const Reference< XMultiServiceFactory >  & rSMgr )
 {
     return *(new DBContentLoader(comphelper::getComponentContext(rSMgr)));
 }
 
 // XServiceInfo
-OUString SAL_CALL DBContentLoader::getImplementationName() throw(std::exception  )
+OUString SAL_CALL DBContentLoader::getImplementationName()
 {
     return getImplementationName_Static();
 }
 
 // XServiceInfo
-sal_Bool SAL_CALL DBContentLoader::supportsService(const OUString& ServiceName) throw(std::exception  )
+sal_Bool SAL_CALL DBContentLoader::supportsService(const OUString& ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 // XServiceInfo
-Sequence< OUString > SAL_CALL DBContentLoader::getSupportedServiceNames() throw(std::exception  )
+Sequence< OUString > SAL_CALL DBContentLoader::getSupportedServiceNames()
 {
     return getSupportedServiceNames_Static();
 }
@@ -145,14 +140,14 @@ Sequence< OUString > DBContentLoader::getSupportedServiceNames_Static() throw(  
 
 void SAL_CALL DBContentLoader::load(const Reference< XFrame > & rFrame, const OUString& rURL,
         const Sequence< PropertyValue >& rArgs,
-        const Reference< XLoadEventListener > & rListener) throw(css::uno::RuntimeException, std::exception)
+        const Reference< XLoadEventListener > & rListener)
 {
     m_xFrame    = rFrame;
     m_xListener = rListener;
     m_aURL      = rURL;
     m_aArgs     = rArgs;
 
-    const struct ServiceNameToImplName
+    static const struct ServiceNameToImplName
     {
         const char*     pAsciiServiceName;
         const char*     pAsciiImplementationName;
@@ -173,13 +168,13 @@ void SAL_CALL DBContentLoader::load(const Reference< XFrame > & rFrame, const OU
     INetURLObject aParser( rURL );
     Reference< XController2 > xController;
 
-    const OUString sComponentURL( aParser.GetMainURL( INetURLObject::DECODE_TO_IURI ) );
-    for ( size_t i=0; i < SAL_N_ELEMENTS( aImplementations ); ++i )
+    const OUString sComponentURL( aParser.GetMainURL( INetURLObject::DecodeMechanism::ToIUri ) );
+    for (const ServiceNameToImplName& aImplementation : aImplementations)
     {
-        if ( sComponentURL.equalsAscii( aImplementations[i].pAsciiServiceName ) )
+        if ( sComponentURL.equalsAscii( aImplementation.pAsciiServiceName ) )
         {
             xController.set( m_xContext->getServiceManager()->
-               createInstanceWithContext( OUString::createFromAscii( aImplementations[i].pAsciiImplementationName ), m_xContext), UNO_QUERY_THROW );
+               createInstanceWithContext( OUString::createFromAscii( aImplementation.pAsciiImplementationName ), m_xContext), UNO_QUERY_THROW );
             break;
         }
     }
@@ -191,8 +186,8 @@ void SAL_CALL DBContentLoader::load(const Reference< XFrame > & rFrame, const OU
 
     if  ( sComponentURL == URL_COMPONENT_DATASOURCEBROWSER )
     {
-        bool bDisableBrowser =  !aLoadArgs.getOrDefault( "ShowTreeViewButton", sal_True )   // compatibility name
-                                ||  !aLoadArgs.getOrDefault( PROPERTY_ENABLE_BROWSER, sal_True );
+        bool bDisableBrowser =  !aLoadArgs.getOrDefault( "ShowTreeViewButton", true )   // compatibility name
+                                ||  !aLoadArgs.getOrDefault( PROPERTY_ENABLE_BROWSER, true );
 
         if ( bDisableBrowser )
         {
@@ -203,14 +198,14 @@ void SAL_CALL DBContentLoader::load(const Reference< XFrame > & rFrame, const OU
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
             }
         }
     }
 
     if ( sComponentURL == URL_COMPONENT_REPORTDESIGN )
     {
-        bool bPreview = aLoadArgs.getOrDefault( "Preview", sal_False );
+        bool bPreview = aLoadArgs.getOrDefault( "Preview", false );
         if ( bPreview )
         {   // report designs cannot be previewed
             if ( rListener.is() )
@@ -260,7 +255,7 @@ void SAL_CALL DBContentLoader::load(const Reference< XFrame > & rFrame, const OU
         try
         {
             Reference<XInitialization > xIni(xController,UNO_QUERY);
-            PropertyValue aFrame(OUString("Frame"),0,makeAny(rFrame),PropertyState_DIRECT_VALUE);
+            PropertyValue aFrame("Frame",0,makeAny(rFrame),PropertyState_DIRECT_VALUE);
             Sequence< Any > aInitArgs(m_aArgs.getLength()+1);
 
             Any* pBegin = aInitArgs.getArray();
@@ -284,7 +279,7 @@ void SAL_CALL DBContentLoader::load(const Reference< XFrame > & rFrame, const OU
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
             }
         }
     }
@@ -306,7 +301,7 @@ void SAL_CALL DBContentLoader::load(const Reference< XFrame > & rFrame, const OU
             rListener->loadCancelled( this );
 }
 
-void DBContentLoader::cancel() throw(std::exception)
+void DBContentLoader::cancel()
 {
 }
 

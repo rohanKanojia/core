@@ -25,14 +25,16 @@
 #include <com/sun/star/presentation/EffectNodeType.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 
-#include "basenode.hxx"
-#include "eventmultiplexer.hxx"
-#include "basecontainernode.hxx"
-#include "eventqueue.hxx"
-#include "delayevent.hxx"
-#include "tools.hxx"
+#include <basenode.hxx>
+#include <eventmultiplexer.hxx>
+#include <basecontainernode.hxx>
+#include <eventqueue.hxx>
+#include <delayevent.hxx>
+#include <tools.hxx>
 #include "nodetools.hxx"
 #include "generateevent.hxx"
+
+#include <sal/log.hxx>
 
 #include <vector>
 #include <algorithm>
@@ -203,7 +205,7 @@ const int* getStateTransitionTable( sal_Int16 nRestartMode,
         // same value: animations::AnimationRestart::INHERIT:
         OSL_FAIL(
             "getStateTransitionTable(): unexpected case for restart" );
-        // FALLTHROUGH intended
+        [[fallthrough]];
     case animations::AnimationRestart::NEVER:
         nRestartValue = 0;
         break;
@@ -223,7 +225,7 @@ const int* getStateTransitionTable( sal_Int16 nRestartMode,
         // same value: animations::AnimationFill::INHERIT:
         OSL_FAIL(
             "getStateTransitionTable(): unexpected case for fill" );
-        // FALLTHROUGH intended
+        [[fallthrough]];
     case animations::AnimationFill::REMOVE:
         nFillValue = 0;
         break;
@@ -244,7 +246,7 @@ bool isMainSequenceRootNode_(
     // detect main sequence root node (need that for
     // end-of-mainsequence signalling below)
     beans::NamedValue const aSearchKey(
-        OUString( "node-type" ),
+        "node-type",
         uno::makeAny( presentation::EffectNodeType::MAIN_SEQUENCE ) );
 
     uno::Sequence<beans::NamedValue> const userData(xNode->getUserData());
@@ -355,16 +357,14 @@ void BaseNode::dispose()
 sal_Int16 BaseNode::getRestartMode()
 {
     const sal_Int16 nTmp( mxAnimationNode->getRestart() );
-    return (nTmp != animations::AnimationRestart::DEFAULT &&
-            nTmp != animations::AnimationRestart::INHERIT)
+    return nTmp != animations::AnimationRestart::DEFAULT
         ? nTmp : getRestartDefaultMode();
 }
 
 sal_Int16 BaseNode::getFillMode()
 {
     const sal_Int16 nTmp( mxAnimationNode->getFill() );
-    const sal_Int16 nFill((nTmp != animations::AnimationFill::DEFAULT &&
-                           nTmp != animations::AnimationFill::INHERIT)
+    const sal_Int16 nFill(nTmp != animations::AnimationFill::DEFAULT
                           ? nTmp : getFillDefaultMode());
 
     // For AUTO fill mode, SMIL specifies that fill mode is FREEZE,
@@ -593,27 +593,26 @@ void BaseNode::end()
                 "end state not reachable in transition table" );
 
     StateTransition st(this);
-    if (st.enter( ENDED, StateTransition::FORCE )) {
+    if (!st.enter( ENDED, StateTransition::FORCE ))
+        return;
 
-        deactivate_st( ENDED );
-        st.commit(); // changing state
+    deactivate_st( ENDED );
+    st.commit(); // changing state
 
-        // if is FROZEN or is to be FROZEN, then
-        // will/already notified deactivating listeners
-        if (!bIsFrozenOrInTransitionToFrozen)
-            notifyEndListeners();
+    // if is FROZEN or is to be FROZEN, then
+    // will/already notified deactivating listeners
+    if (!bIsFrozenOrInTransitionToFrozen)
+        notifyEndListeners();
 
-        // discharge a loaded event, before going on:
-        if (mpCurrentEvent) {
-            mpCurrentEvent->dispose();
-            mpCurrentEvent.reset();
-        }
+    // discharge a loaded event, before going on:
+    if (mpCurrentEvent) {
+        mpCurrentEvent->dispose();
+        mpCurrentEvent.reset();
     }
 }
 
 void BaseNode::notifyDeactivating( const AnimationNodeSharedPtr& rNotifier )
 {
-    (void) rNotifier; // avoid warning
     OSL_ASSERT( rNotifier->getState() == FROZEN ||
                 rNotifier->getState() == ENDED );
     // TODO(F1): for end sync functionality, this might indeed be used some day
@@ -695,36 +694,36 @@ void BaseNode::showState() const
     // determine additional node information
     uno::Reference<animations::XAnimate> const xAnimate( mxAnimationNode,
                                                          uno::UNO_QUERY );
-    if( xAnimate.is() )
+    if( !xAnimate.is() )
+        return;
+
+    uno::Reference< drawing::XShape > xTargetShape( xAnimate->getTarget(),
+                                                    uno::UNO_QUERY );
+
+    if( !xTargetShape.is() )
     {
-        uno::Reference< drawing::XShape > xTargetShape( xAnimate->getTarget(),
-                                                        uno::UNO_QUERY );
+        css::presentation::ParagraphTarget aTarget;
 
-        if( !xTargetShape.is() )
-        {
-            css::presentation::ParagraphTarget aTarget;
+        // no shape provided. Maybe a ParagraphTarget?
+        if( xAnimate->getTarget() >>= aTarget )
+            xTargetShape = aTarget.Shape;
+    }
 
-            // no shape provided. Maybe a ParagraphTarget?
-            if( (xAnimate->getTarget() >>= aTarget) )
-                xTargetShape = aTarget.Shape;
-        }
+    if( !xTargetShape.is() )
+        return;
 
-        if( xTargetShape.is() )
-        {
-            uno::Reference< beans::XPropertySet > xPropSet( xTargetShape,
-                                                            uno::UNO_QUERY );
+    uno::Reference< beans::XPropertySet > xPropSet( xTargetShape,
+                                                    uno::UNO_QUERY );
 
-            // read shape name
-            OUString aName;
-            if( xPropSet->getPropertyValue("Name") >>= aName )
-            {
-                SAL_INFO("slideshow.verbose", "Node info: n" <<
-                         debugGetNodeName(this) <<
-                         ", name \"" <<
-                         aName <<
-                         "\"");
-            }
-        }
+    // read shape name
+    OUString aName;
+    if( xPropSet->getPropertyValue("Name") >>= aName )
+    {
+        SAL_INFO("slideshow.verbose", "Node info: n" <<
+                 debugGetNodeName(this) <<
+                 ", name \"" <<
+                 aName <<
+                 "\"");
     }
 }
 

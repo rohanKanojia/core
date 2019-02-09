@@ -20,19 +20,27 @@
 #ifndef INCLUDED_OOX_PPT_SLIDEPERSIST_HXX
 #define INCLUDED_OOX_PPT_SLIDEPERSIST_HXX
 
+#include <vector>
+#include <map>
 #include <memory>
-#include <oox/drawingml/shape.hxx>
-#include <oox/drawingml/theme.hxx>
+
+#include <cppuhelper/weakref.hxx>
+#include <com/sun/star/uno/Reference.hxx>
 #include <oox/drawingml/clrscheme.hxx>
-#include <oox/ppt/headerfooter.hxx>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/drawing/XDrawPage.hpp>
-#include <com/sun/star/animations/XAnimationNode.hpp>
-#include <oox/core/fragmenthandler.hxx>
+#include <oox/drawingml/color.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <oox/drawingml/shape.hxx>
 #include <oox/ppt/comments.hxx>
+#include <oox/ppt/headerfooter.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
-#include <list>
+namespace com { namespace sun { namespace star {
+    namespace animations { class XAnimationNode; }
+    namespace drawing { class XDrawPage; }
+} } }
 
+namespace oox { namespace core { class XmlFilterBase; } }
 namespace oox { namespace vml { class Drawing; } }
 
 namespace oox { namespace ppt {
@@ -56,7 +64,7 @@ class SlidePersist : public std::enable_shared_from_this< SlidePersist >
 public:
     SlidePersist( oox::core::XmlFilterBase& rFilter, bool bMaster, bool bNotes,
                     const css::uno::Reference< css::drawing::XDrawPage >&,
-                    oox::drawingml::ShapePtr pShapesPtr, const ::oox::drawingml::TextListStylePtr & );
+                    oox::drawingml::ShapePtr const & pShapesPtr, const ::oox::drawingml::TextListStylePtr & );
     ~SlidePersist();
 
     const css::uno::Reference< css::drawing::XDrawPage >& getPage() const { return mxPage; };
@@ -77,13 +85,12 @@ public:
     void setTheme( const oox::drawingml::ThemePtr& rThemePtr ){ mpThemePtr = rThemePtr; }
     const oox::drawingml::ThemePtr& getTheme() const { return mpThemePtr; }
 
-    const oox::drawingml::ClrSchemePtr& getClrScheme() const { return mpClrSchemePtr; }
-
     void setClrMap( const oox::drawingml::ClrMapPtr pClrMapPtr ){ mpClrMapPtr = pClrMapPtr; }
     const oox::drawingml::ClrMapPtr& getClrMap() const { return mpClrMapPtr; }
 
     void setBackgroundProperties( const oox::drawingml::FillPropertiesPtr& rFillPropertiesPtr ){ mpBackgroundPropertiesPtr = rFillPropertiesPtr; }
     const oox::drawingml::FillPropertiesPtr& getBackgroundProperties() const { return mpBackgroundPropertiesPtr; }
+    oox::drawingml::Color& getBackgroundColor() { return maBackgroundColor; }
 
     bool isMasterPage() const { return mbMaster; }
     bool isNotesPage() const { return mbNotes; }
@@ -100,7 +107,7 @@ public:
 
     const oox::drawingml::ShapePtr& getShapes() { return maShapesPtr; }
     void hideShapesAsMasterShapes();
-    ::std::list< std::shared_ptr< TimeNode > >& getTimeNodeList() { return maTimeNodeList; }
+    ::std::vector< std::shared_ptr< TimeNode > >& getTimeNodeList() { return maTimeNodeList; }
     oox::ppt::HeaderFooter& getHeaderFooter(){ return maHeaderFooter; };
 
     oox::vml::Drawing* getDrawing() { return mpDrawingPtr.get(); }
@@ -122,24 +129,24 @@ private:
     std::shared_ptr< oox::vml::Drawing >                                    mpDrawingPtr;
     css::uno::Reference< css::drawing::XDrawPage >                          mxPage;
     oox::drawingml::ThemePtr                                                mpThemePtr;         // the theme that is used
-    oox::drawingml::ClrSchemePtr                                            mpClrSchemePtr;     // the local color scheme (if any)
     oox::drawingml::ClrMapPtr                                               mpClrMapPtr;        // color mapping (if any)
     SlidePersistPtr                                                         mpMasterPagePtr;
 
     oox::drawingml::ShapePtr                                                maShapesPtr;
+    oox::drawingml::Color                                                   maBackgroundColor;
     oox::drawingml::FillPropertiesPtr                                       mpBackgroundPropertiesPtr;
-    ::std::list< std::shared_ptr< TimeNode > >                              maTimeNodeList;
+    ::std::vector< std::shared_ptr< TimeNode > >                            maTimeNodeList;
 
     oox::ppt::HeaderFooter                                                  maHeaderFooter;
     sal_Int32                                                               mnLayoutValueToken;
-    bool                                                                    mbMaster;
-    bool                                                                    mbNotes;
+    bool const                                                              mbMaster;
+    bool const                                                              mbNotes;
 
-    oox::drawingml::TextListStylePtr                                        maDefaultTextStylePtr;
-    oox::drawingml::TextListStylePtr                                        maTitleTextStylePtr;
-    oox::drawingml::TextListStylePtr                                        maBodyTextStylePtr;
-    oox::drawingml::TextListStylePtr                                        maNotesTextStylePtr;
-    oox::drawingml::TextListStylePtr                                        maOtherTextStylePtr;
+    oox::drawingml::TextListStylePtr const                                  maDefaultTextStylePtr;
+    oox::drawingml::TextListStylePtr const                                  maTitleTextStylePtr;
+    oox::drawingml::TextListStylePtr const                                  maBodyTextStylePtr;
+    oox::drawingml::TextListStylePtr const                                  maNotesTextStylePtr;
+    oox::drawingml::TextListStylePtr const                                  maOtherTextStylePtr;
 
     std::map< OUString, css::uno::Reference< css::animations::XAnimationNode > > maAnimNodesMap;
     std::map< OUString, ::oox::drawingml::ShapePtr >                        maShapeMap;

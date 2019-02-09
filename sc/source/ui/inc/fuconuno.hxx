@@ -22,21 +22,20 @@
 
 #include "fuconstr.hxx"
 
+enum class SdrInventor : sal_uInt32;
+
 /** Draw Control */
-class FuConstUnoControl : public FuConstruct
+class FuConstUnoControl final : public FuConstruct
 {
-protected:
-    sal_uInt32 nInventor;
-    sal_uInt16 nIdentifier;
+    SdrInventor nInventor;
+    sal_uInt16  nIdentifier;
 
 public:
-    FuConstUnoControl(ScTabViewShell* pViewSh, vcl::Window* pWin, ScDrawView* pView,
-                       SdrModel* pDoc, SfxRequest& rReq);
+    FuConstUnoControl(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawView* pView,
+                       SdrModel* pDoc, const SfxRequest& rReq);
 
-    virtual ~FuConstUnoControl();
+    virtual ~FuConstUnoControl() override;
                                        // Mouse- & Key-Events
-    virtual bool KeyInput(const KeyEvent& rKEvt) override;
-    virtual bool MouseMove(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonUp(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonDown(const MouseEvent& rMEvt) override;
 
@@ -44,7 +43,7 @@ public:
     virtual void Deactivate() override;
 
     // Create default drawing objects via keyboard
-    virtual SdrObject* CreateDefaultObject(const sal_uInt16 nID, const Rectangle& rRectangle) override;
+    virtual SdrObjectUniquePtr CreateDefaultObject(const sal_uInt16 nID, const tools::Rectangle& rRectangle) override;
 };
 
 #endif      // _SD_FUCONCTL_HXX

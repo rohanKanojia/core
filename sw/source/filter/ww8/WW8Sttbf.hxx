@@ -22,7 +22,7 @@
 
 #include <memory>
 #include <vector>
-#include <boost/shared_array.hpp>
+
 #include <tools/solar.h>
 #include <rtl/ustring.hxx>
 #include <IDocumentExternalData.hxx>
@@ -34,14 +34,14 @@ namespace ww8
 
     class WW8Struct : public ::sw::ExternalData
     {
-        boost::shared_array<sal_uInt8> mp_data;
+        std::shared_ptr<sal_uInt8> m_pData;
         sal_uInt32 mn_offset;
         sal_uInt32 mn_size;
 
     public:
         WW8Struct(SvStream& rSt, sal_uInt32 nPos, sal_uInt32 nSize);
-        WW8Struct(WW8Struct * pStruct, sal_uInt32 nPos, sal_uInt32 nSize);
-        virtual ~WW8Struct();
+        WW8Struct(WW8Struct const * pStruct, sal_uInt32 nPos, sal_uInt32 nSize);
+        virtual ~WW8Struct() override;
 
         sal_uInt8 getU8(sal_uInt32 nOffset);
 
@@ -61,7 +61,7 @@ namespace ww8
 
     public:
         WW8Sttb(SvStream& rSt, sal_Int32 nPos, sal_uInt32 nSize);
-        virtual ~WW8Sttb();
+        virtual ~WW8Sttb() override;
 
         std::vector<OUString> & getStrings()
         {

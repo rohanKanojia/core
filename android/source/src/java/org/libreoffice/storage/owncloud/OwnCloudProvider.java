@@ -23,6 +23,7 @@ import com.owncloud.android.lib.resources.files.FileUtils;
 import com.owncloud.android.lib.resources.files.ReadRemoteFileOperation;
 import com.owncloud.android.lib.resources.files.RemoteFile;
 
+
 /**
  * Implementation of IDocumentProvider for ownCloud servers.
  */
@@ -38,6 +39,7 @@ public class OwnCloudProvider implements IDocumentProvider,
     private String serverUrl;
     private String userName;
     private String password;
+    private RemoteOperationResult result;
 
     public OwnCloudProvider(int id, Context context) {
         this.id = id;
@@ -72,21 +74,26 @@ public class OwnCloudProvider implements IDocumentProvider,
     }
 
     @Override
-    public IFile getRootDirectory() {
-        return createFromUri(URI.create(FileUtils.PATH_SEPARATOR));
+    public IFile getRootDirectory(Context context) {
+        return createFromUri(context, URI.create(FileUtils.PATH_SEPARATOR));
     }
 
     @Override
-    public IFile createFromUri(URI uri) {
-        ReadRemoteFileOperation refreshOperation = new ReadRemoteFileOperation(
-                uri.getPath());
-        RemoteOperationResult result = refreshOperation.execute(client);
-        if (!result.isSuccess()) {
-            throw buildRuntimeExceptionForResultCode(result.getCode());
+    public IFile createFromUri(Context context, URI uri) {
+        if(serverUrl != "" || userName != "" || password != ""){
+            ReadRemoteFileOperation refreshOperation = new ReadRemoteFileOperation(
+                    uri.getPath());
+            this.result = refreshOperation.execute(client);
+            if (!result.isSuccess()) {
+                throw buildRuntimeExceptionForResultCode(result.getCode());
+            }
+            if (result.getData().size() > 0) {
+                return new OwnCloudFile(this, (RemoteFile) result.getData().get(0));
+            }
+        } else {
+            throw buildRuntimeExceptionForResultCode(ResultCode.WRONG_CONNECTION);
         }
-        if (result.getData().size() > 0) {
-            return new OwnCloudFile(this, (RemoteFile) result.getData().get(0));
-        }
+
         return null;
     }
 
@@ -176,5 +183,10 @@ public class OwnCloudProvider implements IDocumentProvider,
     @Override
     public int getId() {
         return id;
+    }
+
+    @Override
+    public boolean checkProviderAvailability(Context context) {
+        return client != null;
     }
 }

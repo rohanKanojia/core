@@ -29,7 +29,7 @@
 #include <com/sun/star/sdbc/DataType.hpp>
 #include <com/sun/star/form/XLoadable.hpp>
 #include <com/sun/star/form/XReset.hpp>
-#include "fmvwimp.hxx"
+#include <fmvwimp.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/viewsh.hxx>
 #include <sfx2/viewfrm.hxx>
@@ -37,23 +37,21 @@
 #include <sfx2/dispatch.hxx>
 #include <basic/sbuno.hxx>
 #include <basic/sbx.hxx>
-#include "fmitems.hxx"
-#include "fmobj.hxx"
-#include "svx/svditer.hxx"
+#include <fmobj.hxx>
+#include <svx/svditer.hxx>
 #include <svx/svdpagv.hxx>
 #include <svx/svdogrp.hxx>
 #include <svx/fmview.hxx>
 #include <svx/fmmodel.hxx>
 #include <svx/fmpage.hxx>
 #include <svx/fmshell.hxx>
-#include "fmpgeimp.hxx"
-#include "svx/fmtools.hxx"
-#include "fmshimp.hxx"
-#include "fmservs.hxx"
-#include "fmprop.hrc"
-#include "fmundo.hxx"
+#include <fmpgeimp.hxx>
+#include <svx/fmtools.hxx>
+#include <fmshimp.hxx>
+#include <fmservs.hxx>
+#include <fmprop.hxx>
+#include <fmundo.hxx>
 #include <svx/dataaccessdescriptor.hxx>
-#include <comphelper/processfactory.hxx>
 #include <comphelper/namedvaluecollection.hxx>
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
@@ -64,7 +62,7 @@
 #include <vcl/stdtext.hxx>
 #include <svx/fmglob.hxx>
 #include <svx/sdrpagewindow.hxx>
-#include "svx/sdrpaintwindow.hxx"
+#include <svx/sdrpaintwindow.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -78,30 +76,28 @@ using namespace ::com::sun::star::util;
 using namespace ::svxform;
 using namespace ::svx;
 
-
-FmFormView::FmFormView( FmFormModel* pModel, OutputDevice* pOut )
-    :E3dView(pModel,pOut)
+FmFormView::FmFormView(
+    SdrModel& rSdrModel,
+    OutputDevice* pOut)
+:   E3dView(rSdrModel, pOut)
 {
     Init();
 }
-
 
 void FmFormView::Init()
 {
     pFormShell = nullptr;
     pImpl = new FmXFormView(this);
-    pImpl->acquire();
 
-
-    // Model setzen
+    // set model
     SdrModel* pModel = GetModel();
 
-    DBG_ASSERT( dynamic_cast<const FmFormModel*>( pModel) !=  nullptr, "Falsches Model" );
+    DBG_ASSERT( dynamic_cast<const FmFormModel*>( pModel) !=  nullptr, "Wrong model" );
     if( dynamic_cast<const FmFormModel*>( pModel) ==  nullptr ) return;
     FmFormModel* pFormModel = static_cast<FmFormModel*>(pModel);
 
 
-    // DesignMode vom Model holen
+    // get DesignMode from model
     bool bInitDesignMode = pFormModel->GetOpenInDesignMode();
     if ( pFormModel->OpenInDesignModeIsDefaulted( ) )
     {   // this means that nobody ever explicitly set this on the model, and the model has never
@@ -126,8 +122,8 @@ void FmFormView::Init()
         }
     }
 
-    // dieses wird in der Shell vorgenommen
-    // bDesignMode = !bInitDesignMode;  // erzwingt, dass SetDesignMode ausgefuehrt wird
+    // this will be done in the shell
+    // bDesignMode = !bInitDesignMode;  // forces execution of SetDesignMode
     SetDesignMode( bInitDesignMode );
 }
 
@@ -138,8 +134,6 @@ FmFormView::~FmFormView()
         pFormShell->SetView( nullptr );
 
     pImpl->notifyViewDying();
-    pImpl->release();
-    pImpl = nullptr;
 }
 
 
@@ -163,20 +157,20 @@ void FmFormView::MarkListHasChanged()
             pImpl->m_pMarkedGrid = nullptr;
             if ( pImpl->m_xWindow.is() )
             {
-                pImpl->m_xWindow->removeFocusListener(pImpl);
+                pImpl->m_xWindow->removeFocusListener(pImpl.get());
                 pImpl->m_xWindow = nullptr;
             }
             SetMoveOutside(false);
             //OLMRefreshAllIAOManagers();
         }
 
-        pFormShell->GetImpl()->SetSelectionDelayed();
+        pFormShell->GetImpl()->SetSelectionDelayed_Lock();
     }
 }
 
 namespace
 {
-    const SdrPageWindow* findPageWindow( const SdrPaintView* _pView, OutputDevice* _pWindow )
+    const SdrPageWindow* findPageWindow( const SdrPaintView* _pView, OutputDevice const * _pWindow )
     {
         SdrPageView* pPageView = _pView->GetSdrPageView();
         if(pPageView)
@@ -227,10 +221,9 @@ void FmFormView::ChangeDesignMode(bool bDesign)
 
     FmFormModel* pModel = dynamic_cast<FmFormModel*>( GetModel() );
     if (pModel)
-    {   // fuer die Zeit des Uebergangs das Undo-Environment ausschalten, das sichert, dass man dort auch nicht-transiente
-        // Properties mal eben aendern kann (sollte allerdings mit Vorsicht genossen und beim Rueckschalten des Modes
-        // auch immer wieder rueckgaegig gemacht werden. Ein Beispiel ist das Setzen der maximalen Text-Laenge durch das
-        // FmXEditModel an seinem Control.)
+    {   // For the duration of the transition the Undo-Environment is disabled. This ensures that non-transient Properties can
+        // also be changed (this should be done with care and also reversed before switching the mode back. An example is the
+        // setting of the maximal length of the text by FmXEditModel on its control.)
         pModel->GetUndoEnv().Lock();
     }
 
@@ -240,7 +233,7 @@ void FmFormView::ChangeDesignMode(bool bDesign)
 
     // --- 2. simulate a deactivation (the shell will handle some things there ...?)
     if ( pFormShell && pFormShell->GetImpl() )
-        pFormShell->GetImpl()->viewDeactivated( *this );
+        pFormShell->GetImpl()->viewDeactivated_Lock(*this);
     else
         pImpl->Deactivate();
 
@@ -253,7 +246,7 @@ void FmFormView::ChangeDesignMode(bool bDesign)
     if ( pCurPage )
     {
         if ( pFormShell && pFormShell->GetImpl() )
-            pFormShell->GetImpl()->loadForms( pCurPage, ( bDesign ? FORMS_UNLOAD : FORMS_LOAD ) );
+            pFormShell->GetImpl()->loadForms_Lock(pCurPage, (bDesign ? LoadFormsFlags::Unload : LoadFormsFlags::Load));
     }
 
     // --- 5. base class functionality
@@ -262,7 +255,7 @@ void FmFormView::ChangeDesignMode(bool bDesign)
     // --- 6. simulate a activation (the shell will handle some things there ...?)
     OSL_PRECOND( pFormShell && pFormShell->GetImpl(), "FmFormView::ChangeDesignMode: is this really allowed? No shell?" );
     if ( pFormShell && pFormShell->GetImpl() )
-        pFormShell->GetImpl()->viewActivated( *this );
+        pFormShell->GetImpl()->viewActivated_Lock(*this);
     else
         pImpl->Activate();
 
@@ -279,7 +272,7 @@ void FmFormView::ChangeDesignMode(bool bDesign)
             // redraw UNO objects
             if ( GetSdrPageView() )
             {
-                SdrObjListIter aIter(*pCurPage);
+                SdrObjListIter aIter(pCurPage);
                 while( aIter.IsMore() )
                 {
                     SdrObject* pObj = aIter.Next();
@@ -301,7 +294,7 @@ void FmFormView::ChangeDesignMode(bool bDesign)
         }
     }
 
-    // und mein Undo-Environment wieder an
+    // Unlock Undo-Environment
     if (pModel)
         pModel->GetUndoEnv().UnLock();
 }
@@ -325,24 +318,24 @@ SdrPageView* FmFormView::ShowSdrPage(SdrPage* pPage)
             // creating the controllers
             ActivateControls(pPV);
 
-            // Alles deselektieren
+            // Deselect all
             UnmarkAll();
         }
         else if ( pFormShell && pFormShell->IsDesignMode() )
         {
             FmXFormShell* pFormShellImpl = pFormShell->GetImpl();
-            pFormShellImpl->UpdateForms( true );
+            pFormShellImpl->UpdateForms_Lock(true);
 
-            // damit der Formular-Navigator auf den Seitenwechsel reagieren kann
+            // so that the form navigator can react to the pagechange
             pFormShell->GetViewShell()->GetViewFrame()->GetBindings().Invalidate(SID_FM_FMEXPLORER_CONTROL, true);
 
-            pFormShellImpl->SetSelection(GetMarkedObjectList());
+            pFormShellImpl->SetSelection_Lock(GetMarkedObjectList());
         }
     }
 
     // notify our shell that we have been activated
     if ( pFormShell && pFormShell->GetImpl() )
-        pFormShell->GetImpl()->viewActivated( *this );
+        pFormShell->GetImpl()->viewActivated_Lock(*this);
     else
         pImpl->Activate();
 
@@ -358,7 +351,7 @@ void FmFormView::HideSdrPage()
 
     // --- 2. tell the shell the view is (going to be) deactivated
     if ( pFormShell && pFormShell->GetImpl() )
-        pFormShell->GetImpl()->viewDeactivated( *this );
+        pFormShell->GetImpl()->viewDeactivated_Lock(*this);
     else
         pImpl->Deactivate();
 
@@ -367,17 +360,12 @@ void FmFormView::HideSdrPage()
 }
 
 
-SdrModel* FmFormView::GetMarkedObjModel() const
-{
-    return E3dView::GetMarkedObjModel();
-}
-
-void FmFormView::ActivateControls(SdrPageView* pPageView)
+void FmFormView::ActivateControls(SdrPageView const * pPageView)
 {
     if (!pPageView)
         return;
 
-    for (sal_uInt32 i = 0L; i < pPageView->PageWindowCount(); ++i)
+    for (sal_uInt32 i = 0; i < pPageView->PageWindowCount(); ++i)
     {
         const SdrPageWindow& rPageWindow = *pPageView->GetPageWindow(i);
         pImpl->addWindow(rPageWindow);
@@ -385,12 +373,12 @@ void FmFormView::ActivateControls(SdrPageView* pPageView)
 }
 
 
-void FmFormView::DeactivateControls(SdrPageView* pPageView)
+void FmFormView::DeactivateControls(SdrPageView const * pPageView)
 {
     if( !pPageView )
         return;
 
-    for (sal_uInt32 i = 0L; i < pPageView->PageWindowCount(); ++i)
+    for (sal_uInt32 i = 0; i < pPageView->PageWindowCount(); ++i)
     {
         const SdrPageWindow& rPageWindow = *pPageView->GetPageWindow(i);
         pImpl->removeWindow(rPageWindow.GetControlContainer() );
@@ -398,33 +386,33 @@ void FmFormView::DeactivateControls(SdrPageView* pPageView)
 }
 
 
-SdrObject* FmFormView::CreateFieldControl( const ODataAccessDescriptor& _rColumnDescriptor )
+SdrObjectUniquePtr FmFormView::CreateFieldControl( const ODataAccessDescriptor& _rColumnDescriptor )
 {
     return pImpl->implCreateFieldControl( _rColumnDescriptor );
 }
 
 
-SdrObject* FmFormView::CreateXFormsControl( const OXFormsDescriptor &_rDesc )
+SdrObjectUniquePtr FmFormView::CreateXFormsControl( const OXFormsDescriptor &_rDesc )
 {
     return pImpl->implCreateXFormsControl(_rDesc);
 }
 
 
-SdrObject* FmFormView::CreateFieldControl(const OUString& rFieldDesc) const
+SdrObjectUniquePtr FmFormView::CreateFieldControl(const OUString& rFieldDesc) const
 {
-    OUString sDataSource     = rFieldDesc.getToken(0,sal_Unicode(11));
-    OUString sObjectName     = rFieldDesc.getToken(1,sal_Unicode(11));
-    sal_uInt16 nObjectType   = (sal_uInt16)rFieldDesc.getToken(2,sal_Unicode(11)).toInt32();
-    OUString sFieldName      = rFieldDesc.getToken(3,sal_Unicode(11));
+    OUString sDataSource     = rFieldDesc.getToken(0,u'\x000B');
+    OUString sObjectName     = rFieldDesc.getToken(1,u'\x000B');
+    sal_uInt16 nObjectType   = static_cast<sal_uInt16>(rFieldDesc.getToken(2,u'\x000B').toInt32());
+    OUString sFieldName      = rFieldDesc.getToken(3,u'\x000B');
 
     if (sFieldName.isEmpty() || sObjectName.isEmpty() || sDataSource.isEmpty())
         return nullptr;
 
     ODataAccessDescriptor aColumnDescriptor;
     aColumnDescriptor.setDataSource(sDataSource);
-    aColumnDescriptor[ daCommand ]          <<= sObjectName;
-    aColumnDescriptor[ daCommandType ]      <<= nObjectType;
-    aColumnDescriptor[ daColumnName ]       <<= sFieldName;
+    aColumnDescriptor[ DataAccessDescriptorProperty::Command ]          <<= sObjectName;
+    aColumnDescriptor[ DataAccessDescriptorProperty::CommandType ]      <<= nObjectType;
+    aColumnDescriptor[ DataAccessDescriptorProperty::ColumnName ]       <<= sFieldName;
 
     return pImpl->implCreateFieldControl( aColumnDescriptor );
 }
@@ -437,7 +425,7 @@ void FmFormView::InsertControlContainer(const Reference< css::awt::XControlConta
         SdrPageView* pPageView = GetSdrPageView();
         if( pPageView )
         {
-            for( sal_uInt32 i = 0L; i < pPageView->PageWindowCount(); i++ )
+            for( sal_uInt32 i = 0; i < pPageView->PageWindowCount(); i++ )
             {
                 const SdrPageWindow& rPageWindow = *pPageView->GetPageWindow(i);
 
@@ -500,7 +488,7 @@ bool FmFormView::KeyInput(const KeyEvent& rKEvt, vcl::Window* pWin)
                     pImpl->m_pMarkedGrid = pObj;
                     pImpl->m_xWindow = xWindow;
                     // add as listener to get notified when ESC will be pressed inside the grid
-                    pImpl->m_xWindow->addFocusListener(pImpl);
+                    pImpl->m_xWindow->addFocusListener(pImpl.get());
                     SetMoveOutside(true);
                     //OLMRefreshAllIAOManagers();
                     xWindow->setFocus();
@@ -516,7 +504,7 @@ bool FmFormView::KeyInput(const KeyEvent& rKEvt, vcl::Window* pWin)
             &&   rKeyCode.IsMod2()
             )
         {
-            pFormShell->GetImpl()->handleShowPropertiesRequest();
+            pFormShell->GetImpl()->handleShowPropertiesRequest_Lock();
         }
 
     }
@@ -545,7 +533,7 @@ bool FmFormView::MouseButtonDown( const MouseEvent& _rMEvt, vcl::Window* _pWin )
     {
         SdrViewEvent aViewEvent;
         PickAnything( _rMEvt, SdrMouseEventKind::BUTTONDOWN, aViewEvent );
-        pFormShell->GetImpl()->handleMouseButtonDown( aViewEvent );
+        pFormShell->GetImpl()->handleMouseButtonDown_Lock(aViewEvent);
     }
 
     return bReturn;
@@ -574,16 +562,18 @@ FmFormObj* FmFormView::getMarkedGrid() const
 }
 
 
-void FmFormView::createControlLabelPair( OutputDevice* _pOutDev, sal_Int32 _nXOffsetMM, sal_Int32 _nYOffsetMM,
+void FmFormView::createControlLabelPair( OutputDevice const * _pOutDev, sal_Int32 _nXOffsetMM, sal_Int32 _nYOffsetMM,
     const Reference< XPropertySet >& _rxField, const Reference< XNumberFormats >& _rxNumberFormats,
-    sal_uInt16 _nControlObjectID, const OUString& _rFieldPostfix, sal_uInt32 _nInventor, sal_uInt16 _nLabelObjectID,
-    SdrPage* _pLabelPage, SdrPage* _pControlPage, SdrModel* _pModel, SdrUnoObj*& _rpLabel, SdrUnoObj*& _rpControl )
+    sal_uInt16 _nControlObjectID, SdrInventor _nInventor, sal_uInt16 _nLabelObjectID,
+    SdrModel& _rModel,
+    std::unique_ptr<SdrUnoObj, SdrObjectFreeOp>& _rpLabel,
+    std::unique_ptr<SdrUnoObj, SdrObjectFreeOp>& _rpControl )
 {
     FmXFormView::createControlLabelPair(
         *_pOutDev, _nXOffsetMM, _nYOffsetMM,
         _rxField, _rxNumberFormats,
-        _nControlObjectID, _rFieldPostfix, _nInventor, _nLabelObjectID,
-        _pLabelPage, _pControlPage, _pModel,
+        _nControlObjectID, "", _nInventor, _nLabelObjectID,
+        _rModel,
         _rpLabel, _rpControl
     );
 }

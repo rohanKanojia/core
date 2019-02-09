@@ -51,6 +51,7 @@ namespace drawinglayer { namespace primitive2d {
     class ControlPrimitive2D;
     class PagePreviewPrimitive2D;
     class EpsPrimitive2D;
+    class ObjectInfoPrimitive2D;
     class SvgLinearAtomPrimitive2D;
     class SvgRadialAtomPrimitive2D;
 }}
@@ -86,9 +87,10 @@ namespace drawinglayer
             // PolygonStrokePrimitive2D's decompositions (normally only one)
             sal_uInt32                                              mnPolygonStrokePrimitive2D;
 
+            // currently used ObjectInfoPrimitive2D
+            const primitive2d::ObjectInfoPrimitive2D*               mpObjectInfoPrimitive2D;
 
             // common VCL rendering support
-
             void RenderTextSimpleOrDecoratedPortionPrimitive2D(const primitive2d::TextSimplePortionPrimitive2D& rTextCandidate);
             void RenderPolygonHairlinePrimitive2D(const primitive2d::PolygonHairlinePrimitive2D& rPolygonCandidate, bool bPixelBased);
             void RenderBitmapPrimitive2D(const primitive2d::BitmapPrimitive2D& rBitmapCandidate);
@@ -104,9 +106,9 @@ namespace drawinglayer
             void RenderPointArrayPrimitive2D(const primitive2d::PointArrayPrimitive2D& rPointArrayCandidate);
             void RenderPolygonStrokePrimitive2D(const primitive2d::PolygonStrokePrimitive2D& rPolygonStrokeCandidate);
             void RenderEpsPrimitive2D(const primitive2d::EpsPrimitive2D& rEpsPrimitive2D);
+            void RenderObjectInfoPrimitive2D(const primitive2d::ObjectInfoPrimitive2D& rObjectInfoPrimitive2D);
             void RenderSvgLinearAtomPrimitive2D(const primitive2d::SvgLinearAtomPrimitive2D& rCandidate);
             void RenderSvgRadialAtomPrimitive2D(const primitive2d::SvgRadialAtomPrimitive2D& rCandidate);
-            void RenderMetafilePrimitive2D(const primitive2d::MetafilePrimitive2D& rPolygonCandidate);
 
             // DrawMode adaption support
             void adaptLineToFillDrawMode() const;
@@ -117,10 +119,13 @@ namespace drawinglayer
             VclProcessor2D(
                 const geometry::ViewInformation2D& rViewInformation,
                 OutputDevice& rOutDev);
-            virtual ~VclProcessor2D();
+            virtual ~VclProcessor2D() override;
 
             // access to Drawinglayer configuration options
             const SvtOptionsDrawinglayer& getOptionsDrawinglayer() const { return maDrawinglayerOpt; }
+
+            // access to currently used ObjectInfoPrimitive2D
+            const primitive2d::ObjectInfoPrimitive2D* getObjectInfoPrimitive2D() const { return mpObjectInfoPrimitive2D; }
         };
     } // end of namespace processor2d
 } // end of namespace drawinglayer

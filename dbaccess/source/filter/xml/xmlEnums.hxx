@@ -25,11 +25,16 @@ namespace dbaxml
 {
     enum XMLDocTokens
     {
-        XML_TOK_DOC_AUTOSTYLES,
         XML_TOK_DOC_SETTINGS,
-        XML_TOK_DOC_DATABASE,
         XML_TOK_DOC_STYLES,
-        XML_TOK_DOC_SCRIPT
+        XML_TOK_DOC_CONTENT,
+    };
+    enum XMLDocContentTokens
+    {
+        XML_TOK_CONTENT_AUTOSTYLES,
+        XML_TOK_CONTENT_STYLES,
+        XML_TOK_CONTENT_SCRIPTS,
+        XML_TOK_CONTENT_BODY,
     };
     enum XMLDatabaseToken
     {
@@ -124,13 +129,6 @@ namespace dbaxml
         XML_TOK_ACTUATE ,
         XML_TOK_AS_TEMPLATE ,
         XML_TOK_COMPONENT_NAME
-    };
-    enum XMLType
-    {
-        XML_TYPE_FORMS,
-        XML_TYPE_REPORTS,
-        XML_TYPE_QUERIES,
-        XML_TYPE_TABLES
     };
     enum XMLQueryTable
     {

@@ -17,10 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "MultipleItemConverter.hxx"
-#include "ItemPropertyMap.hxx"
+#include <MultipleItemConverter.hxx>
 
-#include <algorithm>
 #include <memory>
 
 using namespace ::com::sun::star;
@@ -33,13 +31,12 @@ MultipleItemConverter::MultipleItemConverter( SfxItemPool& rItemPool )
 }
 MultipleItemConverter::~MultipleItemConverter()
 {
-    ::std::for_each( m_aConverters.begin(), m_aConverters.end(), std::default_delete<ItemConverter>());
 }
 
 void MultipleItemConverter::FillItemSet( SfxItemSet & rOutItemSet ) const
 {
-    ::std::vector< ItemConverter* >::const_iterator       aIter = m_aConverters.begin();
-    const ::std::vector< ItemConverter* >::const_iterator aEnd  = m_aConverters.end();
+    auto aIter = m_aConverters.begin();
+    auto aEnd  = m_aConverters.end();
     if( aIter != aEnd )
     {
         (*aIter)->FillItemSet( rOutItemSet );
@@ -47,7 +44,7 @@ void MultipleItemConverter::FillItemSet( SfxItemSet & rOutItemSet ) const
     }
     for( ; aIter != aEnd; ++aIter )
     {
-        SfxItemSet aSet = this->CreateEmptyItemSet();
+        SfxItemSet aSet = CreateEmptyItemSet();
         (*aIter)->FillItemSet( aSet );
         InvalidateUnequalItems( rOutItemSet, aSet );
     }

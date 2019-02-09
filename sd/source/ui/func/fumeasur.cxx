@@ -17,12 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fumeasur.hxx"
-#include <vcl/msgbox.hxx>
+#include <fumeasur.hxx>
 #include <sfx2/request.hxx>
-#include "View.hxx"
-#include "ViewShell.hxx"
-#include "drawdoc.hxx"
+#include <View.hxx>
+#include <ViewShell.hxx>
+#include <drawdoc.hxx>
 #include <svx/svxdlg.hxx>
 #include <svx/dialogs.hrc>
 #include <memory>
@@ -57,9 +56,9 @@ void FuMeasureDlg::DoExecute( SfxRequest& rReq )
     if( !pArgs )
     {
         SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-        std::unique_ptr<SfxAbstractDialog> pDlg( pFact ? pFact->CreateSfxDialog( nullptr, aNewAttr, mpView, RID_SVXPAGE_MEASURE) : nullptr );
+        ScopedVclPtr<SfxAbstractDialog> pDlg(pFact->CreateSfxDialog(rReq.GetFrameWindow(), aNewAttr, mpView, RID_SVXPAGE_MEASURE));
 
-        if( pDlg.get() && (pDlg->Execute() == RET_OK) )
+        if( pDlg->Execute() == RET_OK )
         {
             rReq.Done( *pDlg->GetOutputItemSet() );
             pArgs = rReq.GetArgs();

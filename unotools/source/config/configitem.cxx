@@ -23,7 +23,6 @@
 #include <unotools/configitem.hxx>
 #include <unotools/configmgr.hxx>
 #include <unotools/configpaths.hxx>
-#include <comphelper/processfactory.hxx>
 #include <com/sun/star/beans/XMultiPropertySet.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/util/XChangesListener.hpp>
@@ -43,6 +42,7 @@
 #include <comphelper/solarmutex.hxx>
 #include <rtl/ref.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <tools/diagnose_ex.h>
 
 using namespace utl;
 using namespace com::sun::star::uno;
@@ -53,22 +53,6 @@ using namespace com::sun::star::container;
 using namespace com::sun::star::configuration;
 
 #include <cppuhelper/implbase.hxx>
-
-#ifdef DBG_UTIL
-static inline void lcl_CFG_DBG_EXCEPTION(const sal_Char* cText, const Exception& rEx)
-{
-    OString sMsg(cText);
-    sMsg += OString(rEx.Message.getStr(), rEx.Message.getLength(), RTL_TEXTENCODING_ASCII_US);
-    OSL_FAIL(sMsg.getStr());
-}
-#define CATCH_INFO(a) \
-catch(const Exception& rEx)   \
-{                       \
-    lcl_CFG_DBG_EXCEPTION(a, rEx);\
-}
-#else
-    #define CATCH_INFO(a) catch(const Exception&){}
-#endif
 
 /*
     The ConfigChangeListener_Impl receives notifications from the configuration about changes that
@@ -87,13 +71,12 @@ namespace utl{
             ConfigItem*                 pParent;
             const Sequence< OUString >  aPropertyNames;
             ConfigChangeListener_Impl(ConfigItem& rItem, const Sequence< OUString >& rNames);
-            virtual ~ConfigChangeListener_Impl();
 
         //XChangesListener
-        virtual void SAL_CALL changesOccurred( const ChangesEvent& Event ) throw(RuntimeException, std::exception) override;
+        virtual void SAL_CALL changesOccurred( const ChangesEvent& Event ) override;
 
         //XEventListener
-        virtual void SAL_CALL disposing( const EventObject& Source ) throw(RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const EventObject& Source ) override;
     };
 }
 
@@ -120,10 +103,6 @@ ConfigChangeListener_Impl::ConfigChangeListener_Impl(
 {
 }
 
-ConfigChangeListener_Impl::~ConfigChangeListener_Impl()
-{
-}
-
 static bool lcl_Find(
         const OUString& rTemp,
         const OUString* pCheckPropertyNames,
@@ -137,7 +116,7 @@ static bool lcl_Find(
     return false;
 }
 
-void ConfigChangeListener_Impl::changesOccurred( const ChangesEvent& rEvent ) throw(RuntimeException, std::exception)
+void ConfigChangeListener_Impl::changesOccurred( const ChangesEvent& rEvent )
 {
     const ElementChange* pElementChanges = rEvent.Changes.getConstArray();
 
@@ -166,7 +145,7 @@ void ConfigChangeListener_Impl::changesOccurred( const ChangesEvent& rEvent ) th
     }
 }
 
-void ConfigChangeListener_Impl::disposing( const EventObject& /*rSource*/ ) throw(RuntimeException, std::exception)
+void ConfigChangeListener_Impl::disposing( const EventObject& /*rSource*/ )
 {
     pParent->RemoveChangesListener();
 }
@@ -178,7 +157,7 @@ ConfigItem::ConfigItem(const OUString &rSubTree, ConfigItemMode nSetMode ) :
     m_bEnableInternalNotification(false),
     m_nInValueChange(0)
 {
-    if (utl::ConfigManager::IsAvoidConfig())
+    if (utl::ConfigManager::IsFuzzing())
         return;
 
     if (nSetMode & ConfigItemMode::ReleaseTree)
@@ -198,7 +177,7 @@ void ConfigItem::CallNotify( const css::uno::Sequence<OUString>& rPropertyNames 
     // the call is forwarded to the virtual Notify() method
     // it is pure virtual, so all classes deriving from ConfigItem have to decide how they
     // want to notify listeners
-    if(!IsInValueChange() || m_bEnableInternalNotification)
+    if(m_nInValueChange <= 0 || m_bEnableInternalNotification)
         Notify(rPropertyNames);
 }
 
@@ -208,7 +187,7 @@ void ConfigItem::impl_packLocalizedProperties(  const   Sequence< OUString >&   
 {
     // Safe impossible cases.
     // This method should be called for special ConfigItem-mode only!
-    OSL_ENSURE( ((m_nMode & ConfigItemMode::AllLocales ) == ConfigItemMode::AllLocales), "ConfigItem::impl_packLocalizedProperties()\nWrong call of this method detected!\n" );
+    OSL_ENSURE( ((m_nMode & ConfigItemMode::AllLocales ) == ConfigItemMode::AllLocales), "ConfigItem::impl_packLocalizedProperties() Wrong call of this method detected!" );
 
     sal_Int32                   nSourceCounter;      // used to step during input lists
     sal_Int32                   nSourceSize;         // marks end of loop over input lists
@@ -276,7 +255,7 @@ void ConfigItem::impl_unpackLocalizedProperties(    const   Sequence< OUString >
 {
     // Safe impossible cases.
     // This method should be called for special ConfigItem-mode only!
-    OSL_ENSURE( ((m_nMode & ConfigItemMode::AllLocales ) == ConfigItemMode::AllLocales), "ConfigItem::impl_unpackLocalizedProperties()\nWrong call of this method detected!\n" );
+    OSL_ENSURE( ((m_nMode & ConfigItemMode::AllLocales ) == ConfigItemMode::AllLocales), "ConfigItem::impl_unpackLocalizedProperties() Wrong call of this method detected!" );
 
     sal_Int32                   nSourceCounter;      // used to step during input lists
     sal_Int32                   nSourceSize;         // marks end of loop over input lists
@@ -356,7 +335,7 @@ Sequence< sal_Bool > ConfigItem::GetReadOnlyStates(const css::uno::Sequence< OUS
     // We must be sure to return a valid information every time!
     // Set default to non readonly... similar to the configuration handling of this property.
     for ( i=0; i<nCount; ++i)
-        lStates[i] = sal_False;
+        lStates[i] = false;
 
     // no access - no information...
     Reference< XHierarchicalNameAccess > xHierarchyAccess = GetTree();
@@ -374,7 +353,7 @@ Sequence< sal_Bool > ConfigItem::GetReadOnlyStates(const css::uno::Sequence< OUS
             (void)::utl::splitLastFromConfigurationPath(sName,sPath,sProperty);
             if (sPath.isEmpty() && sProperty.isEmpty())
             {
-                OSL_FAIL("ConfigItem::IsReadonly()\nsplitt failed\n");
+                OSL_FAIL("ConfigItem::IsReadonly() split failed");
                 continue;
             }
 
@@ -386,7 +365,7 @@ Sequence< sal_Bool > ConfigItem::GetReadOnlyStates(const css::uno::Sequence< OUS
                 Any aNode = xHierarchyAccess->getByHierarchicalName(sPath);
                 if (!(aNode >>= xNode) || !xNode.is())
                 {
-                    OSL_FAIL("ConfigItem::IsReadonly()\nno set available\n");
+                    OSL_FAIL("ConfigItem::IsReadonly() no set available");
                     continue;
                 }
             }
@@ -399,17 +378,17 @@ Sequence< sal_Bool > ConfigItem::GetReadOnlyStates(const css::uno::Sequence< OUS
             if (xSet.is())
             {
                 xInfo = xSet->getPropertySetInfo();
-                OSL_ENSURE(xInfo.is(), "ConfigItem::IsReadonly()\ngetPropertySetInfo failed ...\n");
+                OSL_ENSURE(xInfo.is(), "ConfigItem::IsReadonly() getPropertySetInfo failed ...");
             }
             else
             {
                 xInfo.set(xNode, UNO_QUERY);
-                OSL_ENSURE(xInfo.is(), "ConfigItem::IsReadonly()\nUNO_QUERY failed ...\n");
+                OSL_ENSURE(xInfo.is(), "ConfigItem::IsReadonly() UNO_QUERY failed ...");
             }
 
             if (!xInfo.is())
             {
-                OSL_FAIL("ConfigItem::IsReadonly()\nno prop info available\n");
+                OSL_FAIL("ConfigItem::IsReadonly() no prop info available");
                 continue;
             }
 
@@ -444,7 +423,7 @@ Sequence< Any > ConfigItem::GetProperties(const Sequence< OUString >& rNames)
                     "unotools.config",
                     "ignoring XHierarchicalNameAccess to /org.openoffice."
                         << sSubTree << "/" << pNames[i] << " Exception: "
-                        << rEx.Message);
+                        << rEx);
             }
         }
 
@@ -520,14 +499,24 @@ bool ConfigItem::PutProperties( const Sequence< OUString >& rNames,
                     xTopNodeReplace->replaceByName(sProperty, pValues[i]);
                 }
             }
-            CATCH_INFO("Exception from PutProperties: ");
+            catch (css::uno::Exception & e)
+            {
+                SAL_WARN(
+                    "unotools.config",
+                    "Exception from PutProperties: " << e);
+            }
         }
         try
         {
             Reference<XChangesBatch> xBatch(xHierarchyAccess, UNO_QUERY);
             xBatch->commitChanges();
         }
-        CATCH_INFO("Exception from commitChanges(): ")
+        catch (css::uno::Exception & e)
+        {
+            SAL_WARN(
+                "unotools.config",
+                "Exception from commitChanges(): " << e);
+        }
     }
 
     return bRet;
@@ -586,31 +575,11 @@ static void lcl_normalizeLocalNames(Sequence< OUString >& _rNames, ConfigNameFor
 {
     switch (_eFormat)
     {
-    case CONFIG_NAME_LOCAL_NAME:
+    case ConfigNameFormat::LocalNode:
         // unaltered - this is our input format
         break;
 
-    case CONFIG_NAME_FULL_PATH:
-        {
-            Reference<XHierarchicalName> xFormatter(_xParentNode, UNO_QUERY);
-            if (xFormatter.is())
-            {
-                OUString * pNames = _rNames.getArray();
-                for(int i = 0; i<_rNames.getLength(); ++i)
-                {
-                    try
-                    {
-                        pNames[i] = xFormatter->composeHierarchicalName(pNames[i]);
-                    }
-                    CATCH_INFO("Exception from composeHierarchicalName(): ")
-                }
-                break;
-            }
-        }
-        OSL_FAIL("Cannot create absolute paths: missing interface");
-        // make local paths instaed
-
-    case CONFIG_NAME_LOCAL_PATH:
+    case ConfigNameFormat::LocalPath:
         {
             Reference<XTemplateContainer> xTypeContainer(_xParentNode, UNO_QUERY);
             if (xTypeContainer.is())
@@ -639,28 +608,12 @@ static void lcl_normalizeLocalNames(Sequence< OUString >& _rNames, ConfigNameFor
         }
         break;
 
-    case CONFIG_NAME_PLAINTEXT_NAME:
-        {
-            Reference<XStringEscape> xEscaper(_xParentNode, UNO_QUERY);
-            if (xEscaper.is())
-            {
-                OUString * pNames = _rNames.getArray();
-                for(int i = 0; i<_rNames.getLength(); ++i)
-                try
-                {
-                    pNames[i] = xEscaper->unescapeString(pNames[i]);
-                }
-                CATCH_INFO("Exception from unescapeString(): ")
-            }
-        }
-        break;
-
     }
 }
 
 Sequence< OUString > ConfigItem::GetNodeNames(const OUString& rNode)
 {
-    ConfigNameFormat const eDefaultFormat = CONFIG_NAME_LOCAL_NAME; // CONFIG_NAME_DEFAULT;
+    ConfigNameFormat const eDefaultFormat = ConfigNameFormat::LocalNode; // CONFIG_NAME_DEFAULT;
 
     return GetNodeNames(rNode, eDefaultFormat);
 }
@@ -688,7 +641,12 @@ Sequence< OUString > ConfigItem::GetNodeNames(const OUString& rNode, ConfigNameF
             }
 
         }
-        CATCH_INFO("Exception from GetNodeNames: ");
+        catch (css::uno::Exception & e)
+        {
+            SAL_WARN(
+                "unotools.config",
+                "Exception from GetNodeNames: " << e);
+        }
     }
     return aRet;
 }
@@ -721,17 +679,25 @@ bool ConfigItem::ClearNodeSet(const OUString& rNode)
                 {
                     xCont->removeByName(pNames[i]);
                 }
-                CATCH_INFO("Exception from removeByName(): ")
+                catch (css::uno::Exception & e)
+                {
+                    SAL_WARN(
+                        "unotools.config",
+                         "Exception from removeByName(): " << e);
+                }
             }
             xBatch->commitChanges();
             bRet = true;
         }
-        CATCH_INFO("Exception from ClearNodeSet")
+        catch (css::uno::Exception & e)
+        {
+            SAL_WARN("unotools.config", "Exception from ClearNodeSet" << e);
+        }
     }
     return bRet;
 }
 
-bool ConfigItem::ClearNodeElements(const OUString& rNode, Sequence< OUString >& rElements)
+bool ConfigItem::ClearNodeElements(const OUString& rNode, Sequence< OUString > const & rElements)
 {
     ValueCounter_Impl aCounter(m_nInValueChange);
     bool bRet = false;
@@ -760,16 +726,25 @@ bool ConfigItem::ClearNodeElements(const OUString& rNode, Sequence< OUString >& 
                 Reference<XChangesBatch> xBatch(xHierarchyAccess, UNO_QUERY);
                 xBatch->commitChanges();
             }
-            CATCH_INFO("Exception from commitChanges(): ")
+            catch (css::uno::Exception & e)
+            {
+                SAL_WARN(
+                    "unotools.config",
+                    "Exception from commitChanges(): " << e);
+            }
             bRet = true;
         }
-        CATCH_INFO("Exception from GetNodeNames: ")
+        catch (css::uno::Exception & e)
+        {
+            SAL_WARN(
+                "unotools.config",
+                "Exception from GetNodeNames: " << e);
+        }
     }
     return bRet;
 }
 
-static inline
-OUString lcl_extractSetPropertyName( const OUString& rInPath, const OUString& rPrefix )
+static OUString lcl_extractSetPropertyName( const OUString& rInPath, const OUString& rPrefix )
 {
     OUString const sSubPath = dropPrefixFromConfigurationPath( rInPath, rPrefix);
     return extractFirstFromConfigurationPath( sSubPath );
@@ -848,7 +823,12 @@ bool ConfigItem::SetSetProperties(
                 {
                     xBatch->commitChanges();
                 }
-                CATCH_INFO("Exception from commitChanges(): ")
+                catch (css::uno::Exception & e)
+                {
+                    SAL_WARN(
+                        "unotools.config",
+                        "Exception from commitChanges(): " << e);
+                }
 
                 const PropertyValue* pProperties = rValues.getConstArray();
 
@@ -884,19 +864,21 @@ bool ConfigItem::SetSetProperties(
                         OSL_ENSURE( xHierarchyAccess->hasByHierarchicalName(pValues[nValue].Name),
                             "Invalid config path" );
                     }
-                    CATCH_INFO("Exception form insert/replaceByName(): ")
+                    catch (css::uno::Exception & e)
+                    {
+                        SAL_WARN(
+                            "unotools.config",
+                            "Exception form insert/replaceByName(): " << e);
+                    }
                 }
                 xBatch->commitChanges();
             }
         }
-#ifdef DBG_UTIL
         catch (const Exception& rEx)
         {
-            lcl_CFG_DBG_EXCEPTION("Exception from SetSetProperties: ", rEx);
-#else
-        catch (const Exception&)
-        {
-#endif
+            SAL_WARN(
+                "unotools.config",
+                "Exception from SetSetProperties: " << rEx);
             bRet = false;
         }
     }
@@ -972,7 +954,12 @@ bool ConfigItem::ReplaceSetProperties(
                     }
                 }
                 try { xBatch->commitChanges(); }
-                CATCH_INFO("Exception from commitChanges(): ")
+                catch (css::uno::Exception & e)
+                {
+                    SAL_WARN(
+                        "unotools.config",
+                        "Exception from commitChanges(): " << e);
+                }
             }
 
             if(xFac.is()) // !isSimpleValueSet
@@ -988,7 +975,12 @@ bool ConfigItem::ReplaceSetProperties(
                     }
                 }
                 try { xBatch->commitChanges(); }
-                CATCH_INFO("Exception from commitChanges(): ")
+                catch (css::uno::Exception & e)
+                {
+                    SAL_WARN(
+                        "unotools.config",
+                        "Exception from commitChanges(): " << e);
+                }
 
                 const PropertyValue* pProperties = rValues.getConstArray();
 
@@ -1022,19 +1014,20 @@ bool ConfigItem::ReplaceSetProperties(
                         else
                             xCont->insertByName(sSubNode, pValues[nValue].Value);
                     }
-                    CATCH_INFO("Exception from insert/replaceByName(): ");
+                    catch (css::uno::Exception & e)
+                    {
+                        SAL_WARN(
+                            "unotools.config",
+                            "Exception from insert/replaceByName(): " << e);
+                    }
                 }
                 xBatch->commitChanges();
             }
         }
-#ifdef DBG_UTIL
         catch (const Exception& rEx)
         {
-            lcl_CFG_DBG_EXCEPTION("Exception from ReplaceSetProperties: ", rEx);
-#else
-        catch (const Exception&)
-        {
-#endif
+            SAL_WARN(
+                "unotools.config", "Exception from ReplaceSetProperties: " << rEx);
             bRet = false;
         }
     }
@@ -1076,7 +1069,10 @@ bool ConfigItem::AddNode(const OUString& rNode, const OUString& rNewNode)
                 {
                     xBatch->commitChanges();
                 }
-                CATCH_INFO("Exception from commitChanges(): ")
+                catch (css::uno::Exception & e)
+                {
+                    SAL_WARN("unotools.config", "Exception from commitChanges(): " << e);
+                }
             }
             else
             {
@@ -1086,18 +1082,16 @@ bool ConfigItem::AddNode(const OUString& rNode, const OUString& rNewNode)
                     if(!xCont->hasByName(rNewNode))
                         xCont->insertByName(rNewNode, Any());
                 }
-                CATCH_INFO("Exception from AddNode(): ")
+                catch (css::uno::Exception & e)
+                {
+                    SAL_WARN("unotools.config", "Exception from AddNode(): " << e);
+                }
             }
             xBatch->commitChanges();
         }
-#ifdef DBG_UTIL
-        catch (const Exception& rEx)
-        {
-            lcl_CFG_DBG_EXCEPTION("Exception from AddNode(): ", rEx);
-#else
         catch (const Exception&)
         {
-#endif
+            DBG_UNHANDLED_EXCEPTION("unotools.config");
             bRet = false;
         }
     }
@@ -1118,7 +1112,7 @@ void    ConfigItem::ClearModified()
 Reference< XHierarchicalNameAccess> ConfigItem::GetTree()
 {
     Reference< XHierarchicalNameAccess> xRet;
-    if (utl::ConfigManager::IsAvoidConfig())
+    if (utl::ConfigManager::IsFuzzing())
         return xRet;
     if(!m_xHierarchyAccess.is())
         xRet = ConfigManager::acquireTree(*this);

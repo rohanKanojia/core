@@ -21,6 +21,7 @@
 
 #include <connectivity/dbtoolsdllapi.hxx>
 #include <connectivity/dbmetadata.hxx>
+#include <com/sun/star/sdbc/SQLException.hpp>
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/util/XNumberFormatTypes.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -62,13 +63,11 @@ namespace connectivity
     class OSQLParseNode;
     class IParseContext;
 
-    typedef ::std::vector< OSQLParseNode* >                  OSQLParseNodes;
-
     enum class SQLNodeType { Rule, ListRule, CommaListRule,
-                         Keyword, Comparison, Name,
+                         Keyword, Name,
                          String, IntNum, ApproxNum,
                          Equal, Less, Great, LessEq, GreatEq, NotEqual,
-                         Punctuation, AMMSC, AccessDate, Date, Concat};
+                         Punctuation, AccessDate, Concat};
 
     typedef ::std::set< OUString >   QueryNameSet;
 
@@ -104,7 +103,6 @@ namespace connectivity
             bool _bPredicate,
             bool _bParseToSDBC
         );
-        ~SQLParseNodeParameter();
     };
 
     //= OSQLParseNode
@@ -113,14 +111,15 @@ namespace connectivity
     {
         friend class OSQLParser;
 
-        OSQLParseNodes                  m_aChildren;
-        OSQLParseNode*                  m_pParent;      // pParent for reverse linkage in the tree
+        std::vector< std::unique_ptr<OSQLParseNode> >
+                                 m_aChildren;
+        OSQLParseNode*           m_pParent;      // pParent for reverse linkage in the tree
         OUString                 m_aNodeValue;   // token name, or empty in case of rules,
-                                                        // or OUString in case of
-                                                        // OUString, INT, etc.
-        SQLNodeType                     m_eNodeType;    // see above
-        sal_uInt32                      m_nNodeID;      // Rule ID (if IsRule())
-                                                        // or Token ID (if !IsRule())
+                                                 // or OUString in case of
+                                                 // OUString, INT, etc.
+        SQLNodeType              m_eNodeType;    // see above
+        sal_uInt32               m_nNodeID;      // Rule ID (if IsRule())
+                                                 // or Token ID (if !IsRule())
                                             // Rule IDs and Token IDs can't
                                             // be distinguished by their values,
                                             // IsRule has to be used for that!
@@ -251,7 +250,7 @@ namespace connectivity
         OSQLParseNode(const OSQLParseNode& rParseNode);
         OSQLParseNode& operator=(const OSQLParseNode& rParseNode);
 
-        bool operator==(OSQLParseNode& rParseNode) const;
+        bool operator==(OSQLParseNode const & rParseNode) const;
 
         // destructor destructs the tree recursively
         virtual ~OSQLParseNode();
@@ -399,7 +398,7 @@ namespace connectivity
 
         // substitute all occurrences of :var or [name] into the dynamic parameter ?
         // _pNode will be modified if parameters exists
-        static void substituteParameterNames(OSQLParseNode* _pNode);
+        static void substituteParameterNames(OSQLParseNode const * _pNode);
 
         /** return a table range when it exists.
         */
@@ -417,8 +416,7 @@ namespace connectivity
                             bool _bIntl,
                             bool _bQuote,
                             sal_Char _cDecSep,
-                            bool _bPredicate,
-                            bool _bSubstitute) const;
+                            bool _bPredicate) const;
 
     private:
         void impl_parseNodeToString_throw( OUStringBuffer& rString, const SQLParseNodeParameter& rParam, bool bSimple=true ) const;
@@ -441,9 +439,7 @@ namespace connectivity
 
     inline OSQLParseNode* OSQLParseNode::getChild(sal_uInt32 nPos) const
     {
-        assert(nPos < m_aChildren.size());
-
-        return m_aChildren[nPos];
+        return m_aChildren[nPos].get();
     }
 
     // utilities to query for a specific rule, token or punctuation

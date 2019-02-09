@@ -20,9 +20,10 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_CHARTTYPES_PIECHART_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_CHARTTYPES_PIECHART_HXX
 
-#include "VSeriesPlotter.hxx"
-#include <basegfx/vector/b2dvector.hxx>
-#include <basegfx/range/b2irectangle.hxx>
+#include <memory>
+#include <VSeriesPlotter.hxx>
+#include <basegfx/vector/b2ivector.hxx>
+#include <com/sun/star/awt/Point.hpp>
 
 namespace chart
 {
@@ -37,15 +38,15 @@ public:
 
     PieChart( const css::uno::Reference< css::chart2::XChartType >& xChartTypeModel
             , sal_Int32 nDimensionCount, bool bExcludingPositioning );
-    virtual ~PieChart();
+    virtual ~PieChart() override;
 
     /** This method creates all shapes needed for representing the pie chart.
      */
     virtual void createShapes() override;
     virtual void rearrangeLabelToAvoidOverlapIfRequested( const css::awt::Size& rPageSize ) override;
 
-    virtual void setScales( const ::std::vector< ExplicitScaleData >& rScales, bool bSwapXAndYAxis ) override;
-    virtual void addSeries( VDataSeries* pSeries, sal_Int32 zSlot = -1, sal_Int32 xSlot = -1,sal_Int32 ySlot = -1 ) override;
+    virtual void setScales( const std::vector< ExplicitScaleData >& rScales, bool bSwapXAndYAxis ) override;
+    virtual void addSeries( std::unique_ptr<VDataSeries> pSeries, sal_Int32 zSlot, sal_Int32 xSlot, sal_Int32 ySlot ) override;
 
     virtual css::drawing::Direction3D  getPreferredDiagramAspectRatio() const override;
     virtual bool shouldSnapRectToUsedArea() override;
@@ -67,7 +68,7 @@ private: //methods
         createDataPoint(
             const css::uno::Reference<css::drawing::XShapes>& xTarget,
             const css::uno::Reference<css::beans::XPropertySet>& xObjectProperties,
-            tPropertyNameValueMap* pOverWritePropertiesMap,
+            tPropertyNameValueMap const * pOverWritePropertiesMap,
             const ShapeParam& rParam );
 
     /** This method creates a text shape for a label of a data point.
@@ -101,16 +102,16 @@ private: //methods
     bool                detectLabelOverlapsAndMove(const css::awt::Size& rPageSize);//returns true when there might be more to do
     void                resetLabelPositionsToPreviousState();
 struct PieLabelInfo;
-    bool                tryMoveLabels( PieLabelInfo* pFirstBorder, PieLabelInfo* pSecondBorder
+    bool                tryMoveLabels( PieLabelInfo const * pFirstBorder, PieLabelInfo const * pSecondBorder
                                 , PieLabelInfo* pCenter, bool bSingleCenter, bool& rbAlternativeMoveDirection
                                 , const css::awt::Size& rPageSize );
 
-    bool                performLabelBestFitInnerPlacement(ShapeParam& rShapeParam, PieLabelInfo& rPieLabelInfo);
-    static bool         performLabelBestFitOuterPlacement(ShapeParam& rShapeParam, PieLabelInfo& rPieLabelInfo);
-    void                performLabelBestFit(ShapeParam& rShapeParam, PieLabelInfo& rPieLabelInfo);
+    bool                performLabelBestFitInnerPlacement(ShapeParam& rShapeParam, PieLabelInfo const & rPieLabelInfo);
+    void                performLabelBestFit(ShapeParam& rShapeParam, PieLabelInfo const & rPieLabelInfo);
 
 private: //member
-    PiePositionHelper*    m_pPosHelper;
+    std::unique_ptr<PiePositionHelper>
+                          m_pPosHelper;
     bool                  m_bUseRings;
     bool                  m_bSizeExcludesLabelsAndExplodedSegments;
 
@@ -118,7 +119,7 @@ private: //member
     {
         PieLabelInfo();
         bool moveAwayFrom( const PieLabelInfo* pFix, const css::awt::Size& rPageSize
-            , bool bMoveHalfWay, bool bMoveClockwise, bool bAlternativeMoveDirection );
+            , bool bMoveHalfWay, bool bMoveClockwise );
 
         css::uno::Reference< css::drawing::XShape > xTextShape;
         css::uno::Reference< css::drawing::XShape > xLabelGroupShape;
@@ -133,7 +134,7 @@ private: //member
         css::awt::Point aPreviousPosition;
     };
 
-    ::std::vector< PieLabelInfo > m_aLabelInfoList;
+    std::vector< PieLabelInfo > m_aLabelInfoList;
 
     double m_fMaxOffset;    /// cached max offset value (init'ed to NaN)
 };

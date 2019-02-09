@@ -19,19 +19,19 @@
 
 #include <vcl/svapp.hxx>
 #include <vcl/mnemonic.hxx>
-#include <vcl/msgbox.hxx>
 #include <unotools/charclass.hxx>
 #include <unotools/viewoptions.hxx>
 #include <formula/formdata.hxx>
 #include <formula/funcutl.hxx>
 #include <formula/tokenarray.hxx>
+#include <formula/FormulaCompiler.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
 #include <memory>
 
-#include "Formula.hxx"
-#include "AddField.hxx"
-#include "helpids.hrc"
+#include <Formula.hxx>
+#include <AddField.hxx>
+#include <helpids.h>
 
 
 namespace rptui
@@ -94,8 +94,8 @@ void FormulaDialog::dispose()
 {
     if ( m_pAddField )
     {
-        SvtViewOptions aDlgOpt( E_WINDOW, OUString( HID_RPT_FIELD_SEL_WIN ) );
-        aDlgOpt.SetWindowState(OStringToOUString(m_pAddField->GetWindowState((WINDOWSTATE_MASK_X | WINDOWSTATE_MASK_Y | WINDOWSTATE_MASK_STATE | WINDOWSTATE_MASK_MINIMIZED)), RTL_TEXTENCODING_ASCII_US));
+        SvtViewOptions aDlgOpt( EViewType::Window, HID_RPT_FIELD_SEL_WIN );
+        aDlgOpt.SetWindowState(OStringToOUString(m_pAddField->GetWindowState(WindowStateMask::X | WindowStateMask::Y | WindowStateMask::State | WindowStateMask::Minimized), RTL_TEXTENCODING_ASCII_US));
     }
 
     StoreFormEditData( m_pFormulaData );
@@ -105,13 +105,24 @@ void FormulaDialog::dispose()
 }
 
 
-//                          Funktionen fuer rechte Seite
+// functions for right side
 
 bool FormulaDialog::calculateValue( const OUString& rStrExp, OUString& rStrResult, bool /*bMatrixFormula*/ )
 {
     rStrResult = rStrExp;
     return false;
 }
+
+std::shared_ptr<formula::FormulaCompiler> FormulaDialog::getCompiler() const
+{
+    return nullptr;
+}
+
+std::unique_ptr<formula::FormulaCompiler> FormulaDialog::createCompiler( formula::FormulaTokenArray& rArray ) const
+{
+    return std::unique_ptr<formula::FormulaCompiler>(new FormulaCompiler(rArray));
+}
+
 void FormulaDialog::doClose(bool _bOk)
 {
     EndDialog(_bOk ? RET_OK : RET_CANCEL);
@@ -126,9 +137,6 @@ void FormulaDialog::dispatch(bool /*_bOK*/, bool /*_bMatrixChecked*/)
 {
 }
 void FormulaDialog::setDispatcherLock( bool /*bLock*/ )
-{
-}
-void FormulaDialog::setReferenceInput(const FormEditData* /*_pData*/)
 {
 }
 void FormulaDialog::deleteFormData()
@@ -206,21 +214,21 @@ void FormulaDialog::ToggleCollapsed( RefEdit* _pEdit, RefButton* _pButton)
     {
         m_pAddField = VclPtr<OAddFieldWindow>::Create(this,m_xRowSet);
         m_pAddField->SetCreateHdl(LINK( this, FormulaDialog, OnClickHdl ) );
-        SvtViewOptions aDlgOpt( E_WINDOW, OUString( HID_RPT_FIELD_SEL_WIN ) );
+        SvtViewOptions aDlgOpt( EViewType::Window, HID_RPT_FIELD_SEL_WIN );
         if ( aDlgOpt.Exists() )
         {
-            m_pAddField->SetWindowState(OUStringToOString(aDlgOpt.GetWindowState().getStr(), RTL_TEXTENCODING_ASCII_US));
+            m_pAddField->SetWindowState(OUStringToOString(aDlgOpt.GetWindowState(), RTL_TEXTENCODING_ASCII_US));
 
         }
 
         m_pAddField->Update();
     }
-    RefInputStartAfter( aPair.second, aPair.first );
+    RefInputStartAfter();
     m_pAddField->Show();
 
 }
 
-IMPL_LINK_TYPED( FormulaDialog, OnClickHdl, OAddFieldWindow& ,_rAddFieldDlg, void)
+IMPL_LINK( FormulaDialog, OnClickHdl, OAddFieldWindow& ,_rAddFieldDlg, void)
 {
     const uno::Sequence< beans::PropertyValue > aArgs = _rAddFieldDlg.getSelectedFieldDescriptors();
     // we use this way to create undo actions
@@ -230,7 +238,7 @@ IMPL_LINK_TYPED( FormulaDialog, OnClickHdl, OAddFieldWindow& ,_rAddFieldDlg, voi
         aArgs[0].Value >>= aValue;
         svx::ODataAccessDescriptor aDescriptor(aValue);
         OUString sName;
-        aDescriptor[ svx::daColumnName ] >>= sName;
+        aDescriptor[ svx::DataAccessDescriptorProperty::ColumnName ] >>= sName;
         if ( !sName.isEmpty() )
         {
             sName = "[" + sName + "]";

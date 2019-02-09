@@ -17,6 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <o3tl/any.hxx>
+#include <o3tl/temporary.hxx>
 #include <tools/datetime.hxx>
 #include <svl/zforlist.hxx>
 #include <com/sun/star/util/DateTime.hpp>
@@ -28,7 +32,7 @@
 using namespace ::com::sun::star;
 
 SwDateTimeFieldType::SwDateTimeFieldType(SwDoc* pInitDoc)
-    : SwValueFieldType( pInitDoc, RES_DATETIMEFLD )
+    : SwValueFieldType( pInitDoc, SwFieldIds::DateTime )
 {}
 
 SwFieldType* SwDateTimeFieldType::Copy() const
@@ -37,15 +41,15 @@ SwFieldType* SwDateTimeFieldType::Copy() const
     return pTmp;
 }
 
-SwDateTimeField::SwDateTimeField(SwDateTimeFieldType* pInitType, sal_uInt16 nSub, sal_uLong nFormat, sal_uInt16 nLng)
+SwDateTimeField::SwDateTimeField(SwDateTimeFieldType* pInitType, sal_uInt16 nSub, sal_uLong nFormat, LanguageType nLng)
     : SwValueField(pInitType, nFormat, nLng, 0.0),
-    nSubType(nSub),
-    nOffset(0)
+    m_nSubType(nSub),
+    m_nOffset(0)
 {
     if (!nFormat)
     {
         SvNumberFormatter* pFormatter = GetDoc()->GetNumberFormatter();
-        if (nSubType & DATEFLD)
+        if (m_nSubType & DATEFLD)
             ChangeFormat(pFormatter->GetFormatIndex(NF_DATE_SYSTEM_SHORT, GetLanguage()));
         else
             ChangeFormat(pFormatter->GetFormatIndex(NF_TIME_HHMMSS, GetLanguage()));
@@ -57,7 +61,7 @@ SwDateTimeField::SwDateTimeField(SwDateTimeFieldType* pInitType, sal_uInt16 nSub
     }
 }
 
-OUString SwDateTimeField::Expand() const
+OUString SwDateTimeField::ExpandImpl(SwRootFrame const*const) const
 {
     double fVal;
 
@@ -69,44 +73,44 @@ OUString SwDateTimeField::Expand() const
     else
         fVal = GetValue();
 
-    if (nOffset)
-        fVal += (double)(nOffset * 60L) / 86400.0;
+    if (m_nOffset)
+        fVal += m_nOffset * ( 60 / 86400.0 );
 
     return ExpandValue(fVal, GetFormat(), GetLanguage());
 }
 
-SwField* SwDateTimeField::Copy() const
+std::unique_ptr<SwField> SwDateTimeField::Copy() const
 {
-    SwDateTimeField *pTmp =
-        new SwDateTimeField(static_cast<SwDateTimeFieldType*>(GetTyp()), nSubType,
-                                            GetFormat(), GetLanguage());
+    std::unique_ptr<SwDateTimeField> pTmp(
+        new SwDateTimeField(static_cast<SwDateTimeFieldType*>(GetTyp()), m_nSubType,
+                                            GetFormat(), GetLanguage()) );
 
     pTmp->SetValue(GetValue());
-    pTmp->SetOffset(nOffset);
+    pTmp->SetOffset(m_nOffset);
     pTmp->SetAutomaticLanguage(IsAutomaticLanguage());
 
-    return pTmp;
+    return std::unique_ptr<SwField>(pTmp.release());
 }
 
 sal_uInt16 SwDateTimeField::GetSubType() const
 {
-    return nSubType;
+    return m_nSubType;
 }
 
 void SwDateTimeField::SetSubType(sal_uInt16 nType)
 {
-    nSubType = nType;
+    m_nSubType = nType;
 }
 
 void SwDateTimeField::SetPar2(const OUString& rStr)
 {
-    nOffset = rStr.toInt32();
+    m_nOffset = rStr.toInt32();
 }
 
 OUString SwDateTimeField::GetPar2() const
 {
-    if (nOffset)
-        return OUString::number(nOffset);
+    if (m_nOffset)
+        return OUString::number(m_nOffset);
     return OUString();
 }
 
@@ -118,9 +122,9 @@ void SwDateTimeField::SetDateTime(const DateTime& rDT)
 double SwDateTimeField::GetDateTime(SwDoc* pDoc, const DateTime& rDT)
 {
     SvNumberFormatter* pFormatter = pDoc->GetNumberFormatter();
-    Date* pNullDate = pFormatter->GetNullDate();
+    const Date& rNullDate = pFormatter->GetNullDate();
 
-    double fResult = rDT - DateTime(*pNullDate);
+    double fResult = rDT - DateTime(rNullDate);
 
     return fResult;
 }
@@ -136,21 +140,20 @@ double SwDateTimeField::GetValue() const
 Date SwDateTimeField::GetDate() const
 {
     SvNumberFormatter* pFormatter = GetDoc()->GetNumberFormatter();
-    Date* pNullDate = pFormatter->GetNullDate();
+    const Date& rNullDate = pFormatter->GetNullDate();
 
     long nVal = static_cast<long>( GetValue() );
 
-    Date aDate = *pNullDate + nVal;
+    Date aDate = rNullDate + nVal;
 
     return aDate;
 }
 
 tools::Time SwDateTimeField::GetTime() const
 {
-    double fDummy;
-    double fFract = modf(GetValue(), &fDummy);
-    DateTime aDT((long)fDummy, 0);
-    aDT += fFract;
+    double fFract = modf(GetValue(), &o3tl::temporary(double()));
+    DateTime aDT( DateTime::EMPTY );
+    aDT.AddTime(fFract);
     return static_cast<tools::Time>(aDT);
 }
 
@@ -162,13 +165,13 @@ bool SwDateTimeField::QueryValue( uno::Any& rVal, sal_uInt16 nWhichId ) const
         rVal <<= IsFixed();
         break;
     case FIELD_PROP_BOOL2:
-        rVal <<= IsDate();
+        rVal <<= (m_nSubType & DATEFLD) != 0;
         break;
     case FIELD_PROP_FORMAT:
-        rVal <<= (sal_Int32)GetFormat();
+        rVal <<= static_cast<sal_Int32>(GetFormat());
         break;
     case FIELD_PROP_SUBTYPE:
-        rVal <<= (sal_Int32)nOffset;
+        rVal <<= static_cast<sal_Int32>(m_nOffset);
         break;
     case FIELD_PROP_DATE_TIME:
         {
@@ -188,14 +191,14 @@ bool SwDateTimeField::PutValue( const uno::Any& rVal, sal_uInt16 nWhichId )
     switch( nWhichId )
     {
     case FIELD_PROP_BOOL1:
-        if(*static_cast<sal_Bool const *>(rVal.getValue()))
-            nSubType |= FIXEDFLD;
+        if(*o3tl::doAccess<bool>(rVal))
+            m_nSubType |= FIXEDFLD;
         else
-            nSubType &= ~FIXEDFLD;
+            m_nSubType &= ~FIXEDFLD;
         break;
     case FIELD_PROP_BOOL2:
-        nSubType &=  ~(DATEFLD|TIMEFLD);
-        nSubType |= *static_cast<sal_Bool const *>(rVal.getValue()) ? DATEFLD : TIMEFLD;
+        m_nSubType &=  ~(DATEFLD|TIMEFLD);
+        m_nSubType |= *o3tl::doAccess<bool>(rVal) ? DATEFLD : TIMEFLD;
         break;
     case FIELD_PROP_FORMAT:
         rVal >>= nTmp;
@@ -203,7 +206,7 @@ bool SwDateTimeField::PutValue( const uno::Any& rVal, sal_uInt16 nWhichId )
         break;
     case FIELD_PROP_SUBTYPE:
         rVal >>= nTmp;
-        nOffset = nTmp;
+        m_nOffset = nTmp;
         break;
     case FIELD_PROP_DATE_TIME:
         {

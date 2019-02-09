@@ -18,6 +18,7 @@
  */
 
 
+#include <com/sun/star/beans/PropertyAttribute.hpp>
 #include "controlfontdialog.hxx"
 #include <cppuhelper/typeprovider.hxx>
 #include "fontdialog.hxx"
@@ -25,7 +26,7 @@
 #include "pcrcommon.hxx"
 #include "pcrservices.hxx"
 
-extern "C" void SAL_CALL createRegistryInfo_OControlFontDialog()
+extern "C" void createRegistryInfo_OControlFontDialog()
 {
     ::pcr::OAutoRegistration< ::pcr::OControlFontDialog > aAutoRegistration;
 }
@@ -41,7 +42,6 @@ namespace pcr
 
     OControlFontDialog::OControlFontDialog(const Reference< XComponentContext >& _rxContext )
         :OGenericUnoDialog( _rxContext )
-        ,m_pFontItems(nullptr)
         ,m_pItemPool(nullptr)
         ,m_pItemPoolDefaults(nullptr)
     {
@@ -53,52 +53,55 @@ namespace pcr
 
     OControlFontDialog::~OControlFontDialog()
     {
-        if (m_pDialog)
+        if (m_aDialog)
         {
             ::osl::MutexGuard aGuard(m_aMutex);
-            if (m_pDialog)
+            if (m_aDialog)
+            {
                 destroyDialog();
+                ControlCharacterDialog::destroyItemSet(m_pFontItems, m_pItemPool, m_pItemPoolDefaults);
+            }
         }
     }
 
 
-    Sequence<sal_Int8> SAL_CALL OControlFontDialog::getImplementationId(  ) throw(RuntimeException, std::exception)
+    Sequence<sal_Int8> SAL_CALL OControlFontDialog::getImplementationId(  )
     {
         return css::uno::Sequence<sal_Int8>();
     }
 
 
-    Reference< XInterface > SAL_CALL OControlFontDialog::Create( const Reference< XComponentContext >& _rxContext )
+    Reference< XInterface > OControlFontDialog::Create( const Reference< XComponentContext >& _rxContext )
     {
         return *( new OControlFontDialog( _rxContext ) );
     }
 
 
-    OUString SAL_CALL OControlFontDialog::getImplementationName() throw(RuntimeException, std::exception)
+    OUString SAL_CALL OControlFontDialog::getImplementationName()
     {
         return getImplementationName_static();
     }
 
 
-    OUString OControlFontDialog::getImplementationName_static() throw(RuntimeException)
+    OUString OControlFontDialog::getImplementationName_static()
     {
         return OUString("org.openoffice.comp.form.ui.OControlFontDialog");
     }
 
 
-    css::uno::Sequence<OUString> SAL_CALL OControlFontDialog::getSupportedServiceNames() throw(RuntimeException, std::exception)
+    css::uno::Sequence<OUString> SAL_CALL OControlFontDialog::getSupportedServiceNames()
     {
         return getSupportedServiceNames_static();
     }
 
 
-    css::uno::Sequence<OUString> OControlFontDialog::getSupportedServiceNames_static() throw(RuntimeException)
+    css::uno::Sequence<OUString> OControlFontDialog::getSupportedServiceNames_static()
     {
         css::uno::Sequence<OUString> aSupported { "com.sun.star.form.ControlFontDialog" };
         return aSupported;
     }
 
-    void OControlFontDialog::initialize( const Sequence< Any >& aArguments ) throw(Exception, RuntimeException, std::exception)
+    void OControlFontDialog::initialize( const Sequence< Any >& aArguments )
     {
         Reference<XPropertySet> xGridModel;
         if (aArguments.getLength() == 1 && (aArguments[0] >>= xGridModel))
@@ -115,7 +118,7 @@ namespace pcr
     }
 
 
-    Reference<XPropertySetInfo>  SAL_CALL OControlFontDialog::getPropertySetInfo() throw(RuntimeException, std::exception)
+    Reference<XPropertySetInfo>  SAL_CALL OControlFontDialog::getPropertySetInfo()
     {
         Reference<XPropertySetInfo>  xInfo( createPropertySetInfo( getInfoHelper() ) );
         return xInfo;
@@ -135,35 +138,26 @@ namespace pcr
         return new ::cppu::OPropertyArrayHelper(aProps);
     }
 
-
-    VclPtr<Dialog> OControlFontDialog::createDialog(vcl::Window* _pParent)
+    svt::OGenericUnoDialog::Dialog OControlFontDialog::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
     {
         ControlCharacterDialog::createItemSet(m_pFontItems, m_pItemPool, m_pItemPoolDefaults);
 
         OSL_ENSURE(m_xControlModel.is(), "OControlFontDialog::createDialog: no introspectee set!");
         if (m_xControlModel.is())
-            ControlCharacterDialog::translatePropertiesToItems(m_xControlModel, m_pFontItems);
+            ControlCharacterDialog::translatePropertiesToItems(m_xControlModel, m_pFontItems.get());
         // TODO: we need a mechanism to prevent that somebody creates us, sets an introspectee, executes us,
         // sets a new introspectee and re-executes us. In this case, the dialog returned here (upon the first
         // execute) will be re-used upon the second execute, and thus it won't be initialized correctly.
 
-        return VclPtr<ControlCharacterDialog>::Create(_pParent, *m_pFontItems);
+        return svt::OGenericUnoDialog::Dialog(std::make_unique<ControlCharacterDialog>(Application::GetFrameWeld(rParent), *m_pFontItems));
     }
-
-
-    void OControlFontDialog::destroyDialog()
-    {
-        OGenericUnoDialog::destroyDialog();
-        ControlCharacterDialog::destroyItemSet(m_pFontItems, m_pItemPool, m_pItemPoolDefaults);
-    }
-
 
     void OControlFontDialog::executedDialog(sal_Int16 _nExecutionResult)
     {
-        OSL_ENSURE(m_pDialog, "OControlFontDialog::executedDialog: no dialog anymore?!!");
-        if (m_pDialog && (RET_OK == _nExecutionResult) && m_xControlModel.is())
+        OSL_ENSURE(m_aDialog, "OControlFontDialog::executedDialog: no dialog anymore?!!");
+        if (m_aDialog && (RET_OK == _nExecutionResult) && m_xControlModel.is())
         {
-            const SfxItemSet* pOutput = static_cast<ControlCharacterDialog*>(m_pDialog.get())->GetOutputItemSet();
+            const SfxItemSet* pOutput = static_cast<ControlCharacterDialog*>(m_aDialog.m_xWeldDialog.get())->GetOutputItemSet();
             if (pOutput)
                 ControlCharacterDialog::translateItemsToProperties( *pOutput, m_xControlModel );
         }

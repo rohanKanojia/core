@@ -29,15 +29,10 @@ CGMElements::CGMElements()
 
 CGMElements::~CGMElements()
 {
-    DeleteAllBundles( aLineList );
-    DeleteAllBundles( aMarkerList );
-    DeleteAllBundles( aEdgeList );
-    DeleteAllBundles( aTextList );
-    DeleteAllBundles( aFillList );
 }
 
 
-CGMElements& CGMElements::operator=( CGMElements& rSource )
+CGMElements& CGMElements::operator=( const CGMElements& rSource )
 {
     sal_uInt32 nIndex;
 
@@ -67,7 +62,6 @@ CGMElements& CGMElements::operator=( CGMElements& rSource )
     eClipIndicator = rSource.eClipIndicator;
     aClipRect = rSource.aClipRect;
     eColorSelectionMode = rSource.eColorSelectionMode;
-    eColorModel = rSource.eColorModel;
     nColorMaximumIndex = rSource.nColorMaximumIndex;
     nLatestColorMaximumIndex = rSource.nLatestColorMaximumIndex;
 
@@ -170,7 +164,6 @@ void CGMElements::Init()
     aClipRect = aVDCExtent;
 
     eColorSelectionMode = CSM_INDEXED;
-    eColorModel = CM_RGB;
     nColorMaximumIndex = 63;
     int i;
     for ( i = 0; i < 256; aColorTableEntryIs[ i++ ] = 0 ) ;
@@ -290,24 +283,13 @@ void CGMElements::ImplInsertHatch( sal_Int32 nKey, int nStyle, long nDistance, l
 }
 
 
-void CGMElements::DeleteAllBundles( BundleList& rList )
+void CGMElements::CopyAllBundles( const BundleList& rSource, BundleList& rDest )
 {
-    for ( size_t i = 0, n = rList.size(); i < n; ++i ) {
-        delete rList[ i ];
-    }
-    rList.clear();
-};
+    rDest.clear();
 
-
-void CGMElements::CopyAllBundles( BundleList& rSource, BundleList& rDest )
-{
-    DeleteAllBundles( rDest );
-
-    for ( size_t i = 0, n = rSource.size(); i < n; ++i )
+    for (auto & pPtr : rSource)
     {
-        Bundle* pPtr = rSource[ i ];
-        Bundle* pTempBundle = pPtr->Clone();
-        rDest.push_back( pTempBundle );
+        rDest.push_back( pPtr->Clone() );
     }
 };
 
@@ -324,9 +306,9 @@ Bundle* CGMElements::GetBundleIndex( long nIndex, BundleList& rList, Bundle& rBu
 
 Bundle* CGMElements::GetBundle( BundleList& rList, long nIndex )
 {
-    for ( size_t i = 0, n = rList.size(); i < n; ++i ) {
-        if ( rList[ i ]->GetIndex() == nIndex ) {
-            return rList[ i ];
+    for (auto const & i : rList) {
+        if ( i->GetIndex() == nIndex ) {
+            return i.get();
         }
     }
     return nullptr;
@@ -339,16 +321,14 @@ Bundle* CGMElements::InsertBundle( BundleList& rList, Bundle& rBundle )
     if ( pBundle )
     {
         for ( BundleList::iterator it = rList.begin(); it != rList.end(); ++it ) {
-            if ( *it == pBundle ) {
+            if ( it->get() == pBundle ) {
                 rList.erase( it );
-                delete pBundle;
                 break;
             }
         }
     }
-    pBundle = rBundle.Clone();
-    rList.push_back( pBundle );
-    return pBundle;
+    rList.push_back( rBundle.Clone() );
+    return rList.back().get();
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -42,41 +42,40 @@ SidebarController* SfxUnoPanel::getSidebarController()
 }
 
 OUString SAL_CALL SfxUnoPanel::getId()
-                               throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     return mPanelId;
 }
 
-OUString SAL_CALL  SfxUnoPanel::getTitle()
-                                throw(uno::RuntimeException, std::exception)
+OUString SAL_CALL SfxUnoPanel::getTitle()
 {
     SolarMutexGuard aGuard;
 
-    PanelTitleBar* pTitleBar = mpPanel->GetTitleBar();
-    return pTitleBar->GetTitle();
+    VclPtr<PanelTitleBar> pTitleBar = mpPanel->GetTitleBar();
+    if (pTitleBar)
+        return pTitleBar->GetTitle();
+    else
+        return OUString();
 }
 
 void SAL_CALL SfxUnoPanel::setTitle( const OUString& newTitle )
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     SidebarController* pSidebarController = getSidebarController();
-    PanelDescriptor* pPanelDescriptor = pSidebarController->GetResourceManager()->GetPanelDescriptor(mPanelId);
+    std::shared_ptr<PanelDescriptor> xPanelDescriptor = pSidebarController->GetResourceManager()->GetPanelDescriptor(mPanelId);
 
-    if (pPanelDescriptor)
+    if (xPanelDescriptor)
     {
-        pPanelDescriptor->msTitle = newTitle;
-        PanelTitleBar* pTitleBar = mpPanel->GetTitleBar();
+        xPanelDescriptor->msTitle = newTitle;
+        VclPtr<PanelTitleBar> pTitleBar = mpPanel->GetTitleBar();
         if (pTitleBar)
             pTitleBar->SetTitle(newTitle);
     }
 }
 
 sal_Bool SAL_CALL SfxUnoPanel::isExpanded()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -85,7 +84,6 @@ sal_Bool SAL_CALL SfxUnoPanel::isExpanded()
 
 
 void SAL_CALL SfxUnoPanel::expand( const sal_Bool bCollapseOther )
-                                throw(uno::RuntimeException, std::exception)
 {
 
     SolarMutexGuard aGuard;
@@ -94,16 +92,11 @@ void SAL_CALL SfxUnoPanel::expand( const sal_Bool bCollapseOther )
 
     if (bCollapseOther)
     {
-     Panel* aPanel;
-
-     SharedPanelContainer maPanels = mpDeck->GetPanels();
-     for ( SharedPanelContainer::iterator iPanel(maPanels.begin()), iEnd(maPanels.end());
-        iPanel!=iEnd; ++iPanel)
+        SharedPanelContainer aPanels = mpDeck->GetPanels();
+        for (auto const& panel : aPanels)
         {
-            aPanel = *iPanel;
-
-            if (! aPanel->HasIdPredicate(mPanelId))
-                aPanel->SetExpanded(false);
+            if (! panel->HasIdPredicate(mPanelId))
+                panel->SetExpanded(false);
         }
     }
 
@@ -113,7 +106,6 @@ void SAL_CALL SfxUnoPanel::expand( const sal_Bool bCollapseOther )
 }
 
 void SAL_CALL SfxUnoPanel::collapse()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -123,7 +115,6 @@ void SAL_CALL SfxUnoPanel::collapse()
 }
 
 uno::Reference<awt::XWindow> SAL_CALL SfxUnoPanel::getDialog()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -132,7 +123,6 @@ uno::Reference<awt::XWindow> SAL_CALL SfxUnoPanel::getDialog()
 
 
 sal_Int32 SAL_CALL SfxUnoPanel::getOrderIndex()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -142,23 +132,21 @@ sal_Int32 SAL_CALL SfxUnoPanel::getOrderIndex()
 }
 
 void SAL_CALL SfxUnoPanel::setOrderIndex( const sal_Int32 newOrderIndex )
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
 
-    PanelDescriptor* pPanelDescriptor = pSidebarController->GetResourceManager()->GetPanelDescriptor(mPanelId);
+    std::shared_ptr<PanelDescriptor> xPanelDescriptor = pSidebarController->GetResourceManager()->GetPanelDescriptor(mPanelId);
 
-    if (pPanelDescriptor)
+    if (xPanelDescriptor)
     {
-        pPanelDescriptor->mnOrderIndex = newOrderIndex;
+        xPanelDescriptor->mnOrderIndex = newOrderIndex;
         // update the sidebar
         pSidebarController->NotifyResize();
     }
 }
 
 void SAL_CALL SfxUnoPanel::moveFirst()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -171,10 +159,10 @@ void SAL_CALL SfxUnoPanel::moveFirst()
     if (curOrderIndex != minIndex) // is current panel already in place ?
     {
         minIndex -= 1;
-        PanelDescriptor* pPanelDescriptor = pSidebarController->GetResourceManager()->GetPanelDescriptor(mPanelId);
-        if (pPanelDescriptor)
+        std::shared_ptr<PanelDescriptor> xPanelDescriptor = pSidebarController->GetResourceManager()->GetPanelDescriptor(mPanelId);
+        if (xPanelDescriptor)
         {
-            pPanelDescriptor->mnOrderIndex = minIndex;
+            xPanelDescriptor->mnOrderIndex = minIndex;
             // update the sidebar
             pSidebarController->NotifyResize();
         }
@@ -182,7 +170,6 @@ void SAL_CALL SfxUnoPanel::moveFirst()
 }
 
 void SAL_CALL SfxUnoPanel::moveLast()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -195,10 +182,10 @@ void SAL_CALL SfxUnoPanel::moveLast()
     if (curOrderIndex != maxIndex) // is current panel already in place ?
     {
         maxIndex += 1;
-        PanelDescriptor* pPanelDescriptor = pSidebarController->GetResourceManager()->GetPanelDescriptor(mPanelId);
-        if (pPanelDescriptor)
+        std::shared_ptr<PanelDescriptor> xPanelDescriptor = pSidebarController->GetResourceManager()->GetPanelDescriptor(mPanelId);
+        if (xPanelDescriptor)
         {
-            pPanelDescriptor->mnOrderIndex = maxIndex;
+            xPanelDescriptor->mnOrderIndex = maxIndex;
             // update the sidebar
             pSidebarController->NotifyResize();
         }
@@ -206,7 +193,6 @@ void SAL_CALL SfxUnoPanel::moveLast()
 }
 
 void SAL_CALL SfxUnoPanel::moveUp()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -217,10 +203,9 @@ void SAL_CALL SfxUnoPanel::moveUp()
     sal_Int32 curOrderIndex = getOrderIndex();
     sal_Int32 previousIndex = GetMinOrderIndex(aPanels);
 
-    ResourceManager::PanelContextDescriptorContainer::const_iterator iPanel;
-    for (iPanel = aPanels.begin(); iPanel != aPanels.end(); ++iPanel)
+    for (auto const& panel : aPanels)
     {
-        sal_Int32 index = pSidebarController->GetResourceManager()->GetPanelDescriptor(iPanel->msId)->mnOrderIndex;
+        sal_Int32 index = pSidebarController->GetResourceManager()->GetPanelDescriptor(panel.msId)->mnOrderIndex;
         if( index < curOrderIndex && index > previousIndex)
             previousIndex = index;
     }
@@ -228,10 +213,10 @@ void SAL_CALL SfxUnoPanel::moveUp()
     if (curOrderIndex != previousIndex) // is current panel already in place ?
     {
         previousIndex -= 1;
-        PanelDescriptor* pPanelDescriptor = pSidebarController->GetResourceManager()->GetPanelDescriptor(mPanelId);
-        if (pPanelDescriptor)
+        std::shared_ptr<PanelDescriptor> xPanelDescriptor = pSidebarController->GetResourceManager()->GetPanelDescriptor(mPanelId);
+        if (xPanelDescriptor)
         {
-            pPanelDescriptor->mnOrderIndex = previousIndex;
+            xPanelDescriptor->mnOrderIndex = previousIndex;
             // update the sidebar
             pSidebarController->NotifyResize();
         }
@@ -239,7 +224,6 @@ void SAL_CALL SfxUnoPanel::moveUp()
 }
 
 void SAL_CALL SfxUnoPanel::moveDown()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -250,10 +234,9 @@ void SAL_CALL SfxUnoPanel::moveDown()
     sal_Int32 curOrderIndex = getOrderIndex();
     sal_Int32 nextIndex = GetMaxOrderIndex(aPanels);
 
-    ResourceManager::PanelContextDescriptorContainer::const_iterator iPanel;
-    for (iPanel = aPanels.begin(); iPanel != aPanels.end(); ++iPanel)
+    for (auto const& panel : aPanels)
     {
-        sal_Int32 index = pSidebarController->GetResourceManager()->GetPanelDescriptor(iPanel->msId)->mnOrderIndex;
+        sal_Int32 index = pSidebarController->GetResourceManager()->GetPanelDescriptor(panel.msId)->mnOrderIndex;
         if( index > curOrderIndex && index < nextIndex)
             nextIndex = index;
     }
@@ -261,10 +244,10 @@ void SAL_CALL SfxUnoPanel::moveDown()
     if (curOrderIndex != nextIndex) // is current panel already in place ?
     {
         nextIndex += 1;
-        PanelDescriptor* pPanelDescriptor = pSidebarController->GetResourceManager()->GetPanelDescriptor(mPanelId);
-        if (pPanelDescriptor)
+        std::shared_ptr<PanelDescriptor> xPanelDescriptor = pSidebarController->GetResourceManager()->GetPanelDescriptor(mPanelId);
+        if (xPanelDescriptor)
         {
-            pPanelDescriptor->mnOrderIndex = nextIndex;
+            xPanelDescriptor->mnOrderIndex = nextIndex;
             // update the sidebar
             pSidebarController->NotifyResize();
         }
@@ -275,14 +258,11 @@ sal_Int32 SfxUnoPanel::GetMinOrderIndex(ResourceManager::PanelContextDescriptorC
 {
     SidebarController* pSidebarController = getSidebarController();
 
-    ResourceManager::PanelContextDescriptorContainer::iterator iPanel;
+    sal_Int32 minIndex = pSidebarController->GetResourceManager()->GetPanelDescriptor(aPanels.begin()->msId)->mnOrderIndex;
 
-    iPanel = aPanels.begin();
-    sal_Int32 minIndex = pSidebarController->GetResourceManager()->GetPanelDescriptor(iPanel->msId)->mnOrderIndex;
-
-    for (iPanel = aPanels.begin(); iPanel != aPanels.end(); ++iPanel)
+    for (auto const& panel : aPanels)
     {
-        sal_Int32 index = pSidebarController->GetResourceManager()->GetPanelDescriptor(iPanel->msId)->mnOrderIndex;
+        sal_Int32 index = pSidebarController->GetResourceManager()->GetPanelDescriptor(panel.msId)->mnOrderIndex;
         if(minIndex > index)
             minIndex = index;
     }
@@ -293,14 +273,11 @@ sal_Int32 SfxUnoPanel::GetMaxOrderIndex(ResourceManager::PanelContextDescriptorC
 {
     SidebarController* pSidebarController = getSidebarController();
 
-    ResourceManager::PanelContextDescriptorContainer::iterator iPanel;
+    sal_Int32 maxIndex = pSidebarController->GetResourceManager()->GetPanelDescriptor(aPanels.begin()->msId)->mnOrderIndex;
 
-    iPanel = aPanels.begin();
-    sal_Int32 maxIndex = pSidebarController->GetResourceManager()->GetPanelDescriptor(iPanel->msId)->mnOrderIndex;
-
-    for (iPanel = aPanels.begin(); iPanel != aPanels.end(); ++iPanel)
+    for (auto const& panel : aPanels)
     {
-        sal_Int32 index = pSidebarController->GetResourceManager()->GetPanelDescriptor(iPanel->msId)->mnOrderIndex;
+        sal_Int32 index = pSidebarController->GetResourceManager()->GetPanelDescriptor(panel.msId)->mnOrderIndex;
         if(maxIndex < index)
             maxIndex = index;
     }

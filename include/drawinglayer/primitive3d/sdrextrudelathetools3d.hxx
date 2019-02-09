@@ -47,9 +47,8 @@ namespace drawinglayer
         };
 
         /// class to hold one Slice3D
-        class DRAWINGLAYER_DLLPUBLIC Slice3D
+        class DRAWINGLAYER_DLLPUBLIC Slice3D final
         {
-        protected:
             basegfx::B3DPolyPolygon                 maPolyPolygon;
             SliceType3D                             maSliceType;
 
@@ -58,18 +57,10 @@ namespace drawinglayer
                 const basegfx::B2DPolyPolygon& rPolyPolygon,
                 const basegfx::B3DHomMatrix& aTransform,
                 SliceType3D aSliceType = SLICETYPE3D_REGULAR)
-            :   maPolyPolygon(basegfx::tools::createB3DPolyPolygonFromB2DPolyPolygon(rPolyPolygon)),
+            :   maPolyPolygon(basegfx::utils::createB3DPolyPolygonFromB2DPolyPolygon(rPolyPolygon)),
                 maSliceType(aSliceType)
             {
                 maPolyPolygon.transform(aTransform);
-            }
-
-            explicit Slice3D(
-                const basegfx::B3DPolyPolygon& rPolyPolygon,
-                SliceType3D aSliceType = SLICETYPE3D_REGULAR)
-            :   maPolyPolygon(rPolyPolygon),
-                maSliceType(aSliceType)
-            {
             }
 
             // data access
@@ -110,7 +101,6 @@ namespace drawinglayer
             ::std::vector< basegfx::B3DPolyPolygon >& rFill,
             const Slice3DVector& rSliceVector,
             bool bCreateNormals,
-            bool bSmoothHorizontalNormals,
             bool bSmoothNormals,
             bool bSmoothLids,
             bool bClosed,

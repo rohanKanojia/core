@@ -11,6 +11,11 @@
 #include <stdlib.h>
 #include "cryptox.h"
 
+#ifdef _WIN32
+#pragma warning(push)
+#pragma warning(disable: 4204)
+#endif
+
 #if defined(MAR_NSS)
 
 /**
@@ -266,6 +271,10 @@ CryptoAPI_VerifyUpdate(HCRYPTHASH* hash, BYTE *buf, DWORD len)
   result = CryptHashData(*hash, buf, len, 0);
   return result ? CryptoX_Success : CryptoX_Error;
 }
+
+#ifdef _WIN32
+#pragma warning(pop)
+#endif
 
 #endif
 

@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <xmlsecurity/xmlsignaturehelper.hxx>
-#include "xmlsignaturehelper2.hxx"
+#include <xmlsignaturehelper.hxx>
+#include <xmlsignaturehelper2.hxx>
 
 #include <tools/solar.h>
 #include <unotools/streamhelper.hxx>
@@ -29,119 +29,9 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <osl/diagnose.h>
 #include <rtl/uri.hxx>
+#include <sal/log.hxx>
 
 using namespace com::sun::star;
-
-ImplXMLSignatureListener::ImplXMLSignatureListener(const Link<XMLSignatureCreationResult&,void>& rCreationResultListenerListener,
-                                                   const Link<XMLSignatureVerifyResult&,void>& rVerifyResultListenerListener,
-                                                   const Link<LinkParamNone*,void>& rStartSignatureElement)
-{
-    maCreationResultListenerListener = rCreationResultListenerListener;
-    maVerifyResultListenerListener = rVerifyResultListenerListener;
-    maStartVerifySignatureElementListener = rStartSignatureElement;
-}
-
-ImplXMLSignatureListener::~ImplXMLSignatureListener()
-{
-}
-
-void ImplXMLSignatureListener::setNextHandler(
-    uno::Reference< xml::sax::XDocumentHandler > xNextHandler)
-{
-    m_xNextHandler = xNextHandler;
-}
-
-void SAL_CALL ImplXMLSignatureListener::signatureCreated( sal_Int32 securityId, css::xml::crypto::SecurityOperationStatus nResult )
-        throw (css::uno::RuntimeException, std::exception)
-{
-    XMLSignatureCreationResult aResult( securityId, nResult );
-    maCreationResultListenerListener.Call( aResult );
-}
-
-void SAL_CALL ImplXMLSignatureListener::signatureVerified( sal_Int32 securityId, css::xml::crypto::SecurityOperationStatus nResult )
-        throw (css::uno::RuntimeException, std::exception)
-{
-    XMLSignatureVerifyResult aResult( securityId, nResult );
-    maVerifyResultListenerListener.Call( aResult );
-}
-
-// XDocumentHandler
-void SAL_CALL ImplXMLSignatureListener::startDocument(  )
-    throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception)
-{
-    if (m_xNextHandler.is())
-    {
-        m_xNextHandler->startDocument();
-    }
-}
-
-void SAL_CALL ImplXMLSignatureListener::endDocument(  )
-    throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception)
-{
-    if (m_xNextHandler.is())
-    {
-        m_xNextHandler->endDocument();
-    }
-}
-
-void SAL_CALL ImplXMLSignatureListener::startElement( const OUString& aName, const css::uno::Reference< css::xml::sax::XAttributeList >& xAttribs )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception)
-{
-    if ( aName == "Signature" )
-    {
-        maStartVerifySignatureElementListener.Call( nullptr );
-    }
-
-    if (m_xNextHandler.is())
-    {
-        m_xNextHandler->startElement( aName, xAttribs );
-    }
-}
-
-void SAL_CALL ImplXMLSignatureListener::endElement( const OUString& aName )
-    throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception)
-{
-    if (m_xNextHandler.is())
-    {
-        m_xNextHandler->endElement( aName );
-    }
-}
-
-void SAL_CALL ImplXMLSignatureListener::characters( const OUString& aChars )
-    throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception)
-{
-    if (m_xNextHandler.is())
-    {
-        m_xNextHandler->characters( aChars );
-    }
-}
-
-void SAL_CALL ImplXMLSignatureListener::ignorableWhitespace( const OUString& aWhitespaces )
-    throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception)
-{
-    if (m_xNextHandler.is())
-    {
-        m_xNextHandler->ignorableWhitespace( aWhitespaces );
-    }
-}
-
-void SAL_CALL ImplXMLSignatureListener::processingInstruction( const OUString& aTarget, const OUString& aData )
-    throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception)
-{
-    if (m_xNextHandler.is())
-    {
-        m_xNextHandler->processingInstruction( aTarget, aData );
-    }
-}
-
-void SAL_CALL ImplXMLSignatureListener::setDocumentLocator( const css::uno::Reference< css::xml::sax::XLocator >& xLocator )
-    throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception)
-{
-    if (m_xNextHandler.is())
-    {
-        m_xNextHandler->setDocumentLocator( xLocator );
-    }
-}
 
 // XUriBinding
 
@@ -155,12 +45,10 @@ UriBindingHelper::UriBindingHelper( const css::uno::Reference < css::embed::XSto
 }
 
 void SAL_CALL UriBindingHelper::setUriBinding( const OUString& /*uri*/, const uno::Reference< io::XInputStream >&)
-    throw (uno::Exception, uno::RuntimeException, std::exception)
 {
 }
 
 uno::Reference< io::XInputStream > SAL_CALL UriBindingHelper::getUriBinding( const OUString& uri )
-    throw (uno::Exception, uno::RuntimeException, std::exception)
 {
     uno::Reference< io::XInputStream > xInputStream;
     if ( mxStorage.is() )
@@ -170,9 +58,7 @@ uno::Reference< io::XInputStream > SAL_CALL UriBindingHelper::getUriBinding( con
     else
     {
         SvFileStream* pStream = new SvFileStream( uri, StreamMode::READ );
-        pStream->Seek( STREAM_SEEK_TO_END );
-        sal_uLong nBytes = pStream->Tell();
-        pStream->Seek( STREAM_SEEK_TO_BEGIN );
+        sal_uLong nBytes = pStream->TellEnd();
         SvLockBytesRef xLockBytes = new SvLockBytes( pStream, true );
         xInputStream = new utl::OInputStreamHelper( xLockBytes, nBytes );
     }

@@ -32,9 +32,8 @@ namespace sdr
 {
     namespace contact
     {
-        class ViewContactOfMasterPageDescriptor : public ViewContact
+        class ViewContactOfMasterPageDescriptor final : public ViewContact
         {
-        protected:
             // the owner of this ViewContact. Set from constructor and not
             // to be changed in any way.
             sdr::MasterPageDescriptor&                      mrMasterPageDescriptor;
@@ -50,7 +49,7 @@ namespace sdr
             explicit ViewContactOfMasterPageDescriptor(sdr::MasterPageDescriptor& rDescriptor);
 
             // The destructor.
-            virtual ~ViewContactOfMasterPageDescriptor();
+            virtual ~ViewContactOfMasterPageDescriptor() override;
 
             // access to MasterPageDescriptor
             sdr::MasterPageDescriptor& GetMasterPageDescriptor() const

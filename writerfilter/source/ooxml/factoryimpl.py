@@ -25,26 +25,30 @@ def createFastChildContextFromFactory(model):
 (OOXMLFastContextHandler* pHandler, OOXMLFactory_ns::Pointer_t pFactory, Token_t Element)
 {
     uno::Reference <xml::sax::XFastContextHandler> aResult;
-    Id nDefine = pHandler->getDefine();
+    const Id nDefine = pHandler->getDefine();
 
     if (pFactory.get() != NULL)
     {
-        ResourceType_t nResource;
+        ResourceType nResource;
         Id nElementId;
         if (pFactory->getElementId(nDefine, Element, nResource, nElementId))
         {
-            Id nId = pFactory->getResourceId(nDefine, Element);
+            const Id nId = pFactory->getResourceId(nDefine, Element);
 
             switch (nResource)
             {""")
-    resources = ["List", "Integer", "Hex", "String", "UniversalMeasure", "Boolean"]
+    resources = [
+        "List", "Integer", "Hex", "HexColor", "String",
+        "TwipsMeasure_asSigned", "TwipsMeasure_asZero",
+        "HpsMeasure", "Boolean", "MeasurementOrPercent",
+    ]
     for resource in [r.getAttribute("resource") for r in model.getElementsByTagName("resource")]:
         if resource not in resources:
             resources.append(resource)
-            print("""            case RT_%s:
+            print("""            case ResourceType::%s:
                 aResult.set(OOXMLFastHelper<OOXMLFastContextHandler%s>::createAndSetParentAndDefine(pHandler, Element, nId, nElementId));
                 break;""" % (resource, resource))
-    print("""            case RT_Any:
+    print("""            case ResourceType::Any:
                 aResult.set(createFastChildContextFromStart(pHandler, Element));
                 break;
             default:
@@ -105,20 +109,9 @@ def createFastChildContextFromStart(model):
 
 
 def fastTokenToId(model):
-    print("""namespace tokenmap {
-struct token { const char* name; Token_t nToken; };
-class Perfect_Hash
-{
-private:
-  static inline unsigned int hash (const char* str, unsigned int len);
-public:
-  static struct token* in_word_set (const char* str, unsigned int len);
-};
-}
-
+    print("""
 std::string fastTokenToId(sal_uInt32 nToken)
 {
-
     std::string sResult;
 #ifdef DEBUG_WRITERFILTER
 
@@ -160,6 +153,11 @@ def getFastParser():
     if (!mxFastParser.is())
     {
         mxFastParser = css::xml::sax::FastParser::create(mxContext);
+        // the threaded parser is about 20% slower loading writer documents
+        css::uno::Reference< css::lang::XInitialization > xInit( mxFastParser, css::uno::UNO_QUERY_THROW );
+        css::uno::Sequence< css::uno::Any > args(1);
+        args[0] <<= OUString("DisableThreadedParser");
+        xInit->initialize(args);
 """)
     for url in sorted(ooxUrlAliases.keys()):
         print("""        mxFastParser->registerNamespace("%s", oox::NMSP_%s);""" % (url, ooxUrlAliases[url]))
@@ -175,6 +173,7 @@ def getFastParser():
 def createImpl(model):
     print("""
 #include <com/sun/star/xml/sax/FastParser.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
 #include "ooxml/OOXMLFactory.hxx"
 #include "ooxml/OOXMLFastHelper.hxx"
 #include "ooxml/OOXMLStreamImpl.hxx"

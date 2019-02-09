@@ -26,7 +26,7 @@
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <connectivity/FValue.hxx>
-#include "file/filedllapi.hxx"
+#include <file/filedllapi.hxx>
 
 #include <stack>
 
@@ -37,25 +37,21 @@ namespace connectivity
     {
 
         class OOperand;
-        typedef ::std::stack<OOperand*> OCodeStack;
-        class OBoolOperator;
-        typedef ::std::map<sal_Int32,sal_Int32> OEvaluateSet;
+        typedef std::stack<OOperand*> OCodeStack;
 
         class OOO_DLLPUBLIC_FILE OCode
         {
         public:
-            OCode();
+            //virtual dtor to allow this to be the root of the class hierarchy
             virtual ~OCode();
-
-            inline static void * SAL_CALL operator new( size_t nSize )
-                { return ::rtl_allocateMemory( nSize ); }
-            inline static void * SAL_CALL operator new( size_t /*nSize*/,void* _pHint )
-                { return _pHint; }
-            inline static void SAL_CALL operator delete( void * pMem )
-                { ::rtl_freeMemory( pMem ); }
-            inline static void SAL_CALL operator delete( void * /*pMem*/,void* /*_pHint*/ )
-                {  }
-
+            //but that disables the default move ctor
+            OCode(OCode&&) = default;
+            //but that disables the rest of default ctors
+            OCode(const OCode&) = default;
+            OCode() = default;
+            //and same issue for the assignment operators
+            OCode& operator=(const OCode&) = default;
+            OCode& operator=(OCode&&) = default;
         };
 
 
@@ -65,8 +61,8 @@ namespace connectivity
         protected:
             sal_Int32 m_eDBType;
 
-            OOperand(const sal_Int32& _rType) : m_eDBType(_rType){}
-            OOperand() : m_eDBType(::com::sun::star::sdbc::DataType::OTHER){}
+            OOperand(sal_Int32 _rType) : m_eDBType(_rType){}
+            OOperand() : m_eDBType(css::sdbc::DataType::OTHER){}
 
         public:
             virtual const ORowSetValue& getValue() const = 0;
@@ -96,7 +92,7 @@ namespace connectivity
         {
         public:
             OOperandAttr(sal_uInt16 _nPos,
-                         const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet>& _xColumn);
+                         const css::uno::Reference< css::beans::XPropertySet>& _xColumn);
 
         };
 
@@ -104,7 +100,7 @@ namespace connectivity
         class OOperandParam : public OOperandRow
         {
         public:
-            OOperandParam(connectivity::OSQLParseNode* pNode, sal_Int32 _nPos);
+            OOperandParam(connectivity::OSQLParseNode const * pNode, sal_Int32 _nPos);
         };
 
         // Value operands
@@ -141,8 +137,6 @@ namespace connectivity
         class OOperandResult : public OOperandValue
         {
         protected:
-            OOperandResult(const ORowSetValue& _rVar, sal_Int32 eDbType)
-                            :OOperandValue(_rVar, eDbType) {}
             OOperandResult(sal_Int32 eDbType)
                             :OOperandValue(eDbType) {}
         public:
@@ -154,7 +148,7 @@ namespace connectivity
         class OOperandResultBOOL : public OOperandResult
         {
         public:
-            OOperandResultBOOL(bool bResult) : OOperandResult(::com::sun::star::sdbc::DataType::BIT)
+            OOperandResultBOOL(bool bResult) : OOperandResult(css::sdbc::DataType::BIT)
             {
                 m_aValue = bResult ? 1.0 : 0.0;
                 m_aValue.setBound(true);
@@ -164,7 +158,7 @@ namespace connectivity
         class OOperandResultNUM : public OOperandResult
         {
         public:
-            OOperandResultNUM(double fNum) : OOperandResult(::com::sun::star::sdbc::DataType::DOUBLE)
+            OOperandResultNUM(double fNum) : OOperandResult(css::sdbc::DataType::DOUBLE)
             {
                 m_aValue = fNum;
                 m_aValue.setBound(true);
@@ -202,7 +196,7 @@ namespace connectivity
 
         protected:
             virtual void Exec(OCodeStack&) override;
-            virtual bool operate(const OOperand*, const OOperand* = nullptr) const override;
+            virtual bool operate(const OOperand*, const OOperand*) const override;
         };
 
         class OOp_AND : public OBoolOperator
@@ -225,13 +219,13 @@ namespace connectivity
         public:
         public:
             virtual void Exec(OCodeStack&) override;
-            virtual bool operate(const OOperand*, const OOperand* = nullptr) const override;
+            virtual bool operate(const OOperand*, const OOperand*) const override;
         };
 
         class OOO_DLLPUBLIC_FILE OOp_ISNOTNULL : public OOp_ISNULL
         {
         public:
-            virtual bool operate(const OOperand*, const OOperand* = nullptr) const override;
+            virtual bool operate(const OOperand*, const OOperand*) const override;
         };
 
         class OOO_DLLPUBLIC_FILE OOp_LIKE : public OBoolOperator
@@ -241,7 +235,7 @@ namespace connectivity
             const sal_Unicode cEscape;
 
         public:
-            OOp_LIKE(const sal_Unicode cEsc = L'\0'):cEscape(cEsc){};
+            OOp_LIKE(const sal_Unicode cEsc):cEscape(cEsc){};
 
             virtual bool operate(const OOperand*, const OOperand*) const override;
         };
@@ -250,7 +244,7 @@ namespace connectivity
         {
         public:
         public:
-            OOp_NOTLIKE(const sal_Unicode cEsc = L'\0'):OOp_LIKE(cEsc){};
+            OOp_NOTLIKE(const sal_Unicode cEsc):OOp_LIKE(cEsc){};
 
             virtual bool operate(const OOperand*, const OOperand*) const override;
         };
@@ -263,7 +257,7 @@ namespace connectivity
             OOp_COMPARE(sal_Int32 aPType)
                          :aPredicateType(aPType) {}
 
-            inline sal_Int32 getPredicateType() const { return aPredicateType; }
+            sal_Int32 getPredicateType() const { return aPredicateType; }
             virtual bool operate(const OOperand*, const OOperand*) const override;
         };
 
@@ -304,7 +298,7 @@ namespace connectivity
 
         inline bool OOperand::isValid() const
         {
-            return getValue().getDouble() != double(0.0);
+            return getValue().getDouble() != 0.0;
         }
 
         // Operator
@@ -315,7 +309,7 @@ namespace connectivity
 
 
         protected:
-            virtual ORowSetValue operate(const ::std::vector<ORowSetValue>& lhs) const = 0;
+            virtual ORowSetValue operate(const std::vector<ORowSetValue>& lhs) const = 0;
         };
 
         class OBinaryOperator : public OOperator

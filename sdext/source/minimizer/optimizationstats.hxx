@@ -28,24 +28,16 @@
 
 class OptimizationStats
 {
-    struct Compare
-    {
-        bool operator()( const PPPOptimizerTokenEnum s1, const PPPOptimizerTokenEnum s2 ) const
-        {
-            return s1 < s2;
-        }
-    };
-    std::map < PPPOptimizerTokenEnum, css::uno::Any, Compare > maStats;
+    std::map < PPPOptimizerTokenEnum, css::uno::Any > maStats;
 
     public:
 
         OptimizationStats();
-        ~OptimizationStats(){};
 
         void SetStatusValue( const PPPOptimizerTokenEnum eStat, const css::uno::Any& rStatValue );
         const css::uno::Any* GetStatusValue( const PPPOptimizerTokenEnum eStat ) const;
 
-        void InitializeStatusValuesFromDocument( css::uno::Reference< css::frame::XModel > rxModel );
+        void InitializeStatusValuesFromDocument( const css::uno::Reference< css::frame::XModel >& rxModel );
         void InitializeStatusValues( const css::uno::Sequence< css::beans::PropertyValue >& rOptimizationStats );
 
         css::beans::PropertyValues GetStatusSequence();

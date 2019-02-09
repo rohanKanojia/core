@@ -22,11 +22,11 @@
 
 #include <svtools/svtdllapi.h>
 #include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/io/XInputStream.hpp>
 #include <vcl/graph.hxx>
-#include <tools/mapunit.hxx>
 #include <rtl/ustring.hxx>
 #include <memory>
+
+namespace com :: sun :: star :: io { class XInputStream; }
 
 namespace comphelper
 {
@@ -37,7 +37,6 @@ namespace com { namespace sun { namespace star { namespace embed {
     class XEmbeddedObject;
 }}}}
 
-class Rectangle;
 class OutputDevice;
 
 namespace svt {
@@ -48,14 +47,14 @@ class SVT_DLLPUBLIC EmbeddedObjectRef
 {
     std::unique_ptr<EmbeddedObjectRef_Impl> mpImpl;
 
-    SVT_DLLPRIVATE SvStream* GetGraphicStream( bool bUpdate ) const;
+    SVT_DLLPRIVATE std::unique_ptr<SvStream> GetGraphicStream( bool bUpdate ) const;
     SVT_DLLPRIVATE void GetReplacement( bool bUpdate );
 
     EmbeddedObjectRef& operator = ( const EmbeddedObjectRef& ) = delete;
 
 public:
-    static void DrawPaintReplacement( const Rectangle &rRect, const OUString &rText, OutputDevice *pOut );
-    static void DrawShading( const Rectangle &rRect, OutputDevice *pOut );
+    static void DrawPaintReplacement( const tools::Rectangle &rRect, const OUString &rText, OutputDevice *pOut );
+    static void DrawShading( const tools::Rectangle &rRect, OutputDevice *pOut );
     static bool TryRunningState( const css::uno::Reference < css::embed::XEmbeddedObject >& );
     static void SetGraphicToContainer( const Graphic& rGraphic,
                                         comphelper::EmbeddedObjectContainer& aContainer,
@@ -69,7 +68,6 @@ public:
                             throw();
 
     static bool IsChart(const css::uno::Reference < css::embed::XEmbeddedObject >& xObj);
-    static bool IsGLChart(const css::uno::Reference < css::embed::XEmbeddedObject >& xObj);
 
     const css::uno::Reference <css::embed::XEmbeddedObject>& operator->() const;
     const css::uno::Reference <css::embed::XEmbeddedObject>& GetObject() const;
@@ -96,7 +94,7 @@ public:
 
     // the original size of the object ( size of the icon for iconified object )
     // no conversion is done if no target mode is provided
-    Size            GetSize( MapMode* pTargetMapMode = nullptr ) const;
+    Size            GetSize( MapMode const * pTargetMapMode ) const;
 
     void            SetGraphic( const Graphic& rGraphic, const OUString& rMediaType );
     void            SetGraphicStream(
@@ -111,7 +109,6 @@ public:
 
     bool IsLocked() const;
     bool IsChart() const;
-    bool IsGLChart() const;
 
     OUString GetChartType();
 

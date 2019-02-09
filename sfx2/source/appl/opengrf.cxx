@@ -18,8 +18,10 @@
  */
 
 
+#include <tools/debug.hxx>
 #include <tools/urlobj.hxx>
 #include <com/sun/star/uno/Reference.h>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/ui/dialogs/CommonFilePickerElementIds.hpp>
 #include <com/sun/star/ui/dialogs/ExecutableDialogResults.hpp>
@@ -33,17 +35,20 @@
 #include <com/sun/star/ui/dialogs/XFilePickerNotifier.hpp>
 #include <com/sun/star/ui/dialogs/XFilePreview.hpp>
 #include <com/sun/star/ui/dialogs/XFilterManager.hpp>
+#include <o3tl/any.hxx>
 #include <svl/urihelper.hxx>
-#include <unotools/ucbstreamhelper.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <sot/formats.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/button.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 #include <sfx2/filedlghelper.hxx>
 #include <sfx2/docfile.hxx>
 #include <unotools/pathoptions.hxx>
 #include <sfx2/opengrf.hxx>
-#include "app.hrc"
+#include <sfx2/strings.hrc>
 #include <sfx2/sfxresid.hxx>
+#include <osl/diagnose.h>
 
 
 using namespace ::com::sun::star;
@@ -52,59 +57,60 @@ using namespace ::com::sun::star::ui::dialogs;
 using namespace ::com::sun::star::uno;
 using namespace ::cppu;
 
-
-sal_uInt16  SvxOpenGrfErr2ResId(    short   err     )
+static const char* SvxOpenGrfErr2ResId( ErrCode err )
 {
-    switch( err )
-    {
-        case GRFILTER_OPENERROR:
-            return RID_SVXSTR_GRFILTER_OPENERROR;
-        case GRFILTER_IOERROR:
-            return RID_SVXSTR_GRFILTER_IOERROR;
-        case GRFILTER_VERSIONERROR:
-            return RID_SVXSTR_GRFILTER_VERSIONERROR;
-        case GRFILTER_FILTERERROR:
-            return RID_SVXSTR_GRFILTER_FILTERERROR;
-        case GRFILTER_FORMATERROR:
-        default:
-            return RID_SVXSTR_GRFILTER_FORMATERROR;
-    }
+    if (err == ERRCODE_GRFILTER_OPENERROR)
+        return RID_SVXSTR_GRFILTER_OPENERROR;
+    else if (err == ERRCODE_GRFILTER_IOERROR)
+        return RID_SVXSTR_GRFILTER_IOERROR;
+    else if (err == ERRCODE_GRFILTER_VERSIONERROR)
+        return RID_SVXSTR_GRFILTER_VERSIONERROR;
+    else if (err == ERRCODE_GRFILTER_FILTERERROR)
+        return RID_SVXSTR_GRFILTER_FILTERERROR;
+    else
+        return RID_SVXSTR_GRFILTER_FORMATERROR;
 }
-
 
 struct SvxOpenGrf_Impl
 {
-    SvxOpenGrf_Impl         ();
+    SvxOpenGrf_Impl(weld::Window* pPreferredParent,
+                    sal_Int16 nDialogType);
 
     sfx2::FileDialogHelper                  aFileDlg;
+    OUString sDetectedFilter;
     uno::Reference < XFilePickerControlAccess > xCtrlAcc;
 };
 
 
-SvxOpenGrf_Impl::SvxOpenGrf_Impl()
-    : aFileDlg(ui::dialogs::TemplateDescription::FILEOPEN_LINK_PREVIEW,
-            SFXWB_GRAPHIC)
+SvxOpenGrf_Impl::SvxOpenGrf_Impl(weld::Window* pPreferredParent,
+                                 sal_Int16 nDialogType)
+    : aFileDlg(nDialogType, FileDialogFlags::Graphic, pPreferredParent)
 {
-    uno::Reference < XFilePicker2 > xFP = aFileDlg.GetFilePicker();
+    uno::Reference < XFilePicker3 > xFP = aFileDlg.GetFilePicker();
     xCtrlAcc.set(xFP, UNO_QUERY);
 }
 
 
-SvxOpenGraphicDialog::SvxOpenGraphicDialog( const OUString& rTitle ) :
-    mpImpl( new SvxOpenGrf_Impl )
+SvxOpenGraphicDialog::SvxOpenGraphicDialog(const OUString& rTitle, weld::Window* pPreferredParent)
+    : mpImpl(new SvxOpenGrf_Impl(pPreferredParent, ui::dialogs::TemplateDescription::FILEOPEN_LINK_PREVIEW))
 {
     mpImpl->aFileDlg.SetTitle(rTitle);
 }
 
+SvxOpenGraphicDialog::SvxOpenGraphicDialog(const OUString& rTitle, weld::Window* pPreferredParent,
+                                           sal_Int16 nDialogType)
+    : mpImpl(new SvxOpenGrf_Impl(pPreferredParent, nDialogType))
+{
+    mpImpl->aFileDlg.SetTitle(rTitle);
+}
 
 SvxOpenGraphicDialog::~SvxOpenGraphicDialog()
 {
 }
 
-
-short SvxOpenGraphicDialog::Execute()
+ErrCode SvxOpenGraphicDialog::Execute()
 {
-    sal_uInt16  nImpRet;
+    ErrCode nImpRet;
     bool    bQuitLoop(false);
 
     while( !bQuitLoop &&
@@ -124,46 +130,54 @@ short SvxOpenGraphicDialog::Execute()
             // non-local?
             if ( INetProtocol::File != aObj.GetProtocol() )
             {
-                SfxMedium aMed( aObj.GetMainURL( INetURLObject::NO_DECODE ), StreamMode::READ );
+                SfxMedium aMed( aObj.GetMainURL( INetURLObject::DecodeMechanism::NONE ), StreamMode::READ );
                 aMed.Download();
                 SvStream* pStream = aMed.GetInStream();
 
                 if( pStream )
-                    nImpRet = rFilter.CanImportGraphic( aObj.GetMainURL( INetURLObject::NO_DECODE ), *pStream, nFormatNum, &nRetFormat );
+                    nImpRet = rFilter.CanImportGraphic( aObj.GetMainURL( INetURLObject::DecodeMechanism::NONE ), *pStream, nFormatNum, &nRetFormat );
                 else
                     nImpRet = rFilter.CanImportGraphic( aObj, nFormatNum, &nRetFormat );
 
-                if ( GRFILTER_OK != nImpRet )
+                if ( ERRCODE_NONE != nImpRet )
                 {
                     if ( !pStream )
                         nImpRet = rFilter.CanImportGraphic( aObj, GRFILTER_FORMAT_DONTKNOW, &nRetFormat );
                     else
-                        nImpRet = rFilter.CanImportGraphic( aObj.GetMainURL( INetURLObject::NO_DECODE ), *pStream,
+                        nImpRet = rFilter.CanImportGraphic( aObj.GetMainURL( INetURLObject::DecodeMechanism::NONE ), *pStream,
                                                              GRFILTER_FORMAT_DONTKNOW, &nRetFormat );
                 }
             }
             else
             {
-                if( (nImpRet=rFilter.CanImportGraphic( aObj, nFormatNum, &nRetFormat )) != GRFILTER_OK )
+                if( (nImpRet=rFilter.CanImportGraphic( aObj, nFormatNum, &nRetFormat )) != ERRCODE_NONE )
                     nImpRet = rFilter.CanImportGraphic( aObj, GRFILTER_FORMAT_DONTKNOW, &nRetFormat );
             }
 
-            if ( GRFILTER_OK == nImpRet )
+            if ( ERRCODE_NONE == nImpRet )
                 nFound = nRetFormat;
 
             // could not load?
             if ( nFound == USHRT_MAX )
             {
-                ScopedVclPtrInstance< WarningBox > aWarningBox(nullptr, WB_3DLOOK | WB_RETRY_CANCEL, SfxResId( SvxOpenGrfErr2ResId(nImpRet) ).toString());
-                bQuitLoop = aWarningBox->Execute() != RET_RETRY;
+                std::unique_ptr<weld::MessageDialog> xWarn(Application::CreateMessageDialog(nullptr,
+                                                           VclMessageType::Warning, VclButtonsType::NONE,
+                                                           SfxResId(SvxOpenGrfErr2ResId(nImpRet))));
+                xWarn->add_button(Button::GetStandardText(StandardButtonType::Retry), RET_RETRY);
+                xWarn->add_button(Button::GetStandardText(StandardButtonType::Cancel), RET_CANCEL);
+                bQuitLoop = xWarn->run() != RET_RETRY;
             }
             else
             {
-                // setup appropriate filter (so next time, it will work)
                 if( rFilter.GetImportFormatCount() )
                 {
-                    OUString  aFormatName(rFilter.GetImportFormatName(nFound));
-                    SetCurrentFilter(aFormatName);
+                    // store detected appropriate filter
+                    OUString aFormatName(rFilter.GetImportFormatName(nFound));
+                    SetDetectedFilter(aFormatName);
+                }
+                else
+                {
+                    SetDetectedFilter(mpImpl->aFileDlg.GetCurrentFilter());
                 }
 
                 return nImpRet;
@@ -172,55 +186,49 @@ short SvxOpenGraphicDialog::Execute()
     }
 
     // cancel
-    return -1;
+    return ErrCode(sal_uInt32(-1));
 }
 
-
-void SvxOpenGraphicDialog::SetPath( const OUString& rPath )
-{
-    mpImpl->aFileDlg.SetDisplayDirectory(rPath);
-}
 
 void SvxOpenGraphicDialog::SetPath( const OUString& rPath, bool bLinkState )
 {
-    SetPath(rPath);
+    mpImpl->aFileDlg.SetDisplayDirectory(rPath);
     AsLink(bLinkState);
 }
 
 
 void SvxOpenGraphicDialog::EnableLink( bool state )
 {
-    if( mpImpl->xCtrlAcc.is() )
+    if( !mpImpl->xCtrlAcc.is() )
+        return;
+
+    try
     {
-        try
-        {
-            mpImpl->xCtrlAcc->enableControl( ExtendedFilePickerElementIds::CHECKBOX_LINK, state );
-        }
-        catch(const IllegalArgumentException&)
-        {
+        mpImpl->xCtrlAcc->enableControl( ExtendedFilePickerElementIds::CHECKBOX_LINK, state );
+    }
+    catch(const IllegalArgumentException&)
+    {
 #ifdef DBG_UTIL
-            OSL_FAIL( "Cannot enable \"link\" checkbox" );
+        OSL_FAIL( "Cannot enable \"link\" checkbox" );
 #endif
-        }
     }
 }
 
 
 void SvxOpenGraphicDialog::AsLink(bool bState)
 {
-    if( mpImpl->xCtrlAcc.is() )
+    if( !mpImpl->xCtrlAcc.is() )
+        return;
+
+    try
     {
-        try
-        {
-            Any aAny; aAny <<= bState;
-            mpImpl->xCtrlAcc->setValue( ExtendedFilePickerElementIds::CHECKBOX_LINK, 0, aAny );
-        }
-        catch(const IllegalArgumentException&)
-        {
+        mpImpl->xCtrlAcc->setValue( ExtendedFilePickerElementIds::CHECKBOX_LINK, 0, Any(bState) );
+    }
+    catch(const IllegalArgumentException&)
+    {
 #ifdef DBG_UTIL
-            OSL_FAIL( "Cannot check \"link\" checkbox" );
+        OSL_FAIL( "Cannot check \"link\" checkbox" );
 #endif
-        }
     }
 }
 
@@ -233,7 +241,7 @@ bool SvxOpenGraphicDialog::IsAsLink() const
         {
             Any aVal = mpImpl->xCtrlAcc->getValue( ExtendedFilePickerElementIds::CHECKBOX_LINK, 0 );
             DBG_ASSERT(aVal.hasValue(), "Value CBX_INSERT_AS_LINK not found");
-            return aVal.hasValue() && ( *static_cast<sal_Bool const *>(aVal.getValue()) );
+            return aVal.hasValue() && *o3tl::doAccess<bool>(aVal);
         }
     }
     catch(const IllegalArgumentException&)
@@ -246,28 +254,39 @@ bool SvxOpenGraphicDialog::IsAsLink() const
     return false;
 }
 
-
-int SvxOpenGraphicDialog::GetGraphic(Graphic& rGraphic) const
+ErrCode SvxOpenGraphicDialog::GetGraphic(Graphic& rGraphic) const
 {
     return mpImpl->aFileDlg.GetGraphic(rGraphic);
 }
-
 
 OUString SvxOpenGraphicDialog::GetPath() const
 {
     return mpImpl->aFileDlg.GetPath();
 }
 
-
 OUString SvxOpenGraphicDialog::GetCurrentFilter() const
 {
     return mpImpl->aFileDlg.GetCurrentFilter();
 }
 
+OUString const & SvxOpenGraphicDialog::GetDetectedFilter() const
+{
+    return mpImpl->sDetectedFilter;
+}
 
 void SvxOpenGraphicDialog::SetCurrentFilter(const OUString& rStr)
 {
     mpImpl->aFileDlg.SetCurrentFilter(rStr);
+}
+
+void SvxOpenGraphicDialog::SetDetectedFilter(const OUString& rStr)
+{
+    mpImpl->sDetectedFilter = rStr;
+}
+
+Reference<ui::dialogs::XFilePickerControlAccess> const & SvxOpenGraphicDialog::GetFilePickerControlAccess()
+{
+    return mpImpl->xCtrlAcc;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

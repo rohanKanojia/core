@@ -19,18 +19,20 @@
 
 #include <sal/config.h>
 
-#include "unoservices.hxx"
-#include "xml_import.hxx"
+#include <unoservices.hxx>
+#include <xml_import.hxx>
 
 #include <cppuhelper/factory.hxx>
 #include <cppuhelper/implementationentry.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <com/sun/star/container/NoSuchElementException.hpp>
 #include <com/sun/star/xml/input/XAttributes.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <sal/log.hxx>
+#include <rtl/ref.hxx>
 
 #include <memory>
 #include <unordered_map>
@@ -55,35 +57,36 @@ OUString getImplementationName_DocumentHandlerImpl()
     return OUString( "com.sun.star.comp.xml.input.SaxDocumentHandler" );
 }
 
-typedef std::unordered_map< OUString, sal_Int32, OUStringHash > t_OUString2LongMap;
+typedef std::unordered_map< OUString, sal_Int32 > t_OUString2LongMap;
 
 struct PrefixEntry
 {
     ::std::vector< sal_Int32 > m_Uids;
 
-    inline PrefixEntry()
+    PrefixEntry()
         { m_Uids.reserve( 4 ); }
 };
 
 typedef std::unordered_map<
-    OUString, PrefixEntry *, OUStringHash > t_OUString2PrefixMap;
+    OUString, std::unique_ptr<PrefixEntry> > t_OUString2PrefixMap;
 
 struct ElementEntry
 {
     Reference< xml::input::XElement > m_xElement;
     ::std::vector< OUString > m_prefixes;
 
-    inline ElementEntry()
+    ElementEntry()
         { m_prefixes.reserve( 2 ); }
 };
 
 class ExtendedAttributes;
 
-struct MGuard
+class MGuard
 {
     Mutex * m_pMutex;
-    explicit MGuard( Mutex * pMutex )
-        : m_pMutex( pMutex )
+public:
+    explicit MGuard( std::unique_ptr<Mutex> const & pMutex )
+        : m_pMutex( pMutex.get() )
         { if (m_pMutex) m_pMutex->acquire(); }
     ~MGuard() throw ()
         { if (m_pMutex) m_pMutex->release(); }
@@ -102,9 +105,6 @@ class DocumentHandlerImpl :
     t_OUString2LongMap m_URI2Uid;
     sal_Int32 m_uid_count;
 
-    OUString m_sXMLNS_PREFIX_UNKNOWN;
-    OUString m_sXMLNS;
-
     sal_Int32 m_nLastURI_lookup;
     OUString m_aLastURI_lookup;
 
@@ -112,10 +112,10 @@ class DocumentHandlerImpl :
     sal_Int32 m_nLastPrefix_lookup;
     OUString m_aLastPrefix_lookup;
 
-    std::vector< ElementEntry * > m_elements;
+    std::vector< ElementEntry > m_elements;
     sal_Int32 m_nSkipElements;
 
-    Mutex * m_pMutex;
+    std::unique_ptr<Mutex> m_pMutex;
 
     inline Reference< xml::input::XElement > getCurrentElement() const;
 
@@ -133,83 +133,58 @@ public:
     DocumentHandlerImpl(
         Reference< xml::input::XRoot > const & xRoot,
         bool bSingleThreadedUse );
-    virtual ~DocumentHandlerImpl() throw ();
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw (RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
     virtual sal_Bool SAL_CALL supportsService(
-        OUString const & servicename )
-        throw (RuntimeException, std::exception) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames()
-        throw (RuntimeException, std::exception) override;
+        OUString const & servicename ) override;
+    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // XInitialization
     virtual void SAL_CALL initialize(
-        Sequence< Any > const & arguments )
-        throw (Exception, std::exception) override;
+        Sequence< Any > const & arguments ) override;
 
     // XDocumentHandler
-    virtual void SAL_CALL startDocument()
-        throw (xml::sax::SAXException, RuntimeException, std::exception) override;
-    virtual void SAL_CALL endDocument()
-        throw (xml::sax::SAXException, RuntimeException, std::exception) override;
+    virtual void SAL_CALL startDocument() override;
+    virtual void SAL_CALL endDocument() override;
     virtual void SAL_CALL startElement(
         OUString const & rQElementName,
-        Reference< xml::sax::XAttributeList > const & xAttribs )
-        throw (xml::sax::SAXException, RuntimeException, std::exception) override;
+        Reference< xml::sax::XAttributeList > const & xAttribs ) override;
     virtual void SAL_CALL endElement(
-        OUString const & rQElementName )
-        throw (xml::sax::SAXException, RuntimeException, std::exception) override;
+        OUString const & rQElementName ) override;
     virtual void SAL_CALL characters(
-        OUString const & rChars )
-        throw (xml::sax::SAXException, RuntimeException, std::exception) override;
+        OUString const & rChars ) override;
     virtual void SAL_CALL ignorableWhitespace(
-        OUString const & rWhitespaces )
-        throw (xml::sax::SAXException, RuntimeException, std::exception) override;
+        OUString const & rWhitespaces ) override;
     virtual void SAL_CALL processingInstruction(
-        OUString const & rTarget, OUString const & rData )
-        throw (xml::sax::SAXException, RuntimeException, std::exception) override;
+        OUString const & rTarget, OUString const & rData ) override;
     virtual void SAL_CALL setDocumentLocator(
-        Reference< xml::sax::XLocator > const & xLocator )
-        throw (xml::sax::SAXException, RuntimeException, std::exception) override;
+        Reference< xml::sax::XLocator > const & xLocator ) override;
 
     // XNamespaceMapping
-    virtual sal_Int32 SAL_CALL getUidByUri( OUString const & Uri )
-        throw (RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getUriByUid( sal_Int32 Uid )
-        throw (container::NoSuchElementException, RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL getUidByUri( OUString const & Uri ) override;
+    virtual OUString SAL_CALL getUriByUid( sal_Int32 Uid ) override;
 };
+
+static OUString const g_sXMLNS_PREFIX_UNKNOWN( "<<< unknown prefix >>>" );
+static OUString const g_sXMLNS( "xmlns" );
+
 
 DocumentHandlerImpl::DocumentHandlerImpl(
     Reference< xml::input::XRoot > const & xRoot,
     bool bSingleThreadedUse )
     : m_xRoot( xRoot ),
       m_uid_count( 0 ),
-      m_sXMLNS_PREFIX_UNKNOWN( "<<< unknown prefix >>>" ),
-      m_sXMLNS( "xmlns" ),
       m_nLastURI_lookup( UID_UNKNOWN ),
       m_aLastURI_lookup( "<<< unknown URI >>>" ),
       m_nLastPrefix_lookup( UID_UNKNOWN ),
       m_aLastPrefix_lookup( "<<< unknown URI >>>" ),
-      m_nSkipElements( 0 ),
-      m_pMutex( nullptr )
+      m_nSkipElements( 0 )
 {
     m_elements.reserve( 10 );
 
     if (! bSingleThreadedUse)
-        m_pMutex = new Mutex();
-}
-
-DocumentHandlerImpl::~DocumentHandlerImpl() throw ()
-{
-    if (m_pMutex != nullptr)
-    {
-        delete m_pMutex;
-#if OSL_DEBUG_LEVEL == 0
-        m_pMutex = 0;
-#endif
-    }
+        m_pMutex.reset(new Mutex);
 }
 
 inline Reference< xml::input::XElement >
@@ -219,7 +194,7 @@ DocumentHandlerImpl::getCurrentElement() const
     if (m_elements.empty())
         return Reference< xml::input::XElement >();
     else
-        return m_elements.back()->m_xElement;
+        return m_elements.back().m_xElement;
 }
 
 inline sal_Int32 DocumentHandlerImpl::getUidByURI( OUString const & rURI )
@@ -263,7 +238,7 @@ inline sal_Int32 DocumentHandlerImpl::getUidByPrefix(
         else
         {
             m_nLastPrefix_lookup = UID_UNKNOWN;
-            m_aLastPrefix_lookup = m_sXMLNS_PREFIX_UNKNOWN;
+            m_aLastPrefix_lookup = g_sXMLNS_PREFIX_UNKNOWN;
         }
     }
     return m_nLastPrefix_lookup;
@@ -281,13 +256,13 @@ inline void DocumentHandlerImpl::pushPrefix(
     {
         PrefixEntry * pEntry = new PrefixEntry();
         pEntry->m_Uids.push_back( nUid ); // latest id for prefix
-        m_prefixes[ rPrefix ] = pEntry;
+        m_prefixes[rPrefix].reset(pEntry);
     }
     else
     {
-        PrefixEntry * pEntry = iFind->second;
-        SAL_WARN_IF( pEntry->m_Uids.empty(), "xmlscript.xmlhelper", "pEntry->m_Uids is empty" );
-        pEntry->m_Uids.push_back( nUid );
+        PrefixEntry& rEntry = *iFind->second;
+        SAL_WARN_IF(rEntry.m_Uids.empty(), "xmlscript.xmlhelper", "pEntry->m_Uids is empty");
+        rEntry.m_Uids.push_back(nUid);
     }
 
     m_aLastPrefix_lookup = rPrefix;
@@ -300,23 +275,22 @@ inline void DocumentHandlerImpl::popPrefix(
     t_OUString2PrefixMap::iterator iFind( m_prefixes.find( rPrefix ) );
     if (iFind != m_prefixes.end()) // unused prefix
     {
-        PrefixEntry * pEntry = iFind->second;
-        pEntry->m_Uids.pop_back(); // pop last id for prefix
-        if (pEntry->m_Uids.empty()) // erase prefix key
+        PrefixEntry& rEntry = *iFind->second;
+        rEntry.m_Uids.pop_back(); // pop last id for prefix
+        if (rEntry.m_Uids.empty()) // erase prefix key
         {
-            m_prefixes.erase( iFind );
-            delete pEntry;
+            m_prefixes.erase(iFind);
         }
     }
 
     m_nLastPrefix_lookup = UID_UNKNOWN;
-    m_aLastPrefix_lookup = m_sXMLNS_PREFIX_UNKNOWN;
+    m_aLastPrefix_lookup = g_sXMLNS_PREFIX_UNKNOWN;
 }
 
 inline void DocumentHandlerImpl::getElementName(
     OUString const & rQName, sal_Int32 * pUid, OUString * pLocalName )
 {
-    sal_Int32 nColonPos = rQName.indexOf( (sal_Unicode)':' );
+    sal_Int32 nColonPos = rQName.indexOf( ':' );
     *pLocalName = (nColonPos >= 0 ? rQName.copy( nColonPos +1 ) : rQName);
     *pUid = getUidByPrefix(
         nColonPos >= 0 ? rQName.copy( 0, nColonPos ) : OUString() );
@@ -325,99 +299,70 @@ inline void DocumentHandlerImpl::getElementName(
 class ExtendedAttributes :
     public ::cppu::WeakImplHelper< xml::input::XAttributes >
 {
-    sal_Int32 m_nAttributes;
-    sal_Int32 * m_pUids;
-    OUString * m_pLocalNames;
-    OUString * m_pQNames;
-    OUString * m_pValues;
-
-    DocumentHandlerImpl * m_pHandler;
+    sal_Int32 const m_nAttributes;
+    std::unique_ptr<sal_Int32[]> m_pUids;
+    std::unique_ptr<OUString[]>  m_pLocalNames;
+    std::unique_ptr<OUString[]>  m_pQNames;
+    std::unique_ptr<OUString[]>  m_pValues;
 
 public:
     inline ExtendedAttributes(
         sal_Int32 nAttributes,
-        sal_Int32 * pUids,
-        OUString * pLocalNames, OUString * pQNames,
-        Reference< xml::sax::XAttributeList > const & xAttributeList,
-        DocumentHandlerImpl * pHandler );
-    virtual ~ExtendedAttributes() throw ();
+        std::unique_ptr<sal_Int32[]> pUids,
+        std::unique_ptr<OUString[]> pLocalNames,
+        std::unique_ptr<OUString[]> pQNames,
+        Reference< xml::sax::XAttributeList > const & xAttributeList );
 
     // XAttributes
-    virtual sal_Int32 SAL_CALL getLength()
-        throw (RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL getLength() override;
     virtual sal_Int32 SAL_CALL getIndexByQName(
-        OUString const & rQName )
-        throw (RuntimeException, std::exception) override;
+        OUString const & rQName ) override;
     virtual sal_Int32 SAL_CALL getIndexByUidName(
-        sal_Int32 nUid, OUString const & rLocalName )
-        throw (RuntimeException, std::exception) override;
+        sal_Int32 nUid, OUString const & rLocalName ) override;
     virtual OUString SAL_CALL getQNameByIndex(
-        sal_Int32 nIndex )
-        throw (RuntimeException, std::exception) override;
+        sal_Int32 nIndex ) override;
     virtual sal_Int32 SAL_CALL getUidByIndex(
-        sal_Int32 nIndex )
-        throw (RuntimeException, std::exception) override;
+        sal_Int32 nIndex ) override;
     virtual OUString SAL_CALL getLocalNameByIndex(
-        sal_Int32 nIndex )
-        throw (RuntimeException, std::exception) override;
+        sal_Int32 nIndex ) override;
     virtual OUString SAL_CALL getValueByIndex(
-        sal_Int32 nIndex )
-        throw (RuntimeException, std::exception) override;
+        sal_Int32 nIndex ) override;
     virtual OUString SAL_CALL getValueByUidName(
-        sal_Int32 nUid, OUString const & rLocalName )
-        throw (RuntimeException, std::exception) override;
+        sal_Int32 nUid, OUString const & rLocalName ) override;
     virtual OUString SAL_CALL getTypeByIndex(
-        sal_Int32 nIndex )
-        throw (RuntimeException, std::exception) override;
+        sal_Int32 nIndex ) override;
 };
 
 inline ExtendedAttributes::ExtendedAttributes(
     sal_Int32 nAttributes,
-    sal_Int32 * pUids,
-    OUString * pLocalNames, OUString * pQNames,
-    Reference< xml::sax::XAttributeList > const & xAttributeList,
-    DocumentHandlerImpl * pHandler )
+    std::unique_ptr<sal_Int32[]> pUids,
+    std::unique_ptr<OUString[]> pLocalNames, std::unique_ptr<OUString[]> pQNames,
+    Reference< xml::sax::XAttributeList > const & xAttributeList )
     : m_nAttributes( nAttributes )
-    , m_pUids( pUids )
-    , m_pLocalNames( pLocalNames )
-    , m_pQNames( pQNames )
+    , m_pUids( std::move(pUids) )
+    , m_pLocalNames( std::move(pLocalNames) )
+    , m_pQNames( std::move(pQNames) )
     , m_pValues( new OUString[ nAttributes ] )
-    , m_pHandler( pHandler )
 {
-    m_pHandler->acquire();
-
     for ( sal_Int32 nPos = 0; nPos < nAttributes; ++nPos )
     {
         m_pValues[ nPos ] = xAttributeList->getValueByIndex( nPos );
     }
 }
 
-ExtendedAttributes::~ExtendedAttributes() throw ()
-{
-    m_pHandler->release();
-
-    delete [] m_pUids;
-    delete [] m_pLocalNames;
-    delete [] m_pQNames;
-    delete [] m_pValues;
-}
-
 // XServiceInfo
 
 OUString DocumentHandlerImpl::getImplementationName()
-    throw (RuntimeException, std::exception)
 {
     return getImplementationName_DocumentHandlerImpl();
 }
 
 sal_Bool DocumentHandlerImpl::supportsService( OUString const & servicename )
-    throw (RuntimeException, std::exception)
 {
     return cppu::supportsService(this, servicename);
 }
 
 Sequence< OUString > DocumentHandlerImpl::getSupportedServiceNames()
-    throw (RuntimeException, std::exception)
 {
     return getSupportedServiceNames_DocumentHandlerImpl();
 }
@@ -426,26 +371,21 @@ Sequence< OUString > DocumentHandlerImpl::getSupportedServiceNames()
 
 void DocumentHandlerImpl::initialize(
     Sequence< Any > const & arguments )
-    throw (Exception, std::exception)
 {
     MGuard guard( m_pMutex );
     Reference< xml::input::XRoot > xRoot;
-    if (arguments.getLength() == 1 &&
-        (arguments[ 0 ] >>= xRoot) &&
-        xRoot.is())
-    {
-        m_xRoot = xRoot;
-    }
-    else
+    if (arguments.getLength() != 1 ||
+        !(arguments[ 0 ] >>= xRoot) ||
+        !xRoot.is())
     {
         throw RuntimeException( "missing root instance!" );
     }
+    m_xRoot = xRoot;
 }
 
 // XNamespaceMapping
 
 sal_Int32 DocumentHandlerImpl::getUidByUri( OUString const & Uri )
-    throw (RuntimeException, std::exception)
 {
     sal_Int32 uid = getUidByURI( Uri );
     SAL_WARN_IF( uid == UID_UNKNOWN, "xmlscript.xmlhelper", "uid UNKNOWN");
@@ -453,15 +393,12 @@ sal_Int32 DocumentHandlerImpl::getUidByUri( OUString const & Uri )
 }
 
 OUString DocumentHandlerImpl::getUriByUid( sal_Int32 Uid )
-    throw (container::NoSuchElementException, RuntimeException, std::exception)
 {
     MGuard guard( m_pMutex );
-    t_OUString2LongMap::const_iterator iPos( m_URI2Uid.begin() );
-    t_OUString2LongMap::const_iterator const iEnd( m_URI2Uid.end() );
-    for ( ; iPos != iEnd; ++iPos )
+    for (const auto& rURIUid : m_URI2Uid)
     {
-        if (iPos->second == Uid)
-            return iPos->first;
+        if (rURIUid.second == Uid)
+            return rURIUid.first;
     }
     throw container::NoSuchElementException( "no such xmlns uid!" , static_cast< OWeakObject * >(this) );
 }
@@ -469,13 +406,11 @@ OUString DocumentHandlerImpl::getUriByUid( sal_Int32 Uid )
 // XDocumentHandler
 
 void DocumentHandlerImpl::startDocument()
-    throw (xml::sax::SAXException, RuntimeException, std::exception)
 {
     m_xRoot->startDocument( static_cast< xml::input::XNamespaceMapping * >( this ) );
 }
 
 void DocumentHandlerImpl::endDocument()
-    throw (xml::sax::SAXException, RuntimeException, std::exception)
 {
     m_xRoot->endDocument();
 }
@@ -483,13 +418,12 @@ void DocumentHandlerImpl::endDocument()
 void DocumentHandlerImpl::startElement(
     OUString const & rQElementName,
     Reference< xml::sax::XAttributeList > const & xAttribs )
-    throw (xml::sax::SAXException, RuntimeException, std::exception)
 {
     Reference< xml::input::XElement > xCurrentElement;
     Reference< xml::input::XAttributes > xAttributes;
     sal_Int32 nUid;
     OUString aLocalName;
-    ::std::unique_ptr< ElementEntry > elementEntry( new ElementEntry );
+    ElementEntry elementEntry;
 
     { // guard start:
     MGuard aGuard( m_pMutex );
@@ -504,10 +438,10 @@ void DocumentHandlerImpl::startElement(
     sal_Int16 nAttribs = xAttribs->getLength();
 
     // save all namespace ids
-    sal_Int32 * pUids = new sal_Int32[ nAttribs ];
-    OUString * pPrefixes = new OUString[ nAttribs ];
-    OUString * pLocalNames = new OUString[ nAttribs ];
-    OUString * pQNames = new OUString[ nAttribs ];
+    std::unique_ptr<sal_Int32[]> pUids(new sal_Int32[ nAttribs ]);
+    std::unique_ptr<OUString[]> pPrefixes(new OUString[ nAttribs ]);
+    std::unique_ptr<OUString[]> pLocalNames(new OUString[ nAttribs ]);
+    std::unique_ptr<OUString[]> pQNames(new OUString[ nAttribs ]);
 
     // first recognize all xmlns attributes
     sal_Int16 nPos;
@@ -520,7 +454,7 @@ void DocumentHandlerImpl::startElement(
         pQNames[ nPos ] = xAttribs->getNameByIndex( nPos );
         OUString const & rQAttributeName = pQNames[ nPos ];
 
-        if (rQAttributeName.startsWith( m_sXMLNS ))
+        if (rQAttributeName.startsWith( g_sXMLNS ))
         {
             if (rQAttributeName.getLength() == 5) // set default namespace
             {
@@ -528,18 +462,18 @@ void DocumentHandlerImpl::startElement(
                 pushPrefix(
                     aDefNamespacePrefix,
                     xAttribs->getValueByIndex( nPos ) );
-                elementEntry->m_prefixes.push_back( aDefNamespacePrefix );
+                elementEntry.m_prefixes.push_back( aDefNamespacePrefix );
                 pUids[ nPos ]          = UID_UNKNOWN;
-                pPrefixes[ nPos ]      = m_sXMLNS;
+                pPrefixes[ nPos ]      = g_sXMLNS;
                 pLocalNames[ nPos ]    = aDefNamespacePrefix;
             }
-            else if ((sal_Unicode)':' == rQAttributeName[ 5 ]) // set prefix
+            else if (':' == rQAttributeName[ 5 ]) // set prefix
             {
                 OUString aPrefix( rQAttributeName.copy( 6 ) );
                 pushPrefix( aPrefix, xAttribs->getValueByIndex( nPos ) );
-                elementEntry->m_prefixes.push_back( aPrefix );
+                elementEntry.m_prefixes.push_back( aPrefix );
                 pUids[ nPos ]          = UID_UNKNOWN;
-                pPrefixes[ nPos ]      = m_sXMLNS;
+                pPrefixes[ nPos ]      = g_sXMLNS;
                 pLocalNames[ nPos ]    = aPrefix;
             }
             // else just a name starting with xmlns, but no prefix
@@ -555,7 +489,7 @@ void DocumentHandlerImpl::startElement(
             SAL_WARN_IF(rQAttributeName.startsWith( "xmlns:" ), "xmlscript.xmlhelper", "### unexpected xmlns!" );
 
             // collect attribute's uid and current prefix
-            sal_Int32 nColonPos = rQAttributeName.indexOf( (sal_Unicode) ':' );
+            sal_Int32 nColonPos = rQAttributeName.indexOf( ':' );
             if (nColonPos >= 0)
             {
                 pPrefixes[ nPos ] = rQAttributeName.copy( 0, nColonPos );
@@ -570,40 +504,45 @@ void DocumentHandlerImpl::startElement(
             pUids[ nPos ] = getUidByPrefix( pPrefixes[ nPos ] );
         }
     }
-    delete[] pPrefixes;
+    pPrefixes.reset();
     // ownership of arrays belongs to attribute list
     xAttributes = static_cast< xml::input::XAttributes * >(
         new ExtendedAttributes(
-            nAttribs, pUids, pLocalNames, pQNames,
-            xAttribs, this ) );
+            nAttribs, std::move(pUids), std::move(pLocalNames), std::move(pQNames),
+            xAttribs ) );
 
     getElementName( rQElementName, &nUid, &aLocalName );
 
     // create new child context and append to list
     if (! m_elements.empty())
-        xCurrentElement = m_elements.back()->m_xElement;
+        xCurrentElement = m_elements.back().m_xElement;
     } // :guard end
 
     if (xCurrentElement.is())
     {
-        elementEntry->m_xElement =
+        elementEntry.m_xElement =
             xCurrentElement->startChildElement( nUid, aLocalName, xAttributes );
     }
     else
     {
-        elementEntry->m_xElement =
+        elementEntry.m_xElement =
             m_xRoot->startRootElement( nUid, aLocalName, xAttributes );
     }
 
     {
     MGuard aGuard( m_pMutex );
-    if (elementEntry->m_xElement.is())
+    if (elementEntry.m_xElement.is())
     {
-        m_elements.push_back( elementEntry.release() );
+        m_elements.push_back( std::move(elementEntry) );
     }
     else
     {
         ++m_nSkipElements;
+
+        // pop prefixes
+        for (sal_Int32 nPos = elementEntry.m_prefixes.size(); nPos--;)
+            popPrefix(elementEntry.m_prefixes[nPos]);
+
         SAL_INFO("xmlscript.xmlhelper", " no context given on createChildElement() => ignoring element \"" << rQElementName << "\" ...");
     }
     }
@@ -611,45 +550,41 @@ void DocumentHandlerImpl::startElement(
 
 void DocumentHandlerImpl::endElement(
     OUString const & rQElementName )
-    throw (xml::sax::SAXException, RuntimeException, std::exception)
 {
     Reference< xml::input::XElement > xCurrentElement;
     {
-    MGuard aGuard( m_pMutex );
-    if (m_nSkipElements)
-    {
-        --m_nSkipElements;
-        SAL_INFO("xmlscript.xmlhelper", "### received endElement() for \"" << rQElementName << "\".");
-        static_cast<void>(rQElementName);
-        return;
-    }
+        MGuard aGuard( m_pMutex );
+        if (m_nSkipElements)
+        {
+            --m_nSkipElements;
+            SAL_INFO("xmlscript.xmlhelper", "### received endElement() for \"" << rQElementName << "\".");
+            return;
+        }
 
-    // popping context
-    SAL_WARN_IF( m_elements.empty(), "xmlscript.xmlhelper", "m_elements is empty" );
-    ElementEntry * pEntry = m_elements.back();
-    xCurrentElement = pEntry->m_xElement;
+        // popping context
+        SAL_WARN_IF( m_elements.empty(), "xmlscript.xmlhelper", "m_elements is empty" );
+        ElementEntry& rEntry = m_elements.back();
+        xCurrentElement = rEntry.m_xElement;
 
 #if OSL_DEBUG_LEVEL > 0
-    sal_Int32 nUid;
-    OUString aLocalName;
-    getElementName( rQElementName, &nUid, &aLocalName );
-    SAL_WARN_IF( xCurrentElement->getLocalName() != aLocalName, "xmlscript.xmlhelper", "xCurrentElement->getLocalName() != aLocalName" );
-    SAL_WARN_IF( xCurrentElement->getUid() != nUid, "xmlscript.xmlhelper", "xCurrentElement->getUid() != nUid" );
+        sal_Int32 nUid;
+        OUString aLocalName;
+        getElementName( rQElementName, &nUid, &aLocalName );
+        SAL_WARN_IF( xCurrentElement->getLocalName() != aLocalName, "xmlscript.xmlhelper", "xCurrentElement->getLocalName() != aLocalName" );
+        SAL_WARN_IF( xCurrentElement->getUid() != nUid, "xmlscript.xmlhelper", "xCurrentElement->getUid() != nUid" );
 #endif
 
-    // pop prefixes
-    for ( sal_Int32 nPos = pEntry->m_prefixes.size(); nPos--; )
-    {
-        popPrefix( pEntry->m_prefixes[ nPos ] );
-    }
-    m_elements.pop_back();
-    delete pEntry;
+        // pop prefixes
+        for ( sal_Int32 nPos = rEntry.m_prefixes.size(); nPos--; )
+        {
+            popPrefix( rEntry.m_prefixes[ nPos ] );
+        }
+        m_elements.pop_back();
     }
     xCurrentElement->endElement();
 }
 
 void DocumentHandlerImpl::characters( OUString const & rChars )
-    throw (xml::sax::SAXException, RuntimeException, std::exception)
 {
     Reference< xml::input::XElement > xCurrentElement( getCurrentElement() );
     if (xCurrentElement.is())
@@ -658,7 +593,6 @@ void DocumentHandlerImpl::characters( OUString const & rChars )
 
 void DocumentHandlerImpl::ignorableWhitespace(
     OUString const & rWhitespaces )
-    throw (xml::sax::SAXException, RuntimeException, std::exception)
 {
     Reference< xml::input::XElement > xCurrentElement( getCurrentElement() );
     if (xCurrentElement.is())
@@ -667,7 +601,6 @@ void DocumentHandlerImpl::ignorableWhitespace(
 
 void DocumentHandlerImpl::processingInstruction(
     OUString const & rTarget, OUString const & rData )
-    throw (xml::sax::SAXException, RuntimeException, std::exception)
 {
     Reference< xml::input::XElement > xCurrentElement( getCurrentElement() );
     if (xCurrentElement.is())
@@ -678,7 +611,6 @@ void DocumentHandlerImpl::processingInstruction(
 
 void DocumentHandlerImpl::setDocumentLocator(
     Reference< xml::sax::XLocator > const & xLocator )
-    throw (xml::sax::SAXException, RuntimeException, std::exception)
 {
     m_xRoot->setDocumentLocator( xLocator );
 }
@@ -686,11 +618,10 @@ void DocumentHandlerImpl::setDocumentLocator(
 // XAttributes
 
 sal_Int32 ExtendedAttributes::getIndexByQName( OUString const & rQName )
-    throw (RuntimeException, std::exception)
 {
     for ( sal_Int32 nPos = m_nAttributes; nPos--; )
     {
-        if (m_pQNames[ nPos ].equals( rQName ))
+        if (m_pQNames[ nPos ] == rQName)
         {
             return nPos;
         }
@@ -699,13 +630,11 @@ sal_Int32 ExtendedAttributes::getIndexByQName( OUString const & rQName )
 }
 
 sal_Int32 ExtendedAttributes::getLength()
-    throw (RuntimeException, std::exception)
 {
     return m_nAttributes;
 }
 
 OUString ExtendedAttributes::getLocalNameByIndex( sal_Int32 nIndex )
-    throw (RuntimeException, std::exception)
 {
     if (nIndex < m_nAttributes)
         return m_pLocalNames[ nIndex ];
@@ -714,7 +643,6 @@ OUString ExtendedAttributes::getLocalNameByIndex( sal_Int32 nIndex )
 }
 
 OUString ExtendedAttributes::getQNameByIndex( sal_Int32 nIndex )
-    throw (RuntimeException, std::exception)
 {
     if (nIndex < m_nAttributes)
         return m_pQNames[ nIndex ];
@@ -723,15 +651,12 @@ OUString ExtendedAttributes::getQNameByIndex( sal_Int32 nIndex )
 }
 
 OUString ExtendedAttributes::getTypeByIndex( sal_Int32 nIndex )
-    throw (RuntimeException, std::exception)
 {
-    static_cast<void>(nIndex);
     SAL_WARN_IF( nIndex >= m_nAttributes , "xmlscript.xmlhelper", "nIndex is bigger then m_nAttributes");
     return OUString(); // unsupported
 }
 
 OUString ExtendedAttributes::getValueByIndex( sal_Int32 nIndex )
-    throw (RuntimeException, std::exception)
 {
     if (nIndex < m_nAttributes)
         return m_pValues[ nIndex ];
@@ -741,7 +666,6 @@ OUString ExtendedAttributes::getValueByIndex( sal_Int32 nIndex )
 
 sal_Int32 ExtendedAttributes::getIndexByUidName(
     sal_Int32 nUid, OUString const & rLocalName )
-    throw (RuntimeException, std::exception)
 {
     for ( sal_Int32 nPos = m_nAttributes; nPos--; )
     {
@@ -754,7 +678,6 @@ sal_Int32 ExtendedAttributes::getIndexByUidName(
 }
 
 sal_Int32 ExtendedAttributes::getUidByIndex( sal_Int32 nIndex )
-    throw (RuntimeException, std::exception)
 {
     if (nIndex < m_nAttributes)
         return m_pUids[ nIndex ];
@@ -764,7 +687,6 @@ sal_Int32 ExtendedAttributes::getUidByIndex( sal_Int32 nIndex )
 
 OUString ExtendedAttributes::getValueByUidName(
     sal_Int32 nUid, OUString const & rLocalName )
-    throw (RuntimeException, std::exception)
 {
     for ( sal_Int32 nPos = m_nAttributes; nPos--; )
     {
@@ -776,7 +698,7 @@ OUString ExtendedAttributes::getValueByUidName(
     return OUString();
 }
 
-Reference< xml::sax::XDocumentHandler > SAL_CALL createDocumentHandler(
+Reference< xml::sax::XDocumentHandler > createDocumentHandler(
     Reference< xml::input::XRoot > const & xRoot )
 {
     SAL_WARN_IF( !xRoot.is(), "xmlscript.xmlhelper", "xRoot is NULL" );
@@ -788,7 +710,7 @@ Reference< xml::sax::XDocumentHandler > SAL_CALL createDocumentHandler(
     return Reference< xml::sax::XDocumentHandler >();
 }
 
-Reference< XInterface > SAL_CALL create_DocumentHandlerImpl(
+Reference< XInterface > create_DocumentHandlerImpl(
     SAL_UNUSED_PARAMETER Reference< XComponentContext > const & )
 {
     return static_cast< ::cppu::OWeakObject * >(

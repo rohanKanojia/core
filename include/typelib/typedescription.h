@@ -19,10 +19,10 @@
 #ifndef INCLUDED_TYPELIB_TYPEDESCRIPTION_H
 #define INCLUDED_TYPELIB_TYPEDESCRIPTION_H
 
-#include <cppu/cppudllapi.h>
-#include <typelib/uik.h>
-#include <typelib/typeclass.h>
-#include <rtl/ustring.h>
+#include "cppu/cppudllapi.h"
+#include "typelib/uik.h"
+#include "typelib/typeclass.h"
+#include "rtl/ustring.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -31,7 +31,7 @@ extern "C"
 
 struct _typelib_TypeDescription;
 
-#if defined( SAL_W32)
+#if defined( _WIN32)
 #pragma pack(push, 8)
 #endif
 
@@ -158,7 +158,7 @@ typedef struct _typelib_StructTypeDescription
 
     /**
        Flags for direct members, specifying whether they are of parameterized
-       type (true) or explict type (false).
+       type (true) or explicit type (false).
 
        For a plain struct type, this is a null pointer.
      */
@@ -451,7 +451,7 @@ typedef struct _typelib_StructMember_Init
 
     /**
        Flag specifying whether the member is of parameterized type (true) or
-       explict type (false).
+       explicit type (false).
      */
     sal_Bool bParameterizedType;
 } typelib_StructMember_Init;
@@ -477,7 +477,7 @@ typedef struct _typelib_Parameter_Init
     sal_Bool            bOut;
 } typelib_Parameter_Init;
 
-#if defined( SAL_W32)
+#if defined( _WIN32)
 #pragma pack(pop)
 #endif
 
@@ -913,7 +913,7 @@ CPPU_DLLPUBLIC void SAL_CALL typelib_static_compound_type_init(
     @param nMembers number of members
     @param ppMembers member types
     @param pParameterizedTypes flags for direct members, specifying whether they
-        are of parameterized type (true) or explict type (false); must be null
+        are of parameterized type (true) or explicit type (false); must be null
         for a plain struct type
 
     @since UDK 3.2.0
@@ -1017,7 +1017,7 @@ inline void TYPELIB_DANGER_GET( typelib_TypeDescription** ppMacroTypeDescr,
     }
 }
 
-/** Releases the description previouse fetched by TYPELIB_DANGER_GET.
+/** Releases the description previous fetched by TYPELIB_DANGER_GET.
     @internal
 */
 inline void TYPELIB_DANGER_RELEASE( typelib_TypeDescription* pDescription )

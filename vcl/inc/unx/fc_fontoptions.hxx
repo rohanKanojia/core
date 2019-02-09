@@ -22,7 +22,6 @@
 
 #include <rtl/ustring.hxx>
 #include <tools/gen.hxx>
-#include <tools/color.hxx>
 #include <vcl/dllapi.h>
 #include <vcl/vclenum.hxx>
 #include <vcl/fntstyle.hxx>
@@ -31,36 +30,15 @@ typedef struct _FcPattern   FcPattern;
 class FontConfigFontOptions
 {
 public:
-    FontEmbeddedBitmap meEmbeddedBitmap; // whether the embedded bitmaps should be used
-    FontAntiAlias      meAntiAlias;      // whether the font should be antialiased
-    FontAutoHint       meAutoHint;       // whether the font should be autohinted
-    FontHinting        meHinting;        // whether the font should be hinted
-    FontHintStyle      meHintStyle;      // type of font hinting to be used
-
-                        FontConfigFontOptions() :
-                            meEmbeddedBitmap(EMBEDDEDBITMAP_DONTKNOW),
-                            meAntiAlias(ANTIALIAS_DONTKNOW),
-                            meAutoHint(AUTOHINT_DONTKNOW),
-                            meHinting(HINTING_DONTKNOW),
-                            meHintStyle(HINT_SLIGHT),
-                            mpPattern(nullptr) {}
                         FontConfigFontOptions(FcPattern* pPattern) :
-                            meEmbeddedBitmap(EMBEDDEDBITMAP_DONTKNOW),
-                            meAntiAlias(ANTIALIAS_DONTKNOW),
-                            meAutoHint(AUTOHINT_DONTKNOW),
-                            meHinting(HINTING_DONTKNOW),
-                            meHintStyle(HINT_SLIGHT),
                             mpPattern(pPattern) {}
                         ~FontConfigFontOptions();
 
-    FontAutoHint        GetUseAutoHint() const { return meAutoHint; }
-    FontHintStyle       GetHintStyle() const { return meHintStyle; }
-    bool                DontUseEmbeddedBitmaps() const { return meEmbeddedBitmap == EMBEDDEDBITMAP_FALSE; }
-    bool                DontUseAntiAlias() const { return meAntiAlias == ANTIALIAS_FALSE; }
-    bool                DontUseHinting() const { return (meHinting == HINTING_FALSE) || (GetHintStyle() == HINT_NONE); }
-    void*               GetPattern(void * /*pFace*/, bool /*bEmbolden*/) const;
+    void                SyncPattern(const OString& rFileName, int nFontFace, bool bEmbolden);
+    FcPattern*          GetPattern() const;
+    static void         cairo_font_options_substitute(FcPattern* pPattern);
 private:
-    FcPattern* mpPattern;
+    FcPattern* const mpPattern;
 };
 
 

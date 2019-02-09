@@ -18,12 +18,12 @@
  */
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <basegfx/polygon/b2dpolypolygon.hxx>
 #include <com/sun/star/rendering/InterpolationMode.hpp>
 
-#include <implspritecanvas.hxx>
-#include <implcustomsprite.hxx>
+#include "implspritecanvas.hxx"
+#include "implcustomsprite.hxx"
 
 
 using namespace ::com::sun::star;

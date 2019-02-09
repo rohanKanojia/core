@@ -19,8 +19,8 @@
 
 #include "typelib/typedescription.h"
 #include "rtl/ustrbuf.hxx"
+#include <sal/log.hxx>
 #include "com/sun/star/uno/RuntimeException.hpp"
-#include "osl/mutex.hxx"
 #include "cli_proxy.h"
 #include "cli_base.h"
 #include "cli_bridge.h"
@@ -1039,7 +1039,7 @@ void SAL_CALL cli_proxy_dispatch(
                     {
                         uno_any_construct( (uno_Any *)uno_ret, 0, 0, 0 );
                     }
-                    // no excetpion occurred
+                    // no exception occurred
                     *uno_exc = 0;
                 }
                 else
@@ -1097,11 +1097,7 @@ void SAL_CALL cli_proxy_dispatch(
             css::uno::XInterface >() );
         css::uno::Type const & exc_type = cppu::UnoType<decltype(exc)>::get();
         uno_type_any_construct( *uno_exc, &exc, exc_type.getTypeLibType(), 0);
-#if OSL_DEBUG_LEVEL >= 1
-        OString cstr_msg(OUStringToOString(exc.Message,
-                                             RTL_TEXTENCODING_ASCII_US ) );
-        OSL_FAIL(cstr_msg.getStr());
-#endif
+        SAL_WARN( "cli", exc);
     }
 }
 

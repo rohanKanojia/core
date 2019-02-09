@@ -35,8 +35,10 @@ namespace framework{
 
 // Hash code function for using in all hash maps of follow implementation.
 
-class FWE_DLLPUBLIC OReadStatusBarDocumentHandler :
-                                        public ::cppu::WeakImplHelper< css::xml::sax::XDocumentHandler >
+// workaround for incremental linking bugs in MSVC2015
+class SAL_DLLPUBLIC_TEMPLATE OReadStatusBarDocumentHandler_Base : public cppu::WeakImplHelper< css::xml::sax::XDocumentHandler > {};
+
+class FWE_DLLPUBLIC OReadStatusBarDocumentHandler : public OReadStatusBarDocumentHandler_Base
 {
     public:
         enum StatusBar_XML_Entry
@@ -51,94 +53,75 @@ class FWE_DLLPUBLIC OReadStatusBarDocumentHandler :
             SB_ATTRIBUTE_WIDTH,
             SB_ATTRIBUTE_OFFSET,
             SB_ATTRIBUTE_HELPURL,
+            SB_ATTRIBUTE_MANDATORY,
             SB_XML_ENTRY_COUNT
         };
 
         enum StatusBar_XML_Namespace
         {
             SB_NS_STATUSBAR,
-            SB_NS_XLINK,
-            SB_XML_NAMESPACES_COUNT
+            SB_NS_XLINK
         };
 
         OReadStatusBarDocumentHandler( const css::uno::Reference< css::container::XIndexContainer >& aStatusBarItems );
-        virtual ~OReadStatusBarDocumentHandler();
+        virtual ~OReadStatusBarDocumentHandler() override;
 
         // XDocumentHandler
-        virtual void SAL_CALL startDocument()
-        throw ( css::xml::sax::SAXException,
-                css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL startDocument() override;
 
-        virtual void SAL_CALL endDocument()
-        throw(  css::xml::sax::SAXException,
-                css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL endDocument() override;
 
         virtual void SAL_CALL startElement(
             const OUString& aName,
-            const css::uno::Reference< css::xml::sax::XAttributeList > &xAttribs)
-        throw(  css::xml::sax::SAXException,
-                css::uno::RuntimeException, std::exception ) override;
+            const css::uno::Reference< css::xml::sax::XAttributeList > &xAttribs) override;
 
-        virtual void SAL_CALL endElement(const OUString& aName)
-        throw(  css::xml::sax::SAXException,
-                css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL endElement(const OUString& aName) override;
 
-        virtual void SAL_CALL characters(const OUString& aChars)
-        throw(  css::xml::sax::SAXException,
-                css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL characters(const OUString& aChars) override;
 
-        virtual void SAL_CALL ignorableWhitespace(const OUString& aWhitespaces)
-        throw(  css::xml::sax::SAXException,
-                css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL ignorableWhitespace(const OUString& aWhitespaces) override;
 
         virtual void SAL_CALL processingInstruction(const OUString& aTarget,
-                                                    const OUString& aData)
-        throw(  css::xml::sax::SAXException,
-                css::uno::RuntimeException, std::exception ) override;
+                                                    const OUString& aData) override;
 
         virtual void SAL_CALL setDocumentLocator(
-            const css::uno::Reference< css::xml::sax::XLocator > &xLocator)
-        throw(  css::xml::sax::SAXException,
-                css::uno::RuntimeException, std::exception ) override;
+            const css::uno::Reference< css::xml::sax::XLocator > &xLocator) override;
 
     private:
         OUString getErrorLineString();
 
         class StatusBarHashMap : public std::unordered_map<OUString,
-                                                           StatusBar_XML_Entry,
-                                                           OUStringHash >
+                                                           StatusBar_XML_Entry >
         {
         };
 
         bool                                                      m_bStatusBarStartFound;
-        bool                                                      m_bStatusBarEndFound;
         bool                                                      m_bStatusBarItemStartFound;
         StatusBarHashMap                                          m_aStatusBarMap;
         css::uno::Reference< css::container::XIndexContainer >    m_aStatusBarItems;
         css::uno::Reference< css::xml::sax::XLocator >            m_xLocator;
 };
 
-class FWE_DLLPUBLIC OWriteStatusBarDocumentHandler
+class FWE_DLLPUBLIC OWriteStatusBarDocumentHandler final
 {
     public:
         OWriteStatusBarDocumentHandler(
             const css::uno::Reference< css::container::XIndexAccess >& rStatusBarItems,
             const css::uno::Reference< css::xml::sax::XDocumentHandler >& rWriteDocHandler );
-        virtual ~OWriteStatusBarDocumentHandler();
+        ~OWriteStatusBarDocumentHandler();
 
-        void WriteStatusBarDocument() throw
-            ( css::xml::sax::SAXException,
-              css::uno::RuntimeException );
+        /// @throws css::xml::sax::SAXException
+        /// @throws css::uno::RuntimeException
+        void WriteStatusBarDocument();
 
-    protected:
+    private:
+        /// @throws css::xml::sax::SAXException
+        /// @throws css::uno::RuntimeException
         void WriteStatusBarItem(
             const OUString& rCommandURL,
-            const OUString& rHelpURL,
             sal_Int16            nOffset,
             sal_Int16            nStyle,
-            sal_Int16            nWidth ) throw
-            ( css::xml::sax::SAXException,
-              css::uno::RuntimeException );
+            sal_Int16            nWidth );
 
         css::uno::Reference< css::container::XIndexAccess >       m_aStatusBarItems;
         css::uno::Reference< css::xml::sax::XDocumentHandler >    m_xWriteDocumentHandler;

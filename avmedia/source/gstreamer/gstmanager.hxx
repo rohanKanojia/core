@@ -22,7 +22,7 @@
 
 #include "gstcommon.hxx"
 #include <cppuhelper/implbase.hxx>
-#include "com/sun/star/media/XManager.hpp"
+#include <com/sun/star/media/XManager.hpp>
 
 namespace avmedia { namespace gstreamer {
 
@@ -32,15 +32,15 @@ class Manager : public ::cppu::WeakImplHelper< css::media::XManager,
 public:
 
     explicit Manager();
-    virtual ~Manager();
+    virtual ~Manager() override;
 
     // XManager
-    virtual css::uno::Reference< css::media::XPlayer > SAL_CALL createPlayer( const OUString& aURL ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::media::XPlayer > SAL_CALL createPlayer( const OUString& aURL ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 };
 
 } // namespace gstreamer

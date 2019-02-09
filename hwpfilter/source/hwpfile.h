@@ -25,11 +25,14 @@
 #ifndef INCLUDED_HWPFILTER_SOURCE_HWPFILE_H
 #define INCLUDED_HWPFILTER_SOURCE_HWPFILE_H
 
+#include <algorithm>
 #include <list>
+#include <memory>
+#include <vector>
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
-
+#include <sal/types.h>
 #include "hwplib.h"
 #include "hfont.h"
 #include "hstyle.h"
@@ -69,11 +72,10 @@ class   HStream;
 struct ColumnInfo{
     int start_page;
     bool bIsSet;
-    ColumnDef *coldef;
+    std::shared_ptr<ColumnDef> xColdef;
     explicit ColumnInfo(int num){
         start_page = num;
         bIsSet = false;
-        coldef = NULL;
     }
 };
 
@@ -92,7 +94,6 @@ struct ColumnInfo{
  * to use @ref Open(), @ref InfoRead(), @ref FontRead(), @ref StyleRead(), @ref ParaListRead(), @ref TagsRead(),
  *
  * @short HWP file management object
- * @author Mizi Reserach
  */
 class DLLEXPORT HWPFile
 {
@@ -110,7 +111,7 @@ class DLLEXPORT HWPFile
  * @returns 0 if success, otherwise error code
  * @see State()
  */
-        int Open( HStream * );
+        int Open( std::unique_ptr<HStream> );
 
 /**
  * Say current state
@@ -124,8 +125,8 @@ class DLLEXPORT HWPFile
 /**
  * Reads one byte from HIODev
  */
-        bool Read1b(char &out);
         bool Read1b(unsigned char &out);
+        bool Read1b(char &out);
 /**
  * Reads two byte from HIODev
  */
@@ -136,13 +137,9 @@ class DLLEXPORT HWPFile
         bool Read4b(unsigned int &out);
         bool Read4b(int &out);
 /**
- * Reads nmemb byte array from HIODev
- */
-        int Read1b( void *ptr, size_t nmemb );
-/**
  * Reads nmemb short type array from HIODev
  */
-        void Read2b( void *ptr, size_t nmemb );
+        size_t Read2b(void *ptr, size_t nmemb);
 /**
  * Reads nmemb long type array from HIODev
  */
@@ -159,7 +156,8 @@ class DLLEXPORT HWPFile
 /**
  * Reads main paragraph list
  */
-        bool ReadParaList(std::list<HWPPara*> &aplist, unsigned char flag = 0);
+        void ReadParaList(std::vector<std::unique_ptr<HWPPara>> &aplist, unsigned char flag = 0);
+        void ReadParaList(std::vector<HWPPara*> &aplist);
 /**
  * Sets if the stream is compressed
  */
@@ -167,12 +165,12 @@ class DLLEXPORT HWPFile
 /**
  * Sets current HIODev
  */
-        HIODev *SetIODevice( HIODev *hiodev );
+        std::unique_ptr<HIODev> SetIODevice( std::unique_ptr<HIODev> hiodev );
 
 /**
  * Reads all information of hwp file from stream
  */
-        int ReadHwpFile( HStream *);
+        int ReadHwpFile( std::unique_ptr<HStream> );
 /**
  * Reads document information of hwp file from HIODev
  */
@@ -211,14 +209,14 @@ class DLLEXPORT HWPFile
         void AddBox(FBox *);
         void AddPage(){ m_nCurrentPage++;}
         void AddColumnInfo();
-        void SetColumnDef(ColumnDef *coldef);
-        void AddParaShape(ParaShape *);
-        void AddCharShape(CharShape *);
+        void SetColumnDef(std::shared_ptr<ColumnDef> const &);
+        void AddParaShape(std::shared_ptr<ParaShape> const &);
+        void AddCharShape(std::shared_ptr<CharShape> const &);
         void AddFBoxStyle(FBoxStyle *);
         void AddDateFormat(DateCode *);
         void AddHeaderFooter(HeaderFooter *);
         void AddPageNumber(ShowPageNum *);
-        void AddTable(Table *);
+        void AddTable(std::unique_ptr<Table>);
 
         ColumnDef* GetColumnDef(int);
           int GetPageMasterNum(int page);
@@ -227,7 +225,7 @@ class DLLEXPORT HWPFile
         HWPInfo& GetHWPInfo(void) { return _hwpInfo; }
         HWPFont& GetHWPFont(void) { return _hwpFont; }
         HWPStyle& GetHWPStyle(void) { return _hwpStyle; }
-        HWPPara *GetFirstPara(void) { return plist.front(); }
+        HWPPara *GetFirstPara(void) { return !plist.empty() ? plist.front().get() : nullptr; }
 
         EmPicture *GetEmPicture(Picture *pic);
         EmPicture *GetEmPictureByName(char * name);
@@ -252,9 +250,16 @@ class DLLEXPORT HWPFile
           int getMaxSettedPage(){ return m_nMaxSettedPage; }
           void setMaxSettedPage(){ m_nMaxSettedPage = m_nCurrentPage; }
 
+        void push_hpara_type(unsigned char scflag) { element_import_stack.push_back(scflag); }
+        bool already_importing_type(unsigned char scflag) const
+        {
+            return std::find(element_import_stack.begin(), element_import_stack.end(), scflag) != element_import_stack.end();
+        }
+        void pop_hpara_type() { element_import_stack.pop_back(); }
+
     private:
-        int compareCharShape(CharShape *shape);
-        int compareParaShape(ParaShape *shape);
+        int compareCharShape(CharShape const *shape);
+        int compareParaShape(ParaShape const *shape);
 
     public:
         int   version;
@@ -263,38 +268,62 @@ class DLLEXPORT HWPFile
         unsigned char linenumber;
         int   info_block_len;
         int   error_code;
-        OlePicture *oledata;
+        std::unique_ptr<OlePicture> oledata;
+        unsigned char scratch[SAL_MAX_UINT16];
+        int readdepth;
 
     private:
 /* hwp 파일 이름 */
-          int           m_nCurrentPage;
-          int m_nMaxSettedPage;
-        HIODev    *hiodev;
+        int m_nCurrentPage;
+        int m_nMaxSettedPage;
+        std::unique_ptr<HIODev> hiodev;
 // read hwp contents
         HWPInfo   _hwpInfo;
         HWPFont   _hwpFont;
         HWPStyle  _hwpStyle;
-        std::list<ColumnInfo*> columnlist;
-          // paragraph linked list
-        std::list<HWPPara*> plist;
-          // floating box linked list
-        std::list<FBox*> blist;
-          // embedded picture list(tag datas)
-        std::list<EmPicture*> emblist;
-        std::list<HyperText*> hyperlist;
+        std::vector<std::unique_ptr<ColumnInfo>> columnlist;
+        // paragraph list
+        std::vector<std::unique_ptr<HWPPara>> plist;
+        // floating box list
+        std::vector<FBox*> blist;
+        // embedded picture list(tag datas)
+        std::vector<std::unique_ptr<EmPicture>> emblist;
+        std::vector<std::unique_ptr<HyperText>> hyperlist;
         int currenthyper;
-        std::list<ParaShape*> pslist;             /* 스타오피스의 구조상 필요 */
-        std::list<CharShape*> cslist;
-        std::list<FBoxStyle*> fbslist;
-        std::list<DateCode*> datecodes;
-        std::list<HeaderFooter*> headerfooters;
-        std::list<ShowPageNum*> pagenumbers;
-        std::list<Table*> tables;
+        std::vector<std::shared_ptr<ParaShape>> pslist;
+        std::vector<std::shared_ptr<CharShape>> cslist;
+        std::vector<FBoxStyle*> fbslist;
+        std::vector<DateCode*> datecodes;
+        std::vector<HeaderFooter*> headerfooters;
+        std::vector<ShowPageNum*> pagenumbers;
+        std::vector<std::unique_ptr<Table>> tables;
+        //track the stack of HParas types we're currently importing
+        std::vector<unsigned char> element_import_stack;
 
 // for global document handling
         static HWPFile *cur_doc;
         friend HWPFile *GetCurrentDoc(void);
         friend HWPFile *SetCurrentDoc(HWPFile *);
+};
+
+class DLLEXPORT DepthGuard
+{
+private:
+    HWPFile& m_rFile;
+public:
+    DepthGuard(HWPFile &rFile)
+        : m_rFile(rFile)
+    {
+        ++m_rFile.readdepth;
+    }
+    bool toodeep() const
+    {
+        return m_rFile.readdepth == 512;
+    }
+    ~DepthGuard()
+    {
+        --m_rFile.readdepth;
+    }
 };
 
 HWPFile *GetCurrentDoc(void);

@@ -22,7 +22,9 @@
 
 #include <cppuhelper/implbase.hxx>
 
+#include <com/sun/star/awt/XWindow.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/task/XInteractionHandler2.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 
@@ -31,43 +33,42 @@ using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 
 
-class PDFInteractionHandler : public cppu::WeakImplHelper < task::XInteractionHandler2,
-                                                             XServiceInfo >
+class PDFInteractionHandler : public cppu::WeakImplHelper<css::lang::XInitialization,
+                                                          css::task::XInteractionHandler2,
+                                                          XServiceInfo>
 {
+private:
+    css::uno::Reference<css::awt::XWindow> m_xParent;
 protected:
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw(RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) throw(RuntimeException, std::exception) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames()  throw(RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
-    // XIniteractionHandler
-    virtual void SAL_CALL handle( const Reference< task::XInteractionRequest >& ) throw(RuntimeException, std::exception) override;
+    // XInitialization
+    virtual void SAL_CALL initialize(const css::uno::Sequence<css::uno::Any>& rArguments) override;
 
-    // XIniteractionHandler2
-    virtual sal_Bool SAL_CALL handleInteractionRequest( const Reference< task::XInteractionRequest >& ) throw(RuntimeException, std::exception) override;
+    // XInteractionHandler
+    virtual void SAL_CALL handle( const Reference< task::XInteractionRequest >& ) override;
+
+    // XInteractionHandler2
+    virtual sal_Bool SAL_CALL handleInteractionRequest( const Reference< task::XInteractionRequest >& ) override;
 
 public:
 
                 PDFInteractionHandler();
-    virtual     ~PDFInteractionHandler();
+    virtual     ~PDFInteractionHandler() override;
 };
 
+/// @throws RuntimeException
+OUString PDFInteractionHandler_getImplementationName ();
 
-OUString PDFInteractionHandler_getImplementationName ()
-    throw ( RuntimeException );
+/// @throws RuntimeException
+Sequence< OUString > PDFInteractionHandler_getSupportedServiceNames(  );
 
-
-bool SAL_CALL PDFInteractionHandler_supportsService( const OUString& ServiceName )
-    throw ( RuntimeException );
-
-
-Sequence< OUString > SAL_CALL PDFInteractionHandler_getSupportedServiceNames(  )
-    throw ( RuntimeException );
-
-
+/// @throws Exception
 Reference< XInterface >
-SAL_CALL PDFInteractionHandler_createInstance( const Reference< XMultiServiceFactory > & rSMgr)
-    throw ( Exception );
+PDFInteractionHandler_createInstance( const Reference< XMultiServiceFactory > & rSMgr);
 
 #endif // INCLUDED_FILTER_SOURCE_PDF_PDFINTERACT_HXX
 

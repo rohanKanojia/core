@@ -22,8 +22,8 @@
 
 #include <basegfx/polygon/b2dpolypolygon.hxx>
 
-#include "unoview.hxx"
-#include "rgbcolor.hxx"
+#include <unoview.hxx>
+#include <rgbcolor.hxx>
 
 #include <memory>
 #include <vector>
@@ -65,7 +65,7 @@ namespace slideshow
             ~UserPaintOverlay();
             UserPaintOverlay(const UserPaintOverlay&) = delete;
             UserPaintOverlay& operator=(const UserPaintOverlay&) = delete;
-            PolyPolygonVector getPolygons();
+            PolyPolygonVector const & getPolygons();
             void drawPolygons();
 
         private:

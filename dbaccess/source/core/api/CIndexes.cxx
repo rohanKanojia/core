@@ -21,9 +21,8 @@
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/sdbc/IndexType.hpp>
-#include "dbastrings.hrc"
+#include <stringconstants.hxx>
 #include <connectivity/dbtools.hxx>
-#include <comphelper/extract.hxx>
 
 
 using namespace connectivity;
@@ -82,7 +81,7 @@ void OIndexes::dropObject(sal_Int32 _nPos, const OUString& _sElementName)
         OIndexesHelper::dropObject(_nPos,_sElementName);
 }
 
-void SAL_CALL OIndexes::disposing()
+void OIndexes::disposing()
 {
     if ( m_xIndexes.is() )
         clear_NoDispose();

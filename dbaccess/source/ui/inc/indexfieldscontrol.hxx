@@ -20,7 +20,6 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_UI_INC_INDEXFIELDSCONTROL_HXX
 #define INCLUDED_DBACCESS_SOURCE_UI_INC_INDEXFIELDSCONTROL_HXX
 
-#include "moduledbu.hxx"
 #include <svtools/editbrowsebox.hxx>
 #include "indexcollection.hxx"
 #include <com/sun/star/uno/Sequence.hxx>
@@ -31,10 +30,8 @@ namespace dbaui
     class DbaMouseDownListBoxController;
 
     // IndexFieldsControl
-    class IndexFieldsControl : public ::svt::EditBrowseBox
+    class IndexFieldsControl final : public ::svt::EditBrowseBox
     {
-        OModuleClient               m_aModuleClient;
-    protected:
         IndexFields                 m_aSavedValue;
 
         IndexFields                 m_aFields;          // !! order matters !!
@@ -48,21 +45,20 @@ namespace dbaui
         OUString                    m_sAscendingText;
         OUString                    m_sDescendingText;
 
-        sal_Int32                   m_nMaxColumnsInIndex;
         bool                        m_bAddIndexAppendix;
 
     public:
         IndexFieldsControl( vcl::Window* _pParent, WinBits nWinStyle);
-        virtual ~IndexFieldsControl();
+        virtual ~IndexFieldsControl() override;
         virtual void dispose() override;
 
-        void Init(const css::uno::Sequence< OUString >& _rAvailableFields, sal_Int32 _nMaxColumnsInIndex,bool _bAddIndexAppendix);
+        void Init(const css::uno::Sequence< OUString >& _rAvailableFields, bool _bAddIndexAppendix);
 
         void initializeFrom(const IndexFields& _rFields);
         void commitTo(IndexFields& _rFields);
 
         bool SaveModified() override;
-        bool IsModified() const override;
+        using EditBrowseBox::IsModified;
 
         const IndexFields&  GetSavedValue() const { return m_aSavedValue; }
         void                SaveValue() { m_aSavedValue = m_aFields; }
@@ -70,9 +66,9 @@ namespace dbaui
         void SetModifyHdl(const Link<IndexFieldsControl&,void>& _rHdl) { m_aModifyHdl = _rHdl; }
         virtual OUString GetCellText(long _nRow,sal_uInt16 nColId) const override;
 
-    protected:
+    private:
         // EditBrowseBox overridables
-        virtual void PaintCell( OutputDevice& _rDev, const Rectangle& _rRect, sal_uInt16 _nColumnId ) const override;
+        virtual void PaintCell( OutputDevice& _rDev, const tools::Rectangle& _rRect, sal_uInt16 _nColumnId ) const override;
         virtual bool SeekRow(long nRow) override;
         virtual sal_uInt32 GetTotalCellWidth(long nRow, sal_uInt16 nColId) override;
         virtual bool IsTabAllowed(bool bForward) const override;
@@ -80,15 +76,13 @@ namespace dbaui
         ::svt::CellController*  GetController(long _nRow, sal_uInt16 _nColumnId) override;
         void                InitController(::svt::CellControllerRef&, long _nRow, sal_uInt16 _nColumnId) override;
 
-    protected:
         OUString GetRowCellText(const IndexFields::const_iterator& _rRow,sal_uInt16 nColId) const;
         bool implGetFieldDesc(long _nRow, IndexFields::const_iterator& _rPos);
 
-        bool isNewField() const { return GetCurRow() >= (sal_Int32)m_aFields.size(); }
+        bool isNewField() const { return GetCurRow() >= static_cast<sal_Int32>(m_aFields.size()); }
 
-        DECL_LINK_TYPED( OnListEntrySelected, DbaMouseDownListBoxController&, void );
+        DECL_LINK( OnListEntrySelected, DbaMouseDownListBoxController&, void );
 
-    private:
         using ::svt::EditBrowseBox::Init;
     };
 

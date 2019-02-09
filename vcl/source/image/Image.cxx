@@ -18,11 +18,8 @@
  */
 
 #include <osl/file.hxx>
-#include <tools/debug.hxx>
 #include <tools/stream.hxx>
-#include <tools/rc.h>
-#include <tools/rc.hxx>
-#include <tools/resmgr.hxx>
+#include <unotools/resmgr.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/outdev.hxx>
 #include <vcl/graph.hxx>
@@ -30,186 +27,76 @@
 #include <vcl/svapp.hxx>
 #include <vcl/image.hxx>
 #include <vcl/imagerepository.hxx>
-#include <vcl/implimagetree.hxx>
+#include <vcl/ImageTree.hxx>
 #include <sal/types.h>
 #include <image.h>
 
-#include <vcl/BitmapProcessor.hxx>
+#include <BitmapDisabledImageFilter.hxx>
+#include <BitmapColorizeFilter.hxx>
 
 #if OSL_DEBUG_LEVEL > 0
 #include <rtl/strbuf.hxx>
 #endif
 
-Image::Image() :
-    mpImplData( nullptr )
+using namespace css;
+
+Image::Image()
 {
 }
 
-Image::Image( const ResId& rResId ) :
-    mpImplData( nullptr )
+Image::Image(const BitmapEx& rBitmapEx)
 {
+    ImplInit(rBitmapEx);
+}
 
-    rResId.SetRT( RSC_IMAGE );
+Image::Image(uno::Reference<graphic::XGraphic> const & rxGraphic)
+{
+    const Graphic aGraphic(rxGraphic);
+    ImplInit(aGraphic.GetBitmapEx());
+}
 
-    ResMgr* pResMgr = rResId.GetResMgr();
-    if( pResMgr && pResMgr->GetResource( rResId ) )
+Image::Image(const OUString & rFileUrl)
+{
+    OUString sImageName;
+    if (rFileUrl.startsWith("private:graphicrepository/", &sImageName))
     {
-        pResMgr->Increment( sizeof( RSHEADER_TYPE ) );
-
-        BitmapEx    aBmpEx;
-        sal_uLong       nObjMask = pResMgr->ReadLong();
-
-        if( nObjMask & RSC_IMAGE_IMAGEBITMAP )
+        mpImplData = std::make_shared<ImplImage>(sImageName);
+    }
+    else
+    {
+        Graphic aGraphic;
+        if (ERRCODE_NONE == GraphicFilter::LoadGraphic(rFileUrl, IMP_PNG, aGraphic))
         {
-            aBmpEx = BitmapEx( ResId( static_cast<RSHEADER_TYPE*>(pResMgr->GetClass()), *pResMgr ) );
-            pResMgr->Increment( ResMgr::GetObjSize( static_cast<RSHEADER_TYPE*>(pResMgr->GetClass()) ) );
+            ImplInit(aGraphic.GetBitmapEx());
         }
-
-        if( nObjMask & RSC_IMAGE_MASKBITMAP )
-        {
-            if( !aBmpEx.IsEmpty() && aBmpEx.GetTransparentType() == TRANSPARENT_NONE )
-            {
-                const Bitmap aMaskBitmap( ResId( static_cast<RSHEADER_TYPE*>(pResMgr->GetClass()), *pResMgr ) );
-                aBmpEx = BitmapEx( aBmpEx.GetBitmap(), aMaskBitmap );
-            }
-
-            pResMgr->Increment( ResMgr::GetObjSize( static_cast<RSHEADER_TYPE*>(pResMgr->GetClass()) ) );
-        }
-
-        if( nObjMask & RSC_IMAGE_MASKCOLOR )
-        {
-            if( !aBmpEx.IsEmpty() && aBmpEx.GetTransparentType() == TRANSPARENT_NONE )
-            {
-                const Color aMaskColor( ResId( static_cast<RSHEADER_TYPE*>(pResMgr->GetClass()), *pResMgr ) );
-                aBmpEx = BitmapEx( aBmpEx.GetBitmap(), aMaskColor );
-            }
-
-            pResMgr->Increment( ResMgr::GetObjSize( static_cast<RSHEADER_TYPE*>(pResMgr->GetClass()) ) );
-        }
-        if( ! aBmpEx.IsEmpty() )
-            ImplInit( aBmpEx );
     }
 }
 
-Image::Image( const Image& rImage ) :
-    mpImplData( rImage.mpImplData )
+Image::Image(StockImage, const OUString & rFileUrl)
+    : mpImplData(std::make_shared<ImplImage>(rFileUrl))
 {
-
-    if( mpImplData )
-        ++mpImplData->mnRefCount;
-}
-
-Image::Image( const BitmapEx& rBitmapEx ) :
-    mpImplData( nullptr )
-{
-
-    ImplInit( rBitmapEx );
-}
-
-Image::Image( const Bitmap& rBitmap ) :
-    mpImplData( nullptr )
-{
-
-    ImplInit( rBitmap );
-}
-
-Image::Image( const Bitmap& rBitmap, const Bitmap& rMaskBitmap ) :
-    mpImplData( nullptr )
-{
-
-    const BitmapEx aBmpEx( rBitmap, rMaskBitmap );
-
-    ImplInit( aBmpEx );
-}
-
-Image::Image( const Bitmap& rBitmap, const Color& rColor ) :
-    mpImplData( nullptr )
-{
-
-    const BitmapEx aBmpEx( rBitmap, rColor );
-
-    ImplInit( aBmpEx );
-}
-
-Image::Image( const css::uno::Reference< css::graphic::XGraphic >& rxGraphic ) :
-    mpImplData( nullptr )
-{
-
-    const Graphic aGraphic( rxGraphic );
-    ImplInit( aGraphic.GetBitmapEx() );
-}
-
-Image::Image( const OUString &rFileUrl ) :
-    mpImplData( nullptr )
-{
-    OUString aTmp;
-    osl::FileBase::getSystemPathFromFileURL( rFileUrl, aTmp );
-    Graphic aGraphic;
-    const OUString aFilterName( IMP_PNG );
-    if( GRFILTER_OK == GraphicFilter::LoadGraphic( aTmp, aFilterName, aGraphic ) )
-    {
-        ImplInit( aGraphic.GetBitmapEx() );
-    }
-}
-
-Image::~Image()
-{
-    if( mpImplData && ( 0 == --mpImplData->mnRefCount ) )
-        delete mpImplData;
 }
 
 void Image::ImplInit(const BitmapEx& rBitmapEx)
 {
     if (!rBitmapEx.IsEmpty())
-    {
-        mpImplData = new ImplImage;
-        mpImplData->mpBitmapEx.reset(new BitmapEx(rBitmapEx));
-    }
+        mpImplData = std::make_shared<ImplImage>(rBitmapEx);
 }
 
 Size Image::GetSizePixel() const
 {
-    Size aRet;
-
-    if (mpImplData && mpImplData->mpBitmapEx)
-    {
-        aRet = mpImplData->mpBitmapEx->GetSizePixel();
-    }
-
-    return aRet;
+    if (mpImplData)
+        return mpImplData->getSizePixel();
+    else
+        return Size();
 }
 
 BitmapEx Image::GetBitmapEx() const
 {
-    BitmapEx aRet;
-
-    if (mpImplData && mpImplData->mpBitmapEx)
-    {
-        aRet = BitmapEx(*mpImplData->mpBitmapEx);
-    }
-
-    return aRet;
-}
-
-css::uno::Reference< css::graphic::XGraphic > Image::GetXGraphic() const
-{
-    const Graphic aGraphic( GetBitmapEx() );
-
-    return aGraphic.GetXGraphic();
-}
-
-Image& Image::operator=( const Image& rImage )
-{
-
-    if( rImage.mpImplData )
-        ++rImage.mpImplData->mnRefCount;
-
-    if( mpImplData && ( 0 == --mpImplData->mnRefCount ) )
-        delete mpImplData;
-
-    mpImplData = rImage.mpImplData;
-
-    return *this;
+    if (mpImplData)
+        return mpImplData->getBitmapEx();
+    else
+        return BitmapEx();
 }
 
 bool Image::operator==(const Image& rImage) const
@@ -221,71 +108,56 @@ bool Image::operator==(const Image& rImage) const
     else if (!rImage.mpImplData || !mpImplData)
         bRet = false;
     else
-        bRet = *rImage.mpImplData->mpBitmapEx == *mpImplData->mpBitmapEx;
+        bRet = rImage.mpImplData->isEqual(*mpImplData);
 
     return bRet;
 }
 
 void Image::Draw(OutputDevice* pOutDev, const Point& rPos, DrawImageFlags nStyle, const Size* pSize)
 {
-    if (mpImplData == nullptr || !mpImplData->mpBitmapEx || !pOutDev->IsDeviceOutputNecessary())
+    if (!mpImplData || (!pOutDev->IsDeviceOutputNecessary() && pOutDev->GetConnectMetaFile() == nullptr))
         return;
 
-    const Point aSrcPos(0, 0);
-    Size aBitmapSizePixel = mpImplData->mpBitmapEx->GetSizePixel();
+    Size aOutSize = pSize ? *pSize : pOutDev->PixelToLogic(mpImplData->getSizePixel());
 
-    Size aOutSize = pSize ? *pSize : pOutDev->PixelToLogic(aBitmapSizePixel);
+    BitmapEx aRenderBmp = mpImplData->getBitmapExForHiDPI(!!(nStyle & DrawImageFlags::Disable));
 
-    if (nStyle & DrawImageFlags::Disable)
+    if (!(nStyle & DrawImageFlags::Disable) &&
+        (nStyle & (DrawImageFlags::ColorTransform | DrawImageFlags::Highlight |
+                   DrawImageFlags::Deactive | DrawImageFlags::SemiTransparent)))
     {
-        BitmapChecksum aChecksum = mpImplData->mpBitmapEx->GetChecksum();
-        if (mpImplData->maBitmapChecksum != aChecksum)
-        {
-            mpImplData->maBitmapChecksum = aChecksum;
-            mpImplData->maDisabledBitmapEx = BitmapProcessor::createDisabledImage(*mpImplData->mpBitmapEx);
-        }
-        pOutDev->DrawBitmapEx(rPos, aOutSize, aSrcPos, aBitmapSizePixel, mpImplData->maDisabledBitmapEx);
-    }
-    else
-    {
-        if (nStyle & (DrawImageFlags::ColorTransform | DrawImageFlags::Highlight |
-                      DrawImageFlags::Deactive | DrawImageFlags::SemiTransparent))
-        {
-            BitmapEx aTempBitmapEx(*mpImplData->mpBitmapEx);
+        BitmapEx aTempBitmapEx(aRenderBmp);
 
-            if (nStyle & (DrawImageFlags::Highlight | DrawImageFlags::Deactive))
+        if (nStyle & (DrawImageFlags::Highlight | DrawImageFlags::Deactive))
+        {
+            const StyleSettings& rSettings = pOutDev->GetSettings().GetStyleSettings();
+            Color aColor;
+            if (nStyle & DrawImageFlags::Highlight)
+                aColor = rSettings.GetHighlightColor();
+            else
+                aColor = rSettings.GetDeactiveColor();
+
+            BitmapFilter::Filter(aTempBitmapEx, BitmapColorizeFilter(aColor));
+        }
+
+        if (nStyle & DrawImageFlags::SemiTransparent)
+        {
+            if (aTempBitmapEx.IsTransparent())
             {
-                const StyleSettings& rSettings = pOutDev->GetSettings().GetStyleSettings();
-                Color aColor;
-                if (nStyle & DrawImageFlags::Highlight)
-                    aColor = rSettings.GetHighlightColor();
-                else
-                    aColor = rSettings.GetDeactiveColor();
-
-                BitmapProcessor::colorizeImage(aTempBitmapEx, aColor);
+                Bitmap aAlphaBmp(aTempBitmapEx.GetAlpha().GetBitmap());
+                aAlphaBmp.Adjust(50);
+                aTempBitmapEx = BitmapEx(aTempBitmapEx.GetBitmap(), AlphaMask(aAlphaBmp));
             }
-
-            if (nStyle & DrawImageFlags::SemiTransparent)
+            else
             {
-                if (aTempBitmapEx.IsTransparent())
-                {
-                    Bitmap aAlphaBmp(aTempBitmapEx.GetAlpha().GetBitmap());
-                    aAlphaBmp.Adjust(50);
-                    aTempBitmapEx = BitmapEx(aTempBitmapEx.GetBitmap(), AlphaMask(aAlphaBmp));
-                }
-                else
-                {
-                    sal_uInt8 cErase = 128;
-                    aTempBitmapEx = BitmapEx(aTempBitmapEx.GetBitmap(), AlphaMask(aTempBitmapEx.GetSizePixel(), &cErase));
-                }
+                sal_uInt8 cErase = 128;
+                aTempBitmapEx = BitmapEx(aTempBitmapEx.GetBitmap(), AlphaMask(aTempBitmapEx.GetSizePixel(), &cErase));
             }
-            pOutDev->DrawBitmapEx(rPos, aOutSize, aSrcPos, aTempBitmapEx.GetSizePixel(), aTempBitmapEx);
         }
-        else
-        {
-            pOutDev->DrawBitmapEx(rPos, aOutSize, aSrcPos, mpImplData->mpBitmapEx->GetSizePixel(), *mpImplData->mpBitmapEx);
-        }
+        aRenderBmp = aTempBitmapEx;
     }
+
+    pOutDev->DrawBitmapEx(rPos, aOutSize, aRenderBmp);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -20,8 +20,8 @@
 #define INCLUDED_SW_INC_FMTLSPLT_HXX
 
 #include <svl/eitem.hxx>
-#include <hintids.hxx>
-#include <format.hxx>
+#include "hintids.hxx"
+#include "format.hxx"
 #include "swdllapi.h"
 
 class IntlWrapper;
@@ -34,14 +34,14 @@ public:
     /// "pure virtual methods" of SfxPoolItem
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper*    pIntl = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& rIntl ) const override;
 };
 
 inline const SwFormatLayoutSplit &SwAttrSet::GetLayoutSplit(bool bInP) const
-    { return static_cast<const SwFormatLayoutSplit&>(Get( RES_LAYOUT_SPLIT,bInP)); }
+    { return Get( RES_LAYOUT_SPLIT,bInP); }
 
 inline const SwFormatLayoutSplit &SwFormat::GetLayoutSplit(bool bInP) const
     { return m_aSet.GetLayoutSplit(bInP); }

@@ -17,42 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuconarc.hxx"
-#include "sc.hrc"
-#include "tabvwsh.hxx"
-#include "drawview.hxx"
+#include <fuconarc.hxx>
+#include <sc.hrc>
+#include <tabvwsh.hxx>
+#include <drawview.hxx>
 
 // Create default drawing objects via keyboard
 #include <svx/svdocirc.hxx>
 #include <svx/sxciaitm.hxx>
 
-/*************************************************************************
-|*
-|* Konstruktor
-|*
-\************************************************************************/
-
-FuConstArc::FuConstArc( ScTabViewShell* pViewSh, vcl::Window* pWin, ScDrawView* pViewP,
-                   SdrModel* pDoc, SfxRequest& rReq )
-    : FuConstruct( pViewSh, pWin, pViewP, pDoc, rReq )
+FuConstArc::FuConstArc(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawView* pViewP,
+                       SdrModel* pDoc, const SfxRequest& rReq)
+    : FuConstruct(rViewSh, pWin, pViewP, pDoc, rReq)
 {
 }
-
-/*************************************************************************
-|*
-|* Destruktor
-|*
-\************************************************************************/
 
 FuConstArc::~FuConstArc()
 {
 }
-
-/*************************************************************************
-|*
-|* MouseButtonDown-event
-|*
-\************************************************************************/
 
 bool FuConstArc::MouseButtonDown( const MouseEvent& rMEvt )
 {
@@ -64,35 +46,12 @@ bool FuConstArc::MouseButtonDown( const MouseEvent& rMEvt )
     if ( rMEvt.IsLeft() && !pView->IsAction() )
     {
         Point aPnt( pWindow->PixelToLogic( rMEvt.GetPosPixel() ) );
-        // Hack  to align object to nearest grid position where object
-        // would be anchored ( if it were cell anchored )
-        // Get grid offset for current position ( note: aPnt is
-        // also adjusted )
-        Point aGridOff = CurrentGridSyncOffsetAndPos( aPnt );
         pWindow->CaptureMouse();
         pView->BegCreateObj( aPnt );
-        pView->GetCreateObj()->SetGridOffset( aGridOff );
         bReturn = true;
     }
     return bReturn;
 }
-
-/*************************************************************************
-|*
-|* MouseMove-event
-|*
-\************************************************************************/
-
-bool FuConstArc::MouseMove( const MouseEvent& rMEvt )
-{
-    return FuConstruct::MouseMove(rMEvt);
-}
-
-/*************************************************************************
-|*
-|* MouseButtonUp-event
-|*
-\************************************************************************/
 
 bool FuConstArc::MouseButtonUp( const MouseEvent& rMEvt )
 {
@@ -103,31 +62,11 @@ bool FuConstArc::MouseButtonUp( const MouseEvent& rMEvt )
 
     if ( pView->IsCreateObj() && rMEvt.IsLeft() )
     {
-        pView->EndCreateObj( SDRCREATE_NEXTPOINT );
+        pView->EndCreateObj( SdrCreateCmd::NextPoint );
         bReturn = true;
     }
     return (FuConstruct::MouseButtonUp(rMEvt) || bReturn);
 }
-
-/*************************************************************************
-|*
-|* Tastaturereignisse bearbeiten
-|*
-|* Wird ein KeyEvent bearbeitet, so ist der Return-Wert sal_True, andernfalls
-|* FALSE.
-|*
-\************************************************************************/
-
-bool FuConstArc::KeyInput(const KeyEvent& rKEvt)
-{
-    return FuConstruct::KeyInput(rKEvt);
-}
-
-/*************************************************************************
-|*
-|* Function aktivieren
-|*
-\************************************************************************/
 
 void FuConstArc::Activate()
 {
@@ -159,39 +98,34 @@ void FuConstArc::Activate()
     pView->SetCurrentObj( sal::static_int_cast<sal_uInt16>( aObjKind ) );
 
     aOldPointer = pWindow->GetPointer();
-    pViewShell->SetActivePointer( aNewPointer );
+    rViewShell.SetActivePointer( aNewPointer );
 
     FuDraw::Activate();
 }
 
-/*************************************************************************
-|*
-|* Function deaktivieren
-|*
-\************************************************************************/
-
 void FuConstArc::Deactivate()
 {
     FuDraw::Deactivate();
-    pViewShell->SetActivePointer( aOldPointer );
+    rViewShell.SetActivePointer( aOldPointer );
 }
 
 // Create default drawing objects via keyboard
-SdrObject* FuConstArc::CreateDefaultObject(const sal_uInt16 nID, const Rectangle& rRectangle)
+SdrObjectUniquePtr FuConstArc::CreateDefaultObject(const sal_uInt16 nID, const tools::Rectangle& rRectangle)
 {
     // case SID_DRAW_ARC:
     // case SID_DRAW_PIE:
     // case SID_DRAW_CIRCLECUT:
 
-    SdrObject* pObj = SdrObjFactory::MakeNewObject(
-        pView->GetCurrentObjInventor(), pView->GetCurrentObjIdentifier(),
-        nullptr, pDrDoc);
+    SdrObjectUniquePtr pObj(SdrObjFactory::MakeNewObject(
+        *pDrDoc,
+        pView->GetCurrentObjInventor(),
+        pView->GetCurrentObjIdentifier()));
 
     if(pObj)
     {
-        if(dynamic_cast<const SdrCircObj*>( pObj) !=  nullptr)
+        if(dynamic_cast<const SdrCircObj*>( pObj.get() ) !=  nullptr)
         {
-            Rectangle aRect(rRectangle);
+            tools::Rectangle aRect(rRectangle);
 
             if(SID_DRAW_ARC == nID || SID_DRAW_CIRCLECUT == nID)
             {

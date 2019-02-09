@@ -18,20 +18,23 @@
  */
 
 #include <com/sun/star/util/XModifiable.hpp>
+#include <com/sun/star/embed/XEmbeddedObject.hpp>
 #include <com/sun/star/embed/XLinkageSupport.hpp>
 #include <com/sun/star/embed/NoVisualAreaSizeException.hpp>
 #include <com/sun/star/embed/Aspects.hpp>
 #include <com/sun/star/task/XInteractionHandler.hpp>
 #include <com/sun/star/ucb/CommandFailedException.hpp>
+#include <com/sun/star/ucb/ContentCreationException.hpp>
 
 #include <vcl/virdev.hxx>
 #include <svx/svdoole2.hxx>
 #include <svx/svdomedia.hxx>
 #include <svx/svdpool.hxx>
 #include <comphelper/classids.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <cppuhelper/exc_hlp.hxx>
 #include <sfx2/frmdescr.hxx>
 #include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
 
 #include <toolkit/helper/vclunohelper.hxx>
 #include <sfx2/objsh.hxx>
@@ -46,16 +49,16 @@
 
 #include <svx/unoshprp.hxx>
 
-#include "svx/unoapi.hxx"
-#include "svx/svdpagv.hxx"
-#include "svx/svdview.hxx"
-#include "svdglob.hxx"
-#include "svx/svdstr.hrc"
+#include <svx/unoapi.hxx>
+#include <svx/svdpagv.hxx>
+#include <svx/svdview.hxx>
 #include <vcl/wmf.hxx>
 #include <svtools/embedhlp.hxx>
+#include <sal/log.hxx>
+
+#include <config_features.h>
 
 
-using namespace ::osl;
 using namespace ::cppu;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -64,13 +67,13 @@ using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::beans;
 
 
-SvxOle2Shape::SvxOle2Shape( SdrObject* pObject ) throw()
+SvxOle2Shape::SvxOle2Shape(SdrObject* pObject)
 : SvxShapeText( pObject, getSvxMapProvider().GetMap(SVXMAP_OLE2),
                 getSvxMapProvider().GetPropertySet(SVXMAP_OLE2,SdrObject::GetGlobalDrawObjectItemPool()) )
 {
 }
 
-SvxOle2Shape::SvxOle2Shape( SdrObject* pObject, const SfxItemPropertyMapEntry* pPropertyMap, const SvxItemPropertySet* pPropertySet ) throw ()
+SvxOle2Shape::SvxOle2Shape(SdrObject* pObject, const SfxItemPropertyMapEntry* pPropertyMap, const SvxItemPropertySet* pPropertySet)
 : SvxShapeText( pObject, pPropertyMap, pPropertySet  )
 {
 }
@@ -79,13 +82,8 @@ SvxOle2Shape::~SvxOle2Shape() throw()
 {
 }
 
-css::uno::Any SAL_CALL SvxOle2Shape::queryAggregation( const css::uno::Type & rType ) throw(css::uno::RuntimeException, std::exception)
-{
-    return SvxShapeText::queryAggregation( rType );
-}
-
 //XPropertySet
-bool SvxOle2Shape::setPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, const css::uno::Any& rValue ) throw(css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+bool SvxOle2Shape::setPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, const css::uno::Any& rValue )
 {
     switch( pProperty->nWID )
     {
@@ -94,22 +92,22 @@ bool SvxOle2Shape::setPropertyValueImpl( const OUString& rName, const SfxItemPro
         // TODO/LATER: seems to make no sense for iconified object
 
         awt::Rectangle aVisArea;
-        if( (rValue >>= aVisArea) && dynamic_cast<const SdrOle2Obj* >(mpObj.get()) != nullptr)
+        if( (rValue >>= aVisArea) && dynamic_cast<const SdrOle2Obj* >(GetSdrObject()) != nullptr)
         {
             Size aTmp( aVisArea.X + aVisArea.Width, aVisArea.Y + aVisArea.Height );
-            uno::Reference < embed::XEmbeddedObject > xObj = static_cast<SdrOle2Obj*>(mpObj.get())->GetObjRef();
+            uno::Reference < embed::XEmbeddedObject > xObj = static_cast<SdrOle2Obj*>(GetSdrObject())->GetObjRef();
             if( xObj.is() )
             {
                 try
                 {
-                    MapUnit aMapUnit( MAP_100TH_MM ); // the API handles with MAP_100TH_MM map mode
+                    // the API handles with MapUnit::Map100thMM map mode
                     MapUnit aObjUnit = VCLUnoHelper::UnoEmbed2VCLMapUnit( xObj->getMapUnit( embed::Aspects::MSOLE_CONTENT ) );
-                    aTmp = OutputDevice::LogicToLogic( aTmp, aMapUnit, aObjUnit );
+                    aTmp = OutputDevice::LogicToLogic(aTmp, MapMode(MapUnit::Map100thMM), MapMode(aObjUnit));
                     xObj->setVisualAreaSize( embed::Aspects::MSOLE_CONTENT, awt::Size( aTmp.Width(), aTmp.Height() ) );
                 }
                 catch( uno::Exception& )
                 {
-                    OSL_FAIL( "Couldn't set the visual area for the object!\n" );
+                    OSL_FAIL( "Couldn't set the visual area for the object!" );
                 }
             }
 
@@ -122,7 +120,7 @@ bool SvxOle2Shape::setPropertyValueImpl( const OUString& rName, const SfxItemPro
         sal_Int64 nAspect = 0;
         if( rValue >>= nAspect )
         {
-            static_cast<SdrOle2Obj*>(mpObj.get())->SetAspect( nAspect );
+            static_cast<SdrOle2Obj*>(GetSdrObject())->SetAspect( nAspect );
             return true;
         }
         break;
@@ -144,11 +142,11 @@ bool SvxOle2Shape::setPropertyValueImpl( const OUString& rName, const SfxItemPro
     }
     case OWN_ATTR_THUMBNAIL:
     {
-        OUString aURL;
-        if( rValue >>= aURL )
+        uno::Reference< graphic::XGraphic > xGraphic( rValue, uno::UNO_QUERY );
+        if( xGraphic.is() )
         {
-            GraphicObject aGrafObj( GraphicObject::CreateGraphicObjectFromURL( aURL ) );
-            static_cast<SdrOle2Obj*>(mpObj.get())->SetGraphic( &aGrafObj.GetGraphic() );
+            const Graphic aGraphic(xGraphic);
+            static_cast<SdrOle2Obj*>(GetSdrObject())->SetGraphic(aGraphic);
             return true;
         }
         break;
@@ -158,12 +156,12 @@ bool SvxOle2Shape::setPropertyValueImpl( const OUString& rName, const SfxItemPro
         uno::Reference< graphic::XGraphic > xGraphic( rValue, uno::UNO_QUERY );
         if( xGraphic.is() )
         {
-            SdrOle2Obj* pOle = dynamic_cast< SdrOle2Obj* >( mpObj.get() );
+            SdrOle2Obj* pOle = dynamic_cast< SdrOle2Obj* >( GetSdrObject() );
             if( pOle )
             {
                 GraphicObject aGrafObj( xGraphic );
-                const Graphic aGraphic( aGrafObj.GetGraphic() );
-                pOle->SetGraphicToObj( aGraphic, OUString() );
+                const Graphic& aGraphic( aGrafObj.GetGraphic() );
+                pOle->SetGraphicToObj( aGraphic );
             }
             return true;
         }
@@ -176,10 +174,10 @@ bool SvxOle2Shape::setPropertyValueImpl( const OUString& rName, const SfxItemPro
         {
             SdrOle2Obj *pOle;
 #if OSL_DEBUG_LEVEL > 0
-            pOle = dynamic_cast<SdrOle2Obj*>(mpObj.get());
+            pOle = dynamic_cast<SdrOle2Obj*>(GetSdrObject());
             assert(pOle);
 #else
-            pOle = static_cast<SdrOle2Obj*>(mpObj.get());
+            pOle = static_cast<SdrOle2Obj*>(GetSdrObject());
 #endif
             pOle->SetPersistName( aPersistName );
             return true;
@@ -203,14 +201,14 @@ bool SvxOle2Shape::setPropertyValueImpl( const OUString& rName, const SfxItemPro
     throw IllegalArgumentException();
 }
 
-bool SvxOle2Shape::getPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, css::uno::Any& rValue ) throw(css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+bool SvxOle2Shape::getPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, css::uno::Any& rValue )
 {
     switch( pProperty->nWID )
     {
     case OWN_ATTR_CLSID:
     {
         OUString aCLSID;
-        SvGlobalName aClassName = GetClassName_Impl(aCLSID);
+        GetClassName_Impl(aCLSID);
         rValue <<= aCLSID;
         break;
     }
@@ -224,20 +222,20 @@ bool SvxOle2Shape::getPropertyValueImpl( const OUString& rName, const SfxItemPro
 
     case OWN_ATTR_METAFILE:
     {
-        SdrOle2Obj* pObj = dynamic_cast<SdrOle2Obj*>(mpObj.get());
+        SdrOle2Obj* pObj = dynamic_cast<SdrOle2Obj*>(GetSdrObject());
         if( pObj )
         {
             const Graphic* pGraphic = pObj->GetGraphic();
             if( pGraphic )
             {
                 bool bIsWMF = false;
-                if ( pGraphic->IsLink() )
+                if ( pGraphic->IsGfxLink() )
                 {
-                    GfxLink aLnk = pGraphic->GetLink();
-                    if ( aLnk.GetType() == GFX_LINK_TYPE_NATIVE_WMF )
+                    GfxLink aLnk = pGraphic->GetGfxLink();
+                    if ( aLnk.GetType() == GfxLinkType::NativeWmf )
                     {
                         bIsWMF = true;
-                        uno::Sequence<sal_Int8> aSeq(reinterpret_cast<sal_Int8 const *>(aLnk.GetData()), (sal_Int32) aLnk.GetDataSize());
+                        uno::Sequence<sal_Int8> aSeq(reinterpret_cast<sal_Int8 const *>(aLnk.GetData()), static_cast<sal_Int32>(aLnk.GetDataSize()));
                         rValue <<= aSeq;
                     }
                 }
@@ -264,10 +262,10 @@ bool SvxOle2Shape::getPropertyValueImpl( const OUString& rName, const SfxItemPro
     case OWN_ATTR_OLE_VISAREA:
     {
         awt::Rectangle aVisArea;
-        if( dynamic_cast<const SdrOle2Obj* >(mpObj.get()) != nullptr)
+        if( dynamic_cast<const SdrOle2Obj* >(GetSdrObject()) != nullptr)
         {
-            MapMode aMapMode( MAP_100TH_MM ); // the API uses this map mode
-            Size aTmp = static_cast<SdrOle2Obj*>(mpObj.get())->GetOrigObjSize( &aMapMode ); // get the size in the requested map mode
+            MapMode aMapMode( MapUnit::Map100thMM ); // the API uses this map mode
+            Size aTmp = static_cast<SdrOle2Obj*>(GetSdrObject())->GetOrigObjSize( &aMapMode ); // get the size in the requested map mode
             aVisArea = awt::Rectangle( 0, 0, aTmp.Width(), aTmp.Height() );
         }
 
@@ -277,14 +275,14 @@ bool SvxOle2Shape::getPropertyValueImpl( const OUString& rName, const SfxItemPro
 
     case OWN_ATTR_OLESIZE:
     {
-        Size aTmp( static_cast<SdrOle2Obj*>(mpObj.get())->GetOrigObjSize() );
+        Size aTmp( static_cast<SdrOle2Obj*>(GetSdrObject())->GetOrigObjSize() );
         rValue <<= awt::Size( aTmp.Width(), aTmp.Height() );
         break;
     }
 
     case OWN_ATTR_OLE_ASPECT:
     {
-        rValue <<= static_cast<SdrOle2Obj*>(mpObj.get())->GetAspect();
+        rValue <<= static_cast<SdrOle2Obj*>(GetSdrObject())->GetAspect();
         break;
     }
 
@@ -292,7 +290,7 @@ bool SvxOle2Shape::getPropertyValueImpl( const OUString& rName, const SfxItemPro
     case OWN_ATTR_OLE_EMBEDDED_OBJECT:
     case OWN_ATTR_OLE_EMBEDDED_OBJECT_NONEWCLIENT:
     {
-        SdrOle2Obj* pObj = dynamic_cast<SdrOle2Obj*>( mpObj.get() );
+        SdrOle2Obj* pObj = dynamic_cast<SdrOle2Obj*>( GetSdrObject() );
         if( pObj )
         {
             uno::Reference < embed::XEmbeddedObject > xObj( pObj->GetObjRef() );
@@ -319,7 +317,7 @@ bool SvxOle2Shape::getPropertyValueImpl( const OUString& rName, const SfxItemPro
     case OWN_ATTR_VALUE_GRAPHIC:
     {
         uno::Reference< graphic::XGraphic > xGraphic;
-        const Graphic* pGraphic = static_cast<SdrOle2Obj*>( mpObj.get() )->GetGraphic();
+        const Graphic* pGraphic = static_cast<SdrOle2Obj*>( GetSdrObject() )->GetGraphic();
         if( pGraphic )
             xGraphic = pGraphic->GetXGraphic();
         rValue <<= xGraphic;
@@ -328,39 +326,24 @@ bool SvxOle2Shape::getPropertyValueImpl( const OUString& rName, const SfxItemPro
 
     case OWN_ATTR_THUMBNAIL:
     {
-        OUString    aURL;
-        SdrOle2Obj* pOle = dynamic_cast< SdrOle2Obj* >( mpObj.get() );
-        if( pOle )
-        {
-            const Graphic* pGraphic = pOle->GetGraphic();
-
-            // if there isn't already a preview graphic set, check if we need to generate
-            // one if model says so
-            if( pGraphic == nullptr && !pOle->IsEmptyPresObj() && mpModel->IsSaveOLEPreview() )
-                pGraphic = pOle->GetGraphic();
-
-            if( pGraphic )
-            {
-                GraphicObject aObj( *pGraphic );
-                aURL = UNO_NAME_GRAPHOBJ_URLPREFIX;
-                aURL += OStringToOUString(aObj.GetUniqueID(),
-                    RTL_TEXTENCODING_ASCII_US);
-            }
-        }
-        rValue <<= aURL;
+        uno::Reference< graphic::XGraphic > xGraphic;
+        const Graphic* pGraphic = static_cast<SdrOle2Obj*>( GetSdrObject() )->GetGraphic();
+        if( pGraphic )
+            xGraphic = pGraphic->GetXGraphic();
+        rValue <<= xGraphic;
         break;
     }
     case OWN_ATTR_PERSISTNAME:
     {
         OUString    aPersistName;
-        SdrOle2Obj* pOle = dynamic_cast< SdrOle2Obj* >( mpObj.get() );
+        SdrOle2Obj* pOle = dynamic_cast< SdrOle2Obj* >( GetSdrObject() );
 
         if( pOle )
         {
             aPersistName = pOle->GetPersistName();
             if( !aPersistName.isEmpty() )
             {
-                ::comphelper::IEmbeddedHelper *pPersist = mpObj->GetModel()->GetPersist();
+                ::comphelper::IEmbeddedHelper* pPersist(GetSdrObject()->getSdrModelFromSdrObject().GetPersist());
                 if( (nullptr == pPersist) || !pPersist->getEmbeddedObjectContainer().HasEmbeddedObject( pOle->GetPersistName() ) )
                     aPersistName.clear();
             }
@@ -372,7 +355,7 @@ bool SvxOle2Shape::getPropertyValueImpl( const OUString& rName, const SfxItemPro
     case OWN_ATTR_OLE_LINKURL:
     {
         OUString    aLinkURL;
-        SdrOle2Obj* pOle = dynamic_cast< SdrOle2Obj* >( mpObj.get() );
+        SdrOle2Obj* pOle = dynamic_cast< SdrOle2Obj* >( GetSdrObject() );
 
         if( pOle )
         {
@@ -395,28 +378,28 @@ bool SvxOle2Shape::createObject( const SvGlobalName &aClassName )
 {
     DBG_TESTSOLARMUTEX();
 
-    SdrOle2Obj* pOle2Obj = dynamic_cast< SdrOle2Obj* >( mpObj.get() );
+    SdrOle2Obj* pOle2Obj = dynamic_cast< SdrOle2Obj* >( GetSdrObject() );
     if ( !pOle2Obj || !pOle2Obj->IsEmpty() )
         return false;
 
     // create storage and inplace object
-    ::comphelper::IEmbeddedHelper*     pPersist = mpModel->GetPersist();
+    ::comphelper::IEmbeddedHelper*     pPersist = GetSdrObject()->getSdrModelFromSdrObject().GetPersist();
     OUString              aPersistName;
     OUString            aTmpStr;
     if( SvxShape::getPropertyValue( UNO_NAME_OLE2_PERSISTNAME ) >>= aTmpStr )
         aPersistName = aTmpStr;
 
-    uno::Sequence<beans::PropertyValue> objArgs(1);
-    objArgs[0].Name = "DefaultParentBaseURL";
-    objArgs[0].Value <<= pPersist->getDocumentBaseURL();
+    uno::Sequence<beans::PropertyValue> objArgs( comphelper::InitPropertySequence({
+            { "DefaultParentBaseURL", Any(pPersist->getDocumentBaseURL()) }
+        }));
     //TODO/LATER: how to cope with creation failure?!
     uno::Reference<embed::XEmbeddedObject> xObj(
         pPersist->getEmbeddedObjectContainer().CreateEmbeddedObject(
             aClassName.GetByteSequence(), objArgs, aPersistName));
     if( xObj.is() )
     {
-        Rectangle aRect = pOle2Obj->GetLogicRect();
-        if ( aRect.GetWidth() == 100 && aRect.GetHeight() == 100 )
+        tools::Rectangle aRect = pOle2Obj->GetLogicRect();
+        if ( aRect.GetWidth() == 101 && aRect.GetHeight() == 101 )
         {
             // TODO/LATER: is it possible that this method is used to create an iconified object?
             // default size
@@ -443,7 +426,8 @@ bool SvxOle2Shape::createObject( const SvGlobalName &aClassName )
         }
 
         // connect the object after the visual area is set
-        SvxShape::setPropertyValue( UNO_NAME_OLE2_PERSISTNAME, Any( aTmpStr = aPersistName ) );
+        aTmpStr = aPersistName;
+        SvxShape::setPropertyValue( UNO_NAME_OLE2_PERSISTNAME, Any( aTmpStr ) );
 
         // the object is inserted during setting of PersistName property usually
         if( pOle2Obj->IsEmpty() )
@@ -457,13 +441,13 @@ void SvxOle2Shape::createLink( const OUString& aLinkURL )
 {
     DBG_TESTSOLARMUTEX();
 
-    SdrOle2Obj* pOle2Obj = dynamic_cast< SdrOle2Obj* >( mpObj.get() );
+    SdrOle2Obj* pOle2Obj = dynamic_cast< SdrOle2Obj* >( GetSdrObject() );
     if ( !pOle2Obj || !pOle2Obj->IsEmpty() )
         return;
 
     OUString aPersistName;
 
-    ::comphelper::IEmbeddedHelper* pPersist = mpModel->GetPersist();
+    ::comphelper::IEmbeddedHelper* pPersist = GetSdrObject()->getSdrModelFromSdrObject().GetPersist();
 
     uno::Sequence< beans::PropertyValue > aMediaDescr( 1 );
     aMediaDescr[0].Name = "URL";
@@ -483,8 +467,8 @@ void SvxOle2Shape::createLink( const OUString& aLinkURL )
 
     if( xObj.is() )
     {
-        Rectangle aRect = pOle2Obj->GetLogicRect();
-        if ( aRect.GetWidth() == 100 && aRect.GetHeight() == 100 )
+        tools::Rectangle aRect = pOle2Obj->GetLogicRect();
+        if ( aRect.GetWidth() == 101 && aRect.GetHeight() == 101 )
         {
             // default size
             try
@@ -516,16 +500,16 @@ void SvxOle2Shape::createLink( const OUString& aLinkURL )
 
 void SvxOle2Shape::resetModifiedState()
 {
-    ::comphelper::IEmbeddedHelper* pPersist = mpModel ? mpModel->GetPersist() : nullptr;
+    ::comphelper::IEmbeddedHelper* pPersist = GetSdrObject()->getSdrModelFromSdrObject().GetPersist();
     if( pPersist && !pPersist->isEnableSetModified() )
     {
-        SdrOle2Obj* pOle = dynamic_cast< SdrOle2Obj* >( mpObj.get() );
+        SdrOle2Obj* pOle = dynamic_cast< SdrOle2Obj* >( GetSdrObject() );
         if( pOle && !pOle->IsEmpty() )
         {
             uno::Reference < util::XModifiable > xMod( pOle->GetObjRef(), uno::UNO_QUERY );
             if( xMod.is() )
                 // TODO/MBA: what's this?!
-                xMod->setModified( sal_False );
+                xMod->setModified( false );
         }
     }
 }
@@ -534,7 +518,7 @@ const SvGlobalName SvxOle2Shape::GetClassName_Impl(OUString& rHexCLSID)
 {
     DBG_TESTSOLARMUTEX();
     SvGlobalName aClassName;
-    SdrOle2Obj* pOle2Obj = dynamic_cast< SdrOle2Obj* >( mpObj.get() );
+    SdrOle2Obj* pOle2Obj = dynamic_cast< SdrOle2Obj* >( GetSdrObject() );
 
     if( pOle2Obj )
     {
@@ -542,7 +526,7 @@ const SvGlobalName SvxOle2Shape::GetClassName_Impl(OUString& rHexCLSID)
 
         if( pOle2Obj->IsEmpty() )
         {
-            ::comphelper::IEmbeddedHelper* pPersist = mpModel->GetPersist();
+            ::comphelper::IEmbeddedHelper* pPersist = GetSdrObject()->getSdrModelFromSdrObject().GetPersist();
             if( pPersist )
             {
                 uno::Reference < embed::XEmbeddedObject > xObj =
@@ -557,7 +541,7 @@ const SvGlobalName SvxOle2Shape::GetClassName_Impl(OUString& rHexCLSID)
 
         if (rHexCLSID.isEmpty())
         {
-            uno::Reference < embed::XEmbeddedObject > xObj( pOle2Obj->GetObjRef() );
+            const uno::Reference < embed::XEmbeddedObject >& xObj( pOle2Obj->GetObjRef() );
             if ( xObj.is() )
             {
                 aClassName = SvGlobalName( xObj->getClassID() );
@@ -569,9 +553,8 @@ const SvGlobalName SvxOle2Shape::GetClassName_Impl(OUString& rHexCLSID)
     return aClassName;
 }
 
-
-SvxAppletShape::SvxAppletShape( SdrObject* pObject ) throw()
-: SvxOle2Shape( pObject, getSvxMapProvider().GetMap(SVXMAP_APPLET), getSvxMapProvider().GetPropertySet(SVXMAP_APPLET, SdrObject::GetGlobalDrawObjectItemPool())  )
+SvxAppletShape::SvxAppletShape(SdrObject* pObject)
+    : SvxOle2Shape( pObject, getSvxMapProvider().GetMap(SVXMAP_APPLET), getSvxMapProvider().GetPropertySet(SVXMAP_APPLET, SdrObject::GetGlobalDrawObjectItemPool())  )
 {
     SetShapeType( "com.sun.star.drawing.AppletShape" );
 }
@@ -588,25 +571,25 @@ void SvxAppletShape::Create( SdrObject* pNewObj, SvxDrawPage* pNewPage )
     SetShapeType( "com.sun.star.drawing.AppletShape" );
 }
 
-void SAL_CALL SvxAppletShape::setPropertyValue( const OUString& aPropertyName, const css::uno::Any& rValue ) throw(css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+void SAL_CALL SvxAppletShape::setPropertyValue( const OUString& aPropertyName, const css::uno::Any& rValue )
 {
     SvxShape::setPropertyValue( aPropertyName, rValue );
     resetModifiedState();
 }
 
-void SAL_CALL SvxAppletShape::setPropertyValues( const css::uno::Sequence< OUString >& aPropertyNames, const css::uno::Sequence< css::uno::Any >& rValues ) throw (css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+void SAL_CALL SvxAppletShape::setPropertyValues( const css::uno::Sequence< OUString >& aPropertyNames, const css::uno::Sequence< css::uno::Any >& rValues )
 {
     SvxShape::setPropertyValues( aPropertyNames, rValues );
     resetModifiedState();
 }
 
-bool SvxAppletShape::setPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, const css::uno::Any& rValue ) throw(css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+bool SvxAppletShape::setPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, const css::uno::Any& rValue )
 {
     if( (pProperty->nWID >= OWN_ATTR_APPLET_DOCBASE) && (pProperty->nWID <= OWN_ATTR_APPLET_ISSCRIPT) )
     {
-        if ( svt::EmbeddedObjectRef::TryRunningState( static_cast<SdrOle2Obj*>(mpObj.get())->GetObjRef() ) )
+        if ( svt::EmbeddedObjectRef::TryRunningState( static_cast<SdrOle2Obj*>(GetSdrObject())->GetObjRef() ) )
         {
-            uno::Reference < beans::XPropertySet > xSet( static_cast<SdrOle2Obj*>(mpObj.get())->GetObjRef()->getComponent(), uno::UNO_QUERY );
+            uno::Reference < beans::XPropertySet > xSet( static_cast<SdrOle2Obj*>(GetSdrObject())->GetObjRef()->getComponent(), uno::UNO_QUERY );
             if( xSet.is() )
             {
                 // allow exceptions to pass through
@@ -621,13 +604,13 @@ bool SvxAppletShape::setPropertyValueImpl( const OUString& rName, const SfxItemP
     }
 }
 
-bool SvxAppletShape::getPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, css::uno::Any& rValue ) throw(css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+bool SvxAppletShape::getPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, css::uno::Any& rValue )
 {
     if( (pProperty->nWID >= OWN_ATTR_APPLET_DOCBASE) && (pProperty->nWID <= OWN_ATTR_APPLET_ISSCRIPT) )
     {
-        if ( svt::EmbeddedObjectRef::TryRunningState( static_cast<SdrOle2Obj*>(mpObj.get())->GetObjRef() ) )
+        if ( svt::EmbeddedObjectRef::TryRunningState( static_cast<SdrOle2Obj*>(GetSdrObject())->GetObjRef() ) )
         {
-            uno::Reference < beans::XPropertySet > xSet( static_cast<SdrOle2Obj*>(mpObj.get())->GetObjRef()->getComponent(), uno::UNO_QUERY );
+            uno::Reference < beans::XPropertySet > xSet( static_cast<SdrOle2Obj*>(GetSdrObject())->GetObjRef()->getComponent(), uno::UNO_QUERY );
             if( xSet.is() )
             {
                 rValue = xSet->getPropertyValue( rName );
@@ -641,9 +624,8 @@ bool SvxAppletShape::getPropertyValueImpl( const OUString& rName, const SfxItemP
     }
 }
 
-
-SvxPluginShape::SvxPluginShape( SdrObject* pObject ) throw()
-: SvxOle2Shape( pObject, getSvxMapProvider().GetMap(SVXMAP_PLUGIN), getSvxMapProvider().GetPropertySet(SVXMAP_PLUGIN, SdrObject::GetGlobalDrawObjectItemPool()) )
+SvxPluginShape::SvxPluginShape(SdrObject* pObject)
+    : SvxOle2Shape( pObject, getSvxMapProvider().GetMap(SVXMAP_PLUGIN), getSvxMapProvider().GetPropertySet(SVXMAP_PLUGIN, SdrObject::GetGlobalDrawObjectItemPool()) )
 {
     SetShapeType( "com.sun.star.drawing.PluginShape" );
 }
@@ -660,25 +642,25 @@ void SvxPluginShape::Create( SdrObject* pNewObj, SvxDrawPage* pNewPage )
     SetShapeType( "com.sun.star.drawing.PluginShape" );
 }
 
-void SAL_CALL SvxPluginShape::setPropertyValue( const OUString& aPropertyName, const css::uno::Any& rValue ) throw(css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+void SAL_CALL SvxPluginShape::setPropertyValue( const OUString& aPropertyName, const css::uno::Any& rValue )
 {
     SvxShape::setPropertyValue( aPropertyName, rValue );
     resetModifiedState();
 }
 
-void SAL_CALL SvxPluginShape::setPropertyValues( const css::uno::Sequence< OUString >& aPropertyNames, const css::uno::Sequence< css::uno::Any >& rValues ) throw (css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+void SAL_CALL SvxPluginShape::setPropertyValues( const css::uno::Sequence< OUString >& aPropertyNames, const css::uno::Sequence< css::uno::Any >& rValues )
 {
     SvxShape::setPropertyValues( aPropertyNames, rValues );
     resetModifiedState();
 }
 
-bool SvxPluginShape::setPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, const css::uno::Any& rValue ) throw(css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+bool SvxPluginShape::setPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, const css::uno::Any& rValue )
 {
     if( (pProperty->nWID >= OWN_ATTR_PLUGIN_MIMETYPE) && (pProperty->nWID <= OWN_ATTR_PLUGIN_COMMANDS) )
     {
-        if( svt::EmbeddedObjectRef::TryRunningState( static_cast<SdrOle2Obj*>(mpObj.get())->GetObjRef() ) )
+        if( svt::EmbeddedObjectRef::TryRunningState( static_cast<SdrOle2Obj*>(GetSdrObject())->GetObjRef() ) )
         {
-            uno::Reference < beans::XPropertySet > xSet( static_cast<SdrOle2Obj*>(mpObj.get())->GetObjRef()->getComponent(), uno::UNO_QUERY );
+            uno::Reference < beans::XPropertySet > xSet( static_cast<SdrOle2Obj*>(GetSdrObject())->GetObjRef()->getComponent(), uno::UNO_QUERY );
             if( xSet.is() )
             {
                 // allow exceptions to pass through
@@ -693,16 +675,16 @@ bool SvxPluginShape::setPropertyValueImpl( const OUString& rName, const SfxItemP
     }
 }
 
-bool SvxPluginShape::getPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, css::uno::Any& rValue ) throw(css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+bool SvxPluginShape::getPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, css::uno::Any& rValue )
 {
     if( (pProperty->nWID >= OWN_ATTR_PLUGIN_MIMETYPE) && (pProperty->nWID <= OWN_ATTR_PLUGIN_COMMANDS) )
     {
-        if( svt::EmbeddedObjectRef::TryRunningState( static_cast<SdrOle2Obj*>(mpObj.get())->GetObjRef() ) )
+        if( svt::EmbeddedObjectRef::TryRunningState( static_cast<SdrOle2Obj*>(GetSdrObject())->GetObjRef() ) )
         {
-            uno::Reference < beans::XPropertySet > xSet( static_cast<SdrOle2Obj*>(mpObj.get())->GetObjRef()->getComponent(), uno::UNO_QUERY );
+            uno::Reference < beans::XPropertySet > xSet( static_cast<SdrOle2Obj*>(GetSdrObject())->GetObjRef()->getComponent(), uno::UNO_QUERY );
             if( xSet.is() )
             {
-                rValue <<= xSet->getPropertyValue( rName );
+                rValue = xSet->getPropertyValue( rName );
             }
         }
         return true;
@@ -714,7 +696,7 @@ bool SvxPluginShape::getPropertyValueImpl( const OUString& rName, const SfxItemP
 }
 
 
-SvxFrameShape::SvxFrameShape( SdrObject* pObject ) throw()
+SvxFrameShape::SvxFrameShape(SdrObject* pObject)
 : SvxOle2Shape( pObject, getSvxMapProvider().GetMap(SVXMAP_FRAME), getSvxMapProvider().GetPropertySet(SVXMAP_FRAME, SdrObject::GetGlobalDrawObjectItemPool())  )
 {
     SetShapeType( "com.sun.star.drawing.FrameShape" );
@@ -724,7 +706,7 @@ SvxFrameShape::~SvxFrameShape() throw()
 {
 }
 
-void SvxFrameShape::Create( SdrObject* pNewObj, SvxDrawPage* pNewPage ) throw (uno::RuntimeException, std::exception)
+void SvxFrameShape::Create( SdrObject* pNewObj, SvxDrawPage* pNewPage )
 {
     SvxShape::Create( pNewObj, pNewPage );
     const SvGlobalName aIFrameClassId( SO3_IFRAME_CLASSID );
@@ -732,25 +714,25 @@ void SvxFrameShape::Create( SdrObject* pNewObj, SvxDrawPage* pNewPage ) throw (u
     SetShapeType( "com.sun.star.drawing.FrameShape" );
 }
 
-void SAL_CALL SvxFrameShape::setPropertyValue( const OUString& aPropertyName, const css::uno::Any& rValue ) throw(css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+void SAL_CALL SvxFrameShape::setPropertyValue( const OUString& aPropertyName, const css::uno::Any& rValue )
 {
     SvxShape::setPropertyValue( aPropertyName, rValue );
     resetModifiedState();
 }
 
-void SAL_CALL SvxFrameShape::setPropertyValues( const css::uno::Sequence< OUString >& aPropertyNames, const css::uno::Sequence< css::uno::Any >& rValues ) throw (css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+void SAL_CALL SvxFrameShape::setPropertyValues( const css::uno::Sequence< OUString >& aPropertyNames, const css::uno::Sequence< css::uno::Any >& rValues )
 {
     SvxShape::setPropertyValues( aPropertyNames, rValues );
     resetModifiedState();
 }
 
-bool SvxFrameShape::setPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, const css::uno::Any& rValue ) throw(css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+bool SvxFrameShape::setPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, const css::uno::Any& rValue )
 {
     if( (pProperty->nWID >= OWN_ATTR_FRAME_URL) && (pProperty->nWID <= OWN_ATTR_FRAME_MARGIN_HEIGHT) )
     {
-        if( svt::EmbeddedObjectRef::TryRunningState( static_cast<SdrOle2Obj*>(mpObj.get())->GetObjRef() ) )
+        if( svt::EmbeddedObjectRef::TryRunningState( static_cast<SdrOle2Obj*>(GetSdrObject())->GetObjRef() ) )
         {
-            uno::Reference < beans::XPropertySet > xSet( static_cast<SdrOle2Obj*>(mpObj.get())->GetObjRef()->getComponent(), uno::UNO_QUERY );
+            uno::Reference < beans::XPropertySet > xSet( static_cast<SdrOle2Obj*>(GetSdrObject())->GetObjRef()->getComponent(), uno::UNO_QUERY );
             if( xSet.is() )
             {
                 // allow exceptions to pass through
@@ -767,19 +749,15 @@ bool SvxFrameShape::setPropertyValueImpl( const OUString& rName, const SfxItemPr
 
 bool SvxFrameShape::getPropertyValueImpl(const OUString& rName, const SfxItemPropertySimpleEntry* pProperty,
     css::uno::Any& rValue)
-        throw (css::beans::UnknownPropertyException,
-               css::lang::WrappedTargetException,
-               css::uno::RuntimeException,
-               std::exception)
 {
     if( (pProperty->nWID >= OWN_ATTR_FRAME_URL) && (pProperty->nWID <= OWN_ATTR_FRAME_MARGIN_HEIGHT) )
     {
-        if( svt::EmbeddedObjectRef::TryRunningState( static_cast<SdrOle2Obj*>(mpObj.get())->GetObjRef() ) )
+        if( svt::EmbeddedObjectRef::TryRunningState( static_cast<SdrOle2Obj*>(GetSdrObject())->GetObjRef() ) )
         {
-            uno::Reference < beans::XPropertySet > xSet( static_cast<SdrOle2Obj*>(mpObj.get())->GetObjRef()->getComponent(), uno::UNO_QUERY );
+            uno::Reference < beans::XPropertySet > xSet( static_cast<SdrOle2Obj*>(GetSdrObject())->GetObjRef()->getComponent(), uno::UNO_QUERY );
             if( xSet.is() )
             {
-                rValue <<= xSet->getPropertyValue( rName );
+                rValue = xSet->getPropertyValue( rName );
             }
         }
         return true;
@@ -789,7 +767,7 @@ bool SvxFrameShape::getPropertyValueImpl(const OUString& rName, const SfxItemPro
         return SvxOle2Shape::getPropertyValueImpl( rName, pProperty, rValue );
     }
 }
-SvxMediaShape::SvxMediaShape( SdrObject* pObj, OUString const & referer ) throw()
+SvxMediaShape::SvxMediaShape(SdrObject* pObj, OUString const & referer)
 :   SvxShape( pObj, getSvxMapProvider().GetMap(SVXMAP_MEDIA), getSvxMapProvider().GetPropertySet(SVXMAP_MEDIA, SdrObject::GetGlobalDrawObjectItemPool()) ),
     referer_(referer)
 {
@@ -802,19 +780,20 @@ SvxMediaShape::~SvxMediaShape() throw()
 }
 
 
-bool SvxMediaShape::setPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, const css::uno::Any& rValue ) throw(css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+bool SvxMediaShape::setPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, const css::uno::Any& rValue )
 {
     if( ((pProperty->nWID >= OWN_ATTR_MEDIA_URL) && (pProperty->nWID <= OWN_ATTR_MEDIA_ZOOM))
         || (pProperty->nWID == OWN_ATTR_MEDIA_STREAM)
         || (pProperty->nWID == OWN_ATTR_MEDIA_MIMETYPE) )
     {
-        SdrMediaObj* pMedia = static_cast< SdrMediaObj* >( mpObj.get() );
+        SdrMediaObj* pMedia = static_cast< SdrMediaObj* >( GetSdrObject() );
         ::avmedia::MediaItem aItem;
         bool bOk = false;
 
         switch( pProperty->nWID )
         {
         case OWN_ATTR_MEDIA_URL:
+#if HAVE_FEATURE_AVMEDIA
         {
             OUString aURL;
             if( rValue >>= aURL )
@@ -823,9 +802,11 @@ bool SvxMediaShape::setPropertyValueImpl( const OUString& rName, const SfxItemPr
                 aItem.setURL( aURL, "", referer_ );
             }
         }
+#endif
         break;
 
         case OWN_ATTR_MEDIA_LOOP:
+#if HAVE_FEATURE_AVMEDIA
         {
             bool bLoop;
 
@@ -835,9 +816,11 @@ bool SvxMediaShape::setPropertyValueImpl( const OUString& rName, const SfxItemPr
                 aItem.setLoop( bLoop );
             }
         }
+#endif
         break;
 
         case OWN_ATTR_MEDIA_MUTE:
+#if HAVE_FEATURE_AVMEDIA
         {
             bool bMute;
 
@@ -847,9 +830,11 @@ bool SvxMediaShape::setPropertyValueImpl( const OUString& rName, const SfxItemPr
                 aItem.setMute( bMute );
             }
         }
+#endif
         break;
 
         case OWN_ATTR_MEDIA_VOLUMEDB:
+#if HAVE_FEATURE_AVMEDIA
         {
             sal_Int16 nVolumeDB = sal_Int16();
 
@@ -859,9 +844,11 @@ bool SvxMediaShape::setPropertyValueImpl( const OUString& rName, const SfxItemPr
                 aItem.setVolumeDB( nVolumeDB );
             }
         }
+#endif
         break;
 
         case OWN_ATTR_MEDIA_ZOOM:
+#if HAVE_FEATURE_AVMEDIA
         {
             css::media::ZoomLevel eLevel;
 
@@ -871,9 +858,11 @@ bool SvxMediaShape::setPropertyValueImpl( const OUString& rName, const SfxItemPr
                 aItem.setZoom( eLevel );
             }
         }
+#endif
         break;
 
         case OWN_ATTR_MEDIA_MIMETYPE:
+#if HAVE_FEATURE_AVMEDIA
         {
             OUString sMimeType;
             if( rValue >>= sMimeType )
@@ -882,9 +871,11 @@ bool SvxMediaShape::setPropertyValueImpl( const OUString& rName, const SfxItemPr
                 aItem.setMimeType( sMimeType );
             }
         }
+#endif
         break;
 
         case OWN_ATTR_MEDIA_STREAM:
+#if HAVE_FEATURE_AVMEDIA
             try
             {
                 uno::Reference<io::XInputStream> xStream;
@@ -893,20 +884,23 @@ bool SvxMediaShape::setPropertyValueImpl( const OUString& rName, const SfxItemPr
                     pMedia->SetInputStream(xStream);
                 }
             }
-            catch (const css::ucb::ContentCreationException& e)
+            catch (const css::ucb::ContentCreationException&)
             {
+                css::uno::Any exc = cppu::getCaughtException();
                 throw css::lang::WrappedTargetException(
                         "ContentCreationException Setting InputStream!",
                         static_cast<OWeakObject *>(this),
-                        makeAny(e));
+                        exc);
             }
-            catch (const css::ucb::CommandFailedException& e)
+            catch (const css::ucb::CommandFailedException&)
             {
+                css::uno::Any anyEx = cppu::getCaughtException();
                 throw css::lang::WrappedTargetException(
                         "CommandFailedException Setting InputStream!",
                         static_cast<OWeakObject *>(this),
-                        makeAny(e));
+                        anyEx);
             }
+#endif
         break;
 
         default:
@@ -928,7 +922,7 @@ bool SvxMediaShape::setPropertyValueImpl( const OUString& rName, const SfxItemPr
 }
 
 
-bool SvxMediaShape::getPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, css::uno::Any& rValue ) throw(css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+bool SvxMediaShape::getPropertyValueImpl( const OUString& rName, const SfxItemPropertySimpleEntry* pProperty, css::uno::Any& rValue )
 {
     if (   ((pProperty->nWID >= OWN_ATTR_MEDIA_URL) &&
             (pProperty->nWID <= OWN_ATTR_MEDIA_ZOOM))
@@ -937,29 +931,39 @@ bool SvxMediaShape::getPropertyValueImpl( const OUString& rName, const SfxItemPr
         || (pProperty->nWID == OWN_ATTR_MEDIA_MIMETYPE)
         || (pProperty->nWID == OWN_ATTR_FALLBACK_GRAPHIC))
     {
-        SdrMediaObj* pMedia = static_cast< SdrMediaObj* >( mpObj.get() );
+        SdrMediaObj* pMedia = static_cast< SdrMediaObj* >( GetSdrObject() );
         const ::avmedia::MediaItem aItem( pMedia->getMediaProperties() );
 
         switch( pProperty->nWID )
         {
             case OWN_ATTR_MEDIA_URL:
+#if HAVE_FEATURE_AVMEDIA
                 rValue <<= aItem.getURL();
+#endif
                 break;
 
             case OWN_ATTR_MEDIA_LOOP:
+#if HAVE_FEATURE_AVMEDIA
                 rValue <<= aItem.isLoop();
+#endif
                 break;
 
             case OWN_ATTR_MEDIA_MUTE:
+#if HAVE_FEATURE_AVMEDIA
                 rValue <<= aItem.isMute();
+#endif
                 break;
 
             case OWN_ATTR_MEDIA_VOLUMEDB:
-                rValue <<= (sal_Int16) aItem.getVolumeDB();
+#if HAVE_FEATURE_AVMEDIA
+                rValue <<= aItem.getVolumeDB();
+#endif
                 break;
 
             case OWN_ATTR_MEDIA_ZOOM:
+#if HAVE_FEATURE_AVMEDIA
                 rValue <<= aItem.getZoom();
+#endif
                 break;
 
             case OWN_ATTR_MEDIA_STREAM:
@@ -967,29 +971,33 @@ bool SvxMediaShape::getPropertyValueImpl( const OUString& rName, const SfxItemPr
                 {
                     rValue <<= pMedia->GetInputStream();
                 }
-                catch (const css::ucb::ContentCreationException& e)
+                catch (const css::ucb::ContentCreationException&)
                 {
+                    css::uno::Any anyEx = cppu::getCaughtException();
                     throw css::lang::WrappedTargetException(
                             "ContentCreationException Getting InputStream!",
-                            static_cast < OWeakObject * > ( this ),
-                            makeAny( e ) );
+                            static_cast < OWeakObject * > ( this ), anyEx );
                 }
-                catch (const css::ucb::CommandFailedException& e)
+                catch (const css::ucb::CommandFailedException&)
                 {
+                    css::uno::Any anyEx = cppu::getCaughtException();
                     throw css::lang::WrappedTargetException(
                             "CommandFailedException Getting InputStream!",
-                            static_cast < OWeakObject * > ( this ),
-                            makeAny( e ) );
+                            static_cast < OWeakObject * > ( this ), anyEx );
                 }
 
                 break;
 
             case OWN_ATTR_MEDIA_TEMPFILEURL:
+#if HAVE_FEATURE_AVMEDIA
                 rValue <<= aItem.getTempURL();
+#endif
                 break;
 
             case OWN_ATTR_MEDIA_MIMETYPE:
+#if HAVE_FEATURE_AVMEDIA
                 rValue <<= aItem.getMimeType();
+#endif
                 break;
 
             case OWN_ATTR_FALLBACK_GRAPHIC:
@@ -1005,15 +1013,6 @@ bool SvxMediaShape::getPropertyValueImpl( const OUString& rName, const SfxItemPr
     {
         return SvxShape::getPropertyValueImpl( rName, pProperty, rValue );
     }
-}
-
-SvxDummyShapeContainer::SvxDummyShapeContainer(uno::Reference< drawing::XShapes > xObject):
-    m_xDummyObject(xObject)
-{
-}
-
-SvxDummyShapeContainer::~SvxDummyShapeContainer() throw()
-{
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

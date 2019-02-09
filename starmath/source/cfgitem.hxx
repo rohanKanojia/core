@@ -20,21 +20,21 @@
 #ifndef INCLUDED_STARMATH_SOURCE_CFGITEM_HXX
 #define INCLUDED_STARMATH_SOURCE_CFGITEM_HXX
 
-#include <deque>
+#include <utility.hxx>
+
 #include <vector>
 
-#include <com/sun/star/beans/PropertyValues.hpp>
-#include <com/sun/star/uno/Sequence.hxx>
-
 #include <rtl/ustring.hxx>
+#include <svl/SfxBroadcaster.hxx>
 #include <unotools/configitem.hxx>
-#include <vcl/timer.hxx>
 
-#include <symbol.hxx>
 #include <types.hxx>
 #include <memory>
 
+namespace com { namespace sun { namespace star { namespace uno { template <class E> class Sequence; } } } }
+
 class SmSym;
+class SmSymbolManager;
 class SmFormat;
 namespace vcl { class Font; }
 struct SmCfgOther;
@@ -66,7 +66,7 @@ struct SmFntFmtListEntry
 
 class SmFontFormatList
 {
-    std::deque<SmFntFmtListEntry> aEntries;
+    std::vector<SmFntFmtListEntry> aEntries;
     bool                    bModified;
 
     SmFontFormatList(const SmFontFormatList&) = delete;
@@ -91,7 +91,7 @@ public:
     void    SetModified( bool bVal )    { bModified = bVal; }
 };
 
-class SmMathConfig : public utl::ConfigItem, public SfxBroadcaster
+class SmMathConfig final : public utl::ConfigItem, public SfxBroadcaster
 {
     std::unique_ptr<SmFormat>         pFormat;
     std::unique_ptr<SmCfgOther>       pOther;
@@ -116,9 +116,8 @@ class SmMathConfig : public utl::ConfigItem, public SfxBroadcaster
                         const OUString &rSymbolName,
                         const OUString &rBaseNode ) const;
 
-    void            SetOtherIfNotEqual( bool &rbItem, bool bNewVal );
+    void    SetOtherIfNotEqual( bool &rbItem, bool bNewVal );
 
-protected:
     void    LoadOther();
     void    SaveOther();
     void    LoadFormat();
@@ -127,10 +126,9 @@ protected:
     void    SaveFontFormatList();
 
     void        SetOtherModified( bool bVal );
-    inline bool IsOtherModified() const     { return bIsOtherModified; }
+    bool IsOtherModified() const     { return bIsOtherModified; }
     void        SetFormatModified( bool bVal );
-    inline bool IsFormatModified() const    { return bIsFormatModified; }
-    void        SetFontFormatListModified( bool bVal );
+    bool IsFormatModified() const    { return bIsFormatModified; }
 
     SmFontFormatList &          GetFontFormatList();
     const SmFontFormatList &    GetFontFormatList() const
@@ -142,7 +140,7 @@ protected:
 
 public:
     SmMathConfig();
-    virtual ~SmMathConfig();
+    virtual ~SmMathConfig() override;
 
     // utl::ConfigItem
     virtual void    Notify( const css::uno::Sequence< OUString > &rPropertyNames ) override;

@@ -29,18 +29,17 @@ namespace sdr
     namespace overlay
     {
         // overlay type definition
-        enum OverlayType
+        enum class OverlayType
         {
-            OVERLAY_INVERT,
-            OVERLAY_SOLID,
-            OVERLAY_TRANSPARENT
+            Invert,
+            Solid,
+            Transparent
         };
 
-        class SVX_DLLPUBLIC OverlaySelection : public OverlayObject
+        class SVX_DLLPUBLIC OverlaySelection final : public OverlayObject
         {
-        protected:
             // type of overlay
-            OverlayType                         meOverlayType;
+            OverlayType const                   meOverlayType;
 
             // geometry of overlay
             std::vector< basegfx::B2DRange >    maRanges;
@@ -51,8 +50,7 @@ namespace sdr
             OverlayType                         maLastOverlayType;
             sal_uInt16                          mnLastTransparence;
 
-            // bitfield
-            bool                                mbBorder : 1;
+            bool const                          mbBorder : 1;
 
             // geometry creation for OverlayObject, can use local *Last* values
             virtual drawinglayer::primitive2d::Primitive2DContainer createOverlayObjectPrimitive2DSequence() override;
@@ -63,11 +61,10 @@ namespace sdr
                 const Color& rColor,
                 const std::vector< basegfx::B2DRange >& rRanges,
                 bool bBorder);
-            virtual ~OverlaySelection();
+            virtual ~OverlaySelection() override;
 
             // data read access
             const std::vector< basegfx::B2DRange >& getRanges() const { return maRanges; }
-            bool getBorder() const { return mbBorder; }
 
             /// override to check conditions for last createOverlayObjectPrimitive2DSequence
             virtual drawinglayer::primitive2d::Primitive2DContainer getOverlayObjectPrimitive2DSequence() const override;

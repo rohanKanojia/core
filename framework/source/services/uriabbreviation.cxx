@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "services/uriabbreviation.hxx"
-#include "services.h"
+#include <services/uriabbreviation.hxx>
+#include <services.h>
 
 #include <sal/config.h>
 #include <cppuhelper/factory.hxx>
@@ -48,14 +48,14 @@ UriAbbreviation::UriAbbreviation(css::uno::Reference< css::uno::XComponentContex
 }
 
 // css::util::XStringAbbreviation:
-OUString SAL_CALL UriAbbreviation::abbreviateString(const css::uno::Reference< css::util::XStringWidth > & xStringWidth, ::sal_Int32 nWidth, const OUString & aString) throw (css::uno::RuntimeException, std::exception)
+OUString SAL_CALL UriAbbreviation::abbreviateString(const css::uno::Reference< css::util::XStringWidth > & xStringWidth, ::sal_Int32 nWidth, const OUString & aString)
 {
     OUString aResult( aString );
     if ( xStringWidth.is() )
     {
         // Use INetURLObject to abbreviate URLs
         INetURLObject aURL( aString );
-        aResult = aURL.getAbbreviated( xStringWidth, nWidth, INetURLObject::DECODE_UNAMBIGUOUS );
+        aResult = aURL.getAbbreviated( xStringWidth, nWidth, INetURLObject::DecodeMechanism::Unambiguous );
     }
 
     return aResult;

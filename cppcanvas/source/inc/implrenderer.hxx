@@ -20,21 +20,31 @@
 #ifndef INCLUDED_CPPCANVAS_SOURCE_INC_IMPLRENDERER_HXX
 #define INCLUDED_CPPCANVAS_SOURCE_INC_IMPLRENDERER_HXX
 
+#include <sal/config.h>
+
+#include <basegfx/vector/b2dsize.hxx>
 #include <sal/types.h>
+#include <tools/stream.hxx>
 #include <cppcanvas/renderer.hxx>
 #include <cppcanvas/canvas.hxx>
 
-#include <canvasgraphichelper.hxx>
-#include <action.hxx>
-#include <outdevstate.hxx>
+#include "canvasgraphichelper.hxx"
+#include "action.hxx"
+#include "outdevstate.hxx"
 
-#include <vector>
+#include <com/sun/star/rendering/FontRequest.hpp>
+#include <com/sun/star/rendering/StrokeAttributes.hpp>
+#include <osl/diagnose.h>
+#include <osl/endian.h>
+
 #include <map>
+#include <memory>
+#include <vector>
 
 class GDIMetaFile;
 class VirtualDevice;
 class Gradient;
-class Rectangle;
+namespace tools { class Rectangle; }
 namespace vcl { class Font; }
 namespace tools { class PolyPolygon; }
 class Point;
@@ -54,11 +64,6 @@ namespace cppcanvas
         struct ActionFactoryParameters;
         struct XForm;
 
-        struct EMFPObject
-        {
-            virtual ~EMFPObject() {}
-        };
-
         // state stack of OutputDevice, to correctly handle
         // push/pop actions
         class VectorOfOutDevStates
@@ -70,63 +75,36 @@ namespace cppcanvas
             void popState();
             void clearStateStack();
         private:
-            ::std::vector< OutDevState > m_aStates;
+            std::vector< OutDevState > m_aStates;
         };
 
         // EMF+
-        // TODO: replace?
+        // Transformation matrix (used for Affine Transformation)
+        //      [ eM11, eM12, eDx ]
+        //      [ eM21, eM22, eDy ]
+        //      [ 0,    0,    1   ]
+        // that consists of a linear map (eM11, eM12, eM21, eM22)
+        // More info: https://en.wikipedia.org/wiki/Linear_map
+        // followed by a translation (eDx, eDy)
+
         struct XForm
         {
-            float   eM11;
-            float   eM12;
-            float   eM21;
-            float   eM22;
-            float   eDx;
-            float   eDy;
+            float   eM11; // M1,1 value in the matrix. Increases or decreases the size of the pixels horizontally.
+            float   eM12; // M1,2 value in the matrix. This effectively angles the X axis up or down.
+            float   eM21; // M2,1 value in the matrix. This effectively angles the Y axis left or right.
+            float   eM22; // M2,2 value in the matrix. Increases or decreases the size of the pixels vertically.
+            float   eDx;  // Delta x (Dx) value in the matrix. Moves the whole coordinate system horizontally.
+            float   eDy;  // Delta y (Dy) value in the matrix. Moves the whole coordinate system vertically.
             XForm()
             {
                 SetIdentity ();
-            };
+            }
 
             void SetIdentity ()
             {
                 eM11 =  eM22 = 1.0f;
                 eDx = eDy = eM12 = eM21 = 0.0f;
             }
-
-            void Set (const XForm& f)
-            {
-                eM11 = f.eM11;
-                eM12 = f.eM12;
-                eM21 = f.eM21;
-                eM22 = f.eM22;
-                eDx  = f.eDx;
-                eDy  = f.eDy;
-            }
-
-            void Multiply (const XForm& f)
-            {
-                eM11 = eM11*f.eM11 + eM12*f.eM21;
-                eM12 = eM11*f.eM12 + eM12*f.eM22;
-                eM21 = eM21*f.eM11 + eM22*f.eM21;
-                eM22 = eM21*f.eM12 + eM22*f.eM22;
-                eDx *= eDx*f.eM11  + eDy*f.eM21 + f.eDx;
-                eDy *= eDx*f.eM12  + eDy*f.eM22 + f.eDy;
-            }
-
-#ifdef OSL_BIGENDIAN
-// little endian <-> big endian switch
-static float GetSwapFloat( SvStream& rSt )
-{
-        float   fTmp;
-        sal_Int8* pPtr = (sal_Int8*)&fTmp;
-        rSt.ReadSChar( pPtr[3] );
-        rSt.ReadSChar( pPtr[2] );
-        rSt.ReadSChar( pPtr[1] );
-        rSt.ReadSChar( pPtr[0] );
-        return fTmp;
-}
-#endif
 
             friend SvStream& ReadXForm( SvStream& rIn, XForm& rXForm )
             {
@@ -137,29 +115,14 @@ static float GetSwapFloat( SvStream& rSt )
                 }
                 else
                 {
-#ifdef OSL_BIGENDIAN
-                    rXForm.eM11 = GetSwapFloat( rIn );
-                    rXForm.eM12 = GetSwapFloat( rIn );
-                    rXForm.eM21 = GetSwapFloat( rIn );
-                    rXForm.eM22 = GetSwapFloat( rIn );
-                    rXForm.eDx = GetSwapFloat( rIn );
-                    rXForm.eDy = GetSwapFloat( rIn );
-#else
                     rIn.ReadFloat( rXForm.eM11 ).ReadFloat( rXForm.eM12 ).ReadFloat( rXForm.eM21 ).ReadFloat( rXForm.eM22 )
                        .ReadFloat( rXForm.eDx ).ReadFloat( rXForm.eDy );
-#endif
                 }
                 return rIn;
             }
         };
 
         // EMF+
-        typedef struct {
-            XForm aWorldTransform;
-            OutDevState aDevState;
-        } EmfPlusGraphicState;
-
-        typedef ::std::map<int,EmfPlusGraphicState> GraphicStateMap;
 
         class ImplRenderer : public virtual Renderer, protected CanvasGraphicHelper
         {
@@ -168,7 +131,7 @@ static float GetSwapFloat( SvStream& rSt )
                           const GDIMetaFile&        rMtf,
                           const Parameters&         rParms );
 
-            virtual ~ImplRenderer();
+            virtual ~ImplRenderer() override;
 
             virtual bool                draw() const override;
             virtual bool                drawSubset( sal_Int32   nStartIndex,
@@ -181,29 +144,20 @@ static float GetSwapFloat( SvStream& rSt )
             // public, since some functors need it, too.
             struct MtfAction
             {
-                MtfAction( const ActionSharedPtr&   rAction,
+                MtfAction( const std::shared_ptr<Action>&   rAction,
                            sal_Int32                nOrigIndex ) :
                     mpAction( rAction ),
                     mnOrigIndex( nOrigIndex )
                 {
                 }
 
-                ActionSharedPtr mpAction;
+                std::shared_ptr<Action> mpAction;
                 sal_Int32       mnOrigIndex;
             };
 
             // prefetched and prepared canvas actions
             // (externally not visible)
-            typedef ::std::vector< MtfAction >      ActionVector;
-
-            /* EMF+ */
-            static void ReadRectangle (SvStream& s, float& x, float& y, float &width, float& height, bool bCompressed = false);
-            static void ReadPoint (SvStream& s, float& x, float& y, sal_uInt32 flags);
-            void MapToDevice (double &x, double &y);
-            ::basegfx::B2DPoint Map (double ix, double iy);
-            ::basegfx::B2DSize MapSize (double iwidth, double iheight);
-            void GraphicStatePush (GraphicStateMap& map, sal_Int32 index, OutDevState& rState);
-            void GraphicStatePop (GraphicStateMap& map, sal_Int32 index, OutDevState& rState);
+            typedef std::vector< MtfAction >      ActionVector;
 
         private:
             ImplRenderer(const ImplRenderer&) = delete;
@@ -213,7 +167,7 @@ static float GetSwapFloat( SvStream& rSt )
                                  const ActionFactoryParameters&     rParms,
                                  bool                               bIntersect );
 
-            static void updateClipping( const ::Rectangle&                 rClipRect,
+            static void updateClipping( const ::tools::Rectangle&                 rClipRect,
                                  const ActionFactoryParameters&     rParms,
                                  bool                               bIntersect );
 
@@ -221,7 +175,7 @@ static float GetSwapFloat( SvStream& rSt )
                 css::rendering::XCanvasFont > createFont( double&                         o_rFontRotation,
                                                           const vcl::Font&                rFont,
                                                           const ActionFactoryParameters&  rParms );
-            bool createActions( GDIMetaFile&                    rMtf,
+            void createActions( GDIMetaFile&                    rMtf,
                                 const ActionFactoryParameters&  rParms,
                                 bool                            bSubsettableActions );
             bool createFillAndStroke( const ::basegfx::B2DPolyPolygon& rPolyPoly,
@@ -255,33 +209,10 @@ static float GetSwapFloat( SvStream& rSt )
                                    ActionVector::const_iterator& o_rRangeBegin,
                                    ActionVector::const_iterator& o_rRangeEnd ) const;
 
-            void processObjectRecord(SvMemoryStream& rObjectStream, sal_uInt16 flags, sal_uInt32 dataSize, bool bUseWholeStream = false);
-
-            /* EMF+ */
-            void processEMFPlus( MetaCommentAction* pAct, const ActionFactoryParameters& rFactoryParms, OutDevState& rState, const CanvasSharedPtr& rCanvas );
-            double setFont( sal_uInt8 objectId, const ActionFactoryParameters& rParms, OutDevState& rState );
-
-            /// Render LineCap, like the start or end arrow of a polygon.
-            /// @return how much we should shorten the original polygon.
-            double EMFPPlusDrawLineCap(const ::basegfx::B2DPolygon& rPolygon, double fPolyLength,
-                    const ::basegfx::B2DPolyPolygon& rLineCap, bool isFilled, bool bStart,
-                    const css::rendering::StrokeAttributes& rAttributes,
-                    const ActionFactoryParameters& rParms, OutDevState& rState);
-
-            void EMFPPlusDrawPolygon (const ::basegfx::B2DPolyPolygon& polygon, const ActionFactoryParameters& rParms, OutDevState& rState, const CanvasSharedPtr& rCanvas, sal_uInt32 penIndex);
-            void EMFPPlusFillPolygon (::basegfx::B2DPolyPolygon& polygon, const ActionFactoryParameters& rParms, OutDevState& rState, const CanvasSharedPtr& rCanvas, bool isColor, sal_uInt32 brushIndexOrColor);
-
             ActionVector maActions;
 
             /* EMF+ */
             XForm           aBaseTransform;
-            XForm           aWorldTransform;
-            EMFPObject*     aObjects [256];
-            float           fPageScale;
-            sal_Int32       nOriginX;
-            sal_Int32       nOriginY;
-            sal_Int32       nHDPI;
-            sal_Int32       nVDPI;
             /* EMF+ emf header info */
             sal_Int32       nFrameLeft;
             sal_Int32       nFrameTop;
@@ -291,13 +222,6 @@ static float GetSwapFloat( SvStream& rSt )
             sal_Int32       nPixY;
             sal_Int32       nMmX;
             sal_Int32       nMmY;
-            /* multipart object data */
-            bool            mbMultipart;
-            sal_uInt16      mMFlags;
-            SvMemoryStream  mMStream;
-            /* emf+ graphic state stack */
-            GraphicStateMap mGSStack;
-            GraphicStateMap mGSContainerStack;
         };
 
 

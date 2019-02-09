@@ -19,11 +19,11 @@
 
 #include "ShellStackGuard.hxx"
 
-#include "framework/ConfigurationController.hxx"
-#include "framework/FrameworkHelper.hxx"
+#include <framework/ConfigurationController.hxx>
+#include <framework/FrameworkHelper.hxx>
 
-#include "DrawController.hxx"
-#include "ViewShellBase.hxx"
+#include <DrawController.hxx>
+#include <ViewShellBase.hxx>
 #include <sfx2/printer.hxx>
 #include <com/sun/star/drawing/framework/XControllerManager.hpp>
 #include <com/sun/star/drawing/framework/XConfigurationController.hpp>
@@ -38,12 +38,12 @@ namespace sd { namespace framework {
 
 //===== CenterViewFocusModule ====================================================
 
-ShellStackGuard::ShellStackGuard (Reference<frame::XController>& rxController)
+ShellStackGuard::ShellStackGuard (Reference<frame::XController> const & rxController)
     : ShellStackGuardInterfaceBase(m_aMutex),
       mxConfigurationController(),
       mpBase(nullptr),
       mpUpdateLock(),
-      maPrinterPollingIdle()
+      maPrinterPollingIdle("sd ShellStackGuard PrinterPollingIdle")
 {
     Reference<XControllerManager> xControllerManager (rxController, UNO_QUERY);
     if (xControllerManager.is())
@@ -71,8 +71,7 @@ ShellStackGuard::ShellStackGuard (Reference<frame::XController>& rxController)
             Any());
 
         // Prepare the printer polling.
-        maPrinterPollingIdle.SetIdleHdl(LINK(this,ShellStackGuard,TimeoutHandler));
-        maPrinterPollingIdle.SetPriority(SchedulerPriority::LOWER);
+        maPrinterPollingIdle.SetInvokeHandler(LINK(this,ShellStackGuard,TimeoutHandler));
     }
 }
 
@@ -91,11 +90,10 @@ void SAL_CALL ShellStackGuard::disposing()
 
 void SAL_CALL ShellStackGuard::notifyConfigurationChange (
     const ConfigurationChangeEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
-    if (rEvent.Type.equals(FrameworkHelper::msConfigurationUpdateStartEvent))
+    if (rEvent.Type == FrameworkHelper::msConfigurationUpdateStartEvent)
     {
-        if (mpUpdateLock.get() == nullptr && IsPrinting())
+        if (mpUpdateLock == nullptr && IsPrinting())
         {
             // Prevent configuration updates while the printer is printing.
             mpUpdateLock.reset(new ConfigurationController::Lock(mxConfigurationController));
@@ -108,7 +106,6 @@ void SAL_CALL ShellStackGuard::notifyConfigurationChange (
 
 void SAL_CALL ShellStackGuard::disposing (
     const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
 {
     if (mxConfigurationController.is())
         if (rEvent.Source == mxConfigurationController)
@@ -118,14 +115,14 @@ void SAL_CALL ShellStackGuard::disposing (
         }
 }
 
-IMPL_LINK_TYPED(ShellStackGuard, TimeoutHandler, Idle*, pIdle, void)
+IMPL_LINK(ShellStackGuard, TimeoutHandler, Timer*, pIdle, void)
 {
 #ifdef DEBUG
     OSL_ASSERT(pIdle==&maPrinterPollingIdle);
 #else
     (void)pIdle;
 #endif
-    if (mpUpdateLock.get() != nullptr)
+    if (mpUpdateLock != nullptr)
     {
         if ( ! IsPrinting())
         {

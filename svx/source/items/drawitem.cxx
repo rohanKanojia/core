@@ -28,6 +28,7 @@ SfxPoolItem* SvxColorListItem::CreateDefault() { return new  SvxColorListItem ;}
 SfxPoolItem* SvxGradientListItem::CreateDefault() { return new   SvxGradientListItem ;}
 SfxPoolItem* SvxHatchListItem::CreateDefault() { return new   SvxHatchListItem ;}
 SfxPoolItem* SvxBitmapListItem::CreateDefault() { return new   SvxBitmapListItem ;}
+SfxPoolItem* SvxPatternListItem::CreateDefault() { return new SvxPatternListItem ;}
 SfxPoolItem* SvxDashListItem::CreateDefault() { return new   SvxDashListItem ;}
 SfxPoolItem* SvxLineEndListItem::CreateDefault() { return new   SvxLineEndListItem ;}
 
@@ -36,7 +37,7 @@ SvxColorListItem::SvxColorListItem()
 }
 
 
-SvxColorListItem::SvxColorListItem( XColorListRef pTable, sal_uInt16 nW ) :
+SvxColorListItem::SvxColorListItem( XColorListRef const & pTable, sal_uInt16 nW ) :
     SfxPoolItem( nW ),
     pColorList( pTable )
 {
@@ -52,9 +53,9 @@ SvxColorListItem::SvxColorListItem( const SvxColorListItem& rItem ) :
 bool SvxColorListItem::GetPresentation
 (
     SfxItemPresentation /*ePres*/,
-    SfxMapUnit          /*eCoreUnit*/,
-    SfxMapUnit          /*ePresUnit*/,
-    OUString&           rText, const IntlWrapper *
+    MapUnit             /*eCoreUnit*/,
+    MapUnit             /*ePresUnit*/,
+    OUString&           rText, const IntlWrapper&
 )   const
 {
     rText.clear();
@@ -63,7 +64,7 @@ bool SvxColorListItem::GetPresentation
 
 bool SvxColorListItem::operator==( const SfxPoolItem& rItem ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==( rItem ), "unequal type" );
+    assert(SfxPoolItem::operator==(rItem));
     return static_cast<const SvxColorListItem&>(rItem).pColorList == pColorList;
 }
 
@@ -77,7 +78,7 @@ SfxPoolItem* SvxColorListItem::Clone( SfxItemPool * ) const
 #define QUERY_PUT_IMPL(svtype, xtype) \
 bool svtype::QueryValue( css::uno::Any& rVal, sal_uInt8 ) const \
 { \
-    rVal = uno::makeAny( uno::Reference< uno::XWeak >( p##xtype.get() ) ); \
+    rVal <<= uno::Reference< uno::XWeak >( p##xtype.get() ); \
     return true; \
 } \
 \
@@ -97,7 +98,7 @@ SvxGradientListItem::SvxGradientListItem()
 {
 }
 
-SvxGradientListItem::SvxGradientListItem( XGradientListRef pList, sal_uInt16 nW ) :
+SvxGradientListItem::SvxGradientListItem( XGradientListRef const & pList, sal_uInt16 nW ) :
     SfxPoolItem( nW ),
     pGradientList( pList )
 {
@@ -114,9 +115,9 @@ SvxGradientListItem::SvxGradientListItem( const SvxGradientListItem& rItem ) :
 bool SvxGradientListItem::GetPresentation
 (
     SfxItemPresentation /*ePres*/,
-    SfxMapUnit          /*eCoreUnit*/,
-    SfxMapUnit          /*ePresUnit*/,
-    OUString&           rText, const IntlWrapper *
+    MapUnit             /*eCoreUnit*/,
+    MapUnit             /*ePresUnit*/,
+    OUString&           rText, const IntlWrapper&
 )   const
 {
     rText.clear();
@@ -126,7 +127,7 @@ bool SvxGradientListItem::GetPresentation
 
 bool SvxGradientListItem::operator==( const SfxPoolItem& rItem ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==( rItem ), "unequal type" );
+    assert(SfxPoolItem::operator==(rItem));
     return static_cast<const SvxGradientListItem&>(rItem).pGradientList == pGradientList;
 }
 
@@ -144,7 +145,7 @@ SvxHatchListItem::SvxHatchListItem()
 }
 
 
-SvxHatchListItem::SvxHatchListItem( XHatchListRef pList, sal_uInt16 nW ) :
+SvxHatchListItem::SvxHatchListItem( XHatchListRef const & pList, sal_uInt16 nW ) :
     SfxPoolItem( nW ),
     pHatchList( pList )
 {
@@ -161,9 +162,9 @@ SvxHatchListItem::SvxHatchListItem( const SvxHatchListItem& rItem ) :
 bool SvxHatchListItem::GetPresentation
 (
     SfxItemPresentation /*ePres*/,
-    SfxMapUnit          /*eCoreUnit*/,
-    SfxMapUnit          /*ePresUnit*/,
-    OUString&           rText, const IntlWrapper *
+    MapUnit             /*eCoreUnit*/,
+    MapUnit             /*ePresUnit*/,
+    OUString&           rText, const IntlWrapper&
 )   const
 {
     rText.clear();
@@ -173,7 +174,7 @@ bool SvxHatchListItem::GetPresentation
 
 bool SvxHatchListItem::operator==( const SfxPoolItem& rItem ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==( rItem ), "unequal type" );
+    assert(SfxPoolItem::operator==(rItem));
     return static_cast<const SvxHatchListItem&>(rItem).pHatchList == pHatchList;
 }
 
@@ -189,7 +190,7 @@ SvxBitmapListItem::SvxBitmapListItem()
 {
 }
 
-SvxBitmapListItem::SvxBitmapListItem( XBitmapListRef pList, sal_uInt16 nW ) :
+SvxBitmapListItem::SvxBitmapListItem( XBitmapListRef const & pList, sal_uInt16 nW ) :
     SfxPoolItem( nW ),
     pBitmapList( pList )
 {
@@ -204,9 +205,9 @@ SvxBitmapListItem::SvxBitmapListItem( const SvxBitmapListItem& rItem ) :
 bool SvxBitmapListItem::GetPresentation
 (
     SfxItemPresentation /*ePres*/,
-    SfxMapUnit          /*eCoreUnit*/,
-    SfxMapUnit          /*ePresUnit*/,
-    OUString&           rText, const IntlWrapper *
+    MapUnit             /*eCoreUnit*/,
+    MapUnit             /*ePresUnit*/,
+    OUString&           rText, const IntlWrapper&
 )   const
 {
     rText.clear();
@@ -215,7 +216,7 @@ bool SvxBitmapListItem::GetPresentation
 
 bool SvxBitmapListItem::operator==( const SfxPoolItem& rItem ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==( rItem ), "unequal type" );
+    assert(SfxPoolItem::operator==(rItem));
     return static_cast<const SvxBitmapListItem&>(rItem).pBitmapList == pBitmapList;
 }
 
@@ -226,12 +227,52 @@ SfxPoolItem* SvxBitmapListItem::Clone( SfxItemPool * ) const
 
 QUERY_PUT_IMPL( SvxBitmapListItem, BitmapList )
 
-SvxDashListItem::SvxDashListItem() :
-    pDashList( nullptr )
+SvxPatternListItem::SvxPatternListItem()
 {
 }
 
-SvxDashListItem::SvxDashListItem( XDashListRef pList, sal_uInt16 nW ) :
+SvxPatternListItem::SvxPatternListItem( XPatternListRef const & pList, sal_uInt16 nW ) :
+    SfxPoolItem( nW ),
+    pPatternList( pList )
+{
+}
+
+SvxPatternListItem::SvxPatternListItem( const SvxPatternListItem& rItem ) :
+    SfxPoolItem( rItem ),
+    pPatternList( rItem.pPatternList )
+{
+}
+
+bool SvxPatternListItem::GetPresentation
+(
+    SfxItemPresentation /*ePres*/,
+    MapUnit             /*eCoreUnit*/,
+    MapUnit             /*ePresUnit*/,
+    OUString&           rText, const IntlWrapper&
+)   const
+{
+    rText.clear();
+    return false;
+}
+
+bool SvxPatternListItem::operator==( const SfxPoolItem& rItem ) const
+{
+    assert(SfxPoolItem::operator==(rItem));
+    return static_cast<const SvxPatternListItem&>(rItem).pPatternList == pPatternList;
+}
+
+SfxPoolItem* SvxPatternListItem::Clone( SfxItemPool * ) const
+{
+    return new SvxPatternListItem( *this );
+}
+
+QUERY_PUT_IMPL( SvxPatternListItem, PatternList )
+
+SvxDashListItem::SvxDashListItem()
+{
+}
+
+SvxDashListItem::SvxDashListItem( XDashListRef const & pList, sal_uInt16 nW ) :
     SfxPoolItem( nW ),
     pDashList( pList )
 {
@@ -246,9 +287,9 @@ SvxDashListItem::SvxDashListItem( const SvxDashListItem& rItem ) :
 bool SvxDashListItem::GetPresentation
 (
     SfxItemPresentation /*ePres*/,
-    SfxMapUnit          /*eCoreUnit*/,
-    SfxMapUnit          /*ePresUnit*/,
-    OUString&           rText, const IntlWrapper *
+    MapUnit             /*eCoreUnit*/,
+    MapUnit             /*ePresUnit*/,
+    OUString&           rText, const IntlWrapper&
 )   const
 {
     rText.clear();
@@ -257,7 +298,7 @@ bool SvxDashListItem::GetPresentation
 
 bool SvxDashListItem::operator==( const SfxPoolItem& rItem ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==( rItem ), "unequal type" );
+    assert(SfxPoolItem::operator==(rItem));
     return static_cast<const SvxDashListItem&>(rItem).pDashList == pDashList;
 }
 
@@ -272,7 +313,7 @@ SvxLineEndListItem::SvxLineEndListItem()
 {
 }
 
-SvxLineEndListItem::SvxLineEndListItem( XLineEndListRef pList, sal_uInt16 nW ) :
+SvxLineEndListItem::SvxLineEndListItem( XLineEndListRef const & pList, sal_uInt16 nW ) :
     SfxPoolItem( nW ),
     pLineEndList( pList )
 {
@@ -287,9 +328,9 @@ SvxLineEndListItem::SvxLineEndListItem( const SvxLineEndListItem& rItem ) :
 bool SvxLineEndListItem::GetPresentation
 (
     SfxItemPresentation /*ePres*/,
-    SfxMapUnit          /*eCoreUnit*/,
-    SfxMapUnit          /*ePresUnit*/,
-    OUString&           rText, const IntlWrapper *
+    MapUnit             /*eCoreUnit*/,
+    MapUnit             /*ePresUnit*/,
+    OUString&           rText, const IntlWrapper&
 )   const
 {
     rText.clear();
@@ -298,7 +339,7 @@ bool SvxLineEndListItem::GetPresentation
 
 bool SvxLineEndListItem::operator==( const SfxPoolItem& rItem ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==( rItem ), "unequal type" );
+    assert(SfxPoolItem::operator==(rItem));
     return static_cast<const SvxLineEndListItem&>(rItem).pLineEndList == pLineEndList;
 }
 

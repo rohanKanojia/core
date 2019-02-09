@@ -30,19 +30,19 @@
 #include <svl/whiter.hxx>
 
 #include "imapwrap.hxx"
-#include "tabvwsh.hxx"
-#include "viewdata.hxx"
-#include "tabview.hxx"
-#include "drwlayer.hxx"
-#include "userdat.hxx"
-#include "docsh.hxx"
+#include <tabvwsh.hxx>
+#include <viewdata.hxx>
+#include <tabview.hxx>
+#include <drwlayer.hxx>
+#include <userdat.hxx>
+#include <docsh.hxx>
 
 #include <svx/galleryitem.hxx>
 #include <com/sun/star/gallery/GalleryItemType.hpp>
 
 class SvxIMapDlg;
 
-void ScTabViewShell::ExecChildWin(SfxRequest& rReq)
+void ScTabViewShell::ExecChildWin(const SfxRequest& rReq)
 {
     sal_uInt16 nSlot = rReq.GetSlot();
     switch(nSlot)
@@ -60,7 +60,7 @@ void ScTabViewShell::ExecChildWin(SfxRequest& rReq)
     }
 }
 
-void ScTabViewShell::ExecGallery( SfxRequest& rReq )
+void ScTabViewShell::ExecGallery( const SfxRequest& rReq )
 {
     const SfxItemSet* pArgs = rReq.GetArgs();
 
@@ -76,8 +76,7 @@ void ScTabViewShell::ExecGallery( SfxRequest& rReq )
         Graphic aGraphic( pGalleryItem->GetGraphic() );
         Point   aPos     = GetInsertPos();
 
-        OUString aPath, aFilter;
-        PasteGraphic( aPos, aGraphic, aPath, aFilter );
+        PasteGraphic( aPos, aGraphic, OUString(), OUString() );
     }
     else if ( nType == css::gallery::GalleryItemType::MEDIA )
     {
@@ -136,7 +135,7 @@ void ScTabViewShell::ExecImageMap( SfxRequest& rReq )
                     ScIMapInfo*     pIMapInfo = ScDrawLayer::GetIMapInfo( pSdrObj );
 
                     if ( !pIMapInfo )
-                        pSdrObj->AppendUserData( new ScIMapInfo( rImageMap ) );
+                        pSdrObj->AppendUserData( std::unique_ptr<SdrObjUserData>(new ScIMapInfo( rImageMap )) );
                     else
                         pIMapInfo->SetImageMap( rImageMap );
 

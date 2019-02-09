@@ -17,13 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <sfx2/sidebar/ResourceDefinitions.hrc>
 #include <sfx2/sidebar/Theme.hxx>
 #include <sfx2/sidebar/ControlFactory.hxx>
 #include "CellAppearancePropertyPanel.hxx"
-#include <CellAppearancePropertyPanel.hrc>
-#include "sc.hrc"
-#include "scresid.hxx"
+#include <sc.hrc>
+#include <bitmaps.hlst>
 #include <sfx2/bindings.hxx>
 #include <sfx2/dispatch.hxx>
 #include <vcl/fixed.hxx>
@@ -33,12 +31,9 @@
 #include <editeng/lineitem.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
-#include <svx/sidebar/PopupContainer.hxx>
+#include <vcl/virdev.hxx>
 #include "CellLineStyleControl.hxx"
-#include "CellLineStylePopup.hxx"
-#include "CellBorderUpdater.hxx"
 #include "CellBorderStyleControl.hxx"
-#include "CellBorderStylePopup.hxx"
 
 using namespace css;
 using namespace css::uno;
@@ -49,32 +44,6 @@ const char UNO_LINESTYLE[] = ".uno:LineStyle";
 // namespace open
 
 namespace sc { namespace sidebar {
-
-svx::sidebar::PopupControl* CellAppearancePropertyPanel::CreateCellLineStylePopupControl(svx::sidebar::PopupContainer* pParent)
-{
-    return VclPtr<CellLineStyleControl>::Create(pParent, *this);
-}
-
-void CellAppearancePropertyPanel::EndCellLineStylePopupMode()
-{
-    if(mpCellLineStylePopup.get())
-    {
-        mpCellLineStylePopup->Hide();
-    }
-}
-
-svx::sidebar::PopupControl* CellAppearancePropertyPanel::CreateCellBorderStylePopupControl(svx::sidebar::PopupContainer* pParent)
-{
-    return VclPtr<CellBorderStyleControl>::Create(pParent, *this);
-}
-
-void CellAppearancePropertyPanel::EndCellBorderStylePopupMode()
-{
-    if(mpCellBorderStylePopup.get())
-    {
-        mpCellBorderStylePopup->Hide();
-    }
-}
 
 CellAppearancePropertyPanel::CellAppearancePropertyPanel(
     vcl::Window* pParent,
@@ -89,26 +58,26 @@ CellAppearancePropertyPanel::CellAppearancePropertyPanel(
     maBorderTLBRControl(SID_ATTR_BORDER_DIAG_TLBR, *pBindings, *this),
     maBorderBLTRControl(SID_ATTR_BORDER_DIAG_BLTR, *pBindings, *this),
 
-    maIMGCellBorder(ScResId(IMG_CELL_BORDER)),
-    maIMGLineStyle1(ScResId(IMG_LINE_STYLE1)),
-    maIMGLineStyle2(ScResId(IMG_LINE_STYLE2)),
-    maIMGLineStyle3(ScResId(IMG_LINE_STYLE3)),
-    maIMGLineStyle4(ScResId(IMG_LINE_STYLE4)),
-    maIMGLineStyle5(ScResId(IMG_LINE_STYLE5)),
-    maIMGLineStyle6(ScResId(IMG_LINE_STYLE6)),
-    maIMGLineStyle7(ScResId(IMG_LINE_STYLE7)),
-    maIMGLineStyle8(ScResId(IMG_LINE_STYLE8)),
-    maIMGLineStyle9(ScResId(IMG_LINE_STYLE9)),
+    maIMGCellBorder(StockImage::Yes, RID_BMP_CELL_BORDER),
+    maIMGLineStyle1(StockImage::Yes, RID_BMP_LINE_STYLE1),
+    maIMGLineStyle2(StockImage::Yes, RID_BMP_LINE_STYLE2),
+    maIMGLineStyle3(StockImage::Yes, RID_BMP_LINE_STYLE3),
+    maIMGLineStyle4(StockImage::Yes, RID_BMP_LINE_STYLE4),
+    maIMGLineStyle5(StockImage::Yes, RID_BMP_LINE_STYLE5),
+    maIMGLineStyle6(StockImage::Yes, RID_BMP_LINE_STYLE6),
+    maIMGLineStyle7(StockImage::Yes, RID_BMP_LINE_STYLE7),
+    maIMGLineStyle8(StockImage::Yes, RID_BMP_LINE_STYLE8),
+    maIMGLineStyle9(StockImage::Yes, RID_BMP_LINE_STYLE9),
 
-    mnIn(0),
-    mnOut(0),
-    mnDis(0),
-    mnTLBRIn(0),
-    mnTLBROut(0),
-    mnTLBRDis(0),
-    mnBLTRIn(0),
-    mnBLTROut(0),
-    mnBLTRDis(0),
+    mnInWidth(0),
+    mnOutWidth(0),
+    mnDistance(0),
+    mnDiagTLBRInWidth(0),
+    mnDiagTLBROutWidth(0),
+    mnDiagTLBRDistance(0),
+    mnDiagBLTRInWidth(0),
+    mnDiagBLTROutWidth(0),
+    mnDiagBLTRDistance(0),
     mbBorderStyleAvailable(true),
     mbLeft(false),
     mbRight(false),
@@ -118,21 +87,16 @@ CellAppearancePropertyPanel::CellAppearancePropertyPanel(
     mbHor(false),
     mbOuterBorder(false),
     mbInnerBorder(false),
-    mbTLBR(false),
-    mbBLTR(false),
-
-    mpCellLineStylePopup(),
-    mpCellBorderStylePopup(),
-
+    mbDiagTLBR(false),
+    mbDiagBLTR(false),
+    mxCellLineStylePopup(),
+    mxCellBorderStylePopup(),
     maContext(),
     mpBindings(pBindings)
 {
     get(mpTBCellBorder, "cellbordertype");
     get(mpTBLineStyle,  "borderlinestyle");
     get(mpTBLineColor,  "borderlinecolor");
-
-    mpCellBorderUpdater.reset( new CellBorderUpdater(
-        mpTBCellBorder->GetItemId( UNO_SETBORDERSTYLE ), *mpTBCellBorder) );
 
     Initialize();
 }
@@ -148,6 +112,8 @@ void CellAppearancePropertyPanel::dispose()
     mpTBLineStyle.clear();
     mpTBLineColor.clear();
 
+    mxCellBorderStylePopup.disposeAndClear();
+    mxCellLineStylePopup.disposeAndClear();
     maLineStyleControl.dispose();
     maBorderOuterControl.dispose();
     maBorderInnerControl.dispose();
@@ -176,53 +142,30 @@ void CellAppearancePropertyPanel::Initialize()
     mpTBLineStyle->Disable();
 
     mpTBLineColor->Disable();
-
-    mpTBLineColor->SetAccessibleRelationLabeledBy(mpTBLineColor);
-    mpTBLineStyle->SetAccessibleRelationLabeledBy(mpTBLineStyle);
 }
 
-IMPL_LINK_TYPED(CellAppearancePropertyPanel, TbxCellBorderSelectHdl, ToolBox*, pToolBox, void)
+IMPL_LINK(CellAppearancePropertyPanel, TbxCellBorderSelectHdl, ToolBox*, pToolBox, void)
 {
     const OUString aCommand(pToolBox->GetItemCommand(pToolBox->GetCurItemId()));
 
-    if(aCommand == UNO_SETBORDERSTYLE)
+    if (aCommand == UNO_SETBORDERSTYLE)
     {
-        // create popup on demand
-        if(!mpCellBorderStylePopup.get())
-        {
-            mpCellBorderStylePopup.reset(
-                new CellBorderStylePopup(
-                    this,
-                    [this] (svx::sidebar::PopupContainer* pParent) { return this->CreateCellBorderStylePopupControl(pParent); } ));
-        }
-
-        if(mpCellBorderStylePopup.get())
-        {
-            mpCellBorderStylePopup->Show(*pToolBox);
-        }
+        if (!mxCellBorderStylePopup)
+            mxCellBorderStylePopup = VclPtr<CellBorderStylePopup>::Create(GetBindings()->GetDispatcher());
+        mxCellBorderStylePopup->StartPopupMode(pToolBox, FloatWinPopupFlags::GrabFocus);
     }
 }
 
-IMPL_LINK_TYPED(CellAppearancePropertyPanel, TbxLineStyleSelectHdl, ToolBox*, pToolBox, void)
+IMPL_LINK(CellAppearancePropertyPanel, TbxLineStyleSelectHdl, ToolBox*, pToolBox, void)
 {
     const OUString aCommand(pToolBox->GetItemCommand(pToolBox->GetCurItemId()));
 
-    if(aCommand == UNO_LINESTYLE)
+    if (aCommand == UNO_LINESTYLE)
     {
-        // create popup on demand
-        if(!mpCellLineStylePopup.get())
-        {
-            mpCellLineStylePopup.reset(
-                new CellLineStylePopup(
-                    this,
-                    [this] (svx::sidebar::PopupContainer* pParent) { return this->CreateCellLineStylePopupControl(pParent); } ));
-        }
-
-        if(mpCellLineStylePopup.get())
-        {
-            mpCellLineStylePopup->SetLineStyleSelect(mnOut, mnIn, mnDis);
-            mpCellLineStylePopup->Show(*pToolBox);
-        }
+        if (!mxCellLineStylePopup)
+            mxCellLineStylePopup = VclPtr<CellLineStylePopup>::Create(GetBindings()->GetDispatcher());
+        mxCellLineStylePopup->SetLineStyleSelect(mnOutWidth, mnInWidth, mnDistance);
+        mxCellLineStylePopup->StartPopupMode(pToolBox, FloatWinPopupFlags::GrabFocus);
     }
 }
 
@@ -243,12 +186,10 @@ VclPtr<vcl::Window> CellAppearancePropertyPanel::Create (
 }
 
 void CellAppearancePropertyPanel::DataChanged(
-    const DataChangedEvent& rEvent)
-{
-    (void)rEvent;
-}
+    const DataChangedEvent&)
+{}
 
-void CellAppearancePropertyPanel::HandleContextChange(const ::sfx2::sidebar::EnumContext& rContext)
+void CellAppearancePropertyPanel::HandleContextChange(const vcl::EnumContext& rContext)
 {
     if (maContext == rContext)
     {
@@ -263,45 +204,31 @@ void CellAppearancePropertyPanel::NotifyItemUpdate(
     sal_uInt16 nSID,
     SfxItemState eState,
     const SfxPoolItem* pState,
-    const bool bIsEnabled)
+    const bool)
 {
-    (void)bIsEnabled;
-
     switch(nSID)
     {
     case SID_FRAME_LINESTYLE:
+        mbBorderStyleAvailable = false;
         if( eState == SfxItemState::DONTCARE )
         {
             mbBorderStyleAvailable = true;
-            mnIn = 0;
-            mnOut = 0;
-            mnDis = 0;
-            SetStyleIcon();
-            break;
+            mnInWidth = 0;
+            mnOutWidth = 0;
+            mnDistance = 0;
         }
-
-        if(eState >= SfxItemState::DEFAULT)
+        else if(eState >= SfxItemState::DEFAULT)
         {
             const SvxLineItem* pSvxLineItem = dynamic_cast< const SvxLineItem* >(pState);
-
             if(pSvxLineItem)
             {
-                const editeng::SvxBorderLine* mbLineItem = pSvxLineItem->GetLine();
-                mnIn = mbLineItem->GetInWidth();
-                mnOut = mbLineItem->GetOutWidth();
-                mnDis = mbLineItem->GetDistance();
-
-                if(mnIn == 0 && mnOut == 0 && mnDis == 0)
-                    mbBorderStyleAvailable = false;
-                else
-                    mbBorderStyleAvailable = true;
-
-                SetStyleIcon();
-                break;
+                const editeng::SvxBorderLine* pLineItem = pSvxLineItem->GetLine();
+                mnInWidth = pLineItem->GetInWidth();
+                mnOutWidth = pLineItem->GetOutWidth();
+                mnDistance = pLineItem->GetDistance();
+                mbBorderStyleAvailable = !(mnInWidth == 0 && mnOutWidth == 0 && mnDistance == 0);
             }
         }
-
-        mbBorderStyleAvailable = false;
         SetStyleIcon();
         break;
     case SID_ATTR_BORDER_OUTER:
@@ -329,9 +256,9 @@ void CellAppearancePropertyPanel::NotifyItemUpdate(
                     mbBottom = true;
 
                 if(!AllSettings::GetLayoutRTL())
-                    mpCellBorderUpdater->UpdateCellBorder(mbTop, mbBottom, mbLeft, mbRight, maIMGCellBorder, mbVer, mbHor);
+                    UpdateCellBorder(mbTop, mbBottom, mbLeft, mbRight, mbVer, mbHor);
                 else
-                    mpCellBorderUpdater->UpdateCellBorder(mbTop, mbBottom, mbRight, mbLeft, maIMGCellBorder, mbVer, mbHor);
+                    UpdateCellBorder(mbTop, mbBottom, mbRight, mbLeft, mbVer, mbHor);
 
                 if(mbLeft || mbRight || mbTop || mbBottom)
                     mbOuterBorder = true;
@@ -346,7 +273,6 @@ void CellAppearancePropertyPanel::NotifyItemUpdate(
         if(eState >= SfxItemState::DEFAULT)
         {
             const SvxBoxInfoItem* pBoxInfoItem = dynamic_cast< const SvxBoxInfoItem* >(pState);
-
             if(pBoxInfoItem)
             {
                 bool bLeft(false), bRight(false), bTop(false), bBottom(false);
@@ -373,9 +299,9 @@ void CellAppearancePropertyPanel::NotifyItemUpdate(
                     bBottom = true;
 
                 if(!AllSettings::GetLayoutRTL())
-                    mpCellBorderUpdater->UpdateCellBorder(bTop, bBottom, bLeft, bRight, maIMGCellBorder, mbVer, mbHor);
+                    UpdateCellBorder(bTop, bBottom, bLeft, bRight, mbVer, mbHor);
                 else
-                    mpCellBorderUpdater->UpdateCellBorder(bTop, bBottom, bRight, bLeft, maIMGCellBorder, mbVer, mbHor);
+                    UpdateCellBorder(bTop, bBottom, bRight, bLeft, mbVer, mbHor);
 
                 if(mbVer || mbHor || bLeft || bRight || bTop || bBottom)
                     mbInnerBorder = true;
@@ -387,83 +313,54 @@ void CellAppearancePropertyPanel::NotifyItemUpdate(
         }
         break;
     case SID_ATTR_BORDER_DIAG_TLBR:
+        mbDiagTLBR = false;
         if( eState == SfxItemState::DONTCARE )
         {
-            mbTLBR = true;
-            mnTLBRIn = mnTLBROut = mnTLBRDis = 0;
-            UpdateControlState();
-            break;
+            mbDiagTLBR = true;
+            mnDiagTLBRInWidth = mnDiagTLBROutWidth = mnDiagTLBRDistance = 0;
         }
-
-        if(eState >= SfxItemState::DEFAULT)
+        else if(eState >= SfxItemState::DEFAULT)
         {
             const SvxLineItem* pItem = dynamic_cast< const SvxLineItem* >(pState);
-
             if(pItem)
             {
                 const editeng::SvxBorderLine* aLine = pItem->GetLine();
-
-                if(!aLine)
+                if(aLine)
                 {
-                    mbTLBR = false;
-                }
-                else
-                {
-                    mbTLBR = true;
-                    mnTLBRIn = aLine->GetInWidth();
-                    mnTLBROut = aLine->GetOutWidth();
-                    mnTLBRDis = aLine->GetDistance();
+                    mnDiagTLBRInWidth = aLine->GetInWidth();
+                    mnDiagTLBROutWidth = aLine->GetOutWidth();
+                    mnDiagTLBRDistance = aLine->GetDistance();
 
-                    if(mnTLBRIn == 0 && mnTLBROut == 0 && mnTLBRDis == 0)
-                        mbTLBR = false;
+                    mbDiagTLBR = !(mnDiagTLBRInWidth == 0 && mnDiagTLBROutWidth == 0 && mnDiagTLBRDistance == 0);
                 }
-
-                UpdateControlState();
-                break;
             }
         }
-
-        mbTLBR = false;
         UpdateControlState();
         break;
     case SID_ATTR_BORDER_DIAG_BLTR:
+        mbDiagBLTR = false;
         if( eState == SfxItemState::DONTCARE )
         {
-            mbBLTR = true;
-            mnBLTRIn = mnBLTROut = mnBLTRDis = 0;
-            UpdateControlState();
-            break;
+            mbDiagBLTR = true;
+            mnDiagBLTRInWidth = mnDiagBLTROutWidth = mnDiagBLTRDistance = 0;
         }
-
-        if(eState >= SfxItemState::DEFAULT)
+        else if(eState >= SfxItemState::DEFAULT)
         {
             const SvxLineItem* pItem = dynamic_cast< const SvxLineItem* >(pState);
-
             if(pItem)
             {
                 const editeng::SvxBorderLine* aLine = pItem->GetLine();
 
-                if(!aLine)
+                if(aLine)
                 {
-                    mbBLTR = false;
-                }
-                else
-                {
-                    mbBLTR = true;
-                    mnBLTRIn = aLine->GetInWidth();
-                    mnBLTROut = aLine->GetOutWidth();
-                    mnBLTRDis = aLine->GetDistance();
+                    mnDiagBLTRInWidth = aLine->GetInWidth();
+                    mnDiagBLTROutWidth = aLine->GetOutWidth();
+                    mnDiagBLTRDistance = aLine->GetDistance();
 
-                    if(mnBLTRIn == 0 && mnBLTROut == 0 && mnBLTRDis == 0)
-                        mbBLTR = false;
+                    mbDiagBLTR = !(mnDiagBLTRInWidth == 0 && mnDiagBLTROutWidth == 0 && mnDiagBLTRDistance == 0);
                 }
-
-                UpdateControlState();
             }
-            break;
         }
-
-        mbBLTR = false;
         UpdateControlState();
         break;
     }
@@ -474,23 +371,23 @@ void CellAppearancePropertyPanel::SetStyleIcon()
     const sal_uInt16 nIdBorderLineStyle = mpTBLineStyle->GetItemId( UNO_LINESTYLE );
 
     //FIXME: update for new line border possibilities
-    if(mnOut == DEF_LINE_WIDTH_0 && mnIn == 0 && mnDis == 0)    //1
+    if(mnOutWidth == DEF_LINE_WIDTH_0 && mnInWidth == 0 && mnDistance == 0)    //1
         mpTBLineStyle->SetItemImage(nIdBorderLineStyle, maIMGLineStyle1);
-    else if(mnOut == DEF_LINE_WIDTH_2 && mnIn == 0 && mnDis == 0) //2
+    else if(mnOutWidth == DEF_LINE_WIDTH_2 && mnInWidth == 0 && mnDistance == 0) //2
         mpTBLineStyle->SetItemImage(nIdBorderLineStyle, maIMGLineStyle2);
-    else if(mnOut == DEF_LINE_WIDTH_3 && mnIn == 0 && mnDis == 0) //3
+    else if(mnOutWidth == DEF_LINE_WIDTH_3 && mnInWidth == 0 && mnDistance == 0) //3
         mpTBLineStyle->SetItemImage(nIdBorderLineStyle, maIMGLineStyle3);
-    else if(mnOut == DEF_LINE_WIDTH_4 && mnIn == 0 && mnDis == 0) //4
+    else if(mnOutWidth == DEF_LINE_WIDTH_4 && mnInWidth == 0 && mnDistance == 0) //4
         mpTBLineStyle->SetItemImage(nIdBorderLineStyle, maIMGLineStyle4);
-    else if(mnOut == DEF_LINE_WIDTH_0 && mnIn == DEF_LINE_WIDTH_0 && mnDis == DEF_LINE_WIDTH_1) //5
+    else if(mnOutWidth == DEF_LINE_WIDTH_0 && mnInWidth == DEF_LINE_WIDTH_0 && mnDistance == DEF_LINE_WIDTH_1) //5
         mpTBLineStyle->SetItemImage(nIdBorderLineStyle, maIMGLineStyle5);
-    else if(mnOut == DEF_LINE_WIDTH_0 && mnIn == DEF_LINE_WIDTH_0 && mnDis == DEF_LINE_WIDTH_2) //6
+    else if(mnOutWidth == DEF_LINE_WIDTH_0 && mnInWidth == DEF_LINE_WIDTH_0 && mnDistance == DEF_LINE_WIDTH_2) //6
         mpTBLineStyle->SetItemImage(nIdBorderLineStyle, maIMGLineStyle6);
-    else if(mnOut == DEF_LINE_WIDTH_1 && mnIn == DEF_LINE_WIDTH_2 && mnDis == DEF_LINE_WIDTH_1) //7
+    else if(mnOutWidth == DEF_LINE_WIDTH_1 && mnInWidth == DEF_LINE_WIDTH_2 && mnDistance == DEF_LINE_WIDTH_1) //7
         mpTBLineStyle->SetItemImage(nIdBorderLineStyle, maIMGLineStyle7);
-    else if(mnOut == DEF_LINE_WIDTH_2 && mnIn == DEF_LINE_WIDTH_0 && mnDis == DEF_LINE_WIDTH_2) //8
+    else if(mnOutWidth == DEF_LINE_WIDTH_2 && mnInWidth == DEF_LINE_WIDTH_0 && mnDistance == DEF_LINE_WIDTH_2) //8
         mpTBLineStyle->SetItemImage(nIdBorderLineStyle, maIMGLineStyle8);
-    else if(mnOut == DEF_LINE_WIDTH_2 && mnIn == DEF_LINE_WIDTH_2 && mnDis == DEF_LINE_WIDTH_2) //9
+    else if(mnOutWidth == DEF_LINE_WIDTH_2 && mnInWidth == DEF_LINE_WIDTH_2 && mnDistance == DEF_LINE_WIDTH_2) //9
         mpTBLineStyle->SetItemImage(nIdBorderLineStyle, maIMGLineStyle9);
     else
         mpTBLineStyle->SetItemImage(nIdBorderLineStyle, maIMGLineStyle1);
@@ -498,65 +395,65 @@ void CellAppearancePropertyPanel::SetStyleIcon()
 
 void CellAppearancePropertyPanel::UpdateControlState()
 {
-    if(mbOuterBorder || mbInnerBorder || mbTLBR || mbBLTR)
+    if(mbOuterBorder || mbInnerBorder || mbDiagTLBR || mbDiagBLTR)
     {
         mpTBLineColor->Enable();
         mpTBLineStyle->Enable();
 
         //set line style state
-        if( mbBorderStyleAvailable && !mbTLBR && !mbBLTR )
+        if( mbBorderStyleAvailable && !mbDiagTLBR && !mbDiagBLTR )
         {
         }
-        else if( !mbBorderStyleAvailable && mbTLBR && !mbBLTR )
+        else if( !mbBorderStyleAvailable && mbDiagTLBR && !mbDiagBLTR )
         {
-            mnIn = mnTLBRIn;
-            mnOut = mnTLBROut;
-            mnDis = mnTLBRDis;
+            mnInWidth = mnDiagTLBRInWidth;
+            mnOutWidth = mnDiagTLBROutWidth;
+            mnDistance = mnDiagTLBRDistance;
         }
-        else if ( !mbBorderStyleAvailable && !mbTLBR && mbBLTR )
+        else if ( !mbBorderStyleAvailable && !mbDiagTLBR && mbDiagBLTR )
         {
-            mnIn = mnBLTRIn;
-            mnOut = mnBLTROut;
-            mnDis = mnBLTRDis;
+            mnInWidth = mnDiagBLTRInWidth;
+            mnOutWidth = mnDiagBLTROutWidth;
+            mnDistance = mnDiagBLTRDistance;
         }
-        else if( !mbBorderStyleAvailable && mbTLBR && mbBLTR)
+        else if( !mbBorderStyleAvailable && mbDiagTLBR && mbDiagBLTR)
         {
-            if( mnTLBRIn == mnBLTRIn && mnTLBROut == mnBLTROut && mnTLBRDis == mnBLTRDis)
+            if( mnDiagTLBRInWidth == mnDiagBLTRInWidth && mnDiagTLBROutWidth == mnDiagBLTROutWidth && mnDiagTLBRDistance == mnDiagBLTRDistance)
             {
-                mnIn = mnTLBRIn;
-                mnOut = mnTLBROut;
-                mnDis = mnTLBRDis;
+                mnInWidth = mnDiagTLBRInWidth;
+                mnOutWidth = mnDiagTLBROutWidth;
+                mnDistance = mnDiagTLBRDistance;
             }
             else
             {
-                mnIn = 0;
-                mnOut = 0;
-                mnDis = 0;
+                mnInWidth = 0;
+                mnOutWidth = 0;
+                mnDistance = 0;
             }
         }
-        else if( mbBorderStyleAvailable && mbTLBR && !mbBLTR )
+        else if( mbBorderStyleAvailable && mbDiagTLBR && !mbDiagBLTR )
         {
-            if( mnTLBRIn != mnIn || mnTLBROut != mnOut || mnTLBRDis != mnDis)
+            if( mnDiagTLBRInWidth != mnInWidth || mnDiagTLBROutWidth != mnOutWidth || mnDiagTLBRDistance != mnDistance)
             {
-                mnIn = 0;
-                mnOut = 0;
-                mnDis = 0;
+                mnInWidth = 0;
+                mnOutWidth = 0;
+                mnDistance = 0;
             }
         }
-        else if( mbBorderStyleAvailable && !mbTLBR && mbBLTR )
+        else if( mbBorderStyleAvailable && !mbDiagTLBR && mbDiagBLTR )
         {
-            if(  mnBLTRIn != mnIn || mnBLTROut != mnOut || mnBLTRDis != mnDis )
+            if(  mnDiagBLTRInWidth != mnInWidth || mnDiagBLTROutWidth != mnOutWidth || mnDiagBLTRDistance != mnDistance )
             {
-                mnIn = 0;
-                mnOut = 0;
-                mnDis = 0;
+                mnInWidth = 0;
+                mnOutWidth = 0;
+                mnDistance = 0;
             }
         }
         else
         {
-            mnIn = 0;
-            mnOut = 0;
-            mnDis = 0;
+            mnInWidth = 0;
+            mnOutWidth = 0;
+            mnDistance = 0;
         }
         SetStyleIcon();
     }
@@ -567,6 +464,40 @@ void CellAppearancePropertyPanel::UpdateControlState()
     }
 }
 
+void CellAppearancePropertyPanel::UpdateCellBorder(bool bTop, bool bBot, bool bLeft, bool bRight, bool bVer, bool bHor)
+{
+    const Size aBmpSize = maIMGCellBorder.GetBitmapEx().GetSizePixel();
+
+    ScopedVclPtr<VirtualDevice> pVirDev(VclPtr<VirtualDevice>::Create(*Application::GetDefaultDevice(),
+            DeviceFormat::DEFAULT, DeviceFormat::DEFAULT));
+    pVirDev->SetOutputSizePixel(aBmpSize);
+    pVirDev->SetBackground(COL_TRANSPARENT);
+    pVirDev->Erase();
+    pVirDev->SetLineColor( ::Application::GetSettings().GetStyleSettings().GetFieldTextColor() ) ;
+    pVirDev->SetFillColor(COL_BLACK);
+
+    const int btnId = mpTBCellBorder->GetItemId( UNO_SETBORDERSTYLE );
+
+    if(aBmpSize.Width() == 43 && aBmpSize.Height() == 43)
+    {
+        Point aTL(2, 1), aTR(42,1), aBL(2, 41), aBR(42, 41), aHL(2,21), aHR(42, 21), aVT(22,1), aVB(22, 41);
+        if(bLeft)
+            pVirDev->DrawLine( aTL,aBL );
+        if(bRight)
+            pVirDev->DrawLine( aTR,aBR );
+        if(bTop)
+            pVirDev->DrawLine( aTL,aTR );
+        if(bBot)
+            pVirDev->DrawLine( aBL,aBR );
+        if(bVer)
+            pVirDev->DrawLine( aVT,aVB );
+        if(bHor)
+            pVirDev->DrawLine( aHL,aHR );
+        mpTBCellBorder->SetItemOverlayImage( btnId, Image( pVirDev->GetBitmapEx(Point(0,0), aBmpSize) ) );
+    }
+
+    mpTBCellBorder->SetItemImage( btnId, maIMGCellBorder );
+}
 // namespace close
 
 }} // end of namespace ::sc::sidebar

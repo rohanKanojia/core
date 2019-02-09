@@ -50,13 +50,12 @@ namespace cppcanvas
             virtual void                             setTransformation( const ::basegfx::B2DHomMatrix& rMatrix ) override;
             virtual void                             setClip( const ::basegfx::B2DPolyPolygon& rClipPoly ) override;
             virtual void                             setClip() override;
-            virtual void                             setCompositeOp( CompositeOp aOp ) override;
+            virtual void                             setCompositeOp( sal_Int8 aOp ) override;
 
         protected:
             // for our clients
             // ===============
-            CanvasSharedPtr                                                      getCanvas() const {  return mpCanvas; }
-            css::uno::Reference< css::rendering::XGraphicDevice >                getGraphicDevice() const {  return mxGraphicDevice; }
+            const CanvasSharedPtr&                                               getCanvas() const {  return mpCanvas; }
             const css::rendering::RenderState&                                   getRenderState() const;
 
         private:

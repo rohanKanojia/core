@@ -17,34 +17,27 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <algorithm>
+
 #include <sfx2/objsh.hxx>
 
-#include "adiasync.hxx"
-#include "brdcst.hxx"
-#include "global.hxx"
-#include "document.hxx"
-#include "sc.hrc"
+#include <adiasync.hxx>
+#include <brdcst.hxx>
+#include <global.hxx>
+#include <document.hxx>
+#include <sc.hrc>
 #include <osl/diagnose.h>
 #include <osl/thread.h>
 
 ScAddInAsyncs theAddInAsyncTbl;
-static ScAddInAsync aSeekObj;
 
 extern "C" {
 void CALLTYPE ScAddInAsyncCallBack( double& nHandle, void* pData )
 {
     ScAddInAsync::CallBack( sal_uLong( nHandle ), pData );
 }
-}
-
-ScAddInAsync::ScAddInAsync() :
-    SvtBroadcaster(),
-    pDocs( nullptr ),
-    mpFuncData( nullptr ),
-    nHandle( 0 ),
-    meType( ParamType::NONE ),
-    bValid( false )
-{   // nur fuer aSeekObj !
 }
 
 ScAddInAsync::ScAddInAsync(sal_uLong nHandleP, LegacyFuncData* pFuncData, ScDocument* pDoc) :
@@ -55,46 +48,46 @@ ScAddInAsync::ScAddInAsync(sal_uLong nHandleP, LegacyFuncData* pFuncData, ScDocu
     meType(pFuncData->GetAsyncType()),
     bValid( false )
 {
-    pDocs = new ScAddInDocs();
+    pDocs.reset(new ScAddInDocs);
     pDocs->insert( pDoc );
-    theAddInAsyncTbl.insert( this );
+    theAddInAsyncTbl.emplace( this );
 }
 
 ScAddInAsync::~ScAddInAsync()
 {
-    // aSeekObj does not have that, handle 0 does not exist otherwise
-    if ( nHandle )
-    {
-        // in dTor because of theAddInAsyncTbl.DeleteAndDestroy in ScGlobal::Clear
-        mpFuncData->Unadvice( (double)nHandle );
-        if ( meType == ParamType::PTR_STRING && pStr )      // include type comparison because of union
-            delete pStr;
-        delete pDocs;
-    }
+    // in dTor because of theAddInAsyncTbl.DeleteAndDestroy in ScGlobal::Clear
+    mpFuncData->Unadvice( static_cast<double>(nHandle) );
+    if ( meType == ParamType::PTR_STRING && pStr )      // include type comparison because of union
+        delete pStr;
+    pDocs.reset();
 }
 
 ScAddInAsync* ScAddInAsync::Get( sal_uLong nHandleP )
 {
     ScAddInAsync* pRet = nullptr;
-    aSeekObj.nHandle = nHandleP;
-    ScAddInAsyncs::iterator it = theAddInAsyncTbl.find( &aSeekObj );
+    auto it = std::find_if(
+        theAddInAsyncTbl.begin(), theAddInAsyncTbl.end(),
+        [nHandleP](std::unique_ptr<ScAddInAsync> const & el)
+            { return el->nHandle == nHandleP; });
     if ( it != theAddInAsyncTbl.end() )
-        pRet = *it;
-    aSeekObj.nHandle = 0;
+        pRet = it->get();
     return pRet;
 }
 
 void ScAddInAsync::CallBack( sal_uLong nHandleP, void* pData )
 {
-    ScAddInAsync* p;
-    if ( (p = Get( nHandleP )) == nullptr )
+    auto asyncIt = std::find_if(
+        theAddInAsyncTbl.begin(), theAddInAsyncTbl.end(),
+        [nHandleP](std::unique_ptr<ScAddInAsync> const & el)
+            { return el->nHandle == nHandleP; });
+    if ( asyncIt == theAddInAsyncTbl.end() )
         return;
+    ScAddInAsync* p = asyncIt->get();
 
     if ( !p->HasListeners() )
     {
         // not in dTor because of theAddInAsyncTbl.DeleteAndDestroy in ScGlobal::Clear
-        theAddInAsyncTbl.erase( p );
-        delete p;
+        theAddInAsyncTbl.erase( asyncIt );
         return ;
     }
     switch ( p->meType )
@@ -116,33 +109,28 @@ void ScAddInAsync::CallBack( sal_uLong nHandleP, void* pData )
             return;
     }
     p->bValid = true;
-    p->Broadcast( ScHint(SC_HINT_DATACHANGED, ScAddress()) );
+    p->Broadcast( ScHint(SfxHintId::ScDataChanged, ScAddress()) );
 
-    for ( ScAddInDocs::iterator it = p->pDocs->begin(); it != p->pDocs->end(); ++it )
+    for ( ScDocument* pDoc : *p->pDocs )
     {
-        ScDocument* pDoc = *it;
         pDoc->TrackFormulas();
-        pDoc->GetDocumentShell()->Broadcast( SfxSimpleHint( FID_DATACHANGED ) );
+        pDoc->GetDocumentShell()->Broadcast( SfxHint( SfxHintId::ScDataChanged ) );
     }
 }
 
 void ScAddInAsync::RemoveDocument( ScDocument* pDocumentP )
 {
-    if ( !theAddInAsyncTbl.empty() )
-    {
-        for( ScAddInAsyncs::reverse_iterator iter1 = theAddInAsyncTbl.rbegin(); iter1 != theAddInAsyncTbl.rend(); ++iter1 )
-        {   // backwards because of pointer-movement in array
-            ScAddInAsync* pAsync = *iter1;
-            ScAddInDocs* p = pAsync->pDocs;
-            ScAddInDocs::iterator iter2 = p->find( pDocumentP );
-            if( iter2 != p->end() )
-            {
-                p->erase( iter2 );
-                if ( p->empty() )
-                {   // this AddIn is not used anymore
-                    theAddInAsyncTbl.erase( --(iter1.base()) );
-                    delete pAsync;
-                }
+    for( ScAddInAsyncs::reverse_iterator iter1 = theAddInAsyncTbl.rbegin(); iter1 != theAddInAsyncTbl.rend(); ++iter1 )
+    {   // backwards because of pointer-movement in array
+        ScAddInAsync* pAsync = iter1->get();
+        ScAddInDocs* p = pAsync->pDocs.get();
+        ScAddInDocs::iterator iter2 = p->find( pDocumentP );
+        if( iter2 != p->end() )
+        {
+            p->erase( iter2 );
+            if ( p->empty() )
+            {   // this AddIn is not used anymore
+                theAddInAsyncTbl.erase( --(iter1.base()) );
             }
         }
     }

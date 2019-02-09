@@ -19,31 +19,50 @@
 
 #include "ole2uno.hxx"
 
+#include <comphelper/windowserrorstring.hxx>
 #include <osl/thread.hxx>
 #include <sal/log.hxx>
 
 using namespace std;
 
-namespace ole_adapter
-{
-
 void o2u_attachCurrentThread()
 {
     static osl::ThreadData oleThreadData;
 
-    if ((sal_Bool)(sal_IntPtr)oleThreadData.getData() != sal_True)
+    if (!bool(reinterpret_cast<sal_IntPtr>(oleThreadData.getData())))
     {
-        HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
+        HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         if (!SUCCEEDED(hr))
         {   // FIXME: is it a problem that this ends up in STA currently?
             assert(RPC_E_CHANGED_MODE == hr);
-            SAL_INFO("extensions.olebridge",
-                    "CoInitializeEx fail: probably thread is in STA already?");
+            // Let's find out explicitly what apartment mode we are in.
+            SAL_WARN("extensions.olebridge", "CoInitializeEx failed"
+                     << (hr == RPC_E_CHANGED_MODE ? " (expectedly)" : "")
+                     << ": " << WindowsErrorStringFromHRESULT(hr));
+            APTTYPE nAptType;
+            APTTYPEQUALIFIER nAptTypeQualifier;
+            if (SUCCEEDED(CoGetApartmentType(&nAptType, &nAptTypeQualifier)))
+            {
+                SAL_WARN("extensions.olebridge",
+                         "  Thread is in a "
+                         << (nAptType == APTTYPE_STA ? OUString("single-threaded") :
+                             (nAptType == APTTYPE_MTA ? OUString("multi-threaded") :
+                              (nAptType == APTTYPE_NA ? OUString("neutral") :
+                               (nAptType == APTTYPE_MAINSTA ? OUString("main single-threaded") :
+                                ("unknown (") + OUString::number(nAptType) + ")"))))
+                         << " apartment"
+                         << (nAptTypeQualifier == APTTYPEQUALIFIER_NONE ? OUString() :
+                             (nAptTypeQualifier == APTTYPEQUALIFIER_IMPLICIT_MTA ? OUString(" (implicit)") :
+                              (nAptTypeQualifier == APTTYPEQUALIFIER_NA_ON_MTA ? OUString(" (on MTA)") :
+                               (nAptTypeQualifier == APTTYPEQUALIFIER_NA_ON_STA ? OUString(" (on STA)") :
+                                (nAptTypeQualifier == APTTYPEQUALIFIER_NA_ON_IMPLICIT_MTA ? OUString(" (on implicit MTA)") :
+                                 (nAptTypeQualifier == APTTYPEQUALIFIER_NA_ON_MAINSTA ? OUString(" (on main STA)") :
+                                  (" (with unknown qualifier (" + OUString::number(nAptTypeQualifier) + "))")))))))
+                         << ".");
+            }
         }
-        oleThreadData.setData((void*)sal_True);
+        oleThreadData.setData(reinterpret_cast<void*>(true));
     }
 }
-
-} // end namespace
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

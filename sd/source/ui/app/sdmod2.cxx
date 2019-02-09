@@ -19,13 +19,14 @@
 
 #include <editeng/eeitem.hxx>
 #include <editeng/flditem.hxx>
+#include <editeng/CustomPropertyField.hxx>
 #include <sfx2/printer.hxx>
+#include <sfx2/styfitem.hxx>
 #include <svl/inethist.hxx>
 #include <svl/poolitem.hxx>
 #include <svl/flagitem.hxx>
 #include <unotools/useroptions.hxx>
 #include <sfx2/bindings.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/request.hxx>
@@ -43,32 +44,33 @@
 
 #include <svx/sdr/contact/displayinfo.hxx>
 
-#include "sdmod.hxx"
-#include "app.hrc"
-#include "glob.hrc"
-#include "strings.hrc"
-#include "res_bmp.hrc"
-#include "ViewShell.hxx"
-#include "FrameView.hxx"
-#include "sdattr.hxx"
-#include "optsitem.hxx"
-#include "DrawDocShell.hxx"
-#include "drawdoc.hxx"
-#include "Outliner.hxx"
-#include "sdresid.hxx"
-#include "pres.hxx"
-#include "DrawViewShell.hxx"
-#include "OutlineViewShell.hxx"
-#include "OutlineView.hxx"
-#include "ViewShellBase.hxx"
-#include "sdpage.hxx"
-#include "sdxfer.hxx"
-#include "sdabstdlg.hxx"
+#include <sdmod.hxx>
+#include <app.hrc>
+#include <family.hrc>
+#include <strings.hrc>
+
+#include <bitmaps.hlst>
+#include <ViewShell.hxx>
+#include <FrameView.hxx>
+#include <sdattr.hxx>
+#include <optsitem.hxx>
+#include <DrawDocShell.hxx>
+#include <drawdoc.hxx>
+#include <Outliner.hxx>
+#include <sdresid.hxx>
+#include <pres.hxx>
+#include <DrawViewShell.hxx>
+#include <OutlineViewShell.hxx>
+#include <OutlineView.hxx>
+#include <ViewShellBase.hxx>
+#include <sdpage.hxx>
+#include <sdxfer.hxx>
+#include <sdabstdlg.hxx>
 #include <svl/intitem.hxx>
 
 /** retrieves the page that is currently painted. This will only be the master page
     if the current drawn view only shows the master page*/
-static SdPage* GetCurrentPage( sd::ViewShell* pViewSh, EditFieldInfo* pInfo, bool& bMasterView )
+static SdPage* GetCurrentPage( sd::ViewShell const * pViewSh, EditFieldInfo const * pInfo, bool& bMasterView )
 {
     if( !pInfo )
         return nullptr;
@@ -87,8 +89,8 @@ static SdPage* GetCurrentPage( sd::ViewShell* pViewSh, EditFieldInfo* pInfo, boo
 
     // first try to check if we are inside the outline view
     sd::OutlineView* pSdView = nullptr;
-    if( dynamic_cast<const sd::OutlineViewShell* >(pViewSh) !=  nullptr )
-        pSdView = static_cast<sd::OutlineView*> (static_cast<sd::OutlineViewShell*>(pViewSh)->GetView());
+    if( auto pOutlineViewShell = dynamic_cast<const sd::OutlineViewShell* >(pViewSh) )
+        pSdView = static_cast<sd::OutlineView*>(pOutlineViewShell->GetView());
 
     if (pSdView != nullptr && (pOutliner ==  &pSdView->GetOutliner()))
     {
@@ -104,7 +106,7 @@ static SdPage* GetCurrentPage( sd::ViewShell* pViewSh, EditFieldInfo* pInfo, boo
                 nPgNum++;
         }
 
-        pPage = pViewSh->GetDoc()->GetSdPage( (sal_uInt16)nPgNum, PK_STANDARD );
+        pPage = pViewSh->GetDoc()->GetSdPage( static_cast<sal_uInt16>(nPgNum), PageKind::Standard );
     }
     else
     {
@@ -126,13 +128,13 @@ static SdPage* GetCurrentPage( sd::ViewShell* pViewSh, EditFieldInfo* pInfo, boo
 
             if( pTextObj )
             {
-                pPage = dynamic_cast< SdPage* >( pTextObj->GetPage() );
+                pPage = dynamic_cast< SdPage* >( pTextObj->getSdrPageFromSdrObject() );
             }
         }
 
         if(pPage)
         {
-            bMasterView = pPage && pPage->IsMasterPage();
+            bMasterView = pPage->IsMasterPage();
         }
     }
 
@@ -142,7 +144,7 @@ static SdPage* GetCurrentPage( sd::ViewShell* pViewSh, EditFieldInfo* pInfo, boo
 /**
  * Link for CalcFieldValue of Outliners
  */
-IMPL_LINK_TYPED(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
+IMPL_LINK(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
 {
     if (!pInfo)
         return;
@@ -157,7 +159,7 @@ IMPL_LINK_TYPED(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
         const SdrTextObj* pTextObj = pSdrOutliner->GetTextObj();
 
         if( pTextObj )
-            pDoc = dynamic_cast< SdDrawDocument* >( pTextObj->GetModel() );
+            pDoc = dynamic_cast< SdDrawDocument* >( &pTextObj->getSdrModelFromSdrObject() );
 
         if( pDoc )
             pDocShell = pDoc->GetDocSh();
@@ -172,6 +174,8 @@ IMPL_LINK_TYPED(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
     const SvxAuthorField* pAuthorField = nullptr;
     const SvxURLField* pURLField = nullptr;
 
+    const editeng::CustomPropertyField* pCustomPropertyField = nullptr;
+
     if( (pDateField = dynamic_cast< const SvxDateField* >(pField)) != nullptr )
     {
         LanguageType eLang = pInfo->GetOutliner()->GetLanguage( pInfo->GetPara(), pInfo->GetPos() );
@@ -184,7 +188,7 @@ IMPL_LINK_TYPED(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
     }
     else if( (pExtFileField = dynamic_cast< const SvxExtFileField * >(pField)) != nullptr )
     {
-        if( pDocShell && (pExtFileField->GetType() != SVXFILETYPE_FIX) )
+        if( pDocShell && (pExtFileField->GetType() != SvxFileType::Fix) )
         {
             OUString aName;
             if( pDocShell->HasName() )
@@ -199,14 +203,14 @@ IMPL_LINK_TYPED(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
     }
     else if( (pAuthorField = dynamic_cast< const SvxAuthorField* >( pField )) != nullptr  )
     {
-        if( pAuthorField->GetType() != SVXAUTHORTYPE_FIX )
+        if( pAuthorField->GetType() != SvxAuthorType::Fix )
         {
             SvtUserOptions aUserOptions;
             SvxAuthorField aAuthorField(
                     aUserOptions.GetFirstName(), aUserOptions.GetLastName(), aUserOptions.GetID(),
                     pAuthorField->GetType(), pAuthorField->GetFormat() );
 
-            *(const_cast< SvxAuthorField* >(pAuthorField)) = aAuthorField;
+            *const_cast< SvxAuthorField* >(pAuthorField) = aAuthorField;
         }
         pInfo->SetRepresentation( pAuthorField->GetFormatted() );
 
@@ -232,7 +236,7 @@ IMPL_LINK_TYPED(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
         {
             int nPgNum;
 
-            if( (pPage->GetPageKind() == PK_HANDOUT) && pViewSh )
+            if( (pPage->GetPageKind() == PageKind::Handout) && pViewSh )
             {
                 nPgNum = pViewSh->GetPrintedHandoutPageNum();
             }
@@ -240,14 +244,13 @@ IMPL_LINK_TYPED(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
             {
                 nPgNum = (pPage->GetPageNum() - 1) / 2 + 1;
             }
-            aRepresentation = pDoc->CreatePageNumValue((sal_uInt16)nPgNum);
+            aRepresentation = pDoc->CreatePageNumValue(static_cast<sal_uInt16>(nPgNum));
         }
         else
-            aRepresentation = SdResId(STR_FIELD_PLACEHOLDER_NUMBER).toString();
+            aRepresentation = SdResId(STR_FIELD_PLACEHOLDER_NUMBER);
 
         pInfo->SetRepresentation( aRepresentation );
     }
-
     else if( dynamic_cast< const SvxPageTitleField*  >(pField) )
     {
         OUString aRepresentation(" ");
@@ -271,10 +274,10 @@ IMPL_LINK_TYPED(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
         }
         else
         {
-            DocumentType eDocType = pDoc ? pDoc->GetDocumentType() : DOCUMENT_TYPE_IMPRESS;
-            aRepresentation = ( ( eDocType == DOCUMENT_TYPE_IMPRESS )
-                                ? SdResId(STR_FIELD_PLACEHOLDER_SLIDENAME).toString()
-                                : SdResId(STR_FIELD_PLACEHOLDER_PAGENAME).toString() );
+            DocumentType eDocType = pDoc ? pDoc->GetDocumentType() : DocumentType::Impress;
+            aRepresentation = ( ( eDocType == DocumentType::Impress )
+                                ? SdResId(STR_FIELD_PLACEHOLDER_SLIDENAME)
+                                : SdResId(STR_FIELD_PLACEHOLDER_PAGENAME) );
         }
 
         pInfo->SetRepresentation( aRepresentation );
@@ -300,20 +303,20 @@ IMPL_LINK_TYPED(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
 
         if( !bMasterView )
         {
-            if( pPage && (pPage->GetPageKind() == PK_HANDOUT) && pViewSh )
+            if( pPage && (pPage->GetPageKind() == PageKind::Handout) && pViewSh )
             {
                 nPageCount = pViewSh->GetPrintedHandoutPageCount();
             }
             else if( pDoc )
             {
-                nPageCount = (sal_uInt16)pDoc->GetActiveSdPageCount();
+                nPageCount = pDoc->GetActiveSdPageCount();
             }
         }
 
         if( nPageCount > 0 )
             aRepresentation = pDoc->CreatePageNumValue(nPageCount);
         else
-            aRepresentation = SdResId(STR_FIELD_PLACEHOLDER_COUNT).toString();
+            aRepresentation = SdResId(STR_FIELD_PLACEHOLDER_COUNT);
 
         pInfo->SetRepresentation( aRepresentation );
     }
@@ -321,17 +324,17 @@ IMPL_LINK_TYPED(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
     {
         switch ( pURLField->GetFormat() )
         {
-            case SVXURLFORMAT_APPDEFAULT: //!!! adjustable at App???
-            case SVXURLFORMAT_REPR:
+            case SvxURLFormat::AppDefault: //!!! adjustable at App???
+            case SvxURLFormat::Repr:
                 pInfo->SetRepresentation( pURLField->GetRepresentation() );
                 break;
 
-            case SVXURLFORMAT_URL:
+            case SvxURLFormat::Url:
                 pInfo->SetRepresentation( pURLField->GetURL() );
                 break;
         }
 
-        OUString aURL = pURLField->GetURL();
+        const OUString& aURL = pURLField->GetURL();
 
         svtools::ColorConfig aConfig;
         svtools::ColorConfigEntry eEntry =
@@ -341,6 +344,24 @@ IMPL_LINK_TYPED(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
     else if ( dynamic_cast< const SdrMeasureField* >(pField))
     {
         pInfo->ClearFieldColor();
+    }
+    else if ((pCustomPropertyField = dynamic_cast<const editeng::CustomPropertyField*>(pField)) != nullptr)
+    {
+        try
+        {
+            if (SfxObjectShell::Current() && SfxObjectShell::Current()->IsLoadingFinished())
+            {
+                auto pNonConstCustomPropertyField = const_cast<editeng::CustomPropertyField*>(pCustomPropertyField);
+                OUString sCurrent = pNonConstCustomPropertyField->GetFormatted(SfxObjectShell::Current()->getDocProperties());
+                pInfo->SetRepresentation(sCurrent);
+            }
+            else
+                pInfo->SetRepresentation(pCustomPropertyField->GetCurrentPresentation());
+        }
+        catch (...)
+        {
+            pInfo->SetRepresentation(pCustomPropertyField->GetCurrentPresentation());
+        }
     }
     else
     {
@@ -359,11 +380,11 @@ IMPL_LINK_TYPED(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
             if( (pPage == nullptr) || bMasterView )
             {
                 if( bHeaderField )
-                    aRepresentation = SdResId(STR_FIELD_PLACEHOLDER_HEADER).toString();
+                    aRepresentation = SdResId(STR_FIELD_PLACEHOLDER_HEADER);
                 else if (bFooterField )
-                    aRepresentation = SdResId(STR_FIELD_PLACEHOLDER_FOOTER).toString();
+                    aRepresentation = SdResId(STR_FIELD_PLACEHOLDER_FOOTER);
                 else if (bDateTimeField )
-                    aRepresentation = SdResId(STR_FIELD_PLACEHOLDER_DATETIME).toString();
+                    aRepresentation = SdResId(STR_FIELD_PLACEHOLDER_DATETIME);
             }
             else
             {
@@ -385,10 +406,10 @@ IMPL_LINK_TYPED(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
                     }
                     else
                     {
-                        Date aDate( Date::SYSTEM );
-                        tools::Time aTime( tools::Time::SYSTEM );
+                        DateTime aDateTime( DateTime::SYSTEM );
                         LanguageType eLang = pInfo->GetOutliner()->GetLanguage( pInfo->GetPara(), pInfo->GetPos() );
-                        aRepresentation = SvxDateTimeField::GetFormatted( aDate, aTime, (SvxDateFormat)rSettings.meDateTimeFormat, *GetNumberFormatter(), eLang );
+                        aRepresentation = SvxDateTimeField::GetFormatted( aDateTime, aDateTime,
+                                              rSettings.meDateFormat, rSettings.meTimeFormat, *GetNumberFormatter(), eLang );
                     }
                 }
             }
@@ -407,16 +428,16 @@ IMPL_LINK_TYPED(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
 /**
  * virtual methods for option dialog
  */
-SfxItemSet*  SdModule::CreateItemSet( sal_uInt16 nSlot )
+std::unique_ptr<SfxItemSet> SdModule::CreateItemSet( sal_uInt16 nSlot )
 {
     ::sd::FrameView* pFrameView = nullptr;
     ::sd::DrawDocShell* pDocSh = dynamic_cast< ::sd::DrawDocShell *>( SfxObjectShell::Current() );
     SdDrawDocument* pDoc = nullptr;
 
     // Here we set the DocType of the option dialog (not document!)
-    DocumentType eDocType = DOCUMENT_TYPE_IMPRESS;
+    DocumentType eDocType = DocumentType::Impress;
     if( nSlot == SID_SD_GRAPHIC_OPTIONS )
-        eDocType = DOCUMENT_TYPE_DRAW;
+        eDocType = DocumentType::Draw;
 
     if (pDocSh)
     {
@@ -436,27 +457,18 @@ SfxItemSet*  SdModule::CreateItemSet( sal_uInt16 nSlot )
 
     // Pool has by default MapUnit Twips (Awgh!)
     SfxItemPool& rPool = GetPool();
-    rPool.SetDefaultMetric( SFX_MAPUNIT_100TH_MM );
+    rPool.SetDefaultMetric( MapUnit::Map100thMM );
 
-    SfxItemSet*  pRet = new SfxItemSet( rPool,
-                        SID_ATTR_METRIC, SID_ATTR_METRIC,
-                        SID_ATTR_DEFTABSTOP, SID_ATTR_DEFTABSTOP,
-
-                        ATTR_OPTIONS_LAYOUT, ATTR_OPTIONS_LAYOUT,
-                        ATTR_OPTIONS_CONTENTS, ATTR_OPTIONS_CONTENTS,
-                        ATTR_OPTIONS_MISC, ATTR_OPTIONS_MISC,
-
-                        ATTR_OPTIONS_SNAP, ATTR_OPTIONS_SNAP,
-
-                        ATTR_OPTIONS_SCALE_START, ATTR_OPTIONS_SCALE_END,
-
-                        ATTR_OPTIONS_PRINT, ATTR_OPTIONS_PRINT,
-
-                        SID_ATTR_GRID_OPTIONS, SID_ATTR_GRID_OPTIONS,
-                        0 );
+    auto pRet = std::make_unique<SfxItemSet>(
+        rPool,
+        svl::Items<
+            SID_ATTR_GRID_OPTIONS, SID_ATTR_GRID_OPTIONS,
+            SID_ATTR_METRIC, SID_ATTR_METRIC,
+            SID_ATTR_DEFTABSTOP, SID_ATTR_DEFTABSTOP,
+            ATTR_OPTIONS_LAYOUT, ATTR_OPTIONS_SCALE_END>{});
 
     // TP_OPTIONS_LAYOUT:
-    pRet->Put( SdOptionsLayoutItem( ATTR_OPTIONS_LAYOUT, pOptions, pFrameView ) );
+    pRet->Put( SdOptionsLayoutItem( pOptions, pFrameView ) );
 
     sal_uInt16 nDefTab = 0;
     if( pFrameView)
@@ -465,41 +477,38 @@ SfxItemSet*  SdModule::CreateItemSet( sal_uInt16 nSlot )
         nDefTab = pOptions->GetDefTab();
     pRet->Put( SfxUInt16Item( SID_ATTR_DEFTABSTOP, nDefTab ) );
 
-    FieldUnit nMetric = (FieldUnit)0xffff;
+    FieldUnit nMetric = FieldUnit(0xffff);
     if( pFrameView)
         nMetric = pDoc->GetUIUnit();
     else
-        nMetric = (FieldUnit)pOptions->GetMetric();
+        nMetric = static_cast<FieldUnit>(pOptions->GetMetric());
 
-    if( nMetric == (FieldUnit)0xffff )
+    if( nMetric == FieldUnit(0xffff) )
         nMetric = GetFieldUnit();
 
-    pRet->Put( SfxUInt16Item( SID_ATTR_METRIC, (sal_uInt16)nMetric ) );
-
-    // TP_OPTIONS_CONTENTS:
-    pRet->Put( SdOptionsContentsItem( ATTR_OPTIONS_CONTENTS, pOptions, pFrameView ) );
+    pRet->Put( SfxUInt16Item( SID_ATTR_METRIC, static_cast<sal_uInt16>(nMetric) ) );
 
     // TP_OPTIONS_MISC:
-    SdOptionsMiscItem aSdOptionsMiscItem( ATTR_OPTIONS_MISC, pOptions, pFrameView );
+    SdOptionsMiscItem aSdOptionsMiscItem( pOptions, pFrameView );
     if ( pFrameView )
     {
         aSdOptionsMiscItem.GetOptionsMisc().SetSummationOfParagraphs( pDoc->IsSummationOfParagraphs() );
         aSdOptionsMiscItem.GetOptionsMisc().SetPrinterIndependentLayout (
-            (sal_uInt16)pDoc->GetPrinterIndependentLayout());
+            static_cast<sal_uInt16>(pDoc->GetPrinterIndependentLayout()));
     }
     pRet->Put( aSdOptionsMiscItem );
 
     // TP_OPTIONS_SNAP:
-    pRet->Put( SdOptionsSnapItem( ATTR_OPTIONS_SNAP, pOptions, pFrameView ) );
+    pRet->Put( SdOptionsSnapItem( pOptions, pFrameView ) );
 
     // TP_SCALE:
-    sal_uInt32 nW = 10L;
-    sal_uInt32 nH = 10L;
+    sal_uInt32 nW = 10;
+    sal_uInt32 nH = 10;
     sal_Int32  nX;
     sal_Int32  nY;
     if( pDocSh )
     {
-        SdrPage* pPage = static_cast<SdrPage*>(pDoc->GetSdPage(0, PK_STANDARD));
+        SdrPage* pPage = static_cast<SdrPage*>(pDoc->GetSdPage(0, PageKind::Standard));
         Size aSize(pPage->GetSize());
         nW = aSize.Width();
         nH = aSize.Height();
@@ -523,10 +532,10 @@ SfxItemSet*  SdModule::CreateItemSet( sal_uInt16 nSlot )
     pRet->Put( SfxUInt32Item( ATTR_OPTIONS_SCALE_HEIGHT, nH ) );
 
     // TP_OPTIONS_PRINT:
-    pRet->Put( SdOptionsPrintItem( ATTR_OPTIONS_PRINT, pOptions ) );
+    pRet->Put( SdOptionsPrintItem( pOptions ) );
 
     // RID_SVXPAGE_GRID:
-    pRet->Put( SdOptionsGridItem( SID_ATTR_GRID_OPTIONS, pOptions ) );
+    pRet->Put( SdOptionsGridItem( pOptions ) );
 
     return pRet;
 }
@@ -540,9 +549,9 @@ void SdModule::ApplyItemSet( sal_uInt16 nSlot, const SfxItemSet& rSet )
     ::sd::DrawDocShell* pDocSh = dynamic_cast< ::sd::DrawDocShell *>( SfxObjectShell::Current() );
     SdDrawDocument* pDoc = nullptr;
     // Here we set the DocType of the option dialog (not document!)
-    DocumentType eDocType = DOCUMENT_TYPE_IMPRESS;
+    DocumentType eDocType = DocumentType::Impress;
     if( nSlot == SID_SD_GRAPHIC_OPTIONS )
-        eDocType = DOCUMENT_TYPE_DRAW;
+        eDocType = DocumentType::Draw;
 
     ::sd::ViewShell* pViewShell = nullptr;
 
@@ -625,10 +634,9 @@ void SdModule::ApplyItemSet( sal_uInt16 nSlot, const SfxItemSet& rSet )
     }
 
     SfxItemSet aPrintSet( GetPool(),
-                    SID_PRINTER_NOTFOUND_WARN,  SID_PRINTER_NOTFOUND_WARN,
+                    svl::Items<SID_PRINTER_NOTFOUND_WARN,  SID_PRINTER_NOTFOUND_WARN,
                     SID_PRINTER_CHANGESTODOC,   SID_PRINTER_CHANGESTODOC,
-                    ATTR_OPTIONS_PRINT,         ATTR_OPTIONS_PRINT,
-                    0 );
+                    ATTR_OPTIONS_PRINT,         ATTR_OPTIONS_PRINT>{} );
 
     // Print
     const SdOptionsPrintItem* pPrintItem = nullptr;
@@ -638,7 +646,7 @@ void SdModule::ApplyItemSet( sal_uInt16 nSlot, const SfxItemSet& rSet )
         pPrintItem->SetOptions( pOptions );
 
         // set PrintOptionsSet
-        SdOptionsPrintItem aPrintItem( ATTR_OPTIONS_PRINT, pOptions );
+        SdOptionsPrintItem aPrintItem( pOptions );
         SfxFlagItem aFlagItem( SID_PRINTER_CHANGESTODOC );
         SfxPrinterChangeFlags nFlags =
                 (aPrintItem.GetOptionsPrint().IsWarningSize() ? SfxPrinterChangeFlags::CHG_SIZE : SfxPrinterChangeFlags::NONE) |
@@ -666,11 +674,11 @@ void SdModule::ApplyItemSet( sal_uInt16 nSlot, const SfxItemSet& rSet )
             SdDrawDocument* pDocument = pDocSh->GetDoc();
             pDocument->SetDefaultTabulator( nDefTab );
 
-            ::sd::Outliner* pOutl = pDocument->GetOutliner( false );
+            SdOutliner* pOutl = pDocument->GetOutliner( false );
             if( pOutl )
                 pOutl->SetDefTab( nDefTab );
 
-            ::sd::Outliner* pInternalOutl = pDocument->GetInternalOutliner( false );
+            SdOutliner* pInternalOutl = pDocument->GetInternalOutliner( false );
             if( pInternalOutl )
                 pInternalOutl->SetDefTab( nDefTab );
         }
@@ -684,7 +692,7 @@ void SdModule::ApplyItemSet( sal_uInt16 nSlot, const SfxItemSet& rSet )
             SdrOutliner& rOutl = pDocument->GetDrawOutliner();
             nCntrl = rOutl.GetControlWord() &~ EEControlBits::ULSPACESUMMATION;
             rOutl.SetControlWord( nCntrl | nSum );
-            ::sd::Outliner* pOutl = pDocument->GetOutliner( false );
+            SdOutliner* pOutl = pDocument->GetOutliner( false );
             if( pOutl )
             {
                 nCntrl = pOutl->GetControlWord() &~ EEControlBits::ULSPACESUMMATION;
@@ -708,7 +716,7 @@ void SdModule::ApplyItemSet( sal_uInt16 nSlot, const SfxItemSet& rSet )
     // Only if also the document type matches...
     if( pDocSh && pDoc && eDocType == pDoc->GetDocumentType() )
     {
-        FieldUnit eUIUnit = (FieldUnit) pOptions->GetMetric();
+        FieldUnit eUIUnit = static_cast<FieldUnit>(pOptions->GetMetric());
         pDoc->SetUIUnit(eUIUnit);
 
         if (pViewShell)
@@ -730,73 +738,87 @@ void SdModule::ApplyItemSet( sal_uInt16 nSlot, const SfxItemSet& rSet )
         pViewShell->GetViewFrame()->GetBindings().InvalidateAll( true );
 }
 
-VclPtr<SfxTabPage> SdModule::CreateTabPage( sal_uInt16 nId, vcl::Window* pParent, const SfxItemSet& rSet )
+VclPtr<SfxTabPage> SdModule::CreateTabPage( sal_uInt16 nId, TabPageParent pParent, const SfxItemSet& rSet )
 {
     VclPtr<SfxTabPage> pRet;
     SfxAllItemSet aSet(*(rSet.GetPool()));
     SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
-    if( pFact )
+
+    switch(nId)
     {
-        switch(nId)
+        case SID_SD_TP_CONTENTS:
+        case SID_SI_TP_CONTENTS:
         {
-            case SID_SD_TP_CONTENTS:
-            case SID_SI_TP_CONTENTS:
-            {   ::CreateTabPage fnCreatePage = pFact->GetSdOptionsContentsTabPageCreatorFunc();
-                if( fnCreatePage )
-                    pRet = (*fnCreatePage)( pParent, &rSet );
-            }
-            break;
-            case SID_SD_TP_SNAP:
-            case SID_SI_TP_SNAP:
-            {   ::CreateTabPage fnCreatePage = pFact->GetSdOptionsSnapTabPageCreatorFunc();
-                if( fnCreatePage )
-                    pRet = (*fnCreatePage)( pParent, &rSet );
-            }
-            break;
-            case SID_SD_TP_PRINT:
-            case SID_SI_TP_PRINT:
-            {
-                ::CreateTabPage fnCreatePage = pFact->GetSdPrintOptionsTabPageCreatorFunc();
-                if( fnCreatePage )
-                {
-                    pRet = (*fnCreatePage)( pParent, &rSet );
-                    if(SID_SD_TP_PRINT == nId)
-                        aSet.Put (SfxUInt32Item(SID_SDMODE_FLAG,SD_DRAW_MODE));
-                    pRet->PageCreated(aSet);
-                }
-            }
-            break;
-            case SID_SI_TP_MISC:
-            case SID_SD_TP_MISC:
-            {
-                ::CreateTabPage fnCreatePage = pFact->GetSdOptionsMiscTabPageCreatorFunc();
-                if( fnCreatePage )
-                {
-                    pRet = (*fnCreatePage)( pParent, &rSet );
-                    if(SID_SD_TP_MISC == nId)
-                        aSet.Put (SfxUInt32Item(SID_SDMODE_FLAG,SD_DRAW_MODE));
-                    else
-                        aSet.Put (SfxUInt32Item(SID_SDMODE_FLAG,SD_IMPRESS_MODE));
-                    pRet->PageCreated(aSet);
-                }
-            }
-            break;
-            case RID_SVXPAGE_TEXTANIMATION :
-            {
-                SfxAbstractDialogFactory* pSfxFact = SfxAbstractDialogFactory::Create();
-                if ( pSfxFact )
-                {
-                    ::CreateTabPage fnCreatePage = pSfxFact->GetTabPageCreatorFunc( nId );
-                    if ( fnCreatePage )
-                        pRet = (*fnCreatePage)( pParent, &rSet );
-                }
-            }
-            break;
+            ::CreateTabPage fnCreatePage = pFact->GetSdOptionsContentsTabPageCreatorFunc();
+            if( fnCreatePage )
+                pRet = (*fnCreatePage)( pParent, &rSet );
         }
-        DBG_ASSERT( pRet, "SdModule::CreateTabPage(): no valid ID for TabPage!" );
+        break;
+        case SID_SD_TP_SNAP:
+        case SID_SI_TP_SNAP:
+        {
+            ::CreateTabPage fnCreatePage = pFact->GetSdOptionsSnapTabPageCreatorFunc();
+            if( fnCreatePage )
+                pRet = (*fnCreatePage)( pParent, &rSet );
+        }
+        break;
+        case SID_SD_TP_PRINT:
+        case SID_SI_TP_PRINT:
+        {
+            ::CreateTabPage fnCreatePage = pFact->GetSdPrintOptionsTabPageCreatorFunc();
+            if( fnCreatePage )
+            {
+                pRet = (*fnCreatePage)( pParent, &rSet );
+                if(SID_SD_TP_PRINT == nId)
+                    aSet.Put (SfxUInt32Item(SID_SDMODE_FLAG,SD_DRAW_MODE));
+                pRet->PageCreated(aSet);
+            }
+        }
+        break;
+        case SID_SI_TP_MISC:
+        case SID_SD_TP_MISC:
+        {
+            ::CreateTabPage fnCreatePage = pFact->GetSdOptionsMiscTabPageCreatorFunc();
+            if( fnCreatePage )
+            {
+                pRet = (*fnCreatePage)( pParent, &rSet );
+                if(SID_SD_TP_MISC == nId)
+                    aSet.Put (SfxUInt32Item(SID_SDMODE_FLAG,SD_DRAW_MODE));
+                else
+                    aSet.Put (SfxUInt32Item(SID_SDMODE_FLAG,SD_IMPRESS_MODE));
+                pRet->PageCreated(aSet);
+            }
+        }
+        break;
+        case RID_SVXPAGE_TEXTANIMATION :
+        {
+            SfxAbstractDialogFactory* pSfxFact = SfxAbstractDialogFactory::Create();
+            ::CreateTabPage fnCreatePage = pSfxFact->GetTabPageCreatorFunc( nId );
+            if ( fnCreatePage )
+                pRet = (*fnCreatePage)( pParent, &rSet );
+        }
+        break;
     }
+    DBG_ASSERT( pRet, "SdModule::CreateTabPage(): no valid ID for TabPage!" );
 
     return pRet;
+}
+
+std::unique_ptr<SfxStyleFamilies> SdModule::CreateStyleFamilies()
+{
+    std::unique_ptr<SfxStyleFamilies> pStyleFamilies(new SfxStyleFamilies);
+
+    pStyleFamilies->emplace_back(SfxStyleFamilyItem(SfxStyleFamily::Para,
+                                                    SdResId(STR_GRAPHICS_STYLE_FAMILY),
+                                                    Image(StockImage::Yes, BMP_STYLES_FAMILY_GRAPHICS),
+                                                    RID_GRAPHICSTYLEFAMILY, SD_MOD()->GetResLocale()));
+
+    pStyleFamilies->emplace_back(SfxStyleFamilyItem(SfxStyleFamily::Pseudo,
+                                                    SdResId(STR_PRESENTATIONS_STYLE_FAMILY),
+                                                    Image(StockImage::Yes, BMP_STYLES_FAMILY_PRESENTATIONS),
+                                                    RID_PRESENTATIONSTYLEFAMILY, SD_MOD()->GetResLocale()));
+
+    return pStyleFamilies;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

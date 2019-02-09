@@ -33,19 +33,19 @@ private:
     VclPtr<CheckBox>               m_pCbxLink;
     VclPtr<CheckBox>               m_pCbxMasters;
 
-    SfxMedium*              pMedium;
+    SfxMedium* const        pMedium;
     const SdDrawDocument*   mpDoc;
     const OUString&         rName;
 
     void                    Reset();
-    DECL_LINK_TYPED( SelectObjectHdl, SvTreeListBox*, void );
+    DECL_LINK( SelectObjectHdl, SvTreeListBox*, void );
 
 public:
                 SdInsertPagesObjsDlg( vcl::Window* pParent,
                                 const SdDrawDocument* pDoc,
                                 SfxMedium* pSfxMedium,
                                 const OUString& rFileName );
-                virtual ~SdInsertPagesObjsDlg();
+                virtual ~SdInsertPagesObjsDlg() override;
     virtual void dispose() override;
 
     /** returns the list

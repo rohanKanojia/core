@@ -19,9 +19,9 @@
 
 #include <uielement/uicommanddescription.hxx>
 
-#include "properties.h"
+#include <properties.h>
 
-#include "helper/mischelper.hxx"
+#include <helper/mischelper.hxx>
 
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -32,12 +32,13 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <unotools/configmgr.hxx>
 
 #include <vcl/mnemonic.hxx>
-#include <comphelper/sequence.hxx>
+#include <comphelper/propertysequence.hxx>
 
 #include <unordered_map>
 
@@ -46,47 +47,36 @@ using namespace com::sun::star::lang;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::configuration;
 using namespace com::sun::star::container;
-using namespace ::com::sun::star::frame;
 using namespace framework;
 
 namespace {
-
-static const char GENERIC_MODULE_NAME[]                     = "generic";
-static const char CONFIGURATION_ROOT_ACCESS[]               = "/org.openoffice.Office.UI.";
-static const char CONFIGURATION_CATEGORY_ELEMENT_ACCESS[]   = "/Commands/Categories";
-static const char CONFIGURATION_PROPERTY_NAME[]             = "Name";
 
 class ConfigurationAccess_UICategory : public ::cppu::WeakImplHelper<XNameAccess,XContainerListener>
 {
     osl::Mutex aMutex;
     public:
                                   ConfigurationAccess_UICategory( const OUString& aModuleName, const Reference< XNameAccess >& xGenericUICommands, const Reference< XComponentContext >& rxContext );
-        virtual                   ~ConfigurationAccess_UICategory();
+        virtual                   ~ConfigurationAccess_UICategory() override;
 
         // XNameAccess
-        virtual css::uno::Any SAL_CALL getByName( const OUString& aName )
-            throw (css::container::NoSuchElementException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL getByName( const OUString& aName ) override;
 
-        virtual css::uno::Sequence< OUString > SAL_CALL getElementNames()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getElementNames() override;
 
-        virtual sal_Bool SAL_CALL hasByName( const OUString& aName )
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL hasByName( const OUString& aName ) override;
 
         // XElementAccess
-        virtual css::uno::Type SAL_CALL getElementType()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Type SAL_CALL getElementType() override;
 
-        virtual sal_Bool SAL_CALL hasElements()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL hasElements() override;
 
         // container.XContainerListener
-        virtual void SAL_CALL     elementInserted( const ContainerEvent& aEvent ) throw(RuntimeException, std::exception) override;
-        virtual void SAL_CALL     elementRemoved ( const ContainerEvent& aEvent ) throw(RuntimeException, std::exception) override;
-        virtual void SAL_CALL     elementReplaced( const ContainerEvent& aEvent ) throw(RuntimeException, std::exception) override;
+        virtual void SAL_CALL     elementInserted( const ContainerEvent& aEvent ) override;
+        virtual void SAL_CALL     elementRemoved ( const ContainerEvent& aEvent ) override;
+        virtual void SAL_CALL     elementReplaced( const ContainerEvent& aEvent ) override;
 
         // lang.XEventListener
-        virtual void SAL_CALL disposing( const EventObject& aEvent ) throw(RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const EventObject& aEvent ) override;
 
     protected:
         Any                       getUINameFromID( const OUString& rId );
@@ -96,8 +86,7 @@ class ConfigurationAccess_UICategory : public ::cppu::WeakImplHelper<XNameAccess
 
     private:
         typedef std::unordered_map< OUString,
-                                    OUString,
-                                    OUStringHash > IdToInfoCache;
+                                    OUString > IdToInfoCache;
 
         void initializeConfigAccess();
 
@@ -115,15 +104,14 @@ class ConfigurationAccess_UICategory : public ::cppu::WeakImplHelper<XNameAccess
 //  XInterface, XTypeProvider
 
 ConfigurationAccess_UICategory::ConfigurationAccess_UICategory( const OUString& aModuleName, const Reference< XNameAccess >& rGenericUICategories, const Reference< XComponentContext >& rxContext ) :
-    m_aConfigCategoryAccess( CONFIGURATION_ROOT_ACCESS ),
-    m_aPropUIName( CONFIGURATION_PROPERTY_NAME ),
+    m_aConfigCategoryAccess( "/org.openoffice.Office.UI." ),
+    m_aPropUIName( "Name" ),
     m_xGenericUICategories( rGenericUICategories ),
     m_bConfigAccessInitialized( false ),
     m_bCacheFilled( false )
 {
     // Create configuration hierarchical access name
-    m_aConfigCategoryAccess += aModuleName;
-    m_aConfigCategoryAccess += CONFIGURATION_CATEGORY_ELEMENT_ACCESS;
+    m_aConfigCategoryAccess += aModuleName + "/Commands/Categories";
 
     m_xConfigProvider = theDefaultProvider::get( rxContext );
 }
@@ -139,7 +127,6 @@ ConfigurationAccess_UICategory::~ConfigurationAccess_UICategory()
 
 // XNameAccess
 Any SAL_CALL ConfigurationAccess_UICategory::getByName( const OUString& rId )
-throw ( NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
 {
     osl::MutexGuard g(aMutex);
     if ( !m_bConfigAccessInitialized )
@@ -159,29 +146,25 @@ throw ( NoSuchElementException, WrappedTargetException, RuntimeException, std::e
 }
 
 Sequence< OUString > SAL_CALL ConfigurationAccess_UICategory::getElementNames()
-throw ( RuntimeException, std::exception )
 {
     return getAllIds();
 }
 
 sal_Bool SAL_CALL ConfigurationAccess_UICategory::hasByName( const OUString& rId )
-throw (css::uno::RuntimeException, std::exception)
 {
     return getByName( rId ).hasValue();
 }
 
 // XElementAccess
 Type SAL_CALL ConfigurationAccess_UICategory::getElementType()
-throw ( RuntimeException, std::exception )
 {
-    return( cppu::UnoType<OUString>::get());
+    return cppu::UnoType<OUString>::get();
 }
 
 sal_Bool SAL_CALL ConfigurationAccess_UICategory::hasElements()
-throw ( RuntimeException, std::exception )
 {
     // There must be global categories!
-    return sal_True;
+    return true;
 }
 
 void ConfigurationAccess_UICategory::fillCache()
@@ -204,7 +187,7 @@ void ConfigurationAccess_UICategory::fillCache()
             {
                 xNameAccess->getByName( m_aPropUIName ) >>= aUIName;
 
-                m_aIdCache.insert( IdToInfoCache::value_type( aNameSeq[i], aUIName ));
+                m_aIdCache.emplace( aNameSeq[i], aUIName );
             }
         }
         catch ( const css::lang::WrappedTargetException& )
@@ -278,8 +261,6 @@ Sequence< OUString > ConfigurationAccess_UICategory::getAllIds()
 
     if ( m_xConfigAccess.is() )
     {
-        Reference< XNameAccess > xNameAccess;
-
         try
         {
             Sequence< OUString > aNameSeq = m_xConfigAccess->getElementNames();
@@ -313,14 +294,12 @@ Sequence< OUString > ConfigurationAccess_UICategory::getAllIds()
 
 void ConfigurationAccess_UICategory::initializeConfigAccess()
 {
-    Sequence< Any > aArgs( 1 );
-    PropertyValue   aPropValue;
-
     try
     {
-        aPropValue.Name  = "nodepath";
-        aPropValue.Value <<= m_aConfigCategoryAccess;
-        aArgs[0] <<= aPropValue;
+        Sequence<Any> aArgs(comphelper::InitAnyPropertySequence(
+        {
+            {"nodepath", Any(m_aConfigCategoryAccess)}
+        }));
 
         m_xConfigAccess.set( m_xConfigProvider->createInstanceWithArguments(
                     "com.sun.star.configuration.ConfigurationAccess", aArgs ),UNO_QUERY );
@@ -344,20 +323,20 @@ void ConfigurationAccess_UICategory::initializeConfigAccess()
 }
 
 // container.XContainerListener
-void SAL_CALL ConfigurationAccess_UICategory::elementInserted( const ContainerEvent& ) throw(RuntimeException, std::exception)
+void SAL_CALL ConfigurationAccess_UICategory::elementInserted( const ContainerEvent& )
 {
 }
 
-void SAL_CALL ConfigurationAccess_UICategory::elementRemoved ( const ContainerEvent& ) throw(RuntimeException, std::exception)
+void SAL_CALL ConfigurationAccess_UICategory::elementRemoved ( const ContainerEvent& )
 {
 }
 
-void SAL_CALL ConfigurationAccess_UICategory::elementReplaced( const ContainerEvent& ) throw(RuntimeException, std::exception)
+void SAL_CALL ConfigurationAccess_UICategory::elementReplaced( const ContainerEvent& )
 {
 }
 
 // lang.XEventListener
-void SAL_CALL ConfigurationAccess_UICategory::disposing( const EventObject& aEvent ) throw(RuntimeException, std::exception)
+void SAL_CALL ConfigurationAccess_UICategory::disposing( const EventObject& aEvent )
 {
     // SAFE
     // remove our reference to the config access
@@ -373,25 +352,20 @@ class UICategoryDescription :  public UICommandDescription
 {
 public:
     explicit UICategoryDescription( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
-    virtual ~UICategoryDescription();
 
-    virtual OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual OUString SAL_CALL getImplementationName() override
     {
         return OUString("com.sun.star.comp.framework.UICategoryDescription");
     }
 
-    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
     {
-        css::uno::Sequence< OUString > aSeq { "com.sun.star.ui.UICategoryDescription" };
-        return aSeq;
+        return {"com.sun.star.ui.UICategoryDescription"};
     }
 
 };
@@ -404,18 +378,13 @@ UICategoryDescription::UICategoryDescription( const Reference< XComponentContext
     m_xGenericUICommands = new ConfigurationAccess_UICategory( aGenericCategories, xEmpty, rxContext );
 
     // insert generic categories mappings
-    m_aModuleToCommandFileMap.insert( ModuleToCommandFileMap::value_type(
-        OUString(GENERIC_MODULE_NAME ), aGenericCategories ));
+    m_aModuleToCommandFileMap.emplace( OUString("generic"), aGenericCategories );
 
     UICommandsHashMap::iterator pCatIter = m_aUICommandsHashMap.find( aGenericCategories );
     if ( pCatIter != m_aUICommandsHashMap.end() )
         pCatIter->second = m_xGenericUICommands;
 
     impl_fillElements("ooSetupFactoryCmdCategoryConfigRef");
-}
-
-UICategoryDescription::~UICategoryDescription()
-{
 }
 
 struct Instance {
@@ -436,7 +405,7 @@ struct Singleton:
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_framework_UICategoryDescription_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)

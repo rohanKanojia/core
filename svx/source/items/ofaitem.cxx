@@ -18,16 +18,12 @@
  */
 
 
-#include "svx/ofaitem.hxx"
+#include <svx/ofaitem.hxx>
 
 OfaPtrItem::OfaPtrItem( sal_uInt16 _nWhich, void *_pPtr )
     : SfxPoolItem( _nWhich ), pPtr( _pPtr )
 {
 
-}
-OfaPtrItem::OfaPtrItem( const OfaPtrItem& rItem)
-    : SfxPoolItem( rItem.Which() ), pPtr( rItem.pPtr )
-{
 }
 
 bool OfaPtrItem::operator==( const SfxPoolItem& rItem) const

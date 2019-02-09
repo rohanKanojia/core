@@ -104,7 +104,7 @@ public class _XExtendedIndexEntrySupplier extends MultiMethodTest {
     }
 
     /*
-     * gets one phonetic canidate for the chinese local
+     * gets one phonetic candidate for the chinese local
      * is ok if 'yi' is returned as expected.
      */
     public void _getPhoneticCandidate() {
@@ -202,7 +202,7 @@ public class _XExtendedIndexEntrySupplier extends MultiMethodTest {
     /**
      * Helper class to handle the phonetic equivalence of unicode characters
      * This class delivers an amount of unicode characters and the equivalent phonetics
-     * for the "getPhoneticCandidate" test. Euivalents are only usable for zh,CN locale.
+     * for the "getPhoneticCandidate" test. Equivalents are only usable for zh,CN locale.
      */
     public static class UnicodeStringPair {
         static final int valCount = 78;

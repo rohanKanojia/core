@@ -18,14 +18,14 @@
  */
 
 #include "svddrgm1.hxx"
-#include "svdglob.hxx"
-#include "svx/svdstr.hrc"
+#include <svx/dialmgr.hxx>
+#include <svx/strings.hrc>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <editeng/eeitem.hxx>
-#include <svl/smplhint.hxx>
+#include <svl/hint.hxx>
 #include <svl/style.hxx>
 
 #include <sdr/contact/viewcontactofsdredgeobj.hxx>
@@ -47,22 +47,14 @@
 #include <svx/sxenditm.hxx>
 #include <svx/xpoly.hxx>
 #include <svx/xpool.hxx>
-
-
-SdrObjConnection::~SdrObjConnection()
-{
-}
+#include <o3tl/make_unique.hxx>
 
 void SdrObjConnection::ResetVars()
 {
     pObj=nullptr;
     nConId=0;
-    nXDist=0;
-    nYDist=0;
     bBestConn=true;
     bBestVertex=true;
-    bXDistOvr=false;
-    bYDistOvr=false;
     bAutoVertex=false;
     bAutoCorner=false;
 }
@@ -96,14 +88,14 @@ bool SdrObjConnection::TakeGluePoint(SdrGluePoint& rGP) const
     return bRet;
 }
 
-Point& SdrEdgeInfoRec::ImpGetLineVersatzPoint(SdrEdgeLineCode eLineCode)
+Point& SdrEdgeInfoRec::ImpGetLineOffsetPoint(SdrEdgeLineCode eLineCode)
 {
     switch (eLineCode) {
-        case OBJ1LINE2 : return aObj1Line2;
-        case OBJ1LINE3 : return aObj1Line3;
-        case OBJ2LINE2 : return aObj2Line2;
-        case OBJ2LINE3 : return aObj2Line3;
-        case MIDDLELINE: return aMiddleLine;
+        case SdrEdgeLineCode::Obj1Line2 : return aObj1Line2;
+        case SdrEdgeLineCode::Obj1Line3 : return aObj1Line3;
+        case SdrEdgeLineCode::Obj2Line2 : return aObj2Line2;
+        case SdrEdgeLineCode::Obj2Line3 : return aObj2Line3;
+        case SdrEdgeLineCode::MiddleLine: return aMiddleLine;
     } // switch
     return aMiddleLine;
 }
@@ -111,11 +103,11 @@ Point& SdrEdgeInfoRec::ImpGetLineVersatzPoint(SdrEdgeLineCode eLineCode)
 sal_uInt16 SdrEdgeInfoRec::ImpGetPolyIdx(SdrEdgeLineCode eLineCode, const XPolygon& rXP) const
 {
     switch (eLineCode) {
-        case OBJ1LINE2 : return 1;
-        case OBJ1LINE3 : return 2;
-        case OBJ2LINE2 : return rXP.GetPointCount()-3;
-        case OBJ2LINE3 : return rXP.GetPointCount()-4;
-        case MIDDLELINE: return nMiddleLine;
+        case SdrEdgeLineCode::Obj1Line2 : return 1;
+        case SdrEdgeLineCode::Obj1Line3 : return 2;
+        case SdrEdgeLineCode::Obj2Line2 : return rXP.GetPointCount()-3;
+        case SdrEdgeLineCode::Obj2Line3 : return rXP.GetPointCount()-4;
+        case SdrEdgeLineCode::MiddleLine: return nMiddleLine;
     } // switch
     return 0;
 }
@@ -124,7 +116,7 @@ bool SdrEdgeInfoRec::ImpIsHorzLine(SdrEdgeLineCode eLineCode, const XPolygon& rX
 {
     sal_uInt16 nIdx=ImpGetPolyIdx(eLineCode,rXP);
     bool bHorz=nAngle1==0 || nAngle1==18000;
-    if (eLineCode==OBJ2LINE2 || eLineCode==OBJ2LINE3) {
+    if (eLineCode==SdrEdgeLineCode::Obj2Line2 || eLineCode==SdrEdgeLineCode::Obj2Line3) {
         nIdx=rXP.GetPointCount()-nIdx;
         bHorz=nAngle2==0 || nAngle2==18000;
     }
@@ -132,39 +124,41 @@ bool SdrEdgeInfoRec::ImpIsHorzLine(SdrEdgeLineCode eLineCode, const XPolygon& rX
     return bHorz;
 }
 
-void SdrEdgeInfoRec::ImpSetLineVersatz(SdrEdgeLineCode eLineCode, const XPolygon& rXP, long nVal)
+void SdrEdgeInfoRec::ImpSetLineOffset(SdrEdgeLineCode eLineCode, const XPolygon& rXP, long nVal)
 {
-    Point& rPt=ImpGetLineVersatzPoint(eLineCode);
-    if (ImpIsHorzLine(eLineCode,rXP)) rPt.Y()=nVal;
-    else rPt.X()=nVal;
+    Point& rPt=ImpGetLineOffsetPoint(eLineCode);
+    if (ImpIsHorzLine(eLineCode,rXP)) rPt.setY(nVal );
+    else rPt.setX(nVal );
 }
 
-long SdrEdgeInfoRec::ImpGetLineVersatz(SdrEdgeLineCode eLineCode, const XPolygon& rXP) const
+long SdrEdgeInfoRec::ImpGetLineOffset(SdrEdgeLineCode eLineCode, const XPolygon& rXP) const
 {
-    const Point& rPt=ImpGetLineVersatzPoint(eLineCode);
-    if (ImpIsHorzLine(eLineCode,rXP)) return rPt.Y();
-    else return rPt.X();
+    const Point& rPt = const_cast<SdrEdgeInfoRec*>(this)->ImpGetLineOffsetPoint(eLineCode);
+    if (ImpIsHorzLine(eLineCode,rXP))
+        return rPt.Y();
+    else
+        return rPt.X();
 }
 
 
 // BaseProperties section
 
-sdr::properties::BaseProperties* SdrEdgeObj::CreateObjectSpecificProperties()
+std::unique_ptr<sdr::properties::BaseProperties> SdrEdgeObj::CreateObjectSpecificProperties()
 {
-    return new sdr::properties::ConnectorProperties(*this);
+    return o3tl::make_unique<sdr::properties::ConnectorProperties>(*this);
 }
 
 
 // DrawContact section
 
-sdr::contact::ViewContact* SdrEdgeObj::CreateObjectSpecificViewContact()
+std::unique_ptr<sdr::contact::ViewContact> SdrEdgeObj::CreateObjectSpecificViewContact()
 {
-    return new sdr::contact::ViewContactOfSdrEdgeObj(*this);
+    return o3tl::make_unique<sdr::contact::ViewContactOfSdrEdgeObj>(*this);
 }
 
 
-SdrEdgeObj::SdrEdgeObj()
-:   SdrTextObj(),
+SdrEdgeObj::SdrEdgeObj(SdrModel& rSdrModel)
+:   SdrTextObj(rSdrModel),
     nNotifyingCount(0),
     bEdgeTrackDirty(false),
     bEdgeTrackUserDefined(false),
@@ -175,81 +169,93 @@ SdrEdgeObj::SdrEdgeObj()
 {
     bClosedObj=false;
     bIsEdge=true;
-    pEdgeTrack=new XPolygon;
-
+    pEdgeTrack.reset(new XPolygon);
 }
 
 SdrEdgeObj::~SdrEdgeObj()
 {
-    DisconnectFromNode(true);
-    DisconnectFromNode(false);
-    delete pEdgeTrack;
+    SdrEdgeObj::DisconnectFromNode(true);
+    SdrEdgeObj::DisconnectFromNode(false);
+}
+
+void SdrEdgeObj::handlePageChange(SdrPage* pOldPage, SdrPage* pNewPage)
+{
+    // call parent
+    SdrTextObj::handlePageChange(pOldPage, pNewPage);
+
+    if(nullptr != GetConnection(true).GetObject() || nullptr != GetConnection(false).GetObject())
+    {
+        // check broadcasters; when we are not inserted we do not need broadcasters
+        // TTTT not yet added, but keep hint to do this here
+        // mpCon1->ownerPageChange();
+        // mpCon2->ownerPageChange();
+    }
 }
 
 void SdrEdgeObj::ImpSetAttrToEdgeInfo()
 {
     const SfxItemSet& rSet = GetObjectItemSet();
-    SdrEdgeKind eKind = static_cast<const SdrEdgeKindItem&>(rSet.Get(SDRATTR_EDGEKIND)).GetValue();
-    sal_Int32 nVal1 = static_cast<const SdrMetricItem&>(rSet.Get(SDRATTR_EDGELINE1DELTA)).GetValue();
-    sal_Int32 nVal2 = static_cast<const SdrMetricItem&>(rSet.Get(SDRATTR_EDGELINE2DELTA)).GetValue();
-    sal_Int32 nVal3 = static_cast<const SdrMetricItem&>(rSet.Get(SDRATTR_EDGELINE3DELTA)).GetValue();
+    SdrEdgeKind eKind = rSet.Get(SDRATTR_EDGEKIND).GetValue();
+    sal_Int32 nVal1 = rSet.Get(SDRATTR_EDGELINE1DELTA).GetValue();
+    sal_Int32 nVal2 = rSet.Get(SDRATTR_EDGELINE2DELTA).GetValue();
+    sal_Int32 nVal3 = rSet.Get(SDRATTR_EDGELINE3DELTA).GetValue();
 
-    if(eKind == SDREDGE_ORTHOLINES || eKind == SDREDGE_BEZIER)
+    if(eKind == SdrEdgeKind::OrthoLines || eKind == SdrEdgeKind::Bezier)
     {
         sal_Int32 nVals[3] = { nVal1, nVal2, nVal3 };
         sal_uInt16 n = 0;
 
         if(aEdgeInfo.nObj1Lines >= 2 && n < 3)
         {
-            aEdgeInfo.ImpSetLineVersatz(OBJ1LINE2, *pEdgeTrack, nVals[n]);
+            aEdgeInfo.ImpSetLineOffset(SdrEdgeLineCode::Obj1Line2, *pEdgeTrack, nVals[n]);
             n++;
         }
 
         if(aEdgeInfo.nObj1Lines >= 3 && n < 3)
         {
-            aEdgeInfo.ImpSetLineVersatz(OBJ1LINE3, *pEdgeTrack, nVals[n]);
+            aEdgeInfo.ImpSetLineOffset(SdrEdgeLineCode::Obj1Line3, *pEdgeTrack, nVals[n]);
             n++;
         }
 
         if(aEdgeInfo.nMiddleLine != 0xFFFF && n < 3)
         {
-            aEdgeInfo.ImpSetLineVersatz(MIDDLELINE, *pEdgeTrack, nVals[n]);
+            aEdgeInfo.ImpSetLineOffset(SdrEdgeLineCode::MiddleLine, *pEdgeTrack, nVals[n]);
             n++;
         }
 
         if(aEdgeInfo.nObj2Lines >= 3 && n < 3)
         {
-            aEdgeInfo.ImpSetLineVersatz(OBJ2LINE3, *pEdgeTrack, nVals[n]);
+            aEdgeInfo.ImpSetLineOffset(SdrEdgeLineCode::Obj2Line3, *pEdgeTrack, nVals[n]);
             n++;
         }
 
         if(aEdgeInfo.nObj2Lines >= 2 && n < 3)
         {
-            aEdgeInfo.ImpSetLineVersatz(OBJ2LINE2, *pEdgeTrack, nVals[n]);
+            aEdgeInfo.ImpSetLineOffset(SdrEdgeLineCode::Obj2Line2, *pEdgeTrack, nVals[n]);
             n++;
         }
     }
-    else if(eKind == SDREDGE_THREELINES)
+    else if(eKind == SdrEdgeKind::ThreeLines)
     {
         bool bHor1 = aEdgeInfo.nAngle1 == 0 || aEdgeInfo.nAngle1 == 18000;
         bool bHor2 = aEdgeInfo.nAngle2 == 0 || aEdgeInfo.nAngle2 == 18000;
 
         if(bHor1)
         {
-            aEdgeInfo.aObj1Line2.X() = nVal1;
+            aEdgeInfo.aObj1Line2.setX( nVal1 );
         }
         else
         {
-            aEdgeInfo.aObj1Line2.Y() = nVal1;
+            aEdgeInfo.aObj1Line2.setY( nVal1 );
         }
 
         if(bHor2)
         {
-            aEdgeInfo.aObj2Line2.X() = nVal2;
+            aEdgeInfo.aObj2Line2.setX( nVal2 );
         }
         else
         {
-            aEdgeInfo.aObj2Line2.Y() = nVal2;
+            aEdgeInfo.aObj2Line2.setY( nVal2 );
         }
     }
 
@@ -259,47 +265,47 @@ void SdrEdgeObj::ImpSetAttrToEdgeInfo()
 void SdrEdgeObj::ImpSetEdgeInfoToAttr()
 {
     const SfxItemSet& rSet = GetObjectItemSet();
-    SdrEdgeKind eKind = static_cast<const SdrEdgeKindItem&>(rSet.Get(SDRATTR_EDGEKIND)).GetValue();
-    sal_Int32 nValAnz = static_cast<const SdrEdgeLineDeltaCountItem&>(rSet.Get(SDRATTR_EDGELINEDELTAANZ)).GetValue();
-    sal_Int32 nVal1 = static_cast<const SdrMetricItem&>(rSet.Get(SDRATTR_EDGELINE1DELTA)).GetValue();
-    sal_Int32 nVal2 = static_cast<const SdrMetricItem&>(rSet.Get(SDRATTR_EDGELINE2DELTA)).GetValue();
-    sal_Int32 nVal3 = static_cast<const SdrMetricItem&>(rSet.Get(SDRATTR_EDGELINE3DELTA)).GetValue();
+    SdrEdgeKind eKind = rSet.Get(SDRATTR_EDGEKIND).GetValue();
+    sal_Int32 nValAnz = rSet.Get(SDRATTR_EDGELINEDELTACOUNT).GetValue();
+    sal_Int32 nVal1 = rSet.Get(SDRATTR_EDGELINE1DELTA).GetValue();
+    sal_Int32 nVal2 = rSet.Get(SDRATTR_EDGELINE2DELTA).GetValue();
+    sal_Int32 nVal3 = rSet.Get(SDRATTR_EDGELINE3DELTA).GetValue();
     sal_Int32 nVals[3] = { nVal1, nVal2, nVal3 };
     sal_uInt16 n = 0;
 
-    if(eKind == SDREDGE_ORTHOLINES || eKind == SDREDGE_BEZIER)
+    if(eKind == SdrEdgeKind::OrthoLines || eKind == SdrEdgeKind::Bezier)
     {
         if(aEdgeInfo.nObj1Lines >= 2 && n < 3)
         {
-            nVals[n] = aEdgeInfo.ImpGetLineVersatz(OBJ1LINE2, *pEdgeTrack);
+            nVals[n] = aEdgeInfo.ImpGetLineOffset(SdrEdgeLineCode::Obj1Line2, *pEdgeTrack);
             n++;
         }
 
         if(aEdgeInfo.nObj1Lines >= 3 && n < 3)
         {
-            nVals[n] = aEdgeInfo.ImpGetLineVersatz(OBJ1LINE3, *pEdgeTrack);
+            nVals[n] = aEdgeInfo.ImpGetLineOffset(SdrEdgeLineCode::Obj1Line3, *pEdgeTrack);
             n++;
         }
 
         if(aEdgeInfo.nMiddleLine != 0xFFFF && n < 3)
         {
-            nVals[n] = aEdgeInfo.ImpGetLineVersatz(MIDDLELINE, *pEdgeTrack);
+            nVals[n] = aEdgeInfo.ImpGetLineOffset(SdrEdgeLineCode::MiddleLine, *pEdgeTrack);
             n++;
         }
 
         if(aEdgeInfo.nObj2Lines >= 3 && n < 3)
         {
-            nVals[n] = aEdgeInfo.ImpGetLineVersatz(OBJ2LINE3, *pEdgeTrack);
+            nVals[n] = aEdgeInfo.ImpGetLineOffset(SdrEdgeLineCode::Obj2Line3, *pEdgeTrack);
             n++;
         }
 
         if(aEdgeInfo.nObj2Lines >= 2 && n < 3)
         {
-            nVals[n] = aEdgeInfo.ImpGetLineVersatz(OBJ2LINE2, *pEdgeTrack);
+            nVals[n] = aEdgeInfo.ImpGetLineOffset(SdrEdgeLineCode::Obj2Line2, *pEdgeTrack);
             n++;
         }
     }
-    else if(eKind == SDREDGE_THREELINES)
+    else if(eKind == SdrEdgeKind::ThreeLines)
     {
         bool bHor1 = aEdgeInfo.nAngle1 == 0 || aEdgeInfo.nAngle1 == 18000;
         bool bHor2 = aEdgeInfo.nAngle2 == 0 || aEdgeInfo.nAngle2 == 18000;
@@ -358,7 +364,6 @@ void SdrEdgeObj::TakeObjInfo(SdrObjTransformInfoRec& rInfo) const
     rInfo.bMirror45Allowed = true;
     rInfo.bMirror90Allowed = true;
     rInfo.bTransparenceAllowed = false;
-    rInfo.bGradientAllowed = false;
     rInfo.bShearAllowed = true;
     rInfo.bEdgeRadiusAllowed = false;
     bool bCanConv=!HasText() || ImpCanConvTextToCurve();
@@ -372,7 +377,7 @@ sal_uInt16 SdrEdgeObj::GetObjIdentifier() const
     return sal_uInt16(OBJ_EDGE);
 }
 
-const Rectangle& SdrEdgeObj::GetCurrentBoundRect() const
+const tools::Rectangle& SdrEdgeObj::GetCurrentBoundRect() const
 {
     if(bEdgeTrackDirty)
     {
@@ -382,7 +387,7 @@ const Rectangle& SdrEdgeObj::GetCurrentBoundRect() const
     return SdrTextObj::GetCurrentBoundRect();
 }
 
-const Rectangle& SdrEdgeObj::GetSnapRect() const
+const tools::Rectangle& SdrEdgeObj::GetSnapRect() const
 {
     if(bEdgeTrackDirty)
     {
@@ -397,7 +402,7 @@ void SdrEdgeObj::RecalcSnapRect()
     maSnapRect=pEdgeTrack->GetBoundRect();
 }
 
-void SdrEdgeObj::TakeUnrotatedSnapRect(Rectangle& rRect) const
+void SdrEdgeObj::TakeUnrotatedSnapRect(tools::Rectangle& rRect) const
 {
     rRect=GetSnapRect();
 }
@@ -423,8 +428,8 @@ SdrGluePoint SdrEdgeObj::GetVertexGluePoint(sal_uInt16 nNum) const
                 Point aPt1((*pEdgeTrack)[nPointCount/2-1]);
                 Point aPt2((*pEdgeTrack)[nPointCount/2]);
                 aPt1+=aPt2;
-                aPt1.X()/=2;
-                aPt1.Y()/=2;
+                aPt1.setX( aPt1.X() / 2 );
+                aPt1.setY( aPt1.Y() / 2 );
                 aPt=aPt1;
             }
         }
@@ -476,8 +481,14 @@ void SdrEdgeObj::DisconnectFromNode(bool bTail1)
 
 SdrObject* SdrEdgeObj::GetConnectedNode(bool bTail1) const
 {
-    SdrObject* pObj=GetConnection(bTail1).pObj;
-    if (pObj!=nullptr && (pObj->GetPage()!=pPage || !pObj->IsInserted())) pObj=nullptr;
+    SdrObject* pObj(GetConnection(bTail1).pObj);
+
+    if(nullptr != pObj
+        && (pObj->getSdrPageFromSdrObject() != getSdrPageFromSdrObject() || !pObj->IsInserted()))
+    {
+        pObj = nullptr;
+    }
+
     return pObj;
 }
 
@@ -486,7 +497,9 @@ bool SdrEdgeObj::CheckNodeConnection(bool bTail1) const
     bool bRet = false;
     const SdrObjConnection& rCon=GetConnection(bTail1);
     sal_uInt16 nPointCount=pEdgeTrack->GetPointCount();
-    if (rCon.pObj!=nullptr && rCon.pObj->GetPage()==pPage && nPointCount!=0) {
+
+    if(nullptr != rCon.pObj && rCon.pObj->getSdrPageFromSdrObject() == getSdrPageFromSdrObject() && 0 != nPointCount)
+    {
         const SdrGluePointList* pGPL=rCon.pObj->GetGluePointList();
         sal_uInt16 nConAnz=pGPL==nullptr ? 0 : pGPL->GetCount();
         sal_uInt16 nGesAnz=nConAnz+8;
@@ -525,13 +538,14 @@ void SdrEdgeObj::ImpSetTailPoint(bool bTail1, const Point& rPt)
 
 void SdrEdgeObj::ImpDirtyEdgeTrack()
 {
-    if ( !bEdgeTrackUserDefined || !(GetModel() && GetModel()->isLocked()) )
+    if ( !bEdgeTrackUserDefined || !getSdrModelFromSdrObject().isLocked() )
         bEdgeTrackDirty = true;
 }
 
 void SdrEdgeObj::ImpUndirtyEdgeTrack()
 {
-    if (bEdgeTrackDirty && (GetModel() && GetModel()->isLocked()) ) {
+    if (bEdgeTrackDirty && getSdrModelFromSdrObject().isLocked())
+    {
         ImpRecalcEdgeTrack();
     }
 }
@@ -545,14 +559,14 @@ void SdrEdgeObj::ImpRecalcEdgeTrack()
     }
 
     // #i120437# also not when model locked during import, but remember
-    if(!GetModel() || GetModel()->isLocked())
+    if(getSdrModelFromSdrObject().isLocked())
     {
         mbSuppressed = true;
         return;
     }
 
     // #i110649#
-    if(IsBoundRectCalculationRunning())
+    if(mbBoundRectCalculationRunning)
     {
         // This object is involved into another ImpRecalcEdgeTrack() call
         // from another SdrEdgeObj. Do not calculate again to avoid loop.
@@ -576,7 +590,7 @@ void SdrEdgeObj::ImpRecalcEdgeTrack()
             mbSuppressed = false;
         }
 
-        Rectangle aBoundRect0; if (pUserCall!=nullptr) aBoundRect0=GetCurrentBoundRect();
+        tools::Rectangle aBoundRect0; if (pUserCall!=nullptr) aBoundRect0=GetCurrentBoundRect();
         SetRectsDirty();
         *pEdgeTrack=ImpCalcEdgeTrack(*pEdgeTrack,aCon1,aCon2,&aEdgeInfo);
         ImpSetEdgeInfoToAttr(); // copy values from aEdgeInfo into the pool
@@ -585,16 +599,16 @@ void SdrEdgeObj::ImpRecalcEdgeTrack()
         // Only redraw here, no object change
         ActionChanged();
 
-        SendUserCall(SDRUSERCALL_RESIZE,aBoundRect0);
+        SendUserCall(SdrUserCallType::Resize,aBoundRect0);
 
         mbBoundRectCalculationRunning = false;
     }
 }
 
-SdrEscapeDirection SdrEdgeObj::ImpCalcEscAngle(SdrObject* pObj, const Point& rPt)
+SdrEscapeDirection SdrEdgeObj::ImpCalcEscAngle(SdrObject const * pObj, const Point& rPt)
 {
     if (pObj==nullptr) return SdrEscapeDirection::ALL;
-    Rectangle aR(pObj->GetSnapRect());
+    tools::Rectangle aR(pObj->GetSnapRect());
     long dxl=rPt.X()-aR.Left();
     long dyo=rPt.Y()-aR.Top();
     long dxr=aR.Right()-rPt.X();
@@ -629,55 +643,55 @@ SdrEscapeDirection SdrEdgeObj::ImpCalcEscAngle(SdrObject* pObj, const Point& rPt
     }
 }
 
-XPolygon SdrEdgeObj::ImpCalcObjToCenter(const Point& rStPt, long nEscAngle, const Rectangle& rRect, const Point& rMeeting)
+XPolygon SdrEdgeObj::ImpCalcObjToCenter(const Point& rStPt, long nEscAngle, const tools::Rectangle& rRect, const Point& rMeeting)
 {
     XPolygon aXP;
-    aXP.Insert(XPOLY_APPEND,rStPt,XPOLY_NORMAL);
+    aXP.Insert(XPOLY_APPEND,rStPt,PolyFlags::Normal);
     bool bRts=nEscAngle==0;
     bool bObn=nEscAngle==9000;
     bool bLks=nEscAngle==18000;
     bool bUnt=nEscAngle==27000;
 
     Point aP1(rStPt); // mandatory difference first,...
-    if (bLks) aP1.X()=rRect.Left();
-    if (bRts) aP1.X()=rRect.Right();
-    if (bObn) aP1.Y()=rRect.Top();
-    if (bUnt) aP1.Y()=rRect.Bottom();
+    if (bLks) aP1.setX(rRect.Left() );
+    if (bRts) aP1.setX(rRect.Right() );
+    if (bObn) aP1.setY(rRect.Top() );
+    if (bUnt) aP1.setY(rRect.Bottom() );
 
     Point aP2(aP1); // ...now increase to Meeting height, if necessary
-    if (bLks && rMeeting.X()<=aP2.X()) aP2.X()=rMeeting.X();
-    if (bRts && rMeeting.X()>=aP2.X()) aP2.X()=rMeeting.X();
-    if (bObn && rMeeting.Y()<=aP2.Y()) aP2.Y()=rMeeting.Y();
-    if (bUnt && rMeeting.Y()>=aP2.Y()) aP2.Y()=rMeeting.Y();
-    aXP.Insert(XPOLY_APPEND,aP2,XPOLY_NORMAL);
+    if (bLks && rMeeting.X()<=aP2.X()) aP2.setX(rMeeting.X() );
+    if (bRts && rMeeting.X()>=aP2.X()) aP2.setX(rMeeting.X() );
+    if (bObn && rMeeting.Y()<=aP2.Y()) aP2.setY(rMeeting.Y() );
+    if (bUnt && rMeeting.Y()>=aP2.Y()) aP2.setY(rMeeting.Y() );
+    aXP.Insert(XPOLY_APPEND,aP2,PolyFlags::Normal);
 
     Point aP3(aP2);
     if ((bLks && rMeeting.X()>aP2.X()) || (bRts && rMeeting.X()<aP2.X())) { // around
         if (rMeeting.Y()<aP2.Y()) {
-            aP3.Y()=rRect.Top();
-            if (rMeeting.Y()<aP3.Y()) aP3.Y()=rMeeting.Y();
+            aP3.setY(rRect.Top() );
+            if (rMeeting.Y()<aP3.Y()) aP3.setY(rMeeting.Y() );
         } else {
-            aP3.Y()=rRect.Bottom();
-            if (rMeeting.Y()>aP3.Y()) aP3.Y()=rMeeting.Y();
+            aP3.setY(rRect.Bottom() );
+            if (rMeeting.Y()>aP3.Y()) aP3.setY(rMeeting.Y() );
         }
-        aXP.Insert(XPOLY_APPEND,aP3,XPOLY_NORMAL);
+        aXP.Insert(XPOLY_APPEND,aP3,PolyFlags::Normal);
         if (aP3.Y()!=rMeeting.Y()) {
-            aP3.X()=rMeeting.X();
-            aXP.Insert(XPOLY_APPEND,aP3,XPOLY_NORMAL);
+            aP3.setX(rMeeting.X() );
+            aXP.Insert(XPOLY_APPEND,aP3,PolyFlags::Normal);
         }
     }
     if ((bObn && rMeeting.Y()>aP2.Y()) || (bUnt && rMeeting.Y()<aP2.Y())) { // around
         if (rMeeting.X()<aP2.X()) {
-            aP3.X()=rRect.Left();
-            if (rMeeting.X()<aP3.X()) aP3.X()=rMeeting.X();
+            aP3.setX(rRect.Left() );
+            if (rMeeting.X()<aP3.X()) aP3.setX(rMeeting.X() );
         } else {
-            aP3.X()=rRect.Right();
-            if (rMeeting.X()>aP3.X()) aP3.X()=rMeeting.X();
+            aP3.setX(rRect.Right() );
+            if (rMeeting.X()>aP3.X()) aP3.setX(rMeeting.X() );
         }
-        aXP.Insert(XPOLY_APPEND,aP3,XPOLY_NORMAL);
+        aXP.Insert(XPOLY_APPEND,aP3,PolyFlags::Normal);
         if (aP3.X()!=rMeeting.X()) {
-            aP3.Y()=rMeeting.Y();
-            aXP.Insert(XPOLY_APPEND,aP3,XPOLY_NORMAL);
+            aP3.setY(rMeeting.Y() );
+            aXP.Insert(XPOLY_APPEND,aP3,PolyFlags::Normal);
         }
     }
 #ifdef DBG_UTIL
@@ -693,10 +707,10 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const XPolygon& rTrack0, SdrObjConnection&
     Point aPt1,aPt2;
     SdrGluePoint aGP1,aGP2;
     SdrEscapeDirection nEsc1=SdrEscapeDirection::ALL,nEsc2=SdrEscapeDirection::ALL;
-    Rectangle aBoundRect1;
-    Rectangle aBoundRect2;
-    Rectangle aBewareRect1;
-    Rectangle aBewareRect2;
+    tools::Rectangle aBoundRect1;
+    tools::Rectangle aBoundRect2;
+    tools::Rectangle aBewareRect1;
+    tools::Rectangle aBewareRect2;
     // first, get the old corner points
     if (rTrack0.GetPointCount()!=0) {
         aPt1=rTrack0[0];
@@ -711,12 +725,12 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const XPolygon& rTrack0, SdrObjConnection&
     }
 
     // #i54102# To allow interactive preview, do also if not inserted
-    bool bCon1=rCon1.pObj!=nullptr && rCon1.pObj->GetPage()==pPage;
-    bool bCon2=rCon2.pObj!=nullptr && rCon2.pObj->GetPage()==pPage;
-
+    const bool bCon1(nullptr != rCon1.pObj && rCon1.pObj->getSdrPageFromSdrObject() == getSdrPageFromSdrObject());
+    const bool bCon2(nullptr != rCon2.pObj && rCon2.pObj->getSdrPageFromSdrObject() == getSdrPageFromSdrObject());
     const SfxItemSet& rSet = GetObjectItemSet();
 
-    if (bCon1) {
+    if (bCon1)
+    {
         if (rCon1.pObj==static_cast<SdrObject const *>(this))
         {
             // check, just in case
@@ -726,44 +740,50 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const XPolygon& rTrack0, SdrObjConnection&
         {
             aBoundRect1 = rCon1.pObj->GetCurrentBoundRect();
         }
+
         aBoundRect1.Move(rCon1.aObjOfs.X(),rCon1.aObjOfs.Y());
         aBewareRect1=aBoundRect1;
-
-        sal_Int32 nH = static_cast<const SdrEdgeNode1HorzDistItem&>(rSet.Get(SDRATTR_EDGENODE1HORZDIST)).GetValue();
-        sal_Int32 nV = static_cast<const SdrEdgeNode1VertDistItem&>(rSet.Get(SDRATTR_EDGENODE1VERTDIST)).GetValue();
-
-        aBewareRect1.Left()-=nH;
-        aBewareRect1.Right()+=nH;
-        aBewareRect1.Top()-=nV;
-        aBewareRect1.Bottom()+=nV;
-    } else {
-        aBoundRect1=Rectangle(aPt1,aPt1);
+        sal_Int32 nH = rSet.Get(SDRATTR_EDGENODE1HORZDIST).GetValue();
+        sal_Int32 nV = rSet.Get(SDRATTR_EDGENODE1VERTDIST).GetValue();
+        aBewareRect1.AdjustLeft( -nH );
+        aBewareRect1.AdjustRight(nH );
+        aBewareRect1.AdjustTop( -nV );
+        aBewareRect1.AdjustBottom(nV );
+    }
+    else
+    {
+        aBoundRect1=tools::Rectangle(aPt1,aPt1);
         aBoundRect1.Move(rCon1.aObjOfs.X(),rCon1.aObjOfs.Y());
         aBewareRect1=aBoundRect1;
     }
-    if (bCon2) {
-        if (rCon2.pObj==static_cast<SdrObject const *>(this)) { // check, just in case
+
+    if (bCon2)
+    {
+        if (rCon2.pObj==static_cast<SdrObject const *>(this))
+        { // check, just in case
             aBoundRect2=aOutRect;
         }
         else
         {
             aBoundRect2 = rCon2.pObj->GetCurrentBoundRect();
         }
+
         aBoundRect2.Move(rCon2.aObjOfs.X(),rCon2.aObjOfs.Y());
         aBewareRect2=aBoundRect2;
-
-        sal_Int32 nH = static_cast<const SdrEdgeNode2HorzDistItem&>(rSet.Get(SDRATTR_EDGENODE2HORZDIST)).GetValue();
-        sal_Int32 nV = static_cast<const SdrEdgeNode2VertDistItem&>(rSet.Get(SDRATTR_EDGENODE2VERTDIST)).GetValue();
-
-        aBewareRect2.Left()-=nH;
-        aBewareRect2.Right()+=nH;
-        aBewareRect2.Top()-=nV;
-        aBewareRect2.Bottom()+=nV;
-    } else {
-        aBoundRect2=Rectangle(aPt2,aPt2);
+        sal_Int32 nH = rSet.Get(SDRATTR_EDGENODE2HORZDIST).GetValue();
+        sal_Int32 nV = rSet.Get(SDRATTR_EDGENODE2VERTDIST).GetValue();
+        aBewareRect2.AdjustLeft( -nH );
+        aBewareRect2.AdjustRight(nH );
+        aBewareRect2.AdjustTop( -nV );
+        aBewareRect2.AdjustBottom(nV );
+    }
+    else
+    {
+        aBoundRect2=tools::Rectangle(aPt2,aPt2);
         aBoundRect2.Move(rCon2.aObjOfs.X(),rCon2.aObjOfs.Y());
         aBewareRect2=aBoundRect2;
     }
+
     XPolygon aBestXP;
     sal_uIntPtr nBestQual=0xFFFFFFFF;
     SdrEdgeInfoRec aBestInfo;
@@ -775,30 +795,39 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const XPolygon& rTrack0, SdrObjConnection&
     sal_uInt16 nBestAuto2=0;
     sal_uInt16 nCount1=bAuto1 ? 4 : 1;
     sal_uInt16 nCount2=bAuto2 ? 4 : 1;
-    for (sal_uInt16 nNum1=0; nNum1<nCount1; nNum1++) {
+
+    for (sal_uInt16 nNum1=0; nNum1<nCount1; nNum1++)
+    {
         if (bAuto1) rCon1.nConId=nNum1;
-        if (bCon1 && rCon1.TakeGluePoint(aGP1)) {
+        if (bCon1 && rCon1.TakeGluePoint(aGP1))
+        {
             aPt1=aGP1.GetPos();
             nEsc1=aGP1.GetEscDir();
             if (nEsc1==SdrEscapeDirection::SMART) nEsc1=ImpCalcEscAngle(rCon1.pObj,aPt1-rCon1.aObjOfs);
         }
-        for (sal_uInt16 nNum2=0; nNum2<nCount2; nNum2++) {
+        for (sal_uInt16 nNum2=0; nNum2<nCount2; nNum2++)
+        {
             if (bAuto2) rCon2.nConId=nNum2;
-            if (bCon2 && rCon2.TakeGluePoint(aGP2)) {
+            if (bCon2 && rCon2.TakeGluePoint(aGP2))
+            {
                 aPt2=aGP2.GetPos();
                 nEsc2=aGP2.GetEscDir();
                 if (nEsc2==SdrEscapeDirection::SMART) nEsc2=ImpCalcEscAngle(rCon2.pObj,aPt2-rCon2.aObjOfs);
             }
-            for (long nA1=0; nA1<36000; nA1+=9000) {
+            for (long nA1=0; nA1<36000; nA1+=9000)
+            {
                 SdrEscapeDirection nE1 = nA1==0 ? SdrEscapeDirection::RIGHT : nA1==9000 ? SdrEscapeDirection::TOP : nA1==18000 ? SdrEscapeDirection::LEFT : nA1==27000 ? SdrEscapeDirection::BOTTOM : SdrEscapeDirection::SMART;
-                for (long nA2=0; nA2<36000; nA2+=9000) {
+                for (long nA2=0; nA2<36000; nA2+=9000)
+                {
                     SdrEscapeDirection nE2 = nA2==0 ? SdrEscapeDirection::RIGHT : nA2==9000 ? SdrEscapeDirection::TOP : nA2==18000 ? SdrEscapeDirection::LEFT : nA2==27000 ? SdrEscapeDirection::BOTTOM : SdrEscapeDirection::SMART;
-                    if ((nEsc1&nE1) && (nEsc2&nE2)) {
+                    if ((nEsc1&nE1) && (nEsc2&nE2))
+                    {
                         sal_uIntPtr nQual=0;
                         SdrEdgeInfoRec aInfo;
                         if (pInfo!=nullptr) aInfo=*pInfo;
                         XPolygon aXP(ImpCalcEdgeTrack(aPt1,nA1,aBoundRect1,aBewareRect1,aPt2,nA2,aBoundRect2,aBewareRect2,&nQual,&aInfo));
-                        if (nQual<nBestQual) {
+                        if (nQual<nBestQual)
+                        {
                             aBestXP=aXP;
                             nBestQual=nQual;
                             aBestInfo=aInfo;
@@ -816,11 +845,11 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const XPolygon& rTrack0, SdrObjConnection&
     return aBestXP;
 }
 
-XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rectangle& rBoundRect1, const Rectangle& rBewareRect1,
-    const Point& rPt2, long nAngle2, const Rectangle& rBoundRect2, const Rectangle& rBewareRect2,
+XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const tools::Rectangle& rBoundRect1, const tools::Rectangle& rBewareRect1,
+    const Point& rPt2, long nAngle2, const tools::Rectangle& rBoundRect2, const tools::Rectangle& rBewareRect2,
     sal_uIntPtr* pnQuality, SdrEdgeInfoRec* pInfo) const
 {
-    SdrEdgeKind eKind=static_cast<const SdrEdgeKindItem&>(GetObjectItem(SDRATTR_EDGEKIND)).GetValue();
+    SdrEdgeKind eKind=GetObjectItem(SDRATTR_EDGEKIND).GetValue();
     bool bRts1=nAngle1==0;
     bool bObn1=nAngle1==9000;
     bool bLks1=nAngle1==18000;
@@ -835,7 +864,6 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
     bool bVer2=bObn2 || bUnt2;
     bool bInfo=pInfo!=nullptr;
     if (bInfo) {
-        pInfo->cOrthoForm=0;
         pInfo->nAngle1=nAngle1;
         pInfo->nAngle2=nAngle2;
         pInfo->nObj1Lines=1;
@@ -844,12 +872,12 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
     }
     Point aPt1(rPt1);
     Point aPt2(rPt2);
-    Rectangle aBoundRect1 (rBoundRect1 );
-    Rectangle aBoundRect2 (rBoundRect2 );
-    Rectangle aBewareRect1(rBewareRect1);
-    Rectangle aBewareRect2(rBewareRect2);
+    tools::Rectangle aBoundRect1 (rBoundRect1 );
+    tools::Rectangle aBoundRect2 (rBoundRect2 );
+    tools::Rectangle aBewareRect1(rBewareRect1);
+    tools::Rectangle aBewareRect2(rBewareRect2);
     Point aMeeting((aPt1.X()+aPt2.X()+1)/2,(aPt1.Y()+aPt2.Y()+1)/2);
-    if (eKind==SDREDGE_ONELINE) {
+    if (eKind==SdrEdgeKind::OneLine) {
         XPolygon aXP(2);
         aXP[0]=rPt1;
         aXP[1]=rPt2;
@@ -857,20 +885,20 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
             *pnQuality=std::abs(rPt1.X()-rPt2.X())+std::abs(rPt1.Y()-rPt2.Y());
         }
         return aXP;
-    } else if (eKind==SDREDGE_THREELINES) {
+    } else if (eKind==SdrEdgeKind::ThreeLines) {
         XPolygon aXP(4);
         aXP[0]=rPt1;
         aXP[1]=rPt1;
         aXP[2]=rPt2;
         aXP[3]=rPt2;
-        if (bRts1) aXP[1].X()=aBewareRect1.Right();  //+=500;
-        if (bObn1) aXP[1].Y()=aBewareRect1.Top();    //-=500;
-        if (bLks1) aXP[1].X()=aBewareRect1.Left();   //-=500;
-        if (bUnt1) aXP[1].Y()=aBewareRect1.Bottom(); //+=500;
-        if (bRts2) aXP[2].X()=aBewareRect2.Right();  //+=500;
-        if (bObn2) aXP[2].Y()=aBewareRect2.Top();    //-=500;
-        if (bLks2) aXP[2].X()=aBewareRect2.Left();   //-=500;
-        if (bUnt2) aXP[2].Y()=aBewareRect2.Bottom(); //+=500;
+        if (bRts1) aXP[1].setX(aBewareRect1.Right() );  //+=500;
+        if (bObn1) aXP[1].setY(aBewareRect1.Top() );    //-=500;
+        if (bLks1) aXP[1].setX(aBewareRect1.Left() );   //-=500;
+        if (bUnt1) aXP[1].setY(aBewareRect1.Bottom() ); //+=500;
+        if (bRts2) aXP[2].setX(aBewareRect2.Right() );  //+=500;
+        if (bObn2) aXP[2].setY(aBewareRect2.Top() );    //-=500;
+        if (bLks2) aXP[2].setX(aBewareRect2.Left() );   //-=500;
+        if (bUnt2) aXP[2].setY(aBewareRect2.Bottom() ); //+=500;
         if (pnQuality!=nullptr) {
             long nQ=std::abs(aXP[1].X()-aXP[0].X())+std::abs(aXP[1].Y()-aXP[0].Y());
                 nQ+=std::abs(aXP[2].X()-aXP[1].X())+std::abs(aXP[2].Y()-aXP[1].Y());
@@ -881,14 +909,14 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
             pInfo->nObj1Lines=2;
             pInfo->nObj2Lines=2;
             if (bHor1) {
-                aXP[1].X()+=pInfo->aObj1Line2.X();
+                aXP[1].AdjustX(pInfo->aObj1Line2.X() );
             } else {
-                aXP[1].Y()+=pInfo->aObj1Line2.Y();
+                aXP[1].AdjustY(pInfo->aObj1Line2.Y() );
             }
             if (bHor2) {
-                aXP[2].X()+=pInfo->aObj2Line2.X();
+                aXP[2].AdjustX(pInfo->aObj2Line2.X() );
             } else {
-                aXP[2].Y()+=pInfo->aObj2Line2.Y();
+                aXP[2].AdjustY(pInfo->aObj2Line2.Y() );
             }
         }
         return aXP;
@@ -901,26 +929,26 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
             // overlapping on the x axis
             long n1=std::max(aBewareRect1.Left(),aBewareRect2.Left());
             long n2=std::min(aBewareRect1.Right(),aBewareRect2.Right());
-            aMeeting.X()=(n1+n2+1)/2;
+            aMeeting.setX((n1+n2+1)/2 );
         } else {
             // otherwise the center point of the empty space
             if (aC1.X()<aC2.X()) {
-                aMeeting.X()=(aBewareRect1.Right()+aBewareRect2.Left()+1)/2;
+                aMeeting.setX((aBewareRect1.Right()+aBewareRect2.Left()+1)/2 );
             } else {
-                aMeeting.X()=(aBewareRect1.Left()+aBewareRect2.Right()+1)/2;
+                aMeeting.setX((aBewareRect1.Left()+aBewareRect2.Right()+1)/2 );
             }
         }
         if (aBewareRect1.Top()<=aBewareRect2.Bottom() && aBewareRect1.Bottom()>=aBewareRect2.Top()) {
             // overlapping on the x axis
             long n1=std::max(aBewareRect1.Top(),aBewareRect2.Top());
             long n2=std::min(aBewareRect1.Bottom(),aBewareRect2.Bottom());
-            aMeeting.Y()=(n1+n2+1)/2;
+            aMeeting.setY((n1+n2+1)/2 );
         } else {
             // otherwise the center point of the empty space
             if (aC1.Y()<aC2.Y()) {
-                aMeeting.Y()=(aBewareRect1.Bottom()+aBewareRect2.Top()+1)/2;
+                aMeeting.setY((aBewareRect1.Bottom()+aBewareRect2.Top()+1)/2 );
             } else {
-                aMeeting.Y()=(aBewareRect1.Top()+aBewareRect2.Bottom()+1)/2;
+                aMeeting.setY((aBewareRect1.Top()+aBewareRect2.Bottom()+1)/2 );
             }
         }
         // Here, there are three cases:
@@ -937,24 +965,24 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
         if (nAngle1==nAngle2) nMainCase=1;
         else if ((bHor1 && bHor2) || (bVer1 && bVer2)) nMainCase=2;
         if (nMainCase==1) { // case 1 (both go in one direction) is possible
-            if (bVer1) aMeeting.X()=(aPt1.X()+aPt2.X()+1)/2; // Here, this is better than
-            if (bHor1) aMeeting.Y()=(aPt1.Y()+aPt2.Y()+1)/2; // using center point of empty space
+            if (bVer1) aMeeting.setX((aPt1.X()+aPt2.X()+1)/2 ); // Here, this is better than
+            if (bHor1) aMeeting.setY((aPt1.Y()+aPt2.Y()+1)/2 ); // using center point of empty space
             // bX1Ok means that the vertical exiting Obj1 doesn't conflict with Obj2, ...
             bool bX1Ok=aPt1.X()<=aBewareRect2.Left() || aPt1.X()>=aBewareRect2.Right();
             bool bX2Ok=aPt2.X()<=aBewareRect1.Left() || aPt2.X()>=aBewareRect1.Right();
             bool bY1Ok=aPt1.Y()<=aBewareRect2.Top() || aPt1.Y()>=aBewareRect2.Bottom();
             bool bY2Ok=aPt2.Y()<=aBewareRect1.Top() || aPt2.Y()>=aBewareRect1.Bottom();
             if (bLks1 && (bY1Ok || aBewareRect1.Left()<aBewareRect2.Right()) && (bY2Ok || aBewareRect2.Left()<aBewareRect1.Right())) {
-                aMeeting.X()=nXMin;
+                aMeeting.setX(nXMin );
             }
             if (bRts1 && (bY1Ok || aBewareRect1.Right()>aBewareRect2.Left()) && (bY2Ok || aBewareRect2.Right()>aBewareRect1.Left())) {
-                aMeeting.X()=nXMax;
+                aMeeting.setX(nXMax );
             }
             if (bObn1 && (bX1Ok || aBewareRect1.Top()<aBewareRect2.Bottom()) && (bX2Ok || aBewareRect2.Top()<aBewareRect1.Bottom())) {
-                aMeeting.Y()=nYMin;
+                aMeeting.setY(nYMin );
             }
             if (bUnt1 && (bX1Ok || aBewareRect1.Bottom()>aBewareRect2.Top()) && (bX2Ok || aBewareRect2.Bottom()>aBewareRect1.Top())) {
-                aMeeting.Y()=nYMax;
+                aMeeting.setY(nYMax );
             }
         } else if (nMainCase==2) {
             // case 2:
@@ -1000,10 +1028,10 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
 
                 // normalization; be aR1 the one exiting to the right,
                 // be aR2 the one exiting to the left
-                Rectangle aBewR1(bRts1 ? aBewareRect1 : aBewareRect2);
-                Rectangle aBewR2(bRts1 ? aBewareRect2 : aBewareRect1);
-                Rectangle aBndR1(bRts1 ? aBoundRect1 : aBoundRect2);
-                Rectangle aBndR2(bRts1 ? aBoundRect2 : aBoundRect1);
+                tools::Rectangle aBewR1(bRts1 ? aBewareRect1 : aBewareRect2);
+                tools::Rectangle aBewR2(bRts1 ? aBewareRect2 : aBewareRect1);
+                tools::Rectangle aBndR1(bRts1 ? aBoundRect1 : aBoundRect2);
+                tools::Rectangle aBndR2(bRts1 ? aBoundRect2 : aBoundRect1);
                 if (aBewR1.Bottom()>aBewR2.Top() && aBewR1.Top()<aBewR2.Bottom()) {
                     // overlap on y axis; cases 2.1, 2.8, 2.9
                     if (aBewR1.Right()>aBewR2.Left()) {
@@ -1028,17 +1056,17 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
                         if (!bCase29Direct) {
                             bool bObenLang=std::abs(nYMin-aMeeting.Y())<=std::abs(nYMax-aMeeting.Y());
                             if (bObenLang) {
-                                aMeeting.Y()=nYMin;
+                                aMeeting.setY(nYMin );
                             } else {
-                                aMeeting.Y()=nYMax;
+                                aMeeting.setY(nYMax );
                             }
                             if (bCase29) {
                                 // now make sure that the surrounded object
                                 // isn't traversed
                                 if ((aBewR1.Center().Y()<aBewR2.Center().Y()) != bObenLang) {
-                                    aMeeting.X()=aBewR2.Right();
+                                    aMeeting.setX(aBewR2.Right() );
                                 } else {
-                                    aMeeting.X()=aBewR1.Left();
+                                    aMeeting.setX(aBewR1.Left() );
                                 }
                             }
                         } else {
@@ -1051,21 +1079,21 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
                             long nGet1=BigMulDiv(nWant1,nSpace,nWant1+nWant2);
                             long nGet2=nSpace-nGet1;
                             if (bRts1) { // revert normalization
-                                aBewareRect1.Right()+=nGet1-nWant1;
-                                aBewareRect2.Left()-=nGet2-nWant2;
+                                aBewareRect1.AdjustRight(nGet1-nWant1 );
+                                aBewareRect2.AdjustLeft( -(nGet2-nWant2) );
                             } else {
-                                aBewareRect2.Right()+=nGet1-nWant1;
-                                aBewareRect1.Left()-=nGet2-nWant2;
+                                aBewareRect2.AdjustRight(nGet1-nWant1 );
+                                aBewareRect1.AdjustLeft( -(nGet2-nWant2) );
                             }
                             nIntersections++; // lower quality
                         }
                     }
                 }
             } else if (bVer1) { // both horizontal
-                Rectangle aBewR1(bUnt1 ? aBewareRect1 : aBewareRect2);
-                Rectangle aBewR2(bUnt1 ? aBewareRect2 : aBewareRect1);
-                Rectangle aBndR1(bUnt1 ? aBoundRect1 : aBoundRect2);
-                Rectangle aBndR2(bUnt1 ? aBoundRect2 : aBoundRect1);
+                tools::Rectangle aBewR1(bUnt1 ? aBewareRect1 : aBewareRect2);
+                tools::Rectangle aBewR2(bUnt1 ? aBewareRect2 : aBewareRect1);
+                tools::Rectangle aBndR1(bUnt1 ? aBoundRect1 : aBoundRect2);
+                tools::Rectangle aBndR2(bUnt1 ? aBoundRect2 : aBoundRect1);
                 if (aBewR1.Right()>aBewR2.Left() && aBewR1.Left()<aBewR2.Right()) {
                     // overlap on y axis; cases 2.1, 2.8, 2.9
                     if (aBewR1.Bottom()>aBewR2.Top()) {
@@ -1089,17 +1117,17 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
                         if (!bCase29Direct) {
                             bool bLinksLang=std::abs(nXMin-aMeeting.X())<=std::abs(nXMax-aMeeting.X());
                             if (bLinksLang) {
-                                aMeeting.X()=nXMin;
+                                aMeeting.setX(nXMin );
                             } else {
-                                aMeeting.X()=nXMax;
+                                aMeeting.setX(nXMax );
                             }
                             if (bCase29) {
                                 // now make sure that the surrounded object
                                 // isn't traversed
                                 if ((aBewR1.Center().X()<aBewR2.Center().X()) != bLinksLang) {
-                                    aMeeting.Y()=aBewR2.Bottom();
+                                    aMeeting.setY(aBewR2.Bottom() );
                                 } else {
-                                    aMeeting.Y()=aBewR1.Top();
+                                    aMeeting.setY(aBewR1.Top() );
                                 }
                             }
                         } else {
@@ -1112,11 +1140,11 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
                             long nGet1=BigMulDiv(nWant1,nSpace,nWant1+nWant2);
                             long nGet2=nSpace-nGet1;
                             if (bUnt1) { // revert normalization
-                                aBewareRect1.Bottom()+=nGet1-nWant1;
-                                aBewareRect2.Top()-=nGet2-nWant2;
+                                aBewareRect1.AdjustBottom(nGet1-nWant1 );
+                                aBewareRect2.AdjustTop( -(nGet2-nWant2) );
                             } else {
-                                aBewareRect2.Bottom()+=nGet1-nWant1;
-                                aBewareRect1.Top()-=nGet2-nWant2;
+                                aBewareRect2.AdjustBottom(nGet1-nWant1 );
+                                aBewareRect1.AdjustTop( -(nGet2-nWant2) );
                             }
                             nIntersections++; // lower quality
                         }
@@ -1173,8 +1201,8 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
             */
 
             // case 3.2
-            Rectangle aTmpR1(aBewareRect1);
-            Rectangle aTmpR2(aBewareRect2);
+            tools::Rectangle aTmpR1(aBewareRect1);
+            tools::Rectangle aTmpR2(aBewareRect2);
             if (bBewareOverlap) {
                 // overlapping BewareRects: use BoundRects for checking for case 3.2
                 aTmpR1=aBoundRect1;
@@ -1186,11 +1214,11 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
                  ((bUnt1 && aTmpR1.Bottom()<=aPt2.Y()) || (bObn1 && aTmpR1.Top ()>=aPt2.Y())))) {
                 // case 3.2 applies: connector with only 2 lines
                 if (bHor1) {
-                    aMeeting.X()=aPt2.X();
-                    aMeeting.Y()=aPt1.Y();
+                    aMeeting.setX(aPt2.X() );
+                    aMeeting.setY(aPt1.Y() );
                 } else {
-                    aMeeting.X()=aPt1.X();
-                    aMeeting.Y()=aPt2.Y();
+                    aMeeting.setX(aPt1.X() );
+                    aMeeting.setY(aPt2.Y() );
                 }
                 // in the case of overlapping BewareRects:
                 aBewareRect1=aTmpR1;
@@ -1204,34 +1232,34 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
                         ((bUnt1 && aBewareRect1.Bottom()>aBewareRect2.Top   ()) ||
                          (bObn1 && aBewareRect1.Top   ()<aBewareRect2.Bottom())))) {
                 // case 3.3
-                if (bRts1 || bRts2) { aMeeting.X()=nXMax; }
-                if (bLks1 || bLks2) { aMeeting.X()=nXMin; }
-                if (bUnt1 || bUnt2) { aMeeting.Y()=nYMax; }
-                if (bObn1 || bObn2) { aMeeting.Y()=nYMin; }
+                if (bRts1 || bRts2) { aMeeting.setX(nXMax ); }
+                if (bLks1 || bLks2) { aMeeting.setX(nXMin ); }
+                if (bUnt1 || bUnt2) { aMeeting.setY(nYMax ); }
+                if (bObn1 || bObn2) { aMeeting.setY(nYMin ); }
             }
         }
     }
 
     XPolygon aXP1(ImpCalcObjToCenter(aPt1,nAngle1,aBewareRect1,aMeeting));
     XPolygon aXP2(ImpCalcObjToCenter(aPt2,nAngle2,aBewareRect2,aMeeting));
-    sal_uInt16 nXP1Anz=aXP1.GetPointCount();
-    sal_uInt16 nXP2Anz=aXP2.GetPointCount();
+    sal_uInt16 nXP1Cnt=aXP1.GetPointCount();
+    sal_uInt16 nXP2Cnt=aXP2.GetPointCount();
     if (bInfo) {
-        pInfo->nObj1Lines=nXP1Anz; if (nXP1Anz>1) pInfo->nObj1Lines--;
-        pInfo->nObj2Lines=nXP2Anz; if (nXP2Anz>1) pInfo->nObj2Lines--;
+        pInfo->nObj1Lines=nXP1Cnt; if (nXP1Cnt>1) pInfo->nObj1Lines--;
+        pInfo->nObj2Lines=nXP2Cnt; if (nXP2Cnt>1) pInfo->nObj2Lines--;
     }
-    Point aEP1(aXP1[nXP1Anz-1]);
-    Point aEP2(aXP2[nXP2Anz-1]);
+    Point aEP1(aXP1[nXP1Cnt-1]);
+    Point aEP2(aXP2[nXP2Cnt-1]);
     bool bInsMeetingPoint=aEP1.X()!=aEP2.X() && aEP1.Y()!=aEP2.Y();
-    bool bHorzE1=aEP1.Y()==aXP1[nXP1Anz-2].Y(); // is last line of XP1 horizontal?
-    bool bHorzE2=aEP2.Y()==aXP2[nXP2Anz-2].Y(); // is last line of XP2 horizontal?
+    bool bHorzE1=aEP1.Y()==aXP1[nXP1Cnt-2].Y(); // is last line of XP1 horizontal?
+    bool bHorzE2=aEP2.Y()==aXP2[nXP2Cnt-2].Y(); // is last line of XP2 horizontal?
     if (aEP1==aEP2 && ((bHorzE1 && bHorzE2 && aEP1.Y()==aEP2.Y()) || (!bHorzE1 && !bHorzE2 && aEP1.X()==aEP2.X()))) {
         // special casing 'I' connectors
-        nXP1Anz--; aXP1.Remove(nXP1Anz,1);
-        nXP2Anz--; aXP2.Remove(nXP2Anz,1);
+        nXP1Cnt--; aXP1.Remove(nXP1Cnt,1);
+        nXP2Cnt--; aXP2.Remove(nXP2Cnt,1);
     }
     if (bInsMeetingPoint) {
-        aXP1.Insert(XPOLY_APPEND,aMeeting,XPOLY_NORMAL);
+        aXP1.Insert(XPOLY_APPEND,aMeeting,PolyFlags::Normal);
         if (bInfo) {
             // Inserting a MeetingPoint adds 2 new lines,
             // either might become the center line.
@@ -1241,22 +1269,22 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
             } else {
                 if (pInfo->nObj1Lines>pInfo->nObj2Lines) {
                     pInfo->nObj2Lines++;
-                    pInfo->nMiddleLine=nXP1Anz-1;
+                    pInfo->nMiddleLine=nXP1Cnt-1;
                 } else {
                     pInfo->nObj1Lines++;
-                    pInfo->nMiddleLine=nXP1Anz;
+                    pInfo->nMiddleLine=nXP1Cnt;
                 }
             }
         }
-    } else if (bInfo && aEP1!=aEP2 && nXP1Anz+nXP2Anz>=4) {
+    } else if (bInfo && aEP1!=aEP2 && nXP1Cnt+nXP2Cnt>=4) {
         // By connecting both ends, another line is added, this becomes the center line.
-        pInfo->nMiddleLine=nXP1Anz-1;
+        pInfo->nMiddleLine=nXP1Cnt-1;
     }
     sal_uInt16 nNum=aXP2.GetPointCount();
-    if (aXP1[nXP1Anz-1]==aXP2[nXP2Anz-1] && nXP1Anz>1 && nXP2Anz>1) nNum--;
+    if (aXP1[nXP1Cnt-1]==aXP2[nXP2Cnt-1] && nXP1Cnt>1 && nXP2Cnt>1) nNum--;
     while (nNum>0) {
         nNum--;
-        aXP1.Insert(XPOLY_APPEND,aXP2[nNum],XPOLY_NORMAL);
+        aXP1.Insert(XPOLY_APPEND,aXP2[nNum],PolyFlags::Normal);
     }
     sal_uInt16 nPointCount=aXP1.GetPointCount();
     char cForm;
@@ -1285,7 +1313,6 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
         } else cForm='?';
         // more shapes:
         if (bInfo) {
-            pInfo->cOrthoForm=cForm;
             if (cForm=='I' || cForm=='L' || cForm=='Z' || cForm=='U') {
                 pInfo->nObj1Lines=1;
                 pInfo->nObj2Lines=1;
@@ -1336,7 +1363,7 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
         }
         if (nTmp>=3) {
             nQual0=nQual;
-            nQual+=(sal_uIntPtr)nTmp*0x01000000;
+            nQual+=static_cast<sal_uIntPtr>(nTmp)*0x01000000;
             if (nQual<nQual0 || nTmp>15) bOverflow = true;
         }
         if (nPointCount>=2) { // check exit angle again
@@ -1393,7 +1420,7 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
         }
         if (nPointCount<=1) nIntersections++;
         nQual0=nQual;
-        nQual+=(sal_uIntPtr)nIntersections*0x10000000;
+        nQual+=static_cast<sal_uIntPtr>(nIntersections)*0x10000000;
         if (nQual<nQual0 || nIntersections>15) bOverflow = true;
 
         if (bOverflow || nQual==0xFFFFFFFF) nQual=0xFFFFFFFE;
@@ -1401,58 +1428,58 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
     }
     if (bInfo) { // now apply line offsets to aXP1
         if (pInfo->nMiddleLine!=0xFFFF) {
-            sal_uInt16 nIdx=pInfo->ImpGetPolyIdx(MIDDLELINE,aXP1);
-            if (pInfo->ImpIsHorzLine(MIDDLELINE,aXP1)) {
-                aXP1[nIdx].Y()+=pInfo->aMiddleLine.Y();
-                aXP1[nIdx+1].Y()+=pInfo->aMiddleLine.Y();
+            sal_uInt16 nIdx=pInfo->ImpGetPolyIdx(SdrEdgeLineCode::MiddleLine,aXP1);
+            if (pInfo->ImpIsHorzLine(SdrEdgeLineCode::MiddleLine,aXP1)) {
+                aXP1[nIdx].AdjustY(pInfo->aMiddleLine.Y() );
+                aXP1[nIdx+1].AdjustY(pInfo->aMiddleLine.Y() );
             } else {
-                aXP1[nIdx].X()+=pInfo->aMiddleLine.X();
-                aXP1[nIdx+1].X()+=pInfo->aMiddleLine.X();
+                aXP1[nIdx].AdjustX(pInfo->aMiddleLine.X() );
+                aXP1[nIdx+1].AdjustX(pInfo->aMiddleLine.X() );
             }
         }
         if (pInfo->nObj1Lines>=2) {
-            sal_uInt16 nIdx=pInfo->ImpGetPolyIdx(OBJ1LINE2,aXP1);
-            if (pInfo->ImpIsHorzLine(OBJ1LINE2,aXP1)) {
-                aXP1[nIdx].Y()+=pInfo->aObj1Line2.Y();
-                aXP1[nIdx+1].Y()+=pInfo->aObj1Line2.Y();
+            sal_uInt16 nIdx=pInfo->ImpGetPolyIdx(SdrEdgeLineCode::Obj1Line2,aXP1);
+            if (pInfo->ImpIsHorzLine(SdrEdgeLineCode::Obj1Line2,aXP1)) {
+                aXP1[nIdx].AdjustY(pInfo->aObj1Line2.Y() );
+                aXP1[nIdx+1].AdjustY(pInfo->aObj1Line2.Y() );
             } else {
-                aXP1[nIdx].X()+=pInfo->aObj1Line2.X();
-                aXP1[nIdx+1].X()+=pInfo->aObj1Line2.X();
+                aXP1[nIdx].AdjustX(pInfo->aObj1Line2.X() );
+                aXP1[nIdx+1].AdjustX(pInfo->aObj1Line2.X() );
             }
         }
         if (pInfo->nObj1Lines>=3) {
-            sal_uInt16 nIdx=pInfo->ImpGetPolyIdx(OBJ1LINE3,aXP1);
-            if (pInfo->ImpIsHorzLine(OBJ1LINE3,aXP1)) {
-                aXP1[nIdx].Y()+=pInfo->aObj1Line3.Y();
-                aXP1[nIdx+1].Y()+=pInfo->aObj1Line3.Y();
+            sal_uInt16 nIdx=pInfo->ImpGetPolyIdx(SdrEdgeLineCode::Obj1Line3,aXP1);
+            if (pInfo->ImpIsHorzLine(SdrEdgeLineCode::Obj1Line3,aXP1)) {
+                aXP1[nIdx].AdjustY(pInfo->aObj1Line3.Y() );
+                aXP1[nIdx+1].AdjustY(pInfo->aObj1Line3.Y() );
             } else {
-                aXP1[nIdx].X()+=pInfo->aObj1Line3.X();
-                aXP1[nIdx+1].X()+=pInfo->aObj1Line3.X();
+                aXP1[nIdx].AdjustX(pInfo->aObj1Line3.X() );
+                aXP1[nIdx+1].AdjustX(pInfo->aObj1Line3.X() );
             }
         }
         if (pInfo->nObj2Lines>=2) {
-            sal_uInt16 nIdx=pInfo->ImpGetPolyIdx(OBJ2LINE2,aXP1);
-            if (pInfo->ImpIsHorzLine(OBJ2LINE2,aXP1)) {
-                aXP1[nIdx].Y()+=pInfo->aObj2Line2.Y();
-                aXP1[nIdx+1].Y()+=pInfo->aObj2Line2.Y();
+            sal_uInt16 nIdx=pInfo->ImpGetPolyIdx(SdrEdgeLineCode::Obj2Line2,aXP1);
+            if (pInfo->ImpIsHorzLine(SdrEdgeLineCode::Obj2Line2,aXP1)) {
+                aXP1[nIdx].AdjustY(pInfo->aObj2Line2.Y() );
+                aXP1[nIdx+1].AdjustY(pInfo->aObj2Line2.Y() );
             } else {
-                aXP1[nIdx].X()+=pInfo->aObj2Line2.X();
-                aXP1[nIdx+1].X()+=pInfo->aObj2Line2.X();
+                aXP1[nIdx].AdjustX(pInfo->aObj2Line2.X() );
+                aXP1[nIdx+1].AdjustX(pInfo->aObj2Line2.X() );
             }
         }
         if (pInfo->nObj2Lines>=3) {
-            sal_uInt16 nIdx=pInfo->ImpGetPolyIdx(OBJ2LINE3,aXP1);
-            if (pInfo->ImpIsHorzLine(OBJ2LINE3,aXP1)) {
-                aXP1[nIdx].Y()+=pInfo->aObj2Line3.Y();
-                aXP1[nIdx+1].Y()+=pInfo->aObj2Line3.Y();
+            sal_uInt16 nIdx=pInfo->ImpGetPolyIdx(SdrEdgeLineCode::Obj2Line3,aXP1);
+            if (pInfo->ImpIsHorzLine(SdrEdgeLineCode::Obj2Line3,aXP1)) {
+                aXP1[nIdx].AdjustY(pInfo->aObj2Line3.Y() );
+                aXP1[nIdx+1].AdjustY(pInfo->aObj2Line3.Y() );
             } else {
-                aXP1[nIdx].X()+=pInfo->aObj2Line3.X();
-                aXP1[nIdx+1].X()+=pInfo->aObj2Line3.X();
+                aXP1[nIdx].AdjustX(pInfo->aObj2Line3.X() );
+                aXP1[nIdx+1].AdjustX(pInfo->aObj2Line3.X() );
             }
         }
     }
     // make the connector a bezier curve, if appropriate
-    if (eKind==SDREDGE_BEZIER && nPointCount>2) {
+    if (eKind==SdrEdgeKind::Bezier && nPointCount>2) {
         Point* pPt1=&aXP1[0];
         Point* pPt2=&aXP1[1];
         Point* pPt3=&aXP1[nPointCount-2];
@@ -1462,26 +1489,26 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
         long dx2=pPt3->X()-pPt4->X();
         long dy2=pPt3->Y()-pPt4->Y();
         if (cForm=='L') { // nPointCount==3
-            aXP1.SetFlags(1,XPOLY_CONTROL);
+            aXP1.SetFlags(1,PolyFlags::Control);
             Point aPt3(*pPt2);
-            aXP1.Insert(2,aPt3,XPOLY_CONTROL);
+            aXP1.Insert(2,aPt3,PolyFlags::Control);
             nPointCount=aXP1.GetPointCount();
             pPt2=&aXP1[1];
             pPt3=&aXP1[nPointCount-2];
-            pPt2->X()-=dx1/3;
-            pPt2->Y()-=dy1/3;
-            pPt3->X()-=dx2/3;
-            pPt3->Y()-=dy2/3;
+            pPt2->AdjustX( -(dx1/3) );
+            pPt2->AdjustY( -(dy1/3) );
+            pPt3->AdjustX( -(dx2/3) );
+            pPt3->AdjustY( -(dy2/3) );
         } else if (nPointCount>=4 && nPointCount<=6) { // Z or U or ...
             // To all others, the end points of the original lines become control
             // points for now. Thus, we need to do some more work for nPointCount>4!
-            aXP1.SetFlags(1,XPOLY_CONTROL);
-            aXP1.SetFlags(nPointCount-2,XPOLY_CONTROL);
+            aXP1.SetFlags(1,PolyFlags::Control);
+            aXP1.SetFlags(nPointCount-2,PolyFlags::Control);
             // distance x1.5
-            pPt2->X()+=dx1/2;
-            pPt2->Y()+=dy1/2;
-            pPt3->X()+=dx2/2;
-            pPt3->Y()+=dy2/2;
+            pPt2->AdjustX(dx1/2 );
+            pPt2->AdjustY(dy1/2 );
+            pPt3->AdjustX(dx2/2 );
+            pPt3->AdjustY(dy2/2 );
             if (nPointCount==5) {
                 // add a control point before and after center
                 Point aCenter(aXP1[2]);
@@ -1489,26 +1516,26 @@ XPolygon SdrEdgeObj::ImpCalcEdgeTrack(const Point& rPt1, long nAngle1, const Rec
                 long dy1b=aCenter.Y()-aXP1[1].Y();
                 long dx2b=aCenter.X()-aXP1[3].X();
                 long dy2b=aCenter.Y()-aXP1[3].Y();
-                aXP1.Insert(2,aCenter,XPOLY_CONTROL);
-                aXP1.SetFlags(3,XPOLY_SYMMTR);
-                aXP1.Insert(4,aCenter,XPOLY_CONTROL);
-                aXP1[2].X()-=dx1b/2;
-                aXP1[2].Y()-=dy1b/2;
-                aXP1[3].X()-=(dx1b+dx2b)/4;
-                aXP1[3].Y()-=(dy1b+dy2b)/4;
-                aXP1[4].X()-=dx2b/2;
-                aXP1[4].Y()-=dy2b/2;
+                aXP1.Insert(2,aCenter,PolyFlags::Control);
+                aXP1.SetFlags(3,PolyFlags::Symmetric);
+                aXP1.Insert(4,aCenter,PolyFlags::Control);
+                aXP1[2].AdjustX( -(dx1b/2) );
+                aXP1[2].AdjustY( -(dy1b/2) );
+                aXP1[3].AdjustX( -((dx1b+dx2b)/4) );
+                aXP1[3].AdjustY( -((dy1b+dy2b)/4) );
+                aXP1[4].AdjustX( -(dx2b/2) );
+                aXP1[4].AdjustY( -(dy2b/2) );
             }
             if (nPointCount==6) {
                 Point aPt1b(aXP1[2]);
                 Point aPt2b(aXP1[3]);
-                aXP1.Insert(2,aPt1b,XPOLY_CONTROL);
-                aXP1.Insert(5,aPt2b,XPOLY_CONTROL);
+                aXP1.Insert(2,aPt1b,PolyFlags::Control);
+                aXP1.Insert(5,aPt2b,PolyFlags::Control);
                 long dx=aPt1b.X()-aPt2b.X();
                 long dy=aPt1b.Y()-aPt2b.Y();
-                aXP1[3].X()-=dx/2;
-                aXP1[3].Y()-=dy/2;
-                aXP1.SetFlags(3,XPOLY_SYMMTR);
+                aXP1[3].AdjustX( -(dx/2) );
+                aXP1[3].AdjustY( -(dy/2) );
+                aXP1.SetFlags(3,PolyFlags::Symmetric);
                 aXP1.Remove(4,1); // because it's identical with aXP1[3]
             }
         }
@@ -1563,10 +1590,9 @@ line (CL). The number of object margins per object varies between 0 and 3:
 
 void SdrEdgeObj::Notify(SfxBroadcaster& rBC, const SfxHint& rHint)
 {
-    const SfxSimpleHint* pSimple = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    const sal_uInt32 nId = pSimple==nullptr ? 0 : pSimple->GetId();
-    bool bDataChg=nId==SFX_HINT_DATACHANGED;
-    bool bDying=nId==SFX_HINT_DYING;
+    const SfxHintId nId = rHint.GetId();
+    bool bDataChg=nId==SfxHintId::DataChanged;
+    bool bDying=nId==SfxHintId::Dying;
     bool bObj1=aCon1.pObj!=nullptr && aCon1.pObj->GetBroadcaster()==&rBC;
     bool bObj2=aCon2.pObj!=nullptr && aCon2.pObj->GetBroadcaster()==&rBC;
     if (bDying && (bObj1 || bObj2)) {
@@ -1588,18 +1614,18 @@ void SdrEdgeObj::Notify(SfxBroadcaster& rBC, const SfxHint& rHint)
             ImpSetAttrToEdgeInfo(); // when changing templates, copy values from Pool to aEdgeInfo
         }
         if (bDataChg                                ||
-            (bObj1 && aCon1.pObj->GetPage()==pPage) ||
-            (bObj2 && aCon2.pObj->GetPage()==pPage) ||
-            (pSdrHint && pSdrHint->GetKind()==HINT_OBJREMOVED))
+            (bObj1 && aCon1.pObj->getSdrPageFromSdrObject() == getSdrPageFromSdrObject()) ||
+            (bObj2 && aCon2.pObj->getSdrPageFromSdrObject() == getSdrPageFromSdrObject()) ||
+            (pSdrHint && pSdrHint->GetKind()==SdrHintKind::ObjectRemoved))
         {
             // broadcasting only, if on the same page
-            Rectangle aBoundRect0; if (pUserCall!=nullptr) aBoundRect0=GetCurrentBoundRect();
+            tools::Rectangle aBoundRect0; if (pUserCall!=nullptr) aBoundRect0=GetCurrentBoundRect();
             ImpDirtyEdgeTrack();
 
             // only redraw here, object hasn't actually changed
             ActionChanged();
 
-            SendUserCall(SDRUSERCALL_RESIZE,aBoundRect0);
+            SendUserCall(SdrUserCallType::Resize,aBoundRect0);
         }
         nNotifyingCount--;
     }
@@ -1612,20 +1638,20 @@ void SdrEdgeObj::Reformat()
 {
     if( nullptr != aCon1.pObj )
     {
-        SfxSimpleHint aHint( SFX_HINT_DATACHANGED );
+        SfxHint aHint( SfxHintId::DataChanged );
         Notify( *const_cast<SfxBroadcaster*>(aCon1.pObj->GetBroadcaster()), aHint );
     }
 
     if( nullptr != aCon2.pObj )
     {
-        SfxSimpleHint aHint( SFX_HINT_DATACHANGED );
+        SfxHint aHint( SfxHintId::DataChanged );
         Notify( *const_cast<SfxBroadcaster*>(aCon2.pObj->GetBroadcaster()), aHint );
     }
 }
 
-SdrEdgeObj* SdrEdgeObj::Clone() const
+SdrEdgeObj* SdrEdgeObj::CloneSdrObject(SdrModel& rTargetModel) const
 {
-    return CloneHelper< SdrEdgeObj >();
+    return CloneHelper< SdrEdgeObj >(rTargetModel);
 }
 
 SdrEdgeObj& SdrEdgeObj::operator=(const SdrEdgeObj& rObj)
@@ -1645,7 +1671,7 @@ SdrEdgeObj& SdrEdgeObj::operator=(const SdrEdgeObj& rObj)
 
 OUString SdrEdgeObj::TakeObjNameSingul() const
 {
-    OUStringBuffer sName(ImpGetResStr(STR_ObjNameSingulEDGE));
+    OUStringBuffer sName(SvxResId(STR_ObjNameSingulEDGE));
 
     OUString aName(GetName());
     if (!aName.isEmpty())
@@ -1660,7 +1686,7 @@ OUString SdrEdgeObj::TakeObjNameSingul() const
 
 OUString SdrEdgeObj::TakeObjNamePlural() const
 {
-    return ImpGetResStr(STR_ObjNamePluralEDGE);
+    return SvxResId(STR_ObjNamePluralEDGE);
 }
 
 basegfx::B2DPolyPolygon SdrEdgeObj::TakeXorPoly() const
@@ -1694,7 +1720,7 @@ void SdrEdgeObj::SetEdgeTrackPath( const basegfx::B2DPolyPolygon& rPoly )
         bEdgeTrackUserDefined = true;
 
         // #i110629# also set aRect and maSnapeRect depending on pEdgeTrack
-        const Rectangle aPolygonBounds(pEdgeTrack->GetBoundRect());
+        const tools::Rectangle aPolygonBounds(pEdgeTrack->GetBoundRect());
         maRect = aPolygonBounds;
         maSnapRect = aPolygonBounds;
     }
@@ -1714,98 +1740,113 @@ basegfx::B2DPolyPolygon SdrEdgeObj::GetEdgeTrackPath() const
 
 sal_uInt32 SdrEdgeObj::GetHdlCount() const
 {
-    SdrEdgeKind eKind=static_cast<const SdrEdgeKindItem&>(GetObjectItem(SDRATTR_EDGEKIND)).GetValue();
-    sal_uInt32 nHdlAnz(0L);
+    SdrEdgeKind eKind=GetObjectItem(SDRATTR_EDGEKIND).GetValue();
+    sal_uInt32 nHdlCnt(0);
     sal_uInt32 nPointCount(pEdgeTrack->GetPointCount());
 
     if(nPointCount)
     {
-        nHdlAnz = 2L;
-
-        if ((eKind==SDREDGE_ORTHOLINES || eKind==SDREDGE_BEZIER) && nPointCount >= 4L)
+        nHdlCnt = 2;
+        if ((eKind==SdrEdgeKind::OrthoLines || eKind==SdrEdgeKind::Bezier) && nPointCount >= 4)
         {
-            sal_uInt32 nO1(aEdgeInfo.nObj1Lines > 0L ? aEdgeInfo.nObj1Lines - 1L : 0L);
-            sal_uInt32 nO2(aEdgeInfo.nObj2Lines > 0L ? aEdgeInfo.nObj2Lines - 1L : 0L);
-            sal_uInt32 nM(aEdgeInfo.nMiddleLine != 0xFFFF ? 1L : 0L);
-            nHdlAnz += nO1 + nO2 + nM;
+             sal_uInt32 nO1(aEdgeInfo.nObj1Lines > 0 ? aEdgeInfo.nObj1Lines - 1 : 0);
+             sal_uInt32 nO2(aEdgeInfo.nObj2Lines > 0 ? aEdgeInfo.nObj2Lines - 1 : 0);
+             sal_uInt32 nM(aEdgeInfo.nMiddleLine != 0xFFFF ? 1 : 0);
+             nHdlCnt += nO1 + nO2 + nM;
         }
-        else if (eKind==SDREDGE_THREELINES && nPointCount == 4L)
+        else if (eKind==SdrEdgeKind::ThreeLines && nPointCount == 4)
         {
             if(GetConnectedNode(true))
-                nHdlAnz++;
+                nHdlCnt++;
 
             if(GetConnectedNode(false))
-                nHdlAnz++;
+                nHdlCnt++;
         }
     }
 
-    return nHdlAnz;
+    return nHdlCnt;
 }
 
-SdrHdl* SdrEdgeObj::GetHdl(sal_uInt32 nHdlNum) const
+void SdrEdgeObj::AddToHdlList(SdrHdlList& rHdlList) const
 {
-    SdrHdl* pHdl=nullptr;
     sal_uInt32 nPointCount(pEdgeTrack->GetPointCount());
-    if (nPointCount!=0) {
-        if (nHdlNum==0) {
-            pHdl=new ImpEdgeHdl((*pEdgeTrack)[0],HDL_POLY);
-            if (aCon1.pObj!=nullptr && aCon1.bBestVertex) pHdl->Set1PixMore();
-        } else if (nHdlNum==1) {
-            pHdl=new ImpEdgeHdl((*pEdgeTrack)[sal_uInt16(nPointCount-1)],HDL_POLY);
-            if (aCon2.pObj!=nullptr && aCon2.bBestVertex) pHdl->Set1PixMore();
-        } else {
-            SdrEdgeKind eKind=static_cast<const SdrEdgeKindItem&>(GetObjectItem(SDRATTR_EDGEKIND)).GetValue();
-            if (eKind==SDREDGE_ORTHOLINES || eKind==SDREDGE_BEZIER) {
-                sal_uInt32 nO1(aEdgeInfo.nObj1Lines > 0L ? aEdgeInfo.nObj1Lines - 1L : 0L);
-                sal_uInt32 nO2(aEdgeInfo.nObj2Lines > 0L ? aEdgeInfo.nObj2Lines - 1L : 0L);
-                sal_uInt32 nM(aEdgeInfo.nMiddleLine != 0xFFFF ? 1L : 0L);
-                sal_uInt32 nNum(nHdlNum - 2L);
-                sal_Int32 nPt(0L);
-                pHdl=new ImpEdgeHdl(Point(),HDL_POLY);
+    if (nPointCount==0)
+        return;
+
+    {
+        std::unique_ptr<SdrHdl> pHdl(new ImpEdgeHdl((*pEdgeTrack)[0],SdrHdlKind::Poly));
+        if (aCon1.pObj!=nullptr && aCon1.bBestVertex) pHdl->Set1PixMore();
+        pHdl->SetPointNum(0);
+        rHdlList.AddHdl(std::move(pHdl));
+    }
+    {
+        std::unique_ptr<SdrHdl> pHdl(new ImpEdgeHdl((*pEdgeTrack)[sal_uInt16(nPointCount-1)],SdrHdlKind::Poly));
+        if (aCon2.pObj!=nullptr && aCon2.bBestVertex) pHdl->Set1PixMore();
+        pHdl->SetPointNum(1);
+        rHdlList.AddHdl(std::move(pHdl));
+    }
+    {
+        SdrEdgeKind eKind=GetObjectItem(SDRATTR_EDGEKIND).GetValue();
+        if ((eKind==SdrEdgeKind::OrthoLines || eKind==SdrEdgeKind::Bezier) && nPointCount >= 4)
+        {
+            sal_uInt32 nO1(aEdgeInfo.nObj1Lines > 0 ? aEdgeInfo.nObj1Lines - 1 : 0);
+            sal_uInt32 nO2(aEdgeInfo.nObj2Lines > 0 ? aEdgeInfo.nObj2Lines - 1 : 0);
+            sal_uInt32 nM(aEdgeInfo.nMiddleLine != 0xFFFF ? 1 : 0);
+            for(sal_uInt32 i = 0; i < (nO1 + nO2 + nM); ++i)
+            {
+                sal_Int32 nPt(0);
+                sal_uInt32 nNum = i;
+                std::unique_ptr<ImpEdgeHdl> pHdl(new ImpEdgeHdl(Point(),SdrHdlKind::Poly));
                 if (nNum<nO1) {
-                    nPt=nNum+1L;
-                    if (nNum==0) static_cast<ImpEdgeHdl*>(pHdl)->SetLineCode(OBJ1LINE2);
-                    if (nNum==1) static_cast<ImpEdgeHdl*>(pHdl)->SetLineCode(OBJ1LINE3);
+                    nPt=nNum+1;
+                    if (nNum==0) pHdl->SetLineCode(SdrEdgeLineCode::Obj1Line2);
+                    if (nNum==1) pHdl->SetLineCode(SdrEdgeLineCode::Obj1Line3);
                 } else {
                     nNum=nNum-nO1;
                     if (nNum<nO2) {
                         nPt=nPointCount-3-nNum;
-                        if (nNum==0) static_cast<ImpEdgeHdl*>(pHdl)->SetLineCode(OBJ2LINE2);
-                        if (nNum==1) static_cast<ImpEdgeHdl*>(pHdl)->SetLineCode(OBJ2LINE3);
+                        if (nNum==0) pHdl->SetLineCode(SdrEdgeLineCode::Obj2Line2);
+                        if (nNum==1) pHdl->SetLineCode(SdrEdgeLineCode::Obj2Line3);
                     } else {
                         nNum=nNum-nO2;
                         if (nNum<nM) {
                             nPt=aEdgeInfo.nMiddleLine;
-                            static_cast<ImpEdgeHdl*>(pHdl)->SetLineCode(MIDDLELINE);
+                            pHdl->SetLineCode(SdrEdgeLineCode::MiddleLine);
                         }
                     }
                 }
                 if (nPt>0) {
-                    Point aPos((*pEdgeTrack)[(sal_uInt16)nPt]);
-                    aPos+=(*pEdgeTrack)[(sal_uInt16)nPt+1];
-                    aPos.X()/=2;
-                    aPos.Y()/=2;
+                    Point aPos((*pEdgeTrack)[static_cast<sal_uInt16>(nPt)]);
+                    aPos+=(*pEdgeTrack)[static_cast<sal_uInt16>(nPt)+1];
+                    aPos.setX( aPos.X() / 2 );
+                    aPos.setY( aPos.Y() / 2 );
                     pHdl->SetPos(aPos);
-                } else {
-                    delete pHdl;
-                    pHdl=nullptr;
+                    pHdl->SetPointNum(i + 2);
+                    rHdlList.AddHdl(std::move(pHdl));
                 }
-            } else if (eKind==SDREDGE_THREELINES) {
-                sal_uInt32 nNum(nHdlNum);
-                if (GetConnectedNode(true)==nullptr) nNum++;
-                Point aPos((*pEdgeTrack)[(sal_uInt16)nNum-1]);
-                pHdl=new ImpEdgeHdl(aPos,HDL_POLY);
-                if (nNum==2) static_cast<ImpEdgeHdl*>(pHdl)->SetLineCode(OBJ1LINE2);
-                if (nNum==3) static_cast<ImpEdgeHdl*>(pHdl)->SetLineCode(OBJ2LINE2);
             }
         }
-        if (pHdl!=nullptr) {
-            pHdl->SetPointNum(nHdlNum);
+        else if (eKind==SdrEdgeKind::ThreeLines && nPointCount == 4)
+        {
+            if(GetConnectedNode(true))
+            {
+                Point aPos((*pEdgeTrack)[1]);
+                std::unique_ptr<ImpEdgeHdl> pHdl(new ImpEdgeHdl(aPos,SdrHdlKind::Poly));
+                pHdl->SetLineCode(SdrEdgeLineCode::Obj1Line2);
+                pHdl->SetPointNum(2);
+                rHdlList.AddHdl(std::move(pHdl));
+            }
+            if(GetConnectedNode(false))
+            {
+                Point aPos((*pEdgeTrack)[2]);
+                std::unique_ptr<ImpEdgeHdl> pHdl(new ImpEdgeHdl(aPos,SdrHdlKind::Poly));
+                pHdl->SetLineCode(SdrEdgeLineCode::Obj2Line2);
+                pHdl->SetPointNum(3);
+                rHdlList.AddHdl(std::move(pHdl));
+            }
         }
     }
-    return pHdl;
 }
-
 
 bool SdrEdgeObj::hasSpecialDrag() const
 {
@@ -1815,7 +1856,7 @@ bool SdrEdgeObj::hasSpecialDrag() const
 SdrObject* SdrEdgeObj::getFullDragClone() const
 {
     // use Clone operator
-    SdrEdgeObj* pRetval = Clone();
+    SdrEdgeObj* pRetval(CloneSdrObject(getSdrModelFromSdrObject()));
 
     // copy connections for clone, SdrEdgeObj::operator= does not do this
     pRetval->ConnectToNode(true, GetConnectedNode(true));
@@ -1860,6 +1901,8 @@ bool SdrEdgeObj::applySpecialDrag(SdrDragStat& rDragStat)
         const bool bDragA(0 == rDragStat.GetHdl()->GetPointNum());
         const Point aPointNow(rDragStat.GetNow());
 
+        rDragStat.SetEndDragChangesGeoAndAttributes(true);
+
         if(rDragStat.GetPageView())
         {
             SdrObjConnection* pDraggedOne(bDragA ? &aCon1 : &aCon2);
@@ -1883,7 +1926,7 @@ bool SdrEdgeObj::applySpecialDrag(SdrDragStat& rDragStat)
             {
                 // show IA helper, but only do this during IA, so not when the original
                 // Edge gets modified in the last call
-                rDragStat.GetView()->SetConnectMarker(*pDraggedOne, *rDragStat.GetPageView());
+                rDragStat.GetView()->SetConnectMarker(*pDraggedOne);
             }
         }
 
@@ -1915,8 +1958,8 @@ bool SdrEdgeObj::applySpecialDrag(SdrDragStat& rDragStat)
         const Point aDist(rDragStat.GetNow() - rDragStat.GetStart());
         sal_Int32 nDist(pEdgeHdl->IsHorzDrag() ? aDist.X() : aDist.Y());
 
-        nDist += aEdgeInfo.ImpGetLineVersatz(eLineCode, *pEdgeTrack);
-        aEdgeInfo.ImpSetLineVersatz(eLineCode, *pEdgeTrack, nDist);
+        nDist += aEdgeInfo.ImpGetLineOffset(eLineCode, *pEdgeTrack);
+        aEdgeInfo.ImpSetLineOffset(eLineCode, *pEdgeTrack, nDist);
     }
 
     // force recalculation of EdgeTrack
@@ -1969,15 +2012,15 @@ basegfx::B2DPolygon SdrEdgeObj::ImplAddConnectorOverlay(SdrDragMethod& rDragMeth
         if (bTail1)
         {
             const basegfx::B2DPoint aTemp(rDragMethod.getCurrentTransformation() * basegfx::B2DPoint(aMyCon1.aObjOfs.X(), aMyCon1.aObjOfs.Y()));
-            aMyCon1.aObjOfs.X() = basegfx::fround(aTemp.getX());
-            aMyCon1.aObjOfs.Y() = basegfx::fround(aTemp.getY());
+            aMyCon1.aObjOfs.setX( basegfx::fround(aTemp.getX()) );
+            aMyCon1.aObjOfs.setY( basegfx::fround(aTemp.getY()) );
         }
 
         if (bTail2)
         {
             const basegfx::B2DPoint aTemp(rDragMethod.getCurrentTransformation() * basegfx::B2DPoint(aMyCon2.aObjOfs.X(), aMyCon2.aObjOfs.Y()));
-            aMyCon2.aObjOfs.X() = basegfx::fround(aTemp.getX());
-            aMyCon2.aObjOfs.Y() = basegfx::fround(aTemp.getY());
+            aMyCon2.aObjOfs.setX( basegfx::fround(aTemp.getX()) );
+            aMyCon2.aObjOfs.setY( basegfx::fround(aTemp.getY()) );
         }
 
         SdrEdgeInfoRec aInfo(aEdgeInfo);
@@ -2002,15 +2045,15 @@ basegfx::B2DPolygon SdrEdgeObj::ImplAddConnectorOverlay(SdrDragMethod& rDragMeth
         if (bTail1)
         {
             const basegfx::B2DPoint aTemp(rDragMethod.getCurrentTransformation() * basegfx::B2DPoint(aPt1.X(), aPt1.Y()));
-            aPt1.X() = basegfx::fround(aTemp.getX());
-            aPt1.Y() = basegfx::fround(aTemp.getY());
+            aPt1.setX( basegfx::fround(aTemp.getX()) );
+            aPt1.setY( basegfx::fround(aTemp.getY()) );
         }
 
         if (bTail2)
         {
             const basegfx::B2DPoint aTemp(rDragMethod.getCurrentTransformation() * basegfx::B2DPoint(aPt2.X(), aPt2.Y()));
-            aPt2.X() = basegfx::fround(aTemp.getX());
-            aPt2.Y() = basegfx::fround(aTemp.getY());
+            aPt2.setX( basegfx::fround(aTemp.getX()) );
+            aPt2.setY( basegfx::fround(aTemp.getY()) );
         }
 
         aResult.append(basegfx::B2DPoint(aPt1.X(), aPt1.Y()));
@@ -2040,7 +2083,7 @@ bool SdrEdgeObj::MovCreate(SdrDragStat& rDragStat)
     (*pEdgeTrack)[nMax-1]=rDragStat.GetNow();
     if (rDragStat.GetPageView()!=nullptr) {
         ImpFindConnector(rDragStat.GetNow(),*rDragStat.GetPageView(),aCon2,this);
-        rDragStat.GetView()->SetConnectMarker(aCon2,*rDragStat.GetPageView());
+        rDragStat.GetView()->SetConnectMarker(aCon2);
     }
     SetBoundRectDirty();
     bSnapRectDirty=true;
@@ -2052,7 +2095,7 @@ bool SdrEdgeObj::MovCreate(SdrDragStat& rDragStat)
 
 bool SdrEdgeObj::EndCreate(SdrDragStat& rDragStat, SdrCreateCmd eCmd)
 {
-    bool bOk=(eCmd==SDRCREATE_FORCEEND || rDragStat.GetPointCount()>=2);
+    bool bOk=(eCmd==SdrCreateCmd::ForceEnd || rDragStat.GetPointCount()>=2);
     if (bOk) {
         ConnectToNode(true,aCon1.pObj);
         ConnectToNode(false,aCon2.pObj);
@@ -2098,17 +2141,17 @@ bool SdrEdgeObj::ImpFindConnector(const Point& rPt, const SdrPageView& rPV, SdrO
     if (pOut==nullptr) pOut=rPV.GetView().GetFirstOutputDevice();
     if (pOut==nullptr) return false;
     SdrObjList* pOL=rPV.GetObjList();
-    const SetOfByte& rVisLayer=rPV.GetVisibleLayers();
+    const SdrLayerIDSet& rVisLayer=rPV.GetVisibleLayers();
     // sensitive area of connectors is twice as large as the one of the handles
     sal_uInt16 nMarkHdSiz=rPV.GetView().GetMarkHdlSizePixel();
     Size aHalfConSiz(nMarkHdSiz,nMarkHdSiz);
     aHalfConSiz=pOut->PixelToLogic(aHalfConSiz);
-    Rectangle aMouseRect(rPt,rPt);
-    aMouseRect.Left()  -=aHalfConSiz.Width();
-    aMouseRect.Top()   -=aHalfConSiz.Height();
-    aMouseRect.Right() +=aHalfConSiz.Width();
-    aMouseRect.Bottom()+=aHalfConSiz.Height();
-    sal_uInt16 nBoundHitTol=(sal_uInt16)aHalfConSiz.Width()/2; if (nBoundHitTol==0) nBoundHitTol=1;
+    tools::Rectangle aMouseRect(rPt,rPt);
+    aMouseRect.AdjustLeft( -(aHalfConSiz.Width()) );
+    aMouseRect.AdjustTop( -(aHalfConSiz.Height()) );
+    aMouseRect.AdjustRight(aHalfConSiz.Width() );
+    aMouseRect.AdjustBottom(aHalfConSiz.Height() );
+    sal_uInt16 nBoundHitTol=static_cast<sal_uInt16>(aHalfConSiz.Width())/2; if (nBoundHitTol==0) nBoundHitTol=1;
     size_t no=pOL->GetObjCount();
     bool bFnd = false;
     SdrObjConnection aTestCon;
@@ -2122,7 +2165,7 @@ bool SdrEdgeObj::ImpFindConnector(const Point& rPt, const SdrPageView& rPV, SdrO
             (pThis==nullptr || pObj!=static_cast<SdrObject const *>(pThis)) && // don't connect it to itself
             pObj->IsNode())
         {
-            Rectangle aObjBound(pObj->GetCurrentBoundRect());
+            tools::Rectangle aObjBound(pObj->GetCurrentBoundRect());
             if (aObjBound.IsOver(aMouseRect)) {
                 aTestCon.ResetVars();
                 bool bEdge=dynamic_cast<const SdrEdgeObj *>(pObj) != nullptr; // no BestCon for Edge
@@ -2150,18 +2193,12 @@ bool SdrEdgeObj::ImpFindConnector(const Point& rPt, const SdrPageView& rPV, SdrO
                         bOk = true;
                     } else if (bVertex && !bUserFnd) {
                         nConNum=nConNum-nConAnz;
-                        if (rPV.GetView().IsAutoVertexConnectors()) {
-                            SdrGluePoint aPt(pObj->GetVertexGluePoint(nConNum));
-                            aConPos=aPt.GetAbsolutePos(*pObj);
-                            bOk = true;
-                        } else i+=3;
+                        SdrGluePoint aPt(pObj->GetVertexGluePoint(nConNum));
+                        aConPos=aPt.GetAbsolutePos(*pObj);
+                        bOk = true;
                     } else if (bCorner && !bUserFnd) {
                         nConNum-=nConAnz+4;
-                        if (rPV.GetView().IsAutoCornerConnectors()) {
-                            SdrGluePoint aPt(pObj->GetCornerGluePoint(nConNum));
-                            aConPos=aPt.GetAbsolutePos(*pObj);
-                            bOk = true;
-                        } else i+=3;
+                        i+=3;
                     }
                     else if (bCenter && !bUserFnd && !bEdge)
                     {
@@ -2177,7 +2214,7 @@ bool SdrEdgeObj::ImpFindConnector(const Point& rPt, const SdrPageView& rPV, SdrO
                     if (bOk && aMouseRect.IsInside(aConPos)) {
                         if (bUser) bUserFnd = true;
                         bFnd = true;
-                        sal_uIntPtr nDist=(sal_uIntPtr)std::abs(aConPos.X()-rPt.X())+(sal_uIntPtr)std::abs(aConPos.Y()-rPt.Y());
+                        sal_uIntPtr nDist=static_cast<sal_uIntPtr>(std::abs(aConPos.X()-rPt.X()))+static_cast<sal_uIntPtr>(std::abs(aConPos.Y()-rPt.Y()));
                         if (nDist<nBestDist) {
                             nBestDist=nDist;
                             aTestCon.pObj=pObj;
@@ -2203,11 +2240,11 @@ bool SdrEdgeObj::ImpFindConnector(const Point& rPt, const SdrPageView& rPV, SdrO
                     }
                 }
                 if (bFnd) {
-                    Rectangle aMouseRect2(rPt,rPt);
-                    aMouseRect.Left()  -=nBoundHitTol;
-                    aMouseRect.Top()   -=nBoundHitTol;
-                    aMouseRect.Right() +=nBoundHitTol;
-                    aMouseRect.Bottom()+=nBoundHitTol;
+                    tools::Rectangle aMouseRect2(rPt,rPt);
+                    aMouseRect.AdjustLeft( -nBoundHitTol );
+                    aMouseRect.AdjustTop( -nBoundHitTol );
+                    aMouseRect.AdjustRight(nBoundHitTol );
+                    aMouseRect.AdjustBottom(nBoundHitTol );
                     aObjBound.IsOver(aMouseRect2);
                 }
 
@@ -2218,9 +2255,9 @@ bool SdrEdgeObj::ImpFindConnector(const Point& rPt, const SdrPageView& rPV, SdrO
     return bFnd;
 }
 
-void SdrEdgeObj::NbcSetSnapRect(const Rectangle& rRect)
+void SdrEdgeObj::NbcSetSnapRect(const tools::Rectangle& rRect)
 {
-    const Rectangle aOld(GetSnapRect());
+    const tools::Rectangle aOld(GetSnapRect());
 
     if(aOld != rRect)
     {
@@ -2259,7 +2296,7 @@ void SdrEdgeObj::NbcResize(const Point& rRefPnt, const Fraction& aXFact, const F
     ResizeXPoly(*pEdgeTrack,rRefPnt,aXFact,aYFact);
 
     // if resize is not from paste, forget user distances
-    if (!GetModel() || !GetModel()->IsPasteResize())
+    if (!getSdrModelFromSdrObject().IsPasteResize())
     {
         aEdgeInfo.aObj1Line2 = Point();
         aEdgeInfo.aObj1Line3 = Point();
@@ -2282,8 +2319,8 @@ void SdrEdgeObj::NbcRotate(const Point& rRef, long nAngle, double sn, double cs)
     else
     {
         // handle start and end point if not connected
-        bool bCon1=aCon1.pObj!=nullptr && aCon1.pObj->GetPage()==pPage;
-        bool bCon2=aCon2.pObj!=nullptr && aCon2.pObj->GetPage()==pPage;
+        const bool bCon1(nullptr != aCon1.pObj && aCon1.pObj->getSdrPageFromSdrObject() == getSdrPageFromSdrObject());
+        const bool bCon2(nullptr != aCon2.pObj && aCon2.pObj->getSdrPageFromSdrObject() == getSdrPageFromSdrObject());
 
         if(!bCon1 && pEdgeTrack)
         {
@@ -2313,8 +2350,8 @@ void SdrEdgeObj::NbcMirror(const Point& rRef1, const Point& rRef2)
     else
     {
         // handle start and end point if not connected
-        bool bCon1=aCon1.pObj!=nullptr && aCon1.pObj->GetPage()==pPage;
-        bool bCon2=aCon2.pObj!=nullptr && aCon2.pObj->GetPage()==pPage;
+        const bool bCon1(nullptr != aCon1.pObj && aCon1.pObj->getSdrPageFromSdrObject() == getSdrPageFromSdrObject());
+        const bool bCon2(nullptr != aCon2.pObj && aCon2.pObj->getSdrPageFromSdrObject() == getSdrPageFromSdrObject());
 
         if(!bCon1 && pEdgeTrack)
         {
@@ -2344,8 +2381,8 @@ void SdrEdgeObj::NbcShear(const Point& rRef, long nAngle, double tn, bool bVShea
     else
     {
         // handle start and end point if not connected
-        bool bCon1=aCon1.pObj!=nullptr && aCon1.pObj->GetPage()==pPage;
-        bool bCon2=aCon2.pObj!=nullptr && aCon2.pObj->GetPage()==pPage;
+        const bool bCon1(nullptr != aCon1.pObj && aCon1.pObj->getSdrPageFromSdrObject() == getSdrPageFromSdrObject());
+        const bool bCon2(nullptr != aCon2.pObj && aCon2.pObj->getSdrPageFromSdrObject() == getSdrPageFromSdrObject());
 
         if(!bCon1 && pEdgeTrack)
         {
@@ -2378,7 +2415,7 @@ SdrObject* SdrEdgeObj::DoConvertToPolyObj(bool bBezier, bool bAddText) const
 
 sal_uInt32 SdrEdgeObj::GetSnapPointCount() const
 {
-    return 2L;
+    return 2;
 }
 
 Point SdrEdgeObj::GetSnapPoint(sal_uInt32 i) const
@@ -2396,14 +2433,14 @@ bool SdrEdgeObj::IsPolyObj() const
 
 sal_uInt32 SdrEdgeObj::GetPointCount() const
 {
-    return 0L;
+    return 0;
 }
 
 Point SdrEdgeObj::GetPoint(sal_uInt32 i) const
 {
     const_cast<SdrEdgeObj*>(this)->ImpUndirtyEdgeTrack();
     sal_uInt16 nCount=pEdgeTrack->GetPointCount();
-    if (0L == i)
+    if (0 == i)
         return (*pEdgeTrack)[0];
     else
         return (*pEdgeTrack)[nCount-1];
@@ -2414,24 +2451,23 @@ void SdrEdgeObj::NbcSetPoint(const Point& rPnt, sal_uInt32 i)
     // TODO: Need an implementation to connect differently.
     ImpUndirtyEdgeTrack();
     sal_uInt16 nCount=pEdgeTrack->GetPointCount();
-    if (0L == i)
+    if (0 == i)
         (*pEdgeTrack)[0]=rPnt;
-    if (1L == i)
+    if (1 == i)
         (*pEdgeTrack)[nCount-1]=rPnt;
     SetEdgeTrackDirty();
     SetRectsDirty();
 }
 
 SdrEdgeObjGeoData::SdrEdgeObjGeoData()
-    : bEdgeTrackDirty(false)
+    : pEdgeTrack(new XPolygon)
+    , bEdgeTrackDirty(false)
     , bEdgeTrackUserDefined(false)
 {
-    pEdgeTrack=new XPolygon;
 }
 
 SdrEdgeObjGeoData::~SdrEdgeObjGeoData()
 {
-    delete pEdgeTrack;
 }
 
 SdrObjGeoData* SdrEdgeObj::NewGeoData() const
@@ -2460,11 +2496,17 @@ void SdrEdgeObj::RestGeoData(const SdrObjGeoData& rGeo)
         aCon1=rEGeo.aCon1;
         if (aCon1.pObj!=nullptr) aCon1.pObj->AddListener(*this);
     }
+    else
+        aCon1=rEGeo.aCon1;
+
     if (aCon2.pObj!=rEGeo.aCon2.pObj) {
         if (aCon2.pObj!=nullptr) aCon2.pObj->RemoveListener(*this);
         aCon2=rEGeo.aCon2;
         if (aCon2.pObj!=nullptr) aCon2.pObj->AddListener(*this);
     }
+    else
+        aCon2=rEGeo.aCon2;
+
     *pEdgeTrack    =*rEGeo.pEdgeTrack;
     bEdgeTrackDirty=rEGeo.bEdgeTrackDirty;
     bEdgeTrackUserDefined=rEGeo.bEdgeTrackUserDefined;
@@ -2509,7 +2551,7 @@ void SdrEdgeObj::SetTailPoint( bool bTail, const Point& rPt )
 */
 void SdrEdgeObj::setGluePointIndex( bool bTail, sal_Int32 nIndex /* = -1 */ )
 {
-    Rectangle aBoundRect0; if (pUserCall!=nullptr) aBoundRect0=GetCurrentBoundRect();
+    tools::Rectangle aBoundRect0; if (pUserCall!=nullptr) aBoundRect0=GetCurrentBoundRect();
 
     SdrObjConnection& rConn1 = GetConnection( bTail );
 
@@ -2524,7 +2566,7 @@ void SdrEdgeObj::setGluePointIndex( bool bTail, sal_Int32 nIndex /* = -1 */ )
         // for user defined glue points we have
         // to get the id for this index first
         const SdrGluePointList* pList = rConn1.GetObject() ? rConn1.GetObject()->GetGluePointList() : nullptr;
-        if( pList == nullptr || SDRGLUEPOINT_NOTFOUND == pList->FindGluePoint((sal_uInt16)nIndex) )
+        if( pList == nullptr || SDRGLUEPOINT_NOTFOUND == pList->FindGluePoint(static_cast<sal_uInt16>(nIndex)) )
             return;
     }
     else if( nIndex < 0 )
@@ -2532,7 +2574,7 @@ void SdrEdgeObj::setGluePointIndex( bool bTail, sal_Int32 nIndex /* = -1 */ )
         nIndex = 0;
     }
 
-    rConn1.SetConnectorId( (sal_uInt16)nIndex );
+    rConn1.SetConnectorId( static_cast<sal_uInt16>(nIndex) );
 
     SetChanged();
     SetRectsDirty();

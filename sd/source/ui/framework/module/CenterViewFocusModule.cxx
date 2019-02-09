@@ -19,15 +19,13 @@
 
 #include "CenterViewFocusModule.hxx"
 
-#include "framework/ConfigurationController.hxx"
-#include "framework/FrameworkHelper.hxx"
-#include "framework/ViewShellWrapper.hxx"
+#include <framework/ConfigurationController.hxx>
+#include <framework/FrameworkHelper.hxx>
+#include <framework/ViewShellWrapper.hxx>
 
-#include "DrawController.hxx"
-#include "ViewShellBase.hxx"
-#include "ViewShellManager.hxx"
-#include "strings.hrc"
-#include "sdresid.hxx"
+#include <DrawController.hxx>
+#include <ViewShellBase.hxx>
+#include <ViewShellManager.hxx>
 #include <com/sun/star/drawing/framework/XControllerManager.hpp>
 #include <com/sun/star/drawing/framework/XConfigurationController.hpp>
 
@@ -44,7 +42,7 @@ namespace sd { namespace framework {
 
 //===== CenterViewFocusModule ====================================================
 
-CenterViewFocusModule::CenterViewFocusModule (Reference<frame::XController>& rxController)
+CenterViewFocusModule::CenterViewFocusModule (Reference<frame::XController> const & rxController)
     : CenterViewFocusModuleInterfaceBase(MutexOwner::maMutex),
       mbValid(false),
       mxConfigurationController(),
@@ -102,15 +100,14 @@ void SAL_CALL CenterViewFocusModule::disposing()
 
 void SAL_CALL CenterViewFocusModule::notifyConfigurationChange (
     const ConfigurationChangeEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
     if (mbValid)
     {
-        if (rEvent.Type.equals(FrameworkHelper::msConfigurationUpdateEndEvent))
+        if (rEvent.Type == FrameworkHelper::msConfigurationUpdateEndEvent)
         {
             HandleNewView(rEvent.Configuration);
         }
-        else if (rEvent.Type.equals(FrameworkHelper::msResourceActivationEvent))
+        else if (rEvent.Type == FrameworkHelper::msResourceActivationEvent)
         {
             if (rEvent.ResourceId->getResourceURL().match(FrameworkHelper::msViewURLPrefix))
                 mbNewViewCreated = true;
@@ -142,7 +139,7 @@ void CenterViewFocusModule::HandleNewView (
             if (pViewShellWrapper != nullptr)
             {
                 std::shared_ptr<ViewShell> pViewShell = pViewShellWrapper->GetViewShell();
-                if (pViewShell.get() != nullptr)
+                if (pViewShell != nullptr)
                     mpBase->GetViewShellManager()->MoveToTop(*pViewShell);
             }
         }
@@ -151,7 +148,6 @@ void CenterViewFocusModule::HandleNewView (
 
 void SAL_CALL CenterViewFocusModule::disposing (
     const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
 {
     if (mxConfigurationController.is())
         if (rEvent.Source == mxConfigurationController)

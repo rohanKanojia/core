@@ -22,9 +22,7 @@
 
 #include "fuconstr.hxx"
 
-class KeyEvent;
 class SdDrawDocument;
-class SdrObject;
 class SfxItemSet;
 
 namespace sd {
@@ -32,17 +30,21 @@ namespace sd {
 /**
  * draw rectangle
  */
-class FuConstructRectangle
+class FuConstructRectangle final
     : public FuConstruct
 {
+private:
+    //Extra attributes coming from parameters
+    sal_uInt16 mnFillTransparence;  // Default: 0
+    OUString msFillColor;           // Default: ""
+    sal_uInt16 mnLineStyle;         // Default: SAL_MAX_UINT16
+
 public:
 
     static rtl::Reference<FuPoor> Create( ViewShell* pViewSh, ::sd::Window* pWin, ::sd::View* pView, SdDrawDocument* pDoc, SfxRequest& rReq, bool bPermanent );
     virtual void DoExecute( SfxRequest& rReq ) override;
 
     // Mouse- & Key-Events
-    virtual bool KeyInput(const KeyEvent& rKEvt) override;
-    virtual bool MouseMove(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonUp(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonDown(const MouseEvent& rMEvt) override;
 
@@ -50,11 +52,11 @@ public:
     virtual void Deactivate() override;
 
     void SetAttributes(SfxItemSet& rAttr, SdrObject* pObj);
-    void SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj);
+    void SetLineEnds(SfxItemSet& rAttr, SdrObject const & rObj);
 
-    virtual SdrObject* CreateDefaultObject(const sal_uInt16 nID, const Rectangle& rRectangle) override;
+    virtual SdrObjectUniquePtr CreateDefaultObject(const sal_uInt16 nID, const ::tools::Rectangle& rRectangle) override;
 
-protected:
+private:
     FuConstructRectangle (
         ViewShell* pViewSh,
         ::sd::Window* pWin,

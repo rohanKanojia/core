@@ -37,7 +37,7 @@ sdbcx::ObjectType OTables::createObject(const OUString& _rName)
 
     Reference< XResultSet > xResult = m_xMetaData->getTables(Any(),aSchema,aName,aTypes);
 
-    sdbcx::ObjectType xRet = nullptr;
+    sdbcx::ObjectType xRet;
     if(xResult.is())
     {
         Reference< XRow > xRow(xResult,UNO_QUERY);
@@ -53,14 +53,14 @@ sdbcx::ObjectType OTables::createObject(const OUString& _rName)
     return xRet;
 }
 
-void OTables::impl_refresh(  ) throw(RuntimeException)
+void OTables::impl_refresh(  )
 {
     static_cast<OCatalog&>(m_rParent).refreshTables();
 }
 
 void OTables::disposing()
 {
-m_xMetaData.clear();
+    m_xMetaData.clear();
     OCollection::disposing();
 }
 

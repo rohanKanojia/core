@@ -15,6 +15,9 @@ from inspect import isclass
 from testcollections_base import CollectionsTestBase
 from com.sun.star.beans import PropertyValue
 
+# Footnote instance factory
+def getFootnoteInstance(doc):
+    return doc.createInstance("com.sun.star.text.Footnote")
 
 # Tests behaviour of objects implementing XIndexAccess using the new-style
 # collection accessors
@@ -26,7 +29,7 @@ class TestXIndexAccess(CollectionsTestBase):
     def insertTestFootnotes(self, doc, count):
         cursor = doc.Text.createTextCursor()
         for i in range(count):
-            footnote = doc.createInstance("com.sun.star.text.Footnote")
+            footnote = getFootnoteInstance(doc)
             footnote.Label = 'n'+str(i)
             doc.Text.insertTextContent(cursor, footnote, 0)
 
@@ -74,6 +77,8 @@ class TestXIndexAccess(CollectionsTestBase):
         # Then
         self.assertEqual(0, count)
 
+        doc.close(True);
+
     # Tests syntax:
     #    num = len(obj)              # Number of elements
     # For:
@@ -82,7 +87,7 @@ class TestXIndexAccess(CollectionsTestBase):
         # Given
         doc = self.createBlankTextDocument()
         cursor = doc.Text.createTextCursor()
-        footnote = doc.createInstance("com.sun.star.text.Footnote")
+        footnote = getFootnoteInstance(doc)
         doc.Text.insertTextContent(cursor, footnote, 0)
 
         # When
@@ -90,6 +95,8 @@ class TestXIndexAccess(CollectionsTestBase):
 
         # Then
         self.assertEqual(1, count)
+
+        doc.close(True);
 
     # Tests syntax:
     #    val = obj[0]                # Access by index
@@ -114,6 +121,7 @@ class TestXIndexAccess(CollectionsTestBase):
         self.readValuesTestFixture(doc, 2, 1,          1)
         self.readValuesTestFixture(doc, 2, 2,          IndexError)
         self.readValuesTestFixture(doc, 2, 3,          IndexError)
+        doc.close(True);
 
     def test_XIndexAccess_ReadIndex_Single_Invalid(self):
         doc = self.createBlankTextDocument()
@@ -123,33 +131,36 @@ class TestXIndexAccess(CollectionsTestBase):
         self.readValuesTestFixture(doc, 0, (0, 1),     TypeError)
         self.readValuesTestFixture(doc, 0, [0, 1],     TypeError)
         self.readValuesTestFixture(doc, 0, {'a': 'b'}, TypeError)
+        doc.close(True);
 
     # Tests syntax:
     #    val1,val2 = obj[2:4]        # Access by slice
     def test_XIndexAccess_ReadSlice(self):
         doc = self.createBlankTextDocument()
-        testMax = 4
-        for i in range(testMax):
+        test_max = 4
+        for i in range(test_max):
             t = tuple(range(i))
-            for j in [x for x in range(-testMax-2, testMax+3)] + [None]:
-                for k in [x for x in range(-testMax-2, testMax+3)] + [None]:
+            for j in [x for x in range(-test_max-2, test_max+3)] + [None]:
+                for k in [x for x in range(-test_max-2, test_max+3)] + [None]:
                     key = slice(j, k)
                     expected = t[key]
                     self.readValuesTestFixture(doc, i, key, expected)
+        doc.close(True);
 
     # Tests syntax:
     #    val1,val2 = obj[0:3:2]      # Access by extended slice
     def test_XIndexAccess_ReadExtendedSlice(self):
         doc = self.createBlankTextDocument()
-        testMax = 4
-        for i in range(testMax):
+        test_max = 4
+        for i in range(test_max):
             t = tuple(range(i))
-            for j in [x for x in range(-testMax-2, testMax+3)] + [None]:
-                for k in [x for x in range(-testMax-2, testMax+3)] + [None]:
+            for j in [x for x in range(-test_max-2, test_max+3)] + [None]:
+                for k in [x for x in range(-test_max-2, test_max+3)] + [None]:
                     for l in [-2, -1, 2]:
                         key = slice(j, k, l)
                         expected = t[key]
                         self.readValuesTestFixture(doc, i, key, expected)
+        doc.close(True);
 
     # Tests syntax:
     #    if val in obj: ...          # Test value presence
@@ -159,7 +170,7 @@ class TestXIndexAccess(CollectionsTestBase):
         # Given
         doc = self.createBlankTextDocument()
         cursor = doc.Text.createTextCursor()
-        footnote = doc.createInstance("com.sun.star.text.Footnote")
+        footnote = getFootnoteInstance(doc)
         footnote.setLabel('foo')
         doc.Text.insertTextContent(cursor, footnote, 0)
         footnote = doc.Footnotes.getByIndex(0)
@@ -169,6 +180,8 @@ class TestXIndexAccess(CollectionsTestBase):
 
         # Then
         self.assertTrue(present)
+
+        doc.close(True);
 
     # Tests syntax:
     #    if val in obj: ...          # Test value presence
@@ -184,6 +197,8 @@ class TestXIndexAccess(CollectionsTestBase):
         # Then
         self.assertFalse(present)
 
+        doc.close(True);
+
     # Tests syntax:
     #    if val in obj: ...          # Test value presence
     # For:
@@ -198,6 +213,8 @@ class TestXIndexAccess(CollectionsTestBase):
         # Then
         self.assertFalse(present)
 
+        doc.close(True);
+
     # Tests syntax:
     #    if val in obj: ...          # Test value presence
     # For:
@@ -210,6 +227,8 @@ class TestXIndexAccess(CollectionsTestBase):
         with self.assertRaises(TypeError):
             present = {} in doc.Footnotes
 
+        doc.close(True);
+
     # Tests syntax:
     #    for val in obj: ...         # Implicit iterator (values)
     # For:
@@ -219,12 +238,14 @@ class TestXIndexAccess(CollectionsTestBase):
         doc = self.createBlankTextDocument()
 
         # When
-        readFootnotes = []
+        read_footnotes = []
         for f in doc.Footnotes:
-            readFootnotes.append(f)
+            read_footnotes.append(f)
 
         # Then
-        self.assertEqual(0, len(readFootnotes))
+        self.assertEqual(0, len(read_footnotes))
+
+        doc.close(True);
 
     # Tests syntax:
     #    for val in obj: ...         # Implicit iterator (values)
@@ -234,18 +255,20 @@ class TestXIndexAccess(CollectionsTestBase):
         # Given
         doc = self.createBlankTextDocument()
         cursor = doc.Text.createTextCursor()
-        footnote = doc.createInstance("com.sun.star.text.Footnote")
+        footnote = getFootnoteInstance(doc)
         footnote.setLabel('foo')
         doc.Text.insertTextContent(cursor, footnote, 0)
 
         # When
-        readFootnotes = []
+        read_footnotes = []
         for f in doc.Footnotes:
-            readFootnotes.append(f)
+            read_footnotes.append(f)
 
         # Then
-        self.assertEqual(1, len(readFootnotes))
-        self.assertEqual('foo', readFootnotes[0].Label)
+        self.assertEqual(1, len(read_footnotes))
+        self.assertEqual('foo', read_footnotes[0].Label)
+
+        doc.close(True);
 
     # Tests syntax:
     #    for val in obj: ...         # Implicit iterator (values)
@@ -255,22 +278,24 @@ class TestXIndexAccess(CollectionsTestBase):
         # Given
         doc = self.createBlankTextDocument()
         cursor = doc.Text.createTextCursor()
-        footnote1 = doc.createInstance("com.sun.star.text.Footnote")
-        footnote2 = doc.createInstance("com.sun.star.text.Footnote")
+        footnote1 = getFootnoteInstance(doc)
+        footnote2 = getFootnoteInstance(doc)
         footnote1.setLabel('foo')
         footnote2.setLabel('bar')
         doc.Text.insertTextContent(cursor, footnote1, 0)
         doc.Text.insertTextContent(cursor, footnote2, 0)
 
         # When
-        readFootnotes = []
+        read_footnotes = []
         for f in doc.Footnotes:
-            readFootnotes.append(f)
+            read_footnotes.append(f)
 
         # Then
-        self.assertEqual(2, len(readFootnotes))
-        self.assertEqual('foo', readFootnotes[0].Label)
-        self.assertEqual('bar', readFootnotes[1].Label)
+        self.assertEqual(2, len(read_footnotes))
+        self.assertEqual('foo', read_footnotes[0].Label)
+        self.assertEqual('bar', read_footnotes[1].Label)
+
+        doc.close(True);
 
     # Tests syntax:
     #    itr = iter(obj)             # Named iterator (values)
@@ -280,7 +305,7 @@ class TestXIndexAccess(CollectionsTestBase):
         # Given
         doc = self.createBlankTextDocument()
         cursor = doc.Text.createTextCursor()
-        footnote = doc.createInstance("com.sun.star.text.Footnote")
+        footnote = getFootnoteInstance(doc)
         footnote.setLabel('foo')
         doc.Text.insertTextContent(cursor, footnote, 0)
 
@@ -291,6 +316,8 @@ class TestXIndexAccess(CollectionsTestBase):
         self.assertIsNotNone(next(itr))
         with self.assertRaises(StopIteration):
             next(itr)
+
+        doc.close(True);
 
 
 if __name__ == '__main__':

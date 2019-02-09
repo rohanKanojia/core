@@ -29,10 +29,9 @@
 namespace abp
 {
 
-    typedef ::svt::RoadmapWizard OAddessBookSourcePilot_Base;
-    class OAddessBookSourcePilot : public OAddessBookSourcePilot_Base
+    typedef ::svt::RoadmapWizard OAddressBookSourcePilot_Base;
+    class OAddressBookSourcePilot final : public OAddressBookSourcePilot_Base
     {
-    protected:
         css::uno::Reference< css::uno::XComponentContext >
                                 m_xORB;
         AddressSettings         m_aSettings;
@@ -42,7 +41,7 @@ namespace abp
 
     public:
         /// ctor
-        OAddessBookSourcePilot(
+        OAddressBookSourcePilot(
             vcl::Window* _pParent,
             const css::uno::Reference< css::uno::XComponentContext >& _rxORB);
 
@@ -56,12 +55,12 @@ namespace abp
 
         bool                connectToDataSource( bool _bForceReConnect );
 
-        void                    travelNext( ) { OAddessBookSourcePilot_Base::travelNext(); }
+        void                    travelNext( ) { OAddressBookSourcePilot_Base::travelNext(); }
 
         /// to be called when the selected type changed
         void                    typeSelectionChanged( AddressSourceType _eType );
 
-    protected:
+    private:
         // OWizardMachine overridables
         virtual VclPtr<TabPage>     createPage( WizardState _nState ) override;
         virtual void                enterState( WizardState _nState ) override;
@@ -73,8 +72,7 @@ namespace abp
 
         virtual bool    Close() override;
 
-    private:
-        DECL_LINK_TYPED( OnCancelClicked, Button*, void );
+        DECL_LINK( OnCancelClicked, Button*, void );
 
         /** creates a new data source of the type indicated by m_aSettings
             <p>If another data source has been created before, this one is deleted.</p>
@@ -87,30 +85,30 @@ namespace abp
         /// guesses a default for the table name, if no valid table is selected
         void implDefaultTableName();
 
-        static inline bool needAdminInvokationPage( AddressSourceType _eType )
+        static bool needAdminInvokationPage( AddressSourceType _eType )
         {
             return  ( AST_OTHER == _eType );
         }
         /// check if with the current settings, we would need to invoke he administration dialog for more details about the data source
-        inline bool needAdminInvokationPage() const
+        bool needAdminInvokationPage() const
         {
             return  needAdminInvokationPage( m_aSettings.eType );
         }
 
-        static inline bool needManualFieldMapping( AddressSourceType _eType )
+        static bool needManualFieldMapping( AddressSourceType _eType )
         {
             return  ( AST_OTHER == _eType ) || ( AST_KAB == _eType ) ||
                     ( AST_EVOLUTION == _eType ) || ( AST_EVOLUTION_GROUPWISE == _eType ) ||
                     ( AST_EVOLUTION_LDAP == _eType );
         }
         /// checks if we need a manual (user-guided) field mapping
-        inline bool needManualFieldMapping() const
+        bool needManualFieldMapping() const
         {
             return needManualFieldMapping( m_aSettings.eType );
         }
 
         /// determines whether the given address book type does provide one table only
-        static inline bool needTableSelection( AddressSourceType _eType )
+        static bool needTableSelection( AddressSourceType _eType )
         {
             return  ( AST_KAB != _eType );
         }

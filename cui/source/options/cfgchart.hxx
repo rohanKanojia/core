@@ -29,19 +29,13 @@
 class SvxChartColorTable
 {
 private:
-    ::std::vector< XColorEntry >     m_aColorEntries;
-    int                              nNextElementNumber;
-    OUString                         sDefaultNamePrefix;
-    OUString                         sDefaultNamePostfix;
+    std::vector< XColorEntry >     m_aColorEntries;
 
 public:
-    SvxChartColorTable();
-    explicit SvxChartColorTable( const SvxChartColorTable & _rSource );
-
     // accessors
     size_t size() const;
     const XColorEntry & operator[]( size_t _nIndex ) const;
-    ColorData getColorData( size_t _nIndex ) const;
+    Color getColor( size_t _nIndex ) const;
 
     // mutators
     void clear();
@@ -49,7 +43,7 @@ public:
     void remove( size_t _nIndex );
     void replace( size_t _nIndex, const XColorEntry & _rEntry );
     void useDefault();
-    OUString getDefaultName(size_t _nIndex);
+    static OUString getDefaultName(size_t _nIndex);
 
     // comparison
     bool operator==( const SvxChartColorTable & _rOther ) const;
@@ -67,7 +61,7 @@ private:
     css::uno::Sequence< OUString >
                                 maPropertyNames;
 
-    inline css::uno::Sequence< OUString > GetPropertyNames() const
+    const css::uno::Sequence< OUString >& GetPropertyNames() const
         { return maPropertyNames; }
     bool RetrieveOptions();
 
@@ -75,7 +69,7 @@ private:
 
 public:
     SvxChartOptions();
-    virtual ~SvxChartOptions();
+    virtual ~SvxChartOptions() override;
 
     const SvxChartColorTable&   GetDefaultColors();
     void                        SetDefaultColors( const SvxChartColorTable& aCol );
@@ -90,7 +84,6 @@ class SvxChartColorTableItem : public SfxPoolItem
 {
 public:
     SvxChartColorTableItem( sal_uInt16 nWhich, const SvxChartColorTable& );
-    SvxChartColorTableItem( const SvxChartColorTableItem& );
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool            operator==( const SfxPoolItem& ) const override;

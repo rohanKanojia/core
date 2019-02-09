@@ -58,16 +58,16 @@ namespace frm
         VclPtr<ScrollBar>              m_pVScroll;
         VclPtr<ScrollBarBox>           m_pScrollCorner;
         RichTextEngine*         m_pEngine;
-        EditView*               m_pView;
+        std::unique_ptr<EditView> m_pView;
         ITextAttributeListener* m_pTextAttrListener;
         ITextSelectionListener* m_pSelectionListener;
         bool                    m_bHasEverBeenShown;
 
     public:
         struct GrantAccess { friend class RichTextControl; private: GrantAccess() { } };
-        inline EditView*        getView( const GrantAccess& ) const     { return m_pView; }
-        inline RichTextEngine*  getEngine( const GrantAccess& ) const   { return m_pEngine; }
-        inline vcl::Window*          getViewport( const GrantAccess& ) const { return m_pViewport; }
+        EditView*        getView( const GrantAccess& ) const     { return m_pView.get(); }
+        RichTextEngine*  getEngine( const GrantAccess& ) const   { return m_pEngine; }
+        vcl::Window*          getViewport( const GrantAccess& ) const { return m_pViewport; }
 
     public:
         RichTextControlImpl( Control* _pAntiImpl, RichTextEngine* _pEngine,
@@ -85,7 +85,7 @@ namespace frm
         void    updateAttribute( AttributeId _nAttribute );
 
         /// enables the callback for a particular attribute
-        void    enableAttributeNotification( AttributeId _nAttributeId, ITextAttributeListener* _pListener = nullptr );
+        void    enableAttributeNotification( AttributeId _nAttributeId, ITextAttributeListener* _pListener );
 
         /// disables the change notifications for a particular attribute
         void    disableAttributeNotification( AttributeId _nAttributeId );
@@ -142,14 +142,14 @@ namespace frm
         bool    GetHideInactiveSelection() const;
 
         /// draws the control onto a given output device
-        void    Draw( OutputDevice* _pDev, const Point& _rPos, const Size& _rSize, DrawFlags _nFlags );
+        void    Draw( OutputDevice* _pDev, const Point& _rPos, const Size& _rSize );
 
         /// handles command events arrived at the anti-impl control
-        long    HandleCommand( const CommandEvent& _rEvent );
+        bool    HandleCommand( const CommandEvent& _rEvent );
 
     private:
         // updates the cache with the state provided by the given attribute handler
-        void    implUpdateAttribute( AttributeHandlerPool::const_iterator _pHandler );
+        void    implUpdateAttribute( const AttributeHandlerPool::const_iterator& _pHandler );
 
         // updates the cache with the given state, and calls listeners (if necessary)
         void    implCheckUpdateCache( AttributeId _nAttribute, const AttributeState& _rState );
@@ -166,16 +166,16 @@ namespace frm
         /// ensures that our "automatic line break" setting matches the current WinBits of the window
         void    ensureLineBreakSetting();
 
-        inline  bool    hasVScrollBar( ) const { return m_pVScroll != nullptr; }
-        inline  bool    hasHScrollBar( ) const { return m_pHScroll != nullptr; }
+        bool    hasVScrollBar( ) const { return m_pVScroll != nullptr; }
+        bool    hasHScrollBar( ) const { return m_pHScroll != nullptr; }
 
         // IEngineStatusListener overridables
         virtual void EditEngineStatusChanged( const EditStatus& _rStatus ) override;
 
     private:
-        DECL_LINK_TYPED( OnInvalidateAllAttributes, LinkParamNone*, void );
-        DECL_LINK_TYPED( OnHScroll, ScrollBar*, void );
-        DECL_LINK_TYPED( OnVScroll, ScrollBar*, void );
+        DECL_LINK( OnInvalidateAllAttributes, LinkParamNone*, void );
+        DECL_LINK( OnHScroll, ScrollBar*, void );
+        DECL_LINK( OnVScroll, ScrollBar*, void );
     };
 
 

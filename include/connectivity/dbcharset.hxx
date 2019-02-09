@@ -67,8 +67,6 @@ namespace dbtools
         OCharsetMap();
         virtual ~OCharsetMap();
 
-        struct IANA { };
-
         /** find the given text encoding in the map.
             @return the <em>end</em> iterator if the encoding could not be found.
         */
@@ -76,7 +74,7 @@ namespace dbtools
         /** find the given IANA name in the map.
             @return the <em>end</em> iterator if the IANA name could not be found.
         */
-        CharsetIterator find(const OUString& _rIanaName, const IANA&) const;
+        CharsetIterator findIanaName(const OUString& _rIanaName) const;
 
         /// get access to the first element of the charset collection
         CharsetIterator begin() const;
@@ -86,7 +84,7 @@ namespace dbtools
     protected:
         // needed because we want to call a virtual method during construction
                 void lateConstruct();
-        inline  void ensureConstructed( ) const { if ( m_aEncodings.empty() ) const_cast< OCharsetMap* >( this )->lateConstruct(); }
+        void ensureConstructed( ) const { if ( m_aEncodings.empty() ) const_cast< OCharsetMap* >( this )->lateConstruct(); }
 
         virtual bool approveEncoding( const rtl_TextEncoding _eEncoding, const rtl_TextEncodingInfo& _rInfo ) const;
     };
@@ -129,9 +127,6 @@ namespace dbtools
         OCharsetMap::TextEncBag::const_iterator m_aPos;
 
     public:
-        CharsetIterator(const CharsetIterator& _rSource);
-        ~CharsetIterator();
-
         CharsetIteratorDerefHelper operator*() const;
         // no -> operator
         // this would require us to a) store CharsetIteratorDerefHelper instances ourself so that we
@@ -144,7 +139,7 @@ namespace dbtools
         const CharsetIterator&  operator--();
 
     protected:
-        CharsetIterator(const OCharsetMap* _pContainer, OCharsetMap::TextEncBag::const_iterator _aPos );
+        CharsetIterator(const OCharsetMap* _pContainer, OCharsetMap::TextEncBag::const_iterator const & _aPos );
     };
 
 

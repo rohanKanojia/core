@@ -17,24 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "WindowUpdater.hxx"
-#include "ViewShell.hxx"
-#include "Window.hxx"
-#include "drawdoc.hxx"
-#include "View.hxx"
+#include <WindowUpdater.hxx>
+#include <ViewShell.hxx>
+#include <Window.hxx>
+#include <drawdoc.hxx>
+#include <View.hxx>
 
 #include <vcl/split.hxx>
 #include <sfx2/childwin.hxx>
 #include <sfx2/viewfrm.hxx>
-#include <svl/smplhint.hxx>
 
 #include <algorithm>
 
 namespace sd {
 
 WindowUpdater::WindowUpdater()
-    : mpViewShell (nullptr),
-      mpDocument (nullptr)
+    : mpDocument (nullptr)
 {
     maCTLOptions.AddListener(this);
 }
@@ -55,7 +53,7 @@ void WindowUpdater::RegisterWindow (vcl::Window* pWindow)
         {
             // Update the device once right now and add it to the list.
             Update (pWindow);
-            maWindowList.push_back (pWindow);
+            maWindowList.emplace_back(pWindow);
         }
     }
 }
@@ -69,11 +67,6 @@ void WindowUpdater::UnregisterWindow (vcl::Window* pWindow)
     {
         maWindowList.erase (aWindowIterator);
     }
-}
-
-void WindowUpdater::SetViewShell (ViewShell& rViewShell)
-{
-    mpViewShell = &rViewShell;
 }
 
 void WindowUpdater::SetDocument (SdDrawDocument* pDocument)
@@ -121,21 +114,19 @@ void WindowUpdater::UpdateWindow (OutputDevice* pDevice) const
     }
 }
 
-void WindowUpdater::ConfigurationChanged( utl::ConfigurationBroadcaster*, sal_uInt32 )
+void WindowUpdater::ConfigurationChanged( utl::ConfigurationBroadcaster*, ConfigurationHints )
 {
     // Set the current state at all registered output devices.
-    tWindowList::iterator aWindowIterator (maWindowList.begin());
-    while (aWindowIterator != maWindowList.end())
-        Update (*aWindowIterator++);
+    for (auto& rxWindow : maWindowList)
+        Update (rxWindow);
 
     // Reformat the document for the modified state to take effect.
     if (mpDocument != nullptr)
         mpDocument->ReformatAllTextObjects();
 
     // Invalidate the windows to make the modified state visible.
-    aWindowIterator = maWindowList.begin();
-    while (aWindowIterator != maWindowList.end())
-        (*aWindowIterator++)->Invalidate();
+    for (auto& rxWindow : maWindowList)
+        rxWindow->Invalidate();
 }
 
 } // end of namespace sd

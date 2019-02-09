@@ -18,7 +18,7 @@
  */
 
 
-#include "commandimageprovider.hxx"
+#include <commandimageprovider.hxx>
 
 #include <com/sun/star/ui/XImageManager.hpp>
 #include <com/sun/star/ui/XUIConfigurationManagerSupplier.hpp>
@@ -34,12 +34,10 @@ namespace frm
 
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::uno::UNO_QUERY;
     using ::com::sun::star::uno::UNO_QUERY_THROW;
     using ::com::sun::star::uno::UNO_SET_THROW;
     using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Sequence;
     using ::com::sun::star::uno::XComponentContext;
     using ::com::sun::star::frame::XModel;
@@ -60,9 +58,6 @@ namespace frm
         DocumentCommandImageProvider( const Reference<XComponentContext>& _rContext, const Reference< XModel >& _rxDocument )
         {
             impl_init_nothrow( _rContext, _rxDocument );
-        }
-        virtual ~DocumentCommandImageProvider()
-        {
         }
 
         // ICommandImageProvider
@@ -92,7 +87,7 @@ namespace frm
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("forms.helper");
         }
 
         // obtain the image manager or the module
@@ -109,7 +104,7 @@ namespace frm
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("forms.helper");
         }
     }
 
@@ -134,8 +129,8 @@ namespace frm
             if ( m_xModuleImageManager.is() )
                 aModImages = m_xModuleImageManager->getImages( nImageType, _rCommandURLs );
 
-            ENSURE_OR_THROW( (size_t)aDocImages.getLength() == nCommandCount, "illegal array size returned by getImages (document image manager)" );
-            ENSURE_OR_THROW( (size_t)aModImages.getLength() == nCommandCount, "illegal array size returned by getImages (module image manager)" );
+            ENSURE_OR_THROW( static_cast<size_t>(aDocImages.getLength()) == nCommandCount, "illegal array size returned by getImages (document image manager)" );
+            ENSURE_OR_THROW( static_cast<size_t>(aModImages.getLength()) == nCommandCount, "illegal array size returned by getImages (module image manager)" );
 
             for ( size_t i=0; i<nCommandCount; ++i )
             {
@@ -147,7 +142,7 @@ namespace frm
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("forms.helper");
         }
         return aImages;
     }

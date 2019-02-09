@@ -20,12 +20,12 @@
 #define INCLUDED_SW_INC_PRTOPT_HXX
 
 #include <unotools/configitem.hxx>
-#include <printdata.hxx>
+#include "printdata.hxx"
 
 class SwPrintOptions : public SwPrintData, public utl::ConfigItem
 {
 private:
-    bool            bIsWeb;
+    bool const            bIsWeb;
 
     css::uno::Sequence<OUString> GetPropertyNames();
 
@@ -33,10 +33,10 @@ private:
 
 public:
     SwPrintOptions(bool bWeb);
-    virtual ~SwPrintOptions();
+    virtual ~SwPrintOptions() override;
 
     virtual void Notify( const css::uno::Sequence< OUString >& aPropertyNames ) override;
-    virtual void            doSetModified( ) override { m_bModified = true; SetModified();}
+    virtual void doSetModified() override { SetModified(); }
 
     SwPrintOptions& operator=(const SwPrintData& rData)
     {

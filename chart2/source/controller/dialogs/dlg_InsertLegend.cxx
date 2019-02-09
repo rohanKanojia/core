@@ -17,19 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dlg_InsertLegend.hxx"
-#include "res_LegendPosition.hxx"
+#include <dlg_InsertLegend.hxx>
+#include <res_LegendPosition.hxx>
 
 namespace chart
 {
 
 using namespace ::com::sun::star;
 
-SchLegendDlg::SchLegendDlg(vcl::Window* pWindow, const uno::Reference< uno::XComponentContext>& xCC )
-    : ModalDialog(pWindow
-    ,"dlg_InsertLegend"
-    ,"modules/schart/ui/dlg_InsertLegend.ui")
-    , m_xLegendPositionResources( new LegendPositionResources(*this,xCC) )
+SchLegendDlg::SchLegendDlg(weld::Window* pWindow, const uno::Reference< uno::XComponentContext>& xCC)
+    : GenericDialogController(pWindow, "modules/schart/ui/dlg_InsertLegend.ui", "dlg_InsertLegend")
+    , m_xLegendPositionResources(new LegendPositionResources(*m_xBuilder, xCC))
 {
 }
 
@@ -38,10 +36,9 @@ void SchLegendDlg::init( const uno::Reference< frame::XModel >& xChartModel )
     m_xLegendPositionResources->writeToResources( xChartModel );
 }
 
-bool SchLegendDlg::writeToModel( const uno::Reference< frame::XModel >& xChartModel ) const
+void SchLegendDlg::writeToModel( const uno::Reference< frame::XModel >& xChartModel ) const
 {
     m_xLegendPositionResources->writeToModel( xChartModel );
-    return true;
 }
 
 } //namespace chart

@@ -18,45 +18,38 @@
  */
 
 #include <config_features.h>
+#include <sal/log.hxx>
 
 #include <sfx2/app.hxx>
 #include <sfx2/frame.hxx>
 #include <basic/basrdll.hxx>
 #include <basic/sbmeth.hxx>
 #include <basic/sbmod.hxx>
+#include <tools/svlibrary.h>
 #include <svtools/asynclink.hxx>
 #include <svl/stritem.hxx>
 #include <svl/eitem.hxx>
 #include <svl/urlbmk.hxx>
-#include <vcl/msgbox.hxx>
 #include <svtools/sfxecode.hxx>
 #include <svtools/ehdl.hxx>
 
 #include <svl/svdde.hxx>
 #include <unotools/configmgr.hxx>
 #include <unotools/tempfile.hxx>
-#include <osl/file.hxx>
 #include <com/sun/star/lang/XInitialization.hpp>
-#include <com/sun/star/frame/XFrameActionListener.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/FrameActionEvent.hpp>
-#include <com/sun/star/frame/FrameAction.hpp>
 #include <com/sun/star/loader/XImplementationLoader.hpp>
-#include <com/sun/star/frame/XFramesSupplier.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/uri/UriReferenceFactory.hpp>
 #include <com/sun/star/uri/XVndSunStarScriptUrl.hpp>
 #include <basic/basmgr.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/svapp.hxx>
 #include <sfx2/sfxhelp.hxx>
 #include <sfx2/request.hxx>
-#include "sfxtypes.hxx"
-#include <sfx2/sfxresid.hxx>
-#include "arrdecl.hxx"
+#include <sfxtypes.hxx>
+#include <arrdecl.hxx>
 #include <sfx2/progress.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/docfac.hxx>
@@ -67,20 +60,19 @@
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewsh.hxx>
 #include <sfx2/viewfrm.hxx>
-#include "appdata.hxx"
-#include "openflag.hxx"
-#include "app.hrc"
+#include <appdata.hxx>
+#include <openflag.hxx>
 #include <sfx2/module.hxx>
 #include <sfx2/event.hxx>
 #include "imestatuswindow.hxx"
-#include "workwin.hxx"
+#include <workwin.hxx>
 #include <sfx2/sidebar/Theme.hxx>
 #include <sfx2/tbxctrl.hxx>
 #include <sfx2/sfxdlg.hxx>
 #include <sfx2/stbitem.hxx>
-#include "eventsupplier.hxx"
+#include <eventsupplier.hxx>
 #include <sfx2/dockwin.hxx>
-#include "shellimpl.hxx"
+#include <shellimpl.hxx>
 
 #include <unotools/saveopt.hxx>
 #include <svtools/helpopt.hxx>
@@ -92,7 +84,6 @@
 #include <svtools/miscopt.hxx>
 #include <unotools/useroptions.hxx>
 #include <unotools/securityoptions.hxx>
-#include <unotools/localisationoptions.hxx>
 #include <unotools/fontoptions.hxx>
 #include <unotools/syslocaleoptions.hxx>
 #include <unotools/syslocale.hxx>
@@ -101,6 +92,8 @@
 #include <rtl/instance.hxx>
 #include <rtl/strbuf.hxx>
 #include <memory>
+#include <framework/sfxhelperfunctions.hxx>
+#include <fwkhelper.hxx>
 
 using namespace ::com::sun::star;
 
@@ -120,13 +113,23 @@ namespace
         : public rtl::Static<osl::Mutex, theApplicationMutex> {};
 }
 
-#include <framework/sfxhelperfunctions.hxx>
-#include <sfx2/imagemgr.hxx>
-#include "fwkhelper.hxx"
-
 SfxApplication* SfxApplication::Get()
 {
     return g_pSfxApplication;
+}
+
+void SfxApplication::SetModule(SfxToolsModule nSharedLib, std::unique_ptr<SfxModule> pModule)
+{
+    assert(g_pSfxApplication != nullptr);
+
+    g_pSfxApplication->pImpl->aModules[nSharedLib] = std::move(pModule);
+}
+
+SfxModule* SfxApplication::GetModule(SfxToolsModule nSharedLib)
+{
+    if (!g_pSfxApplication) // It is possible GetModule is called before SfxApplication is initialised via GetOrCreate()
+        return nullptr;
+    return g_pSfxApplication->pImpl->aModules[nSharedLib].get();
 }
 
 SfxApplication* SfxApplication::GetOrCreate()
@@ -151,11 +154,11 @@ SfxApplication* SfxApplication::GetOrCreate()
         ::framework::SetIsDockingWindowVisible( IsDockingWindowVisible );
 #if HAVE_FEATURE_DESKTOP
         Application::SetHelp( pSfxHelp );
-        if (!utl::ConfigManager::IsAvoidConfig() && SvtHelpOptions().IsHelpTips())
+        if (!utl::ConfigManager::IsFuzzing() && SvtHelpOptions().IsHelpTips())
             Help::EnableQuickHelp();
         else
             Help::DisableQuickHelp();
-        if (!utl::ConfigManager::IsAvoidConfig() && SvtHelpOptions().IsHelpTips() && SvtHelpOptions().IsExtendedHelp())
+        if (!utl::ConfigManager::IsFuzzing() && SvtHelpOptions().IsHelpTips() && SvtHelpOptions().IsExtendedHelp())
             Help::EnableBalloonHelp();
         else
             Help::DisableBalloonHelp();
@@ -165,14 +168,13 @@ SfxApplication* SfxApplication::GetOrCreate()
 }
 
 SfxApplication::SfxApplication()
-    : pAppData_Impl( nullptr )
+    : pImpl( new SfxAppData_Impl )
 {
     SetName( "StarOffice" );
-    if (!utl::ConfigManager::IsAvoidConfig())
+    if (!utl::ConfigManager::IsFuzzing())
         SvtViewOptions::AcquireOptions();
 
-    pAppData_Impl = new SfxAppData_Impl( this );
-    pAppData_Impl->m_xImeStatusWindow->init();
+    pImpl->m_xImeStatusWindow->init();
 
     SAL_INFO( "sfx.appl", "{ initialize DDE" );
 
@@ -186,7 +188,7 @@ SfxApplication::SfxApplication()
             aStr.append(static_cast<sal_Int32>(GetDdeService()->GetError()));
         else
             aStr.append('?');
-        DBG_ASSERT( false, aStr.getStr() );
+        SAL_WARN( "sfx.appl", aStr.getStr() );
     }
 #else
     (void)bOk;
@@ -205,11 +207,12 @@ SfxApplication::SfxApplication()
 
 SfxApplication::~SfxApplication()
 {
-    OSL_ENSURE( GetObjectShells_Impl().size() == 0, "Memory leak: some object shells were not removed!" );
+    SAL_WARN_IF(GetObjectShells_Impl().size() != 0, "sfx.appl", "Memory leak: some object shells were not removed!");
 
-    Broadcast( SfxSimpleHint(SFX_HINT_DYING) );
+    Broadcast( SfxHint(SfxHintId::Dying) );
 
-    SfxModule::DestroyModules_Impl();
+    for (auto &module : pImpl->aModules)    // Clear modules
+        module.reset();
 
 #if HAVE_FEATURE_DESKTOP
     delete pSfxHelp;
@@ -217,17 +220,16 @@ SfxApplication::~SfxApplication()
 #endif
 
     // delete global options
-    if (!utl::ConfigManager::IsAvoidConfig())
+    if (!utl::ConfigManager::IsFuzzing())
         SvtViewOptions::ReleaseOptions();
 
-    if ( !pAppData_Impl->bDowning )
+    if ( !pImpl->bDowning )
         Deinitialize();
 
 #if HAVE_FEATURE_SCRIPTING
     delete pBasic;
 #endif
 
-    delete pAppData_Impl;
     g_pSfxApplication = nullptr;
 }
 
@@ -247,23 +249,8 @@ const OUString& SfxApplication::GetLastDir_Impl() const
 */
 
 {
-    return pAppData_Impl->aLastDir;
+    return pImpl->aLastDir;
 }
-
-const OUString& SfxApplication::GetLastSaveDirectory() const
-
-/*  [Description]
-
-    As <SfxApplication::GetLastDir_Impl()>, only external
-
-    [Cross-reference]
-    <SfxApplication::GetLastDir_Impl()>
-*/
-
-{
-    return GetLastDir_Impl();
-}
-
 
 void SfxApplication::SetLastDir_Impl
 (
@@ -280,61 +267,55 @@ void SfxApplication::SetLastDir_Impl
 */
 
 {
-    pAppData_Impl->aLastDir = rNewDir;
+    pImpl->aLastDir = rNewDir;
 }
 
 
 void SfxApplication::ResetLastDir()
 {
-    pAppData_Impl->aLastDir.clear();
+    pImpl->aLastDir.clear();
 }
 
 
 SfxDispatcher* SfxApplication::GetDispatcher_Impl()
 {
-    return pAppData_Impl->pViewFrame? pAppData_Impl->pViewFrame->GetDispatcher(): pAppData_Impl->pAppDispat;
+    return pImpl->pViewFrame? pImpl->pViewFrame->GetDispatcher(): pImpl->pAppDispat;
 }
 
 
 void SfxApplication::SetViewFrame_Impl( SfxViewFrame *pFrame )
 {
-    if ( pFrame != pAppData_Impl->pViewFrame )
+    if ( pFrame != pImpl->pViewFrame )
     {
-        // get the containerframes ( if one of the frames is an InPlaceFrame )
-        SfxViewFrame *pOldContainerFrame = pAppData_Impl->pViewFrame;
-        while ( pOldContainerFrame && pOldContainerFrame->GetParentViewFrame_Impl() )
-            pOldContainerFrame = pOldContainerFrame->GetParentViewFrame_Impl();
-        SfxViewFrame *pNewContainerFrame = pFrame;
-        while ( pNewContainerFrame && pNewContainerFrame->GetParentViewFrame_Impl() )
-            pNewContainerFrame = pNewContainerFrame->GetParentViewFrame_Impl();
+        SfxViewFrame *pOldFrame = pImpl->pViewFrame;
 
         // DocWinActivate : both frames belong to the same TopWindow
         // TopWinActivate : both frames belong to different TopWindows
 
-        bool bTaskActivate = pOldContainerFrame != pNewContainerFrame;
+        bool bTaskActivate = pOldFrame != pFrame;
 
-        if ( pOldContainerFrame )
+        if ( pOldFrame )
         {
             if ( bTaskActivate )
-                NotifyEvent( SfxViewEventHint( SFX_EVENT_DEACTIVATEDOC, GlobalEventConfig::GetEventName(GlobalEventId::DEACTIVATEDOC), pOldContainerFrame->GetObjectShell(), pOldContainerFrame->GetFrame().GetController() ) );
-            pOldContainerFrame->DoDeactivate( bTaskActivate, pFrame );
+                NotifyEvent( SfxViewEventHint( SfxEventHintId::DeactivateDoc, GlobalEventConfig::GetEventName(GlobalEventId::DEACTIVATEDOC), pOldFrame->GetObjectShell(), pOldFrame->GetFrame().GetController() ) );
+            pOldFrame->DoDeactivate( bTaskActivate, pFrame );
 
-            if( pOldContainerFrame->GetProgress() )
-                pOldContainerFrame->GetProgress()->Suspend();
+            if( pOldFrame->GetProgress() )
+                pOldFrame->GetProgress()->Suspend();
         }
 
-        pAppData_Impl->pViewFrame = pFrame;
+        pImpl->pViewFrame = pFrame;
 
-        if( pNewContainerFrame )
+        if( pFrame )
         {
-            pNewContainerFrame->DoActivate( bTaskActivate );
-            if ( bTaskActivate && pNewContainerFrame->GetObjectShell() )
+            pFrame->DoActivate( bTaskActivate );
+            if ( bTaskActivate && pFrame->GetObjectShell() )
             {
-                pNewContainerFrame->GetObjectShell()->PostActivateEvent_Impl( pNewContainerFrame );
-                NotifyEvent(SfxViewEventHint(SFX_EVENT_ACTIVATEDOC, GlobalEventConfig::GetEventName(GlobalEventId::ACTIVATEDOC), pNewContainerFrame->GetObjectShell(), pNewContainerFrame->GetFrame().GetController() ) );
+                pFrame->GetObjectShell()->PostActivateEvent_Impl( pFrame );
+                NotifyEvent(SfxViewEventHint(SfxEventHintId::ActivateDoc, GlobalEventConfig::GetEventName(GlobalEventId::ACTIVATEDOC), pFrame->GetObjectShell(), pFrame->GetFrame().GetController() ) );
             }
 
-            SfxProgress *pProgress = pNewContainerFrame->GetProgress();
+            SfxProgress *pProgress = pFrame->GetProgress();
             if ( pProgress )
             {
                 if( pProgress->IsSuspended() )
@@ -343,9 +324,9 @@ void SfxApplication::SetViewFrame_Impl( SfxViewFrame *pFrame )
                     pProgress->SetState( pProgress->GetState() );
             }
 
-            if ( pAppData_Impl->pViewFrame->GetViewShell() )
+            if ( pImpl->pViewFrame->GetViewShell() )
             {
-                SfxDispatcher* pDisp = pAppData_Impl->pViewFrame->GetDispatcher();
+                SfxDispatcher* pDisp = pImpl->pViewFrame->GetDispatcher();
                 pDisp->Flush();
                 pDisp->Update_Impl(true);
             }
@@ -355,48 +336,39 @@ void SfxApplication::SetViewFrame_Impl( SfxViewFrame *pFrame )
     // even if the frame actually didn't change, ensure its document is forwarded
     // to SfxObjectShell::SetCurrentComponent.
     // Otherwise, the CurrentComponent might not be correct, in case it has meanwhile
-    // been reset to some other document, by some non-SFX component.
-    // #i49133# / 2007-12-19 / frank.schoenheit@sun.com
+    // been reset to some other document, by some non-SFX component. #i49133#
     if ( pFrame && pFrame->GetViewShell() )
         pFrame->GetViewShell()->SetCurrentDocument();
 }
 
-ResMgr* SfxApplication::GetSfxResManager()
-{
-    return SfxResId::GetResMgr();
-}
-
-
 void SfxApplication::SetProgress_Impl
 (
     SfxProgress *pProgress
-
 )
 {
-    DBG_ASSERT( ( !pAppData_Impl->pProgress && pProgress ) ||
-                ( pAppData_Impl->pProgress && !pProgress ),
+    DBG_ASSERT( ( !pImpl->pProgress && pProgress ) ||
+                ( pImpl->pProgress && !pProgress ),
                 "Progress activation/deactivation mismatch" );
 
-    if ( pAppData_Impl->pProgress && pProgress )
+    if ( pImpl->pProgress && pProgress )
     {
-        pAppData_Impl->pProgress->Suspend();
-        pAppData_Impl->pProgress->UnLock();
-        delete pAppData_Impl->pProgress;
+        pImpl->pProgress->Suspend();
+        delete pImpl->pProgress;
     }
 
-    pAppData_Impl->pProgress = pProgress;
+    pImpl->pProgress = pProgress;
 }
 
 
 sal_uInt16 SfxApplication::GetFreeIndex()
 {
-    return pAppData_Impl->aIndexBitSet.GetFreeIndex()+1;
+    return pImpl->aIndexBitSet.GetFreeIndex()+1;
 }
 
 
 void SfxApplication::ReleaseIndex(sal_uInt16 i)
 {
-    pAppData_Impl->aIndexBitSet.ReleaseIndex(i-1);
+    pImpl->aIndexBitSet.ReleaseIndex(i-1);
 }
 
 
@@ -408,27 +380,27 @@ vcl::Window* SfxApplication::GetTopWindow() const
 
 SfxTbxCtrlFactArr_Impl&     SfxApplication::GetTbxCtrlFactories_Impl() const
 {
-    return *pAppData_Impl->pTbxCtrlFac;
+    return *pImpl->pTbxCtrlFac;
 }
 
 SfxStbCtrlFactArr_Impl&     SfxApplication::GetStbCtrlFactories_Impl() const
 {
-    return *pAppData_Impl->pStbCtrlFac;
+    return *pImpl->pStbCtrlFac;
 }
 
 SfxViewFrameArr_Impl&       SfxApplication::GetViewFrames_Impl() const
 {
-    return *pAppData_Impl->pViewFrames;
+    return *pImpl->pViewFrames;
 }
 
 SfxViewShellArr_Impl&       SfxApplication::GetViewShells_Impl() const
 {
-    return *pAppData_Impl->pViewShells;
+    return *pImpl->pViewShells;
 }
 
 SfxObjectShellArr_Impl&     SfxApplication::GetObjectShells_Impl() const
 {
-    return *pAppData_Impl->pObjShells;
+    return *pImpl->pObjShells;
 }
 
 void SfxApplication::Invalidate( sal_uInt16 nId )
@@ -441,10 +413,10 @@ void SfxApplication::Invalidate( sal_uInt16 nId )
 
 #ifndef DISABLE_DYNLOADING
 
-typedef long (SAL_CALL *basicide_handle_basic_error)(void*);
-typedef void (SAL_CALL *basicide_macro_organizer)(sal_Int16);
+typedef long (*basicide_handle_basic_error)(void const *);
+typedef void (*basicide_macro_organizer)(sal_Int16);
 
-extern "C" { static void SAL_CALL thisModule() {} }
+extern "C" { static void thisModule() {} }
 
 #else
 
@@ -455,7 +427,7 @@ extern "C" void basicide_macro_organizer(sal_Int16);
 
 #endif
 
-IMPL_LINK_TYPED( SfxApplication, GlobalBasicErrorHdl_Impl, StarBASIC*, pStarBasic, bool )
+IMPL_STATIC_LINK( SfxApplication, GlobalBasicErrorHdl_Impl, StarBASIC*, pStarBasic, bool )
 {
 #if !HAVE_FEATURE_SCRIPTING
     (void) pStarBasic;
@@ -524,27 +496,24 @@ SfxApplication::ChooseScript()
 
 #if HAVE_FEATURE_SCRIPTING
     SfxAbstractDialogFactory* pFact = SfxAbstractDialogFactory::Create();
-    if ( pFact )
+    SAL_INFO( "sfx.appl", "create selector dialog");
+
+    const SfxViewFrame* pViewFrame = SfxViewFrame::Current();
+    const SfxFrame* pFrame = pViewFrame ? &pViewFrame->GetFrame() : nullptr;
+    uno::Reference< frame::XFrame > xFrame( pFrame ? pFrame->GetFrameInterface() : uno::Reference< frame::XFrame >() );
+
+    ScopedVclPtr<AbstractScriptSelectorDialog> pDlg(
+        pFact->CreateScriptSelectorDialog( nullptr, xFrame ));
+
+    SAL_INFO( "sfx.appl", "done, now exec it");
+
+      sal_uInt16 nRet = pDlg->Execute();
+
+    SAL_INFO( "sfx.appl", "has returned");
+
+    if ( nRet == RET_OK )
     {
-        SAL_INFO( "sfx.appl", "create selector dialog");
-
-        const SfxViewFrame* pViewFrame = SfxViewFrame::Current();
-        const SfxFrame* pFrame = pViewFrame ? &pViewFrame->GetFrame() : nullptr;
-        uno::Reference< frame::XFrame > xFrame( pFrame ? pFrame->GetFrameInterface() : uno::Reference< frame::XFrame >() );
-
-        std::unique_ptr<AbstractScriptSelectorDialog> pDlg(
-            pFact->CreateScriptSelectorDialog( nullptr, xFrame ));
-
-        SAL_INFO( "sfx.appl", "done, now exec it");
-
-          sal_uInt16 nRet = pDlg->Execute();
-
-        SAL_INFO( "sfx.appl", "has returned");
-
-        if ( nRet == RET_OK )
-        {
-            aScriptURL = pDlg->GetScriptURL();
-        }
+        aScriptURL = pDlg->GetScriptURL();
     }
 #endif
     return aScriptURL;
@@ -566,7 +535,7 @@ void SfxApplication::MacroOrganizer( sal_Int16 nTabId )
 
     aMod.release();
 
-    SAL_WARN_IF(!pSymbol, "sfx.doc", "SfxApplication::MacroOrganizer, no symbol!");
+    SAL_WARN_IF(!pSymbol, "sfx.appl", "SfxApplication::MacroOrganizer, no symbol!");
     if (!pSymbol)
         return;
 
@@ -597,12 +566,12 @@ ErrCode SfxApplication::CallBasic( const OUString& rCode, BasicManager* pMgr, Sb
 
 sfx2::sidebar::Theme & SfxApplication::GetSidebarTheme()
 {
-    if (!pAppData_Impl->m_pSidebarTheme.is())
+    if (!pImpl->m_pSidebarTheme.is())
     {
-        pAppData_Impl->m_pSidebarTheme.set(new sfx2::sidebar::Theme);
-        pAppData_Impl->m_pSidebarTheme->InitializeTheme();
+        pImpl->m_pSidebarTheme.set(new sfx2::sidebar::Theme);
+        pImpl->m_pSidebarTheme->InitializeTheme();
     }
-    return *pAppData_Impl->m_pSidebarTheme;
+    return *pImpl->m_pSidebarTheme;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

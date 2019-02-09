@@ -24,37 +24,48 @@
 #include <vcl/button.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/vclmedit.hxx>
+#include <vcl/weld.hxx>
 
 class SwInputField;
 class SwSetExpField;
 class SwUserFieldType;
 class SwField;
 class SwWrtShell;
+class SwFieldMgr;
 
 // insert fields
-class SwFieldInputDlg: public SvxStandardDialog
+class SwFieldInputDlg : public weld::GenericDialogController
 {
-    virtual void    Apply() override;
-    virtual void    StateChanged( StateChangedType ) override;
+    void Apply();
 
     SwWrtShell&       rSh;
     SwInputField*     pInpField;
     SwSetExpField*    pSetField;
     SwUserFieldType*  pUsrType;
 
-    VclPtr<Edit>             m_pLabelED;
+    weld::Button*   m_pPressedButton;
+    std::unique_ptr<weld::Entry>    m_xLabelED;
+    std::unique_ptr<weld::TextView> m_xEditED;
+    std::unique_ptr<weld::Button>   m_xPrevBT;
+    std::unique_ptr<weld::Button>   m_xNextBT;
+    std::unique_ptr<weld::Button>   m_xOKBT;
 
-    VclPtr<VclMultiLineEdit> m_pEditED;
+    DECL_LINK(NextHdl, weld::Button&, void);
+    DECL_LINK(PrevHdl, weld::Button&, void);
 
-    VclPtr<OKButton>         m_pOKBT;
-    VclPtr<PushButton>       m_pNextBT;
-
-    DECL_LINK_TYPED(NextHdl, Button*, void);
 public:
-    SwFieldInputDlg(  vcl::Window *pParent, SwWrtShell &rSh,
-                    SwField* pField, bool bNextButton = false );
-    virtual ~SwFieldInputDlg();
-    virtual void dispose() override;
+    SwFieldInputDlg(weld::Window *pParent, SwWrtShell &rSh,
+                    SwField* pField, bool bPrevButton, bool bNextButton);
+    virtual short run() override
+    {
+        short nRet = GenericDialogController::run();
+        if (nRet == RET_OK)
+            Apply();
+        return nRet;
+    }
+    virtual ~SwFieldInputDlg() override;
+    bool PrevButtonPressed() const;
+    bool NextButtonPressed() const;
 };
 
 #endif

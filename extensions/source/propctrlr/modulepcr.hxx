@@ -20,18 +20,35 @@
 #ifndef INCLUDED_EXTENSIONS_SOURCE_PROPCTRLR_MODULEPCR_HXX
 #define INCLUDED_EXTENSIONS_SOURCE_PROPCTRLR_MODULEPCR_HXX
 
-#include <unotools/componentresmodule.hxx>
-
+#include <comphelper/componentmodule.hxx>
 
 namespace pcr
 {
+    /* -------------------------------------------------------------------- */
+    class PcrModule : public ::comphelper::OModule
+    {
+        friend struct CreateModuleClass;
+        typedef ::comphelper::OModule BaseClass;
+    public:
+        static PcrModule& getInstance();
+    private:
+        PcrModule();
+    };
 
+    /* -------------------------------------------------------------------- */
+    template < class TYPE >
+    class OAutoRegistration : public ::comphelper::OAutoRegistration< TYPE >
+    {
+    private:
+        typedef ::comphelper::OAutoRegistration< TYPE >    BaseClass;
+    public:
+        OAutoRegistration() : BaseClass( PcrModule::getInstance() )
+        {
+        }
+    };
 
-    DEFINE_MODULE( PcrModule, PcrClient, PcrRes )
-
-
+    OUString PcrRes(const char* pId);
 } // namespace pcr
-
 
 #endif // _ INCLUDED_EXTENSIONS_SOURCE_PROPCTRLR_MODULEPCR_HXX_
 

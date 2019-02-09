@@ -42,7 +42,7 @@ class X11ImeStatus : public SalI18NImeStatus
 {
 public:
     X11ImeStatus() {}
-    virtual ~X11ImeStatus();
+    virtual ~X11ImeStatus() override;
 
     virtual bool canToggle() override;
     virtual void toggle() override;
@@ -50,17 +50,10 @@ public:
 
 class I18NStatus
 {
-public:
-    struct ChoiceData
-    {
-        OUString  aString;
-        void*     pData;
-    };
 private:
     SalFrame*                       m_pParent;
     VclPtr<StatusWindow>            m_pStatusWindow;
-    OUString                        m_aCurrentIM;
-    ::std::vector< ChoiceData >     m_aChoices;
+    OUString const                  m_aCurrentIM;
 
     I18NStatus();
     ~I18NStatus();
@@ -80,8 +73,6 @@ public:
 
     enum ShowReason { focus, presentation, contextmap };
     void show( bool bShow, ShowReason eReason );
-
-    const ::std::vector< ChoiceData >& getChoices() const { return m_aChoices; }
 
     // External Control:
 

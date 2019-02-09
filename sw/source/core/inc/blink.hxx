@@ -36,7 +36,7 @@ class SwBlinkPortion
     Point               aPos;
     const SwLinePortion *pPor;
     const SwRootFrame     *pFrame;
-    sal_uInt16              nDir;
+    sal_uInt16 const     nDir;
 
 public:
     SwBlinkPortion(const SwLinePortion* pPortion, sal_uInt16 nDirection)
@@ -75,7 +75,7 @@ public:
     SwBlink();
     ~SwBlink();
 
-    DECL_LINK_TYPED( Blinker, Timer *, void );
+    DECL_LINK( Blinker, Timer *, void );
 
     void Insert( const Point& rPoint, const SwLinePortion* pPor,
                  const SwTextFrame *pTextFrame, sal_uInt16 nDir );

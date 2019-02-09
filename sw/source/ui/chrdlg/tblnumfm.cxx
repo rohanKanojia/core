@@ -22,29 +22,25 @@
 #include <swtypes.hxx>
 #include <tblnumfm.hxx>
 
-#include <chrdlg.hrc>
-
 #include <svx/svxdlg.hxx>
 #include <svx/dialogs.hrc>
 #include <svl/itemset.hxx>
 #include <sfx2/tabdlg.hxx>
 
-SwNumFormatDlg::SwNumFormatDlg(vcl::Window* pParent, const SfxItemSet& rSet)
-    : SfxSingleTabDialog(pParent, rSet, "FormatNumberDialog",
-        "cui/ui/formatnumberdialog.ui")
+SwNumFormatDlg::SwNumFormatDlg(weld::Window* pParent, const SfxItemSet& rSet)
+    : SfxSingleTabDialogController(pParent, rSet, "cui/ui/formatnumberdialog.ui", "FormatNumberDialog")
 {
     // Create TabPage
     SfxAbstractDialogFactory* pFact = SfxAbstractDialogFactory::Create();
-    OSL_ENSURE(pFact, "Dialog creation failed!");
-    ::CreateTabPage fnCreatePage = pFact->GetTabPageCreatorFunc( RID_SVXPAGE_NUMBERFORMAT );
-
+    ::CreateTabPage fnCreatePage = pFact->GetTabPageCreatorFunc(RID_SVXPAGE_NUMBERFORMAT);
     if ( fnCreatePage )
     {
-        SfxTabPage* pNewPage = (*fnCreatePage)( get_content_area(), &rSet );
+        TabPageParent pPageParent(get_content_area(), this);
+        VclPtr<SfxTabPage> xNewPage = (*fnCreatePage)(pPageParent, &rSet);
         SfxAllItemSet aSet(*(rSet.GetPool()));
-        aSet.Put ( SvxNumberInfoItem( static_cast<const SvxNumberInfoItem&>(pNewPage->GetItemSet().Get( SID_ATTR_NUMBERFORMAT_INFO ))));
-        pNewPage->PageCreated(aSet);
-        SetTabPage(pNewPage);
+        aSet.Put(xNewPage->GetItemSet().Get( SID_ATTR_NUMBERFORMAT_INFO));
+        xNewPage->PageCreated(aSet);
+        SetTabPage(xNewPage);
     }
 }
 

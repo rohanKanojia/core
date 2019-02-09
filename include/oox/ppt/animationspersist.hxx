@@ -21,17 +21,15 @@
 #ifndef INCLUDED_OOX_PPT_ANIMATIONSPERSIST_HXX
 #define INCLUDED_OOX_PPT_ANIMATIONSPERSIST_HXX
 
-#include <list>
-#include <memory>
 #include <array>
-
-#include <rtl/ustring.hxx>
+#include <vector>
+#include <memory>
 
 #include <com/sun/star/uno/Any.hxx>
-#include <com/sun/star/drawing/XShape.hpp>
-
 #include <oox/drawingml/drawingmltypes.hxx>
 #include <oox/ppt/slidepersist.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 namespace oox { namespace ppt {
 
@@ -45,10 +43,10 @@ namespace oox { namespace ppt {
         NP_ENDSYNC, NP_ITERATETYPE, NP_ITERATEINTERVAL,
         NP_SUBITEM, NP_TARGET, NP_COMMAND, NP_PARAMETER,
         NP_VALUES, NP_FORMULA, NP_KEYTIMES, NP_DISPLAY,
-        _NP_SIZE
+        NP_SIZE_
     };
 
-    typedef std::array< css::uno::Any, _NP_SIZE > NodePropertyMap;
+    typedef std::array< css::uno::Any, NP_SIZE_ > NodePropertyMap;
 
 
     /** data for CT_TLShapeTargetElement */
@@ -87,7 +85,7 @@ namespace oox { namespace ppt {
 
     struct AnimationCondition;
 
-    typedef std::list< AnimationCondition > AnimationConditionList;
+    typedef std::vector< AnimationCondition > AnimationConditionList;
 
     /** data for CT_TLTimeCondition */
     struct AnimationCondition
@@ -115,7 +113,7 @@ namespace oox { namespace ppt {
         css::uno::Any       maValue;
     };
 
-    typedef ::std::list< TimeAnimationValue > TimeAnimationValueList;
+    typedef ::std::vector< TimeAnimationValue > TimeAnimationValueList;
 
 } }
 

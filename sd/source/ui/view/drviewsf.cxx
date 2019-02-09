@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DrawViewShell.hxx"
+#include <DrawViewShell.hxx>
 #include <com/sun/star/form/FormButtonType.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <comphelper/string.hxx>
@@ -41,19 +41,18 @@
 #include <svx/fmshell.hxx>
 #include <svl/cjkoptions.hxx>
 
-#include "FrameView.hxx"
-#include "Outliner.hxx"
-#include "app.hrc"
+#include <FrameView.hxx>
+#include <Outliner.hxx>
+#include <app.hrc>
 
-#include "sdmod.hxx"
-#include "stlsheet.hxx"
-#include "drawview.hxx"
-#include "drawdoc.hxx"
-#include "Window.hxx"
-#include "ViewShellBase.hxx"
-#include "FormShellManager.hxx"
-#include "cfgids.hxx"
-#include "anminfo.hxx"
+#include <sdmod.hxx>
+#include <stlsheet.hxx>
+#include <drawview.hxx>
+#include <drawdoc.hxx>
+#include <Window.hxx>
+#include <ViewShellBase.hxx>
+#include <FormShellManager.hxx>
+#include <anminfo.hxx>
 
 #include <editeng/lspcitem.hxx>
 #include <editeng/ulspitem.hxx>
@@ -97,11 +96,11 @@ void DrawViewShell::GetCtrlState(SfxItemSet &rSet)
                 if ( abs( aSel.nEndPos - aSel.nStartPos ) == 1 )
                 {
                     const SvxFieldData* pField = pFieldItem->GetField();
-                    if( dynamic_cast< const SvxURLField *>( pField ) !=  nullptr)
+                    if( auto pUrlField = dynamic_cast< const SvxURLField *>( pField ) )
                     {
-                        aHLinkItem.SetName(static_cast<const SvxURLField*>(pField)->GetRepresentation());
-                        aHLinkItem.SetURL(static_cast<const SvxURLField*>(pField)->GetURL());
-                        aHLinkItem.SetTargetFrame(static_cast<const SvxURLField*>(pField)->GetTargetFrame());
+                        aHLinkItem.SetName(pUrlField->GetRepresentation());
+                        aHLinkItem.SetURL(pUrlField->GetURL());
+                        aHLinkItem.SetTargetFrame(pUrlField->GetTargetFrame());
                         bField = true;
                     }
                 }
@@ -122,7 +121,7 @@ void DrawViewShell::GetCtrlState(SfxItemSet &rSet)
                 bool bFound = false;
 
                 SdrObject* pMarkedObj = mpDrawView->GetMarkedObjectList().GetMark(0)->GetMarkedSdrObj();
-                if( pMarkedObj && (FmFormInventor == pMarkedObj->GetObjInventor()) )
+                if( pMarkedObj && (SdrInventor::FmForm == pMarkedObj->GetObjInventor()) )
                 {
                     SdrUnoObj* pUnoCtrl = dynamic_cast< SdrUnoObj* >( pMarkedObj );
 
@@ -192,11 +191,11 @@ void DrawViewShell::GetCtrlState(SfxItemSet &rSet)
         SfxItemState::DEFAULT == rSet.GetItemState( SID_OUTPUT_QUALITY_BLACKWHITE ) ||
         SfxItemState::DEFAULT == rSet.GetItemState( SID_OUTPUT_QUALITY_CONTRAST ) )
     {
-        const sal_uLong nMode = (sal_Int32)GetActiveWindow()->GetDrawMode();
-        rSet.Put( SfxBoolItem( SID_OUTPUT_QUALITY_COLOR, (sal_uLong)OUTPUT_DRAWMODE_COLOR == nMode ) );
-        rSet.Put( SfxBoolItem( SID_OUTPUT_QUALITY_GRAYSCALE, (sal_uLong)OUTPUT_DRAWMODE_GRAYSCALE == nMode ) );
-        rSet.Put( SfxBoolItem( SID_OUTPUT_QUALITY_BLACKWHITE, (sal_uLong)OUTPUT_DRAWMODE_BLACKWHITE == nMode ) );
-        rSet.Put( SfxBoolItem( SID_OUTPUT_QUALITY_CONTRAST, (sal_uLong)OUTPUT_DRAWMODE_CONTRAST == nMode ) );
+        const sal_uLong nMode = static_cast<sal_Int32>(GetActiveWindow()->GetDrawMode());
+        rSet.Put( SfxBoolItem( SID_OUTPUT_QUALITY_COLOR, sal_uLong(OUTPUT_DRAWMODE_COLOR) == nMode ) );
+        rSet.Put( SfxBoolItem( SID_OUTPUT_QUALITY_GRAYSCALE, static_cast<sal_uLong>(OUTPUT_DRAWMODE_GRAYSCALE) == nMode ) );
+        rSet.Put( SfxBoolItem( SID_OUTPUT_QUALITY_BLACKWHITE, static_cast<sal_uLong>(OUTPUT_DRAWMODE_BLACKWHITE) == nMode ) );
+        rSet.Put( SfxBoolItem( SID_OUTPUT_QUALITY_CONTRAST, static_cast<sal_uLong>(OUTPUT_DRAWMODE_CONTRAST) == nMode ) );
     }
 
     if ( SfxItemState::DEFAULT == rSet.GetItemState(SID_MAIL_SCROLLBODY_PAGEDOWN) )
@@ -289,9 +288,8 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                 SfxItemSet aAttrs( GetDoc()->GetPool() );
                 mpDrawView->GetAttributes( aAttrs );
 
-                SvxAdjustItem aItem= static_cast<const SvxAdjustItem&>( aAttrs.Get( EE_PARA_JUST ) );
-                SvxAdjust eAdj = aItem.GetAdjust();
-                if ( eAdj == SVX_ADJUST_LEFT)
+                SvxAdjust eAdj = aAttrs.Get( EE_PARA_JUST ).GetAdjust();
+                if ( eAdj == SvxAdjust::Left)
                 {
                     rSet.Put( SfxBoolItem( SID_ATTR_PARA_ADJUST_LEFT, true ) );
                 }
@@ -306,9 +304,8 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                 SfxItemSet aAttrs( GetDoc()->GetPool() );
                 mpDrawView->GetAttributes( aAttrs );
 
-                SvxAdjustItem aItem= static_cast<const SvxAdjustItem&>( aAttrs.Get( EE_PARA_JUST ) );
-                SvxAdjust eAdj = aItem.GetAdjust();
-                if ( eAdj == SVX_ADJUST_CENTER)
+                SvxAdjust eAdj = aAttrs.Get( EE_PARA_JUST ).GetAdjust();
+                if ( eAdj == SvxAdjust::Center)
                 {
                     rSet.Put( SfxBoolItem( SID_ATTR_PARA_ADJUST_CENTER, true ) );
                 }
@@ -323,9 +320,8 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                 SfxItemSet aAttrs( GetDoc()->GetPool() );
                 mpDrawView->GetAttributes( aAttrs );
 
-                SvxAdjustItem aItem= static_cast<const SvxAdjustItem&>( aAttrs.Get( EE_PARA_JUST ) );
-                SvxAdjust eAdj = aItem.GetAdjust();
-                if ( eAdj == SVX_ADJUST_RIGHT)
+                SvxAdjust eAdj = aAttrs.Get( EE_PARA_JUST ).GetAdjust();
+                if ( eAdj == SvxAdjust::Right)
                 {
                     rSet.Put( SfxBoolItem( SID_ATTR_PARA_ADJUST_RIGHT, true ) );
                 }
@@ -340,9 +336,8 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                 SfxItemSet aAttrs( GetDoc()->GetPool() );
                 mpDrawView->GetAttributes( aAttrs );
 
-                SvxAdjustItem aItem= static_cast<const SvxAdjustItem&>( aAttrs.Get( EE_PARA_JUST ) );
-                SvxAdjust eAdj = aItem.GetAdjust();
-                if ( eAdj == SVX_ADJUST_BLOCK)
+                SvxAdjust eAdj = aAttrs.Get( EE_PARA_JUST ).GetAdjust();
+                if ( eAdj == SvxAdjust::Block)
                 {
                     rSet.Put( SfxBoolItem( SID_ATTR_PARA_ADJUST_BLOCK, true ) );
                 }
@@ -356,7 +351,7 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
             {
                 SfxItemSet aAttrs( GetDoc()->GetPool() );
                 mpDrawView->GetAttributes( aAttrs );
-                SvxLRSpaceItem aLRSpace = static_cast<const SvxLRSpaceItem&>( aAttrs.Get( EE_PARA_LRSPACE ) );
+                SvxLRSpaceItem aLRSpace = aAttrs.Get( EE_PARA_LRSPACE );
                 aLRSpace.SetWhich(SID_ATTR_PARA_LRSPACE);
                 rSet.Put(aLRSpace);
                 bAttr = true;
@@ -367,7 +362,7 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
             {
                 SfxItemSet aAttrs( GetDoc()->GetPool() );
                 mpDrawView->GetAttributes( aAttrs );
-                SvxLineSpacingItem aLineLR = static_cast<const SvxLineSpacingItem&>( aAttrs.Get( EE_PARA_SBL ) );
+                SvxLineSpacingItem aLineLR = aAttrs.Get( EE_PARA_SBL );
                 rSet.Put(aLineLR);
                 bAttr = true;
                 Invalidate(SID_ATTR_PARA_LINESPACE);
@@ -377,7 +372,7 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
             {
                 SfxItemSet aAttrs( GetDoc()->GetPool() );
                 mpDrawView->GetAttributes( aAttrs );
-                SvxULSpaceItem aULSP = static_cast<const SvxULSpaceItem&>( aAttrs.Get( EE_PARA_ULSPACE ) );
+                SvxULSpaceItem aULSP = aAttrs.Get( EE_PARA_ULSPACE );
                 aULSP.SetWhich(SID_ATTR_PARA_ULSPACE);
                 rSet.Put(aULSP);
                 bAttr = true;
@@ -427,7 +422,7 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                 mpDrawView->GetAttributes( aAttrs );
                 if( aAttrs.GetItemState( EE_PARA_HYPHENATE ) >= SfxItemState::DEFAULT )
                 {
-                    bool bValue = static_cast<const SfxBoolItem&>( aAttrs.Get( EE_PARA_HYPHENATE ) ).GetValue();
+                    bool bValue = aAttrs.Get( EE_PARA_HYPHENATE ).GetValue();
                     rSet.Put( SfxBoolItem( SID_HYPHENATION, bValue ) );
                 }
             }
@@ -448,16 +443,16 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                     }
                     else
                     {
-                        if (pStyleSheet->GetFamily() == SD_STYLE_FAMILY_MASTERPAGE)
+                        if (pStyleSheet->GetFamily() == SfxStyleFamily::Page)
                             pStyleSheet = static_cast<SdStyleSheet*>(pStyleSheet)->GetPseudoStyleSheet();
 
                         if( pStyleSheet )
                         {
                             SfxStyleFamily eFamily = pStyleSheet->GetFamily();
 
-                            if ((eFamily == SD_STYLE_FAMILY_GRAPHICS &&     nSlotId == SID_STYLE_FAMILY2)       ||
-                                (eFamily == SD_STYLE_FAMILY_CELL     && nSlotId == SID_STYLE_FAMILY3)       ||
-                                (eFamily == SD_STYLE_FAMILY_PSEUDO &&   nSlotId == SID_STYLE_FAMILY5))
+                            if ((eFamily == SfxStyleFamily::Para &&     nSlotId == SID_STYLE_FAMILY2)       ||
+                                (eFamily == SfxStyleFamily::Frame     && nSlotId == SID_STYLE_FAMILY3)       ||
+                                (eFamily == SfxStyleFamily::Pseudo &&   nSlotId == SID_STYLE_FAMILY5))
                             {
                                 SfxTemplateItem aTmpItem ( nWhich, pStyleSheet->GetName() );
                                 aAllSet.Put( aTmpItem, aTmpItem.Which()  );
@@ -491,7 +486,7 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                 std::unique_ptr<SfxPoolItem> pItem;
                 GetViewFrame()->GetBindings().QueryState(SID_STYLE_FAMILY, pItem);
                 SfxUInt16Item* pFamilyItem = dynamic_cast<SfxUInt16Item*>(pItem.get());
-                if (pFamilyItem && SfxTemplate::NIdToSfxFamilyId(pFamilyItem->GetValue()) == SD_STYLE_FAMILY_PSEUDO)
+                if (pFamilyItem && static_cast<SfxStyleFamily>(pFamilyItem->GetValue()) == SfxStyleFamily::Pseudo)
                     rSet.Put(SfxBoolItem(nWhich,false));
                 else
                 {
@@ -506,7 +501,7 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                 std::unique_ptr<SfxPoolItem> pItem;
                 GetViewFrame()->GetBindings().QueryState(SID_STYLE_FAMILY, pItem);
                 SfxUInt16Item* pFamilyItem = dynamic_cast<SfxUInt16Item*>(pItem.get());
-                if (pFamilyItem && SfxTemplate::NIdToSfxFamilyId(pFamilyItem->GetValue()) == SD_STYLE_FAMILY_PSEUDO)
+                if (pFamilyItem && static_cast<SfxStyleFamily>(pFamilyItem->GetValue()) == SfxStyleFamily::Pseudo)
                 {
                     rSet.DisableItem(nWhich);
                 }
@@ -518,7 +513,7 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                 std::unique_ptr<SfxPoolItem> pItem;
                 GetViewFrame()->GetBindings().QueryState(SID_STYLE_FAMILY, pItem);
                 SfxUInt16Item* pFamilyItem = dynamic_cast<SfxUInt16Item*>(pItem.get());
-                if (pFamilyItem && SfxTemplate::NIdToSfxFamilyId(pFamilyItem->GetValue()) == SD_STYLE_FAMILY_PSEUDO)
+                if (pFamilyItem && static_cast<SfxStyleFamily>(pFamilyItem->GetValue()) == SfxStyleFamily::Pseudo)
                     rSet.DisableItem(nWhich);
             }
             break;
@@ -533,11 +528,11 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                 SfxUInt16Item* pFamilyItem = dynamic_cast<SfxUInt16Item*>(pItem.get());
                 if (pFamilyItem)
                 {
-                    if (SfxTemplate::NIdToSfxFamilyId(pFamilyItem->GetValue()) == SD_STYLE_FAMILY_PSEUDO)
+                    if (static_cast<SfxStyleFamily>(pFamilyItem->GetValue()) == SfxStyleFamily::Pseudo)
                     {
                         rSet.DisableItem(nWhich);
                     }
-                    else if (SfxTemplate::NIdToSfxFamilyId(pFamilyItem->GetValue()) == SD_STYLE_FAMILY_GRAPHICS)
+                    else if (static_cast<SfxStyleFamily>(pFamilyItem->GetValue()) == SfxStyleFamily::Para)
                     {
                         if (!mpDrawView->AreObjectsMarked())
                         {
@@ -571,7 +566,7 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                 SfxItemSet aEditAttr( GetDoc()->GetPool() );
                 mpDrawView->GetAttributes( aEditAttr );
 
-                SfxItemSet aNewAttr( GetPool(), EE_ITEMS_START, EE_ITEMS_END );
+                SfxItemSet aNewAttr( GetPool(), svl::Items<EE_ITEMS_START, EE_ITEMS_END>{} );
                 aNewAttr.Put( aEditAttr, false );
 
                 std::unique_ptr<SvxNumRule> pNumRule;
@@ -587,7 +582,7 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                 {
                     sal_uInt16 nMask = 1;
                     sal_uInt16 nCount = 0;
-                    sal_uInt16 nCurLevel = (sal_uInt16)0xFFFF;
+                    sal_uInt16 nCurLevel = sal_uInt16(0xFFFF);
                     for(sal_uInt16 i = 0; i < pNumRule->GetLevelCount(); i++)
                     {
                         if(nActNumLvl & nMask)
@@ -614,11 +609,11 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                                     bBullets = false;
                             }
 
-                            rSet.Put(SfxUInt16Item(FN_BUL_NUM_RULE_INDEX,(sal_uInt16)0xFFFF));
-                            rSet.Put(SfxUInt16Item(FN_NUM_NUM_RULE_INDEX,(sal_uInt16)0xFFFF));
+                            rSet.Put(SfxUInt16Item(FN_BUL_NUM_RULE_INDEX,sal_uInt16(0xFFFF)));
+                            rSet.Put(SfxUInt16Item(FN_NUM_NUM_RULE_INDEX,sal_uInt16(0xFFFF)));
                             if ( bBullets )
                             {
-                                NBOTypeMgrBase* pBullets = NBOutlineTypeMgrFact::CreateInstance(eNBOType::BULLETS);
+                                NBOTypeMgrBase* pBullets = NBOutlineTypeMgrFact::CreateInstance(NBOType::Bullets);
                                 if ( pBullets )
                                 {
                                     sal_uInt16 nBulIndex = pBullets->GetNBOIndexForNumRule(*pNumRule,nActNumLvl);
@@ -626,7 +621,7 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                                 }
                             }else
                             {
-                                NBOTypeMgrBase* pNumbering = NBOutlineTypeMgrFact::CreateInstance(eNBOType::NUMBERING);
+                                NBOTypeMgrBase* pNumbering = NBOutlineTypeMgrFact::CreateInstance(NBOType::Numbering);
                                 if ( pNumbering )
                                 {
                                     sal_uInt16 nBulIndex = pNumbering->GetNBOIndexForNumRule(*pNumRule,nActNumLvl);
@@ -647,7 +642,7 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
                 for (size_t nIndex = 0; nIndex < nMarkCount; ++nIndex)
                 {
                     SdrTextObj* pTextObj = dynamic_cast< SdrTextObj* >(rMarkList.GetMark(nIndex)->GetMarkedSdrObj());
-                    if (pTextObj && pTextObj->GetObjInventor() == SdrInventor)
+                    if (pTextObj && pTextObj->GetObjInventor() == SdrInventor::Default)
                     {
                         if (pTextObj->GetObjIdentifier() != OBJ_OLE2)
                         {
@@ -690,11 +685,12 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
         // changed from SfxItemState::DEFAULT (_ON) to SfxItemState::DISABLED
         if( mpDrawView->AreObjectsMarked() )
         {
-            SfxWhichIter aNewIter( *pSet, XATTR_LINE_FIRST, XATTR_FILL_LAST );
+            SfxWhichIter aNewIter( *pSet );
             nWhich = aNewIter.FirstWhich();
             while( nWhich )
             {
-                if( SfxItemState::DEFAULT == pSet->GetItemState( nWhich ) )
+                if (nWhich >= XATTR_LINE_FIRST && nWhich <= XATTR_LINE_LAST
+                    && SfxItemState::DEFAULT == pSet->GetItemState(nWhich) )
                 {
                     rSet.ClearItem( nWhich );
                     rSet.DisableItem( nWhich );
@@ -722,13 +718,12 @@ void DrawViewShell::GetAttrState( SfxItemSet& rSet )
             rSet.InvalidateItem(SID_ATTR_PARA_ULSPACE);
         }
 
-        SvxEscapement eEsc = (SvxEscapement) static_cast<const SvxEscapementItem&>(
-                        pSet->Get( EE_CHAR_ESCAPEMENT ) ).GetEnumValue();
-        if( eEsc == SVX_ESCAPEMENT_SUPERSCRIPT )
+        SvxEscapement eEsc = static_cast<SvxEscapement>(pSet->Get( EE_CHAR_ESCAPEMENT ).GetEnumValue());
+        if( eEsc == SvxEscapement::Superscript )
         {
             rSet.Put( SfxBoolItem( SID_SET_SUPER_SCRIPT, true ) );
         }
-        else if( eEsc == SVX_ESCAPEMENT_SUBSCRIPT )
+        else if( eEsc == SvxEscapement::Subscript )
         {
             rSet.Put( SfxBoolItem( SID_SET_SUB_SCRIPT, true ) );
         }

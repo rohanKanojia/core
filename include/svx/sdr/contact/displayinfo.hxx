@@ -23,22 +23,23 @@
 #include <svx/svdsob.hxx>
 #include <vcl/region.hxx>
 #include <svx/svxdllapi.h>
+#include <basegfx/range/b2irectangle.hxx>
 
 namespace sdr
 {
     namespace contact
     {
-        class SVX_DLLPUBLIC DisplayInfo
+        class SVX_DLLPUBLIC DisplayInfo final
         {
-        protected:
             // The Layers which shall be processed (visible)
-            SetOfByte                                       maProcessLayers;
+            SdrLayerIDSet                                       maProcessLayers;
 
             // The redraw area, in logical coordinates of OutputDevice. If Region
             // is empty, everything needs to be redrawn
             vcl::Region                                          maRedrawArea;
 
-            // bitfield
+            /// only for Writer: current page being painted
+            basegfx::B2IRectangle m_WriterPageFrame;
 
             // Internal flag to know when the control layer is painted. Default is
             // false. If set to true, painting of the page, page borders and
@@ -69,16 +70,16 @@ namespace sdr
             // basic constructor.
             DisplayInfo();
 
-            // destructor
-            virtual ~DisplayInfo();
-
             // access to ProcessLayers
-            void SetProcessLayers(const SetOfByte& rSet);
-            const SetOfByte& GetProcessLayers() const { return maProcessLayers; }
+            void SetProcessLayers(const SdrLayerIDSet& rSet);
+            const SdrLayerIDSet& GetProcessLayers() const { return maProcessLayers; }
 
             // access to RedrawArea
             void SetRedrawArea(const vcl::Region& rRegion);
             const vcl::Region& GetRedrawArea() const { return maRedrawArea; }
+
+            void SetWriterPageFrame(basegfx::B2IRectangle const& rPageFrame);
+            basegfx::B2IRectangle const& GetWriterPageFrame() const { return m_WriterPageFrame; }
 
             // Access to ControlLayerProcessingActive flag
             void SetControlLayerProcessingActive(bool bDoPaint);

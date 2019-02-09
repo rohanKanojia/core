@@ -20,6 +20,8 @@
 #ifndef INCLUDED_FILTER_SOURCE_CONFIG_CACHE_FILTERCACHE_HXX
 #define INCLUDED_FILTER_SOURCE_CONFIG_CACHE_FILTERCACHE_HXX
 
+#include <memory>
+
 #include "cacheitem.hxx"
 #include <com/sun/star/uno/Exception.hpp>
 #include <com/sun/star/util/URL.hpp>
@@ -85,12 +87,12 @@ class FilterCache : public BaseLock
 
             @descr      This cache supports a 2-step load mechanism.
                         First only types (and only some special properties of every type!)
-                        but no filters/frame loaders/content handlers will be readed.
+                        but no filters/frame loaders/content handlers will be read.
                         That should be enough to work with this cache e.g. for loading
                         the first document. After this first document was loaded successfully,
                         a special "load-on-demand-thread" will be started to fill this cache
-                        with ALL other information, which was not readed before.
-                        Thats the second step. All operations on top of this cache will be
+                        with ALL other information, which was not read before.
+                        That's the second step. All operations on top of this cache will be
                         blocked then.
          */
         enum EFillState
@@ -100,8 +102,7 @@ class FilterCache : public BaseLock
             E_CONTAINS_TYPES            = 2,
             E_CONTAINS_FILTERS          = 4,
             E_CONTAINS_FRAMELOADERS     = 8,
-            E_CONTAINS_CONTENTHANDLERS  = 16,
-            E_CONTAINS_ALL              = 31 // must be a combination of all excepting E_CONTAINS_NOTHING! Please update if items will be added or removed ...
+            E_CONTAINS_CONTENTHANDLERS  = 16
         };
 
 
@@ -111,7 +112,7 @@ class FilterCache : public BaseLock
 
 
         /** @short      regulate, which properties of a configured item
-                        will be readed.
+                        will be read.
 
             @descr      To perform reading of all configuration items,
                         only standard properties will be handled. At a second
@@ -122,7 +123,6 @@ class FilterCache : public BaseLock
          */
         enum EReadOption
         {
-            E_READ_NOTHING  = 0,
             E_READ_STANDARD = 1,
             E_READ_UPDATE   = 2,
             E_READ_ALL      = 3
@@ -228,10 +228,10 @@ class FilterCache : public BaseLock
 
 
         /** TODO document me ... */
-        OUStringList m_lChangedTypes;
-        OUStringList m_lChangedFilters;
-        OUStringList m_lChangedFrameLoaders;
-        OUStringList m_lChangedContentHandlers;
+        std::vector<OUString> m_lChangedTypes;
+        std::vector<OUString> m_lChangedFilters;
+        std::vector<OUString> m_lChangedFrameLoaders;
+        std::vector<OUString> m_lChangedContentHandlers;
 
         /// standard property names for filter config keyed by EReadOption
         css::uno::Sequence< OUString > m_aStandardProps[4];
@@ -255,7 +255,7 @@ class FilterCache : public BaseLock
 
         /** @short  standard ctor
 
-            @descr  Its not allowed to do anything here ...
+            @descr  It's not allowed to do anything here...
                     especially is forbidden to start operations,
                     which needs a FilterCache instance too!
                     Why? Because this FilterCache instance will be
@@ -286,17 +286,14 @@ class FilterCache : public BaseLock
                     because it listen for changes on the internal used configuration layer.
                     If the new data are needed immediately inside the original container,
                     the method takeOver() can be used to copy all changes back.
-                    The may be following notifications of the configuration will be superflous then.
-                    But they can't be stopped ...
+                    The may be following notifications of the configuration will be superfluous then.
+                    But they can't be stopped...
 
                     All internal structures will be copied here. But the internal used
-                    configuration (update) access wont be copied. The cloned instance contains
+                    configuration (update) access won't be copied. The cloned instance contains
                     a different one.
-
-            @note   The cloned instance is created on the heap. The user of this instance
-                    has to remove it later.
          */
-        FilterCache* clone() const;
+        std::unique_ptr<FilterCache> clone() const;
 
 
         /** @short  copy the cache content or rClone back to this instance.
@@ -307,7 +304,7 @@ class FilterCache : public BaseLock
         /** @short      force special fill state of this cache.
 
             @descr      This method checks, if all requested items/properties already
-                        exist. Only missing information will be readed.
+                        exist. Only missing information will be read.
                         Otherwise this method does nothing!
 
                         This method must be called from every user of this cache
@@ -319,8 +316,7 @@ class FilterCache : public BaseLock
                         at all if this method does nothing inside, because the cache
                         is already fully filled!
          */
-        void load(EFillState eRequired)
-            throw(css::uno::Exception);
+        void load(EFillState eRequired);
 
 
         /** @short      return the current fill state of this cache.
@@ -333,9 +329,10 @@ class FilterCache : public BaseLock
 
             @return     sal_True if the required fill state exists for this cache; FALSE
                         otherwise.
+
+            @throws css::uno::Exception
          */
-        bool isFillState(EFillState eRequired) const
-            throw(css::uno::Exception);
+        bool isFillState(EFillState eRequired) const;
 
 
         /** @short      return a list of key names for items, which match
@@ -361,7 +358,7 @@ class FilterCache : public BaseLock
                         specify the property set, which must not(!) exist at the searched items
                         as minimum.
 
-            @return     [OUStringList]
+            @return     [std::vector<OUString>]
                         a list of key names, which identify items of the queried sub container.
                         May be an empty list.
 
@@ -369,10 +366,9 @@ class FilterCache : public BaseLock
                         if some input parameter are wrong or the cache itself is not valid
                         any longer, because any operation before damage it.
          */
-        OUStringList getMatchingItemsByProps(      EItemType  eType                ,
+        std::vector<OUString> getMatchingItemsByProps(      EItemType  eType                ,
                                                      const CacheItem& lIProps              ,
-                                                     const CacheItem& lEProps = CacheItem()) const
-            throw(css::uno::Exception);
+                                                     const CacheItem& lEProps = CacheItem()) const;
 
 
         /** @short      indicates if the requested sub container
@@ -396,8 +392,7 @@ class FilterCache : public BaseLock
                         if some input parameter are wrong or the cache itself is not valid
                         any longer, because any operation before damage it.
          */
-        bool hasItems(EItemType eType) const
-            throw(css::uno::Exception);
+        bool hasItems(EItemType eType) const;
 
 
         /** @short      return a list of all key names, which represent
@@ -412,7 +407,7 @@ class FilterCache : public BaseLock
                         specify the sub container of this cache, which should be used for
                         searching. see also EItemType.
 
-            @return     [OUStringList]
+            @return     [std::vector<OUString>]
                         a list of key names, which can be used to access the item properties
                         using some other methods of this cache.
 
@@ -420,8 +415,7 @@ class FilterCache : public BaseLock
                         if some input parameter are wrong or the cache itself is not valid
                         any longer, because any operation before damage it.
          */
-        OUStringList getItemNames(EItemType eType) const
-            throw(css::uno::Exception);
+        std::vector<OUString> getItemNames(EItemType eType) const;
 
 
         /** @short      check if the required item exist inside this container.
@@ -444,8 +438,7 @@ class FilterCache : public BaseLock
                         any longer, because any operation before damage it.
          */
         bool hasItem(      EItemType        eType,
-                                 const OUString& sItem)
-            throw(css::uno::Exception);
+                                 const OUString& sItem);
 
 
         /** @short      return an item, which match the specified type and name.
@@ -473,30 +466,32 @@ class FilterCache : public BaseLock
                         any longer, because any operation before damage it.
          */
         CacheItem getItem(      EItemType        eType,
-                                  const OUString& sItem)
-            throw(css::uno::Exception);
+                                  const OUString& sItem);
 
 
         /** TODO document me ...
+
+            @throws css::uno::Exception
          */
         void removeItem(      EItemType        eType,
-                                const OUString& sItem)
-            throw(css::uno::Exception);
+                                const OUString& sItem);
 
 
         /** TODO document me ...
+
+            @throws css::uno::Exception
          */
         void setItem(      EItemType        eType ,
                              const OUString& sItem ,
-                             const CacheItem&       aValue)
-            throw(css::uno::Exception, std::exception);
+                             const CacheItem&       aValue);
 
 
         /** TODO document me ...
+
+            @throws css::uno::Exception
          */
         void refreshItem(      EItemType        eType,
-                                 const OUString& sItem)
-            throw(css::uno::Exception);
+                                 const OUString& sItem);
 
 
         /** @short      add some implicit properties to the given
@@ -536,14 +531,14 @@ class FilterCache : public BaseLock
          */
         void addStatePropsToItem(      EItemType        eType,
                                          const OUString& sItem,
-                                               CacheItem&       rItem)
-            throw(css::uno::Exception);
+                                               CacheItem&       rItem);
 
 
         /** TODO document me
+
+            @throws css::uno::Exception
          */
-        static void removeStatePropsFromItem(CacheItem& aValue)
-            throw(css::uno::Exception);
+        static void removeStatePropsFromItem(CacheItem& aValue);
 
 
         /** @short      force writing of all changes (which was made after
@@ -555,8 +550,7 @@ class FilterCache : public BaseLock
                         if the cache itself is not valid
                         any longer, because any operation before damage it.
          */
-        void flush()
-            throw(css::uno::Exception);
+        void flush();
 
 
         /** @short      supports a flat type detection for given URL.
@@ -567,14 +561,14 @@ class FilterCache : public BaseLock
 
             @param      aURL
                         URL of the content, which type should be detected.
-                        Its already parsed and splitted into its different parts,
+                        It's already parsed and split into its different parts,
                         like e.g.: main, jump marks etcpp.
 
             @param      rFlatTypes
                         used as [out] parameter to add all types, which match to the given
                         URL. Further an information is added for every type. It indicates, how
                         this type is related to the specified URL (means e.g. if it matches
-                        by extension or URLPattern ...).
+                        by extension or URLPattern...).
 
             @attention  Please note: because this cache can be used inside multithreaded
                         environments, such returned key names can point to some already removed
@@ -586,8 +580,7 @@ class FilterCache : public BaseLock
                         any longer, because any operation before damage it.
          */
         void detectFlatForURL(const css::util::URL& aURL      ,
-                                            FlatDetection&  rFlatTypes) const
-            throw(css::uno::Exception);
+                                            FlatDetection&  rFlatTypes) const;
 
 
     // private helper
@@ -626,12 +619,13 @@ class FilterCache : public BaseLock
                         specify the needed configuration provider.
                         see EConfigProvider for further information ...
 
+            @throws css::uno::Exception
+
             @attention  If a configuration access was opened successfully
                         all necessary listener connections will be established
                         too. So this cache will be informed about outside updates.
          */
-        css::uno::Reference< css::uno::XInterface > impl_openConfig(EConfigProvider eProvide)
-            throw(css::uno::Exception);
+        css::uno::Reference< css::uno::XInterface > impl_openConfig(EConfigProvider eProvide);
 
 
         /** @short      tries to open the requested configuration root
@@ -661,15 +655,15 @@ class FilterCache : public BaseLock
                         and return its value.
 
             @descr      The specified key must be an absolute configuration path,
-                        which can be splitted into its package and relative path tokens.
+                        which can be split into its package and relative path tokens.
 
             @attention  Because this function might opens a new configuration
                         read access for reading one key value only, it should
-                        be used in rare cases only. Its an easy way ... but an
+                        be used in rare cases only. It's an easy way... but an
                         expensive one.
 
             @param      sDirectKey
-                        the absolute configuration path, which should be readed.
+                        the absolute configuration path, which should be read.
 
             @return     [css::uno::Any]
                         the value of the requested key.
@@ -681,16 +675,17 @@ class FilterCache : public BaseLock
 
         /** @short      load the underlying configuration into this cache.
 
-            @descr      Which items should be readed can be regulate by the
+            @descr      Which items should be read can be regulate by the
                         parameter eRequiredState. That provides the possibility
                         to load standard values on startup only and update this
                         cache later on demand with all available information.
 
             @param      eRequiredState
                         indicates, which fill state this cache should have afterwards.
+
+            @throws css::uno::Exception
          */
-        void impl_load(EFillState eRequiredState)
-            throw(css::uno::Exception);
+        void impl_load(EFillState eRequiredState);
 
 
         /** @short      validate the whole cache and create
@@ -709,8 +704,7 @@ class FilterCache : public BaseLock
             @throw      [css::uno::Exception]
                         if cache is invalid and could not be repaired.
          */
-        void impl_validateAndOptimize()
-            throw(css::uno::Exception);
+        void impl_validateAndOptimize();
 
     private:
 
@@ -743,20 +737,19 @@ class FilterCache : public BaseLock
         void impl_loadSet(const css::uno::Reference< css::container::XNameAccess >& xConfig,
                                 EItemType                                           eType  ,
                                 EReadOption                                         eOption,
-                                CacheItemList*                                      pCache )
-            throw(css::uno::Exception);
+                                CacheItemList*                                      pCache );
 
 
         /** @short  read the specified container item from the given configuration set.
 
-            @descr  Its not added to any internal structures here. That must be done
+            @descr  It's not added to any internal structures here. That must be done
                     outside this method.
 
             @param  xSet
                     provides access to the configuration set, which includes all items.
 
             @param  eType
-                    specify, which container item type must be readed.
+                    specify, which container item type must be read.
 
             @param  sItem
                     means the internal name, which can be used to address the item
@@ -772,8 +765,7 @@ class FilterCache : public BaseLock
         CacheItem impl_loadItem(const css::uno::Reference< css::container::XNameAccess >& xSet   ,
                                       EItemType                                           eType  ,
                                 const OUString&                                    sItem  ,
-                                      EReadOption                                         eOption)
-            throw(css::uno::Exception);
+                                      EReadOption                                         eOption);
 
 
         /** @short  try to load the requested item on demand from the underlying configuration
@@ -802,29 +794,34 @@ class FilterCache : public BaseLock
                     if an unrecoverable error occurs inside this operation.
          */
         CacheItemList::iterator impl_loadItemOnDemand(      EItemType        eType,
-                                                      const OUString& sItem)
-            throw(css::uno::Exception);
+                                                      const OUString& sItem);
 
 
-        /** TODO */
+        /** TODO
+
+            @throws css::uno::Exception
+        */
         static void impl_saveItem(const css::uno::Reference< css::container::XNameReplace >& xSet  ,
                                  EItemType                                            eType ,
-                           const CacheItem&                                           aValue)
-            throw(css::uno::Exception);
+                           const CacheItem & aValue);
 
 
-        /** TODO */
+        /** TODO
+
+            @throws css::uno::Exception
+        */
         void impl_addItem2FlushList(      EItemType        eType,
-                                    const OUString& sItem)
-            throw(css::uno::Exception);
+                                    const OUString& sItem);
 
 
-        /** TODO */
+        /** TODO
+
+            @throws css::uno::Exception
+        */
         static void impl_flushByList(const css::uno::Reference< css::container::XNameAccess >& xSet  ,
                                     EItemType                                           eType ,
                               const CacheItemList&                                      rCache,
-                              const OUStringList&                                       lItems)
-            throw(css::uno::Exception);
+                              const std::vector<OUString>&                              lItems);
 
 
         /** @short  specify, which save operation is necessary for the specified item.
@@ -856,29 +853,34 @@ class FilterCache : public BaseLock
          */
         static EItemFlushState impl_specifyFlushOperation(const css::uno::Reference< css::container::XNameAccess >& xSet ,
                                                    const CacheItemList&                                      rList,
-                                                   const OUString&                                    sItem)
-            throw(css::uno::Exception);
+                                                   const OUString&                                    sItem);
 
 
-        /** TODO */
+        /** TODO
+
+            @throws css::uno::Exception
+        */
         void impl_readPatchUINames(const css::uno::Reference< css::container::XNameAccess >& xNode,
-                                         CacheItem&                                          rItem)
-            throw(css::uno::Exception);
+                                         CacheItem&                                          rItem);
 
 
-        /** TODO */
+        /** TODO
+
+            @throws css::uno::Exception
+        */
         static void impl_savePatchUINames(const css::uno::Reference< css::container::XNameReplace >& xNode,
-                                   const CacheItem&                                           rItem)
-            throw(css::uno::Exception);
+                                   const CacheItem&                                           rItem);
 
         /** TODO */
         void impl_readOldFormat();
 
-        /** TODO */
+        /** TODO
+
+            @throws css::uno::Exception
+        */
         CacheItem impl_readOldItem(const css::uno::Reference< css::container::XNameAccess >& xSet ,
                                          EItemType                                           eType,
-                                   const OUString&                                    sItem)
-            throw(css::uno::Exception);
+                                   const OUString&                                    sItem);
 
 
         /** TODO */
@@ -894,7 +896,7 @@ class FilterCache : public BaseLock
 
 
         /** TODO */
-        static OUStringList impl_tokenizeString(const OUString& sData     ,
+        static std::vector<OUString> impl_tokenizeString(const OUString& sData     ,
                                                sal_Unicode      cSeparator);
 
 

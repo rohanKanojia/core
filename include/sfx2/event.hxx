@@ -20,8 +20,10 @@
 #define INCLUDED_SFX2_EVENT_HXX
 
 #include <sal/config.h>
+
+#include <ostream>
+
 #include <sfx2/dllapi.h>
-#include <sfx2/sfx.hrc>
 #include <svl/hint.hxx>
 #include <unotools/eventcfg.hxx>
 #include <rtl/ustring.hxx>
@@ -31,23 +33,174 @@
 #include <com/sun/star/frame/XController2.hpp>
 #include <com/sun/star/view/PrintableState.hpp>
 
+/**
+  these values get stored in streams in a 16-bit value
+*/
+enum class SvMacroItemId : sal_uInt16 {
+    NONE                 = 0,
+
+    // used by SwHTMLForm_Impl
+    HtmlOnSubmitForm,
+    HtmlOnResetForm,
+    HtmlOnGetFocus,
+    HtmlOnLoseFocus,
+    HtmlOnClick,
+    HtmlOnClickItem,
+    HtmlOnChange,
+    HtmlOnSelect,
+
+    // used by SwHTMLParser
+    OpenDoc,
+    PrepareCloseDoc,
+    ActivateDoc,
+    DeactivateDoc,
+
+    // Events for Controls etc.
+    OnMouseOver          =  5100,
+    OnClick              =  5101,
+    OnMouseOut           =  5102,
+
+    OnImageLoadDone      = 10000,
+    OnImageLoadCancel    = 10001,
+    OnImageLoadError     = 10002,
+
+    SwObjectSelect       = 20000,
+    SwStartInsGlossary   = 20001,
+    SwEndInsGlossary     = 20002,
+    SwFrmKeyInputAlpha   = 20004,
+    SwFrmKeyInputNoAlpha = 20005,
+    SwFrmResize          = 20006,
+    SwFrmMove            = 20007,
+};
+
+template< typename charT, typename traits >
+inline std::basic_ostream<charT, traits> & operator <<(
+    std::basic_ostream<charT, traits> & stream, const SvMacroItemId& id )
+{
+    switch(id)
+    {
+    case SvMacroItemId::NONE: return stream << "NONE";
+    case SvMacroItemId::HtmlOnSubmitForm: return stream << "HtmlOnSubmitForm";
+    case SvMacroItemId::HtmlOnResetForm: return stream << "HtmlOnResetForm";
+    case SvMacroItemId::HtmlOnGetFocus: return stream << "HtmlOnGetFocus";
+    case SvMacroItemId::HtmlOnLoseFocus: return stream << "HtmlOnLoseFocus";
+    case SvMacroItemId::HtmlOnClick: return stream << "HtmlOnClick";
+    case SvMacroItemId::HtmlOnClickItem: return stream << "HtmlOnClickItem";
+    case SvMacroItemId::HtmlOnChange: return stream << "HtmlOnChange";
+    case SvMacroItemId::HtmlOnSelect: return stream << "HtmlOnSelect";
+    case SvMacroItemId::OpenDoc: return stream << "OpenDoc";
+    case SvMacroItemId::PrepareCloseDoc: return stream << "PrepareCloseDoc";
+    case SvMacroItemId::ActivateDoc: return stream << "ActivateDoc";
+    case SvMacroItemId::DeactivateDoc: return stream << "DeactivateDoc";
+    case SvMacroItemId::OnMouseOver: return stream << "OnMouseOver";
+    case SvMacroItemId::OnClick: return stream << "OnClick";
+    case SvMacroItemId::OnMouseOut: return stream << "OnMouseOut";
+    case SvMacroItemId::OnImageLoadDone: return stream << "OnImageLoadDone";
+    case SvMacroItemId::OnImageLoadCancel: return stream << "OnImageLoadCancel";
+    case SvMacroItemId::OnImageLoadError: return stream << "OnImageLoadError";
+    case SvMacroItemId::SwObjectSelect: return stream << "SwObjectSelect";
+    case SvMacroItemId::SwStartInsGlossary: return stream << "SwStartInsGlossary";
+    case SvMacroItemId::SwEndInsGlossary: return stream << "SwEndInsGlossary";
+    case SvMacroItemId::SwFrmKeyInputAlpha: return stream << "SwFrmKeyInputAlpha";
+    case SvMacroItemId::SwFrmKeyInputNoAlpha: return stream << "SwFrmKeyInputNoAlpha";
+    case SvMacroItemId::SwFrmResize: return stream << "SwFrmResize";
+    case SvMacroItemId::SwFrmMove: return stream << "SwFrmMove";
+    default: return stream << "unk(" << std::to_string(int(id)) << ")";
+    }
+}
+
 class SfxObjectShell;
 
+enum class SfxEventHintId {
+    NONE = 0,
+    ActivateDoc,
+    CloseDoc,
+    CloseView,
+    CreateDoc,
+    DeactivateDoc,
+    DocCreated,
+    LoadFinished,
+    ModifyChanged,
+    OpenDoc,
+    PrepareCloseDoc,
+    PrepareCloseView,
+    PrintDoc,
+    SaveAsDoc,
+    SaveAsDocDone,
+    SaveAsDocFailed,
+    SaveDoc,
+    SaveDocDone,
+    SaveDocFailed,
+    SaveToDoc,
+    SaveToDocDone,
+    SaveToDocFailed,
+    StorageChanged,
+    ViewCreated,
+    VisAreaChanged,
+    // SW events
+    SwMailMerge,
+    SwMailMergeEnd,
+    SwEventPageCount,
+    SwEventFieldMerge,
+    SwEventFieldMergeFinished,
+    SwEventLayoutFinished,
+};
+
+template< typename charT, typename traits >
+inline std::basic_ostream<charT, traits> & operator <<(
+    std::basic_ostream<charT, traits> & stream, const SfxEventHintId& id )
+{
+    switch(id)
+    {
+    case SfxEventHintId::NONE: return stream << "NONE";
+    case SfxEventHintId::ActivateDoc: return stream << "ActivateDoc";
+    case SfxEventHintId::CloseDoc: return stream << "CloseDoc";
+    case SfxEventHintId::CloseView: return stream << "CloseView";
+    case SfxEventHintId::CreateDoc: return stream << "CreateDoc";
+    case SfxEventHintId::DeactivateDoc: return stream << "DeactivateDoc";
+    case SfxEventHintId::DocCreated: return stream << "DocCreated";
+    case SfxEventHintId::LoadFinished: return stream << "LoadFinished";
+    case SfxEventHintId::ModifyChanged: return stream << "ModifyChanged";
+    case SfxEventHintId::OpenDoc: return stream << "OpenDoc";
+    case SfxEventHintId::PrepareCloseDoc: return stream << "PrepareCloseDoc";
+    case SfxEventHintId::PrepareCloseView: return stream << "PrepareCloseView";
+    case SfxEventHintId::PrintDoc: return stream << "PrintDoc";
+    case SfxEventHintId::SaveAsDoc: return stream << "SaveAsDoc";
+    case SfxEventHintId::SaveAsDocDone: return stream << "SaveAsDocDone";
+    case SfxEventHintId::SaveAsDocFailed: return stream << "SaveAsDocFailed";
+    case SfxEventHintId::SaveDoc: return stream << "SaveDoc";
+    case SfxEventHintId::SaveDocDone: return stream << "SaveDocDone";
+    case SfxEventHintId::SaveDocFailed: return stream << "SaveDocFailed";
+    case SfxEventHintId::SaveToDoc: return stream << "SaveToDoc";
+    case SfxEventHintId::SaveToDocDone: return stream << "SaveToDocDone";
+    case SfxEventHintId::SaveToDocFailed: return stream << "SaveToDocFailed";
+    case SfxEventHintId::StorageChanged: return stream << "StorageChanged";
+    case SfxEventHintId::ViewCreated: return stream << "ViewCreated";
+    case SfxEventHintId::VisAreaChanged: return stream << "VisAreaChanged";
+    case SfxEventHintId::SwMailMerge: return stream << "SwMailMerge";
+    case SfxEventHintId::SwMailMergeEnd: return stream << "SwMailMergeEnd";
+    case SfxEventHintId::SwEventPageCount: return stream << "SwEventPageCount";
+    case SfxEventHintId::SwEventFieldMerge: return stream << "SwEventFieldMerge";
+    case SfxEventHintId::SwEventFieldMergeFinished: return stream << "SwEventFieldMergeFinished";
+    case SfxEventHintId::SwEventLayoutFinished: return stream << "SwEventLayoutFinished";
+    default: return stream << "unk(" << std::to_string(int(id)) << ")";
+    }
+}
 
 class SFX2_DLLPUBLIC SfxEventHint : public SfxHint
 {
-    SfxObjectShell*     pObjShell;
-    OUString     aEventName;
-    sal_uInt16              nEventId;
+    SfxObjectShell* const     pObjShell;
+    OUString const            aEventName;
+    SfxEventHintId const      nEventId;
 
 public:
-    SfxEventHint( sal_uInt16 nId, const OUString& aName, SfxObjectShell *pObj = nullptr )
+    SfxEventHint( SfxEventHintId nId, const OUString& aName, SfxObjectShell *pObj )
                         :   pObjShell(pObj),
                             aEventName(aName),
                             nEventId(nId)
                         {}
 
-    sal_uInt16              GetEventId() const
+    SfxEventHintId      GetEventId() const
                         { return nEventId; }
 
     const OUString&     GetEventName() const
@@ -63,12 +216,12 @@ class SFX2_DLLPUBLIC SfxViewEventHint : public SfxEventHint
     css::uno::Reference< css::frame::XController2 > xViewController;
 
 public:
-    SfxViewEventHint( sal_uInt16 nId, const OUString& aName, SfxObjectShell *pObj, const css::uno::Reference< css::frame::XController >& xController )
+    SfxViewEventHint( SfxEventHintId nId, const OUString& aName, SfxObjectShell *pObj, const css::uno::Reference< css::frame::XController >& xController )
                         : SfxEventHint( nId, aName, pObj )
                         , xViewController( xController, css::uno::UNO_QUERY )
                         {}
 
-    SfxViewEventHint( sal_uInt16 nId, const OUString& aName, SfxObjectShell *pObj, const css::uno::Reference< css::frame::XController2 >& xController )
+    SfxViewEventHint( SfxEventHintId nId, const OUString& aName, SfxObjectShell *pObj, const css::uno::Reference< css::frame::XController2 >& xController )
                         : SfxEventHint( nId, aName, pObj )
                         , xViewController( xController )
                         {}
@@ -81,29 +234,33 @@ class Printer;
 
 class SfxPrintingHint : public SfxViewEventHint
 {
-    sal_Int32 mnPrintableState;
-    css::uno::Sequence < css::beans::PropertyValue > aOpts;
+    css::view::PrintableState const mnPrintableState;
+    css::uno::Sequence < css::beans::PropertyValue > const aOpts;
 public:
         SfxPrintingHint(
-                sal_Int32 nEvent,
+                css::view::PrintableState nState,
                 const css::uno::Sequence < css::beans::PropertyValue >& rOpts,
                 SfxObjectShell *pObj,
                 const css::uno::Reference< css::frame::XController2 >& xController )
         : SfxViewEventHint(
-            SFX_EVENT_PRINTDOC,
+            SfxEventHintId::PrintDoc,
             GlobalEventConfig::GetEventName( GlobalEventId::PRINTDOC ),
             pObj,
             xController )
-        , mnPrintableState( nEvent )
+        , mnPrintableState( nState )
         , aOpts( rOpts )
         {}
 
-        SfxPrintingHint( sal_Int32 nEvent )
-        : SfxViewEventHint( SFX_EVENT_PRINTDOC, rtl::OUString(), nullptr, css::uno::Reference< css::frame::XController >() )
-        , mnPrintableState( nEvent )
+        SfxPrintingHint( css::view::PrintableState nState )
+        : SfxViewEventHint(
+            SfxEventHintId::PrintDoc,
+            GlobalEventConfig::GetEventName( GlobalEventId::PRINTDOC ),
+            nullptr,
+            css::uno::Reference< css::frame::XController >() )
+        , mnPrintableState( nState )
         {}
 
-    sal_Int32 GetWhich() const { return mnPrintableState; }
+    css::view::PrintableState GetWhich() const { return mnPrintableState; }
     const css::uno::Sequence < css::beans::PropertyValue >& GetOptions() const { return aOpts; }
 };
 

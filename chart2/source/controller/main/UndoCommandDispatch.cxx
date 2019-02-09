@@ -18,17 +18,15 @@
  */
 
 #include "UndoCommandDispatch.hxx"
-#include "ResId.hxx"
-#include "macros.hxx"
 
 #include <com/sun/star/util/XModifyBroadcaster.hpp>
+#include <com/sun/star/document/UndoFailedException.hpp>
 #include <com/sun/star/document/XUndoManagerSupplier.hpp>
 
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 #include <tools/diagnose_ex.h>
 
-#include <svtools/svtools.hrc>
+#include <svtools/strings.hrc>
 #include <svtools/svtresid.hxx>
 
 using namespace ::com::sun::star;
@@ -68,17 +66,9 @@ void UndoCommandDispatch::fireStatusEvent(
         const bool bFireAll = rURL.isEmpty();
         uno::Any aUndoState, aRedoState;
         if( m_xUndoManager->isUndoPossible())
-        {
-            // using assignment for broken gcc 3.3
-            OUString aUndo = SvtResId( STR_UNDO ).toString();
-            aUndoState <<= ( aUndo + m_xUndoManager->getCurrentUndoActionTitle());
-        }
+            aUndoState <<= SvtResId( STR_UNDO ) + m_xUndoManager->getCurrentUndoActionTitle();
         if( m_xUndoManager->isRedoPossible())
-        {
-            // using assignment for broken gcc 3.3
-            OUString aRedo = SvtResId( STR_REDO ).toString();
-            aRedoState <<= ( aRedo + m_xUndoManager->getCurrentRedoActionTitle());
-        }
+            aRedoState <<= SvtResId( STR_REDO ) + m_xUndoManager->getCurrentRedoActionTitle();
 
         if( bFireAll || rURL == ".uno:Undo" )
             fireStatusEventForURL( ".uno:Undo", aUndoState, m_xUndoManager->isUndoPossible(), xSingleListener );
@@ -91,7 +81,6 @@ void UndoCommandDispatch::fireStatusEvent(
 void SAL_CALL UndoCommandDispatch::dispatch(
     const util::URL& URL,
     const Sequence< beans::PropertyValue >& /* Arguments */ )
-    throw (uno::RuntimeException, std::exception)
 {
     if( m_xUndoManager.is() )
     {
@@ -110,7 +99,7 @@ void SAL_CALL UndoCommandDispatch::dispatch(
         }
         catch( const uno::Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
         // \--
     }
@@ -133,7 +122,6 @@ void SAL_CALL UndoCommandDispatch::disposing()
 
 // ____ XEventListener (base of XModifyListener) ____
 void SAL_CALL UndoCommandDispatch::disposing( const lang::EventObject& /* Source */ )
-    throw (uno::RuntimeException, std::exception)
 {
     m_xUndoManager.clear();
     m_xModel.clear();

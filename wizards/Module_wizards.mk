@@ -21,6 +21,7 @@ $(eval $(call gb_Module_Module,wizards))
 
 $(eval $(call gb_Module_add_targets,wizards,\
 	CustomTarget_share \
+	CustomTarget_wizards \
 	Package_access2base \
 	Package_depot \
 	Package_euro \
@@ -33,19 +34,16 @@ $(eval $(call gb_Module_add_targets,wizards,\
 	Package_tools \
 	Package_tutorials \
 	Package_usr \
+	Package_wizards \
+	Package_wizards_properties \
 	Pyuno_fax \
 	Pyuno_letter \
 	Pyuno_agenda \
-	Pyuno_web \
 	Pyuno_commonwizards \
 ))
 
 $(eval $(call gb_Module_add_l10n_targets,wizards,\
-	AllLangResTarget_dbw \
-	AllLangResTarget_eur \
-	AllLangResTarget_imp \
-	AllLangResTarget_tpl \
-	AllLangResTarget_wzi \
+	AllLangMoTarget_wiz \
 ))
 
 ifeq ($(ENABLE_JAVA),TRUE)

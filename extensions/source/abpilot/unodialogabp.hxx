@@ -22,7 +22,7 @@
 
 #include <svtools/genericunodialog.hxx>
 #include <comphelper/proparrhlp.hxx>
-#include "componentmodule.hxx"
+#include <componentmodule.hxx>
 #include <com/sun/star/task/XJob.hpp>
 #include <cppuhelper/implbase1.hxx>
 
@@ -33,10 +33,9 @@ namespace abp
     typedef ::comphelper::OPropertyArrayUsageHelper< OABSPilotUno > OABSPilotUno_PBase;
     /// the UNO wrapper for the address book source pilot
     class OABSPilotUno
-            :public OModuleResourceClient
-            ,public svt::OGenericUnoDialog
-            ,public OABSPilotUno_JBase
-            ,public OABSPilotUno_PBase
+            : public svt::OGenericUnoDialog
+            , public OABSPilotUno_JBase
+            , public OABSPilotUno_PBase
     {
         OUString m_sDataSourceName;
 
@@ -45,34 +44,34 @@ namespace abp
 
     private:
         // XInterface (disambiguation)
-        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) override;
         virtual void SAL_CALL acquire(  ) throw () override;
         virtual void SAL_CALL release(  ) throw () override;
 
         // XTypeProvider
-        virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence<sal_Int8> SAL_CALL getImplementationId(  ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) override;
+        virtual css::uno::Sequence<sal_Int8> SAL_CALL getImplementationId(  ) override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() throw(css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getImplementationName() override;
+        virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
 
         // XPropertySet
-        virtual css::uno::Reference< css::beans::XPropertySetInfo>  SAL_CALL getPropertySetInfo() throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::beans::XPropertySetInfo>  SAL_CALL getPropertySetInfo() override;
         virtual ::cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
 
         // OPropertyArrayUsageHelper
         virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
 
         // XJob
-        virtual css::uno::Any SAL_CALL execute( const css::uno::Sequence< css::beans::NamedValue >& lArgs ) throw (css::lang::IllegalArgumentException, css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL execute( const css::uno::Sequence< css::beans::NamedValue >& lArgs ) override;
 
         // XInitialisation
-        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
         using svt::OGenericUnoDialog::execute;
         // OGenericUnoDialog overridables
-        virtual VclPtr<Dialog> createDialog(vcl::Window* _pParent) override;
+        virtual svt::OGenericUnoDialog::Dialog createDialog(const css::uno::Reference<css::awt::XWindow>& rParent) override;
         virtual void executedDialog(sal_Int16 _nExecutionResult) override;
     };
 

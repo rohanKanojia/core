@@ -18,12 +18,13 @@
  */
 
 #include "OOXMLStreamImpl.hxx"
-#include "oox/core/fasttokenhandler.hxx"
+#include <oox/core/fasttokenhandler.hxx>
 #include <iostream>
 
 #include <com/sun/star/embed/XHierarchicalStorageAccess.hpp>
 #include <com/sun/star/uri/UriReferenceFactory.hpp>
 #include <com/sun/star/xml/sax/Parser.hpp>
+#include <comphelper/storagehelper.hxx>
 
 namespace writerfilter {
 namespace ooxml
@@ -32,8 +33,8 @@ namespace ooxml
 using namespace com::sun::star;
 
 OOXMLStreamImpl::OOXMLStreamImpl
-(uno::Reference<uno::XComponentContext> xContext,
- uno::Reference<io::XInputStream> xStorageStream,
+(uno::Reference<uno::XComponentContext> const & xContext,
+ uno::Reference<io::XInputStream> const & xStorageStream,
  StreamType_t nType, bool bRepairStorage)
 : mxContext(xContext), mxStorageStream(xStorageStream), mnStreamType(nType)
 {
@@ -46,7 +47,7 @@ OOXMLStreamImpl::OOXMLStreamImpl
 }
 
 OOXMLStreamImpl::OOXMLStreamImpl
-(OOXMLStreamImpl & rOOXMLStream, StreamType_t nStreamType)
+(OOXMLStreamImpl const & rOOXMLStream, StreamType_t nStreamType)
 : mxContext(rOOXMLStream.mxContext),
   mxStorageStream(rOOXMLStream.mxStorageStream),
   mxStorage(rOOXMLStream.mxStorage),
@@ -59,7 +60,7 @@ OOXMLStreamImpl::OOXMLStreamImpl
 }
 
 OOXMLStreamImpl::OOXMLStreamImpl
-(OOXMLStreamImpl & rOOXMLStream, const OUString & rId)
+(OOXMLStreamImpl const & rOOXMLStream, const OUString & rId)
 : mxContext(rOOXMLStream.mxContext),
   mxStorageStream(rOOXMLStream.mxStorageStream),
   mxStorage(rOOXMLStream.mxStorage),
@@ -141,8 +142,6 @@ bool OOXMLStreamImpl::lcl_getTarget(const uno::Reference<embed::XRelationshipAcc
     static const char sThemeType[] = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
     static const char sCustomType[] = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml";
     static const char sCustomPropsType[] = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps";
-    static const char sActiveXType[] = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/control";
-    static const char sActiveXBinType[] = "http://schemas.microsoft.com/office/2006/relationships/activeXControlBinary";
     static const char sGlossaryType[] = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/glossaryDocument";
     static const char sWebSettings[] = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/webSettings";
     static const char sSettingsType[] = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings";
@@ -151,7 +150,6 @@ bool OOXMLStreamImpl::lcl_getTarget(const uno::Reference<embed::XRelationshipAcc
     static const char sFooterType[] = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer";
     static const char sHeaderType[] = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header";
     static const char sOleObjectType[] = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject";
-    static const char sSignatureType[] = "http://schemas.openxmlformats.org/package/2006/relationships/digital-signature/origin";
     // OOXML strict
     static const char sDocumentTypeStrict[] = "http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument";
     static const char sStylesTypeStrict[] = "http://purl.oclc.org/ooxml/officeDocument/relationships/styles";
@@ -163,7 +161,6 @@ bool OOXMLStreamImpl::lcl_getTarget(const uno::Reference<embed::XRelationshipAcc
     static const char sThemeTypeStrict[] = "http://purl.oclc.org/ooxml/officeDocument/relationships/theme";
     static const char sCustomTypeStrict[] = "http://purl.oclc.org/ooxml/officeDocument/relationships/customXml";
     static const char sCustomPropsTypeStrict[] = "http://purl.oclc.org/ooxml/officeDocument/relationships/customXmlProps";
-    static const char sActiveXTypeStrict[] = "http://purl.oclc.org/ooxml/officeDocument/relationships/control";
     static const char sGlossaryTypeStrict[] = "http://purl.oclc.org/ooxml/officeDocument/relationships/glossaryDocument";
     static const char sWebSettingsStrict[] = "http://purl.oclc.org/ooxml/officeDocument/relationships/webSettings";
     static const char sSettingsTypeStrict[] = "http://purl.oclc.org/ooxml/officeDocument/relationships/settings";
@@ -173,6 +170,7 @@ bool OOXMLStreamImpl::lcl_getTarget(const uno::Reference<embed::XRelationshipAcc
     static const char sHeaderTypeStrict[] = "http://purl.oclc.org/ooxml/officeDocument/relationships/header";
     static const char sOleObjectTypeStrict[] = "http://purl.oclc.org/ooxml/officeDocument/relationships/oleObject";
     static const char sVBAProjectType[] = "http://schemas.microsoft.com/office/2006/relationships/vbaProject";
+    static const char sVBADataType[] = "http://schemas.microsoft.com/office/2006/relationships/wordVbaData";
 
     OUString sStreamType;
     OUString sStreamTypeStrict;
@@ -182,6 +180,10 @@ bool OOXMLStreamImpl::lcl_getTarget(const uno::Reference<embed::XRelationshipAcc
         case VBAPROJECT:
             sStreamType = sVBAProjectType;
             sStreamTypeStrict = sVBAProjectType;
+            break;
+        case VBADATA:
+            sStreamType = sVBADataType;
+            sStreamTypeStrict = sVBADataType;
             break;
         case DOCUMENT:
             sStreamType = sDocumentType;
@@ -223,14 +225,6 @@ bool OOXMLStreamImpl::lcl_getTarget(const uno::Reference<embed::XRelationshipAcc
             sStreamType = sCustomPropsType;
             sStreamTypeStrict = sCustomPropsTypeStrict;
             break;
-        case ACTIVEX:
-            sStreamType = sActiveXType;
-            sStreamTypeStrict = sActiveXTypeStrict;
-            break;
-        case ACTIVEXBIN:
-            sStreamType = sActiveXBinType;
-            sStreamTypeStrict = sActiveXBinType;
-            break;
         case SETTINGS:
             sStreamType = sSettingsType;
             sStreamTypeStrict = sSettingsTypeStrict;
@@ -259,9 +253,6 @@ bool OOXMLStreamImpl::lcl_getTarget(const uno::Reference<embed::XRelationshipAcc
             sStreamType = sHeaderType;
             sStreamTypeStrict = sHeaderTypeStrict;
           break;
-        case SIGNATURE:
-            sStreamType = sSignatureType;
-            break;
         default:
             break;
     }
@@ -297,8 +288,8 @@ bool OOXMLStreamImpl::lcl_getTarget(const uno::Reference<embed::XRelationshipAcc
                     bFound = true;
                 else if (rPair.First == sTarget)
                 {
-                    // checking item[n].xml or activex[n].xml is not visited already.
-                    if(customTarget != rPair.Second && (sStreamType == sCustomType || sStreamType == sActiveXType || sStreamType == sChartType || sStreamType == sFooterType || sStreamType == sHeaderType))
+                    // checking item[n].xml is not visited already.
+                    if(customTarget != rPair.Second && (sStreamType == sCustomType || sStreamType == sChartType || sStreamType == sFooterType || sStreamType == sHeaderType))
                     {
                         bFound = false;
                     }
@@ -322,15 +313,23 @@ bool OOXMLStreamImpl::lcl_getTarget(const uno::Reference<embed::XRelationshipAcc
                     // 'Target' is a relative Uri, so a 'Target=/path'
                     // with a base Uri of file://base/foo will resolve to
                     // file://base/word. We need something more than some
-                    // simple string concatination here to handle that.
+                    // simple string concatenation here to handle that.
                     uno::Reference<uri::XUriReference> xPart = xFac->parse(sMyTarget);
-                    uno::Reference<uri::XUriReference> xAbs = xFac->makeAbsolute(xBase, xPart, sal_True, uri::RelativeUriExcessParentSegments_RETAIN);
-                    rDocumentTarget = xAbs->getPath();
-                    // path will start with the fragment separator. need to
-                    // remove that
-                    rDocumentTarget = rDocumentTarget.copy( 1 );
-                    if(sStreamType == sEmbeddingsType)
-                        embeddingsTarget = rDocumentTarget;
+                    uno::Reference<uri::XUriReference> xAbs = xFac->makeAbsolute(xBase, xPart, true, uri::RelativeUriExcessParentSegments_RETAIN);
+                    if (!xAbs)
+                    {
+                        //it was invalid gibberish
+                        bFound = false;
+                    }
+                    else
+                    {
+                        rDocumentTarget = xAbs->getPath();
+                        // path will start with the fragment separator. need to
+                        // remove that
+                        rDocumentTarget = rDocumentTarget.copy( 1 );
+                        if(sStreamType == sEmbeddingsType)
+                            embeddingsTarget = rDocumentTarget;
+                    }
                 }
 
                 break;
@@ -391,11 +390,6 @@ uno::Reference<io::XInputStream> OOXMLStreamImpl::getDocumentStream()
     return xResult;
 }
 
-uno::Reference<io::XInputStream> OOXMLStreamImpl::getStorageStream()
-{
-    return mxStorageStream;
-}
-
 uno::Reference<uno::XComponentContext> OOXMLStreamImpl::getContext()
 {
     return mxContext;
@@ -425,8 +419,22 @@ OOXMLDocumentFactory::createStream
 (const OOXMLStream::Pointer_t& pStream,  OOXMLStream::StreamType_t nStreamType)
 {
     OOXMLStream::Pointer_t pRet;
-    if (OOXMLStreamImpl* pImpl = dynamic_cast<OOXMLStreamImpl *>(pStream.get()))
-        pRet.reset(new OOXMLStreamImpl(*pImpl, nStreamType));
+
+    if (nStreamType != OOXMLStream::VBADATA)
+    {
+        if (OOXMLStreamImpl* pImpl = dynamic_cast<OOXMLStreamImpl *>(pStream.get()))
+            pRet = new OOXMLStreamImpl(*pImpl, nStreamType);
+    }
+    else
+    {
+        // VBADATA is not a relation of the document, but of the VBAPROJECT stream.
+        if (OOXMLStreamImpl* pImpl = dynamic_cast<OOXMLStreamImpl *>(pStream.get()))
+        {
+            std::unique_ptr<OOXMLStreamImpl> pProject(new OOXMLStreamImpl(*pImpl, OOXMLStream::VBAPROJECT));
+            pRet = new OOXMLStreamImpl(*pProject, OOXMLStream::VBADATA);
+        }
+    }
+
     return pRet;
 }
 
@@ -436,7 +444,7 @@ OOXMLDocumentFactory::createStream
 {
     OOXMLStream::Pointer_t pRet;
     if (OOXMLStreamImpl* pImpl = dynamic_cast<OOXMLStreamImpl *>(pStream.get()))
-        pRet.reset(new OOXMLStreamImpl(*pImpl, rId));
+        pRet = new OOXMLStreamImpl(*pImpl, rId);
     return pRet;
 }
 

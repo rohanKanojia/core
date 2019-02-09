@@ -18,22 +18,21 @@
  */
 
 
-#include "bridges/cpp_uno/shared/vtablefactory.hxx"
+#include <vtablefactory.hxx>
 
-#include "guardedarray.hxx"
+#include <vtables.hxx>
 
-#include "bridges/cpp_uno/shared/vtables.hxx"
+#include <osl/thread.h>
+#include <osl/security.hxx>
+#include <osl/file.hxx>
+#include <osl/mutex.hxx>
+#include <rtl/alloc.h>
+#include <rtl/ustring.hxx>
+#include <sal/log.hxx>
+#include <sal/types.h>
+#include <typelib/typedescription.hxx>
 
-#include "osl/thread.h"
-#include "osl/security.hxx"
-#include "osl/file.hxx"
-#include "osl/mutex.hxx"
-#include "rtl/alloc.h"
-#include "rtl/ustring.hxx"
-#include "sal/log.hxx"
-#include "sal/types.h"
-#include "typelib/typedescription.hxx"
-
+#include <memory>
 #include <new>
 #include <unordered_map>
 #include <vector>
@@ -43,15 +42,9 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/mman.h>
-#elif defined SAL_W32
+#elif defined _WIN32
 #define WIN32_LEAN_AND_MEAN
-#ifdef _MSC_VER
-#pragma warning(push,1) // disable warnings within system headers
-#endif
 #include <windows.h>
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 #else
 #error Unsupported platform
 #endif
@@ -64,24 +57,24 @@ using bridges::cpp_uno::shared::VtableFactory;
 
 namespace {
 
-extern "C" void * SAL_CALL allocExec(
+extern "C" void * allocExec(
     SAL_UNUSED_PARAMETER rtl_arena_type *, sal_Size * size)
 {
-    sal_Size pagesize;
+    std::size_t pagesize;
 #if defined SAL_UNX
-#if defined FREEBSD || defined NETBSD || defined OPENBSD || defined DRAGONFLY
+#if defined FREEBSD || defined NETBSD || defined OPENBSD || defined DRAGONFLY || defined HAIKU
     pagesize = getpagesize();
 #else
     pagesize = sysconf(_SC_PAGESIZE);
 #endif
-#elif defined SAL_W32
+#elif defined _WIN32
     SYSTEM_INFO info;
     GetSystemInfo(&info);
     pagesize = info.dwPageSize;
 #else
 #error Unsupported platform
 #endif
-    sal_Size n = (*size + (pagesize - 1)) & ~(pagesize - 1);
+    std::size_t n = (*size + (pagesize - 1)) & ~(pagesize - 1);
     void * p;
 #if defined SAL_UNX
     p = mmap(
@@ -95,8 +88,8 @@ extern "C" void * SAL_CALL allocExec(
         munmap (p, n);
         p = nullptr;
     }
-#elif defined SAL_W32
-    p = VirtualAlloc(0, n, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+#elif defined _WIN32
+    p = VirtualAlloc(nullptr, n, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 #endif
     if (p != nullptr) {
         *size = n;
@@ -104,12 +97,12 @@ extern "C" void * SAL_CALL allocExec(
     return p;
 }
 
-extern "C" void SAL_CALL freeExec(
+extern "C" void freeExec(
     SAL_UNUSED_PARAMETER rtl_arena_type *, void * address, sal_Size size)
 {
 #if defined SAL_UNX
     munmap(address, size);
-#elif defined SAL_W32
+#elif defined _WIN32
     (void) size; // unused
     VirtualFree(address, 0, MEM_RELEASE);
 #endif
@@ -155,9 +148,7 @@ private:
     sal_Int32 calculate(
         typelib_InterfaceTypeDescription * type, sal_Int32 offset);
 
-    typedef std::unordered_map< OUString, sal_Int32, OUStringHash > Map;
-
-    Map m_map;
+    std::unordered_map< OUString, sal_Int32 > m_map;
 };
 
 sal_Int32 VtableFactory::BaseOffset::calculate(
@@ -168,7 +159,7 @@ sal_Int32 VtableFactory::BaseOffset::calculate(
         for (sal_Int32 i = 0; i < type->nBaseTypes; ++i) {
             offset = calculate(type->ppBaseTypes[i], offset);
         }
-        m_map.insert(Map::value_type(name, offset));
+        m_map.insert({name, offset});
         typelib_typedescription_complete(
             reinterpret_cast< typelib_TypeDescription ** >(&type));
         offset += bridges::cpp_uno::shared::getLocalFunctions(type);
@@ -212,13 +203,13 @@ VtableFactory::Vtables VtableFactory::getVtables(
         Vtables vtables;
         assert(blocks.size() <= SAL_MAX_INT32);
         vtables.count = static_cast< sal_Int32 >(blocks.size());
-        bridges::cpp_uno::shared::GuardedArray< Block > guardedBlocks(
+        std::unique_ptr< Block[] > guardedBlocks(
             new Block[vtables.count]);
         vtables.blocks = guardedBlocks.get();
         for (sal_Int32 j = 0; j < vtables.count; ++j) {
             vtables.blocks[j] = blocks[j];
         }
-        i = m_map.insert(Map::value_type(name, vtables)).first;
+        i = m_map.emplace(name, vtables).first;
         guardedBlocks.release();
         blocks.unguard();
     }
@@ -228,8 +219,8 @@ VtableFactory::Vtables VtableFactory::getVtables(
 #ifdef USE_DOUBLE_MMAP
 bool VtableFactory::createBlock(Block &block, sal_Int32 slotCount) const
 {
-    sal_Size size = getBlockSize(slotCount);
-    sal_Size pagesize = sysconf(_SC_PAGESIZE);
+    std::size_t size = getBlockSize(slotCount);
+    std::size_t pagesize = sysconf(_SC_PAGESIZE);
     block.size = (size + (pagesize - 1)) & ~(pagesize - 1);
     block.fd = -1;
 
@@ -252,18 +243,17 @@ bool VtableFactory::createBlock(Block &block, sal_Int32 slotCount) const
 
         strDirectory += "/.execoooXXXXXX";
         OString aTmpName = OUStringToOString(strDirectory, osl_getThreadTextEncoding());
-        char *tmpfname = new char[aTmpName.getLength()+1];
-        strncpy(tmpfname, aTmpName.getStr(), aTmpName.getLength()+1);
+        std::unique_ptr<char[]> tmpfname(new char[aTmpName.getLength()+1]);
+        strncpy(tmpfname.get(), aTmpName.getStr(), aTmpName.getLength()+1);
         // coverity[secure_temp] - https://communities.coverity.com/thread/3179
-        if ((block.fd = mkstemp(tmpfname)) == -1)
-            fprintf(stderr, "mkstemp(\"%s\") failed: %s\n", tmpfname, strerror(errno));
+        if ((block.fd = mkstemp(tmpfname.get())) == -1)
+            fprintf(stderr, "mkstemp(\"%s\") failed: %s\n", tmpfname.get(), strerror(errno));
         if (block.fd == -1)
         {
-            delete[] tmpfname;
             break;
         }
-        unlink(tmpfname);
-        delete[] tmpfname;
+        unlink(tmpfname.get());
+        tmpfname.reset();
 #if defined(HAVE_POSIX_FALLOCATE)
         int err = posix_fallocate(block.fd, 0, block.size);
 #else
@@ -360,7 +350,7 @@ sal_Int32 VtableFactory::createVtables(
 #ifdef USE_DOUBLE_MMAP
         //Finished generating block, swap writable pointer with executable
         //pointer
-            ::std::swap(block.start, block.exec);
+            std::swap(block.start, block.exec);
 #endif
             blocks.push_back(block);
         } catch (...) {

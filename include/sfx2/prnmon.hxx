@@ -19,35 +19,34 @@
 #ifndef INCLUDED_SFX2_PRNMON_HXX
 #define INCLUDED_SFX2_PRNMON_HXX
 
+#include <memory>
 #include <sal/config.h>
 #include <sfx2/dllapi.h>
-
-#include <vcl/button.hxx>
-#include <vcl/dialog.hxx>
 #include <sfx2/printer.hxx>
+#include <vcl/weld.hxx>
 
 
 class SfxViewShell;
 
 
 struct SfxPrintOptDlg_Impl;
-class SfxPrintOptionsDialog : public ModalDialog
+class SfxPrintOptionsDialog : public weld::GenericDialogController
 {
 private:
-    SfxPrintOptDlg_Impl*    pDlgImpl;
-    SfxViewShell*           pViewSh;
-    SfxItemSet*             pOptions;
+    std::unique_ptr<SfxPrintOptDlg_Impl>   pDlgImpl;
+    std::unique_ptr<SfxItemSet>            pOptions;
     VclPtr<SfxTabPage>      pPage;
+    std::unique_ptr<weld::Widget>    m_xHelpBtn;
+    std::unique_ptr<weld::Container> m_xContainer;
 
+    DECL_LINK(HelpRequestHdl, weld::Widget&, bool);
 public:
-                            SfxPrintOptionsDialog( vcl::Window *pParent,
-                                                   SfxViewShell *pViewShell,
-                                                   const SfxItemSet *rOptions );
-    virtual                 ~SfxPrintOptionsDialog();
-    virtual void            dispose() override;
+                            SfxPrintOptionsDialog(weld::Window *pParent,
+                                                  SfxViewShell *pViewShell,
+                                                  const SfxItemSet *rOptions);
+    virtual                 ~SfxPrintOptionsDialog() override;
 
-    virtual short           Execute() override;
-    virtual bool            Notify( NotifyEvent& rNEvt ) override;
+    virtual short run() override;
 
     const SfxItemSet&       GetOptions() const { return *pOptions; }
     void                    DisableHelp();

@@ -24,7 +24,6 @@
 #include <vcl/dockwin.hxx>
 #include <o3tl/typed_flags_set.hxx>
 
-class Wallpaper;
 class ImplSplitSet;
 
 enum class SplitWindowItemFlags
@@ -34,24 +33,23 @@ enum class SplitWindowItemFlags
     RelativeSize   = 0x0002,
     PercentSize    = 0x0004,
     ColSet         = 0x0008,
-    Invisible      = 0x0010,
 };
 namespace o3tl
 {
-    template<> struct typed_flags<SplitWindowItemFlags> : is_typed_flags<SplitWindowItemFlags, 0x1f> {};
+    template<> struct typed_flags<SplitWindowItemFlags> : is_typed_flags<SplitWindowItemFlags, 0x0f> {};
 }
 
-#define SPLITWINDOW_APPEND          ((sal_uInt16)0xFFFF)
-#define SPLITWINDOW_ITEM_NOTFOUND   ((sal_uInt16)0xFFFF)
+#define SPLITWINDOW_APPEND          (sal_uInt16(0xFFFF))
+#define SPLITWINDOW_ITEM_NOTFOUND   (sal_uInt16(0xFFFF))
 
 class VCL_DLLPUBLIC SplitWindow : public DockingWindow
 {
 private:
-    ImplSplitSet*       mpMainSet;
+    std::unique_ptr<ImplSplitSet> mpMainSet;
     ImplSplitSet*       mpBaseSet;
     ImplSplitSet*       mpSplitSet;
     long*               mpLastSizes;
-    Rectangle           maDragRect;
+    tools::Rectangle           maDragRect;
     long                mnDX;
     long                mnDY;
     long                mnLeftBorder;
@@ -73,18 +71,13 @@ private:
                         mbCalc:1,
                         mbRecalc:1,
                         mbInvalidate:1,
-                        mbAutoHide:1,
                         mbFadeIn:1,
                         mbFadeOut:1,
-                        mbAutoHideIn:1,
-                        mbAutoHideDown:1,
                         mbFadeInDown:1,
                         mbFadeOutDown:1,
-                        mbAutoHidePressed:1,
                         mbFadeInPressed:1,
                         mbFadeOutPressed:1,
-                        mbFadeNoButtonMode:1,
-                        mbNoAlign:1;
+                        mbFadeNoButtonMode:1;
     Link<SplitWindow*,void>  maSplitHdl;
 
     using Window::ImplInit;
@@ -94,29 +87,24 @@ private:
     SAL_DLLPRIVATE void ImplUpdate();
     SAL_DLLPRIVATE void ImplSetWindowSize( long nDelta );
     SAL_DLLPRIVATE void ImplSplitMousePos( Point& rMousePos );
-    SAL_DLLPRIVATE void ImplGetButtonRect( Rectangle& rRect, long nEx, bool bTest ) const;
-    SAL_DLLPRIVATE void ImplGetAutoHideRect( Rectangle& rRect, bool bTest = false ) const;
-    SAL_DLLPRIVATE void ImplGetFadeInRect( Rectangle& rRect, bool bTest = false ) const;
-    SAL_DLLPRIVATE void ImplGetFadeOutRect( Rectangle& rRect, bool bTest = false ) const;
-    SAL_DLLPRIVATE void ImplDrawButtonRect(vcl::RenderContext& rRenderContext, const Rectangle& rRect, long nSize);
-    SAL_DLLPRIVATE void ImplDrawAutoHide(vcl::RenderContext& rRenderContext);
+    SAL_DLLPRIVATE void ImplGetButtonRect( tools::Rectangle& rRect, bool bTest ) const;
+    SAL_DLLPRIVATE void ImplGetFadeInRect( tools::Rectangle& rRect, bool bTest = false ) const;
+    SAL_DLLPRIVATE void ImplGetFadeOutRect( tools::Rectangle& rRect ) const;
     SAL_DLLPRIVATE void ImplDrawFadeIn(vcl::RenderContext& rRenderContext);
     SAL_DLLPRIVATE void ImplDrawFadeOut(vcl::RenderContext& rRenderContext);
     SAL_DLLPRIVATE void ImplNewAlign();
-    SAL_DLLPRIVATE void ImplDrawGrip(vcl::RenderContext& rRenderContext, const Rectangle& rRect, bool bHorz, bool bLeft);
+    SAL_DLLPRIVATE void ImplDrawGrip(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect, bool bHorz, bool bLeft);
     SAL_DLLPRIVATE void ImplStartSplit( const MouseEvent& rMEvt );
 
     SAL_DLLPRIVATE void ImplDrawBorder(vcl::RenderContext& rRenderContext);
     SAL_DLLPRIVATE void ImplDrawBorderLine(vcl::RenderContext& rRenderContext);
     static SAL_DLLPRIVATE void ImplCalcSet2( SplitWindow* pWindow, ImplSplitSet* pSet, bool bHide,
-                                             bool bRows, bool bDown = true );
+                                             bool bRows );
     SAL_DLLPRIVATE void ImplDrawBack(vcl::RenderContext& rRenderContext, ImplSplitSet* pSet );
-    SAL_DLLPRIVATE void ImplDrawBack(vcl::RenderContext& rRenderContext, const Rectangle& rRect,
-                                             const Wallpaper* pWall, const Bitmap* pBitmap );
     static SAL_DLLPRIVATE sal_uInt16 ImplTestSplit( ImplSplitSet* pSet, const Point& rPos,
                                                 long& rMouseOff, ImplSplitSet** ppFoundSet, sal_uInt16& rFoundPos,
-                                                bool bRows, bool bDown = true );
-    static SAL_DLLPRIVATE sal_uInt16 ImplTestSplit( SplitWindow* pWindow, const Point& rPos,
+                                                bool bRows );
+    static SAL_DLLPRIVATE sal_uInt16 ImplTestSplit( const SplitWindow* pWindow, const Point& rPos,
                                                 long& rMouseOff, ImplSplitSet** ppFoundSet, sal_uInt16& rFoundPos );
     SAL_DLLPRIVATE void ImplDrawSplitTracking(const Point& rPos);
 
@@ -124,21 +112,19 @@ private:
                         SplitWindow & operator= (const SplitWindow &) = delete;
 public:
                         SplitWindow( vcl::Window* pParent, WinBits nStyle = 0 );
-    virtual             ~SplitWindow();
+    virtual             ~SplitWindow() override;
     virtual void        dispose() override;
 
     virtual void        StartSplit();
     virtual void        Split();
     virtual void        SplitResize();
-    virtual void        AutoHide();
     virtual void        FadeIn();
     virtual void        FadeOut();
 
     virtual void        MouseButtonDown( const MouseEvent& rMEvt ) override;
     virtual void        MouseMove( const MouseEvent& rMEvt ) override;
     virtual void        Tracking( const TrackingEvent& rTEvt ) override;
-    virtual void        Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
-    virtual void        Move() override;
+    virtual void        Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void        Resize() override;
     virtual void        RequestHelp( const HelpEvent& rHEvt ) override;
     virtual void        StateChanged( StateChangedType nType ) override;
@@ -146,17 +132,17 @@ public:
     virtual bool        PreNotify( NotifyEvent& rNEvt ) override;
 
     void                InsertItem( sal_uInt16 nId, vcl::Window* pWindow, long nSize,
-                                    sal_uInt16 nPos = SPLITWINDOW_APPEND, sal_uInt16 nIntoSetId = 0,
-                                    SplitWindowItemFlags nBits = SplitWindowItemFlags::NONE );
+                                    sal_uInt16 nPos, sal_uInt16 nIntoSetId,
+                                    SplitWindowItemFlags nBits );
     void                InsertItem( sal_uInt16 nId, long nSize,
-                                    sal_uInt16 nPos = SPLITWINDOW_APPEND, sal_uInt16 nIntoSetId = 0,
-                                    SplitWindowItemFlags nBits = SplitWindowItemFlags::NONE );
+                                    sal_uInt16 nPos, sal_uInt16 nIntoSetId,
+                                    SplitWindowItemFlags nBits );
     void                RemoveItem( sal_uInt16 nId );
     void                Clear();
 
     void                SplitItem( sal_uInt16 nId, long nNewSize,
-                                   bool bPropSmall = false,
-                                   bool bPropGreat = false );
+                                   bool bPropSmall,
+                                   bool bPropGreat );
     void                SetItemSize( sal_uInt16 nId, long nNewSize );
     long                GetItemSize( sal_uInt16 nId ) const;
     /** Set a range that limits the (variable part of the) size with an
@@ -165,7 +151,7 @@ public:
             Id of the item for which the size limits are set.
         @param rRange
             Values of -1 define missing bounds, thus setting a range (-1,-1)
-            (the default) removes the size limitiation.
+            (the default) removes the size limit.
     */
     void                SetItemSizeRange (sal_uInt16 nId, const Range& rRange);
     /** Return the current size limits for the specified item.
@@ -179,7 +165,7 @@ public:
     sal_uInt16          GetItemCount( sal_uInt16 nSetId = 0 ) const;
     bool                IsItemValid( sal_uInt16 nId ) const;
 
-    void                SetAlign( WindowAlign eNewAlign = WindowAlign::Top );
+    void                SetAlign( WindowAlign eNewAlign );
     WindowAlign         GetAlign() const { return meAlign; }
     bool                IsHorizontal() const { return mbHorz; }
 
@@ -187,14 +173,11 @@ public:
 
     Size                CalcLayoutSizePixel( const Size& aNewSize );
 
-    void                ShowAutoHideButton( bool bShow = true );
-    bool                IsAutoHideButtonVisible() const { return mbAutoHide; }
     void                ShowFadeInHideButton();
     void                ShowFadeOutButton();
     long                GetFadeInSize() const;
     bool                IsFadeNoButtonMode() const { return mbFadeNoButtonMode; }
 
-    void                SetAutoHideState( bool bAutoHide );
     void                SetSplitHdl( const Link<SplitWindow*,void>& rLink ) { maSplitHdl = rLink; }
 };
 

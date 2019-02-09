@@ -36,8 +36,6 @@ class EDITENG_DLLPUBLIC SvxFontItem : public SfxPoolItem
     FontPitch ePitch;
     rtl_TextEncoding eTextEncoding;
 
-    static bool bEnableStoreUnicodeNames;
-
 public:
     static SfxPoolItem* CreateDefault();
 
@@ -57,8 +55,8 @@ public:
     virtual bool PutValue(const css::uno::Any& rVal, sal_uInt8 nMemberId) override;
 
     virtual bool GetPresentation(SfxItemPresentation ePres,
-                                 SfxMapUnit eCoreMetric, SfxMapUnit ePresMetric,
-                                 OUString &rText, const IntlWrapper* = nullptr) const override;
+                                 MapUnit eCoreMetric, MapUnit ePresMetric,
+                                 OUString &rText, const IntlWrapper&) const override;
 
     // Access methods:
     void SetFamilyName(const OUString& rFamilyName)
@@ -107,8 +105,7 @@ public:
     }
 
     SvxFontItem& operator=(const SvxFontItem& rFont);
-
-    static void EnableStoreUnicodeNames(bool bEnable);
+    SvxFontItem(SvxFontItem const &) = default; // SfxPoolItem copy function dichotomy
 
     void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
 };

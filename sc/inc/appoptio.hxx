@@ -20,13 +20,13 @@
 #ifndef INCLUDED_SC_INC_APPOPTIO_HXX
 #define INCLUDED_SC_INC_APPOPTIO_HXX
 
-#include <vcl/field.hxx>
 #include <sfx2/zoomitem.hxx>
-#include <unotools/configitem.hxx>
 #include "scdllapi.h"
-#include "scmod.hxx"
 #include "global.hxx"
 #include "optutil.hxx"
+#include <tools/fldunit.hxx>
+#include <tools/color.hxx>
+#include <tools/link.hxx>
 
 class SC_DLLPUBLIC ScAppOptions
 {
@@ -45,8 +45,8 @@ public:
     SvxZoomType GetZoomType() const             { return eZoomType;     }
     void        SetSynchronizeZoom( bool bNew ) { bSynchronizeZoom = bNew; }
     bool        GetSynchronizeZoom() const      { return bSynchronizeZoom; }
-    sal_uInt16      GetLRUFuncListCount() const     { return nLRUFuncCount; }
-    sal_uInt16*     GetLRUFuncList() const          { return pLRUList;      }
+    sal_uInt16  GetLRUFuncListCount() const     { return nLRUFuncCount; }
+    sal_uInt16* GetLRUFuncList() const          { return pLRUList.get();      }
     void        SetLRUFuncList( const sal_uInt16* pList,
                                 const sal_uInt16  nCount );
     void        SetStatusFunc( sal_uInt32 nNew )    { nStatusFunc = nNew;   }
@@ -56,14 +56,14 @@ public:
     void        SetDetectiveAuto( bool bNew )   { bDetectiveAuto = bNew; }
     bool        GetDetectiveAuto() const        { return bDetectiveAuto; }
 
-    void        SetTrackContentColor(sal_uInt32 nNew) { nTrackContentColor = nNew; }
-    sal_uInt32  GetTrackContentColor() const     { return nTrackContentColor; }
-    void        SetTrackInsertColor(sal_uInt32 nNew)  { nTrackInsertColor = nNew;  }
-    sal_uInt32  GetTrackInsertColor() const      { return nTrackInsertColor;  }
-    void        SetTrackDeleteColor(sal_uInt32 nNew)  { nTrackDeleteColor = nNew;  }
-    sal_uInt32  GetTrackDeleteColor() const      { return nTrackDeleteColor;  }
-    void        SetTrackMoveColor(sal_uInt32 nNew)    { nTrackMoveColor = nNew;    }
-    sal_uInt32  GetTrackMoveColor() const        { return nTrackMoveColor;    }
+    void        SetTrackContentColor(Color nNew) { nTrackContentColor = nNew; }
+    Color       GetTrackContentColor() const     { return nTrackContentColor; }
+    void        SetTrackInsertColor(Color nNew)  { nTrackInsertColor = nNew;  }
+    Color       GetTrackInsertColor() const      { return nTrackInsertColor;  }
+    void        SetTrackDeleteColor(Color nNew)  { nTrackDeleteColor = nNew;  }
+    Color       GetTrackDeleteColor() const      { return nTrackDeleteColor;  }
+    void        SetTrackMoveColor(Color nNew)    { nTrackMoveColor = nNew;    }
+    Color       GetTrackMoveColor() const        { return nTrackMoveColor;    }
 
     ScLkUpdMode GetLinkMode() const             { return eLinkMode ;}
     void        SetLinkMode( ScLkUpdMode nSet ) {   eLinkMode  = nSet;}
@@ -78,22 +78,23 @@ public:
     ScOptionsUtil::KeyBindingType GetKeyBindingType() const { return meKeyBindingType; }
     void        SetKeyBindingType( ScOptionsUtil::KeyBindingType e ) { meKeyBindingType = e; }
 
-    const ScAppOptions& operator=   ( const ScAppOptions& rOpt );
+    ScAppOptions& operator=   ( const ScAppOptions& rOpt );
 
 private:
     FieldUnit       eMetric;
     sal_uInt16      nLRUFuncCount;
-    sal_uInt16*     pLRUList;
+    std::unique_ptr<sal_uInt16[]>
+                    pLRUList;
     SvxZoomType     eZoomType;
     sal_uInt16      nZoom;
     bool            bSynchronizeZoom;
     sal_uInt32      nStatusFunc;
     bool            bAutoComplete;
     bool            bDetectiveAuto;
-    sal_uInt32  nTrackContentColor;
-    sal_uInt32  nTrackInsertColor;
-    sal_uInt32  nTrackDeleteColor;
-    sal_uInt32  nTrackMoveColor;
+    Color           nTrackContentColor;
+    Color           nTrackInsertColor;
+    Color           nTrackDeleteColor;
+    Color           nTrackMoveColor;
     ScLkUpdMode eLinkMode;
     sal_Int32       nDefaultObjectSizeWidth;
     sal_Int32       nDefaultObjectSizeHeight;
@@ -116,13 +117,13 @@ class ScAppCfg : public ScAppOptions
     ScLinkConfigItem    aMiscItem;
     ScLinkConfigItem    aCompatItem;
 
-    DECL_LINK_TYPED( LayoutCommitHdl, ScLinkConfigItem&, void );
-    DECL_LINK_TYPED( InputCommitHdl, ScLinkConfigItem&, void );
-    DECL_LINK_TYPED( RevisionCommitHdl, ScLinkConfigItem&, void );
-    DECL_LINK_TYPED( ContentCommitHdl, ScLinkConfigItem&, void );
-    DECL_LINK_TYPED( SortListCommitHdl, ScLinkConfigItem&, void );
-    DECL_LINK_TYPED( MiscCommitHdl, ScLinkConfigItem&, void );
-    DECL_LINK_TYPED( CompatCommitHdl, ScLinkConfigItem&, void );
+    DECL_LINK( LayoutCommitHdl, ScLinkConfigItem&, void );
+    DECL_LINK( InputCommitHdl, ScLinkConfigItem&, void );
+    DECL_LINK( RevisionCommitHdl, ScLinkConfigItem&, void );
+    DECL_LINK( ContentCommitHdl, ScLinkConfigItem&, void );
+    DECL_LINK( SortListCommitHdl, ScLinkConfigItem&, void );
+    DECL_LINK( MiscCommitHdl, ScLinkConfigItem&, void );
+    DECL_LINK( CompatCommitHdl, ScLinkConfigItem&, void );
 
     static css::uno::Sequence<OUString> GetLayoutPropertyNames();
     static css::uno::Sequence<OUString> GetInputPropertyNames();

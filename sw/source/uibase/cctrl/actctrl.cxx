@@ -17,16 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <comphelper/string.hxx>
 #include <vcl/builderfactory.hxx>
-#include "actctrl.hxx"
+#include <actctrl.hxx>
+#include <vcl/event.hxx>
+#include <vcl/toolbox.hxx>
 
-void NumEditAction::Action()
-{
-    aActionLink.Call( *this );
-}
-
-bool NumEditAction::Notify( NotifyEvent& rNEvt )
+bool NumEditAction::EventNotify( NotifyEvent& rNEvt )
 {
     bool bHandled = false;
 
@@ -34,17 +30,27 @@ bool NumEditAction::Notify( NotifyEvent& rNEvt )
     {
         const KeyEvent* pKEvt = rNEvt.GetKeyEvent();
         const vcl::KeyCode aKeyCode = pKEvt->GetKeyCode();
+        const sal_uInt16 aCode = aKeyCode.GetCode();
         const sal_uInt16 nModifier = aKeyCode.GetModifier();
-        if( aKeyCode.GetCode() == KEY_RETURN &&
+        if( aCode == KEY_RETURN &&
                 !nModifier)
         {
-            Action();
+            aActionLink.Call( *this );
             bHandled = true;
         }
-
+        else
+        {
+            vcl::Window* pParent = GetParent();
+            if ( pParent != nullptr && aCode == KEY_TAB &&
+                 pParent->GetType() == WindowType::TOOLBOX )
+            {
+                static_cast<ToolBox*>(pParent)->ChangeHighlightUpDn( aKeyCode.IsShift() );
+                bHandled = true;
+            }
+        }
     }
     if(!bHandled)
-        NumericField::Notify( rNEvt );
+        bHandled = NumericField::EventNotify(rNEvt);
     return bHandled;
 }
 
@@ -61,9 +67,9 @@ void ReturnActionEdit::KeyInput( const KeyEvent& rEvt)
         Edit::KeyInput(rEvt);
 }
 
-VCL_BUILDER_DECL_FACTORY(ReturnActionEdit)
+extern "C" SAL_DLLPUBLIC_EXPORT void makeReturnActionEdit(VclPtr<vcl::Window> & rRet, VclPtr<vcl::Window> & pParent, VclBuilder::stringmap & rMap)
 {
-    VclBuilder::ensureDefaultWidthChars(rMap);
+    BuilderUtils::ensureDefaultWidthChars(rMap);
     rRet = VclPtr<ReturnActionEdit>::Create(pParent, WB_LEFT|WB_VCENTER|WB_BORDER|WB_3DLOOK);
 }
 

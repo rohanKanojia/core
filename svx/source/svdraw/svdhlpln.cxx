@@ -29,8 +29,8 @@
 Pointer SdrHelpLine::GetPointer() const
 {
     switch (eKind) {
-        case SDRHELPLINE_VERTICAL  : return Pointer(PointerStyle::ESize);
-        case SDRHELPLINE_HORIZONTAL: return Pointer(PointerStyle::SSize);
+        case SdrHelpLineKind::Vertical  : return Pointer(PointerStyle::ESize);
+        case SdrHelpLineKind::Horizontal: return Pointer(PointerStyle::SSize);
         default                    : return Pointer(PointerStyle::Move);
     } // switch
 }
@@ -41,9 +41,9 @@ bool SdrHelpLine::IsHit(const Point& rPnt, sal_uInt16 nTolLog, const OutputDevic
     bool bXHit=rPnt.X()>=aPos.X()-nTolLog && rPnt.X()<=aPos.X()+nTolLog+a1Pix.Width();
     bool bYHit=rPnt.Y()>=aPos.Y()-nTolLog && rPnt.Y()<=aPos.Y()+nTolLog+a1Pix.Height();
     switch (eKind) {
-        case SDRHELPLINE_VERTICAL  : return bXHit;
-        case SDRHELPLINE_HORIZONTAL: return bYHit;
-        case SDRHELPLINE_POINT: {
+        case SdrHelpLineKind::Vertical  : return bXHit;
+        case SdrHelpLineKind::Horizontal: return bYHit;
+        case SdrHelpLineKind::Point: {
             if (bXHit || bYHit) {
                 Size aRad(rOut.PixelToLogic(Size(SDRHELPLINE_POINT_PIXELSIZE,SDRHELPLINE_POINT_PIXELSIZE)));
                 return rPnt.X()>=aPos.X()-aRad.Width() && rPnt.X()<=aPos.X()+aRad.Width()+a1Pix.Width() &&
@@ -54,20 +54,20 @@ bool SdrHelpLine::IsHit(const Point& rPnt, sal_uInt16 nTolLog, const OutputDevic
     return false;
 }
 
-Rectangle SdrHelpLine::GetBoundRect(const OutputDevice& rOut) const
+tools::Rectangle SdrHelpLine::GetBoundRect(const OutputDevice& rOut) const
 {
-    Rectangle aRet(aPos,aPos);
+    tools::Rectangle aRet(aPos,aPos);
     Point aOfs(rOut.GetMapMode().GetOrigin());
     Size aSiz(rOut.GetOutputSize());
     switch (eKind) {
-        case SDRHELPLINE_VERTICAL  : aRet.Top()=-aOfs.Y(); aRet.Bottom()=-aOfs.Y()+aSiz.Height(); break;
-        case SDRHELPLINE_HORIZONTAL: aRet.Left()=-aOfs.X(); aRet.Right()=-aOfs.X()+aSiz.Width();  break;
-        case SDRHELPLINE_POINT     : {
+        case SdrHelpLineKind::Vertical  : aRet.SetTop(-aOfs.Y() ); aRet.SetBottom(-aOfs.Y()+aSiz.Height() ); break;
+        case SdrHelpLineKind::Horizontal: aRet.SetLeft(-aOfs.X() ); aRet.SetRight(-aOfs.X()+aSiz.Width() );  break;
+        case SdrHelpLineKind::Point     : {
             Size aRad(rOut.PixelToLogic(Size(SDRHELPLINE_POINT_PIXELSIZE,SDRHELPLINE_POINT_PIXELSIZE)));
-            aRet.Left()  -=aRad.Width();
-            aRet.Right() +=aRad.Width();
-            aRet.Top()   -=aRad.Height();
-            aRet.Bottom()+=aRad.Height();
+            aRet.AdjustLeft( -(aRad.Width()) );
+            aRet.AdjustRight(aRad.Width() );
+            aRet.AdjustTop( -(aRad.Height()) );
+            aRet.AdjustBottom(aRad.Height() );
         } break;
     } // switch
     return aRet;
@@ -75,20 +75,17 @@ Rectangle SdrHelpLine::GetBoundRect(const OutputDevice& rOut) const
 
 void SdrHelpLineList::Clear()
 {
-    sal_uInt16 nCount=GetCount();
-    for (sal_uInt16 i=0; i<nCount; i++) {
-        delete GetObject(i);
-    }
     aList.clear();
 }
 
-void SdrHelpLineList::operator=(const SdrHelpLineList& rSrcList)
+SdrHelpLineList& SdrHelpLineList::operator=(const SdrHelpLineList& rSrcList)
 {
     Clear();
     sal_uInt16 nCount=rSrcList.GetCount();
     for (sal_uInt16 i=0; i<nCount; i++) {
         Insert(rSrcList[i]);
     }
+    return *this;
 }
 
 bool SdrHelpLineList::operator==(const SdrHelpLineList& rSrcList) const
@@ -98,7 +95,7 @@ bool SdrHelpLineList::operator==(const SdrHelpLineList& rSrcList) const
     if (nCount==rSrcList.GetCount()) {
         bEqual = true;
         for (sal_uInt16 i=0; i<nCount && bEqual; i++) {
-            if (*GetObject(i)!=*rSrcList.GetObject(i)) {
+            if (*aList[i]!=*rSrcList.aList[i]) {
                 bEqual = false;
             }
         }
@@ -111,7 +108,7 @@ sal_uInt16 SdrHelpLineList::HitTest(const Point& rPnt, sal_uInt16 nTolLog, const
     sal_uInt16 nCount=GetCount();
     for (sal_uInt16 i=nCount; i>0;) {
         i--;
-        if (GetObject(i)->IsHit(rPnt,nTolLog,rOut)) return i;
+        if (aList[i]->IsHit(rPnt,nTolLog,rOut)) return i;
     }
     return SDRHELPLINE_NOTFOUND;
 }

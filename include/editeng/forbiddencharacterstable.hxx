@@ -24,7 +24,9 @@
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/i18n/ForbiddenCharacters.hpp>
 #include <editeng/editengdllapi.h>
+#include <i18nlangtag/lang.h>
 #include <map>
+#include <memory>
 
 namespace com {
 namespace sun {
@@ -33,22 +35,22 @@ namespace uno {
     class XComponentContext;
 }}}}
 
-class EDITENG_DLLPUBLIC SvxForbiddenCharactersTable : public salhelper::SimpleReferenceObject
+class EDITENG_DLLPUBLIC SvxForbiddenCharactersTable
 {
 public:
-    typedef std::map<sal_uInt16, css::i18n::ForbiddenCharacters> Map;
+    typedef std::map<LanguageType, css::i18n::ForbiddenCharacters> Map;
 private:
     Map                                                maMap;
     css::uno::Reference< css::uno::XComponentContext > m_xContext;
+    SvxForbiddenCharactersTable(const css::uno::Reference< css::uno::XComponentContext >& rxContext);
 
 public:
-    SvxForbiddenCharactersTable( const css::uno::Reference< css::uno::XComponentContext >& rxContext);
-    virtual ~SvxForbiddenCharactersTable() {}
+    static std::shared_ptr<SvxForbiddenCharactersTable> makeForbiddenCharactersTable(const css::uno::Reference<css::uno::XComponentContext>& rxContext);
 
-    Map& GetMap() { return maMap; }
-    const css::i18n::ForbiddenCharacters* GetForbiddenCharacters( sal_uInt16 nLanguage, bool bGetDefault );
-    void    SetForbiddenCharacters(  sal_uInt16 nLanguage , const css::i18n::ForbiddenCharacters& );
-    void    ClearForbiddenCharacters( sal_uInt16 nLanguage );
+    Map&    GetMap() { return maMap; }
+    const css::i18n::ForbiddenCharacters* GetForbiddenCharacters( LanguageType nLanguage, bool bGetDefault );
+    void    SetForbiddenCharacters(  LanguageType nLanguage , const css::i18n::ForbiddenCharacters& );
+    void    ClearForbiddenCharacters( LanguageType nLanguage );
 };
 
 #endif // INCLUDED_EDITENG_FORBIDDENCHARACTERSTABLE_HXX

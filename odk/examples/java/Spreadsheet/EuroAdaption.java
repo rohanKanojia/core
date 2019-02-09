@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -215,7 +216,7 @@ public class EuroAdaption {
                     xCellProp.setPropertyValue( "NumberFormat",
                                                 Integer.valueOf( iNewNumberFormat ) );
 
-                    // interate over all cells from the cellrange with an
+                    // iterate over all cells from the cellrange with an
                     // content and use the DM/EUR factor
                     XCellRangesQuery xCellRangesQuery = UnoRuntime.queryInterface(
                     XCellRangesQuery.class, xCellRange );
@@ -378,3 +379,5 @@ public class EuroAdaption {
     }
 
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

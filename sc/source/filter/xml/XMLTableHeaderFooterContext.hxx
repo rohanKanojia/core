@@ -20,13 +20,13 @@
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLTABLEHEADERFOOTERCONTEXT_HXX
 
 #include <xmloff/xmlictxt.hxx>
-#include <xmloff/xmlimp.hxx>
-#include <com/sun/star/sheet/XHeaderFooterContent.hpp>
 
 namespace com { namespace sun { namespace star {
     namespace text { class XTextCursor; }
     namespace beans { class XPropertySet; }
 } } }
+
+namespace com { namespace sun { namespace star { namespace sheet { class XHeaderFooterContent; } } } }
 
 class XMLTableHeaderFooterContext: public SvXMLImportContext
 {
@@ -36,13 +36,8 @@ class XMLTableHeaderFooterContext: public SvXMLImportContext
     css::uno::Reference< css::sheet::XHeaderFooterContent > xHeaderFooterContent;
 
     const OUString   sOn;
-    const OUString   sShareContent;
-    const OUString   sContent;
-    const OUString   sContentLeft;
     OUString         sCont;
 
-    bool    bDisplay;
-    bool    bLeft;
     bool    bContainsLeft;
     bool    bContainsRight;
     bool    bContainsCenter;
@@ -55,9 +50,9 @@ public:
             const css::uno::Reference< css::beans::XPropertySet > & rPageStylePropSet,
                bool bFooter, bool bLft );
 
-    virtual ~XMLTableHeaderFooterContext();
+    virtual ~XMLTableHeaderFooterContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 nPrefix,
             const OUString& rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
@@ -75,12 +70,11 @@ public:
 
     XMLHeaderFooterRegionContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
             const OUString& rLName,
-            const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList,
             css::uno::Reference< css::text::XTextCursor >& xCursor );
 
-    virtual ~XMLHeaderFooterRegionContext();
+    virtual ~XMLHeaderFooterRegionContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 nPrefix,
             const OUString& rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;

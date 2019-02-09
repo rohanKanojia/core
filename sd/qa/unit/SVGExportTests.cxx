@@ -37,7 +37,7 @@ protected:
         xmlXPathRegisterNs(pXmlXpathCtx, BAD_CAST("svg"), BAD_CAST("urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"));
     }
 
-    void load(const char* pDir, const char* pName)
+    void load(const OUString& pDir, const char* pName)
     {
         return loadURL(m_directories.getURLFromSrc(pDir) + OUString::createFromAscii(pName), pName);
     }
@@ -57,8 +57,7 @@ protected:
     {
         uno::Reference<frame::XStorable> xStorable(mxComponent, uno::UNO_QUERY);
         utl::MediaDescriptor aMediaDescriptor;
-        OUString aFilterName("impress_svg_Export");
-        aMediaDescriptor["FilterName"] <<= aFilterName;
+        aMediaDescriptor["FilterName"] <<= OUString("impress_svg_Export");
         xStorable->storeToURL(maTempFile.GetURL(), aMediaDescriptor.getAsConstPropertyValueList());
     }
 

@@ -19,15 +19,11 @@
 
 #include <sal/types.h>
 
-#include <cppunit/TestSuite.h>
 #include <cppunit/TestFixture.h>
-#include <cppunit/TestCase.h>
 #include <cppunit/plugin/TestPlugIn.h>
 #include <cppunit/extensions/HelperMacros.h>
 
-#include "Interface1.hpp"
-
-#include "rtl/ustring.hxx"
+#include <Interface1.hpp>
 
 namespace
 {
@@ -49,19 +45,16 @@ public:
     Foo(const Foo&) = delete;
     const Foo& operator=(const Foo&) = delete;
 
-    virtual Any SAL_CALL queryInterface(const Type & _type)
-        throw (RuntimeException, std::exception) override
+    virtual Any SAL_CALL queryInterface(const Type & _type) override
     {
-        Any aInterface;
         if (_type == cppu::UnoType<XInterface>::get())
         {
-            Reference< XInterface > ref( static_cast< XInterface * >( this ) );
-            aInterface.setValue( &ref, _type );
+            return css::uno::makeAny<css::uno::Reference<css::uno::XInterface>>(
+                this);
         }
-        else if (_type == cppu::UnoType<Interface1>::get())
+        if (_type == cppu::UnoType<Interface1>::get())
         {
-            Reference< Interface1 > ref( this );
-            aInterface.setValue( &ref, _type );
+            return css::uno::makeAny<css::uno::Reference<Interface1>>(this);
         }
 
         return Any();
@@ -92,17 +85,24 @@ private:
 
 struct Base1: public css::uno::XInterface {
     virtual ~Base1() = delete;
+    static ::css::uno::Type const & static_type(void * = nullptr) // loplugin:refcounting
+    { return ::cppu::UnoType<Base1>::get(); }
 };
-struct Base2: public Base1 { virtual ~Base2() = delete; };
-struct Base3: public Base1 { virtual ~Base3() = delete; };
+struct Base2: public Base1 {
+    virtual ~Base2() override = delete;
+};
+struct Base3: public Base1 { virtual ~Base3() override = delete; };
 struct Derived: public Base2, public Base3 {
-    virtual ~Derived() = delete;
+    virtual ~Derived() override = delete;
 };
 
 // The special case using the conversion operator instead:
 css::uno::Reference< css::uno::XInterface > testUpcast1(
     css::uno::Reference< Derived > const & ref)
-{ return ref; }
+{
+    Base1::static_type(); // prevent loplugin:unreffun firing
+    return ref;
+}
 
 // The normal up-cast case:
 css::uno::Reference< Base1 > testUpcast2(
@@ -150,20 +150,20 @@ void Test::testUnoSetThrow()
 
     // ctor taking Reference< interface_type >
     bool bCaughtException = false;
-    try { Reference< Interface1 > x( xNull, UNO_SET_THROW ); (void)x; } catch( const RuntimeException& ) { bCaughtException = true; }
+    try { Reference< Interface1 > x( xNull, UNO_SET_THROW ); } catch( const RuntimeException& ) { bCaughtException = true; }
     CPPUNIT_ASSERT_EQUAL( true, bCaughtException );
 
     bCaughtException = false;
-    try { Reference< Interface1 > x( xFoo, UNO_SET_THROW ); (void)x; } catch( const RuntimeException& ) { bCaughtException = true; }
+    try { Reference< Interface1 > x( xFoo, UNO_SET_THROW ); } catch( const RuntimeException& ) { bCaughtException = true; }
     CPPUNIT_ASSERT_EQUAL( false, bCaughtException );
 
     // ctor taking interface_type*
     bCaughtException = false;
-    try { Reference< Interface1 > x( xNull.get(), UNO_SET_THROW ); (void)x; } catch( const RuntimeException& ) { bCaughtException = true; }
+    try { Reference< Interface1 > x( xNull.get(), UNO_SET_THROW ); } catch( const RuntimeException& ) { bCaughtException = true; }
     CPPUNIT_ASSERT_EQUAL( true, bCaughtException );
 
     bCaughtException = false;
-    try { Reference< Interface1 > x( xFoo.get(), UNO_SET_THROW ); (void)x; } catch( const RuntimeException& ) { bCaughtException = true; }
+    try { Reference< Interface1 > x( xFoo.get(), UNO_SET_THROW ); } catch( const RuntimeException& ) { bCaughtException = true; }
     CPPUNIT_ASSERT_EQUAL( false, bCaughtException );
 
     Reference< Interface1 > x;

@@ -40,17 +40,17 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(, argv)
     for( sal_Int32 i = 0 ; i < nCount ; i ++ )
     {
         rtl_getAppCommandArg( i , &(suArg[i].pData) );
-        rtl::OString aString;
-        aString = ::rtl::OUStringToOString( suArg[i], RTL_TEXTENCODING_ASCII_US );
+        OString aString;
+        aString = OUStringToOString( suArg[i], RTL_TEXTENCODING_ASCII_US );
         printf(
             "# Parameter[%ld] is %s\n", sal::static_int_cast< long >(i),
             aString.getStr());
     }
 
-    if ( suArg[0].compareTo( suParam0) != 0 ||
-         suArg[1].compareTo( suParam1) != 0 ||
-         suArg[2].compareTo( suParam2) != 0 ||
-         suArg[3].compareTo( suParam3) != 0 )
+    if ( suArg[0] != suParam0 ||
+         suArg[1] != suParam1 ||
+         suArg[2] != suParam2 ||
+         suArg[3] != suParam3 )
     {
         return 0;
     }

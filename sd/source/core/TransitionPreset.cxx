@@ -17,34 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/animations/XTimeContainer.hpp>
 #include <com/sun/star/animations/XTransitionFilter.hpp>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
 #include <com/sun/star/beans/NamedValue.hpp>
-#include <com/sun/star/util/theMacroExpander.hpp>
 #include <com/sun/star/animations/AnimationNodeType.hpp>
-#include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
 #include <unotools/configmgr.hxx>
-#include <unotools/streamwrap.hxx>
 #include <comphelper/getexpandeduri.hxx>
 #include <comphelper/processfactory.hxx>
-#include <unotools/pathoptions.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <officecfg/Office/UI/Effects.hxx>
-#include <tools/stream.hxx>
 
-#include <rtl/uri.hxx>
 #include <rtl/instance.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
 #include <CustomAnimationPreset.hxx>
 #include <TransitionPreset.hxx>
-#include <unotools/ucbstreamhelper.hxx>
-
-#include <algorithm>
-
-#include "sdpage.hxx"
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::animations;
@@ -88,7 +78,7 @@ TransitionPreset::TransitionPreset( const css::uno::Reference< css::animations::
 }
 
 bool TransitionPreset::importTransitionsFile( TransitionPresetList& rList,
-                                              Reference< XMultiServiceFactory >& xServiceFactory,
+                                              Reference< XMultiServiceFactory > const & xServiceFactory,
                                               const OUString& aURL )
 {
     SAL_INFO("sd.transitions", "Importing " << aURL);
@@ -161,7 +151,7 @@ bool TransitionPreset::importTransitionsFile( TransitionPresetList& rList,
                                 }
 
                                 pPreset->maSetLabel = sSet;
-                                SAL_INFO("sd.transitions", aPresetId << ": " << sGroup << "/" << sSet << (sVariant.isEmpty() ? OUString("") : OUString("/" + sVariant)));
+                                SAL_INFO("sd.transitions", aPresetId << ": " << sGroup << "/" << sSet << (sVariant.isEmpty() ? OUString() : OUString("/" + sVariant)));
 
                                 rList.push_back( pPreset );
                             }
@@ -190,7 +180,7 @@ bool TransitionPreset::importTransitionsFile( TransitionPresetList& rList,
 
 bool TransitionPreset::importTransitionPresetList( TransitionPresetList& rList )
 {
-    if (utl::ConfigManager::IsAvoidConfig())
+    if (utl::ConfigManager::IsFuzzing())
         return false;
 
     bool bRet = false;
@@ -202,23 +192,19 @@ bool TransitionPreset::importTransitionPresetList( TransitionPresetList& rList )
         Reference< XMultiServiceFactory > xServiceFactory(
             xContext->getServiceManager(), UNO_QUERY_THROW );
 
-        uno::Reference< util::XMacroExpander > xMacroExpander =
-            util::theMacroExpander::get(xContext);
-
         // import ui strings
         Reference< XMultiServiceFactory > xConfigProvider =
             configuration::theDefaultProvider::get( xContext );
 
         // read path to transition effects files from config
-        Any propValue = uno::makeAny(
-            beans::PropertyValue("nodepath", -1,
-                uno::makeAny( OUString("/org.openoffice.Office.Impress/Misc")),
-                beans::PropertyState_DIRECT_VALUE ) );
-
+        uno::Sequence<uno::Any> aArgs(comphelper::InitAnyPropertySequence(
+        {
+            {"nodepath", uno::Any(OUString("/org.openoffice.Office.Impress/Misc"))}
+        }));
         Reference<container::XNameAccess> xNameAccess(
             xConfigProvider->createInstanceWithArguments(
                 "com.sun.star.configuration.ConfigurationAccess",
-                Sequence<Any>( &propValue, 1 ) ),
+                aArgs),
                 UNO_QUERY_THROW );
         uno::Sequence< OUString > aFiles;
         xNameAccess->getByName("TransitionFiles") >>= aFiles;
@@ -270,17 +256,6 @@ namespace
 const TransitionPresetList& TransitionPreset::getTransitionPresetList()
 {
     return theTransitionPresetList::get().getList();
-}
-
-void TransitionPreset::apply( SdPage* pSlide ) const
-{
-    if( pSlide )
-    {
-        pSlide->setTransitionType( mnTransition );
-        pSlide->setTransitionSubtype( mnSubtype );
-        pSlide->setTransitionDirection( mbDirection );
-        pSlide->setTransitionFadeColor( mnFadeColor );
-    }
 }
 
 }

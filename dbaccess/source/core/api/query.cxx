@@ -18,18 +18,16 @@
  */
 
 #include "query.hxx"
-#include "dbastrings.hrc"
+#include <stringconstants.hxx>
 #include <connectivity/warningscontainer.hxx>
 #include "HelperCollections.hxx"
-#include "core_resource.hxx"
-#include "core_resource.hrc"
+#include <core_resource.hxx>
+#include <strings.hrc>
 
 #include <cppuhelper/queryinterface.hxx>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
 #include <osl/diagnose.h>
-#include <comphelper/propagg.hxx>
-#include <comphelper/sequence.hxx>
 
 #include <com/sun/star/sdbc/XConnection.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
@@ -39,14 +37,14 @@
 #include <comphelper/types.hxx>
 #include <comphelper/property.hxx>
 #include <unotools/sharedunocomponent.hxx>
-#include "definitioncolumn.hxx"
+#include <definitioncolumn.hxx>
 
 #include <functional>
 
-#include "sdbcoretools.hxx"
-#include "querycomposer.hxx"
+#include <sdbcoretools.hxx>
+#include <querycomposer.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
-#include "ContainerMediator.hxx"
+#include <ContainerMediator.hxx>
 
 using namespace dbaccess;
 using namespace ::com::sun::star::uno;
@@ -70,14 +68,13 @@ namespace dbaccess
 OQuery::OQuery( const Reference< XPropertySet >& _rxCommandDefinition
                ,const Reference< XConnection >& _rxConn
                ,const Reference< XComponentContext >& _xORB)
-    :OContentHelper(_xORB,nullptr,TContentPtr(new OContentHelper_Impl))
+    :OContentHelper(_xORB,nullptr,std::make_shared<OContentHelper_Impl>())
     ,OQueryDescriptor_Base(m_aMutex,*this)
     ,ODataSettings(OContentHelper::rBHelper,true)
     ,m_xCommandDefinition(_rxCommandDefinition)
     ,m_xConnection(_rxConn)
-    ,m_pColumnMediator( nullptr )
     ,m_pWarnings( nullptr )
-    ,m_eDoingCurrently(NONE)
+    ,m_eDoingCurrently(AggregateAction::NONE)
 {
     registerProperties();
     ODataSettings::registerPropertiesFor(this);
@@ -108,7 +105,6 @@ OQuery::~OQuery()
 }
 
 css::uno::Sequence<sal_Int8> OQuery::getImplementationId()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -131,7 +127,7 @@ void OQuery::rebuildColumns()
         {
             xColumnDefinitions = xColSup->getColumns();
             if ( xColumnDefinitions.is() )
-                m_pColumnMediator = new OContainerMediator( m_pColumns, xColumnDefinitions );
+                m_pColumnMediator = new OContainerMediator( m_pColumns.get(), xColumnDefinitions );
         }
 
         // fill the columns with columns from the statement
@@ -166,31 +162,28 @@ void OQuery::rebuildColumns()
             ::rtl::Reference< OSQLColumns > aParseColumns(
                 ::connectivity::parse::OParseColumn::createColumnsForResultSet( xResultSetMeta, xDBMeta,xColumnDefinitions ) );
             xColumns = OPrivateColumns::createWithIntrinsicNames(
-                aParseColumns, xDBMeta->supportsMixedCaseQuotedIdentifiers(), *this, m_aMutex );
+                aParseColumns, xDBMeta->supportsMixedCaseQuotedIdentifiers(), *this, m_aMutex ).release();
             if ( !xColumns.is() )
                 throw RuntimeException();
         }
 
-        Sequence< OUString> aNames = xColumns->getElementNames();
-        const OUString* pIter = aNames.getConstArray();
-        const OUString* pEnd  = pIter + aNames.getLength();
-        for ( sal_Int32 i = 0;pIter != pEnd; ++pIter,++i)
+        for ( const OUString& rName : xColumns->getElementNames() )
         {
-            Reference<XPropertySet> xSource(xColumns->getByName( *pIter ),UNO_QUERY);
-            OUString sLabel = *pIter;
-            if ( xColumnDefinitions.is() && xColumnDefinitions->hasByName(*pIter) )
+            Reference<XPropertySet> xSource(xColumns->getByName( rName ),UNO_QUERY);
+            OUString sLabel = rName;
+            if ( xColumnDefinitions.is() && xColumnDefinitions->hasByName(rName) )
             {
-                Reference<XPropertySet> xCommandColumn(xColumnDefinitions->getByName( *pIter ),UNO_QUERY);
+                Reference<XPropertySet> xCommandColumn(xColumnDefinitions->getByName( rName ),UNO_QUERY);
                 xCommandColumn->getPropertyValue(PROPERTY_LABEL) >>= sLabel;
             }
             OQueryColumn* pColumn = new OQueryColumn( xSource, m_xConnection, sLabel);
             Reference< XChild > xChild( *pColumn, UNO_QUERY_THROW );
             xChild->setParent( *this );
 
-            implAppendColumn( *pIter, pColumn );
+            implAppendColumn( rName, pColumn );
             Reference< XPropertySet > xDest( *pColumn, UNO_QUERY_THROW );
             if ( m_pColumnMediator.is() )
-                m_pColumnMediator->notifyElementCreated( *pIter, xDest );
+                m_pColumnMediator->notifyElementCreated( rName, xDest );
         }
     }
     catch( const SQLContext& e )
@@ -210,7 +203,7 @@ void OQuery::rebuildColumns()
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -218,7 +211,7 @@ void OQuery::rebuildColumns()
 IMPLEMENT_SERVICE_INFO3(OQuery, "com.sun.star.sdb.dbaccess.OQuery", SERVICE_SDB_DATASETTINGS, SERVICE_SDB_QUERY, "com.sun.star.sdb.QueryDefinition")
 
 // css::beans::XPropertyChangeListener
-void SAL_CALL OQuery::propertyChange( const PropertyChangeEvent& _rSource ) throw(RuntimeException, std::exception)
+void SAL_CALL OQuery::propertyChange( const PropertyChangeEvent& _rSource )
 {
     sal_Int32 nOwnHandle = -1;
     {
@@ -227,7 +220,7 @@ void SAL_CALL OQuery::propertyChange( const PropertyChangeEvent& _rSource ) thro
         OSL_ENSURE(_rSource.Source.get() == Reference< XInterface >(m_xCommandDefinition, UNO_QUERY).get(),
             "OQuery::propertyChange : where did this call come from ?");
 
-        if (m_eDoingCurrently == SETTING_PROPERTIES)
+        if (m_eDoingCurrently == AggregateAction::SettingProperties)
             // we're setting the property ourself, so we will do the necessary notifications later
             return;
 
@@ -247,14 +240,13 @@ void SAL_CALL OQuery::propertyChange( const PropertyChangeEvent& _rSource ) thro
         }
     }
 
-    fire(&nOwnHandle, &_rSource.NewValue, &_rSource.OldValue, 1, sal_False);
+    fire(&nOwnHandle, &_rSource.NewValue, &_rSource.OldValue, 1, false);
 }
 
-void SAL_CALL OQuery::disposing( const EventObject& _rSource ) throw (RuntimeException, std::exception)
+void SAL_CALL OQuery::disposing( const EventObject& _rSource )
 {
     MutexGuard aGuard(m_aMutex);
 
-    (void)_rSource;
     OSL_ENSURE(_rSource.Source.get() == Reference< XInterface >(m_xCommandDefinition, UNO_QUERY).get(),
         "OQuery::disposing : where did this call come from ?");
 
@@ -263,7 +255,7 @@ void SAL_CALL OQuery::disposing( const EventObject& _rSource ) throw (RuntimeExc
 }
 
 // XDataDescriptorFactory
-Reference< XPropertySet > SAL_CALL OQuery::createDataDescriptor(  ) throw(RuntimeException, std::exception)
+Reference< XPropertySet > SAL_CALL OQuery::createDataDescriptor(  )
 {
     return new OQueryDescriptor(*this);
 }
@@ -282,7 +274,7 @@ void SAL_CALL OQuery::disposing()
     m_pWarnings = nullptr;
 }
 
-void OQuery::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _rValue ) throw (Exception, std::exception)
+void OQuery::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _rValue )
 {
     ODataSettings::setFastPropertyValue_NoBroadcast(_nHandle, _rValue);
     OUString sAggPropName;
@@ -292,8 +284,8 @@ void OQuery::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _r
         m_xCommandPropInfo->hasPropertyByName(sAggPropName))
     {   // the base class holds the property values itself, but we have to forward this to our CommandDefinition
 
-        m_eDoingCurrently = SETTING_PROPERTIES;
-        OAutoActionReset aAutoReset(this);
+        m_eDoingCurrently = AggregateAction::SettingProperties;
+        OAutoActionReset aAutoReset(*this);
         m_xCommandDefinition->setPropertyValue(sAggPropName, _rValue);
 
         if ( PROPERTY_ID_COMMAND == _nHandle )
@@ -302,7 +294,7 @@ void OQuery::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _r
     }
 }
 
-Reference< XPropertySetInfo > SAL_CALL OQuery::getPropertySetInfo(  ) throw(RuntimeException, std::exception)
+Reference< XPropertySetInfo > SAL_CALL OQuery::getPropertySetInfo(  )
 {
     return createPropertySetInfo( getInfoHelper() ) ;
 }
@@ -325,7 +317,7 @@ OColumn* OQuery::createColumn(const OUString& /*_rName*/) const
     return nullptr;
 }
 
-void SAL_CALL OQuery::rename( const OUString& newName ) throw (SQLException, ElementExistException, RuntimeException, std::exception)
+void SAL_CALL OQuery::rename( const OUString& newName )
 {
     MutexGuard aGuard(m_aMutex);
     Reference<XRename> xRename(m_xCommandDefinition,UNO_QUERY);

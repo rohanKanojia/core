@@ -72,14 +72,14 @@
               <td class="content3"><img src="images/arrow-1.gif"/></td>
               <td><a href="#regmerge"  title="link to the regmerge tool description">regmerge</a></td>
               <td class="content87">Tool to merge several registry (e.g. type
-			  libraries) files into one file. <b>Note:</b> Since OpenOffice.org 3 it is not longer part of the SDK but it comes directly with the office as part of the <b>ure</b>.</td>
+			  libraries) files into one file. <b>Note:</b> Since OpenOffice.org 3 it is no longer part of the SDK but it comes directly with the office as part of the <b>ure</b>.</td>
             </tr>
             <tr valign="top">
               <td class="content3"><img src="images/arrow-1.gif"/></td>
               <td><a href="#regview"  title="link to the regview tool description">regview</a></td>
               <td class="content87">Tool to view the content of a registry file
 			  in a human readable manner. Special support for type library
-			  nodes. <b>Note:</b> Since OpenOffice.org 3 it is not longer part of the SDK but it comes directly with the office as part of the <b>ure</b>.</td>
+			  nodes. <b>Note:</b> Since OpenOffice.org 3 it is no longer part of the SDK but it comes directly with the office as part of the <b>ure</b>.</td>
             </tr>
             <tr valign="middle">
               <td colspan="3"><img class="line" src="images/sdk_line-1.gif"/></td>
@@ -151,12 +151,12 @@
 		  <td colspan="3">
 		  <p>'unopkg' is a tool for easy deployment of UNO packages in an existing
 		  office installation. UNO packages are UNO components (single libraries or
-		  Jar files or more complex zip files that contains one or more libraries|
+		  Jar files or more complex zip files that contain one or more libraries|
 		  Jar files, type libraries and configuration items), scripts  and
 		  LibreOffice %PRODUCT_RELEASE% Basic libraries as zip package. 'unopkg' is not part of the
 		  SDK but comes with the office directly and is a development tool as well
 		  as an end user tool to deploy extension into an office installation.</p>
-		  <p>More details concerning deployment and this tool can be find in the
+		  <p>More details concerning deployment and this tool can be found in the
 		  Developer's Guide: <a href="http://wiki.openoffice.org/wiki/Documentation/DevGuide/Extensions/unopkg" title="link to the &quot;Extension Manager - unopkg&quot; chapter in the Developer's Guide">Extension Manager - <i>unopkg</i></a>.</p>
 		  <p><b>Note:</b> This tool works only in the <i>&lt;office&gt;/program</i>
 		  directory!</p>
@@ -184,7 +184,7 @@
           </tr>
 		  <tr>
             <td class="cell15"><code>reinstall</code></td>
-			<td class="cell85">export feature: reinstall all deployed
+			<td class="cell85">expert feature: reinstall all deployed
 			packages</td>
           </tr>
 		  <tr>
@@ -449,7 +449,10 @@
             <td class="cell15"><code>-B&lt;name&gt;</code></td>
 			<td class="cell85">name specifies the base node. All types are
 			searched under this node. Default is the root '/' of the registry
-			files.</td>
+			files.
+			<br/>
+			<i>This option has been removed in LibreOffice 4.1.</i>
+			</td>
           </tr>
 		  <tr>
             <td class="cell15"><code>-L</code></td>
@@ -536,7 +539,10 @@ types the specified types depend on.</p>
 		    <td class="cell15"><code>-B&lt;name&gt;</code></td>
 			<td class="cell85">name specifies the base node. All types are
 			searched under this node. Default is the root '/' of the registry
-			files.</td>
+			files.
+			<br/>
+			<i>This option has been removed in LibreOffice 4.1.</i>
+			</td>
           </tr>
           <tr>
             <td class="cell15"><code>-nD</code></td>
@@ -721,18 +727,18 @@ types the specified types depend on.</p>
           </tr>
 		  <tr>
             <td class="cell15"><code>-sn, --shortnames</code></td>
-			<td class="cell85">using namespace abbreviation 'css:': for	'::com::sun::star::', only valid for sub-command 'dump' and target language 'cpp'. It is default for the sub-command 'component'.</td>
+			<td class="cell85">using namespace abbreviation 'css:': for '::com::sun::star::', only valid for sub-command 'dump' and target language 'cpp'. It is default for the sub-command 'component'.</td>
           </tr>
 		  <tr>
             <td class="cell15"><code>--propertysetmixin</code></td>
 			<td class="cell85">the generated skeleton implements the cppu::PropertySetMixin helper if a referenced new style service specifies an interface which provides attributes (directly or inherited).</td>
           </tr>
           <tr>
-            <td class="cell15"><code>-lh --licenseheader</code></td>
+            <td class="cell15"><code>-lh, --licenseheader</code></td>
 			<td class="cell85">generates a default LibreOffice MPLv2 license header at the beginning of a component source file. This option is taken into account in 'component' mode only and if -o is unequal 'stdout'.</td>
           </tr>
           <tr>
-            <td class="cell15"><code>-bc<br/>--backward-compatible</code></td>
+            <td class="cell15"><code>-bc,<br>--backward-compatible</code></td>
 			<td class="cell85">specifies that the generated calc add-in is backward compatible to older office versions and implement the former required add-in interfaces where the implementation is mapped on the new add-in configuration. In this case the config schema needs to be bundled with the extension add-in as well. Default is a minimal add-in component skeleton based on the add-in configuration coming with the office since OO.org 2.0.4.</td>
           </tr>
           <tr>
@@ -905,7 +911,7 @@ types the specified types depend on.</p>
                 <div id="Footer">
                     <div id="FooterText">
                         <p>
-                            Copyright © 2000, 2016 LibreOffice contributors. All rights reserved.
+                            Copyright © 2000–2019 LibreOffice contributors. All rights reserved.
                             <br/>
                             LibreOffice was created by The Document Foundation,
                             based on Apache OpenOffice, which is Copyright 2011,

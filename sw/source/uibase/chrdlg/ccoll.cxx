@@ -17,24 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "cmdid.h"
-#include "swmodule.hxx"
-#include "view.hxx"
-#include "wrtsh.hxx"
-#include "globals.hrc"
-#include "helpid.h"
+#include <cmdid.h>
+#include <swmodule.hxx>
+#include <view.hxx>
+#include <wrtsh.hxx>
+#include <globals.hrc>
 
 #include <sfx2/styfitem.hxx>
 
-#include "uitool.hxx"
-#include "ccoll.hxx"
-#include "fmtcol.hxx"
-#include "hintids.hxx"
-#include "docsh.hxx"
-#include "docstyle.hxx"
-#include "hints.hxx"
+#include <uitool.hxx>
+#include <ccoll.hxx>
+#include <fmtcol.hxx>
+#include <hintids.hxx>
+#include <docsh.hxx>
+#include <docstyle.hxx>
+#include <hints.hxx>
 
-#include "chrdlg.hrc"
 #include <vcl/svapp.hxx>
 
 #include <unomid.h>
@@ -42,7 +40,9 @@
 //!! order of entries has to be the same as in
 //!! CommandStruct SwCondCollItem::aCmds[]
 
-const char *aCommandContext[COND_COMMAND_COUNT] =
+// note: also keep this in sync with the list of conditions in xmloff/source/style/prstylecond.cxx
+
+const char * const aCommandContext[COND_COMMAND_COUNT] =
 {
     "TableHeader",
     "Table",
@@ -99,42 +99,41 @@ OUString GetCommandContextByIndex( sal_Int16 nIndex )
 
 const CommandStruct SwCondCollItem::aCmds[] =
 {
-    { PARA_IN_TABLEHEAD,    0 },
-    { PARA_IN_TABLEBODY,    0 },
-    { PARA_IN_FRAME,        0 },
-    { PARA_IN_SECTION,      0 },
-    { PARA_IN_FOOTENOTE,    0 },
-    { PARA_IN_ENDNOTE,      0 },
-    { PARA_IN_HEADER,       0 },
-    { PARA_IN_FOOTER,       0 },
-    { PARA_IN_OUTLINE,      0 },
-    { PARA_IN_OUTLINE,      1 },
-    { PARA_IN_OUTLINE,      2 },
-    { PARA_IN_OUTLINE,      3 },
-    { PARA_IN_OUTLINE,      4 },
-    { PARA_IN_OUTLINE,      5 },
-    { PARA_IN_OUTLINE,      6 },
-    { PARA_IN_OUTLINE,      7 },
-    { PARA_IN_OUTLINE,      8 },
-    { PARA_IN_OUTLINE,      9 },
-    { PARA_IN_LIST,         0 },
-    { PARA_IN_LIST,         1 },
-    { PARA_IN_LIST,         2 },
-    { PARA_IN_LIST,         3 },
-    { PARA_IN_LIST,         4 },
-    { PARA_IN_LIST,         5 },
-    { PARA_IN_LIST,         6 },
-    { PARA_IN_LIST,         7 },
-    { PARA_IN_LIST,         8 },
-    { PARA_IN_LIST,         9 }
+    { Master_CollCondition::PARA_IN_TABLEHEAD,    0 },
+    { Master_CollCondition::PARA_IN_TABLEBODY,    0 },
+    { Master_CollCondition::PARA_IN_FRAME,        0 },
+    { Master_CollCondition::PARA_IN_SECTION,      0 },
+    { Master_CollCondition::PARA_IN_FOOTNOTE,     0 },
+    { Master_CollCondition::PARA_IN_ENDNOTE,      0 },
+    { Master_CollCondition::PARA_IN_HEADER,       0 },
+    { Master_CollCondition::PARA_IN_FOOTER,       0 },
+    { Master_CollCondition::PARA_IN_OUTLINE,      0 },
+    { Master_CollCondition::PARA_IN_OUTLINE,      1 },
+    { Master_CollCondition::PARA_IN_OUTLINE,      2 },
+    { Master_CollCondition::PARA_IN_OUTLINE,      3 },
+    { Master_CollCondition::PARA_IN_OUTLINE,      4 },
+    { Master_CollCondition::PARA_IN_OUTLINE,      5 },
+    { Master_CollCondition::PARA_IN_OUTLINE,      6 },
+    { Master_CollCondition::PARA_IN_OUTLINE,      7 },
+    { Master_CollCondition::PARA_IN_OUTLINE,      8 },
+    { Master_CollCondition::PARA_IN_OUTLINE,      9 },
+    { Master_CollCondition::PARA_IN_LIST,         0 },
+    { Master_CollCondition::PARA_IN_LIST,         1 },
+    { Master_CollCondition::PARA_IN_LIST,         2 },
+    { Master_CollCondition::PARA_IN_LIST,         3 },
+    { Master_CollCondition::PARA_IN_LIST,         4 },
+    { Master_CollCondition::PARA_IN_LIST,         5 },
+    { Master_CollCondition::PARA_IN_LIST,         6 },
+    { Master_CollCondition::PARA_IN_LIST,         7 },
+    { Master_CollCondition::PARA_IN_LIST,         8 },
+    { Master_CollCondition::PARA_IN_LIST,         9 }
 };
 
 
 // Item for the transport of the condition table
-SwCondCollItem::SwCondCollItem(sal_uInt16 _nWhich ) :
-    SfxPoolItem(_nWhich)
+SwCondCollItem::SwCondCollItem() :
+    SfxPoolItem(FN_COND_COLL)
 {
-
 }
 
 SwCondCollItem::~SwCondCollItem()
@@ -170,7 +169,7 @@ void
 SwCondCollItem::SetStyle(OUString const*const pStyle, sal_uInt16 const nPos)
 {
     if( nPos < COND_COMMAND_COUNT )
-        m_sStyles[nPos] = (pStyle) ? *pStyle : OUString();
+        m_sStyles[nPos] = pStyle ? *pStyle : OUString();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/debug.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
 #include <xmloff/xmlmetae.hxx>
 #include <xmloff/xmlexp.hxx>
@@ -28,6 +28,8 @@
 
 #include <com/sun/star/beans/XPropertyAccess.hpp>
 #include <com/sun/star/beans/StringPair.hpp>
+#include <com/sun/star/document/XDocumentProperties.hpp>
+#include <com/sun/star/util/DateTime.hpp>
 #include <com/sun/star/util/Duration.hpp>
 #include <com/sun/star/xml/dom/XDocument.hpp>
 #include <com/sun/star/xml/sax/XSAXSerializable.hpp>
@@ -55,7 +57,7 @@ SvXMLMetaExport::GetISODateTimeString( const util::DateTime& rDateTime )
     //  return ISO date string "YYYY-MM-DDThh:mm:ss"
 
     OUStringBuffer sTmp;
-    sTmp.append( (sal_Int32) rDateTime.Year );
+    sTmp.append( static_cast<sal_Int32>(rDateTime.Year) );
     sTmp.append( '-' );
     lcl_AddTwoDigits( sTmp, rDateTime.Month );
     sTmp.append( '-' );
@@ -295,10 +297,10 @@ void SvXMLMetaExport::MExport_()
     }
 }
 
-static const char *s_xmlns  = "xmlns";
-static const char *s_xmlns2 = "xmlns:";
-static const char *s_meta   = "meta:";
-static const char *s_href   = "xlink:href";
+static const char s_xmlns[] = "xmlns";
+static const char s_xmlns2[] = "xmlns:";
+static const char s_meta[] = "meta:";
+static const char s_href[] = "xlink:href";
 
 SvXMLMetaExport::SvXMLMetaExport(
         SvXMLExport& i_rExp,
@@ -326,11 +328,9 @@ void SvXMLMetaExport::Export()
              key != USHRT_MAX; key = rNsMap.GetNextKey(key)) {
             beans::StringPair ns;
             const OUString attrname = rNsMap.GetAttrNameByKey(key);
-            if (attrname.matchAsciiL(s_xmlns2, strlen(s_xmlns2))) {
-                ns.First  = attrname.copy(strlen(s_xmlns2));
-            } else if (attrname.equalsAsciiL(s_xmlns, strlen(s_xmlns))) {
-                // default initialized empty string
-            } else {
+            if (!attrname.startsWith(s_xmlns2, &ns.First)
+                || attrname == s_xmlns) // default initialized empty string
+            {
                 assert(!"namespace attribute not starting with xmlns unexpected");
             }
             ns.Second = rNsMap.GetNameByKey(key);
@@ -349,7 +349,6 @@ void SvXMLMetaExport::Export()
 // css::xml::sax::XDocumentHandler:
 void SAL_CALL
 SvXMLMetaExport::startDocument()
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
 {
     // ignore: has already been done by SvXMLExport::exportDoc
     assert(m_level == 0 && "SvXMLMetaExport: level error");
@@ -357,7 +356,6 @@ SvXMLMetaExport::startDocument()
 
 void SAL_CALL
 SvXMLMetaExport::endDocument()
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
 {
     // ignore: will be done by SvXMLExport::exportDoc
     assert(m_level == 0 && "SvXMLMetaExport: level error");
@@ -367,7 +365,6 @@ SvXMLMetaExport::endDocument()
 void SAL_CALL
 SvXMLMetaExport::startElement(const OUString & i_rName,
     const uno::Reference< xml::sax::XAttributeList > & i_xAttribs)
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
 {
 
     if (m_level == 0) {
@@ -376,19 +373,19 @@ SvXMLMetaExport::startElement(const OUString & i_rName,
         const sal_Int16 nCount = i_xAttribs->getLength();
         for (sal_Int16 i = 0; i < nCount; ++i) {
             const OUString name(i_xAttribs->getNameByIndex(i));
-            if (name.matchAsciiL(s_xmlns, strlen(s_xmlns))) {
+            if (name.startsWith(s_xmlns)) {
                 bool found(false);
                 const SvXMLNamespaceMap & rNsMap(mrExport.GetNamespaceMap());
                 for (sal_uInt16 key = rNsMap.GetFirstKey();
                      key != USHRT_MAX; key = rNsMap.GetNextKey(key)) {
-                    if (name.equals(rNsMap.GetAttrNameByKey(key))) {
+                    if (name == rNsMap.GetAttrNameByKey(key)) {
                         found = true;
                         break;
                     }
                 }
                 if (!found) {
-                    m_preservedNSs.push_back(beans::StringPair(name,
-                        i_xAttribs->getValueByIndex(i)));
+                    m_preservedNSs.emplace_back(name,
+                        i_xAttribs->getValueByIndex(i));
                 }
             }
         }
@@ -399,34 +396,33 @@ SvXMLMetaExport::startElement(const OUString & i_rName,
 
     if (m_level == 1) {
         // attach preserved namespace decls from root node here
-        for (std::vector<beans::StringPair>::const_iterator iter =
-                m_preservedNSs.begin(); iter != m_preservedNSs.end(); ++iter) {
-            const OUString ns(iter->First);
+        for (const auto& rPreservedNS : m_preservedNSs) {
+            const OUString ns(rPreservedNS.First);
             bool found(false);
             // but only if it is not already there
             const sal_Int16 nCount = i_xAttribs->getLength();
             for (sal_Int16 i = 0; i < nCount; ++i) {
                 const OUString name(i_xAttribs->getNameByIndex(i));
-                if (ns.equals(name)) {
+                if (ns == name) {
                     found = true;
                     break;
                 }
             }
             if (!found) {
-                mrExport.AddAttribute(ns, iter->Second);
+                mrExport.AddAttribute(ns, rPreservedNS.Second);
             }
         }
     }
 
     // attach the attributes
-    if (i_rName.matchAsciiL(s_meta, strlen(s_meta))) {
+    if (i_rName.startsWith(s_meta)) {
         // special handling for all elements that may have
         // xlink:href attributes; these must be made relative
         const sal_Int16 nLength = i_xAttribs->getLength();
         for (sal_Int16 i = 0; i < nLength; ++i) {
             const OUString name (i_xAttribs->getNameByIndex (i));
             OUString value(i_xAttribs->getValueByIndex(i));
-            if (name.matchAsciiL(s_href, strlen(s_href))) {
+            if (name.startsWith(s_href)) {
                 value = mrExport.GetRelativeReference(value);
             }
             mrExport.AddAttribute(name, value);
@@ -449,7 +445,6 @@ SvXMLMetaExport::startElement(const OUString & i_rName,
 
 void SAL_CALL
 SvXMLMetaExport::endElement(const OUString & i_rName)
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
 {
     --m_level;
     if (m_level == 0) {
@@ -462,31 +457,25 @@ SvXMLMetaExport::endElement(const OUString & i_rName)
 
 void SAL_CALL
 SvXMLMetaExport::characters(const OUString & i_rChars)
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
 {
     mrExport.Characters(i_rChars);
 }
 
 void SAL_CALL
 SvXMLMetaExport::ignorableWhitespace(const OUString & /*i_rWhitespaces*/)
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
 {
     mrExport.IgnorableWhitespace(/*i_rWhitespaces*/);
 }
 
 void SAL_CALL
-SvXMLMetaExport::processingInstruction(const OUString & i_rTarget,
-    const OUString & i_rData)
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
+SvXMLMetaExport::processingInstruction(const OUString &,
+    const OUString &)
 {
     // ignore; the exporter cannot handle these
-    (void) i_rTarget;
-    (void) i_rData;
 }
 
 void SAL_CALL
 SvXMLMetaExport::setDocumentLocator(const uno::Reference<xml::sax::XLocator>&)
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
 {
     // nothing to do here, move along...
 }

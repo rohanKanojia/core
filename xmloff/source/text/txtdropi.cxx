@@ -43,8 +43,7 @@ enum SvXMLTokenMapDropAttrs
     XML_TOK_DROP_LINES,
     XML_TOK_DROP_LENGTH,
     XML_TOK_DROP_DISTANCE,
-    XML_TOK_DROP_STYLE,
-    XML_TOK_DROP_END=XML_TOK_UNKNOWN
+    XML_TOK_DROP_STYLE
 };
 
 static const SvXMLTokenMapEntry aDropAttrTokenMap[] =
@@ -62,7 +61,7 @@ void XMLTextDropCapImportContext::ProcessAttrs(
     SvXMLTokenMap aTokenMap( aDropAttrTokenMap );
 
     DropCapFormat aFormat;
-    sal_Bool bWholeWord = sal_False;
+    bool bWholeWord = false;
 
     sal_Int32 nTmp;
     sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
@@ -80,19 +79,19 @@ void XMLTextDropCapImportContext::ProcessAttrs(
         case XML_TOK_DROP_LINES:
             if (::sax::Converter::convertNumber( nTmp, rValue, 0, 255 ))
             {
-                aFormat.Lines = nTmp < 2 ? 0 : (sal_Int8)nTmp;
+                aFormat.Lines = nTmp < 2 ? 0 : static_cast<sal_Int8>(nTmp);
             }
             break;
 
         case XML_TOK_DROP_LENGTH:
             if( IsXMLToken( rValue, XML_WORD ) )
             {
-                bWholeWord = sal_True;
+                bWholeWord = true;
             }
             else if (::sax::Converter::convertNumber( nTmp, rValue, 1, 255 ))
             {
-                bWholeWord = sal_False;
-                aFormat.Count = (sal_Int8)nTmp;
+                bWholeWord = false;
+                aFormat.Count = static_cast<sal_Int8>(nTmp);
             }
             break;
 
@@ -100,7 +99,7 @@ void XMLTextDropCapImportContext::ProcessAttrs(
             if (GetImport().GetMM100UnitConverter().convertMeasureToCore(
                         nTmp, rValue, 0 ))
             {
-                aFormat.Distance = (sal_uInt16)nTmp;
+                aFormat.Distance = static_cast<sal_uInt16>(nTmp);
             }
             break;
 
@@ -115,7 +114,7 @@ void XMLTextDropCapImportContext::ProcessAttrs(
 
     aProp.maValue <<= aFormat;
 
-    aWholeWordProp.maValue.setValue( &bWholeWord, cppu::UnoType<bool>::get() );
+    aWholeWordProp.maValue <<= bWholeWord;
 }
 
 XMLTextDropCapImportContext::XMLTextDropCapImportContext(

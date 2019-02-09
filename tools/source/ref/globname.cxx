@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 
 #include <rtl/strbuf.hxx>
+#include <rtl/character.hxx>
 
 #include <tools/stream.hxx>
 #include <tools/globname.hxx>
@@ -84,11 +84,11 @@ SvGlobalName::SvGlobalName( const css::uno::Sequence < sal_Int8 >& aSeq )
     memset( &aResult, 0, sizeof( aResult ) );
     if ( aSeq.getLength() == 16 )
     {
-        aResult.Data1 = ( ( ( ( ( ( sal_uInt8 )aSeq[0] << 8 ) + ( sal_uInt8 )aSeq[1] ) << 8 ) + ( sal_uInt8 )aSeq[2] ) << 8 ) + ( sal_uInt8 )aSeq[3];
-        aResult.Data2 = ( ( sal_uInt8 )aSeq[4] << 8 ) + ( sal_uInt8 )aSeq[5];
-        aResult.Data3 = ( ( sal_uInt8 )aSeq[6] << 8 ) + ( sal_uInt8 )aSeq[7];
+        aResult.Data1 = ( ( ( ( ( static_cast<sal_uInt8>(aSeq[0]) << 8 ) + static_cast<sal_uInt8>(aSeq[1]) ) << 8 ) + static_cast<sal_uInt8>(aSeq[2]) ) << 8 ) + static_cast<sal_uInt8>(aSeq[3]);
+        aResult.Data2 = ( static_cast<sal_uInt8>(aSeq[4]) << 8 ) + static_cast<sal_uInt8>(aSeq[5]);
+        aResult.Data3 = ( static_cast<sal_uInt8>(aSeq[6]) << 8 ) + static_cast<sal_uInt8>(aSeq[7]);
         for( int nInd = 0; nInd < 8; nInd++ )
-            aResult.Data4[nInd] = ( sal_uInt8 )aSeq[nInd+8];
+            aResult.Data4[nInd] = static_cast<sal_uInt8>(aSeq[nInd+8]);
     }
 
     pImp = ::o3tl::cow_wrapper< ImpSvGlobalName >(aResult);
@@ -105,12 +105,18 @@ SvGlobalName & SvGlobalName::operator = ( const SvGlobalName & rObj )
     return *this;
 }
 
+SvGlobalName & SvGlobalName::operator = ( SvGlobalName && rObj )
+{
+    pImp = std::move(rObj.pImp);
+    return *this;
+}
+
 SvStream& WriteSvGlobalName( SvStream& rOStr, const SvGlobalName & rObj )
 {
     rOStr.WriteUInt32( rObj.pImp->szData.Data1 );
     rOStr.WriteUInt16( rObj.pImp->szData.Data2 );
     rOStr.WriteUInt16( rObj.pImp->szData.Data3 );
-    rOStr.Write( &rObj.pImp->szData.Data4, 8 );
+    rOStr.WriteBytes( &rObj.pImp->szData.Data4, 8 );
     return rOStr;
 }
 
@@ -121,7 +127,7 @@ SvStream& operator >> ( SvStream& rStr, SvGlobalName & rObj )
     rStr.ReadUInt32( rObj.pImp->szData.Data1 );
     rStr.ReadUInt16( rObj.pImp->szData.Data2 );
     rStr.ReadUInt16( rObj.pImp->szData.Data3 );
-    rStr.Read( &rObj.pImp->szData.Data4, 8 );
+    rStr.ReadBytes( &rObj.pImp->szData.Data4, 8 );
     return rStr;
 }
 
@@ -141,34 +147,19 @@ bool SvGlobalName::operator < ( const SvGlobalName & rObj ) const
     return pImp->szData.Data1 < rObj.pImp->szData.Data1;
 }
 
-SvGlobalName & SvGlobalName::operator += ( sal_uInt32 n )
-{
-    sal_uInt32 nOld = pImp->szData.Data1;
-    pImp->szData.Data1 += n;
-
-    if( nOld > pImp->szData.Data1 )
-    {
-        // overflow
-        pImp->szData.Data2++;
-    }
-    return *this;
-}
-
 bool SvGlobalName::operator == ( const SvGlobalName & rObj ) const
 {
     return pImp == rObj.pImp;
 }
 
-void SvGlobalName::MakeFromMemory( void * pData )
+void SvGlobalName::MakeFromMemory( void const * pData )
 {
     memcpy( &pImp->szData, pData, sizeof( pImp->szData ) );
 }
 
 bool SvGlobalName::MakeId( const OUString & rIdStr )
 {
-    OString aStr(OUStringToOString(rIdStr,
-        RTL_TEXTENCODING_ASCII_US));
-    const sal_Char *pStr = aStr.getStr();
+    const sal_Unicode *pStr = rIdStr.getStr();
     if( rIdStr.getLength() == 36
       && '-' == pStr[ 8 ]  && '-' == pStr[ 13 ]
       && '-' == pStr[ 18 ] && '-' == pStr[ 23 ] )
@@ -177,11 +168,11 @@ bool SvGlobalName::MakeId( const OUString & rIdStr )
         int i = 0;
         for( i = 0; i < 8; i++ )
         {
-            if( isxdigit( *pStr ) )
-                if( isdigit( *pStr ) )
+            if( rtl::isAsciiHexDigit( *pStr ) )
+                if( rtl::isAsciiDigit( *pStr ) )
                     nFirst = nFirst * 16 + (*pStr - '0');
                 else
-                    nFirst = nFirst * 16 + (toupper( *pStr ) - 'A' + 10 );
+                    nFirst = nFirst * 16 + (rtl::toAsciiUpperCase( *pStr ) - 'A' + 10 );
             else
                 return false;
             pStr++;
@@ -191,11 +182,11 @@ bool SvGlobalName::MakeId( const OUString & rIdStr )
         pStr++;
         for( i = 0; i < 4; i++ )
         {
-            if( isxdigit( *pStr ) )
-                if( isdigit( *pStr ) )
+            if( rtl::isAsciiHexDigit( *pStr ) )
+                if( rtl::isAsciiDigit( *pStr ) )
                     nSec = nSec * 16 + (*pStr - '0');
                 else
-                    nSec = nSec * 16 + (sal_uInt16)(toupper( *pStr ) - 'A' + 10 );
+                    nSec = nSec * 16 + static_cast<sal_uInt16>(rtl::toAsciiUpperCase( *pStr ) - 'A' + 10 );
             else
                 return false;
             pStr++;
@@ -205,11 +196,11 @@ bool SvGlobalName::MakeId( const OUString & rIdStr )
         pStr++;
         for( i = 0; i < 4; i++ )
         {
-            if( isxdigit( *pStr ) )
-                if( isdigit( *pStr ) )
+            if( rtl::isAsciiHexDigit( *pStr ) )
+                if( rtl::isAsciiDigit( *pStr ) )
                     nThird = nThird * 16 + (*pStr - '0');
                 else
-                    nThird = nThird * 16 + (sal_uInt16)(toupper( *pStr ) - 'A' + 10 );
+                    nThird = nThird * 16 + static_cast<sal_uInt16>(rtl::toAsciiUpperCase( *pStr ) - 'A' + 10 );
             else
                 return false;
             pStr++;
@@ -220,11 +211,11 @@ bool SvGlobalName::MakeId( const OUString & rIdStr )
         pStr++;
         for( i = 0; i < 16; i++ )
         {
-            if( isxdigit( *pStr ) )
-                if( isdigit( *pStr ) )
+            if( rtl::isAsciiHexDigit( *pStr ) )
+                if( rtl::isAsciiDigit( *pStr ) )
                     szRemain[i/2] = szRemain[i/2] * 16 + (*pStr - '0');
                 else
-                    szRemain[i/2] = szRemain[i/2] * 16 + (sal_Int8)(toupper( *pStr ) - 'A' + 10 );
+                    szRemain[i/2] = szRemain[i/2] * 16 + static_cast<sal_Int8>(rtl::toAsciiUpperCase( *pStr ) - 'A' + 10 );
             else
                 return false;
             pStr++;
@@ -275,14 +266,14 @@ css::uno::Sequence < sal_Int8 > SvGlobalName::GetByteSequence() const
     // maybe transported remotely
     css::uno::Sequence< sal_Int8 > aResult( 16 );
 
-    aResult[ 0] = (sal_Int8) (pImp->szData.Data1 >> 24);
-    aResult[ 1] = (sal_Int8) ((pImp->szData.Data1 << 8 ) >> 24);
-    aResult[ 2] = (sal_Int8) ((pImp->szData.Data1 << 16 ) >> 24);
-    aResult[ 3] = (sal_Int8) ((pImp->szData.Data1 << 24 ) >> 24);
-    aResult[ 4] = (sal_Int8) (pImp->szData.Data2 >> 8);
-    aResult[ 5] = (sal_Int8) ((pImp->szData.Data2 << 8 ) >> 8);
-    aResult[ 6] = (sal_Int8) (pImp->szData.Data3 >> 8);
-    aResult[ 7] = (sal_Int8) ((pImp->szData.Data3 << 8 ) >> 8);
+    aResult[ 0] = static_cast<sal_Int8>(pImp->szData.Data1 >> 24);
+    aResult[ 1] = static_cast<sal_Int8>((pImp->szData.Data1 << 8 ) >> 24);
+    aResult[ 2] = static_cast<sal_Int8>((pImp->szData.Data1 << 16 ) >> 24);
+    aResult[ 3] = static_cast<sal_Int8>((pImp->szData.Data1 << 24 ) >> 24);
+    aResult[ 4] = static_cast<sal_Int8>(pImp->szData.Data2 >> 8);
+    aResult[ 5] = static_cast<sal_Int8>((pImp->szData.Data2 << 8 ) >> 8);
+    aResult[ 6] = static_cast<sal_Int8>(pImp->szData.Data3 >> 8);
+    aResult[ 7] = static_cast<sal_Int8>((pImp->szData.Data3 << 8 ) >> 8);
     aResult[ 8] = pImp->szData.Data4[ 0 ];
     aResult[ 9] = pImp->szData.Data4[ 1 ];
     aResult[10] = pImp->szData.Data4[ 2 ];

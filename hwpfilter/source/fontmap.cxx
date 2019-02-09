@@ -18,13 +18,14 @@
  */
 
 #include <stdio.h>
-#ifdef SOLARIS
+#ifdef __sun
 #include <strings.h>
 #else
 #include <string.h>
 #endif
 
-#include <fontmap.hxx>
+#include <sal/types.h>
+#include "fontmap.hxx"
 
 struct FontEntry
 {
@@ -118,7 +119,7 @@ const struct FontEntry FontMapTab[] =
 };
 
 #if defined(_WIN32)
-const char* RepFontTab[] =
+const char* const RepFontTab[] =
 {
     "\xb9\xd9\xc5\xc1",                                       /* 0 */
     "\xb5\xb8\xbf\xf2",                                       /* 1 */
@@ -126,7 +127,7 @@ const char* RepFontTab[] =
     "\xb1\xc3\xbc\xad"                                        /* 3 */
 };
 #elif defined(LINUX)
-const char* RepFontTab[] =
+const char* const RepFontTab[] =
 {
     "\xb9\xe9\xb9\xac \xb9\xd9\xc5\xc1",                                     /* 0 */
     "\xb9\xe9\xb9\xac \xb5\xb8\xbf\xf2",                                      /* 1 */
@@ -134,7 +135,7 @@ const char* RepFontTab[] =
     "\xb9\xe9\xb9\xac \xc7\xec\xb5\xe5\xb6\xf3\xc0\xce"                                      /* 3 */
 };
 #else
-const char* RepFontTab[] =
+const char* const RepFontTab[] =
 {
     "Batang",                                     /* 0 */
     "Dotum",                                      /* 1 */
@@ -145,16 +146,14 @@ const char* RepFontTab[] =
 
 int getRepFamilyName(const char* orig, char *buf, double &ratio)
 {
-    int i;
-    int size = sizeof(FontMapTab)/sizeof(FontEntry);
-    for( i = 0 ; i < size ; i++)
+    for( int i = 0 ; i < int(SAL_N_ELEMENTS(FontMapTab)); i++)
     {
         if( !strcmp(orig, FontMapTab[i].familyname) ){
                 ratio = FontMapTab[i].ratio;
             return strlen( strcpy(buf,RepFontTab[FontMapTab[i].key]) );
           }
     }
-     ratio = FontMapTab[0].ratio;
+    ratio = FontMapTab[0].ratio;
     return strlen( strcpy(buf, RepFontTab[0] ) );
 }
 

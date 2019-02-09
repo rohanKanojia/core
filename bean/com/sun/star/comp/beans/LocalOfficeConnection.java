@@ -69,7 +69,7 @@ public class LocalOfficeConnection
 
     static
     {
-        // preload shared libraries whichs import lips are linked to officebean
+        // preload shared libraries which import lips are linked to officebean
         if ( System.getProperty( "os.name" ).startsWith( "Windows" ) )
         {
             try
@@ -94,22 +94,13 @@ public class LocalOfficeConnection
 
             try
             {
-                NativeLibraryLoader.loadLibrary(LocalOfficeConnection.class.getClassLoader(), "uwinapi");
-            }
-            catch (Throwable e)
-            {
-                // loading twice would fail
-                System.err.println( "cannot find uwinapi" );
-            }
-
-            try
-            {
                 NativeLibraryLoader.loadLibrary(LocalOfficeConnection.class.getClassLoader(), "jawt");
             }
             catch (Throwable e)
             {
                 // loading twice would fail
-                System.err.println( "cannot find jawt" );
+                System.err.println("cannot find jawt:");
+                e.printStackTrace();
             }
         }
 
@@ -474,7 +465,7 @@ public class LocalOfficeConnection
      * </ul>
      *
      * @param url This is UNO URL which describes the type of a connection.
-     * @exception java.net.MalformedURLException when inappropreate URL was
+     * @exception java.net.MalformedURLException when inappropriate URL was
      *  provided.
      */
     private void parseUnoUrlWithOfficePath(String url, String prefix)
@@ -773,3 +764,5 @@ public class LocalOfficeConnection
     }
 
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

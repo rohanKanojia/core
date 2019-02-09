@@ -18,20 +18,12 @@
  */
 
 #include "UndoActions.hxx"
-#include "DisposeHelper.hxx"
-#include "CommonFunctors.hxx"
-#include "PropertyHelper.hxx"
 #include "ChartModelClone.hxx"
 
-#include <com/sun/star/chart2/XChartDocument.hpp>
-#include <com/sun/star/util/XCloneable.hpp>
-#include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
 
-#include <tools/diagnose_ex.h>
 #include <svx/svdundo.hxx>
 
-#include <algorithm>
 #include <memory>
 
 using namespace ::com::sun::star;
@@ -41,16 +33,9 @@ namespace chart
 namespace impl
 {
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
-    using ::com::sun::star::uno::Exception;
     using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::frame::XModel;
-    using ::com::sun::star::util::XCloneable;
-    using ::com::sun::star::lang::XComponent;
     using ::com::sun::star::lang::DisposedException;
-    using ::com::sun::star::view::XSelectionSupplier;
-    using ::com::sun::star::chart2::XChartDocument;
-    using ::com::sun::star::document::UndoFailedException;
 
 UndoElement::UndoElement( const OUString& i_actionString, const Reference< XModel >& i_documentModel, const std::shared_ptr< ChartModelClone >& i_modelClone )
     :UndoElement_MBase()
@@ -67,13 +52,13 @@ UndoElement::~UndoElement()
 
 void SAL_CALL UndoElement::disposing()
 {
-    if ( !!m_pModelClone )
+    if ( m_pModelClone )
         m_pModelClone->dispose();
     m_pModelClone.reset();
     m_xDocumentModel.clear();
 }
 
-OUString SAL_CALL UndoElement::getTitle() throw (RuntimeException, std::exception)
+OUString SAL_CALL UndoElement::getTitle()
 {
     return m_sActionString;
 }
@@ -88,12 +73,12 @@ void UndoElement::impl_toggleModelState()
     m_pModelClone = pNewClone;
 }
 
-void SAL_CALL UndoElement::undo(  ) throw (UndoFailedException, RuntimeException, std::exception)
+void SAL_CALL UndoElement::undo(  )
 {
     impl_toggleModelState();
 }
 
-void SAL_CALL UndoElement::redo(  ) throw (UndoFailedException, RuntimeException, std::exception)
+void SAL_CALL UndoElement::redo(  )
 {
     impl_toggleModelState();
 }
@@ -111,21 +96,21 @@ ShapeUndoElement::~ShapeUndoElement()
 {
 }
 
-OUString SAL_CALL ShapeUndoElement::getTitle() throw (RuntimeException, std::exception)
+OUString SAL_CALL ShapeUndoElement::getTitle()
 {
     if ( !m_pAction )
         throw DisposedException( OUString(), *this );
     return m_pAction->GetComment();
 }
 
-void SAL_CALL ShapeUndoElement::undo(  ) throw (UndoFailedException, RuntimeException, std::exception)
+void SAL_CALL ShapeUndoElement::undo(  )
 {
     if ( !m_pAction )
         throw DisposedException( OUString(), *this );
     m_pAction->Undo();
 }
 
-void SAL_CALL ShapeUndoElement::redo(  ) throw (UndoFailedException, RuntimeException, std::exception)
+void SAL_CALL ShapeUndoElement::redo(  )
 {
     if ( !m_pAction )
         throw DisposedException( OUString(), *this );

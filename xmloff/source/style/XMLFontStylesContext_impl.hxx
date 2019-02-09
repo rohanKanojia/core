@@ -35,11 +35,11 @@ class XMLFontStyleContextFontFace : public SvXMLStyleContext
     css::uno::Any aPitch;
     css::uno::Any aEnc;
 
-    SvXMLImportContextRef xStyles;
+    SvXMLImportContextRef const xStyles;
 
     XMLFontStylesContext *GetStyles()
     {
-        return static_cast<XMLFontStylesContext *>(&xStyles);
+        return static_cast<XMLFontStylesContext *>(xStyles.get());
     }
 
 public:
@@ -50,7 +50,7 @@ public:
             const css::uno::Reference<
                 css::xml::sax::XAttributeList > & xAttrList,
             XMLFontStylesContext& rStyles );
-    virtual ~XMLFontStyleContextFontFace();
+    virtual ~XMLFontStyleContextFontFace() override;
 
     void SetAttribute( sal_uInt16 nPrefixKey, const OUString& rLocalName,
                        const OUString& rValue ) override;
@@ -64,7 +64,7 @@ public:
 
     OUString familyName() const;
 
-    SvXMLImportContext * CreateChildContext(
+    SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
@@ -81,7 +81,7 @@ public:
             const OUString& rLName,
             const XMLFontStyleContextFontFace& font );
 
-    virtual SvXMLImportContext * CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
@@ -111,7 +111,7 @@ public:
         const OUString& rValue ) override;
     void SetFormat( const OUString& rFormat );
     void EndElement() override;
-    SvXMLImportContext * CreateChildContext(
+    SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;

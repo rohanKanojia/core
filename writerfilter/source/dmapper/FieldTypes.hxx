@@ -167,7 +167,7 @@ enum FieldId
         imports a ShowVariable (bookmarkname)?
         \h hyperlink to paragraph
         \p relative to para above/below
-        \f refenence number
+        \f reference number
         \d separator number separator
         \n paragraph number
         \r paragraph number in relative context
@@ -266,7 +266,7 @@ enum FieldId
     \u  Builds a table of contents by using the applied paragraph outline level
     \w Preserve tab characters within table entries
     \x Preserve newline characters within table entries
-    \z Hides page numbers within the table of contens when shown in Web Layout View
+    \z Hides page numbers within the table of contents when shown in Web Layout View
      */
     ,FIELD_TOC
     /*

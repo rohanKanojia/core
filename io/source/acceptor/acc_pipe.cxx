@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "osl/security.hxx"
+#include <osl/security.hxx>
 #include "acceptor.hxx"
 #include <com/sun/star/connection/ConnectionSetupException.hpp>
+#include <com/sun/star/io/IOException.hpp>
 
 #include <osl/diagnose.h>
 #include <osl/mutex.hxx>
@@ -36,29 +37,17 @@ using namespace ::com::sun::star::io;
 namespace io_acceptor
 {
 
-    typedef WeakImplHelper< XConnection > MyPipeConnection;
-
     class PipeConnection :
-        public MyPipeConnection
+        public WeakImplHelper< XConnection >
     {
     public:
         explicit PipeConnection( const OUString &sConnectionDescription);
-        virtual ~PipeConnection();
 
-        virtual sal_Int32 SAL_CALL read( Sequence< sal_Int8 >& aReadBytes, sal_Int32 nBytesToRead )
-            throw(css::io::IOException,
-                  css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL write( const Sequence< sal_Int8 >& aData )
-            throw(css::io::IOException,
-                  css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL flush(  ) throw(
-            css::io::IOException,
-            css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL close(  )
-            throw(css::io::IOException,
-                  css::uno::RuntimeException, std::exception) override;
-        virtual OUString SAL_CALL getDescription(  )
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual sal_Int32 SAL_CALL read( Sequence< sal_Int8 >& aReadBytes, sal_Int32 nBytesToRead ) override;
+        virtual void SAL_CALL write( const Sequence< sal_Int8 >& aData ) override;
+        virtual void SAL_CALL flush(  ) override;
+        virtual void SAL_CALL close(  ) override;
+        virtual OUString SAL_CALL getDescription(  ) override;
     public:
         ::osl::StreamPipe m_pipe;
         oslInterlockedCount m_nStatus;
@@ -77,58 +66,43 @@ namespace io_acceptor
                 reinterpret_cast< sal_IntPtr >(&m_pipe)) );
     }
 
-    PipeConnection::~PipeConnection()
-    {
-    }
-
     sal_Int32 PipeConnection::read( Sequence < sal_Int8 > & aReadBytes , sal_Int32 nBytesToRead )
-        throw(css::io::IOException,
-              css::uno::RuntimeException, std::exception)
     {
-        if( ! m_nStatus )
+        if( m_nStatus )
         {
-            if( aReadBytes.getLength() < nBytesToRead )
-            {
-                aReadBytes.realloc( nBytesToRead );
-            }
-            sal_Int32 n = m_pipe.read( aReadBytes.getArray(), nBytesToRead );
-            OSL_ASSERT( n >= 0 && n <= aReadBytes.getLength() );
-            if( n < aReadBytes.getLength() )
-            {
-                aReadBytes.realloc( n );
-            }
-            return n;
-        }
-        else {
             throw IOException();
         }
+        if( aReadBytes.getLength() < nBytesToRead )
+        {
+            aReadBytes.realloc( nBytesToRead );
+        }
+        sal_Int32 n = m_pipe.read( aReadBytes.getArray(), nBytesToRead );
+        OSL_ASSERT( n >= 0 && n <= aReadBytes.getLength() );
+        if( n < aReadBytes.getLength() )
+        {
+            aReadBytes.realloc( n );
+        }
+        return n;
+
     }
 
     void PipeConnection::write( const Sequence < sal_Int8 > &seq )
-            throw(css::io::IOException,
-                  css::uno::RuntimeException, std::exception)
     {
-        if( ! m_nStatus )
+        if( m_nStatus )
         {
-            if( m_pipe.write( seq.getConstArray() , seq.getLength() ) != seq.getLength() )
-            {
-                throw IOException();
-            }
+            throw IOException();
         }
-        else {
+        if( m_pipe.write( seq.getConstArray() , seq.getLength() ) != seq.getLength() )
+        {
             throw IOException();
         }
     }
 
     void PipeConnection::flush( )
-        throw(  css::io::IOException,
-                css::uno::RuntimeException, std::exception)
     {
     }
 
     void PipeConnection::close()
-        throw( css::io::IOException,
-               css::uno::RuntimeException, std::exception)
     {
         if(  1 == osl_atomic_increment( (&m_nStatus) ) )
         {
@@ -137,7 +111,6 @@ namespace io_acceptor
     }
 
     OUString PipeConnection::getDescription()
-            throw(css::uno::RuntimeException, std::exception)
     {
         return m_sDescription;
     }
@@ -175,19 +148,18 @@ namespace io_acceptor
             OUString error = "io.acceptor: pipe already closed" + m_sPipeName;
             throw ConnectionSetupException( error );
         }
-        PipeConnection *pConn = new PipeConnection( m_sConnectionDescription );
+        std::unique_ptr<PipeConnection> pConn(new PipeConnection( m_sConnectionDescription ));
 
         oslPipeError status = pipe.accept( pConn->m_pipe );
 
         if( m_bClosed )
         {
             // stopAccepting was called !
-            delete pConn;
             return Reference < XConnection >();
         }
         else if( osl_Pipe_E_None == status )
         {
-            return Reference < XConnection > ( static_cast<XConnection *>(pConn) );
+            return Reference < XConnection > ( static_cast<XConnection *>(pConn.release()) );
         }
         else
         {

@@ -18,8 +18,8 @@
  */
 
 #include <com/sun/star/registry/XRegistryKey.hpp>
-#include "sal/types.h"
-#include "cppuhelper/factory.hxx"
+#include <sal/types.h>
+#include <cppuhelper/factory.hxx>
 #include <cppuhelper/implementationentry.hxx>
 
 #include <colorpicker.hxx>
@@ -28,13 +28,13 @@ using namespace com::sun::star;
 
 namespace
 {
-    cppu::ImplementationEntry entries[] = {
+    cppu::ImplementationEntry const entries[] = {
         { &::cui::ColorPicker_createInstance, &::cui::ColorPicker_getImplementationName, &::cui::ColorPicker_getSupportedServiceNames, &cppu::createSingleComponentFactory, nullptr, 0 },
         { nullptr, nullptr, nullptr, nullptr, nullptr, 0 }
     };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL cui_component_getFactory( char const * implName, void * serviceManager, void * registryKey)
+extern "C" SAL_DLLPUBLIC_EXPORT void * cui_component_getFactory( char const * implName, void * serviceManager, void * registryKey)
 {
     return cppu::component_getFactoryHelper(implName, serviceManager, registryKey, entries);
 }

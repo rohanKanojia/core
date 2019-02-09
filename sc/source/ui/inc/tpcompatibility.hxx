@@ -11,7 +11,6 @@
 #define INCLUDED_SC_SOURCE_UI_INC_TPCOMPATIBILITY_HXX
 
 #include <sfx2/tabdlg.hxx>
-#include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
 
 class ScTpCompatOptions : public SfxTabPage
@@ -20,13 +19,13 @@ class ScTpCompatOptions : public SfxTabPage
 public:
     using SfxTabPage::DeactivatePage;
 
-    static  VclPtr<SfxTabPage> Create (vcl::Window* pParent, const SfxItemSet* rCoreAttrs);
+    static  VclPtr<SfxTabPage> Create (TabPageParent pParent, const SfxItemSet* rCoreAttrs);
 
     virtual bool FillItemSet(SfxItemSet* rCoreAttrs) override;
     virtual void Reset(const SfxItemSet* rCoreAttrs) override;
-    virtual sfxpg DeactivatePage(SfxItemSet* pSet = nullptr) override;
+    virtual DeactivateRC DeactivatePage(SfxItemSet* pSet ) override;
 
-    virtual ~ScTpCompatOptions();
+    virtual ~ScTpCompatOptions() override;
     virtual void dispose() override;
 private:
     explicit ScTpCompatOptions(vcl::Window* pParent, const SfxItemSet& rCoreAttrs);

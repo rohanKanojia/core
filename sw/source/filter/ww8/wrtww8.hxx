@@ -33,13 +33,16 @@
 #include "fields.hxx"
 #include "types.hxx"
 #include "writerhelper.hxx"
-#include "../inc/msfilter.hxx"
+#include <msfilter.hxx>
 #include <expfld.hxx>
+#include "WW8TableInfo.hxx"
 
 #include <vcl/graph.hxx>
 
 #include <boost/optional.hpp>
+#include <o3tl/typed_flags_set.hxx>
 
+#include <cstddef>
 #include <memory>
 #include <map>
 #include <vector>
@@ -124,8 +127,13 @@ class XEmbeddedObject;
 typedef std::map<const css::embed::XEmbeddedObject*, sal_Int32> WW8OleMap;
 struct WW8_PdAttrDesc;
 class SvxBrushItem;
-
-#include "WW8TableInfo.hxx"
+namespace sw
+{
+namespace mark
+{
+class IFieldmark;
+}
+}
 
 #define GRF_MAGIC_1 0x12    // 3 magic bytes for PicLocFc attribute
 #define GRF_MAGIC_2 0x34
@@ -134,15 +142,18 @@ class SvxBrushItem;
 
 #define OLE_PREVIEW_AS_EMF  //If we want to export ole2 previews as emf in ww8+
 
-typedef sal_uInt8 FieldFlags;
-namespace nsFieldFlags // for InsertField- Method
+enum class FieldFlags : sal_uInt8 // for InsertField- Method
 {
-    const FieldFlags WRITEFIELD_START         = 0x01;
-    const FieldFlags WRITEFIELD_CMD_START     = 0x02;
-    const FieldFlags WRITEFIELD_CMD_END     = 0x04;
-    const FieldFlags WRITEFIELD_END         = 0x10;
-    const FieldFlags WRITEFIELD_CLOSE         = 0x20;
-    const FieldFlags WRITEFIELD_ALL         = 0xFF;
+    NONE        = 0x00,
+    Start       = 0x01,
+    CmdStart    = 0x02,
+    CmdEnd      = 0x04,
+    End         = 0x10,
+    Close       = 0x20,
+    All         = 0x37
+};
+namespace o3tl {
+    template<> struct typed_flags<FieldFlags> : is_typed_flags<FieldFlags, 0x37> {};
 }
 
 enum TextTypes  //enums for TextTypes
@@ -166,14 +177,9 @@ struct WW8_SepInfo
     const SwPageDesc* pPageDesc;
     const SwSectionFormat* pSectionFormat;
     const SwNode* pPDNd;
-    sal_uLong  nLnNumRestartNo;
-    ::boost::optional<sal_uInt16> oPgRestartNo;
-    bool bIsFirstParagraph;
-
-    WW8_SepInfo()
-        : pPageDesc(nullptr), pSectionFormat(nullptr), pPDNd(nullptr), nLnNumRestartNo(0), bIsFirstParagraph(false)
-
-    {}
+    sal_uLong const  nLnNumRestartNo;
+    ::boost::optional<sal_uInt16> const oPgRestartNo;
+    bool const bIsFirstParagraph;
 
     WW8_SepInfo( const SwPageDesc* pPD, const SwSectionFormat* pFormat,
                  sal_uLong nLnRestart, ::boost::optional<sal_uInt16> oPgRestart = boost::none,
@@ -187,14 +193,14 @@ struct WW8_SepInfo
 };
 
 /// Class to collect and output the sections/headers/footers.
-// Plc fuer PageDescs -> Sepx ( Section Extensions )
+// Plc for PageDescs -> Sepx ( Section Extensions )
 class MSWordSections
 {
 protected:
     bool mbDocumentIsProtected;
     std::vector<WW8_SepInfo> aSects;
 
-    void CheckForFacinPg( WW8Export& rWrt ) const;
+    void CheckForFacinPg( const WW8Export& rWrt ) const;
     void NeedsDocumentProtected(const WW8_SepInfo &rInfo);
 
     //No copy, no assign
@@ -207,8 +213,8 @@ public:
     virtual bool HeaderFooterWritten();
 
     void AppendSection( const SwPageDesc* pPd,
-                    const SwSectionFormat* pSectionFormat = nullptr,
-                    sal_uLong nLnNumRestartNo = 0,
+                    const SwSectionFormat* pSectionFormat,
+                    sal_uLong nLnNumRestartNo,
                     bool bIsFirstParagraph = false );
     void AppendSection( const SwFormatPageDesc& rPd,
                     const SwNode& rNd,
@@ -238,24 +244,24 @@ public:
 class WW8_WrPlcSepx : public MSWordSections
 {
     std::vector<WW8_CP> aCps;
-    ::std::vector< std::shared_ptr<WW8_PdAttrDesc> > m_SectionAttributes;
+    std::vector< std::shared_ptr<WW8_PdAttrDesc> > m_SectionAttributes;
     // hack to prevent adding sections in endnotes
     bool m_bHeaderFooterWritten;
-    WW8_WrPlc0* pTextPos;        // Position of the headers/footers
+    std::unique_ptr<WW8_WrPlc0> pTextPos;        // Position of the headers/footers
 
     WW8_WrPlcSepx( const WW8_WrPlcSepx& ) = delete;
     WW8_WrPlcSepx& operator=( const WW8_WrPlcSepx& ) = delete;
 
 public:
     explicit WW8_WrPlcSepx( MSWordExportBase& rExport );
-    virtual ~WW8_WrPlcSepx();
+    virtual ~WW8_WrPlcSepx() override;
 
     virtual bool HeaderFooterWritten() override; // override
 
     void AppendSep( WW8_CP nStartCp,
                     const SwPageDesc* pPd,
-                    const SwSectionFormat* pSectionFormat = nullptr,
-                    sal_uLong nLnNumRestartNo = 0 );
+                    const SwSectionFormat* pSectionFormat,
+                    sal_uLong nLnNumRestartNo );
     void AppendSep( WW8_CP nStartCp, const SwFormatPageDesc& rPd,
                     const SwNode& rNd,
                     const SwSectionFormat* pSectionFormat,
@@ -298,16 +304,16 @@ sal_uInt8 maWW8_FFN[6];
     OUString msFamilyNm;
     OUString msAltNm;
     bool mbAlt;
-    FontPitch mePitch;
-    FontFamily meFamily;
-    rtl_TextEncoding meChrSet;
+    FontPitch const mePitch;
+    FontFamily const meFamily;
+    rtl_TextEncoding const meChrSet;
 public:
      wwFont( const OUString &rFamilyName, FontPitch ePitch, FontFamily eFamily,
         rtl_TextEncoding eChrSet);
     void Write( SvStream *pTableStram ) const;
     void WriteDocx( DocxAttributeOutput* rAttrOutput ) const;
     void WriteRtf( const RtfAttributeOutput* rAttrOutput ) const;
-    OUString GetFamilyName() const { return OUString( msFamilyNm ); }
+    OUString const & GetFamilyName() const { return msFamilyNm; }
     friend bool operator < (const wwFont &r1, const wwFont &r2);
 };
 
@@ -315,10 +321,10 @@ class wwFontHelper
 {
 private:
     /// Keep track of fonts that need to be exported.
-    ::std::map<wwFont, sal_uInt16> maFonts;
+    std::map<wwFont, sal_uInt16> maFonts;
 
     /// Convert from fast insertion map to linear vector in the order that we want to write.
-    ::std::vector< const wwFont* > AsVector() const;
+    std::vector< const wwFont* > AsVector() const;
 
 public:
     wwFontHelper() : bLoadAllFonts(false) {}
@@ -337,28 +343,24 @@ public:
 class DrawObj
 {
 public:
-    WW8_CP mnCp;                // CP-Pos of references
+    WW8_CP const mnCp;                // CP-Pos of references
     sal_uInt32 mnShapeId;       // ShapeId for the SwFrameFormats
-    ww8::Frame maContent;          // the frame itself
-    Point maParentPos;          // Points
+    ww8::Frame maContent;       // the frame itself
+    Point const maParentPos;          // Points
     sal_Int32 mnThick;          // Border Thicknesses
-    short mnDirection;          // If BiDi or not
-    unsigned int mnHdFtIndex;   // 0 for main text, +1 for each subsequent
+    SvxFrameDirection const mnDirection; // If BiDi or not
+    unsigned int const mnHdFtIndex;   // 0 for main text, +1 for each subsequent
                                 // msword hd/ft
 
-    DrawObj(const ww8::Frame &rContent, WW8_CP nCp, Point aParentPos, short nDir,
+    DrawObj(const ww8::Frame &rContent, WW8_CP nCp, Point aParentPos, SvxFrameDirection nDir,
             unsigned int nHdFtIndex)
         : mnCp(nCp), mnShapeId(0), maContent(rContent), maParentPos(aParentPos),
         mnThick(0), mnDirection(nDir), mnHdFtIndex(nHdFtIndex) {}
     void SetShapeDetails(sal_uInt32 nId, sal_Int32 nThick);
-    DrawObj& operator=(const DrawObj &rOther);
 };
 
 typedef std::vector<DrawObj> DrawObjVector;
-typedef DrawObjVector::const_iterator cDrawObjIter;
-
 typedef std::vector<DrawObj *> DrawObjPointerVector;
-typedef DrawObjPointerVector::iterator DrawObjPointerIter;
 
 class PlcDrawObj // PC for DrawObjects and Text-/OLE-/GRF-Boxes
 {
@@ -371,7 +373,7 @@ protected:
 public:
     PlcDrawObj() {}
     void WritePlc( WW8Export& rWrt ) const;
-    bool Append( WW8Export&, WW8_CP nCp, const ww8::Frame& rFormat,
+    bool Append( WW8Export const &, WW8_CP nCp, const ww8::Frame& rFormat,
         const Point& rNdTopLeft );
     int size() { return maDrawObjs.size(); };
     DrawObjVector &GetObjArr() { return maDrawObjs; }
@@ -407,7 +409,7 @@ private:
     HdFtPlcDrawObj& operator=(const HdFtPlcDrawObj&) = delete;
 };
 
-typedef ::std::pair<OUString, sal_uLong> aBookmarkPair;
+typedef std::pair<OUString, sal_uLong> aBookmarkPair;
 
 class WW8_WrtRedlineAuthor : public sw::util::WrtRedlineAuthor
 {
@@ -430,7 +432,7 @@ struct MSWordSaveData
 {
     Point* pOldFlyOffset;
     RndStdIds eOldAnchorType;
-    ww::bytes* pOOld;                ///< WW8Export only
+    std::unique_ptr<ww::bytes> pOOld; ///< WW8Export only
     SwPaM* pOldPam, *pOldEnd;
     sal_uLong nOldStart, nOldEnd;
     const ww8::Frame* pOldFlyFormat;
@@ -451,20 +453,19 @@ class MSWordExportBase
 public:
     wwFontHelper m_aFontHelper;
     std::vector<sal_uLong> m_aChapterFieldLocs;
-    typedef std::vector<sal_uLong>::const_iterator mycCFIter;
-    OUString m_aMainStg;
+    OUString const m_aMainStg;
     std::vector<const SwTOXType*> m_aTOXArr;
     const SfxItemSet* m_pISet;    // for double attributes
-    WW8_WrPct*  m_pPiece;         // Pointer auf Piece-Table
-    SwNumRuleTable* m_pUsedNumTable;  // all used NumRules
+    WW8_WrPct*  m_pPiece;         // Pointer to Piece-Table
+    std::unique_ptr<SwNumRuleTable> m_pUsedNumTable;  // all used NumRules
     const SwTextNode *m_pTopNodeOfHdFtPage; ///< Top node of host page when in hd/ft
     std::map< sal_uInt16, sal_uInt16 > m_aRuleDuplicates; //map to Duplicated numrules
     std::stack< sal_Int32 > m_aCurrentCharPropStarts; ///< To remember the position in a run.
     WW8_WrtBookmarks* m_pBkmks;
     WW8_WrtRedlineAuthor* m_pRedlAuthors;
     std::shared_ptr<NfKeywordTable> m_pKeyMap;
-    SvxMSExportOLEObjects* m_pOLEExp;
-    SwMSConvertControls* m_pOCXExp;
+    std::unique_ptr<SvxMSExportOLEObjects> m_pOLEExp;
+    std::unique_ptr<SwMSConvertControls> m_pOCXExp;
     WW8OleMap m_aOleMap;    // To remember all already exported ole objects
     ww8::WW8TableInfo::Pointer_t m_pTableInfo;
 
@@ -476,18 +477,19 @@ public:
     sal_uInt16 m_nUniqueList;         ///< current number for creating unique list names
     unsigned int m_nHdFtIndex;
 
-    RedlineMode_t m_nOrigRedlineMode;   ///< Remember the original redline mode
+    RedlineFlags m_nOrigRedlineFlags;   ///< Remember the original redline mode
 
 public:
     /* implicit bookmark vector containing pairs of node indexes and bookmark names */
     std::vector<aBookmarkPair> m_aImplicitBookmarks;
     ww8::Frames m_aFrames;             // The floating frames in this document
-    const SwPageDesc *m_pAktPageDesc;
+    const SwPageDesc *m_pCurrentPageDesc;
     bool m_bPrevTextNodeIsEmpty;
-    WW8_WrPlcPn* m_pPapPlc;
-    WW8_WrPlcPn* m_pChpPlc;
+    bool m_bFirstTOCNodeWithSection;
+    std::unique_ptr<WW8_WrPlcPn> m_pPapPlc;
+    std::unique_ptr<WW8_WrPlcPn> m_pChpPlc;
     MSWordAttrIter* m_pChpIter;
-    MSWordStyles* m_pStyles;
+    std::unique_ptr<MSWordStyles> m_pStyles;
     WW8_WrPlcAnnotations* m_pAtn;
     std::unique_ptr<WW8_WrtFactoids> m_pFactoids;
     WW8_WrPlcTextBoxes *m_pTextBxs, *m_pHFTextBxs;
@@ -510,18 +512,18 @@ public:
     Point* m_pFlyOffset;              // for adjusting of character-bound Fly in the Writer,
     RndStdIds m_eNewAnchorType;       // that is paragraph-bound in the WW.
 
-    WW8_WrPlcField* m_pFieldMain;         // fields in MainText
-    WW8_WrPlcField* m_pFieldHdFt;         // fields in Header/Footer
-    WW8_WrPlcField* m_pFieldFootnote;          // fields in FootNotes
-    WW8_WrPlcField* m_pFieldEdn;          // fields in EndNotes
-    WW8_WrPlcField* m_pFieldAtn;          // fields in Annotations
-    WW8_WrPlcField* m_pFieldTextBxs;       // fields in textboxes
-    WW8_WrPlcField* m_pFieldHFTextBxs;     // fields in header/footer textboxes
-    WW8_WrMagicTable *m_pMagicTable;  // keeps track of table cell positions, and
+    std::unique_ptr<WW8_WrPlcField> m_pFieldMain;         // fields in MainText
+    std::unique_ptr<WW8_WrPlcField> m_pFieldHdFt;         // fields in Header/Footer
+    std::unique_ptr<WW8_WrPlcField> m_pFieldFootnote;          // fields in FootNotes
+    std::unique_ptr<WW8_WrPlcField> m_pFieldEdn;          // fields in EndNotes
+    std::unique_ptr<WW8_WrPlcField> m_pFieldAtn;          // fields in Annotations
+    std::unique_ptr<WW8_WrPlcField> m_pFieldTextBxs;       // fields in textboxes
+    std::unique_ptr<WW8_WrPlcField> m_pFieldHFTextBxs;     // fields in header/footer textboxes
+    std::unique_ptr<WW8_WrMagicTable> m_pMagicTable;  // keeps track of table cell positions, and
                                     // marks those that contain graphics,
                                     // which is required to make word display
                                     // graphics inside tables
-    SwWW8WrGrf* m_pGrf;
+    std::unique_ptr<SwWW8WrGrf> m_pGrf;
     const SwAttrSet* m_pStyAttr;      // StyleAttr for Tabs
     const SwModify* m_pOutFormatNode;    // write Format or Node
     const SwFormat *m_pCurrentStyle;     // iff bStyDef=true, then this store the current style
@@ -545,7 +547,7 @@ public:
                                      // ( is reset e.g. for Flys in a table )
     bool m_bOutGrf : 1;           // graphics are being written
     bool m_bInWriteEscher : 1;    // in write textboxes
-    bool m_bStartTOX : 1;         // true: a TOX is startet
+    bool m_bStartTOX : 1;         // true: a TOX is started
     bool m_bInWriteTOX : 1;       // true: all content are in a TOX
     bool m_bFootnoteAtTextEnd : 1;      // true: all FTN at Textend
     bool m_bEndAtTextEnd : 1;      // true: all END at Textend
@@ -558,13 +560,14 @@ public:
     bool m_bExportModeRTF;
     /// Is font size written already as part of the current character properties?
     bool m_bFontSizeWritten;
+    bool m_bAddFootnoteTab;     // only one aesthetic spacing tab per footnote
 
     SwDoc *m_pDoc;
     sal_uLong m_nCurStart, m_nCurEnd;
     SwPaM *m_pCurPam, *m_pOrigPam;
 
     /// Stack to remember the nesting (see MSWordSaveData for more)
-    ::std::stack< MSWordSaveData > m_aSaveData;
+    std::stack< MSWordSaveData > m_aSaveData;
 
     /// Used to split the runs according to the bookmarks start and ends
     typedef std::vector< ::sw::mark::IMark* > IMarkVector;
@@ -575,7 +578,7 @@ public:
 
 public:
     /// The main function to export the document.
-    void ExportDocument( bool bWriteAll );
+    ErrCode ExportDocument( bool bWriteAll );
 
     /// Iterate through the nodes and call the appropriate OutputNode() on them.
     void WriteText();
@@ -589,7 +592,7 @@ public:
     void WriteSpecialText( sal_uLong nStart, sal_uLong nEnd, sal_uInt8 nTTyp );
 
     /// Export the pool items to attributes (through an attribute output class).
-    void ExportPoolItemsToCHP( ww8::PoolItems &rItems, sal_uInt16 nScript );
+    void ExportPoolItemsToCHP( ww8::PoolItems &rItems, sal_uInt16 nScript, const SvxFontItem *pFont, bool bWriteCombChars = false );
 
     /// Return the numeric id of the numbering rule
     sal_uInt16 GetId( const SwNumRule& rNumRule );
@@ -614,6 +617,10 @@ public:
     }
 
     const SfxPoolItem& GetItem( sal_uInt16 nWhich ) const;
+    template<class T> const T& GetItem( TypedWhichId<T> nWhich ) const
+    {
+        return static_cast<const T&>(GetItem(sal_uInt16(nWhich)));
+    }
 
     /// Find the reference.
     bool HasRefToObject( sal_uInt16 nTyp, const OUString* pName, sal_uInt16 nSeqNo );
@@ -621,19 +628,16 @@ public:
     /// Find the bookmark name.
     static OUString GetBookmarkName( sal_uInt16 nTyp, const OUString* pName, sal_uInt16 nSeqNo );
 
-    /// Add a bookmark converted to a Word name.
-    void AppendWordBookmark( const OUString& rName );
-
     /// Use OutputItem() on an item set according to the parameters.
     void OutputItemSet( const SfxItemSet& rSet, bool bPapFormat, bool bChpFormat, sal_uInt16 nScript, bool bExportParentItemSet );
 
-    short GetDefaultFrameDirection( ) const;
+    SvxFrameDirection GetDefaultFrameDirection( ) const;
 
     /// Right to left?
-    short TrueFrameDirection( const SwFrameFormat& rFlyFormat ) const;
+    SvxFrameDirection TrueFrameDirection( const SwFrameFormat& rFlyFormat ) const;
 
     /// Right to left?
-    short GetCurrentPageDirection() const;
+    SvxFrameDirection GetCurrentPageDirection() const;
 
     /// In case of numbering restart.
 
@@ -663,6 +667,9 @@ public:
     /// If saving page break is preferred as a paragraph attribute (yes) or as a special character (no).
     virtual bool PreferPageBreakBefore() const = 0;
 
+    /// Text in tables can be postponed except for .doc
+    virtual bool AllowPostponedTextInTable() const { return true; }
+
     /// Guess the script (asian/western).
     ///
     /// Sadly word does not have two different sizes for asian font size and
@@ -675,13 +682,13 @@ public:
     /// has two
     virtual bool CollapseScriptsforWordOk( sal_uInt16 nScript, sal_uInt16 nWhich ) = 0;
 
-    virtual void AppendBookmarks( const SwTextNode& rNd, sal_Int32 nAktPos, sal_Int32 nLen ) = 0;
+    virtual void AppendBookmarks( const SwTextNode& rNd, sal_Int32 nCurrentPos, sal_Int32 nLen ) = 0;
 
     virtual void AppendBookmark( const OUString& rName ) = 0;
 
-    virtual void AppendAnnotationMarks( const SwTextNode& rNd, sal_Int32 nAktPos, sal_Int32 nLen ) = 0;
+    virtual void AppendAnnotationMarks( const SwTextNode& rNd, sal_Int32 nCurrentPos, sal_Int32 nLen ) = 0;
 
-    virtual void AppendSmartTags(const SwTextNode& /*rTextNode*/) { }
+    virtual void AppendSmartTags(SwTextNode& /*rTextNode*/) { }
 
     //For i120928,add this interface to export graphic of bullet
     virtual void ExportGrfBullet(const SwTextNode& rNd) = 0;
@@ -702,7 +709,7 @@ public:
     /// Setter for pISet.
     void SetCurItemSet( const SfxItemSet* pS ) { m_pISet = pS; }
 
-    /// Remember some of the memebers so that we can recurse in WriteText().
+    /// Remember some of the members so that we can recurse in WriteText().
     virtual void SaveData( sal_uLong nStt, sal_uLong nEnd );
 
     /// Restore what was saved in SaveData().
@@ -758,7 +765,7 @@ public:
 
     /// Write the field
     virtual void OutputField( const SwField* pField, ww::eField eFieldType,
-            const OUString& rFieldCmd, sal_uInt8 nMode = nsFieldFlags::WRITEFIELD_ALL ) = 0;
+            const OUString& rFieldCmd, FieldFlags nMode = FieldFlags::All ) = 0;
 
     /// Write the data of the form field
     virtual void WriteFormData( const ::sw::mark::IFieldmark& rFieldmark ) = 0;
@@ -784,18 +791,21 @@ public:
     /// Returns the index of a picture bullet, used in numberings.
     int GetGrfIndex(const SvxBrushItem& rBrush);
 
+    enum ExportFormat { DOC = 0, RTF = 1, DOCX = 2};
+    virtual ExportFormat GetExportFormat() const = 0;
+
 protected:
     /// Format-dependent part of the actual export.
-    virtual void ExportDocument_Impl() = 0;
+    virtual ErrCode ExportDocument_Impl() = 0;
 
     /// Get the next position in the text node to output
-    sal_Int32 GetNextPos( SwWW8AttrIter* pAttrIter, const SwTextNode& rNode, sal_Int32 nAktPos );
+    sal_Int32 GetNextPos( SwWW8AttrIter const * pAttrIter, const SwTextNode& rNode, sal_Int32 nCurrentPos );
 
     /// Update the information for GetNextPos().
-    void UpdatePosition( SwWW8AttrIter* pAttrIter, sal_Int32 nAktPos, sal_Int32 nEnd );
+    void UpdatePosition( SwWW8AttrIter* pAttrIter, sal_Int32 nCurrentPos );
 
     /// Output SwTextNode
-    virtual void OutputTextNode( const SwTextNode& );
+    virtual void OutputTextNode( SwTextNode& );
 
     /// Setup the chapter fields (maChapterFieldLocs).
     void GatherChapterFields();
@@ -803,7 +813,7 @@ protected:
     void AddLinkTarget( const OUString& rURL );
     void CollectOutlineBookmarks( const SwDoc &rDoc );
 
-    bool SetAktPageDescFromNode(const SwNode &rNd);
+    bool SetCurrentPageDescFromNode(const SwNode &rNd);
     bool ContentContainsChapterField(const SwFormatContent &rContent) const;
     bool FormatHdFtContainsChapterField(const SwFrameFormat &rFormat) const;
 
@@ -811,8 +821,8 @@ protected:
 
     virtual void PrepareNewPageDesc( const SfxItemSet* pSet,
                                      const SwNode& rNd,
-                                     const SwFormatPageDesc* pNewPgDescFormat = nullptr,
-                                     const SwPageDesc* pNewPgDesc = nullptr ) = 0;
+                                     const SwFormatPageDesc* pNewPgDescFormat,
+                                     const SwPageDesc* pNewPgDesc ) = 0;
 
     /// Return value indicates if an inherited outline numbering is suppressed.
     virtual bool DisallowInheritingOutlineNumbering(const SwFormat &rFormat) = 0;
@@ -833,29 +843,30 @@ protected:
 
     /// Output SwSectionNode
     void OutputSectionNode( const SwSectionNode& );
+    static void UpdateTocSectionNodeProperties(const SwSectionNode& rSectionNode);
 
     virtual void AppendSection( const SwPageDesc *pPageDesc, const SwSectionFormat* pFormat, sal_uLong nLnNum ) = 0;
 
     /// Call the right (virtual) function according to the type of the item.
     ///
     /// One of OutputTextNode(), OutputGrfNode(), or OutputOLENode()
-    void OutputContentNode( const SwContentNode& );
+    void OutputContentNode( SwContentNode& );
 
     /// Find the nearest bookmark from the current position.
     ///
     /// Returns false when there is no bookmark.
-    bool NearestBookmark( sal_Int32& rNearest, const sal_Int32 nAktPos, bool bNextPositionOnly );
+    bool NearestBookmark( sal_Int32& rNearest, const sal_Int32 nCurrentPos, bool bNextPositionOnly );
 
-    void GetSortedBookmarks( const SwTextNode& rNd, sal_Int32 nAktPos, sal_Int32 nLen );
+    void GetSortedBookmarks( const SwTextNode& rNd, sal_Int32 nCurrentPos, sal_Int32 nLen );
 
     bool GetBookmarks( const SwTextNode& rNd, sal_Int32 nStt, sal_Int32 nEnd,
             IMarkVector& rArr );
 
     /// Find the nearest annotation mark from the current position.
     ///
-    void NearestAnnotationMark( sal_Int32& rNearest, const sal_Int32 nAktPos, bool bNextPositionOnly );
+    void NearestAnnotationMark( sal_Int32& rNearest, const sal_Int32 nCurrentPos, bool bNextPositionOnly );
 
-    void GetSortedAnnotationMarks( const SwTextNode& rNd, sal_Int32 nAktPos, sal_Int32 nLen );
+    void GetSortedAnnotationMarks( const SwTextNode& rNd, sal_Int32 nCurrentPos, sal_Int32 nLen );
 
     bool GetAnnotationMarks( const SwTextNode& rNd, sal_Int32 nStt, sal_Int32 nEnd,
             IMarkVector& rArr );
@@ -870,6 +881,10 @@ protected:
     int CollectGrfsOfBullets();
     /// Write the numbering picture bullets.
     void BulletDefinitions();
+
+    bool NeedSectionBreak( const SwNode& rNd ) const;
+    bool NeedTextNodeSplit( const SwTextNode& rNd, std::set< sal_Int32 >& pList ) const;
+
     std::vector<const Graphic*> m_vecBulletPic; ///< Vector to record all the graphics of bullets
 
 public:
@@ -878,7 +893,7 @@ public:
 
     // TODO move as much as possible here from WW8Export! ;-)
 
-    static void CorrectTabStopInSet( SfxItemSet& rSet, sal_uInt16 nAbsLeft );
+    static void CorrectTabStopInSet( SfxItemSet& rSet, sal_Int32 nAbsLeft );
 
 private:
     MSWordExportBase( const MSWordExportBase& ) = delete;
@@ -898,10 +913,10 @@ friend void WW8_WrtRedlineAuthor::Write(Writer &rWrt);
 
 public:
     SwWW8Writer(const OUString& rFltName, const OUString& rBaseURL);
-    virtual ~SwWW8Writer();
+    virtual ~SwWW8Writer() override;
 
-    virtual sal_uLong WriteStorage() override;
-    virtual sal_uLong WriteMedium( SfxMedium& ) override;
+    virtual ErrCode WriteStorage() override;
+    virtual ErrCode WriteMedium( SfxMedium& ) override;
 
     // TODO most probably we want to be able to get these in
     // MSExportFilterBase
@@ -933,7 +948,7 @@ public:
     bool InitStd97CodecUpdateMedium( ::msfilter::MSCodec_Std97& rCodec );
 
     using StgWriter::Write;
-    virtual sal_uLong Write( SwPaM&, SfxMedium&, const OUString* = nullptr ) override;
+    virtual ErrCode Write( SwPaM&, SfxMedium&, const OUString* ) override;
     //Seems not an expected to provide method to access the private member
     SfxMedium* GetMedia() { return mpMedium; }
 
@@ -946,21 +961,21 @@ private:
 class WW8Export : public MSWordExportBase
 {
 public:
-    ww::bytes* pO;                       ///< Buffer
+    std::unique_ptr<ww::bytes> pO;      ///< Buffer
 
     SvStream *pTableStrm, *pDataStrm;   ///< Streams for WW97 Export
 
-    WW8Fib* pFib;                       ///< File Information Block
-    WW8Dop* pDop;                       ///< DOcument Properties
-    WW8_WrPlcFootnoteEdn *pFootnote;              ///< Footnotes - structure to remember them, and output
-    WW8_WrPlcFootnoteEdn *pEdn;              ///< Endnotes - structure to remember them, and output
-    WW8_WrPlcSepx* pSepx;               ///< Sections/headers/footers
+    std::unique_ptr<WW8Fib> pFib;                       ///< File Information Block
+    std::unique_ptr<WW8Dop> pDop;                       ///< DOcument Properties
+    std::unique_ptr<WW8_WrPlcFootnoteEdn> pFootnote;    ///< Footnotes - structure to remember them, and output
+    std::unique_ptr<WW8_WrPlcFootnoteEdn> pEdn;         ///< Endnotes - structure to remember them, and output
+    std::unique_ptr<WW8_WrPlcSepx> pSepx;               ///< Sections/headers/footers
 
-    bool m_bDot; ///< Template or document.
+    bool const m_bDot; ///< Template or document.
 
 protected:
     SwWW8Writer        *m_pWriter;      ///< Pointer to the writer
-    WW8AttributeOutput *m_pAttrOutput;  ///< Converting attributes to stream data
+    std::unique_ptr<WW8AttributeOutput> m_pAttrOutput;  ///< Converting attributes to stream data
 
 private:
     tools::SvRef<SotStorage>       xEscherStg;      /// memory leak #i120098#, to hold the reference to unnamed SotStorage obj
@@ -974,6 +989,8 @@ public:
 
     virtual bool PreferPageBreakBefore() const override { return true; }
 
+    virtual bool AllowPostponedTextInTable() const override { return false; }
+
     virtual bool SupportsOneColumnBreak() const override { return false; }
 
     virtual bool FieldsQuoted() const override { return false; }
@@ -981,7 +998,7 @@ public:
     virtual bool AddSectionBreaksForTOX() const override { return false; }
 private:
     /// Format-dependent part of the actual export.
-    virtual void ExportDocument_Impl() override;
+    virtual ErrCode ExportDocument_Impl() override;
 
     void PrepareStorage();
     void WriteFkpPlcUsw();
@@ -996,8 +1013,7 @@ private:
 
     void RestoreMacroCmds();
 
-    void DoComboBox(css::uno::Reference<css::beans::XPropertySet> xPropSet);
-    void DoCheckBox(css::uno::Reference<css::beans::XPropertySet> xPropSet);
+    void DoComboBox(css::uno::Reference<css::beans::XPropertySet> const & xPropSet);
 
 public:
 
@@ -1008,10 +1024,9 @@ public:
 
     SvxMSExportOLEObjects& GetOLEExp()      { return *m_pOLEExp; }
     SwMSConvertControls& GetOCXExp()        { return *m_pOCXExp; }
-    WW8OleMap& GetOLEMap()                  { return m_aOleMap; }
     void ExportDopTypography(WW8DopTypography &rTypo);
 
-    sal_uInt16 AddRedlineAuthor( sal_uInt16 nId );
+    sal_uInt16 AddRedlineAuthor( std::size_t nId );
 
     void WriteFootnoteBegin( const SwFormatFootnote& rFootnote, ww::bytes* pO = nullptr );
     void WritePostItBegin( ww::bytes* pO = nullptr );
@@ -1028,27 +1043,29 @@ public:
 
     /// Write the field
     virtual void OutputField( const SwField* pField, ww::eField eFieldType,
-            const OUString& rFieldCmd, sal_uInt8 nMode = nsFieldFlags::WRITEFIELD_ALL ) override;
+            const OUString& rFieldCmd, FieldFlags nMode = FieldFlags::All ) override;
 
     void StartCommentOutput( const OUString& rName );
     void EndCommentOutput(   const OUString& rName );
     void OutGrf(const ww8::Frame &rFrame);
-    bool TestOleNeedsGraphic(const SwAttrSet& rSet, tools::SvRef<SotStorage> xOleStg,
-        tools::SvRef<SotStorage> xObjStg, OUString &rStorageName, SwOLENode *pOLENd);
+    bool TestOleNeedsGraphic(const SwAttrSet& rSet, tools::SvRef<SotStorage> const& xOleStg,
+                             const tools::SvRef<SotStorage>& xObjStg, OUString const& rStorageName,
+                             SwOLENode* pOLENd);
 
-    virtual void AppendBookmarks( const SwTextNode& rNd, sal_Int32 nAktPos, sal_Int32 nLen ) override;
+    virtual void AppendBookmarks( const SwTextNode& rNd, sal_Int32 nCurrentPos, sal_Int32 nLen ) override;
     virtual void AppendBookmark( const OUString& rName ) override;
+    void AppendBookmarkEndWithCorrection( const OUString& rName );
 
-    virtual void AppendAnnotationMarks( const SwTextNode& rNd, sal_Int32 nAktPos, sal_Int32 nLen ) override;
+    virtual void AppendAnnotationMarks( const SwTextNode& rNd, sal_Int32 nCurrentPos, sal_Int32 nLen ) override;
 
-    virtual void AppendSmartTags(const SwTextNode& rTextNode) override;
+    virtual void AppendSmartTags(SwTextNode& rTextNode) override;
 
     virtual void ExportGrfBullet(const SwTextNode& rNd) override;
     void OutGrfBullets(const ww8::Frame &rFrame);
 
     void MoveFieldMarks(WW8_CP nFrom, WW8_CP nTo);
 
-    void WriteAsStringTable(const ::std::vector<OUString>&, sal_Int32& rfcSttbf,
+    void WriteAsStringTable(const std::vector<OUString>&, sal_Int32& rfcSttbf,
         sal_Int32& rlcbSttbf);
 
     virtual sal_uLong ReplaceCr( sal_uInt8 nChar ) override;
@@ -1071,8 +1088,8 @@ public:
     // #i76300#
     virtual void PrepareNewPageDesc( const SfxItemSet* pSet,
                                      const SwNode& rNd,
-                                     const SwFormatPageDesc* pNewPgDescFormat = nullptr,
-                                     const SwPageDesc* pNewPgDesc = nullptr ) override;
+                                     const SwFormatPageDesc* pNewPgDescFormat,
+                                     const SwPageDesc* pNewPgDesc ) override;
 
     static void Out_BorderLine(ww::bytes& rO, const ::editeng::SvxBorderLine* pLine,
         sal_uInt16 nDist, sal_uInt16 nSprmNo, sal_uInt16 nSprmNoVer9,
@@ -1106,6 +1123,7 @@ public:
         const ww8::Frame &rFrameFormat);
 
     void InsUInt16( sal_uInt16 n )      { SwWW8Writer::InsUInt16( *pO, n ); }
+    void InsInt16(sal_Int16 n) { InsUInt16(sal_uInt16(n)); }
     void InsUInt32( sal_uInt32 n )      { SwWW8Writer::InsUInt32( *pO, n ); }
     void WriteStringAsPara( const OUString& rText );
 
@@ -1113,7 +1131,7 @@ public:
     WW8Export( SwWW8Writer *pWriter,
             SwDoc *pDocument, SwPaM *pCurrentPam, SwPaM *pOriginalPam,
             bool bDot );
-    virtual ~WW8Export();
+    virtual ~WW8Export() override;
 
     virtual void DoComboBox(const OUString &rName,
                     const OUString &rHelp,
@@ -1135,7 +1153,7 @@ public:
     SwWW8Writer& GetWriter() const { return *m_pWriter; }
     SvStream& Strm() const { return m_pWriter->Strm(); }
 
-    /// Remember some of the memebers so that we can recurse in WriteText().
+    /// Remember some of the members so that we can recurse in WriteText().
     virtual void SaveData( sal_uLong nStt, sal_uLong nEnd ) override;
 
     /// Restore what was saved in SaveData().
@@ -1145,6 +1163,8 @@ public:
     virtual void WriteHeadersFooters( sal_uInt8 nHeadFootFlags,
             const SwFrameFormat& rFormat, const SwFrameFormat& rLeftFormat, const SwFrameFormat& rFirstPageFormat,
         sal_uInt8 nBreakCode) override;
+
+    virtual ExportFormat GetExportFormat() const override { return ExportFormat::DOC; }
 
 protected:
     /// Output SwGrfNode
@@ -1170,8 +1190,8 @@ private:
 protected:
     std::vector<WW8_CP> aCps;
     std::vector<const void*> aContent;                // PTRARR of SwFormatFootnote/PostIts/..
-    std::vector<const SwFrameFormat*> aSpareFormats;        //a backup for aContent: if there's no SdrObject, stores the fmt directly here
-    WW8_WrPlc0* pTextPos;            // positions of the individual texts
+    std::vector<const SwFrameFormat*> aSpareFormats;  // a backup for aContent: if there's no SdrObject, stores the fmt directly here
+    std::unique_ptr<WW8_WrPlc0> pTextPos;             // positions of the individual texts
 
     WW8_WrPlcSubDoc();
     virtual ~WW8_WrPlcSubDoc();
@@ -1187,10 +1207,10 @@ protected:
 class WW8_WrPlcFootnoteEdn : public WW8_WrPlcSubDoc
 {
 private:
-    sal_uInt8 nTyp;
+    sal_uInt8 const nTyp;
 
     WW8_WrPlcFootnoteEdn(const WW8_WrPlcFootnoteEdn&) = delete;
-    WW8_WrPlcFootnoteEdn& operator=(WW8_WrPlcFootnoteEdn &) = delete;
+    WW8_WrPlcFootnoteEdn& operator=(WW8_WrPlcFootnoteEdn const &) = delete;
 public:
     explicit WW8_WrPlcFootnoteEdn( sal_uInt8 nTTyp ) : nTyp( nTTyp ) {}
 
@@ -1216,13 +1236,13 @@ class WW8_WrPlcAnnotations : public WW8_WrPlcSubDoc  // double Plc for Postits
 {
 private:
     WW8_WrPlcAnnotations(const WW8_WrPlcAnnotations&) = delete;
-    WW8_WrPlcAnnotations& operator=(WW8_WrPlcAnnotations&) = delete;
+    WW8_WrPlcAnnotations& operator=(WW8_WrPlcAnnotations const &) = delete;
     std::set<const SwRedlineData*> maProcessedRedlines;
 
     std::map<const OUString, WW8_CP> m_aRangeStartPositions;
 public:
     WW8_WrPlcAnnotations() {}
-    virtual ~WW8_WrPlcAnnotations();
+    virtual ~WW8_WrPlcAnnotations() override;
 
     void AddRangeStartPosition(const OUString& rName, WW8_CP nStartCp);
     void Append( WW8_CP nCp, const SwPostItField* pPostIt );
@@ -1240,7 +1260,7 @@ private:
     virtual const std::vector<sal_uInt32>* GetShapeIdArr() const override;
 
     WW8_WrPlcTextBoxes(const WW8_WrPlcTextBoxes&) = delete;
-    WW8_WrPlcTextBoxes& operator=(WW8_WrPlcTextBoxes&) = delete;
+    WW8_WrPlcTextBoxes& operator=(WW8_WrPlcTextBoxes const &) = delete;
 public:
     explicit WW8_WrPlcTextBoxes( sal_uInt8 nTTyp ) : nTyp( nTTyp ) {}
 
@@ -1282,9 +1302,9 @@ class WW8_WrPlc1
 {
 private:
     std::vector<WW8_CP> aPos;
-    sal_uInt8* pData;                // content ( structures )
+    std::unique_ptr<sal_uInt8[]> pData;                // content ( structures )
     sal_uLong nDataLen;
-    sal_uInt16 nStructSiz;
+    sal_uInt16 const nStructSiz;
 
     WW8_WrPlc1(const WW8_WrPlc1&) = delete;
     WW8_WrPlc1& operator=(const WW8_WrPlc1&) = delete;
@@ -1303,7 +1323,7 @@ public:
 class WW8_WrPlcField : public WW8_WrPlc1
 {
 private:
-    sal_uInt8 nTextTyp;
+    sal_uInt8 const nTextTyp;
     sal_uInt16 nResults;
 
     WW8_WrPlcField(const WW8_WrPlcField&) = delete;
@@ -1331,15 +1351,14 @@ public:
 class GraphicDetails
 {
 public:
-    ww8::Frame maFly;                // surrounding FlyFrames
+    ww8::Frame const maFly;                // surrounding FlyFrames
     sal_uLong mnPos;                // FilePos of the graphics
-    sal_uInt16 mnWid;               // Width of the graphics
-    sal_uInt16 mnHei;               // Height of the graphics
+    sal_uInt16 const mnWid;               // Width of the graphics
+    sal_uInt16 const mnHei;               // Height of the graphics
 
     GraphicDetails(const ww8::Frame &rFly, sal_uInt16 nWid, sal_uInt16 nHei)
         : maFly(rFly), mnPos(0), mnWid(nWid), mnHei(nHei)
     {}
-    GraphicDetails& operator=(const GraphicDetails& rOther);
 
     bool operator==(const GraphicDetails& rIn) const
     {
@@ -1358,7 +1377,6 @@ private:
     WW8Export& rWrt;
 
     std::vector<GraphicDetails> maDetails;
-    typedef std::vector<GraphicDetails>::iterator myiter;
     sal_uInt16 mnIdx;       // index in file positions
 
     static void WritePICFHeader(SvStream& rStrm, const ww8::Frame &rFly,
@@ -1387,7 +1405,7 @@ public:
 class MSWordAttrIter
 {
 private:
-    MSWordAttrIter* pOld;
+    MSWordAttrIter* const pOld;
     MSWordAttrIter(const MSWordAttrIter&) = delete;
     MSWordAttrIter& operator=(const MSWordAttrIter&) = delete;
 protected:
@@ -1398,7 +1416,7 @@ public:
 
     virtual const SfxPoolItem* HasTextItem( sal_uInt16 nWhich ) const = 0;
     virtual const SfxPoolItem& GetItem( sal_uInt16 nWhich ) const = 0;
-};
+ };
 
 /// Used to export formatted text associated to drawings.
 class MSWord_SdrAttrIter : public MSWordAttrIter
@@ -1410,11 +1428,11 @@ private:
     std::vector<const EECharAttrib*> aChrTextAtrArr;
     std::vector<rtl_TextEncoding> aChrSetArr;
     sal_Int32 nPara;
-    sal_Int32 nAktSwPos;
+    sal_Int32 nCurrentSwPos;
     sal_Int32 nTmpSwPos;                   // for HasItem()
     rtl_TextEncoding eNdChrSet;
     sal_uInt16 nScript;
-    sal_uInt8 mnTyp;
+    sal_uInt8 const mnTyp;
 
     sal_Int32 SearchNext( sal_Int32 nStartPos );
     void SetCharSet(const EECharAttrib& rTextAttr, bool bStart);
@@ -1432,12 +1450,12 @@ public:
 
     bool IsTextAttr(sal_Int32 nSwPos);
 
-    void NextPos() { if ( nAktSwPos < SAL_MAX_INT32 ) nAktSwPos = SearchNext( nAktSwPos + 1 ); }
+    void NextPos() { if ( nCurrentSwPos < SAL_MAX_INT32 ) nCurrentSwPos = SearchNext( nCurrentSwPos + 1 ); }
 
     void OutAttr( sal_Int32 nSwPos );
     virtual const SfxPoolItem* HasTextItem( sal_uInt16 nWhich ) const override;
     virtual const SfxPoolItem& GetItem( sal_uInt16 nWhich ) const override;
-    sal_Int32 WhereNext() const                { return nAktSwPos; }
+    sal_Int32 WhereNext() const                { return nCurrentSwPos; }
     rtl_TextEncoding GetNextCharSet() const;
     rtl_TextEncoding GetNodeCharSet() const     { return eNdChrSet; }
 };
@@ -1455,15 +1473,15 @@ private:
     const SwTextNode& rNd;
 
     sw::util::CharRuns maCharRuns;
-    sw::util::cCharRunIter maCharRunIter;
+    sw::util::CharRuns::const_iterator maCharRunIter;
 
     rtl_TextEncoding meChrSet;
     sal_uInt16 mnScript;
     bool mbCharIsRTL;
 
     const SwRangeRedline* pCurRedline;
-    sal_Int32 nAktSwPos;
-    sal_uInt16 nCurRedlinePos;
+    sal_Int32 nCurrentSwPos;
+    SwRedlineTable::size_type nCurRedlinePos;
 
     bool mbParaIsRTL;
 
@@ -1474,7 +1492,7 @@ private:
 
     sal_Int32 SearchNext( sal_Int32 nStartPos );
 
-    void OutSwFormatRefMark(const SwFormatRefMark& rAttr, bool bStart);
+    void OutSwFormatRefMark(const SwFormatRefMark& rAttr);
 
     void IterToCurrent();
 
@@ -1483,32 +1501,34 @@ private:
 public:
     SwWW8AttrIter( MSWordExportBase& rWr, const SwTextNode& rNd );
 
-    bool IsTextAttr( sal_Int32 nSwPos );
+    bool IsTextAttr( sal_Int32 nSwPos ) const;
+    bool IsExportableAttr(sal_Int32 nSwPos) const;
     bool IncludeEndOfParaCRInRedlineProperties(sal_Int32 nPos) const;
     bool IsDropCap( int nSwPos );
     bool RequiresImplicitBookmark();
 
-    void NextPos() { if ( nAktSwPos < SAL_MAX_INT32 ) nAktSwPos = SearchNext( nAktSwPos + 1 ); }
+    void NextPos() { if ( nCurrentSwPos < SAL_MAX_INT32 ) nCurrentSwPos = SearchNext( nCurrentSwPos + 1 ); }
 
-    void OutAttr( sal_Int32 nSwPos, bool bRuby = false );
+    void OutAttr( sal_Int32 nSwPos, bool bWriteCombinedChars );
     virtual const SfxPoolItem* HasTextItem( sal_uInt16 nWhich ) const override;
     virtual const SfxPoolItem& GetItem( sal_uInt16 nWhich ) const override;
-    int OutAttrWithRange(sal_Int32 nPos);
+    int OutAttrWithRange(const SwTextNode& rNode, sal_Int32 nPos);
     const SwRedlineData* GetParagraphLevelRedline( );
     const SwRedlineData* GetRunLevelRedline( sal_Int32 nPos );
     FlyProcessingState OutFlys(sal_Int32 nSwPos);
 
-    sal_Int32 WhereNext() const { return nAktSwPos; }
+    sal_Int32 WhereNext() const { return nCurrentSwPos; }
     sal_uInt16 GetScript() const { return mnScript; }
-    bool IsCharRTL() const { return mbCharIsRTL; }
     bool IsParaRTL() const { return mbParaIsRTL; }
     rtl_TextEncoding GetCharSet() const { return meChrSet; }
-    OUString GetSnippet(const OUString &rStr, sal_Int32 nAktPos,
+    OUString GetSnippet(const OUString &rStr, sal_Int32 nCurrentPos,
         sal_Int32 nLen) const;
     const SwFormatDrop& GetSwFormatDrop() const { return mrSwFormatDrop; }
 
     bool IsWatermarkFrame();
     bool IsAnchorLinkedToThisNode( sal_uLong nNodePos );
+
+    void SplitRun( sal_Int32 nSplitEndPos );
 };
 
 /// Class to collect and output the styles table.
@@ -1516,9 +1536,9 @@ class MSWordStyles
 {
     MSWordExportBase& m_rExport;
     sal_uInt16 m_aHeadingParagraphStyles[MAXLEVEL];
-    SwFormat** m_pFormatA; ///< Slot <-> Character and paragraph style array (0 for list styles).
+    std::unique_ptr<SwFormat*[]> m_pFormatA; ///< Slot <-> Character and paragraph style array (0 for list styles).
     sal_uInt16 m_nUsedSlots;
-    bool m_bListStyles; ///< If list styles are requested to be exported as well.
+    bool const m_bListStyles; ///< If list styles are requested to be exported as well.
     std::map<sal_uInt16, const SwNumRule*> m_aNumRules; ///< Slot <-> List style map.
 
     /// We need to build style id's for DOCX export; ideally we should roundtrip that, but this is good enough.
@@ -1562,7 +1582,7 @@ public:
     sal_uInt16 GetSlot( const SwFormat* pFormat ) const;
 
     /// Get styleId of the nId-th style (nId is its position in pFormatA).
-    OString GetStyleId(sal_uInt16 nId) const;
+    OString const & GetStyleId(sal_uInt16 nId) const;
 
     const SwFormat* GetSwFormat(sal_uInt16 nId) const { return m_pFormatA[nId]; }
     /// Get numbering rule of the nId-th style
@@ -1581,11 +1601,9 @@ class WW8SHDLong
 {
     sal_uInt32 m_cvFore;
     sal_uInt32 m_cvBack;
-    sal_uInt16 m_ipat;
 
 public:
-    WW8SHDLong() : m_cvFore(0), m_cvBack(0), m_ipat(0) {}
-    virtual ~WW8SHDLong() {}
+    WW8SHDLong() : m_cvFore(0), m_cvBack(0) {}
 
     void Write(WW8Export & rExport);
     void setCvFore(sal_uInt32 cvFore) { m_cvFore = cvFore; }

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "pagesettings.hxx"
+#include <pagesettings.hxx>
 
 #include <algorithm>
 #include <set>
@@ -27,21 +27,26 @@
 #include <com/sun/star/style/GraphicLocation.hpp>
 #include <com/sun/star/text/FilenameDisplayFormat.hpp>
 #include <com/sun/star/text/XText.hpp>
-#include <com/sun/star/text/XTextContent.hpp>
 #include <com/sun/star/text/XTextCursor.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <osl/diagnose.h>
 #include <rtl/strbuf.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <sax/tools/converter.hxx>
-#include <oox/core/xmlfilterbase.hxx>
 #include <oox/helper/attributelist.hxx>
+#include <oox/helper/binaryinputstream.hxx>
 #include <oox/helper/graphichelper.hxx>
 #include <oox/helper/propertymap.hxx>
 #include <oox/helper/propertyset.hxx>
-#include "biffinputstream.hxx"
-#include "excelhandlers.hxx"
-#include "stylesbuffer.hxx"
-#include "unitconverter.hxx"
-#include "document.hxx"
+#include <oox/token/namespaces.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
+#include <oox/core/filterbase.hxx>
+#include <oox/core/relations.hxx>
+#include <stylesbuffer.hxx>
+#include <unitconverter.hxx>
+#include <document.hxx>
+#include <biffhelper.hxx>
 #include <filter/msfilter/util.hxx>
 
 namespace oox {
@@ -331,9 +336,11 @@ void PageSettings::finalizeImport()
 
 void PageSettings::importPictureData( const Relations& rRelations, const OUString& rRelId )
 {
-    OUString aPicturePath = rRelations.getFragmentPathFromRelId( rRelId );
-    if( !aPicturePath.isEmpty() )
-        maModel.maGraphicUrl = getBaseFilter().getGraphicHelper().importEmbeddedGraphicObject( aPicturePath );
+    OUString aPicturePath = rRelations.getFragmentPathFromRelId(rRelId);
+    if (!aPicturePath.isEmpty())
+    {
+        maModel.mxGraphic = getBaseFilter().getGraphicHelper().importEmbeddedGraphic(aPicturePath);
+    }
 }
 
 enum HFPortionId
@@ -382,16 +389,14 @@ public:
 
 private:
     /** Returns the current edit engine text object. */
-    inline HFPortionInfo& getPortion() { return maPortions[ meCurrPortion ]; }
+    HFPortionInfo& getPortion() { return maPortions[ meCurrPortion ]; }
     /** Returns the start cursor of the current text range. */
-    inline const Reference<text::XTextCursor>& getStartPos() { return getPortion().mxStart; }
+    const Reference<text::XTextCursor>& getStartPos() { return getPortion().mxStart; }
     /** Returns the end cursor of the current text range. */
-    inline const Reference<text::XTextCursor>& getEndPos() { return getPortion().mxEnd; }
+    const Reference<text::XTextCursor>& getEndPos() { return getPortion().mxEnd; }
 
     /** Returns the current line height of the specified portion. */
     double              getCurrHeight( HFPortionId ePortion ) const;
-    /** Returns the current line height. */
-    double              getCurrHeight() const;
 
     /** Updates the current line height of the specified portion, using the current font size. */
     void                updateCurrHeight( HFPortionId ePortion );
@@ -424,15 +429,9 @@ private:
 
 private:
     typedef ::std::vector< HFPortionInfo >  HFPortionInfoVec;
-    typedef ::std::set< OString >           OStringSet;
 
-    const OUString      maPageNumberService;
-    const OUString      maPageCountService;
-    const OUString      maSheetNameService;
-    const OUString      maFileNameService;
-    const OUString      maDateTimeService;
-    const OStringSet    maBoldNames;            /// All names for bold font style in lowercase UTF-8.
-    const OStringSet    maItalicNames;          /// All names for italic font style in lowercase UTF-8.
+    const std::set< OString >    maBoldNames;            /// All names for bold font style in lowercase UTF-8.
+    const std::set< OString >    maItalicNames;          /// All names for italic font style in lowercase UTF-8.
     HFPortionInfoVec    maPortions;
     HFPortionId         meCurrPortion;          /// Identifier of current H/F portion.
     OUStringBuffer      maBuffer;               /// Text data to append to current text range.
@@ -464,15 +463,16 @@ static const sal_Char* const sppcItalicNames[] =
 
 } // namespace
 
+static const OUStringLiteral gaPageNumberService( "com.sun.star.text.TextField.PageNumber" );
+static const OUStringLiteral gaPageCountService( "com.sun.star.text.TextField.PageCount" );
+static const OUStringLiteral gaSheetNameService( "com.sun.star.text.TextField.SheetName" );
+static const OUStringLiteral gaFileNameService( "com.sun.star.text.TextField.FileName" );
+static const OUStringLiteral gaDateTimeService( "com.sun.star.text.TextField.DateTime" );
+
 HeaderFooterParser::HeaderFooterParser( const WorkbookHelper& rHelper ) :
     WorkbookHelper( rHelper ),
-    maPageNumberService( "com.sun.star.text.TextField.PageNumber" ),
-    maPageCountService( "com.sun.star.text.TextField.PageCount" ),
-    maSheetNameService( "com.sun.star.text.TextField.SheetName" ),
-    maFileNameService( "com.sun.star.text.TextField.FileName" ),
-    maDateTimeService( "com.sun.star.text.TextField.DateTime" ),
-    maBoldNames( sppcBoldNames, STATIC_ARRAY_END( sppcBoldNames ) ),
-    maItalicNames( sppcItalicNames, STATIC_ARRAY_END( sppcItalicNames ) ),
+    maBoldNames( sppcBoldNames, sppcBoldNames + SAL_N_ELEMENTS(sppcBoldNames) ),
+    maItalicNames( sppcItalicNames, sppcItalicNames + SAL_N_ELEMENTS(sppcItalicNames) ),
     maPortions( static_cast< size_t >( HF_COUNT ) ),
     meCurrPortion( HF_CENTER )
 {
@@ -535,7 +535,7 @@ double HeaderFooterParser::parse( const Reference<sheet::XHeaderFooterContent>& 
                 eState = STATE_TEXT;
                 // ignore case of token codes
                 if( ('a' <= cChar) && (cChar <= 'z') )
-                    (cChar -= 'a') += 'A';
+                    cChar = (cChar - 'a') + 'A';
                 switch( cChar )
                 {
                     case '&':   maBuffer.append( cChar );   break;  // the '&' character
@@ -545,40 +545,39 @@ double HeaderFooterParser::parse( const Reference<sheet::XHeaderFooterContent>& 
                     case 'R':   setNewPortion( HF_RIGHT );  break;  // right portion
 
                     case 'P':   // page number
-                        appendField( createField( maPageNumberService ) );
+                        appendField( createField( gaPageNumberService ) );
                     break;
                     case 'N':   // total page count
-                        appendField( createField( maPageCountService ) );
+                        appendField( createField( gaPageCountService ) );
                     break;
                     case 'A':   // current sheet name
-                        appendField( createField( maSheetNameService ) );
+                        appendField( createField( gaSheetNameService ) );
                     break;
 
                     case 'F':   // file name
                     {
-                        Reference<text::XTextContent> xContent = createField( maFileNameService );
+                        Reference<text::XTextContent> xContent = createField( gaFileNameService );
                         PropertySet aPropSet( xContent );
                         aPropSet.setProperty( PROP_FileFormat, css::text::FilenameDisplayFormat::NAME_AND_EXT );
                         appendField( xContent );
                     }
                     break;
                     case 'Z':   // file path (without file name), OOXML, BIFF12, and BIFF8 only
-                        if( (getFilterType() == FILTER_OOXML) || ((getFilterType() == FILTER_BIFF) && (getBiff() == BIFF8)) )
-                        {
-                            Reference<text::XTextContent> xContent = createField( maFileNameService );
-                            PropertySet aPropSet( xContent );
-                            // FilenameDisplayFormat::PATH not supported by Calc
-                            aPropSet.setProperty( PROP_FileFormat, css::text::FilenameDisplayFormat::FULL );
-                            appendField( xContent );
-                            /*  path only is not supported -- if we find a '&Z&F'
-                                combination for path/name, skip the '&F' part */
-                            if( (pcChar + 2 < pcEnd) && (pcChar[ 1 ] == '&') && ((pcChar[ 2 ] == 'f') || (pcChar[ 2 ] == 'F')) )
-                                pcChar += 2;
-                        }
+                    {
+                        Reference<text::XTextContent> xContent = createField( gaFileNameService );
+                        PropertySet aPropSet( xContent );
+                        // FilenameDisplayFormat::PATH not supported by Calc
+                        aPropSet.setProperty( PROP_FileFormat, css::text::FilenameDisplayFormat::FULL );
+                        appendField( xContent );
+                        /*  path only is not supported -- if we find a '&Z&F'
+                            combination for path/name, skip the '&F' part */
+                        if( (pcChar + 2 < pcEnd) && (pcChar[ 1 ] == '&') && ((pcChar[ 2 ] == 'f') || (pcChar[ 2 ] == 'F')) )
+                            pcChar += 2;
+                    }
                     break;
                     case 'D':   // date
                     {
-                        Reference<text::XTextContent> xContent = createField( maDateTimeService );
+                        Reference<text::XTextContent> xContent = createField( gaDateTimeService );
                         PropertySet aPropSet( xContent );
                         aPropSet.setProperty( PROP_IsDate, true );
                         appendField( xContent );
@@ -586,7 +585,7 @@ double HeaderFooterParser::parse( const Reference<sheet::XHeaderFooterContent>& 
                     break;
                     case 'T':   // time
                     {
-                        Reference<text::XTextContent> xContent = createField( maDateTimeService );
+                        Reference<text::XTextContent> xContent = createField( gaDateTimeService );
                         PropertySet aPropSet( xContent );
                         aPropSet.setProperty( PROP_IsDate, false );
                         appendField( xContent );
@@ -631,7 +630,7 @@ double HeaderFooterParser::parse( const Reference<sheet::XHeaderFooterContent>& 
                     break;
 
                     case 'K':   // text color (not in BIFF)
-                        if( (getFilterType() == FILTER_OOXML) && (pcChar + 6 < pcEnd) )
+                        if( pcChar + 6 < pcEnd )
                         {
                             setAttributes();
                             // eat the following 6 characters
@@ -734,11 +733,6 @@ double HeaderFooterParser::getCurrHeight( HFPortionId ePortion ) const
     return (fMaxHt == 0.0) ? maFontModel.mfHeight : fMaxHt;
 }
 
-double HeaderFooterParser::getCurrHeight() const
-{
-    return getCurrHeight( meCurrPortion );
-}
-
 void HeaderFooterParser::updateCurrHeight( HFPortionId ePortion )
 {
     double& rfMaxHt = maPortions[ ePortion ].mfCurrHeight;
@@ -753,16 +747,16 @@ void HeaderFooterParser::updateCurrHeight()
 void HeaderFooterParser::setAttributes()
 {
     Reference<text::XTextRange> xRange( getStartPos(), UNO_QUERY );
-    getEndPos()->gotoRange( xRange, sal_False );
-    getEndPos()->gotoEnd( sal_True );
+    getEndPos()->gotoRange( xRange, false );
+    getEndPos()->gotoEnd( true );
     if( !getEndPos()->isCollapsed() )
     {
         Font aFont( *this, maFontModel );
         aFont.finalizeImport();
         PropertySet aPropSet( getEndPos() );
-        aFont.writeToPropertySet( aPropSet, FONT_PROPTYPE_TEXT );
-        getStartPos()->gotoEnd( sal_False );
-        getEndPos()->gotoEnd( sal_False );
+        aFont.writeToPropertySet( aPropSet );
+        getStartPos()->gotoEnd( false );
+        getEndPos()->gotoEnd( false );
     }
 }
 
@@ -770,7 +764,7 @@ void HeaderFooterParser::appendText()
 {
     if( !maBuffer.isEmpty() )
     {
-        getEndPos()->gotoEnd( sal_False );
+        getEndPos()->gotoEnd( false );
         getEndPos()->setString( maBuffer.makeStringAndClear() );
         updateCurrHeight();
     }
@@ -778,9 +772,9 @@ void HeaderFooterParser::appendText()
 
 void HeaderFooterParser::appendLineBreak()
 {
-    getEndPos()->gotoEnd( sal_False );
+    getEndPos()->gotoEnd( false );
     getEndPos()->setString( OUString( '\n' ) );
-    getPortion().mfTotalHeight += getCurrHeight();
+    getPortion().mfTotalHeight += getCurrHeight( meCurrPortion ); // add the current line height.
     getPortion().mfCurrHeight = 0;
 }
 
@@ -802,11 +796,11 @@ Reference<text::XTextContent> HeaderFooterParser::createField( const OUString& r
 
 void HeaderFooterParser::appendField( const Reference<text::XTextContent>& rxContent )
 {
-    getEndPos()->gotoEnd( sal_False );
+    getEndPos()->gotoEnd( false );
     try
     {
         Reference<text::XTextRange> xRange( getEndPos(), UNO_QUERY_THROW );
-        getPortion().mxText->insertTextContent( xRange, rxContent, sal_False );
+        getPortion().mxText->insertTextContent( xRange, rxContent, false );
         updateCurrHeight();
     }
     catch( Exception& )
@@ -854,7 +848,7 @@ void HeaderFooterParser::convertFontColor( const OUString& rColor )
             static_cast< double >( rColor.copy( 2 ).toInt32() ) / 100.0 );
     else
         // RGB color: RRGGBB
-        maFontModel.maColor.setRgb( rColor.toUInt32( 16 ) );
+        maFontModel.maColor.setRgb( ::Color(rColor.toUInt32( 16 )) );
 }
 
 void HeaderFooterParser::finalizePortion()
@@ -900,7 +894,7 @@ void PageSettingsConverter::writePageSettingsProperties(
         PropertySet& rPropSet, const PageSettingsModel& rModel, WorksheetType eSheetType )
 {
     // special handling for chart sheets
-    bool bChartSheet = eSheetType == SHEETTYPE_CHARTSHEET;
+    bool bChartSheet = eSheetType == WorksheetType::Chart;
 
     // printout scaling
     if( bChartSheet )
@@ -917,7 +911,7 @@ void PageSettingsConverter::writePageSettingsProperties(
     else
     {
         // scale may be 0 which indicates uninitialized
-        sal_Int16 nScale = (rModel.mbValidSettings && (rModel.mnScale > 0)) ? getLimitedValue< sal_Int16, sal_Int32 >( rModel.mnScale, 10, 400 ) : 100;
+        sal_Int16 nScale = (rModel.mnScale > 0) ? getLimitedValue< sal_Int16, sal_Int32 >( rModel.mnScale, 10, 400 ) : 100;
         rPropSet.setProperty( PROP_PageScale, nScale );
     }
 
@@ -933,7 +927,7 @@ void PageSettingsConverter::writePageSettingsProperties(
         awt::Size aSize;
         bool bValid = false;
 
-        if( (0 < rModel.mnPaperSize) )
+        if( 0 < rModel.mnPaperSize )
         {
             const msfilter::util::ApiPaperSize& rPaperSize = msfilter::util::PaperSizeConv::getApiSizeForMSPaperSizeIndex(  rModel.mnPaperSize );
             aSize = awt::Size( rPaperSize.mnWidth, rPaperSize.mnHeight );
@@ -968,12 +962,12 @@ void PageSettingsConverter::writePageSettingsProperties(
     aPropMap.setProperty( PROP_CenterVertically, rModel.mbVerCenter);
     aPropMap.setProperty( PROP_PrintGrid, (!bChartSheet && rModel.mbPrintGrid));     // no gridlines in chart sheets
     aPropMap.setProperty( PROP_PrintHeaders, (!bChartSheet && rModel.mbPrintHeadings)); // no column/row headings in chart sheets
-    aPropMap.setProperty( PROP_LeftMargin, rUnitConv.scaleToMm100( rModel.mfLeftMargin, UNIT_INCH ));
-    aPropMap.setProperty( PROP_RightMargin, rUnitConv.scaleToMm100( rModel.mfRightMargin, UNIT_INCH ));
+    aPropMap.setProperty( PROP_LeftMargin, rUnitConv.scaleToMm100( rModel.mfLeftMargin, Unit::Inch ));
+    aPropMap.setProperty( PROP_RightMargin, rUnitConv.scaleToMm100( rModel.mfRightMargin, Unit::Inch ));
     // #i23296# In Calc, "TopMargin" property is distance to top of header if enabled
-    aPropMap.setProperty( PROP_TopMargin, rUnitConv.scaleToMm100( maHeaderData.mbHasContent ? rModel.mfHeaderMargin : rModel.mfTopMargin, UNIT_INCH ));
+    aPropMap.setProperty( PROP_TopMargin, rUnitConv.scaleToMm100( maHeaderData.mbHasContent ? rModel.mfHeaderMargin : rModel.mfTopMargin, Unit::Inch ));
     // #i23296# In Calc, "BottomMargin" property is distance to bottom of footer if enabled
-    aPropMap.setProperty( PROP_BottomMargin, rUnitConv.scaleToMm100( maFooterData.mbHasContent ? rModel.mfFooterMargin : rModel.mfBottomMargin, UNIT_INCH ));
+    aPropMap.setProperty( PROP_BottomMargin, rUnitConv.scaleToMm100( maFooterData.mbHasContent ? rModel.mfFooterMargin : rModel.mfBottomMargin, Unit::Inch ));
     aPropMap.setProperty( PROP_HeaderIsOn, maHeaderData.mbHasContent);
     aPropMap.setProperty( PROP_HeaderIsShared, maHeaderData.mbShareOddEven);
     aPropMap.setProperty( PROP_HeaderIsDynamicHeight, maHeaderData.mbDynamicHeight);
@@ -985,10 +979,10 @@ void PageSettingsConverter::writePageSettingsProperties(
     aPropMap.setProperty( PROP_FooterHeight, maFooterData.mnHeight);
     aPropMap.setProperty( PROP_FooterBodyDistance, maFooterData.mnBodyDist);
     // background image
-    if( !rModel.maGraphicUrl.isEmpty() )
+    if (rModel.mxGraphic.is())
     {
-        aPropMap.setProperty( PROP_BackGraphicURL, rModel.maGraphicUrl);
-        aPropMap.setProperty( PROP_BackGraphicLocation, css::style::GraphicLocation_TILED);
+        aPropMap.setProperty(PROP_BackGraphic, rModel.mxGraphic);
+        aPropMap.setProperty(PROP_BackGraphicLocation, css::style::GraphicLocation_TILED);
     }
 
     rPropSet.setProperties( aPropMap );
@@ -1018,7 +1012,7 @@ void PageSettingsConverter::convertHeaderFooterData(
         /*  Calc contains distance between bottom of header and top of page
             body in "HeaderBodyDistance" property, and distance between bottom
             of page body and top of footer in "FooterBodyDistance" property */
-        orHFData.mnBodyDist = getUnitConverter().scaleToMm100( fPageMargin - fContentMargin, UNIT_INCH ) - orHFData.mnHeight;
+        orHFData.mnBodyDist = getUnitConverter().scaleToMm100( fPageMargin - fContentMargin, Unit::Inch ) - orHFData.mnHeight;
         /*  #i23296# Distance less than 0 means, header or footer overlays page
             body. As this is not possible in Calc, set fixed header or footer
             height (crop header/footer) to get correct top position of page body. */
@@ -1045,7 +1039,7 @@ sal_Int32 PageSettingsConverter::writeHeaderFooter(
         {
             double fTotalHeight = mxHFParser->parse( xHFContent, rContent );
             rPropSet.setProperty( nPropId, xHFContent );
-            nHeight = getUnitConverter().scaleToMm100( fTotalHeight, UNIT_POINT );
+            nHeight = getUnitConverter().scaleToMm100( fTotalHeight, Unit::Point );
         }
     }
     return nHeight;

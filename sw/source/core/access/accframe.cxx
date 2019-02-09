@@ -34,9 +34,9 @@
 #include <fldbas.hxx>
 #include <dcontact.hxx>
 #include <accmap.hxx>
-#include <accfrmobjslist.hxx>
-#include <accfrmobjmap.hxx>
-#include <accframe.hxx>
+#include "accfrmobjslist.hxx"
+#include "accfrmobjmap.hxx"
+#include "accframe.hxx"
 
 using namespace sw::access;
 
@@ -231,7 +231,7 @@ SwAccessibleChild SwAccessibleFrame::GetChildAtPixel( const SwRect& rVisArea,
                 SwRect aLogBounds( rLower.GetBounds( rAccMap ) );
                 if( !aLogBounds.IsEmpty() )
                 {
-                    Rectangle aPixBounds( rAccMap.CoreToPixel( aLogBounds.SVRect() ) );
+                    tools::Rectangle aPixBounds( rAccMap.CoreToPixel( aLogBounds.SVRect() ) );
                     if( aPixBounds.IsInside( rPixPos ) )
                         aRet = rLower;
                 }
@@ -262,7 +262,7 @@ SwAccessibleChild SwAccessibleFrame::GetChildAtPixel( const SwRect& rVisArea,
                 SwRect aLogBounds( rLower.GetBounds( rAccMap ) );
                 if( !aLogBounds.IsEmpty() )
                 {
-                    Rectangle aPixBounds( rAccMap.CoreToPixel( aLogBounds.SVRect() ) );
+                    tools::Rectangle aPixBounds( rAccMap.CoreToPixel( aLogBounds.SVRect() ) );
                     if( aPixBounds.IsInside( rPixPos ) )
                         aRet = rLower;
                 }
@@ -283,7 +283,7 @@ SwAccessibleChild SwAccessibleFrame::GetChildAtPixel( const SwRect& rVisArea,
 void SwAccessibleFrame::GetChildren( SwAccessibleMap& rAccMap,
                                      const SwRect& rVisArea,
                                      const SwFrame& rFrame,
-                                     ::std::list< SwAccessibleChild >& rChildren,
+                                     std::list< SwAccessibleChild >& rChildren,
                                      bool bInPagePreview )
 {
     if( SwAccessibleChildMap::IsSortingRequired( rFrame ) )
@@ -342,7 +342,7 @@ SwRect SwAccessibleFrame::GetBounds( const SwAccessibleMap& rAccMap,
     return aBounds;
 }
 
-bool SwAccessibleFrame::IsEditable( SwViewShell *pVSh ) const
+bool SwAccessibleFrame::IsEditable( SwViewShell const *pVSh ) const
 {
     const SwFrame *pFrame = GetFrame();
     if( !pFrame )
@@ -359,7 +359,7 @@ bool SwAccessibleFrame::IsEditable( SwViewShell *pVSh ) const
     return true;
 }
 
-bool SwAccessibleFrame::IsOpaque( SwViewShell *pVSh ) const
+bool SwAccessibleFrame::IsOpaque( SwViewShell const *pVSh ) const
 {
     SwAccessibleChild aFrame( GetFrame() );
     if( !aFrame.GetSwFrame() )
@@ -415,9 +415,9 @@ SwAccessibleFrame::SwAccessibleFrame( const SwRect& rVisArea,
                                       bool bIsPagePreview ) :
     maVisArea( rVisArea ),
     mpFrame( pF ),
-    mbIsInPagePreview( bIsPagePreview ),
-    bIsAccDocUse( false )
+    mbIsInPagePreview( bIsPagePreview )
 {
+    assert(mpFrame);
 }
 
 SwAccessibleFrame::~SwAccessibleFrame()
@@ -433,7 +433,7 @@ const SwFrame* SwAccessibleFrame::GetParent( const SwAccessibleChild& rFrameOrOb
 OUString SwAccessibleFrame::GetFormattedPageNumber() const
 {
     sal_uInt16 nPageNum = GetFrame()->GetVirtPageNum();
-    sal_uInt32 nFormat = GetFrame()->FindPageFrame()->GetPageDesc()
+    SvxNumType nFormat = GetFrame()->FindPageFrame()->GetPageDesc()
                               ->GetNumType().GetNumberingType();
     if( SVX_NUM_NUMBER_NONE == nFormat )
         nFormat = SVX_NUM_ARABIC;
@@ -460,7 +460,7 @@ sal_Int32 SwAccessibleFrame::GetChildIndex( SwAccessibleMap& rAccMap,
     sal_Int32 nPos = 0;
     return GetChildIndex( rAccMap, maVisArea, *mpFrame, rChild, nPos, IsInPagePreview() )
            ? nPos
-           : -1L;
+           : -1;
 }
 
 sw::access::SwAccessibleChild SwAccessibleFrame::GetChildAtPixel(
@@ -471,7 +471,7 @@ sw::access::SwAccessibleChild SwAccessibleFrame::GetChildAtPixel(
 }
 
 void SwAccessibleFrame::GetChildren( SwAccessibleMap& rAccMap,
-                                     ::std::list< sw::access::SwAccessibleChild >& rChildren ) const
+                                     std::list< sw::access::SwAccessibleChild >& rChildren ) const
 {
     GetChildren( rAccMap, maVisArea, *mpFrame, rChildren, IsInPagePreview() );
 }

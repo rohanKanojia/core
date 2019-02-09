@@ -19,18 +19,16 @@
 
 #include <unotools/textsearch.hxx>
 
-#include "chgviset.hxx"
-#include "rechead.hxx"
-#include "chgtrack.hxx"
-#include "document.hxx"
+#include <chgviset.hxx>
+#include <rechead.hxx>
+#include <chgtrack.hxx>
+#include <document.hxx>
 
 ScChangeViewSettings::~ScChangeViewSettings()
 {
-    delete pCommentSearcher;
 }
 
 ScChangeViewSettings::ScChangeViewSettings( const ScChangeViewSettings& r ):
-    pCommentSearcher(nullptr),
     aFirstDateTime( DateTime::EMPTY ),
     aLastDateTime( DateTime::EMPTY )
 {
@@ -46,7 +44,6 @@ ScChangeViewSettings::ScChangeViewSettings( const ScChangeViewSettings& r ):
     bIsAuthor       =r.bIsAuthor;
     bIsComment      =r.bIsComment;
     bIsRange        =r.bIsRange;
-    bEveryoneButMe  =r.bEveryoneButMe;
     bShowAccepted   =r.bShowAccepted;
     bShowRejected   =r.bShowRejected;
     mbIsActionRange = r.mbIsActionRange;
@@ -70,7 +67,6 @@ ScChangeViewSettings& ScChangeViewSettings::operator=( const ScChangeViewSetting
     bIsAuthor       =r.bIsAuthor;
     bIsComment      =r.bIsComment;
     bIsRange        =r.bIsRange;
-    bEveryoneButMe  =r.bEveryoneButMe;
     bShowAccepted   =r.bShowAccepted;
     bShowRejected   =r.bShowRejected;
     mbIsActionRange = r.mbIsActionRange;
@@ -96,18 +92,14 @@ bool ScChangeViewSettings::IsValidComment(const OUString* pCommentStr) const
 void ScChangeViewSettings::SetTheComment(const OUString& rString)
 {
     aComment = rString;
-    if(pCommentSearcher)
-    {
-        delete pCommentSearcher;
-        pCommentSearcher=nullptr;
-    }
+    pCommentSearcher.reset();
 
     if(!rString.isEmpty())
     {
         utl::SearchParam aSearchParam( rString,
-            utl::SearchParam::SRCH_REGEXP,false );
+            utl::SearchParam::SearchType::Regexp,false );
 
-        pCommentSearcher = new utl::TextSearch( aSearchParam, *ScGlobal::pCharClass );
+        pCommentSearcher.reset( new utl::TextSearch( aSearchParam, *ScGlobal::pCharClass ) );
     }
 }
 
@@ -146,7 +138,7 @@ void ScChangeViewSettings::AdjustDateMode( const ScDocument& rDoc )
                 aFirstDateTime.SetTime( 0 );
             }
             aLastDateTime = Date( Date::SYSTEM );
-            aLastDateTime.SetYear( aLastDateTime.GetYear() + 100 );
+            aLastDateTime.AddYears( 100 );
         }
         break;
         default:

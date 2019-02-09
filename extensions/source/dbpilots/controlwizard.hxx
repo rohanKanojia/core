@@ -30,9 +30,10 @@
 #include <vcl/button.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/combobox.hxx>
+#include <vcl/weld.hxx>
 #include "dbptypes.hxx"
-#include "dbpresid.hrc"
-#include "componentmodule.hxx"
+#include <strings.hrc>
+#include <componentmodule.hxx>
 #include "wizardcontext.hxx"
 
 class ResId;
@@ -66,7 +67,7 @@ namespace dbp
                                         getFormConnection() const;
     public:
         OControlWizardPage( OControlWizard* _pParent, const OString& rID, const OUString& rUIXMLDescription );
-        virtual ~OControlWizardPage();
+        virtual ~OControlWizardPage() override;
         virtual void dispose() override;
 
     protected:
@@ -101,32 +102,32 @@ namespace dbp
             const css::uno::Reference< css::beans::XPropertySet >& _rxObjectModel,
             const css::uno::Reference< css::uno::XComponentContext >& _rxContext
         );
-        virtual ~OControlWizard();
+        virtual ~OControlWizard() override;
 
-        // make the some base class methods public
-        bool    travelNext() { return OControlWizard_Base::travelNext(); }
+        // make the same base class methods public
+        using OControlWizard_Base::travelNext;
 
     public:
-        css::uno::Reference< css::uno::XComponentContext >
+        const css::uno::Reference< css::uno::XComponentContext >&
             getComponentContext() const { return m_xContext; }
 
         const OControlWizardContext&    getContext() const { return m_aContext; }
         bool                        updateContext(const OAccessRegulator&);
-        void                            setFormConnection(const OAccessRegulator&, const css::uno::Reference< css::sdbc::XConnection >& _rxConn, bool _bAutoDispose = true );
+        void                            setFormConnection(const OAccessRegulator&, const css::uno::Reference< css::sdbc::XConnection >& _rxConn, bool _bAutoDispose );
             css::uno::Reference< css::sdbc::XConnection >
                                         getFormConnection(const OAccessRegulator&) const;
 
         /** returns the com.sun.star.task.InteractionHandler
             @param  _pWindow    The window will be used when an error message has to be shown.
         */
-        css::uno::Reference< css::task::XInteractionHandler > getInteractionHandler(vcl::Window* _pWindow) const;
+        css::uno::Reference< css::task::XInteractionHandler > getInteractionHandler(weld::Window* _pWindow) const;
 
     protected:
         // initialize the derivees settings (which have to be derived from OControlWizardSettings)
         // with some common data extracted from the control model
         void initControlSettings(OControlWizardSettings* _pSettings);
         // commit the control-relevant settings
-        void commitControlSettings(OControlWizardSettings* _pSettings);
+        void commitControlSettings(OControlWizardSettings const * _pSettings);
 
         bool needDatasourceSelection();
 
@@ -147,7 +148,7 @@ namespace dbp
         void implDetermineShape();
 
         // made private. Not to be used by derived (or external) classes
-        virtual void ActivatePage() override;
+        using OControlWizard_Base::ActivatePage;
     };
 
 

@@ -34,7 +34,7 @@ class XMLTextFrameHyperlinkContext : public SvXMLImportContext
     OUString              sHRef;
     OUString              sName;
     OUString              sTargetFrameName;
-    css::text::TextContentAnchorType eDefaultAnchorType;
+    css::text::TextContentAnchorType const eDefaultAnchorType;
     SvXMLImportContextRef   xFrameContext;
     bool                    bMap;
 
@@ -46,11 +46,11 @@ public:
             const OUString& rLName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList,
             css::text::TextContentAnchorType eDefaultAnchorType );
-    virtual ~XMLTextFrameHyperlinkContext();
+    virtual ~XMLTextFrameHyperlinkContext() override;
 
     virtual void EndElement() override;
 
-    SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                 const OUString& rLocalName,
                  const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
 

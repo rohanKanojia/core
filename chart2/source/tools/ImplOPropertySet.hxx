@@ -20,11 +20,12 @@
 #define INCLUDED_CHART2_SOURCE_TOOLS_IMPLOPROPERTYSET_HXX
 
 #include <com/sun/star/beans/PropertyState.hpp>
-#include <com/sun/star/uno/Sequence.hxx>
-#include <com/sun/star/style/XStyle.hpp>
+#include <com/sun/star/uno/Reference.h>
 
 #include <map>
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace style { class XStyle; } } } }
 
 namespace property
 {
@@ -43,10 +44,10 @@ public:
         GetPropertyStateByHandle( sal_Int32 nHandle ) const;
 
     css::uno::Sequence< css::beans::PropertyState >
-        GetPropertyStatesByHandle( const ::std::vector< sal_Int32 > & aHandles ) const;
+        GetPropertyStatesByHandle( const std::vector< sal_Int32 > & aHandles ) const;
 
     void SetPropertyToDefault( sal_Int32 nHandle );
-    void SetPropertiesToDefault( const ::std::vector< sal_Int32 > & aHandles );
+    void SetPropertiesToDefault( const std::vector< sal_Int32 > & aHandles );
     void SetAllPropertiesToDefault();
 
     /** @param rValue is set to the value for the property given in nHandle.  If
@@ -65,16 +66,14 @@ public:
                                    const css::uno::Any & rValue );
 
     bool SetStyle( const css::uno::Reference< css::style::XStyle > & xStyle );
-    css::uno::Reference< css::style::XStyle >
+    const css::uno::Reference< css::style::XStyle >&
         GetStyle() const { return m_xStyle;}
 
     typedef
-        ::std::map< sal_Int32, css::uno::Any >
+        std::map< sal_Int32, css::uno::Any >
         tPropertyMap;
 
 private:
-    void cloneInterfaceProperties();
-
     tPropertyMap    m_aProperties;
     css::uno::Reference< css::style::XStyle >
         m_xStyle;

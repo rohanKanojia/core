@@ -32,7 +32,7 @@
 #include <com/sun/star/text/SizeType.hpp>
 #include <com/sun/star/text/VertOrientation.hpp>
 #include <oox/token/tokens.hxx>
-#include <DomainMapper.hxx>
+#include "DomainMapper.hxx"
 
 using namespace com::sun::star;
 using namespace oox;
@@ -44,13 +44,6 @@ namespace dmapper {
         m_pCurrentInteropGrabBag(nullptr),
         m_pTableManager( nullptr )
     {
-    }
-
-
-    TablePropertiesHandler::~TablePropertiesHandler( )
-    {
-        // Do not delete the table manager... this will be done somewhere else
-        m_pTableManager = nullptr;
     }
 
     bool TablePropertiesHandler::sprm(Sprm & rSprm)
@@ -124,7 +117,7 @@ namespace dmapper {
                             nToken = XML_tableRowDelete;
                             break;
                     };
-                    TrackChangesHandlerPtr pTrackChangesHandler( new TrackChangesHandler( nToken ) );
+                    std::shared_ptr<TrackChangesHandler> pTrackChangesHandler( new TrackChangesHandler( nToken ) );
                     pProperties->resolve(*pTrackChangesHandler);
                     TablePropertyMapPtr pPropMap( new TablePropertyMap );
 
@@ -155,7 +148,7 @@ namespace dmapper {
                             throw lang::IllegalArgumentException("illegal redline token type", nullptr, 0);
                             break;
                     };
-                    TrackChangesHandlerPtr pTrackChangesHandler( new TrackChangesHandler( nToken ) );
+                    std::shared_ptr<TrackChangesHandler> pTrackChangesHandler( new TrackChangesHandler( nToken ) );
                     pProperties->resolve(*pTrackChangesHandler);
                     TablePropertyMapPtr pPropMap( new TablePropertyMap );
 
@@ -202,7 +195,7 @@ namespace dmapper {
                     {
                         beans::PropertyValue aValue;
                         aValue.Name = "vAlign";
-                        aValue.Value = uno::makeAny(aVertOrient);
+                        aValue.Value <<= aVertOrient;
                         m_pCurrentInteropGrabBag->push_back(aValue);
                     }
                 }
@@ -213,7 +206,7 @@ namespace dmapper {
                 writerfilter::Reference<Properties>::Pointer_t pProperties = rSprm.getProps();
                 if( pProperties.get())
                 {
-                    BorderHandlerPtr pBorderHandler(new BorderHandler(true));
+                    std::shared_ptr<BorderHandler> pBorderHandler(new BorderHandler(true));
                     if (m_pCurrentInteropGrabBag)
                         pBorderHandler->enableInteropGrabBag("tblBorders");
                     pProperties->resolve(*pBorderHandler);
@@ -243,14 +236,14 @@ namespace dmapper {
                 if( pProperties.get())
                 {
                     //in OOXML there's one set of borders at each cell (if there is any)
-                    std::shared_ptr< TDefTableHandler > pTDefTableHandler( new TDefTableHandler());
+                    tools::SvRef< TDefTableHandler > pTDefTableHandler( new TDefTableHandler());
                     if (m_pCurrentInteropGrabBag)
                         pTDefTableHandler->enableInteropGrabBag("tcBorders");
                     pProperties->resolve( *pTDefTableHandler );
                     if (m_pCurrentInteropGrabBag)
                         m_pCurrentInteropGrabBag->push_back(pTDefTableHandler->getInteropGrabBag());
                     TablePropertyMapPtr pCellPropMap( new TablePropertyMap );
-                    pTDefTableHandler->fillCellProperties( 0, pCellPropMap );
+                    pTDefTableHandler->fillCellProperties( pCellPropMap );
                     cellProps( pCellPropMap );
                 }
             }
@@ -261,7 +254,7 @@ namespace dmapper {
                     writerfilter::Reference<Properties>::Pointer_t pProperties = rSprm.getProps();
                     if (pProperties.get())
                     {
-                        CellMarginHandlerPtr pCellMarginHandler(new CellMarginHandler);
+                        std::shared_ptr<CellMarginHandler> pCellMarginHandler(new CellMarginHandler);
                         if (m_pCurrentInteropGrabBag)
                             pCellMarginHandler->enableInteropGrabBag("tcMar");
                         pProperties->resolve(*pCellMarginHandler);
@@ -280,17 +273,19 @@ namespace dmapper {
                     }
                 }
             break;
+/*          // tdf#123189 skip to keep MSO interoperability
             case NS_ooxml::LN_CT_TblPrBase_shd:
             {
                 writerfilter::Reference<Properties>::Pointer_t pProperties = rSprm.getProps();
                 if( pProperties.get())
                 {
-                    CellColorHandlerPtr pCellColorHandler( new CellColorHandler);
+                    std::shared_ptr<CellColorHandler> pCellColorHandler( new CellColorHandler);
                     pProperties->resolve( *pCellColorHandler );
                     TablePropertyMapPtr pTablePropMap( new TablePropertyMap );
                     insertTableProps( pCellColorHandler->getProperties() );
                 }
             }
+*/
             break;
             case NS_ooxml::LN_CT_TcPrBase_shd:
             {
@@ -299,7 +294,7 @@ namespace dmapper {
                 writerfilter::Reference<Properties>::Pointer_t pProperties = rSprm.getProps();
                 if( pProperties.get())
                 {
-                    CellColorHandlerPtr pCellColorHandler( new CellColorHandler );
+                    std::shared_ptr<CellColorHandler> pCellColorHandler( new CellColorHandler );
                     pCellColorHandler->enableInteropGrabBag("shd"); //enable to store shd unsupported props in grab bag
                     pProperties->resolve( *pCellColorHandler );
                     TablePropertyMapPtr pPropertyMap = pCellColorHandler->getProperties();
@@ -319,7 +314,7 @@ namespace dmapper {
                 writerfilter::Reference<Properties>::Pointer_t pProperties = rSprm.getProps();
                 if( pProperties.get())
                 {
-                    CellMarginHandlerPtr pCellMarginHandler( new CellMarginHandler );
+                    std::shared_ptr<CellMarginHandler> pCellMarginHandler( new CellMarginHandler );
                     if (m_pCurrentInteropGrabBag)
                         pCellMarginHandler->enableInteropGrabBag("tblCellMar");
                     pProperties->resolve( *pCellMarginHandler );
@@ -376,7 +371,7 @@ namespace dmapper {
                     {
                         beans::PropertyValue aValue;
                         aValue.Name = (nSprmId == NS_ooxml::LN_CT_TblPrBase_tblStyleRowBandSize ? OUString("tblStyleRowBandSize") : OUString("tblStyleColBandSize"));
-                        aValue.Value = uno::makeAny(nIntValue);
+                        aValue.Value <<= nIntValue;
                         m_pCurrentInteropGrabBag->push_back(aValue);
                     }
                     break;

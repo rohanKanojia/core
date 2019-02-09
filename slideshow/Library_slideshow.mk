@@ -29,9 +29,9 @@ $(eval $(call gb_Library_set_precompiled_header,slideshow,$(SRCDIR)/slideshow/in
 $(eval $(call gb_Library_use_externals,slideshow,\
 	boost_headers \
 ))
-ifeq ($(ENABLE_OPENGL),TRUE)
+ifeq ($(DISABLE_GUI),)
 $(eval $(call gb_Library_use_externals,slideshow,\
-     glew \
+     epoxy \
  ))
 endif
 
@@ -46,11 +46,11 @@ $(eval $(call gb_Library_use_libraries,slideshow,\
     cppu \
     cppuhelper \
     sal \
+    salhelper \
     svt \
     tl \
     utl \
     vcl \
-    $(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_set_componentfile,slideshow,slideshow/util/slideshow))

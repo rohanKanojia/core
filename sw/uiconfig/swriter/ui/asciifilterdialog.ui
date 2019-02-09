@@ -1,12 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.0 -->
-  <!-- interface-requires LibreOffice 1.0 -->
+<!-- Generated with glade 3.22.1 -->
+<interface domain="sw">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="AsciiFilterDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">ASCII Filter Options</property>
+    <property name="title" translatable="yes" context="asciifilterdialog|AsciiFilterDialog">ASCII Filter Options</property>
+    <property name="modal">True</property>
+    <property name="default_width">0</property>
+    <property name="default_height">0</property>
     <property name="type_hint">dialog</property>
+    <child>
+      <placeholder/>
+    </child>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
         <property name="can_focus">False</property>
@@ -58,6 +64,7 @@
                 <property name="expand">False</property>
                 <property name="fill">True</property>
                 <property name="position">2</property>
+                <property name="secondary">True</property>
               </packing>
             </child>
           </object>
@@ -93,67 +100,59 @@
                       <object class="GtkLabel" id="label2">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">0</property>
-                        <property name="label" translatable="yes">_Character set</property>
+                        <property name="halign">end</property>
+                        <property name="label" translatable="yes" context="asciifilterdialog|label2">_Character set:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">charset</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">0</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkLabel" id="fontft">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">0</property>
-                        <property name="label" translatable="yes">Default fonts</property>
+                        <property name="halign">end</property>
+                        <property name="label" translatable="yes" context="asciifilterdialog|fontft">Default fonts:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">font</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">1</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkLabel" id="languageft">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">0</property>
-                        <property name="label" translatable="yes">Lan_guage</property>
+                        <property name="halign">end</property>
+                        <property name="label" translatable="yes" context="asciifilterdialog|languageft">Lan_guage:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">language</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">2</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkLabel" id="label5">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">0</property>
-                        <property name="label" translatable="yes">_Paragraph break</property>
+                        <property name="halign">end</property>
+                        <property name="label" translatable="yes" context="asciifilterdialog|label5">_Paragraph break:</property>
                         <property name="use_underline">True</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">3</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="svxlo-SvxTextEncodingBox" id="charset">
+                      <object class="GtkComboBoxText" id="charset">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="hexpand">True</property>
@@ -161,8 +160,6 @@
                       <packing>
                         <property name="left_attach">1</property>
                         <property name="top_attach">0</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
@@ -170,27 +167,10 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="hexpand">True</property>
-                        <property name="entry_text_column">0</property>
-                        <property name="id_column">1</property>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
                         <property name="top_attach">1</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="svxcorelo-SvxLanguageBox" id="language">
-                        <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="hexpand">True</property>
-                      </object>
-                      <packing>
-                        <property name="left_attach">1</property>
-                        <property name="top_attach">2</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
@@ -198,10 +178,10 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="hexpand">True</property>
-                        <property name="homogeneous">True</property>
+                        <property name="spacing">12</property>
                         <child>
                           <object class="GtkRadioButton" id="crlf">
-                            <property name="label" translatable="yes">_CR &amp; LF</property>
+                            <property name="label" translatable="yes" context="asciifilterdialog|crlf">_CR &amp; LF</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -209,7 +189,6 @@
                             <property name="xalign">0</property>
                             <property name="active">True</property>
                             <property name="draw_indicator">True</property>
-                            <property name="group">cr</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -219,7 +198,7 @@
                         </child>
                         <child>
                           <object class="GtkRadioButton" id="cr">
-                            <property name="label" translatable="yes">C_R</property>
+                            <property name="label" translatable="yes" context="asciifilterdialog|cr">C_R</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -227,7 +206,7 @@
                             <property name="use_underline">True</property>
                             <property name="xalign">0</property>
                             <property name="draw_indicator">True</property>
-                            <property name="group">lf</property>
+                            <property name="group">crlf</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -237,7 +216,7 @@
                         </child>
                         <child>
                           <object class="GtkRadioButton" id="lf">
-                            <property name="label" translatable="yes">_LF</property>
+                            <property name="label" translatable="yes" context="asciifilterdialog|lf">_LF</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -257,9 +236,42 @@
                       <packing>
                         <property name="left_attach">1</property>
                         <property name="top_attach">3</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
+                    </child>
+                    <child>
+                      <object class="GtkComboBoxText" id="language">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="hexpand">True</property>
+                        <property name="has_entry">True</property>
+                        <child internal-child="entry">
+                          <object class="GtkEntry">
+                            <property name="can_focus">True</property>
+                            <property name="activates_default">True</property>
+                          </object>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="left_attach">1</property>
+                        <property name="top_attach">2</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkCheckButton" id="includebom">
+                        <property name="label" translatable="yes" context="asciifilterdialog|includebom">Include byte-order mark</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">True</property>
+                        <property name="receives_default">False</property>
+                        <property name="halign">start</property>
+                        <property name="draw_indicator">True</property>
+                      </object>
+                      <packing>
+                        <property name="left_attach">1</property>
+                        <property name="top_attach">4</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <placeholder/>
                     </child>
                   </object>
                 </child>
@@ -269,7 +281,7 @@
               <object class="GtkLabel" id="label1">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Properties</property>
+                <property name="label" translatable="yes" context="asciifilterdialog|label1">Properties</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -285,9 +297,9 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">cancel</action-widget>
-      <action-widget response="0">help</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
   </object>
 </interface>

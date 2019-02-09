@@ -17,80 +17,69 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "workbookhelper.hxx"
+#include <workbookhelper.hxx>
 
 #include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/container/XIndexContainer.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
-#include <com/sun/star/document/XActionLockable.hpp>
-#include <com/sun/star/sheet/XDatabaseRange.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <com/sun/star/sheet/XDatabaseRanges.hpp>
-#include <com/sun/star/sheet/XUnnamedDatabaseRanges.hpp>
-#include <com/sun/star/sheet/XNamedRange.hpp>
-#include <com/sun/star/sheet/XNamedRanges.hpp>
 #include <com/sun/star/sheet/XSpreadsheet.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/sheet/NamedRangeFlag.hpp>
-#include <com/sun/star/style/XStyle.hpp>
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
-#include <com/sun/star/table/CellAddress.hpp>
-#include <com/sun/star/container/XNamed.hpp>
 #include <com/sun/star/document/XDocumentProperties.hpp>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
+#include <com/sun/star/document/XViewDataSupplier.hpp>
 #include <osl/thread.h>
 #include <oox/helper/progressbar.hxx>
 #include <oox/helper/propertyset.hxx>
 #include <oox/ole/vbaproject.hxx>
-#include <vcl/msgbox.hxx>
-#include "addressconverter.hxx"
-#include "biffinputstream.hxx"
-#include "biffcodec.hxx"
-#include "connectionsbuffer.hxx"
-#include "defnamesbuffer.hxx"
-#include "excelchartconverter.hxx"
-#include "excelfilter.hxx"
-#include "externallinkbuffer.hxx"
-#include "formulaparser.hxx"
-#include "pagesettings.hxx"
-#include "pivotcachebuffer.hxx"
-#include "pivottablebuffer.hxx"
-#include "scenariobuffer.hxx"
-#include "sharedstringsbuffer.hxx"
-#include "stylesbuffer.hxx"
-#include "tablebuffer.hxx"
-#include "themebuffer.hxx"
-#include "unitconverter.hxx"
-#include "viewsettings.hxx"
-#include "workbooksettings.hxx"
-#include "worksheetbuffer.hxx"
-#include "scmod.hxx"
-#include "docsh.hxx"
-#include "document.hxx"
-#include "docuno.hxx"
-#include "rangenam.hxx"
-#include "tokenarray.hxx"
-#include "tokenuno.hxx"
-#include "convuno.hxx"
-#include "dbdata.hxx"
-#include "datauno.hxx"
-#include "globalnames.hxx"
-#include "documentimport.hxx"
-#include "drwlayer.hxx"
-#include "globstr.hrc"
+#include <oox/token/properties.hxx>
+#include <addressconverter.hxx>
+#include <connectionsbuffer.hxx>
+#include <defnamesbuffer.hxx>
+#include <excelchartconverter.hxx>
+#include <excelfilter.hxx>
+#include <externallinkbuffer.hxx>
+#include <formulaparser.hxx>
+#include <pagesettings.hxx>
+#include <pivotcachebuffer.hxx>
+#include <pivottablebuffer.hxx>
+#include <scenariobuffer.hxx>
+#include <sharedstringsbuffer.hxx>
+#include <stylesbuffer.hxx>
+#include <tablebuffer.hxx>
+#include <themebuffer.hxx>
+#include <unitconverter.hxx>
+#include <viewsettings.hxx>
+#include <workbooksettings.hxx>
+#include <worksheetbuffer.hxx>
+#include <docsh.hxx>
+#include <document.hxx>
+#include <docuno.hxx>
+#include <rangenam.hxx>
+#include <tokenarray.hxx>
+#include <tokenuno.hxx>
+#include <dbdata.hxx>
+#include <datauno.hxx>
+#include <globalnames.hxx>
+#include <documentimport.hxx>
+#include <drwlayer.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
 
-#include "formulabuffer.hxx"
-#include <vcl/mapmod.hxx>
-#include "editutil.hxx"
+#include <formulabuffer.hxx>
+#include <editutil.hxx>
 #include <editeng/editstat.hxx>
-
-#include <comphelper/processfactory.hxx>
-#include <officecfg/Office/Calc.hxx>
+#include <unotools/charclass.hxx>
+#include <ViewSettingsSequenceDefines.hxx>
 
 #include <memory>
 
 namespace oox {
 namespace xls {
 
-using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::lang;
@@ -98,6 +87,7 @@ using namespace ::com::sun::star::sheet;
 using namespace ::com::sun::star::style;
 using namespace ::com::sun::star::table;
 using namespace ::com::sun::star::uno;
+using namespace ::com::sun::star::beans;
 
 using ::oox::core::FilterBase;
 using ::oox::core::FragmentHandler;
@@ -121,33 +111,31 @@ public:
                         ~WorkbookGlobals();
 
     /** Returns true, if this helper refers to a valid document. */
-    inline bool         isValid() const { return mxDoc.is(); }
+    bool         isValid() const { return mxDoc.is(); }
 
     // filter -----------------------------------------------------------------
 
     /** Returns the base filter object (base class of all filters). */
-    inline FilterBase&  getBaseFilter() const { return mrBaseFilter; }
+    FilterBase&  getBaseFilter() const { return mrBaseFilter; }
     /** Returns the filter progress bar. */
-    inline SegmentProgressBar& getProgressBar() const { return *mxProgressBar; }
-    /** Returns the file type of the current filter. */
-    inline FilterType   getFilterType() const { return meFilterType; }
-    /** Returns true, if the file is a multi-sheet document, or false if single-sheet. */
-    inline bool         isWorkbookFile() const { return mbWorkbook; }
+    SegmentProgressBar& getProgressBar() const { return *mxProgressBar; }
     /** Returns the VBA project storage. */
-    inline StorageRef   getVbaProjectStorage() const { return mxVbaPrjStrg; }
+    const StorageRef&   getVbaProjectStorage() const { return mxVbaPrjStrg; }
     /** Returns the index of the current Calc sheet, if filter currently processes a sheet. */
-    inline sal_Int16    getCurrentSheetIndex() const { return mnCurrSheet; }
+    sal_Int16    getCurrentSheetIndex() const { return mnCurrSheet; }
+    /** Returns true when reading a file generated by a known good generator. */
+    bool         isGeneratorKnownGood() const { return mbGeneratorKnownGood; }
 
     /** Sets the VBA project storage used to import VBA source code and forms. */
-    inline void         setVbaProjectStorage( const StorageRef& rxVbaPrjStrg ) { mxVbaPrjStrg = rxVbaPrjStrg; }
+    void         setVbaProjectStorage( const StorageRef& rxVbaPrjStrg ) { mxVbaPrjStrg = rxVbaPrjStrg; }
     /** Sets the index of the current Calc sheet, if filter currently processes a sheet. */
-    inline void         setCurrentSheetIndex( sal_Int16 nSheet ) { mnCurrSheet = nSheet; }
+    void         setCurrentSheetIndex( SCTAB nSheet ) { mnCurrSheet = nSheet; }
 
     // document model ---------------------------------------------------------
 
-    inline ScEditEngineDefaulter& getEditEngine() const
+    ScEditEngineDefaulter& getEditEngine() const
     {
-        return *mxEditEngine.get();
+        return *mxEditEngine;
     }
 
     ScDocument& getScDocument() { return *mpDoc; }
@@ -155,7 +143,7 @@ public:
     ScDocumentImport& getDocImport();
 
     /** Returns a reference to the source/target spreadsheet document model. */
-    inline Reference< XSpreadsheetDocument > getDocument() const { return mxDoc; }
+    const Reference< XSpreadsheetDocument >& getDocument() const { return mxDoc; }
     /** Returns the cell or page styles container from the Calc document. */
     Reference< XNameContainer > getStyleFamily( bool bPageStyles ) const;
     /** Returns the specified cell or page style from the Calc document. */
@@ -165,9 +153,9 @@ public:
     /** Creates and returns a defined name on the-fly in the correct Calc sheet. */
     ScRangeData* createLocalNamedRangeObject( OUString& orName, const Sequence< FormulaToken>& rTokens, sal_Int32 nIndex, sal_Int32 nNameFlags, sal_Int32 nTab );
     /** Creates and returns a database range on-the-fly in the Calc document. */
-    Reference< XDatabaseRange > createDatabaseRangeObject( OUString& orName, const CellRangeAddress& rRangeAddr );
+    Reference< XDatabaseRange > createDatabaseRangeObject( OUString& orName, const ScRange& rRangeAddr );
     /** Creates and returns an unnamed database range on-the-fly in the Calc document. */
-    Reference< XDatabaseRange > createUnnamedDatabaseRangeObject( const CellRangeAddress& rRangeAddr );
+    Reference< XDatabaseRange > createUnnamedDatabaseRangeObject( const ScRange& rRangeAddr );
     /** Finds the (already existing) database range of the given formula token index. */
     ScDBData* findDatabaseRangeByIndex( sal_uInt16 nIndex );
     /** Creates and returns a com.sun.star.style.Style object for cells or pages. */
@@ -177,62 +165,58 @@ public:
 
     // buffers ----------------------------------------------------------------
 
-    inline FormulaBuffer& getFormulaBuffer() const { return *mxFormulaBuffer; }
+    FormulaBuffer& getFormulaBuffer() const { return *mxFormulaBuffer; }
     /** Returns the global workbook settings object. */
-    inline WorkbookSettings& getWorkbookSettings() const { return *mxWorkbookSettings; }
+    WorkbookSettings& getWorkbookSettings() const { return *mxWorkbookSettings; }
     /** Returns the workbook and sheet view settings object. */
-    inline ViewSettings& getViewSettings() const { return *mxViewSettings; }
+    ViewSettings& getViewSettings() const { return *mxViewSettings; }
     /** Returns the worksheet buffer containing sheet names and properties. */
-    inline WorksheetBuffer& getWorksheets() const { return *mxWorksheets; }
+    WorksheetBuffer& getWorksheets() const { return *mxWorksheets; }
     /** Returns the office theme object read from the theme substorage. */
-    inline ThemeBuffer& getTheme() const { return *mxTheme; }
+    ThemeBuffer& getTheme() const { return *mxTheme; }
     /** Returns all cell formatting objects read from the styles substream. */
-    inline StylesBuffer& getStyles() const { return *mxStyles; }
+    StylesBuffer& getStyles() const { return *mxStyles; }
     /** Returns the shared strings read from the shared strings substream. */
-    inline SharedStringsBuffer& getSharedStrings() const { return *mxSharedStrings; }
+    SharedStringsBuffer& getSharedStrings() const { return *mxSharedStrings; }
     /** Returns the external links read from the external links substream. */
-    inline ExternalLinkBuffer& getExternalLinks() const { return *mxExtLinks; }
+    ExternalLinkBuffer& getExternalLinks() const { return *mxExtLinks; }
     /** Returns the defined names read from the workbook globals. */
-    inline DefinedNamesBuffer& getDefinedNames() const { return *mxDefNames; }
+    DefinedNamesBuffer& getDefinedNames() const { return *mxDefNames; }
     /** Returns the tables collection (equivalent to Calc's database ranges). */
-    inline TableBuffer& getTables() const { return *mxTables; }
+    TableBuffer& getTables() const { return *mxTables; }
     /** Returns the scenarios collection. */
-    inline ScenarioBuffer& getScenarios() const { return *mxScenarios; }
+    ScenarioBuffer& getScenarios() const { return *mxScenarios; }
     /** Returns the collection of external data connections. */
-    inline ConnectionsBuffer&  getConnections() const { return *mxConnections; }
+    ConnectionsBuffer&  getConnections() const { return *mxConnections; }
     /** Returns the collection of pivot caches. */
-    inline PivotCacheBuffer& getPivotCaches() const { return *mxPivotCaches; }
+    PivotCacheBuffer& getPivotCaches() const { return *mxPivotCaches; }
     /** Returns the collection of pivot tables. */
-    inline PivotTableBuffer& getPivotTables() { return *mxPivotTables; }
+    PivotTableBuffer& getPivotTables() { return *mxPivotTables; }
 
     // converters -------------------------------------------------------------
 
     /** Returns a shared import formula parser. */
-    inline FormulaParser& getFormulaParser() const { return *mxFmlaParser; }
+    FormulaParser& getFormulaParser() const { return *mxFmlaParser; }
     /** Returns an unshared import formula parser. */
-    inline FormulaParser* createFormulaParser() { return new FormulaParser(*this); }
+    FormulaParser* createFormulaParser() { return new FormulaParser(*this); }
     /** Returns the measurement unit converter. */
-    inline UnitConverter& getUnitConverter() const { return *mxUnitConverter; }
+    UnitConverter& getUnitConverter() const { return *mxUnitConverter; }
     /** Returns the converter for string to cell address/range conversion. */
-    inline AddressConverter& getAddressConverter() const { return *mxAddrConverter; }
+    AddressConverter& getAddressConverter() const { return *mxAddrConverter; }
     /** Returns the chart object converter. */
-    inline oox::drawingml::chart::ChartConverter* getChartConverter() const { return mxChartConverter.get(); }
+    oox::drawingml::chart::ChartConverter* getChartConverter() const { return mxChartConverter.get(); }
     /** Returns the page/print settings converter. */
-    inline PageSettingsConverter& getPageSettingsConverter() const { return *mxPageSettConverter; }
+    PageSettingsConverter& getPageSettingsConverter() const { return *mxPageSettConverter; }
 
     // OOXML/BIFF12 specific --------------------------------------------------
 
     /** Returns the base OOXML/BIFF12 filter object. */
-    inline XmlFilterBase& getOoxFilter() const { return *mpOoxFilter; }
+    XmlFilterBase& getOoxFilter() const { return *mpOoxFilter; }
 
     // BIFF2-BIFF8 specific ---------------------------------------------------
 
-    /** Returns the BIFF type in binary filter. */
-    inline BiffType     getBiff() const { return meBiff; }
     /** Returns the text encoding used to import/export byte strings. */
-    inline rtl_TextEncoding getTextEncoding() const { return meTextEnc; }
-    /** Returns the codec helper that stores the encoder/decoder object. */
-    inline BiffCodecHelper& getCodecHelper() { return *mxCodecHelper; }
+    rtl_TextEncoding getTextEncoding() const { return meTextEnc; }
 
 private:
     /** Initializes some basic members and sets needed document properties. */
@@ -262,7 +246,6 @@ private:
     typedef ::std::unique_ptr< AddressConverter >       AddressConvPtr;
     typedef ::std::unique_ptr< oox::drawingml::chart::ChartConverter > ExcelChartConvPtr;
     typedef ::std::unique_ptr< PageSettingsConverter >  PageSettConvPtr;
-    typedef ::std::unique_ptr< BiffCodecHelper >        BiffCodecHelperPtr;
 
     OUString            maCellStyles;           /// Style family name for cell styles.
     OUString            maPageStyles;           /// Style family name for page styles.
@@ -271,11 +254,10 @@ private:
     Reference< XSpreadsheetDocument > mxDoc;    /// Document model.
     FilterBase&         mrBaseFilter;           /// Base filter object.
     ExcelFilter&        mrExcelFilter;          /// Base object for registration of this structure.
-    FilterType          meFilterType;           /// File type of the filter.
     ProgressBarPtr      mxProgressBar;          /// The progress bar.
     StorageRef          mxVbaPrjStrg;           /// Storage containing the VBA project.
     sal_Int16           mnCurrSheet;            /// Current sheet index in Calc document.
-    bool                mbWorkbook;             /// True = multi-sheet file.
+    bool                mbGeneratorKnownGood;   /// Whether reading a file generated by Excel or Calc.
 
     // buffers
     FormulaBufferPtr    mxFormulaBuffer;
@@ -306,10 +288,7 @@ private:
     XmlFilterBase*      mpOoxFilter;            /// Base OOXML/BIFF12 filter object.
 
     // BIFF2-BIFF8 specific
-    BiffCodecHelperPtr  mxCodecHelper;          /// Encoder/decoder helper.
-    BiffType            meBiff;                 /// BIFF version for BIFF import/export.
     rtl_TextEncoding    meTextEnc;              /// BIFF byte string text encoding.
-    bool                mbHasCodePage;          /// True = CODEPAGE record exists in imported stream.
     ScDocument* mpDoc;
     ScDocShell* mpDocShell;
     std::unique_ptr<ScDocumentImport> mxDocImport;
@@ -318,9 +297,7 @@ private:
 WorkbookGlobals::WorkbookGlobals( ExcelFilter& rFilter ) :
     mrBaseFilter( rFilter ),
     mrExcelFilter( rFilter ),
-    meFilterType( FILTER_OOXML ),
     mpOoxFilter( &rFilter ),
-    meBiff( BIFF_UNKNOWN ),
     mpDoc(nullptr),
     mpDocShell(nullptr)
 {
@@ -399,7 +376,7 @@ OUString findUnusedName( const ScRangeName* pRangeName, const OUString& rSuggest
     OUString aNewName = rSuggestedName;
     sal_Int32 nIndex = 0;
     while(pRangeName->findByUpperName(ScGlobal::pCharClass->uppercase(aNewName)))
-        aNewName = OUStringBuffer(rSuggestedName).append( '_' ).append( nIndex++ ).makeStringAndClear();
+        aNewName = rSuggestedName + OUStringLiteral1('_') + OUString::number( nIndex++ );
 
     return aNewName;
 }
@@ -442,10 +419,10 @@ ScRangeData* WorkbookGlobals::createLocalNamedRangeObject(
     return pScRangeData;
 }
 
-Reference< XDatabaseRange > WorkbookGlobals::createDatabaseRangeObject( OUString& orName, const CellRangeAddress& rRangeAddr )
+Reference< XDatabaseRange > WorkbookGlobals::createDatabaseRangeObject( OUString& orName, const ScRange& rRangeAddr )
 {
     // validate cell range
-    CellRangeAddress aDestRange = rRangeAddr;
+    ScRange aDestRange = rRangeAddr;
     bool bValidRange = getAddressConverter().validateCellRange( aDestRange, true, true );
 
     // create database range and insert it into the Calc document
@@ -457,7 +434,9 @@ Reference< XDatabaseRange > WorkbookGlobals::createDatabaseRangeObject( OUString
         Reference< XDatabaseRanges > xDatabaseRanges( aDocProps.getAnyProperty( PROP_DatabaseRanges ), UNO_QUERY_THROW );
         orName = ContainerHelper::getUnusedName( xDatabaseRanges, orName, '_' );
         // create the database range
-        xDatabaseRanges->addNewByName( orName, aDestRange );
+        CellRangeAddress aApiRange( aDestRange.aStart.Tab(), aDestRange.aStart.Col(), aDestRange.aStart.Row(),
+                                    aDestRange.aEnd.Col(), aDestRange.aEnd.Row() );
+        xDatabaseRanges->addNewByName( orName, aApiRange );
         xDatabaseRange.set( xDatabaseRanges->getByName( orName ), UNO_QUERY );
     }
     catch( Exception& )
@@ -467,10 +446,10 @@ Reference< XDatabaseRange > WorkbookGlobals::createDatabaseRangeObject( OUString
     return xDatabaseRange;
 }
 
-Reference< XDatabaseRange > WorkbookGlobals::createUnnamedDatabaseRangeObject( const CellRangeAddress& rRangeAddr )
+Reference< XDatabaseRange > WorkbookGlobals::createUnnamedDatabaseRangeObject( const ScRange& rRangeAddr )
 {
     // validate cell range
-    CellRangeAddress aDestRange = rRangeAddr;
+    ScRange aDestRange = rRangeAddr;
     bool bValidRange = getAddressConverter().validateCellRange( aDestRange, true, true );
 
     // create database range and insert it into the Calc document
@@ -478,16 +457,14 @@ Reference< XDatabaseRange > WorkbookGlobals::createUnnamedDatabaseRangeObject( c
     if( bValidRange ) try
     {
         ScDocument& rDoc =  getScDocument();
-        if( rDoc.GetTableCount() <= aDestRange.Sheet )
+        if( rDoc.GetTableCount() <= aDestRange.aStart.Tab() )
             throw css::lang::IndexOutOfBoundsException();
-        ScRange aScRange;
-        ScUnoConversion::FillScRange(aScRange, aDestRange);
-        ScDBData* pNewDBData = new ScDBData( STR_DB_LOCAL_NONAME, aScRange.aStart.Tab(),
-                                       aScRange.aStart.Col(), aScRange.aStart.Row(),
-                                       aScRange.aEnd.Col(), aScRange.aEnd.Row() );
-        rDoc.SetAnonymousDBData( aScRange.aStart.Tab() , pNewDBData );
+        std::unique_ptr<ScDBData> pNewDBData(new ScDBData( STR_DB_LOCAL_NONAME, aDestRange.aStart.Tab(),
+                                       aDestRange.aStart.Col(), aDestRange.aStart.Row(),
+                                       aDestRange.aEnd.Col(), aDestRange.aEnd.Row() ));
+        rDoc.SetAnonymousDBData( aDestRange.aStart.Tab() , std::move(pNewDBData) );
         ScDocShell* pDocSh = static_cast< ScDocShell* >(rDoc.GetDocumentShell());
-        xDatabaseRange.set(new ScDatabaseRangeObj(pDocSh, aScRange.aStart.Tab()));
+        xDatabaseRange.set(new ScDatabaseRangeObj(pDocSh, aDestRange.aStart.Tab()));
     }
     catch( Exception& )
     {
@@ -539,9 +516,8 @@ void WorkbookGlobals::initialize()
     maCellStyleServ = "com.sun.star.style.CellStyle";
     maPageStyleServ = "com.sun.star.style.PageStyle";
     mnCurrSheet = -1;
-    mbWorkbook = true;
+    mbGeneratorKnownGood = false;
     meTextEnc = osl_getThreadTextEncoding();
-    mbHasCodePage = false;
 
     // the spreadsheet document
     mxDoc.set( mrBaseFilter.getModel(), UNO_QUERY );
@@ -561,12 +537,18 @@ void WorkbookGlobals::initialize()
 
     Reference< XDocumentPropertiesSupplier > xPropSupplier( mxDoc, UNO_QUERY);
     Reference< XDocumentProperties > xDocProps = xPropSupplier->getDocumentProperties();
+    const OUString aGenerator( xDocProps->getGenerator());
 
-    if (xDocProps->getGenerator().startsWithIgnoreAsciiCase("Microsoft"))
+    if (aGenerator.startsWithIgnoreAsciiCase("Microsoft"))
     {
+        mbGeneratorKnownGood = true;
         ScCalcConfig aCalcConfig = mpDoc->GetCalcConfig();
         aCalcConfig.SetStringRefSyntax( formula::FormulaGrammar::CONV_XL_A1 ) ;
         mpDoc->SetCalcConfig(aCalcConfig);
+    }
+    else if (aGenerator.startsWithIgnoreAsciiCase("LibreOffice"))
+    {
+        mbGeneratorKnownGood = true;
     }
 
     mxDocImport.reset(new ScDocumentImport(*mpDoc));
@@ -594,7 +576,7 @@ void WorkbookGlobals::initialize()
     // initialise edit engine
     ScDocument& rDoc = getScDocument();
     mxEditEngine.reset( new ScEditEngineDefaulter( rDoc.GetEnginePool() ) );
-    mxEditEngine->SetRefMapMode( MAP_100TH_MM );
+    mxEditEngine->SetRefMapMode(MapMode(MapUnit::Map100thMM));
     mxEditEngine->SetEditTextObjectPool( rDoc.GetEditPool() );
     mxEditEngine->SetUpdateMode( false );
     mxEditEngine->EnableUndo( false );
@@ -608,11 +590,11 @@ void WorkbookGlobals::initialize()
         // #i76026# disable Undo while loading the document
         mpDoc->EnableUndo(false);
         // #i79826# disable calculating automatic row height while loading the document
-        mpDoc->EnableAdjustHeight(false);
+        mpDoc->LockAdjustHeight();
         // disable automatic update of linked sheets and DDE links
         mpDoc->EnableExecuteLink(false);
 
-        mxProgressBar.reset( new SegmentProgressBar( mrBaseFilter.getStatusIndicator(), ScGlobal::GetRscString(STR_LOAD_DOC) ) );
+        mxProgressBar.reset( new SegmentProgressBar( mrBaseFilter.getStatusIndicator(), ScResId(STR_LOAD_DOC) ) );
         mxFmlaParser.reset( createFormulaParser() );
 
         //prevent unnecessary broadcasts and "half way listeners" as
@@ -621,20 +603,7 @@ void WorkbookGlobals::initialize()
     }
     else if( mrBaseFilter.isExportFilter() )
     {
-        mxProgressBar.reset( new SegmentProgressBar( mrBaseFilter.getStatusIndicator(), ScGlobal::GetRscString(STR_SAVE_DOC) ) );
-    }
-    // filter specific
-    switch( getFilterType() )
-    {
-        case FILTER_BIFF:
-            mxCodecHelper.reset( new BiffCodecHelper( *this ) );
-        break;
-
-        case FILTER_OOXML:
-        break;
-
-        case FILTER_UNKNOWN:
-        break;
+        mxProgressBar.reset( new SegmentProgressBar( mrBaseFilter.getStatusIndicator(), ScResId(STR_SAVE_DOC) ) );
     }
 }
 
@@ -648,7 +617,7 @@ void WorkbookGlobals::finalize()
         // enable automatic update of linked sheets and DDE links
         mpDoc->EnableExecuteLink(true);
         // #i79826# enable updating automatic row height after loading the document
-        mpDoc->EnableAdjustHeight(true);
+        mpDoc->UnlockAdjustHeight();
 
         // #i76026# enable Undo after loading the document
         mpDoc->EnableUndo(true);
@@ -683,19 +652,9 @@ FilterBase& WorkbookHelper::getBaseFilter() const
     return mrBookGlob.getBaseFilter();
 }
 
-FilterType WorkbookHelper::getFilterType() const
-{
-    return mrBookGlob.getFilterType();
-}
-
 SegmentProgressBar& WorkbookHelper::getProgressBar() const
 {
     return mrBookGlob.getProgressBar();
-}
-
-bool WorkbookHelper::isWorkbookFile() const
-{
-    return mrBookGlob.isWorkbookFile();
 }
 
 sal_Int16 WorkbookHelper::getCurrentSheetIndex() const
@@ -703,12 +662,17 @@ sal_Int16 WorkbookHelper::getCurrentSheetIndex() const
     return mrBookGlob.getCurrentSheetIndex();
 }
 
+bool WorkbookHelper::isGeneratorKnownGood() const
+{
+    return mrBookGlob.isGeneratorKnownGood();
+}
+
 void WorkbookHelper::setVbaProjectStorage( const StorageRef& rxVbaPrjStrg )
 {
     mrBookGlob.setVbaProjectStorage( rxVbaPrjStrg );
 }
 
-void WorkbookHelper::setCurrentSheetIndex( sal_Int16 nSheet )
+void WorkbookHelper::setCurrentSheetIndex( SCTAB nSheet )
 {
     mrBookGlob.setCurrentSheetIndex( nSheet );
 }
@@ -755,6 +719,38 @@ void WorkbookHelper::finalizeWorkbookImport()
         aCalcConfig.meStringRefAddressSyntax = formula::FormulaGrammar::CONV_A1_XL_A1;
         getScDocument().SetCalcConfig(aCalcConfig);
     }
+
+    // set selected sheet
+    Reference<XViewDataSupplier> xViewDataSupplier(getDocument(), UNO_QUERY);
+    if (xViewDataSupplier.is())
+    {
+        Reference<XIndexAccess> xIndexAccess(xViewDataSupplier->getViewData());
+        if (xIndexAccess.is() && xIndexAccess->getCount() > 0)
+        {
+            Sequence< PropertyValue > aSeq;
+            if (xIndexAccess->getByIndex(0) >>= aSeq)
+            {
+                sal_Int32 nCount (aSeq.getLength());
+                for (sal_Int32 i = 0; i < nCount; ++i)
+                {
+                    OUString sName(aSeq[i].Name);
+                    if (sName == SC_ACTIVETABLE)
+                    {
+                        OUString sTabName;
+                        if(aSeq[i].Value >>= sTabName)
+                        {
+                            SCTAB nTab(0);
+                            if (getScDocument().GetTable(sTabName, nTab))
+                            {
+                                getScDocument().SetVisibleTab(nTab);
+                                i = nCount;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 // document model -------------------------------------------------------------
@@ -784,7 +780,7 @@ ScEditEngineDefaulter& WorkbookHelper::getEditEngine() const
     return mrBookGlob.getEditEngine();
 }
 
-Reference< XSpreadsheetDocument > WorkbookHelper::getDocument() const
+const Reference< XSpreadsheetDocument > & WorkbookHelper::getDocument() const
 {
     return mrBookGlob.getDocument();
 }
@@ -817,13 +813,13 @@ Reference< XSpreadsheet > WorkbookHelper::getSheetFromDoc( const OUString& rShee
     return xSheet;
 }
 
-Reference< XCellRange > WorkbookHelper::getCellRangeFromDoc( const CellRangeAddress& rRange ) const
+Reference< XCellRange > WorkbookHelper::getCellRangeFromDoc( const ScRange& rRange ) const
 {
     Reference< XCellRange > xRange;
     try
     {
-        Reference< XSpreadsheet > xSheet( getSheetFromDoc( rRange.Sheet ), UNO_SET_THROW );
-        xRange = xSheet->getCellRangeByPosition( rRange.StartColumn, rRange.StartRow, rRange.EndColumn, rRange.EndRow );
+        Reference< XSpreadsheet > xSheet( getSheetFromDoc( rRange.aStart.Tab() ), UNO_SET_THROW );
+        xRange = xSheet->getCellRangeByPosition( rRange.aStart.Col(), rRange.aStart.Row(), rRange.aEnd.Col(), rRange.aEnd.Row() );
     }
     catch( Exception& )
     {
@@ -851,12 +847,12 @@ ScRangeData* WorkbookHelper::createLocalNamedRangeObject( OUString& orName, cons
     return mrBookGlob.createLocalNamedRangeObject( orName, rTokens, nIndex, nNameFlags, nTab );
 }
 
-Reference< XDatabaseRange > WorkbookHelper::createDatabaseRangeObject( OUString& orName, const CellRangeAddress& rRangeAddr ) const
+Reference< XDatabaseRange > WorkbookHelper::createDatabaseRangeObject( OUString& orName, const ScRange& rRangeAddr ) const
 {
     return mrBookGlob.createDatabaseRangeObject( orName, rRangeAddr );
 }
 
-Reference< XDatabaseRange > WorkbookHelper::createUnnamedDatabaseRangeObject( const CellRangeAddress& rRangeAddr ) const
+Reference< XDatabaseRange > WorkbookHelper::createUnnamedDatabaseRangeObject( const ScRange& rRangeAddr ) const
 {
     return mrBookGlob.createUnnamedDatabaseRangeObject( rRangeAddr );
 }
@@ -984,7 +980,6 @@ PageSettingsConverter& WorkbookHelper::getPageSettingsConverter() const
 
 XmlFilterBase& WorkbookHelper::getOoxFilter() const
 {
-    OSL_ENSURE( mrBookGlob.getFilterType() == FILTER_OOXML, "WorkbookHelper::getOoxFilter - invalid call" );
     return mrBookGlob.getOoxFilter();
 }
 
@@ -1000,19 +995,9 @@ bool WorkbookHelper::importOoxFragment( const rtl::Reference<FragmentHandler>& r
 
 // BIFF specific --------------------------------------------------------------
 
-BiffType WorkbookHelper::getBiff() const
-{
-    return mrBookGlob.getBiff();
-}
-
 rtl_TextEncoding WorkbookHelper::getTextEncoding() const
 {
     return mrBookGlob.getTextEncoding();
-}
-
-BiffCodecHelper& WorkbookHelper::getCodecHelper() const
-{
-    return mrBookGlob.getCodecHelper();
 }
 
 } // namespace xls

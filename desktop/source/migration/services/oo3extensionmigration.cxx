@@ -25,20 +25,21 @@
 #include <osl/thread.h>
 #include <tools/urlobj.hxx>
 #include <unotools/bootstrap.hxx>
-#include <unotools/ucbstreamhelper.hxx>
 #include <unotools/textsearch.hxx>
 #include <comphelper/sequence.hxx>
-#include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <ucbhelper/content.hxx>
 
 #include <com/sun/star/task/XInteractionApprove.hpp>
 #include <com/sun/star/task/XInteractionAbort.hpp>
+#include <com/sun/star/ucb/CommandAbortedException.hpp>
 #include <com/sun/star/ucb/XCommandInfo.hpp>
 #include <com/sun/star/ucb/TransferInfo.hpp>
 #include <com/sun/star/ucb/NameClash.hpp>
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <com/sun/star/xml/xpath/XPathAPI.hpp>
+#include <com/sun/star/xml/xpath/XPathException.hpp>
+#include <com/sun/star/xml/dom/DOMException.hpp>
 #include <com/sun/star/xml/dom/DocumentBuilder.hpp>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/deployment/ExtensionManager.hpp>
@@ -61,7 +62,7 @@ OUString OO3ExtensionMigration_getImplementationName()
 
 Sequence< OUString > OO3ExtensionMigration_getSupportedServiceNames()
 {
-    return Sequence< OUString > { "com.sun.star.migration.Extensions" };
+    return { "com.sun.star.migration.Extensions" };
 }
 
 
@@ -76,18 +77,6 @@ m_ctx(ctx)
 
 OO3ExtensionMigration::~OO3ExtensionMigration()
 {
-}
-
-void OO3ExtensionMigration::checkAndCreateDirectory( INetURLObject& rDirURL )
-{
-    ::osl::FileBase::RC aResult = ::osl::Directory::create( rDirURL.GetMainURL( INetURLObject::DECODE_TO_IURI ) );
-    if ( aResult == ::osl::FileBase::E_NOENT )
-    {
-        INetURLObject aBaseURL( rDirURL );
-        aBaseURL.removeSegment();
-        checkAndCreateDirectory( aBaseURL );
-        ::osl::Directory::create( rDirURL.GetMainURL( INetURLObject::DECODE_TO_IURI ) );
-    }
 }
 
 void OO3ExtensionMigration::scanUserExtensions( const OUString& sSourceDir, TStringVector& aMigrateExtensions )
@@ -162,11 +151,11 @@ OO3ExtensionMigration::ScanResult OO3ExtensionMigration::scanExtensionFolder( co
             }
         }
 
-        TStringVector::const_iterator pIter = aDirectories.begin();
-        while ( pIter != aDirectories.end() && aResult == SCANRESULT_NOTFOUND )
+        for (auto const& directory : aDirectories)
         {
-            aResult = scanExtensionFolder( *pIter );
-            ++pIter;
+            aResult = scanExtensionFolder(directory);
+            if (aResult != SCANRESULT_NOTFOUND)
+                break;
         }
     }
     return aResult;
@@ -225,9 +214,9 @@ bool OO3ExtensionMigration::scanDescriptionXml( const OUString& sDescriptionXmlU
         if ( !aExtIdentifier.isEmpty() )
         {
             // scan extension identifier and try to match with our black list entries
-            for ( size_t i = 0; i < m_aBlackList.size(); i++ )
+            for (OUString & i : m_aBlackList)
             {
-                utl::SearchParam param(m_aBlackList[i], utl::SearchParam::SRCH_REGEXP);
+                utl::SearchParam param(i, utl::SearchParam::SearchType::Regexp);
                 utl::TextSearch  ts(param, LANGUAGE_DONTKNOW);
 
                 sal_Int32 start = 0;
@@ -250,9 +239,9 @@ bool OO3ExtensionMigration::scanDescriptionXml( const OUString& sDescriptionXmlU
         // Try to use the folder name to match our black list
         // as some extensions don't provide an identifier in the
         // description.xml!
-        for ( size_t i = 0; i < m_aBlackList.size(); i++ )
+        for (OUString & i : m_aBlackList)
         {
-            utl::SearchParam param(m_aBlackList[i], utl::SearchParam::SRCH_REGEXP);
+            utl::SearchParam param(i, utl::SearchParam::SearchType::Regexp);
             utl::TextSearch  ts(param, LANGUAGE_DONTKNOW);
 
             sal_Int32 start = 0;
@@ -285,7 +274,7 @@ void OO3ExtensionMigration::migrateExtension( const OUString& sSourceDir )
         SAL_WARN(
             "desktop.migration",
             "Ignoring UNO Exception while migrating extension from <"
-            << sSourceDir << ">: \"" << e.Message << "\"");
+            << sSourceDir << ">: " << e);
     }
 }
 
@@ -293,20 +282,19 @@ void OO3ExtensionMigration::migrateExtension( const OUString& sSourceDir )
 // XServiceInfo
 
 
-OUString OO3ExtensionMigration::getImplementationName() throw (RuntimeException, std::exception)
+OUString OO3ExtensionMigration::getImplementationName()
 {
     return OO3ExtensionMigration_getImplementationName();
 }
 
 
 sal_Bool OO3ExtensionMigration::supportsService(OUString const & ServiceName)
-    throw (css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 
-Sequence< OUString > OO3ExtensionMigration::getSupportedServiceNames() throw (RuntimeException, std::exception)
+Sequence< OUString > OO3ExtensionMigration::getSupportedServiceNames()
 {
     return OO3ExtensionMigration_getSupportedServiceNames();
 }
@@ -315,7 +303,7 @@ Sequence< OUString > OO3ExtensionMigration::getSupportedServiceNames() throw (Ru
 // XInitialization
 
 
-void OO3ExtensionMigration::initialize( const Sequence< Any >& aArguments ) throw (Exception, RuntimeException, std::exception)
+void OO3ExtensionMigration::initialize( const Sequence< Any >& aArguments )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -345,7 +333,6 @@ void OO3ExtensionMigration::initialize( const Sequence< Any >& aArguments ) thro
 }
 
 Any OO3ExtensionMigration::execute( const Sequence< beans::NamedValue >& )
-    throw (lang::IllegalArgumentException, Exception, RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -357,14 +344,9 @@ Any OO3ExtensionMigration::execute( const Sequence< beans::NamedValue >& )
         sSourceDir += "/user/uno_packages/cache/uno_packages";
         TStringVector aExtensionToMigrate;
         scanUserExtensions( sSourceDir, aExtensionToMigrate );
-        if ( aExtensionToMigrate.size() > 0 )
+        for (auto const& extensionToMigrate : aExtensionToMigrate)
         {
-            TStringVector::iterator pIter = aExtensionToMigrate.begin();
-            while ( pIter != aExtensionToMigrate.end() )
-            {
-                migrateExtension( *pIter );
-                ++pIter;
-            }
+            migrateExtension(extensionToMigrate);
         }
     }
 
@@ -385,14 +367,12 @@ TmpRepositoryCommandEnv::~TmpRepositoryCommandEnv()
 // XCommandEnvironment
 
 uno::Reference< task::XInteractionHandler > TmpRepositoryCommandEnv::getInteractionHandler()
-throw ( uno::RuntimeException, std::exception )
 {
     return this;
 }
 
 
 uno::Reference< ucb::XProgressHandler > TmpRepositoryCommandEnv::getProgressHandler()
-throw ( uno::RuntimeException, std::exception )
 {
     return this;
 }
@@ -400,7 +380,6 @@ throw ( uno::RuntimeException, std::exception )
 // XInteractionHandler
 void TmpRepositoryCommandEnv::handle(
     uno::Reference< task::XInteractionRequest> const & xRequest )
-    throw ( uno::RuntimeException, std::exception )
 {
     OSL_ASSERT( xRequest->getRequest().getValueTypeClass() == uno::TypeClass_EXCEPTION );
 
@@ -428,17 +407,15 @@ void TmpRepositoryCommandEnv::handle(
 
 // XProgressHandler
 void TmpRepositoryCommandEnv::push( uno::Any const & /*Status*/ )
-throw (uno::RuntimeException, std::exception)
 {
 }
 
 
 void TmpRepositoryCommandEnv::update( uno::Any const & /*Status */)
-throw (uno::RuntimeException, std::exception)
 {
 }
 
-void TmpRepositoryCommandEnv::pop() throw (uno::RuntimeException, std::exception)
+void TmpRepositoryCommandEnv::pop()
 {
 }
 
@@ -446,7 +423,7 @@ void TmpRepositoryCommandEnv::pop() throw (uno::RuntimeException, std::exception
 // component operations
 
 
-Reference< XInterface > SAL_CALL OO3ExtensionMigration_create(
+Reference< XInterface > OO3ExtensionMigration_create(
     Reference< XComponentContext > const & ctx )
 {
     return static_cast< lang::XTypeProvider * >( new OO3ExtensionMigration(

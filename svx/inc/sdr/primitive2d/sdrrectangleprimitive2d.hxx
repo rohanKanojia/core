@@ -35,18 +35,17 @@ namespace drawinglayer
         class SdrRectanglePrimitive2D : public BufferedDecompositionPrimitive2D
         {
         private:
-            basegfx::B2DHomMatrix                       maTransform;
-            attribute::SdrLineFillShadowTextAttribute   maSdrLFSTAttribute;
-            double                                      mfCornerRadiusX;    // [0.0..1.0] relative to 1/2 width
-            double                                      mfCornerRadiusY;    // [0.0..1.0] relative to 1/2 height
+            basegfx::B2DHomMatrix const                       maTransform;
+            attribute::SdrLineFillShadowTextAttribute const   maSdrLFSTAttribute;
+            double const                                      mfCornerRadiusX;    // [0.0..1.0] relative to 1/2 width
+            double const                                      mfCornerRadiusY;    // [0.0..1.0] relative to 1/2 height
 
-            // bitfield
             // flag which decides if the HitArea should be the filled geometry
-            bool                                        mbForceFillForHitTest : 1;
+            bool const                                        mbForceFillForHitTest : 1;
 
         protected:
             // local decomposition.
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& aViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& aViewInformation) const override;
 
         public:
             SdrRectanglePrimitive2D(

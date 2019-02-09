@@ -38,14 +38,16 @@
 #include <unx/geninst.h>
 #include <osl/thread.h>
 #include <osl/process.h>
+#include <sal/log.hxx>
 
-#include "unx/i18n_im.hxx"
-#include "unx/i18n_xkb.hxx"
+#include <unx/i18n_im.hxx>
+#include <unx/i18n_xkb.hxx>
 #include <unx/wmadaptor.hxx>
 
-#include "unx/x11_cursors/salcursors.h"
+#include <unx/x11_cursors/salcursors.h>
 
 #include <vcl/svapp.hxx>
+#include <chrono>
 
 using namespace vcl_sal;
 
@@ -53,12 +55,12 @@ using namespace vcl_sal;
  * class GtkSalDisplay                                         *
  ***************************************************************/
 extern "C" {
-GdkFilterReturn call_filterGdkEvent( GdkXEvent* sys_event,
-                                     GdkEvent* event,
+static GdkFilterReturn call_filterGdkEvent( GdkXEvent* sys_event,
+                                     GdkEvent* /*event*/,
                                      gpointer data )
 {
     GtkSalDisplay *pDisplay = static_cast<GtkSalDisplay *>(data);
-    return pDisplay->filterGdkEvent( sys_event, event );
+    return pDisplay->filterGdkEvent( sys_event );
 }
 }
 
@@ -77,7 +79,7 @@ GtkSalDisplay::GtkSalDisplay( GdkDisplay* pDisplay ) :
     gdk_window_add_filter( nullptr, call_filterGdkEvent, this );
 
     if ( getenv( "SAL_IGNOREXERRORS" ) )
-        GetGenericData()->ErrorTrapPush(); // and leak the trap
+        GetGenericUnixSalData()->ErrorTrapPush(); // and leak the trap
 
     m_bX11Display = true;
 
@@ -101,13 +103,13 @@ GtkSalDisplay::~GtkSalDisplay()
 
 extern "C" {
 
-void signalScreenSizeChanged( GdkScreen* pScreen, gpointer data )
+static void signalScreenSizeChanged( GdkScreen* pScreen, gpointer data )
 {
     GtkSalDisplay* pDisp = static_cast<GtkSalDisplay*>(data);
     pDisp->screenSizeChanged( pScreen );
 }
 
-void signalMonitorsChanged( GdkScreen* pScreen, gpointer data )
+static void signalMonitorsChanged( GdkScreen* pScreen, gpointer data )
 {
     GtkSalDisplay* pDisp = static_cast<GtkSalDisplay*>(data);
     pDisp->monitorsChanged( pScreen );
@@ -115,8 +117,7 @@ void signalMonitorsChanged( GdkScreen* pScreen, gpointer data )
 
 }
 
-GdkFilterReturn GtkSalDisplay::filterGdkEvent( GdkXEvent* sys_event,
-                                               GdkEvent* )
+GdkFilterReturn GtkSalDisplay::filterGdkEvent( GdkXEvent* sys_event )
 {
     GdkFilterReturn aFilterReturn = GDK_FILTER_CONTINUE;
     XEvent *pEvent = static_cast<XEvent *>(sys_event);
@@ -133,20 +134,18 @@ GdkFilterReturn GtkSalDisplay::filterGdkEvent( GdkXEvent* sys_event,
         // so we need to listen for corresponding property notifications here
         // these should be rare enough so that we can assume that the settings
         // actually change when a corresponding PropertyNotify occurs
-        if( pEvent->type == PropertyNotify &&
-            pEvent->xproperty.atom == getWMAdaptor()->getAtom( WMAdaptor::XSETTINGS ) &&
-            ! m_aFrames.empty()
-           )
+        SalFrame *pAnyFrame = anyFrame();
+        if( pAnyFrame && pEvent->type == PropertyNotify &&
+            pEvent->xproperty.atom == getWMAdaptor()->getAtom( WMAdaptor::XSETTINGS ) )
         {
-            SendInternalEvent( m_aFrames.front(), nullptr, SALEVENT_SETTINGSCHANGED );
+            PostEvent( pAnyFrame, nullptr, SalEvent::SettingsChanged );
         }
         // let's see if one of our frames wants to swallow these events
         // get the frame
-        for( std::list< SalFrame* >::const_iterator it = m_aFrames.begin();
-                 it != m_aFrames.end(); ++it )
+        for (auto pSalFrame : m_aFrames )
         {
-            GtkSalFrame* pFrame = static_cast<GtkSalFrame*>(*it);
-            if( (GdkNativeWindow)pFrame->GetSystemData()->aWindow == pEvent->xany.window ||
+            GtkSalFrame* pFrame = static_cast<GtkSalFrame*>( pSalFrame );
+            if( pFrame->GetSystemData()->aWindow == pEvent->xany.window ||
                 ( pFrame->getForeignParent() && pFrame->getForeignParentWindow() == pEvent->xany.window ) ||
                 ( pFrame->getForeignTopLevel() && pFrame->getForeignTopLevelWindow() == pEvent->xany.window )
                 )
@@ -162,14 +161,14 @@ GdkFilterReturn GtkSalDisplay::filterGdkEvent( GdkXEvent* sys_event,
     return aFilterReturn;
 }
 
-void GtkSalDisplay::screenSizeChanged( GdkScreen* pScreen )
+void GtkSalDisplay::screenSizeChanged( GdkScreen const * pScreen )
 {
     m_pSys->countScreenMonitors();
     if (pScreen)
         emitDisplayChanged();
 }
 
-void GtkSalDisplay::monitorsChanged( GdkScreen* pScreen )
+void GtkSalDisplay::monitorsChanged( GdkScreen const * pScreen )
 {
     m_pSys->countScreenMonitors();
     if (pScreen)
@@ -213,11 +212,10 @@ bool GtkSalDisplay::Dispatch( XEvent* pEvent )
     {
         // let's see if one of our frames wants to swallow these events
         // get the child frame
-        for( std::list< SalFrame* >::const_iterator it = m_aFrames.begin();
-             it != m_aFrames.end(); ++it )
+        for (auto pSalFrame : m_aFrames )
         {
-            if( (GdkNativeWindow)(*it)->GetSystemData()->aWindow == pEvent->xany.window )
-                return static_cast<GtkSalFrame*>(*it)->Dispatch( pEvent );
+            if (pSalFrame->GetSystemData()->aWindow == pEvent->xany.window)
+                return static_cast<GtkSalFrame*>( pSalFrame )->Dispatch( pEvent );
         }
     }
 
@@ -247,6 +245,9 @@ GdkCursor* GtkSalDisplay::getFromXBM( const unsigned char *pBitmap,
             ( pBitmapPix, pMaskPix,
               &aBlack, &aWhite, nXHot, nYHot);
 }
+
+static unsigned char nullmask_bits[] = { 0x00, 0x00, 0x00, 0x00 };
+static unsigned char nullcurs_bits[] = { 0x00, 0x00, 0x00, 0x00 };
 
 #define MAKE_CURSOR( vcl_name, name ) \
     case vcl_name: \
@@ -349,8 +350,6 @@ GdkCursor *GtkSalDisplay::getCursor( PointerStyle ePointerStyle )
             MAKE_CURSOR( PointerStyle::PivotDelete, pivotdel_ );
             MAKE_CURSOR( PointerStyle::Chain, chain_ );
             MAKE_CURSOR( PointerStyle::ChainNotAllowed, chainnot_ );
-            MAKE_CURSOR( PointerStyle::TimeEventMove, timemove_ );
-            MAKE_CURSOR( PointerStyle::TimeEventSize, timesize_ );
             MAKE_CURSOR( PointerStyle::AutoScrollN, asn_ );
             MAKE_CURSOR( PointerStyle::AutoScrollS, ass_ );
             MAKE_CURSOR( PointerStyle::AutoScrollW, asw_ );
@@ -362,7 +361,6 @@ GdkCursor *GtkSalDisplay::getCursor( PointerStyle ePointerStyle )
             MAKE_CURSOR( PointerStyle::AutoScrollNS, asns_ );
             MAKE_CURSOR( PointerStyle::AutoScrollWE, aswe_ );
             MAKE_CURSOR( PointerStyle::AutoScrollNSWE, asnswe_ );
-            MAKE_CURSOR( PointerStyle::Airbrush, airbrush_ );
             MAKE_CURSOR( PointerStyle::TextVertical, vertcurs_ );
 
             // #i32329#
@@ -371,9 +369,6 @@ GdkCursor *GtkSalDisplay::getCursor( PointerStyle ePointerStyle )
             MAKE_CURSOR( PointerStyle::TabSelectSE, tblselse_ );
             MAKE_CURSOR( PointerStyle::TabSelectW, tblselw_ );
             MAKE_CURSOR( PointerStyle::TabSelectSW, tblselsw_ );
-
-            // #i20119#
-            MAKE_CURSOR( PointerStyle::Paintbrush, paintbrush_ );
 
             MAKE_CURSOR( PointerStyle::HideWhitespace, hidewhitespace_ );
             MAKE_CURSOR( PointerStyle::ShowWhitespace, showwhitespace_ );
@@ -411,24 +406,24 @@ int GtkSalDisplay::CaptureMouse( SalFrame* pSFrame )
     }
 
     m_pCapture = pFrame;
-    static_cast<GtkSalFrame*>(pFrame)->grabPointer( TRUE );
+    pFrame->grabPointer( TRUE );
     return 1;
 }
 
 /**********************************************************************
- * class GtkData                                                      *
+ * class GtkSalData                                                   *
  **********************************************************************/
 
-GtkData::GtkData( SalInstance *pInstance )
-    : SalGenericData( SAL_DATA_GTK, pInstance )
+GtkSalData::GtkSalData( SalInstance *pInstance )
+    : GenericUnixSalData( SAL_DATA_GTK, pInstance )
     , m_aDispatchMutex()
-    , blockIdleTimeout( false )
+    , m_aDispatchCondition()
+    , m_pDocumentFocusListener(nullptr)
 {
     m_pUserEvent = nullptr;
-    m_aDispatchCondition = osl_createCondition();
 }
 
-XIOErrorHandler aOrigXIOErrorHandler = nullptr;
+static XIOErrorHandler aOrigXIOErrorHandler = nullptr;
 
 extern "C" {
 
@@ -442,14 +437,14 @@ static int XIOErrorHdl(Display *)
 
 }
 
-GtkData::~GtkData()
+GtkSalData::~GtkSalData()
 {
     Yield( true, true );
     g_warning ("TESTME: We used to have a stop-timer here, but the central code should do this");
 
      // sanity check: at this point nobody should be yielding, but wake them
      // up anyway before the condition they're waiting on gets destroyed.
-    osl_setCondition( m_aDispatchCondition );
+    m_aDispatchCondition.set();
 
     osl::MutexGuard g( m_aDispatchMutex );
     if (m_pUserEvent)
@@ -458,20 +453,17 @@ GtkData::~GtkData()
         g_source_unref (m_pUserEvent);
         m_pUserEvent = nullptr;
     }
-    osl_destroyCondition( m_aDispatchCondition );
     XSetIOErrorHandler(aOrigXIOErrorHandler);
 }
 
-void GtkData::Dispose()
+void GtkSalData::Dispose()
 {
     deInitNWF();
 }
 
 /// Allows events to be processed, returns true if we processed an event.
-SalYieldResult GtkData::Yield( bool bWait, bool bHandleAllCurrentEvents )
+bool GtkSalData::Yield( bool bWait, bool bHandleAllCurrentEvents )
 {
-    blockIdleTimeout = !bWait;
-
     /* #i33212# only enter g_main_context_iteration in one thread at any one
      * time, else one of them potentially will never end as long as there is
      * another thread in there. Having only one yielding thread actually dispatch
@@ -481,13 +473,12 @@ SalYieldResult GtkData::Yield( bool bWait, bool bHandleAllCurrentEvents )
     bool bWasEvent = false;
     {
         // release YieldMutex (and re-acquire at block end)
-        SalYieldMutexReleaser aReleaser;
+        SolarMutexReleaser aReleaser;
         if( m_aDispatchMutex.tryToAcquire() )
             bDispatchThread = true;
         else if( ! bWait )
         {
-            blockIdleTimeout = false;
-            return SalYieldResult::TIMEOUT; // someone else is waiting already, return
+            return false; // someone else is waiting already, return
         }
 
         if( bDispatchThread )
@@ -508,9 +499,8 @@ SalYieldResult GtkData::Yield( bool bWait, bool bHandleAllCurrentEvents )
              * workaround: timeout of 1 second a emergency exit
              */
             // we are the dispatch thread
-            osl_resetCondition( m_aDispatchCondition );
-            TimeValue aValue = { 1, 0 };
-            osl_waitCondition( m_aDispatchCondition, &aValue );
+            m_aDispatchCondition.reset();
+            m_aDispatchCondition.wait( std::chrono::seconds(1) );
         }
     }
 
@@ -518,15 +508,13 @@ SalYieldResult GtkData::Yield( bool bWait, bool bHandleAllCurrentEvents )
     {
         m_aDispatchMutex.release();
         if( bWasEvent )
-            osl_setCondition( m_aDispatchCondition ); // trigger non dispatch thread yields
+            m_aDispatchCondition.set(); // trigger non dispatch thread yields
     }
-    blockIdleTimeout = false;
 
-    return bWasEvent ? SalYieldResult::EVENT
-                     : SalYieldResult::TIMEOUT;
+    return bWasEvent;
 }
 
-void GtkData::Init()
+void GtkSalData::Init()
 {
     int i;
     SAL_INFO( "vcl.gtk", "GtkMainloop::Init()" );
@@ -655,16 +643,19 @@ void GtkData::Init()
     }
 }
 
-void GtkData::ErrorTrapPush()
+void GtkSalData::ErrorTrapPush()
 {
     gdk_error_trap_push ();
 }
 
-bool GtkData::ErrorTrapPop( bool bIgnoreError )
+bool GtkSalData::ErrorTrapPop( bool )
 {
-    (void) bIgnoreError;
     return gdk_error_trap_pop () != 0;
 }
+
+#if !GLIB_CHECK_VERSION(2,32,0)
+#define G_SOURCE_REMOVE FALSE
+#endif
 
 extern "C" {
 
@@ -681,7 +672,7 @@ extern "C" {
     }
 
     static gboolean sal_gtk_timeout_expired( SalGtkTimeoutSource *pTSource,
-                                             gint *nTimeoutMS, GTimeVal *pTimeNow )
+                                             gint *nTimeoutMS, GTimeVal const *pTimeNow )
     {
         glong nDeltaSec = pTSource->aFireTime.tv_sec - pTimeNow->tv_sec;
         glong nDeltaUSec = pTSource->aFireTime.tv_usec - pTimeNow->tv_usec;
@@ -696,7 +687,7 @@ extern "C" {
             nDeltaSec -= 1;
         }
         // if the clock changes backwards we need to cope ...
-        if( (unsigned long) nDeltaSec > 1 + ( pTSource->pInstance->m_nTimeoutMS / 1000 ) )
+        if( static_cast<unsigned long>(nDeltaSec) > 1 + ( pTSource->pInstance->m_nTimeoutMS / 1000 ) )
         {
             sal_gtk_timeout_defer( pTSource );
             return TRUE;
@@ -736,21 +727,15 @@ extern "C" {
         if( !pTSource->pInstance )
             return FALSE;
 
-        GtkData *pSalData = static_cast< GtkData* >( GetSalData());
-
-        osl::Guard< comphelper::SolarMutex > aGuard( pSalData->m_pInstance->GetYieldMutex() );
+        SolarMutexGuard aGuard;
 
         sal_gtk_timeout_defer( pTSource );
 
         ImplSVData* pSVData = ImplGetSVData();
-        if( pSVData->mpSalTimer )
-        {
-            // TODO: context_pending should be probably checked too, but it causes locking assertion failures
-            bool idle = !pSalData->BlockIdleTimeout() && /*!g_main_context_pending( NULL ) &&*/ !gdk_events_pending();
-            pSVData->mpSalTimer->CallCallback( idle );
-        }
+        if( pSVData->maSchedCtx.mpSalTimer )
+            pSVData->maSchedCtx.mpSalTimer->CallCallback();
 
-        return TRUE;
+        return G_SOURCE_REMOVE;
     }
 
     static GSourceFuncs sal_gtk_timeout_funcs =
@@ -795,13 +780,13 @@ GtkSalTimer::GtkSalTimer()
 GtkSalTimer::~GtkSalTimer()
 {
     GtkInstance *pInstance = static_cast<GtkInstance *>(GetSalData()->m_pInstance);
-    pInstance->RemoveTimer( this );
+    pInstance->RemoveTimer();
     Stop();
 }
 
 bool GtkSalTimer::Expired()
 {
-    if( !m_pTimeout )
+    if( !m_pTimeout || g_source_is_destroyed( &m_pTimeout->aParent ) )
         return false;
 
     gint nDummy = 0;
@@ -814,6 +799,8 @@ void GtkSalTimer::Start( sal_uLong nMS )
 {
     // glib is not 64bit safe in this regard.
     assert( nMS <= G_MAXINT );
+    if ( nMS > G_MAXINT )
+        nMS = G_MAXINT;
     m_nTimeoutMS = nMS; // for restarting
     Stop(); // FIXME: ideally re-use an existing m_pTimeout
     m_pTimeout = create_sal_gtk_timeout( this );
@@ -829,54 +816,31 @@ void GtkSalTimer::Stop()
     }
 }
 
-gboolean GtkData::userEventFn( gpointer data )
-{
-    gboolean bContinue = FALSE;
-    GtkData *pThis = static_cast<GtkData *>(data);
-    SalGenericData *pData = GetGenericData();
-    osl::Guard< comphelper::SolarMutex > aGuard( pData->m_pInstance->GetYieldMutex() );
-    const SalGenericDisplay *pDisplay = pData->GetDisplay();
-    if (pDisplay)
-    {
-        OSL_ASSERT(static_cast<const SalGenericDisplay *>(pThis->GetGtkDisplay()) == pDisplay);
-        {
-            osl::MutexGuard g (pThis->GetGtkDisplay()->getEventGuardMutex());
-
-            if( !pThis->GetGtkDisplay()->HasUserEvents() )
-            {
-                if( pThis->m_pUserEvent )
-                {
-                    g_source_unref (pThis->m_pUserEvent);
-                    pThis->m_pUserEvent = nullptr;
-                }
-                bContinue = FALSE;
-            }
-            else
-                bContinue = TRUE;
-        }
-        pThis->GetGtkDisplay()->DispatchInternalEvent();
-    }
-
-    return bContinue;
-}
-
 extern "C" {
     static gboolean call_userEventFn( void *data )
     {
         SolarMutexGuard aGuard;
-        return GtkData::userEventFn( data );
+        const SalGenericDisplay *pDisplay = GetGenericUnixSalData()->GetDisplay();
+        if ( pDisplay )
+        {
+            GtkSalDisplay *pThisDisplay = static_cast<GtkSalData *>(data)->GetGtkDisplay();
+            assert(static_cast<const SalGenericDisplay *>(pThisDisplay) == pDisplay);
+            pThisDisplay->DispatchInternalEvent();
+        }
+        return TRUE;
     }
 }
 
-// hEventGuard_ held during this invocation
-void GtkData::PostUserEvent()
+void GtkSalData::TriggerUserEventProcessing()
 {
     if (m_pUserEvent)
         g_main_context_wakeup (nullptr); // really needed ?
     else // nothing pending anyway
     {
         m_pUserEvent = g_idle_source_new();
-        g_source_set_priority (m_pUserEvent, G_PRIORITY_HIGH);
+        // tdf#112890 some dialog don't appear under gtk2, use the same
+        // priority for user-events as gtk3 does since tdf#110737
+        g_source_set_priority (m_pUserEvent,  G_PRIORITY_HIGH_IDLE + 30);
         g_source_set_can_recurse (m_pUserEvent, TRUE);
         g_source_set_callback (m_pUserEvent, call_userEventFn,
                                static_cast<gpointer>(this), nullptr);
@@ -884,9 +848,33 @@ void GtkData::PostUserEvent()
     }
 }
 
-void GtkSalDisplay::PostUserEvent()
+void GtkSalData::TriggerAllUserEventsProcessed()
 {
-    GetGtkSalData()->PostUserEvent();
+    assert( m_pUserEvent );
+    g_source_destroy( m_pUserEvent );
+    g_source_unref( m_pUserEvent );
+    m_pUserEvent = nullptr;
+}
+
+void GtkSalDisplay::TriggerUserEventProcessing()
+{
+    GetGtkSalData()->TriggerUserEventProcessing();
+}
+
+void GtkSalDisplay::TriggerAllUserEventsProcessed()
+{
+    GetGtkSalData()->TriggerAllUserEventsProcessed();
+}
+
+GtkWidget* GtkSalDisplay::findGtkWidgetForNativeHandle(sal_uIntPtr hWindow) const
+{
+    for (auto pFrame : m_aFrames)
+    {
+        const SystemEnvData* pEnvData = pFrame->GetSystemData();
+        if (pEnvData->aWindow == hWindow)
+            return GTK_WIDGET(pEnvData->pWidget);
+    }
+    return nullptr;
 }
 
 void GtkSalDisplay::deregisterFrame( SalFrame* pFrame )

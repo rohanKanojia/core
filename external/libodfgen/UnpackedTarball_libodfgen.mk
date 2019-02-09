@@ -13,6 +13,8 @@ $(eval $(call gb_UnpackedTarball_set_tarball,libodfgen,$(ODFGEN_TARBALL)))
 
 $(eval $(call gb_UnpackedTarball_set_patchlevel,libodfgen,0))
 
+$(eval $(call gb_UnpackedTarball_update_autoconf_configs,libodfgen))
+
 ifeq ($(COM_IS_CLANG),TRUE)
 ifneq ($(filter -fsanitize=%,$(CC)),)
 $(eval $(call gb_UnpackedTarball_add_patches,libodfgen, \
@@ -35,5 +37,8 @@ $(eval $(call gb_UnpackedTarball_add_patches,libodfgen, \
 endif
 endif
 
+$(eval $(call gb_UnpackedTarball_add_patches,libodfgen, \
+	external/libodfgen/0001-tdf-101077-make-double-string-conversion-locale-agno.patch.1 \
+))
 
 # vim: set noet sw=4 ts=4:

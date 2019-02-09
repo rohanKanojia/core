@@ -20,6 +20,7 @@
 #include <config_folders.h>
 
 #include <com/sun/star/xml/xpath/XPathAPI.hpp>
+#include <com/sun/star/xml/xpath/XPathException.hpp>
 
 #include "updateprotocol.hxx"
 #include "updatecheckconfig.hxx"
@@ -38,7 +39,6 @@
 
 namespace container = css::container ;
 namespace deployment = css::deployment ;
-namespace lang = css::lang ;
 namespace uno = css::uno ;
 namespace task = css::task ;
 namespace xml = css::xml ;
@@ -81,8 +81,6 @@ checkForUpdates(
     uno::Reference< task::XInteractionHandler > const & rxInteractionHandler,
     const uno::Reference< deployment::XUpdateInformationProvider >& rUpdateInfoProvider)
 {
-    OSL_TRACE("checking for updates ..");
-
     OUString myArch;
     OUString myOS;
 
@@ -213,12 +211,12 @@ checkForUpdates(
                     {
                         sal_Int32 pos = xRelNote->getAttribute("pos").toInt32();
 
-                        ReleaseNote aRelNote((sal_uInt8) pos, xRelNote->getAttribute("src"));
+                        ReleaseNote aRelNote(static_cast<sal_uInt8>(pos), xRelNote->getAttribute("src"));
 
                         if( xRelNote->hasAttribute("src2") )
                         {
                             pos = xRelNote->getAttribute("pos2").toInt32();
-                            aRelNote.Pos2 = (sal_Int8) pos;
+                            aRelNote.Pos2 = static_cast<sal_Int8>(pos);
                             aRelNote.URL2 = xRelNote->getAttribute("src2");
                         }
 

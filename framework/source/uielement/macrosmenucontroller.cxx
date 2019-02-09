@@ -19,22 +19,17 @@
 
 #include <uielement/macrosmenucontroller.hxx>
 #include <uielement/menubarmanager.hxx>
-#include "services.h"
-#include <classes/resource.hrc>
-#include <classes/fwkresid.hxx>
+#include <services.h>
 #include <com/sun/star/awt/MenuItemStyle.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XContentEnumerationAccess.hpp>
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
-#include <com/sun/star/frame/XModuleManager.hpp>
-#include <comphelper/processfactory.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/i18nhelp.hxx>
 #include <vcl/commandinfoprovider.hxx>
 #include <rtl/ustrbuf.hxx>
-#include "helper/mischelper.hxx"
-#include "helpid.hrc"
+#include <helper/mischelper.hxx>
 #include <osl/mutex.hxx>
 
 using namespace com::sun::star::uno;
@@ -44,7 +39,6 @@ using namespace com::sun::star::beans;
 using namespace com::sun::star::util;
 using namespace com::sun::star::style;
 using namespace com::sun::star::container;
-using namespace ::com::sun::star::frame;
 
 namespace framework
 {
@@ -65,11 +59,10 @@ MacrosMenuController::MacrosMenuController( const css::uno::Reference< css::uno:
 
 MacrosMenuController::~MacrosMenuController()
 {
-    OSL_TRACE("calling dtor");
 }
 
 // private function
-void MacrosMenuController::fillPopupMenu( Reference< css::awt::XPopupMenu >& rPopupMenu )
+void MacrosMenuController::fillPopupMenu( Reference< css::awt::XPopupMenu > const & rPopupMenu )
 {
     VCLXPopupMenu* pVCLPopupMenu = static_cast<VCLXPopupMenu *>(VCLXMenu::GetImplementation( rPopupMenu ));
     PopupMenu*     pPopupMenu    = nullptr;
@@ -85,7 +78,7 @@ void MacrosMenuController::fillPopupMenu( Reference< css::awt::XPopupMenu >& rPo
 
     // insert basic
     OUString aCommand(".uno:MacroDialog");
-    OUString aDisplayName = vcl::CommandInfoProvider::Instance().GetMenuLabelForCommand(aCommand, m_xFrame);
+    OUString aDisplayName = vcl::CommandInfoProvider::GetMenuLabelForCommand(aCommand, m_aModuleName);
     pPopupMenu->InsertItem( 2, aDisplayName );
     pPopupMenu->SetItemCommand( 2, aCommand );
 
@@ -94,12 +87,11 @@ void MacrosMenuController::fillPopupMenu( Reference< css::awt::XPopupMenu >& rPo
 }
 
 // XEventListener
-void SAL_CALL MacrosMenuController::disposing( const EventObject& ) throw ( RuntimeException, std::exception )
+void SAL_CALL MacrosMenuController::disposing( const EventObject& )
 {
     Reference< css::awt::XMenuListener > xHolder(static_cast<OWeakObject *>(this), UNO_QUERY );
 
     osl::MutexGuard aLock( m_aMutex );
-    OSL_TRACE("disposing");
     m_xFrame.clear();
     m_xDispatch.clear();
     m_xContext.clear();
@@ -107,13 +99,12 @@ void SAL_CALL MacrosMenuController::disposing( const EventObject& ) throw ( Runt
     if ( m_xPopupMenu.is() )
     {
         m_xPopupMenu->removeMenuListener( Reference< css::awt::XMenuListener >(static_cast<OWeakObject *>(this), UNO_QUERY ));
-        OSL_TRACE("removed listener");
     }
     m_xPopupMenu.clear();
 }
 
 // XStatusListener
-void SAL_CALL MacrosMenuController::statusChanged( const FeatureStateEvent& ) throw ( RuntimeException, std::exception )
+void SAL_CALL MacrosMenuController::statusChanged( const FeatureStateEvent& )
 {
     osl::MutexGuard aLock( m_aMutex );
     if ( m_xPopupMenu.is() )

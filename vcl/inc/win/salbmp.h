@@ -23,6 +23,7 @@
 #include <tools/gen.hxx>
 #include <win/wincomp.hxx>
 #include <salbmp.hxx>
+#include <basegfx/utils/systemdependentdata.hxx>
 #include <memory>
 
 
@@ -31,27 +32,13 @@ class   BitmapColor;
 class   BitmapPalette;
 class   SalGraphics;
 namespace Gdiplus { class Bitmap; }
-typedef std::shared_ptr< Gdiplus::Bitmap > GdiPlusBmpPtr;
 
-class WinSalBitmap : public SalBitmap
+class WinSalBitmap : public SalBitmap, public basegfx::SystemDependentDataHolder
 {
 private:
-    friend class GdiPlusBuffer; // allow buffer to remove maGdiPlusBitmap and mpAssociatedAlpha eventually
-
     Size                maSize;
     HGLOBAL             mhDIB;
     HBITMAP             mhDDB;
-
-    // the buffered evtl. used Gdiplus::Bitmap instance. It is managed by
-    // GdiPlusBuffer. To make this safe, it is only handed out as shared
-    // pointer; the GdiPlusBuffer may delete the local instance.
-
-    // mpAssociatedAlpha holds the last WinSalBitmap used to construct an
-    // evtl. buffered GdiPlusBmp. This is needed since the GdiPlusBmp is a single
-    // instance and remembered only on the content-WinSalBitmap, not on the
-    // alpha-WinSalBitmap.
-    GdiPlusBmpPtr       maGdiPlusBitmap;
-    const WinSalBitmap* mpAssociatedAlpha;
 
     sal_uInt16          mnBitCount;
 
@@ -63,7 +50,7 @@ public:
     HGLOBAL             ImplGethDIB() const { return mhDIB; }
     HBITMAP             ImplGethDDB() const { return mhDDB; }
 
-    GdiPlusBmpPtr ImplGetGdiPlusBitmap(const WinSalBitmap* pAlphaSource = 0) const;
+    std::shared_ptr< Gdiplus::Bitmap > ImplGetGdiPlusBitmap(const WinSalBitmap* pAlphaSource = nullptr) const;
 
     static HGLOBAL      ImplCreateDIB( const Size& rSize, sal_uInt16 nBitCount, const BitmapPalette& rPal );
     static HANDLE       ImplCopyDIBOrDDB( HANDLE hHdl, bool bDIB );
@@ -74,7 +61,7 @@ public:
 public:
 
                         WinSalBitmap();
-    virtual             ~WinSalBitmap();
+    virtual             ~WinSalBitmap() override;
 
 public:
 
@@ -96,8 +83,25 @@ public:
     virtual void                ReleaseBuffer( BitmapBuffer* pBuffer, BitmapAccessMode nMode ) override;
     virtual bool                GetSystemData( BitmapSystemData& rData ) override;
 
+    virtual bool                ScalingSupported() const override;
     virtual bool                Scale( const double& rScaleX, const double& rScaleY, BmpScaleFlag nScaleFlag ) override;
-    virtual bool                Replace( const Color& rSearchColor, const Color& rReplaceColor, sal_uLong nTol ) override;
+    virtual bool                Replace( const Color& rSearchColor, const Color& rReplaceColor, sal_uInt8 nTol ) override;
+
+    // exclusive management op's for SystemDependentData at WinSalBitmap
+    template<class T>
+    std::shared_ptr<T> getSystemDependentData() const
+    {
+        return std::static_pointer_cast<T>(basegfx::SystemDependentDataHolder::getSystemDependentData(typeid(T).hash_code()));
+    }
+
+    template<class T, class... Args>
+    std::shared_ptr<T> addOrReplaceSystemDependentData(basegfx::SystemDependentDataManager& manager, Args&&... args) const
+    {
+        std::shared_ptr<T> r = std::make_shared<T>(manager, std::forward<Args>(args)...);
+        basegfx::SystemDependentData_SharedPtr r2(r);
+        const_cast< WinSalBitmap* >(this)->basegfx::SystemDependentDataHolder::addOrReplaceSystemDependentData(r2);
+        return r;
+    }
 };
 
 #endif // INCLUDED_VCL_INC_WIN_SALBMP_H

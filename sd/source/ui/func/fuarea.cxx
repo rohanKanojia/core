@@ -17,21 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuarea.hxx"
+#include <fuarea.hxx>
 
 #include <svx/svxids.hrc>
-#include <vcl/msgbox.hxx>
 #include <svl/intitem.hxx>
 #include <svl/stritem.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/bindings.hxx>
-#include "ViewShell.hxx"
+#include <ViewShell.hxx>
 
-#include "drawdoc.hxx"
-#include "View.hxx"
-#include "Window.hxx"
-#include "app.hrc"
+#include <drawdoc.hxx>
+#include <View.hxx>
+#include <Window.hxx>
+#include <app.hrc>
 #include <svx/svxdlg.hxx>
 #include <svx/dialogs.hrc>
 #include <memory>
@@ -52,39 +51,42 @@ rtl::Reference<FuPoor> FuArea::Create( ViewShell* pViewSh, ::sd::Window* pWin, :
 
 void FuArea::DoExecute( SfxRequest& rReq )
 {
-    const SfxItemSet* pArgs = rReq.GetArgs();
-
-    if( !pArgs )
-    {
-        SfxItemSet aNewAttr( mpDoc->GetPool() );
-        mpView->GetAttributes( aNewAttr );
-
-        SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-        std::unique_ptr<AbstractSvxAreaTabDialog> pDlg(pFact ? pFact->CreateSvxAreaTabDialog( nullptr,
-                                                                        &aNewAttr,
-                                                                        mpDoc,
-                                                                        true) : nullptr);
-        if( pDlg && (pDlg->Execute() == RET_OK) )
-        {
-            mpView->SetAttributes (*(pDlg->GetOutputItemSet ()));
-        }
-
-        // attributes changed, update Listboxes in Objectbars
-        static sal_uInt16 SidArray[] = {
-                        SID_ATTR_FILL_STYLE,
-                        SID_ATTR_FILL_COLOR,
-                        SID_ATTR_FILL_GRADIENT,
-                        SID_ATTR_FILL_HATCH,
-                        SID_ATTR_FILL_BITMAP,
-                        SID_ATTR_FILL_TRANSPARENCE,
-                        SID_ATTR_FILL_FLOATTRANSPARENCE,
-                        0 };
-
-        mpViewShell->GetViewFrame()->GetBindings().Invalidate( SidArray );
-    }
-
     rReq.Ignore ();
 
+    const SfxItemSet* pArgs = rReq.GetArgs();
+    if (pArgs)
+        return;
+
+    SfxItemSet aNewAttr( mpDoc->GetPool() );
+    mpView->GetAttributes( aNewAttr );
+
+    SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
+    VclPtr<AbstractSvxAreaTabDialog> pDlg(pFact->CreateSvxAreaTabDialog(mpViewShell->GetFrameWeld(), &aNewAttr, mpDoc, true));
+
+    pDlg->StartExecuteAsync([pDlg, this](sal_Int32 nResult){
+        if (nResult == RET_OK)
+        {
+            mpView->SetAttributes (*(pDlg->GetOutputItemSet ()));
+
+            // attributes changed, update Listboxes in Objectbars
+            static const sal_uInt16 SidArray[] = {
+                SID_ATTR_FILL_STYLE,
+                SID_ATTR_FILL_COLOR,
+                SID_ATTR_FILL_GRADIENT,
+                SID_ATTR_FILL_HATCH,
+                SID_ATTR_FILL_BITMAP,
+                SID_ATTR_FILL_TRANSPARENCE,
+                SID_ATTR_FILL_FLOATTRANSPARENCE,
+                0 };
+
+            mpViewShell->GetViewFrame()->GetBindings().Invalidate( SidArray );
+        }
+
+        // deferred until the dialog ends
+        mpViewShell->Cancel();
+
+        pDlg->disposeOnce();
+    });
 }
 
 void FuArea::Activate()

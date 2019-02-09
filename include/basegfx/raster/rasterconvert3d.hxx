@@ -28,7 +28,6 @@
 #include <basegfx/color/bcolor.hxx>
 #include <basegfx/vector/b3dvector.hxx>
 #include <basegfx/point/b2dpoint.hxx>
-#include <basegfx/vector/b2dvector.hxx>
 #include <basegfx/basegfxdllapi.h>
 
 namespace basegfx
@@ -366,7 +365,7 @@ namespace basegfx
 
         void incrementRasterConversionLineEntry3D(sal_uInt32 nStep, InterpolatorProvider3D& rProvider)
         {
-            const double fStep((double)nStep);
+            const double fStep(static_cast<double>(nStep));
             maX.increment(fStep);
             maZ.increment(fStep);
             mnY += nStep;

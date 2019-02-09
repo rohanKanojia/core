@@ -22,30 +22,29 @@
 
 #include "fupoor.hxx"
 
+class SdOutliner;
+
 namespace sd {
 
-class Outliner;
-
-class FuHangulHanjaConversion : public FuPoor
+class FuHangulHanjaConversion final : public FuPoor
 {
 public:
 
     static rtl::Reference<FuPoor> Create( ViewShell* pViewSh, ::sd::Window* pWin, ::sd::View* pView, SdDrawDocument* pDoc, SfxRequest& rReq );
 
-    void StartConversion( sal_Int16 nSourceLanguage,  sal_Int16 nTargetLanguage,
+    void StartConversion( LanguageType nSourceLanguage,  LanguageType nTargetLanguage,
                           const vcl::Font *pTargetFont, sal_Int32 nOptions, bool bIsInteractive );
 
     void StartChineseConversion();
 
-    void ConvertStyles( sal_Int16 nTargetLanguage, const vcl::Font *pTargetFont );
-
-protected:
-    virtual ~FuHangulHanjaConversion();
-
-    Outliner*   pSdOutliner;
-    bool            bOwnOutliner;
+    void ConvertStyles( LanguageType nTargetLanguage, const vcl::Font *pTargetFont );
 
 private:
+    virtual ~FuHangulHanjaConversion() override;
+
+    SdOutliner*     pSdOutliner;
+    bool            bOwnOutliner;
+
     FuHangulHanjaConversion (
         ViewShell* pViewSh,
         ::sd::Window* pWin,
@@ -55,8 +54,8 @@ private:
 
 };
 
-#endif // INCLUDED_SD_SOURCE_UI_INC_FUHHCONV_HXX
-
 } // end of namespace sd
+
+#endif // INCLUDED_SD_SOURCE_UI_INC_FUHHCONV_HXX
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -24,14 +24,12 @@
 #include <vcl/edit.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/field.hxx>
-#include <vcl/lstbox.hxx>
 #include <sfx2/tabdlg.hxx>
 
-#include "tox.hxx"
-#include <toxmgr.hxx>
+#include <tox.hxx>
+#include "toxmgr.hxx"
 #include <svx/checklbx.hxx>
-#include <tools/resary.hxx>
-#include <svtools/treelistbox.hxx>
+#include <vcl/treelistbox.hxx>
 #include <vcl/menubtn.hxx>
 #include <svx/langbox.hxx>
 
@@ -62,21 +60,6 @@ struct CurTOXType
     CurTOXType () : eType (TOX_INDEX), nIndex (0) {};
 
     CurTOXType (TOXTypes t) : eType (t), nIndex (0) {};
-};
-
-class SwOLENames : public Resource
-{
-    ResStringArray      aNamesAry;
-public:
-    SwOLENames(const ResId& rResId) :
-        Resource(rResId),
-        aNamesAry(ResId(1,*rResId.GetResMgr()))
-    {
-        FreeResource();
-    }
-
-    ResStringArray&     GetNames() { return aNamesAry;}
-
 };
 
 #endif

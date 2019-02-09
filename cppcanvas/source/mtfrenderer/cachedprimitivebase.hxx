@@ -25,7 +25,7 @@
 
 #include <cppcanvas/canvas.hxx>
 
-#include "action.hxx"
+#include <action.hxx>
 
 namespace basegfx { class B2DHomMatrix; }
 
@@ -61,7 +61,6 @@ namespace cppcanvas
              */
             CachedPrimitiveBase( const CanvasSharedPtr& rCanvas,
                                  bool                   bOnlyRedrawWithSameTransform );
-            virtual ~CachedPrimitiveBase() {}
 
             CachedPrimitiveBase(const CachedPrimitiveBase&) = delete;
             const CachedPrimitiveBase& operator=(const CachedPrimitiveBase&) = delete;

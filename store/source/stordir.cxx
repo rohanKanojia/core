@@ -23,11 +23,11 @@
 
 #include <rtl/textcvt.h>
 #include <rtl/ref.hxx>
+#include <rtl/ustring.h>
 
 #include <osl/mutex.hxx>
 
-#include "store/types.h"
-#include "object.hxx"
+#include <store/types.h>
 
 #include "storbase.hxx"
 #include "stordata.hxx"
@@ -43,7 +43,7 @@ using namespace store;
 /*
  * convertTextToUnicode.
  */
-static inline sal_Size convertTextToUnicode (
+static sal_Size convertTextToUnicode (
     rtl_TextToUnicodeConverter  hConverter,
     const sal_Char *pSrcBuffer, sal_Size nSrcLength,
     sal_Unicode    *pDstBuffer, sal_Size nDstLength)
@@ -63,7 +63,7 @@ static inline sal_Size convertTextToUnicode (
  * OStoreDirectory_Impl implementation.
  *
  *======================================================================*/
-const sal_uInt32 OStoreDirectory_Impl::m_nTypeId = sal_uInt32(0x89191107);
+const sal_uInt32 OStoreDirectory_Impl::m_nTypeId(0x89191107);
 
 /*
  * OStoreDirectory_Impl.
@@ -101,8 +101,8 @@ bool OStoreDirectory_Impl::isKindOf (sal_uInt32 nTypeId)
  */
 storeError OStoreDirectory_Impl::create (
     OStorePageManager *pManager,
-    rtl_String        *pPath,
-    rtl_String        *pName,
+    rtl_String const  *pPath,
+    rtl_String const  *pName,
     storeAccessMode    eMode)
 {
     rtl::Reference<OStorePageManager> xManager (pManager);
@@ -123,7 +123,7 @@ storeError OStoreDirectory_Impl::create (
         return store_E_NotDirectory;
 
     inode_holder_type xNode (aPage.get());
-    eErrCode = xManager->acquirePage (xNode->m_aDescr, store_AccessReadOnly);
+    eErrCode = xManager->acquirePage (xNode->m_aDescr, storeAccessMode::ReadOnly);
     if (eErrCode != store_E_None)
         return eErrCode;
 
@@ -179,8 +179,8 @@ storeError OStoreDirectory_Impl::iterate (storeFindData &rFindData)
 
                 // Setup FindData.
                 sal_Char *p = xNode->m_aNameBlock.m_pData;
-                sal_Size  n = rtl_str_getLength (p);
-                sal_Size  k = rFindData.m_nLength;
+                sal_Int32 n = rtl_str_getLength (p);
+                sal_Int32 k = rFindData.m_nLength;
 
                 n = convertTextToUnicode (
                     m_hTextCvt, p, n,
@@ -191,9 +191,8 @@ storeError OStoreDirectory_Impl::iterate (storeFindData &rFindData)
                     memset (&rFindData.m_pszName[n], 0, k);
                 }
 
-                rFindData.m_nLength  = static_cast<sal_Int32>(n);
+                rFindData.m_nLength  = n;
                 rFindData.m_nAttrib |= aPage.attrib();
-                rFindData.m_nSize    = aPage.dataLength();
 
                 // Leave.
                 rFindData.m_nReserved = store::ntohl(aKey.m_nLow);

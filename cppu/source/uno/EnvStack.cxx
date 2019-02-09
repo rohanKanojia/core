@@ -17,17 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "uno/environment.hxx"
+#include <uno/environment.hxx>
 #include <uno/lbnames.h>
 
-#include "cppu/EnvDcp.hxx"
-#include "cppu/Enterable.hxx"
+#include <cppu/EnvDcp.hxx>
+#include <cppu/Enterable.hxx>
 
-#include "rtl/instance.hxx"
+#include <rtl/instance.hxx>
 
-#include "osl/thread.h"
-#include "osl/thread.hxx"
-#include "osl/mutex.hxx"
+#include <osl/thread.h>
+#include <osl/thread.hxx>
+#include <osl/mutex.hxx>
 
 #include <unordered_map>
 
@@ -111,7 +111,7 @@ extern "C" void SAL_CALL uno_getCurrentEnvironment(uno_Environment ** ppEnv, rtl
         *ppEnv = nullptr;
     }
 
-    rtl::OUString currPurpose;
+    OUString currPurpose;
 
     uno_Environment * pCurrEnv = s_getCurrent();
     if (pCurrEnv) // no environment means no purpose
@@ -119,7 +119,7 @@ extern "C" void SAL_CALL uno_getCurrentEnvironment(uno_Environment ** ppEnv, rtl
 
     if (pTypeName && rtl_uString_getLength(pTypeName))
     {
-        rtl::OUString envDcp(pTypeName);
+        OUString envDcp(pTypeName);
         envDcp += currPurpose;
 
         uno_getEnvironment(ppEnv, envDcp.pData, nullptr);
@@ -133,32 +133,32 @@ extern "C" void SAL_CALL uno_getCurrentEnvironment(uno_Environment ** ppEnv, rtl
         }
         else
         {
-            rtl::OUString uno_envDcp(UNO_LB_UNO);
+            OUString uno_envDcp(UNO_LB_UNO);
             uno_getEnvironment(ppEnv, uno_envDcp.pData, nullptr);
         }
     }
 }
 
-static rtl::OUString s_getPrefix(rtl::OUString const & str1, rtl::OUString const & str2)
+static OUString s_getPrefix(OUString const & str1, OUString const & str2)
 {
     sal_Int32 nIndex1 = 0;
     sal_Int32 nIndex2 = 0;
     sal_Int32 sim = 0;
 
-    rtl::OUString token1;
-    rtl::OUString token2;
+    OUString token1;
+    OUString token2;
 
     do
     {
         token1 = str1.getToken(0, ':', nIndex1);
         token2 = str2.getToken(0, ':', nIndex2);
 
-        if (token1.equals(token2))
+        if (token1 == token2)
             sim += token1.getLength() + 1;
     }
-    while(nIndex1 == nIndex2 && nIndex1 >= 0 && token1.equals(token2));
+    while(nIndex1 == nIndex2 && nIndex1 >= 0 && token1 == token2);
 
-    rtl::OUString result;
+    OUString result;
 
     if (sim)
         result = str1.copy(0, sim - 1);
@@ -170,17 +170,17 @@ static int s_getNextEnv(uno_Environment ** ppEnv, uno_Environment * pCurrEnv, un
 {
     int res = 0;
 
-    rtl::OUString nextPurpose;
+    OUString nextPurpose;
 
-    rtl::OUString currPurpose;
+    OUString currPurpose;
     if (pCurrEnv)
         currPurpose = cppu::EnvDcp::getPurpose(pCurrEnv->pTypeName);
 
-    rtl::OUString targetPurpose;
+    OUString targetPurpose;
     if (pTargetEnv)
         targetPurpose = cppu::EnvDcp::getPurpose(pTargetEnv->pTypeName);
 
-    rtl::OUString intermPurpose(s_getPrefix(currPurpose, targetPurpose));
+    OUString intermPurpose(s_getPrefix(currPurpose, targetPurpose));
     if (currPurpose.getLength() > intermPurpose.getLength())
     {
         sal_Int32 idx = currPurpose.lastIndexOf(':');
@@ -202,7 +202,7 @@ static int s_getNextEnv(uno_Environment ** ppEnv, uno_Environment * pCurrEnv, un
 
     if (!nextPurpose.isEmpty())
     {
-        rtl::OUString next_envDcp(UNO_LB_UNO);
+        OUString next_envDcp(UNO_LB_UNO);
         next_envDcp += nextPurpose;
 
         uno_getEnvironment(ppEnv, next_envDcp.pData, nullptr);
@@ -360,21 +360,21 @@ int SAL_CALL uno_Environment_isValid(uno_Environment * pEnv, rtl_uString ** pRea
 {
     int result = 1;
 
-    rtl::OUString typeName(cppu::EnvDcp::getTypeName(pEnv->pTypeName));
+    OUString typeName(cppu::EnvDcp::getTypeName(pEnv->pTypeName));
     if (typeName == UNO_LB_UNO)
     {
         cppu::Enterable * pEnterable = static_cast<cppu::Enterable *>(pEnv->pReserved);
         if (pEnterable)
-            result = pEnterable->isValid(reinterpret_cast<rtl::OUString *>(pReason));
+            result = pEnterable->isValid(reinterpret_cast<OUString *>(pReason));
     }
     else
     {
-        rtl::OUString envDcp(UNO_LB_UNO);
+        OUString envDcp(UNO_LB_UNO);
         envDcp += cppu::EnvDcp::getPurpose(pEnv->pTypeName);
 
         uno::Environment env(envDcp);
 
-        result = env.isValid(reinterpret_cast<rtl::OUString *>(pReason));
+        result = env.isValid(reinterpret_cast<OUString *>(pReason));
     }
 
     return result;

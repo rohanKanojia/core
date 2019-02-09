@@ -20,9 +20,8 @@
 #include <string.h>
 
 #include "Columns.hxx"
-#include "property.hrc"
-#include "property.hxx"
-#include "componenttools.hxx"
+#include <property.hxx>
+#include <componenttools.hxx>
 #include "findpos.hxx"
 #include <com/sun/star/io/XPersistObject.hpp>
 #include <com/sun/star/io/XObjectOutputStream.hpp>
@@ -33,12 +32,12 @@
 #include <com/sun/star/form/binding/XBindableValue.hpp>
 #include <com/sun/star/beans/XPropertyContainer.hpp>
 #include <com/sun/star/text/XText.hpp>
-#include <comphelper/sequence.hxx>
 #include <comphelper/property.hxx>
 #include <comphelper/basicio.hxx>
 #include <comphelper/servicehelper.hxx>
-#include "services.hxx"
-#include "frm_resource.hrc"
+#include <comphelper/types.hxx>
+#include <services.hxx>
+#include <strings.hrc>
 #include <tools/debug.hxx>
 
 
@@ -64,10 +63,10 @@ const sal_uInt16 COMPATIBLE_HIDDEN  = 0x0008;
 
 const css::uno::Sequence<OUString>& getColumnTypes()
 {
-    static css::uno::Sequence<OUString> aColumnTypes(10);
-    if (aColumnTypes.getConstArray()[0].isEmpty())
+    static css::uno::Sequence<OUString> aColumnTypes = [&]()
     {
-        OUString* pNames = aColumnTypes.getArray();
+        css::uno::Sequence<OUString> tmp(10);
+        OUString* pNames = tmp.getArray();
         pNames[TYPE_CHECKBOX]       = "CheckBox";
         pNames[TYPE_COMBOBOX]       = "ComboBox";
         pNames[TYPE_CURRENCYFIELD]  = "CurrencyField";
@@ -78,7 +77,8 @@ const css::uno::Sequence<OUString>& getColumnTypes()
         pNames[TYPE_PATTERNFIELD]   = "PatternField";
         pNames[TYPE_TEXTFIELD]      = "TextField";
         pNames[TYPE_TIMEFIELD]      = "TimeField";
-    }
+        return tmp;
+    }();
     return aColumnTypes;
 }
 
@@ -121,7 +121,7 @@ const Sequence<sal_Int8>& OGridColumn::getUnoTunnelImplementationId()
 }
 
 
-sal_Int64 SAL_CALL OGridColumn::getSomething( const Sequence<sal_Int8>& _rIdentifier) throw(RuntimeException, std::exception)
+sal_Int64 SAL_CALL OGridColumn::getSomething( const Sequence<sal_Int8>& _rIdentifier)
 {
     sal_Int64 nReturn(0);
 
@@ -141,13 +141,13 @@ sal_Int64 SAL_CALL OGridColumn::getSomething( const Sequence<sal_Int8>& _rIdenti
 }
 
 
-Sequence<sal_Int8> SAL_CALL OGridColumn::getImplementationId() throw(RuntimeException, std::exception)
+Sequence<sal_Int8> SAL_CALL OGridColumn::getImplementationId()
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 
-Sequence<Type> SAL_CALL OGridColumn::getTypes() throw(RuntimeException, std::exception)
+Sequence<Type> SAL_CALL OGridColumn::getTypes()
 {
     TypeBag aTypes( OGridColumn_BASE::getTypes() );
     // erase the types which we do not support
@@ -171,7 +171,7 @@ Sequence<Type> SAL_CALL OGridColumn::getTypes() throw(RuntimeException, std::exc
 }
 
 
-Any SAL_CALL OGridColumn::queryAggregation( const Type& _rType ) throw (RuntimeException, std::exception)
+Any SAL_CALL OGridColumn::queryAggregation( const Type& _rType )
 {
     Any aReturn;
     // some functionality at our aggregate cannot be reasonably fulfilled here.
@@ -198,7 +198,7 @@ Any SAL_CALL OGridColumn::queryAggregation( const Type& _rType ) throw (RuntimeE
 OGridColumn::OGridColumn( const Reference<XComponentContext>& _rContext, const OUString& _sModelName )
     :OGridColumn_BASE(m_aMutex)
     ,OPropertySetAggregationHelper(OGridColumn_BASE::rBHelper)
-    ,m_aHidden( makeAny( sal_False ) )
+    ,m_aHidden( makeAny( false ) )
     ,m_aModelName(_sModelName)
 {
 
@@ -269,7 +269,7 @@ OGridColumn::~OGridColumn()
 
 // XEventListener
 
-void SAL_CALL OGridColumn::disposing(const EventObject& _rSource) throw(RuntimeException, std::exception)
+void SAL_CALL OGridColumn::disposing(const EventObject& _rSource)
 {
     OPropertySetAggregationHelper::disposing(_rSource);
 
@@ -390,7 +390,7 @@ void OGridColumn::getFastPropertyValue(Any& rValue, sal_Int32 nHandle ) const
 
 
 sal_Bool OGridColumn::convertFastPropertyValue( Any& rConvertedValue, Any& rOldValue,
-                                            sal_Int32 nHandle, const Any& rValue )throw( IllegalArgumentException )
+                                            sal_Int32 nHandle, const Any& rValue )
 {
     bool bModified(false);
     switch (nHandle)
@@ -409,7 +409,7 @@ sal_Bool OGridColumn::convertFastPropertyValue( Any& rConvertedValue, Any& rOldV
             {
                 sal_Int32 nAlign( 0 );
                 if ( rConvertedValue >>= nAlign )
-                    rConvertedValue <<= (sal_Int16)nAlign;
+                    rConvertedValue <<= static_cast<sal_Int16>(nAlign);
             }
             break;
         case PROPERTY_ID_HIDDEN:
@@ -420,7 +420,7 @@ sal_Bool OGridColumn::convertFastPropertyValue( Any& rConvertedValue, Any& rOldV
 }
 
 
-void OGridColumn::setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const Any& rValue ) throw (css::uno::Exception, std::exception)
+void OGridColumn::setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const Any& rValue )
 {
     switch (nHandle)
     {
@@ -459,7 +459,7 @@ Any OGridColumn::getPropertyDefaultByHandle( sal_Int32 nHandle ) const
 
 // XCloneable
 
-Reference< XCloneable > SAL_CALL OGridColumn::createClone(  ) throw (RuntimeException, std::exception)
+Reference< XCloneable > SAL_CALL OGridColumn::createClone(  )
 {
     OGridColumn* pNewColumn = createCloneColumn();
     return pNewColumn;
@@ -467,7 +467,7 @@ Reference< XCloneable > SAL_CALL OGridColumn::createClone(  ) throw (RuntimeExce
 
 // XPersistObject
 
-void SAL_CALL OGridColumn::write(const Reference<XObjectOutputStream>& _rxOutStream)
+void OGridColumn::write(const Reference<XObjectOutputStream>& _rxOutStream)
 {
     // 1. Write the UnoControl
     Reference<XMarkableStream>  xMark(_rxOutStream, UNO_QUERY);
@@ -515,7 +515,7 @@ void SAL_CALL OGridColumn::write(const Reference<XObjectOutputStream>& _rxOutStr
 }
 
 
-void SAL_CALL OGridColumn::read(const Reference<XObjectInputStream>& _rxInStream)
+void OGridColumn::read(const Reference<XObjectInputStream>& _rxInStream)
 {
     // 1. Read the UnoControl
     sal_Int32 nLen = _rxInStream->readLong();
@@ -533,13 +533,13 @@ void SAL_CALL OGridColumn::read(const Reference<XObjectInputStream>& _rxInStream
     }
 
     // 2. Write a version number
-    sal_uInt16 nVersion = _rxInStream->readShort(); (void)nVersion;
+    _rxInStream->readShort(); // version;
     sal_uInt16 nAnyMask = _rxInStream->readShort();
 
     if (nAnyMask & WIDTH)
     {
         sal_Int32 nValue = _rxInStream->readLong();
-        m_aWidth <<= (sal_Int32)nValue;
+        m_aWidth <<= nValue;
     }
 
     if (nAnyMask & ALIGN)

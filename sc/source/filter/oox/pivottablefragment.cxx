@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "pivottablefragment.hxx"
-
-#include "biffinputstream.hxx"
-#include "pivottablebuffer.hxx"
+#include <pivottablefragment.hxx>
+#include <pivottablebuffer.hxx>
+#include <biffhelper.hxx>
+#include <oox/token/namespaces.hxx>
 
 namespace oox {
 namespace xls {

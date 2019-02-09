@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <editeng/eeitem.hxx>
 
 #include <editeng/editobj.hxx>
@@ -25,26 +25,28 @@
 #include <editeng/editview.hxx>
 #include <editeng/flditem.hxx>
 #include <editeng/adjustitem.hxx>
+#include <editeng/fhgtitem.hxx>
 #include <sfx2/basedlgs.hxx>
 #include <sfx2/objsh.hxx>
-#include <vcl/msgbox.hxx>
+#include <sfx2/sfxdlg.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/builderfactory.hxx>
 
-#include "tphfedit.hxx"
-#include "editutil.hxx"
-#include "global.hxx"
-#include "attrib.hxx"
-#include "patattr.hxx"
-#include "scresid.hxx"
-#include "sc.hrc"
-#include "globstr.hrc"
-#include "tabvwsh.hxx"
-#include "prevwsh.hxx"
-#include "AccessibleEditObject.hxx"
+#include <tphfedit.hxx>
+#include <editutil.hxx>
+#include <global.hxx>
+#include <attrib.hxx>
+#include <patattr.hxx>
+#include <scresid.hxx>
+#include <sc.hrc>
+#include <globstr.hrc>
+#include <strings.hrc>
+#include <tabvwsh.hxx>
+#include <prevwsh.hxx>
+#include <AccessibleEditObject.hxx>
 
-#include "scabstdlg.hxx"
+#include <scabstdlg.hxx>
 #include <memory>
 
 
@@ -72,41 +74,41 @@ ScEditWindow::ScEditWindow( vcl::Window* pParent, WinBits nBits, ScEditWindowLoc
     const StyleSettings& rStyleSettings = Application::GetSettings().GetStyleSettings();
     Color aBgColor = rStyleSettings.GetWindowColor();
 
-    SetMapMode( MAP_TWIP );
+    SetMapMode(MapMode(MapUnit::MapTwip));
     SetPointer( PointerStyle::Text );
     SetBackground( aBgColor );
 
     Size aSize( GetOutputSize() );
-    aSize.Height() *= 4;
+    aSize.setHeight( aSize.Height() * 4 );
 
-    pEdEngine = new ScHeaderEditEngine( EditEngine::CreatePool() );
+    pEdEngine.reset( new ScHeaderEditEngine( EditEngine::CreatePool() ) );
     pEdEngine->SetPaperSize( aSize );
     pEdEngine->SetRefDevice( this );
 
     ScHeaderFieldData aData;
     lcl_GetFieldData( aData );
 
-        //  Feldbefehle:
+    // fields
     pEdEngine->SetData( aData );
     pEdEngine->SetControlWord( pEdEngine->GetControlWord() | EEControlBits::MARKFIELDS );
     mbRTL = ScGlobal::IsSystemRTL();
     if (mbRTL)
-        pEdEngine->SetDefaultHorizontalTextDirection(EE_HTEXTDIR_R2L);
+        pEdEngine->SetDefaultHorizontalTextDirection(EEHorizontalTextDirection::R2L);
 
-    pEdView = new EditView( pEdEngine, this );
-    pEdView->SetOutputArea( Rectangle( Point(0,0), GetOutputSize() ) );
+    pEdView.reset( new EditView( pEdEngine.get(), this ) );
+    pEdView->SetOutputArea( tools::Rectangle( Point(0,0), GetOutputSize() ) );
 
     pEdView->SetBackgroundColor( aBgColor );
-    pEdEngine->InsertView( pEdView );
+    pEdEngine->InsertView( pEdView.get() );
 }
 
 void ScEditWindow::Resize()
 {
     Size aOutputSize(GetOutputSize());
     Size aSize(aOutputSize);
-    aSize.Height() *= 4;
+    aSize.setHeight( aSize.Height() * 4 );
     pEdEngine->SetPaperSize(aSize);
-    pEdView->SetOutputArea(Rectangle(Point(0,0), aOutputSize));
+    pEdView->SetOutputArea(tools::Rectangle(Point(0,0), aOutputSize));
     Control::Resize();
 }
 
@@ -124,14 +126,13 @@ void ScEditWindow::dispose()
         if (xTemp.is())
             pAcc->dispose();
     }
-    delete pEdEngine;
-    delete pEdView;
+    pEdEngine.reset();
+    pEdView.reset();
     Control::dispose();
 }
 
-VCL_BUILDER_DECL_FACTORY(ScEditWindow)
+extern "C" SAL_DLLPUBLIC_EXPORT void makeScEditWindow(VclPtr<vcl::Window> & rRet, VclPtr<vcl::Window> & pParent, VclBuilder::stringmap &)
 {
-    (void)rMap;
     rRet = VclPtr<ScEditWindow>::Create(pParent, WB_BORDER|WB_TABSTOP, Left);
 }
 
@@ -141,10 +142,10 @@ void ScEditWindow::SetNumType(SvxNumType eNumType)
     pEdEngine->UpdateFields();
 }
 
-EditTextObject* ScEditWindow::CreateTextObject()
+std::unique_ptr<EditTextObject> ScEditWindow::CreateTextObject()
 {
-    //  Absatzattribute zuruecksetzen
-    //  (GetAttribs beim Format-Dialog-Aufruf gibt immer gesetzte Items zurueck)
+    //  reset paragraph attributes
+    //  (GetAttribs at creation of format dialog always returns the set items)
 
     const SfxItemSet& rEmpty = pEdEngine->GetEmptyItemSet();
     sal_Int32 nParCnt = pEdEngine->GetParagraphCount();
@@ -160,11 +161,14 @@ void ScEditWindow::SetFont( const ScPatternAttr& rPattern )
     rPattern.FillEditItemSet( pSet );
     //  FillEditItemSet adjusts font height to 1/100th mm,
     //  but for header/footer twips is needed, as in the PatternAttr:
-    pSet->Put( rPattern.GetItem(ATTR_FONT_HEIGHT), EE_CHAR_FONTHEIGHT );
-    pSet->Put( rPattern.GetItem(ATTR_CJK_FONT_HEIGHT), EE_CHAR_FONTHEIGHT_CJK );
-    pSet->Put( rPattern.GetItem(ATTR_CTL_FONT_HEIGHT), EE_CHAR_FONTHEIGHT_CTL );
+    std::unique_ptr<SfxPoolItem> pNewItem(rPattern.GetItem(ATTR_FONT_HEIGHT).CloneSetWhich(EE_CHAR_FONTHEIGHT));
+    pSet->Put( *pNewItem );
+    pNewItem = rPattern.GetItem(ATTR_CJK_FONT_HEIGHT).CloneSetWhich(EE_CHAR_FONTHEIGHT_CJK);
+    pSet->Put( *pNewItem );
+    pNewItem = rPattern.GetItem(ATTR_CTL_FONT_HEIGHT).CloneSetWhich(EE_CHAR_FONTHEIGHT_CTL);
+    pSet->Put( *pNewItem );
     if (mbRTL)
-        pSet->Put( SvxAdjustItem( SVX_ADJUST_RIGHT, EE_PARA_JUST ) );
+        pSet->Put( SvxAdjustItem( SvxAdjust::Right, EE_PARA_JUST ) );
     pEdEngine->SetDefaults( pSet );
 }
 
@@ -196,12 +200,11 @@ void ScEditWindow::SetCharAttributes()
         SfxItemSet aSet( pEdView->GetAttribs() );
 
         ScAbstractDialogFactory* pFact = ScAbstractDialogFactory::Create();
-        OSL_ENSURE(pFact, "ScAbstractFactory create fail!");
 
-        std::unique_ptr<SfxAbstractTabDialog> pDlg(pFact->CreateScCharDlg(
-            GetParent(),  &aSet, pDocSh));
-        OSL_ENSURE(pDlg, "Dialog create fail!");
-        pDlg->SetText( ScGlobal::GetRscString( STR_TEXTATTRS ) );
+        vcl::Window* pWin = GetParent();
+        ScopedVclPtr<SfxAbstractTabDialog> pDlg(pFact->CreateScCharDlg(
+            pWin ? pWin->GetFrameWeld() : nullptr,  &aSet, pDocSh));
+        pDlg->SetText( ScResId( STR_TEXTATTRS ) );
         if ( pDlg->Execute() == RET_OK )
         {
             aSet.ClearItem();
@@ -213,7 +216,7 @@ void ScEditWindow::SetCharAttributes()
     }
 }
 
-void ScEditWindow::Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect )
+void ScEditWindow::Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect )
 {
     const StyleSettings& rStyleSettings = Application::GetSettings().GetStyleSettings();
     Color aBgColor = rStyleSettings.GetWindowColor();
@@ -311,105 +314,25 @@ css::uno::Reference< css::accessibility::XAccessible > ScEditWindow::CreateAcces
     {
     case Left:
         {
-            sName = OUString(ScResId(STR_ACC_LEFTAREA_NAME));
+            sName = ScResId(STR_ACC_LEFTAREA_NAME);
         }
         break;
     case Center:
         {
-            sName = OUString(ScResId(STR_ACC_CENTERAREA_NAME));
+            sName = ScResId(STR_ACC_CENTERAREA_NAME);
         }
         break;
     case Right:
         {
-            sName = OUString(ScResId(STR_ACC_RIGHTAREA_NAME));
+            sName = ScResId(STR_ACC_RIGHTAREA_NAME);
         }
         break;
     }
-    pAcc = new ScAccessibleEditObject(GetAccessibleParentWindow()->GetAccessible(), pEdView, this,
-        OUString(sName), OUString(sDescription), ScAccessibleEditObject::EditControl);
+    pAcc = new ScAccessibleEditObject(GetAccessibleParentWindow()->GetAccessible(), pEdView.get(), this,
+        sName, sDescription, ScAccessibleEditObject::EditControl);
     css::uno::Reference< css::accessibility::XAccessible > xAccessible = pAcc;
     xAcc = xAccessible;
     return pAcc;
-}
-
-ScExtIButton::ScExtIButton(vcl::Window* pParent, WinBits nBits )
-    : ImageButton(pParent,nBits), pPopupMenu(nullptr)
-{
-    nSelected=0;
-    aIdle.SetPriority(SchedulerPriority::LOWEST);
-    SetDropDown(PushButtonDropdownStyle::Toolbox);
-}
-
-VCL_BUILDER_FACTORY_ARGS(ScExtIButton, 0 /* WB_BORDER|WB_TABSTOP */)
-
-void ScExtIButton::SetPopupMenu(PopupMenu* pPopUp)
-{
-    pPopupMenu=pPopUp;
-}
-
-void ScExtIButton::MouseButtonDown( const MouseEvent& rMEvt )
-{
-    if(!aIdle.IsActive())
-    {
-        aIdle.SetIdleHdl(LINK( this, ScExtIButton, TimerHdl));
-        aIdle.Start();
-    }
-
-    ImageButton::MouseButtonDown(rMEvt );
-}
-
-void ScExtIButton::MouseButtonUp( const MouseEvent& rMEvt)
-{
-    aIdle.Stop();
-    aIdle.SetIdleHdl(Link<Idle *, void>());
-    ImageButton::MouseButtonUp(rMEvt );
-}
-
-void ScExtIButton::Click()
-{
-    aIdle.Stop();
-    aIdle.SetIdleHdl(Link<Idle *, void>());
-    ImageButton::Click();
-}
-
-void ScExtIButton::StartPopup()
-{
-    nSelected=0;
-    aSelectedIdent.clear();
-
-    if(pPopupMenu!=nullptr)
-    {
-        SetPressed( true );
-        EndSelection();
-        Point aPoint(0,0);
-        aPoint.Y()=GetOutputSizePixel().Height();
-
-        nSelected = pPopupMenu->Execute( this, aPoint );
-
-        if(nSelected)
-        {
-            aSelectedIdent = pPopupMenu->GetItemIdent(nSelected);
-            aMLink.Call(*this);
-        }
-
-        SetPressed( false);
-    }
-}
-
-bool ScExtIButton::PreNotify( NotifyEvent& rNEvt )
-{
-    MouseNotifyEvent nSwitch=rNEvt.GetType();
-    if(nSwitch==MouseNotifyEvent::MOUSEBUTTONUP)
-    {
-        MouseButtonUp(*rNEvt.GetMouseEvent());
-    }
-
-    return ImageButton::PreNotify(rNEvt );
-}
-
-IMPL_LINK_NOARG_TYPED(ScExtIButton, TimerHdl, Idle *, void)
-{
-    StartPopup();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

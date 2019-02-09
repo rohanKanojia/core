@@ -23,7 +23,7 @@
 #include <com/sun/star/media/XFrameGrabber.hpp>
 #include <cppuhelper/implbase.hxx>
 #include "vlccommon.hxx"
-#include "wrapper/Wrapper.hxx"
+#include <wrapper/Wrapper.hxx>
 
 namespace avmedia {
 namespace vlc {
@@ -38,17 +38,13 @@ class VLCFrameGrabber : public FrameGrabber_BASE
     wrapper::Player mPlayer;
     wrapper::EventHandler& mEventHandler;
 public:
-    VLCFrameGrabber( wrapper::EventHandler& eh, const rtl::OUString& url );
+    VLCFrameGrabber( wrapper::EventHandler& eh, const OUString& url );
 
-    css::uno::Reference< css::graphic::XGraphic > SAL_CALL grabFrame( double fMediaTime )
-            throw ( css::uno::RuntimeException, std::exception ) override;
+    css::uno::Reference< css::graphic::XGraphic > SAL_CALL grabFrame( double fMediaTime ) override;
 
-    ::rtl::OUString SAL_CALL getImplementationName()
-            throw ( css::uno::RuntimeException, std::exception ) override;
-    sal_Bool SAL_CALL supportsService( const ::rtl::OUString& serviceName )
-            throw ( css::uno::RuntimeException, std::exception ) override;
-    css::uno::Sequence< ::rtl::OUString > SAL_CALL getSupportedServiceNames()
-            throw ( css::uno::RuntimeException, std::exception ) override;
+    OUString SAL_CALL getImplementationName() override;
+    sal_Bool SAL_CALL supportsService( const OUString& serviceName ) override;
+    css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 };
 
 }

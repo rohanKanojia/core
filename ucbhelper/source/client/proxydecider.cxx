@@ -19,7 +19,7 @@
 
 #include <utility>
 #include <vector>
-#include <list>
+#include <deque>
 
 #include <osl/diagnose.h>
 #include <osl/mutex.hxx>
@@ -32,7 +32,14 @@
 #include <com/sun/star/util/XChangesListener.hpp>
 #include <com/sun/star/util/XChangesNotifier.hpp>
 #include <cppuhelper/implbase.hxx>
-#include "ucbhelper/proxydecider.hxx"
+#include <ucbhelper/proxydecider.hxx>
+
+#ifdef _WIN32
+#include <o3tl/char16_t2wchar_t.hxx>
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#include <Winhttp.h>
+#endif
 
 using namespace com::sun::star;
 using namespace ucbhelper;
@@ -59,7 +66,7 @@ namespace proxydecider_impl
 class WildCard
 {
 private:
-    OString m_aWildString;
+    OString const m_aWildString;
 
 public:
     explicit WildCard( const OUString& rWildCard )
@@ -73,41 +80,32 @@ public:
 
 typedef std::pair< WildCard, WildCard > NoProxyListEntry;
 
-
 class HostnameCache
 {
     typedef std::pair< OUString, OUString > HostListEntry;
 
-    std::list< HostListEntry >     m_aHostList;
-    sal_uInt32                     m_nCapacity;
+    std::deque< HostListEntry >    m_aHostList;
 
 public:
-    explicit HostnameCache( sal_uInt32 nCapacity )
-        : m_nCapacity( nCapacity ) {}
-
     bool get( const OUString & rKey, OUString & rValue ) const
     {
-        std::list< HostListEntry >::const_iterator it
-            = m_aHostList.begin();
-        const std::list< HostListEntry >::const_iterator end
-            = m_aHostList.end();
-
-        while ( it != end )
+        for (auto const& host : m_aHostList)
         {
-            if ( (*it).first == rKey )
+            if ( host.first == rKey )
             {
-                rValue = (*it).second;
+                rValue = host.second;
                 return true;
             }
-            ++it;
         }
         return false;
     }
 
     void put( const OUString & rKey, const OUString & rValue )
     {
-        if ( m_aHostList.size() == m_nCapacity )
-            m_aHostList.resize( m_nCapacity / 2 );
+        static constexpr sal_uInt32 nCapacity = 256;
+
+        if ( m_aHostList.size() == nCapacity )
+            m_aHostList.resize( nCapacity / 2 );
 
         m_aHostList.push_front( HostListEntry( rKey, rValue ) );
     }
@@ -117,12 +115,14 @@ public:
 class InternetProxyDecider_Impl :
     public cppu::WeakImplHelper< util::XChangesListener >
 {
+    // see officecfg/registry/schema/org/openoffice/Inet.xcs for the definition of these values
+    enum class ProxyType { NoProxy, Automatic, Manual };
     mutable osl::Mutex                       m_aMutex;
     InternetProxyServer                      m_aHttpProxy;
     InternetProxyServer                      m_aHttpsProxy;
     InternetProxyServer                      m_aFtpProxy;
     const InternetProxyServer                m_aEmptyProxy;
-    sal_Int32                                m_nProxyType;
+    ProxyType                                m_nProxyType;
     uno::Reference< util::XChangesNotifier > m_xNotifier;
     std::vector< NoProxyListEntry >          m_aNoProxyList;
     mutable HostnameCache                    m_aHostnames;
@@ -134,21 +134,18 @@ private:
 public:
     explicit InternetProxyDecider_Impl(
         const uno::Reference< uno::XComponentContext >& rxContext );
-    virtual ~InternetProxyDecider_Impl();
 
     void dispose();
 
-    const InternetProxyServer & getProxy( const OUString & rProtocol,
+    InternetProxyServer getProxy(const OUString& rProtocol,
                                           const OUString & rHost,
                                           sal_Int32 nPort ) const;
 
     // XChangesListener
-    virtual void SAL_CALL changesOccurred( const util::ChangesEvent& Event )
-        throw( uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL changesOccurred( const util::ChangesEvent& Event ) override;
 
     // XEventListener ( base of XChangesLisetenr )
-    virtual void SAL_CALL disposing( const lang::EventObject& Source )
-        throw( uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL disposing( const lang::EventObject& Source ) override;
 
 private:
     void setNoProxyList( const OUString & rNoProxyList );
@@ -161,8 +158,7 @@ private:
 bool WildCard::Matches( const OUString& rString ) const
 {
     OString aString
-        = OUStringToOString(
-                    rString, RTL_TEXTENCODING_UTF8 ).toAsciiLowerCase();
+        = OUStringToOString( rString, RTL_TEXTENCODING_UTF8 ).toAsciiLowerCase();
     const char * pStr  = aString.getStr();
     const char * pWild = m_aWildString.getStr();
 
@@ -190,7 +186,7 @@ bool WildCard::Matches( const OUString& rString ) const
                 else
                     break;
 
-                // Note: fall-through are intended!
+                [[fallthrough]];
 
             case '*':
                 while ( *pWild == '*' )
@@ -227,7 +223,7 @@ bool WildCard::Matches( const OUString& rString ) const
 }
 
 
-bool getConfigStringValue(
+static bool getConfigStringValue(
     const uno::Reference< container::XNameAccess > & xNameAccess,
     const char * key,
     OUString & value )
@@ -254,7 +250,7 @@ bool getConfigStringValue(
 }
 
 
-bool getConfigInt32Value(
+static bool getConfigInt32Value(
     const uno::Reference< container::XNameAccess > & xNameAccess,
     const char * key,
     sal_Int32 & value )
@@ -287,8 +283,8 @@ bool getConfigInt32Value(
 
 InternetProxyDecider_Impl::InternetProxyDecider_Impl(
     const uno::Reference< uno::XComponentContext >& rxContext )
-    : m_nProxyType( 0 ),
-      m_aHostnames( 256 ) // cache size
+    : m_nProxyType( ProxyType::NoProxy ),
+      m_aHostnames()
 {
     try
     {
@@ -320,8 +316,10 @@ InternetProxyDecider_Impl::InternetProxyDecider_Impl(
             if ( xNameAccess.is() )
             {
                 // *** Proxy type ***
+                sal_Int32 tmp = 0;
                 getConfigInt32Value(
-                    xNameAccess, PROXY_TYPE_KEY, m_nProxyType );
+                    xNameAccess, PROXY_TYPE_KEY, tmp );
+                m_nProxyType = static_cast<ProxyType>(tmp);
 
                 // *** No proxy list ***
                 OUString aNoProxyList;
@@ -376,13 +374,6 @@ InternetProxyDecider_Impl::InternetProxyDecider_Impl(
     }
 }
 
-
-// virtual
-InternetProxyDecider_Impl::~InternetProxyDecider_Impl()
-{
-}
-
-
 void InternetProxyDecider_Impl::dispose()
 {
     uno::Reference< util::XChangesNotifier > xNotifier;
@@ -428,41 +419,209 @@ bool InternetProxyDecider_Impl::shouldUseProxy( const OUString & rHost,
     aBuffer.append( OUString::number( nPort ) );
     const OUString aHostAndPort( aBuffer.makeStringAndClear() );
 
-    std::vector< NoProxyListEntry >::const_iterator it
-        = m_aNoProxyList.begin();
-    const std::vector< NoProxyListEntry >::const_iterator end
-        = m_aNoProxyList.end();
-
-    while ( it != end )
+    for (auto const& noProxy : m_aNoProxyList)
     {
         if ( bUseFullyQualified )
         {
-            if ( (*it).second.Matches( aHostAndPort ) )
+            if ( noProxy.second.Matches( aHostAndPort ) )
                 return false;
         }
         else
         {
-            if ( (*it).first.Matches( aHostAndPort ) )
+            if ( noProxy.first.Matches( aHostAndPort ) )
                 return false;
         }
-        ++it;
     }
 
     return true;
 }
 
+namespace
+{
+#ifdef _WIN32
+struct GetPACProxyData
+{
+    const OUString& m_rProtocol;
+    const OUString& m_rHost;
+    sal_Int32 m_nPort;
+    bool m_bAutoDetect = false;
+    OUString m_sAutoConfigUrl;
+    InternetProxyServer m_ProxyServer;
 
-const InternetProxyServer & InternetProxyDecider_Impl::getProxy(
+    GetPACProxyData(const OUString& rProtocol, const OUString& rHost, sal_Int32 nPort)
+        : m_rProtocol(rProtocol)
+        , m_rHost(rHost)
+        , m_nPort(nPort)
+    {
+    }
+};
+
+// Tries to get proxy configuration using WinHttpGetProxyForUrl, which supports Web Proxy Auto-Discovery
+// (WPAD) protocol and manually configured address to get Proxy Auto-Configuration (PAC) file.
+// The WinINet/WinHTTP functions cannot correctly run in a STA COM thread, so use a dedicated thread
+DWORD WINAPI GetPACProxyThread(_In_ LPVOID lpParameter)
+{
+    assert(lpParameter);
+    GetPACProxyData* pData = static_cast<GetPACProxyData*>(lpParameter);
+
+    OUString url(pData->m_rProtocol + "://" + pData->m_rHost + ":"
+                 + OUString::number(pData->m_nPort));
+
+    HINTERNET hInternet = WinHttpOpen(L"Mozilla 5.0", WINHTTP_ACCESS_TYPE_NO_PROXY,
+                                      WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    DWORD nError = GetLastError();
+    if (!hInternet)
+        return nError;
+
+    WINHTTP_AUTOPROXY_OPTIONS AutoProxyOptions{};
+    if (pData->m_bAutoDetect)
+    {
+        AutoProxyOptions.dwFlags = WINHTTP_AUTOPROXY_AUTO_DETECT;
+        AutoProxyOptions.dwAutoDetectFlags
+            = WINHTTP_AUTO_DETECT_TYPE_DHCP | WINHTTP_AUTO_DETECT_TYPE_DNS_A;
+    }
+    if (!pData->m_sAutoConfigUrl.isEmpty())
+    {
+        AutoProxyOptions.dwFlags |= WINHTTP_AUTOPROXY_CONFIG_URL;
+        AutoProxyOptions.lpszAutoConfigUrl = o3tl::toW(pData->m_sAutoConfigUrl.getStr());
+    }
+    // First, try without autologon. According to
+    // https://github.com/Microsoft/Windows-classic-samples/blob/master/Samples/Win7Samples/web/winhttp/WinhttpProxySample/GetProxy.cpp
+    // autologon prevents caching, and so causes repetitive network traffic.
+    AutoProxyOptions.fAutoLogonIfChallenged = FALSE;
+    WINHTTP_PROXY_INFO ProxyInfo{};
+    BOOL bResult
+        = WinHttpGetProxyForUrl(hInternet, o3tl::toW(url.getStr()), &AutoProxyOptions, &ProxyInfo);
+    nError = GetLastError();
+    if (!bResult && nError == ERROR_WINHTTP_LOGIN_FAILURE)
+    {
+        AutoProxyOptions.fAutoLogonIfChallenged = TRUE;
+        bResult = WinHttpGetProxyForUrl(hInternet, o3tl::toW(url.getStr()),
+                                        &AutoProxyOptions, &ProxyInfo);
+        nError = GetLastError();
+    }
+    WinHttpCloseHandle(hInternet);
+    if (bResult)
+    {
+        if (ProxyInfo.lpszProxyBypass)
+            GlobalFree(ProxyInfo.lpszProxyBypass);
+        if (ProxyInfo.lpszProxy)
+        {
+            OUString sProxyResult = o3tl::toU(ProxyInfo.lpszProxy);
+            GlobalFree(ProxyInfo.lpszProxy);
+            // Get the first of possibly multiple results
+            sProxyResult = sProxyResult.getToken(0, ';');
+            sal_Int32 nPortSepPos = sProxyResult.indexOf(':');
+            if (nPortSepPos != -1)
+            {
+                pData->m_ProxyServer.nPort = sProxyResult.copy(nPortSepPos + 1).toInt32();
+                sProxyResult = sProxyResult.copy(0, nPortSepPos);
+            }
+            else
+            {
+                pData->m_ProxyServer.nPort = 0;
+            }
+            pData->m_ProxyServer.aName = sProxyResult;
+        }
+    }
+
+    return nError;
+}
+
+InternetProxyServer GetPACProxy(const OUString& rProtocol, const OUString& rHost, sal_Int32 nPort)
+{
+    GetPACProxyData aData(rProtocol, rHost, nPort);
+
+    // WinHTTP only supports http(s), so don't try for other protocols
+    if (!(rProtocol.equalsIgnoreAsciiCase("http") || rProtocol.equalsIgnoreAsciiCase("https")))
+        return aData.m_ProxyServer;
+
+    // Only try to get configuration from PAC (with all the overhead, including new thread)
+    // if configured to do so
+    {
+        WINHTTP_CURRENT_USER_IE_PROXY_CONFIG aProxyConfig{};
+        BOOL bResult = WinHttpGetIEProxyConfigForCurrentUser(&aProxyConfig);
+        if (aProxyConfig.lpszProxy)
+            GlobalFree(aProxyConfig.lpszProxy);
+        if (aProxyConfig.lpszProxyBypass)
+            GlobalFree(aProxyConfig.lpszProxyBypass);
+        // Don't try WPAD if AutoDetection or AutoConfig script URL are not configured
+        if (!bResult || !(aProxyConfig.fAutoDetect || aProxyConfig.lpszAutoConfigUrl))
+            return aData.m_ProxyServer;
+        aData.m_bAutoDetect = aProxyConfig.fAutoDetect;
+        if (aProxyConfig.lpszAutoConfigUrl)
+        {
+            aData.m_sAutoConfigUrl = o3tl::toU(aProxyConfig.lpszAutoConfigUrl);
+            GlobalFree(aProxyConfig.lpszAutoConfigUrl);
+        }
+    }
+
+    HANDLE hThread = CreateThread(nullptr, 0, GetPACProxyThread, &aData, 0, nullptr);
+    if (hThread)
+    {
+        WaitForSingleObject(hThread, INFINITE);
+        CloseHandle(hThread);
+    }
+    return aData.m_ProxyServer;
+}
+
+#else // .. _WIN32
+
+// Read the settings from the OS which are stored in env vars
+//
+InternetProxyServer GetUnixSystemProxy(const OUString & rProtocol,
+                                            const OUString & /*rHost*/,
+                                            sal_Int32 /*nPort*/)
+{
+    // TODO this could be improved to read the "no_proxy" env variable
+    InternetProxyServer aProxy;
+    OUString protocolLower = rProtocol.toAsciiLowerCase() + "_proxy";
+    OString protocolLowerStr = OUStringToOString( protocolLower, RTL_TEXTENCODING_ASCII_US );
+    const char* pEnvProxy = getenv(protocolLowerStr.getStr());
+    if (!pEnvProxy)
+        return aProxy;
+    // expecting something like "https://example.ct:80"
+    OUString tmp = OUString::createFromAscii(pEnvProxy);
+    if (tmp.getLength() < (rProtocol.getLength() + 3))
+        return aProxy;
+    tmp = tmp.copy(rProtocol.getLength() + 3);
+    sal_Int32 x = tmp.indexOf(':');
+    if (x == -1)
+        return aProxy;
+    int nPort = tmp.copy(x + 1).toInt32();
+    if (nPort == 0)
+        return aProxy;
+    aProxy.aName = tmp.copy(0, x);
+    aProxy.nPort = nPort;
+    return aProxy;
+}
+
+#endif // else .. _WIN32
+}
+
+InternetProxyServer InternetProxyDecider_Impl::getProxy(
                                             const OUString & rProtocol,
                                             const OUString & rHost,
                                             sal_Int32 nPort ) const
 {
     osl::Guard< osl::Mutex > aGuard( m_aMutex );
 
-    if ( m_nProxyType == 0 )
+    if ( m_nProxyType == ProxyType::NoProxy )
     {
         // Never use proxy.
         return m_aEmptyProxy;
+    }
+
+    // If get from system
+    if (m_nProxyType == ProxyType::Automatic && !rHost.isEmpty())
+    {
+#ifdef _WIN32
+        InternetProxyServer aProxy(GetPACProxy(rProtocol, rHost, nPort));
+#else
+        InternetProxyServer aProxy(GetUnixSystemProxy(rProtocol, rHost, nPort));
+#endif // _WIN32
+        if (!aProxy.aName.isEmpty())
+            return aProxy;
     }
 
     if ( !rHost.isEmpty() && !m_aNoProxyList.empty() )
@@ -542,11 +701,9 @@ const InternetProxyServer & InternetProxyDecider_Impl::getProxy(
     return m_aEmptyProxy;
 }
 
-
 // virtual
 void SAL_CALL InternetProxyDecider_Impl::changesOccurred(
                                         const util::ChangesEvent& Event )
-    throw( uno::RuntimeException, std::exception )
 {
     osl::Guard< osl::Mutex > aGuard( m_aMutex );
 
@@ -563,11 +720,14 @@ void SAL_CALL InternetProxyDecider_Impl::changesOccurred(
             {
                 if ( aKey == PROXY_TYPE_KEY )
                 {
-                    if ( !( rElem.Element >>= m_nProxyType ) )
+                    sal_Int32 tmp;
+                    if ( !( rElem.Element >>= tmp ) )
                     {
                         OSL_FAIL( "InternetProxyDecider - changesOccurred - "
                                     "Error getting config item value!" );
                     }
+                    else
+                        m_nProxyType = static_cast<ProxyType>(tmp);
                 }
                 else if ( aKey == NO_PROXY_LIST_KEY )
                 {
@@ -642,7 +802,6 @@ void SAL_CALL InternetProxyDecider_Impl::changesOccurred(
 
 // virtual
 void SAL_CALL InternetProxyDecider_Impl::disposing(const lang::EventObject&)
-    throw( uno::RuntimeException, std::exception )
 {
     if ( m_xNotifier.is() )
     {
@@ -747,11 +906,8 @@ void InternetProxyDecider_Impl::setNoProxyList(
                     }
                 }
 
-                m_aNoProxyList.push_back(
-                    NoProxyListEntry( WildCard( aToken ),
-                                      WildCard(
-                                        aFullyQualifiedHost
-                                            .makeStringAndClear() ) ) );
+                m_aNoProxyList.emplace_back( WildCard( aToken ),
+                                      WildCard( aFullyQualifiedHost.makeStringAndClear() ) );
             }
 
             if ( nEnd != nLen )
@@ -772,19 +928,15 @@ void InternetProxyDecider_Impl::setNoProxyList(
 
 InternetProxyDecider::InternetProxyDecider(
     const uno::Reference< uno::XComponentContext>& rxContext )
-: m_pImpl( new proxydecider_impl::InternetProxyDecider_Impl( rxContext ) )
+: m_xImpl( new proxydecider_impl::InternetProxyDecider_Impl( rxContext ) )
 {
-    m_pImpl->acquire();
 }
 
 
 InternetProxyDecider::~InternetProxyDecider()
 {
     // Break circular reference between config listener and notifier.
-    m_pImpl->dispose();
-
-    // Let him go...
-    m_pImpl->release();
+    m_xImpl->dispose();
 }
 
 
@@ -792,19 +944,19 @@ bool InternetProxyDecider::shouldUseProxy( const OUString & rProtocol,
                                            const OUString & rHost,
                                            sal_Int32 nPort ) const
 {
-    const InternetProxyServer & rData = m_pImpl->getProxy( rProtocol,
+    const InternetProxyServer & rData = m_xImpl->getProxy( rProtocol,
                                                            rHost,
                                                            nPort );
     return !rData.aName.isEmpty();
 }
 
 
-const InternetProxyServer & InternetProxyDecider::getProxy(
+InternetProxyServer InternetProxyDecider::getProxy(
                                             const OUString & rProtocol,
                                             const OUString & rHost,
                                             sal_Int32 nPort ) const
 {
-    return m_pImpl->getProxy( rProtocol, rHost, nPort );
+    return m_xImpl->getProxy( rProtocol, rHost, nPort );
 }
 
 } // namespace ucbhelper

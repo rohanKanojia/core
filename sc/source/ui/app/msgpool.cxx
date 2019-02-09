@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <svx/dialogs.hrc>
 
-#include "sc.hrc"
-#include "docpool.hxx"
-#include "msgpool.hxx"
+#include <sc.hrc>
+#include <docpool.hxx>
+#include <msgpool.hxx>
 
 static SfxItemInfo const aMsgItemInfos[] =
 {
@@ -35,11 +35,11 @@ static SfxItemInfo const aMsgItemInfos[] =
     { SID_PIVOT_TABLE,           true },   // SCITEM_PIVOTDATA
     { SID_SOLVE,                 true },   // SCITEM_SOLVEDATA
     { SID_SCUSERLISTS,           true },   // SCITEM_USERLIST
-    { SID_PRINTER_NOTFOUND_WARN, true }    // SCITEM_PRINTWARN
+    { 0,                         false }  // SCITEM_CONDFORMATDLGDATA
 };
 
 ScMessagePool::ScMessagePool()
-    :   SfxItemPool         ( OUString("ScMessagePool"),
+    :   SfxItemPool         ( "ScMessagePool",
                               MSGPOOL_START, MSGPOOL_END,
                               aMsgItemInfos, nullptr ),
 
@@ -52,25 +52,23 @@ ScMessagePool::ScMessagePool()
     aGlobalPivotItem        ( ScPivotItem           ( SCITEM_PIVOTDATA, nullptr, nullptr, false ) ),
     aGlobalSolveItem        ( ScSolveItem           ( SCITEM_SOLVEDATA, nullptr ) ),
     aGlobalUserListItem     ( ScUserListItem        ( SCITEM_USERLIST ) ),
+    aCondFormatDlgItem      ( ScCondFormatDlgItem   ( nullptr, -1, false ) ),
 
-    aPrintWarnItem          ( SfxBoolItem           ( SCITEM_PRINTWARN, false ) )
+    mvPoolDefaults(MSGPOOL_END - MSGPOOL_START + 1),
+    pDocPool(new ScDocumentPool)
 {
-    ppPoolDefaults = new SfxPoolItem*[MSGPOOL_END - MSGPOOL_START + 1];
+    mvPoolDefaults[SCITEM_STRING            - MSGPOOL_START] = &aGlobalStringItem;
+    mvPoolDefaults[SCITEM_SEARCHDATA        - MSGPOOL_START] = &aGlobalSearchItem;
+    mvPoolDefaults[SCITEM_SORTDATA          - MSGPOOL_START] = &aGlobalSortItem;
+    mvPoolDefaults[SCITEM_QUERYDATA         - MSGPOOL_START] = &aGlobalQueryItem;
+    mvPoolDefaults[SCITEM_SUBTDATA          - MSGPOOL_START] = &aGlobalSubTotalItem;
+    mvPoolDefaults[SCITEM_CONSOLIDATEDATA   - MSGPOOL_START] = &aGlobalConsolidateItem;
+    mvPoolDefaults[SCITEM_PIVOTDATA         - MSGPOOL_START] = &aGlobalPivotItem;
+    mvPoolDefaults[SCITEM_SOLVEDATA         - MSGPOOL_START] = &aGlobalSolveItem;
+    mvPoolDefaults[SCITEM_USERLIST          - MSGPOOL_START] = &aGlobalUserListItem;
+    mvPoolDefaults[SCITEM_CONDFORMATDLGDATA - MSGPOOL_START] = &aCondFormatDlgItem;
 
-    ppPoolDefaults[SCITEM_STRING            - MSGPOOL_START] = &aGlobalStringItem;
-    ppPoolDefaults[SCITEM_SEARCHDATA        - MSGPOOL_START] = &aGlobalSearchItem;
-    ppPoolDefaults[SCITEM_SORTDATA          - MSGPOOL_START] = &aGlobalSortItem;
-    ppPoolDefaults[SCITEM_QUERYDATA         - MSGPOOL_START] = &aGlobalQueryItem;
-    ppPoolDefaults[SCITEM_SUBTDATA          - MSGPOOL_START] = &aGlobalSubTotalItem;
-    ppPoolDefaults[SCITEM_CONSOLIDATEDATA   - MSGPOOL_START] = &aGlobalConsolidateItem;
-    ppPoolDefaults[SCITEM_PIVOTDATA         - MSGPOOL_START] = &aGlobalPivotItem;
-    ppPoolDefaults[SCITEM_SOLVEDATA         - MSGPOOL_START] = &aGlobalSolveItem;
-    ppPoolDefaults[SCITEM_USERLIST          - MSGPOOL_START] = &aGlobalUserListItem;
-    ppPoolDefaults[SCITEM_PRINTWARN         - MSGPOOL_START] = &aPrintWarnItem;
-
-    SetDefaults( ppPoolDefaults );
-
-    pDocPool = new ScDocumentPool;
+    SetDefaults( &mvPoolDefaults );
 
     SetSecondaryPool( pDocPool );
 }
@@ -81,20 +79,18 @@ ScMessagePool::~ScMessagePool()
     SetSecondaryPool( nullptr ); // before deleting defaults (accesses defaults)
 
     for ( sal_uInt16 i=0; i <= MSGPOOL_END-MSGPOOL_START; i++ )
-        SetRefCount( *ppPoolDefaults[i], 0 );
-
-    delete[] ppPoolDefaults;
+        ClearRefCount( *mvPoolDefaults[i] );
 
     SfxItemPool::Free(pDocPool);
 }
 
-SfxMapUnit ScMessagePool::GetMetric( sal_uInt16 nWhich ) const
+MapUnit ScMessagePool::GetMetric( sal_uInt16 nWhich ) const
 {
     // Own attributes: Twips, everything else 1/100 mm
     if ( nWhich >= ATTR_STARTINDEX && nWhich <= ATTR_ENDINDEX )
-        return SFX_MAPUNIT_TWIP;
+        return MapUnit::MapTwip;
     else
-        return SFX_MAPUNIT_100TH_MM;
+        return MapUnit::Map100thMM;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

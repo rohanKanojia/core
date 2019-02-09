@@ -23,8 +23,8 @@
 #include <connectivity/sdbcx/VCollection.hxx>
 #include <com/sun/star/sdbc/XDatabaseMetaData.hpp>
 #include <connectivity/sdbcx/IRefreshable.hxx>
-#include "file/FTable.hxx"
-#include "file/filedllapi.hxx"
+#include <file/FTable.hxx>
+#include <file/filedllapi.hxx>
 
 namespace connectivity
 {
@@ -36,11 +36,11 @@ namespace connectivity
             OFileTable* m_pTable;
 
             virtual sdbcx::ObjectType createObject(const OUString& _rName) override;
-            virtual void impl_refresh() throw(::com::sun::star::uno::RuntimeException) override;
+            virtual void impl_refresh() override;
         public:
             OColumns(   OFileTable* _pTable,
                         ::osl::Mutex& _rMutex,
-                        const TStringVector &_rVector
+                        const ::std::vector< OUString> &_rVector
                     ) : sdbcx::OCollection(*_pTable,_pTable->getConnection()->getMetaData()->supportsMixedCaseQuotedIdentifiers(),_rMutex,_rVector)
                 ,m_pTable(_pTable)
             {}

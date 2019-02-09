@@ -28,14 +28,16 @@
 #include <o3tl/cow_wrapper.hxx>
 
 
+namespace tools
+{
 class Rectangle;
+}
 class Point;
 class SvStream;
 
 class Impl_Gradient
 {
 public:
-    sal_uInt32          mnRefCount;
     GradientStyle       meStyle;
     Color               maStartColor;
     Color               maEndColor;
@@ -46,9 +48,6 @@ public:
     sal_uInt16          mnIntensityStart;
     sal_uInt16          mnIntensityEnd;
     sal_uInt16          mnStepCount;
-
-    friend SvStream& ReadImpl_Gradient( SvStream& rIStm, Impl_Gradient& rImplGradient );
-    friend SvStream& WriteImpl_Gradient( SvStream& rOStm, const Impl_Gradient& rImplGradient );
 
     Impl_Gradient();
     Impl_Gradient( const Impl_Gradient& rImplGradient );
@@ -65,6 +64,7 @@ private:
 public:
                     Gradient();
                     Gradient( const Gradient& rGradient );
+                    Gradient( Gradient&& rGradient );
                     Gradient( GradientStyle eStyle,
                               const Color& rStartColor,
                               const Color& rEndColor );
@@ -96,9 +96,10 @@ public:
     void            SetSteps( sal_uInt16 nSteps );
     sal_uInt16          GetSteps() const { return mpImplGradient->mnStepCount; }
 
-    void            GetBoundRect( const Rectangle& rRect, Rectangle &rBoundRect, Point& rCenter ) const;
+    void            GetBoundRect( const tools::Rectangle& rRect, tools::Rectangle &rBoundRect, Point& rCenter ) const;
 
     Gradient&       operator=( const Gradient& rGradient );
+    Gradient&       operator=( Gradient&& rGradient );
     bool            operator==( const Gradient& rGradient ) const;
     bool            operator!=( const Gradient& rGradient ) const
                         { return !(Gradient::operator==( rGradient )); }

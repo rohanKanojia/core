@@ -20,13 +20,11 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_PREVIEWRENDERER_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_PREVIEWRENDERER_HXX
 
-#include "drawview.hxx"
 #include <vcl/image.hxx>
-#include <vcl/virdev.hxx>
-#include <svl/listener.hxx>
 #include <memory>
 
-class OutputDevice;
+#include <svl/lstner.hxx>
+
 class SdPage;
 class VirtualDevice;
 
@@ -41,47 +39,34 @@ class PreviewRenderer
 public:
     /** Create a new preview renderer that takes some of its initial values
         from the given output device.
-        @param pTemplate
-            May be NULL.
         @param bPaintFrame
             When <TRUE/> (the default) then a frame is painted around the
             preview.  This makes the actual preview smaller.
     */
-    PreviewRenderer (
-        OutputDevice* pTemplate = nullptr,
-        const bool bPaintFrame = true);
+    PreviewRenderer(const bool bPaintFrame = true);
 
-    virtual ~PreviewRenderer();
+    virtual ~PreviewRenderer() override;
 
     /** Render a page with the given pixel size.
         Use this version when only the width of the preview is known to the
-        caller.  The height is then calculated according to the aspect
-        ration of the given page.
+        caller. The height is then calculated according to the aspect
+        ratio of the given page.
         @param pPage
             The page to render.
         @param nWidth
             The width of the preview in device coordinates.
-        @param sSubstitutionText
-            When the actual preview can not be created for some reason, then
-            this text is painted in an empty rectangle of the requested size
-            instead.
          The high contrast mode of the application is
          ignored and the preview is rendered in normal mode.
     */
     Image RenderPage (
         const SdPage* pPage,
-        const sal_Int32 nWidth,
-        const OUString& sSubstitutionText);
+        const sal_Int32 nWidth);
 
     /** Render a page with the given pixel size.
         @param pPage
             The page to render.
         @param aPreviewPixelSize
             The size in device coordinates of the preview.
-        @param sSubstitutionText
-            When the actual preview can not be created for some reason, then
-            this text is painted in an empty rectangle of the requested size
-            instead.
         @param bObeyHighContrastMode
             When <FALSE/> then the high contrast mode of the application is
             ignored and the preview is rendered in normal mode.  When
@@ -94,8 +79,7 @@ public:
     Image RenderPage (
         const SdPage* pPage,
         const Size aPreviewPixelSize,
-        const OUString& sSubstitutionText,
-        const bool bObeyHighContrastMode = true,
+        const bool bObeyHighContrastMode,
         const bool bDisplayPresentationObjects = true);
 
     /** Render an image that contains the given substitution text instead of a
@@ -131,7 +115,6 @@ private:
         const SdPage* pPage,
         const Size& rPixelSize,
         const bool bObeyHighContrastMode);
-    void Cleanup();
     void PaintPage (
         const SdPage* pPage,
         const bool bDisplayPresentationObjects);

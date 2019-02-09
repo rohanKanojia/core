@@ -20,9 +20,11 @@
 #include <sal/config.h>
 
 #include <com/sun/star/uno/Reference.h>
+#include <com/sun/star/linguistic2/XLinguServiceEventBroadcaster.hpp>
 #include <com/sun/star/linguistic2/XSearchableDictionaryList.hpp>
 #include <com/sun/star/linguistic2/SpellFailure.hpp>
 #include <com/sun/star/registry/XRegistryKey.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <cppuhelper/factory.hxx>
 #include <unotools/localedatawrapper.hxx>
@@ -31,13 +33,14 @@
 #include <tools/debug.hxx>
 #include <svl/lngmisc.hxx>
 #include <osl/mutex.hxx>
+#include <sal/log.hxx>
 
 #include <vector>
 
 #include "spelldsp.hxx"
-#include "linguistic/spelldta.hxx"
+#include <linguistic/spelldta.hxx>
 #include "lngsvcmgr.hxx"
-#include "linguistic/lngprops.hxx"
+#include <linguistic/lngprops.hxx>
 
 using namespace osl;
 using namespace com::sun::star;
@@ -152,7 +155,7 @@ std::vector< OUString > ProposalList::GetVector() const
     return aRes;
 }
 
-bool SvcListHasLanguage(
+static bool SvcListHasLanguage(
         const LangSvcEntries_Spell &rEntry,
         LanguageType nLanguage )
 {
@@ -175,58 +178,41 @@ bool SvcListHasLanguage(
 }
 
 SpellCheckerDispatcher::SpellCheckerDispatcher( LngSvcMgr &rLngSvcMgr ) :
-    rMgr    (rLngSvcMgr)
+    m_rMgr    (rLngSvcMgr)
 {
-    pCache = nullptr;
-    pCharClass = nullptr;
 }
 
 
 SpellCheckerDispatcher::~SpellCheckerDispatcher()
 {
-    ClearSvcList();
-    delete pCache;
-    delete pCharClass;
-}
-
-
-void SpellCheckerDispatcher::ClearSvcList()
-{
-    // release memory for each table entry
-    SpellSvcByLangMap_t aTmp;
-    aSvcMap.swap( aTmp );
 }
 
 
 Sequence< Locale > SAL_CALL SpellCheckerDispatcher::getLocales()
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
-    Sequence< Locale > aLocales( static_cast< sal_Int32 >(aSvcMap.size()) );
+    Sequence< Locale > aLocales( static_cast< sal_Int32 >(m_aSvcMap.size()) );
     Locale *pLocales = aLocales.getArray();
-    SpellSvcByLangMap_t::const_iterator aIt;
-    for (aIt = aSvcMap.begin();  aIt != aSvcMap.end();  ++aIt)
+    for (auto const& elem : m_aSvcMap)
     {
-        *pLocales++ = LanguageTag::convertToLocale( aIt->first );
+        *pLocales++ = LanguageTag::convertToLocale(elem.first);
     }
     return aLocales;
 }
 
 
 sal_Bool SAL_CALL SpellCheckerDispatcher::hasLocale( const Locale& rLocale )
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
-    SpellSvcByLangMap_t::const_iterator aIt( aSvcMap.find( LinguLocaleToLanguage( rLocale ) ) );
-    return aIt != aSvcMap.end();
+    SpellSvcByLangMap_t::const_iterator aIt( m_aSvcMap.find( LinguLocaleToLanguage( rLocale ) ) );
+    return aIt != m_aSvcMap.end();
 }
 
 
 sal_Bool SAL_CALL
     SpellCheckerDispatcher::isValid( const OUString& rWord, const Locale& rLocale,
             const PropertyValues& rProperties )
-        throw(IllegalArgumentException, RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     return isValid_Impl( rWord, LinguLocaleToLanguage( rLocale ), rProperties );
@@ -236,7 +222,6 @@ sal_Bool SAL_CALL
 Reference< XSpellAlternatives > SAL_CALL
     SpellCheckerDispatcher::spell( const OUString& rWord, const Locale& rLocale,
             const PropertyValues& rProperties )
-        throw(IllegalArgumentException, RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     return spell_Impl( rWord, LinguLocaleToLanguage( rLocale ), rProperties );
@@ -281,7 +266,6 @@ bool SpellCheckerDispatcher::isValid_Impl(
             const OUString& rWord,
             LanguageType nLanguage,
             const PropertyValues& rProperties)
-        throw( RuntimeException, IllegalArgumentException, std::exception )
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -291,8 +275,8 @@ bool SpellCheckerDispatcher::isValid_Impl(
         return bRes;
 
     // search for entry with that language
-    SpellSvcByLangMap_t::iterator    aIt( aSvcMap.find( nLanguage ) );
-    LangSvcEntries_Spell    *pEntry = aIt != aSvcMap.end() ? aIt->second.get() : nullptr;
+    SpellSvcByLangMap_t::iterator    aIt( m_aSvcMap.find( nLanguage ) );
+    LangSvcEntries_Spell    *pEntry = aIt != m_aSvcMap.end() ? aIt->second.get() : nullptr;
 
     if (pEntry)
     {
@@ -377,14 +361,14 @@ bool SpellCheckerDispatcher::isValid_Impl(
                 }
                 catch (uno::Exception &)
                 {
-                    DBG_ASSERT( false, "createInstanceWithArguments failed" );
+                    SAL_WARN( "linguistic", "createInstanceWithArguments failed" );
                 }
                 pRef [i] = xSpell;
 
                 Reference< XLinguServiceEventBroadcaster >
                         xBroadcaster( xSpell, UNO_QUERY );
                 if (xBroadcaster.is())
-                    rMgr.AddLngSvcEvtBroadcaster( xBroadcaster );
+                    m_rMgr.AddLngSvcEvtBroadcaster( xBroadcaster );
 
                 bTmpResValid = true;
                 if (xSpell.is()  &&  xSpell->hasLocale( aLocale ))
@@ -405,7 +389,7 @@ bool SpellCheckerDispatcher::isValid_Impl(
                 if (bTmpResValid)
                     bRes = bTmpRes;
 
-                pEntry->nLastTriedSvcIndex = (sal_Int16) i;
+                pEntry->nLastTriedSvcIndex = static_cast<sal_Int16>(i);
                 ++i;
             }
 
@@ -414,7 +398,7 @@ bool SpellCheckerDispatcher::isValid_Impl(
             if (i == nLen)
             {
                 if (!SvcListHasLanguage( *pEntry, nLanguage ))
-                    aSvcMap.erase( nLanguage );
+                    m_aSvcMap.erase( nLanguage );
             }
         }
 
@@ -426,9 +410,9 @@ bool SpellCheckerDispatcher::isValid_Impl(
                 bRes = !xTmp->isNegative();
             } else {
                 setCharClass(LanguageTag(nLanguage));
-                CapType ct = capitalType(aChkWord, pCharClass);
+                CapType ct = capitalType(aChkWord, m_pCharClass.get());
                 if (ct == CapType::INITCAP || ct == CapType::ALLCAP) {
-                    Reference< XDictionaryEntry > xTmp2( lcl_GetRulingDictionaryEntry( makeLowerCase(aChkWord, pCharClass), nLanguage ) );
+                    Reference< XDictionaryEntry > xTmp2( lcl_GetRulingDictionaryEntry( makeLowerCase(aChkWord, m_pCharClass.get()), nLanguage ) );
                     if (xTmp2.is()) {
                         bRes = !xTmp2->isNegative();
                     }
@@ -445,7 +429,6 @@ Reference< XSpellAlternatives > SpellCheckerDispatcher::spell_Impl(
             const OUString& rWord,
             LanguageType nLanguage,
             const PropertyValues& rProperties )
-        throw(IllegalArgumentException, RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -455,8 +438,8 @@ Reference< XSpellAlternatives > SpellCheckerDispatcher::spell_Impl(
         return xRes;
 
     // search for entry with that language
-    SpellSvcByLangMap_t::iterator    aIt( aSvcMap.find( nLanguage ) );
-    LangSvcEntries_Spell    *pEntry = aIt != aSvcMap.end() ? aIt->second.get() : nullptr;
+    SpellSvcByLangMap_t::iterator    aIt( m_aSvcMap.find( nLanguage ) );
+    LangSvcEntries_Spell    *pEntry = aIt != m_aSvcMap.end() ? aIt->second.get() : nullptr;
 
     if (pEntry)
     {
@@ -560,14 +543,14 @@ Reference< XSpellAlternatives > SpellCheckerDispatcher::spell_Impl(
                 }
                 catch (uno::Exception &)
                 {
-                    DBG_ASSERT( false, "createInstanceWithArguments failed" );
+                    SAL_WARN( "linguistic", "createInstanceWithArguments failed" );
                 }
                 pRef [i] = xSpell;
 
                 Reference< XLinguServiceEventBroadcaster >
                         xBroadcaster( xSpell, UNO_QUERY );
                 if (xBroadcaster.is())
-                    rMgr.AddLngSvcEvtBroadcaster( xBroadcaster );
+                    m_rMgr.AddLngSvcEvtBroadcaster( xBroadcaster );
 
                 bTmpResValid = true;
                 if (xSpell.is()  &&  xSpell->hasLocale( aLocale ))
@@ -608,7 +591,7 @@ Reference< XSpellAlternatives > SpellCheckerDispatcher::spell_Impl(
                     nNumSugestions = nTmpNumSugestions;
                 }
 
-                pEntry->nLastTriedSvcIndex = (sal_Int16) i;
+                pEntry->nLastTriedSvcIndex = static_cast<sal_Int16>(i);
                 ++i;
             }
 
@@ -617,7 +600,7 @@ Reference< XSpellAlternatives > SpellCheckerDispatcher::spell_Impl(
             if (i == nLen)
             {
                 if (!SvcListHasLanguage( *pEntry, nLanguage ))
-                    aSvcMap.erase( nLanguage );
+                    m_aSvcMap.erase( nLanguage );
             }
         }
 
@@ -668,10 +651,10 @@ Reference< XSpellAlternatives > SpellCheckerDispatcher::spell_Impl(
             else
             {
                 setCharClass(LanguageTag(nLanguage));
-                CapType ct = capitalType(aChkWord, pCharClass);
+                CapType ct = capitalType(aChkWord, m_pCharClass.get());
                 if (ct == CapType::INITCAP || ct == CapType::ALLCAP)
                 {
-                    Reference< XDictionaryEntry > xTmp2( lcl_GetRulingDictionaryEntry( makeLowerCase(aChkWord, pCharClass), nLanguage ) );
+                    Reference< XDictionaryEntry > xTmp2( lcl_GetRulingDictionaryEntry( makeLowerCase(aChkWord, m_pCharClass.get()), nLanguage ) );
                     if (xTmp2.is())
                     {
                         if (xTmp2->isNegative())    // negative entry found
@@ -688,10 +671,10 @@ Reference< XSpellAlternatives > SpellCheckerDispatcher::spell_Impl(
                                 switch ( ct )
                                 {
                                     case CapType::INITCAP:
-                                        aProposalList.Prepend( pCharClass->titlecase(aAddRplcTxt) );
+                                        aProposalList.Prepend( m_pCharClass->titlecase(aAddRplcTxt) );
                                         break;
                                     case CapType::ALLCAP:
-                                        aProposalList.Prepend( pCharClass->uppercase(aAddRplcTxt) );
+                                        aProposalList.Prepend( m_pCharClass->uppercase(aAddRplcTxt) );
                                         break;
                                     default:
                                         /* can't happen because of if ct ==  above */
@@ -733,14 +716,14 @@ Reference< XSpellAlternatives > SpellCheckerDispatcher::spell_Impl(
             {
                 if (xRes.is())
                 {
-                    DBG_ASSERT( false, "XSetSpellAlternatives not implemented!" );
+                    SAL_WARN( "linguistic", "XSetSpellAlternatives not implemented!" );
                 }
                 else if (!aProposals.empty())
                 {
                     // no xRes but Proposals found from the user-dictionaries.
                     // Thus we need to create an xRes...
                     xRes = new linguistic::SpellAlternatives( rWord, nLanguage,
-                            SpellFailure::IS_NEGATIVE_WORD, comphelper::containerToSequence(aProposals) );
+                            comphelper::containerToSequence(aProposals) );
                 }
             }
         }
@@ -750,7 +733,6 @@ Reference< XSpellAlternatives > SpellCheckerDispatcher::spell_Impl(
 }
 
 uno::Sequence< sal_Int16 > SAL_CALL SpellCheckerDispatcher::getLanguages(  )
-throw (uno::RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     uno::Sequence< Locale > aTmp( getLocales() );
@@ -761,10 +743,9 @@ throw (uno::RuntimeException, std::exception)
 
 sal_Bool SAL_CALL SpellCheckerDispatcher::hasLanguage(
     sal_Int16 nLanguage )
-throw (uno::RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
-    return hasLocale( LanguageTag::convertToLocale( nLanguage) );
+    return hasLocale( LanguageTag::convertToLocale(LanguageType(static_cast<sal_uInt16>(nLanguage))));
 }
 
 
@@ -772,10 +753,9 @@ sal_Bool SAL_CALL SpellCheckerDispatcher::isValid(
     const OUString& rWord,
     sal_Int16 nLanguage,
     const uno::Sequence< beans::PropertyValue >& rProperties )
-throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
-    return isValid( rWord, LanguageTag::convertToLocale( nLanguage ), rProperties);
+    return isValid( rWord, LanguageTag::convertToLocale(LanguageType(static_cast<sal_uInt16>(nLanguage))), rProperties);
 }
 
 
@@ -783,10 +763,9 @@ uno::Reference< linguistic2::XSpellAlternatives > SAL_CALL SpellCheckerDispatche
     const OUString& rWord,
     sal_Int16 nLanguage,
     const uno::Sequence< beans::PropertyValue >& rProperties )
-throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
-    return spell( rWord, LanguageTag::convertToLocale( nLanguage), rProperties);
+    return spell(rWord, LanguageTag::convertToLocale(LanguageType(static_cast<sal_uInt16>(nLanguage))), rProperties);
 }
 
 
@@ -795,19 +774,19 @@ void SpellCheckerDispatcher::SetServiceList( const Locale &rLocale,
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
-    if (pCache)
-        pCache->Flush();    // new services may spell differently...
+    if (m_pCache)
+        m_pCache->Flush();    // new services may spell differently...
 
-    sal_Int16 nLanguage = LinguLocaleToLanguage( rLocale );
+    LanguageType nLanguage = LinguLocaleToLanguage( rLocale );
 
     sal_Int32 nLen = rSvcImplNames.getLength();
     if (0 == nLen)
         // remove entry
-        aSvcMap.erase( nLanguage );
+        m_aSvcMap.erase( nLanguage );
     else
     {
         // modify/add entry
-        LangSvcEntries_Spell *pEntry = aSvcMap[ nLanguage ].get();
+        LangSvcEntries_Spell *pEntry = m_aSvcMap[ nLanguage ].get();
         if (pEntry)
         {
             pEntry->Clear();
@@ -818,7 +797,7 @@ void SpellCheckerDispatcher::SetServiceList( const Locale &rLocale,
         {
             std::shared_ptr< LangSvcEntries_Spell > pTmpEntry( new LangSvcEntries_Spell( rSvcImplNames ) );
             pTmpEntry->aSvcRefs = Sequence< Reference < XSpellChecker > >( nLen );
-            aSvcMap[ nLanguage ] = pTmpEntry;
+            m_aSvcMap[ nLanguage ] = pTmpEntry;
         }
     }
 }
@@ -832,9 +811,9 @@ Sequence< OUString >
     Sequence< OUString > aRes;
 
     // search for entry with that language and use data from that
-    sal_Int16 nLanguage = LinguLocaleToLanguage( rLocale );
-    const SpellSvcByLangMap_t::const_iterator aIt( aSvcMap.find( nLanguage ) );
-    const LangSvcEntries_Spell      *pEntry = aIt != aSvcMap.end() ? aIt->second.get() : nullptr;
+    LanguageType nLanguage = LinguLocaleToLanguage( rLocale );
+    const SpellSvcByLangMap_t::const_iterator aIt( m_aSvcMap.find( nLanguage ) );
+    const LangSvcEntries_Spell      *pEntry = aIt != m_aSvcMap.end() ? aIt->second.get() : nullptr;
     if (pEntry)
         aRes = pEntry->aSvcImplNames;
 
@@ -844,19 +823,19 @@ Sequence< OUString >
 
 void SpellCheckerDispatcher::FlushSpellCache()
 {
-    if (pCache)
-        pCache->Flush();
+    if (m_pCache)
+        m_pCache->Flush();
 }
 
 void SpellCheckerDispatcher::setCharClass(const LanguageTag& rLanguageTag)
 {
-    if (!pCharClass)
-        pCharClass = new CharClass(rLanguageTag);
-    pCharClass->setLanguageTag(rLanguageTag);
+    if (!m_pCharClass)
+        m_pCharClass.reset( new CharClass(rLanguageTag) );
+    m_pCharClass->setLanguageTag(rLanguageTag);
 }
 
 
-OUString SAL_CALL SpellCheckerDispatcher::makeLowerCase(const OUString& aTerm, CharClass * pCC)
+OUString SpellCheckerDispatcher::makeLowerCase(const OUString& aTerm, CharClass const * pCC)
 {
     if (pCC)
         return pCC->lowercase(aTerm);

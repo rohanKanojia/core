@@ -20,9 +20,9 @@
 #ifndef INCLUDED_SAL_TEXTENC_CONVERTER_HXX
 #define INCLUDED_SAL_TEXTENC_CONVERTER_HXX
 
-#include "sal/config.h"
-#include "sal/saldllapi.h"
-#include "sal/types.h"
+#include <sal/config.h>
+#include <sal/saldllapi.h>
+#include <sal/types.h>
 
 // Internal, non-stable ABI
 
@@ -38,12 +38,12 @@ enum BadInputConversionAction
 BadInputConversionAction SAL_DLLPUBLIC
 handleBadInputTextToUnicodeConversion(
     bool bUndefined, bool bMultiByte, char cByte, sal_uInt32 nFlags,
-    sal_Unicode ** pDestBufPtr, sal_Unicode * pDestBufEnd, sal_uInt32 * pInfo);
+    sal_Unicode ** pDestBufPtr, const sal_Unicode * pDestBufEnd, sal_uInt32 * pInfo);
 
 BadInputConversionAction SAL_DLLPUBLIC
 handleBadInputUnicodeToTextConversion(
     bool bUndefined, sal_uInt32 nUtf32, sal_uInt32 nFlags, char ** pDestBufPtr,
-    char * pDestBufEnd, sal_uInt32 * pInfo, char const * pPrefix,
+    const char * pDestBufEnd, sal_uInt32 * pInfo, char const * pPrefix,
     sal_Size nPrefixLen, bool * pPrefixWritten);
 
 } } }

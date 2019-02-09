@@ -18,15 +18,12 @@
  */
 
 #include <osl/diagnose.h>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
-#include <com/sun/star/sdbc/XDataSource.hpp>
 #include <com/sun/star/sdbc/DataType.hpp>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
 #include <com/sun/star/sdb/XQueriesSupplier.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <comphelper/processfactory.hxx>
 #include <fldmgr.hxx>
 #include <dbmgr.hxx>
 #include <wrtsh.hxx>
@@ -52,12 +49,11 @@ bool SwFieldMgr::IsDBNumeric( const OUString& rDBName, const OUString& rTableQry
 {
     bool bNumeric = true;
 
-    SwDBManager* pDBManager = pWrtShell ? pWrtShell->GetDBManager() :
+    SwDBManager* pDBManager = m_pWrtShell ? m_pWrtShell->GetDBManager() :
                             ::GetActiveView()->GetWrtShell().GetDBManager();
 
-    OUString sSource(rDBName);
     Reference< XConnection> xConnection =
-                    pDBManager->RegisterConnection(sSource);
+                    pDBManager->RegisterConnection(rDBName);
 
     if( !xConnection.is() )
         return bNumeric;

@@ -19,10 +19,10 @@
 
 #include "NSString_OOoAdditions.hxx"
 #include "NSURL_OOoAdditions.hxx"
-#include "sal/log.hxx"
+#include <sal/log.hxx>
 
 @implementation NSURL (OOoAdditions)
-- (rtl::OUString) OUStringForInfo:(InfoType)info
+- (OUString) OUStringForInfo:(InfoType)info
 {
     NSAutoreleasePool *pool = [NSAutoreleasePool new];
 
@@ -66,7 +66,7 @@
             break;
     }
 
-    rtl::OUString sResult = [sURLString OUString];
+    OUString sResult = [sURLString OUString];
     [sURLString release];
 
     [pool release];
@@ -86,7 +86,11 @@ NSString* resolveAlias( NSString* i_pSystemPath )
         CFErrorRef rError;
         CFDataRef rBookmark = CFURLCreateBookmarkDataFromFile( nullptr, rUrl, &rError );
         CFRelease( rUrl );
-        if( rBookmark != nullptr )
+        if( rBookmark == nullptr )
+        {
+            CFRelease( rError );
+        }
+        else
         {
             Boolean bIsStale;
             CFURLRef rResolvedUrl = CFURLCreateByResolvingBookmarkData( kCFAllocatorDefault, rBookmark, kCFBookmarkResolutionWithoutUIMask,

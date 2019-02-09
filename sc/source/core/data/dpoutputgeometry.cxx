@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dpoutputgeometry.hxx"
-#include "address.hxx"
+#include <dpoutputgeometry.hxx>
+#include <address.hxx>
 
 #include <vector>
 
@@ -31,7 +31,9 @@ ScDPOutputGeometry::ScDPOutputGeometry(const ScRange& rOutRange, bool bShowFilte
     mnPageFields(0),
     mnDataFields(0),
     meDataLayoutType(None),
-    mbShowFilter(bShowFilter)
+    mbShowFilter(bShowFilter),
+    mbHeaderLayout (false),
+    mbCompactMode (false)
 {
 }
 
@@ -64,6 +66,16 @@ void ScDPOutputGeometry::setDataLayoutType(FieldType eType)
     meDataLayoutType = eType;
 }
 
+void ScDPOutputGeometry::setHeaderLayout(bool bHeaderLayout)
+{
+    mbHeaderLayout = bHeaderLayout;
+}
+
+void ScDPOutputGeometry::setCompactMode(bool bCompactMode)
+{
+    mbCompactMode = bCompactMode;
+}
+
 void ScDPOutputGeometry::getColumnFieldPositions(vector<ScAddress>& rAddrs) const
 {
     sal_uInt32 nColumnFields, nRowFields;
@@ -90,10 +102,12 @@ void ScDPOutputGeometry::getColumnFieldPositions(vector<ScAddress>& rAddrs) cons
     SCROW nRow = nCurRow;
     SCTAB nTab = maOutRange.aStart.Tab();
     SCCOL nColStart = static_cast<SCCOL>(maOutRange.aStart.Col() + nRowFields);
+    if(mbCompactMode)
+        nColStart = static_cast<SCCOL>(maOutRange.aStart.Col() + 1); // We have only one row in compact mode
     SCCOL nColEnd = nColStart + static_cast<SCCOL>(nColumnFields-1);
 
     for (SCCOL nCol = nColStart; nCol <= nColEnd; ++nCol)
-        aAddrs.push_back(ScAddress(nCol, nRow, nTab));
+        aAddrs.emplace_back(nCol, nRow, nTab);
     rAddrs.swap(aAddrs);
 }
 
@@ -114,8 +128,11 @@ void ScDPOutputGeometry::getRowFieldPositions(vector<ScAddress>& rAddrs) const
     SCCOL nColStart = maOutRange.aStart.Col();
     SCCOL nColEnd = nColStart + static_cast<SCCOL>(nRowFields-1);
 
+    if(mbCompactMode)
+        nColEnd = nColStart; // We have only one row in compact mode
+
     for (SCCOL nCol = nColStart; nCol <= nColEnd; ++nCol)
-        aAddrs.push_back(ScAddress(nCol, nRow, nTab));
+        aAddrs.emplace_back(nCol, nRow, nTab);
     rAddrs.swap(aAddrs);
 }
 
@@ -135,7 +152,7 @@ void ScDPOutputGeometry::getPageFieldPositions(vector<ScAddress>& rAddrs) const
     SCROW nRowEnd   = nRowStart + static_cast<SCCOL>(mnPageFields-1);
 
     for (SCROW nRow = nRowStart; nRow <= nRowEnd; ++nRow)
-        aAddrs.push_back(ScAddress(nCol, nRow, nTab));
+        aAddrs.emplace_back(nCol, nRow, nTab);
     rAddrs.swap(aAddrs);
 }
 
@@ -156,7 +173,7 @@ SCROW ScDPOutputGeometry::getRowFieldHeaderRow() const
 
     if (nColumnFields)
         nCurRow += static_cast<SCROW>(nColumnFields);
-    else if (nRowFields)
+    else if (nRowFields && mbHeaderLayout)
         ++nCurRow;
 
     return nCurRow;
@@ -179,6 +196,7 @@ void ScDPOutputGeometry::adjustFieldsForDataLayout(sal_uInt32& rColumnFields, sa
             case Row:
                 if (rRowFields > 0)
                     rRowFields -= 1;
+            break;
             default:
                 ;
         }
@@ -221,7 +239,7 @@ ScDPOutputGeometry::getFieldButtonType(const ScAddress& rPos) const
 
         nCurRow += static_cast<SCROW>(nColumnFields);
     }
-    else
+    else if (mbHeaderLayout)
         ++nCurRow;
 
     if (nRowFields)

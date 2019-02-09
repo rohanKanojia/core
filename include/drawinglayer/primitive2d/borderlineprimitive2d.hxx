@@ -26,22 +26,77 @@
 #include <basegfx/color/bcolor.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/polygon/b2dpolypolygon.hxx>
+#include <drawinglayer/attribute/lineattribute.hxx>
+#include <drawinglayer/attribute/strokeattribute.hxx>
 
-#include <com/sun/star/table/BorderLineStyle.hpp>
-
+enum class SvxBorderLineStyle : sal_Int16;
 
 namespace drawinglayer
 {
     namespace primitive2d
     {
+        /** BorderLine class
+        Helper class holding the style definition for a single part of a full BorderLine definition.
+        Line extends are for start/end and for Left/Right, seen in vector direction. If
+        Left != Right that means the line has a diagonal start/end.
+        Think about it similar to a trapezoid, but not aligned to X-Axis and using the
+        perpendicular vector to the given one in a right-handed coordinate system.
+        */
+        class DRAWINGLAYER_DLLPUBLIC BorderLine
+        {
+        private:
+            // line attribute containing Width, Color and others
+            drawinglayer::attribute::LineAttribute  maLineAttribute;
+
+            // line extends
+            double              mfStartLeft;
+            double              mfStartRight;
+            double              mfEndLeft;
+            double              mfEndRight;
+
+            // if this is a gap, this is set to true
+            bool                mbIsGap;
+
+        public:
+            // Constructor for visible BorderLine segments
+            BorderLine(
+                const drawinglayer::attribute::LineAttribute& rLineAttribute,
+                double fStartLeft = 0.0,
+                double fStartRight = 0.0,
+                double fEndLeft = 0.0,
+                double fEndRight = 0.0);
+
+            // Constructor for gap BorderLine segments
+            BorderLine(double fWidth);
+
+            ~BorderLine();
+
+            const drawinglayer::attribute::LineAttribute& getLineAttribute() const { return maLineAttribute; }
+            double getStartLeft() const { return mfStartLeft; }
+            double getStartRight() const { return mfStartRight; }
+            double getEndLeft() const { return mfEndLeft; }
+            double getEndRight() const { return mfEndRight; }
+            bool isGap() const { return mbIsGap; }
+
+            /// compare operator
+            bool operator==(const BorderLine& rBorderLine) const;
+        };
+
+        /// helper to try to merge two instances of BorderLinePrimitive2D. If it was possible,
+        /// a merged version is in the returned Primitive2DReference. Lots of preconditions
+        /// have to be met to allow that, see implementation (and maybe even expand)
+        Primitive2DReference DRAWINGLAYER_DLLPUBLIC tryMergeBorderLinePrimitive2D(
+            const Primitive2DReference& rCandidateA,
+            const Primitive2DReference& rCandidateB);
+
         /** BorderLinePrimitive2D class
 
-            This is the basic primitive to build frames around objects, e.g. tables.
-            It defines a single or double line from Start to End using the LeftWidth,
-            Distance and RightWidth definitions.
-            The LineStart/End overlap is defined by the Extend(Left|Right)(Start|End)
-            definitions.
-         */
+        This is the basic primitive to build frames around objects, e.g. tables.
+        It defines a single or double line from Start to End using the LeftWidth,
+        Distance and RightWidth definitions.
+        The LineStart/End overlap is defined in the BorderLines definitions (see
+        class BorderLine above).
+        */
         class DRAWINGLAYER_DLLPUBLIC BorderLinePrimitive2D : public BufferedDecompositionPrimitive2D
         {
         private:
@@ -49,88 +104,34 @@ namespace drawinglayer
             basegfx::B2DPoint                               maStart;
             basegfx::B2DPoint                               maEnd;
 
-            /// the widths of single/double line
-            double                                          mfLeftWidth;
-            double                                          mfDistance;
-            double                                          mfRightWidth;
+            /// the single BorderLine style definition(s), one or three mostly used
+            std::vector< BorderLine >                       maBorderLines;
 
-            /// edge overlap sizes
-            double                                          mfExtendLeftStart;
-            double                                          mfExtendLeftEnd;
-            double                                          mfExtendRightStart;
-            double                                          mfExtendRightEnd;
-
-            /// the line colors
-            basegfx::BColor                                 maRGBColorRight;
-            basegfx::BColor                                 maRGBColorLeft;
-            basegfx::BColor                                 maRGBColorGap;
-            bool                                            mbHasGapColor;
-
-            short                                           mnStyle;
-
-            double                                          mfPatternScale;
-
-            /// local helpers
-            double getWidth(
-                    const geometry::ViewInformation2D& rViewInformation) const;
-
-            bool isSolidLine() const
-            {
-                return mnStyle == css::table::BorderLineStyle::SOLID;
-            }
-
-            bool isInsideUsed() const
-            {
-                return !basegfx::fTools::equalZero(mfLeftWidth);
-            }
-
-            bool isOutsideUsed() const
-            {
-                return !basegfx::fTools::equalZero(mfRightWidth);
-            }
-
-        protected:
-            virtual basegfx::B2DPolyPolygon getClipPolygon(
-                    const geometry::ViewInformation2D& rViewInformation) const;
+            /// common style definitions
+            const drawinglayer::attribute::StrokeAttribute  maStrokeAttribute;
 
             /// create local decomposition
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const override;
+
+            /// helper to get the full width from maBorderLines
+            double getFullWidth() const;
 
         public:
-            /// constructor
+            /// simplified constructor for BorderLine with single edge
             BorderLinePrimitive2D(
                 const basegfx::B2DPoint& rStart,
                 const basegfx::B2DPoint& rEnd,
-                double fLeftWidth,
-                double fDistance,
-                double fRightWidth,
-                double fExtendLeftStart,
-                double fExtendLeftEnd,
-                double fExtendRightStart,
-                double fExtendRightEnd,
-                const basegfx::BColor& rRGBColorRight,
-                const basegfx::BColor& rRGBColorLeft,
-                const basegfx::BColor& rRGBColorGap,
-                bool bHasGapColor,
-                const short nStyle,
-                double fPatternScale = 1.0 );
+                const std::vector< BorderLine >& rBorderLines,
+                const drawinglayer::attribute::StrokeAttribute& rStrokeAttribute);
 
             /// data read access
             const basegfx::B2DPoint& getStart() const { return maStart; }
             const basegfx::B2DPoint& getEnd() const { return maEnd; }
-            double getLeftWidth() const { return mfLeftWidth; }
-            double getDistance() const { return mfDistance; }
-            double getRightWidth() const { return mfRightWidth; }
-            double getExtendLeftStart() const { return mfExtendLeftStart; }
-            double getExtendLeftEnd() const { return mfExtendLeftEnd; }
-            double getExtendRightStart() const { return mfExtendRightStart; }
-            double getExtendRightEnd() const { return mfExtendRightEnd; }
-            const basegfx::BColor& getRGBColorRight () const { return maRGBColorRight; }
-            const basegfx::BColor& getRGBColorLeft () const { return maRGBColorLeft; }
-            const basegfx::BColor& getRGBColorGap () const { return maRGBColorGap; }
-            bool hasGapColor( ) const { return mbHasGapColor; }
-            short getStyle () const { return mnStyle; }
-            double getPatternScale() const { return mfPatternScale; }
+            const std::vector< BorderLine >& getBorderLines() const { return maBorderLines; }
+            const drawinglayer::attribute::StrokeAttribute& getStrokeAttribute() const { return maStrokeAttribute; }
+
+            /// helper to decide if AntiAliasing should be used
+            bool isHorizontalOrVertical(const geometry::ViewInformation2D& rViewInformation) const;
 
             /// compare operator
             virtual bool operator==(const BasePrimitive2D& rPrimitive) const override;

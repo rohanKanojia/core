@@ -8,7 +8,6 @@
  */
 
 #include "plugin.hxx"
-#include "compat.hxx"
 #include <iostream>
 
 /*
@@ -20,52 +19,22 @@
 namespace {
 
 class ConstantFunction:
-    public RecursiveASTVisitor<ConstantFunction>, public loplugin::Plugin
+    public loplugin::FilteringPlugin<ConstantFunction>
 {
-    StringRef getFilename(SourceLocation loc);
+    StringRef getFilename(const FunctionDecl* functionDecl);
 public:
-    explicit ConstantFunction(InstantiationData const & data): Plugin(data) {}
+    explicit ConstantFunction(InstantiationData const & data): FilteringRewritePlugin(data) {}
 
     void run() override
     {
         // these files crash clang-3.5 somewhere in the isEvaluatable/EvaluateAsXXX stuff
-        FileID mainFileID = compiler.getSourceManager().getMainFileID();
-        if (strstr(compiler.getSourceManager().getFileEntryForID(mainFileID)->getDir()->getName(), "sc/source/core/data") != 0) {
-            return;
-        }
-        if (strstr(compiler.getSourceManager().getFileEntryForID(mainFileID)->getDir()->getName(), "sc/source/ui/app") != 0) {
-            return;
-        }
-        if (strstr(compiler.getSourceManager().getFileEntryForID(mainFileID)->getDir()->getName(), "sc/qa/unit") != 0) {
-            return;
-        }
-        if (strstr(compiler.getSourceManager().getFileEntryForID(mainFileID)->getName(), "docuno.cxx") != 0) {
-            return;
-        }
-        if (strstr(compiler.getSourceManager().getFileEntryForID(mainFileID)->getName(), "viewdata.cxx") != 0) {
-            return;
-        }
-        if (strstr(compiler.getSourceManager().getFileEntryForID(mainFileID)->getName(), "calcoptionsdlg.cxx") != 0) {
-            return;
-        }
-        if (strstr(compiler.getSourceManager().getFileEntryForID(mainFileID)->getDir()->getName(), "sc/source/core/opencl") != 0) {
-            return;
-        }
-        if (strstr(compiler.getSourceManager().getFileEntryForID(mainFileID)->getDir()->getName(), "sc/source/core/tool") != 0) {
-            return;
-        }
-        if (strstr(compiler.getSourceManager().getFileEntryForID(mainFileID)->getDir()->getName(), "sc/source/core/tool") != 0) {
-            return;
-        }
-        if (strstr(compiler.getSourceManager().getFileEntryForID(mainFileID)->getDir()->getName(), "desktop/source/lib") != 0) {
-            return;
-        }
+/*        FileID mainFileID = compiler.getSourceManager().getMainFileID();
         if (strstr(compiler.getSourceManager().getFileEntryForID(mainFileID)->getName(), "bootstrapfixture.cxx") != 0) {
             return;
         }
         if (strstr(compiler.getSourceManager().getFileEntryForID(mainFileID)->getName(), "gtk3gtkinst.cxx") != 0) {
             return;
-        }
+        }*/
 
         TraverseDecl(compiler.getASTContext().getTranslationUnitDecl());
     }
@@ -73,9 +42,9 @@ public:
     bool VisitFunctionDecl(const FunctionDecl *);
 };
 
-StringRef ConstantFunction::getFilename(SourceLocation loc)
+StringRef ConstantFunction::getFilename(const FunctionDecl* functionDecl)
 {
-    SourceLocation spellingLocation = compiler.getSourceManager().getSpellingLoc(loc);
+    SourceLocation spellingLocation = compiler.getSourceManager().getSpellingLoc(functionDecl->getCanonicalDecl()->getNameInfo().getLoc());
     StringRef name { compiler.getSourceManager().getFilename(spellingLocation) };
     return name;
 }
@@ -91,12 +60,21 @@ bool ConstantFunction::VisitFunctionDecl(const FunctionDecl * pFunctionDecl) {
     if (!pFunctionDecl->hasBody()) {
         return true;
     }
+    if (!pFunctionDecl->isThisDeclarationADefinition()) {
+        return true;
+    }
     // stuff declared extern-C is almost always used as a some kind of callback
     if (pFunctionDecl->isExternC()) {
         return true;
     }
+    if (pFunctionDecl->isConstexpr()) {
+        return true;
+    }
+    if (pFunctionDecl->isMain()) {
+        return true;
+    }
 
-    StringRef aFileName = getFilename(pFunctionDecl->getLocStart());
+    StringRef aFileName = getFilename(pFunctionDecl);
 
     // various tests in here are empty stubs under Linux
     if (aFileName.startswith(SRCDIR "/sal/qa/")) {
@@ -104,11 +82,6 @@ bool ConstantFunction::VisitFunctionDecl(const FunctionDecl * pFunctionDecl) {
     }
     // lots of empty stuff here where it looks like someone is still going to "fill in the blanks"
     if (aFileName.startswith(SRCDIR "/basegfx/test/")) {
-        return true;
-    }
-    // some stuff is just stubs under Linux, although this appears to be a SOLARIS-specific hack, so it
-    // should probably not even be compiling under Linux.
-    if (aFileName == SRCDIR "/setup_native/scripts/source/getuid.c") {
         return true;
     }
     // bridges has some weird stuff in it....
@@ -129,15 +102,11 @@ bool ConstantFunction::VisitFunctionDecl(const FunctionDecl * pFunctionDecl) {
         return true;
     }
     // salplug runtime-loading mechanism at work
-    if (getFilename(pFunctionDecl->getCanonicalDecl()->getLocStart()) == SRCDIR "/vcl/inc/salinst.hxx") {
+    if (aFileName == SRCDIR "/vcl/inc/salinst.hxx") {
         return true;
     }
     // lots of callbacks here
     if (aFileName == SRCDIR "/extensions/source/plugin/unx/npnapi.cxx") {
-        return true;
-    }
-    // template magic
-    if (aFileName == SRCDIR "/filter/source/svg/svgreader.cxx") {
         return true;
     }
     // vcl/unx/gtk3 re-using vcl/unx/gtk:
@@ -145,7 +114,7 @@ bool ConstantFunction::VisitFunctionDecl(const FunctionDecl * pFunctionDecl) {
         return true;
     }
     // used by code generated by python
-    if (getFilename(pFunctionDecl->getCanonicalDecl()->getLocStart()) == SRCDIR "/writerfilter/source/ooxml/OOXMLFastContextHandler.hxx") {
+    if (aFileName == SRCDIR "/writerfilter/source/ooxml/OOXMLFastContextHandler.hxx") {
         return true;
     }
     // this test just test the include of some headers
@@ -179,8 +148,7 @@ bool ConstantFunction::VisitFunctionDecl(const FunctionDecl * pFunctionDecl) {
     if (isa<CXXConstructorDecl>(pFunctionDecl) || isa<CXXDestructorDecl>(pFunctionDecl) || isa<CXXConversionDecl>(pFunctionDecl)) {
         return true;
     }
-    SourceLocation canonicalLoc = pFunctionDecl->getCanonicalDecl()->getLocStart();
-    if (isInUnoIncludeFile(compiler.getSourceManager().getSpellingLoc(canonicalLoc))) {
+    if (isInUnoIncludeFile(pFunctionDecl)) {
         return true;
     }
 
@@ -215,7 +183,7 @@ bool ConstantFunction::VisitFunctionDecl(const FunctionDecl * pFunctionDecl) {
     if (aFunctionName == "ExceptionThrower_acquire_release_nop") {
         return true;
     }
-    // differetnt hook function is called on different platforms, /vcl/source/app/svmainhook.cxx
+    // different hook function is called on different platforms, /vcl/source/app/svmainhook.cxx
     if (aFunctionName == "ImplSVMainHook") {
         return true;
     }
@@ -344,10 +312,6 @@ bool ConstantFunction::VisitFunctionDecl(const FunctionDecl * pFunctionDecl) {
     if (aFunctionName == "sdext::presenter::PresenterFrameworkObserver::True") {
         return true;
     }
-    //  hidden behind the ENABLE_PANE_RESIZING macro
-    if (aFunctionName == "sdext::presenter::PresenterWindowManager::UpdateWindowList") {
-        return true;
-    }
     // callback, sw/source/core/doc/tblrwcl.cxx
     if (aFunctionName == "lcl_DelOtherBox") {
         return true;
@@ -377,16 +341,8 @@ bool ConstantFunction::VisitFunctionDecl(const FunctionDecl * pFunctionDecl) {
     if (startsWith(aFunctionName, "sc::(anonymous namespace)::CSVHandler::")) {
         return true;
     }
-    // called from SDI file, I don't know what that stuff is about, sc/source/ui/docshell/docsh7.cxx
-    if (aFunctionName == "ScDocShell::GetDrawObjState") {
-        return true;
-    }
     // called from SDI file, I don't know what that stuff is about, sc/source/ui/view/cellsh4.cxx
     if (aFunctionName == "ScCellShell::GetStateCursor") {
-        return true;
-    }
-    // called from SDI file, I don't know what that stuff is about, sc/source/ui/view/tabvwshh.cxx
-    if (aFunctionName == "ScTabViewShell::ExecuteSbx" || aFunctionName == "ScTabViewShell::GetSbxState") {
         return true;
     }
     // template magic, sc/source/filter/excel/xepivot.cxx
@@ -432,19 +388,62 @@ bool ConstantFunction::VisitFunctionDecl(const FunctionDecl * pFunctionDecl) {
     {
         return true;
     }
-    // LINK callback which supplies a return value which means something
-    if (aFunctionName == "framework::MenuBarManager::Highlight") {
-        return true;
-    }
     if (aFunctionName == "sc::AlignedAllocator::operator!=") {
         return true;
     }
     if (aFunctionName == "clipboard_owner_init") {
         return true;
     }
+    // returns sizeof(struct) vcl/source/gdi/dibtools.cxx
+    if (aFunctionName == "getDIBV5HeaderSize") {
+        return true;
+    }
+    // windows only
+    if (aFunctionName == "InitAccessBridge") {
+        return true;
+    }
+    // callbacks
+    if (aFunctionName == "disabled_initSystray" || aFunctionName == "disabled_deInitSystray") {
+        return true;
+    }
+    // behind a BREAKPAD option
+    if (aFunctionName == "desktop::(anonymous namespace)::crashReportInfoExists") {
+        return true;
+    }
+    // LOK stuff
+    if (aFunctionName == "doc_getTileMode") {
+        return true;
+    }
+    // apparently this will be useful at sometime in the future
+    if (aFunctionName == "LocaleDataWrapper::getCurrZeroChar") {
+        return true;
+    }
+    // marked with TODO
+    if (aFunctionName == "oglcanvas::TextLayout::draw") {
+        return true;
+    }
+    // called from the .sdi files
+    if (aFunctionName == "SfxObjectShell::StateView_Impl") {
+        return true;
+    }
+    // gtk callback
+    if (aFunctionName == "GtkSalFrame::signalVisibility") {
+        return true;
+    }
+    // platform-version-dependent code
+    if (aFunctionName == "(anonymous namespace)::ACTIVE_TAB") {
+        return true;
+    }
+    // SMIL callbacks
+    if (aFunctionName == "boost::sp_scalar_constructor_hook" || aFunctionName == "boost::sp_scalar_destructor_hook") {
+        return true;
+    }
+
+
+
 
     std::string aImmediateMacro = "";
-    if (compat::isMacroBodyExpansion(compiler, pFunctionDecl->getLocStart()) ) {
+    if (compiler.getSourceManager().isMacroBodyExpansion(pFunctionDecl->getLocStart()) ) {
         StringRef name { Lexer::getImmediateMacroName(
                 pFunctionDecl->getLocStart(), compiler.getSourceManager(), compiler.getLangOpts()) };
         aImmediateMacro = name;
@@ -464,6 +463,11 @@ bool ConstantFunction::VisitFunctionDecl(const FunctionDecl * pFunctionDecl) {
             const ReturnStmt *pReturnStmt = dyn_cast<ReturnStmt>(*pCompoundStmt->body_begin());
             if (!pReturnStmt) {
                 return true;
+            }
+            if (const UnaryOperator* unaryOp = dyn_cast<UnaryOperator>(pReturnStmt->getRetValue())) {
+                if (unaryOp->getOpcode() == UO_AddrOf) {
+                    return true;
+                }
             }
             if (pReturnStmt->getRetValue() != nullptr) {
                 // && !pReturnStmt->getRetValue()->isEvaluatable(compiler.getASTContext())) {
@@ -493,8 +497,13 @@ bool ConstantFunction::VisitFunctionDecl(const FunctionDecl * pFunctionDecl) {
         DiagnosticsEngine::Warning,
         aMessage,
         pFunctionDecl->getLocStart())
-      << pFunctionDecl->getSourceRange()
-      << pFunctionDecl->getCanonicalDecl()->getSourceRange();
+      << pFunctionDecl->getSourceRange();
+    if (pFunctionDecl != pFunctionDecl->getCanonicalDecl())
+        report(
+            DiagnosticsEngine::Note,
+            aMessage,
+            pFunctionDecl->getCanonicalDecl()->getLocStart())
+          << pFunctionDecl->getCanonicalDecl()->getSourceRange();
     return true;
 }
 

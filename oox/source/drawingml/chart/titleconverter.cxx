@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/chart/titleconverter.hxx"
+#include <drawingml/chart/titleconverter.hxx>
 
 #include <com/sun/star/chart/ChartLegendExpansion.hpp>
 #include <com/sun/star/chart2/FormattedString.hpp>
@@ -27,15 +27,17 @@
 #include <com/sun/star/chart2/XTitle.hpp>
 #include <com/sun/star/chart2/XTitled.hpp>
 #include <osl/diagnose.h>
-#include "drawingml/textbody.hxx"
-#include "drawingml/textparagraph.hxx"
-#include "drawingml/chart/datasourceconverter.hxx"
-#include "drawingml/chart/titlemodel.hxx"
-#include "oox/helper/containerhelper.hxx"
+#include <drawingml/textbody.hxx>
+#include <drawingml/textparagraph.hxx>
+#include <drawingml/chart/datasourceconverter.hxx>
+#include <drawingml/chart/titlemodel.hxx>
+#include <oox/helper/containerhelper.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
 #include <com/sun/star/chart2/RelativePosition.hpp>
 #include <com/sun/star/drawing/Alignment.hpp>
 
-#include "oox/drawingml/chart/modelbase.hxx"
+#include <oox/drawingml/chart/modelbase.hxx>
 namespace oox {
 namespace drawingml {
 namespace chart {
@@ -46,7 +48,6 @@ using namespace ::com::sun::star::chart2::data;
 using namespace ::com::sun::star::drawing;
 using namespace ::com::sun::star::uno;
 
-using ::oox::core::XmlFilterBase;
 
 TextConverter::TextConverter( const ConverterRoot& rParent, TextModel& rModel ) :
     ConverterBase< TextModel >( rParent, rModel )
@@ -84,7 +85,7 @@ Sequence< Reference< XFormattedString > > TextConverter::createStringSequence(
             for( TextRunVector::const_iterator aRIt = rTextPara.getRuns().begin(), aREnd = rTextPara.getRuns().end(); aRIt != aREnd; ++aRIt )
             {
                 const TextRun& rTextRun = **aRIt;
-                bool bAddNewLine = (aRIt + 1 == aREnd) && (aPIt + 1 != aPEnd);
+                bool bAddNewLine = ((aRIt + 1 == aREnd) && (aPIt + 1 != aPEnd)) || rTextRun.isLineBreak();
                 Reference< XFormattedString > xFmtStr = appendFormattedString( aStringVec, rTextRun.getText(), bAddNewLine );
                 PropertySet aPropSet( xFmtStr );
                 TextCharacterProperties aRunProps( rParaProps );
@@ -123,7 +124,7 @@ Reference< XFormattedString > TextConverter::appendFormattedString(
     {
         xFmtStr = FormattedString::create( ConverterRoot::getComponentContext() );
         xFmtStr->setString( bAddNewLine ? (rString + "\n") : rString );
-        orStringVec.push_back( xFmtStr );
+        orStringVec.emplace_back(xFmtStr );
     }
     catch( Exception& )
     {
@@ -212,14 +213,13 @@ void LegendConverter::convertFromModel( const Reference< XDiagram >& rxDiagram )
             case XML_r:
                 eLegendPos = cssc2::LegendPosition_LINE_END;
                 eLegendExpand = cssc::ChartLegendExpansion_HIGH;
-                break;
+            break;
             case XML_tr:    // top-right not supported
                 eLegendPos = LegendPosition_CUSTOM;
                 eRelPos.Primary = 1;
                 eRelPos.Secondary =0;
                 eRelPos.Anchor = Alignment_TOP_RIGHT;
                 bTopRight=true;
-
             break;
             case XML_t:
                 eLegendPos = cssc2::LegendPosition_PAGE_START;
@@ -235,9 +235,12 @@ void LegendConverter::convertFromModel( const Reference< XDiagram >& rxDiagram )
         if( mrModel.mxLayout.get() )
         {
             LayoutConverter aLayoutConv( *this, *mrModel.mxLayout );
-            // manual size needs ChartLegendExpansion_CUSTOM
+            // manual size needs ChartLegendExpansion_CUSTOM and LegendPosition_CUSTOM (tdf#118150)
             if( aLayoutConv.convertFromModel( aPropSet ) )
+            {
+                eLegendPos = cssc2::LegendPosition_CUSTOM;
                 eLegendExpand = cssc::ChartLegendExpansion_CUSTOM;
+            }
             bManualLayout = !aLayoutConv.getAutoLayout();
         }
 

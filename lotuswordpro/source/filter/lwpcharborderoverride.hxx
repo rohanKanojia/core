@@ -61,30 +61,27 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPCHARBORDEROVERRIDE_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPCHARBORDEROVERRIDE_HXX
 
-#include "lwpoverride.hxx"
+#include <lwpoverride.hxx>
 
 class LwpBorderStuff;
 class LwpMargins;
-class LwpCharacterBorderOverride : public LwpOverride
+class LwpCharacterBorderOverride final : public LwpOverride
 {
 public:
     LwpCharacterBorderOverride();
 
-    virtual ~LwpCharacterBorderOverride();
+    virtual ~LwpCharacterBorderOverride() override;
 
     virtual LwpCharacterBorderOverride* clone() const override;
 
     void Read(LwpObjectStream* pStrm) override;
 
-protected:
-    LwpCharacterBorderOverride(LwpCharacterBorderOverride const& rOther);
-
 private:
+    LwpCharacterBorderOverride(LwpCharacterBorderOverride const& rOther);
     LwpCharacterBorderOverride& operator=(LwpCharacterBorderOverride const& rOther) = delete;
 
-private:
-    LwpBorderStuff* m_pBorderStuff;
-    LwpMargins*     m_pMargins;
+    std::unique_ptr<LwpBorderStuff> m_pBorderStuff;
+    std::unique_ptr<LwpMargins>     m_pMargins;
     sal_Int32       m_nAboveWidth;
     sal_Int32       m_nBelowWidth;
 

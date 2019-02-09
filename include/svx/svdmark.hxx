@@ -25,10 +25,11 @@
 #include <svx/sdrobjectuser.hxx>
 #include <tools/solar.h>
 
+#include <memory>
 #include <set>
 #include <vector>
 
-class Rectangle;
+namespace tools { class Rectangle; }
 class SdrPage;
 class SdrObjList;
 class SdrObject;
@@ -40,20 +41,18 @@ typedef std::set<sal_uInt16> SdrUShortCont;
 /**
  * Everything a View needs to know about a selected object
  */
-class SVX_DLLPUBLIC SdrMark : public sdr::ObjectUser
+class SVX_DLLPUBLIC SdrMark final : public sdr::ObjectUser
 {
-private:
-    void setTime();
-protected:
     sal_Int64                                           mnTimeStamp;
     SdrObject*                                          mpSelectedSdrObject; // the selected object
     SdrPageView*                                        mpPageView;
-    SdrUShortCont*                                      mpPoints;     // Selected Points
-    SdrUShortCont*                                      mpLines;      // Selected Line
-    SdrUShortCont*                                      mpGluePoints; // Selected Gluepoints (their Id's)
+    SdrUShortCont                                       maPoints;     // Selected Points
+    SdrUShortCont                                       maGluePoints; // Selected Gluepoints (their Id's)
     bool                                                mbCon1;       // for Connectors
     bool                                                mbCon2;       // for Connectors
     sal_uInt16                                          mnUser;       // E.g. for CopyObjects, also copy Edges
+
+    void setTime();
 
 public:
     explicit SdrMark(SdrObject* pNewObj = nullptr, SdrPageView* pNewPageView = nullptr);
@@ -108,40 +107,24 @@ public:
         return mnUser;
     }
 
-    const SdrUShortCont* GetMarkedPoints() const
+    const SdrUShortCont& GetMarkedPoints() const
     {
-        return mpPoints;
+        return maPoints;
     }
 
-    const SdrUShortCont* GetMarkedGluePoints() const
+    const SdrUShortCont& GetMarkedGluePoints() const
     {
-        return mpGluePoints;
+        return maGluePoints;
     }
 
-    SdrUShortCont* GetMarkedPoints()
+    SdrUShortCont& GetMarkedPoints()
     {
-        return mpPoints;
+        return maPoints;
     }
 
-    SdrUShortCont* GetMarkedGluePoints()
+    SdrUShortCont& GetMarkedGluePoints()
     {
-        return mpGluePoints;
-    }
-
-    SdrUShortCont* ForceMarkedPoints()
-    {
-        if(!mpPoints)
-            mpPoints = new SdrUShortCont;
-
-        return mpPoints;
-    }
-
-    SdrUShortCont* ForceMarkedGluePoints()
-    {
-        if(!mpGluePoints)
-            mpGluePoints = new SdrUShortCont;
-
-        return mpGluePoints;
+        return maGluePoints;
     }
 
     sal_Int64 getTimeStamp() const
@@ -150,10 +133,9 @@ public:
     }
 };
 
-class SVX_DLLPUBLIC SdrMarkList
+class SVX_DLLPUBLIC SdrMarkList final
 {
-protected:
-    std::vector<SdrMark*>                               maList;
+    std::vector<std::unique_ptr<SdrMark>>               maList;
 
     OUString                                            maMarkName;
     OUString                                            maPointName;
@@ -164,10 +146,7 @@ protected:
     bool                                                mbNameOk;
     bool                                                mbSorted;
 
-private:
     SVX_DLLPRIVATE void ImpForceSort();
-
-private:
     SVX_DLLPRIVATE const OUString& GetPointMarkDescription(bool bGlue) const;
 
 public:
@@ -233,12 +212,12 @@ public:
         return GetPointMarkDescription(true);
     }
 
-    // pPage=0L: Selection of everything! Respect Pages
-    bool TakeBoundRect(SdrPageView* pPageView, Rectangle& rRect) const;
-    bool TakeSnapRect(SdrPageView* pPageView, Rectangle& rRect) const;
+    // pPage=0: Selection of everything! Respect Pages
+    bool TakeBoundRect(SdrPageView const * pPageView, tools::Rectangle& rRect) const;
+    bool TakeSnapRect(SdrPageView const * pPageView, tools::Rectangle& rRect) const;
 
     // All Entries are copied!
-    void operator=(const SdrMarkList& rLst);
+    SdrMarkList& operator=(const SdrMarkList& rLst);
 };
 
 
@@ -253,7 +232,6 @@ namespace sdr
         SdrMarkList                 maMarkedEdgesOfMarkedNodes;
         std::vector<SdrObject*>     maAllMarkedObjects;
 
-        // bitfield
         bool                        mbEdgesOfMarkedNodesDirty : 1;
 
         SVX_DLLPRIVATE void ImpForceEdgesOfMarkedNodes();

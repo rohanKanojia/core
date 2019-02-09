@@ -21,24 +21,20 @@
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLTABLESHAPESCONTEXT_HXX
 
 #include <xmloff/xmlictxt.hxx>
-#include "xmlimprt.hxx"
+#include "importcontext.hxx"
 
-class ScXMLTableShapesContext : public SvXMLImportContext
+class ScXMLImport;
+
+class ScXMLTableShapesContext : public ScXMLImportContext
 {
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
 public:
-    ScXMLTableShapesContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList);
+    ScXMLTableShapesContext( ScXMLImport& rImport );
 
-    virtual ~ScXMLTableShapesContext();
+    virtual ~ScXMLTableShapesContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                                      const OUString& rLocalName,
                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
-
-    virtual void EndElement() override;
 };
 
 #endif

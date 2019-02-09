@@ -22,11 +22,9 @@
 
 #include <unotools/configitem.hxx>
 #include <sfx2/module.hxx>
-#include <sfx2/app.hxx>
-#include <sfx2/sfxsids.hrc>
 #include <svx/optgrid.hxx>
-#include <svx/dlgutil.hxx>
-#include "sddllapi.h"
+#include <sddllapi.h>
+#include <memory>
 
 class SdOptions;
 
@@ -48,14 +46,19 @@ private:
 public:
 
     SdOptionsItem( const SdOptionsGeneric& rParent, const OUString& rSubTree );
-    virtual ~SdOptionsItem();
+    virtual ~SdOptionsItem() override;
+
+    SdOptionsItem(SdOptionsItem const &) = default;
+    SdOptionsItem(SdOptionsItem &&) = default;
+    SdOptionsItem & operator =(SdOptionsItem const &) = delete; // due to ConfigItem
+    SdOptionsItem & operator =(SdOptionsItem &&) = delete; // due to ConfigItem
 
     virtual void            Notify( const css::uno::Sequence<OUString>& aPropertyNames) override;
 
     css::uno::Sequence< css::uno::Any > GetProperties( const css::uno::Sequence< OUString >& rNames );
     bool                    PutProperties( const css::uno::Sequence< OUString >& rNames,
                                            const css::uno::Sequence< css::uno::Any>& rValues );
-    void                    SetModified();
+    using ConfigItem::SetModified;
 };
 
 class SD_DLLPUBLIC SdOptionsGeneric
@@ -65,8 +68,9 @@ friend class SdOptionsItem;
 private:
 
     OUString                maSubTree;
-    SdOptionsItem*          mpCfgItem;
-    sal_uInt16              mnConfigId;
+    std::unique_ptr<SdOptionsItem>
+                            mpCfgItem;
+    bool                    mbImpress;
     bool                    mbInit          : 1;
     bool                    mbEnableModify  : 1;
 
@@ -86,10 +90,13 @@ protected:
 
 public:
 
-                            SdOptionsGeneric( sal_uInt16 nConfigId, const OUString& rSubTree );
+                            SdOptionsGeneric(bool bImpress, const OUString& rSubTree);
+                            SdOptionsGeneric(SdOptionsGeneric const &);
                             virtual ~SdOptionsGeneric();
 
-    sal_uInt16              GetConfigId() const { return mnConfigId; }
+    SdOptionsGeneric&       operator=( SdOptionsGeneric const & );
+
+    bool                    IsImpress() const { return mbImpress; }
 
     void                    EnableModify( bool bModify ) { mbEnableModify = bModify; }
 
@@ -117,8 +124,7 @@ protected:
     virtual bool WriteData( css::uno::Any* pValues ) const override;
 
 public:
-            SdOptionsLayout( sal_uInt16 nConfigId, bool bUseConfig );
-            virtual ~SdOptionsLayout() {}
+            SdOptionsLayout(bool bImpress, bool bUseConfig);
 
     bool    operator==( const SdOptionsLayout& rOpt ) const;
 
@@ -127,14 +133,14 @@ public:
     bool    IsDragStripes() const { Init(); return bDragStripes; }
     bool    IsHandlesBezier() const { Init(); return bHandlesBezier; }
     bool    IsHelplines() const { Init(); return bHelplines; }
-    sal_uInt16  GetMetric() const { Init(); return( ( 0xffff == nMetric ) ? (sal_uInt16)SfxModule::GetCurrentFieldUnit() : nMetric ); }
+    sal_uInt16  GetMetric() const { Init(); return( ( 0xffff == nMetric ) ? static_cast<sal_uInt16>(SfxModule::GetCurrentFieldUnit()) : nMetric ); }
     sal_uInt16  GetDefTab() const { Init(); return nDefTab; }
 
-    void    SetRulerVisible( bool bOn = true ) { if( bRuler != bOn ) { OptionsChanged(); bRuler = bOn; } }
-    void    SetMoveOutline( bool bOn = true ) { if( bMoveOutline != bOn ) { OptionsChanged(); bMoveOutline = bOn; } }
-    void    SetDragStripes( bool bOn = true ) { if( bDragStripes != bOn ) { OptionsChanged(); bDragStripes = bOn; } }
-    void    SetHandlesBezier( bool bOn = true ) { if( bHandlesBezier != bOn ) { OptionsChanged(); bHandlesBezier = bOn; } }
-    void    SetHelplines( bool bOn = true ) { if( bHelplines != bOn ) { OptionsChanged(); bHelplines = bOn; } }
+    void    SetRulerVisible( bool bOn ) { if( bRuler != bOn ) { OptionsChanged(); bRuler = bOn; } }
+    void    SetMoveOutline( bool bOn ) { if( bMoveOutline != bOn ) { OptionsChanged(); bMoveOutline = bOn; } }
+    void    SetDragStripes( bool bOn ) { if( bDragStripes != bOn ) { OptionsChanged(); bDragStripes = bOn; } }
+    void    SetHandlesBezier( bool bOn ) { if( bHandlesBezier != bOn ) { OptionsChanged(); bHandlesBezier = bOn; } }
+    void    SetHelplines( bool bOn ) { if( bHelplines != bOn ) { OptionsChanged(); bHelplines = bOn; } }
     void    SetMetric( sal_uInt16 nInMetric ) { if( nMetric != nInMetric ) { OptionsChanged(); nMetric = nInMetric; } }
     void    SetDefTab( sal_uInt16 nTab ) { if( nDefTab != nTab ) { OptionsChanged(); nDefTab = nTab; } }
 };
@@ -143,8 +149,8 @@ class SD_DLLPUBLIC SdOptionsLayoutItem : public SfxPoolItem
 {
 public:
 
-                            explicit SdOptionsLayoutItem( sal_uInt16 nWhich);
-                            SdOptionsLayoutItem( sal_uInt16 nWhich, SdOptions* pOpts, ::sd::FrameView* pView = nullptr );
+                            explicit SdOptionsLayoutItem();
+                            SdOptionsLayoutItem( SdOptions const * pOpts, ::sd::FrameView const * pView );
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool            operator==( const SfxPoolItem& ) const override;
@@ -167,23 +173,9 @@ protected:
 
 public:
 
-            SdOptionsContents( sal_uInt16 nConfigId, bool bUseConfig );
-            virtual ~SdOptionsContents() {}
+            SdOptionsContents(bool bImpress);
 
     bool    operator==( const SdOptionsContents& rOpt ) const;
-};
-
-class SD_DLLPUBLIC SdOptionsContentsItem : public SfxPoolItem
-{
-public:
-
-                            SdOptionsContentsItem( sal_uInt16 nWhich, SdOptions* pOpts, ::sd::FrameView* pView = nullptr );
-
-    virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual bool            operator==( const SfxPoolItem& ) const override;
-
-private:
-    SdOptionsContents       maOptionsContents;
 };
 
 class SD_DLLPUBLIC SdOptionsMisc : public SdOptionsGeneric
@@ -239,8 +231,7 @@ protected:
 
 public:
 
-            SdOptionsMisc( sal_uInt16 nConfigId, bool bUseConfig );
-            virtual ~SdOptionsMisc() {}
+            SdOptionsMisc(bool bImpress, bool bUseConfig);
 
     bool    operator==( const SdOptionsMisc& rOpt ) const;
 
@@ -276,7 +267,7 @@ public:
     bool    IsPreviewTransitions() const { Init(); return bPreviewTransitions; }
 
     sal_Int32   GetDisplay() const;
-    void        SetDisplay( sal_Int32 nDisplay = 0 );
+    void        SetDisplay( sal_Int32 nDisplay );
 
     sal_Int32 GetPresentationPenColor() const { Init(); return mnPenColor; }
     void      SetPresentationPenColor( sal_Int32 nPenColor ) { if( mnPenColor != nPenColor ) { OptionsChanged(); mnPenColor = nPenColor; } }
@@ -284,30 +275,30 @@ public:
     double    GetPresentationPenWidth() const { Init(); return mnPenWidth; }
     void      SetPresentationPenWidth( double nPenWidth ) { if( mnPenWidth != nPenWidth ) { OptionsChanged(); mnPenWidth = nPenWidth; } }
 
-    void    SetStartWithTemplate( bool bOn = true ) { if( bStartWithTemplate != bOn ) { OptionsChanged(); bStartWithTemplate = bOn; } }
-    void    SetMarkedHitMovesAlways( bool bOn = true ) { if( bMarkedHitMovesAlways != bOn ) { OptionsChanged(); bMarkedHitMovesAlways = bOn; } }
-    void    SetMoveOnlyDragging( bool bOn = true ) { if( bMoveOnlyDragging != bOn ) { OptionsChanged(); bMoveOnlyDragging = bOn; } }
-    void    SetCrookNoContortion( bool bOn = true ) { if( bCrookNoContortion != bOn ) { OptionsChanged(); bCrookNoContortion = bOn; } }
-    void    SetQuickEdit( bool bOn = true ) { if( bQuickEdit != bOn ) { OptionsChanged(); bQuickEdit = bOn; } }
-    void    SetMasterPagePaintCaching( bool bOn = true ) { if( bMasterPageCache != bOn ) { OptionsChanged(); bMasterPageCache = bOn; } }
-    void    SetDragWithCopy( bool bOn = true ) { if( bDragWithCopy != bOn ) { OptionsChanged(); bDragWithCopy = bOn; } }
-    void    SetPickThrough( bool bOn = true ) { if( bPickThrough != bOn ) { OptionsChanged(); bPickThrough = bOn; } }
-    void    SetDoubleClickTextEdit( bool bOn = true ) { if( bDoubleClickTextEdit != bOn ) { OptionsChanged(); bDoubleClickTextEdit = bOn; } }
-    void    SetClickChangeRotation( bool bOn = true ) { if( bClickChangeRotation != bOn ) { OptionsChanged(); bClickChangeRotation = bOn; } }
-    void    SetEnableSdremote( bool bOn = true ) { if( bEnableSdremote != bOn ) { OptionsChanged(); bEnableSdremote = bOn; } }
-    void    SetEnablePresenterScreen( bool bOn = true ) { if( bEnablePresenterScreen != bOn ) { OptionsChanged(); bEnablePresenterScreen = bOn; } }
-    void    SetSummationOfParagraphs( bool bOn = true ){ if ( bOn != bSummationOfParagraphs ) { OptionsChanged(); bSummationOfParagraphs = bOn; } }
-    void    SetTabBarVisible( bool bOn = true ){ if ( bOn != bTabBarVisible ) { OptionsChanged(); bTabBarVisible = bOn; } }
+    void    SetStartWithTemplate( bool bOn ) { if( bStartWithTemplate != bOn ) { OptionsChanged(); bStartWithTemplate = bOn; } }
+    void    SetMarkedHitMovesAlways( bool bOn ) { if( bMarkedHitMovesAlways != bOn ) { OptionsChanged(); bMarkedHitMovesAlways = bOn; } }
+    void    SetMoveOnlyDragging( bool bOn ) { if( bMoveOnlyDragging != bOn ) { OptionsChanged(); bMoveOnlyDragging = bOn; } }
+    void    SetCrookNoContortion( bool bOn ) { if( bCrookNoContortion != bOn ) { OptionsChanged(); bCrookNoContortion = bOn; } }
+    void    SetQuickEdit( bool bOn ) { if( bQuickEdit != bOn ) { OptionsChanged(); bQuickEdit = bOn; } }
+    void    SetMasterPagePaintCaching( bool bOn ) { if( bMasterPageCache != bOn ) { OptionsChanged(); bMasterPageCache = bOn; } }
+    void    SetDragWithCopy( bool bOn ) { if( bDragWithCopy != bOn ) { OptionsChanged(); bDragWithCopy = bOn; } }
+    void    SetPickThrough( bool bOn ) { if( bPickThrough != bOn ) { OptionsChanged(); bPickThrough = bOn; } }
+    void    SetDoubleClickTextEdit( bool bOn ) { if( bDoubleClickTextEdit != bOn ) { OptionsChanged(); bDoubleClickTextEdit = bOn; } }
+    void    SetClickChangeRotation( bool bOn ) { if( bClickChangeRotation != bOn ) { OptionsChanged(); bClickChangeRotation = bOn; } }
+    void    SetEnableSdremote( bool bOn ) { if( bEnableSdremote != bOn ) { OptionsChanged(); bEnableSdremote = bOn; } }
+    void    SetEnablePresenterScreen( bool bOn ) { if( bEnablePresenterScreen != bOn ) { OptionsChanged(); bEnablePresenterScreen = bOn; } }
+    void    SetSummationOfParagraphs( bool bOn ){ if ( bOn != bSummationOfParagraphs ) { OptionsChanged(); bSummationOfParagraphs = bOn; } }
+    void    SetTabBarVisible( bool bOn ){ if ( bOn != bTabBarVisible ) { OptionsChanged(); bTabBarVisible = bOn; } }
     /** Set the printer independent layout mode.
         @param nOn
             The default value is to switch printer independent layout on,
             hence the parameters name.  Use 0 for turning it off.  Other
             values are reserved for future use.
     */
-    void    SetPrinterIndependentLayout (sal_uInt16 nOn = 1 ){ if ( nOn != mnPrinterIndependentLayout ) { OptionsChanged(); mnPrinterIndependentLayout = nOn; } }
-    void    SetSolidDragging( bool bOn = true ) { if( bSolidDragging != bOn ) { OptionsChanged(); bSolidDragging = bOn; } }
-    void    SetShowUndoDeleteWarning( bool bOn = true ) { if( bShowUndoDeleteWarning != bOn ) { OptionsChanged(); bShowUndoDeleteWarning = bOn; } }
-    void    SetSlideshowRespectZOrder( bool bOn = true ) { if( bSlideshowRespectZOrder != bOn ) { OptionsChanged(); bSlideshowRespectZOrder = bOn; } }
+    void    SetPrinterIndependentLayout (sal_uInt16 nOn ){ if ( nOn != mnPrinterIndependentLayout ) { OptionsChanged(); mnPrinterIndependentLayout = nOn; } }
+    void    SetSolidDragging( bool bOn ) { if( bSolidDragging != bOn ) { OptionsChanged(); bSolidDragging = bOn; } }
+    void    SetShowUndoDeleteWarning( bool bOn ) { if( bShowUndoDeleteWarning != bOn ) { OptionsChanged(); bShowUndoDeleteWarning = bOn; } }
+    void    SetSlideshowRespectZOrder( bool bOn ) { if( bSlideshowRespectZOrder != bOn ) { OptionsChanged(); bSlideshowRespectZOrder = bOn; } }
     void    SetDefaultObjectSizeWidth( sal_uLong nWidth ) { if( nDefaultObjectSizeWidth != nWidth ) { OptionsChanged(); nDefaultObjectSizeWidth = nWidth; } }
     void    SetDefaultObjectSizeHeight( sal_uLong nHeight ) { if( nDefaultObjectSizeHeight != nHeight ) { OptionsChanged(); nDefaultObjectSizeHeight = nHeight; } }
 
@@ -323,8 +314,8 @@ class SD_DLLPUBLIC SdOptionsMiscItem : public SfxPoolItem
 {
 public:
 
-                            explicit SdOptionsMiscItem( sal_uInt16 nWhich);
-                            SdOptionsMiscItem( sal_uInt16 nWhich, SdOptions* pOpts, ::sd::FrameView* pView = nullptr );
+                            explicit SdOptionsMiscItem();
+                            SdOptionsMiscItem( SdOptions const * pOpts, ::sd::FrameView const * pView );
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool            operator==( const SfxPoolItem& ) const override;
@@ -360,8 +351,7 @@ protected:
 
 public:
 
-            SdOptionsSnap( sal_uInt16 nConfigId, bool bUseConfig );
-            virtual ~SdOptionsSnap() {}
+            SdOptionsSnap(bool bImpress, bool bUseConfig);
 
     bool    operator==( const SdOptionsSnap& rOpt ) const;
 
@@ -376,13 +366,13 @@ public:
     sal_Int16   GetAngle() const { Init(); return nAngle; }
     sal_Int16   GetEliminatePolyPointLimitAngle() const { Init(); return nBezAngle; }
 
-    void    SetSnapHelplines( bool bOn = true ) { if( bSnapHelplines != bOn ) { OptionsChanged(); bSnapHelplines = bOn; } }
-    void    SetSnapBorder( bool bOn = true ) { if( bSnapBorder != bOn ) { OptionsChanged(); bSnapBorder = bOn; } }
-    void    SetSnapFrame( bool bOn = true ) { if( bSnapFrame != bOn ) { OptionsChanged(); bSnapFrame = bOn; } }
-    void    SetSnapPoints( bool bOn = true ) { if( bSnapPoints != bOn ) { OptionsChanged(); bSnapPoints = bOn; } }
-    void    SetOrtho( bool bOn = true ) { if( bOrtho != bOn ) { OptionsChanged(); bOrtho = bOn; } }
-    void    SetBigOrtho( bool bOn = true ) { if( bBigOrtho != bOn ) { OptionsChanged(); bBigOrtho = bOn; } }
-    void    SetRotate( bool bOn = true ) { if( bRotate != bOn ) { OptionsChanged(); bRotate = bOn; } }
+    void    SetSnapHelplines( bool bOn ) { if( bSnapHelplines != bOn ) { OptionsChanged(); bSnapHelplines = bOn; } }
+    void    SetSnapBorder( bool bOn ) { if( bSnapBorder != bOn ) { OptionsChanged(); bSnapBorder = bOn; } }
+    void    SetSnapFrame( bool bOn ) { if( bSnapFrame != bOn ) { OptionsChanged(); bSnapFrame = bOn; } }
+    void    SetSnapPoints( bool bOn ) { if( bSnapPoints != bOn ) { OptionsChanged(); bSnapPoints = bOn; } }
+    void    SetOrtho( bool bOn ) { if( bOrtho != bOn ) { OptionsChanged(); bOrtho = bOn; } }
+    void    SetBigOrtho( bool bOn ) { if( bBigOrtho != bOn ) { OptionsChanged(); bBigOrtho = bOn; } }
+    void    SetRotate( bool bOn ) { if( bRotate != bOn ) { OptionsChanged(); bRotate = bOn; } }
     void    SetSnapArea( sal_Int16 nIn ) { if( nSnapArea != nIn ) { OptionsChanged(); nSnapArea = nIn; } }
     void    SetAngle( sal_Int16 nIn ) { if( nAngle != nIn ) { OptionsChanged(); nAngle = nIn; } }
     void    SetEliminatePolyPointLimitAngle( sal_Int16 nIn ) { if( nBezAngle != nIn ) { OptionsChanged(); nBezAngle = nIn; } }
@@ -392,8 +382,8 @@ class SD_DLLPUBLIC SdOptionsSnapItem : public SfxPoolItem
 {
 public:
 
-                            explicit SdOptionsSnapItem( sal_uInt16 nWhich);
-                            SdOptionsSnapItem( sal_uInt16 nWhich, SdOptions* pOpts, ::sd::FrameView* pView = nullptr );
+                            explicit SdOptionsSnapItem();
+                            SdOptionsSnapItem( SdOptions const * pOpts, ::sd::FrameView const * pView );
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool            operator==( const SfxPoolItem& ) const override;
@@ -420,8 +410,7 @@ protected:
 
 public:
 
-    explicit SdOptionsZoom(sal_uInt16 nConfigId);
-    virtual ~SdOptionsZoom() {}
+    explicit SdOptionsZoom(bool bImpress);
 
     void    GetScale( sal_Int32& rX, sal_Int32& rY ) const { Init(); rX = nX; rY = nY; }
     void    SetScale( sal_Int32 nInX, sal_Int32 nInY ) { if( nX != nInX || nY != nInY ) { OptionsChanged(); nX = nInX; nY = nInY; } }
@@ -437,8 +426,8 @@ protected:
 
 public:
 
-    explicit SdOptionsGrid(sal_uInt16 nConfigId);
-    virtual ~SdOptionsGrid();
+    explicit SdOptionsGrid(bool bImpress);
+    virtual ~SdOptionsGrid() override;
 
     void    SetDefaults();
 
@@ -469,7 +458,7 @@ class SdOptionsGridItem : public SvxGridItem
 {
 
 public:
-                            SdOptionsGridItem( sal_uInt16 nWhich, SdOptions* pOpts, ::sd::FrameView* pView = nullptr );
+    explicit                SdOptionsGridItem( SdOptions const * pOpts );
 
     void                    SetOptions( SdOptions* pOpts ) const;
 };
@@ -508,8 +497,7 @@ protected:
 
 public:
 
-            SdOptionsPrint( sal_uInt16 nConfigId, bool bUseConfig );
-            virtual ~SdOptionsPrint() {}
+            SdOptionsPrint(bool bImpress, bool bUseConfig);
 
     bool    operator==( const SdOptionsPrint& rOpt ) const;
 
@@ -535,24 +523,24 @@ public:
     bool    IsHandoutHorizontal() const { Init(); return mbHandoutHorizontal; }
     sal_uInt16  GetHandoutPages() const { Init(); return mnHandoutPages; }
 
-    void    SetDraw( bool bOn = true ) { if( bDraw != bOn ) { OptionsChanged(); bDraw = bOn; } }
-    void    SetNotes( bool bOn = true ) { if( bNotes != bOn ) { OptionsChanged(); bNotes = bOn; } }
-    void    SetHandout( bool bOn = true ) { if( bHandout != bOn ) { OptionsChanged(); bHandout = bOn; } }
-    void    SetOutline( bool bOn = true ) { if( bOutline != bOn ) { OptionsChanged(); bOutline = bOn; } }
-    void    SetDate( bool bOn = true ) { if( bDate != bOn ) { OptionsChanged(); bDate = bOn; } }
-    void    SetTime( bool bOn = true ) { if( bTime != bOn ) { OptionsChanged(); bTime = bOn; } }
-    void    SetPagename( bool bOn = true ) { if( bPagename != bOn ) { OptionsChanged(); bPagename = bOn; } }
-    void    SetHiddenPages( bool bOn = true ) { if( bHiddenPages != bOn ) { OptionsChanged(); bHiddenPages = bOn; } }
-    void    SetPagesize( bool bOn = true ) { if( bPagesize != bOn ) { OptionsChanged(); bPagesize = bOn; } }
-    void    SetPagetile( bool bOn = true ) { if( bPagetile != bOn ) { OptionsChanged(); bPagetile = bOn; } }
-    void    SetWarningPrinter( bool bOn = true ) { if( bWarningPrinter != bOn ) { OptionsChanged(); bWarningPrinter = bOn; } }
-    void    SetWarningSize( bool bOn = true ) { if( bWarningSize != bOn ) { OptionsChanged(); bWarningSize = bOn; } }
-    void    SetWarningOrientation( bool bOn = true ) { if( bWarningOrientation != bOn ) { OptionsChanged(); bWarningOrientation = bOn; } }
-    void    SetBooklet( bool bOn = true ) { if( bBooklet != bOn ) { OptionsChanged(); bBooklet = bOn; } }
-    void    SetFrontPage( bool bOn = true ) { if( bFront != bOn ) { OptionsChanged(); bFront = bOn; } }
-    void    SetBackPage( bool bOn = true ) { if( bBack != bOn ) { OptionsChanged(); bBack = bOn; } }
-    void    SetCutPage( bool bOn = true ) { if( bCutPage != bOn ) { OptionsChanged(); bCutPage = bOn; } }
-    void    SetPaperbin( bool bOn = true ) { if( bPaperbin != bOn ) { OptionsChanged(); bPaperbin = bOn; } }
+    void    SetDraw( bool bOn ) { if( bDraw != bOn ) { OptionsChanged(); bDraw = bOn; } }
+    void    SetNotes( bool bOn ) { if( bNotes != bOn ) { OptionsChanged(); bNotes = bOn; } }
+    void    SetHandout( bool bOn ) { if( bHandout != bOn ) { OptionsChanged(); bHandout = bOn; } }
+    void    SetOutline( bool bOn ) { if( bOutline != bOn ) { OptionsChanged(); bOutline = bOn; } }
+    void    SetDate( bool bOn ) { if( bDate != bOn ) { OptionsChanged(); bDate = bOn; } }
+    void    SetTime( bool bOn ) { if( bTime != bOn ) { OptionsChanged(); bTime = bOn; } }
+    void    SetPagename( bool bOn ) { if( bPagename != bOn ) { OptionsChanged(); bPagename = bOn; } }
+    void    SetHiddenPages( bool bOn ) { if( bHiddenPages != bOn ) { OptionsChanged(); bHiddenPages = bOn; } }
+    void    SetPagesize( bool bOn ) { if( bPagesize != bOn ) { OptionsChanged(); bPagesize = bOn; } }
+    void    SetPagetile( bool bOn ) { if( bPagetile != bOn ) { OptionsChanged(); bPagetile = bOn; } }
+    void    SetWarningPrinter( bool bOn ) { if( bWarningPrinter != bOn ) { OptionsChanged(); bWarningPrinter = bOn; } }
+    void    SetWarningSize( bool bOn ) { if( bWarningSize != bOn ) { OptionsChanged(); bWarningSize = bOn; } }
+    void    SetWarningOrientation( bool bOn) { if( bWarningOrientation != bOn ) { OptionsChanged(); bWarningOrientation = bOn; } }
+    void    SetBooklet( bool bOn ) { if( bBooklet != bOn ) { OptionsChanged(); bBooklet = bOn; } }
+    void    SetFrontPage( bool bOn ) { if( bFront != bOn ) { OptionsChanged(); bFront = bOn; } }
+    void    SetBackPage( bool bOn ) { if( bBack != bOn ) { OptionsChanged(); bBack = bOn; } }
+    void    SetCutPage( bool bOn ) { if( bCutPage != bOn ) { OptionsChanged(); bCutPage = bOn; } }
+    void    SetPaperbin( bool bOn ) { if( bPaperbin != bOn ) { OptionsChanged(); bPaperbin = bOn; } }
     void    SetOutputQuality( sal_uInt16 nInQuality ) { if( nQuality != nInQuality ) { OptionsChanged(); nQuality = nInQuality; } }
     void    SetHandoutHorizontal( bool bHandoutHorizontal ) { if( mbHandoutHorizontal != bHandoutHorizontal ) { OptionsChanged(); mbHandoutHorizontal = bHandoutHorizontal; } }
     void    SetHandoutPages( sal_uInt16 nHandoutPages ) { if( nHandoutPages != mnHandoutPages ) { OptionsChanged(); mnHandoutPages = nHandoutPages; } }
@@ -562,8 +550,8 @@ class SD_DLLPUBLIC SdOptionsPrintItem : public SfxPoolItem
 {
 public:
 
-                            explicit SdOptionsPrintItem( sal_uInt16 nWhich);
-                            SdOptionsPrintItem( sal_uInt16 nWhich, SdOptions* pOpts, ::sd::FrameView* pView = nullptr );
+                            explicit SdOptionsPrintItem();
+    explicit                SdOptionsPrintItem( SdOptions const * pOpts );
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool            operator==( const SfxPoolItem& ) const override;
@@ -583,8 +571,8 @@ class SdOptions : public SdOptionsLayout, public SdOptionsContents,
 {
 public:
 
-                        explicit SdOptions( sal_uInt16 nConfigId );
-                        virtual ~SdOptions();
+                        explicit SdOptions(bool bImpress);
+                        virtual ~SdOptions() override;
 
     void                StoreConfig();
 };

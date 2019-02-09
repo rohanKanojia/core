@@ -19,20 +19,18 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_CHARTAPIWRAPPER_DATASERIESPOINTWRAPPER_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_CHARTAPIWRAPPER_DATASERIESPOINTWRAPPER_HXX
 
-#include "WrappedPropertySet.hxx"
+#include <WrappedPropertySet.hxx>
 #include "ReferenceSizePropertyProvider.hxx"
 #include <cppuhelper/implbase.hxx>
-#include <comphelper/uno3.hxx>
 #include <comphelper/interfacecontainer2.hxx>
-#include <com/sun/star/chart2/XDataSeries.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XEventListener.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <memory>
+
+namespace com { namespace sun { namespace star { namespace chart2 { class XDataSeries; } } } }
 
 namespace chart
 {
@@ -42,7 +40,7 @@ namespace wrapper
 
 class Chart2ModelContact;
 
-class DataSeriesPointWrapper : public ::cppu::ImplInheritanceHelper<
+class DataSeriesPointWrapper final : public ::cppu::ImplInheritanceHelper<
                                           WrappedPropertySet
                                         , css::lang::XServiceInfo
                                         , css::lang::XInitialization
@@ -60,68 +58,55 @@ public:
     };
 
     //this constructor needs an initialize call afterwards
-    explicit DataSeriesPointWrapper( std::shared_ptr< Chart2ModelContact > spChart2ModelContact );
+    explicit DataSeriesPointWrapper(const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact);
 
-    DataSeriesPointWrapper( eType eType
+    DataSeriesPointWrapper(eType eType
             , sal_Int32 nSeriesIndexInNewAPI
             , sal_Int32 nPointIndex //ignored for series
-            , std::shared_ptr< Chart2ModelContact > spChart2ModelContact  );
+            , const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact);
 
-    virtual ~DataSeriesPointWrapper();
+    virtual ~DataSeriesPointWrapper() override;
 
     bool isSupportingAreaProperties();
     bool isLinesForbidden() { return !m_bLinesAllowed;}
 
     /// XServiceInfo declarations
-    virtual OUString SAL_CALL getImplementationName()
-            throw( css::uno::RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-            throw( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-            throw( css::uno::RuntimeException, std::exception ) override;
-
-    static OUString getImplementationName_Static();
-    static css::uno::Sequence< OUString > getSupportedServiceNames_Static();
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // ___lang::XInitialization___
-    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments )
-                throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
     //ReferenceSizePropertyProvider
     virtual void updateReferenceSize() override;
     virtual css::uno::Any getReferenceSize() override;
     virtual css::awt::Size getCurrentSizeForReference() override;
 
-protected:
+private:
     // ____ XComponent ____
-    virtual void SAL_CALL dispose()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL dispose() override;
+    virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
     // ____ XEventListener ____
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
-protected:
     // ____ WrappedPropertySet ____
     virtual const css::uno::Sequence< css::beans::Property >& getPropertySequence() override;
-    virtual const std::vector< WrappedProperty* > createWrappedProperties() override;
-    virtual void SAL_CALL setPropertyValue( const OUString& aPropertyName, const css::uno::Any& aValue ) throw (css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getPropertyValue( const OUString& PropertyName ) throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+    virtual std::vector< std::unique_ptr<WrappedProperty> > createWrappedProperties() override;
+    virtual void SAL_CALL setPropertyValue( const OUString& aPropertyName, const css::uno::Any& aValue ) override;
+    virtual css::uno::Any SAL_CALL getPropertyValue( const OUString& PropertyName ) override;
     virtual css::uno::Reference< css::beans::XPropertySet > getInnerPropertySet() override;
 
-    virtual css::beans::PropertyState SAL_CALL getPropertyState( const OUString& PropertyName ) throw (css::beans::UnknownPropertyException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setPropertyToDefault( const OUString& PropertyName ) throw (css::beans::UnknownPropertyException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getPropertyDefault( const OUString& aPropertyName ) throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+    virtual css::beans::PropertyState SAL_CALL getPropertyState( const OUString& PropertyName ) override;
+    virtual void SAL_CALL setPropertyToDefault( const OUString& PropertyName ) override;
+    virtual css::uno::Any SAL_CALL getPropertyDefault( const OUString& aPropertyName ) override;
 
     //own methods
     css::uno::Reference< css::chart2::XDataSeries > getDataSeries();
     css::uno::Reference< css::beans::XPropertySet > getDataPointProperties();
 
-private:
     std::shared_ptr< Chart2ModelContact >         m_spChart2ModelContact;
     ::comphelper::OInterfaceContainerHelper2      m_aEventListenerContainer;
 

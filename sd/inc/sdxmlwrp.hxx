@@ -19,14 +19,16 @@
 #ifndef INCLUDED_SD_INC_SDXMLWRP_HXX
 #define INCLUDED_SD_INC_SDXMLWRP_HXX
 
-#include <tools/errcode.hxx>
+#include <comphelper/fileformat.h>
+#include <tools/solar.h>
 #include "sdfilter.hxx"
+
+class ErrCode;
 
 // SdXMLFilter
 enum SdXMLFilterMode
 {
     SDXMLMODE_Normal,   ///< standard load and save of the complete document
-    SDXMLMODE_Preview,  ///< only for import, only the first draw page and its master page is loaded
     SDXMLMODE_Organizer ///< only for import, only the styles are loaded
 };
 
@@ -38,14 +40,14 @@ public:
         ::sd::DrawDocShell& rDocShell,
         SdXMLFilterMode eFilterMode = SDXMLMODE_Normal,
         sal_uLong nStoreVer = SOFFICE_FILEFORMAT_8 );
-    virtual ~SdXMLFilter();
+    virtual ~SdXMLFilter() override;
 
     bool        Import( ErrCode& nError );
     bool        Export() override;
 
 private:
-    SdXMLFilterMode meFilterMode;
-    sal_uLong mnStoreVer;
+    SdXMLFilterMode const meFilterMode;
+    sal_uLong const mnStoreVer;
 };
 
 #endif // INCLUDED_SD_INC_SDXMLWRP_HXX

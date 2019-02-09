@@ -19,18 +19,22 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_INC_PROPERTYMAPPER_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_INC_PROPERTYMAPPER_HXX
 
-#include <comphelper/InlineContainer.hxx>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/drawing/XShape.hpp>
+#include <sal/config.h>
 
-#include "charttoolsdllapi.hxx"
+#include <map>
+
+#include <com/sun/star/uno/Sequence.h>
+#include <com/sun/star/uno/Reference.h>
+
+#include <charttoolsdllapi.hxx>
+
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
 
 namespace chart
 {
 
-typedef ::std::map< OUString, OUString >                              tPropertyNameMap;
-typedef ::comphelper::MakeMap< OUString, OUString >                   tMakePropertyNameMap;
-typedef ::std::map< OUString, css::uno::Any >            tPropertyNameValueMap;
+typedef std::map< OUString, OUString >                              tPropertyNameMap;
+typedef std::map< OUString, css::uno::Any >            tPropertyNameValueMap;
 typedef css::uno::Sequence< OUString >                   tNameSequence;
 typedef css::uno::Sequence< css::uno::Any > tAnySequence;
 
@@ -47,7 +51,7 @@ public:
           const css::uno::Reference< css::beans::XPropertySet >& xTarget
         , const css::uno::Reference< css::beans::XPropertySet >& xSource
         , const tPropertyNameMap& rMap
-        , tPropertyNameValueMap* pOverwriteMap=nullptr );
+        , tPropertyNameValueMap const * pOverwriteMap=nullptr );
 
     /**
      * Fetch property values from the source object and map it to the
@@ -93,16 +97,16 @@ public:
                 , const tAnySequence&  rValues
                 , const css::uno::Reference< css::beans::XPropertySet >& xTarget );
 
-    static const tMakePropertyNameMap& getPropertyNameMapForCharacterProperties();
-    static const tMakePropertyNameMap& getPropertyNameMapForParagraphProperties();
-    static const tMakePropertyNameMap& getPropertyNameMapForFillProperties();
-    static const tMakePropertyNameMap& getPropertyNameMapForLineProperties();
-    static const tMakePropertyNameMap& getPropertyNameMapForFillAndLineProperties();
-    static const tMakePropertyNameMap& getPropertyNameMapForTextShapeProperties();
+    static const tPropertyNameMap& getPropertyNameMapForCharacterProperties();
+    static const tPropertyNameMap& getPropertyNameMapForParagraphProperties();
+    static const tPropertyNameMap& getPropertyNameMapForFillProperties();
+    static const tPropertyNameMap& getPropertyNameMapForLineProperties();
+    static const tPropertyNameMap& getPropertyNameMapForFillAndLineProperties();
+    static const tPropertyNameMap& getPropertyNameMapForTextShapeProperties();
 
-    static const tMakePropertyNameMap& getPropertyNameMapForFilledSeriesProperties();
-    static const tMakePropertyNameMap& getPropertyNameMapForLineSeriesProperties();
-    static const tMakePropertyNameMap& getPropertyNameMapForTextLabelProperties();
+    static const tPropertyNameMap& getPropertyNameMapForFilledSeriesProperties();
+    static const tPropertyNameMap& getPropertyNameMapForLineSeriesProperties();
+    static const tPropertyNameMap& getPropertyNameMapForTextLabelProperties();
 
     static void getTextLabelMultiPropertyLists(
                 const css::uno::Reference< css::beans::XPropertySet >& xSourceProp

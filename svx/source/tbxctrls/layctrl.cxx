@@ -25,11 +25,11 @@
 #include <sfx2/dispatch.hxx>
 #include <sfx2/app.hxx>
 
-#include <svx/dialogs.hrc>
-#include "svx/layctrl.hxx"
+#include <svx/strings.hrc>
+#include <svx/svxids.hrc>
+#include <svx/layctrl.hxx>
 #include <svx/dialmgr.hxx>
 #include <comphelper/processfactory.hxx>
-#include <comphelper/string.hxx>
 #include <svtools/colorcfg.hxx>
 #include <com/sun/star/util/URLTransformer.hpp>
 
@@ -52,10 +52,8 @@ private:
     ::Color             aBackgroundColor;
     long                nCol;
     long                nLine;
-    bool                bInitialKeyInput;
-    bool                m_bMod1;
     Reference< XFrame > mxFrame;
-    OUString       maCommand;
+    OUString const      maCommand;
 
     static const long TABLE_CELLS_HORIZ;
     static const long TABLE_CELLS_VERT;
@@ -63,26 +61,24 @@ private:
     long mnTableCellWidth;
     long mnTableCellHeight;
 
-    long mnTablePosX;
-    long mnTablePosY;
-
     long mnTableWidth;
     long mnTableHeight;
 
-    DECL_LINK_TYPED( SelectHdl, Button*, void );
+    DECL_LINK( SelectHdl, Button*, void );
 
 public:
                             TableWindow( sal_uInt16                 nSlotId,
+                                         vcl::Window*               pParent,
                                          const OUString&            rCmd,
                                          const OUString&            rText,
                                          const Reference< XFrame >& rFrame );
-                            virtual ~TableWindow();
+                            virtual ~TableWindow() override;
     virtual void            dispose() override;
 
     void                    KeyInput( const KeyEvent& rKEvt ) override;
     virtual void            MouseMove( const MouseEvent& rMEvt ) override;
     virtual void            MouseButtonUp( const MouseEvent& rMEvt ) override;
-    virtual void            Paint( vcl::RenderContext& /*rRenderContext*/, const Rectangle& ) override;
+    virtual void            Paint( vcl::RenderContext& /*rRenderContext*/, const tools::Rectangle& ) override;
     virtual void            PopupModeEnd() override;
 
 private:
@@ -95,30 +91,30 @@ const long TableWindow::TABLE_CELLS_HORIZ = 10;
 const long TableWindow::TABLE_CELLS_VERT = 15;
 
 
-IMPL_LINK_NOARG_TYPED(TableWindow, SelectHdl, Button*, void)
+IMPL_LINK_NOARG(TableWindow, SelectHdl, Button*, void)
 {
     CloseAndShowTableDialog();
 }
 
+constexpr long nTablePosX = 2;
+constexpr long nTablePosY = 2;
 
-TableWindow::TableWindow( sal_uInt16 nSlotId, const OUString& rCmd, const OUString& rText,
-                          const Reference< XFrame >& rFrame )
-    : SfxPopupWindow( nSlotId, rFrame, WinBits( WB_STDPOPUP ) )
+TableWindow::TableWindow( sal_uInt16 nSlotId, vcl::Window* pParent, const OUString& rCmd,
+                          const OUString& rText, const Reference< XFrame >& rFrame )
+    : SfxPopupWindow( nSlotId, pParent, rFrame, WB_STDPOPUP )
     , aTableButton( VclPtr<PushButton>::Create(this) )
     , nCol( 0 )
     , nLine( 0 )
-    , bInitialKeyInput(false)
-    , m_bMod1(false)
     , mxFrame( rFrame )
     , maCommand( rCmd )
-    , mnTablePosX(2)
-    , mnTablePosY(2)
 {
-    mnTableCellWidth  = 15 * GetDPIScaleFactor();
-    mnTableCellHeight = 15 * GetDPIScaleFactor();
+    float fScaleFactor = GetDPIScaleFactor();
 
-    mnTableWidth  = mnTablePosX + TABLE_CELLS_HORIZ*mnTableCellWidth;
-    mnTableHeight = mnTablePosY + TABLE_CELLS_VERT*mnTableCellHeight;
+    mnTableCellWidth  = 15 * fScaleFactor;
+    mnTableCellHeight = 15 * fScaleFactor;
+
+    mnTableWidth  = nTablePosX + TABLE_CELLS_HORIZ*mnTableCellWidth;
+    mnTableHeight = nTablePosY + TABLE_CELLS_VERT*mnTableCellHeight;
 
     const StyleSettings& rStyles = Application::GetSettings().GetStyleSettings();
     svtools::ColorConfig aColorConfig;
@@ -130,16 +126,16 @@ TableWindow::TableWindow( sal_uInt16 nSlotId, const OUString& rCmd, const OUStri
 
     SetBackground( aBackgroundColor );
     vcl::Font aFont = GetFont();
-    aFont.SetColor( ::Color( aColorConfig.GetColorValue( svtools::FONTCOLOR ).nColor )  );
+    aFont.SetColor( aColorConfig.GetColorValue( svtools::FONTCOLOR ).nColor );
     aFont.SetFillColor( aBackgroundColor );
     aFont.SetTransparent( false );
     SetFont( aFont );
 
     SetText( rText );
 
-    aTableButton->SetPosSizePixel( Point( mnTablePosX, mnTableHeight + 5 ),
-            Size( mnTableWidth - mnTablePosX, 24 ) );
-    aTableButton->SetText( SVX_RESSTR( RID_SVXSTR_MORE ) );
+    aTableButton->SetPosSizePixel( Point( nTablePosX, mnTableHeight + 5 ),
+            Size( mnTableWidth - nTablePosX, 24 ) );
+    aTableButton->SetText( SvxResId( RID_SVXSTR_MORE ) );
     aTableButton->SetClickHdl( LINK( this, TableWindow, SelectHdl ) );
     aTableButton->Show();
 
@@ -164,8 +160,8 @@ void TableWindow::MouseMove( const MouseEvent& rMEvt )
     Point aPos = rMEvt.GetPosPixel();
     Point aMousePos( aPos );
 
-    long nNewCol = ( aMousePos.X() - mnTablePosX + mnTableCellWidth ) / mnTableCellWidth;
-    long nNewLine = ( aMousePos.Y() - mnTablePosY + mnTableCellHeight ) / mnTableCellHeight;
+    long nNewCol = ( aMousePos.X() - nTablePosX + mnTableCellWidth ) / mnTableCellWidth;
+    long nNewLine = ( aMousePos.Y() - nTablePosY + mnTableCellHeight ) / mnTableCellHeight;
 
     Update( nNewCol, nNewLine );
 }
@@ -221,21 +217,11 @@ void TableWindow::KeyInput( const KeyEvent& rKEvt )
         }
         if ( bHandled )
         {
-            //make sure that a table can initially be created
-            if(bInitialKeyInput)
-            {
-                bInitialKeyInput = false;
-                if(!nNewLine)
-                    nNewLine = 1;
-                if(!nNewCol)
-                    nNewCol = 1;
-            }
             Update( nNewCol, nNewLine );
         }
     }
     else if(KEY_MOD1 == nModifier && KEY_RETURN == nKey)
     {
-        m_bMod1 = true;
         EndPopupMode( FloatWinPopupEndFlags::CloseAll );
     }
 
@@ -251,77 +237,77 @@ void TableWindow::MouseButtonUp( const MouseEvent& rMEvt )
 }
 
 
-void TableWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle&)
+void TableWindow::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&)
 {
-    const long nSelectionWidth = mnTablePosX + nCol * mnTableCellWidth;
-    const long nSelectionHeight = mnTablePosY + nLine * mnTableCellHeight;
+    const long nSelectionWidth = nTablePosX + nCol * mnTableCellWidth;
+    const long nSelectionHeight = nTablePosY + nLine * mnTableCellHeight;
 
     // the non-selected parts of the table
     rRenderContext.SetLineColor(aLineColor);
     rRenderContext.SetFillColor(aFillColor);
-    rRenderContext.DrawRect(Rectangle(nSelectionWidth, mnTablePosY, mnTableWidth, nSelectionHeight));
-    rRenderContext.DrawRect(Rectangle(mnTablePosX, nSelectionHeight, nSelectionWidth, mnTableHeight));
-    rRenderContext.DrawRect(Rectangle(nSelectionWidth, nSelectionHeight, mnTableWidth, mnTableHeight));
+    rRenderContext.DrawRect(tools::Rectangle(nSelectionWidth, nTablePosY, mnTableWidth, nSelectionHeight));
+    rRenderContext.DrawRect(tools::Rectangle(nTablePosX, nSelectionHeight, nSelectionWidth, mnTableHeight));
+    rRenderContext.DrawRect(tools::Rectangle(nSelectionWidth, nSelectionHeight, mnTableWidth, mnTableHeight));
 
     // the selection
     if (nCol > 0 && nLine > 0)
     {
         rRenderContext.SetFillColor(aHighlightFillColor);
-        rRenderContext.DrawRect(Rectangle(mnTablePosX, mnTablePosY, nSelectionWidth, nSelectionHeight));
+        rRenderContext.DrawRect(tools::Rectangle(nTablePosX, nTablePosY, nSelectionWidth, nSelectionHeight));
     }
 
     // lines inside of the table
     rRenderContext.SetLineColor(aLineColor);
     for (long i = 1; i < TABLE_CELLS_VERT; ++i)
     {
-        rRenderContext.DrawLine(Point(mnTablePosX, mnTablePosY + i*mnTableCellHeight),
-                                Point(mnTableWidth, mnTablePosY + i*mnTableCellHeight));
+        rRenderContext.DrawLine(Point(nTablePosX, nTablePosY + i*mnTableCellHeight),
+                                Point(mnTableWidth, nTablePosY + i*mnTableCellHeight));
     }
 
     for (long i = 1; i < TABLE_CELLS_HORIZ; ++i)
     {
-        rRenderContext.DrawLine(Point( mnTablePosX + i*mnTableCellWidth, mnTablePosY),
-                                Point( mnTablePosX + i*mnTableCellWidth, mnTableHeight));
+        rRenderContext.DrawLine(Point( nTablePosX + i*mnTableCellWidth, nTablePosY),
+                                Point( nTablePosX + i*mnTableCellWidth, mnTableHeight));
     }
 
     // the text near the mouse cursor telling the table dimensions
-    if (nCol && nLine)
+    if (!nCol || !nLine)
+        return;
+
+    OUString aText;
+    aText += OUString::number( nCol );
+    aText += " x ";
+    aText += OUString::number( nLine );
+    if(GetId() == FN_SHOW_MULTIPLE_PAGES)
     {
-        OUString aText;
-        aText += OUString::number( nCol );
-        aText += " x ";
-        aText += OUString::number( nLine );
-        if(GetId() == FN_SHOW_MULTIPLE_PAGES)
-        {
-            aText += " ";
-            aText += SVX_RESSTR(RID_SVXSTR_PAGES);
-        }
-
-        Size aTextSize(rRenderContext.GetTextWidth(aText), rRenderContext.GetTextHeight());
-
-        long nTextX = nSelectionWidth + mnTableCellWidth;
-        long nTextY = nSelectionHeight + mnTableCellHeight;
-        const long nTipBorder = 2;
-
-        if (aTextSize.Width() + mnTablePosX + mnTableCellWidth + 2 * nTipBorder < nSelectionWidth)
-            nTextX = nSelectionWidth - mnTableCellWidth - aTextSize.Width();
-
-        if (aTextSize.Height() + mnTablePosY + mnTableCellHeight + 2 * nTipBorder < nSelectionHeight)
-            nTextY = nSelectionHeight - mnTableCellHeight - aTextSize.Height();
-
-        rRenderContext.SetLineColor(aLineColor);
-        rRenderContext.SetFillColor(aBackgroundColor);
-        rRenderContext.DrawRect(Rectangle(nTextX - 2 * nTipBorder,
-                                          nTextY - 2 * nTipBorder,
-                                          nTextX + aTextSize.Width() + nTipBorder,
-                                          nTextY + aTextSize.Height() + nTipBorder));
-
-        // #i95350# force RTL output
-        if (IsRTLEnabled())
-            aText = OUString(sal_Unicode(0x202D)) + aText;
-
-        rRenderContext.DrawText(Point(nTextX, nTextY), aText);
+        aText += " ";
+        aText += SvxResId(RID_SVXSTR_PAGES);
     }
+
+    Size aTextSize(rRenderContext.GetTextWidth(aText), rRenderContext.GetTextHeight());
+
+    long nTextX = nSelectionWidth + mnTableCellWidth;
+    long nTextY = nSelectionHeight + mnTableCellHeight;
+    const long nTipBorder = 2;
+
+    if (aTextSize.Width() + nTablePosX + mnTableCellWidth + 2 * nTipBorder < nSelectionWidth)
+        nTextX = nSelectionWidth - mnTableCellWidth - aTextSize.Width();
+
+    if (aTextSize.Height() + nTablePosY + mnTableCellHeight + 2 * nTipBorder < nSelectionHeight)
+        nTextY = nSelectionHeight - mnTableCellHeight - aTextSize.Height();
+
+    rRenderContext.SetLineColor(aLineColor);
+    rRenderContext.SetFillColor(aBackgroundColor);
+    rRenderContext.DrawRect(tools::Rectangle(nTextX - 2 * nTipBorder,
+                                      nTextY - 2 * nTipBorder,
+                                      nTextX + aTextSize.Width() + nTipBorder,
+                                      nTextY + aTextSize.Height() + nTipBorder));
+
+    // #i95350# force RTL output
+    if (IsRTLEnabled())
+        aText = OUStringLiteral1(0x202D) + aText;
+
+    rRenderContext.DrawText(Point(nTextX, nTextY), aText);
 }
 
 
@@ -331,9 +317,9 @@ void TableWindow::PopupModeEnd()
     {
         Sequence< PropertyValue > aArgs( 2 );
         aArgs[0].Name = "Columns";
-        aArgs[0].Value = makeAny( sal_Int16( nCol ));
+        aArgs[0].Value <<= sal_Int16( nCol );
         aArgs[1].Name = "Rows";
-        aArgs[1].Value = makeAny( sal_Int16( nLine ));
+        aArgs[1].Value <<= sal_Int16( nLine );
 
         TableDialog( aArgs );
     }
@@ -354,7 +340,7 @@ void TableWindow::Update( long nNewCol, long nNewLine )
     {
         nCol = nNewCol;
         nLine = nNewLine;
-        Invalidate(Rectangle(mnTablePosX, mnTablePosY, mnTableWidth, mnTableHeight));
+        Invalidate(tools::Rectangle(nTablePosX, nTablePosY, mnTableWidth, mnTableHeight));
     }
 }
 
@@ -400,23 +386,25 @@ private:
     bool                bInitialKeyInput;
     bool                m_bMod1;
     Reference< XFrame > mxFrame;
-    OUString            maCommand;
+    OUString const            maCommand;
 
     void UpdateSize_Impl( long nNewCol );
 public:
-                            ColumnsWindow( sal_uInt16 nId, const OUString& rCmd, const OUString &rText, const Reference< XFrame >& rFrame );
+                            ColumnsWindow( sal_uInt16 nId, vcl::Window* pParent, const OUString& rCmd,
+                                           const OUString &rText, const Reference< XFrame >& rFrame );
 
     void                    KeyInput( const KeyEvent& rKEvt ) override;
     virtual void            MouseMove( const MouseEvent& rMEvt ) override;
     virtual void            MouseButtonDown( const MouseEvent& rMEvt ) override;
     virtual void            MouseButtonUp( const MouseEvent& rMEvt ) override;
-    virtual void            Paint( vcl::RenderContext& /*rRenderContext*/, const Rectangle& ) override;
+    virtual void            Paint( vcl::RenderContext& /*rRenderContext*/, const tools::Rectangle& ) override;
     virtual void            PopupModeEnd() override;
 };
 
 
-ColumnsWindow::ColumnsWindow( sal_uInt16 nId, const OUString& rCmd, const OUString& rText, const Reference< XFrame >& rFrame ) :
-    SfxPopupWindow( nId, rFrame, WB_STDPOPUP ),
+ColumnsWindow::ColumnsWindow( sal_uInt16 nId, vcl::Window* pParent, const OUString& rCmd,
+                              const OUString& rText, const Reference< XFrame >& rFrame ) :
+    SfxPopupWindow( nId, pParent, rFrame, WB_STDPOPUP ),
     bInitialKeyInput(true),
     m_bMod1(false),
     mxFrame(rFrame),
@@ -424,7 +412,7 @@ ColumnsWindow::ColumnsWindow( sal_uInt16 nId, const OUString& rCmd, const OUStri
 {
     const StyleSettings& rStyles = Application::GetSettings().GetStyleSettings();
     svtools::ColorConfig aColorConfig;
-    aLineColor = ::Color( aColorConfig.GetColorValue( svtools::FONTCOLOR ).nColor );
+    aLineColor = aColorConfig.GetColorValue( svtools::FONTCOLOR ).nColor;
     aHighlightLineColor = rStyles.GetHighlightTextColor();
     aFillColor = rStyles.GetWindowColor();
     aHighlightFillColor = rStyles.GetHighlightColor();
@@ -443,7 +431,7 @@ ColumnsWindow::ColumnsWindow( sal_uInt16 nId, const OUString& rCmd, const OUStri
 
     SetText( rText );
 
-    Size aLogicSize = LogicToPixel( Size( 95, 155 ), MapMode( MAP_10TH_MM ) );
+    Size aLogicSize = LogicToPixel( Size( 95, 155 ), MapMode( MapUnit::Map10thMM ) );
     nMX = aLogicSize.Width();
     SetOutputSizePixel( Size( nMX*nWidth-1, aLogicSize.Height()+nTextHeight ) );
     StartCascading();
@@ -492,13 +480,13 @@ void ColumnsWindow::UpdateSize_Impl( long nNewCol )
         }
 
         while ( nWidth > 0 &&
-                (short)(aWinPos.X()+(nMX*nWidth-1)) >= aMaxPos.X()-3 )
+                static_cast<short>(aWinPos.X()+(nMX*nWidth-1)) >= aMaxPos.X()-3 )
             nWidth--;
 
         if ( nNewCol > nWidth )
             nNewCol = nWidth;
 
-        Invalidate( Rectangle( 0, aWinSize.Height()-nTextHeight+2,
+        Invalidate( tools::Rectangle( 0, aWinSize.Height()-nTextHeight+2,
                                aWinSize.Width(), aWinSize.Height() ) );
         SetOutputSizePixel( Size( nMX*nWidth-1, aWinSize.Height() ) );
     }
@@ -506,7 +494,7 @@ void ColumnsWindow::UpdateSize_Impl( long nNewCol )
 
     if ( nNewCol != nCol )
     {
-        Invalidate( Rectangle( 0, aWinSize.Height()-nTextHeight+2,
+        Invalidate( tools::Rectangle( 0, aWinSize.Height()-nTextHeight+2,
                                aWinSize.Width(), aWinSize.Height() ) );
 
         long nMinCol = 0, nMaxCol = 0;
@@ -522,7 +510,7 @@ void ColumnsWindow::UpdateSize_Impl( long nNewCol )
             nMaxCol = nNewCol;
         }
 
-        Invalidate( Rectangle( nMinCol*nMX-1, 0,
+        Invalidate( tools::Rectangle( nMinCol*nMX-1, 0,
                                nMaxCol*nMX+1, aWinSize.Height()-nTextHeight+2 ) );
         nCol  = nNewCol;
     }
@@ -600,7 +588,7 @@ void ColumnsWindow::MouseButtonUp( const MouseEvent& rMEvt )
 }
 
 
-void ColumnsWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle&)
+void ColumnsWindow::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&)
 {
     long i;
     long nLineWidth;
@@ -619,7 +607,7 @@ void ColumnsWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle&)
             rRenderContext.SetFillColor(aFillColor);
         }
 
-        rRenderContext.DrawRect(Rectangle(i * nMX - 1, -1, i * nMX + nMX, aSize.Height() - nTextHeight + 1));
+        rRenderContext.DrawRect(tools::Rectangle(i * nMX - 1, -1, i * nMX + nMX, aSize.Height() - nTextHeight + 1));
 
         long j = 4;
         while (j < aSize.Height() - nTextHeight - 4)
@@ -639,24 +627,24 @@ void ColumnsWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle&)
     if (nCol)
         aText = OUString::number(nCol);
     else
-        aText = comphelper::string::remove(Button::GetStandardText(StandardButtonType::Cancel), '~');
+        aText = Button::GetStandardText(StandardButtonType::Cancel).replaceAll("~", "");
 
     Size aTextSize(rRenderContext.GetTextWidth(aText), rRenderContext.GetTextHeight());
     rRenderContext.DrawText(Point((aSize.Width() - aTextSize.Width()) / 2, aSize.Height() - nTextHeight + 2), aText);
 
-    rRenderContext.DrawRect(Rectangle(0,
+    rRenderContext.DrawRect(tools::Rectangle(0,
                                       aSize.Height() - nTextHeight + 2,
                                       (aSize.Width() - aTextSize.Width()) / 2 - 1,
                                       aSize.Height()));
 
-    rRenderContext.DrawRect(Rectangle((aSize.Width() - aTextSize.Width()) / 2 + aTextSize.Width(),
+    rRenderContext.DrawRect(tools::Rectangle((aSize.Width() - aTextSize.Width()) / 2 + aTextSize.Width(),
                                       aSize.Height() - nTextHeight + 2,
                                       aSize.Width(),
                                       aSize.Height()));
 
     rRenderContext.SetLineColor(aLineColor);
     rRenderContext.SetFillColor();
-    rRenderContext.DrawRect(Rectangle( 0, 0, aSize.Width() - 1, aSize.Height() - nTextHeight + 1));
+    rRenderContext.DrawRect(tools::Rectangle( 0, 0, aSize.Width() - 1, aSize.Height() - nTextHeight + 1));
 }
 
 
@@ -666,9 +654,9 @@ void ColumnsWindow::PopupModeEnd()
     {
         Sequence< PropertyValue > aArgs( 2 );
         aArgs[0].Name = "Columns";
-        aArgs[0].Value = makeAny( sal_Int16( nCol ));
+        aArgs[0].Value <<= sal_Int16( nCol );
         aArgs[1].Name = "Modifier";
-        aArgs[1].Value = makeAny( sal_Int16( m_bMod1 ? KEY_MOD1 : 0 ));
+        aArgs[1].Value <<= sal_Int16( m_bMod1 ? KEY_MOD1 : 0 );
 
         SfxToolBoxControl::Dispatch( Reference< XDispatchProvider >( mxFrame->getController(), UNO_QUERY ),
                                         maCommand,
@@ -698,7 +686,7 @@ VclPtr<SfxPopupWindow> SvxTableToolBoxControl::CreatePopupWindow()
     if ( bEnabled )
     {
         ToolBox& rTbx = GetToolBox();
-        VclPtr<TableWindow> pWin = VclPtr<TableWindow>::Create( GetSlotId(), m_aCommandURL, GetToolBox().GetItemText( GetId() ), m_xFrame );
+        VclPtr<TableWindow> pWin = VclPtr<TableWindow>::Create( GetSlotId(), &GetToolBox(), m_aCommandURL, GetToolBox().GetItemText( GetId() ), m_xFrame );
         pWin->StartPopupMode( &rTbx, FloatWinPopupFlags::GrabFocus|FloatWinPopupFlags::NoKeyClose );
         SetPopupWindow( pWin );
         return pWin;
@@ -708,9 +696,9 @@ VclPtr<SfxPopupWindow> SvxTableToolBoxControl::CreatePopupWindow()
 
 void SvxTableToolBoxControl::StateChanged( sal_uInt16, SfxItemState eState, const SfxPoolItem* pState )
 {
-    if ( pState && dynamic_cast<const SfxUInt16Item* >(pState) !=  nullptr )
+    if ( auto pUInt16Item = dynamic_cast<const SfxUInt16Item* >(pState) )
     {
-        sal_Int16 nValue = static_cast< const SfxUInt16Item* >( pState )->GetValue();
+        sal_Int16 nValue = pUInt16Item->GetValue();
         bEnabled = ( nValue != 0 );
     }
     else
@@ -740,10 +728,10 @@ SvxColumnsToolBoxControl::~SvxColumnsToolBoxControl()
 
 VclPtr<SfxPopupWindow> SvxColumnsToolBoxControl::CreatePopupWindow()
 {
-    ColumnsWindow* pWin = nullptr;
+    VclPtr<ColumnsWindow> pWin;
     if(bEnabled)
     {
-            pWin = VclPtr<ColumnsWindow>::Create( GetSlotId(), m_aCommandURL, GetToolBox().GetItemText( GetId() ), m_xFrame );
+            pWin = VclPtr<ColumnsWindow>::Create( GetSlotId(), &GetToolBox(), m_aCommandURL, GetToolBox().GetItemText( GetId() ), m_xFrame );
             pWin->StartPopupMode( &GetToolBox(),
                                   FloatWinPopupFlags::GrabFocus|FloatWinPopupFlags::NoKeyClose );
             SetPopupWindow( pWin );

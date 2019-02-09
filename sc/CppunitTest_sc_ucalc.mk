@@ -26,10 +26,6 @@ $(eval $(call gb_CppunitTest_use_library_objects,sc_ucalc, \
 	scqahelper \
 ))
 
-ifeq ($(ENABLE_TELEPATHY),TRUE)
-$(eval $(call gb_CppunitTest_use_libraries,sc_ucalc,tubes))
-endif
-
 $(eval $(call gb_CppunitTest_use_externals,sc_ucalc,\
 	boost_headers \
     $(call gb_Helper_optional,OPENCL, \
@@ -49,6 +45,7 @@ $(eval $(call gb_CppunitTest_use_libraries,sc_ucalc, \
     comphelper \
     cppu \
     cppuhelper \
+    dbtools \
     drawinglayer \
     editeng \
     for \
@@ -76,7 +73,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sc_ucalc, \
     vbahelper \
     vcl \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sc_ucalc,\
@@ -87,8 +83,9 @@ $(eval $(call gb_CppunitTest_set_include,sc_ucalc,\
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sc_ucalc,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_custom_headers,sc_ucalc,\
@@ -112,11 +109,18 @@ $(eval $(call gb_CppunitTest_use_components,sc_ucalc,\
     ucb/source/ucp/file/ucpfile1 \
     unoxml/source/service/unoxml \
     uui/util/uui \
+    vcl/vcl.common \
 ))
 
 ifeq ($(OS),LINUX)
 $(eval $(call gb_CppunitTest_add_libs,sc_ucalc,\
      -lrt \
+))
+endif
+
+ifeq ($(OS), $(filter LINUX %BSD SOLARIS, $(OS)))
+$(eval $(call gb_CppunitTest_add_libs,sc_ucalc,\
+    -lpthread \
 ))
 endif
 

@@ -19,7 +19,6 @@
 
 #include "gio_datasupplier.hxx"
 #include "gio_resultset.hxx"
-#include "comphelper/processfactory.hxx"
 
 using namespace com::sun::star::lang;
 using namespace com::sun::star::ucb;
@@ -29,7 +28,7 @@ using namespace gio;
 
 DynamicResultSet::DynamicResultSet(
     const Reference< XComponentContext >& rxContext,
-    const Reference< Content >& rxContent,
+    const rtl::Reference< Content >& rxContent,
     const OpenCommandArgument2& rCommand,
     const Reference< XCommandEnvironment >& rxEnv )
     : ResultSetImplHelper( rxContext, rCommand ),

@@ -18,6 +18,8 @@
  */
 #include "dbloader2.hxx"
 #include <tools/urlobj.hxx>
+#include <comphelper/sequenceashashmap.hxx>
+#include <comphelper/storagehelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
 namespace rptxml
@@ -29,7 +31,6 @@ using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::ucb;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::util;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::lang;
@@ -37,7 +38,6 @@ using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::registry;
 using namespace ::com::sun::star::embed;
 using namespace ::com::sun::star::ui::dialogs;
-using ::com::sun::star::awt::XWindow;
 
 
 ORptTypeDetection::ORptTypeDetection(Reference< XComponentContext > const & xContext)
@@ -45,7 +45,7 @@ ORptTypeDetection::ORptTypeDetection(Reference< XComponentContext > const & xCon
 {
 }
 
-OUString SAL_CALL ORptTypeDetection::detect( Sequence< css::beans::PropertyValue >& Descriptor ) throw (RuntimeException, std::exception)
+OUString SAL_CALL ORptTypeDetection::detect( Sequence< css::beans::PropertyValue >& Descriptor )
 {
 
     ::comphelper::SequenceAsHashMap aTemp(Descriptor);
@@ -78,33 +78,33 @@ OUString SAL_CALL ORptTypeDetection::detect( Sequence< css::beans::PropertyValue
     return OUString();
 }
 
-Reference< XInterface > SAL_CALL
+Reference< XInterface >
         ORptTypeDetection::create(Reference< XComponentContext > const & xContext)
 {
     return *(new ORptTypeDetection(xContext));
 }
 
 // XServiceInfo
-OUString SAL_CALL ORptTypeDetection::getImplementationName() throw(std::exception  )
+OUString SAL_CALL ORptTypeDetection::getImplementationName()
 {
     return getImplementationName_Static();
 }
 
 
 // XServiceInfo
-sal_Bool SAL_CALL ORptTypeDetection::supportsService(const OUString& ServiceName) throw(std::exception  )
+sal_Bool SAL_CALL ORptTypeDetection::supportsService(const OUString& ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 // XServiceInfo
-Sequence< OUString > SAL_CALL ORptTypeDetection::getSupportedServiceNames() throw(std::exception  )
+Sequence< OUString > SAL_CALL ORptTypeDetection::getSupportedServiceNames()
 {
     return getSupportedServiceNames_Static();
 }
 
 // ORegistryServiceManager_Static
-Sequence< OUString > ORptTypeDetection::getSupportedServiceNames_Static() throw( RuntimeException )
+Sequence< OUString > ORptTypeDetection::getSupportedServiceNames_Static()
 {
     Sequence<OUString> aSNS { "com.sun.star.document.ExtendedTypeDetection" };
     return aSNS;

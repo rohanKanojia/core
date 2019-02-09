@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuconcustomshape.hxx"
+#include <fuconcustomshape.hxx>
 #include <editeng/svxenum.hxx>
 #include <svx/gallery.hxx>
 #include <sfx2/request.hxx>
@@ -27,18 +27,18 @@
 #include <svx/svdoashp.hxx>
 #include <editeng/eeitem.hxx>
 #include <svx/sdtagitm.hxx>
-#include "fuconuno.hxx"
-#include "tabvwsh.hxx"
-#include "sc.hrc"
-#include "drawview.hxx"
+#include <fuconuno.hxx>
+#include <tabvwsh.hxx>
+#include <sc.hrc>
+#include <drawview.hxx>
 #include <editeng/adjustitem.hxx>
 
 #include <math.h>
 
 using namespace com::sun::star;
 
-FuConstCustomShape::FuConstCustomShape( ScTabViewShell* pViewSh, vcl::Window* pWin, ScDrawView* pViewP, SdrModel* pDoc, SfxRequest& rReq )
-    : FuConstruct( pViewSh, pWin, pViewP, pDoc, rReq )
+FuConstCustomShape::FuConstCustomShape(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawView* pViewP, SdrModel* pDoc, const SfxRequest& rReq )
+    : FuConstruct(rViewSh, pWin, pViewP, pDoc, rReq)
 {
     const SfxItemSet* pArgs = rReq.GetArgs();
     if ( pArgs )
@@ -48,21 +48,9 @@ FuConstCustomShape::FuConstCustomShape( ScTabViewShell* pViewSh, vcl::Window* pW
     }
 }
 
-/*************************************************************************
-|*
-|* Destruktor
-|*
-\************************************************************************/
-
 FuConstCustomShape::~FuConstCustomShape()
 {
 }
-
-/*************************************************************************
-|*
-|* MouseButtonDown-event
-|*
-\************************************************************************/
 
 bool FuConstCustomShape::MouseButtonDown(const MouseEvent& rMEvt)
 {
@@ -73,12 +61,6 @@ bool FuConstCustomShape::MouseButtonDown(const MouseEvent& rMEvt)
     if ( rMEvt.IsLeft() && !pView->IsAction() )
     {
         Point aPnt( pWindow->PixelToLogic( rMEvt.GetPosPixel() ) );
-        // Hack  to align object to nearest grid position where object
-        // would be anchored ( if it were cell anchored )
-        // Get grid offset for current position ( note: aPnt is
-        // also adjusted )
-        Point aGridOff = CurrentGridSyncOffsetAndPos( aPnt );
-
         pWindow->CaptureMouse();
         pView->BegCreateObj(aPnt);
 
@@ -91,30 +73,12 @@ bool FuConstCustomShape::MouseButtonDown(const MouseEvent& rMEvt)
                 bForceNoFillStyle = true;
             if ( bForceNoFillStyle )
                 pObj->SetMergedItem( XFillStyleItem( drawing::FillStyle_NONE ) );
-            pObj->SetGridOffset( aGridOff );
         }
 
         bReturn = true;
     }
     return bReturn;
 }
-
-/*************************************************************************
-|*
-|* MouseMove-event
-|*
-\************************************************************************/
-
-bool FuConstCustomShape::MouseMove(const MouseEvent& rMEvt)
-{
-    return FuConstruct::MouseMove(rMEvt);
-}
-
-/*************************************************************************
-|*
-|* MouseButtonUp-event
-|*
-\************************************************************************/
 
 bool FuConstCustomShape::MouseButtonUp(const MouseEvent& rMEvt)
 {
@@ -125,31 +89,11 @@ bool FuConstCustomShape::MouseButtonUp(const MouseEvent& rMEvt)
 
     if ( pView->IsCreateObj() && rMEvt.IsLeft() )
     {
-        pView->EndCreateObj(SDRCREATE_FORCEEND);
+        pView->EndCreateObj(SdrCreateCmd::ForceEnd);
         bReturn = true;
     }
     return (FuConstruct::MouseButtonUp(rMEvt) || bReturn);
 }
-
-/*************************************************************************
-|*
-|* Tastaturereignisse bearbeiten
-|*
-|* Wird ein KeyEvent bearbeitet, so ist der Return-Wert sal_True, andernfalls
-|* FALSE.
-|*
-\************************************************************************/
-
-bool FuConstCustomShape::KeyInput(const KeyEvent& rKEvt)
-{
-    return FuConstruct::KeyInput(rKEvt);
-}
-
-/*************************************************************************
-|*
-|* Function aktivieren
-|*
-\************************************************************************/
 
 void FuConstCustomShape::Activate()
 {
@@ -157,7 +101,7 @@ void FuConstCustomShape::Activate()
 
     aNewPointer = Pointer( PointerStyle::DrawRect );
     aOldPointer = pWindow->GetPointer();
-    pViewShell->SetActivePointer( aNewPointer );
+    rViewShell.SetActivePointer( aNewPointer );
 
     SdrLayer* pLayer = pView->GetModel()->GetLayerAdmin().GetLayerPerID(SC_LAYER_CONTROLS);
     if (pLayer)
@@ -165,12 +109,6 @@ void FuConstCustomShape::Activate()
 
     FuConstruct::Activate();
 }
-
-/*************************************************************************
-|*
-|* Function deaktivieren
-|*
-\************************************************************************/
 
 void FuConstCustomShape::Deactivate()
 {
@@ -180,31 +118,28 @@ void FuConstCustomShape::Deactivate()
     if (pLayer)
         pView->SetActiveLayer( pLayer->GetName() );
 
-    pViewShell->SetActivePointer( aOldPointer );
+    rViewShell.SetActivePointer( aOldPointer );
 }
 
 // Create default drawing objects via keyboard
-SdrObject* FuConstCustomShape::CreateDefaultObject(const sal_uInt16 /* nID */, const Rectangle& rRectangle)
+SdrObjectUniquePtr FuConstCustomShape::CreateDefaultObject(const sal_uInt16 /* nID */, const tools::Rectangle& rRectangle)
 {
-    SdrObject* pObj = SdrObjFactory::MakeNewObject(
-        pView->GetCurrentObjInventor(), pView->GetCurrentObjIdentifier(),
-        nullptr, pDrDoc);
+    SdrObjectUniquePtr pObj(SdrObjFactory::MakeNewObject(
+        *pDrDoc,
+        pView->GetCurrentObjInventor(),
+        pView->GetCurrentObjIdentifier()));
+
     if( pObj )
     {
-        Rectangle aRectangle( rRectangle );
-        SetAttributes( pObj );
+        tools::Rectangle aRectangle( rRectangle );
+        SetAttributes( pObj.get() );
         if ( SdrObjCustomShape::doConstructOrthogonal( aCustomShape ) )
             ImpForceQuadratic( aRectangle );
         pObj->SetLogicRect( aRectangle );
     }
+
     return pObj;
 }
-
-/*************************************************************************
-|*
-|* applying attributes
-|*
-\************************************************************************/
 
 void FuConstCustomShape::SetAttributes( SdrObject* pObj )
 {
@@ -215,34 +150,34 @@ void FuConstCustomShape::SetAttributes( SdrObject* pObj )
         std::vector< OUString > aObjList;
         if ( GalleryExplorer::FillObjListTitle( GALLERY_THEME_POWERPOINT, aObjList ) )
         {
-            sal_uInt16 i;
-            for ( i = 0; i < aObjList.size(); i++ )
+            for ( std::vector<OUString>::size_type i = 0; i < aObjList.size(); i++ )
             {
                 if ( aObjList[ i ].equalsIgnoreAsciiCase( aCustomShape ) )
                 {
                     FmFormModel aFormModel;
-                    SfxItemPool& rPool = aFormModel.GetItemPool();
+                    SfxItemPool& rPool(aFormModel.GetItemPool());
                     rPool.FreezeIdRanges();
+
                     if ( GalleryExplorer::GetSdrObj( GALLERY_THEME_POWERPOINT, i, &aFormModel ) )
                     {
                         const SdrObject* pSourceObj = aFormModel.GetPage( 0 )->GetObj( 0 );
                         if( pSourceObj )
                         {
                             const SfxItemSet& rSource = pSourceObj->GetMergedItemSet();
-                            SfxItemSet aDest( pObj->GetModel()->GetItemPool(),              // ranges from SdrAttrObj
-                            SDRATTR_START, SDRATTR_SHADOW_LAST,
-                            SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST,
-                            SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION,
-                            // Graphic Attributes
-                            SDRATTR_GRAF_FIRST, SDRATTR_GRAF_LAST,
-                            // 3d Properties
-                            SDRATTR_3D_FIRST, SDRATTR_3D_LAST,
-                            // CustomShape properties
-                            SDRATTR_CUSTOMSHAPE_FIRST, SDRATTR_CUSTOMSHAPE_LAST,
-                            // range from SdrTextObj
-                            EE_ITEMS_START, EE_ITEMS_END,
-                            // end
-                            0, 0);
+                            SfxItemSet aDest(
+                                pObj->getSdrModelFromSdrObject().GetItemPool(),
+                                svl::Items<
+                                    // Ranges from SdrAttrObj:
+                                    SDRATTR_START, SDRATTR_SHADOW_LAST,
+                                    SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST,
+                                    SDRATTR_TEXTDIRECTION,
+                                        SDRATTR_TEXTDIRECTION,
+                                    // Graphic attributes, 3D properties,
+                                    // CustomShape properties:
+                                    SDRATTR_GRAF_FIRST,
+                                        SDRATTR_CUSTOMSHAPE_LAST,
+                                    // Range from SdrTextObj:
+                                    EE_ITEMS_START, EE_ITEMS_END>{});
                             aDest.Set( rSource );
                             pObj->SetMergedItemSet( aDest );
                             sal_Int32 nAngle = pSourceObj->GetRotateAngle();
@@ -261,7 +196,7 @@ void FuConstCustomShape::SetAttributes( SdrObject* pObj )
     }
     if ( !bAttributesAppliedFromGallery )
     {
-        pObj->SetMergedItem( SvxAdjustItem( SVX_ADJUST_CENTER, 0 ) );
+        pObj->SetMergedItem( SvxAdjustItem( SvxAdjust::Center, EE_PARA_JUST ) );
         pObj->SetMergedItem( SdrTextVertAdjustItem( SDRTEXTVERTADJUST_CENTER ) );
         pObj->SetMergedItem( SdrTextHorzAdjustItem( SDRTEXTHORZADJUST_BLOCK ) );
         pObj->SetMergedItem( makeSdrTextAutoGrowHeightItem( false ) );

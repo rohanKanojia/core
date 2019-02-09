@@ -21,10 +21,9 @@
 #define INCLUDED_VCL_INC_SALTIMER_HXX
 
 #include <sal/config.h>
-
 #include <vcl/dllapi.h>
-
-#include <salwtype.hxx>
+#include "salwtype.hxx"
+#include <iostream>
 
 /*
  * note: there will be only a single instance of SalTimer
@@ -35,9 +34,10 @@
 class VCL_PLUGIN_PUBLIC SalTimer
 {
     SALTIMERPROC        m_pProc;
+
 public:
     SalTimer() : m_pProc( nullptr ) {}
-    virtual ~SalTimer();
+    virtual ~SalTimer() COVERITY_NOEXCEPT_FALSE;
 
     // AutoRepeat and Restart
     virtual void            Start( sal_uLong nMS ) = 0;
@@ -49,28 +49,54 @@ public:
         m_pProc = pProc;
     }
 
-    void            CallCallback( bool idle )
+    void            CallCallback()
     {
         if( m_pProc )
-            m_pProc( idle );
+            m_pProc();
     }
 };
 
-class Scheduler;
-
-// Internal scheduler record holding intrusive linked list pieces
-struct ImplSchedulerData
+class VersionedEvent
 {
-    ImplSchedulerData*  mpNext;        // Pointer to the next element in list
-    Scheduler*          mpScheduler;   // Pointer to VCL Scheduler instance
-    bool                mbDelete;      // Destroy this scheduler?
-    bool                mbInScheduler; // Scheduler currently processed?
-    sal_uInt64          mnUpdateTime;  // Last Update Time
+    /**
+     * The "additional event data" members on macOS are integers, so we can't
+     * use an unsigned integer and rely on the defined unsigned overflow in
+     * InvalidateEvent().
+     */
+    sal_Int32 m_nEventVersion;
+    bool      m_bIsValidVersion;
 
-    void Invoke();
+public:
+    VersionedEvent() : m_nEventVersion( 0 ), m_bIsValidVersion( false ) {}
 
-    const char *GetDebugName() const;
-    static ImplSchedulerData *GetMostImportantTask( bool bTimer );
+    sal_Int32 GetNextEventVersion()
+    {
+        InvalidateEvent();
+        m_bIsValidVersion = true;
+        return m_nEventVersion;
+    }
+
+    void InvalidateEvent()
+    {
+        if ( m_bIsValidVersion )
+        {
+            if ( m_nEventVersion == SAL_MAX_INT32 )
+                m_nEventVersion = 0;
+            else
+                ++m_nEventVersion;
+            m_bIsValidVersion = false;
+        }
+    }
+
+    bool ExistsValidEvent() const
+    {
+        return m_bIsValidVersion;
+    }
+
+    bool IsValidEventVersion( const sal_Int32 nEventVersion ) const
+    {
+        return m_bIsValidVersion && nEventVersion == m_nEventVersion;
+    }
 };
 
 #endif // INCLUDED_VCL_INC_SALTIMER_HXX

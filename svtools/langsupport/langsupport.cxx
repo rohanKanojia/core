@@ -9,6 +9,7 @@
 
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/bootstrap.hxx>
 #include <i18nlangtag/languagetag.hxx>
@@ -17,6 +18,7 @@
 #include <tools/extendapplicationenvironment.hxx>
 #include <vcl/svapp.hxx>
 #include <iostream>
+#include <sal/log.hxx>
 
 using namespace com::sun::star;
 
@@ -55,8 +57,7 @@ SAL_IMPLEMENT_MAIN()
 
                 OUString sTag( LanguageTag::convertToBcp47( eLang));
 
-                std::cout << OUStringToOString(sTag, osl_getThreadTextEncoding()).getStr()
-                    << std::endl;
+                std::cout << sTag << std::endl;
             }
         }
 
@@ -66,12 +67,12 @@ SAL_IMPLEMENT_MAIN()
     }
     catch (const uno::Exception& e)
     {
-        SAL_WARN("vcl.app", "Fatal exception: " << e.Message);
+        SAL_WARN("vcl.app", "Fatal: " << e);
         return 1;
     }
     catch (const std::exception &e)
     {
-        SAL_WARN("vcl.app", "Fatal exception: " << e.what());
+        SAL_WARN("vcl.app", "Fatal: " << e.what());
         return 1;
     }
 

@@ -20,15 +20,18 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_AUTOFILTERBUFFER_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_AUTOFILTERBUFFER_HXX
 
-#include <com/sun/star/table/CellRangeAddress.hpp>
+#include <oox/helper/helper.hxx>
 #include <oox/helper/refvector.hxx>
 #include "workbookhelper.hxx"
+#include <com/sun/star/sheet/TableFilterField3.hpp>
 
 namespace com { namespace sun { namespace star {
-    namespace sheet { struct TableFilterField3; }
     namespace sheet { class XDatabaseRange; }
     namespace sheet { class XSheetFilterDescriptor3; }
 } } }
+
+namespace oox { class AttributeList; }
+namespace oox { class SequenceInputStream; }
 
 namespace oox {
 namespace xls {
@@ -166,7 +169,7 @@ public:
 
     /** Creates and returns the specified filter settings object. */
     template< typename FilterSettingsType >
-    inline FilterSettingsBase& createFilterSettings()
+    FilterSettingsBase& createFilterSettings()
         { mxSettings.reset( new FilterSettingsType( *this ) ); return *mxSettings; }
 
     /** Returns converted UNO API filter settings representing all filter
@@ -201,7 +204,7 @@ private:
     typedef RefVector< FilterColumn > FilterColumnVector;
 
     FilterColumnVector  maFilterColumns;
-    css::table::CellRangeAddress maRange;
+    ScRange             maRange;
 };
 
 class AutoFilterBuffer : public WorkbookHelper

@@ -19,26 +19,14 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_SWUICCOLL_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_SWUICCOLL_HXX
 
-#include <tools/resary.hxx>
+#include <sfx2/tabdlg.hxx>
+#include <vcl/svtabbx.hxx>
 
 class SwWrtShell;
 class SwFormat;
 
 class SwCondCollPage : public SfxTabPage
 {
-    VclPtr<CheckBox>           m_pConditionCB;
-
-    VclPtr<FixedText>          m_pContextFT;
-    VclPtr<FixedText>          m_pUsedFT;
-    VclPtr<SvTabListBox>       m_pTbLinks;
-
-    VclPtr<FixedText>          m_pStyleFT;
-    VclPtr<ListBox>            m_pStyleLB;
-    VclPtr<ListBox>            m_pFilterLB;
-
-    VclPtr<PushButton>         m_pRemovePB;
-    VclPtr<PushButton>         m_pAssignPB;
-
     std::vector<OUString> m_aStrArr;
 
     SwWrtShell          &m_rSh;
@@ -47,19 +35,24 @@ class SwCondCollPage : public SfxTabPage
 
     bool                m_bNewTemplate;
 
-    virtual ~SwCondCollPage();
-    virtual void dispose() override;
+    std::unique_ptr<weld::CheckButton> m_xConditionCB;
+    std::unique_ptr<weld::TreeView> m_xTbLinks;
+    std::unique_ptr<weld::TreeView> m_xStyleLB;
+    std::unique_ptr<weld::ComboBox> m_xFilterLB;
+    std::unique_ptr<weld::Button> m_xRemovePB;
+    std::unique_ptr<weld::Button> m_xAssignPB;
 
-    virtual sfxpg   DeactivatePage(SfxItemSet *pSet) override;
+    virtual ~SwCondCollPage() override;
 
-    DECL_LINK_TYPED( OnOffHdl, Button*, void );
-    DECL_LINK_TYPED( AssignRemoveHdl, ListBox&, void);
-    DECL_LINK_TYPED( AssignRemoveTreeListBoxHdl, SvTreeListBox*, bool);
-    DECL_LINK_TYPED( AssignRemoveClickHdl, Button*, void);
-    DECL_LINK_TYPED( SelectTreeListBoxHdl, SvTreeListBox*, void );
-    DECL_LINK_TYPED( SelectListBoxHdl, ListBox&, void );
-    void AssignRemove(void*);
-    void SelectHdl(void*);
+    virtual DeactivateRC   DeactivatePage(SfxItemSet *pSet) override;
+
+    DECL_LINK(OnOffHdl, weld::ToggleButton&, void);
+    DECL_LINK(AssignRemoveTreeListBoxHdl, weld::TreeView&, void);
+    DECL_LINK(AssignRemoveClickHdl, weld::Button&, void);
+    DECL_LINK(SelectTreeListBoxHdl, weld::TreeView&, void);
+    DECL_LINK(SelectListBoxHdl, weld::ComboBox&, void);
+    void AssignRemove(const weld::Widget*);
+    void SelectHdl(const weld::Widget*);
 
     using SfxTabPage::ActivatePage;
     using SfxTabPage::DeactivatePage;
@@ -67,9 +60,9 @@ class SwCondCollPage : public SfxTabPage
     static const sal_uInt16 m_aPageRg[];
 
 public:
-    SwCondCollPage(vcl::Window *pParent, const SfxItemSet &rSet);
+    SwCondCollPage(TabPageParent pParent, const SfxItemSet &rSet);
 
-    static VclPtr<SfxTabPage> Create(vcl::Window *pParent, const SfxItemSet *rSet);
+    static VclPtr<SfxTabPage> Create(TabPageParent pParent, const SfxItemSet *rSet);
     static const sal_uInt16* GetRanges() { return m_aPageRg; }
 
     virtual bool FillItemSet(      SfxItemSet *rSet) override;

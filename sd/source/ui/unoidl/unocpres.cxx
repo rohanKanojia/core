@@ -20,26 +20,24 @@
 #include <algorithm>
 
 #include <com/sun/star/lang/DisposedException.hpp>
-#include <osl/mutex.hxx>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <vcl/svapp.hxx>
 #include <svx/svdpage.hxx>
-#include <comphelper/extract.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
-#include "createunocustomshow.hxx"
-#include "unohelp.hxx"
-#include "unomodel.hxx"
-#include "drawdoc.hxx"
+#include <createunocustomshow.hxx>
+#include <unomodel.hxx>
+#include <drawdoc.hxx>
 #include "unocpres.hxx"
-#include "cusshow.hxx"
-#include "unopage.hxx"
-#include "customshowlist.hxx"
+#include <cusshow.hxx>
+#include <unopage.hxx>
+#include <customshowlist.hxx>
 
 using namespace ::com::sun::star;
 
 uno::Reference< uno::XInterface > createUnoCustomShow( SdCustomShow* pShow )
 {
-    return static_cast<cppu::OWeakObject*>(new SdXCustomPresentation( pShow, nullptr ));
+    return static_cast<cppu::OWeakObject*>(new SdXCustomPresentation( pShow ));
 }
 
 SdXCustomPresentation::SdXCustomPresentation() throw()
@@ -49,8 +47,8 @@ SdXCustomPresentation::SdXCustomPresentation() throw()
 {
 }
 
-SdXCustomPresentation::SdXCustomPresentation( SdCustomShow* pShow, SdXImpressDocument* pMyModel) throw()
-:   mpSdCustomShow(pShow), mpModel(pMyModel),
+SdXCustomPresentation::SdXCustomPresentation( SdCustomShow* pShow) throw()
+:   mpSdCustomShow(pShow), mpModel(nullptr),
     aDisposeListeners( aDisposeContainerMutex ),
     bDisposing( false )
 {
@@ -64,19 +62,16 @@ UNO3_GETIMPLEMENTATION_IMPL( SdXCustomPresentation );
 
 // XServiceInfo
 OUString SAL_CALL SdXCustomPresentation::getImplementationName()
-    throw(uno::RuntimeException, std::exception)
 {
     return OUString( "SdXCustomPresentation" ) ;
 }
 
 sal_Bool SAL_CALL SdXCustomPresentation::supportsService( const OUString& ServiceName )
-    throw(uno::RuntimeException, std::exception)
 {
     return cppu::supportsService( this, ServiceName );
 }
 
 uno::Sequence< OUString > SAL_CALL SdXCustomPresentation::getSupportedServiceNames()
-    throw(uno::RuntimeException, std::exception)
 {
     OUString aSN( "com.sun.star.presentation.CustomPresentation" );
     uno::Sequence< OUString > aSeq( &aSN, 1 );
@@ -85,14 +80,13 @@ uno::Sequence< OUString > SAL_CALL SdXCustomPresentation::getSupportedServiceNam
 
 // XIndexContainer
 void SAL_CALL SdXCustomPresentation::insertByIndex( sal_Int32 Index, const uno::Any& Element )
-    throw(lang::IllegalArgumentException, lang::IndexOutOfBoundsException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     if( bDisposing )
         throw lang::DisposedException();
 
-    if( Index < 0 || Index > (sal_Int32)( mpSdCustomShow ? mpSdCustomShow->PagesVector().size() : 0 ) )
+    if( Index < 0 || Index > static_cast<sal_Int32>( mpSdCustomShow ? mpSdCustomShow->PagesVector().size() : 0 ) )
         throw lang::IndexOutOfBoundsException();
 
     uno::Reference< drawing::XDrawPage > xPage;
@@ -109,7 +103,7 @@ void SAL_CALL SdXCustomPresentation::insertByIndex( sal_Int32 Index, const uno::
             mpModel = pPage->GetModel();
 
         if( nullptr != mpModel && nullptr == mpSdCustomShow && mpModel->GetDoc() )
-            mpSdCustomShow = new SdCustomShow( mpModel->GetDoc() );
+            mpSdCustomShow = new SdCustomShow;
 
         mpSdCustomShow->PagesVector().insert(mpSdCustomShow->PagesVector().begin() + Index,
             static_cast<SdPage*>(pPage->GetSdrPage()));
@@ -120,7 +114,6 @@ void SAL_CALL SdXCustomPresentation::insertByIndex( sal_Int32 Index, const uno::
 }
 
 void SAL_CALL SdXCustomPresentation::removeByIndex( sal_Int32 Index )
-    throw(lang::IndexOutOfBoundsException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -153,7 +146,6 @@ void SAL_CALL SdXCustomPresentation::removeByIndex( sal_Int32 Index )
 
 // XIndexReplace
 void SAL_CALL SdXCustomPresentation::replaceByIndex( sal_Int32 Index, const uno::Any& Element )
-    throw(lang::IllegalArgumentException, lang::IndexOutOfBoundsException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     removeByIndex( Index );
     insertByIndex( Index, Element );
@@ -161,13 +153,11 @@ void SAL_CALL SdXCustomPresentation::replaceByIndex( sal_Int32 Index, const uno:
 
 // XElementAccess
 uno::Type SAL_CALL SdXCustomPresentation::getElementType()
-    throw(uno::RuntimeException, std::exception)
 {
     return cppu::UnoType<drawing::XDrawPage>::get();
 }
 
 sal_Bool SAL_CALL SdXCustomPresentation::hasElements()
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -179,7 +169,6 @@ sal_Bool SAL_CALL SdXCustomPresentation::hasElements()
 
 // XIndexAccess
 sal_Int32 SAL_CALL SdXCustomPresentation::getCount()
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if( bDisposing )
@@ -189,14 +178,13 @@ sal_Int32 SAL_CALL SdXCustomPresentation::getCount()
 }
 
 uno::Any SAL_CALL SdXCustomPresentation::getByIndex( sal_Int32 Index )
-    throw(lang::IndexOutOfBoundsException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     if( bDisposing )
         throw lang::DisposedException();
 
-    if (Index < 0 || !mpSdCustomShow || Index >= (sal_Int32)mpSdCustomShow->PagesVector().size())
+    if (Index < 0 || !mpSdCustomShow || Index >= static_cast<sal_Int32>(mpSdCustomShow->PagesVector().size()))
         throw lang::IndexOutOfBoundsException();
 
     uno::Any aAny;
@@ -213,7 +201,6 @@ uno::Any SAL_CALL SdXCustomPresentation::getByIndex( sal_Int32 Index )
 
 // XNamed
 OUString SAL_CALL SdXCustomPresentation::getName()
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -227,7 +214,6 @@ OUString SAL_CALL SdXCustomPresentation::getName()
 }
 
 void SAL_CALL SdXCustomPresentation::setName( const OUString& aName )
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -239,12 +225,12 @@ void SAL_CALL SdXCustomPresentation::setName( const OUString& aName )
 }
 
 // XComponent
-void SAL_CALL SdXCustomPresentation::dispose() throw(uno::RuntimeException, std::exception)
+void SAL_CALL SdXCustomPresentation::dispose()
 {
     SolarMutexGuard aGuard;
 
     if( bDisposing )
-        return; // catched a recursion
+        return; // caught a recursion
 
     bDisposing = true;
 
@@ -258,7 +244,6 @@ void SAL_CALL SdXCustomPresentation::dispose() throw(uno::RuntimeException, std:
 }
 
 void SAL_CALL SdXCustomPresentation::addEventListener( const uno::Reference< lang::XEventListener >& xListener )
-    throw(uno::RuntimeException, std::exception)
 {
     if( bDisposing )
         throw lang::DisposedException();
@@ -266,7 +251,7 @@ void SAL_CALL SdXCustomPresentation::addEventListener( const uno::Reference< lan
     aDisposeListeners.addInterface(xListener);
 }
 
-void SAL_CALL SdXCustomPresentation::removeEventListener( const uno::Reference< lang::XEventListener >& aListener ) throw(uno::RuntimeException, std::exception)
+void SAL_CALL SdXCustomPresentation::removeEventListener( const uno::Reference< lang::XEventListener >& aListener )
 {
     if( !bDisposing )
         aDisposeListeners.removeInterface(aListener);
@@ -288,19 +273,16 @@ SdXCustomPresentationAccess::~SdXCustomPresentationAccess() throw()
 
 // XServiceInfo
 OUString SAL_CALL SdXCustomPresentationAccess::getImplementationName()
-    throw(uno::RuntimeException, std::exception)
 {
     return OUString( "SdXCustomPresentationAccess" );
 }
 
 sal_Bool SAL_CALL SdXCustomPresentationAccess::supportsService( const OUString& ServiceName )
-    throw(uno::RuntimeException, std::exception)
 {
     return cppu::supportsService( this, ServiceName );
 }
 
 uno::Sequence< OUString > SAL_CALL SdXCustomPresentationAccess::getSupportedServiceNames()
-    throw(uno::RuntimeException, std::exception)
 {
     const OUString aNS( "com.sun.star.presentation.CustomPresentationAccess" );
     uno::Sequence< OUString > aSeq( &aNS, 1 );
@@ -309,21 +291,18 @@ uno::Sequence< OUString > SAL_CALL SdXCustomPresentationAccess::getSupportedServ
 
 // XSingleServiceFactory
 uno::Reference< uno::XInterface > SAL_CALL SdXCustomPresentationAccess::createInstance()
-    throw(uno::Exception, uno::RuntimeException, std::exception)
 {
     uno::Reference< uno::XInterface >  xRef( static_cast<cppu::OWeakObject*>(new SdXCustomPresentation()) );
     return xRef;
 }
 
 uno::Reference< uno::XInterface > SAL_CALL SdXCustomPresentationAccess::createInstanceWithArguments( const uno::Sequence< uno::Any >& )
-    throw(uno::Exception, uno::RuntimeException, std::exception)
 {
     return createInstance();
 }
 
 // XNameContainer
 void SAL_CALL SdXCustomPresentationAccess::insertByName( const OUString& aName, const uno::Any& aElement )
-    throw(lang::IllegalArgumentException, container::ElementExistException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -350,7 +329,7 @@ void SAL_CALL SdXCustomPresentationAccess::insertByName( const OUString& aName, 
     SdCustomShow* pShow = pXShow->GetSdCustomShow();
     if( nullptr == pShow )
     {
-        pShow = new SdCustomShow( mrModel.GetDoc(), xContainer );
+        pShow = new SdCustomShow( xContainer );
         pXShow->SetSdCustomShow( pShow );
     }
     else
@@ -371,30 +350,28 @@ void SAL_CALL SdXCustomPresentationAccess::insertByName( const OUString& aName, 
             throw container::ElementExistException();
     }
 
-    pList->push_back(pShow);
+    pList->push_back(std::unique_ptr<SdCustomShow>(pShow));
 
     mrModel.SetModified();
 }
 
 void SAL_CALL SdXCustomPresentationAccess::removeByName( const OUString& Name )
-    throw(container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     SdCustomShow* pShow = getSdCustomShow(Name);
 
     SdCustomShowList* pList = GetCustomShowList();
-    if(pList && pShow)
-        delete pList->Remove( pShow );
-    else
+    if(!pList || !pShow)
         throw container::NoSuchElementException();
+
+    pList->erase( pShow );
 
     mrModel.SetModified();
 }
 
 // XNameReplace
 void SAL_CALL SdXCustomPresentationAccess::replaceByName( const OUString& aName, const uno::Any& aElement )
-    throw(lang::IllegalArgumentException, container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     removeByName( aName );
     insertByName( aName, aElement );
@@ -402,28 +379,20 @@ void SAL_CALL SdXCustomPresentationAccess::replaceByName( const OUString& aName,
 
 // XNameAccess
 uno::Any SAL_CALL SdXCustomPresentationAccess::getByName( const OUString& aName )
-    throw(container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    uno::Any aAny;
-
     SdCustomShow* pShow = getSdCustomShow(aName);
-    if(pShow)
-    {
-        uno::Reference< container::XIndexContainer >  xRef( pShow->getUnoCustomShow(), uno::UNO_QUERY );
-        aAny <<= xRef;
-    }
-    else
+    if(!pShow)
     {
         throw container::NoSuchElementException();
     }
 
-    return aAny;
+    uno::Reference< container::XIndexContainer >  xRef( pShow->getUnoCustomShow(), uno::UNO_QUERY );
+    return uno::Any(xRef);
 }
 
 uno::Sequence< OUString > SAL_CALL SdXCustomPresentationAccess::getElementNames()
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -436,7 +405,7 @@ uno::Sequence< OUString > SAL_CALL SdXCustomPresentationAccess::getElementNames(
     sal_uInt32 nIdx = 0;
     while( nIdx < nCount )
     {
-        const SdCustomShow* pShow = (*pList)[nIdx];
+        const SdCustomShow* pShow = (*pList)[nIdx].get();
         pStringList[nIdx] = pShow->GetName();
         nIdx++;
     }
@@ -445,7 +414,6 @@ uno::Sequence< OUString > SAL_CALL SdXCustomPresentationAccess::getElementNames(
 }
 
 sal_Bool SAL_CALL SdXCustomPresentationAccess::hasByName( const OUString& aName )
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     return getSdCustomShow(aName) != nullptr;
@@ -453,13 +421,11 @@ sal_Bool SAL_CALL SdXCustomPresentationAccess::hasByName( const OUString& aName 
 
 // XElementAccess
 uno::Type SAL_CALL SdXCustomPresentationAccess::getElementType()
-    throw(uno::RuntimeException, std::exception)
 {
     return cppu::UnoType<container::XIndexContainer>::get();
 }
 
 sal_Bool SAL_CALL SdXCustomPresentationAccess::hasElements()
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -467,19 +433,17 @@ sal_Bool SAL_CALL SdXCustomPresentationAccess::hasElements()
     return pList && !pList->empty();
 }
 
-SdCustomShow * SdXCustomPresentationAccess::getSdCustomShow( const OUString& Name ) const throw()
+SdCustomShow * SdXCustomPresentationAccess::getSdCustomShow( const OUString& rName ) const throw()
 {
     sal_uInt32 nIdx = 0;
 
     SdCustomShowList* pList = GetCustomShowList();
     const sal_uInt32 nCount = pList ? pList->size() : 0;
 
-    const OUString aName( Name );
-
     while( nIdx < nCount )
     {
-        SdCustomShow* pShow = (*pList)[nIdx];
-        if( pShow->GetName() == aName )
+        SdCustomShow* pShow = (*pList)[nIdx].get();
+        if( pShow->GetName() == rName )
             return pShow;
         nIdx++;
     }

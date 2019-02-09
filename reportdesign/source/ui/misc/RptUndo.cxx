@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "RptUndo.hxx"
-#include "uistrings.hrc"
-#include "rptui_slotid.hrc"
-#include "UITools.hxx"
-#include "UndoEnv.hxx"
+#include <RptUndo.hxx>
+#include <strings.hxx>
+#include <rptui_slotid.hrc>
+#include <UITools.hxx>
+#include <UndoEnv.hxx>
 
 #include <dbaccess/IController.hxx>
 #include <com/sun/star/report/XSection.hpp>
@@ -29,7 +29,9 @@
 
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/awt/Size.hpp>
+#include <comphelper/types.hxx>
 #include <svx/unoshape.hxx>
+#include <utility>
 #include <vcl/settings.hxx>
 
 #include <functional>
@@ -39,7 +41,6 @@ namespace rptui
     using namespace ::com::sun::star;
     using namespace uno;
     using namespace lang;
-    using namespace script;
     using namespace beans;
     using namespace awt;
     using namespace util;
@@ -114,8 +115,8 @@ namespace
 OSectionUndo::OSectionUndo(OReportModel& _rMod
                            ,sal_uInt16 _nSlot
                            ,Action _eAction
-                           ,sal_uInt16 nCommentID)
-: OCommentUndoAction(_rMod,nCommentID)
+                           ,const char* pCommentID)
+: OCommentUndoAction(_rMod,pCommentID)
 ,m_eAction(_eAction)
 ,m_nSlot(_nSlot)
 ,m_bInserted(false)
@@ -164,7 +165,7 @@ void OSectionUndo::collectControls(const uno::Reference< report::XSection >& _xS
         for(;pIter != pEnd;++pIter)
         {
             if ( 0 == (pIter->Attributes & beans::PropertyAttribute::READONLY) )
-                m_aValues.push_back(::std::pair< OUString ,uno::Any>(pIter->Name,_xSection->getPropertyValue(pIter->Name)));
+                m_aValues.emplace_back(pIter->Name,_xSection->getPropertyValue(pIter->Name));
         }
         lcl_collectElements(_xSection,m_aControls);
     }
@@ -215,15 +216,13 @@ void OSectionUndo::Redo()
     }
 }
 
-
-OReportSectionUndo::OReportSectionUndo(OReportModel& _rMod,sal_uInt16 _nSlot
-                                       ,::std::mem_fun_t< uno::Reference< report::XSection >
-                                            ,OReportHelper> _pMemberFunction
-                                       ,const uno::Reference< report::XReportDefinition >& _xReport
-                                       ,Action _eAction)
-: OSectionUndo(_rMod,_nSlot,_eAction,0)
-,m_aReportHelper(_xReport)
-,m_pMemberFunction(_pMemberFunction)
+OReportSectionUndo::OReportSectionUndo(
+    OReportModel& _rMod, sal_uInt16 _nSlot,
+    ::std::function<uno::Reference<report::XSection>(OReportHelper*)> _pMemberFunction,
+    const uno::Reference<report::XReportDefinition>& _xReport, Action _eAction)
+    : OSectionUndo(_rMod, _nSlot, _eAction, nullptr)
+    , m_aReportHelper(_xReport)
+    , m_pMemberFunction(std::move(_pMemberFunction))
 {
     if( m_eAction == Removed )
         collectControls(m_pMemberFunction(&m_aReportHelper));
@@ -252,16 +251,13 @@ void OReportSectionUndo::implReRemove( )
     m_bInserted = false;
 }
 
-
-OGroupSectionUndo::OGroupSectionUndo(OReportModel& _rMod,sal_uInt16 _nSlot
-                                       ,::std::mem_fun_t< uno::Reference< report::XSection >
-                                            ,OGroupHelper> _pMemberFunction
-                                       ,const uno::Reference< report::XGroup >& _xGroup
-                                       ,Action _eAction
-                                       ,sal_uInt16 nCommentID)
-: OSectionUndo(_rMod,_nSlot,_eAction,nCommentID)
-,m_aGroupHelper(_xGroup)
-,m_pMemberFunction(_pMemberFunction)
+OGroupSectionUndo::OGroupSectionUndo(
+    OReportModel& _rMod, sal_uInt16 _nSlot,
+    ::std::function<uno::Reference<report::XSection>(OGroupHelper*)> _pMemberFunction,
+    const uno::Reference<report::XGroup>& _xGroup, Action _eAction, const char* pCommentID)
+    : OSectionUndo(_rMod, _nSlot, _eAction, pCommentID)
+    , m_aGroupHelper(_xGroup)
+    , m_pMemberFunction(std::move(_pMemberFunction))
 {
     if( m_eAction == Removed )
     {
@@ -295,7 +291,7 @@ void OGroupSectionUndo::implReInsert( )
     uno::Sequence< beans::PropertyValue > aArgs(2);
 
     aArgs[0].Name = SID_GROUPHEADER_WITHOUT_UNDO == m_nSlot? OUString(PROPERTY_HEADERON) : OUString(PROPERTY_FOOTERON);
-    aArgs[0].Value <<= sal_True;
+    aArgs[0].Value <<= true;
     aArgs[1].Name = PROPERTY_GROUP;
     aArgs[1].Value <<= m_aGroupHelper.getGroup();
     m_pController->executeChecked(m_nSlot,aArgs);
@@ -314,7 +310,7 @@ void OGroupSectionUndo::implReRemove( )
     uno::Sequence< beans::PropertyValue > aArgs(2);
 
     aArgs[0].Name = SID_GROUPHEADER_WITHOUT_UNDO == m_nSlot? OUString(PROPERTY_HEADERON) : OUString(PROPERTY_FOOTERON);
-    aArgs[0].Value <<= sal_False;
+    aArgs[0].Value <<= false;
     aArgs[1].Name = PROPERTY_GROUP;
     aArgs[1].Value <<= m_aGroupHelper.getGroup();
 
@@ -324,11 +320,11 @@ void OGroupSectionUndo::implReRemove( )
 
 
 OGroupUndo::OGroupUndo(OReportModel& _rMod
-                       ,sal_uInt16 nCommentID
+                       ,const char* pCommentID
                        ,Action  _eAction
                        ,const uno::Reference< report::XGroup>& _xGroup
                        ,const uno::Reference< report::XReportDefinition >& _xReportDefinition)
-: OCommentUndoAction(_rMod,nCommentID)
+: OCommentUndoAction(_rMod,pCommentID)
 ,m_xGroup(_xGroup)
 ,m_xReportDefinition(_xReportDefinition)
 ,m_eAction(_eAction)
@@ -344,7 +340,7 @@ void OGroupUndo::implReInsert( )
     }
     catch(uno::Exception&)
     {
-        OSL_FAIL("Exception catched while undoing remove group");
+        OSL_FAIL("Exception caught while undoing remove group");
     }
 }
 
@@ -356,7 +352,7 @@ void OGroupUndo::implReRemove( )
     }
     catch(uno::Exception&)
     {
-        OSL_FAIL("Exception catched while redoing remove group");
+        OSL_FAIL("Exception caught while redoing remove group");
     }
 }
 

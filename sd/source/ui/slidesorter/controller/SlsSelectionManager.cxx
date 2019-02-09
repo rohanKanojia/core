@@ -17,35 +17,38 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "controller/SlsSelectionManager.hxx"
+#include <controller/SlsSelectionManager.hxx>
 
-#include "SlideSorter.hxx"
-#include "controller/SlideSorterController.hxx"
-#include "controller/SlsAnimator.hxx"
-#include "controller/SlsAnimationFunction.hxx"
-#include "controller/SlsCurrentSlideManager.hxx"
-#include "controller/SlsFocusManager.hxx"
-#include "controller/SlsPageSelector.hxx"
-#include "controller/SlsProperties.hxx"
-#include "controller/SlsScrollBarManager.hxx"
-#include "controller/SlsSlotManager.hxx"
-#include "controller/SlsSelectionObserver.hxx"
-#include "model/SlideSorterModel.hxx"
-#include "model/SlsPageEnumerationProvider.hxx"
-#include "model/SlsPageDescriptor.hxx"
-#include "view/SlideSorterView.hxx"
-#include "view/SlsLayouter.hxx"
-#include "drawdoc.hxx"
-#include "Window.hxx"
+#include <SlideSorter.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <controller/SlsAnimator.hxx>
+#include <controller/SlsAnimationFunction.hxx>
+#include <controller/SlsCurrentSlideManager.hxx>
+#include <controller/SlsFocusManager.hxx>
+#include <controller/SlsPageSelector.hxx>
+#include <controller/SlsProperties.hxx>
+#include <controller/SlsScrollBarManager.hxx>
+#include <controller/SlsSlotManager.hxx>
+#include <controller/SlsSelectionObserver.hxx>
+#include <model/SlideSorterModel.hxx>
+#include <model/SlsPageEnumerationProvider.hxx>
+#include <model/SlsPageDescriptor.hxx>
+#include <view/SlideSorterView.hxx>
+#include <view/SlsLayouter.hxx>
+#include <drawdoc.hxx>
+#include <sdpage.hxx>
+#include <drawview.hxx>
+#include <DrawViewShell.hxx>
+#include <ViewShellBase.hxx>
+#include <Window.hxx>
 #include <svx/svxids.hrc>
 #include <com/sun/star/drawing/XMasterPagesSupplier.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 
-#include "res_bmp.hrc"
-#include "sdresid.hxx"
-#include "strings.hrc"
-#include "app.hrc"
-#include "glob.hrc"
+
+#include <sdresid.hxx>
+#include <strings.hrc>
+#include <app.hrc>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::drawing;
@@ -59,17 +62,13 @@ namespace sd { namespace slidesorter { namespace controller {
 SelectionManager::SelectionManager (SlideSorter& rSlideSorter)
     : mrSlideSorter(rSlideSorter),
       mrController(rSlideSorter.GetController()),
-      mbIsMakeSelectionVisiblePending(true),
       mnInsertionPosition(-1),
-      mnAnimationId(Animator::NotAnAnimationId),
       mpSelectionObserver(new SelectionObserver(rSlideSorter))
 {
 }
 
 SelectionManager::~SelectionManager()
 {
-    if (mnAnimationId != Animator::NotAnAnimationId)
-        mrController.GetAnimator()->RemoveAnimation(mnAnimationId);
 }
 
 void SelectionManager::DeleteSelectedPages (const bool bSelectFollowingPage)
@@ -108,11 +107,18 @@ void SelectionManager::DeleteSelectedPages (const bool bSelectFollowingPage)
     else
         --nNewCurrentSlide;
 
+    const auto pViewShell = mrSlideSorter.GetViewShell();
+    const auto pDrawViewShell = pViewShell ? std::dynamic_pointer_cast<sd::DrawViewShell>(pViewShell->GetViewShellBase().GetMainViewShell()) : nullptr;
+    const auto pDrawView = pDrawViewShell ? pDrawViewShell->GetDrawView() : nullptr;
+
+    if (pDrawView)
+        pDrawView->BlockPageOrderChangedHint(true);
+
     // The actual deletion of the selected pages is done in one of two
     // helper functions.  They are specialized for normal respectively for
     // master pages.
     mrSlideSorter.GetView().BegUndo (SdResId(STR_UNDO_DELETEPAGES));
-    if (mrSlideSorter.GetModel().GetEditMode() == EM_PAGE)
+    if (mrSlideSorter.GetModel().GetEditMode() == EditMode::Page)
         DeleteSelectedNormalPages(aSelectedPages);
     else
         DeleteSelectedMasterPages(aSelectedPages);
@@ -120,6 +126,12 @@ void SelectionManager::DeleteSelectedPages (const bool bSelectFollowingPage)
 
     mrController.HandleModelChange();
     aLock.Release();
+    if (pDrawView)
+    {
+        assert(pDrawViewShell);
+        pDrawView->BlockPageOrderChangedHint(false);
+        pDrawViewShell->ResetActualPage();
+    }
 
     // Show focus and move it to next valid location.
     if (bIsFocusShowing)
@@ -138,15 +150,15 @@ void SelectionManager::DeleteSelectedPages (const bool bSelectFollowingPage)
 void SelectionManager::DeleteSelectedNormalPages (const ::std::vector<SdPage*>& rSelectedPages)
 {
     // Prepare the deletion via the UNO API.
-    OSL_ASSERT(mrSlideSorter.GetModel().GetEditMode() == EM_PAGE);
+    OSL_ASSERT(mrSlideSorter.GetModel().GetEditMode() == EditMode::Page);
 
     try
     {
         Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier( mrSlideSorter.GetModel().GetDocument()->getUnoModel(), UNO_QUERY_THROW );
         Reference<drawing::XDrawPages> xPages( xDrawPagesSupplier->getDrawPages(), UNO_QUERY_THROW );
 
-        // Iterate over all pages that where seleted when this method was called
-        // and delete the draw page the notes page.  The iteration is done in
+        // Iterate over all pages that were selected when this method was called
+        // and delete the draw page the notes page. The iteration is done in
         // reverse order so that when one slide is not deleted (to avoid an
         // empty document) the remaining slide is the first one.
         ::std::vector<SdPage*>::const_reverse_iterator aI;
@@ -171,15 +183,15 @@ void SelectionManager::DeleteSelectedNormalPages (const ::std::vector<SdPage*>& 
 void SelectionManager::DeleteSelectedMasterPages (const ::std::vector<SdPage*>& rSelectedPages)
 {
     // Prepare the deletion via the UNO API.
-    OSL_ASSERT(mrSlideSorter.GetModel().GetEditMode() == EM_MASTERPAGE);
+    OSL_ASSERT(mrSlideSorter.GetModel().GetEditMode() == EditMode::MasterPage);
 
     try
     {
         Reference<drawing::XMasterPagesSupplier> xDrawPagesSupplier( mrSlideSorter.GetModel().GetDocument()->getUnoModel(), UNO_QUERY_THROW );
         Reference<drawing::XDrawPages> xPages( xDrawPagesSupplier->getMasterPages(), UNO_QUERY_THROW );
 
-        // Iterate over all pages that where seleted when this method was called
-        // and delete the draw page the notes page.  The iteration is done in
+        // Iterate over all pages that were selected when this method was called
+        // and delete the draw page the notes page. The iteration is done in
         // reverse order so that when one slide is not deleted (to avoid an
         // empty document) the remaining slide is the first one.
         ::std::vector<SdPage*>::const_reverse_iterator aI;
@@ -203,8 +215,6 @@ void SelectionManager::DeleteSelectedMasterPages (const ::std::vector<SdPage*>& 
 
 void SelectionManager::SelectionHasChanged ()
 {
-    mbIsMakeSelectionVisiblePending = true;
-
     ViewShell* pViewShell = mrSlideSorter.GetViewShell();
     if (pViewShell != nullptr)
     {

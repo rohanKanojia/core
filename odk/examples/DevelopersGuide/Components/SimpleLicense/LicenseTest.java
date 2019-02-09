@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -118,9 +119,11 @@ public class LicenseTest {
         public void initialize( Object[] object )
             throws com.sun.star.uno.Exception {
             /* The component describes what arguments its expected and in which
-             * order!At this point you can read the objects and can intialize
+             * order!At this point you can read the objects and can initialize
              * your component using these objects.
              */
         }
 
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

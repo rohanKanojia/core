@@ -26,6 +26,8 @@
 #include <com/sun/star/view/PaperFormat.hpp>
 #include <com/sun/star/view/PaperOrientation.hpp>
 #include <com/sun/star/ucb/NameClash.hpp>
+#include <com/sun/star/ucb/ContentCreationException.hpp>
+#include <com/sun/star/ucb/CommandAbortedException.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/lang/EventObject.hpp>
@@ -55,7 +57,7 @@
 #include <sfx2/objsh.hxx>
 #include <sfx2/event.hxx>
 
-#define SFX_PRINTABLESTATE_CANCELJOB    -2
+#define SFX_PRINTABLESTATE_CANCELJOB    css::view::PrintableState(-2)
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -68,8 +70,7 @@ struct IMPL_PrintListener_DataContainer : public SfxListener
     css::uno::Sequence< css::beans::PropertyValue > m_aPrintOptions;
 
     explicit IMPL_PrintListener_DataContainer( ::osl::Mutex& aMutex)
-            :   m_pObjectShell          ( nullptr )
-            ,   m_aInterfaceContainer   ( aMutex )
+            :   m_aInterfaceContainer   ( aMutex )
     {
     }
 
@@ -78,7 +79,7 @@ struct IMPL_PrintListener_DataContainer : public SfxListener
                     const   SfxHint&        aHint   ) override ;
 };
 
-awt::Size impl_Size_Object2Struct( const Size& aSize )
+static awt::Size impl_Size_Object2Struct( const Size& aSize )
 {
     awt::Size aReturnValue;
     aReturnValue.Width  = aSize.Width()  ;
@@ -86,11 +87,11 @@ awt::Size impl_Size_Object2Struct( const Size& aSize )
     return aReturnValue ;
 }
 
-Size impl_Size_Struct2Object( const awt::Size& aSize )
+static Size impl_Size_Struct2Object( const awt::Size& aSize )
 {
     Size aReturnValue;
-    aReturnValue.Width()  = aSize.Width  ;
-    aReturnValue.Height() = aSize.Height ;
+    aReturnValue.setWidth( aSize.Width )  ;
+    aReturnValue.setHeight( aSize.Height ) ;
     return aReturnValue ;
 }
 
@@ -103,10 +104,10 @@ class SfxPrintJob_Impl : public cppu::WeakImplHelper
 
 public:
     explicit SfxPrintJob_Impl( IMPL_PrintListener_DataContainer* pData );
-    virtual Sequence< css::beans::PropertyValue > SAL_CALL getPrintOptions(  ) throw (RuntimeException, std::exception) override;
-    virtual Sequence< css::beans::PropertyValue > SAL_CALL getPrinter(  ) throw (RuntimeException, std::exception) override;
-    virtual Reference< css::view::XPrintable > SAL_CALL getPrintable(  ) throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL cancelJob() throw (RuntimeException, std::exception) override;
+    virtual Sequence< css::beans::PropertyValue > SAL_CALL getPrintOptions(  ) override;
+    virtual Sequence< css::beans::PropertyValue > SAL_CALL getPrinter(  ) override;
+    virtual Reference< css::view::XPrintable > SAL_CALL getPrintable(  ) override;
+    virtual void SAL_CALL cancelJob() override;
 };
 
 SfxPrintJob_Impl::SfxPrintJob_Impl( IMPL_PrintListener_DataContainer* pData )
@@ -114,14 +115,14 @@ SfxPrintJob_Impl::SfxPrintJob_Impl( IMPL_PrintListener_DataContainer* pData )
 {
 }
 
-Sequence< css::beans::PropertyValue > SAL_CALL SfxPrintJob_Impl::getPrintOptions() throw (RuntimeException, std::exception)
+Sequence< css::beans::PropertyValue > SAL_CALL SfxPrintJob_Impl::getPrintOptions()
 {
     return m_pData->m_aPrintOptions;
 }
 
-Sequence< css::beans::PropertyValue > SAL_CALL SfxPrintJob_Impl::getPrinter() throw (RuntimeException, std::exception)
+Sequence< css::beans::PropertyValue > SAL_CALL SfxPrintJob_Impl::getPrinter()
 {
-    if( m_pData->m_pObjectShell.Is() )
+    if( m_pData->m_pObjectShell.is() )
     {
         Reference < view::XPrintable > xPrintable( m_pData->m_pObjectShell->GetModel(), UNO_QUERY );
         if ( xPrintable.is() )
@@ -130,44 +131,43 @@ Sequence< css::beans::PropertyValue > SAL_CALL SfxPrintJob_Impl::getPrinter() th
     return Sequence< css::beans::PropertyValue >();
 }
 
-Reference< css::view::XPrintable > SAL_CALL SfxPrintJob_Impl::getPrintable() throw (RuntimeException, std::exception)
+Reference< css::view::XPrintable > SAL_CALL SfxPrintJob_Impl::getPrintable()
 {
-    Reference < view::XPrintable > xPrintable( m_pData->m_pObjectShell.Is() ? m_pData->m_pObjectShell->GetModel() : nullptr, UNO_QUERY );
+    Reference < view::XPrintable > xPrintable( m_pData->m_pObjectShell.is() ? m_pData->m_pObjectShell->GetModel() : nullptr, UNO_QUERY );
     return xPrintable;
 }
 
-void SAL_CALL SfxPrintJob_Impl::cancelJob() throw (RuntimeException, std::exception)
+void SAL_CALL SfxPrintJob_Impl::cancelJob()
 {
     // FIXME: how to cancel PrintJob via API?!
-    if( m_pData->m_pObjectShell.Is() )
+    if( m_pData->m_pObjectShell.is() )
         m_pData->m_pObjectShell->Broadcast( SfxPrintingHint( SFX_PRINTABLESTATE_CANCELJOB ) );
 }
 
 SfxPrintHelper::SfxPrintHelper()
 {
-    m_pData = new IMPL_PrintListener_DataContainer(m_aMutex);
+    m_pData.reset(new IMPL_PrintListener_DataContainer(m_aMutex));
 }
 
-void SAL_CALL SfxPrintHelper::initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception)
+void SAL_CALL SfxPrintHelper::initialize( const css::uno::Sequence< css::uno::Any >& aArguments )
 {
-    if ( aArguments.getLength() )
+    if ( !aArguments.getLength() )
+        return;
+
+    css::uno::Reference < css::frame::XModel > xModel;
+    aArguments[0] >>= xModel;
+    uno::Reference < lang::XUnoTunnel > xObj( xModel, uno::UNO_QUERY );
+    uno::Sequence < sal_Int8 > aSeq( SvGlobalName( SFX_GLOBAL_CLASSID ).GetByteSequence() );
+    sal_Int64 nHandle = xObj->getSomething( aSeq );
+    if ( nHandle )
     {
-        css::uno::Reference < css::frame::XModel > xModel;
-        aArguments[0] >>= xModel;
-        uno::Reference < lang::XUnoTunnel > xObj( xModel, uno::UNO_QUERY );
-        uno::Sequence < sal_Int8 > aSeq( SvGlobalName( SFX_GLOBAL_CLASSID ).GetByteSequence() );
-        sal_Int64 nHandle = xObj->getSomething( aSeq );
-        if ( nHandle )
-        {
-            m_pData->m_pObjectShell = reinterpret_cast< SfxObjectShell* >( sal::static_int_cast< sal_IntPtr >( nHandle ));
-            m_pData->StartListening(*m_pData->m_pObjectShell);
-        }
+        m_pData->m_pObjectShell = reinterpret_cast< SfxObjectShell* >( sal::static_int_cast< sal_IntPtr >( nHandle ));
+        m_pData->StartListening(*m_pData->m_pObjectShell);
     }
 }
 
 SfxPrintHelper::~SfxPrintHelper()
 {
-    delete m_pData;
 }
 
 namespace
@@ -241,7 +241,7 @@ namespace
             case view::PaperFormat_USER:
                 eRet = PAPER_USER;
                 break;
-            case view::PaperFormat_MAKE_FIXED_SIZE:
+            case view::PaperFormat::PaperFormat_MAKE_FIXED_SIZE:
                 break;
             //deliberate no default to force warn on a new papersize
         }
@@ -253,19 +253,19 @@ namespace
 //  XPrintable
 
 
-uno::Sequence< beans::PropertyValue > SAL_CALL SfxPrintHelper::getPrinter() throw(css::uno::RuntimeException, std::exception)
+uno::Sequence< beans::PropertyValue > SAL_CALL SfxPrintHelper::getPrinter()
 {
     // object already disposed?
     SolarMutexGuard aGuard;
 
     // search for any view of this document that is currently printing
     const Printer *pPrinter = nullptr;
-    SfxViewFrame *pViewFrm = m_pData->m_pObjectShell.Is() ? SfxViewFrame::GetFirst( m_pData->m_pObjectShell, false ) : nullptr;
+    SfxViewFrame *pViewFrm = m_pData->m_pObjectShell.is() ? SfxViewFrame::GetFirst( m_pData->m_pObjectShell.get(), false ) : nullptr;
     SfxViewFrame* pFirst = pViewFrm;
     while ( pViewFrm && !pPrinter )
     {
         pPrinter = pViewFrm->GetViewShell()->GetActivePrinter();
-        pViewFrm = SfxViewFrame::GetNext( *pViewFrm, m_pData->m_pObjectShell, false );
+        pViewFrm = SfxViewFrame::GetNext( *pViewFrm, m_pData->m_pObjectShell.get(), false );
     }
 
     // if no view is printing currently, use the permanent SfxPrinter instance
@@ -278,16 +278,16 @@ uno::Sequence< beans::PropertyValue > SAL_CALL SfxPrintHelper::getPrinter() thro
     uno::Sequence< beans::PropertyValue > aPrinter(8);
 
     aPrinter.getArray()[7].Name = "CanSetPaperSize";
-    aPrinter.getArray()[7].Value <<= ( pPrinter->HasSupport( SUPPORT_SET_PAPERSIZE ) );
+    aPrinter.getArray()[7].Value <<= pPrinter->HasSupport( PrinterSupport::SetPaperSize );
 
     aPrinter.getArray()[6].Name = "CanSetPaperFormat";
-    aPrinter.getArray()[6].Value <<= ( pPrinter->HasSupport( SUPPORT_SET_PAPER ) );
+    aPrinter.getArray()[6].Value <<= pPrinter->HasSupport( PrinterSupport::SetPaper );
 
     aPrinter.getArray()[5].Name = "CanSetPaperOrientation";
-    aPrinter.getArray()[5].Value <<= ( pPrinter->HasSupport( SUPPORT_SET_ORIENTATION ) );
+    aPrinter.getArray()[5].Value <<= pPrinter->HasSupport( PrinterSupport::SetOrientation );
 
     aPrinter.getArray()[4].Name = "IsBusy";
-    aPrinter.getArray()[4].Value <<= ( pPrinter->IsPrinting() );
+    aPrinter.getArray()[4].Value <<= pPrinter->IsPrinting();
 
     aPrinter.getArray()[3].Name = "PaperSize";
     awt::Size aSize = impl_Size_Object2Struct(pPrinter->GetPaperSize() );
@@ -298,7 +298,7 @@ uno::Sequence< beans::PropertyValue > SAL_CALL SfxPrintHelper::getPrinter() thro
     aPrinter.getArray()[2].Value <<= eFormat;
 
     aPrinter.getArray()[1].Name = "PaperOrientation";
-    view::PaperOrientation eOrient = (view::PaperOrientation)pPrinter->GetOrientation();
+    view::PaperOrientation eOrient = static_cast<view::PaperOrientation>(pPrinter->GetOrientation());
     aPrinter.getArray()[1].Value <<= eOrient;
 
     aPrinter.getArray()[0].Name = "Name";
@@ -313,14 +313,14 @@ uno::Sequence< beans::PropertyValue > SAL_CALL SfxPrintHelper::getPrinter() thro
 
 
 void SfxPrintHelper::impl_setPrinter(const uno::Sequence< beans::PropertyValue >& rPrinter,
-                                     SfxPrinter*& pPrinter,
+                                     VclPtr<SfxPrinter>& pPrinter,
                                      SfxPrinterChangeFlags& nChangeFlags,
                                      SfxViewShell*& pViewSh)
 
 {
     // Get old Printer
-    SfxViewFrame *pViewFrm = m_pData->m_pObjectShell.Is() ?
-                                SfxViewFrame::GetFirst( m_pData->m_pObjectShell, false ) : nullptr;
+    SfxViewFrame *pViewFrm = m_pData->m_pObjectShell.is() ?
+                                SfxViewFrame::GetFirst( m_pData->m_pObjectShell.get(), false ) : nullptr;
     if ( !pViewFrm )
         return;
 
@@ -370,12 +370,12 @@ void SfxPrintHelper::impl_setPrinter(const uno::Sequence< beans::PropertyValue >
             {
                 if ( !( rProp.Value >>= lDummy ) )
                     throw css::lang::IllegalArgumentException();
-                eOrient = ( view::PaperOrientation) lDummy;
+                eOrient = static_cast<view::PaperOrientation>(lDummy);
             }
 
-            if ( (Orientation) eOrient != pPrinter->GetOrientation() )
+            if ( static_cast<Orientation>(eOrient) != pPrinter->GetOrientation() )
             {
-                pPrinter->SetOrientation( (Orientation) eOrient );
+                pPrinter->SetOrientation( static_cast<Orientation>(eOrient) );
                 nChangeFlags |= SfxPrinterChangeFlags::CHG_ORIENTATION;
             }
         }
@@ -387,7 +387,7 @@ void SfxPrintHelper::impl_setPrinter(const uno::Sequence< beans::PropertyValue >
             {
                 if ( !( rProp.Value >>= lDummy ) )
                     throw css::lang::IllegalArgumentException();
-                nPaperFormat = ( view::PaperFormat ) lDummy;
+                nPaperFormat = static_cast<view::PaperFormat>(lDummy);
             }
 
             if ( convertToPaper(nPaperFormat) != pPrinter->GetPaper() )
@@ -405,10 +405,7 @@ void SfxPrintHelper::impl_setPrinter(const uno::Sequence< beans::PropertyValue >
             {
                 throw css::lang::IllegalArgumentException();
             }
-            else
-            {
-                aSetPaperSize = impl_Size_Struct2Object(aTempSize);
-            }
+            aSetPaperSize = impl_Size_Struct2Object(aTempSize);
         }
 
         // PrinterTray-Property
@@ -417,7 +414,7 @@ void SfxPrintHelper::impl_setPrinter(const uno::Sequence< beans::PropertyValue >
             OUString aTmp;
             if ( !( rProp.Value >>= aTmp ) )
                 throw css::lang::IllegalArgumentException();
-            sal_uInt16 nCount = pPrinter->GetPaperBinCount();
+            const sal_uInt16 nCount = pPrinter->GetPaperBinCount();
             for (sal_uInt16 nBin=0; nBin<nCount; nBin++)
             {
                 OUString aName( pPrinter->GetPaperBinName(nBin) );
@@ -436,7 +433,7 @@ void SfxPrintHelper::impl_setPrinter(const uno::Sequence< beans::PropertyValue >
     {
         // Bug 56929 - MapMode of 100mm which recalculated when
         // the device is set. Additionally only set if they were really changed.
-        aSetPaperSize = pPrinter->LogicToPixel( aSetPaperSize, MAP_100TH_MM );
+        aSetPaperSize = pPrinter->LogicToPixel(aSetPaperSize, MapMode(MapUnit::Map100thMM));
         if( aSetPaperSize != pPrinter->GetPaperSizePixel() )
         {
             pPrinter->SetPaperSizeUser( pPrinter->PixelToLogic( aSetPaperSize ) );
@@ -451,13 +448,12 @@ void SfxPrintHelper::impl_setPrinter(const uno::Sequence< beans::PropertyValue >
 }
 
 void SAL_CALL SfxPrintHelper::setPrinter(const uno::Sequence< beans::PropertyValue >& rPrinter)
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
 {
     // object already disposed?
     SolarMutexGuard aGuard;
 
     SfxViewShell* pViewSh = nullptr;
-    SfxPrinter* pPrinter = nullptr;
+    VclPtr<SfxPrinter> pPrinter;
     SfxPrinterChangeFlags nChangeFlags = SfxPrinterChangeFlags::NONE;
     impl_setPrinter(rPrinter,pPrinter,nChangeFlags,pViewSh);
     // set new printer
@@ -479,7 +475,7 @@ class ImplUCBPrintWatcher : public ::osl::Thread
         /// of course we must know the printer which execute the job
         VclPtr<SfxPrinter> m_pPrinter;
         /// this describes the target location for the printed temp file
-        OUString m_sTargetURL;
+        OUString const m_sTargetURL;
         /// it holds the temp file alive, till the print job will finish and remove it from disk automatically if the object die
         ::utl::TempFile* m_pTempFile;
 
@@ -524,7 +520,7 @@ class ImplUCBPrintWatcher : public ::osl::Thread
         }
 
         /* static helper to move the temp. file to the target location by using the ucb
-           It's static to be useable from outside too. So it's not really necessary to start
+           It's static to be usable from outside too. So it's not really necessary to start
            the thread, if finishing of the job was detected outside this thread.
            But it must be called without using a corresponding thread for the given parameter!
          */
@@ -537,23 +533,23 @@ class ImplUCBPrintWatcher : public ::osl::Thread
                 OUString        sFileName = aSplitter.getName(
                                             INetURLObject::LAST_SEGMENT,
                                             true,
-                                            INetURLObject::DECODE_WITH_CHARSET);
+                                            INetURLObject::DecodeMechanism::WithCharset);
                 if (aSplitter.removeSegment() && !sFileName.isEmpty())
                 {
                     ::ucbhelper::Content aSource(
-                            OUString((*ppTempFile)->GetURL()),
+                            (*ppTempFile)->GetURL(),
                             css::uno::Reference< css::ucb::XCommandEnvironment >(),
                             comphelper::getProcessComponentContext());
 
                     ::ucbhelper::Content aTarget(
-                            OUString(aSplitter.GetMainURL(INetURLObject::NO_DECODE)),
+                            aSplitter.GetMainURL(INetURLObject::DecodeMechanism::NONE),
                             css::uno::Reference< css::ucb::XCommandEnvironment >(),
                             comphelper::getProcessComponentContext());
 
                     aTarget.transferContent(
                             aSource,
-                            ::ucbhelper::InsertOperation_COPY,
-                            OUString(sFileName),
+                            ::ucbhelper::InsertOperation::Copy,
+                            sFileName,
                             css::ucb::NameClash::OVERWRITE);
                 }
             }
@@ -584,7 +580,6 @@ class ImplUCBPrintWatcher : public ::osl::Thread
 //  XPrintable
 
 void SAL_CALL SfxPrintHelper::print(const uno::Sequence< beans::PropertyValue >& rOptions)
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
 {
     if( Application::GetSettings().GetMiscSettings().GetDisablePrinting() )
         return;
@@ -594,8 +589,8 @@ void SAL_CALL SfxPrintHelper::print(const uno::Sequence< beans::PropertyValue >&
     SolarMutexGuard aGuard;
 
     // get view for sfx printing capabilities
-    SfxViewFrame *pViewFrm = m_pData->m_pObjectShell.Is() ?
-                                SfxViewFrame::GetFirst( m_pData->m_pObjectShell, false ) : nullptr;
+    SfxViewFrame *pViewFrm = m_pData->m_pObjectShell.is() ?
+                                SfxViewFrame::GetFirst( m_pData->m_pObjectShell.get(), false ) : nullptr;
     if ( !pViewFrm )
         return;
     SfxViewShell* pView = pViewFrm->GetViewShell();
@@ -640,13 +635,13 @@ void SAL_CALL SfxPrintHelper::print(const uno::Sequence< beans::PropertyValue >&
             {
                 // OK - it's not a valid URL. But may it's a simple
                 // system path directly. It will be supported for historical
-                // reasons. Otherwhise we break to much external code ...
+                // reasons. Otherwise we break to much external code ...
                 // We try to convert it to a file URL. If its possible
                 // we put the system path to the item set and let vcl work with it.
-                // No ucb or thread will be necessary then. In case it couldnt be
-                // converted its not an URL nor a system path. Then we can't accept
+                // No ucb or thread will be necessary then. In case it couldn't be
+                // converted it's not an URL nor a system path. Then we can't accept
                 // this parameter and have to throw an exception.
-                OUString sSystemPath(sTemp);
+                const OUString& sSystemPath(sTemp);
                 OUString sFileURL;
                 if (::osl::FileBase::getFileURLFromSystemPath(sSystemPath,sFileURL)!=::osl::FileBase::E_None)
                     throw css::lang::IllegalArgumentException();
@@ -655,7 +650,7 @@ void SAL_CALL SfxPrintHelper::print(const uno::Sequence< beans::PropertyValue >&
                 // and append the local filename
                 aCheckedArgs.realloc( aCheckedArgs.getLength()+1 );
                 aCheckedArgs[nProps].Name = "LocalFileName";
-                aCheckedArgs[nProps++].Value <<= OUString( sTemp );
+                aCheckedArgs[nProps++].Value <<= sTemp;
             }
             else
             // It's a valid URL. but now we must know, if it is a local one or not.
@@ -690,7 +685,7 @@ void SAL_CALL SfxPrintHelper::print(const uno::Sequence< beans::PropertyValue >&
 
                 //FIXME: does it work?
                 aCheckedArgs[nProps].Name = "LocalFileName";
-                aCheckedArgs[nProps++].Value <<= OUString( pUCBPrintTempFile->GetFileName() );
+                aCheckedArgs[nProps++].Value <<= pUCBPrintTempFile->GetFileName();
                 sUcbUrl = sURL;
             }
         }
@@ -701,7 +696,6 @@ void SAL_CALL SfxPrintHelper::print(const uno::Sequence< beans::PropertyValue >&
             sal_Int32 nCopies = 0;
             if ( !( rProp.Value >>= nCopies ) )
                 throw css::lang::IllegalArgumentException();
-
             aCheckedArgs[nProps].Name = rProp.Name;
             aCheckedArgs[nProps++].Value <<= nCopies;
         }
@@ -711,26 +705,20 @@ void SAL_CALL SfxPrintHelper::print(const uno::Sequence< beans::PropertyValue >&
         else if ( rProp.Name == "Collate" || rProp.Name == "Sort" )
         {
             bool bTemp;
-            if ( rProp.Value >>= bTemp )
-            {
-                aCheckedArgs[nProps].Name = "Collate";
-                aCheckedArgs[nProps++].Value <<= bTemp;
-            }
-            else
+            if ( !(rProp.Value >>= bTemp) )
                 throw css::lang::IllegalArgumentException();
+            aCheckedArgs[nProps].Name = "Collate";
+            aCheckedArgs[nProps++].Value <<= bTemp;
         }
 
         // Pages-Property
         else if ( rProp.Name == "Pages" )
         {
             OUString sTemp;
-            if( rProp.Value >>= sTemp )
-            {
-                aCheckedArgs[nProps].Name = rProp.Name;
-                aCheckedArgs[nProps++].Value <<= sTemp;
-            }
-            else
+            if( !(rProp.Value >>= sTemp) )
                 throw css::lang::IllegalArgumentException();
+            aCheckedArgs[nProps].Name = rProp.Name;
+            aCheckedArgs[nProps++].Value <<= sTemp;
         }
 
         // MonitorVisible
@@ -776,27 +764,27 @@ void SAL_CALL SfxPrintHelper::print(const uno::Sequence< beans::PropertyValue >&
     //  a) printing finished                        => move the file directly and forget the watcher thread
     //  b) printing is asynchron and runs currently => start watcher thread and exit this method
     //                                                 This thread make all necessary things by itself.
-    if (pUCBPrintTempFile)
+    if (!pUCBPrintTempFile)
+        return;
+
+    // a)
+    SfxPrinter* pPrinter = pView->GetPrinter();
+    if ( ! pPrinter->IsPrinting() )
+        ImplUCBPrintWatcher::moveAndDeleteTemp(&pUCBPrintTempFile,sUcbUrl);
+    // b)
+    else
     {
-        // a)
-        SfxPrinter* pPrinter = pView->GetPrinter();
-        if ( ! pPrinter->IsPrinting() )
-            ImplUCBPrintWatcher::moveAndDeleteTemp(&pUCBPrintTempFile,sUcbUrl);
-        // b)
-        else
-        {
-            // Note: we create(d) some resource on the heap (thread and temp file).
-            // They will be deleted by the thread automatically if he finish his run() method.
-            ImplUCBPrintWatcher* pWatcher = new ImplUCBPrintWatcher( pPrinter, pUCBPrintTempFile, sUcbUrl );
-            pWatcher->create();
-        }
+        // Note: we create(d) some resource on the heap (thread and temp file).
+        // They will be deleted by the thread automatically if he finish his run() method.
+        ImplUCBPrintWatcher* pWatcher = new ImplUCBPrintWatcher( pPrinter, pUCBPrintTempFile, sUcbUrl );
+        pWatcher->create();
     }
 }
 
 void IMPL_PrintListener_DataContainer::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
 {
     const SfxPrintingHint* pPrintHint = dynamic_cast<const SfxPrintingHint*>(&rHint);
-    if ( &rBC != m_pObjectShell
+    if ( &rBC != m_pObjectShell.get()
         || !pPrintHint
         || pPrintHint->GetWhich() == SFX_PRINTABLESTATE_CANCELJOB )
         return;
@@ -815,20 +803,20 @@ void IMPL_PrintListener_DataContainer::Notify( SfxBroadcaster& rBC, const SfxHin
 
     view::PrintJobEvent aEvent;
     aEvent.Source = m_xPrintJob;
-    aEvent.State = (css::view::PrintableState) pPrintHint->GetWhich();
+    aEvent.State = pPrintHint->GetWhich();
 
     ::cppu::OInterfaceIteratorHelper pIterator(*pContainer);
     while (pIterator.hasMoreElements())
         static_cast<view::XPrintJobListener*>(pIterator.next())->printJobEvent( aEvent );
 }
 
-void SAL_CALL SfxPrintHelper::addPrintJobListener( const css::uno::Reference< css::view::XPrintJobListener >& xListener ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL SfxPrintHelper::addPrintJobListener( const css::uno::Reference< css::view::XPrintJobListener >& xListener )
 {
     SolarMutexGuard aGuard;
     m_pData->m_aInterfaceContainer.addInterface( cppu::UnoType<view::XPrintJobListener>::get(), xListener );
 }
 
-void SAL_CALL SfxPrintHelper::removePrintJobListener( const css::uno::Reference< css::view::XPrintJobListener >& xListener ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL SfxPrintHelper::removePrintJobListener( const css::uno::Reference< css::view::XPrintJobListener >& xListener )
 {
     SolarMutexGuard aGuard;
     m_pData->m_aInterfaceContainer.removeInterface( cppu::UnoType<view::XPrintJobListener>::get(), xListener );

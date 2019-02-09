@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "basiccharclass.hxx"
+#include <basiccharclass.hxx>
 
 #include <unotools/charclass.hxx>
+#include <rtl/character.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 
@@ -33,9 +34,7 @@ bool BasicCharClass::isLetter( sal_Unicode c )
 
 bool BasicCharClass::isLetterUnicode( sal_Unicode c )
 {
-  static CharClass* pCharClass = nullptr;
-  if( pCharClass == nullptr )
-    pCharClass = new CharClass( Application::GetSettings().GetLanguageTag() );
+  static CharClass* pCharClass = new CharClass( Application::GetSettings().GetLanguageTag() );
   // can we get pCharClass to accept a sal_Unicode instead of this waste?
   return pCharClass->isLetter( OUString(c), 0 );
 }

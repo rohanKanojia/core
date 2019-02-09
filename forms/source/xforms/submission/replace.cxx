@@ -24,6 +24,7 @@
 #include <osl/diagnose.h>
 #include <rtl/ustring.hxx>
 #include <rtl/string.hxx>
+#include <sal/log.hxx>
 
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/uno/Reference.hxx>
@@ -64,12 +65,12 @@ CSubmission::SubmissionResult CSubmission::replace(const OUString& aReplace, con
             // open the stream from the result...
             // build media descriptor
             Sequence< PropertyValue > descriptor(2);
-            descriptor[0] = PropertyValue(OUString("InputStream"),
+            descriptor[0] = PropertyValue("InputStream",
                 -1, makeAny(m_aResultStream), PropertyState_DIRECT_VALUE);
-            descriptor[1] = PropertyValue(OUString("ReadOnly"),
-                -1, makeAny(sal_True), PropertyState_DIRECT_VALUE);
+            descriptor[1] = PropertyValue("ReadOnly",
+                -1, makeAny(true), PropertyState_DIRECT_VALUE);
 
-            OUString aURL = m_aURLObj.GetMainURL(INetURLObject::NO_DECODE);
+            OUString aURL = m_aURLObj.GetMainURL(INetURLObject::DecodeMechanism::NONE);
             OUString aTarget = "_default";
             xLoader->loadComponentFromURL(aURL, aTarget, FrameSearchFlag::ALL, descriptor);
 
@@ -86,7 +87,7 @@ CSubmission::SubmissionResult CSubmission::replace(const OUString& aReplace, con
                     Reference< XElement > oldRoot = aDocument->getDocumentElement();
                     Reference< XElement > newRoot = aNewDocument->getDocumentElement();
 
-                    Reference< XNode > aImportedNode = aDocument->importNode(newRoot, sal_True);
+                    Reference< XNode > aImportedNode = aDocument->importNode(newRoot, true);
                     aDocument->replaceChild(aImportedNode, oldRoot);
                     return CSubmission::SUCCESS;
                 } else {
@@ -101,9 +102,7 @@ CSubmission::SubmissionResult CSubmission::replace(const OUString& aReplace, con
             return CSubmission::SUCCESS;
         }
     } catch (const Exception& e) {
-        OString aMsg("Exception during replace:\n");
-        aMsg += OUStringToOString(e.Message, RTL_TEXTENCODING_UTF8);
-        OSL_FAIL(aMsg.getStr());
+        SAL_WARN( "forms.xforms", "Exception during replace: " << e);
     }
     return CSubmission::UNKNOWN_ERROR;
 }

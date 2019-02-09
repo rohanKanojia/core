@@ -7,9 +7,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <memory>
 #include <cellvalues.hxx>
 #include <column.hxx>
-#include <cellvalue.hxx>
 
 #include <cassert>
 
@@ -147,7 +147,7 @@ std::vector<CellValueSpan> CellValues::getNonEmptySpans() const
             // Record this span.
             size_t nRow1 = it->position;
             size_t nRow2 = nRow1 + it->size - 1;
-            aRet.push_back(CellValueSpan(nRow1, nRow2));
+            aRet.emplace_back(nRow1, nRow2);
         }
     }
     return aRet;
@@ -192,7 +192,7 @@ void CellValues::copyCellsTo( ScColumn& rCol, SCROW nRow ) const
                 for (; it != itEnd; ++it)
                 {
                     const EditTextObject* p = *it;
-                    aVals.push_back(p->Clone());
+                    aVals.push_back(p->Clone().release());
                 }
                 itPos = rDest.set(itPos, nCurRow, aVals.begin(), aVals.end());
             }
@@ -265,10 +265,10 @@ struct TableValues::Impl
 
         for (size_t nTab = 0; nTab < nTabs; ++nTab)
         {
-            m_Tables.push_back(std::unique_ptr<TableType>(new TableType));
+            m_Tables.push_back(std::make_unique<TableType>());
             std::unique_ptr<TableType>& rTab2 = m_Tables.back();
             for (size_t nCol = 0; nCol < nCols; ++nCol)
-                rTab2.get()->push_back(std::unique_ptr<CellValues>(new CellValues));
+                rTab2->push_back(std::make_unique<CellValues>());
         }
     }
 
@@ -285,7 +285,7 @@ struct TableValues::Impl
             return nullptr;
         std::unique_ptr<TableType>& rTab2 = m_Tables[nTab-maRange.aStart.Tab()];
         size_t nColOffset = nCol - maRange.aStart.Col();
-        if(nColOffset >= rTab2.get()->size())
+        if (nColOffset >= rTab2->size())
             return nullptr;
         return &rTab2.get()[0][nColOffset].get()[0];
     }

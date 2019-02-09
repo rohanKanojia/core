@@ -21,19 +21,16 @@
 #ifndef INCLUDED_BASIC_SBXDEF_HXX
 #define INCLUDED_BASIC_SBXDEF_HXX
 
-
-#ifndef __RSC
-#include <tools/errcode.hxx>
 #include <o3tl/typed_flags_set.hxx>
 
-enum SbxClassType {         // SBX-class-IDs (order is important!)
-    SbxCLASS_DONTCARE = 1,  // don't care (search, not 0 due to StarBASIC)
-    SbxCLASS_ARRAY,         // Array of SbxVariables
-    SbxCLASS_VALUE,         // simple value
-    SbxCLASS_VARIABLE,      // Variable (from here there is Broadcaster)
-    SbxCLASS_METHOD,        // Method (Function or Sub)
-    SbxCLASS_PROPERTY,      // Property
-    SbxCLASS_OBJECT         // Object
+enum class SbxClassType {         // SBX-class-IDs (order is important!)
+    DontCare = 1,  // don't care (search, not 0 due to StarBASIC)
+    Array,         // Array of SbxVariables
+    Value,         // simple value
+    Variable,      // Variable (from here there is Broadcaster)
+    Method,        // Method (Function or Sub)
+    Property,      // Property
+    Object         // Object
 };
 
 enum SbxDataType {
@@ -58,10 +55,6 @@ enum SbxDataType {
     SbxUSHORT   = 18,    // * unsigned short (sal_uInt16)
     SbxULONG    = 19,    // * unsigned long (sal_uInt32)
 
-//deprecated:  // old 64bit types kept for backward compatibility in file I/O
-    SbxLONG64   = 20,    //   moved to SbxSALINT64  as 64bit int
-    SbxULONG64  = 21,    //   moved to SbxSALUINT64 as 64bit int
-
     SbxINT      = 22,    // * signed machine-dependent int
     SbxUINT     = 23,    // * unsigned machine-dependent int
 
@@ -85,13 +78,6 @@ enum SbxDataType {
     SbxVECTOR = 0x1000,  // simple counted array
     SbxARRAY  = 0x2000,  // array
     SbxBYREF  = 0x4000,  // access by reference
-
-    SbxSV1 = 128,        // first defined data type for StarView
-    SbxMEMORYSTREAM,     // SvMemoryStream
-    SbxSTORAGE,          // SotStorage
-
-    SbxUSER1  = 256,     // first user defined data type
-    SbxUSERn  = 2047     // last user defined data type
 };
 
 const sal_uInt32 SBX_TYPE_WITH_EVENTS_FLAG = 0x10000;
@@ -130,54 +116,11 @@ enum SbxOperator {
     SbxGE       // this >= var
 };
 
-enum SbxNameType {          // Type of the questioned name of a variable
-    SbxNAME_NONE,           // plain name
-    SbxNAME_SHORT,          // Name(A,B)
-    SbxNAME_SHORT_TYPES,    // Name%(A%,B$)
-    SbxNAME_LONG_TYPES      // Name(A As Integer, B As String) As Integer
+enum class SbxNameType {          // Type of the questioned name of a variable
+    NONE,           // plain name
+    ShortTypes,     // Name%(A%,B$)
 };
 
-// from 1996/3/20: New error messages
-typedef sal_uIntPtr SbxError;           // Preserve old type
-
-#endif
-
-
-// New error codes per define
-#define ERRCODE_SBX_OK            ERRCODE_NONE    // processed
-
-#define ERRCODE_SBX_SYNTAX              (1UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_COMPILER)
-#define ERRCODE_SBX_NOTIMP              (2UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_NOTSUPPORTED)
-#define ERRCODE_SBX_OVERFLOW            (3UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_SBX)        // overflow
-#define ERRCODE_SBX_BOUNDS              (4UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_SBX)        // Invalid array index
-#define ERRCODE_SBX_ZERODIV             (5UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_SBX)        // Division by zero
-#define ERRCODE_SBX_CONVERSION          (6UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_SBX)        // wrong data type
-#define ERRCODE_SBX_BAD_PARAMETER       (7UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_RUNTIME)    // invalid Parameter
-#define ERRCODE_SBX_PROC_UNDEFINED      (8UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_RUNTIME)    // Sub or Func not def
-#define ERRCODE_SBX_ERROR               (9UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_UNKNOWN)    // generic object error
-#define ERRCODE_SBX_NO_OBJECT           (10UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_RUNTIME)   // Object var not object
-#define ERRCODE_SBX_CANNOT_LOAD         (11UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_CREATE)    // Object init/load fail
-#define ERRCODE_SBX_BAD_INDEX           (12UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_SBX)       // Invalid object index
-#define ERRCODE_SBX_NO_ACTIVE_OBJECT    (13UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_ACCESS)    // Object not active
-#define ERRCODE_SBX_BAD_PROP_VALUE      (14UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_RUNTIME)   // Bad property value
-#define ERRCODE_SBX_PROP_READONLY       (15UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_READ)      // Property is read only
-#define ERRCODE_SBX_PROP_WRITEONLY      (16UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_WRITE)     // Property is write only
-#define ERRCODE_SBX_INVALID_OBJECT      (17UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_ACCESS)    // Invalid object reference
-#define ERRCODE_SBX_NO_METHOD           (18UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_RUNTIME)   // Property oder Methode unbekannt
-#define ERRCODE_SBX_INVALID_USAGE_OBJECT (19UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_ACCESS)   // Invalid object usage
-#define ERRCODE_SBX_NO_OLE              (20UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_ACCESS)    // No OLE-Object
-#define ERRCODE_SBX_BAD_METHOD          (21UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_RUNTIME)   // Method not supported
-#define ERRCODE_SBX_OLE_ERROR           (22UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_RUNTIME)   // OLE Automation Error
-#define ERRCODE_SBX_BAD_ACTION          (23UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_NOTSUPPORTED)  // Action not supported
-#define ERRCODE_SBX_NO_NAMED_ARGS       (24UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_RUNTIME)   // No named arguments
-#define ERRCODE_SBX_BAD_LOCALE          (25UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_NOTSUPPORTED)  // Locale not supported
-#define ERRCODE_SBX_NAMED_NOT_FOUND     (26UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_RUNTIME)   // Unknown named argument
-#define ERRCODE_SBX_NOT_OPTIONAL        (27UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_RUNTIME)   // Argument not optional
-#define ERRCODE_SBX_WRONG_ARGS          (28UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_SBX)       // Invalid number of arguments
-#define ERRCODE_SBX_NOT_A_COLL          (29UL | ERRCODE_AREA_SBX | ERRCODE_CLASS_RUNTIME)   // Object contains no elements
-#define LAST_SBX_ERROR_ID                        29UL
-
-#ifndef __RSC
 
 // Flag-Bits:
 enum class SbxFlagBits {
@@ -211,14 +154,6 @@ namespace o3tl
     template<> struct typed_flags<SbxFlagBits> : is_typed_flags<SbxFlagBits, 0xffff> {};
 }
 
-// Broadcaster-IDs:
-#define SBX_HINT_DYING          SFX_HINT_DYING
-#define SBX_HINT_DATAWANTED     SFX_HINT_USER00
-#define SBX_HINT_DATACHANGED    SFX_HINT_DATACHANGED
-#define SBX_HINT_CONVERTED      SFX_HINT_USER01
-#define SBX_HINT_INFOWANTED     SFX_HINT_USER02
-#define SBX_HINT_OBJECTCHANGED  SFX_HINT_USER03
-
 // List of all creators for Load/Store
 
 #define SBXCR_SBX            0x20584253        // SBX(blank)
@@ -241,19 +176,15 @@ namespace o3tl
 // of the implementation. Only type double is greedy and takes
 // what it gets.
 
-#define SbxMAXCHAR  ((sal_Unicode)65535)
+#define SbxMAXCHAR  (u'\xFFFF')
 #define SbxMINCHAR  (0)
 #define SbxMAXBYTE  ( 255)
 #define SbxMAXINT   ( 32767)
 #define SbxMININT   (-32768)
-#define SbxMAXUINT  ((sal_uInt16) 65535)
+#define SbxMAXUINT  (sal_uInt16(65535))
 #define SbxMAXLNG   ( 2147483647)
-#define SbxMINLNG   ((sal_Int32)(-2147483647-1))
-#define SbxMAXULNG  ((sal_uInt32) 0xffffffff)
-
-#define SbxMAXSALUINT64     SAL_MAX_UINT64
-#define SbxMAXSALINT64      SAL_MAX_INT64
-#define SbxMINSALINT64      SAL_MIN_INT64
+#define SbxMINLNG   (sal_Int32(-2147483647-1))
+#define SbxMAXULNG  (sal_uInt32(0xffffffff))
 
         // Currency stored as SbxSALINT64 == sal_Int64
         // value range limits are ~(2^63 - 1)/10000
@@ -277,8 +208,6 @@ namespace o3tl
 
 // The numeric values of sal_True and FALSE
 enum SbxBOOL { SbxFALSE = 0, SbxTRUE = -1 };
-
-#endif //ifndef __RSC
 
 #endif
 

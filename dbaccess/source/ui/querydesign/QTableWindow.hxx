@@ -19,20 +19,20 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_UI_QUERYDESIGN_QTABLEWINDOW_HXX
 #define INCLUDED_DBACCESS_SOURCE_UI_QUERYDESIGN_QTABLEWINDOW_HXX
 
-#include "TableWindow.hxx"
+#include <TableWindow.hxx>
 #include "QTableWindowData.hxx"
-#include "TableFieldDescription.hxx"
+#include <TableFieldDescription.hxx>
 
 namespace dbaui
 {
     class OQueryTableWindow : public OTableWindow
     {
         sal_Int32           m_nAliasNum;
-        OUString     m_strInitialAlias;
+        OUString            m_strInitialAlias;
     public:
-        OQueryTableWindow( vcl::Window* pParent, const TTableWindowData::value_type& pTabWinData, sal_Unicode* pszInitialAlias = nullptr );
+        OQueryTableWindow( vcl::Window* pParent, const TTableWindowData::value_type& pTabWinData );
 
-        OUString GetAliasName() const
+        OUString const & GetAliasName() const
         {
             return static_cast<OQueryTableWindowData*>(GetData().get())->GetAliasName();
         }
@@ -44,13 +44,12 @@ namespace dbaui
         // late Constructor, the base class CREATES Listbox on first call
         virtual bool         Init() override;
 
-        bool                 ExistsField(const OUString& strFieldName, OTableFieldDescRef& rInfo);
+        bool                 ExistsField(const OUString& strFieldName, OTableFieldDescRef const & rInfo);
         bool                 ExistsAVisitedConn() const;
 
         virtual OUString     GetName() const override { return GetWinName(); }
 
     protected:
-        virtual void    KeyInput( const KeyEvent& rEvt ) override;
 
         virtual void    OnEntryDoubleClicked(SvTreeListEntry* pEntry) override;
             // is called from DoubleClickHdl of the ListBox

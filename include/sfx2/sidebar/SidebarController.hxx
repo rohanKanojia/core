@@ -19,6 +19,7 @@
 #ifndef INCLUDED_SFX2_SOURCE_SIDEBAR_SIDEBARCONTROLLER_HXX
 #define INCLUDED_SFX2_SOURCE_SIDEBAR_SIDEBARCONTROLLER_HXX
 
+#include <memory>
 #include <sal/config.h>
 
 #include <sfx2/sidebar/AsynchronousCall.hxx>
@@ -38,19 +39,16 @@
 #include <com/sun/star/ui/XSidebar.hpp>
 
 #include <boost/optional.hpp>
-#include <cppuhelper/compbase4.hxx>
+#include <cppuhelper/compbase.hxx>
 #include <cppuhelper/basemutex.hxx>
 
-
-namespace
-{
-    typedef ::cppu::WeakComponentImplHelper4 <
-        css::ui::XContextChangeEventListener,
-        css::beans::XPropertyChangeListener,
-        css::ui::XSidebar,
-        css::frame::XStatusListener
-        > SidebarControllerInterfaceBase;
-}
+typedef cppu::WeakComponentImplHelper <
+    css::ui::XContextChangeEventListener,
+    css::beans::XPropertyChangeListener,
+    css::ui::XSidebar,
+    css::frame::XStatusListener,
+    css::frame::XFrameActionListener
+    > SidebarControllerInterfaceBase;
 
 class SfxSplitWindow;
 class FixedBitmap;
@@ -69,10 +67,10 @@ class SFX2_DLLPUBLIC SidebarController
       public SidebarControllerInterfaceBase
 {
 public:
-    SidebarController(
+    static rtl::Reference<SidebarController> create(
         SidebarDockingWindow* pParentWindow,
         const css::uno::Reference<css::frame::XFrame>& rxFrame);
-    virtual ~SidebarController();
+    virtual ~SidebarController() override;
     SidebarController(const SidebarController&) = delete;
     SidebarController& operator=( const SidebarController& ) = delete;
 
@@ -90,24 +88,22 @@ public:
     static void unregisterSidebarForFrame(SidebarController* pController, const css::uno::Reference<css::frame::XController>& xFrame);
 
     // ui::XContextChangeEventListener
-    virtual void SAL_CALL notifyContextChangeEvent (const css::ui::ContextChangeEventObject& rEvent)
-        throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL notifyContextChangeEvent (const css::ui::ContextChangeEventObject& rEvent) override;
 
     // XEventListener
-    virtual void SAL_CALL disposing (const css::lang::EventObject& rEventObject)
-        throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing (const css::lang::EventObject& rEventObject) override;
 
     // beans::XPropertyChangeListener
-    virtual void SAL_CALL propertyChange (const css::beans::PropertyChangeEvent& rEvent)
-        throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL propertyChange (const css::beans::PropertyChangeEvent& rEvent) override;
 
     // frame::XStatusListener
-    virtual void SAL_CALL statusChanged (const css::frame::FeatureStateEvent& rEvent)
-        throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL statusChanged (const css::frame::FeatureStateEvent& rEvent) override;
+
+    // frame::XFrameActionListener
+    virtual void SAL_CALL frameAction (const css::frame::FrameActionEvent& rEvent) override;
 
     // ui::XSidebar
-    virtual void SAL_CALL requestLayout()
-        throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL requestLayout() override;
 
     void NotifyResize();
 
@@ -124,8 +120,8 @@ public:
 
     const static sal_Int32 gnMaximumSidebarWidth = 400;
 
-    void OpenThenSwitchToDeck (
-        const ::rtl::OUString& rsDeckId);
+    void OpenThenSwitchToDeck(const OUString& rsDeckId);
+    void OpenThenToggleDeck(const OUString& rsDeckId);
 
     /** Show only the tab bar, not the deck.
     */
@@ -137,7 +133,9 @@ public:
 
     /** Returns true when the given deck is the currently visible deck
      */
-    bool IsDeckVisible (const ::rtl::OUString& rsDeckId);
+    bool IsDeckVisible(const OUString& rsDeckId);
+
+    bool IsDeckOpen(const sal_Int32 nIndex = -1);
 
     FocusManager& GetFocusManager() { return maFocusManager;}
 
@@ -148,14 +146,16 @@ public:
     const Context& GetCurrentContext() const { return maCurrentContext;}
     bool IsDocumentReadOnly (void) const { return mbIsDocumentReadOnly;}
 
-    void SwitchToDeck ( const ::rtl::OUString& rsDeckId);
+    void SwitchToDeck(const OUString& rsDeckId);
     void SwitchToDefaultDeck();
+    bool WasFloatingDeckClosed() const { return mbFloatingDeckClosed; }
+    void SetFloatingDeckClosed(bool bWasClosed) { mbFloatingDeckClosed = bWasClosed; }
 
-    void CreateDeck(const ::rtl::OUString& rDeckId);
-    void CreateDeck(const ::rtl::OUString& rDeckId, const Context& rContext, bool bForceCreate = false);
+    void CreateDeck(const OUString& rDeckId);
+    void CreateDeck(const OUString& rDeckId, const Context& rContext, bool bForceCreate = false);
 
     ResourceManager::DeckContextDescriptorContainer GetMatchingDecks();
-    ResourceManager::PanelContextDescriptorContainer GetMatchingPanels( const ::rtl::OUString& rDeckId);
+    ResourceManager::PanelContextDescriptorContainer GetMatchingPanels(const OUString& rDeckId);
 
     void notifyDeckTitle(const OUString& targetDeckId);
 
@@ -163,7 +163,17 @@ public:
 
     void disposeDecks();
 
+    void FadeIn();
+    void FadeOut();
+
+    tools::Rectangle GetDeckDragArea() const;
+
+    css::uno::Reference<css::frame::XFrame> getXFrame() {return mxFrame;}
+
 private:
+    SidebarController(
+        SidebarDockingWindow* pParentWindow,
+        const css::uno::Reference<css::frame::XFrame>& rxFrame);
 
     VclPtr<Deck> mpCurrentDeck;
     VclPtr<SidebarDockingWindow> mpParentWindow;
@@ -174,7 +184,7 @@ private:
     css::uno::Reference<css::frame::XController> mxCurrentController;
     /// Use a combination of SwitchFlag_* as value.
     sal_Int32 mnRequestedForceFlags;
-    ::rtl::OUString msCurrentDeckId;
+    OUString msCurrentDeckId;
     AsynchronousCall maPropertyChangeForwarder;
     AsynchronousCall maContextChangeUpdate;
     AsynchronousCall maAsynchronousDeckSwitch;
@@ -189,7 +199,8 @@ private:
     */
     ::boost::optional<bool> mbIsDeckRequestedOpen;
     ::boost::optional<bool> mbIsDeckOpen;
-    bool mbCanDeckBeOpened;
+
+    bool mbFloatingDeckClosed;
 
     /** Before the deck is closed the sidebar width is saved into this variable,
         so that it can be restored when the deck is reopened.
@@ -209,22 +220,22 @@ private:
     */
     VclPtr<vcl::Window> mpCloseIndicator;
 
-    DECL_LINK_TYPED(WindowEventHandler, VclWindowEvent&, void);
+    DECL_LINK(WindowEventHandler, VclWindowEvent&, void);
     /** Make maRequestedContext the current context.
     */
     void UpdateConfigurations();
 
     css::uno::Reference<css::ui::XUIElement> CreateUIElement (
         const css::uno::Reference<css::awt::XWindowPeer>& rxWindow,
-        const ::rtl::OUString& rsImplementationURL,
+        const OUString& rsImplementationURL,
         const bool bWantsCanvas,
         const Context& rContext);
 
     void CreatePanels(
-        const ::rtl::OUString& rDeckId,
+        const OUString& rDeckId,
         const Context& rContext);
     VclPtr<Panel> CreatePanel (
-        const ::rtl::OUString& rsPanelId,
+        const OUString& rsPanelId,
         vcl::Window* pParentWindow,
         const bool bIsInitiallyExpanded,
         const Context& rContext,
@@ -235,11 +246,11 @@ private:
         const Context& rContext);
 
     void ShowPopupMenu (
-        const Rectangle& rButtonBox,
+        const tools::Rectangle& rButtonBox,
         const ::std::vector<TabBar::DeckMenuData>& rMenuData) const;
-    std::shared_ptr<PopupMenu> CreatePopupMenu (
+    VclPtr<PopupMenu> CreatePopupMenu (
         const ::std::vector<TabBar::DeckMenuData>& rMenuData) const;
-    DECL_LINK_TYPED(OnMenuItemSelected, Menu*, bool);
+    DECL_LINK(OnMenuItemSelected, Menu*, bool);
     void BroadcastPropertyChange();
 
     /** The close of the deck changes the width of the child window.

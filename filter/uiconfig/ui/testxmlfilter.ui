@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.20.4 -->
+<interface domain="flt">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="TestXMLFilterDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Test XML Filter: %s</property>
+    <property name="title" translatable="yes" context="testxmlfilter|TestXMLFilterDialog">Test XML Filter: %s</property>
     <property name="resizable">False</property>
+    <property name="modal">True</property>
+    <property name="default_width">0</property>
+    <property name="default_height">0</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
@@ -85,8 +88,8 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
+                            <property name="label" translatable="yes" context="testxmlfilter|label3">XSLT for export</property>
                             <property name="xalign">0</property>
-                            <property name="label" translatable="yes">XSLT for export</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -98,8 +101,8 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
+                            <property name="label" translatable="yes" context="testxmlfilter|label4">Transform document</property>
                             <property name="xalign">0</property>
-                            <property name="label" translatable="yes">Transform document</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -108,7 +111,7 @@
                         </child>
                         <child>
                           <object class="GtkButton" id="exportbrowse">
-                            <property name="label" translatable="yes">Browse...</property>
+                            <property name="label" translatable="yes" context="testxmlfilter|exportbrowse">Browse...</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
@@ -120,7 +123,7 @@
                         </child>
                         <child>
                           <object class="GtkButton" id="currentdocument">
-                            <property name="label" translatable="yes">Current Document</property>
+                            <property name="label" translatable="yes" context="testxmlfilter|currentdocument">Current Document</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
@@ -145,8 +148,8 @@
                           <object class="GtkLabel" id="currentfilename">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">1</property>
                             <property name="width_chars">52</property>
+                            <property name="xalign">1</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -165,7 +168,7 @@
                   <object class="GtkLabel" id="label1">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Export</property>
+                    <property name="label" translatable="yes" context="testxmlfilter|label1">Export</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -201,8 +204,8 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
+                            <property name="label" translatable="yes" context="testxmlfilter|label5">XSLT for import</property>
                             <property name="xalign">0</property>
-                            <property name="label" translatable="yes">XSLT for import</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -211,7 +214,7 @@
                         </child>
                         <child>
                           <object class="GtkButton" id="importbrowse">
-                            <property name="label" translatable="yes">Browse...</property>
+                            <property name="label" translatable="yes" context="testxmlfilter|importbrowse">Browse...</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
@@ -223,7 +226,7 @@
                         </child>
                         <child>
                           <object class="GtkButton" id="recentfile">
-                            <property name="label" translatable="yes">Recent File</property>
+                            <property name="label" translatable="yes" context="testxmlfilter|recentfile">Recent File</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
@@ -238,8 +241,8 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
+                            <property name="label" translatable="yes" context="testxmlfilter|templateimport">Template for import</property>
                             <property name="xalign">0</property>
-                            <property name="label" translatable="yes">Template for import</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -259,7 +262,7 @@
                         </child>
                         <child>
                           <object class="GtkCheckButton" id="displaysource">
-                            <property name="label" translatable="yes">Display source</property>
+                            <property name="label" translatable="yes" context="testxmlfilter|displaysource">Display source</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -277,8 +280,8 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
+                            <property name="label" translatable="yes" context="testxmlfilter|label6">Transform file</property>
                             <property name="xalign">0</property>
-                            <property name="label" translatable="yes">Transform file</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -300,8 +303,8 @@
                           <object class="GtkLabel" id="recentfilename">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">1</property>
                             <property name="width_chars">52</property>
+                            <property name="xalign">1</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -323,7 +326,7 @@
                   <object class="GtkLabel" id="label2">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Import</property>
+                    <property name="label" translatable="yes" context="testxmlfilter|label2">Import</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -346,9 +349,12 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">close</action-widget>
-      <action-widget response="0">help</action-widget>
+      <action-widget response="-7">close</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
+    <child>
+      <placeholder/>
+    </child>
   </object>
   <object class="GtkSizeGroup" id="sizegroup1">
     <widgets>

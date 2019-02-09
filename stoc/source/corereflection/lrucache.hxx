@@ -26,11 +26,11 @@
 #include <rtl/ustring.hxx>
 #include <sal/log.hxx>
 
+#include <memory>
 #include <unordered_map>
 
 /** Implementation of a least recently used (lru) cache.
     <br>
-    @author Daniel Boelzle
 */
 template< class t_Key, class t_Val, class t_KeyHash >
 class LRU_Cache
@@ -48,7 +48,7 @@ class LRU_Cache
     sal_Int32                   _nCachedElements;
     t_Key2Element               _aKey2Element;
 
-    CacheEntry *                _pBlock;
+    std::unique_ptr<CacheEntry[]> _pBlock;
     mutable CacheEntry *        _pHead;
     mutable CacheEntry *        _pTail;
     inline void toFront( CacheEntry * pEntry ) const;
@@ -58,11 +58,7 @@ public:
         <br>
         @param nCachedElements number of elements to be cached; default param set to 128
     */
-    explicit inline LRU_Cache( sal_Int32 nCachedElements = 128 );
-    /** Destructor: releases all cached elements and keys.
-        <br>
-    */
-    inline ~LRU_Cache();
+    explicit inline LRU_Cache();
 
     /** Retrieves a value from the cache. Returns default constructed value,
         if none was found.
@@ -84,33 +80,24 @@ public:
 };
 
 template< class t_Key, class t_Val, class t_KeyHash >
-inline LRU_Cache< t_Key, t_Val, t_KeyHash >::LRU_Cache( sal_Int32 nCachedElements )
+inline LRU_Cache< t_Key, t_Val, t_KeyHash >::LRU_Cache()
 #ifdef __CACHE_DIAGNOSE
     : _nCachedElements( 4 )
 #else
-    : _nCachedElements( nCachedElements )
+    : _nCachedElements( 256 )
 #endif
     , _pBlock( nullptr )
     , _pHead( nullptr )
     , _pTail( nullptr )
 {
-    if (_nCachedElements > 0)
+    _pBlock.reset(new CacheEntry[_nCachedElements]);
+    _pHead = _pBlock.get();
+    _pTail = _pBlock.get() + _nCachedElements - 1;
+    for (sal_Int32 nPos = _nCachedElements; nPos--;)
     {
-        _pBlock = new CacheEntry[_nCachedElements];
-        _pHead  = _pBlock;
-        _pTail  = _pBlock + _nCachedElements -1;
-        for ( sal_Int32 nPos = _nCachedElements; nPos--; )
-        {
-            _pBlock[nPos].pPred = _pBlock + nPos -1;
-            _pBlock[nPos].pSucc = _pBlock + nPos +1;
-        }
+        _pBlock[nPos].pPred = _pBlock.get() + nPos - 1;
+        _pBlock[nPos].pSucc = _pBlock.get() + nPos + 1;
     }
-}
-
-template< class t_Key, class t_Val, class t_KeyHash >
-inline LRU_Cache< t_Key, t_Val, t_KeyHash >::~LRU_Cache()
-{
-    delete [] _pBlock;
 }
 
 template< class t_Key, class t_Val, class t_KeyHash >
@@ -176,7 +163,8 @@ inline void LRU_Cache< t_Key, t_Val, t_KeyHash >::setValue(
             }
 #endif
             _aKey2Element.erase( pEntry->aKey );
-            _aKey2Element[ pEntry->aKey = rKey ] = pEntry;
+            pEntry->aKey = rKey;
+            _aKey2Element[ rKey ] = pEntry;
         }
         else
         {

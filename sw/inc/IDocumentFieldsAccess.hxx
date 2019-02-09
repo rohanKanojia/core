@@ -33,9 +33,13 @@ class SwTextField;
 class SwField;
 class SwMsgPoolItem;
 class DateTime;
-class _SetGetExpField;
-struct SwHash;
+class SetGetExpField;
 class SwNode;
+enum class SwFieldIds : sal_uInt16;
+template <class T> class SwHashTable;
+struct HashStr;
+class SwRootFrame;
+class IDocumentRedlineAccess;
 
 namespace rtl { class OUString; }
 using rtl::OUString;
@@ -50,9 +54,9 @@ namespace com { namespace sun { namespace star { namespace uno { class Any; } } 
 
     virtual SwFieldType *InsertFieldType(const SwFieldType &) = 0;
 
-    virtual SwFieldType *GetSysFieldType( const sal_uInt16 eWhich ) const = 0;
+    virtual SwFieldType *GetSysFieldType( const SwFieldIds eWhich ) const = 0;
 
-    virtual SwFieldType* GetFieldType(sal_uInt16 nResId, const OUString& rName, bool bDbFieldMatching) const = 0;
+    virtual SwFieldType* GetFieldType(SwFieldIds nResId, const OUString& rName, bool bDbFieldMatching) const = 0;
 
     virtual void RemoveFieldType(size_t nField) = 0;
 
@@ -72,7 +76,7 @@ namespace com { namespace sun { namespace star { namespace uno { class Any; } } 
        @retval true            putting of value was successful
        @retval false           else
     */
-    virtual bool PutValueToField(const SwPosition & rPos, const css::uno::Any& rVal, sal_uInt16 nWhich) = 0;
+    virtual void PutValueToField(const SwPosition & rPos, const css::uno::Any& rVal, sal_uInt16 nWhich) = 0;
 
     // Call update of expression fields. All expressions are re-evaluated.
 
@@ -88,7 +92,7 @@ namespace com { namespace sun { namespace star { namespace uno { class Any; } } 
     */
     virtual bool UpdateField(SwTextField * rDstFormatField, SwField & rSrcField, SwMsgPoolItem * pMsgHint, bool bUpdateTableFields) = 0;
 
-    virtual void UpdateRefFields(SfxPoolItem* pHt) = 0;
+    virtual void UpdateRefFields() = 0;
 
     virtual void UpdateTableFields(SfxPoolItem* pHt) = 0;
 
@@ -120,9 +124,9 @@ namespace com { namespace sun { namespace star { namespace uno { class Any; } } 
     // (if the address != 0 and the pointer == 0 a new list will be returned).
     virtual void FieldsToCalc(SwCalc& rCalc, sal_uLong nLastNd, sal_uInt16 nLastCnt) = 0;
 
-    virtual void FieldsToCalc(SwCalc& rCalc, const _SetGetExpField& rToThisField) = 0;
+    virtual void FieldsToCalc(SwCalc& rCalc, const SetGetExpField& rToThisField, SwRootFrame const* pLayout) = 0;
 
-    virtual void FieldsToExpand(SwHash**& ppTable, sal_uInt16& rTableSize, const _SetGetExpField& rToThisField) = 0;
+    virtual void FieldsToExpand(SwHashTable<HashStr> & rTable, const SetGetExpField& rToThisField, SwRootFrame const& rLayout) = 0;
 
     virtual bool IsNewFieldLst() const = 0;
 
@@ -130,9 +134,16 @@ namespace com { namespace sun { namespace star { namespace uno { class Any; } } 
 
     virtual void InsDelFieldInFieldLst(bool bIns, const SwTextField& rField) = 0;
 
+    virtual sal_Int32 GetRecordsPerDocument() const = 0;
+
 protected:
     virtual ~IDocumentFieldsAccess() {};
  };
+
+namespace sw {
+bool IsFieldDeletedInModel(IDocumentRedlineAccess const& rIDRA,
+        SwTextField const& rTextField);
+}
 
 #endif // INCLUDED_SW_INC_IDOCUMENTFIELDSACCESS_HXX
 

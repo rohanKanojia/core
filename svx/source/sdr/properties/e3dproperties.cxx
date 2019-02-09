@@ -17,6 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <o3tl/make_unique.hxx>
 #include <sdr/properties/e3dproperties.hxx>
 #include <svl/itemset.hxx>
 #include <svx/svddef.hxx>
@@ -28,20 +31,17 @@ namespace sdr
     namespace properties
     {
         // create a new itemset
-        SfxItemSet* E3dProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
+        std::unique_ptr<SfxItemSet> E3dProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
         {
-            return new SfxItemSet(rPool,
+            return o3tl::make_unique<SfxItemSet>(rPool,
 
                 // ranges from SdrAttrObj
-                SDRATTR_START, SDRATTR_SHADOW_LAST,
+                svl::Items<SDRATTR_START, SDRATTR_SHADOW_LAST,
                 SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST,
                 SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION,
 
                 // ranges from E3dObject, contains object and scene because of GetMergedItemSet()
-                SDRATTR_3D_FIRST, SDRATTR_3D_LAST,
-
-                // end
-                0, 0);
+                SDRATTR_3D_FIRST, SDRATTR_3D_LAST>{});
         }
 
         E3dProperties::E3dProperties(SdrObject& rObj)
@@ -58,9 +58,9 @@ namespace sdr
         {
         }
 
-        BaseProperties& E3dProperties::Clone(SdrObject& rObj) const
+        std::unique_ptr<BaseProperties> E3dProperties::Clone(SdrObject& rObj) const
         {
-            return *(new E3dProperties(*this, rObj));
+            return std::unique_ptr<BaseProperties>(new E3dProperties(*this, rObj));
         }
 
         void E3dProperties::ItemSetChanged(const SfxItemSet& rSet)
@@ -72,21 +72,6 @@ namespace sdr
 
             // local changes
             rObj.StructureChanged();
-        }
-
-        void E3dProperties::SetStyleSheet(SfxStyleSheet* pNewStyleSheet, bool bDontRemoveHardAttr)
-        {
-            // call parent
-            AttributeProperties::SetStyleSheet(pNewStyleSheet, bDontRemoveHardAttr);
-
-            // propagate call to contained objects
-            const SdrObjList* pSub = static_cast<const E3dObject&>(GetSdrObject()).GetSubList();
-            const size_t nCount(pSub->GetObjCount());
-
-            for(size_t a = 0; a < nCount; ++a)
-            {
-                pSub->GetObj(a)->GetProperties().SetStyleSheet(pNewStyleSheet, bDontRemoveHardAttr);
-            }
         }
     } // end of namespace properties
 } // end of namespace sdr

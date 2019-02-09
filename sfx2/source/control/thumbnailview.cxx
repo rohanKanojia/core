@@ -20,6 +20,7 @@
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/vector/b2dsize.hxx>
 #include <basegfx/vector/b2dvector.hxx>
+#include <comphelper/processfactory.hxx>
 #include <drawinglayer/attribute/fillgraphicattribute.hxx>
 #include <drawinglayer/attribute/fontattribute.hxx>
 #include <drawinglayer/primitive2d/fillgraphicprimitive2d.hxx>
@@ -29,12 +30,16 @@
 #include <drawinglayer/processor2d/baseprocessor2d.hxx>
 #include <drawinglayer/processor2d/processorfromoutputdevice.hxx>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 #include <svtools/optionsdrawinglayer.hxx>
+#include <unotools/ucbstreamhelper.hxx>
 #include <vcl/decoview.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/scrbar.hxx>
 #include <vcl/help.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/commandevent.hxx>
+#include <vcl/event.hxx>
 
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
@@ -42,27 +47,17 @@
 #include <memory>
 
 using namespace basegfx;
-using namespace basegfx::tools;
+using namespace basegfx::utils;
 using namespace drawinglayer::attribute;
 using namespace drawinglayer::primitive2d;
 
-enum
-{
-    ITEM_OFFSET = 4,
-    ITEM_OFFSET_DOUBLE = 6,
-    NAME_LINE_OFF_X = 2,
-    NAME_LINE_OFF_Y = 2,
-    NAME_LINE_HEIGHT = 2,
-    NAME_OFFSET = 2,
-    SCROLL_OFFSET = 4
-};
+constexpr int gnFineness = 5;
 
-ThumbnailView::ThumbnailView (vcl::Window *pParent, WinBits nWinStyle, bool bDisableTransientChildren)
+ThumbnailView::ThumbnailView (vcl::Window *pParent, WinBits nWinStyle)
     : Control( pParent, nWinStyle )
     , mpItemAttrs(new ThumbnailItemAttributes)
 {
     ImplInit();
-    mbIsTransientChildrenDisabled = bDisableTransientChildren;
 }
 
 ThumbnailView::~ThumbnailView()
@@ -78,7 +73,7 @@ void ThumbnailView::dispose()
         xComponent->dispose ();
 
     mpScrBar.disposeAndClear();
-    delete mpItemAttrs;
+    mpItemAttrs.reset();
 
     ImplDeleteItems();
     Control::dispose();
@@ -99,7 +94,7 @@ void ThumbnailView::MouseMove(const MouseEvent& rMEvt)
             aHelp = pItem->getHelpText();
         }
 
-        Rectangle aToInvalidate(pItem->updateHighlight(pItem->mbVisible && !rMEvt.IsLeaveWindow(), aPoint));
+        ::tools::Rectangle aToInvalidate(pItem->updateHighlight(pItem->mbVisible && !rMEvt.IsLeaveWindow(), aPoint));
 
         if (!aToInvalidate.IsEmpty() && IsReallyVisible() && IsUpdateMode())
             Invalidate(aToInvalidate);
@@ -109,9 +104,9 @@ void ThumbnailView::MouseMove(const MouseEvent& rMEvt)
         SetQuickHelpText(aHelp);
 }
 
-void ThumbnailView::AppendItem(ThumbnailViewItem *pItem)
+void ThumbnailView::AppendItem(std::unique_ptr<ThumbnailViewItem> pItem)
 {
-    if (maFilterFunc(pItem))
+    if (maFilterFunc(pItem.get()))
     {
         // Save current start,end range, iterator might get invalidated
         size_t nSelStartPos = 0;
@@ -123,33 +118,34 @@ void ThumbnailView::AppendItem(ThumbnailViewItem *pItem)
             nSelStartPos = mpStartSelRange - mFilteredItemList.begin();
         }
 
-        mFilteredItemList.push_back(pItem);
+        mFilteredItemList.push_back(pItem.get());
         mpStartSelRange = pSelStartItem != nullptr ? mFilteredItemList.begin() + nSelStartPos : mFilteredItemList.end();
     }
 
-    mItemList.push_back(pItem);
+    mItemList.push_back(std::move(pItem));
 }
 
 void ThumbnailView::ImplInit()
 {
     mpScrBar = nullptr;
-    mnHeaderHeight = 0;
     mnItemWidth = 0;
     mnItemHeight = 0;
     mnItemPadding = 0;
     mnVisLines = 0;
     mnLines = 0;
-    mnFineness = 5;
     mnFirstLine = 0;
     mnCols = 0;
     mbScroll = false;
     mbHasVisibleItems = false;
     mbShowTooltips = false;
+    mbIsMultiSelectionEnabled = true;
     maFilterFunc = ViewFilterAll();
     maFillColor = GetSettings().GetStyleSettings().GetFieldColor();
     maTextColor = GetSettings().GetStyleSettings().GetWindowTextColor();
     maHighlightColor = GetSettings().GetStyleSettings().GetHighlightColor();
     maHighlightTextColor = GetSettings().GetStyleSettings().GetWindowTextColor();
+    maSelectHighlightColor = GetSettings().GetStyleSettings().GetActiveColor();
+    maSelectHighlightTextColor = GetSettings().GetStyleSettings().GetActiveTextColor();
 
     const SvtOptionsDrawinglayer aSvtOptionsDrawinglayer;
     mfHighlightTransparence = aSvtOptionsDrawinglayer.GetTransparentSelectionPercent() * 0.01;
@@ -165,7 +161,7 @@ void ThumbnailView::ImplDeleteItems()
 
     for ( size_t i = 0; i < n; ++i )
     {
-        ThumbnailViewItem *const pItem = mItemList[i];
+        ThumbnailViewItem *const pItem = mItemList[i].get();
 
         // deselect all current selected items and fire events
         if (pItem->isSelected())
@@ -180,11 +176,11 @@ void ThumbnailView::ImplDeleteItems()
         {
             css::uno::Any aOldAny, aNewAny;
 
-            aOldAny <<= pItem->GetAccessible( mbIsTransientChildrenDisabled );
+            aOldAny <<= pItem->GetAccessible( false );
             ImplFireAccessibleEvent( css::accessibility::AccessibleEventId::CHILD, aOldAny, aNewAny );
         }
 
-        delete pItem;
+        mItemList[i].reset();
     }
 
     mItemList.clear();
@@ -206,34 +202,18 @@ void ThumbnailView::ApplySettings(vcl::RenderContext& rRenderContext)
     mpItemAttrs->aTextColor = maTextColor.getBColor();
     mpItemAttrs->aHighlightColor = maHighlightColor.getBColor();
     mpItemAttrs->aHighlightTextColor = maHighlightTextColor.getBColor();
+    mpItemAttrs->aSelectHighlightColor = maSelectHighlightColor.getBColor();
+    mpItemAttrs->aSelectHighlightTextColor = maSelectHighlightTextColor.getBColor();
     mpItemAttrs->fHighlightTransparence = mfHighlightTransparence;
     mpItemAttrs->aFontAttr = getFontAttributeFromVclFont(mpItemAttrs->aFontSize,GetFont(),false,true);
     mpItemAttrs->nMaxTextLength = 0;
 }
 
-void ThumbnailView::ImplInitScrollBar()
-{
-    if ( GetStyle() & WB_VSCROLL )
-    {
-        if ( !mpScrBar )
-        {
-            mpScrBar = VclPtr<ScrollBar>::Create( this, WB_VSCROLL | WB_DRAG );
-            mpScrBar->SetScrollHdl( LINK( this, ThumbnailView, ImplScrollHdl ) );
-        }
-        else
-        {
-            // adapt the width because of the changed settings
-            long nScrBarWidth = GetSettings().GetStyleSettings().GetScrollBarSize();
-            mpScrBar->setPosSizePixel( 0, 0, nScrBarWidth, 0, PosSizeFlags::Width );
-        }
-    }
-}
-
-void ThumbnailView::DrawItem(ThumbnailViewItem *pItem)
+void ThumbnailView::DrawItem(ThumbnailViewItem const *pItem)
 {
     if (pItem->isVisible())
     {
-        Rectangle aRect = pItem->getDrawArea();
+        ::tools::Rectangle aRect = pItem->getDrawArea();
 
         if ((aRect.GetHeight() > 0) && (aRect.GetWidth() > 0))
             Invalidate(aRect);
@@ -246,7 +226,7 @@ void ThumbnailView::OnItemDblClicked (ThumbnailViewItem*)
 
 css::uno::Reference< css::accessibility::XAccessible > ThumbnailView::CreateAccessible()
 {
-    return new ThumbnailViewAcc( this, mbIsTransientChildrenDisabled );
+    return new ThumbnailViewAcc( this );
 }
 
 void ThumbnailView::CalculateItemPositions (bool bScrollBarUsed)
@@ -261,7 +241,19 @@ void ThumbnailView::CalculateItemPositions (bool bScrollBarUsed)
 
     // consider the scrolling
     if ( nStyle & WB_VSCROLL )
-        ImplInitScrollBar();
+    {
+        if ( !mpScrBar )
+        {
+            mpScrBar = VclPtr<ScrollBar>::Create( this, WB_VSCROLL | WB_DRAG );
+            mpScrBar->SetScrollHdl( LINK( this, ThumbnailView, ImplScrollHdl ) );
+        }
+        else
+        {
+            // adapt the width because of the changed settings
+            long nScrBarWidth = GetSettings().GetStyleSettings().GetScrollBarSize();
+            mpScrBar->setPosSizePixel( 0, 0, nScrBarWidth, 0, PosSizeFlags::Width );
+        }
+    }
     else
     {
         if ( mpScrBar )
@@ -286,17 +278,17 @@ void ThumbnailView::CalculateItemPositions (bool bScrollBarUsed)
         nScrBarWidth = mpScrBar->GetSizePixel().Width();
 
     // calculate maximum number of visible columns
-    mnCols = (sal_uInt16)((aWinSize.Width()-nScrBarWidth) / (mnItemWidth));
+    mnCols = static_cast<sal_uInt16>((aWinSize.Width()-nScrBarWidth) / (mnItemWidth));
 
     if (!mnCols)
         mnCols = 1;
 
     // calculate maximum number of visible rows
-    mnVisLines = (sal_uInt16)((aWinSize.Height()-mnHeaderHeight) / (mnItemHeight));
+    mnVisLines = static_cast<sal_uInt16>(aWinSize.Height() / mnItemHeight);
 
     // calculate empty space
     long nHSpace = aWinSize.Width()-nScrBarWidth - mnCols*mnItemWidth;
-    long nVSpace = aWinSize.Height()-mnHeaderHeight - mnVisLines*mnItemHeight;
+    long nVSpace = aWinSize.Height() - mnVisLines*mnItemHeight;
     long nHItemSpace = nHSpace / (mnCols+1);
     long nVItemSpace = nVSpace / (mnVisLines+1);
 
@@ -309,20 +301,20 @@ void ThumbnailView::CalculateItemPositions (bool bScrollBarUsed)
 
     if ( mnLines <= mnVisLines )
         mnFirstLine = 0;
-    else if ( mnFirstLine > (sal_uInt16)(mnLines-mnVisLines) )
-        mnFirstLine = (sal_uInt16)(mnLines-mnVisLines);
+    else if ( mnFirstLine > static_cast<sal_uInt16>(mnLines-mnVisLines) )
+        mnFirstLine = static_cast<sal_uInt16>(mnLines-mnVisLines);
 
     mbHasVisibleItems = true;
 
     long nItemHeightOffset = mnItemHeight + nVItemSpace;
     long nHiddenLines = (static_cast<long>(
         ( mnLines - 1 ) * nItemHeightOffset * nScrollRatio ) -
-        nVItemSpace - mnHeaderHeight) /
+        nVItemSpace ) /
         nItemHeightOffset;
 
     // calculate offsets
     long nStartX = nHItemSpace;
-    long nStartY = nVItemSpace + mnHeaderHeight;
+    long nStartY = nVItemSpace;
 
     // calculate and draw items
     long x = nStartX;
@@ -355,7 +347,7 @@ void ThumbnailView::CalculateItemPositions (bool bScrollBarUsed)
                 {
                     css::uno::Any aOldAny, aNewAny;
 
-                    aNewAny <<= pItem->GetAccessible( mbIsTransientChildrenDisabled );
+                    aNewAny <<= pItem->GetAccessible( false );
                     ImplFireAccessibleEvent( css::accessibility::AccessibleEventId::CHILD, aOldAny, aNewAny );
                 }
 
@@ -364,8 +356,8 @@ void ThumbnailView::CalculateItemPositions (bool bScrollBarUsed)
                 maItemStateHdl.Call(pItem);
             }
 
-            pItem->setDrawArea(Rectangle( Point(x,y), Size(mnItemWidth, mnItemHeight) ));
-            pItem->calculateItemsPosition(mnThumbnailHeight,mnDisplayHeight,mnItemPadding,mpItemAttrs->nMaxTextLength,mpItemAttrs);
+            pItem->setDrawArea(::tools::Rectangle( Point(x,y), Size(mnItemWidth, mnItemHeight) ));
+            pItem->calculateItemsPosition(mnThumbnailHeight,mnDisplayHeight,mnItemPadding,mpItemAttrs->nMaxTextLength,mpItemAttrs.get());
 
             if ( !((nCurCount+1) % mnCols) )
             {
@@ -383,7 +375,7 @@ void ThumbnailView::CalculateItemPositions (bool bScrollBarUsed)
                 {
                     css::uno::Any aOldAny, aNewAny;
 
-                    aOldAny <<= pItem->GetAccessible( mbIsTransientChildrenDisabled );
+                    aOldAny <<= pItem->GetAccessible( false );
                     ImplFireAccessibleEvent( css::accessibility::AccessibleEventId::CHILD, aOldAny, aNewAny );
                 }
 
@@ -406,14 +398,14 @@ void ThumbnailView::CalculateItemPositions (bool bScrollBarUsed)
         mbScroll = mnLines > mnVisLines;
 
 
-        Point aPos( aWinSize.Width() - nScrBarWidth, mnHeaderHeight );
-        Size aSize( nScrBarWidth, aWinSize.Height() - mnHeaderHeight );
+        Point aPos( aWinSize.Width() - nScrBarWidth, 0 );
+        Size aSize( nScrBarWidth, aWinSize.Height() );
 
         mpScrBar->SetPosSizePixel( aPos, aSize );
-        mpScrBar->SetRangeMax( (nCurCount+mnCols-1)*mnFineness/mnCols);
+        mpScrBar->SetRangeMax( (nCurCount+mnCols-1)*gnFineness/mnCols);
         mpScrBar->SetVisibleSize( mnVisLines );
         if (!bScrollBarUsed)
-            mpScrBar->SetThumbPos( (long)mnFirstLine*mnFineness );
+            mpScrBar->SetThumbPos( static_cast<long>(mnFirstLine)*gnFineness );
         long nPageSize = mnVisLines;
         if ( nPageSize < 1 )
             nPageSize = 1;
@@ -466,7 +458,7 @@ ThumbnailViewItem* ThumbnailView::ImplGetVisibleItem( sal_uInt16 nVisiblePos )
 
     for ( size_t n = 0; n < nItemCount; ++n )
     {
-        ThumbnailViewItem *const pItem = mItemList[n];
+        ThumbnailViewItem *const pItem = mItemList[n].get();
 
         if ( pItem->isVisible() && !nVisiblePos-- )
             return pItem;
@@ -489,7 +481,7 @@ bool ThumbnailView::ImplHasAccessibleListeners()
     return( pAcc && pAcc->HasAccessibleListeners() );
 }
 
-IMPL_LINK_TYPED( ThumbnailView,ImplScrollHdl, ScrollBar*, pScrollBar, void )
+IMPL_LINK( ThumbnailView,ImplScrollHdl, ScrollBar*, pScrollBar, void )
 {
     if ( pScrollBar->GetDelta() )
     {
@@ -523,7 +515,7 @@ void ThumbnailView::KeyInput( const KeyEvent& rKEvt )
 
     if (aKeyCode.IsShift() && bHasSelRange)
     {
-        //If the last elemented selected is the start range position
+        //If the last element selected is the start range position
         //search for the first selected item
         size_t nSelPos = mpStartSelRange - mFilteredItemList.begin();
 
@@ -566,7 +558,7 @@ void ThumbnailView::KeyInput( const KeyEvent& rKEvt )
                 if ( bFoundLast )
                 {
                     //If we are in the second last row just go the one in
-                    //the row below, if theres not row below just go to the
+                    //the row below, if there's not row below just go to the
                     //last item but for the last row don't do anything.
                     if ( nLastPos + mnCols < mFilteredItemList.size( ) )
                     {
@@ -602,12 +594,12 @@ void ThumbnailView::KeyInput( const KeyEvent& rKEvt )
                 if ( bFoundLast )
                     OnItemDblClicked( mFilteredItemList[nLastPos] );
             }
-            //fall-through
+            [[fallthrough]];
         default:
             Control::KeyInput( rKEvt );
     }
 
-    if ( pNext )
+    if ( pNext  && mbIsMultiSelectionEnabled)
     {
         if (aKeyCode.IsShift() && bValidRange)
         {
@@ -672,6 +664,12 @@ void ThumbnailView::KeyInput( const KeyEvent& rKEvt )
 
         MakeItemVisible(pNext->mnId);
     }
+    else if(pNext && !mbIsMultiSelectionEnabled)
+    {
+        deselectItems();
+        SelectItem(pNext->mnId);
+        MakeItemVisible(pNext->mnId);
+    }
 }
 
 void ThumbnailView::MakeItemVisible( sal_uInt16 nItemId )
@@ -724,7 +722,17 @@ void ThumbnailView::MouseButtonDown( const MouseEvent& rMEvt )
         return;
     }
 
-    if ( rMEvt.GetClicks() == 1 )
+    if ( rMEvt.GetClicks() == 1 && !mbIsMultiSelectionEnabled )
+    {
+        deselectItems();
+        pItem->setSelection(!pItem->isSelected());
+
+        if (!pItem->isHighlighted())
+            DrawItem(pItem);
+
+        maItemStateHdl.Call(pItem);
+    }
+    else if(rMEvt.GetClicks() == 1)
     {
         if (rMEvt.IsMod1())
         {
@@ -799,12 +807,6 @@ void ThumbnailView::MouseButtonDown( const MouseEvent& rMEvt )
             mpStartSelRange = mFilteredItemList.begin() + nPos;
         }
 
-        if (pItem->isSelected())
-        {
-            bool bClickOnTitle = pItem->getTextArea().IsInside(rMEvt.GetPosPixel());
-            pItem->setEditTitle(bClickOnTitle);
-        }
-
         if (!pItem->isHighlighted())
             DrawItem(pItem);
 
@@ -812,11 +814,6 @@ void ThumbnailView::MouseButtonDown( const MouseEvent& rMEvt )
 
         //fire accessible event??
     }
-}
-
-void ThumbnailView::MouseButtonUp( const MouseEvent& rMEvt )
-{
-    Control::MouseButtonUp( rMEvt );
 }
 
 void ThumbnailView::Command( const CommandEvent& rCEvt )
@@ -832,7 +829,7 @@ void ThumbnailView::Command( const CommandEvent& rCEvt )
     Control::Command( rCEvt );
 }
 
-void ThumbnailView::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void ThumbnailView::Paint(vcl::RenderContext& rRenderContext, const ::tools::Rectangle& rRect)
 {
     size_t nItemCount = mItemList.size();
 
@@ -840,7 +837,7 @@ void ThumbnailView::Paint(vcl::RenderContext& rRenderContext, const Rectangle& r
     drawinglayer::primitive2d::Primitive2DContainer aSeq(1);
     aSeq[0] = drawinglayer::primitive2d::Primitive2DReference(
             new PolyPolygonColorPrimitive2D(
-                    B2DPolyPolygon( ::tools::Polygon(Rectangle(Point(), GetOutputSizePixel()), 0, 0).getB2DPolygon()),
+                    B2DPolyPolygon( ::tools::Polygon(::tools::Rectangle(Point(), GetOutputSizePixel()), 0, 0).getB2DPolygon()),
                     maFillColor.getBColor()));
 
     // Create the processor and process the primitives
@@ -853,11 +850,11 @@ void ThumbnailView::Paint(vcl::RenderContext& rRenderContext, const Rectangle& r
     // draw items
     for (size_t i = 0; i < nItemCount; i++)
     {
-        ThumbnailViewItem *const pItem = mItemList[i];
+        ThumbnailViewItem *const pItem = mItemList[i].get();
 
         if (pItem->isVisible())
         {
-            pItem->Paint(pProcessor.get(), mpItemAttrs);
+            pItem->Paint(pProcessor.get(), mpItemAttrs.get());
         }
     }
 
@@ -875,7 +872,7 @@ void ThumbnailView::GetFocus()
             nSelected = i;
     }
 
-    if (nSelected == -1 && mItemList.size() > 0)
+    if (nSelected == -1 && !mItemList.empty())
     {
         SelectItem(1);
     }
@@ -1010,14 +1007,14 @@ void ThumbnailView::Clear()
         Invalidate();
 }
 
-void ThumbnailView::updateItems (const std::vector<ThumbnailViewItem*> &items)
+void ThumbnailView::updateItems (std::vector<std::unique_ptr<ThumbnailViewItem>> items)
 {
     ImplDeleteItems();
 
     // reset variables
     mnFirstLine     = 0;
 
-    mItemList = items;
+    mItemList = std::move(items);
 
     filterItems(maFilterFunc);
 }
@@ -1072,62 +1069,54 @@ void ThumbnailView::SelectItem( sal_uInt16 nItemId )
         return;
 
     ThumbnailViewItem* pItem = mFilteredItemList[nItemPos];
-    if (!pItem->isSelected())
+    if (pItem->isSelected())
+        return;
+
+    pItem->setSelection(true);
+    maItemStateHdl.Call(pItem);
+
+    if (IsReallyVisible() && IsUpdateMode())
+        Invalidate();
+
+    bool bNewOut = IsReallyVisible() && IsUpdateMode();
+
+    // if necessary scroll to the visible area
+    if (mbScroll && nItemId && mnCols)
     {
-        pItem->setSelection(true);
-        maItemStateHdl.Call(pItem);
-
-        if (IsReallyVisible() && IsUpdateMode())
-            Invalidate();
-
-        bool bNewOut = IsReallyVisible() && IsUpdateMode();
-
-        // if necessary scroll to the visible area
-        if ( mbScroll && nItemId )
+        sal_uInt16 nNewLine = static_cast<sal_uInt16>(nItemPos / mnCols);
+        if ( nNewLine < mnFirstLine )
         {
-            sal_uInt16 nNewLine = (sal_uInt16)(nItemPos / mnCols);
-            if ( nNewLine < mnFirstLine )
-            {
-                mnFirstLine = nNewLine;
-            }
-            else if ( nNewLine > (sal_uInt16)(mnFirstLine+mnVisLines-1) )
-            {
-                mnFirstLine = (sal_uInt16)(nNewLine-mnVisLines+1);
-            }
+            mnFirstLine = nNewLine;
         }
-
-        if ( bNewOut )
+        else if ( nNewLine > static_cast<sal_uInt16>(mnFirstLine+mnVisLines-1) )
         {
-            if ( IsReallyVisible() && IsUpdateMode() )
-                Invalidate();
-        }
-
-        if( ImplHasAccessibleListeners() )
-        {
-            // focus event (select)
-            ThumbnailViewItemAcc* pItemAcc = ThumbnailViewItemAcc::getImplementation( pItem->GetAccessible( mbIsTransientChildrenDisabled ) );
-
-            if( pItemAcc )
-            {
-                css::uno::Any aOldAny, aNewAny;
-                if( !mbIsTransientChildrenDisabled )
-                {
-                    aNewAny <<= css::uno::Reference< css::uno::XInterface >(
-                        static_cast< ::cppu::OWeakObject* >( pItemAcc ));
-                    ImplFireAccessibleEvent( css::accessibility::AccessibleEventId::ACTIVE_DESCENDANT_CHANGED, aOldAny, aNewAny );
-                }
-                else
-                {
-                    aNewAny <<= css::accessibility::AccessibleStateType::FOCUSED;
-                    pItemAcc->FireAccessibleEvent( css::accessibility::AccessibleEventId::STATE_CHANGED, aOldAny, aNewAny );
-                }
-            }
-
-            // selection event
-            css::uno::Any aOldAny, aNewAny;
-            ImplFireAccessibleEvent( css::accessibility::AccessibleEventId::SELECTION_CHANGED, aOldAny, aNewAny );
+            mnFirstLine = static_cast<sal_uInt16>(nNewLine-mnVisLines+1);
         }
     }
+
+    if ( bNewOut )
+    {
+        if ( IsReallyVisible() && IsUpdateMode() )
+            Invalidate();
+    }
+
+    if( !ImplHasAccessibleListeners() )
+        return;
+
+    // focus event (select)
+    ThumbnailViewItemAcc* pItemAcc = ThumbnailViewItemAcc::getImplementation( pItem->GetAccessible( false ) );
+
+    if( pItemAcc )
+    {
+        css::uno::Any aOldAny, aNewAny;
+        aNewAny <<= css::uno::Reference< css::uno::XInterface >(
+            static_cast< ::cppu::OWeakObject* >( pItemAcc ));
+        ImplFireAccessibleEvent( css::accessibility::AccessibleEventId::ACTIVE_DESCENDANT_CHANGED, aOldAny, aNewAny );
+    }
+
+    // selection event
+    css::uno::Any aOldAny, aNewAny;
+    ImplFireAccessibleEvent( css::accessibility::AccessibleEventId::SELECTION_CHANGED, aOldAny, aNewAny );
 }
 
 bool ThumbnailView::IsItemSelected( sal_uInt16 nItemId ) const
@@ -1142,14 +1131,13 @@ bool ThumbnailView::IsItemSelected( sal_uInt16 nItemId ) const
 
 void ThumbnailView::deselectItems()
 {
-    for (size_t i = 0, n = mItemList.size(); i < n; ++i)
+    for (std::unique_ptr<ThumbnailViewItem>& p : mItemList)
     {
-        if (mItemList[i]->isSelected())
+        if (p->isSelected())
         {
-            mItemList[i]->setEditTitle(false);
-            mItemList[i]->setSelection(false);
+            p->setSelection(false);
 
-            maItemStateHdl.Call(mItemList[i]);
+            maItemStateHdl.Call(p.get());
         }
     }
 
@@ -1160,6 +1148,11 @@ void ThumbnailView::deselectItems()
 void ThumbnailView::ShowTooltips( bool bShowTooltips )
 {
     mbShowTooltips = bShowTooltips;
+}
+
+void ThumbnailView::SetMultiSelectionEnabled( bool bIsMultiSelectionEnabled )
+{
+    mbIsMultiSelectionEnabled = bIsMultiSelectionEnabled;
 }
 
 void ThumbnailView::filterItems(const std::function<bool (const ThumbnailViewItem*)> &func)
@@ -1175,7 +1168,7 @@ void ThumbnailView::filterItems(const std::function<bool (const ThumbnailViewIte
 
     for (size_t i = 0, n = mItemList.size(); i < n; ++i)
     {
-        ThumbnailViewItem *const pItem = mItemList[i];
+        ThumbnailViewItem *const pItem = mItemList[i].get();
 
         if (maFilterFunc(pItem))
         {
@@ -1195,7 +1188,7 @@ void ThumbnailView::filterItems(const std::function<bool (const ThumbnailViewIte
                 {
                     css::uno::Any aOldAny, aNewAny;
 
-                    aOldAny <<= pItem->GetAccessible( mbIsTransientChildrenDisabled );
+                    aOldAny <<= pItem->GetAccessible( false );
                     ImplFireAccessibleEvent( css::accessibility::AccessibleEventId::CHILD, aOldAny, aNewAny );
                 }
 
@@ -1208,15 +1201,6 @@ void ThumbnailView::filterItems(const std::function<bool (const ThumbnailViewIte
     }
 
     mpStartSelRange = bHasSelRange ? mFilteredItemList.begin()  + nSelPos : mFilteredItemList.end();
-    CalculateItemPositions();
-
-    Invalidate();
-}
-
-void ThumbnailView::sortItems(const std::function<bool (const ThumbnailViewItem*, const ThumbnailViewItem*)> &func)
-{
-    std::sort(mItemList.begin(),mItemList.end(),func);
-
     CalculateItemPositions();
 
     Invalidate();
@@ -1267,12 +1251,9 @@ BitmapEx ThumbnailView::readThumbnail(const OUString &msURL)
         }
         catch (const uno::Exception& rException)
         {
-            OSL_TRACE (
-                "caught exception while trying to access Thumbnail/thumbnail.png of %s: %s",
-                OUStringToOString(msURL,
-                    RTL_TEXTENCODING_UTF8).getStr(),
-                OUStringToOString(rException.Message,
-                    RTL_TEXTENCODING_UTF8).getStr());
+            SAL_WARN("sfx",
+                "caught exception while trying to access Thumbnail/thumbnail.png of "
+                 << msURL << ": " << rException);
         }
 
         try
@@ -1297,22 +1278,16 @@ BitmapEx ThumbnailView::readThumbnail(const OUString &msURL)
         }
         catch (const uno::Exception& rException)
         {
-            OSL_TRACE (
-                "caught exception while trying to access Thumbnails/thumbnail.png of %s: %s",
-                OUStringToOString(msURL,
-                    RTL_TEXTENCODING_UTF8).getStr(),
-                OUStringToOString(rException.Message,
-                    RTL_TEXTENCODING_UTF8).getStr());
+            SAL_WARN("sfx",
+                "caught exception while trying to access Thumbnails/thumbnail.png of "
+                << msURL << ": " << rException);
         }
     }
     catch (const uno::Exception& rException)
     {
-        OSL_TRACE (
-            "caught exception while trying to access tuhmbnail of %s: %s",
-            OUStringToOString(msURL,
-                RTL_TEXTENCODING_UTF8).getStr(),
-            OUStringToOString(rException.Message,
-                RTL_TEXTENCODING_UTF8).getStr());
+        SAL_WARN("sfx",
+            "caught exception while trying to access thumbnail of "
+            << msURL << ": " << rException);
     }
 
     // Extract the image from the stream.

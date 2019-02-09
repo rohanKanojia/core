@@ -13,12 +13,11 @@
 #include <vcl/dialog.hxx>
 #include <vcl/button.hxx>
 #include <vcl/fixed.hxx>
+#include <vcl/layout.hxx>
+#include <types.hxx>
 
-#include "global.hxx"
-
-#include "tabvwsh.hxx"
-#include <sfx2/bindings.hxx>
-#include <sfx2/dispatch.hxx>
+class ScTabViewShell;
+class ScDocument;
 
 #define MAX_DATAFORM_COLS   256
 #define MAX_DATAFORM_ROWS   32000
@@ -47,32 +46,31 @@ private:
     SCROW           nStartRow;
     SCROW           nEndRow;
     SCTAB           nTab;
-    bool            bNoSelection;
 
     std::vector<VclPtr<FixedText> > maFixedTexts;
     std::vector<VclPtr<Edit> >      maEdits;
 
 public:
     ScDataFormDlg( vcl::Window* pParent, ScTabViewShell* pTabViewShell);
-    virtual ~ScDataFormDlg();
+    virtual ~ScDataFormDlg() override;
     virtual void dispose() override;
 
-    void FillCtrls(SCROW nCurrentRow);
+    void FillCtrls();
 private:
 
     void SetButtonState();
 
     // Handler:
-    DECL_LINK_TYPED(Impl_NewHdl, Button*, void);
-    DECL_LINK_TYPED(Impl_PrevHdl, Button*, void);
-    DECL_LINK_TYPED(Impl_NextHdl, Button*, void);
+    DECL_LINK(Impl_NewHdl, Button*, void);
+    DECL_LINK(Impl_PrevHdl, Button*, void);
+    DECL_LINK(Impl_NextHdl, Button*, void);
 
-    DECL_LINK_TYPED(Impl_RestoreHdl, Button*, void);
-    DECL_LINK_TYPED(Impl_DeleteHdl, Button*, void);
-    DECL_LINK_TYPED(Impl_CloseHdl, Button*, void);
+    DECL_LINK(Impl_RestoreHdl, Button*, void);
+    DECL_LINK(Impl_DeleteHdl, Button*, void);
+    DECL_LINK(Impl_CloseHdl, Button*, void);
 
-    DECL_LINK_TYPED(Impl_ScrollHdl, ScrollBar*, void);
-    DECL_LINK_TYPED(Impl_DataModifyHdl, Edit&, void);
+    DECL_LINK(Impl_ScrollHdl, ScrollBar*, void);
+    DECL_LINK(Impl_DataModifyHdl, Edit&, void);
 };
 #endif // INCLUDED_SC_SOURCE_UI_INC_DATAFDLG_HXX
 

@@ -26,31 +26,32 @@ namespace connectivity
         class Tables: public ::connectivity::sdbcx::OCollection
         {
         protected:
-            ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XDatabaseMetaData >
+            css::uno::Reference< css::sdbc::XDatabaseMetaData >
                 m_xMetaData;
 
+            static OUString createStandardColumnPart(const css::uno::Reference< css::beans::XPropertySet >& xColProp,const css::uno::Reference< com::sun::star::sdbc::XConnection>& _xConnection);
+
             // OCollection
-            virtual void impl_refresh()
-                throw(::com::sun::star::uno::RuntimeException) override;
+            virtual void impl_refresh() override;
             virtual ::connectivity::sdbcx::ObjectType createObject(
-                                                const ::rtl::OUString& rName) override;
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >
+                                                const OUString& rName) override;
+            virtual css::uno::Reference< css::beans::XPropertySet >
                     createDescriptor() override;
             virtual ::connectivity::sdbcx::ObjectType appendObject(
                         const OUString& rName,
-                        const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& rDescriptor) override;
+                        const css::uno::Reference< css::beans::XPropertySet >& rDescriptor) override;
 
         public:
-            Tables(const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XDatabaseMetaData >& rMetaData,
+            Tables(const css::uno::Reference< css::sdbc::XDatabaseMetaData >& rMetaData,
                    ::cppu::OWeakObject& rParent,
                    ::osl::Mutex& rMutex,
-                   ::connectivity::TStringVector& rNames) : sdbcx::OCollection(rParent, true, rMutex, rNames), m_xMetaData(rMetaData) {}
+                   ::std::vector< OUString> const & rNames) : sdbcx::OCollection(rParent, true, rMutex, rNames), m_xMetaData(rMetaData) {}
 
             // TODO: we should also implement XDataDescriptorFactory, XRefreshable,
             // XAppend,  etc., but all are optional.
 
             // XDrop
-            virtual void dropObject(sal_Int32 nPosition, const ::rtl::OUString& rName) override;
+            virtual void dropObject(sal_Int32 nPosition, const OUString& rName) override;
 
         };
 

@@ -20,6 +20,7 @@
 #ifndef INCLUDED_SVX_SVDORECT_HXX
 #define INCLUDED_SVX_SVDORECT_HXX
 
+#include <memory>
 #include <svx/svdotext.hxx>
 #include <svx/svxdllapi.h>
 
@@ -43,13 +44,13 @@ private:
     friend class SdrTextObj; // Due to SetXPolyDirty for GrowAdjust
 
 protected:
-    virtual sdr::contact::ViewContact* CreateObjectSpecificViewContact() override;
-    virtual sdr::properties::BaseProperties* CreateObjectSpecificProperties() override;
+    virtual std::unique_ptr<sdr::contact::ViewContact> CreateObjectSpecificViewContact() override;
+    virtual std::unique_ptr<sdr::properties::BaseProperties> CreateObjectSpecificProperties() override;
 
-    XPolygon* mpXPoly;
+    std::unique_ptr<XPolygon> mpXPoly;
 
 protected:
-    XPolygon ImpCalcXPoly(const Rectangle& rRect1, long nRad1) const;
+    XPolygon ImpCalcXPoly(const tools::Rectangle& rRect1, long nRad1) const;
     void SetXPolyDirty();
 
     /// Subclasses should override RecalcXPoly() by creating an XPolygon
@@ -58,6 +59,9 @@ protected:
     const XPolygon& GetXPoly() const;
     virtual void           RestGeoData(const SdrObjGeoData& rGeo) override;
 
+    // protected destructor
+    virtual ~SdrRectObj() override;
+
 public:
     /**
      * The corner radius parameter is dropped at some point.
@@ -65,31 +69,37 @@ public:
      *
      * Constructor of a rectangular drawing object
      */
-    SdrRectObj();
-    SdrRectObj(const Rectangle& rRect);
+    SdrRectObj(SdrModel& rSdrModel);
+    SdrRectObj(
+        SdrModel& rSdrModel,
+        const tools::Rectangle& rRect);
 
     SdrRectObj& operator=(const SdrRectObj& rCopy);
 
     // Constructor of a text frame
-    SdrRectObj(SdrObjKind eNewTextKind);
-    SdrRectObj(SdrObjKind eNewTextKind, const Rectangle& rRect);
-    virtual ~SdrRectObj();
+    SdrRectObj(
+        SdrModel& rSdrModel,
+        SdrObjKind eNewTextKind);
+    SdrRectObj(
+        SdrModel& rSdrModel,
+        SdrObjKind eNewTextKind,
+        const tools::Rectangle& rRect);
 
     virtual void TakeObjInfo(SdrObjTransformInfoRec& rInfo) const override;
     virtual sal_uInt16 GetObjIdentifier() const override;
-    virtual void TakeUnrotatedSnapRect(Rectangle& rRect) const override;
+    virtual void TakeUnrotatedSnapRect(tools::Rectangle& rRect) const override;
 
     virtual OUString TakeObjNameSingul() const override;
     virtual OUString TakeObjNamePlural() const override;
 
-    virtual SdrRectObj* Clone() const override;
+    virtual SdrRectObj* CloneSdrObject(SdrModel& rTargetModel) const override;
     virtual void RecalcSnapRect() override;
-    virtual void NbcSetSnapRect(const Rectangle& rRect) override;
-    virtual void NbcSetLogicRect(const Rectangle& rRect) override;
+    virtual void NbcSetSnapRect(const tools::Rectangle& rRect) override;
+    virtual void NbcSetLogicRect(const tools::Rectangle& rRect) override;
     virtual basegfx::B2DPolyPolygon TakeXorPoly() const override;
 
     virtual sal_uInt32 GetHdlCount() const override;
-    virtual SdrHdl* GetHdl(sal_uInt32 nHdlNum) const override;
+    virtual void AddToHdlList(SdrHdlList& rHdlList) const override;
 
     // Special drag methods
     virtual bool hasSpecialDrag() const override;
@@ -105,9 +115,6 @@ public:
     virtual void NbcRotate(const Point& rRef, long nAngle, double sn, double cs) override;
     virtual void NbcMirror(const Point& rRef1, const Point& rRef2) override;
     virtual void NbcShear(const Point& rRef, long nAngle, double tn, bool bVShear) override;
-
-    virtual bool DoMacro(const SdrObjMacroHitRec& rRec) override;
-    virtual OUString GetMacroPopupComment(const SdrObjMacroHitRec& rRec) const override;
 
     virtual SdrGluePoint GetVertexGluePoint(sal_uInt16 nNum) const override;
     virtual SdrGluePoint GetCornerGluePoint(sal_uInt16 nNum) const override;

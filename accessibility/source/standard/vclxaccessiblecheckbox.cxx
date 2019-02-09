@@ -17,21 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <accessibility/standard/vclxaccessiblecheckbox.hxx>
+#include <standard/vclxaccessiblecheckbox.hxx>
 
 #include <toolkit/awt/vclxwindows.hxx>
-#include <accessibility/helper/accresmgr.hxx>
-#include <accessibility/helper/accessiblestrings.hrc>
+#include <helper/accresmgr.hxx>
+#include <strings.hrc>
 
 #include <unotools/accessiblestatesethelper.hxx>
 #include <comphelper/accessiblekeybindinghelper.hxx>
 #include <com/sun/star/awt/KeyModifier.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <cppuhelper/typeprovider.hxx>
-#include <comphelper/sequence.hxx>
 
 #include <vcl/button.hxx>
+#include <vcl/event.hxx>
+#include <vcl/vclevent.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -52,17 +54,12 @@ VCLXAccessibleCheckBox::VCLXAccessibleCheckBox( VCLXWindow* pVCLWindow )
 }
 
 
-VCLXAccessibleCheckBox::~VCLXAccessibleCheckBox()
-{
-}
-
-
 bool VCLXAccessibleCheckBox::IsChecked()
 {
     bool bChecked = false;
 
     VCLXCheckBox* pVCLXCheckBox = static_cast< VCLXCheckBox* >( GetVCLXWindow() );
-    if ( pVCLXCheckBox && pVCLXCheckBox->getState() == (sal_Int16) 1 )
+    if ( pVCLXCheckBox && pVCLXCheckBox->getState() == sal_Int16(1) )
         bChecked = true;
 
     return bChecked;
@@ -74,7 +71,7 @@ bool VCLXAccessibleCheckBox::IsIndeterminate()
     bool bIndeterminate = false;
 
     VCLXCheckBox* pVCLXCheckBox = static_cast< VCLXCheckBox* >( GetVCLXWindow() );
-    if ( pVCLXCheckBox && pVCLXCheckBox->getState() == (sal_Int16) 2 )
+    if ( pVCLXCheckBox && pVCLXCheckBox->getState() == sal_Int16(2) )
         bIndeterminate = true;
 
     return bIndeterminate;
@@ -115,7 +112,7 @@ void VCLXAccessibleCheckBox::ProcessWindowEvent( const VclWindowEvent& rVclWindo
 {
     switch ( rVclWindowEvent.GetId() )
     {
-        case VCLEVENT_CHECKBOX_TOGGLE:
+        case VclEventId::CheckboxToggle:
         {
             SetChecked( IsChecked() );
             SetIndeterminate( IsIndeterminate() );
@@ -156,23 +153,22 @@ IMPLEMENT_FORWARD_XTYPEPROVIDER2( VCLXAccessibleCheckBox, VCLXAccessibleTextComp
 // XServiceInfo
 
 
-OUString VCLXAccessibleCheckBox::getImplementationName() throw (RuntimeException, std::exception)
+OUString VCLXAccessibleCheckBox::getImplementationName()
 {
     return OUString( "com.sun.star.comp.toolkit.AccessibleCheckBox" );
 }
 
 
-Sequence< OUString > VCLXAccessibleCheckBox::getSupportedServiceNames() throw (RuntimeException, std::exception)
+Sequence< OUString > VCLXAccessibleCheckBox::getSupportedServiceNames()
 {
-    Sequence< OUString > aNames { "com.sun.star.awt.AccessibleCheckBox" };
-    return aNames;
+    return { "com.sun.star.awt.AccessibleCheckBox" };
 }
 
 
 // XAccessibleAction
 
 
-sal_Int32 VCLXAccessibleCheckBox::getAccessibleActionCount( ) throw (RuntimeException, std::exception)
+sal_Int32 VCLXAccessibleCheckBox::getAccessibleActionCount( )
 {
     OExternalLockGuard aGuard( this );
 
@@ -180,62 +176,61 @@ sal_Int32 VCLXAccessibleCheckBox::getAccessibleActionCount( ) throw (RuntimeExce
 }
 
 
-sal_Bool VCLXAccessibleCheckBox::doAccessibleAction ( sal_Int32 nIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+sal_Bool VCLXAccessibleCheckBox::doAccessibleAction ( sal_Int32 nIndex )
 {
     OExternalLockGuard aGuard( this );
 
-    if ( nIndex < 0 || nIndex >= getAccessibleActionCount() )
+    if ( nIndex != 0 )
         throw IndexOutOfBoundsException();
 
     VclPtr< CheckBox > pCheckBox = GetAs< CheckBox >();
     VCLXCheckBox* pVCLXCheckBox = static_cast< VCLXCheckBox* >( GetVCLXWindow() );
     if ( pCheckBox && pVCLXCheckBox )
     {
-        sal_Int32 nValueMin = (sal_Int32) 0;
-        sal_Int32 nValueMax = (sal_Int32) 1;
+        sal_Int32 nValueMax = sal_Int32(1);
 
         if ( pCheckBox->IsTriStateEnabled() )
-            nValueMax = (sal_Int32) 2;
+            nValueMax = sal_Int32(2);
 
-        sal_Int32 nValue = (sal_Int32) pVCLXCheckBox->getState();
+        sal_Int32 nValue = static_cast<sal_Int32>(pVCLXCheckBox->getState());
 
         ++nValue;
 
         if ( nValue > nValueMax )
-            nValue = nValueMin;
+            nValue = 0;
 
-        pVCLXCheckBox->setState( (sal_Int16) nValue );
+        pVCLXCheckBox->setState( static_cast<sal_Int16>(nValue) );
     }
 
     return true;
 }
 
 
-OUString VCLXAccessibleCheckBox::getAccessibleActionDescription ( sal_Int32 nIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+OUString VCLXAccessibleCheckBox::getAccessibleActionDescription ( sal_Int32 nIndex )
 {
     OExternalLockGuard aGuard( this );
 
-    if ( nIndex < 0 || nIndex >= getAccessibleActionCount() )
+    if ( nIndex != 0 )
         throw IndexOutOfBoundsException();
 
     if(IsChecked())
-        return TK_RES_STRING( RID_STR_ACC_ACTION_UNCHECK );
+        return AccResId( RID_STR_ACC_ACTION_UNCHECK );
     else
-        return TK_RES_STRING( RID_STR_ACC_ACTION_CHECK );
+        return AccResId( RID_STR_ACC_ACTION_CHECK );
 }
 
 
-Reference< XAccessibleKeyBinding > VCLXAccessibleCheckBox::getAccessibleActionKeyBinding( sal_Int32 nIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+Reference< XAccessibleKeyBinding > VCLXAccessibleCheckBox::getAccessibleActionKeyBinding( sal_Int32 nIndex )
 {
     OExternalLockGuard aGuard( this );
 
-    if ( nIndex < 0 || nIndex >= getAccessibleActionCount() )
+    if ( nIndex != 0 )
         throw IndexOutOfBoundsException();
 
     OAccessibleKeyBindingHelper* pKeyBindingHelper = new OAccessibleKeyBindingHelper();
     Reference< XAccessibleKeyBinding > xKeyBinding = pKeyBindingHelper;
 
-    vcl::Window* pWindow = GetWindow();
+    VclPtr<vcl::Window> pWindow = GetWindow();
     if ( pWindow )
     {
         KeyEvent aKeyEvent = pWindow->GetActivationKey();
@@ -266,7 +261,7 @@ Reference< XAccessibleKeyBinding > VCLXAccessibleCheckBox::getAccessibleActionKe
 // XAccessibleValue
 
 
-Any VCLXAccessibleCheckBox::getCurrentValue(  ) throw (RuntimeException, std::exception)
+Any VCLXAccessibleCheckBox::getCurrentValue(  )
 {
     OExternalLockGuard aGuard( this );
 
@@ -274,13 +269,13 @@ Any VCLXAccessibleCheckBox::getCurrentValue(  ) throw (RuntimeException, std::ex
 
     VCLXCheckBox* pVCLXCheckBox = static_cast< VCLXCheckBox* >( GetVCLXWindow() );
     if ( pVCLXCheckBox )
-        aValue <<= (sal_Int32) pVCLXCheckBox->getState();
+        aValue <<= static_cast<sal_Int32>(pVCLXCheckBox->getState());
 
     return aValue;
 }
 
 
-sal_Bool VCLXAccessibleCheckBox::setCurrentValue( const Any& aNumber ) throw (RuntimeException, std::exception)
+sal_Bool VCLXAccessibleCheckBox::setCurrentValue( const Any& aNumber )
 {
     OExternalLockGuard aGuard( this );
 
@@ -291,15 +286,14 @@ sal_Bool VCLXAccessibleCheckBox::setCurrentValue( const Any& aNumber ) throw (Ru
     {
         sal_Int32 nValue = 0, nValueMin = 0, nValueMax = 0;
         OSL_VERIFY( aNumber >>= nValue );
-        OSL_VERIFY( getMinimumValue() >>= nValueMin );
-        OSL_VERIFY( getMaximumValue() >>= nValueMax );
+        nValueMax=implGetMaximumValue();
 
         if ( nValue < nValueMin )
             nValue = nValueMin;
         else if ( nValue > nValueMax )
             nValue = nValueMax;
 
-        pVCLXCheckBox->setState( (sal_Int16) nValue );
+        pVCLXCheckBox->setState( static_cast<sal_Int16>(nValue) );
         bReturn = true;
     }
 
@@ -307,28 +301,31 @@ sal_Bool VCLXAccessibleCheckBox::setCurrentValue( const Any& aNumber ) throw (Ru
 }
 
 
-Any VCLXAccessibleCheckBox::getMaximumValue(  ) throw (RuntimeException, std::exception)
+Any VCLXAccessibleCheckBox::getMaximumValue(  )
 {
     OExternalLockGuard aGuard( this );
 
     Any aValue;
-
-    VclPtr< CheckBox > pCheckBox = GetAs< CheckBox >();
-    if ( pCheckBox && pCheckBox->IsTriStateEnabled() )
-        aValue <<= (sal_Int32) 2;
-    else
-        aValue <<= (sal_Int32) 1;
+    aValue <<= implGetMaximumValue();
 
     return aValue;
 }
 
+sal_Int32 VCLXAccessibleCheckBox::implGetMaximumValue(  )
+{
+    VclPtr< CheckBox > pCheckBox = GetAs< CheckBox >();
+    if ( pCheckBox && pCheckBox->IsTriStateEnabled() )
+        return 2;
 
-Any VCLXAccessibleCheckBox::getMinimumValue(  ) throw (RuntimeException, std::exception)
+    return 1;
+}
+
+Any VCLXAccessibleCheckBox::getMinimumValue(  )
 {
     OExternalLockGuard aGuard( this );
 
     Any aValue;
-    aValue <<= (sal_Int32) 0;
+    aValue <<= sal_Int32(0);
 
     return aValue;
 }

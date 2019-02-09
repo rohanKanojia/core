@@ -12,53 +12,47 @@
 
 #include <sal/config.h>
 
-#include <rtl/ref.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/layout.hxx>
-
-#include "datastream.hxx"
+#include <vcl/weld.hxx>
 
 class ScDocShell;
-class SvtURLBox;
+class URLBox;
 class ScRange;
-class ComboBox;
 
 namespace sc {
 
-class DataStreamDlg : public ModalDialog
+class DataStream;
+
+class DataStreamDlg : public weld::GenericDialogController
 {
-    ScDocShell *mpDocShell;
+    ScDocShell *m_pDocShell;
 
-    VclPtr<SvtURLBox>      m_pCbUrl;
-    VclPtr<PushButton>     m_pBtnBrowse;
-    VclPtr<RadioButton>    m_pRBDirectData;
-    VclPtr<RadioButton>    m_pRBScriptData;
-    VclPtr<RadioButton>    m_pRBValuesInLine;
-    VclPtr<RadioButton>    m_pRBAddressValue;
-    VclPtr<CheckBox>       m_pCBRefreshOnEmpty;
-    VclPtr<RadioButton>    m_pRBDataDown;
-    VclPtr<RadioButton>    m_pRBRangeDown;
-    VclPtr<RadioButton>    m_pRBNoMove;
-    VclPtr<RadioButton>    m_pRBMaxLimit;
-    VclPtr<RadioButton>    m_pRBUnlimited;
-    VclPtr<Edit>           m_pEdRange;
-    VclPtr<Edit>           m_pEdLimit;
-    VclPtr<OKButton>       m_pBtnOk;
-    VclPtr<VclFrame>       m_pVclFrameLimit;
-    VclPtr<VclFrame>       m_pVclFrameMove;
+    std::unique_ptr<URLBox> m_xCbUrl;
+    std::unique_ptr<weld::Button> m_xBtnBrowse;
+    std::unique_ptr<weld::RadioButton> m_xRBValuesInLine;
+    std::unique_ptr<weld::RadioButton> m_xRBAddressValue;
+    std::unique_ptr<weld::CheckButton> m_xCBRefreshOnEmpty;
+    std::unique_ptr<weld::RadioButton> m_xRBDataDown;
+    std::unique_ptr<weld::RadioButton> m_xRBRangeDown;
+    std::unique_ptr<weld::RadioButton> m_xRBNoMove;
+    std::unique_ptr<weld::RadioButton> m_xRBMaxLimit;
+    std::unique_ptr<weld::RadioButton> m_xRBUnlimited;
+    std::unique_ptr<weld::Entry> m_xEdRange;
+    std::unique_ptr<weld::Entry> m_xEdLimit;
+    std::unique_ptr<weld::Button> m_xBtnOk;
+    std::unique_ptr<weld::Frame> m_xVclFrameLimit;
+    std::unique_ptr<weld::Frame> m_xVclFrameMove;
 
-    DECL_LINK_TYPED(UpdateClickHdl, Button*, void);
-    DECL_LINK_TYPED(UpdateHdl, Edit&, void);
-    DECL_LINK_TYPED(UpdateComboBoxHdl, ComboBox&, void);
-    DECL_LINK_TYPED(BrowseHdl, Button*, void);
+    DECL_LINK(UpdateClickHdl, weld::ToggleButton&, void);
+    DECL_LINK(UpdateHdl, weld::Entry&, void);
+    DECL_LINK(UpdateComboBoxHdl, weld::ComboBox&, void);
+    DECL_LINK(BrowseHdl, weld::Button&, void);
 
     void UpdateEnable();
     ScRange GetStartRange();
 
 public:
-    DataStreamDlg(ScDocShell *pDocShell, vcl::Window* pParent);
-    virtual ~DataStreamDlg();
-    virtual void dispose() override;
+    DataStreamDlg(ScDocShell *pDocShell, weld::Window* pParent);
+    virtual ~DataStreamDlg() override;
 
     void Init( const DataStream& rStrm );
 

@@ -19,18 +19,16 @@
 #ifndef INCLUDED_CPPU_SOURCE_UNO_PRIM_HXX
 #define INCLUDED_CPPU_SOURCE_UNO_PRIM_HXX
 
-#include "typelib/typedescription.h"
-#include "typelib/typeclass.h"
-#include "uno/sequence2.h"
-#include "uno/any2.h"
-#include "uno/data.h"
-#include "uno/mapping.h"
-#include "uno/dispatcher.h"
+#include <typelib/typedescription.h>
+#include <typelib/typeclass.h>
+#include <uno/sequence2.h>
+#include <uno/any2.h>
+#include <uno/data.h>
+#include <uno/mapping.h>
+#include <uno/dispatcher.h>
 
-#include "osl/interlck.h"
-#include "osl/diagnose.h"
-#include "rtl/ustring.hxx"
-#include "rtl/alloc.h"
+#include <osl/interlck.h>
+#include <stdint.h>
 
 namespace cppu
 {
@@ -99,12 +97,12 @@ inline sal_uInt32 calcSeqMemSize(
     sal_Int32 nElementSize, sal_Int32 nElements )
 {
     sal_uInt64 nSize =
-        (sal_uInt64) SAL_SEQUENCE_HEADER_SIZE +
-        ((sal_uInt64) nElementSize * (sal_uInt64) nElements);
+        static_cast<sal_uInt64>(SAL_SEQUENCE_HEADER_SIZE) +
+        (static_cast<sal_uInt64>(nElementSize) * static_cast<sal_uInt64>(nElements));
     if (nSize > 0xffffffffU)
         return 0;
     else
-        return (sal_uInt32) nSize;
+        return static_cast<sal_uInt32>(nSize);
 }
 
 
@@ -127,7 +125,7 @@ inline typelib_TypeDescriptionReference * _getVoidType()
 inline void CONSTRUCT_EMPTY_ANY(uno_Any * pAny) {
     pAny->pType = _getVoidType();
 #if OSL_DEBUG_LEVEL > 0
-    pAny->pData = reinterpret_cast<void *>((uintptr_t)0xdeadbeef);
+    pAny->pData = reinterpret_cast<void *>(uintptr_t(0xdeadbeef));
 #else
     pAny->pData = pAny;
 #endif
@@ -142,7 +140,7 @@ extern "C" void * binuno_queryInterface(
 
 
 inline bool _type_equals(
-    typelib_TypeDescriptionReference * pType1, typelib_TypeDescriptionReference * pType2 )
+    typelib_TypeDescriptionReference const * pType1, typelib_TypeDescriptionReference const * pType2 )
 
 {
     return (pType1 == pType2 ||

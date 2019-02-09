@@ -18,12 +18,15 @@
  */
 
 #include "ImagePreparer.hxx"
+#include "Transmitter.hxx"
 
+#include <comphelper/base64.hxx>
 #include <comphelper/processfactory.hxx>
 #include <osl/file.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <sax/tools/converter.hxx>
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
 #include <unotools/streamwrap.hxx>
 
 #include <svl/itemset.hxx>
@@ -36,6 +39,7 @@
 #include <com/sun/star/document/XExporter.hpp>
 #include <com/sun/star/drawing/GraphicExportFilter.hpp>
 #include <com/sun/star/lang/XServiceName.hpp>
+#include <com/sun/star/presentation/XSlideShowController.hpp>
 #include <com/sun/star/presentation/XPresentationPage.hpp>
 #include <com/sun/star/text/XTextRange.hpp>
 
@@ -88,7 +92,7 @@ void ImagePreparer::sendPreview( sal_uInt32 aSlideNumber )
         return;
 
     OUStringBuffer aStrBuffer;
-    ::sax::Converter::encodeBase64( aStrBuffer, aImageData );
+    ::comphelper::Base64::encode( aStrBuffer, aImageData );
 
     OString aEncodedShortString = OUStringToOString(
         aStrBuffer.makeStringAndClear(), RTL_TEXTENCODING_UTF8 );
@@ -98,7 +102,7 @@ void ImagePreparer::sendPreview( sal_uInt32 aSlideNumber )
 
     aBuffer.append( "slide_preview\n" );
 
-    aBuffer.append( OString::number( aSlideNumber ).getStr() );
+    aBuffer.append( static_cast<sal_Int32>(aSlideNumber) );
     aBuffer.append( "\n" );
 
     aBuffer.append( aEncodedShortString.getStr() );
@@ -175,12 +179,6 @@ void ImagePreparer::sendNotes( sal_uInt32 aSlideNumber )
     if ( aNotes.isEmpty() )
         return;
 
-//     OUStringBuffer aStrBuffer;
-//     ::sax::Converter::encodeBase64( aStrBuffer, aTemp );
-
-//     OString aNotes = OUStringToOString(
-//         aStrBuffer.makeStringAndClear(), RTL_TEXTENCODING_UTF8 );
-
     if ( !xController->isRunning() )
         return;
 
@@ -189,7 +187,7 @@ void ImagePreparer::sendNotes( sal_uInt32 aSlideNumber )
 
     aBuffer.append( "slide_notes\n" );
 
-    aBuffer.append( OString::number( aSlideNumber ).getStr() );
+    aBuffer.append( static_cast<sal_Int32>(aSlideNumber) );
     aBuffer.append( "\n" );
 
     aBuffer.append( "<html><body>" );
@@ -236,7 +234,7 @@ OString ImagePreparer::prepareNotes( sal_uInt32 aSlideNumber )
             uno::Reference<lang::XServiceName> xServiceName (
                 xIndexAccess->getByIndex(nIndex), UNO_QUERY);
             if (xServiceName.is()
-                && xServiceName->getServiceName().equals(sNotesShapeName))
+                && xServiceName->getServiceName() == sNotesShapeName)
             {
                 uno::Reference<text::XTextRange> xText (xServiceName, UNO_QUERY);
                 if (xText.is())
@@ -252,7 +250,7 @@ OString ImagePreparer::prepareNotes( sal_uInt32 aSlideNumber )
                 if (xShapeDescriptor.is())
                 {
                     OUString sType (xShapeDescriptor->getShapeType());
-                    if (sType.equals(sNotesShapeName) || sType.equals(sTextShapeName))
+                    if (sType == sNotesShapeName || sType == sTextShapeName)
                     {
                         uno::Reference<text::XTextRange> xText (
                             xIndexAccess->getByIndex(nIndex), UNO_QUERY);

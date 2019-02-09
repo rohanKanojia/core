@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "parser.hxx"
-#include "iosys.hxx"
+#include <parser.hxx>
+#include <iosys.hxx>
 #include <memory>
 
 // test if there's an I/O channel
@@ -118,7 +118,6 @@ void SbiParser::Line()
         KeywordSymbolInfo aInfo;
         aInfo.m_aKeywordSymbol = "line";
         aInfo.m_eSbxDataType = GetType();
-        aInfo.m_eTok = SYMBOL;
 
         Symbol( &aInfo );
     }
@@ -201,7 +200,7 @@ void SbiParser::Open()
             if( Peek() == WRITE )
             {
                 Next();
-                nMode |= (StreamMode::READ | StreamMode::WRITE);
+                nMode |= StreamMode::READ | StreamMode::WRITE;
             }
             else
                 nMode |= StreamMode::READ;
@@ -213,16 +212,8 @@ void SbiParser::Open()
     }
     switch( Peek() )
     {
-#ifdef SHARED
-#undef SHARED
-#define tmpSHARED
-#endif
         case SHARED:
             Next(); nMode |= StreamMode::SHARE_DENYNONE; break;
-#ifdef tmpSHARED
-#define SHARED
-#undef tmpSHARED
-#endif
         case LOCK:
             Next();
             eTok = Next();
@@ -245,8 +236,6 @@ void SbiParser::Open()
     TestToken( AS );
     // channel number
     std::unique_ptr<SbiExpression> pChan(new SbiExpression( this ));
-    if( !pChan )
-        Error( ERRCODE_BASIC_SYNTAX );
     std::unique_ptr<SbiExpression> pLen;
     if( Peek() == SYMBOL )
     {
@@ -263,8 +252,7 @@ void SbiParser::Open()
     // channel number
     // file name
     pLen->Gen();
-    if( pChan )
-        pChan->Gen();
+    pChan->Gen();
     aFileName.Gen();
     aGen.Gen( SbiOpcode::OPEN_, static_cast<sal_uInt32>(nMode), static_cast<sal_uInt32>(nFlags) );
     bInStatement = false;
@@ -282,7 +270,6 @@ void SbiParser::Name()
         KeywordSymbolInfo aInfo;
         aInfo.m_aKeywordSymbol = "name";
         aInfo.m_eSbxDataType = GetType();
-        aInfo.m_eTok = SYMBOL;
 
         Symbol( &aInfo );
         return;

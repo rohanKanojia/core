@@ -30,7 +30,6 @@ using namespace ::com::sun::star::container;
 
 OCatalog::OCatalog(OConnection* _pCon) : connectivity::sdbcx::OCatalog(_pCon)
                 ,m_pConnection(_pCon)
-                ,m_xMetaData(m_pConnection->getMetaData(  ))
 {
 //  osl_atomic_increment( &m_refCount );
 //  refreshTables();
@@ -42,7 +41,7 @@ OCatalog::OCatalog(OConnection* _pCon) : connectivity::sdbcx::OCatalog(_pCon)
 
 void OCatalog::refreshTables()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
     Sequence< OUString > aTypes { "%" };
     Reference< XResultSet > xResult = m_xMetaData->getTables(Any(),
         "%", "%", aTypes);
@@ -60,7 +59,7 @@ void OCatalog::refreshTables()
     if(m_pTables)
         m_pTables->reFill(aVector);
     else
-        m_pTables = new OTables(m_xMetaData,*this,m_aMutex,aVector);
+        m_pTables.reset( new OTables(m_xMetaData,*this,m_aMutex,aVector) );
 }
 
 void OCatalog::refreshViews()
@@ -77,7 +76,7 @@ void OCatalog::refreshUsers()
 
 
 // XTablesSupplier
-Reference< XNameAccess > SAL_CALL OCatalog::getTables(  ) throw(RuntimeException, std::exception)
+Reference< XNameAccess > SAL_CALL OCatalog::getTables(  )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     checkDisposed(rBHelper.bDisposed);
@@ -97,7 +96,7 @@ Reference< XNameAccess > SAL_CALL OCatalog::getTables(  ) throw(RuntimeException
         // allowed
     }
 
-    return m_pTables;
+    return m_pTables.get();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

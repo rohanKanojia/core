@@ -51,7 +51,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sd_export_tests, \
     utl \
     vcl \
     xo \
-    $(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sd_export_tests,\
@@ -60,10 +59,7 @@ $(eval $(call gb_CppunitTest_set_include,sd_export_tests,\
     $$(INCLUDE) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,sd_export_tests,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,sd_export_tests))
 
 $(eval $(call gb_CppunitTest_use_ure,sd_export_tests))
 $(eval $(call gb_CppunitTest_use_vcl,sd_export_tests))
@@ -79,9 +75,5 @@ $(eval $(call gb_CppunitTest_use_configuration,sd_export_tests))
 $(eval $(call gb_CppunitTest_add_arguments,sd_export_tests,\
     -env:SVG_DISABLE_FONT_EMBEDDING= \
 ))
-
-$(call gb_CppunitTest_get_target,sd_export_tests): \
-    $(call gb_AllLangResTarget_get_target,avmedia) \
-    $(call gb_AllLangResTarget_get_target,sd)
 
 # vim: set noet sw=4 ts=4:

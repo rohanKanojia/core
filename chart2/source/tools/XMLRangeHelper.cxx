@@ -17,13 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "XMLRangeHelper.hxx"
-#include <unotools/charclass.hxx>
+#include <XMLRangeHelper.hxx>
+#include <rtl/character.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <osl/diagnose.h>
 
 #include <algorithm>
-#include <functional>
 
 namespace
 {
@@ -31,18 +30,18 @@ namespace
     array (which you can get from an OUString with getStr()) and puts the result
     into the OUStringBuffer given in the CTOR
  */
-class lcl_Escape : public ::std::unary_function< sal_Unicode, void >
+class lcl_Escape
 {
 public:
     explicit lcl_Escape( OUStringBuffer & aResultBuffer ) : m_aResultBuffer( aResultBuffer ) {}
     void operator() ( sal_Unicode aChar )
     {
-        static const sal_Unicode m_aQuote( '\'' );
-        static const sal_Unicode m_aBackslash( '\\' );
+        static const sal_Unicode s_aQuote( '\'' );
+        static const sal_Unicode s_aBackslash( '\\' );
 
-        if( aChar == m_aQuote ||
-            aChar == m_aBackslash )
-            m_aResultBuffer.append( m_aBackslash );
+        if( aChar == s_aQuote ||
+            aChar == s_aBackslash )
+            m_aResultBuffer.append( s_aBackslash );
         m_aResultBuffer.append( aChar );
     }
 
@@ -54,15 +53,15 @@ private:
     you can get from an OUString with getStr()) and puts the result into the
     OUStringBuffer given in the CTOR
  */
-class lcl_UnEscape : public ::std::unary_function< sal_Unicode, void >
+class lcl_UnEscape
 {
 public:
     explicit lcl_UnEscape( OUStringBuffer & aResultBuffer ) : m_aResultBuffer( aResultBuffer ) {}
     void operator() ( sal_Unicode aChar )
     {
-        static const sal_Unicode m_aBackslash( '\\' );
+        static const sal_Unicode s_aBackslash( '\\' );
 
-        if( aChar != m_aBackslash )
+        if( aChar != s_aBackslash )
             m_aResultBuffer.append( aChar );
     }
 
@@ -84,23 +83,23 @@ void lcl_getXMLStringForCell( const ::chart::XMLRangeHelper::Cell & rCell, OUStr
 
     // get A, B, C, ..., AA, AB, ... representation of column number
     if( nCol < 26 )
-        output->append( (sal_Unicode)('A' + nCol) );
+        output->append( static_cast<sal_Unicode>('A' + nCol) );
     else if( nCol < 702 )
     {
-        output->append( (sal_Unicode)('A' + nCol / 26 - 1 ));
-        output->append( (sal_Unicode)('A' + nCol % 26) );
+        output->append( static_cast<sal_Unicode>('A' + nCol / 26 - 1 ));
+        output->append( static_cast<sal_Unicode>('A' + nCol % 26) );
     }
     else    // works for nCol <= 18,278
     {
-        output->append( (sal_Unicode)('A' + nCol / 702 - 1 ));
-        output->append( (sal_Unicode)('A' + (nCol % 702) / 26 ));
-        output->append( (sal_Unicode)('A' + nCol % 26) );
+        output->append( static_cast<sal_Unicode>('A' + nCol / 702 - 1 ));
+        output->append( static_cast<sal_Unicode>('A' + (nCol % 702) / 26 ));
+        output->append( static_cast<sal_Unicode>('A' + nCol % 26) );
     }
 
     // write row number as number
     if( ! rCell.bRelativeRow )
         output->append( '$' );
-    output->append( rCell.nRow + (sal_Int32)1 );
+    output->append( rCell.nRow + sal_Int32(1) );
 }
 
 void lcl_getSingleCellAddressFromXMLString(
@@ -186,7 +185,7 @@ bool lcl_getCellAddressFromXMLString(
         const sal_Unicode * pTableName = rXMLString.getStr();
 
         // remove escapes from table name
-        ::std::for_each( pTableName + nStartPos,
+        std::for_each( pTableName + nStartPos,
                          pTableName + nDelimiterPos,
                          lcl_UnEscape( aTableNameBuffer ));
 
@@ -275,7 +274,7 @@ bool lcl_getCellRangeAddressFromXMLString(
         }
         if( bResult &&
             !sTableSecondName.isEmpty() &&
-            ! sTableSecondName.equals( rOutRange.aTableName ))
+            sTableSecondName != rOutRange.aTableName )
             bResult = false;
     }
 
@@ -297,17 +296,15 @@ CellRange getCellRangeFromXMLString( const OUString & rXMLString )
     static const sal_Unicode aDollar( '$' );
     static const sal_Unicode aBackslash( '\\' );
 
-    sal_Int32 nStartPos = 0;
-    sal_Int32 nEndPos = nStartPos;
     const sal_Int32 nLength = rXMLString.getLength();
 
     // reset
     CellRange aResult;
 
     // iterate over different ranges
-    for( sal_Int32 i = 0;
+    for( sal_Int32 nStartPos = 0, nEndPos = nStartPos;
          nEndPos < nLength;
-         nStartPos = ++nEndPos, i++ )
+         nStartPos = ++nEndPos )
     {
         // find start point of next range
 
@@ -350,7 +347,7 @@ OUString getXMLStringFromCellRange( const CellRange & rRange )
 
     OUStringBuffer aBuffer;
 
-    if( !(rRange.aTableName).isEmpty())
+    if( !rRange.aTableName.isEmpty())
     {
         bool bNeedsEscaping = ( rRange.aTableName.indexOf( aQuote ) > -1 );
         bool bNeedsQuoting = bNeedsEscaping || ( rRange.aTableName.indexOf( aSpace ) > -1 );
@@ -367,7 +364,7 @@ OUString getXMLStringFromCellRange( const CellRange & rRange )
                 const sal_Unicode * pTableNameBeg = rRange.aTableName.getStr();
 
                 // append the quoted string at the buffer
-                ::std::for_each( pTableNameBeg,
+                std::for_each( pTableNameBeg,
                                  pTableNameBeg + rRange.aTableName.getLength(),
                                  lcl_Escape( aBuffer ) );
             }
@@ -385,7 +382,7 @@ OUString getXMLStringFromCellRange( const CellRange & rRange )
     if( ! rRange.aLowerRight.empty())
     {
         // we have a range (not a single cell)
-        aBuffer.append( sal_Unicode( ':' ));
+        aBuffer.append( u':');
         lcl_getXMLStringForCell( rRange.aLowerRight, &aBuffer );
     }
 

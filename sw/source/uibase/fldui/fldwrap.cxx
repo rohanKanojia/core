@@ -21,7 +21,6 @@
 #include <swtypes.hxx>
 #include <sfx2/basedlgs.hxx>
 #include <sfx2/dispatch.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/htmlmode.hxx>
 #include <viewopt.hxx>
 #include <docsh.hxx>
@@ -30,10 +29,8 @@
 #include <view.hxx>
 #include <swmodule.hxx>
 
-#include <helpid.h>
-#include <fldui.hrc>
 #include <globals.hrc>
-#include "swabstdlg.hxx"
+#include <swabstdlg.hxx>
 
 SFX_IMPL_CHILDWINDOW_WITHID(SwFieldDlgWrapper, FN_INSERT_FIELD)
 
@@ -43,10 +40,10 @@ SwChildWinWrapper::SwChildWinWrapper(vcl::Window *pParentWindow, sal_uInt16 nId)
 {
     // avoid flickering of buttons:
     m_aUpdateTimer.SetTimeout(200);
-    m_aUpdateTimer.SetTimeoutHdl(LINK(this, SwChildWinWrapper, UpdateHdl));
+    m_aUpdateTimer.SetInvokeHandler(LINK(this, SwChildWinWrapper, UpdateHdl));
 }
 
-IMPL_LINK_NOARG_TYPED(SwChildWinWrapper, UpdateHdl, Timer *, void)
+IMPL_LINK_NOARG(SwChildWinWrapper, UpdateHdl, Timer *, void)
 {
     GetWindow()->Activate();    // update dialog
 }
@@ -80,20 +77,16 @@ SwFieldDlgWrapper::SwFieldDlgWrapper( vcl::Window* _pParent, sal_uInt16 nId,
     : SwChildWinWrapper( _pParent, nId )
 {
     SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-    assert(pFact && "SwAbstractDialogFactory fail!");
-    AbstractSwFieldDlg* pDlg = pFact->CreateSwFieldDlg(pB, this, _pParent);
-    assert(pDlg && "Dialog creation failed!");
-    pDlgInterface = pDlg;
-    SetWindow( pDlg->GetWindow() );
-    pDlg->Start();
+    pDlgInterface = pFact->CreateSwFieldDlg(pB, this, _pParent);
+    SetWindow( pDlgInterface->GetWindow() );
+    pDlgInterface->Start();
 }
 
 // newly initialise dialog after Doc switch
 bool SwFieldDlgWrapper::ReInitDlg(SwDocShell *pDocSh)
 {
-    bool bRet;
-
-    if ((bRet = SwChildWinWrapper::ReInitDlg(pDocSh)))  // update immediately, Doc switch
+    bool bRet = SwChildWinWrapper::ReInitDlg(pDocSh);
+    if (bRet)  // update immediately, Doc switch
     {
         pDlgInterface->ReInitDlg();
     }
@@ -123,23 +116,19 @@ SwFieldDataOnlyDlgWrapper::SwFieldDataOnlyDlgWrapper( vcl::Window* _pParent, sal
     : SwChildWinWrapper( _pParent, nId )
 {
     SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-    OSL_ENSURE(pFact, "SwAbstractDialogFactory fail!");
+    pDlgInterface = pFact->CreateSwFieldDlg(pB, this, _pParent);
 
-    AbstractSwFieldDlg* pDlg = pFact->CreateSwFieldDlg(pB, this, _pParent);
-    OSL_ENSURE(pDlg, "Dialog creation failed!");
-    pDlgInterface = pDlg;
-
-    SetWindow( pDlg->GetWindow() );
-    pDlg->ActivateDatabasePage();
-    pDlg->Start();
-    pDlg->Initialize( pInfo );
+    SetWindow( pDlgInterface->GetWindow() );
+    pDlgInterface->ActivateDatabasePage();
+    pDlgInterface->Start();
+    pDlgInterface->Initialize( pInfo );
 }
 
 // re-init after doc activation
 bool SwFieldDataOnlyDlgWrapper::ReInitDlg(SwDocShell *pDocSh)
 {
-    bool bRet;
-    if ((bRet = SwChildWinWrapper::ReInitDlg(pDocSh)))  // update immediately, Doc switch
+    bool bRet = SwChildWinWrapper::ReInitDlg(pDocSh);
+    if (bRet)  // update immediately, Doc switch
     {
         pDlgInterface->ReInitDlg();
     }

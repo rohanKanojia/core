@@ -22,11 +22,10 @@
 using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
-OUString SAL_CALL
-ignoreKiKuFollowedBySa_ja_JP::folding( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, Sequence< sal_Int32 >& offset )
-  throw(RuntimeException, std::exception)
+OUString
+ignoreKiKuFollowedBySa_ja_JP::foldingImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, Sequence< sal_Int32 >& offset, bool useOffset )
 {
     // Create a string buffer which can hold nCount + 1 characters.
     // The reference count is 1 now.
@@ -79,7 +78,7 @@ ignoreKiKuFollowedBySa_ja_JP::folding( const OUString& inStr, sal_Int32 startPos
         *dst ++ = previousChar;
     }
 
-    *dst = (sal_Unicode) 0;
+    *dst = u'\0';
 
     newStr->length = sal_Int32(dst - newStr->buffer);
     if (useOffset)
@@ -87,6 +86,6 @@ ignoreKiKuFollowedBySa_ja_JP::folding( const OUString& inStr, sal_Int32 startPos
     return OUString(newStr, SAL_NO_ACQUIRE); // take ownership
 }
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

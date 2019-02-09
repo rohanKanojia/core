@@ -17,42 +17,34 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "srchxtra.hxx"
-#include <tools/rcid.h>
-#include <vcl/msgbox.hxx>
+#include <srchxtra.hxx>
+#include <sal/log.hxx>
 #include <svl/cjkoptions.hxx>
 #include <svl/whiter.hxx>
 #include <sfx2/objsh.hxx>
-#include <cuires.hrc>
 #include <svx/svxitems.hrc>
-#include <svx/dialmgr.hxx>
+#include <svx/strarray.hxx>
 #include <editeng/flstitem.hxx>
-#include "chardlg.hxx"
-#include "paragrph.hxx"
-#include <dialmgr.hxx>
-#include "backgrnd.hxx"
+#include <chardlg.hxx>
+#include <paragrph.hxx>
+#include <backgrnd.hxx>
 #include <svx/dialogs.hrc>
 #include <tools/resary.hxx>
 #include <rtl/strbuf.hxx>
-#include "svtools/treelistentry.hxx"
+#include <vcl/treelistentry.hxx>
 
-SvxSearchFormatDialog::SvxSearchFormatDialog(vcl::Window* pParent, const SfxItemSet& rSet)
-    : SfxTabDialog(pParent, "SearchFormatDialog", "cui/ui/searchformatdialog.ui", &rSet)
-    , m_pFontList(nullptr)
-    , m_nNamePageId(0)
-    , m_nParaStdPageId(0)
-    , m_nParaAlignPageId(0)
-    , m_nBackPageId(0)
+SvxSearchFormatDialog::SvxSearchFormatDialog(weld::Window* pParent, const SfxItemSet& rSet)
+    : SfxTabDialogController(pParent, "cui/ui/searchformatdialog.ui", "SearchFormatDialog", &rSet)
 {
-    m_nNamePageId = AddTabPage("font", SvxCharNamePage::Create, nullptr);
+    AddTabPage("font", SvxCharNamePage::Create, nullptr);
     AddTabPage("fonteffects", SvxCharEffectsPage::Create, nullptr);
     AddTabPage("position", SvxCharPositionPage::Create, nullptr);
     AddTabPage("asianlayout", SvxCharTwoLinesPage::Create, nullptr);
-    m_nParaStdPageId = AddTabPage("labelTP_PARA_STD", SvxStdParagraphTabPage::Create, nullptr);
-    m_nParaAlignPageId = AddTabPage("labelTP_PARA_ALIGN", SvxParaAlignTabPage::Create, nullptr);
+    AddTabPage("labelTP_PARA_STD", SvxStdParagraphTabPage::Create, nullptr);
+    AddTabPage("labelTP_PARA_ALIGN", SvxParaAlignTabPage::Create, nullptr);
     AddTabPage("labelTP_PARA_EXT", SvxExtParagraphTabPage::Create, nullptr);
     AddTabPage("labelTP_PARA_ASIAN", SvxAsianTabPage::Create, nullptr );
-    m_nBackPageId = AddTabPage("background", SvxBackgroundTabPage::Create, nullptr);
+    AddTabPage("background", SvxBkgTabPage::Create, nullptr);
 
     // remove asian tabpages if necessary
     SvtCJKOptions aCJKOptions;
@@ -64,19 +56,11 @@ SvxSearchFormatDialog::SvxSearchFormatDialog(vcl::Window* pParent, const SfxItem
 
 SvxSearchFormatDialog::~SvxSearchFormatDialog()
 {
-    disposeOnce();
 }
 
-void SvxSearchFormatDialog::dispose()
+void SvxSearchFormatDialog::PageCreated(const OString& rId, SfxTabPage& rPage)
 {
-    delete m_pFontList;
-    m_pFontList = nullptr;
-    SfxTabDialog::dispose();
-}
-
-void SvxSearchFormatDialog::PageCreated( sal_uInt16 nId, SfxTabPage& rPage )
-{
-    if (nId == m_nNamePageId)
+    if (rId == "font")
     {
         const FontList* pApm_pFontList = nullptr;
         SfxObjectShell* pSh = SfxObjectShell::Current();
@@ -94,24 +78,23 @@ void SvxSearchFormatDialog::PageCreated( sal_uInt16 nId, SfxTabPage& rPage )
         if ( !pList )
         {
             if ( !m_pFontList )
-                m_pFontList = new FontList( this );
-            pList = m_pFontList;
+                m_pFontList.reset(new FontList(Application::GetDefaultDevice()));
+            pList = m_pFontList.get();
         }
 
-        if ( pList )
-            static_cast<SvxCharNamePage&>(rPage).
+        static_cast<SvxCharNamePage&>(rPage).
                 SetFontList( SvxFontListItem( pList, SID_ATTR_CHAR_FONTLIST ) );
         static_cast<SvxCharNamePage&>(rPage).EnableSearchMode();
     }
-    else if (nId == m_nParaStdPageId)
+    else if (rId == "labelTP_PARA_STD")
     {
         static_cast<SvxStdParagraphTabPage&>(rPage).EnableAutoFirstLine();
     }
-    else if (nId == m_nParaAlignPageId)
+    else if (rId == "labelTP_PARA_ALIGN")
     {
         static_cast<SvxParaAlignTabPage&>(rPage).EnableJustifyExt();
     }
-    else if (nId == m_nBackPageId)
+    else if (rId == "background")
     {
         SfxAllItemSet aSet(*(GetInputSetImpl()->GetPool()));
         aSet.Put(SfxUInt32Item(SID_FLAG_TYPE,static_cast<sal_uInt32>(SvxBackgroundTabFlags::SHOW_HIGHLIGHTING)));
@@ -137,7 +120,6 @@ SvxSearchAttributeDialog::SvxSearchAttributeDialog(vcl::Window* pParent,
     SfxObjectShell* pSh = SfxObjectShell::Current();
     DBG_ASSERT( pSh, "No DocShell" );
 
-    ResStringArray aAttrNames( SVX_RES( RID_ATTR_NAMES ) );
     SfxItemPool& rPool = pSh->GetPool();
     SfxItemSet aSet( rPool, pWhRanges );
     SfxWhichIter aIter( aSet );
@@ -160,10 +142,10 @@ SvxSearchAttributeDialog::SvxSearchAttributeDialog(vcl::Window* pParent,
             }
 
             // item resources are in svx
-            sal_uInt32 nId  = aAttrNames.FindIndex( nSlot );
+            sal_uInt32 nId  = SvxAttrNameTable::FindIndex(nSlot);
             SvTreeListEntry* pEntry = nullptr;
             if ( RESARRAY_INDEX_NOTFOUND != nId )
-                pEntry = m_pAttrLB->SvTreeListBox::InsertEntry( aAttrNames.GetString(nId) );
+                pEntry = m_pAttrLB->SvTreeListBox::InsertEntry(SvxAttrNameTable::GetString(nId));
             else
                 SAL_WARN( "cui.dialogs", "no resource for slot id " << static_cast<sal_Int32>(nSlot) );
 
@@ -193,14 +175,14 @@ void SvxSearchAttributeDialog::dispose()
 }
 
 
-IMPL_LINK_NOARG_TYPED(SvxSearchAttributeDialog, OKHdl, Button*, void)
+IMPL_LINK_NOARG(SvxSearchAttributeDialog, OKHdl, Button*, void)
 {
     SearchAttrItem aInvalidItem;
-    aInvalidItem.pItem = reinterpret_cast<SfxPoolItem*>(-1);
+    aInvalidItem.pItem = INVALID_POOL_ITEM;
 
     for ( sal_uLong i = 0; i < m_pAttrLB->GetEntryCount(); ++i )
     {
-        sal_uInt16 nSlot = (sal_uInt16)reinterpret_cast<sal_uLong>(m_pAttrLB->GetEntryData(i));
+        sal_uInt16 nSlot = static_cast<sal_uInt16>(reinterpret_cast<sal_uLong>(m_pAttrLB->GetEntryData(i)));
         bool bChecked = m_pAttrLB->IsChecked(i);
 
         sal_uInt16 j;
@@ -213,7 +195,7 @@ IMPL_LINK_NOARG_TYPED(SvxSearchAttributeDialog, OKHdl, Button*, void)
                 {
                     if( !IsInvalidItem( rItem.pItem ) )
                         delete rItem.pItem;
-                    rItem.pItem = reinterpret_cast<SfxPoolItem*>(-1);
+                    rItem.pItem = INVALID_POOL_ITEM;
                 }
                 else if( IsInvalidItem( rItem.pItem ) )
                     rItem.pItem = nullptr;
@@ -239,39 +221,22 @@ IMPL_LINK_NOARG_TYPED(SvxSearchAttributeDialog, OKHdl, Button*, void)
 
 // class SvxSearchSimilarityDialog ---------------------------------------
 
-SvxSearchSimilarityDialog::SvxSearchSimilarityDialog
-(
-    vcl::Window* pParent,
-    bool bRelax,
-    sal_uInt16 nOther,
-    sal_uInt16 nShorter,
-    sal_uInt16 nLonger
-) :
-    ModalDialog( pParent, "SimilaritySearchDialog", "cui/ui/similaritysearchdialog.ui" )
+SvxSearchSimilarityDialog::SvxSearchSimilarityDialog(weld::Window* pParent, bool bRelax,
+    sal_uInt16 nOther, sal_uInt16 nShorter, sal_uInt16 nLonger)
+    : GenericDialogController(pParent, "cui/ui/similaritysearchdialog.ui", "SimilaritySearchDialog")
+    , m_xOtherFld(m_xBuilder->weld_spin_button("otherfld"))
+    , m_xLongerFld(m_xBuilder->weld_spin_button("longerfld"))
+    , m_xShorterFld(m_xBuilder->weld_spin_button("shorterfld"))
+    , m_xRelaxBox(m_xBuilder->weld_check_button("relaxbox"))
 {
-    get( m_pOtherFld, "otherfld");
-    get( m_pLongerFld, "longerfld");
-    get( m_pShorterFld, "shorterfld");
-    get( m_pRelaxBox, "relaxbox");
-
-    m_pOtherFld->SetValue( nOther );
-    m_pShorterFld->SetValue( nShorter );
-    m_pLongerFld->SetValue( nLonger );
-    m_pRelaxBox->Check( bRelax );
+    m_xOtherFld->set_value(nOther);
+    m_xShorterFld->set_value(nShorter);
+    m_xLongerFld->set_value(nLonger);
+    m_xRelaxBox->set_active(bRelax);
 }
 
 SvxSearchSimilarityDialog::~SvxSearchSimilarityDialog()
 {
-    disposeOnce();
-}
-
-void SvxSearchSimilarityDialog::dispose()
-{
-    m_pOtherFld.clear();
-    m_pLongerFld.clear();
-    m_pShorterFld.clear();
-    m_pRelaxBox.clear();
-    ModalDialog::dispose();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

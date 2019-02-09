@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "reftokenhelper.hxx"
-#include "document.hxx"
-#include "rangeutl.hxx"
-#include "compiler.hxx"
-#include "tokenarray.hxx"
+#include <reftokenhelper.hxx>
+#include <document.hxx>
+#include <rangeutl.hxx>
+#include <compiler.hxx>
+#include <tokenarray.hxx>
 
 #include <rtl/ustring.hxx>
 #include <formula/grammar.hxx>
@@ -51,8 +51,7 @@ void ScRefTokenHelper::compileRangeRepresentation(
         if (nOffset < 0)
             break;
 
-        ScCompiler aCompiler(pDoc, ScAddress(0,0,0));
-        aCompiler.SetGrammar(eGrammar);
+        ScCompiler aCompiler(pDoc, ScAddress(0,0,0), eGrammar);
         std::unique_ptr<ScTokenArray> pArray(aCompiler.CompileString(aToken));
 
         // There MUST be exactly one reference per range token and nothing
@@ -66,8 +65,7 @@ void ScRefTokenHelper::compileRangeRepresentation(
             break;
         }
 
-        pArray->Reset();
-        const FormulaToken* p = pArray->Next();
+        const FormulaToken* p = pArray->FirstToken();
         if (!p)
         {
             bFailure = true;
@@ -115,7 +113,7 @@ void ScRefTokenHelper::compileRangeRepresentation(
                 break;
         }
         if (!bFailure)
-            rRefTokens.push_back(ScTokenRef(p->Clone()));
+            rRefTokens.emplace_back(p->Clone());
 
     }
     if (bFailure)
@@ -160,12 +158,11 @@ bool ScRefTokenHelper::getRangeFromToken(
 void ScRefTokenHelper::getRangeListFromTokens(
     ScRangeList& rRangeList, const vector<ScTokenRef>& rTokens, const ScAddress& rPos)
 {
-    vector<ScTokenRef>::const_iterator itr = rTokens.begin(), itrEnd = rTokens.end();
-    for (; itr != itrEnd; ++itr)
+    for (const auto& rToken : rTokens)
     {
         ScRange aRange;
-        getRangeFromToken(aRange, *itr, rPos);
-        rRangeList.Append(aRange);
+        getRangeFromToken(aRange, rToken, rPos);
+        rRangeList.push_back(aRange);
     }
 }
 
@@ -189,13 +186,9 @@ void ScRefTokenHelper::getTokensFromRangeList(vector<ScTokenRef>& pTokens, const
     aTokens.reserve(nCount);
     for (size_t i = 0; i < nCount; ++i)
     {
-        const ScRange* pRange = rRanges[i];
-        if (!pRange)
-            // failed.
-            return;
-
+        const ScRange & rRange = rRanges[i];
         ScTokenRef pToken;
-        ScRefTokenHelper::getTokenFromRange(pToken,* pRange);
+        ScRefTokenHelper::getTokenFromRange(pToken, rRange);
         aTokens.push_back(pToken);
     }
     pTokens.swap(aTokens);
@@ -241,10 +234,8 @@ bool ScRefTokenHelper::intersects(
     ScRange aRange;
     getRangeFromToken(aRange, pToken, rPos, bExternal);
 
-    vector<ScTokenRef>::const_iterator itr = rTokens.begin(), itrEnd = rTokens.end();
-    for (; itr != itrEnd; ++itr)
+    for (const ScTokenRef& p : rTokens)
     {
-        const ScTokenRef& p = *itr;
         if (!isRef(p))
             continue;
 
@@ -302,8 +293,8 @@ private:
             // These two ranges cannot be joined.  Move on.
             return false;
 
-        T nMin = nMin1 < nMin2 ? nMin1 : nMin2;
-        T nMax = nMax1 > nMax2 ? nMax1 : nMax2;
+        T nMin = std::min(nMin1, nMin2);
+        T nMax = std::max(nMax1, nMax2);
 
         rNewMin = nMin;
         rNewMax = nMax;
@@ -321,14 +312,11 @@ private:
         // Get the information of the new token.
         bool bExternal = ScRefTokenHelper::isExternalRef(pToken);
         sal_uInt16 nFileId = bExternal ? pToken->GetIndex() : 0;
-        OUString aTabName = bExternal ? pToken->GetString().getString() : OUString();
+        svl::SharedString aTabName = bExternal ? pToken->GetString() : svl::SharedString::getEmptyString();
 
         bool bJoined = false;
-        vector<ScTokenRef>::iterator itr = rTokens.begin(), itrEnd = rTokens.end();
-        for (; itr != itrEnd; ++itr)
+        for (ScTokenRef& pOldToken : rTokens)
         {
-            ScTokenRef& pOldToken = *itr;
-
             if (!ScRefTokenHelper::isRef(pOldToken))
                 // A non-ref token should not have been added here in the first
                 // place!
@@ -344,7 +332,7 @@ private:
                     // Different external files.
                     continue;
 
-                if (aTabName != pOldToken->GetString().getString())
+                if (aTabName != pOldToken->GetString())
                     // Different table names.
                     continue;
             }

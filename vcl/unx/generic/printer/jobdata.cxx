@@ -19,8 +19,8 @@
 
 #include <officecfg/Office/Common.hxx>
 #include <vcl/jobdata.hxx>
-#include <vcl/printerinfomanager.hxx>
-#include "tools/stream.hxx"
+#include <printerinfomanager.hxx>
+#include <tools/stream.hxx>
 
 #include <rtl/strbuf.hxx>
 #include <memory>
@@ -38,6 +38,7 @@ JobData& JobData::operator=(const JobData& rRight)
     m_nColorDepth           = rRight.m_nColorDepth;
     m_eOrientation          = rRight.m_eOrientation;
     m_aPrinterName          = rRight.m_aPrinterName;
+    m_bPapersizeFromSetup   = rRight.m_bPapersizeFromSetup;
     m_pParser               = rRight.m_pParser;
     m_aContext              = rRight.m_aContext;
     m_nPSLevel              = rRight.m_nPSLevel;
@@ -79,9 +80,8 @@ void JobData::setCollate( bool bCollate )
     }
 }
 
-bool JobData::setPaper( int i_nWidth, int i_nHeight )
+void JobData::setPaper( int i_nWidth, int i_nHeight )
 {
-    bool bSuccess = false;
     if( m_pParser )
     {
         OUString aPaper( m_pParser->matchPaper( i_nWidth, i_nHeight ) );
@@ -89,22 +89,21 @@ bool JobData::setPaper( int i_nWidth, int i_nHeight )
         const PPDKey*   pKey = m_pParser->getKey( OUString( "PageSize" ) );
         const PPDValue* pValue = pKey ? pKey->getValueCaseInsensitive( aPaper ) : nullptr;
 
-        bSuccess = pKey && pValue && m_aContext.setValue( pKey, pValue );
+        if (pKey && pValue)
+            m_aContext.setValue( pKey, pValue );
     }
-    return bSuccess;
 }
 
-bool JobData::setPaperBin( int i_nPaperBin )
+void JobData::setPaperBin( int i_nPaperBin )
 {
-    bool bSuccess = false;
     if( m_pParser )
     {
         const PPDKey*   pKey = m_pParser->getKey( OUString( "InputSlot" ) );
         const PPDValue* pValue = pKey ? pKey->getValue( i_nPaperBin ) : nullptr;
 
-        bSuccess = pKey && pValue && m_aContext.setValue( pKey, pValue );
+        if (pKey && pValue)
+            m_aContext.setValue( pKey, pValue );
     }
-    return bSuccess;
 }
 
 bool JobData::getStreamBuffer( void*& pData, sal_uInt32& bytes )
@@ -119,7 +118,7 @@ bool JobData::getStreamBuffer( void*& pData, sal_uInt32& bytes )
     SvMemoryStream aStream;
 
     // write header job data
-    aStream.WriteLine(OString("JobData 1"));
+    aStream.WriteLine("JobData 1");
 
     OStringBuffer aLine;
 
@@ -176,19 +175,19 @@ bool JobData::getStreamBuffer( void*& pData, sal_uInt32& bytes )
     sal_uLong nBytes;
     std::unique_ptr<char[]> pContextBuffer(m_aContext.getStreamableBuffer( nBytes ));
     if( nBytes )
-        aStream.Write( pContextBuffer.get(), nBytes );
+        aStream.WriteBytes( pContextBuffer.get(), nBytes );
     pContextBuffer.reset();
 
     // success
     bytes = static_cast<sal_uInt32>(aStream.Tell());
-    pData = rtl_allocateMemory( bytes );
+    pData = std::malloc( bytes );
     memcpy( pData, aStream.GetData(), bytes );
     return true;
 }
 
-bool JobData::constructFromStreamBuffer( void* pData, sal_uInt32 bytes, JobData& rJobData )
+bool JobData::constructFromStreamBuffer( const void* pData, sal_uInt32 bytes, JobData& rJobData )
 {
-    SvMemoryStream aStream( pData, bytes, StreamMode::READ );
+    SvMemoryStream aStream( const_cast<void*>(pData), bytes, StreamMode::READ );
     OString aLine;
     bool bVersion       = false;
     bool bPrinter       = false;
@@ -211,7 +210,7 @@ bool JobData::constructFromStreamBuffer( void* pData, sal_uInt32 bytes, JobData&
     const char pslevelEquals[] = "pslevel=";
     const char pdfdeviceEquals[] = "pdfdevice=";
 
-    while( ! aStream.IsEof() )
+    while( ! aStream.eof() )
     {
         aStream.ReadLine( aLine );
         if (aLine.startsWith("JobData"))
@@ -238,11 +237,11 @@ bool JobData::constructFromStreamBuffer( void* pData, sal_uInt32 bytes, JobData&
         else if (aLine.startsWith(margindajustmentEquals))
         {
             bMargin = true;
-            OString aValues(aLine.copy(RTL_CONSTASCII_LENGTH(margindajustmentEquals)));
-            rJobData.m_nLeftMarginAdjust = aValues.getToken(0, ',').toInt32();
-            rJobData.m_nRightMarginAdjust = aValues.getToken(1, ',').toInt32();
-            rJobData.m_nTopMarginAdjust = aValues.getToken(2, ',').toInt32();
-            rJobData.m_nBottomMarginAdjust = aValues.getToken(3, ',').toInt32();
+            sal_Int32 nIdx {RTL_CONSTASCII_LENGTH(margindajustmentEquals)};
+            rJobData.m_nLeftMarginAdjust = aLine.getToken(0, ',', nIdx).toInt32();
+            rJobData.m_nRightMarginAdjust = aLine.getToken(0, ',', nIdx).toInt32();
+            rJobData.m_nTopMarginAdjust = aLine.getToken(0, ',', nIdx).toInt32();
+            rJobData.m_nBottomMarginAdjust = aLine.getToken(0, ',', nIdx).toInt32();
         }
         else if (aLine.startsWith(colordepthEquals))
         {
@@ -274,11 +273,16 @@ bool JobData::constructFromStreamBuffer( void* pData, sal_uInt32 bytes, JobData&
                 if( rJobData.m_pParser )
                 {
                     rJobData.m_aContext.setParser( rJobData.m_pParser );
-                    const sal_uInt64 nBytes = bytes - aStream.Tell();
-                    std::unique_ptr<char[]> pRemain(new char[bytes - aStream.Tell()]);
-                    aStream.Read( pRemain.get(), nBytes );
-                    rJobData.m_aContext.rebuildFromStreamBuffer( pRemain.get(), nBytes );
-                    bContext = true;
+                    sal_uInt64 nBytes = bytes - aStream.Tell();
+                    std::vector<char> aRemain(nBytes+1);
+                    nBytes = aStream.ReadBytes(aRemain.data(), nBytes);
+                    if (nBytes)
+                    {
+                        aRemain.resize(nBytes+1);
+                        aRemain[nBytes] = 0;
+                        rJobData.m_aContext.rebuildFromStreamBuffer(aRemain);
+                        bContext = true;
+                    }
                 }
             }
         }

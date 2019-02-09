@@ -16,26 +16,24 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "svx/sidebar/SelectionChangeHandler.hxx"
-#include "svx/sidebar/SelectionAnalyzer.hxx"
-#include "svx/sidebar/ContextChangeEventMultiplexer.hxx"
-#include "svx/svdmrkv.hxx"
+#include <svx/sidebar/SelectionChangeHandler.hxx>
+#include <svx/sidebar/SelectionAnalyzer.hxx>
+#include <svx/sidebar/ContextChangeEventMultiplexer.hxx>
+#include <svx/svdmrkv.hxx>
 
-#include <sfx2/sidebar/EnumContext.hxx>
+#include <vcl/EnumContext.hxx>
 #include <sfx2/shell.hxx>
 
 
 using namespace css;
 using namespace css::uno;
 
-using namespace sfx2::sidebar;
-
 namespace svx { namespace sidebar {
 
 SelectionChangeHandler::SelectionChangeHandler (
-    const std::function<rtl::OUString()>& rSelectionChangeCallback,
+    const std::function<OUString()>& rSelectionChangeCallback,
     const Reference<css::frame::XController>& rxController,
-    const EnumContext::Context eDefaultContext)
+    const vcl::EnumContext::Context eDefaultContext)
     : SelectionChangeHandlerInterfaceBase(m_aMutex),
       maSelectionChangeCallback(rSelectionChangeCallback),
       mxController(rxController),
@@ -51,15 +49,14 @@ SelectionChangeHandler::~SelectionChangeHandler()
 
 
 void SAL_CALL SelectionChangeHandler::selectionChanged (const lang::EventObject&)
-    throw (uno::RuntimeException, std::exception)
 {
     if (maSelectionChangeCallback)
     {
-        const EnumContext::Context eContext (
-            EnumContext::GetContextEnum(maSelectionChangeCallback()));
+        const vcl::EnumContext::Context eContext (
+            vcl::EnumContext::GetContextEnum(maSelectionChangeCallback()));
         ContextChangeEventMultiplexer::NotifyContextChange(
             mxController,
-            eContext==EnumContext::Context_Unknown
+            eContext==vcl::EnumContext::Context::Unknown
                 ? meDefaultContext
                 : eContext);
     }
@@ -67,13 +64,11 @@ void SAL_CALL SelectionChangeHandler::selectionChanged (const lang::EventObject&
 
 
 void SAL_CALL SelectionChangeHandler::disposing (const lang::EventObject&)
-    throw (uno::RuntimeException, std::exception)
 {
 }
 
 
 void SAL_CALL SelectionChangeHandler::disposing()
-    throw (uno::RuntimeException)
 {
     if (mbIsConnected)
         Disconnect();

@@ -18,29 +18,28 @@
  */
 
 #include <svl/zforlist.hxx>
+#include <unotools/charclass.hxx>
 
-#include "dpshttab.hxx"
-#include "dptabres.hxx"
-#include "document.hxx"
-#include "formulacell.hxx"
-#include "dpfilteredcache.hxx"
-#include "dpobject.hxx"
-#include "globstr.hrc"
-#include "rangenam.hxx"
-#include "queryentry.hxx"
+#include <dpcache.hxx>
+#include <dpshttab.hxx>
+#include <document.hxx>
+#include <dpfilteredcache.hxx>
+#include <dpobject.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <rangenam.hxx>
+#include <queryentry.hxx>
 
-#include <com/sun/star/sheet/DataPilotFieldFilter.hpp>
 #include <osl/diagnose.h>
 
 #include <vector>
-#include <set>
 
 using namespace ::com::sun::star;
 using ::com::sun::star::uno::Any;
 using ::com::sun::star::uno::Sequence;
 using ::std::vector;
 
-ScSheetDPData::ScSheetDPData(ScDocument* pD, const ScSheetSourceDesc& rDesc, const ScDPCache& rCache) :
+ScSheetDPData::ScSheetDPData(const ScDocument* pD, const ScSheetSourceDesc& rDesc, const ScDPCache& rCache) :
     ScDPTableData(pD),
     aQuery ( rDesc.GetQueryParam() ),
     bIgnoreEmptyRows( false ),
@@ -87,7 +86,7 @@ OUString ScSheetDPData::getDimensionName(long nColumn)
     {
         //TODO: different internal and display names?
         //return "Data";
-        return ScGlobal::GetRscString(STR_PIVOT_DATA);
+        return ScResId(STR_PIVOT_DATA);
     }
     else if (nColumn >= aCacheTable.getColSize())
     {
@@ -119,7 +118,7 @@ bool ScSheetDPData::IsDateDimension(long nDim)
     }
 }
 
-sal_uLong ScSheetDPData::GetNumberFormat(long nDim)
+sal_uInt32 ScSheetDPData::GetNumberFormat(long nDim)
 {
     CreateCacheTable();
     if (getIsDataLayoutDimension(nDim))
@@ -150,7 +149,7 @@ sal_uInt32  ScDPTableData::GetNumberFormatByIdx( NfIndexTableOffset eIdx )
 bool ScSheetDPData::getIsDataLayoutDimension(long nColumn)
 {
     CreateCacheTable();
-    return (nColumn ==(long)( aCacheTable.getColSize()));
+    return (nColumn ==static_cast<long>( aCacheTable.getColSize()));
 }
 
 void ScSheetDPData::SetEmptyFlags( bool bIgnoreEmptyRowsP, bool bRepeatIfEmptyP )
@@ -209,6 +208,15 @@ void ScSheetDPData::ReloadCacheTable()
     CreateCacheTable();
 }
 
+#if DUMP_PIVOT_TABLE
+
+void ScSheetDPData::Dump() const
+{
+    // TODO : Implement this.
+}
+
+#endif
+
 ScSheetSourceDesc::ScSheetSourceDesc(ScDocument* pDoc) :
     mpDoc(pDoc) {}
 
@@ -224,13 +232,39 @@ const ScRange& ScSheetSourceDesc::GetSourceRange() const
     {
         // Obtain the source range from the range name first.
         maSourceRange = ScRange();
+
+        // Range names referring a sheet contain a .
+        // See comment of ScCellShell::ExecuteDataPilotDialog
+        // paragraph "Populate named ranges"
+        sal_Int32 nAfterSheetName = ScGlobal::FindUnquoted( maRangeName, '.');
+
+        // let's consider the range name is global to the doc by default
         ScRangeName* pRangeName = mpDoc->GetRangeName();
+        OUString searchRangeName(maRangeName);
+
+        // the range name concerns a specificsheet
+        if (nAfterSheetName != -1)
+        {
+            OUString sheetName = maRangeName.copy(0, nAfterSheetName);
+            ScGlobal::EraseQuotes( sheetName, '\'', false);
+            searchRangeName = maRangeName.copy(nAfterSheetName+1);
+
+            SCTAB nTab = 0;
+            if (!mpDoc->GetTable(sheetName, nTab))
+            {
+                // the sheetname should exist
+                assert(false);
+                return maSourceRange;
+            }
+            pRangeName = mpDoc->GetRangeName(nTab);
+        }
+
         do
         {
             if (!pRangeName)
                 break;
 
-            OUString aUpper = ScGlobal::pCharClass->uppercase(maRangeName);
+            OUString aUpper = ScGlobal::pCharClass->uppercase(searchRangeName);
             const ScRangeData* pData = pRangeName->findByUpperName(aUpper);
             if (!pData)
                 break;
@@ -275,10 +309,10 @@ const ScDPCache* ScSheetSourceDesc::CreateCache(const ScDPDimensionSaveData* pDi
     if (!mpDoc)
         return nullptr;
 
-    sal_uLong nErrId = CheckSourceRange();
-    if (nErrId)
+    const char* pErrId = CheckSourceRange();
+    if (pErrId)
     {
-        OSL_FAIL( "Error Create Cache\n" );
+        OSL_FAIL( "Error Create Cache" );
         return nullptr;
     }
 
@@ -295,7 +329,7 @@ const ScDPCache* ScSheetSourceDesc::CreateCache(const ScDPDimensionSaveData* pDi
     return rCaches.getCache(GetSourceRange(), pDimData);
 }
 
-sal_uLong ScSheetSourceDesc::CheckSourceRange() const
+const char* ScSheetSourceDesc::CheckSourceRange() const
 {
     if (!mpDoc)
         return STR_ERR_DATAPILOTSOURCE;
@@ -308,7 +342,7 @@ sal_uLong ScSheetSourceDesc::CheckSourceRange() const
     if (rSrcRange.aStart.Col() > rSrcRange.aEnd.Col() || rSrcRange.aStart.Row() > rSrcRange.aEnd.Row())
         return STR_ERR_DATAPILOTSOURCE;
 
-    return 0;
+    return nullptr;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -24,6 +24,7 @@
 #include <comphelper/processfactory.hxx>
 #include <comphelper/string.hxx>
 #include <tools/urlobj.hxx>
+#include <rtl/character.hxx>
 #include <osl/file.hxx>
 
 using namespace ::ooo::vba;
@@ -31,7 +32,7 @@ using namespace ::com::sun::star;
 
 static OUString lcl_CheckGroupName( const OUString& rGroupName )
 {
-    OUString sRet;
+    OUStringBuffer sRet;
     //group name should contain only A-Z and a-z and spaces
     for( sal_Int32 i = 0; i < rGroupName.getLength(); i++ )
     {
@@ -39,10 +40,11 @@ static OUString lcl_CheckGroupName( const OUString& rGroupName )
         if (rtl::isAsciiAlphanumeric(cChar) ||
             cChar == '_' || cChar == 0x20)
         {
-            sRet += OUString(cChar);
+            sRet.append(cChar);
         }
     }
-    return comphelper::string::strip(sRet, ' ');
+    sRet.strip(' ');
+    return sRet.makeStringAndClear();
 }
 
 SwVbaTemplate::SwVbaTemplate( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, const OUString& rFullUrl )
@@ -55,7 +57,7 @@ SwVbaTemplate::~SwVbaTemplate()
 }
 
 OUString
-SwVbaTemplate::getName() throw ( css::uno::RuntimeException, std::exception )
+SwVbaTemplate::getName()
 {
     OUString sName;
     if( !msFullUrl.isEmpty() )
@@ -67,13 +69,13 @@ SwVbaTemplate::getName() throw ( css::uno::RuntimeException, std::exception )
 }
 
 OUString
-SwVbaTemplate::getPath() throw ( css::uno::RuntimeException, std::exception )
+SwVbaTemplate::getPath()
 {
     OUString sPath;
     if( !msFullUrl.isEmpty() )
     {
         INetURLObject aURL( msFullUrl );
-        OUString sURL( aURL.GetMainURL( INetURLObject::DECODE_TO_IURI ) );
+        OUString sURL( aURL.GetMainURL( INetURLObject::DecodeMechanism::ToIUri ) );
         sURL = sURL.copy( 0, sURL.getLength() - aURL.GetLastName().getLength() - 1 );
         ::osl::File::getSystemPathFromFileURL( sURL, sPath );
     }
@@ -81,7 +83,7 @@ SwVbaTemplate::getPath() throw ( css::uno::RuntimeException, std::exception )
 }
 
 uno::Any SAL_CALL
-SwVbaTemplate::AutoTextEntries( const uno::Any& index ) throw (uno::RuntimeException, std::exception)
+SwVbaTemplate::AutoTextEntries( const uno::Any& index )
 {
     uno::Reference< uno::XComponentContext > xContext = comphelper::getProcessComponentContext();
     uno::Reference< text::XAutoTextContainer2 > xAutoTextContainer = text::AutoTextContainer::create( xContext );
@@ -97,14 +99,12 @@ SwVbaTemplate::AutoTextEntries( const uno::Any& index ) throw (uno::RuntimeExcep
     OUString sNewGroup = lcl_CheckGroupName( sGroup );
 
     uno::Reference< container::XIndexAccess > xGroup;
-    if( xAutoTextContainer->hasByName( sNewGroup ) )
-    {
-        xGroup.set( xAutoTextContainer->getByName( sNewGroup ), uno::UNO_QUERY_THROW );
-    }
-    else
+    if( !xAutoTextContainer->hasByName( sNewGroup ) )
     {
         throw uno::RuntimeException("Auto Text Entry doesn't exist" );
     }
+
+    xGroup.set( xAutoTextContainer->getByName( sNewGroup ), uno::UNO_QUERY_THROW );
 
     uno::Reference< XCollection > xCol( new SwVbaAutoTextEntries( this, mxContext, xGroup ) );
     if( index.hasValue() )
@@ -121,12 +121,10 @@ SwVbaTemplate::getServiceImplName()
 uno::Sequence< OUString >
 SwVbaTemplate::getServiceNames()
 {
-        static uno::Sequence< OUString > aServiceNames;
-        if ( aServiceNames.getLength() == 0 )
+        static uno::Sequence< OUString > const aServiceNames
         {
-                aServiceNames.realloc( 1 );
-                aServiceNames[ 0 ] = "ooo.vba.word.Template";
-        }
+            "ooo.vba.word.Template"
+        };
         return aServiceNames;
 }
 

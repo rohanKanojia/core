@@ -32,13 +32,9 @@ class XMLEventsImportContext;
 
 class XMLScriptContextFactory : public XMLEventContextFactory
 {
-    const OUString sEventType;
-    const OUString sScript;
-    const OUString sURL;
-
 public:
     XMLScriptContextFactory();
-    virtual ~XMLScriptContextFactory();
+    virtual ~XMLScriptContextFactory() override;
 
     virtual SvXMLImportContext *
     CreateContext(SvXMLImport & rImport, /// import context

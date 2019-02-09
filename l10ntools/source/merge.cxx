@@ -17,15 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <algorithm>
 #include <fstream>
 #include <string>
 #include <vector>
 
-#include "export.hxx"
-#include "po.hxx"
+#include <export.hxx>
+#include <po.hxx>
 
 namespace
 {
@@ -47,7 +48,7 @@ namespace
         }
         catch (const PoIfstream::Exception&)
         {
-            SAL_WARN("l10ntools", rFileName.getStr() << " contains invalid entry\n");
+            SAL_WARN("l10ntools", rFileName << " contains invalid entry");
             return false;
         }
         return true;
@@ -60,29 +61,15 @@ namespace
 
 ResData::ResData( const OString &rGId )
     :
-    nIdLevel( ID_LEVEL_NULL ),
-    bChild( false ),
-    bChildWithText( false ),
-    bText( false ),
-    bQuickHelpText( false ),
-    bTitle( false ),
-    sGId( rGId ),
-    sTextTyp( "Text" )
+    sGId( rGId )
 {
     sGId = sGId.replaceAll("\r", OString());
 }
 
 ResData::ResData( const OString &rGId, const OString &rFilename)
     :
-    nIdLevel( ID_LEVEL_NULL ),
-    bChild( false ),
-    bChildWithText( false ),
-    bText( false ),
-    bQuickHelpText( false ),
-    bTitle( false ),
     sGId( rGId ),
-    sFilename( rFilename ),
-    sTextTyp( "Text" )
+    sFilename( rFilename )
 {
     sGId = sGId.replaceAll("\r", OString());
 }
@@ -92,32 +79,14 @@ ResData::ResData( const OString &rGId, const OString &rFilename)
 
 
 bool MergeEntrys::GetText( OString &rReturn,
-    sal_uInt16 nTyp, const OString &nLangIndex, bool bDel )
+    const OString &nLangIndex, bool bDel )
 {
     bool bReturn = true;
-    switch ( nTyp ) {
-        case STRING_TYP_TEXT :
-            rReturn = sText[ nLangIndex ];
-            if ( bDel )
-                sText[ nLangIndex ] = "";
-            bReturn = bTextFirst[ nLangIndex ];
-            bTextFirst[ nLangIndex ] = false;
-            break;
-        case STRING_TYP_QUICKHELPTEXT :
-            rReturn = sQuickHelpText[ nLangIndex ];
-            if ( bDel )
-                sQuickHelpText[ nLangIndex ] = "";
-            bReturn = bQuickHelpTextFirst[ nLangIndex ];
-            bQuickHelpTextFirst[ nLangIndex ] = false;
-            break;
-        case STRING_TYP_TITLE :
-            rReturn = sTitle[ nLangIndex ];
-            if ( bDel )
-                sTitle[ nLangIndex ] = "";
-            bReturn = bTitleFirst[ nLangIndex ];
-            bTitleFirst[ nLangIndex ] = false;
-            break;
-    }
+    rReturn = sText[ nLangIndex ];
+    if ( bDel )
+        sText[ nLangIndex ] = "";
+    bReturn = bTextFirst[ nLangIndex ];
+    bTextFirst[ nLangIndex ] = false;
     return bReturn;
 }
 
@@ -127,7 +96,7 @@ namespace
     {
         //DOUBLE VERTICAL LINE instead of || because the translations make their
         //way into action_names under gtk3 where || is illegal
-        return OUStringToOString(OUString(static_cast<sal_Unicode>(0x2016)), RTL_TEXTENCODING_UTF8);
+        return OUStringToOString(OUString(u'\x2016'), RTL_TEXTENCODING_UTF8);
     }
 }
 
@@ -143,9 +112,9 @@ OString MergeEntrys::GetQTZText(const ResData& rResData, const OString& rOrigTex
 // class MergeDataHashMap
 
 
-std::pair<MergeDataHashMap::iterator,bool> MergeDataHashMap::insert(const OString& rKey, MergeData* pMergeData)
+std::pair<MergeDataHashMap::iterator,bool> MergeDataHashMap::insert(const OString& rKey, std::unique_ptr<MergeData> pMergeData)
 {
-    std::pair<iterator,bool> aTemp = m_aHashMap.insert(HashMap_t::value_type( rKey, pMergeData ));
+    std::pair<iterator,bool> aTemp = m_aHashMap.emplace( rKey, std::move(pMergeData) );
     if( m_aHashMap.size() == 1 )
     {
         // When first insert, set an iterator to the first element
@@ -160,7 +129,7 @@ std::pair<MergeDataHashMap::iterator,bool> MergeDataHashMap::insert(const OStrin
     return aTemp;
 }
 
-MergeDataHashMap::iterator MergeDataHashMap::find(const OString& rKey)
+MergeDataHashMap::iterator const & MergeDataHashMap::find(const OString& rKey)
 {
     iterator aHint = m_aHashMap.end();
 
@@ -197,17 +166,13 @@ MergeDataHashMap::iterator MergeDataHashMap::find(const OString& rKey)
 // class MergeData
 
 
-MergeData::MergeData(const OString &rGID,
-    const OString &rLID )
-    : sGID( rGID ),
-    sLID( rLID ) ,
-    pMergeEntrys( new MergeEntrys() )
+MergeData::MergeData()
+    : pMergeEntrys( new MergeEntrys() )
 {
 }
 
 MergeData::~MergeData()
 {
-    delete pMergeEntrys;
 }
 
 
@@ -223,7 +188,7 @@ MergeDataFile::MergeDataFile(
     std::ifstream aInputStream( rFileName.getStr() );
     if ( !aInputStream.is_open() )
     {
-        SAL_WARN("l10ntools", "Can't open po path container file for " << rFileName.getStr());
+        SAL_WARN("l10ntools", "Can't open po path container file for " << rFileName);
         return;
     }
     std::string sPoFile;
@@ -235,12 +200,12 @@ MergeDataFile::MergeDataFile(
         const OString sFileName( lcl_NormalizeFilename(rFile) );
         const bool bReadAll = sFileName.isEmpty();
         // coverity[tainted_data] - this is a build time tool
-        const OString sPoFileName(sPoFile.data(), (sal_Int32)sPoFile.length());
+        const OString sPoFileName(sPoFile.data(), static_cast<sal_Int32>(sPoFile.length()));
         PoIfstream aPoInput;
         aPoInput.open( sPoFileName );
         if ( !aPoInput.isOpen() )
         {
-            SAL_WARN("l10ntools", "Can't open file: " << sPoFileName.getStr());
+            SAL_WARN("l10ntools", "Can't open file: " << sPoFileName);
             return;
         }
 
@@ -312,7 +277,7 @@ MergeDataFile::MergeDataFile(
                 bFirstLang, bCaseSensitive );
 
             if( bFirstLang && bWithQtz &&
-                !sEnableReleaseBuild.equals("TRUE") )
+                sEnableReleaseBuild != "TRUE" )
             {
                 aLanguageSet.insert("qtz");
                 InsertEntry(
@@ -332,8 +297,6 @@ MergeDataFile::MergeDataFile(
 
 MergeDataFile::~MergeDataFile()
 {
-    for (MergeDataHashMap::iterator aI = aMap.begin(), aEnd = aMap.end(); aI != aEnd; ++aI)
-        delete aI->second;
 }
 
 std::vector<OString> MergeDataFile::GetLanguages() const
@@ -361,7 +324,7 @@ MergeData *MergeDataFile::GetMergeData( ResData *pResData , bool bCaseSensitive 
     {
         pResData->sGId = sOldG;
         pResData->sId = sOldL;
-        return mit->second;
+        return mit->second.get();
     }
     pResData->sGId = sOldG;
     pResData->sId = sOldL;
@@ -402,14 +365,14 @@ void MergeDataFile::InsertEntry(
     {
         MergeDataHashMap::const_iterator mit = aMap.find( sKey );
         if(mit != aMap.end())
-            pData = mit->second;
+            pData = mit->second.get();
 
     }
 
     if( !pData )
     {
-        pData = new MergeData( rGID, rLID );
-        aMap.insert( sKey, pData );
+        pData = new MergeData;
+        aMap.insert( sKey, std::unique_ptr<MergeData>(pData) );
     }
 
 
@@ -441,7 +404,6 @@ OString MergeDataFile::CreateKey(const OString& rTYP, const OString& rGID,
     sKey += rLID;
     sKey += sStroke;
     sKey += lcl_NormalizeFilename(rFilename);
-    OSL_TRACE("created key: %s", sKey.getStr());
     if(bCaseSensitive)
         return sKey;         // officecfg case sensitive identifier
     return sKey.toAsciiUpperCase();

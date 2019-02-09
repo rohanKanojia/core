@@ -18,17 +18,17 @@ public:
 
     TemplateViewItem (ThumbnailView &rView, sal_uInt16 nId);
 
-    virtual ~TemplateViewItem ();
+    virtual ~TemplateViewItem () override;
 
     void setPath (const OUString &rPath) { maPath = rPath; }
 
     const OUString& getPath () const { return maPath; }
 
-    void setSubTitle (const OUString &rTitle) { maSubTitle = rTitle; }
+    void showDefaultIcon(bool bVal) { mbIsDefaultTemplate = bVal; }
 
-    virtual void calculateItemsPosition (const long nThumbnailHeight, const long nDisplayHeight,
-                                         const long nPadding, sal_uInt32 nMaxTextLength,
-                                         const ThumbnailItemAttributes *pAttrs) override;
+    bool IsDefaultTemplate() const { return mbIsDefaultTemplate; }
+
+    tools::Rectangle getDefaultIconArea() const;
 
     virtual void Paint (drawinglayer::processor2d::BaseProcessor2D *pProcessor,
                         const ThumbnailItemAttributes *pAttrs) override;
@@ -39,9 +39,8 @@ public:
 private:
 
     OUString maPath;
-    OUString maSubTitle;
-
-    Point maSubTitlePos;
+    BitmapEx const maDefaultBitmap;
+    bool mbIsDefaultTemplate;
 };
 
 #endif // INCLUDED_SFX2_TEMPLATEVIEWITEM_HXX

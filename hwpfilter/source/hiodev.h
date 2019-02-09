@@ -46,9 +46,8 @@ class DLLEXPORT HIODev
         virtual ~HIODev();
 
         virtual bool open() = 0;
-        virtual void close() = 0;
         virtual void flush() = 0;
-        virtual int  state() const = 0;
+        virtual bool state() const = 0;
 /* gzip routine wrapper */
         virtual bool setCompressed( bool ) = 0;
 
@@ -57,12 +56,11 @@ class DLLEXPORT HIODev
         virtual bool read2b(unsigned short &out) = 0;
         virtual bool read4b(unsigned int &out) = 0;
         virtual bool read4b(int &out) = 0;
-        virtual int readBlock( void *ptr, int size ) = 0;
-        virtual int skipBlock( int size ) = 0;
+        virtual size_t readBlock( void *ptr, size_t size ) = 0;
+        virtual size_t skipBlock( size_t size ) = 0;
 
-        int read1b( void *ptr, int nmemb );
-        int read2b( void *ptr, int nmemb );
-        int read4b( void *ptr, int nmemb );
+        size_t read2b( void *ptr, size_t nmemb );
+        size_t read4b( void *ptr, size_t nmemb );
 };
 
 struct gz_stream;
@@ -73,23 +71,19 @@ struct gz_stream;
  * This controls the HStream given by constructor
  * @short Stream IO device
  */
-class HStreamIODev : public HIODev
+class HStreamIODev final: public HIODev
 {
     private:
 /* zlib으로 압축을 풀기 위한 자료 구조 */
         std::unique_ptr<HStream> _stream;
         gz_stream *_gzfp;
     public:
-        explicit HStreamIODev(HStream* stream);
-        virtual ~HStreamIODev();
+        explicit HStreamIODev(std::unique_ptr<HStream> stream);
+        virtual ~HStreamIODev() override;
 /**
  * Check whether the stream is available
  */
         virtual bool open() override;
-/**
- * Free stream object
- */
-        virtual void close() override;
 /**
  * If the stream is gzipped, flush the stream.
  */
@@ -97,7 +91,7 @@ class HStreamIODev : public HIODev
 /**
  * Not implemented.
  */
-        virtual int  state() const override;
+        virtual bool state() const override;
 /**
  * Set whether the stream is compressed or not
  */
@@ -105,7 +99,6 @@ class HStreamIODev : public HIODev
 /**
  * Read one byte from stream
  */
-        using HIODev::read1b;
         virtual bool read1b(unsigned char &out) override;
         virtual bool read1b(char &out) override;
 /**
@@ -122,12 +115,12 @@ class HStreamIODev : public HIODev
 /**
  * Read some bytes from stream to given pointer as amount of size
  */
-        virtual int readBlock( void *ptr, int size ) override;
+        virtual size_t readBlock( void *ptr, size_t size ) override;
 /**
  * Move current pointer of stream as amount of size
  */
-        virtual int skipBlock( int size ) override;
-    protected:
+        virtual size_t skipBlock( size_t size ) override;
+    private:
 /**
  * Initialize this object
  */
@@ -139,21 +132,19 @@ class HStreamIODev : public HIODev
  * The HMemIODev class controls the Input/Output device.
  * @short Memory IO device
  */
-class HMemIODev : public HIODev
+class HMemIODev final: public HIODev
 {
     uchar *ptr;
-    int pos, length;
+    size_t pos, length;
     public:
-        HMemIODev(char *s, int len);
-        virtual ~HMemIODev();
+        HMemIODev(char *s, size_t len);
+        virtual ~HMemIODev() override;
 
         virtual bool open() override;
-        virtual void close() override;
         virtual void flush() override;
-        virtual int  state() const override;
+        virtual bool state() const override;
 /* gzip routine wrapper */
         virtual bool setCompressed( bool ) override;
-        using HIODev::read1b;
         virtual bool read1b(unsigned char &out) override;
         virtual bool read1b(char &out) override;
         using HIODev::read2b;
@@ -161,9 +152,9 @@ class HMemIODev : public HIODev
         using HIODev::read4b;
         virtual bool read4b(unsigned int &out) override;
         virtual bool read4b(int &out) override;
-        virtual int readBlock( void *ptr, int size ) override;
-        virtual int skipBlock( int size ) override;
-    protected:
+        virtual size_t readBlock( void *ptr, size_t size ) override;
+        virtual size_t skipBlock( size_t size ) override;
+    private:
         virtual void init() override;
 };
 #endif // INCLUDED_HWPFILTER_SOURCE_HIODEV_H

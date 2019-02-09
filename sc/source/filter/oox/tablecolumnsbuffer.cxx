@@ -17,26 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "tablecolumnsbuffer.hxx"
+#include <tablecolumnsbuffer.hxx>
 
-#include <com/sun/star/sheet/XDatabaseRange.hpp>
-#include <rtl/ustrbuf.hxx>
-#include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <oox/helper/attributelist.hxx>
-#include <oox/helper/containerhelper.hxx>
-#include <oox/helper/propertyset.hxx>
-#include <oox/token/properties.hxx>
-#include "addressconverter.hxx"
-#include "biffinputstream.hxx"
-#include "defnamesbuffer.hxx"
-#include "dbdata.hxx"
+#include <oox/token/tokens.hxx>
+#include <dbdata.hxx>
 
 namespace oox {
 namespace xls {
-
-using namespace ::com::sun::star::sheet;
-using namespace ::com::sun::star::table;
-using namespace ::com::sun::star::uno;
 
 TableColumn::TableColumn( const WorkbookHelper& rHelper ) :
     WorkbookHelper( rHelper ),
@@ -96,10 +85,10 @@ bool TableColumns::finalizeImport( ScDBData* pDBData )
         /* TODO: use svl::SharedString for names */
         ::std::vector< OUString > aNames( maTableColumnVector.size());
         size_t i = 0;
-        for (TableColumnVector::const_iterator aIt = maTableColumnVector.begin(), aEnd = maTableColumnVector.end();
-                aIt != aEnd; ++aIt, ++i)
+        for (const auto& rxTableColumn : maTableColumnVector)
         {
-            aNames[i] = (*aIt)->getName();
+            aNames[i] = rxTableColumn->getName();
+            ++i;
         }
         pDBData->SetTableColumnNames( aNames);
         return true;

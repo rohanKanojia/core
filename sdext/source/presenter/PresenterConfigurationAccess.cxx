@@ -24,7 +24,10 @@
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
 #include <com/sun/star/util/XChangesBatch.hpp>
+#include <comphelper/propertysequence.hxx>
 #include <osl/diagnose.h>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -45,22 +48,11 @@ PresenterConfigurationAccess::PresenterConfigurationAccess (
     {
         if (rxContext.is())
         {
-            Sequence<Any> aCreationArguments(3);
-            aCreationArguments[0] = makeAny(beans::PropertyValue(
-                "nodepath",
-                0,
-                makeAny(rsRootName),
-                beans::PropertyState_DIRECT_VALUE));
-            aCreationArguments[1] = makeAny(beans::PropertyValue(
-                "depth",
-                0,
-                makeAny((sal_Int32)-1),
-                beans::PropertyState_DIRECT_VALUE));
-            aCreationArguments[2] = makeAny(beans::PropertyValue(
-                "lazywrite",
-                0,
-                makeAny(true),
-                beans::PropertyState_DIRECT_VALUE));
+            uno::Sequence<uno::Any> aCreationArguments(comphelper::InitAnyPropertySequence(
+            {
+                {"nodepath", uno::Any(rsRootName)},
+                {"depth", uno::Any(sal_Int32(-1))}
+            }));
 
             OUString sAccessService;
             if (eMode == READ_ONLY)
@@ -75,11 +67,9 @@ PresenterConfigurationAccess::PresenterConfigurationAccess (
             maNode <<= mxRoot;
         }
     }
-    catch (const Exception& rException)
+    catch (const Exception&)
     {
-        OSL_TRACE ("caught exception while opening configuration: %s",
-            OUStringToOString(rException.Message,
-                RTL_TEXTENCODING_UTF8).getStr());
+        DBG_UNHANDLED_EXCEPTION("sdext.presenter", "caught exception while opening configuration");
     }
 }
 
@@ -161,9 +151,7 @@ Any PresenterConfigurationAccess::GetConfigurationNode (
     }
     catch (const Exception& rException)
     {
-        OSL_TRACE ("caught exception while getting configuration node %s: %s",
-            OUStringToOString(sPathToNode, RTL_TEXTENCODING_UTF8).getStr(),
-            OUStringToOString(rException.Message, RTL_TEXTENCODING_UTF8).getStr());
+        SAL_WARN("sdext.presenter", "caught exception while getting configuration node " << sPathToNode << " : " << rException);
     }
 
     return Any();
@@ -214,7 +202,7 @@ void PresenterConfigurationAccess::ForAll (
             else
                 bHasAllValues = false;
             if (bHasAllValues)
-                rProcessor(rsKey,aValues);
+                rProcessor(aValues);
         }
     }
 }

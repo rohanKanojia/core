@@ -85,7 +85,7 @@ void OModuleRegistration::revokeComponent(const OUString& _rImplementationName)
     const OUString* pImplNames = s_pImplementationNames->getConstArray();
     for (sal_Int32 i=0; i<nLen; ++i, ++pImplNames)
     {
-        if (pImplNames->equals(_rImplementationName))
+        if (*pImplNames == _rImplementationName)
         {
             removeElementAt(*s_pImplementationNames, i);
             removeElementAt(*s_pSupportedServices, i);
@@ -133,10 +133,10 @@ uno::Reference< uno::XInterface > OModuleRegistration::getComponentFactory(
 
     for (sal_Int32 i=0; i<nLen; ++i, ++pImplName, ++pServices, ++pComponentFunction, ++pFactoryFunction)
     {
-        if (pImplName->equals(_rImplementationName))
+        if (*pImplName == _rImplementationName)
         {
-            const FactoryInstantiation FactoryInstantiationFunction = reinterpret_cast<const FactoryInstantiation>(*pFactoryFunction);
-            const ComponentInstantiation ComponentInstantiationFunction = reinterpret_cast<const ComponentInstantiation>(*pComponentFunction);
+            const FactoryInstantiation FactoryInstantiationFunction = reinterpret_cast<FactoryInstantiation>(*pFactoryFunction);
+            const ComponentInstantiation ComponentInstantiationFunction = reinterpret_cast<ComponentInstantiation>(*pComponentFunction);
 
             xReturn = FactoryInstantiationFunction( _rxServiceManager, *pImplName, ComponentInstantiationFunction, *pServices, nullptr);
             if (xReturn.is())

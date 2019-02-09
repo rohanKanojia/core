@@ -21,7 +21,6 @@
 #define INCLUDED_SC_SOURCE_FILTER_INC_XLVIEW_HXX
 
 #include <tools/color.hxx>
-#include "ftools.hxx"
 #include "xladdress.hxx"
 #include <map>
 #include <memory>
@@ -109,7 +108,7 @@ struct XclSelectionData
     XclRangeList        maXclSelection;     /// Selected cell ranges.
     sal_uInt16          mnCursorIdx;        /// Index of cursor in selection list.
 
-    inline explicit     XclSelectionData() : mnCursorIdx( 0 ) {}
+    explicit     XclSelectionData() : mnCursorIdx( 0 ) {}
 };
 
 typedef std::shared_ptr< XclSelectionData > XclSelectionDataRef;
@@ -141,8 +140,8 @@ struct XclTabViewData
     bool                mbShowZeros;        /// true = Show zero value zells.
     bool                mbShowOutline;      /// true = Show outlines.
     Color               maTabBgColor;       /// Tab Color default = (COL_AUTO )
-    bool                IsDefaultTabBgColor() const { return maTabBgColor == Color(COL_AUTO); };
-    sal_uInt32          mnTabBgColorId;         /// pallette color id
+    bool                IsDefaultTabBgColor() const { return maTabBgColor == COL_AUTO; };
+    sal_uInt32          mnTabBgColorId;     /// palette color id
 
     explicit            XclTabViewData();
                         ~XclTabViewData();

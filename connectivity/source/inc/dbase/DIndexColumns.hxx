@@ -21,8 +21,8 @@
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_DBASE_DINDEXCOLUMNS_HXX
 
 #include <connectivity/sdbcx/VCollection.hxx>
-#include "dbase/DIndex.hxx"
-#include "dbase/DTable.hxx"
+#include <dbase/DIndex.hxx>
+#include <dbase/DTable.hxx>
 
 namespace connectivity
 {
@@ -33,13 +33,13 @@ namespace connectivity
             ODbaseIndex* m_pIndex;
         protected:
             virtual sdbcx::ObjectType createObject(const OUString& _rName) override;
-            virtual void impl_refresh() throw(::com::sun::star::uno::RuntimeException) override;
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > createDescriptor() override;
-            virtual sdbcx::ObjectType appendObject( const OUString& _rForName, const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& descriptor ) override;
+            virtual void impl_refresh() override;
+            virtual css::uno::Reference< css::beans::XPropertySet > createDescriptor() override;
+            virtual sdbcx::ObjectType appendObject( const OUString& _rForName, const css::uno::Reference< css::beans::XPropertySet >& descriptor ) override;
         public:
             ODbaseIndexColumns( ODbaseIndex* _pIndex,
                                 ::osl::Mutex& _rMutex,
-                                const TStringVector &_rVector)
+                                const ::std::vector< OUString> &_rVector)
                         : sdbcx::OCollection(*_pIndex,_pIndex->getTable()->getConnection()->getMetaData()->supportsMixedCaseQuotedIdentifiers(),_rMutex,_rVector)
                         , m_pIndex(_pIndex)
             {}

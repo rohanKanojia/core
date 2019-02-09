@@ -17,26 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fusumry.hxx"
+#include <fusumry.hxx>
 #include <editeng/eeitem.hxx>
 #include <svx/svdotext.hxx>
 #include <svx/svdundo.hxx>
 #include <sfx2/printer.hxx>
 #include <editeng/outlobj.hxx>
+#include <xmloff/autolayout.hxx>
 
-#include "strings.hrc"
+#include <strings.hrc>
 
-#include "pres.hxx"
-#include "View.hxx"
-#include "sdpage.hxx"
-#include "Outliner.hxx"
-#include "drawview.hxx"
-#include "drawdoc.hxx"
-#include "ViewShell.hxx"
-#include "DrawDocShell.hxx"
-#include "sdresid.hxx"
-#include "optsitem.hxx"
-#include "DrawViewShell.hxx"
+#include <pres.hxx>
+#include <View.hxx>
+#include <sdpage.hxx>
+#include <Outliner.hxx>
+#include <drawview.hxx>
+#include <drawdoc.hxx>
+#include <ViewShell.hxx>
+#include <DrawDocShell.hxx>
+#include <sdmod.hxx>
+#include <sdresid.hxx>
+#include <optsitem.hxx>
+#include <DrawViewShell.hxx>
 
 using namespace com::sun::star;
 
@@ -62,19 +64,19 @@ rtl::Reference<FuPoor> FuSummaryPage::Create( ViewShell* pViewSh, ::sd::Window* 
 
 void FuSummaryPage::DoExecute( SfxRequest& )
 {
-    ::sd::Outliner* pOutl = nullptr;
+    std::unique_ptr<SdOutliner> pOutl;
     SdPage* pSummaryPage = nullptr;
     sal_uInt16 i = 0;
     sal_uInt16 nFirstPage = SDRPAGE_NOTFOUND;
     sal_uInt16 nSelectedPages = 0;
-    sal_uInt16 nCount = mpDoc->GetSdPageCount(PK_STANDARD);
+    sal_uInt16 nCount = mpDoc->GetSdPageCount(PageKind::Standard);
 
     while (i < nCount && nSelectedPages <= 1)
     {
         /* How many pages are selected?
              exactly one: pool everything from this page
              otherwise:   only pool the selected pages  */
-        SdPage* pActualPage = mpDoc->GetSdPage(i, PK_STANDARD);
+        SdPage* pActualPage = mpDoc->GetSdPage(i, PageKind::Standard);
 
         if (pActualPage->IsSelected())
         {
@@ -95,11 +97,11 @@ void FuSummaryPage::DoExecute( SfxRequest& )
 
     for (i = nFirstPage; i < nCount; i++)
     {
-        SdPage* pActualPage = mpDoc->GetSdPage(i, PK_STANDARD);
+        SdPage* pActualPage = mpDoc->GetSdPage(i, PageKind::Standard);
 
         if (nSelectedPages <= 1 || pActualPage->IsSelected())
         {
-            SdPage* pActualNotesPage = mpDoc->GetSdPage(i, PK_NOTES);
+            SdPage* pActualNotesPage = mpDoc->GetSdPage(i, PageKind::Notes);
             SdrTextObj* pTextObj = static_cast<SdrTextObj*>( pActualPage->GetPresObj(PRESOBJ_TITLE) );
 
             if (pTextObj && !pTextObj->IsEmptyPresObj())
@@ -111,19 +113,19 @@ void FuSummaryPage::DoExecute( SfxRequest& )
 
                     if( bUndo )
                     {
-                        mpView->BegUndo(SD_RESSTR(STR_UNDO_SUMMARY_PAGE));
+                        mpView->BegUndo(SdResId(STR_UNDO_SUMMARY_PAGE));
                         bBegUndo = true;
                     }
 
-                    SetOfByte aVisibleLayers = pActualPage->TRG_GetMasterPageVisibleLayers();
+                    SdrLayerIDSet aVisibleLayers = pActualPage->TRG_GetMasterPageVisibleLayers();
 
                     // page with title & structuring!
                     pSummaryPage = mpDoc->AllocSdPage(false);
                     pSummaryPage->SetSize(pActualPage->GetSize() );
-                    pSummaryPage->SetBorder(pActualPage->GetLftBorder(),
-                                     pActualPage->GetUppBorder(),
-                                     pActualPage->GetRgtBorder(),
-                                     pActualPage->GetLwrBorder() );
+                    pSummaryPage->SetBorder(pActualPage->GetLeftBorder(),
+                                     pActualPage->GetUpperBorder(),
+                                     pActualPage->GetRightBorder(),
+                                     pActualPage->GetLowerBorder() );
 
                     // insert page at the back
                     mpDoc->InsertPage(pSummaryPage, nCount * 2 + 1);
@@ -133,18 +135,18 @@ void FuSummaryPage::DoExecute( SfxRequest& )
                     // use MasterPage of the current page
                     pSummaryPage->TRG_SetMasterPage(pActualPage->TRG_GetMasterPage());
                     pSummaryPage->SetLayoutName(pActualPage->GetLayoutName());
-                    pSummaryPage->SetAutoLayout(AUTOLAYOUT_ENUM, true);
+                    pSummaryPage->SetAutoLayout(AUTOLAYOUT_TITLE_CONTENT, true);
                     pSummaryPage->TRG_SetMasterPageVisibleLayers(aVisibleLayers);
                     pSummaryPage->setHeaderFooterSettings(pActualPage->getHeaderFooterSettings());
 
                     // notes-page
                     SdPage* pNotesPage = mpDoc->AllocSdPage(false);
                     pNotesPage->SetSize(pActualNotesPage->GetSize());
-                    pNotesPage->SetBorder(pActualNotesPage->GetLftBorder(),
-                                          pActualNotesPage->GetUppBorder(),
-                                          pActualNotesPage->GetRgtBorder(),
-                                          pActualNotesPage->GetLwrBorder() );
-                    pNotesPage->SetPageKind(PK_NOTES);
+                    pNotesPage->SetBorder(pActualNotesPage->GetLeftBorder(),
+                                          pActualNotesPage->GetUpperBorder(),
+                                          pActualNotesPage->GetRightBorder(),
+                                          pActualNotesPage->GetLowerBorder() );
+                    pNotesPage->SetPageKind(PageKind::Notes);
 
                     // insert page at the back
                     mpDoc->InsertPage(pNotesPage, nCount * 2 + 2);
@@ -159,12 +161,12 @@ void FuSummaryPage::DoExecute( SfxRequest& )
                     pNotesPage->TRG_SetMasterPageVisibleLayers(aVisibleLayers);
                     pNotesPage->setHeaderFooterSettings(pActualNotesPage->getHeaderFooterSettings());
 
-                    pOutl = new ::sd::Outliner( mpDoc, OUTLINERMODE_OUTLINEOBJECT );
+                    pOutl.reset(new SdOutliner( mpDoc, OutlinerMode::OutlineObject ));
                     pOutl->SetUpdateMode(false);
                     pOutl->EnableUndo(false);
 
                     if (mpDocSh)
-                        pOutl->SetRefDevice(SD_MOD()->GetRefDevice( *mpDocSh ));
+                        pOutl->SetRefDevice(SD_MOD()->GetVirtualRefDevice());
 
                     pOutl->SetDefTab( mpDoc->GetDefaultTabulator() );
                     pOutl->SetStyleSheetPool(static_cast<SfxStyleSheetPool*>(mpDoc->GetStyleSheetPool()));
@@ -177,7 +179,7 @@ void FuSummaryPage::DoExecute( SfxRequest& )
                 // #118876#, check if the OutlinerParaObject is created successfully
                 if( pParaObj )
                 {
-                    pParaObj->SetOutlinerMode( OUTLINERMODE_OUTLINEOBJECT );
+                    pParaObj->SetOutlinerMode( OutlinerMode::OutlineObject );
                     pOutl->AddText(*pParaObj);
                 }
             }
@@ -193,7 +195,7 @@ void FuSummaryPage::DoExecute( SfxRequest& )
         return;
 
     // remove hard break- and character attributes
-    SfxItemSet aEmptyEEAttr(mpDoc->GetPool(), EE_ITEMS_START, EE_ITEMS_END);
+    SfxItemSet aEmptyEEAttr(mpDoc->GetPool(), svl::Items<EE_ITEMS_START, EE_ITEMS_END>{});
     sal_Int32 nParaCount = pOutl->GetParagraphCount();
 
     for (sal_Int32 nPara = 0; nPara < nParaCount; nPara++)
@@ -215,7 +217,7 @@ void FuSummaryPage::DoExecute( SfxRequest& )
 
     if( bBegUndo )
         mpView->EndUndo();
-    delete pOutl;
+    pOutl.reset();
 
     DrawViewShell* pDrawViewShell= dynamic_cast< DrawViewShell* >( mpViewShell );
     if(pDrawViewShell)

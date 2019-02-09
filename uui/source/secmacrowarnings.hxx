@@ -20,10 +20,9 @@
 #ifndef INCLUDED_UUI_SOURCE_SECMACROWARNINGS_HXX
 #define INCLUDED_UUI_SOURCE_SECMACROWARNINGS_HXX
 
-#include <vcl/dialog.hxx>
-#include <svtools/stdctrl.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
 #include <unotools/securityoptions.hxx>
-#include <vcl/button.hxx>
+#include <vcl/weld.hxx>
 
 namespace com {
 namespace sun {
@@ -32,44 +31,32 @@ namespace security {
     class XCertificate; }
 }}}
 
-#include <com/sun/star/uno/Sequence.hxx>
-
-
-class MacroWarning : public ModalDialog
+class MacroWarning : public weld::MessageDialogController
 {
 private:
+    std::unique_ptr<weld::Widget> mxGrid;
+    std::unique_ptr<weld::Label> mxSignsFI;
+    std::unique_ptr<weld::Button> mxViewSignsBtn;
+    std::unique_ptr<weld::CheckButton> mxAlwaysTrustCB;
+    std::unique_ptr<weld::Button> mxEnableBtn;
+    std::unique_ptr<weld::Button> mxDisableBtn;
 
     css::uno::Reference< css::security::XCertificate >  mxCert;
     css::uno::Reference< css::embed::XStorage >         mxStore;
     OUString                                 maODFVersion;
     const css::uno::Sequence< css::security::DocumentSignatureInformation >*    mpInfos;
 
-    VclPtr<FixedImage>         mpSymbolImg;
-    VclPtr<FixedText>          mpDocNameFI;
-    VclPtr<FixedText>          mpDescr1FI;
-    VclPtr<FixedText>          mpDescr1aFI;
-    VclPtr<FixedText>          mpSignsFI;
-    VclPtr<PushButton>         mpViewSignsBtn;
-    VclPtr<FixedText>          mpDescr2FI;
-    VclPtr<CheckBox>           mpAlwaysTrustCB;
-    VclPtr<PushButton>         mpEnableBtn;
-    VclPtr<PushButton>         mpDisableBtn;
-
-    const bool          mbSignedMode;           // modus of dialog (signed / unsigned macros)
     const bool          mbShowSignatures;
     sal_Int32           mnActSecLevel;
 
-    DECL_LINK_TYPED(    ViewSignsBtnHdl, Button*, void );
-    DECL_LINK_TYPED(    EnableBtnHdl, Button*, void );
-    DECL_LINK_TYPED(    DisableBtnHdl, Button*, void );
-    DECL_LINK_TYPED(    AlwaysTrustCheckHdl, Button*, void );
+    DECL_LINK(ViewSignsBtnHdl, weld::Button&, void);
+    DECL_LINK(EnableBtnHdl, weld::Button&, void);
+    DECL_LINK(AlwaysTrustCheckHdl, weld::Button&, void);
 
     void                InitControls();
 
 public:
-    MacroWarning( vcl::Window* pParent, bool _bShowSignatures, ResMgr& rResMgr );
-    virtual ~MacroWarning();
-    virtual void dispose() override;
+    MacroWarning(weld::Window* pParent, bool _bShowSignatures);
 
     void    SetDocumentURL( const OUString& rDocURL );
 

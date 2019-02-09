@@ -21,44 +21,22 @@
 #define INCLUDED_SVX_INC_SDR_CONTACT_VIEWOBJECTCONTACTOFGRAPHIC_HXX
 
 #include <svx/sdr/contact/viewobjectcontactofsdrobj.hxx>
+#include <memory>
 
 class SdrGrafObj;
-
-namespace sdr { namespace event {
-    class AsynchGraphicLoadingEvent;
-}}
 
 namespace sdr
 {
     namespace contact
     {
-        class ViewObjectContactOfGraphic : public ViewObjectContactOfSdrObj
+        class ViewObjectContactOfGraphic final : public ViewObjectContactOfSdrObj
         {
-        private:
-            // allow async loading event helper to call tooling methods
-            friend class sdr::event::AsynchGraphicLoadingEvent;
-
-            // Member which takes care for the asynch loading events which may be necessary
-            // for asynch graphics loading.
-            sdr::event::AsynchGraphicLoadingEvent*      mpAsynchLoadEvent;
-
-            // async graphics loading helpers. Only to be used internally or from the
-            // event helper class (in .cxx file)
-            void impPrepareGraphicWithAsynchroniousLoading();
-            void impPrepareGraphicWithSynchroniousLoading();
-            void doAsynchGraphicLoading();
-            void forgetAsynchGraphicLoadingEvent(sdr::event::AsynchGraphicLoadingEvent* pEvent);
-
-        protected:
-            const SdrGrafObj& getSdrGrafObj() const;
-            SdrGrafObj& getSdrGrafObj();
-
             // This method is responsible for creating the graphical visualisation data
             virtual drawinglayer::primitive2d::Primitive2DContainer createPrimitive2DSequence(const DisplayInfo& rDisplayInfo) const override;
 
         public:
             ViewObjectContactOfGraphic(ObjectContact& rObjectContact, ViewContact& rViewContact);
-            virtual ~ViewObjectContactOfGraphic();
+            virtual ~ViewObjectContactOfGraphic() override;
         };
     } // end of namespace contact
 } // end of namespace sdr

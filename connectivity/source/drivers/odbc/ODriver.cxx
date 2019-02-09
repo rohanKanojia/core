@@ -17,14 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "odbc/ODriver.hxx"
-#include "odbc/OConnection.hxx"
-#include "odbc/OFunctions.hxx"
-#include "odbc/OTools.hxx"
+#include <odbc/ODriver.hxx>
+#include <odbc/OConnection.hxx>
+#include <odbc/OFunctions.hxx>
+#include <odbc/OTools.hxx>
 #include <connectivity/dbexception.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include "resource/common_res.hrc"
-#include "resource/sharedresources.hxx"
+#include <strings.hrc>
+#include <resource/sharedresources.hxx>
 
 using namespace connectivity::odbc;
 using namespace com::sun::star::uno;
@@ -32,7 +32,7 @@ using namespace com::sun::star::lang;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::sdbc;
 
-ODBCDriver::ODBCDriver(const ::com::sun::star::uno::Reference< ::com::sun::star::lang::XMultiServiceFactory >& _rxFactory)
+ODBCDriver::ODBCDriver(const css::uno::Reference< css::lang::XMultiServiceFactory >& _rxFactory)
     :ODriver_BASE(m_aMutex)
     ,m_xORB(_rxFactory)
     ,m_pDriverHandle(SQL_NULL_HANDLE)
@@ -44,9 +44,9 @@ void ODBCDriver::disposing()
     ::osl::MutexGuard aGuard(m_aMutex);
 
 
-    for (OWeakRefArray::iterator i = m_xConnections.begin(); m_xConnections.end() != i; ++i)
+    for (auto const& connection : m_xConnections)
     {
-        Reference< XComponent > xComp(i->get(), UNO_QUERY);
+        Reference< XComponent > xComp(connection.get(), UNO_QUERY);
         if (xComp.is())
             xComp->dispose();
     }
@@ -57,7 +57,7 @@ void ODBCDriver::disposing()
 
 // static ServiceInfo
 
-OUString ODBCDriver::getImplementationName_Static(  ) throw(RuntimeException)
+OUString ODBCDriver::getImplementationName_Static(  )
 {
     return OUString("com.sun.star.comp.sdbc.ODBCDriver");
         // this name is referenced in the configuration and in the odbc.xml
@@ -65,31 +65,31 @@ OUString ODBCDriver::getImplementationName_Static(  ) throw(RuntimeException)
 }
 
 
-Sequence< OUString > ODBCDriver::getSupportedServiceNames_Static(  ) throw (RuntimeException)
+Sequence< OUString > ODBCDriver::getSupportedServiceNames_Static(  )
 {
     Sequence<OUString> aSNS { "com.sun.star.sdbc.Driver" };
     return aSNS;
 }
 
 
-OUString SAL_CALL ODBCDriver::getImplementationName(  ) throw(RuntimeException, std::exception)
+OUString SAL_CALL ODBCDriver::getImplementationName(  )
 {
     return getImplementationName_Static();
 }
 
-sal_Bool SAL_CALL ODBCDriver::supportsService( const OUString& _rServiceName ) throw(RuntimeException, std::exception)
+sal_Bool SAL_CALL ODBCDriver::supportsService( const OUString& _rServiceName )
 {
     return cppu::supportsService(this, _rServiceName);
 }
 
 
-Sequence< OUString > SAL_CALL ODBCDriver::getSupportedServiceNames(  ) throw(RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL ODBCDriver::getSupportedServiceNames(  )
 {
     return getSupportedServiceNames_Static();
 }
 
 
-Reference< XConnection > SAL_CALL ODBCDriver::connect( const OUString& url, const Sequence< PropertyValue >& info ) throw(SQLException, RuntimeException, std::exception)
+Reference< XConnection > SAL_CALL ODBCDriver::connect( const OUString& url, const Sequence< PropertyValue >& info )
 {
     if ( ! acceptsURL(url) )
         return nullptr;
@@ -109,82 +109,81 @@ Reference< XConnection > SAL_CALL ODBCDriver::connect( const OUString& url, cons
 }
 
 sal_Bool SAL_CALL ODBCDriver::acceptsURL( const OUString& url )
-        throw(SQLException, RuntimeException, std::exception)
 {
     return url.startsWith("sdbc:odbc:");
 }
 
-Sequence< DriverPropertyInfo > SAL_CALL ODBCDriver::getPropertyInfo( const OUString& url, const Sequence< PropertyValue >& /*info*/ ) throw(SQLException, RuntimeException, std::exception)
+Sequence< DriverPropertyInfo > SAL_CALL ODBCDriver::getPropertyInfo( const OUString& url, const Sequence< PropertyValue >& /*info*/ )
 {
     if ( acceptsURL(url) )
     {
-        ::std::vector< DriverPropertyInfo > aDriverInfo;
+        std::vector< DriverPropertyInfo > aDriverInfo;
 
         Sequence< OUString > aBooleanValues(2);
         aBooleanValues[0] = "false";
         aBooleanValues[1] = "true";
 
         aDriverInfo.push_back(DriverPropertyInfo(
-                OUString("CharSet")
-                ,OUString("CharSet of the database.")
-                ,sal_False
+                "CharSet"
+                ,"CharSet of the database."
+                ,false
                 ,OUString()
                 ,Sequence< OUString >())
                 );
         aDriverInfo.push_back(DriverPropertyInfo(
-                OUString("UseCatalog")
-                ,OUString("Use catalog for file-based databases.")
-                ,sal_False
-                ,OUString(  "false"  )
+                "UseCatalog"
+                ,"Use catalog for file-based databases."
+                ,false
+                ,"false"
                 ,aBooleanValues)
                 );
         aDriverInfo.push_back(DriverPropertyInfo(
-                OUString("SystemDriverSettings")
-                ,OUString("Driver settings.")
-                ,sal_False
+                "SystemDriverSettings"
+                ,"Driver settings."
+                ,false
                 ,OUString()
                 ,Sequence< OUString >())
                 );
         aDriverInfo.push_back(DriverPropertyInfo(
-                OUString("ParameterNameSubstitution")
-                ,OUString("Change named parameters with '?'.")
-                ,sal_False
-                ,OUString(  "false"  )
+                "ParameterNameSubstitution"
+                ,"Change named parameters with '?'."
+                ,false
+                ,"false"
                 ,aBooleanValues)
                 );
         aDriverInfo.push_back(DriverPropertyInfo(
-                OUString("IgnoreDriverPrivileges")
-                ,OUString("Ignore the privileges from the database driver.")
-                ,sal_False
-                ,OUString(  "false"  )
+                "IgnoreDriverPrivileges"
+                ,"Ignore the privileges from the database driver."
+                ,false
+                ,"false"
                 ,aBooleanValues)
                 );
         aDriverInfo.push_back(DriverPropertyInfo(
-                OUString("IsAutoRetrievingEnabled")
-                ,OUString("Retrieve generated values.")
-                ,sal_False
-                ,OUString(  "false"  )
+                "IsAutoRetrievingEnabled"
+                ,"Retrieve generated values."
+                ,false
+                ,"false"
                 ,aBooleanValues)
                 );
         aDriverInfo.push_back(DriverPropertyInfo(
-                OUString("AutoRetrievingStatement")
-                ,OUString("Auto-increment statement.")
-                ,sal_False
+                "AutoRetrievingStatement"
+                ,"Auto-increment statement."
+                ,false
                 ,OUString()
                 ,Sequence< OUString >())
                 );
         aDriverInfo.push_back(DriverPropertyInfo(
-                OUString("GenerateASBeforeCorrelationName")
-                ,OUString("Generate AS before table correlation names.")
-                ,sal_False
-                ,OUString(  "false"  )
+                "GenerateASBeforeCorrelationName"
+                ,"Generate AS before table correlation names."
+                ,false
+                ,"false"
                 ,aBooleanValues)
                 );
         aDriverInfo.push_back(DriverPropertyInfo(
-                OUString("EscapeDateTime")
-                ,OUString("Escape date time format.")
-                ,sal_False
-                ,OUString(  "true"  )
+                "EscapeDateTime"
+                ,"Escape date time format."
+                ,false
+                ,"true"
                 ,aBooleanValues)
                 );
 
@@ -196,12 +195,12 @@ Sequence< DriverPropertyInfo > SAL_CALL ODBCDriver::getPropertyInfo( const OUStr
     return Sequence< DriverPropertyInfo >();
 }
 
-sal_Int32 SAL_CALL ODBCDriver::getMajorVersion(  ) throw(RuntimeException, std::exception)
+sal_Int32 SAL_CALL ODBCDriver::getMajorVersion(  )
 {
     return 1;
 }
 
-sal_Int32 SAL_CALL ODBCDriver::getMinorVersion(  ) throw(RuntimeException, std::exception)
+sal_Int32 SAL_CALL ODBCDriver::getMinorVersion(  )
 {
     return 0;
 }

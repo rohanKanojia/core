@@ -22,27 +22,8 @@
 #include <sal/config.h>
 
 #include <sal/log.hxx>
-#include <tools/rc.hxx>
-#include <tools/rcid.h>
-#include <tools/resid.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/wrkwin.hxx>
-
-#include <osl/mutex.hxx>
-
-#ifndef DELETEZ
-#define DELETEZ(pPtr) ( delete pPtr, pPtr = 0 )
-#endif
-
-#ifndef DELETEX
-#ifdef DBG_UTIL
-#define DELETEX(T, pPtr) \
-    ( delete pPtr, pPtr = reinterpret_cast<T *>(sal_IntPtr(-1)) )
-#else
-#define DELETEX(T, pPtr) delete pPtr
-#endif
-#endif
-
 
 #if defined(DBG_UTIL)
 
@@ -68,17 +49,6 @@ public:
 #define SFX_STACK(s)
 #endif
 
-
-struct StringList_Impl : private Resource
-{
-
-    ResId aResId;
-
-    StringList_Impl( const ResId& rErrIdP,  sal_uInt16 nId)
-        : Resource( rErrIdP ), aResId(nId, *rErrIdP.GetResMgr()) {}
-    ~StringList_Impl() { FreeResource(); }
-
-};
 
 #endif // INCLUDED_SFX2_SOURCE_INC_SFXTYPES_HXX
 

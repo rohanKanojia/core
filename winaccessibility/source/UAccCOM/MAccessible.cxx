@@ -24,7 +24,7 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnon-virtual-dtor"
 #endif
-#include  "UAccCOM.h"
+#include  <UAccCOM.h>
 #if defined __clang__
 #pragma clang diagnostic pop
 #endif
@@ -43,7 +43,10 @@
 #include "AccHypertext.h"
 #include "AccHyperLink.h"
 
+#include <rtl/ustrbuf.hxx>
 #include <vcl/svapp.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
+#include <comphelper/AccessibleImplementationHelper.hxx>
 
 #include <com/sun/star/accessibility/XAccessibleText.hpp>
 #include <com/sun/star/accessibility/XAccessibleEditableText.hpp>
@@ -52,7 +55,7 @@
 #include <com/sun/star/accessibility/XAccessibleExtendedComponent.hpp>
 #include <com/sun/star/accessibility/XAccessibleAction.hpp>
 #include <com/sun/star/accessibility/XAccessibleKeyBinding.hpp>
-#include <com/sun/star/accessibility/XAccessibleHyperText.hpp>
+#include <com/sun/star/accessibility/XAccessibleHypertext.hpp>
 #include <com/sun/star/accessibility/XAccessibleHyperlink.hpp>
 #include <com/sun/star/accessibility/XAccessibleRelationSet.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
@@ -88,7 +91,7 @@ enum XInterfaceIndex {
 
 // IA2 states mapping, and name
 // maintenance the consistency, change one array, change the three all
-long IA2_STATES[] =
+long const IA2_STATES[] =
 {
     IA2_STATE_ACTIVE,                   // =                    0x1;
     IA2_STATE_ARMED,                    // =                    0x2;
@@ -114,7 +117,7 @@ long IA2_STATES[] =
 <=== map ===>
 
 */
-short UNO_STATES[] =
+short const UNO_STATES[] =
 {
     ACTIVE,         // = (sal_Int16)1;
     ARMED,          // = (sal_Int16)2;
@@ -141,7 +144,7 @@ using namespace com::sun::star::accessibility::AccessibleRole;
 
 #define QUERYXINTERFACE(ainterface) \
 {                           \
-    if(pXAcc == NULL)       \
+    if(pXAcc == nullptr)    \
     return FALSE;       \
     pRContext = pXAcc->getAccessibleContext();  \
     if( !pRContext.is() )   \
@@ -153,7 +156,7 @@ using namespace com::sun::star::accessibility::AccessibleRole;
 {                       \
     return FALSE;       \
 }                       \
-    *ppXI = (XInterface*)pRXI.get();        \
+    *ppXI = static_cast<XInterface*>(pRXI.get()); \
     return TRUE;            \
 }
 
@@ -162,19 +165,19 @@ using namespace com::sun::star::accessibility::AccessibleRole;
     return S_FALSE;
 
 
-AccObjectManagerAgent* CMAccessible::g_pAgent = NULL;
+AccObjectManagerAgent* CMAccessible::g_pAgent = nullptr;
 
 CMAccessible::CMAccessible():
-m_pszName(NULL),
-m_pszValue(NULL),
-m_pszActionDescription(NULL),
+m_pszName(nullptr),
+m_pszValue(nullptr),
+m_pszActionDescription(nullptr),
 m_iRole(0x00),
 m_dState(0x00),
-m_pszDescription(NULL),
-m_pIParent(NULL),
+m_pszDescription(nullptr),
+m_pIParent(nullptr),
 m_dChildID(0x00),
 m_dFocusChildID(UACC_NO_FOCUS),
-m_hwnd(NULL),
+m_hwnd(nullptr),
 m_isDestroy(FALSE),
 m_bRequiresSave(FALSE)
 {
@@ -190,32 +193,28 @@ CMAccessible::~CMAccessible()
 {
     SolarMutexGuard g;
 
-    if(m_pszName!=NULL)
+    if(m_pszName!=nullptr)
     {
         SAFE_SYSFREESTRING(m_pszName);
-        m_pszName=NULL;
     }
-    if(m_pszValue!=NULL)
+    if(m_pszValue!=nullptr)
     {
         SAFE_SYSFREESTRING(m_pszValue);
-        m_pszValue=NULL;
     }
-    if(m_pszDescription!=NULL)
+    if(m_pszDescription!=nullptr)
     {
         SAFE_SYSFREESTRING(m_pszDescription);
-        m_pszDescription=NULL;
     }
 
-    if(m_pszActionDescription!=NULL)
+    if(m_pszActionDescription!=nullptr)
     {
         SAFE_SYSFREESTRING(m_pszActionDescription);
-        m_pszActionDescription=NULL;
     }
 
     if(m_pIParent)
     {
         m_pIParent->Release();
-        m_pIParent=NULL;
+        m_pIParent=nullptr;
     }
     m_pEnumVar->Release();
     m_containedObjects.clear();
@@ -236,7 +235,7 @@ STDMETHODIMP CMAccessible::get_accParent(IDispatch **ppdispParent)
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(ppdispParent == NULL)
+        if(ppdispParent == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -249,8 +248,8 @@ STDMETHODIMP CMAccessible::get_accParent(IDispatch **ppdispParent)
         }
         else if(m_hwnd)
         {
-            HRESULT hr = AccessibleObjectFromWindow(m_hwnd, OBJID_WINDOW, IID_IAccessible, (void**)ppdispParent);
-            if( ! SUCCEEDED( hr ) || ! ppdispParent )
+            HRESULT hr = AccessibleObjectFromWindow(m_hwnd, OBJID_WINDOW, IID_IAccessible, reinterpret_cast<void**>(ppdispParent));
+            if (!SUCCEEDED(hr) || !*ppdispParent)
             {
                 return S_FALSE;
             }
@@ -273,7 +272,7 @@ STDMETHODIMP CMAccessible::get_accChildCount(long *pcountChildren)
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pcountChildren == NULL)
+        if(pcountChildren == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -307,7 +306,7 @@ STDMETHODIMP CMAccessible::get_accChild(VARIANT varChild, IDispatch **ppdispChil
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(ppdispChild == NULL)
+        if(ppdispChild == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -321,7 +320,7 @@ STDMETHODIMP CMAccessible::get_accChild(VARIANT varChild, IDispatch **ppdispChil
                 return S_OK;
             }
             *ppdispChild = GetChildInterface(varChild.lVal);
-            if((*ppdispChild) == NULL)
+            if((*ppdispChild) == nullptr)
                 return E_FAIL;
             (*ppdispChild)->AddRef();
             return S_OK;
@@ -345,7 +344,7 @@ STDMETHODIMP CMAccessible::get_accName(VARIANT varChild, BSTR *pszName)
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pszName == NULL)
+        if(pszName == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -384,7 +383,7 @@ STDMETHODIMP CMAccessible::get_accValue(VARIANT varChild, BSTR *pszValue)
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if( pszValue == NULL )
+        if( pszValue == nullptr )
         {
             return E_INVALIDARG;
         }
@@ -395,7 +394,7 @@ STDMETHODIMP CMAccessible::get_accValue(VARIANT varChild, BSTR *pszValue)
                 if(m_dState & STATE_SYSTEM_PROTECTED)
                     return E_ACCESSDENIED;
 
-                if ( m_pszValue !=NULL && wcslen(m_pszValue) == 0 )
+                if ( m_pszValue !=nullptr && wcslen(m_pszValue) == 0 )
                     return S_OK;
 
                 SAFE_SYSFREESTRING(*pszValue);
@@ -429,7 +428,7 @@ STDMETHODIMP CMAccessible::get_accDescription(VARIANT varChild, BSTR *pszDescrip
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pszDescription == NULL)
+        if(pszDescription == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -468,7 +467,7 @@ STDMETHODIMP CMAccessible::get_accRole(VARIANT varChild, VARIANT *pvarRole)
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pvarRole == NULL)
+        if(pvarRole == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -519,7 +518,7 @@ STDMETHODIMP CMAccessible::get_accState(VARIANT varChild, VARIANT *pvarState)
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pvarState == NULL)
+        if(pvarState == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -591,21 +590,18 @@ STDMETHODIMP CMAccessible::get_accHelpTopic(BSTR *, VARIANT, long *)
     return E_NOTIMPL;
 }
 
-static void GetMnemonicChar( const ::rtl::OUString& aStr, WCHAR* wStr)
+static bool GetMnemonicChar( const OUString& aStr, sal_Unicode* wStr)
 {
-    int  nLen    = aStr.pData->length;
-    int  i       = 0;
-    WCHAR* text = aStr.pData->buffer;
-
-    while ( i < nLen )
-    {
-        if ( text[i] == L'~' )
-            if ( text[i+1] != L'~' )
-            {
-                wStr[0] = text[i+1];
-                break;
-            }
-            i++;
+    for (sal_Int32 i = 0;; i += 2) {
+        i = aStr.indexOf('~', i);
+        if (i == -1 || i == aStr.getLength() - 1) {
+            return false;
+        }
+        auto c = aStr[i + 1];
+        if (c != '~') {
+            *wStr = c;
+            return true;
+        }
     }
 }
 
@@ -624,7 +620,7 @@ STDMETHODIMP CMAccessible::get_accKeyboardShortcut(VARIANT varChild, BSTR *pszKe
 
         ISDESTROY()
         // #CHECK#
-        if(pszKeyboardShortcut == NULL)
+        if(pszKeyboardShortcut == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -642,7 +638,7 @@ STDMETHODIMP CMAccessible::get_accKeyboardShortcut(VARIANT varChild, BSTR *pszKe
 
                     Reference<XAccessibleAction> pRXI(pRContext,UNO_QUERY);
 
-                    OLECHAR wString[64]={0};
+                    OUString wString;
 
                     if( pRXI.is() && pRXI->getAccessibleActionCount() >= 1)
                     {
@@ -652,11 +648,11 @@ STDMETHODIMP CMAccessible::get_accKeyboardShortcut(VARIANT varChild, BSTR *pszKe
                             long nCount = binding->getAccessibleKeyBindingCount();
                             if(nCount >= 1)
                             {
-                                CAccAction::GetkeyBindingStrByXkeyBinding( binding->getAccessibleKeyBinding(0),wString );
+                                wString = comphelper::GetkeyBindingStrByXkeyBinding( binding->getAccessibleKeyBinding(0) );
                             }
                         }
                     }
-                    if(wString[0] == 0)
+                    if(wString.isEmpty())
                     {
                         Reference<XAccessibleRelationSet> pRrelationSet = pRContext->getAccessibleRelationSet();
                         if(!pRrelationSet.is())
@@ -672,16 +668,16 @@ STDMETHODIMP CMAccessible::get_accKeyboardShortcut(VARIANT varChild, BSTR *pszKe
                             VARIANT varParentRole;
                             VariantInit( &varParentRole );
 
-                            m_pIParent->get_accRole(varChild, &varParentRole);
-
-                            if( m_pIParent && varParentRole.lVal == ROLE_SYSTEM_COMBOBOX ) // edit in comoboBox
+                            if (m_pIParent
+                                && SUCCEEDED(m_pIParent->get_accRole(varChild, &varParentRole))
+                                && varParentRole.lVal == ROLE_SYSTEM_COMBOBOX) // edit in comboBox
                             {
                                 m_pIParent->get_accKeyboardShortcut(varChild, pszKeyboardShortcut);
                                 return S_OK;
                             }
                         }
 
-                        AccessibleRelation *paccRelation = NULL;
+                        AccessibleRelation *paccRelation = nullptr;
                         AccessibleRelation accRelation;
                         for(int i=0; i<nRelCount ; i++)
                         {
@@ -692,13 +688,13 @@ STDMETHODIMP CMAccessible::get_accKeyboardShortcut(VARIANT varChild, BSTR *pszKe
                             }
                         }
 
-                        if(paccRelation == NULL)
+                        if(paccRelation == nullptr)
                             return S_FALSE;
 
                         Sequence< Reference< XInterface > > xTargets = paccRelation->TargetSet;
                         Reference<XInterface> pRAcc = xTargets[0];
 
-                        XAccessible* pXAcc = (XAccessible*)pRAcc.get();
+                        XAccessible* pXAcc = static_cast<XAccessible*>(pRAcc.get());
 
                         Reference<XAccessibleContext> pRLebelContext = pXAcc->getAccessibleContext();
                         if(!pRLebelContext.is())
@@ -707,7 +703,7 @@ STDMETHODIMP CMAccessible::get_accKeyboardShortcut(VARIANT varChild, BSTR *pszKe
                         pRrelationSet = pRLebelContext->getAccessibleRelationSet();
                         nRelCount = pRrelationSet->getRelationCount();
 
-                        paccRelation = NULL;
+                        paccRelation = nullptr;
                         for(int j=0; j<nRelCount ; j++)
                         {
                             if( pRrelationSet->getRelation(j).RelationType == 5 )
@@ -721,7 +717,7 @@ STDMETHODIMP CMAccessible::get_accKeyboardShortcut(VARIANT varChild, BSTR *pszKe
                         {
                             xTargets = paccRelation->TargetSet;
                             pRAcc = xTargets[0];
-                            if (m_xAccessible.get() != (XAccessible*)pRAcc.get())
+                            if (m_xAccessible.get() != static_cast<XAccessible*>(pRAcc.get()))
                                 return S_FALSE;
                         }
 
@@ -729,20 +725,18 @@ STDMETHODIMP CMAccessible::get_accKeyboardShortcut(VARIANT varChild, BSTR *pszKe
                         if(!pRXIE.is())
                             return S_FALSE;
 
-                        ::rtl::OUString ouStr = pRXIE->getTitledBorderText();
-                        WCHAR key[2] = {NULL};
-                        GetMnemonicChar(ouStr, key);
-                        if(key[0] != 0)
+                        OUString ouStr = pRXIE->getTitledBorderText();
+                        sal_Unicode key;
+                        if(GetMnemonicChar(ouStr, &key))
                         {
-                            wcscat(wString, L"Alt+");
-                            wcscat(wString, key);
+                            wString = "Alt+" + OUStringLiteral1(key);
                         }
                         else
                             return S_FALSE;
                     }
 
                     SAFE_SYSFREESTRING(*pszKeyboardShortcut);
-                    *pszKeyboardShortcut = SysAllocString(wString);
+                    *pszKeyboardShortcut = SysAllocString(o3tl::toW(wString.getStr()));
 
                     return S_OK;
                 }
@@ -778,7 +772,7 @@ STDMETHODIMP CMAccessible::get_accFocus(VARIANT *pvarChild)
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pvarChild == NULL)
+        if(pvarChild == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -790,7 +784,7 @@ STDMETHODIMP CMAccessible::get_accFocus(VARIANT *pvarChild)
         //if the descendant of current object has focus indicated by m_dFocusChildID, return the IDispatch of this focused object
         else
         {
-            IMAccessible* pIMAcc = NULL;
+            IMAccessible* pIMAcc = nullptr;
             g_pAgent->GetIAccessibleFromResID(m_dFocusChildID,&pIMAcc);
             pIMAcc->AddRef();
             pvarChild->vt = VT_DISPATCH;
@@ -817,7 +811,7 @@ STDMETHODIMP CMAccessible::get_accSelection(VARIANT *pvarChildren)
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pvarChildren == NULL)
+        if(pvarChildren == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -866,7 +860,7 @@ STDMETHODIMP CMAccessible::accLocation(long *pxLeft, long *pyTop, long *pcxWidth
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pxLeft == NULL || pyTop == NULL || pcxWidth == NULL || pcyHeight == NULL)
+        if(pxLeft == nullptr || pyTop == nullptr || pcxWidth == nullptr || pcyHeight == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -924,7 +918,7 @@ STDMETHODIMP CMAccessible::accNavigate(long navDir, VARIANT varStart, VARIANT *p
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pvarEndUpAt == NULL)
+        if(pvarEndUpAt == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -966,7 +960,7 @@ STDMETHODIMP CMAccessible::accHitTest(long xLeft, long yTop, VARIANT *pvarChild)
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pvarChild == NULL)
+        if(pvarChild == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -984,7 +978,7 @@ STDMETHODIMP CMAccessible::accHitTest(long xLeft, long yTop, VARIANT *pvarChild)
             nCount = pRContext->getAccessibleChildCount();
             if(nCount > 256)
                 return E_FAIL;
-            IMAccessible* child = NULL;
+            IMAccessible* child = nullptr;
             for( i = 0; i<nCount; i++)
             {
 
@@ -1078,7 +1072,7 @@ STDMETHODIMP CMAccessible::put_accValue(VARIANT varChild, BSTR szValue)
         {
             if(varChild.lVal==CHILDID_SELF)
             {
-                SysAllocString(m_pszValue);
+                SAFE_SYSFREESTRING(m_pszValue);
                 m_pszValue=SysAllocString(szValue);
                 return S_OK;
             }
@@ -1107,14 +1101,14 @@ STDMETHODIMP CMAccessible::Put_XAccName(const OLECHAR __RPC_FAR *pszName)
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pszName == NULL)
+        if(pszName == nullptr)
         {
             return E_INVALIDARG;
         }
 
-        SAFE_SYSFREESTRING(m_pszName);//??
+        SAFE_SYSFREESTRING(m_pszName);
         m_pszName = SysAllocString(pszName);
-        if(m_pszName==NULL)
+        if(m_pszName==nullptr)
             return E_FAIL;
         return S_OK;
 
@@ -1186,7 +1180,7 @@ STDMETHODIMP CMAccessible::Put_XAccDescription(const OLECHAR __RPC_FAR *pszDescr
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pszDescription == NULL)
+        if(pszDescription == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -1194,7 +1188,7 @@ STDMETHODIMP CMAccessible::Put_XAccDescription(const OLECHAR __RPC_FAR *pszDescr
         SAFE_SYSFREESTRING(m_pszDescription);
         m_pszDescription = SysAllocString(pszDescription);
 
-        if(m_pszDescription==NULL)
+        if(m_pszDescription==nullptr)
             return E_FAIL;
         return S_OK;
 
@@ -1213,13 +1207,13 @@ STDMETHODIMP CMAccessible::Put_XAccValue(const OLECHAR __RPC_FAR *pszAccValue)
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pszAccValue == NULL)
+        if(pszAccValue == nullptr)
         {
             return E_INVALIDARG;
         }
         SAFE_SYSFREESTRING(m_pszValue);
         m_pszValue = SysAllocString(pszAccValue);
-        if(m_pszValue==NULL)
+        if(m_pszValue==nullptr)
             return E_FAIL;
         return S_OK;
 
@@ -1366,26 +1360,26 @@ IMAccessible* CMAccessible::GetChildInterface(long dChildID)//for test
     {
         if(g_pAgent)
         {
-            IMAccessible* pIMAcc = NULL;
+            IMAccessible* pIMAcc = nullptr;
             g_pAgent->GetIAccessibleFromResID(dChildID,&pIMAcc);
             return pIMAcc;
         }
-        return NULL;
+        return nullptr;
     }
     else
     {
         if (!m_xAccessible.is())
-            return NULL;
+            return nullptr;
 
         Reference<XAccessibleContext> const pRContext =
             m_xAccessible->getAccessibleContext();
         if( !pRContext.is() )
-            return NULL;
+            return nullptr;
 
         if(dChildID<1 || dChildID>pRContext->getAccessibleChildCount())
-            return NULL;
+            return nullptr;
 
-        IAccessible* pChild = NULL;
+        IAccessible* pChild = nullptr;
         Reference< XAccessible > pXChild = pRContext->getAccessibleChild(dChildID-1);
         BOOL isGet = get_IAccessibleFromXAccessible(pXChild.get(), &pChild);
 
@@ -1398,12 +1392,12 @@ IMAccessible* CMAccessible::GetChildInterface(long dChildID)//for test
 
         if(isGet)
         {
-            IMAccessible* pIMAcc =  (IMAccessible*)pChild;
+            IMAccessible* pIMAcc =  static_cast<IMAccessible*>(pChild);
             return pIMAcc;
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -1427,21 +1421,24 @@ IMAccessible* CMAccessible::GetNavigateChildForDM(VARIANT varCur, short flags)
 {
 
     XAccessibleContext* pXContext = GetContextByXAcc(m_xAccessible.get());
-    if(pXContext==NULL)
+    if(pXContext==nullptr)
     {
-        return NULL;
+        return nullptr;
     }
 
     int count = pXContext->getAccessibleChildCount();
     if(count<1)
     {
-        return NULL;
+        return nullptr;
     }
 
-    IMAccessible* pCurChild = NULL;
-    XAccessible* pChildXAcc = NULL;
+    IMAccessible* pCurChild = nullptr;
+    union {
+        XAccessible* pChildXAcc;
+        hyper nHyper = 0;
+    };
     Reference<XAccessible> pRChildXAcc;
-    XAccessibleContext* pChildContext = NULL;
+    XAccessibleContext* pChildContext = nullptr;
     int index = 0,delta=0;
     switch(flags)
     {
@@ -1454,19 +1451,19 @@ IMAccessible* CMAccessible::GetNavigateChildForDM(VARIANT varCur, short flags)
     case DM_NEXTCHILD:
     case DM_PREVCHILD:
         pCurChild = GetChildInterface(varCur.lVal);
-        if(pCurChild==NULL)
+        if(pCurChild==nullptr)
         {
-            return NULL;
+            return nullptr;
         }
-        pCurChild->GetUNOInterface(reinterpret_cast<hyper*>(&pChildXAcc));
-        if(pChildXAcc==NULL)
+        pCurChild->GetUNOInterface(&nHyper);
+        if(pChildXAcc==nullptr)
         {
-            return NULL;
+            return nullptr;
         }
         pChildContext = GetContextByXAcc(pChildXAcc);
-        if(pChildContext == NULL)
+        if(pChildContext == nullptr)
         {
-            return NULL;
+            return nullptr;
         }
         delta = (flags==DM_NEXTCHILD)?1:-1;
         //currently, getAccessibleIndexInParent is error in UNO for
@@ -1484,7 +1481,7 @@ IMAccessible* CMAccessible::GetNavigateChildForDM(VARIANT varCur, short flags)
 
     if(!pRChildXAcc.is())
     {
-        return NULL;
+        return nullptr;
     }
     pChildXAcc = pRChildXAcc.get();
     g_pAgent->InsertAccObj(pChildXAcc, m_xAccessible.get());
@@ -1508,7 +1505,7 @@ HRESULT CMAccessible::GetFirstChild(VARIANT varStart,VARIANT* pvarEndUpAt)
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pvarEndUpAt == NULL)
+        if(pvarEndUpAt == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -1545,7 +1542,7 @@ HRESULT CMAccessible::GetLastChild(VARIANT varStart,VARIANT* pvarEndUpAt)
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pvarEndUpAt == NULL)
+        if(pvarEndUpAt == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -1616,7 +1613,7 @@ HRESULT CMAccessible::GetPreSibling(VARIANT varStart,VARIANT* pvarEndUpAt)
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pvarEndUpAt == NULL)
+        if(pvarEndUpAt == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -1655,7 +1652,7 @@ STDMETHODIMP CMAccessible::get_nRelations( long __RPC_FAR *nRelations)
         ISDESTROY()
 
         // #CHECK#
-        if(nRelations == NULL)
+        if(nRelations == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -1685,7 +1682,7 @@ STDMETHODIMP CMAccessible::get_relation( long relationIndex, IAccessibleRelation
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(relation == NULL)
+        if(relation == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -1697,10 +1694,10 @@ STDMETHODIMP CMAccessible::get_relation( long relationIndex, IAccessibleRelation
         long nMax = 0;
         get_nRelations(&nMax);
 
-        *relation = (IAccessibleRelation*)::CoTaskMemAlloc(sizeof(IAccessibleRelation));
+        *relation = static_cast<IAccessibleRelation*>(::CoTaskMemAlloc(sizeof(IAccessibleRelation)));
 
         // #CHECK Memory Allocation#
-        if(*relation == NULL)
+        if(*relation == nullptr)
         {
             return E_FAIL;
         }
@@ -1715,13 +1712,13 @@ STDMETHODIMP CMAccessible::get_relation( long relationIndex, IAccessibleRelation
                 return E_FAIL;
             }
 
-            IAccessibleRelation* pRelation = NULL;
+            IAccessibleRelation* pRelation = nullptr;
             HRESULT hr = createInstance<CAccRelation>(IID_IAccessibleRelation,
                             &pRelation);
             if(SUCCEEDED(hr))
             {
-                IUNOXWrapper* wrapper = NULL;
-                hr = pRelation->QueryInterface(IID_IUNOXWrapper, (void**)&wrapper);
+                IUNOXWrapper* wrapper = nullptr;
+                hr = pRelation->QueryInterface(IID_IUNOXWrapper, reinterpret_cast<void**>(&wrapper));
                 if(SUCCEEDED(hr))
                 {
                     AccessibleRelation accRelation = pRrelationSet->getRelation(relationIndex);
@@ -1748,7 +1745,7 @@ STDMETHODIMP CMAccessible::get_relations( long, IAccessibleRelation __RPC_FAR *_
         ISDESTROY()
 
         // #CHECK#
-        if(relation == NULL || nRelations == NULL)
+        if(relation == nullptr || nRelations == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -1767,23 +1764,23 @@ STDMETHODIMP CMAccessible::get_relations( long, IAccessibleRelation __RPC_FAR *_
 
         long nCount = pRrelationSet->getRelationCount();
 
-        *relation = (IAccessibleRelation*)::CoTaskMemAlloc(nCount*sizeof(IAccessibleRelation));
+        *relation = static_cast<IAccessibleRelation*>(::CoTaskMemAlloc(nCount*sizeof(IAccessibleRelation)));
 
         // #CHECK Memory Allocation#
-        if(*relation == NULL)
+        if(*relation == nullptr)
         {
             return E_FAIL;
         }
 
         for(int i=0; i<nCount ; i++)
         {
-            IAccessibleRelation* pRelation = NULL;
+            IAccessibleRelation* pRelation = nullptr;
             HRESULT hr = createInstance<CAccRelation>(IID_IAccessibleRelation,
                             &pRelation);
             if(SUCCEEDED(hr))
             {
-                IUNOXWrapper* wrapper = NULL;
-                hr = pRelation->QueryInterface(IID_IUNOXWrapper, (void**)&wrapper);
+                IUNOXWrapper* wrapper = nullptr;
+                hr = pRelation->QueryInterface(IID_IUNOXWrapper, reinterpret_cast<void**>(&wrapper));
                 if(SUCCEEDED(hr))
                 {
                     AccessibleRelation accRelation = pRrelationSet->getRelation(i);
@@ -1791,7 +1788,7 @@ STDMETHODIMP CMAccessible::get_relations( long, IAccessibleRelation __RPC_FAR *_
                             reinterpret_cast<hyper>(&accRelation));
                     wrapper->Release();
                 }
-                (relation)[i] = pRelation;
+                relation[i] = pRelation;
             }
         }
 
@@ -1823,13 +1820,13 @@ STDMETHODIMP CMAccessible:: get_nActions(long __RPC_FAR *nActions)
     {
         ISDESTROY()
             // #CHECK#
-            if(nActions == NULL)
+            if(nActions == nullptr)
             {
                 return E_INVALIDARG;
             }
-            *nActions = 0L;
-            IAccessibleAction* pAcc = NULL;
-            HRESULT hr = QueryInterface(IID_IAccessibleAction, (void**)&pAcc);
+            *nActions = 0;
+            IAccessibleAction* pAcc = nullptr;
+            HRESULT hr = QueryInterface(IID_IAccessibleAction, reinterpret_cast<void**>(&pAcc));
             if( hr == S_OK )
             {
                 pAcc->nActions(nActions);
@@ -1840,7 +1837,7 @@ STDMETHODIMP CMAccessible:: get_nActions(long __RPC_FAR *nActions)
     }
     catch(...)
     {
-        *nActions = 0L;
+        *nActions = 0;
         return S_OK;
     }
 }
@@ -1859,23 +1856,23 @@ STDMETHODIMP CMAccessible:: scrollTo(enum IA2ScrollType)
 static XAccessible* getTheParentOfMember(XAccessible* pXAcc)
 {
     // #CHECK#
-    if(pXAcc == NULL)
+    if(pXAcc == nullptr)
     {
-        return NULL;
+        return nullptr;
     }
     Reference<XAccessibleContext> pRContext = pXAcc->getAccessibleContext();
     Reference<XAccessibleRelationSet> pRrelationSet = pRContext->getAccessibleRelationSet();
-    long nRelations = pRrelationSet->getRelationCount();
-    for(int i=0 ; i<nRelations ; i++)
+    sal_Int32 nRelations = pRrelationSet->getRelationCount();
+    for(sal_Int32 i=0 ; i<nRelations ; i++)
     {
         AccessibleRelation accRelation = pRrelationSet->getRelation(i);
         if(accRelation.RelationType == 7)
         {
             Sequence< Reference< XInterface > > xTargets = accRelation.TargetSet;
-            return (XAccessible*)xTargets[0].get();
+            return static_cast<XAccessible*>(xTargets[0].get());
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 STDMETHODIMP CMAccessible:: get_groupPosition(long __RPC_FAR *groupLevel,long __RPC_FAR *similarItemsInGroup,long __RPC_FAR *positionInGroup)
@@ -1885,7 +1882,7 @@ STDMETHODIMP CMAccessible:: get_groupPosition(long __RPC_FAR *groupLevel,long __
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(groupLevel == NULL || similarItemsInGroup == NULL || positionInGroup == NULL)
+        if(groupLevel == nullptr || similarItemsInGroup == nullptr || positionInGroup == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -1910,12 +1907,11 @@ STDMETHODIMP CMAccessible:: get_groupPosition(long __RPC_FAR *groupLevel,long __
             if ( xGroupPosition.is() )
             {
                 Sequence< sal_Int32 > rSeq = xGroupPosition->getGroupPosition( makeAny( pRContext ) );
-                sal_Int32* pSeq = rSeq.getArray();
-                if ( pSeq )
+                if (rSeq.getLength() >= 3)
                 {
-                    *groupLevel = pSeq[0];
-                    *similarItemsInGroup = pSeq[1];
-                    *positionInGroup = pSeq[2];
+                    *groupLevel = rSeq[0];
+                    *similarItemsInGroup = rSeq[1];
+                    *positionInGroup = rSeq[2];
                     return S_OK;
                 }
                 return S_OK;
@@ -1930,12 +1926,10 @@ STDMETHODIMP CMAccessible:: get_groupPosition(long __RPC_FAR *groupLevel,long __
 
         Reference<XAccessibleContext> pRParentContext = pParentAcc->getAccessibleContext();
 
-        int level = 0;
-        int index = 0;
-        int number = 0;
-
         if( Role ==  RADIO_BUTTON )
         {
+            int index = 0;
+            int number = 0;
             Reference<XAccessibleRelationSet> pRrelationSet = pRContext->getAccessibleRelationSet();
             long nRel = pRrelationSet->getRelationCount();
             for(int i=0 ; i<nRel ; i++)
@@ -1949,7 +1943,7 @@ STDMETHODIMP CMAccessible:: get_groupPosition(long __RPC_FAR *groupLevel,long __
                     for(int j=0; j<pRParentContext->getAccessibleChildCount(); j++)
                     {
                         if( getTheParentOfMember(pRParentContext->getAccessibleChild(j).get())
-                            == (XAccessible*)pRAcc.get() &&
+                            == static_cast<XAccessible*>(pRAcc.get()) &&
                             pRParentContext->getAccessibleChild(j)->getAccessibleContext()->getAccessibleRole() == RADIO_BUTTON)
                             number++;
                         if (pRParentContext->getAccessibleChild(j).get() == m_xAccessible.get())
@@ -2026,7 +2020,7 @@ STDMETHODIMP CMAccessible:: get_groupPosition(long __RPC_FAR *groupLevel,long __
             return S_OK;
         }
 
-
+        int level = 0;
         BOOL isFound = FALSE;
         while( pParentAcc.is() && !isFound)
         {
@@ -2070,7 +2064,7 @@ STDMETHODIMP CMAccessible:: get_uniqueID(long __RPC_FAR *uniqueID)
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(uniqueID == NULL)
+        if(uniqueID == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -2087,24 +2081,22 @@ STDMETHODIMP CMAccessible:: get_windowHandle(HWND __RPC_FAR *windowHandle)
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(windowHandle == NULL)
+        if(windowHandle == nullptr)
         {
             return E_INVALIDARG;
         }
 
         HWND nHwnd = m_hwnd;
         IAccessible* pParent = m_pIParent;
-        CMAccessible* pChild = this;
-        while((nHwnd==0) && pParent)
+        while((nHwnd==nullptr) && pParent)
         {
-            pChild = (CMAccessible*)pParent;
-            if(pChild)
+            if (CMAccessible* pChild = dynamic_cast<CMAccessible*>(pParent))
             {
-                pParent = (IAccessible*)pChild->m_pIParent;
-                nHwnd = (HWND)pChild->m_hwnd;
+                pParent = pChild->m_pIParent;
+                nHwnd = pChild->m_hwnd;
             }
             else
-                pParent = NULL;
+                pParent = nullptr;
         }
 
         *windowHandle = nHwnd;
@@ -2121,12 +2113,12 @@ STDMETHODIMP CMAccessible:: get_windowHandle(HWND __RPC_FAR *windowHandle)
 XAccessibleContext* CMAccessible::GetContextByXAcc( XAccessible* pXAcc )
 {
     Reference< XAccessibleContext > pRContext;
-    if( pXAcc == NULL)
-        return NULL;
+    if( pXAcc == nullptr)
+        return nullptr;
 
     pRContext = pXAcc->getAccessibleContext();
     if( !pRContext.is() )
-        return NULL;
+        return nullptr;
     return pRContext.get();
 }
 
@@ -2140,7 +2132,7 @@ XAccessibleContext* CMAccessible::GetContextByXAcc( XAccessible* pXAcc )
 Reference< XAccessibleSelection > CMAccessible::GetSelection()
 {
     if (!m_xAccessible.is())
-        return NULL;
+        return nullptr;
     Reference<XAccessibleContext> const pRContext =
         m_xAccessible->getAccessibleContext();
     if(pRContext.is())
@@ -2148,7 +2140,7 @@ Reference< XAccessibleSelection > CMAccessible::GetSelection()
         Reference< XAccessibleSelection > pRSelection(pRContext,UNO_QUERY);
         return pRSelection;
     }
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -2163,7 +2155,7 @@ HRESULT CMAccessible::SelectChild(XAccessible* pItem)
         ISDESTROY()
         XAccessibleContext* pParentContext = GetContextByXAcc(m_xAccessible.get());
     XAccessibleContext* pContext = GetContextByXAcc( pItem );
-    if( pParentContext == NULL || pContext == NULL )
+    if( pParentContext == nullptr || pContext == nullptr )
         return E_FAIL;
 
     Reference< XAccessibleSelection > pRSelection = GetSelection();
@@ -2177,7 +2169,7 @@ HRESULT CMAccessible::SelectChild(XAccessible* pItem)
 }
 
 /**
-* Deselect one XAccessible item, for accSelect implimentation
+* Deselect one XAccessible item, for accSelect implementation
 * @param    pItem, the item should be deselected.
 * @return  S_OK if successful.
 */
@@ -2189,7 +2181,7 @@ HRESULT CMAccessible::DeSelectChild(XAccessible* pItem)
         XAccessibleContext* pParentContext = GetContextByXAcc(m_xAccessible.get());
     ;
     XAccessibleContext* pContext = GetContextByXAcc( pItem );
-    if( pParentContext == NULL || pContext == NULL )
+    if( pParentContext == nullptr || pContext == nullptr )
         return E_INVALIDARG;
 
     Reference< XAccessibleSelection > pRSelection = GetSelection();
@@ -2209,13 +2201,13 @@ HRESULT CMAccessible::DeSelectChild(XAccessible* pItem)
 * @param    size, the size of the items.
 * @return  S_OK if successful.
 */
-HRESULT CMAccessible::SelectMutipleChidren( XAccessible** pItem,int size )
+HRESULT CMAccessible::SelectMultipleChidren( XAccessible** pItem,int size )
 {
 
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pItem == NULL)
+        if(pItem == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -2234,13 +2226,13 @@ HRESULT CMAccessible::SelectMutipleChidren( XAccessible** pItem,int size )
 * @param    size, the size of the items.
 * @return  S_OK if successful.
 */
-HRESULT CMAccessible::DeSelectMutipleChildren( XAccessible** pItem,int size )
+HRESULT CMAccessible::DeSelectMultipleChildren( XAccessible** pItem,int size )
 {
 
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pItem == NULL)
+        if(pItem == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -2314,15 +2306,18 @@ STDMETHODIMP CMAccessible::accSelect(long flagsSelect, VARIANT varChild)
         pSelectAcc = GetChildInterface(varChild.lVal);
     }
 
-    if( pSelectAcc == NULL )
+    if( pSelectAcc == nullptr )
         return E_INVALIDARG;
 
     if( flagsSelect&SELFLAG_TAKEFOCUS )
     {
-        XAccessible * pTempUNO = 0;
-        pSelectAcc->GetUNOInterface(reinterpret_cast<hyper*>(&pTempUNO));
+        union {
+            XAccessible* pTempUNO;
+            hyper nHyper = 0;
+        };
+        pSelectAcc->GetUNOInterface(&nHyper);
 
-        if( pTempUNO == NULL )
+        if( pTempUNO == nullptr )
             return NULL;
 
         Reference<XAccessibleContext> pRContext = pTempUNO->getAccessibleContext();
@@ -2379,7 +2374,7 @@ STDMETHODIMP CMAccessible::GetUNOInterface(hyper * pXAcc)
 {
     // internal IMAccessible - no mutex meeded
 
-    if(pXAcc == NULL)
+    if(pXAcc == nullptr)
         return E_INVALIDARG;
 
     *pXAcc = reinterpret_cast<hyper>(m_xAccessible.get());
@@ -2413,7 +2408,7 @@ HRESULT STDMETHODCALLTYPE CMAccessible::get_accDefaultAction(VARIANT varChild, B
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(pszDefaultAction == NULL)
+        if(pszDefaultAction == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -2487,7 +2482,7 @@ STDMETHODIMP CMAccessible::Put_ActionDescription( const OLECHAR* szAction)
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(szAction == NULL)
+        if(szAction == nullptr)
         {
             return E_INVALIDARG;
         }
@@ -2547,7 +2542,7 @@ BOOL CMAccessible::GetXInterfaceFromXAccessible(XAccessible* pXAcc, XInterface**
     return FALSE;
 }
 
-template<typename T> HRESULT
+template<typename T> static HRESULT
 createAggInstance(CMAccessible &rOuter, void ** ppvObject)
 {
     // Note: CComAggObject has special handling for IUnknown - must
@@ -2578,7 +2573,7 @@ static AggMapEntry g_CMAccessible_AggMap[] = {
     { &IID_IAccessibleValue, &createAggInstance<CAccValue>, XI_VALUE },
     { &IID_IAccessibleHypertext, &createAggInstance<CAccHypertext>, XI_HYPERTEXT },
     { &IID_IAccessibleHyperlink, &createAggInstance<CAccHyperLink>, XI_HYPERLINK },
-    { 0, 0, 0 },
+    { nullptr, nullptr, 0 },
 };
 
 
@@ -2603,7 +2598,7 @@ HRESULT WINAPI CMAccessible::SmartQI(void* /*pv*/, REFIID iid, void** ppvObject)
         {
             SolarMutexGuard g;
 
-            XInterface* pXI = NULL;
+            XInterface* pXI = nullptr;
             BOOL bFound = GetXInterfaceFromXAccessible(m_xAccessible.get(),
                                 &pXI, pMap->XIFIndex);
             if(!bFound)
@@ -2622,9 +2617,9 @@ HRESULT WINAPI CMAccessible::SmartQI(void* /*pv*/, REFIID iid, void** ppvObject)
                 assert(hr == S_OK);
                 if(hr == S_OK)
                 {
-                    m_containedObjects.insert(XGUIDToComObjHash::value_type(*pMap->piid,(IUnknown*)*ppvObject));
-                    IUNOXWrapper* wrapper = NULL;
-                    ((IUnknown*)*ppvObject)->QueryInterface(IID_IUNOXWrapper, (void**)&wrapper);
+                    m_containedObjects.emplace(*pMap->piid, static_cast<IUnknown*>(*ppvObject));
+                    IUNOXWrapper* wrapper = nullptr;
+                    static_cast<IUnknown*>(*ppvObject)->QueryInterface(IID_IUNOXWrapper, reinterpret_cast<void**>(&wrapper));
                     if(wrapper)
                     {
                         wrapper->put_XInterface(
@@ -2647,12 +2642,13 @@ BOOL
 CMAccessible::get_IAccessibleFromXAccessible(XAccessible * pXAcc, IAccessible **ppIA)
 {
 
-    ENTER_PROTECTED_BLOCK
+    try
+    {
 
         // #CHECK#
-        if(ppIA == NULL)
+        if(ppIA == nullptr)
         {
-            return E_INVALIDARG;
+            return FALSE;
         }
         BOOL isGet = FALSE;
         if(g_pAgent)
@@ -2663,103 +2659,93 @@ CMAccessible::get_IAccessibleFromXAccessible(XAccessible * pXAcc, IAccessible **
         else
             return FALSE;
 
-        LEAVE_PROTECTED_BLOCK
+    }
+    catch(...)
+    {
+        return FALSE;
+    }
 }
 
-void CMAccessible::get_OLECHARFromAny(Any& pAny, OLECHAR* pChar)
+OUString CMAccessible::get_StringFromAny(Any const & pAny)
 {
-    // #CHECK#
-    if(pChar == NULL)
-        return;
-
     switch(pAny.getValueTypeClass())
     {
     case TypeClass_CHAR:
         {
             sal_Int8 val;
             pAny >>= val;
-            swprintf( pChar, L"%d", val);
-            break;
+            return OUString::number(val);
         }
     case TypeClass_BOOLEAN:
         {
-            sal_Bool val;
+            bool val;
             pAny >>= val;
-            swprintf( pChar, L"%d", val);
-            break;
+            return OUString::number(int(val));
         }
     case TypeClass_BYTE:
         {
             sal_Int8 val;
             pAny >>= val;
-            swprintf( pChar, L"%d", val);
-            break;
+            return OUString::number(val);
         }
     case TypeClass_SHORT:
         {
-            SHORT val;
+            sal_Int16 val;
             pAny >>= val;
-            swprintf( pChar, L"%d", val);
-            break;
+            return OUString::number(val);
         }
     case TypeClass_UNSIGNED_SHORT:
         {
-            USHORT val;
+            sal_uInt16 val;
             pAny >>= val;
-            swprintf( pChar, L"%d", val);
-            break;
+            return OUString::number(val);
         }
     case TypeClass_LONG:
         {
-            LONG val;
+            sal_Int32 val;
             pAny >>= val;
-            swprintf( pChar, L"%ld", val);
-            break;
+            return OUString::number(val);
         }
     case TypeClass_UNSIGNED_LONG:
         {
-            ULONG val;
+            sal_uInt32 val;
             pAny >>= val;
-            swprintf( pChar, L"%ld", val);
-            break;
+            return OUString::number(val);
         }
     case TypeClass_FLOAT:
         {
-            FLOAT val;
+            float val;
             pAny >>= val;
-            swprintf( pChar, L"%.3f", val);
-            break;
+            return OUString::number(val);
         }
     case TypeClass_DOUBLE:
         {
-            DOUBLE val;
+            double val;
             pAny >>= val;
-            swprintf( pChar, L"%.6lf", val);
-            break;
+            return OUString::number(val);
         }
     case TypeClass_STRING:
         {
-            ::rtl::OUString val;
+            OUString val;
             pAny >>= val;
-            wcscpy(pChar, val.getStr());
-            break;
+            return val;
         }
     case TypeClass_SEQUENCE:
         {
-            if(pAny.getValueType() == cppu::UnoType<Sequence< ::rtl::OUString >>::get())
+            if(pAny.getValueType() == cppu::UnoType<Sequence< OUString >>::get())
             {
-                Sequence < ::rtl::OUString > val;
+                Sequence < OUString > val;
                 pAny >>= val;
 
-                ::rtl::OUString pString;
+                OUStringBuffer pString;
 
                 int count = val.getLength();
 
                 for( int iIndex = 0;iIndex < count;iIndex++ )
                 {
-                    pString += val[iIndex];
+                    pString.append(val[iIndex]);
                 }
-                wcscpy(pChar, pString.getStr());
+                return pString.makeStringAndClear();
             }
             else if (pAny.getValueType() == cppu::UnoType<Sequence< css::style::TabStop >>::get())
             {
@@ -2767,35 +2753,32 @@ void CMAccessible::get_OLECHARFromAny(Any& pAny, OLECHAR* pChar)
                 pAny >>= val;
                 int count = val.getLength();
 
+                OUStringBuffer buf;
                 for( int iIndex = 0;iIndex < count;iIndex++ )
                 {
-                    OLECHAR pAttrs[512] = {NULL};
-
-                    OLECHAR pAttrsPosition[512] = {NULL};
-                    OLECHAR pAttrsDescimalChar[512] = {NULL};
-                    OLECHAR pAttrsFillChar[512] = {NULL};
-
                     css::style::TabStop sigleVal = val[iIndex];
 
-                    swprintf( pAttrsPosition, L"Position=%ld,TabAlign=%ld",
-                        sigleVal.Position, sigleVal.Alignment);
+                    buf.append("Position=");
+                    buf.append(sigleVal.Position);
+                    buf.append(",TabAlign=");
+                    buf.append(sal_Int32(sigleVal.Alignment));
+                    buf.append(",");
 
+                    buf.append("DecimalChar=");
                     if(sigleVal.DecimalChar==';' || sigleVal.DecimalChar == ':' || sigleVal.DecimalChar == ',' ||
                         sigleVal.DecimalChar == '=' || sigleVal.DecimalChar == '\\')
-                        swprintf( pAttrsDescimalChar, L"DecimalChar=\\%c",sigleVal.DecimalChar);
-                    else
-                        swprintf( pAttrsDescimalChar, L"DecimalChar=%c",sigleVal.DecimalChar);
+                        buf.append('\\');
+                    buf.append(sigleVal.DecimalChar);
+                    buf.append(",");
 
+                    buf.append("FillChar=");
                     if(sigleVal.FillChar==';' || sigleVal.FillChar == ':' || sigleVal.FillChar == ',' ||
                         sigleVal.FillChar == '=' || sigleVal.FillChar == '\\')
-                        swprintf( pAttrsFillChar, L"FillChar=\\%c",sigleVal.FillChar);
-                    else
-                        swprintf( pAttrsFillChar, L"FillChar=%c",sigleVal.FillChar);
-
-                    swprintf( pAttrs, L"%s,%s,%s,",pAttrsPosition,pAttrsDescimalChar,pAttrsFillChar);
-
-                    wcscat(pChar,pAttrs);
+                        buf.append('\\');
+                    buf.append(sigleVal.FillChar);
+                    buf.append(",");
                 }
+                return buf.makeStringAndClear();
             }
             break;
         }
@@ -2805,8 +2788,9 @@ void CMAccessible::get_OLECHARFromAny(Any& pAny, OLECHAR* pChar)
             {
                 css::awt::FontSlant val;
                 pAny >>= val;
-                swprintf( pChar, L"%d", val);
+                return OUString::number(sal_Int32(val));
             }
+            break;
         }
     case TypeClass_STRUCT:
         {
@@ -2814,14 +2798,14 @@ void CMAccessible::get_OLECHARFromAny(Any& pAny, OLECHAR* pChar)
             {
                 css::style::LineSpacing val;
                 pAny >>= val;
-                swprintf( pChar, L"Mode=%ld,Height=%ld,", val.Mode, val.Height);
+                return "Mode=" + OUString::number(val.Mode) + ",Height="
+                    + OUString::number(val.Height) + ",";
             }
             else if (pAny.getValueType() == cppu::UnoType<css::accessibility::TextSegment>::get())
             {
                 css::accessibility::TextSegment val;
                 pAny >>= val;
-                ::rtl::OUString realVal(val.SegmentText);
-                wcscpy(pChar, realVal.getStr());
+                return val.SegmentText;
             }
             break;
         }
@@ -2842,17 +2826,15 @@ void CMAccessible::get_OLECHARFromAny(Any& pAny, OLECHAR* pChar)
     case TypeClass_CONSTANT:
     case TypeClass_CONSTANTS:
     case TypeClass_SINGLETON:
-    case TypeClass_MAKE_FIXED_SIZE:
         break;
     default:
         break;
     }
+    return OUString();
 }
 
-void CMAccessible::get_OLECHAR4Numbering(const Any& pAny, short numberingLevel,const OUString& numberingPrefix,OLECHAR* pChar)
+OUString CMAccessible::get_String4Numbering(const Any& pAny, sal_Int16 numberingLevel,const OUString& numberingPrefix)
 {
-    if(pChar == NULL)
-        return;
     Reference< css::container::XIndexReplace > pXIndex;
     if((pAny>>=pXIndex) && (numberingLevel !=-1))//numbering level is -1,means invalid value
     {
@@ -2861,38 +2843,32 @@ void CMAccessible::get_OLECHAR4Numbering(const Any& pAny, short numberingLevel,c
         aAny >>= aProps;
         const css::beans::PropertyValue* pPropArray = aProps.getConstArray();
         sal_Int32 nCount = aProps.getLength();
-        swprintf(pChar,L"Numbering:NumberingLevel=%d,",numberingLevel);
+        OUStringBuffer buf("Numbering:NumberingLevel=");
+        buf.append(sal_Int32(numberingLevel));
+        buf.append(',');
         for( sal_Int32 i=0; i<nCount; i++ )
         {
             css::beans::PropertyValue rProp = pPropArray[i];
             if( (rProp.Name == "BulletChar" ) ||
-                (rProp.Name == "GraphicURL" ) ||
                 (rProp.Name == "NumberingType" ))
             {
-                OLECHAR propStr[512] = {NULL};
-                swprintf(propStr,L"%s=",rProp.Name.getStr());
-                OLECHAR pTemp[256] = {NULL};
-                CMAccessible::get_OLECHARFromAny(rProp.Value,pTemp);
-                if(rProp.Name == "GraphicURL")
-                {
-                    OLECHAR* pOccur = wcschr(pTemp,':');
-                    if(pOccur)
-                        *pOccur = '.';
-                }
-                wcscat(propStr,pTemp);
-                wcscat(pChar,propStr);
-                wcscat(pChar,L",");
+                buf.append(rProp.Name);
+                buf.append('=');
+                auto const pTemp = CMAccessible::get_StringFromAny(rProp.Value);
+                buf.append(pTemp);
+                buf.append(',');
 
                 if(rProp.Name == "NumberingType")
                 {
                     if(numberingPrefix.getLength()!=0)
                     {
-                        swprintf(pTemp,L"NumberingPrefix=%s,",numberingPrefix.getStr());
-                        wcscat(pChar,pTemp);
+                        buf.append("NumberingPrefix=");
+                        buf.append(numberingPrefix);
                     }
                 }
             }
         }
+        return buf.makeStringAndClear();
     }
 
     //Because now have three types numbering level:
@@ -2903,11 +2879,11 @@ void CMAccessible::get_OLECHAR4Numbering(const Any& pAny, short numberingLevel,c
     // so NumberingLevel value will be decreased 1 in bridge code.
     else if(numberingLevel >0)
     {
-        swprintf(pChar,L"Numbering:NumberingLevel=%d,NumberingType=4,NumberingPrefix=,",numberingLevel-1);
+        return "Numbering:NumberingLevel=" + OUString::number(numberingLevel-1) + ",NumberingType=4,NumberingPrefix=,";
     }
     else
     {
-        swprintf(pChar,L"Numbering:");
+        return OUString("Numbering:");
     }
 }
 
@@ -2927,10 +2903,13 @@ void CMAccessible::ConvertAnyToVariant(const css::uno::Any &rAnyVal, VARIANT *pv
             break;
 
         case TypeClass_BOOLEAN:
+        {
+            bool bBoolean(false);
+            rAnyVal >>= bBoolean;
             pvData->vt = VT_BOOL;
-            memcpy(&pvData->boolVal, rAnyVal.getValue(), sizeof(sal_Bool));
+            pvData->boolVal = VARIANT_BOOL(bBoolean); // boolVal is a VARIANT_BOOL, a 16bit field
             break;
-
+        }
         case TypeClass_BYTE:
             pvData->vt = VT_UI1;
             memcpy(&pvData->bVal, rAnyVal.getValue(), sizeof(sal_Int8));
@@ -2969,9 +2948,9 @@ void CMAccessible::ConvertAnyToVariant(const css::uno::Any &rAnyVal, VARIANT *pv
         case TypeClass_STRING:
             {
                 pvData->vt = VT_BSTR;
-                ::rtl::OUString val;
+                OUString val;
                 rAnyVal >>= val;
-                pvData->bstrVal = SysAllocString((OLECHAR *)val.getStr());
+                pvData->bstrVal = SysAllocString(o3tl::toW(val.getStr()));
                 break;
             }
 
@@ -2992,9 +2971,9 @@ void CMAccessible::ConvertAnyToVariant(const css::uno::Any &rAnyVal, VARIANT *pv
                 {
                     if(pXAcc.is())
                     {
-                        IAccessible* pIAcc = NULL;
+                        IAccessible* pIAcc = nullptr;
                         get_IAccessibleFromXAccessible(pXAcc.get(), &pIAcc);
-                        if(pIAcc == NULL)
+                        if(pIAcc == nullptr)
                         {
                             Reference< XAccessibleContext > pXAccContext = pXAcc->getAccessibleContext();
                             g_pAgent->InsertAccObj(pXAcc.get(),pXAccContext->getAccessibleParent().get());
@@ -3005,11 +2984,12 @@ void CMAccessible::ConvertAnyToVariant(const css::uno::Any &rAnyVal, VARIANT *pv
                             pIAcc->AddRef();
 
                             pvData->vt = VT_UNKNOWN;
-                            pvData->pdispVal = (IAccessible2*)pIAcc;
+                            pvData->pdispVal = static_cast<IAccessible2*>(pIAcc);
                             break;
                         }
                     }
                 }
+                [[fallthrough]];
             }
         case TypeClass_SERVICE:
         case TypeClass_MODULE:
@@ -3020,10 +3000,10 @@ void CMAccessible::ConvertAnyToVariant(const css::uno::Any &rAnyVal, VARIANT *pv
         case TypeClass_CONSTANT:
         case TypeClass_CONSTANTS:
         case TypeClass_SINGLETON:
-        case TypeClass_MAKE_FIXED_SIZE:
+        case TypeClass::TypeClass_MAKE_FIXED_SIZE:
             // Output the type string, if there is other uno value type.
             pvData->vt = VT_BSTR;
-            pvData->bstrVal = SysAllocString(rAnyVal.getValueTypeName().getStr());
+            pvData->bstrVal = SysAllocString(o3tl::toW(rAnyVal.getValueTypeName().getStr()));
             break;
 
         default:
@@ -3040,7 +3020,7 @@ STDMETHODIMP CMAccessible::Get_XAccChildID(long* childID)
 {
     // internal IMAccessible - no mutex meeded
 
-    if(childID == NULL)
+    if(childID == nullptr)
     {
         return E_FAIL;
     }
@@ -3114,7 +3094,7 @@ STDMETHODIMP CMAccessible:: get_indexInParent( long __RPC_FAR *accParentIndex)
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
         // #CHECK#
-        if(accParentIndex == NULL)
+        if(accParentIndex == nullptr)
             return E_INVALIDARG;
 
     if (!m_xContext.is())
@@ -3130,73 +3110,20 @@ STDMETHODIMP CMAccessible:: get_locale( IA2Locale __RPC_FAR *locale  )
 {
         ENTER_PROTECTED_BLOCK
         ISDESTROY()
-        if(locale == NULL)
+        if(locale == nullptr)
             return E_INVALIDARG;
 
     if (!m_xContext.is())
         return E_FAIL;
 
     css::lang::Locale unoLoc = m_xContext.get()->getLocale();
-    locale->language = SysAllocString((OLECHAR*)unoLoc.Language.getStr());
-    locale->country = SysAllocString((OLECHAR*)unoLoc.Country.getStr());
-    locale->variant = SysAllocString((OLECHAR*)unoLoc.Variant.getStr());
+    locale->language = SysAllocString(o3tl::toW(unoLoc.Language.getStr()));
+    locale->country = SysAllocString(o3tl::toW(unoLoc.Country.getStr()));
+    locale->variant = SysAllocString(o3tl::toW(unoLoc.Variant.getStr()));
 
     return S_OK;
 
     LEAVE_PROTECTED_BLOCK
-}
-
-DWORD GetMSAAStateFromUNO(short xState)
-{
-    DWORD IState = STATE_SYSTEM_UNAVAILABLE;
-    switch( xState )
-    {
-    case /*AccessibleStateType::*/AccessibleStateType::BUSY:
-        IState = STATE_SYSTEM_BUSY;
-        break;
-    case /*AccessibleStateType::*/AccessibleStateType::CHECKED:
-        IState = STATE_SYSTEM_CHECKED;
-        break;
-    case /*AccessibleStateType::*/AccessibleStateType::DEFUNC:
-        IState = STATE_SYSTEM_UNAVAILABLE;
-        break;
-    case /*AccessibleStateType::*/AccessibleStateType::EXPANDED:
-        IState = STATE_SYSTEM_EXPANDED;
-        break;
-    case /*AccessibleStateType::*/AccessibleStateType::FOCUSABLE:
-        IState = STATE_SYSTEM_FOCUSABLE;
-        break;
-    case /*AccessibleStateType::*/AccessibleStateType::FOCUSED:
-        IState = STATE_SYSTEM_FOCUSED;
-        break;
-    case /*AccessibleStateType::*/AccessibleStateType::INDETERMINATE:
-        IState = STATE_SYSTEM_MIXED;
-        break;
-    case /*AccessibleStateType::*/AccessibleStateType::MULTI_SELECTABLE:
-        IState = STATE_SYSTEM_MULTISELECTABLE;
-        break;
-    case /*AccessibleStateType::*/AccessibleStateType::PRESSED:
-        IState = STATE_SYSTEM_PRESSED;
-        break;
-    case /*AccessibleStateType::*/AccessibleStateType::RESIZABLE:
-        IState = STATE_SYSTEM_SIZEABLE;
-        break;
-    case /*AccessibleStateType::*/AccessibleStateType::SELECTABLE:
-        IState = STATE_SYSTEM_SELECTABLE;
-        break;
-    case /*AccessibleStateType::*/AccessibleStateType::SELECTED:
-        IState = STATE_SYSTEM_SELECTED;
-        break;
-    case /*AccessibleStateType::*/AccessibleStateType::ARMED:
-        IState = STATE_SYSTEM_FOCUSED;
-        break;
-    case /*AccessibleStateType::*/AccessibleStateType::EXPANDABLE:
-        IState = STATE_SYSTEM_COLLAPSED;
-        break;
-    default:
-        break;
-    }
-    return IState;
 }
 
 STDMETHODIMP CMAccessible:: get_appName( BSTR __RPC_FAR *name)
@@ -3205,7 +3132,7 @@ STDMETHODIMP CMAccessible:: get_appName( BSTR __RPC_FAR *name)
 
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
-        if(name == NULL)
+        if(name == nullptr)
             return E_INVALIDARG;
 
     *name = SysAllocString(OLESTR("Hannover"));
@@ -3218,7 +3145,7 @@ STDMETHODIMP CMAccessible:: get_appVersion(BSTR __RPC_FAR *version)
 
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
-        if(version == NULL)
+        if(version == nullptr)
             return E_INVALIDARG;
     *version=SysAllocString(OLESTR("3.0"));
     return S_OK;
@@ -3230,7 +3157,7 @@ STDMETHODIMP CMAccessible:: get_toolkitName(BSTR __RPC_FAR *name)
 
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
-        if(name == NULL)
+        if(name == nullptr)
             return E_INVALIDARG;
     *name = SysAllocString(OLESTR(" "));
     return S_OK;
@@ -3242,7 +3169,7 @@ STDMETHODIMP CMAccessible:: get_toolkitVersion(BSTR __RPC_FAR *version)
 
     ENTER_PROTECTED_BLOCK
         ISDESTROY()
-        if(version == NULL)
+        if(version == nullptr)
             return E_INVALIDARG;
     *version = SysAllocString(OLESTR(" "));
     return S_OK;
@@ -3274,12 +3201,12 @@ STDMETHODIMP CMAccessible::get_attributes(/*[out]*/ BSTR *pAttr)
         pRXAttr = pRXI.get();
         css::uno::Any  anyVal = pRXAttr->getExtendedAttributes();
 
-        ::rtl::OUString val;
+        OUString val;
         anyVal >>= val;
 
         if(*pAttr)
             SAFE_SYSFREESTRING(*pAttr);
-        *pAttr = SysAllocString((OLECHAR *)val.getStr());
+        *pAttr = SysAllocString(o3tl::toW(val.getStr()));
 
         return S_OK;
     }

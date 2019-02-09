@@ -21,7 +21,7 @@
 #define INCLUDED_SC_SOURCE_UI_INC_DBFUNC_HXX
 
 #include "viewfunc.hxx"
-#include "dptypes.hxx"
+#include <dptypes.hxx>
 
 namespace com { namespace sun { namespace star { namespace sheet {
     struct DataPilotFieldFilter;
@@ -30,7 +30,6 @@ namespace com { namespace sun { namespace star { namespace sheet {
 struct ScSortParam;
 struct ScQueryParam;
 class ScDBData;
-class ScDBCollection;
 class ScDPObject;
 class ScDPSaveData;
 struct ScDPNumGroupInfo;
@@ -66,7 +65,7 @@ public:
     void GotoDBArea( const OUString& rDBName );
 
                     // DB range from Cursor
-    ScDBData*       GetDBData( bool bMarkArea = true, ScGetDBMode eMode = SC_DB_MAKE, ScGetDBSelection eSel = SC_DBSEL_KEEP);
+    ScDBData*       GetDBData( bool bMarkArea = true, ScGetDBMode eMode = SC_DB_MAKE, ScGetDBSelection eSel = ScGetDBSelection::Keep);
     ScDBData*       GetAnonymousDBData();
 
     void            Consolidate( const ScConsolidateParam& rParam );
@@ -85,10 +84,10 @@ public:
     void            UngroupDataPilot();
     void DataPilotInput( const ScAddress& rPos, const OUString& rString );
 
-    void            DataPilotSort( const ScAddress& rPos, bool bAscending, sal_uInt16* pUserListId = nullptr );
+    void            DataPilotSort(ScDPObject* pDPObject, long nDimIndex, bool bAscending, const sal_uInt16* pUserListId = nullptr);
     bool            DataPilotMove( const ScRange& rSource, const ScAddress& rDest );
 
-    bool HasSelectionForDrillDown( sal_uInt16& rOrientation );
+    bool HasSelectionForDrillDown( css::sheet::DataPilotFieldOrientation& rOrientation );
     void SetDataPilotDetails(bool bShow, const OUString* pNewDimensionName = nullptr);
 
     void            ShowDataPilotSourceData( ScDPObject& rDPObj,
@@ -103,6 +102,7 @@ public:
 
     void            SelectLevel( bool bColumns, sal_uInt16 nLevel,
                                     bool bRecord = true );
+    void            SetOutlineState( bool bColumn, sal_uInt16 nLevel, sal_uInt16 nEntry, bool bHidden);
     void            ShowOutline( bool bColumns, sal_uInt16 nLevel, sal_uInt16 nEntry,
                                     bool bRecord = true, bool bPaint = true );
     void            HideOutline( bool bColumns, sal_uInt16 nLevel, sal_uInt16 nEntry,
@@ -112,9 +112,11 @@ public:
     void            HideMarkedOutlines( bool bRecord = true );
     bool            OutlinePossible(bool bHide);
 
-    void            UpdateCharts(bool bAllCharts = false);      // Default: am Cursor
+    void            UpdateCharts(bool bAllCharts);      // Default: am Cursor
 
     static sal_uInt16   DoUpdateCharts( const ScAddress& rPos, ScDocument* pDoc, bool bAllCharts );
+
+    void            OnLOKShowHideColRow(bool bColumns, SCROW nStartRow);
 };
 
 #endif

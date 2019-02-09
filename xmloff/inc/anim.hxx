@@ -21,6 +21,7 @@
 #define INCLUDED_XMLOFF_INC_ANIM_HXX
 
 #include <com/sun/star/presentation/AnimationEffect.hpp>
+#include <com/sun/star/presentation/AnimationSpeed.hpp>
 #include <com/sun/star/drawing/XShape.hpp>
 #include <xmloff/xmlement.hxx>
 
@@ -45,7 +46,7 @@ enum XMLEffect
     EK_stretch
 };
 
-extern SvXMLEnumMapEntry aXML_AnimationEffect_EnumMap[];
+extern const SvXMLEnumMapEntry<XMLEffect> aXML_AnimationEffect_EnumMap[];
 
 enum XMLEffectDirection
 {
@@ -84,9 +85,9 @@ enum XMLEffectDirection
     ED_cclockwise
 };
 
-extern SvXMLEnumMapEntry aXML_AnimationDirection_EnumMap[];
+extern const SvXMLEnumMapEntry<XMLEffectDirection> aXML_AnimationDirection_EnumMap[];
 
-extern SvXMLEnumMapEntry aXML_AnimationSpeed_EnumMap[];
+extern const SvXMLEnumMapEntry<css::presentation::AnimationSpeed> aXML_AnimationSpeed_EnumMap[];
 
 void SdXMLImplSetEffect( css::presentation::AnimationEffect eEffect, XMLEffect& eKind, XMLEffectDirection& eDirection, sal_Int16& nStartScale, bool& bIn );
 css::presentation::AnimationEffect ImplSdXMLgetEffect( XMLEffect eKind, XMLEffectDirection eDirection, sal_Int16 nStartScale, bool bIn );

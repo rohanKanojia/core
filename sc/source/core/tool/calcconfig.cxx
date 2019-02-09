@@ -14,34 +14,83 @@
 #include <formula/grammar.hxx>
 #include <formula/opcode.hxx>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 #include <sfx2/objsh.hxx>
+#include <unotools/configmgr.hxx>
 
-#include "calcconfig.hxx"
-#include "compiler.hxx"
-#include "docsh.hxx"
+#include <calcconfig.hxx>
+#include <compiler.hxx>
+#include <docsh.hxx>
 
 #include <comphelper/configurationlistener.hxx>
+#include <com/sun/star/datatransfer/XTransferable2.hpp>
 
 using comphelper::ConfigurationListener;
 
-static rtl::Reference<ConfigurationListener> getMiscListener()
+static rtl::Reference<ConfigurationListener> const & getMiscListener()
 {
-    static rtl::Reference<ConfigurationListener> xListener;
-    if (!xListener.is())
-        xListener.set(new ConfigurationListener("/org.openoffice.Office.Common/Misc"));
+    static rtl::Reference<ConfigurationListener> xListener(new ConfigurationListener("/org.openoffice.Office.Common/Misc"));
     return xListener;
+}
+
+static rtl::Reference<ConfigurationListener> const & getFormulaCalculationListener()
+{
+    static rtl::Reference<ConfigurationListener> xListener(new ConfigurationListener("/org.openoffice.Office.Calc/Formula/Calculation"));
+    return xListener;
+}
+
+static ForceCalculationType forceCalculationTypeInit()
+{
+    const char* env = getenv( "SC_FORCE_CALCULATION" );
+    if( env != nullptr )
+    {
+        if( strcmp( env, "opencl" ) == 0 )
+        {
+            SAL_INFO("sc.core.formulagroup", "Forcing calculations to use OpenCL");
+            return ForceCalculationOpenCL;
+        }
+        if( strcmp( env, "threads" ) == 0 )
+        {
+            SAL_INFO("sc.core.formulagroup", "Forcing calculations to use threads");
+            return ForceCalculationThreads;
+        }
+        if( strcmp( env, "core" ) == 0 )
+        {
+            SAL_INFO("sc.core.formulagroup", "Forcing calculations to use core");
+            return ForceCalculationCore;
+        }
+        SAL_WARN("sc.core.formulagroup", "Unrecognized value of SC_FORCE_CALCULATION");
+        abort();
+    }
+    return ForceCalculationNone;
+}
+
+ForceCalculationType ScCalcConfig::getForceCalculationType()
+{
+    static const ForceCalculationType type = forceCalculationTypeInit();
+    return type;
 }
 
 bool ScCalcConfig::isOpenCLEnabled()
 {
-    static comphelper::ConfigurationListenerProperty<bool> gOpenCLEnabled(getMiscListener(), OUString("UseOpenCL"));
+    if (utl::ConfigManager::IsFuzzing())
+        return false;
+    static ForceCalculationType force = getForceCalculationType();
+    if( force != ForceCalculationNone )
+        return force == ForceCalculationOpenCL;
+    static comphelper::ConfigurationListenerProperty<bool> gOpenCLEnabled(getMiscListener(), "UseOpenCL");
     return gOpenCLEnabled.get();
 }
 
-bool ScCalcConfig::isSwInterpreterEnabled()
+bool ScCalcConfig::isThreadingEnabled()
 {
-    static comphelper::ConfigurationListenerProperty<bool> gSwInterpreterEnabled(getMiscListener(), OUString("UseSwInterpreter"));
-    return gSwInterpreterEnabled.get();
+    if (utl::ConfigManager::IsFuzzing())
+        return false;
+    static ForceCalculationType force = getForceCalculationType();
+    if( force != ForceCalculationNone )
+        return force == ForceCalculationThreads;
+    static comphelper::ConfigurationListenerProperty<bool> gThreadingEnabled(getFormulaCalculationListener(), "UseThreadedCalculationForFormulaGroups");
+    return gThreadingEnabled.get();
 }
 
 ScCalcConfig::ScCalcConfig() :
@@ -62,8 +111,10 @@ void ScCalcConfig::setOpenCLConfigToDefault()
     static OpCodeSet pDefaultOpenCLSubsetOpCodes(new std::set<OpCode>({
         ocAdd,
         ocSub,
+        ocNegSub,
         ocMul,
         ocDiv,
+        ocPow,
         ocRandom,
         ocSin,
         ocCos,
@@ -92,15 +143,6 @@ void ScCalcConfig::setOpenCLConfigToDefault()
         ocSlope,
         ocSumIfs}));
 
-    // opcodes that are known to work well with the software interpreter
-    static OpCodeSet pDefaultSwInterpreterSubsetOpCodes(new std::set<OpCode>({
-        ocAdd,
-        ocSub,
-        ocMul,
-        ocDiv,
-        ocSum,
-        ocProduct}));
-
     // Note that these defaults better be kept in sync with those in
     // officecfg/registry/schema/org/openoffice/Office/Calc.xcs.
     // Crazy.
@@ -108,7 +150,6 @@ void ScCalcConfig::setOpenCLConfigToDefault()
     mbOpenCLAutoSelect = true;
     mnOpenCLMinimumFormulaGroupSize = 100;
     mpOpenCLSubsetOpCodes = pDefaultOpenCLSubsetOpCodes;
-    mpSwInterpreterSubsetOpCodes = pDefaultSwInterpreterSubsetOpCodes;
 }
 
 void ScCalcConfig::reset()
@@ -142,9 +183,7 @@ bool ScCalcConfig::operator== (const ScCalcConfig& r) const
            mbOpenCLAutoSelect == r.mbOpenCLAutoSelect &&
            maOpenCLDevice == r.maOpenCLDevice &&
            mnOpenCLMinimumFormulaGroupSize == r.mnOpenCLMinimumFormulaGroupSize &&
-           *mpOpenCLSubsetOpCodes == *r.mpOpenCLSubsetOpCodes &&
-           *mpSwInterpreterSubsetOpCodes == *r.mpSwInterpreterSubsetOpCodes &&
-           true;
+           *mpOpenCLSubsetOpCodes == *r.mpOpenCLSubsetOpCodes;
 }
 
 bool ScCalcConfig::operator!= (const ScCalcConfig& r) const
@@ -170,11 +209,11 @@ OUString ScOpCodeSetToSymbolicString(const ScCalcConfig::OpCodeSet& rOpCodes)
 
 ScCalcConfig::OpCodeSet ScStringToOpCodeSet(const OUString& rOpCodes)
 {
-    ScCalcConfig::OpCodeSet result(new std::set< OpCode >());
+    ScCalcConfig::OpCodeSet result(new std::set< OpCode >);
     formula::FormulaCompiler aCompiler;
     formula::FormulaCompiler::OpCodeMapPtr pOpCodeMap(aCompiler.GetOpCodeMap(css::sheet::FormulaLanguage::ENGLISH));
 
-    const formula::OpCodeHashMap *pHashMap(pOpCodeMap->getHashMap());
+    const formula::OpCodeHashMap& rHashMap(pOpCodeMap->getHashMap());
 
     sal_Int32 fromIndex(0);
     sal_Int32 semicolon;
@@ -190,15 +229,18 @@ ScCalcConfig::OpCodeSet ScStringToOpCodeSet(const OUString& rOpCodes)
                 result->insert(static_cast<OpCode>(n));
             else
             {
-                auto opcode(pHashMap->find(element));
-                if (opcode != pHashMap->end())
-                    result->insert(static_cast<OpCode>(opcode->second));
+                auto opcode(rHashMap.find(element));
+                if (opcode != rHashMap.end())
+                    result->insert(opcode->second);
                 else
                     SAL_WARN("sc.opencl", "Unrecognized OpCode " << element << " in OpCode set string");
             }
         }
         fromIndex = semicolon+1;
     }
+    // HACK: Both unary and binary minus have the same string but different opcodes.
+    if( result->find( ocSub ) != result->end())
+        result->insert( ocNegSub );
     return result;
 }
 

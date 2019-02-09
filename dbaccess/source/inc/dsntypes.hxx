@@ -24,7 +24,7 @@
 
 #include <vector>
 
-#include "dbadllapi.hxx"
+#include <dbadllapi.hxx>
 #include <connectivity/DriversConfig.hxx>
 
 namespace dbaccess
@@ -62,6 +62,7 @@ enum DATASOURCE_TYPE
     DST_FIREBIRD            = 26,
     DST_EMBEDDED_FIREBIRD   = 27,
     DST_POSTGRES            = 28,
+    DST_WRITER              = 29,
 
     DST_USERDEFINE1,    /// first user defined driver
     DST_USERDEFINE2,
@@ -90,20 +91,18 @@ enum DATASOURCE_TYPE
 #define PAGE_DBSETUPWIZARD_JDBC                      10
 #define PAGE_DBSETUPWIZARD_ADO                       11
 #define PAGE_DBSETUPWIZARD_ODBC                      12
-#define PAGE_DBSETUPWIZARD_SPREADSHEET               13
+#define PAGE_DBSETUPWIZARD_DOCUMENT_OR_SPREADSHEET   13
 #define PAGE_DBSETUPWIZARD_AUTHENTIFICATION          14
 #define PAGE_DBSETUPWIZARD_FINAL                     16
 #define PAGE_DBSETUPWIZARD_USERDEFINED               17
 #define PAGE_DBSETUPWIZARD_MYSQL_NATIVE              18
 
 // ODsnTypeCollection
-class OOO_DLLPUBLIC_DBA ODsnTypeCollection
+class OOO_DLLPUBLIC_DBA ODsnTypeCollection final
 {
-protected:
-    typedef std::vector<OUString> StringVector;
 
-    StringVector    m_aDsnTypesDisplayNames;    /// user readable names for the datasource types
-    StringVector    m_aDsnPrefixes;             /// DSN prefixes which determine the type of a datasource
+    std::vector<OUString> m_aDsnTypesDisplayNames;    /// user readable names for the datasource types
+    std::vector<OUString> m_aDsnPrefixes;             /// DSN prefixes which determine the type of a datasource
     ::connectivity::DriversConfig m_aDriverConfig;
     css::uno::Reference< css::uno::XComponentContext > m_xContext;
 
@@ -137,7 +136,7 @@ public:
     OUString getMediaType(const OUString& _sURL) const;
 
     /// returns the dsn prefix for a given media type
-    OUString getDatasourcePrefixFromMediaType(const OUString& _sMediaType,const OUString& _sExtension = OUString() );
+    OUString getDatasourcePrefixFromMediaType(const OUString& _sMediaType, const OUString& _sExtension );
 
     void extractHostNamePort(const OUString& _rDsn,OUString& _sDatabaseName,OUString& _rHostname,sal_Int32& _nPortNumber) const;
 
@@ -153,7 +152,7 @@ public:
     // check if a Create New Database button may be shown to insert connection url
     bool supportsDBCreation(const OUString& _sURL) const;
 
-    /// check if the given data source tyoe is based on the file system - i.e. the URL is a prefix plus a file URL
+    /// check if the given data source type is based on the file system - i.e. the URL is a prefix plus a file URL
     bool isFileSystemBased(const OUString& _sURL) const;
 
     bool isConnectionUrlRequired(const OUString& _sURL) const;
@@ -176,7 +175,7 @@ public:
     /// get access to the (last + 1st) element of the types collection
     inline TypeIterator    end() const;
 
-    void fillPageIds(const OUString& _sURL,::std::vector<sal_Int16>& _rOutPathIds) const;
+    void fillPageIds(const OUString& _sURL,std::vector<sal_Int16>& _rOutPathIds) const;
 
     DATASOURCE_TYPE determineType(const OUString& _rDsn) const;
 
@@ -201,14 +200,14 @@ public:
     TypeIterator(const TypeIterator& _rSource);
     ~TypeIterator();
 
-    OUString getURLPrefix() const;
-    OUString          getDisplayName() const;
+    OUString const & getURLPrefix() const;
+    OUString const & getDisplayName() const;
 
     /// prefix increment
     const TypeIterator& operator++();
 
 protected:
-    TypeIterator(const ODsnTypeCollection* _pContainer, sal_Int32 _nInitialPos = 0);
+    TypeIterator(const ODsnTypeCollection* _pContainer, sal_Int32 _nInitialPos);
 };
 
 

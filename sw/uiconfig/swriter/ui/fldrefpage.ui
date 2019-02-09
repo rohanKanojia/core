@@ -1,30 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<interface domain="sw">
+  <requires lib="gtk+" version="3.18"/>
   <requires lib="LibreOffice" version="1.0"/>
-  <object class="GtkListStore" id="liststore1">
+  <object class="GtkTreeStore" id="liststore1">
     <columns>
       <!-- column-name gchararray1 -->
       <column type="gchararray"/>
     </columns>
-    <data>
-      <row>
-        <col id="0" translatable="yes">Bookmarks</col>
-      </row>
-      <row>
-        <col id="0" translatable="yes">Footnotes</col>
-      </row>
-      <row>
-        <col id="0" translatable="yes">Endnotes</col>
-      </row>
-      <row>
-        <col id="0" translatable="yes">Headings</col>
-      </row>
-      <row>
-        <col id="0" translatable="yes">Numbered Paragraphs</col>
-      </row>
-    </data>
   </object>
   <object class="GtkBox" id="FieldRefPage">
     <property name="visible">True</property>
@@ -66,6 +49,7 @@
                         <property name="can_focus">True</property>
                         <property name="model">liststore1</property>
                         <property name="search_column">0</property>
+                        <property name="show_expanders">False</property>
                         <child internal-child="selection">
                           <object class="GtkTreeSelection" id="treeview-selection"/>
                         </child>
@@ -78,7 +62,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Type</property>
+                    <property name="label" translatable="yes" context="fldrefpage|label1">_Type</property>
                     <property name="use_underline">True</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
@@ -111,6 +95,7 @@
                         <property name="can_focus">True</property>
                         <property name="model">liststore1</property>
                         <property name="search_column">0</property>
+                        <property name="show_expanders">False</property>
                         <child internal-child="selection">
                           <object class="GtkTreeSelection" id="treeview-selection2"/>
                         </child>
@@ -123,7 +108,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="xalign">0</property>
-                    <property name="label" translatable="yes">Insert _reference to</property>
+                    <property name="label" translatable="yes" context="fldrefpage|label3">Insert _reference to</property>
                     <property name="use_underline">True</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
@@ -166,7 +151,7 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="margin_right">5</property>
-                        <property name="label" translatable="yes">Selection</property>
+                        <property name="label" translatable="yes" context="fldrefpage|label4">Selection</property>
                         <attributes>
                           <attribute name="weight" value="bold"/>
                         </attributes>
@@ -192,7 +177,7 @@
                     <property name="can_focus">True</property>
                     <property name="hexpand">True</property>
                     <property name="shadow_type">out</property>
-                    <property name="placeholder_text" translatable="yes">Filter Selection</property>
+                    <property name="placeholder_text" translatable="yes" context="fldrefpage|filter">Filter Selection</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
@@ -247,6 +232,7 @@
                             <property name="can_focus">True</property>
                             <property name="hexpand">True</property>
                             <property name="vexpand">True</property>
+                            <property name="show_expanders">False</property>
                             <child internal-child="selection">
                               <object class="GtkTreeSelection" id="treeview-selection4"/>
                             </child>
@@ -266,7 +252,7 @@
                     <property name="visible">False</property>
                     <property name="can_focus">False</property>
                     <property name="xalign">0</property>
-                    <property name="label" translatable="yes">S_election</property>
+                    <property name="label" translatable="yes" context="fldrefpage|label2">S_election</property>
                     <property name="use_underline">True</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
@@ -293,7 +279,7 @@
                     <property name="sensitive">False</property>
                     <property name="can_focus">False</property>
                     <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Value</property>
+                    <property name="label" translatable="yes" context="fldrefpage|valueft">_Value</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">value</property>
                   </object>
@@ -308,7 +294,6 @@
                     <property name="sensitive">False</property>
                     <property name="can_focus">True</property>
                     <property name="hexpand">True</property>
-                    <property name="invisible_char">•</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
@@ -320,7 +305,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="xalign">0</property>
-                    <property name="label" translatable="yes">Na_me</property>
+                    <property name="label" translatable="yes" context="fldrefpage|nameft">Na_me</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">name</property>
                   </object>
@@ -334,7 +319,6 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="hexpand">True</property>
-                    <property name="invisible_char">•</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>

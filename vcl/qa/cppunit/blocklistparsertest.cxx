@@ -16,7 +16,7 @@
 
 #include <unotest/bootstrapfixturebase.hxx>
 
-#include "opengl/win/blocklist_parser.hxx"
+#include <opengl/win/blocklist_parser.hxx>
 
 namespace
 {
@@ -40,7 +40,7 @@ void BlocklistParserTest::testParse()
     aBlocklistParser.parse();
 
     size_t const n = aDriveInfos.size();
-    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(20), n);
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(22), n);
 
     size_t i = 0;
 
@@ -81,6 +81,11 @@ void BlocklistParserTest::testParse()
 
         aDriveInfo = aDriveInfos[i++];
         CPPUNIT_ASSERT_EQUAL(bIsWhitelisted, aDriveInfo.mbWhitelisted);
+        CPPUNIT_ASSERT_EQUAL(OUString("0xcafe"), aDriveInfo.maAdapterVendor);
+        CPPUNIT_ASSERT_EQUAL(wgl::VersionComparisonOp::DRIVER_NOT_EQUAL, aDriveInfo.meComparisonOp);
+
+        aDriveInfo = aDriveInfos[i++];
+        CPPUNIT_ASSERT_EQUAL(bIsWhitelisted, aDriveInfo.mbWhitelisted);
         CPPUNIT_ASSERT_EQUAL(WinOpenGLDeviceInfo::GetDeviceVendor(wgl::VendorAll), aDriveInfo.maAdapterVendor);
         CPPUNIT_ASSERT_EQUAL(wgl::VersionComparisonOp::DRIVER_BETWEEN_EXCLUSIVE, aDriveInfo.meComparisonOp);
 
@@ -113,11 +118,11 @@ void BlocklistParserTest::testEvaluate()
     OUString vendorIntel = WinOpenGLDeviceInfo::GetDeviceVendor(wgl::VendorIntel);
     OUString vendorMicrosoft = WinOpenGLDeviceInfo::GetDeviceVendor(wgl::VendorMicrosoft);
 
-    uint32_t osWindowsXP = 0x00050001;
-    uint32_t osWindowsVista = 0x00060000;
-    uint32_t osWindows7 = 0x00060001;
-    uint32_t osWindows8 = 0x00060002;
-    uint32_t osWindows10 = 0x000A0000;
+    uint32_t const osWindowsXP = 0x00050001;
+    uint32_t const osWindowsVista = 0x00060000;
+    uint32_t const osWindows7 = 0x00060001;
+    uint32_t const osWindows8 = 0x00060002;
+    uint32_t const osWindows10 = 0x000A0000;
 
     // Check OS
     CPPUNIT_ASSERT_EQUAL(true, WinOpenGLDeviceInfo::FindBlocklistedDeviceInList(

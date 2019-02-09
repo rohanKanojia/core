@@ -22,19 +22,19 @@
 
 #include "global.hxx"
 #include "address.hxx"
+#include <tools/solar.h>
 #include <svl/hint.hxx>
 
-class ScPaintHint : public SfxHint
+class SC_DLLPUBLIC ScPaintHint : public SfxHint
 {
-    ScRange     aRange;
-    sal_uInt16  nParts;
-    bool        bPrint;     //  flag indicating whether print/preview if affected
-
-    ScPaintHint(); // disabled
+    ScRange const         aRange;
+    PaintPartFlags const  nParts;
+    bool            bPrint;     //  flag indicating whether print/preview if affected
 
 public:
-                    ScPaintHint( const ScRange& rRng, sal_uInt16 nPaint = PAINT_ALL );
-                    virtual ~ScPaintHint();
+                    ScPaintHint() = delete;
+                    ScPaintHint( const ScRange& rRng, PaintPartFlags nPaint );
+                    virtual ~ScPaintHint() override;
 
     void            SetPrintFlag(bool bSet) { bPrint = bSet; }
     SCCOL           GetStartCol() const     { return aRange.aStart.Col(); }
@@ -43,41 +43,28 @@ public:
     SCCOL           GetEndCol() const       { return aRange.aEnd.Col(); }
     SCROW           GetEndRow() const       { return aRange.aEnd.Row(); }
     SCTAB           GetEndTab() const       { return aRange.aEnd.Tab(); }
-    sal_uInt16      GetParts() const        { return nParts; }
+    PaintPartFlags  GetParts() const        { return nParts; }
     bool            GetPrintFlag() const    { return bPrint; }
 };
 
 class ScUpdateRefHint : public SfxHint
 {
-    UpdateRefMode   eUpdateRefMode;
-    ScRange         aRange;
-    SCsCOL          nDx;
-    SCsROW          nDy;
-    SCsTAB          nDz;
+    UpdateRefMode const   eUpdateRefMode;
+    ScRange const         aRange;
+    SCCOL const           nDx;
+    SCROW const           nDy;
+    SCTAB const           nDz;
 
 public:
                     ScUpdateRefHint( UpdateRefMode eMode, const ScRange& rR,
-                                        SCsCOL nX, SCsROW nY, SCsTAB nZ );
-                    virtual ~ScUpdateRefHint();
+                                        SCCOL nX, SCROW nY, SCTAB nZ );
+                    virtual ~ScUpdateRefHint() override;
 
     UpdateRefMode   GetMode() const         { return eUpdateRefMode; }
     const ScRange&  GetRange() const        { return aRange; }
-    SCsCOL          GetDx() const           { return nDx; }
-    SCsROW          GetDy() const           { return nDy; }
-    SCsTAB          GetDz() const           { return nDz; }
-};
-
-#define SC_POINTERCHANGED_NUMFMT    1
-
-class ScPointerChangedHint : public SfxHint
-{
-    sal_uInt16          nFlags;
-
-public:
-
-                    virtual ~ScPointerChangedHint();
-
-    sal_uInt16          GetFlags() const            { return nFlags; }
+    SCCOL           GetDx() const           { return nDx; }
+    SCROW           GetDy() const           { return nDy; }
+    SCTAB           GetDz() const           { return nDz; }
 };
 
 //! move ScLinkRefreshedHint to a different file?
@@ -92,16 +79,15 @@ class ScLinkRefreshedHint : public SfxHint
     OUString    aDdeAppl;   // used for dde links:
     OUString    aDdeTopic;
     OUString    aDdeItem;
-    sal_uInt8   nDdeMode;
     ScAddress   aDestPos;   // used to identify area links
                             //! also use source data for area links?
 
 public:
                     ScLinkRefreshedHint();
-                    virtual ~ScLinkRefreshedHint();
+                    virtual ~ScLinkRefreshedHint() override;
 
     void            SetSheetLink( const OUString& rSourceUrl );
-    void            SetDdeLink( const OUString& rA, const OUString& rT, const OUString& rI, sal_uInt8 nM );
+    void            SetDdeLink( const OUString& rA, const OUString& rT, const OUString& rI );
     void            SetAreaLink( const ScAddress& rPos );
 
     ScLinkRefType       GetLinkType() const { return nLinkType; }
@@ -116,15 +102,15 @@ public:
 
 class ScAutoStyleHint : public SfxHint
 {
-    ScRange     aRange;
-    OUString    aStyle1;
-    OUString    aStyle2;
-    sal_uLong   nTimeout;
+    ScRange const     aRange;
+    OUString const    aStyle1;
+    OUString const    aStyle2;
+    sal_uLong const   nTimeout;
 
 public:
                     ScAutoStyleHint( const ScRange& rR, const OUString& rSt1,
                                         sal_uLong nT, const OUString& rSt2 );
-                    virtual ~ScAutoStyleHint();
+                    virtual ~ScAutoStyleHint() override;
 
     const ScRange&  GetRange() const    { return aRange; }
     const OUString& GetStyle1() const   { return aStyle1; }
@@ -134,22 +120,22 @@ public:
 
 class ScDBRangeRefreshedHint : public SfxHint
 {
-    ScImportParam   aParam;
+    ScImportParam const   aParam;
 
 public:
                     ScDBRangeRefreshedHint( const ScImportParam& rP );
-                    virtual ~ScDBRangeRefreshedHint();
+                    virtual ~ScDBRangeRefreshedHint() override;
 
     const ScImportParam&  GetImportParam() const    { return aParam; }
 };
 
 class ScDataPilotModifiedHint : public SfxHint
 {
-    OUString        maName;
+    OUString const        maName;
 
 public:
                     ScDataPilotModifiedHint( const OUString& rName );
-                    virtual ~ScDataPilotModifiedHint();
+                    virtual ~ScDataPilotModifiedHint() override;
 
     const OUString&   GetName() const { return maName; }
 };

@@ -25,10 +25,10 @@
 #include <uno/data.h>
 #include <typelib/typedescription.hxx>
 
-#include "bridges/cpp_uno/shared/bridge.hxx"
-#include "bridges/cpp_uno/shared/cppinterfaceproxy.hxx"
-#include "bridges/cpp_uno/shared/types.hxx"
-#include "bridges/cpp_uno/shared/vtablefactory.hxx"
+#include "bridge.hxx"
+#include "cppinterfaceproxy.hxx"
+#include "types.hxx"
+#include "vtablefactory.hxx"
 
 #include "msci.hxx"
 
@@ -241,6 +241,13 @@ static typelib_TypeClass __cdecl cpp_mediate(
             pThis);
 
     typelib_InterfaceTypeDescription * pTypeDescr = pCppI->getTypeDescr();
+
+    SAL_INFO( "bridges.win32", "cpp_vtable_call: pCallStack=[" <<
+            std::hex << pCallStack[0] << "," << pCallStack[1] << "," << pCallStack[2] << ",...]" <<
+            ", pThis=" << pThis << ", pCppI=" << pCppI <<
+            std::dec << ", nFunctionIndex=" << nFunctionIndex << ", nVtableOffset=" << nVtableOffset );
+    SAL_INFO( "bridges.win32", "name=" << OUString::unacquired(&pTypeDescr->aBase.pTypeName) );
+
     if (nFunctionIndex >= pTypeDescr->nMapFunctionIndexToMemberIndex)
     {
         SAL_WARN(
@@ -260,6 +267,8 @@ static typelib_TypeClass __cdecl cpp_mediate(
     assert(nMemberPos < pTypeDescr->nAllMembers);
 
     TypeDescription aMemberDescr( pTypeDescr->ppAllMembers[nMemberPos] );
+
+    SAL_INFO( "bridges.win32", "Calling " << OUString::unacquired(&aMemberDescr.get()->pTypeName) );
 
     typelib_TypeClass eRet = typelib_TypeClass_VOID;
     switch (aMemberDescr.get()->eTypeClass)
@@ -431,7 +440,7 @@ bridges::cpp_uno::shared::VtableFactory::mapBlockToVtable(void * block)
     return static_cast< Slot * >(block) + 1;
 }
 
-sal_Size bridges::cpp_uno::shared::VtableFactory::getBlockSize(
+std::size_t bridges::cpp_uno::shared::VtableFactory::getBlockSize(
     sal_Int32 slotCount)
 {
     return (slotCount + 1) * sizeof (Slot) + slotCount * codeSnippetSize;

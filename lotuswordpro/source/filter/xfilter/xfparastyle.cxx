@@ -59,23 +59,15 @@
  * Styles for paragraph may include many style,include font,indent,margin,
  * shadow,line height,and so on.
  ************************************************************************/
-#include "xfparastyle.hxx"
-#include "xffont.hxx"
-#include "xfborders.hxx"
+#include <xfilter/xfparastyle.hxx>
+#include <xfilter/xffont.hxx>
+#include <xfilter/xfborders.hxx>
 #include "xftabstyle.hxx"
-#include "xfbgimage.hxx"
+#include <xfilter/xfbgimage.hxx>
 
 XFParaStyle::XFParaStyle()
     : m_eAlignType(enumXFAlignNone)
-    , m_eLastLineAlign(enumXFAlignNone)
-    , m_bJustSingleWord(false)
-    , m_bKeepWithNext(false)
     , m_fTextIndent(0)
-    , m_pBorders(nullptr)
-    , m_pBGImage(nullptr)
-    , m_nPageNumber(0)
-    , m_bNumberLines(true)
-    , m_nLineNumberRestart(0)
     , m_nFlag(0)
     , m_bNumberRight(false)
 {
@@ -85,9 +77,6 @@ XFParaStyle::XFParaStyle()
 XFParaStyle::XFParaStyle(const XFParaStyle& other)
     : XFStyle(other)
     , m_eAlignType(other.m_eAlignType)
-    , m_eLastLineAlign(other.m_eLastLineAlign)
-    , m_bJustSingleWord(other.m_bJustSingleWord)
-    , m_bKeepWithNext(other.m_bKeepWithNext)
     , m_fTextIndent(other.m_fTextIndent)
     , m_aBackColor(other.m_aBackColor)
     , m_aMargin(other.m_aMargin)
@@ -97,23 +86,14 @@ XFParaStyle::XFParaStyle(const XFParaStyle& other)
     , m_aDropcap(other.m_aDropcap)
     , m_aLineHeight(other.m_aLineHeight)
     , m_aBreaks(other.m_aBreaks)
-    , m_nPageNumber(other.m_nPageNumber)
-    , m_bNumberLines(other.m_bNumberLines)
-    , m_nLineNumberRestart(other.m_nLineNumberRestart)
     , m_nFlag(other.m_nFlag)
     , m_bNumberRight(other.m_bNumberRight)
 {
-    m_strParentStyleName = other.m_strParentStyleName;
-
     if( other.m_pBorders )
-        m_pBorders = new XFBorders(*other.m_pBorders);
-    else
-        m_pBorders = nullptr;
+        m_pBorders.reset( new XFBorders(*other.m_pBorders) );
 
     if( other.m_pBGImage )
-        m_pBGImage = new XFBGImage(*other.m_pBGImage);
-    else
-        m_pBGImage = nullptr;
+        m_pBGImage.reset( new XFBGImage(*other.m_pBGImage) );
 
     for (size_t i = 0; i < other.m_aTabs.GetCount(); ++i)
     {
@@ -123,8 +103,8 @@ XFParaStyle::XFParaStyle(const XFParaStyle& other)
             const XFTabStyle* pTabStyle = dynamic_cast<const XFTabStyle*>(pStyle);
             if( pTabStyle )
             {
-                XFTabStyle *pCopyStyle = new XFTabStyle(*pTabStyle);
-                m_aTabs.AddStyle(pCopyStyle);
+                std::unique_ptr<XFTabStyle> pCopyStyle(new XFTabStyle(*pTabStyle));
+                m_aTabs.AddStyle(std::move(pCopyStyle));
             }
         }
     }
@@ -136,31 +116,26 @@ XFParaStyle& XFParaStyle::operator=(const XFParaStyle& other)
     if (this != &other)
     {
         // first , clean member
-        delete m_pBGImage;
+        m_pBGImage.reset();
         m_aTabs.Reset();
 
         m_strParentStyleName = other.m_strParentStyleName;
         m_nFlag = other.m_nFlag;
         m_eAlignType = other.m_eAlignType;
-        m_eLastLineAlign = other.m_eLastLineAlign;
-        m_bJustSingleWord = other.m_bJustSingleWord;
-        m_bKeepWithNext = other.m_bKeepWithNext;
         m_fTextIndent = other.m_fTextIndent;
-        m_bNumberLines = other.m_bNumberLines;
-        m_nLineNumberRestart = other.m_nLineNumberRestart;
         m_bNumberRight = other.m_bNumberRight;
 
         m_pFont = other.m_pFont;
 
         if( other.m_pBorders )
-            m_pBorders = new XFBorders(*other.m_pBorders);
+            m_pBorders.reset( new XFBorders(*other.m_pBorders) );
         else
-            m_pBorders = nullptr;
+            m_pBorders.reset();
         m_aBackColor = other.m_aBackColor;
         if( other.m_pBGImage )
-            m_pBGImage = new XFBGImage(*other.m_pBGImage);
+            m_pBGImage.reset( new XFBGImage(*other.m_pBGImage) );
         else
-            m_pBGImage = nullptr;
+            m_pBGImage.reset();
 
         m_aShadow = other.m_aShadow;
         m_aMargin = other.m_aMargin;
@@ -177,8 +152,8 @@ XFParaStyle& XFParaStyle::operator=(const XFParaStyle& other)
                 const XFTabStyle *pTabStyle = dynamic_cast<const XFTabStyle*>(pStyle);
                 if( pTabStyle )
                 {
-                    XFTabStyle *pCopyStyle = new XFTabStyle(*pTabStyle);
-                    m_aTabs.AddStyle(pCopyStyle);
+                    std::unique_ptr<XFTabStyle> pCopyStyle(new XFTabStyle(*pTabStyle));
+                    m_aTabs.AddStyle(std::move(pCopyStyle));
                 }
             }
         }
@@ -188,8 +163,6 @@ XFParaStyle& XFParaStyle::operator=(const XFParaStyle& other)
 
 XFParaStyle::~XFParaStyle()
 {
-    delete m_pBorders;
-    delete m_pBGImage;
 }
 
 enumXFStyle XFParaStyle::GetStyleFamily()
@@ -219,29 +192,27 @@ void    XFParaStyle::SetMargins(double left, double right, double top, double bo
         m_aMargin.SetBottom( bottom );
 }
 
-void    XFParaStyle::SetShadow(enumXFShadowPos pos, double offset, XFColor& color)
+void    XFParaStyle::SetShadow(enumXFShadowPos pos, double offset, XFColor const & color)
 {
     m_aShadow.SetPosition(pos);
     m_aShadow.SetOffset(offset);
     m_aShadow.SetColor(color);
 }
 
-void    XFParaStyle::SetBackColor(XFColor& color)
+void    XFParaStyle::SetBackColor(XFColor const & color)
 {
     m_aBackColor = color;
     m_nFlag |= XFPARA_FLAG_BACKCOLOR;
 }
 
-void    XFParaStyle::SetBackImage(XFBGImage *image)
+void    XFParaStyle::SetBackImage(std::unique_ptr<XFBGImage>& rImage)
 {
-    delete m_pBGImage;
-    m_pBGImage = image;
+    m_pBGImage = std::move(rImage);
 }
 
 void    XFParaStyle::SetBorders(XFBorders *pBorders)
 {
-    delete m_pBorders;
-    m_pBorders = pBorders;
+    m_pBorders.reset( pBorders );
 }
 
 void    XFParaStyle::SetDropCap(sal_Int16 nLength,
@@ -273,7 +244,7 @@ void    XFParaStyle::SetLineHeight(enumLHType type, double value)
         m_aLineHeight.SetLeastHeight(value);
         break;
     case enumLHPercent: //perhaps i should redesign the interface here,ohm..
-        m_aLineHeight.SetPercent((sal_Int32)value);
+        m_aLineHeight.SetPercent(static_cast<sal_Int32>(value));
         break;
     case enumLHSpace:
         m_aLineHeight.SetSpace(value*0.5666);   //don't known why,just suspect.
@@ -285,12 +256,12 @@ void    XFParaStyle::SetLineHeight(enumLHType type, double value)
 
 void    XFParaStyle::AddTabStyle(enumXFTab type, double len, sal_Unicode leader, sal_Unicode delimiter)
 {
-    XFTabStyle  *tab = new XFTabStyle();
+    std::unique_ptr<XFTabStyle> tab(new XFTabStyle());
     tab->SetTabType(type);
     tab->SetLength(len);
     tab->SetLeaderChar(leader);
     tab->SetDelimiter(delimiter);
-    m_aTabs.AddStyle(tab);
+    m_aTabs.AddStyle(std::move(tab));
 }
 
 /**
@@ -313,20 +284,8 @@ bool    XFParaStyle::Equal(IXFStyle *pStyle)
         return false;
     if( m_fTextIndent != pOther->m_fTextIndent )
         return false;
-    if( m_bJustSingleWord != pOther->m_bJustSingleWord )
-        return false;
-    if( m_bKeepWithNext != pOther->m_bKeepWithNext )
-        return false;
-    //line number:
-    if( m_bNumberLines != pOther->m_bNumberLines )
-        return false;
-    if( m_nLineNumberRestart != pOther->m_nLineNumberRestart )
-        return false;
     //align:
     if( m_eAlignType != pOther->m_eAlignType )
-        return false;
-    //last line align:
-    if( m_eLastLineAlign != pOther->m_eLastLineAlign )
         return false;
 
     //shadow:
@@ -347,8 +306,6 @@ bool    XFParaStyle::Equal(IXFStyle *pStyle)
         return false;
     //breaks:
     if( m_aBreaks != pOther->m_aBreaks )
-        return false;
-    if( m_nPageNumber != pOther->m_nPageNumber )
         return false;
     if( m_aTabs != pOther->m_aTabs )
         return false;
@@ -426,25 +383,9 @@ void    XFParaStyle::ToXml(IXFStream *pStrm)
     {
         pAttrList->AddAttribute("fo:text-align", GetAlignName(m_eAlignType) );
     }
-    //last line align:
-    if( m_eLastLineAlign != enumXFAlignNone )
-    {
-        pAttrList->AddAttribute("fo:fo:text-align-last", GetAlignName(m_eLastLineAlign) );
-        if( m_bJustSingleWord )
-            pAttrList->AddAttribute("style:justify-single-word", "true" );
-    }
     //line number:
-    if( m_bNumberLines )
-    {
-        pAttrList->AddAttribute( "text:number-lines", "true" );
-        pAttrList->AddAttribute( "text:line-number", OUString::number(m_nLineNumberRestart) );
-    }
-    else
-    {
-        pAttrList->AddAttribute( "text:number-lines", "false" );
-        assert(m_nLineNumberRestart>0);
-        pAttrList->AddAttribute( "text:line-number", "0" );
-    }
+    pAttrList->AddAttribute( "text:number-lines", "true" );
+    pAttrList->AddAttribute( "text:line-number", OUString::number(0) );
 
     //shadow:
     m_aShadow.ToXml(pStrm);
@@ -463,14 +404,8 @@ void    XFParaStyle::ToXml(IXFStream *pStrm)
     if( m_pFont.is() )
         m_pFont->ToXml(pStrm);
 
-    //page number:
-    if( m_nPageNumber )
-        pAttrList->AddAttribute("fo:page-number", OUString::number(m_nPageNumber) );
     //page breaks:
     m_aBreaks.ToXml(pStrm);
-
-    if( m_bKeepWithNext )
-        pAttrList->AddAttribute("fo:fo:keep-with-next", "true" );
 
     pStrm->StartElement("style:properties");
 

@@ -17,20 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <string_view>
+
 #include <comphelper/classids.hxx>
-#include <com/sun/star/embed/XEmbedObjectCreator.hpp>
 #include <com/sun/star/embed/XEmbeddedObject.hpp>
 #include <com/sun/star/embed/XLinkageSupport.hpp>
-#include <com/sun/star/embed/EmbedStates.hpp>
-#include <com/sun/star/embed/XClassifiedObject.hpp>
-#include <com/sun/star/embed/Aspects.hpp>
-#include <com/sun/star/embed/NoVisualAreaSizeException.hpp>
 #include <com/sun/star/document/XEmbeddedObjectSupplier.hpp>
 #include <xmloff/families.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/txtprmap.hxx>
 #include <xmloff/maptype.hxx>
+#include <xmloff/xmlexppr.hxx>
 
 #include <svx/svdobj.hxx>
 #include <doc.hxx>
@@ -42,6 +42,7 @@
 #include "xmlexp.hxx"
 #include "xmltexte.hxx"
 #include <SwAppletImpl.hxx>
+#include <ndindex.hxx>
 
 #include <svl/urihelper.hxx>
 #include <sfx2/frmdescr.hxx>
@@ -79,99 +80,12 @@ SwNoTextNode *SwXMLTextParagraphExport::GetNoTextNode(
     return  pNdIdx->GetNodes()[pNdIdx->GetIndex() + 1]->GetNoTextNode();
 }
 
-void SwXMLTextParagraphExport::exportStyleContent(
-        const Reference< XStyle > & rStyle )
-{
-
-    Reference<XUnoTunnel> xStyleTunnel(rStyle, UNO_QUERY);
-    Reference<lang::XServiceInfo> xServiceInfo(rStyle, UNO_QUERY);
-    if(!xStyleTunnel.is() || !xServiceInfo.is() || !xServiceInfo->supportsService("com.sun.star.style.ParagraphStyle"))
-        return;
-    sw::ICoreParagraphStyle* pCoreParagraphStyle(reinterpret_cast<sw::ICoreParagraphStyle*>(
-            xStyleTunnel->getSomething(sw::ICoreParagraphStyle::getUnoTunnelId())));
-    if(!pCoreParagraphStyle)
-        return;
-    const SwTextFormatColl* pColl(pCoreParagraphStyle->GetFormatColl());
-    OSL_ENSURE( pColl, "There is the text collection?" );
-    if( pColl && RES_CONDTXTFMTCOLL == pColl->Which() )
-    {
-        const SwFormatCollConditions& rConditions =
-            static_cast<const SwConditionTextFormatColl *>(pColl)->GetCondColls();
-        for( size_t i=0; i < rConditions.size(); ++i )
-        {
-            const SwCollCondition& rCond = *rConditions[i];
-
-            enum XMLTokenEnum eFunc = XML_TOKEN_INVALID;
-            OUString sVal;
-            switch( rCond.GetCondition() )
-            {
-            case PARA_IN_LIST:
-                eFunc = XML_LIST_LEVEL;
-                sVal = OUString::number(rCond.GetSubCondition()+1);
-                break;
-            case PARA_IN_OUTLINE:
-                eFunc = XML_OUTLINE_LEVEL;
-                sVal = OUString::number(rCond.GetSubCondition()+1);
-                break;
-            case PARA_IN_FRAME:
-                eFunc = XML_TEXT_BOX;
-                break;
-            case PARA_IN_TABLEHEAD:
-                eFunc = XML_TABLE_HEADER;
-                break;
-            case PARA_IN_TABLEBODY:
-                eFunc = XML_TABLE;
-                break;
-            case PARA_IN_SECTION:
-                eFunc = XML_SECTION;
-                break;
-            case PARA_IN_FOOTENOTE:
-                eFunc = XML_FOOTNOTE;
-                break;
-            case PARA_IN_FOOTER:
-                eFunc = XML_FOOTER;
-                break;
-            case PARA_IN_HEADER:
-                eFunc = XML_HEADER;
-                break;
-            case PARA_IN_ENDNOTE:
-                eFunc = XML_ENDNOTE;
-                break;
-            }
-            OSL_ENSURE( eFunc != XML_TOKEN_INVALID,
-                        "SwXMLExport::ExportFormat: unknown condition" );
-            if( eFunc != XML_TOKEN_INVALID )
-            {
-                OUString sCond = GetXMLToken(eFunc) + "()";
-                if( !sVal.isEmpty() )
-                {
-                    sCond += "=" + sVal;
-                }
-
-                GetExport().AddAttribute( XML_NAMESPACE_STYLE,
-                            XML_CONDITION, sCond );
-                OUString aString;
-                SwStyleNameMapper::FillProgName(
-                                rCond.GetTextFormatColl()->GetName(),
-                                aString,
-                                nsSwGetPoolIdFromName::GET_POOLID_TXTCOLL,
-                                true);
-                aString = GetExport().EncodeStyleName( aString );
-                GetExport().AddAttribute( XML_NAMESPACE_STYLE,
-                            XML_APPLY_STYLE_NAME, aString );
-                SvXMLElementExport aElem( GetExport(), XML_NAMESPACE_STYLE,
-                                          XML_MAP, true, true );
-            }
-        }
-    }
-}
+static const OUStringLiteral gsEmbeddedObjectProtocol( "vnd.sun.star.EmbeddedObject:" );
 
 SwXMLTextParagraphExport::SwXMLTextParagraphExport(
         SwXMLExport& rExp,
          SvXMLAutoStylePoolP& _rAutoStylePool ) :
     XMLTextParagraphExport( rExp, _rAutoStylePool ),
-    sEmbeddedObjectProtocol( "vnd.sun.star.EmbeddedObject:" ),
-    sGraphicObjectProtocol( "vnd.sun.star.GraphicObject:" ),
     aAppletClassId( SO3_APPLET_CLASSID ),
     aPluginClassId( SO3_PLUGIN_CLASSID ),
     aIFrameClassId( SO3_IFRAME_CLASSID )
@@ -203,13 +117,10 @@ static void lcl_addAspect(
         const XMLPropertyState **pStates,
         const rtl::Reference < XMLPropertySetMapper >& rMapper )
 {
+    sal_Int64 nAspect = rObj.GetViewAspect();
+    if ( nAspect )
     {
-        sal_Int64 nAspect = rObj.GetViewAspect();
-
-        if ( nAspect )
-        {
-            *pStates = new XMLPropertyState( rMapper->FindEntryIndex( CTF_OLE_DRAW_ASPECT ), uno::makeAny( nAspect ) );
-        }
+        *pStates = new XMLPropertyState( rMapper->FindEntryIndex( CTF_OLE_DRAW_ASPECT ), uno::makeAny( nAspect ) );
     }
 }
 
@@ -218,28 +129,21 @@ static void lcl_addOutplaceProperties(
         const XMLPropertyState **pStates,
         const rtl::Reference < XMLPropertySetMapper >& rMapper )
 {
+    MapMode aMode( MapUnit::Map100thMM ); // the API expects this map mode for the embedded objects
+    Size aSize = rObj.GetSize( &aMode ); // get the size in the requested map mode
+
+    if( aSize.Width() && aSize.Height() )
     {
-        MapMode aMode( MAP_100TH_MM ); // the API expects this map mode for the embedded objects
-        Size aSize = rObj.GetSize( &aMode ); // get the size in the requested map mode
+        *pStates = new XMLPropertyState( rMapper->FindEntryIndex( CTF_OLE_VIS_AREA_LEFT ), Any(sal_Int32(0)) );
+        pStates++;
 
-        if( aSize.Width() && aSize.Height() )
-        {
-            Any aAny;
-            aAny <<= 0L;
-            *pStates = new XMLPropertyState( rMapper->FindEntryIndex( CTF_OLE_VIS_AREA_LEFT ), aAny );
-            pStates++;
+        *pStates = new XMLPropertyState( rMapper->FindEntryIndex( CTF_OLE_VIS_AREA_TOP ), Any(sal_Int32(0)) );
+        pStates++;
 
-            aAny <<= 0L;
-            *pStates = new XMLPropertyState( rMapper->FindEntryIndex( CTF_OLE_VIS_AREA_TOP ), aAny );
-            pStates++;
+        *pStates = new XMLPropertyState( rMapper->FindEntryIndex( CTF_OLE_VIS_AREA_WIDTH ), Any(static_cast<sal_Int32>(aSize.Width())) );
+        pStates++;
 
-            aAny <<= (sal_Int32)aSize.Width();
-            *pStates = new XMLPropertyState( rMapper->FindEntryIndex( CTF_OLE_VIS_AREA_WIDTH ), aAny );
-            pStates++;
-
-            aAny <<= (sal_Int32)aSize.Height();
-            *pStates = new XMLPropertyState( rMapper->FindEntryIndex( CTF_OLE_VIS_AREA_HEIGHT ), aAny );
-        }
+        *pStates = new XMLPropertyState( rMapper->FindEntryIndex( CTF_OLE_VIS_AREA_HEIGHT ), Any(static_cast<sal_Int32>(aSize.Height())) );
     }
 }
 
@@ -299,16 +203,12 @@ static void lcl_addFrameProperties(
     }
     if( SIZE_NOT_SET != nWidth )
     {
-        Any aAny2;
-        aAny <<= nWidth;
-        *pStates = new XMLPropertyState( rMapper->FindEntryIndex( CTF_FRAME_MARGIN_HORI ), aAny2 );
+        *pStates = new XMLPropertyState( rMapper->FindEntryIndex( CTF_FRAME_MARGIN_HORI ), Any(nWidth) );
         pStates++;
     }
     if( SIZE_NOT_SET != nHeight )
     {
-        Any aAny2;
-        aAny <<= nHeight;
-        *pStates = new XMLPropertyState( rMapper->FindEntryIndex( CTF_FRAME_MARGIN_VERT ), aAny2 );
+        *pStates = new XMLPropertyState( rMapper->FindEntryIndex( CTF_FRAME_MARGIN_VERT ), Any(nHeight) );
     }
 }
 
@@ -383,9 +283,9 @@ void SwXMLTextParagraphExport::_exportTextEmbedded(
     // First the stuff common to each of Applet/Plugin/Floating Frame
     OUString sStyle;
     Any aAny;
-    if( rPropSetInfo->hasPropertyByName( sFrameStyleName ) )
+    if( rPropSetInfo->hasPropertyByName( gsFrameStyleName ) )
     {
-        aAny = rPropSet->getPropertyValue( sFrameStyleName );
+        aAny = rPropSet->getPropertyValue( gsFrameStyleName );
         aAny >>= sStyle;
     }
 
@@ -444,13 +344,13 @@ void SwXMLTextParagraphExport::_exportTextEmbedded(
                 catch(const uno::Exception&)
                 {
                     // TODO/LATER: error handling
-                    OSL_FAIL( "Link detection or retrieving of the URL of OOo link is failed!\n" );
+                    OSL_FAIL( "Link detection or retrieving of the URL of OOo link is failed!" );
                 }
             }
 
             if ( !bIsOwnLink )
             {
-                sURL = sEmbeddedObjectProtocol + rOLEObj.GetCurrentPersistName();
+                sURL = gsEmbeddedObjectProtocol + rOLEObj.GetCurrentPersistName();
             }
 
             sURL = GetExport().AddEmbeddedObject( sURL );
@@ -472,11 +372,11 @@ void SwXMLTextParagraphExport::_exportTextEmbedded(
                         if( aBuffer.isEmpty() )
                         {
                             aBuffer.append( '\'' );
-                            aBuffer.append( sRange.copy( 0, i ) );
+                            aBuffer.append( std::u16string_view(sRange).substr(0, i) );
                         }
                         if( '\'' == c || '\\' == c )
                             aBuffer.append( '\\' );
-                        // no break!
+                        [[fallthrough]];
                     default:
                         if( !aBuffer.isEmpty() )
                             aBuffer.append( c );
@@ -602,7 +502,7 @@ void SwXMLTextParagraphExport::_exportTextEmbedded(
         case SV_EMBEDDED_OUTPLACE:
             if( rXMLExport.getExportFlags() & SvXMLExportFlags::EMBEDDED )
             {
-                OUString sURL( sEmbeddedObjectProtocol + rOLEObj.GetCurrentPersistName() );
+                OUString sURL( gsEmbeddedObjectProtocol + rOLEObj.GetCurrentPersistName() );
 
                 if ( !( rXMLExport.getExportFlags() & SvXMLExportFlags::OASIS ) )
                     sURL += "?oasis=false";
@@ -668,7 +568,8 @@ void SwXMLTextParagraphExport::_exportTextEmbedded(
     }
     if( SV_EMBEDDED_OUTPLACE==nType || SV_EMBEDDED_OWN==nType )
     {
-        OUString sURL( sGraphicObjectProtocol + rOLEObj.GetCurrentPersistName() );
+        OUString sURL(XML_EMBEDDEDOBJECTGRAPHIC_URL_BASE);
+        sURL += rOLEObj.GetCurrentPersistName();
         if( !(rXMLExport.getExportFlags() & SvXMLExportFlags::EMBEDDED) )
         {
             sURL = GetExport().AddEmbeddedObject( sURL );

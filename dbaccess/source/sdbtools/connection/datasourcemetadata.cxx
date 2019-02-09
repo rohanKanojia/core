@@ -19,8 +19,6 @@
 
 #include "datasourcemetadata.hxx"
 
-#include <com/sun/star/lang/NullPointerException.hpp>
-
 #include <connectivity/dbmetadata.hxx>
 
 namespace sdbtools
@@ -28,8 +26,6 @@ namespace sdbtools
 
     using ::com::sun::star::uno::Reference;
     using ::com::sun::star::sdbc::XConnection;
-    using ::com::sun::star::lang::NullPointerException;
-    using ::com::sun::star::sdbc::SQLException;
     using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::XComponentContext;
 
@@ -44,7 +40,7 @@ namespace sdbtools
     {
     }
 
-    sal_Bool SAL_CALL DataSourceMetaData::supportsQueriesInFrom(  ) throw (RuntimeException, SQLException, std::exception)
+    sal_Bool SAL_CALL DataSourceMetaData::supportsQueriesInFrom(  )
     {
         EntryGuard aGuard( *this );
         ::dbtools::DatabaseMetaData aMeta( getConnection() );

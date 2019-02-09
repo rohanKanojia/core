@@ -40,8 +40,6 @@ XInteractionApproveImpl::XInteractionApproveImpl()
 }
 
 void SAL_CALL XInteractionApproveImpl::select()
-    throw (RuntimeException,
-           std::exception)
 {
     m_bSelected = true;
 }
@@ -50,15 +48,11 @@ void SAL_CALL XInteractionApproveImpl::select()
 // XInteractionDisapproveImpl
 
 XInteractionDisapproveImpl::XInteractionDisapproveImpl()
-    : m_bSelected(false)
 {
 }
 
 void SAL_CALL XInteractionDisapproveImpl::select()
-    throw (RuntimeException,
-           std::exception)
 {
-    m_bSelected = true;
 }
 
 // XInteractionRequestImpl
@@ -70,11 +64,9 @@ XInteractionRequestImpl::XInteractionRequestImpl()
     std::vector<uno::Reference<task::XInteractionContinuation>> continuations{
         Reference<XInteractionContinuation>(p1),
         Reference<XInteractionContinuation>(p2) };
-    Any aAny;
     UnsupportedNameClashException excep;
     excep.NameClash = NameClash::ERROR;
-    aAny <<= excep;
-    m_xRequest.set(new ::comphelper::OInteractionRequest(aAny, continuations));
+    m_xRequest.set(new ::comphelper::OInteractionRequest(Any(excep), continuations));
 }
 
 bool XInteractionRequestImpl::approved() const

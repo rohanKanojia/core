@@ -28,18 +28,13 @@
 
 #include "object.hxx"
 #include "storbase.hxx"
-#include "storpage.hxx"
 
 namespace store
 {
 
+class OStorePageManager;
 struct OStoreDirectoryPageData;
 
-/*========================================================================
- *
- * OStoreDirectory_Impl interface.
- *
- *======================================================================*/
 class OStoreDirectory_Impl : public store::OStoreObject
 {
 public:
@@ -56,8 +51,8 @@ public:
      */
     storeError create (
         OStorePageManager *pManager,
-        rtl_String        *pPath,
-        rtl_String        *pName,
+        rtl_String const  *pPath,
+        rtl_String const  *pName,
         storeAccessMode    eAccessMode);
 
     /** iterate.
@@ -75,7 +70,7 @@ public:
 protected:
     /** Destruction.
      */
-    virtual ~OStoreDirectory_Impl();
+    virtual ~OStoreDirectory_Impl() override;
 
 private:
     /** IStoreHandle TypeId.
@@ -112,12 +107,6 @@ SAL_CALL query (OStoreObject *pHandle, SAL_UNUSED_PARAMETER OStoreDirectory_Impl
     }
     return nullptr;
 }
-
-/*========================================================================
- *
- * The End.
- *
- *======================================================================*/
 
 } // namespace store
 

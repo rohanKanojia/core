@@ -18,11 +18,12 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <boost/cast.hpp>
 
 #include <basegfx/range/b2drectangle.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <comphelper/scopeguard.hxx>
 #include <tools/diagnose_ex.h>
 #include <vcl/canvastools.hxx>
@@ -169,7 +170,7 @@ namespace cairocanvas
         CairoSharedPtr pCompositingCairo = pCompositingSurface->getCairo();
         CairoSharedPtr pWindowCairo = pWindowSurface->getCairo();
 
-        // TODO(P1): Might be worthwile to track areas of background
+        // TODO(P1): Might be worthwhile to track areas of background
         // changes, too.
         if( !bUpdateAll && !io_bSurfaceDirty && !mbCompositingSurfaceDirty )
         {
@@ -266,7 +267,7 @@ namespace cairocanvas
             ::canvas::tools::spritePixelAreaFromB2DRange( rMoveEnd ) );
         ::basegfx::B2IPoint aDestPos( rDestRect.getMinimum() );
 
-        ::std::vector< ::basegfx::B2IRange > aUnscrollableAreas;
+        std::vector< ::basegfx::B2IRange > aUnscrollableAreas;
 
         // TODO(E3): This is plain buggy (but copies the behaviour of
         // the old Impress slideshow) - the scrolled area might
@@ -336,7 +337,8 @@ namespace cairocanvas
             const ::canvas::SpriteRedrawManager::SpriteConnectedRanges::ComponentListType::const_iterator
                 aFirst( rUpdateArea.maComponentList.begin() );
             ::canvas::SpriteRedrawManager::SpriteConnectedRanges::ComponentListType::const_iterator
-                  aSecond( aFirst ); ++aSecond;
+                  aSecond( aFirst );
+            ++aSecond;
 
             ENSURE_OR_THROW( aFirst->second.getSprite().is(),
                              "VCLCanvas::scrollUpdate(): no sprite" );
@@ -352,7 +354,7 @@ namespace cairocanvas
         // repaint uncovered areas from backbuffer - take the
         // _rounded_ rectangles from above, to have the update
         // consistent with the scroll above.
-        ::std::vector< ::basegfx::B2DRange > aUncoveredAreas;
+        std::vector< ::basegfx::B2DRange > aUncoveredAreas;
         ::basegfx::computeSetDifference( aUncoveredAreas,
                                          rUpdateArea.maTotalBounds,
                                          ::basegfx::B2DRange( rDestRect ) );
@@ -370,7 +372,7 @@ namespace cairocanvas
     }
 
     void SpriteCanvasHelper::opaqueUpdate( const ::basegfx::B2DRange&                          rTotalArea,
-                                           const ::std::vector< ::canvas::Sprite::Reference >& rSortedUpdateSprites )
+                                           const std::vector< ::canvas::Sprite::Reference >& rSortedUpdateSprites )
     {
         ENSURE_OR_THROW( mpOwningSpriteCanvas &&
                           mpOwningSpriteCanvas->getBufferSurface(),
@@ -415,7 +417,7 @@ namespace cairocanvas
     }
 
     void SpriteCanvasHelper::genericUpdate( const ::basegfx::B2DRange&                          rRequestedArea,
-                                            const ::std::vector< ::canvas::Sprite::Reference >& rSortedUpdateSprites )
+                                            const std::vector< ::canvas::Sprite::Reference >& rSortedUpdateSprites )
     {
         // TODO
         SAL_INFO("canvas.cairo", "SpriteCanvasHelper::genericUpdate called");
@@ -437,17 +439,17 @@ namespace cairocanvas
         // otherwise, truncation of size below might leave visible
         // areas uncovered by VDev.
         const Point aOutputPosition(
-            ::std::max( sal_Int32( 0 ),
+            std::max( sal_Int32( 0 ),
                         static_cast< sal_Int32 >(rRequestedArea.getMinX()) ),
-            ::std::max( sal_Int32( 0 ),
+            std::max( sal_Int32( 0 ),
                         static_cast< sal_Int32 >(rRequestedArea.getMinY()) ) );
         // round output size towards +infty. Don't want to truncate a
         // fraction of a sprite pixel... Limit size of VDev to output
         // device's area.
         const Size  aOutputSize(
-            ::std::min( rSize.getX(),
+            std::min( rSize.getX(),
                         ::canvas::tools::roundUp( rRequestedArea.getMaxX() - aOutputPosition.X()) ),
-            ::std::min( rSize.getY(),
+            std::min( rSize.getY(),
                         ::canvas::tools::roundUp( rRequestedArea.getMaxY() - aOutputPosition.Y()) ) );
 
         cairo_rectangle( pCompositingCairo.get(), aOutputPosition.X(), aOutputPosition.Y(), aOutputSize.Width(), aOutputSize.Height() );
@@ -481,7 +483,7 @@ namespace cairocanvas
         cairo_paint( pWindowCairo.get() );
     }
 
-    ::cairo::SurfaceSharedPtr SpriteCanvasHelper::getCompositingSurface( const ::basegfx::B2ISize& rNeededSize )
+    ::cairo::SurfaceSharedPtr const & SpriteCanvasHelper::getCompositingSurface( const ::basegfx::B2ISize& rNeededSize )
     {
         if( rNeededSize.getX() > maCompositingSurfaceSize.getX() ||
             rNeededSize.getY() > maCompositingSurfaceSize.getY() )
@@ -501,7 +503,7 @@ namespace cairocanvas
         return mpCompositingSurface;
     }
 
-    ::cairo::SurfaceSharedPtr SpriteCanvasHelper::getTemporarySurface()
+    ::cairo::SurfaceSharedPtr const & SpriteCanvasHelper::getTemporarySurface()
     {
         if ( !mpTemporarySurface )
             mpTemporarySurface = createSurface( maCompositingSurfaceSize );

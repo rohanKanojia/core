@@ -60,16 +60,16 @@
 
 #include <sal/config.h>
 
-#include <xfparastyle.hxx>
-#include "xfstylemanager.hxx"
-#include <xftextstyle.hxx>
-#include "ixfstyle.hxx"
+#include <xfilter/xfparastyle.hxx>
+#include <xfilter/xfstylemanager.hxx>
+#include <xfilter/xftextstyle.hxx>
+#include <xfilter/ixfstyle.hxx>
 
 XFStyleManager::XFStyleManager() : s_aStdArrowStyles( "arrow" ), s_aTextStyles( "T" ),
     s_aParaStyles( "P" ),s_aListStyles( "L" ),s_aSectionStyles( "Sect" ),
     s_aPageMasters( "PM" ),s_aMasterpages( "MP" ),s_aDateStyles( "N" ),
     s_aGraphicsStyles( "fr" ),s_aTableStyles( "table" ),s_aTableCellStyles( "cell" ),
-    s_aTableRowStyles( "row" ),s_aTableColStyles( "col" ),s_pOutlineStyle(nullptr)
+    s_aTableRowStyles( "row" ),s_aTableColStyles( "col" )
 {
 }
 
@@ -80,11 +80,7 @@ XFStyleManager::~XFStyleManager()
 
 void    XFStyleManager::Reset()
 {
-    if( s_pOutlineStyle )
-    {
-        delete s_pOutlineStyle;
-        s_pOutlineStyle = nullptr;
-    }
+    s_pOutlineStyle.reset();
 
     s_aStdTextStyles.Reset();
     s_aStdParaStyles.Reset();
@@ -104,12 +100,12 @@ void    XFStyleManager::Reset()
     s_aFontDecls.clear();
 }
 
-void    XFStyleManager::AddFontDecl(XFFontDecl& aFontDecl)
+void    XFStyleManager::AddFontDecl(XFFontDecl const & aFontDecl)
 {
     s_aFontDecls.push_back(aFontDecl);
 }
 
-IXFStyleRet XFStyleManager::AddStyle(IXFStyle *pStyle)
+IXFStyleRet XFStyleManager::AddStyle(std::unique_ptr<IXFStyle> pStyle)
 {
     IXFStyleRet aRet;
 
@@ -122,105 +118,104 @@ IXFStyleRet XFStyleManager::AddStyle(IXFStyle *pStyle)
     {
         if( !name.isEmpty() )
         {
-            aRet = s_aStdTextStyles.AddStyle(pStyle);
+            aRet = s_aStdTextStyles.AddStyle(std::move(pStyle));
         }
         else
         {
-            aRet = s_aTextStyles.AddStyle(pStyle);
+            aRet = s_aTextStyles.AddStyle(std::move(pStyle));
         }
     }
     else if( pStyle->GetStyleFamily() == enumXFStylePara )
     {
         if( !name.isEmpty() )
         {
-            aRet = s_aStdParaStyles.AddStyle(pStyle);
+            aRet = s_aStdParaStyles.AddStyle(std::move(pStyle));
         }
         else
         {
-            aRet = s_aParaStyles.AddStyle(pStyle);
+            aRet = s_aParaStyles.AddStyle(std::move(pStyle));
         }
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleDefaultPara )
     {
-        aRet = s_aStdParaStyles.AddStyle(pStyle);
+        aRet = s_aStdParaStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleList )
     {
-        aRet = s_aListStyles.AddStyle(pStyle);
+        aRet = s_aListStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleSection )
     {
-        aRet = s_aSectionStyles.AddStyle(pStyle);
+        aRet = s_aSectionStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStylePageMaster )
     {
-        aRet = s_aPageMasters.AddStyle(pStyle);
+        aRet = s_aPageMasters.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleMasterPage )
     {
         //Master page don't need name.
-        aRet = s_aMasterpages.AddStyle(pStyle);
+        aRet = s_aMasterpages.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleDate )
     {
-        aRet = s_aDateStyles.AddStyle(pStyle);
+        aRet = s_aDateStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleTime )
     {
-        aRet = s_aDateStyles.AddStyle(pStyle);
+        aRet = s_aDateStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleNumber )
     {
-        aRet = s_aDateStyles.AddStyle(pStyle);
+        aRet = s_aDateStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStylePercent )
     {
-        aRet = s_aDateStyles.AddStyle(pStyle);
+        aRet = s_aDateStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleCurrency )
     {
-        aRet = s_aDateStyles.AddStyle(pStyle);
+        aRet = s_aDateStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleGraphics )
     {
-        aRet = s_aGraphicsStyles.AddStyle(pStyle);
+        aRet = s_aGraphicsStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleTable )
     {
-        aRet = s_aTableStyles.AddStyle(pStyle);
+        aRet = s_aTableStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleTableCell )
     {
-        aRet = s_aTableCellStyles.AddStyle(pStyle);
+        aRet = s_aTableCellStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleTableRow )
     {
-        aRet = s_aTableRowStyles.AddStyle(pStyle);
+        aRet = s_aTableRowStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleTableCol )
     {
-        aRet = s_aTableColStyles.AddStyle(pStyle);
+        aRet = s_aTableColStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleOutline )
     {
-        delete s_pOutlineStyle;
-        s_pOutlineStyle = pStyle;
+        s_pOutlineStyle = std::move(pStyle);
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleStrokeDash )
     {
-        aRet = s_aStdStrokeDashStyles.AddStyle(pStyle);
+        aRet = s_aStdStrokeDashStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleArea )
     {
-        aRet = s_aStdAreaStyles.AddStyle(pStyle);
+        aRet = s_aStdAreaStyles.AddStyle(std::move(pStyle));
     }
     else if( pStyle->GetStyleFamily() == enumXFStyleArrow )
     {
-        aRet = s_aStdArrowStyles.AddStyle(pStyle);
+        aRet = s_aStdArrowStyles.AddStyle(std::move(pStyle));
     }
     else if (pStyle->GetStyleFamily() == enumXFStyleRuby)
     {
-        aRet = s_aRubyStyles.AddStyle(pStyle);
+        aRet = s_aRubyStyles.AddStyle(std::move(pStyle));
     }
 
     return aRet;
@@ -265,7 +260,7 @@ IXFStyle*   XFStyleManager::FindStyle(const OUString& name)
     if( pStyle )
         return pStyle;
     if(s_pOutlineStyle && s_pOutlineStyle->GetStyleName() == name )
-        return s_pOutlineStyle;
+        return s_pOutlineStyle.get();
     pStyle = s_aStdStrokeDashStyles.FindStyle(name);
     if( pStyle )
         return pStyle;
@@ -314,24 +309,18 @@ void    XFStyleManager::SetEndnoteConfig(XFEndnoteConfig *pENConfig)
 
 void    XFStyleManager::ToXml(IXFStream *pStrm)
 {
-    std::vector<XFFontDecl>::iterator   itDecl;
     IXFAttrList *pAttrList = pStrm->GetAttrList();
 
     pAttrList->Clear();
     pStrm->StartElement( "office:font-decls" );
 
     //font declarations:
-    for( itDecl = s_aFontDecls.begin(); itDecl != s_aFontDecls.end(); ++itDecl )
+    for (auto & fontDecl : s_aFontDecls)
     {
-        XFFontDecl &f = *itDecl;
-
         pAttrList->Clear();
-        pAttrList->AddAttribute( "style:name", f.GetFontName() );
-        pAttrList->AddAttribute( "fo:font-family", f.GetFontFamily() );
-        if( f.GetFontPitchFixed() )
-            pAttrList->AddAttribute( "style:font-pitch", "fixed" );
-        else
-            pAttrList->AddAttribute( "style:font-pitch", "variable" );
+        pAttrList->AddAttribute( "style:name", fontDecl.GetFontName() );
+        pAttrList->AddAttribute( "fo:font-family", fontDecl.GetFontFamily() );
+        pAttrList->AddAttribute( "style:font-pitch", "variable" );
         pStrm->StartElement( "style:font-decl" );
         pStrm->EndElement( "style:font-decl" );
     }

@@ -17,26 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "RelationDesignView.hxx"
-#include "RelationTableView.hxx"
-#include "RelationController.hxx"
+#include <RelationDesignView.hxx>
+#include <RelationTableView.hxx>
+#include <RelationController.hxx>
 #include <svl/undo.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/msgbox.hxx>
-#include "browserids.hxx"
-#include "dbu_rel.hrc"
-#include <comphelper/types.hxx>
+#include <vcl/event.hxx>
+#include <browserids.hxx>
 #include <connectivity/dbtools.hxx>
 #include <com/sun/star/sdbc/DataType.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include "RTableConnection.hxx"
-#include "ConnectionLine.hxx"
-#include "ConnectionLineData.hxx"
-#include "RTableConnectionData.hxx"
-#include "dbustrings.hrc"
-#include <comphelper/extract.hxx>
-#include "UITools.hxx"
-#include <tools/debug.hxx>
+#include <ConnectionLine.hxx>
+#include <ConnectionLineData.hxx>
+#include <RTableConnectionData.hxx>
+#include <stringconstants.hxx>
+#include <UITools.hxx>
 
 using namespace ::dbaui;
 using namespace ::com::sun::star::uno;

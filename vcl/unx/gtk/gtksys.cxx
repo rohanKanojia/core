@@ -25,9 +25,7 @@
 
 GtkSalSystem *GtkSalSystem::GetSingleton()
 {
-    static GtkSalSystem *pSingleton = nullptr;
-    if (!pSingleton)
-        pSingleton = new GtkSalSystem();
+    static GtkSalSystem *pSingleton = new GtkSalSystem();
     return pSingleton;
 }
 
@@ -62,6 +60,17 @@ GtkSalSystem::GetDisplayXScreenCount()
 namespace
 {
 
+struct GdkRectangleCoincidentLess
+{
+    // fdo#78799 - detect and elide overlaying monitors of different sizes
+    bool operator()(GdkRectangle const& rLeft, GdkRectangle const& rRight)
+    {
+        return
+            rLeft.x < rRight.x
+            || rLeft.y < rRight.y
+            ;
+    }
+};
 struct GdkRectangleCoincident
 {
     // fdo#78799 - detect and elide overlaying monitors of different sizes
@@ -101,13 +110,14 @@ GtkSalSystem::countScreenMonitors()
                 gdk_screen_get_monitor_geometry(pScreen, j, &aGeometry);
                 aGeometries.push_back(aGeometry);
             }
-            GdkRectangleCoincident aCmp;
-            std::sort(aGeometries.begin(), aGeometries.end(), aCmp);
+            std::sort(aGeometries.begin(), aGeometries.end(),
+                    GdkRectangleCoincidentLess());
             const std::vector<GdkRectangle>::iterator aUniqueEnd(
-                    std::unique(aGeometries.begin(), aGeometries.end(), aCmp));
+                    std::unique(aGeometries.begin(), aGeometries.end(),
+                    GdkRectangleCoincident()));
             nMonitors = std::distance(aGeometries.begin(), aUniqueEnd);
         }
-        maScreenMonitors.push_back(std::make_pair(pScreen, nMonitors));
+        maScreenMonitors.emplace_back(pScreen, nMonitors);
     }
 }
 
@@ -138,13 +148,13 @@ GdkScreen *
 GtkSalSystem::getScreenMonitorFromIdx (int nIdx, gint &nMonitor)
 {
     GdkScreen *pScreen = nullptr;
-    for (ScreenMonitors_t::const_iterator aIt(maScreenMonitors.begin()), aEnd(maScreenMonitors.end()); aIt != aEnd; ++aIt)
+    for (auto const& screenMonitor : maScreenMonitors)
     {
-        pScreen = aIt->first;
+        pScreen = screenMonitor.first;
         if (!pScreen)
             break;
-        if (nIdx >= aIt->second)
-            nIdx -= aIt->second;
+        if (nIdx >= screenMonitor.second)
+            nIdx -= screenMonitor.second;
         else
             break;
     }
@@ -161,11 +171,11 @@ int
 GtkSalSystem::getScreenIdxFromPtr (GdkScreen *pScreen)
 {
     int nIdx = 0;
-    for (ScreenMonitors_t::const_iterator aIt(maScreenMonitors.begin()), aEnd(maScreenMonitors.end()); aIt != aEnd; ++aIt)
+    for (auto const& screenMonitor : maScreenMonitors)
     {
-        if (aIt->first == pScreen)
+        if (screenMonitor.first == pScreen)
             return nIdx;
-        nIdx += aIt->second;
+        nIdx += screenMonitor.second;
     }
     g_warning ("failed to find screen %p", pScreen);
     return 0;
@@ -238,16 +248,16 @@ unsigned int GtkSalSystem::GetDisplayBuiltInScreen()
     return idx + _get_primary_monitor (pDefault);
 }
 
-Rectangle GtkSalSystem::GetDisplayScreenPosSizePixel (unsigned int nScreen)
+tools::Rectangle GtkSalSystem::GetDisplayScreenPosSizePixel (unsigned int nScreen)
 {
     gint nMonitor;
     GdkScreen *pScreen;
     GdkRectangle aRect;
     pScreen = getScreenMonitorFromIdx (nScreen, nMonitor);
     if (!pScreen)
-        return Rectangle();
+        return tools::Rectangle();
     gdk_screen_get_monitor_geometry (pScreen, nMonitor, &aRect);
-    return Rectangle (Point(aRect.x, aRect.y), Size(aRect.width, aRect.height));
+    return tools::Rectangle (Point(aRect.x, aRect.y), Size(aRect.width, aRect.height));
 }
 
 // convert ~ to indicate mnemonic to '_'
@@ -257,8 +267,7 @@ static OString MapToGtkAccelerator(const OUString &rStr)
 }
 
 int GtkSalSystem::ShowNativeDialog (const OUString& rTitle, const OUString& rMessage,
-                                    const std::list< OUString >& rButtonNames,
-                                    int nDefaultButton)
+                                    const std::vector< OUString >& rButtonNames)
 {
     OString aTitle (OUStringToOString (rTitle, RTL_TEXTENCODING_UTF8));
     OString aMessage (OUStringToOString (rMessage, RTL_TEXTENCODING_UTF8));
@@ -266,14 +275,13 @@ int GtkSalSystem::ShowNativeDialog (const OUString& rTitle, const OUString& rMes
     GtkDialog *pDialog = GTK_DIALOG (
         g_object_new (GTK_TYPE_MESSAGE_DIALOG,
                       "title", aTitle.getStr(),
-                      "message-type", (int)GTK_MESSAGE_WARNING,
+                      "message-type", int(GTK_MESSAGE_WARNING),
                       "text", aMessage.getStr(),
                       nullptr));
     int nButton = 0;
-    std::list< OUString >::const_iterator it;
-    for (it = rButtonNames.begin(); it != rButtonNames.end(); ++it)
-        gtk_dialog_add_button (pDialog, MapToGtkAccelerator(*it).getStr(), nButton++);
-    gtk_dialog_set_default_response (pDialog, nDefaultButton);
+    for (auto const& buttonName : rButtonNames)
+        gtk_dialog_add_button (pDialog, MapToGtkAccelerator(buttonName).getStr(), nButton++);
+    gtk_dialog_set_default_response (pDialog, 0/*nDefaultButton*/);
 
     nButton = gtk_dialog_run (pDialog);
     if (nButton < 0)

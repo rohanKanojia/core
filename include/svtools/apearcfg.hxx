@@ -25,24 +25,23 @@
 class Application;
 enum class MouseMiddleButtonAction;
 
-typedef enum {
-    SnapToButton = 0,
-    SnapToMiddle,
-    NoSnap
-} SnapType;
+enum class SnapType {
+    ToButton = 0,
+    ToMiddle,
+    NONE
+};
 
-typedef enum {
-    DragFullWindow,
-    DragFrame,
-    DragSystemDep
-} DragMode;
+enum class DragMode {
+    FullWindow,
+    Frame,
+    SystemDep
+};
 
 
 class SVT_DLLPUBLIC SvtTabAppearanceCfg : public utl::ConfigItem
 {
-    short           nDragMode           ;
-    short           nScaleFactor        ;
-    short           nSnapMode           ;
+    DragMode        nDragMode           ;
+    SnapType        nSnapMode           ;
     MouseMiddleButtonAction nMiddleMouse;
 #if defined( UNX )
     short           nAAMinPixelHeight   ;
@@ -55,22 +54,19 @@ class SVT_DLLPUBLIC SvtTabAppearanceCfg : public utl::ConfigItem
 
     static bool  bInitialized ;
 
-    SVT_DLLPRIVATE const css::uno::Sequence<OUString>& GetPropertyNames();
+    SVT_DLLPRIVATE static const css::uno::Sequence<OUString>& GetPropertyNames();
     virtual void    ImplCommit() override;
 
 public:
     SvtTabAppearanceCfg( );
-    virtual ~SvtTabAppearanceCfg( );
+    virtual ~SvtTabAppearanceCfg( ) override;
 
     virtual void Notify( const css::uno::Sequence< OUString >& _rPropertyNames) override;
 
-    sal_uInt16  GetDragMode  () const { return nDragMode; }
+    DragMode  GetDragMode  () const { return nDragMode; }
 
-    sal_uInt16      GetScaleFactor () const { return nScaleFactor; }
-    void        SetScaleFactor ( sal_uInt16 nSet );
-
-    sal_uInt16      GetSnapMode () const { return nSnapMode; }
-    void        SetSnapMode ( sal_uInt16 nSet );
+    SnapType    GetSnapMode () const { return nSnapMode; }
+    void        SetSnapMode ( SnapType nSet );
 
     MouseMiddleButtonAction GetMiddleMouseButton () const { return nMiddleMouse; }
     void        SetMiddleMouseButton ( MouseMiddleButtonAction nSet );

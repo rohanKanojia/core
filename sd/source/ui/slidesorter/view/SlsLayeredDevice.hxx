@@ -20,16 +20,18 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_VIEW_SLSLAYEREDDEVICE_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_VIEW_SLSLAYEREDDEVICE_HXX
 
-#include "view/SlsILayerPainter.hxx"
-#include "SlideSorter.hxx"
+#include <view/SlsILayerPainter.hxx>
 
-#include <vcl/region.hxx>
-#include <vcl/virdev.hxx>
+#include <vcl/vclptr.hxx>
+#include <vcl/mapmod.hxx>
 
 #include <memory>
-#include <vector>
 
-class Rectangle;
+namespace sd { class Window; }
+namespace tools { class Rectangle; }
+namespace vcl { class Region; }
+
+class VirtualDevice;
 
 namespace sd { namespace slidesorter { namespace view {
 
@@ -42,14 +44,14 @@ class LayeredDevice
 
 {
 public:
-    explicit LayeredDevice (VclPtr<sd::Window> pTargetWindow);
+    explicit LayeredDevice (const VclPtr<sd::Window>& pTargetWindow);
     ~LayeredDevice ();
 
     void Invalidate (
-        const Rectangle& rInvalidationBox,
+        const ::tools::Rectangle& rInvalidationBox,
         const sal_Int32 nLayer);
     void InvalidateAllLayers (
-        const Rectangle& rInvalidationBox);
+        const ::tools::Rectangle& rInvalidationBox);
     void InvalidateAllLayers (
         const vcl::Region& rInvalidationRegion);
 
@@ -75,7 +77,7 @@ private:
     ScopedVclPtr<VirtualDevice> mpBackBuffer;
     MapMode maSavedMapMode;
 
-    void RepaintRectangle (const Rectangle& rRepaintRectangle);
+    void RepaintRectangle (const ::tools::Rectangle& rRepaintRectangle);
 };
 
 } } } // end of namespace ::sd::slidesorter::view

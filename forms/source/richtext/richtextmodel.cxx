@@ -27,6 +27,7 @@
 
 #include <cppuhelper/typeprovider.hxx>
 #include <comphelper/guarding.hxx>
+#include <svl/itempool.hxx>
 #include <toolkit/awt/vclxdevice.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <editeng/editstat.hxx>
@@ -65,7 +66,7 @@ namespace frm
         getPropertyDefaultByHandle( PROPERTY_ID_VSCROLL                 ) >>= m_bVScroll;
         getPropertyDefaultByHandle( PROPERTY_ID_READONLY                ) >>= m_bReadonly;
         getPropertyDefaultByHandle( PROPERTY_ID_PRINTABLE               ) >>= m_bPrintable;
-        getPropertyDefaultByHandle( PROPERTY_ID_ALIGN                   ) >>= m_aAlign;
+        m_aAlign = getPropertyDefaultByHandle( PROPERTY_ID_ALIGN );
         getPropertyDefaultByHandle( PROPERTY_ID_ECHO_CHAR               ) >>= m_nEchoChar;
         getPropertyDefaultByHandle( PROPERTY_ID_MAXTEXTLEN              ) >>= m_nMaxTextLength;
         getPropertyDefaultByHandle( PROPERTY_ID_MULTILINE               ) >>= m_bMultiLine;
@@ -121,8 +122,8 @@ namespace frm
 
     void ORichTextModel::implInit()
     {
-        OSL_ENSURE( m_pEngine.get(), "ORichTextModel::implInit: where's the engine?" );
-        if ( m_pEngine.get() )
+        OSL_ENSURE(m_pEngine, "ORichTextModel::implInit: where's the engine?");
+        if (m_pEngine)
         {
             m_pEngine->SetModifyHdl( LINK( this, ORichTextModel, OnEngineContentModified ) );
 
@@ -200,7 +201,7 @@ namespace frm
             acquire();
             dispose();
         }
-        if ( m_pEngine.get() )
+        if (m_pEngine)
         {
             SolarMutexGuard g;
             SfxItemPool* pPool = m_pEngine->getPool();
@@ -212,7 +213,7 @@ namespace frm
     }
 
 
-    Any SAL_CALL ORichTextModel::queryAggregation( const Type& _rType ) throw ( RuntimeException, std::exception )
+    Any SAL_CALL ORichTextModel::queryAggregation( const Type& _rType )
     {
         Any aReturn = ORichTextModel_BASE::queryInterface( _rType );
 
@@ -225,12 +226,12 @@ namespace frm
 
     IMPLEMENT_FORWARD_XTYPEPROVIDER2( ORichTextModel, OControlModel, ORichTextModel_BASE )
 
-    OUString SAL_CALL ORichTextModel::getImplementationName() throw ( RuntimeException, std::exception )
+    OUString SAL_CALL ORichTextModel::getImplementationName()
     {
         return OUString( "com.sun.star.comp.forms.ORichTextModel" );
     }
 
-    Sequence< OUString > SAL_CALL ORichTextModel::getSupportedServiceNames() throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL ORichTextModel::getSupportedServiceNames()
     {
         Sequence< OUString > aOwnNames( 8 );
         aOwnNames[ 0 ] = FRM_SUN_COMPONENT_RICHTEXTCONTROL;
@@ -329,7 +330,7 @@ namespace frm
     }
 
 
-    sal_Bool SAL_CALL ORichTextModel::convertFastPropertyValue( Any& _rConvertedValue, Any& _rOldValue, sal_Int32 _nHandle, const Any& _rValue ) throw( IllegalArgumentException )
+    sal_Bool SAL_CALL ORichTextModel::convertFastPropertyValue( Any& _rConvertedValue, Any& _rOldValue, sal_Int32 _nHandle, const Any& _rValue )
     {
         bool bModified = false;
 
@@ -350,7 +351,7 @@ namespace frm
     }
 
 
-    void SAL_CALL ORichTextModel::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _rValue ) throw ( Exception, std::exception)
+    void SAL_CALL ORichTextModel::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _rValue )
     {
         if ( isRegisteredProperty( _nHandle ) )
         {
@@ -425,13 +426,13 @@ namespace frm
             break;
 
         case PROPERTY_ID_LINEEND_FORMAT:
-            aDefault <<= (sal_Int16)LineEndFormat::LINE_FEED;
+            aDefault <<= sal_Int16(LineEndFormat::LINE_FEED);
             break;
 
         case PROPERTY_ID_ECHO_CHAR:
         case PROPERTY_ID_ALIGN:
         case PROPERTY_ID_MAXTEXTLEN:
-            aDefault <<= (sal_Int16)0;
+            aDefault <<= sal_Int16(0);
             break;
 
         case PROPERTY_ID_TABSTOP:
@@ -468,7 +469,7 @@ namespace frm
             break;
 
         case PROPERTY_ID_BORDER:
-            aDefault <<= (sal_Int16)1;
+            aDefault <<= sal_Int16(1);
             break;
 
         default:
@@ -484,7 +485,7 @@ namespace frm
 
     void ORichTextModel::impl_smlock_setEngineText( const OUString& _rText )
     {
-        if ( m_pEngine.get() )
+        if (m_pEngine)
         {
             SolarMutexGuard aSolarGuard;
             m_bSettingEngineText = true;
@@ -494,23 +495,9 @@ namespace frm
     }
 
 
-    OUString SAL_CALL ORichTextModel::getServiceName() throw ( RuntimeException, std::exception)
+    OUString SAL_CALL ORichTextModel::getServiceName()
     {
         return OUString(FRM_SUN_COMPONENT_RICHTEXTCONTROL);
-    }
-
-
-    void SAL_CALL ORichTextModel::write(const Reference< XObjectOutputStream >& _rxOutStream) throw ( IOException, RuntimeException, std::exception)
-    {
-        OControlModel::write( _rxOutStream );
-        // TODO: place your code here
-    }
-
-
-    void SAL_CALL ORichTextModel::read(const Reference< XObjectInputStream >& _rxInStream) throw ( IOException, RuntimeException, std::exception)
-    {
-        OControlModel::read( _rxInStream );
-        // TODO: place your code here
     }
 
 
@@ -537,21 +524,12 @@ namespace frm
 
     Sequence< sal_Int8 > ORichTextModel::getEditEngineTunnelId()
     {
-        static ::cppu::OImplementationId * pId = nullptr;
-        if (! pId)
-        {
-            ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-            if (! pId)
-            {
-                static ::cppu::OImplementationId aId;
-                pId = &aId;
-            }
-        }
-        return pId->getImplementationId();
+        static cppu::OImplementationId aId;
+        return aId.getImplementationId();
     }
 
 
-    IMPL_LINK_NOARG_TYPED( ORichTextModel, OnEngineContentModified, LinkParamNone*, void )
+    IMPL_LINK_NOARG( ORichTextModel, OnEngineContentModified, LinkParamNone*, void )
     {
         if ( !m_bSettingEngineText )
         {
@@ -566,7 +544,7 @@ namespace frm
     }
 
 
-    sal_Int64 SAL_CALL ORichTextModel::getSomething( const Sequence< sal_Int8 >& _rId ) throw (RuntimeException, std::exception)
+    sal_Int64 SAL_CALL ORichTextModel::getSomething( const Sequence< sal_Int8 >& _rId )
     {
         Sequence< sal_Int8 > aEditEngineAccessId( getEditEngineTunnelId() );
         if  (   ( _rId.getLength() == aEditEngineAccessId.getLength() )
@@ -582,13 +560,13 @@ namespace frm
     }
 
 
-    void SAL_CALL ORichTextModel::addModifyListener( const Reference< XModifyListener >& _rxListener ) throw (RuntimeException, std::exception)
+    void SAL_CALL ORichTextModel::addModifyListener( const Reference< XModifyListener >& _rxListener )
     {
         m_aModifyListeners.addInterface( _rxListener );
     }
 
 
-    void SAL_CALL ORichTextModel::removeModifyListener( const Reference< XModifyListener >& _rxListener ) throw (RuntimeException, std::exception)
+    void SAL_CALL ORichTextModel::removeModifyListener( const Reference< XModifyListener >& _rxListener )
     {
         m_aModifyListeners.removeInterface( _rxListener );
     }
@@ -597,7 +575,7 @@ namespace frm
     void ORichTextModel::potentialTextChange( )
     {
         OUString sCurrentEngineText;
-        if ( m_pEngine.get() )
+        if (m_pEngine)
             sCurrentEngineText = m_pEngine->GetText();
 
         if ( sCurrentEngineText != m_sLastKnownEngineText )
@@ -605,7 +583,7 @@ namespace frm
             sal_Int32 nHandle = PROPERTY_ID_TEXT;
             Any aOldValue; aOldValue <<= m_sLastKnownEngineText;
             Any aNewValue; aNewValue <<= sCurrentEngineText;
-            fire( &nHandle, &aNewValue, &aOldValue, 1, sal_False );
+            fire( &nHandle, &aNewValue, &aOldValue, 1, false );
 
             m_sLastKnownEngineText = sCurrentEngineText;
         }
@@ -615,7 +593,7 @@ namespace frm
 } // namespace frm
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_forms_ORichTextModel_get_implementation(css::uno::XComponentContext* context,
                                                           css::uno::Sequence<css::uno::Any> const &)
 {

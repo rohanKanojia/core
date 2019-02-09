@@ -20,7 +20,6 @@
 #define INCLUDED_CHART2_SOURCE_INC_REFERENCESIZEPROVIDER_HXX
 
 #include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/chart2/XChartDocument.hpp>
 #include <com/sun/star/awt/Size.hpp>
 #include "charttoolsdllapi.hxx"
 
@@ -28,6 +27,10 @@ namespace com { namespace sun { namespace star {
 namespace chart2 {
     class XTitle;
     class XTitled;
+    class XChartDocument;
+}
+namespace beans {
+    class XPropertySet;
 }
 }}}
 
@@ -50,7 +53,7 @@ public:
         css::awt::Size aPageSize,
         const css::uno::Reference< css::chart2::XChartDocument > & xChartDoc );
 
-    css::awt::Size getPageSize() const { return m_aPageSize;}
+    const css::awt::Size& getPageSize() const { return m_aPageSize;}
 
     /** Retrieves the state auto-resize from all objects that support this
         feature.  If all objects return the same state, AUTO_RESIZE_YES or

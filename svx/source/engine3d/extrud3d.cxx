@@ -18,10 +18,10 @@
  */
 
 
-#include "svx/svdstr.hrc"
-#include "svdglob.hxx"
+#include <svx/strings.hrc>
+#include <svx/dialmgr.hxx>
 #include <svx/svdpage.hxx>
-#include "svx/globl3d.hxx"
+#include <svx/globl3d.hxx>
 #include <svx/extrud3d.hxx>
 #include <svx/scene3d.hxx>
 
@@ -36,27 +36,28 @@
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/polygon/b3dpolygontools.hxx>
 #include <basegfx/polygon/b3dpolypolygontools.hxx>
+#include <o3tl/make_unique.hxx>
 
 
 // DrawContact section
-
-sdr::contact::ViewContact* E3dExtrudeObj::CreateObjectSpecificViewContact()
+std::unique_ptr<sdr::contact::ViewContact> E3dExtrudeObj::CreateObjectSpecificViewContact()
 {
-    return new sdr::contact::ViewContactOfE3dExtrude(*this);
+    return o3tl::make_unique<sdr::contact::ViewContactOfE3dExtrude>(*this);
 }
 
-
-sdr::properties::BaseProperties* E3dExtrudeObj::CreateObjectSpecificProperties()
+std::unique_ptr<sdr::properties::BaseProperties> E3dExtrudeObj::CreateObjectSpecificProperties()
 {
-    return new sdr::properties::E3dExtrudeProperties(*this);
+    return o3tl::make_unique<sdr::properties::E3dExtrudeProperties>(*this);
 }
-
 
 // Constructor creates a two cover surface tools::PolyPolygon and (point-count 1) side
 // surfaces rectangles from the passed PolyPolygon
-
-E3dExtrudeObj::E3dExtrudeObj(E3dDefaultAttributes& rDefault, const basegfx::B2DPolyPolygon& rPP, double fDepth)
-:   E3dCompoundObject(rDefault),
+E3dExtrudeObj::E3dExtrudeObj(
+    SdrModel& rSdrModel,
+    const E3dDefaultAttributes& rDefault,
+    const basegfx::B2DPolyPolygon& rPP,
+    double fDepth)
+:   E3dCompoundObject(rSdrModel),
     maExtrudePolygon(rPP)
 {
     // since the old class PolyPolygon3D did mirror the given PolyPolygons in Y, do the same here
@@ -68,18 +69,23 @@ E3dExtrudeObj::E3dExtrudeObj(E3dDefaultAttributes& rDefault, const basegfx::B2DP
     SetDefaultAttributes(rDefault);
 
     // set extrude depth
-    GetProperties().SetObjectItemDirect(makeSvx3DDepthItem((sal_uInt32)(fDepth + 0.5)));
+    GetProperties().SetObjectItemDirect(makeSvx3DDepthItem(static_cast<sal_uInt32>(fDepth + 0.5)));
 }
 
-E3dExtrudeObj::E3dExtrudeObj()
-:   E3dCompoundObject()
+E3dExtrudeObj::E3dExtrudeObj(SdrModel& rSdrModel)
+:   E3dCompoundObject(rSdrModel)
 {
     // Set Defaults
-    E3dDefaultAttributes aDefault;
+    const E3dDefaultAttributes aDefault;
+
     SetDefaultAttributes(aDefault);
 }
 
-void E3dExtrudeObj::SetDefaultAttributes(E3dDefaultAttributes& rDefault)
+E3dExtrudeObj::~E3dExtrudeObj()
+{
+}
+
+void E3dExtrudeObj::SetDefaultAttributes(const E3dDefaultAttributes& rDefault)
 {
     GetProperties().SetObjectItemDirect(Svx3DSmoothNormalsItem(rDefault.GetDefaultExtrudeSmoothed()));
     GetProperties().SetObjectItemDirect(Svx3DSmoothLidsItem(rDefault.GetDefaultExtrudeSmoothFrontBack()));
@@ -97,11 +103,21 @@ sal_uInt16 E3dExtrudeObj::GetObjIdentifier() const
     return E3D_EXTRUDEOBJ_ID;
 }
 
-E3dExtrudeObj* E3dExtrudeObj::Clone() const
+E3dExtrudeObj* E3dExtrudeObj::CloneSdrObject(SdrModel& rTargetModel) const
 {
-    return CloneHelper< E3dExtrudeObj >();
+    return CloneHelper< E3dExtrudeObj >(rTargetModel);
 }
 
+E3dExtrudeObj& E3dExtrudeObj::operator=(const E3dExtrudeObj& rObj)
+{
+    if( this == &rObj )
+        return *this;
+    E3dCompoundObject::operator=(rObj);
+
+    maExtrudePolygon = rObj.maExtrudePolygon;
+
+    return *this;
+}
 
 // Set local parameters with geometry re-creating
 
@@ -118,7 +134,7 @@ void E3dExtrudeObj::SetExtrudePolygon(const basegfx::B2DPolyPolygon &rNew)
 
 OUString E3dExtrudeObj::TakeObjNameSingul() const
 {
-    OUStringBuffer sName(ImpGetResStr(STR_ObjNameSingulExtrude3d));
+    OUStringBuffer sName(SvxResId(STR_ObjNameSingulExtrude3d));
 
     OUString aName(GetName());
     if (!aName.isEmpty())
@@ -135,7 +151,7 @@ OUString E3dExtrudeObj::TakeObjNameSingul() const
 
 OUString E3dExtrudeObj::TakeObjNamePlural() const
 {
-    return ImpGetResStr(STR_ObjNamePluralExtrude3d);
+    return SvxResId(STR_ObjNamePluralExtrude3d);
 }
 
 bool E3dExtrudeObj::IsBreakObjPossible()
@@ -143,7 +159,7 @@ bool E3dExtrudeObj::IsBreakObjPossible()
     return true;
 }
 
-SdrAttrObj* E3dExtrudeObj::GetBreakObj()
+std::unique_ptr<SdrAttrObj,SdrObjectFreeOp> E3dExtrudeObj::GetBreakObj()
 {
     basegfx::B3DPolyPolygon aFrontSide;
     basegfx::B3DPolyPolygon aBackSide;
@@ -152,15 +168,15 @@ SdrAttrObj* E3dExtrudeObj::GetBreakObj()
     {
         basegfx::B2DPolyPolygon aTemp(maExtrudePolygon);
         aTemp.removeDoublePoints();
-        aTemp = basegfx::tools::correctOrientations(aTemp);
-        const basegfx::B2VectorOrientation aOrient = basegfx::tools::getOrientation(aTemp.getB2DPolygon(0L));
+        aTemp = basegfx::utils::correctOrientations(aTemp);
+        const basegfx::B2VectorOrientation aOrient = basegfx::utils::getOrientation(aTemp.getB2DPolygon(0));
 
         if(basegfx::B2VectorOrientation::Positive == aOrient)
         {
             aTemp.flip();
         }
 
-        aFrontSide = basegfx::tools::createB3DPolyPolygonFromB2DPolyPolygon(aTemp);
+        aFrontSide = basegfx::utils::createB3DPolyPolygonFromB2DPolyPolygon(aTemp);
     }
 
     if(aFrontSide.count())
@@ -175,7 +191,7 @@ SdrAttrObj* E3dExtrudeObj::GetBreakObj()
             {
                 // scale polygon from center
                 const double fScaleFactor(GetPercentBackScale() / 100.0);
-                const basegfx::B3DRange aPolyPolyRange(basegfx::tools::getRange(aBackSide));
+                const basegfx::B3DRange aPolyPolyRange(basegfx::utils::getRange(aBackSide));
                 const basegfx::B3DPoint aCenter(aPolyPolyRange.getCenter());
 
                 aTransform.translate(-aCenter.getX(), -aCenter.getY(), -aCenter.getZ());
@@ -184,7 +200,7 @@ SdrAttrObj* E3dExtrudeObj::GetBreakObj()
             }
 
             // translate by extrude depth
-            aTransform.translate(0.0, 0.0, (double)GetExtrudeDepth());
+            aTransform.translate(0.0, 0.0, static_cast<double>(GetExtrudeDepth()));
 
             aBackSide.transform(aTransform);
         }
@@ -194,13 +210,13 @@ SdrAttrObj* E3dExtrudeObj::GetBreakObj()
     {
     // create PathObj
         basegfx::B2DPolyPolygon aPoly = TransformToScreenCoor(aBackSide);
-        SdrPathObj* pPathObj = new SdrPathObj(OBJ_PLIN, aPoly);
+        std::unique_ptr<SdrPathObj,SdrObjectFreeOp> pPathObj(new SdrPathObj(getSdrModelFromSdrObject(), OBJ_PLIN, aPoly));
 
         SfxItemSet aSet(GetObjectItemSet());
         aSet.Put(XLineStyleItem(css::drawing::LineStyle_SOLID));
         pPathObj->SetMergedItemSet(aSet);
 
-        return pPathObj;
+        return std::unique_ptr<SdrAttrObj,SdrObjectFreeOp>(pPathObj.release());
     }
 
     return nullptr;

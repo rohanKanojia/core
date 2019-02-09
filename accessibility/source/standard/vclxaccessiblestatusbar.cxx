@@ -17,11 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <accessibility/standard/vclxaccessiblestatusbar.hxx>
-#include <accessibility/standard/vclxaccessiblestatusbaritem.hxx>
+#include <standard/vclxaccessiblestatusbar.hxx>
+#include <standard/vclxaccessiblestatusbaritem.hxx>
 #include <toolkit/helper/convert.hxx>
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <vcl/status.hxx>
+#include <vcl/vclevent.hxx>
 
 
 using namespace ::com::sun::star;
@@ -44,14 +46,9 @@ VCLXAccessibleStatusBar::VCLXAccessibleStatusBar( VCLXWindow* pVCLXWindow )
 }
 
 
-VCLXAccessibleStatusBar::~VCLXAccessibleStatusBar()
-{
-}
-
-
 void VCLXAccessibleStatusBar::UpdateShowing( sal_Int32 i, bool bShowing )
 {
-    if ( i >= 0 && i < (sal_Int32)m_aAccessibleChildren.size() )
+    if ( i >= 0 && i < static_cast<sal_Int32>(m_aAccessibleChildren.size()) )
     {
         Reference< XAccessible > xChild( m_aAccessibleChildren[i] );
         if ( xChild.is() )
@@ -66,7 +63,7 @@ void VCLXAccessibleStatusBar::UpdateShowing( sal_Int32 i, bool bShowing )
 
 void VCLXAccessibleStatusBar::UpdateItemName( sal_Int32 i )
 {
-    if ( i >= 0 && i < (sal_Int32)m_aAccessibleChildren.size() )
+    if ( i >= 0 && i < static_cast<sal_Int32>(m_aAccessibleChildren.size()) )
     {
         Reference< XAccessible > xChild( m_aAccessibleChildren[i] );
         if ( xChild.is() )
@@ -84,7 +81,7 @@ void VCLXAccessibleStatusBar::UpdateItemName( sal_Int32 i )
 
 void VCLXAccessibleStatusBar::UpdateItemText( sal_Int32 i )
 {
-    if ( i >= 0 && i < (sal_Int32)m_aAccessibleChildren.size() )
+    if ( i >= 0 && i < static_cast<sal_Int32>(m_aAccessibleChildren.size()) )
     {
         Reference< XAccessible > xChild( m_aAccessibleChildren[i] );
         if ( xChild.is() )
@@ -102,7 +99,7 @@ void VCLXAccessibleStatusBar::UpdateItemText( sal_Int32 i )
 
 void VCLXAccessibleStatusBar::InsertChild( sal_Int32 i )
 {
-    if ( i >= 0 && i <= (sal_Int32)m_aAccessibleChildren.size() )
+    if ( i >= 0 && i <= static_cast<sal_Int32>(m_aAccessibleChildren.size()) )
     {
         // insert entry in child list
         m_aAccessibleChildren.insert( m_aAccessibleChildren.begin() + i, Reference< XAccessible >() );
@@ -121,7 +118,7 @@ void VCLXAccessibleStatusBar::InsertChild( sal_Int32 i )
 
 void VCLXAccessibleStatusBar::RemoveChild( sal_Int32 i )
 {
-    if ( i >= 0 && i < (sal_Int32)m_aAccessibleChildren.size() )
+    if ( i >= 0 && i < static_cast<sal_Int32>(m_aAccessibleChildren.size()) )
     {
         // get the accessible of the removed page
         Reference< XAccessible > xChild( m_aAccessibleChildren[i] );
@@ -148,21 +145,21 @@ void VCLXAccessibleStatusBar::ProcessWindowEvent( const VclWindowEvent& rVclWind
 {
     switch ( rVclWindowEvent.GetId() )
     {
-        case VCLEVENT_STATUSBAR_ITEMADDED:
+        case VclEventId::StatusbarItemAdded:
         {
             if ( m_pStatusBar )
             {
-                sal_uInt16 nItemId = (sal_uInt16)reinterpret_cast<sal_IntPtr>(rVclWindowEvent.GetData());
+                sal_uInt16 nItemId = static_cast<sal_uInt16>(reinterpret_cast<sal_IntPtr>(rVclWindowEvent.GetData()));
                 sal_uInt16 nItemPos = m_pStatusBar->GetItemPos( nItemId );
                 InsertChild( nItemPos );
             }
         }
         break;
-        case VCLEVENT_STATUSBAR_ITEMREMOVED:
+        case VclEventId::StatusbarItemRemoved:
         {
             if ( m_pStatusBar )
             {
-                sal_uInt16 nItemId = (sal_uInt16)reinterpret_cast<sal_IntPtr>(rVclWindowEvent.GetData());
+                sal_uInt16 nItemId = static_cast<sal_uInt16>(reinterpret_cast<sal_IntPtr>(rVclWindowEvent.GetData()));
                 for ( sal_Int32 i = 0, nCount = getAccessibleChildCount(); i < nCount; ++i )
                 {
                     Reference< XAccessible > xChild( getAccessibleChild( i ) );
@@ -179,59 +176,53 @@ void VCLXAccessibleStatusBar::ProcessWindowEvent( const VclWindowEvent& rVclWind
             }
         }
         break;
-        case VCLEVENT_STATUSBAR_ALLITEMSREMOVED:
+        case VclEventId::StatusbarAllItemsRemoved:
         {
             for ( sal_Int32 i = m_aAccessibleChildren.size() - 1; i >= 0; --i )
                 RemoveChild( i );
         }
         break;
-        case VCLEVENT_STATUSBAR_SHOWITEM:
-        case VCLEVENT_STATUSBAR_HIDEITEM:
+        case VclEventId::StatusbarShowItem:
+        case VclEventId::StatusbarHideItem:
         {
             if ( m_pStatusBar )
             {
-                sal_uInt16 nItemId = (sal_uInt16)reinterpret_cast<sal_IntPtr>(rVclWindowEvent.GetData());
+                sal_uInt16 nItemId = static_cast<sal_uInt16>(reinterpret_cast<sal_IntPtr>(rVclWindowEvent.GetData()));
                 sal_uInt16 nItemPos = m_pStatusBar->GetItemPos( nItemId );
-                UpdateShowing( nItemPos, rVclWindowEvent.GetId() == VCLEVENT_STATUSBAR_SHOWITEM );
+                UpdateShowing( nItemPos, rVclWindowEvent.GetId() == VclEventId::StatusbarShowItem );
             }
         }
         break;
-        case VCLEVENT_STATUSBAR_SHOWALLITEMS:
-        {
-            for ( size_t i = 0; i < m_aAccessibleChildren.size(); ++i )
-                UpdateShowing( i, rVclWindowEvent.GetId() == VCLEVENT_STATUSBAR_SHOWALLITEMS );
-        }
-        break;
-        case VCLEVENT_STATUSBAR_NAMECHANGED:
+        case VclEventId::StatusbarNameChanged:
         {
             if ( m_pStatusBar )
             {
-                sal_uInt16 nItemId = (sal_uInt16)reinterpret_cast<sal_IntPtr>(rVclWindowEvent.GetData());
+                sal_uInt16 nItemId = static_cast<sal_uInt16>(reinterpret_cast<sal_IntPtr>(rVclWindowEvent.GetData()));
                 sal_uInt16 nItemPos = m_pStatusBar->GetItemPos( nItemId );
                 UpdateItemName( nItemPos );
             }
         }
         break;
-        case VCLEVENT_STATUSBAR_DRAWITEM:
+        case VclEventId::StatusbarDrawItem:
         {
             if ( m_pStatusBar )
             {
-                sal_uInt16 nItemId = (sal_uInt16)reinterpret_cast<sal_IntPtr>(rVclWindowEvent.GetData());
+                sal_uInt16 nItemId = static_cast<sal_uInt16>(reinterpret_cast<sal_IntPtr>(rVclWindowEvent.GetData()));
                 sal_uInt16 nItemPos = m_pStatusBar->GetItemPos( nItemId );
                 UpdateItemText( nItemPos );
             }
         }
         break;
-        case VCLEVENT_OBJECT_DYING:
+        case VclEventId::ObjectDying:
         {
             if ( m_pStatusBar )
             {
                 m_pStatusBar = nullptr;
 
                 // dispose all children
-                for ( size_t i = 0; i < m_aAccessibleChildren.size(); ++i )
+                for (Reference<XAccessible>& i : m_aAccessibleChildren)
                 {
-                    Reference< XComponent > xComponent( m_aAccessibleChildren[i], UNO_QUERY );
+                    Reference< XComponent > xComponent( i, UNO_QUERY );
                     if ( xComponent.is() )
                         xComponent->dispose();
                 }
@@ -259,9 +250,9 @@ void VCLXAccessibleStatusBar::disposing()
         m_pStatusBar = nullptr;
 
         // dispose all children
-        for ( size_t i = 0; i < m_aAccessibleChildren.size(); ++i )
+        for (Reference<XAccessible>& i : m_aAccessibleChildren)
         {
-            Reference< XComponent > xComponent( m_aAccessibleChildren[i], UNO_QUERY );
+            Reference< XComponent > xComponent( i, UNO_QUERY );
             if ( xComponent.is() )
                 xComponent->dispose();
         }
@@ -273,23 +264,22 @@ void VCLXAccessibleStatusBar::disposing()
 // XServiceInfo
 
 
-OUString VCLXAccessibleStatusBar::getImplementationName() throw (RuntimeException, std::exception)
+OUString VCLXAccessibleStatusBar::getImplementationName()
 {
     return OUString( "com.sun.star.comp.toolkit.AccessibleStatusBar" );
 }
 
 
-Sequence< OUString > VCLXAccessibleStatusBar::getSupportedServiceNames() throw (RuntimeException, std::exception)
+Sequence< OUString > VCLXAccessibleStatusBar::getSupportedServiceNames()
 {
-    Sequence< OUString > aNames { "com.sun.star.awt.AccessibleStatusBar" };
-    return aNames;
+    return { "com.sun.star.awt.AccessibleStatusBar" };
 }
 
 
 // XAccessibleContext
 
 
-sal_Int32 VCLXAccessibleStatusBar::getAccessibleChildCount() throw (RuntimeException, std::exception)
+sal_Int32 VCLXAccessibleStatusBar::getAccessibleChildCount()
 {
     OExternalLockGuard aGuard( this );
 
@@ -297,11 +287,11 @@ sal_Int32 VCLXAccessibleStatusBar::getAccessibleChildCount() throw (RuntimeExcep
 }
 
 
-Reference< XAccessible > VCLXAccessibleStatusBar::getAccessibleChild( sal_Int32 i ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+Reference< XAccessible > VCLXAccessibleStatusBar::getAccessibleChild( sal_Int32 i )
 {
     OExternalLockGuard aGuard( this );
 
-    if ( i < 0 || i >= getAccessibleChildCount() )
+    if ( i < 0 || i >= static_cast<sal_Int32> (m_aAccessibleChildren.size()) )
         throw IndexOutOfBoundsException();
 
     Reference< XAccessible > xChild = m_aAccessibleChildren[i];
@@ -309,7 +299,7 @@ Reference< XAccessible > VCLXAccessibleStatusBar::getAccessibleChild( sal_Int32 
     {
         if ( m_pStatusBar )
         {
-            sal_uInt16 nItemId = m_pStatusBar->GetItemId( (sal_uInt16)i );
+            sal_uInt16 nItemId = m_pStatusBar->GetItemId( static_cast<sal_uInt16>(i) );
 
             xChild = new VCLXAccessibleStatusBarItem( m_pStatusBar, nItemId );
 
@@ -325,7 +315,7 @@ Reference< XAccessible > VCLXAccessibleStatusBar::getAccessibleChild( sal_Int32 
 // XAccessibleComponent
 
 
-Reference< XAccessible > VCLXAccessibleStatusBar::getAccessibleAtPoint( const awt::Point& rPoint ) throw (RuntimeException, std::exception)
+Reference< XAccessible > VCLXAccessibleStatusBar::getAccessibleAtPoint( const awt::Point& rPoint )
 {
     OExternalLockGuard aGuard( this );
 
@@ -334,7 +324,7 @@ Reference< XAccessible > VCLXAccessibleStatusBar::getAccessibleAtPoint( const aw
     {
         sal_uInt16 nItemId = m_pStatusBar->GetItemId( VCLPoint( rPoint ) );
         sal_Int32 nItemPos = m_pStatusBar->GetItemPos( nItemId );
-        if ( nItemPos >= 0 && nItemPos < (sal_Int32)m_aAccessibleChildren.size() )
+        if ( nItemPos >= 0 && nItemPos < static_cast<sal_Int32>(m_aAccessibleChildren.size()) )
             xChild = getAccessibleChild( nItemPos );
     }
 

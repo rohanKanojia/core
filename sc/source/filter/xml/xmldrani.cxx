@@ -21,48 +21,33 @@
 #include "xmlimprt.hxx"
 #include "xmlfilti.hxx"
 #include "xmlsorti.hxx"
-#include "document.hxx"
-#include "globstr.hrc"
-#include "globalnames.hxx"
-#include "docuno.hxx"
-#include "dbdata.hxx"
-#include "datauno.hxx"
-#include "attrib.hxx"
-#include "unonames.hxx"
-#include "convuno.hxx"
+#include <document.hxx>
+#include <globalnames.hxx>
+#include <dbdata.hxx>
+#include <datauno.hxx>
+#include <attrib.hxx>
+#include <unonames.hxx>
 #include "XMLConverter.hxx"
-#include "rangeutl.hxx"
-#include "queryentry.hxx"
-#include "dputil.hxx"
+#include <rangeutl.hxx>
+#include <dputil.hxx>
 #include <sortparam.hxx>
 
-#include <xmloff/xmltkmap.hxx>
-#include <xmloff/nmspmap.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
-#include <xmloff/xmlerror.hxx>
 
 #include <sax/tools/converter.hxx>
 
 #include <com/sun/star/sheet/DataImportMode.hpp>
-#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
-#include <com/sun/star/sheet/XDatabaseRanges.hpp>
-#include <com/sun/star/sheet/XDatabaseRange.hpp>
-#include <com/sun/star/table/CellRangeAddress.hpp>
-#include <comphelper/extract.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/xml/sax/XLocator.hpp>
+#include <com/sun/star/table/TableOrientation.hpp>
+#include <osl/diagnose.h>
 
 #include <memory>
 
 using namespace com::sun::star;
 using namespace xmloff::token;
 
-ScXMLDatabaseRangesContext::ScXMLDatabaseRangesContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ ) :
-    SvXMLImportContext( rImport, nPrfx, rLName )
+ScXMLDatabaseRangesContext::ScXMLDatabaseRangesContext( ScXMLImport& rImport ) :
+    ScXMLImportContext( rImport )
 {
     // has no attributes
     rImport.LockSolarMutex();
@@ -73,38 +58,32 @@ ScXMLDatabaseRangesContext::~ScXMLDatabaseRangesContext()
     GetScImport().UnlockSolarMutex();
 }
 
-SvXMLImportContext *ScXMLDatabaseRangesContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDatabaseRangesContext::createFastChildContext(
+                                      sal_Int32 nElement,
+                                      const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetDatabaseRangesElemTokenMap();
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch( nElement )
     {
-        case XML_TOK_DATABASE_RANGE :
+        case XML_ELEMENT( TABLE, XML_DATABASE_RANGE ):
         {
-            pContext = new ScXMLDatabaseRangeContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList);
+            pContext = new ScXMLDatabaseRangeContext( GetScImport(), pAttribList );
         }
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLDatabaseRangesContext::EndElement()
-{
-}
-
 ScXMLDatabaseRangeContext::ScXMLDatabaseRangeContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList ) :
+    ScXMLImportContext( rImport ),
     mpQueryParam(new ScQueryParam),
     sDatabaseRangeName(STR_DB_LOCAL_NONAME),
     aSortSequence(),
@@ -131,76 +110,71 @@ ScXMLDatabaseRangeContext::ScXMLDatabaseRangeContext( ScXMLImport& rImport,
     meRangeType(ScDBCollection::GlobalNamed)
 {
     nSourceType = sheet::DataImportMode_NONE;
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDatabaseRangeAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for( auto &aIter : *rAttrList )
         {
-            case XML_TOK_DATABASE_RANGE_ATTR_NAME :
+            switch( aIter.getToken() )
             {
-                sDatabaseRangeName = sValue;
+                case XML_ELEMENT( TABLE, XML_NAME ):
+                {
+                    sDatabaseRangeName = aIter.toString();
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_IS_SELECTION ):
+                {
+                    bIsSelection = IsXMLToken( aIter, XML_TRUE );
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_ON_UPDATE_KEEP_STYLES ):
+                {
+                    bKeepFormats = IsXMLToken( aIter, XML_TRUE );
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_ON_UPDATE_KEEP_SIZE ):
+                {
+                    bMoveCells = !IsXMLToken( aIter, XML_TRUE );
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_HAS_PERSISTENT_DATA ):
+                {
+                    bStripData = !IsXMLToken( aIter, XML_TRUE );
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_ORIENTATION ):
+                {
+                    bByRow = !IsXMLToken( aIter, XML_COLUMN );
+                    mpQueryParam->bByRow = bByRow;
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_CONTAINS_HEADER ):
+                {
+                    bHasHeader = IsXMLToken( aIter, XML_TRUE );
+                    mpQueryParam->bHasHeader = bHasHeader;
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_DISPLAY_FILTER_BUTTONS ):
+                {
+                    bAutoFilter = IsXMLToken( aIter, XML_TRUE );
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_TARGET_RANGE_ADDRESS ):
+                {
+                    ScDocument* pDoc = GetScImport().GetDocument();
+                    sal_Int32 nOffset = 0;
+                    if (!ScRangeStringConverter::GetRangeFromString(
+                        maRange, aIter.toString(), pDoc, ::formula::FormulaGrammar::CONV_OOO, nOffset))
+                        mbValidRange = false;
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_REFRESH_DELAY ):
+                {
+                    double fTime;
+                    if (::sax::Converter::convertDuration( fTime, aIter.toString() ))
+                        nRefresh = std::max( static_cast<sal_Int32>(fTime * 86400.0), sal_Int32(0) );
+                }
+                break;
             }
-            break;
-            case XML_TOK_DATABASE_RANGE_ATTR_IS_SELECTION :
-            {
-                bIsSelection = IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
-            case XML_TOK_DATABASE_RANGE_ATTR_ON_UPDATE_KEEP_STYLES :
-            {
-                bKeepFormats = IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
-            case XML_TOK_DATABASE_RANGE_ATTR_ON_UPDATE_KEEP_SIZE :
-            {
-                bMoveCells = !IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
-            case XML_TOK_DATABASE_RANGE_ATTR_HAS_PERSISTENT_DATA :
-            {
-                bStripData = !IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
-            case XML_TOK_DATABASE_RANGE_ATTR_ORIENTATION :
-            {
-                bByRow = !IsXMLToken(sValue, XML_COLUMN);
-                mpQueryParam->bByRow = bByRow;
-            }
-            break;
-            case XML_TOK_DATABASE_RANGE_ATTR_CONTAINS_HEADER :
-            {
-                bHasHeader = IsXMLToken(sValue, XML_TRUE);
-                mpQueryParam->bHasHeader = bHasHeader;
-            }
-            break;
-            case XML_TOK_DATABASE_RANGE_ATTR_DISPLAY_FILTER_BUTTONS :
-            {
-                bAutoFilter = IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
-            case XML_TOK_DATABASE_RANGE_ATTR_TARGET_RANGE_ADDRESS :
-            {
-                ScDocument* pDoc = GetScImport().GetDocument();
-                sal_Int32 nOffset = 0;
-                if (!ScRangeStringConverter::GetRangeFromString(
-                    maRange, sValue, pDoc, ::formula::FormulaGrammar::CONV_OOO, nOffset))
-                    mbValidRange = false;
-            }
-            break;
-            case XML_TOK_DATABASE_RANGE_ATTR_REFRESH_DELAY :
-            {
-                double fTime;
-                if (::sax::Converter::convertDuration( fTime, sValue ))
-                    nRefresh = std::max( (sal_Int32)(fTime * 86400.0), (sal_Int32)0 );
-            }
-            break;
         }
     }
 
@@ -210,9 +184,9 @@ ScXMLDatabaseRangeContext::ScXMLDatabaseRangeContext( ScXMLImport& rImport,
     mpQueryParam->nCol2 = maRange.aEnd.Col();
     mpQueryParam->nRow2 = maRange.aEnd.Row();
 
-    if (sDatabaseRangeName.matchAsciiL(STR_DB_LOCAL_NONAME, strlen(STR_DB_LOCAL_NONAME)))
+    if (sDatabaseRangeName.startsWith(STR_DB_LOCAL_NONAME))
         meRangeType = ScDBCollection::SheetAnonymous;
-    else if (sDatabaseRangeName.matchAsciiL(STR_DB_GLOBAL_NONAME, strlen(STR_DB_GLOBAL_NONAME)))
+    else if (sDatabaseRangeName.startsWith(STR_DB_GLOBAL_NONAME))
         meRangeType = ScDBCollection::GlobalAnonymous;
 }
 
@@ -220,57 +194,52 @@ ScXMLDatabaseRangeContext::~ScXMLDatabaseRangeContext()
 {
 }
 
-SvXMLImportContext *ScXMLDatabaseRangeContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDatabaseRangeContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetDatabaseRangeElemTokenMap();
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_DATABASE_RANGE_SOURCE_SQL :
+        case XML_ELEMENT( TABLE, XML_DATABASE_SOURCE_SQL ):
         {
-            pContext = new ScXMLSourceSQLContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, this);
+            pContext = new ScXMLSourceSQLContext( GetScImport(), pAttribList, this);
         }
         break;
-        case XML_TOK_DATABASE_RANGE_SOURCE_TABLE :
+        case XML_ELEMENT( TABLE, XML_DATABASE_SOURCE_TABLE ):
         {
-            pContext = new ScXMLSourceTableContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, this);
+            pContext = new ScXMLSourceTableContext( GetScImport(), pAttribList, this);
         }
         break;
-        case XML_TOK_DATABASE_RANGE_SOURCE_QUERY :
+        case XML_ELEMENT( TABLE, XML_DATABASE_SOURCE_QUERY ):
         {
-            pContext = new ScXMLSourceQueryContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, this);
+            pContext = new ScXMLSourceQueryContext( GetScImport(), pAttribList, this);
         }
         break;
-        case XML_TOK_FILTER :
+        case XML_ELEMENT( TABLE, XML_FILTER ):
         {
             pContext = new ScXMLFilterContext(
-                GetScImport(), nPrefix, rLName, xAttrList, *mpQueryParam, this);
+                GetScImport(), pAttribList, *mpQueryParam, this);
         }
         break;
-        case XML_TOK_SORT :
+        case XML_ELEMENT( TABLE, XML_SORT ):
         {
             bContainsSort = true;
-            pContext = new ScXMLSortContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, this);
+            pContext = new ScXMLSortContext( GetScImport(), pAttribList, this);
         }
         break;
-        case XML_TOK_DATABASE_RANGE_SUBTOTAL_RULES :
+        case XML_ELEMENT( TABLE, XML_SUBTOTAL_RULES ):
         {
             bContainsSubTotal = true;
-            pContext = new ScXMLSubTotalRulesContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, this);
+            pContext = new ScXMLSubTotalRulesContext( GetScImport(), pAttribList, this);
         }
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
@@ -294,9 +263,7 @@ std::unique_ptr<ScDBData> ScXMLDatabaseRangeContext::ConvertToDBData(const OUStr
 
     if (bFilterConditionSourceRange)
     {
-        ScRange aAdvSource;
-        ScUnoConversion::FillScRange(aAdvSource, aFilterConditionSourceRangeAddress);
-        pData->SetAdvancedQuerySource(&aAdvSource);
+        pData->SetAdvancedQuerySource( &aFilterConditionSourceRangeAddress );
     }
 
     {
@@ -304,8 +271,7 @@ std::unique_ptr<ScDBData> ScXMLDatabaseRangeContext::ConvertToDBData(const OUStr
         aParam.bNative = bNative;
         aParam.aDBName = sDatabaseName.isEmpty() ? sConnectionResource : sDatabaseName;
         aParam.aStatement = sSourceObject;
-        sheet::DataImportMode eMode = static_cast<sheet::DataImportMode>(nSourceType);
-        switch (eMode)
+        switch (nSourceType)
         {
             case sheet::DataImportMode_NONE:
                 aParam.bImport = false;
@@ -365,17 +331,15 @@ std::unique_ptr<ScDBData> ScXMLDatabaseRangeContext::ConvertToDBData(const OUStr
         aParam.bCaseSens = bSubTotalsIsCaseSensitive;
         aParam.bDoSort = bSubTotalsSortGroups;
         aParam.bAscending = bSubTotalsAscending;
-        aParam.bUserDef = bSubTotalsEnabledUserList;
-        aParam.nUserIndex = nSubTotalsUserListIndex;
-        std::vector <ScSubTotalRule>::iterator itr = aSubTotalRules.begin(), itrEnd = aSubTotalRules.end();
-        for (size_t nPos = 0; itr != itrEnd; ++itr, ++nPos)
+        size_t nPos = 0;
+        for (const auto& rSubTotalRule : aSubTotalRules)
         {
             if (nPos >= MAXSUBTOTAL)
                 break;
 
-            const uno::Sequence<sheet::SubTotalColumn>& rColumns = itr->aSubTotalColumns;
+            const uno::Sequence<sheet::SubTotalColumn>& rColumns = rSubTotalRule.aSubTotalColumns;
             sal_Int32 nColCount = rColumns.getLength();
-            sal_Int16 nGroupColumn = itr->nSubTotalRuleGroupFieldNumber;
+            sal_Int16 nGroupColumn = rSubTotalRule.nSubTotalRuleGroupFieldNumber;
             aParam.bGroupActive[nPos] = true;
             aParam.nField[nPos] = static_cast<SCCOL>(nGroupColumn);
 
@@ -390,7 +354,7 @@ std::unique_ptr<ScDBData> ScXMLDatabaseRangeContext::ConvertToDBData(const OUStr
                 for (SCCOL i = 0; i < nCount; ++i)
                 {
                     aParam.pSubTotals[nPos][i] = static_cast<SCCOL>(pAry[i].Column);
-                    aParam.pFunctions[nPos][i] = ScDPUtil::toSubTotalFunc(pAry[i].Function);
+                    aParam.pFunctions[nPos][i] = ScDPUtil::toSubTotalFunc(static_cast<ScGeneralFunction>(pAry[i].Function));
                 }
             }
             else
@@ -398,6 +362,7 @@ std::unique_ptr<ScDBData> ScXMLDatabaseRangeContext::ConvertToDBData(const OUStr
                 aParam.pSubTotals[nPos] = nullptr;
                 aParam.pFunctions[nPos] = nullptr;
             }
+            ++nPos;
         }
 
         pData->SetSubTotalParam(aParam);
@@ -425,13 +390,13 @@ bool setAutoFilterFlags(ScDocument& rDoc, const ScDBData& rData)
     rData.GetArea(aRange);
     rDoc.ApplyFlagsTab(
         aRange.aStart.Col(), aRange.aStart.Row(), aRange.aEnd.Col(), aRange.aStart.Row(),
-        aRange.aStart.Tab(), SC_MF_AUTO);
+        aRange.aStart.Tab(), ScMF::Auto);
     return false;
 }
 
 }
 
-void ScXMLDatabaseRangeContext::EndElement()
+void SAL_CALL ScXMLDatabaseRangeContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     ScDocument* pDoc = GetScImport().GetDocument();
     if (!pDoc)
@@ -439,31 +404,29 @@ void ScXMLDatabaseRangeContext::EndElement()
 
     if (meRangeType == ScDBCollection::SheetAnonymous)
     {
-        OUString aName(STR_DB_LOCAL_NONAME);
-        ::std::unique_ptr<ScDBData> pData(ConvertToDBData(aName));
+        ::std::unique_ptr<ScDBData> pData(ConvertToDBData(STR_DB_LOCAL_NONAME));
 
-        if (pData.get())
+        if (pData)
         {
             ScRange aRange;
             pData->GetArea(aRange);
 
             setAutoFilterFlags(*pDoc, *pData);
-            pDoc->SetAnonymousDBData(aRange.aStart.Tab(), pData.release());
+            pDoc->SetAnonymousDBData(aRange.aStart.Tab(), std::move(pData));
         }
         return;
     }
     else if (meRangeType == ScDBCollection::GlobalAnonymous)
     {
-        OUString aName(STR_DB_GLOBAL_NONAME);
-        ::std::unique_ptr<ScDBData> pData(ConvertToDBData(aName));
+        ::std::unique_ptr<ScDBData> pData(ConvertToDBData(STR_DB_GLOBAL_NONAME));
 
-        if (pData.get())
+        if (pData)
         {
             ScRange aRange;
             pData->GetArea(aRange);
 
             if (setAutoFilterFlags(*pDoc, *pData))
-                pDoc->SetAnonymousDBData(aRange.aStart.Tab(), pData.release());
+                pDoc->SetAnonymousDBData(aRange.aStart.Tab(), std::move(pData));
             else
                 pDoc->GetDBCollection()->getAnonDBs().insert(pData.release());
         }
@@ -473,52 +436,36 @@ void ScXMLDatabaseRangeContext::EndElement()
     {
         ::std::unique_ptr<ScDBData> pData(ConvertToDBData(sDatabaseRangeName));
 
-        if (pData.get())
+        if (pData)
         {
             setAutoFilterFlags(*pDoc, *pData);
-            if (pDoc->GetDBCollection()->getNamedDBs().insert(pData.get()))
-            {
-                pData.release();
-            }
+            (void)pDoc->GetDBCollection()->getNamedDBs().insert(std::move(pData));
         }
     }
 }
 
 ScXMLSourceSQLContext::ScXMLSourceSQLContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLDatabaseRangeContext* pTempDatabaseRangeContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDatabaseRangeContext(pTempDatabaseRangeContext)
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDatabaseRangeSourceSQLAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_SOURCE_SQL_ATTR_DATABASE_NAME :
+            switch (aIter.getToken())
             {
-                sDBName = sValue;
+                case XML_ELEMENT( TABLE, XML_DATABASE_NAME ):
+                    sDBName = aIter.toString();
+                    break;
+                case XML_ELEMENT( TABLE, XML_SQL_STATEMENT ):
+                    pDatabaseRangeContext->SetSourceObject(aIter.toString());
+                    break;
+                case XML_ELEMENT( TABLE, XML_PARSE_SQL_STATEMENT ):
+                    pDatabaseRangeContext->SetNative(IsXMLToken(aIter, XML_TRUE));
+                    break;
             }
-            break;
-            case XML_TOK_SOURCE_SQL_ATTR_SQL_STATEMENT :
-            {
-                pDatabaseRangeContext->SetSourceObject(sValue);
-            }
-            break;
-            case XML_TOK_SOURCE_SQL_ATTR_PARSE_SQL_STATEMENT :
-            {
-                pDatabaseRangeContext->SetNative(IsXMLToken(sValue, XML_TRUE));
-            }
-            break;
         }
     }
     pDatabaseRangeContext->SetSourceType(sheet::DataImportMode_SQL);
@@ -528,63 +475,50 @@ ScXMLSourceSQLContext::~ScXMLSourceSQLContext()
 {
 }
 
-SvXMLImportContext *ScXMLSourceSQLContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSourceSQLContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    if ( nPrefix == XML_NAMESPACE_FORM )
+    if ( nElement == XML_ELEMENT( FORM, XML_CONNECTION_RESOURCE ) && sDBName.isEmpty() )
     {
-        if (IsXMLToken(rLName, XML_CONNECTION_RESOURCE) && sDBName.isEmpty())
-        {
-            pContext = new ScXMLConResContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, pDatabaseRangeContext);
-        }
+        pContext = new ScXMLConResContext( GetScImport(), pAttribList, pDatabaseRangeContext);
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLSourceSQLContext::EndElement()
+void SAL_CALL ScXMLSourceSQLContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     if (!sDBName.isEmpty())
         pDatabaseRangeContext->SetDatabaseName(sDBName);
 }
 
 ScXMLSourceTableContext::ScXMLSourceTableContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLDatabaseRangeContext* pTempDatabaseRangeContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDatabaseRangeContext(pTempDatabaseRangeContext)
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDatabaseRangeSourceTableAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_SOURCE_TABLE_ATTR_DATABASE_NAME :
+            switch (aIter.getToken())
             {
-                sDBName = sValue;
+                case XML_ELEMENT( TABLE, XML_DATABASE_NAME ):
+                    sDBName = aIter.toString();
+                    break;
+                case XML_ELEMENT( TABLE, XML_TABLE_NAME ):
+                case XML_ELEMENT( TABLE, XML_DATABASE_TABLE_NAME ):
+                    pDatabaseRangeContext->SetSourceObject(aIter.toString());
+                    break;
             }
-            break;
-            case XML_TOK_SOURCE_TABLE_ATTR_TABLE_NAME :
-            {
-                pDatabaseRangeContext->SetSourceObject(sValue);
-            }
-            break;
         }
     }
     pDatabaseRangeContext->SetSourceType(sheet::DataImportMode_TABLE);
@@ -594,63 +528,49 @@ ScXMLSourceTableContext::~ScXMLSourceTableContext()
 {
 }
 
-SvXMLImportContext *ScXMLSourceTableContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSourceTableContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    if ( nPrefix == XML_NAMESPACE_FORM )
+    if ( nElement == XML_ELEMENT( FORM, XML_CONNECTION_RESOURCE ) && sDBName.isEmpty() )
     {
-        if (IsXMLToken(rLName, XML_CONNECTION_RESOURCE) && sDBName.isEmpty())
-        {
-            pContext = new ScXMLConResContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, pDatabaseRangeContext);
-        }
+        pContext = new ScXMLConResContext( GetScImport(), pAttribList, pDatabaseRangeContext);
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLSourceTableContext::EndElement()
+void SAL_CALL ScXMLSourceTableContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     if (!sDBName.isEmpty())
         pDatabaseRangeContext->SetDatabaseName(sDBName);
 }
 
 ScXMLSourceQueryContext::ScXMLSourceQueryContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLDatabaseRangeContext* pTempDatabaseRangeContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDatabaseRangeContext(pTempDatabaseRangeContext)
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDatabaseRangeSourceQueryAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_SOURCE_QUERY_ATTR_DATABASE_NAME :
+            switch (aIter.getToken())
             {
-                sDBName = sValue;
+                case XML_ELEMENT( TABLE, XML_DATABASE_NAME ):
+                    sDBName = aIter.toString();
+                    break;
+                case XML_ELEMENT( TABLE, XML_QUERY_NAME ):
+                    pDatabaseRangeContext->SetSourceObject(aIter.toString());
+                    break;
             }
-            break;
-            case XML_TOK_SOURCE_QUERY_ATTR_QUERY_NAME :
-            {
-                pDatabaseRangeContext->SetSourceObject(sValue);
-            }
-            break;
         }
     }
     pDatabaseRangeContext->SetSourceType(sheet::DataImportMode_QUERY);
@@ -660,56 +580,41 @@ ScXMLSourceQueryContext::~ScXMLSourceQueryContext()
 {
 }
 
-SvXMLImportContext *ScXMLSourceQueryContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSourceQueryContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    if ( nPrefix == XML_NAMESPACE_FORM )
+    if ( nElement == XML_ELEMENT( FORM, XML_CONNECTION_RESOURCE ) && sDBName.isEmpty() )
     {
-        if (IsXMLToken(rLName, XML_CONNECTION_RESOURCE) && sDBName.isEmpty())
-        {
-            pContext = new ScXMLConResContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, pDatabaseRangeContext);
-        }
+        pContext = new ScXMLConResContext( GetScImport(), pAttribList, pDatabaseRangeContext);
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLSourceQueryContext::EndElement()
+void SAL_CALL ScXMLSourceQueryContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     if (!sDBName.isEmpty())
         pDatabaseRangeContext->SetDatabaseName(sDBName);
 }
 
 ScXMLConResContext::ScXMLConResContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
-                                      ScXMLDatabaseRangeContext* pTempDatabaseRangeContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
-    pDatabaseRangeContext( pTempDatabaseRangeContext )
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
+                                      ScXMLDatabaseRangeContext* pDatabaseRangeContext) :
+    ScXMLImportContext( rImport )
 {
     OUString sConRes;
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    for( sal_Int16 i=0; i < nAttrCount; i++ )
+    if ( rAttrList.is() )
     {
-        OUString sAttrName = xAttrList->getNameByIndex( i );
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        OUString sValue = xAttrList->getValueByIndex( i );
-
-        if (nPrefix == XML_NAMESPACE_XLINK)
-        {
-            if (IsXMLToken(aLocalName, XML_HREF))
-                sConRes = sValue;
-        }
+        auto &aIter( rAttrList->find( XML_ELEMENT( XLINK, XML_HREF ) ) );
+        if (aIter != rAttrList->end())
+            sConRes = aIter.toString();
     }
     if (!sConRes.isEmpty())
         pDatabaseRangeContext->SetConnectionResource(sConRes);
@@ -719,52 +624,28 @@ ScXMLConResContext::~ScXMLConResContext()
 {
 }
 
-SvXMLImportContext *ScXMLConResContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLConResContext::EndElement()
-{
-}
-
 ScXMLSubTotalRulesContext::ScXMLSubTotalRulesContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLDatabaseRangeContext* pTempDatabaseRangeContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDatabaseRangeContext(pTempDatabaseRangeContext)
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDatabaseRangeSubTotalRulesAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_SUBTOTAL_RULES_ATTR_BIND_STYLES_TO_CONTENT :
+            switch (aIter.getToken())
             {
-                pDatabaseRangeContext->SetSubTotalsBindFormatsToContent(IsXMLToken(sValue, XML_TRUE));
+                case XML_ELEMENT( TABLE, XML_BIND_STYLES_TO_CONTENT ):
+                    pDatabaseRangeContext->SetSubTotalsBindFormatsToContent(IsXMLToken(aIter, XML_TRUE));
+                    break;
+                case XML_ELEMENT( TABLE, XML_CASE_SENSITIVE ):
+                    pDatabaseRangeContext->SetSubTotalsIsCaseSensitive(IsXMLToken(aIter, XML_TRUE));
+                    break;
+                case XML_ELEMENT( TABLE, XML_PAGE_BREAKS_ON_GROUP_CHANGE ):
+                    pDatabaseRangeContext->SetSubTotalsInsertPageBreaks(IsXMLToken(aIter, XML_TRUE));
+                    break;
             }
-            break;
-            case XML_TOK_SUBTOTAL_RULES_ATTR_CASE_SENSITIVE :
-            {
-                pDatabaseRangeContext->SetSubTotalsIsCaseSensitive(IsXMLToken(sValue, XML_TRUE));
-            }
-            break;
-            case XML_TOK_SUBTOTAL_RULES_ATTR_PAGE_BREAKS_ON_GROUP_CHANGE :
-            {
-                pDatabaseRangeContext->SetSubTotalsInsertPageBreaks(IsXMLToken(sValue, XML_TRUE));
-            }
-            break;
         }
     }
 }
@@ -773,97 +654,84 @@ ScXMLSubTotalRulesContext::~ScXMLSubTotalRulesContext()
 {
 }
 
-SvXMLImportContext *ScXMLSubTotalRulesContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSubTotalRulesContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetDatabaseRangeSubTotalRulesElemTokenMap();
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_SUBTOTAL_RULES_SORT_GROUPS :
+        case XML_ELEMENT( TABLE, XML_SORT_GROUPS ):
         {
-            pContext = new ScXMLSortGroupsContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, pDatabaseRangeContext);
+            pContext = new ScXMLSortGroupsContext( GetScImport(), pAttribList, pDatabaseRangeContext);
         }
         break;
-        case XML_TOK_SUBTOTAL_RULES_SUBTOTAL_RULE :
+        case XML_ELEMENT( TABLE, XML_SUBTOTAL_RULE ):
         {
-            pContext = new ScXMLSubTotalRuleContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, pDatabaseRangeContext);
+            pContext = new ScXMLSubTotalRuleContext( GetScImport(), pAttribList, pDatabaseRangeContext);
         }
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLSubTotalRulesContext::EndElement()
-{
-}
-
 ScXMLSortGroupsContext::ScXMLSortGroupsContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
-                                      ScXMLDatabaseRangeContext* pTempDatabaseRangeContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
-    pDatabaseRangeContext(pTempDatabaseRangeContext)
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
+                                      ScXMLDatabaseRangeContext* pDatabaseRangeContext) :
+    ScXMLImportContext( rImport )
 {
     pDatabaseRangeContext->SetSubTotalsSortGroups(true);
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetSubTotalRulesSortGroupsAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_SORT_GROUPS_ATTR_DATA_TYPE :
+            switch (aIter.getToken())
             {
-                if (sValue.getLength() > 8)
+                case XML_ELEMENT( TABLE, XML_DATA_TYPE ):
                 {
-                    OUString sTemp = sValue.copy(0, 8);
-                    if (sTemp == "UserList")
+                    const OUString &sValue = aIter.toString();
+                    if (sValue.getLength() > 8)
                     {
-                        pDatabaseRangeContext->SetSubTotalsEnabledUserList(true);
-                        sTemp = sValue.copy(8);
-                        pDatabaseRangeContext->SetSubTotalsUserListIndex(static_cast<sal_Int16>(sTemp.toInt32()));
+                        OUString sTemp = sValue.copy(0, 8);
+                        if (sTemp == "UserList")
+                        {
+                            pDatabaseRangeContext->SetSubTotalsEnabledUserList(true);
+                            sTemp = sValue.copy(8);
+                            pDatabaseRangeContext->SetSubTotalsUserListIndex(static_cast<sal_Int16>(sTemp.toInt32()));
+                        }
+                        else
+                        {
+                            //if (IsXMLToken(aIter, XML_AUTOMATIC))
+                                //aSortField.FieldType = util::SortFieldType_AUTOMATIC;
+                                // is not supported by StarOffice
+                        }
                     }
                     else
                     {
-                        //if (IsXMLToken(sValue, XML_AUTOMATIC))
-                            //aSortField.FieldType = util::SortFieldType_AUTOMATIC;
+                        //if (IsXMLToken(aIter, XML_TEXT))
+                            //aSortField.FieldType = util::SortFieldType_ALPHANUMERIC;
+                            // is not supported by StarOffice
+                        //else if (IsXMLToken(aIter, XML_NUMBER))
+                            //aSortField.FieldType = util::SortFieldType_NUMERIC;
                             // is not supported by StarOffice
                     }
                 }
-                else
+                break;
+                case XML_ELEMENT( TABLE, XML_ORDER ):
                 {
-                    //if (IsXMLToken(sValue, XML_TEXT))
-                        //aSortField.FieldType = util::SortFieldType_ALPHANUMERIC;
-                        // is not supported by StarOffice
-                    //else if (IsXMLToken(sValue, XML_NUMBER))
-                        //aSortField.FieldType = util::SortFieldType_NUMERIC;
-                        // is not supported by StarOffice
+                    if (IsXMLToken(aIter, XML_ASCENDING))
+                        pDatabaseRangeContext->SetSubTotalsAscending(true);
+                    else
+                        pDatabaseRangeContext->SetSubTotalsAscending(false);
                 }
+                break;
             }
-            break;
-            case XML_TOK_SORT_GROUPS_ATTR_ORDER :
-            {
-                if (IsXMLToken(sValue, XML_ASCENDING))
-                    pDatabaseRangeContext->SetSubTotalsAscending(true);
-                else
-                    pDatabaseRangeContext->SetSubTotalsAscending(false);
-            }
-            break;
         }
     }
 }
@@ -872,42 +740,22 @@ ScXMLSortGroupsContext::~ScXMLSortGroupsContext()
 {
 }
 
-SvXMLImportContext *ScXMLSortGroupsContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLSortGroupsContext::EndElement()
-{
-}
-
 ScXMLSubTotalRuleContext::ScXMLSubTotalRuleContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLDatabaseRangeContext* pTempDatabaseRangeContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDatabaseRangeContext(pTempDatabaseRangeContext)
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetSubTotalRulesSubTotalRuleAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_SUBTOTAL_RULE_ATTR_GROUP_BY_FIELD_NUMBER :
+            switch (aIter.getToken())
             {
-                aSubTotalRule.nSubTotalRuleGroupFieldNumber = static_cast<sal_Int16>(sValue.toInt32());
+                case XML_ELEMENT( TABLE, XML_GROUP_BY_FIELD_NUMBER ):
+                    aSubTotalRule.nSubTotalRuleGroupFieldNumber = static_cast<sal_Int16>(aIter.toInt32());
+                    break;
             }
-            break;
         }
     }
 }
@@ -916,65 +764,53 @@ ScXMLSubTotalRuleContext::~ScXMLSubTotalRuleContext()
 {
 }
 
-SvXMLImportContext *ScXMLSubTotalRuleContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSubTotalRuleContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetSubTotalRulesSubTotalRuleElemTokenMap();
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_SUBTOTAL_RULE_SUBTOTAL_FIELD :
+        case XML_ELEMENT( TABLE, XML_SUBTOTAL_FIELD ):
         {
-            pContext = new ScXMLSubTotalFieldContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, this);
+            pContext = new ScXMLSubTotalFieldContext( GetScImport(), pAttribList, this);
         }
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLSubTotalRuleContext::EndElement()
+void SAL_CALL ScXMLSubTotalRuleContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     if (pDatabaseRangeContext)
         pDatabaseRangeContext->AddSubTotalRule(aSubTotalRule);
 }
 
 ScXMLSubTotalFieldContext::ScXMLSubTotalFieldContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLSubTotalRuleContext* pTempSubTotalRuleContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pSubTotalRuleContext(pTempSubTotalRuleContext)
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetSubTotalRuleSubTotalFieldAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_SUBTOTAL_FIELD_ATTR_FIELD_NUMBER :
+            switch (aIter.getToken())
             {
-                sFieldNumber = sValue;
+                case XML_ELEMENT( TABLE, XML_FIELD_NUMBER ):
+                    sFieldNumber = aIter.toString();
+                    break;
+                case XML_ELEMENT( TABLE, XML_FUNCTION ):
+                    sFunction = aIter.toString();
+                    break;
             }
-            break;
-            case XML_TOK_SUBTOTAL_FIELD_ATTR_FUNCTION :
-            {
-                sFunction = sValue;
-            }
-            break;
         }
     }
 }
@@ -983,14 +819,7 @@ ScXMLSubTotalFieldContext::~ScXMLSubTotalFieldContext()
 {
 }
 
-SvXMLImportContext *ScXMLSubTotalFieldContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLSubTotalFieldContext::EndElement()
+void SAL_CALL ScXMLSubTotalFieldContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     sheet::SubTotalColumn aSubTotalColumn;
     aSubTotalColumn.Column = sFieldNumber.toInt32();

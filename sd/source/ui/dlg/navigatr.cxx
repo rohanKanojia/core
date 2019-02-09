@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <sal/config.h>
 
 #include <osl/file.hxx>
 #include <tools/urlobj.hxx>
-#include <sfx2/imgmgr.hxx>
 #include <sfx2/fcontnr.hxx>
 #include <svl/eitem.hxx>
 #include <svl/stritem.hxx>
@@ -36,24 +36,24 @@
 
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/dockwin.hxx>
-#include <sfx2/sfxresid.hxx>
 
-#include "pres.hxx"
-#include "navigatr.hxx"
-#include "navigatr.hrc"
-#include "pgjump.hxx"
-#include "app.hrc"
-#include "strings.hrc"
-#include "res_bmp.hrc"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "sdresid.hxx"
-#include "ViewShell.hxx"
-#include "ViewShellBase.hxx"
-#include "DrawViewShell.hxx"
-#include "slideshow.hxx"
-#include "FrameView.hxx"
-#include "helpids.h"
+#include <pres.hxx>
+#include <navigatr.hxx>
+#include <pgjump.hxx>
+#include <app.hrc>
+#include <strings.hrc>
+
+#include <bitmaps.hlst>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <sdresid.hxx>
+#include <ViewShell.hxx>
+#include <ViewShellBase.hxx>
+#include <DrawViewShell.hxx>
+#include <slideshow.hxx>
+#include <FrameView.hxx>
+#include <helpids.h>
+#include <Window.hxx>
 
 namespace {
 static const sal_uInt16 nShowNamedShapesFilter=1;
@@ -63,91 +63,49 @@ static const sal_uInt16 nShowAllShapesFilter=2;
 /**
  * SdNavigatorWin - FloatingWindow
  */
-SdNavigatorWin::SdNavigatorWin(
-    vcl::Window* pParent,
-    const SdResId& rSdResId,
-    SfxBindings* pInBindings)
-    : vcl::Window( pParent, rSdResId )
-    , maToolbox ( VclPtr<ToolBox>::Create( this, SdResId( 1 ) ) )
-    , maTlbObjects( VclPtr<SdPageObjsTLB>::Create( this, SdResId( TLB_OBJECTS ) ) )
-    , maLbDocs ( VclPtr<ListBox>::Create( this, SdResId( LB_DOCS ) ) )
+SdNavigatorWin::SdNavigatorWin(vcl::Window* pParent, SfxBindings* pInBindings)
+    : PanelLayout(pParent, "NavigatorPanel", "modules/simpress/ui/navigatorpanel.ui", nullptr)
     , mbDocImported ( false )
       // On changes of the DragType: adjust SelectionMode of TLB!
     , meDragType ( NAVIGATOR_DRAGTYPE_EMBEDDED )
     , mpBindings ( pInBindings )
-    , mpNavigatorCtrlItem( nullptr )
-    , mpPageNameCtrlItem( nullptr )
-    , maImageList ( SdResId( IL_NAVIGATR ) )
 {
+    get(maToolbox, "toolbox");
+    get(maTlbObjects, "tree");
+    Size aSize(maTlbObjects->LogicToPixel(Size(97, 67), MapMode(MapUnit::MapAppFont)));
+    maTlbObjects->set_height_request(aSize.Width());
+    maTlbObjects->set_width_request(aSize.Height());
+    get(maLbDocs, "documents");
+
     maTlbObjects->SetViewFrame( mpBindings->GetDispatcher()->GetFrame() );
 
-    FreeResource();
+    maTlbObjects->SetAccessibleName(SdResId(STR_OBJECTS_TREE));
 
-    maTlbObjects->SetAccessibleName(SD_RESSTR(STR_OBJECTS_TREE));
+    maTlbObjects->SetDoubleClickHdl(LINK(this, SdNavigatorWin, ClickObjectHdl));
+    maTlbObjects->SetSelectionMode(SelectionMode::Single);
 
-    ApplyImageList(); // load images *before* calculating sizes to get something useful !!!
-
-    Size aTbxSize( maToolbox->CalcWindowSizePixel() );
-    maToolbox->SetOutputSizePixel( aTbxSize );
     maToolbox->SetSelectHdl( LINK( this, SdNavigatorWin, SelectToolboxHdl ) );
     maToolbox->SetDropdownClickHdl( LINK(this, SdNavigatorWin, DropdownClickToolBoxHdl) );
-    maToolbox->SetItemBits( TBI_DRAGTYPE, maToolbox->GetItemBits( TBI_DRAGTYPE ) | ToolBoxItemBits::DROPDOWNONLY );
+    const sal_uInt16 nDragTypeId = maToolbox->GetItemId("dragmode");
+    maToolbox->SetItemBits(nDragTypeId, maToolbox->GetItemBits(nDragTypeId) | ToolBoxItemBits::DROPDOWNONLY);
 
     // Shape filter drop down menu.
-    maToolbox->SetItemBits(
-        TBI_SHAPE_FILTER,
-        maToolbox->GetItemBits(TBI_SHAPE_FILTER) | ToolBoxItemBits::DROPDOWNONLY);
+    const sal_uInt16 nShapeId = maToolbox->GetItemId("shapes");
+    maToolbox->SetItemBits(nShapeId, maToolbox->GetItemBits(nShapeId) | ToolBoxItemBits::DROPDOWNONLY);
 
-    // TreeListBox
-    // set position below toolbox
-    long nListboxYPos = maToolbox->GetPosPixel().Y() + maToolbox->GetSizePixel().Height() + 4;
-    maTlbObjects->setPosSizePixel( 0, nListboxYPos, 0, 0, PosSizeFlags::Y );
-    maTlbObjects->SetDoubleClickHdl( LINK( this, SdNavigatorWin, ClickObjectHdl ) );
-    maTlbObjects->SetSelectionMode( SINGLE_SELECTION );
     // set focus to listbox, otherwise it is in the toolbox which is only useful
     // for keyboard navigation
     maTlbObjects->GrabFocus();
-    maTlbObjects->SetSdNavigatorWinFlag(true);
+    maTlbObjects->SetSdNavigator(this);
 
     // DragTypeListBox
     maLbDocs->SetSelectHdl( LINK( this, SdNavigatorWin, SelectDocumentHdl ) );
-    // set position below treelistbox
-    nListboxYPos = maTlbObjects->GetPosPixel().Y() + maTlbObjects->GetSizePixel().Height() + 4;
-    maLbDocs->setPosSizePixel( 0, nListboxYPos, 0, 0, PosSizeFlags::Y );
-
-    // assure that tool box is at least as wide as the tree list box
-    {
-        const Size aTlbSize( maTlbObjects->GetOutputSizePixel() );
-        if ( aTlbSize.Width() > aTbxSize.Width() )
-        {
-            maToolbox->setPosSizePixel( 0, 0, aTlbSize.Width(), 0, PosSizeFlags::Width );
-            aTbxSize = maToolbox->GetOutputSizePixel();
-        }
-    }
-
-    // set min outputsize after all sizes are known
-    const long nFullHeight = nListboxYPos + maLbDocs->GetSizePixel().Height() + 4;
-    maSize = GetOutputSizePixel();
-    if( maSize.Height() < nFullHeight )
-    {
-        maSize.Height() = nFullHeight;
-        SetOutputSizePixel( maSize );
-    }
-    maMinSize = maSize;
-    const long nMinWidth = 2*maToolbox->GetPosPixel().X() + aTbxSize.Width(); // never clip the toolbox
-    if( nMinWidth > maMinSize.Width() )
-        maMinSize.Width() = nMinWidth;
-    maMinSize.Height() -= 40;
-    SfxDockingWindow* pDockingParent = dynamic_cast<SfxDockingWindow*>(GetParent());
-    if (pDockingParent != nullptr)
-        pDockingParent->SetMinOutputSizePixel( maMinSize );
-
 }
 
 void SdNavigatorWin::SetUpdateRequestFunctor(const UpdateRequestFunctor& rUpdateRequest)
 {
-    mpNavigatorCtrlItem = new SdNavigatorControllerItem( SID_NAVIGATOR_STATE, this, mpBindings, rUpdateRequest);
-    mpPageNameCtrlItem = new SdPageNameControllerItem( SID_NAVIGATOR_PAGENAME, this, mpBindings);
+    mpNavigatorCtrlItem.reset( new SdNavigatorControllerItem(SID_NAVIGATOR_STATE, this, mpBindings, rUpdateRequest) );
+    mpPageNameCtrlItem.reset( new SdPageNameControllerItem(SID_NAVIGATOR_PAGENAME, this, mpBindings) );
 
     // InitTlb; is initiated over Slot
     if (rUpdateRequest)
@@ -161,12 +119,12 @@ SdNavigatorWin::~SdNavigatorWin()
 
 void SdNavigatorWin::dispose()
 {
-    DELETEZ( mpNavigatorCtrlItem );
-    DELETEZ( mpPageNameCtrlItem );
-    maToolbox.disposeAndClear();
-    maTlbObjects.disposeAndClear();
-    maLbDocs.disposeAndClear();
-    vcl::Window::dispose();
+    mpNavigatorCtrlItem.reset();
+    mpPageNameCtrlItem.reset();
+    maToolbox.clear();
+    maTlbObjects.clear();
+    maLbDocs.clear();
+    PanelLayout::dispose();
 }
 
 //when object is marked , fresh the corresponding entry tree .
@@ -174,11 +132,11 @@ void SdNavigatorWin::FreshTree( const SdDrawDocument* pDoc )
 {
     SdDrawDocument* pNonConstDoc = const_cast<SdDrawDocument*>(pDoc); // const as const can...
     sd::DrawDocShell* pDocShell = pNonConstDoc->GetDocSh();
-    OUString aDocShName( pDocShell->GetName() );
+    const OUString& aDocShName( pDocShell->GetName() );
     OUString aDocName = pDocShell->GetMedium()->GetName();
     maTlbObjects->SetSaveTreeItemStateFlag(true); //Added by yanjun for sym2_6385
     maTlbObjects->Clear();
-    maTlbObjects->Fill( pDoc, false, aDocName ); // Nur normale Seiten
+    maTlbObjects->Fill( pDoc, false, aDocName ); // Only normal pages
     maTlbObjects->SetSaveTreeItemStateFlag(false); //Added by yanjun for sym2_6385
     RefreshDocumentLB();
     maLbDocs->SelectEntry( aDocShName );
@@ -186,7 +144,7 @@ void SdNavigatorWin::FreshTree( const SdDrawDocument* pDoc )
 
 void SdNavigatorWin::FreshEntry( )
 {
-    maTlbObjects->FreshCurEntry();
+    maTlbObjects->Invalidate();
 }
 
 void SdNavigatorWin::InitTreeLB( const SdDrawDocument* pDoc )
@@ -207,10 +165,11 @@ void SdNavigatorWin::InitTreeLB( const SdDrawDocument* pDoc )
 
     // Disable the shape filter drop down menu when there is a running slide
     // show.
+    const sal_uInt16 nShapeId = maToolbox->GetItemId("shapes");
     if (pViewShell!=nullptr && sd::SlideShow::IsRunning( pViewShell->GetViewShellBase() ))
-        maToolbox->EnableItem(TBI_SHAPE_FILTER, false);
+        maToolbox->EnableItem(nShapeId, false);
     else
-        maToolbox->EnableItem(TBI_SHAPE_FILTER);
+        maToolbox->EnableItem(nShapeId);
 
     if( !maTlbObjects->IsEqualToDoc( pDoc ) )
     {
@@ -227,7 +186,7 @@ void SdNavigatorWin::InitTreeLB( const SdDrawDocument* pDoc )
         maLbDocs->SelectEntry( aDocShName );
 
 // commented in order to fix 30246
-//        if( maLbDocs->GetSelectEntryCount() == 0 )
+//        if( maLbDocs->GetSelectedEntryCount() == 0 )
         {
             RefreshDocumentLB();
             maLbDocs->SelectEntry( aDocShName );
@@ -254,122 +213,126 @@ NavigatorDragType SdNavigatorWin::GetNavigatorDragType()
     return eDT;
 }
 
-//Get SdDrawDocShell
-sd::DrawDocShell* SdNavigatorWin::GetDrawDocShell( const SdDrawDocument* pDoc )
+VclPtr<SdPageObjsTLB> const & SdNavigatorWin::GetObjects()
 {
-    if( !pDoc )
-        return nullptr; // const as const can...
-    sd::DrawDocShell* pDocShell = pDoc->GetDocSh();
-    return pDocShell;
+    return maTlbObjects;
 }
 
-IMPL_LINK_NOARG_TYPED(SdNavigatorWin, SelectToolboxHdl, ToolBox *, void)
+IMPL_LINK_NOARG(SdNavigatorWin, SelectToolboxHdl, ToolBox *, void)
 {
     sal_uInt16 nId = maToolbox->GetCurItemId();
+    const OUString sCommand = maToolbox->GetItemCommand(nId);
     PageJump ePage = PAGE_NONE;
 
-    if( nId == TBI_FIRST )
-        ePage = PAGE_FIRST;
-    else if( nId == TBI_PREVIOUS )
-        ePage = PAGE_PREVIOUS;
-    else if( nId == TBI_NEXT )
-        ePage = PAGE_NEXT;
-    else if( nId == TBI_LAST )
-        ePage = PAGE_LAST;
-
-    if( ePage != PAGE_NONE )
+    if (sCommand == "first")
     {
-        SfxUInt16Item aItem( SID_NAVIGATOR_PAGE, (sal_uInt16)ePage );
+        ePage = PAGE_FIRST;
+        maTlbObjects->Select( maTlbObjects->GetFirstEntryInView() );
+    }
+    else if (sCommand == "previous")
+    {
+        ePage = PAGE_PREVIOUS;
+        if( maTlbObjects->GetPrevEntryInView( maTlbObjects->GetCurEntry() ) != nullptr )
+            maTlbObjects->Select( maTlbObjects->GetPrevEntryInView( maTlbObjects->GetCurEntry() ) );
+    }
+    else if (sCommand == "next")
+    {
+        ePage = PAGE_NEXT;
+        if( maTlbObjects->GetNextEntryInView( maTlbObjects->GetCurEntry() ) != nullptr )
+            maTlbObjects->Select( maTlbObjects->GetNextEntryInView( maTlbObjects->GetCurEntry() ) );
+    }
+    else if (sCommand == "last")
+    {
+        ePage = PAGE_LAST;
+        maTlbObjects->Select( maTlbObjects->GetLastEntryInView() );
+    }
+
+    if (ePage != PAGE_NONE)
+    {
+        SfxUInt16Item aItem( SID_NAVIGATOR_PAGE, static_cast<sal_uInt16>(ePage) );
         mpBindings->GetDispatcher()->ExecuteList(SID_NAVIGATOR_PAGE,
                 SfxCallMode::SLOT | SfxCallMode::RECORD, { &aItem });
     }
 }
 
-IMPL_LINK_TYPED( SdNavigatorWin, DropdownClickToolBoxHdl, ToolBox*, pBox, void )
+IMPL_LINK( SdNavigatorWin, DropdownClickToolBoxHdl, ToolBox*, pBox, void )
 {
     sal_uInt16 nId = maToolbox->GetCurItemId();
+    const OUString sCommand = maToolbox->GetItemCommand(nId);
 
-    switch( nId )
+    if (sCommand == "dragmode")
     {
-        case TBI_DRAGTYPE:
+        // Popup menu is created depending if the document is saved or not
+        ScopedVclPtrInstance<PopupMenu> pMenu;
+
+        static const char* aHIDs[] =
         {
-            // Popup menu is created depending if the document is saved or not
-            PopupMenu *pMenu = new PopupMenu;
+             HID_SD_NAVIGATOR_MENU1,
+             HID_SD_NAVIGATOR_MENU2,
+             HID_SD_NAVIGATOR_MENU3,
+             nullptr
+        };
 
-            static const char* aHIDs[] =
+        for (sal_uInt16 nID = NAVIGATOR_DRAGTYPE_URL; nID < NAVIGATOR_DRAGTYPE_COUNT; ++nID)
+        {
+            const char* pRId = GetDragTypeSdStrId(static_cast<NavigatorDragType>(nID));
+            if (pRId)
             {
-                 HID_SD_NAVIGATOR_MENU1,
-                 HID_SD_NAVIGATOR_MENU2,
-                 HID_SD_NAVIGATOR_MENU3,
-                 nullptr
-            };
-
-            for( sal_uInt16 nID = NAVIGATOR_DRAGTYPE_URL;
-                 nID < NAVIGATOR_DRAGTYPE_COUNT;
-                 nID++ )
-            {
-                sal_uInt16 nRId = GetDragTypeSdResId( (NavigatorDragType)nID );
-                if( nRId > 0 )
-                {
-                    DBG_ASSERT(aHIDs[nID-NAVIGATOR_DRAGTYPE_URL],"HelpId not added!");
-                    pMenu->InsertItem( nID, SD_RESSTR( nRId ) );
-                    pMenu->SetHelpId( nID, aHIDs[nID - NAVIGATOR_DRAGTYPE_URL] );
-                }
-
-            }
-            NavDocInfo* pInfo = GetDocInfo();
-
-            if( ( pInfo && !pInfo->HasName() ) || !maTlbObjects->IsLinkableSelected() )
-            {
-                pMenu->EnableItem( NAVIGATOR_DRAGTYPE_LINK, false );
-                pMenu->EnableItem( NAVIGATOR_DRAGTYPE_URL, false );
-                meDragType = NAVIGATOR_DRAGTYPE_EMBEDDED;
+                DBG_ASSERT(aHIDs[nID-NAVIGATOR_DRAGTYPE_URL],"HelpId not added!");
+                pMenu->InsertItem(nID, SdResId(pRId), MenuItemBits::RADIOCHECK);
+                pMenu->SetHelpId(nID, aHIDs[nID - NAVIGATOR_DRAGTYPE_URL]);
             }
 
-            pMenu->CheckItem( (sal_uInt16)meDragType );
-            pMenu->SetSelectHdl( LINK( this, SdNavigatorWin, MenuSelectHdl ) );
-
-            pMenu->Execute( this, maToolbox->GetItemRect( nId ), PopupMenuFlags::ExecuteDown );
-            pBox->EndSelection();
-            delete pMenu;
         }
-        break;
+        NavDocInfo* pInfo = GetDocInfo();
 
-        case TBI_SHAPE_FILTER:
+        if( ( pInfo && !pInfo->HasName() ) || !maTlbObjects->IsLinkableSelected() )
         {
-            PopupMenu *pMenu = new PopupMenu;
-
-            pMenu->InsertItem(
-                nShowNamedShapesFilter,
-                SD_RESSTR(STR_NAVIGATOR_SHOW_NAMED_SHAPES));
-            pMenu->InsertItem(
-                nShowAllShapesFilter,
-                SD_RESSTR(STR_NAVIGATOR_SHOW_ALL_SHAPES));
-
-            if (maTlbObjects->GetShowAllShapes())
-                pMenu->CheckItem(nShowAllShapesFilter);
-            else
-                pMenu->CheckItem(nShowNamedShapesFilter);
-            pMenu->SetSelectHdl( LINK( this, SdNavigatorWin, ShapeFilterCallback ) );
-
-            pMenu->Execute( this, maToolbox->GetItemRect( nId ), PopupMenuFlags::ExecuteDown );
-            pBox->EndSelection();
-            delete pMenu;
+            pMenu->EnableItem( NAVIGATOR_DRAGTYPE_LINK, false );
+            pMenu->EnableItem( NAVIGATOR_DRAGTYPE_URL, false );
+            meDragType = NAVIGATOR_DRAGTYPE_EMBEDDED;
         }
-        break;
+
+        pMenu->CheckItem( static_cast<sal_uInt16>(meDragType) );
+        pMenu->SetSelectHdl( LINK( this, SdNavigatorWin, MenuSelectHdl ) );
+
+        pMenu->Execute( this, maToolbox->GetItemRect( nId ), PopupMenuFlags::ExecuteDown );
+        pBox->EndSelection();
+    }
+    else if (sCommand == "shapes")
+    {
+        ScopedVclPtrInstance<PopupMenu> pMenu;
+
+        pMenu->InsertItem(
+            nShowNamedShapesFilter,
+            SdResId(STR_NAVIGATOR_SHOW_NAMED_SHAPES),
+            MenuItemBits::RADIOCHECK);
+        pMenu->InsertItem(
+            nShowAllShapesFilter,
+            SdResId(STR_NAVIGATOR_SHOW_ALL_SHAPES),
+            MenuItemBits::RADIOCHECK);
+
+        if (maTlbObjects->GetShowAllShapes())
+            pMenu->CheckItem(nShowAllShapesFilter);
+        else
+            pMenu->CheckItem(nShowNamedShapesFilter);
+        pMenu->SetSelectHdl( LINK( this, SdNavigatorWin, ShapeFilterCallback ) );
+
+        pMenu->Execute( this, maToolbox->GetItemRect( nId ), PopupMenuFlags::ExecuteDown );
+        pBox->EndSelection();
     }
 }
 
-IMPL_LINK_NOARG_TYPED(SdNavigatorWin, ClickObjectHdl, SvTreeListBox*, bool)
+IMPL_LINK_NOARG(SdNavigatorWin, ClickObjectHdl, SvTreeListBox*, bool)
 {
-    if( !mbDocImported || maLbDocs->GetSelectEntryPos() != 0 )
+    if( !mbDocImported || maLbDocs->GetSelectedEntryPos() != 0 )
     {
         NavDocInfo* pInfo = GetDocInfo();
 
         // if it is the active window, we jump to the page
         if( pInfo && pInfo->IsActive() )
         {
-            OUString aStr( maTlbObjects->GetSelectEntry() );
+            OUString aStr( maTlbObjects->GetSelectedEntry() );
 
             if( !aStr.isEmpty() )
             {
@@ -378,7 +341,7 @@ IMPL_LINK_NOARG_TYPED(SdNavigatorWin, ClickObjectHdl, SvTreeListBox*, bool)
                     SID_NAVIGATOR_OBJECT,
                     SfxCallMode::SLOT | SfxCallMode::RECORD, { &aItem });
                 //set sign variable
-                maTlbObjects->MarkCurEntry(aStr);
+                maTlbObjects->Invalidate();
 
                 // moved here from SetGetFocusHdl. Reset the
                 // focus only if something has been selected in the
@@ -391,16 +354,37 @@ IMPL_LINK_NOARG_TYPED(SdNavigatorWin, ClickObjectHdl, SvTreeListBox*, bool)
                     if ( pShellWnd )
                         pShellWnd->GrabFocus();
                 }
+
+                // We navigated to an object, but the current shell may be
+                // still the slide sorter. Explicitly try to grab the draw
+                // shell focus, so follow-up operations work with the object
+                // and not with the whole slide.
+                sd::DrawDocShell* pDocShell = pInfo->mpDocShell;
+                if (pDocShell)
+                {
+                    sd::ViewShell* pViewShell = pDocShell->GetViewShell();
+                    if (pViewShell)
+                    {
+                        vcl::Window* pWindow = pViewShell->GetActiveWindow();
+                        if (pWindow)
+                            pWindow->GrabFocus();
+                    }
+                }
+
+                if (!maTlbObjects->IsNavigationGrabsFocus())
+                    // This is the case when keyboard navigation inside the
+                    // navigator should continue to work.
+                    maTlbObjects->GrabFocus();
             }
         }
     }
     return false;
 }
 
-IMPL_LINK_NOARG_TYPED(SdNavigatorWin, SelectDocumentHdl, ListBox&, void)
+IMPL_LINK_NOARG(SdNavigatorWin, SelectDocumentHdl, ListBox&, void)
 {
-    OUString aStrLb = maLbDocs->GetSelectEntry();
-    long   nPos = maLbDocs->GetSelectEntryPos();
+    OUString aStrLb = maLbDocs->GetSelectedEntry();
+    long   nPos = maLbDocs->GetSelectedEntryPos();
     bool   bFound = false;
     ::sd::DrawDocShell* pDocShell = nullptr;
     NavDocInfo* pInfo = GetDocInfo();
@@ -443,7 +427,7 @@ IMPL_LINK_NOARG_TYPED(SdNavigatorWin, SelectDocumentHdl, ListBox&, void)
  * Set DrageType and set image accordingly to it.
  * If the handler is called with NULL, the default (URL) is set.
  */
-IMPL_LINK_TYPED( SdNavigatorWin, MenuSelectHdl, Menu *, pMenu, bool )
+IMPL_LINK( SdNavigatorWin, MenuSelectHdl, Menu *, pMenu, bool )
 {
     sal_uInt16 nMenuId;
     if( pMenu )
@@ -453,7 +437,7 @@ IMPL_LINK_TYPED( SdNavigatorWin, MenuSelectHdl, Menu *, pMenu, bool )
 
     if( nMenuId != USHRT_MAX ) // Necessary ?
     {
-        NavigatorDragType eDT = (NavigatorDragType) nMenuId;
+        NavigatorDragType eDT = static_cast<NavigatorDragType>(nMenuId);
         if( meDragType != eDT )
         {
             meDragType = eDT;
@@ -465,16 +449,16 @@ IMPL_LINK_TYPED( SdNavigatorWin, MenuSelectHdl, Menu *, pMenu, bool )
                 if( maTlbObjects->GetSelectionCount() > 1 )
                     maTlbObjects->SelectAll( false );
 
-                maTlbObjects->SetSelectionMode( SINGLE_SELECTION );
+                maTlbObjects->SetSelectionMode( SelectionMode::Single );
             }
             else
-                maTlbObjects->SetSelectionMode( MULTIPLE_SELECTION );
+                maTlbObjects->SetSelectionMode( SelectionMode::Multiple );
         }
     }
     return false;
 }
 
-IMPL_LINK_TYPED( SdNavigatorWin, ShapeFilterCallback, Menu *, pMenu, bool )
+IMPL_LINK( SdNavigatorWin, ShapeFilterCallback, Menu *, pMenu, bool )
 {
     if (pMenu != nullptr)
     {
@@ -521,43 +505,6 @@ IMPL_LINK_TYPED( SdNavigatorWin, ShapeFilterCallback, Menu *, pMenu, bool )
     return false;
 }
 
-void SdNavigatorWin::Resize()
-{
-    Size aWinSize( GetOutputSizePixel() );
-    if( aWinSize.Height() >= maMinSize.Height() )
-        //aWinSize.Width() >= maMinSize.Width() )
-    {
-        Size aDiffSize;
-        aDiffSize.Width() = aWinSize.Width() - maSize.Width();
-        aDiffSize.Height() = aWinSize.Height() - maSize.Height();
-
-        // change size of Toolbox
-        Size aObjSize( maToolbox->GetOutputSizePixel() );
-        aObjSize.Width() += aDiffSize.Width();
-        maToolbox->SetOutputSizePixel( aObjSize );
-
-        // change size of TreeLB
-        aObjSize = maTlbObjects->GetSizePixel();
-        aObjSize.Width() += aDiffSize.Width();
-        aObjSize.Height() = maLbDocs->GetPosPixel().Y() + aDiffSize.Height() -
-            maTlbObjects->GetPosPixel().Y() - 4;
-        maTlbObjects->SetSizePixel( aObjSize );
-
-        Point aPt( 0, aDiffSize.Height() );
-
-        // move other controls (DocumentLB)
-        maLbDocs->Hide();
-        aObjSize = maLbDocs->GetOutputSizePixel();
-        aObjSize.Width() += aDiffSize.Width();
-        maLbDocs->SetPosPixel( maLbDocs->GetPosPixel() + aPt );
-        maLbDocs->SetOutputSizePixel( aObjSize );
-        maLbDocs->Show();
-
-        maSize = aWinSize;
-    }
-    Window::Resize();
-}
-
 bool SdNavigatorWin::InsertFile(const OUString& rFileName)
 {
     INetURLObject   aURL( rFileName );
@@ -570,7 +517,7 @@ bool SdNavigatorWin::InsertFile(const OUString& rFileName)
     }
 
     // get adjusted FileName
-    OUString aFileName( aURL.GetMainURL( INetURLObject::NO_DECODE ) );
+    OUString aFileName( aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
 
     if (aFileName.isEmpty())
     {
@@ -581,12 +528,12 @@ bool SdNavigatorWin::InsertFile(const OUString& rFileName)
     {
         // show dragged-in document
         std::shared_ptr<const SfxFilter> pFilter;
-        ErrCode nErr = 0;
+        ErrCode nErr = ERRCODE_NONE;
 
         if (aFileName != maDropFileName)
         {
             SfxMedium aMed(aFileName, (StreamMode::READ | StreamMode::SHARE_DENYNONE));
-            SfxFilterMatcher aMatch( OUString("simpress") );
+            SfxFilterMatcher aMatch( "simpress" );
             aMed.UseInteractionHandler( true );
             nErr = aMatch.GuessFilter(aMed, pFilter);
         }
@@ -601,7 +548,7 @@ bool SdNavigatorWin::InsertFile(const OUString& rFileName)
             if (xMedium->IsStorage())
             {
                 // Now depending on mode:
-                // maTlbObjects->SetSelectionMode(MULTIPLE_SELECTION);
+                // maTlbObjects->SetSelectionMode(SelectionMode::Multiple);
                 // handover of ownership of xMedium;
                 SdDrawDocument* pDropDoc = maTlbObjects->GetBookmarkDoc(xMedium.release());
 
@@ -646,7 +593,7 @@ void SdNavigatorWin::RefreshDocumentLB( const OUString* pDocName )
     }
     else
     {
-        nPos = maLbDocs->GetSelectEntryPos();
+        nPos = maLbDocs->GetSelectedEntryPos();
         if( nPos == LISTBOX_ENTRY_NOTFOUND )
             nPos = 0;
 
@@ -676,7 +623,7 @@ void SdNavigatorWin::RefreshDocumentLB( const OUString* pDocName )
                 SfxMedium *pMedium = pDocShell->GetMedium();
                 aStr = pMedium ? pMedium->GetName() : OUString();
                 if( !aStr.isEmpty() )
-                    aInfo.SetName();
+                    aInfo.SetName( true );
                 else
                     aInfo.SetName( false );
                 // at the moment, we use the name of the shell again (i.e.
@@ -687,7 +634,7 @@ void SdNavigatorWin::RefreshDocumentLB( const OUString* pDocName )
                 maLbDocs->InsertEntry( aStr );
 
                 if( pDocShell == pCurrentDocShell )
-                    aInfo.SetActive();
+                    aInfo.SetActive( true );
                 else
                     aInfo.SetActive( false );
 
@@ -699,26 +646,43 @@ void SdNavigatorWin::RefreshDocumentLB( const OUString* pDocName )
     maLbDocs->SelectEntryPos( nPos );
 }
 
-sal_uInt16 SdNavigatorWin::GetDragTypeSdResId( NavigatorDragType eDT, bool bImage )
+const char* SdNavigatorWin::GetDragTypeSdStrId(NavigatorDragType eDT)
 {
     switch( eDT )
     {
         case NAVIGATOR_DRAGTYPE_NONE:
-                return( bImage ? 0 : STR_NONE );
+                return STR_SD_NONE;
         case NAVIGATOR_DRAGTYPE_URL:
-                return( bImage ? TBI_HYPERLINK : STR_DRAGTYPE_URL );
+                return STR_DRAGTYPE_URL;
         case NAVIGATOR_DRAGTYPE_EMBEDDED:
-                return( bImage ? TBI_EMBEDDED : STR_DRAGTYPE_EMBEDDED );
+                return STR_DRAGTYPE_EMBEDDED;
         case NAVIGATOR_DRAGTYPE_LINK:
-                return( bImage ? TBI_LINK : STR_DRAGTYPE_LINK );
+                return STR_DRAGTYPE_LINK;
         default: OSL_FAIL( "No resource for DragType available!" );
     }
-    return 0;
+    return nullptr;
+}
+
+OUString SdNavigatorWin::GetDragTypeSdBmpId(NavigatorDragType eDT)
+{
+    switch( eDT )
+    {
+        case NAVIGATOR_DRAGTYPE_NONE:
+                return OUString();
+        case NAVIGATOR_DRAGTYPE_URL:
+                return OUString(BMP_HYPERLINK);
+        case NAVIGATOR_DRAGTYPE_EMBEDDED:
+                return OUString(BMP_EMBEDDED);
+        case NAVIGATOR_DRAGTYPE_LINK:
+                return OUString(BMP_LINK);
+        default: OSL_FAIL( "No resource for DragType available!" );
+    }
+    return OUString();
 }
 
 NavDocInfo* SdNavigatorWin::GetDocInfo()
 {
-    sal_uInt32 nPos = maLbDocs->GetSelectEntryPos();
+    sal_uInt32 nPos = maLbDocs->GetSelectedEntryPos();
 
     if( mbDocImported )
     {
@@ -735,7 +699,7 @@ NavDocInfo* SdNavigatorWin::GetDocInfo()
 /**
  * PreNotify
  */
-bool SdNavigatorWin::Notify(NotifyEvent& rNEvt)
+bool SdNavigatorWin::EventNotify(NotifyEvent& rNEvt)
 {
     const KeyEvent* pKEvt = rNEvt.GetKeyEvent();
     bool            bOK = false;
@@ -757,7 +721,7 @@ bool SdNavigatorWin::Notify(NotifyEvent& rNEvt)
                     sd::SlideShow::Stop( *pBase );
                     // Stopping the slide show may result in a synchronous
                     // deletion of the navigator window.  Calling the
-                    // parents Notify after this is unsafe.  Therefore we
+                    // parent's EventNotify after this is unsafe.  Therefore we
                     // return now.
                     return true;
                 }
@@ -766,7 +730,7 @@ bool SdNavigatorWin::Notify(NotifyEvent& rNEvt)
     }
 
     if( !bOK )
-        bOK = Window::Notify( rNEvt );
+        bOK = Window::EventNotify(rNEvt);
 
     return bOK;
 }
@@ -801,26 +765,10 @@ void SdNavigatorWin::KeyInput( const KeyEvent& rKEvt )
     }
 }
 
-void SdNavigatorWin::DataChanged( const DataChangedEvent& rDCEvt )
-{
-    if ( (rDCEvt.GetType() == DataChangedEventType::SETTINGS) && (rDCEvt.GetFlags() & AllSettingsFlags::STYLE) )
-            ApplyImageList();
-
-    Window::DataChanged( rDCEvt );
-}
-
 void SdNavigatorWin::SetDragImage()
 {
-    maToolbox->SetItemImage( TBI_DRAGTYPE, maToolbox->GetImageList().GetImage( GetDragTypeSdResId( meDragType, true ) ) );
-}
-
-void SdNavigatorWin::ApplyImageList()
-{
-
-    maToolbox->SetImageList( maImageList );
-    maToolbox->SetItemImage(TBI_SHAPE_FILTER, Image(BitmapEx(SdResId(BMP_GRAPHIC))));
-
-    SetDragImage();
+    const sal_uInt16 nDragTypeId = maToolbox->GetItemId("dragmode");
+    maToolbox->SetItemImage(nDragTypeId, Image(StockImage::Yes, GetDragTypeSdBmpId(meDragType)));
 }
 
 /**
@@ -843,45 +791,50 @@ void SdNavigatorControllerItem::StateChanged( sal_uInt16 nSId,
     if( eState >= SfxItemState::DEFAULT && nSId == SID_NAVIGATOR_STATE )
     {
         const SfxUInt32Item& rStateItem = dynamic_cast<const SfxUInt32Item&>(*pItem);
-        sal_uInt32 nState = rStateItem.GetValue();
+        NavState nState = static_cast<NavState>(rStateItem.GetValue());
 
         // only if doc in LB is the active
         NavDocInfo* pInfo = pNavigatorWin->GetDocInfo();
         if( pInfo && pInfo->IsActive() )
         {
+            sal_uInt16 nFirstId = pNavigatorWin->maToolbox->GetItemId("first");
+            sal_uInt16 nPrevId = pNavigatorWin->maToolbox->GetItemId("previous");
+            sal_uInt16 nLastId = pNavigatorWin->maToolbox->GetItemId("last");
+            sal_uInt16 nNextId = pNavigatorWin->maToolbox->GetItemId("next");
+
             // First
-            if( nState & NAVBTN_FIRST_ENABLED &&
-                !pNavigatorWin->maToolbox->IsItemEnabled( TBI_FIRST ) )
-                pNavigatorWin->maToolbox->EnableItem( TBI_FIRST );
-            if( nState & NAVBTN_FIRST_DISABLED &&
-                pNavigatorWin->maToolbox->IsItemEnabled( TBI_FIRST ) )
-                pNavigatorWin->maToolbox->EnableItem( TBI_FIRST, false );
+            if (nState & NavState::BtnFirstEnabled &&
+                !pNavigatorWin->maToolbox->IsItemEnabled(nFirstId))
+                pNavigatorWin->maToolbox->EnableItem(nFirstId);
+            if (nState & NavState::BtnFirstDisabled &&
+                pNavigatorWin->maToolbox->IsItemEnabled(nFirstId))
+                pNavigatorWin->maToolbox->EnableItem(nFirstId, false);
 
             // Prev
-            if( nState & NAVBTN_PREV_ENABLED &&
-                !pNavigatorWin->maToolbox->IsItemEnabled( TBI_PREVIOUS ) )
-                pNavigatorWin->maToolbox->EnableItem( TBI_PREVIOUS );
-            if( nState & NAVBTN_PREV_DISABLED &&
-                pNavigatorWin->maToolbox->IsItemEnabled( TBI_PREVIOUS ) )
-                pNavigatorWin->maToolbox->EnableItem( TBI_PREVIOUS, false );
+            if (nState & NavState::BtnPrevEnabled &&
+                !pNavigatorWin->maToolbox->IsItemEnabled(nPrevId))
+                pNavigatorWin->maToolbox->EnableItem(nPrevId);
+            if (nState & NavState::BtnPrevDisabled &&
+                pNavigatorWin->maToolbox->IsItemEnabled(nPrevId))
+                pNavigatorWin->maToolbox->EnableItem(nPrevId, false);
 
             // Last
-            if( nState & NAVBTN_LAST_ENABLED &&
-                !pNavigatorWin->maToolbox->IsItemEnabled( TBI_LAST ) )
-                pNavigatorWin->maToolbox->EnableItem( TBI_LAST );
-            if( nState & NAVBTN_LAST_DISABLED &&
-                pNavigatorWin->maToolbox->IsItemEnabled( TBI_LAST ) )
-                pNavigatorWin->maToolbox->EnableItem( TBI_LAST, false );
+            if (nState & NavState::BtnLastEnabled &&
+                !pNavigatorWin->maToolbox->IsItemEnabled(nLastId))
+                pNavigatorWin->maToolbox->EnableItem(nLastId);
+            if (nState & NavState::BtnLastDisabled &&
+                pNavigatorWin->maToolbox->IsItemEnabled(nLastId))
+                pNavigatorWin->maToolbox->EnableItem(nLastId, false);
 
             // Next
-            if( nState & NAVBTN_NEXT_ENABLED &&
-                !pNavigatorWin->maToolbox->IsItemEnabled( TBI_NEXT ) )
-                pNavigatorWin->maToolbox->EnableItem( TBI_NEXT );
-            if( nState & NAVBTN_NEXT_DISABLED &&
-                pNavigatorWin->maToolbox->IsItemEnabled( TBI_NEXT ) )
-                pNavigatorWin->maToolbox->EnableItem( TBI_NEXT, false );
+            if (nState & NavState::BtnNextEnabled &&
+                !pNavigatorWin->maToolbox->IsItemEnabled(nNextId))
+                pNavigatorWin->maToolbox->EnableItem(nNextId);
+            if (nState & NavState::BtnNextDisabled &&
+                pNavigatorWin->maToolbox->IsItemEnabled(nNextId))
+                pNavigatorWin->maToolbox->EnableItem(nNextId, false);
 
-            if( nState & NAVTLB_UPDATE )
+            if (nState & NavState::TableUpdate)
             {
                 // InitTlb; is initiated by Slot
                 if (maUpdateRequest)
@@ -913,11 +866,11 @@ void SdPageNameControllerItem::StateChanged( sal_uInt16 nSId,
         if( pInfo && pInfo->IsActive() )
         {
             const SfxStringItem& rStateItem = dynamic_cast<const SfxStringItem&>(*pItem);
-            OUString aPageName = rStateItem.GetValue();
+            const OUString& aPageName = rStateItem.GetValue();
 
             if( !pNavigatorWin->maTlbObjects->HasSelectedChildren( aPageName ) )
             {
-                if( pNavigatorWin->maTlbObjects->GetSelectionMode() == MULTIPLE_SELECTION )
+                if( pNavigatorWin->maTlbObjects->GetSelectionMode() == SelectionMode::Multiple )
                 {
                     // because otherwise it is always additional select
                     pNavigatorWin->maTlbObjects->SelectAll( false );

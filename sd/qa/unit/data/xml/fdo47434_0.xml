@@ -9,13 +9,16 @@
   <LineStart/>
   <LineEnd>
    <pointSequence>
-    <point positionX="225" positionY="0" polygonFlags="NORMAL"/>
-    <point positionX="450" positionY="409" polygonFlags="NORMAL"/>
-    <point positionX="382" positionY="450" polygonFlags="NORMAL"/>
-    <point positionX="225" positionY="162" polygonFlags="NORMAL"/>
-    <point positionX="67" positionY="450" polygonFlags="NORMAL"/>
-    <point positionX="0" positionY="409" polygonFlags="NORMAL"/>
-    <point positionX="225" positionY="0" polygonFlags="NORMAL"/>
+    <point positionX="175" positionY="0" polygonFlags="NORMAL"/>
+    <point positionX="350" positionY="322" polygonFlags="NORMAL"/>
+    <point positionX="322" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="193" positionY="102" polygonFlags="NORMAL"/>
+    <point positionX="193" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="156" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="156" positionY="102" polygonFlags="NORMAL"/>
+    <point positionX="27" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="0" positionY="322" polygonFlags="NORMAL"/>
+    <point positionX="175" positionY="0" polygonFlags="NORMAL"/>
    </pointSequence>
   </LineEnd>
   <Transformation>
@@ -24,7 +27,6 @@
    <Line3 column1="0.000000" column2="0.000000" column3="1.000000"/>
   </Transformation>
   <CustomShapeGeometry>
-   <PropertyValue name="IsPostRotateAngle" value="true" handle="0" propertyState="DIRECT_VALUE"/>
    <PropertyValue name="MirroredX" value="false" handle="0" propertyState="DIRECT_VALUE"/>
    <PropertyValue name="MirroredY" value="false" handle="0" propertyState="DIRECT_VALUE"/>
    <PropertyValue name="TextPreRotateAngle" value="0" handle="0" propertyState="DIRECT_VALUE"/>
@@ -69,13 +71,16 @@
   <LineStart/>
   <LineEnd>
    <pointSequence>
-    <point positionX="225" positionY="0" polygonFlags="NORMAL"/>
-    <point positionX="450" positionY="409" polygonFlags="NORMAL"/>
-    <point positionX="382" positionY="450" polygonFlags="NORMAL"/>
-    <point positionX="225" positionY="162" polygonFlags="NORMAL"/>
-    <point positionX="67" positionY="450" polygonFlags="NORMAL"/>
-    <point positionX="0" positionY="409" polygonFlags="NORMAL"/>
-    <point positionX="225" positionY="0" polygonFlags="NORMAL"/>
+    <point positionX="175" positionY="0" polygonFlags="NORMAL"/>
+    <point positionX="350" positionY="322" polygonFlags="NORMAL"/>
+    <point positionX="322" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="193" positionY="102" polygonFlags="NORMAL"/>
+    <point positionX="193" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="156" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="156" positionY="102" polygonFlags="NORMAL"/>
+    <point positionX="27" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="0" positionY="322" polygonFlags="NORMAL"/>
+    <point positionX="175" positionY="0" polygonFlags="NORMAL"/>
    </pointSequence>
   </LineEnd>
   <Transformation>
@@ -84,7 +89,6 @@
    <Line3 column1="0.000000" column2="0.000000" column3="1.000000"/>
   </Transformation>
   <CustomShapeGeometry>
-   <PropertyValue name="IsPostRotateAngle" value="true" handle="0" propertyState="DIRECT_VALUE"/>
    <PropertyValue name="MirroredX" value="true" handle="0" propertyState="DIRECT_VALUE"/>
    <PropertyValue name="MirroredY" value="false" handle="0" propertyState="DIRECT_VALUE"/>
    <PropertyValue name="TextPreRotateAngle" value="0" handle="0" propertyState="DIRECT_VALUE"/>
@@ -129,13 +133,16 @@
   <LineStart/>
   <LineEnd>
    <pointSequence>
-    <point positionX="225" positionY="0" polygonFlags="NORMAL"/>
-    <point positionX="450" positionY="409" polygonFlags="NORMAL"/>
-    <point positionX="382" positionY="450" polygonFlags="NORMAL"/>
-    <point positionX="225" positionY="162" polygonFlags="NORMAL"/>
-    <point positionX="67" positionY="450" polygonFlags="NORMAL"/>
-    <point positionX="0" positionY="409" polygonFlags="NORMAL"/>
-    <point positionX="225" positionY="0" polygonFlags="NORMAL"/>
+    <point positionX="175" positionY="0" polygonFlags="NORMAL"/>
+    <point positionX="350" positionY="322" polygonFlags="NORMAL"/>
+    <point positionX="322" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="193" positionY="102" polygonFlags="NORMAL"/>
+    <point positionX="193" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="156" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="156" positionY="102" polygonFlags="NORMAL"/>
+    <point positionX="27" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="0" positionY="322" polygonFlags="NORMAL"/>
+    <point positionX="175" positionY="0" polygonFlags="NORMAL"/>
    </pointSequence>
   </LineEnd>
   <Transformation>
@@ -144,7 +151,6 @@
    <Line3 column1="0.000000" column2="0.000000" column3="1.000000"/>
   </Transformation>
   <CustomShapeGeometry>
-   <PropertyValue name="IsPostRotateAngle" value="true" handle="0" propertyState="DIRECT_VALUE"/>
    <PropertyValue name="MirroredX" value="false" handle="0" propertyState="DIRECT_VALUE"/>
    <PropertyValue name="MirroredY" value="false" handle="0" propertyState="DIRECT_VALUE"/>
    <PropertyValue name="TextPreRotateAngle" value="0" handle="0" propertyState="DIRECT_VALUE"/>
@@ -189,13 +195,16 @@
   <LineStart/>
   <LineEnd>
    <pointSequence>
-    <point positionX="225" positionY="0" polygonFlags="NORMAL"/>
-    <point positionX="450" positionY="409" polygonFlags="NORMAL"/>
-    <point positionX="382" positionY="450" polygonFlags="NORMAL"/>
-    <point positionX="225" positionY="162" polygonFlags="NORMAL"/>
-    <point positionX="67" positionY="450" polygonFlags="NORMAL"/>
-    <point positionX="0" positionY="409" polygonFlags="NORMAL"/>
-    <point positionX="225" positionY="0" polygonFlags="NORMAL"/>
+    <point positionX="175" positionY="0" polygonFlags="NORMAL"/>
+    <point positionX="350" positionY="322" polygonFlags="NORMAL"/>
+    <point positionX="322" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="193" positionY="102" polygonFlags="NORMAL"/>
+    <point positionX="193" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="156" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="156" positionY="102" polygonFlags="NORMAL"/>
+    <point positionX="27" positionY="350" polygonFlags="NORMAL"/>
+    <point positionX="0" positionY="322" polygonFlags="NORMAL"/>
+    <point positionX="175" positionY="0" polygonFlags="NORMAL"/>
    </pointSequence>
   </LineEnd>
   <Transformation>
@@ -204,7 +213,6 @@
    <Line3 column1="0.000000" column2="0.000000" column3="1.000000"/>
   </Transformation>
   <CustomShapeGeometry>
-   <PropertyValue name="IsPostRotateAngle" value="true" handle="0" propertyState="DIRECT_VALUE"/>
    <PropertyValue name="MirroredX" value="true" handle="0" propertyState="DIRECT_VALUE"/>
    <PropertyValue name="MirroredY" value="false" handle="0" propertyState="DIRECT_VALUE"/>
    <PropertyValue name="TextPreRotateAngle" value="0" handle="0" propertyState="DIRECT_VALUE"/>

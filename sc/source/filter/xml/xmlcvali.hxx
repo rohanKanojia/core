@@ -19,32 +19,18 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_XML_XMLCVALI_HXX
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLCVALI_HXX
 
-#include <xmloff/xmlictxt.hxx>
-#include <xmloff/xmlimp.hxx>
-#include <com/sun/star/sheet/ValidationAlertStyle.hpp>
-#include <com/sun/star/sheet/ValidationType.hpp>
-#include <com/sun/star/sheet/ConditionOperator.hpp>
-#include <rtl/ustrbuf.hxx>
-#include "xmlimprt.hxx"
+#include "importcontext.hxx"
 
-class ScXMLContentValidationsContext : public SvXMLImportContext
+class ScXMLContentValidationsContext : public ScXMLImportContext
 {
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
-
 public:
 
-    ScXMLContentValidationsContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList);
+    ScXMLContentValidationsContext( ScXMLImport& rImport );
 
-    virtual ~ScXMLContentValidationsContext();
+    virtual ~ScXMLContentValidationsContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
-
-    virtual void EndElement() override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 };
 
 #endif

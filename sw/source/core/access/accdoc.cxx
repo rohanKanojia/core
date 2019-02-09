@@ -22,28 +22,25 @@
 
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
-#include <com/sun/star/beans/XPropertyChangeListener.hpp>
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <unotools/accessiblestatesethelper.hxx>
 #include <sfx2/viewsh.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
-#include <comphelper/servicehelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <viewsh.hxx>
 #include <doc.hxx>
 #include <accmap.hxx>
-#include <accdoc.hxx>
-#include "access.hrc"
+#include "accdoc.hxx"
+#include <strings.hrc>
 #include <pagefrm.hxx>
 
 #include <editeng/brushitem.hxx>
 #include <swatrset.hxx>
 #include <frmatr.hxx>
-#include "unostyle.hxx"
-#include "docsh.hxx"
+#include <unostyle.hxx>
+#include <docsh.hxx>
 #include <crsrsh.hxx>
-#include "fesh.hxx"
+#include <fesh.hxx>
 #include <fmtclds.hxx>
 #include <flyfrm.hxx>
 #include <colfrm.hxx>
@@ -70,11 +67,12 @@ using lang::IndexOutOfBoundsException;
 // SwAccessibleDocumentBase: base class for SwAccessibleDocument and
 // SwAccessiblePreview
 
-SwAccessibleDocumentBase::SwAccessibleDocumentBase ( SwAccessibleMap *_pMap ) :
-    SwAccessibleContext( _pMap, AccessibleRole::DOCUMENT_TEXT,
-                         _pMap->GetShell()->GetLayout() ),
-    mxParent( _pMap->GetShell()->GetWin()->GetAccessibleParentWindow()->GetAccessible() ),
-    mpChildWin( nullptr )
+SwAccessibleDocumentBase::SwAccessibleDocumentBase(
+        std::shared_ptr<SwAccessibleMap> const& pMap)
+    : SwAccessibleContext(pMap, AccessibleRole::DOCUMENT_TEXT,
+                          pMap->GetShell()->GetLayout())
+    , mxParent(pMap->GetShell()->GetWin()->GetAccessibleParentWindow()->GetAccessible())
+    , mpChildWin(nullptr)
 {
 }
 
@@ -134,11 +132,10 @@ void SwAccessibleDocumentBase::RemoveChild( vcl::Window *pWin )
 }
 
 sal_Int32 SAL_CALL SwAccessibleDocumentBase::getAccessibleChildCount()
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    // CHECK_FOR_DEFUNC is called by parent
+    // ThrowIfDisposed is called by parent
 
     sal_Int32 nChildren = SwAccessibleContext::getAccessibleChildCount();
     if( !IsDisposing() && mpChildWin )
@@ -149,14 +146,13 @@ sal_Int32 SAL_CALL SwAccessibleDocumentBase::getAccessibleChildCount()
 
 uno::Reference< XAccessible> SAL_CALL
     SwAccessibleDocumentBase::getAccessibleChild( sal_Int32 nIndex )
-        throw (uno::RuntimeException,
-                lang::IndexOutOfBoundsException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     if( mpChildWin  )
     {
-        CHECK_FOR_DEFUNC( XAccessibleContext )
+        ThrowIfDisposed();
+
         if ( nIndex == GetChildCount( *(GetMap()) ) )
         {
             return mpChildWin->GetAccessible();
@@ -167,13 +163,11 @@ uno::Reference< XAccessible> SAL_CALL
 }
 
 uno::Reference< XAccessible> SAL_CALL SwAccessibleDocumentBase::getAccessibleParent()
-        throw (uno::RuntimeException, std::exception)
 {
     return mxParent;
 }
 
 sal_Int32 SAL_CALL SwAccessibleDocumentBase::getAccessibleIndexInParent()
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -190,20 +184,18 @@ sal_Int32 SAL_CALL SwAccessibleDocumentBase::getAccessibleIndexInParent()
         }
         catch(const css::lang::IndexOutOfBoundsException &)
         {
-            return -1L;
+            return -1;
         }
     }
-    return -1L;
+    return -1;
 }
 
 OUString SAL_CALL SwAccessibleDocumentBase::getAccessibleDescription()
-    throw (uno::RuntimeException, std::exception)
 {
     return GetResource( STR_ACCESS_DOC_DESC );
 }
 
 OUString SAL_CALL SwAccessibleDocumentBase::getAccessibleName()
-        throw (css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -220,15 +212,10 @@ OUString SAL_CALL SwAccessibleDocumentBase::getAccessibleName()
                 sFileName = pDocSh->GetTitle( SFX_TITLE_APINAME );
             }
         }
-        OUString sReadOnly;
-        if(pDoc->getDocReadOnly())
-        {
-            sReadOnly = GetResource( STR_ACCESS_DOC_WORDPROCESSING_READONLY );
-        }
 
         if ( !sFileName.isEmpty() )
         {
-            sAccName = sFileName + sReadOnly + " - " + sAccName;
+            sAccName = sFileName + " - " + sAccName;
         }
     }
 
@@ -236,17 +223,18 @@ OUString SAL_CALL SwAccessibleDocumentBase::getAccessibleName()
 }
 
 awt::Rectangle SAL_CALL SwAccessibleDocumentBase::getBounds()
-        throw (uno::RuntimeException, std::exception)
 {
     try
     {
         SolarMutexGuard aGuard;
 
         vcl::Window *pWin = GetWindow();
+        if (!pWin)
+        {
+            throw uno::RuntimeException("no Window", static_cast<cppu::OWeakObject*>(this));
+        }
 
-        CHECK_FOR_WINDOW( XAccessibleComponent, pWin )
-
-        Rectangle aPixBounds( pWin->GetWindowExtentsRelative( pWin->GetAccessibleParentWindow() ) );
+        tools::Rectangle aPixBounds( pWin->GetWindowExtentsRelative( pWin->GetAccessibleParentWindow() ) );
         awt::Rectangle aBox( aPixBounds.Left(), aPixBounds.Top(),
                              aPixBounds.GetWidth(), aPixBounds.GetHeight() );
 
@@ -259,13 +247,14 @@ awt::Rectangle SAL_CALL SwAccessibleDocumentBase::getBounds()
 }
 
 awt::Point SAL_CALL SwAccessibleDocumentBase::getLocation()
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     vcl::Window *pWin = GetWindow();
-
-    CHECK_FOR_WINDOW( XAccessibleComponent, pWin )
+    if (!pWin)
+    {
+        throw uno::RuntimeException("no Window", static_cast<cppu::OWeakObject*>(this));
+    }
 
     Point aPixPos( pWin->GetWindowExtentsRelative( pWin->GetAccessibleParentWindow() ).TopLeft() );
     awt::Point aLoc( aPixPos.getX(), aPixPos.getY() );
@@ -274,13 +263,14 @@ awt::Point SAL_CALL SwAccessibleDocumentBase::getLocation()
 }
 
 css::awt::Point SAL_CALL SwAccessibleDocumentBase::getLocationOnScreen()
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     vcl::Window *pWin = GetWindow();
-
-    CHECK_FOR_WINDOW( XAccessibleComponent, pWin )
+    if (!pWin)
+    {
+        throw uno::RuntimeException("no Window", static_cast<cppu::OWeakObject*>(this));
+    }
 
     Point aPixPos( pWin->GetWindowExtentsRelative( nullptr ).TopLeft() );
     awt::Point aLoc( aPixPos.getX(), aPixPos.getY() );
@@ -289,13 +279,14 @@ css::awt::Point SAL_CALL SwAccessibleDocumentBase::getLocationOnScreen()
 }
 
 css::awt::Size SAL_CALL SwAccessibleDocumentBase::getSize()
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     vcl::Window *pWin = GetWindow();
-
-    CHECK_FOR_WINDOW( XAccessibleComponent, pWin )
+    if (!pWin)
+    {
+        throw uno::RuntimeException("no Window", static_cast<cppu::OWeakObject*>(this));
+    }
 
     Size aPixSize( pWin->GetWindowExtentsRelative( nullptr ).GetSize() );
     awt::Size aSize( aPixSize.Width(), aPixSize.Height() );
@@ -305,15 +296,16 @@ css::awt::Size SAL_CALL SwAccessibleDocumentBase::getSize()
 
 sal_Bool SAL_CALL SwAccessibleDocumentBase::containsPoint(
             const awt::Point& aPoint )
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     vcl::Window *pWin = GetWindow();
+    if (!pWin)
+    {
+        throw uno::RuntimeException("no Window", static_cast<cppu::OWeakObject*>(this));
+    }
 
-    CHECK_FOR_WINDOW( XAccessibleComponent, pWin )
-
-    Rectangle aPixBounds( pWin->GetWindowExtentsRelative( nullptr ) );
+    tools::Rectangle aPixBounds( pWin->GetWindowExtentsRelative( nullptr ) );
     aPixBounds.Move(-aPixBounds.Left(), -aPixBounds.Top());
 
     Point aPixPoint( aPoint.X, aPoint.Y );
@@ -322,16 +314,18 @@ sal_Bool SAL_CALL SwAccessibleDocumentBase::containsPoint(
 
 uno::Reference< XAccessible > SAL_CALL SwAccessibleDocumentBase::getAccessibleAtPoint(
                 const awt::Point& aPoint )
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     if( mpChildWin  )
     {
-        CHECK_FOR_DEFUNC( XAccessibleComponent )
+        ThrowIfDisposed();
 
         vcl::Window *pWin = GetWindow();
-        CHECK_FOR_WINDOW( XAccessibleComponent, pWin )
+        if (!pWin)
+        {
+            throw uno::RuntimeException("no Window", static_cast<cppu::OWeakObject*>(this));
+        }
 
         Point aPixPoint( aPoint.X, aPoint.Y ); // px rel to window
         if( mpChildWin->GetWindowExtentsRelative( pWin ).IsInside( aPixPoint ) )
@@ -341,7 +335,7 @@ uno::Reference< XAccessible > SAL_CALL SwAccessibleDocumentBase::getAccessibleAt
     return SwAccessibleContext::getAccessibleAtPoint( aPoint );
 }
 
-// SwAccessibeDocument
+// SwAccessibleDocument
 
 void SwAccessibleDocument::GetStates(
         ::utl::AccessibleStateSetHelper& rStateSet )
@@ -353,11 +347,12 @@ void SwAccessibleDocument::GetStates(
     rStateSet.AddState( AccessibleStateType::MANAGES_DESCENDANTS );
 }
 
-SwAccessibleDocument::SwAccessibleDocument ( SwAccessibleMap* pInitMap ) :
-    SwAccessibleDocumentBase( pInitMap ),
-    maSelectionHelper( *this )
+SwAccessibleDocument::SwAccessibleDocument(
+        std::shared_ptr<SwAccessibleMap> const& pInitMap)
+    : SwAccessibleDocumentBase(pInitMap)
+    , maSelectionHelper(*this)
 {
-    SetName( GetResource( STR_ACCESS_DOC_NAME ) );
+    SetName(pInitMap->GetDocName());
     vcl::Window *pWin = pInitMap->GetShell()->GetWin();
     if( pWin )
     {
@@ -380,22 +375,22 @@ SwAccessibleDocument::~SwAccessibleDocument()
         pWin->RemoveChildEventListener( LINK( this, SwAccessibleDocument, WindowChildEventListener ));
 }
 
-void SwAccessibleDocument::Dispose( bool bRecursive )
+void SwAccessibleDocument::Dispose(bool bRecursive, bool bCanSkipInvisible)
 {
     OSL_ENSURE( GetFrame() && GetMap(), "already disposed" );
 
     vcl::Window *pWin = GetMap() ? GetMap()->GetShell()->GetWin() : nullptr;
     if( pWin )
         pWin->RemoveChildEventListener( LINK( this, SwAccessibleDocument, WindowChildEventListener ));
-    SwAccessibleContext::Dispose( bRecursive );
+    SwAccessibleContext::Dispose(bRecursive, bCanSkipInvisible);
 }
 
-IMPL_LINK_TYPED( SwAccessibleDocument, WindowChildEventListener, VclWindowEvent&, rEvent, void )
+IMPL_LINK( SwAccessibleDocument, WindowChildEventListener, VclWindowEvent&, rEvent, void )
 {
     OSL_ENSURE( rEvent.GetWindow(), "Window???" );
     switch ( rEvent.GetId() )
     {
-    case VCLEVENT_WINDOW_SHOW:  // send create on show for direct accessible children
+    case VclEventId::WindowShow:  // send create on show for direct accessible children
         {
             vcl::Window* pChildWin = static_cast< vcl::Window* >( rEvent.GetData() );
             if( pChildWin && AccessibleRole::EMBEDDED_OBJECT == pChildWin->GetAccessibleRole() )
@@ -404,7 +399,7 @@ IMPL_LINK_TYPED( SwAccessibleDocument, WindowChildEventListener, VclWindowEvent&
             }
         }
         break;
-    case VCLEVENT_WINDOW_HIDE:  // send destroy on hide for direct accessible children
+    case VclEventId::WindowHide:  // send destroy on hide for direct accessible children
         {
             vcl::Window* pChildWin = static_cast< vcl::Window* >( rEvent.GetData() );
             if( pChildWin && AccessibleRole::EMBEDDED_OBJECT == pChildWin->GetAccessibleRole() )
@@ -413,7 +408,7 @@ IMPL_LINK_TYPED( SwAccessibleDocument, WindowChildEventListener, VclWindowEvent&
             }
         }
         break;
-    case VCLEVENT_OBJECT_DYING:  // send destroy on hide for direct accessible children
+    case VclEventId::ObjectDying:  // send destroy on hide for direct accessible children
         {
             vcl::Window* pChildWin = rEvent.GetWindow();
             if( pChildWin && AccessibleRole::EMBEDDED_OBJECT == pChildWin->GetAccessibleRole() )
@@ -422,23 +417,21 @@ IMPL_LINK_TYPED( SwAccessibleDocument, WindowChildEventListener, VclWindowEvent&
             }
         }
         break;
+    default: break;
     }
 }
 
 OUString SAL_CALL SwAccessibleDocument::getImplementationName()
-        throw( uno::RuntimeException, std::exception )
 {
     return OUString(sImplementationName);
 }
 
 sal_Bool SAL_CALL SwAccessibleDocument::supportsService(const OUString& sTestServiceName)
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, sTestServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL SwAccessibleDocument::getSupportedServiceNames()
-        throw( uno::RuntimeException, std::exception )
 {
     uno::Sequence< OUString > aRet(2);
     OUString* pArray = aRet.getArray();
@@ -451,7 +444,6 @@ uno::Sequence< OUString > SAL_CALL SwAccessibleDocument::getSupportedServiceName
 
 uno::Any SwAccessibleDocument::queryInterface(
     const uno::Type& rType )
-    throw ( uno::RuntimeException, std::exception )
 {
     uno::Any aRet;
     if ( rType == cppu::UnoType<XAccessibleSelection>::get() )
@@ -476,7 +468,6 @@ uno::Any SwAccessibleDocument::queryInterface(
 
 // XTypeProvider
 uno::Sequence< uno::Type > SAL_CALL SwAccessibleDocument::getTypes()
-    throw(uno::RuntimeException, std::exception)
 {
     uno::Sequence< uno::Type > aTypes( SwAccessibleDocumentBase::getTypes() );
 
@@ -490,7 +481,6 @@ uno::Sequence< uno::Type > SAL_CALL SwAccessibleDocument::getTypes()
 }
 
 uno::Sequence< sal_Int8 > SAL_CALL SwAccessibleDocument::getImplementationId()
-        throw(uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -499,41 +489,32 @@ uno::Sequence< sal_Int8 > SAL_CALL SwAccessibleDocument::getImplementationId()
 
 void SwAccessibleDocument::selectAccessibleChild(
     sal_Int32 nChildIndex )
-    throw ( lang::IndexOutOfBoundsException,
-            uno::RuntimeException, std::exception )
 {
     maSelectionHelper.selectAccessibleChild(nChildIndex);
 }
 
 sal_Bool SwAccessibleDocument::isAccessibleChildSelected(
     sal_Int32 nChildIndex )
-    throw ( lang::IndexOutOfBoundsException,
-            uno::RuntimeException, std::exception )
 {
     return maSelectionHelper.isAccessibleChildSelected(nChildIndex);
 }
 
 void SwAccessibleDocument::clearAccessibleSelection(  )
-    throw ( uno::RuntimeException, std::exception )
 {
 }
 
 void SwAccessibleDocument::selectAllAccessibleChildren(  )
-    throw ( uno::RuntimeException, std::exception )
 {
     maSelectionHelper.selectAllAccessibleChildren();
 }
 
 sal_Int32 SwAccessibleDocument::getSelectedAccessibleChildCount(  )
-    throw ( uno::RuntimeException, std::exception )
 {
     return maSelectionHelper.getSelectedAccessibleChildCount();
 }
 
 uno::Reference<XAccessible> SwAccessibleDocument::getSelectedAccessibleChild(
     sal_Int32 nSelectedChildIndex )
-    throw ( lang::IndexOutOfBoundsException,
-            uno::RuntimeException, std::exception)
 {
     return maSelectionHelper.getSelectedAccessibleChild(nSelectedChildIndex);
 }
@@ -541,16 +522,11 @@ uno::Reference<XAccessible> SwAccessibleDocument::getSelectedAccessibleChild(
 // index has to be treated as global child index.
 void SwAccessibleDocument::deselectAccessibleChild(
     sal_Int32 nChildIndex )
-    throw ( lang::IndexOutOfBoundsException,
-            uno::RuntimeException, std::exception )
 {
     maSelectionHelper.deselectAccessibleChild( nChildIndex );
 }
 
 uno::Any SAL_CALL SwAccessibleDocument::getExtendedAttributes()
-    throw (css::lang::IndexOutOfBoundsException,
-           css::uno::RuntimeException,
-           std::exception)
 {
     SolarMutexGuard g;
 
@@ -592,13 +568,13 @@ uno::Any SAL_CALL SwAccessibleDocument::getExtendedAttributes()
         sal_uLong nLineNum = 0;
         SwTextFrame* pTextFrame = nullptr;
         SwTextFrame* pCurrTextFrame = nullptr;
-        pTextFrame = static_cast< SwTextFrame* >(static_cast< SwPageFrame* > (pCurrPage)->ContainsContent());
+        pTextFrame = static_cast< SwTextFrame* >(pCurrPage->ContainsContent());
         if (pCurrFrame->IsInFly())//such as, graphic,chart
         {
             SwFlyFrame *pFlyFrame = pCurrFrame->FindFlyFrame();
             const SwFormatAnchor& rAnchor = pFlyFrame->GetFormat()->GetAnchor();
             RndStdIds eAnchorId = rAnchor.GetAnchorId();
-            if(eAnchorId == FLY_AS_CHAR)
+            if(eAnchorId == RndStdIds::FLY_AS_CHAR)
             {
                 const SwFrame *pSwFrame = pFlyFrame->GetAnchorFrame();
                 if(pSwFrame->IsTextFrame())
@@ -606,7 +582,10 @@ uno::Any SAL_CALL SwAccessibleDocument::getExtendedAttributes()
             }
         }
         else
-            pCurrTextFrame = const_cast<SwTextFrame*>(static_cast<const SwTextFrame* >(pCurrFrame));
+        {
+            assert(dynamic_cast<SwTextFrame*>(pCurrFrame));
+            pCurrTextFrame = static_cast<SwTextFrame* >(pCurrFrame);
+        }
         //check whether the text frame where the Graph/OLE/Frame anchored is in the Header/Footer
         SwFrame* pFrame = pCurrTextFrame;
         while ( pFrame && !pFrame->IsHeaderFrame() && !pFrame->IsFooterFrame() )
@@ -622,7 +601,7 @@ uno::Any SAL_CALL SwAccessibleDocument::getExtendedAttributes()
                 SdrObject *pObj = rMrkList.GetMark(i)->GetMarkedSdrObj();
                 SwFrameFormat* pFormat = static_cast<SwDrawContact*>(pObj->GetUserCall())->GetFormat();
                 const SwFormatAnchor& rAnchor = pFormat->GetAnchor();
-                if( FLY_AS_CHAR != rAnchor.GetAnchorId() )
+                if( RndStdIds::FLY_AS_CHAR != rAnchor.GetAnchorId() )
                     pCurrTextFrame = nullptr;
             }
         }
@@ -649,29 +628,25 @@ uno::Any SAL_CALL SwAccessibleDocument::getExtendedAttributes()
                 SwPaM* pCaret = pCursorShell->GetCursor();
                 if (!pCurrTextFrame->IsEmpty() && pCaret)
                 {
-                    if (pCurrTextFrame->IsTextFrame())
+                    assert(pCurrTextFrame->IsTextFrame());
+                    const SwPosition* pPoint = nullptr;
+                    if (pCurrTextFrame->IsInFly())
                     {
-                        const SwPosition* pPoint = nullptr;
-                        if(pCurrTextFrame->IsInFly())
-                        {
-                            SwFlyFrame *pFlyFrame = pCurrTextFrame->FindFlyFrame();
-                            const SwFormatAnchor& rAnchor = pFlyFrame->GetFormat()->GetAnchor();
-                            pPoint= rAnchor.GetContentAnchor();
-                        }
-                        else
-                            pPoint = pCaret->GetPoint();
-                        const sal_Int32 nActPos = pPoint->nContent.GetIndex();
-                        nLineNum += pCurrTextFrame->GetLineCount( nActPos );
+                        SwFlyFrame *pFlyFrame = pCurrTextFrame->FindFlyFrame();
+                        const SwFormatAnchor& rAnchor = pFlyFrame->GetFormat()->GetAnchor();
+                        pPoint = rAnchor.GetContentAnchor();
+                        SwContentNode *const pNode(pPoint->nNode.GetNode().GetContentNode());
+                        pCurrTextFrame = pNode
+                            ? static_cast<SwTextFrame*>(pNode->getLayoutFrame(
+                                        pCurrTextFrame->getRootFrame(), pPoint))
+                            : nullptr;
                     }
-                    else//graphic, form, shape, etc.
+                    else
+                        pPoint = pCaret->GetPoint();
+                    if (pCurrTextFrame)
                     {
-                        SwPosition* pPoint =  pCaret->GetPoint();
-                        Point aPt = pCursorShell->_GetCursor()->GetPtPos();
-                        if( pCursorShell->GetLayout()->GetCursorOfst( pPoint, aPt/*,* &eTmpState*/ ) )
-                        {
-                            const sal_Int32 nActPos = pPoint->nContent.GetIndex();
-                            nLineNum += pCurrTextFrame->GetLineCount( nActPos );
-                        }
+                        TextFrameIndex const nActPos(pCurrTextFrame->MapModelToViewPos(*pPoint));
+                        nLineNum += pCurrTextFrame->GetLineCount( nActPos );
                     }
                 }
                 else
@@ -781,16 +756,13 @@ uno::Any SAL_CALL SwAccessibleDocument::getExtendedAttributes()
 }
 
 sal_Int32 SAL_CALL SwAccessibleDocument::getBackground()
-        throw (css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    return SW_MOD()->GetColorConfig().GetColorValue( ::svtools::DOCCOLOR ).nColor;
+    return sal_Int32(SW_MOD()->GetColorConfig().GetColorValue( ::svtools::DOCCOLOR ).nColor);
 }
 
 css::uno::Sequence< css::uno::Any >
         SAL_CALL SwAccessibleDocument::getAccFlowTo(const css::uno::Any& rAny, sal_Int32 nType)
-        throw (css::uno::RuntimeException,
-               std::exception)
 {
     SolarMutexGuard g;
 
@@ -829,7 +801,7 @@ css::uno::Sequence< css::uno::Any >
                                     if ( xSelContext->getAccessibleRole() == AccessibleRole::PARAGRAPH )
                                     {
                                         uno::Sequence<uno::Any> aRet( 1 );
-                                        aRet[0] = uno::makeAny( xSel );
+                                        aRet[0] <<= xSel;
                                         return aRet;
                                     }
                                 }
@@ -851,7 +823,7 @@ css::uno::Sequence< css::uno::Any >
             if ( pAccImpl && pAccImpl->getAccessibleRole() == AccessibleRole::PARAGRAPH )
             {
                 uno::Sequence< uno::Any > aRet(1);
-                aRet[0] = uno::makeAny( xAcc );
+                aRet[0] <<= xAcc;
                 return aRet;
             }
         }
@@ -861,45 +833,41 @@ css::uno::Sequence< css::uno::Any >
         SwCursorShell* pCursorShell = GetCursorShell();
         if ( pCursorShell )
         {
-            SwPaM *_pStartCursor = pCursorShell->GetCursor(), *__pStartCursor = _pStartCursor;
-            SwContentNode* pPrevNode = nullptr;
-            std::vector<SwFrame*> vFrameList;
+            SwPaM *_pStartCursor = pCursorShell->GetCursor(), *_pStartCursor2 = _pStartCursor;
+            std::set<SwFrame*> vFrameList;
             do
             {
                 if ( _pStartCursor && _pStartCursor->HasMark() )
                 {
                     SwContentNode* pContentNode = _pStartCursor->GetContentNode();
-                    if ( pContentNode == pPrevNode )
-                    {
-                        continue;
-                    }
-                    SwFrame* pFrame = pContentNode ? pContentNode->getLayoutFrame( pCursorShell->GetLayout() ) : nullptr;
+                    SwFrame *const pFrame = pContentNode
+                        ? pContentNode->getLayoutFrame(pCursorShell->GetLayout(), _pStartCursor->GetPoint())
+                        : nullptr;
                     if ( pFrame )
                     {
-                        vFrameList.push_back( pFrame );
+                        vFrameList.insert( pFrame );
                     }
-
-                    pPrevNode = pContentNode;
                 }
             }
 
-            while( _pStartCursor && ( (_pStartCursor = _pStartCursor->GetNext()) != __pStartCursor) );
+            while( _pStartCursor && ( (_pStartCursor = _pStartCursor->GetNext()) != _pStartCursor2) );
 
-            if ( vFrameList.size() )
+            if ( !vFrameList.empty() )
             {
                 uno::Sequence< uno::Any > aRet(vFrameList.size());
-                std::vector<SwFrame*>::iterator aIter = vFrameList.begin();
-                for ( sal_Int32 nIndex = 0; aIter != vFrameList.end(); ++aIter, nIndex++ )
+                sal_Int32 nIndex = 0;
+                for ( const auto& rpFrame : vFrameList )
                 {
-                    uno::Reference< XAccessible > xAcc = pAccMap->GetContext(*aIter, false);
+                    uno::Reference< XAccessible > xAcc = pAccMap->GetContext(rpFrame, false);
                     if ( xAcc.is() )
                     {
                         SwAccessibleContext *pAccImpl = static_cast< SwAccessibleContext *>( xAcc.get() );
                         if ( pAccImpl && pAccImpl->getAccessibleRole() == AccessibleRole::PARAGRAPH )
                         {
-                            aRet[nIndex] = uno::makeAny( xAcc );
+                            aRet[nIndex] <<= xAcc;
                         }
                     }
+                    nIndex++;
                 }
 
                 return aRet;

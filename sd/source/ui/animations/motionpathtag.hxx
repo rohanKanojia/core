@@ -21,12 +21,11 @@
 #define INCLUDED_SD_SOURCE_UI_ANIMATIONS_MOTIONPATHTAG_HXX
 
 #include <com/sun/star/util/XChangesListener.hpp>
-#include <com/sun/star/drawing/XShape.hpp>
 #include <basegfx/polygon/b2dpolypolygon.hxx>
-#include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include "smarttag.hxx"
-#include "CustomAnimationEffect.hxx"
+#include <smarttag.hxx>
+#include <CustomAnimationEffect.hxx>
 
+namespace com { namespace sun { namespace star { namespace drawing { class XShape; } } } }
 class SdrPathObj;
 
 namespace sd {
@@ -35,11 +34,11 @@ class View;
 class CustomAnimationPane;
 
 /// Base class for all functions.
-class MotionPathTag : public SmartTag, public IPolyPolygonEditorController, public SfxListener, public css::util::XChangesListener
+class MotionPathTag final : public SmartTag, public IPolyPolygonEditorController, public SfxListener, public css::util::XChangesListener
 {
 public:
     MotionPathTag( CustomAnimationPane& rPane, ::sd::View& rView, const CustomAnimationEffectPtr& pEffect );
-    virtual ~MotionPathTag();
+    virtual ~MotionPathTag() override;
 
     SdrPathObj* getPathObj() const { return mpPathObj; }
 
@@ -50,11 +49,11 @@ public:
     virtual bool KeyInput( const KeyEvent& rKEvt ) override;
 
     // callbacks from sdr view
-    virtual sal_uLong GetMarkablePointCount() const override;
-    virtual sal_uLong GetMarkedPointCount() const override;
-    virtual bool MarkPoint(SdrHdl& rHdl, bool bUnmark=false) override;
+    virtual sal_Int32 GetMarkablePointCount() const override;
+    virtual sal_Int32 GetMarkedPointCount() const override;
+    virtual bool MarkPoint(SdrHdl& rHdl, bool bUnmark) override;
     virtual void CheckPossibilities() override;
-    virtual bool MarkPoints(const Rectangle* pRect, bool bUnmark) override;
+    virtual bool MarkPoints(const ::tools::Rectangle* pRect, bool bUnmark) override;
 
     const CustomAnimationEffectPtr& getEffect() const { return mpEffect; }
 
@@ -85,13 +84,13 @@ public:
     bool OnMove( const KeyEvent& rKEvt );
 
     // XChangesListener
-    virtual void SAL_CALL changesOccurred( const css::util::ChangesEvent& Event ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL changesOccurred( const css::util::ChangesEvent& Event ) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
+    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) override;
     virtual void SAL_CALL acquire(  ) throw () override;
     virtual void SAL_CALL release(  ) throw () override;
 
-protected:
+private:
     virtual void addCustomHandles( SdrHdlList& rHandlerList ) override;
     virtual bool getContext( SdrViewContext& rContext ) override;
     virtual void disposing() override;
@@ -100,14 +99,13 @@ protected:
     void updatePathAttributes();
     void selectionChanged();
 
-private:
     CustomAnimationPane& mrPane;
     CustomAnimationEffectPtr mpEffect;
     ::basegfx::B2DPolyPolygon mxPolyPoly;
     css::uno::Reference< css::drawing::XShape > mxOrigin;
     SdrPathObj* mpPathObj;
     css::awt::Point maOriginPos;
-    SdrMark* mpMark;
+    std::unique_ptr<SdrMark> mpMark;
     OUString msLastPath;
     bool mbInUpdatePath;
 };

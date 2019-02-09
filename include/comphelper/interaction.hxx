@@ -20,7 +20,6 @@
 #ifndef INCLUDED_COMPHELPER_INTERACTION_HXX
 #define INCLUDED_COMPHELPER_INTERACTION_HXX
 
-#include <comphelper/uno3.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <com/sun/star/task/XInteractionApprove.hpp>
 #include <com/sun/star/task/XInteractionDisapprove.hpp>
@@ -52,14 +51,14 @@ namespace comphelper
         bool    wasSelected() const { return m_bSelected; }
 
         // XInteractionContinuation
-        virtual void SAL_CALL select() throw(css::uno::RuntimeException) override;
+        virtual void SAL_CALL select() override;
     private:
         bool    m_bSelected : 1;    /// indicates if the select event occurred
     };
 
 
     template <class INTERACTION>
-    void SAL_CALL OInteraction< INTERACTION >::select(  ) throw(css::uno::RuntimeException)
+    void SAL_CALL OInteraction< INTERACTION >::select(  )
     {
         m_bSelected = true;
     }
@@ -70,7 +69,7 @@ namespace comphelper
     typedef OInteraction< css::task::XInteractionApprove > OInteractionApprove;
 
 
-    //= OInteractionDispprove
+    //= OInteractionDisapprove
 
     typedef OInteraction< css::task::XInteractionDisapprove >  OInteractionDisapprove;
 
@@ -90,18 +89,14 @@ namespace comphelper
     class COMPHELPER_DLLPUBLIC OInteractionPassword : public OInteraction< css::task::XInteractionPassword >
     {
     public:
-        OInteractionPassword()
-        {
-        }
-
         OInteractionPassword( const OUString& _rInitialPassword )
             :m_sPassword( _rInitialPassword )
         {
         }
 
         // XInteractionPassword
-        virtual void SAL_CALL setPassword( const OUString& Password ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual OUString SAL_CALL getPassword(  ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL setPassword( const OUString& Password ) override;
+        virtual OUString SAL_CALL getPassword(  ) override;
 
     private:
         OUString m_sPassword;
@@ -117,7 +112,7 @@ namespace comphelper
     */
     class COMPHELPER_DLLPUBLIC OInteractionRequest : public OInteractionRequest_Base
     {
-        css::uno::Any
+        css::uno::Any const
                     m_aRequest;         /// the request we represent
         std::vector< css::uno::Reference< css::task::XInteractionContinuation > >
                     m_aContinuations;   /// all registered continuations
@@ -131,8 +126,8 @@ namespace comphelper
         void addContinuation(const css::uno::Reference< css::task::XInteractionContinuation >& _rxContinuation);
 
     // XInteractionRequest
-        virtual css::uno::Any SAL_CALL getRequest(  ) throw(css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< css::uno::Reference< css::task::XInteractionContinuation > > SAL_CALL getContinuations(  ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL getRequest(  ) override;
+        virtual css::uno::Sequence< css::uno::Reference< css::task::XInteractionContinuation > > SAL_CALL getContinuations(  ) override;
     };
 
 }   // namespace comphelper

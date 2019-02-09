@@ -24,11 +24,11 @@
 #include <svl/itemprop.hxx>
 #include <vcl/svapp.hxx>
 
-#include "docsh.hxx"
-#include "unonames.hxx"
-#include "miscuno.hxx"
-#include "convuno.hxx"
-#include "addruno.hxx"
+#include <docsh.hxx>
+#include <unonames.hxx>
+#include <miscuno.hxx>
+#include <convuno.hxx>
+#include <addruno.hxx>
 
 using namespace com::sun::star;
 
@@ -50,8 +50,7 @@ ScAddressConversionObj::~ScAddressConversionObj()
 
 void ScAddressConversionObj::Notify( SfxBroadcaster&, const SfxHint& rHint )
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>( &rHint );
-    if ( pSimpleHint && pSimpleHint->GetId() == SFX_HINT_DYING )
+    if ( rHint.GetId() == SfxHintId::Dying )
     {
         pDocShell = nullptr;       // invalid
     }
@@ -94,7 +93,6 @@ bool ScAddressConversionObj::ParseUIString( const OUString& rUIString, ::formula
 // XPropertySet
 
 uno::Reference<beans::XPropertySetInfo> SAL_CALL ScAddressConversionObj::getPropertySetInfo()
-                                                        throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -131,16 +129,12 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScAddressConversionObj::getProp
 }
 
 void SAL_CALL ScAddressConversionObj::setPropertyValue( const OUString& aPropertyName, const uno::Any& aValue )
-                throw(beans::UnknownPropertyException, beans::PropertyVetoException,
-                        lang::IllegalArgumentException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     if ( !pDocShell )
         throw uno::RuntimeException();
 
     bool bSuccess = false;
-    OUString aNameStr(aPropertyName);
-    if ( aNameStr == SC_UNONAME_ADDRESS )
+    if ( aPropertyName == SC_UNONAME_ADDRESS )
     {
         //  read the cell/range address from API struct
         if ( bIsRange )
@@ -162,7 +156,7 @@ void SAL_CALL ScAddressConversionObj::setPropertyValue( const OUString& aPropert
             }
         }
     }
-    else if ( aNameStr == SC_UNONAME_REFSHEET )
+    else if ( aPropertyName == SC_UNONAME_REFSHEET )
     {
         //  set the reference sheet
         sal_Int32 nIntVal = 0;
@@ -172,19 +166,18 @@ void SAL_CALL ScAddressConversionObj::setPropertyValue( const OUString& aPropert
             bSuccess = true;
         }
     }
-    else if ( aNameStr == SC_UNONAME_UIREPR )
+    else if ( aPropertyName == SC_UNONAME_UIREPR )
     {
         //  parse the UI representation string
         OUString sRepresentation;
         if (aValue >>= sRepresentation)
         {
-            OUString aUIString = sRepresentation;
-            bSuccess = ParseUIString( aUIString );
+            bSuccess = ParseUIString( sRepresentation );
         }
     }
-    else if ( aNameStr == SC_UNONAME_PERSREPR || aNameStr == SC_UNONAME_XLA1REPR )
+    else if ( aPropertyName == SC_UNONAME_PERSREPR || aPropertyName == SC_UNONAME_XLA1REPR )
     {
-        ::formula::FormulaGrammar::AddressConvention eConv = aNameStr == SC_UNONAME_XLA1REPR ?
+        ::formula::FormulaGrammar::AddressConvention eConv = aPropertyName == SC_UNONAME_XLA1REPR ?
             ::formula::FormulaGrammar::CONV_XL_A1 : ::formula::FormulaGrammar::CONV_OOO;
 
         //  parse the file format string
@@ -194,13 +187,13 @@ void SAL_CALL ScAddressConversionObj::setPropertyValue( const OUString& aPropert
             OUString aUIString(sRepresentation);
 
             //  cell or range: strip a single "." at the start
-            if ( aUIString[0]== (sal_Unicode) '.' )
+            if ( aUIString[0]== '.' )
                 aUIString = aUIString.copy( 1 );
 
             if ( bIsRange )
             {
                 //  range: also strip a "." after the last colon
-                sal_Int32 nColon = aUIString.lastIndexOf( (sal_Unicode) ':' );
+                sal_Int32 nColon = aUIString.lastIndexOf( ':' );
                 if ( nColon >= 0 && nColon < aUIString.getLength() - 1 &&
                      aUIString[nColon+1] == '.' )
                     aUIString = aUIString.replaceAt( nColon+1, 1, "" );
@@ -218,8 +211,6 @@ void SAL_CALL ScAddressConversionObj::setPropertyValue( const OUString& aPropert
 }
 
 uno::Any SAL_CALL ScAddressConversionObj::getPropertyValue( const OUString& aPropertyName )
-                throw(beans::UnknownPropertyException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     if ( !pDocShell )
         throw uno::RuntimeException();
@@ -227,8 +218,7 @@ uno::Any SAL_CALL ScAddressConversionObj::getPropertyValue( const OUString& aPro
     ScDocument& rDoc = pDocShell->GetDocument();
     uno::Any aRet;
 
-    OUString aNameStr(aPropertyName);
-    if ( aNameStr == SC_UNONAME_ADDRESS )
+    if ( aPropertyName == SC_UNONAME_ADDRESS )
     {
         if ( bIsRange )
         {
@@ -243,11 +233,11 @@ uno::Any SAL_CALL ScAddressConversionObj::getPropertyValue( const OUString& aPro
             aRet <<= aCellAddress;
         }
     }
-    else if ( aNameStr == SC_UNONAME_REFSHEET )
+    else if ( aPropertyName == SC_UNONAME_REFSHEET )
     {
         aRet <<= nRefSheet;
     }
-    else if ( aNameStr == SC_UNONAME_UIREPR )
+    else if ( aPropertyName == SC_UNONAME_UIREPR )
     {
         //  generate UI representation string - include sheet only if different from ref sheet
         OUString aFormatStr;
@@ -260,9 +250,9 @@ uno::Any SAL_CALL ScAddressConversionObj::getPropertyValue( const OUString& aPro
             aFormatStr = aRange.aStart.Format(nFlags, &rDoc);
         aRet <<= aFormatStr;
     }
-    else if ( aNameStr == SC_UNONAME_PERSREPR || aNameStr == SC_UNONAME_XLA1REPR )
+    else if ( aPropertyName == SC_UNONAME_PERSREPR || aPropertyName == SC_UNONAME_XLA1REPR )
     {
-        ::formula::FormulaGrammar::AddressConvention eConv = aNameStr == SC_UNONAME_XLA1REPR ?
+        ::formula::FormulaGrammar::AddressConvention eConv = aPropertyName == SC_UNONAME_XLA1REPR ?
             ::formula::FormulaGrammar::CONV_XL_A1 : ::formula::FormulaGrammar::CONV_OOO;
 
         //  generate file format string - always include sheet
@@ -277,7 +267,7 @@ uno::Any SAL_CALL ScAddressConversionObj::getPropertyValue( const OUString& aPro
             OUString aSecond(aRange.aEnd.Format(nFlags, &rDoc, eConv));
             aFormatStr += aSecond ;
         }
-        aRet <<= OUString( aFormatStr );
+        aRet <<= aFormatStr;
     }
     else
         throw beans::UnknownPropertyException();
@@ -289,25 +279,22 @@ SC_IMPL_DUMMY_PROPERTY_LISTENER( ScAddressConversionObj )
 
 // lang::XServiceInfo
 
-OUString SAL_CALL ScAddressConversionObj::getImplementationName() throw(uno::RuntimeException, std::exception)
+OUString SAL_CALL ScAddressConversionObj::getImplementationName()
 {
     return OUString("ScAddressConversionObj" );
 }
 
 sal_Bool SAL_CALL ScAddressConversionObj::supportsService( const OUString& rServiceName )
-                                                    throw(uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 uno::Sequence<OUString> SAL_CALL ScAddressConversionObj::getSupportedServiceNames()
-                                                    throw(uno::RuntimeException, std::exception)
 {
-    uno::Sequence<OUString> aRet(1);
-    OUString* pArray = aRet.getArray();
-    pArray[0] = bIsRange ? OUString(SC_SERVICENAME_RANGEADDRESS)
-                         : OUString(SC_SERVICENAME_CELLADDRESS);
-    return aRet;
+    if (bIsRange)
+        return {SC_SERVICENAME_RANGEADDRESS};
+    else
+        return {SC_SERVICENAME_CELLADDRESS};
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

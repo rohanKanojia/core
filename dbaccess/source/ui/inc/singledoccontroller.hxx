@@ -20,6 +20,7 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_UI_INC_SINGLEDOCCONTROLLER_HXX
 #define INCLUDED_DBACCESS_SOURCE_UI_INC_SINGLEDOCCONTROLLER_HXX
 
+#include <memory>
 #include <dbaccess/dbsubcomponentcontroller.hxx>
 
 #include <com/sun/star/document/XUndoManagerSupplier.hpp>
@@ -41,7 +42,7 @@ namespace dbaui
     {
     protected:
         OSingleDocumentController( const css::uno::Reference< css::uno::XComponentContext>& _rxORB );
-        virtual ~OSingleDocumentController();
+        virtual ~OSingleDocumentController() override;
 
         // OComponentHelper
         virtual void SAL_CALL disposing() override;
@@ -57,20 +58,20 @@ namespace dbaui
             additionally invalidates the UNDO and REDO slot
             @param  pAction the undo action to add
         */
-        void addUndoActionAndInvalidate( SfxUndoAction* pAction );
+        void addUndoActionAndInvalidate( std::unique_ptr<SfxUndoAction> pAction );
 
         // OGenericUnoController
         virtual FeatureState    GetState( sal_uInt16 nId ) const override;
         virtual void            Execute( sal_uInt16 nId, const css::uno::Sequence< css::beans::PropertyValue>& aArgs ) override;
 
         // XUndoManagerSupplier
-        virtual css::uno::Reference< css::document::XUndoManager > SAL_CALL getUndoManager(  ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::document::XUndoManager > SAL_CALL getUndoManager(  ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing(const css::lang::EventObject& Source) throw( css::uno::RuntimeException, std::exception ) override;
+        using OSingleDocumentController_Base::disposing;
 
     private:
-        ::std::unique_ptr< OSingleDocumentController_Data >   m_pData;
+        std::unique_ptr< OSingleDocumentController_Data >   m_pData;
     };
 
 } // namespace dbaui

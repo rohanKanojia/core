@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/chart/datasourceconverter.hxx"
+#include <drawingml/chart/datasourceconverter.hxx>
 
 #include <com/sun/star/chart2/XChartDocument.hpp>
-#include "oox/drawingml/chart/chartconverter.hxx"
-#include "oox/drawingml/chart/datasourcemodel.hxx"
-#include "oox/token/properties.hxx"
+#include <oox/drawingml/chart/chartconverter.hxx>
+#include <oox/drawingml/chart/datasourcemodel.hxx>
+#include <oox/token/properties.hxx>
 
 namespace oox {
 namespace drawingml {
@@ -52,10 +52,9 @@ Reference< XDataSequence > DataSequenceConverter::createDataSequence( const OUSt
         mrModel.mnPointCount = std::min<sal_Int32>(mrModel.mnPointCount, 1);
         OUStringBuffer aTitle;
         bool bFirst = true;
-        for(DataSequenceModel::AnyMap::const_iterator itr = mrModel.maData.begin(),
-                itrEnd = mrModel.maData.end(); itr != itrEnd; ++itr)
+        for (auto const& elem : mrModel.maData)
         {
-            Any aAny = itr->second;
+            Any aAny = elem.second;
             if(aAny.has<OUString>())
             {
                 if(!bFirst)
@@ -69,7 +68,7 @@ Reference< XDataSequence > DataSequenceConverter::createDataSequence( const OUSt
         if(!bFirst)
         {
             mrModel.maData.clear();
-            mrModel.maData.insert(std::make_pair<sal_Int32, Any>(1, Any(aTitle.makeStringAndClear())));
+            mrModel.maData.insert(std::make_pair<sal_Int32, Any>(0, Any(aTitle.makeStringAndClear())));
         }
     }
     xDataSeq = getChartConverter().createDataSequence(getChartDocument()->getDataProvider(), mrModel, rRole);

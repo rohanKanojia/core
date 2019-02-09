@@ -36,17 +36,18 @@ private:
     ImplRegionBand*             mpLastCheckedBand;
 
     void implReset();
+    [[nodiscard]] bool CheckConsistency() const;
 
 public:
     RegionBand();
     RegionBand(const RegionBand&);
     RegionBand& operator=(const RegionBand&);
-    RegionBand(const Rectangle&);
+    RegionBand(const tools::Rectangle&);
     ~RegionBand();
 
     bool operator==( const RegionBand& rRegionBand ) const;
 
-    void load(SvStream& rIStrm);
+    [[nodiscard]] bool load(SvStream& rIStrm);
     void save(SvStream& rIStrm) const;
 
     bool isSingleRectangle() const;
@@ -70,7 +71,7 @@ public:
     void Intersect(const RegionBand& rSource);
     bool Exclude(const RegionBand& rSource);
     void XOr(const RegionBand& rSource);
-    Rectangle GetBoundRect() const;
+    tools::Rectangle GetBoundRect() const;
     bool IsInside(const Point& rPoint) const;
     sal_uInt32 getRectangleCount() const; // only users are Region::Intersect, Region::IsRectangle and PSWriter::ImplBmp
     void GetRegionRectangles(RectangleVector& rTarget) const;

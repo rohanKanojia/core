@@ -19,18 +19,17 @@
 
 #include <cppuhelper/factory.hxx>
 #include <cppuhelper/implementationentry.hxx>
-#include <osl/diagnose.h>
-#include "DatabaseDataProvider.hxx"
-#include "dbadllapi.hxx"
+#include <DatabaseDataProvider.hxx>
+#include <dbadllapi.hxx>
 
-#include <../dataaccess/databasecontext.hxx>
+#include <databasecontext.hxx>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::registry;
 
 namespace dba{
-    ::cppu::ImplementationEntry entries[] = {
+    ::cppu::ImplementationEntry const entries[] = {
         {
             &::dbaccess::DatabaseDataProvider::Create,
             &::dbaccess::DatabaseDataProvider::getImplementationName_Static,
@@ -49,7 +48,7 @@ namespace dba{
     };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL dba_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void* dba_component_getFactory(
                     const sal_Char* pImplementationName,
                     void* pServiceManager,
                     void* pRegistryKey)

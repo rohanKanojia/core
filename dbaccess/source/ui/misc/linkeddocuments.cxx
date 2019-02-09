@@ -17,32 +17,29 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "linkeddocuments.hxx"
+#include <core_resource.hxx>
+#include <linkeddocuments.hxx>
 #include <osl/diagnose.h>
 #include <tools/diagnose_ex.h>
 #include <unotools/confignode.hxx>
-#include "dbustrings.hrc"
+#include <stringconstants.hxx>
 #include <comphelper/classids.hxx>
 #include <comphelper/namedvaluecollection.hxx>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/frame/XComponentLoader.hpp>
 #include <com/sun/star/util/URL.hpp>
-#include <com/sun/star/frame/FrameSearchFlag.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/ucb/XCommandProcessor.hpp>
 #include <com/sun/star/ucb/OpenCommandArgument.hpp>
 #include <com/sun/star/ucb/OpenMode.hpp>
 #include <com/sun/star/task/XJobExecutor.hpp>
-#include <comphelper/extract.hxx>
 #include <comphelper/types.hxx>
-#include <vcl/msgbox.hxx>
 #include <ucbhelper/content.hxx>
-#include "dbu_misc.hrc"
+#include <strings.hrc>
+#include <strings.hxx>
 #include <svl/filenotation.hxx>
-#include "browserids.hxx"
+#include <browserids.hxx>
 #include <sfx2/new.hxx>
-#include "moduledbu.hxx"
 #include <sfx2/app.hxx>
 #include <basic/sbx.hxx>
 #include <basic/sbuno.hxx>
@@ -56,7 +53,7 @@
 #include <connectivity/dbtools.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <com/sun/star/io/WrongFormatException.hpp>
-#include "com/sun/star/sdb/RowSetVetoException.hpp"
+#include <com/sun/star/sdb/RowSetVetoException.hpp>
 
 namespace dbaui
 {
@@ -139,7 +136,7 @@ namespace dbaui
 
             case E_OPEN_FOR_MAIL:
                 aArguments.put( "Hidden", true );
-                // fall through
+                [[fallthrough]];
 
             case E_OPEN_DESIGN:
                 sOpenMode = "openDesign";
@@ -152,22 +149,16 @@ namespace dbaui
         aArguments.put( "OpenMode", sOpenMode );
 
         aArguments.put( OUString(PROPERTY_ACTIVE_CONNECTION), m_xConnection );
-        try
-        {
-            Reference<XHierarchicalNameContainer> xHier(m_xDocumentContainer,UNO_QUERY);
-            if ( xHier.is() && xHier->hasByHierarchicalName(_rLinkName) )
-            {
-                _xDefinition.set(xHier->getByHierarchicalName(_rLinkName),UNO_QUERY);
-            }
 
-            aArguments.merge( _rAdditionalArgs, true );
-
-            xRet = xComponentLoader->loadComponentFromURL( _rLinkName, OUString(), 0, aArguments.getPropertyValues() );
-        }
-        catch(const Exception&)
+        Reference<XHierarchicalNameContainer> xHier(m_xDocumentContainer,UNO_QUERY);
+        if ( xHier.is() && xHier->hasByHierarchicalName(_rLinkName) )
         {
-            throw;
+            _xDefinition.set(xHier->getByHierarchicalName(_rLinkName),UNO_QUERY);
         }
+
+        aArguments.merge( _rAdditionalArgs, true );
+
+        xRet = xComponentLoader->loadComponentFromURL( _rLinkName, OUString(), 0, aArguments.getPropertyValues() );
 
         return xRet;
     }
@@ -205,7 +196,7 @@ namespace dbaui
         }
         catch(const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
     void OLinkedDocumentsAccess::newFormWithPilot( const sal_Int32 _nCommandType,const OUString& _rObjectName )
@@ -305,7 +296,7 @@ namespace dbaui
         }
         catch(const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
 
         return xNewDocument;
@@ -321,7 +312,7 @@ namespace dbaui
             xRet = impl_open( _rLinkName, _xDefinition, _eOpenMode, _rAdditionalArgs );
             if ( !xRet.is() )
             {
-                OUString sMessage = ModuleRes(STR_COULDNOTOPEN_LINKEDDOC);
+                OUString sMessage = DBA_RES(STR_COULDNOTOPEN_LINKEDDOC);
                 sMessage = sMessage.replaceFirst("$file$",_rLinkName);
 
                 css::sdbc::SQLException aSQLException;
@@ -338,11 +329,11 @@ namespace dbaui
             aInfo = dbtools::SQLExceptionInfo(aSQLException);
 
             // more like a hack, insert an empty message
-            OUString sText( ModuleRes( RID_STR_EXTENSION_NOT_PRESENT ) );
+            OUString sText( DBA_RES( RID_STR_EXTENSION_NOT_PRESENT ) );
             sText = sText.replaceFirst("$file$",_rLinkName);
             aInfo.prepend(sText);
 
-            OUString sMessage = ModuleRes(STR_COULDNOTOPEN_LINKEDDOC);
+            OUString sMessage = DBA_RES(STR_COULDNOTOPEN_LINKEDDOC);
             sMessage = sMessage.replaceFirst("$file$",_rLinkName);
             aInfo.prepend(sMessage);
         }
@@ -360,7 +351,7 @@ namespace dbaui
                 // more like a hack, insert an empty message
                 aInfo.prepend(" \n");
 
-                OUString sMessage = ModuleRes(STR_COULDNOTOPEN_LINKEDDOC);
+                OUString sMessage = DBA_RES(STR_COULDNOTOPEN_LINKEDDOC);
                 sMessage = sMessage.replaceFirst("$file$",_rLinkName);
                 aInfo.prepend(sMessage);
             }

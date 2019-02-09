@@ -21,7 +21,7 @@
 #define INCLUDED_SD_SOURCE_UI_INC_TABCONTROL_HXX
 
 #include <svtools/tabbar.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 
 namespace sd {
 
@@ -31,16 +31,15 @@ namespace sd {
 
 class DrawViewShell;
 
-class TabControl
+class TabControl final
     : public TabBar,
       public DragSourceHelper,
       public DropTargetHelper
 {
-    //declare bIsMarked variable
-    sal_uInt16    RrePageID;
 public:
     TabControl (DrawViewShell* pDrViewSh, vcl::Window* pParent);
-    virtual ~TabControl();
+    virtual void dispose() override;
+    virtual ~TabControl() override;
 
     /** Inform all listeners of this control that the current page has been
         activated.  Call this method after switching the current page and is
@@ -54,8 +53,9 @@ public:
     */
     void SendDeactivatePageEvent();
 
-protected:
-    DrawViewShell*  pDrViewSh;
+private:
+    sal_uInt16          RrePageID;
+    DrawViewShell*      pDrViewSh;
     bool                bInternalMove;
 
     // TabBar
@@ -79,7 +79,6 @@ protected:
     virtual sal_Int8    AcceptDrop( const AcceptDropEvent& rEvt ) override;
     virtual sal_Int8    ExecuteDrop( const ExecuteDropEvent& rEvt ) override;
 
-private:
     // nested class to implement the TransferableHelper
     class TabControlTransferable : public TransferableHelper
     {
@@ -90,7 +89,7 @@ private:
 
         TabControl&     mrParent;
 
-        virtual             ~TabControlTransferable();
+        virtual             ~TabControlTransferable() override;
 
         virtual void        AddSupportedFormats() override;
         virtual bool GetData( const css::datatransfer::DataFlavor& rFlavor, const OUString& rDestDoc ) override;
@@ -100,9 +99,8 @@ private:
 
     friend class TabControl::TabControlTransferable;
 
-    void                DragFinished( sal_Int8 nDropAction );
+    void                DragFinished();
 
-private:
     using TabBar::StartDrag;
 };
 

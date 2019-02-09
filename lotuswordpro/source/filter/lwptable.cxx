@@ -58,9 +58,13 @@
  *  For LWP filter architecture prototype - table object
  */
 
+#include <sal/config.h>
+
+#include <algorithm>
+
  #include "lwptable.hxx"
 
- LwpSuperTable::LwpSuperTable(LwpObjectHeader &objHdr, LwpSvStream* pStrm):LwpContent(objHdr, pStrm)
+ LwpSuperTable::LwpSuperTable(LwpObjectHeader const &objHdr, LwpSvStream* pStrm):LwpContent(objHdr, pStrm)
 {}
 
 LwpSuperTable::~LwpSuperTable()
@@ -82,7 +86,7 @@ void LwpSuperTable::XFConvert(XFContentContainer* /*pCont*/)
 }
 
 /*****************************************************************************/
- LwpTable::LwpTable(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+ LwpTable::LwpTable(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
      : LwpContent(objHdr, pStrm)
      , m_nRow(0)
      , m_nColumn(0)
@@ -114,20 +118,18 @@ void LwpTable::Read()
 
     m_nAttributes = m_pObjStrm->QuickReaduInt16();
 
-    m_Layout.ReadIndexed(m_pObjStrm);
+    m_Layout.ReadIndexed(m_pObjStrm.get());
 
-    m_DefaultCellStyle.ReadIndexed(m_pObjStrm);
+    m_DefaultCellStyle.ReadIndexed(m_pObjStrm.get());
     if (LwpFileHeader::m_nFileRevision >= 0x0007)
-        m_CPNotifyList.Read(m_pObjStrm);
+        m_CPNotifyList.Read(m_pObjStrm.get());
 
     m_pObjStrm->SkipExtra();
 }
 
 bool LwpTable::IsNumberDown()
 {
-    if (m_nAttributes & NUMBER_DOWN)
-        return true;
-    return false;
+    return (m_nAttributes & NUMBER_DOWN) != 0;
 }
 
 void  LwpTable::Parse(IXFStream* /*pOutputStream*/)
@@ -144,7 +146,7 @@ void  LwpTable::Parse(IXFStream* /*pOutputStream*/)
 }
 
  /*****************************************************************************/
- LwpTableHeading::LwpTableHeading(LwpObjectHeader &objHdr, LwpSvStream* pStrm):LwpTable(objHdr, pStrm)
+ LwpTableHeading::LwpTableHeading(LwpObjectHeader const &objHdr, LwpSvStream* pStrm):LwpTable(objHdr, pStrm)
 {}
 
 LwpTableHeading::~LwpTableHeading()
@@ -160,7 +162,7 @@ void  LwpTableHeading::Parse(IXFStream* /*pOutputStream*/)
 }
 
  /*****************************************************************************/
-LwpParallelColumns::LwpParallelColumns(LwpObjectHeader &objHdr, LwpSvStream* pStrm):LwpTable(objHdr, pStrm)
+LwpParallelColumns::LwpParallelColumns(LwpObjectHeader const &objHdr, LwpSvStream* pStrm):LwpTable(objHdr, pStrm)
 {
 }
 
@@ -171,13 +173,13 @@ LwpParallelColumns::~LwpParallelColumns()
 void LwpParallelColumns::Read()
 {
     LwpTable::Read();
-    cDefaultLeftColumnStyle.ReadIndexed(m_pObjStrm);
-    cDefaultRightColumnStyle.ReadIndexed(m_pObjStrm);
+    cDefaultLeftColumnStyle.ReadIndexed(m_pObjStrm.get());
+    cDefaultRightColumnStyle.ReadIndexed(m_pObjStrm.get());
 
     m_pObjStrm->SkipExtra();
 }
  /*****************************************************************************/
-LwpGlossary::LwpGlossary(LwpObjectHeader &objHdr, LwpSvStream* pStrm):LwpParallelColumns(objHdr, pStrm)
+LwpGlossary::LwpGlossary(LwpObjectHeader const &objHdr, LwpSvStream* pStrm):LwpParallelColumns(objHdr, pStrm)
 {
 }
 
@@ -207,7 +209,7 @@ void LwpGlossary::Read()
     {
         if (NumIndexRows)
         {
-            sal_uInt16 EntriesRead = (FiledEntries > NumIndexRows)? NumIndexRows:FiledEntries;
+            sal_uInt16 EntriesRead = std::min(FiledEntries, NumIndexRows);
 
             for (sal_uInt16 EntryCount = 1; EntryCount <= EntriesRead; EntryCount++)
                 m_pObjStrm->QuickReaduInt16();

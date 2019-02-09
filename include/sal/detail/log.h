@@ -10,10 +10,10 @@
 #ifndef INCLUDED_SAL_DETAIL_LOG_H
 #define INCLUDED_SAL_DETAIL_LOG_H
 
-#include <sal/config.h>
+#include "sal/config.h"
 
-#include <sal/saldllapi.h>
-#include <sal/types.h>
+#include "sal/saldllapi.h"
+#include "sal/types.h"
 
 /** @cond INTERNAL */
 
@@ -52,7 +52,6 @@ extern "C" {
 
 enum sal_detail_LogLevel {
     SAL_DETAIL_LOG_LEVEL_INFO, SAL_DETAIL_LOG_LEVEL_WARN,
-    SAL_DETAIL_LOG_LEVEL_DEBUG_TRACE = SAL_MAX_ENUM - 1,
     SAL_DETAIL_LOG_LEVEL_DEBUG = SAL_MAX_ENUM
 };
 

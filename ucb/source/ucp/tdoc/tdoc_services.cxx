@@ -18,9 +18,9 @@
  */
 
 
-#include "com/sun/star/lang/XMultiServiceFactory.hpp"
-#include "com/sun/star/lang/XSingleServiceFactory.hpp"
-#include "com/sun/star/registry/XRegistryKey.hpp"
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
+#include <com/sun/star/registry/XRegistryKey.hpp>
 
 #include "tdoc_provider.hxx"
 #include "tdoc_documentcontentfactory.hxx"
@@ -29,7 +29,7 @@ using namespace com::sun::star;
 using namespace tdoc_ucp;
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL ucptdoc1_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * ucptdoc1_component_getFactory(
     const sal_Char * pImplName, void * pServiceManager, void * /*pRegistryKey*/ )
 {
     void * pRet = nullptr;

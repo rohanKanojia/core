@@ -27,6 +27,7 @@
 #include <xmloff/xmluconv.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlprmap.hxx>
+#include <xmloff/xmlement.hxx>
 
 #include <xmloff/PageMasterStyleMap.hxx>
 #include <com/sun/star/text/HorizontalAdjust.hpp>
@@ -54,8 +55,8 @@ void XMLFootnoteSeparatorExport::exportXML(
 {
     assert(pProperties);
 
-    // intialize values
-    sal_Int16 eLineAdjust = text::HorizontalAdjust_LEFT;
+    // initialize values
+    text::HorizontalAdjust eLineAdjust = text::HorizontalAdjust_LEFT;
     sal_Int32 nLineColor = 0;
     sal_Int32 nLineDistance = 0;
     sal_Int8 nLineRelWidth = 0;
@@ -75,8 +76,12 @@ void XMLFootnoteSeparatorExport::exportXML(
         switch (rMapper->GetEntryContextId(rState.mnIndex))
         {
         case CTF_PM_FTN_LINE_ADJUST:
-            rState.maValue >>= eLineAdjust;
+        {
+            sal_Int16 nTmp;
+            if (rState.maValue >>= nTmp)
+                eLineAdjust = static_cast<text::HorizontalAdjust>(nTmp);
             break;
+        }
         case CTF_PM_FTN_LINE_COLOR:
             rState.maValue >>= nLineColor;
             break;
@@ -129,7 +134,7 @@ void XMLFootnoteSeparatorExport::exportXML(
     }
 
     // line style
-    static const SvXMLEnumMapEntry aXML_LineStyle_Enum[] =
+    static const SvXMLEnumMapEntry<sal_Int8> aXML_LineStyle_Enum[] =
     {
         { XML_NONE,     0 },
         { XML_SOLID,    1 },
@@ -145,12 +150,12 @@ void XMLFootnoteSeparatorExport::exportXML(
     }
 
     // adjustment
-    static const SvXMLEnumMapEntry aXML_HorizontalAdjust_Enum[] =
+    static const SvXMLEnumMapEntry<text::HorizontalAdjust> aXML_HorizontalAdjust_Enum[] =
     {
         { XML_LEFT,     text::HorizontalAdjust_LEFT },
         { XML_CENTER,   text::HorizontalAdjust_CENTER },
         { XML_RIGHT,    text::HorizontalAdjust_RIGHT },
-        { XML_TOKEN_INVALID, 0 }
+        { XML_TOKEN_INVALID, text::HorizontalAdjust(0) }
     };
 
     if (SvXMLUnitConverter::convertEnum(

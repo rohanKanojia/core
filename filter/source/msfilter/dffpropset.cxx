@@ -19,6 +19,8 @@
 
 #include <algorithm>
 #include <filter/msfilter/dffpropset.hxx>
+#include <filter/msfilter/dffrecordheader.hxx>
+#include <svx/msdffdef.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <tools/stream.hxx>
 
@@ -1105,7 +1107,6 @@ void DffPropSet::ReadPropSet( SvStream& rIn, bool bSetUninitializedOnly )
 
     sal_uInt32 nPropCount = aHd.nRecInstance;
 
-    // FilePos der ComplexData merken
     sal_uInt32 nComplexDataFilePos = rIn.Tell() + ( nPropCount * 6 );
 
     for( sal_uInt32 nPropNum = 0; nPropNum < nPropCount; nPropNum++ )
@@ -1131,7 +1132,7 @@ void DffPropSet::ReadPropSet( SvStream& rIn, bool bSetUninitializedOnly )
                                 | ( nCurrentFlags >> 16 ) ) ^ 0xffffffff;       // attributes from mergeflags
                 nCurrentFlags &= ( ( nMergeFlags & 0xffff0000 )                 // apply zero master bits
                                 | ( nMergeFlags >> 16 ) ) ^ 0xffffffff;
-                nCurrentFlags |= (sal_uInt16)nMergeFlags;                       // apply filled master bits
+                nCurrentFlags |= static_cast<sal_uInt16>(nMergeFlags);                       // apply filled master bits
                 mpPropSetEntries[ nRecType ].nContent = nCurrentFlags;
                 mpPropSetEntries[ nRecType ].nComplexIndexOrFlagsHAttr |= static_cast< sal_uInt16 >( nContent >> 16 );
             }
@@ -1158,7 +1159,7 @@ void DffPropSet::ReadPropSet( SvStream& rIn, bool bSetUninitializedOnly )
                 // normally nContent is the complete size of the complex property,
                 // but this is not always true for IMsoArrays ( what the hell is a IMsoArray ? )
 
-                // I love special threatments :-(
+                // I love special treatments :-(
                 if ( ( nRecType == DFF_Prop_pVertices ) || ( nRecType == DFF_Prop_pSegmentInfo )
                     || ( nRecType == DFF_Prop_fillShadeColors ) || ( nRecType == DFF_Prop_lineDashStyle )
                         || ( nRecType == DFF_Prop_pWrapPolygonVertices ) || ( nRecType == DFF_Prop_connectorPoints )
@@ -1167,11 +1168,11 @@ void DffPropSet::ReadPropSet( SvStream& rIn, bool bSetUninitializedOnly )
                 {
                     // now check if the current content size is possible, or 6 bytes too small
                     sal_uInt32  nOldPos = rIn.Tell();
-                    sal_Int16   nNumElem, nNumElemReserved, nSize;
 
-                    rIn.Seek( nComplexDataFilePos );
-                    rIn. ReadInt16( nNumElem ).ReadInt16( nNumElemReserved ).ReadInt16( nSize );
-                    if ( nNumElemReserved >= nNumElem )
+                    sal_Int16 nNumElem(0), nNumElemReserved(0), nSize(0);
+                    if (checkSeek(rIn, nComplexDataFilePos))
+                        rIn.ReadInt16(nNumElem).ReadInt16(nNumElemReserved).ReadInt16(nSize);
+                    if (nNumElemReserved >= nNumElem)
                     {
                         // the size of these array elements is nowhere defined,
                         // what if the size is negative ?
@@ -1179,7 +1180,7 @@ void DffPropSet::ReadPropSet( SvStream& rIn, bool bSetUninitializedOnly )
                         // for -16 this works
                         if ( nSize < 0 )
                             nSize = ( -nSize ) >> 2;
-                        sal_uInt32 nDataSize = (sal_uInt32)( nSize * nNumElem );
+                        sal_uInt32 nDataSize = static_cast<sal_uInt32>( nSize * nNumElem );
 
                         // sometimes the content size is 6 bytes too small (array header information is missing )
                         if ( nDataSize == nContent )
@@ -1295,7 +1296,7 @@ bool DffPropSet::GetPropertyBool( sal_uInt32 nId ) const
 
 OUString DffPropSet::GetPropertyString( sal_uInt32 nId, SvStream& rStrm ) const
 {
-    sal_Size nOldPos = rStrm.Tell();
+    sal_uInt64 const nOldPos = rStrm.Tell();
     OUStringBuffer aBuffer;
     sal_uInt32 nBufferSize = GetPropertyValue( nId, 0 );
     if( (nBufferSize > 0) && SeekToContent( nId, rStrm ) )
@@ -1329,8 +1330,7 @@ bool DffPropSet::SeekToContent( sal_uInt32 nRecType, SvStream& rStrm ) const
             sal_uInt16 nIndex = mpPropSetEntries[ nRecType ].nComplexIndexOrFlagsHAttr;
             if ( nIndex < maOffsets.size() )
             {
-                rStrm.Seek( maOffsets[ nIndex ] );
-                return true;
+                return checkSeek(rStrm, maOffsets[nIndex]);
             }
         }
     }

@@ -55,40 +55,19 @@
  ************************************************************************/
 /*************************************************************************
  * @file
- * Represente index source,index body and index index entry.
+ * Represents index source, index body and index entry.
  ************************************************************************/
-#include "xfindex.hxx"
-#include "xfparagraph.hxx"
+#include <xfilter/xfindex.hxx>
+#include <xfilter/xfparagraph.hxx>
 
 XFIndex::XFIndex()
-{
-    m_pTitle = nullptr;
-    m_eType = enumXFIndexTOC;
-    m_bProtect = true;
-    m_bSeparator = false;
-    m_nMaxLevel = 0;
-
-    for(sal_uInt16 i=1;i<MAX_TOC_LEVEL+1;i++)
-    {
-        m_aTOCSource[i].clear();
-    }
-}
+    : m_eType(enumXFIndexTOC)
+    , m_bProtect(true)
+    , m_bSeparator(false)
+{}
 
 XFIndex::~XFIndex()
 {
-    delete m_pTitle;
-
-    for(sal_uInt16 i=1;i<MAX_TOC_LEVEL+1;i++)
-    {
-        m_aTOCSource[i].clear();
-    }
-
-    while(m_aTemplates.size()>0)
-    {
-        XFIndexTemplate * pTemplate = m_aTemplates.back();
-        m_aTemplates.pop_back();
-        delete pTemplate;
-    }
 }
 
 void    XFIndex::AddTemplate(const OUString& level, const OUString& style, XFIndexTemplate* templ)
@@ -198,11 +177,10 @@ void    XFIndex::ToXml(IXFStream *pStrm)
     pStrm->EndElement( "text:index-title-template" );
 
     //entry templates:
-    std::vector<XFIndexTemplate *>::iterator it;
-    for (it = m_aTemplates.begin(); it != m_aTemplates.end(); ++it)
+    for (auto const& elem : m_aTemplates)
     {
-        (*it)->SetTagName( strTplName);
-        (*it)->ToXml(pStrm);
+        elem->SetTagName( strTplName);
+        elem->ToXml(pStrm);
     }
 
     // by
@@ -220,11 +198,10 @@ void    XFIndex::ToXml(IXFStream *pStrm)
             pAttrList->AddAttribute( "text:outline-level", OUString::number(i));
             pStrm->StartElement( "text:index-source-styles" );
 
-            std::vector<OUString>::iterator it_str;
-            for (it_str = m_aTOCSource[i].begin(); it_str != m_aTOCSource[i].end(); ++it_str)
+            for (auto const& elemTOCSource : m_aTOCSource[i])
             {
                 pAttrList->Clear();
-                pAttrList->AddAttribute( "text:style-name", *it_str);
+                pAttrList->AddAttribute( "text:style-name", elemTOCSource);
                 pStrm->StartElement( "text:index-source-style" );
                 pStrm->EndElement( "text:index-source-style" );
             }
@@ -242,8 +219,6 @@ void    XFIndex::ToXml(IXFStream *pStrm)
     {
         pAttrList->AddAttribute( "text:name", m_strTitle + "_Head" );
         pStrm->StartElement( "text:index-title" );
-        if( m_pTitle )
-            m_pTitle->ToXml(pStrm);
         pStrm->EndElement( "text:index-title" );
     }
 

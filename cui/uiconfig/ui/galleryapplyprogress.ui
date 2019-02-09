@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.16.1 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.22.1 -->
+<interface domain="cui">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="GalleryApplyProgress">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Apply</property>
+    <property name="title" translatable="yes" context="galleryapplyprogress|GalleryApplyProgress">Apply</property>
+    <property name="modal">True</property>
     <property name="type_hint">normal</property>
+    <child>
+      <placeholder/>
+    </child>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
         <property name="can_focus">False</property>
@@ -70,7 +74,7 @@
                   <object class="GtkLabel" id="label2">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">File</property>
+                    <property name="label" translatable="yes" context="galleryapplyprogress|label2">File</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -80,8 +84,6 @@
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">0</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
           </object>
@@ -94,7 +96,7 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">cancel</action-widget>
+      <action-widget response="-6">cancel</action-widget>
     </action-widgets>
   </object>
 </interface>

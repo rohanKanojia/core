@@ -17,12 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "helper/simplereferencecomponent.hxx"
+#include <helper/simplereferencecomponent.hxx>
 
-#include "com/sun/star/uno/RuntimeException.hpp"
-#include "osl/diagnose.h"
-
-#include <new>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 using com::sun::star::uno::RuntimeException;
 using sd::SimpleReferenceComponent;
@@ -52,16 +51,9 @@ void SimpleReferenceComponent::release()
         {
             Dispose();
         }
-        catch (RuntimeException &
-#if OSL_DEBUG_LEVEL > 0
-            exc
-#endif
-            ) // don't break throw ()
+        catch (RuntimeException & exc ) // don't break throw ()
         {
-#if OSL_DEBUG_LEVEL > 0
-            OString msg( OUStringToOString( exc.Message, RTL_TEXTENCODING_ASCII_US ) );
-            OSL_FAIL( msg.getStr() );
-#endif
+            SAL_WARN( "sd", exc );
         }
     }
 
@@ -79,45 +71,6 @@ void SimpleReferenceComponent::Dispose()
 
 void SimpleReferenceComponent::disposing()
 {
-}
-
-void * SimpleReferenceComponent::operator new(std::size_t nSize)
-{
-    return ::operator new(nSize);
-}
-
-void * SimpleReferenceComponent::operator new(std::size_t nSize,
-                                           std::nothrow_t const &
-#ifndef _WIN32
-                                           rNothrow
-#endif
-                                           )
-{
-#if defined(_WIN32)
-    return ::operator new(nSize);
-        // WNT lacks a global nothrow operator new...
-#else // WNT
-    return ::operator new(nSize, rNothrow);
-#endif // WNT
-}
-
-void SimpleReferenceComponent::operator delete(void * pPtr)
-{
-    ::operator delete(pPtr);
-}
-
-void SimpleReferenceComponent::operator delete(void * pPtr,
-                                            std::nothrow_t const &
-#ifndef _WIN32
-                                            rNothrow
-#endif
-)
-{
-#if defined(_WIN32)
-    ::operator delete(pPtr); // WNT lacks a global nothrow operator delete...
-#else // WNT
-    ::operator delete(pPtr, rNothrow);
-#endif // WNT
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

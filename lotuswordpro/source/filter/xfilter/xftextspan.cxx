@@ -57,10 +57,10 @@
  * @file
  * An span of text with style.
  ************************************************************************/
-#include "xftextspan.hxx"
-#include "ixfstream.hxx"
-#include "ixfattrlist.hxx"
-#include "xftextcontent.hxx"
+#include <xfilter/xftextspan.hxx>
+#include <xfilter/ixfstream.hxx>
+#include <xfilter/ixfattrlist.hxx>
+#include <xfilter/xftextcontent.hxx>
 
 XFTextSpan::XFTextSpan()
 {
@@ -86,7 +86,7 @@ enumXFContent XFTextSpan::GetContentType()
 
 void    XFTextSpan::Add(XFContent *pContent)
 {
-    m_aContents.push_back(pContent);
+    m_aContents.emplace_back(pContent);
 }
 
 void    XFTextSpan::Add(const OUString& text)
@@ -107,10 +107,9 @@ void    XFTextSpan::ToXml(IXFStream *pStrm)
         pAttrList->AddAttribute( "text:style-name", GetStyleName() );
     pStrm->StartElement( "text:span" );
 
-    std::vector< rtl::Reference<XFContent> >::iterator it;
-    for( it= m_aContents.begin(); it!= m_aContents.end(); ++it )
+    for (auto const& content : m_aContents)
     {
-        XFContent *pContent = it->get();
+        XFContent *pContent = content.get();
         if( pContent )
             pContent->DoToXml(pStrm);
     }
@@ -130,20 +129,18 @@ void    XFTextSpanStart::ToXml(IXFStream *pStrm)
         pAttrList->AddAttribute( "text:style-name", GetStyleName() );
     pStrm->StartElement( "text:span" );
 
-    std::vector< rtl::Reference<XFContent> >::iterator it;
-    for( it= m_aContents.begin(); it!= m_aContents.end(); ++it )
+    for (auto const& content : m_aContents)
     {
-        XFContent *pContent = it->get();
+        XFContent *pContent = content.get();
         if( pContent )
             pContent->DoToXml(pStrm);
     }
 }
 void    XFTextSpanEnd::ToXml(IXFStream *pStrm)
 {
-    std::vector< rtl::Reference<XFContent> >::iterator it;
-    for( it= m_aContents.begin(); it!= m_aContents.end(); ++it )
+    for (auto const& content : m_aContents)
     {
-        XFContent *pContent = it->get();
+        XFContent *pContent = content.get();
         if( pContent )
             pContent->DoToXml(pStrm);
     }

@@ -22,7 +22,6 @@
 #include <sfx2/sfxuno.hxx>
 #include "newhelp.hxx"
 #include <tools/debug.hxx>
-#include <com/sun/star/frame/XNotifyingDispatch.hpp>
 
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::frame;
@@ -50,7 +49,7 @@ HelpDispatch_Impl::~HelpDispatch_Impl()
 
 void SAL_CALL HelpDispatch_Impl::dispatch(
 
-    const URL& aURL, const Sequence< PropertyValue >& aArgs ) throw( RuntimeException, std::exception )
+    const URL& aURL, const Sequence< PropertyValue >& aArgs )
 
 {
     DBG_ASSERT( m_xRealDispatch.is(), "invalid dispatch" );
@@ -89,7 +88,7 @@ void SAL_CALL HelpDispatch_Impl::dispatch(
 
 void SAL_CALL HelpDispatch_Impl::addStatusListener(
 
-    const Reference< XStatusListener >& xControl, const URL& aURL ) throw( RuntimeException, std::exception )
+    const Reference< XStatusListener >& xControl, const URL& aURL )
 
 {
     DBG_ASSERT( m_xRealDispatch.is(), "invalid dispatch" );
@@ -99,7 +98,7 @@ void SAL_CALL HelpDispatch_Impl::addStatusListener(
 
 void SAL_CALL HelpDispatch_Impl::removeStatusListener(
 
-    const Reference< XStatusListener >& xControl, const URL& aURL ) throw( RuntimeException, std::exception )
+    const Reference< XStatusListener >& xControl, const URL& aURL )
 
 {
     DBG_ASSERT( m_xRealDispatch.is(), "invalid dispatch" );

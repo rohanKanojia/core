@@ -20,13 +20,12 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSPAGESELECTOR_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSPAGESELECTOR_HXX
 
-#include "model/SlsSharedPageDescriptor.hxx"
+#include <model/SlsSharedPageDescriptor.hxx>
 
-#include <com/sun/star/drawing/XDrawPage.hpp>
 #include <vector>
 #include <memory>
 
-#include "sddllapi.h"
+#include <sddllapi.h>
 
 class SdPage;
 
@@ -115,7 +114,7 @@ public:
         @return
             The returned anchor may be NULL.
     */
-    model::SharedPageDescriptor GetSelectionAnchor() const { return mpSelectionAnchor;}
+    const model::SharedPageDescriptor& GetSelectionAnchor() const { return mpSelectionAnchor;}
 
     typedef ::std::vector<SdPage*> PageSelection;
 
@@ -144,7 +143,7 @@ public:
     */
     void SetPageSelection (
         const std::shared_ptr<PageSelection>& rSelection,
-        const bool bUpdateCurrentPage = true);
+        const bool bUpdateCurrentPage);
 
     /** Call this method after the model has changed to set the number
         of selected pages.
@@ -158,7 +157,7 @@ public:
     class UpdateLock
     {
     public:
-        UpdateLock (SlideSorter& rSlideSorter);
+        UpdateLock (SlideSorter const & rSlideSorter);
         UpdateLock (PageSelector& rPageSelector);
         ~UpdateLock();
         void Release();
@@ -169,7 +168,7 @@ public:
     class BroadcastLock
     {
     public:
-        BroadcastLock (SlideSorter& rSlideSorter);
+        BroadcastLock (SlideSorter const & rSlideSorter);
         BroadcastLock (PageSelector& rPageSelector);
         ~BroadcastLock();
     private:

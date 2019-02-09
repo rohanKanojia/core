@@ -20,13 +20,7 @@
 #ifndef INCLUDED_RTL_TEXTENC_H
 #define INCLUDED_RTL_TEXTENC_H
 
-#ifdef _SOLAR_RSC_INVOKED
-/* Enable resources to use these values, rsc can't handle casts */
-#define RTL_TEXTENC_CAST( val ) (val)
-
-#else /* !_SOLAR_RSC_INVOKED */
-
-#include <sal/types.h>
+#include "sal/types.h"
 
 /** The various supported text encodings.
 
@@ -39,8 +33,6 @@
 typedef sal_uInt16 rtl_TextEncoding;
 
 #define RTL_TEXTENC_CAST( val ) ((rtl_TextEncoding) val)
-
-#endif /* _SOLAR_RSC_INVOKED */
 
 #define RTL_TEXTENCODING_DONTKNOW               (RTL_TEXTENC_CAST( 0 ))
 #define RTL_TEXTENCODING_MS_1252                (RTL_TEXTENC_CAST( 1 ))

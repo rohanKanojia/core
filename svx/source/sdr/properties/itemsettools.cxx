@@ -18,13 +18,11 @@
  */
 
 #include <sdr/properties/itemsettools.hxx>
-#include <tools/debug.hxx>
 #include <tools/fract.hxx>
 #include <svl/itemset.hxx>
 #include <svl/whiter.hxx>
 #include <svx/svdogrp.hxx>
 #include <svx/svditer.hxx>
-#include <vcl/region.hxx>
 #include <vcl/outdev.hxx>
 #include <memory>
 
@@ -36,12 +34,10 @@ namespace sdr
     {
         ItemChangeBroadcaster::ItemChangeBroadcaster(const SdrObject& rObj)
         {
-            if(dynamic_cast<const SdrObjGroup*>( &rObj ) !=  nullptr)
+            if (const SdrObjGroup* pGroupObj = dynamic_cast<const SdrObjGroup*>(&rObj))
             {
-                SdrObjListIter aIter(static_cast<const SdrObjGroup&>(rObj), IM_DEEPNOGROUPS);
-                mpData = new RectangleVector;
-                DBG_ASSERT(mpData, "ItemChangeBroadcaster: No memory (!)");
-                static_cast<RectangleVector*>(mpData)->reserve(aIter.Count());
+                SdrObjListIter aIter(pGroupObj->GetSubList(), SdrIterMode::DeepNoGroups);
+                maRectangles.reserve(aIter.Count());
 
                 while(aIter.IsMore())
                 {
@@ -49,41 +45,13 @@ namespace sdr
 
                     if(pObj)
                     {
-                        static_cast<RectangleVector*>(mpData)->push_back(pObj->GetLastBoundRect());
+                        maRectangles.push_back(pObj->GetLastBoundRect());
                     }
                 }
-
-                mnCount = static_cast<RectangleVector*>(mpData)->size();
             }
             else
             {
-                mpData = new Rectangle(rObj.GetLastBoundRect());
-                mnCount = 1L;
-            }
-        }
-
-        ItemChangeBroadcaster::~ItemChangeBroadcaster()
-        {
-            if(mnCount > 1)
-            {
-                delete static_cast<RectangleVector*>(mpData);
-            }
-            else
-            {
-                delete static_cast<Rectangle*>(mpData);
-            }
-        }
-
-
-        const Rectangle& ItemChangeBroadcaster::GetRectangle(sal_uInt32 nIndex) const
-        {
-            if(mnCount > 1)
-            {
-                return (*static_cast<RectangleVector*>(mpData))[nIndex];
-            }
-            else
-            {
-                return *static_cast<Rectangle*>(mpData);
+                maRectangles.push_back(rObj.GetLastBoundRect());
             }
         }
     } // end of namespace properties

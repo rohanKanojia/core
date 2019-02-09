@@ -19,12 +19,17 @@
 
 #include "timetargetelementcontext.hxx"
 
-#include "comphelper/anytostring.hxx"
-#include "cppuhelper/exc_hlp.hxx"
+#include <cppuhelper/exc_hlp.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
-#include "oox/helper/attributelist.hxx"
-#include "drawingml/embeddedwavaudiofile.hxx"
+#include <oox/helper/attributelist.hxx>
+#include <drawingml/embeddedwavaudiofile.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <com/sun/star/io/XInputStream.hpp>
+#include <avmedia/mediaitem.hxx>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::xml::sax;
@@ -37,7 +42,7 @@ namespace oox { namespace ppt {
         : public FragmentHandler2
     {
     public:
-        ShapeTargetElementContext( FragmentHandler2& rParent, ShapeTargetElement & aValue )
+        ShapeTargetElementContext( FragmentHandler2 const & rParent, ShapeTargetElement & aValue )
             : FragmentHandler2( rParent )
                 , bTargetSet(false)
                 , maShapeTarget(aValue)
@@ -90,7 +95,7 @@ namespace oox { namespace ppt {
         ShapeTargetElement & maShapeTarget;
     };
 
-    TimeTargetElementContext::TimeTargetElementContext( FragmentHandler2& rParent, const AnimTargetElementPtr & pValue )
+    TimeTargetElementContext::TimeTargetElementContext( FragmentHandler2 const & rParent, const AnimTargetElementPtr & pValue )
         : FragmentHandler2( rParent ),
             mpTarget( pValue )
     {
@@ -120,8 +125,16 @@ namespace oox { namespace ppt {
             return this;
         case PPT_TOKEN( sndTgt ):
         {
+            OUString srcFile = drawingml::getEmbeddedWAVAudioFile(getRelations(), rAttribs);
             mpTarget->mnType = XML_sndTgt;
-            mpTarget->msValue = drawingml::getEmbeddedWAVAudioFile( getRelations(), rAttribs );
+            Reference<css::io::XInputStream>
+                xInputStream = getFilter().openInputStream(srcFile);
+
+            if (xInputStream.is())
+            {
+                ::avmedia::EmbedMedia(getFilter().getModel(), srcFile, mpTarget->msValue, xInputStream);
+                xInputStream->closeInput();
+            }
             break;
         }
         case PPT_TOKEN( spTgt ):

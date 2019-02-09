@@ -24,11 +24,14 @@
 
 #include <vcl/unohelp.hxx>
 #include <com/sun/star/i18n/XCharacterClassification.hpp>
+#include <i18nlangtag/languagetag.hxx>
 #include <i18nlangtag/mslangid.hxx>
+#include <rtl/character.hxx>
 
 using namespace ::com::sun::star;
 
-MnemonicGenerator::MnemonicGenerator()
+MnemonicGenerator::MnemonicGenerator(sal_Unicode cMnemonic)
+    : m_cMnemonic(cMnemonic)
 {
     memset( maMnemonics, 1, sizeof( maMnemonics ) );
 }
@@ -59,10 +62,10 @@ sal_uInt16 MnemonicGenerator::ImplGetMnemonicIndex( sal_Unicode c )
 sal_Unicode MnemonicGenerator::ImplFindMnemonic( const OUString& rKey )
 {
     sal_Int32 nIndex = 0;
-    while ( (nIndex = rKey.indexOf( MNEMONIC_CHAR, nIndex )) != -1 )
+    while ( (nIndex = rKey.indexOf( m_cMnemonic, nIndex )) != -1 )
     {
         sal_Unicode cMnemonic = rKey[ nIndex+1 ];
-        if ( cMnemonic != MNEMONIC_CHAR )
+        if ( cMnemonic != m_cMnemonic )
             return cMnemonic;
         nIndex += 2;
     }
@@ -72,14 +75,13 @@ sal_Unicode MnemonicGenerator::ImplFindMnemonic( const OUString& rKey )
 
 void MnemonicGenerator::RegisterMnemonic( const OUString& rKey )
 {
-    const css::lang::Locale& rLocale = Application::GetSettings().GetUILanguageTag().getLocale();
     uno::Reference < i18n::XCharacterClassification > xCharClass = GetCharClass();
 
     // Don't crash even when we don't have access to i18n service
     if ( !xCharClass.is() )
         return;
 
-    OUString aKey = xCharClass->toUpper( rKey, 0, rKey.getLength(), rLocale );
+    OUString aKey = xCharClass->toLower(rKey, 0, rKey.getLength(), css::lang::Locale());
 
     // If we find a Mnemonic, set the flag. In other case count the
     // characters, because we need this to set most as possible
@@ -116,14 +118,13 @@ OUString MnemonicGenerator::CreateMnemonic( const OUString& _rKey )
     if ( _rKey.isEmpty() || ImplFindMnemonic( _rKey ) )
         return _rKey;
 
-    const css::lang::Locale& rLocale = Application::GetSettings().GetUILanguageTag().getLocale();
     uno::Reference < i18n::XCharacterClassification > xCharClass = GetCharClass();
 
     // Don't crash even when we don't have access to i18n service
     if ( !xCharClass.is() )
         return _rKey;
 
-    OUString aKey = xCharClass->toUpper( _rKey, 0, _rKey.getLength(), rLocale );
+    OUString aKey = xCharClass->toLower(_rKey, 0, _rKey.getLength(), css::lang::Locale());
 
     bool bChanged = false;
     sal_Int32 nLen = aKey.getLength();
@@ -189,7 +190,7 @@ OUString MnemonicGenerator::CreateMnemonic( const OUString& _rKey )
                 if ( maMnemonics[nMnemonicIndex] )
                 {
                     maMnemonics[nMnemonicIndex] = 0;
-                    rKey = rKey.replaceAt( nIndex, 0, OUString(MNEMONIC_CHAR) );
+                    rKey = rKey.replaceAt( nIndex, 0, OUString(m_cMnemonic) );
                     bChanged = true;
                     break;
                 }
@@ -241,7 +242,7 @@ OUString MnemonicGenerator::CreateMnemonic( const OUString& _rKey )
             if ( nBestCount != 0xFFFF )
             {
                 maMnemonics[nBestMnemonicIndex] = 0;
-                rKey = rKey.replaceAt( nBestIndex, 0, OUString(MNEMONIC_CHAR) );
+                rKey = rKey.replaceAt( nBestIndex, 0, OUString(m_cMnemonic) );
                 bChanged = true;
             }
         }
@@ -255,14 +256,14 @@ OUString MnemonicGenerator::CreateMnemonic( const OUString& _rKey )
         // Append Ascii Mnemonic
         for ( c = MNEMONIC_RANGE_2_START; c <= MNEMONIC_RANGE_2_END; c++ )
         {
-            nMnemonicIndex = ImplGetMnemonicIndex( c );
+            nMnemonicIndex = ImplGetMnemonicIndex(c);
             if ( nMnemonicIndex != MNEMONIC_INDEX_NOTFOUND )
             {
                 if ( maMnemonics[nMnemonicIndex] )
                 {
                     maMnemonics[nMnemonicIndex] = 0;
                     OUString aStr = OUStringBuffer().
-                        append('(').append(MNEMONIC_CHAR).append(c).
+                        append('(').append(m_cMnemonic).append(sal_Unicode(rtl::toAsciiUpperCase(c))).
                         append(')').makeStringAndClear();
                     nIndex = rKey.getLength();
                     if( nIndex >= 2 )
@@ -296,7 +297,7 @@ OUString MnemonicGenerator::CreateMnemonic( const OUString& _rKey )
     return rKey;
 }
 
-uno::Reference< i18n::XCharacterClassification > MnemonicGenerator::GetCharClass()
+uno::Reference< i18n::XCharacterClassification > const & MnemonicGenerator::GetCharClass()
 {
     if ( !mxCharClass.is() )
         mxCharClass = vcl::unohelper::CreateCharacterClassification();
@@ -316,7 +317,7 @@ OUString MnemonicGenerator::EraseAllMnemonicChars( const OUString& rStr )
             // check for CJK-style mnemonic
             if( i > 0 && (i+2) < nLen )
             {
-                sal_Unicode c = aStr[i+1];
+                sal_Unicode c = sal_Unicode(rtl::toAsciiUpperCase(aStr[i+1]));
                 if( aStr[ i-1 ] == '(' &&
                     aStr[ i+2 ] == ')' &&
                     c >= MNEMONIC_RANGE_2_START && c <= MNEMONIC_RANGE_2_END )

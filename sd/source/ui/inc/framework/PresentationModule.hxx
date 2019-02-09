@@ -20,7 +20,10 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_FRAMEWORK_PRESENTATIONMODULE_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_FRAMEWORK_PRESENTATIONMODULE_HXX
 
-#include <com/sun/star/frame/XController.hpp>
+#include <sal/types.h>
+
+namespace com { namespace sun { namespace star { namespace frame { class XController; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <class interface_type> class Reference; } } } }
 
 namespace sd { namespace framework {
 
@@ -31,7 +34,7 @@ class PresentationModule
 {
 public:
     static void Initialize (
-        css::uno::Reference<css::frame::XController>& rxController);
+        css::uno::Reference<css::frame::XController> const & rxController);
 };
 
 } } // end of namespace sd::framework

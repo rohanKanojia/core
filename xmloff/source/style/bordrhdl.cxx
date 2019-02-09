@@ -17,14 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <bordrhdl.hxx>
+#include "bordrhdl.hxx"
 #include <sax/tools/converter.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmluconv.hxx>
+#include <xmloff/xmlement.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/table/BorderLine2.hpp>
 #include <com/sun/star/table/BorderLineStyle.hpp>
+
+#include <limits.h>
 
 using namespace ::com::sun::star;
 using namespace ::xmloff::token;
@@ -37,7 +40,7 @@ using namespace ::xmloff::token;
 #define SVX_XML_BORDER_WIDTH_MIDDLE 1
 #define SVX_XML_BORDER_WIDTH_THICK 2
 
-SvXMLEnumMapEntry pXML_BorderStyles[] =
+SvXMLEnumMapEntry<sal_uInt16> const pXML_BorderStyles[] =
 {
     { XML_NONE,          table::BorderLineStyle::NONE   },
     { XML_HIDDEN,        table::BorderLineStyle::NONE   },
@@ -56,7 +59,7 @@ SvXMLEnumMapEntry pXML_BorderStyles[] =
     { XML_TOKEN_INVALID, 0 }
 };
 
-SvXMLEnumMapEntry pXML_NamedBorderWidths[] =
+SvXMLEnumMapEntry<sal_uInt16> const pXML_NamedBorderWidths[] =
 {
     { XML_THIN,             SVX_XML_BORDER_WIDTH_THIN   },
     { XML_MIDDLE,           SVX_XML_BORDER_WIDTH_MIDDLE },
@@ -211,12 +214,12 @@ bool XMLBorderHdl::importXML( const OUString& rStrImpValue, uno::Any& rValue, co
                  rUnitConverter.convertMeasureToCore( nTemp, aToken, 0,
                                                  USHRT_MAX ) )
         {
-            nWidth = (sal_uInt16)nTemp;
+            nWidth = static_cast<sal_uInt16>(nTemp);
             bHasWidth = true;
         }
         else
         {
-            // missformed
+            // misformed
             return false;
         }
     }

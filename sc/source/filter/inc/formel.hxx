@@ -20,10 +20,8 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_FORMEL_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_FORMEL_HXX
 
-#include <compiler.hxx>
-#include <global.hxx>
+#include <tools/stream.hxx>
 
-#include "root.hxx"
 #include "tokstack.hxx"
 
 #include <memory>
@@ -38,16 +36,12 @@ class SharedStringPool;
 
 class XclImpStream;
 class ScTokenArray;
-struct ScSingleRefData;
-struct ScComplexRefData;
 
-enum ConvErr
+enum class ConvErr
 {
-    ConvOK = 0,
-    ConvErrNi,      // unimplemented/unknown opcode occurred
-    ConvErrNoMem,   // alloc error
-    ConvErrExternal,// excel add-ins are not converted
-    ConvErrCount    // did not get all bytes of formula
+    OK = 0,
+    Ni,      // unimplemented/unknown opcode occurred
+    Count    // did not get all bytes of formula
 };
 
 enum FORMULA_TYPE
@@ -58,7 +52,7 @@ enum FORMULA_TYPE
     FT_CondFormat
 };
 
-class _ScRangeListTabs
+class ScRangeListTabs
 {
     typedef ::std::vector<ScRange> RangeListType;
     typedef ::std::map<SCTAB, std::unique_ptr<RangeListType>> TabRangeType;
@@ -67,13 +61,13 @@ class _ScRangeListTabs
     RangeListType::const_iterator maItrCurEnd;
 
 public:
-    _ScRangeListTabs ();
-    ~_ScRangeListTabs();
+    ScRangeListTabs ();
+    ~ScRangeListTabs();
 
     void Append( const ScAddress& aSRD, SCTAB nTab );
     void Append( const ScRange& aCRD, SCTAB nTab );
 
-    const ScRange* First ( SCTAB nTab = 0 );
+    const ScRange* First ( SCTAB nTab );
     const ScRange* Next ();
 
     bool HasRanges () const { return !m_TabRanges.empty(); }
@@ -85,8 +79,8 @@ protected:
     TokenPool           aPool;          // user token + predefined token
     TokenStack          aStack;
     ScAddress           aEingPos;
-    ConvErr             eStatus;
-    sal_Char*           pBuffer;        // universal buffer
+    std::unique_ptr<sal_Char[]>
+                        pBuffer;        // universal buffer
 
     ConverterBase( svl::SharedStringPool& rSPool, sal_uInt16 nNewBuffer );
     virtual             ~ConverterBase();
@@ -97,16 +91,16 @@ protected:
 class ExcelConverterBase : public ConverterBase
 {
 protected:
-    ExcelConverterBase( svl::SharedStringPool& rSPool, sal_uInt16 nNewBuffer );
-    virtual             ~ExcelConverterBase();
+    ExcelConverterBase( svl::SharedStringPool& rSPool );
+    virtual             ~ExcelConverterBase() override;
 
 public:
     void                Reset();
     void                Reset( const ScAddress& rEingPos );
 
-    virtual ConvErr     Convert( const ScTokenArray*& rpErg, XclImpStream& rStrm, sal_Size nFormulaLen,
+    virtual ConvErr     Convert( std::unique_ptr<ScTokenArray>& rpErg, XclImpStream& rStrm, std::size_t nFormulaLen,
                                  bool bAllowArrays, const FORMULA_TYPE eFT = FT_CellFormula ) = 0;
-    virtual ConvErr     Convert( _ScRangeListTabs&, XclImpStream& rStrm, sal_Size nFormulaLen, SCsTAB nTab,
+    virtual ConvErr     Convert( ScRangeListTabs&, XclImpStream& rStrm, std::size_t nFormulaLen, SCTAB nTab,
                                     const FORMULA_TYPE eFT = FT_CellFormula ) = 0;
 };
 
@@ -123,13 +117,15 @@ protected:
     inline void         Read( double& fDouble );
     inline void         Read( sal_uInt32& nUINT32 );
 
-    LotusConverterBase( SvStream& rStr, svl::SharedStringPool& rSPool, sal_uInt16 nNewBuffer );
-    virtual             ~LotusConverterBase();
+    LotusConverterBase( SvStream& rStr, svl::SharedStringPool& rSPool );
+    virtual             ~LotusConverterBase() override;
 
 public:
     void                Reset( const ScAddress& rEingPos );
 
-    virtual void        Convert( const ScTokenArray*& rpErg, sal_Int32& nRest ) = 0;
+    virtual void        Convert( std::unique_ptr<ScTokenArray>& rpErg, sal_Int32& nRest ) = 0;
+
+    bool good() const { return aIn.good(); }
 
 protected:
     using               ConverterBase::Reset;
@@ -144,31 +140,51 @@ inline void LotusConverterBase::Ignore( const long nSeekRel )
 inline void LotusConverterBase::Read( sal_uInt8& nByte )
 {
     aIn.ReadUChar( nByte );
-    nBytesLeft--;
+    if (aIn.good())
+        nBytesLeft--;
+    else
+    {
+        // SvStream::ReadUChar() does not init a single char on failure. This
+        // behaviour is even tested in a unit test.
+        nByte = 0;
+        nBytesLeft = -1;    // bail out early
+    }
 }
 
 inline void LotusConverterBase::Read( sal_uInt16& nUINT16 )
 {
     aIn.ReadUInt16( nUINT16 );
-    nBytesLeft -= 2;
+    if (aIn.good())
+        nBytesLeft -= 2;
+    else
+        nBytesLeft = -1;    // bail out early
 }
 
 inline void LotusConverterBase::Read( sal_Int16& nINT16 )
 {
     aIn.ReadInt16( nINT16 );
-    nBytesLeft -= 2;
+    if (aIn.good())
+        nBytesLeft -= 2;
+    else
+        nBytesLeft = -1;    // bail out early
 }
 
 inline void LotusConverterBase::Read( double& fDouble )
 {
     aIn.ReadDouble( fDouble );
-    nBytesLeft -= 8;
+    if (aIn.good())
+        nBytesLeft -= 8;
+    else
+        nBytesLeft = -1;    // bail out early
 }
 
 inline void LotusConverterBase::Read( sal_uInt32& nUINT32 )
 {
     aIn.ReadUInt32( nUINT32 );
-    nBytesLeft -= 4;
+    if (aIn.good())
+        nBytesLeft -= 4;
+    else
+        nBytesLeft = -1;    // bail out early
 }
 
 #endif

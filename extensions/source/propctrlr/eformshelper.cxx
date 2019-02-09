@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include "eformshelper.hxx"
 #include "formstrings.hxx"
-#include "formresid.hrc"
+#include <strings.hrc>
 #include "modulepcr.hxx"
 #include "propeventtranslation.hxx"
 #include "formbrowsertools.hxx"
@@ -32,7 +33,6 @@
 #include <tools/diagnose_ex.h>
 #include <rtl/ustrbuf.hxx>
 
-#include <functional>
 #include <algorithm>
 #include <o3tl/functional.hxx>
 
@@ -123,14 +123,14 @@ namespace pcr
             OSL_VERIFY( m_xControlModel->getPropertyValue( PROPERTY_CLASSID ) >>= nControlType );
 
             // some lists
-            sal_Int16 nNumericCompatibleTypes[] = { DataTypeClass::DECIMAL, DataTypeClass::FLOAT, DataTypeClass::DOUBLE, 0 };
-            sal_Int16 nDateCompatibleTypes[] = { DataTypeClass::DATE, 0 };
-            sal_Int16 nTimeCompatibleTypes[] = { DataTypeClass::TIME, 0 };
-            sal_Int16 nCheckboxCompatibleTypes[] = { DataTypeClass::BOOLEAN, DataTypeClass::STRING, DataTypeClass::anyURI, 0 };
-            sal_Int16 nRadiobuttonCompatibleTypes[] = { DataTypeClass::STRING, DataTypeClass::anyURI, 0 };
-            sal_Int16 nFormattedCompatibleTypes[] = { DataTypeClass::DECIMAL, DataTypeClass::FLOAT, DataTypeClass::DOUBLE, DataTypeClass::DATETIME, DataTypeClass::DATE, DataTypeClass::TIME, 0 };
+            sal_Int16 const nNumericCompatibleTypes[] = { DataTypeClass::DECIMAL, DataTypeClass::FLOAT, DataTypeClass::DOUBLE, 0 };
+            sal_Int16 const nDateCompatibleTypes[] = { DataTypeClass::DATE, 0 };
+            sal_Int16 const nTimeCompatibleTypes[] = { DataTypeClass::TIME, 0 };
+            sal_Int16 const nCheckboxCompatibleTypes[] = { DataTypeClass::BOOLEAN, DataTypeClass::STRING, DataTypeClass::anyURI, 0 };
+            sal_Int16 const nRadiobuttonCompatibleTypes[] = { DataTypeClass::STRING, DataTypeClass::anyURI, 0 };
+            sal_Int16 const nFormattedCompatibleTypes[] = { DataTypeClass::DECIMAL, DataTypeClass::FLOAT, DataTypeClass::DOUBLE, DataTypeClass::DATETIME, DataTypeClass::DATE, DataTypeClass::TIME, 0 };
 
-            sal_Int16* pCompatibleTypes = nullptr;
+            sal_Int16 const * pCompatibleTypes = nullptr;
             switch ( nControlType )
             {
             case FormComponentType::SPINBUTTON:
@@ -164,7 +164,7 @@ namespace pcr
                         break;
                     }
                 }
-                // NO break here!
+                [[fallthrough]];
             }
             case FormComponentType::LISTBOX:
             case FormComponentType::COMBOBOX:
@@ -242,7 +242,7 @@ namespace pcr
     {
         if ( !_bDoListen )
         {
-            ::std::unique_ptr< ::comphelper::OInterfaceIteratorHelper2 > pListenerIterator = m_aPropertyListeners.createIterator();
+            std::unique_ptr< ::comphelper::OInterfaceIteratorHelper2 > pListenerIterator = m_aPropertyListeners.createIterator();
             while ( pListenerIterator->hasMoreElements() )
             {
                 PropertyEventTranslation* pTranslator = dynamic_cast< PropertyEventTranslation* >( pListenerIterator->next() );
@@ -276,7 +276,7 @@ namespace pcr
             }
             else
             {
-                ::std::unique_ptr< ::comphelper::OInterfaceIteratorHelper2 > pListenerIterator = m_aPropertyListeners.createIterator();
+                std::unique_ptr< ::comphelper::OInterfaceIteratorHelper2 > pListenerIterator = m_aPropertyListeners.createIterator();
                 while ( pListenerIterator->hasMoreElements() )
                 {
                     Reference< XPropertyChangeListener > xListener( pListenerIterator->next(), UNO_QUERY );
@@ -293,7 +293,7 @@ namespace pcr
     }
 
 
-    void EFormsHelper::getFormModelNames( ::std::vector< OUString >& /* [out] */ _rModelNames ) const
+    void EFormsHelper::getFormModelNames( std::vector< OUString >& /* [out] */ _rModelNames ) const
     {
         if ( m_xDocument.is() )
         {
@@ -307,7 +307,7 @@ namespace pcr
                 {
                     Sequence< OUString > aModelNames = xForms->getElementNames();
                     _rModelNames.resize( aModelNames.getLength() );
-                    ::std::copy( aModelNames.begin(), aModelNames.end(), _rModelNames.begin() );
+                    std::copy( aModelNames.begin(), aModelNames.end(), _rModelNames.begin() );
                 }
             }
             catch( const Exception& )
@@ -318,7 +318,7 @@ namespace pcr
     }
 
 
-    void EFormsHelper::getBindingNames( const OUString& _rModelName, ::std::vector< OUString >& /* [out] */ _rBindingNames ) const
+    void EFormsHelper::getBindingNames( const OUString& _rModelName, std::vector< OUString >& /* [out] */ _rBindingNames ) const
     {
         _rBindingNames.resize( 0 );
         try
@@ -332,7 +332,7 @@ namespace pcr
                 {
                     Sequence< OUString > aNames = xBindings->getElementNames();
                     _rBindingNames.resize( aNames.getLength() );
-                    ::std::copy( aNames.begin(), aNames.end(), _rBindingNames.begin() );
+                    std::copy( aNames.begin(), aNames.end(), _rBindingNames.begin() );
                 }
             }
         }
@@ -482,7 +482,7 @@ namespace pcr
             m_xBindableControl->setValueBinding( xBinding );
             impl_toggleBindingPropertyListening_throw( true, nullptr );
 
-            ::std::set< OUString > aSet;
+            std::set< OUString > aSet;
             firePropertyChanges( xOldBinding, _rxBinding, aSet );
         }
         catch( const Exception& )
@@ -510,7 +510,7 @@ namespace pcr
             // determine the model which the binding should belong to
             if ( sTargetModel.isEmpty() )
             {
-                ::std::vector< OUString > aModelNames;
+                std::vector< OUString > aModelNames;
                 getFormModelNames( aModelNames );
                 if ( !aModelNames.empty() )
                     sTargetModel = *aModelNames.begin();
@@ -541,7 +541,7 @@ namespace pcr
                     if ( xBinding.is() )
                     {
                         // find a nice name for it
-                        OUString sBaseName(PcrRes(RID_STR_BINDING_UI_NAME).toString());
+                        OUString sBaseName(PcrRes(RID_STR_BINDING_NAME));
                         sBaseName += " ";
                         OUString sNewName;
                         sal_Int32 nNumber = 1;
@@ -560,7 +560,7 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
 
         return xBinding;
@@ -570,7 +570,7 @@ namespace pcr
     namespace
     {
 
-        struct PropertyBagInserter : public ::std::unary_function< Property, void >
+        struct PropertyBagInserter
         {
         private:
             PropertyBag& m_rProperties;
@@ -593,7 +593,7 @@ namespace pcr
             if ( xInfo.is() )
             {
                 Sequence< Property > aProperties = xInfo->getProperties();
-                ::std::for_each( aProperties.getConstArray(), aProperties.getConstArray() + aProperties.getLength(),
+                std::for_each( aProperties.begin(), aProperties.end(),
                     PropertyBagInserter( _rBag )
                 );
             }
@@ -614,7 +614,7 @@ namespace pcr
             OSL_ENSURE( xHelper.is(), "EFormsHelper::getModelElementUIName: invalid element or model!" );
             if ( xHelper.is() )
             {
-                OUString sElementName = ( _eType == Submission ) ? xHelper->getSubmissionName( _rxElement, sal_True ) : xHelper->getBindingName( _rxElement, sal_True );
+                OUString sElementName = ( _eType == Submission ) ? xHelper->getSubmissionName( _rxElement, true ) : xHelper->getBindingName( _rxElement, true );
                 Reference< xforms::XModel > xModel( xHelper, UNO_QUERY_THROW );
                 sUIName = composeModelElementUIName( xModel->getID(), sElementName );
             }
@@ -638,7 +638,7 @@ namespace pcr
     }
 
 
-    void EFormsHelper::getAllElementUINames( const ModelElementType _eType, ::std::vector< OUString >& /* [out] */ _rElementNames, bool _bPrepentEmptyEntry )
+    void EFormsHelper::getAllElementUINames( const ModelElementType _eType, std::vector< OUString >& /* [out] */ _rElementNames, bool _bPrepentEmptyEntry )
     {
         MapStringToPropertySet& rMapUINameToElement( ( _eType == Submission ) ? m_aSubmissionUINames : m_aBindingUINames );
         rMapUINameToElement.clear();
@@ -650,17 +650,14 @@ namespace pcr
         try
         {
             // obtain the model names
-            ::std::vector< OUString > aModels;
+            std::vector< OUString > aModels;
             getFormModelNames( aModels );
             _rElementNames.reserve( aModels.size() * 2 );    // heuristics
 
             // for every model, obtain the element
-            for ( ::std::vector< OUString >::const_iterator pModelName = aModels.begin();
-                  pModelName != aModels.end();
-                  ++pModelName
-                )
+            for (auto const& modelName : aModels)
             {
-                Reference< xforms::XModel > xModel = getFormModelByName( *pModelName );
+                Reference< xforms::XModel > xModel = getFormModelByName(modelName);
                 OSL_ENSURE( xModel.is(), "EFormsHelper::getAllElementUINames: inconsistency in the models!" );
                 Reference< xforms::XFormsUIHelper1 > xHelper( xModel, UNO_QUERY );
 
@@ -686,11 +683,11 @@ namespace pcr
                             xElement->setPropertyValue( PROPERTY_MODEL, makeAny( xModel ) );
                     }
 #endif
-                    OUString sElementName = ( _eType == Submission ) ? xHelper->getSubmissionName( xElement, sal_True ) : xHelper->getBindingName( xElement, sal_True );
-                    OUString sUIName = composeModelElementUIName( *pModelName, sElementName );
+                    OUString sElementName = ( _eType == Submission ) ? xHelper->getSubmissionName( xElement, true ) : xHelper->getBindingName( xElement, true );
+                    OUString sUIName = composeModelElementUIName( modelName, sElementName );
 
                     OSL_ENSURE( rMapUINameToElement.find( sUIName ) == rMapUINameToElement.end(), "EFormsHelper::getAllElementUINames: duplicate name!" );
-                    rMapUINameToElement.insert( MapStringToPropertySet::value_type( sUIName, xElement ) );
+                    rMapUINameToElement.emplace( sUIName, xElement );
                 }
             }
         }
@@ -700,7 +697,7 @@ namespace pcr
         }
 
         _rElementNames.resize( rMapUINameToElement.size() );
-        ::std::transform( rMapUINameToElement.begin(), rMapUINameToElement.end(), _rElementNames.begin(),
+        std::transform( rMapUINameToElement.begin(), rMapUINameToElement.end(), _rElementNames.begin(),
                 ::o3tl::select1st< MapStringToPropertySet::value_type >() );
     }
 
@@ -731,7 +728,7 @@ namespace pcr
     }
 
 
-    void EFormsHelper::firePropertyChanges( const Reference< XPropertySet >& _rxOldProps, const Reference< XPropertySet >& _rxNewProps, ::std::set< OUString >& _rFilter ) const
+    void EFormsHelper::firePropertyChanges( const Reference< XPropertySet >& _rxOldProps, const Reference< XPropertySet >& _rxNewProps, std::set< OUString >& _rFilter ) const
     {
         if ( m_aPropertyListeners.empty() )
             return;
@@ -742,23 +739,20 @@ namespace pcr
             Reference< XPropertySetInfo > xOldInfo = collectPropertiesGetInfo( _rxOldProps, aProperties );
             Reference< XPropertySetInfo > xNewInfo = collectPropertiesGetInfo( _rxNewProps, aProperties );
 
-            for ( PropertyBag::const_iterator aProp = aProperties.begin();
-                  aProp != aProperties.end();
-                  ++aProp
-                )
+            for (auto const& property : aProperties)
             {
-                if ( _rFilter.find( aProp->Name ) != _rFilter.end() )
+                if ( _rFilter.find( property.Name ) != _rFilter.end() )
                     continue;
 
-                Any aOldValue( nullptr, aProp->Type );
-                if ( xOldInfo.is() && xOldInfo->hasPropertyByName( aProp->Name ) )
-                    aOldValue = _rxOldProps->getPropertyValue( aProp->Name );
+                Any aOldValue( nullptr, property.Type );
+                if ( xOldInfo.is() && xOldInfo->hasPropertyByName( property.Name ) )
+                    aOldValue = _rxOldProps->getPropertyValue( property.Name );
 
-                Any aNewValue( nullptr, aProp->Type );
-                if ( xNewInfo.is() && xNewInfo->hasPropertyByName( aProp->Name ) )
-                    aNewValue = _rxNewProps->getPropertyValue( aProp->Name );
+                Any aNewValue( nullptr, property.Type );
+                if ( xNewInfo.is() && xNewInfo->hasPropertyByName( property.Name ) )
+                    aNewValue = _rxNewProps->getPropertyValue( property.Name );
 
-                firePropertyChange( aProp->Name, aOldValue, aNewValue );
+                firePropertyChange( property.Name, aOldValue, aNewValue );
             }
         }
         catch( const Exception& )

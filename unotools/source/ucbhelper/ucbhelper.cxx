@@ -25,6 +25,7 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/task/XInteractionHandler.hpp>
+#include <com/sun/star/task/InteractionHandler.hpp>
 #include <com/sun/star/ucb/CommandAbortedException.hpp>
 #include <com/sun/star/ucb/ContentInfo.hpp>
 #include <com/sun/star/ucb/ContentInfoAttribute.hpp>
@@ -46,6 +47,7 @@
 #include <com/sun/star/util/DateTime.hpp>
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/exc_hlp.hxx>
+#include <comphelper/simplefileaccessinteraction.hxx>
 #include <osl/file.hxx>
 #include <rtl/string.h>
 #include <rtl/ustring.h>
@@ -63,20 +65,20 @@ namespace {
 OUString canonic(OUString const & url) {
     INetURLObject o(url);
     SAL_WARN_IF(o.HasError(), "unotools.ucbhelper", "Invalid URL \"" << url << '"');
-    return o.GetMainURL(INetURLObject::NO_DECODE);
+    return o.GetMainURL(INetURLObject::DecodeMechanism::NONE);
 }
 
 ucbhelper::Content content(OUString const & url) {
     return ucbhelper::Content(
         canonic(url),
-        css::uno::Reference<css::ucb::XCommandEnvironment>(),
+        utl::UCBContentHelper::getDefaultCommandEnvironment(),
         comphelper::getProcessComponentContext());
 }
 
 ucbhelper::Content content(INetURLObject const & url) {
     return ucbhelper::Content(
-        url.GetMainURL(INetURLObject::NO_DECODE),
-        css::uno::Reference<css::ucb::XCommandEnvironment>(),
+        url.GetMainURL(INetURLObject::DecodeMechanism::NONE),
+        utl::UCBContentHelper::getDefaultCommandEnvironment(),
         comphelper::getProcessComponentContext());
 }
 
@@ -101,7 +103,7 @@ std::vector<OUString> getContents(OUString const & url) {
         SAL_INFO(
             "unotools.ucbhelper",
             "getContents(" << url << ") " << e.getValueType().getTypeName()
-                << " \"" << e.get<css::uno::Exception>().Message << '"');
+                << " \"" << e.get<css::uno::Exception>() << '"');
         return std::vector<OUString>();
     }
 }
@@ -120,6 +122,22 @@ DateTime convert(css::util::DateTime const & dt) {
 
 }
 
+css::uno::Reference< css::ucb::XCommandEnvironment > utl::UCBContentHelper::getDefaultCommandEnvironment()
+{
+    css::uno::Reference< css::task::XInteractionHandler > xIH(
+        css::task::InteractionHandler::createWithParent(
+            comphelper::getProcessComponentContext(), nullptr ) );
+
+    css::uno::Reference< css::ucb::XProgressHandler > xProgress;
+    ucbhelper::CommandEnvironment* pCommandEnv =
+        new ::ucbhelper::CommandEnvironment(
+            new comphelper::SimpleFileAccessInteraction( xIH ), xProgress );
+
+    css::uno::Reference < css::ucb::XCommandEnvironment > xEnv(
+        static_cast< css::ucb::XCommandEnvironment* >(pCommandEnv), css::uno::UNO_QUERY );
+    return xEnv;
+}
+
 bool utl::UCBContentHelper::IsDocument(OUString const & url) {
     try {
         return content(url).isDocument();
@@ -134,7 +152,7 @@ bool utl::UCBContentHelper::IsDocument(OUString const & url) {
             "unotools.ucbhelper",
             "UCBContentHelper::IsDocument(" << url << ") "
                 << e.getValueType().getTypeName() << " \""
-                << e.get<css::uno::Exception>().Message << '"');
+                << e.get<css::uno::Exception>() << '"');
         return false;
     }
 }
@@ -155,7 +173,7 @@ css::uno::Any utl::UCBContentHelper::GetProperty(
             "unotools.ucbhelper",
             "UCBContentHelper::GetProperty(" << url << ", " << property << ") "
                 << e.getValueType().getTypeName() << " \""
-                << e.get<css::uno::Exception>().Message << '"');
+                << e.get<css::uno::Exception>() << '"');
         return css::uno::Any();
     }
 }
@@ -174,7 +192,7 @@ bool utl::UCBContentHelper::IsFolder(OUString const & url) {
             "unotools.ucbhelper",
             "UCBContentHelper::IsFolder(" << url << ") "
                 << e.getValueType().getTypeName() << " \""
-                << e.get<css::uno::Exception>().Message << '"');
+                << e.get<css::uno::Exception>() << '"');
         return false;
     }
 }
@@ -196,7 +214,7 @@ bool utl::UCBContentHelper::GetTitle(
             "unotools.ucbhelper",
             "UCBContentHelper::GetTitle(" << url << ") "
                 << e.getValueType().getTypeName() << " \""
-                << e.get<css::uno::Exception>().Message << '"');
+                << e.get<css::uno::Exception>() << '"');
         return false;
     }
 }
@@ -218,7 +236,7 @@ bool utl::UCBContentHelper::Kill(OUString const & url) {
             "unotools.ucbhelper",
             "UCBContentHelper::Kill(" << url << ") "
                 << e.getValueType().getTypeName() << " \""
-                << e.get<css::uno::Exception>().Message << '"');
+                << e.get<css::uno::Exception>() << '"');
         return false;
     }
 }
@@ -258,8 +276,8 @@ bool utl::UCBContentHelper::MakeFolder(
             SAL_INFO(
                 "unotools.ucbhelper",
                 "UCBContentHelper::MakeFolder(" << title
-                    << ") InteractiveIOException \"" << e.Message
-                    << "\", code " << +e.Code);
+                    << ") InteractiveIOException \"" << e
+                    << "\", code " << + static_cast<sal_Int32>(e.Code));
         }
     } catch (css::ucb::NameClashException const &) {
         exists = true;
@@ -274,7 +292,7 @@ bool utl::UCBContentHelper::MakeFolder(
             "unotools.ucbhelper",
             "UCBContentHelper::MakeFolder(" << title << ") "
                 << e.getValueType().getTypeName() << " \""
-                << e.get<css::uno::Exception>().Message << '"');
+                << e.get<css::uno::Exception>() << '"');
     }
     if (exists) {
         INetURLObject o(parent.getURL());
@@ -283,31 +301,6 @@ bool utl::UCBContentHelper::MakeFolder(
         return true;
     } else {
         return false;
-    }
-}
-
-sal_Int64 utl::UCBContentHelper::GetSize(OUString const & url) {
-    try {
-        sal_Int64 n = 0;
-        bool ok = (content(url).getPropertyValue("Size") >>= n);
-        SAL_INFO_IF(
-            !ok, "unotools.ucbhelper",
-            "UCBContentHelper::GetSize(" << url
-                << "): Size cannot be determined");
-        return n;
-    } catch (css::uno::RuntimeException const &) {
-        throw;
-    } catch (css::ucb::CommandAbortedException const &) {
-        assert(false && "this cannot happen");
-        throw;
-    } catch (css::uno::Exception const &) {
-        css::uno::Any e(cppu::getCaughtException());
-        SAL_INFO(
-            "unotools.ucbhelper",
-            "UCBContentHelper::GetSize(" << url << ") "
-                << e.getValueType().getTypeName() << " \""
-                << e.get<css::uno::Exception>().Message << '"');
-        return 0;
     }
 }
 
@@ -335,7 +328,7 @@ bool utl::UCBContentHelper::IsYounger(
             "unotools.ucbhelper",
             "UCBContentHelper::IsYounger(" << younger << ", " << older << ") "
                 << e.getValueType().getTypeName() << " \""
-                << e.get<css::uno::Exception>().Message << '"');
+                << e.get<css::uno::Exception>() << '"');
         return false;
     }
 }
@@ -363,23 +356,16 @@ bool utl::UCBContentHelper::Exists(OUString const & url) {
         OUString name(
             o.getName(
                 INetURLObject::LAST_SEGMENT, true,
-                INetURLObject::DECODE_WITH_CHARSET));
+                INetURLObject::DecodeMechanism::WithCharset));
         o.removeSegment();
         o.removeFinalSlash();
         std::vector<OUString> cs(
-            getContents(o.GetMainURL(INetURLObject::NO_DECODE)));
-        for (std::vector<OUString>::iterator i(cs.begin()); i != cs.end();
-             ++i)
-        {
-            if (INetURLObject(*i).getName(
-                    INetURLObject::LAST_SEGMENT, true,
-                    INetURLObject::DECODE_WITH_CHARSET).
-                equalsIgnoreAsciiCase(name))
-            {
-                return true;
-            }
-        }
-        return false;
+            getContents(o.GetMainURL(INetURLObject::DecodeMechanism::NONE)));
+        return std::any_of(cs.begin(), cs.end(),
+            [&name](const OUString& rItem) {
+                return INetURLObject(rItem).
+                    getName(INetURLObject::LAST_SEGMENT, true, INetURLObject::DecodeMechanism::WithCharset).
+                        equalsIgnoreAsciiCase(name); });
     }
 }
 
@@ -427,7 +413,7 @@ bool utl::UCBContentHelper::IsSubPath(
             "unotools.ucbhelper",
             "UCBContentHelper::IsSubPath(" << parent << ", " << child << ") "
                 << e.getValueType().getTypeName() << " \""
-                << e.get<css::uno::Exception>().Message << '"');
+                << e.get<css::uno::Exception>() << '"');
     }
     return false;
 }
@@ -456,11 +442,11 @@ bool utl::UCBContentHelper::ensureFolder(
     try
     {
         INetURLObject aURL( rFolder );
-        OUString aTitle = aURL.getName( INetURLObject::LAST_SEGMENT, true, INetURLObject::DECODE_WITH_CHARSET );
+        OUString aTitle = aURL.getName( INetURLObject::LAST_SEGMENT, true, INetURLObject::DecodeMechanism::WithCharset );
         aURL.removeSegment();
         ::ucbhelper::Content aParent;
 
-        if ( ::ucbhelper::Content::create( aURL.GetMainURL( INetURLObject::NO_DECODE ),
+        if ( ::ucbhelper::Content::create( aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ),
                                   xEnv, xCtx, aParent ) )
         {
             return ::utl::UCBContentHelper::MakeFolder(aParent, aTitle, result);

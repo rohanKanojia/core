@@ -19,44 +19,33 @@
 #ifndef INCLUDED_SVX_SDTFSITM_HXX
 #define INCLUDED_SVX_SDTFSITM_HXX
 
+#include <com/sun/star/drawing/TextFitToSizeType.hpp>
+
 #include <svl/eitem.hxx>
 #include <svx/svddef.hxx>
 #include <svx/svxdllapi.h>
 
-enum SdrFitToSizeType {
-    SDRTEXTFIT_NONE,         // - no fit-to-size
-    SDRTEXTFIT_PROPORTIONAL, // - resize all glyphs proportionally
-                             //   (might scale anisotrophically)
-    SDRTEXTFIT_ALLLINES,     // - like SDRTEXTFIT_PROPORTIONAL, but
-                             //   scales each line separately
-    SDRTEXTFIT_AUTOFIT};     // - mimics PPT's automatic adaption of
-                             //   font size to text rect - comparable
-                             //   to SDRTEXTFIT_PROPORTIONAL, but
-                             //   scales isotrophically
 
-// No AutoGrow and no automatic line breaks for
-// SDRTEXTFIT_PROPORTIONAL and SDRTEXTFIT_ALLLINES.
 // No automatic line breaks for AutoGrowingWidth as well (only if
 // TextMaxFrameWidth is reached).
 
 
-// class SdrTextFitToSizeTypeItem
-
-class SVX_DLLPUBLIC SdrTextFitToSizeTypeItem: public SfxEnumItem {
+class SVX_DLLPUBLIC SdrTextFitToSizeTypeItem
+    : public SfxEnumItem<css::drawing::TextFitToSizeType>
+{
 public:
     static SfxPoolItem* CreateDefault();
-    SdrTextFitToSizeTypeItem(SdrFitToSizeType eFit=SDRTEXTFIT_NONE): SfxEnumItem(SDRATTR_TEXT_FITTOSIZE,(sal_uInt16)eFit) {}
-    SdrTextFitToSizeTypeItem(SvStream& rIn)                        : SfxEnumItem(SDRATTR_TEXT_FITTOSIZE,rIn)  {}
+    SdrTextFitToSizeTypeItem(
+            css::drawing::TextFitToSizeType const eFit = css::drawing::TextFitToSizeType_NONE)
+        : SfxEnumItem(SDRATTR_TEXT_FITTOSIZE, eFit) {}
     virtual SfxPoolItem*     Clone(SfxItemPool* pPool=nullptr) const override;
-    virtual SfxPoolItem*     Create(SvStream& rIn, sal_uInt16 nVer) const override;
     virtual sal_uInt16       GetValueCount() const override;
-            SdrFitToSizeType GetValue() const      { return (SdrFitToSizeType)SfxEnumItem::GetValue(); }
 
     virtual bool             QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool             PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
-    virtual OUString         GetValueTextByPos(sal_uInt16 nPos) const override;
-    virtual bool GetPresentation(SfxItemPresentation ePres, SfxMapUnit eCoreMetric, SfxMapUnit ePresMetric, OUString& rText, const IntlWrapper * = nullptr) const override;
+    static OUString          GetValueTextByPos(sal_uInt16 nPos);
+    virtual bool GetPresentation(SfxItemPresentation ePres, MapUnit eCoreMetric, MapUnit ePresMetric, OUString& rText, const IntlWrapper&) const override;
     virtual bool             HasBoolValue() const override;
     virtual bool             GetBoolValue() const override;
     virtual void             SetBoolValue(bool bVal) override;

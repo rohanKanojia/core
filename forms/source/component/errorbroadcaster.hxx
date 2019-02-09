@@ -44,15 +44,15 @@ namespace frm
         explicit OErrorBroadcaster( ::cppu::OBroadcastHelper& _rBHelper );
         virtual ~OErrorBroadcaster( );
 
-        void SAL_CALL disposing();
+        void disposing();
 
-        void SAL_CALL onError( const css::sdbc::SQLException& _rException, const OUString& _rContextDescription );
-        void SAL_CALL onError( const css::sdb::SQLErrorEvent& _rException );
+        void onError( const css::sdbc::SQLException& _rException, const OUString& _rContextDescription );
+        void onError( const css::sdb::SQLErrorEvent& _rException );
 
     protected:
     // XSQLErrorBroadcaster
-        virtual void SAL_CALL addSQLErrorListener( const css::uno::Reference< css::sdb::XSQLErrorListener >& _rListener ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL removeSQLErrorListener( const css::uno::Reference< css::sdb::XSQLErrorListener >& _rListener ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL addSQLErrorListener( const css::uno::Reference< css::sdb::XSQLErrorListener >& _rListener ) override;
+        virtual void SAL_CALL removeSQLErrorListener( const css::uno::Reference< css::sdb::XSQLErrorListener >& _rListener ) override;
     };
 
 

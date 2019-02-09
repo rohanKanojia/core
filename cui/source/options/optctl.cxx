@@ -18,13 +18,13 @@
  */
 
 #include "optctl.hxx"
-#include <dialmgr.hxx>
-#include <cuires.hrc>
 #include <svl/ctloptions.hxx>
+#include <sal/log.hxx>
+#include <tools/debug.hxx>
 
 // class SvxCTLOptionsPage -----------------------------------------------------
 
-IMPL_LINK_NOARG_TYPED(SvxCTLOptionsPage, SequenceCheckingCB_Hdl, Button*, void)
+IMPL_LINK_NOARG(SvxCTLOptionsPage, SequenceCheckingCB_Hdl, Button*, void)
 {
     bool bIsSequenceChecking = m_pSequenceCheckingCB->IsChecked();
     m_pRestrictedCB->Enable( bIsSequenceChecking );
@@ -72,9 +72,9 @@ void SvxCTLOptionsPage::dispose()
     SfxTabPage::dispose();
 }
 
-VclPtr<SfxTabPage> SvxCTLOptionsPage::Create( vcl::Window* pParent, const SfxItemSet* rAttrSet )
+VclPtr<SfxTabPage> SvxCTLOptionsPage::Create( TabPageParent pParent, const SfxItemSet* rAttrSet )
 {
-    return VclPtr<SvxCTLOptionsPage>::Create( pParent, *rAttrSet );
+    return VclPtr<SvxCTLOptionsPage>::Create( pParent.pParent, *rAttrSet );
 }
 
 bool SvxCTLOptionsPage::FillItemSet( SfxItemSet* )
@@ -115,8 +115,8 @@ bool SvxCTLOptionsPage::FillItemSet( SfxItemSet* )
 
     if ( m_pNumeralsLB->IsValueChangedFromSaved() )
     {
-        const sal_Int32 nPos = m_pNumeralsLB->GetSelectEntryPos();
-        aCTLOptions.SetCTLTextNumerals( (SvtCTLOptions::TextNumerals)nPos );
+        const sal_Int32 nPos = m_pNumeralsLB->GetSelectedEntryPos();
+        aCTLOptions.SetCTLTextNumerals( static_cast<SvtCTLOptions::TextNumerals>(nPos) );
         bModified = true;
     }
 
@@ -146,7 +146,7 @@ void SvxCTLOptionsPage::Reset( const SfxItemSet* )
             SAL_WARN( "cui.options", "SvxCTLOptionsPage::Reset(): invalid movement enum" );
     }
 
-    sal_uInt16 nPos = (sal_uInt16)aCTLOptions.GetCTLTextNumerals();
+    sal_uInt16 nPos = static_cast<sal_uInt16>(aCTLOptions.GetCTLTextNumerals());
     DBG_ASSERT( nPos < m_pNumeralsLB->GetEntryCount(), "SvxCTLOptionsPage::Reset(): invalid numerals enum" );
     m_pNumeralsLB->SelectEntryPos( nPos );
 

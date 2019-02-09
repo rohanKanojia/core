@@ -20,13 +20,8 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_VIEWSHELLBASE_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_VIEWSHELLBASE_HXX
 
-#include <com/sun/star/frame/XFrame.hpp>
-
-#include "ViewShell.hxx"
-
-#include "glob.hxx"
+#include <glob.hxx>
 #include <sfx2/viewsh.hxx>
-#include <sfx2/viewfac.hxx>
 #include <memory>
 
 class SdDrawDocument;
@@ -76,14 +71,14 @@ public:
         SfxViewFrame *pFrame,
         SfxViewShell* pOldShell);
 
-    virtual ~ViewShellBase();
+    virtual ~ViewShellBase() override;
 
     /** This method is part of the object construction.  It HAS to be called
         after the constructor has created a new object.
     */
     void LateInit (const OUString& rsDefaultView);
 
-    std::shared_ptr<ViewShellManager> GetViewShellManager() const;
+    std::shared_ptr<ViewShellManager> const & GetViewShellManager() const;
 
     /** Return the main view shell stacked on the called ViewShellBase
         object.  This is usually the view shell displayed in the center
@@ -97,7 +92,7 @@ public:
             When the SfxViewShell of the given frame is not a
             ViewShellBase object then NULL is returned.
     */
-    static ViewShellBase* GetViewShellBase (SfxViewFrame* pFrame);
+    static ViewShellBase* GetViewShellBase (SfxViewFrame const * pFrame);
 
     DrawDocShell* GetDocShell() const { return mpDocShell;}
     SdDrawDocument* GetDocument() const { return mpDocument;}
@@ -114,11 +109,11 @@ public:
     void GetState (SfxItemSet& rSet);
 
     /* override these from SfxViewShell */
-    virtual OUString GetSelectionText(bool) override;
-    virtual bool HasSelection(bool) const override;
+    virtual OUString GetSelectionText(bool = false) override;
+    virtual bool HasSelection(bool = true ) const override;
 
     SvBorder GetBorder (bool bOuterResize);
-    virtual void InnerResizePixel (const Point& rOrigin, const Size& rSize) override;
+    virtual void InnerResizePixel (const Point& rOrigin, const Size& rSize, bool inplaceEditModeChange) override;
     virtual void OuterResizePixel (const Point& rOrigin, const Size& rSize) override;
 
     /** This call is forwarded to the main sub-shell.
@@ -152,7 +147,7 @@ public:
     virtual void UIActivating( SfxInPlaceClient* ) override;
     virtual void UIDeactivated( SfxInPlaceClient* ) override;
     virtual void Activate (bool IsMDIActivate) override;
-    virtual void Deactivate (bool IsMDIActivate) override;
+    using SfxViewShell::Deactivate;
     virtual void SetZoomFactor (
         const Fraction &rZoomX,
         const Fraction &rZoomY) override;
@@ -160,7 +155,6 @@ public:
     virtual void WriteUserData (OUString&, bool bBrowse = false) override;
     virtual void ReadUserData (const OUString&, bool bBrowse = false) override;
     virtual SdrView* GetDrawView() const override;
-    virtual void AdjustPosSizePixel (const Point &rOfs, const Size &rSize) override;
 
     /** When <TRUE/> is given, then the mouse shape is set to hour glass (or
         whatever the busy shape looks like on the system.)
@@ -195,15 +189,15 @@ public:
         events from various sources.  This method must not be called before
         LateInit() has terminated.
     */
-    std::shared_ptr<tools::EventMultiplexer> GetEventMultiplexer();
+    std::shared_ptr<tools::EventMultiplexer> const & GetEventMultiplexer();
 
     /** returns the complete area of the current view relative to the frame
         window
     */
-    const Rectangle& getClientRectangle() const;
+    const ::tools::Rectangle& getClientRectangle() const;
 
-    std::shared_ptr<ToolBarManager> GetToolBarManager() const;
-    std::shared_ptr<FormShellManager> GetFormShellManager() const;
+    std::shared_ptr<ToolBarManager> const & GetToolBarManager() const;
+    std::shared_ptr<FormShellManager> const & GetFormShellManager() const;
 
     DrawController& GetDrawController() const;
 
@@ -218,6 +212,10 @@ public:
     /** returns the ui descriptive name for the given uno slot. The result is taken from the configuration
         and not cached, so do not use it excessive (f.e. in status updates) */
     OUString RetrieveLabelFromCommand( const OUString& aCmdURL ) const;
+    /// See SfxViewShell::getPart().
+    int getPart() const override;
+    /// See SfxViewShell::NotifyCursor().
+    void NotifyCursor(SfxViewShell* pViewShell) const override;
 
 protected:
 
@@ -239,9 +237,6 @@ private:
     */
     OUString GetInitialViewShellType();
 };
-
-OUString ImplRetrieveLabelFromCommand( const css::uno::Reference< css::frame::XFrame >& xFrame, const OUString& aCmdURL );
-
 
 } // end of namespace sd
 

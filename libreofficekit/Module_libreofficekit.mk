@@ -15,7 +15,8 @@ $(eval $(call gb_Module_add_check_targets,libreofficekit, \
     CppunitTest_libreofficekit_checkapi \
 ))
 
-$(eval $(call gb_Module_add_subsequentcheck_targets,libreofficekit,\
+# tdf#113311 disabled because it can deadlock on shutdown
+#$(eval $(call gb_Module_add_subsequentcheck_targets,libreofficekit,\
     CppunitTest_libreofficekit_tiledrendering \
 ))
 
@@ -23,10 +24,14 @@ ifneq ($(ENABLE_GTK3),)
 $(eval $(call gb_Module_add_targets,libreofficekit,\
     Library_libreofficekitgtk \
     Executable_gtktiledviewer \
-    Executable_tilebench \
-    Package_selectionhandles \
 ))
 endif # ($(ENABLE_GTK3),)
+
+$(eval $(call gb_Module_add_targets,libreofficekit,\
+    Executable_tilebench \
+    Package_selectionhandles \
+    UIConfig_libreofficekit \
+))
 
 endif
 

@@ -19,7 +19,7 @@
 
 #include <tools/debug.hxx>
 
-#include "sdiocmpt.hxx"
+#include <sdiocmpt.hxx>
 
 old_SdrDownCompat::old_SdrDownCompat(SvStream& rNewStream, StreamMode nNewMode)
 :   rStream(rNewStream),
@@ -37,11 +37,6 @@ old_SdrDownCompat::~old_SdrDownCompat()
         CloseSubRecord();
 }
 
-void old_SdrDownCompat::Read()
-{
-    rStream.ReadUInt32( nSubRecSiz );
-}
-
 void old_SdrDownCompat::Write()
 {
     rStream.WriteUInt32( nSubRecSiz );
@@ -56,7 +51,7 @@ void old_SdrDownCompat::OpenSubRecord()
 
     if(nMode == StreamMode::READ)
     {
-        Read();
+        rStream.ReadUInt32( nSubRecSiz );
     }
     else if(nMode == StreamMode::WRITE)
     {
@@ -71,22 +66,22 @@ void old_SdrDownCompat::CloseSubRecord()
     if(rStream.GetError())
         return;
 
-    sal_uInt32 nAktPos(rStream.Tell());
+    sal_uInt32 nCurrentPos(rStream.Tell());
 
     if(nMode == StreamMode::READ)
     {
-        sal_uInt32 nReadAnz(nAktPos - nSubRecPos);
-        if(nReadAnz != nSubRecSiz)
+        sal_uInt32 nReadCnt(nCurrentPos - nSubRecPos);
+        if(nReadCnt != nSubRecSiz)
         {
             rStream.Seek(nSubRecPos + nSubRecSiz);
         }
     }
     else if(nMode == StreamMode::WRITE)
     {
-        nSubRecSiz = nAktPos - nSubRecPos;
+        nSubRecSiz = nCurrentPos - nSubRecPos;
         rStream.Seek(nSubRecPos);
         Write();
-        rStream.Seek(nAktPos);
+        rStream.Seek(nCurrentPos);
     }
 
     bOpen = false;
@@ -98,18 +93,18 @@ void old_SdrDownCompat::CloseSubRecord()
 |*
 \************************************************************************/
 
-SdIOCompat::SdIOCompat(SvStream& rNewStream, StreamMode nNewMode, sal_uInt16 nVer)
-:   old_SdrDownCompat(rNewStream, nNewMode), nVersion(nVer)
+SdIOCompat::SdIOCompat(SvStream& rNewStream, StreamMode nNewMode, sal_uInt16 nVersion)
+:   old_SdrDownCompat(rNewStream, nNewMode)
 {
     if (nNewMode == StreamMode::WRITE)
     {
-        DBG_ASSERT(nVer != SDIOCOMPAT_VERSIONDONTKNOW,
+        DBG_ASSERT(nVersion != SDIOCOMPAT_VERSIONDONTKNOW,
                    "can't write unknown version");
         rNewStream.WriteUInt16( nVersion );
     }
     else if (nNewMode == StreamMode::READ)
     {
-        DBG_ASSERT(nVer == SDIOCOMPAT_VERSIONDONTKNOW,
+        DBG_ASSERT(nVersion == SDIOCOMPAT_VERSIONDONTKNOW,
                    "referring to the version while reading is silly!");
         rNewStream.ReadUInt16( nVersion );
     }

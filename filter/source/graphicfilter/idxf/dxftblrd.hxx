@@ -20,8 +20,8 @@
 #ifndef INCLUDED_FILTER_SOURCE_GRAPHICFILTER_IDXF_DXFTBLRD_HXX
 #define INCLUDED_FILTER_SOURCE_GRAPHICFILTER_IDXF_DXFTBLRD_HXX
 
-#include <dxfgrprd.hxx>
-#include <dxfvec.hxx>
+#include "dxfgrprd.hxx"
+#include "dxfvec.hxx"
 
 
 //------------------- Line Type ----------------------------------------------
@@ -109,7 +109,7 @@ public:
     double fCenterY;                  // 22
     double fSnapBaseX;                // 13
     double fSnapBaseY;                // 23
-    double fSnapSapcingX;             // 14
+    double fSnapSpacingX;             // 14
     double fSnapSpacingY;             // 24
     double fGridX;                    // 15
     double fGridY;                    // 25
@@ -137,7 +137,7 @@ public:
 };
 
 
-//------------------ Tabellen ------------------------------------------------
+//------------------ Tables --------------------------------------------------
 
 
 class DXFTables {
@@ -153,7 +153,7 @@ public:
     ~DXFTables();
 
     void Read(DXFGroupReader & rDGR);
-        // Reads the table until a ENDSEC oder EOF
+        // Reads the table until a ENDSEC or EOF
         // (Unknown things/tables will be skipped)
 
     void Clear();

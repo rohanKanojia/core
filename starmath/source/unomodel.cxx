@@ -17,13 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/mutex.hxx>
+#include <sal/config.h>
+#include <sal/log.hxx>
+
+#include <utility>
+
+#include <o3tl/any.hxx>
 #include <sfx2/printer.hxx>
 #include <vcl/svapp.hxx>
-#include <svtools/ctrltool.hxx>
-#include <svl/itemprop.hxx>
 #include <unotools/localedatawrapper.hxx>
-#include <editeng/paperinf.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/print.hxx>
 #include <toolkit/awt/vclxdevice.hxx>
@@ -31,20 +33,20 @@
 #include <com/sun/star/formula/SymbolDescriptor.hpp>
 #include <com/sun/star/awt/Size.hpp>
 #include <com/sun/star/script/XLibraryContainer.hpp>
-#include <xmloff/xmluconv.hxx>
-#include <rtl/ustrbuf.hxx>
 #include <comphelper/propertysetinfo.hxx>
 #include <comphelper/servicehelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <unotools/moduleoptions.hxx>
 #include <tools/mapunit.hxx>
+#include <tools/stream.hxx>
 
 #include <unomodel.hxx>
 #include <document.hxx>
 #include <view.hxx>
 #include <symbol.hxx>
 #include <starmath.hrc>
-#include <smdll.hxx>
+#include <strings.hrc>
+#include <smmod.hxx>
 #include "cfgitem.hxx"
 
 using namespace ::cppu;
@@ -60,11 +62,6 @@ using namespace ::com::sun::star::script;
 
 SmPrintUIOptions::SmPrintUIOptions()
 {
-    ResStringArray      aLocalizedStrings( SmResId( RID_PRINTUIOPTIONS ) );
-    SAL_WARN_IF( aLocalizedStrings.Count() < 9, "starmath", "resource incomplete" );
-    if( aLocalizedStrings.Count() < 9 ) // bad resource ?
-        return;
-
     SmModule *pp = SM_MOD();
     SmMathConfig *pConfig = pp->GetConfig();
     SAL_WARN_IF( !pConfig, "starmath", "SmConfig not found" );
@@ -84,37 +81,37 @@ SmPrintUIOptions::SmPrintUIOptions()
     // create Section for formula (results in an extra tab page in dialog)
     SvtModuleOptions aOpt;
     OUString aAppGroupname(
-        aLocalizedStrings.GetString( 0 ).
+        SmResId( RID_PRINTUIOPT_PRODNAME ).
             replaceFirst( "%s", aOpt.GetModuleName( SvtModuleOptions::EModule::MATH ) ) );
     m_aUIProperties[nIdx++].Value = setGroupControlOpt("tabcontrol-page2", aAppGroupname, ".HelpID:vcl:PrintDialog:TabPage:AppPage");
 
     // create subgroup for print options
-    m_aUIProperties[nIdx++].Value = setSubgroupControlOpt("contents", aLocalizedStrings.GetString(1), OUString());
+    m_aUIProperties[nIdx++].Value = setSubgroupControlOpt("contents", SmResId( RID_PRINTUIOPT_CONTENTS ), OUString());
 
     // create a bool option for title row (matches to SID_PRINTTITLE)
-    m_aUIProperties[nIdx++].Value = setBoolControlOpt("title", aLocalizedStrings.GetString( 2 ),
+    m_aUIProperties[nIdx++].Value = setBoolControlOpt("title", SmResId( RID_PRINTUIOPT_TITLE ),
                                                   ".HelpID:vcl:PrintDialog:TitleRow:CheckBox",
                                                   PRTUIOPT_TITLE_ROW,
                                                   pConfig->IsPrintTitle());
     // create a bool option for formula text (matches to SID_PRINTTEXT)
-    m_aUIProperties[nIdx++].Value = setBoolControlOpt("formulatext", aLocalizedStrings.GetString( 3 ),
+    m_aUIProperties[nIdx++].Value = setBoolControlOpt("formulatext", SmResId( RID_PRINTUIOPT_FRMLTXT ),
                                                   ".HelpID:vcl:PrintDialog:FormulaText:CheckBox",
                                                   PRTUIOPT_FORMULA_TEXT,
                                                   pConfig->IsPrintFormulaText());
     // create a bool option for border (matches to SID_PRINTFRAME)
-    m_aUIProperties[nIdx++].Value = setBoolControlOpt("borders", aLocalizedStrings.GetString( 4 ),
+    m_aUIProperties[nIdx++].Value = setBoolControlOpt("borders", SmResId( RID_PRINTUIOPT_BORDERS ),
                                                   ".HelpID:vcl:PrintDialog:Border:CheckBox",
                                                   PRTUIOPT_BORDER,
                                                   pConfig->IsPrintFrame());
 
     // create subgroup for print format
-    m_aUIProperties[nIdx++].Value = setSubgroupControlOpt("size", aLocalizedStrings.GetString(5), OUString());
+    m_aUIProperties[nIdx++].Value = setSubgroupControlOpt("size", SmResId( RID_PRINTUIOPT_SIZE ), OUString());
 
     // create a radio button group for print format (matches to SID_PRINTSIZE)
     Sequence< OUString > aChoices{
-        aLocalizedStrings.GetString( 6 ),
-        aLocalizedStrings.GetString( 7 ),
-        aLocalizedStrings.GetString( 8 )
+        SmResId( RID_PRINTUIOPT_ORIGSIZE ),
+        SmResId( RID_PRINTUIOPT_FITTOPAGE ),
+        SmResId( RID_PRINTUIOPT_SCALING )
     };
     Sequence< OUString > aHelpIds{
         ".HelpID:vcl:PrintDialog:PrintFormat:RadioButton:0",
@@ -145,7 +142,7 @@ SmPrintUIOptions::SmPrintUIOptions()
 
     Sequence< PropertyValue > aHintNoLayoutPage( 1 );
     aHintNoLayoutPage[0].Name = "HintNoLayoutPage";
-    aHintNoLayoutPage[0].Value = makeAny( sal_True );
+    aHintNoLayoutPage[0].Value <<= true;
     m_aUIProperties[nIdx++].Value <<= aHintNoLayoutPage;
 
     assert(nIdx == nNumProps);
@@ -219,6 +216,7 @@ enum SmModelPropertyHandles
     HANDLE_PRINTER_NAME,
     HANDLE_PRINTER_SETUP,
     HANDLE_SYMBOLS,
+    HANDLE_SAVE_THUMBNAIL,
     HANDLE_USED_SYMBOLS,
     HANDLE_BASIC_LIBRARIES,
     HANDLE_RUNTIME_UID,
@@ -228,7 +226,7 @@ enum SmModelPropertyHandles
     HANDLE_INTEROP_GRAB_BAG,
 };
 
-static PropertySetInfo * lcl_createModelPropertyInfo ()
+static rtl::Reference<PropertySetInfo> lcl_createModelPropertyInfo ()
 {
     static PropertyMapEntry aModelPropertyInfoMap[] =
     {
@@ -291,19 +289,19 @@ static PropertySetInfo * lcl_createModelPropertyInfo ()
         { OUString("RelativeSymbolPrimaryHeight")      , HANDLE_RELATIVE_SYMBOL_PRIMARY_HEIGHT     ,  ::cppu::UnoType<sal_Int16>::get(),                                     PROPERTY_NONE,  DIS_ORNAMENTSIZE      },
         { OUString("RelativeUpperLimitDistance")       , HANDLE_RELATIVE_UPPER_LIMIT_DISTANCE      ,  ::cppu::UnoType<sal_Int16>::get(),                                     PROPERTY_NONE,  DIS_UPPERLIMIT        },
         { OUString("RightMargin")                      , HANDLE_RIGHT_MARGIN                       ,  ::cppu::UnoType<sal_Int16>::get(),                                     PROPERTY_NONE,  DIS_RIGHTSPACE        },
-        { OUString("RuntimeUID")                       , HANDLE_RUNTIME_UID                        ,  cppu::UnoType<OUString>::get(),                      PropertyAttribute::READONLY,  0       },
-        { OUString("Symbols")                          , HANDLE_SYMBOLS                            ,  cppu::UnoType<Sequence < SymbolDescriptor >>::get(),                PROPERTY_NONE,  0                     },
-        { OUString("UserDefinedSymbolsInUse")          , HANDLE_USED_SYMBOLS                       ,  cppu::UnoType<Sequence < SymbolDescriptor >>::get(),                PropertyAttribute::READONLY,  0       },
+        { OUString("RuntimeUID")                       , HANDLE_RUNTIME_UID                        ,  cppu::UnoType<OUString>::get(),                                        PropertyAttribute::READONLY,  0       },
+        { OUString("SaveThumbnail")                    , HANDLE_SAVE_THUMBNAIL                     ,  cppu::UnoType<bool>::get(),                                            PROPERTY_NONE,  0                     },
+        { OUString("Symbols")                          , HANDLE_SYMBOLS                            ,  cppu::UnoType<Sequence < SymbolDescriptor >>::get(),                   PROPERTY_NONE,  0                     },
+        { OUString("UserDefinedSymbolsInUse")          , HANDLE_USED_SYMBOLS                       ,  cppu::UnoType<Sequence < SymbolDescriptor >>::get(),                   PropertyAttribute::READONLY,  0       },
         { OUString("TopMargin")                        , HANDLE_TOP_MARGIN                         ,  ::cppu::UnoType<sal_Int16>::get(),                                     PROPERTY_NONE,  DIS_TOPSPACE          },
         // #i33095# Security Options
-        { OUString("LoadReadonly")                     , HANDLE_LOAD_READONLY                      ,  cppu::UnoType<bool>::get(),                                                 PROPERTY_NONE,  0                     },
+        { OUString("LoadReadonly")                     , HANDLE_LOAD_READONLY                      ,  cppu::UnoType<bool>::get(),                                            PROPERTY_NONE,  0                     },
         // #i972#
         { OUString("BaseLine")                         , HANDLE_BASELINE                           ,  ::cppu::UnoType<sal_Int16>::get(),                                     PROPERTY_NONE,  0                     },
-        { OUString("InteropGrabBag")                   , HANDLE_INTEROP_GRAB_BAG                   ,  cppu::UnoType<uno::Sequence< beans::PropertyValue >>::get(),       PROPERTY_NONE,  0                     },
+        { OUString("InteropGrabBag")                   , HANDLE_INTEROP_GRAB_BAG                   ,  cppu::UnoType<uno::Sequence< beans::PropertyValue >>::get(),           PROPERTY_NONE,  0                     },
         { OUString(), 0, css::uno::Type(), 0, 0 }
     };
-    PropertySetInfo *pInfo = new PropertySetInfo ( aModelPropertyInfoMap );
-    return pInfo;
+    return rtl::Reference<PropertySetInfo>( new PropertySetInfo ( aModelPropertyInfoMap ) );
 }
 
 SmModel::SmModel( SfxObjectShell *pObjSh )
@@ -316,7 +314,7 @@ SmModel::~SmModel() throw ()
 {
 }
 
-uno::Any SAL_CALL SmModel::queryInterface( const uno::Type& rType ) throw(uno::RuntimeException, std::exception)
+uno::Any SAL_CALL SmModel::queryInterface( const uno::Type& rType )
 {
     uno::Any aRet =  ::cppu::queryInterface ( rType,
                                     // OWeakObject interfaces
@@ -343,7 +341,7 @@ void SAL_CALL SmModel::release() throw()
     OWeakObject::release();
 }
 
-uno::Sequence< uno::Type > SAL_CALL SmModel::getTypes(  ) throw(uno::RuntimeException, std::exception)
+uno::Sequence< uno::Type > SAL_CALL SmModel::getTypes(  )
 {
     SolarMutexGuard aGuard;
     uno::Sequence< uno::Type > aTypes = SfxBaseModel::getTypes();
@@ -369,7 +367,6 @@ const uno::Sequence< sal_Int8 > & SmModel::getUnoTunnelId()
 }
 
 sal_Int64 SAL_CALL SmModel::getSomething( const uno::Sequence< sal_Int8 >& rId )
-    throw(uno::RuntimeException, std::exception)
 {
     if( rId.getLength() == 16
         && 0 == memcmp( getUnoTunnelId().getConstArray(),
@@ -383,29 +380,25 @@ sal_Int64 SAL_CALL SmModel::getSomething( const uno::Sequence< sal_Int8 >& rId )
 
 static sal_Int16 lcl_AnyToINT16(const uno::Any& rAny)
 {
-    uno::TypeClass eType = rAny.getValueType().getTypeClass();
-
     sal_Int16 nRet = 0;
-    if( eType == uno::TypeClass_DOUBLE )
-        nRet = static_cast<sal_Int16>(*static_cast<double const *>(rAny.getValue()));
-    else if( eType == uno::TypeClass_FLOAT )
-        nRet = static_cast<sal_Int16>(*static_cast<float const *>(rAny.getValue()));
+    if( auto x = o3tl::tryAccess<double>(rAny) )
+        nRet = static_cast<sal_Int16>(*x);
     else
         rAny >>= nRet;
     return nRet;
 }
 
-OUString SmModel::getImplementationName() throw( uno::RuntimeException, std::exception )
+OUString SmModel::getImplementationName()
 {
     return OUString("com.sun.star.comp.Math.FormulaDocument");
 }
 
-sal_Bool SmModel::supportsService(const OUString& rServiceName) throw( uno::RuntimeException, std::exception )
+sal_Bool SmModel::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-uno::Sequence< OUString > SmModel::getSupportedServiceNames() throw( uno::RuntimeException, std::exception )
+uno::Sequence< OUString > SmModel::getSupportedServiceNames()
 {
     return uno::Sequence<OUString>{
         "com.sun.star.document.OfficeDocument",
@@ -414,7 +407,6 @@ uno::Sequence< OUString > SmModel::getSupportedServiceNames() throw( uno::Runtim
 }
 
 void SmModel::_setPropertyValues(const PropertyMapEntry** ppEntries, const Any* pValues)
-    throw (RuntimeException, UnknownPropertyException, PropertyVetoException, IllegalArgumentException, WrappedTargetException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -452,7 +444,7 @@ void SmModel::_setPropertyValues(const PropertyMapEntry** ppEntries, const Any* 
                 if(sFontName.isEmpty())
                     throw IllegalArgumentException();
 
-                if(OUString(aFormat.GetFont((*ppEntries)->mnMemberId).GetFamilyName()) != sFontName)
+                if(aFormat.GetFont((*ppEntries)->mnMemberId).GetFamilyName() != sFontName)
                 {
                     const SmFace rOld = aFormat.GetFont((*ppEntries)->mnMemberId);
 
@@ -471,11 +463,11 @@ void SmModel::_setPropertyValues(const PropertyMapEntry** ppEntries, const Any* 
             case HANDLE_FONT_NUMBERS_POSTURE     :
             case HANDLE_FONT_TEXT_POSTURE        :
             {
-                if((*pValues).getValueType() != cppu::UnoType<bool>::get())
+                auto bVal = o3tl::tryAccess<bool>(*pValues);
+                if(!bVal)
                     throw IllegalArgumentException();
-                bool bVal = *static_cast<sal_Bool const *>((*pValues).getValue());
                 vcl::Font aNewFont(aFormat.GetFont((*ppEntries)->mnMemberId));
-                aNewFont.SetItalic((bVal) ? ITALIC_NORMAL : ITALIC_NONE);
+                aNewFont.SetItalic(*bVal ? ITALIC_NORMAL : ITALIC_NONE);
                 aFormat.SetFont((*ppEntries)->mnMemberId, aNewFont);
             }
             break;
@@ -487,11 +479,11 @@ void SmModel::_setPropertyValues(const PropertyMapEntry** ppEntries, const Any* 
             case HANDLE_FONT_NUMBERS_WEIGHT      :
             case HANDLE_FONT_TEXT_WEIGHT         :
             {
-                if((*pValues).getValueType() != cppu::UnoType<bool>::get())
+                auto bVal = o3tl::tryAccess<bool>(*pValues);
+                if(!bVal)
                     throw IllegalArgumentException();
-                bool bVal = *static_cast<sal_Bool const *>((*pValues).getValue());
                 vcl::Font aNewFont(aFormat.GetFont((*ppEntries)->mnMemberId));
-                aNewFont.SetWeight((bVal) ? WEIGHT_BOLD : WEIGHT_NORMAL);
+                aNewFont.SetWeight(*bVal ? WEIGHT_BOLD : WEIGHT_NORMAL);
                 aFormat.SetFont((*ppEntries)->mnMemberId, aNewFont);
             }
             break;
@@ -502,9 +494,7 @@ void SmModel::_setPropertyValues(const PropertyMapEntry** ppEntries, const Any* 
                 if(nVal < 1)
                     throw IllegalArgumentException();
                 Size aSize = aFormat.GetBaseSize();
-                nVal *= 20;
-                nVal = static_cast < sal_Int16 > ( convertTwipToMm100(nVal) );
-                aSize.Height() = nVal;
+                aSize.setHeight( SmPtsTo100th_mm(nVal) );
                 aFormat.SetBaseSize(aSize);
 
                 // apply base size to fonts
@@ -529,7 +519,7 @@ void SmModel::_setPropertyValues(const PropertyMapEntry** ppEntries, const Any* 
 
             case HANDLE_IS_TEXT_MODE                       :
             {
-                aFormat.SetTextmode(*static_cast<sal_Bool const *>((*pValues).getValue()));
+                aFormat.SetTextmode(*o3tl::doAccess<bool>(*pValues));
             }
             break;
 
@@ -550,7 +540,7 @@ void SmModel::_setPropertyValues(const PropertyMapEntry** ppEntries, const Any* 
                 *pValues >>= nVal;
                 if(nVal < 0 || nVal > 2)
                     throw IllegalArgumentException();
-                aFormat.SetHorAlign((SmHorAlign)nVal);
+                aFormat.SetHorAlign(static_cast<SmHorAlign>(nVal));
             }
             break;
 
@@ -587,7 +577,7 @@ void SmModel::_setPropertyValues(const PropertyMapEntry** ppEntries, const Any* 
             }
             break;
             case HANDLE_IS_SCALE_ALL_BRACKETS              :
-                aFormat.SetScaleNormalBrackets(*static_cast<sal_Bool const *>((*pValues).getValue()));
+                aFormat.SetScaleNormalBrackets(*o3tl::doAccess<bool>(*pValues));
             break;
             case HANDLE_PRINTER_NAME:
             {
@@ -598,19 +588,17 @@ void SmModel::_setPropertyValues(const PropertyMapEntry** ppEntries, const Any* 
                     if (pPrinter)
                     {
                         OUString sPrinterName;
-                        if (*pValues >>= sPrinterName )
-                        {
-                            if ( !sPrinterName.isEmpty() )
-                            {
-                                VclPtrInstance<SfxPrinter> pNewPrinter( pPrinter->GetOptions().Clone(), sPrinterName );
-                                if (pNewPrinter->IsKnown())
-                                    pDocSh->SetPrinter ( pNewPrinter );
-                                else
-                                    pNewPrinter.disposeAndClear();
-                            }
-                        }
-                        else
+                        if ( !(*pValues >>= sPrinterName) )
                             throw IllegalArgumentException();
+
+                        if ( !sPrinterName.isEmpty() )
+                        {
+                            VclPtrInstance<SfxPrinter> pNewPrinter( pPrinter->GetOptions().Clone(), sPrinterName );
+                            if (pNewPrinter->IsKnown())
+                                pDocSh->SetPrinter ( pNewPrinter );
+                            else
+                                pNewPrinter.disposeAndClear();
+                        }
                     }
                 }
             }
@@ -618,62 +606,57 @@ void SmModel::_setPropertyValues(const PropertyMapEntry** ppEntries, const Any* 
             case HANDLE_PRINTER_SETUP:
             {
                 Sequence < sal_Int8 > aSequence;
-                if ( *pValues >>= aSequence )
-                {
-                    sal_uInt32 nSize = aSequence.getLength();
-                    SvMemoryStream aStream ( aSequence.getArray(), nSize, StreamMode::READ );
-                    aStream.Seek ( STREAM_SEEK_TO_BEGIN );
-                    static sal_uInt16 const nRange[] =
-                    {
-                        SID_PRINTSIZE,       SID_PRINTSIZE,
-                        SID_PRINTZOOM,       SID_PRINTZOOM,
-                        SID_PRINTTITLE,      SID_PRINTTITLE,
-                        SID_PRINTTEXT,       SID_PRINTTEXT,
-                        SID_PRINTFRAME,      SID_PRINTFRAME,
-                        SID_NO_RIGHT_SPACES, SID_NO_RIGHT_SPACES,
-                        SID_SAVE_ONLY_USED_SYMBOLS, SID_SAVE_ONLY_USED_SYMBOLS,
-                        SID_AUTO_CLOSE_BRACKETS,    SID_AUTO_CLOSE_BRACKETS,
-                        0
-                    };
-                    SfxItemSet *pItemSet = new SfxItemSet( SmDocShell::GetPool(), nRange );
-                    SmModule *pp = SM_MOD();
-                    pp->GetConfig()->ConfigToItemSet(*pItemSet);
-                    VclPtr<SfxPrinter> pPrinter = SfxPrinter::Create ( aStream, pItemSet );
-
-                    pDocSh->SetPrinter( pPrinter );
-                }
-                else
+                if ( !(*pValues >>= aSequence) )
                     throw IllegalArgumentException();
+
+                sal_uInt32 nSize = aSequence.getLength();
+                SvMemoryStream aStream ( aSequence.getArray(), nSize, StreamMode::READ );
+                aStream.Seek ( STREAM_SEEK_TO_BEGIN );
+                static sal_uInt16 const nRange[] =
+                {
+                    SID_PRINTSIZE,       SID_PRINTSIZE,
+                    SID_PRINTZOOM,       SID_PRINTZOOM,
+                    SID_PRINTTITLE,      SID_PRINTTITLE,
+                    SID_PRINTTEXT,       SID_PRINTTEXT,
+                    SID_PRINTFRAME,      SID_PRINTFRAME,
+                    SID_NO_RIGHT_SPACES, SID_NO_RIGHT_SPACES,
+                    SID_SAVE_ONLY_USED_SYMBOLS, SID_SAVE_ONLY_USED_SYMBOLS,
+                    SID_AUTO_CLOSE_BRACKETS,    SID_AUTO_CLOSE_BRACKETS,
+                    0
+                };
+                auto pItemSet = std::make_unique<SfxItemSet>( SmDocShell::GetPool(), nRange );
+                SmModule *pp = SM_MOD();
+                pp->GetConfig()->ConfigToItemSet(*pItemSet);
+                VclPtr<SfxPrinter> pPrinter = SfxPrinter::Create ( aStream, std::move(pItemSet) );
+
+                pDocSh->SetPrinter( pPrinter );
             }
             break;
             case HANDLE_SYMBOLS:
             {
                 // this is set
                 Sequence < SymbolDescriptor > aSequence;
-                if ( *pValues >>= aSequence )
-                {
-                    sal_uInt32 nSize = aSequence.getLength();
-                    SmModule *pp = SM_MOD();
-                    SmSymbolManager &rManager = pp->GetSymbolManager();
-                    SymbolDescriptor *pDescriptor = aSequence.getArray();
-                    for (sal_uInt32 i = 0; i < nSize ; i++, pDescriptor++)
-                    {
-                        vcl::Font aFont;
-                        aFont.SetFamilyName ( pDescriptor->sFontName );
-                        aFont.SetCharSet ( static_cast < rtl_TextEncoding > (pDescriptor->nCharSet) );
-                        aFont.SetFamily ( static_cast < FontFamily > (pDescriptor->nFamily ) );
-                        aFont.SetPitch  ( static_cast < FontPitch >  (pDescriptor->nPitch ) );
-                        aFont.SetWeight ( static_cast < FontWeight > (pDescriptor->nWeight ) );
-                        aFont.SetItalic ( static_cast < FontItalic > (pDescriptor->nItalic ) );
-                        SmSym aSymbol ( pDescriptor->sName, aFont, static_cast < sal_Unicode > (pDescriptor->nCharacter),
-                                        pDescriptor->sSymbolSet );
-                        aSymbol.SetExportName ( pDescriptor->sExportName );
-                        aSymbol.SetDocSymbol( true );
-                        rManager.AddOrReplaceSymbol ( aSymbol );
-                    }
-                }
-                else
+                if ( !(*pValues >>= aSequence) )
                     throw IllegalArgumentException();
+
+                sal_uInt32 nSize = aSequence.getLength();
+                SmModule *pp = SM_MOD();
+                SmSymbolManager &rManager = pp->GetSymbolManager();
+                SymbolDescriptor *pDescriptor = aSequence.getArray();
+                for (sal_uInt32 i = 0; i < nSize ; i++, pDescriptor++)
+                {
+                    vcl::Font aFont;
+                    aFont.SetFamilyName ( pDescriptor->sFontName );
+                    aFont.SetCharSet ( static_cast < rtl_TextEncoding > (pDescriptor->nCharSet) );
+                    aFont.SetFamily ( static_cast < FontFamily > (pDescriptor->nFamily ) );
+                    aFont.SetPitch  ( static_cast < FontPitch >  (pDescriptor->nPitch ) );
+                    aFont.SetWeight ( static_cast < FontWeight > (pDescriptor->nWeight ) );
+                    aFont.SetItalic ( static_cast < FontItalic > (pDescriptor->nItalic ) );
+                    SmSym aSymbol ( pDescriptor->sName, aFont, static_cast < sal_Unicode > (pDescriptor->nCharacter),
+                                    pDescriptor->sSymbolSet );
+                    aSymbol.SetExportName ( pDescriptor->sExportName );
+                    rManager.AddOrReplaceSymbol ( aSymbol );
+                }
             }
             break;
             // #i33095# Security Options
@@ -689,6 +672,15 @@ void SmModel::_setPropertyValues(const PropertyMapEntry** ppEntries, const Any* 
             case HANDLE_INTEROP_GRAB_BAG:
                 setGrabBagItem(*pValues);
             break;
+            case HANDLE_SAVE_THUMBNAIL:
+            {
+                if ((*pValues).getValueType() != cppu::UnoType<bool>::get())
+                    throw IllegalArgumentException();
+                bool bThumbnail = false;
+                if (*pValues >>= bThumbnail)
+                    pDocSh->SetUseThumbnailSave(bThumbnail);
+            }
+            break;
         }
     }
 
@@ -696,11 +688,10 @@ void SmModel::_setPropertyValues(const PropertyMapEntry** ppEntries, const Any* 
 
     // #i67283# since about all of the above changes are likely to change
     // the formula size we have to recalculate the vis-area now
-    pDocSh->SetVisArea( Rectangle( Point(0, 0), pDocSh->GetSize() ) );
+    pDocSh->SetVisArea( tools::Rectangle( Point(0, 0), pDocSh->GetSize() ) );
 }
 
 void SmModel::_getPropertyValues( const PropertyMapEntry **ppEntries, Any *pValue )
-    throw (RuntimeException, UnknownPropertyException, WrappedTargetException, std::exception)
 {
     SmDocShell *pDocSh = static_cast < SmDocShell * > (GetObjectShell());
 
@@ -714,7 +705,7 @@ void SmModel::_getPropertyValues( const PropertyMapEntry **ppEntries, Any *pValu
         switch ( (*ppEntries)->mnHandle )
         {
             case HANDLE_FORMULA:
-                *pValue <<= OUString(pDocSh->GetText());
+                *pValue <<= pDocSh->GetText();
             break;
             case HANDLE_FONT_NAME_VARIABLES                :
             case HANDLE_FONT_NAME_FUNCTIONS                :
@@ -725,7 +716,7 @@ void SmModel::_getPropertyValues( const PropertyMapEntry **ppEntries, Any *pValu
             case HANDLE_CUSTOM_FONT_NAME_FIXED             :
             {
                 const SmFace &  rFace = aFormat.GetFont((*ppEntries)->mnMemberId);
-                *pValue <<= OUString(rFace.GetFamilyName());
+                *pValue <<= rFace.GetFamilyName();
             }
             break;
             case HANDLE_CUSTOM_FONT_FIXED_POSTURE:
@@ -737,8 +728,7 @@ void SmModel::_getPropertyValues( const PropertyMapEntry **ppEntries, Any *pValu
             case HANDLE_FONT_TEXT_POSTURE        :
             {
                 const SmFace &  rFace = aFormat.GetFont((*ppEntries)->mnMemberId);
-                bool bVal = IsItalic( rFace );
-                (*pValue).setValue(&bVal, (*ppEntries)->maType);
+                *pValue <<= IsItalic( rFace );
             }
             break;
             case HANDLE_CUSTOM_FONT_FIXED_WEIGHT :
@@ -750,17 +740,15 @@ void SmModel::_getPropertyValues( const PropertyMapEntry **ppEntries, Any *pValu
             case HANDLE_FONT_TEXT_WEIGHT         :
             {
                 const SmFace &  rFace = aFormat.GetFont((*ppEntries)->mnMemberId);
-                bool bVal = IsBold( rFace ); // bold?
-                (*pValue).setValue(&bVal, (*ppEntries)->maType);
+                *pValue <<= IsBold( rFace );
             }
             break;
             case HANDLE_BASE_FONT_HEIGHT                   :
             {
                 // Point!
-                sal_Int16 nVal = static_cast < sal_Int16 > (aFormat.GetBaseSize().Height());
-                nVal = static_cast < sal_Int16 > (convertMm100ToTwip(nVal));
-                nVal = (nVal + 10) / 20;
-                *pValue <<= nVal;
+                *pValue <<= sal_Int16(
+                    SmRoundFraction(
+                        Sm100th_mmToPts(aFormat.GetBaseSize().Height())));
             }
             break;
             case HANDLE_RELATIVE_FONT_HEIGHT_TEXT           :
@@ -772,14 +760,11 @@ void SmModel::_getPropertyValues( const PropertyMapEntry **ppEntries, Any *pValu
             break;
 
             case HANDLE_IS_TEXT_MODE                       :
-            {
-                sal_Bool bVal = aFormat.IsTextmode();
-                (*pValue).setValue(&bVal, cppu::UnoType<bool>::get());
-            }
+                *pValue <<= aFormat.IsTextmode();
             break;
 
             case HANDLE_GREEK_CHAR_STYLE                    :
-                *pValue <<= static_cast<sal_Int16>(aFormat.GetGreekCharStyle());
+                *pValue <<= aFormat.GetGreekCharStyle();
             break;
 
             case HANDLE_ALIGNMENT                          :
@@ -814,15 +799,12 @@ void SmModel::_getPropertyValues( const PropertyMapEntry **ppEntries, Any *pValu
                 *pValue <<= static_cast<sal_Int16>(aFormat.GetDistance((*ppEntries)->mnMemberId));
             break;
             case HANDLE_IS_SCALE_ALL_BRACKETS              :
-            {
-                sal_Bool bVal = aFormat.IsScaleNormalBrackets();
-                (*pValue).setValue(&bVal, cppu::UnoType<bool>::get());
-            }
+                *pValue <<= aFormat.IsScaleNormalBrackets();
             break;
             case HANDLE_PRINTER_NAME:
             {
                 SfxPrinter *pPrinter = pDocSh->GetPrinter ( );
-                *pValue <<= pPrinter ? OUString ( pPrinter->GetName()) : OUString();
+                *pValue <<= pPrinter ? pPrinter->GetName() : OUString();
             }
             break;
             case HANDLE_PRINTER_SETUP:
@@ -832,11 +814,10 @@ void SmModel::_getPropertyValues( const PropertyMapEntry **ppEntries, Any *pValu
                 {
                     SvMemoryStream aStream;
                     pPrinter->Store( aStream );
-                    aStream.Seek ( STREAM_SEEK_TO_END );
-                    sal_uInt32 nSize = aStream.Tell();
+                    sal_uInt32 nSize = aStream.TellEnd();
                     aStream.Seek ( STREAM_SEEK_TO_BEGIN );
                     Sequence < sal_Int8 > aSequence ( nSize );
-                    aStream.Read ( aSequence.getArray(), nSize );
+                    aStream.ReadBytes(aSequence.getArray(), nSize);
                     *pValue <<= aSequence;
                 }
             }
@@ -853,9 +834,8 @@ void SmModel::_getPropertyValues( const PropertyMapEntry **ppEntries, Any *pValu
                 vector < const SmSym * > aVector;
 
                 const SymbolPtrVec_t aSymbols( rManager.GetSymbols() );
-                for (size_t i = 0; i < aSymbols.size(); ++i)
+                for (const SmSym* pSymbol : aSymbols)
                 {
-                    const SmSym * pSymbol = aSymbols[ i ];
                     if (pSymbol && !pSymbol->IsPredefined() &&
                         (!bUsedSymbolsOnly ||
                          rUsedSymbols.find( pSymbol->GetName() ) != rUsedSymbols.end()))
@@ -864,21 +844,21 @@ void SmModel::_getPropertyValues( const PropertyMapEntry **ppEntries, Any *pValu
                 Sequence < SymbolDescriptor > aSequence ( aVector.size() );
                 SymbolDescriptor * pDescriptor = aSequence.getArray();
 
-                vector < const SmSym * >::const_iterator aIter = aVector.begin(), aEnd = aVector.end();
-                for(; aIter != aEnd; pDescriptor++, ++aIter)
+                for (const SmSym* pSymbol : aVector)
                 {
-                    pDescriptor->sName = (*aIter)->GetName();
-                    pDescriptor->sExportName = (*aIter)->GetExportName();
-                    pDescriptor->sSymbolSet = (*aIter)->GetSymbolSetName();
-                    pDescriptor->nCharacter = static_cast < sal_Int32 > ((*aIter)->GetCharacter());
+                    pDescriptor->sName = pSymbol->GetName();
+                    pDescriptor->sExportName = pSymbol->GetExportName();
+                    pDescriptor->sSymbolSet = pSymbol->GetSymbolSetName();
+                    pDescriptor->nCharacter = static_cast < sal_Int32 > (pSymbol->GetCharacter());
 
-                    vcl::Font rFont = (*aIter)->GetFace();
+                    vcl::Font rFont = pSymbol->GetFace();
                     pDescriptor->sFontName = rFont.GetFamilyName();
                     pDescriptor->nCharSet  = sal::static_int_cast< sal_Int16 >(rFont.GetCharSet());
                     pDescriptor->nFamily   = sal::static_int_cast< sal_Int16 >(rFont.GetFamilyType());
                     pDescriptor->nPitch    = sal::static_int_cast< sal_Int16 >(rFont.GetPitch());
                     pDescriptor->nWeight   = sal::static_int_cast< sal_Int16 >(rFont.GetWeight());
                     pDescriptor->nItalic   = sal::static_int_cast< sal_Int16 >(rFont.GetItalic());
+                    pDescriptor++;
                 }
                 *pValue <<= aSequence;
             }
@@ -901,19 +881,23 @@ void SmModel::_getPropertyValues( const PropertyMapEntry **ppEntries, Any *pValu
             // #i972#
             case HANDLE_BASELINE:
             {
-                if ( !pDocSh->pTree )
+                if ( !pDocSh->GetFormulaTree() )
                     pDocSh->Parse();
-                if ( pDocSh->pTree )
+                if ( pDocSh->GetFormulaTree() )
                 {
-                    if ( !pDocSh->IsFormulaArranged() )
-                        pDocSh->ArrangeFormula();
+                    pDocSh->ArrangeFormula();
 
-                    *pValue <<= static_cast<sal_Int32>( pDocSh->pTree->GetFormulaBaseline() );
+                    *pValue <<= static_cast<sal_Int32>( pDocSh->GetFormulaTree()->GetFormulaBaseline() );
                 }
                 break;
             }
             case HANDLE_INTEROP_GRAB_BAG:
                 getGrabBagItem(*pValue);
+            break;
+            case HANDLE_SAVE_THUMBNAIL:
+            {
+                *pValue <<= pDocSh->IsUseThumbnailSave();
+            }
             break;
         }
     }
@@ -923,9 +907,7 @@ void SmModel::_getPropertyValues( const PropertyMapEntry **ppEntries, Any *pValu
 sal_Int32 SAL_CALL SmModel::getRendererCount(
         const uno::Any& /*rSelection*/,
         const uno::Sequence< beans::PropertyValue >& /*xOptions*/ )
-    throw (IllegalArgumentException, RuntimeException, std::exception)
 {
-    SolarMutexGuard aGuard;
     return 1;
 }
 
@@ -934,19 +916,19 @@ static Size lcl_GuessPaperSize()
 {
     Size aRes;
     const LocaleDataWrapper& rLocWrp( AllSettings().GetLocaleDataWrapper() );
-    if( MEASURE_METRIC == rLocWrp.getMeasurementSystemEnum() )
+    if( MeasurementSystem::Metric == rLocWrp.getMeasurementSystemEnum() )
     {
         // in 100th mm
         PaperInfo aInfo( PAPER_A4 );
-        aRes.Width()  = aInfo.getWidth();
-        aRes.Height() = aInfo.getHeight();
+        aRes.setWidth( aInfo.getWidth() );
+        aRes.setHeight( aInfo.getHeight() );
     }
     else
     {
         // in 100th mm
         PaperInfo aInfo( PAPER_LETTER );
-        aRes.Width()  = aInfo.getWidth();
-        aRes.Height() = aInfo.getHeight();
+        aRes.setWidth( aInfo.getWidth() );
+        aRes.setHeight( aInfo.getHeight() );
     }
     return aRes;
 }
@@ -955,7 +937,6 @@ uno::Sequence< beans::PropertyValue > SAL_CALL SmModel::getRenderer(
         sal_Int32 nRenderer,
         const uno::Any& /*rSelection*/,
         const uno::Sequence< beans::PropertyValue >& /*rxOptions*/ )
-    throw (IllegalArgumentException, RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -992,7 +973,6 @@ void SAL_CALL SmModel::render(
         sal_Int32 nRenderer,
         const uno::Any& rSelection,
         const uno::Sequence< beans::PropertyValue >& rxOptions )
-    throw (IllegalArgumentException, RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -1011,84 +991,82 @@ void SAL_CALL SmModel::render(
             rxOptions[i].Value >>= xRenderDevice;
     }
 
-    if (xRenderDevice.is())
+    if (!xRenderDevice.is())
+        return;
+
+    VCLXDevice*   pDevice = VCLXDevice::GetImplementation( xRenderDevice );
+    VclPtr< OutputDevice> pOut = pDevice ? pDevice->GetOutputDevice()
+                                         : VclPtr< OutputDevice >();
+    if (!pOut)
+        throw RuntimeException();
+
+    pOut->SetMapMode(MapMode(MapUnit::Map100thMM));
+
+    uno::Reference< frame::XModel > xModel;
+    rSelection >>= xModel;
+    if (xModel != pDocSh->GetModel())
+        return;
+
+    //!! when called via API we may not have an active view
+    //!! thus we go and look for a view that can be used.
+    SfxViewShell* pViewSh = SfxViewShell::GetFirst( false /* search non-visible views as well*/, checkSfxViewShell<SmViewShell> );
+    while (pViewSh && pViewSh->GetObjectShell() != pDocSh)
+        pViewSh = SfxViewShell::GetNext( *pViewSh, false /* search non-visible views as well*/, checkSfxViewShell<SmViewShell> );
+    SmViewShell *pView = dynamic_cast< SmViewShell *>( pViewSh );
+    SAL_WARN_IF( !pView, "starmath", "SmModel::render : no SmViewShell found" );
+
+    if (!pView)
+        return;
+
+    SmPrinterAccess aPrinterAccess( *pDocSh );
+    Printer *pPrinter = aPrinterAccess.GetPrinter();
+
+    Size    aPrtPaperSize ( pPrinter->GetPaperSize() );
+    Size    aOutputSize   ( pPrinter->GetOutputSize() );
+    Point   aPrtPageOffset( pPrinter->GetPageOffset() );
+
+    // no real printer ??
+    if (aPrtPaperSize.Height() == 0 || aPrtPaperSize.Width() == 0)
     {
-        VCLXDevice*   pDevice = VCLXDevice::GetImplementation( xRenderDevice );
-        VclPtr< OutputDevice> pOut = pDevice ? pDevice->GetOutputDevice()
-                                             : VclPtr< OutputDevice >();
-        if (!pOut)
-            throw RuntimeException();
-
-        pOut->SetMapMode( MAP_100TH_MM );
-
-        uno::Reference< frame::XModel > xModel;
-        rSelection >>= xModel;
-        if (xModel == pDocSh->GetModel())
-        {
-            //!! when called via API we may not have an active view
-            //!! thus we go and look for a view that can be used.
-            SfxViewShell* pViewSh = SfxViewShell::GetFirst( false /* search non-visible views as well*/, checkSfxViewShell<SmViewShell> );
-            while (pViewSh && pViewSh->GetObjectShell() != pDocSh)
-                pViewSh = SfxViewShell::GetNext( *pViewSh, false /* search non-visible views as well*/, checkSfxViewShell<SmViewShell> );
-            SmViewShell *pView = dynamic_cast< SmViewShell *>( pViewSh );
-            SAL_WARN_IF( !pView, "starmath", "SmModel::render : no SmViewShell found" );
-
-            if (pView)
-            {
-                SmPrinterAccess aPrinterAccess( *pDocSh );
-                Printer *pPrinter = aPrinterAccess.GetPrinter();
-
-                Size    aPrtPaperSize ( pPrinter->GetPaperSize() );
-                Size    aOutputSize   ( pPrinter->GetOutputSize() );
-                Point   aPrtPageOffset( pPrinter->GetPageOffset() );
-
-                // no real printer ??
-                if (aPrtPaperSize.Height() == 0 || aPrtPaperSize.Width() == 0)
-                {
-                    aPrtPaperSize = lcl_GuessPaperSize();
-                    // factors from Windows DIN A4
-                    aOutputSize    = Size( static_cast<long>(aPrtPaperSize.Width()  * 0.941),
-                                           static_cast<long>(aPrtPaperSize.Height() * 0.961));
-                    aPrtPageOffset = Point( static_cast<long>(aPrtPaperSize.Width()  * 0.0250),
-                                            static_cast<long>(aPrtPaperSize.Height() * 0.0214));
-                }
-                Point   aZeroPoint;
-                Rectangle OutputRect( aZeroPoint, aOutputSize );
+        aPrtPaperSize = lcl_GuessPaperSize();
+        // factors from Windows DIN A4
+        aOutputSize    = Size( static_cast<long>(aPrtPaperSize.Width()  * 0.941),
+                               static_cast<long>(aPrtPaperSize.Height() * 0.961));
+        aPrtPageOffset = Point( static_cast<long>(aPrtPaperSize.Width()  * 0.0250),
+                                static_cast<long>(aPrtPaperSize.Height() * 0.0214));
+    }
+    tools::Rectangle OutputRect( Point(), aOutputSize );
 
 
-                // set minimum top and bottom border
-                if (aPrtPageOffset.Y() < 2000)
-                    OutputRect.Top() += 2000 - aPrtPageOffset.Y();
-                if ((aPrtPaperSize.Height() - (aPrtPageOffset.Y() + OutputRect.Bottom())) < 2000)
-                    OutputRect.Bottom() -= 2000 - (aPrtPaperSize.Height() -
-                                                (aPrtPageOffset.Y() + OutputRect.Bottom()));
+    // set minimum top and bottom border
+    if (aPrtPageOffset.Y() < 2000)
+        OutputRect.AdjustTop(2000 - aPrtPageOffset.Y() );
+    if ((aPrtPaperSize.Height() - (aPrtPageOffset.Y() + OutputRect.Bottom())) < 2000)
+        OutputRect.AdjustBottom( -(2000 - (aPrtPaperSize.Height() -
+                                    (aPrtPageOffset.Y() + OutputRect.Bottom()))) );
 
-                // set minimum left and right border
-                if (aPrtPageOffset.X() < 2500)
-                    OutputRect.Left() += 2500 - aPrtPageOffset.X();
-                if ((aPrtPaperSize.Width() - (aPrtPageOffset.X() + OutputRect.Right())) < 1500)
-                    OutputRect.Right() -= 1500 - (aPrtPaperSize.Width() -
-                                                (aPrtPageOffset.X() + OutputRect.Right()));
+    // set minimum left and right border
+    if (aPrtPageOffset.X() < 2500)
+        OutputRect.AdjustLeft(2500 - aPrtPageOffset.X() );
+    if ((aPrtPaperSize.Width() - (aPrtPageOffset.X() + OutputRect.Right())) < 1500)
+        OutputRect.AdjustRight( -(1500 - (aPrtPaperSize.Width() -
+                                    (aPrtPageOffset.X() + OutputRect.Right()))) );
 
-                if (!m_pPrintUIOptions)
-                    m_pPrintUIOptions.reset(new SmPrintUIOptions);
-                m_pPrintUIOptions->processProperties( rxOptions );
+    if (!m_pPrintUIOptions)
+        m_pPrintUIOptions.reset(new SmPrintUIOptions);
+    m_pPrintUIOptions->processProperties( rxOptions );
 
-                pView->Impl_Print( *pOut, *m_pPrintUIOptions, Rectangle( OutputRect ), Point() );
+    pView->Impl_Print( *pOut, *m_pPrintUIOptions, OutputRect );
 
-                // release SmPrintUIOptions when everything is done.
-                // That way, when SmPrintUIOptions is needed again it will read the latest configuration settings in its c-tor.
-                if (m_pPrintUIOptions->getBoolValue( "IsLastPage" ))
-                {
-                    m_pPrintUIOptions.reset();
-                }
-            }
-        }
+    // release SmPrintUIOptions when everything is done.
+    // That way, when SmPrintUIOptions is needed again it will read the latest configuration settings in its c-tor.
+    if (m_pPrintUIOptions->getBoolValue( "IsLastPage" ))
+    {
+        m_pPrintUIOptions.reset();
     }
 }
 
 void SAL_CALL SmModel::setParent( const uno::Reference< uno::XInterface >& xParent)
-        throw( lang::NoSupportException, uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     SfxBaseModel::setParent( xParent );
@@ -1097,7 +1075,7 @@ void SAL_CALL SmModel::setParent( const uno::Reference< uno::XInterface >& xPare
     {
         SvGlobalName aSfxIdent( SFX_GLOBAL_CLASSID );
         SfxObjectShell* pDoc = reinterpret_cast<SfxObjectShell *>(xParentTunnel->getSomething(
-                                        uno::Sequence< sal_Int8 >( aSfxIdent.GetByteSequence() ) ) );
+                                        aSfxIdent.GetByteSequence() ) );
         if ( pDoc )
             GetObjectShell()->OnDocumentPrinterChanged( pDoc->GetDocumentPrinter() );
     }

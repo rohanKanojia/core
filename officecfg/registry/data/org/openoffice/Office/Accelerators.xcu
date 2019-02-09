@@ -16,6 +16,10 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  -->
+<!-- problematic combinations
+Ctrl+Shift+u aka U_SHIFT_MOD1 under GTK/IBUS is for unicode key input
+Ctrl+Shift+e aka E_SHIFT_MOD1 under GTK/IBUS is for some emoji thing
+ -->
 <!DOCTYPE oor:component-data SYSTEM "../../../../component-update.dtd">
 <oor:component-data xmlns:oor="http://openoffice.org/2001/registry" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:install="http://openoffice.org/2004/installation" oor:name="Accelerators" oor:package="org.openoffice.Office">
   <node oor:name="PrimaryKeys">
@@ -43,12 +47,6 @@
         <prop oor:name="Command">
           <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
           <value xml:lang="en-US">.uno:Copy</value>
-        </prop>
-      </node>
-      <node oor:name="E_SHIFT_MOD1" oor:op="replace">
-        <prop oor:name="Command">
-          <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-          <value xml:lang="en-US">.uno:TrackChanges</value>
         </prop>
       </node>
       <node oor:name="M_SHIFT_MOD1" oor:op="replace">
@@ -79,6 +77,7 @@
         <prop oor:name="Command">
           <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
           <value xml:lang="es">.uno:SelectAll</value>
+          <value xml:lang="en-US">.uno:CommonAlignHorizontalCenter</value>
         </prop>
       </node>
       <node oor:name="F11_MOD2" oor:op="replace">
@@ -130,6 +129,18 @@
           <value xml:lang="es">.uno:Save</value>
         </prop>
       </node>
+      <node oor:name="J_MOD1" oor:op="replace">
+        <prop oor:name="Command">
+          <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+          <value xml:lang="en-US">.uno:CommonAlignJustified</value>
+        </prop>
+      </node>
+      <node oor:name="L_MOD1" oor:op="replace">
+        <prop oor:name="Command">
+          <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+          <value xml:lang="en-US">.uno:CommonAlignLeft</value>
+        </prop>
+      </node>
       <node oor:name="N_MOD1" oor:op="replace">
         <prop oor:name="Command">
           <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
@@ -152,6 +163,18 @@
         <prop oor:name="Command">
           <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
           <value xml:lang="en-US">.uno:Print</value>
+        </prop>
+      </node>
+      <node oor:name="R_MOD1" oor:op="replace">
+        <prop oor:name="Command">
+          <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+          <value xml:lang="en-US">.uno:CommonAlignRight</value>
+        </prop>
+      </node>
+      <node oor:name="E_MOD1_MOD2" oor:op="replace">
+        <prop oor:name="Command">
+          <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+          <value xml:lang="en-US">service:com.sun.star.deployment.ui.PackageManagerDialog</value>
         </prop>
       </node>
       <node oor:name="O_SHIFT_MOD1" oor:op="replace">
@@ -245,8 +268,7 @@
           <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
           <value xml:lang="en-US">.uno:Repeat</value>
         </prop>
-      </node>
-      <node oor:name="Z_SHIFT_MOD1" oor:op="replace">
+      </node>      <node oor:name="Z_SHIFT_MOD1" oor:op="replace">
         <prop oor:name="Command">
           <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
           <value xml:lang="en-US">.uno:Redo</value>
@@ -262,6 +284,18 @@
         <prop oor:name="Command">
           <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
           <value xml:lang="en-US">.uno:Undo</value>
+        </prop>
+      </node>
+      <node oor:name="COMMA_MOD1" oor:op="replace">
+        <prop oor:name="Command">
+          <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+          <value xml:lang="en-US" install:module="macosx">.uno:OptionsTreeDialog</value>
+        </prop>
+      </node>
+      <node oor:name="F12_MOD2" oor:op="replace">
+        <prop oor:name="Command">
+          <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+          <value xml:lang="en-US" install:module="unxwnt">.uno:OptionsTreeDialog</value>
         </prop>
       </node>
     </node>
@@ -324,7 +358,14 @@
         <node oor:name="F_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:RepeatSearch</value>
+          </prop>
+        </node>
+        <node oor:name="G_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="en-US">.uno:RepeatSearch</value>
+            <value xml:lang="es">.uno:Save</value>
           </prop>
         </node>
       </node>
@@ -516,7 +557,13 @@
         <node oor:name="1_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:NumberFormatDecimal</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:NumberFormatDecimal</value>
+          </prop>
+        </node>
+        <node oor:name="1_SHIFT_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:NumberFormatDecimal</value>
           </prop>
         </node>
         <node oor:name="2_MOD1" oor:op="replace">
@@ -528,19 +575,37 @@
         <node oor:name="2_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:NumberFormatScientific</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:NumberFormatScientific</value>
+          </prop>
+        </node>
+        <node oor:name="2_SHIFT_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:NumberFormatScientific</value>
           </prop>
         </node>
         <node oor:name="3_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:NumberFormatDate</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:NumberFormatDate</value>
+          </prop>
+        </node>
+        <node oor:name="3_SHIFT_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:NumberFormatDate</value>
           </prop>
         </node>
         <node oor:name="4_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:NumberFormatCurrency</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:NumberFormatCurrency</value>
+          </prop>
+        </node>
+        <node oor:name="4_SHIFT_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:NumberFormatCurrency</value>
           </prop>
         </node>
         <node oor:name="5_MOD1" oor:op="replace">
@@ -552,25 +617,39 @@
         <node oor:name="5_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:NumberFormatPercent</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:NumberFormatPercent</value>
+          </prop>
+        </node>
+        <node oor:name="5_SHIFT_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:NumberFormatPercent</value>
           </prop>
         </node>
         <node oor:name="6_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:NumberFormatStandard</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:NumberFormatStandard</value>
+          </prop>
+        </node>
+        <node oor:name="6_SHIFT_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:NumberFormatStandard</value>
           </prop>
         </node>
         <node oor:name="8_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="sv">.uno:Shrink</value>
+            <value xml:lang="de">.uno:Shrink</value>
           </prop>
         </node>
         <node oor:name="9_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="sv">.uno:Grow</value>
+            <value xml:lang="de">.uno:Grow</value>
           </prop>
         </node>
         <node oor:name="ADD_MOD1" oor:op="replace">
@@ -774,6 +853,12 @@
             <value xml:lang="en-US">.uno:Navigator</value>
           </prop>
         </node>
+        <node oor:name="F5_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US">.uno:Sidebar</value>
+          </prop>
+        </node>
         <node oor:name="F5_SHIFT" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
@@ -783,7 +868,14 @@
         <node oor:name="F7" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:SpellDialog</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:SpellDialog</value>
+          </prop>
+        </node>
+        <node oor:name="SEMICOLON_SHIFT_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:SpellDialog</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:InsertCurrentTime</value>
           </prop>
         </node>
         <node oor:name="F7_MOD1" oor:op="replace">
@@ -832,7 +924,7 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="de">.uno:Bold</value>
-            <value xml:lang="en-US">.uno:RepeatSearch</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:RepeatSearch</value>
           </prop>
         </node>
         <node oor:name="F_MOD1_MOD2" oor:op="replace">
@@ -845,7 +937,8 @@
         <node oor:name="G_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="de">.uno:RepeatSearch</value>
+            <value xml:lang="en-US">.uno:RepeatSearch</value>
+            <value xml:lang="es">.uno:Save</value>
             <value xml:lang="fr">.uno:Bold</value>
           </prop>
         </node>
@@ -894,13 +987,25 @@
         <node oor:name="J_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:FullScreen</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:FullScreen</value>
+          </prop>
+        </node>
+        <node oor:name="F_MOD1_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:FullScreen</value>
           </prop>
         </node>
         <node oor:name="K_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="es">.uno:Italic</value>
+          </prop>
+        </node>
+        <node oor:name="K_MOD1_MOD2" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="es">.uno:HyperlinkDialog</value>
           </prop>
         </node>
         <node oor:name="K_SHIFT_MOD1" oor:op="replace">
@@ -969,12 +1074,6 @@
             <value xml:lang="en-US">.uno:GoDownBlock</value>
           </prop>
         </node>
-        <node oor:name="PAGEDOWN_MOD1" oor:op="replace">
-          <prop oor:name="Command">
-            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:JumpToNextTable</value>
-          </prop>
-        </node>
         <node oor:name="PAGEDOWN_SHIFT" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
@@ -991,12 +1090,6 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="en-US">.uno:GoUpBlock</value>
-          </prop>
-        </node>
-        <node oor:name="PAGEUP_MOD1" oor:op="replace">
-          <prop oor:name="Command">
-            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:JumpToPrevTable</value>
           </prop>
         </node>
         <node oor:name="PAGEUP_SHIFT" oor:op="replace">
@@ -1020,7 +1113,13 @@
         <node oor:name="QUOTELEFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:ToggleFormula</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:ToggleFormula</value>
+          </prop>
+        </node>
+        <node oor:name="QUOTELEFT_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:ToggleFormula</value>
           </prop>
         </node>
         <node oor:name="QUOTERIGHT_MOD1" oor:op="replace">
@@ -1083,12 +1182,6 @@
             <value xml:lang="en-US">.uno:InsertCurrentDate</value>
           </prop>
         </node>
-        <node oor:name="SEMICOLON_SHIFT_MOD1" oor:op="replace">
-          <prop oor:name="Command">
-            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:InsertCurrentTime</value>
-          </prop>
-        </node>
         <node oor:name="POINT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
@@ -1149,6 +1242,8 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="en-US" install:module="unxwnt">.uno:SelectAll</value>
+            <value xml:lang="zh-TW" install:module="unxwnt">.uno:SelectColumn</value>
+            <value xml:lang="zh-CN" install:module="unxwnt">.uno:SelectColumn</value>
           </prop>
         </node>
         <node oor:name="SPACE_SHIFT_MOD3" oor:op="replace">
@@ -1238,6 +1333,12 @@
             <value xml:lang="en-US">.uno:PasteSpecial</value>
           </prop>
         </node>
+        <node oor:name="V_SHIFT_MOD1_MOD2" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US">.uno:PasteUnformatted</value>
+          </prop>
+        </node>
         <node oor:name="Z_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
@@ -1260,6 +1361,30 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="en-US">.uno:InsertAnnotation</value>
+          </prop>
+        </node>
+        <node oor:name="TAB_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:JumpToNextTable</value>
+          </prop>
+        </node>
+        <node oor:name="TAB_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:JumpToNextTable</value>
+          </prop>
+        </node>
+        <node oor:name="TAB_SHIFT_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:JumpToPrevTable</value>
+          </prop>
+        </node>
+        <node oor:name="TAB_SHIFT_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:JumpToPrevTable</value>
           </prop>
         </node>
       </node>
@@ -1291,7 +1416,13 @@
         <node oor:name="J_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:FullScreen</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:FullScreen</value>
+          </prop>
+        </node>
+        <node oor:name="F_MOD1_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:FullScreen</value>
           </prop>
         </node>
         <node oor:name="N_MOD1" oor:op="replace">
@@ -1396,12 +1527,14 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="sv">.uno:Shrink</value>
+            <value xml:lang="de">.uno:Shrink</value>
           </prop>
         </node>
         <node oor:name="9_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="sv">.uno:Grow</value>
+            <value xml:lang="de">.uno:Grow</value>
           </prop>
         </node>
         <node oor:name="9_SHIFT_MOD1_MOD2" oor:op="replace">
@@ -1539,10 +1672,16 @@
             <value xml:lang="en-US">.uno:Navigator</value>
           </prop>
         </node>
+        <node oor:name="F5_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US">.uno:Sidebar</value>
+          </prop>
+        </node>
         <node oor:name="F7" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:SpellDialog</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:SpellDialog</value>
           </prop>
         </node>
         <node oor:name="F7_MOD1" oor:op="replace">
@@ -1619,6 +1758,12 @@
             <value xml:lang="es">.uno:Italic</value>
           </prop>
         </node>
+        <node oor:name="K_MOD1_MOD2" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="es">.uno:HyperlinkDialog</value>
+          </prop>
+        </node>
         <node oor:name="K_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
@@ -1641,13 +1786,13 @@
         <node oor:name="M_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US" install:module="unxwnt">.uno:ResetAttributes</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:SetDefault</value>
           </prop>
         </node>
         <node oor:name="M_MOD3" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US" install:module="macosx">.uno:ResetAttributes</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:SetDefault</value>
           </prop>
         </node>
         <node oor:name="N_MOD1" oor:op="replace">
@@ -1858,12 +2003,14 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="sv">.uno:Shrink</value>
+            <value xml:lang="de">.uno:Shrink</value>
           </prop>
         </node>
         <node oor:name="9_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="sv">.uno:Grow</value>
+            <value xml:lang="de">.uno:Grow</value>
           </prop>
         </node>
         <node oor:name="ADD_MOD1" oor:op="replace">
@@ -2031,6 +2178,12 @@
             <value xml:lang="es">.uno:SelectAll</value>
           </prop>
         </node>
+        <node oor:name="E_SHIFT_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US">.uno:TrackChanges</value>
+          </prop>
+        </node>
         <node oor:name="F10_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
@@ -2142,7 +2295,13 @@
         <node oor:name="F7" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:SpellingAndGrammarDialog</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:SpellingAndGrammarDialog</value>
+          </prop>
+        </node>
+        <node oor:name="SEMICOLON_SHIFT_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:SpellingAndGrammarDialog</value>
           </prop>
         </node>
         <node oor:name="F7_MOD1" oor:op="replace">
@@ -2210,13 +2369,14 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="de">.uno:Bold</value>
-            <value xml:lang="en-US">.uno:RepeatSearch</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:RepeatSearch</value>
           </prop>
         </node>
         <node oor:name="G_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="de">.uno:RepeatSearch</value>
+            <value xml:lang="en-US">.uno:RepeatSearch</value>
+            <value xml:lang="es">.uno:Save</value>
             <value xml:lang="fr">.uno:Bold</value>
           </prop>
         </node>
@@ -2277,13 +2437,25 @@
         <node oor:name="J_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:FullScreen</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:FullScreen</value>
+          </prop>
+        </node>
+        <node oor:name="F_MOD1_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:FullScreen</value>
           </prop>
         </node>
         <node oor:name="K_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="es">.uno:Italic</value>
+          </prop>
+        </node>
+        <node oor:name="K_MOD1_MOD2" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="es">.uno:HyperlinkDialog</value>
           </prop>
         </node>
         <node oor:name="K_SHIFT_MOD1" oor:op="replace">
@@ -2631,12 +2803,14 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="sv">.uno:Shrink</value>
+            <value xml:lang="de">.uno:Shrink</value>
           </prop>
         </node>
         <node oor:name="9_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="sv">.uno:Grow</value>
+            <value xml:lang="de">.uno:Grow</value>
           </prop>
         </node>
         <node oor:name="9_SHIFT_MOD1_MOD2" oor:op="replace">
@@ -2792,6 +2966,12 @@
             <value xml:lang="en-US">.uno:Presentation</value>
           </prop>
         </node>
+        <node oor:name="F5_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US">.uno:Sidebar</value>
+          </prop>
+        </node>
         <node oor:name="F5_SHIFT" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
@@ -2813,7 +2993,13 @@
         <node oor:name="F7" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:SpellDialog</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:SpellDialog</value>
+          </prop>
+        </node>
+        <node oor:name="SEMICOLON_SHIFT_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:SpellDialog</value>
           </prop>
         </node>
         <node oor:name="F7_MOD1" oor:op="replace">
@@ -2896,6 +3082,12 @@
             <value xml:lang="es">.uno:Italic</value>
           </prop>
         </node>
+        <node oor:name="K_MOD1_MOD2" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="es">.uno:HyperlinkDialog</value>
+          </prop>
+        </node>
         <node oor:name="K_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
@@ -2924,13 +3116,25 @@
         <node oor:name="M_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US" install:module="unxwnt">.uno:ResetAttributes</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:InsertPage</value>
+          </prop>
+        </node>
+        <node oor:name="M_SHIFT_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:SetDefault</value>
           </prop>
         </node>
         <node oor:name="M_MOD3" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US" install:module="macosx">.uno:ResetAttributes</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:InsertPage</value>
+          </prop>
+        </node>
+        <node oor:name="M_SHIFT_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:SetDefault</value>
           </prop>
         </node>
         <node oor:name="N_MOD1" oor:op="replace">
@@ -3158,7 +3362,13 @@
         <node oor:name="J_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:FullScreen</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:FullScreen</value>
+          </prop>
+        </node>
+        <node oor:name="F_MOD1_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:FullScreen</value>
           </prop>
         </node>
         <node oor:name="Z_SHIFT_MOD1" oor:op="replace">
@@ -3184,7 +3394,7 @@
         <node oor:name="0_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:StyleApply?Style:string=Text%20body&amp;FamilyName:string=ParagraphStyles</value>
+            <value xml:lang="en-US">.uno:StyleApply?Style:string=Text body&amp;FamilyName:string=ParagraphStyles</value>
           </prop>
         </node>
         <node oor:name="0_SHIFT_MOD1" oor:op="replace">
@@ -3196,43 +3406,45 @@
         <node oor:name="1_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading%201&amp;FamilyName:string=ParagraphStyles</value>
+            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading 1&amp;FamilyName:string=ParagraphStyles</value>
           </prop>
         </node>
         <node oor:name="2_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading%202&amp;FamilyName:string=ParagraphStyles</value>
+            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading 2&amp;FamilyName:string=ParagraphStyles</value>
           </prop>
         </node>
         <node oor:name="3_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading%203&amp;FamilyName:string=ParagraphStyles</value>
+            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading 3&amp;FamilyName:string=ParagraphStyles</value>
           </prop>
         </node>
         <node oor:name="4_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading%204&amp;FamilyName:string=ParagraphStyles</value>
+            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading 4&amp;FamilyName:string=ParagraphStyles</value>
           </prop>
         </node>
         <node oor:name="5_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading%205&amp;FamilyName:string=ParagraphStyles</value>
+            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading 5&amp;FamilyName:string=ParagraphStyles</value>
           </prop>
         </node>
         <node oor:name="8_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="sv">.uno:Shrink</value>
+            <value xml:lang="de">.uno:Shrink</value>
           </prop>
         </node>
         <node oor:name="9_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="sv">.uno:Grow</value>
+            <value xml:lang="de">.uno:Grow</value>
           </prop>
         </node>
         <node oor:name="ADD_MOD1" oor:op="replace">
@@ -3511,7 +3723,13 @@
         <node oor:name="F7" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:SpellingAndGrammarDialog</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:SpellingAndGrammarDialog</value>
+          </prop>
+        </node>
+        <node oor:name="SEMICOLON_SHIFT_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:SpellingAndGrammarDialog</value>
           </prop>
         </node>
         <node oor:name="F7_MOD1" oor:op="replace">
@@ -3579,13 +3797,14 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="de">.uno:Bold</value>
-            <value xml:lang="en-US">.uno:RepeatSearch</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:RepeatSearch</value>
           </prop>
         </node>
         <node oor:name="G_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="de">.uno:RepeatSearch</value>
+            <value xml:lang="en-US">.uno:RepeatSearch</value>
+            <value xml:lang="es">.uno:Save</value>
             <value xml:lang="fr">.uno:Bold</value>
           </prop>
         </node>
@@ -3646,13 +3865,25 @@
         <node oor:name="J_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:FullScreen</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:FullScreen</value>
+          </prop>
+        </node>
+        <node oor:name="F_MOD1_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:FullScreen</value>
           </prop>
         </node>
         <node oor:name="K_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="es">.uno:Italic</value>
+          </prop>
+        </node>
+        <node oor:name="K_MOD1_MOD2" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="es">.uno:HyperlinkDialog</value>
           </prop>
         </node>
         <node oor:name="K_SHIFT_MOD1" oor:op="replace">
@@ -4272,7 +4503,13 @@
         <node oor:name="F7" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:SpellingAndGrammarDialog</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:SpellingAndGrammarDialog</value>
+          </prop>
+        </node>
+        <node oor:name="SEMICOLON_SHIFT_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:SpellingAndGrammarDialog</value>
           </prop>
         </node>
         <node oor:name="F7_MOD1" oor:op="replace">
@@ -4340,13 +4577,14 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="de">.uno:Bold</value>
-            <value xml:lang="en-US">.uno:RepeatSearch</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:RepeatSearch</value>
           </prop>
         </node>
         <node oor:name="G_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="de">.uno:RepeatSearch</value>
+            <value xml:lang="en-US">.uno:RepeatSearch</value>
+            <value xml:lang="es">.uno:Save</value>
             <value xml:lang="fr">.uno:Bold</value>
           </prop>
         </node>
@@ -4413,13 +4651,25 @@
         <node oor:name="J_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:FullScreen</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:FullScreen</value>
+          </prop>
+        </node>
+        <node oor:name="F_MOD1_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:FullScreen</value>
           </prop>
         </node>
         <node oor:name="K_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="es">.uno:Italic</value>
+          </prop>
+        </node>
+        <node oor:name="K_MOD1_MOD2" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="es">.uno:HyperlinkDialog</value>
           </prop>
         </node>
         <node oor:name="K_SHIFT_MOD1" oor:op="replace">
@@ -5033,7 +5283,13 @@
         <node oor:name="F7" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:SpellingAndGrammarDialog</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:SpellingAndGrammarDialog</value>
+          </prop>
+        </node>
+        <node oor:name="SEMICOLON_SHIFT_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:SpellingAndGrammarDialog</value>
           </prop>
         </node>
         <node oor:name="F7_MOD1" oor:op="replace">
@@ -5094,7 +5350,7 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="de">.uno:Bold</value>
-            <value xml:lang="en-US">.uno:RepeatSearch</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:RepeatSearch</value>
           </prop>
         </node>
         <node oor:name="F_MOD1_MOD2" oor:op="replace">
@@ -5107,7 +5363,8 @@
         <node oor:name="G_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="de">.uno:RepeatSearch</value>
+            <value xml:lang="en-US">.uno:RepeatSearch</value>
+            <value xml:lang="es">.uno:Save</value>
             <value xml:lang="fr">.uno:Bold</value>
           </prop>
         </node>
@@ -5168,13 +5425,25 @@
         <node oor:name="J_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:FullScreen</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:FullScreen</value>
+          </prop>
+        </node>
+        <node oor:name="F_MOD1_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:FullScreen</value>
           </prop>
         </node>
         <node oor:name="K_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="es">.uno:Italic</value>
+          </prop>
+        </node>
+        <node oor:name="K_MOD1_MOD2" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="es">.uno:HyperlinkDialog</value>
           </prop>
         </node>
         <node oor:name="K_SHIFT_MOD1" oor:op="replace">
@@ -5479,7 +5748,7 @@
         <node oor:name="0_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:StyleApply?Style:string=Text%20body&amp;FamilyName:string=ParagraphStyles</value>
+            <value xml:lang="en-US">.uno:StyleApply?Style:string=Text body&amp;FamilyName:string=ParagraphStyles</value>
           </prop>
         </node>
         <node oor:name="0_SHIFT_MOD1" oor:op="replace">
@@ -5491,43 +5760,45 @@
         <node oor:name="1_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading%201&amp;FamilyName:string=ParagraphStyles</value>
+            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading 1&amp;FamilyName:string=ParagraphStyles</value>
           </prop>
         </node>
         <node oor:name="2_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading%202&amp;FamilyName:string=ParagraphStyles</value>
+            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading 2&amp;FamilyName:string=ParagraphStyles</value>
           </prop>
         </node>
         <node oor:name="3_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading%203&amp;FamilyName:string=ParagraphStyles</value>
+            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading 3&amp;FamilyName:string=ParagraphStyles</value>
           </prop>
         </node>
         <node oor:name="4_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading%204&amp;FamilyName:string=ParagraphStyles</value>
+            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading 4&amp;FamilyName:string=ParagraphStyles</value>
           </prop>
         </node>
         <node oor:name="5_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading%205&amp;FamilyName:string=ParagraphStyles</value>
+            <value xml:lang="en-US">.uno:StyleApply?Style:string=Heading 5&amp;FamilyName:string=ParagraphStyles</value>
           </prop>
         </node>
         <node oor:name="8_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="sv">.uno:Shrink</value>
+            <value xml:lang="de">.uno:Shrink</value>
           </prop>
         </node>
         <node oor:name="9_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="sv">.uno:Grow</value>
+            <value xml:lang="de">.uno:Grow</value>
           </prop>
         </node>
         <node oor:name="ADD_MOD1" oor:op="replace">
@@ -5596,6 +5867,12 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="en-US">.uno:SubScript</value>
+          </prop>
+        </node>
+        <node oor:name="C_SHIFT_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US">.uno:TrackChanges</value>
           </prop>
         </node>
         <node oor:name="DELETE_MOD1" oor:op="replace">
@@ -5791,6 +6068,12 @@
             <value xml:lang="en-US">.uno:Navigator</value>
           </prop>
         </node>
+        <node oor:name="F5_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US">.uno:Sidebar</value>
+          </prop>
+        </node>
         <node oor:name="F5_SHIFT" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
@@ -5806,7 +6089,13 @@
         <node oor:name="F7" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:SpellingAndGrammarDialog</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:SpellingAndGrammarDialog</value>
+          </prop>
+        </node>
+        <node oor:name="SEMICOLON_SHIFT_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:SpellingAndGrammarDialog</value>
           </prop>
         </node>
         <node oor:name="F7_MOD1" oor:op="replace">
@@ -5874,13 +6163,15 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="de">.uno:Bold</value>
-            <value xml:lang="en-US">.uno:RepeatSearch</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:RepeatSearch</value>
           </prop>
         </node>
         <node oor:name="G_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="de">.uno:RepeatSearch</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:GotoPage</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:RepeatSearch</value>
+            <value xml:lang="es">.uno:Save</value>
             <value xml:lang="fr">.uno:Bold</value>
           </prop>
         </node>
@@ -5941,13 +6232,25 @@
         <node oor:name="J_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:FullScreen</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:FullScreen</value>
+          </prop>
+        </node>
+        <node oor:name="F_MOD1_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:FullScreen</value>
           </prop>
         </node>
         <node oor:name="K_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="es">.uno:Italic</value>
+          </prop>
+        </node>
+        <node oor:name="K_MOD1_MOD2" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="es">.uno:HyperlinkDialog</value>
           </prop>
         </node>
         <node oor:name="K_SHIFT_MOD1" oor:op="replace">
@@ -6301,12 +6604,14 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="sv">.uno:Shrink</value>
+            <value xml:lang="de">.uno:Shrink</value>
           </prop>
         </node>
         <node oor:name="9_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="sv">.uno:Grow</value>
+            <value xml:lang="de">.uno:Grow</value>
           </prop>
         </node>
         <node oor:name="ADD_MOD1" oor:op="replace">
@@ -6585,7 +6890,13 @@
         <node oor:name="F7" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:SpellingAndGrammarDialog</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:SpellingAndGrammarDialog</value>
+          </prop>
+        </node>
+        <node oor:name="SEMICOLON_SHIFT_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:SpellingAndGrammarDialog</value>
           </prop>
         </node>
         <node oor:name="F7_MOD1" oor:op="replace">
@@ -6653,13 +6964,14 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="de">.uno:Bold</value>
-            <value xml:lang="en-US">.uno:RepeatSearch</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:RepeatSearch</value>
           </prop>
         </node>
         <node oor:name="G_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="de">.uno:RepeatSearch</value>
+            <value xml:lang="en-US">.uno:RepeatSearch</value>
+            <value xml:lang="es">.uno:Save</value>
             <value xml:lang="fr">.uno:Bold</value>
           </prop>
         </node>
@@ -6720,13 +7032,25 @@
         <node oor:name="J_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:FullScreen</value>
+            <value xml:lang="en-US" install:module="unxwnt">.uno:FullScreen</value>
+          </prop>
+        </node>
+        <node oor:name="F_MOD1_MOD3" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US" install:module="macosx">.uno:FullScreen</value>
           </prop>
         </node>
         <node oor:name="K_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="es">.uno:Italic</value>
+          </prop>
+        </node>
+        <node oor:name="K_MOD1_MOD2" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="es">.uno:HyperlinkDialog</value>
           </prop>
         </node>
         <node oor:name="K_SHIFT_MOD1" oor:op="replace">
@@ -7139,6 +7463,12 @@
             <value xml:lang="en-US">.uno:Undo</value>
           </prop>
         </node>
+        <node oor:name="E_SHIFT_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US">.uno:TraceChangeMode</value>
+          </prop>
+        </node>
         <node oor:name="F5_SHIFT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
@@ -7149,6 +7479,18 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="en-US">.uno:Undo</value>
+          </prop>
+        </node>
+        <node oor:name="PAGEDOWN_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US">.uno:JumpToNextTable</value>
+          </prop>
+        </node>
+        <node oor:name="PAGEUP_MOD1" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="en-US">.uno:JumpToPrevTable</value>
           </prop>
         </node>
       </node>
@@ -7269,6 +7611,12 @@
             <value xml:lang="es">.uno:Italic</value>
           </prop>
         </node>
+        <node oor:name="K_MOD1_MOD2" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="es">.uno:HyperlinkDialog</value>
+          </prop>
+        </node>
         <node oor:name="N_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
@@ -7351,18 +7699,6 @@
             <value xml:lang="en-US">.uno:Cut</value>
           </prop>
         </node>
-        <node oor:name="F2_MOD1" oor:op="replace">
-          <prop oor:name="Command">
-            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:Presentation</value>
-          </prop>
-        </node>
-        <node oor:name="F9" oor:op="replace">
-          <prop oor:name="Command">
-            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:Presentation</value>
-          </prop>
-        </node>
         <node oor:name="INSERT_MOD1" oor:op="replace">
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
@@ -7379,6 +7715,12 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="es">.uno:Italic</value>
+          </prop>
+        </node>
+        <node oor:name="K_MOD1_MOD2" oor:op="replace">
+          <prop oor:name="Command">
+            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
+            <value xml:lang="es">.uno:HyperlinkDialog</value>
           </prop>
         </node>
         <node oor:name="N_MOD1" oor:op="replace">
@@ -7630,18 +7972,6 @@
           <prop oor:name="Command">
             <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
             <value xml:lang="en-US">.uno:Undo</value>
-          </prop>
-        </node>
-        <node oor:name="TAB_MOD1" oor:op="replace">
-          <prop oor:name="Command">
-            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:NextMark</value>
-          </prop>
-        </node>
-        <node oor:name="TAB_SHIFT_MOD1" oor:op="replace">
-          <prop oor:name="Command">
-            <value xml:lang="x-no-translate">I10N SHORTCUTS - NO TRANSLATE</value>
-            <value xml:lang="en-US">.uno:PrevMark</value>
           </prop>
         </node>
         <node oor:name="SUBTRACT" oor:op="replace">

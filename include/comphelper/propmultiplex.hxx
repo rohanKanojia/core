@@ -20,10 +20,15 @@
 #ifndef INCLUDED_COMPHELPER_PROPMULTIPLEX_HXX
 #define INCLUDED_COMPHELPER_PROPMULTIPLEX_HXX
 
-#include <comphelper/propstate.hxx>
+#include <com/sun/star/beans/XPropertyChangeListener.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <comphelper/comphelperdllapi.h>
+#include <rtl/ref.hxx>
+#include <vector>
 
+namespace com { namespace sun { namespace star { namespace beans {
+    class XPropertySet;
+} } } }
 
 //= property helper classes
 
@@ -42,18 +47,18 @@ namespace comphelper
     {
         friend class OPropertyChangeMultiplexer;
 
-        OPropertyChangeMultiplexer* m_pAdapter;
+        rtl::Reference<OPropertyChangeMultiplexer> m_xAdapter;
         ::osl::Mutex&               m_rMutex;
 
     public:
         OPropertyChangeListener(::osl::Mutex& _rMutex)
-            : m_pAdapter(nullptr), m_rMutex(_rMutex) { }
+            : m_rMutex(_rMutex) { }
         virtual ~OPropertyChangeListener();
 
-        virtual void _propertyChanged(const css::beans::PropertyChangeEvent& _rEvent)
-            throw (css::uno::RuntimeException, std::exception) = 0;
-        virtual void _disposing(const css::lang::EventObject& _rSource)
-            throw( css::uno::RuntimeException, std::exception);
+        /// @throws css::uno::RuntimeException
+        virtual void _propertyChanged(const css::beans::PropertyChangeEvent& _rEvent) = 0;
+        /// @throws css::uno::RuntimeException
+        virtual void _disposing(const css::lang::EventObject& _rSource);
 
     protected:
         /** If the derivee also owns the mutex which we know as reference, then call this within your
@@ -77,18 +82,18 @@ namespace comphelper
         OPropertyChangeListener*                        m_pListener;
         sal_Int32                                       m_nLockCount;
         bool                                            m_bListening        : 1;
-        bool                                            m_bAutoSetRelease   : 1;
+        bool const                                      m_bAutoSetRelease   : 1;
 
 
-        virtual ~OPropertyChangeMultiplexer();
+        virtual ~OPropertyChangeMultiplexer() override;
     public:
         OPropertyChangeMultiplexer(OPropertyChangeListener* _pListener, const  css::uno::Reference< css::beans::XPropertySet>& _rxSet, bool _bAutoReleaseSet = true);
 
     // XEventListener
-        virtual void SAL_CALL disposing( const  css::lang::EventObject& Source ) throw( css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const  css::lang::EventObject& Source ) override;
 
     // XPropertyChangeListener
-        virtual void SAL_CALL propertyChange( const  css::beans::PropertyChangeEvent& evt ) throw( css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL propertyChange( const  css::beans::PropertyChangeEvent& evt ) override;
 
         /// incremental lock
         void        lock();

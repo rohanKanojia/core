@@ -20,14 +20,14 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <_getopt.h>
+#include "_getopt.h"
 
 #define EPR                 fprintf(stderr,
 #define ERR(str, chr)       if(opterr) { EPR "%s%c\n", str, chr); }
 
-int opterr = 1;
+static int opterr = 1;
 int optind = 1;
-int optopt;
+static int optopt;
 char *optarg;
 
 int
@@ -49,7 +49,7 @@ int
             }
         else if (strcmp(argv[optind], "-isysroot") == 0)
             {
-                // skip Mac OS X SDK selection flags
+                // skip macOS SDK selection flags
                 optind++; optind++;
             }
     }

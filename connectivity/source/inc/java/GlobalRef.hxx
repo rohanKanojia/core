@@ -20,8 +20,8 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_GLOBALREF_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_GLOBALREF_HXX
 
-#include "java/LocalRef.hxx"
-#include "java/lang/Object.hxx"
+#include <java/LocalRef.hxx>
+#include <java/lang/Object.hxx>
 
 #include <jvmaccess/virtualmachine.hxx>
 
@@ -55,7 +55,7 @@ namespace connectivity { namespace jdbc
             return *this;
         }
 
-        ~GlobalRef()
+        ~GlobalRef() COVERITY_NOEXCEPT_FALSE
         {
             reset();
         }

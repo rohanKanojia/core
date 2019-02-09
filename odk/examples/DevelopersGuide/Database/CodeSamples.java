@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -111,7 +112,7 @@ public class CodeSamples
         System.exit(0);
     }
 
-    // check if the connection is not null aand dispose it later on.
+    // check if the connection is not null and dispose it later on.
     public static void checkConnection(XConnection con)
     {
         if(con != null)
@@ -318,3 +319,4 @@ public class CodeSamples
     }
 }
 
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -17,19 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dlg_InsertErrorBars.hxx"
-#include "res_ErrorBar.hxx"
-#include "ResId.hxx"
-#include "chartview/ExplicitValueProvider.hxx"
-#include "ChartModelHelper.hxx"
-#include "ObjectIdentifier.hxx"
-#include "DiagramHelper.hxx"
-#include "AxisHelper.hxx"
-#include "ObjectNameProvider.hxx"
-
-#include <com/sun/star/chart2/XAxis.hpp>
-#include <com/sun/star/chart2/XDiagram.hpp>
-#include <vcl/settings.hxx>
+#include <dlg_InsertErrorBars.hxx>
+#include <res_ErrorBar.hxx>
+#include <chartview/ExplicitScaleValues.hxx>
+#include <chartview/ExplicitValueProvider.hxx>
+#include <ChartModelHelper.hxx>
+#include <ObjectIdentifier.hxx>
+#include <DiagramHelper.hxx>
+#include <AxisHelper.hxx>
+#include <ObjectNameProvider.hxx>
 
 using ::com::sun::star::uno::Reference;
 using namespace ::com::sun::star;
@@ -39,20 +35,17 @@ namespace chart
 {
 
 InsertErrorBarsDialog::InsertErrorBarsDialog(
-    vcl::Window* pParent, const SfxItemSet& rMyAttrs,
+    weld::Window* pParent, const SfxItemSet& rMyAttrs,
     const uno::Reference< chart2::XChartDocument > & xChartDocument,
-    ErrorBarResources::tErrorBarType eType /* = ErrorBarResources::ERROR_BAR_Y */ ) :
-        ModalDialog( pParent
-        ,"dlg_InsertErrorBars"
-        ,"modules/schart/ui/dlg_InsertErrorBars.ui"),
-        rInAttrs( rMyAttrs ),
-        m_apErrorBarResources( new ErrorBarResources(
-                                   this, this, rInAttrs,
+    ErrorBarResources::tErrorBarType eType /* = ErrorBarResources::ERROR_BAR_Y */ )
+        : GenericDialogController(pParent, "modules/schart/ui/dlg_InsertErrorBars.ui", "dlg_InsertErrorBars")
+        , m_apErrorBarResources( new ErrorBarResources(
+                                   m_xBuilder.get(), TabPageParent(m_xDialog.get(), nullptr), rMyAttrs,
                                    /* bNoneAvailable = */ true, eType ))
 {
     ObjectType objType = eType == ErrorBarResources::ERROR_BAR_Y ? OBJECTTYPE_DATA_ERRORS_Y : OBJECTTYPE_DATA_ERRORS_X;
 
-    this->SetText( ObjectNameProvider::getName_ObjectForAllSeries(objType) );
+    m_xDialog->set_title(ObjectNameProvider::getName_ObjectForAllSeries(objType));
 
     m_apErrorBarResources->SetChartDocumentForRangeChoosing( xChartDocument );
 }
@@ -60,14 +53,6 @@ InsertErrorBarsDialog::InsertErrorBarsDialog(
 void InsertErrorBarsDialog::FillItemSet(SfxItemSet& rOutAttrs)
 {
     m_apErrorBarResources->FillItemSet(rOutAttrs);
-}
-
-void InsertErrorBarsDialog::DataChanged( const DataChangedEvent& rDCEvt )
-{
-    ModalDialog::DataChanged( rDCEvt );
-
-    if ( (rDCEvt.GetType() == DataChangedEventType::SETTINGS) && (rDCEvt.GetFlags() & AllSettingsFlags::STYLE) )
-        m_apErrorBarResources->FillValueSets();
 }
 
 void InsertErrorBarsDialog::SetAxisMinorStepWidthForErrorBarDecimals( double fMinorStepWidth )

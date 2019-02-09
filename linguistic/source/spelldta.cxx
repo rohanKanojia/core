@@ -20,14 +20,12 @@
 #include <com/sun/star/uno/Reference.h>
 #include <com/sun/star/linguistic2/SpellFailure.hpp>
 #include <com/sun/star/linguistic2/XSearchableDictionaryList.hpp>
-#include <comphelper/string.hxx>
-#include <tools/debug.hxx>
 #include <osl/mutex.hxx>
 
 #include <algorithm>
 #include <vector>
 
-#include "linguistic/spelldta.hxx"
+#include <linguistic/spelldta.hxx>
 #include "lngsvcmgr.hxx"
 
 
@@ -45,7 +43,7 @@ namespace linguistic
 
 #define MAX_PROPOSALS   40
 
-bool SeqHasEntry(
+static bool SeqHasEntry(
         const std::vector< OUString > &rSeq,
         const OUString &rTxt)
 {
@@ -60,8 +58,8 @@ bool SeqHasEntry(
 }
 
 
-void SearchSimilarText( const OUString &rText, sal_Int16 nLanguage,
-        Reference< XSearchableDictionaryList > &xDicList,
+void SearchSimilarText( const OUString &rText, LanguageType nLanguage,
+        Reference< XSearchableDictionaryList > const &xDicList,
         std::vector< OUString > & rDicListProps )
 {
     if (!xDicList.is())
@@ -77,7 +75,7 @@ void SearchSimilarText( const OUString &rText, sal_Int16 nLanguage,
     {
         Reference< XDictionary > xDic( pDic[i], UNO_QUERY );
 
-        sal_Int16           nLang = LinguLocaleToLanguage( xDic->getLocale() );
+        LanguageType nLang = LinguLocaleToLanguage( xDic->getLocale() );
 
         if ( xDic.is() && xDic->isActive()
             && (nLang == nLanguage  ||  LinguIsUnspecified( nLang)) )
@@ -96,7 +94,7 @@ void SearchSimilarText( const OUString &rText, sal_Int16 nLanguage,
                 if (pEntries[k].is())
                 {
                     // remove characters used to determine hyphenation positions
-                    aEntryTxt = comphelper::string::remove(pEntries[k]->getDictionaryWord(), '=');
+                    aEntryTxt = pEntries[k]->getDictionaryWord().replaceAll("=", "");
                 }
                 if (!aEntryTxt.isEmpty()  &&  aEntryTxt.getLength() > 1  &&  LevDistance( rText, aEntryTxt ) <= 2)
                     rDicListProps.push_back( aEntryTxt );
@@ -107,8 +105,8 @@ void SearchSimilarText( const OUString &rText, sal_Int16 nLanguage,
 
 
 void SeqRemoveNegEntries( std::vector< OUString > &rSeq,
-        Reference< XSearchableDictionaryList > &rxDicList,
-        sal_Int16 nLanguage )
+        Reference< XSearchableDictionaryList > const &rxDicList,
+        LanguageType nLanguage )
 {
     bool bSthRemoved = false;
     sal_Int32 nLen = rSeq.size();
@@ -126,7 +124,7 @@ void SeqRemoveNegEntries( std::vector< OUString > &rSeq,
     {
         std::vector< OUString > aNew;
         // merge sequence without duplicates and empty strings in new empty sequence
-        aNew = MergeProposalSeqs( aNew, rSeq, false );
+        aNew = MergeProposalSeqs( aNew, rSeq );
         rSeq = aNew;
     }
 }
@@ -134,38 +132,30 @@ void SeqRemoveNegEntries( std::vector< OUString > &rSeq,
 
 std::vector< OUString > MergeProposalSeqs(
             std::vector< OUString > &rAlt1,
-            std::vector< OUString > &rAlt2,
-            bool bAllowDuplicates )
+            std::vector< OUString > &rAlt2 )
 {
     std::vector< OUString > aMerged;
 
-    if (rAlt1.empty() && bAllowDuplicates)
-        aMerged = rAlt2;
-    else if (rAlt2.empty() && bAllowDuplicates)
-        aMerged = rAlt1;
-    else
+    size_t nAltCount1 = rAlt1.size();
+    size_t nAltCount2 = rAlt2.size();
+
+    sal_Int32 nCountNew = std::min<sal_Int32>( nAltCount1 + nAltCount2, sal_Int32(MAX_PROPOSALS) );
+    aMerged.resize( nCountNew );
+
+    sal_Int32 nIndex = 0;
+    sal_Int32 i = 0;
+    for (int j = 0;  j < 2;  j++)
     {
-        size_t nAltCount1 = rAlt1.size();
-        size_t nAltCount2 = rAlt2.size();
-
-        sal_Int32 nCountNew = std::min<sal_Int32>( nAltCount1 + nAltCount2, (sal_Int32) MAX_PROPOSALS );
-        aMerged.resize( nCountNew );
-
-        sal_Int32 nIndex = 0;
-        sal_Int32 i = 0;
-        for (int j = 0;  j < 2;  j++)
+        sal_Int32        nCount  = j == 0 ? nAltCount1 : nAltCount2;
+        std::vector< OUString >& rAlt   = j == 0 ? rAlt1 : rAlt2;
+        for (i = 0;  i < nCount  &&  nIndex < MAX_PROPOSALS;  i++)
         {
-            sal_Int32        nCount  = j == 0 ? nAltCount1 : nAltCount2;
-            std::vector< OUString >& rAlt   = j == 0 ? rAlt1 : rAlt2;
-            for (i = 0;  i < nCount  &&  nIndex < MAX_PROPOSALS;  i++)
-            {
-                if (!rAlt[i].isEmpty() &&
-                    (bAllowDuplicates || !SeqHasEntry(aMerged, rAlt[i] )))
-                    aMerged[ nIndex++ ] = rAlt[ i ];
-            }
+            if (!rAlt[i].isEmpty() &&
+                !SeqHasEntry(aMerged, rAlt[i] ))
+                aMerged[ nIndex++ ] = rAlt[ i ];
         }
-        aMerged.resize( nIndex );
     }
+    aMerged.resize( nIndex );
 
     return aMerged;
 }
@@ -179,11 +169,11 @@ SpellAlternatives::SpellAlternatives()
 
 
 SpellAlternatives::SpellAlternatives(
-        const OUString &rWord, sal_Int16 nLang, sal_Int16 nFailureType,
+        const OUString &rWord, LanguageType nLang,
         const Sequence< OUString > &rAlternatives ) :
     aAlt        (rAlternatives),
     aWord       (rWord),
-    nType       (nFailureType),
+    nType       (SpellFailure::IS_NEGATIVE_WORD),
     nLanguage   (nLang)
 {
 }
@@ -195,7 +185,6 @@ SpellAlternatives::~SpellAlternatives()
 
 
 OUString SAL_CALL SpellAlternatives::getWord()
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     return aWord;
@@ -203,7 +192,6 @@ OUString SAL_CALL SpellAlternatives::getWord()
 
 
 Locale SAL_CALL SpellAlternatives::getLocale()
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     return LanguageTag::convertToLocale( nLanguage );
@@ -211,7 +199,6 @@ Locale SAL_CALL SpellAlternatives::getLocale()
 
 
 sal_Int16 SAL_CALL SpellAlternatives::getFailureType()
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     return nType;
@@ -219,15 +206,13 @@ sal_Int16 SAL_CALL SpellAlternatives::getFailureType()
 
 
 sal_Int16 SAL_CALL SpellAlternatives::getAlternativesCount()
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
-    return (sal_Int16) aAlt.getLength();
+    return static_cast<sal_Int16>(aAlt.getLength());
 }
 
 
 Sequence< OUString > SAL_CALL SpellAlternatives::getAlternatives()
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     return aAlt;
@@ -235,7 +220,6 @@ Sequence< OUString > SAL_CALL SpellAlternatives::getAlternatives()
 
 
 void SAL_CALL SpellAlternatives::setAlternatives( const uno::Sequence< OUString >& rAlternatives )
-throw (uno::RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     aAlt = rAlternatives;
@@ -243,14 +227,13 @@ throw (uno::RuntimeException, std::exception)
 
 
 void SAL_CALL SpellAlternatives::setFailureType( sal_Int16 nFailureType )
-throw (uno::RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     nType = nFailureType;
 }
 
 
-void SpellAlternatives::SetWordLanguage(const OUString &rWord, sal_Int16 nLang)
+void SpellAlternatives::SetWordLanguage(const OUString &rWord, LanguageType nLang)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     aWord = rWord;
@@ -273,7 +256,7 @@ void SpellAlternatives::SetAlternatives( const Sequence< OUString > &rAlt )
 
 
 css::uno::Reference < css::linguistic2::XSpellAlternatives > SpellAlternatives::CreateSpellAlternatives(
-        const OUString &rWord, sal_Int16 nLang, sal_Int16 nTypeP, const css::uno::Sequence< OUString > &rAlt )
+        const OUString &rWord, LanguageType nLang, sal_Int16 nTypeP, const css::uno::Sequence< OUString > &rAlt )
 {
     SpellAlternatives* pAlt = new SpellAlternatives;
     pAlt->SetWordLanguage( rWord, nLang );

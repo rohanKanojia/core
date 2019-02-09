@@ -20,15 +20,23 @@
 #ifndef INCLUDED_OOX_CORE_CONTEXTHANDLER_HXX
 #define INCLUDED_OOX_CORE_CONTEXTHANDLER_HXX
 
-#include <com/sun/star/xml/sax/XFastContextHandler.hpp>
-#include <cppuhelper/implbase.hxx>
-#include <rtl/ref.hxx>
-#include <oox/token/namespaces.hxx>
-#include <oox/token/tokens.hxx>
-#include <oox/dllapi.h>
+#include <exception>
 #include <memory>
 
+#include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <com/sun/star/xml/sax/SAXException.hpp>
+#include <com/sun/star/xml/sax/XFastContextHandler.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <oox/dllapi.h>
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+
 namespace com { namespace sun { namespace star {
+    namespace xml { namespace sax { class XFastAttributeList; } }
     namespace xml { namespace sax { class XLocator; } }
 } } }
 
@@ -38,7 +46,6 @@ namespace oox {
 namespace core {
 
 class XmlFilterBase;
-class FragmentHandler;
 struct Relation;
 class Relations;
 
@@ -54,7 +61,7 @@ class OOX_DLLPUBLIC ContextHandler : public ContextHandler_BASE
 {
 public:
     explicit            ContextHandler( const ContextHandler& rParent );
-    virtual             ~ContextHandler();
+    virtual             ~ContextHandler() override;
 
     /** Returns the filter instance. */
     XmlFilterBase&      getFilter() const;
@@ -73,13 +80,13 @@ public:
 
     // com.sun.star.xml.sax.XFastContextHandler interface ---------------------
 
-    virtual void SAL_CALL startFastElement( ::sal_Int32 Element, const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs ) throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL startUnknownElement( const OUString& Namespace, const OUString& Name, const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs ) throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL endFastElement( ::sal_Int32 Element ) throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL endUnknownElement( const OUString& Namespace, const OUString& Name ) throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext( ::sal_Int32 Element, const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs ) throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createUnknownChildContext( const OUString& Namespace, const OUString& Name, const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs ) throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL characters( const OUString& aChars ) throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL startFastElement( ::sal_Int32 Element, const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs ) override;
+    virtual void SAL_CALL startUnknownElement( const OUString& Namespace, const OUString& Name, const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs ) override;
+    virtual void SAL_CALL endFastElement( ::sal_Int32 Element ) override;
+    virtual void SAL_CALL endUnknownElement( const OUString& Namespace, const OUString& Name ) override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext( ::sal_Int32 Element, const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs ) override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createUnknownChildContext( const OUString& Namespace, const OUString& Name, const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs ) override;
+    virtual void SAL_CALL characters( const OUString& aChars ) override;
 
     // record context interface -----------------------------------------------
 

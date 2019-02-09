@@ -21,12 +21,11 @@
 #define INCLUDED_VCL_INC_IMPFONT_HXX
 
 #include <rtl/ustring.hxx>
+#include <tools/color.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <vcl/vclenum.hxx>
 
 #include "fontinstance.hxx"
-
-#include <boost/intrusive_ptr.hpp>
 
 /* The following class is extraordinarily similar to FontAttributes. */
 
@@ -65,8 +64,6 @@ public:
 
     void                SetSymbolFlag( const bool bSymbolFlag )         { mbSymbolFlag = bSymbolFlag; }
 
-    bool                CompareDeviceIndependentFontAttributes(const ImplFont& rOther) const;
-
     // straight properties, no getting them from AskConfig()
     FontFamily          GetFamilyTypeNoAsk() const                      { return meFamily; }
     FontWeight          GetWeightNoAsk() const                          { return meWeight; }
@@ -76,22 +73,11 @@ public:
 
     // device dependent functions
     int                 GetQuality() const                              { return mnQuality; }
-    OUString            GetMapNames() const                             { return maMapNames; }
 
     void                SetQuality( int nQuality )                      { mnQuality = nQuality; }
     void                IncreaseQualityBy( int nQualityAmount )         { mnQuality += nQualityAmount; }
     void                DecreaseQualityBy( int nQualityAmount )         { mnQuality -= nQualityAmount; }
     void                SetMapNames( OUString const & aMapNames )       { maMapNames = aMapNames; }
-
-    bool                IsBuiltInFont() const                           { return mbDevice; }
-    bool                CanEmbed() const                                { return mbEmbeddable; }
-    bool                CanSubset() const                               { return mbSubsettable; }
-    bool                CanRotate() const                               { return mbRotatable; }
-
-    void                SetBuiltInFontFlag( bool bIsBuiltInFont )       { mbDevice = bIsBuiltInFont; }
-    void                SetEmbeddableFlag( bool bEmbeddable )           { mbEmbeddable = bEmbeddable; }
-    void                SetSubsettableFlag( bool bSubsettable )         { mbSubsettable = bSubsettable; }
-    void                SetOrientationFlag( bool bCanRotate )           { mbRotatable = bCanRotate; }
 
     bool                operator==( const ImplFont& ) const;
 
@@ -101,8 +87,6 @@ private:
     friend SvStream&    WriteImplFont( SvStream& rOStm, const ImplFont& );
 
     void                AskConfig();
-
-    sal_uInt32          mnRefCount;
 
     // Device independent variables
     OUString            maFamilyName;
@@ -139,11 +123,7 @@ private:
 
     // Device dependent variables
     OUString            maMapNames;
-    bool                mbWordLine:1,
-                        mbEmbeddable:1,
-                        mbSubsettable:1,
-                        mbRotatable:1,      // is "rotatable" even a word?!? I'll keep it for consistency for now
-                        mbDevice:1;
+    bool                mbWordLine:1;
 
     // TODO: metric data, should be migrated to ImplFontMetric
     short               mnOrientation;

@@ -16,11 +16,12 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include <TDefTableHandler.hxx>
-#include <PropertyMap.hxx>
-#include <ConversionHelper.hxx>
+#include "TDefTableHandler.hxx"
+#include "PropertyMap.hxx"
+#include "ConversionHelper.hxx"
 #include <ooxml/resourceids.hxx>
 #include <filter/msfilter/util.hxx>
+#include <tools/color.hxx>
 #include <com/sun/star/table/BorderLine2.hpp>
 #include <com/sun/star/text/TableColumnSeparator.hpp>
 #include <com/sun/star/text/VertOrientation.hpp>
@@ -36,8 +37,7 @@ TDefTableHandler::TDefTableHandler() :
 LoggedProperties("TDefTableHandler"),
 m_nLineWidth(0),
 m_nLineType(0),
-m_nLineColor(0),
-m_nLineDistance(0)
+m_nLineColor(0)
 {
 }
 
@@ -275,8 +275,6 @@ OUString TDefTableHandler::getThemeColorTypeString(sal_Int32 nType)
 void TDefTableHandler::lcl_attribute(Id rName, Value & rVal)
 {
     sal_Int32 nIntValue = rVal.getInt();
-    (void)nIntValue;
-    (void)rName;
     switch( rName )
     {
         case NS_ooxml::LN_CT_Border_sz:
@@ -289,12 +287,11 @@ void TDefTableHandler::lcl_attribute(Id rName, Value & rVal)
             appendGrabBag("val", TDefTableHandler::getBorderTypeString(nIntValue));
         break;
         case NS_ooxml::LN_CT_Border_color:
-            appendGrabBag("color", OUString::fromUtf8(msfilter::util::ConvertColor(nIntValue, /*bAutoColor=*/true)));
+            appendGrabBag("color", OUString::fromUtf8(msfilter::util::ConvertColor(nIntValue)));
             m_nLineColor = nIntValue;
         break;
         case NS_ooxml::LN_CT_Border_space:
             appendGrabBag("space", OUString::number(nIntValue));
-            m_nLineDistance = nIntValue;
         break;
         case NS_ooxml::LN_CT_Border_shadow:
             //if 1 then line has shadow - unsupported
@@ -318,7 +315,7 @@ void TDefTableHandler::localResolve(Id rName, const writerfilter::Reference<Prop
 {
     if( pProperties.get())
     {
-        m_nLineWidth = m_nLineType = m_nLineColor = m_nLineDistance = 0;
+        m_nLineWidth = m_nLineType = m_nLineColor = 0;
         std::vector<beans::PropertyValue> aSavedGrabBag;
         if (!m_aInteropGrabBagName.isEmpty())
         {
@@ -416,32 +413,20 @@ void TDefTableHandler::lcl_sprm(Sprm & rSprm)
     }
 }
 
-void TDefTableHandler::fillCellProperties(
-            size_t nCell, const ::std::shared_ptr< TablePropertyMap >& pCellProperties ) const
+void TDefTableHandler::fillCellProperties( const ::tools::SvRef< TablePropertyMap >& pCellProperties ) const
 {
-    if( m_aCellBorderPositions.size() > nCell )
-    {
-        sal_Int16 nVertOrient = text::VertOrientation::NONE;
-        switch( m_aCellVertAlign[nCell] ) //0 - top 1 - center 2 - bottom
-        {
-            case 1: nVertOrient = text::VertOrientation::CENTER; break;
-            case 2: nVertOrient = text::VertOrientation::BOTTOM; break;
-            default:;
-        }
-        pCellProperties->Insert( PROP_VERT_ORIENT, uno::makeAny( nVertOrient ) );
-    }
-    if( m_aTopBorderLines.size() > nCell )
-        pCellProperties->Insert( PROP_TOP_BORDER, uno::makeAny( m_aTopBorderLines[nCell] ) );
-    if( m_aLeftBorderLines.size() > nCell )
-        pCellProperties->Insert( PROP_LEFT_BORDER, uno::makeAny( m_aLeftBorderLines[nCell] ) );
-    if( m_aBottomBorderLines.size() > nCell )
-        pCellProperties->Insert( PROP_BOTTOM_BORDER, uno::makeAny( m_aBottomBorderLines[nCell] ) );
-    if( m_aRightBorderLines.size() > nCell )
-        pCellProperties->Insert( PROP_RIGHT_BORDER, uno::makeAny( m_aRightBorderLines[nCell] ) );
-    if( m_aInsideHBorderLines.size() > nCell )
-        pCellProperties->Insert( META_PROP_HORIZONTAL_BORDER, uno::makeAny( m_aInsideHBorderLines[nCell] ) );
-    if( m_aInsideVBorderLines.size() > nCell )
-        pCellProperties->Insert( META_PROP_VERTICAL_BORDER, uno::makeAny( m_aInsideVBorderLines[nCell] ) );
+    if( !m_aTopBorderLines.empty() )
+        pCellProperties->Insert( PROP_TOP_BORDER, uno::makeAny( m_aTopBorderLines[0] ) );
+    if( !m_aLeftBorderLines.empty() )
+        pCellProperties->Insert( PROP_LEFT_BORDER, uno::makeAny( m_aLeftBorderLines[0] ) );
+    if( !m_aBottomBorderLines.empty() )
+        pCellProperties->Insert( PROP_BOTTOM_BORDER, uno::makeAny( m_aBottomBorderLines[0] ) );
+    if( !m_aRightBorderLines.empty() )
+        pCellProperties->Insert( PROP_RIGHT_BORDER, uno::makeAny( m_aRightBorderLines[0] ) );
+    if( !m_aInsideHBorderLines.empty() )
+        pCellProperties->Insert( META_PROP_HORIZONTAL_BORDER, uno::makeAny( m_aInsideHBorderLines[0] ) );
+    if( !m_aInsideVBorderLines.empty() )
+        pCellProperties->Insert( META_PROP_VERTICAL_BORDER, uno::makeAny( m_aInsideVBorderLines[0] ) );
 }
 
 
@@ -458,7 +443,7 @@ beans::PropertyValue TDefTableHandler::getInteropGrabBag(const OUString& aName)
     else
         aRet.Name = aName;
 
-    aRet.Value = uno::makeAny(comphelper::containerToSequence(m_aInteropGrabBag));
+    aRet.Value <<= comphelper::containerToSequence(m_aInteropGrabBag);
     m_aInteropGrabBag.clear();
     return aRet;
 }
@@ -467,7 +452,7 @@ void TDefTableHandler::appendGrabBag(const OUString& aKey, const OUString& aValu
 {
     beans::PropertyValue aProperty;
     aProperty.Name = aKey;
-    aProperty.Value = uno::makeAny(aValue);
+    aProperty.Value <<= aValue;
     m_aInteropGrabBag.push_back(aProperty);
 }
 

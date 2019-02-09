@@ -41,13 +41,20 @@ namespace drawinglayer
         {
         }
 
+        void BaseProcessor2D::process(const primitive2d::BasePrimitive2D& rCandidate)
+        {
+            primitive2d::Primitive2DContainer aContainer;
+            rCandidate.get2DDecomposition(aContainer, getViewInformation2D());
+            process(aContainer);
+        }
+
         void BaseProcessor2D::process(const primitive2d::Primitive2DContainer& rSource)
         {
             if(!rSource.empty())
             {
                 const sal_Int32 nCount(rSource.size());
 
-                for(sal_Int32 a(0L); a < nCount; a++)
+                for(sal_Int32 a(0); a < nCount; a++)
                 {
                     // get reference
                     const primitive2d::Primitive2DReference xReference(rSource[a]);

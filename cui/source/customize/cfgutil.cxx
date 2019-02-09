@@ -17,7 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "cfgutil.hxx"
+#include <cfgutil.hxx>
+#include <cfg.hxx>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
@@ -31,14 +32,10 @@
 #include <com/sun/star/script/browse/BrowseNodeTypes.hpp>
 #include <com/sun/star/script/browse/theBrowseNodeFactory.hpp>
 #include <com/sun/star/script/browse/BrowseNodeFactoryViewTypes.hpp>
-#include <com/sun/star/script/provider/XScriptProviderSupplier.hpp>
-#include <com/sun/star/script/provider/XScriptProvider.hpp>
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
 #include <com/sun/star/uno/RuntimeException.hpp>
 #include <com/sun/star/ui/theUICategoryDescription.hpp>
 
-#include "acccfg.hrc"
-#include "helpid.hrc"
 #include <basic/sbx.hxx>
 #include <basic/basicmanagerrepository.hxx>
 #include <basic/sbstar.hxx>
@@ -46,21 +43,28 @@
 #include <basic/sbmod.hxx>
 #include <basic/basmgr.hxx>
 #include <tools/urlobj.hxx>
-#include "cuires.hrc"
+#include <strings.hrc>
+#include <bitmaps.hlst>
 #include <sfx2/app.hxx>
 #include <sfx2/minfitem.hxx>
+#include <comphelper/DisableInteractionHelper.hxx>
 #include <comphelper/documentinfo.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/sequenceashashmap.hxx>
-#include <comphelper/string.hxx>
 #include <svtools/imagemgr.hxx>
-#include "svtools/treelistentry.hxx"
+#include <vcl/treelistentry.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 #include <unotools/configmgr.hxx>
-#include "dialmgr.hxx"
+#include <dialmgr.hxx>
 #include <svl/stritem.hxx>
 #include <vcl/builderfactory.hxx>
-#include <o3tl/make_unique.hxx>
+#include <vcl/button.hxx>
+#include <vcl/commandinfoprovider.hxx>
+#include <vcl/fixed.hxx>
+#include <vcl/help.hxx>
+#include <vcl/vclmedit.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -71,13 +75,11 @@ using namespace ::com::sun::star::document;
 SfxStylesInfo_Impl::SfxStylesInfo_Impl()
 {}
 
-void SfxStylesInfo_Impl::setModel(const css::uno::Reference< css::frame::XModel >& xModel)
+void SfxStylesInfo_Impl::init(const OUString& rModuleName, const css::uno::Reference< css::frame::XModel >& xModel)
 {
+    m_aModuleName = rModuleName;
     m_xDoc = xModel;
 }
-
-static const char CMDURL_SPART [] = ".uno:StyleApply?Style:string=";
-static const char CMDURL_FPART2[] = "&FamilyName:string=";
 
 static const char CMDURL_STYLEPROT_ONLY[] = ".uno:StyleApply?";
 static const char CMDURL_SPART_ONLY    [] = "Style:string=";
@@ -87,12 +89,10 @@ static const char STYLEPROP_UINAME[] = "DisplayName";
 
 OUString SfxStylesInfo_Impl::generateCommand(const OUString& sFamily, const OUString& sStyle)
 {
-    OUStringBuffer sCommand(1024);
-    sCommand.append(CMDURL_SPART );
-    sCommand.append(sStyle       );
-    sCommand.append(CMDURL_FPART2);
-    sCommand.append(sFamily      );
-    return sCommand.makeStringAndClear();
+    return ".uno:StyleApply?Style:string="
+           + sStyle
+           + "&FamilyName:string="
+           + sFamily;
 }
 
 bool SfxStylesInfo_Impl::parseStyleCommand(SfxStyleInfo_Impl& aStyle)
@@ -115,20 +115,17 @@ bool SfxStylesInfo_Impl::parseStyleCommand(SfxStyleInfo_Impl& aStyle)
 
     OUString sArg = sCmdArgs.copy(0, i);
     if (sArg.startsWith(CMDURL_SPART_ONLY))
-        aStyle.sStyle = sArg.copy(LEN_SPART, sArg.getLength()-LEN_SPART);
+        aStyle.sStyle = sArg.copy(LEN_SPART);
     else if (sArg.startsWith(CMDURL_FPART_ONLY))
-        aStyle.sFamily = sArg.copy(LEN_FPART, sArg.getLength()-LEN_FPART);
+        aStyle.sFamily = sArg.copy(LEN_FPART);
 
     sArg = sCmdArgs.copy(i+1, sCmdArgs.getLength()-i-1);
     if (sArg.startsWith(CMDURL_SPART_ONLY))
-        aStyle.sStyle = sArg.copy(LEN_SPART, sArg.getLength()-LEN_SPART);
+        aStyle.sStyle = sArg.copy(LEN_SPART);
     else if (sArg.startsWith(CMDURL_FPART_ONLY))
-        aStyle.sFamily = sArg.copy(LEN_FPART, sArg.getLength()-LEN_FPART);
+        aStyle.sFamily = sArg.copy(LEN_FPART);
 
-    if (!(aStyle.sFamily.isEmpty() || aStyle.sStyle.isEmpty()))
-        return true;
-
-    return false;
+    return !(aStyle.sFamily.isEmpty() || aStyle.sStyle.isEmpty());
 }
 
 void SfxStylesInfo_Impl::getLabel4Style(SfxStyleInfo_Impl& aStyle)
@@ -164,22 +161,24 @@ void SfxStylesInfo_Impl::getLabel4Style(SfxStyleInfo_Impl& aStyle)
     }
 }
 
-::std::vector< SfxStyleInfo_Impl > SfxStylesInfo_Impl::getStyleFamilies()
+std::vector< SfxStyleInfo_Impl > SfxStylesInfo_Impl::getStyleFamilies()
 {
-    // Its an optional interface!
+    // It's an optional interface!
     css::uno::Reference< css::style::XStyleFamiliesSupplier > xModel(m_xDoc, css::uno::UNO_QUERY);
     if (!xModel.is())
-        return ::std::vector< SfxStyleInfo_Impl >();
+        return std::vector< SfxStyleInfo_Impl >();
 
     css::uno::Reference< css::container::XNameAccess > xCont = xModel->getStyleFamilies();
     css::uno::Sequence< OUString > lFamilyNames = xCont->getElementNames();
-    ::std::vector< SfxStyleInfo_Impl > lFamilies;
-    sal_Int32 c = lFamilyNames.getLength();
-    sal_Int32 i = 0;
-    for(i=0; i<c; ++i)
+    std::vector< SfxStyleInfo_Impl > lFamilies;
+    for (const auto& aFamily : lFamilyNames)
     {
+        if ((aFamily == "CellStyles" && m_aModuleName != "com.sun.star.sheet.SpreadsheetDocument") ||
+             aFamily == "cell" || aFamily == "table" || aFamily == "Default")
+            continue;
+
         SfxStyleInfo_Impl aFamilyInfo;
-        aFamilyInfo.sFamily = lFamilyNames[i];
+        aFamilyInfo.sFamily = aFamily;
 
         try
         {
@@ -196,7 +195,7 @@ void SfxStylesInfo_Impl::getLabel4Style(SfxStyleInfo_Impl& aStyle)
         catch(const css::uno::RuntimeException&)
             { throw; }
         catch(const css::uno::Exception&)
-            { return ::std::vector< SfxStyleInfo_Impl >(); }
+            { return std::vector< SfxStyleInfo_Impl >(); }
 
         lFamilies.push_back(aFamilyInfo);
     }
@@ -204,10 +203,8 @@ void SfxStylesInfo_Impl::getLabel4Style(SfxStyleInfo_Impl& aStyle)
     return lFamilies;
 }
 
-::std::vector< SfxStyleInfo_Impl > SfxStylesInfo_Impl::getStyles(const OUString& sFamily)
+std::vector< SfxStyleInfo_Impl > SfxStylesInfo_Impl::getStyles(const OUString& sFamily)
 {
-    static const char PROP_UINAME[] = "DisplayName";
-
     css::uno::Sequence< OUString > lStyleNames;
     css::uno::Reference< css::style::XStyleFamiliesSupplier > xModel(m_xDoc, css::uno::UNO_QUERY_THROW);
     css::uno::Reference< css::container::XNameAccess > xFamilies = xModel->getStyleFamilies();
@@ -220,9 +217,9 @@ void SfxStylesInfo_Impl::getLabel4Style(SfxStyleInfo_Impl& aStyle)
     catch(const css::uno::RuntimeException&)
         { throw; }
     catch(const css::uno::Exception&)
-        { return ::std::vector< SfxStyleInfo_Impl >(); }
+        { return std::vector< SfxStyleInfo_Impl >(); }
 
-    ::std::vector< SfxStyleInfo_Impl > lStyles;
+    std::vector< SfxStyleInfo_Impl > lStyles;
     sal_Int32                          c      = lStyleNames.getLength();
     sal_Int32                          i      = 0;
     for (i=0; i<c; ++i)
@@ -238,7 +235,7 @@ void SfxStylesInfo_Impl::getLabel4Style(SfxStyleInfo_Impl& aStyle)
             xStyleSet->getByName(aStyleInfo.sStyle) >>= xStyle;
             if (!xStyle.is())
                 continue;
-            xStyle->getPropertyValue(PROP_UINAME) >>= aStyleInfo.sLabel;
+            xStyle->getPropertyValue("DisplayName") >>= aStyleInfo.sLabel;
         }
         catch(const css::uno::RuntimeException&)
             { throw; }
@@ -252,22 +249,13 @@ void SfxStylesInfo_Impl::getLabel4Style(SfxStyleInfo_Impl& aStyle)
 
 SfxConfigFunctionListBox::SfxConfigFunctionListBox(vcl::Window* pParent, WinBits nStyle)
     : SvTreeListBox( pParent, nStyle )
-    , pStylesInfo( nullptr )
 {
     SetStyle( GetStyle() | WB_CLIPCHILDREN | WB_HSCROLL | WB_SORT );
     GetModel()->SetSortMode( SortAscending );
+    SetQuickSearch( true );
 }
 
-VCL_BUILDER_DECL_FACTORY(SfxConfigFunctionListBox)
-{
-    WinBits nWinBits = WB_TABSTOP;
-
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-       nWinBits |= WB_BORDER;
-
-    rRet = VclPtr<SfxConfigFunctionListBox>::Create(pParent, nWinBits);
-}
+VCL_BUILDER_FACTORY_CONSTRUCTOR(SfxConfigFunctionListBox, WB_TABSTOP)
 
 SfxConfigFunctionListBox::~SfxConfigFunctionListBox()
 {
@@ -315,14 +303,26 @@ void SfxConfigFunctionListBox::ClearAll()
     Clear();
 }
 
-OUString SfxConfigFunctionListBox::GetSelectedScriptURI()
+OUString SfxConfigFunctionListBox::GetHelpText( bool bConsiderParent )
 {
     SvTreeListEntry *pEntry = FirstSelected();
     if ( pEntry )
     {
         SfxGroupInfo_Impl *pData = static_cast<SfxGroupInfo_Impl*>(pEntry->GetUserData());
-        if ( pData && ( pData->nKind == SfxCfgKind::FUNCTION_SCRIPT ) )
-            return *static_cast<OUString*>(pData->pObject);
+        if ( pData )
+        {
+            if ( pData->nKind == SfxCfgKind::FUNCTION_SLOT )
+            {
+                if (bConsiderParent)
+                    return Application::GetHelp()->GetHelpText( pData->sCommand, this );
+                else
+                    return Application::GetHelp()->GetHelpText( pData->sCommand, static_cast<weld::Widget*>(nullptr) );
+            }
+            else if ( pData->nKind == SfxCfgKind::FUNCTION_SCRIPT )
+            {
+                return pData->sHelpText;
+            }
+        }
     }
     return OUString();
 }
@@ -351,12 +351,62 @@ OUString SfxConfigFunctionListBox::GetCurLabel()
     return pData->sCommand;
 }
 
-void SfxConfigFunctionListBox::SetStylesInfo(SfxStylesInfo_Impl* pStyles)
+CuiConfigFunctionListBox::CuiConfigFunctionListBox(std::unique_ptr<weld::TreeView> xTreeView)
+    : m_xTreeView(std::move(xTreeView))
 {
-    pStylesInfo = pStyles;
+    m_xTreeView->make_sorted();
+    m_xTreeView->set_size_request(m_xTreeView->get_approximate_digit_width() * 35, m_xTreeView->get_height_rows(9));
 }
 
-struct SvxConfigGroupBoxResource_Impl : public Resource
+CuiConfigFunctionListBox::~CuiConfigFunctionListBox()
+{
+    ClearAll();
+}
+
+void CuiConfigFunctionListBox::ClearAll()
+/*  Description
+    Deletes all entries in the FunctionListBox, all UserData and all
+    possibly existing MacroInfo.
+*/
+{
+    sal_uInt16 nCount = aArr.size();
+    for ( sal_uInt16 i=0; i<nCount; ++i )
+    {
+        SfxGroupInfo_Impl *pData = aArr[i].get();
+
+        if ( pData->nKind == SfxCfgKind::FUNCTION_SCRIPT )
+        {
+            OUString* pScriptURI = static_cast<OUString*>(pData->pObject);
+            delete pScriptURI;
+        }
+
+        if ( pData->nKind == SfxCfgKind::GROUP_SCRIPTCONTAINER )
+        {
+            XInterface* xi = static_cast<XInterface *>(pData->pObject);
+            if (xi != nullptr)
+            {
+                xi->release();
+            }
+        }
+    }
+
+    aArr.clear();
+    m_xTreeView->clear();
+}
+
+OUString CuiConfigFunctionListBox::GetSelectedScriptURI()
+{
+    int nSelected = m_xTreeView->get_selected_index();
+    if (nSelected != -1)
+    {
+        SfxGroupInfo_Impl *pData = reinterpret_cast<SfxGroupInfo_Impl*>(m_xTreeView->get_id(nSelected).toInt64());
+        if (pData && pData->nKind == SfxCfgKind::FUNCTION_SCRIPT)
+            return *static_cast<OUString*>(pData->pObject);
+    }
+    return OUString();
+}
+
+struct SvxConfigGroupBoxResource_Impl
 {
     Image m_hdImage;
     Image m_libImage;
@@ -374,40 +424,49 @@ struct SvxConfigGroupBoxResource_Impl : public Resource
 };
 
 SvxConfigGroupBoxResource_Impl::SvxConfigGroupBoxResource_Impl() :
-    Resource(CUI_RES(RID_SVXPAGE_CONFIGGROUPBOX)),
-    m_hdImage(CUI_RES(RID_CUIIMG_HARDDISK)),
-    m_libImage(CUI_RES(RID_CUIIMG_LIB)),
-    m_macImage(CUI_RES(RID_CUIIMG_MACRO)),
-    m_docImage(CUI_RES(RID_CUIIMG_DOC)),
-    m_sMyMacros(CUI_RESSTR(RID_SVXSTR_MYMACROS)),
-    m_sProdMacros(CUI_RESSTR(RID_SVXSTR_PRODMACROS)),
-    m_sMacros(CUI_RESSTR(STR_BASICMACROS)),
-    m_sDlgMacros(CUI_RESSTR(RID_SVXSTR_PRODMACROS)),
-    m_aStrGroupStyles(CUI_RESSTR(STR_GROUP_STYLES)),
-    m_collapsedImage(CUI_RES(BMP_COLLAPSED)),
-    m_expandedImage(CUI_RES(BMP_EXPANDED))
+    m_hdImage(StockImage::Yes, RID_CUIBMP_HARDDISK),
+    m_libImage(StockImage::Yes, RID_CUIBMP_LIB),
+    m_macImage(StockImage::Yes, RID_CUIBMP_MACRO),
+    m_docImage(StockImage::Yes, RID_CUIBMP_DOC),
+    m_sMyMacros(CuiResId(RID_SVXSTR_MYMACROS)),
+    m_sProdMacros(CuiResId(RID_SVXSTR_PRODMACROS)),
+    m_sMacros(CuiResId(RID_SVXSTR_BASICMACROS)),
+    m_sDlgMacros(CuiResId(RID_SVXSTR_PRODMACROS)),
+    m_aStrGroupStyles(CuiResId(RID_SVXSTR_GROUP_STYLES)),
+    m_collapsedImage(StockImage::Yes, RID_CUIBMP_COLLAPSED),
+    m_expandedImage(StockImage::Yes, RID_CUIBMP_EXPANDED)
 {
-    FreeResource();
+}
+
+struct CuiConfigGroupBoxResource_Impl
+{
+    OUString m_sMyMacros;
+    OUString m_sProdMacros;
+    OUString m_sDlgMacros;
+    OUString m_aStrGroupStyles;
+
+    CuiConfigGroupBoxResource_Impl();
+};
+
+CuiConfigGroupBoxResource_Impl::CuiConfigGroupBoxResource_Impl() :
+    m_sMyMacros(CuiResId(RID_SVXSTR_MYMACROS)),
+    m_sProdMacros(CuiResId(RID_SVXSTR_PRODMACROS)),
+    m_sDlgMacros(CuiResId(RID_SVXSTR_PRODMACROS)),
+    m_aStrGroupStyles(CuiResId(RID_SVXSTR_GROUP_STYLES))
+{
 }
 
 SfxConfigGroupListBox::SfxConfigGroupListBox(vcl::Window* pParent, WinBits nStyle)
     : SvTreeListBox(pParent, nStyle)
-    , pImp(new SvxConfigGroupBoxResource_Impl()), pFunctionListBox(nullptr), pStylesInfo(nullptr)
+    , xImp(new SvxConfigGroupBoxResource_Impl())
+    , pFunctionListBox(nullptr)
+    , pStylesInfo(nullptr)
 {
     SetStyle( GetStyle() | WB_CLIPCHILDREN | WB_HSCROLL | WB_HASBUTTONS | WB_HASLINES | WB_HASLINESATROOT | WB_HASBUTTONSATROOT );
-    SetNodeBitmaps( pImp->m_collapsedImage, pImp->m_expandedImage );
+    SetNodeBitmaps(xImp->m_collapsedImage, xImp->m_expandedImage);
 }
 
-VCL_BUILDER_DECL_FACTORY(SfxConfigGroupListBox)
-{
-    WinBits nWinBits = WB_TABSTOP;
-
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-       nWinBits |= WB_BORDER;
-
-    rRet = VclPtr<SfxConfigGroupListBox>::Create(pParent, nWinBits);
-}
+VCL_BUILDER_FACTORY_CONSTRUCTOR(SfxConfigGroupListBox, WB_TABSTOP)
 
 SfxConfigGroupListBox::~SfxConfigGroupListBox()
 {
@@ -456,6 +515,14 @@ void SfxConfigGroupListBox::InitModule()
         sal_Int32                       c1      = lGroups.getLength();
         sal_Int32                       i1      = 0;
 
+        if ( c1 )
+        {
+            // Add All Commands category
+            SvTreeListEntry* pEntry = InsertEntry( CuiResId(RID_SVXSTR_ALLFUNCTIONS) );
+            aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::GROUP_ALLFUNCTIONS, 0 ) );
+            pEntry->SetUserData(aArr.back().get());
+        }
+
         for (i1=0; i1<c1; ++i1)
         {
             sal_Int16&      rGroupID   = lGroups[i1];
@@ -472,8 +539,8 @@ void SfxConfigGroupListBox::InitModule()
                 { continue; }
 
             SvTreeListEntry*        pEntry = InsertEntry(sGroupName);
-            SfxGroupInfo_Impl* pInfo   = new SfxGroupInfo_Impl(SfxCfgKind::GROUP_FUNCTION, rGroupID);
-            pEntry->SetUserData(pInfo);
+            aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::GROUP_FUNCTION, rGroupID ) );
+            pEntry->SetUserData(aArr.back().get());
         }
     }
     catch(const css::uno::RuntimeException&)
@@ -536,6 +603,126 @@ namespace
 }
 
 
+void SfxConfigGroupListBox::FillScriptList(const css::uno::Reference< css::script::browse::XBrowseNode >& xRootNode,
+                                           SvTreeListEntry* pParentEntry, bool bCheapChildrenOnDemand)
+{
+    try {
+        if ( xRootNode->hasChildNodes() )
+        {
+            // tdf#120362: Don't ask to enable disabled Java when filling script list
+            css::uno::ContextLayer layer(
+                new comphelper::NoEnableJavaInteractionContext(css::uno::getCurrentContext()));
+
+            Sequence< Reference< browse::XBrowseNode > > children =
+                xRootNode->getChildNodes();
+            bool bIsRootNode = false;
+
+            OUString user("user");
+            OUString share("share");
+            if ( xRootNode->getName() == "Root" )
+            {
+                bIsRootNode = true;
+            }
+
+            //To mimic current starbasic behaviour we
+            //need to make sure that only the current document
+            //is displayed in the config tree. Tests below
+            //set the bDisplay flag to FALSE if the current
+            //node is a first level child of the Root and is NOT
+            //either the current document, user or share
+            OUString currentDocTitle;
+            Reference< XModel > xDocument( lcl_getScriptableDocument_nothrow( m_xFrame ) );
+            if ( xDocument.is() )
+            {
+                currentDocTitle = ::comphelper::DocumentInfo::getDocumentTitle( xDocument );
+            }
+
+            for ( sal_Int32 n = 0; n < children.getLength(); ++n )
+            {
+                Reference< browse::XBrowseNode >& theChild = children[n];
+                bool bDisplay = true;
+                OUString uiName = theChild->getName();
+                if ( bIsRootNode )
+                {
+                    if (  ! (theChild->getName() == user  || theChild->getName() == share ||
+                             theChild->getName() == currentDocTitle ) )
+                    {
+                        bDisplay=false;
+                    }
+                    else
+                    {
+                        if ( uiName == user )
+                        {
+                            uiName = xImp->m_sMyMacros;
+                        }
+                        else if ( uiName == share )
+                        {
+                            uiName = xImp->m_sProdMacros;
+                        }
+                    }
+                }
+                if (children[n]->getType() != browse::BrowseNodeTypes::SCRIPT  && bDisplay )
+                {
+//                              We call acquire on the XBrowseNode so that it does not
+//                              get autodestructed and become invalid when accessed later.
+                    theChild->acquire();
+
+                    Image aImage = GetImage( theChild, m_xContext, bIsRootNode );
+                    SvTreeListEntry* pNewEntry =
+                        InsertEntry( uiName, pParentEntry );
+                    SetExpandedEntryBmp(  pNewEntry, aImage );
+                    SetCollapsedEntryBmp( pNewEntry, aImage );
+
+                    aArr.push_back( std::make_unique<SfxGroupInfo_Impl>(SfxCfgKind::GROUP_SCRIPTCONTAINER,
+                            0, static_cast<void *>( theChild.get())));
+
+                    pNewEntry->SetUserData( aArr.back().get() );
+
+                    if ( !bCheapChildrenOnDemand && children[n]->hasChildNodes() )
+                    {
+                        Sequence< Reference< browse::XBrowseNode > > grandchildren =
+                            children[n]->getChildNodes();
+
+                        for ( sal_Int32 m = 0; m < grandchildren.getLength(); ++m )
+                        {
+                            if ( grandchildren[m]->getType() == browse::BrowseNodeTypes::CONTAINER )
+                            {
+                                pNewEntry->EnableChildrenOnDemand();
+                                m = grandchildren.getLength();
+                            }
+                        }
+                    }
+                    else
+                    {
+                        /* i30923 - Would be nice if there was a better
+                        * way to determine if a basic lib had children
+                        * without having to ask for them (which forces
+                        * the library to be loaded */
+                        pNewEntry->EnableChildrenOnDemand();
+                    }
+                }
+            }
+        }
+    }
+    catch (RuntimeException&) {
+        // do nothing, the entry will not be displayed in the UI
+    }
+}
+
+void SfxConfigGroupListBox::FillFunctionsList(const css::uno::Sequence<DispatchInformation>& xCommands)
+{
+    for (const auto & rInfo : xCommands)
+    {
+        OUString sUIName = MapCommand2UIName(rInfo.Command);
+        SvTreeListEntry* pFuncEntry = pFunctionListBox->InsertEntry(sUIName );
+        aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::FUNCTION_SLOT, 0 ) );
+        SfxGroupInfo_Impl* pGrpInfo = aArr.back().get();
+        pGrpInfo->sCommand = rInfo.Command;
+        pGrpInfo->sLabel   = sUIName;
+        pFuncEntry->SetUserData(pGrpInfo);
+    }
+}
+
 void SfxConfigGroupListBox::Init(const css::uno::Reference< css::uno::XComponentContext >& xContext,
     const css::uno::Reference< css::frame::XFrame >& xFrame,
     const OUString& sModuleLongName,
@@ -544,12 +731,11 @@ void SfxConfigGroupListBox::Init(const css::uno::Reference< css::uno::XComponent
     SetUpdateMode(false);
     ClearAll(); // Remove all old entries from treelist box
 
+    m_xContext = xContext;
     m_xFrame = xFrame;
-    if( xContext.is() )
+    if( bEventMode )
     {
-        m_xContext        = xContext;
         m_sModuleLongName = sModuleLongName;
-
         m_xGlobalCategoryInfo = css::ui::theUICategoryDescription::get( m_xContext );
         m_xModuleCategoryInfo.set(m_xGlobalCategoryInfo->getByName(m_sModuleLongName), css::uno::UNO_QUERY_THROW);
         m_xUICmdDescription   = css::frame::theUICommandDescription::get( m_xContext );
@@ -560,16 +746,14 @@ void SfxConfigGroupListBox::Init(const css::uno::Reference< css::uno::XComponent
     SAL_INFO("cui.customize", "** ** About to initialise SF Scripts");
     // Add Scripting Framework entries
     Reference< browse::XBrowseNode > rootNode;
-    Reference< XComponentContext > xCtx(
-        comphelper::getProcessComponentContext() );
     try
     {
-        Reference< browse::XBrowseNodeFactory > xFac = browse::theBrowseNodeFactory::get( xCtx );
+        Reference< browse::XBrowseNodeFactory > xFac = browse::theBrowseNodeFactory::get( m_xContext );
         rootNode.set( xFac->createView( browse::BrowseNodeFactoryViewTypes::MACROSELECTOR ) );
     }
     catch( Exception& e )
     {
-        SAL_INFO("cui.customize", "Caught some exception whilst retrieving browse nodes from factory... Exception: " << e.Message);
+        SAL_INFO("cui.customize", "Caught some exception whilst retrieving browse nodes from factory... Exception: " << e);
         // TODO exception handling
     }
 
@@ -582,9 +766,9 @@ void SfxConfigGroupListBox::Init(const css::uno::Reference< css::uno::XComponent
                 //get autodestructed and become invalid when accessed later.
             rootNode->acquire();
 
-            aArr.push_back( o3tl::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::GROUP_SCRIPTCONTAINER, 0,
+            aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::GROUP_SCRIPTCONTAINER, 0,
                     static_cast<void *>(rootNode.get())));
-            OUString aTitle(pImp->m_sDlgMacros);
+            OUString aTitle(xImp->m_sDlgMacros);
             SvTreeListEntry *pNewEntry = InsertEntry( aTitle );
             pNewEntry->SetUserData( aArr.back().get() );
             pNewEntry->EnableChildrenOnDemand();
@@ -593,104 +777,16 @@ void SfxConfigGroupListBox::Init(const css::uno::Reference< css::uno::XComponent
         {
              //We are only showing scripts not slot APIs so skip
              //Root node and show location nodes
-            try {
-                if ( rootNode->hasChildNodes() )
-                {
-                    Sequence< Reference< browse::XBrowseNode > > children =
-                        rootNode->getChildNodes();
-                    bool bIsRootNode = false;
-
-                    OUString user("user");
-                    OUString share("share");
-                    if ( rootNode->getName() == "Root" )
-                    {
-                        bIsRootNode = true;
-                    }
-
-                    //To mimic current starbasic behaviour we
-                    //need to make sure that only the current document
-                    //is displayed in the config tree. Tests below
-                    //set the bDisplay flag to FALSE if the current
-                    //node is a first level child of the Root and is NOT
-                    //either the current document, user or share
-                    OUString currentDocTitle;
-                    Reference< XModel > xDocument( lcl_getScriptableDocument_nothrow( m_xFrame ) );
-                    if ( xDocument.is() )
-                    {
-                        currentDocTitle = ::comphelper::DocumentInfo::getDocumentTitle( xDocument );
-                    }
-
-                    for ( sal_Int32 n = 0; n < children.getLength(); ++n )
-                    {
-                        Reference< browse::XBrowseNode >& theChild = children[n];
-                        bool bDisplay = true;
-                        OUString uiName = theChild->getName();
-                        if ( bIsRootNode )
-                        {
-                            if (  ! ((theChild->getName().equals( user )  || theChild->getName().equals( share ) ||
-                                theChild->getName().equals( currentDocTitle ) ) ) )
-                            {
-                                bDisplay=false;
-                            }
-                            else
-                            {
-                                if ( uiName.equals( user ) )
-                                {
-                                    uiName = pImp->m_sMyMacros;
-                                }
-                                else if ( uiName.equals( share ) )
-                                {
-                                    uiName = pImp->m_sProdMacros;
-                                }
-                            }
-                        }
-                        if (children[n]->getType() != browse::BrowseNodeTypes::SCRIPT  && bDisplay )
-                        {
-//                              We call acquire on the XBrowseNode so that it does not
-//                              get autodestructed and become invalid when accessed later.
-                            theChild->acquire();
-
-                            Image aImage = GetImage( theChild, xCtx, bIsRootNode );
-                            SvTreeListEntry* pNewEntry =
-                                InsertEntry( uiName );
-                            SetExpandedEntryBmp(  pNewEntry, aImage );
-                            SetCollapsedEntryBmp( pNewEntry, aImage );
-
-                            aArr.push_back( o3tl::make_unique<SfxGroupInfo_Impl>(SfxCfgKind::GROUP_SCRIPTCONTAINER,
-                                    0, static_cast<void *>( theChild.get())));
-
-                            pNewEntry->SetUserData( aArr.back().get() );
-
-                            if ( children[n]->hasChildNodes() )
-                            {
-                                Sequence< Reference< browse::XBrowseNode > > grandchildren =
-                                    children[n]->getChildNodes();
-
-                                for ( sal_Int32 m = 0; m < grandchildren.getLength(); ++m )
-                                {
-                                    if ( grandchildren[m]->getType() == browse::BrowseNodeTypes::CONTAINER )
-                                    {
-                                        pNewEntry->EnableChildrenOnDemand();
-                                        m = grandchildren.getLength();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            catch (RuntimeException&) {
-                // do nothing, the entry will not be displayed in the UI
-            }
+            FillScriptList(rootNode, nullptr, false);
         }
     }
 
     // add styles
-    if ( m_xContext.is() )
+    if ( bEventMode )
     {
-        OUString sStyle( pImp->m_aStrGroupStyles );
+        OUString sStyle(xImp->m_aStrGroupStyles);
         SvTreeListEntry *pEntry = InsertEntry( sStyle );
-        aArr.push_back( o3tl::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::GROUP_STYLES, 0, nullptr ) ); // TODO last parameter should contain user data
+        aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::GROUP_STYLES, 0, nullptr ) ); // TODO last parameter should contain user data
         pEntry->SetUserData( aArr.back().get() );
         pEntry->EnableChildrenOnDemand();
     }
@@ -701,18 +797,16 @@ void SfxConfigGroupListBox::Init(const css::uno::Reference< css::uno::XComponent
 
 Image SfxConfigGroupListBox::GetImage(
     const Reference< browse::XBrowseNode >& node,
-    Reference< XComponentContext > xCtx,
+    Reference< XComponentContext > const & xCtx,
     bool bIsRootNode
 )
 {
     Image aImage;
     if ( bIsRootNode )
     {
-        OUString user("user");
-        OUString share("share");
-        if (node->getName().equals( user ) || node->getName().equals(share ) )
+        if (node->getName() == "user" || node->getName() == "share" )
         {
-            aImage = pImp->m_hdImage;
+            aImage = xImp->m_hdImage;
         }
         else
         {
@@ -749,22 +843,22 @@ Image SfxConfigGroupListBox::GetImage(
             }
             else
             {
-                aImage = pImp->m_docImage;
+                aImage = xImp->m_docImage;
             }
         }
     }
     else
     {
         if( node->getType() == browse::BrowseNodeTypes::SCRIPT )
-            aImage = pImp->m_macImage;
+            aImage = xImp->m_macImage;
         else
-            aImage = pImp->m_libImage;
+            aImage = xImp->m_libImage;
     }
     return aImage;
 }
 
 Reference< XInterface  >
-SfxConfigGroupListBox::getDocumentModel( Reference< XComponentContext >& xCtx, OUString& docName )
+SfxConfigGroupListBox::getDocumentModel( Reference< XComponentContext > const & xCtx, OUString const & docName )
 {
     Reference< XInterface > xModel;
     Reference< frame::XDesktop2 > desktop = frame::Desktop::create( xCtx );
@@ -781,7 +875,7 @@ SfxConfigGroupListBox::getDocumentModel( Reference< XComponentContext >& xCtx, O
         {
             OUString sTdocUrl =
                 ::comphelper::DocumentInfo::getDocumentTitle( model );
-            if( sTdocUrl.equals( docName ) )
+            if( sTdocUrl == docName )
             {
                 xModel = model;
                 break;
@@ -830,35 +924,39 @@ void SfxConfigGroupListBox::GroupSelected()
     SfxGroupInfo_Impl *pInfo = static_cast<SfxGroupInfo_Impl*>(pEntry->GetUserData());
     pFunctionListBox->SetUpdateMode(false);
     pFunctionListBox->ClearAll();
-    if ( pInfo->nKind != SfxCfgKind::GROUP_FUNCTION &&
-             pInfo->nKind != SfxCfgKind::GROUP_SCRIPTCONTAINER &&
-             pInfo->nKind != SfxCfgKind::GROUP_STYLES )
-    {
-        pFunctionListBox->SetUpdateMode(true);
-        return;
-    }
 
     switch ( pInfo->nKind )
     {
+        case SfxCfgKind::GROUP_ALLFUNCTIONS:
+        {
+            css::uno::Reference< css::frame::XDispatchInformationProvider > xProvider( m_xFrame, UNO_QUERY );
+            SvTreeListEntry *pCurrEntry = First();
+            while( pCurrEntry )
+            {
+                SfxGroupInfo_Impl *pCurrentInfo = static_cast<SfxGroupInfo_Impl*>(pCurrEntry->GetUserData());
+                if (pCurrentInfo->nKind == SfxCfgKind::GROUP_FUNCTION)
+                {
+                    css::uno::Sequence< css::frame::DispatchInformation > lCommands;
+                    try
+                    {
+                        lCommands = xProvider->getConfigurableDispatchInformation( pCurrentInfo->nUniqueID );
+                        FillFunctionsList( lCommands );
+                    }
+                    catch ( container::NoSuchElementException& )
+                    {
+                    }
+                }
+                pCurrEntry = Next( pCurrEntry );
+            }
+            break;
+        }
+
         case SfxCfgKind::GROUP_FUNCTION :
         {
             sal_uInt16                                                          nGroup    = pInfo->nUniqueID;
             css::uno::Reference< css::frame::XDispatchInformationProvider > xProvider (m_xFrame, css::uno::UNO_QUERY_THROW);
             css::uno::Sequence< css::frame::DispatchInformation >           lCommands = xProvider->getConfigurableDispatchInformation(nGroup);
-            sal_Int32                                                       c         = lCommands.getLength();
-            sal_Int32                                                       i         = 0;
-
-            for (i=0; i<c; ++i)
-            {
-                const css::frame::DispatchInformation& rInfo      = lCommands[i];
-                OUString                        sUIName    = MapCommand2UIName(rInfo.Command);
-                SvTreeListEntry*                           pFuncEntry = pFunctionListBox->InsertEntry(sUIName);
-                SfxGroupInfo_Impl*                     pGrpInfo   = new SfxGroupInfo_Impl(SfxCfgKind::FUNCTION_SLOT, 0);
-                pGrpInfo->sCommand = rInfo.Command;
-                pGrpInfo->sLabel   = sUIName;
-                pFuncEntry->SetUserData(pGrpInfo);
-            }
-
+            FillFunctionsList( lCommands );
             break;
         }
 
@@ -879,7 +977,7 @@ void SfxConfigGroupListBox::GroupSelected()
                         {
                             if (children[n]->getType() == browse::BrowseNodeTypes::SCRIPT)
                             {
-                                OUString uri;
+                                OUString uri, description;
 
                                 Reference < beans::XPropertySet >xPropSet( children[n], UNO_QUERY );
                                 if (!xPropSet.is())
@@ -891,6 +989,15 @@ void SfxConfigGroupListBox::GroupSelected()
                                     xPropSet->getPropertyValue("URI");
                                 value >>= uri;
 
+                                try
+                                {
+                                    value = xPropSet->getPropertyValue("Description");
+                                    value >>= description;
+                                }
+                                catch (Exception &) {
+                                    // do nothing, the description will be empty
+                                }
+
                                 OUString* pScriptURI = new OUString( uri );
 
                                 Image aImage = GetImage( children[n], Reference< XComponentContext >(), false );
@@ -899,9 +1006,10 @@ void SfxConfigGroupListBox::GroupSelected()
                                 pFunctionListBox->SetExpandedEntryBmp( pNewEntry, aImage );
                                 pFunctionListBox->SetCollapsedEntryBmp(pNewEntry, aImage );
 
-                                pFunctionListBox->aArr.push_back( o3tl::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::FUNCTION_SCRIPT, 0, pScriptURI ));
+                                pFunctionListBox->aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::FUNCTION_SCRIPT, 0, pScriptURI ));
                                 pFunctionListBox->aArr.back()->sCommand = uri;
                                 pFunctionListBox->aArr.back()->sLabel = children[n]->getName();
+                                pFunctionListBox->aArr.back()->sHelpText = description;
                                 pNewEntry->SetUserData( pFunctionListBox->aArr.back().get() );
                             }
                         }
@@ -919,15 +1027,12 @@ void SfxConfigGroupListBox::GroupSelected()
             SfxStyleInfo_Impl* pFamily = static_cast<SfxStyleInfo_Impl*>(pInfo->pObject);
             if (pFamily)
             {
-                const ::std::vector< SfxStyleInfo_Impl > lStyles = pStylesInfo->getStyles(pFamily->sFamily);
-                ::std::vector< SfxStyleInfo_Impl >::const_iterator pIt;
-                for (  pIt  = lStyles.begin();
-                       pIt != lStyles.end()  ;
-                     ++pIt                   )
+                const std::vector< SfxStyleInfo_Impl > lStyles = pStylesInfo->getStyles(pFamily->sFamily);
+                for (auto const& lStyle : lStyles)
                 {
-                    SfxStyleInfo_Impl* pStyle = new SfxStyleInfo_Impl(*pIt);
+                    SfxStyleInfo_Impl* pStyle = new SfxStyleInfo_Impl(lStyle);
                     SvTreeListEntry* pFuncEntry = pFunctionListBox->InsertEntry( pStyle->sLabel );
-                    pFunctionListBox->aArr.push_back( o3tl::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::GROUP_STYLES, 0, pStyle ) );
+                    pFunctionListBox->aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::GROUP_STYLES, 0, pStyle ) );
                     pFunctionListBox->aArr.back()->sCommand = pStyle->sCommand;
                     pFunctionListBox->aArr.back()->sLabel = pStyle->sLabel;
                     pFuncEntry->SetUserData( pFunctionListBox->aArr.back().get() );
@@ -937,7 +1042,9 @@ void SfxConfigGroupListBox::GroupSelected()
         }
 
         default:
-            return;
+            // Do nothing, the list box will stay empty
+            SAL_INFO( "cui.customize", "Ignoring unexpected SfxCfgKind: " <<  static_cast<int>(pInfo->nKind) );
+            break;
     }
 
     if ( pFunctionListBox->GetEntryCount() )
@@ -970,7 +1077,7 @@ bool SfxConfigGroupListBox::Expand( SvTreeListEntry* pParent )
             }
 
             if ( nParentPos + nChildCount + 1 > nEntries )
-                ScrollOutputArea( (short)( nEntries - ( nParentPos + nChildCount + 1 ) ) );
+                ScrollOutputArea( static_cast<short>( nEntries - ( nParentPos + nChildCount + 1 ) ) );
         }
     }
 
@@ -983,7 +1090,6 @@ void SfxConfigGroupListBox::RequestingChildren( SvTreeListEntry *pEntry )
 */
 {
     SfxGroupInfo_Impl *pInfo = static_cast<SfxGroupInfo_Impl*>(pEntry->GetUserData());
-    pInfo->bWasOpened = true;
     switch ( pInfo->nKind )
     {
         case SfxCfgKind::GROUP_SCRIPTCONTAINER:
@@ -992,87 +1098,7 @@ void SfxConfigGroupListBox::RequestingChildren( SvTreeListEntry *pEntry )
             {
                 Reference< browse::XBrowseNode > rootNode(
                     static_cast< browse::XBrowseNode* >( pInfo->pObject ) ) ;
-
-                try {
-                    if ( rootNode->hasChildNodes() )
-                    {
-                        Sequence< Reference< browse::XBrowseNode > > children =
-                            rootNode->getChildNodes();
-                        bool bIsRootNode = false;
-
-                        OUString user("user");
-                        OUString share("share" );
-                        if ( rootNode->getName() == "Root" )
-                        {
-                            bIsRootNode = true;
-                        }
-
-                        /* To mimic current starbasic behaviour we
-                        need to make sure that only the current document
-                        is displayed in the config tree. Tests below
-                        set the bDisplay flag to sal_False if the current
-                        node is a first level child of the Root and is NOT
-                        either the current document, user or share */
-                        OUString currentDocTitle;
-                        Reference< XModel > xDocument( lcl_getScriptableDocument_nothrow( m_xFrame ) );
-                        if ( xDocument.is() )
-                        {
-                            currentDocTitle = ::comphelper::DocumentInfo::getDocumentTitle( xDocument );
-                        }
-
-                        sal_Int32 nLen = children.getLength();
-                        for ( sal_Int32 n = 0; n < nLen; ++n )
-                        {
-                            Reference< browse::XBrowseNode >& theChild = children[n];
-                            OUString aName( theChild->getName() );
-                            bool bDisplay = true;
-                            if ( bIsRootNode )
-                            {
-                                if ( !( (aName.equals(user) || aName.equals(share) || aName.equals(currentDocTitle) ) ) )
-                                    bDisplay=false;
-                            }
-                            if ( children[n].is() && children[n]->getType() != browse::BrowseNodeTypes::SCRIPT && bDisplay )
-                            {
-
-                                /*
-                                    We call acquire on the XBrowseNode so that it does not
-                                    get autodestructed and become invalid when accessed later.
-                                */
-                                theChild->acquire();
-
-                                Image aImage = GetImage( theChild, Reference< XComponentContext >(), false );
-                                SvTreeListEntry* pNewEntry =
-                                    InsertEntry( theChild->getName(), pEntry );
-                                SetExpandedEntryBmp( pNewEntry, aImage );
-                                SetCollapsedEntryBmp(pNewEntry, aImage );
-
-                                aArr.push_back( o3tl::make_unique<SfxGroupInfo_Impl>(
-                                    SfxCfgKind::GROUP_SCRIPTCONTAINER,
-                                        0, static_cast<void *>( theChild.get())));
-
-                                pNewEntry->SetUserData( aArr.back().get() );
-
-                                if ( children[n]->hasChildNodes() )
-                                {
-                                    Sequence< Reference< browse::XBrowseNode > > grandchildren =
-                                        children[n]->getChildNodes();
-
-                                    for ( sal_Int32 m = 0; m < grandchildren.getLength(); ++m )
-                                    {
-                                        if ( grandchildren[m]->getType() == browse::BrowseNodeTypes::CONTAINER )
-                                        {
-                                            pNewEntry->EnableChildrenOnDemand();
-                                            m = grandchildren.getLength();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                catch (RuntimeException&) {
-                    // do nothing, the entry will not be displayed in the UI
-                }
+                FillScriptList(rootNode, pEntry, true /* i30923 */ );
             }
             break;
         }
@@ -1081,15 +1107,12 @@ void SfxConfigGroupListBox::RequestingChildren( SvTreeListEntry *pEntry )
         {
             if ( !GetChildCount( pEntry ) )
             {
-                const ::std::vector< SfxStyleInfo_Impl >                 lStyleFamilies = pStylesInfo->getStyleFamilies();
-                      ::std::vector< SfxStyleInfo_Impl >::const_iterator pIt;
-                for (  pIt  = lStyleFamilies.begin();
-                       pIt != lStyleFamilies.end()  ;
-                     ++pIt                          )
+                const std::vector< SfxStyleInfo_Impl >                 lStyleFamilies = pStylesInfo->getStyleFamilies();
+                for (auto const& lStyleFamily : lStyleFamilies)
                 {
-                    SfxStyleInfo_Impl* pFamily = new SfxStyleInfo_Impl(*pIt);
+                    SfxStyleInfo_Impl* pFamily = new SfxStyleInfo_Impl(lStyleFamily);
                     SvTreeListEntry* pStyleEntry = InsertEntry( pFamily->sLabel, pEntry );
-                    aArr.push_back( o3tl::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::GROUP_STYLES, 0, pFamily ));
+                    aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::GROUP_STYLES, 0, pFamily ));
                     pStyleEntry->SetUserData( aArr.back().get() );
                     pStyleEntry->EnableChildrenOnDemand( false );
                 }
@@ -1098,7 +1121,7 @@ void SfxConfigGroupListBox::RequestingChildren( SvTreeListEntry *pEntry )
         }
 
         default:
-            OSL_FAIL( "Falscher Gruppentyp!" );
+            OSL_FAIL( "Wrong group type!" );
             break;
     }
 }
@@ -1112,15 +1135,21 @@ void SfxConfigGroupListBox::SelectMacro( const SfxMacroInfoItem *pItem )
 void SfxConfigGroupListBox::SelectMacro( const OUString& rBasic,
          const OUString& rMacro )
 {
-    const OUString aBasicName( rBasic + " " + pImp->m_sMacros );
-    const sal_Int32 nCount = comphelper::string::getTokenCount(rMacro, '.');
-    const OUString aMethod( rMacro.getToken( nCount-1, '.' ) );
+    const OUString aBasicName(rBasic + " " + xImp->m_sMacros);
+    sal_Int32 nIdx {rMacro.lastIndexOf('.')};
+    const OUString aMethod( rMacro.copy(nIdx+1) );
     OUString aLib;
     OUString aModule;
-    if ( nCount > 2 )
+    if ( nIdx>0 )
     {
-        aLib = rMacro.getToken( 0, '.' );
-        aModule = rMacro.getToken( nCount-2, '.' );
+        // string contains at least 2 tokens
+        nIdx = rMacro.lastIndexOf('.', nIdx);
+        if (nIdx>=0)
+        {
+            // string contains at least 3 tokens
+            aLib = rMacro.getToken( 0, '.' );
+            aModule = rMacro.getToken( 0, '.', ++nIdx );
+        }
     }
 
     SvTreeListEntry *pEntry = FirstChild(nullptr);
@@ -1159,14 +1188,762 @@ void SfxConfigGroupListBox::SelectMacro( const OUString& rBasic,
                                 pMethod = pFunctionListBox->Next( pMethod );
                             }
                         }
-                        pMod = NextSibling( pMod );
+                        pMod = pMod->NextSibling();
                     }
                 }
-                pLib = NextSibling( pLib );
+                pLib = pLib->NextSibling();
             }
         }
-        pEntry = NextSibling( pEntry );
+        pEntry = pEntry->NextSibling();
     }
+}
+
+CuiConfigGroupListBox::CuiConfigGroupListBox(std::unique_ptr<weld::TreeView> xTreeView)
+    : xImp(new CuiConfigGroupBoxResource_Impl())
+    , m_pFunctionListBox(nullptr)
+    , m_pStylesInfo(nullptr)
+    , m_xTreeView(std::move(xTreeView))
+{
+    m_xTreeView->connect_row_activated(LINK(this, CuiConfigGroupListBox, OpenCurrentHdl));
+    m_xTreeView->connect_expanding(LINK(this, CuiConfigGroupListBox, ExpandingHdl));
+    m_xTreeView->set_size_request(m_xTreeView->get_approximate_digit_width() * 35, m_xTreeView->get_height_rows(9));
+}
+
+IMPL_LINK_NOARG(CuiConfigGroupListBox, OpenCurrentHdl, weld::TreeView&, void)
+{
+    std::unique_ptr<weld::TreeIter> xIter(m_xTreeView->make_iterator());
+    bool bValidIter = m_xTreeView->get_cursor(xIter.get());
+    if (!bValidIter)
+        return;
+    if (!m_xTreeView->get_row_expanded(*xIter))
+        m_xTreeView->expand_row(*xIter);
+    else
+        m_xTreeView->collapse_row(*xIter);
+}
+
+CuiConfigGroupListBox::~CuiConfigGroupListBox()
+{
+    ClearAll();
+}
+
+void CuiConfigGroupListBox::ClearAll()
+{
+    sal_uInt16 nCount = aArr.size();
+    for ( sal_uInt16 i=0; i<nCount; ++i )
+    {
+        SfxGroupInfo_Impl *pData = aArr[i].get();
+        if (pData->nKind == SfxCfgKind::GROUP_SCRIPTCONTAINER)
+        {
+            XInterface* xi = static_cast<XInterface *>(pData->pObject);
+            if (xi != nullptr)
+            {
+                xi->release();
+            }
+        }
+    }
+
+    aArr.clear();
+    m_xTreeView->clear();
+}
+
+void CuiConfigGroupListBox::InitModule()
+{
+    try
+    {
+        css::uno::Reference< css::frame::XDispatchInformationProvider > xProvider(m_xFrame, css::uno::UNO_QUERY_THROW);
+        css::uno::Sequence< sal_Int16 > lGroups = xProvider->getSupportedCommandGroups();
+        sal_Int32                       c1      = lGroups.getLength();
+        sal_Int32                       i1      = 0;
+
+        if ( c1 )
+        {
+            // Add All Commands category
+            aArr.push_back(std::make_unique<SfxGroupInfo_Impl>(SfxCfgKind::GROUP_ALLFUNCTIONS, 0));
+            m_xTreeView->append(OUString::number(reinterpret_cast<sal_Int64>(aArr.back().get())),
+                                CuiResId(RID_SVXSTR_ALLFUNCTIONS));
+        }
+
+        for (i1=0; i1<c1; ++i1)
+        {
+            sal_Int16&      rGroupID   = lGroups[i1];
+            OUString sGroupID   = OUString::number(rGroupID);
+            OUString sGroupName ;
+
+            try
+            {
+                m_xModuleCategoryInfo->getByName(sGroupID) >>= sGroupName;
+                if (sGroupName.isEmpty())
+                    continue;
+            }
+            catch(const css::container::NoSuchElementException&)
+                { continue; }
+
+            aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::GROUP_FUNCTION, rGroupID ) );
+            m_xTreeView->append(OUString::number(reinterpret_cast<sal_Int64>(aArr.back().get())),
+                                sGroupName);
+        }
+    }
+    catch(const css::uno::RuntimeException&)
+        { throw; }
+    catch(const css::uno::Exception&)
+        {}
+}
+
+void CuiConfigGroupListBox::FillScriptList(const css::uno::Reference< css::script::browse::XBrowseNode >& xRootNode,
+                                           weld::TreeIter* pParentEntry, bool bCheapChildrenOnDemand)
+{
+    try {
+        if ( xRootNode->hasChildNodes() )
+        {
+            // tdf#120362: Don't ask to enable disabled Java when filling script list
+            css::uno::ContextLayer layer(
+                new comphelper::NoEnableJavaInteractionContext(css::uno::getCurrentContext()));
+
+            Sequence< Reference< browse::XBrowseNode > > children =
+                xRootNode->getChildNodes();
+            bool bIsRootNode = false;
+
+            OUString user("user");
+            OUString share("share");
+            if ( xRootNode->getName() == "Root" )
+            {
+                bIsRootNode = true;
+            }
+
+            //To mimic current starbasic behaviour we
+            //need to make sure that only the current document
+            //is displayed in the config tree. Tests below
+            //set the bDisplay flag to FALSE if the current
+            //node is a first level child of the Root and is NOT
+            //either the current document, user or share
+            OUString currentDocTitle;
+            Reference< XModel > xDocument( lcl_getScriptableDocument_nothrow( m_xFrame ) );
+            if ( xDocument.is() )
+            {
+                currentDocTitle = ::comphelper::DocumentInfo::getDocumentTitle( xDocument );
+            }
+
+            for ( sal_Int32 n = 0; n < children.getLength(); ++n )
+            {
+                Reference< browse::XBrowseNode >& theChild = children[n];
+                bool bDisplay = true;
+                OUString uiName = theChild->getName();
+                if ( bIsRootNode )
+                {
+                    if (  ! (theChild->getName() == user  || theChild->getName() == share ||
+                             theChild->getName() == currentDocTitle ) )
+                    {
+                        bDisplay=false;
+                    }
+                    else
+                    {
+                        if ( uiName == user )
+                        {
+                            uiName = xImp->m_sMyMacros;
+                        }
+                        else if ( uiName == share )
+                        {
+                            uiName = xImp->m_sProdMacros;
+                        }
+                    }
+                }
+                if (children[n]->getType() != browse::BrowseNodeTypes::SCRIPT  && bDisplay )
+                {
+//                  We call acquire on the XBrowseNode so that it does not
+//                  get autodestructed and become invalid when accessed later.
+                    theChild->acquire();
+
+                    bool bChildOnDemand = false;
+                    if ( !bCheapChildrenOnDemand && children[n]->hasChildNodes() )
+                    {
+                        Sequence< Reference< browse::XBrowseNode > > grandchildren =
+                            children[n]->getChildNodes();
+
+                        for ( sal_Int32 m = 0; m < grandchildren.getLength(); ++m )
+                        {
+                            if ( grandchildren[m]->getType() == browse::BrowseNodeTypes::CONTAINER )
+                            {
+                                bChildOnDemand = true;
+                                m = grandchildren.getLength();
+                            }
+                        }
+                    }
+                    else
+                    {
+                        /* i30923 - Would be nice if there was a better
+                        * way to determine if a basic lib had children
+                        * without having to ask for them (which forces
+                        * the library to be loaded */
+                        bChildOnDemand = true;
+                    }
+
+                    OUString aImage = GetImage(theChild, m_xContext, bIsRootNode);
+
+                    aArr.push_back( std::make_unique<SfxGroupInfo_Impl>(SfxCfgKind::GROUP_SCRIPTCONTAINER,
+                            0, static_cast<void *>( theChild.get())));
+
+                    OUString sId(OUString::number(reinterpret_cast<sal_Int64>(aArr.back().get())));
+                    m_xTreeView->insert(pParentEntry, -1, &uiName, &sId, nullptr, nullptr, &aImage, bChildOnDemand);
+                }
+            }
+        }
+    }
+    catch (RuntimeException&) {
+        // do nothing, the entry will not be displayed in the UI
+    }
+}
+
+void CuiConfigGroupListBox::FillFunctionsList(const css::uno::Sequence<DispatchInformation>& xCommands)
+{
+    for (const auto & rInfo : xCommands)
+    {
+        OUString sUIName = MapCommand2UIName(rInfo.Command);
+        aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::FUNCTION_SLOT, 0 ) );
+        SfxGroupInfo_Impl* pGrpInfo = aArr.back().get();
+        pGrpInfo->sCommand = rInfo.Command;
+        pGrpInfo->sLabel   = sUIName;
+        m_pFunctionListBox->append(OUString::number(reinterpret_cast<sal_Int64>(pGrpInfo)), sUIName);
+    }
+}
+
+void CuiConfigGroupListBox::Init(const css::uno::Reference< css::uno::XComponentContext >& xContext,
+    const css::uno::Reference< css::frame::XFrame >& xFrame,
+    const OUString& sModuleLongName,
+    bool bEventMode)
+{
+    m_xTreeView->freeze();
+    ClearAll(); // Remove all old entries from treelist box
+
+    m_xContext = xContext;
+    m_xFrame = xFrame;
+    if( bEventMode )
+    {
+        m_sModuleLongName = sModuleLongName;
+        m_xGlobalCategoryInfo = css::ui::theUICategoryDescription::get( m_xContext );
+        m_xModuleCategoryInfo.set(m_xGlobalCategoryInfo->getByName(m_sModuleLongName), css::uno::UNO_QUERY_THROW);
+        m_xUICmdDescription   = css::frame::theUICommandDescription::get( m_xContext );
+
+        InitModule();
+    }
+
+    SAL_INFO("cui.customize", "** ** About to initialise SF Scripts");
+    // Add Scripting Framework entries
+    Reference< browse::XBrowseNode > rootNode;
+    try
+    {
+        Reference< browse::XBrowseNodeFactory > xFac = browse::theBrowseNodeFactory::get( m_xContext );
+        rootNode.set( xFac->createView( browse::BrowseNodeFactoryViewTypes::MACROSELECTOR ) );
+    }
+    catch( Exception& e )
+    {
+        SAL_INFO("cui.customize", "Caught some exception whilst retrieving browse nodes from factory... Exception: " << e);
+        // TODO exception handling
+    }
+
+
+    if ( rootNode.is() )
+    {
+        if ( bEventMode )
+        {
+                //We call acquire on the XBrowseNode so that it does not
+                //get autodestructed and become invalid when accessed later.
+            rootNode->acquire();
+
+            aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::GROUP_SCRIPTCONTAINER, 0,
+                    static_cast<void *>(rootNode.get())));
+            OUString aTitle(xImp->m_sDlgMacros);
+            OUString sId(OUString::number(reinterpret_cast<sal_Int64>(aArr.back().get())));
+            m_xTreeView->insert(nullptr, -1, &aTitle, &sId, nullptr, nullptr, nullptr, true);
+        }
+        else
+        {
+             //We are only showing scripts not slot APIs so skip
+             //Root node and show location nodes
+            FillScriptList(rootNode, nullptr, false);
+        }
+    }
+
+    // add styles
+    if ( bEventMode )
+    {
+        aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::GROUP_STYLES, 0, nullptr ) ); // TODO last parameter should contain user data
+        OUString sStyle(xImp->m_aStrGroupStyles);
+        OUString sId(OUString::number(reinterpret_cast<sal_Int64>(aArr.back().get())));
+        m_xTreeView->insert(nullptr, -1, &sStyle, &sId, nullptr, nullptr, nullptr, true);
+    }
+
+    m_xTreeView->thaw();
+    m_xTreeView->scroll_to_row(0);
+    m_xTreeView->select(0);
+}
+
+OUString CuiConfigGroupListBox::GetImage(
+    const Reference< browse::XBrowseNode >& node,
+    Reference< XComponentContext > const & xCtx,
+    bool bIsRootNode)
+{
+    OUString aImage;
+    if ( bIsRootNode )
+    {
+        if (node->getName() == "user" || node->getName() == "share" )
+        {
+            aImage = RID_CUIBMP_HARDDISK;
+        }
+        else
+        {
+            OUString factoryURL;
+            OUString nodeName = node->getName();
+            Reference<XInterface> xDocumentModel = getDocumentModel(xCtx, nodeName );
+            if ( xDocumentModel.is() )
+            {
+                Reference< frame::XModuleManager2 > xModuleManager( frame::ModuleManager::create(xCtx) );
+                // get the long name of the document:
+                OUString appModule( xModuleManager->identify(
+                                    xDocumentModel ) );
+                Sequence<beans::PropertyValue> moduleDescr;
+                Any aAny = xModuleManager->getByName(appModule);
+                if( !( aAny >>= moduleDescr ) )
+                {
+                    throw RuntimeException("SFTreeListBox::Init: failed to get PropertyValue");
+                }
+                beans::PropertyValue const * pmoduleDescr =
+                    moduleDescr.getConstArray();
+                for ( sal_Int32 pos = moduleDescr.getLength(); pos--; )
+                {
+                    if ( pmoduleDescr[ pos ].Name == "ooSetupFactoryEmptyDocumentURL" )
+                    {
+                        pmoduleDescr[ pos ].Value >>= factoryURL;
+                        SAL_INFO("cui.customize", "factory url for doc images is " << factoryURL);
+                        break;
+                    }
+                }
+            }
+            if( !factoryURL.isEmpty() )
+            {
+                aImage = SvFileInformationManager::GetFileImageId(INetURLObject(factoryURL));
+            }
+            else
+            {
+                aImage = RID_CUIBMP_DOC;
+            }
+        }
+    }
+    else
+    {
+        if( node->getType() == browse::BrowseNodeTypes::SCRIPT )
+            aImage = RID_CUIBMP_MACRO;
+        else
+            aImage = RID_CUIBMP_LIB;
+    }
+    return aImage;
+}
+
+Reference< XInterface  >
+CuiConfigGroupListBox::getDocumentModel( Reference< XComponentContext > const & xCtx, OUString const & docName )
+{
+    Reference< XInterface > xModel;
+    Reference< frame::XDesktop2 > desktop = frame::Desktop::create( xCtx );
+
+    Reference< container::XEnumerationAccess > componentsAccess =
+        desktop->getComponents();
+    Reference< container::XEnumeration > components =
+        componentsAccess->createEnumeration();
+    while (components->hasMoreElements())
+    {
+        Reference< frame::XModel > model(
+            components->nextElement(), UNO_QUERY );
+        if ( model.is() )
+        {
+            OUString sTdocUrl =
+                ::comphelper::DocumentInfo::getDocumentTitle( model );
+            if( sTdocUrl == docName )
+            {
+                xModel = model;
+                break;
+            }
+        }
+    }
+    return xModel;
+}
+
+OUString CuiConfigGroupListBox::MapCommand2UIName(const OUString& sCommand)
+{
+    OUString sUIName;
+    try
+    {
+        css::uno::Reference< css::container::XNameAccess > xModuleConf;
+        m_xUICmdDescription->getByName(m_sModuleLongName) >>= xModuleConf;
+        if (xModuleConf.is())
+        {
+            ::comphelper::SequenceAsHashMap lProps(xModuleConf->getByName(sCommand));
+            sUIName = lProps.getUnpackedValueOrDefault("Name", OUString());
+        }
+    }
+    catch(const css::uno::RuntimeException&)
+        { throw; }
+    catch(css::uno::Exception&)
+        { sUIName.clear(); }
+
+    // fallback for missing UINames !?
+    if (sUIName.isEmpty())
+    {
+        sUIName = sCommand;
+    }
+
+    return sUIName;
+}
+
+void CuiConfigGroupListBox::GroupSelected()
+/*  Description
+    A function group or a basic module has been selected.
+    All functions/macros are displayed in the functionlistbox.
+*/
+{
+    std::unique_ptr<weld::TreeIter> xIter(m_xTreeView->make_iterator());
+    if (!m_xTreeView->get_selected(xIter.get()))
+        return;
+
+    SfxGroupInfo_Impl *pInfo = reinterpret_cast<SfxGroupInfo_Impl*>(m_xTreeView->get_id(*xIter).toInt64());
+    m_pFunctionListBox->freeze();
+    m_pFunctionListBox->ClearAll();
+
+    switch ( pInfo->nKind )
+    {
+        case SfxCfgKind::GROUP_ALLFUNCTIONS:
+        {
+            css::uno::Reference< css::frame::XDispatchInformationProvider > xProvider( m_xFrame, UNO_QUERY );
+            bool bValidIter = m_xTreeView->get_iter_first(*xIter);
+            while (bValidIter)
+            {
+                SfxGroupInfo_Impl *pCurrentInfo = reinterpret_cast<SfxGroupInfo_Impl*>(m_xTreeView->get_id(*xIter).toInt64());
+                if (pCurrentInfo->nKind == SfxCfgKind::GROUP_FUNCTION)
+                {
+                    css::uno::Sequence< css::frame::DispatchInformation > lCommands;
+                    try
+                    {
+                        lCommands = xProvider->getConfigurableDispatchInformation( pCurrentInfo->nUniqueID );
+                        FillFunctionsList( lCommands );
+                    }
+                    catch ( container::NoSuchElementException& )
+                    {
+                    }
+                }
+                bValidIter = m_xTreeView->iter_next(*xIter);
+            }
+            break;
+        }
+
+        case SfxCfgKind::GROUP_FUNCTION :
+        {
+            sal_uInt16                                                          nGroup    = pInfo->nUniqueID;
+            css::uno::Reference< css::frame::XDispatchInformationProvider > xProvider (m_xFrame, css::uno::UNO_QUERY_THROW);
+            css::uno::Sequence< css::frame::DispatchInformation >           lCommands = xProvider->getConfigurableDispatchInformation(nGroup);
+            FillFunctionsList( lCommands );
+            break;
+        }
+
+        case SfxCfgKind::GROUP_SCRIPTCONTAINER:
+        {
+            if (!m_xTreeView->iter_has_child(*xIter))
+            {
+                Reference< browse::XBrowseNode > rootNode(
+                    static_cast< browse::XBrowseNode* >( pInfo->pObject ) ) ;
+
+                try {
+                    if ( rootNode->hasChildNodes() )
+                    {
+                        Sequence< Reference< browse::XBrowseNode > > children =
+                            rootNode->getChildNodes();
+
+                        for ( sal_Int32 n = 0; n < children.getLength(); ++n )
+                        {
+                            if (children[n]->getType() == browse::BrowseNodeTypes::SCRIPT)
+                            {
+                                OUString uri, description;
+
+                                Reference < beans::XPropertySet >xPropSet( children[n], UNO_QUERY );
+                                if (!xPropSet.is())
+                                {
+                                    continue;
+                                }
+
+                                Any value =
+                                    xPropSet->getPropertyValue("URI");
+                                value >>= uri;
+
+                                try
+                                {
+                                    value = xPropSet->getPropertyValue("Description");
+                                    value >>= description;
+                                }
+                                catch (Exception &) {
+                                    // do nothing, the description will be empty
+                                }
+
+                                OUString* pScriptURI = new OUString( uri );
+
+                                OUString aImage = GetImage(children[n], Reference< XComponentContext >(), false);
+                                m_pFunctionListBox->aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::FUNCTION_SCRIPT, 0, pScriptURI ));
+                                m_pFunctionListBox->aArr.back()->sCommand = uri;
+                                m_pFunctionListBox->aArr.back()->sLabel = children[n]->getName();
+                                m_pFunctionListBox->aArr.back()->sHelpText = description;
+
+                                OUString sId(OUString::number(reinterpret_cast<sal_Int64>(m_pFunctionListBox->aArr.back().get())));
+                                m_pFunctionListBox->append(sId, children[n]->getName(), aImage);
+                            }
+                        }
+                    }
+                }
+                catch (RuntimeException&) {
+                    // do nothing, the entry will not be displayed in the UI
+                }
+            }
+            break;
+        }
+
+        case SfxCfgKind::GROUP_STYLES :
+        {
+            SfxStyleInfo_Impl* pFamily = static_cast<SfxStyleInfo_Impl*>(pInfo->pObject);
+            if (pFamily)
+            {
+                const std::vector< SfxStyleInfo_Impl > lStyles = m_pStylesInfo->getStyles(pFamily->sFamily);
+                for (auto const& lStyle : lStyles)
+                {
+                    SfxStyleInfo_Impl* pStyle = new SfxStyleInfo_Impl(lStyle);
+                    m_pFunctionListBox->aArr.push_back(std::make_unique<SfxGroupInfo_Impl>(SfxCfgKind::GROUP_STYLES, 0, pStyle));
+                    m_pFunctionListBox->aArr.back()->sCommand = pStyle->sCommand;
+                    m_pFunctionListBox->aArr.back()->sLabel = pStyle->sLabel;
+                    OUString sId(OUString::number(reinterpret_cast<sal_Int64>(m_pFunctionListBox->aArr.back().get())));
+                    m_pFunctionListBox->append(sId, pStyle->sLabel);
+                }
+            }
+            break;
+        }
+
+        default:
+            // Do nothing, the list box will stay empty
+            SAL_INFO( "cui.customize", "Ignoring unexpected SfxCfgKind: " <<  static_cast<int>(pInfo->nKind) );
+            break;
+    }
+
+    m_pFunctionListBox->thaw();
+
+    if (m_pFunctionListBox->n_children())
+        m_pFunctionListBox->select(0);
+}
+
+/*  Description
+    A basic or a library is opened.
+*/
+IMPL_LINK(CuiConfigGroupListBox, ExpandingHdl, weld::TreeIter&, rIter, bool)
+{
+    SfxGroupInfo_Impl *pInfo = reinterpret_cast<SfxGroupInfo_Impl*>(m_xTreeView->get_id(rIter).toInt64());
+    switch ( pInfo->nKind )
+    {
+        case SfxCfgKind::GROUP_SCRIPTCONTAINER:
+        {
+            if (!m_xTreeView->iter_has_child(rIter))
+            {
+                Reference< browse::XBrowseNode > rootNode(
+                    static_cast< browse::XBrowseNode* >( pInfo->pObject ) ) ;
+                FillScriptList(rootNode, &rIter, true /* i30923 */ );
+            }
+            break;
+        }
+
+        case SfxCfgKind::GROUP_STYLES:
+        {
+            if (!m_xTreeView->iter_has_child(rIter))
+            {
+                const std::vector<SfxStyleInfo_Impl> lStyleFamilies = m_pStylesInfo->getStyleFamilies();
+                for (auto const& lStyleFamily : lStyleFamilies)
+                {
+                    SfxStyleInfo_Impl* pFamily = new SfxStyleInfo_Impl(lStyleFamily);
+                    aArr.push_back( std::make_unique<SfxGroupInfo_Impl>( SfxCfgKind::GROUP_STYLES, 0, pFamily ));
+                    OUString sId(OUString::number(reinterpret_cast<sal_Int64>(aArr.back().get())));
+                    m_xTreeView->insert(&rIter, -1, &pFamily->sLabel, &sId, nullptr, nullptr, nullptr, false);
+                }
+            }
+            break;
+        }
+
+        default:
+            OSL_FAIL( "Wrong group type!" );
+            break;
+    }
+    return true;
+}
+
+/*
+ * Implementation of SvxScriptSelectorDialog
+ *
+ * This dialog is used for selecting Slot API commands
+ * and Scripting Framework Scripts.
+ */
+
+SvxScriptSelectorDialog::SvxScriptSelectorDialog(
+    vcl::Window* pParent, bool bShowSlots, const css::uno::Reference< css::frame::XFrame >& xFrame)
+    : ModalDialog(pParent, "MacroSelectorDialog", "cui/ui/macroselectordialog.ui")
+    , m_bShowSlots(bShowSlots)
+{
+    get<FixedText>("libraryft")->Show(!m_bShowSlots);
+    get<FixedText>("categoryft")->Show(m_bShowSlots);
+    get<FixedText>("macronameft")->Show(!m_bShowSlots);
+    get<FixedText>("commandsft")->Show(m_bShowSlots);
+    get(m_pDescriptionText, "description");
+    get(m_pCommands, "commands");
+    if (m_bShowSlots)
+    {
+        // If we are showing Slot API commands update labels in the UI
+        SetText(CuiResId(RID_SVXSTR_SELECTOR_ADD_COMMANDS));
+        get(m_pCancelButton, "close");
+        get(m_pDialogDescription, "helptoolbar");
+        get(m_pOKButton, "add");
+    }
+    else
+    {
+        get(m_pCancelButton, "cancel");
+        get(m_pDialogDescription, "helpmacro");
+        get(m_pOKButton, "ok");
+    }
+    m_pCancelButton->Show();
+    m_pDialogDescription->Show();
+    m_pOKButton->Show();
+
+    get(m_pCategories, "categories");
+    const OUString aModuleName(vcl::CommandInfoProvider::GetModuleIdentifier(xFrame));
+    m_pCategories->SetFunctionListBox(m_pCommands);
+    m_pCategories->Init(comphelper::getProcessComponentContext(), xFrame, aModuleName, bShowSlots);
+
+    m_pCategories->SetSelectHdl(
+            LINK( this, SvxScriptSelectorDialog, SelectHdl ) );
+    m_pCommands->SetSelectHdl( LINK( this, SvxScriptSelectorDialog, SelectHdl ) );
+    m_pCommands->SetDoubleClickHdl( LINK( this, SvxScriptSelectorDialog, FunctionDoubleClickHdl ) );
+
+    m_pOKButton->SetClickHdl( LINK( this, SvxScriptSelectorDialog, ClickHdl ) );
+    m_pCancelButton->SetClickHdl( LINK( this, SvxScriptSelectorDialog, ClickHdl ) );
+
+    m_sDefaultDesc = m_pDescriptionText->GetText();
+
+    // Support style commands
+    uno::Reference<frame::XController> xController;
+    uno::Reference<frame::XModel> xModel;
+    if (xFrame.is())
+        xController = xFrame->getController();
+    if (xController.is())
+        xModel = xController->getModel();
+
+    m_aStylesInfo.init(aModuleName, xModel);
+    m_pCategories->SetStylesInfo(&m_aStylesInfo);
+
+    UpdateUI();
+}
+
+SvxScriptSelectorDialog::~SvxScriptSelectorDialog()
+{
+    disposeOnce();
+}
+
+void SvxScriptSelectorDialog::dispose()
+{
+    m_pDialogDescription.clear();
+    m_pCategories.clear();
+    m_pCommands.clear();
+    m_pOKButton.clear();
+    m_pCancelButton.clear();
+    m_pDescriptionText.clear();
+    ModalDialog::dispose();
+}
+
+IMPL_LINK( SvxScriptSelectorDialog, SelectHdl, SvTreeListBox*, pCtrl, void )
+{
+    if (pCtrl == m_pCategories)
+    {
+        m_pCategories->GroupSelected();
+    }
+    UpdateUI();
+}
+
+IMPL_LINK_NOARG( SvxScriptSelectorDialog, FunctionDoubleClickHdl, SvTreeListBox*, bool )
+{
+    if (m_pOKButton->IsEnabled())
+        ClickHdl(m_pOKButton);
+    return false;
+}
+
+// Check if command is selected and enable the OK button accordingly
+// Grab the help text for this id if available and update the description field
+void
+SvxScriptSelectorDialog::UpdateUI()
+{
+    OUString url = GetScriptURL();
+    if ( !url.isEmpty() )
+    {
+        OUString sMessage = m_pCommands->GetHelpText();
+        m_pDescriptionText->SetText(sMessage.isEmpty() ? m_sDefaultDesc : sMessage);
+
+        m_pOKButton->Enable();
+    }
+    else
+    {
+        m_pDescriptionText->SetText(m_sDefaultDesc);
+        m_pOKButton->Enable( false );
+    }
+}
+
+IMPL_LINK( SvxScriptSelectorDialog, ClickHdl, Button *, pButton, void )
+{
+    if (pButton == m_pCancelButton)
+    {
+        EndDialog();
+    }
+    else if (pButton == m_pOKButton)
+    {
+        // If we are displaying Slot API commands then this the dialog is being
+        // run from Tools/Configure and we should not close it
+        if ( !m_bShowSlots )
+        {
+            EndDialog( RET_OK );
+        }
+        else
+        {
+            // Select the next entry in the list if possible
+            SvTreeListEntry* current = m_pCommands->FirstSelected();
+            SvTreeListEntry* next = current->NextSibling();
+
+            if ( next != nullptr )
+            {
+                m_pCommands->Select( next );
+            }
+        }
+    }
+}
+
+void
+SvxScriptSelectorDialog::SetRunLabel()
+{
+    m_pOKButton->SetText(CuiResId(RID_SVXSTR_SELECTOR_RUN));
+}
+
+OUString
+SvxScriptSelectorDialog::GetScriptURL() const
+{
+    OUString result;
+
+    SvTreeListEntry *pEntry = const_cast< SvxScriptSelectorDialog* >( this )->m_pCommands->FirstSelected();
+    if ( pEntry )
+    {
+        SfxGroupInfo_Impl *pData = static_cast<SfxGroupInfo_Impl*>(pEntry->GetUserData());
+        if  (   ( pData->nKind == SfxCfgKind::FUNCTION_SLOT )
+            ||  ( pData->nKind == SfxCfgKind::FUNCTION_SCRIPT )
+            ||  ( pData->nKind == SfxCfgKind::GROUP_STYLES )
+            )
+        {
+            result = pData->sCommand;
+        }
+    }
+
+    return result;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

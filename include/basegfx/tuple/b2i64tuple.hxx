@@ -21,7 +21,6 @@
 #define INCLUDED_BASEGFX_TUPLE_B2I64TUPLE_HXX
 
 #include <sal/types.h>
-#include <basegfx/tuple/b2dtuple.hxx>
 #include <basegfx/basegfxdllapi.h>
 
 
@@ -35,9 +34,8 @@ namespace basegfx
         @derive Use this class to implement Points or Vectors
         which are based on two sal_Int64 values
     */
-    class SAL_WARN_UNUSED BASEGFX_DLLPUBLIC B2I64Tuple
+    class SAL_WARN_UNUSED BASEGFX_DLLPUBLIC B2I64Tuple final
     {
-    protected:
         sal_Int64                                       mnX;
         sal_Int64                                       mnY;
 
@@ -74,9 +72,6 @@ namespace basegfx
         B2I64Tuple(const B2I64Tuple& rTup)
         :   mnX( rTup.mnX ),
             mnY( rTup.mnY )
-        {}
-
-        ~B2I64Tuple()
         {}
 
         /// Get X-Coordinate of 2D Tuple

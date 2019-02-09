@@ -21,7 +21,7 @@
 #include <basegfx/color/bcolormodifier.hxx>
 #include <drawinglayer/primitive2d/modifiedcolorprimitive2d.hxx>
 #include <drawinglayer/primitive2d/transformprimitive2d.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <drawinglayer/primitive2d/transparenceprimitive2d.hxx>
 #include <drawinglayer/primitive2d/unifiedtransparenceprimitive2d.hxx>
 #include <drawinglayer/primitive2d/drawinglayer_primitivetypes2d.hxx>
@@ -64,10 +64,8 @@ namespace drawinglayer
             return aRetval;
         }
 
-        Primitive2DContainer ShadowPrimitive2D::get2DDecomposition(const geometry::ViewInformation2D& /*rViewInformation*/) const
+        void ShadowPrimitive2D::get2DDecomposition(Primitive2DDecompositionVisitor& rVisitor, const geometry::ViewInformation2D& /*rViewInformation*/) const
         {
-            Primitive2DContainer aRetval;
-
             if(!getChildren().empty())
             {
                 // create a modifiedColorPrimitive containing the shadow color and the content
@@ -81,11 +79,8 @@ namespace drawinglayer
                 const Primitive2DContainer aSequenceB { xRefA };
 
                 // build transformed primitiveVector with shadow offset and add to target
-                const Primitive2DReference xRefB(new TransformPrimitive2D(getShadowTransform(), aSequenceB));
-                aRetval = Primitive2DContainer { xRefB };
+                rVisitor.append(new TransformPrimitive2D(getShadowTransform(), aSequenceB));
             }
-
-            return aRetval;
         }
 
         // provide unique ID

@@ -18,16 +18,16 @@
  */
 
 #include "querydlg.hxx"
-#include "dbu_qry.hrc"
+#include <strings.hrc>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
 #include "QTableConnectionData.hxx"
-#include "querycontroller.hxx"
-#include "QueryTableView.hxx"
-#include "QueryDesignView.hxx"
+#include <core_resource.hxx>
+#include <querycontroller.hxx>
+#include <QueryTableView.hxx>
+#include <QueryDesignView.hxx>
 #include <com/sun/star/sdbc/XDatabaseMetaData.hpp>
-#include "RelationControl.hxx"
-#include <vcl/msgbox.hxx>
+#include <RelationControl.hxx>
 #include <vcl/settings.hxx>
 
 #define ID_INNER_JOIN       1
@@ -43,19 +43,16 @@ using namespace ::com::sun::star::sdbc;
 
 DlgQryJoin::DlgQryJoin( OQueryTableView * pParent,
                        const TTableConnectionData::value_type& _pData,
-                       OJoinTableView::OTableWindowMap* _pTableMap,
+                       const OJoinTableView::OTableWindowMap* _pTableMap,
                        const Reference< XConnection >& _xConnection,
                        bool _bAllowTableSelect)
     : ModalDialog( pParent, "JoinDialog", "dbaccess/ui/joindialog.ui" )
-    , m_pTableControl( nullptr )
-    , m_pTableMap(_pTableMap)
-    , m_pTableView(pParent)
     , eJoinType(static_cast<OQueryTableConnectionData*>(_pData.get())->GetJoinType())
     , m_pOrigConnData(_pData)
     , m_xConnection(_xConnection)
 {
     get(m_pML_HelpText, "helptext");
-    Size aSize(LogicToPixel(Size(179, 49), MAP_APPFONT));
+    Size aSize(LogicToPixel(Size(179, 49), MapMode(MapUnit::MapAppFont)));
     //alternatively loop through the STR_QUERY_* strings with their STR_JOIN_TYPE_HINT
     //suffix to find the longest entry at runtime
     m_pML_HelpText->set_height_request(aSize.Height());
@@ -65,11 +62,11 @@ DlgQryJoin::DlgQryJoin( OQueryTableView * pParent,
     get(m_pPB_OK, "ok");
 
     m_pML_HelpText->SetControlBackground( GetSettings().GetStyleSettings().GetFaceColor() );
-    // Connection kopieren
+    // Copy connection
     m_pConnData.reset(_pData->NewInstance());
     m_pConnData->CopyFrom(*_pData);
 
-    m_pTableControl = new OTableListBoxControl(this, m_pTableMap, this);
+    m_pTableControl.reset(new OTableListBoxControl(this, _pTableMap, this));
 
     m_pCBNatural->Check(static_cast<OQueryTableConnectionData*>(m_pConnData.get())->isNatural());
 
@@ -114,7 +111,7 @@ DlgQryJoin::DlgQryJoin( OQueryTableView * pParent,
     m_pLB_JoinType->SetSelectHdl(LINK(this,DlgQryJoin,LBChangeHdl));
     m_pCBNatural->SetToggleHdl(LINK(this,DlgQryJoin,NaturalToggleHdl));
 
-    if ( static_cast<OQueryTableView*>(pParent)->getDesignView()->getController().isReadOnly() )
+    if ( pParent->getDesignView()->getController().isReadOnly() )
     {
         m_pLB_JoinType->Disable();
         m_pCBNatural->Disable();
@@ -122,14 +119,15 @@ DlgQryJoin::DlgQryJoin( OQueryTableView * pParent,
     }
     else
     {
-        const sal_Int32 nCount = m_pLB_JoinType->GetEntryCount();
-        for (sal_Int32 i = 0; i < nCount; ++i)
+        for (sal_Int32 i = 0; i < m_pLB_JoinType->GetEntryCount();)
         {
             const sal_IntPtr nJoinTyp = reinterpret_cast<sal_IntPtr>(m_pLB_JoinType->GetEntryData(i));
             if ( !bSupportFullJoin && nJoinTyp == ID_FULL_JOIN )
                 m_pLB_JoinType->RemoveEntry(i);
             else if ( !bSupportOuterJoin && (nJoinTyp == ID_LEFT_JOIN || nJoinTyp == ID_RIGHT_JOIN) )
                 m_pLB_JoinType->RemoveEntry(i);
+            else
+                ++i;
         }
 
         m_pTableControl->NotifyCellChange();
@@ -144,18 +142,17 @@ DlgQryJoin::~DlgQryJoin()
 
 void DlgQryJoin::dispose()
 {
-    delete m_pTableControl;
+    m_pTableControl.reset();
     m_pML_HelpText.clear();
     m_pPB_OK.clear();
     m_pLB_JoinType.clear();
     m_pCBNatural.clear();
-    m_pTableView.clear();
     ModalDialog::dispose();
 }
 
-IMPL_LINK_NOARG_TYPED( DlgQryJoin, LBChangeHdl, ListBox&, void )
+IMPL_LINK_NOARG( DlgQryJoin, LBChangeHdl, ListBox&, void )
 {
-    if (m_pLB_JoinType->GetSelectEntryPos() == m_pLB_JoinType->GetSavedValue() )
+    if (m_pLB_JoinType->GetSelectedEntryPos() == m_pLB_JoinType->GetSavedValue() )
         return;
 
     m_pLB_JoinType->SaveValue();
@@ -166,25 +163,25 @@ IMPL_LINK_NOARG_TYPED( DlgQryJoin, LBChangeHdl, ListBox&, void )
     OUString sFirstWinName    = m_pConnData->getReferencingTable()->GetWinName();
     OUString sSecondWinName   = m_pConnData->getReferencedTable()->GetWinName();
     const EJoinType eOldJoinType = eJoinType;
-    sal_uInt16 nResId = 0;
-    const sal_Int32 nPos = m_pLB_JoinType->GetSelectEntryPos();
+    const char* pResId = nullptr;
+    const sal_Int32 nPos = m_pLB_JoinType->GetSelectedEntryPos();
     const sal_IntPtr nJoinType = reinterpret_cast<sal_IntPtr>(m_pLB_JoinType->GetEntryData(nPos));
     bool bAddHint = true;
     switch ( nJoinType )
     {
         default:
         case ID_INNER_JOIN:
-            nResId = STR_QUERY_INNER_JOIN;
+            pResId = STR_QUERY_INNER_JOIN;
             bAddHint = false;
             eJoinType = INNER_JOIN;
             break;
         case ID_LEFT_JOIN:
-            nResId = STR_QUERY_LEFTRIGHT_JOIN;
+            pResId = STR_QUERY_LEFTRIGHT_JOIN;
             eJoinType = LEFT_JOIN;
             break;
         case ID_RIGHT_JOIN:
             {
-                nResId = STR_QUERY_LEFTRIGHT_JOIN;
+                pResId = STR_QUERY_LEFTRIGHT_JOIN;
                 eJoinType = RIGHT_JOIN;
                 OUString sTemp = sFirstWinName;
                 sFirstWinName = sSecondWinName;
@@ -192,12 +189,12 @@ IMPL_LINK_NOARG_TYPED( DlgQryJoin, LBChangeHdl, ListBox&, void )
             }
             break;
         case ID_FULL_JOIN:
-            nResId = STR_QUERY_FULL_JOIN;
+            pResId = STR_QUERY_FULL_JOIN;
             eJoinType = FULL_JOIN;
             break;
         case ID_CROSS_JOIN:
             {
-                nResId = STR_QUERY_CROSS_JOIN;
+                pResId = STR_QUERY_CROSS_JOIN;
                 eJoinType = CROSS_JOIN;
 
                 m_pConnData->ResetConnLines();
@@ -224,7 +221,7 @@ IMPL_LINK_NOARG_TYPED( DlgQryJoin, LBChangeHdl, ListBox&, void )
 
     m_pTableControl->Invalidate();
 
-    OUString sHelpText = ModuleRes( nResId );
+    OUString sHelpText = DBA_RES(pResId);
     if( nPos )
     {
         sHelpText = sHelpText.replaceFirst( "%1", sFirstWinName );
@@ -233,13 +230,13 @@ IMPL_LINK_NOARG_TYPED( DlgQryJoin, LBChangeHdl, ListBox&, void )
     if ( bAddHint )
     {
         sHelpText += "\n";
-        sHelpText += ModuleRes( STR_JOIN_TYPE_HINT );
+        sHelpText += DBA_RES( STR_JOIN_TYPE_HINT );
     }
 
     m_pML_HelpText->SetText( sHelpText );
 }
 
-IMPL_LINK_NOARG_TYPED( DlgQryJoin, OKClickHdl, Button*, void )
+IMPL_LINK_NOARG( DlgQryJoin, OKClickHdl, Button*, void )
 {
     m_pConnData->Update();
     m_pOrigConnData->CopyFrom( *m_pConnData );
@@ -247,7 +244,7 @@ IMPL_LINK_NOARG_TYPED( DlgQryJoin, OKClickHdl, Button*, void )
     EndDialog(RET_OK);
 }
 
-IMPL_LINK_NOARG_TYPED( DlgQryJoin, NaturalToggleHdl, CheckBox&, void )
+IMPL_LINK_NOARG( DlgQryJoin, NaturalToggleHdl, CheckBox&, void )
 {
     bool bChecked = m_pCBNatural->IsChecked();
     static_cast<OQueryTableConnectionData*>(m_pConnData.get())->setNatural(bChecked);
@@ -269,7 +266,7 @@ IMPL_LINK_NOARG_TYPED( DlgQryJoin, NaturalToggleHdl, CheckBox&, void )
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
         m_pTableControl->NotifyCellChange();
         m_pTableControl->Invalidate();

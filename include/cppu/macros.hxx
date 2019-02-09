@@ -19,7 +19,7 @@
 #ifndef INCLUDED_CPPU_MACROS_HXX
 #define INCLUDED_CPPU_MACROS_HXX
 
-#include <sal/types.h>
+#include "sal/types.h"
 
 /** Namespace name for compiler/ platform, e.g. gcc3, msci
 
@@ -29,7 +29,7 @@
 
 /// @cond INTERNAL
 
-/** Patching the GCC 3 incomatible alignment change for Linux.
+/** Patching the GCC 3 incompatible alignment change for Linux.
 
     This macro is appended by cppumaker to every first member of a struct, if
     the struct inherits from a base struct and the first member is neither

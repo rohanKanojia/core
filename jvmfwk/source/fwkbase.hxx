@@ -19,7 +19,7 @@
 #ifndef INCLUDED_JVMFWK_SOURCE_FWKBASE_HXX
 #define INCLUDED_JVMFWK_SOURCE_FWKBASE_HXX
 
-#include "rtl/ustring.hxx"
+#include <rtl/ustring.hxx>
 #include "libxmlutil.hxx"
 
 namespace jfw
@@ -34,9 +34,9 @@ class VendorSettings
 public:
     VendorSettings();
 
-    VersionInfo getVersionInformation(const OUString & sVendor);
+    VersionInfo getVersionInformation(const OUString & sVendor) const;
 
-    ::std::vector< OUString> getSupportedVendors();
+    ::std::vector< OUString> getSupportedVendors() const;
 };
 
 /* The class offers functions to retrieve verified bootstrap parameters.

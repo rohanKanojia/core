@@ -29,8 +29,8 @@ class TableProperties;
 class TableContext : public ShapeContext
 {
 public:
-    TableContext( ::oox::core::ContextHandler2Helper& rParent, ShapePtr pShapePtr );
-    virtual ~TableContext();
+    TableContext( ::oox::core::ContextHandler2Helper const & rParent, const ShapePtr& pShapePtr );
+    virtual ~TableContext() override;
 
     virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 

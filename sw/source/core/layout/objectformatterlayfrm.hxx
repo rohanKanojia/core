@@ -44,14 +44,14 @@ class SwObjectFormatterLayFrame : public SwObjectFormatter
             @return boolean
             indicates, if format was successful
         */
-        bool _AdditionalFormatObjsOnPage();
+        bool AdditionalFormatObjsOnPage();
 
     protected:
 
         virtual SwFrame& GetAnchorFrame() override;
 
     public:
-        virtual ~SwObjectFormatterLayFrame();
+        virtual ~SwObjectFormatterLayFrame() override;
 
         // #i40147# - add parameter <_bCheckForMovedFwd>.
         // Not relevant for objects anchored at layout frame.
@@ -59,7 +59,7 @@ class SwObjectFormatterLayFrame : public SwObjectFormatter
                                   const bool _bCheckForMovedFwd = false ) override;
         virtual bool DoFormatObjs() override;
 
-        static SwObjectFormatterLayFrame* CreateObjFormatter(
+        static std::unique_ptr<SwObjectFormatterLayFrame> CreateObjFormatter(
                                                 SwLayoutFrame& _rAnchorLayFrame,
                                                 const SwPageFrame& _rPageFrame,
                                                 SwLayAction* _pLayAction );

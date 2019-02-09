@@ -20,22 +20,19 @@
 #ifndef INCLUDED_SC_INC_FORMULACELL_HXX
 #define INCLUDED_SC_INC_FORMULACELL_HXX
 
-#include <set>
 #include <memory>
 
 #include <formula/tokenarray.hxx>
-#include <osl/conditn.hxx>
-#include <osl/mutex.hxx>
-#include <rtl/ref.hxx>
 #include <svl/listener.hxx>
 
 #include "types.hxx"
-
+#include "interpretercontext.hxx"
+#include "document.hxx"
+#include "formulalogger.hxx"
 #include "formularesult.hxx"
 
 namespace sc {
 
-class CompiledFormula;
 class StartListeningContext;
 class EndListeningContext;
 struct RefUpdateContext;
@@ -51,6 +48,7 @@ class UpdatedRangeNames;
 class ScFormulaCell;
 class ScProgress;
 class ScTokenArray;
+enum class SvNumFormatType : sal_Int16;
 
 struct SC_DLLPUBLIC ScFormulaCellGroup
 {
@@ -62,12 +60,14 @@ public:
 
     mutable size_t mnRefCount;
 
-    ScTokenArray* mpCode;
+    std::unique_ptr<ScTokenArray> mpCode;
     ScFormulaCell *mpTopCell;
     SCROW mnLength; // How many of these do we have ?
-    short mnFormatType;
+    sal_Int32 mnWeight;
+    SvNumFormatType mnFormatType;
     bool mbInvariant:1;
     bool mbSubTotal:1;
+    bool mbPartOfCycle:1; // To flag FG's part of a cycle
 
     sal_uInt8 meCalcState;
 
@@ -77,7 +77,7 @@ public:
     ~ScFormulaCellGroup();
 
     void setCode( const ScTokenArray& rCode );
-    void setCode( ScTokenArray* pCode );
+    void setCode( std::unique_ptr<ScTokenArray> pCode );
     void compileCode(
         ScDocument& rDoc, const ScAddress& rPos, formula::FormulaGrammar::Grammar eGram );
 
@@ -98,16 +98,34 @@ inline void intrusive_ptr_release(const ScFormulaCellGroup *p)
         delete p;
 }
 
-enum ScMatrixMode {
-    MM_NONE      = 0,                   // No matrix formula
-    MM_FORMULA   = 1,                   // Upper left matrix formula cell
-    MM_REFERENCE = 2                    // Remaining cells, via ocMatRef reference token
+enum class ScMatrixMode : sal_uInt8 {
+    NONE      = 0,                   // No matrix formula
+    Formula   = 1,                   // Upper left matrix formula cell
+    Reference = 2                    // Remaining cells, via ocMatRef reference token
 };
 
 class SC_DLLPUBLIC ScFormulaCell : public SvtListener
 {
 private:
-    ScFormulaCellGroupRef mxGroup;       // re-factoring hack - group of formulae we're part of.
+    ScFormulaCellGroupRef mxGroup;       // Group of formulae we're part of
+    bool            bDirty         : 1; // Must be (re)calculated
+    bool            bTableOpDirty  : 1; // Dirty flag for TableOp
+    bool            bChanged       : 1; // Whether something changed regarding display/representation
+    bool            bRunning       : 1; // Already interpreting right now
+    bool            bCompile       : 1; // Must be (re)compiled
+    bool            bSubTotal      : 1; // Cell is part of or contains a SubTotal
+    bool            bIsIterCell    : 1; // Cell is part of a circular reference
+    bool            bInChangeTrack : 1; // Cell is in ChangeTrack
+    bool            bNeedListening : 1; // Listeners need to be re-established after UpdateReference
+    bool            mbNeedsNumberFormat : 1; // set the calculated number format as hard number format
+    bool            mbAllowNumberFormatChange : 1; /* allow setting further calculated
+                                                      number formats as hard number format */
+    bool            mbPostponedDirty : 1;   // if cell needs to be set dirty later
+    bool            mbIsExtRef       : 1; // has references in ScExternalRefManager; never cleared after set
+    bool            mbSeenInPath     : 1; // For detecting cycle involving formula groups and singleton formulacells
+    ScMatrixMode    cMatrixFlag      : 8;
+    sal_uInt16      nSeenInIteration : 16;   // Iteration cycle in which the cell was last encountered
+    SvNumFormatType nFormatType      : 16;
     ScFormulaResult aResult;
     formula::FormulaGrammar::Grammar  eTempGrammar;   // used between string (creation) and (re)compilation
     ScTokenArray*   pCode;              // The (new) token array
@@ -116,29 +134,6 @@ private:
     ScFormulaCell*  pNext;
     ScFormulaCell*  pPreviousTrack;
     ScFormulaCell*  pNextTrack;
-    sal_uInt16      nSeenInIteration;   // Iteration cycle in which the cell was last encountered
-    short           nFormatType;
-    sal_uInt8       cMatrixFlag    : 2; // One of ScMatrixMode
-    bool            bDirty         : 1; // Must be (re)calculated
-    bool            bChanged       : 1; // Whether something changed regarding display/representation
-    bool            bRunning       : 1; // Already interpreting right now
-    bool            bCompile       : 1; // Must be (re)compiled
-    bool            bSubTotal      : 1; // Cell is part of or contains a SubTotal
-    bool            bIsIterCell    : 1; // Cell is part of a circular reference
-    bool            bInChangeTrack : 1; // Cell is in ChangeTrack
-    bool            bTableOpDirty  : 1; // Dirty flag for TableOp
-    bool            bNeedListening : 1; // Listeners need to be re-established after UpdateReference
-    bool            mbNeedsNumberFormat : 1; // set the calculated number format as hard number format
-    bool            mbPostponedDirty : 1;   // if cell needs to be set dirty later
-    bool            mbIsExtRef       : 1; // has references in ScExternalRefManager; never cleared after set
-
-                    enum ScInterpretTailParameter
-                    {
-                        SCITP_NORMAL,
-                        SCITP_FROM_ITERATION,
-                        SCITP_CLOSE_ITERATION_CIRCLE
-                    };
-    void            InterpretTail( ScInterpretTailParameter );
 
     /**
      * Update reference in response to cell copy-n-paste.
@@ -147,15 +142,36 @@ private:
         const sc::RefUpdateContext& rCxt, ScDocument* pUndoDoc, const ScAddress* pUndoCellPos );
 
     ScFormulaCell( const ScFormulaCell& ) = delete;
+
+    bool CheckComputeDependencies(sc::FormulaLogger::GroupScope& rScope, bool fromFirstRow,
+                                  SCROW nStartOffset, SCROW nEndOffset);
+    bool InterpretFormulaGroupThreading(sc::FormulaLogger::GroupScope& aScope,
+                                        bool& bDependencyComputed,
+                                        bool& bDependencyCheckFailed,
+                                        SCROW nStartOffset, SCROW nEndOffset);
+    bool InterpretFormulaGroupOpenCL(sc::FormulaLogger::GroupScope& aScope,
+                                     bool& bDependencyComputed,
+                                     bool& bDependencyCheckFailed);
+    bool InterpretInvariantFormulaGroup();
+
 public:
+
+
+                    enum ScInterpretTailParameter
+                    {
+                        SCITP_NORMAL,
+                        SCITP_FROM_ITERATION,
+                        SCITP_CLOSE_ITERATION_CIRCLE
+                    };
+                    void InterpretTail( ScInterpreterContext&, ScInterpretTailParameter );
+
+    void            HandleStuffAfterParallelCalculation();
 
     enum CompareState { NotEqual = 0, EqualInvariant, EqualRelativeRef };
 
-    DECL_FIXEDMEMPOOL_NEWDEL( ScFormulaCell )
-
     ScAddress       aPos;
 
-                    virtual ~ScFormulaCell();
+                    virtual ~ScFormulaCell() override;
 
     ScFormulaCell* Clone() const;
     ScFormulaCell* Clone( const ScAddress& rPos ) const;
@@ -167,17 +183,17 @@ public:
      * formula cell being constructed.  The caller <i>must not</i> pass a NULL
      * token array pointer.
      */
-    ScFormulaCell( ScDocument* pDoc, const ScAddress& rPos, ScTokenArray* pArray,
+    ScFormulaCell( ScDocument* pDoc, const ScAddress& rPos, std::unique_ptr<ScTokenArray> pArray,
                    const formula::FormulaGrammar::Grammar eGrammar = formula::FormulaGrammar::GRAM_DEFAULT,
-                   sal_uInt8 cMatInd = MM_NONE );
+                   ScMatrixMode cMatInd = ScMatrixMode::NONE );
 
     ScFormulaCell( ScDocument* pDoc, const ScAddress& rPos, const ScTokenArray& rArray,
                    const formula::FormulaGrammar::Grammar eGrammar = formula::FormulaGrammar::GRAM_DEFAULT,
-                   sal_uInt8 cMatInd = MM_NONE );
+                   ScMatrixMode cMatInd = ScMatrixMode::NONE );
 
     ScFormulaCell( ScDocument* pDoc, const ScAddress& rPos, const ScFormulaCellGroupRef& xGroup,
                    const formula::FormulaGrammar::Grammar = formula::FormulaGrammar::GRAM_DEFAULT,
-                   sal_uInt8 = MM_NONE );
+                   ScMatrixMode = ScMatrixMode::NONE );
 
     /** With formula string and grammar to compile with.
        formula::FormulaGrammar::GRAM_DEFAULT effectively isformula::FormulaGrammar::GRAM_NATIVE_UI that
@@ -186,20 +202,22 @@ public:
     ScFormulaCell( ScDocument* pDoc, const ScAddress& rPos,
                     const OUString& rFormula,
                     const formula::FormulaGrammar::Grammar = formula::FormulaGrammar::GRAM_DEFAULT,
-                    sal_uInt8 cMatInd = MM_NONE );
+                    ScMatrixMode cMatInd = ScMatrixMode::NONE );
 
-    ScFormulaCell( const ScFormulaCell& rCell, ScDocument& rDoc, const ScAddress& rPos, int nCloneFlags = SC_CLONECELL_DEFAULT );
+    ScFormulaCell(const ScFormulaCell& rCell, ScDocument& rDoc, const ScAddress& rPos, ScCloneFlags nCloneFlags = ScCloneFlags::Default);
 
     size_t GetHash() const;
 
     ScFormulaVectorState GetVectorState() const;
 
     void            GetFormula( OUString& rFormula,
-                                const formula::FormulaGrammar::Grammar = formula::FormulaGrammar::GRAM_DEFAULT ) const;
+                                const formula::FormulaGrammar::Grammar = formula::FormulaGrammar::GRAM_DEFAULT,
+                                const ScInterpreterContext* pContext = nullptr ) const;
     void            GetFormula( OUStringBuffer& rBuffer,
-                                const formula::FormulaGrammar::Grammar = formula::FormulaGrammar::GRAM_DEFAULT ) const;
+                                const formula::FormulaGrammar::Grammar = formula::FormulaGrammar::GRAM_DEFAULT,
+                                const ScInterpreterContext* pContext = nullptr ) const;
 
-    OUString GetFormula( sc::CompileFormulaContext& rCxt ) const;
+    OUString GetFormula( sc::CompileFormulaContext& rCxt, const ScInterpreterContext* pContext = nullptr ) const;
 
     void            SetDirty( bool bDirtyFlag=true );
     void            SetDirtyVar();
@@ -207,7 +225,12 @@ public:
     void            SetDirtyAfterLoad();
     void ResetTableOpDirtyVar();
     void            SetTableOpDirty();
-    bool            IsDirtyOrInTableOpDirty() const;
+
+    bool IsDirtyOrInTableOpDirty() const
+    {
+        return bDirty || (bTableOpDirty && pDocument->IsInInterpreterTableOp());
+    }
+
     bool GetDirty() const { return bDirty; }
     void ResetDirty();
     bool NeedsListening() const { return bNeedListening; }
@@ -215,10 +238,10 @@ public:
     void SetNeedsDirty( bool bVar );
     void SetNeedNumberFormat( bool bVal );
     bool NeedsNumberFormat() const { return mbNeedsNumberFormat;}
-    short GetFormatType() const { return nFormatType; }
+    SvNumFormatType GetFormatType() const { return nFormatType; }
     void            Compile(const OUString& rFormula,
-                            bool bNoListening = false,
-                            const formula::FormulaGrammar::Grammar = formula::FormulaGrammar::GRAM_DEFAULT );
+                            bool bNoListening,
+                            const formula::FormulaGrammar::Grammar );
     void Compile(
         sc::CompileFormulaContext& rCxt, const OUString& rFormula, bool bNoListening = false );
 
@@ -227,7 +250,7 @@ public:
     void CompileXML( sc::CompileFormulaContext& rCxt, ScProgress& rProgress );        // compile temporary string tokens
     void CalcAfterLoad( sc::CompileFormulaContext& rCxt, bool bStartListening );
     bool            MarkUsedExternalReferences();
-    void            Interpret();
+    bool Interpret(SCROW nStartOffset = -1, SCROW nEndOffset = -1);
     bool IsIterCell() const { return bIsIterCell; }
     sal_uInt16 GetSeenInIteration() const { return nSeenInIteration; }
 
@@ -241,7 +264,14 @@ public:
        It is similar to HasOneReference(), but more general.
      */
     bool HasRefListExpressibleAsOneReference(ScRange& rRange) const;
-    bool            HasRelNameReference() const;
+
+    enum class RelNameRef
+    {
+        NONE,   ///< no relative reference from named expression
+        SINGLE, ///< only single cell relative reference
+        DOUBLE  ///< at least one range relative reference from named expression
+    };
+    RelNameRef      HasRelNameReference() const;
 
     bool UpdateReference(
         const sc::RefUpdateContext& rCxt, ScDocument* pUndoDoc = nullptr, const ScAddress* pUndoCellPos = nullptr );
@@ -271,12 +301,12 @@ public:
 
     void            UpdateGrow( const ScRange& rArea, SCCOL nGrowX, SCROW nGrowY );
 
-    void            UpdateInsertTab( sc::RefUpdateInsertTabContext& rCxt );
+    void            UpdateInsertTab( const sc::RefUpdateInsertTabContext& rCxt );
     void            UpdateInsertTabAbs(SCTAB nTable);
-    void            UpdateDeleteTab( sc::RefUpdateDeleteTabContext& rCxt );
-    void            UpdateMoveTab( sc::RefUpdateMoveTabContext& rCxt, SCTAB nTabNo );
+    void            UpdateDeleteTab( const sc::RefUpdateDeleteTabContext& rCxt );
+    void            UpdateMoveTab( const sc::RefUpdateMoveTabContext& rCxt, SCTAB nTabNo );
     bool            TestTabRefAbs(SCTAB nTable);
-    void            UpdateCompile( bool bForceIfNameInUse = false );
+    void            UpdateCompile( bool bForceIfNameInUse );
     void            FindRangeNamesInUse(sc::UpdatedRangeNames& rIndexes) const;
     bool            IsSubTotal() const { return bSubTotal;}
     bool            IsChanged() const { return bChanged;}
@@ -287,23 +317,32 @@ public:
     bool            IsValue();      // also true if formula::svEmptyCell
     bool            IsValueNoError();
     bool            IsValueNoError() const;
-    bool            IsHybridValueCell(); // for cells after import to deal with inherited number formats
     double          GetValue();
     svl::SharedString GetString();
+
+    /**
+     * Get a numeric value without potentially triggering re-calculation.
+     */
+    double GetRawValue() const;
+
+    /**
+     * Get a string value without potentially triggering re-calculation.
+     */
+    svl::SharedString GetRawString() const;
     const ScMatrix* GetMatrix();
     bool            GetMatrixOrigin( ScAddress& rPos ) const;
     void            GetResultDimensions( SCSIZE& rCols, SCSIZE& rRows );
-    sal_uInt16 GetMatrixEdge( ScAddress& rOrgPos ) const;
-    sal_uInt16      GetErrCode();   // interpret first if necessary
-    sal_uInt16      GetRawError();  // don't interpret, just return code or result error
-    bool GetErrorOrValue( sal_uInt16& rErr, double& rVal );
+    sc::MatrixEdge  GetMatrixEdge( ScAddress& rOrgPos ) const;
+    FormulaError    GetErrCode();   // interpret first if necessary
+    FormulaError    GetRawError();  // don't interpret, just return code or result error
+    bool            GetErrorOrValue( FormulaError& rErr, double& rVal );
     sc::FormulaResultValue GetResult();
     sc::FormulaResultValue GetResult() const;
-    sal_uInt8       GetMatrixFlag() const { return cMatrixFlag;}
-    ScTokenArray* GetCode() { return pCode;}
+    ScMatrixMode    GetMatrixFlag() const { return cMatrixFlag;}
+    ScTokenArray*   GetCode() { return pCode;}
     const ScTokenArray* GetCode() const { return pCode;}
 
-    void SetCode( ScTokenArray* pNew );
+    void SetCode( std::unique_ptr<ScTokenArray> pNew );
 
     bool            IsRunning() const { return bRunning;}
     void            SetRunning( bool bVal );
@@ -339,6 +378,13 @@ public:
         SetHybridString() or SetHybridFormula(), use SetHybridDouble() first
         for performance reasons.*/
     void SetHybridString( const svl::SharedString& r );
+    /** For import only: set an empty cell result to be displayed as empty string.
+        If for whatever reason you have to use both, SetHybridDouble() and
+        SetHybridEmptyDisplayedAsString() or SetHybridFormula(), use
+        SetHybridDouble() first for performance reasons and use
+        SetHybridEmptyDisplayedAsString() last because SetHybridDouble() and
+        SetHybridString() will override it.*/
+    void SetHybridEmptyDisplayedAsString();
     /** For import only: set a temporary formula string to be compiled later.
         If for whatever reason you have to use both, SetHybridDouble() and
         SetHybridString() or SetHybridFormula(), use SetHybridDouble() first
@@ -346,9 +392,9 @@ public:
     void SetHybridFormula(
         const OUString& r, const formula::FormulaGrammar::Grammar eGrammar );
 
-    OUString GetHybridFormula() const;
+    const OUString& GetHybridFormula() const;
 
-    void SetResultMatrix( SCCOL nCols, SCROW nRows, const ScConstMatrixRef& pMat, formula::FormulaToken* pUL );
+    void SetResultMatrix( SCCOL nCols, SCROW nRows, const ScConstMatrixRef& pMat, const formula::FormulaToken* pUL );
 
     /** For import only: set a double result.
         Use this instead of SetHybridDouble() if there is no (temporary)
@@ -361,34 +407,55 @@ public:
 
     svl::SharedString GetResultString() const;
 
+    bool HasHybridStringResult() const;
+
     /* Sets the shared code array to error state in addition to the cell result */
-    void SetErrCode( sal_uInt16 n );
+    void SetErrCode( FormulaError n );
 
     /* Sets just the result to error */
-    void SetResultError( sal_uInt16 n );
+    void SetResultError( FormulaError n );
 
     bool IsHyperLinkCell() const;
-    EditTextObject* CreateURLObject();
+    std::unique_ptr<EditTextObject> CreateURLObject();
     void GetURLResult( OUString& rURL, OUString& rCellText );
 
     /** Determines whether or not the result string contains more than one paragraph */
     bool            IsMultilineResult();
 
-    bool NeedsInterpret() const;
+    bool NeedsInterpret() const
+    {
+        if (bIsIterCell)
+            // Shortcut to force return of current value and not enter Interpret()
+            // as we're looping over all iteration cells.
+            return false;
 
-    void            MaybeInterpret();
+        if (!IsDirtyOrInTableOpDirty())
+            return false;
+
+        return (pDocument->GetAutoCalc() || (cMatrixFlag != ScMatrixMode::NONE));
+    }
+
+    bool MaybeInterpret()
+    {
+        if (NeedsInterpret())
+        {
+            assert(!pDocument->IsThreadedGroupCalcInProgress());
+            Interpret();
+            return true;
+        }
+        return false;
+    }
 
     /**
      * Turn a non-grouped cell into the top of a grouped cell.
      */
     ScFormulaCellGroupRef CreateCellGroup( SCROW nLen, bool bInvariant );
-    ScFormulaCellGroupRef GetCellGroup() const { return mxGroup;}
+    const ScFormulaCellGroupRef& GetCellGroup() const { return mxGroup;}
     void SetCellGroup( const ScFormulaCellGroupRef &xRef );
 
-    CompareState CompareByTokenArray( ScFormulaCell& rOther ) const;
+    CompareState CompareByTokenArray( const ScFormulaCell& rOther ) const;
 
-    bool InterpretFormulaGroup();
-    bool InterpretInvariantFormulaGroup();
+    bool InterpretFormulaGroup(SCROW nStartOffset = -1, SCROW nEndOffset = -1);
 
     // nOnlyNames may be one or more of SC_LISTENING_NAMES_*
     void StartListeningTo( ScDocument* pDoc );
@@ -413,6 +480,12 @@ public:
     bool IsPostponedDirty() const { return mbPostponedDirty;}
 
     void SetIsExtRef() { mbIsExtRef = true; }
+    bool GetSeenInPath() { return mbSeenInPath; }
+    void SetSeenInPath(bool bSet) { mbSeenInPath = bSet; }
+
+#if DUMP_COLUMN_STORAGE
+    void Dump() const;
+#endif
 };
 
 #endif

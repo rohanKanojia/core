@@ -17,21 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "basidesh.hrc"
-#include "helpid.hrc"
+#include <strings.hrc>
+#include <helpids.h>
 
-#include "accessibledialogwindow.hxx"
-#include "baside3.hxx"
-#include "basidesh.hxx"
-#include "bastype2.hxx"
-#include "dlged.hxx"
-#include "dlgeddef.hxx"
-#include "dlgedmod.hxx"
-#include "dlgedview.hxx"
-#include "iderdll.hxx"
-#include "idetemp.hxx"
-#include "localizationmgr.hxx"
-#include "managelang.hxx"
+#include <accessibledialogwindow.hxx>
+#include <baside3.hxx>
+#include <basidesh.hxx>
+#include <bastype2.hxx>
+#include <dlged.hxx>
+#include <dlgeddef.hxx>
+#include <dlgedmod.hxx>
+#include <dlgedview.hxx>
+#include <iderdll.hxx>
+#include <localizationmgr.hxx>
+#include <managelang.hxx>
 
 #include <basic/basmgr.hxx>
 #include <com/sun/star/resource/StringResourceWithLocation.hpp>
@@ -47,10 +46,10 @@
 #include <svl/visitem.hxx>
 #include <svl/whiter.hxx>
 #include <svx/svdundo.hxx>
+#include <svx/svxids.hrc>
 #include <tools/diagnose_ex.h>
 #include <tools/urlobj.hxx>
-#include <vcl/layout.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/settings.hxx>
 #include <xmlscript/xmldlg_imexp.hxx>
 
@@ -74,16 +73,17 @@ DialogWindow::DialogWindow(DialogWindowLayout* pParent, ScriptDocument const& rD
                            const OUString& aLibName, const OUString& aName,
                            css::uno::Reference<css::container::XNameContainer> const& xDialogModel)
     : BaseWindow(pParent, rDocument, aLibName, aName)
-    ,rLayout(*pParent)
-    ,pEditor(new DlgEditor(*this, rLayout, rDocument.isDocument()
+    ,m_rLayout(*pParent)
+    ,m_pEditor(new DlgEditor(*this, m_rLayout, rDocument.isDocument()
                                             ? rDocument.getDocument()
                                             : Reference<frame::XModel>(), xDialogModel))
-    ,pUndoMgr(new SfxUndoManager)
+    ,m_pUndoMgr(new SfxUndoManager)
+    ,m_nControlSlotId(SID_INSERT_SELECT)
 {
     InitSettings();
 
-    pEditor->GetModel().SetNotifyUndoActionHdl(
-        LINK(this, DialogWindow, NotifyUndoActionHdl)
+    m_pEditor->GetModel().SetNotifyUndoActionHdl(
+        &DialogWindow::NotifyUndoActionHdl
     );
 
     SetHelpId( HID_BASICIDE_DIALOGWINDOW );
@@ -99,7 +99,7 @@ DialogWindow::DialogWindow(DialogWindowLayout* pParent, ScriptDocument const& rD
 
 void DialogWindow::dispose()
 {
-    pEditor.reset();
+    m_pEditor.reset();
     BaseWindow::dispose();
 }
 
@@ -111,22 +111,22 @@ void DialogWindow::LoseFocus()
     Window::LoseFocus();
 }
 
-void DialogWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void DialogWindow::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect)
 {
-    pEditor->Paint(rRenderContext, rRect);
+    m_pEditor->Paint(rRenderContext, rRect);
 }
 
 void DialogWindow::Resize()
 {
     if (GetHScrollBar() && GetVScrollBar())
     {
-        pEditor->SetScrollBars( GetHScrollBar(), GetVScrollBar() );
+        m_pEditor->SetScrollBars( GetHScrollBar(), GetVScrollBar() );
     }
 }
 
 void DialogWindow::MouseButtonDown( const MouseEvent& rMEvt )
 {
-    pEditor->MouseButtonDown( rMEvt );
+    m_pEditor->MouseButtonDown( rMEvt );
 
     if (SfxBindings* pBindings = GetBindingsPtr())
         pBindings->Invalidate( SID_SHOW_PROPERTYBROWSER );
@@ -134,12 +134,12 @@ void DialogWindow::MouseButtonDown( const MouseEvent& rMEvt )
 
 void DialogWindow::MouseButtonUp( const MouseEvent& rMEvt )
 {
-    pEditor->MouseButtonUp( rMEvt );
-    if( (pEditor->GetMode() == DlgEditor::INSERT) && !pEditor->IsCreateOK() )
+    m_pEditor->MouseButtonUp( rMEvt );
+    if( (m_pEditor->GetMode() == DlgEditor::INSERT) && !m_pEditor->IsCreateOK() )
     {
-        pEditor->SetMode( DlgEditor::SELECT );
-        if (SfxBindings* pBindings = GetBindingsPtr())
-            pBindings->Invalidate( SID_CHOOSE_CONTROLS );
+        m_nControlSlotId = SID_INSERT_SELECT;
+        m_pEditor->SetMode( DlgEditor::SELECT );
+        Shell::InvalidateControlSlots();
     }
     if (SfxBindings* pBindings = GetBindingsPtr())
     {
@@ -153,7 +153,7 @@ void DialogWindow::MouseButtonUp( const MouseEvent& rMEvt )
 
 void DialogWindow::MouseMove( const MouseEvent& rMEvt )
 {
-    pEditor->MouseMove( rMEvt );
+    m_pEditor->MouseMove( rMEvt );
 }
 
 void DialogWindow::KeyInput( const KeyEvent& rKEvt )
@@ -170,7 +170,7 @@ void DialogWindow::KeyInput( const KeyEvent& rKEvt )
         if( pBindings && rKEvt.GetKeyCode() == KEY_TAB )
             pBindings->Invalidate( SID_SHOW_PROPERTYBROWSER );
 
-        if( !pEditor->KeyInput( rKEvt ) )
+        if( !m_pEditor->KeyInput( rKEvt ) )
         {
             if( !SfxViewShell::Current()->KeyInput( rKEvt ) )
                 Window::KeyInput( rKEvt );
@@ -200,7 +200,7 @@ void DialogWindow::Command( const CommandEvent& rCEvt )
             SdrView& rView = GetView();
             if( !rCEvt.IsMouseEvent() && rView.AreObjectsMarked() )
             {
-                Rectangle aMarkedRect( rView.GetMarkedRect() );
+                tools::Rectangle aMarkedRect( rView.GetMarkedRect() );
                 Point MarkedCenter( aMarkedRect.Center() );
                 Point PosPixel( LogicToPixel( MarkedCenter ) );
                 SfxDispatcher::ExecutePopup( this, &PosPixel );
@@ -217,25 +217,23 @@ void DialogWindow::Command( const CommandEvent& rCEvt )
 }
 
 
-IMPL_STATIC_LINK_TYPED(
-    DialogWindow, NotifyUndoActionHdl, SdrUndoAction *, pUndoAction, void )
+void DialogWindow::NotifyUndoActionHdl( std::unique_ptr<SdrUndoAction> )
 {
     // #i120515# pUndoAction needs to be deleted, this hand over is an ownership
     // change. As long as it does not get added to the undo manager, it needs at
     // least to be deleted.
-    delete pUndoAction;
 }
 
 void DialogWindow::DoInit()
 {
     GetHScrollBar()->Show();
     GetVScrollBar()->Show();
-    pEditor->SetScrollBars( GetHScrollBar(), GetVScrollBar() );
+    m_pEditor->SetScrollBars( GetHScrollBar(), GetVScrollBar() );
 }
 
-void DialogWindow::DoScroll( ScrollBar* pCurScrollBar )
+void DialogWindow::DoScroll( ScrollBar*  )
 {
-    pEditor->DoScroll( pCurScrollBar );
+    m_pEditor->DoScroll();
 }
 
 void DialogWindow::GetState( SfxItemSet& rSet )
@@ -253,7 +251,7 @@ void DialogWindow::GetState( SfxItemSet& rSet )
         }
     }
 
-    for ( sal_uInt16 nWh = aIter.FirstWhich(); 0 != nWh; nWh = aIter.NextWhich() )
+    for ( sal_uInt16 nWh = aIter.FirstWhich(); nWh != 0; nWh = aIter.NextWhich() )
     {
         switch ( nWh )
         {
@@ -269,7 +267,7 @@ void DialogWindow::GetState( SfxItemSet& rSet )
             case SID_COPY:
             {
                 // any object selected?
-                if ( !pEditor->GetView().AreObjectsMarked() )
+                if ( !m_pEditor->GetView().AreObjectsMarked() )
                     rSet.DisableItem( nWh );
             }
             break;
@@ -278,7 +276,7 @@ void DialogWindow::GetState( SfxItemSet& rSet )
             case SID_BACKSPACE:
             {
                 // any object selected?
-                if ( !pEditor->GetView().AreObjectsMarked() )
+                if ( !m_pEditor->GetView().AreObjectsMarked() )
                     rSet.DisableItem( nWh );
 
                 if ( IsReadOnly() )
@@ -287,7 +285,7 @@ void DialogWindow::GetState( SfxItemSet& rSet )
             break;
             case SID_REDO:
             {
-                if ( !pUndoMgr->GetUndoActionCount() )
+                if ( !m_pUndoMgr->GetUndoActionCount() )
                     rSet.DisableItem( nWh );
             }
             break;
@@ -296,7 +294,7 @@ void DialogWindow::GetState( SfxItemSet& rSet )
             {
                 // is the IDE still active?
                 bool const bBool = GetShell()->GetFrame() &&
-                    pEditor->GetMode() == DlgEditor::TEST;
+                    m_pEditor->GetMode() == DlgEditor::TEST;
                 rSet.Put(SfxBoolItem(SID_DIALOG_TESTMODE, bBool));
             }
             break;
@@ -304,50 +302,7 @@ void DialogWindow::GetState( SfxItemSet& rSet )
             case SID_CHOOSE_CONTROLS:
             {
                 if ( IsReadOnly() )
-                {
                     rSet.DisableItem( nWh );
-                }
-                else
-                {
-                    SfxAllEnumItem aItem( SID_CHOOSE_CONTROLS );
-                    if ( GetEditor().GetMode() == DlgEditor::SELECT )
-                        aItem.SetValue( SVX_SNAP_SELECT );
-                    else
-                    {
-                        sal_uInt16 nObj;
-                        switch( pEditor->GetInsertObj() )
-                        {
-                            case OBJ_DLG_PUSHBUTTON:        nObj = SVX_SNAP_PUSHBUTTON; break;
-                            case OBJ_DLG_RADIOBUTTON:       nObj = SVX_SNAP_RADIOBUTTON; break;
-                            case OBJ_DLG_CHECKBOX:          nObj = SVX_SNAP_CHECKBOX; break;
-                            case OBJ_DLG_LISTBOX:           nObj = SVX_SNAP_LISTBOX; break;
-                            case OBJ_DLG_COMBOBOX:          nObj = SVX_SNAP_COMBOBOX; break;
-                            case OBJ_DLG_GROUPBOX:          nObj = SVX_SNAP_GROUPBOX; break;
-                            case OBJ_DLG_EDIT:              nObj = SVX_SNAP_EDIT; break;
-                            case OBJ_DLG_FIXEDTEXT:         nObj = SVX_SNAP_FIXEDTEXT; break;
-                            case OBJ_DLG_IMAGECONTROL:      nObj = SVX_SNAP_IMAGECONTROL; break;
-                            case OBJ_DLG_PROGRESSBAR:       nObj = SVX_SNAP_PROGRESSBAR; break;
-                            case OBJ_DLG_HSCROLLBAR:        nObj = SVX_SNAP_HSCROLLBAR; break;
-                            case OBJ_DLG_VSCROLLBAR:        nObj = SVX_SNAP_VSCROLLBAR; break;
-                            case OBJ_DLG_HFIXEDLINE:        nObj = SVX_SNAP_HFIXEDLINE; break;
-                            case OBJ_DLG_VFIXEDLINE:        nObj = SVX_SNAP_VFIXEDLINE; break;
-                            case OBJ_DLG_DATEFIELD:         nObj = SVX_SNAP_DATEFIELD; break;
-                            case OBJ_DLG_TIMEFIELD:         nObj = SVX_SNAP_TIMEFIELD; break;
-                            case OBJ_DLG_NUMERICFIELD:      nObj = SVX_SNAP_NUMERICFIELD; break;
-                            case OBJ_DLG_CURRENCYFIELD:     nObj = SVX_SNAP_CURRENCYFIELD; break;
-                            case OBJ_DLG_FORMATTEDFIELD:    nObj = SVX_SNAP_FORMATTEDFIELD; break;
-                            case OBJ_DLG_PATTERNFIELD:      nObj = SVX_SNAP_PATTERNFIELD; break;
-                            case OBJ_DLG_FILECONTROL:       nObj = SVX_SNAP_FILECONTROL; break;
-                            case OBJ_DLG_SPINBUTTON:        nObj = SVX_SNAP_SPINBUTTON; break;
-                            case OBJ_DLG_TREECONTROL:       nObj = SVX_SNAP_TREECONTROL; break;
-                            default:                        nObj = 0;
-                        }
-                        SAL_INFO_IF( !nObj, "basctl.basicide", "SID_CHOOSE_CONTROLS: Unbekannt!" );
-                        aItem.SetValue( nObj );
-                    }
-
-                    rSet.Put( aItem );
-                }
             }
             break;
 
@@ -355,7 +310,7 @@ void DialogWindow::GetState( SfxItemSet& rSet )
             {
                 Shell* pShell = GetShell();
                 SfxViewFrame* pViewFrame = pShell ? pShell->GetViewFrame() : nullptr;
-                if ( pViewFrame && !pViewFrame->HasChildWindow( SID_SHOW_PROPERTYBROWSER ) && !pEditor->GetView().AreObjectsMarked() )
+                if ( pViewFrame && !pViewFrame->HasChildWindow( SID_SHOW_PROPERTYBROWSER ) && !m_pEditor->GetView().AreObjectsMarked() )
                     rSet.DisableItem( nWh );
 
                 if ( IsReadOnly() )
@@ -372,6 +327,40 @@ void DialogWindow::GetState( SfxItemSet& rSet )
             {
                 if ( !bIsCalc || IsReadOnly() )
                     rSet.DisableItem( nWh );
+                else
+                    rSet.Put( SfxBoolItem( nWh, m_nControlSlotId == nWh ) );
+            }
+            break;
+
+            case SID_INSERT_SELECT:
+            case SID_INSERT_PUSHBUTTON:
+            case SID_INSERT_RADIOBUTTON:
+            case SID_INSERT_CHECKBOX:
+            case SID_INSERT_LISTBOX:
+            case SID_INSERT_COMBOBOX:
+            case SID_INSERT_GROUPBOX:
+            case SID_INSERT_EDIT:
+            case SID_INSERT_FIXEDTEXT:
+            case SID_INSERT_IMAGECONTROL:
+            case SID_INSERT_PROGRESSBAR:
+            case SID_INSERT_HSCROLLBAR:
+            case SID_INSERT_VSCROLLBAR:
+            case SID_INSERT_HFIXEDLINE:
+            case SID_INSERT_VFIXEDLINE:
+            case SID_INSERT_DATEFIELD:
+            case SID_INSERT_TIMEFIELD:
+            case SID_INSERT_NUMERICFIELD:
+            case SID_INSERT_CURRENCYFIELD:
+            case SID_INSERT_FORMATTEDFIELD:
+            case SID_INSERT_PATTERNFIELD:
+            case SID_INSERT_FILECONTROL:
+            case SID_INSERT_SPINBUTTON:
+            case SID_INSERT_TREECONTROL:
+            {
+                if ( IsReadOnly() )
+                    rSet.DisableItem( nWh );
+                else
+                    rSet.Put( SfxBoolItem( nWh, m_nControlSlotId == nWh ) );
             }
             break;
             case SID_SHOWLINES:
@@ -394,7 +383,10 @@ void DialogWindow::GetState( SfxItemSet& rSet )
 
 void DialogWindow::ExecuteCommand( SfxRequest& rReq )
 {
-    switch ( rReq.GetSlot() )
+    const sal_uInt16 nSlotId(rReq.GetSlot());
+    sal_uInt16 nInsertObj(0);
+
+    switch ( nSlotId )
     {
         case SID_CUT:
             if ( !IsReadOnly() )
@@ -423,198 +415,102 @@ void DialogWindow::ExecuteCommand( SfxRequest& rReq )
                     pBindings->Invalidate( SID_DOC_MODIFIED );
             }
             break;
+
         case SID_INSERT_FORM_RADIO:
-            GetEditor().SetMode( DlgEditor::INSERT );
-            GetEditor().SetInsertObj( OBJ_DLG_FORMRADIO );
+            nInsertObj = OBJ_DLG_FORMRADIO;
             break;
         case SID_INSERT_FORM_CHECK:
-            GetEditor().SetMode( DlgEditor::INSERT );
-            GetEditor().SetInsertObj( OBJ_DLG_FORMCHECK );
+            nInsertObj = OBJ_DLG_FORMCHECK;
             break;
         case SID_INSERT_FORM_LIST:
-            GetEditor().SetMode( DlgEditor::INSERT );
-            GetEditor().SetInsertObj( OBJ_DLG_FORMLIST );
+            nInsertObj = OBJ_DLG_FORMLIST;
             break;
         case SID_INSERT_FORM_COMBO:
-            GetEditor().SetMode( DlgEditor::INSERT );
-            GetEditor().SetInsertObj( OBJ_DLG_FORMCOMBO );
+            nInsertObj = OBJ_DLG_FORMCOMBO;
             break;
         case SID_INSERT_FORM_SPIN:
-            GetEditor().SetMode( DlgEditor::INSERT );
-            GetEditor().SetInsertObj( OBJ_DLG_FORMSPIN );
+            nInsertObj = OBJ_DLG_FORMSPIN;
             break;
         case SID_INSERT_FORM_VSCROLL:
-            GetEditor().SetMode( DlgEditor::INSERT );
-            GetEditor().SetInsertObj( OBJ_DLG_FORMVSCROLL );
+            nInsertObj = OBJ_DLG_FORMVSCROLL;
             break;
         case SID_INSERT_FORM_HSCROLL:
-            GetEditor().SetMode( DlgEditor::INSERT );
-            GetEditor().SetInsertObj( OBJ_DLG_FORMHSCROLL );
+            nInsertObj = OBJ_DLG_FORMHSCROLL;
             break;
-        case SID_CHOOSE_CONTROLS:
-        {
-            const SfxItemSet* pArgs = rReq.GetArgs();
-            assert(pArgs && "Nix Args");
-
-            const SfxAllEnumItem& rItem = static_cast<const SfxAllEnumItem&>(pArgs->Get( SID_CHOOSE_CONTROLS ));
-            switch( rItem.GetValue() )
-            {
-                case SVX_SNAP_PUSHBUTTON:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_PUSHBUTTON );
-                }
-                break;
-                case SVX_SNAP_RADIOBUTTON:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_RADIOBUTTON );
-                }
-                break;
-                case SVX_SNAP_CHECKBOX:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_CHECKBOX);
-                }
-                break;
-                case SVX_SNAP_LISTBOX:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_LISTBOX );
-                }
-                break;
-                case SVX_SNAP_COMBOBOX:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_COMBOBOX );
-                }
-                break;
-                case SVX_SNAP_GROUPBOX:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_GROUPBOX );
-                }
-                break;
-                case SVX_SNAP_EDIT:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_EDIT );
-                }
-                break;
-                case SVX_SNAP_FIXEDTEXT:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_FIXEDTEXT );
-                }
-                break;
-                case SVX_SNAP_IMAGECONTROL:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_IMAGECONTROL );
-                }
-                break;
-                case SVX_SNAP_PROGRESSBAR:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_PROGRESSBAR );
-                }
-                break;
-                case SVX_SNAP_HSCROLLBAR:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_HSCROLLBAR );
-                }
-                break;
-                case SVX_SNAP_VSCROLLBAR:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_VSCROLLBAR );
-                }
-                break;
-                case SVX_SNAP_HFIXEDLINE:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_HFIXEDLINE );
-                }
-                break;
-                case SVX_SNAP_VFIXEDLINE:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_VFIXEDLINE );
-                }
-                break;
-                case SVX_SNAP_DATEFIELD:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_DATEFIELD );
-                }
-                break;
-                case SVX_SNAP_TIMEFIELD:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_TIMEFIELD );
-                }
-                break;
-                case SVX_SNAP_NUMERICFIELD:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_NUMERICFIELD );
-                }
-                break;
-                case SVX_SNAP_CURRENCYFIELD:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_CURRENCYFIELD );
-                }
-                break;
-                case SVX_SNAP_FORMATTEDFIELD:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_FORMATTEDFIELD );
-                }
-                break;
-                case SVX_SNAP_PATTERNFIELD:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_PATTERNFIELD );
-                }
-                break;
-                case SVX_SNAP_FILECONTROL:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_FILECONTROL );
-                }
-                break;
-                case SVX_SNAP_SPINBUTTON:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_SPINBUTTON );
-                }
-                break;
-                case SVX_SNAP_TREECONTROL:
-                {
-                    GetEditor().SetMode( DlgEditor::INSERT );
-                    GetEditor().SetInsertObj( OBJ_DLG_TREECONTROL );
-                }
-                break;
-
-                case SVX_SNAP_SELECT:
-                {
-                    GetEditor().SetMode( DlgEditor::SELECT );
-                }
-                break;
-            }
-
-            if ( rReq.GetModifier() & KEY_MOD1 )
-            {
-                if ( GetEditor().GetMode() == DlgEditor::INSERT )
-                    GetEditor().CreateDefaultObject();
-            }
-
-            if (SfxBindings* pBindings = GetBindingsPtr())
-                pBindings->Invalidate( SID_DOC_MODIFIED );
-        }
-        break;
+        case SID_INSERT_PUSHBUTTON:
+            nInsertObj = OBJ_DLG_PUSHBUTTON;
+            break;
+        case SID_INSERT_RADIOBUTTON:
+            nInsertObj = OBJ_DLG_RADIOBUTTON;
+            break;
+        case SID_INSERT_CHECKBOX:
+            nInsertObj = OBJ_DLG_CHECKBOX;
+            break;
+        case SID_INSERT_LISTBOX:
+            nInsertObj = OBJ_DLG_LISTBOX;
+            break;
+        case SID_INSERT_COMBOBOX:
+            nInsertObj = OBJ_DLG_COMBOBOX;
+            break;
+        case SID_INSERT_GROUPBOX:
+            nInsertObj = OBJ_DLG_GROUPBOX;
+            break;
+        case SID_INSERT_EDIT:
+            nInsertObj = OBJ_DLG_EDIT;
+            break;
+        case SID_INSERT_FIXEDTEXT:
+            nInsertObj = OBJ_DLG_FIXEDTEXT;
+            break;
+        case SID_INSERT_IMAGECONTROL:
+            nInsertObj = OBJ_DLG_IMAGECONTROL;
+            break;
+        case SID_INSERT_PROGRESSBAR:
+            nInsertObj = OBJ_DLG_PROGRESSBAR;
+            break;
+        case SID_INSERT_HSCROLLBAR:
+            nInsertObj = OBJ_DLG_HSCROLLBAR;
+            break;
+        case SID_INSERT_VSCROLLBAR:
+            nInsertObj = OBJ_DLG_VSCROLLBAR;
+            break;
+        case SID_INSERT_HFIXEDLINE:
+            nInsertObj = OBJ_DLG_HFIXEDLINE;
+            break;
+        case SID_INSERT_VFIXEDLINE:
+            nInsertObj = OBJ_DLG_VFIXEDLINE;
+            break;
+        case SID_INSERT_DATEFIELD:
+            nInsertObj = OBJ_DLG_DATEFIELD;
+            break;
+        case SID_INSERT_TIMEFIELD:
+            nInsertObj = OBJ_DLG_TIMEFIELD;
+            break;
+        case SID_INSERT_NUMERICFIELD:
+            nInsertObj = OBJ_DLG_NUMERICFIELD;
+            break;
+        case SID_INSERT_CURRENCYFIELD:
+            nInsertObj = OBJ_DLG_CURRENCYFIELD;
+            break;
+        case SID_INSERT_FORMATTEDFIELD:
+            nInsertObj = OBJ_DLG_FORMATTEDFIELD;
+            break;
+        case SID_INSERT_PATTERNFIELD:
+            nInsertObj = OBJ_DLG_PATTERNFIELD;
+            break;
+        case SID_INSERT_FILECONTROL:
+            nInsertObj = OBJ_DLG_FILECONTROL;
+            break;
+        case SID_INSERT_SPINBUTTON:
+            nInsertObj = OBJ_DLG_SPINBUTTON;
+            break;
+        case SID_INSERT_TREECONTROL:
+            nInsertObj = OBJ_DLG_TREECONTROL;
+            break;
+        case SID_INSERT_SELECT:
+            m_nControlSlotId = nSlotId;
+            GetEditor().SetMode( DlgEditor::SELECT );
+            Shell::InvalidateControlSlots();
+            break;
 
         case SID_DIALOG_TESTMODE:
         {
@@ -635,7 +531,7 @@ void DialogWindow::ExecuteCommand( SfxRequest& rReq )
             break;
 
         case SID_BASICIDE_DELETECURRENT:
-            if (QueryDelDialog(m_aName, this))
+            if (QueryDelDialog(m_aName, GetFrameWeld()))
             {
                 if (RemoveDialog(m_aDocument, m_aLibName, m_aName))
                 {
@@ -646,17 +542,33 @@ void DialogWindow::ExecuteCommand( SfxRequest& rReq )
             break;
     }
 
+    if ( nInsertObj )
+    {
+        m_nControlSlotId = nSlotId;
+        GetEditor().SetMode( DlgEditor::INSERT );
+        GetEditor().SetInsertObj( nInsertObj );
+
+        if ( rReq.GetModifier() & KEY_MOD1 )
+        {
+            GetEditor().CreateDefaultObject();
+            if (SfxBindings* pBindings = GetBindingsPtr())
+                pBindings->Invalidate( SID_DOC_MODIFIED );
+        }
+
+        Shell::InvalidateControlSlots();
+    }
+
     rReq.Done();
 }
 
-Reference< container::XNameContainer > DialogWindow::GetDialog() const
+Reference< container::XNameContainer > const & DialogWindow::GetDialog() const
 {
-    return pEditor->GetDialog();
+    return m_pEditor->GetDialog();
 }
 
 bool DialogWindow::RenameDialog( const OUString& rNewName )
 {
-    if ( !basctl::RenameDialog( this, GetDocument(), GetLibName(), GetName(), rNewName ) )
+    if (!basctl::RenameDialog(GetFrameWeld(), GetDocument(), GetLibName(), GetName(), rNewName))
         return false;
 
     if (SfxBindings* pBindings = GetBindingsPtr())
@@ -667,12 +579,12 @@ bool DialogWindow::RenameDialog( const OUString& rNewName )
 
 void DialogWindow::DisableBrowser()
 {
-    rLayout.DisablePropertyBrowser();
+    m_rLayout.DisablePropertyBrowser();
 }
 
 void DialogWindow::UpdateBrowser()
 {
-    rLayout.UpdatePropertyBrowser();
+    m_rLayout.UpdatePropertyBrowser();
 }
 
 void DialogWindow::SaveDialog()
@@ -686,20 +598,20 @@ void DialogWindow::SaveDialog()
     aValue <<= true;
     xFPControl->setValue(ExtendedFilePickerElementIds::CHECKBOX_AUTOEXTENSION, 0, aValue);
 
-    if ( !aCurPath.isEmpty() )
-        xFP->setDisplayDirectory ( aCurPath );
+    if ( !m_sCurPath.isEmpty() )
+        xFP->setDisplayDirectory ( m_sCurPath );
 
     xFP->setDefaultName( GetName() );
 
-    OUString aDialogStr(IDE_RESSTR(RID_STR_STDDIALOGNAME));
+    OUString aDialogStr(IDEResId(RID_STR_STDDIALOGNAME));
     xFP->appendFilter( aDialogStr, "*.xdl" );
-    xFP->appendFilter( IDE_RESSTR(RID_STR_FILTER_ALLFILES), FilterMask_All );
+    xFP->appendFilter( IDEResId(RID_STR_FILTER_ALLFILES), FilterMask_All );
     xFP->setCurrentFilter( aDialogStr );
 
     if( xFP->execute() == RET_OK )
     {
         Sequence< OUString > aPaths = xFP->getSelectedFiles();
-        aCurPath = aPaths[0];
+        m_sCurPath = aPaths[0];
 
         // export dialog model to xml
         Reference< container::XNameContainer > xDialogModel = GetDialog();
@@ -711,9 +623,9 @@ void DialogWindow::SaveDialog()
         Reference< XOutputStream > xOutput;
         try
         {
-            if( xSFI->exists( aCurPath ) )
-                xSFI->kill( aCurPath );
-            xOutput = xSFI->openFileWrite( aCurPath );
+            if( xSFI->exists( m_sCurPath ) )
+                xSFI->kill( m_sCurPath );
+            xOutput = xSFI->openFileWrite( m_sCurPath );
         }
         catch(const Exception& )
         {}
@@ -757,15 +669,12 @@ void DialogWindow::SaveDialog()
 
             if( bResource )
             {
-                INetURLObject aURLObj( aCurPath );
+                INetURLObject aURLObj( m_sCurPath );
                 aURLObj.removeExtension();
                 OUString aDialogName( aURLObj.getName() );
                 aURLObj.removeSegment();
-                OUString aURL( aURLObj.GetMainURL( INetURLObject::NO_DECODE ) );
-                bool bReadOnly = false;
-                OUString aComment( "# " );
-                aComment += aDialogName;
-                aComment += " strings" ;
+                OUString aURL( aURLObj.GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
+                OUString aComment = "# " + aDialogName + " strings" ;
                 Reference< task::XInteractionHandler > xDummyHandler;
 
                 // Remove old properties files in case of overwriting Dialog files
@@ -807,7 +716,7 @@ void DialogWindow::SaveDialog()
                 }
 
                 Reference< XStringResourceWithLocation > xStringResourceWithLocation =
-                    StringResourceWithLocation::create( xContext, aURL, bReadOnly,
+                    StringResourceWithLocation::create( xContext, aURL, false/*bReadOnly*/,
                         xStringResourceResolver->getDefaultLocale(), aDialogName, aComment, xDummyHandler );
 
                 // Add locales
@@ -827,11 +736,15 @@ void DialogWindow::SaveDialog()
             }
         }
         else
-            ScopedVclPtrInstance<MessageDialog>::Create(this, IDE_RESSTR(RID_STR_COULDNTWRITE))->Execute();
+        {
+            std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                      VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_COULDNTWRITE)));
+            xBox->run();
+        }
     }
 }
 
-std::vector< lang::Locale > implGetLanguagesOnlyContainedInFirstSeq
+static std::vector< lang::Locale > implGetLanguagesOnlyContainedInFirstSeq
     ( const Sequence< lang::Locale >& aFirstSeq, const Sequence< lang::Locale >& aSecondSeq )
 {
     std::vector< lang::Locale > avRet;
@@ -866,57 +779,44 @@ std::vector< lang::Locale > implGetLanguagesOnlyContainedInFirstSeq
 }
 
 
-class NameClashQueryBox : public MessBox
+class NameClashQueryBox
 {
+private:
+    std::unique_ptr<weld::MessageDialog> m_xQueryBox;
 public:
-    NameClashQueryBox( vcl::Window* pParent,
-        const OUString& rTitle, const OUString& rMessage );
+    NameClashQueryBox(weld::Window* pParent, const OUString& rTitle, const OUString& rMessage)
+        : m_xQueryBox(Application::CreateMessageDialog(pParent, VclMessageType::Question, VclButtonsType::NONE, rMessage))
+    {
+        if (!rTitle.isEmpty())
+            m_xQueryBox->set_title(rTitle);
+        m_xQueryBox->add_button(IDEResId(RID_STR_DLGIMP_CLASH_RENAME), RET_YES);
+        m_xQueryBox->add_button(IDEResId(RID_STR_DLGIMP_CLASH_REPLACE), RET_NO);
+        m_xQueryBox->add_button(Button::GetStandardText(StandardButtonType::Cancel), RET_CANCEL);
+        m_xQueryBox->set_default_response(RET_YES);
+    }
+    short run() { return m_xQueryBox->run(); }
 };
 
-NameClashQueryBox::NameClashQueryBox( vcl::Window* pParent,
-    const OUString& rTitle, const OUString& rMessage )
-        : MessBox( pParent, 0, rTitle, rMessage )
+class LanguageMismatchQueryBox
 {
-    if ( !rTitle.isEmpty() )
-        SetText( rTitle );
-
-    maMessText = rMessage;
-
-    AddButton( IDE_RESSTR(RID_STR_DLGIMP_CLASH_RENAME), RET_YES,
-        ButtonDialogFlags::Default | ButtonDialogFlags::OK | ButtonDialogFlags::Focus );
-    AddButton( IDE_RESSTR(RID_STR_DLGIMP_CLASH_REPLACE), RET_NO );
-    AddButton( StandardButtonType::Cancel, RET_CANCEL, ButtonDialogFlags::Cancel );
-
-    SetImage( QueryBox::GetStandardImage() );
-}
-
-
-class LanguageMismatchQueryBox : public MessBox
-{
+private:
+    std::unique_ptr<weld::MessageDialog> m_xQueryBox;
 public:
-    LanguageMismatchQueryBox( vcl::Window* pParent,
-        const OUString& rTitle, const OUString& rMessage );
+    LanguageMismatchQueryBox(weld::Window* pParent, const OUString& rTitle, const OUString& rMessage)
+        : m_xQueryBox(Application::CreateMessageDialog(pParent, VclMessageType::Question, VclButtonsType::NONE, rMessage))
+    {
+        if (!rTitle.isEmpty())
+            m_xQueryBox->set_title(rTitle);
+        m_xQueryBox->add_button(IDEResId(RID_STR_DLGIMP_MISMATCH_ADD), RET_YES);
+        m_xQueryBox->add_button(IDEResId(RID_STR_DLGIMP_MISMATCH_OMIT), RET_NO);
+        m_xQueryBox->add_button(Button::GetStandardText(StandardButtonType::Cancel), RET_CANCEL);
+        m_xQueryBox->add_button(Button::GetStandardText(StandardButtonType::Help), RET_HELP);
+        m_xQueryBox->set_default_response(RET_YES);
+    }
+    short run() { return m_xQueryBox->run(); }
 };
 
-LanguageMismatchQueryBox::LanguageMismatchQueryBox( vcl::Window* pParent,
-    const OUString& rTitle, const OUString& rMessage )
-        : MessBox( pParent, 0, rTitle, rMessage )
-{
-    if ( !rTitle.isEmpty() )
-        SetText( rTitle );
-
-    maMessText = rMessage;
-    AddButton( IDE_RESSTR(RID_STR_DLGIMP_MISMATCH_ADD), RET_YES,
-        ButtonDialogFlags::Default | ButtonDialogFlags::OK | ButtonDialogFlags::Focus );
-    AddButton( IDE_RESSTR(RID_STR_DLGIMP_MISMATCH_OMIT), RET_NO );
-    AddButton( StandardButtonType::Cancel, RET_CANCEL, ButtonDialogFlags::Cancel );
-    AddButton( StandardButtonType::Help, RET_HELP, ButtonDialogFlags::Help, 4 );
-
-    SetImage( QueryBox::GetStandardImage() );
-}
-
-
-bool implImportDialog( vcl::Window* pWin, const OUString& rCurPath, const ScriptDocument& rDocument, const OUString& aLibName )
+bool implImportDialog(weld::Window* pWin, const OUString& rCurPath, const ScriptDocument& rDocument, const OUString& aLibName)
 {
     bool bDone = false;
 
@@ -933,9 +833,9 @@ bool implImportDialog( vcl::Window* pWin, const OUString& rCurPath, const Script
     if ( !aCurPath.isEmpty() )
         xFP->setDisplayDirectory ( aCurPath );
 
-    OUString aDialogStr(IDE_RESSTR(RID_STR_STDDIALOGNAME));
+    OUString aDialogStr(IDEResId(RID_STR_STDDIALOGNAME));
     xFP->appendFilter( aDialogStr, "*.xdl" );
-    xFP->appendFilter( IDE_RESSTR(RID_STR_FILTER_ALLFILES), FilterMask_All );
+    xFP->appendFilter( IDEResId(RID_STR_FILTER_ALLFILES), FilterMask_All );
     xFP->setCurrentFilter( aDialogStr );
 
     if( xFP->execute() == RET_OK )
@@ -995,25 +895,25 @@ bool implImportDialog( vcl::Window* pWin, const OUString& rCurPath, const Script
             NameClashMode eNameClashMode = NO_CLASH;
             if( bDialogAlreadyExists )
             {
-                OUString aQueryBoxTitle(IDE_RESSTR(RID_STR_DLGIMP_CLASH_TITLE));
-                OUString aQueryBoxText(IDE_RESSTR(RID_STR_DLGIMP_CLASH_TEXT));
+                OUString aQueryBoxTitle(IDEResId(RID_STR_DLGIMP_CLASH_TITLE));
+                OUString aQueryBoxText(IDEResId(RID_STR_DLGIMP_CLASH_TEXT));
                 aQueryBoxText = aQueryBoxText.replaceAll("$(ARG1)", aXmlDlgName);
 
-                ScopedVclPtrInstance< NameClashQueryBox > aQueryBox( pWin, aQueryBoxTitle, aQueryBoxText );
-                sal_uInt16 nRet = aQueryBox->Execute();
-                if( RET_YES == nRet )
+                NameClashQueryBox aQueryBox(pWin, aQueryBoxTitle, aQueryBoxText);
+                sal_uInt16 nRet = aQueryBox.run();
+                if( nRet == RET_YES )
                 {
                     // RET_YES == Rename, see NameClashQueryBox::NameClashQueryBox
                     eNameClashMode = CLASH_RENAME_DIALOG;
 
                     aNewDlgName = rDocument.createObjectName( E_DIALOGS, aLibName );
                 }
-                else if( RET_NO == nRet )
+                else if( nRet == RET_NO )
                 {
                     // RET_NO == Replace, see NameClashQueryBox::NameClashQueryBox
                     eNameClashMode = CLASH_OVERWRITE_DIALOG;
                 }
-                else if( RET_CANCEL == nRet )
+                else if( nRet == RET_CANCEL )
                 {
                     return bDone;
                 }
@@ -1029,9 +929,8 @@ bool implImportDialog( vcl::Window* pWin, const OUString& rCurPath, const Script
             // Resource?
             css::lang::Locale aLocale = Application::GetSettings().GetUILanguageTag().getLocale();
             Reference< task::XInteractionHandler > xDummyHandler;
-            bool bReadOnly = true;
             Reference< XStringResourceWithLocation > xImportStringResource =
-                StringResourceWithLocation::create( xContext, aBasePath, bReadOnly,
+                StringResourceWithLocation::create( xContext, aBasePath, true/*bReadOnly*/,
                 aLocale, aXmlDlgName, OUString(), xDummyHandler );
 
             Sequence< lang::Locale > aImportLocaleSeq = xImportStringResource->getLocales();
@@ -1059,11 +958,11 @@ bool implImportDialog( vcl::Window* pWin, const OUString& rCurPath, const Script
             bool bAddDialogLanguagesToLib = false;
             if( nOnlyInImportLanguageCount > 0 )
             {
-                OUString aQueryBoxTitle(IDE_RESSTR(RID_STR_DLGIMP_MISMATCH_TITLE));
-                OUString aQueryBoxText(IDE_RESSTR(RID_STR_DLGIMP_MISMATCH_TEXT));
-                ScopedVclPtrInstance< LanguageMismatchQueryBox > aQueryBox( pWin, aQueryBoxTitle, aQueryBoxText );
-                sal_uInt16 nRet = aQueryBox->Execute();
-                if( RET_YES == nRet )
+                OUString aQueryBoxTitle(IDEResId(RID_STR_DLGIMP_MISMATCH_TITLE));
+                OUString aQueryBoxText(IDEResId(RID_STR_DLGIMP_MISMATCH_TEXT));
+                LanguageMismatchQueryBox aQueryBox(pWin, aQueryBoxTitle, aQueryBoxText);
+                sal_uInt16 nRet = aQueryBox.run();
+                if( nRet == RET_YES )
                 {
                     // RET_YES == Add, see LanguageMismatchQueryBox::LanguageMismatchQueryBox
                     bAddDialogLanguagesToLib = true;
@@ -1073,7 +972,7 @@ bool implImportDialog( vcl::Window* pWin, const OUString& rCurPath, const Script
                 //else if( RET_NO == nRet )
                 //{
                 //}
-                else if( RET_CANCEL == nRet )
+                else if( nRet == RET_CANCEL )
                 {
                     return bDone;
                 }
@@ -1084,7 +983,7 @@ bool implImportDialog( vcl::Window* pWin, const OUString& rCurPath, const Script
                 bool bCopyResourcesForDialog = true;
                 if( bAddDialogLanguagesToLib )
                 {
-                    std::shared_ptr<LocalizationMgr> pCurMgr = pShell->GetCurLocalizationMgr();
+                    const std::shared_ptr<LocalizationMgr>& pCurMgr = pShell->GetCurLocalizationMgr();
 
                     lang::Locale aFirstLocale;
                     aFirstLocale = aOnlyInImportLanguages[0];
@@ -1150,7 +1049,7 @@ bool implImportDialog( vcl::Window* pWin, const OUString& rCurPath, const Script
                 {
                     BaseWindow* pDlgWin = pShell->FindDlgWin( rDocument, aLibName, aNewDlgName, false, true );
                     if( pDlgWin != nullptr )
-                        pShell->RemoveWindow( pDlgWin, true );
+                        pShell->RemoveWindow( pDlgWin, false );
                     MarkDocumentModified( rDocument );
                 }
                 else
@@ -1167,9 +1066,7 @@ bool implImportDialog( vcl::Window* pWin, const OUString& rCurPath, const Script
                 {
                     try
                     {
-                        Any aXmlDialogNameAny;
-                        aXmlDialogNameAny <<= OUString( aNewDlgName );
-                        xDialogModelPropSet->setPropertyValue( DLGED_PROP_NAME, aXmlDialogNameAny );
+                        xDialogModelPropSet->setPropertyValue( DLGED_PROP_NAME, Any(aNewDlgName) );
                         bRenamed = true;
                     }
                     catch(const beans::UnknownPropertyException& )
@@ -1205,37 +1102,36 @@ bool implImportDialog( vcl::Window* pWin, const OUString& rCurPath, const Script
     return bDone;
 }
 
-
 void DialogWindow::ImportDialog()
 {
     const ScriptDocument& rDocument = GetDocument();
     OUString aLibName = GetLibName();
-    implImportDialog( this, aCurPath, rDocument, aLibName );
+    implImportDialog(GetFrameWeld(), m_sCurPath, rDocument, aLibName);
 }
 
 DlgEdModel& DialogWindow::GetModel() const
 {
-    return pEditor->GetModel();
+    return m_pEditor->GetModel();
 }
 
 DlgEdPage& DialogWindow::GetPage() const
 {
-    return pEditor->GetPage();
+    return m_pEditor->GetPage();
 }
 
 DlgEdView& DialogWindow::GetView() const
 {
-    return pEditor->GetView();
+    return m_pEditor->GetView();
 }
 
 bool DialogWindow::IsModified()
 {
-    return pEditor->IsModified();
+    return m_pEditor->IsModified();
 }
 
-::svl::IUndoManager* DialogWindow::GetUndoManager()
+SfxUndoManager* DialogWindow::GetUndoManager()
 {
-    return pUndoMgr.get();
+    return m_pUndoMgr.get();
 }
 
 OUString DialogWindow::GetTitle()
@@ -1247,24 +1143,23 @@ EntryDescriptor DialogWindow::CreateEntryDescriptor()
 {
     ScriptDocument aDocument( GetDocument() );
     OUString aLibName( GetLibName() );
-    OUString aLibSubName;
     LibraryLocation eLocation = aDocument.getLibraryLocation( aLibName );
-    return EntryDescriptor( aDocument, eLocation, aLibName, aLibSubName, GetName(), OBJ_TYPE_DIALOG );
+    return EntryDescriptor( aDocument, eLocation, aLibName, OUString(), GetName(), OBJ_TYPE_DIALOG );
 }
 
 void DialogWindow::SetReadOnly (bool bReadOnly)
 {
-    pEditor->SetMode(bReadOnly ? DlgEditor::READONLY : DlgEditor::SELECT);
+    m_pEditor->SetMode(bReadOnly ? DlgEditor::READONLY : DlgEditor::SELECT);
 }
 
 bool DialogWindow::IsReadOnly ()
 {
-    return pEditor->GetMode() == DlgEditor::READONLY;
+    return m_pEditor->GetMode() == DlgEditor::READONLY;
 }
 
 bool DialogWindow::IsPasteAllowed()
 {
-    return pEditor->IsPasteAllowed();
+    return m_pEditor->IsPasteAllowed();
 }
 
 void DialogWindow::StoreData()
@@ -1277,23 +1172,23 @@ void DialogWindow::StoreData()
 
             if( xLib.is() )
             {
-                Reference< container::XNameContainer > xDialogModel = pEditor->GetDialog();
+                Reference< container::XNameContainer > xDialogModel = m_pEditor->GetDialog();
 
                 if( xDialogModel.is() )
                 {
                     Reference< XComponentContext > xContext(
                         comphelper::getProcessComponentContext() );
                     Reference< XInputStreamProvider > xISP = ::xmlscript::exportDialogModel( xDialogModel, xContext, GetDocument().isDocument() ? GetDocument().getDocument() : Reference< frame::XModel >() );
-                    xLib->replaceByName( GetName(), makeAny( xISP ) );
+                    xLib->replaceByName( GetName(), Any( xISP ) );
                 }
             }
         }
         catch (const uno::Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
         MarkDocumentModified( GetDocument() );
-        pEditor->ClearModifyFlag();
+        m_pEditor->ClearModifyFlag();
     }
 }
 

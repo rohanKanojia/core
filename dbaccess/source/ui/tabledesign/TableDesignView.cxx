@@ -17,20 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TableDesignView.hxx"
-#include <tools/debug.hxx>
-#include "TableController.hxx"
-#include "dbaccess_helpid.hrc"
-#include "FieldDescriptions.hxx"
+#include <TableDesignView.hxx>
+#include <TableController.hxx>
+#include <helpids.h>
+#include <FieldDescriptions.hxx>
 #include "TEditControl.hxx"
 #include "TableFieldDescWin.hxx"
-#include "TableRow.hxx"
+#include <TableRow.hxx>
 #include <unotools/configmgr.hxx>
-#include <comphelper/types.hxx>
 #include <com/sun/star/datatransfer/clipboard/XClipboard.hpp>
+#include <i18nlangtag/languagetag.hxx>
 #include <unotools/syslocale.hxx>
 #include <vcl/settings.hxx>
-#include "UITools.hxx"
+#include <UITools.hxx>
 #include <memory>
 
 using namespace ::dbaui;
@@ -46,7 +45,7 @@ OTableBorderWindow::OTableBorderWindow(vcl::Window* pParent) : Window(pParent,WB
 {
 
     ImplInitSettings();
-    // Children erzeugen
+    // create children
     m_pEditorCtrl   = VclPtr<OTableEditorCtrl>::Create( this);
     m_pFieldDescWin = VclPtr<OTableFieldDescWin>::Create( this );
 
@@ -55,7 +54,7 @@ OTableBorderWindow::OTableBorderWindow(vcl::Window* pParent) : Window(pParent,WB
     // set depending windows and controls
     m_pEditorCtrl->SetDescrWin(m_pFieldDescWin);
 
-    // Splitter einrichten
+    // set up splitter
     m_aHorzSplitter->SetSplitHdl( LINK(this, OTableBorderWindow, SplitHdl) );
     m_aHorzSplitter->Show();
 }
@@ -67,7 +66,7 @@ OTableBorderWindow::~OTableBorderWindow()
 
 void OTableBorderWindow::dispose()
 {
-    // Children zerstoeren
+    // destroy children
     //  ::dbaui::notifySystemWindow(this,m_pFieldDescWin,::comphelper::mem_fun(&TaskPaneList::RemoveWindow));
     m_pEditorCtrl->Hide();
     m_pFieldDescWin->Hide();
@@ -81,31 +80,31 @@ void OTableBorderWindow::Resize()
 {
     const long nSplitterHeight(3);
 
-    // Abmessungen parent window
+    // dimensions of parent window
     Size aOutputSize( GetOutputSize() );
     long nOutputWidth   = aOutputSize.Width();
     long nOutputHeight  = aOutputSize.Height();
     long nSplitPos      = m_aHorzSplitter->GetSplitPosPixel();
 
-    // Verschiebebereich Splitter mittleres Drittel des Outputs
+    // shift range of the splitter is the middle third of the output
     long nDragPosY = nOutputHeight/3;
     long nDragSizeHeight = nOutputHeight/3;
-    m_aHorzSplitter->SetDragRectPixel( Rectangle(Point(0,nDragPosY), Size(nOutputWidth,nDragSizeHeight) ), this );
+    m_aHorzSplitter->SetDragRectPixel( tools::Rectangle(Point(0,nDragPosY), Size(nOutputWidth,nDragSizeHeight) ), this );
     if( (nSplitPos < nDragPosY) || (nSplitPos > (nDragPosY+nDragSizeHeight)) )
         nSplitPos = nDragPosY+nDragSizeHeight-5;
 
-    // Splitter setzen
+    // set splitter
     m_aHorzSplitter->SetPosSizePixel( Point( 0, nSplitPos ), Size(nOutputWidth, nSplitterHeight));
     m_aHorzSplitter->SetSplitPosPixel( nSplitPos );
 
-    // Fenster setzen
+    // set window
     m_pEditorCtrl->SetPosSizePixel( Point(0, 0), Size(nOutputWidth , nSplitPos) );
 
     m_pFieldDescWin->SetPosSizePixel(   Point(0, nSplitPos+nSplitterHeight),
                         Size(nOutputWidth, nOutputHeight-nSplitPos-nSplitterHeight) );
 }
 
-IMPL_LINK_TYPED( OTableBorderWindow, SplitHdl, Splitter*, pSplit, void )
+IMPL_LINK( OTableBorderWindow, SplitHdl, Splitter*, pSplit, void )
 {
     if(pSplit == m_aHorzSplitter.get())
     {
@@ -203,7 +202,7 @@ void OTableDesignView::initialize()
     GetEditorCtrl()->DisplayData(0);
 }
 
-void OTableDesignView::resizeDocumentView(Rectangle& _rPlayground)
+void OTableDesignView::resizeDocumentView(tools::Rectangle& _rPlayground)
 {
     m_pWin->SetPosSizePixel( _rPlayground.TopLeft(), _rPlayground.GetSize() );
 
@@ -214,7 +213,6 @@ void OTableDesignView::resizeDocumentView(Rectangle& _rPlayground)
 
 bool OTableDesignView::PreNotify( NotifyEvent& rNEvt )
 {
-    bool bHandled = false;
     if (rNEvt.GetType() == MouseNotifyEvent::GETFOCUS)
     {
         if( GetDescWin() && GetDescWin()->HasChildPathFocus() )
@@ -225,7 +223,7 @@ bool OTableDesignView::PreNotify( NotifyEvent& rNEvt )
             m_eChildFocus = NONE;
     }
 
-    return bHandled || ODataView::PreNotify(rNEvt);
+    return ODataView::PreNotify(rNEvt);
 }
 
 IClipboardTest* OTableDesignView::getActiveChild() const
@@ -294,7 +292,7 @@ void OTableDesignView::setReadOnly(bool _bReadOnly)
 void OTableDesignView::reSync()
 {
     GetEditorCtrl()->DeactivateCell();
-     std::shared_ptr<OTableRow>  pRow = (*GetEditorCtrl()->GetRowList())[GetEditorCtrl()->GetCurRow()];
+    std::shared_ptr<OTableRow>  pRow = (*GetEditorCtrl()->GetRowList())[GetEditorCtrl()->GetCurRow()];
     OFieldDescription* pFieldDescr = pRow ? pRow->GetActFieldDescr() : nullptr;
     if ( pFieldDescr )
         GetDescWin()->DisplayData(pFieldDescr);

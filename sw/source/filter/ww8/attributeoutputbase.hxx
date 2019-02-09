@@ -34,6 +34,7 @@
 #include <wrtswtbl.hxx>
 #include <fldbas.hxx>
 #include <IDocumentRedlineAccess.hxx>
+#include <unotools/saveopt.hxx>
 
 #include <vector>
 
@@ -146,6 +147,11 @@ enum StyleType
 
 class AttributeOutputBase
 {
+private:
+    SvtSaveOptions const m_aSaveOpt;
+
+    OUString ConvertURL( const OUString& rUrl, bool bAbsoluteOut );
+
 public:
     /// Export the state of RTL/CJK.
     virtual void RTLAndCJKState( bool bIsRTL, sal_uInt16 nScript ) = 0;
@@ -169,10 +175,10 @@ public:
     virtual void EmptyParagraph() = 0;
 
     /// Start of the text run.
-    virtual void StartRun( const SwRedlineData* pRedlineData, bool bSingleEmptyRun = false ) = 0;
+    virtual void StartRun( const SwRedlineData* pRedlineData, sal_Int32 nPos, bool bSingleEmptyRun = false ) = 0;
 
     /// End of the text run.
-    virtual void EndRun() = 0;
+    virtual void EndRun( const SwTextNode* pNode, sal_Int32 nPos, bool bLastRun = false ) = 0;
 
     /// Called before we start outputting the attributes.
     virtual void StartRunProperties() = 0;
@@ -181,16 +187,16 @@ public:
     virtual void EndRunProperties( const SwRedlineData* pRedlineData ) = 0;
 
     /// docx requires footnoteRef/endnoteRef tag at the beginning of each of them
-    virtual void FootnoteEndnoteRefTag() {};
+    virtual bool FootnoteEndnoteRefTag() { return false; };
 
-    /// for docx footnotePr/endnotePr inside sectPr
+    /// for footnote/endnote section properties
     virtual void SectFootnoteEndnotePr() {};
 
     /// for docx w:commentReference
     virtual void WritePostitFieldReference() {};
 
     /// Output text (inside a run).
-    virtual void RunText( const OUString& rText, rtl_TextEncoding eCharSet ) = 0;
+    virtual void RunText( const OUString& rText, rtl_TextEncoding eCharSet = RTL_TEXTENCODING_UTF8 ) = 0;
 
     /// Output text (without markup).
     virtual void RawText(const OUString& rText, rtl_TextEncoding eCharSet) = 0;
@@ -199,7 +205,7 @@ public:
     virtual void StartRuby( const SwTextNode& rNode, sal_Int32 nPos, const SwFormatRuby& rRuby ) = 0;
 
     /// Output ruby end.
-    virtual void EndRuby() = 0;
+    virtual void EndRuby( const SwTextNode& rNode, sal_Int32 nPos ) = 0;
 
     /// Output URL start.
     virtual bool StartURL( const OUString& rUrl, const OUString& rTarget ) = 0;
@@ -208,6 +214,9 @@ public:
     virtual bool EndURL(bool isAtEndOfParagraph) = 0;
 
     virtual void FieldVanish( const OUString& rText, ww::eField eType ) = 0;
+
+    /// MSO uses bookmarks to reference sequence fields, so we need to generate these additional bookmarks during export
+    void GenerateBookmarksForSequenceField(const SwTextNode& rNode, SwWW8AttrIter& rAttrIter);
 
     void StartTOX( const SwSection& rSect );
 
@@ -225,7 +234,7 @@ public:
     /// Output FKP (Formatted disK Page) - necessary for binary formats only.
     /// FIXME having it in AttributeOutputBase is probably a hack, it
     /// should be in WW8AttributeOutput only...
-    virtual void OutputFKP(bool /*bForce*/ = false) {}
+    virtual void OutputFKP(bool /*bForce*/) {}
 
     /// Output style.
     virtual void ParagraphStyle( sal_uInt16 nStyle ) = 0;
@@ -267,7 +276,7 @@ public:
     virtual void EndStyles( sal_uInt16 nNumberOfStyles ) = 0;
 
     /// Write default style.
-    virtual void DefaultStyle( sal_uInt16 nStyle ) = 0;
+    virtual void DefaultStyle() = 0;
 
     /// Start of a style in the styles table.
     virtual void StartStyle( const OUString& rName, StyleType eType,
@@ -358,7 +367,7 @@ public:
         sal_Int16 nFirstLineIndex,
         sal_Int16 nListTabPos,
         const OUString &rNumberingString,
-        const SvxBrushItem* pBrush = nullptr) = 0; // #i120928 export graphic of bullet
+        const SvxBrushItem* pBrush) = 0; // #i120928 export graphic of bullet
 
 protected:
 
@@ -623,8 +632,11 @@ protected:
 
     virtual bool AnalyzeURL( const OUString& rUrl, const OUString& rTarget, OUString* pLinkURL, OUString* pMark );
 
-    ww8::GridColsPtr GetGridCols( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner );
-    ww8::WidthsPtr   GetColumnWidths( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner );
+    /// Insert a bookmark inside the currently processed paragraph.
+    virtual void WriteBookmarkInActParagraph( const OUString& rName, sal_Int32 nFirstRunPos, sal_Int32 nLastRunPos ) = 0;
+
+    ww8::GridColsPtr GetGridCols( ww8::WW8TableNodeInfoInner::Pointer_t const & pTableTextNodeInfoInner );
+    ww8::WidthsPtr   GetColumnWidths( ww8::WW8TableNodeInfoInner::Pointer_t const & pTableTextNodeInfoInner );
 
 public:
     AttributeOutputBase() {}
@@ -640,13 +652,13 @@ public:
     void OutputItem( const SfxPoolItem& rHt );
 
     /// Use OutputItem() on an item set - for styles.
-    void OutputStyleItemSet( const SfxItemSet& rSet, bool bDeep, bool bTestForDefault );
+    void OutputStyleItemSet( const SfxItemSet& rSet, bool bTestForDefault );
 
     /// Output frames.
     void OutputFlyFrame( const ww8::Frame& rFormat );
 
     void GetTablePageSize
-    ( ww8::WW8TableNodeInfoInner * pTableTextNodeInfoInner,
+    ( ww8::WW8TableNodeInfoInner const * pTableTextNodeInfoInner,
       long& rPageSize, bool& rRelBoxSize );
 
     /// Exports the definition (image, size) of a single numbering picture bullet.
@@ -656,6 +668,22 @@ public:
     const SwRedlineData* GetParagraphMarkerRedline( const SwTextNode& rNode, RedlineType_t aRedlineType );
 };
 
+class WW8Ruby
+{
+    sal_Int32 m_nJC;
+    sal_Char m_cDirective;
+    sal_uInt32 m_nRubyHeight;
+    sal_uInt32 m_nBaseHeight;
+    OUString m_sFontFamily;
+
+public:
+    WW8Ruby(const SwTextNode& rNode, const SwFormatRuby& rRuby, const MSWordExportBase& rExport );
+    sal_Int32   GetJC() { return m_nJC; }
+    sal_Char    GetDirective() { return m_cDirective; }
+    sal_uInt32   GetRubyHeight() { return m_nRubyHeight; }
+    sal_uInt32   GetBaseHeight() { return m_nBaseHeight; }
+    OUString const & GetFontFamily() { return m_sFontFamily; }
+};
 #endif // INCLUDED_SW_SOURCE_FILTER_WW8_ATTRIBUTEOUTPUTBASE_HXX
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

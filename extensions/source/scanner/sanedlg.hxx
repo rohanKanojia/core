@@ -23,12 +23,11 @@
 #include <vcl/lstbox.hxx>
 #include <vcl/button.hxx>
 #include <vcl/fixed.hxx>
-#include <vcl/group.hxx>
 #include <vcl/field.hxx>
 #include <vcl/edit.hxx>
-#include <svtools/treelistbox.hxx>
+#include <vcl/treelistbox.hxx>
 
-#include <sane.hxx>
+#include "sane.hxx"
 
 class ScanPreview;
 
@@ -75,16 +74,16 @@ private:
 
     int             mnCurrentOption;
     int             mnCurrentElement;
-    double*         mpRange;
+    std::unique_ptr<double[]> mpRange;
     double          mfMin, mfMax;
 
     bool            doScan;
 
-    DECL_LINK_TYPED( ClickBtnHdl, Button*, void );
-    DECL_LINK_TYPED( SelectHdl, ListBox&, void );
-    DECL_LINK_TYPED( ModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( ReloadSaneOptionsHdl, Sane&, void );
-    DECL_LINK_TYPED( OptionsBoxSelectHdl, SvTreeListBox*, void );
+    DECL_LINK( ClickBtnHdl, Button*, void );
+    DECL_LINK( SelectHdl, ListBox&, void );
+    DECL_LINK( ModifyHdl, Edit&, void );
+    DECL_LINK( ReloadSaneOptionsHdl, Sane&, void );
+    DECL_LINK( OptionsBoxSelectHdl, SvTreeListBox*, void );
 
     void SaveState();
     bool LoadState();
@@ -104,7 +103,7 @@ private:
     bool SetAdjustedNumericalValue( const char* pOption, double fValue, int nElement = 0 );
 public:
     SaneDlg( vcl::Window*, Sane&, bool );
-    virtual ~SaneDlg();
+    virtual ~SaneDlg() override;
     virtual void dispose() override;
 
     virtual short Execute() override;

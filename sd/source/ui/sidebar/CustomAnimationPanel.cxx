@@ -18,9 +18,9 @@
  */
 
 #include "CustomAnimationPanel.hxx"
-#include "createcustomanimationpanel.hxx"
+#include <createcustomanimationpanel.hxx>
 
-#include "ViewShellBase.hxx"
+#include <ViewShellBase.hxx>
 
 namespace sd { namespace sidebar {
 
@@ -34,6 +34,7 @@ CustomAnimationPanel::CustomAnimationPanel (
         rViewShellBase),
       mxFrame( rxFrame )
 {
+    SetStyle( GetStyle() | WB_DIALOGCONTROL );
 #ifdef DEBUG
     SetText(OUString("sd:CustomAnimationPanel"));
 #endif

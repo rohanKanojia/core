@@ -20,20 +20,20 @@
 #ifndef INCLUDED_COMPHELPER_PROCESSFACTORY_HXX
 #define INCLUDED_COMPHELPER_PROCESSFACTORY_HXX
 
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <com/sun/star/uno/Reference.hxx>
 #include <comphelper/comphelperdllapi.h>
 
 namespace com { namespace sun { namespace star { namespace lang {
     class XMultiServiceFactory;
 } } } }
 
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+
 namespace comphelper
 {
 
 /**
  * This function set the process service factory.
- *
- * @author Juergen Schmidt
  */
 COMPHELPER_DLLPUBLIC void setProcessServiceFactory(const css::uno::Reference< css::lang::XMultiServiceFactory >& xSMgr);
 
@@ -41,8 +41,6 @@ COMPHELPER_DLLPUBLIC void setProcessServiceFactory(const css::uno::Reference< cs
  * This function gets the process service factory.
  *
  * If no service factory is set the function throws a RuntimeException.
- *
- * @author Juergen Schmidt
  */
 COMPHELPER_DLLPUBLIC css::uno::Reference< css::lang::XMultiServiceFactory > getProcessServiceFactory();
 

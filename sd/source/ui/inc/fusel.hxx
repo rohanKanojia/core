@@ -22,14 +22,14 @@
 
 #include "fudraw.hxx"
 
-#include <com/sun/star/media/XPlayer.hpp>
+namespace com { namespace sun { namespace star { namespace media { class XPlayer; } } } }
 
 class SdrHdl;
 class SdrObject;
 
 namespace sd {
 
-class FuSelection
+class FuSelection final
     : public FuDraw
 {
 public:
@@ -44,7 +44,6 @@ public:
     virtual bool MouseButtonDown(const MouseEvent& rMEvt) override;
 
     virtual void Activate() override;
-    virtual void Deactivate() override;
 
     virtual void SelectionHasChanged() override;
 
@@ -63,26 +62,25 @@ public:
 
     //let mouse cursor move
     virtual void ForcePointer(const MouseEvent* pMEvt = nullptr) override;
-protected:
+
+private:
     FuSelection (ViewShell* pViewSh,
         ::sd::Window* pWin,
         ::sd::View* pView,
         SdDrawDocument* pDoc,
         SfxRequest& rReq);
 
-    virtual ~FuSelection();
+    virtual ~FuSelection() override;
 
     bool            bTempRotation;
     bool            bSelectionChanged;
-    bool            bHideAndAnimate;
     SdrHdl*         pHdl;
     bool            bSuppressChangesOfSelection;
     bool            bMirrorSide0;
     sal_uInt16      nEditMode;
     css::uno::Reference< css::media::XPlayer > mxPlayer;
 
-private:
-    /** This pointer stores a canidate for assigning a style in the water
+    /** This pointer stores a candidate for assigning a style in the water
         can mode between mouse button down and mouse button up.
     */
     SdrObject* pWaterCanCandidate;

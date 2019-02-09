@@ -18,6 +18,8 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
+#include <o3tl/safeint.hxx>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,20 +28,22 @@
 #include <jerror.h>
 
 #include <com/sun/star/task/XStatusIndicator.hpp>
-#include <osl/diagnose.h>
 
 extern "C" {
 #include "transupp.h"
 }
 
 #include "jpeg.h"
-#include <JpegReader.hxx>
-#include <JpegWriter.hxx>
+#include "JpegReader.hxx"
+#include "JpegWriter.hxx"
 #include <memory>
+#include <unotools/configmgr.hxx>
+#include <vcl/bitmapaccess.hxx>
+#include <vcl/graphicfilter.hxx>
 
 #ifdef _MSC_VER
-#pragma warning(push, 1) /* disable to __declspec(align()) aligned warning */
-#pragma warning (disable: 4324)
+#pragma warning(push)
+#pragma warning (disable: 4324) /* disable to __declspec(align()) aligned warning */
 #endif
 
 struct ErrorManagerStruct
@@ -52,64 +56,123 @@ struct ErrorManagerStruct
 #pragma warning(pop)
 #endif
 
-extern "C" void errorExit (j_common_ptr cinfo)
-{
-    ErrorManagerStruct * error = reinterpret_cast<ErrorManagerStruct *>(cinfo->err);
-    (*cinfo->err->output_message) (cinfo);
-    longjmp(error->setjmp_buffer, 1);
-}
+extern "C" {
 
-extern "C" void outputMessage (j_common_ptr cinfo)
+static void errorExit (j_common_ptr cinfo)
 {
     char buffer[JMSG_LENGTH_MAX];
     (*cinfo->err->format_message) (cinfo, buffer);
+    SAL_WARN("vcl.filter", "fatal failure reading JPEG: " << buffer);
+    ErrorManagerStruct * error = reinterpret_cast<ErrorManagerStruct *>(cinfo->err);
+    longjmp(error->setjmp_buffer, 1);
 }
 
-void ReadJPEG( JPEGReader* pJPEGReader, void* pInputStream, long* pLines,
-               Size const & previewSize )
+static void outputMessage (j_common_ptr cinfo)
 {
-    jpeg_decompress_struct          cinfo;
-    ErrorManagerStruct              jerr;
-    JPEGCreateBitmapParam           aCreateBitmapParam;
-    unsigned char *                 pDIB;
-    unsigned char *                 pTmp;
-    long                            nWidth;
-    long                            nHeight;
-    long                            nAlignedWidth;
-    JSAMPLE*                        aRangeLimit;
-    std::unique_ptr<unsigned char[]> pScanLineBuffer;
+    char buffer[JMSG_LENGTH_MAX];
+    (*cinfo->err->format_message) (cinfo, buffer);
+    SAL_WARN("vcl.filter", "failure reading JPEG: " << buffer);
+}
 
-    if ( setjmp( jerr.setjmp_buffer ) )
+}
+
+static int GetWarningLimit()
+{
+    return utl::ConfigManager::IsFuzzing() ? 5 : 1000;
+}
+
+extern "C" {
+
+static void emitMessage (j_common_ptr cinfo, int msg_level)
+{
+    if (msg_level < 0)
     {
-        jpeg_destroy_decompress( &cinfo );
+        // ofz#3002 try to retain some degree of recoverability up to some
+        // reasonable limit (initially using ImageMagick's current limit of
+        // 1000), then bail.
+        // https://libjpeg-turbo.org/pmwiki/uploads/About/TwoIssueswiththeJPEGStandard.pdf
+        if (++cinfo->err->num_warnings > GetWarningLimit())
+            cinfo->err->error_exit(cinfo);
+        else
+            cinfo->err->output_message(cinfo);
+    }
+    else if (cinfo->err->trace_level >= msg_level)
+        cinfo->err->output_message(cinfo);
+}
+
+}
+
+class JpegDecompressOwner
+{
+public:
+    void set(jpeg_decompress_struct *cinfo)
+    {
+        m_cinfo = cinfo;
+    }
+    ~JpegDecompressOwner()
+    {
+        if (m_cinfo != nullptr)
+        {
+            jpeg_destroy_decompress(m_cinfo);
+        }
+    }
+private:
+    jpeg_decompress_struct *m_cinfo = nullptr;
+};
+
+class JpegCompressOwner
+{
+public:
+    void set(jpeg_compress_struct *cinfo)
+    {
+        m_cinfo = cinfo;
+    }
+    ~JpegCompressOwner()
+    {
+        if (m_cinfo != nullptr)
+        {
+            jpeg_destroy_compress(m_cinfo);
+        }
+    }
+private:
+    jpeg_compress_struct *m_cinfo = nullptr;
+};
+
+struct JpegStuff
+{
+    jpeg_decompress_struct cinfo;
+    ErrorManagerStruct jerr;
+    JpegDecompressOwner aOwner;
+    std::unique_ptr<BitmapScopedWriteAccess> pScopedAccess;
+    std::vector<sal_uInt8> pScanLineBuffer;
+    std::vector<sal_uInt8> pCYMKBuffer;
+};
+
+static void ReadJPEG(JpegStuff& rContext, JPEGReader* pJPEGReader, void* pInputStream, long* pLines,
+              Size const & previewSize, GraphicFilterImportFlags nImportFlags,
+              BitmapScopedWriteAccess* ppAccess)
+{
+    if (setjmp(rContext.jerr.setjmp_buffer))
+    {
         return;
     }
 
-    cinfo.err = jpeg_std_error( &jerr.pub );
-    jerr.pub.error_exit = errorExit;
-    jerr.pub.output_message = outputMessage;
+    rContext.cinfo.err = jpeg_std_error(&rContext.jerr.pub);
+    rContext.jerr.pub.error_exit = errorExit;
+    rContext.jerr.pub.output_message = outputMessage;
+    rContext.jerr.pub.emit_message = emitMessage;
 
-    jpeg_create_decompress( &cinfo );
-    jpeg_svstream_src( &cinfo, pInputStream );
-    jpeg_read_header( &cinfo, TRUE );
+    jpeg_create_decompress(&rContext.cinfo);
+    rContext.aOwner.set(&rContext.cinfo);
+    jpeg_svstream_src(&rContext.cinfo, pInputStream);
+    SourceManagerStruct *source = reinterpret_cast<SourceManagerStruct*>(rContext.cinfo.src);
+    jpeg_read_header(&rContext.cinfo, TRUE);
 
-    cinfo.scale_num = 1;
-    cinfo.scale_denom = 1;
-    cinfo.output_gamma = 1.0;
-    cinfo.raw_data_out = FALSE;
-    cinfo.quantize_colors = FALSE;
-    if ( cinfo.jpeg_color_space == JCS_YCbCr )
-        cinfo.out_color_space = JCS_RGB;
-    else if ( cinfo.jpeg_color_space == JCS_YCCK )
-        cinfo.out_color_space = JCS_CMYK;
-
-    if (cinfo.out_color_space != JCS_CMYK &&
-        cinfo.out_color_space != JCS_GRAYSCALE &&
-        cinfo.out_color_space != JCS_RGB)
-    {
-        SAL_WARN("vcl.filter", "jpg with unknown out color space, forcing to rgb");
-        cinfo.out_color_space = JCS_RGB;
-    }
+    rContext.cinfo.scale_num = 1;
+    rContext.cinfo.scale_denom = 1;
+    rContext.cinfo.output_gamma = 1.0;
+    rContext.cinfo.raw_data_out = FALSE;
+    rContext.cinfo.quantize_colors = FALSE;
 
     /* change scale for preview import */
     long nPreviewWidth = previewSize.Width();
@@ -118,7 +181,7 @@ void ReadJPEG( JPEGReader* pJPEGReader, void* pInputStream, long* pLines,
     {
         if( nPreviewWidth == 0 )
         {
-            nPreviewWidth = ( cinfo.image_width * nPreviewHeight ) / cinfo.image_height;
+            nPreviewWidth = (rContext.cinfo.image_width * nPreviewHeight) / rContext.cinfo.image_height;
             if( nPreviewWidth <= 0 )
             {
                 nPreviewWidth = 1;
@@ -126,112 +189,177 @@ void ReadJPEG( JPEGReader* pJPEGReader, void* pInputStream, long* pLines,
         }
         else if( nPreviewHeight == 0 )
         {
-            nPreviewHeight = ( cinfo.image_height * nPreviewWidth ) / cinfo.image_width;
+            nPreviewHeight = (rContext.cinfo.image_height * nPreviewWidth) / rContext.cinfo.image_width;
             if( nPreviewHeight <= 0 )
             {
                 nPreviewHeight = 1;
             }
         }
 
-        for( cinfo.scale_denom = 1; cinfo.scale_denom < 8; cinfo.scale_denom *= 2 )
+        for (rContext.cinfo.scale_denom = 1; rContext.cinfo.scale_denom < 8; rContext.cinfo.scale_denom *= 2)
         {
-            if( cinfo.image_width < nPreviewWidth * cinfo.scale_denom )
+            if (rContext.cinfo.image_width < nPreviewWidth * rContext.cinfo.scale_denom)
                 break;
-            if( cinfo.image_height < nPreviewHeight * cinfo.scale_denom )
+            if (rContext.cinfo.image_height < nPreviewHeight * rContext.cinfo.scale_denom)
                 break;
         }
 
-        if( cinfo.scale_denom > 1 )
+        if (rContext.cinfo.scale_denom > 1)
         {
-            cinfo.dct_method            = JDCT_FASTEST;
-            cinfo.do_fancy_upsampling   = FALSE;
-            cinfo.do_block_smoothing    = FALSE;
+            rContext.cinfo.dct_method            = JDCT_FASTEST;
+            rContext.cinfo.do_fancy_upsampling   = FALSE;
+            rContext.cinfo.do_block_smoothing    = FALSE;
         }
     }
 
-    jpeg_start_decompress( &cinfo );
+    jpeg_calc_output_dimensions(&rContext.cinfo);
 
-    nWidth = cinfo.output_width;
-    nHeight = cinfo.output_height;
+    long nWidth = rContext.cinfo.output_width;
+    long nHeight = rContext.cinfo.output_height;
+
+    long nResult = 0;
+    if (utl::ConfigManager::IsFuzzing() && (o3tl::checked_multiply(nWidth, nHeight, nResult) || nResult > 4000000))
+        return;
+
+    bool bGray = (rContext.cinfo.output_components == 1);
+
+    JPEGCreateBitmapParam aCreateBitmapParam;
+
     aCreateBitmapParam.nWidth = nWidth;
     aCreateBitmapParam.nHeight = nHeight;
 
-    aCreateBitmapParam.density_unit = cinfo.density_unit;
-    aCreateBitmapParam.X_density = cinfo.X_density;
-    aCreateBitmapParam.Y_density = cinfo.Y_density;
-    aCreateBitmapParam.bGray = long(cinfo.output_components == 1);
-    pDIB = pJPEGReader->CreateBitmap(aCreateBitmapParam);
-    nAlignedWidth = aCreateBitmapParam.nAlignedWidth;
-    aRangeLimit = cinfo.sample_range_limit;
+    aCreateBitmapParam.density_unit = rContext.cinfo.density_unit;
+    aCreateBitmapParam.X_density = rContext.cinfo.X_density;
+    aCreateBitmapParam.Y_density = rContext.cinfo.Y_density;
+    aCreateBitmapParam.bGray = bGray;
 
-    long nScanLineBufferComponents = 0;
-    if ( cinfo.out_color_space == JCS_CMYK )
-    {
-        nScanLineBufferComponents = cinfo.output_width * 4;
-        pScanLineBuffer.reset(new unsigned char[nScanLineBufferComponents]);
-    }
+    const auto bOnlyCreateBitmap = static_cast<bool>(nImportFlags & GraphicFilterImportFlags::OnlyCreateBitmap);
+    const auto bUseExistingBitmap = static_cast<bool>(nImportFlags & GraphicFilterImportFlags::UseExistingBitmap);
+    bool bBitmapCreated = bUseExistingBitmap;
+    if (!bBitmapCreated)
+        bBitmapCreated = pJPEGReader->CreateBitmap(aCreateBitmapParam);
 
-    if( pDIB )
+    if (bBitmapCreated && !bOnlyCreateBitmap)
     {
-        if( aCreateBitmapParam.bTopDown )
-        {
-            pTmp = pDIB;
-        }
+        if (nImportFlags & GraphicFilterImportFlags::UseExistingBitmap)
+            // ppAccess must be set if this flag is used.
+            assert(ppAccess);
         else
-        {
-            pTmp = pDIB + ( nHeight - 1 ) * nAlignedWidth;
-            nAlignedWidth = -nAlignedWidth;
-        }
+            rContext.pScopedAccess.reset(new BitmapScopedWriteAccess(pJPEGReader->GetBitmap()));
 
-        for ( *pLines = 0; *pLines < nHeight; (*pLines)++ )
+        BitmapScopedWriteAccess& pAccess = bUseExistingBitmap ? *ppAccess : *rContext.pScopedAccess;
+
+        if (pAccess)
         {
-            if (pScanLineBuffer)
-            { // in other words cinfo.out_color_space == JCS_CMYK
-                int i;
-                int j;
-                unsigned char *pSLB = pScanLineBuffer.get();
-                jpeg_read_scanlines( &cinfo, reinterpret_cast<JSAMPARRAY>(&pSLB), 1 );
-                // convert CMYK to RGB
-                for( i=0, j=0; i < nScanLineBufferComponents; i+=4, j+=3 )
-                {
-                    int color_C = 255 - pScanLineBuffer[i+0];
-                    int color_M = 255 - pScanLineBuffer[i+1];
-                    int color_Y = 255 - pScanLineBuffer[i+2];
-                    int color_K = 255 - pScanLineBuffer[i+3];
-                    pTmp[j+0] = aRangeLimit[ 255L - ( color_C + color_K ) ];
-                    pTmp[j+1] = aRangeLimit[ 255L - ( color_M + color_K ) ];
-                    pTmp[j+2] = aRangeLimit[ 255L - ( color_Y + color_K ) ];
-                }
-            }
-            else
+            int nPixelSize = 3;
+            J_COLOR_SPACE best_out_color_space = JCS_RGB;
+            ScanlineFormat eScanlineFormat = ScanlineFormat::N24BitTcRgb;
+            ScanlineFormat eFinalFormat = pAccess->GetScanlineFormat();
+
+            if (bGray)
             {
-                jpeg_read_scanlines( &cinfo, reinterpret_cast<JSAMPARRAY>(&pTmp), 1 );
+                best_out_color_space = JCS_GRAYSCALE;
+                eScanlineFormat = ScanlineFormat::N8BitPal;
+                nPixelSize = 1;
+            }
+#if defined(JCS_EXTENSIONS)
+            else if (eFinalFormat == ScanlineFormat::N32BitTcBgra)
+            {
+                best_out_color_space = JCS_EXT_BGRA;
+                eScanlineFormat = eFinalFormat;
+                nPixelSize = 4;
+            }
+            else if (eFinalFormat == ScanlineFormat::N32BitTcRgba)
+            {
+                best_out_color_space = JCS_EXT_RGBA;
+                eScanlineFormat = eFinalFormat;
+                nPixelSize = 4;
+            }
+            else if (eFinalFormat == ScanlineFormat::N32BitTcArgb)
+            {
+                best_out_color_space = JCS_EXT_ARGB;
+                eScanlineFormat = eFinalFormat;
+                nPixelSize = 4;
+            }
+#endif
+            if (rContext.cinfo.jpeg_color_space == JCS_YCCK)
+                rContext.cinfo.out_color_space = JCS_CMYK;
+
+            if (rContext.cinfo.out_color_space != JCS_CMYK)
+                rContext.cinfo.out_color_space = best_out_color_space;
+
+            jpeg_start_decompress(&rContext.cinfo);
+
+            JSAMPLE* aRangeLimit = rContext.cinfo.sample_range_limit;
+
+            rContext.pScanLineBuffer.resize(nWidth * nPixelSize);
+
+            if (rContext.cinfo.out_color_space == JCS_CMYK)
+            {
+                rContext.pCYMKBuffer.resize(nWidth * 4);
             }
 
-            /* PENDING ??? */
-            if ( cinfo.err->msg_code == 113 )
-                break;
+            for (*pLines = 0; *pLines < nHeight && !source->no_data_available; (*pLines)++)
+            {
+                size_t yIndex = *pLines;
 
-            pTmp += nAlignedWidth;
+                sal_uInt8* p = (rContext.cinfo.out_color_space == JCS_CMYK) ? rContext.pCYMKBuffer.data() : rContext.pScanLineBuffer.data();
+                jpeg_read_scanlines(&rContext.cinfo, reinterpret_cast<JSAMPARRAY>(&p), 1);
+
+                if (rContext.cinfo.out_color_space == JCS_CMYK)
+                {
+                    // convert CMYK to RGB
+                    Scanline pScanline = pAccess->GetScanline(yIndex);
+                    for (long cmyk = 0, x = 0; cmyk < nWidth * 4; cmyk += 4, ++x)
+                    {
+                        int color_C = 255 - rContext.pCYMKBuffer[cmyk + 0];
+                        int color_M = 255 - rContext.pCYMKBuffer[cmyk + 1];
+                        int color_Y = 255 - rContext.pCYMKBuffer[cmyk + 2];
+                        int color_K = 255 - rContext.pCYMKBuffer[cmyk + 3];
+
+                        sal_uInt8 cRed = aRangeLimit[255L - (color_C + color_K)];
+                        sal_uInt8 cGreen = aRangeLimit[255L - (color_M + color_K)];
+                        sal_uInt8 cBlue = aRangeLimit[255L - (color_Y + color_K)];
+
+                        pAccess->SetPixelOnData(pScanline, x, BitmapColor(cRed, cGreen, cBlue));
+                    }
+                }
+                else
+                {
+                    pAccess->CopyScanline(yIndex, rContext.pScanLineBuffer.data(), eScanlineFormat, rContext.pScanLineBuffer.size());
+                }
+
+                /* PENDING ??? */
+                if (rContext.cinfo.err->msg_code == 113)
+                    break;
+            }
+
+            rContext.pScanLineBuffer.clear();
+            rContext.pCYMKBuffer.clear();
         }
+        rContext.pScopedAccess.reset();
     }
 
-    if ( pDIB )
+    if (bBitmapCreated && !bOnlyCreateBitmap)
     {
-        jpeg_finish_decompress( &cinfo );
+        jpeg_finish_decompress(&rContext.cinfo);
     }
     else
     {
-        jpeg_abort_decompress( &cinfo );
+        jpeg_abort_decompress(&rContext.cinfo);
     }
+}
 
-    pScanLineBuffer.reset();
-
-    jpeg_destroy_decompress( &cinfo );
+void ReadJPEG( JPEGReader* pJPEGReader, void* pInputStream, long* pLines,
+               Size const & previewSize, GraphicFilterImportFlags nImportFlags,
+               BitmapScopedWriteAccess* ppAccess )
+{
+    JpegStuff aContext;
+    ReadJPEG(aContext, pJPEGReader, pInputStream, pLines, previewSize, nImportFlags, ppAccess);
 }
 
 bool WriteJPEG( JPEGWriter* pJPEGWriter, void* pOutputStream,
-                long nWidth, long nHeight, basegfx::B2DSize aPPI, bool bGreys,
+                long nWidth, long nHeight, basegfx::B2DSize const & rPPI, bool bGreys,
                 long nQualityPercent, long aChromaSubsampling,
                 css::uno::Reference<css::task::XStatusIndicator> const & status )
 {
@@ -240,9 +368,10 @@ bool WriteJPEG( JPEGWriter* pJPEGWriter, void* pOutputStream,
     void*                       pScanline;
     long                        nY;
 
+    JpegCompressOwner aOwner;
+
     if ( setjmp( jerr.setjmp_buffer ) )
     {
-        jpeg_destroy_compress( &cinfo );
         return false;
     }
 
@@ -251,10 +380,11 @@ bool WriteJPEG( JPEGWriter* pJPEGWriter, void* pOutputStream,
     jerr.pub.output_message = outputMessage;
 
     jpeg_create_compress( &cinfo );
+    aOwner.set(&cinfo);
     jpeg_svstream_dest( &cinfo, pOutputStream );
 
-    cinfo.image_width = (JDIMENSION) nWidth;
-    cinfo.image_height = (JDIMENSION) nHeight;
+    cinfo.image_width = static_cast<JDIMENSION>(nWidth);
+    cinfo.image_height = static_cast<JDIMENSION>(nHeight);
     if ( bGreys )
     {
         cinfo.input_components = 1;
@@ -267,11 +397,11 @@ bool WriteJPEG( JPEGWriter* pJPEGWriter, void* pOutputStream,
     }
 
     jpeg_set_defaults( &cinfo );
-    jpeg_set_quality( &cinfo, (int) nQualityPercent, FALSE );
+    jpeg_set_quality( &cinfo, static_cast<int>(nQualityPercent), FALSE );
 
     cinfo.density_unit = 1;
-    cinfo.X_density = aPPI.getX();
-    cinfo.Y_density = aPPI.getY();
+    cinfo.X_density = rPPI.getX();
+    cinfo.Y_density = rPPI.getY();
 
     if ( ( nWidth > 128 ) || ( nHeight > 128 ) )
         jpeg_simple_progression( &cinfo );
@@ -310,12 +440,11 @@ bool WriteJPEG( JPEGWriter* pJPEGWriter, void* pOutputStream,
     }
 
     jpeg_finish_compress(&cinfo);
-    jpeg_destroy_compress( &cinfo );
 
     return true;
 }
 
-long Transform(void* pInputStream, void* pOutputStream, long nAngle)
+void Transform(void* pInputStream, void* pOutputStream, long nAngle)
 {
     jpeg_transform_info aTransformOption;
     JCOPY_OPTION        aCopyOption = JCOPYOPT_ALL;
@@ -362,15 +491,20 @@ long Transform(void* pInputStream, void* pOutputStream, long nAngle)
 
     aDestinationInfo.optimize_coding = TRUE;
 
+    JpegDecompressOwner aDecompressOwner;
+    JpegCompressOwner aCompressOwner;
+
     if (setjmp(aSourceError.setjmp_buffer) || setjmp(aDestinationError.setjmp_buffer))
     {
         jpeg_destroy_decompress(&aSourceInfo);
         jpeg_destroy_compress(&aDestinationInfo);
-        return 0;
+        return;
     }
 
     jpeg_create_decompress(&aSourceInfo);
+    aDecompressOwner.set(&aSourceInfo);
     jpeg_create_compress(&aDestinationInfo);
+    aCompressOwner.set(&aDestinationInfo);
 
     jpeg_svstream_src (&aSourceInfo, pInputStream);
 
@@ -384,19 +518,15 @@ long Transform(void* pInputStream, void* pOutputStream, long nAngle)
     aDestinationCoefArrays = jtransform_adjust_parameters(&aSourceInfo, &aDestinationInfo, aSourceCoefArrays, &aTransformOption);
     jpeg_svstream_dest (&aDestinationInfo, pOutputStream);
 
-    // Compute optimal Huffman coding tables instead of precomuted tables
+    // Compute optimal Huffman coding tables instead of precomputed tables
     aDestinationInfo.optimize_coding = TRUE;
     jpeg_write_coefficients(&aDestinationInfo, aDestinationCoefArrays);
     jcopy_markers_execute(&aSourceInfo, &aDestinationInfo, aCopyOption);
     jtransform_execute_transformation(&aSourceInfo, &aDestinationInfo, aSourceCoefArrays, &aTransformOption);
 
     jpeg_finish_compress(&aDestinationInfo);
-    jpeg_destroy_compress(&aDestinationInfo);
 
     jpeg_finish_decompress(&aSourceInfo);
-    jpeg_destroy_decompress(&aSourceInfo);
-
-    return 1;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

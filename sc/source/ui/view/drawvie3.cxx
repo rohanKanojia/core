@@ -22,25 +22,26 @@
 #include <sfx2/app.hxx>
 #include <sfx2/viewfrm.hxx>
 
-#include "sc.hrc"
-#include "scresid.hxx"
-#include "drawview.hxx"
-#include "drwlayer.hxx"
+#include <strings.hrc>
+#include <scresid.hxx>
+#include <drawview.hxx>
+#include <drwlayer.hxx>
 #include "imapwrap.hxx"
-#include "viewdata.hxx"
-#include "dbfunc.hxx"
-#include "document.hxx"
-#include "userdat.hxx"
-#include "tabvwsh.hxx"
-#include "docsh.hxx"
+#include <viewdata.hxx>
+#include <dbfunc.hxx>
+#include <document.hxx>
+#include <userdat.hxx>
+#include <tabvwsh.hxx>
+#include <docsh.hxx>
 
-ScDrawView::ScDrawView( OutputDevice* pOut, ScViewData* pData ) :
-    FmFormView( pData->GetDocument()->GetDrawLayer(), pOut ),
+ScDrawView::ScDrawView(
+    OutputDevice* pOut,
+    ScViewData* pData )
+:   FmFormView(*pData->GetDocument()->GetDrawLayer(), pOut),
     pViewData( pData ),
     pDev( pOut ),
     pDoc( pData->GetDocument() ),
     nTab( pData->GetTabNo() ),
-    pDropMarker( nullptr ),
     pDropMarkObj( nullptr ),
     bInConstruct( true )
 {
@@ -62,11 +63,11 @@ void ScDrawView::SetPageAnchored()
         const SdrMarkList* pMark = &GetMarkedObjectList();
         const size_t nCount = pMark->GetMarkCount();
 
-        BegUndo( OUString(ScResId( SCSTR_UNDO_PAGE_ANCHOR )) );
+        BegUndo(ScResId(SCSTR_UNDO_PAGE_ANCHOR));
         for( size_t i=0; i<nCount; ++i )
         {
             SdrObject* pObj = pMark->GetMark(i)->GetMarkedSdrObj();
-            AddUndo (new ScUndoAnchorData( pObj, pDoc, nTab ));
+            AddUndo (std::make_unique<ScUndoAnchorData>( pObj, pDoc, nTab ));
             ScDrawLayer::SetPageAnchored( *pObj );
         }
         EndUndo();
@@ -75,12 +76,12 @@ void ScDrawView::SetPageAnchored()
             pViewData->GetDocShell()->SetDrawModified();
 
         // Remove the anchor object.
-        maHdlList.RemoveAllByKind(HDL_ANCHOR);
-        maHdlList.RemoveAllByKind(HDL_ANCHOR_TR);
+        maHdlList.RemoveAllByKind(SdrHdlKind::Anchor);
+        maHdlList.RemoveAllByKind(SdrHdlKind::Anchor_TR);
     }
 }
 
-void ScDrawView::SetCellAnchored()
+void ScDrawView::SetCellAnchored(bool bResizeWithCell)
 {
     if (!pDoc)
         return;
@@ -90,12 +91,12 @@ void ScDrawView::SetCellAnchored()
         const SdrMarkList* pMark = &GetMarkedObjectList();
         const size_t nCount = pMark->GetMarkCount();
 
-        BegUndo( OUString(ScResId( SCSTR_UNDO_CELL_ANCHOR )) );
+        BegUndo(ScResId(SCSTR_UNDO_CELL_ANCHOR));
         for( size_t i=0; i<nCount; ++i )
         {
             SdrObject* pObj = pMark->GetMark(i)->GetMarkedSdrObj();
-            AddUndo (new ScUndoAnchorData( pObj, pDoc, nTab ));
-            ScDrawLayer::SetCellAnchoredFromPosition(*pObj, *pDoc, nTab);
+            AddUndo (std::make_unique<ScUndoAnchorData>( pObj, pDoc, nTab ));
+            ScDrawLayer::SetCellAnchoredFromPosition(*pObj, *pDoc, nTab, bResizeWithCell);
         }
         EndUndo();
 
@@ -111,6 +112,7 @@ ScAnchorType ScDrawView::GetAnchorType() const
 {
     bool bPage = false;
     bool bCell = false;
+    bool bCellResize = false;
     if( AreObjectsMarked() )
     {
         const SdrMarkList* pMark = &GetMarkedObjectList();
@@ -118,16 +120,21 @@ ScAnchorType ScDrawView::GetAnchorType() const
         for( size_t i=0; i<nCount; ++i )
         {
             const SdrObject* pObj = pMark->GetMark(i)->GetMarkedSdrObj();
-            if( ScDrawLayer::GetAnchorType( *pObj ) == SCA_CELL )
+            const ScAnchorType aAnchorType = ScDrawLayer::GetAnchorType( *pObj );
+            if( aAnchorType == SCA_CELL )
                 bCell =true;
+            else if (aAnchorType == SCA_CELL_RESIZE)
+                bCellResize = true;
             else
                 bPage = true;
         }
     }
-    if( bPage && !bCell )
+    if( bPage && !bCell && !bCellResize )
         return SCA_PAGE;
-    if( !bPage && bCell )
+    if( !bPage && bCell && !bCellResize )
         return SCA_CELL;
+    if( !bPage && !bCell && bCellResize )
+        return SCA_CELL_RESIZE;
     return SCA_DONTKNOW;
 }
 
@@ -139,7 +146,7 @@ namespace {
  */
 void adjustAnchoredPosition(const SdrHint& rHint, const ScDocument& rDoc, SCTAB nTab)
 {
-    if (rHint.GetKind() != HINT_OBJCHG && rHint.GetKind() != HINT_OBJINSERTED)
+    if (rHint.GetKind() != SdrHintKind::ObjectChange && rHint.GetKind() != SdrHintKind::ObjectInserted)
         return;
 
     SdrObject* pObj = const_cast<SdrObject*>(rHint.GetObject());
@@ -153,7 +160,7 @@ void adjustAnchoredPosition(const SdrHint& rHint, const ScDocument& rDoc, SCTAB 
     if (pAnchor->meType == ScDrawObjData::CellNote)
         return;
 
-    if (pAnchor->maLastRect == pObj->GetSnapRect())
+    if (pAnchor->getShapeRect() == pObj->GetSnapRect())
         return;
 
     if (pAnchor->maStart.Tab() != nTab)
@@ -162,7 +169,7 @@ void adjustAnchoredPosition(const SdrHint& rHint, const ScDocument& rDoc, SCTAB 
         // anchored on all selected sheets.
         return;
 
-    ScDrawLayer::SetCellAnchoredFromPosition(*pObj, rDoc, pAnchor->maStart.Tab());
+    ScDrawLayer::SetCellAnchoredFromPosition(*pObj, rDoc, pAnchor->maStart.Tab(), pAnchor->mbResizeWithCell);
 }
 
 }
@@ -207,7 +214,7 @@ void ScDrawView::UpdateIMap( SdrObject* pObj )
             pImageMap = &pIMapInfo->GetImageMap();
 
         // handle target list
-        pViewData->GetViewShell()->GetViewFrame()->GetTargetList( aTargetList );
+        SfxViewFrame::GetTargetList( aTargetList );
 
         // handle graphics from object
         if ( dynamic_cast<const SdrGrafObj*>( pObj) !=  nullptr )

@@ -20,7 +20,7 @@
 #define INCLUDED_DBACCESS_SOURCE_UI_UNO_COLUMNCONTROL_HXX
 
 #include <toolkit/controls/unocontrol.hxx>
-#include "apitools.hxx"
+#include <apitools.hxx>
 
 namespace com { namespace sun { namespace star { namespace uno {
     class XComponentContext;
@@ -39,10 +39,16 @@ namespace dbaui
         virtual OUString GetComponentServiceName() override;
 
         // XServiceInfo
-        DECLARE_SERVICE_INFO_STATIC();
+        DECLARE_SERVICE_INFO();
+        /// @throws css::uno::RuntimeException
+        static OUString getImplementationName_Static(  );
+        /// @throws css::uno::RuntimeException
+        static css::uno::Sequence< OUString > getSupportedServiceNames_Static(  );
+        static css::uno::Reference< css::uno::XInterface >
+        Create(const css::uno::Reference< css::lang::XMultiServiceFactory >&);
 
         // css::awt::XControl
-        virtual void SAL_CALL createPeer(const css::uno::Reference< css::awt::XToolkit >& _rToolkit, const css::uno::Reference< css::awt::XWindowPeer >& Parent) throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL createPeer(const css::uno::Reference< css::awt::XToolkit >& _rToolkit, const css::uno::Reference< css::awt::XWindowPeer >& Parent) override;
     };
 }   // namespace dbaui
 

@@ -35,11 +35,6 @@
           <value xml:lang="en-US">Cell Edit</value>
         </prop>
       </node>
-      <node oor:name="private:resource/popupmenu/chart" oor:op="replace">
-        <prop oor:name="UIName" oor:type="xs:string">
-          <value xml:lang="en-US">Chart</value>
-        </prop>
-      </node>
       <node oor:name="private:resource/popupmenu/colheader" oor:op="replace">
         <prop oor:name="UIName" oor:type="xs:string">
           <value xml:lang="en-US">Column Header</value>
@@ -65,6 +60,11 @@
           <value xml:lang="en-US">Text Box Formatting</value>
         </prop>
       </node>
+      <node oor:name="private:resource/popupmenu/formulabar" oor:op="replace">
+        <prop oor:name="UIName" oor:type="xs:string">
+          <value xml:lang="en-US">Formula Bar</value>
+        </prop>
+      </node>
       <node oor:name="private:resource/popupmenu/graphic" oor:op="replace">
         <prop oor:name="UIName" oor:type="xs:string">
           <value xml:lang="en-US">Image</value>
@@ -73,6 +73,11 @@
       <node oor:name="private:resource/popupmenu/media" oor:op="replace">
         <prop oor:name="UIName" oor:type="xs:string">
           <value xml:lang="en-US">Media</value>
+        </prop>
+      </node>
+      <node oor:name="private:resource/popupmenu/notebookbar" oor:op="replace">
+        <prop oor:name="UIName" oor:type="xs:string">
+          <value xml:lang="en-US">Notebookbar</value>
         </prop>
       </node>
       <node oor:name="private:resource/popupmenu/oleobject" oor:op="replace">
@@ -110,7 +115,7 @@
           <value>false</value>
         </prop>
         <prop oor:name="UIName" oor:type="xs:string">
-          <value xml:lang="en-US">Graphic Filter</value>
+          <value xml:lang="en-US">Image Filter</value>
         </prop>
         <prop oor:name="Visible" oor:type="xs:boolean">
           <value>false</value>
@@ -147,7 +152,7 @@
           <value>false</value>
         </prop>
         <prop oor:name="UIName" oor:type="xs:string">
-          <value xml:lang="en-US">Classification</value>
+          <value xml:lang="en-US">TSCP Classification</value>
         </prop>
       </node>
       <node oor:name="private:resource/toolbar/graphicobjectbar" oor:op="replace">
@@ -686,6 +691,51 @@
         </prop>
         <prop oor:name="UIName" oor:type="xs:string">
           <value xml:lang="en-US">Fontwork Shape</value>
+        </prop>
+        <prop oor:name="Visible" oor:type="xs:boolean">
+          <value>false</value>
+        </prop>
+        <prop oor:name="HideFromToolbarMenu" oor:type="xs:boolean">
+          <value>true</value>
+        </prop>
+      </node>
+      <node oor:name="private:resource/toolbar/singlemode" oor:op="replace">
+        <prop oor:name="DockPos" oor:type="xs:string">
+          <value>0,0</value>
+        </prop>
+        <prop oor:name="Docked" oor:type="xs:boolean">
+          <value>true</value>
+        </prop>
+        <prop oor:name="DockingArea" oor:type="xs:int">
+          <value>0</value>
+        </prop>
+        <prop oor:name="UIName" oor:type="xs:string">
+          <value xml:lang="en-US">Standard (Single Mode)</value>
+        </prop>
+        <prop oor:name="Visible" oor:type="xs:boolean">
+          <value>false</value>
+        </prop>
+        <prop oor:name="HideFromToolbarMenu" oor:type="xs:boolean">
+          <value>false</value>
+        </prop>
+        <prop oor:name="ContextSensitive" oor:type="xs:boolean">
+          <value>false</value>
+        </prop>
+      </node>
+      <node oor:name="private:resource/toolbar/arrowsbar" oor:op="replace">
+        <prop oor:name="Docked" oor:type="xs:boolean">
+          <value>false</value>
+        </prop>
+        <prop oor:name="UIName" oor:type="xs:string">
+          <value xml:lang="en-US">Arrows</value>
+        </prop>
+        <prop oor:name="Visible" oor:type="xs:boolean">
+          <value>false</value>
+        </prop>
+      </node>
+      <node oor:name="private:resource/toolbar/notebookbarshortcuts" oor:op="replace">
+        <prop oor:name="UIName" oor:type="xs:string">
+          <value xml:lang="en-US">Notebookbar shortcuts</value>
         </prop>
         <prop oor:name="Visible" oor:type="xs:boolean">
           <value>false</value>

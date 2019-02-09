@@ -18,11 +18,13 @@
  */
 
 #include "ChartModelClone.hxx"
-#include "ChartModelHelper.hxx"
-#include "ControllerLockGuard.hxx"
-#include "DataSourceHelper.hxx"
+#include <ChartModel.hxx>
+#include <ChartModelHelper.hxx>
+#include <ControllerLockGuard.hxx>
+#include <DataSourceHelper.hxx>
 
 #include <com/sun/star/chart2/XAnyDescriptionAccess.hpp>
+#include <com/sun/star/chart2/XInternalDataProvider.hpp>
 #include <com/sun/star/util/XCloneable.hpp>
 #include <com/sun/star/chart2/XChartDocument.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
@@ -39,11 +41,9 @@ namespace chart
 {
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::uno::UNO_QUERY;
     using ::com::sun::star::uno::UNO_QUERY_THROW;
     using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Sequence;
     using ::com::sun::star::frame::XModel;
     using ::com::sun::star::util::XCloneable;
@@ -70,7 +70,7 @@ namespace chart
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
             return xResult;
         }
@@ -101,7 +101,7 @@ namespace chart
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 
@@ -123,7 +123,7 @@ namespace chart
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
         m_xModelClone.clear();
         m_xDataClone.clear();
@@ -152,7 +152,7 @@ namespace chart
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
         }
     }
@@ -234,13 +234,13 @@ namespace chart
             Reference< XModifiable > xDestMod( xDestination, UNO_QUERY );
             if ( xSourceMod.is() && xDestMod.is() && !xSourceMod->isModified() )
             {
-                xDestMod->setModified( sal_False );
+                xDestMod->setModified( false );
             }
-            // \-- loccked controllers of destination
+            // \-- locked controllers of destination
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 

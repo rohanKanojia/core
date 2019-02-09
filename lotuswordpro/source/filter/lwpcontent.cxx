@@ -59,10 +59,10 @@
  ************************************************************************/
 
 #include "lwpstory.hxx"
-#include "lwpfilehdr.hxx"
+#include <lwpfilehdr.hxx>
 #include "lwpholder.hxx"
 
-LwpHeadContent::LwpHeadContent(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpHeadContent::LwpHeadContent(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpContent(objHdr, pStrm)
 {}
 
@@ -72,7 +72,7 @@ void LwpHeadContent::Read()
     m_pObjStrm->SkipExtra();
 }
 
-LwpContent::LwpContent(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpContent::LwpContent(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpDLNFVList(objHdr, pStrm)
     , m_nFlags(0)
 {
@@ -82,7 +82,7 @@ void LwpContent::Read()
 {
     LwpDLNFVList::Read();
 
-    LwpObjectStream* pStrm = m_pObjStrm;
+    LwpObjectStream* pStrm = m_pObjStrm.get();
 
     m_LayoutsWithMe.Read(pStrm);
     m_nFlags = pStrm->QuickReaduInt16();
@@ -121,7 +121,7 @@ void LwpContent::Read()
     pStrm->SkipExtra();
 }
 
-rtl::Reference<LwpVirtualLayout> LwpContent::GetLayout(LwpVirtualLayout* pStartLayout)
+rtl::Reference<LwpVirtualLayout> LwpContent::GetLayout(LwpVirtualLayout const * pStartLayout)
 {
     return m_LayoutsWithMe.GetLayout(pStartLayout);
 }

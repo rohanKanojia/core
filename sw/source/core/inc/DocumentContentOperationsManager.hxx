@@ -41,7 +41,7 @@ public:
 
     void DeleteSection(SwNode* pNode) override;
 
-    bool DeleteRange(SwPaM&) override;
+    void DeleteRange(SwPaM&) override;
 
     bool DelFullPara(SwPaM&) override;
 
@@ -54,7 +54,7 @@ public:
 
     bool MoveNodeRange(SwNodeRange&, SwNodeIndex&, SwMoveFlags) override;
 
-    bool MoveAndJoin(SwPaM&, SwPosition&, SwMoveFlags) override;
+    bool MoveAndJoin(SwPaM&, SwPosition&) override;
 
     bool Overwrite(const SwPaM &rRg, const OUString& rStr) override;
 
@@ -63,21 +63,20 @@ public:
 
     void TransliterateText(const SwPaM& rPaM, utl::TransliterationWrapper&) override;
 
-    SwFlyFrameFormat* Insert(const SwPaM &rRg, const OUString& rGrfName, const OUString& rFltName, const Graphic* pGraphic,
+    SwFlyFrameFormat* InsertGraphic(const SwPaM &rRg, const OUString& rGrfName, const OUString& rFltName, const Graphic* pGraphic,
                         const SfxItemSet* pFlyAttrSet, const SfxItemSet* pGrfAttrSet, SwFrameFormat*) override;
 
-    SwFlyFrameFormat* Insert(const SwPaM& rRg, const GraphicObject& rGrfObj, const SfxItemSet* pFlyAttrSet,
-        const SfxItemSet* pGrfAttrSet, SwFrameFormat*) override;
+    SwFlyFrameFormat* InsertGraphicObject(const SwPaM& rRg, const GraphicObject& rGrfObj, const SfxItemSet* pFlyAttrSet,
+        const SfxItemSet* pGrfAttrSet) override;
 
-    void ReRead(SwPaM&, const OUString& rGrfName, const OUString& rFltName, const Graphic* pGraphic, const GraphicObject* pGrfObj) override;
+    void ReRead(SwPaM&, const OUString& rGrfName, const OUString& rFltName, const Graphic* pGraphic) override;
 
     SwDrawFrameFormat* InsertDrawObj( const SwPaM &rRg, SdrObject& rDrawObj, const SfxItemSet& rFlyAttrSet ) override;
 
-    SwFlyFrameFormat* Insert(const SwPaM &rRg, const svt::EmbeddedObjectRef& xObj, const SfxItemSet* pFlyAttrSet,
-        const SfxItemSet* pGrfAttrSet, SwFrameFormat*) override;
+    SwFlyFrameFormat* InsertEmbObject(const SwPaM &rRg, const svt::EmbeddedObjectRef& xObj, const SfxItemSet* pFlyAttrSet) override;
 
     SwFlyFrameFormat* InsertOLE(const SwPaM &rRg, const OUString& rObjName, sal_Int64 nAspect, const SfxItemSet* pFlyAttrSet,
-                           const SfxItemSet* pGrfAttrSet, SwFrameFormat*) override;
+                           const SfxItemSet* pGrfAttrSet) override;
 
     bool SplitNode(const SwPosition &rPos, bool bChkTableStart) override;
 
@@ -88,10 +87,13 @@ public:
 
     // Add a para for the char attribute exp...
     bool InsertPoolItem(const SwPaM &rRg, const SfxPoolItem&,
-                                const SetAttrMode nFlags = SetAttrMode::DEFAULT, bool bExpandCharToPara=false) override;
+                        const SetAttrMode nFlags = SetAttrMode::DEFAULT,
+                        SwRootFrame const* pLayout = nullptr,
+                        bool bExpandCharToPara=false) override;
 
-    bool InsertItemSet (const SwPaM &rRg, const SfxItemSet&,
-        const SetAttrMode nFlags = SetAttrMode::DEFAULT) override;
+    void InsertItemSet (const SwPaM &rRg, const SfxItemSet&,
+        const SetAttrMode nFlags = SetAttrMode::DEFAULT,
+        SwRootFrame const* pLayout = nullptr) override;
 
     void RemoveLeadingWhiteSpace(const SwPosition & rPos ) override;
 
@@ -118,6 +120,7 @@ public:
         SwHistory* pHistory;
         const SwPosition *pSttNd, *pEndNd;
         const SfxItemSet* pDelSet;
+        SwRootFrame const*const pLayout;
         sal_uInt16 nWhich;
         bool bReset;
         bool bResetListAttrs; // #i62575#
@@ -127,12 +130,14 @@ public:
         bool bExactRange;
 
         ParaRstFormat(const SwPosition* pStt, const SwPosition* pEnd,
-                   SwHistory* pHst, const SfxItemSet* pSet = nullptr)
+                   SwHistory* pHst, const SfxItemSet* pSet = nullptr,
+                   SwRootFrame const*const pLay = nullptr)
             : pFormatColl(nullptr)
             , pHistory(pHst)
             , pSttNd(pStt)
             , pEndNd(pEnd)
             , pDelSet(pSet)
+            , pLayout(pLay)
             , nWhich(0)
             , bReset(false) // #i62675#
             , bResetListAttrs(false)
@@ -145,7 +150,7 @@ public:
     static bool lcl_RstTextAttr( const SwNodePtr& rpNd, void* pArgs ); //originally from docfmt.cxx
 
 
-    virtual ~DocumentContentOperationsManager();
+    virtual ~DocumentContentOperationsManager() override;
 
 private:
     SwDoc& m_rDoc;
@@ -155,10 +160,10 @@ private:
     bool DeleteRangeImpl(SwPaM&, const bool unused = false);
     bool DeleteRangeImplImpl(SwPaM &);
     bool ReplaceRangeImpl(SwPaM&, OUString const&, const bool);
-    SwFlyFrameFormat* _InsNoTextNode( const SwPosition&rPos, SwNoTextNode*,
+    SwFlyFrameFormat* InsNoTextNode( const SwPosition&rPos, SwNoTextNode*,
                                 const SfxItemSet* pFlyAttrSet,
                                 const SfxItemSet* pGrfAttrSet,
-                                SwFrameFormat* = nullptr );
+                                SwFrameFormat* );
     /* Copy a range within the same or to another document.
      Position may not lie within range! */
     bool CopyImpl( SwPaM&, SwPosition&, const bool MakeNewFrames /*= true */,

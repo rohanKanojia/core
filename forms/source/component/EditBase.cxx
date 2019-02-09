@@ -18,14 +18,15 @@
  */
 
 #include "EditBase.hxx"
-#include "property.hxx"
-#include "property.hrc"
-#include "services.hxx"
+#include <property.hxx>
+#include <services.hxx>
 #include <tools/debug.hxx>
 #include <comphelper/basicio.hxx>
+#include <comphelper/property.hxx>
+#include <comphelper/types.hxx>
 #include <cppuhelper/queryinterface.hxx>
-#include "frm_resource.hxx"
-#include "frm_resource.hrc"
+#include <frm_resource.hxx>
+#include <strings.hrc>
 #include <tools/time.hxx>
 #include <tools/date.hxx>
 #include <com/sun/star/util/Time.hpp>
@@ -85,7 +86,7 @@ OEditBaseModel::~OEditBaseModel( )
 
 // XPersist
 
-void OEditBaseModel::write(const Reference<XObjectOutputStream>& _rxOutStream) throw ( css::io::IOException, css::uno::RuntimeException, std::exception)
+void OEditBaseModel::write(const Reference<XObjectOutputStream>& _rxOutStream)
 {
     OBoundControlModel::write(_rxOutStream);
 
@@ -140,7 +141,7 @@ void OEditBaseModel::write(const Reference<XObjectOutputStream>& _rxOutStream) t
     writeHelpTextCompatibly(_rxOutStream);
     // (that's potentially bad : at the time I added the above line we had two derived classes : OEditModel and
     // OFormattedModel. The first one does not have an own version handling, so it can't write the help text itself,
-    // the second one does it's own writing (reading) after calling our method, so normally we shouldn't write any
+    // the second one does its own writing (reading) after calling our method, so normally we shouldn't write any
     // additional members as this is not compatible to older office versions.
     // We decided to place the writing of the help text here as it seems the less worse alternative. There is no delivered
     // office version including formatted controls (and thus the OFormattedModel), and the OFormattedModel::read seems
@@ -159,7 +160,7 @@ sal_uInt16 OEditBaseModel::getPersistenceFlags() const
 }
 
 
-void OEditBaseModel::read(const Reference<XObjectInputStream>& _rxInStream) throw ( css::io::IOException, css::uno::RuntimeException, std::exception)
+void OEditBaseModel::read(const Reference<XObjectInputStream>& _rxInStream)
 {
     OBoundControlModel::read(_rxInStream);
     ::osl::MutexGuard aGuard(m_aMutex);
@@ -184,12 +185,12 @@ void OEditBaseModel::read(const Reference<XObjectInputStream>& _rxInStream) thro
         if ((nAnyMask & DEFAULT_LONG) == DEFAULT_LONG)
         {
             sal_Int32 nValue = _rxInStream->readLong();
-            m_aDefault <<= (sal_Int32)nValue;
+            m_aDefault <<= nValue;
         }
         else if ((nAnyMask & DEFAULT_DOUBLE) == DEFAULT_DOUBLE)
         {
             double fValue = _rxInStream->readDouble();
-            m_aDefault <<= (double)fValue;
+            m_aDefault <<= fValue;
         }
         else if ((nAnyMask & DEFAULT_TIME) == DEFAULT_TIME)
         {
@@ -291,9 +292,8 @@ void OEditBaseModel::getFastPropertyValue( Any& rValue, sal_Int32 nHandle ) cons
     }
 }
 
-
 sal_Bool OEditBaseModel::convertFastPropertyValue( Any& rConvertedValue, Any& rOldValue,
-                                            sal_Int32 nHandle, const Any& rValue ) throw( IllegalArgumentException )
+                                            sal_Int32 nHandle, const Any& rValue )
 {
     bool bModified(false);
     switch (nHandle)
@@ -326,8 +326,7 @@ sal_Bool OEditBaseModel::convertFastPropertyValue( Any& rConvertedValue, Any& rO
     return bModified;
 }
 
-
-void OEditBaseModel::setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const Any& rValue ) throw ( css::uno::Exception, std::exception)
+void OEditBaseModel::setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const Any& rValue )
 {
     switch (nHandle)
     {

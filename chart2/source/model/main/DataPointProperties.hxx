@@ -19,11 +19,12 @@
 #ifndef INCLUDED_CHART2_SOURCE_MODEL_MAIN_DATAPOINTPROPERTIES_HXX
 #define INCLUDED_CHART2_SOURCE_MODEL_MAIN_DATAPOINTPROPERTIES_HXX
 
-#include "PropertyHelper.hxx"
-#include "FastPropertyIdRanges.hxx"
-#include <com/sun/star/beans/Property.hpp>
+#include <PropertyHelper.hxx>
+#include <FastPropertyIdRanges.hxx>
 
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace beans { struct Property; } } } }
 
 namespace chart
 {
@@ -80,13 +81,14 @@ namespace DataPointProperties
         PROP_DATAPOINT_LABEL_BORDER_WIDTH,
         PROP_DATAPOINT_LABEL_BORDER_DASH,
         PROP_DATAPOINT_LABEL_BORDER_DASH_NAME,
-        PROP_DATAPOINT_LABEL_BORDER_TRANS
+        PROP_DATAPOINT_LABEL_BORDER_TRANS,
+        PROP_DATAPOINT_CUSTOM_LABEL_FIELDS
 
         // additionally some properites from ::chart::LineProperties
     };
 
     void AddPropertiesToVector(
-        ::std::vector< css::beans::Property > & rOutProperties );
+        std::vector< css::beans::Property > & rOutProperties );
 
     void AddDefaultsToMap( ::chart::tPropertyValueMap & rOutMap );
 }

@@ -15,28 +15,9 @@
 #include <string>
 #include <vector>
 
+#include "check.hxx"
 #include "compat.hxx"
 #include "plugin.hxx"
-
-#if CLANG_VERSION < 30700
-
-template<> struct std::iterator_traits<ExprIterator> {
-    typedef std::ptrdiff_t difference_type;
-    typedef Expr * value_type;
-    typedef Expr const ** pointer;
-    typedef Expr const & reference;
-    typedef std::random_access_iterator_tag iterator_category;
-};
-
-template<> struct std::iterator_traits<ConstExprIterator> {
-    typedef std::ptrdiff_t difference_type;
-    typedef Expr const * value_type;
-    typedef Expr const ** pointer;
-    typedef Expr const & reference;
-    typedef std::random_access_iterator_tag iterator_category;
-};
-
-#endif
 
 namespace {
 
@@ -75,6 +56,25 @@ SubstTemplateTypeParmType const * getAsSubstTemplateTypeParmType(QualType type)
     }
 }
 
+QualType reconstructTemplateArgumentType(
+    TemplateDecl const * decl, TemplateSpecializationType const * specializationType,
+    SubstTemplateTypeParmType const * parmType)
+{
+    TemplateParameterList const * ps = decl->getTemplateParameters();
+    auto i = std::find(ps->begin(), ps->end(), parmType->getReplacedParameter()->getDecl());
+    if (i == ps->end()) {
+        return {};
+    }
+    if (ps->size() != specializationType->getNumArgs()) { //TODO
+        return {};
+    }
+    TemplateArgument const & arg = specializationType->getArg(i - ps->begin());
+    if (arg.getKind() != TemplateArgument::Type) {
+        return {};
+    }
+    return arg.getAsType();
+}
+
 bool areSameTypedef(QualType type1, QualType type2) {
     // type1.getTypePtr() == typ2.getTypePtr() fails for e.g. ::sal_Bool vs.
     // sal_Bool:
@@ -83,31 +83,20 @@ bool areSameTypedef(QualType type1, QualType type2) {
     return t1 != nullptr && t2 != nullptr && t1->getDecl() == t2->getDecl();
 }
 
-bool isBool(QualType type, bool allowTypedefs = true) {
-    if (type->isBooleanType()) {
-        return true;
-    }
-    if (!allowTypedefs) {
-        return false;
-    }
-    TypedefType const * t2 = type->getAs<TypedefType>();
-    if (t2 == nullptr) {
-        return false;
-    }
-    std::string name(t2->getDecl()->getNameAsString());
-    return name == "sal_Bool" || name == "BOOL" || name == "Boolean"
-        || name == "FT_Bool" || name == "FcBool" || name == "GLboolean"
-        || name == "NPBool" || name == "UBool" || name == "dbus_bool_t"
-        || name == "gboolean" || name == "hb_bool_t" || name == "jboolean";
-}
-
 bool isBool(Expr const * expr, bool allowTypedefs = true) {
-    return isBool(expr->getType(), allowTypedefs);
+    auto t = expr->getType();
+    return allowTypedefs
+        ? bool(loplugin::TypeCheck(t).AnyBoolean()) : t->isBooleanType();
 }
 
 bool isMatchingBool(Expr const * expr, Expr const * comparisonExpr) {
     return isBool(expr, false)
         || areSameTypedef(expr->getType(), comparisonExpr->getType());
+}
+
+bool isSalBool(QualType type) {
+    auto t = type->getAs<TypedefType>();
+    return t != nullptr && t->getDecl()->getName() == "sal_Bool";
 }
 
 bool isBoolExpr(Expr const * expr) {
@@ -165,27 +154,22 @@ bool isBoolExpr(Expr const * expr) {
                 if (td == nullptr) {
                     break;
                 }
-                TemplateParameterList const * ps = td->getTemplateParameters();
                 SubstTemplateTypeParmType const * t2
                     = getAsSubstTemplateTypeParmType(
                         me->getMemberDecl()->getType());
                 if (t2 == nullptr) {
                     break;
                 }
-                auto i = std::find(
-                    ps->begin(), ps->end(),
-                    t2->getReplacedParameter()->getDecl());
-                if (i == ps->end()) {
+                ty = reconstructTemplateArgumentType(td, t, t2);
+                if (ty.isNull()) {
+                    auto const canon = cast<TemplateDecl>(td->getCanonicalDecl());
+                    if (canon != td) {
+                        ty = reconstructTemplateArgumentType(canon, t, t2);
+                    }
+                }
+                if (ty.isNull()) {
                     break;
                 }
-                if (ps->size() != t->getNumArgs()) { //TODO
-                    break;
-                }
-                TemplateArgument const & arg = t->getArg(i - ps->begin());
-                if (arg.getKind() != TemplateArgument::Type) {
-                    break;
-                }
-                ty = arg.getAsType();
             } else {
                 CXXOperatorCallExpr const * op
                     = dyn_cast<CXXOperatorCallExpr>(stack.top());
@@ -204,7 +188,7 @@ bool isBoolExpr(Expr const * expr) {
             }
             stack.pop();
             if (stack.empty()) {
-                if (isBool(ty)) {
+                if (loplugin::TypeCheck(ty).AnyBoolean()) {
                     return true;
                 }
                 break;
@@ -230,24 +214,18 @@ bool hasCLanguageLinkageType(FunctionDecl const * decl) {
     if (decl->isExternC()) {
         return true;
     }
-#if CLANG_VERSION >= 30300
     if (decl->isInExternCContext()) {
         return true;
     }
-#else
-    if (decl->getCanonicalDecl()->getDeclContext()->isExternCContext()) {
-        return true;
-    }
-#endif
     return false;
 }
 
 class ImplicitBoolConversion:
-    public RecursiveASTVisitor<ImplicitBoolConversion>, public loplugin::Plugin
+    public loplugin::FilteringPlugin<ImplicitBoolConversion>
 {
 public:
-    explicit ImplicitBoolConversion(InstantiationData const & data):
-        Plugin(data) {}
+    explicit ImplicitBoolConversion(loplugin::InstantiationData const & data):
+        FilteringPlugin(data) {}
 
     virtual void run() override
     { TraverseDecl(compiler.getASTContext().getTranslationUnitDecl()); }
@@ -288,11 +266,15 @@ public:
 
     bool TraverseBinXorAssign(CompoundAssignOperator * expr);
 
+    bool TraverseCXXStdInitializerListExpr(CXXStdInitializerListExpr * expr);
+
     bool TraverseReturnStmt(ReturnStmt * stmt);
 
     bool TraverseFunctionDecl(FunctionDecl * decl);
 
     bool VisitImplicitCastExpr(ImplicitCastExpr const * expr);
+
+    bool VisitMaterializeTemporaryExpr(MaterializeTemporaryExpr const * expr);
 
 private:
     bool isExternCFunctionCall(
@@ -328,19 +310,19 @@ bool ImplicitBoolConversion::TraverseCallExpr(CallExpr * expr) {
             std::ptrdiff_t n = j - expr->arg_begin();
             assert(n >= 0);
             if (t != nullptr
-                && static_cast<std::size_t>(n) >= compat::getNumParams(*t))
+                && static_cast<std::size_t>(n) >= t->getNumParams())
             {
                 assert(t->isVariadic());
                 // ignore bool to int promotions of variadic arguments
             } else if (bExt) {
                 if (t != nullptr) {
                     assert(
-                        static_cast<std::size_t>(n) < compat::getNumParams(*t));
-                    if (!(compat::getParamType(*t, n)->isSpecificBuiltinType(
+                        static_cast<std::size_t>(n) < t->getNumParams());
+                    if (!(t->getParamType(n)->isSpecificBuiltinType(
                               BuiltinType::Int)
-                          || compat::getParamType(*t, n)->isSpecificBuiltinType(
+                          || t->getParamType(n)->isSpecificBuiltinType(
                               BuiltinType::UInt)
-                          || compat::getParamType(*t, n)->isSpecificBuiltinType(
+                          || t->getParamType(n)->isSpecificBuiltinType(
                               BuiltinType::Long)))
                     {
                         reportWarning(i);
@@ -372,8 +354,10 @@ bool ImplicitBoolConversion::TraverseCallExpr(CallExpr * expr) {
                                 auto const ta = dr->getTemplateArgs();
                                 if ((ta[0].getArgument().getKind()
                                      == TemplateArgument::Type)
-                                    && isBool(
-                                        ta[0].getTypeSourceInfo()->getType()))
+                                    && (loplugin::TypeCheck(
+                                            ta[0].getTypeSourceInfo()
+                                            ->getType())
+                                        .AnyBoolean()))
                                 {
                                     continue;
                                 }
@@ -420,7 +404,7 @@ bool ImplicitBoolConversion::TraverseCXXMemberCallExpr(CXXMemberCallExpr * expr)
                 = ignoreParenImpCastAndComma(expr->getImplicitObjectArgument())
                 ->getType();
             if (dyn_cast<MemberExpr>(expr->getCallee())->isArrow()) {
-                ty = ty->getAs<PointerType>()->getPointeeType();
+                ty = ty->getAs<clang::PointerType>()->getPointeeType();
             }
             TemplateSpecializationType const * ct
                 = ty->getAs<TemplateSpecializationType>();
@@ -435,7 +419,8 @@ bool ImplicitBoolConversion::TraverseCXXMemberCallExpr(CXXMemberCallExpr * expr)
                         //TODO: fix this superficial nonsense check:
                         if (ct->getNumArgs() >= 1
                             && ct->getArg(0).getKind() == TemplateArgument::Type
-                            && isBool(ct->getArg(0).getAsType()))
+                            && (loplugin::TypeCheck(ct->getArg(0).getAsType())
+                                .AnyBoolean()))
                         {
                             continue;
                         }
@@ -656,10 +641,12 @@ bool ImplicitBoolConversion::TraverseBinNE(BinaryOperator * expr) {
 bool ImplicitBoolConversion::TraverseBinAssign(BinaryOperator * expr) {
     nested.push(std::vector<ImplicitCastExpr const *>());
     bool bRet = RecursiveASTVisitor::TraverseBinAssign(expr);
-    // /usr/include/gtk-2.0/gtk/gtktogglebutton.h: struct _GtkToggleButton:
+    // gtk-2.0/gtk/gtktogglebutton.h: struct _GtkToggleButton:
     //  guint GSEAL (active) : 1;
     // even though <http://www.gtk.org/api/2.6/gtk/GtkToggleButton.html>:
     //  "active"               gboolean              : Read / Write
+    // qt5/QtGui/qaccessible.h: struct State:
+    //  quint64 disabled : 1;
     bool bExt = false;
     MemberExpr const * me = dyn_cast<MemberExpr>(expr->getLHS());
     if (me != nullptr) {
@@ -667,8 +654,9 @@ bool ImplicitBoolConversion::TraverseBinAssign(BinaryOperator * expr) {
         if (fd != nullptr && fd->isBitField()
             && fd->getBitWidthValue(compiler.getASTContext()) == 1)
         {
-            TypedefType const * t = fd->getType()->getAs<TypedefType>();
-            bExt = t != nullptr && t->getDecl()->getNameAsString() == "guint";
+            auto const check = loplugin::TypeCheck(fd->getType());
+            bExt = check.Typedef("guint").GlobalNamespace()
+                || check.Typedef("quint64").GlobalNamespace();
         }
     }
     assert(!nested.empty());
@@ -701,7 +689,7 @@ bool ImplicitBoolConversion::TraverseBinAndAssign(CompoundAssignOperator * expr)
     {
         report(
             DiagnosticsEngine::Warning, "mix of %0 and %1 in operator &=",
-            expr->getRHS()->getLocStart())
+            compat::getBeginLoc(expr->getRHS()))
             << expr->getLHS()->getType()
             << expr->getRHS()->IgnoreParenImpCasts()->getType()
             << expr->getSourceRange();
@@ -727,7 +715,7 @@ bool ImplicitBoolConversion::TraverseBinOrAssign(CompoundAssignOperator * expr)
     {
         report(
             DiagnosticsEngine::Warning, "mix of %0 and %1 in operator |=",
-            expr->getRHS()->getLocStart())
+            compat::getBeginLoc(expr->getRHS()))
             << expr->getLHS()->getType()
             << expr->getRHS()->IgnoreParenImpCasts()->getType()
             << expr->getSourceRange();
@@ -753,12 +741,49 @@ bool ImplicitBoolConversion::TraverseBinXorAssign(CompoundAssignOperator * expr)
     {
         report(
             DiagnosticsEngine::Warning, "mix of %0 and %1 in operator ^=",
-            expr->getRHS()->getLocStart())
+            compat::getBeginLoc(expr->getRHS()))
             << expr->getLHS()->getType()
             << expr->getRHS()->IgnoreParenImpCasts()->getType()
             << expr->getSourceRange();
     }
     return bRet;
+}
+
+bool ImplicitBoolConversion::TraverseCXXStdInitializerListExpr(
+    CXXStdInitializerListExpr * expr)
+{
+    // Must be some std::initializer_list<T>; check whether T is sal_Bool (i.e.,
+    // unsigned char) [TODO: check for real sal_Bool instead]:
+    auto t = expr->getType();
+    if (auto et = dyn_cast<ElaboratedType>(t)) {
+        t = et->desugar();
+    }
+    auto ts = t->getAs<TemplateSpecializationType>();
+    if (ts == nullptr
+        || !ts->getArg(0).getAsType()->isSpecificBuiltinType(
+            clang::BuiltinType::UChar))
+    {
+        return RecursiveASTVisitor::TraverseCXXStdInitializerListExpr(expr);
+    }
+    // Avoid warnings for code like
+    //
+    //  Sequence<sal_Bool> arBool({true, false, true});
+    //
+    auto e = dyn_cast<InitListExpr>(
+        ignoreParenAndTemporaryMaterialization(expr->getSubExpr()));
+    if (e == nullptr) {
+        return RecursiveASTVisitor::TraverseCXXStdInitializerListExpr(expr);
+    }
+    nested.push(std::vector<ImplicitCastExpr const *>());
+    bool ret = RecursiveASTVisitor::TraverseCXXStdInitializerListExpr(expr);
+    assert(!nested.empty());
+    for (auto i: nested.top()) {
+        if (std::find(e->begin(), e->end(), i) == e->end()) {
+            reportWarning(i);
+        }
+    }
+    nested.pop();
+    return ret;
 }
 
 bool ImplicitBoolConversion::TraverseReturnStmt(ReturnStmt * stmt) {
@@ -785,7 +810,7 @@ bool ImplicitBoolConversion::TraverseReturnStmt(ReturnStmt * stmt) {
 bool ImplicitBoolConversion::TraverseFunctionDecl(FunctionDecl * decl) {
     bool bExt = false;
     if (hasCLanguageLinkageType(decl) && decl->isThisDeclarationADefinition()) {
-        QualType t { compat::getReturnType(*decl) };
+        QualType t { decl->getReturnType() };
         if (t->isSpecificBuiltinType(BuiltinType::Int)
             || t->isSpecificBuiltinType(BuiltinType::UInt))
         {
@@ -829,36 +854,68 @@ bool ImplicitBoolConversion::VisitImplicitCastExpr(
         }
         return true;
     }
-    ExplicitCastExpr const * sub = dyn_cast<ExplicitCastExpr>(
-        expr->getSubExpr()->IgnoreParenImpCasts());
-    if (sub != nullptr
-        && (sub->getSubExpr()->IgnoreParenImpCasts()->getType().IgnoreParens()
-            == expr->getType().IgnoreParens())
-        && isBool(sub->getSubExpr()->IgnoreParenImpCasts()))
+    if (auto const sub = dyn_cast<ExplicitCastExpr>(
+            compat::getSubExprAsWritten(expr)))
     {
-        report(
-            DiagnosticsEngine::Warning,
-            "explicit conversion (%0) from %1 to %2 implicitly cast back to %3",
-            expr->getLocStart())
-            << sub->getCastKindName()
-            << sub->getSubExpr()->IgnoreParenImpCasts()->getType()
-            << sub->getType() << expr->getType() << expr->getSourceRange();
-        return true;
+        auto const subsub = compat::getSubExprAsWritten(sub);
+        if (subsub->getType().IgnoreParens() == expr->getType().IgnoreParens()
+            && isBool(subsub))
+        {
+            // Ignore "normalizing cast" bool(b) from sal_Bool b to bool, then
+            // implicitly cast back again to sal_Bool:
+            if (dyn_cast<CXXFunctionalCastExpr>(sub) != nullptr
+                && sub->getType()->isBooleanType() && isSalBool(expr->getType())
+                && isSalBool(subsub->getType()))
+            {
+                return true;
+            }
+            report(
+                DiagnosticsEngine::Warning,
+                ("explicit conversion (%0) from %1 to %2 implicitly cast back"
+                 " to %3"),
+                compat::getBeginLoc(expr))
+                << sub->getCastKindName() << subsub->getType() << sub->getType()
+                << expr->getType() << expr->getSourceRange();
+            return true;
+        }
     }
     if (expr->getType()->isBooleanType() && !isBoolExpr(expr->getSubExpr())
         && !calls.empty())
     {
         CallExpr const * call = calls.top();
-        if (std::find_if(
+        if (std::any_of(
                 call->arg_begin(), call->arg_end(),
-                [expr](Expr const * e) { return expr == e->IgnoreParens(); })
-            != call->arg_end())
+                [expr](Expr const * e) { return expr == e->IgnoreParens(); }))
         {
             report(
                 DiagnosticsEngine::Warning,
                 "implicit conversion (%0) of call argument from %1 to %2",
-                expr->getLocStart())
+                compat::getBeginLoc(expr))
                 << expr->getCastKindName() << expr->getSubExpr()->getType()
+                << expr->getType() << expr->getSourceRange();
+            return true;
+        }
+    }
+    return true;
+}
+
+bool ImplicitBoolConversion::VisitMaterializeTemporaryExpr(
+    MaterializeTemporaryExpr const * expr)
+{
+    if (ignoreLocation(expr)) {
+        return true;
+    }
+    if (auto const sub = dyn_cast<ExplicitCastExpr>(expr->GetTemporaryExpr())) {
+        auto const subsub = compat::getSubExprAsWritten(sub);
+        if (subsub->getType().IgnoreParens() == expr->getType().IgnoreParens()
+            && isBool(subsub))
+        {
+            report(
+                DiagnosticsEngine::Warning,
+                ("explicit conversion (%0) from %1 to %2 implicitly converted"
+                 " back to %3"),
+                compat::getBeginLoc(expr))
+                << sub->getCastKindName() << subsub->getType() << sub->getType()
                 << expr->getType() << expr->getSourceRange();
             return true;
         }
@@ -875,7 +932,8 @@ bool ImplicitBoolConversion::isExternCFunctionCall(
     if (d != nullptr) {
         FunctionDecl const * fd = dyn_cast<FunctionDecl>(d);
         if (fd != nullptr) {
-            PointerType const * pt = fd->getType()->getAs<PointerType>();
+            clang::PointerType const * pt = fd->getType()
+                ->getAs<clang::PointerType>();
             QualType t2(pt == nullptr ? fd->getType() : pt->getPointeeType());
             *functionType = t2->getAs<FunctionProtoType>();
             assert(
@@ -889,7 +947,8 @@ bool ImplicitBoolConversion::isExternCFunctionCall(
         }
         VarDecl const * vd = dyn_cast<VarDecl>(d);
         if (vd != nullptr) {
-            PointerType const * pt = vd->getType()->getAs<PointerType>();
+            clang::PointerType const * pt = vd->getType()
+                ->getAs<clang::PointerType>();
             *functionType
                 = ((pt == nullptr ? vd->getType() : pt->getPointeeType())
                    ->getAs<FunctionProtoType>());
@@ -942,7 +1001,8 @@ void ImplicitBoolConversion::checkCXXConstructExpr(
                             TemplateArgument const & arg = t1->getArg(
                                 i - ps->begin());
                             if (arg.getKind() == TemplateArgument::Type
-                                && isBool(arg.getAsType()))
+                                && (loplugin::TypeCheck(arg.getAsType())
+                                    .AnyBoolean()))
                             {
                                 continue;
                             }
@@ -956,10 +1016,10 @@ void ImplicitBoolConversion::checkCXXConstructExpr(
 }
 
 void ImplicitBoolConversion::reportWarning(ImplicitCastExpr const * expr) {
-    if (!compiler.getLangOpts().ObjC2 || compiler.getLangOpts().CPlusPlus) {
+    if (compiler.getLangOpts().CPlusPlus) {
         report(
             DiagnosticsEngine::Warning,
-            "implicit conversion (%0) from %1 to %2", expr->getLocStart())
+            "implicit conversion (%0) from %1 to %2", compat::getBeginLoc(expr))
             << expr->getCastKindName() << expr->getSubExprAsWritten()->getType()
             << expr->getType() << expr->getSourceRange();
     }

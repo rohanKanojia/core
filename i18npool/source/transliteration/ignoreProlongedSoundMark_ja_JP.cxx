@@ -22,7 +22,7 @@
 using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 static const sal_Unicode table_normalwidth[] = {
     //  0x0000,   // 0x3040
@@ -286,9 +286,8 @@ static const sal_Unicode table_halfwidth[] = {
 };
 
 
-OUString SAL_CALL
-ignoreProlongedSoundMark_ja_JP::folding( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, Sequence< sal_Int32 >& offset )
-  throw(RuntimeException, std::exception)
+OUString
+ignoreProlongedSoundMark_ja_JP::foldingImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, Sequence< sal_Int32 >& offset, bool useOffset )
 {
     // Create a string buffer which can hold nCount + 1 characters.
     // The reference count is 1 now.
@@ -337,7 +336,7 @@ ignoreProlongedSoundMark_ja_JP::folding( const OUString& inStr, sal_Int32 startP
         *dst ++ = previousChar;
     }
 
-    *dst = (sal_Unicode) 0;
+    *dst = u'\0';
 
     newStr->length = sal_Int32(dst - newStr->buffer);
     if (useOffset)
@@ -346,6 +345,6 @@ ignoreProlongedSoundMark_ja_JP::folding( const OUString& inStr, sal_Int32 startP
 
 }
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

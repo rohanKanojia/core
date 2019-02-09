@@ -21,27 +21,29 @@
 #define INCLUDED_BASEGFX_POLYGON_B2DPOLYGON_HXX
 
 #include <ostream>
+#include <vector>
 
 #include <sal/types.h>
 #include <o3tl/cow_wrapper.hxx>
 #include <basegfx/vector/b2enums.hxx>
-#include <basegfx/range/b2drange.hxx>
 #include <basegfx/basegfxdllapi.h>
 
 class ImplB2DPolygon;
 
 namespace basegfx
 {
-    class B2DPolygon;
     class B2DPoint;
-    class B2DVector;
+    class B2DRange;
     class B2DHomMatrix;
     class B2DCubicBezier;
+    class SystemDependentData;
+    class SystemDependentDataManager;
+    typedef std::shared_ptr<SystemDependentData> SystemDependentData_SharedPtr;
 }
 
 namespace basegfx
 {
-    class BASEGFX_DLLPUBLIC B2DPolygon
+    class SAL_WARN_UNUSED BASEGFX_DLLPUBLIC B2DPolygon
     {
     public:
         typedef o3tl::cow_wrapper< ImplB2DPolygon > ImplType;
@@ -54,11 +56,15 @@ namespace basegfx
         /// diverse constructors
         B2DPolygon();
         B2DPolygon(const B2DPolygon& rPolygon);
+        B2DPolygon(B2DPolygon&& rPolygon);
         B2DPolygon(const B2DPolygon& rPolygon, sal_uInt32 nIndex, sal_uInt32 nCount);
+        B2DPolygon(std::initializer_list<basegfx::B2DPoint> rPoints);
+
         ~B2DPolygon();
 
         /// assignment operator
         B2DPolygon& operator=(const B2DPolygon& rPolygon);
+        B2DPolygon& operator=(B2DPolygon&& rPolygon);
 
         /// unshare this polygon with all internally shared instances
         void makeUnique();
@@ -71,7 +77,7 @@ namespace basegfx
         sal_uInt32 count() const;
 
         /// Coordinate interface
-        basegfx::B2DPoint getB2DPoint(sal_uInt32 nIndex) const;
+        basegfx::B2DPoint const & getB2DPoint(sal_uInt32 nIndex) const;
         void setB2DPoint(sal_uInt32 nIndex, const basegfx::B2DPoint& rValue);
 
         /// Coordinate insert/append
@@ -132,7 +138,7 @@ namespace basegfx
             usually pretty usable for processing purposes. There is no parameter
             passing here ATM but it may be changed on demand. If needed, a TYPE
             and PARAMETER (both defaulted) may be added to allow for switching
-            between the different kinds of subdivisiond and passing them one
+            between the different kinds of subdivisioned and passing them one
             parameter.
 
             The lifetime of the buffered subdivision is based on polygon changes.
@@ -145,7 +151,7 @@ namespace basegfx
             be this polygon itself when it has no bezier segments. It is guaranteed
             to have no more bezier segments
         */
-        B2DPolygon getDefaultAdaptiveSubdivision() const;
+        B2DPolygon const & getDefaultAdaptiveSubdivision() const;
 
         /** Get the B2DRange (Rectangle dimensions) of this B2DPolygon
 
@@ -174,7 +180,7 @@ namespace basegfx
             @return
             The outer range of the bezier curve/polygon
         */
-        B2DRange getB2DRange() const;
+        B2DRange const & getB2DRange() const;
 
         /** append other 2D polygons
 
@@ -214,28 +220,48 @@ namespace basegfx
 
         /// apply transformation given in matrix form
         void transform(const basegfx::B2DHomMatrix& rMatrix);
+
+        // exclusive management op's for SystemDependentData at B2DPolygon
+        template<class T>
+        std::shared_ptr<T> getSystemDependentData() const
+        {
+            return std::static_pointer_cast<T>(getSystemDependantDataInternal(typeid(T).hash_code()));
+        }
+
+        template<class T, class... Args>
+        std::shared_ptr<T> addOrReplaceSystemDependentData(SystemDependentDataManager& manager, Args&&... args) const
+        {
+            std::shared_ptr<T> r = std::make_shared<T>(manager, std::forward<Args>(args)...);
+            basegfx::SystemDependentData_SharedPtr r2(r);
+            addOrReplaceSystemDependentDataInternal(r2);
+            return r;
+        }
+
+    private:
+        void addOrReplaceSystemDependentDataInternal(SystemDependentData_SharedPtr& rData) const;
+        SystemDependentData_SharedPtr getSystemDependantDataInternal(size_t hash_code) const;
     };
 
     // typedef for a vector of B2DPolygons
     typedef ::std::vector< B2DPolygon > B2DPolygonVector;
 
-} // end of namespace basegfx
-
-template< typename charT, typename traits >
-inline std::basic_ostream<charT, traits> & operator <<(
-    std::basic_ostream<charT, traits> & stream, const basegfx::B2DPolygon& poly )
-{
-    stream << "<" << poly.count() << ":";
-    for (sal_uInt32 i = 0; i < poly.count(); i++)
+    template< typename charT, typename traits >
+    inline std::basic_ostream<charT, traits> & operator <<(
+        std::basic_ostream<charT, traits> & stream, const B2DPolygon& poly )
     {
-        if (i > 0)
-            stream << "--";
-        stream << poly.getB2DPoint(i);
-    }
-    stream << ">";
+        stream << "<" << poly.count() << ":";
+        for (sal_uInt32 i = 0; i < poly.count(); i++)
+        {
+            if (i > 0)
+                stream << "--";
+            stream << poly.getB2DPoint(i);
+        }
+        stream << ">";
 
-    return stream;
-}
+        return stream;
+    }
+
+} // end of namespace basegfx
 
 #endif // INCLUDED_BASEGFX_POLYGON_B2DPOLYGON_HXX
 

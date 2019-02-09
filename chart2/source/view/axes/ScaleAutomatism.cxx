@@ -17,13 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ScaleAutomatism.hxx"
-#include "macros.hxx"
+#include <ScaleAutomatism.hxx>
 #include "Tickmarks_Equidistant.hxx"
-#include "DateHelper.hxx"
+#include <DateHelper.hxx>
 #include "DateScaling.hxx"
-#include "AxisHelper.hxx"
+#include <AxisHelper.hxx>
 #include <com/sun/star/chart/TimeUnit.hpp>
+#include <com/sun/star/chart2/AxisType.hpp>
 
 #include <rtl/math.hxx>
 #include <limits>
@@ -39,7 +39,7 @@ using ::com::sun::star::chart::TimeUnit::YEAR;
 const sal_Int32 MAXIMUM_MANUAL_INCREMENT_COUNT = 500;
 const sal_Int32 MAXIMUM_SUB_INCREMENT_COUNT = 100;
 
-sal_Int32 lcl_getMaximumAutoIncrementCount( sal_Int32 nAxisType )
+static sal_Int32 lcl_getMaximumAutoIncrementCount( sal_Int32 nAxisType )
 {
     sal_Int32 nMaximumAutoIncrementCount = 10;
     if( nAxisType==AxisType::DATE )
@@ -105,9 +105,6 @@ ScaleAutomatism::ScaleAutomatism( const ScaleData& rSourceScale, const Date& rNu
     if( m_aSourceScale.Origin >>= fExplicitOrigin )
         expandValueRange( fExplicitOrigin, fExplicitOrigin);
 }
-ScaleAutomatism::~ScaleAutomatism()
-{
-}
 
 void ScaleAutomatism::resetValueRange( )
 {
@@ -119,7 +116,7 @@ void ScaleAutomatism::expandValueRange( double fMinimum, double fMaximum )
 {
     // if m_fValueMinimum and m_fValueMaximum == 0, it means that they were not determined.
     // m_fValueMinimum == 0 makes impossible to determine real minimum,
-    // so they need to be reseted tdf#96807
+    // so they need to be reset tdf#96807
     if( (m_fValueMinimum == 0.0) && (m_fValueMaximum == 0.0) )
         resetValueRange();
     if( (fMinimum < m_fValueMinimum) || ::rtl::math::isNan( m_fValueMinimum ) )
@@ -264,7 +261,7 @@ void ScaleAutomatism::calculateExplicitIncrementAndScaleForCategory(
     if( bAutoMaximum && m_bExpandBorderToIncrementRhythm )
         rExplicitScale.Maximum = EquidistantTickFactory::getMaximumAtIncrement( rExplicitScale.Maximum, rExplicitIncrement );
 
-    //prevent performace killover
+    //prevent performance killover
     double fDistanceCount = ::rtl::math::approxFloor( (rExplicitScale.Maximum-rExplicitScale.Minimum) / rExplicitIncrement.Distance );
     if( static_cast< sal_Int32 >( fDistanceCount ) > MAXIMUM_MANUAL_INCREMENT_COUNT )
     {
@@ -356,7 +353,7 @@ void ScaleAutomatism::calculateExplicitIncrementAndScaleForLogarithmic(
         double fTempValue = fSourceMinimum;
         fSourceMinimum = -fSourceMaximum;
         fSourceMaximum = -fTempValue;
-        ::std::swap( bAutoMinimum, bAutoMaximum );
+        std::swap( bAutoMinimum, bAutoMaximum );
     }
 
     // *** STEP 2: find temporary (unrounded) axis minimum and maximum ***
@@ -521,7 +518,7 @@ void ScaleAutomatism::calculateExplicitIncrementAndScaleForLogarithmic(
                 rExplicitScale.Maximum = 10.0;
         }
         if( rExplicitScale.Maximum < rExplicitScale.Minimum )
-            ::std::swap( rExplicitScale.Maximum, rExplicitScale.Minimum );
+            std::swap( rExplicitScale.Maximum, rExplicitScale.Minimum );
     }
 
     //fill explicit sub increment
@@ -551,8 +548,8 @@ void ScaleAutomatism::calculateExplicitIncrementAndScaleForDateTimeAxis(
         ExplicitIncrementData& rExplicitIncrement,
         bool bAutoMinimum, bool bAutoMaximum ) const
 {
-    Date aMinDate(m_aNullDate); aMinDate += static_cast<long>(::rtl::math::approxFloor(rExplicitScale.Minimum));
-    Date aMaxDate(m_aNullDate); aMaxDate += static_cast<long>(::rtl::math::approxFloor(rExplicitScale.Maximum));
+    Date aMinDate(m_aNullDate); aMinDate.AddDays(::rtl::math::approxFloor(rExplicitScale.Minimum));
+    Date aMaxDate(m_aNullDate); aMaxDate.AddDays(::rtl::math::approxFloor(rExplicitScale.Maximum));
     rExplicitIncrement.PostEquidistant = false;
 
     if( aMinDate > aMaxDate )
@@ -615,7 +612,7 @@ void ScaleAutomatism::calculateExplicitIncrementAndScaleForDateTimeAxis(
         nMaxMainIncrementCount--;
 
     //choose major time interval:
-    long nDayCount = (aMaxDate-aMinDate);
+    long nDayCount = aMaxDate - aMinDate;
     long nMainIncrementCount = 1;
     if( !bAutoMajor )
     {
@@ -642,12 +639,12 @@ void ScaleAutomatism::calculateExplicitIncrementAndScaleForDateTimeAxis(
         long nNumer = 1;
         long nIntervalDays =  nDayCount / nMaxMainIncrementCount;
         double nDaysPerInterval = 1.0;
-        if( nIntervalDays>365 || YEAR==rExplicitScale.TimeResolution )
+        if( nIntervalDays>365 || rExplicitScale.TimeResolution==YEAR )
         {
             rExplicitIncrement.MajorTimeInterval.TimeUnit = YEAR;
             nDaysPerInterval = 365.0;//todo: maybe different for other calendars... get localized calendar according to set number format at axis ...
         }
-        else if( nIntervalDays>31 || MONTH==rExplicitScale.TimeResolution )
+        else if( nIntervalDays>31 || rExplicitScale.TimeResolution==MONTH )
         {
             rExplicitIncrement.MajorTimeInterval.TimeUnit = MONTH;
             nDaysPerInterval = 31.0;//todo: maybe different for other calendars... get localized calendar according to set number format at axis ...
@@ -776,7 +773,7 @@ void ScaleAutomatism::calculateExplicitIncrementAndScaleForLinear(
         double fTempValue = fSourceMinimum;
         fSourceMinimum = -fSourceMaximum;
         fSourceMaximum = -fTempValue;
-        ::std::swap( bAutoMinimum, bAutoMaximum );
+        std::swap( bAutoMinimum, bAutoMaximum );
     }
 
     // *** STEP 2: find temporary (unrounded) axis minimum and maximum ***

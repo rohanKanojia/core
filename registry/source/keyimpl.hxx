@@ -65,7 +65,7 @@ public:
                          sal_uInt32 vSize);
 
     RegError    setLongListValue(const OUString& valueName,
-                                  sal_Int32* pValueList,
+                                 sal_Int32 const * pValueList,
                                  sal_uInt32 len);
 
     RegError    setStringListValue(const OUString& valueName,
@@ -91,7 +91,7 @@ public:
                                     sal_uInt32* pLen) const;
 
     RegError    getResolvedKeyName(const OUString& keyName,
-                                   OUString& resolvedName);
+                                   OUString& resolvedName) const;
 
     bool isDeleted() const
         { return m_bDeleted; }
@@ -116,7 +116,7 @@ public:
     const store::OStoreFile& getStoreFile() const
                     { return m_pRegistry->getStoreFile(); }
 
-    store::OStoreDirectory getStoreDir();
+    store::OStoreDirectory getStoreDir() const;
 
     const OUString& getName() const
                     { return m_name; }
@@ -125,7 +125,7 @@ public:
 
 private:
     sal_uInt32              m_refCount;
-    OUString           m_name;
+    OUString const           m_name;
     bool                     m_bDeleted:1;
     bool                     m_bModified:1;
     ORegistry*              m_pRegistry;

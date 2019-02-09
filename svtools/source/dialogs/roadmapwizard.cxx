@@ -19,12 +19,11 @@
 
 
 #include <svtools/roadmapwizard.hxx>
-#include <svtools/svtools.hrc>
+#include <svtools/strings.hrc>
 #include <svtools/svtresid.hxx>
 #include <roadmap.hxx>
 #include <tools/debug.hxx>
-
-#include <stdarg.h>
+#include <osl/diagnose.h>
 
 #include <vector>
 #include <map>
@@ -79,11 +78,17 @@ namespace svt
     sal_Int32 RoadmapWizardImpl::getStateIndexInPath( WizardTypes::WizardState _nState, const WizardPath& _rPath )
     {
         sal_Int32 nStateIndexInPath = 0;
-        WizardPath::const_iterator aPathLoop = _rPath.begin();
-        for ( ; aPathLoop != _rPath.end(); ++aPathLoop, ++nStateIndexInPath )
-            if ( *aPathLoop == _nState )
+        bool bFound = false;
+        for (auto const& path : _rPath)
+        {
+            if (path == _nState)
+            {
+                bFound = true;
                 break;
-        if ( aPathLoop == _rPath.end() )
+            }
+            ++nStateIndexInPath;
+        }
+        if (!bFound)
             nStateIndexInPath = -1;
         return nStateIndexInPath;
     }
@@ -111,15 +116,8 @@ namespace svt
     }
 
     //= RoadmapWizard
-    RoadmapWizard::RoadmapWizard( vcl::Window* _pParent, const WinBits i_nStyle, WizardButtonFlags _nButtonFlags )
-        :OWizardMachine( _pParent, i_nStyle, _nButtonFlags )
-        ,m_pImpl( new RoadmapWizardImpl )
-    {
-        impl_construct();
-    }
-
-    RoadmapWizard::RoadmapWizard( vcl::Window* _pParent, WizardButtonFlags _nButtonFlags )
-        :OWizardMachine( _pParent, _nButtonFlags )
+    RoadmapWizard::RoadmapWizard( vcl::Window* _pParent )
+        :OWizardMachine( _pParent, WizardButtonFlags::NEXT | WizardButtonFlags::PREVIOUS | WizardButtonFlags::FINISH | WizardButtonFlags::CANCEL | WizardButtonFlags::HELP )
         ,m_pImpl( new RoadmapWizardImpl )
     {
         impl_construct();
@@ -131,12 +129,12 @@ namespace svt
         SetEmptyViewMargin();
 
         m_pImpl->pRoadmap.disposeAndReset( VclPtr<ORoadmap>::Create( this, WB_TABSTOP ) );
-        m_pImpl->pRoadmap->SetText( SVT_RESSTR( STR_WIZDLG_ROADMAP_TITLE ) );
+        m_pImpl->pRoadmap->SetText( SvtResId( STR_WIZDLG_ROADMAP_TITLE ) );
         m_pImpl->pRoadmap->SetPosPixel( Point( 0, 0 ) );
         m_pImpl->pRoadmap->SetItemSelectHdl( LINK( this, RoadmapWizard, OnRoadmapItemSelected ) );
 
-        Size aRoadmapSize =( LogicToPixel( Size( 85, 0 ), MAP_APPFONT ) );
-        aRoadmapSize.Height() = GetSizePixel().Height();
+        Size aRoadmapSize = LogicToPixel(Size(85, 0), MapMode(MapUnit::MapAppFont));
+        aRoadmapSize.setHeight( GetSizePixel().Height() );
         m_pImpl->pRoadmap->SetSizePixel( aRoadmapSize );
 
         SetViewWindow( m_pImpl->pRoadmap );
@@ -152,8 +150,7 @@ namespace svt
 
     void RoadmapWizard::dispose()
     {
-        delete m_pImpl;
-        m_pImpl = nullptr;
+        m_pImpl.reset();
         OWizardMachine::dispose();
     }
 
@@ -172,42 +169,13 @@ namespace svt
     void RoadmapWizard::declarePath( PathId _nPathId, const WizardPath& _lWizardStates)
     {
 
-        m_pImpl->aPaths.insert( Paths::value_type( _nPathId, _lWizardStates ) );
+        m_pImpl->aPaths.emplace( _nPathId, _lWizardStates );
 
         if ( m_pImpl->aPaths.size() == 1 )
             // the very first path -> activate it
             activatePath( _nPathId );
         else
             implUpdateRoadmap( );
-    }
-
-
-    void RoadmapWizard::declarePath( PathId _nPathId, WizardState _nFirstState, ... )
-    {
-
-        DBG_ASSERT( _nFirstState != WZS_INVALID_STATE, "RoadmapWizard::declarePath: there should be at least one state in the path!" );
-        if ( _nFirstState == WZS_INVALID_STATE )
-            return;
-
-        WizardPath aNewPath;
-
-        // collect the elements of the path
-        va_list aStateList;
-        va_start( aStateList, _nFirstState );
-
-        WizardState nState = _nFirstState;
-        while ( nState != WZS_INVALID_STATE )
-        {
-            aNewPath.push_back( nState );
-            nState = sal::static_int_cast< WizardState >(
-                va_arg( aStateList, int ));
-        }
-        va_end( aStateList );
-
-        DBG_ASSERT( _nFirstState == 0, "RoadmapWizard::declarePath: first state must be NULL." );
-            // The WizardDialog (our very base class) always starts with a mnCurLevel == 0
-
-        declarePath( _nPathId, aNewPath );
     }
 
 
@@ -237,12 +205,12 @@ namespace svt
         if ( m_pImpl->nActivePath != -1 )
             nCurrentStatePathIndex = m_pImpl->getStateIndexInPath( getCurrentState(), m_pImpl->nActivePath );
 
-        DBG_ASSERT( (sal_Int32)aNewPathPos->second.size() > nCurrentStatePathIndex,
+        DBG_ASSERT( static_cast<sal_Int32>(aNewPathPos->second.size()) > nCurrentStatePathIndex,
             "RoadmapWizard::activate: you cannot activate a path which has less states than we've already advanced!" );
             // If this asserts, this for instance means that we are already in state number, say, 5
             // of our current path, and the caller tries to activate a path which has less than 5
             // states
-        if ( (sal_Int32)aNewPathPos->second.size() <= nCurrentStatePathIndex )
+        if ( static_cast<sal_Int32>(aNewPathPos->second.size()) <= nCurrentStatePathIndex )
             return;
 
         // assert that the current and the new path are equal, up to nCurrentStatePathIndex
@@ -275,20 +243,17 @@ namespace svt
             return;
 
         // determine up to which index (in the new path) we have to display the items
-        RoadmapTypes::ItemIndex nUpperStepBoundary = (RoadmapTypes::ItemIndex)rActivePath.size();
+        RoadmapTypes::ItemIndex nUpperStepBoundary = static_cast<RoadmapTypes::ItemIndex>(rActivePath.size());
         bool bIncompletePath = false;
         if ( !m_pImpl->bActivePathIsDefinite )
         {
-            for ( Paths::const_iterator aPathPos = m_pImpl->aPaths.begin();
-                  aPathPos != m_pImpl->aPaths.end();
-                  ++aPathPos
-                )
+            for (auto const& path : m_pImpl->aPaths)
             {
-                if ( aPathPos->first == m_pImpl->nActivePath )
+                if ( path.first == m_pImpl->nActivePath )
                     // it's the path we are just activating -> no need to check anything
                     continue;
                 // the index from which on both paths differ
-                sal_Int32 nDivergenceIndex = RoadmapWizardImpl::getFirstDifferentIndex( rActivePath, aPathPos->second );
+                sal_Int32 nDivergenceIndex = RoadmapWizardImpl::getFirstDifferentIndex( rActivePath, path.second );
                 if ( nDivergenceIndex <= nCurrentStatePathIndex )
                     // they differ in an index which we have already left behind us
                     // -> this is no conflict anymore
@@ -313,7 +278,7 @@ namespace svt
 
         // now, we have to remove all items after nCurrentStatePathIndex, and insert the items from the active
         // path, up to (excluding) nUpperStepBoundary
-        RoadmapTypes::ItemIndex nLoopUntil = ::std::max( (RoadmapTypes::ItemIndex)nUpperStepBoundary, m_pImpl->pRoadmap->GetItemCount() );
+        RoadmapTypes::ItemIndex nLoopUntil = ::std::max( nUpperStepBoundary, m_pImpl->pRoadmap->GetItemCount() );
         for ( RoadmapTypes::ItemIndex nItemIndex = nCurrentStatePathIndex; nItemIndex < nLoopUntil; ++nItemIndex )
         {
             bool bExistentItem = ( nItemIndex < m_pImpl->pRoadmap->GetItemCount() );
@@ -353,7 +318,8 @@ namespace svt
                 m_pImpl->pRoadmap->InsertRoadmapItem(
                     nItemIndex,
                     getStateDisplayName( nState ),
-                    nState
+                    nState,
+                    true
                 );
             }
 
@@ -386,14 +352,14 @@ namespace svt
 
         sal_Int32 nNextStateIndex = nCurrentStatePathIndex + 1;
 
-        while   (   ( nNextStateIndex < (sal_Int32)aActivePathPos->second.size() )
+        while   (   ( nNextStateIndex < static_cast<sal_Int32>(aActivePathPos->second.size()) )
                 &&  ( m_pImpl->aDisabledStates.find( aActivePathPos->second[ nNextStateIndex ] ) != m_pImpl->aDisabledStates.end() )
                 )
         {
             ++nNextStateIndex;
         }
 
-        if ( nNextStateIndex >= (sal_Int32)aActivePathPos->second.size() )
+        if ( nNextStateIndex >= static_cast<sal_Int32>(aActivePathPos->second.size()) )
             // there is no next state in the current path (at least none which is enabled)
             return WZS_INVALID_STATE;
 
@@ -410,13 +376,10 @@ namespace svt
             sal_Int32 nCurrentStatePathIndex = RoadmapWizardImpl::getStateIndexInPath( getCurrentState(), rActivePath );
 
             size_t nPossiblePaths(0);
-            for (   Paths::const_iterator aPathPos = m_pImpl->aPaths.begin();
-                    aPathPos != m_pImpl->aPaths.end();
-                    ++aPathPos
-                )
+            for (auto const& path : m_pImpl->aPaths)
             {
                 // the index from which on both paths differ
-                sal_Int32 nDivergenceIndex = RoadmapWizardImpl::getFirstDifferentIndex( rActivePath, aPathPos->second );
+                sal_Int32 nDivergenceIndex = RoadmapWizardImpl::getFirstDifferentIndex( rActivePath, path.second );
 
                 if ( nDivergenceIndex > nCurrentStatePathIndex )
                     // this path is still a possible path
@@ -431,10 +394,7 @@ namespace svt
         }
 
         const WizardPath& rPath = m_pImpl->aPaths[ m_pImpl->nActivePath ];
-        if ( *rPath.rbegin() == getCurrentState() )
-            return false;
-
-        return true;
+        return *rPath.rbegin() != getCurrentState();
     }
 
 
@@ -446,13 +406,13 @@ namespace svt
         ::std::vector< WizardState > aHistory;
         getStateHistory( aHistory );
         bool bHaveEnabledState = false;
-        for (   ::std::vector< WizardState >::const_iterator state = aHistory.begin();
-                state != aHistory.end() && !bHaveEnabledState;
-                ++state
-            )
+        for (auto const& state : aHistory)
         {
-            if ( isStateEnabled( *state ) )
+            if ( isStateEnabled(state) )
+            {
                 bHaveEnabledState = true;
+                break;
+            }
         }
 
         enableButtons( WizardButtonFlags::PREVIOUS, bHaveEnabledState );
@@ -461,7 +421,7 @@ namespace svt
     }
 
 
-    IMPL_LINK_NOARG_TYPED(RoadmapWizard, OnRoadmapItemSelected, LinkParamNone*, void)
+    IMPL_LINK_NOARG(RoadmapWizard, OnRoadmapItemSelected, LinkParamNone*, void)
     {
 
         RoadmapTypes::ItemId nCurItemId = m_pImpl->pRoadmap->GetCurrentRoadmapItemID();
@@ -487,8 +447,8 @@ namespace svt
         bool bResult = true;
         if ( nNewIndex > nCurrentIndex )
         {
-            bResult = skipUntil( (WizardState)nCurItemId );
-            WizardState nTemp = (WizardState)nCurItemId;
+            bResult = skipUntil( static_cast<WizardState>(nCurItemId) );
+            WizardState nTemp = static_cast<WizardState>(nCurItemId);
             while( nTemp )
             {
                 if( m_pImpl->aDisabledStates.find( --nTemp ) != m_pImpl->aDisabledStates.end() )
@@ -496,7 +456,7 @@ namespace svt
             }
         }
         else
-            bResult = skipBackwardUntil( (WizardState)nCurItemId );
+            bResult = skipBackwardUntil( static_cast<WizardState>(nCurItemId) );
 
         if ( !bResult )
             m_pImpl->pRoadmap->SelectRoadmapItemByID( getCurrentState() );
@@ -558,23 +518,17 @@ namespace svt
         }
 
         // if the state is currently in the roadmap, reflect it's new status
-        m_pImpl->pRoadmap->EnableRoadmapItem( (RoadmapTypes::ItemId)_nState, _bEnable );
+        m_pImpl->pRoadmap->EnableRoadmapItem( static_cast<RoadmapTypes::ItemId>(_nState), _bEnable );
     }
 
 
     bool RoadmapWizard::knowsState( WizardState i_nState ) const
     {
-        for (   Paths::const_iterator path = m_pImpl->aPaths.begin();
-                path != m_pImpl->aPaths.end();
-                ++path
-            )
+        for (auto const& path : m_pImpl->aPaths)
         {
-            for (   WizardPath::const_iterator state = path->second.begin();
-                    state != path->second.end();
-                    ++state
-                )
+            for (auto const& state : path.second)
             {
-                if ( *state == i_nState )
+                if ( state == i_nState )
                     return true;
             }
         }
@@ -589,8 +543,8 @@ namespace svt
     void RoadmapWizard::updateRoadmapItemLabel( WizardState _nState )
     {
         const WizardPath& rActivePath( m_pImpl->aPaths[ m_pImpl->nActivePath ] );
-        RoadmapTypes::ItemIndex nUpperStepBoundary = (RoadmapTypes::ItemIndex)rActivePath.size();
-        RoadmapTypes::ItemIndex nLoopUntil = ::std::max( (RoadmapTypes::ItemIndex)nUpperStepBoundary, m_pImpl->pRoadmap->GetItemCount() );
+        RoadmapTypes::ItemIndex nUpperStepBoundary = static_cast<RoadmapTypes::ItemIndex>(rActivePath.size());
+        RoadmapTypes::ItemIndex nLoopUntil = ::std::max( nUpperStepBoundary, m_pImpl->pRoadmap->GetItemCount() );
         sal_Int32 nCurrentStatePathIndex = -1;
         if ( m_pImpl->nActivePath != -1 )
             nCurrentStatePathIndex = m_pImpl->getStateIndexInPath( getCurrentState(), m_pImpl->nActivePath );

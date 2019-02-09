@@ -17,22 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "viewsh.hxx"
-#include "rootfrm.hxx"
-#include "txtfrm.hxx"
-#include "blink.hxx"
+#include <memory>
+#include <viewsh.hxx>
+#include <rootfrm.hxx>
+#include <txtfrm.hxx>
+#include <blink.hxx>
 #include "porlin.hxx"
 #include "porlay.hxx"
 
 // Visible time
-#define BLINK_ON_TIME       2400L
+#define BLINK_ON_TIME       2400
 // Invisible time
-#define BLINK_OFF_TIME      800L
+#define BLINK_OFF_TIME      800
 
 /**
  * pBlink points to the instance where blinking portions need to register.
  * If necessary, it needs to be created by SwBlink.
- * They are then triggered rhythimcally for a repaint. They can query
+ * They are then triggered rhythmically for a repaint. They can query
  * for being visible or invisible with IsVisible().
  */
 SwBlink *pBlink = nullptr;
@@ -42,7 +43,7 @@ SwBlink::SwBlink()
     bVisible = true;
     // Prepare the timer
     aTimer.SetTimeout( BLINK_ON_TIME );
-    aTimer.SetTimeoutHdl( LINK(this, SwBlink, Blinker) );
+    aTimer.SetInvokeHandler( LINK(this, SwBlink, Blinker) );
 }
 
 SwBlink::~SwBlink( )
@@ -55,7 +56,7 @@ SwBlink::~SwBlink( )
  * Toggle visibility flag
  * Determine the repaint rectangle and invalidate them in their OleShells.
  */
-IMPL_LINK_NOARG_TYPED(SwBlink, Blinker, Timer *, void)
+IMPL_LINK_NOARG(SwBlink, Blinker, Timer *, void)
 {
     bVisible = !bVisible;
     if( bVisible )
@@ -78,32 +79,32 @@ IMPL_LINK_NOARG_TYPED(SwBlink, Blinker, Timer *, void)
                 switch ( pTmp->GetDirection() )
                 {
                     case 900:
-                        aPos.X() -= pTmp->GetPortion()->GetAscent();
-                        aPos.Y() -= pTmp->GetPortion()->Width();
+                        aPos.AdjustX( -(pTmp->GetPortion()->GetAscent()) );
+                        aPos.AdjustY( -(pTmp->GetPortion()->Width()) );
                         nWidth = pTmp->GetPortion()->SvLSize().Height();
                         nHeight = pTmp->GetPortion()->SvLSize().Width();
                         break;
                     case 1800:
-                        aPos.Y() -= pTmp->GetPortion()->Height() -
-                                    pTmp->GetPortion()->GetAscent();
-                        aPos.X() -= pTmp->GetPortion()->Width();
+                        aPos.AdjustY( -(pTmp->GetPortion()->Height() -
+                                    pTmp->GetPortion()->GetAscent()) );
+                        aPos.AdjustX( -(pTmp->GetPortion()->Width()) );
                         nWidth = pTmp->GetPortion()->SvLSize().Width();
                         nHeight = pTmp->GetPortion()->SvLSize().Height();
                         break;
                     case 2700:
-                        aPos.X() -= pTmp->GetPortion()->Height() -
-                                    pTmp->GetPortion()->GetAscent();
+                        aPos.AdjustX( -(pTmp->GetPortion()->Height() -
+                                    pTmp->GetPortion()->GetAscent()) );
                         nWidth = pTmp->GetPortion()->SvLSize().Height();
                         nHeight = pTmp->GetPortion()->SvLSize().Width();
                         break;
                     default:
-                        aPos.Y() -= pTmp->GetPortion()->GetAscent();
+                        aPos.AdjustY( -(pTmp->GetPortion()->GetAscent()) );
                         nWidth = pTmp->GetPortion()->SvLSize().Width();
                         nHeight = pTmp->GetPortion()->SvLSize().Height();
                 }
 
-                Rectangle aRefresh( aPos, Size( nWidth, nHeight ) );
-                aRefresh.Right() += ( aRefresh.Bottom()- aRefresh.Top() ) / 8;
+                tools::Rectangle aRefresh( aPos, Size( nWidth, nHeight ) );
+                aRefresh.AdjustRight(( aRefresh.Bottom()- aRefresh.Top() ) / 8 );
                 pTmp->GetRootFrame()
                     ->GetCurrShell()->InvalidateWindows( aRefresh );
             }
@@ -132,7 +133,7 @@ void SwBlink::Insert( const Point& rPoint, const SwLinePortion* pPor,
         m_List.insert(std::move(pBlinkPor));
         pTextFrame->SetBlinkPor();
         if( pPor->IsLayPortion() || pPor->IsParaPortion() )
-            const_cast<SwLineLayout*>(static_cast<const SwLineLayout*>(pPor))->SetBlinking();
+            const_cast<SwLineLayout*>(static_cast<const SwLineLayout*>(pPor))->SetBlinking(true);
 
         if( !aTimer.IsActive() )
             aTimer.Start();

@@ -19,16 +19,16 @@
 #ifndef INCLUDED_CHART2_SOURCE_MODEL_TEMPLATE_CHARTTYPE_HXX
 #define INCLUDED_CHART2_SOURCE_MODEL_TEMPLATE_CHARTTYPE_HXX
 
-#include "MutexContainer.hxx"
-#include "OPropertySet.hxx"
+#include <MutexContainer.hxx>
+#include <OPropertySet.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <comphelper/uno3.hxx>
-#include "ModifyListenerHelper.hxx"
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/chart2/XChartType.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/chart2/XDataSeriesContainer.hpp>
 #include <com/sun/star/util/XCloneable.hpp>
+#include <com/sun/star/util/XModifyBroadcaster.hpp>
+#include <com/sun/star/util/XModifyListener.hpp>
 
 #include <vector>
 
@@ -53,8 +53,8 @@ class ChartType :
     public ::property::OPropertySet
 {
 public:
-    explicit ChartType( css::uno::Reference< css::uno::XComponentContext > const & xContext );
-    virtual ~ChartType();
+    explicit ChartType();
+    virtual ~ChartType() override;
 
     /// merge XInterface implementations
      DECLARE_XINTERFACE()
@@ -62,68 +62,46 @@ public:
 protected:
     explicit ChartType( const ChartType & rOther );
 
-    css::uno::Reference< css::uno::XComponentContext >
-        GetComponentContext() const { return m_xContext;}
-
     // ____ XChartType ____
     // still abstract ! implement !
-    virtual OUString SAL_CALL getChartType()
-        throw (css::uno::RuntimeException, std::exception) override = 0;
+    virtual OUString SAL_CALL getChartType() override = 0;
     virtual css::uno::Reference< css::chart2::XCoordinateSystem > SAL_CALL
-        createCoordinateSystem( ::sal_Int32 DimensionCount )
-        throw (css::lang::IllegalArgumentException,
-               css::uno::RuntimeException, std::exception) override;
+        createCoordinateSystem( ::sal_Int32 DimensionCount ) override;
     virtual css::uno::Sequence< OUString > SAL_CALL
-        getSupportedMandatoryRoles()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getSupportedMandatoryRoles() override;
     virtual css::uno::Sequence< OUString > SAL_CALL
-        getSupportedOptionalRoles()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getRoleOfSequenceForSeriesLabel()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getSupportedOptionalRoles() override;
+    virtual OUString SAL_CALL getRoleOfSequenceForSeriesLabel() override;
     virtual css::uno::Sequence< OUString > SAL_CALL
-        getSupportedPropertyRoles()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getSupportedPropertyRoles() override;
 
     // ____ XDataSeriesContainer ____
     virtual void SAL_CALL addDataSeries(
-        const css::uno::Reference< css::chart2::XDataSeries >& aDataSeries )
-        throw (css::lang::IllegalArgumentException,
-               css::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference< css::chart2::XDataSeries >& aDataSeries ) override;
     virtual void SAL_CALL removeDataSeries(
-        const css::uno::Reference< css::chart2::XDataSeries >& aDataSeries )
-        throw (css::container::NoSuchElementException,
-               css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< css::uno::Reference< css::chart2::XDataSeries > > SAL_CALL getDataSeries()
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference< css::chart2::XDataSeries >& aDataSeries ) override;
+    virtual css::uno::Sequence< css::uno::Reference< css::chart2::XDataSeries > > SAL_CALL getDataSeries() override;
     virtual void SAL_CALL setDataSeries(
-        const css::uno::Sequence< css::uno::Reference< css::chart2::XDataSeries > >& aDataSeries )
-        throw (css::lang::IllegalArgumentException,
-               css::uno::RuntimeException, std::exception) override;
+        const css::uno::Sequence< css::uno::Reference< css::chart2::XDataSeries > >& aDataSeries ) override;
 
     // ____ XModifyBroadcaster ____
     virtual void SAL_CALL addModifyListener(
-        const css::uno::Reference< css::util::XModifyListener >& aListener )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference< css::util::XModifyListener >& aListener ) override;
     virtual void SAL_CALL removeModifyListener(
-        const css::uno::Reference< css::util::XModifyListener >& aListener )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference< css::util::XModifyListener >& aListener ) override;
 
     // ____ XModifyListener ____
     virtual void SAL_CALL modified(
-        const css::lang::EventObject& aEvent )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& aEvent ) override;
 
     // ____ XEventListener (base of XModifyListener) ____
     virtual void SAL_CALL disposing(
-        const css::lang::EventObject& Source )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& Source ) override;
 
     void fireModifyEvent();
 
     // ____ OPropertySet ____
-    virtual css::uno::Any GetDefaultValue( sal_Int32 nHandle ) const
-        throw(css::beans::UnknownPropertyException) override;
+    virtual css::uno::Any GetDefaultValue( sal_Int32 nHandle ) const override;
     virtual ::cppu::IPropertyArrayHelper & SAL_CALL getInfoHelper() override;
 
     virtual void firePropertyChangeEvent() override;
@@ -131,8 +109,7 @@ protected:
 
     // ____ XPropertySet ____
     virtual css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL
-        getPropertySetInfo()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getPropertySetInfo() override;
 
     /// merge XTypeProvider implementations
      DECLARE_XTYPEPROVIDER()
@@ -146,11 +123,8 @@ private:
         const css::uno::Reference< css::chart2::XDataSeries >& aDataSeries );
 
 private:
-    css::uno::Reference< css::uno::XComponentContext >
-        const m_xContext;
-
     typedef
-        ::std::vector< css::uno::Reference< css::chart2::XDataSeries > >  tDataSeriesContainerType;
+        std::vector< css::uno::Reference< css::chart2::XDataSeries > >  tDataSeriesContainerType;
 
     // --- mutable members: the following members need mutex guard ---
 

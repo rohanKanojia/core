@@ -19,9 +19,6 @@
 
 #include "precompile.h"
 
-#include <ctype.h>
-
-#include <osl/diagnose.h>
 
 #include "hwpfile.h"
 #include "hbox.h"
@@ -30,6 +27,9 @@
 #include "htags.h"
 #include "drawdef.h"
 #include "hcode.h"
+#include "datecode.h"
+
+#include <rtl/character.hxx>
 
 int HBox::boxCount = 0;
 
@@ -63,26 +63,14 @@ int HBox::WSize()
 }
 
 
-hchar_string HBox::GetString()
-{
-    hchar_string ret;
-    ret.push_back(hh);
-    return ret;
-}
-
-
 // skip block
 SkipData::SkipData(hchar hch)
     : HBox(hch)
-    , data_block_len(0)
-    , dummy(0)
-    , data_block(nullptr)
 {
 }
 
 SkipData::~SkipData()
 {
-    delete[]data_block;
 }
 
 
@@ -90,25 +78,11 @@ SkipData::~SkipData()
 FieldCode::FieldCode()
     : HBox(CH_FIELD)
     , location_info(0)
-    , str1(nullptr)
-    , str2(nullptr)
-    , str3(nullptr)
-    , bin(nullptr)
-    , m_pDate(nullptr)
 {
-    reserved1 = new char[4];
-    reserved2 = new char[22];
 }
 
 FieldCode::~FieldCode()
 {
-    delete[] str1;
-    delete[] str2;
-    delete[] str3;
-    delete[] bin;
-    delete[] reserved1;
-    delete[] reserved2;
-    delete m_pDate;
 }
 
 // book mark(6)
@@ -137,8 +111,6 @@ DateCode::DateCode()
     , key(0)
 {
 }
-
-#include "datecode.h"
 
 static const hchar kor_week[] =
 {
@@ -174,9 +146,9 @@ hchar_string DateCode::GetString()
     format[DATE_SIZE - 1] = 0;
     fmt = format[0] ? format : defaultform;
 
-    for (; *fmt && ((int) ret.size() < DATE_SIZE); fmt++)
+    for (; *fmt && (static_cast<int>(ret.size()) < DATE_SIZE); fmt++)
     {
-        form = (add_zero) ? "%02d" : "%d";
+        form = add_zero ? "%02d" : "%d";
 
         add_zero = false;
         is_pm = (date[HOUR] >= 12);
@@ -250,13 +222,13 @@ hchar_string DateCode::GetString()
             break;
         case '7':
             ret.push_back(0xB5A1);
-            ret.push_back((is_pm) ? 0xD281 : 0xB8E5);
+            ret.push_back(is_pm ? 0xD281 : 0xB8E5);
             break;
         case '&':
-            strncat(cbuf, (is_pm) ? "p.m." : "a.m.", sizeof(cbuf) - strlen(cbuf) - 1);
+            strncat(cbuf, is_pm ? "p.m." : "a.m.", sizeof(cbuf) - strlen(cbuf) - 1);
             break;
         case '+':
-            strncat(cbuf, (is_pm) ? "P.M." : "A.M.", sizeof(cbuf) - strlen(cbuf) - 1);
+            strncat(cbuf, is_pm ? "P.M." : "A.M.", sizeof(cbuf) - strlen(cbuf) - 1);
             break;
         case '8':                             // 2.5 feature
         case '9':
@@ -336,8 +308,6 @@ FBox::FBox(hchar hch)
     , pgy(0)
     , pgno(0)
     , showpg(0)
-    , prev(nullptr)
-    , next(nullptr)
 {
 }
 
@@ -361,37 +331,14 @@ TxtBox::TxtBox()
     , type(0)
     , nCell(0)
     , protect(0)
-    , cell(nullptr)
     , m_pTable(nullptr)
-    , plists(nullptr)
 {
     reserved[0] = reserved[1] = 0;
 }
 
 TxtBox::~TxtBox()
 {
-    delete[]cell;
-
-    for (int ii = 0; ii < nCell; ++ii)
-    {
-        std::list < HWPPara* >::iterator it = plists[ii].begin();
-        for (; it != plists[ii].end(); ++it)
-        {
-            HWPPara* pPara = *it;
-            delete pPara;
-        }
-    }
-
-    std::list < HWPPara* >::iterator it = caption.begin();
-    for (; it != caption.end(); ++it)
-    {
-        HWPPara* pPara = *it;
-        delete pPara;
-    }
-
-    delete[]plists;
 }
-
 
 // picture(11)
 
@@ -405,23 +352,15 @@ Picture::Picture()
     , cap_pos(0)
     , num(0)
     , pictype(0)
-    , follow(nullptr)
     , ishyper(false)
 {
+    memset(&picinfo, 0, sizeof(picinfo));
 }
 
 Picture::~Picture()
 {
-    delete[]follow;
-    if( pictype == PICTYPE_DRAW && picinfo.picdraw.hdo )
-        delete static_cast<HWPDrawingObject *>(picinfo.picdraw.hdo);
-
-    std::list < HWPPara* >::iterator it = caption.begin();
-    for (; it != caption.end(); ++it)
-    {
-        HWPPara* pPara = *it;
-        delete pPara;
-    }
+    if (pictype == PICTYPE_DRAW)
+        delete picinfo.picdraw.hdo;
 }
 
 
@@ -429,36 +368,18 @@ Picture::~Picture()
 // hidden(15)
 Hidden::~Hidden()
 {
-    std::list < HWPPara* >::iterator it = plist.begin();
-    for (; it != plist.end(); ++it)
-    {
-        HWPPara* pPara = *it;
-        delete pPara;
-    }
 }
 
 
 // header/footer(16)
 HeaderFooter::~HeaderFooter()
 {
-    std::list < HWPPara* >::iterator it = plist.begin();
-    for (; it != plist.end(); ++it)
-    {
-        HWPPara* pPara = *it;
-        delete pPara;
-    }
 }
 
 
 // footnote(17)
 Footnote::~Footnote()
 {
-    std::list < HWPPara* >::iterator it = plist.begin();
-    for (; it != plist.end(); ++it)
-    {
-        HWPPara* pPara = *it;
-        delete pPara;
-    }
 }
 
 
@@ -474,7 +395,7 @@ hchar_string MailMerge::GetString()
 }
 
 
-// character compositon(23)
+// character composition(23)
 // hyphen(24)
 // toc mark(25)
 // index mark(26)
@@ -494,7 +415,7 @@ static hchar olHanglJaso(int num, int type)
 
     if (type == OL_HANGL_JASO)
     {
-        num = num % (14 + (sizeof(jung) / sizeof(char)));
+        num = num % (14 + SAL_N_ELEMENTS(jung));
 
         if (num < 14)
             hh = (han_init[num] << 8) | 'A';
@@ -507,7 +428,7 @@ static hchar olHanglJaso(int num, int type)
             hh = (han_init[num] << 8) | 'a';
         else
         {
-            int j = (num / 14) % (sizeof(jung2) / sizeof(char));
+            int j = (num / 14) % SAL_N_ELEMENTS(jung2);
 
             num = num % 14;
             hh = (han_init[num] << 8) | (jung2[j] << 5) | 1;
@@ -586,7 +507,8 @@ static void getOutlineNumStr(int style, int level, int num, hchar * hstr)
             ptr = buf;
             while (*ptr)
             {
-                *ptr = sal::static_int_cast<char>(toupper(*ptr));
+                *ptr = sal::static_int_cast<char>(
+                    rtl::toAsciiUpperCase(static_cast<unsigned char>(*ptr)));
                 ptr++;
             }
         }
@@ -688,7 +610,7 @@ hchar_string Outline::GetUnicode() const
                                 char *ptr = dest;
                                 while( *ptr )
                                 {
-                                    *ptr = sal::static_int_cast<char>(toupper(*ptr));
+                                    *ptr = sal::static_int_cast<char>(rtl::toAsciiUpperCase(static_cast<unsigned char>(*ptr)));
                                     ptr++;
                                 }
                             }

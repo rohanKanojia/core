@@ -20,8 +20,8 @@
 #define INCLUDED_SW_INC_HFSPACINGITEM_HXX
 
 #include <svl/eitem.hxx>
-#include <hintids.hxx>
-#include <format.hxx>
+#include "hintids.hxx"
+#include "format.hxx"
 
 class IntlWrapper;
 
@@ -34,14 +34,14 @@ public:
     // "pure virtual methods" of SfxPoolItem
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper*    pIntl = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& rIntl ) const override;
 };
 
 inline const SwHeaderAndFooterEatSpacingItem &SwAttrSet::GetHeaderAndFooterEatSpacing(bool bInP) const
-    { return static_cast<const SwHeaderAndFooterEatSpacingItem&>(Get( RES_HEADER_FOOTER_EAT_SPACING,bInP)); }
+    { return Get( RES_HEADER_FOOTER_EAT_SPACING,bInP); }
 
 inline const SwHeaderAndFooterEatSpacingItem &SwFormat::GetHeaderAndFooterEatSpacing(bool bInP) const
     { return m_aSet.GetHeaderAndFooterEatSpacing(bInP); }

@@ -27,8 +27,9 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmluconv.hxx>
 
+#include <com/sun/star/container/XNameContainer.hpp>
+
 using ::com::sun::star::beans::PropertyValue;
-using ::com::sun::star::beans::PropertyValues;
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Any;
@@ -108,14 +109,13 @@ void XMLIndexSimpleEntryContext::FillPropertyValues(
     Any aAny;
 
     // token type
-    rValues[0].Name = rTemplateContext.sTokenType;
-    aAny <<= rEntryType;
-    rValues[0].Value = aAny;
+    rValues[0].Name = "TokenType";
+    rValues[0].Value <<= rEntryType;
 
     // char style
     if (bCharStyleNameOK)
     {
-        rValues[1].Name = rTemplateContext.sCharacterStyleName;
+        rValues[1].Name = "CharacterStyleName";
         aAny <<= GetImport().GetStyleDisplayName(
                                     XML_STYLE_FAMILY_TEXT_TEXT,
                                     sCharStyleName );

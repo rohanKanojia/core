@@ -19,43 +19,23 @@
 #ifndef INCLUDED_SFX2_MGETEMPL_HXX
 #define INCLUDED_SFX2_MGETEMPL_HXX
 
-#include <vcl/edit.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/lstbox.hxx>
-#include <vcl/vclmedit.hxx>
+#include <sfx2/styfitem.hxx>
 #include <sfx2/tabdlg.hxx>
+#include <vcl/weld.hxx>
+#include <memory>
 
 /* expected:
     SID_TEMPLATE_NAME   :   In: StringItem, Name of Template
     SID_TEMPLATE_FAMILY :   In: Family of Template
 */
 
-class SfxStyleFamilies;
 class SfxStyleFamilyItem;
 class SfxStyleSheetBase;
 
-class SfxManageStyleSheetPage : public SfxTabPage
+class SfxManageStyleSheetPage final : public SfxTabPage
 {
-    VclPtr<VclMultiLineEdit> m_pNameRo;
-    VclPtr<Edit>             m_pNameRw;
-
-    VclPtr<CheckBox>         m_pAutoCB;
-
-    VclPtr<FixedText>        m_pFollowFt;
-    VclPtr<ListBox>          m_pFollowLb;
-    VclPtr<PushButton>       m_pEditStyleBtn;
-
-    VclPtr<FixedText>        m_pBaseFt;
-    VclPtr<ListBox>          m_pBaseLb;
-    VclPtr<PushButton>       m_pEditLinkStyleBtn;
-
-    VclPtr<FixedText>        m_pFilterFt;
-    VclPtr<ListBox>          m_pFilterLb;
-
-    VclPtr<FixedText>        m_pDescFt;
-
     SfxStyleSheetBase *pStyle;
-    SfxStyleFamilies *pFamilies;
+    std::unique_ptr<SfxStyleFamilies> pFamilies;
     const SfxStyleFamilyItem *pItem;
     OUString aBuf;
     bool bModified;
@@ -64,39 +44,49 @@ class SfxManageStyleSheetPage : public SfxTabPage
     OUString aName;
     OUString aFollow;
     OUString aParent;
-    sal_uInt16 nFlags;
+    SfxStyleSearchBits const nFlags;
 
-private:
-friend class SfxStyleDialog;
+    std::unique_ptr<weld::Entry> m_xName;
+    std::unique_ptr<weld::CheckButton> m_xAutoCB;
+    std::unique_ptr<weld::Label> m_xFollowFt;
+    std::unique_ptr<weld::ComboBox> m_xFollowLb;
+    std::unique_ptr<weld::Button> m_xEditStyleBtn;
+    std::unique_ptr<weld::Label> m_xBaseFt;
+    std::unique_ptr<weld::ComboBox>          m_xBaseLb;
+    std::unique_ptr<weld::Button> m_xEditLinkStyleBtn;
+    std::unique_ptr<weld::Label> m_xFilterFt;
+    std::unique_ptr<weld::ComboBox> m_xFilterLb;
+    std::unique_ptr<weld::Label> m_xDescFt;
+    std::unique_ptr<weld::Label> m_xNameFt;
 
-    DECL_LINK_TYPED( GetFocusHdl, Control&, void );
-    DECL_LINK_TYPED( LoseFocusHdl, Control&, void );
-    DECL_LINK_TYPED( EditStyleSelectHdl_Impl, ListBox&, void );
-    DECL_LINK_TYPED( EditStyleHdl_Impl, Button*, void );
-    DECL_LINK_TYPED( EditLinkStyleSelectHdl_Impl, ListBox&, void );
-    DECL_LINK_TYPED( EditLinkStyleHdl_Impl, Button*, void );
+friend class SfxStyleDialogController;
 
-    void    UpdateName_Impl(ListBox *, const OUString &rNew);
+    DECL_LINK(GetFocusHdl, weld::Widget&, void);
+    DECL_LINK(LoseFocusHdl, weld::Widget&, void);
+    DECL_LINK(EditStyleSelectHdl_Impl, weld::ComboBox&, void);
+    DECL_LINK(EditStyleHdl_Impl, weld::Button&, void);
+    DECL_LINK(EditLinkStyleSelectHdl_Impl, weld::ComboBox&, void);
+    DECL_LINK(EditLinkStyleHdl_Impl, weld::Button&, void);
+
+    void    UpdateName_Impl(weld::ComboBox*, const OUString &rNew);
     void    SetDescriptionText_Impl();
 
-    virtual ~SfxManageStyleSheetPage();
+    virtual ~SfxManageStyleSheetPage() override;
     virtual void dispose() override;
 
-    static VclPtr<SfxTabPage> Create( vcl::Window* pParent, const SfxItemSet* );
+    static VclPtr<SfxTabPage> Create( TabPageParent pParent, const SfxItemSet* );
 
-protected:
     virtual bool        FillItemSet(SfxItemSet *) override;
     virtual void        Reset(const SfxItemSet *) override;
 
-    static bool    Execute_Impl( sal_uInt16 nId, const OUString& rStr, const OUString& rRefStr,
-                          sal_uInt16 nFamily, sal_uInt16 nMask = 0 );
+    static bool    Execute_Impl( sal_uInt16 nId, const OUString& rStr, sal_uInt16 nFamily );
     using TabPage::ActivatePage;
-        virtual void        ActivatePage(const SfxItemSet &) override;
-        using TabPage::DeactivatePage;
-    virtual sfxpg DeactivatePage(SfxItemSet * = nullptr) override;
+    virtual void        ActivatePage(const SfxItemSet &) override;
+    using TabPage::DeactivatePage;
+    virtual DeactivateRC DeactivatePage(SfxItemSet *) override;
 
 public:
-    SfxManageStyleSheetPage(vcl::Window *pParent, const SfxItemSet &rAttrSet );
+    SfxManageStyleSheetPage(TabPageParent pParent, const SfxItemSet &rAttrSet);
 };
 
 #endif

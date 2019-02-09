@@ -36,9 +36,8 @@ namespace pcr
 
     /** encapsulates functionality related to binding a form control to a spreadsheet cell
     */
-    class CellBindingHelper
+    class CellBindingHelper final
     {
-    protected:
         css::uno::Reference< css::beans::XPropertySet >
                     m_xControlModel;    // the model we work for
         css::uno::Reference< css::sheet::XSpreadsheetDocument >
@@ -54,7 +53,6 @@ namespace pcr
             const css::uno::Reference< css::frame::XModel >& _rxContextDocument
         );
 
-    public:
         /** determines whether the given model is a spreadsheet document model
 
             <p>If this method returns <FALSE/>, you cannot instantiate a CellBindingHelper with
@@ -71,7 +69,7 @@ namespace pcr
         css::uno::Reference< css::form::binding::XValueBinding >
                         createCellBindingFromStringAddress(
                             const OUString& _rAddress,
-                            bool _bSupportIntegerExchange = false
+                            bool _bSupportIntegerExchange
                         ) const;
 
         /** creates a cell binding (supporting integer exchange, if requested) for
@@ -80,7 +78,7 @@ namespace pcr
         css::uno::Reference< css::form::binding::XValueBinding >
                         createCellBindingFromAddress(
                             const css::table::CellAddress& _rAddress,
-                            bool _bSupportIntegerExchange = false
+                            bool _bSupportIntegerExchange
                         ) const;
 
         /** gets a cell range list source binding for the given address
@@ -196,7 +194,7 @@ namespace pcr
                             css::uno::Reference< css::sheet::XSpreadsheet >& _out_rxSheet
                         ) const;
 
-    protected:
+    private:
         /** creates an address object from a string representation of a cell address
         */
         bool            convertStringAddress(
@@ -216,7 +214,7 @@ namespace pcr
         */
         bool            isSpreadsheetDocumentWhichSupplies( const OUString& _rService ) const;
 
-        /** checkes whether a given component supports a given servive
+        /** checks whether a given component supports a given servive
         */
         static bool     doesComponentSupport(
                             const css::uno::Reference< css::uno::XInterface >& _rxComponent,

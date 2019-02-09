@@ -33,9 +33,8 @@ namespace helpdatafileproxy {
 void HDFData::copyToBuffer( const char* pSrcData, int nSize )
 {
     m_nSize = nSize;
-    delete [] m_pBuffer;
-    m_pBuffer = new char[m_nSize+1];
-    memcpy( m_pBuffer, pSrcData, m_nSize );
+    m_pBuffer.reset( new char[m_nSize+1] );
+    memcpy( m_pBuffer.get(), pSrcData, m_nSize );
     m_pBuffer[m_nSize] = 0;
 }
 
@@ -69,13 +68,13 @@ void Hdf::createHashMap( bool bOptimizeForPerformance )
     {
         if( m_pStringToDataMap != nullptr )
             return;
-        m_pStringToDataMap = new StringToDataMap();
+        m_pStringToDataMap.reset(new StringToDataMap);
     }
     else
     {
         if( m_pStringToValPosMap != nullptr )
             return;
-        m_pStringToValPosMap = new StringToValPosMap();
+        m_pStringToValPosMap.reset(new StringToValPosMap);
     }
 
     Reference< XInputStream > xIn = m_xSFA->openFileRead( m_aFileURL );
@@ -124,18 +123,14 @@ void Hdf::createHashMap( bool bOptimizeForPerformance )
 
 void Hdf::releaseHashMap()
 {
-    if( m_pStringToDataMap != nullptr )
-    {
-        delete m_pStringToDataMap;
-        m_pStringToDataMap = nullptr;
-    }
-    if( m_pStringToValPosMap != nullptr )
-    {
-        delete m_pStringToValPosMap;
-        m_pStringToValPosMap = nullptr;
-    }
+    m_pStringToDataMap.reset();
+    m_pStringToValPosMap.reset();
 }
 
+
+Hdf::~Hdf()
+{
+}
 
 bool Hdf::getValueForKey( const OString& rKey, HDFData& rValue )
 {
@@ -148,8 +143,7 @@ bool Hdf::getValueForKey( const OString& rKey, HDFData& rValue )
 
     if( m_pStringToDataMap == nullptr && m_pStringToValPosMap == nullptr )
     {
-        bool bOptimizeForPerformance = false;
-        createHashMap( bOptimizeForPerformance );
+        createHashMap( false/*bOptimizeForPerformance*/ );
     }
 
     if( m_pStringToValPosMap != nullptr )

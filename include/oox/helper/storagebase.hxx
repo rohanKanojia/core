@@ -20,10 +20,14 @@
 #ifndef INCLUDED_OOX_HELPER_STORAGEBASE_HXX
 #define INCLUDED_OOX_HELPER_STORAGEBASE_HXX
 
+#include <functional>
+#include <memory>
 #include <vector>
+
 #include <com/sun/star/uno/Reference.hxx>
-#include <oox/helper/refmap.hxx>
 #include <oox/dllapi.h>
+#include <oox/helper/refmap.hxx>
+#include <rtl/ustring.hxx>
 
 namespace com { namespace sun { namespace star {
     namespace embed { class XStorage; }
@@ -168,17 +172,16 @@ private:
     StorageRef          getSubStorage( const OUString& rElementName, bool bCreateMissing );
 
 private:
-    typedef RefMap< OUString, StorageBase > SubStorageMap;
-
-    SubStorageMap       maSubStorages;      ///< Map of direct sub storages.
+    RefMap< OUString, StorageBase >
+                        maSubStorages;      ///< Map of direct sub storages.
     css::uno::Reference< css::io::XInputStream >
                         mxInStream;         ///< Cached base input stream (to keep it alive).
     css::uno::Reference< css::io::XStream >
                         mxOutStream;        ///< Cached base output stream (to keep it alive).
-    OUString            maParentPath;       ///< Full path of parent storage.
-    OUString            maStorageName;      ///< Name of this storage, if it is a substorage.
-    bool                mbBaseStreamAccess; ///< True = access base streams with empty stream name.
-    bool                mbReadOnly;         ///< True = storage opened read-only (based on input stream).
+    OUString const      maParentPath;       ///< Full path of parent storage.
+    OUString const      maStorageName;      ///< Name of this storage, if it is a substorage.
+    bool const          mbBaseStreamAccess; ///< True = access base streams with empty stream name.
+    bool const          mbReadOnly;         ///< True = storage opened read-only (based on input stream).
 };
 
 

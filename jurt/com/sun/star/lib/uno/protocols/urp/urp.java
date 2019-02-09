@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -29,8 +30,6 @@ import com.sun.star.lib.uno.typedesc.MethodDescription;
 import com.sun.star.lib.uno.typedesc.TypeDescription;
 import com.sun.star.uno.Any;
 import com.sun.star.uno.IBridge;
-import com.sun.star.uno.IMethodDescription;
-import com.sun.star.uno.ITypeDescription;
 import com.sun.star.uno.Type;
 import com.sun.star.uno.TypeClass;
 import com.sun.star.uno.UnoRuntime;
@@ -158,7 +157,7 @@ public final class urp implements IProtocol {
             int header = HEADER_LONGHEADER;
             PendingRequests.Item pending = pendingIn.pop(tid);
             TypeDescription resultType;
-            ITypeDescription[] argTypes;
+            TypeDescription[] argTypes;
             Object[] args;
             if (exception) {
                 header |= HEADER_EXCEPTION;
@@ -166,8 +165,7 @@ public final class urp implements IProtocol {
                 argTypes = null;
                 args = null;
             } else {
-                resultType = (TypeDescription)
-                    pending.function.getReturnSignature();
+                resultType = pending.function.getReturnSignature();
                 argTypes = pending.function.getOutSignature();
                 args = pending.arguments;
             }
@@ -186,7 +184,7 @@ public final class urp implements IProtocol {
                 for (int i = 0; i < argTypes.length; ++i) {
                     if (argTypes[i] != null) {
                         marshal.writeValue(
-                            (TypeDescription) argTypes[i].getComponentType(),
+                            argTypes[i].getComponentType(),
                             Array.get(args[i], 0));
                     }
                 }
@@ -416,13 +414,13 @@ public final class urp implements IProtocol {
             ? (XCurrentContext) unmarshal.readInterface(
                 new Type(XCurrentContext.class))
             : null;
-        IMethodDescription desc = inL1Type.getMethodDescription(functionId);
+        MethodDescription desc = inL1Type.getMethodDescription(functionId);
         if (desc == null) {
             throw new IOException(
                 "read URP request with unsupported function ID " + functionId);
         }
-        ITypeDescription[] inSig = desc.getInSignature();
-        ITypeDescription[] outSig = desc.getOutSignature();
+        TypeDescription[] inSig = desc.getInSignature();
+        TypeDescription[] outSig = desc.getOutSignature();
         Object[] args = new Object[inSig.length];
         for (int i = 0; i < args.length; ++i) {
             if (inSig[i] != null) {
@@ -432,10 +430,10 @@ public final class urp implements IProtocol {
                     Array.set(
                         inout, 0,
                         unmarshal.readValue(
-                            (TypeDescription) outSig[i].getComponentType()));
+                            outSig[i].getComponentType()));
                     args[i] = inout;
                 } else {
-                    args[i] = unmarshal.readValue((TypeDescription) inSig[i]);
+                    args[i] = unmarshal.readValue(inSig[i]);
                 }
             } else {
                 args[i] = Array.newInstance(
@@ -458,7 +456,7 @@ public final class urp implements IProtocol {
         }
         PendingRequests.Item pending = pendingOut.pop(inL1Tid);
         TypeDescription resultType;
-        ITypeDescription[] argTypes;
+        TypeDescription[] argTypes;
         Object[] args;
         boolean exception = (header & HEADER_EXCEPTION) != 0;
         if (exception) {
@@ -466,8 +464,7 @@ public final class urp implements IProtocol {
             argTypes = null;
             args = null;
         } else {
-            resultType = (TypeDescription)
-                pending.function.getReturnSignature();
+            resultType = pending.function.getReturnSignature();
             argTypes = pending.function.getOutSignature();
             args = pending.arguments;
         }
@@ -479,7 +476,7 @@ public final class urp implements IProtocol {
                     Array.set(
                         args[i], 0,
                         unmarshal.readValue(
-                            (TypeDescription) argTypes[i].getComponentType()));
+                            argTypes[i].getComponentType()));
                 }
             }
         }
@@ -493,7 +490,7 @@ public final class urp implements IProtocol {
         ThreadId tid, Object[] arguments)
         throws IOException
     {
-        IMethodDescription desc = type.getMethodDescription(function);
+        MethodDescription desc = type.getMethodDescription(function);
         synchronized (output) {
             if (desc.getIndex() == MethodDescription.ID_RELEASE
                 && releaseQueue.size() < MAX_RELEASE_QUEUE_SIZE)
@@ -511,7 +508,7 @@ public final class urp implements IProtocol {
 
     private boolean writeRequest(
         boolean internal, String oid, TypeDescription type,
-        IMethodDescription desc, ThreadId tid, Object[] arguments,
+        MethodDescription desc, ThreadId tid, Object[] arguments,
         boolean flush)
         throws IOException
     {
@@ -588,17 +585,17 @@ public final class urp implements IProtocol {
                 UnoRuntime.getCurrentContext(),
                 new Type(XCurrentContext.class));
         }
-        ITypeDescription[] inSig = desc.getInSignature();
-        ITypeDescription[] outSig = desc.getOutSignature();
+        TypeDescription[] inSig = desc.getInSignature();
+        TypeDescription[] outSig = desc.getOutSignature();
         for (int i = 0; i < inSig.length; ++i) {
             if (inSig[i] != null) {
                 if (outSig[i] != null) {
                     marshal.writeValue(
-                        (TypeDescription) outSig[i].getComponentType(),
+                        outSig[i].getComponentType(),
                         ((Object[]) arguments[i])[0]);
                 } else {
                     marshal.writeValue(
-                        (TypeDescription) inSig[i], arguments[i]);
+                        inSig[i], arguments[i]);
                 }
             }
         }
@@ -678,7 +675,7 @@ public final class urp implements IProtocol {
     private static final class QueuedRelease {
         public QueuedRelease(
             boolean internal, String objectId, TypeDescription type,
-            IMethodDescription method, ThreadId threadId)
+            MethodDescription method, ThreadId threadId)
         {
             this.internal = internal;
             this.objectId = objectId;
@@ -690,7 +687,7 @@ public final class urp implements IProtocol {
         public final boolean internal;
         public final String objectId;
         public final TypeDescription type;
-        public final IMethodDescription method;
+        public final MethodDescription method;
         public final ThreadId threadId;
     }
 
@@ -755,7 +752,9 @@ public final class urp implements IProtocol {
 
     private ThreadId outL1Tid = null;
     private String outL1Oid = null;
-    private ITypeDescription outL1Type = null;
+    private TypeDescription outL1Type = null;
 
     private final ArrayList<QueuedRelease> releaseQueue = new ArrayList<QueuedRelease>(); // of QueuedRelease
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

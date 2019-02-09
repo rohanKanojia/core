@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <SchXMLCalculationSettingsContext.hxx>
+#include "SchXMLCalculationSettingsContext.hxx"
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/util/DateTime.hpp>
 
@@ -51,12 +51,12 @@ SchXMLCalculationSettingsContext::SchXMLCalculationSettingsContext( SvXMLImport&
         {
             util::DateTime aNullDate;
             const OUString sValue = xAttrList->getValueByIndex( i );
-            ::sax::Converter::parseDateTime(aNullDate, nullptr, sValue);
+            ::sax::Converter::parseDateTime(aNullDate, sValue);
             m_aNullDate <<= aNullDate;
         }
     }
 }
-SvXMLImportContext* SchXMLCalculationSettingsContext::CreateChildContext( sal_uInt16 nPrefix,
+SvXMLImportContextRef SchXMLCalculationSettingsContext::CreateChildContext( sal_uInt16 nPrefix,
                                    const OUString& rLocalName,
                                    const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList )
 {
@@ -68,8 +68,7 @@ void SchXMLCalculationSettingsContext::EndElement()
     if ( m_aNullDate.hasValue() )
     {
         Reference < XPropertySet > xPropSet ( GetImport().GetModel(), UNO_QUERY );
-        OUString sNullDate( "NullDate" );
-        xPropSet->setPropertyValue ( sNullDate, m_aNullDate );
+        xPropSet->setPropertyValue ( "NullDate", m_aNullDate );
     }
 }
 

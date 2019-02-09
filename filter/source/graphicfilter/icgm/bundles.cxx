@@ -23,75 +23,19 @@
 #include <tools/stream.hxx>
 #include <memory>
 
-Bundle& Bundle::operator=( Bundle& rSource )
-{
-    mnColor = rSource.mnColor;
-    mnBundleIndex = rSource.mnBundleIndex;
-    return *this;
-};
-
-
 void Bundle::SetColor( sal_uInt32 nColor )
 {
     mnColor = nColor;
 }
 
-
-LineBundle& LineBundle::operator=( LineBundle& rSource )
-{
-    SetIndex( rSource.GetIndex() );
-    eLineType = rSource.eLineType;
-    nLineWidth = rSource.nLineWidth;
-    return *this;
-};
-
-MarkerBundle& MarkerBundle::operator=( MarkerBundle& rSource )
-{
-    SetIndex( rSource.GetIndex() );
-    eMarkerType = rSource.eMarkerType;
-    nMarkerSize = rSource.nMarkerSize;
-    return *this;
-};
-
-EdgeBundle& EdgeBundle::operator=( EdgeBundle& rSource )
-{
-    SetIndex( rSource.GetIndex() );
-    eEdgeType = rSource.eEdgeType;
-    nEdgeWidth = rSource.nEdgeWidth;
-    return *this;
-};
-
-TextBundle& TextBundle::operator=( TextBundle& rSource )
-{
-    SetIndex( rSource.GetIndex() );
-    nTextFontIndex = rSource.nTextFontIndex;
-    eTextPrecision = rSource.eTextPrecision;
-    nCharacterExpansion = rSource.nCharacterExpansion;
-    nCharacterSpacing = rSource.nCharacterSpacing;
-    return *this;
-};
-
-FillBundle& FillBundle::operator=( FillBundle& rSource )
-{
-    SetIndex( rSource.GetIndex() );
-    eFillInteriorStyle = rSource.eFillInteriorStyle;
-    nFillPatternIndex = rSource.nFillPatternIndex;
-    nFillHatchIndex = rSource.nFillHatchIndex;
-    return *this;
-};
-
 FontEntry::FontEntry() :
-    pFontName       ( nullptr ),
     eCharSetType    ( CST_CCOMPLETE ),
-    pCharSetValue   ( nullptr ),
     nFontType       ( 0 )
 {
 }
 
 FontEntry::~FontEntry()
 {
-    delete [] pFontName;
-    delete[] pCharSetValue;
 }
 
 CGMFList::CGMFList() :
@@ -107,43 +51,43 @@ CGMFList::~CGMFList()
     ImplDeleteList();
 }
 
-
-CGMFList& CGMFList::operator=( CGMFList& rSource )
+CGMFList& CGMFList::operator=( const CGMFList& rSource )
 {
-    ImplDeleteList();
-    nFontsAvailable = rSource.nFontsAvailable;
-    nFontNameCount  = rSource.nFontNameCount;
-    nCharSetCount   = rSource.nCharSetCount;
-    for ( size_t i = 0, n = rSource.aFontEntryList.size(); i < n; ++i )
+    if (this != &rSource)
     {
-        FontEntry* pPtr = rSource.aFontEntryList[ i ];
-        FontEntry* pCFontEntry = new FontEntry;
-        if ( pPtr->pFontName )
+        ImplDeleteList();
+        nFontsAvailable = rSource.nFontsAvailable;
+        nFontNameCount  = rSource.nFontNameCount;
+        nCharSetCount   = rSource.nCharSetCount;
+        for (auto const & pPtr : rSource.aFontEntryList)
         {
-            sal_uInt32 nSize = strlen( reinterpret_cast<char*>(pPtr->pFontName) ) + 1;
-            pCFontEntry->pFontName = new sal_Int8[ nSize ];
-            memcpy( pCFontEntry->pFontName, pPtr->pFontName, nSize );
+            std::unique_ptr<FontEntry> pCFontEntry(new FontEntry);
+            if ( pPtr->pFontName )
+            {
+                sal_uInt32 nSize = strlen( reinterpret_cast<char*>(pPtr->pFontName.get()) ) + 1;
+                pCFontEntry->pFontName.reset( new sal_Int8[ nSize ] );
+                memcpy( pCFontEntry->pFontName.get(), pPtr->pFontName.get(), nSize );
+            }
+            if ( pPtr->pCharSetValue )
+            {
+                sal_uInt32 nSize = strlen( reinterpret_cast<char*>(pPtr->pCharSetValue.get()) ) + 1;
+                pCFontEntry->pCharSetValue.reset( new sal_Int8[ nSize ] );
+                memcpy( pCFontEntry->pCharSetValue.get(), pPtr->pCharSetValue.get(), nSize );
+            }
+            pCFontEntry->eCharSetType = pPtr->eCharSetType;
+            pCFontEntry->nFontType = pPtr->nFontType;
+            aFontEntryList.push_back( std::move(pCFontEntry) );
         }
-        if ( pPtr->pCharSetValue )
-        {
-            sal_uInt32 nSize = strlen( reinterpret_cast<char*>(pPtr->pCharSetValue) ) + 1;
-            pCFontEntry->pCharSetValue = new sal_Int8[ nSize ];
-            memcpy( pCFontEntry->pCharSetValue, pPtr->pCharSetValue, nSize );
-        }
-        pCFontEntry->eCharSetType = pPtr->eCharSetType;
-        pCFontEntry->nFontType = pPtr->nFontType;
-        aFontEntryList.push_back( pCFontEntry );
     }
     return *this;
 }
-
 
 FontEntry* CGMFList::GetFontEntry( sal_uInt32 nIndex )
 {
     sal_uInt32 nInd = nIndex;
     if ( nInd )
         nInd--;
-    return ( nInd < aFontEntryList.size() ) ? aFontEntryList[ nInd ] : nullptr;
+    return ( nInd < aFontEntryList.size() ) ? aFontEntryList[ nInd ].get() : nullptr;
 }
 
 
@@ -164,18 +108,18 @@ static sal_Int8* ImplSearchEntry( sal_Int8* pSource, sal_Int8 const * pDest, sal
     return nullptr;
 }
 
-void CGMFList::InsertName( sal_uInt8* pSource, sal_uInt32 nSize )
+void CGMFList::InsertName( sal_uInt8 const * pSource, sal_uInt32 nSize )
 {
     FontEntry* pFontEntry;
     if ( nFontsAvailable == nFontNameCount )
     {
         nFontsAvailable++;
         pFontEntry = new FontEntry;
-        aFontEntryList.push_back( pFontEntry );
+        aFontEntryList.push_back( std::unique_ptr<FontEntry>(pFontEntry) );
     }
     else
     {
-        pFontEntry = aFontEntryList[ nFontNameCount ];
+        pFontEntry = aFontEntryList[ nFontNameCount ].get();
     }
     nFontNameCount++;
     std::unique_ptr<sal_Int8[]> pBuf(new sal_Int8[ nSize ]);
@@ -184,7 +128,7 @@ void CGMFList::InsertName( sal_uInt8* pSource, sal_uInt32 nSize )
     if ( pFound )
     {
         pFontEntry->nFontType |= 1;
-        sal_uInt32 nPrev = ( pFound - pBuf.get() );
+        sal_uInt32 nPrev = pFound - pBuf.get();
         sal_uInt32 nToCopyOfs = 6;
         if ( nPrev && ( pFound[ -1 ] == '-' || pFound[ -1 ] == ' ' ) )
         {
@@ -204,7 +148,7 @@ void CGMFList::InsertName( sal_uInt8* pSource, sal_uInt32 nSize )
     {
         pFontEntry->nFontType |= 2;
 
-        sal_uInt32 nPrev = ( pFound - pBuf.get() );
+        sal_uInt32 nPrev = pFound - pBuf.get();
         sal_uInt32 nToCopyOfs = 4;
         if ( nPrev && ( pFound[ -1 ] == '-' || pFound[ -1 ] == ' ' ) )
         {
@@ -219,37 +163,35 @@ void CGMFList::InsertName( sal_uInt8* pSource, sal_uInt32 nSize )
         }
         nSize -= nToCopyOfs;
     }
-    pFontEntry->pFontName = new sal_Int8[ nSize + 1 ];
+    pFontEntry->pFontName.reset( new sal_Int8[ nSize + 1 ] );
     pFontEntry->pFontName[ nSize ] = 0;
-    memcpy( pFontEntry->pFontName, pBuf.get(), nSize );
+    memcpy( pFontEntry->pFontName.get(), pBuf.get(), nSize );
 }
 
 
-void CGMFList::InsertCharSet( CharSetType eCharSetType, sal_uInt8* pSource, sal_uInt32 nSize )
+void CGMFList::InsertCharSet( CharSetType eCharSetType, sal_uInt8 const * pSource, sal_uInt32 nSize )
 {
     FontEntry* pFontEntry;
     if ( nFontsAvailable == nCharSetCount )
     {
         nFontsAvailable++;
         pFontEntry = new FontEntry;
-        aFontEntryList.push_back( pFontEntry );
+        aFontEntryList.push_back( std::unique_ptr<FontEntry>(pFontEntry) );
     }
     else
     {
-        pFontEntry = aFontEntryList[ nCharSetCount ];
+        pFontEntry = aFontEntryList[ nCharSetCount ].get();
     }
     nCharSetCount++;
     pFontEntry->eCharSetType = eCharSetType;
-    pFontEntry->pCharSetValue = new sal_Int8[ nSize + 1 ];
+    pFontEntry->pCharSetValue.reset( new sal_Int8[ nSize + 1 ] );
     pFontEntry->pCharSetValue[ nSize ] = 0;
-    memcpy( pFontEntry->pCharSetValue, pSource , nSize );
+    memcpy( pFontEntry->pCharSetValue.get(), pSource, nSize );
 }
 
 
 void CGMFList::ImplDeleteList()
 {
-    for ( size_t i = 0, n = aFontEntryList.size(); i < n; ++i )
-        delete aFontEntryList[ i ];
     aFontEntryList.clear();
 }
 

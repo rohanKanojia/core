@@ -24,6 +24,7 @@
 #include <com/sun/star/awt/FontDescriptor.hpp>
 #include <com/sun/star/beans/Property.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
+#include <tools/color.hxx>
 
 namespace cppu {
     class OPropertySetHelper;
@@ -50,15 +51,15 @@ namespace frm
         const css::awt::FontDescriptor& getFont() const { return m_aFont; }
         void setFont( const css::awt::FontDescriptor& _rFont ) { m_aFont = _rFont; }
 
-        void        setTextColor( sal_Int32 _nColor ) { m_aTextColor <<= _nColor;       }
+        void        setTextColor( Color _nColor ) { m_aTextColor <<= _nColor;       }
         void        clearTextColor( )                 { m_aTextColor.clear();           }
         bool        hasTextColor( ) const             { return m_aTextColor.hasValue(); }
-        sal_Int32   getTextColor( ) const;
+        Color       getTextColor( ) const;
 
-        void        setTextLineColor( sal_Int32 _nColor ) { m_aTextLineColor <<= _nColor;       }
+        void        setTextLineColor( Color _nColor ) { m_aTextLineColor <<= _nColor;       }
         void        clearTextLineColor( )                 { m_aTextLineColor.clear();           }
         bool        hasTextLineColor( ) const             { return m_aTextLineColor.hasValue(); }
-        sal_Int32   getTextLineColor( ) const;
+        Color       getTextLineColor( ) const;
 
     protected:
         FontControlModel( bool _bToolkitCompatibleDefaults );
@@ -73,12 +74,14 @@ namespace frm
             css::uno::Sequence< css::beans::Property >& /* [out] */ _rProps );
 
         void     getFastPropertyValue            ( css::uno::Any& _rValue, sal_Int32 _nHandle ) const;
-        bool     convertFastPropertyValue        ( css::uno::Any& _rConvertedValue, css::uno::Any& _rOldValue, sal_Int32 _nHandle, const css::uno::Any& _rValue ) throw( css::lang::IllegalArgumentException );
+        /// @throws css::lang::IllegalArgumentException
+        /// @throws css::uno::RuntimeException
+        bool     convertFastPropertyValue        ( css::uno::Any& _rConvertedValue, css::uno::Any& _rOldValue, sal_Int32 _nHandle, const css::uno::Any& _rValue );
+        /// @throws css::uno::Exception
         void     setFastPropertyValue_NoBroadcast_impl(
                      ::cppu::OPropertySetHelper & rBase,
                      void (::cppu::OPropertySetHelper::*pSet)( sal_Int32, css::uno::Any const&),
-                     sal_Int32 nHandle, const css::uno::Any& rValue)
-            throw ( css::uno::Exception );
+                     sal_Int32 nHandle, const css::uno::Any& rValue);
         css::uno::Any
                  getPropertyDefaultByHandle      ( sal_Int32 _nHandle ) const;
 

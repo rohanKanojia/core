@@ -19,19 +19,20 @@
 
 #undef SC_DLLIMPLEMENTATION
 
-#include "scitems.hxx"
-#include <vcl/msgbox.hxx>
+#include <scitems.hxx>
+#include <vcl/weld.hxx>
 
-#include "global.hxx"
-#include "globstr.hrc"
-#include "uiitems.hxx"
-#include "docsh.hxx"
-#include "document.hxx"
-#include "docoptio.hxx"
-#include "scresid.hxx"
-#include "sc.hrc"
+#include <global.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <uiitems.hxx>
+#include <docsh.hxx>
+#include <document.hxx>
+#include <docoptio.hxx>
+#include <sc.hrc>
+#include <officecfg/Office/Calc.hxx>
 
-#include "tpcalc.hxx"
+#include <tpcalc.hxx>
 
 #include <math.h>
 
@@ -62,6 +63,7 @@ ScTpCalcOptions::ScTpCalcOptions(vcl::Window* pParent, const SfxItemSet& rCoreAt
     get(m_pBtnGeneralPrec, "generalprec");
     get(m_pFtPrec, "precft");
     get(m_pEdPrec, "prec");
+    get(m_pBtnThread, "threadingenabled");
     Init();
     SetExchangeSupport();
 }
@@ -73,8 +75,8 @@ ScTpCalcOptions::~ScTpCalcOptions()
 
 void ScTpCalcOptions::dispose()
 {
-    delete pOldOptions;
-    delete pLocalOptions;
+    pOldOptions.reset();
+    pLocalOptions.reset();
     m_pBtnIterate.clear();
     m_pFtSteps.clear();
     m_pEdSteps.clear();
@@ -93,6 +95,7 @@ void ScTpCalcOptions::dispose()
     m_pBtnGeneralPrec.clear();
     m_pFtPrec.clear();
     m_pEdPrec.clear();
+    m_pBtnThread.clear();
     SfxTabPage::dispose();
 }
 
@@ -103,30 +106,49 @@ void ScTpCalcOptions::Init()
     m_pBtnDateStd->SetClickHdl( LINK( this, ScTpCalcOptions, RadioClickHdl ) );
     m_pBtnDateSc10->SetClickHdl( LINK( this, ScTpCalcOptions, RadioClickHdl ) );
     m_pBtnDate1904->SetClickHdl( LINK( this, ScTpCalcOptions, RadioClickHdl ) );
+    m_pBtnThread->SetClickHdl( LINK( this, ScTpCalcOptions, CheckClickHdl ) );
 }
 
-VclPtr<SfxTabPage> ScTpCalcOptions::Create( vcl::Window* pParent, const SfxItemSet* rAttrSet )
+VclPtr<SfxTabPage> ScTpCalcOptions::Create( TabPageParent pParent, const SfxItemSet* rAttrSet )
 {
-    return VclPtr<ScTpCalcOptions>::Create( pParent, *rAttrSet );
+    return VclPtr<ScTpCalcOptions>::Create( pParent.pParent, *rAttrSet );
 }
 
 void ScTpCalcOptions::Reset( const SfxItemSet* /* rCoreAttrs */ )
 {
-    sal_uInt16  d,m,y;
+    sal_uInt16  d,m;
+    sal_Int16   y;
 
     *pLocalOptions  = *pOldOptions;
 
     m_pBtnCase->Check( !pLocalOptions->IsIgnoreCase() );
+    m_pBtnCase->Enable( !officecfg::Office::Calc::Calculate::Other::CaseSensitive::isReadOnly() );
     m_pBtnCalc->Check( pLocalOptions->IsCalcAsShown() );
+    m_pBtnCalc->Enable( !officecfg::Office::Calc::Calculate::Other::Precision::isReadOnly() );
     m_pBtnMatch->Check( pLocalOptions->IsMatchWholeCell() );
+    m_pBtnMatch->Enable( !officecfg::Office::Calc::Calculate::Other::SearchCriteria::isReadOnly() );
     bool bWildcards = pLocalOptions->IsFormulaWildcardsEnabled();
     bool bRegex = pLocalOptions->IsFormulaRegexEnabled();
+    // If both, Wildcards and Regex, are set then Wildcards shall take
+    // precedence. This is also how other code calling Search handles it. Both
+    // simultaneously couldn't be set using UI but editing the configuration.
     if (bWildcards && bRegex)
         bRegex = false;
     m_pBtnWildcards->Check( bWildcards );
     m_pBtnRegex->Check( bRegex );
+    m_pBtnWildcards->Enable( !officecfg::Office::Calc::Calculate::Other::Wildcards::isReadOnly() );
+    m_pBtnRegex->Enable( !officecfg::Office::Calc::Calculate::Other::RegularExpressions::isReadOnly() );
     m_pBtnLiteral->Check( !bWildcards && !bRegex );
+    m_pBtnLiteral->Enable( m_pBtnWildcards->IsEnabled() || m_pBtnRegex->IsEnabled() );
+    // if either regex or wildcards radio button is set and read-only, disable all three
+    if ( (!m_pBtnWildcards->IsEnabled() && bWildcards) || (!m_pBtnRegex->IsEnabled() && bRegex) )
+    {
+        m_pBtnWildcards->Enable( false );
+        m_pBtnRegex->Enable( false );
+        m_pBtnLiteral->Enable( false );
+    }
     m_pBtnLookUp->Check( pLocalOptions->IsLookUpColRowNames() );
+    m_pBtnLookUp->Enable( !officecfg::Office::Calc::Calculate::Other::FindLabel::isReadOnly() );
     m_pBtnIterate->Check( pLocalOptions->IsIter() );
     m_pEdSteps->SetValue( pLocalOptions->GetIterCount() );
     m_pEdEps->SetValue( pLocalOptions->GetIterEps(), 6 );
@@ -161,13 +183,16 @@ void ScTpCalcOptions::Reset( const SfxItemSet* /* rCoreAttrs */ )
         m_pEdPrec->SetValue(nPrec);
     }
 
+    m_pBtnThread->Enable( !officecfg::Office::Calc::Formula::Calculation::UseThreadedCalculationForFormulaGroups::isReadOnly() );
+    m_pBtnThread->Check( officecfg::Office::Calc::Formula::Calculation::UseThreadedCalculationForFormulaGroups::get() );
+
     CheckClickHdl(m_pBtnIterate);
 }
 
 bool ScTpCalcOptions::FillItemSet( SfxItemSet* rCoreAttrs )
 {
-    // alle weiteren Optionen werden in den Handlern aktualisiert
-    pLocalOptions->SetIterCount( (sal_uInt16)m_pEdSteps->GetValue() );
+    // every other options are updated in handlers
+    pLocalOptions->SetIterCount( static_cast<sal_uInt16>(m_pEdSteps->GetValue()) );
     pLocalOptions->SetIgnoreCase( !m_pBtnCase->IsChecked() );
     pLocalOptions->SetCalcAsShown( m_pBtnCalc->IsChecked() );
     pLocalOptions->SetMatchWholeCell( m_pBtnMatch->IsChecked() );
@@ -181,6 +206,13 @@ bool ScTpCalcOptions::FillItemSet( SfxItemSet* rCoreAttrs )
     else
         pLocalOptions->SetStdPrecision( SvNumberFormatter::UNLIMITED_PRECISION );
 
+    bool bShouldEnableThreading = m_pBtnThread->IsChecked();
+    if (bShouldEnableThreading != officecfg::Office::Calc::Formula::Calculation::UseThreadedCalculationForFormulaGroups::get())
+    {
+        std::shared_ptr<comphelper::ConfigurationChanges> xBatch(comphelper::ConfigurationChanges::create());
+        officecfg::Office::Calc::Formula::Calculation::UseThreadedCalculationForFormulaGroups::set(bShouldEnableThreading, xBatch);
+        xBatch->commit();
+    }
     if ( *pLocalOptions != *pOldOptions )
     {
         rCoreAttrs->Put( ScTpCalcItem( nWhichCalc, *pLocalOptions ) );
@@ -190,22 +222,22 @@ bool ScTpCalcOptions::FillItemSet( SfxItemSet* rCoreAttrs )
         return false;
 }
 
-SfxTabPage::sfxpg ScTpCalcOptions::DeactivatePage( SfxItemSet* pSetP )
+DeactivateRC ScTpCalcOptions::DeactivatePage( SfxItemSet* pSetP )
 {
-    sfxpg nReturn = KEEP_PAGE;
+    DeactivateRC nReturn = DeactivateRC::KeepPage;
 
     double fEps;
     if( m_pEdEps->GetValue( fEps ) && (fEps > 0.0) )
     {
         pLocalOptions->SetIterEps( fEps );
-        nReturn = LEAVE_PAGE;
+        nReturn = DeactivateRC::LeavePage;
     }
 
-    if ( nReturn == KEEP_PAGE )
+    if ( nReturn == DeactivateRC::KeepPage )
     {
-        ScopedVclPtr<MessageDialog>::Create( this,
-                  ScGlobal::GetRscString( STR_INVALID_EPS )
-                )->Execute();
+        std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(GetFrameWeld(), VclMessageType::Warning,
+                    VclButtonsType::Ok, ScResId(STR_INVALID_EPS)));
+        xBox->run();
 
         m_pEdEps->GrabFocus();
     }
@@ -217,7 +249,7 @@ SfxTabPage::sfxpg ScTpCalcOptions::DeactivatePage( SfxItemSet* pSetP )
 
 // Handler:
 
-IMPL_LINK_TYPED( ScTpCalcOptions, RadioClickHdl, Button*, pBtn, void )
+IMPL_LINK( ScTpCalcOptions, RadioClickHdl, Button*, pBtn, void )
 {
     if (pBtn == m_pBtnDateStd)
     {
@@ -233,7 +265,7 @@ IMPL_LINK_TYPED( ScTpCalcOptions, RadioClickHdl, Button*, pBtn, void )
     }
 }
 
-IMPL_LINK_TYPED( ScTpCalcOptions, CheckClickHdl, Button*, p, void )
+IMPL_LINK( ScTpCalcOptions, CheckClickHdl, Button*, p, void )
 {
     CheckBox* pBtn = static_cast<CheckBox*>(p);
     if (pBtn == m_pBtnGeneralPrec)

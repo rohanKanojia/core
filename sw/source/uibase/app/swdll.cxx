@@ -17,11 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <config_features.h>
 
 #include <svx/svdobj.hxx>
-
-#include "globdoc.hrc"
 
 #include <swdll.hxx>
 #include <wdocsh.hxx>
@@ -31,7 +30,6 @@
 #include <swtypes.hxx>
 #include <init.hxx>
 #include <dobjfac.hxx>
-#include <cfgid.h>
 
 #include <com/sun/star/frame/Desktop.hpp>
 #include <unotools/configmgr.hxx>
@@ -39,13 +37,14 @@
 #include <comphelper/unique_disposing_ptr.hxx>
 #include <comphelper/processfactory.hxx>
 
+#include <sal/log.hxx>
 #include <svx/fmobjfac.hxx>
-#include <svx/svdfield.hxx>
 #include <svx/objfac3d.hxx>
 #include <editeng/acorrcfg.hxx>
 
 #include <swacorr.hxx>
 #include <unomid.h>
+#include <swabstdlg.hxx>
 
 #include "swdllimpl.hxx"
 
@@ -58,7 +57,7 @@ namespace
     class SwDLLInstance : public comphelper::unique_disposing_solar_mutex_reset_ptr<SwDLL>
     {
     public:
-        SwDLLInstance() : comphelper::unique_disposing_solar_mutex_reset_ptr<SwDLL>(uno::Reference<lang::XComponent>( frame::Desktop::create(comphelper::getProcessComponentContext()), uno::UNO_QUERY_THROW), new SwDLL)
+        SwDLLInstance() : comphelper::unique_disposing_solar_mutex_reset_ptr<SwDLL>(uno::Reference<lang::XComponent>( frame::Desktop::create(comphelper::getProcessComponentContext()), uno::UNO_QUERY_THROW), new SwDLL, true)
         {
         }
     };
@@ -80,18 +79,17 @@ namespace SwGlobals
 }
 
 SwDLL::SwDLL()
+    : m_pAutoCorrCfg(nullptr)
 {
-    // the SdModule must be created
-    SwModule** ppShlPtr = reinterpret_cast<SwModule**>(GetAppData(SHL_WRITER));
-    if ( *ppShlPtr )
+    if ( SfxApplication::GetModule(SfxToolsModule::Writer) )    // Module already active
         return;
 
     std::unique_ptr<SvtModuleOptions> xOpt;
-    if (!utl::ConfigManager::IsAvoidConfig())
+    if (!utl::ConfigManager::IsFuzzing())
         xOpt.reset(new SvtModuleOptions);
     SfxObjectFactory* pDocFact = nullptr;
     SfxObjectFactory* pGlobDocFact = nullptr;
-    if (xOpt && xOpt->IsWriter())
+    if (!xOpt || xOpt->IsWriter())
     {
         pDocFact = &SwDocShell::Factory();
         pGlobDocFact = &SwGlobalDocShell::Factory();
@@ -99,33 +97,31 @@ SwDLL::SwDLL()
 
     SfxObjectFactory* pWDocFact = &SwWebDocShell::Factory();
 
-    SwModule* pModule = new SwModule( pWDocFact, pDocFact, pGlobDocFact );
-    *ppShlPtr = pModule;
+    auto pUniqueModule = std::make_unique<SwModule>(pWDocFact, pDocFact, pGlobDocFact);
+    SwModule* pModule = pUniqueModule.get();
+    SfxApplication::SetModule(SfxToolsModule::Writer, std::move(pUniqueModule));
 
     pWDocFact->SetDocumentServiceName("com.sun.star.text.WebDocument");
 
-    if (xOpt && xOpt->IsWriter())
+    if (!xOpt || xOpt->IsWriter())
     {
         pGlobDocFact->SetDocumentServiceName("com.sun.star.text.GlobalDocument");
         pDocFact->SetDocumentServiceName("com.sun.star.text.TextDocument");
     }
 
-    // register SvDraw-Fields
-    SdrRegisterFieldClasses();
-
-    // register 3D-Objekt-Factory
+    // register 3D-object-Factory
     E3dObjFactory();
 
-    // register form::component::Form-Objekt-Factory
+    // register form::component::Form-object-Factory
     FmFormObjFactory();
 
     SdrObjFactory::InsertMakeObjectHdl( LINK( &aSwObjectFactory, SwObjectFactory, MakeObject ) );
 
     SAL_INFO( "sw.ui", "Init Core/UI/Filter" );
     // Initialisation of Statics
-    ::_InitCore();
+    ::InitCore();
     filters_.reset(new sw::Filters);
-    ::_InitUI();
+    ::InitUI();
 
     pModule->InitAttrPool();
     // now SWModule can create its Pool
@@ -141,44 +137,48 @@ SwDLL::SwDLL()
     RegisterControls();
 #endif
 
-    if (!utl::ConfigManager::IsAvoidConfig())
+    if (!utl::ConfigManager::IsFuzzing())
     {
         // replace SvxAutocorrect with SwAutocorrect
         SvxAutoCorrCfg& rACfg = SvxAutoCorrCfg::Get();
         const SvxAutoCorrect* pOld = rACfg.GetAutoCorrect();
         rACfg.SetAutoCorrect(new SwAutoCorrect( *pOld ));
+        m_pAutoCorrCfg = &rACfg;
     }
 }
 
-SwDLL::~SwDLL()
+SwDLL::~SwDLL() COVERITY_NOEXCEPT_FALSE
 {
-    if (!utl::ConfigManager::IsAvoidConfig())
+    if (m_pAutoCorrCfg)
     {
-        // fdo#86494 SwAutoCorrect must be deleted before _FinitCore
-        SvxAutoCorrCfg& rACfg = SvxAutoCorrCfg::Get();
-        rACfg.SetAutoCorrect(nullptr); // delete SwAutoCorrect before exit handlers
+        // fdo#86494 SwAutoCorrect must be deleted before FinitCore
+        m_pAutoCorrCfg->SetAutoCorrect(nullptr); // delete SwAutoCorrect before exit handlers
     }
 
     // Pool has to be deleted before statics are
     SW_MOD()->RemoveAttrPool();
 
-    ::_FinitUI();
+    ::FinitUI();
     filters_.reset();
-    ::_FinitCore();
-    // sign out Objekt-Factory
+    ::FinitCore();
+    // sign out object-Factory
     SdrObjFactory::RemoveMakeObjectHdl(LINK(&aSwObjectFactory, SwObjectFactory, MakeObject ));
-#if 0
-    // the SwModule must be destroyed
-    SwModule** ppShlPtr = (SwModule**) GetAppData(SHL_WRITER);
-    delete (*ppShlPtr);
-    (*ppShlPtr) = NULL;
-#endif
 }
 
 sw::Filters & SwDLL::getFilters()
 {
-    OSL_ASSERT(filters_);
-    return *filters_.get();
+    assert(filters_);
+    return *filters_;
 }
+
+#ifndef DISABLE_DYNLOADING
+
+extern "C" SAL_DLLPUBLIC_EXPORT
+void lok_preload_hook()
+{
+    SwAbstractDialogFactory::Create();
+}
+
+#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

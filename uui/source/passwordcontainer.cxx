@@ -30,6 +30,7 @@
 #include <com/sun/star/ucb/URLAuthenticationRequest.hpp>
 #include <com/sun/star/ucb/XInteractionSupplyAuthentication.hpp>
 #include <com/sun/star/ucb/XInteractionSupplyAuthentication2.hpp>
+#include <officecfg/Office/Common.hxx>
 
 #include "passwordcontainer.hxx"
 
@@ -55,7 +56,7 @@ bool fillContinuation(
         // Wants client that we use it?
         if ( xSupplyAuthentication2.is() && bCanUseSystemCredentials )
         {
-            xSupplyAuthentication2->setUseSystemCredentials( sal_True );
+            xSupplyAuthentication2->setUseSystemCredentials( true );
             return true;
         }
         return false;
@@ -77,28 +78,26 @@ bool fillContinuation(
         {
             if (xSupplyAuthentication->canSetUserName())
                 xSupplyAuthentication->
-                    setUserName(aRec.UserList[0].UserName.getStr());
+                    setUserName(aRec.UserList[0].UserName);
 
             if (xSupplyAuthentication->canSetPassword())
                 xSupplyAuthentication->
-                    setPassword(aRec.UserList[0].Passwords[0].getStr());
+                    setPassword(aRec.UserList[0].Passwords[0]);
             if (aRec.UserList[0].Passwords.getLength() > 1)
             {
                 if (rRequest.HasRealm)
                 {
                     if (xSupplyAuthentication->canSetRealm())
                         xSupplyAuthentication->
-                            setRealm(aRec.UserList[0].Passwords[1].
-                                getStr());
+                            setRealm(aRec.UserList[0].Passwords[1]);
                 }
                 else if (xSupplyAuthentication->canSetAccount())
                     xSupplyAuthentication->
-                        setAccount(aRec.UserList[0].Passwords[1].
-                            getStr());
+                        setAccount(aRec.UserList[0].Passwords[1]);
             }
 
             if ( xSupplyAuthentication2.is() && bCanUseSystemCredentials )
-                xSupplyAuthentication2->setUseSystemCredentials( sal_False );
+                xSupplyAuthentication2->setUseSystemCredentials( false );
 
             return true;
         }
@@ -142,11 +141,16 @@ bool PasswordContainerHelper::handleAuthenticationRequest(
 
     if ( bCanUseSystemCredentials )
     {
-        // Runtime / Persistent info avail for current auth request?
-
-        OUString aResult = m_xPasswordContainer->findUrl(
-            rURL.isEmpty() ? rRequest.ServerName : rURL );
-        if ( !aResult.isEmpty() )
+        // Does the configuration mandate that we try system credentials first?
+        bool bUseSystemCredentials = ::officecfg::Office::Common::Passwords::TrySystemCredentialsFirst::get();
+        if (!bUseSystemCredentials)
+        {
+            // Runtime / Persistent info avail for current auth request?
+            OUString aResult = m_xPasswordContainer->findUrl(
+                rURL.isEmpty() ? rRequest.ServerName : rURL);
+            bUseSystemCredentials = !aResult.isEmpty();
+        }
+        if ( bUseSystemCredentials )
         {
             if ( fillContinuation( true,
                                    rRequest,
@@ -245,7 +249,7 @@ bool PasswordContainerHelper::addRecord(
                 // If persistent storing of passwords is not yet
                 // allowed, enable it.
                 if ( !m_xPasswordContainer->isPersistentStoringAllowed() )
-                    m_xPasswordContainer->allowPersistentStoring( sal_True );
+                    m_xPasswordContainer->allowPersistentStoring( true );
 
                 m_xPasswordContainer->addPersistent( rURL,
                                                      rUsername,
@@ -291,7 +295,6 @@ PasswordContainerInteractionHandler::~PasswordContainerInteractionHandler()
 // virtual
 OUString SAL_CALL
 PasswordContainerInteractionHandler::getImplementationName()
-    throw ( uno::RuntimeException, std::exception )
 {
     return getImplementationName_Static();
 }
@@ -301,7 +304,6 @@ PasswordContainerInteractionHandler::getImplementationName()
 sal_Bool SAL_CALL
 PasswordContainerInteractionHandler::supportsService(
         const OUString& ServiceName )
-    throw ( uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, ServiceName);
 }
@@ -310,7 +312,6 @@ PasswordContainerInteractionHandler::supportsService(
 // virtual
 uno::Sequence< OUString > SAL_CALL
 PasswordContainerInteractionHandler::getSupportedServiceNames()
-    throw ( uno::RuntimeException, std::exception )
 {
     return getSupportedServiceNames_Static();
 }
@@ -340,7 +341,6 @@ PasswordContainerInteractionHandler::getSupportedServiceNames_Static()
 void SAL_CALL
 PasswordContainerInteractionHandler::handle(
         const uno::Reference< task::XInteractionRequest >& rRequest )
-    throw ( uno::RuntimeException, std::exception )
 {
     handleInteractionRequest( rRequest );
 }
@@ -349,7 +349,6 @@ PasswordContainerInteractionHandler::handle(
 sal_Bool SAL_CALL
 PasswordContainerInteractionHandler::handleInteractionRequest(
         const uno::Reference< task::XInteractionRequest >& rRequest )
-    throw ( uno::RuntimeException, std::exception )
 {
     if ( !rRequest.is() )
         return false;
@@ -402,11 +401,10 @@ PasswordContainerInteractionHandler::handleInteractionRequest(
 
 // Service factory implementation.
 
-
-static uno::Reference< uno::XInterface > SAL_CALL
+/// @throws uno::Exception
+static uno::Reference< uno::XInterface >
 PasswordContainerInteractionHandler_CreateInstance(
         const uno::Reference< lang::XMultiServiceFactory> & rSMgr )
-    throw( uno::Exception )
 {
     lang::XServiceInfo * pX = static_cast< lang::XServiceInfo * >(
         new PasswordContainerInteractionHandler( comphelper::getComponentContext(rSMgr) ) );
@@ -419,12 +417,11 @@ uno::Reference< lang::XSingleServiceFactory >
 PasswordContainerInteractionHandler::createServiceFactory(
     const uno::Reference< lang::XMultiServiceFactory >& rxServiceMgr )
 {
-    return uno::Reference< lang::XSingleServiceFactory >(
-        cppu::createOneInstanceFactory(
+    return cppu::createOneInstanceFactory(
             rxServiceMgr,
             PasswordContainerInteractionHandler::getImplementationName_Static(),
             PasswordContainerInteractionHandler_CreateInstance,
-            PasswordContainerInteractionHandler::getSupportedServiceNames_Static() ) );
+            PasswordContainerInteractionHandler::getSupportedServiceNames_Static() );
 }
 
 } // namespace uui

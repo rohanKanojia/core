@@ -33,7 +33,7 @@
 
 #define AVMEDIA_FRAMEGRABBER_DEFAULTFRAME -1.0
 
-namespace vcl { class Window; }
+namespace weld { class Window; }
 class KeyEvent;
 class MouseEvent;
 class CommandEvent;
@@ -65,7 +65,7 @@ namespace avmedia
 
         vcl::Window*             getWindow() const;
 
-        void                setPosSize( const Rectangle& rNewRect );
+        void                setPosSize( const tools::Rectangle& rNewRect );
 
         void                setPointer( const Pointer& rPointer );
 
@@ -98,18 +98,14 @@ namespace avmedia
         static void         getMediaFilters( FilterNameVector& rFilterNameVector );
         /// @param o_pbLink if not 0, this is an "insert" dialog: display link
         ///                 checkbox and store its state in *o_pbLink
-        static bool         executeMediaURLDialog( vcl::Window* pParent,
-                OUString& rURL, bool *const o_pbLink );
-        static void         executeFormatErrorBox( vcl::Window* pParent );
+        static bool         executeMediaURLDialog(weld::Window* pParent, OUString& rURL, bool *const o_pbLink);
+        static void         executeFormatErrorBox(weld::Window* pParent);
         static bool         isMediaURL( const OUString& rURL, const OUString& rReferer, bool bDeep = false, Size* pPreferredSizePixel = nullptr );
 
         static css::uno::Reference< css::media::XPlayer > createPlayer( const OUString& rURL, const OUString& rReferer, const OUString* pMimeType = nullptr );
 
         static css::uno::Reference< css::graphic::XGraphic > grabFrame( const OUString& rURL, const OUString& rReferer,
             const OUString& sMimeType );
-
-        static BitmapEx getAudioLogo();
-        static BitmapEx getEmptyLogo();
 
     private:
         MediaWindow(const MediaWindow&) = delete;

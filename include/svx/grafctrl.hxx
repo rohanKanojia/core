@@ -26,21 +26,11 @@
 #include <svx/svxdllapi.h>
 
 
-class SVX_DLLPUBLIC TbxImageItem : public SfxUInt16Item
-{
-public:
-                            TbxImageItem( sal_uInt16 nWhich = 0, sal_uInt16 nImage = 0 );
-
-    virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
-    virtual bool            operator==( const SfxPoolItem& ) const override;
-};
-
-
 class SvxGrafToolBoxControl : public SfxToolBoxControl
 {
 public:
     SvxGrafToolBoxControl( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx );
-    virtual ~SvxGrafToolBoxControl();
+    virtual ~SvxGrafToolBoxControl() override;
 
     virtual void        StateChanged( sal_uInt16 nSID, SfxItemState eState, const SfxPoolItem* pState ) override;
     virtual VclPtr<vcl::Window> CreateItemWindow( vcl::Window *pParent ) override;
@@ -108,7 +98,7 @@ class SVX_DLLPUBLIC SvxGrafModeToolBoxControl : public SfxToolBoxControl, public
 public:
                         SFX_DECL_TOOLBOX_CONTROL();
                         SvxGrafModeToolBoxControl( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx );
-                        virtual ~SvxGrafModeToolBoxControl();
+                        virtual ~SvxGrafModeToolBoxControl() override;
 
     virtual void        StateChanged( sal_uInt16 nSID, SfxItemState eState, const SfxPoolItem* pState ) override;
     virtual VclPtr<vcl::Window> CreateItemWindow( vcl::Window *pParent ) override;
@@ -124,7 +114,7 @@ class SVX_DLLPUBLIC SvxGrafAttrHelper
 public:
 
     static void     ExecuteGrafAttr( SfxRequest& rReq, SdrView& rView );
-    static void     GetGrafAttrState( SfxItemSet& rSet, SdrView& rView );
+    static void     GetGrafAttrState( SfxItemSet& rSet, SdrView const & rView );
 };
 
 #endif // INCLUDED_SVX_GRAFCTRL_HXX

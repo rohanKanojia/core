@@ -23,15 +23,17 @@
 #include <vcl/timer.hxx>
 #include <tools/link.hxx>
 #include <tools/gen.hxx>
-#include <vcl/event.hxx>
-#include <rtl/ref.hxx>
+#include <vcl/vclptr.hxx>
+#include <svx/svdobj.hxx>
 
-#include "helper/simplereferencecomponent.hxx"
+#include <helper/simplereferencecomponent.hxx>
 
 class SdDrawDocument;
 class SfxRequest;
-class Dialog;
-class SdrObject;
+class CommandEvent;
+class HelpEvent;
+class KeyEvent;
+class MouseEvent;
 
 namespace sd {
 
@@ -46,10 +48,10 @@ class Window;
 class FuPoor : public SimpleReferenceComponent
 {
 public:
-    static const int HITPIX = 2;                   // Hit-Toleranz in Pixel
-    static const int HITLOG = 53;                  // Hit tolerance in mm100
-    static const int DRGPIX = 2;                   // Drag MinMove in Pixel
-    static const int DRGLOG = 53;                  // Minimal drag move in mm100
+    static const int HITPIX = 2;                   // hit tolerance in pixel
+    static const int HITLOG = 53;                  // hit tolerance in mm100
+    static const int DRGPIX = 2;                   // minimal drag move in pixel
+    static const int DRGLOG = 53;                  // minimal drag move in mm100
 
 
     virtual void DoExecute( SfxRequest& rReq );
@@ -64,7 +66,7 @@ public:
     virtual void DoPaste();
     virtual void DoPasteUnformatted();
 
-    // Mouse- & Key-Events; Returnwert=sal_True: Event wurde bearbeitet
+    // mouse & key events; return value = sal_True: event has been handled
     virtual bool KeyInput(const KeyEvent& rKEvt);
     virtual bool MouseMove(const MouseEvent& );
     virtual bool MouseButtonUp(const MouseEvent& rMEvt);
@@ -87,7 +89,7 @@ public:
 
     void StartDelayToScrollTimer ();
 
-    virtual SdrObject* CreateDefaultObject(const sal_uInt16 nID, const Rectangle& rRectangle);
+    virtual SdrObjectUniquePtr CreateDefaultObject(const sal_uInt16 nID, const ::tools::Rectangle& rRectangle);
 
     /** is called when the current function should be aborted. <p>
         This is used when a function gets a KEY_ESCAPE but can also
@@ -117,11 +119,11 @@ protected:
         ::sd::View* pView,
         SdDrawDocument* pDoc,
         SfxRequest& rReq);
-    virtual ~FuPoor();
+    virtual ~FuPoor() override;
 
-    DECL_LINK_TYPED( DelayHdl, Timer *, void );
+    DECL_LINK( DelayHdl, Timer *, void );
 
-    static void ImpForceQuadratic(Rectangle& rRect);
+    static void ImpForceQuadratic(::tools::Rectangle& rRect);
 
     /** Switch to another layer.  The layer to switch to is specified by an
         offset relative to the active layer.  With respect to the layer bar
@@ -148,16 +150,13 @@ protected:
     SdDrawDocument* mpDoc;
 
     sal_uInt16          nSlotId;
-    sal_uInt16          nSlotValue;
-
-    VclPtr<Dialog>             pDialog;
 
     Timer               aScrollTimer;           ///< for auto-scrolling
-    DECL_LINK_TYPED( ScrollHdl, Timer *, void );
+    DECL_LINK( ScrollHdl, Timer *, void );
     void ForceScroll(const Point& aPixPos);
 
     Timer               aDragTimer;             ///< for Drag&Drop
-    DECL_LINK_TYPED(DragHdl, Timer *, void);
+    DECL_LINK(DragHdl, Timer *, void);
     bool            bIsInDragMode;
     Point               aMDPos;                 ///< position of MouseButtonDown
 

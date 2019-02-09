@@ -42,6 +42,8 @@
 #include <com/sun/star/container/XEnumerationAccess.hpp>
 #include <com/sun/star/container/XEnumeration.hpp>
 
+#include <stdio.h>
+
 #if defined ( UNX )
 #include <limits.h>
 #define _MAX_PATH PATH_MAX
@@ -62,13 +64,8 @@ using namespace cppu;
 
 Reference<XMultiServiceFactory> getProcessServiceManager()
 {
-    Reference<XMultiServiceFactory > s_x;
-    if (! s_x.is())
-    {
-        MutexGuard aGuard( Mutex::getGlobalMutex() );
-        if (! s_x.is())
-            s_x = createRegistryServiceFactory( OUString("stoctest.rdb"), sal_False );
-    }
+    static Reference<XMultiServiceFactory> s_x(
+        createRegistryServiceFactory(OUString("stoctest.rdb"), sal_False));
     return s_x;
 }
 
@@ -166,8 +163,6 @@ Sequence< OUString > Test_Manager_Impl::getSupportedServiceNames_Static() throw 
 *
 *
 ****/
-
-#include <stdio.h>
 
 extern "C" void SAL_CALL test_ServiceManager()
 {

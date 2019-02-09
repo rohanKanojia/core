@@ -26,7 +26,6 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/awt/XVclWindowPeer.hpp>
-#include <comphelper/processfactory.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <comphelper/interfacecontainer2.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -49,23 +48,22 @@ class ODocumentCloser : public ::cppu::WeakImplHelper< css::lang::XComponent,
 {
     ::osl::Mutex m_aMutex;
     css::uno::Reference< css::frame::XFrame > m_xFrame;
-    ::comphelper::OInterfaceContainerHelper2* m_pListenersContainer; // list of listeners
+    std::unique_ptr<::comphelper::OInterfaceContainerHelper2> m_pListenersContainer; // list of listeners
 
     bool m_bDisposed;
 
 public:
     explicit ODocumentCloser(const css::uno::Sequence< css::uno::Any >& aArguments);
-    virtual ~ODocumentCloser();
 
 // XComponent
-    virtual void SAL_CALL dispose() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL dispose() override;
+    virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
 // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 };
 
 class MainThreadFrameCloserRequest
@@ -77,7 +75,7 @@ class MainThreadFrameCloserRequest
         : m_xFrame( xFrame )
         {}
 
-        DECL_STATIC_LINK_TYPED( MainThreadFrameCloserRequest, worker, void*, void );
+        DECL_STATIC_LINK( MainThreadFrameCloserRequest, worker, void*, void );
 
         static void Start( MainThreadFrameCloserRequest* pRequest );
 };
@@ -87,7 +85,7 @@ void MainThreadFrameCloserRequest::Start( MainThreadFrameCloserRequest* pMTReque
 {
     if ( pMTRequest )
     {
-        if ( Application::GetMainThreadIdentifier() == osl::Thread::getCurrentIdentifier() )
+        if ( Application::IsMainThread() )
         {
             // this is the main thread
             worker( nullptr, pMTRequest );
@@ -98,53 +96,52 @@ void MainThreadFrameCloserRequest::Start( MainThreadFrameCloserRequest* pMTReque
 }
 
 
-IMPL_STATIC_LINK_TYPED( MainThreadFrameCloserRequest, worker, void*, p, void )
+IMPL_STATIC_LINK( MainThreadFrameCloserRequest, worker, void*, p, void )
 {
     MainThreadFrameCloserRequest* pMTRequest = static_cast<MainThreadFrameCloserRequest*>(p);
-    if ( pMTRequest )
+    if ( !pMTRequest )
+        return;
+
+    if ( pMTRequest->m_xFrame.is() )
     {
-        if ( pMTRequest->m_xFrame.is() )
+        // this is the main thread, the solar mutex must be locked
+        SolarMutexGuard aGuard;
+
+        try
         {
-            // this is the main thread, the solar mutex must be locked
-            SolarMutexGuard aGuard;
+            uno::Reference< awt::XWindow > xWindow = pMTRequest->m_xFrame->getContainerWindow();
+            uno::Reference< awt::XVclWindowPeer > xWinPeer( xWindow, uno::UNO_QUERY_THROW );
 
-            try
-            {
-                uno::Reference< awt::XWindow > xWindow = pMTRequest->m_xFrame->getContainerWindow();
-                uno::Reference< awt::XVclWindowPeer > xWinPeer( xWindow, uno::UNO_QUERY_THROW );
+            xWindow->setVisible( false );
 
-                xWindow->setVisible( sal_False );
+            // reparent the window
+            xWinPeer->setProperty( "PluginParent", uno::makeAny( sal_Int64(0) ) );
 
-                // reparent the window
-                xWinPeer->setProperty( "PluginParent", uno::makeAny( (sal_Int64) 0 ) );
-
-                vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
-                if ( pWindow )
-                    Dialog::EndAllDialogs( pWindow );
-            }
-            catch( uno::Exception& )
-            {
-                // ignore all the errors
-            }
-
-            try
-            {
-                uno::Reference< util::XCloseable > xCloseable( pMTRequest->m_xFrame, uno::UNO_QUERY_THROW );
-                xCloseable->close( sal_True );
-            }
-            catch( uno::Exception& )
-            {
-                // ignore all the errors
-            }
+            VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
+            if ( pWindow )
+                Dialog::EndAllDialogs( pWindow );
+        }
+        catch( uno::Exception& )
+        {
+            // ignore all the errors
         }
 
-        delete pMTRequest;
+        try
+        {
+            uno::Reference< util::XCloseable > xCloseable( pMTRequest->m_xFrame, uno::UNO_QUERY_THROW );
+            xCloseable->close( true );
+        }
+        catch( uno::Exception& )
+        {
+            // ignore all the errors
+        }
     }
+
+    delete pMTRequest;
 }
 
 ODocumentCloser::ODocumentCloser(const css::uno::Sequence< css::uno::Any >& aArguments)
-: m_pListenersContainer( nullptr )
-, m_bDisposed( false )
+: m_bDisposed( false )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( !m_refCount )
@@ -153,31 +150,21 @@ ODocumentCloser::ODocumentCloser(const css::uno::Sequence< css::uno::Any >& aArg
     sal_Int32 nLen = aArguments.getLength();
     if ( nLen != 1 )
         throw lang::IllegalArgumentException(
-                        OUString("Wrong count of parameters!" ),
+                        "Wrong count of parameters!",
                         uno::Reference< uno::XInterface >(),
                         0 );
 
     if ( !( aArguments[0] >>= m_xFrame ) || !m_xFrame.is() )
         throw lang::IllegalArgumentException(
-                OUString("Nonempty reference is expected as the first argument!" ),
+                "Nonempty reference is expected as the first argument!",
                 uno::Reference< uno::XInterface >(),
                 0 );
 }
 
 
-ODocumentCloser::~ODocumentCloser()
-{
-    if ( m_pListenersContainer )
-    {
-        delete m_pListenersContainer;
-        m_pListenersContainer = nullptr;
-    }
-}
-
 // XComponent
 
 void SAL_CALL ODocumentCloser::dispose()
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -201,21 +188,19 @@ void SAL_CALL ODocumentCloser::dispose()
 
 
 void SAL_CALL ODocumentCloser::addEventListener( const uno::Reference< lang::XEventListener >& xListener )
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( m_bDisposed )
         throw lang::DisposedException(); // TODO
 
     if ( !m_pListenersContainer )
-        m_pListenersContainer = new ::comphelper::OInterfaceContainerHelper2( m_aMutex );
+        m_pListenersContainer.reset( new ::comphelper::OInterfaceContainerHelper2( m_aMutex ) );
 
     m_pListenersContainer->addInterface( xListener );
 }
 
 
 void SAL_CALL ODocumentCloser::removeEventListener( const uno::Reference< lang::XEventListener >& xListener )
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( m_pListenersContainer )
@@ -224,19 +209,16 @@ void SAL_CALL ODocumentCloser::removeEventListener( const uno::Reference< lang::
 
 // XServiceInfo
 OUString SAL_CALL ODocumentCloser::getImplementationName(  )
-    throw (uno::RuntimeException, std::exception)
 {
     return OUString( "com.sun.star.comp.embed.DocumentCloser" );
 }
 
 sal_Bool SAL_CALL ODocumentCloser::supportsService( const OUString& ServiceName )
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL ODocumentCloser::getSupportedServiceNames()
-    throw (uno::RuntimeException, std::exception)
 {
     const OUString aServiceName( "com.sun.star.embed.DocumentCloser" );
     return uno::Sequence< OUString >( &aServiceName, 1 );
@@ -244,7 +226,7 @@ uno::Sequence< OUString > SAL_CALL ODocumentCloser::getSupportedServiceNames()
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_embed_DocumentCloser_get_implementation(
     SAL_UNUSED_PARAMETER css::uno::XComponentContext *,
     css::uno::Sequence<css::uno::Any> const &arguments)

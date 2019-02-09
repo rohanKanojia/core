@@ -21,29 +21,24 @@
 #include <svtools/htmltokn.h>
 #include <svtools/asynclink.hxx>
 
-#include <sfx2/sfx.hrc>
-
 #include <sfx2/frmhtml.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/evntconf.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/fcontnr.hxx>
-#include "sfxtypes.hxx"
+#include <sfxtypes.hxx>
 
 static sal_Char const sHTML_SC_yes[] =  "YES";
 static sal_Char const sHTML_SC_no[] =       "NO";
 static sal_Char const sHTML_SC_auto[] = "AUTO";
 
-#define HTML_O_READONLY "READONLY"
-#define HTML_O_EDIT     "EDIT"
-
-static HTMLOptionEnum const aScollingTable[] =
+static HTMLOptionEnum<ScrollingMode> const aScrollingTable[] =
 {
-    { sHTML_SC_yes,     ScrollingYes    },
-    { sHTML_SC_no,      ScrollingNo     },
-    { sHTML_SC_auto,    ScrollingAuto   },
-    { nullptr,                0               }
+    { sHTML_SC_yes,     ScrollingMode::Yes    },
+    { sHTML_SC_no,      ScrollingMode::No     },
+    { sHTML_SC_auto,    ScrollingMode::Auto   },
+    { nullptr,          ScrollingMode(0) }
 };
 
 void SfxFrameHTMLParser::ParseFrameOptions(
@@ -55,52 +50,42 @@ void SfxFrameHTMLParser::ParseFrameOptions(
     // Netscape seems to set marginwidth to 0 as soon as
     // marginheight is set, and vice versa.
     // Netscape does however not allow for a direct
-    // seting to 0, while IE4.0 does
+    // setting to 0, while IE4.0 does
     // We will not mimic that bug !
     bool bMarginWidth = false, bMarginHeight = false;
 
-    for (size_t i = 0, n = rOptions.size(); i < n; ++i)
+    for (const auto & rOption : rOptions)
     {
-        const HTMLOption& aOption = rOptions[i];
-        switch( aOption.GetToken() )
+        switch( rOption.GetToken() )
         {
-        case HTML_O_BORDERCOLOR:
-            {
-                Color aColor;
-                aOption.GetColor( aColor );
-                pFrame->SetWallpaper( Wallpaper( aColor ) );
-                break;
-            }
-        case HTML_O_SRC:
+        case HtmlOptionId::SRC:
             pFrame->SetURL(
                     INetURLObject::GetAbsURL(
-                        rBaseURL, aOption.GetString()) );
+                        rBaseURL, rOption.GetString()) );
             break;
-        case HTML_O_NAME:
-            pFrame->SetName( aOption.GetString() );
+        case HtmlOptionId::NAME:
+            pFrame->SetName( rOption.GetString() );
             break;
-        case HTML_O_MARGINWIDTH:
-            aMargin.Width() = aOption.GetNumber();
+        case HtmlOptionId::MARGINWIDTH:
+            aMargin.setWidth( rOption.GetNumber() );
 
             if( !bMarginHeight )
-                aMargin.Height() = 0;
+                aMargin.setHeight( 0 );
             bMarginWidth = true;
             break;
-        case HTML_O_MARGINHEIGHT:
-            aMargin.Height() = aOption.GetNumber();
+        case HtmlOptionId::MARGINHEIGHT:
+            aMargin.setHeight( rOption.GetNumber() );
 
             if( !bMarginWidth )
-                aMargin.Width() = 0;
+                aMargin.setWidth( 0 );
             bMarginHeight = true;
             break;
-        case HTML_O_SCROLLING:
-            pFrame->SetScrollingMode(
-                (ScrollingMode)aOption.GetEnum( aScollingTable,
-                                                 ScrollingAuto ) );
+        case HtmlOptionId::SCROLLING:
+            pFrame->SetScrollingMode( rOption.GetEnum( aScrollingTable, ScrollingMode::Auto ) );
             break;
-        case HTML_O_FRAMEBORDER:
+        case HtmlOptionId::FRAMEBORDER:
         {
-            OUString aStr = aOption.GetString();
+            const OUString& aStr = rOption.GetString();
             bool bBorder = true;
             if ( aStr.equalsIgnoreAsciiCase("NO") ||
                  aStr.equalsIgnoreAsciiCase("0") )
@@ -108,27 +93,7 @@ void SfxFrameHTMLParser::ParseFrameOptions(
             pFrame->SetFrameBorder( bBorder );
             break;
         }
-        case HTML_O_NORESIZE:
-            pFrame->SetResizable( false );
-            break;
         default:
-            if (aOption.GetTokenString().equalsIgnoreAsciiCase(HTML_O_READONLY))
-            {
-                OUString aStr = aOption.GetString();
-                bool bReadonly = true;
-                if ( aStr.equalsIgnoreAsciiCase("FALSE") )
-                    bReadonly = false;
-                pFrame->SetReadOnly( bReadonly );
-            }
-            else if (aOption.GetTokenString().equalsIgnoreAsciiCase(HTML_O_EDIT))
-            {
-                OUString aStr = aOption.GetString();
-                bool bEdit = true;
-                if ( aStr.equalsIgnoreAsciiCase("FALSE") )
-                    bEdit = false;
-                pFrame->SetEditable( bEdit );
-            }
-
             break;
         }
     }

@@ -23,9 +23,9 @@
 #include <vcl/dllapi.h>
 #include <vcl/timer.hxx>
 #include <vcl/event.hxx>
+#include <vcl/vclenum.hxx>
 #include <o3tl/typed_flags_set.hxx>
 
-namespace vcl { class Window; }
 class CommandEvent;
 
 // Timerticks
@@ -33,9 +33,6 @@ class CommandEvent;
 #define SELENG_AUTOREPEAT_INTERVAL  50
 #define SELENG_AUTOREPEAT_INTERVAL_MIN 25
 #define SELENG_AUTOREPEAT_INTERVAL_MAX 300
-
-enum SelectionMode { NO_SELECTION, SINGLE_SELECTION, RANGE_SELECTION, MULTIPLE_SELECTION };
-
 
 class VCL_DLLPUBLIC FunctionSet
 {
@@ -49,7 +46,7 @@ public:
 
     // move cursor, at the same time match cursor position to the selection
     // starting at anchor. true == Ok
-    virtual bool    SetCursorAtPoint( const Point& rPointPixel,
+    virtual void    SetCursorAtPoint( const Point& rPointPixel,
                                           bool bDontSelectAtCursor = false ) = 0;
 
     virtual bool    IsSelectionAtPoint( const Point& rPointPixel ) = 0;
@@ -79,22 +76,21 @@ class VCL_DLLPUBLIC SelectionEngine
 private:
     FunctionSet*        pFunctionSet;
     VclPtr<vcl::Window> pWin;
-    Rectangle           aArea;
+    tools::Rectangle           aArea;
     Timer               aWTimer; // generate fake mouse moves
     MouseEvent          aLastMove;
     SelectionMode       eSelMode;
     sal_uLong               nUpdateInterval;
     sal_uInt16              nLockedMods;
     SelectionEngineFlags    nFlags;
-    DECL_DLLPRIVATE_LINK_TYPED( ImpWatchDog, Timer*, void );
+    DECL_DLLPRIVATE_LINK( ImpWatchDog, Timer*, void );
 
     inline bool         ShouldDeselect( bool bModifierKey1 ) const;
                                 // determines to deselect or not when Ctrl-key is pressed on CursorPosChanging
 public:
 
                         SelectionEngine( vcl::Window* pWindow,
-                                         FunctionSet* pFunctions = nullptr,
-                                         sal_uLong nAutoRepeatInterval = SELENG_AUTOREPEAT_INTERVAL );
+                                         FunctionSet* pFunctions = nullptr );
                         ~SelectionEngine();
 
     // true: Event was processed by Selection Engine
@@ -114,7 +110,7 @@ public:
 
     // is needed to generate a Move event via a Timer
     // when the mouse is outside the area
-    void                SetVisibleArea( const Rectangle& rNewArea )
+    void                SetVisibleArea( const tools::Rectangle& rNewArea )
                             { aArea = rNewArea; }
 
     void                SetAddMode( bool);
@@ -153,7 +149,7 @@ public:
 
     void                SetUpdateInterval( sal_uLong nInterval );
 
-    // wird im Ctor eingeschaltet
+    // is switched on in the Ctor
     void                ExpandSelectionOnMouseMove( bool bExpand = true )
                         {
                             if( bExpand )
@@ -176,7 +172,7 @@ inline void SelectionEngine::SetAddMode( bool bNewMode )
     if ( bNewMode )
         nFlags |= SelectionEngineFlags::IN_ADD;
     else
-        nFlags &= (~SelectionEngineFlags::IN_ADD);
+        nFlags &= ~SelectionEngineFlags::IN_ADD;
 }
 
 inline void SelectionEngine::EnableDrag( bool bOn )
@@ -184,7 +180,7 @@ inline void SelectionEngine::EnableDrag( bool bOn )
     if ( bOn )
         nFlags |= SelectionEngineFlags::DRG_ENAB;
     else
-        nFlags &= (~SelectionEngineFlags::DRG_ENAB);
+        nFlags &= ~SelectionEngineFlags::DRG_ENAB;
 }
 
 inline void SelectionEngine::AddAlways( bool bOn )
@@ -192,7 +188,7 @@ inline void SelectionEngine::AddAlways( bool bOn )
     if( bOn )
         nFlags |= SelectionEngineFlags::ADD_ALW;
     else
-        nFlags &= (~SelectionEngineFlags::ADD_ALW);
+        nFlags &= ~SelectionEngineFlags::ADD_ALW;
 }
 
 inline bool SelectionEngine::IsAlwaysAdding() const
@@ -224,7 +220,7 @@ inline void SelectionEngine::SetAnchor( bool bAnchor )
     if ( bAnchor )
         nFlags |= SelectionEngineFlags::HAS_ANCH;
     else
-        nFlags &= (~SelectionEngineFlags::HAS_ANCH);
+        nFlags &= ~SelectionEngineFlags::HAS_ANCH;
 }
 
 #endif // INCLUDED_VCL_SELENG_HXX

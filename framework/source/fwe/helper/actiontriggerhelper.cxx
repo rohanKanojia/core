@@ -22,14 +22,13 @@
 #include <classes/rootactiontriggercontainer.hxx>
 #include <classes/imagewrapper.hxx>
 #include <framework/addonsoptions.hxx>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/awt/XBitmap.hpp>
 #include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
 #include <tools/stream.hxx>
 #include <cppuhelper/weak.hxx>
-#include <comphelper/processfactory.hxx>
 #include <vcl/dibtools.hxx>
 
 const sal_uInt16 START_ITEMID = 1000;
@@ -45,7 +44,7 @@ namespace framework
 
 // implementation helper ( menu => ActionTrigger )
 
-bool IsSeparator( const Reference< XPropertySet >& xPropertySet )
+static bool IsSeparator( const Reference< XPropertySet >& xPropertySet )
 {
     Reference< XServiceInfo > xServiceInfo( xPropertySet, UNO_QUERY );
     try
@@ -59,7 +58,7 @@ bool IsSeparator( const Reference< XPropertySet >& xPropertySet )
     return false;
 }
 
-void GetMenuItemAttributes( const Reference< XPropertySet >& xActionTriggerPropertySet,
+static void GetMenuItemAttributes( const Reference< XPropertySet >& xActionTriggerPropertySet,
                             OUString& aMenuLabel,
                             OUString& aCommandURL,
                             OUString& aHelpURL,
@@ -95,7 +94,7 @@ void GetMenuItemAttributes( const Reference< XPropertySet >& xActionTriggerPrope
     }
 }
 
-void InsertSubMenuItems( Menu* pSubMenu, sal_uInt16& nItemId, const Reference< XIndexContainer >& xActionTriggerContainer )
+static void InsertSubMenuItems( Menu* pSubMenu, sal_uInt16& nItemId, const Reference< XIndexContainer >& xActionTriggerContainer )
 {
     if ( xActionTriggerContainer.is() )
     {
@@ -134,10 +133,10 @@ void InsertSubMenuItems( Menu* pSubMenu, sal_uInt16& nItemId, const Reference< X
                             if ( nIndex >= 0 )
                             {
                                 // Special code for our menu implementation: some menu items don't have a
-                                // command url but uses the item id as a unqiue identifier. These entries
+                                // command url but uses the item id as a unique identifier. These entries
                                 // got a special url during conversion from menu=>actiontriggercontainer.
                                 // Now we have to extract this special url and set the correct item id!!!
-                                nNewItemId = (sal_uInt16)aCommandURL.copy( nIndex+aSlotURL.getLength() ).toInt32();
+                                nNewItemId = static_cast<sal_uInt16>(aCommandURL.copy( nIndex+aSlotURL.getLength() ).toInt32());
                                 pSubMenu->InsertItem( nNewItemId, aLabel );
                             }
                             else
@@ -160,7 +159,7 @@ void InsertSubMenuItems( Menu* pSubMenu, sal_uInt16& nItemId, const Reference< X
                                     {
                                         // This is our own optimized implementation of menu images!
                                         ImageWrapper* pImageWrapper = reinterpret_cast< ImageWrapper * >( nPointer );
-                                        Image aMenuImage = pImageWrapper->GetImage();
+                                        const Image& aMenuImage = pImageWrapper->GetImage();
 
                                         if ( !!aMenuImage )
                                             pSubMenu->SetItemImage( nNewItemId, aMenuImage );
@@ -174,13 +173,13 @@ void InsertSubMenuItems( Menu* pSubMenu, sal_uInt16& nItemId, const Reference< X
                                     // This is an unknown implementation of a XBitmap interface. We have to
                                     // use a more time consuming way to build an Image!
                                     Image   aImage;
-                                    Bitmap  aBitmap;
+                                    BitmapEx aBitmap;
 
                                     Sequence< sal_Int8 > aDIBSeq;
                                     {
                                         aDIBSeq = xBitmap->getDIB();
                                         SvMemoryStream aMem( const_cast<sal_Int8 *>(aDIBSeq.getConstArray()), aDIBSeq.getLength(), StreamMode::READ );
-                                        ReadDIB(aBitmap, aMem, true);
+                                        ReadDIBBitmapEx(aBitmap, aMem);
                                     }
 
                                     aDIBSeq = xBitmap->getMaskDIB();
@@ -189,7 +188,7 @@ void InsertSubMenuItems( Menu* pSubMenu, sal_uInt16& nItemId, const Reference< X
                                         Bitmap aMaskBitmap;
                                         SvMemoryStream aMem( const_cast<sal_Int8 *>(aDIBSeq.getConstArray()), aDIBSeq.getLength(), StreamMode::READ );
                                         ReadDIB(aMaskBitmap, aMem, true);
-                                        aImage = Image( aBitmap, aMaskBitmap );
+                                        aImage = Image(BitmapEx(aBitmap.GetBitmap(), aMaskBitmap));
                                     }
                                     else
                                         aImage = Image( aBitmap );
@@ -208,7 +207,7 @@ void InsertSubMenuItems( Menu* pSubMenu, sal_uInt16& nItemId, const Reference< X
 
                             if ( xSubContainer.is() )
                             {
-                                PopupMenu* pNewSubMenu = new PopupMenu;
+                                VclPtr<PopupMenu> pNewSubMenu = VclPtr<PopupMenu>::Create();
 
                                 // Sub menu (recursive call CreateSubMenu )
                                 InsertSubMenuItems( pNewSubMenu, nItemId, xSubContainer );
@@ -236,7 +235,8 @@ void InsertSubMenuItems( Menu* pSubMenu, sal_uInt16& nItemId, const Reference< X
 
 // implementation helper ( ActionTrigger => menu )
 
-Reference< XPropertySet > CreateActionTrigger( sal_uInt16 nItemId, const Menu* pMenu, const Reference< XIndexContainer >& rActionTriggerContainer ) throw ( RuntimeException )
+/// @throws RuntimeException
+static Reference< XPropertySet > CreateActionTrigger( sal_uInt16 nItemId, const Menu* pMenu, const Reference< XIndexContainer >& rActionTriggerContainer )
 {
     Reference< XPropertySet > xPropSet;
 
@@ -282,7 +282,8 @@ Reference< XPropertySet > CreateActionTrigger( sal_uInt16 nItemId, const Menu* p
     return xPropSet;
 }
 
-Reference< XPropertySet > CreateActionTriggerSeparator( const Reference< XIndexContainer >& rActionTriggerContainer ) throw ( RuntimeException )
+/// @throws RuntimeException
+static Reference< XPropertySet > CreateActionTriggerSeparator( const Reference< XIndexContainer >& rActionTriggerContainer )
 {
     Reference< XMultiServiceFactory > xMultiServiceFactory( rActionTriggerContainer, UNO_QUERY );
     if ( xMultiServiceFactory.is() )
@@ -295,7 +296,8 @@ Reference< XPropertySet > CreateActionTriggerSeparator( const Reference< XIndexC
     return Reference< XPropertySet >();
 }
 
-Reference< XIndexContainer > CreateActionTriggerContainer( const Reference< XIndexContainer >& rActionTriggerContainer ) throw ( RuntimeException )
+/// @throws RuntimeException
+static Reference< XIndexContainer > CreateActionTriggerContainer( const Reference< XIndexContainer >& rActionTriggerContainer )
 {
     Reference< XMultiServiceFactory > xMultiServiceFactory( rActionTriggerContainer, UNO_QUERY );
     if ( xMultiServiceFactory.is() )
@@ -308,7 +310,7 @@ Reference< XIndexContainer > CreateActionTriggerContainer( const Reference< XInd
     return Reference< XIndexContainer >();
 }
 
-void FillActionTriggerContainerWithMenu( const Menu* pMenu, Reference< XIndexContainer >& rActionTriggerContainer )
+static void FillActionTriggerContainerWithMenu( const Menu* pMenu, Reference< XIndexContainer > const & rActionTriggerContainer )
 {
     SolarMutexGuard aGuard;
 
@@ -365,7 +367,7 @@ void ActionTriggerHelper::CreateMenuFromActionTriggerContainer(
 }
 
 void ActionTriggerHelper::FillActionTriggerContainerFromMenu(
-    Reference< XIndexContainer >& xActionTriggerContainer,
+    Reference< XIndexContainer > const & xActionTriggerContainer,
     const Menu* pMenu )
 {
     FillActionTriggerContainerWithMenu( pMenu, xActionTriggerContainer );

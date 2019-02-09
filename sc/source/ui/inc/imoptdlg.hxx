@@ -20,58 +20,22 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_IMOPTDLG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_IMOPTDLG_HXX
 
-#include <vcl/dialog.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/combobox.hxx>
-#include <vcl/lstbox.hxx>
-#include <vcl/button.hxx>
-#include <svx/txencbox.hxx>
-#include "scdllapi.h"
-#include "global.hxx"
+#include <rtl/textenc.h>
+#include <rtl/ustring.hxx>
+#include <scdllapi.h>
 
 class SC_DLLPUBLIC ScImportOptions
 {
 public:
-        ScImportOptions()
-            : nFieldSepCode(0), nTextSepCode(0),
-            eCharSet(RTL_TEXTENCODING_DONTKNOW), bFixedWidth(false),
-            bSaveAsShown(false), bQuoteAllText(false), bSaveFormulas(false)
-        {}
         ScImportOptions( const OUString& rStr );
-
-        ScImportOptions( sal_Unicode nFieldSep, sal_Unicode nTextSep, const OUString& rStr )
-            : nFieldSepCode(nFieldSep), nTextSepCode(nTextSep), aStrFont(rStr),
-            bFixedWidth(false), bSaveAsShown(false), bQuoteAllText(false), bSaveFormulas(false)
-        { eCharSet = ScGlobal::GetCharsetValue(aStrFont); }
 
         ScImportOptions( sal_Unicode nFieldSep, sal_Unicode nTextSep, rtl_TextEncoding nEnc )
             : nFieldSepCode(nFieldSep), nTextSepCode(nTextSep),
-            bFixedWidth(false), bSaveAsShown(false), bQuoteAllText(false), bSaveFormulas(false)
+            bFixedWidth(false), bSaveAsShown(false), bQuoteAllText(false),
+            bSaveNumberAsSuch(true), bSaveFormulas(false), bRemoveSpace(false)
         { SetTextEncoding( nEnc ); }
 
-        ScImportOptions( const ScImportOptions& rCpy )
-            : nFieldSepCode     (rCpy.nFieldSepCode),
-              nTextSepCode      (rCpy.nTextSepCode),
-              aStrFont          (rCpy.aStrFont),
-              eCharSet          (rCpy.eCharSet),
-              bFixedWidth       (rCpy.bFixedWidth),
-              bSaveAsShown      (rCpy.bSaveAsShown),
-              bQuoteAllText     (rCpy.bQuoteAllText),
-              bSaveFormulas     (rCpy.bSaveFormulas)
-        {}
-
-    ScImportOptions& operator=( const ScImportOptions& rCpy )
-                        {
-                            nFieldSepCode   = rCpy.nFieldSepCode;
-                            nTextSepCode    = rCpy.nTextSepCode;
-                            aStrFont        = rCpy.aStrFont;
-                            eCharSet        = rCpy.eCharSet;
-                            bFixedWidth     = rCpy.bFixedWidth;
-                            bSaveAsShown    = rCpy.bSaveAsShown;
-                            bQuoteAllText   = rCpy.bQuoteAllText;
-                            bSaveFormulas   = rCpy.bSaveFormulas;
-                            return *this;
-                        }
+    ScImportOptions& operator=( const ScImportOptions& rCpy ) = default;
 
     OUString  BuildString() const;
 
@@ -84,7 +48,9 @@ public:
     bool        bFixedWidth;
     bool        bSaveAsShown;
     bool        bQuoteAllText;
+    bool        bSaveNumberAsSuch;
     bool        bSaveFormulas;
+    bool        bRemoveSpace;
 };
 
 #endif // INCLUDED_SC_SOURCE_UI_INC_IMOPTDLG_HXX

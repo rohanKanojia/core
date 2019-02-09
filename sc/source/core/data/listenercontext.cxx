@@ -7,9 +7,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "listenercontext.hxx"
-#include "document.hxx"
-#include "mtvelements.hxx"
+#include <listenercontext.hxx>
+#include <document.hxx>
+#include <mtvelements.hxx>
 
 namespace sc {
 
@@ -19,6 +19,16 @@ StartListeningContext::StartListeningContext(ScDocument& rDoc) :
 StartListeningContext::StartListeningContext(
     ScDocument& rDoc, const std::shared_ptr<ColumnBlockPositionSet>& pSet) :
     mrDoc(rDoc), mpSet(pSet) {}
+
+void StartListeningContext::setColumnSet( const std::shared_ptr<const ColumnSet>& rpColSet )
+{
+    mpColSet = rpColSet;
+}
+
+const std::shared_ptr<const ColumnSet>& StartListeningContext::getColumnSet() const
+{
+    return mpColSet;
+}
 
 ColumnBlockPosition* StartListeningContext::getBlockPosition(SCTAB nTab, SCCOL nCol)
 {

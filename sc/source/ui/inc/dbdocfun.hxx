@@ -20,9 +20,8 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_DBDOCFUN_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_DBDOCFUN_HXX
 
-#include "address.hxx"
-#include <tools/solar.h>
-#include <com/sun/star/uno/Sequence.hxx>
+#include <address.hxx>
+#include <vector>
 
 struct ScImportParam;
 struct ScQueryParam;
@@ -32,10 +31,10 @@ struct ScSubTotalParam;
 class SfxViewFrame;
 class ScDBData;
 class ScDocShell;
-class ScAddress;
-class ScRange;
 class ScDPObject;
 class ScDBCollection;
+
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Sequence; } } } }
 
 namespace com { namespace sun { namespace star {
     namespace beans {
@@ -56,17 +55,16 @@ private:
 
 public:
                     ScDBDocFunc( ScDocShell& rDocSh ): rDocShell(rDocSh) {}
-                    ~ScDBDocFunc() {}
 
     void            UpdateImport( const OUString& rTarget, const svx::ODataAccessDescriptor& rDescriptor );
 
     bool DoImport( SCTAB nTab, const ScImportParam& rParam,
                    const svx::ODataAccessDescriptor* pDescriptor);      // used for selection an existing ResultSet
 
-    bool DoImportUno( const ScAddress& rPos,
+    void DoImportUno( const ScAddress& rPos,
                       const css::uno::Sequence<css::beans::PropertyValue>& aArgs );
 
-    static void     ShowInBeamer( const ScImportParam& rParam, SfxViewFrame* pFrame );
+    static void     ShowInBeamer( const ScImportParam& rParam, const SfxViewFrame* pFrame );
 
     SC_DLLPUBLIC bool Sort(
         SCTAB nTab, const ScSortParam& rSortParam, bool bRecord, bool bPaint, bool bApi );
@@ -75,17 +73,16 @@ public:
                             const ScRange* pAdvSource, bool bRecord, bool bApi );
 
     void            DoSubTotals( SCTAB nTab, const ScSubTotalParam& rParam,
-                                    const ScSortParam* pForceNewSort,
                                     bool bRecord, bool bApi );
 
-    bool AddDBRange( const OUString& rName, const ScRange& rRange, bool bApi );
+    bool AddDBRange( const OUString& rName, const ScRange& rRange );
     bool DeleteDBRange( const OUString& rName );
     bool RenameDBRange( const OUString& rOld, const OUString& rNew );
     void ModifyDBData( const ScDBData& rNewData );  // Name unveraendert
 
     void ModifyAllDBData( const ScDBCollection& rNewColl, const std::vector<ScRange>& rDelAreaList );
 
-    bool RepeatDB( const OUString& rDBName, bool bApi, bool bIsUnnamed=false, SCTAB aTab = 0);
+    bool RepeatDB( const OUString& rDBName, bool bApi, bool bIsUnnamed, SCTAB aTab = 0);
 
     bool DataPilotUpdate( ScDPObject* pOldObj, const ScDPObject* pNewObj,
                           bool bRecord, bool bApi, bool bAllowMove = false );
@@ -98,7 +95,7 @@ public:
      * Reload the referenced pivot cache, and refresh all pivot tables that
      * reference the cache.
      */
-    void RefreshPivotTables(ScDPObject* pDPObj, bool bApi);
+    void RefreshPivotTables(const ScDPObject* pDPObj, bool bApi);
 
     /**
      * Refresh the group dimensions of all pivot tables referencing the same

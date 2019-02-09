@@ -23,11 +23,11 @@
 #include <connectivity/sdbcx/VTable.hxx>
 #include <com/sun/star/sdbc/XDatabaseMetaData.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
-#include "file/FConnection.hxx"
-#include "file/filedllapi.hxx"
+#include <file/FConnection.hxx>
+#include <file/filedllapi.hxx>
 #include <tools/stream.hxx>
 #include <connectivity/FValue.hxx>
-#include "TResultSetHelper.hxx"
+#include <TResultSetHelper.hxx>
 
 namespace connectivity
 {
@@ -39,16 +39,16 @@ namespace connectivity
         {
         protected:
             OConnection*                                        m_pConnection;
-            SvStream*                                           m_pFileStream;
+            std::unique_ptr<SvStream>                           m_pFileStream;
             ::rtl::Reference<OSQLColumns>                           m_aColumns;
             sal_Int32                                           m_nFilePos;                 // current IResultSetHelper::Movement
-            sal_uInt8*                                          m_pBuffer;
+            std::unique_ptr<sal_uInt8[]>                        m_pBuffer;
             sal_uInt16                                          m_nBufferSize;  // size of the ReadBuffer, if pBuffer != NULL
-            bool                                            m_bWriteable;   // svstream cann't say if we are writeable
+            bool                                            m_bWriteable;   // svstream can't say if we are writeable
                                                                                 // so we have to
 
             virtual void FileClose();
-            virtual ~OFileTable( );
+            virtual ~OFileTable( ) override;
         public:
             virtual void refreshColumns() override;
             virtual void refreshKeys() override;
@@ -58,15 +58,13 @@ namespace connectivity
             OFileTable( sdbcx::OCollection* _pTables,OConnection* _pConnection,
                     const OUString& Name,
                     const OUString& Type,
-                    const OUString& Description = OUString(),
-                    const OUString& SchemaName = OUString(),
-                    const OUString& CatalogName = OUString()
+                    const OUString& Description,
+                    const OUString& SchemaName,
+                    const OUString& CatalogName
                 );
 
             //XInterface
-            virtual ::com::sun::star::uno::Any SAL_CALL queryInterface( const ::com::sun::star::uno::Type & rType ) throw(::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL acquire() throw() override;
-            virtual void SAL_CALL release() throw() override;
+            virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type & rType ) override;
             // ::cppu::OComponentHelper
             virtual void SAL_CALL disposing() override;
 
@@ -77,22 +75,22 @@ namespace connectivity
             virtual bool fetchRow(OValueRefRow& _rRow, const OSQLColumns& _rCols, bool bRetrieveData) = 0;
 
             const ::rtl::Reference<OSQLColumns>& getTableColumns() const {return m_aColumns;}
-            virtual bool InsertRow(OValueRefVector& rRow, const ::com::sun::star::uno::Reference< ::com::sun::star::container::XIndexAccess>& _xCols);
+            virtual bool InsertRow(OValueRefVector& rRow, const css::uno::Reference< css::container::XIndexAccess>& _xCols);
             virtual bool DeleteRow(const OSQLColumns& _rCols);
-            virtual bool UpdateRow(OValueRefVector& rRow, OValueRefRow& pOrgRow,const ::com::sun::star::uno::Reference< ::com::sun::star::container::XIndexAccess>& _xCols);
-            virtual void addColumn(const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet>& descriptor);
+            virtual bool UpdateRow(OValueRefVector& rRow, OValueRefRow& pOrgRow,const css::uno::Reference< css::container::XIndexAccess>& _xCols);
+            virtual void addColumn(const css::uno::Reference< css::beans::XPropertySet>& descriptor);
             virtual void dropColumn(sal_Int32 _nPos);
             // refresh the header of file based tables to see changes done by someone
             virtual void refreshHeader();
 
-            OUString SAL_CALL getName() throw(std::exception) override { return m_Name; }
+            OUString SAL_CALL getName() override { return m_Name; }
 
             const OUString& getSchema() { return m_SchemaName; }
             bool isReadOnly() const { return !m_bWriteable; }
                 // m_pFileStream && !m_pFileStream->IsWritable(); }
-            // com::sun::star::lang::XUnoTunnel
-            virtual sal_Int64 SAL_CALL getSomething( const ::com::sun::star::uno::Sequence< sal_Int8 >& aIdentifier ) throw(::com::sun::star::uno::RuntimeException, std::exception) override;
-            static ::com::sun::star::uno::Sequence< sal_Int8 > getUnoTunnelImplementationId();
+            // css::lang::XUnoTunnel
+            virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
+            static css::uno::Sequence< sal_Int8 > getUnoTunnelImplementationId();
 
 
             sal_Int32 getFilePos() const { return m_nFilePos; }
@@ -102,7 +100,7 @@ namespace connectivity
 
             // creates a stream using ::utl::UcbStreamHelper::CreateStream, but the error is simplified
             // (NULL or non-NULL is returned)
-            static SvStream* createStream_simpleError( const OUString& _rFileName, StreamMode _eOpenMode);
+            static std::unique_ptr<SvStream> createStream_simpleError( const OUString& _rFileName, StreamMode _eOpenMode);
         };
     }
 }

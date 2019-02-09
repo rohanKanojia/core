@@ -40,29 +40,28 @@ class CURI:
 {
 public:
     explicit CURI();
-    virtual ~CURI() {}
 
     // css::lang::XServiceInfo:
-    virtual OUString SAL_CALL getImplementationName() throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService(const OUString & ServiceName) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService(const OUString & ServiceName) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // css::lang::XInitialization:
-    virtual void SAL_CALL initialize(const css::uno::Sequence< css::uno::Any > & aArguments) throw (css::uno::RuntimeException, css::uno::Exception, std::exception) override;
+    virtual void SAL_CALL initialize(const css::uno::Sequence< css::uno::Any > & aArguments) override;
 
     // css::rdf::XNode:
-    virtual OUString SAL_CALL getStringValue() throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getStringValue() override;
 
     // css::rdf::XURI:
-    virtual OUString SAL_CALL getLocalName() throw (css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getNamespace() throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getLocalName() override;
+    virtual OUString SAL_CALL getNamespace() override;
 
 private:
     CURI(CURI const&) = delete;
     CURI& operator=(CURI const&) = delete;
 
     /// handle css.rdf.URIs
-    void SAL_CALL initFromConstant(const sal_Int16 i_Constant);
+    void initFromConstant(const sal_Int16 i_Constant);
 
     OUString m_Namespace;
     OUString m_LocalName;
@@ -73,17 +72,17 @@ CURI::CURI() :
 {}
 
 // com.sun.star.uno.XServiceInfo:
-OUString SAL_CALL CURI::getImplementationName() throw (css::uno::RuntimeException, std::exception)
+OUString SAL_CALL CURI::getImplementationName()
 {
     return comp_CURI::_getImplementationName();
 }
 
-sal_Bool SAL_CALL CURI::supportsService(OUString const & serviceName) throw (css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL CURI::supportsService(OUString const & serviceName)
 {
     return cppu::supportsService(this, serviceName);
 }
 
-css::uno::Sequence< OUString > SAL_CALL CURI::getSupportedServiceNames() throw (css::uno::RuntimeException, std::exception)
+css::uno::Sequence< OUString > SAL_CALL CURI::getSupportedServiceNames()
 {
     return comp_CURI::_getSupportedServiceNames();
 }
@@ -97,7 +96,7 @@ const char s_nsPkg      [] =
 const char s_nsODF      [] =
     "http://docs.oasis-open.org/ns/office/1.2/meta/odf#";
 
-void SAL_CALL CURI::initFromConstant(const sal_Int16 i_Constant)
+void CURI::initFromConstant(const sal_Int16 i_Constant)
 {
     const char *ns(nullptr);
     const char *ln(nullptr);
@@ -701,47 +700,41 @@ void SAL_CALL CURI::initFromConstant(const sal_Int16 i_Constant)
 
         default:
             throw css::lang::IllegalArgumentException(
-                OUString("CURI::initialize: "
-                    "invalid URIs constant argument"), *this, 0);
+                "CURI::initialize: invalid URIs constant argument", *this, 0);
     }
     m_Namespace = OUString::createFromAscii(ns).intern();
     m_LocalName = OUString::createFromAscii(ln).intern();
-    return;
 }
 
 // css::lang::XInitialization:
-void SAL_CALL CURI::initialize(const css::uno::Sequence< css::uno::Any > & aArguments) throw (css::uno::RuntimeException, css::uno::Exception, std::exception)
+void SAL_CALL CURI::initialize(const css::uno::Sequence< css::uno::Any > & aArguments)
 {
     sal_Int32 len = aArguments.getLength();
     if ((len < 1) || (len > 2)) {
         throw css::lang::IllegalArgumentException(
-            OUString("CURI::initialize: "
-                "must give 1 or 2 argument(s)"), *this, 2);
+            "CURI::initialize: must give 1 or 2 argument(s)", *this, 2);
     }
 
     sal_Int16 arg(0);
     OUString arg0;
     OUString arg1;
-    if ((aArguments[0] >>= arg)) {
+    if (aArguments[0] >>= arg) {
         // integer argument: constant from rdf::URIs
         if (len != 1) {
             throw css::lang::IllegalArgumentException(
-                OUString("CURI::initialize: "
-                    "must give 1 int argument"), *this, 1);
+                "CURI::initialize: must give 1 int argument", *this, 1);
         }
         initFromConstant(arg);
         return;
     }
     if (!(aArguments[0] >>= arg0)) {
         throw css::lang::IllegalArgumentException(
-            OUString("CURI::initialize: "
-                "argument must be string or short"), *this, 0);
+            "CURI::initialize: argument must be string or short", *this, 0);
     }
     if (len > 1) {
         if (!(aArguments[1] >>= arg1)) {
             throw css::lang::IllegalArgumentException(
-                OUString("CURI::initialize: "
-                    "argument must be string"), *this, 1);
+                "CURI::initialize: argument must be string", *this, 1);
         }
         // just append the parameters and then split them again; seems simplest
         arg0 = arg0 + arg1;
@@ -750,52 +743,46 @@ void SAL_CALL CURI::initialize(const css::uno::Sequence< css::uno::Any > & aArgu
 
     // split parameter
     sal_Int32 idx;
-    if (    ((idx = arg0.indexOf    ('#')) >= 0)
-        ||  ((idx = arg0.lastIndexOf('/')) >= 0)
-        ||  ((idx = arg0.lastIndexOf(':')) >= 0))
-    {
-
-        if (idx < arg0.getLength() - 1) {
-            arg1 = arg0.copy(idx+1);
-            arg0 = arg0.copy(0, idx+1);
-        }
-    } else {
+    if (    ((idx = arg0.indexOf    ('#')) < 0)
+        &&  ((idx = arg0.lastIndexOf('/')) < 0)
+        &&  ((idx = arg0.lastIndexOf(':')) < 0) )
+ {
         throw css::lang::IllegalArgumentException(
-            OUString("CURI::initialize: "
-                "argument not splittable: no separator [#/:]"), *this, 0);
+            "CURI::initialize: argument not splittable: no separator [#/:]", *this, 0);
+    }
+    if (idx < arg0.getLength() - 1) {
+        arg1 = arg0.copy(idx+1);
+        arg0 = arg0.copy(0, idx+1);
     }
 
     //FIXME: what is legal?
-    if (!arg0.isEmpty()) {
-        m_Namespace = arg0;
-    } else {
+    if (arg0.isEmpty()) {
         throw css::lang::IllegalArgumentException(
-            OUString("CURI::initialize: "
-                "argument is not valid namespace"), *this, 0);
+            "CURI::initialize: argument is not valid namespace", *this, 0);
     }
+    m_Namespace = arg0;
+
     //FIXME: what is legal?
-    if (true) {
-        m_LocalName = arg1;
-    } else {
+    if ((false)) {
         throw css::lang::IllegalArgumentException(
-            OUString("CURI::initialize: "
-                "argument is not valid local name"), *this, 1);
+            "CURI::initialize: argument is not valid local name", *this, 1);
     }
+    m_LocalName = arg1;
 }
 
 // css::rdf::XNode:
-OUString SAL_CALL CURI::getStringValue() throw (css::uno::RuntimeException, std::exception)
+OUString SAL_CALL CURI::getStringValue()
 {
     return m_Namespace + m_LocalName;
 }
 
 // css::rdf::XURI:
-OUString SAL_CALL CURI::getNamespace() throw (css::uno::RuntimeException, std::exception)
+OUString SAL_CALL CURI::getNamespace()
 {
     return m_Namespace;
 }
 
-OUString SAL_CALL CURI::getLocalName() throw (css::uno::RuntimeException, std::exception)
+OUString SAL_CALL CURI::getLocalName()
 {
     return m_LocalName;
 }
@@ -806,18 +793,18 @@ OUString SAL_CALL CURI::getLocalName() throw (css::uno::RuntimeException, std::e
 // component helper namespace
 namespace comp_CURI {
 
-OUString SAL_CALL _getImplementationName() {
+OUString _getImplementationName() {
     return OUString(
         "CURI");
 }
 
-css::uno::Sequence< OUString > SAL_CALL _getSupportedServiceNames()
+css::uno::Sequence< OUString > _getSupportedServiceNames()
 {
     css::uno::Sequence< OUString > s { "com.sun.star.rdf.URI" };
     return s;
 }
 
-css::uno::Reference< css::uno::XInterface > SAL_CALL _create(
+css::uno::Reference< css::uno::XInterface > _create(
     const css::uno::Reference< css::uno::XComponentContext > & )
 {
     return static_cast< ::cppu::OWeakObject * >(new CURI);

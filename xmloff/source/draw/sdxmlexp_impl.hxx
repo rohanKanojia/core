@@ -22,7 +22,6 @@
 
 #include <xmloff/xmlexp.hxx>
 
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/task/XStatusIndicator.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/drawing/XDrawPage.hpp>
@@ -30,7 +29,7 @@
 #include <set>
 #include <vector>
 
-class Rectangle;
+namespace tools { class Rectangle; }
 
 class ImpXMLEXPPageMasterInfo;
 class ImpXMLAutoLayoutInfo;
@@ -39,18 +38,15 @@ class XMLShapeExportPropertyMapper;
 class XMLPageExportPropertyMapper;
 
 typedef ::std::vector< ImpXMLEXPPageMasterInfo* > ImpXMLEXPPageMasterList;
-typedef ::std::vector< ImpXMLAutoLayoutInfo*    > ImpXMLAutoLayoutInfoList;
 
 enum XmlPlaceholder
 {
     XmlPlaceholderTitle,
     XmlPlaceholderOutline,
     XmlPlaceholderSubtitle,
-    XmlPlaceholderText,
     XmlPlaceholderGraphic,
     XmlPlaceholderObject,
     XmlPlaceholderChart,
-    XmlPlaceholderOrgchart,
     XmlPlaceholderTable,
     XmlPlaceholderPage,
     XmlPlaceholderNotes,
@@ -85,11 +81,11 @@ class SdXMLExport : public SvXMLExport
     sal_uInt32                  mnObjectCount;
 
     // temporary infos
-    ImpXMLEXPPageMasterList*    mpPageMasterInfoList;
-    ImpXMLEXPPageMasterList*    mpPageMasterUsageList;
-    ImpXMLEXPPageMasterList*    mpNotesPageMasterUsageList;
+    std::vector< std::unique_ptr<ImpXMLEXPPageMasterInfo> > mvPageMasterInfoList;
+    ImpXMLEXPPageMasterList     mvPageMasterUsageList;
+    ImpXMLEXPPageMasterList     mvNotesPageMasterUsageList;
     ImpXMLEXPPageMasterInfo*    mpHandoutPageMaster;
-    ImpXMLAutoLayoutInfoList*   mpAutoLayoutInfoList;
+    std::vector< std::unique_ptr<ImpXMLAutoLayoutInfo> >    mvAutoLayoutInfoList;
 
     css::uno::Sequence< OUString > maDrawPagesAutoLayoutNames;
 
@@ -106,16 +102,14 @@ class SdXMLExport : public SvXMLExport
 
     HeaderFooterPageSettingsImpl            maHandoutPageHeaderFooterSettings;
 
-    XMLSdPropHdlFactory*                mpSdPropHdlFactory;
-    XMLShapeExportPropertyMapper*       mpPropertySetMapper;
-    XMLPageExportPropertyMapper*        mpPresPagePropsMapper;
+    rtl::Reference<XMLSdPropHdlFactory>          mpSdPropHdlFactory;
+    rtl::Reference<XMLShapeExportPropertyMapper> mpPropertySetMapper;
+    rtl::Reference<XMLPageExportPropertyMapper>  mpPresPagePropsMapper;
 
-    SdXMLFormatMap  maUsedDateStyles;           // this is a vector with the used formatings for date fields
-    SdXMLFormatMap  maUsedTimeStyles;           // this is a vector with the used formatings for time fields
+    SdXMLFormatMap  maUsedDateStyles;           // this is a vector with the used formattings for date fields
+    SdXMLFormatMap  maUsedTimeStyles;           // this is a vector with the used formattings for time fields
 
-    bool                    mbIsDraw;
-
-    const OUString         msPageLayoutNames;
+    bool const      mbIsDraw;
 
     virtual void ExportStyles_(bool bUsed) override;
     virtual void ExportAutoStyles_() override;
@@ -138,7 +132,7 @@ class SdXMLExport : public SvXMLExport
 
     bool ImpPrepAutoLayoutInfo(const css::uno::Reference< css::drawing::XDrawPage >& xPage, OUString& rName);
     void ImpWriteAutoLayoutInfos();
-    void ImpWriteAutoLayoutPlaceholder(XmlPlaceholder ePl, const Rectangle& rRect);
+    void ImpWriteAutoLayoutPlaceholder(XmlPlaceholder ePl, const tools::Rectangle& rRect);
     void ImpWriteHeaderFooterDecls();
     void ImplExportHeaderFooterDeclAttributes( const HeaderFooterPageSettingsImpl& aSettings );
 
@@ -162,17 +156,17 @@ public:
     SdXMLExport(
         const css::uno::Reference< css::uno::XComponentContext >& xContext,
         OUString const & implementationName,
-        bool bIsDraw, SvXMLExportFlags nExportFlags = SvXMLExportFlags::ALL );
-    virtual ~SdXMLExport();
+        bool bIsDraw, SvXMLExportFlags nExportFlags );
+    virtual ~SdXMLExport() override;
 
-    void SetProgress(sal_Int32 nProg);
+    void collectAutoStyles() override;
 
     // XExporter
-    virtual void SAL_CALL setSourceDocument( const css::uno::Reference< css::lang::XComponent >& xDoc ) throw(css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setSourceDocument( const css::uno::Reference< css::lang::XComponent >& xDoc ) override;
 
     // get factories and mappers
-    XMLShapeExportPropertyMapper* GetPropertySetMapper() const { return mpPropertySetMapper; }
-    XMLPageExportPropertyMapper* GetPresPagePropsMapper() const { return mpPresPagePropsMapper; }
+    XMLShapeExportPropertyMapper* GetPropertySetMapper() const { return mpPropertySetMapper.get(); }
+    XMLPageExportPropertyMapper* GetPresPagePropsMapper() const { return mpPresPagePropsMapper.get(); }
 
     bool IsDraw() const { return mbIsDraw; }
     bool IsImpress() const { return !mbIsDraw; }

@@ -66,7 +66,7 @@ protected:
 
     /// allow manipulation of the expression before it is evaluated
     // the default implementation is to do nothing...
-    const OUString _getExpressionForEvaluation() const { return msExpression; }
+    const OUString& _getExpressionForEvaluation() const { return msExpression; }
 
     /// obtain a (suitable) XPathAPI implementation
     static css::uno::Reference<css::xml::xpath::XXPathAPI> _getXPathAPI(const xforms::EvaluationContext& aContext);
@@ -82,7 +82,7 @@ public:
 
 
     /// get the expression string
-    OUString getExpression() const { return msExpression;}
+    const OUString& getExpression() const { return msExpression;}
 
     /// set a new expression string
     void setExpression( const OUString& rExpression );
@@ -111,7 +111,7 @@ public:
     // get the result of this expression as string/bool/...
     // (Results will be based on the last call of evaluate(..). The caller
     // must call evaluate to ensure current results.)
-    css::uno::Reference<css::xml::xpath::XXPathObject> getXPath() const { return mxResult;}
+    css::uno::Reference<css::xml::xpath::XXPathObject> const & getXPath() const { return mxResult;}
     bool getBool( bool bDefault = false ) const;
     OUString getString() const;
 

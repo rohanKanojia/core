@@ -19,6 +19,7 @@
 
 #include <vcl/metaact.hxx>
 #include <vcl/cvtgrf.hxx>
+#include <tools/stream.hxx>
 
 #include <salinst.hxx>
 #include <svdata.hxx>
@@ -32,10 +33,10 @@ GraphicConverter::~GraphicConverter()
 {
 }
 
-sal_uLong GraphicConverter::Import( SvStream& rIStm, Graphic& rGraphic, ConvertDataFormat nFormat )
+ErrCode GraphicConverter::Import( SvStream& rIStm, Graphic& rGraphic, ConvertDataFormat nFormat )
 {
     GraphicConverter*   pCvt = ImplGetSVData()->maGDIData.mpGrfConverter;
-    sal_uLong           nRet = ERRCODE_IO_GENERAL;
+    ErrCode             nRet = ERRCODE_IO_GENERAL;
 
     if( pCvt && pCvt->GetFilterHdl().IsSet() )
     {
@@ -53,10 +54,10 @@ sal_uLong GraphicConverter::Import( SvStream& rIStm, Graphic& rGraphic, ConvertD
     return nRet;
 }
 
-sal_uLong GraphicConverter::Export( SvStream& rOStm, const Graphic& rGraphic, ConvertDataFormat nFormat )
+ErrCode GraphicConverter::Export( SvStream& rOStm, const Graphic& rGraphic, ConvertDataFormat nFormat )
 {
     GraphicConverter*   pCvt = ImplGetSVData()->maGDIData.mpGrfConverter;
-    sal_uLong           nRet = ERRCODE_IO_GENERAL;
+    ErrCode             nRet = ERRCODE_IO_GENERAL;
 
     if( pCvt && pCvt->GetFilterHdl().IsSet() )
     {

@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "rtl/textcvt.h"
-#include "sal/types.h"
+#include <rtl/textcvt.h>
+#include <sal/types.h>
 
 #include "converter.hxx"
 #include "convertiso2022cn.hxx"
@@ -150,7 +150,7 @@ sal_Size ImplConvertIso2022CnToUnicode(void const * pData,
                 eState = IMPL_ISO_2022_CN_TO_UNICODE_STATE_ESC;
             else if (nChar < 0x80)
                 if (pDestBufPtr != pDestBufEnd)
-                    *pDestBufPtr++ = (sal_Unicode) nChar;
+                    *pDestBufPtr++ = static_cast<sal_Unicode>(nChar);
                 else
                     goto no_output;
             else
@@ -201,7 +201,7 @@ sal_Size ImplConvertIso2022CnToUnicode(void const * pData,
                     if (nUnicode != 0)
                         if (pDestBufPtr != pDestBufEnd)
                         {
-                            *pDestBufPtr++ = (sal_Unicode) nUnicode;
+                            *pDestBufPtr++ = static_cast<sal_Unicode>(nUnicode);
                             eState = IMPL_ISO_2022_CN_TO_UNICODE_STATE_SO;
                         }
                         else
@@ -328,17 +328,16 @@ sal_Size ImplConvertIso2022CnToUnicode(void const * pData,
                             {
                                 nOffset += nLast - nFirst + 1;
                                 nFirst = pCns116431992Data[nOffset++];
-                                *pDestBufPtr++ = (sal_Unicode) nUnicode;
+                                *pDestBufPtr++ = static_cast<sal_Unicode>(nUnicode);
                                 *pDestBufPtr++
-                                    = (sal_Unicode)
-                                          pCns116431992Data[
-                                              nOffset + (nChar - nFirst)];
+                                    = static_cast<sal_Unicode>(pCns116431992Data[
+                                              nOffset + (nChar - nFirst)]);
                             }
                             else
                                 goto no_output;
                         else
                             if (pDestBufPtr != pDestBufEnd)
-                                *pDestBufPtr++ = (sal_Unicode) nUnicode;
+                                *pDestBufPtr++ = static_cast<sal_Unicode>(nUnicode);
                             else
                                 goto no_output;
                     }
@@ -373,17 +372,17 @@ sal_Size ImplConvertIso2022CnToUnicode(void const * pData,
 
     no_output:
         --pSrcBuf;
-        nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+        nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
         break;
     }
 
     if (eState > IMPL_ISO_2022_CN_TO_UNICODE_STATE_SO
         && (nInfo & (RTL_TEXTTOUNICODE_INFO_ERROR
-                         | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL))
+                         | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL))
                == 0)
     {
         if ((nFlags & RTL_TEXTTOUNICODE_FLAGS_FLUSH) == 0)
-            nInfo |= RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL;
+            nInfo |= RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL;
         else
             switch (sal::detail::textenc::handleBadInputTextToUnicodeConversion(
                         false, true, 0, nFlags, &pDestBufPtr, pDestBufEnd,
@@ -396,7 +395,7 @@ sal_Size ImplConvertIso2022CnToUnicode(void const * pData,
                 break;
 
             case sal::detail::textenc::BAD_INPUT_NO_OUTPUT:
-                nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+                nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
                 break;
             }
     }
@@ -541,7 +540,7 @@ sal_Size ImplConvertUnicodeToIso2022Cn(void const * pData,
         {
             if (ImplIsHighSurrogate(nChar))
             {
-                nHighSurrogate = (sal_Unicode) nChar;
+                nHighSurrogate = static_cast<sal_Unicode>(nChar);
                 continue;
             }
         }

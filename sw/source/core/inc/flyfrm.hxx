@@ -21,9 +21,12 @@
 #define INCLUDED_SW_SOURCE_CORE_INC_FLYFRM_HXX
 
 #include "layfrm.hxx"
-#include <list>
-#include "frmfmt.hxx"
+#include <vector>
+#include <frmfmt.hxx>
+#include <anchoredobject.hxx>
+#include <swdllapi.h>
 
+class SwFormatAnchor;
 class SwPageFrame;
 class SwFormatFrameSize;
 struct SwCursorMoveState;
@@ -34,8 +37,10 @@ class SwAttrSetChg;
 namespace tools { class PolyPolygon; }
 class SwFlyDrawContact;
 class SwFormat;
+class SwViewShell;
+class SwFEShell;
+class SwWrtShell;
 
-#include <anchoredobject.hxx>
 
 /** search an anchor for paragraph bound frames starting from pOldAnch
 
@@ -54,23 +59,20 @@ bool CalcClipRect( const SdrObject *pSdrObj, SwRect &rRect, bool bMove = true );
 
     #i26791# - inherit also from <SwAnchoredFlyFrame>
 */
-class SwFlyFrame : public SwLayoutFrame, public SwAnchoredObject
+class SW_DLLPUBLIC SwFlyFrame : public SwLayoutFrame, public SwAnchoredObject
 {
     // is allowed to lock, implemented in frmtool.cxx
-    friend void AppendObjs   ( const SwFrameFormats *, sal_uLong, SwFrame *, SwPageFrame *, SwDoc* );
+    friend void AppendObj(SwFrame *const pFrame, SwPageFrame *const pPage, SwFrameFormat *const pFormat, const SwFormatAnchor & rAnch);
     friend void Notify( SwFlyFrame *, SwPageFrame *pOld, const SwRect &rOld,
                         const SwRect* pOldPrt );
 
     void InitDrawObj();     // these to methods are called in the
     void FinitDrawObj();    // constructors
 
-    void _UpdateAttr( const SfxPoolItem*, const SfxPoolItem*, sal_uInt8 &,
+    void UpdateAttr_( const SfxPoolItem*, const SfxPoolItem*, sal_uInt8 &,
                       SwAttrSetChg *pa = nullptr, SwAttrSetChg *pb = nullptr );
 
     using SwLayoutFrame::CalcRel;
-
-    sal_uInt32 _GetOrdNumForNewRef( const SwFlyDrawContact* );
-    SwVirtFlyDrawObj* CreateNewRef( SwFlyDrawContact* );
 
 protected:
     // Predecessor/Successor for chaining with text flow
@@ -79,7 +81,7 @@ protected:
 private:
     // It must be possible to block Content-bound flys so that they will be not
     // formatted; in this case MakeAll() returns immediately. This is necessary
-    // for page changes during formattting. In addition, it is needed during
+    // for page changes during formatting. In addition, it is needed during
     // the constructor call of the root object since otherwise the anchor will
     // be formatted before the root is anchored correctly to a shell and
     // because too much would be formatted as a result.
@@ -106,15 +108,10 @@ protected:
     // but the width will not be re-evaluated based on the attributes.
     bool m_bFormatHeightOnly :1;
 
-    bool m_bInCnt :1;        ///< FLY_AS_CHAR, anchored as character
-    bool m_bAtCnt :1;        ///< FLY_AT_PARA, anchored at paragraph
-    bool m_bLayout :1;       ///< FLY_AT_PAGE, FLY_AT_FLY, at page or at frame
-    bool m_bAutoPosition :1; ///< FLY_AT_CHAR, anchored at character
-
-    bool m_bNoShrink :1;     ///< temporary forbid shrinking to avoid loops
-    // If true, the content of the fly frame will not be deleted when it
-    // is moved to an invisible layer.
-    bool m_bLockDeleteContent :1;
+    bool m_bInCnt :1;        ///< RndStdIds::FLY_AS_CHAR, anchored as character
+    bool m_bAtCnt :1;        ///< RndStdIds::FLY_AT_PARA, anchored at paragraph
+    bool m_bLayout :1;       ///< RndStdIds::FLY_AT_PAGE, RndStdIds::FLY_AT_FLY, at page or at frame
+    bool m_bAutoPosition :1; ///< RndStdIds::FLY_AT_CHAR, anchored at character
 
     friend class SwNoTextFrame; // is allowed to call NotifyBackground
 
@@ -129,23 +126,23 @@ protected:
     void Unlock()       { m_bLocked = false; }
 
     Size CalcRel( const SwFormatFrameSize &rSz ) const;
-    SwTwips CalcAutoWidth() const;
 
     SwFlyFrame( SwFlyFrameFormat*, SwFrame*, SwFrame *pAnchor );
 
     virtual void DestroyImpl() override;
-    virtual ~SwFlyFrame();
+    virtual ~SwFlyFrame() override;
 
     /** method to assure that anchored object is registered at the correct
         page frame
     */
     virtual void RegisterAtCorrectPage() override;
 
-    virtual bool _SetObjTop( const SwTwips _nTop ) override;
-    virtual bool _SetObjLeft( const SwTwips _nLeft ) override;
+    virtual bool SetObjTop_( const SwTwips _nTop ) override;
+    virtual bool SetObjLeft_( const SwTwips _nLeft ) override;
 
     virtual const SwRect GetObjBoundRect() const override;
     virtual void Modify( const SfxPoolItem*, const SfxPoolItem* ) override;
+    virtual void SwClientNotify(const SwModify& rMod, const SfxHint& rHint) override;
 
     virtual const IDocumentDrawModelAccess& getIDocumentDrawModelAccess( ) override;
 
@@ -156,7 +153,7 @@ public:
 
     // get client information
     virtual bool GetInfo( SfxPoolItem& ) const override;
-    virtual void Paint( vcl::RenderContext& rRenderContext, SwRect const&,
+    virtual void PaintSwFrame( vcl::RenderContext& rRenderContext, SwRect const&,
                         SwPrintData const*const pPrintData = nullptr ) const override;
     virtual Size ChgSize( const Size& aNewSize ) override;
     virtual bool GetCursorOfst( SwPosition *, Point&,
@@ -168,9 +165,9 @@ public:
     virtual void Paste( SwFrame* pParent, SwFrame* pSibling = nullptr ) override;
 #endif
 
-    SwTwips _Shrink( SwTwips, bool bTst );
-    SwTwips _Grow  ( SwTwips, bool bTst );
-    void    _Invalidate( SwPageFrame *pPage = nullptr );
+    SwTwips Shrink_( SwTwips, bool bTst );
+    SwTwips Grow_  ( SwTwips, bool bTst );
+    void    Invalidate_( SwPageFrame const *pPage = nullptr );
 
     bool FrameSizeChg( const SwFormatFrameSize & );
 
@@ -180,7 +177,7 @@ public:
     static void ChainFrames( SwFlyFrame *pMaster, SwFlyFrame *pFollow );
     static void UnchainFrames( SwFlyFrame *pMaster, SwFlyFrame *pFollow );
 
-    SwFlyFrame *FindChainNeighbour( SwFrameFormat &rFormat, SwFrame *pAnch = nullptr );
+    SwFlyFrame *FindChainNeighbour( SwFrameFormat const &rFormat, SwFrame *pAnch = nullptr );
 
     // #i26791#
     const SwVirtFlyDrawObj* GetVirtDrawObj() const;
@@ -203,14 +200,12 @@ public:
     bool IsNotifyBack() const { return m_bNotifyBack; }
     void SetNotifyBack()      { m_bNotifyBack = true; }
     void ResetNotifyBack()    { m_bNotifyBack = false; }
-    bool IsNoShrink()   const { return m_bNoShrink; }
-    bool IsLockDeleteContent()  const { return m_bLockDeleteContent; }
 
     bool IsClipped()        const   { return m_bHeightClipped || m_bWidthClipped; }
     bool IsHeightClipped()  const   { return m_bHeightClipped; }
 
     bool IsLowerOf( const SwLayoutFrame* pUpper ) const;
-    inline bool IsUpperOf( const SwFlyFrame& _rLower ) const
+    bool IsUpperOf( const SwFlyFrame& _rLower ) const
     {
         return _rLower.IsLowerOf( this );
     }
@@ -259,7 +254,7 @@ public:
         format isn't possible, if Writer fly frame is locked resp. col-locked.
     */
     virtual bool IsFormatPossible() const override;
-    static void GetAnchoredObjects( std::list<SwAnchoredObject*>&, const SwFormat& rFormat );
+    static void GetAnchoredObjects( std::vector<SwAnchoredObject*>&, const SwFormat& rFormat );
 
     // overwriting "SwFrameFormat *SwLayoutFrame::GetFormat" to provide the correct derived return type.
     // (This is in order to skip on the otherwise necessary casting of the result to
@@ -275,6 +270,16 @@ public:
     Point& ContentPos() { return m_aContentPos; }
 
     void InvalidateContentPos();
+
+    void SelectionHasChanged(SwFEShell* pShell);
+    bool IsShowUnfloatButton(SwWrtShell* pWrtSh) const;
+
+    // For testing only (see uiwriter)
+    void ActiveUnfloatButton(SwWrtShell* pWrtSh);
+
+private:
+    void UpdateUnfloatButton(SwWrtShell* pWrtSh, bool bShow) const;
+    void PaintDecorators() const;
 };
 #endif
 

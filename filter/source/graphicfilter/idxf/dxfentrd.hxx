@@ -20,10 +20,12 @@
 #ifndef INCLUDED_FILTER_SOURCE_GRAPHICFILTER_IDXF_DXFENTRD_HXX
 #define INCLUDED_FILTER_SOURCE_GRAPHICFILTER_IDXF_DXFENTRD_HXX
 
-#include <dxfgrprd.hxx>
-#include <dxfvec.hxx>
+#include "dxfgrprd.hxx"
+#include "dxfvec.hxx"
 
 #include <deque>
+#include <memory>
+#include <vector>
 
 enum DXFEntityType {
     DXF_LINE,
@@ -62,7 +64,6 @@ public:
     // commented with group codes:
     OString m_sLayer;                     //  8
     OString m_sLineType;                  //  6
-    double fElevation;                    // 38
     double fThickness;                    // 39
     long nColor;                          // 62
     long nSpace;                          // 67
@@ -302,7 +303,6 @@ class DXFPolyLineEntity : public DXFBasicEntity {
 
 public:
 
-    double fElevation; // 30
     long nFlags;       // 70
     double fSWidth;    // 40
     double fEWidth;    // 41
@@ -322,19 +322,18 @@ protected:
 class DXFLWPolyLineEntity : public DXFBasicEntity
 {
         sal_Int32   nIndex;
+        sal_Int32   nCount;         // 90
 
     public:
 
-        sal_Int32   nCount;         // 90
         sal_Int32   nFlags;         // 70   1 = closed, 128 = plinegen
         double      fConstantWidth; // 43   (optional - default: 0, not used if fStartWidth and/or fEndWidth is used)
         double      fStartWidth;    // 40
         double      fEndWidth;      // 41
 
-        DXFVector*  pP;
+        std::vector<DXFVector>  aP;
 
         DXFLWPolyLineEntity();
-        virtual ~DXFLWPolyLineEntity();
 
     protected:
 
@@ -353,14 +352,15 @@ struct DXFEdgeType
 
         DXFEdgeType( sal_Int32 EdgeType ):nEdgeType(EdgeType){};
 };
+
 struct DXFEdgeTypeLine : public DXFEdgeType
 {
     DXFVector aStartPoint;              // 10,20
     DXFVector aEndPoint;                // 11,21
     DXFEdgeTypeLine();
-    virtual ~DXFEdgeTypeLine();
     virtual bool EvaluateGroup( DXFGroupReader & rDGR ) override;
 };
+
 struct DXFEdgeTypeCircularArc : public DXFEdgeType
 {
     DXFVector aCenter;                  // 10,20
@@ -369,9 +369,9 @@ struct DXFEdgeTypeCircularArc : public DXFEdgeType
     double    fEndAngle;                // 51
     sal_Int32 nIsCounterClockwiseFlag;  // 73
     DXFEdgeTypeCircularArc();
-    virtual ~DXFEdgeTypeCircularArc();
     virtual bool EvaluateGroup( DXFGroupReader & rDGR ) override;
 };
+
 struct DXFEdgeTypeEllipticalArc : public DXFEdgeType
 {
     DXFVector aCenter;                  // 10,20
@@ -382,9 +382,9 @@ struct DXFEdgeTypeEllipticalArc : public DXFEdgeType
     sal_Int32 nIsCounterClockwiseFlag;  // 73
 
     DXFEdgeTypeEllipticalArc();
-    virtual ~DXFEdgeTypeEllipticalArc();
     virtual bool EvaluateGroup( DXFGroupReader & rDGR ) override;
 };
+
 struct DXFEdgeTypeSpline : public DXFEdgeType
 {
     sal_Int32 nDegree;                  // 94
@@ -394,16 +394,17 @@ struct DXFEdgeTypeSpline : public DXFEdgeType
     sal_Int32 nControlCount;            // 76
 
     DXFEdgeTypeSpline();
-    virtual ~DXFEdgeTypeSpline();
     virtual bool EvaluateGroup( DXFGroupReader & rDGR ) override;
 };
 
 struct DXFBoundaryPathData
 {
+private:
+    sal_Int32           nPointCount;            // 93
+public:
     sal_Int32           nFlags;                 // 92
     sal_Int32           nHasBulgeFlag;          // 72
     sal_Int32           nIsClosedFlag;          // 73
-    sal_Int32           nPointCount;            // 93
     double              fBulge;                 // 42
     sal_Int32           nSourceBoundaryObjects; // 97
     sal_Int32           nEdgeCount;             // 93
@@ -411,9 +412,8 @@ struct DXFBoundaryPathData
     bool                bIsPolyLine;
     sal_Int32           nPointIndex;
 
-    DXFVector*          pP;
-    std::deque< DXFEdgeType* >
-                        aEdges;
+    std::vector<DXFVector> aP;
+    std::deque<std::unique_ptr<DXFEdgeType>> aEdges;
 
     DXFBoundaryPathData();
     ~DXFBoundaryPathData();
@@ -440,10 +440,9 @@ class DXFHatchEntity : public DXFBasicEntity
         double      fPixelSize;                     // 47
         sal_Int32   nNumberOfSeedPoints;            // 98
 
-        DXFBoundaryPathData* pBoundaryPathData;
+        std::unique_ptr<DXFBoundaryPathData[]> pBoundaryPathData;
 
         DXFHatchEntity();
-        virtual ~DXFHatchEntity();
 
     protected:
 
@@ -511,31 +510,28 @@ class DXFEntities {
 
 public:
 
-    DXFEntities();
-    ~DXFEntities();
+    DXFEntities()
+        : pFirst(nullptr)
+        , mbBeingDrawn(false)
+    {
+    }
+
+    ~DXFEntities()
+    {
+        Clear();
+    }
 
     DXFBasicEntity * pFirst; // list of entities, READ ONLY!
+    mutable bool mbBeingDrawn; // guard for loop in entity parsing
 
     void Read(DXFGroupReader & rDGR);
-        // read entities per rGDR of a DXF file until a
-        // ENDBLK, ENDSEC oder EOF (of group 0).
+        // read entities by rGDR of a DXF file until a
+        // ENDBLK, ENDSEC or EOF (of group 0).
         // (all unknown thing will be skipped)
 
     void Clear();
         // deletes all entities
 };
-
-inline DXFEntities::DXFEntities()
-{
-    pFirst=nullptr;
-}
-
-
-inline DXFEntities::~DXFEntities()
-{
-    Clear();
-}
-
 
 #endif
 

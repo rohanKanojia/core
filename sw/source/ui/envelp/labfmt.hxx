@@ -20,25 +20,25 @@
 #define INCLUDED_SW_SOURCE_UI_ENVELP_LABFMT_HXX
 
 #include "swuilabimp.hxx"
-#include "labimg.hxx"
-#include <vcl/msgbox.hxx>
+#include <labimg.hxx>
 #include <vcl/idle.hxx>
+#include <vcl/customweld.hxx>
+#include <vcl/weld.hxx>
+
 class SwLabFormatPage;
 
-class SwLabPreview : public vcl::Window
+class SwLabPreview : public weld::CustomWidgetController
 {
-    Color m_aGrayColor;
+    Color const m_aGrayColor;
 
-    OUString m_aHDistStr;
-    OUString m_aVDistStr;
-    OUString m_aWidthStr;
-    OUString m_aHeightStr;
-    OUString m_aLeftStr;
-    OUString m_aUpperStr;
-    OUString m_aColsStr;
-    OUString m_aRowsStr;
-    OUString m_aPWidthStr;
-    OUString m_aPHeightStr;
+    OUString const m_aHDistStr;
+    OUString const m_aVDistStr;
+    OUString const m_aWidthStr;
+    OUString const m_aHeightStr;
+    OUString const m_aLeftStr;
+    OUString const m_aUpperStr;
+    OUString const m_aColsStr;
+    OUString const m_aRowsStr;
 
     long m_lHDistWidth;
     long m_lVDistWidth;
@@ -46,51 +46,50 @@ class SwLabPreview : public vcl::Window
     long m_lLeftWidth;
     long m_lUpperWidth;
     long m_lColsWidth;
-    long m_lPWidthWidth;
-    long m_lPHeightWidth;
 
     long m_lXWidth;
     long m_lXHeight;
 
     SwLabItem m_aItem;
 
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle&) override;
-
-    virtual Size GetOptimalSize() const override;
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
 
 public:
 
-    explicit SwLabPreview(vcl::Window* pParent);
+    SwLabPreview();
 
     void UpdateItem(const SwLabItem& rItem);
 };
 
 class SwLabFormatPage : public SfxTabPage
 {
-    VclPtr<FixedText>    m_pMakeFI;
-    VclPtr<FixedText>    m_pTypeFI;
-    VclPtr<SwLabPreview> m_pPreview;
-    VclPtr<MetricField>  m_pHDistField;
-    VclPtr<MetricField>  m_pVDistField;
-    VclPtr<MetricField>  m_pWidthField;
-    VclPtr<MetricField>  m_pHeightField;
-    VclPtr<MetricField>  m_pLeftField;
-    VclPtr<MetricField>  m_pUpperField;
-    VclPtr<NumericField> m_pColsField;
-    VclPtr<NumericField> m_pRowsField;
-    VclPtr<MetricField>  m_pPWidthField;
-    VclPtr<MetricField>  m_pPHeightField;
-    VclPtr<PushButton>   m_pSavePB;
-
     Idle aPreviewIdle;
-    bool  bModified;
+    SwLabItem aItem;
+    bool bModified;
 
-    SwLabItem    aItem;
+    SwLabPreview m_aPreview;
 
-    DECL_LINK_TYPED( ModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( PreviewHdl, Idle *, void );
-    DECL_LINK_TYPED( LoseFocusHdl, Control&, void );
-    DECL_LINK_TYPED( SaveHdl, Button*, void );
+    std::unique_ptr<weld::Label>  m_xMakeFI;
+    std::unique_ptr<weld::Label>  m_xTypeFI;
+    std::unique_ptr<weld::CustomWeld> m_xPreview;
+    std::unique_ptr<weld::MetricSpinButton>  m_xHDistField;
+    std::unique_ptr<weld::MetricSpinButton>  m_xVDistField;
+    std::unique_ptr<weld::MetricSpinButton>  m_xWidthField;
+    std::unique_ptr<weld::MetricSpinButton>  m_xHeightField;
+    std::unique_ptr<weld::MetricSpinButton>  m_xLeftField;
+    std::unique_ptr<weld::MetricSpinButton>  m_xUpperField;
+    std::unique_ptr<weld::SpinButton> m_xColsField;
+    std::unique_ptr<weld::SpinButton> m_xRowsField;
+    std::unique_ptr<weld::MetricSpinButton>  m_xPWidthField;
+    std::unique_ptr<weld::MetricSpinButton>  m_xPHeightField;
+    std::unique_ptr<weld::Button> m_xSavePB;
+
+
+    DECL_LINK( ModifyHdl, weld::SpinButton&, void );
+    DECL_LINK( MetricModifyHdl, weld::MetricSpinButton&, void );
+    DECL_LINK( PreviewHdl, Timer *, void );
+    DECL_LINK( SaveHdl, weld::Button&, void );
 
     void ChangeMinMax();
 
@@ -98,43 +97,44 @@ class SwLabFormatPage : public SfxTabPage
     using TabPage::DeactivatePage;
 
 public:
-    SwLabFormatPage(vcl::Window* pParent, const SfxItemSet& rSet);
-    virtual ~SwLabFormatPage();
-    virtual void dispose() override;
+    SwLabFormatPage(TabPageParent pParent, const SfxItemSet& rSet);
+    virtual ~SwLabFormatPage() override;
 
-    static VclPtr<SfxTabPage> Create(vcl::Window* pParent, const SfxItemSet* rSet);
+    static VclPtr<SfxTabPage> Create(TabPageParent pParent, const SfxItemSet* rSet);
 
     virtual void ActivatePage(const SfxItemSet& rSet) override;
-    virtual sfxpg DeactivatePage(SfxItemSet* pSet = nullptr) override;
+    virtual DeactivateRC DeactivatePage(SfxItemSet* pSet) override;
             void FillItem(SwLabItem& rItem);
     virtual bool FillItemSet(SfxItemSet* rSet) override;
     virtual void Reset(const SfxItemSet* rSet) override;
 
-    SwLabDlg* GetParentSwLabDlg() {return static_cast<SwLabDlg*>(GetParentDialog());}
+    SwLabDlg* GetParentSwLabDlg() {return static_cast<SwLabDlg*>(GetDialogController());}
 };
 
-class SwSaveLabelDlg : public ModalDialog
+class SwSaveLabelDlg : public weld::GenericDialogController
 {
-    VclPtr<ComboBox>   m_pMakeCB;
-    VclPtr<Edit>       m_pTypeED;
-    VclPtr<OKButton>   m_pOKPB;
-
     bool        bSuccess;
-    VclPtr<SwLabFormatPage>   pLabPage;
-    SwLabRec&       rLabRec;
+    SwLabDlg*   m_pLabDialog;
+    SwLabRec&   rLabRec;
 
-    DECL_LINK_TYPED(OkHdl, Button*, void);
-    DECL_LINK_TYPED(ModifyHdl, Edit&, void);
+    std::unique_ptr<weld::ComboBox> m_xMakeCB;
+    std::unique_ptr<weld::Entry>        m_xTypeED;
+    std::unique_ptr<weld::Button>       m_xOKPB;
+
+    DECL_LINK(OkHdl, weld::Button&, void);
+    DECL_LINK(ModifyEntryHdl, weld::Entry&, void);
+    DECL_LINK(ModifyComboHdl, weld::ComboBox&, void);
+
+    void Modify();
 
 public:
-    SwSaveLabelDlg(SwLabFormatPage* pParent, SwLabRec& rRec);
-    virtual ~SwSaveLabelDlg();
-    virtual void dispose() override;
+    SwSaveLabelDlg(SwLabDlg* pParent, SwLabRec& rRec);
+    virtual ~SwSaveLabelDlg() override;
 
     void SetLabel(const OUString& rMake, const OUString& rType)
     {
-        m_pMakeCB->SetText(rMake);
-        m_pTypeED->SetText(rType);
+        m_xMakeCB->set_entry_text(rMake);
+        m_xTypeED->set_text(rType);
     }
     bool GetLabel(SwLabItem& rItem);
 };

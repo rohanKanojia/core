@@ -57,26 +57,21 @@
  * @file
  * Table style.
  ************************************************************************/
-#include "xftablestyle.hxx"
-#include "xfbgimage.hxx"
+#include <xfilter/xftablestyle.hxx>
+#include <xfilter/xfbgimage.hxx>
 
 XFTableStyle::XFTableStyle()
-{
-    m_fWidth = 2;
-    m_eAlign = enumXFAlignStart;
-    m_pBGImage = nullptr;
-}
+    : m_fWidth(2)
+    , m_eAlign(enumXFAlignStart)
+{}
 
 XFTableStyle::~XFTableStyle()
 {
-    delete m_pBGImage;
 }
 
-void    XFTableStyle::SetBackImage(XFBGImage *pImage)
+void    XFTableStyle::SetBackImage(std::unique_ptr<XFBGImage>& rImage)
 {
-    delete m_pBGImage;
-
-    m_pBGImage = pImage;
+    m_pBGImage = std::move(rImage);
 }
 
 enumXFStyle XFTableStyle::GetStyleFamily()

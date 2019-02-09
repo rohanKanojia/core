@@ -25,6 +25,8 @@
 #include <vcl/cursor.hxx>
 #include <vcl/idle.hxx>
 
+#include <cstddef>
+#include <limits>
 #include <vector>
 
 class TextNode;
@@ -52,13 +54,6 @@ private:
     sal_uInt8       nKind;
     bool            bRightToLeft;
 
-                TETextPortion()
-                    : nLen {0}
-                    , nWidth {-1}
-                    , nKind {PORTIONKIND_TEXT}
-                    , bRightToLeft {false}
-                {}
-
 public:
                 TETextPortion( sal_Int32 nL )
                     : nLen {nL}
@@ -74,24 +69,41 @@ public:
     bool            IsRightToLeft() const       { return bRightToLeft; }
 };
 
-class TETextPortionList : public std::vector<TETextPortion*>
+class TETextPortionList
 {
+private:
+    std::vector<std::unique_ptr<TETextPortion>> maPortions;
+
 public:
+    static constexpr auto npos = std::numeric_limits<std::size_t>::max();
+
     TETextPortionList();
     ~TETextPortionList();
 
+    TETextPortion* operator[]( std::size_t nPos );
+    std::vector<std::unique_ptr<TETextPortion>>::iterator begin();
+    std::vector<std::unique_ptr<TETextPortion>>::const_iterator begin() const;
+    std::vector<std::unique_ptr<TETextPortion>>::iterator end();
+    std::vector<std::unique_ptr<TETextPortion>>::const_iterator end() const;
+    bool empty() const;
+    std::size_t size() const;
+    std::vector<std::unique_ptr<TETextPortion>>::iterator erase( const std::vector<std::unique_ptr<TETextPortion>>::iterator& aIter );
+    std::vector<std::unique_ptr<TETextPortion>>::iterator insert( const std::vector<std::unique_ptr<TETextPortion>>::iterator& aIter,
+                                                  std::unique_ptr<TETextPortion> pTP );
+    void push_back( std::unique_ptr<TETextPortion> pTP );
+
     void    Reset();
-    sal_uInt16  FindPortion( sal_Int32 nCharPos, sal_Int32& rPortionStart, bool bPreferStartingPortion = false );
-    void    DeleteFromPortion( sal_uInt16 nDelFrom );
+    std::size_t FindPortion( sal_Int32 nCharPos, sal_Int32& rPortionStart, bool bPreferStartingPortion = false );
+    void    DeleteFromPortion( std::size_t nDelFrom );
 };
 
 struct TEWritingDirectionInfo
 {
-    sal_uInt8    nType;
-    sal_Int32    nStartPos;
-    sal_Int32    nEndPos;
-    TEWritingDirectionInfo( sal_uInt8 Type, sal_Int32 Start, sal_Int32 End )
-        : nType {Type}
+    bool const         bLeftToRight;
+    sal_Int32 const    nStartPos;
+    sal_Int32 const    nEndPos;
+    TEWritingDirectionInfo( bool LeftToRight, sal_Int32 Start, sal_Int32 End )
+        : bLeftToRight {LeftToRight}
         , nStartPos {Start}
         , nEndPos {End}
     {}
@@ -102,12 +114,12 @@ class TextLine
 private:
     sal_Int32           mnStart;
     sal_Int32           mnEnd;
-    sal_uInt16          mnStartPortion;
-    sal_uInt16          mnEndPortion;
+    std::size_t         mnStartPortion;
+    std::size_t         mnEndPortion;
 
     short               mnStartX;
 
-    bool                mbInvalid;  // fuer geschickte Formatierung/Ausgabe
+    bool                mbInvalid;  // for clever formatting/output
 
 public:
                     TextLine()
@@ -124,19 +136,15 @@ public:
 
     void            SetStart( sal_Int32 n )         { mnStart = n; }
     sal_Int32       GetStart() const                { return mnStart; }
-    sal_Int32&      GetStart()                      { return mnStart; }
 
     void            SetEnd( sal_Int32 n )           { mnEnd = n; }
     sal_Int32       GetEnd() const                  { return mnEnd; }
-    sal_Int32&      GetEnd()                        { return mnEnd; }
 
-    void            SetStartPortion( sal_uInt16 n )     { mnStartPortion = n; }
-    sal_uInt16      GetStartPortion() const         { return mnStartPortion; }
-    sal_uInt16&     GetStartPortion()               { return mnStartPortion; }
+    void            SetStartPortion( std::size_t n ) { mnStartPortion = n; }
+    std::size_t     GetStartPortion() const         { return mnStartPortion; }
 
-    void            SetEndPortion( sal_uInt16 n )       { mnEndPortion = n; }
-    sal_uInt16      GetEndPortion() const           { return mnEndPortion; }
-    sal_uInt16&     GetEndPortion()                 { return mnEndPortion; }
+    void            SetEndPortion( std::size_t n )  { mnEndPortion = n; }
+    std::size_t     GetEndPortion() const           { return mnEndPortion; }
 
     sal_Int32       GetLen() const                  { return mnEnd - mnStart; }
 
@@ -162,7 +170,7 @@ inline bool TextLine::operator == ( const TextLine& rLine ) const
 class TEParaPortion
 {
 private:
-    TextNode*               mpNode;
+    TextNode* const         mpNode;
 
     std::vector<TextLine>   maLines;
     TETextPortionList       maTextPortions;
@@ -187,7 +195,7 @@ public:
     void                SetValid()                  { mbInvalid = false; mbSimple = true;}
 
     void                MarkInvalid( sal_Int32 nStart, sal_Int32 nDiff );
-    void                MarkSelectionInvalid( sal_Int32 nStart, sal_Int32 nEnd );
+    void                MarkSelectionInvalid( sal_Int32 nStart );
 
     sal_Int32           GetInvalidPosStart() const  { return mnInvalidPosStart; }
     sal_Int32           GetInvalidDiff() const      { return mnInvalidDiff; }
@@ -197,22 +205,22 @@ public:
     TETextPortionList&  GetTextPortions()           { return maTextPortions; }
     std::vector<TEWritingDirectionInfo>& GetWritingDirectionInfos() { return maWritingDirectionInfos; }
 
-    sal_uInt16          GetLineNumber( sal_Int32 nIndex, bool bInclEnd );
+    std::vector<TextLine>::size_type GetLineNumber( sal_Int32 nIndex, bool bInclEnd );
     void                CorrectValuesBehindLastFormattedLine( sal_uInt16 nLastFormattedLine );
 };
 
 class TEParaPortions
 {
 private:
-    std::vector<TEParaPortion*> mvData;
+    std::vector<std::unique_ptr<TEParaPortion>> mvData;
 
 public:
                     TEParaPortions() : mvData() {}
                     ~TEParaPortions();
 
     sal_uInt32      Count() const { return static_cast<sal_uInt32>(mvData.size()); }
-    TEParaPortion*  GetObject( sal_uInt32 nIndex ) { return mvData[nIndex]; }
-    void            Insert( TEParaPortion* pObject, sal_uInt32 nPos ) { mvData.insert( mvData.begin()+nPos, pObject ); }
+    TEParaPortion*  GetObject( sal_uInt32 nIndex ) { return mvData[nIndex].get(); }
+    void            Insert( TEParaPortion* pObject, sal_uInt32 nPos ) { mvData.emplace( mvData.begin()+nPos, pObject ); }
     void            Remove( sal_uInt32 nPos ) { mvData.erase( mvData.begin()+nPos ); }
 };
 
@@ -228,7 +236,7 @@ public:
 
     virtual void    CreateAnchor() override;
 
-    virtual bool    SetCursorAtPoint( const Point& rPointPixel, bool bDontSelectAtCursor = false ) override;
+    virtual void    SetCursorAtPoint( const Point& rPointPixel, bool bDontSelectAtCursor = false ) override;
 
     virtual bool    IsSelectionAtPoint( const Point& rPointPixel ) override;
     virtual void    DeselectAll() override;
@@ -245,7 +253,7 @@ private:
 
 public:
                 IdleFormatter();
-                virtual ~IdleFormatter();
+                virtual ~IdleFormatter() override;
 
     void        DoIdleFormat( TextView* pV, sal_uInt16 nMaxRestarts );
     void        ForceTimeout();

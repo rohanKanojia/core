@@ -17,15 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "comphelper/anytostring.hxx"
-#include "cppuhelper/exc_hlp.hxx"
+#include <cppuhelper/exc_hlp.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
-#include <com/sun/star/animations/XTimeContainer.hpp>
-#include <com/sun/star/animations/XAnimationNode.hpp>
-#include <com/sun/star/animations/XAnimate.hpp>
-
-#include "oox/core/fragmenthandler.hxx"
+#include <oox/core/fragmenthandler.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 #include <oox/ppt/pptfilterhelpers.hxx>
 
 #include "commonbehaviorcontext.hxx"
@@ -37,16 +36,15 @@
 using namespace ::oox::core;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::xml::sax;
-using namespace ::com::sun::star::animations;
 
 namespace oox { namespace ppt {
 
-    CommonBehaviorContext::CommonBehaviorContext( FragmentHandler2& rParent,
-            const Reference< XFastAttributeList >& xAttribs,
-            const TimeNodePtr & pNode )
-        : TimeNodeContext( rParent, PPT_TOKEN( cBhvr ), xAttribs, pNode )
+    CommonBehaviorContext::CommonBehaviorContext( FragmentHandler2 const & rParent,
+            const TimeNodePtr & pNode)
+        : FragmentHandler2(rParent)
             , mbInAttrList( false )
             , mbIsInAttrName( false )
+            , mpNode(pNode)
     {
     }
 
@@ -63,17 +61,16 @@ namespace oox { namespace ppt {
             if( !maAttributes.empty() )
             {
                 OUStringBuffer sAttributes;
-                std::list< Attribute >::const_iterator iter;
-                for(iter = maAttributes.begin(); iter != maAttributes.end(); ++iter)
+                for (auto const& attribute : maAttributes)
                 {
                     if( !sAttributes.isEmpty() )
                     {
                         sAttributes.append( ";" );
                     }
-                    sAttributes.append( iter->name );
+                    sAttributes.append( attribute.name );
                 }
                 OUString sTmp( sAttributes.makeStringAndClear() );
-                mpNode->getNodeProperties()[ NP_ATTRIBUTENAME ] = makeAny( sTmp );
+                mpNode->getNodeProperties()[ NP_ATTRIBUTENAME ] <<= sTmp;
             }
             break;
         }

@@ -19,31 +19,24 @@
 
 #include "Axis.hxx"
 #include "GridProperties.hxx"
-#include "macros.hxx"
-#include "CharacterProperties.hxx"
-#include "LinePropertiesHelper.hxx"
-#include "UserDefinedProperties.hxx"
-#include "PropertyHelper.hxx"
-#include "ContainerHelper.hxx"
-#include "CloneHelper.hxx"
-#include "AxisHelper.hxx"
-#include "EventListenerHelper.hxx"
+#include <CharacterProperties.hxx>
+#include <LinePropertiesHelper.hxx>
+#include <UserDefinedProperties.hxx>
+#include <PropertyHelper.hxx>
+#include <CloneHelper.hxx>
+#include <AxisHelper.hxx>
+#include <EventListenerHelper.hxx>
+#include <ModifyListenerHelper.hxx>
 #include <unonames.hxx>
 
 #include <com/sun/star/chart/ChartAxisArrangeOrderType.hpp>
 #include <com/sun/star/chart/ChartAxisLabelPosition.hpp>
 #include <com/sun/star/chart/ChartAxisMarkPosition.hpp>
 #include <com/sun/star/chart/ChartAxisPosition.hpp>
-#include <com/sun/star/chart2/AxisType.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
-#include <com/sun/star/lang/Locale.hpp>
-#include <com/sun/star/drawing/LineStyle.hpp>
-#include <com/sun/star/drawing/LineDash.hpp>
-#include <com/sun/star/drawing/LineJoint.hpp>
 #include <com/sun/star/awt/Size.hpp>
-#include <rtl/uuid.h>
-#include <cppuhelper/queryinterface.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <tools/diagnose_ex.h>
 
 #include <vector>
 #include <algorithm>
@@ -58,8 +51,6 @@ using ::osl::MutexGuard;
 
 namespace
 {
-
-static const char lcl_aServiceName[] = "com.sun.star.comp.chart2.Axis";
 
 enum
 {
@@ -88,138 +79,119 @@ enum
 };
 
 void lcl_AddPropertiesToVector(
-    ::std::vector< Property > & rOutProperties )
+    std::vector< Property > & rOutProperties )
 {
-    rOutProperties.push_back(
-        Property( "Show",
+    rOutProperties.emplace_back( "Show",
                   PROP_AXIS_SHOW,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "CrossoverPosition",
+    rOutProperties.emplace_back( "CrossoverPosition",
                   PROP_AXIS_CROSSOVER_POSITION,
                   cppu::UnoType<css::chart::ChartAxisPosition>::get(),
-                  beans::PropertyAttribute::MAYBEDEFAULT ));
+                  beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "CrossoverValue",
+    rOutProperties.emplace_back( "CrossoverValue",
                   PROP_AXIS_CROSSOVER_VALUE,
                   cppu::UnoType<double>::get(),
-                  beans::PropertyAttribute::MAYBEVOID ));
+                  beans::PropertyAttribute::MAYBEVOID );
 
-    rOutProperties.push_back(
-        Property( "DisplayLabels",
+    rOutProperties.emplace_back( "DisplayLabels",
                   PROP_AXIS_DISPLAY_LABELS,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( CHART_UNONAME_NUMFMT,
+    rOutProperties.emplace_back( CHART_UNONAME_NUMFMT,
                   PROP_AXIS_NUMBERFORMAT,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( CHART_UNONAME_LINK_TO_SRC_NUMFMT,
+    rOutProperties.emplace_back( CHART_UNONAME_LINK_TO_SRC_NUMFMT,
                   PROP_AXIS_LINK_NUMBERFORMAT_TO_SOURCE,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "LabelPosition",
+    rOutProperties.emplace_back( "LabelPosition",
                   PROP_AXIS_LABEL_POSITION,
                   cppu::UnoType<css::chart::ChartAxisLabelPosition>::get(),
-                  beans::PropertyAttribute::MAYBEDEFAULT ));
+                  beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "TextRotation",
+    rOutProperties.emplace_back( "TextRotation",
                   PROP_AXIS_TEXT_ROTATION,
                   cppu::UnoType<double>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "TextBreak",
+    rOutProperties.emplace_back( "TextBreak",
                   PROP_AXIS_TEXT_BREAK,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "TextOverlap",
+    rOutProperties.emplace_back( "TextOverlap",
                   PROP_AXIS_TEXT_OVERLAP,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "StackCharacters",
+    rOutProperties.emplace_back( "StackCharacters",
                   PROP_AXIS_TEXT_STACKED,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "ArrangeOrder",
+    rOutProperties.emplace_back( "ArrangeOrder",
                   PROP_AXIS_TEXT_ARRANGE_ORDER,
                   cppu::UnoType<css::chart::ChartAxisArrangeOrderType>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "ReferencePageSize",
+    rOutProperties.emplace_back( "ReferencePageSize",
                   PROP_AXIS_REFERENCE_DIAGRAM_SIZE,
                   cppu::UnoType<awt::Size>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEVOID ));
+                  | beans::PropertyAttribute::MAYBEVOID );
 
-    rOutProperties.push_back(
-        Property( "MajorTickmarks",
+    rOutProperties.emplace_back( "MajorTickmarks",
                   PROP_AXIS_MAJOR_TICKMARKS,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
-    rOutProperties.push_back(
-        Property( "MinorTickmarks",
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( "MinorTickmarks",
                   PROP_AXIS_MINOR_TICKMARKS,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
-    rOutProperties.push_back(
-        Property( "MarkPosition",
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( "MarkPosition",
                   PROP_AXIS_MARK_POSITION,
                   cppu::UnoType<css::chart::ChartAxisMarkPosition>::get(),
-                  beans::PropertyAttribute::MAYBEDEFAULT ));
+                  beans::PropertyAttribute::MAYBEDEFAULT );
 
     //Properties for display units:
-    rOutProperties.push_back(
-        Property( "DisplayUnits",
+    rOutProperties.emplace_back( "DisplayUnits",
                   PROP_AXIS_DISPLAY_UNITS,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
     //Properties for labels:
-    rOutProperties.push_back(
-        Property( "BuiltInUnit",
+    rOutProperties.emplace_back( "BuiltInUnit",
                   PROP_AXIS_BUILTINUNIT,
                   cppu::UnoType<OUString>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
     // Compatibility option: starting from LibreOffice 5.1 the rotated
     // layout is preferred to staggering for axis labels.
-    rOutProperties.push_back(
-        Property( "TryStaggeringFirst",
+    rOutProperties.emplace_back( "TryStaggeringFirst",
                   PROP_AXIS_TRY_STAGGERING_FIRST,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
 }
 
@@ -276,13 +248,13 @@ struct StaticAxisInfoHelper_Initializer
 private:
     static Sequence< Property > lcl_GetPropertySequence()
     {
-        ::std::vector< css::beans::Property > aProperties;
+        std::vector< css::beans::Property > aProperties;
         lcl_AddPropertiesToVector( aProperties );
         ::chart::CharacterProperties::AddPropertiesToVector( aProperties );
         ::chart::LinePropertiesHelper::AddPropertiesToVector( aProperties );
         ::chart::UserDefinedProperties::AddPropertiesToVector( aProperties );
 
-        ::std::sort( aProperties.begin(), aProperties.end(),
+        std::sort( aProperties.begin(), aProperties.end(),
                      ::chart::PropertyNameLess() );
 
         return comphelper::containerToSequence( aProperties );
@@ -312,17 +284,14 @@ typedef uno::Reference< beans::XPropertySet > lcl_tSubGridType;
 void lcl_CloneSubGrids(
     const uno::Sequence< lcl_tSubGridType > & rSource, uno::Sequence< lcl_tSubGridType > & rDestination )
 {
-    const lcl_tSubGridType * pBegin = rSource.getConstArray();
-    const lcl_tSubGridType * pEnd = pBegin + rSource.getLength();
-
     rDestination.realloc( rSource.getLength());
     lcl_tSubGridType * pDestBegin = rDestination.getArray();
     lcl_tSubGridType * pDestEnd   = pDestBegin + rDestination.getLength();
     lcl_tSubGridType * pDestIt    = pDestBegin;
 
-    for( const lcl_tSubGridType * pIt = pBegin; pIt != pEnd; ++pIt )
+    for( Reference< beans::XPropertySet > const & i : rSource )
     {
-        Reference< beans::XPropertySet > xSubGrid( *pIt );
+        Reference< beans::XPropertySet > xSubGrid( i );
         if( xSubGrid.is())
         {
             Reference< util::XCloneable > xCloneable( xSubGrid, uno::UNO_QUERY );
@@ -335,7 +304,6 @@ void lcl_CloneSubGrids(
         ++pDestIt;
     }
     OSL_ASSERT( pDestIt == pDestEnd );
-    (void)(pDestEnd); // avoid warning
 }
 
 } // anonymous namespace
@@ -343,7 +311,7 @@ void lcl_CloneSubGrids(
 namespace chart
 {
 
-Axis::Axis( Reference< uno::XComponentContext > const & /* xContext */ ) :
+Axis::Axis() :
         ::property::OPropertySet( m_aMutex ),
         m_xModifyEventForwarder( ModifyListenerHelper::createModifyEventForwarder()),
         m_aScaleData( AxisHelper::createDefaultScale() ),
@@ -353,7 +321,7 @@ Axis::Axis( Reference< uno::XComponentContext > const & /* xContext */ ) :
 {
     osl_atomic_increment(&m_refCount);
     setFastPropertyValue_NoBroadcast(
-        ::chart::LinePropertiesHelper::PROP_LINE_COLOR, uno::makeAny( static_cast< sal_Int32 >( 0xb3b3b3 ) ) );  // gray30
+        ::chart::LinePropertiesHelper::PROP_LINE_COLOR, uno::Any( static_cast< sal_Int32 >( 0xb3b3b3 ) ) );  // gray30
 
     if( m_xGrid.is())
         ModifyListenerHelper::addListener( m_xGrid, m_xModifyEventForwarder );
@@ -366,12 +334,12 @@ Axis::Axis( Reference< uno::XComponentContext > const & /* xContext */ ) :
 
 Axis::Axis( const Axis & rOther ) :
         MutexContainer(),
-        impl::Axis_Base(),
+        impl::Axis_Base(rOther),
         ::property::OPropertySet( rOther, m_aMutex ),
     m_xModifyEventForwarder( ModifyListenerHelper::createModifyEventForwarder()),
     m_aScaleData( rOther.m_aScaleData )
 {
-    m_xGrid.set( CloneHelper::CreateRefClone< Reference< beans::XPropertySet > >()( rOther.m_xGrid ));
+    m_xGrid.set( CloneHelper::CreateRefClone< beans::XPropertySet >()( rOther.m_xGrid ));
     if( m_xGrid.is())
         ModifyListenerHelper::addListener( m_xGrid, m_xModifyEventForwarder );
 
@@ -382,13 +350,13 @@ Axis::Axis( const Axis & rOther ) :
         lcl_CloneSubGrids( rOther.m_aSubGridProperties, m_aSubGridProperties );
     ModifyListenerHelper::addListenerToAllSequenceElements( m_aSubGridProperties, m_xModifyEventForwarder );
 
-    m_xTitle.set( CloneHelper::CreateRefClone< Reference< chart2::XTitle > >()( rOther.m_xTitle ));
+    m_xTitle.set( CloneHelper::CreateRefClone< chart2::XTitle >()( rOther.m_xTitle ));
     if( m_xTitle.is())
         ModifyListenerHelper::addListener( m_xTitle, m_xModifyEventForwarder );
 }
 
 // late initialization to call after copy-constructing
-void Axis::Init( const Axis & /* rOther */ )
+void Axis::Init()
 {
     if( m_aScaleData.Categories.is())
         EventListenerHelper::addListener( m_aScaleData.Categories, this );
@@ -407,9 +375,9 @@ Axis::~Axis()
             m_aScaleData.Categories.set(nullptr);
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     m_aSubGridProperties.realloc(0);
@@ -453,16 +421,14 @@ void Axis::AllocateSubGrids()
         }
     }
     //don't keep the mutex locked while calling out
-    std::vector< Reference< beans::XPropertySet > >::iterator aBroadcaster = aOldBroadcasters.begin();
-    for( ;aBroadcaster != aOldBroadcasters.end(); ++aBroadcaster )
-        ModifyListenerHelper::removeListener( *aBroadcaster, xModifyEventForwarder );
-    for( aBroadcaster = aNewBroadcasters.begin(); aBroadcaster != aNewBroadcasters.end(); ++aBroadcaster )
-        ModifyListenerHelper::addListener( *aBroadcaster, xModifyEventForwarder );
+    for (auto const& oldBroadcaster : aOldBroadcasters)
+        ModifyListenerHelper::removeListener(oldBroadcaster, xModifyEventForwarder );
+    for (auto const& newBroadcaster : aNewBroadcasters)
+        ModifyListenerHelper::addListener( newBroadcaster, xModifyEventForwarder );
 }
 
 // ____ XAxis ____
 void SAL_CALL Axis::setScaleData( const chart2::ScaleData& rScaleData )
-    throw (uno::RuntimeException, std::exception)
 {
     Reference< util::XModifyListener > xModifyEventForwarder;
     Reference< lang::XEventListener > xEventListener;
@@ -492,27 +458,23 @@ void SAL_CALL Axis::setScaleData( const chart2::ScaleData& rScaleData )
 }
 
 chart2::ScaleData SAL_CALL Axis::getScaleData()
-    throw (uno::RuntimeException, std::exception)
 {
     MutexGuard aGuard( m_aMutex );
     return m_aScaleData;
 }
 
 Reference< beans::XPropertySet > SAL_CALL Axis::getGridProperties()
-    throw (uno::RuntimeException, std::exception)
 {
     MutexGuard aGuard( m_aMutex );
     return m_xGrid;
 }
 Sequence< Reference< beans::XPropertySet > > SAL_CALL Axis::getSubGridProperties()
-    throw (uno::RuntimeException, std::exception)
 {
     MutexGuard aGuard( m_aMutex );
     return m_aSubGridProperties;
 }
 
 Sequence< Reference< beans::XPropertySet > > SAL_CALL Axis::getSubTickProperties()
-    throw (uno::RuntimeException, std::exception)
 {
     OSL_FAIL( "Not implemented yet" );
     return Sequence< Reference< beans::XPropertySet > >();
@@ -520,14 +482,12 @@ Sequence< Reference< beans::XPropertySet > > SAL_CALL Axis::getSubTickProperties
 
 // ____ XTitled ____
 Reference< chart2::XTitle > SAL_CALL Axis::getTitleObject()
-    throw (uno::RuntimeException, std::exception)
 {
     MutexGuard aGuard( GetMutex() );
     return m_xTitle;
 }
 
 void SAL_CALL Axis::setTitleObject( const Reference< chart2::XTitle >& xNewTitle )
-    throw (uno::RuntimeException, std::exception)
 {
     Reference< util::XModifyListener > xModifyEventForwarder;
     Reference< chart2::XTitle > xOldTitle;
@@ -548,55 +508,50 @@ void SAL_CALL Axis::setTitleObject( const Reference< chart2::XTitle >& xNewTitle
 
 // ____ XCloneable ____
 Reference< util::XCloneable > SAL_CALL Axis::createClone()
-    throw (uno::RuntimeException, std::exception)
 {
     Axis * pNewAxis( new Axis( *this ));
     // hold a reference to the clone
     Reference< util::XCloneable > xResult( pNewAxis );
     // do initialization that uses uno references to the clone
-    pNewAxis->Init( *this );
+    pNewAxis->Init();
     return xResult;
 }
 
 // ____ XModifyBroadcaster ____
 void SAL_CALL Axis::addModifyListener( const Reference< util::XModifyListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
         Reference< util::XModifyBroadcaster > xBroadcaster( m_xModifyEventForwarder, uno::UNO_QUERY_THROW );
         xBroadcaster->addModifyListener( aListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception &)
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 void SAL_CALL Axis::removeModifyListener( const Reference< util::XModifyListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
         Reference< util::XModifyBroadcaster > xBroadcaster( m_xModifyEventForwarder, uno::UNO_QUERY_THROW );
         xBroadcaster->removeModifyListener( aListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 // ____ XModifyListener ____
 void SAL_CALL Axis::modified( const lang::EventObject& aEvent )
-    throw (uno::RuntimeException, std::exception)
 {
     m_xModifyEventForwarder->modified( aEvent );
 }
 
 // ____ XEventListener (base of XModifyListener) ____
 void SAL_CALL Axis::disposing( const lang::EventObject& Source )
-    throw (uno::RuntimeException, std::exception)
 {
     if( Source.Source == m_aScaleData.Categories )
         m_aScaleData.Categories = nullptr;
@@ -615,7 +570,6 @@ void Axis::fireModifyEvent()
 
 // ____ OPropertySet ____
 uno::Any Axis::GetDefaultValue( sal_Int32 nHandle ) const
-    throw (beans::UnknownPropertyException, uno::RuntimeException)
 {
     const tPropertyValueMap& rStaticDefaults = *StaticAxisDefaults::get();
     tPropertyValueMap::const_iterator aFound( rStaticDefaults.find( nHandle ) );
@@ -631,17 +585,8 @@ uno::Any Axis::GetDefaultValue( sal_Int32 nHandle ) const
 
 // ____ XPropertySet ____
 Reference< beans::XPropertySetInfo > SAL_CALL Axis::getPropertySetInfo()
-    throw (uno::RuntimeException, std::exception)
 {
     return *StaticAxisInfo::get();
-}
-
-Sequence< OUString > Axis::getSupportedServiceNames_Static()
-{
-    Sequence< OUString > aServices( 2 );
-    aServices[ 0 ] = "com.sun.star.chart2.Axis";
-    aServices[ 1 ] = "com.sun.star.beans.PropertySet";
-    return aServices;
 }
 
 using impl::Axis_Base;
@@ -651,35 +596,29 @@ IMPLEMENT_FORWARD_XTYPEPROVIDER2( Axis, Axis_Base, ::property::OPropertySet )
 
 // implement XServiceInfo methods basing upon getSupportedServiceNames_Static
 OUString SAL_CALL Axis::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getImplementationName_Static();
-}
-
-OUString Axis::getImplementationName_Static()
-{
-    return OUString(lcl_aServiceName);
+    return OUString("com.sun.star.comp.chart2.Axis");
 }
 
 sal_Bool SAL_CALL Axis::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL Axis::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return {
+        "com.sun.star.chart2.Axis",
+        "com.sun.star.beans.PropertySet" };
 }
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
-com_sun_star_comp_chart2_Axis_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+com_sun_star_comp_chart2_Axis_get_implementation(css::uno::XComponentContext *,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new ::chart::Axis(context));
+    return cppu::acquire(new ::chart::Axis);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

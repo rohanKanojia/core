@@ -58,10 +58,10 @@
  *  For LWP filter architecture prototype
  ************************************************************************/
 
-#include "lwpobjid.hxx"
-#include "lwpfilehdr.hxx"
-#include "lwpobjfactory.hxx"
-#include "lwpglobalmgr.hxx"
+#include <lwpobjid.hxx>
+#include <lwpfilehdr.hxx>
+#include <lwpobjfactory.hxx>
+#include <lwpglobalmgr.hxx>
 
 LwpObjectID::LwpObjectID()
     :m_nLow(0), m_nHigh(0), m_nIndex(0), m_bIsCompressed(false)
@@ -109,7 +109,7 @@ void LwpObjectID::ReadIndexed(LwpSvStream *pStrm)
         LwpGlobalMgr* pGlobal = LwpGlobalMgr::GetInstance();
         LwpObjectFactory* pFactory = pGlobal->GetLwpObjFactory();
         LwpIndexManager& rIdxMgr = pFactory->GetIndexManager();
-        m_nLow = rIdxMgr.GetObjTime( (sal_uInt16)m_nIndex);
+        m_nLow = rIdxMgr.GetObjTime( static_cast<sal_uInt16>(m_nIndex));
     }
     else
     {
@@ -140,7 +140,7 @@ sal_uInt32 LwpObjectID::ReadIndexed(LwpObjectStream *pStrm)
         LwpGlobalMgr* pGlobal = LwpGlobalMgr::GetInstance();
         LwpObjectFactory* pFactory = pGlobal->GetLwpObjFactory();
         LwpIndexManager& rIdxMgr = pFactory->GetIndexManager();
-        m_nLow = rIdxMgr.GetObjTime( (sal_uInt16)m_nIndex);
+        m_nLow = rIdxMgr.GetObjTime( static_cast<sal_uInt16>(m_nIndex));
     }
     else
         m_nLow = pStrm->QuickReaduInt32();
@@ -153,7 +153,7 @@ sal_uInt32 LwpObjectID::ReadIndexed(LwpObjectStream *pStrm)
  *          else    lowid equals to the lowid of previous low id
  *              and high id = the high id of previous id + diff +1
 */
-void LwpObjectID::ReadCompressed( LwpObjectStream* pObj, LwpObjectID &prev )
+void LwpObjectID::ReadCompressed( LwpObjectStream* pObj, LwpObjectID const &prev )
 {
     sal_uInt8 diff = pObj->QuickReaduInt8();
 

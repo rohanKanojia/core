@@ -50,11 +50,11 @@ public:
     void                ReInitFromComponent();
 
     sal_uInt16          GetRegionCount() const;
-    const OUString&     GetRegionName(sal_uInt16 nIdx) const;                   //dv!
+    OUString            GetRegionName(sal_uInt16 nIdx) const;                   //dv!
     OUString            GetFullRegionName(sal_uInt16 nIdx) const;
 
     sal_uInt16          GetCount(sal_uInt16 nRegion) const;
-    const OUString&     GetName(sal_uInt16 nRegion, sal_uInt16 nIdx) const;         //dv!
+    OUString            GetName(sal_uInt16 nRegion, sal_uInt16 nIdx) const;         //dv!
     OUString            GetPath(sal_uInt16 nRegion, sal_uInt16 nIdx) const;
 
     // Allows to retrieve the target template URL from the UCB
@@ -62,11 +62,8 @@ public:
                                                          const OUString& aTitle );
 
     // Convert a resource string - a template name - to its localised pair
-    // if it exists in templatelocnames.src
-    static OUString ConvertResourceString(int nSourceResIds,
-                            int nDestResIds,
-                            int nCount,
-                            const OUString& rString);
+    // if it exists in sfx2/inc/strings.hxx
+    static OUString ConvertResourceString(const OUString& rString);
 
     bool            Copy(sal_uInt16 nTargetRegion,
                          sal_uInt16 nTargetIdx,

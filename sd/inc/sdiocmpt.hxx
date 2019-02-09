@@ -21,6 +21,8 @@
 #define INCLUDED_SD_INC_SDIOCMPT_HXX
 
 #include <tools/stream.hxx>
+#include "sddllapi.h"
+
 
 class old_SdrDownCompat
 {
@@ -28,11 +30,10 @@ protected:
     SvStream&                   rStream;
     sal_uInt32                  nSubRecSiz;
     sal_uInt32                  nSubRecPos;
-    StreamMode                  nMode;
+    StreamMode const            nMode;
     bool                        bOpen;
 
 protected:
-    void Read();
     void Write();
 
 public:
@@ -42,15 +43,10 @@ public:
     void  CloseSubRecord();
 };
 
-#include "sddllapi.h"
-
-#define SDIOCOMPAT_VERSIONDONTKNOW (sal_uInt16)0xffff
+#define SDIOCOMPAT_VERSIONDONTKNOW sal_uInt16(0xffff)
 
 class SD_DLLPUBLIC SdIOCompat : public old_SdrDownCompat
 {
-private:
-    sal_uInt16 nVersion;
-
 public:
                 // nNewMode: StreamMode::READ or StreamMode::WRITE
                 // nVer:     specify only when writing

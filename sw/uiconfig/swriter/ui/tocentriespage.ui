@@ -1,8 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.22.1 -->
+<interface domain="sw">
+  <requires lib="gtk+" version="3.18"/>
   <requires lib="LibreOffice" version="1.0"/>
+  <object class="GtkTreeStore" id="liststore1">
+    <columns>
+      <!-- column-name text -->
+      <column type="gchararray"/>
+      <!-- column-name id -->
+      <column type="gchararray"/>
+    </columns>
+  </object>
   <object class="GtkAdjustment" id="adjustment1">
     <property name="upper">19.989999999999998</property>
     <property name="step_increment">0.050000000000000003</property>
@@ -73,12 +81,33 @@
                 <property name="top_padding">6</property>
                 <property name="left_padding">12</property>
                 <child>
-                  <object class="swuilo-SwIdxTreeListBox" id="level:border">
+                  <object class="GtkScrolledWindow">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
-                    <property name="vexpand">True</property>
-                    <child internal-child="selection">
-                      <object class="GtkTreeSelection" id="treeview-selection1"/>
+                    <property name="shadow_type">in</property>
+                    <child>
+                      <object class="GtkTreeView" id="level">
+                        <property name="visible">True</property>
+                        <property name="can_focus">True</property>
+                        <property name="model">liststore1</property>
+                        <property name="headers_visible">False</property>
+                        <property name="headers_clickable">False</property>
+                        <property name="search_column">0</property>
+                        <property name="show_expanders">False</property>
+                        <child internal-child="selection">
+                          <object class="GtkTreeSelection" id="treeview-selection1"/>
+                        </child>
+                        <child>
+                          <object class="GtkTreeViewColumn" id="treeviewcolumn1">
+                            <child>
+                              <object class="GtkCellRendererText" id="cellrenderertext1"/>
+                              <attributes>
+                                <attribute name="text">0</attribute>
+                              </attributes>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
                     </child>
                   </object>
                 </child>
@@ -93,7 +122,7 @@
                   <object class="GtkLabel" id="levelft">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">_Level</property>
+                    <property name="label" translatable="yes" context="tocentriespage|levelft">_Level</property>
                     <property name="use_underline">True</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
@@ -109,7 +138,7 @@
                   <object class="GtkLabel" id="typeft">
                     <property name="can_focus">False</property>
                     <property name="no_show_all">True</property>
-                    <property name="label" translatable="yes">_Type</property>
+                    <property name="label" translatable="yes" context="tocentriespage|typeft">_Type</property>
                     <property name="use_underline">True</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
@@ -165,10 +194,10 @@
                               <object class="GtkLabel" id="label4">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
-                                <property name="xalign">0</property>
-                                <property name="label" translatable="yes">_Structure:</property>
+                                <property name="label" translatable="yes" context="tocentriespage|label4">_Structure:</property>
                                 <property name="use_underline">True</property>
                                 <property name="mnemonic_widget">token</property>
+                                <property name="xalign">0</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -177,7 +206,7 @@
                             </child>
                             <child>
                               <object class="GtkButton" id="all">
-                                <property name="label" translatable="yes">_All</property>
+                                <property name="label" translatable="yes" context="tocentriespage|all">_All</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">True</property>
@@ -189,7 +218,7 @@
                               </packing>
                             </child>
                             <child>
-                              <object class="swuilo-SwTokenWindow" id="token">
+                              <object class="GtkBox" id="token">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
                                 <property name="valign">center</property>
@@ -217,10 +246,10 @@
                               <object class="GtkLabel" id="label5">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
-                                <property name="xalign">0</property>
-                                <property name="label" translatable="yes">Character style:</property>
+                                <property name="label" translatable="yes" context="tocentriespage|label5">Character style:</property>
                                 <property name="use_underline">True</property>
                                 <property name="mnemonic_widget">charstyle</property>
+                                <property name="xalign">0</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -229,7 +258,7 @@
                             </child>
                             <child>
                               <object class="GtkButton" id="edit">
-                                <property name="label" translatable="yes">_Edit...</property>
+                                <property name="label" translatable="yes" context="tocentriespage|edit">_Edit...</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">True</property>
@@ -256,10 +285,10 @@
                               <object class="GtkLabel" id="fillcharft">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
-                                <property name="xalign">0</property>
-                                <property name="label" translatable="yes">Fill character:</property>
+                                <property name="label" translatable="yes" context="tocentriespage|fillcharft">Fill character:</property>
                                 <property name="use_underline">True</property>
                                 <property name="mnemonic_widget">fillchar</property>
+                                <property name="xalign">0</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -276,6 +305,7 @@
                                 <child internal-child="entry">
                                   <object class="GtkEntry" id="comboboxtext-entry">
                                     <property name="can_focus">False</property>
+                                    <property name="activates_default">True</property>
                                   </object>
                                 </child>
                               </object>
@@ -288,10 +318,10 @@
                               <object class="GtkLabel" id="tabstopposft">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
-                                <property name="xalign">0</property>
-                                <property name="label" translatable="yes">Tab stop position:</property>
+                                <property name="label" translatable="yes" context="tocentriespage|tabstopposft">Tab stop position:</property>
                                 <property name="use_underline">True</property>
-                                <property name="mnemonic_widget">tabstoppos:0.00cm</property>
+                                <property name="mnemonic_widget">tabstoppos</property>
+                                <property name="xalign">0</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -299,12 +329,12 @@
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkSpinButton" id="tabstoppos:0.00cm">
+                              <object class="GtkSpinButton" id="tabstoppos">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="halign">start</property>
                                 <property name="hexpand">True</property>
-                                <property name="invisible_char">•</property>
+                                <property name="activates_default">True</property>
                                 <property name="adjustment">adjustment1</property>
                                 <property name="digits">2</property>
                               </object>
@@ -315,7 +345,7 @@
                             </child>
                             <child>
                               <object class="GtkCheckButton" id="alignright">
-                                <property name="label" translatable="yes">Align right</property>
+                                <property name="label" translatable="yes" context="tocentriespage|alignright">Align right</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
@@ -332,10 +362,10 @@
                               <object class="GtkLabel" id="chapterentryft">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
-                                <property name="xalign">0</property>
-                                <property name="label" translatable="yes">Chapter entry:</property>
+                                <property name="label" translatable="yes" context="tocentriespage|chapterentryft">Chapter entry:</property>
                                 <property name="use_underline">True</property>
                                 <property name="mnemonic_widget">chapterentry</property>
+                                <property name="xalign">0</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -349,9 +379,9 @@
                                 <property name="valign">center</property>
                                 <property name="hexpand">True</property>
                                 <items>
-                                  <item translatable="yes">Number range only</item>
-                                  <item translatable="yes">Description only</item>
-                                  <item translatable="yes">Number range and description</item>
+                                  <item translatable="yes" context="tocentriespage|chapterentry">Number range only</item>
+                                  <item translatable="yes" context="tocentriespage|chapterentry">Description only</item>
+                                  <item translatable="yes" context="tocentriespage|chapterentry">Number range and description</item>
                                 </items>
                               </object>
                               <packing>
@@ -363,10 +393,10 @@
                               <object class="GtkLabel" id="entryoutlinelevelft">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
-                                <property name="xalign">0</property>
-                                <property name="label" translatable="yes">Evaluate up to level:</property>
+                                <property name="label" translatable="yes" context="tocentriespage|entryoutlinelevelft">Evaluate up to level:</property>
                                 <property name="use_underline">True</property>
                                 <property name="mnemonic_widget">entryoutlinelevel</property>
+                                <property name="xalign">0</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -379,7 +409,7 @@
                                 <property name="can_focus">True</property>
                                 <property name="halign">start</property>
                                 <property name="hexpand">True</property>
-                                <property name="invisible_char">•</property>
+                                <property name="activates_default">True</property>
                                 <property name="adjustment">adjustment2</property>
                               </object>
                               <packing>
@@ -391,10 +421,10 @@
                               <object class="GtkLabel" id="numberformatft">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
-                                <property name="xalign">0</property>
-                                <property name="label" translatable="yes">Format:</property>
+                                <property name="label" translatable="yes" context="tocentriespage|numberformatft">Format:</property>
                                 <property name="use_underline">True</property>
                                 <property name="mnemonic_widget">numberformat</property>
+                                <property name="xalign">0</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -408,8 +438,8 @@
                                 <property name="valign">center</property>
                                 <property name="hexpand">True</property>
                                 <items>
-                                  <item translatable="yes">Number</item>
-                                  <item translatable="yes">Number without separator</item>
+                                  <item translatable="yes" context="tocentriespage|numberformat">Number</item>
+                                  <item translatable="yes" context="tocentriespage|numberformat">Number without separator</item>
                                 </items>
                               </object>
                               <packing>
@@ -461,7 +491,7 @@
                                 <property name="layout_style">spread</property>
                                 <child>
                                   <object class="GtkButton" id="insert">
-                                    <property name="label" translatable="yes">_Insert</property>
+                                    <property name="label" translatable="yes" context="tocentriespage|insert">_Insert</property>
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">True</property>
@@ -475,7 +505,7 @@
                                 </child>
                                 <child>
                                   <object class="GtkButton" id="remove">
-                                    <property name="label" translatable="yes">_Remove</property>
+                                    <property name="label" translatable="yes" context="tocentriespage|remove">_Remove</property>
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">True</property>
@@ -489,7 +519,7 @@
                                 </child>
                                 <child>
                                   <object class="GtkButton" id="chapterno">
-                                    <property name="label" translatable="yes">Chapter No.</property>
+                                    <property name="label" translatable="yes" context="tocentriespage|chapterno">Chapter No.</property>
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">True</property>
@@ -503,7 +533,7 @@
                                 </child>
                                 <child>
                                   <object class="GtkButton" id="entrytext">
-                                    <property name="label" translatable="yes">Entry Text</property>
+                                    <property name="label" translatable="yes" context="tocentriespage|entrytext">Entry Text</property>
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">True</property>
@@ -516,7 +546,7 @@
                                 </child>
                                 <child>
                                   <object class="GtkButton" id="tabstop">
-                                    <property name="label" translatable="yes">Tab Stop</property>
+                                    <property name="label" translatable="yes" context="tocentriespage|tabstop">Tab Stop</property>
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">True</property>
@@ -530,7 +560,7 @@
                                 </child>
                                 <child>
                                   <object class="GtkButton" id="chapterinfo">
-                                    <property name="label" translatable="yes">_Chapter Info</property>
+                                    <property name="label" translatable="yes" context="tocentriespage|chapterinfo">_Chapter Info</property>
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">True</property>
@@ -544,7 +574,7 @@
                                 </child>
                                 <child>
                                   <object class="GtkButton" id="pageno">
-                                    <property name="label" translatable="yes">Page No.</property>
+                                    <property name="label" translatable="yes" context="tocentriespage|pageno">Page No.</property>
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">True</property>
@@ -558,7 +588,7 @@
                                 </child>
                                 <child>
                                   <object class="GtkButton" id="hyperlink">
-                                    <property name="label" translatable="yes">H_yperlink</property>
+                                    <property name="label" translatable="yes" context="tocentriespage|hyperlink">H_yperlink</property>
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">True</property>
@@ -591,7 +621,7 @@
                   <object class="GtkLabel" id="label1">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Structure and Formatting</property>
+                    <property name="label" translatable="yes" context="tocentriespage|label1">Structure and Formatting</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -626,7 +656,7 @@
                         <property name="column_spacing">12</property>
                         <child>
                           <object class="GtkCheckButton" id="reltostyle">
-                            <property name="label" translatable="yes">Tab position relati_ve to paragraph style indent</property>
+                            <property name="label" translatable="yes" context="tocentriespage|reltostyle">Tab position relati_ve to paragraph style indent</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -642,7 +672,7 @@
                         </child>
                         <child>
                           <object class="GtkCheckButton" id="commasep">
-                            <property name="label" translatable="yes">Key separated by commas</property>
+                            <property name="label" translatable="yes" context="tocentriespage|commasep">Key separated by commas</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -658,7 +688,7 @@
                         </child>
                         <child>
                           <object class="GtkCheckButton" id="alphadelim">
-                            <property name="label" translatable="yes">Alphabetical delimiter</property>
+                            <property name="label" translatable="yes" context="tocentriespage|alphadelim">Alphabetical delimiter</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -676,10 +706,10 @@
                           <object class="GtkLabel" id="mainstyleft">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">0</property>
-                            <property name="label" translatable="yes">Character style for main entries:</property>
+                            <property name="label" translatable="yes" context="tocentriespage|mainstyleft">Character style for main entries:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">mainstyle</property>
+                            <property name="xalign">0</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -704,7 +734,7 @@
                   <object class="GtkLabel" id="label3">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Format</property>
+                    <property name="label" translatable="yes" context="tocentriespage|label3">Format</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -738,7 +768,7 @@
                         <property name="column_spacing">18</property>
                         <child>
                           <object class="GtkRadioButton" id="sortpos">
-                            <property name="label" translatable="yes">Document _position</property>
+                            <property name="label" translatable="yes" context="tocentriespage|sortpos">Document _position</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -755,7 +785,7 @@
                         </child>
                         <child>
                           <object class="GtkRadioButton" id="sortcontents">
-                            <property name="label" translatable="yes">_Content</property>
+                            <property name="label" translatable="yes" context="tocentriespage|sortcontents">_Content</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -777,7 +807,7 @@
                   <object class="GtkLabel" id="label14">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Sort by</property>
+                    <property name="label" translatable="yes" context="tocentriespage|label14">Sort by</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -814,7 +844,7 @@
                           <object class="GtkLabel" id="label15">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">_1:</property>
+                            <property name="label" translatable="yes" context="tocentriespage|label15">_1:</property>
                             <property name="use_underline">True</property>
                           </object>
                           <packing>
@@ -838,7 +868,7 @@
                           <object class="GtkLabel" id="label16">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">_2:</property>
+                            <property name="label" translatable="yes" context="tocentriespage|label16">_2:</property>
                             <property name="use_underline">True</property>
                           </object>
                           <packing>
@@ -850,7 +880,7 @@
                           <object class="GtkLabel" id="label17">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">_3:</property>
+                            <property name="label" translatable="yes" context="tocentriespage|label17">_3:</property>
                             <property name="use_underline">True</property>
                           </object>
                           <packing>
@@ -887,12 +917,12 @@
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
-                            <property name="tooltip_markup" translatable="yes">Ascending</property>
+                            <property name="tooltip_text" translatable="yes" context="tocentriespage|up1cb|tooltip_text">Ascending</property>
                             <property name="image">image1</property>
+                            <property name="use_underline">True</property>
                             <property name="xalign">0</property>
                             <property name="active">True</property>
                             <property name="draw_indicator">True</property>
-                            <property name="group">down1cb</property>
                           </object>
                           <packing>
                             <property name="left_attach">2</property>
@@ -904,8 +934,9 @@
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
-                            <property name="tooltip_markup" translatable="yes">Descending</property>
+                            <property name="tooltip_text" translatable="yes" context="tocentriespage|down1cb|tooltip_text">Descending</property>
                             <property name="image">image2</property>
+                            <property name="use_underline">True</property>
                             <property name="xalign">0</property>
                             <property name="draw_indicator">True</property>
                             <property name="group">up1cb</property>
@@ -921,12 +952,12 @@
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
                             <property name="has_tooltip">True</property>
-                            <property name="tooltip_markup" translatable="yes">Ascending</property>
-                            <property name="tooltip_text" translatable="yes">Ascending</property>
+                            <property name="tooltip_text" translatable="yes" context="tocentriespage|up2cb|tooltip_text">Ascending</property>
                             <property name="image">image3</property>
+                            <property name="use_underline">True</property>
                             <property name="xalign">0</property>
+                            <property name="active">True</property>
                             <property name="draw_indicator">True</property>
-                            <property name="group">down2cb</property>
                           </object>
                           <packing>
                             <property name="left_attach">2</property>
@@ -939,12 +970,12 @@
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
                             <property name="has_tooltip">True</property>
-                            <property name="tooltip_markup" translatable="yes">Ascending</property>
-                            <property name="tooltip_text" translatable="yes">Ascending</property>
+                            <property name="tooltip_text" translatable="yes" context="tocentriespage|up3cb|tooltip_text">Ascending</property>
                             <property name="image">image4</property>
+                            <property name="use_underline">True</property>
                             <property name="xalign">0</property>
+                            <property name="active">True</property>
                             <property name="draw_indicator">True</property>
-                            <property name="group">down3cb</property>
                           </object>
                           <packing>
                             <property name="left_attach">2</property>
@@ -957,9 +988,9 @@
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
                             <property name="has_tooltip">True</property>
-                            <property name="tooltip_markup" translatable="yes">Descending</property>
-                            <property name="tooltip_text" translatable="yes">Descending</property>
+                            <property name="tooltip_text" translatable="yes" context="tocentriespage|down2cb|tooltip_text">Descending</property>
                             <property name="image">image5</property>
+                            <property name="use_underline">True</property>
                             <property name="xalign">0</property>
                             <property name="draw_indicator">True</property>
                             <property name="group">up2cb</property>
@@ -975,9 +1006,9 @@
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
                             <property name="has_tooltip">True</property>
-                            <property name="tooltip_markup" translatable="yes">Descending</property>
-                            <property name="tooltip_text" translatable="yes">Descending</property>
+                            <property name="tooltip_text" translatable="yes" context="tocentriespage|down3cb|tooltip_text">Descending</property>
                             <property name="image">image6</property>
+                            <property name="use_underline">True</property>
                             <property name="xalign">0</property>
                             <property name="draw_indicator">True</property>
                             <property name="group">up3cb</property>
@@ -995,7 +1026,7 @@
                   <object class="GtkLabel" id="label13">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Sort Keys</property>
+                    <property name="label" translatable="yes" context="tocentriespage|label13">Sort Keys</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -1024,7 +1055,7 @@
   <object class="GtkSizeGroup" id="sizegroup1">
     <widgets>
       <widget name="fillchar"/>
-      <widget name="tabstoppos:0.00cm"/>
+      <widget name="tabstoppos"/>
     </widgets>
   </object>
 </interface>

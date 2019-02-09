@@ -20,7 +20,6 @@
 #ifndef INCLUDED_FRAMEWORK_INC_DISPATCH_DISPATCHINFORMATIONPROVIDER_HXX
 #define INCLUDED_FRAMEWORK_INC_DISPATCH_DISPATCHINFORMATIONPROVIDER_HXX
 
-#include <macros/xinterface.hxx>
 #include <general.h>
 
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
@@ -52,13 +51,11 @@ class DispatchInformationProvider : public  ::cppu::WeakImplHelper< css::frame::
         DispatchInformationProvider(const css::uno::Reference< css::uno::XComponentContext >& xContext ,
                                     const css::uno::Reference< css::frame::XFrame >&          xFrame);
 
-        virtual ~DispatchInformationProvider();
+        virtual ~DispatchInformationProvider() override;
 
-        virtual css::uno::Sequence< sal_Int16 > SAL_CALL getSupportedCommandGroups()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< sal_Int16 > SAL_CALL getSupportedCommandGroups() override;
 
-        virtual css::uno::Sequence< css::frame::DispatchInformation > SAL_CALL getConfigurableDispatchInformation(sal_Int16 nCommandGroup)
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< css::frame::DispatchInformation > SAL_CALL getConfigurableDispatchInformation(sal_Int16 nCommandGroup) override;
 
     // helper
     private:

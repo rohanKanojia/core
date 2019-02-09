@@ -16,14 +16,8 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#ifdef _MSC_VER
-#pragma warning(disable : 4917 4555)
-#endif
 
-#ifdef __MINGW32__
-#define INITGUID
-#endif
-#include "servprov.hxx"
+#include <servprov.hxx>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/registry/XRegistryKey.hpp>
@@ -34,22 +28,21 @@
 
 using namespace ::com::sun::star;
 
-
-uno::Reference<uno::XInterface> SAL_CALL EmbedServer_createInstance(
+/// @throws uno::Exception
+static uno::Reference<uno::XInterface> EmbedServer_createInstance(
     const uno::Reference<lang::XMultiServiceFactory> & xSMgr)
-throw (uno::Exception)
 {
     uno::Reference<uno::XInterface > xService = *new EmbedServer_Impl( xSMgr );
     return xService;
 }
 
-OUString SAL_CALL EmbedServer_getImplementationName() throw()
+static OUString EmbedServer_getImplementationName() throw()
 {
     return OUString("com.sun.star.comp.ole.EmbedServer");
 
 }
 
-uno::Sequence< OUString > SAL_CALL EmbedServer_getSupportedServiceNames() throw()
+static uno::Sequence< OUString > EmbedServer_getSupportedServiceNames() throw()
 {
     uno::Sequence<OUString> aServiceNames { "com.sun.star.document.OleEmbeddedServerRegistration" };
     return aServiceNames;
@@ -57,16 +50,16 @@ uno::Sequence< OUString > SAL_CALL EmbedServer_getSupportedServiceNames() throw(
 
 extern "C" {
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL emser_component_getFactory( const sal_Char * pImplName, void * pServiceManager, void * /*pRegistryKey*/ )
+SAL_DLLPUBLIC_EXPORT void * emser_component_getFactory( const sal_Char * pImplName, void * pServiceManager, void * /*pRegistryKey*/ )
 {
-    void * pRet = 0;
+    void * pRet = nullptr;
 
     OUString aImplName( OUString::createFromAscii( pImplName ) );
     uno::Reference< lang::XSingleServiceFactory > xFactory;
 
     if(pServiceManager && aImplName.equals( EmbedServer_getImplementationName() ) )
     {
-        xFactory= ::cppu::createOneInstanceFactory( reinterpret_cast< lang::XMultiServiceFactory*>(pServiceManager),
+        xFactory= ::cppu::createOneInstanceFactory( static_cast< lang::XMultiServiceFactory*>(pServiceManager),
                                             EmbedServer_getImplementationName(),
                                             EmbedServer_createInstance,
                                             EmbedServer_getSupportedServiceNames() );

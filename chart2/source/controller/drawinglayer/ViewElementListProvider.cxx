@@ -17,30 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ViewElementListProvider.hxx"
-#include "chartview/DrawModelWrapper.hxx"
-#include "chartview/DataPointSymbolSupplier.hxx"
-#include "macros.hxx"
-#include "DrawViewWrapper.hxx"
+#include <memory>
+#include <ViewElementListProvider.hxx>
+#include <chartview/DrawModelWrapper.hxx>
+#include <chartview/DataPointSymbolSupplier.hxx>
+#include <DrawViewWrapper.hxx>
+
+#include <com/sun/star/drawing/Direction3D.hpp>
 
 #include <svx/xtable.hxx>
-#include <svx/XPropertyTable.hxx>
-#include <svx/unofill.hxx>
-#include <svx/unoapi.hxx>
-#include <svx/xit.hxx>
-#include <svx/xbtmpit.hxx>
-#include <svx/xflftrit.hxx>
-#include <svx/xlndsit.hxx>
-#include <svx/xflhtit.hxx>
-#include <svx/xflgrit.hxx>
-#include <svx/xlnstit.hxx>
-#include <svx/xlnedit.hxx>
 #include <svl/itempool.hxx>
 #include <svtools/ctrltool.hxx>
 #include <vcl/svapp.hxx>
 #include <svx/svdobj.hxx>
 #include <vcl/virdev.hxx>
 #include <svx/svdview.hxx>
+#include <svx/svdpage.hxx>
+#include <sal/log.hxx>
 
 namespace chart
 {
@@ -48,13 +41,17 @@ using namespace ::com::sun::star;
 
 ViewElementListProvider::ViewElementListProvider( DrawModelWrapper* pDrawModelWrapper )
                         : m_pDrawModelWrapper( pDrawModelWrapper )
-                        , m_pFontList(nullptr)
 {
+}
+
+ViewElementListProvider::ViewElementListProvider( ViewElementListProvider&& rOther )
+{
+    m_pDrawModelWrapper = rOther.m_pDrawModelWrapper;
+    m_pFontList = std::move(rOther.m_pFontList);
 }
 
 ViewElementListProvider::~ViewElementListProvider()
 {
-    delete m_pFontList;
 }
 
 XColorListRef   ViewElementListProvider::GetColorTable() const
@@ -98,14 +95,21 @@ XBitmapListRef   ViewElementListProvider::GetBitmapList() const
     return XBitmapListRef();
 }
 
+XPatternListRef   ViewElementListProvider::GetPatternList() const
+{
+    if(m_pDrawModelWrapper)
+        return m_pDrawModelWrapper->GetPatternList();
+    return XPatternListRef();
+}
+
 //create chartspecific symbols for linecharts
 SdrObjList* ViewElementListProvider::GetSymbolList() const
 {
-    SdrObjList* m_pSymbolList = nullptr;
-    uno::Reference< drawing::XShapes > m_xSymbols(nullptr);//@todo this keeps the first drawinglayer alive ...
+    SdrObjList* pSymbolList = nullptr;
+    uno::Reference< drawing::XShapes > xSymbols;//@todo this keeps the first drawinglayer alive ...
     try
     {
-        if(!m_pSymbolList || !m_pSymbolList->GetObjCount())
+        if(!pSymbolList || !pSymbolList->GetObjCount())
         {
             //@todo use mutex
 
@@ -117,23 +121,23 @@ SdrObjList* ViewElementListProvider::GetSymbolList() const
 
             //create symbols via uno and convert to native sdr objects
             drawing::Direction3D aSymbolSize(220,220,0); // should be 250, but 250 -> 280 ??
-            m_xSymbols =  DataPointSymbolSupplier::create2DSymbolList( xShapeFactory, xTarget, aSymbolSize );
+            xSymbols =  DataPointSymbolSupplier::create2DSymbolList( xShapeFactory, xTarget, aSymbolSize );
 
-            SdrObject* pSdrObject = DrawViewWrapper::getSdrObject( uno::Reference< drawing::XShape >( m_xSymbols, uno::UNO_QUERY ) );
+            SdrObject* pSdrObject = DrawViewWrapper::getSdrObject( uno::Reference< drawing::XShape >( xSymbols, uno::UNO_QUERY ) );
             if(pSdrObject)
-                m_pSymbolList = pSdrObject->GetSubList();
+                pSymbolList = pSdrObject->GetSubList();
         }
     }
     catch( const uno::Exception& e )
     {
-        ASSERT_EXCEPTION( e );
+        SAL_WARN("chart2", "Exception caught. " << e );
     }
-    return m_pSymbolList;
+    return pSymbolList;
 }
 
 Graphic ViewElementListProvider::GetSymbolGraphic( sal_Int32 nStandardSymbol, const SfxItemSet* pSymbolShapeProperties ) const
 {
-    SdrObjList* pSymbolList = this->GetSymbolList();
+    SdrObjList* pSymbolList = GetSymbolList();
     if( !pSymbolList->GetObjCount() )
         return Graphic();
     if(nStandardSymbol<0)
@@ -143,17 +147,22 @@ Graphic ViewElementListProvider::GetSymbolGraphic( sal_Int32 nStandardSymbol, co
     SdrObject* pObj = pSymbolList->GetObj(nStandardSymbol);
 
     ScopedVclPtrInstance< VirtualDevice > pVDev;
-    pVDev->SetMapMode(MapMode(MAP_100TH_MM));
-    SdrModel* pModel = new SdrModel();
+    pVDev->SetMapMode(MapMode(MapUnit::Map100thMM));
+
+    std::unique_ptr<SdrModel> pModel(
+        new SdrModel());
+
     pModel->GetItemPool().FreezeIdRanges();
     SdrPage* pPage = new SdrPage( *pModel, false );
     pPage->SetSize(Size(1000,1000));
     pModel->InsertPage( pPage, 0 );
-    SdrView* pView = new SdrView( pModel, pVDev );
+    std::unique_ptr<SdrView> pView(new SdrView(*pModel, pVDev));
     pView->hideMarkHandles();
     SdrPageView* pPageView = pView->ShowSdrPage(pPage);
 
-    pObj=pObj->Clone();
+    // directly clone to target SdrModel
+    pObj = pObj->CloneSdrObject(*pModel);
+
     pPage->NbcInsertObject(pObj);
     pView->MarkObj(pObj,pPageView);
     if( pSymbolShapeProperties )
@@ -164,13 +173,11 @@ Graphic ViewElementListProvider::GetSymbolGraphic( sal_Int32 nStandardSymbol, co
     Graphic aGraph(aMeta);
     Size aSize = pObj->GetSnapRect().GetSize();
     aGraph.SetPrefSize(aSize);
-    aGraph.SetPrefMapMode(MAP_100TH_MM);
+    aGraph.SetPrefMapMode(MapMode(MapUnit::Map100thMM));
 
     pView->UnmarkAll();
     pObj=pPage->RemoveObject(0);
     SdrObject::Free( pObj );
-    delete pView;
-    delete pModel;
 
     return aGraph;
 }
@@ -184,11 +191,10 @@ FontList* ViewElementListProvider::getFontList() const
     {
         OutputDevice* pRefDev    = m_pDrawModelWrapper ? m_pDrawModelWrapper->getReferenceDevice() : nullptr;
         OutputDevice* pDefaultOut = Application::GetDefaultDevice();
-        m_pFontList = new FontList( pRefDev ? pRefDev    : pDefaultOut
-                                , pRefDev ? pDefaultOut : nullptr
-                                , false );
+        m_pFontList.reset( new FontList( pRefDev ? pRefDev    : pDefaultOut
+                                       , pRefDev ? pDefaultOut : nullptr) );
     }
-    return m_pFontList;
+    return m_pFontList.get();
 }
 } //namespace chart
 

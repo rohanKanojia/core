@@ -17,16 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "controller/SlsInsertionIndicatorHandler.hxx"
-#include "controller/SlsProperties.hxx"
-#include "view/SlideSorterView.hxx"
-#include "view/SlsLayouter.hxx"
-#include "view/SlsInsertionIndicatorOverlay.hxx"
-#include "model/SlideSorterModel.hxx"
-#include "model/SlsPageEnumerationProvider.hxx"
+#include <controller/SlsInsertionIndicatorHandler.hxx>
+#include <controller/SlsProperties.hxx>
+#include <view/SlideSorterView.hxx>
+#include <view/SlsLayouter.hxx>
+#include <view/SlsInsertAnimator.hxx>
+#include <view/SlsInsertionIndicatorOverlay.hxx>
+#include <model/SlideSorterModel.hxx>
+#include <model/SlsPageEnumerationProvider.hxx>
 #include <com/sun/star/datatransfer/dnd/DNDConstants.hpp>
 
-#include "SlideSorter.hxx"
+#include <SlideSorter.hxx>
 
 using namespace ::com::sun::star::datatransfer::dnd::DNDConstants;
 
@@ -47,7 +48,7 @@ InsertionIndicatorHandler::InsertionIndicatorHandler (SlideSorter& rSlideSorter)
 {
 }
 
-InsertionIndicatorHandler::~InsertionIndicatorHandler()
+InsertionIndicatorHandler::~InsertionIndicatorHandler() COVERITY_NOEXCEPT_FALSE
 {
 }
 
@@ -171,7 +172,7 @@ void InsertionIndicatorHandler::SetPosition (
     }
 }
 
-std::shared_ptr<view::InsertAnimator> InsertionIndicatorHandler::GetInsertAnimator()
+std::shared_ptr<view::InsertAnimator> const & InsertionIndicatorHandler::GetInsertAnimator()
 {
     if ( ! mpInsertAnimator)
         mpInsertAnimator.reset(new view::InsertAnimator(mrSlideSorter));
@@ -220,10 +221,7 @@ bool InsertionIndicatorHandler::IsInsertionTrivial (
     // to check that the insertion position is not directly in front or
     // directly behind the selection and thus moving the selection there
     // would not change the model.
-    if (nInsertionIndex<nFirstIndex || nInsertionIndex>(nLastIndex+1))
-        return false;
-
-    return true;
+    return nInsertionIndex >= nFirstIndex && nInsertionIndex <= (nLastIndex+1);
 }
 
 bool InsertionIndicatorHandler::IsInsertionTrivial (const sal_Int8 nDndAction)
@@ -240,7 +238,7 @@ InsertionIndicatorHandler::ForceShowContext::ForceShowContext (
     mpHandler->ForceShow();
 }
 
-InsertionIndicatorHandler::ForceShowContext::~ForceShowContext()
+InsertionIndicatorHandler::ForceShowContext::~ForceShowContext() COVERITY_NOEXCEPT_FALSE
 {
     mpHandler->ForceEnd();
 }

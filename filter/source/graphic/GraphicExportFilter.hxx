@@ -20,53 +20,55 @@
 #ifndef INCLUDED_FILTER_SOURCE_GRAPHIC_GRAPHICEXPORTFILTER_HXX
 #define INCLUDED_FILTER_SOURCE_GRAPHIC_GRAPHICEXPORTFILTER_HXX
 
-#include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/document/XExporter.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/task/XStatusIndicatorFactory.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <cppuhelper/implbase.hxx>
-#include <comphelper/processfactory.hxx>
 
-using namespace css;
-using namespace css::uno;
-using namespace css::lang;
-using namespace css::beans;
-using namespace css::document;
+namespace com { namespace sun { namespace star {
+    namespace drawing {
+        class XShapes;
+        class XShape;
+    }
+}}}
 
 class GraphicExportFilter :
-    public cppu::WeakImplHelper < XFilter, XExporter, XInitialization >
+    public cppu::WeakImplHelper < css::document::XFilter, css::document::XExporter, css::lang::XInitialization >
 {
-    Reference<XComponent>               mxDocument;
-    Reference<io::XOutputStream>        mxOutputStream;
+    css::uno::Reference< css::uno::XComponentContext >  mxContext;
+    css::uno::Reference< css::lang::XComponent >        mxDocument;
+    css::uno::Reference< css::io::XOutputStream >       mxOutputStream;
 
-    void gatherProperties( const Sequence<PropertyValue>& rDescriptor );
+    css::uno::Sequence< css::beans::PropertyValue >     maFilterDataSequence;
 
-    bool        mExportSelection;
-    OUString    mFilterExtension;
-    util::URL   mTargetUrl;
+    OUString    maFilterExtension;
+    sal_Int32   mnTargetWidth;
+    sal_Int32   mnTargetHeight;
+    bool        mbSelectionOnly;
 
-    Sequence<PropertyValue> mFilterDataSequence;
-
-    sal_Int32 mTargetWidth;
-    sal_Int32 mTargetHeight;
+    void gatherProperties( const css::uno::Sequence< css::beans::PropertyValue > & rDescriptor );
+    bool filterRenderDocument() const;
+    bool filterExportShape(
+            const css::uno::Sequence< css::beans::PropertyValue > & rDescriptor,
+            const css::uno::Reference< css::drawing::XShapes > & rxShapes,
+            const css::uno::Reference< css::drawing::XShape > & rxShape ) const;
 
 public:
-    explicit GraphicExportFilter( const Reference<XComponentContext>& rxContext );
-    virtual ~GraphicExportFilter();
+    explicit GraphicExportFilter( const css::uno::Reference< css::uno::XComponentContext > & rxContext );
+    virtual ~GraphicExportFilter() override;
 
     // XFilter
-    virtual sal_Bool SAL_CALL filter( const Sequence<PropertyValue>& rDescriptor ) throw(RuntimeException, std::exception) override;
-    virtual void SAL_CALL cancel( ) throw (RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL filter( const css::uno::Sequence< css::beans::PropertyValue > & rDescriptor ) override;
+    virtual void SAL_CALL cancel( ) override;
 
     // XExporter
-    virtual void SAL_CALL setSourceDocument( const Reference< XComponent >& xDocument ) throw(IllegalArgumentException, RuntimeException, std::exception) override;
+    virtual void SAL_CALL setSourceDocument( const css::uno::Reference< css::lang::XComponent > & xDocument ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const Sequence<Any>& aArguments ) throw(Exception, RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any > & rArguments ) override;
 };
 
 #endif

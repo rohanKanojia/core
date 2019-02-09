@@ -18,6 +18,7 @@
  */
 #include "vbaview.hxx"
 #include <vbahelper/vbahelper.hxx>
+#include <basic/sberrors.hxx>
 #include <tools/diagnose_ex.h>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/view/XViewSettingsSupplier.hpp>
@@ -47,7 +48,7 @@ using namespace ::com::sun::star;
 static const sal_Int32 DEFAULT_BODY_DISTANCE = 500;
 
 SwVbaView::SwVbaView( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext,
-    const uno::Reference< frame::XModel >& rModel ) throw ( uno::RuntimeException ) :
+    const uno::Reference< frame::XModel >& rModel ) :
     SwVbaView_BASE( rParent, rContext ), mxModel( rModel )
 {
     uno::Reference< frame::XController > xController = mxModel->getCurrentController();
@@ -64,7 +65,7 @@ SwVbaView::~SwVbaView()
 }
 
 ::sal_Int32 SAL_CALL
-SwVbaView::getSeekView() throw (css::uno::RuntimeException, std::exception)
+SwVbaView::getSeekView()
 {
     // FIXME: if the view cursor is in table, field, section and frame
     // handle if the cursor is in table
@@ -115,7 +116,7 @@ SwVbaView::getSeekView() throw (css::uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL
-SwVbaView::setSeekView( ::sal_Int32 _seekview ) throw (css::uno::RuntimeException, css::script::BasicErrorException, std::exception)
+SwVbaView::setSeekView( ::sal_Int32 _seekview )
 {
     // FIXME: save the current cursor position, if the cursor is in the main
     // document, so we can jump back to this position, if the macro sets
@@ -134,7 +135,7 @@ SwVbaView::setSeekView( ::sal_Int32 _seekview ) throw (css::uno::RuntimeExceptio
         case word::WdSeekView::wdSeekEvenPagesHeader:
         {
             // need to test
-            mxViewCursor->gotoRange( getHFTextRange( _seekview ), sal_False );
+            mxViewCursor->gotoRange( getHFTextRange( _seekview ), false );
             break;
         }
         case word::WdSeekView::wdSeekFootnotes:
@@ -144,11 +145,11 @@ SwVbaView::setSeekView( ::sal_Int32 _seekview ) throw (css::uno::RuntimeExceptio
             if( xFootnotes->getCount() > 0 )
             {
                 uno::Reference< text::XText > xText( xFootnotes->getByIndex(0), uno::UNO_QUERY_THROW );
-                mxViewCursor->gotoRange( xText->getStart(), sal_False );
+                mxViewCursor->gotoRange( xText->getStart(), false );
             }
             else
             {
-                DebugHelper::runtimeexception( ERRCODE_BASIC_NO_ACTIVE_OBJECT, OUString() );
+                DebugHelper::runtimeexception( ERRCODE_BASIC_NO_ACTIVE_OBJECT );
             }
             break;
         }
@@ -159,11 +160,11 @@ SwVbaView::setSeekView( ::sal_Int32 _seekview ) throw (css::uno::RuntimeExceptio
             if( xEndnotes->getCount() > 0 )
             {
                 uno::Reference< text::XText > xText( xEndnotes->getByIndex(0), uno::UNO_QUERY_THROW );
-                mxViewCursor->gotoRange( xText->getStart(), sal_False );
+                mxViewCursor->gotoRange( xText->getStart(), false );
             }
             else
             {
-                DebugHelper::runtimeexception( ERRCODE_BASIC_NO_ACTIVE_OBJECT, OUString() );
+                DebugHelper::runtimeexception( ERRCODE_BASIC_NO_ACTIVE_OBJECT );
             }
             break;
         }
@@ -171,26 +172,26 @@ SwVbaView::setSeekView( ::sal_Int32 _seekview ) throw (css::uno::RuntimeExceptio
         {
             uno::Reference< text::XTextDocument > xTextDocument( mxModel, uno::UNO_QUERY_THROW );
             uno::Reference< text::XText > xText = xTextDocument->getText();
-            mxViewCursor->gotoRange( word::getFirstObjectPosition( xText ), sal_False );
+            mxViewCursor->gotoRange( word::getFirstObjectPosition( xText ), false );
             break;
         }
     }
 }
 
 ::sal_Int32 SAL_CALL
-SwVbaView::getSplitSpecial() throw (css::uno::RuntimeException, std::exception)
+SwVbaView::getSplitSpecial()
 {
     return word::WdSpecialPane::wdPaneNone;
 }
 
 void SAL_CALL
-SwVbaView::setSplitSpecial( ::sal_Int32/* _splitspecial */) throw (css::uno::RuntimeException, std::exception)
+SwVbaView::setSplitSpecial( ::sal_Int32/* _splitspecial */)
 {
     // not support in Writer
 }
 
 sal_Bool SAL_CALL
-SwVbaView::getTableGridLines() throw (css::uno::RuntimeException, std::exception)
+SwVbaView::getTableGridLines()
 {
     bool bShowTableGridLine = false;
     mxViewSettings->getPropertyValue("ShowTableBoundaries") >>= bShowTableGridLine;
@@ -198,13 +199,13 @@ SwVbaView::getTableGridLines() throw (css::uno::RuntimeException, std::exception
 }
 
 void SAL_CALL
-SwVbaView::setTableGridLines( sal_Bool _tablegridlines ) throw (css::uno::RuntimeException, std::exception)
+SwVbaView::setTableGridLines( sal_Bool _tablegridlines )
 {
     mxViewSettings->setPropertyValue("ShowTableBoundaries", uno::makeAny( _tablegridlines ) );
 }
 
 ::sal_Int32 SAL_CALL
-SwVbaView::getType() throw (css::uno::RuntimeException, std::exception)
+SwVbaView::getType()
 {
     // FIXME: handle wdPrintPreview type
     bool bOnlineLayout = false;
@@ -213,7 +214,7 @@ SwVbaView::getType() throw (css::uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL
-SwVbaView::setType( ::sal_Int32 _type ) throw (css::uno::RuntimeException, std::exception)
+SwVbaView::setType( ::sal_Int32 _type )
 {
     // FIXME: handle wdPrintPreview type
     switch( _type )
@@ -235,12 +236,12 @@ SwVbaView::setType( ::sal_Int32 _type ) throw (css::uno::RuntimeException, std::
             break;
         }
         default:
-            DebugHelper::runtimeexception( ERRCODE_BASIC_NOT_IMPLEMENTED, OUString() );
+            DebugHelper::runtimeexception( ERRCODE_BASIC_NOT_IMPLEMENTED );
 
     }
 }
 
-uno::Reference< text::XTextRange > SwVbaView::getHFTextRange( sal_Int32 nType ) throw (uno::RuntimeException, script::BasicErrorException, std::exception)
+uno::Reference< text::XTextRange > SwVbaView::getHFTextRange( sal_Int32 nType )
 {
     mxModel->lockControllers();
 
@@ -379,12 +380,10 @@ SwVbaView::getServiceImplName()
 uno::Sequence< OUString >
 SwVbaView::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.word.View";
-    }
+        "ooo.vba.word.View"
+    };
     return aServiceNames;
 }
 

@@ -17,8 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DateHelper.hxx"
-#include "DateScaling.hxx"
+#include <DateHelper.hxx>
 #include <rtl/math.hxx>
 #include <com/sun/star/chart/TimeUnit.hpp>
 
@@ -37,27 +36,17 @@ bool DateHelper::IsInSameMonth( const Date& rD1, const Date& rD2 )
         && (rD1.GetMonth() == rD2.GetMonth());
 }
 
-Date DateHelper::GetDateSomeMonthsAway( const Date& rD, long nMonthDistance )
+Date DateHelper::GetDateSomeMonthsAway( const Date& rD, sal_Int32 nMonthDistance )
 {
     Date aRet(rD);
-    long nMonth = rD.GetMonth()+nMonthDistance;
-    long nNewMonth = nMonth%12;
-    long nNewYear = rD.GetYear() + nMonth/12;
-    if( nMonth <= 0 || !nNewMonth )
-        nNewYear--;
-    if( nNewMonth <= 0 )
-        nNewMonth += 12;
-    aRet.SetMonth( sal_uInt16(nNewMonth) );
-    aRet.SetYear( sal_uInt16(nNewYear) );
-    aRet.Normalize();
+    aRet.AddMonths( nMonthDistance );
     return aRet;
 }
 
-Date DateHelper::GetDateSomeYearsAway( const Date& rD, long nYearDistance )
+Date DateHelper::GetDateSomeYearsAway( const Date& rD, sal_Int32 nYearDistance )
 {
     Date aRet(rD);
-    aRet.SetYear( static_cast<sal_uInt16>(rD.GetYear()+nYearDistance) );
-    aRet.Normalize();
+    aRet.AddYears( static_cast<sal_Int16>(nYearDistance) );
     return aRet;
 }
 
@@ -66,9 +55,7 @@ bool DateHelper::IsLessThanOneMonthAway( const Date& rD1, const Date& rD2 )
     Date aDMin( DateHelper::GetDateSomeMonthsAway( rD1, -1 ) );
     Date aDMax( DateHelper::GetDateSomeMonthsAway( rD1, 1 ) );
 
-    if( rD2 > aDMin && rD2 < aDMax )
-        return true;
-    return false;
+    return rD2 > aDMin && rD2 < aDMax;
 }
 
 bool DateHelper::IsLessThanOneYearAway( const Date& rD1, const Date& rD2 )
@@ -76,14 +63,15 @@ bool DateHelper::IsLessThanOneYearAway( const Date& rD1, const Date& rD2 )
     Date aDMin( DateHelper::GetDateSomeYearsAway( rD1, -1 ) );
     Date aDMax( DateHelper::GetDateSomeYearsAway( rD1, 1 ) );
 
-    if( rD2 > aDMin && rD2 < aDMax )
-        return true;
-    return false;
+    return rD2 > aDMin && rD2 < aDMax;
 }
 
 double DateHelper::RasterizeDateValue( double fValue, const Date& rNullDate, long TimeResolution )
 {
-    Date aDate(rNullDate); aDate += static_cast<long>(::rtl::math::approxFloor(fValue));
+    if (rtl::math::isNan(fValue))
+        return fValue;
+
+    Date aDate(rNullDate); aDate.AddDays(::rtl::math::approxFloor(fValue));
     switch(TimeResolution)
     {
         case css::chart::TimeUnit::DAY:

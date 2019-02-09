@@ -20,14 +20,14 @@
 
 #include "classfile.hxx"
 
-#include "codemaker/global.hxx"
-#include "codemaker/options.hxx"
-#include "codemaker/unotype.hxx"
+#include <codemaker/global.hxx>
+#include <codemaker/options.hxx>
+#include <codemaker/unotype.hxx>
 
-#include "osl/diagnose.h"
-#include "rtl/string.h"
-#include "rtl/string.hxx"
-#include "sal/types.h"
+#include <osl/diagnose.h>
+#include <rtl/string.h>
+#include <rtl/string.hxx>
+#include <sal/types.h>
 
 #include <map>
 #include <utility>
@@ -227,12 +227,12 @@ void ClassFile::Code::instrInvokevirtual(
 
 void ClassFile::Code::instrLookupswitch(
     Code const * defaultBlock,
-    std::list< std::pair< sal_Int32, Code * > > const & blocks)
+    std::vector< std::pair< sal_Int32, Code * > > const & blocks)
 {
     // lookupswitch <0--3 byte pad> <defaultbyte1> <defaultbyte2> <defaultbyte3>
     // <defaultbyte4> <npairs1> <npairs2> <npairs3> <npairs4>
     // <match--offset pairs...>:
-    std::list< std::pair< sal_Int32, Code * > >::size_type size = blocks.size();
+    std::vector< std::pair< sal_Int32, Code * > >::size_type size = blocks.size();
     if (size > SAL_MAX_INT32) {
         throw CannotDumpException("Lookup-switch too large for Java class file format");
     }
@@ -312,7 +312,7 @@ void ClassFile::Code::instrSwap() {
 
 void ClassFile::Code::instrTableswitch(
     Code const * defaultBlock, sal_Int32 low,
-    std::list< Code * > const & blocks)
+    std::vector< std::unique_ptr<Code> > const & blocks)
 {
     // tableswitch <0--3 byte pad> <defaultbyte1> <defaultbyte2> <defaultbyte3>
     // <defaultbyte4> <lowbyte1> <lowbyte2> <lowbyte3> <lowbyte4> <highbyte1>
@@ -323,7 +323,7 @@ void ClassFile::Code::instrTableswitch(
     for (int i = 0; i < pad; ++i) {
         appendU1(m_code, 0);
     }
-    std::list< Code * >::size_type size = blocks.size();
+    std::vector< Code * >::size_type size = blocks.size();
     Position pos2 = pos1 + 1 + pad + 12 + size * 4; //FIXME: overflow
     sal_uInt32 defaultOffset = static_cast< sal_uInt32 >(pos2 - pos1);
         //FIXME: overflow
@@ -331,7 +331,7 @@ void ClassFile::Code::instrTableswitch(
     pos2 += defaultBlock->m_code.size(); //FIXME: overflow
     appendU4(m_code, static_cast< sal_uInt32 >(low));
     appendU4(m_code, static_cast< sal_uInt32 >(low + (size - 1)));
-    for (Code *pCode : blocks)
+    for (std::unique_ptr<Code> const & pCode : blocks)
     {
         if (pCode == nullptr) {
             appendU4(m_code, defaultOffset);
@@ -342,7 +342,7 @@ void ClassFile::Code::instrTableswitch(
         }
     }
     appendStream(m_code, defaultBlock->m_code);
-    for (Code *pCode : blocks)
+    for (std::unique_ptr<Code> const & pCode : blocks)
     {
         if (pCode != nullptr) {
             appendStream(m_code, pCode->m_code);
@@ -491,8 +491,7 @@ sal_uInt16 ClassFile::addIntegerInfo(sal_Int32 value) {
     sal_uInt16 index = nextConstantPoolIndex(1);
     appendU1(m_constantPool, 3);
     appendU4(m_constantPool, static_cast< sal_uInt32 >(value));
-    if (!m_integerInfos.insert(
-            std::map< sal_Int32, sal_uInt16 >::value_type(value, index)).second)
+    if (!m_integerInfos.emplace(value, index).second)
     {
         OSL_ASSERT(false);
     }
@@ -509,8 +508,7 @@ sal_uInt16 ClassFile::addFloatInfo(float value) {
     union { float floatBytes; sal_uInt32 uint32Bytes; } bytes;
     bytes.floatBytes = value;
     appendU4(m_constantPool, bytes.uint32Bytes);
-    if (!m_floatInfos.insert(
-            std::map< float, sal_uInt16 >::value_type(value, index)).second)
+    if (!m_floatInfos.emplace(value, index).second)
     {
         OSL_ASSERT(false);
     }
@@ -525,8 +523,7 @@ sal_uInt16 ClassFile::addLongInfo(sal_Int64 value) {
     sal_uInt16 index = nextConstantPoolIndex(2);
     appendU1(m_constantPool, 5);
     appendU8(m_constantPool, static_cast< sal_uInt64 >(value));
-    if (!m_longInfos.insert(
-            std::map< sal_Int64, sal_uInt16 >::value_type(value, index)).second)
+    if (!m_longInfos.emplace(value, index).second)
     {
         OSL_ASSERT(false);
     }
@@ -543,8 +540,7 @@ sal_uInt16 ClassFile::addDoubleInfo(double value) {
     union { double doubleBytes; sal_uInt64 uint64Bytes; } bytes;
     bytes.doubleBytes = value;
     appendU8(m_constantPool, bytes.uint64Bytes);
-    if (!m_doubleInfos.insert(
-            std::map< double, sal_uInt16 >::value_type(value, index)).second)
+    if (!m_doubleInfos.emplace(value, index).second)
     {
         OSL_ASSERT(false);
     }
@@ -685,9 +681,7 @@ sal_uInt16 ClassFile::addUtf8Info(OString const & value) {
     for (sal_Int32 j = 0; j < value.getLength(); ++j) {
         appendU1(m_constantPool, static_cast< sal_uInt8 >(value[j]));
     }
-    if (!m_utf8Infos.insert(
-            std::map< OString, sal_uInt16 >::value_type(value, index)).
-        second)
+    if (!m_utf8Infos.emplace(value, index).second)
     {
         OSL_ASSERT(false);
     }
@@ -704,9 +698,7 @@ sal_uInt16 ClassFile::addClassInfo(OString const & type) {
     sal_uInt16 index = nextConstantPoolIndex(1);
     appendU1(m_constantPool, 7);
     appendU2(m_constantPool, nameIndex);
-    if (!m_classInfos.insert(
-            std::map< sal_uInt16, sal_uInt16 >::value_type(nameIndex, index)).
-        second)
+    if (!m_classInfos.emplace(nameIndex, index).second)
     {
         OSL_ASSERT(false);
     }
@@ -723,9 +715,7 @@ sal_uInt16 ClassFile::addStringInfo(OString const & value) {
     sal_uInt16 index = nextConstantPoolIndex(1);
     appendU1(m_constantPool, 8);
     appendU2(m_constantPool, stringIndex);
-    if (!m_stringInfos.insert(
-            std::map< sal_uInt16, sal_uInt16 >::value_type(stringIndex, index)).
-        second)
+    if (!m_stringInfos.emplace(stringIndex, index).second)
     {
         OSL_ASSERT(false);
     }
@@ -748,8 +738,7 @@ sal_uInt16 ClassFile::addFieldrefInfo(
     appendU1(m_constantPool, 9);
     appendU2(m_constantPool, classIndex);
     appendU2(m_constantPool, nameAndTypeIndex);
-    if (!m_fieldrefInfos.insert(
-            std::map< sal_uInt32, sal_uInt16 >::value_type(key, index)).second)
+    if (!m_fieldrefInfos.emplace(key, index).second)
     {
         OSL_ASSERT(false);
     }
@@ -772,8 +761,7 @@ sal_uInt16 ClassFile::addMethodrefInfo(
     appendU1(m_constantPool, 10);
     appendU2(m_constantPool, classIndex);
     appendU2(m_constantPool, nameAndTypeIndex);
-    if (!m_methodrefInfos.insert(
-            std::map< sal_uInt32, sal_uInt16 >::value_type(key, index)).second)
+    if (!m_methodrefInfos.emplace(key, index).second)
     {
         OSL_ASSERT(false);
     }
@@ -797,8 +785,7 @@ sal_uInt16 ClassFile::addInterfaceMethodrefInfo(
     appendU1(m_constantPool, 11);
     appendU2(m_constantPool, classIndex);
     appendU2(m_constantPool, nameAndTypeIndex);
-    if (!m_interfaceMethodrefInfos.insert(
-            std::map< sal_uInt32, sal_uInt16 >::value_type(key, index)).second)
+    if (!m_interfaceMethodrefInfos.emplace(key, index).second)
     {
         OSL_ASSERT(false);
     }
@@ -821,8 +808,7 @@ sal_uInt16 ClassFile::addNameAndTypeInfo(
     appendU1(m_constantPool, 12);
     appendU2(m_constantPool, nameIndex);
     appendU2(m_constantPool, descriptorIndex);
-    if (!m_nameAndTypeInfos.insert(
-            std::map< sal_uInt32, sal_uInt16 >::value_type(key, index)).second)
+    if (!m_nameAndTypeInfos.emplace(key, index).second)
     {
         OSL_ASSERT(false);
     }

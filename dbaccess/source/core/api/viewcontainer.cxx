@@ -17,17 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "viewcontainer.hxx"
-#include "dbastrings.hrc"
-#include "core_resource.hxx"
-#include "core_resource.hrc"
-#include "View.hxx"
+#include <viewcontainer.hxx>
+#include <stringconstants.hxx>
+#include <View.hxx>
 
-#include <tools/debug.hxx>
-#include <comphelper/enumhelper.hxx>
 #include <comphelper/types.hxx>
 #include <connectivity/dbtools.hxx>
-#include <comphelper/extract.hxx>
 #include <connectivity/dbexception.hxx>
 #include <rtl/ustrbuf.hxx>
 
@@ -63,9 +58,8 @@ OViewContainer::OViewContainer(::cppu::OWeakObject& _rParent
                                  ,const Reference< XConnection >& _xCon
                                  ,bool _bCase
                                  ,IRefreshListener* _pRefreshListener
-                                 ,::dbtools::WarningsContainer* _pWarningsContainer
-                                 ,oslInterlockedCount& _nInAppend)
-    :OFilteredContainer(_rParent,_rMutex,_xCon,_bCase,_pRefreshListener,_pWarningsContainer,_nInAppend)
+                                 ,std::atomic<std::size_t>& _nInAppend)
+    :OFilteredContainer(_rParent,_rMutex,_xCon,_bCase,_pRefreshListener,_nInAppend)
     ,m_bInElementRemoved(false)
 {
 }
@@ -108,7 +102,6 @@ Reference< XPropertySet > OViewContainer::createDescriptor()
     Reference< XPropertySet > xRet;
     // first we have to look if the master tables support this
     // and if so then create a table object as well with the master tables
-    Reference<XColumnsSupplier > xMasterColumnsSup;
     Reference<XDataDescriptorFactory> xDataFactory(m_xMasterContainer,UNO_QUERY);
     if(xDataFactory.is())
         xRet = xDataFactory->createDataDescriptor();
@@ -136,7 +129,7 @@ ObjectType OViewContainer::appendObject( const OUString& _rForName, const Refere
     }
     else
     {
-        OUString sComposedName = ::dbtools::composeTableName( m_xMetaData, descriptor, ::dbtools::EComposeRule::InTableDefinitions, false, false, true );
+        OUString sComposedName = ::dbtools::composeTableName( m_xMetaData, descriptor, ::dbtools::EComposeRule::InTableDefinitions, true );
         if(sComposedName.isEmpty())
             ::dbtools::throwFunctionSequenceException(static_cast<XTypeProvider*>(static_cast<OFilteredContainer*>(this)));
 
@@ -202,7 +195,7 @@ void OViewContainer::dropObject(sal_Int32 _nPos, const OUString& _sElementName)
     }
 }
 
-void SAL_CALL OViewContainer::elementInserted( const ContainerEvent& Event ) throw (RuntimeException, std::exception)
+void SAL_CALL OViewContainer::elementInserted( const ContainerEvent& Event )
 {
     ::osl::MutexGuard aGuard(m_rMutex);
     OUString sName;
@@ -219,7 +212,7 @@ void SAL_CALL OViewContainer::elementInserted( const ContainerEvent& Event ) thr
     }
 }
 
-void SAL_CALL OViewContainer::elementRemoved( const ContainerEvent& Event ) throw (RuntimeException, std::exception)
+void SAL_CALL OViewContainer::elementRemoved( const ContainerEvent& Event )
 {
     ::osl::MutexGuard aGuard(m_rMutex);
     OUString sName;
@@ -239,11 +232,11 @@ void SAL_CALL OViewContainer::elementRemoved( const ContainerEvent& Event ) thro
     }
 }
 
-void SAL_CALL OViewContainer::disposing( const css::lang::EventObject& /*Source*/ ) throw (RuntimeException, std::exception)
+void SAL_CALL OViewContainer::disposing( const css::lang::EventObject& /*Source*/ )
 {
 }
 
-void SAL_CALL OViewContainer::elementReplaced( const ContainerEvent& /*Event*/ ) throw (RuntimeException, std::exception)
+void SAL_CALL OViewContainer::elementReplaced( const ContainerEvent& /*Event*/ )
 {
 }
 

@@ -17,21 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dptabdat.hxx"
+#include <dptabdat.hxx>
+#include <dpcache.hxx>
+#include <dpfilteredcache.hxx>
+#include <dptabres.hxx>
 
-#include "global.hxx"
-#include "dpfilteredcache.hxx"
-#include "dptabres.hxx"
-#include "document.hxx"
-#include "dpobject.hxx"
-
-#include <rtl/math.hxx>
 #include <osl/diagnose.h>
 #include <tools/date.hxx>
-#include <unotools/transliterationwrapper.hxx>
-#include <unotools/collatorwrapper.hxx>
 
-#include <com/sun/star/sheet/DataPilotFieldFilter.hpp>
 
 using namespace ::com::sun::star;
 using ::std::vector;
@@ -43,7 +36,7 @@ ScDPTableData::CalcInfo::CalcInfo() :
 {
 }
 
-ScDPTableData::ScDPTableData(ScDocument* pDoc) :
+ScDPTableData::ScDPTableData(const ScDocument* pDoc) :
     mpDoc(pDoc)
 {
     nLastDateVal = nLastHier = nLastLevel = nLastRet = -1;      // invalid
@@ -55,10 +48,10 @@ ScDPTableData::~ScDPTableData()
 {
 }
 
-OUString ScDPTableData::GetFormattedString(long nDim, const ScDPItemData& rItem) const
+OUString ScDPTableData::GetFormattedString(long nDim, const ScDPItemData& rItem, bool bLocaleIndependent) const
 {
     const ScDPCache& rCache = GetCacheTable().getCache();
-    return rCache.GetFormattedString(nDim, rItem);
+    return rCache.GetFormattedString(nDim, rItem, bLocaleIndependent);
 }
 
 long ScDPTableData::GetDatePart( long nDateVal, long nHierarchy, long nLevel )
@@ -67,7 +60,7 @@ long ScDPTableData::GetDatePart( long nDateVal, long nHierarchy, long nLevel )
         return nLastRet;
 
     Date aDate( 30,12,1899 );                   //TODO: get from source data (and cache here)
-    aDate += nDateVal;
+    aDate.AddDays( nDateVal);
 
     long nRet = 0;
     switch (nHierarchy)
@@ -89,7 +82,7 @@ long ScDPTableData::GetDatePart( long nDateVal, long nHierarchy, long nLevel )
                 //TODO: use settings for different definitions
                 case 0: nRet = aDate.GetYear();                 break;      //!...
                 case 1: nRet = aDate.GetWeekOfYear();           break;
-                case 2: nRet = (long)aDate.GetDayOfWeek();      break;
+                case 2: nRet = static_cast<long>(aDate.GetDayOfWeek());      break;
                 default:
                     OSL_FAIL("GetDatePart: wrong level");
             }
@@ -111,7 +104,7 @@ bool ScDPTableData::IsRepeatIfEmpty()
     return false;
 }
 
-sal_uLong ScDPTableData::GetNumberFormat(long)
+sal_uInt32 ScDPTableData::GetNumberFormat(long)
 {
     return 0;           // default format
 }
@@ -161,7 +154,7 @@ void ScDPTableData::FillRowDataFromCacheTable(sal_Int32 nRow, const ScDPFiltered
     for (sal_Int32 i = 0; i < n; ++i)
     {
         long nDim = rInfo.aDataSrcCols[i];
-        rData.aValues.push_back( ScDPValue() );
+        rData.aValues.emplace_back( );
         // #i111435# GetItemData needs dimension indexes including groups,
         // so the index must be checked here (groups aren't useful as data fields).
         if ( nDim < nCacheColumnCount )
@@ -225,6 +218,7 @@ void ScDPTableData::GetItemData(const ScDPFilteredCache& rCacheTable, sal_Int32 
                                 const vector<long>& rDims, vector<SCROW>& rItemData)
 {
     sal_Int32 nDimSize = rDims.size();
+    rItemData.reserve(rItemData.size() + nDimSize);
     for (sal_Int32 i = 0; i < nDimSize; ++i)
     {
         long nDim = rDims[i];
@@ -258,7 +252,7 @@ const ScDPItemData* ScDPTableData::GetMemberByIndex( long nDim, long nIndex )
 
     const ::std::vector<SCROW>& nMembers = GetCacheTable().getFieldEntries( nDim );
 
-    return GetCacheTable().getCache().GetItemDataById( (SCCOL) nDim, (SCROW)nMembers[nIndex] );
+    return GetCacheTable().getCache().GetItemDataById( static_cast<SCCOL>(nDim), static_cast<SCROW>(nMembers[nIndex]) );
 }
 
 const ScDPItemData* ScDPTableData::GetMemberById( long nDim, long nId)
@@ -282,17 +276,15 @@ long ScDPTableData::Compare( long nDim, long nDataId1, long nDataId2)
     if ( getIsDataLayoutDimension(nDim) )
         return 0;
 
-    long n1 = ScDPFilteredCache::getOrder(nDim, nDataId1);
-    long n2 = ScDPFilteredCache::getOrder(nDim, nDataId2);
-    if ( n1 > n2 )
+    if ( nDataId1 > nDataId2 )
         return 1;
-    else if ( n1 == n2 )
+    else if ( nDataId1 == nDataId2 )
         return 0;
     else
         return -1;
 }
 
-#if DEBUG_PIVOT_TABLE
+#if DUMP_PIVOT_TABLE
 void ScDPTableData::Dump() const
 {
 }

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "JoinExchange.hxx"
+#include <JoinExchange.hxx>
 #include <sot/formats.hxx>
 #include <cppuhelper/typeprovider.hxx>
 
@@ -27,8 +27,6 @@ namespace dbaui
     using namespace ::com::sun::star::util;
     using namespace ::com::sun::star::lang;
     using namespace ::com::sun::star::datatransfer;
-
-    OUString OJoinExchObj::m_sJoinFormat;
 
     // class OJoinExchObj
     OJoinExchObj::OJoinExchObj(const OJoinExchangeData& jxdSource,bool _bFirstEntry)
@@ -58,13 +56,9 @@ namespace dbaui
 
     bool OJoinExchObj::isFormatAvailable( const DataFlavorExVector& _rFormats ,SotClipboardFormatId _nSlotID)
     {
-        DataFlavorExVector::const_iterator aCheckEnd = _rFormats.end();
-        for (   DataFlavorExVector::const_iterator aCheck = _rFormats.begin();
-                aCheck != aCheckEnd;
-                ++aCheck
-            )
+        for (auto const& format : _rFormats)
         {
-            if ( _nSlotID == aCheck->mnSotId )
+            if ( _nSlotID == format.mnSotId )
                 return true;
         }
         return false;
@@ -85,20 +79,12 @@ namespace dbaui
 
     Sequence< sal_Int8 > OJoinExchObj::getUnoTunnelImplementationId()
     {
-        static ::cppu::OImplementationId * pId = nullptr;
-        if (! pId)
-        {
-            ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-            if (! pId)
-            {
-                static ::cppu::OImplementationId aId;
-                pId = &aId;
-            }
-        }
-        return pId->getImplementationId();
+        static ::cppu::OImplementationId implId;
+
+        return implId.getImplementationId();
     }
 
-    sal_Int64 SAL_CALL OJoinExchObj::getSomething( const Sequence< sal_Int8 >& _rIdentifier ) throw(RuntimeException, std::exception)
+    sal_Int64 SAL_CALL OJoinExchObj::getSomething( const Sequence< sal_Int8 >& _rIdentifier )
     {
         if (_rIdentifier.getLength() == 16 && 0 == memcmp(getUnoTunnelImplementationId().getConstArray(),  _rIdentifier.getConstArray(), 16 ) )
             return reinterpret_cast<sal_Int64>(this);
@@ -125,7 +111,7 @@ namespace dbaui
         return false;
     }
 
-    Any SAL_CALL OJoinExchObj::queryInterface( const Type& _rType ) throw(RuntimeException, std::exception)
+    Any SAL_CALL OJoinExchObj::queryInterface( const Type& _rType )
     {
         Any aReturn = TransferableHelper::queryInterface(_rType);
         if (!aReturn.hasValue())

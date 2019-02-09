@@ -45,31 +45,31 @@ namespace dbaccess
 
         virtual void fillValueRow(ORowSetRow& _rRow,sal_Int32 _nPosition) override;
         // css::sdbcx::XRowLocate
-        virtual css::uno::Any SAL_CALL getBookmark() throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual bool SAL_CALL moveToBookmark( const css::uno::Any& bookmark ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual sal_Int32 SAL_CALL compareBookmarks( const css::uno::Any& first, const css::uno::Any& second ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual bool SAL_CALL hasOrderedBookmarks(  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual sal_Int32 SAL_CALL hashBookmark( const css::uno::Any& bookmark ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
+        virtual css::uno::Any getBookmark() override;
+        virtual bool moveToBookmark( const css::uno::Any& bookmark ) override;
+        virtual sal_Int32 compareBookmarks( const css::uno::Any& first, const css::uno::Any& second ) override;
+        virtual bool hasOrderedBookmarks(  ) override;
+        virtual sal_Int32 hashBookmark( const css::uno::Any& bookmark ) override;
+
+        bool isBeforeFirst(  );
+        bool isAfterLast(  );
 
         // css::sdbc::XResultSet
-        virtual bool SAL_CALL next(  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual bool SAL_CALL isBeforeFirst(  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual bool SAL_CALL isAfterLast(  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual void SAL_CALL beforeFirst(  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual void SAL_CALL afterLast(  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual bool SAL_CALL first(  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual bool SAL_CALL last(  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual sal_Int32 SAL_CALL getRow(  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual bool SAL_CALL absolute( sal_Int32 row ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual bool SAL_CALL previous(  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual void SAL_CALL refreshRow(  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual bool SAL_CALL rowUpdated(  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual bool SAL_CALL rowInserted(  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual bool SAL_CALL rowDeleted(  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
+        virtual bool next() override;
+        virtual void beforeFirst(  ) override;
+        virtual void afterLast(  ) override;
+        virtual bool first() override;
+        virtual bool last() override;
+        virtual sal_Int32 getRow(  ) override;
+        virtual bool absolute( sal_Int32 row ) override;
+        virtual bool previous(  ) override;
+        virtual void refreshRow(  ) override;
+        virtual bool rowUpdated(  ) override;
+        virtual bool rowInserted(  ) override;
+        virtual bool rowDeleted(  ) override;
         // css::sdbc::XResultSetUpdate
-        virtual void SAL_CALL insertRow( const ORowSetRow& _rInsertRow,const connectivity::OSQLTable& _xTable ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
-        virtual void SAL_CALL updateRow(const ORowSetRow& _rInsertRow,const ORowSetRow& _rOriginalRow,const connectivity::OSQLTable& _xTable  ) throw(css::sdbc::SQLException, css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL deleteRow(const ORowSetRow& _rInsertRow,const connectivity::OSQLTable& _xTable  ) throw(css::sdbc::SQLException, css::uno::RuntimeException) override;
+        virtual void insertRow( const ORowSetRow& _rInsertRow,const connectivity::OSQLTable& _xTable ) override;
+        virtual void deleteRow(const ORowSetRow& _rInsertRow,const connectivity::OSQLTable& _xTable  ) override;
     };
 }
 #endif // INCLUDED_DBACCESS_SOURCE_CORE_API_STATICSET_HXX

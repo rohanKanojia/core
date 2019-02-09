@@ -19,7 +19,7 @@
 #ifndef INCLUDED_REPORTDESIGN_SOURCE_UI_INC_RPTUNDO_HXX
 #define INCLUDED_REPORTDESIGN_SOURCE_UI_INC_RPTUNDO_HXX
 
-#include "UndoActions.hxx"
+#include <UndoActions.hxx>
 #include <functional>
 
 namespace com { namespace sun { namespace star {
@@ -42,8 +42,8 @@ namespace rptui
                                                     m_aControls;
         ::std::vector< ::std::pair< OUString ,css::uno::Any> >
                                                     m_aValues;
-        Action                                      m_eAction;
-        sal_uInt16                                  m_nSlot;
+        Action const                                m_eAction;
+        sal_uInt16 const                            m_nSlot;
         bool                                        m_bInserted;
 
         virtual void    implReInsert( ) = 0;
@@ -54,8 +54,8 @@ namespace rptui
         OSectionUndo(   OReportModel& rMod
                         ,sal_uInt16 _nSlot
                         ,Action _eAction
-                        ,sal_uInt16 nCommentID);
-        virtual ~OSectionUndo();
+                        ,const char* pCommentID);
+        virtual ~OSectionUndo() override;
 
         virtual void        Undo() override;
         virtual void        Redo() override;
@@ -66,8 +66,7 @@ namespace rptui
     class OReportSectionUndo : public OSectionUndo
     {
         OReportHelper                               m_aReportHelper;
-        ::std::mem_fun_t< css::uno::Reference< css::report::XSection >
-                                    ,OReportHelper> m_pMemberFunction;
+        ::std::function<css::uno::Reference< css::report::XSection >(OReportHelper *)> m_pMemberFunction;
 
         void    implReInsert( ) override;
         void    implReRemove( ) override;
@@ -77,11 +76,10 @@ namespace rptui
         //OReportSectionUndo(    const css::uno::Reference< css::report::XSection >& _xSection
         OReportSectionUndo( OReportModel& rMod
                             ,sal_uInt16 _nSlot
-                            ,::std::mem_fun_t< css::uno::Reference< css::report::XSection >
-                                ,OReportHelper> _pMemberFunction
+                            ,::std::function<css::uno::Reference< css::report::XSection >(OReportHelper *)> _pMemberFunction
                             ,const css::uno::Reference< css::report::XReportDefinition >& _xReport
                             ,Action _eAction);
-        virtual ~OReportSectionUndo();
+        virtual ~OReportSectionUndo() override;
     };
 
     /** Undo action for the group header, footer
@@ -89,8 +87,7 @@ namespace rptui
     class OGroupSectionUndo : public OSectionUndo
     {
         OGroupHelper                                m_aGroupHelper;
-        ::std::mem_fun_t< css::uno::Reference< css::report::XSection >
-                                    ,OGroupHelper> m_pMemberFunction;
+        ::std::function<css::uno::Reference< css::report::XSection >(OGroupHelper *)> m_pMemberFunction;
 
         mutable OUString                     m_sName;
 
@@ -102,11 +99,10 @@ namespace rptui
         //OGroupSectionUndo(     const css::uno::Reference< css::report::XSection >& _xSection
         OGroupSectionUndo(  OReportModel& rMod
                             ,sal_uInt16 _nSlot
-                            ,::std::mem_fun_t< css::uno::Reference< css::report::XSection >
-                                            ,OGroupHelper> _pMemberFunction
+                            ,::std::function<css::uno::Reference< css::report::XSection >(OGroupHelper *)> _pMemberFunction
                             ,const css::uno::Reference< css::report::XGroup >& _xGroup
                             ,Action _eAction
-                            ,sal_uInt16 nCommentID);
+                            ,const char* pCommentID);
 
         virtual OUString GetComment() const override;
     };
@@ -118,14 +114,14 @@ namespace rptui
     {
         css::uno::Reference< css::report::XGroup>             m_xGroup; ///<! the group for the undo redo action
         css::uno::Reference< css::report::XReportDefinition > m_xReportDefinition; ///<! the parent report definition
-        Action                                                                          m_eAction; ///<! the current action
+        Action const                                                                    m_eAction; ///<! the current action
         sal_Int32                                                                       m_nLastPosition; ///<! the last position of the group
 
         void    implReInsert( );
         void    implReRemove( );
     public:
         OGroupUndo(OReportModel& rMod
-                    ,sal_uInt16 nCommentID
+                    ,const char* pCommentID
                     ,Action _eAction
                     ,const css::uno::Reference< css::report::XGroup>& _xGroup
                     ,const css::uno::Reference< css::report::XReportDefinition >& _xReportDefinition);

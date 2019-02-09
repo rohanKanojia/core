@@ -10,12 +10,12 @@
 #ifndef INCLUDED_UNOIDL_SOURCE_SOURCEFILEPROVIDER_HXX
 #define INCLUDED_UNOIDL_SOURCE_SOURCEFILEPROVIDER_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <map>
 
-#include "rtl/ref.hxx"
-#include "unoidl/unoidl.hxx"
+#include <rtl/ref.hxx>
+#include <unoidl/unoidl.hxx>
 
 namespace unoidl { namespace detail {
 
@@ -32,7 +32,7 @@ public:
     virtual rtl::Reference<Entity> findEntity(OUString const & name) const override;
 
 private:
-    virtual ~SourceFileProvider() throw ();
+    virtual ~SourceFileProvider() throw () override;
 
     std::map< OUString, rtl::Reference<Entity> > rootMap_;
 };

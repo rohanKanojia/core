@@ -43,7 +43,7 @@
 - (IOHIDQueueInterface**) queue;
 - (IOHIDDeviceInterface**) hidDeviceInterface;
 - (void) handleEventWithCookieString: (NSString*) cookieString sumOfValues: (SInt32) sumOfValues;
-- (void) removeNotifcationObserver;
+- (void) removeNotificationObserver;
 - (void) remoteControlAvailable:(NSNotification *)notification;
 
 @end
@@ -96,7 +96,7 @@
 }
 
 - (void) dealloc {
-	[self removeNotifcationObserver];
+	[self removeNotificationObserver];
 	[self stopListening:self];
 	[cookieToButtonMapping release];
 	[super dealloc];
@@ -168,7 +168,7 @@
 
 	if ([self isOpenInExclusiveMode] && fixSecureEventInputBug) EnableSecureEventInput();
 
-	[self removeNotifcationObserver];
+	[self removeNotificationObserver];
 
 	io_object_t hidDevice = [[self class] findRemoteDevice];
 	if (hidDevice == 0) return;
@@ -240,7 +240,7 @@ cleanup:
 	if ([self isOpenInExclusiveMode] && fixSecureEventInputBug) DisableSecureEventInput();
 
 	if ([self isOpenInExclusiveMode] && sendNotification) {
-		[[self class] sendFinishedNotifcationForAppIdentifier: nil];
+		[[self class] sendFinishedNotificationForAppIdentifier: nil];
 	}
 	// be KVO friendly
 	[self willChangeValueForKey:@"listeningToRemote"];
@@ -320,13 +320,13 @@ cleanup:
 	}
 }
 
-- (void) removeNotifcationObserver {
+- (void) removeNotificationObserver {
 	[[NSDistributedNotificationCenter defaultCenter] removeObserver:self name:FINISHED_USING_REMOTE_CONTROL_NOTIFICATION object:nil];
 }
 
 - (void) remoteControlAvailable:(NSNotification *)notification {
     (void)notification;
-	[self removeNotifcationObserver];
+	[self removeNotificationObserver];
 	[self startListening: self];
 }
 
@@ -346,7 +346,7 @@ static void QueueCallbackFunction(void* target,  IOReturn result, void* refcon, 
 
 	HIDRemoteControlDevice* remote = (HIDRemoteControlDevice*)target;
 	IOHIDEventStruct event;
-	AbsoluteTime 	 zeroTime = {0,0};
+	AbsoluteTime const zeroTime = {0,0};
 	NSMutableString* cookieString = [NSMutableString string];
 	SInt32			 sumOfValues = 0;
 	while (result == kIOReturnSuccess)
@@ -424,7 +424,6 @@ static void QueueCallbackFunction(void* target,  IOReturn result, void* refcon, 
 
 	if (success == kIOReturnSuccess) {
 
-		[elements autorelease];
 		/*
 		cookies = calloc(NUMBER_OF_APPLE_REMOTE_ACTIONS, sizeof(IOHIDElementCookie));
 		memset(cookies, 0, sizeof(IOHIDElementCookie) * NUMBER_OF_APPLE_REMOTE_ACTIONS);
@@ -452,6 +451,8 @@ static void QueueCallbackFunction(void* target,  IOReturn result, void* refcon, 
 
 			[allCookies addObject: [NSNumber numberWithInt:(int)cookie]];
 		}
+                CFRelease(elements);
+                elements=nil;
 	} else {
 		return NO;
 	}

@@ -38,23 +38,23 @@ public:
                             static SfxPoolItem* CreateDefault();
                             XFillFloatTransparenceItem();
                             XFillFloatTransparenceItem(const OUString& rName, const XGradient& rGradient, bool bEnable = true );
-                            XFillFloatTransparenceItem(SfxItemPool* pPool, const XGradient& rTheGradient, bool bEnable = true );
+                            XFillFloatTransparenceItem( const XGradient& rTheGradient, bool bEnable = true );
                             XFillFloatTransparenceItem( const XFillFloatTransparenceItem& rItem );
 
     virtual bool            operator==( const SfxPoolItem& rItem ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
-    virtual sal_uInt16          GetVersion( sal_uInt16 nFileFormatVersion ) const override;
+    virtual sal_uInt16      GetVersion( sal_uInt16 nFileFormatVersion ) const override;
     virtual bool            QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool            PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
-    virtual bool GetPresentation( SfxItemPresentation ePres, SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric, OUString &rText, const IntlWrapper * pIntlWrapper = nullptr ) const override;
+    virtual bool GetPresentation( SfxItemPresentation ePres, MapUnit eCoreMetric,
+                                  MapUnit ePresMetric, OUString &rText, const IntlWrapper& rIntlWrapper ) const override;
 
     bool                    IsEnabled() const { return bEnabled; }
     void                    SetEnabled( bool bEnable ) { bEnabled = bEnable; }
 
     static bool CompareValueFunc( const NameOrIndex* p1, const NameOrIndex* p2 );
-    XFillFloatTransparenceItem* checkForUniqueItem( SdrModel* pModel ) const;
+    std::unique_ptr<XFillFloatTransparenceItem> checkForUniqueItem( SdrModel* pModel ) const;
 };
 
 #endif

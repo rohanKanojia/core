@@ -43,8 +43,9 @@ getAsConst( const OString& rString )
     return aUgly[ nIdx ].getStr();
 }
 
+/// @throws uno::RuntimeException
 static css::uno::Reference<css::accessibility::XAccessibleAction>
-        getAction( AtkAction *action ) throw (uno::RuntimeException)
+        getAction( AtkAction *action )
 {
     AtkObjectWrapper *pWrap = ATK_OBJECT_WRAPPER( action );
 
@@ -163,7 +164,7 @@ action_wrapper_get_name (AtkAction *action,
 *  The keybindings in <full-path> should be separated by ":"
 */
 
-static inline void
+static void
 appendKeyStrokes(OStringBuffer& rBuffer, const uno::Sequence< awt::KeyStroke >& rKeyStrokes)
 {
     for( sal_Int32 i = 0; i < rKeyStrokes.getLength(); i++ )
@@ -176,7 +177,7 @@ appendKeyStrokes(OStringBuffer& rBuffer, const uno::Sequence< awt::KeyStroke >& 
             rBuffer.append("<Alt>");
 
         if( ( rKeyStrokes[i].KeyCode >= awt::Key::A ) && ( rKeyStrokes[i].KeyCode <= awt::Key::Z ) )
-            rBuffer.append( (sal_Char) ( 'a' + ( rKeyStrokes[i].KeyCode - awt::Key::A ) ) );
+            rBuffer.append( static_cast<sal_Char>( 'a' + ( rKeyStrokes[i].KeyCode - awt::Key::A ) ) );
         else
         {
             sal_Char c = '\0';
@@ -228,13 +229,13 @@ action_wrapper_get_keybinding (AtkAction *action,
             {
                 OStringBuffer aRet;
 
-                sal_Int32 nmax = std::min( xBinding->getAccessibleKeyBindingCount(), (sal_Int32) 3 );
+                sal_Int32 nmax = std::min( xBinding->getAccessibleKeyBindingCount(), sal_Int32(3) );
                 for( sal_Int32 n = 0; n < nmax; n++ )
                 {
                     appendKeyStrokes( aRet,  xBinding->getAccessibleKeyBinding( n ) );
 
                     if( n < 2 )
-                        aRet.append( (sal_Char) ';' );
+                        aRet.append( ';' );
                 }
 
                 // !! FIXME !! remember keystroke in wrapper object ?

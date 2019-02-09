@@ -7,28 +7,29 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <map>
 #include <vector>
 #include <cstring>
 
-#include "osl/file.h"
-#include "osl/file.hxx"
-#include "rtl/character.hxx"
-#include "rtl/ref.hxx"
-#include "rtl/ustrbuf.hxx"
-#include "rtl/ustring.hxx"
-#include "unoidl/unoidl.hxx"
+#include <osl/file.h>
+#include <osl/file.hxx>
+#include <rtl/character.hxx>
+#include <rtl/ref.hxx>
+#include <rtl/ustrbuf.hxx>
+#include <rtl/ustring.hxx>
+#include <unoidl/unoidl.hxx>
 
 #include "sourceprovider-parser-requires.hxx"
-#include "sourceprovider-parser.hxx"
+#include <sourceprovider-parser.hxx>
 #include "sourceprovider-scanner.hxx"
 #include "sourcetreeprovider.hxx"
 
 #if defined MACOSX
 #include <dirent.h>
-#include "osl/thread.h"
+#include <osl/thread.h>
 #endif
 
 namespace unoidl { namespace detail {
@@ -38,7 +39,7 @@ namespace {
 //TODO: Bad hack to work around osl::FileStatus::getFileName not determining the
 // original spelling of a file name (not even with
 // osl_FileStatus_Mask_Validate):
-OUString getFileName(OUString const & uri, osl::FileStatus & status) {
+OUString getFileName(OUString const & uri, osl::FileStatus const & status) {
 #if defined MACOSX
     sal_Int32 i = uri.lastIndexOf('/') + 1;
     OUString path;
@@ -99,7 +100,7 @@ public:
     Cursor() {}
 
 private:
-    virtual ~Cursor() throw () {}
+    virtual ~Cursor() throw () override {}
 
     virtual rtl::Reference<Entity> getNext(OUString *) override
     { return rtl::Reference<Entity>(); } //TODO
@@ -110,7 +111,7 @@ public:
     SourceModuleEntity() {}
 
 private:
-    virtual ~SourceModuleEntity() throw () {}
+    virtual ~SourceModuleEntity() throw () override {}
 
     virtual std::vector<OUString> getMemberNames() const override
     { return std::vector<OUString>(); } //TODO
@@ -201,8 +202,7 @@ rtl::Reference<Entity> SourceTreeProvider::findEntity(OUString const & name)
                 "<" << uri << "> does not define entity " << name);
         }
     }
-    cache_.insert(
-        std::map< OUString, rtl::Reference<Entity> >::value_type(name, ent));
+    cache_.emplace(name, ent);
     return ent;
 }
 

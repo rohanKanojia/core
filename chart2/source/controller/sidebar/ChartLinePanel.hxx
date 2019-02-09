@@ -10,34 +10,21 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_SIDEBAR_CHARTLINEPANEL_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_SIDEBAR_CHARTLINEPANEL_HXX
 
-#include <vcl/ctrl.hxx>
-#include <sfx2/sidebar/ControllerItem.hxx>
 #include <sfx2/sidebar/SidebarModelUpdate.hxx>
-#include <svx/xgrad.hxx>
-#include <svx/itemwin.hxx>
-#include <svx/xfillit0.hxx>
-#include <svx/xflclit.hxx>
-#include <svx/xflgrit.hxx>
-#include <svx/xflhtit.hxx>
-#include <svx/xbtmpit.hxx>
-#include <svx/drawitem.hxx>
-#include <svx/sidebar/PanelLayout.hxx>
-#include <svl/intitem.hxx>
-#include <com/sun/star/ui/XUIElement.hpp>
-
 #include <svx/sidebar/LinePropertyPanelBase.hxx>
 
 #include "ChartSidebarModifyListener.hxx"
 #include "ChartSidebarSelectionListener.hxx"
 #include "ChartColorWrapper.hxx"
 
-class XFillFloatTransparenceItem;
-class XFillTransparenceItem;
-class XFillStyleItem;
-class XFillGradientItem;
-class XFillColorItem;
-class XFillHatchItem;
-class XFillBitmapItem;
+class XLineCapItem;
+class XLineDashItem;
+class XLineEndItem;
+class XLineJointItem;
+class XLineStartItem;
+class XLineStyleItem;
+class XLineTransparenceItem;
+class XLineWidthItem;
 
 namespace chart {
 
@@ -56,13 +43,13 @@ public:
         const css::uno::Reference<css::frame::XFrame>& rxFrame,
         ChartController* pController);
 
-    // constructor/destuctor
+    // constructor/destructor
     ChartLinePanel(
         vcl::Window* pParent,
         const css::uno::Reference<css::frame::XFrame>& rxFrame,
         ChartController* pController);
 
-    virtual ~ChartLinePanel();
+    virtual ~ChartLinePanel() override;
 
     virtual void updateData() override;
     virtual void modelInvalid() override;

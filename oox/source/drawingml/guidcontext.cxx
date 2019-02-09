@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/guidcontext.hxx"
+#include <drawingml/guidcontext.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star::uno;
@@ -25,7 +25,7 @@ using namespace ::com::sun::star::xml::sax;
 
 namespace oox { namespace drawingml {
 
-GuidContext::GuidContext( ContextHandler2Helper& rParent, OUString& rGuidId )
+GuidContext::GuidContext( ContextHandler2Helper const & rParent, OUString& rGuidId )
 : ContextHandler2( rParent )
 , mrGuidId( rGuidId )
 {

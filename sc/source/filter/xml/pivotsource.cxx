@@ -31,17 +31,17 @@ PivotTableSources::PivotTableSources() {}
 
 void PivotTableSources::appendSheetSource( ScDPObject* pObj, const ScSheetSourceDesc& rDesc )
 {
-    maSheetSources.push_back(SheetSource(pObj, rDesc));
+    maSheetSources.emplace_back(pObj, rDesc);
 }
 
 void PivotTableSources::appendDBSource( ScDPObject* pObj, const ScImportSourceDesc& rDesc )
 {
-    maDBSources.push_back(DBSource(pObj, rDesc));
+    maDBSources.emplace_back(pObj, rDesc);
 }
 
 void PivotTableSources::appendServiceSource( ScDPObject* pObj, const ScDPServiceDesc& rDesc )
 {
-    maServiceSources.push_back(ServiceSource(pObj, rDesc));
+    maServiceSources.emplace_back(pObj, rDesc);
 }
 
 void PivotTableSources::appendSelectedPages( ScDPObject* pObj, const SelectedPagesType& rSelected )
@@ -49,12 +49,12 @@ void PivotTableSources::appendSelectedPages( ScDPObject* pObj, const SelectedPag
     if (rSelected.empty())
         return;
 
-    maSelectedPagesList.push_back(SelectedPages(pObj, rSelected));
+    maSelectedPagesList.emplace_back(pObj, rSelected);
 }
 
 namespace {
 
-struct SelectedPageProcessor : std::unary_function<PivotTableSources::SelectedPages, void>
+struct SelectedPageProcessor
 {
     void operator() ( PivotTableSources::SelectedPages& rItem )
     {
@@ -67,11 +67,8 @@ struct SelectedPageProcessor : std::unary_function<PivotTableSources::SelectedPa
         if (!pSaveData)
             return;
 
-        PivotTableSources::SelectedPagesType::const_iterator it = rItem.maSelectedPages.begin(), itEnd = rItem.maSelectedPages.end();
-        for (; it != itEnd; ++it)
+        for (const auto& [rDimName, rSelected] : rItem.maSelectedPages)
         {
-            const OUString& rDimName = it->first;
-            const OUString& rSelected = it->second;
             ScDPSaveDimension* pDim = pSaveData->GetExistingDimensionByName(rDimName);
             if (!pDim)
                 continue;
@@ -81,7 +78,7 @@ struct SelectedPageProcessor : std::unary_function<PivotTableSources::SelectedPa
     }
 };
 
-struct PivotSheetDescSetter : std::unary_function<sc::PivotTableSources::SheetSource, void>
+struct PivotSheetDescSetter
 {
     void operator() ( sc::PivotTableSources::SheetSource& rSrc )
     {
@@ -90,7 +87,7 @@ struct PivotSheetDescSetter : std::unary_function<sc::PivotTableSources::SheetSo
     }
 };
 
-struct PivotDBDescSetter : std::unary_function<sc::PivotTableSources::DBSource, void>
+struct PivotDBDescSetter
 {
     void operator() ( sc::PivotTableSources::DBSource& rSrc )
     {
@@ -99,7 +96,7 @@ struct PivotDBDescSetter : std::unary_function<sc::PivotTableSources::DBSource, 
     }
 };
 
-struct PivotServiceDataSetter : std::unary_function<sc::PivotTableSources::ServiceSource, void>
+struct PivotServiceDataSetter
 {
     void operator() ( sc::PivotTableSources::ServiceSource& rSrc )
     {

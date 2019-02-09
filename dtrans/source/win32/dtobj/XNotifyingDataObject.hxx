@@ -23,14 +23,11 @@
 #include <com/sun/star/datatransfer/XTransferable.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboardOwner.hpp>
 
-#if defined _MSC_VER
-#pragma warning(push,1)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
 #endif
-#include <objidl.h>
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
+#include <objidl.h>
 
 #include <systools/win32/comtools.hxx>
 
@@ -56,25 +53,25 @@ public:
     // ole interface implementation
 
     //IUnknown interface methods
-    STDMETHODIMP           QueryInterface(REFIID iid, LPVOID* ppvObject);
-    STDMETHODIMP_( ULONG ) AddRef( );
-    STDMETHODIMP_( ULONG ) Release( );
+    STDMETHODIMP           QueryInterface(REFIID iid, LPVOID* ppvObject) override;
+    STDMETHODIMP_( ULONG ) AddRef( ) override;
+    STDMETHODIMP_( ULONG ) Release( ) override;
 
     // IDataObject interface methods
-    STDMETHODIMP GetData( LPFORMATETC pFormatetc, LPSTGMEDIUM pmedium );
-    STDMETHODIMP GetDataHere( LPFORMATETC pFormatetc, LPSTGMEDIUM pmedium );
-    STDMETHODIMP QueryGetData( LPFORMATETC pFormatetc );
-    STDMETHODIMP GetCanonicalFormatEtc( LPFORMATETC pFormatectIn, LPFORMATETC pFormatetcOut );
-    STDMETHODIMP SetData( LPFORMATETC pFormatetc, LPSTGMEDIUM pmedium, BOOL fRelease );
-    STDMETHODIMP EnumFormatEtc( DWORD dwDirection, IEnumFORMATETC** ppenumFormatetc );
-    STDMETHODIMP DAdvise( LPFORMATETC pFormatetc, DWORD advf, LPADVISESINK pAdvSink, DWORD* pdwConnection );
-    STDMETHODIMP DUnadvise( DWORD dwConnection );
-    STDMETHODIMP EnumDAdvise( LPENUMSTATDATA* ppenumAdvise );
+    STDMETHODIMP GetData( LPFORMATETC pFormatetc, LPSTGMEDIUM pmedium ) override;
+    STDMETHODIMP GetDataHere( LPFORMATETC pFormatetc, LPSTGMEDIUM pmedium ) override;
+    STDMETHODIMP QueryGetData( LPFORMATETC pFormatetc ) override;
+    STDMETHODIMP GetCanonicalFormatEtc( LPFORMATETC pFormatectIn, LPFORMATETC pFormatetcOut ) override;
+    STDMETHODIMP SetData( LPFORMATETC pFormatetc, LPSTGMEDIUM pmedium, BOOL fRelease ) override;
+    STDMETHODIMP EnumFormatEtc( DWORD dwDirection, IEnumFORMATETC** ppenumFormatetc ) override;
+    STDMETHODIMP DAdvise( LPFORMATETC pFormatetc, DWORD advf, LPADVISESINK pAdvSink, DWORD* pdwConnection ) override;
+    STDMETHODIMP DUnadvise( DWORD dwConnection ) override;
+    STDMETHODIMP EnumDAdvise( LPENUMSTATDATA* ppenumAdvise ) override;
 
     operator IDataObject*( );
 
 private:
-    void SAL_CALL lostOwnership( );
+    void lostOwnership( );
 
 private:
     sal_Int32                                                                     m_nRefCnt;

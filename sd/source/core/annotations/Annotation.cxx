@@ -17,24 +17,33 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "osl/time.h"
+#include <boost/property_tree/json_parser.hpp>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/office/XAnnotation.hpp>
 #include <com/sun/star/drawing/XDrawPage.hpp>
 
 #include <comphelper/processfactory.hxx>
+#include <comphelper/lok.hxx>
 #include <cppuhelper/propertysetmixin.hxx>
 #include <cppuhelper/compbase.hxx>
 #include <cppuhelper/basemutex.hxx>
 
-#include "Annotation.hxx"
-#include "drawdoc.hxx"
-#include "notifydocumentevent.hxx"
-#include "sdpage.hxx"
-#include "textapi.hxx"
+#include <unotools/datetime.hxx>
+
+#include <sfx2/viewsh.hxx>
+#include <svx/svdundo.hxx>
+
+#include <LibreOfficeKit/LibreOfficeKitEnums.h>
+
+#include <Annotation.hxx>
+#include <drawdoc.hxx>
+#include <notifydocumentevent.hxx>
+#include <sdpage.hxx>
+#include <textapi.hxx>
+
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
@@ -57,41 +66,44 @@ public:
     Annotation(const Annotation&) = delete;
     Annotation& operator=(const Annotation&) = delete;
 
+    static sal_uInt32 m_nLastId;
+
     SdPage* GetPage() const { return mpPage; }
-    SdrModel* GetModel() { return (mpPage != nullptr) ? mpPage->GetModel() : nullptr; }
+    SdrModel* GetModel() { return (mpPage != nullptr) ? &mpPage->getSdrModelFromSdrPage() : nullptr; }
+    sal_uInt32 GetId() const { return m_nId; }
 
     // XInterface:
-    virtual Any SAL_CALL queryInterface(Type const & type) throw (RuntimeException, std::exception) override;
+    virtual Any SAL_CALL queryInterface(Type const & type) override;
     virtual void SAL_CALL acquire() throw () override { ::cppu::WeakComponentImplHelper< XAnnotation >::acquire(); }
     virtual void SAL_CALL release() throw () override { ::cppu::WeakComponentImplHelper< XAnnotation >::release(); }
 
     // css::beans::XPropertySet:
-    virtual Reference< XPropertySetInfo > SAL_CALL getPropertySetInfo() throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL setPropertyValue(const OUString & aPropertyName, const Any & aValue) throw (RuntimeException, UnknownPropertyException, PropertyVetoException, IllegalArgumentException, WrappedTargetException, std::exception) override;
-    virtual Any SAL_CALL getPropertyValue(const OUString & PropertyName) throw (RuntimeException, UnknownPropertyException, WrappedTargetException, std::exception) override;
-    virtual void SAL_CALL addPropertyChangeListener(const OUString & aPropertyName, const Reference< XPropertyChangeListener > & xListener) throw (RuntimeException, UnknownPropertyException, WrappedTargetException, std::exception) override;
-    virtual void SAL_CALL removePropertyChangeListener(const OUString & aPropertyName, const Reference< XPropertyChangeListener > & aListener) throw (RuntimeException, UnknownPropertyException, WrappedTargetException, std::exception) override;
-    virtual void SAL_CALL addVetoableChangeListener(const OUString & PropertyName, const Reference< XVetoableChangeListener > & aListener) throw (RuntimeException, UnknownPropertyException, WrappedTargetException, std::exception) override;
-    virtual void SAL_CALL removeVetoableChangeListener(const OUString & PropertyName, const Reference< XVetoableChangeListener > & aListener) throw (RuntimeException, UnknownPropertyException, WrappedTargetException, std::exception) override;
+    virtual Reference< XPropertySetInfo > SAL_CALL getPropertySetInfo() override;
+    virtual void SAL_CALL setPropertyValue(const OUString & aPropertyName, const Any & aValue) override;
+    virtual Any SAL_CALL getPropertyValue(const OUString & PropertyName) override;
+    virtual void SAL_CALL addPropertyChangeListener(const OUString & aPropertyName, const Reference< XPropertyChangeListener > & xListener) override;
+    virtual void SAL_CALL removePropertyChangeListener(const OUString & aPropertyName, const Reference< XPropertyChangeListener > & aListener) override;
+    virtual void SAL_CALL addVetoableChangeListener(const OUString & PropertyName, const Reference< XVetoableChangeListener > & aListener) override;
+    virtual void SAL_CALL removeVetoableChangeListener(const OUString & PropertyName, const Reference< XVetoableChangeListener > & aListener) override;
 
     // css::office::XAnnotation:
-    virtual css::uno::Any SAL_CALL getAnchor() throw (css::uno::RuntimeException, std::exception) override;
-    virtual RealPoint2D SAL_CALL getPosition() throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL setPosition(const RealPoint2D & the_value) throw (RuntimeException, std::exception) override;
-    virtual css::geometry::RealSize2D SAL_CALL getSize() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setSize( const css::geometry::RealSize2D& _size ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getAuthor() throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL setAuthor(const OUString & the_value) throw (RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getInitials() throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL setInitials(const OUString & the_value) throw (RuntimeException, std::exception) override;
-    virtual util::DateTime SAL_CALL getDateTime() throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL setDateTime(const util::DateTime & the_value) throw (RuntimeException, std::exception) override;
-    virtual Reference< XText > SAL_CALL getTextRange() throw (RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL getAnchor() override;
+    virtual RealPoint2D SAL_CALL getPosition() override;
+    virtual void SAL_CALL setPosition(const RealPoint2D & the_value) override;
+    virtual css::geometry::RealSize2D SAL_CALL getSize() override;
+    virtual void SAL_CALL setSize( const css::geometry::RealSize2D& _size ) override;
+    virtual OUString SAL_CALL getAuthor() override;
+    virtual void SAL_CALL setAuthor(const OUString & the_value) override;
+    virtual OUString SAL_CALL getInitials() override;
+    virtual void SAL_CALL setInitials(const OUString & the_value) override;
+    virtual util::DateTime SAL_CALL getDateTime() override;
+    virtual void SAL_CALL setDateTime(const util::DateTime & the_value) override;
+    virtual Reference< XText > SAL_CALL getTextRange() override;
+
+    void createChangeUndo();
 
 private:
     // destructor is private and will be called indirectly by the release call    virtual ~Annotation() {}
-
-    void createChangeUndo();
 
     // override WeakComponentImplHelperBase::disposing()
     // This function is called upon disposing the component,
@@ -99,8 +111,8 @@ private:
     // disposed, do it here.
     virtual void SAL_CALL disposing() override;
 
+    sal_uInt32 const m_nId;
     SdPage* mpPage;
-    mutable ::osl::Mutex m_aMutex;
     RealPoint2D m_Position;
     RealSize2D m_Size;
     OUString m_Author;
@@ -119,7 +131,7 @@ public:
 
 protected:
     rtl::Reference< Annotation > mxAnnotation;
-    bool mbInsert;
+    bool const mbInsert;
     int mnIndex;
 };
 
@@ -130,6 +142,7 @@ struct AnnotationData
     OUString m_Author;
     OUString m_Initials;
     util::DateTime m_DateTime;
+    OUString m_Text;
 
     void get( const rtl::Reference< Annotation >& xAnnotation )
     {
@@ -138,6 +151,8 @@ struct AnnotationData
         m_Author = xAnnotation->getAuthor();
         m_Initials = xAnnotation->getInitials();
         m_DateTime = xAnnotation->getDateTime();
+        Reference<XText> xText(xAnnotation->getTextRange());
+        m_Text = xText->getString();
     }
 
     void set( const rtl::Reference< Annotation >& xAnnotation )
@@ -147,6 +162,8 @@ struct AnnotationData
         xAnnotation->setAuthor(m_Author);
         xAnnotation->setInitials(m_Initials);
         xAnnotation->setDateTime(m_DateTime);
+        Reference<XText> xText(xAnnotation->getTextRange());
+        xText->setString(m_Text);
     }
 };
 
@@ -168,12 +185,15 @@ void createAnnotation( Reference< XAnnotation >& xAnnotation, SdPage* pPage )
 {
     xAnnotation.set(
         new Annotation(comphelper::getProcessComponentContext(), pPage));
-    pPage->addAnnotation(xAnnotation);
+    pPage->addAnnotation(xAnnotation, -1);
 }
+
+sal_uInt32 Annotation::m_nLastId = 1;
 
 Annotation::Annotation( const Reference< XComponentContext >& context, SdPage* pPage )
 : ::cppu::WeakComponentImplHelper< XAnnotation >(m_aMutex)
-, ::cppu::PropertySetMixin< XAnnotation >(context, static_cast< Implements >(IMPLEMENTS_PROPERTY_SET), Sequence< OUString >())
+, ::cppu::PropertySetMixin< XAnnotation >(context, IMPLEMENTS_PROPERTY_SET, Sequence< OUString >())
+, m_nId( m_nLastId++ )
 , mpPage( pPage )
 {
 }
@@ -192,48 +212,48 @@ void SAL_CALL Annotation::disposing()
     }
 }
 
-Any Annotation::queryInterface(Type const & type) throw (RuntimeException, std::exception)
+Any Annotation::queryInterface(Type const & type)
 {
     return ::cppu::WeakComponentImplHelper< XAnnotation>::queryInterface(type);
 }
 
 // com.sun.star.beans.XPropertySet:
-Reference< XPropertySetInfo > SAL_CALL Annotation::getPropertySetInfo() throw (RuntimeException, std::exception)
+Reference< XPropertySetInfo > SAL_CALL Annotation::getPropertySetInfo()
 {
     return ::cppu::PropertySetMixin< XAnnotation >::getPropertySetInfo();
 }
 
-void SAL_CALL Annotation::setPropertyValue(const OUString & aPropertyName, const Any & aValue) throw (RuntimeException, UnknownPropertyException, PropertyVetoException, IllegalArgumentException, WrappedTargetException, std::exception)
+void SAL_CALL Annotation::setPropertyValue(const OUString & aPropertyName, const Any & aValue)
 {
     ::cppu::PropertySetMixin< XAnnotation >::setPropertyValue(aPropertyName, aValue);
 }
 
-Any SAL_CALL Annotation::getPropertyValue(const OUString & aPropertyName) throw (RuntimeException, UnknownPropertyException, WrappedTargetException, std::exception)
+Any SAL_CALL Annotation::getPropertyValue(const OUString & aPropertyName)
 {
     return ::cppu::PropertySetMixin< XAnnotation >::getPropertyValue(aPropertyName);
 }
 
-void SAL_CALL Annotation::addPropertyChangeListener(const OUString & aPropertyName, const Reference< XPropertyChangeListener > & xListener) throw (RuntimeException, UnknownPropertyException, WrappedTargetException, std::exception)
+void SAL_CALL Annotation::addPropertyChangeListener(const OUString & aPropertyName, const Reference< XPropertyChangeListener > & xListener)
 {
     ::cppu::PropertySetMixin< XAnnotation >::addPropertyChangeListener(aPropertyName, xListener);
 }
 
-void SAL_CALL Annotation::removePropertyChangeListener(const OUString & aPropertyName, const Reference< XPropertyChangeListener > & xListener) throw (RuntimeException, UnknownPropertyException, WrappedTargetException, std::exception)
+void SAL_CALL Annotation::removePropertyChangeListener(const OUString & aPropertyName, const Reference< XPropertyChangeListener > & xListener)
 {
     ::cppu::PropertySetMixin< XAnnotation >::removePropertyChangeListener(aPropertyName, xListener);
 }
 
-void SAL_CALL Annotation::addVetoableChangeListener(const OUString & aPropertyName, const Reference< XVetoableChangeListener > & xListener) throw (RuntimeException, UnknownPropertyException, WrappedTargetException, std::exception)
+void SAL_CALL Annotation::addVetoableChangeListener(const OUString & aPropertyName, const Reference< XVetoableChangeListener > & xListener)
 {
     ::cppu::PropertySetMixin< XAnnotation >::addVetoableChangeListener(aPropertyName, xListener);
 }
 
-void SAL_CALL Annotation::removeVetoableChangeListener(const OUString & aPropertyName, const Reference< XVetoableChangeListener > & xListener) throw (RuntimeException, UnknownPropertyException, WrappedTargetException, std::exception)
+void SAL_CALL Annotation::removeVetoableChangeListener(const OUString & aPropertyName, const Reference< XVetoableChangeListener > & xListener)
 {
     ::cppu::PropertySetMixin< XAnnotation >::removeVetoableChangeListener(aPropertyName, xListener);
 }
 
-Any SAL_CALL Annotation::getAnchor() throw (RuntimeException, std::exception)
+Any SAL_CALL Annotation::getAnchor()
 {
     osl::MutexGuard g(m_aMutex);
     Any aRet;
@@ -246,13 +266,13 @@ Any SAL_CALL Annotation::getAnchor() throw (RuntimeException, std::exception)
 }
 
 // css::office::XAnnotation:
-RealPoint2D SAL_CALL Annotation::getPosition() throw (RuntimeException, std::exception)
+RealPoint2D SAL_CALL Annotation::getPosition()
 {
     osl::MutexGuard g(m_aMutex);
     return m_Position;
 }
 
-void SAL_CALL Annotation::setPosition(const RealPoint2D & the_value) throw (RuntimeException, std::exception)
+void SAL_CALL Annotation::setPosition(const RealPoint2D & the_value)
 {
     prepareSet("Position", Any(), Any(), nullptr);
     {
@@ -263,13 +283,13 @@ void SAL_CALL Annotation::setPosition(const RealPoint2D & the_value) throw (Runt
 }
 
 // css::office::XAnnotation:
-RealSize2D SAL_CALL Annotation::getSize() throw (RuntimeException, std::exception)
+RealSize2D SAL_CALL Annotation::getSize()
 {
     osl::MutexGuard g(m_aMutex);
     return m_Size;
 }
 
-void SAL_CALL Annotation::setSize(const RealSize2D & the_value) throw (RuntimeException, std::exception)
+void SAL_CALL Annotation::setSize(const RealSize2D & the_value)
 {
     prepareSet("Size", Any(), Any(), nullptr);
     {
@@ -279,13 +299,13 @@ void SAL_CALL Annotation::setSize(const RealSize2D & the_value) throw (RuntimeEx
     }
 }
 
-OUString SAL_CALL Annotation::getAuthor() throw (RuntimeException, std::exception)
+OUString SAL_CALL Annotation::getAuthor()
 {
     osl::MutexGuard g(m_aMutex);
     return m_Author;
 }
 
-void SAL_CALL Annotation::setAuthor(const OUString & the_value) throw (RuntimeException, std::exception)
+void SAL_CALL Annotation::setAuthor(const OUString & the_value)
 {
     prepareSet("Author", Any(), Any(), nullptr);
     {
@@ -295,13 +315,13 @@ void SAL_CALL Annotation::setAuthor(const OUString & the_value) throw (RuntimeEx
     }
 }
 
-OUString SAL_CALL Annotation::getInitials() throw (RuntimeException, std::exception)
+OUString SAL_CALL Annotation::getInitials()
 {
     osl::MutexGuard g(m_aMutex);
     return m_Initials;
 }
 
-void SAL_CALL Annotation::setInitials(const OUString & the_value) throw (RuntimeException, std::exception)
+void SAL_CALL Annotation::setInitials(const OUString & the_value)
 {
     prepareSet("Initials", Any(), Any(), nullptr);
     {
@@ -311,13 +331,13 @@ void SAL_CALL Annotation::setInitials(const OUString & the_value) throw (Runtime
     }
 }
 
-util::DateTime SAL_CALL Annotation::getDateTime() throw (RuntimeException, std::exception)
+util::DateTime SAL_CALL Annotation::getDateTime()
 {
     osl::MutexGuard g(m_aMutex);
     return m_DateTime;
 }
 
-void SAL_CALL Annotation::setDateTime(const util::DateTime & the_value) throw (RuntimeException, std::exception)
+void SAL_CALL Annotation::setDateTime(const util::DateTime & the_value)
 {
     prepareSet("DateTime", Any(), Any(), nullptr);
     {
@@ -329,38 +349,120 @@ void SAL_CALL Annotation::setDateTime(const util::DateTime & the_value) throw (R
 
 void Annotation::createChangeUndo()
 {
-    SdrModel* pModel = GetModel();
+    SdrModel* pModel = GetModel(); // TTTT should use reference
     if( pModel && pModel->IsUndoEnabled() )
-        pModel->AddUndo( new UndoAnnotation( *this ) );
+        pModel->AddUndo( std::make_unique<UndoAnnotation>( *this ) );
 
     if( pModel )
     {
         pModel->SetChanged();
         Reference< XInterface > xSource( static_cast<uno::XWeak*>( this ) );
-        NotifyDocumentEvent( static_cast< SdDrawDocument* >( pModel ), "OnAnnotationChanged" , xSource );
+        NotifyDocumentEvent(
+            static_cast< SdDrawDocument& >( *pModel ),
+            "OnAnnotationChanged" ,
+            xSource );
     }
 }
 
-Reference< XText > SAL_CALL Annotation::getTextRange() throw (RuntimeException, std::exception)
+Reference< XText > SAL_CALL Annotation::getTextRange()
 {
     osl::MutexGuard g(m_aMutex);
     if( !m_TextRange.is() && (mpPage != nullptr) )
     {
-        m_TextRange = TextApiObject::create( static_cast< SdDrawDocument* >( mpPage->GetModel() ) );
+        m_TextRange = TextApiObject::create( static_cast< SdDrawDocument* >( &mpPage->getSdrModelFromSdrPage() ) );
     }
     return Reference< XText >( m_TextRange.get() );
 }
 
-SdrUndoAction* CreateUndoInsertOrRemoveAnnotation( const Reference< XAnnotation >& xAnnotation, bool bInsert )
+std::unique_ptr<SdrUndoAction> CreateUndoInsertOrRemoveAnnotation( const Reference< XAnnotation >& xAnnotation, bool bInsert )
 {
     Annotation* pAnnotation = dynamic_cast< Annotation* >( xAnnotation.get() );
     if( pAnnotation )
     {
-        return new UndoInsertOrRemoveAnnotation( *pAnnotation, bInsert );
+        return std::make_unique< UndoInsertOrRemoveAnnotation >( *pAnnotation, bInsert );
     }
     else
     {
         return nullptr;
+    }
+}
+
+void CreateChangeUndo(const css::uno::Reference< css::office::XAnnotation >& xAnnotation)
+{
+    Annotation* pAnnotation = dynamic_cast<Annotation*>(xAnnotation.get());
+    if (pAnnotation)
+        pAnnotation->createChangeUndo();
+}
+
+sal_uInt32 getAnnotationId(const Reference<XAnnotation>& xAnnotation)
+{
+    Annotation* pAnnotation = dynamic_cast<Annotation*>(xAnnotation.get());
+    sal_uInt32 nId = 0;
+    if (pAnnotation)
+        nId = pAnnotation->GetId();
+    return nId;
+}
+
+const SdPage* getAnnotationPage(const Reference<XAnnotation>& xAnnotation)
+{
+    Annotation* pAnnotation = dynamic_cast<Annotation*>(xAnnotation.get());
+    if (pAnnotation)
+        return pAnnotation->GetPage();
+    return nullptr;
+}
+
+namespace
+{
+std::string lcl_LOKGetCommentPayload(CommentNotificationType nType, Reference<XAnnotation> const & rxAnnotation)
+{
+    boost::property_tree::ptree aAnnotation;
+    aAnnotation.put("action", (nType == CommentNotificationType::Add ? "Add" :
+                               (nType == CommentNotificationType::Remove ? "Remove" :
+                                (nType == CommentNotificationType::Modify ? "Modify" : "???"))));
+    aAnnotation.put("id", sd::getAnnotationId(rxAnnotation));
+    if (nType != CommentNotificationType::Remove && rxAnnotation.is())
+    {
+        aAnnotation.put("id", sd::getAnnotationId(rxAnnotation));
+        aAnnotation.put("author", rxAnnotation->getAuthor());
+        aAnnotation.put("dateTime", utl::toISO8601(rxAnnotation->getDateTime()));
+        uno::Reference<text::XText> xText(rxAnnotation->getTextRange());
+        aAnnotation.put("text", xText->getString());
+        const SdPage* pPage = sd::getAnnotationPage(rxAnnotation);
+        aAnnotation.put("parthash", pPage ? OString::number(pPage->GetHashCode()) : OString());
+    }
+
+    boost::property_tree::ptree aTree;
+    aTree.add_child("comment", aAnnotation);
+    std::stringstream aStream;
+    boost::property_tree::write_json(aStream, aTree);
+
+    return aStream.str();
+}
+} // anonymous ns
+
+void LOKCommentNotify(CommentNotificationType nType, const SfxViewShell* pViewShell, Reference<XAnnotation> const & rxAnnotation)
+{
+    // callbacks only if tiled annotations are explicitly turned off by LOK client
+    if (!comphelper::LibreOfficeKit::isActive() || comphelper::LibreOfficeKit::isTiledAnnotations())
+        return ;
+
+    std::string aPayload = lcl_LOKGetCommentPayload(nType, rxAnnotation);
+    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_COMMENT, aPayload.c_str());
+}
+
+void LOKCommentNotifyAll(CommentNotificationType nType, Reference<XAnnotation> const & rxAnnotation)
+{
+    // callbacks only if tiled annotations are explicitly turned off by LOK client
+    if (!comphelper::LibreOfficeKit::isActive() || comphelper::LibreOfficeKit::isTiledAnnotations())
+        return ;
+
+    std::string aPayload = lcl_LOKGetCommentPayload(nType, rxAnnotation);
+
+    const SfxViewShell* pViewShell = SfxViewShell::GetFirst();
+    while (pViewShell)
+    {
+        pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_COMMENT, aPayload.c_str());
+        pViewShell = SfxViewShell::GetNext(*pViewShell);
     }
 }
 
@@ -376,13 +478,8 @@ UndoInsertOrRemoveAnnotation::UndoInsertOrRemoveAnnotation( Annotation& rAnnotat
         Reference< XAnnotation > xAnnotation( &rAnnotation );
 
         const AnnotationVector& rVec = pPage->getAnnotations();
-        for( AnnotationVector::const_iterator iter = rVec.begin(); iter != rVec.end(); ++iter )
-        {
-            if( (*iter) == xAnnotation )
-                break;
-
-            mnIndex++;
-        }
+        auto iter = std::find(rVec.begin(), rVec.end(), xAnnotation);
+        mnIndex += std::distance(rVec.begin(), iter);
     }
 }
 
@@ -400,6 +497,7 @@ void UndoInsertOrRemoveAnnotation::Undo()
         else
         {
             pPage->addAnnotation( xAnnotation, mnIndex );
+            LOKCommentNotifyAll( CommentNotificationType::Add, xAnnotation );
         }
     }
 }
@@ -415,6 +513,7 @@ void UndoInsertOrRemoveAnnotation::Redo()
         if( mbInsert )
         {
             pPage->addAnnotation( xAnnotation, mnIndex );
+            LOKCommentNotifyAll( CommentNotificationType::Add, xAnnotation );
         }
         else
         {
@@ -434,12 +533,16 @@ void UndoAnnotation::Undo()
 {
     maRedoData.get( mxAnnotation );
     maUndoData.set( mxAnnotation );
+    Reference< XAnnotation > xAnnotation( mxAnnotation.get() );
+    LOKCommentNotifyAll( CommentNotificationType::Modify, xAnnotation );
 }
 
 void UndoAnnotation::Redo()
 {
     maUndoData.get( mxAnnotation );
     maRedoData.set( mxAnnotation );
+    Reference< XAnnotation > xAnnotation( mxAnnotation.get() );
+    LOKCommentNotifyAll( CommentNotificationType::Modify, xAnnotation );
 }
 
 } // namespace sd

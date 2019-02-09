@@ -17,16 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "hintids.hxx"
-#include <com/sun/star/io/XOutputStream.hpp>
-#include <editeng/memberids.hrc>
+#include <hintids.hxx>
+#include <editeng/memberids.h>
 
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmlimp.hxx>
 #include <xmloff/xmltkmap.hxx>
 #include <xmloff/XMLBase64ImportContext.hxx>
-#include <svtools/grfmgr.hxx>
+#include <vcl/GraphicObject.hxx>
 #include <svx/unomid.hxx>
 #include <editeng/brushitem.hxx>
 #include <xmloff/xmluconv.hxx>
@@ -50,10 +49,9 @@ enum SvXMLTokenMapAttrs
     XML_TOK_BGIMG_POSITION,
     XML_TOK_BGIMG_REPEAT,
     XML_TOK_BGIMG_FILTER,
-    XML_TOK_NGIMG_END=XML_TOK_UNKNOWN
 };
 
-static SvXMLTokenMapEntry aBGImgAttributesAttrTokenMap[] =
+static const SvXMLTokenMapEntry aBGImgAttributesAttrTokenMap[] =
 {
     { XML_NAMESPACE_XLINK, XML_HREF,        XML_TOK_BGIMG_HREF      },
     { XML_NAMESPACE_XLINK, XML_TYPE,        XML_TOK_BGIMG_TYPE      },
@@ -85,9 +83,7 @@ void SwXMLBrushItemImportContext::ProcessAttrs(
         switch( aTokenMap.Get( nPrefix, aLocalName ) )
         {
         case XML_TOK_BGIMG_HREF:
-            SvXMLImportItemMapper::PutXMLValue(
-                *pItem, GetImport().ResolveGraphicObjectURL( rValue, false),
-                MID_GRAPHIC_LINK, rUnitConv );
+            m_xGraphic = GetImport().loadGraphicByURL(rValue);
             break;
         case XML_TOK_BGIMG_TYPE:
         case XML_TOK_BGIMG_ACTUATE:
@@ -110,29 +106,21 @@ void SwXMLBrushItemImportContext::ProcessAttrs(
 
 }
 
-SvXMLImportContext *SwXMLBrushItemImportContext::CreateChildContext(
+SvXMLImportContextRef SwXMLBrushItemImportContext::CreateChildContext(
         sal_uInt16 nPrefix, const OUString& rLocalName,
         const uno::Reference< xml::sax::XAttributeList > & xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
-    if( xmloff::token::IsXMLToken( rLocalName,
-                                        xmloff::token::XML_BINARY_DATA ) )
+    if (xmloff::token::IsXMLToken(rLocalName, xmloff::token::XML_BINARY_DATA))
     {
-        if( !xBase64Stream.is() && pItem->GetGraphicLink().isEmpty() )
+        if (!m_xBase64Stream.is())
         {
-            const GraphicObject *pGrObj = pItem->GetGraphicObject();
-            if( !pGrObj || GRAPHIC_NONE == pGrObj->GetType() )
-            {
-                xBase64Stream =
-                    GetImport().GetStreamForGraphicObjectURLFromBase64();
-                if( xBase64Stream.is() )
-                    pContext = new XMLBase64ImportContext( GetImport(), nPrefix,
-                                                        rLocalName, xAttrList,
-                                                        xBase64Stream );
-            }
+            m_xBase64Stream = GetImport().GetStreamForGraphicObjectURLFromBase64();
+            if (m_xBase64Stream.is())
+                pContext = new XMLBase64ImportContext(GetImport(), nPrefix, rLocalName, xAttrList, m_xBase64Stream);
         }
     }
-    if( !pContext )
+    if (!pContext)
     {
         pContext = new SvXMLImportContext( GetImport(), nPrefix, rLocalName );
     }
@@ -142,17 +130,25 @@ SvXMLImportContext *SwXMLBrushItemImportContext::CreateChildContext(
 
 void SwXMLBrushItemImportContext::EndElement()
 {
-    if( xBase64Stream.is() )
+    if (m_xBase64Stream.is())
     {
-        const OUString sURL( GetImport().ResolveGraphicObjectURLFromBase64( xBase64Stream ) );
-        xBase64Stream = nullptr;
-        SvXMLImportItemMapper::PutXMLValue( *pItem, sURL, MID_GRAPHIC_LINK, GetImport().GetMM100UnitConverter() );
+        m_xGraphic = GetImport().loadGraphicFromBase64(m_xBase64Stream);
+        m_xBase64Stream = nullptr;
     }
 
-    if( pItem->GetGraphicLink().isEmpty() && !(pItem->GetGraphic()) )
-        pItem->SetGraphicPos( GPOS_NONE );
-    else if( GPOS_NONE == pItem->GetGraphicPos() )
-        pItem->SetGraphicPos( GPOS_TILED );
+    if (m_xGraphic.is())
+    {
+        Graphic aGraphic(m_xGraphic);
+        SvxGraphicPosition eOldGraphicPos = pItem->GetGraphicPos();
+        pItem->SetGraphic(aGraphic);
+        if (GPOS_NONE == eOldGraphicPos && GPOS_NONE != pItem->GetGraphicPos())
+            pItem->SetGraphicPos(GPOS_TILED);
+    }
+
+    if (!(pItem->GetGraphic()))
+        pItem->SetGraphicPos(GPOS_NONE);
+    else if (GPOS_NONE == pItem->GetGraphicPos())
+        pItem->SetGraphicPos(GPOS_TILED);
 }
 
 SwXMLBrushItemImportContext::SwXMLBrushItemImportContext(
@@ -184,7 +180,6 @@ SwXMLBrushItemImportContext::SwXMLBrushItemImportContext(
 
 SwXMLBrushItemImportContext::~SwXMLBrushItemImportContext()
 {
-    delete pItem;
 }
 
 SwXMLBrushItemExport::SwXMLBrushItemExport( SwXMLExport& rExp ) :
@@ -200,39 +195,42 @@ void SwXMLBrushItemExport::exportXML( const SvxBrushItem& rItem )
 {
     GetExport().CheckAttrList();
 
-    OUString sURL;
-    const SvXMLUnitConverter& rUnitConv = GetExport().GetTwipUnitConverter();
-    if( SvXMLExportItemMapper::QueryXMLValue(
-            rItem, sURL, MID_GRAPHIC_LINK, rUnitConv ) )
+    uno::Reference<graphic::XGraphic> xGraphic;
+
+    const Graphic* pGraphic = rItem.GetGraphic();
+
+    if (pGraphic)
+        xGraphic = pGraphic->GetXGraphic();
+
+    if (xGraphic.is())
     {
-        OUString sValue = GetExport().AddEmbeddedGraphicObject( sURL );
-        if( !sValue.isEmpty() )
+        OUString sMimeType;
+        OUString sValue = GetExport().AddEmbeddedXGraphic(xGraphic, sMimeType);
+        if (!sValue.isEmpty())
         {
             GetExport().AddAttribute( XML_NAMESPACE_XLINK, XML_HREF, sValue );
             GetExport().AddAttribute( XML_NAMESPACE_XLINK, XML_TYPE, XML_SIMPLE );
             GetExport().AddAttribute( XML_NAMESPACE_XLINK, XML_ACTUATE, XML_ONLOAD );
         }
 
-        if( SvXMLExportItemMapper::QueryXMLValue(
-                rItem, sValue, MID_GRAPHIC_POSITION, rUnitConv ) )
+        const SvXMLUnitConverter& rUnitConv = GetExport().GetTwipUnitConverter();
+        if (SvXMLExportItemMapper::QueryXMLValue(rItem, sValue, MID_GRAPHIC_POSITION, rUnitConv))
             GetExport().AddAttribute( XML_NAMESPACE_STYLE, XML_POSITION, sValue );
 
-        if( SvXMLExportItemMapper::QueryXMLValue(
-                rItem, sValue, MID_GRAPHIC_REPEAT, rUnitConv ) )
+        if (SvXMLExportItemMapper::QueryXMLValue(rItem, sValue, MID_GRAPHIC_REPEAT, rUnitConv))
             GetExport().AddAttribute( XML_NAMESPACE_STYLE, XML_REPEAT, sValue );
 
-        if( SvXMLExportItemMapper::QueryXMLValue(
-                rItem, sValue, MID_GRAPHIC_FILTER, rUnitConv ) )
+        if (SvXMLExportItemMapper::QueryXMLValue(rItem, sValue, MID_GRAPHIC_FILTER, rUnitConv))
             GetExport().AddAttribute( XML_NAMESPACE_STYLE, XML_FILTER_NAME, sValue );
     }
 
     {
         SvXMLElementExport aElem( GetExport(), XML_NAMESPACE_STYLE, XML_BACKGROUND_IMAGE,
                                   true, true );
-        if( !sURL.isEmpty() )
+        if (xGraphic.is())
         {
             // optional office:binary-data
-            GetExport().AddEmbeddedGraphicObjectAsBase64( sURL );
+            GetExport().AddEmbeddedXGraphicAsBase64(xGraphic);
         }
     }
 }

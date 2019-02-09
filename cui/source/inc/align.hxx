@@ -35,17 +35,11 @@
 #define ALIGNDLG_VERALIGN_BLOCK       4
 #define ALIGNDLG_VERALIGN_DISTRIBUTED 5
 
-
-#include <svx/orienthelper.hxx>
-#include <vcl/field.hxx>
-#include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/layout.hxx>
-#include <vcl/lstbox.hxx>
 #include <sfx2/tabdlg.hxx>
 #include <svtools/valueset.hxx>
 #include <svx/dialcontrol.hxx>
 #include <svx/frmdirlbox.hxx>
+#include <vcl/weld.hxx>
 
 namespace svx {
 
@@ -57,59 +51,62 @@ class AlignmentTabPage : public SfxTabPage
     static const sal_uInt16 s_pRanges[];
 
 public:
-    virtual             ~AlignmentTabPage();
+    virtual             ~AlignmentTabPage() override;
     virtual void        dispose() override;
 
-    static VclPtr<SfxTabPage> Create( vcl::Window* pParent, const SfxItemSet* rAttrSet );
+    static VclPtr<SfxTabPage> Create( TabPageParent pParent, const SfxItemSet* rAttrSet );
     static const sal_uInt16*  GetRanges() { return s_pRanges; }
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;
-    virtual sfxpg       DeactivatePage( SfxItemSet* pSet ) override;
+    virtual DeactivateRC DeactivatePage( SfxItemSet* pSet ) override;
     virtual void        DataChanged( const DataChangedEvent& rDCEvt ) override;
 
 private:
-    explicit            AlignmentTabPage( vcl::Window* pParent, const SfxItemSet& rCoreSet );
+    explicit            AlignmentTabPage(TabPageParent pParent, const SfxItemSet& rCoreSet);
 
     void                InitVsRefEgde();
     void                UpdateEnableControls();
 
     bool                HasAlignmentChanged( const SfxItemSet& rNew, sal_uInt16 nWhich ) const;
 
-    DECL_LINK_TYPED( UpdateEnableHdl, ListBox&, void );
-    DECL_LINK_TYPED( UpdateEnableClickHdl, Button*, void );
+    DECL_LINK(UpdateEnableHdl, weld::ComboBox&, void);
+    DECL_LINK(UpdateEnableClickHdl, weld::ToggleButton&, void);
 
 private:
-    VclPtr<ListBox>             m_pLbHorAlign;
-    VclPtr<FixedText>           m_pFtIndent;
-    VclPtr<MetricField>         m_pEdIndent;
-    VclPtr<FixedText>           m_pFtVerAlign;
-    VclPtr<ListBox>             m_pLbVerAlign;
+    SvxDialControl m_aCtrlDial;
+    SvtValueSet m_aVsRefEdge;
 
-    VclPtr<DialControl>         m_pCtrlDial;
-    VclPtr<FixedText>           m_pFtRotate;
-    VclPtr<NumericField>        m_pNfRotate;
-    VclPtr<FixedText>           m_pFtRefEdge;
-    VclPtr<ValueSet>            m_pVsRefEdge;
-    VclPtr<TriStateBox>         m_pCbStacked;
-    VclPtr<TriStateBox>         m_pCbAsianMode;
-    OrientationHelper*   m_pOrientHlp;
+    std::unique_ptr<weld::ComboBox> m_xLbHorAlign;
+    std::unique_ptr<weld::Label> m_xFtIndent;
+    std::unique_ptr<weld::MetricSpinButton> m_xEdIndent;
+    std::unique_ptr<weld::Label> m_xFtVerAlign;
+    std::unique_ptr<weld::ComboBox> m_xLbVerAlign;
 
-    VclPtr<VclHBox>             m_pBoxDirection;
-    VclPtr<TriStateBox>         m_pBtnWrap;
-    VclPtr<TriStateBox>         m_pBtnHyphen;
-    VclPtr<TriStateBox>         m_pBtnShrink;
-    VclPtr<FrameDirListBox>     m_pLbFrameDir;
+    std::unique_ptr<weld::Label> m_xFtRotate;
+    std::unique_ptr<weld::SpinButton> m_xNfRotate;
+    std::unique_ptr<weld::Label> m_xFtRefEdge;
+    std::unique_ptr<weld::CheckButton> m_xCbStacked;
+    std::unique_ptr<weld::CheckButton> m_xCbAsianMode;
+
+    std::unique_ptr<weld::Widget> m_xBoxDirection;
+    std::unique_ptr<weld::CheckButton> m_xBtnWrap;
+    std::unique_ptr<weld::CheckButton> m_xBtnHyphen;
+    std::unique_ptr<weld::CheckButton> m_xBtnShrink;
+    std::unique_ptr<svx::FrameDirectionListBox> m_xLbFrameDir;
 
     // hidden labels/string
-    VclPtr<FixedText>           m_pFtBotLock;
-    VclPtr<FixedText>           m_pFtTopLock;
-    VclPtr<FixedText>           m_pFtCelLock;
-    VclPtr<FixedText>           m_pFtABCD;
+    std::unique_ptr<weld::Label> m_xFtBotLock;
+    std::unique_ptr<weld::Label> m_xFtTopLock;
+    std::unique_ptr<weld::Label> m_xFtCelLock;
+    std::unique_ptr<weld::Label> m_xFtABCD;
 
-    VclPtr<VclContainer>        m_pAlignmentFrame;
-    VclPtr<VclContainer>        m_pOrientFrame;
-    VclPtr<VclContainer>        m_pPropertiesFrame;
+    std::unique_ptr<weld::Widget> m_xAlignmentFrame;
+    std::unique_ptr<weld::Widget> m_xOrientFrame;
+    std::unique_ptr<weld::Widget> m_xPropertiesFrame;
+
+    std::unique_ptr<weld::CustomWeld> m_xVsRefEdge;
+    std::unique_ptr<weld::CustomWeld> m_xCtrlDial;
 };
 
 

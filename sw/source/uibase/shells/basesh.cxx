@@ -17,6 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <config_features.h>
+
 #include <sal/config.h>
 
 #include <hintids.hxx>
@@ -39,8 +41,8 @@
 #include <svx/clipfmtitem.hxx>
 #include <svx/contdlg.hxx>
 #include <vcl/graph.hxx>
+#include <vcl/inputctx.hxx>
 #include <svl/slstitm.hxx>
-#include <vcl/msgbox.hxx>
 #include <svl/ptitem.hxx>
 #include <svl/itemiter.hxx>
 #include <svl/stritem.hxx>
@@ -87,29 +89,28 @@
 #include <swwait.hxx>
 #include <cmdid.h>
 #include <globals.hrc>
-#include <shells.hrc>
-#include <statstr.hrc>
+#include <strings.hrc>
 #include <globals.h>
 #include <unotxdoc.hxx>
 #include <fmtinfmt.hxx>
 #include <doc.hxx>
 #include <IDocumentSettingAccess.hxx>
-#include "swabstdlg.hxx"
-#include "dialog.hrc"
-#include "fldui.hrc"
-#include "table.hrc"
+#include <IDocumentUndoRedo.hxx>
+#include <swabstdlg.hxx>
 #include <modcfg.hxx>
 #include <instable.hxx>
 #include <svx/fmshell.hxx>
 #include <SwRewriter.hxx>
-#include <comcore.hrc>
 #include <unomid.h>
 #include <svx/galleryitem.hxx>
 #include <com/sun/star/gallery/GalleryItemType.hpp>
 #include <memory>
 
-//UUUU
 #include <svx/unobrushitemhelper.hxx>
+#include <comphelper/scopeguard.hxx>
+
+#include <SwStyleNameMapper.hxx>
+#include <poolfmt.hxx>
 
 FlyMode SwBaseShell::eFrameMode = FLY_DRAG_END;
 
@@ -127,13 +128,13 @@ static sal_uInt8 nPagePos;
 static sal_uInt8 nHeaderPos;
 static sal_uInt8 nFooterPos;
 
-#define SwBaseShell
+#define ShellClass_SwBaseShell
 #include <sfx2/msg.hxx>
-#include "swslots.hxx"
+#include <swslots.hxx>
 
 namespace
 {
-    SvxContourDlg* GetContourDlg(SwView &rView)
+    SvxContourDlg* GetContourDlg(SwView const &rView)
     {
         SfxChildWindow *pChildWindow = rView.GetViewFrame()->GetChildWindow(
             SvxContourDlgChildWindow::GetChildWindowId());
@@ -141,7 +142,7 @@ namespace
         return pChildWindow ? static_cast<SvxContourDlg*>(pChildWindow->GetWindow()) : nullptr;
     }
 
-    SvxIMapDlg* GetIMapDlg(SwView &rView)
+    SvxIMapDlg* GetIMapDlg(SwView const &rView)
     {
         SfxChildWindow* pWnd = rView.GetViewFrame()->GetChildWindow(SvxIMapDlgChildWindow::GetChildWindowId());
         return pWnd ? static_cast<SvxIMapDlg*>(pWnd->GetWindow()) : nullptr;
@@ -166,27 +167,27 @@ static void lcl_UpdateIMapDlg( SwWrtShell& rSh )
 {
     Graphic aGrf( rSh.GetIMapGraphic() );
     GraphicType nGrfType = aGrf.GetType();
-    void* pEditObj = GRAPHIC_NONE != nGrfType && GRAPHIC_DEFAULT != nGrfType
+    void* pEditObj = GraphicType::NONE != nGrfType && GraphicType::Default != nGrfType
                         ? rSh.GetIMapInventor() : nullptr;
     std::unique_ptr<TargetList> pList(new TargetList);
-    rSh.GetView().GetViewFrame()->GetTopFrame().GetTargetList(*pList);
+    SfxFrame::GetDefaultTargetList(*pList);
 
-    SfxItemSet aSet( rSh.GetAttrPool(), RES_URL, RES_URL );
+    SfxItemSet aSet( rSh.GetAttrPool(), svl::Items<RES_URL, RES_URL>{} );
     rSh.GetFlyFrameAttr( aSet );
-    const SwFormatURL &rURL = static_cast<const SwFormatURL&>(aSet.Get( RES_URL ));
+    const SwFormatURL &rURL = aSet.Get( RES_URL );
     SvxIMapDlgChildWindow::UpdateIMapDlg(
             aGrf, rURL.GetMap(), pList.get(), pEditObj );
 }
 
-static bool lcl_UpdateContourDlg( SwWrtShell &rSh, int nSel )
+static bool lcl_UpdateContourDlg( SwWrtShell &rSh, SelectionType nSel )
 {
     Graphic aGraf( rSh.GetIMapGraphic() );
     GraphicType nGrfType = aGraf.GetType();
-    bool bRet = GRAPHIC_NONE != nGrfType && GRAPHIC_DEFAULT != nGrfType;
+    bool bRet = GraphicType::NONE != nGrfType && GraphicType::Default != nGrfType;
     if( bRet )
     {
         OUString aGrfName;
-        if ( nSel & nsSelectionType::SEL_GRF )
+        if ( nSel & SelectionType::Graphic )
             rSh.GetGrfNms( &aGrfName, nullptr );
 
         SvxContourDlg *pDlg = GetContourDlg(rSh.GetView());
@@ -229,7 +230,7 @@ void SwBaseShell::ExecDelete(SfxRequest &rReq)
                 break;
             }
 
-            // otherwise call DelLeft
+            [[fallthrough]]; // otherwise call DelLeft
         case FN_SHIFT_BACKSPACE:
             rSh.DelLeft();
             break;
@@ -258,8 +259,7 @@ void SwBaseShell::ExecClpbrd(SfxRequest &rReq)
             rView.GetEditWin().FlushInBuffer();
             if ( rSh.HasSelection() )
             {
-                SwTransferable* pTransfer = new SwTransferable( rSh );
-/*??*/          uno::Reference< datatransfer::XTransferable > xRef( pTransfer );
+                rtl::Reference<SwTransferable> pTransfer = new SwTransferable( rSh );
 
                 if ( nId == SID_CUT && FlyProtectFlags::NONE == rSh.IsSelObjProtected(FlyProtectFlags::Content|FlyProtectFlags::Parent) )
                     pTransfer->Cut();
@@ -287,7 +287,7 @@ void SwBaseShell::ExecClpbrd(SfxRequest &rReq)
 
                     const SfxUInt16Item* pAnchorType = rReq.GetArg<SfxUInt16Item>(FN_PARAM_1);
                     if (pAnchorType)
-                        SwTransferable::Paste(rSh, aDataHelper, pAnchorType->GetValue());
+                        SwTransferable::Paste(rSh, aDataHelper, static_cast<RndStdIds>(pAnchorType->GetValue()));
                     else
                         SwTransferable::Paste(rSh, aDataHelper);
 
@@ -427,6 +427,7 @@ void SwBaseShell::StateClpbrd(SfxItemSet &rSet)
                 rSet.DisableItem( nWhich );
                 break;
             }
+            [[fallthrough]];
         case SID_COPY:
             if( !bCopy )
                 rSet.DisableItem( nWhich );
@@ -474,36 +475,66 @@ void SwBaseShell::StateClpbrd(SfxItemSet &rSet)
 
 void SwBaseShell::ExecUndo(SfxRequest &rReq)
 {
-    SwWrtShell &rSh = GetShell();
+    SwWrtShell &rWrtShell = GetShell();
 
+    SwUndoId nUndoId(SwUndoId::EMPTY);
     sal_uInt16 nId = rReq.GetSlot(), nCnt = 1;
     const SfxItemSet* pArgs = rReq.GetArgs();
     const SfxPoolItem* pItem;
     if( pArgs && SfxItemState::SET == pArgs->GetItemState( nId, false, &pItem ))
         nCnt = static_cast<const SfxUInt16Item*>(pItem)->GetValue();
 
+    // Repair mode: allow undo/redo of all undo actions, even if access would
+    // be limited based on the view shell ID.
+    bool bRepair = false;
+    if (pArgs && pArgs->GetItemState(SID_REPAIRPACKAGE, false, &pItem) == SfxItemState::SET)
+        bRepair = static_cast<const SfxBoolItem*>(pItem)->GetValue();
+
     // #i106349#: save pointer: undo/redo may delete the shell, i.e., this!
     SfxViewFrame *const pViewFrame( GetView().GetViewFrame() );
+
+    IDocumentUndoRedo& rUndoRedo = rWrtShell.GetIDocumentUndoRedo();
+    bool bWasRepair = rUndoRedo.DoesRepair();
+    rUndoRedo.DoRepair(bRepair);
+    comphelper::ScopeGuard aGuard([&rUndoRedo, bWasRepair]()
+    {
+        rUndoRedo.DoRepair(bWasRepair);
+    });
 
     switch( nId )
     {
         case SID_UNDO:
-            rSh.LockPaint();
-            rSh.Do( SwWrtShell::UNDO, nCnt );
-            rSh.UnlockPaint();
+            if (rUndoRedo.GetLastUndoInfo(nullptr, &nUndoId, &rWrtShell.GetView()))
+            {
+                for (SwViewShell& rShell : rWrtShell.GetRingContainer())
+                    rShell.LockPaint();
+                rWrtShell.Do( SwWrtShell::UNDO, nCnt );
+                for (SwViewShell& rShell : rWrtShell.GetRingContainer())
+                    rShell.UnlockPaint();
+            }
             break;
 
         case SID_REDO:
-            rSh.LockPaint();
-            rSh.Do( SwWrtShell::REDO, nCnt );
-            rSh.UnlockPaint();
+            if (rUndoRedo.GetFirstRedoInfo(nullptr, &nUndoId, &rWrtShell.GetView()))
+            {
+                for (SwViewShell& rShell : rWrtShell.GetRingContainer())
+                    rShell.LockPaint();
+                rWrtShell.Do( SwWrtShell::REDO, nCnt );
+                for (SwViewShell& rShell : rWrtShell.GetRingContainer())
+                    rShell.UnlockPaint();
+            }
             break;
 
         case SID_REPEAT:
-            rSh.Do( SwWrtShell::REPEAT );
+            rWrtShell.Do( SwWrtShell::REPEAT );
             break;
         default:
             OSL_FAIL("wrong Dispatcher");
+    }
+
+    if (nUndoId == SwUndoId::CONFLICT)
+    {
+        rReq.SetReturnValue( SfxUInt32Item(nId, static_cast<sal_uInt32>(SID_REPAIRPACKAGE)) );
     }
 
     if (pViewFrame) { pViewFrame->GetBindings().InvalidateAll(false); }
@@ -513,6 +544,7 @@ void SwBaseShell::ExecUndo(SfxRequest &rReq)
 
 void SwBaseShell::StateUndo(SfxItemSet &rSet)
 {
+    SwUndoId nUndoId(SwUndoId::EMPTY);
     SwWrtShell &rSh = GetShell();
     SfxWhichIter aIter(rSet);
     sal_uInt16 nWhich = aIter.FirstWhich();
@@ -522,21 +554,30 @@ void SwBaseShell::StateUndo(SfxItemSet &rSet)
         {
             case SID_UNDO:
             {
-                if (rSh.GetLastUndoInfo(nullptr, nullptr))
+                if (rSh.GetLastUndoInfo(nullptr, &nUndoId, &rSh.GetView()))
                 {
                     rSet.Put( SfxStringItem(nWhich,
                         rSh.GetDoString(SwWrtShell::UNDO)));
                 }
+                else if (nUndoId == SwUndoId::CONFLICT)
+                {
+                    rSet.Put( SfxUInt32Item(nWhich, static_cast<sal_uInt32>(SID_REPAIRPACKAGE)) );
+                }
                 else
                     rSet.DisableItem(nWhich);
+
                 break;
             }
             case SID_REDO:
             {
-                if (rSh.GetFirstRedoInfo(nullptr))
+                if (rSh.GetFirstRedoInfo(nullptr, &nUndoId, &rSh.GetView()))
                 {
                     rSet.Put(SfxStringItem(nWhich,
                         rSh.GetDoString(SwWrtShell::REDO)));
+                }
+                else if (nUndoId == SwUndoId::CONFLICT)
+                {
+                     rSet.Put( SfxInt32Item(nWhich, static_cast<sal_uInt32>(SID_REPAIRPACKAGE)) );
                 }
                 else
                     rSet.DisableItem(nWhich);
@@ -544,9 +585,9 @@ void SwBaseShell::StateUndo(SfxItemSet &rSet)
             }
             case SID_REPEAT:
             {   // Repeat is only possible if no REDO is possible - UI-Restriction
-                if ((!rSh.GetFirstRedoInfo(nullptr)) &&
+                if ((!rSh.GetFirstRedoInfo(nullptr, nullptr)) &&
                     !rSh.IsSelFrameMode() &&
-                    (UNDO_EMPTY != rSh.GetRepeatInfo(nullptr)))
+                    (SwUndoId::EMPTY != rSh.GetRepeatInfo(nullptr)))
                 {
                     rSet.Put(SfxStringItem(nWhich, rSh.GetRepeatString()));
                 }
@@ -567,7 +608,7 @@ void SwBaseShell::StateUndo(SfxItemSet &rSet)
                 break;
 
             case SID_GETREDOSTRINGS:
-                if (rSh.GetFirstRedoInfo(nullptr))
+                if (rSh.GetFirstRedoInfo(nullptr, nullptr))
                 {
                     SfxStringListItem aStrLst( nWhich );
                     rSh.GetDoStrings( SwWrtShell::REDO, aStrLst );
@@ -631,7 +672,7 @@ void SwBaseShell::Execute(SfxRequest &rReq)
                 if( !rSh.GetLinkManager().GetLinks().empty() )
                 {
                     rSh.StartAllAction();
-                    rSh.GetLinkManager().UpdateAllLinks( false, true, true );
+                    rSh.GetLinkManager().UpdateAllLinks( false, true, nullptr );
                     rSh.EndAllAction();
                 }
                 SfxDispatcher &rDis = *rTempView.GetViewFrame()->GetDispatcher();
@@ -657,7 +698,7 @@ void SwBaseShell::Execute(SfxRequest &rReq)
         case FN_GOTO_PREV_MARK:
         {
             SwFieldMgr aFieldMgr;
-            SwFieldType* pFieldType = aFieldMgr.GetFieldType(RES_JUMPEDITFLD);
+            SwFieldType* pFieldType = aFieldMgr.GetFieldType(SwFieldIds::JumpEdit);
 
             if (pFieldType)
             {
@@ -717,10 +758,10 @@ void SwBaseShell::Execute(SfxRequest &rReq)
             if ( !pGalleryItem )
                 break;
 
-            const int nSelType = rSh.GetSelectionType();
+            const SelectionType nSelType = rSh.GetSelectionType();
             sal_Int8 nGalleryItemType( pGalleryItem->GetType() );
 
-            if ( (!rSh.IsSelFrameMode() || nSelType & nsSelectionType::SEL_GRF) &&
+            if ( (!rSh.IsSelFrameMode() || nSelType & SelectionType::Graphic) &&
                 nGalleryItemType == css::gallery::GalleryItemType::GRAPHIC )
             {
                 SwWait aWait( *rView.GetDocShell(), true );
@@ -728,7 +769,7 @@ void SwBaseShell::Execute(SfxRequest &rReq)
                 OUString aGrfName, aFltName;
                 const Graphic aGrf( pGalleryItem->GetGraphic() );
 
-                if ( nSelType & nsSelectionType::SEL_GRF )
+                if ( nSelType & SelectionType::Graphic )
                     rSh.ReRead( aGrfName, aFltName, &aGrf );
                 else
                     rSh.Insert( aGrfName, aFltName, aGrf );
@@ -761,7 +802,7 @@ void SwBaseShell::Execute(SfxRequest &rReq)
                 if(SfxItemState::SET == pArgs->GetItemState(nSlot))
                     nCount = static_cast<const SfxUInt16Item &>(pArgs->Get(nSlot)).GetValue();
                 else
-                    nCount = static_cast<const SfxUInt16Item &>(pArgs->Get(SID_ATTR_COLUMNS)).GetValue();
+                    nCount = pArgs->Get(SID_ATTR_COLUMNS).GetValue();
                 sal_uInt16 nGutterWidth = DEF_GUTTER_WIDTH;
 
                 aFormatCol.Init(nCount ? nCount : 1, nGutterWidth, USHRT_MAX);
@@ -785,13 +826,13 @@ void SwBaseShell::Execute(SfxRequest &rReq)
             if( nSlot == FN_CONVERT_TEXT_TO_TABLE ||
                 ( nSlot == FN_CONVERT_TEXT_TABLE && nullptr == rSh.GetTableFormat() ))
                 bToTable = true;
-            SwInsertTableOptions aInsTableOpts( tabopts::ALL_TBL_INS_ATTR, 1 );
+            SwInsertTableOptions aInsTableOpts( SwInsertTableFlags::All, 1 );
             SwTableAutoFormat const* pTAFormat = nullptr;
             std::unique_ptr<SwTableAutoFormatTable> pAutoFormatTable;
             bool bDeleteFormat = true;
             if(pArgs && SfxItemState::SET == pArgs->GetItemState( FN_PARAM_1, true, &pItem))
             {
-                aInsTableOpts.mnInsMode = 0;
+                aInsTableOpts.mnInsMode = SwInsertTableFlags::NONE;
                 // Delimiter
                 OUString sDelim = static_cast< const SfxStringItem* >(pItem)->GetValue();
                 if(!sDelim.isEmpty())
@@ -818,27 +859,24 @@ void SwBaseShell::Execute(SfxRequest &rReq)
                 //WithHeader
                 if(SfxItemState::SET == pArgs->GetItemState( FN_PARAM_3, true, &pItem) &&
                             static_cast< const SfxBoolItem* >(pItem)->GetValue())
-                    aInsTableOpts.mnInsMode |= tabopts::HEADLINE;
+                    aInsTableOpts.mnInsMode |= SwInsertTableFlags::Headline;
                 // RepeatHeaderLines
                 if(SfxItemState::SET == pArgs->GetItemState( FN_PARAM_4, true, &pItem))
                    aInsTableOpts.mnRowsToRepeat =
-                            (sal_uInt16)static_cast< const SfxInt16Item* >(pItem)->GetValue();
+                            static_cast<sal_uInt16>(static_cast< const SfxInt16Item* >(pItem)->GetValue());
                 //WithBorder
                 if(SfxItemState::SET == pArgs->GetItemState( FN_PARAM_5, true, &pItem) &&
                     static_cast< const SfxBoolItem* >(pItem)->GetValue())
-                    aInsTableOpts.mnInsMode |= tabopts::DEFAULT_BORDER;
+                    aInsTableOpts.mnInsMode |= SwInsertTableFlags::DefaultBorder;
                 //DontSplitTable
                 if(SfxItemState::SET == pArgs->GetItemState( FN_PARAM_6, true, &pItem) &&
                     !static_cast< const SfxBoolItem* >(pItem)->GetValue() )
-                    aInsTableOpts.mnInsMode |= tabopts::SPLIT_LAYOUT;
+                    aInsTableOpts.mnInsMode |= SwInsertTableFlags::SplitLayout;
             }
             else
             {
                 SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-                OSL_ENSURE(pFact, "SwAbstractDialogFactory fail!");
-
-                std::unique_ptr<AbstractSwConvertTableDlg> pDlg(pFact->CreateSwConvertTableDlg(GetView(), bToTable));
-                OSL_ENSURE(pDlg, "Dialog creation failed!");
+                ScopedVclPtr<AbstractSwConvertTableDlg> pDlg(pFact->CreateSwConvertTableDlg(GetView(), bToTable));
                 if( RET_OK == pDlg->Execute() )
                 {
                     pDlg->GetValues( cDelim, aInsTableOpts, pTAFormat );
@@ -861,10 +899,10 @@ void SwBaseShell::Execute(SfxRequest &rReq)
                     {
                         if(pTAFormat)
                             aReq.AppendItem( SfxStringItem( FN_PARAM_2, pTAFormat->GetName()));
-                        aReq.AppendItem( SfxBoolItem ( FN_PARAM_3, 0 != (aInsTableOpts.mnInsMode & tabopts::HEADLINE)));
-                        aReq.AppendItem( SfxInt16Item( FN_PARAM_4, (short)aInsTableOpts.mnRowsToRepeat ));
-                        aReq.AppendItem( SfxBoolItem ( FN_PARAM_5, 0 != (aInsTableOpts.mnInsMode & tabopts::DEFAULT_BORDER) ));
-                        aReq.AppendItem( SfxBoolItem ( FN_PARAM_6, !(aInsTableOpts.mnInsMode & tabopts::SPLIT_LAYOUT)));
+                        aReq.AppendItem( SfxBoolItem ( FN_PARAM_3, bool(aInsTableOpts.mnInsMode & SwInsertTableFlags::Headline)));
+                        aReq.AppendItem( SfxInt16Item( FN_PARAM_4, static_cast<short>(aInsTableOpts.mnRowsToRepeat) ));
+                        aReq.AppendItem( SfxBoolItem ( FN_PARAM_5, bool(aInsTableOpts.mnInsMode & SwInsertTableFlags::DefaultBorder) ));
+                        aReq.AppendItem( SfxBoolItem ( FN_PARAM_6, !(aInsTableOpts.mnInsMode & SwInsertTableFlags::SplitLayout)));
                     }
                     aReq.Done();
                 }
@@ -873,7 +911,7 @@ void SwBaseShell::Execute(SfxRequest &rReq)
                     rSh.TableToText( cDelim );
                 else
                 {
-                    bInserted = rSh.TextToTable( aInsTableOpts, cDelim, text::HoriOrientation::FULL, pTAFormat );
+                    bInserted = rSh.TextToTable( aInsTableOpts, cDelim, pTAFormat );
                 }
                 rSh.EnterStdMode();
 
@@ -889,12 +927,11 @@ void SwBaseShell::Execute(SfxRequest &rReq)
         case SID_STYLE_NEW_BY_EXAMPLE:
         case SID_STYLE_APPLY:
         {
-            ShellModes eMode = GetView().GetShellMode();
-            if ( SHELL_MODE_DRAW != eMode &&
-                 SHELL_MODE_DRAW_CTRL != eMode &&
-                 SHELL_MODE_DRAW_FORM != eMode &&
-                 SHELL_MODE_DRAWTEXT != eMode &&
-                 SHELL_MODE_BEZIER != eMode )
+            ShellMode eMode = GetView().GetShellMode();
+            if ( ShellMode::Draw != eMode &&
+                 ShellMode::DrawForm != eMode &&
+                 ShellMode::DrawText != eMode &&
+                 ShellMode::Bezier != eMode )
             {
                 // oj #107754#
                 if ( SID_STYLE_WATERCAN == nSlot )
@@ -913,6 +950,21 @@ void SwBaseShell::Execute(SfxRequest &rReq)
         }
         break;
         case SID_CLASSIFICATION_APPLY:
+        {
+            GetView().GetDocShell()->Execute(rReq);
+        }
+        break;
+        case SID_CLASSIFICATION_DIALOG:
+        {
+            GetView().GetDocShell()->Execute(rReq);
+        }
+        break;
+        case SID_PARAGRAPH_SIGN_CLASSIFY_DLG:
+        {
+            GetView().GetDocShell()->Execute(rReq);
+        }
+        break;
+        case SID_WATERMARK:
         {
             GetView().GetDocShell()->Execute(rReq);
         }
@@ -940,9 +992,9 @@ void SwBaseShell::Execute(SfxRequest &rReq)
             if ( rSh.IsFrameSelected() &&
                  pDlg->GetEditingObject() == rSh.GetIMapInventor() )
             {
-                    SfxItemSet aSet( rSh.GetAttrPool(), RES_URL, RES_URL );
+                    SfxItemSet aSet( rSh.GetAttrPool(), svl::Items<RES_URL, RES_URL>{} );
                     rSh.GetFlyFrameAttr( aSet );
-                    SwFormatURL aURL( static_cast<const SwFormatURL&>(aSet.Get( RES_URL )) );
+                    SwFormatURL aURL( aSet.Get( RES_URL ) );
                     aURL.SetMap( &pDlg->GetImageMap() );
                     aSet.Put( aURL );
                     rSh.SetFlyFrameAttr( aSet );
@@ -957,9 +1009,9 @@ void SwBaseShell::Execute(SfxRequest &rReq)
             pVFrame->ToggleChildWindow( nId );
             pVFrame->GetBindings().Invalidate( SID_CONTOUR_DLG );
 
-            int nSel = rSh.GetSelectionType();
+            SelectionType nSel = rSh.GetSelectionType();
             if ( pVFrame->HasChildWindow( nId ) &&
-                 (nSel & (nsSelectionType::SEL_GRF|nsSelectionType::SEL_OLE)) )
+                 (nSel & (SelectionType::Graphic|SelectionType::Ole)) )
             {
                 lcl_UpdateContourDlg( rSh, nSel );
             }
@@ -969,20 +1021,20 @@ void SwBaseShell::Execute(SfxRequest &rReq)
         {
             SvxContourDlg *pDlg = GetContourDlg(GetView());
             // Check, if the allocation is useful or allowed at all.
-            int nSel = rSh.GetSelectionType();
-            if ( nSel & (nsSelectionType::SEL_GRF|nsSelectionType::SEL_OLE) )
+            SelectionType nSel = rSh.GetSelectionType();
+            if ( nSel & (SelectionType::Graphic|SelectionType::Ole) )
             {
                 if (pDlg && pDlg->GetEditingObject() == rSh.GetIMapInventor())
                 {
                     rSh.StartAction();
-                    SfxItemSet aSet( rSh.GetAttrPool(), RES_SURROUND, RES_SURROUND);
+                    SfxItemSet aSet( rSh.GetAttrPool(), svl::Items<RES_SURROUND, RES_SURROUND>{});
                     rSh.GetFlyFrameAttr( aSet );
-                    SwFormatSurround aSur( static_cast<const SwFormatSurround&>(aSet.Get( RES_SURROUND )) );
+                    SwFormatSurround aSur( aSet.Get( RES_SURROUND ) );
                     if ( !aSur.IsContour() )
                     {
                         aSur.SetContour( true );
-                        if ( aSur.GetSurround() == SURROUND_NONE )
-                            aSur.SetSurround( SURROUND_PARALLEL );
+                        if ( aSur.GetSurround() == css::text::WrapTextMode_NONE )
+                            aSur.SetSurround( css::text::WrapTextMode_PARALLEL );
                         aSet.Put( aSur );
                         rSh.SetFlyFrameAttr( aSet );
                     }
@@ -1002,8 +1054,6 @@ void SwBaseShell::Execute(SfxRequest &rReq)
             rSh.CallChgLnk();
         }
         break;
-        case FN_TOOL_ANCHOR:
-            break;
         case FN_TOOL_ANCHOR_PAGE:
         case FN_TOOL_ANCHOR_PARAGRAPH:
         case FN_TOOL_ANCHOR_CHAR:
@@ -1011,14 +1061,14 @@ void SwBaseShell::Execute(SfxRequest &rReq)
         case FN_TOOL_ANCHOR_FRAME:
         {
             RndStdIds eSet = nSlot == FN_TOOL_ANCHOR_PAGE
-                                ? FLY_AT_PAGE
+                                ? RndStdIds::FLY_AT_PAGE
                                 : nSlot == FN_TOOL_ANCHOR_PARAGRAPH
-                                    ? FLY_AT_PARA
+                                    ? RndStdIds::FLY_AT_PARA
                                     : nSlot == FN_TOOL_ANCHOR_FRAME
-                                        ? FLY_AT_FLY
+                                        ? RndStdIds::FLY_AT_FLY
                                         : nSlot == FN_TOOL_ANCHOR_CHAR
-                                            ? FLY_AS_CHAR
-                                            : FLY_AT_CHAR;
+                                            ? RndStdIds::FLY_AS_CHAR
+                                            : RndStdIds::FLY_AT_CHAR;
             rSh.StartUndo();
             if (rSh.IsObjSelected())
                 rSh.ChgAnchor(eSet);
@@ -1032,30 +1082,30 @@ void SwBaseShell::Execute(SfxRequest &rReq)
             // pre-conditions are met then align the formula to the baseline of the text
             const uno::Reference < embed::XEmbeddedObject > xObj( rSh.GetOleRef() );
             const bool bDoMathBaselineAlignment = xObj.is() && SotExchange::IsMath( xObj->getClassID() )
-                    && FLY_AS_CHAR == eSet && rSh.GetDoc()->getIDocumentSettingAccess().get( DocumentSettingId::MATH_BASELINE_ALIGNMENT );
+                    && RndStdIds::FLY_AS_CHAR == eSet && rSh.GetDoc()->getIDocumentSettingAccess().get( DocumentSettingId::MATH_BASELINE_ALIGNMENT );
             if (bDoMathBaselineAlignment)
                 rSh.AlignFormulaToBaseline( xObj );
 
             sal_uInt16 nHtmlMode = ::GetHtmlMode(GetView().GetDocShell());
             if( nHtmlMode )
             {
-                SfxItemSet aSet(GetPool(), RES_SURROUND, RES_HORI_ORIENT);
+                SfxItemSet aSet(GetPool(), svl::Items<RES_SURROUND, RES_HORI_ORIENT>{});
                 rSh.GetFlyFrameAttr(aSet);
 
-                const SwFormatSurround& rSurround = static_cast<const SwFormatSurround&>(aSet.Get(RES_SURROUND));
-                const SwFormatVertOrient& rVert = static_cast<const SwFormatVertOrient&>(aSet.Get(RES_VERT_ORIENT));
-                const SwFormatHoriOrient& rHori = static_cast<const SwFormatHoriOrient&>(aSet.Get(RES_HORI_ORIENT));
+                const SwFormatSurround& rSurround = aSet.Get(RES_SURROUND);
+                const SwFormatVertOrient& rVert = aSet.Get(RES_VERT_ORIENT);
+                const SwFormatHoriOrient& rHori = aSet.Get(RES_HORI_ORIENT);
                 sal_Int16 eVOrient = rVert.GetVertOrient();
                 sal_Int16 eHOrient = rHori.GetHoriOrient();
-                SwSurround eSurround = rSurround.GetSurround();
+                css::text::WrapTextMode eSurround = rSurround.GetSurround();
 
                 switch( eSet )
                 {
-                case FLY_AT_FLY:
-                case FLY_AT_PAGE:
+                case RndStdIds::FLY_AT_FLY:
+                case RndStdIds::FLY_AT_PAGE:
                     //Wrap through, left or from left, top, from top
-                    if(eSurround != SURROUND_THROUGHT)
-                        aSet.Put(SwFormatSurround(SURROUND_THROUGHT));
+                    if(eSurround != css::text::WrapTextMode_THROUGH)
+                        aSet.Put(SwFormatSurround(css::text::WrapTextMode_THROUGH));
 
                     if( eVOrient != text::VertOrientation::TOP && eVOrient != text::VertOrientation::NONE)
                         aSet.Put(SwFormatVertOrient(0, text::VertOrientation::TOP));
@@ -1064,10 +1114,10 @@ void SwBaseShell::Execute(SfxRequest &rReq)
                         aSet.Put(SwFormatHoriOrient(0, text::HoriOrientation::LEFT));
                     break;
 
-                case FLY_AT_PARA:
+                case RndStdIds::FLY_AT_PARA:
                     // left, from left, right, top, no wrap, wrap left and right
-                    if (eSurround != SURROUND_LEFT && eSurround != SURROUND_RIGHT)
-                        aSet.Put(SwFormatSurround(SURROUND_LEFT));
+                    if (eSurround != css::text::WrapTextMode_LEFT && eSurround != css::text::WrapTextMode_RIGHT)
+                        aSet.Put(SwFormatSurround(css::text::WrapTextMode_LEFT));
 
                     if( eVOrient != text::VertOrientation::TOP)
                         aSet.Put(SwFormatVertOrient(0, text::VertOrientation::TOP));
@@ -1076,10 +1126,10 @@ void SwBaseShell::Execute(SfxRequest &rReq)
                         aSet.Put(SwFormatHoriOrient(0, text::HoriOrientation::LEFT));
                     break;
 
-                case FLY_AT_CHAR:
+                case RndStdIds::FLY_AT_CHAR:
                     // left, from left, right, top, wrap through
-                    if(eSurround != SURROUND_THROUGHT)
-                        aSet.Put(SwFormatSurround(SURROUND_THROUGHT));
+                    if(eSurround != css::text::WrapTextMode_THROUGH)
+                        aSet.Put(SwFormatSurround(css::text::WrapTextMode_THROUGH));
 
                     if( eVOrient != text::VertOrientation::TOP)
                         aSet.Put(SwFormatVertOrient(0, text::VertOrientation::TOP));
@@ -1097,7 +1147,7 @@ void SwBaseShell::Execute(SfxRequest &rReq)
             }
             rSh.EndUndo();
 
-            GetView().GetViewFrame()->GetBindings().Invalidate( FN_TOOL_ANCHOR );
+            GetView().GetViewFrame()->GetBindings().Invalidate( SID_ANCHOR_MENU );
         }
         break;
 
@@ -1106,6 +1156,7 @@ void SwBaseShell::Execute(SfxRequest &rReq)
         case FN_FRAME_WRAP_IDEAL:
         case FN_FRAME_WRAPTHRU:
         case FN_FRAME_WRAPTHRU_TRANSP:
+        case FN_FRAME_WRAPTHRU_TOGGLE:
         case FN_FRAME_WRAP_CONTOUR:
         case FN_WRAP_ANCHOR_ONLY:
         case FN_FRAME_WRAP_LEFT:
@@ -1119,32 +1170,31 @@ void SwBaseShell::Execute(SfxRequest &rReq)
                 {
                     rSh.EnterStdMode();
                     rSh.StartAllAction();
-                    rSh.GetLinkManager().UpdateAllLinks( false, false );
+                    rSh.GetLinkManager().UpdateAllLinks( false, false, nullptr );
                     rSh.EndAllAction();
                 }
             }
             break;
 
         case FN_XFORMS_DESIGN_MODE:
-            if( pArgs != nullptr
-                && pArgs->GetItemState( nSlot, true, &pItem ) == SfxItemState::SET
-                && pItem != nullptr
-                && dynamic_cast< const SfxBoolItem *>( pItem ) !=  nullptr )
+            if (pArgs && pArgs->GetItemState(nSlot, true, &pItem) == SfxItemState::SET)
             {
-                bool bDesignMode =
-                    static_cast<const SfxBoolItem*>( pItem )->GetValue();
+                if (const SfxBoolItem* pBoolItem = dynamic_cast<const SfxBoolItem*>(pItem))
+                {
+                    bool bDesignMode = pBoolItem->GetValue();
 
-                // set form design mode
-                OSL_ENSURE( GetView().GetFormShell() != nullptr, "form shell?" );
-                SfxRequest aReq( GetView().GetViewFrame(), SID_FM_DESIGN_MODE );
-                aReq.AppendItem( SfxBoolItem( SID_FM_DESIGN_MODE, bDesignMode ) );
-                GetView().GetFormShell()->Execute( aReq );
-                aReq.Done();
+                    // set form design mode
+                    OSL_ENSURE( GetView().GetFormShell() != nullptr, "form shell?" );
+                    SfxRequest aReq( GetView().GetViewFrame(), SID_FM_DESIGN_MODE );
+                    aReq.AppendItem( SfxBoolItem( SID_FM_DESIGN_MODE, bDesignMode ) );
+                    GetView().GetFormShell()->Execute( aReq );
+                    aReq.Done();
 
-                // also set suitable view options
-                SwViewOption aViewOption = *rSh.GetViewOptions();
-                aViewOption.SetFormView( ! bDesignMode );
-                rSh.ApplyViewOptions( aViewOption );
+                    // also set suitable view options
+                    SwViewOption aViewOption = *rSh.GetViewOptions();
+                    aViewOption.SetFormView( ! bDesignMode );
+                    rSh.ApplyViewOptions( aViewOption );
+                }
             }
             break;
 
@@ -1163,11 +1213,6 @@ void SwBaseShell::Execute(SfxRequest &rReq)
         case RES_SHADOW:
         {
             rSh.StartAllAction();
-            SfxItemSet   aSet( rSh.GetAttrPool(),
-                                RES_SHADOW, RES_SHADOW,
-                                RES_BACKGROUND, RES_BACKGROUND, 0 );
-
-            aSet.Put(*pItem);
             // Tabele cell(s) selected?
             if ( rSh.IsTableMode() )
             {
@@ -1230,23 +1275,22 @@ void SwBaseShell::Execute(SfxRequest &rReq)
 // Here the state fpr SID_IMAP / SID_CONTOUR will be handled
 // until the swapping of the graphic is finished.
 
-IMPL_LINK_NOARG_TYPED(SwBaseShell, GraphicArrivedHdl, SwCursorShell&, void)
+IMPL_LINK_NOARG(SwBaseShell, GraphicArrivedHdl, SwCursorShell&, void)
 {
-    sal_uInt16 nGrfType;
     SwWrtShell &rSh = GetShell();
-    if( CNT_GRF == rSh.SwEditShell::GetCntType() &&
-        GRAPHIC_NONE != ( nGrfType = rSh.GetGraphicType() ) &&
+    if (CNT_GRF != rSh.SwEditShell::GetCntType())
+        return;
+    GraphicType const nGrfType(rSh.GetGraphicType());
+    if (GraphicType::NONE != nGrfType &&
         !aGrfUpdateSlots.empty() )
     {
         bool bProtect = FlyProtectFlags::NONE != rSh.IsSelObjProtected(FlyProtectFlags::Content|FlyProtectFlags::Parent);
         SfxViewFrame* pVFrame = GetView().GetViewFrame();
-        sal_uInt16 nSlot;
-        std::set<sal_uInt16>::iterator it;
-        for( it = aGrfUpdateSlots.begin(); it != aGrfUpdateSlots.end(); ++it )
+        for( const auto nSlot : aGrfUpdateSlots )
         {
             bool bSetState = false;
             bool bState = false;
-            switch( nSlot = *it )
+            switch( nSlot )
             {
             case SID_IMAP:
             case SID_IMAP_EXEC:
@@ -1280,7 +1324,7 @@ IMPL_LINK_NOARG_TYPED(SwBaseShell, GraphicArrivedHdl, SwCursorShell&, void)
                         static_cast<SvxIMapDlg*>(pChildWindow->GetWindow()) : nullptr;
                     if( pDlg && pDlg->GetEditingObject() !=
                                 rSh.GetIMapInventor() )
-                        lcl_UpdateContourDlg( rSh, nsSelectionType::SEL_GRF );
+                        lcl_UpdateContourDlg( rSh, SelectionType::Graphic );
 
                     bSetState = true;
                     bState = nullptr != pDlg;
@@ -1290,9 +1334,9 @@ IMPL_LINK_NOARG_TYPED(SwBaseShell, GraphicArrivedHdl, SwCursorShell&, void)
             case FN_FRAME_WRAP_CONTOUR:
                 if( !bProtect )
                 {
-                    SfxItemSet aSet(GetPool(), RES_SURROUND, RES_SURROUND);
+                    SfxItemSet aSet(GetPool(), svl::Items<RES_SURROUND, RES_SURROUND>{});
                     rSh.GetFlyFrameAttr(aSet);
-                    const SwFormatSurround& rWrap = static_cast<const SwFormatSurround&>(aSet.Get(RES_SURROUND));
+                    const SwFormatSurround& rWrap = aSet.Get(RES_SURROUND);
                     bSetState = true;
                     bState = rWrap.IsContour();
                 }
@@ -1310,7 +1354,7 @@ IMPL_LINK_NOARG_TYPED(SwBaseShell, GraphicArrivedHdl, SwCursorShell&, void)
             case SID_GRFFILTER_POPART:
             case SID_GRFFILTER_SEPIA:
             case SID_GRFFILTER_SOLARIZE:
-                bSetState = bState = GRAPHIC_BITMAP == nGrfType;
+                bSetState = bState = GraphicType::Bitmap == nGrfType;
                 break;
             }
 
@@ -1341,7 +1385,7 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
             case SID_GALLERY_FORMATS:
                 if ( rSh.IsObjSelected() ||
                      (rSh.IsSelFrameMode() &&
-                      !(rSh.GetSelectionType() & nsSelectionType::SEL_GRF)) )
+                      !(rSh.GetSelectionType() & SelectionType::Graphic)) )
                     rSet.DisableItem( nWhich );
                 break;
             case SID_GALLERY_ENABLE_ADDCOPY:
@@ -1351,6 +1395,16 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
             case FN_EDIT_REGION:
                 if( !rSh.IsAnySectionInDoc() )
                     rSet.DisableItem(nWhich);
+                break;
+
+            case FN_EDIT_CURRENT_REGION:
+                //tdf#112808 if cursor is in an index, don't show the edit section.
+                if( !rSh.GetCurrSection() ||
+                    (rSh.GetCurrSection()->GetType() != CONTENT_SECTION &&
+                    rSh.GetCurrSection()->GetType() != FILE_LINK_SECTION ))
+                {
+                    rSet.DisableItem(nWhich);
+                }
                 break;
 
             case FN_INSERT_REGION:
@@ -1389,7 +1443,7 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
             case RES_SHADOW:
             {
                 SfxItemSet   aSet( rSh.GetAttrPool(),
-                                    RES_SHADOW, RES_SHADOW );
+                                    svl::Items<RES_SHADOW, RES_SHADOW>{} );
 
                 // Table cell(s) selected?
                 if ( rSh.IsTableMode() )
@@ -1425,7 +1479,7 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
                     const bool bHas = pVFrame->HasChildWindow( nId );
                     const bool bFrameSel = rSh.IsFrameSelected();
                     const bool bIsGraphicSelection =
-                                rSh.GetSelectionType() == nsSelectionType::SEL_GRF;
+                                rSh.GetSelectionType() == SelectionType::Graphic;
 
                     // #i59688#
                     // Avoid unnecessary loading of selected graphic.
@@ -1443,7 +1497,7 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
                         if ( !bHas &&
                              ( !bFrameSel ||
                                ( bIsGraphicSelection &&
-                                 rSh.GetGraphicType() == GRAPHIC_NONE ) ) )
+                                 rSh.GetGraphicType() == GraphicType::NONE ) ) )
                         {
                             rSet.DisableItem( nWhich );
                         }
@@ -1466,7 +1520,7 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
                 sal_uInt16 nId = SvxIMapDlgChildWindow::GetChildWindowId();
                 if(!bDisable && pVFrame->HasChildWindow( nId ))
                 {
-                    if(rSh.GetSelectionType() == nsSelectionType::SEL_GRF
+                    if(rSh.GetSelectionType() == SelectionType::Graphic
                                     && rSh.IsLinkedGrfSwapOut())
                     {
                         if( AddGrfUpdateSlot( nWhich ))
@@ -1503,8 +1557,8 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
                 {
                     sal_uInt16 nId = SvxContourDlgChildWindow::GetChildWindowId();
                     bool bHas = GetView().GetViewFrame()->HasChildWindow( nId );
-                    int nSel = rSh.GetSelectionType();
-                    bool bOk = 0 != (nSel & (nsSelectionType::SEL_GRF|nsSelectionType::SEL_OLE));
+                    SelectionType nSel = rSh.GetSelectionType();
+                    bool bOk(nSel & (SelectionType::Graphic|SelectionType::Ole));
 
                     bool bDisable = false;
                     if( !bHas && !bOk )
@@ -1515,7 +1569,7 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
                     // If the swapping of the graphic is finished, the status
                     // must be determined asynchronously, until this the slot
                     // will be disabled.
-                    else if ( bHas && (nSel & nsSelectionType::SEL_GRF) &&
+                    else if ( bHas && (nSel & SelectionType::Graphic) &&
                               rSh.IsLinkedGrfSwapOut() )
                     {
                         if( AddGrfUpdateSlot( nWhich ))
@@ -1529,10 +1583,10 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
                     {
                         // #i75481#
                         // apply fix #i59688# only for selected graphics
-                        if ( nSel & nsSelectionType::SEL_GRF )
-                            bDisable = GRAPHIC_NONE == rSh.GetGraphicType();
+                        if ( nSel & SelectionType::Graphic )
+                            bDisable = GraphicType::NONE == rSh.GetGraphicType();
                         else
-                            bDisable = GRAPHIC_NONE == rSh.GetIMapGraphic().GetType();
+                            bDisable = GraphicType::NONE == rSh.GetIMapGraphic().GetType();
                     }
 
                     if( bDisable )
@@ -1545,8 +1599,8 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
             case SID_CONTOUR_EXEC:
             {
                 bool bDisable = false;
-                int nSel = rSh.GetSelectionType();
-                if( !(nSel & (nsSelectionType::SEL_GRF|nsSelectionType::SEL_OLE)) )
+                SelectionType nSel = rSh.GetSelectionType();
+                if( !(nSel & (SelectionType::Graphic|SelectionType::Ole)) )
                     bDisable = true;
                 sal_uInt16 nId = SvxContourDlgChildWindow::GetChildWindowId();
                 if( !bDisable && GetView().GetViewFrame()->HasChildWindow( nId ))
@@ -1559,7 +1613,7 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
             }
             break;
 
-            case FN_TOOL_ANCHOR:
+            case SID_ANCHOR_MENU:
             case FN_TOOL_ANCHOR_PAGE:
             case FN_TOOL_ANCHOR_PARAGRAPH:
             case FN_TOOL_ANCHOR_CHAR:
@@ -1571,56 +1625,28 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
 
                 if( !bParentCntProt && (bObj || rSh.IsFrameSelected()))
                 {
-                    SfxItemSet aSet(GetPool(), RES_ANCHOR, RES_ANCHOR);
+                    SfxItemSet aSet(GetPool(), svl::Items<RES_ANCHOR, RES_ANCHOR>{});
                     if(bObj)
                         rSh.GetObjAttr(aSet);
                     else
                         rSh.GetFlyFrameAttr(aSet);
-                    RndStdIds eSet = static_cast<const SwFormatAnchor&>(aSet.Get(RES_ANCHOR)).GetAnchorId();
+                    RndStdIds eSet = aSet.Get(RES_ANCHOR).GetAnchorId();
                     const bool bSet =
                            ((nWhich == FN_TOOL_ANCHOR_PAGE) &&
-                            (eSet == FLY_AT_PAGE))
+                            (eSet == RndStdIds::FLY_AT_PAGE))
                         || ((nWhich == FN_TOOL_ANCHOR_PARAGRAPH) &&
-                            (eSet == FLY_AT_PARA))
+                            (eSet == RndStdIds::FLY_AT_PARA))
                         || ((nWhich == FN_TOOL_ANCHOR_FRAME) &&
-                            (eSet == FLY_AT_FLY))
+                            (eSet == RndStdIds::FLY_AT_FLY))
                         || ((nWhich == FN_TOOL_ANCHOR_AT_CHAR) &&
-                            (eSet == FLY_AT_CHAR))
+                            (eSet == RndStdIds::FLY_AT_CHAR))
                         || ((nWhich == FN_TOOL_ANCHOR_CHAR) &&
-                            (eSet == FLY_AS_CHAR));
-                    if(nWhich != FN_TOOL_ANCHOR)
-                    {
-                        if( nWhich == FN_TOOL_ANCHOR_FRAME && !rSh.IsFlyInFly() )
-                            rSet.DisableItem(nWhich);
-                        else
-                            rSet.Put(SfxBoolItem(nWhich, bSet));
-                    }
-                    else
-                    {
-                        sal_uInt16 nSlotId = 0;
+                            (eSet == RndStdIds::FLY_AS_CHAR));
 
-                        switch (eSet)
-                        {
-                            case FLY_AT_PAGE:
-                                nSlotId = FN_TOOL_ANCHOR_PAGE;
-                            break;
-                            case FLY_AT_PARA:
-                                nSlotId = FN_TOOL_ANCHOR_PARAGRAPH;
-                            break;
-                            case FLY_AS_CHAR:
-                                nSlotId = FN_TOOL_ANCHOR_CHAR;
-                            break;
-                            case FLY_AT_CHAR:
-                                nSlotId = FN_TOOL_ANCHOR_AT_CHAR;
-                            break;
-                            case FLY_AT_FLY:
-                                nSlotId = FN_TOOL_ANCHOR_FRAME;
-                            break;
-                            default:
-                                ;
-                        }
-                        rSet.Put(SfxUInt16Item(nWhich, nSlotId));
-                    }
+                    if( nWhich == FN_TOOL_ANCHOR_FRAME && !rSh.IsFlyInFly() )
+                        rSet.DisableItem(nWhich);
+                    else if(nWhich != SID_ANCHOR_MENU)
+                        rSet.Put(SfxBoolItem(nWhich, bSet));
                 }
                 else
                     rSet.DisableItem( nWhich );
@@ -1631,6 +1657,7 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
             case FN_FRAME_WRAP_IDEAL:
             case FN_FRAME_WRAPTHRU:
             case FN_FRAME_WRAPTHRU_TRANSP:
+            case FN_FRAME_WRAPTHRU_TOGGLE:
             case FN_FRAME_WRAP_CONTOUR:
             case FN_WRAP_ANCHOR_ONLY:
             case FN_FRAME_WRAP_LEFT:
@@ -1641,8 +1668,8 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
 
                 if( !bParentCntProt && (bObj || rSh.IsFrameSelected()))
                 {
-                    SfxItemSet aSet(GetPool(), RES_OPAQUE, RES_ANCHOR);
-                    int nAnchorType;
+                    SfxItemSet aSet(GetPool(), svl::Items<RES_OPAQUE, RES_ANCHOR>{});
+                    RndStdIds nAnchorType;
                     if(bObj)
                     {
                         rSh.GetObjAttr(aSet);
@@ -1651,17 +1678,17 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
                     else
                     {
                         rSh.GetFlyFrameAttr(aSet);
-                        nAnchorType = static_cast<const SwFormatAnchor&>(aSet.Get(RES_ANCHOR)).GetAnchorId();
+                        nAnchorType = aSet.Get(RES_ANCHOR).GetAnchorId();
                     }
-                    const SwFormatSurround& rWrap = static_cast<const SwFormatSurround&>(aSet.Get(RES_SURROUND));
+                    const SwFormatSurround& rWrap = aSet.Get(RES_SURROUND);
 
-                    const SvxOpaqueItem& rOpaque = static_cast<const SvxOpaqueItem&>(aSet.Get(RES_OPAQUE));
+                    const SvxOpaqueItem& rOpaque = aSet.Get(RES_OPAQUE);
                     bool bOpaque = rOpaque.GetValue();
-                    SwSurround nSurround = rWrap.GetSurround();
+                    css::text::WrapTextMode nSurround = rWrap.GetSurround();
                     bool bSet = false;
 
                     bool bDisable =
-                        (nAnchorType == - 1) || (nAnchorType == FLY_AS_CHAR);
+                        (nAnchorType == RndStdIds::UNKNOWN) || (nAnchorType == RndStdIds::FLY_AS_CHAR);
                     const bool bHtmlMode =
                         0 != ::GetHtmlMode(GetView().GetDocShell());
 
@@ -1669,45 +1696,45 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
                     {
                         case FN_FRAME_NOWRAP:
                             bDisable |=
-                                (   (nAnchorType != FLY_AT_PARA)
-                                 && (nAnchorType != FLY_AT_CHAR)
-                                 && (nAnchorType != FLY_AT_PAGE));
-                            bSet = nSurround == SURROUND_NONE;
+                                (   (nAnchorType != RndStdIds::FLY_AT_PARA)
+                                 && (nAnchorType != RndStdIds::FLY_AT_CHAR)
+                                 && (nAnchorType != RndStdIds::FLY_AT_PAGE));
+                            bSet = nSurround == css::text::WrapTextMode_NONE;
                         break;
                         case FN_FRAME_WRAP:
                             bDisable |= bHtmlMode;
-                            bSet = nSurround == SURROUND_PARALLEL;
+                            bSet = nSurround == css::text::WrapTextMode_PARALLEL;
                         break;
                         case FN_FRAME_WRAP_IDEAL:
                             bDisable |= bHtmlMode;
-                            bSet = nSurround == SURROUND_IDEAL;
+                            bSet = nSurround == css::text::WrapTextMode_DYNAMIC;
                         break;
                         case FN_FRAME_WRAPTHRU:
                             bDisable |= (bHtmlMode ||
-                                (   (nAnchorType != FLY_AT_PARA)
-                                 && (nAnchorType != FLY_AT_CHAR)
-                                 && (nAnchorType != FLY_AT_PAGE)));
+                                (   (nAnchorType != RndStdIds::FLY_AT_PARA)
+                                 && (nAnchorType != RndStdIds::FLY_AT_CHAR)
+                                 && (nAnchorType != RndStdIds::FLY_AT_PAGE)));
                             if(bObj)
-                                bSet = nSurround == SURROUND_THROUGHT && rSh.GetLayerId();
+                                bSet = nSurround == css::text::WrapTextMode_THROUGH && rSh.GetLayerId();
                             else
-                                bSet = nSurround == SURROUND_THROUGHT && bOpaque;
+                                bSet = nSurround == css::text::WrapTextMode_THROUGH && bOpaque;
                         break;
                         case FN_FRAME_WRAPTHRU_TRANSP:
+                        case FN_FRAME_WRAPTHRU_TOGGLE:
                             bDisable |= bHtmlMode;
                             if(bObj)
-                                bSet = nSurround == SURROUND_THROUGHT && !rSh.GetLayerId();
+                                bSet = nSurround == css::text::WrapTextMode_THROUGH && !rSh.GetLayerId();
                             else
-                                bSet = nSurround == SURROUND_THROUGHT && !bOpaque;
+                                bSet = nSurround == css::text::WrapTextMode_THROUGH && !bOpaque;
                         break;
                         case FN_FRAME_WRAP_CONTOUR:
                             bDisable |= bHtmlMode;
                             //no contour available whenn no wrap or wrap through is set
-                            bDisable |= (nSurround == SURROUND_NONE || nSurround == SURROUND_THROUGHT);
-                            bSet = rWrap.IsContour();
+                            bDisable |= (nSurround == css::text::WrapTextMode_NONE || nSurround == css::text::WrapTextMode_THROUGH);
                             if( !bDisable )
                             {
-                                int nSel = rSh.GetSelectionType();
-                                if( (nSel & nsSelectionType::SEL_GRF) &&
+                                SelectionType nSel = rSh.GetSelectionType();
+                                if( (nSel & SelectionType::Graphic) &&
                                             rSh.IsLinkedGrfSwapOut())
                                 {
                                     if( AddGrfUpdateSlot( nWhich ))
@@ -1717,8 +1744,8 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
                                 {
                                     // #i102253# applied patch from OD (see task)
                                     bDisable =
-                                        nSel & nsSelectionType::SEL_FRM ||
-                                        GRAPHIC_NONE == rSh.GetIMapGraphic().GetType();
+                                        nSel & SelectionType::Frame ||
+                                        GraphicType::NONE == rSh.GetIMapGraphic().GetType();
                                 }
                             }
                             bSet = !bDisable && rWrap.IsContour();
@@ -1726,14 +1753,14 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
                         break;
                         case FN_WRAP_ANCHOR_ONLY:
                             bDisable |= (bHtmlMode ||
-                                (nAnchorType != FLY_AT_PARA));
+                                (nAnchorType != RndStdIds::FLY_AT_PARA));
                             bSet = rWrap.IsAnchorOnly();
                         break;
                         case FN_FRAME_WRAP_LEFT:
-                            bSet = nSurround == SURROUND_LEFT;
+                            bSet = nSurround == css::text::WrapTextMode_LEFT;
                         break;
                         case FN_FRAME_WRAP_RIGHT:
-                            bSet = nSurround == SURROUND_RIGHT;
+                            bSet = nSurround == css::text::WrapTextMode_RIGHT;
                         break;
                     }
 
@@ -1771,7 +1798,7 @@ void SwBaseShell::GetState( SfxItemSet &rSet )
     pGetStateSet = nullptr;
 }
 
-// Disable the slots with this status methode
+// Disable the slots with this status method
 
 void SwBaseShell::StateDisableItems( SfxItemSet &rSet )
 {
@@ -1785,19 +1812,18 @@ void SwBaseShell::StateDisableItems( SfxItemSet &rSet )
     }
 }
 
-// Disable the slots with this status methode
+// Disable the slots with this status method
 
 void SwBaseShell::StateStyle( SfxItemSet &rSet )
 {
     bool bParentCntProt = GetShell().IsSelObjProtected( FlyProtectFlags::Content|FlyProtectFlags::Parent ) != FlyProtectFlags::NONE;
-    ShellModes eMode = GetView().GetShellMode();
+    ShellMode eMode = GetView().GetShellMode();
 
     if ( bParentCntProt ||
-         SHELL_MODE_DRAW == eMode ||
-         SHELL_MODE_DRAW_CTRL == eMode ||
-         SHELL_MODE_DRAW_FORM == eMode ||
-         SHELL_MODE_DRAWTEXT == eMode ||
-         SHELL_MODE_BEZIER == eMode )
+         ShellMode::Draw == eMode ||
+         ShellMode::DrawForm == eMode ||
+         ShellMode::DrawText == eMode ||
+         ShellMode::Bezier == eMode )
     {
         SfxWhichIter aIter( rSet );
         sal_uInt16 nWhich = aIter.FirstWhich();
@@ -1815,85 +1841,100 @@ void SwBaseShell::SetWrapMode( sal_uInt16 nSlot )
 {
     SwWrtShell &rSh = GetShell();
     bool bObj = 0 != rSh.IsObjSelected();
-    if( bObj || rSh.IsFrameSelected())
+    if( !bObj && !rSh.IsFrameSelected())
+        return;
+
+    SfxItemSet aSet(GetPool(), svl::Items<RES_OPAQUE, RES_SURROUND>{});
+    if(bObj)
+        rSh.GetObjAttr(aSet);
+    else
+        rSh.GetFlyFrameAttr(aSet);
+    SwFormatSurround aWrap( aSet.Get(RES_SURROUND) );
+    css::text::WrapTextMode nOldSurround(aWrap.GetSurround());
+    css::text::WrapTextMode nSurround = css::text::WrapTextMode_PARALLEL;
+
+    switch (nSlot)
     {
-        SfxItemSet aSet(GetPool(), RES_OPAQUE, RES_SURROUND);
-        if(bObj)
-            rSh.GetObjAttr(aSet);
-        else
-            rSh.GetFlyFrameAttr(aSet);
-        SwFormatSurround aWrap( static_cast<const SwFormatSurround&>(aSet.Get(RES_SURROUND)) );
-        SwSurround nOldSurround(aWrap.GetSurround());
-        SwSurround nSurround = SURROUND_PARALLEL;
+        case FN_FRAME_NOWRAP:
+            nSurround = css::text::WrapTextMode_NONE;
+            if (aWrap.IsContour())
+                aWrap.SetContour(false);
+            break;
+        case FN_FRAME_WRAP_IDEAL:
+            nSurround = css::text::WrapTextMode_DYNAMIC;
+            break;
+        case FN_WRAP_ANCHOR_ONLY:
+            aWrap.SetAnchorOnly(!aWrap.IsAnchorOnly());
 
-        switch (nSlot)
-        {
-            case FN_FRAME_NOWRAP:
-                nSurround = SURROUND_NONE;
-                if (aWrap.IsContour())
-                    aWrap.SetContour(false);
-                break;
-            case FN_FRAME_WRAP_IDEAL:
-                nSurround = SURROUND_IDEAL;
-                break;
-            case FN_WRAP_ANCHOR_ONLY:
-                aWrap.SetAnchorOnly(!aWrap.IsAnchorOnly());
+            // keep previous wrapping
 
-                // keep previous wrapping
-
-                // switch to wrap SURROUND_PARALLEL, if previous wrap is SURROUND_NONE
-                if ( nOldSurround != SURROUND_NONE )
-                {
-                    nSurround = nOldSurround;
-                }
-                break;
-            case FN_FRAME_WRAP_CONTOUR:
-                aWrap.SetContour(!aWrap.IsContour());
-                break;
-            case FN_FRAME_WRAPTHRU_TRANSP:
-                if (aWrap.IsContour())
-                    aWrap.SetContour(false);
-                // No break!!!
-            case FN_FRAME_WRAPTHRU:
-                nSurround = SURROUND_THROUGHT;
-                break;
-
-            case FN_FRAME_WRAP_LEFT:
-                nSurround = SURROUND_LEFT;
-                break;
-
-            case FN_FRAME_WRAP_RIGHT:
-                nSurround = SURROUND_RIGHT;
-                break;
-
-            default:
-                break;
-        }
-        aWrap.SetSurround(nSurround);
-
-        if (nSlot != FN_FRAME_WRAP_CONTOUR)
-        {
-            // Defaulting the contour wrap on draw objects.
-            if (bObj && nOldSurround != nSurround &&
-                (nOldSurround == SURROUND_NONE || nOldSurround == SURROUND_THROUGHT))
+            // switch to wrap css::text::WrapTextMode_PARALLEL, if previous wrap is css::text::WrapTextMode_NONE
+            if ( nOldSurround != css::text::WrapTextMode_NONE )
             {
-                aWrap.SetContour(true);
+                nSurround = nOldSurround;
             }
-        }
+            break;
+        case FN_FRAME_WRAP_CONTOUR:
+            aWrap.SetContour(!aWrap.IsContour());
+            break;
+        case FN_FRAME_WRAPTHRU_TRANSP:
+        case FN_FRAME_WRAPTHRU_TOGGLE:
+            if (aWrap.IsContour())
+                aWrap.SetContour(false);
+            [[fallthrough]];
+        case FN_FRAME_WRAPTHRU:
+            nSurround = css::text::WrapTextMode_THROUGH;
+            break;
 
-        aSet.Put( aWrap );
-        aSet.Put(SvxOpaqueItem(RES_OPAQUE, nSlot != FN_FRAME_WRAPTHRU_TRANSP));
-        if(bObj)
-        {
-            rSh.SetObjAttr(aSet);
-            if (nSlot != FN_FRAME_WRAPTHRU_TRANSP)
-                rSh.SelectionToHeaven();
-            else
-                rSh.SelectionToHell();
-        }
-        else
-            rSh.SetFlyFrameAttr(aSet);
+        case FN_FRAME_WRAP_LEFT:
+            nSurround = css::text::WrapTextMode_LEFT;
+            break;
+
+        case FN_FRAME_WRAP_RIGHT:
+            nSurround = css::text::WrapTextMode_RIGHT;
+            break;
+
+        default:
+            break;
     }
+    aWrap.SetSurround(nSurround);
+
+    if (nSlot != FN_FRAME_WRAP_CONTOUR)
+    {
+        // Defaulting the contour wrap on draw objects.
+        if (bObj && nOldSurround != nSurround &&
+            (nOldSurround == css::text::WrapTextMode_NONE || nOldSurround == css::text::WrapTextMode_THROUGH))
+        {
+            aWrap.SetContour(true);
+        }
+    }
+
+    aSet.Put( aWrap );
+
+    bool bOpaque = nSlot != FN_FRAME_WRAPTHRU_TRANSP && nSlot != FN_FRAME_WRAPTHRU_TOGGLE;
+    if( nSlot == FN_FRAME_WRAPTHRU_TOGGLE )
+    {
+        if( bObj )
+            bOpaque = !rSh.GetLayerId();
+        else
+        {
+            const SvxOpaqueItem& aOpaque( aSet.Get(RES_OPAQUE) );
+            bOpaque = !aOpaque.GetValue();
+        }
+    }
+    aSet.Put(SvxOpaqueItem(RES_OPAQUE, bOpaque ));
+
+    if(bObj)
+    {
+        rSh.SetObjAttr(aSet);
+        if ( bOpaque )
+            rSh.SelectionToHeaven();
+        else
+            rSh.SelectionToHell();
+    }
+    else
+        rSh.SetFlyFrameAttr(aSet);
+
 }
 
 //Force update of the status line
@@ -1954,10 +1995,9 @@ void SwBaseShell::ExecTextCtrl( SfxRequest& rReq )
         SfxItemPool& rPool = rSh.GetAttrPool();
         sal_uInt16 nWhich = rPool.GetWhich( nSlot );
         SvtScriptType nScripts = SvtScriptType::LATIN | SvtScriptType::ASIAN | SvtScriptType::COMPLEX;
-        SfxItemSet aHeightSet( GetPool(),  RES_CHRATR_FONTSIZE, RES_CHRATR_FONTSIZE,
+        SfxItemSet aHeightSet( GetPool(),  svl::Items<RES_CHRATR_FONTSIZE, RES_CHRATR_FONTSIZE,
                                             RES_CHRATR_CJK_FONTSIZE, RES_CHRATR_CJK_FONTSIZE,
-                                            RES_CHRATR_CTL_FONTSIZE, RES_CHRATR_CTL_FONTSIZE,
-                                        0L);
+                                            RES_CHRATR_CTL_FONTSIZE, RES_CHRATR_CTL_FONTSIZE>{});
 
         switch( nSlot )
         {
@@ -1972,8 +2012,8 @@ void SwBaseShell::ExecTextCtrl( SfxRequest& rReq )
                     if(nInputLang != LANGUAGE_DONTKNOW && nInputLang != LANGUAGE_SYSTEM)
                         nScripts = SvtLanguageOptions::GetScriptTypeOfLanguage( nInputLang );
                 }
+                [[fallthrough]];
             }
-            // fall-through
             case SID_ATTR_CHAR_POSTURE:
             case SID_ATTR_CHAR_WEIGHT:
             {
@@ -1999,44 +2039,43 @@ void SwBaseShell::ExecTextCtrl( SfxRequest& rReq )
                     sal_uInt32 nHeight = static_cast< const SvxFontHeightItem& >(pArgs->Get( nWhich )).GetHeight();
                     SwStdFontConfig* pStdFont = SW_MOD()->GetStdFontConfig();
 
-                    SfxItemSet aLangSet( GetPool(), RES_CHRATR_LANGUAGE, RES_CHRATR_LANGUAGE,
+                    SfxItemSet aLangSet( GetPool(), svl::Items<RES_CHRATR_LANGUAGE, RES_CHRATR_LANGUAGE,
                                                     RES_CHRATR_CJK_LANGUAGE, RES_CHRATR_CJK_LANGUAGE,
-                                                    RES_CHRATR_CTL_LANGUAGE, RES_CHRATR_CTL_LANGUAGE,
-                                                    0L);
+                                                    RES_CHRATR_CTL_LANGUAGE, RES_CHRATR_CTL_LANGUAGE>{});
                     rSh.GetCurAttr( aLangSet );
 
                     sal_Int32 nWesternSize =
                             pStdFont->GetFontHeight(FONT_STANDARD, FONT_GROUP_DEFAULT,
-                            static_cast<const SvxLanguageItem&>(aLangSet.Get( RES_CHRATR_LANGUAGE)).GetLanguage());
+                            aLangSet.Get( RES_CHRATR_LANGUAGE).GetLanguage());
                     sal_Int32 nCJKSize =
                             pStdFont->GetFontHeight(FONT_STANDARD, FONT_GROUP_CJK,
-                            static_cast<const SvxLanguageItem&>(aLangSet.Get( RES_CHRATR_CJK_LANGUAGE)).GetLanguage());
+                            aLangSet.Get( RES_CHRATR_CJK_LANGUAGE).GetLanguage());
                     sal_Int32 nCTLSize =
                             pStdFont->GetFontHeight(FONT_STANDARD, FONT_GROUP_CTL,
-                            static_cast<const SvxLanguageItem&>(aLangSet.Get( RES_CHRATR_CTL_LANGUAGE)).GetLanguage());
+                            aLangSet.Get( RES_CHRATR_CTL_LANGUAGE).GetLanguage());
 
                     switch(nScripts)
                     {
                         case SvtScriptType::LATIN:
                             nCJKSize = nHeight * nCJKSize / nWesternSize;
                             nCTLSize = nHeight * nCTLSize / nWesternSize;
-                            nWesternSize = (sal_Int32) nHeight;
+                            nWesternSize = static_cast<sal_Int32>(nHeight);
                         break;
                         case SvtScriptType::ASIAN:
                             nCTLSize = nHeight* nCTLSize / nCJKSize;
                             nWesternSize = nHeight * nWesternSize / nCJKSize;
-                            nCJKSize = (sal_Int32) nHeight;
+                            nCJKSize = static_cast<sal_Int32>(nHeight);
                         break;
                         case SvtScriptType::COMPLEX:
                             nCJKSize = nHeight * nCJKSize / nCTLSize;
                             nWesternSize = nHeight * nWesternSize / nCTLSize;
-                            nCTLSize = (sal_Int32) nHeight;
+                            nCTLSize = static_cast<sal_Int32>(nHeight);
                         break;
                         default: break;
                     }
-                    aHeightSet.Put( SvxFontHeightItem( (sal_uInt32)nWesternSize, 100, RES_CHRATR_FONTSIZE ));
-                    aHeightSet.Put( SvxFontHeightItem( (sal_uInt32)nCJKSize, 100, RES_CHRATR_CJK_FONTSIZE ));
-                    aHeightSet.Put( SvxFontHeightItem( (sal_uInt32)nCTLSize, 100, RES_CHRATR_CTL_FONTSIZE ));
+                    aHeightSet.Put( SvxFontHeightItem( static_cast<sal_uInt32>(nWesternSize), 100, RES_CHRATR_FONTSIZE ));
+                    aHeightSet.Put( SvxFontHeightItem( static_cast<sal_uInt32>(nCJKSize), 100, RES_CHRATR_CJK_FONTSIZE ));
+                    aHeightSet.Put( SvxFontHeightItem( static_cast<sal_uInt32>(nCTLSize), 100, RES_CHRATR_CTL_FONTSIZE ));
                     pArgs = &aHeightSet;
                 }
             }
@@ -2094,7 +2133,7 @@ void SwBaseShell::GetTextFontCtrlState( SfxItemSet& rSet )
                 if( !pFntCoreSet )
                 {
                     pFntCoreSet.reset(new SfxItemSet( *rSet.GetPool(),
-                                    RES_CHRATR_BEGIN, RES_CHRATR_END-1 ));
+                                    svl::Items<RES_CHRATR_BEGIN, RES_CHRATR_END-1>{} ));
                     rSh.GetCurAttr( *pFntCoreSet );
                     nScriptType = rSh.GetScriptType();
                     // #i42732# input language should be preferred over
@@ -2117,20 +2156,23 @@ void SwBaseShell::GetTextFontCtrlState( SfxItemSet& rSet )
                 aSetItem.GetItemSet().Put( *pFntCoreSet, false );
                 const SfxPoolItem* pI = aSetItem.GetItemOfScript( nScriptType );
                 if( pI )
-                    rSet.Put( *pI, nWhich );
+                {
+                    std::unique_ptr<SfxPoolItem> pNewItem(pI->CloneSetWhich(nWhich));
+                    rSet.Put( *pNewItem );
+                }
                 else
                     rSet.InvalidateItem( nWhich );
                 // Set input context of the SwEditWin according to the selected font and script type
                 if(RES_CHRATR_FONT == nWhich)
                 {
                     vcl::Font aFont;
-                    if(pI && dynamic_cast< const SvxFontItem *>( pI ) !=  nullptr)
+                    if (const SvxFontItem* pFontItem = dynamic_cast<const SvxFontItem*>(pI))
                     {
-                        aFont.SetFamilyName( static_cast<const SvxFontItem*>(pI)->GetFamilyName());
-                        aFont.SetStyleName(static_cast<const SvxFontItem*>(pI)->GetStyleName());
-                        aFont.SetFamily(static_cast<const SvxFontItem*>(pI)->GetFamily());
-                        aFont.SetPitch(static_cast<const SvxFontItem*>(pI)->GetPitch());
-                        aFont.SetCharSet(static_cast<const SvxFontItem*>(pI)->GetCharSet());
+                        aFont.SetFamilyName(pFontItem->GetFamilyName());
+                        aFont.SetStyleName(pFontItem->GetStyleName());
+                        aFont.SetFamily(pFontItem->GetFamily());
+                        aFont.SetPitch(pFontItem->GetPitch());
+                        aFont.SetCharSet(pFontItem->GetCharSet());
                     }
 
                     bool bVertical = rSh.IsInVerticalText();
@@ -2158,21 +2200,21 @@ void SwBaseShell::GetBckColState(SfxItemSet &rSet)
     SwWrtShell &rSh = GetShell();
     SfxWhichIter aIter(rSet);
     sal_uInt16 nWhich(aIter.FirstWhich());
-    int nSelType(rSh.GetSelectionType());
+    SelectionType nSelType(rSh.GetSelectionType());
     SvxBrushItem aBrushItem(RES_BACKGROUND);
 
-    if( nsSelectionType::SEL_TBL_CELLS & nSelType )
+    if( nWhich == SID_TABLE_CELL_BACKGROUND_COLOR )
     {
         rSh.GetBoxBackground( aBrushItem );
     }
     else
     {
-        //UUUU Adapt to new DrawingLayer FillStyle; use a parent which has XFILL_NONE set
-        SfxItemSet aCoreSet(GetPool(), XATTR_FILL_FIRST, XATTR_FILL_LAST);
+        // Adapt to new DrawingLayer FillStyle; use a parent which has XFILL_NONE set
+        SfxItemSet aCoreSet(GetPool(), svl::Items<XATTR_FILL_FIRST, XATTR_FILL_LAST>{});
 
         aCoreSet.SetParent(&GetView().GetDocShell()->GetDoc()->GetDfltFrameFormat()->GetAttrSet());
 
-        if(nSelType & nsSelectionType::SEL_GRF || nsSelectionType::SEL_FRM & nSelType)
+        if(nSelType & SelectionType::Graphic || SelectionType::Frame & nSelType)
         {
             rSh.GetFlyFrameAttr(aCoreSet);
         }
@@ -2189,15 +2231,17 @@ void SwBaseShell::GetBckColState(SfxItemSet &rSet)
         switch(nWhich)
         {
             case SID_BACKGROUND_COLOR:
+            case SID_TABLE_CELL_BACKGROUND_COLOR:
             {
                 SvxColorItem aColorItem(aBrushItem.GetColor(),SID_BACKGROUND_COLOR);
-                rSet.Put(aColorItem,SID_BACKGROUND_COLOR);
+                rSet.Put(aColorItem);
                 break;
             }
             case SID_ATTR_BRUSH:
             case RES_BACKGROUND:
             {
-                rSet.Put(aBrushItem,GetPool().GetWhich(nWhich));
+                std::unique_ptr<SfxPoolItem> pNewItem(aBrushItem.CloneSetWhich(GetPool().GetWhich(nWhich)));
+                rSet.Put(*pNewItem);
                 break;
             }
         }
@@ -2209,29 +2253,29 @@ void SwBaseShell::GetBckColState(SfxItemSet &rSet)
 void SwBaseShell::ExecBckCol(SfxRequest& rReq)
 {
     SwWrtShell &rSh = GetShell();
-    int nSelType(rSh.GetSelectionType());
+    SelectionType nSelType(rSh.GetSelectionType());
     const SfxItemSet* pArgs = rReq.GetArgs();
     sal_uInt16 nSlot(rReq.GetSlot());
 
-    if(!pArgs  && nSlot != SID_BACKGROUND_COLOR)
+    if (!pArgs && ( nSlot != SID_BACKGROUND_COLOR || nSlot != SID_TABLE_CELL_BACKGROUND_COLOR ) )
     {
         return;
     }
 
     SvxBrushItem aBrushItem(RES_BACKGROUND);
 
-    if( nsSelectionType::SEL_TBL_CELLS & nSelType )
+    if ( nSlot == SID_TABLE_CELL_BACKGROUND_COLOR )
     {
         rSh.GetBoxBackground( aBrushItem );
     }
     else
     {
-        //UUUU Adapt to new DrawingLayer FillStyle; use a parent which has XFILL_NONE set
-        SfxItemSet aCoreSet(GetPool(), XATTR_FILL_FIRST, XATTR_FILL_LAST);
+        // Adapt to new DrawingLayer FillStyle; use a parent which has XFILL_NONE set
+        SfxItemSet aCoreSet(GetPool(), svl::Items<XATTR_FILL_FIRST, XATTR_FILL_LAST>{});
 
         aCoreSet.SetParent(&GetView().GetDocShell()->GetDoc()->GetDfltFrameFormat()->GetAttrSet());
 
-        if((nsSelectionType::SEL_FRM & nSelType) || (nsSelectionType::SEL_GRF & nSelType))
+        if((SelectionType::Frame & nSelType) || (SelectionType::Graphic & nSelType))
         {
             rSh.GetFlyFrameAttr(aCoreSet);
         }
@@ -2246,12 +2290,13 @@ void SwBaseShell::ExecBckCol(SfxRequest& rReq)
     switch(nSlot)
     {
         case SID_BACKGROUND_COLOR:
+        case SID_TABLE_CELL_BACKGROUND_COLOR:
         {
             aBrushItem.SetGraphicPos(GPOS_NONE);
 
             if(pArgs)
             {
-                const SvxColorItem& rNewColorItem = static_cast<const SvxColorItem&>(pArgs->Get(SID_BACKGROUND_COLOR));
+                const SvxColorItem& rNewColorItem = pArgs->Get(nSlot == SID_BACKGROUND_COLOR ? SID_BACKGROUND_COLOR : SID_TABLE_CELL_BACKGROUND_COLOR );
                 const Color& rNewColor = rNewColorItem.GetValue();
                 aBrushItem.SetColor(rNewColor);
                 GetView().GetViewFrame()->GetBindings().SetState(rNewColorItem);
@@ -2259,7 +2304,7 @@ void SwBaseShell::ExecBckCol(SfxRequest& rReq)
             else
             {
                 aBrushItem.SetColor(COL_TRANSPARENT);
-                rReq.AppendItem(SvxColorItem(Color(COL_TRANSPARENT),nSlot));
+                rReq.AppendItem(SvxColorItem(COL_TRANSPARENT,nSlot));
             }
             break;
         }
@@ -2267,6 +2312,7 @@ void SwBaseShell::ExecBckCol(SfxRequest& rReq)
         case SID_ATTR_BRUSH:
         case RES_BACKGROUND:
         {
+            assert(pArgs && "only SID_BACKGROUND_COLOR can have !pArgs, checked at entry");
             const SvxBrushItem& rNewBrushItem = static_cast<const SvxBrushItem&>(pArgs->Get(GetPool().GetWhich(nSlot)));
             aBrushItem = rNewBrushItem;
             break;
@@ -2279,19 +2325,19 @@ void SwBaseShell::ExecBckCol(SfxRequest& rReq)
         }
     }
 
-    if( nsSelectionType::SEL_TBL_CELLS & nSelType )
+    if ( nSlot == SID_TABLE_CELL_BACKGROUND_COLOR )
     {
         rSh.SetBoxBackground( aBrushItem );
     }
     else
     {
-        //UUUU Adapt to new DrawingLayer FillStyle; use a parent which has XFILL_NONE set
-        SfxItemSet aCoreSet(GetPool(), XATTR_FILL_FIRST, XATTR_FILL_LAST);
+        // Adapt to new DrawingLayer FillStyle; use a parent which has XFILL_NONE set
+        SfxItemSet aCoreSet(GetPool(), svl::Items<XATTR_FILL_FIRST, XATTR_FILL_LAST>{});
 
         aCoreSet.SetParent(&GetView().GetDocShell()->GetDoc()->GetDfltFrameFormat()->GetAttrSet());
         setSvxBrushItemAsFillAttributesToTargetSet(aBrushItem, aCoreSet);
 
-        if((nsSelectionType::SEL_FRM & nSelType) || (nsSelectionType::SEL_GRF & nSelType))
+        if((SelectionType::Frame & nSelType) || (SelectionType::Graphic & nSelType))
         {
             // Template autoupdate
             SwFrameFormat* pFormat = rSh.GetSelectedFrameFormat();
@@ -2332,8 +2378,8 @@ void SwBaseShell::GetBorderState(SfxItemSet &rSet)
     if ( bTableMode )
     {
         SfxItemSet aCoreSet( GetPool(),
-                             RES_BOX, RES_BOX,
-                             SID_ATTR_BORDER_INNER, SID_ATTR_BORDER_INNER, 0 );
+                             svl::Items<RES_BOX, RES_BOX,
+                             SID_ATTR_BORDER_INNER, SID_ATTR_BORDER_INNER>{} );
         SvxBoxInfoItem aBoxInfo( SID_ATTR_BORDER_INNER );
         aCoreSet.Put( aBoxInfo );
         rSh.GetTabBorders( aCoreSet );
@@ -2357,7 +2403,7 @@ void SwBaseShell::GetBorderState(SfxItemSet &rSet)
 void SwBaseShell::ExecDlg(SfxRequest &rReq)
 {
     SwWrtShell &rSh = GetShell();
-    vcl::Window *pMDI = &GetView().GetViewFrame()->GetWindow();
+    weld::Window* pMDI = GetView().GetViewFrame()->GetWindow().GetFrameWeld();
     // So that from the basic no dialogues for the background views are called:
     bool bBackground = (&GetView() != GetActiveView());
     const SfxPoolItem* pItem = nullptr;
@@ -2374,7 +2420,7 @@ void SwBaseShell::ExecDlg(SfxRequest &rReq)
         case FN_FORMAT_TITLEPAGE_DLG:
         {
             SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-            std::unique_ptr<VclAbstractDialog> pDlg(pFact->CreateTitlePageDlg( pMDI ));
+            ScopedVclPtr<VclAbstractDialog> pDlg(pFact->CreateTitlePageDlg(pMDI));
             pDlg->Execute();
         }
         break;
@@ -2399,21 +2445,24 @@ void SwBaseShell::ExecDlg(SfxRequest &rReq)
                     case FN_FORMAT_PAGE_SETTING_DLG:
                         sPageId = "page";
                         break;
+                    case FN_FORMAT_PAGE_DLG:
+                        if (pItem)
+                          sPageId = OUStringToOString(static_cast<const SfxStringItem*>(pItem)->GetValue(), RTL_TEXTENCODING_UTF8);
+                        break;
                 }
-
-                rTempView.GetDocShell()->FormatPage(
-                    rPageDesc.GetName(), sPageId, rSh);
+                rTempView.GetDocShell()->FormatPage(rPageDesc.GetName(), sPageId, rSh, &rReq);
                 rTempView.InvalidateRulerPos();
+
+                bDone = true; // FormatPage() takes care of calling Done()
             }
         }
         break;
         case FN_FORMAT_BORDER_DLG:
         {
             SfxItemSet   aSet( rSh.GetAttrPool(),
-                               RES_BOX              , RES_SHADOW,
-                               SID_ATTR_BORDER_INNER, SID_ATTR_BORDER_INNER,
-                               0 );
-            std::unique_ptr<SfxAbstractDialog> pDlg;
+                               svl::Items<RES_BOX              , RES_SHADOW,
+                               SID_ATTR_BORDER_INNER, SID_ATTR_BORDER_INNER>{} );
+            ScopedVclPtr<SfxAbstractDialog> pDlg;
             // Table cell(s) selected?
             if ( rSh.IsTableMode() )
             {
@@ -2421,10 +2470,7 @@ void SwBaseShell::ExecDlg(SfxRequest &rReq)
                 ::PrepareBoxInfo( aSet, rSh );
                 rSh.GetTabBorders( aSet );
                 SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-                OSL_ENSURE(pFact, "SwAbstractDialogFactory fail!");
-
-                pDlg.reset(pFact->CreateSwBorderDlg( pMDI, aSet, SwBorderModes::TABLE, RC_DLG_SWBORDERDLG ));
-                OSL_ENSURE(pDlg, "Dialog creation failed!");
+                pDlg.disposeAndReset(pFact->CreateSwBorderDlg(pMDI, aSet, SwBorderModes::TABLE));
                 if ( pDlg->Execute() == RET_OK )
                 {
                     rSh.SetTabBorders( *pDlg->GetOutputItemSet() );
@@ -2438,10 +2484,7 @@ void SwBaseShell::ExecDlg(SfxRequest &rReq)
                 aSet.Put( aMgr.GetAttrSet() );
 
                 SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-                OSL_ENSURE(pFact, "SwAbstractDialogFactory fail!");
-
-                pDlg.reset(pFact->CreateSwBorderDlg( pMDI, aSet, SwBorderModes::FRAME, RC_DLG_SWBORDERDLG ));
-                OSL_ENSURE(pDlg, "Dialog creation failed!");
+                pDlg.disposeAndReset(pFact->CreateSwBorderDlg(pMDI, aSet, SwBorderModes::FRAME));
                 if ( pDlg->Execute() == RET_OK )
                 {
                     aMgr.SetAttrSet( *pDlg->GetOutputItemSet() );
@@ -2456,10 +2499,7 @@ void SwBaseShell::ExecDlg(SfxRequest &rReq)
                 ::PrepareBoxInfo( aSet, rSh );
 
                 SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-                OSL_ENSURE(pFact, "SwAbstractDialogFactory fail!");
-
-                pDlg.reset(pFact->CreateSwBorderDlg( pMDI, aSet, SwBorderModes::PARA, RC_DLG_SWBORDERDLG ));
-                OSL_ENSURE(pDlg, "Dialog creation failed!");
+                pDlg.disposeAndReset(pFact->CreateSwBorderDlg(pMDI, aSet, SwBorderModes::PARA));
                 if ( pDlg->Execute() == RET_OK )
                 {
                     rSh.SetAttrSet( *pDlg->GetOutputItemSet() );
@@ -2476,11 +2516,10 @@ void SwBaseShell::ExecDlg(SfxRequest &rReq)
         case FN_FORMAT_BACKGROUND_DLG:
         {
             SfxItemSet aSet( rSh.GetAttrPool(),
-                             RES_BACKGROUND, RES_BACKGROUND );
+                             svl::Items<RES_BACKGROUND, RES_BACKGROUND>{} );
 
-            std::unique_ptr<SfxAbstractDialog> pDlg;
+            ScopedVclPtr<SfxAbstractDialog> pDlg;
             SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-            OSL_ENSURE(pFact, "SwAbstractDialogFactory fail!");
 
             // Table cell(s) selected?
             if ( rSh.IsTableMode() )
@@ -2488,16 +2527,12 @@ void SwBaseShell::ExecDlg(SfxRequest &rReq)
                 // Get background attributes of the table and put it in the set
                 SvxBrushItem aBrush(RES_BACKGROUND);
                 rSh.GetBoxBackground( aBrush );
-                pDlg.reset(pFact->CreateSfxDialog( pMDI, aSet,
-                    rView.GetViewFrame()->GetFrame().GetFrameInterface(),
-                    RC_SWDLG_BACKGROUND ));
-                OSL_ENSURE(pDlg, "Dialog creation failed!");
+                pDlg.disposeAndReset(pFact->CreateSwBackgroundDialog(pMDI, aSet));
                 aSet.Put( aBrush );
                 if ( pDlg->Execute() == RET_OK )
                 {
 
-                    rSh.SetBoxBackground( static_cast<const SvxBrushItem&>(
-                        pDlg->GetOutputItemSet()->Get( RES_BACKGROUND )));
+                    rSh.SetBoxBackground( pDlg->GetOutputItemSet()->Get( RES_BACKGROUND ) );
                     pOutSet = pDlg->GetOutputItemSet();
                 }
             }
@@ -2506,13 +2541,10 @@ void SwBaseShell::ExecDlg(SfxRequest &rReq)
 
                 rSh.GetFlyFrameAttr( aSet );
 
-                pDlg.reset(pFact->CreateSfxDialog( pMDI, aSet,
-                    rView.GetViewFrame()->GetFrame().GetFrameInterface(),
-                    RC_SWDLG_BACKGROUND ));
-                OSL_ENSURE(pDlg, "Dialog creation failed!");
+                pDlg.disposeAndReset(pFact->CreateSwBackgroundDialog(pMDI, aSet));
                 if ( pDlg->Execute() == RET_OK )
                 {
-                    rSh.SetFlyFrameAttr((SfxItemSet &) *pDlg->GetOutputItemSet() );
+                    rSh.SetFlyFrameAttr(const_cast<SfxItemSet &>(*pDlg->GetOutputItemSet()) );
                     pOutSet = pDlg->GetOutputItemSet();
                 }
             }
@@ -2521,10 +2553,7 @@ void SwBaseShell::ExecDlg(SfxRequest &rReq)
                 // Set border attributes Umrandungsattribute with the shell quite normal.
                 rSh.GetCurAttr( aSet );
 
-                pDlg.reset(pFact->CreateSfxDialog( pMDI, aSet,
-                    rView.GetViewFrame()->GetFrame().GetFrameInterface(),
-                    RC_SWDLG_BACKGROUND ));
-                OSL_ENSURE(pDlg, "Dialog creation failed!");
+                pDlg.disposeAndReset(pFact->CreateSwBackgroundDialog(pMDI, aSet));
                 if ( pDlg->Execute() == RET_OK )
                 {
                     rSh.SetAttrSet( *pDlg->GetOutputItemSet() );
@@ -2571,7 +2600,7 @@ void SwBaseShell::InsertTable( SfxRequest& _rRequest )
             const SwModuleOptions* pModOpt = SW_MOD()->GetModuleConfig();
             SwInsertTableOptions aInsTableOpts = pModOpt->GetInsTableFlags(bHTMLMode);
 
-            rSh.StartUndo(UNDO_INSTABLE);
+            rSh.StartUndo(SwUndoId::INSTABLE);
             bCallEndUndo = true;
 
             bool bInserted = rSh.TextToTable( aInsTableOpts, '\t' );
@@ -2584,10 +2613,10 @@ void SwBaseShell::InsertTable( SfxRequest& _rRequest )
         {
             sal_uInt16 nCols = 0;
             sal_uInt16 nRows = 0;
-            SwInsertTableOptions aInsTableOpts( tabopts::ALL_TBL_INS_ATTR, 1 );
+            SwInsertTableOptions aInsTableOpts( SwInsertTableFlags::All, 1 );
             OUString aTableName;
             OUString aAutoName;
-            SwTableAutoFormat* pTAFormat = nullptr;
+            std::unique_ptr<SwTableAutoFormat> pTAFormat;
 
             if( pArgs && pArgs->Count() >= 2 )
             {
@@ -2614,7 +2643,7 @@ void SwBaseShell::InsertTable( SfxRequest& _rRequest )
                         {
                             if ( aTableTable[n].GetName() == aAutoName )
                             {
-                                pTAFormat = new SwTableAutoFormat( aTableTable[n] );
+                                pTAFormat.reset(new SwTableAutoFormat( aTableTable[n] ));
                                 break;
                             }
                         }
@@ -2622,7 +2651,7 @@ void SwBaseShell::InsertTable( SfxRequest& _rRequest )
                 }
 
                 if ( pFlags )
-                    aInsTableOpts.mnInsMode = (sal_uInt16) pFlags->GetValue();
+                    aInsTableOpts.mnInsMode = static_cast<SwInsertTableFlags>(pFlags->GetValue());
                 else
                 {
                     const SwModuleOptions* pModOpt = SW_MOD()->GetModuleConfig();
@@ -2633,9 +2662,7 @@ void SwBaseShell::InsertTable( SfxRequest& _rRequest )
             if( !nCols || !nRows )
             {
                 SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-                OSL_ENSURE(pFact, "Dialog creation failed!");
-                std::unique_ptr<AbstractInsTableDlg> pDlg(pFact->CreateInsTableDlg(rTempView));
-                OSL_ENSURE(pDlg, "Dialog creation failed!");
+                ScopedVclPtr<AbstractInsTableDlg> pDlg(pFact->CreateInsTableDlg(rTempView));
                 if( RET_OK == pDlg->Execute() )
                 {
                     pDlg->GetValues( aTableName, nRows, nCols, aInsTableOpts, aAutoName, pTAFormat );
@@ -2652,26 +2679,28 @@ void SwBaseShell::InsertTable( SfxRequest& _rRequest )
                     _rRequest.AppendItem( SfxStringItem( FN_PARAM_2, aAutoName ) );
                 _rRequest.AppendItem( SfxUInt16Item( SID_ATTR_TABLE_COLUMN, nCols ) );
                 _rRequest.AppendItem( SfxUInt16Item( SID_ATTR_TABLE_ROW, nRows ) );
-                _rRequest.AppendItem( SfxInt32Item( FN_PARAM_1, (sal_Int32) aInsTableOpts.mnInsMode ) );
+                _rRequest.AppendItem( SfxInt32Item( FN_PARAM_1, static_cast<sal_Int32>(aInsTableOpts.mnInsMode) ) );
                 _rRequest.Done();
 
-                rSh.StartUndo(UNDO_INSTABLE);
+                rSh.StartUndo(SwUndoId::INSTABLE);
                 bCallEndUndo = true;
 
                 rSh.StartAllAction();
                 if( rSh.HasSelection() )
                     rSh.DelRight();
 
-                rSh.InsertTable( aInsTableOpts, nRows, nCols, text::HoriOrientation::FULL, pTAFormat );
-                rSh.MoveTable( fnTablePrev, fnTableStart );
+                rSh.InsertTable( aInsTableOpts, nRows, nCols, pTAFormat.get() );
+                rSh.MoveTable( GotoPrevTable, fnTableStart );
 
                 if( !aTableName.isEmpty() && !rSh.GetTableStyle( aTableName ) )
                     rSh.GetTableFormat()->SetName( aTableName );
 
+                if( pTAFormat != nullptr && aAutoName != SwStyleNameMapper::GetUIName( RES_POOLTABSTYLE_DEFAULT, OUString() ) )
+                    rSh.SetTableStyle( aAutoName );
+
                 rSh.EndAllAction();
                 rTempView.AutoCaption(TABLE_CAP);
             }
-            delete pTAFormat;
         }
 
         if( bCallEndUndo )
@@ -2680,12 +2709,12 @@ void SwBaseShell::InsertTable( SfxRequest& _rRequest )
 
             if (rSh.GetTableFormat())
             {
-                aRewriter.AddRule(UndoArg1, SW_RESSTR(STR_START_QUOTE));
+                aRewriter.AddRule(UndoArg1, SwResId(STR_START_QUOTE));
                 aRewriter.AddRule(UndoArg2, rSh.GetTableFormat()->GetName());
-                aRewriter.AddRule(UndoArg3, SW_RESSTR(STR_END_QUOTE));
+                aRewriter.AddRule(UndoArg3, SwResId(STR_END_QUOTE));
 
             }
-            rSh.EndUndo(UNDO_INSTABLE, &aRewriter); // If possible change the Shell
+            rSh.EndUndo(SwUndoId::INSTABLE, &aRewriter); // If possible change the Shell
         }
     }
 }
@@ -2699,65 +2728,65 @@ void SwBaseShell::GetGalleryState( SfxItemSet &rSet )
     {
         case SID_GALLERY_BG_BRUSH:
         {
-            int nSel = rSh.GetSelectionType();
+            SelectionType nSel = rSh.GetSelectionType();
             SfxStringListItem aLst( nWhich );
             std::vector<OUString> &rLst = aLst.GetList();
             nParagraphPos = nGraphicPos = nOlePos = nFramePos = nTablePos =
             nTableRowPos  = nTableCellPos = nPagePos =
             nHeaderPos    = nFooterPos = 0;
             sal_uInt8 nPos = 1;
-            rLst.push_back( SW_RESSTR( STR_SWBG_PAGE ) );
+            rLst.push_back( SwResId( STR_SWBG_PAGE ) );
             nPagePos = nPos++;
             sal_uInt16 nHtmlMode = ::GetHtmlMode(GetView().GetDocShell());
             bool bHtmlMode = 0 != (nHtmlMode & HTMLMODE_ON);
 
             if ( (!bHtmlMode || (nHtmlMode & HTMLMODE_FULL_STYLES)) &&
-                 (nSel & nsSelectionType::SEL_TXT) )
+                 (nSel & SelectionType::Text) )
             {
-                rLst.push_back( SW_RESSTR( STR_SWBG_PARAGRAPH ) );
+                rLst.push_back( SwResId( STR_SWBG_PARAGRAPH ) );
                 nParagraphPos = nPos++;
             }
             if ( (!bHtmlMode || (nHtmlMode & HTMLMODE_SOME_STYLES)) &&
-                    nSel & (nsSelectionType::SEL_TBL|nsSelectionType::SEL_TBL_CELLS) )
+                    nSel & (SelectionType::Table|SelectionType::TableCell) )
             {
-                rLst.push_back( SW_RESSTR( STR_SWBG_TABLE ) );
+                rLst.push_back( SwResId( STR_SWBG_TABLE ) );
                 nTablePos = nPos++;
 
                 if(!bHtmlMode)
                 {
-                    rLst.push_back( SW_RESSTR( STR_SWBG_TABLE_ROW ) );
+                    rLst.push_back( SwResId( STR_SWBG_TABLE_ROW ) );
                     nTableRowPos = nPos++;
                 }
 
-                rLst.push_back( SW_RESSTR( STR_SWBG_TABLE_CELL) );
+                rLst.push_back( SwResId( STR_SWBG_TABLE_CELL) );
                 nTableCellPos = nPos++;
             }
             if(!bHtmlMode)
             {
-                if ( nSel & nsSelectionType::SEL_FRM )
+                if ( nSel & SelectionType::Frame )
                 {
-                    rLst.push_back( SW_RESSTR( STR_SWBG_FRAME ) );
+                    rLst.push_back( SwResId( STR_SWBG_FRAME ) );
                     nFramePos = nPos++;
                 }
-                if ( nSel & nsSelectionType::SEL_GRF )
+                if ( nSel & SelectionType::Graphic )
                 {
-                    rLst.push_back( SW_RESSTR( STR_SWBG_GRAPHIC ) );
+                    rLst.push_back( SwResId( STR_SWBG_GRAPHIC ) );
                     nGraphicPos = nPos++;
                 }
-                if ( nSel & nsSelectionType::SEL_OLE )
+                if ( nSel & SelectionType::Ole )
                 {
-                    rLst.push_back( SW_RESSTR( STR_SWBG_OLE ) );
+                    rLst.push_back( SwResId( STR_SWBG_OLE ) );
                     nOlePos = nPos++;
                 }
                 const FrameTypeFlags nType = rSh.GetFrameType(nullptr,true);
                 if ( nType & FrameTypeFlags::HEADER )
                 {
-                    rLst.push_back( SW_RESSTR( STR_SWBG_HEADER ) );
+                    rLst.push_back( SwResId( STR_SWBG_HEADER ) );
                     nHeaderPos = nPos++;
                 }
                 if ( nType & FrameTypeFlags::FOOTER )
                 {
-                    rLst.push_back( SW_RESSTR( STR_SWBG_FOOTER ) );
+                    rLst.push_back( SwResId( STR_SWBG_FOOTER ) );
                     nFooterPos = nPos;
                 }
             }
@@ -2783,8 +2812,8 @@ void SwBaseShell::ExecuteGallery(SfxRequest &rReq)
             if ( !pArgs )
                 break;
 
-            int nSel = rSh.GetSelectionType();
-            if ( nSel & nsSelectionType::SEL_DRW_TXT )
+            SelectionType nSel = rSh.GetSelectionType();
+            if ( nSel & SelectionType::DrawObjectEditMode )
                 break;
 
             const SfxUInt16Item* pPos = rReq.GetArg<SfxUInt16Item>(SID_GALLERY_BG_POS);
@@ -2807,7 +2836,7 @@ void SwBaseShell::ExecuteGallery(SfxRequest &rReq)
                 rSh.SetBoxBackground( aBrush );
             else if ( nPos == nFramePos || nPos == nGraphicPos || nPos == nOlePos )
             {
-                SfxItemSet aCoreSet(GetPool(), RES_BACKGROUND, RES_BACKGROUND);
+                SfxItemSet aCoreSet(GetPool(), svl::Items<RES_BACKGROUND, RES_BACKGROUND>{});
                 aCoreSet.Put( aBrush );
                 rSh.SetFlyFrameAttr( aCoreSet );
             }
@@ -2838,21 +2867,20 @@ void SwBaseShell::ExecuteGallery(SfxRequest &rReq)
     rReq.Done();
 }
 
-void SwBaseShell::ExecField( SfxRequest& rReq )
+void SwBaseShell::ExecField( SfxRequest const & rReq )
 {
     sal_uInt16 nSlot = rReq.GetSlot();
     switch( nSlot )
     {
+#if HAVE_FEATURE_DBCONNECTIVITY
         case FN_CHANGE_DBFIELD:
         {
             SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-            OSL_ENSURE(pFact, "SwAbstractDialogFactory fail!");
-
-            std::unique_ptr<VclAbstractDialog> pDlg(pFact->CreateSwChangeDBDlg(GetView()));
-            OSL_ENSURE(pDlg, "Dialog creation failed!");
+            ScopedVclPtr<VclAbstractDialog> pDlg(pFact->CreateSwChangeDBDlg(GetView()));
             pDlg->Execute();
         }
         break;
+#endif
         default:
             OSL_FAIL("wrong dispatcher");
     }

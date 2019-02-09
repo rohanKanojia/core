@@ -89,6 +89,7 @@ class XclRoot;
 #define EXC_CHPROP_LABELPLACEMENT           "LabelPlacement"
 #define EXC_CHPROP_LABELPOSITION            "LabelPosition"
 #define EXC_CHPROP_LABELSEPARATOR           "LabelSeparator"
+#define EXC_CHPROP_SHOWLEGENDENTRY          "ShowLegendEntry"
 #define EXC_CHPROP_MAJORTICKS               "MajorTickmarks"
 #define EXC_CHPROP_MARKPOSITION             "MarkPosition"
 #define EXC_CHPROP_MINORTICKS               "MinorTickmarks"
@@ -96,6 +97,7 @@ class XclRoot;
 #define EXC_CHPROP_MOVING_AVERAGE_PERIOD    "MovingAveragePeriod"
 #define EXC_CHPROP_NEGATIVEERROR            "NegativeError"
 #define EXC_CHPROP_NUMBERFORMAT             "NumberFormat"
+#define EXC_CHPROP_NUMBERFORMAT_LINKSRC     "LinkNumberFormatToSource"
 #define EXC_CHPROP_OFFSET                   "Offset"
 #define EXC_CHPROP_OVERLAPSEQ               "OverlapSequence"
 #define EXC_CHPROP_PERCENTAGENUMFMT         "PercentageNumberFormat"
@@ -147,7 +149,7 @@ class XclRoot;
 
 // Constants and Enumerations =================================================
 
-const sal_Size EXC_CHART_PROGRESS_SIZE          = 10;
+const std::size_t EXC_CHART_PROGRESS_SIZE       = 10;
 const sal_uInt16 EXC_CHART_AUTOROTATION         = 0xFFFF;   /// Automatic rotation, e.g. axis labels (internal use only).
 
 const sal_Int32 EXC_CHART_AXIS_NONE             = -1;       /// For internal use only.
@@ -582,6 +584,13 @@ const sal_uInt16 EXC_CHAXESSET_PRIMARY          = 0;
 const sal_uInt16 EXC_CHAXESSET_SECONDARY        = 1;
 const sal_uInt16 EXC_CHAXESSET_NONE             = 0xFFFF;   /// For internal use.
 
+// (0x1043) LEGENDEXCEPTION
+
+const sal_uInt16 EXC_ID_CHLEGENDEXCEPTION       = 0x1043;
+
+const sal_uInt16 EXC_CHLEGENDEXCEPTION_DELETED  = 0x0001;
+const sal_uInt16 EXC_CHLEGENDEXCEPTION_LABEL    = 0x0002;
+
 // (0x1044) CHPROPERTIES ------------------------------------------------------
 
 const sal_uInt16 EXC_ID_CHPROPERTIES            = 0x1044;
@@ -889,7 +898,7 @@ struct XclChMarkerFormat
 struct XclCh3dDataFormat
 {
     sal_uInt8           mnBase;             /// Base form.
-    sal_uInt8           mnTop;              /// Top egde mode.
+    sal_uInt8           mnTop;              /// Top edge mode.
 
     explicit            XclCh3dDataFormat();
 };
@@ -1130,14 +1139,14 @@ enum XclChFrameType
 struct XclChFormatInfo
 {
     XclChObjectType     meObjType;          /// Object type for automatic format.
-    XclChPropertyMode   mePropMode;         /// Property mode for property set helper.
-    sal_uInt16          mnAutoLineColorIdx; /// Automatic line color index.
-    sal_Int16           mnAutoLineWeight;   /// Automatic line weight (hairline, single, ...).
-    sal_uInt16          mnAutoPattColorIdx; /// Automatic fill pattern color index.
-    XclChFrameType      meDefFrameType;     /// Default format type for missing frame objects.
-    bool                mbCreateDefFrame;   /// true = Create missing frame objects on import.
-    bool                mbDeleteDefFrame;   /// true = Delete default frame formatting on export.
-    bool                mbIsFrame;          /// true = Object is a frame, false = Object is a line.
+    XclChPropertyMode const   mePropMode;         /// Property mode for property set helper.
+    sal_uInt16 const          mnAutoLineColorIdx; /// Automatic line color index.
+    sal_Int16 const           mnAutoLineWeight;   /// Automatic line weight (hairline, single, ...).
+    sal_uInt16 const          mnAutoPattColorIdx; /// Automatic fill pattern color index.
+    XclChFrameType const      meDefFrameType;     /// Default format type for missing frame objects.
+    bool const                mbCreateDefFrame;   /// true = Create missing frame objects on import.
+    bool const                mbDeleteDefFrame;   /// true = Delete default frame formatting on export.
+    bool const                mbIsFrame;          /// true = Object is a frame, false = Object is a line.
 };
 
 /** Provides access to chart auto formatting for all available object types. */
@@ -1227,10 +1236,10 @@ struct XclChExtTypeInfo : public XclChTypeInfo
     void                Set( const XclChTypeInfo& rTypeInfo, bool b3dChart, bool bSpline );
 
     /** Returns true, if this chart type supports area formatting for its series. */
-    inline bool         IsSeriesFrameFormat() const
+    bool         IsSeriesFrameFormat() const
                             { return mb3dChart ? mbSeriesIsFrame3d : mbSeriesIsFrame2d; }
     /** Returns the correct object type identifier for series and data points. */
-    inline XclChObjectType GetSeriesObjectType() const
+    XclChObjectType GetSeriesObjectType() const
                             { return IsSeriesFrameFormat() ? EXC_CHOBJTYPE_FILLEDSERIES : EXC_CHOBJTYPE_LINEARSERIES; }
 };
 
@@ -1268,7 +1277,7 @@ enum XclChTextType
 /** A map key for text and title objects. */
 struct XclChTextKey : public ::std::pair< XclChTextType, ::std::pair< sal_uInt16, sal_uInt16 > >
 {
-    inline explicit     XclChTextKey( XclChTextType eTextType, sal_uInt16 nMainIdx = 0, sal_uInt16 nSubIdx = 0 )
+    explicit     XclChTextKey( XclChTextType eTextType, sal_uInt16 nMainIdx = 0, sal_uInt16 nSubIdx = 0 )
                             { first = eTextType; second.first = nMainIdx; second.second = nSubIdx; }
 };
 
@@ -1281,23 +1290,21 @@ typedef css::uno::Reference< css::drawing::XShape >
 class XclChObjectTable
 {
 public:
-    explicit            XclChObjectTable( css::uno::Reference< css::lang::XMultiServiceFactory > xFactory,
+    explicit            XclChObjectTable( css::uno::Reference< css::lang::XMultiServiceFactory > const & xFactory,
                             const OUString& rServiceName, const OUString& rObjNameBase );
 
     /** Returns a named formatting object from the chart document. */
     css::uno::Any GetObject( const OUString& rObjName );
-    /** Insertes a named formatting object into the chart document. */
+    /** Inserts a named formatting object into the chart document. */
     OUString      InsertObject( const css::uno::Any& rObj );
 
 private:
     css::uno::Reference< css::lang::XMultiServiceFactory > mxFactory;              /// Factory to create the container.
     css::uno::Reference< css::container::XNameContainer >  mxContainer;            /// Container for the objects.
-    OUString            maServiceName;          /// Service name to create the container.
-    OUString            maObjNameBase;          /// Base of names for inserted objects.
+    OUString const      maServiceName;          /// Service name to create the container.
+    OUString const      maObjNameBase;          /// Base of names for inserted objects.
     sal_Int32           mnIndex;                /// Index to create unique identifiers.
 };
-
-struct XclFontData;
 
 /** Helper class for usage of property sets. */
 class XclChPropSetHelper
@@ -1351,7 +1358,6 @@ public:
     void                WriteEscherProperties(
                             ScfPropertySet& rPropSet,
                             XclChObjectTable& rGradientTable,
-                            XclChObjectTable& rHatchTable,
                             XclChObjectTable& rBitmapTable,
                             const XclChEscherFormat& rEscherFmt,
                             const XclChPicFormat* pPicFmt,
@@ -1400,9 +1406,9 @@ struct XclChRootData
 
     css::uno::Reference< css::chart2::XChartDocument >
                         mxChartDoc;             /// The chart document.
-    Rectangle           maChartRect;            /// Position and size of the chart shape.
-    XclChTypeProvRef    mxTypeInfoProv;         /// Provides info about chart types.
-    XclChFmtInfoProvRef mxFmtInfoProv;          /// Provides info about auto formatting.
+    tools::Rectangle           maChartRect;            /// Position and size of the chart shape.
+    XclChTypeProvRef const    mxTypeInfoProv;         /// Provides info about chart types.
+    XclChFmtInfoProvRef const mxFmtInfoProv;          /// Provides info about auto formatting.
     XclChObjectTableRef mxLineDashTable;        /// Container for line dash styles.
     XclChObjectTableRef mxGradientTable;        /// Container for gradient fill styles.
     XclChObjectTableRef mxHatchTable;           /// Container for hatch fill styles.
@@ -1420,7 +1426,7 @@ struct XclChRootData
     void                InitConversion(
                             const XclRoot& rRoot,
                             const css::uno::Reference< css::chart2::XChartDocument >& rxChartDoc,
-                            const Rectangle& rChartRect );
+                            const tools::Rectangle& rChartRect );
     /** Finishes the API chart document conversion. Must be called once before any API access. */
     void                FinishConversion();
 

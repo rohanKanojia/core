@@ -24,6 +24,8 @@
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Reference.hxx>
 #include <cppuhelper/weakref.hxx>
+#include <sal/log.hxx>
+#include <tools/debug.hxx>
 #include <com/sun/star/accessibility/XAccessible.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
 
@@ -34,8 +36,8 @@
 #include <editeng/unoedhlp.hxx>
 #include <editeng/unopracc.hxx>
 #include <editeng/unoedsrc.hxx>
-#include "editeng/AccessibleParaManager.hxx"
-#include "editeng/AccessibleEditableTextPara.hxx"
+#include <editeng/AccessibleParaManager.hxx>
+#include <editeng/AccessibleEditableTextPara.hxx>
 
 
 using namespace ::com::sun::star;
@@ -64,7 +66,7 @@ namespace accessibility
 
     void AccessibleParaManager::SetNum( sal_Int32 nNumParas )
     {
-        if( (size_t)nNumParas < maChildren.size() )
+        if( static_cast<size_t>(nNumParas) < maChildren.size() )
             Release( nNumParas, maChildren.size() );
 
         maChildren.resize( nNumParas );
@@ -102,9 +104,9 @@ namespace accessibility
 
         if( 0 <= nPara && maChildren.size() > static_cast<size_t>(nPara) )
         {
-            auto maChild( GetChild( nPara ).first.get() );
-            if( maChild.is() )
-                maChild->FireEvent( nEventId );
+            auto aChild( GetChild( nPara ).first.get() );
+            if( aChild.is() )
+                aChild->FireEvent( nEventId );
         }
     }
 
@@ -182,7 +184,7 @@ namespace accessibility
         maEEOffset = rOffset;
 
         MemFunAdapter< const Point& > aAdapter( &::accessibility::AccessibleEditableTextPara::SetEEOffset, rOffset );
-        ::std::for_each( begin(), end(), aAdapter );
+        std::for_each( begin(), end(), aAdapter );
     }
 
     void AccessibleParaManager::SetActive( bool bActive )
@@ -246,7 +248,7 @@ namespace accessibility
 
     void AccessibleParaManager::SetState( const sal_Int16 nStateId )
     {
-        ::std::for_each( begin(), end(),
+        std::for_each( begin(), end(),
                          MemFunAdapter< const sal_Int16 >( &AccessibleEditableTextPara::SetState,
                                                            nStateId ) );
     }
@@ -260,13 +262,13 @@ namespace accessibility
 
     void AccessibleParaManager::UnSetState( const sal_Int16 nStateId )
     {
-        ::std::for_each( begin(), end(),
+        std::for_each( begin(), end(),
                          MemFunAdapter< const sal_Int16 >( &AccessibleEditableTextPara::UnSetState,
                                                            nStateId ) );
     }
 
     // not generic yet, no arguments...
-    class AccessibleParaManager_DisposeChildren : public ::std::unary_function< ::accessibility::AccessibleEditableTextPara&, void >
+    class AccessibleParaManager_DisposeChildren
     {
     public:
         AccessibleParaManager_DisposeChildren() {}
@@ -280,12 +282,12 @@ namespace accessibility
     {
         AccessibleParaManager_DisposeChildren aFunctor;
 
-        ::std::for_each( begin(), end(),
+        std::for_each( begin(), end(),
                          WeakChildAdapter< AccessibleParaManager_DisposeChildren > (aFunctor) );
     }
 
     // not generic yet, too many method arguments...
-    class StateChangeEvent : public ::std::unary_function< ::accessibility::AccessibleEditableTextPara&, void >
+    class StateChangeEvent
     {
     public:
         typedef void return_type;
@@ -295,7 +297,7 @@ namespace accessibility
             mnEventId( nEventId ),
             mrNewValue( rNewValue ),
             mrOldValue( rOldValue ) {}
-        void operator()( ::accessibility::AccessibleEditableTextPara& rPara )
+        void operator()( ::accessibility::AccessibleEditableTextPara const & rPara )
         {
             rPara.FireEvent( mnEventId, mrNewValue, mrOldValue );
         }
@@ -326,16 +328,16 @@ namespace accessibility
             VectorOfChildren::const_iterator front = maChildren.begin();
             VectorOfChildren::const_iterator back = front;
 
-            ::std::advance( front, nStartPara );
-            ::std::advance( back, nEndPara );
+            std::advance( front, nStartPara );
+            std::advance( back, nEndPara );
 
             StateChangeEvent aFunctor( nEventId, rNewValue, rOldValue );
 
-            ::std::for_each( front, back, AccessibleParaManager::WeakChildAdapter< StateChangeEvent >( aFunctor ) );
+            std::for_each( front, back, AccessibleParaManager::WeakChildAdapter< StateChangeEvent >( aFunctor ) );
         }
     }
 
-    class ReleaseChild : public ::std::unary_function< const AccessibleParaManager::WeakChild&, AccessibleParaManager::WeakChild >
+    class ReleaseChild
     {
     public:
         AccessibleParaManager::WeakChild operator()( const AccessibleParaManager::WeakChild& rPara )
@@ -361,10 +363,10 @@ namespace accessibility
             VectorOfChildren::iterator front = maChildren.begin();
             VectorOfChildren::iterator back = front;
 
-            ::std::advance( front, nStartPara );
-            ::std::advance( back, nEndPara );
+            std::advance( front, nStartPara );
+            std::advance( back, nEndPara );
 
-            ::std::transform( front, back, front, ReleaseChild() );
+            std::transform( front, back, front, ReleaseChild() );
         }
     }
 

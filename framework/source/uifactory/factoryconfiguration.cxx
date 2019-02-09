@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "uifactory/factoryconfiguration.hxx"
-#include "services.h"
+#include <uifactory/factoryconfiguration.hxx>
+#include <services.h>
 
-#include "helper/mischelper.hxx"
+#include <helper/mischelper.hxx>
 
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -30,6 +30,7 @@
 #include <com/sun/star/container/XContainer.hpp>
 
 #include <rtl/ustrbuf.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <cppuhelper/weak.hxx>
 
 //  Defines
@@ -44,7 +45,7 @@ using namespace com::sun::star::container;
 
 namespace framework
 {
-OUString getHashKeyFromStrings( const OUString& aCommandURL, const OUString& aModuleName )
+static OUString getHashKeyFromStrings( const OUString& aCommandURL, const OUString& aModuleName )
 {
     OUStringBuffer aKey( aCommandURL );
     aKey.append( "-" );
@@ -120,7 +121,7 @@ void ConfigurationAccess_ControllerFactory::addServiceToCommandModule(
     osl::MutexGuard g(m_mutex);
 
     OUString aHashKey = getHashKeyFromStrings( rCommandURL, rModule );
-    m_aMenuControllerMap.insert( MenuControllerMap::value_type( aHashKey,ControllerInfo(rServiceSpecifier,OUString()) ));
+    m_aMenuControllerMap.emplace( aHashKey,ControllerInfo(rServiceSpecifier,OUString()) );
 }
 
 void ConfigurationAccess_ControllerFactory::removeServiceFromCommandModule(
@@ -134,7 +135,7 @@ void ConfigurationAccess_ControllerFactory::removeServiceFromCommandModule(
 }
 
 // container.XContainerListener
-void SAL_CALL ConfigurationAccess_ControllerFactory::elementInserted( const ContainerEvent& aEvent ) throw(RuntimeException, std::exception)
+void SAL_CALL ConfigurationAccess_ControllerFactory::elementInserted( const ContainerEvent& aEvent )
 {
     OUString   aCommand;
     OUString   aModule;
@@ -154,7 +155,7 @@ void SAL_CALL ConfigurationAccess_ControllerFactory::elementInserted( const Cont
     }
 }
 
-void SAL_CALL ConfigurationAccess_ControllerFactory::elementRemoved ( const ContainerEvent& aEvent ) throw(RuntimeException, std::exception)
+void SAL_CALL ConfigurationAccess_ControllerFactory::elementRemoved ( const ContainerEvent& aEvent )
 {
     OUString   aCommand;
     OUString   aModule;
@@ -172,13 +173,13 @@ void SAL_CALL ConfigurationAccess_ControllerFactory::elementRemoved ( const Cont
     }
 }
 
-void SAL_CALL ConfigurationAccess_ControllerFactory::elementReplaced( const ContainerEvent& aEvent ) throw(RuntimeException, std::exception)
+void SAL_CALL ConfigurationAccess_ControllerFactory::elementReplaced( const ContainerEvent& aEvent )
 {
     elementInserted(aEvent);
 }
 
 // lang.XEventListener
-void SAL_CALL ConfigurationAccess_ControllerFactory::disposing( const EventObject& ) throw(RuntimeException, std::exception)
+void SAL_CALL ConfigurationAccess_ControllerFactory::disposing( const EventObject& )
 {
     // remove our reference to the config access
     osl::MutexGuard g(m_mutex);
@@ -192,13 +193,10 @@ void ConfigurationAccess_ControllerFactory::readConfigurationData()
 
     if ( !m_bConfigAccessInitialized )
     {
-        Sequence< Any > aArgs( 1 );
-        PropertyValue   aPropValue;
-
-        aPropValue.Name  = "nodepath";
-        aPropValue.Value <<= m_sRoot;
-        aArgs[0] <<= aPropValue;
-
+        uno::Sequence<uno::Any> aArgs(comphelper::InitAnyPropertySequence(
+        {
+            {"nodepath", uno::Any(m_sRoot)}
+        }));
         try
         {
             m_xConfigAccess.set( m_xConfigProvider->createInstanceWithArguments(SERVICENAME_CFGREADACCESS,aArgs ), UNO_QUERY );
@@ -250,7 +248,7 @@ void ConfigurationAccess_ControllerFactory::updateConfigurationData()
                     // Create hash key from command and module as they are together a primary key to
                     // the UNO service that implements the popup menu controller.
                     aHashKey = getHashKeyFromStrings( aCommand, aModule );
-                    m_aMenuControllerMap.insert( MenuControllerMap::value_type( aHashKey, ControllerInfo(aService,aValue) ));
+                    m_aMenuControllerMap.emplace( aHashKey, ControllerInfo(aService,aValue) );
                 }
             }
             catch ( const NoSuchElementException& )

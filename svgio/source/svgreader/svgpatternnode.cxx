@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svgpatternnode.hxx>
-#include <svgio/svgreader/svgdocument.hxx>
+#include <svgpatternnode.hxx>
+#include <svgdocument.hxx>
 
 namespace svgio
 {
@@ -38,15 +38,12 @@ namespace svgio
         :   SvgNode(SVGTokenPattern, rDocument, pParent),
             aPrimitives(),
             maSvgStyleAttributes(*this),
-            mpViewBox(nullptr),
             maSvgAspectRatio(),
             maX(),
             maY(),
             maWidth(),
             maHeight(),
-            mpPatternUnits(nullptr),
-            mpPatternContentUnits(nullptr),
-            mpaPatternTransform(nullptr),
+            mbResolvingLink(false),
             maXLink(),
             mpXLink(nullptr)
         {
@@ -54,10 +51,6 @@ namespace svgio
 
         SvgPatternNode::~SvgPatternNode()
         {
-            delete mpViewBox;
-            delete mpaPatternTransform;
-            delete mpPatternUnits;
-            delete mpPatternContentUnits;
         }
 
         const SvgStyleAttributes* SvgPatternNode::getSvgStyleAttributes() const
@@ -71,7 +64,7 @@ namespace svgio
             SvgNode::parseAttribute(rTokenName, aSVGToken, aContent);
 
             // read style attributes
-            maSvgStyleAttributes.parseStyleAttribute(rTokenName, aSVGToken, aContent, false);
+            maSvgStyleAttributes.parseStyleAttribute(aSVGToken, aContent, false);
 
             // parse own
             switch(aSVGToken)
@@ -93,7 +86,7 @@ namespace svgio
                 }
                 case SVGTokenPreserveAspectRatio:
                 {
-                    setSvgAspectRatio(readSvgAspectRatio(aContent));
+                    maSvgAspectRatio = readSvgAspectRatio(aContent);
                     break;
                 }
                 case SVGTokenX:
@@ -102,7 +95,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setX(aNum);
+                        maX = aNum;
                     }
                     break;
                 }
@@ -112,7 +105,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setY(aNum);
+                        maY = aNum;
                     }
                     break;
                 }
@@ -124,7 +117,7 @@ namespace svgio
                     {
                         if(aNum.isPositive())
                         {
-                            setWidth(aNum);
+                            maWidth = aNum;
                         }
                     }
                     break;
@@ -137,7 +130,7 @@ namespace svgio
                     {
                         if(aNum.isPositive())
                         {
-                            setHeight(aNum);
+                            maHeight = aNum;
                         }
                     }
                     break;
@@ -200,67 +193,67 @@ namespace svgio
             }
         }
 
-        void SvgPatternNode::getValuesRelative(double& rfX, double& rfY, double& rfW, double& rfH, const basegfx::B2DRange& rGeoRange, SvgNode& rUser) const
+        void SvgPatternNode::getValuesRelative(double& rfX, double& rfY, double& rfW, double& rfH, const basegfx::B2DRange& rGeoRange, SvgNode const & rUser) const
         {
             double fTargetWidth(rGeoRange.getWidth());
             double fTargetHeight(rGeoRange.getHeight());
 
-            if(fTargetWidth > 0.0 && fTargetHeight > 0.0)
+            if(!(fTargetWidth > 0.0 && fTargetHeight > 0.0))
+                return;
+
+            const SvgUnits aPatternUnits(getPatternUnits() ? *getPatternUnits() : objectBoundingBox);
+
+            if(objectBoundingBox == aPatternUnits)
             {
-                const SvgUnits aPatternUnits(getPatternUnits() ? *getPatternUnits() : objectBoundingBox);
+                rfW = (getWidth().isSet()) ? getWidth().getNumber() : 0.0;
+                rfH = (getHeight().isSet()) ? getHeight().getNumber() : 0.0;
 
-                if(objectBoundingBox == aPatternUnits)
+                if(Unit_percent == getWidth().getUnit())
                 {
-                    rfW = (getWidth().isSet()) ? getWidth().getNumber() : 0.0;
-                    rfH = (getHeight().isSet()) ? getHeight().getNumber() : 0.0;
-
-                    if(Unit_percent == getWidth().getUnit())
-                    {
-                        rfW *= 0.01;
-                    }
-
-                    if(Unit_percent == getHeight().getUnit())
-                    {
-                        rfH *= 0.01;
-                    }
-                }
-                else
-                {
-                    rfW = (getWidth().isSet()) ? getWidth().solve(rUser, xcoordinate) : 0.0;
-                    rfH = (getHeight().isSet()) ? getHeight().solve(rUser, ycoordinate) : 0.0;
-
-                    // make relative to rGeoRange
-                    rfW /= fTargetWidth;
-                    rfH /= fTargetHeight;
+                    rfW *= 0.01;
                 }
 
-                if(rfW > 0.0 && rfH > 0.0)
+                if(Unit_percent == getHeight().getUnit())
                 {
-                    if(objectBoundingBox == aPatternUnits)
-                    {
-                        rfX = (getX().isSet()) ? getX().getNumber() : 0.0;
-                        rfY = (getY().isSet()) ? getY().getNumber() : 0.0;
-
-                        if(Unit_percent == getX().getUnit())
-                        {
-                            rfX *= 0.01;
-                        }
-
-                        if(Unit_percent == getY().getUnit())
-                        {
-                            rfY *= 0.01;
-                        }
-                    }
-                    else
-                    {
-                        rfX = (getX().isSet()) ? getX().solve(rUser, xcoordinate) : 0.0;
-                        rfY = (getY().isSet()) ? getY().solve(rUser, ycoordinate) : 0.0;
-
-                        // make relative to rGeoRange
-                        rfX = (rfX - rGeoRange.getMinX()) / fTargetWidth;
-                        rfY = (rfY - rGeoRange.getMinY()) / fTargetHeight;
-                    }
+                    rfH *= 0.01;
                 }
+            }
+            else
+            {
+                rfW = (getWidth().isSet()) ? getWidth().solve(rUser, xcoordinate) : 0.0;
+                rfH = (getHeight().isSet()) ? getHeight().solve(rUser, ycoordinate) : 0.0;
+
+                // make relative to rGeoRange
+                rfW /= fTargetWidth;
+                rfH /= fTargetHeight;
+            }
+
+            if(!(rfW > 0.0 && rfH > 0.0))
+                return;
+
+            if(objectBoundingBox == aPatternUnits)
+            {
+                rfX = (getX().isSet()) ? getX().getNumber() : 0.0;
+                rfY = (getY().isSet()) ? getY().getNumber() : 0.0;
+
+                if(Unit_percent == getX().getUnit())
+                {
+                    rfX *= 0.01;
+                }
+
+                if(Unit_percent == getY().getUnit())
+                {
+                    rfY *= 0.01;
+                }
+            }
+            else
+            {
+                rfX = (getX().isSet()) ? getX().solve(rUser, xcoordinate) : 0.0;
+                rfY = (getY().isSet()) ? getY().solve(rUser, ycoordinate) : 0.0;
+
+                // make relative to rGeoRange
+                rfX = (rfX - rGeoRange.getMinX()) / fTargetWidth;
+                rfY = (rfY - rGeoRange.getMinY()) / fTargetHeight;
             }
         }
 
@@ -275,9 +268,12 @@ namespace svgio
             {
                 const_cast< SvgPatternNode* >(this)->tryToFindLink();
 
-                if(mpXLink)
+                if (mpXLink && !mbResolvingLink)
                 {
-                    return mpXLink->getPatternPrimitives();
+                    mbResolvingLink = true;
+                    const drawinglayer::primitive2d::Primitive2DContainer& ret = mpXLink->getPatternPrimitives();
+                    mbResolvingLink = false;
+                    return ret;
                 }
             }
 
@@ -300,14 +296,17 @@ namespace svgio
         {
             if(mpViewBox)
             {
-                return mpViewBox;
+                return mpViewBox.get();
             }
 
             const_cast< SvgPatternNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getViewBox();
+                mbResolvingLink = true;
+                auto ret = mpXLink->getViewBox();
+                mbResolvingLink = false;
+                return ret;
             }
 
             return nullptr;
@@ -322,9 +321,12 @@ namespace svgio
 
             const_cast< SvgPatternNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getSvgAspectRatio();
+                mbResolvingLink = true;
+                const SvgAspectRatio& ret = mpXLink->getSvgAspectRatio();
+                mbResolvingLink = false;
+                return ret;
             }
 
             return maSvgAspectRatio;
@@ -339,9 +341,12 @@ namespace svgio
 
             const_cast< SvgPatternNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getX();
+                mbResolvingLink = true;
+                const SvgNumber& ret = mpXLink->getX();
+                mbResolvingLink = false;
+                return ret;
             }
 
             return maX;
@@ -356,9 +361,12 @@ namespace svgio
 
             const_cast< SvgPatternNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getY();
+                mbResolvingLink = true;
+                const SvgNumber& ret = mpXLink->getY();
+                mbResolvingLink = false;
+                return ret;
             }
 
             return maY;
@@ -373,9 +381,12 @@ namespace svgio
 
             const_cast< SvgPatternNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getWidth();
+                mbResolvingLink = true;
+                const SvgNumber& ret = mpXLink->getWidth();
+                mbResolvingLink = false;
+                return ret;
             }
 
             return maWidth;
@@ -390,9 +401,12 @@ namespace svgio
 
             const_cast< SvgPatternNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getHeight();
+                mbResolvingLink = true;
+                const SvgNumber& ret = mpXLink->getHeight();
+                mbResolvingLink = false;
+                return ret;
             }
 
             return maHeight;
@@ -402,14 +416,17 @@ namespace svgio
         {
             if(mpPatternUnits)
             {
-                return mpPatternUnits;
+                return mpPatternUnits.get();
             }
 
             const_cast< SvgPatternNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getPatternUnits();
+                mbResolvingLink = true;
+                auto ret = mpXLink->getPatternUnits();
+                mbResolvingLink = false;
+                return ret;
             }
 
             return nullptr;
@@ -419,14 +436,17 @@ namespace svgio
         {
             if(mpPatternContentUnits)
             {
-                return mpPatternContentUnits;
+                return mpPatternContentUnits.get();
             }
 
             const_cast< SvgPatternNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getPatternContentUnits();
+                mbResolvingLink = true;
+                auto ret = mpXLink->getPatternContentUnits();
+                mbResolvingLink = false;
+                return ret;
             }
 
             return nullptr;
@@ -436,14 +456,17 @@ namespace svgio
         {
             if(mpaPatternTransform)
             {
-                return mpaPatternTransform;
+                return mpaPatternTransform.get();
             }
 
             const_cast< SvgPatternNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getPatternTransform();
+                mbResolvingLink = true;
+                auto ret = mpXLink->getPatternTransform();
+                mbResolvingLink = false;
+                return ret;
             }
 
             return nullptr;

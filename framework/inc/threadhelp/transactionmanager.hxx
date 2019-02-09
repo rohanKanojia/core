@@ -38,14 +38,14 @@ namespace framework{
                     If you wish to implement thread safe classes you should use this feature to protect
                     your code against calls at wrong time. e.g. you are not full initialized but somewhere
                     call an interface method (initialize phase means startup time from creating object till
-                    calling specified first method e.g. XInitialization::initialze()!) then you should refuse
+                    calling specified first method e.g. XInitialization::initialize()!) then you should refuse
                     this call. The same for closing/disposing the object!
 *//*-*************************************************************************************************************/
 enum EWorkingMode
 {
-    E_INIT       ,   // We stand in a init method   -> some calls are accepted - some one are rejected
+    E_INIT       ,   // We stand in an init method  -> some calls are accepted - some ones are rejected
     E_WORK       ,   // Object is ready for working -> all calls are accepted
-    E_BEFORECLOSE,   // We stand in a close method  -> some calls are accepted - some one are rejected
+    E_BEFORECLOSE,   // We stand in a close method  -> some calls are accepted - some ones are rejected
     E_CLOSE          // Object is dead!             -> all calls are rejected!
 };
 
@@ -108,8 +108,12 @@ class FWI_DLLPUBLIC TransactionManager
         TransactionManager&        operator=(const TransactionManager&) = delete;
         void               setWorkingMode               ( EWorkingMode eMode                           );
         EWorkingMode       getWorkingMode               (                                              ) const;
-        void               registerTransaction          ( EExceptionMode eMode ) throw( css::uno::RuntimeException, css::lang::DisposedException );
-        void               unregisterTransaction        (                                              ) throw( css::uno::RuntimeException, css::lang::DisposedException );
+        /// @throws css::uno::RuntimeException
+        /// @throws css::lang::DisposedException
+        void               registerTransaction          ( EExceptionMode eMode );
+        /// @throws css::uno::RuntimeException
+        /// @throws css::lang::DisposedException
+        void               unregisterTransaction        (                                              );
 
     private:
 

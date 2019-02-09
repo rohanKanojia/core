@@ -12,19 +12,17 @@ $(eval $(call gb_CppunitTest_CppunitTest,comphelper_test))
 $(eval $(call gb_CppunitTest_add_exception_objects,comphelper_test, \
     comphelper/qa/string/test_string \
     comphelper/qa/container/testifcontainer \
+    comphelper/qa/unit/test_hash \
+    comphelper/qa/unit/base64_test \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,comphelper_test, \
-	udkapi \
-	offapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,comphelper_test))
 
 $(eval $(call gb_CppunitTest_use_libraries,comphelper_test, \
     comphelper \
     cppuhelper \
     cppu \
     sal \
-	$(gb_UWINAPI) \
 ))
 
 # vim: set noet sw=4 ts=4:

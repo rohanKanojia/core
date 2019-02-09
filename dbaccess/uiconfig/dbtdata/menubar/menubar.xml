@@ -21,12 +21,14 @@
         <menu:menupopup>
             <menu:menuitem menu:id=".uno:AddDirect"/>
             <menu:menuitem menu:id=".uno:Open"/>
+            <menu:menuitem menu:id=".uno:CloseDoc"/>
+            <menu:menuseparator/>
             <menu:menuitem menu:id=".uno:AutoPilotMenu"/>
             <menu:menuseparator/>
-            <menu:menuitem menu:id=".uno:CloseDoc"/>
-            <menu:menuitem menu:id=".uno:SaveAll"/>
             <menu:menuitem menu:id=".uno:Save"/>
             <menu:menuitem menu:id=".uno:SaveAs"/>
+            <menu:menuitem menu:id=".uno:SaveAll"/>
+            <menu:menuseparator/>
             <menu:menuitem menu:id=".uno:CheckOut"/>
             <menu:menuitem menu:id=".uno:CancelCheckOut"/>
             <menu:menuitem menu:id=".uno:CheckIn"/>
@@ -66,7 +68,7 @@
                 <menu:menupopup>
                     <menu:menuitem menu:id=".uno:MacroRecorder"/>
                     <menu:menuitem menu:id=".uno:RunMacro"/>
-                    <menu:menu menu:id=".uno:ScriptOrganizer"/>
+                    <menu:menuitem menu:id=".uno:ScriptOrganizer"/>
                     <menu:menuseparator/>
                     <menu:menuitem menu:id=".uno:MacroOrganizer?TabId:short=1"/>
                 </menu:menupopup>
@@ -85,8 +87,15 @@
         <menu:menupopup>
             <menu:menuitem menu:id=".uno:HelpIndex"/>
             <menu:menuitem menu:id=".uno:ExtendedHelp"/>
+            <menu:menuitem menu:id=".uno:Documentation"/>
             <menu:menuseparator/>
+            <menu:menuitem menu:id=".uno:QuestionAnswers"/>
             <menu:menuitem menu:id=".uno:SendFeedback"/>
+            <menu:menuseparator/>
+            <menu:menuitem menu:id=".uno:SafeMode"/>
+            <menu:menuseparator/>
+            <menu:menuitem menu:id=".uno:GetInvolved"/>
+            <menu:menuitem menu:id=".uno:Donation"/>
             <menu:menuseparator/>
             <menu:menuitem menu:id=".uno:ShowLicense"/>
             <menu:menuitem menu:id=".uno:About"/>

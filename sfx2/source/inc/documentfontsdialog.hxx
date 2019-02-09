@@ -21,24 +21,24 @@
 
 #include <sfx2/tabdlg.hxx>
 
-#include <vcl/fixed.hxx>
-#include <svtools/stdctrl.hxx>
-
 /**
  Tab page for document font settings in the document properties dialog.
 */
 class SfxDocumentFontsPage: public SfxTabPage
 {
 public:
-    SfxDocumentFontsPage( vcl::Window* parent, const SfxItemSet& set );
-    virtual ~SfxDocumentFontsPage();
-    virtual void dispose() override;
-    static VclPtr<SfxTabPage> Create( vcl::Window* parent, const SfxItemSet* set );
+    SfxDocumentFontsPage(TabPageParent parent, const SfxItemSet& set);
+    virtual ~SfxDocumentFontsPage() override;
+    static VclPtr<SfxTabPage> Create(TabPageParent parent, const SfxItemSet* set);
 protected:
     virtual bool FillItemSet( SfxItemSet* set ) override;
     virtual void Reset( const SfxItemSet* set ) override;
 private:
-    VclPtr<CheckBox> embedFontsCheckbox;
+    std::unique_ptr<weld::CheckButton> embedFontsCheckbox;
+    std::unique_ptr<weld::CheckButton> embedUsedFontsCheckbox;
+    std::unique_ptr<weld::CheckButton> embedLatinScriptFontsCheckbox;
+    std::unique_ptr<weld::CheckButton> embedAsianScriptFontsCheckbox;
+    std::unique_ptr<weld::CheckButton> embedComplexScriptFontsCheckbox;
 };
 
 #endif

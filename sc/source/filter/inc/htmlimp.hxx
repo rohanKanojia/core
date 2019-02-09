@@ -21,7 +21,6 @@
 #define INCLUDED_SC_SOURCE_FILTER_INC_HTMLIMP_HXX
 
 #include "eeimport.hxx"
-#include "htmlpars.hxx"
 
 class ScHTMLImport : public ScEEImport
 {
@@ -30,13 +29,11 @@ private:
 
 public:
     ScHTMLImport( ScDocument* pDoc, const OUString& rBaseURL, const ScRange& rRange, bool bCalcWidthHeight );
-    virtual ~ScHTMLImport();
-    const ScHTMLParser* GetParser() const { return static_cast<ScHTMLParser*>(mpParser); }
 
     virtual void        WriteToDocument( bool bSizeColsRows = false, double nOutputFactor = 1.0,
                                          SvNumberFormatter* pFormatter = nullptr, bool bConvertDate = true ) override;
 
-    static OUString     GetHTMLRangeNameList( ScDocument* pDoc, const OUString& rOrigName );
+    static OUString     GetHTMLRangeNameList( const ScDocument* pDoc, const OUString& rOrigName );
 };
 
 #endif

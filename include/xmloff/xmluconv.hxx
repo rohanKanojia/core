@@ -25,25 +25,14 @@
 #include <sal/types.h>
 
 #include <memory>
-#include <limits.h>
 
 #include <rtl/ustring.hxx>
 #include <rtl/ustrbuf.hxx>
-#include <xmloff/xmlement.hxx>
 #include <xmloff/xmltoken.hxx>
-#include <com/sun/star/util/Date.hpp>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/drawing/Position3D.hpp>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <tools/fldunit.hxx>
-#include <tools/mapunit.hxx>
-
-namespace tools { class Time; }
 
 namespace com { namespace sun { namespace star {
-    namespace util { struct DateTime; }
     namespace text { class XNumberingTypeInfo; }
 }}}
 
@@ -52,15 +41,25 @@ namespace basegfx
     class B3DVector;
 }
 
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { struct Position3D; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <class E> class Sequence; } } } }
+namespace com { namespace sun { namespace star { namespace util { struct Date; } } } }
+template <typename EnumT> struct SvXMLEnumMapEntry;
+template <typename EnumT> struct SvXMLEnumStringMapEntry;
+
 class XMLOFF_DLLPUBLIC SvXMLTokenEnumerator
 {
 private:
     const OUString&  maTokenString;
     sal_Int32               mnNextTokenPos;
-    sal_Unicode             mcSeparator;
+    sal_Unicode const       mcSeparator;
 
 public:
-    SvXMLTokenEnumerator( const OUString& rString, sal_Unicode cSeparator = sal_Unicode(' ') );
+    SvXMLTokenEnumerator( const OUString& rString, sal_Unicode cSeparator = u' ' );
 
     bool getNextToken( OUString& rToken );
 };
@@ -75,7 +74,7 @@ public:
         a lot of the methods here have been moved to <sax/tools/converter.hxx>!
 */
 
-class XMLOFF_DLLPUBLIC SvXMLUnitConverter
+class XMLOFF_DLLPUBLIC SvXMLUnitConverter final
 {
 private:
     SvXMLUnitConverter(const SvXMLUnitConverter&) = delete;
@@ -93,7 +92,7 @@ public:
         sal_Int16 eCoreMeasureUnit /*css::util::MeasureUnit*/,
         sal_Int16 eXMLMeasureUnit /*css::util::MeasureUnit*/);
 
-    virtual ~SvXMLUnitConverter();
+    ~SvXMLUnitConverter();
 
     static sal_Int16 GetMeasureUnit(FieldUnit const nFieldUnit);
 
@@ -122,25 +121,48 @@ public:
 
     /** convert string to enum using given enum map, if the enum is
         not found in the map, this method will return false */
-    static bool convertEnum( sal_uInt16& rEnum,
+    template<typename EnumT>
+    static bool convertEnum( EnumT& rEnum,
                              const OUString& rValue,
-                             const SvXMLEnumMapEntry *pMap );
+                             const SvXMLEnumMapEntry<EnumT> *pMap )
+    {
+        sal_uInt16 nTmp;
+        bool bRet = convertEnumImpl(nTmp, rValue,
+                        reinterpret_cast<const SvXMLEnumMapEntry<sal_uInt16>*>(pMap));
+        if (bRet)
+            rEnum = static_cast<EnumT>(nTmp);
+        return bRet;
+    }
 
     /** convert string to enum using given token map, if the enum is
         not found in the map, this method will return false */
-    static bool convertEnum( sal_uInt16& rEnum,
+    template<typename EnumT>
+    static bool convertEnum( EnumT& rEnum,
                              const OUString& rValue,
-                             const SvXMLEnumStringMapEntry *pMap );
+                             const SvXMLEnumStringMapEntry<EnumT> *pMap )
+    {
+        sal_uInt16 nTmp;
+        bool bRet = convertEnumImpl(nTmp, rValue,
+                        reinterpret_cast<const SvXMLEnumStringMapEntry<sal_uInt16>*>(pMap));
+        if (bRet)
+            rEnum = static_cast<EnumT>(nTmp);
+        return bRet;
+    }
 
     /** convert enum to string using given enum map with an optional
         default token. If the enum is not found in the map,
         this method will either use the given default or return
         false if not default is set */
+    template<typename EnumT>
     static bool convertEnum( OUStringBuffer& rBuffer,
-                                 unsigned int nValue,
-                                 const SvXMLEnumMapEntry *pMap,
-                                 enum ::xmloff::token::XMLTokenEnum eDefault =
-                                         ::xmloff::token::XML_TOKEN_INVALID );
+                             EnumT nValue,
+                             const SvXMLEnumMapEntry<EnumT> *pMap,
+                             enum ::xmloff::token::XMLTokenEnum eDefault =
+                                         ::xmloff::token::XML_TOKEN_INVALID )
+    {
+        return convertEnumImpl(rBuffer, static_cast<sal_uInt16>(nValue),
+                   reinterpret_cast<const SvXMLEnumMapEntry<sal_uInt16>*>(pMap), eDefault);
+    }
 
     /** convert double number to string (using ::rtl::math) and DO
         convert to export MapUnit using meCoreMeasureUnit/meXMLMeasureUnit */
@@ -193,13 +215,13 @@ public:
                               const css::drawing::Position3D& rVector );
 
 
-    /** convert num-forat and num-letter-sync values to NumberingType */
+    /** convert num-format and num-letter-sync values to NumberingType */
     bool convertNumFormat( sal_Int16& rType,
                            const OUString& rNumFormat,
                            const OUString& rNumLetterSync,
                            bool bNumberNone = false ) const;
 
-    /** convert NumberingType to num-forat and num-letter-sync values */
+    /** convert NumberingType to num-format and num-letter-sync values */
     void convertNumFormat( OUStringBuffer& rBuffer,
                            sal_Int16 nType ) const;
     static void convertNumLetterSync( OUStringBuffer& rBuffer,
@@ -207,7 +229,7 @@ public:
 
     static void convertPropertySet(css::uno::Sequence<css::beans::PropertyValue>& rProps,
                         const css::uno::Reference<css::beans::XPropertySet>& aProperties);
-    static void convertPropertySet(css::uno::Reference<css::beans::XPropertySet>& rProperties,
+    static void convertPropertySet(css::uno::Reference<css::beans::XPropertySet> const & rProperties,
                         const css::uno::Sequence<css::beans::PropertyValue>& aProps);
 
     OUString encodeStyleName( const OUString& rName,
@@ -219,6 +241,20 @@ public:
     /** convert number (sal_uInt32) to string (hex) */
     static void convertHex( OUStringBuffer& rBuffer,
                                sal_uInt32 nVal );
+
+private:
+    static bool convertEnumImpl( sal_uInt16& rEnum,
+                             const OUString& rValue,
+                             const SvXMLEnumMapEntry<sal_uInt16> *pMap );
+
+    static bool convertEnumImpl( sal_uInt16& rEnum,
+                             const OUString& rValue,
+                             const SvXMLEnumStringMapEntry<sal_uInt16> *pMap );
+
+    static bool convertEnumImpl( OUStringBuffer& rBuffer,
+                             sal_uInt16 nValue,
+                             const SvXMLEnumMapEntry<sal_uInt16> *pMap,
+                             enum ::xmloff::token::XMLTokenEnum eDefault );
 };
 
 #endif // INCLUDED_XMLOFF_XMLUCONV_HXX

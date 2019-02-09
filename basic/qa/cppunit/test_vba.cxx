@@ -9,6 +9,17 @@
 #include "basictest.hxx"
 #include <comphelper/processfactory.hxx>
 #include <unotools/syslocaleoptions.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
+
+#ifdef _WIN32
+#include <string.h>
+
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <odbcinst.h>
+#endif
 
 using namespace ::com::sun::star;
 
@@ -18,7 +29,6 @@ namespace
     {
         public:
         VBATest() : BootstrapFixture(true, false) {}
-        virtual ~VBATest(){}
         void testMiscVBAFunctions();
         void testMiscOLEStuff();
         // Adds code needed to register the test suite
@@ -37,7 +47,10 @@ void VBATest::testMiscVBAFunctions()
 {
     const char* macroSource[] = {
         "bytearraystring.vb",
-        "cdec.vb",
+#ifdef _WIN32
+        "cdec.vb", // currently CDec is implemented only on Windows
+#endif
+        "constants.vb",
 // datevalue test seems to depend on both locale and language
 // settings, should try and rewrite the test to deal with that
 // for some reason tinderboxes don't seem to complain leaving enabled
@@ -49,6 +62,81 @@ void VBATest::testMiscVBAFunctions()
         "format.vb",
         "replace.vb",
         "stringplusdouble.vb",
+        "chr.vb",
+        "abs.vb",
+        "array.vb",
+        "asc.vb",
+        "atn.vb",
+        "cbool.vb",
+        "cdate.vb",
+        "cdbl.vb",
+        "choose.vb",
+        "cos.vb",
+        "cint.vb",
+        "clng.vb",
+        "csng.vb",
+        "cstr.vb",
+        "cvdate.vb",
+        "cverr.vb",
+        "dateadd.vb",
+        "datediff.vb",
+        "datepart.vb",
+        "day.vb",
+        "error.vb",
+        "exp.vb",
+        "fix.vb",
+        "hex.vb",
+        "hour.vb",
+        "formatnumber.vb",
+        "iif.vb",
+        "instr.vb",
+        "instrrev.vb",
+        "int.vb",
+        "iserror.vb",
+        "ismissing.vb",
+        "isnull.vb",
+        "isobject.vb",
+        "join.vb",
+        "lbound.vb",
+        "isarray.vb",
+        "isdate.vb",
+        "isempty.vb",
+        "isnumeric.vb",
+        "lcase.vb",
+        "left.vb",
+        "len.vb",
+        "log.vb",
+        "ltrim.vb",
+        "mid.vb",
+        "minute.vb",
+        "month.vb",
+        "monthname.vb",
+        "oct.vb",
+        "qbcolor.vb",
+        "rgb.vb",
+        "rtrim.vb",
+        "right.vb",
+        "second.vb",
+        "sgn.vb",
+        "sin.vb",
+        "space.vb",
+        "sqr.vb",
+        "str.vb",
+        "strcomp.vb",
+        "string.vb",
+        "strreverse.vb",
+        "switch.vb",
+        "timeserial.vb",
+        "timevalue.vb",
+        "trim.vb",
+        "typename.vb",
+        "ubound.vb",
+        "ucase.vb",
+        "val.vb",
+        "vartype.vb",
+        "weekday.vb",
+        "weekdayname.vb",
+        "year.vb",
 #ifndef WIN32 // missing 64bit Currency marshalling.
         "win32compat.vb", // windows compatibility hooks.
 #endif
@@ -60,28 +148,33 @@ void VBATest::testMiscVBAFunctions()
     SvtSysLocaleOptions aLocalOptions;
     aLocalOptions.SetLocaleConfigString( aLocale.getBcp47() );
 
-    for ( sal_uInt32  i=0; i<SAL_N_ELEMENTS( macroSource ); ++i )
+    for ( size_t  i=0; i<SAL_N_ELEMENTS( macroSource ); ++i )
     {
-        OUString sMacroURL( sMacroPathURL );
-        sMacroURL += OUString::createFromAscii( macroSource[ i ] );
+        OUString sMacroURL = sMacroPathURL
+                           + OUString::createFromAscii( macroSource[ i ] );
 
         MacroSnippet myMacro;
         myMacro.LoadSourceFromFile( sMacroURL );
         SbxVariableRef pReturn = myMacro.Run();
-        if ( pReturn )
-        {
-            fprintf(stderr, "macro result for %s\n", macroSource[ i ] );
-            fprintf(stderr, "macro returned:\n%s\n", OUStringToOString( pReturn->GetOUString(), RTL_TEXTENCODING_UTF8 ).getStr() );
-        }
-        CPPUNIT_ASSERT_MESSAGE("No return variable huh?", pReturn != nullptr );
-        CPPUNIT_ASSERT_MESSAGE("Result not as expected", pReturn->GetOUString() == "OK" );
+        CPPUNIT_ASSERT_MESSAGE("No return variable huh?", pReturn.is());
+        fprintf(stderr, "macro result for %s\n", macroSource[i]);
+        fprintf(stderr, "macro returned:\n%s\n",
+                OUStringToOString(pReturn->GetOUString(), RTL_TEXTENCODING_UTF8).getStr());
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("Result not as expected", OUString("OK"),
+                                     pReturn->GetOUString());
     }
 }
 
 void VBATest::testMiscOLEStuff()
 {
-// not much point even trying to run except on windows
-#if defined(_WIN32)
+// Not much point even trying to run except on Windows.
+// (Without Excel doesn't really do anything anyway,
+// see "so skip test" below.)
+
+// Since some time, on a properly updated Windows 10, this works
+// only with a 64-bit LibreOffice
+
+#if defined(_WIN64)
     // test if we have the necessary runtime environment
     // to run the OLE tests.
     uno::Reference< lang::XMultiServiceFactory > xOLEFactory;
@@ -96,43 +189,56 @@ void VBATest::testMiscOLEStuff()
     bool bOk = false;
     if( xOLEFactory.is() )
     {
-        uno::Reference< uno::XInterface > xExcel = xOLEFactory->createInstance( "Excel.Application" );
         uno::Reference< uno::XInterface > xADODB = xOLEFactory->createInstance( "ADODB.Connection" );
-       bOk = xExcel.is() && xADODB.is();
+        bOk = xADODB.is();
     }
     if ( !bOk )
         return; // can't do anything, skip test
 
+    const int nBufSize = 1024 * 4;
+    wchar_t sBuf[nBufSize];
+    SQLGetInstalledDriversW( sBuf, nBufSize, nullptr );
+
+    const wchar_t *pODBCDriverName = sBuf;
+    bool bFound = false;
+    for (; wcslen( pODBCDriverName ) != 0; pODBCDriverName += wcslen( pODBCDriverName ) + 1 ) {
+        if( wcscmp( pODBCDriverName, L"Microsoft Excel Driver (*.xls)" ) == 0 ||
+            wcscmp( pODBCDriverName, L"Microsoft Excel Driver (*.xls, *.xlsx, *.xlsm, *.xlsb)" ) == 0 ) {
+            bFound = true;
+            break;
+        }
+    }
+    if ( !bFound )
+        return; // can't find ODBC driver needed test, so skip test
+
     const char* macroSource[] = {
         "ole_ObjAssignNoDflt.vb",
         "ole_ObjAssignToNothing.vb",
-        "ole_dfltObjDflMethod.vb",
     };
 
     OUString sMacroPathURL = m_directories.getURLFromSrc("/basic/qa/vba_tests/");
 
-    uno::Sequence< uno::Any > aArgs(1);
+    uno::Sequence< uno::Any > aArgs(2);
     // path to test document
-    OUString sPath = m_directories.getPathFromSrc("/basic/qa/vba_tests/data/");
-    sPath += "ADODBdata.xls";
+    OUString sPath = m_directories.getPathFromSrc("/basic/qa/vba_tests/data/ADODBdata.xls");
     sPath = sPath.replaceAll( "/", "\\" );
 
-    aArgs[ 0 ] = uno::makeAny( sPath );
+    aArgs[ 0 ] <<= sPath;
+    aArgs[ 1 ] <<= OUString(o3tl::toU(pODBCDriverName));
 
     for ( sal_uInt32  i=0; i<SAL_N_ELEMENTS( macroSource ); ++i )
     {
-        OUString sMacroURL( sMacroPathURL );
-        sMacroURL += OUString::createFromAscii( macroSource[ i ] );
+        OUString sMacroURL = sMacroPathURL
+                           + OUString::createFromAscii( macroSource[ i ] );
         MacroSnippet myMacro;
         myMacro.LoadSourceFromFile( sMacroURL );
         SbxVariableRef pReturn = myMacro.Run( aArgs );
-        if ( pReturn )
-        {
-            fprintf(stderr, "macro result for %s\n", macroSource[ i ] );
-            fprintf(stderr, "macro returned:\n%s\n", OUStringToOString( pReturn->GetOUString(), RTL_TEXTENCODING_UTF8 ).getStr() );
-        }
-        CPPUNIT_ASSERT_MESSAGE("No return variable huh?", pReturn != NULL );
-        CPPUNIT_ASSERT_MESSAGE("Result not as expected", pReturn->GetOUString() == "OK" );
+        CPPUNIT_ASSERT_MESSAGE("No return variable huh?", pReturn.is());
+        fprintf(stderr, "macro result for %s\n", macroSource[i]);
+        fprintf(stderr, "macro returned:\n%s\n",
+                OUStringToOString(pReturn->GetOUString(), RTL_TEXTENCODING_UTF8).getStr());
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("Result not as expected", OUString("OK"),
+                                     pReturn->GetOUString());
     }
 #else
     // Avoid "this method is empty and should be removed" warning

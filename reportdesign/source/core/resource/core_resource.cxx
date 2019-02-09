@@ -16,13 +16,10 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "core_resource.hxx"
-#include <tools/simplerm.hxx>
+#include <core_resource.hxx>
+#include <unotools/resmgr.hxx>
 
 // ---- needed as long as we have no contexts for components ---
-#include <vcl/svapp.hxx>
-#include <vcl/settings.hxx>
-
 #include <osl/thread.h>
 #include <com/sun/star/util/XMacroExpander.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -30,48 +27,10 @@
 #include <rtl/uri.hxx>
 
 #include <svl/solar.hrc>
-#include "ModuleHelper.hxx"
 
-namespace reportdesign
+OUString RptResId(const char* pId)
 {
-    using namespace ::com::sun::star;
-
-    //= ResourceManager
-
-    SimpleResMgr* ResourceManager::m_pImpl = nullptr;
-
-
-    ResourceManager::EnsureDelete::~EnsureDelete()
-    {
-        delete ResourceManager::m_pImpl;
-    }
-
-
-    void ResourceManager::ensureImplExists(const uno::Reference< lang::XMultiComponentFactory >& /* _rM */)
-    {
-        if (!m_pImpl)
-        {
-            // now that we have an impl class make sure it's deleted on unloading the library
-            static ResourceManager::EnsureDelete    s_aDeleteTheImplClass;
-
-            m_pImpl = SimpleResMgr::Create("rpt", Application::GetSettings().GetUILanguageTag());
-        }
-    }
-
-
-    OUString ResourceManager::loadString(sal_uInt16 _nResId,const uno::Reference< lang::XMultiComponentFactory >& _rM)
-    {
-        OUString sReturn;
-
-        ensureImplExists(_rM);
-        if (m_pImpl)
-            sReturn = m_pImpl->ReadString(_nResId);
-
-        return sReturn;
-    }
-
-
+    return Translate::get(pId, Translate::Create("rpt"));
 }
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

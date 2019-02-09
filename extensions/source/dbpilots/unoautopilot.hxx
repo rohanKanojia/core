@@ -21,9 +21,10 @@
 #define INCLUDED_EXTENSIONS_SOURCE_DBPILOTS_UNOAUTOPILOT_HXX
 
 #include <svtools/genericunodialog.hxx>
+#include <toolkit/helper/vclunohelper.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/proparrhlp.hxx>
-#include "componentmodule.hxx"
+#include <componentmodule.hxx>
 #include <cppuhelper/typeprovider.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
@@ -33,10 +34,9 @@ namespace dbp
 {
     typedef ::svt::OGenericUnoDialog    OUnoAutoPilot_Base;
     template <class TYPE, class SERVICEINFO>
-    class OUnoAutoPilot
+    class OUnoAutoPilot final
             :public OUnoAutoPilot_Base
             ,public ::comphelper::OPropertyArrayUsageHelper< OUnoAutoPilot< TYPE, SERVICEINFO > >
-            ,public OModuleResourceClient
     {
         explicit OUnoAutoPilot(const css::uno::Reference< css::uno::XComponentContext >& _rxORB)
             : OUnoAutoPilot_Base(_rxORB)
@@ -44,34 +44,35 @@ namespace dbp
         }
 
 
-    protected:
         css::uno::Reference< css::beans::XPropertySet >   m_xObjectModel;
 
     public:
         // XTypeProvider
-        virtual css::uno::Sequence<sal_Int8> SAL_CALL getImplementationId(  ) throw(css::uno::RuntimeException, std::exception) override
+        virtual css::uno::Sequence<sal_Int8> SAL_CALL getImplementationId(  ) override
         {
             return css::uno::Sequence<sal_Int8>();
         }
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() throw(css::uno::RuntimeException, std::exception) override
+        virtual OUString SAL_CALL getImplementationName() override
         {
             return getImplementationName_Static();
         }
 
-        virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception) override
+        virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
         {
             return getSupportedServiceNames_Static();
         }
 
         // XServiceInfo - static methods
-        static css::uno::Sequence< OUString > getSupportedServiceNames_Static() throw( css::uno::RuntimeException )
+        /// @throws css::uno::RuntimeException
+        static css::uno::Sequence< OUString > getSupportedServiceNames_Static()
         {
             return SERVICEINFO::getServiceNames();
         }
 
-        static OUString getImplementationName_Static() throw( css::uno::RuntimeException )
+        /// @throws css::uno::RuntimeException
+        static OUString getImplementationName_Static()
         {
             return SERVICEINFO::getImplementationName();
         }
@@ -83,7 +84,7 @@ namespace dbp
         }
 
         // XPropertySet
-        virtual css::uno::Reference< css::beans::XPropertySetInfo>  SAL_CALL getPropertySetInfo() throw(css::uno::RuntimeException, std::exception) override
+        virtual css::uno::Reference< css::beans::XPropertySetInfo>  SAL_CALL getPropertySetInfo() override
         {
             css::uno::Reference< css::beans::XPropertySetInfo >  xInfo( createPropertySetInfo( getInfoHelper() ) );
             return xInfo;
@@ -102,11 +103,11 @@ namespace dbp
             return new ::cppu::OPropertyArrayHelper(aProps);
         }
 
-    protected:
-    // OGenericUnoDialog overridables
-        virtual VclPtr<Dialog> createDialog(vcl::Window* _pParent) override
+    private:
+        // OGenericUnoDialog overridables
+        virtual svt::OGenericUnoDialog::Dialog createDialog(const css::uno::Reference<css::awt::XWindow>& rParent) override
         {
-            return VclPtr<TYPE>::Create(_pParent, m_xObjectModel, m_aContext);
+            return svt::OGenericUnoDialog::Dialog(VclPtr<TYPE>::Create(VCLUnoHelper::GetWindow(rParent), m_xObjectModel, m_aContext));
         }
 
         virtual void implInitialize(const css::uno::Any& _rValue) override

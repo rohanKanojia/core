@@ -20,10 +20,10 @@
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_DIALOGS_TP_LEGENDPOSITION_HXX
 
 #include <sfx2/tabdlg.hxx>
-#include <vcl/fixed.hxx>
 
-#include "res_LegendPosition.hxx"
-#include "TextDirectionListBox.hxx"
+#include <res_LegendPosition.hxx>
+
+namespace chart { class TextDirectionListBox; }
 
 namespace chart
 {
@@ -33,14 +33,14 @@ class SchLegendPosTabPage : public SfxTabPage
 private:
 
     LegendPositionResources  m_aLegendPositionResources;
-    VclPtr<TextDirectionListBox>    m_pLbTextDirection;
+    std::unique_ptr<TextDirectionListBox> m_xLbTextDirection;
 
 public:
-    SchLegendPosTabPage(vcl::Window* pParent, const SfxItemSet& rInAttrs);
-    virtual ~SchLegendPosTabPage();
+    SchLegendPosTabPage(TabPageParent pParent, const SfxItemSet& rInAttrs);
+    virtual ~SchLegendPosTabPage() override;
     virtual void dispose() override;
 
-    static VclPtr<SfxTabPage> Create(vcl::Window* pParent, const SfxItemSet* rInAttrs);
+    static VclPtr<SfxTabPage> Create(TabPageParent pParent, const SfxItemSet* rInAttrs);
     virtual bool FillItemSet(SfxItemSet* rOutAttrs) override;
     virtual void Reset(const SfxItemSet* rInAttrs) override;
 };

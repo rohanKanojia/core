@@ -19,11 +19,14 @@
 
 #include <comphelper/docpasswordhelper.hxx>
 #include <sal/log.hxx>
+#include <unotools/configmgr.hxx>
 #include <unotools/mediadescriptor.hxx>
 #include <unotools/securityoptions.hxx>
+#include <unotools/ucbhelper.hxx>
 #include <comphelper/namedvaluecollection.hxx>
 #include <comphelper/stillreadwriteinteraction.hxx>
 
+#include <com/sun/star/ucb/ContentCreationException.hpp>
 #include <com/sun/star/ucb/XContent.hpp>
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <com/sun/star/task/XInteractionHandler.hpp>
@@ -49,6 +52,7 @@
 #include <comphelper/processfactory.hxx>
 #include <tools/urlobj.hxx>
 #include <osl/diagnose.h>
+#include <tools/diagnose_ex.h>
 
 namespace utl {
 
@@ -322,6 +326,12 @@ const OUString& MediaDescriptor::PROP_DOCUMENTBASEURL()
     return sProp;
 }
 
+const OUString& MediaDescriptor::PROP_SUGGESTEDSAVEASNAME()
+{
+    static const OUString sProp("SuggestedSaveAsName");
+    return sProp;
+}
+
 MediaDescriptor::MediaDescriptor()
     : SequenceAsHashMap()
 {
@@ -334,11 +344,7 @@ MediaDescriptor::MediaDescriptor(const css::uno::Sequence< css::beans::PropertyV
 
 bool MediaDescriptor::isStreamReadOnly() const
 {
-    static const char CONTENTSCHEME_FILE[] = "file";
-    static const char CONTENTPROP_ISREADONLY[] = "IsReadOnly";
-    static bool READONLY_FALLBACK = false;
-
-    bool bReadOnly = READONLY_FALLBACK;
+    bool bReadOnly = false;
 
     // check for explicit readonly state
     const_iterator pIt = find(MediaDescriptor::PROP_READONLY());
@@ -372,12 +378,14 @@ bool MediaDescriptor::isStreamReadOnly() const
             if (xId.is())
                 aScheme = xId->getContentProviderScheme();
 
-            if (aScheme.equalsIgnoreAsciiCase(CONTENTSCHEME_FILE))
+            if (aScheme.equalsIgnoreAsciiCase("file"))
                 bReadOnly = true;
             else
             {
-                ::ucbhelper::Content aContent(xContent, css::uno::Reference< css::ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext());
-                aContent.getPropertyValue(CONTENTPROP_ISREADONLY) >>= bReadOnly;
+                ::ucbhelper::Content aContent(xContent,
+                                              utl::UCBContentHelper::getDefaultCommandEnvironment(),
+                                              comphelper::getProcessComponentContext());
+                aContent.getPropertyValue("IsReadOnly") >>= bReadOnly;
             }
         }
     }
@@ -482,8 +490,9 @@ bool MediaDescriptor::addInputStream()
 /*-----------------------------------------------*/
 bool MediaDescriptor::addInputStreamOwnLock()
 {
-    return impl_addInputStream(
-        officecfg::Office::Common::Misc::UseDocumentSystemFileLocking::get());
+    const bool bLock = !utl::ConfigManager::IsFuzzing()
+        && officecfg::Office::Common::Misc::UseDocumentSystemFileLocking::get();
+    return impl_addInputStream(bLock);
 }
 
 /*-----------------------------------------------*/
@@ -516,24 +525,21 @@ bool MediaDescriptor::impl_addInputStream( bool bLockFile )
 
         return impl_openStreamWithURL( removeFragment(sURL), bLockFile );
     }
-    catch(const css::uno::Exception& ex)
+    catch(const css::uno::Exception&)
     {
-        SAL_WARN(
-            "unotools.misc",
-            "invalid MediaDescriptor detected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("unotools.misc", "invalid MediaDescriptor detected");
         return false;
     }
 }
 
 bool MediaDescriptor::impl_openStreamWithPostData( const css::uno::Reference< css::io::XInputStream >& _rxPostData )
-    throw(css::uno::RuntimeException)
 {
     if ( !_rxPostData.is() )
         throw css::lang::IllegalArgumentException("Found invalid PostData.",
                 css::uno::Reference< css::uno::XInterface >(), 1);
 
     // PostData can't be used in read/write mode!
-    (*this)[MediaDescriptor::PROP_READONLY()] <<= sal_True;
+    (*this)[MediaDescriptor::PROP_READONLY()] <<= true;
 
     // prepare the environment
     css::uno::Reference< css::task::XInteractionHandler > xInteraction = getUnpackedValueOrDefault(
@@ -573,8 +579,7 @@ bool MediaDescriptor::impl_openStreamWithPostData( const css::uno::Reference< cs
         aPostArgument.MediaType = sMediaType;
         aPostArgument.Referer = getUnpackedValueOrDefault( PROP_REFERRER(), OUString() );
 
-        OUString sCommandName( "post" );
-        aContent.executeCommand( sCommandName, css::uno::makeAny( aPostArgument ) );
+        aContent.executeCommand( "post", css::uno::makeAny( aPostArgument ) );
 
         // get result
         xResultStream = xSink->getInputStream();
@@ -596,7 +601,6 @@ bool MediaDescriptor::impl_openStreamWithPostData( const css::uno::Reference< cs
 
 /*-----------------------------------------------*/
 bool MediaDescriptor::impl_openStreamWithURL( const OUString& sURL, bool bLockFile )
-    throw(css::uno::RuntimeException)
 {
     OUString referer(getUnpackedValueOrDefault(PROP_REFERRER(), OUString()));
     if (SvtSecurityOptions().isUntrustedReferer(referer)) {
@@ -632,17 +636,13 @@ bool MediaDescriptor::impl_openStreamWithURL( const OUString& sURL, bool bLockFi
         { throw; }
     catch(const css::ucb::ContentCreationException& e)
         {
-            SAL_WARN(
-                "unotools.misc",
-                "caught ContentCreationException \"" << e.Message
+            SAL_WARN("unotools.misc", "caught \"" << e
                     << "\" while opening <" << sURL << ">");
             return false; // TODO error handling
         }
     catch(const css::uno::Exception& e)
         {
-            SAL_WARN(
-                "unotools.misc",
-                "caught Exception \"" << e.Message << "\" while opening <"
+            SAL_WARN("unotools.misc", "caught \"" << e << "\" while opening <"
                     << sURL << ">");
             return false; // TODO error handling
         }
@@ -683,9 +683,7 @@ bool MediaDescriptor::impl_openStreamWithURL( const OUString& sURL, bool bLockFi
                 // break this method.
                 if (!pInteraction->wasWriteError() || bModeRequestedExplicitly)
                 {
-                    SAL_WARN(
-                        "unotools.misc",
-                        "caught Exception \"" << e.Message
+                    SAL_WARN("unotools.misc", "caught \"" << e
                             << "\" while opening <" << sURL << ">");
                     // If the protocol is webdav, then we need to treat the stream as readonly, even if the
                     // operation was requested as read/write explicitly (the WebDAV UCB implementation is monodirectional
@@ -751,8 +749,7 @@ bool MediaDescriptor::impl_openStreamWithURL( const OUString& sURL, bool bLockFi
         {
             SAL_INFO(
                 "unotools.misc",
-                "caught Exception \"" << e.Message << "\" while opening <"
-                    << sURL << ">");
+                "caught " << e << " while opening <" << sURL << ">");
             return false;
         }
     }

@@ -19,7 +19,9 @@
 
 #include "ConfigurationClassifier.hxx"
 
-#include "framework/FrameworkHelper.hxx"
+#include <framework/FrameworkHelper.hxx>
+#include <com/sun/star/drawing/framework/XConfiguration.hpp>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -33,8 +35,7 @@ ConfigurationClassifier::ConfigurationClassifier (
     : mxConfiguration1(rxConfiguration1),
       mxConfiguration2(rxConfiguration2),
       maC1minusC2(),
-      maC2minusC1(),
-      maC1andC2()
+      maC2minusC1()
 {
 }
 
@@ -42,7 +43,6 @@ bool ConfigurationClassifier::Partition()
 {
     maC1minusC2.clear();
     maC2minusC1.clear();
-    maC1andC2.clear();
 
     PartitionResources(
         mxConfiguration1->getResources(nullptr, OUString(), AnchorBindingMode_DIRECT),
@@ -74,13 +74,11 @@ void ConfigurationClassifier::PartitionResources (
     CopyResources(aC2minusC1, mxConfiguration2, maC2minusC1);
 
     // Process the unique resources that belong to both configurations.
-    ResourceIdVector::const_iterator iResource;
-    for (iResource=aC1andC2.begin(); iResource!=aC1andC2.end(); ++iResource)
+    for (const auto& rxResource : aC1andC2)
     {
-        maC1andC2.push_back(*iResource);
         PartitionResources(
-            mxConfiguration1->getResources(*iResource, OUString(), AnchorBindingMode_DIRECT),
-            mxConfiguration2->getResources(*iResource, OUString(), AnchorBindingMode_DIRECT));
+            mxConfiguration1->getResources(rxResource, OUString(), AnchorBindingMode_DIRECT),
+            mxConfiguration2->getResources(rxResource, OUString(), AnchorBindingMode_DIRECT));
     }
 }
 
@@ -103,7 +101,7 @@ void ConfigurationClassifier::ClassifyResources (
     {
         bool bFound (false);
         for (sal_Int32 j=0; j<nL2 && !bFound; ++j)
-            if (aA1[i]->getResourceURL().equals(aA2[j]->getResourceURL()))
+            if (aA1[i]->getResourceURL() == aA2[j]->getResourceURL())
                 bFound = true;
 
         if (bFound)
@@ -119,7 +117,7 @@ void ConfigurationClassifier::ClassifyResources (
     {
         bool bFound (false);
         for (sal_Int32 i=0; i<nL1 && !bFound; ++i)
-            if (aA2[j]->getResourceURL().equals(aA1[i]->getResourceURL()))
+            if (aA2[j]->getResourceURL() == aA1[i]->getResourceURL())
                 bFound = true;
 
         if ( ! bFound)
@@ -133,35 +131,47 @@ void ConfigurationClassifier::CopyResources (
     ResourceIdVector& rTarget)
 {
     // Copy all resources bound to the ones in aC1minusC2Unique to rC1minusC2.
-    ResourceIdVector::const_iterator iResource (rSource.begin());
-    ResourceIdVector::const_iterator iEnd(rSource.end());
-    for ( ; iResource!=iEnd; ++iResource)
+    for (const auto& rxResource : rSource)
     {
         const Sequence<Reference<XResourceId> > aBoundResources (
             rxConfiguration->getResources(
-                *iResource,
+                rxResource,
                 OUString(),
                 AnchorBindingMode_INDIRECT));
         const sal_Int32 nL (aBoundResources.getLength());
 
         rTarget.reserve(rTarget.size() + 1 + nL);
-        rTarget.push_back(*iResource);
+        rTarget.push_back(rxResource);
 
         SAL_INFO("sd.fwk", OSL_THIS_FUNC << ":    copying " <<
-            OUStringToOString(FrameworkHelper::ResourceIdToString(*iResource),
-                RTL_TEXTENCODING_UTF8).getStr());
+            FrameworkHelper::ResourceIdToString(rxResource));
 
         const Reference<XResourceId>* aA = aBoundResources.getConstArray();
         for (sal_Int32 i=0; i<nL; ++i)
         {
             rTarget.push_back(aA[i]);
             SAL_INFO("sd.fwk", OSL_THIS_FUNC << ":    copying " <<
-                OUStringToOString(FrameworkHelper::ResourceIdToString(aA[i]),
-                    RTL_TEXTENCODING_UTF8).getStr());
+                FrameworkHelper::ResourceIdToString(aA[i]));
         }
     }
 }
 
+#if DEBUG_SD_CONFIGURATION_TRACE
+
+void ConfigurationClassifier::TraceResourceIdVector (
+    const sal_Char* pMessage,
+    const ResourceIdVector& rResources)
+{
+
+    SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": " << pMessage);
+    for (const auto& rxResource : rResources)
+    {
+        OUString sResource (FrameworkHelper::ResourceIdToString(rxResource));
+        SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": " << sResource);
+    }
+}
+
+#endif
 
 } } // end of namespace sd::framework
 

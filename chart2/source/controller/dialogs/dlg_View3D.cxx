@@ -17,19 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dlg_View3D.hxx"
-#include "Strings.hrc"
-#include "ResourceIds.hrc"
-#include "ResId.hxx"
+#include <dlg_View3D.hxx>
+#include <strings.hrc>
+#include "TabPageIds.h"
+#include <ResId.hxx>
 #include "tp_3D_SceneGeometry.hxx"
 #include "tp_3D_SceneAppearance.hxx"
 #include "tp_3D_SceneIllumination.hxx"
-#include "ChartModelHelper.hxx"
-#include "macros.hxx"
-#include "ControllerLockGuard.hxx"
+#include <ChartModelHelper.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
-
-#include <vcl/msgbox.hxx>
 
 namespace chart
 {
@@ -39,7 +35,7 @@ using namespace ::com::sun::star::chart2;
 
 sal_uInt16 View3DDialog::m_nLastPageId = 0;
 
-View3DDialog::View3DDialog(vcl::Window* pParent, const uno::Reference< frame::XModel > & xChartModel, const XColorListRef &pColorTable )
+View3DDialog::View3DDialog(vcl::Window* pParent, const uno::Reference< frame::XModel > & xChartModel)
     : TabDialog(pParent, "3DViewDialog", "modules/schart/ui/3dviewdialog.ui")
     , m_pGeometry(nullptr)
     , m_pAppearance(nullptr)
@@ -51,11 +47,11 @@ View3DDialog::View3DDialog(vcl::Window* pParent, const uno::Reference< frame::XM
     uno::Reference< beans::XPropertySet > xSceneProperties( ChartModelHelper::findDiagram( xChartModel ), uno::UNO_QUERY );
     m_pGeometry   = VclPtr<ThreeD_SceneGeometry_TabPage>::Create(m_pTabControl,xSceneProperties,m_aControllerLocker);
     m_pAppearance = VclPtr<ThreeD_SceneAppearance_TabPage>::Create(m_pTabControl,xChartModel,m_aControllerLocker);
-    m_pIllumination = VclPtr<ThreeD_SceneIllumination_TabPage>::Create(m_pTabControl,xSceneProperties,xChartModel,pColorTable);
+    m_pIllumination = VclPtr<ThreeD_SceneIllumination_TabPage>::Create(m_pTabControl,xSceneProperties,xChartModel);
 
-    m_pTabControl->InsertPage( TP_3D_SCENEGEOMETRY, SCH_RESSTR(STR_PAGE_PERSPECTIVE) );
-    m_pTabControl->InsertPage( TP_3D_SCENEAPPEARANCE, SCH_RESSTR(STR_PAGE_APPEARANCE) );
-    m_pTabControl->InsertPage( TP_3D_SCENEILLUMINATION, SCH_RESSTR(STR_PAGE_ILLUMINATION) );
+    m_pTabControl->InsertPage( TP_3D_SCENEGEOMETRY, SchResId(STR_PAGE_PERSPECTIVE) );
+    m_pTabControl->InsertPage( TP_3D_SCENEAPPEARANCE, SchResId(STR_PAGE_APPEARANCE) );
+    m_pTabControl->InsertPage( TP_3D_SCENEILLUMINATION, SchResId(STR_PAGE_ILLUMINATION) );
 
     m_pTabControl->SetTabPage( TP_3D_SCENEGEOMETRY, m_pGeometry );
     m_pTabControl->SetTabPage( TP_3D_SCENEAPPEARANCE, m_pAppearance );
@@ -83,11 +79,8 @@ void View3DDialog::dispose()
 short View3DDialog::Execute()
 {
     short nResult = TabDialog::Execute();
-    if( nResult == RET_OK )
-    {
-        if( m_pGeometry )
-            m_pGeometry->commitPendingChanges();
-    }
+    if( nResult == RET_OK && m_pGeometry )
+        m_pGeometry->commitPendingChanges();
     return nResult;
 }
 

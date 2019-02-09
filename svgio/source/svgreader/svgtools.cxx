@@ -17,28 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svgtools.hxx>
+#include <svgtools.hxx>
+#include <sal/log.hxx>
 #include <osl/thread.h>
 #include <tools/color.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
-#include <svgio/svgreader/svgtoken.hxx>
+#include <svgtoken.hxx>
 #include <unordered_map>
 
 namespace svgio
 {
     namespace svgreader
     {
-#ifdef DBG_UTIL
-        void myAssert(const OUString& rMessage)
-        {
-            OString aMessage2;
-
-            rMessage.convertToString(&aMessage2, osl_getThreadTextEncoding(), RTL_UNICODETOTEXT_FLAGS_UNDEFINED_ERROR|RTL_UNICODETOTEXT_FLAGS_INVALID_ERROR);
-            OSL_ENSURE(false, aMessage2.getStr());
-        }
-#endif
-
         // common non-token strings
         const OUString commonStrings::aStrUserSpaceOnUse("userSpaceOnUse");
         const OUString commonStrings::aStrObjectBoundingBox("objectBoundingBox");
@@ -189,6 +180,11 @@ namespace svgio
 
                         return fRetval;
                     }
+                    case Unit_none:
+                    {
+                        SAL_WARN("svgio", "Design error, this case should have been handled in the caller");
+                        return mfNumber;
+                    }
                     default:
                     {
                         OSL_ENSURE(false, "Do not use with percentage! ");
@@ -219,6 +215,7 @@ namespace svgio
                     case Unit_in:
                     case Unit_em:
                     case Unit_ex:
+                    case Unit_none:
                     {
                         return solveNonPercentage( rInfoProvider);
                     }
@@ -229,9 +226,7 @@ namespace svgio
 
                         if ( aViewPort.isEmpty() )
                         {
-#ifdef DBG_UTIL
-                            myAssert("Design error, this case should have been handled in the caller");
-#endif
+                            SAL_WARN("svgio", "Design error, this case should have been handled in the caller");
                             // no viewPort, assume a normal page size (A4)
                             aViewPort = basegfx::B2DRange(
                                 0.0,
@@ -284,17 +279,17 @@ namespace svgio
             return basegfx::fTools::moreOrEqual(mfNumber, 0.0);
         }
 
-        void skip_char(const OUString& rCandidate, const sal_Unicode& rChar, sal_Int32& nPos, const sal_Int32 nLen)
+        void skip_char(const OUString& rCandidate, sal_Unicode nChar, sal_Int32& nPos, const sal_Int32 nLen)
         {
-            while(nPos < nLen && rChar == rCandidate[nPos])
+            while(nPos < nLen && nChar == rCandidate[nPos])
             {
                 nPos++;
             }
         }
 
-        void skip_char(const OUString& rCandidate, const sal_Unicode& rCharA, const sal_Unicode& rCharB, sal_Int32& nPos, const sal_Int32 nLen)
+        void skip_char(const OUString& rCandidate, sal_Unicode nCharA, sal_Unicode nCharB, sal_Int32& nPos, const sal_Int32 nLen)
         {
-            while(nPos < nLen && (rCharA == rCandidate[nPos] || rCharB == rCandidate[nPos]))
+            while(nPos < nLen && (nCharA == rCandidate[nPos] || nCharB == rCandidate[nPos]))
             {
                 nPos++;
             }
@@ -372,9 +367,9 @@ namespace svgio
             }
         }
 
-        void copyToLimiter(const OUString& rCandidate, const sal_Unicode& rLimiter, sal_Int32& nPos, OUStringBuffer& rTarget, const sal_Int32 nLen)
+        void copyToLimiter(const OUString& rCandidate, sal_Unicode nLimiter, sal_Int32& nPos, OUStringBuffer& rTarget, const sal_Int32 nLen)
         {
-            while(nPos < nLen && rLimiter != rCandidate[nPos])
+            while(nPos < nLen && nLimiter != rCandidate[nPos])
             {
                 rTarget.append(rCandidate[nPos]);
                 nPos++;
@@ -448,7 +443,7 @@ namespace svgio
 
                     switch(aCharA)
                     {
-                        case sal_Unicode('e') :
+                        case u'e' :
                         {
                             if('m' == aCharB)
                             {
@@ -464,7 +459,7 @@ namespace svgio
                             }
                             break;
                         }
-                        case sal_Unicode('p') :
+                        case u'p' :
                         {
                             if('x' == aCharB)
                             {
@@ -473,43 +468,43 @@ namespace svgio
                             }
                             else if('t' == aCharB)
                             {
-                                // 'pt' == 1.25 px
+                                // 'pt' == 4/3 px
                                 aRetval = Unit_pt;
                                 bTwoCharValid = true;
                             }
                             else if('c' == aCharB)
                             {
-                                // 'pc' == 15 px
+                                // 'pc' == 16 px
                                 aRetval = Unit_pc;
                                 bTwoCharValid = true;
                             }
                             break;
                         }
-                        case sal_Unicode('i') :
+                        case u'i' :
                         {
                             if('n' == aCharB)
                             {
-                                // 'in' == 90 px
+                                // 'in' == 96 px, since CSS 2.1
                                 aRetval = Unit_in;
                                 bTwoCharValid = true;
                             }
                             break;
                         }
-                        case sal_Unicode('c') :
+                        case u'c' :
                         {
                             if('m' == aCharB)
                             {
-                                // 'cm' == 35.43307 px
+                                // 'cm' == 37.79527559 px
                                 aRetval = Unit_cm;
                                 bTwoCharValid = true;
                             }
                             break;
                         }
-                        case sal_Unicode('m') :
+                        case u'm' :
                         {
                             if('m' == aCharB)
                             {
-                                // 'mm' == 3.543307 px
+                                // 'mm' == 3.779528 px
                                 aRetval = Unit_mm;
                                 bTwoCharValid = true;
                             }
@@ -572,8 +567,8 @@ namespace svgio
 
                     switch(aChar)
                     {
-                        case sal_Unicode('g') :
-                        case sal_Unicode('G') :
+                        case u'g' :
+                        case u'G' :
                         {
                             if(rCandidate.matchIgnoreAsciiCase(aStrGrad, nPos))
                             {
@@ -583,8 +578,8 @@ namespace svgio
                             }
                             break;
                         }
-                        case sal_Unicode('r') :
-                        case sal_Unicode('R') :
+                        case u'r' :
+                        case u'R' :
                         {
                             if(rCandidate.matchIgnoreAsciiCase(aStrRad, nPos))
                             {
@@ -600,7 +595,7 @@ namespace svgio
                 // convert to radians
                 if(deg == aType)
                 {
-                    fAngle *= F_PI / 180.0;
+                    fAngle = basegfx::deg2rad(fAngle);
                 }
                 else if(grad == aType)
                 {
@@ -614,19 +609,19 @@ namespace svgio
             return false;
         }
 
-        sal_Int32 read_hex(const sal_Unicode& rChar)
+        sal_Int32 read_hex(sal_Unicode nChar)
         {
-            if(rChar >= '0' && rChar <= '9')
+            if(nChar >= '0' && nChar <= '9')
             {
-                return sal_Int32(rChar - sal_Unicode('0'));
+                return nChar - u'0';
             }
-            else if(rChar >= 'A' && rChar <= 'F')
+            else if(nChar >= 'A' && nChar <= 'F')
             {
-                return 10 + sal_Int32(rChar - sal_Unicode('A'));
+                return 10 + sal_Int32(nChar - u'A');
             }
-            else if(rChar >= 'a' && rChar <= 'f')
+            else if(nChar >= 'a' && nChar <= 'f')
             {
-                return 10 + sal_Int32(rChar - sal_Unicode('a'));
+                return 10 + sal_Int32(nChar - u'a');
             }
             else
             {
@@ -637,161 +632,157 @@ namespace svgio
 
         bool match_colorKeyword(basegfx::BColor& rColor, const OUString& rName, bool bCaseIndependent)
         {
-            typedef std::unordered_map< OUString, Color,
-                      OUStringHash > ColorTokenMapper;
+            typedef std::unordered_map< OUString, Color > ColorTokenMapper;
             typedef std::pair< OUString, Color > ColorTokenValueType;
-            ColorTokenMapper aColorTokenMapperList;
-
-            if(aColorTokenMapperList.empty())
-            {
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("aliceblue"), Color(240, 248, 255)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("antiquewhite"), Color(250, 235, 215)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("aqua"), Color( 0, 255, 255)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("aquamarine"), Color(127, 255, 212)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("azure"), Color(240, 255, 255)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("beige"), Color(245, 245, 220)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("bisque"), Color(255, 228, 196)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("black"), Color( 0, 0, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("blanchedalmond"), Color(255, 235, 205)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("blue"), Color( 0, 0, 255)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("blueviolet"), Color(138, 43, 226)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("brown"), Color(165, 42, 42)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("burlywood"), Color(222, 184, 135)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("cadetblue"), Color( 95, 158, 160)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("chartreuse"), Color(127, 255, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("chocolate"), Color(210, 105, 30)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("coral"), Color(255, 127, 80)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("cornflowerblue"), Color(100, 149, 237)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("cornsilk"), Color(255, 248, 220)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("crimson"), Color(220, 20, 60)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("cyan"), Color( 0, 255, 255)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkblue"), Color( 0, 0, 139)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkcyan"), Color( 0, 139, 139)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkgoldenrod"), Color(184, 134, 11)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkgray"), Color(169, 169, 169)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkgreen"), Color( 0, 100, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkgrey"), Color(169, 169, 169)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkkhaki"), Color(189, 183, 107)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkmagenta"), Color(139, 0, 139)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkolivegreen"), Color( 85, 107, 47)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkorange"), Color(255, 140, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkorchid"), Color(153, 50, 204)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkred"), Color(139, 0, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darksalmon"), Color(233, 150, 122)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkseagreen"), Color(143, 188, 143)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkslateblue"), Color( 72, 61, 139)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkslategray"), Color( 47, 79, 79)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkslategrey"), Color( 47, 79, 79)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkturquoise"), Color( 0, 206, 209)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("darkviolet"), Color(148, 0, 211)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("deeppink"), Color(255, 20, 147)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("deepskyblue"), Color( 0, 191, 255)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("dimgray"), Color(105, 105, 105)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("dimgrey"), Color(105, 105, 105)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("dodgerblue"), Color( 30, 144, 255)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("firebrick"), Color(178, 34, 34)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("floralwhite"), Color(255, 250, 240)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("forestgreen"), Color( 34, 139, 34)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("fuchsia"), Color(255, 0, 255)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("gainsboro"), Color(220, 220, 220)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("ghostwhite"), Color(248, 248, 255)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("gold"), Color(255, 215, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("goldenrod"), Color(218, 165, 32)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("gray"), Color(128, 128, 128)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("grey"), Color(128, 128, 128)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("green"), Color(0, 128, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("greenyellow"), Color(173, 255, 47)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("honeydew"), Color(240, 255, 240)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("hotpink"), Color(255, 105, 180)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("indianred"), Color(205, 92, 92)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("indigo"), Color( 75, 0, 130)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("ivory"), Color(255, 255, 240)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("khaki"), Color(240, 230, 140)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lavender"), Color(230, 230, 250)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lavenderblush"), Color(255, 240, 245)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lawngreen"), Color(124, 252, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lemonchiffon"), Color(255, 250, 205)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightblue"), Color(173, 216, 230)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightcoral"), Color(240, 128, 128)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightcyan"), Color(224, 255, 255)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightgoldenrodyellow"), Color(250, 250, 210)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightgray"), Color(211, 211, 211)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightgreen"), Color(144, 238, 144)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightgrey"), Color(211, 211, 211)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightpink"), Color(255, 182, 193)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightsalmon"), Color(255, 160, 122)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightseagreen"), Color( 32, 178, 170)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightskyblue"), Color(135, 206, 250)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightslategray"), Color(119, 136, 153)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightslategrey"), Color(119, 136, 153)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightsteelblue"), Color(176, 196, 222)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lightyellow"), Color(255, 255, 224)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("lime"), Color( 0, 255, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("limegreen"), Color( 50, 205, 50)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("linen"), Color(250, 240, 230)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("magenta"), Color(255, 0, 255)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("maroon"), Color(128, 0, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("mediumaquamarine"), Color(102, 205, 170)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("mediumblue"), Color( 0, 0, 205)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("mediumorchid"), Color(186, 85, 211)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("mediumpurple"), Color(147, 112, 219)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("mediumseagreen"), Color( 60, 179, 113)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("mediumslateblue"), Color(123, 104, 238)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("mediumspringgreen"), Color( 0, 250, 154)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("mediumturquoise"), Color( 72, 209, 204)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("mediumvioletred"), Color(199, 21, 133)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("midnightblue"), Color( 25, 25, 112)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("mintcream"), Color(245, 255, 250)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("mistyrose"), Color(255, 228, 225)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("moccasin"), Color(255, 228, 181)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("navajowhite"), Color(255, 222, 173)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("navy"), Color( 0, 0, 128)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("oldlace"), Color(253, 245, 230)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("olive"), Color(128, 128, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("olivedrab"), Color(107, 142, 35)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("orange"), Color(255, 165, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("orangered"), Color(255, 69, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("orchid"), Color(218, 112, 214)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("palegoldenrod"), Color(238, 232, 170)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("palegreen"), Color(152, 251, 152)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("paleturquoise"), Color(175, 238, 238)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("palevioletred"), Color(219, 112, 147)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("papayawhip"), Color(255, 239, 213)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("peachpuff"), Color(255, 218, 185)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("peru"), Color(205, 133, 63)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("pink"), Color(255, 192, 203)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("plum"), Color(221, 160, 221)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("powderblue"), Color(176, 224, 230)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("purple"), Color(128, 0, 128)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("red"), Color(255, 0, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("rosybrown"), Color(188, 143, 143)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("royalblue"), Color( 65, 105, 225)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("saddlebrown"), Color(139, 69, 19)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("salmon"), Color(250, 128, 114)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("sandybrown"), Color(244, 164, 96)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("seagreen"), Color( 46, 139, 87)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("seashell"), Color(255, 245, 238)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("sienna"), Color(160, 82, 45)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("silver"), Color(192, 192, 192)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("skyblue"), Color(135, 206, 235)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("slateblue"), Color(106, 90, 205)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("slategray"), Color(112, 128, 144)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("slategrey"), Color(112, 128, 144)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("snow"), Color(255, 250, 250)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("springgreen"), Color( 0, 255, 127)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("steelblue"), Color( 70, 130, 180)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("tan"), Color(210, 180, 140)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("teal"), Color( 0, 128, 128)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("thistle"), Color(216, 191, 216)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("tomato"), Color(255, 99, 71)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("turquoise"), Color( 64, 224, 208)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("violet"), Color(238, 130, 238)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("wheat"), Color(245, 222, 179)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("white"), Color(255, 255, 255)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("whitesmoke"), Color(245, 245, 245)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("yellow"), Color(255, 255, 0)));
-                aColorTokenMapperList.insert(ColorTokenValueType(OUString("yellowgreen"), Color(154, 205, 50)));
-            }
+            static const ColorTokenMapper aColorTokenMapperList {
+                { ColorTokenValueType(OUString("aliceblue"), Color(240, 248, 255)) },
+                { ColorTokenValueType(OUString("antiquewhite"), Color(250, 235, 215) ) },
+                { ColorTokenValueType(OUString("aqua"), Color( 0, 255, 255) ) },
+                { ColorTokenValueType(OUString("aquamarine"), Color(127, 255, 212) ) },
+                { ColorTokenValueType(OUString("azure"), Color(240, 255, 255) ) },
+                { ColorTokenValueType(OUString("beige"), Color(245, 245, 220) ) },
+                { ColorTokenValueType(OUString("bisque"), Color(255, 228, 196) ) },
+                { ColorTokenValueType(OUString("black"), Color( 0, 0, 0) ) },
+                { ColorTokenValueType(OUString("blanchedalmond"), Color(255, 235, 205) ) },
+                { ColorTokenValueType(OUString("blue"), Color( 0, 0, 255) ) },
+                { ColorTokenValueType(OUString("blueviolet"), Color(138, 43, 226) ) },
+                { ColorTokenValueType(OUString("brown"), Color(165, 42, 42) ) },
+                { ColorTokenValueType(OUString("burlywood"), Color(222, 184, 135) ) },
+                { ColorTokenValueType(OUString("cadetblue"), Color( 95, 158, 160) ) },
+                { ColorTokenValueType(OUString("chartreuse"), Color(127, 255, 0) ) },
+                { ColorTokenValueType(OUString("chocolate"), Color(210, 105, 30) ) },
+                { ColorTokenValueType(OUString("coral"), Color(255, 127, 80) ) },
+                { ColorTokenValueType(OUString("cornflowerblue"), Color(100, 149, 237) ) },
+                { ColorTokenValueType(OUString("cornsilk"), Color(255, 248, 220) ) },
+                { ColorTokenValueType(OUString("crimson"), Color(220, 20, 60) ) },
+                { ColorTokenValueType(OUString("cyan"), Color( 0, 255, 255) ) },
+                { ColorTokenValueType(OUString("darkblue"), Color( 0, 0, 139) ) },
+                { ColorTokenValueType(OUString("darkcyan"), Color( 0, 139, 139) ) },
+                { ColorTokenValueType(OUString("darkgoldenrod"), Color(184, 134, 11) ) },
+                { ColorTokenValueType(OUString("darkgray"), Color(169, 169, 169) ) },
+                { ColorTokenValueType(OUString("darkgreen"), Color( 0, 100, 0) ) },
+                { ColorTokenValueType(OUString("darkgrey"), Color(169, 169, 169) ) },
+                { ColorTokenValueType(OUString("darkkhaki"), Color(189, 183, 107) ) },
+                { ColorTokenValueType(OUString("darkmagenta"), Color(139, 0, 139) ) },
+                { ColorTokenValueType(OUString("darkolivegreen"), Color( 85, 107, 47) ) },
+                { ColorTokenValueType(OUString("darkorange"), Color(255, 140, 0) ) },
+                { ColorTokenValueType(OUString("darkorchid"), Color(153, 50, 204) ) },
+                { ColorTokenValueType(OUString("darkred"), Color(139, 0, 0) ) },
+                { ColorTokenValueType(OUString("darksalmon"), Color(233, 150, 122) ) },
+                { ColorTokenValueType(OUString("darkseagreen"), Color(143, 188, 143) ) },
+                { ColorTokenValueType(OUString("darkslateblue"), Color( 72, 61, 139) ) },
+                { ColorTokenValueType(OUString("darkslategray"), Color( 47, 79, 79) ) },
+                { ColorTokenValueType(OUString("darkslategrey"), Color( 47, 79, 79) ) },
+                { ColorTokenValueType(OUString("darkturquoise"), Color( 0, 206, 209) ) },
+                { ColorTokenValueType(OUString("darkviolet"), Color(148, 0, 211) ) },
+                { ColorTokenValueType(OUString("deeppink"), Color(255, 20, 147) ) },
+                { ColorTokenValueType(OUString("deepskyblue"), Color( 0, 191, 255) ) },
+                { ColorTokenValueType(OUString("dimgray"), Color(105, 105, 105) ) },
+                { ColorTokenValueType(OUString("dimgrey"), Color(105, 105, 105) ) },
+                { ColorTokenValueType(OUString("dodgerblue"), Color( 30, 144, 255) ) },
+                { ColorTokenValueType(OUString("firebrick"), Color(178, 34, 34) ) },
+                { ColorTokenValueType(OUString("floralwhite"), Color(255, 250, 240) ) },
+                { ColorTokenValueType(OUString("forestgreen"), Color( 34, 139, 34) ) },
+                { ColorTokenValueType(OUString("fuchsia"), Color(255, 0, 255) ) },
+                { ColorTokenValueType(OUString("gainsboro"), Color(220, 220, 220) ) },
+                { ColorTokenValueType(OUString("ghostwhite"), Color(248, 248, 255) ) },
+                { ColorTokenValueType(OUString("gold"), Color(255, 215, 0) ) },
+                { ColorTokenValueType(OUString("goldenrod"), Color(218, 165, 32) ) },
+                { ColorTokenValueType(OUString("gray"), Color(128, 128, 128) ) },
+                { ColorTokenValueType(OUString("grey"), Color(128, 128, 128) ) },
+                { ColorTokenValueType(OUString("green"), Color(0, 128, 0) ) },
+                { ColorTokenValueType(OUString("greenyellow"), Color(173, 255, 47) ) },
+                { ColorTokenValueType(OUString("honeydew"), Color(240, 255, 240) ) },
+                { ColorTokenValueType(OUString("hotpink"), Color(255, 105, 180) ) },
+                { ColorTokenValueType(OUString("indianred"), Color(205, 92, 92) ) },
+                { ColorTokenValueType(OUString("indigo"), Color( 75, 0, 130) ) },
+                { ColorTokenValueType(OUString("ivory"), Color(255, 255, 240) ) },
+                { ColorTokenValueType(OUString("khaki"), Color(240, 230, 140) ) },
+                { ColorTokenValueType(OUString("lavender"), Color(230, 230, 250) ) },
+                { ColorTokenValueType(OUString("lavenderblush"), Color(255, 240, 245) ) },
+                { ColorTokenValueType(OUString("lawngreen"), Color(124, 252, 0) ) },
+                { ColorTokenValueType(OUString("lemonchiffon"), Color(255, 250, 205) ) },
+                { ColorTokenValueType(OUString("lightblue"), Color(173, 216, 230) ) },
+                { ColorTokenValueType(OUString("lightcoral"), Color(240, 128, 128) ) },
+                { ColorTokenValueType(OUString("lightcyan"), Color(224, 255, 255) ) },
+                { ColorTokenValueType(OUString("lightgoldenrodyellow"), Color(250, 250, 210) ) },
+                { ColorTokenValueType(OUString("lightgray"), Color(211, 211, 211) ) },
+                { ColorTokenValueType(OUString("lightgreen"), Color(144, 238, 144) ) },
+                { ColorTokenValueType(OUString("lightgrey"), Color(211, 211, 211) ) },
+                { ColorTokenValueType(OUString("lightpink"), Color(255, 182, 193) ) },
+                { ColorTokenValueType(OUString("lightsalmon"), Color(255, 160, 122) ) },
+                { ColorTokenValueType(OUString("lightseagreen"), Color( 32, 178, 170) ) },
+                { ColorTokenValueType(OUString("lightskyblue"), Color(135, 206, 250) ) },
+                { ColorTokenValueType(OUString("lightslategray"), Color(119, 136, 153) ) },
+                { ColorTokenValueType(OUString("lightslategrey"), Color(119, 136, 153) ) },
+                { ColorTokenValueType(OUString("lightsteelblue"), Color(176, 196, 222) ) },
+                { ColorTokenValueType(OUString("lightyellow"), Color(255, 255, 224) ) },
+                { ColorTokenValueType(OUString("lime"), Color( 0, 255, 0) ) },
+                { ColorTokenValueType(OUString("limegreen"), Color( 50, 205, 50) ) },
+                { ColorTokenValueType(OUString("linen"), Color(250, 240, 230) ) },
+                { ColorTokenValueType(OUString("magenta"), Color(255, 0, 255) ) },
+                { ColorTokenValueType(OUString("maroon"), Color(128, 0, 0) ) },
+                { ColorTokenValueType(OUString("mediumaquamarine"), Color(102, 205, 170) ) },
+                { ColorTokenValueType(OUString("mediumblue"), Color( 0, 0, 205) ) },
+                { ColorTokenValueType(OUString("mediumorchid"), Color(186, 85, 211) ) },
+                { ColorTokenValueType(OUString("mediumpurple"), Color(147, 112, 219) ) },
+                { ColorTokenValueType(OUString("mediumseagreen"), Color( 60, 179, 113) ) },
+                { ColorTokenValueType(OUString("mediumslateblue"), Color(123, 104, 238) ) },
+                { ColorTokenValueType(OUString("mediumspringgreen"), Color( 0, 250, 154) ) },
+                { ColorTokenValueType(OUString("mediumturquoise"), Color( 72, 209, 204) ) },
+                { ColorTokenValueType(OUString("mediumvioletred"), Color(199, 21, 133) ) },
+                { ColorTokenValueType(OUString("midnightblue"), Color( 25, 25, 112) ) },
+                { ColorTokenValueType(OUString("mintcream"), Color(245, 255, 250) ) },
+                { ColorTokenValueType(OUString("mistyrose"), Color(255, 228, 225) ) },
+                { ColorTokenValueType(OUString("moccasin"), Color(255, 228, 181) ) },
+                { ColorTokenValueType(OUString("navajowhite"), Color(255, 222, 173) ) },
+                { ColorTokenValueType(OUString("navy"), Color( 0, 0, 128) ) },
+                { ColorTokenValueType(OUString("oldlace"), Color(253, 245, 230) ) },
+                { ColorTokenValueType(OUString("olive"), Color(128, 128, 0) ) },
+                { ColorTokenValueType(OUString("olivedrab"), Color(107, 142, 35) ) },
+                { ColorTokenValueType(OUString("orange"), Color(255, 165, 0) ) },
+                { ColorTokenValueType(OUString("orangered"), Color(255, 69, 0) ) },
+                { ColorTokenValueType(OUString("orchid"), Color(218, 112, 214) ) },
+                { ColorTokenValueType(OUString("palegoldenrod"), Color(238, 232, 170) ) },
+                { ColorTokenValueType(OUString("palegreen"), Color(152, 251, 152) ) },
+                { ColorTokenValueType(OUString("paleturquoise"), Color(175, 238, 238) ) },
+                { ColorTokenValueType(OUString("palevioletred"), Color(219, 112, 147) ) },
+                { ColorTokenValueType(OUString("papayawhip"), Color(255, 239, 213) ) },
+                { ColorTokenValueType(OUString("peachpuff"), Color(255, 218, 185) ) },
+                { ColorTokenValueType(OUString("peru"), Color(205, 133, 63) ) },
+                { ColorTokenValueType(OUString("pink"), Color(255, 192, 203) ) },
+                { ColorTokenValueType(OUString("plum"), Color(221, 160, 221) ) },
+                { ColorTokenValueType(OUString("powderblue"), Color(176, 224, 230) ) },
+                { ColorTokenValueType(OUString("purple"), Color(128, 0, 128) ) },
+                { ColorTokenValueType(OUString("red"), Color(255, 0, 0) ) },
+                { ColorTokenValueType(OUString("rosybrown"), Color(188, 143, 143) ) },
+                { ColorTokenValueType(OUString("royalblue"), Color( 65, 105, 225) ) },
+                { ColorTokenValueType(OUString("saddlebrown"), Color(139, 69, 19) ) },
+                { ColorTokenValueType(OUString("salmon"), Color(250, 128, 114) ) },
+                { ColorTokenValueType(OUString("sandybrown"), Color(244, 164, 96) ) },
+                { ColorTokenValueType(OUString("seagreen"), Color( 46, 139, 87) ) },
+                { ColorTokenValueType(OUString("seashell"), Color(255, 245, 238) ) },
+                { ColorTokenValueType(OUString("sienna"), Color(160, 82, 45) ) },
+                { ColorTokenValueType(OUString("silver"), Color(192, 192, 192) ) },
+                { ColorTokenValueType(OUString("skyblue"), Color(135, 206, 235) ) },
+                { ColorTokenValueType(OUString("slateblue"), Color(106, 90, 205) ) },
+                { ColorTokenValueType(OUString("slategray"), Color(112, 128, 144) ) },
+                { ColorTokenValueType(OUString("slategrey"), Color(112, 128, 144) ) },
+                { ColorTokenValueType(OUString("snow"), Color(255, 250, 250) ) },
+                { ColorTokenValueType(OUString("springgreen"), Color( 0, 255, 127) ) },
+                { ColorTokenValueType(OUString("steelblue"), Color( 70, 130, 180) ) },
+                { ColorTokenValueType(OUString("tan"), Color(210, 180, 140) ) },
+                { ColorTokenValueType(OUString("teal"), Color( 0, 128, 128) ) },
+                { ColorTokenValueType(OUString("thistle"), Color(216, 191, 216) ) },
+                { ColorTokenValueType(OUString("tomato"), Color(255, 99, 71) ) },
+                { ColorTokenValueType(OUString("turquoise"), Color( 64, 224, 208) ) },
+                { ColorTokenValueType(OUString("violet"), Color(238, 130, 238) ) },
+                { ColorTokenValueType(OUString("wheat"), Color(245, 222, 179) ) },
+                { ColorTokenValueType(OUString("white"), Color(255, 255, 255) ) },
+                { ColorTokenValueType(OUString("whitesmoke"), Color(245, 245, 245) ) },
+                { ColorTokenValueType(OUString("yellow"), Color(255, 255, 0) ) },
+                { ColorTokenValueType(OUString("yellowgreen"), Color(154, 205, 50) ) },
+            };
 
             ColorTokenMapper::const_iterator aResult(aColorTokenMapperList.find(rName));
 
@@ -962,7 +953,7 @@ namespace svgio
             return false;
         }
 
-        basegfx::B2DRange readViewBox(const OUString& rCandidate, InfoProvider& rInfoProvider)
+        basegfx::B2DRange readViewBox(const OUString& rCandidate, InfoProvider const & rInfoProvider)
         {
             const sal_Int32 nLen(rCandidate.getLength());
 
@@ -1003,7 +994,7 @@ namespace svgio
             return basegfx::B2DRange();
         }
 
-        basegfx::B2DHomMatrix readTransform(const OUString& rCandidate, InfoProvider& rInfoProvider)
+        basegfx::B2DHomMatrix readTransform(const OUString& rCandidate, InfoProvider const & rInfoProvider)
         {
             basegfx::B2DHomMatrix aMatrix;
             const sal_Int32 nLen(rCandidate.getLength());
@@ -1026,7 +1017,7 @@ namespace svgio
 
                     switch(aChar)
                     {
-                        case sal_Unicode('m') :
+                        case u'm' :
                         {
                             if(rCandidate.match(aStrMatrix, nPos))
                             {
@@ -1080,7 +1071,7 @@ namespace svgio
                             }
                             break;
                         }
-                        case sal_Unicode('t') :
+                        case u't' :
                         {
                             if(rCandidate.match(aStrTranslate, nPos))
                             {
@@ -1097,14 +1088,14 @@ namespace svgio
                                     skip_char(rCandidate, ' ', ')', nPos, nLen);
                                     skip_char(rCandidate, ' ', ',', nPos, nLen);
 
-                                    aMatrix = aMatrix * basegfx::tools::createTranslateB2DHomMatrix(
+                                    aMatrix = aMatrix * basegfx::utils::createTranslateB2DHomMatrix(
                                         aTransX.solve(rInfoProvider, xcoordinate),
                                         aTransY.solve(rInfoProvider, ycoordinate));
                                 }
                             }
                             break;
                         }
-                        case sal_Unicode('s') :
+                        case u's' :
                         {
                             if(rCandidate.match(aStrScale, nPos))
                             {
@@ -1121,7 +1112,7 @@ namespace svgio
                                     skip_char(rCandidate, ' ', ')', nPos, nLen);
                                     skip_char(rCandidate, ' ', ',', nPos, nLen);
 
-                                    aMatrix = aMatrix * basegfx::tools::createScaleB2DHomMatrix(
+                                    aMatrix = aMatrix * basegfx::utils::createScaleB2DHomMatrix(
                                         aScaleX.solve(rInfoProvider),
                                         aScaleY.solve(rInfoProvider));
                                 }
@@ -1138,7 +1129,7 @@ namespace svgio
                                     skip_char(rCandidate, ' ', ')', nPos, nLen);
                                     skip_char(rCandidate, ' ', ',', nPos, nLen);
 
-                                    aMatrix = aMatrix * basegfx::tools::createShearXB2DHomMatrix(tan(fSkewX));
+                                    aMatrix = aMatrix * basegfx::utils::createShearXB2DHomMatrix(tan(fSkewX));
                                 }
                             }
                             else if(rCandidate.match(aStrSkewY, nPos))
@@ -1153,12 +1144,12 @@ namespace svgio
                                     skip_char(rCandidate, ' ', ')', nPos, nLen);
                                     skip_char(rCandidate, ' ', ',', nPos, nLen);
 
-                                    aMatrix = aMatrix * basegfx::tools::createShearYB2DHomMatrix(tan(fSkewY));
+                                    aMatrix = aMatrix * basegfx::utils::createShearYB2DHomMatrix(tan(fSkewY));
                                 }
                             }
                             break;
                         }
-                        case sal_Unicode('r') :
+                        case u'r' :
                         {
                             if(rCandidate.match(aStrRotate, nPos))
                             {
@@ -1184,12 +1175,12 @@ namespace svgio
                                     if(!basegfx::fTools::equalZero(fX) || !basegfx::fTools::equalZero(fY))
                                     {
                                         // rotate around point
-                                        aMatrix = aMatrix * basegfx::tools::createRotateAroundPoint(fX, fY, fAngle);
+                                        aMatrix = aMatrix * basegfx::utils::createRotateAroundPoint(fX, fY, fAngle);
                                     }
                                     else
                                     {
                                         // rotate
-                                        aMatrix = aMatrix * basegfx::tools::createRotateB2DHomMatrix(fAngle);
+                                        aMatrix = aMatrix * basegfx::utils::createRotateB2DHomMatrix(fAngle);
                                     }
                                 }
                             }
@@ -1474,15 +1465,13 @@ namespace svgio
 
                     if(!rMimeType.isEmpty() && nPos < nLen)
                     {
-                        static const char aStrImage[] = "image";
-
-                        if(rMimeType.match(aStrImage, 0))
+                        if(rMimeType.startsWith("image"))
                         {
                             // image data
                             OUString aData(rCandidate.copy(nPos));
                             static const char aStrBase64[] = "base64";
 
-                            if(aData.match(aStrBase64, 0))
+                            if(aData.startsWith(aStrBase64))
                             {
                                 // base64 encoded
                                 nPos = strlen(aStrBase64);
@@ -1506,7 +1495,7 @@ namespace svgio
             }
         }
 
-        OUString convert(const OUString& rCandidate, const sal_Unicode& rPattern, const sal_Unicode& rNew, bool bRemove)
+        OUString convert(const OUString& rCandidate, sal_Unicode nPattern, sal_Unicode nNew, bool bRemove)
         {
             const sal_Int32 nLen(rCandidate.getLength());
 
@@ -1520,13 +1509,13 @@ namespace svgio
                 {
                     const sal_Unicode aChar(rCandidate[nPos]);
 
-                    if(rPattern == aChar)
+                    if(nPattern == aChar)
                     {
                         bChanged = true;
 
                         if(!bRemove)
                         {
-                            aBuffer.append(rNew);
+                            aBuffer.append(nNew);
                         }
                     }
                     else
@@ -1672,10 +1661,10 @@ namespace svgio
             const sal_Unicode aSpace(' ');
 
             // convert newline to space
-            OUString aRetval(convert(rCandidate, aNewline, aSpace, false));
+            convert(rCandidate, aNewline, aSpace, false);
 
             // convert tab to space
-            aRetval = convert(rCandidate, aTab, aSpace, false);
+            convert(rCandidate, aTab, aSpace, false);
 
             return rCandidate;
         }

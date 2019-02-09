@@ -17,13 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xiview.hxx"
-#include "document.hxx"
-#include "scextopt.hxx"
-#include "viewopti.hxx"
-#include "xistream.hxx"
-#include "xihelper.hxx"
-#include "xistyle.hxx"
+#include <xiview.hxx>
+#include <document.hxx>
+#include <scextopt.hxx>
+#include <viewopti.hxx>
+#include <xistream.hxx>
+#include <xihelper.hxx>
+#include <xistyle.hxx>
 
 // Document view settings =====================================================
 
@@ -94,7 +94,7 @@ void XclImpTabViewSettings::Initialize()
     maData.SetDefaults();
 }
 
-void XclImpTabViewSettings::ReadTabBgColor( XclImpStream& rStrm, XclImpPalette& rPal )
+void XclImpTabViewSettings::ReadTabBgColor( XclImpStream& rStrm, const XclImpPalette& rPal )
 {
     OSL_ENSURE_BIFF( GetBiff() >= EXC_BIFF8 );
     if( GetBiff() < EXC_BIFF8 )
@@ -257,13 +257,13 @@ void XclImpTabViewSettings::Finalize()
     else
     {
         // split window: position is in twips
-        rTabSett.maSplitPos.X() = static_cast< long >( maData.mnSplitX );
-        rTabSett.maSplitPos.Y() = static_cast< long >( maData.mnSplitY );
+        rTabSett.maSplitPos.setX( static_cast< long >( maData.mnSplitX ) );
+        rTabSett.maSplitPos.setY( static_cast< long >( maData.mnSplitY ) );
     }
 
     // grid color
     if( maData.mbDefGridColor )
-        rTabSett.maGridColor.SetColor( COL_AUTO );
+        rTabSett.maGridColor = COL_AUTO;
     else
         rTabSett.maGridColor = maData.maGridColor;
 

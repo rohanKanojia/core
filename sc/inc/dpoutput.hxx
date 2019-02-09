@@ -20,18 +20,15 @@
 #ifndef INCLUDED_SC_INC_DPOUTPUT_HXX
 #define INCLUDED_SC_INC_DPOUTPUT_HXX
 
-#include <com/sun/star/sheet/XDimensionsSupplier.hpp>
-#include <com/sun/star/sheet/DataResult.hpp>
-#include <com/sun/star/sheet/MemberResult.hpp>
-#include <com/sun/star/sheet/GeneralFunction.hpp>
 #include <com/sun/star/sheet/DataPilotOutputRangeType.hpp>
+#include <com/sun/star/sheet/DataPilotFieldOrientation.hpp>
+#include <comphelper/sequence.hxx>
 
-#include "global.hxx"
 #include "address.hxx"
 
-#include "dpfilteredcache.hxx"
 #include "dptypes.hxx"
 
+#include <memory>
 #include <vector>
 
 namespace com { namespace sun { namespace star { namespace sheet {
@@ -39,7 +36,11 @@ namespace com { namespace sun { namespace star { namespace sheet {
     struct DataPilotTablePositionData;
 }}}}
 
-class Rectangle;
+namespace com { namespace sun { namespace star { namespace sheet { class XDimensionsSupplier; } } } }
+namespace com { namespace sun { namespace star { namespace sheet { struct DataResult; } } } }
+namespace com { namespace sun { namespace star { namespace sheet { struct MemberResult; } } } }
+
+namespace tools { class Rectangle; }
 class ScDocument;
 struct ScDPOutLevelData;
 
@@ -49,18 +50,17 @@ private:
     ScDocument*             pDoc;
     css::uno::Reference< css::sheet::XDimensionsSupplier> xSource;
     ScAddress               aStartPos;
-    ScDPOutLevelData*       pColFields;
-    ScDPOutLevelData*       pRowFields;
-    ScDPOutLevelData*       pPageFields;
-    long                    nColFieldCount;
-    long                    nRowFieldCount;
-    long                    nPageFieldCount;
+    std::vector<ScDPOutLevelData>       pColFields;
+    std::vector<ScDPOutLevelData>       pRowFields;
+    std::vector<ScDPOutLevelData>       pPageFields;
     css::uno::Sequence< css::uno::Sequence< css::sheet::DataResult> > aData;
     OUString                aDataDescription;
 
     // Number format related parameters
-    sal_uInt32*             pColNumFmt;
-    sal_uInt32*             pRowNumFmt;
+    std::unique_ptr<sal_uInt32[]>
+                            pColNumFmt;
+    std::unique_ptr<sal_uInt32[]>
+                            pRowNumFmt;
     long                    nColFmtCount;
     long                    nRowFmtCount;
     sal_uInt32              nSingleNumFmt;
@@ -77,9 +77,8 @@ private:
     SCROW                   nDataStartRow;
     SCCOL                   nTabEndCol;
     SCROW                   nTabEndRow;
-    bool                    bDoFilter:1;
+    bool const              bDoFilter:1;
     bool                    bResultsError:1;
-    bool                    mbHasDataLayout:1;
     bool                    bSizesValid:1;
     bool                    bSizeOverflow:1;
     bool                    mbHeaderLayout:1;  // true : grid, false : standard
@@ -109,7 +108,6 @@ public:
 
     void            Output();           //! Refresh?
     ScRange GetOutputRange( sal_Int32 nRegionType = css::sheet::DataPilotOutputRangeType::WHOLE );
-    ScRange GetOutputRange() const;
     long            GetHeaderRows();
     bool            HasError();         // range overflow or exception from source
 
@@ -119,10 +117,10 @@ public:
         field region. */
     bool            GetDataResultPositionData(::std::vector< css::sheet::DataPilotFieldFilter >& rFilters, const ScAddress& rPos);
 
-    long            GetHeaderDim( const ScAddress& rPos, sal_uInt16& rOrient );
+    long            GetHeaderDim( const ScAddress& rPos, css::sheet::DataPilotFieldOrientation& rOrient );
     bool GetHeaderDrag(
         const ScAddress& rPos, bool bMouseLeft, bool bMouseTop, long nDragDim,
-        Rectangle& rPosRect, sal_uInt16& rOrient, long& rDimPos );
+        tools::Rectangle& rPosRect, css::sheet::DataPilotFieldOrientation& rOrient, long& rDimPos );
     bool IsFilterButton( const ScAddress& rPos );
 
     void GetMemberResultNames(ScDPUniqueStringSet& rNames, long nDimension);

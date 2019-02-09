@@ -13,7 +13,6 @@
 #include "anyrefdg.hxx"
 #include <vcl/button.hxx>
 #include <vcl/fixed.hxx>
-#include <vcl/edit.hxx>
 #include <vcl/lstbox.hxx>
 
 #include <map>
@@ -42,14 +41,15 @@ private:
     VclPtr<PushButton> m_pBtnCancel;
     VclPtr<FixedText> m_pFtInfo;
 
-    bool mbUndo; //if true we need to add an undo action after creating a range name
+    bool const mbUndo; //if true we need to add an undo action after creating a range name
     ScDocument* mpDoc;
     ScDocShell* mpDocShell;
 
-    ScAddress maCursorPos;
+    ScAddress const maCursorPos;
     OUString maStrInfoDefault;
     const OUString maGlobalNameStr;
     const OUString maErrInvalidNameStr;
+    const OUString maErrInvalidNameCellRefStr;
     const OUString maErrNameInUse;
 
     //hack to call this dialog from Manage Names
@@ -64,20 +64,20 @@ private:
     bool IsNameValid();
     bool IsFormulaValid();
 
-    DECL_LINK_TYPED( CancelBtnHdl, Button*, void );
-    DECL_LINK_TYPED( AddBtnHdl, Button*, void );
-    DECL_LINK_TYPED( NameModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( AssignGetFocusHdl, Control&, void );
+    DECL_LINK( CancelBtnHdl, Button*, void );
+    DECL_LINK( AddBtnHdl, Button*, void );
+    DECL_LINK( NameModifyHdl, Edit&, void );
+    DECL_LINK( AssignGetFocusHdl, Control&, void );
 
 protected:
     virtual void    RefInputDone( bool bForced = false ) override;
 
 public:
     ScNameDefDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent,
-                    ScViewData* pViewData, const std::map<OUString, ScRangeName*>& aRangeMap,
+                    const ScViewData* pViewData, const std::map<OUString, ScRangeName*>& aRangeMap,
                     const ScAddress& aCursorPos, const bool bUndo);
 
-    virtual ~ScNameDefDlg();
+    virtual ~ScNameDefDlg() override;
     virtual void    dispose() override;
 
     virtual void    SetReference( const ScRange& rRef, ScDocument* pDoc ) override;

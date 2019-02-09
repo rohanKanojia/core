@@ -47,7 +47,7 @@ serf_bucket_t * SerfPropPatchReqProcImpl::createSerfRequestBucket( serf_request_
     serf_bucket_alloc_t* pSerfBucketAlloc = serf_request_get_alloc( inSerfRequest );
 
     // body bucket
-    serf_bucket_t* body_bkt = 0;
+    serf_bucket_t* body_bkt = nullptr;
     OString aBodyText;
     {
         // create and fill body bucket with properties to be set or removed
@@ -60,12 +60,12 @@ serf_bucket_t * SerfPropPatchReqProcImpl::createSerfRequestBucket( serf_request_
             { RTL_CONSTASCII_STRINGPARAM( "set" ) },
             { RTL_CONSTASCII_STRINGPARAM( "remove" ) }
         };
-        const int nPropCount = ( mpProperties != 0 )
+        const int nPropCount = ( mpProperties != nullptr )
                                ? mpProperties->size()
                                : 0;
         if ( nPropCount > 0 )
         {
-            rtl::OUStringBuffer aBuffer;
+            OUStringBuffer aBuffer;
             // add PropPatch xml header in front
             aBuffer.append( PROPPATCH_HEADER );
 
@@ -137,7 +137,7 @@ serf_bucket_t * SerfPropPatchReqProcImpl::createSerfRequestBucket( serf_request_
             // add PropPatch xml trailer at end
             aBuffer.append( PROPPATCH_TRAILER );
 
-            aBodyText = rtl::OUStringToOString( aBuffer.makeStringAndClear(), RTL_TEXTENCODING_UTF8 );
+            aBodyText = OUStringToOString( aBuffer.makeStringAndClear(), RTL_TEXTENCODING_UTF8 );
             body_bkt = serf_bucket_simple_copy_create( aBodyText.getStr(),
                                                        aBodyText.getLength(),
                                                        pSerfBucketAlloc );
@@ -154,20 +154,20 @@ serf_bucket_t * SerfPropPatchReqProcImpl::createSerfRequestBucket( serf_request_
 
     // set request header fields
     serf_bucket_t* hdrs_bkt = serf_bucket_request_get_headers( req_bkt );
-    if (hdrs_bkt != NULL)
+    if (hdrs_bkt != nullptr)
     {
         // general header fields provided by caller
         setRequestHeaders( hdrs_bkt );
 
         // request specific header fields
-        if ( body_bkt != 0 && aBodyText.getLength() > 0 )
+        if ( body_bkt != nullptr && aBodyText.getLength() > 0 )
         {
             serf_bucket_headers_set( hdrs_bkt, "Content-Type", "application/xml" );
         }
     }
     else
     {
-        assert("Headers Bucket missing");
+        assert(!"Headers Bucket missing");
     }
 
     return req_bkt;

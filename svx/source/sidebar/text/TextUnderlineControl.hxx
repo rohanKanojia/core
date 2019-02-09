@@ -20,60 +20,40 @@
 #ifndef INCLUDED_SVX_SOURCE_SIDEBAR_TEXT_TEXTUNDERLINECONTROL_HXX
 #define INCLUDED_SVX_SOURCE_SIDEBAR_TEXT_TEXTUNDERLINECONTROL_HXX
 
-#include "svx/sidebar/PopupControl.hxx"
 #include <sfx2/bindings.hxx>
-#include "TextPropertyPanel.hxx"
 #include <vcl/button.hxx>
 #include <vcl/vclenum.hxx>
 #include <svtools/valueset.hxx>
+#include <sfx2/tbxctrl.hxx>
 
-namespace svx{ namespace sidebar {
+namespace svx {
 
-class TextUnderlineControl:public svx::sidebar::PopupControl
+class TextUnderlineControl : public SfxPopupWindow
 {
 public:
-    TextUnderlineControl (
-        vcl::Window* pParent,
-        svx::sidebar::TextPropertyPanel& rPanel,
-        SfxBindings* pBindings);
-    virtual ~TextUnderlineControl();
+    explicit TextUnderlineControl(sal_uInt16 nId, vcl::Window* pParent);
+    virtual ~TextUnderlineControl() override;
     virtual void dispose() override;
-    void Rearrange(FontLineStyle eLine);
 
 private:
-    svx::sidebar::TextPropertyPanel&     mrTextPropertyPanel;
-    SfxBindings*        mpBindings;
-    VclPtr<ValueSet>    maVSUnderline;
-    VclPtr<PushButton>  maPBOptions;
+    VclPtr<PushButton> maNone;
+    VclPtr<PushButton> maSingle;
+    VclPtr<PushButton> maDouble;
+    VclPtr<PushButton> maBold;
+    VclPtr<PushButton> maDot;
+    VclPtr<PushButton> maDotBold;
+    VclPtr<PushButton> maDash;
+    VclPtr<PushButton> maDashLong;
+    VclPtr<PushButton> maDashDot;
+    VclPtr<PushButton> maDashDotDot;
+    VclPtr<PushButton> maWave;
+    VclPtr<PushButton> maMoreOptions;
 
-    Image               maIMGSingle;
-    Image               maIMGDouble;
-    Image               maIMGBold;
-    Image               maIMGDot;
-    Image               maIMGDotBold;
-    Image               maIMGDash;
-    Image               maIMGDashLong;
-    Image               maIMGDashDot;
-    Image               maIMGDashDotDot;
-    Image               maIMGWave;
+    FontLineStyle getLineStyle(Button const * pButton);
 
-    Image               maIMGSingleSel;
-    Image               maIMGDoubleSel;
-    Image               maIMGBoldSel;
-    Image               maIMGDotSel;
-    Image               maIMGDotBoldSel;
-    Image               maIMGDashSel;
-    Image               maIMGDashLongSel;
-    Image               maIMGDashDotSel;
-    Image               maIMGDashDotDotSel;
-    Image               maIMGWaveSel;
-
-    void initial();
-
-    DECL_LINK_TYPED( PBClickHdl, Button*, void);
-    DECL_LINK_TYPED(VSSelectHdl, ValueSet*, void);
+    DECL_LINK(PBClickHdl, Button*, void);
 };
-}}
+}
 
 
 #endif

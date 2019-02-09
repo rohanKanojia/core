@@ -34,6 +34,7 @@ class SwAccessibleChild
 {
     public:
         SwAccessibleChild();
+        ~SwAccessibleChild();
         explicit SwAccessibleChild( const SdrObject* pDrawObj );
         explicit SwAccessibleChild( const SwFrame* pFrame );
         explicit SwAccessibleChild( vcl::Window* pWindow );
@@ -41,8 +42,10 @@ class SwAccessibleChild
                            const SdrObject* pDrawObj,
                            vcl::Window* pWindow );
 
-        SwAccessibleChild( const SwAccessibleChild& r );
-        SwAccessibleChild& operator=( const SwAccessibleChild& r );
+        SwAccessibleChild(SwAccessibleChild const &) = default;
+        SwAccessibleChild(SwAccessibleChild &&) = default;
+        SwAccessibleChild & operator =(SwAccessibleChild const &) = default;
+        SwAccessibleChild & operator =(SwAccessibleChild &&) = default;
 
         SwAccessibleChild& operator=( const SdrObject* pDrawObj );
         SwAccessibleChild& operator=( const SwFrame* pFrame );

@@ -7,14 +7,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "cppunit/TestAssert.h"
-#include "cppunit/TestFixture.h"
-#include "cppunit/extensions/HelperMacros.h"
-#include "cppunit/plugin/TestPlugIn.h"
-#include "rtl/bootstrap.hxx"
-#include "rtl/ustring.hxx"
+#include <cppunit/TestAssert.h>
+#include <cppunit/TestFixture.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
+#include <rtl/bootstrap.hxx>
+#include <rtl/ustring.hxx>
 
 namespace {
 
@@ -40,21 +40,19 @@ void Test::setUp() {
 }
 
 void Test::testDollar() {
-    rtl::OUString s("$WITH_DOLLAR");
+    OUString s("$WITH_DOLLAR");
     rtl::Bootstrap::expandMacros(s);
-    CPPUNIT_ASSERT_EQUAL(rtl::OUString("foo$TEST"), s);
+    CPPUNIT_ASSERT_EQUAL(OUString("foo$TEST"), s);
 }
 
 void Test::testIndirectDollar() {
-    rtl::OUString s("$INDIRECT");
+    OUString s("$INDIRECT");
     rtl::Bootstrap::expandMacros(s);
-    CPPUNIT_ASSERT_EQUAL(rtl::OUString("foo$TEST"), s);
+    CPPUNIT_ASSERT_EQUAL(OUString("foo$TEST"), s);
 }
 
 CPPUNIT_TEST_SUITE_REGISTRATION(Test);
 
 }
-
-CPPUNIT_PLUGIN_IMPLEMENT();
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -12,7 +12,7 @@
 #ifndef INCLUDED_L10NTOOLS_INC_COMMON_HXX
 #define INCLUDED_L10NTOOLS_INC_COMMON_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <iostream>
 #include <rtl/string.hxx>
@@ -45,7 +45,7 @@ bool handleArguments(int argc, char * argv[], HandledArgs& o_aHandledArgs);
 /// Write out a help about usage
 void writeUsage(const OString& rName, const OString& rFileType);
 
-/// Write out a PoEntry with attention to excaptions
+/// Write out a PoEntry with attention to exceptions
 void writePoEntry(
     const OString& rExecutable, PoOfstream& rPoStream, const OString& rSourceFile,
     const OString& rResType, const OString& rGroupId, const OString& rLocalId,

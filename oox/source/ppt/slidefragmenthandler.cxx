@@ -17,28 +17,33 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "comphelper/anytostring.hxx"
-#include "cppuhelper/exc_hlp.hxx"
+#include <comphelper/anytostring.hxx>
+#include <cppuhelper/exc_hlp.hxx>
 
 #include <com/sun/star/beans/XMultiPropertySet.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
-#include "oox/helper/propertyset.hxx"
-#include "oox/core/xmlfilterbase.hxx"
+#include <oox/helper/attributelist.hxx>
+#include <oox/helper/propertyset.hxx>
+#include <oox/core/xmlfilterbase.hxx>
 #include "headerfootercontext.hxx"
-#include "oox/ppt/backgroundproperties.hxx"
-#include "oox/ppt/slidefragmenthandler.hxx"
-#include "oox/ppt/slidetimingcontext.hxx"
-#include "oox/ppt/slidetransitioncontext.hxx"
-#include "oox/ppt/slidemastertextstylescontext.hxx"
-#include "oox/ppt/pptshapegroupcontext.hxx"
-#include "oox/ppt/pptshape.hxx"
-#include "oox/vml/vmldrawing.hxx"
-#include "oox/vml/vmldrawingfragment.hxx"
-#include "drawingml/clrschemecontext.hxx"
-#include "drawingml/textliststyle.hxx"
-#include "oox/ppt/pptimport.hxx"
+#include <oox/ppt/backgroundproperties.hxx>
+#include <oox/ppt/slidefragmenthandler.hxx>
+#include <oox/ppt/slidetimingcontext.hxx>
+#include <oox/ppt/slidetransitioncontext.hxx>
+#include <oox/ppt/slidemastertextstylescontext.hxx>
+#include <oox/ppt/pptshapegroupcontext.hxx>
+#include <oox/ppt/pptshape.hxx>
+#include <oox/vml/vmldrawing.hxx>
+#include <oox/vml/vmldrawingfragment.hxx>
+#include <drawingml/clrschemecontext.hxx>
+#include <drawingml/textliststyle.hxx>
+#include <oox/ppt/pptimport.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::oox::core;
@@ -50,7 +55,7 @@ using namespace ::com::sun::star::container;
 
 namespace oox { namespace ppt {
 
-SlideFragmentHandler::SlideFragmentHandler( XmlFilterBase& rFilter, const OUString& rFragmentPath, SlidePersistPtr pPersistPtr, const ShapeLocation eShapeLocation )
+SlideFragmentHandler::SlideFragmentHandler( XmlFilterBase& rFilter, const OUString& rFragmentPath, const SlidePersistPtr& pPersistPtr, const ShapeLocation eShapeLocation )
 : FragmentHandler2( rFilter, rFragmentPath )
 , mpSlidePersistPtr( pPersistPtr )
 , meShapeLocation( eShapeLocation )
@@ -91,22 +96,22 @@ SlideFragmentHandler::~SlideFragmentHandler()
         OUString aNotesFragmentPath = getFragmentPathFromFirstTypeFromOfficeDoc( "notesMaster" );
 
         std::vector< SlidePersistPtr >& rMasterPages( rFilter.getMasterPages() );
-        std::vector< SlidePersistPtr >::iterator aIter( rMasterPages.begin() );
-        while( aIter != rMasterPages.end() )
+        bool bNotesFragmentPathFound = false;
+        for (auto const& masterPage : rMasterPages)
         {
-            if( (*aIter)->getPath() == aNotesFragmentPath )
+            if( masterPage->getPath() == aNotesFragmentPath )
             {
                 if( !mpSlidePersistPtr->getMasterPersist() )
-                    mpSlidePersistPtr->setMasterPersist( *aIter );
+                    mpSlidePersistPtr->setMasterPersist(masterPage);
+                bNotesFragmentPathFound=true;
                 break;
             }
-            ++aIter;
         }
-        if( aIter == rMasterPages.end() && !mpSlidePersistPtr->getMasterPersist() )
+        if( !bNotesFragmentPathFound && !mpSlidePersistPtr->getMasterPersist() )
         {
             TextListStylePtr pTextListStyle(new TextListStyle);
-            SlidePersistPtr pMasterPersistPtr = SlidePersistPtr( new SlidePersist( rFilter, true, true, mpSlidePersistPtr->getPage(),
-                                ShapePtr( new PPTShape( Master, "com.sun.star.drawing.GroupShape" ) ), mpSlidePersistPtr->getNotesTextStyle() ) );
+            SlidePersistPtr pMasterPersistPtr = std::make_shared<SlidePersist>( rFilter, true, true, mpSlidePersistPtr->getPage(),
+                                ShapePtr( new PPTShape( Master, "com.sun.star.drawing.GroupShape" ) ), mpSlidePersistPtr->getNotesTextStyle() );
             pMasterPersistPtr->setPath( aNotesFragmentPath );
             rFilter.getMasterPages().push_back( pMasterPersistPtr );
             FragmentHandlerRef xMasterFragmentHandler( new SlideFragmentHandler( rFilter, aNotesFragmentPath, pMasterPersistPtr, Master ) );
@@ -165,16 +170,17 @@ SlideFragmentHandler::~SlideFragmentHandler()
             const FillProperties *pFillProperties = nullptr;
             if( mpSlidePersistPtr->getTheme() )
                 pFillProperties = mpSlidePersistPtr->getTheme()->getFillStyle( rAttribs.getInteger( XML_idx, -1 ) );
-            FillPropertiesPtr pFillPropertiesPtr( pFillProperties ? new FillProperties( *pFillProperties ) : new FillProperties() );
+            FillPropertiesPtr pFillPropertiesPtr( pFillProperties ? new FillProperties( *pFillProperties ) : new FillProperties );
             mpSlidePersistPtr->setBackgroundProperties( pFillPropertiesPtr );
-            return this;
+            ContextHandlerRef ret = new ColorContext( *this, mpSlidePersistPtr->getBackgroundColor() );
+            return ret;
         }
         break;
 
     case A_TOKEN( overrideClrMapping ):
     case PPT_TOKEN( clrMap ):           // CT_ColorMapping
         {
-            oox::drawingml::ClrMapPtr pClrMapPtr( ( aElementToken == PPT_TOKEN( clrMap ) || !mpSlidePersistPtr.get() || !mpSlidePersistPtr->getClrMap().get() ) ? new oox::drawingml::ClrMap() : new oox::drawingml::ClrMap( *mpSlidePersistPtr->getClrMap() ) );
+            oox::drawingml::ClrMapPtr pClrMapPtr( ( aElementToken == PPT_TOKEN( clrMap ) || !mpSlidePersistPtr.get() || !mpSlidePersistPtr->getClrMap().get() ) ? new oox::drawingml::ClrMap : new oox::drawingml::ClrMap( *mpSlidePersistPtr->getClrMap() ) );
             ContextHandlerRef ret = new oox::drawingml::clrMapContext( *this, rAttribs, *pClrMapPtr );
             mpSlidePersistPtr->setClrMap( pClrMapPtr );
             return ret;
@@ -199,7 +205,7 @@ SlideFragmentHandler::~SlideFragmentHandler()
             mpSlidePersistPtr->getCommentsList().cmLst.back().setText( getCharVector().back() );
         }
         // insert a new comment in vector commentsList
-        mpSlidePersistPtr->getCommentsList().cmLst.push_back(Comment());
+        mpSlidePersistPtr->getCommentsList().cmLst.emplace_back();
         mpSlidePersistPtr->getCommentsList().cmLst.back().setAuthorId(rAttribs.getString(XML_authorId, OUString()));
         mpSlidePersistPtr->getCommentsList().cmLst.back().setdt(rAttribs.getString(XML_dt, OUString()));
         mpSlidePersistPtr->getCommentsList().cmLst.back().setidx(rAttribs.getString(XML_idx, OUString()));
@@ -244,11 +250,8 @@ void SlideFragmentHandler::finalizeImport()
     }
     catch( uno::Exception& )
     {
-        OSL_FAIL( OString("oox::ppt::SlideFragmentHandler::EndElement(), "
-                    "exception caught: " +
-            OUStringToOString(
-                comphelper::anyToString( cppu::getCaughtException() ),
-                RTL_TEXTENCODING_UTF8 )).getStr());
+        SAL_WARN( "oox", "oox::ppt::SlideFragmentHandler::EndElement(), "
+                    "exception caught: " << comphelper::anyToString( cppu::getCaughtException() ) );
     }
 }
 

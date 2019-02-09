@@ -21,11 +21,9 @@
 
 #include <cassert>
 #include <climits>
-#include <cstddef>
 
 #include <com/sun/star/container/NoSuchElementException.hpp>
 #include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
 #include <osl/file.h>
 #include <rtl/character.hxx>
 #include <rtl/string.h>
@@ -52,20 +50,6 @@ bool isSpace(char c) {
     }
 }
 
-}
-
-XmlReader::XmlReader(char const *sStr, size_t nLength)
-    : fileUrl_("stream")
-    , fileHandle_(nullptr)
-    , fileSize_(0)
-    , fileAddress_(nullptr)
-{
-    namespaceIris_.push_back(Span("http://www.w3.org/XML/1998/namespace"));
-    namespaces_.push_back(NamespaceData(Span("xml"), NAMESPACE_XML));
-    pos_ = sStr;
-    end_ = pos_ + nLength;
-    state_ = STATE_CONTENT;
-    firstAttribute_ = true;
 }
 
 XmlReader::XmlReader(OUString const & fileUrl)
@@ -100,11 +84,11 @@ XmlReader::XmlReader(OUString const & fileUrl)
         throw css::uno::RuntimeException(
             "cannot mmap " + fileUrl_ + " (" + OUString::number(e) + ")" );
     }
-    namespaceIris_.push_back(Span("http://www.w3.org/XML/1998/namespace"));
-    namespaces_.push_back(NamespaceData(Span("xml"), NAMESPACE_XML));
+    namespaceIris_.emplace_back("http://www.w3.org/XML/1998/namespace");
+    namespaces_.emplace_back(Span("xml"), NAMESPACE_XML);
     pos_ = static_cast< char * >(fileAddress_);
     end_ = pos_ + fileSize_;
-    state_ = STATE_CONTENT;
+    state_ = State::Content;
     firstAttribute_ = true;
 }
 
@@ -134,7 +118,7 @@ int XmlReader::registerNamespaceIri(Span const & iri) {
         // those files during migration would fail without this hack that can be
         // removed once migration is no longer relevant (see
         // configmgr::Components::parseModificationLayer):
-        namespaces_.push_back(NamespaceData(Span("xsi"), id));
+        namespaces_.emplace_back(Span("xsi"), id);
     }
     return id;
 }
@@ -142,24 +126,24 @@ int XmlReader::registerNamespaceIri(Span const & iri) {
 XmlReader::Result XmlReader::nextItem(Text reportText, Span * data, int * nsId)
 {
     switch (state_) {
-    case STATE_CONTENT:
+    case State::Content:
         switch (reportText) {
-        case TEXT_NONE:
+        case Text::NONE:
             return handleSkippedText(data, nsId);
-        case TEXT_RAW:
+        case Text::Raw:
             return handleRawText(data);
-        case TEXT_NORMALIZED:
+        default: // Text::Normalized
             return handleNormalizedText(data);
         }
-    case STATE_START_TAG:
+    case State::StartTag:
         return handleStartTag(nsId, data);
-    case STATE_END_TAG:
+    case State::EndTag:
         return handleEndTag();
-    case STATE_EMPTY_ELEMENT_TAG:
+    case State::EmptyElementTag:
         handleElementEnd();
-        return RESULT_END;
-    default: // STATE_DONE
-        return RESULT_DONE;
+        return Result::End;
+    default: // State::Done
+        return Result::Done;
     }
 }
 
@@ -198,13 +182,12 @@ Span XmlReader::getAttributeValue(bool fullyNormalize) {
 }
 
 int XmlReader::getNamespaceId(Span const & prefix) const {
-    for (NamespaceList::const_reverse_iterator i(namespaces_.rbegin());
-         i != namespaces_.rend(); ++i)
-    {
-        if (prefix.equals(i->prefix)) {
-            return i->nsId;
-        }
-    }
+    auto i = std::find_if(namespaces_.crbegin(), namespaces_.crend(),
+        [&prefix](const NamespaceData& rNamespaceData) { return prefix.equals(rNamespaceData.prefix); });
+
+    if (i != namespaces_.rend())
+        return i->nsId;
+
     return NAMESPACE_UNKNOWN;
 }
 
@@ -472,9 +455,9 @@ char const * XmlReader::handleReference(char const * position, char const * end)
     } else {
         struct EntityRef {
             char const * inBegin;
-            sal_Int32 inLength;
+            sal_Int32 const inLength;
             char const * outBegin;
-            sal_Int32 outLength;
+            sal_Int32 const outLength;
         };
         static EntityRef const refs[] = {
             { RTL_CONSTASCII_STRINGPARAM("amp;"),
@@ -487,14 +470,14 @@ char const * XmlReader::handleReference(char const * position, char const * end)
               RTL_CONSTASCII_STRINGPARAM("'") },
             { RTL_CONSTASCII_STRINGPARAM("quot;"),
               RTL_CONSTASCII_STRINGPARAM("\"") } };
-        for (std::size_t i = 0; i < SAL_N_ELEMENTS(refs); ++i) {
+        for (const auto & ref : refs) {
             if (rtl_str_shortenedCompare_WithLength(
-                    position, end - position, refs[i].inBegin, refs[i].inLength,
-                    refs[i].inLength) ==
+                    position, end - position, ref.inBegin, ref.inLength,
+                    ref.inLength) ==
                 0)
             {
-                position += refs[i].inLength;
-                pad_.add(refs[i].outBegin, refs[i].outLength);
+                position += ref.inLength;
+                pad_.add(ref.outBegin, ref.outLength);
                 return position;
             }
         }
@@ -660,15 +643,13 @@ XmlReader::Result XmlReader::handleStartTag(int * nsId, Span * localName) {
                    Span(attrNameBegin, attrNameColon - attrNameBegin).equals(
                        "xmlns"))
         {
-            namespaces_.push_back(
-                NamespaceData(
+            namespaces_.emplace_back(
                     Span(attrNameColon + 1, attrNameEnd - (attrNameColon + 1)),
-                    scanNamespaceIri(valueBegin, valueEnd)));
+                    scanNamespaceIri(valueBegin, valueEnd));
         } else {
-            attributes_.push_back(
-                AttributeData(
+            attributes_.emplace_back(
                     attrNameBegin, attrNameEnd, attrNameColon, valueBegin,
-                    valueEnd));
+                    valueEnd);
         }
     }
     if (!hasDefaultNs && !elements_.empty()) {
@@ -676,10 +657,10 @@ XmlReader::Result XmlReader::handleStartTag(int * nsId, Span * localName) {
     }
     firstAttribute_ = true;
     if (peek() == '/') {
-        state_ = STATE_EMPTY_ELEMENT_TAG;
+        state_ = State::EmptyElementTag;
         ++pos_;
     } else {
-        state_ = STATE_CONTENT;
+        state_ = State::Content;
     }
     if (peek() != '>') {
         throw css::uno::RuntimeException(
@@ -697,7 +678,7 @@ XmlReader::Result XmlReader::handleStartTag(int * nsId, Span * localName) {
         *nsId = getNamespaceId(Span(nameBegin, nameColon - nameBegin));
         *localName = Span(nameColon + 1, nameEnd - (nameColon + 1));
     }
-    return RESULT_BEGIN;
+    return Result::Begin;
 }
 
 XmlReader::Result XmlReader::handleEndTag() {
@@ -720,14 +701,14 @@ XmlReader::Result XmlReader::handleEndTag() {
             "missing '>' in " + fileUrl_ );
     }
     ++pos_;
-    return RESULT_END;
+    return Result::End;
 }
 
 void XmlReader::handleElementEnd() {
     assert(!elements_.empty());
     namespaces_.resize(elements_.top().inheritedNamespaces);
     elements_.pop();
-    state_ = elements_.empty() ? STATE_DONE : STATE_CONTENT;
+    state_ = elements_.empty() ? State::Done : State::Content;
 }
 
 XmlReader::Result XmlReader::handleSkippedText(Span * data, int * nsId) {
@@ -797,8 +778,8 @@ XmlReader::Result XmlReader::handleRawText(Span * text) {
             case '/':
                 *text = pad_.get();
                 ++pos_;
-                state_ = STATE_END_TAG;
-                return RESULT_TEXT;
+                state_ = State::EndTag;
+                return Result::Text;
             case '?':
                 ++pos_;
                 skipProcessingInstruction();
@@ -806,8 +787,8 @@ XmlReader::Result XmlReader::handleRawText(Span * text) {
                 break;
             default:
                 *text = pad_.get();
-                state_ = STATE_START_TAG;
-                return RESULT_TEXT;
+                state_ = State::StartTag;
+                return Result::Text;
             }
             break;
         default:
@@ -914,8 +895,8 @@ XmlReader::Result XmlReader::handleNormalizedText(Span * text) {
                 ++pos_;
                 pad_.add(flowBegin, flowEnd - flowBegin);
                 *text = pad_.get();
-                state_ = STATE_END_TAG;
-                return RESULT_TEXT;
+                state_ = State::EndTag;
+                return Result::Text;
             case '?':
                 ++pos_;
                 skipProcessingInstruction();
@@ -924,8 +905,8 @@ XmlReader::Result XmlReader::handleNormalizedText(Span * text) {
             default:
                 pad_.add(flowBegin, flowEnd - flowBegin);
                 *text = pad_.get();
-                state_ = STATE_START_TAG;
-                return RESULT_TEXT;
+                state_ = State::StartTag;
+                return Result::Text;
             }
             break;
         default:

@@ -27,7 +27,7 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/i18nmap.hxx>
 #include <xmloff/xmluconv.hxx>
-#include "xmltabi.hxx"
+#include <xmltabi.hxx>
 
 
 using namespace ::com::sun::star;
@@ -39,11 +39,10 @@ enum SvXMLTokenMapAttrs
     XML_TOK_TABSTOP_TYPE,
     XML_TOK_TABSTOP_CHAR,
     XML_TOK_TABSTOP_LEADER_STYLE,
-    XML_TOK_TABSTOP_LEADER_TEXT,
-    XML_TOK_TABSTOP_END=XML_TOK_UNKNOWN
+    XML_TOK_TABSTOP_LEADER_TEXT
 };
 
-static SvXMLTokenMapEntry aTabsAttributesAttrTokenMap[] =
+static const SvXMLTokenMapEntry aTabsAttributesAttrTokenMap[] =
 {
     { XML_NAMESPACE_STYLE, XML_POSITION,     XML_TOK_TABSTOP_POSITION },
     { XML_NAMESPACE_STYLE, XML_TYPE,         XML_TOK_TABSTOP_TYPE },
@@ -65,9 +64,7 @@ public:
                                const OUString& rLName,
                                const uno::Reference< xml::sax::XAttributeList > & xAttrList );
 
-    virtual ~SvxXMLTabStopContext_Impl();
-
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                                    const OUString& rLocalName,
                                    const uno::Reference< xml::sax::XAttributeList > & xAttrList ) override;
 
@@ -154,11 +151,7 @@ SvxXMLTabStopContext_Impl::SvxXMLTabStopContext_Impl(
         aTabStop.FillChar = cTextFillChar;
 }
 
-SvxXMLTabStopContext_Impl::~SvxXMLTabStopContext_Impl()
-{
-}
-
-SvXMLImportContext *SvxXMLTabStopContext_Impl::CreateChildContext(
+SvXMLImportContextRef SvxXMLTabStopContext_Impl::CreateChildContext(
                                    sal_uInt16 nPrefix,
                                    const OUString& rLocalName,
                                    const uno::Reference< xml::sax::XAttributeList > & )
@@ -172,27 +165,11 @@ SvxXMLTabStopImportContext::SvxXMLTabStopImportContext(
                                 const OUString& rLName,
                                 const XMLPropertyState& rProp,
                                  ::std::vector< XMLPropertyState > &rProps )
-: XMLElementPropertyContext( rImport, nPrfx, rLName, rProp, rProps ),
-  mpTabStops( nullptr )
+: XMLElementPropertyContext( rImport, nPrfx, rLName, rProp, rProps )
 {
 }
 
-SvxXMLTabStopImportContext::~SvxXMLTabStopImportContext()
-{
-    if( mpTabStops )
-    {
-        while( !mpTabStops->empty() )
-        {
-            SvxXMLTabStopContext_Impl *pTabStop = mpTabStops->back();
-            mpTabStops->pop_back();
-            pTabStop->ReleaseRef();
-        }
-    }
-
-    delete mpTabStops;
-}
-
-SvXMLImportContext *SvxXMLTabStopImportContext::CreateChildContext(
+SvXMLImportContextRef SvxXMLTabStopImportContext::CreateChildContext(
                                    sal_uInt16 nPrefix,
                                    const OUString& rLocalName,
                                    const uno::Reference< xml::sax::XAttributeList > & xAttrList )
@@ -202,18 +179,17 @@ SvXMLImportContext *SvxXMLTabStopImportContext::CreateChildContext(
     if( XML_NAMESPACE_STYLE == nPrefix && IsXMLToken( rLocalName, XML_TAB_STOP ) )
     {
         // create new tabstop import context
-        SvxXMLTabStopContext_Impl *pTabStopContext =
+        const rtl::Reference<SvxXMLTabStopContext_Impl> xTabStopContext{
             new SvxXMLTabStopContext_Impl( GetImport(), nPrefix, rLocalName,
-                                           xAttrList );
+                                           xAttrList )};
 
         // add new tabstop to array of tabstops
         if( !mpTabStops )
-            mpTabStops = new SvxXMLTabStopArray_Impl;
+            mpTabStops = std::make_unique<SvxXMLTabStopArray_Impl>();
 
-        mpTabStops->push_back( pTabStopContext );
-        pTabStopContext->AddFirstRef();
+        mpTabStops->push_back( xTabStopContext );
 
-        pContext = pTabStopContext;
+        pContext = xTabStopContext.get();
     }
     else
     {
@@ -235,7 +211,7 @@ void SvxXMLTabStopImportContext::EndElement( )
         style::TabStop* pTabStops = aSeq.getArray();
         for( sal_uInt16 i=0; i < nCount; i++ )
         {
-            SvxXMLTabStopContext_Impl *pTabStopContext = (*mpTabStops)[i];
+            SvxXMLTabStopContext_Impl *pTabStopContext = (*mpTabStops)[i].get();
             const style::TabStop& rTabStop = pTabStopContext->getTabStop();
             bool bDflt = style::TabAlign_DEFAULT == rTabStop.Alignment;
             if( !bDflt || 0==i )

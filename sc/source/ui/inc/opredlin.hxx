@@ -21,33 +21,21 @@
 
 #include <sfx2/tabdlg.hxx>
 
-#include <vcl/group.hxx>
-
-#include <vcl/button.hxx>
-
-#include <vcl/lstbox.hxx>
-
-#include <vcl/field.hxx>
-
-#include <vcl/fixed.hxx>
-#include <svtools/ctrlbox.hxx>
-#include <svx/fntctrl.hxx>
-#include <svx/strarray.hxx>
+class SvxColorListBox;
 
 class ScRedlineOptionsTabPage : public SfxTabPage
 {
-    VclPtr<ColorListBox>       m_pContentColorLB;
-    VclPtr<ColorListBox>       m_pRemoveColorLB;
-    VclPtr<ColorListBox>       m_pInsertColorLB;
-    VclPtr<ColorListBox>       m_pMoveColorLB;
-    OUString                   aAuthorStr;
+    VclPtr<SvxColorListBox>    m_pContentColorLB;
+    VclPtr<SvxColorListBox>    m_pRemoveColorLB;
+    VclPtr<SvxColorListBox>    m_pInsertColorLB;
+    VclPtr<SvxColorListBox>    m_pMoveColorLB;
 
 public:
 
     ScRedlineOptionsTabPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual ~ScRedlineOptionsTabPage();
+    virtual ~ScRedlineOptionsTabPage() override;
     virtual void dispose() override;
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rAttrSet );
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rAttrSet );
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;

@@ -42,7 +42,7 @@ namespace drawinglayer
         class DRAWINGLAYER_DLLPUBLIC MaterialAttribute3D
         {
         public:
-            typedef o3tl::cow_wrapper< ImpMaterialAttribute3D > ImplType;
+            typedef o3tl::cow_wrapper<ImpMaterialAttribute3D, o3tl::ThreadSafeRefCountingPolicy> ImplType;
 
         private:
             ImplType mpMaterialAttribute3D;
@@ -56,11 +56,11 @@ namespace drawinglayer
                 sal_uInt16 nSpecularIntensity);
             MaterialAttribute3D(const basegfx::BColor& rColor);
             MaterialAttribute3D();
-            MaterialAttribute3D(const MaterialAttribute3D& rCandidate);
+            MaterialAttribute3D(const MaterialAttribute3D&);
             ~MaterialAttribute3D();
 
             // assignment operator
-            MaterialAttribute3D& operator=(const MaterialAttribute3D& rCandidate);
+            MaterialAttribute3D& operator=(const MaterialAttribute3D&);
 
             // compare operator
             bool operator==(const MaterialAttribute3D& rCandidate) const;

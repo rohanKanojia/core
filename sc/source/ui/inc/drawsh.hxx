@@ -21,15 +21,18 @@
 #define INCLUDED_SC_SOURCE_UI_INC_DRAWSH_HXX
 
 #include <sfx2/shell.hxx>
-#include "shellids.hxx"
-#include <sfx2/module.hxx>
-#include <svx/svdmark.hxx>
+#include <shellids.hxx>
+#include <svx/svdtypes.hxx>
 #include <tools/link.hxx>
 #include <rtl/ref.hxx>
 
 class AbstractSvxObjectNameDialog;
 class ScViewData;
 class ScDrawView;
+class SdrMarkList;
+class SfxModule;
+class SdrObject;
+
 namespace svx { namespace sidebar {
 class SelectionChangeHandler;
 } }
@@ -39,7 +42,7 @@ class ScDrawShell : public SfxShell
     ScViewData* pViewData;
     ::rtl::Reference<svx::sidebar::SelectionChangeHandler> mpSelectionChangeHandler;
 
-    DECL_LINK_TYPED( NameObjectHdl, AbstractSvxObjectNameDialog&, bool );
+    DECL_LINK( NameObjectHdl, AbstractSvxObjectNameDialog&, bool );
 
     void SetHlinkForObject( SdrObject* pObj, const OUString& rHlnk );
 
@@ -56,7 +59,7 @@ private:
 
 public:
                     ScDrawShell(ScViewData* pData);
-                    virtual ~ScDrawShell();
+                    virtual ~ScDrawShell() override;
 
     static void StateDisableItems( SfxItemSet &rSet );
 
@@ -68,26 +71,27 @@ public:
     void    GetDrawFuncState(SfxItemSet &rSet);
     void    GetState(SfxItemSet &rSet);
 
-    void    ExecFormText(SfxRequest& rReq);     // StarFontWork
+    void    ExecFormText(const SfxRequest& rReq);     // StarFontWork
     void    GetFormTextState(SfxItemSet& rSet);
 
-    void    ExecuteHLink(SfxRequest& rReq);     // Hyperlink
+    void    ExecuteHLink(const SfxRequest& rReq);     // Hyperlink
     void    GetHLinkState(SfxItemSet& rSet);
 
-    void    ExecFormatPaintbrush(SfxRequest& rReq);
+    void    ExecFormatPaintbrush(const SfxRequest& rReq);
     void    StateFormatPaintbrush(SfxItemSet& rSet);
 
-    void    ExecuteMacroAssign( SdrObject* pObj, vcl::Window* pWin );
+    void    ExecuteMacroAssign(SdrObject* pObj, weld::Window* pWin);
     void    ExecuteLineDlg( SfxRequest& rReq );
     void    ExecuteAreaDlg( SfxRequest& rReq );
     void    ExecuteTextAttrDlg( SfxRequest& rReq );
+    void    ExecuteMeasureDlg( SfxRequest& rReq );
 
     ScDrawView* GetDrawView();
 
-    static bool AreAllObjectsOnLayer(sal_uInt16 nLayerNo,const SdrMarkList& rMark);
+    static bool AreAllObjectsOnLayer(SdrLayerID nLayerNo,const SdrMarkList& rMark);
 
     void GetDrawAttrStateForIFBX( SfxItemSet& rSet );
-    ::rtl::OUString GetSidebarContextName();
+    OUString const & GetSidebarContextName();
 };
 
 #endif

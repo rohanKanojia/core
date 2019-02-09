@@ -18,11 +18,9 @@
  */
 
 #include "CheckBox.hxx"
-#include "property.hxx"
-#include "property.hrc"
-#include "services.hxx"
+#include <property.hxx>
+#include <services.hxx>
 #include <comphelper/basicio.hxx>
-#include <comphelper/processfactory.hxx>
 
 namespace frm
 {
@@ -45,7 +43,7 @@ OCheckBoxControl::OCheckBoxControl(const Reference<XComponentContext>& _rxFactor
 }
 
 
-css::uno::Sequence<OUString> SAL_CALL OCheckBoxControl::getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception)
+css::uno::Sequence<OUString> SAL_CALL OCheckBoxControl::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OBoundControl::getSupportedServiceNames();
     aSupported.realloc(aSupported.getLength() + 2);
@@ -84,7 +82,7 @@ IMPLEMENT_DEFAULT_CLONING( OCheckBoxModel )
 
 // XServiceInfo
 
-css::uno::Sequence<OUString> SAL_CALL OCheckBoxModel::getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception)
+css::uno::Sequence<OUString> SAL_CALL OCheckBoxModel::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OReferenceValueComponent::getSupportedServiceNames();
 
@@ -117,14 +115,13 @@ void OCheckBoxModel::describeFixedProperties( Sequence< Property >& _rProps ) co
 }
 
 
-OUString SAL_CALL OCheckBoxModel::getServiceName() throw(RuntimeException, std::exception)
+OUString SAL_CALL OCheckBoxModel::getServiceName()
 {
     return OUString(FRM_COMPONENT_CHECKBOX);  // old (non-sun) name for compatibility !
 }
 
 
 void SAL_CALL OCheckBoxModel::write(const Reference<css::io::XObjectOutputStream>& _rxOutStream)
-    throw(css::io::IOException, RuntimeException, std::exception)
 {
     OReferenceValueComponent::write(_rxOutStream);
 
@@ -132,14 +129,14 @@ void SAL_CALL OCheckBoxModel::write(const Reference<css::io::XObjectOutputStream
     _rxOutStream->writeShort(0x0003);
     // Properties
     _rxOutStream << getReferenceValue();
-    _rxOutStream << (sal_Int16)getDefaultChecked();
+    _rxOutStream << static_cast<sal_Int16>(getDefaultChecked());
     writeHelpTextCompatibly(_rxOutStream);
     // from version 0x0003 : common properties
     writeCommonProperties(_rxOutStream);
 }
 
 
-void SAL_CALL OCheckBoxModel::read(const Reference<css::io::XObjectInputStream>& _rxInStream) throw(css::io::IOException, RuntimeException, std::exception)
+void SAL_CALL OCheckBoxModel::read(const Reference<css::io::XObjectInputStream>& _rxInStream)
 {
     OReferenceValueComponent::read(_rxInStream);
     osl::MutexGuard aGuard(m_aMutex);
@@ -182,9 +179,7 @@ void SAL_CALL OCheckBoxModel::read(const Reference<css::io::XObjectInputStream>&
 
 bool OCheckBoxModel::DbUseBool()
 {
-    if ( ! (getReferenceValue().isEmpty() && getNoCheckReferenceValue().isEmpty()) )
-        return false;
-    return true;
+    return getReferenceValue().isEmpty() && getNoCheckReferenceValue().isEmpty();
 }
 
 
@@ -214,7 +209,7 @@ Any OCheckBoxModel::translateDbColumnToControlValue()
         bool bTriState = true;
         if ( m_xAggregateSet.is() )
             m_xAggregateSet->getPropertyValue( PROPERTY_TRISTATE ) >>= bTriState;
-        aValue <<= (sal_Int16)( bTriState ? TRISTATE_INDET : getDefaultChecked() );
+        aValue <<= static_cast<sal_Int16>( bTriState ? TRISTATE_INDET : getDefaultChecked() );
     }
     else if ( !aValue.hasValue() )
     {
@@ -222,7 +217,7 @@ Any OCheckBoxModel::translateDbColumnToControlValue()
         // bValue cannot be used uninitialised here.
         // But GCC does not see/understand that, which breaks -Werror builds,
         // so we explicitly default-initialise it.
-        aValue <<= (sal_Int16)( bValue ? TRISTATE_TRUE : TRISTATE_FALSE );
+        aValue <<= static_cast<sal_Int16>( bValue ? TRISTATE_TRUE : TRISTATE_FALSE );
     }
 
     return aValue;
@@ -246,13 +241,13 @@ bool OCheckBoxModel::commitControlValueToDbColumn( bool /*_bPostReset*/ )
                     break;
                 case TRISTATE_TRUE:
                     if (DbUseBool())
-                        m_xColumnUpdate->updateBoolean( sal_True );
+                        m_xColumnUpdate->updateBoolean( true );
                     else
                         m_xColumnUpdate->updateString( getReferenceValue() );
                     break;
                 case TRISTATE_FALSE:
                     if (DbUseBool())
-                        m_xColumnUpdate->updateBoolean( sal_False );
+                        m_xColumnUpdate->updateBoolean( false );
                     else
                         m_xColumnUpdate->updateString( getNoCheckReferenceValue() );
                     break;
@@ -270,14 +265,14 @@ bool OCheckBoxModel::commitControlValueToDbColumn( bool /*_bPostReset*/ )
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OCheckBoxModel_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {
     return cppu::acquire(new frm::OCheckBoxModel(component));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OCheckBoxControl_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {

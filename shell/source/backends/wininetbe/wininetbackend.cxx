@@ -18,21 +18,19 @@
  */
 
 #include <cppuhelper/supportsservice.hxx>
-#include "rtl/ustrbuf.hxx"
+#include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
 #include "wininetbackend.hxx"
 
-#if defined _MSC_VER
-#pragma warning(push, 1)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
 #include <wininet.h>
 #include <sal/alloca.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
-#define WININET_DLL_NAME "wininet.dll"
+#define WININET_DLL_NAME L"wininet.dll"
 #define EQUAL_SIGN '='
 #define COLON      ':'
 #define SPACE      ' '
@@ -57,10 +55,7 @@ typedef struct
 } ProxyEntry;
 
 
-// helper functions
-
-
-namespace // private
+namespace
 {
     ProxyEntry ReadProxyEntry(const OUString& aProxy, sal_Int32& i)
     {
@@ -98,19 +93,18 @@ namespace // private
         return ProxyEntry();
     }
 
-} // end private namespace
-
+} // unnamed namespace
 
 WinInetBackend::WinInetBackend()
 {
-    Library hWinInetDll( LoadLibrary( WININET_DLL_NAME ) );
+    Library hWinInetDll( LoadLibraryW( WININET_DLL_NAME ) );
     if( hWinInetDll.module )
     {
         typedef BOOL ( WINAPI *InternetQueryOption_Proc_T )( HINTERNET, DWORD, LPVOID, LPDWORD );
 
         InternetQueryOption_Proc_T lpfnInternetQueryOption =
             reinterpret_cast< InternetQueryOption_Proc_T >(
-                GetProcAddress( hWinInetDll.module, "InternetQueryOptionA" ) );
+                GetProcAddress( hWinInetDll.module, "InternetQueryOptionW" ) );
         if (lpfnInternetQueryOption)
         {
             // Some Windows versions would fail the InternetQueryOption call
@@ -121,31 +115,31 @@ WinInetBackend::WinInetBackend()
             // reallocation:
             INTERNET_PROXY_INFO pi;
             LPINTERNET_PROXY_INFO lpi = &pi;
-            DWORD dwLength = sizeof (INTERNET_PROXY_INFO);
+            DWORD dwLength = sizeof (pi);
             BOOL ok = lpfnInternetQueryOption(
-                NULL,
+                nullptr,
                 INTERNET_OPTION_PROXY,
-                (LPVOID)lpi,
+                lpi,
                 &dwLength );
             if (!ok)
             {
                 DWORD err = GetLastError();
                 if (err == ERROR_INSUFFICIENT_BUFFER)
                 {
-                    // allocate sufficient space on the heap
-                    // insufficient space on the heap results
+                    // allocate sufficient space on the stack
+                    // insufficient space on the stack results
                     // in a stack overflow exception, we assume
                     // this never happens, because of the relatively
                     // small amount of memory we need
                     // alloca is nice because it is fast and we don't
                     // have to free the allocated memory, it will be
                     // automatically done
-                    lpi = reinterpret_cast< LPINTERNET_PROXY_INFO >(
+                    lpi = static_cast< LPINTERNET_PROXY_INFO >(
                         alloca( dwLength ) );
                     ok = lpfnInternetQueryOption(
-                        NULL,
+                        nullptr,
                         INTERNET_OPTION_PROXY,
-                        (LPVOID)lpi,
+                        lpi,
                         &dwLength );
                     if (!ok)
                     {
@@ -166,14 +160,18 @@ WinInetBackend::WinInetBackend()
             // an empty proxy list, so we don't have to check if
             // proxy is enabled or not
 
+            // We use InternetQueryOptionW (see https://msdn.microsoft.com/en-us/library/aa385101);
+            // it fills INTERNET_PROXY_INFO struct which is defined in WinInet.h to have LPCTSTR
+            // (i.e., the UNICODE-dependent generic string type expanding to const wchar_t* when
+            // UNICODE is defined, and InternetQueryOption macro expands to InternetQueryOptionW).
+            // Thus, it's natural to expect that W version would return wide strings. But it's not
+            // true. The W version still returns const char* in INTERNET_PROXY_INFO.
             OUString aProxyList       = OUString::createFromAscii( lpi->lpszProxy );
             OUString aProxyBypassList = OUString::createFromAscii( lpi->lpszProxyBypass );
 
             // override default for ProxyType, which is "0" meaning "No proxies".
-            sal_Int32 nProperties = 1;
-
             valueProxyType_.IsPresent = true;
-            valueProxyType_.Value <<= nProperties;
+            valueProxyType_.Value <<= sal_Int32(1);
 
             // fill proxy bypass list
             if( aProxyBypassList.getLength() > 0 )
@@ -222,13 +220,10 @@ WinInetBackend::WinInetBackend()
 
 
                 ProxyEntry aTypeIndepProxy = FindProxyEntry( aProxyList, OUString());
-                ProxyEntry aHttpProxy = FindProxyEntry( aProxyList, OUString(
-                    "http"  ) );
-                ProxyEntry aHttpsProxy  = FindProxyEntry( aProxyList, OUString(
-                    "https"  ) );
+                ProxyEntry aHttpProxy = FindProxyEntry( aProxyList, "http" );
+                ProxyEntry aHttpsProxy  = FindProxyEntry( aProxyList, "https" );
 
-                ProxyEntry aFtpProxy  = FindProxyEntry( aProxyList, OUString(
-                    "ftp"  ) );
+                ProxyEntry aFtpProxy  = FindProxyEntry( aProxyList, "ftp" );
 
                 if( aTypeIndepProxy.Server.getLength() )
                 {
@@ -295,36 +290,25 @@ WinInetBackend::WinInetBackend()
     }
 }
 
-
 WinInetBackend::~WinInetBackend()
 {
 }
-
 
 WinInetBackend* WinInetBackend::createInstance()
 {
     return new WinInetBackend;
 }
 
-
 void WinInetBackend::setPropertyValue(
     OUString const &, css::uno::Any const &)
-    throw (
-        css::beans::UnknownPropertyException, css::beans::PropertyVetoException,
-        css::lang::IllegalArgumentException, css::lang::WrappedTargetException,
-        css::uno::RuntimeException)
 {
     throw css::lang::IllegalArgumentException(
-        OUString(
-            "setPropertyValue not supported"),
+        "setPropertyValue not supported",
         static_cast< cppu::OWeakObject * >(this), -1);
 }
 
 css::uno::Any WinInetBackend::getPropertyValue(
     OUString const & PropertyName)
-    throw (
-        css::beans::UnknownPropertyException, css::lang::WrappedTargetException,
-        css::uno::RuntimeException)
 {
     if ( PropertyName == "ooInetFTPProxyName" )
     {
@@ -356,19 +340,16 @@ css::uno::Any WinInetBackend::getPropertyValue(
     }
 }
 
-
-OUString SAL_CALL WinInetBackend::getBackendName() {
+OUString WinInetBackend::getBackendName() {
     return OUString("com.sun.star.comp.configuration.backend.WinInetBackend") ;
 }
 
-
 OUString SAL_CALL WinInetBackend::getImplementationName()
-    throw (uno::RuntimeException)
 {
     return getBackendName() ;
 }
 
-uno::Sequence<OUString> SAL_CALL WinInetBackend::getBackendServiceNames()
+uno::Sequence<OUString> WinInetBackend::getBackendServiceNames()
 {
     uno::Sequence<OUString> aServiceNameList { "com.sun.star.configuration.backend.WinInetBackend" };
 
@@ -376,13 +357,11 @@ uno::Sequence<OUString> SAL_CALL WinInetBackend::getBackendServiceNames()
 }
 
 sal_Bool SAL_CALL WinInetBackend::supportsService(const OUString& aServiceName)
-    throw (uno::RuntimeException)
 {
     return cppu::supportsService(this, aServiceName);
 }
 
 uno::Sequence<OUString> SAL_CALL WinInetBackend::getSupportedServiceNames()
-    throw (uno::RuntimeException)
 {
     return getBackendServiceNames() ;
 }

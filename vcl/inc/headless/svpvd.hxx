@@ -22,24 +22,22 @@
 
 #include <salvd.hxx>
 
-#include <list>
+#include <vector>
 
 class SvpSalGraphics;
 typedef struct _cairo_surface cairo_surface_t;
 
 class VCL_DLLPUBLIC SvpSalVirtualDevice : public SalVirtualDevice
 {
-    DeviceFormat                        m_eFormat;
+    DeviceFormat const                  m_eFormat;
+    cairo_surface_t* const              m_pRefSurface;
     cairo_surface_t*                    m_pSurface;
-    std::list< SvpSalGraphics* >        m_aGraphics;
+    basegfx::B2IVector                  m_aFrameSize;
+    std::vector< SvpSalGraphics* >      m_aGraphics;
 
 public:
-    SvpSalVirtualDevice(DeviceFormat eFormat)
-        : m_eFormat(eFormat)
-        , m_pSurface(nullptr)
-    {
-    }
-    virtual ~SvpSalVirtualDevice();
+    SvpSalVirtualDevice(DeviceFormat eFormat, cairo_surface_t* pRefSurface);
+    virtual ~SvpSalVirtualDevice() override;
 
     // SalVirtualDevice
     virtual SalGraphics*    AcquireGraphics() override;
@@ -49,6 +47,8 @@ public:
     virtual bool        SetSizeUsingBuffer( long nNewDX, long nNewDY,
                                             sal_uInt8 * pBuffer
                                           ) override;
+
+    cairo_surface_t* GetSurface() const { return m_pSurface; }
 
     // SalGeometryProvider
     virtual long GetWidth() const override;

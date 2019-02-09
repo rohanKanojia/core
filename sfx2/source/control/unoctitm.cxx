@@ -17,7 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <config_features.h>
+#include <config_java.h>
+#include <config_folders.h>
 
 #include <tools/debug.hxx>
 #include <svl/eitem.hxx>
@@ -26,18 +27,14 @@
 #include <svl/itemset.hxx>
 #include <svl/visitem.hxx>
 #include <svtools/javacontext.hxx>
+#include <svtools/javainteractionhandler.hxx>
 #include <svl/itempool.hxx>
 #include <tools/urlobj.hxx>
 #include <com/sun/star/awt/FontDescriptor.hpp>
 #include <com/sun/star/util/URLTransformer.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
-#include <com/sun/star/frame/XController.hpp>
-#include <com/sun/star/frame/XFrameActionListener.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/FrameActionEvent.hpp>
-#include <com/sun/star/frame/FrameAction.hpp>
 #include <com/sun/star/frame/status/FontHeight.hpp>
 #include <com/sun/star/frame/status/ItemStatus.hpp>
 #include <com/sun/star/frame/status/ItemState.hpp>
@@ -46,11 +43,10 @@
 #include <com/sun/star/frame/ModuleManager.hpp>
 #include <com/sun/star/frame/status/Visibility.hpp>
 #include <comphelper/processfactory.hxx>
-#include <comphelper/sequence.hxx>
 #include <officecfg/Office/Common.hxx>
-#include <osl/mutex.hxx>
 #include <uno/current_context.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/uitest/logger.hxx>
 
 #include <sfx2/app.hxx>
 #include <sfx2/unoctitm.hxx>
@@ -62,9 +58,10 @@
 #include <sfx2/dispatch.hxx>
 #include <sfx2/sfxsids.hrc>
 #include <sfx2/request.hxx>
-#include "statcach.hxx"
+#include <statcach.hxx>
 #include <sfx2/msgpool.hxx>
 #include <sfx2/objsh.hxx>
+#include <sfx2/viewsh.hxx>
 #include <osl/file.hxx>
 #include <rtl/ustring.hxx>
 #include <unotools/pathoptions.hxx>
@@ -95,7 +92,7 @@ enum URLTypeId
     URLType_COUNT
 };
 
-const char* URLTypeNames[URLType_COUNT] =
+const char* const URLTypeNames[URLType_COUNT] =
 {
     "bool",
     "byte",
@@ -107,162 +104,7 @@ const char* URLTypeNames[URLType_COUNT] =
     "double"
 };
 
-SfxUnoControllerItem::SfxUnoControllerItem( SfxControllerItem *pItem, SfxBindings& rBind, const OUString& rCmd )
-    : pCtrlItem( pItem )
-    , pBindings( &rBind )
-{
-    DBG_ASSERT( !pCtrlItem || !pCtrlItem->IsBound(), "ControllerItem is incorrect!" );
-
-    aCommand.Complete = rCmd;
-    Reference< XURLTransformer > xTrans( URLTransformer::create( ::comphelper::getProcessComponentContext() ) );
-    xTrans->parseStrict( aCommand );
-    pBindings->RegisterUnoController_Impl( this );
-}
-
-SfxUnoControllerItem::~SfxUnoControllerItem()
-{
-    // tell bindings to forget this controller ( if still connected )
-    if ( pBindings )
-        pBindings->ReleaseUnoController_Impl( this );
-}
-
-void SfxUnoControllerItem::UnBind()
-{
-    // connection to SfxControllerItem is lost
-    pCtrlItem = nullptr;
-    css::uno::Reference< css::frame::XStatusListener >  aRef( static_cast<cppu::OWeakObject*>(this), css::uno::UNO_QUERY );
-    ReleaseDispatch();
-}
-
-void SAL_CALL SfxUnoControllerItem::statusChanged(const css::frame::FeatureStateEvent& rEvent) throw ( css::uno::RuntimeException, std::exception )
-{
-    SolarMutexGuard aGuard;
-    DBG_ASSERT( pCtrlItem, "dispatch implementation didn't respect our previous removeStatusListener call!" );
-
-    if ( rEvent.Requery )
-    {
-        // Error can only happen if the old Dispatch is implemented incorrectly
-        // i.e. removeStatusListener did not work. But such things can happen...
-        // So protect before ReleaseDispatch from release!
-        css::uno::Reference< css::frame::XStatusListener >  aRef( static_cast<cppu::OWeakObject*>(this), css::uno::UNO_QUERY  );
-        ReleaseDispatch();
-        if ( pCtrlItem )
-            GetNewDispatch();           // asynchronous ??
-    }
-    else if ( pCtrlItem )
-    {
-        SfxItemState eState = SfxItemState::DISABLED;
-        SfxPoolItem* pItem = nullptr;
-        if ( rEvent.IsEnabled )
-        {
-            eState = SfxItemState::DEFAULT;
-            css::uno::Type pType = rEvent.State.getValueType();
-
-            if ( pType == cppu::UnoType< bool >::get() )
-            {
-                bool bTemp = false;
-                rEvent.State >>= bTemp ;
-                pItem = new SfxBoolItem( pCtrlItem->GetId(), bTemp );
-            }
-            else if ( pType == cppu::UnoType< ::cppu::UnoUnsignedShortType >::get() )
-            {
-                sal_uInt16 nTemp = 0;
-                rEvent.State >>= nTemp ;
-                pItem = new SfxUInt16Item( pCtrlItem->GetId(), nTemp );
-            }
-            else if ( pType == cppu::UnoType<sal_uInt32>::get() )
-            {
-                sal_uInt32 nTemp = 0;
-                rEvent.State >>= nTemp ;
-                pItem = new SfxUInt32Item( pCtrlItem->GetId(), nTemp );
-            }
-            else if ( pType == cppu::UnoType<OUString>::get() )
-            {
-                OUString sTemp ;
-                rEvent.State >>= sTemp ;
-                pItem = new SfxStringItem( pCtrlItem->GetId(), sTemp );
-            }
-            else
-                pItem = new SfxVoidItem( pCtrlItem->GetId() );
-        }
-
-        pCtrlItem->StateChanged( pCtrlItem->GetId(), eState, pItem );
-        delete pItem;
-    }
-}
-
-void  SAL_CALL SfxUnoControllerItem::disposing( const css::lang::EventObject& ) throw ( css::uno::RuntimeException, std::exception )
-{
-    css::uno::Reference< css::frame::XStatusListener >  aRef( static_cast<cppu::OWeakObject*>(this), css::uno::UNO_QUERY );
-    ReleaseDispatch();
-}
-
-void SfxUnoControllerItem::ReleaseDispatch()
-{
-    if ( xDispatch.is() )
-    {
-        xDispatch->removeStatusListener( static_cast<css::frame::XStatusListener*>(this), aCommand );
-        xDispatch.clear();
-    }
-}
-
-void SfxUnoControllerItem::GetNewDispatch()
-{
-    if ( !pBindings )
-    {
-        // Bindings released
-        OSL_FAIL( "Tried to get dispatch, but no Bindings!" );
-        return;
-    }
-
-    // forget old dispatch
-    xDispatch.clear();
-
-    // no arms, no cookies !
-    if ( !pBindings->GetDispatcher_Impl() || !pBindings->GetDispatcher_Impl()->GetFrame() )
-        return;
-
-    SfxFrame& rFrame = pBindings->GetDispatcher_Impl()->GetFrame()->GetFrame();
-    SfxFrame *pParent = rFrame.GetParentFrame();
-    if ( pParent )
-        // parent may intercept
-        xDispatch = TryGetDispatch( pParent );
-
-    if ( !xDispatch.is() )
-    {
-        // no interception
-        css::uno::Reference< css::frame::XFrame >  xFrame = rFrame.GetFrameInterface();
-        css::uno::Reference< css::frame::XDispatchProvider >  xProv( xFrame, css::uno::UNO_QUERY );
-        if ( xProv.is() )
-            xDispatch = xProv->queryDispatch( aCommand, OUString(), 0 );
-    }
-
-    if ( xDispatch.is() )
-        xDispatch->addStatusListener( static_cast<css::frame::XStatusListener*>(this), aCommand );
-    else if ( pCtrlItem )
-        pCtrlItem->StateChanged( pCtrlItem->GetId(), SfxItemState::DISABLED, nullptr );
-}
-
-css::uno::Reference< css::frame::XDispatch >  SfxUnoControllerItem::TryGetDispatch( SfxFrame *pFrame )
-{
-    css::uno::Reference< css::frame::XDispatch >  xDisp;
-    SfxFrame *pParent = pFrame->GetParentFrame();
-    if ( pParent )
-        // parent may intercept
-        xDisp = TryGetDispatch( pParent );
-
-    return xDisp;
-}
-
-void SfxUnoControllerItem::ReleaseBindings()
-{
-    // connection to binding is lost; so forget the binding and the dispatch
-    css::uno::Reference< css::frame::XStatusListener >  aRef( static_cast<cppu::OWeakObject*>(this), css::uno::UNO_QUERY );
-    ReleaseDispatch();
-    if ( pBindings )
-        pBindings->ReleaseUnoController_Impl( this );
-    pBindings = nullptr;
-}
+static void InterceptLOKStateChangeEvent( const SfxViewFrame* pViewFrame, const css::frame::FeatureStateEvent& aEvent, const SfxPoolItem* pState );
 
 void SfxStatusDispatcher::ReleaseAll()
 {
@@ -271,14 +113,14 @@ void SfxStatusDispatcher::ReleaseAll()
     aListeners.disposeAndClear( aObject );
 }
 
-void SAL_CALL SfxStatusDispatcher::dispatch( const css::util::URL&, const css::uno::Sequence< css::beans::PropertyValue >& ) throw ( css::uno::RuntimeException, std::exception )
+void SAL_CALL SfxStatusDispatcher::dispatch( const css::util::URL&, const css::uno::Sequence< css::beans::PropertyValue >& )
 {
 }
 
 void SAL_CALL SfxStatusDispatcher::dispatchWithNotification(
     const css::util::URL&,
     const css::uno::Sequence< css::beans::PropertyValue >&,
-    const css::uno::Reference< css::frame::XDispatchResultListener >& ) throw( css::uno::RuntimeException, std::exception )
+    const css::uno::Reference< css::frame::XDispatchResultListener >& )
 {
 }
 
@@ -287,7 +129,7 @@ SfxStatusDispatcher::SfxStatusDispatcher()
 {
 }
 
-void SAL_CALL SfxStatusDispatcher::addStatusListener(const css::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL) throw ( css::uno::RuntimeException, std::exception )
+void SAL_CALL SfxStatusDispatcher::addStatusListener(const css::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL)
 {
     aListeners.addInterface( aURL.Complete, aListener );
     if ( aURL.Complete == ".uno:LifeTime" )
@@ -295,20 +137,20 @@ void SAL_CALL SfxStatusDispatcher::addStatusListener(const css::uno::Reference< 
         css::frame::FeatureStateEvent aEvent;
         aEvent.FeatureURL = aURL;
         aEvent.Source = static_cast<css::frame::XDispatch*>(this);
-        aEvent.IsEnabled = sal_True;
-        aEvent.Requery = sal_False;
+        aEvent.IsEnabled = true;
+        aEvent.Requery = false;
         aListener->statusChanged( aEvent );
     }
 }
 
-void SAL_CALL SfxStatusDispatcher::removeStatusListener( const css::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL ) throw ( css::uno::RuntimeException, std::exception )
+void SAL_CALL SfxStatusDispatcher::removeStatusListener( const css::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL )
 {
     aListeners.removeInterface( aURL.Complete, aListener );
 }
 
 
 // XUnoTunnel
-sal_Int64 SAL_CALL SfxOfficeDispatch::getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) throw(css::uno::RuntimeException, std::exception)
+sal_Int64 SAL_CALL SfxOfficeDispatch::getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier )
 {
     if ( aIdentifier == impl_getStaticIdentifier() )
         return sal::static_int_cast< sal_Int64 >( reinterpret_cast< sal_IntPtr >( this ));
@@ -317,24 +159,24 @@ sal_Int64 SAL_CALL SfxOfficeDispatch::getSomething( const css::uno::Sequence< sa
 }
 
 SfxOfficeDispatch::SfxOfficeDispatch( SfxBindings& rBindings, SfxDispatcher* pDispat, const SfxSlot* pSlot, const css::util::URL& rURL )
+    : pImpl( new SfxDispatchController_Impl( this, &rBindings, pDispat, pSlot, rURL ))
 {
-    // this object is an adapter that shows a css::frame::XDispatch-Interface to the outside and uses a SfxControllerItem to monitor a state
-    pControllerItem = new SfxDispatchController_Impl( this, &rBindings, pDispat, pSlot, rURL );
+    // pImpl is an adapter that shows a css::frame::XDispatch-Interface to the outside and uses a SfxControllerItem to monitor a state
+
 }
 
 SfxOfficeDispatch::SfxOfficeDispatch( SfxDispatcher* pDispat, const SfxSlot* pSlot, const css::util::URL& rURL )
+    : pImpl( new SfxDispatchController_Impl( this, nullptr, pDispat, pSlot, rURL ))
 {
-    // this object is an adapter that shows a css::frame::XDispatch-Interface to the outside and uses a SfxControllerItem to monitor a state
-    pControllerItem = new SfxDispatchController_Impl( this, nullptr, pDispat, pSlot, rURL );
+    // pImpl is an adapter that shows a css::frame::XDispatch-Interface to the outside and uses a SfxControllerItem to monitor a state
 }
 
 SfxOfficeDispatch::~SfxOfficeDispatch()
 {
-    if ( pControllerItem )
+    if ( pImpl )
     {
         // when dispatch object is released, destroy its connection to this object and destroy it
-        pControllerItem->UnBindController();
-        delete pControllerItem;
+        pImpl->UnBindController();
     }
 }
 
@@ -346,66 +188,81 @@ const css::uno::Sequence< sal_Int8 >& SfxOfficeDispatch::impl_getStaticIdentifie
     return seqID ;
 }
 
+#if HAVE_FEATURE_JAVA
+// The JavaContext contains an interaction handler which is used when
+// the creation of a Java Virtual Machine fails. There shall only be one
+// user notification (message box) even if the same error (interaction)
+// reoccurs. The effect is, that if a user selects a menu entry than they
+// may get only one notification that a JRE is not selected.
+// This function checks if a JavaContext is already available (typically
+// created by Desktop::Main() in app.cxx), and creates new one if not.
+namespace {
+std::unique_ptr< css::uno::ContextLayer > EnsureJavaContext()
+{
+    css::uno::Reference< css::uno::XCurrentContext > xContext(css::uno::getCurrentContext());
+    if (xContext.is())
+    {
+        css::uno::Reference< css::task::XInteractionHandler > xHandler;
+        xContext->getValueByName(JAVA_INTERACTION_HANDLER_NAME) >>= xHandler;
+        if (xHandler.is())
+            return nullptr; // No need to add new layer: JavaContext already present
+    }
+    return std::make_unique< css::uno::ContextLayer >(new svt::JavaContext(xContext));
+}
+}
+#endif
 
-void SAL_CALL SfxOfficeDispatch::dispatch( const css::util::URL& aURL, const css::uno::Sequence< css::beans::PropertyValue >& aArgs ) throw ( css::uno::RuntimeException, std::exception )
+void SAL_CALL SfxOfficeDispatch::dispatch( const css::util::URL& aURL, const css::uno::Sequence< css::beans::PropertyValue >& aArgs )
 {
     // ControllerItem is the Impl class
-    if ( pControllerItem )
+    if ( pImpl )
     {
 #if HAVE_FEATURE_JAVA
-        // The JavaContext contains an interaction handler which is used when
-        // the creation of a Java Virtual Machine fails. The second parameter
-        // indicates, that there shall only be one user notification (message box)
-        // even if the same error (interaction) reoccurs. The effect is, that if a
-        // user selects a menu entry than they may get only one notification that
-        // a JRE is not selected.
-        css::uno::ContextLayer layer(
-            new svt::JavaContext( css::uno::getCurrentContext() ) );
+        std::unique_ptr< css::uno::ContextLayer > layer(EnsureJavaContext());
 #endif
-        pControllerItem->dispatch( aURL, aArgs, css::uno::Reference < css::frame::XDispatchResultListener >() );
+        pImpl->dispatch( aURL, aArgs, css::uno::Reference < css::frame::XDispatchResultListener >() );
     }
 }
 
 void SAL_CALL SfxOfficeDispatch::dispatchWithNotification( const css::util::URL& aURL,
         const css::uno::Sequence< css::beans::PropertyValue >& aArgs,
-        const css::uno::Reference< css::frame::XDispatchResultListener >& rListener ) throw( css::uno::RuntimeException, std::exception )
+        const css::uno::Reference< css::frame::XDispatchResultListener >& rListener )
 {
     // ControllerItem is the Impl class
-    if ( pControllerItem )
+    if ( pImpl )
     {
 #if HAVE_FEATURE_JAVA
-        // see comment for SfxOfficeDispatch::dispatch
-        css::uno::ContextLayer layer( new svt::JavaContext( css::uno::getCurrentContext() ) );
+        std::unique_ptr< css::uno::ContextLayer > layer(EnsureJavaContext());
 #endif
-        pControllerItem->dispatch( aURL, aArgs, rListener );
+        pImpl->dispatch( aURL, aArgs, rListener );
     }
 }
 
-void SAL_CALL SfxOfficeDispatch::addStatusListener(const css::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL) throw ( css::uno::RuntimeException, std::exception )
+void SAL_CALL SfxOfficeDispatch::addStatusListener(const css::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL)
 {
     GetListeners().addInterface( aURL.Complete, aListener );
-    if ( pControllerItem )
+    if ( pImpl )
     {
         // ControllerItem is the Impl class
-        pControllerItem->addStatusListener( aListener, aURL );
+        pImpl->addStatusListener( aListener, aURL );
     }
 }
 
 SfxDispatcher* SfxOfficeDispatch::GetDispatcher_Impl()
 {
-    return pControllerItem->GetDispatcher();
+    return pImpl->GetDispatcher();
 }
 
 void SfxOfficeDispatch::SetFrame(const css::uno::Reference< css::frame::XFrame >& xFrame)
 {
-    if ( pControllerItem )
-        pControllerItem->SetFrame( xFrame );
+    if ( pImpl )
+        pImpl->SetFrame( xFrame );
 }
 
 void SfxOfficeDispatch::SetMasterUnoCommand( bool bSet )
 {
-    if ( pControllerItem )
-        pControllerItem->setMasterSlaveCommand( bSet );
+    if ( pImpl )
+        pImpl->setMasterSlaveCommand( bSet );
 }
 
 // Determine if URL contains a master/slave command which must be handled a little bit different
@@ -437,21 +294,18 @@ SfxDispatchController_Impl::SfxDispatchController_Impl(
     , pDispatcher( pDispat )
     , pBindings( pBind )
     , pLastState( nullptr )
-    , nSlot( pSlot->GetSlotId() )
     , pDispatch( pDisp )
     , bMasterSlave( false )
     , bVisible( true )
-    , pUnoName( pSlot->pUnoName )
 {
-    if ( aDispatchURL.Protocol == "slot:" && pUnoName )
+    if ( aDispatchURL.Protocol == "slot:" && pSlot->pUnoName )
     {
-        OStringBuffer aTmp(".uno:");
-        aTmp.append(pUnoName);
-        aDispatchURL.Complete = OStringToOUString(aTmp.makeStringAndClear(), RTL_TEXTENCODING_ASCII_US);
+        aDispatchURL.Complete = ".uno:" + OUString::createFromAscii(pSlot->pUnoName);
         Reference< XURLTransformer > xTrans( URLTransformer::create( ::comphelper::getProcessComponentContext() ) );
         xTrans->parseStrict( aDispatchURL );
     }
 
+    sal_uInt16 nSlot = pSlot->GetSlotId();
     SetId( nSlot );
     if ( pBindings )
     {
@@ -471,7 +325,7 @@ SfxDispatchController_Impl::~SfxDispatchController_Impl()
     if ( pDispatch )
     {
         // disconnect
-        pDispatch->pControllerItem = nullptr;
+        pDispatch->pImpl = nullptr;
 
         // force all listeners to release the dispatch object
         css::lang::EventObject aObject;
@@ -505,82 +359,82 @@ void SfxDispatchController_Impl::addParametersToArgs( const css::util::URL& aURL
 {
     // Extract the parameter from the URL and put them into the property value sequence
     sal_Int32 nQueryIndex = aURL.Complete.indexOf( '?' );
-    if ( nQueryIndex > 0 )
+    if ( nQueryIndex <= 0 )
+        return;
+
+    OUString aParamString( aURL.Complete.copy( nQueryIndex+1 ));
+    sal_Int32 nIndex = 0;
+    do
     {
-        OUString aParamString( aURL.Complete.copy( nQueryIndex+1 ));
-        sal_Int32 nIndex = 0;
-        do
+        OUString aToken = aParamString.getToken( 0, '&', nIndex );
+
+        sal_Int32 nParmIndex = 0;
+        OUString aParamType;
+        OUString aParamName = aToken.getToken( 0, '=', nParmIndex );
+        OUString aValue     = (nParmIndex!=-1) ? aToken.getToken( 0, '=', nParmIndex ) : OUString();
+
+        if ( !aParamName.isEmpty() )
         {
-            OUString aToken = aParamString.getToken( 0, '&', nIndex );
-
-            sal_Int32 nParmIndex = 0;
-            OUString aParamType;
-            OUString aParamName = aToken.getToken( 0, '=', nParmIndex );
-            OUString aValue     = (nParmIndex!=-1) ? aToken.getToken( 0, '=', nParmIndex ) : OUString();
-
-            if ( !aParamName.isEmpty() )
-            {
-                nParmIndex = 0;
-                aToken = aParamName;
-                aParamName = aToken.getToken( 0, ':', nParmIndex );
-                aParamType = (nParmIndex!=-1) ? aToken.getToken( 0, ':', nParmIndex ) : OUString();
-            }
-
-            sal_Int32 nLen = rArgs.getLength();
-            rArgs.realloc( nLen+1 );
-            rArgs[nLen].Name = aParamName;
-
-            if ( aParamType.isEmpty() )
-            {
-                // Default: LONG
-                rArgs[nLen].Value <<= aValue.toInt32();
-            }
-            else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_BOOL], 4 ))
-            {
-                // sal_Bool support
-                rArgs[nLen].Value <<= aValue.toBoolean();
-            }
-            else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_BYTE], 4 ))
-            {
-                // sal_uInt8 support
-                rArgs[nLen].Value <<= sal_Int8( aValue.toInt32() );
-            }
-            else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_LONG], 4 ))
-            {
-                // LONG support
-                rArgs[nLen].Value <<= aValue.toInt32();
-            }
-            else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_SHORT], 5 ))
-            {
-                // SHORT support
-                rArgs[nLen].Value <<= sal_Int8( aValue.toInt32() );
-            }
-            else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_HYPER], 5 ))
-            {
-                // HYPER support
-                rArgs[nLen].Value <<= aValue.toInt64();
-            }
-            else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_FLOAT], 5 ))
-            {
-                // FLOAT support
-                rArgs[nLen].Value <<= aValue.toFloat();
-            }
-            else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_STRING], 6 ))
-            {
-                // STRING support
-                rArgs[nLen].Value <<= OUString( INetURLObject::decode( aValue, INetURLObject::DECODE_WITH_CHARSET ));
-            }
-            else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_DOUBLE], 6))
-            {
-                // DOUBLE support
-                rArgs[nLen].Value <<= aValue.toDouble();
-            }
+            nParmIndex = 0;
+            aToken = aParamName;
+            aParamName = aToken.getToken( 0, ':', nParmIndex );
+            aParamType = (nParmIndex!=-1) ? aToken.getToken( 0, ':', nParmIndex ) : OUString();
         }
-        while ( nIndex >= 0 );
+
+        sal_Int32 nLen = rArgs.getLength();
+        rArgs.realloc( nLen+1 );
+        rArgs[nLen].Name = aParamName;
+
+        if ( aParamType.isEmpty() )
+        {
+            // Default: LONG
+            rArgs[nLen].Value <<= aValue.toInt32();
+        }
+        else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_BOOL], 4 ))
+        {
+            // sal_Bool support
+            rArgs[nLen].Value <<= aValue.toBoolean();
+        }
+        else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_BYTE], 4 ))
+        {
+            // sal_uInt8 support
+            rArgs[nLen].Value <<= sal_Int8( aValue.toInt32() );
+        }
+        else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_LONG], 4 ))
+        {
+            // LONG support
+            rArgs[nLen].Value <<= aValue.toInt32();
+        }
+        else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_SHORT], 5 ))
+        {
+            // SHORT support
+            rArgs[nLen].Value <<= sal_Int16( aValue.toInt32() );
+        }
+        else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_HYPER], 5 ))
+        {
+            // HYPER support
+            rArgs[nLen].Value <<= aValue.toInt64();
+        }
+        else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_FLOAT], 5 ))
+        {
+            // FLOAT support
+            rArgs[nLen].Value <<= aValue.toFloat();
+        }
+        else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_STRING], 6 ))
+        {
+            // STRING support
+            rArgs[nLen].Value <<= INetURLObject::decode( aValue, INetURLObject::DecodeMechanism::WithCharset );
+        }
+        else if ( aParamType.equalsAsciiL( URLTypeNames[URLType_DOUBLE], 6))
+        {
+            // DOUBLE support
+            rArgs[nLen].Value <<= aValue.toDouble();
+        }
     }
+    while ( nIndex >= 0 );
 }
 
-SfxMapUnit SfxDispatchController_Impl::GetCoreMetric( SfxItemPool& rPool, sal_uInt16 nSlotId )
+MapUnit SfxDispatchController_Impl::GetCoreMetric( SfxItemPool const & rPool, sal_uInt16 nSlotId )
 {
     sal_uInt16 nWhich = rPool.GetWhich( nSlotId );
     return rPool.GetMetric( nWhich );
@@ -608,6 +462,9 @@ class UsageInfo {
     /// Command vs. how many times it was used
     UsageMap maUsage;
 
+    /// config path, get it long before atexit time
+    OUString msConfigPath;
+
 public:
     UsageInfo() : mbIsCollecting(false)
     {
@@ -625,7 +482,15 @@ public:
     void save();
 
     /// Modify the flag whether we are collecting.
-    void setCollecting(bool bIsCollecting) { mbIsCollecting = bIsCollecting; }
+    void setCollecting(bool bIsCollecting)
+    {
+        mbIsCollecting = bIsCollecting;
+        if (mbIsCollecting)
+        {
+            msConfigPath = SvtPathOptions().GetConfigPath();
+            msConfigPath += "usage/";
+        }
+    }
 };
 
 void UsageInfo::increment(const OUString &rCommand)
@@ -643,9 +508,7 @@ void UsageInfo::save()
     if (!mbIsCollecting)
         return;
 
-    OUString path(SvtPathOptions().GetConfigPath());
-    path += "usage/";
-    osl::Directory::createPath(path);
+    osl::Directory::createPath(msConfigPath);
 
     //get system time information.
     TimeValue systemTime;
@@ -660,19 +523,20 @@ void UsageInfo::save()
 
     //filename type: usage-YYYY-MM-DDTHH_MM_SS.csv
     OUString filename = "usage-" + OUString::createFromAscii(time) + ".csv";
-    path += filename;
+    OUString path = msConfigPath + filename;
 
     osl::File file(path);
 
     if( file.open(osl_File_OpenFlag_Read | osl_File_OpenFlag_Write | osl_File_OpenFlag_Create) == osl::File::E_None )
     {
-        OString aUsageInfoMsg = "Document Type;Command;Count";
+        OStringBuffer aUsageInfoMsg("Document Type;Command;Count");
 
-        for (UsageMap::const_iterator it = maUsage.begin(); it != maUsage.end(); ++it)
-            aUsageInfoMsg += "\n" + it->first.toUtf8() + ";" + OString::number(it->second);
+        for (auto const& elem : maUsage)
+            aUsageInfoMsg.append("\n").append(elem.first.toUtf8()).append(";").append(OString::number(elem.second));
 
         sal_uInt64 written = 0;
-        file.write(aUsageInfoMsg.pData->buffer, aUsageInfoMsg.getLength(), written);
+        auto s = aUsageInfoMsg.makeStringAndClear();
+        file.write(s.getStr(), s.getLength(), written);
         file.close();
     }
 }
@@ -728,208 +592,221 @@ void collectUsageInformation(const util::URL& rURL, const uno::Sequence<beans::P
     theUsageInfo::get().increment(aCommand);
 }
 
+void collectUIInformation(const util::URL& rURL, const css::uno::Sequence< css::beans::PropertyValue >& rArgs)
+{
+    static const char* pFile = std::getenv("LO_COLLECT_UIINFO");
+    if (!pFile)
+        return;
+
+    UITestLogger::getInstance().logCommand("CommandSent Name:" + rURL.Complete, rArgs);
 }
 
-void SAL_CALL SfxDispatchController_Impl::dispatch( const css::util::URL& aURL,
+}
+
+void SfxDispatchController_Impl::dispatch( const css::util::URL& aURL,
         const css::uno::Sequence< css::beans::PropertyValue >& aArgs,
         const css::uno::Reference< css::frame::XDispatchResultListener >& rListener )
-    throw (css::uno::RuntimeException, std::exception)
 {
     collectUsageInformation(aURL, aArgs);
+    collectUIInformation(aURL,aArgs);
 
     SolarMutexGuard aGuard;
     if (
-        pDispatch &&
+        !(pDispatch &&
         (
          (aURL.Protocol == ".uno:" && aURL.Path == aDispatchURL.Path) ||
          (aURL.Protocol == "slot:" && aURL.Path.toInt32() == GetId())
-        )
+        ))
        )
+        return;
+
+    if ( !pDispatcher && pBindings )
+        pDispatcher = GetBindings().GetDispatcher_Impl();
+
+    css::uno::Sequence< css::beans::PropertyValue > lNewArgs;
+    sal_Int32 nCount = aArgs.getLength();
+
+    // Support for URL based arguments
+    INetURLObject aURLObj( aURL.Complete );
+    if ( aURLObj.HasParam() )
+        addParametersToArgs( aURL, lNewArgs );
+
+    // Try to find call mode and frame name inside given arguments...
+    SfxCallMode nCall = SfxCallMode::RECORD;
+    sal_Int32   nMarkArg = -1;
+
+    // Filter arguments which shouldn't be part of the sequence property value
+    sal_uInt16  nModifier(0);
+    std::vector< css::beans::PropertyValue > aAddArgs;
+    for( sal_Int32 n=0; n<nCount; n++ )
     {
-        if ( !pDispatcher && pBindings )
-            pDispatcher = GetBindings().GetDispatcher_Impl();
-
-        css::uno::Sequence< css::beans::PropertyValue > lNewArgs;
-        sal_Int32 nCount = aArgs.getLength();
-
-        // Support for URL based arguments
-        INetURLObject aURLObj( aURL.Complete );
-        if ( aURLObj.HasParam() )
-            addParametersToArgs( aURL, lNewArgs );
-
-        // Try to find call mode and frame name inside given arguments...
-        SfxCallMode nCall = SfxCallMode::RECORD;
-        sal_Int32   nMarkArg = -1;
-
-        // Filter arguments which shouldn't be part of the sequence property value
-        sal_uInt16  nModifier(0);
-        std::vector< css::beans::PropertyValue > aAddArgs;
-        for( sal_Int32 n=0; n<nCount; n++ )
+        const css::beans::PropertyValue& rProp = aArgs[n];
+        if( rProp.Name == "SynchronMode" )
         {
-            const css::beans::PropertyValue& rProp = aArgs[n];
-            if( rProp.Name == "SynchronMode" )
+            bool    bTemp;
+            if( rProp.Value >>= bTemp )
+                nCall = bTemp ? SfxCallMode::SYNCHRON : SfxCallMode::ASYNCHRON;
+        }
+        else if( rProp.Name == "Bookmark" )
+        {
+            nMarkArg = n;
+            aAddArgs.push_back( aArgs[n] );
+        }
+        else if( rProp.Name == "KeyModifier" )
+            rProp.Value >>= nModifier;
+        else
+            aAddArgs.push_back( aArgs[n] );
+    }
+
+    // Add needed arguments to sequence property value
+    sal_uInt32 nAddArgs = aAddArgs.size();
+    if ( nAddArgs > 0 )
+    {
+        sal_uInt32 nIndex( lNewArgs.getLength() );
+
+        lNewArgs.realloc( lNewArgs.getLength()+aAddArgs.size() );
+        for ( sal_uInt32 i = 0; i < nAddArgs; i++ )
+            lNewArgs[nIndex++] = aAddArgs[i];
+    }
+
+    // Overwrite possible detected synchron argument, if real listener exists (currently no other way)
+    if ( rListener.is() )
+        nCall = SfxCallMode::SYNCHRON;
+
+    if( GetId() == SID_JUMPTOMARK && nMarkArg == - 1 )
+    {
+        // we offer dispatches for SID_JUMPTOMARK if the URL points to a bookmark inside the document
+        // so we must retrieve this as an argument from the parsed URL
+        lNewArgs.realloc( lNewArgs.getLength()+1 );
+        nMarkArg = lNewArgs.getLength()-1;
+        lNewArgs[nMarkArg].Name = "Bookmark";
+        lNewArgs[nMarkArg].Value <<= aURL.Mark;
+    }
+
+    css::uno::Reference< css::frame::XFrame > xFrameRef(xFrame.get(), css::uno::UNO_QUERY);
+    if (! xFrameRef.is() && pDispatcher)
+    {
+        SfxViewFrame* pViewFrame = pDispatcher->GetFrame();
+        if (pViewFrame)
+            xFrameRef = pViewFrame->GetFrame().GetFrameInterface();
+    }
+
+    bool bSuccess = false;
+    const SfxPoolItem* pItem = nullptr;
+    MapUnit eMapUnit( MapUnit::Map100thMM );
+
+    // Extra scope so that aInternalSet is destroyed before
+    // rListener->dispatchFinished potentially calls
+    // framework::Desktop::terminate -> SfxApplication::Deinitialize ->
+    // ~CntItemPool:
+    if (pDispatcher)
+    {
+        SfxAllItemSet aInternalSet( SfxGetpApp()->GetPool() );
+        if (xFrameRef.is()) // an empty set is no problem ... but an empty frame reference can be a problem !
+            aInternalSet.Put( SfxUnoFrameItem( SID_FILLFRAME, xFrameRef ) );
+
+        SfxShell* pShell( nullptr );
+        // #i102619# Retrieve metric from shell before execution - the shell could be destroyed after execution
+        if ( pDispatcher->GetBindings() )
+        {
+            if ( !pDispatcher->IsLocked() )
             {
-                bool    bTemp;
-                if( rProp.Value >>= bTemp )
-                    nCall = bTemp ? SfxCallMode::SYNCHRON : SfxCallMode::ASYNCHRON;
-            }
-            else if( rProp.Name == "Bookmark" )
-            {
-                nMarkArg = n;
-                aAddArgs.push_back( aArgs[n] );
-            }
-            else if( rProp.Name == "KeyModifier" )
-                rProp.Value >>= nModifier;
-            else
-                aAddArgs.push_back( aArgs[n] );
-        }
-
-        // Add needed arguments to sequence property value
-        sal_uInt32 nAddArgs = aAddArgs.size();
-        if ( nAddArgs > 0 )
-        {
-            sal_uInt32 nIndex( lNewArgs.getLength() );
-
-            lNewArgs.realloc( lNewArgs.getLength()+aAddArgs.size() );
-            for ( sal_uInt32 i = 0; i < nAddArgs; i++ )
-                lNewArgs[nIndex++] = aAddArgs[i];
-        }
-
-        // Overwrite possible detected synchron argument, if real listener exists (currently no other way)
-        if ( rListener.is() )
-            nCall = SfxCallMode::SYNCHRON;
-
-        if( GetId() == SID_JUMPTOMARK && nMarkArg == - 1 )
-        {
-            // we offer dispatches for SID_JUMPTOMARK if the URL points to a bookmark inside the document
-            // so we must retrieve this as an argument from the parsed URL
-            lNewArgs.realloc( lNewArgs.getLength()+1 );
-            nMarkArg = lNewArgs.getLength()-1;
-            lNewArgs[nMarkArg].Name = "Bookmark";
-            lNewArgs[nMarkArg].Value <<= aURL.Mark;
-        }
-
-        css::uno::Reference< css::frame::XFrame > xFrameRef(xFrame.get(), css::uno::UNO_QUERY);
-        if (! xFrameRef.is() && pDispatcher)
-        {
-            SfxViewFrame* pViewFrame = pDispatcher->GetFrame();
-            if (pViewFrame)
-                xFrameRef = pViewFrame->GetFrame().GetFrameInterface();
-        }
-
-        bool bSuccess = false;
-        const SfxPoolItem* pItem = nullptr;
-        SfxMapUnit eMapUnit( SFX_MAPUNIT_100TH_MM );
-
-        // Extra scope so that aInternalSet is destroyed before
-        // rListener->dispatchFinished potentially calls
-        // framework::Desktop::terminate -> SfxApplication::Deinitialize ->
-        // ~CntItemPool:
-        if (pDispatcher)
-        {
-            SfxAllItemSet aInternalSet( SfxGetpApp()->GetPool() );
-            if (xFrameRef.is()) // an empty set is no problem ... but an empty frame reference can be a problem !
-                aInternalSet.Put( SfxUnoFrameItem( SID_FILLFRAME, xFrameRef ) );
-
-            SfxShell* pShell( nullptr );
-            // #i102619# Retrieve metric from shell before execution - the shell could be destroyed after execution
-            if ( pDispatcher->GetBindings() )
-            {
-                if ( !pDispatcher->IsLocked( GetId() ) )
+                const SfxSlot *pSlot = nullptr;
+                if ( pDispatcher->GetShellAndSlot_Impl( GetId(), &pShell, &pSlot, false, false ) )
                 {
-                    const SfxSlot *pSlot = nullptr;
-                    if ( pDispatcher->GetShellAndSlot_Impl( GetId(), &pShell, &pSlot, false,
-                                                            SfxCallMode::MODAL==(nCall&SfxCallMode::MODAL), false ) )
+                    if ( bMasterSlave )
                     {
-                        if ( bMasterSlave )
-                        {
-                            // Extract slave command and add argument to the args list. Master slot MUST
-                            // have a argument that has the same name as the master slot and type is SfxStringItem.
-                            sal_Int32 nIndex = lNewArgs.getLength();
-                            lNewArgs.realloc( nIndex+1 );
-                            lNewArgs[nIndex].Name   = OUString::createFromAscii( pSlot->pUnoName );
-                            lNewArgs[nIndex].Value  = makeAny( SfxDispatchController_Impl::getSlaveCommand( aDispatchURL ));
-                        }
-
-                        eMapUnit = GetCoreMetric( pShell->GetPool(), GetId() );
-                        std::unique_ptr<SfxAllItemSet> xSet(new SfxAllItemSet(pShell->GetPool()));
-                        TransformParameters(GetId(), lNewArgs, *xSet, pSlot);
-                        if (xSet->Count())
-                        {
-                            // execute with arguments - call directly
-                            pItem = pDispatcher->Execute(GetId(), nCall, xSet.get(), &aInternalSet, nModifier);
-                            bSuccess = (pItem != nullptr);
-                        }
-                        else
-                        {
-                            // Be sure to delete this before we send a dispatch
-                            // request, which will destroy the current shell.
-                            xSet.reset();
-
-                            // execute using bindings, enables support for toggle/enum etc.
-                            SfxRequest aReq( GetId(), nCall, pShell->GetPool() );
-                            aReq.SetModifier( nModifier );
-                            aReq.SetInternalArgs_Impl(aInternalSet);
-                            pDispatcher->GetBindings()->Execute_Impl( aReq, pSlot, pShell );
-                            pItem = aReq.GetReturnValue();
-                            bSuccess = aReq.IsDone() || pItem != nullptr;
-                        }
+                        // Extract slave command and add argument to the args list. Master slot MUST
+                        // have a argument that has the same name as the master slot and type is SfxStringItem.
+                        sal_Int32 nIndex = lNewArgs.getLength();
+                        lNewArgs.realloc( nIndex+1 );
+                        lNewArgs[nIndex].Name   = OUString::createFromAscii( pSlot->pUnoName );
+                        lNewArgs[nIndex].Value  <<= SfxDispatchController_Impl::getSlaveCommand( aDispatchURL );
                     }
-#ifdef DBG_UTIL
+
+                    eMapUnit = GetCoreMetric( pShell->GetPool(), GetId() );
+                    std::unique_ptr<SfxAllItemSet> xSet(new SfxAllItemSet(pShell->GetPool()));
+                    TransformParameters(GetId(), lNewArgs, *xSet, pSlot);
+                    if (xSet->Count())
+                    {
+                        // execute with arguments - call directly
+                        pItem = pDispatcher->Execute(GetId(), nCall, xSet.get(), &aInternalSet, nModifier);
+                        if ( pItem != nullptr )
+                        {
+                            if (const SfxBoolItem* pBoolItem = dynamic_cast<const SfxBoolItem*>(pItem))
+                                bSuccess = pBoolItem->GetValue();
+                            else if ( !pItem->IsVoidItem() )
+                                bSuccess = true;  // all other types are true
+                        }
+                        // else bSuccess = false look to line 664 it is false
+                    }
                     else
-                        SAL_INFO("sfx.control", "MacroPlayer: Unknown slot dispatched!");
-#endif
-                }
-            }
-            else
-            {
-                eMapUnit = GetCoreMetric( SfxGetpApp()->GetPool(), GetId() );
-                // AppDispatcher
-                SfxAllItemSet aSet( SfxGetpApp()->GetPool() );
-                TransformParameters( GetId(), lNewArgs, aSet );
-
-                if ( aSet.Count() )
-                    pItem = pDispatcher->Execute( GetId(), nCall, &aSet, &aInternalSet, nModifier );
-                else
-                    // SfxRequests take empty sets as argument sets, GetArgs() returning non-zero!
-                    pItem = pDispatcher->Execute( GetId(), nCall, nullptr, &aInternalSet, nModifier );
-
-                // no bindings, no invalidate ( usually done in SfxDispatcher::Call_Impl()! )
-                if ( SfxApplication::Get() )
-                {
-                    SfxDispatcher* pAppDispat = SfxGetpApp()->GetAppDispatcher_Impl();
-                    if ( pAppDispat )
                     {
-                        const SfxPoolItem* pState=nullptr;
-                        SfxItemState eState = pDispatcher->QueryState( GetId(), pState );
-                        StateChanged( GetId(), eState, pState );
+                        // Be sure to delete this before we send a dispatch
+                        // request, which will destroy the current shell.
+                        xSet.reset();
+
+                        // execute using bindings, enables support for toggle/enum etc.
+                        SfxRequest aReq( GetId(), nCall, pShell->GetPool() );
+                        aReq.SetModifier( nModifier );
+                        aReq.SetInternalArgs_Impl(aInternalSet);
+                        pDispatcher->GetBindings()->Execute_Impl( aReq, pSlot, pShell );
+                        pItem = aReq.GetReturnValue();
+                        bSuccess = aReq.IsDone() || pItem != nullptr;
                     }
                 }
-
-                bSuccess = (pItem != nullptr);
+                else
+                    SAL_INFO("sfx.control", "MacroPlayer: Unknown slot dispatched!");
             }
         }
-
-        if ( rListener.is() )
+        else
         {
-            css::frame::DispatchResultEvent aEvent;
-            if ( bSuccess )
-                aEvent.State = css::frame::DispatchResultState::SUCCESS;
-            else
-                aEvent.State = css::frame::DispatchResultState::FAILURE;
+            eMapUnit = GetCoreMetric( SfxGetpApp()->GetPool(), GetId() );
+            // AppDispatcher
+            SfxAllItemSet aSet( SfxGetpApp()->GetPool() );
+            TransformParameters( GetId(), lNewArgs, aSet );
 
-            aEvent.Source = static_cast<css::frame::XDispatch*>(pDispatch);
-            if ( bSuccess && pItem && dynamic_cast< const SfxVoidItem *>( pItem ) ==  nullptr )
+            if ( aSet.Count() )
+                pItem = pDispatcher->Execute(GetId(), nCall, &aSet, &aInternalSet, nModifier);
+            else
+                // SfxRequests take empty sets as argument sets, GetArgs() returning non-zero!
+                pItem = pDispatcher->Execute(GetId(), nCall, nullptr, &aInternalSet, nModifier);
+
+            // no bindings, no invalidate ( usually done in SfxDispatcher::Call_Impl()! )
+            if (SfxApplication* pApp = SfxApplication::Get())
             {
-                sal_uInt16 nSubId( 0 );
-                if ( eMapUnit == SFX_MAPUNIT_TWIP )
-                    nSubId |= CONVERT_TWIPS;
-                pItem->QueryValue( aEvent.Result, (sal_uInt8)nSubId );
+                SfxDispatcher* pAppDispat = pApp->GetAppDispatcher_Impl();
+                if ( pAppDispat )
+                {
+                    const SfxPoolItem* pState=nullptr;
+                    SfxItemState eState = pDispatcher->QueryState( GetId(), pState );
+                    StateChanged( GetId(), eState, pState );
+                }
             }
 
-            rListener->dispatchFinished( aEvent );
+            bSuccess = (pItem != nullptr);
         }
     }
+
+    if ( !rListener.is() )
+        return;
+
+    css::frame::DispatchResultEvent aEvent;
+    if ( bSuccess )
+        aEvent.State = css::frame::DispatchResultState::SUCCESS;
+    else
+        aEvent.State = css::frame::DispatchResultState::FAILURE;
+
+    aEvent.Source = static_cast<css::frame::XDispatch*>(pDispatch);
+    if ( bSuccess && pItem && !pItem->IsVoidItem() )
+    {
+        sal_uInt16 nSubId( 0 );
+        if ( eMapUnit == MapUnit::MapTwip )
+            nSubId |= CONVERT_TWIPS;
+        pItem->QueryValue( aEvent.Result, static_cast<sal_uInt8>(nSubId) );
+    }
+
+    rListener->dispatchFinished( aEvent );
 }
 
 SfxDispatcher* SfxDispatchController_Impl::GetDispatcher()
@@ -939,7 +816,7 @@ SfxDispatcher* SfxDispatchController_Impl::GetDispatcher()
     return pDispatcher;
 }
 
-void SAL_CALL SfxDispatchController_Impl::addStatusListener(const css::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL) throw ( css::uno::RuntimeException )
+void SfxDispatchController_Impl::addStatusListener(const css::uno::Reference< css::frame::XStatusListener > & aListener, const css::util::URL& aURL)
 {
     SolarMutexGuard aGuard;
     if ( !pDispatch )
@@ -956,13 +833,13 @@ void SAL_CALL SfxDispatchController_Impl::addStatusListener(const css::uno::Refe
         // Use special uno struct to transport don't care state
         css::frame::status::ItemStatus aItemStatus;
         aItemStatus.State = css::frame::status::ItemState::DONT_CARE;
-        aState = makeAny( aItemStatus );
+        aState <<= aItemStatus;
     }
 
     css::frame::FeatureStateEvent  aEvent;
     aEvent.FeatureURL = aURL;
     aEvent.Source     = static_cast<css::frame::XDispatch*>(pDispatch);
-    aEvent.Requery    = sal_False;
+    aEvent.Requery    = false;
     if ( bVisible )
     {
         aEvent.IsEnabled  = eState != SfxItemState::DISABLED;
@@ -971,18 +848,37 @@ void SAL_CALL SfxDispatchController_Impl::addStatusListener(const css::uno::Refe
     else
     {
         css::frame::status::Visibility aVisibilityStatus;
-        aVisibilityStatus.bVisible = sal_False;
+        aVisibilityStatus.bVisible = false;
 
         // MBA: we might decide to *not* disable "invisible" slots, but this would be
         // a change that needs to adjust at least the testtool
-        aEvent.IsEnabled           = sal_False;
-        aEvent.State               = makeAny( aVisibilityStatus );
+        aEvent.IsEnabled           = false;
+        aEvent.State               <<= aVisibilityStatus;
     }
 
     aListener->statusChanged( aEvent );
 }
 
-void SfxDispatchController_Impl::StateChanged( sal_uInt16 nSID, SfxItemState eState, const SfxPoolItem* pState, SfxSlotServer* pSlotServ )
+void SfxDispatchController_Impl::sendStatusChanged(const OUString& rURL, const css::frame::FeatureStateEvent& rEvent)
+{
+    ::cppu::OInterfaceContainerHelper* pContnr = pDispatch->GetListeners().getContainer(rURL);
+    if (!pContnr)
+        return;
+    ::cppu::OInterfaceIteratorHelper aIt(*pContnr);
+    while (aIt.hasMoreElements())
+    {
+        try
+        {
+            static_cast<css::frame::XStatusListener*>(aIt.next())->statusChanged(rEvent);
+        }
+        catch (const css::uno::RuntimeException&)
+        {
+            aIt.remove();
+        }
+    }
+}
+
+void SfxDispatchController_Impl::StateChanged( sal_uInt16 nSID, SfxItemState eState, const SfxPoolItem* pState, SfxSlotServer const * pSlotServ )
 {
     if ( !pDispatch )
         return;
@@ -1013,68 +909,57 @@ void SfxDispatchController_Impl::StateChanged( sal_uInt16 nSID, SfxItemState eSt
         pLastState = pState;
     }
 
-    if (bNotify)
+    if (!bNotify)
+        return;
+
+    css::uno::Any aState;
+    if ( ( eState >= SfxItemState::DEFAULT ) && pState && !IsInvalidItem( pState ) && !pState->IsVoidItem() )
     {
-        css::uno::Any aState;
-        if ( ( eState >= SfxItemState::DEFAULT ) && pState && !IsInvalidItem( pState ) && dynamic_cast< const SfxVoidItem *>( pState ) ==  nullptr )
+        // Retrieve metric from pool to have correct sub ID when calling QueryValue
+        sal_uInt16     nSubId( 0 );
+        MapUnit eMapUnit( MapUnit::Map100thMM );
+
+        // retrieve the core metric
+        // it's enough to check the objectshell, the only shell that does not use the pool of the document
+        // is SfxViewFrame, but it hasn't any metric parameters
+        // TODO/LATER: what about the FormShell? Does it use any metric data?! Perhaps it should use the Pool of the document!
+        if ( pSlotServ && pDispatcher )
         {
-            // Retrieve metric from pool to have correct sub ID when calling QueryValue
-            sal_uInt16     nSubId( 0 );
-            SfxMapUnit eMapUnit( SFX_MAPUNIT_100TH_MM );
-
-            // retrieve the core metric
-            // it's enough to check the objectshell, the only shell that does not use the pool of the document
-            // is SfxViewFrame, but it hasn't any metric parameters
-            // TODO/LATER: what about the FormShell? Does it use any metric data?! Perhaps it should use the Pool of the document!
-            if ( pSlotServ && pDispatcher )
-            {
-                SfxShell* pShell = pDispatcher->GetShell( pSlotServ->GetShellLevel() );
-                DBG_ASSERT( pShell, "Can't get core metric without shell!" );
-                if ( pShell )
-                    eMapUnit = GetCoreMetric( pShell->GetPool(), nSID );
-            }
-
-            if ( eMapUnit == SFX_MAPUNIT_TWIP )
-                nSubId |= CONVERT_TWIPS;
-
-            pState->QueryValue( aState, (sal_uInt8)nSubId );
-        }
-        else if ( eState == SfxItemState::DONTCARE )
-        {
-            // Use special uno struct to transport don't care state
-            css::frame::status::ItemStatus aItemStatus;
-            aItemStatus.State = css::frame::status::ItemState::DONT_CARE;
-            aState = makeAny( aItemStatus );
+            SfxShell* pShell = pDispatcher->GetShell( pSlotServ->GetShellLevel() );
+            DBG_ASSERT( pShell, "Can't get core metric without shell!" );
+            if ( pShell )
+                eMapUnit = GetCoreMetric( pShell->GetPool(), nSID );
         }
 
-        css::frame::FeatureStateEvent aEvent;
-        aEvent.FeatureURL = aDispatchURL;
-        aEvent.Source = static_cast<css::frame::XDispatch*>(pDispatch);
-        aEvent.IsEnabled = eState != SfxItemState::DISABLED;
-        aEvent.Requery = sal_False;
-        aEvent.State = aState;
+        if ( eMapUnit == MapUnit::MapTwip )
+            nSubId |= CONVERT_TWIPS;
 
-        if (pDispatcher && pDispatcher->GetFrame())
-        {
-            InterceptLOKStateChangeEvent(
-                    pDispatcher->GetFrame()->GetObjectShell(), aEvent);
-        }
+        pState->QueryValue( aState, static_cast<sal_uInt8>(nSubId) );
+    }
+    else if ( eState == SfxItemState::DONTCARE )
+    {
+        // Use special uno struct to transport don't care state
+        css::frame::status::ItemStatus aItemStatus;
+        aItemStatus.State = css::frame::status::ItemState::DONT_CARE;
+        aState <<= aItemStatus;
+    }
 
-        ::cppu::OInterfaceContainerHelper* pContnr = pDispatch->GetListeners().getContainer ( aDispatchURL.Complete );
-        if (pContnr) {
-            ::cppu::OInterfaceIteratorHelper aIt( *pContnr );
-            while( aIt.hasMoreElements() )
-            {
-                try
-                {
-                    static_cast< css::frame::XStatusListener *>(aIt.next())->statusChanged( aEvent );
-                }
-                catch (const css::uno::RuntimeException&)
-                {
-                    aIt.remove();
-                }
-            }
-        }
+    css::frame::FeatureStateEvent aEvent;
+    aEvent.FeatureURL = aDispatchURL;
+    aEvent.Source = static_cast<css::frame::XDispatch*>(pDispatch);
+    aEvent.IsEnabled = eState != SfxItemState::DISABLED;
+    aEvent.Requery = false;
+    aEvent.State = aState;
+
+    if (pDispatcher && pDispatcher->GetFrame())
+    {
+        InterceptLOKStateChangeEvent(pDispatcher->GetFrame(), aEvent, pState);
+    }
+
+    for (const OUString& rName: pDispatch->GetListeners().getContainedTypes())
+    {
+        if (rName == aDispatchURL.Main || rName == aDispatchURL.Complete)
+            sendStatusChanged(rName, aEvent);
     }
 }
 
@@ -1083,18 +968,19 @@ void SfxDispatchController_Impl::StateChanged( sal_uInt16 nSID, SfxItemState eSt
     StateChanged( nSID, eState, pState, nullptr );
 }
 
-void SfxDispatchController_Impl::InterceptLOKStateChangeEvent(const SfxObjectShell* objSh, const css::frame::FeatureStateEvent& aEvent)
+static void InterceptLOKStateChangeEvent(const SfxViewFrame* pViewFrame, const css::frame::FeatureStateEvent& aEvent, const SfxPoolItem* pState)
 {
     if (!comphelper::LibreOfficeKit::isActive())
         return;
 
     OUStringBuffer aBuffer;
     aBuffer.append(aEvent.FeatureURL.Complete);
-    aBuffer.append("=");
+    aBuffer.append(u'=');
 
     if (aEvent.FeatureURL.Path == "Bold" ||
         aEvent.FeatureURL.Path == "CenterPara" ||
         aEvent.FeatureURL.Path == "CharBackgroundExt" ||
+        aEvent.FeatureURL.Path == "ControlCodes" ||
         aEvent.FeatureURL.Path == "DefaultBullet" ||
         aEvent.FeatureURL.Path == "DefaultNumbering" ||
         aEvent.FeatureURL.Path == "Italic" ||
@@ -1103,11 +989,21 @@ void SfxDispatchController_Impl::InterceptLOKStateChangeEvent(const SfxObjectShe
         aEvent.FeatureURL.Path == "OutlineFont" ||
         aEvent.FeatureURL.Path == "RightPara" ||
         aEvent.FeatureURL.Path == "Shadowed" ||
+        aEvent.FeatureURL.Path == "SpellOnline" ||
+        aEvent.FeatureURL.Path == "OnlineAutoFormat" ||
         aEvent.FeatureURL.Path == "SubScript" ||
         aEvent.FeatureURL.Path == "SuperScript" ||
         aEvent.FeatureURL.Path == "Strikeout" ||
         aEvent.FeatureURL.Path == "Underline" ||
-        aEvent.FeatureURL.Path == "ModifiedStatus")
+        aEvent.FeatureURL.Path == "ModifiedStatus" ||
+        aEvent.FeatureURL.Path == "TrackChanges" ||
+        aEvent.FeatureURL.Path == "ShowTrackedChanges" ||
+        aEvent.FeatureURL.Path == "NextTrackedChange" ||
+        aEvent.FeatureURL.Path == "PreviousTrackedChange" ||
+        aEvent.FeatureURL.Path == "AlignLeft" ||
+        aEvent.FeatureURL.Path == "AlignHorizontalCenter" ||
+        aEvent.FeatureURL.Path == "AlignRight" ||
+        aEvent.FeatureURL.Path == "DocumentRepair")
     {
         bool bTemp = false;
         aEvent.State >>= bTemp;
@@ -1144,6 +1040,48 @@ void SfxDispatchController_Impl::InterceptLOKStateChangeEvent(const SfxObjectShe
     else if (aEvent.FeatureURL.Path == "Undo" ||
              aEvent.FeatureURL.Path == "Redo")
     {
+        const SfxUInt32Item* pUndoConflict = dynamic_cast< const SfxUInt32Item * >( pState );
+        if ( pUndoConflict && pUndoConflict->GetValue() > 0 )
+        {
+            aBuffer.append(OUString("disabled"));
+        }
+        else
+        {
+            aBuffer.append(aEvent.IsEnabled ? OUString("enabled") : OUString("disabled"));
+        }
+    }
+    else if (aEvent.FeatureURL.Path == "Cut" ||
+             aEvent.FeatureURL.Path == "Copy" ||
+             aEvent.FeatureURL.Path == "Paste" ||
+             aEvent.FeatureURL.Path == "SelectAll" ||
+             aEvent.FeatureURL.Path == "InsertAnnotation" ||
+             aEvent.FeatureURL.Path == "DeleteAnnotation" ||
+             aEvent.FeatureURL.Path == "InsertRowsBefore" ||
+             aEvent.FeatureURL.Path == "InsertRowsAfter" ||
+             aEvent.FeatureURL.Path == "InsertColumnsBefore" ||
+             aEvent.FeatureURL.Path == "InsertColumnsAfter" ||
+             aEvent.FeatureURL.Path == "InsertSymbol" ||
+             aEvent.FeatureURL.Path == "DeleteRows" ||
+             aEvent.FeatureURL.Path == "DeleteColumns" ||
+             aEvent.FeatureURL.Path == "DeleteTable" ||
+             aEvent.FeatureURL.Path == "SelectTable" ||
+             aEvent.FeatureURL.Path == "EntireRow" ||
+             aEvent.FeatureURL.Path == "EntireColumn" ||
+             aEvent.FeatureURL.Path == "EntireCell" ||
+             aEvent.FeatureURL.Path == "SortAscending" ||
+             aEvent.FeatureURL.Path == "SortDescending" ||
+             aEvent.FeatureURL.Path == "AcceptAllTrackedChanges" ||
+             aEvent.FeatureURL.Path == "RejectAllTrackedChanges" ||
+             aEvent.FeatureURL.Path == "TableDialog" ||
+             aEvent.FeatureURL.Path == "FormatCellDialog" ||
+             aEvent.FeatureURL.Path == "FontDialog" ||
+             aEvent.FeatureURL.Path == "ParagraphDialog" ||
+             aEvent.FeatureURL.Path == "OutlineBullet" ||
+             aEvent.FeatureURL.Path == "InsertIndexesEntry" ||
+             aEvent.FeatureURL.Path == "TransformDialog" ||
+             aEvent.FeatureURL.Path == "EditRegion")
+
+    {
         aBuffer.append(aEvent.IsEnabled ? OUString("enabled") : OUString("disabled"));
     }
     else if (aEvent.FeatureURL.Path == "InsertPage" ||
@@ -1152,12 +1090,127 @@ void SfxDispatchController_Impl::InterceptLOKStateChangeEvent(const SfxObjectShe
     {
         aBuffer.append(OUString::boolean(aEvent.IsEnabled));
     }
+    else if (aEvent.FeatureURL.Path == "AssignLayout" ||
+             aEvent.FeatureURL.Path == "StatusSelectionMode" ||
+             aEvent.FeatureURL.Path == "Signature" ||
+             aEvent.FeatureURL.Path == "SelectionMode" ||
+             aEvent.FeatureURL.Path == "StatusBarFunc")
+    {
+        sal_Int32 aInt32;
+
+        if (aEvent.IsEnabled && (aEvent.State >>= aInt32))
+        {
+            aBuffer.append(OUString::number(aInt32));
+        }
+    }
+    else if (aEvent.FeatureURL.Path == "StatusDocPos" ||
+             aEvent.FeatureURL.Path == "RowColSelCount" ||
+             aEvent.FeatureURL.Path == "StatusPageStyle" ||
+             aEvent.FeatureURL.Path == "StateTableCell" ||
+             aEvent.FeatureURL.Path == "StatePageNumber" ||
+             aEvent.FeatureURL.Path == "StateWordCount" ||
+             aEvent.FeatureURL.Path == "PageStyleName" ||
+             aEvent.FeatureURL.Path == "PageStatus" ||
+             aEvent.FeatureURL.Path == "LayoutStatus" ||
+             aEvent.FeatureURL.Path == "Context")
+    {
+        OUString aString;
+
+        if (aEvent.IsEnabled && (aEvent.State >>= aString))
+        {
+            aBuffer.append(aString);
+        }
+    }
+    else if (aEvent.FeatureURL.Path == "InsertMode" ||
+             aEvent.FeatureURL.Path == "WrapText" ||
+             aEvent.FeatureURL.Path == "NumberFormatCurrency" ||
+             aEvent.FeatureURL.Path == "NumberFormatPercent" ||
+             aEvent.FeatureURL.Path == "NumberFormatDate")
+    {
+        bool aBool;
+
+        if (aEvent.IsEnabled && (aEvent.State >>= aBool))
+        {
+            aBuffer.append(OUString::boolean(aBool));
+        }
+    }
+    else if (aEvent.FeatureURL.Path == "ToggleMergeCells")
+    {
+        bool aBool;
+
+        if (aEvent.IsEnabled && (aEvent.State >>= aBool))
+        {
+            aBuffer.append(OUString::boolean(aBool));
+        }
+        else
+        {
+            aBuffer.append(OUString("disabled"));
+        }
+    }
+    else if (aEvent.FeatureURL.Path == "Position")
+    {
+        css::awt::Point aPoint;
+
+        if (aEvent.IsEnabled && (aEvent.State >>= aPoint))
+        {
+            aBuffer.append(OUString::number(aPoint.X)).append(" / ").append(OUString::number(aPoint.Y));
+        }
+    }
+    else if (aEvent.FeatureURL.Path == "Size")
+    {
+        css::awt::Size aSize;
+
+        if (aEvent.IsEnabled && (aEvent.State >>= aSize))
+        {
+            aBuffer.append(OUString::number(aSize.Width)).append(" x ").append(OUString::number(aSize.Height));
+        }
+    }
+    else if (aEvent.FeatureURL.Path == "LanguageStatus")
+    {
+        OUString sValue;
+        css::uno::Sequence< OUString > aSeq;
+
+        if (aEvent.IsEnabled)
+        {
+            if (aEvent.State >>= sValue)
+            {
+                aBuffer.append(sValue);
+            }
+            else if (aEvent.State >>= aSeq)
+            {
+                aBuffer.append(aSeq[0]);
+            }
+        }
+    }
+    else if (aEvent.FeatureURL.Path == "InsertPageHeader" ||
+             aEvent.FeatureURL.Path == "InsertPageFooter")
+    {
+        if (aEvent.IsEnabled)
+        {
+            css::uno::Sequence< OUString > aSeq;
+            if (aEvent.State >>= aSeq)
+            {
+                aBuffer.append(u'{');
+                for (sal_Int32 itSeq = 0; itSeq < aSeq.getLength(); itSeq++)
+                {
+                    aBuffer.append("\"").append(aSeq[itSeq]);
+                    if (itSeq != aSeq.getLength() - 1)
+                        aBuffer.append("\":true,");
+                    else
+                        aBuffer.append("\":true");
+                }
+                aBuffer.append(u'}');
+            }
+        }
+    }
     else
     {
         return;
     }
+
     OUString payload = aBuffer.makeStringAndClear();
-    objSh->libreOfficeKitCallback(LOK_CALLBACK_STATE_CHANGED, payload.toUtf8().getStr());
+    if (const SfxViewShell* pViewShell = pViewFrame->GetViewShell())
+        pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED, payload.toUtf8().getStr());
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

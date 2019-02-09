@@ -22,7 +22,7 @@
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/color/bcolor.hxx>
 #include <drawinglayer/primitive2d/polygonprimitive2d.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <drawinglayer/primitive2d/drawinglayer_primitivetypes2d.hxx>
 #include <drawinglayer/geometry/viewinformation3d.hxx>
@@ -36,7 +36,7 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        bool Embedded3DPrimitive2D::impGetShadow3D(const geometry::ViewInformation2D& /*rViewInformation*/) const
+        bool Embedded3DPrimitive2D::impGetShadow3D() const
         {
             osl::MutexGuard aGuard( m_aMutex );
 
@@ -63,15 +63,13 @@ namespace drawinglayer
             return !maShadowPrimitives.empty();
         }
 
-        Primitive2DContainer Embedded3DPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const
+        void Embedded3DPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const
         {
             // use info to create a yellow 2d rectangle, similar to empty 3d scenes and/or groups
             const basegfx::B2DRange aLocal2DRange(getB2DRange(rViewInformation));
-            const basegfx::B2DPolygon aOutline(basegfx::tools::createPolygonFromRect(aLocal2DRange));
+            const basegfx::B2DPolygon aOutline(basegfx::utils::createPolygonFromRect(aLocal2DRange));
             const basegfx::BColor aYellow(1.0, 1.0, 0.0);
-            const Primitive2DReference xRef(new PolygonHairlinePrimitive2D(aOutline, aYellow));
-
-            return Primitive2DContainer { xRef };
+            rContainer.push_back(new PolygonHairlinePrimitive2D(aOutline, aYellow));
         }
 
         Embedded3DPrimitive2D::Embedded3DPrimitive2D(
@@ -128,7 +126,7 @@ namespace drawinglayer
 
                 // check for 3D shadows and their 2D projections. If those exist, they need to be
                 // taken into account
-                if(impGetShadow3D(rViewInformation))
+                if(impGetShadow3D())
                 {
                     const basegfx::B2DRange aShadow2DRange(maShadowPrimitives.getB2DRange(rViewInformation));
 

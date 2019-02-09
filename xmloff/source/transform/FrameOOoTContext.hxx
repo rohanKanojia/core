@@ -24,13 +24,11 @@
 
 class XMLFrameOOoTransformerContext : public XMLPersElemContentTContext
 {
-    OUString m_aElemQName;
+    OUString const m_aElemQName;
 
 public:
     XMLFrameOOoTransformerContext( XMLTransformerBase& rTransformer,
                            const OUString& rQName );
-
-    virtual ~XMLFrameOOoTransformerContext();
 
     virtual rtl::Reference<XMLTransformerContext> CreateChildContext( sal_uInt16 nPrefix,
                                    const OUString& rLocalName,

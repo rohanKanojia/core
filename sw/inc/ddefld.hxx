@@ -20,15 +20,36 @@
 #define INCLUDED_SW_INC_DDEFLD_HXX
 
 #include <sfx2/lnkbase.hxx>
+#include <svl/hint.hxx>
 #include "swdllapi.h"
 #include "fldbas.hxx"
 
 class SwDoc;
+class SwNode;
+class SwNodes;
+
+namespace sw
+{
+    struct LinkAnchorSearchHint final : public SfxHint
+    {
+        SwNodes& m_rNodes;
+        const SwNode*& m_rpFoundNode;
+        LinkAnchorSearchHint(SwNodes& rNodes, const SwNode*& rpFoundNode) : m_rNodes(rNodes), m_rpFoundNode(rpFoundNode) {};
+        virtual ~LinkAnchorSearchHint() override;
+    };
+    struct InRangeSearchHint final : public SfxHint
+    {
+        const sal_uLong m_nSttNd, m_nEndNd;
+        bool& m_rIsInRange;
+        InRangeSearchHint(const sal_uLong nSttNd, const sal_uLong nEndNd, bool& rIsInRange)
+            : m_nSttNd(nSttNd), m_nEndNd(nEndNd), m_rIsInRange(rIsInRange) {}
+    };
+}
 
 // FieldType for DDE
 class SW_DLLPUBLIC SwDDEFieldType : public SwFieldType
 {
-    OUString aName;
+    OUString const aName;
     OUString aExpansion;
 
     tools::SvRef<sfx2::SvBaseLink> refLink;
@@ -38,24 +59,24 @@ class SW_DLLPUBLIC SwDDEFieldType : public SwFieldType
     bool bCRLFFlag : 1;
     bool bDeleted : 1;
 
-    SAL_DLLPRIVATE void _RefCntChgd();
+    SAL_DLLPRIVATE void RefCntChgd();
 
 public:
     SwDDEFieldType( const OUString& rName, const OUString& rCmd,
-                    SfxLinkUpdateMode = SfxLinkUpdateMode::ONCALL );
-    virtual ~SwDDEFieldType();
+                    SfxLinkUpdateMode );
+    virtual ~SwDDEFieldType() override;
 
-    OUString GetExpansion() const               { return aExpansion; }
+    const OUString& GetExpansion() const               { return aExpansion; }
     void SetExpansion( const OUString& rStr )   { aExpansion = rStr;
                                                   bCRLFFlag = false; }
 
     virtual SwFieldType* Copy() const override;
     virtual OUString GetName() const override;
 
-    virtual bool QueryValue( css::uno::Any& rVal, sal_uInt16 nWhich ) const override;
-    virtual bool PutValue( const css::uno::Any& rVal, sal_uInt16 nWhich ) override;
+    virtual void QueryValue( css::uno::Any& rVal, sal_uInt16 nWhich ) const override;
+    virtual void PutValue( const css::uno::Any& rVal, sal_uInt16 nWhich ) override;
 
-    OUString GetCmd() const;
+    OUString const & GetCmd() const;
     void SetCmd( const OUString& aStr );
 
     SfxLinkUpdateMode GetType() const          { return refLink->GetUpdateMode();  }
@@ -64,7 +85,6 @@ public:
     bool IsDeleted() const          { return bDeleted; }
     void SetDeleted( bool b )       { bDeleted = b; }
 
-    void UpdateNow()                { refLink->Update(); }
     void Disconnect()               { refLink->Disconnect(); }
 
     const ::sfx2::SvBaseLink& GetBaseLink() const    { return *refLink; }
@@ -74,22 +94,22 @@ public:
           SwDoc* GetDoc()           { return pDoc; }
     void SetDoc( SwDoc* pDoc );
 
-    void IncRefCnt() {  if( !nRefCnt++ && pDoc ) _RefCntChgd(); }
-    void DecRefCnt() {  if( !--nRefCnt && pDoc ) _RefCntChgd(); }
+    void IncRefCnt() {  if( !nRefCnt++ && pDoc ) RefCntChgd(); }
+    void DecRefCnt() {  if( !--nRefCnt && pDoc ) RefCntChgd(); }
 
-    void SetCRLFDelFlag( bool bFlag = true )    { bCRLFFlag = bFlag; }
+    void SetCRLFDelFlag( bool bFlag )    { bCRLFFlag = bFlag; }
 };
 
 // DDE-field
 class SwDDEField : public SwField
 {
 private:
-    virtual OUString Expand() const override;
-    virtual SwField* Copy() const override;
+    virtual OUString ExpandImpl(SwRootFrame const* pLayout) const override;
+    virtual std::unique_ptr<SwField> Copy() const override;
 
 public:
     SwDDEField(SwDDEFieldType*);
-    virtual ~SwDDEField();
+    virtual ~SwDDEField() override;
 
     /** Get parameter via types.
      Name cannot be changed. */

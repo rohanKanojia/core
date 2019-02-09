@@ -23,27 +23,31 @@
 #include <memory>
 
 #include <undobj.hxx>
+#include <svx/svdtypes.hxx>
 #include <rtl/ustring.hxx>
-#include <tools/mempool.hxx>
 #include <swtypes.hxx>
 #include <IDocumentContentOperations.hxx>
+#include <boost/optional.hpp>
 
 class Graphic;
 class SwGrfNode;
 class SwUndoDelete;
 class SwUndoFormatAttr;
+class SwDoc;
 namespace sw { class DocumentContentOperationsManager; }
+enum class MirrorGraph;
 
 class SwUndoInsert: public SwUndo, private SwUndoSaveContent
 {
     /// start of Content in UndoNodes for Redo
     std::unique_ptr<SwNodeIndex> m_pUndoNodeIndex;
-    OUString *pText, *pUndoText;
-    SwRedlineData* pRedlData;
+    boost::optional<OUString> maText;
+    boost::optional<OUString> maUndoText;
+    std::unique_ptr<SwRedlineData> pRedlData;
     sal_uLong nNode;
     sal_Int32 nContent, nLen;
-    bool bIsWordDelim : 1;
-    bool bIsAppend : 1;
+    bool const bIsWordDelim : 1;
+    bool const bIsAppend : 1;
     bool m_bWithRsid : 1;
 
     const SwInsertFlags m_nInsertFlags;
@@ -55,14 +59,14 @@ class SwUndoInsert: public SwUndo, private SwUndoSaveContent
     SwDoc * pDoc;
 
     void Init(const SwNodeIndex & rNode);
-    OUString * GetTextFromDoc() const;
+    boost::optional<OUString> GetTextFromDoc() const;
 
 public:
     SwUndoInsert( const SwNodeIndex& rNode, sal_Int32 nContent, sal_Int32 nLen,
                   const SwInsertFlags nInsertFlags,
                   bool bWDelim = true );
     SwUndoInsert( const SwNodeIndex& rNode );
-    virtual ~SwUndoInsert();
+    virtual ~SwUndoInsert() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
@@ -82,12 +86,10 @@ public:
     virtual SwRewriter GetRewriter() const override;
 
     void SetWithRsid() { m_bWithRsid = true; }
-
-    DECL_FIXEDMEMPOOL_NEWDEL(SwUndoInsert)
 };
 
 SwRewriter
-MakeUndoReplaceRewriter(sal_uLong const ocurrences,
+MakeUndoReplaceRewriter(sal_uLong const occurrences,
     OUString const& sOld, OUString const& sNew);
 
 class SwUndoReplace
@@ -97,7 +99,7 @@ public:
     SwUndoReplace(SwPaM const& rPam,
             OUString const& rInsert, bool const bRegExp);
 
-    virtual ~SwUndoReplace();
+    virtual ~SwUndoReplace() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
@@ -127,16 +129,16 @@ public:
 
 private:
     class Impl;
-    ::std::unique_ptr<Impl> m_pImpl;
+    std::unique_ptr<Impl> m_pImpl;
 };
 
 class SwUndoReRead : public SwUndo
 {
-    Graphic *pGrf;
-    OUString *pNm;
-    OUString *pFltr;
+    std::unique_ptr<Graphic> pGrf;
+    boost::optional<OUString> maNm;
+    boost::optional<OUString> maFltr;
     sal_uLong nPos;
-    sal_uInt16 nMirr;
+    MirrorGraph nMirr;
 
     void SaveGraphicData( const SwGrfNode& );
     void SetAndSave( ::sw::UndoRedoContext & );
@@ -144,7 +146,7 @@ class SwUndoReRead : public SwUndo
 public:
     SwUndoReRead( const SwPaM& rPam, const SwGrfNode& pGrfNd );
 
-    virtual ~SwUndoReRead();
+    virtual ~SwUndoReRead() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
@@ -165,18 +167,18 @@ class SwUndoInsertLabel : public SwUndo
         } NODE;
     };
 
-    OUString sText;
+    OUString const sText;
     // #i39983# the separator is drawn with a character style
-    OUString sSeparator;
-    OUString sNumberSeparator;
-    OUString sCharacterStyle;
+    OUString const sSeparator;
+    OUString const sNumberSeparator;
+    OUString const sCharacterStyle;
     // #i26791# - re-store of drawing object position no longer needed
-    sal_uInt16 nFieldId;
-    SwLabelType eType;
-    sal_uInt8 nLayerId;              // for character objects
-    bool bBefore        :1;
+    sal_uInt16 const nFieldId;
+    SwLabelType const eType;
+    SdrLayerID nLayerId;              // for character objects
+    bool const bBefore        :1;
     bool bUndoKeep      :1;
-    bool bCpyBrd        :1;
+    bool const bCpyBrd        :1;
 
 public:
     SwUndoInsertLabel( const SwLabelType eTyp, const OUString &rText,
@@ -185,8 +187,9 @@ public:
                         const OUString& rNumberSeparator, //#i61007# order of captions
                         const bool bBefore, const sal_uInt16 nId,
                         const OUString& rCharacterStyle,
-                        const bool bCpyBrd );
-    virtual ~SwUndoInsertLabel();
+                        const bool bCpyBrd,
+                        const SwDoc* pDoc );
+    virtual ~SwUndoInsertLabel() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
@@ -211,8 +214,8 @@ public:
         { if( LTYPE_OBJECT != eType ) NODE.nNode = nNd; }
 
     void SetUndoKeep()  { bUndoKeep = true; }
-    void SetFlys( SwFrameFormat& rOldFly, SfxItemSet& rChgSet, SwFrameFormat& rNewFly );
-    void SetDrawObj( sal_uInt8 nLayerId );
+    void SetFlys( SwFrameFormat& rOldFly, SfxItemSet const & rChgSet, SwFrameFormat& rNewFly );
+    void SetDrawObj( SdrLayerID nLayerId );
 };
 
 #endif // INCLUDED_SW_SOURCE_CORE_INC_UNDOINSERT_HXX

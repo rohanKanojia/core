@@ -19,6 +19,9 @@
 #include <osl/detail/android-bootstrap.h>
 #include <rtl/strbuf.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
+#include <memory>
 
 #define LOGTAG "LibreOffice/androidinst"
 #define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, LOGTAG, __VA_ARGS__))
@@ -27,17 +30,17 @@
 // Horrible hack
 static int viewWidth = 1, viewHeight = 1;
 
-class AndroidSalData : public SalGenericData
+class AndroidSalData : public GenericUnixSalData
 {
 public:
-    explicit AndroidSalData( SalInstance *pInstance ) : SalGenericData( SAL_DATA_ANDROID, pInstance ) {}
+    explicit AndroidSalData( SalInstance *pInstance ) : GenericUnixSalData( SAL_DATA_ANDROID, pInstance ) {}
     virtual void ErrorTrapPush() {}
     virtual bool ErrorTrapPop( bool ) { return false; }
 };
 
-void AndroidSalInstance::GetWorkArea( Rectangle& rRect )
+void AndroidSalInstance::GetWorkArea(tools::Rectangle& rRect)
 {
-    rRect = Rectangle( Point( 0, 0 ),
+    rRect = tools::Rectangle( Point( 0, 0 ),
                        Size( viewWidth, viewHeight ) );
 }
 
@@ -51,8 +54,8 @@ AndroidSalInstance *AndroidSalInstance::getInstance()
     return static_cast<AndroidSalInstance *>(pData->m_pInstance);
 }
 
-AndroidSalInstance::AndroidSalInstance( SalYieldMutex *pMutex )
-    : SvpSalInstance( pMutex )
+AndroidSalInstance::AndroidSalInstance( std::unique_ptr<SalYieldMutex> pMutex )
+    : SvpSalInstance( std::move(pMutex) )
 {
     int res = (lo_get_javavm())->AttachCurrentThread(&m_pJNIEnv, NULL);
     LOGI("AttachCurrentThread res=%d env=%p", res, m_pJNIEnv);
@@ -72,7 +75,7 @@ bool AndroidSalInstance::AnyInput( VclInputFlags nType )
 
     // Unfortunately there is no way to check for a specific type of
     // input being queued. That information is too hidden, sigh.
-    return SvpSalInstance::s_pDefaultInstance->PostedEventsInQueue();
+    return SvpSalInstance::s_pDefaultInstance->HasUserEvents();
 }
 
 class AndroidSalSystem : public SvpSalSystem {
@@ -81,8 +84,7 @@ public:
     virtual ~AndroidSalSystem() {}
     virtual int ShowNativeDialog( const OUString& rTitle,
                                   const OUString& rMessage,
-                                  const std::list< OUString >& rButtons,
-                                  int nDefButton );
+                                  const std::vector< OUString >& rButtons );
 };
 
 SalSystem *AndroidSalInstance::CreateSalSystem()
@@ -95,16 +97,14 @@ class AndroidSalFrame : public SvpSalFrame
 public:
     AndroidSalFrame( AndroidSalInstance *pInstance,
                      SalFrame           *pParent,
-                     SalFrameStyleFlags  nSalFrameStyle,
-                     SystemParentData   *pSysParent )
-        : SvpSalFrame( pInstance, pParent, nSalFrameStyle,
-                       pSysParent )
+                     SalFrameStyleFlags  nSalFrameStyle )
+        : SvpSalFrame(pInstance, pParent, nSalFrameStyle)
     {
         if (pParent == NULL && viewWidth > 1 && viewHeight > 1)
             SetPosSize(0, 0, viewWidth, viewHeight, SAL_FRAME_POSSIZE_WIDTH | SAL_FRAME_POSSIZE_HEIGHT);
     }
 
-    virtual void GetWorkArea( Rectangle& rRect )
+    virtual void GetWorkArea(tools::Rectangle& rRect)
     {
         AndroidSalInstance::getInstance()->GetWorkArea( rRect );
     }
@@ -130,7 +130,6 @@ public:
         aStyleSet.SetMenuFont( aFont );
         aStyleSet.SetToolFont( aFont );
         aStyleSet.SetLabelFont( aFont );
-        aStyleSet.SetInfoFont( aFont );
         aStyleSet.SetRadioCheckFont( aFont );
         aStyleSet.SetPushButtonFont( aFont );
         aStyleSet.SetFieldFont( aFont );
@@ -142,20 +141,15 @@ public:
     }
 };
 
-SalFrame *AndroidSalInstance::CreateChildFrame( SystemParentData* pParent, SalFrameStyleFlags nStyle )
+SalFrame *AndroidSalInstance::CreateChildFrame( SystemParentData* /*pParent*/, SalFrameStyleFlags nStyle )
 {
-    return new AndroidSalFrame( this, NULL, nStyle, pParent );
+    return new AndroidSalFrame( this, NULL, nStyle );
 }
 
 SalFrame *AndroidSalInstance::CreateFrame( SalFrame* pParent, SalFrameStyleFlags nStyle )
 {
-    return new AndroidSalFrame( this, pParent, nStyle, NULL );
+    return new AndroidSalFrame( this, pParent, nStyle );
 }
-
-// All the interesting stuff is slaved from the AndroidSalInstance
-void InitSalData()   {}
-void DeInitSalData() {}
-void InitSalMain()   {}
 
 void SalAbort( const OUString& rErrorText, bool bDumpCore )
 {
@@ -180,7 +174,6 @@ const OUString& SalGetDesktopEnvironment()
 
 SalData::SalData() :
     m_pInstance( 0 ),
-    m_pPlugin( 0 ),
     m_pPIManager(0 )
 {
 }
@@ -193,26 +186,23 @@ SalData::~SalData()
 SalInstance *CreateSalInstance()
 {
     LOGI("Android: CreateSalInstance!");
-    AndroidSalInstance* pInstance = new AndroidSalInstance( new SalYieldMutex() );
+    AndroidSalInstance* pInstance = new AndroidSalInstance( std::make_unique<SvpSalYieldMutex>() );
     new AndroidSalData( pInstance );
-    pInstance->AcquireYieldMutex(1);
+    pInstance->AcquireYieldMutex();
     return pInstance;
 }
 
 void DestroySalInstance( SalInstance *pInst )
 {
-    pInst->ReleaseYieldMutex();
+    pInst->ReleaseYieldMutexAll();
     delete pInst;
 }
 
-#include <vcl/layout.hxx>
-
 int AndroidSalSystem::ShowNativeDialog( const OUString& rTitle,
                                         const OUString& rMessage,
-                                        const std::list< OUString >& rButtons,
-                                        int nDefButton )
+                                        const std::vector< OUString >& rButtons )
 {
-    (void)rButtons; (void)nDefButton;
+    (void)rButtons;
     LOGI("LibreOffice native dialog '%s': '%s'",
          OUStringToOString(rTitle, RTL_TEXTENCODING_ASCII_US).getStr(),
          OUStringToOString(rMessage, RTL_TEXTENCODING_ASCII_US).getStr());
@@ -229,10 +219,11 @@ int AndroidSalSystem::ShowNativeDialog( const OUString& rTitle,
         // it intended to be used from Java, so some verbose JNI
         // horror would be needed to use it directly here. Probably we
         // want some easier to use magic wrapper, hmm.
-
-        MessageDialog aVclErrBox(NULL, rMessage);
-        aVclErrBox.SetText(rTitle);
-        aVclErrBox.Execute();
+        std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(nullptr,
+                                                  VclMessageType::Warning, VclButtonsType::Ok,
+                                                  rMessage));
+        xBox->set_title(rTitle);
+        xBox->run();
     }
     else
         LOGE("VCL not initialized");

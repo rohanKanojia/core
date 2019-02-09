@@ -21,6 +21,8 @@
 #define INCLUDED_SD_INC_ANNOTATION_HXX
 
 #include <sal/config.h>
+#include <sal/types.h>
+#include <memory>
 
 class SdPage;
 class SdrUndoAction;
@@ -29,12 +31,29 @@ namespace com { namespace sun { namespace star { namespace office {
     class XAnnotation;
 } } } }
 
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Reference; } } } }
+
+class SfxViewShell;
+
 namespace sd {
+
+enum class CommentNotificationType { Add, Modify, Remove };
 
 void createAnnotation( css::uno::Reference< css::office::XAnnotation >& xAnnotation, SdPage* pPage );
 
-SdrUndoAction* CreateUndoInsertOrRemoveAnnotation( const css::uno::Reference< css::office::XAnnotation >& xAnnotation, bool bInsert );
+std::unique_ptr<SdrUndoAction> CreateUndoInsertOrRemoveAnnotation( const css::uno::Reference< css::office::XAnnotation >& xAnnotation, bool bInsert );
 
+void CreateChangeUndo(const css::uno::Reference< css::office::XAnnotation >& xAnnotation);
+
+sal_uInt32 getAnnotationId(const css::uno::Reference <css::office::XAnnotation>& xAnnotation);
+
+const SdPage* getAnnotationPage(const css::uno::Reference<css::office::XAnnotation>& xAnnotation);
+
+void LOKCommentNotify(CommentNotificationType nType, const SfxViewShell* pViewShell,
+        css::uno::Reference<css::office::XAnnotation> const & rxAnnotation);
+
+void LOKCommentNotifyAll(CommentNotificationType nType,
+        css::uno::Reference<css::office::XAnnotation> const & rxAnnotation);
 }
 
 #endif

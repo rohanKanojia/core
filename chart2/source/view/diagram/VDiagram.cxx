@@ -17,28 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "VDiagram.hxx"
-#include "PropertyMapper.hxx"
-#include "ViewDefines.hxx"
-#include "Stripe.hxx"
-#include "macros.hxx"
-#include "ObjectIdentifier.hxx"
-#include "DiagramHelper.hxx"
-#include "BaseGFXHelper.hxx"
-#include "CommonConverters.hxx"
-#include "ChartTypeHelper.hxx"
-#include "ThreeDHelper.hxx"
-#include "defines.hxx"
+#include <ShapeFactory.hxx>
+#include <VDiagram.hxx>
+#include <PropertyMapper.hxx>
+#include <ViewDefines.hxx>
+#include <Stripe.hxx>
+#include <ObjectIdentifier.hxx>
+#include <DiagramHelper.hxx>
+#include <BaseGFXHelper.hxx>
+#include <ChartTypeHelper.hxx>
+#include <ThreeDHelper.hxx>
+#include <defines.hxx>
 #include <editeng/unoprnms.hxx>
-#include <com/sun/star/drawing/FillStyle.hpp>
-#include <com/sun/star/drawing/LineStyle.hpp>
-#include <com/sun/star/drawing/ProjectionMode.hpp>
-#include <com/sun/star/drawing/ShadeMode.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
 #include <com/sun/star/lang/XTypeProvider.hpp>
 #include <svx/unoshape.hxx>
 #include <svx/scene3d.hxx>
 #include <svx/e3dsceneupdater.hxx>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 namespace chart
 {
@@ -48,12 +45,7 @@ using namespace ::com::sun::star::chart2;
 VDiagram::VDiagram(
     const uno::Reference<XDiagram> & xDiagram, const drawing::Direction3D& rPreferredAspectRatio,
     sal_Int32 nDimension )
-    : m_xTarget(nullptr)
-    , m_xShapeFactory(nullptr)
-    , m_pShapeFactory(nullptr)
-    , m_xOuterGroupShape(nullptr)
-    , m_xCoordinateRegionShape(nullptr)
-    , m_xWall2D(nullptr)
+    : m_pShapeFactory(nullptr)
     , m_nDimensionCount(nDimension)
     , m_xDiagram(xDiagram)
     , m_aPreferredAspectRatio(rPreferredAspectRatio)
@@ -92,7 +84,7 @@ void VDiagram::init(
 
     m_xTarget  = xTarget;
     m_xShapeFactory = xFactory;
-    m_pShapeFactory = AbstractShapeFactory::getOrCreateShapeFactory(xFactory);
+    m_pShapeFactory = ShapeFactory::getOrCreateShapeFactory(xFactory);
 }
 
 void VDiagram::createShapes( const awt::Point& rPos, const awt::Size& rSize )
@@ -129,11 +121,11 @@ void VDiagram::createShapes( const awt::Point& rPos, const awt::Size& rSize )
         //do not change aspect ratio
         awt::Size  aAspectRatio( static_cast<sal_Int32>(m_aPreferredAspectRatio.DirectionX*FIXED_SIZE_FOR_3D_CHART_VOLUME),
                                  static_cast<sal_Int32>(m_aPreferredAspectRatio.DirectionY*FIXED_SIZE_FOR_3D_CHART_VOLUME ));
-        m_aCurrentSizeWithoutAxes = awt::Size( AbstractShapeFactory::calculateNewSizeRespectingAspectRatio(
-                        rAvailableSize, aAspectRatio ) );
+        m_aCurrentSizeWithoutAxes = ShapeFactory::calculateNewSizeRespectingAspectRatio(
+                        rAvailableSize, aAspectRatio );
         //center diagram position
-        m_aCurrentPosWithoutAxes = awt::Point( AbstractShapeFactory::calculateTopLeftPositionToCenterObject(
-            rPos, rAvailableSize, m_aCurrentSizeWithoutAxes ) );
+        m_aCurrentPosWithoutAxes = ShapeFactory::calculateTopLeftPositionToCenterObject(
+            rPos, rAvailableSize, m_aCurrentSizeWithoutAxes );
 
     }
 
@@ -143,7 +135,7 @@ void VDiagram::createShapes( const awt::Point& rPos, const awt::Size& rSize )
         m_xWall2D->setPosition(m_aCurrentPosWithoutAxes);
     }
 
-    return ::basegfx::B2IRectangle( BaseGFXHelper::makeRectangle(m_aCurrentPosWithoutAxes,m_aCurrentSizeWithoutAxes) );
+    return BaseGFXHelper::makeRectangle(m_aCurrentPosWithoutAxes,m_aCurrentSizeWithoutAxes);
 }
 
 void VDiagram::createShapes_2d()
@@ -168,7 +160,7 @@ void VDiagram::createShapes_2d()
 
     //add back wall
     {
-        AbstractShapeFactory* pShapeFactory = AbstractShapeFactory::getOrCreateShapeFactory(m_xShapeFactory);
+        ShapeFactory* pShapeFactory = ShapeFactory::getOrCreateShapeFactory(m_xShapeFactory);
         m_xWall2D = pShapeFactory->createRectangle(
                 xGroupForWall );
 
@@ -188,18 +180,18 @@ void VDiagram::createShapes_2d()
                 {
                     //we always need this object as dummy object for correct scene dimensions
                     //but it should not be visible in this case:
-                    AbstractShapeFactory::makeShapeInvisible( m_xWall2D );
+                    ShapeFactory::makeShapeInvisible( m_xWall2D );
                 }
                 else
                 {
                     //CID for selection handling
                     OUString aWallCID( ObjectIdentifier::createClassifiedIdentifier( OBJECTTYPE_DIAGRAM_WALL, OUString() ) );//@todo read CID from model
-                    xProp->setPropertyValue( UNO_NAME_MISC_OBJ_NAME, uno::makeAny( aWallCID ) );
+                    xProp->setPropertyValue( UNO_NAME_MISC_OBJ_NAME, uno::Any( aWallCID ) );
                 }
             }
             catch( const uno::Exception& e )
             {
-                ASSERT_EXCEPTION( e );
+                SAL_WARN("chart2", "Exception caught. " << e );
             }
         }
 
@@ -209,7 +201,7 @@ void VDiagram::createShapes_2d()
     adjustPosAndSize_2d( m_aAvailablePosIncludingAxes, m_aAvailableSizeIncludingAxes );
 }
 
-E3dScene* lcl_getE3dScene( const uno::Reference< drawing::XShape >& xShape )
+static E3dScene* lcl_getE3dScene( const uno::Reference< drawing::XShape >& xShape )
 {
     E3dScene* pRet=nullptr;
     uno::Reference< lang::XUnoTunnel > xUnoTunnel( xShape, uno::UNO_QUERY );
@@ -220,14 +212,13 @@ E3dScene* lcl_getE3dScene( const uno::Reference< drawing::XShape >& xShape )
         if(pSvxShape)
         {
             SdrObject* pObj = pSvxShape->GetSdrObject();
-            if( pObj && dynamic_cast< const E3dScene* >(pObj) !=  nullptr )
-                pRet = static_cast<E3dScene*>(pObj);
+            pRet = dynamic_cast< E3dScene* >(pObj);
         }
     }
     return pRet;
 }
 
-void lcl_setLightSources(
+static void lcl_setLightSources(
     const uno::Reference< beans::XPropertySet > & xSource,
     const uno::Reference< beans::XPropertySet > & xDest )
 {
@@ -437,14 +428,14 @@ void VDiagram::adjustAspectRatio3d( const awt::Size& rAvailableSize )
             // To get the 3D aspect ratio's effect on the 2D scene size, the scene's 2D size needs to be adapted to
             // 3D content changes here. The tooling class remembers the current 3D transformation stack
             // and in its destructor, calculates a new 2D SnapRect for the scene and it's modified 3D geometry.
-            E3DModifySceneSnapRectUpdater aUpdater(lcl_getE3dScene( m_xOuterGroupShape ));
+            E3DModifySceneSnapRectUpdater aUpdater(lcl_getE3dScene(m_xOuterGroupShape));
 
             m_xAspectRatio3D->setPropertyValue( UNO_NAME_3D_TRANSFORM_MATRIX
-                , uno::makeAny(BaseGFXHelper::B3DHomMatrixToHomogenMatrix( aResult )) );
+                , uno::Any(BaseGFXHelper::B3DHomMatrixToHomogenMatrix( aResult )) );
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
 }
@@ -454,16 +445,16 @@ void VDiagram::adjustAspectRatio3d( const awt::Size& rAvailableSize )
     adjustAspectRatio3d( rAvailableSize );
 
     //do not change aspect ratio of 3D scene with 2D bound rect
-    m_aCurrentSizeWithoutAxes = AbstractShapeFactory::calculateNewSizeRespectingAspectRatio(
+    m_aCurrentSizeWithoutAxes = ShapeFactory::calculateNewSizeRespectingAspectRatio(
                     rAvailableSize, m_xOuterGroupShape->getSize() );
     m_xOuterGroupShape->setSize( m_aCurrentSizeWithoutAxes );
 
     //center diagram position
-    m_aCurrentPosWithoutAxes= AbstractShapeFactory::calculateTopLeftPositionToCenterObject(
+    m_aCurrentPosWithoutAxes= ShapeFactory::calculateTopLeftPositionToCenterObject(
          rPos, rAvailableSize, m_aCurrentSizeWithoutAxes );
     m_xOuterGroupShape->setPosition(m_aCurrentPosWithoutAxes);
 
-    return ::basegfx::B2IRectangle( BaseGFXHelper::makeRectangle(m_aCurrentPosWithoutAxes,m_aCurrentSizeWithoutAxes) );
+    return BaseGFXHelper::makeRectangle(m_aCurrentPosWithoutAxes,m_aCurrentSizeWithoutAxes);
 }
 
 void VDiagram::createShapes_3d()
@@ -489,7 +480,7 @@ void VDiagram::createShapes_3d()
 
     //add walls
     {
-        uno::Reference< beans::XPropertySet > xWallProp( nullptr );
+        uno::Reference< beans::XPropertySet > xWallProp;
         if( m_xDiagram.is() )
             xWallProp.set( m_xDiagram->getWall() );
 
@@ -503,16 +494,16 @@ void VDiagram::createShapes_3d()
 
         //add left wall
         {
-            short nRotatedTexture = ( CuboidPlanePosition_Front==eBackWallPos ) ? 3 : 1;
+            short nRotatedTexture = ( eBackWallPos==CuboidPlanePosition_Front ) ? 3 : 1;
             double xPos = 0.0;
-            if( CuboidPlanePosition_Right==eLeftWallPos )
+            if( eLeftWallPos==CuboidPlanePosition_Right )
                 xPos = FIXED_SIZE_FOR_3D_CHART_VOLUME;
             Stripe aStripe( drawing::Position3D(xPos,FIXED_SIZE_FOR_3D_CHART_VOLUME,0)
                 , drawing::Direction3D(0,0,FIXED_SIZE_FOR_3D_CHART_VOLUME)
                 , drawing::Direction3D(0,-FIXED_SIZE_FOR_3D_CHART_VOLUME,0) );
-            if( CuboidPlanePosition_Right==eLeftWallPos )
+            if( eLeftWallPos==CuboidPlanePosition_Right )
             {
-                nRotatedTexture = ( CuboidPlanePosition_Front==eBackWallPos ) ? 2 : 0;
+                nRotatedTexture = ( eBackWallPos==CuboidPlanePosition_Front ) ? 2 : 0;
                 aStripe = Stripe( drawing::Position3D(xPos,FIXED_SIZE_FOR_3D_CHART_VOLUME,0)
                     , drawing::Direction3D(0,-FIXED_SIZE_FOR_3D_CHART_VOLUME,0)
                     , drawing::Direction3D(0,0,FIXED_SIZE_FOR_3D_CHART_VOLUME) );
@@ -526,19 +517,19 @@ void VDiagram::createShapes_3d()
             {
                 //we always need this object as dummy object for correct scene dimensions
                 //but it should not be visible in this case:
-                AbstractShapeFactory::makeShapeInvisible( xShape );
+                ShapeFactory::makeShapeInvisible( xShape );
             }
         }
         //add back wall
         {
             short nRotatedTexture = 0;
             double zPos = 0.0;
-            if( CuboidPlanePosition_Front==eBackWallPos )
+            if( eBackWallPos==CuboidPlanePosition_Front )
                     zPos = FIXED_SIZE_FOR_3D_CHART_VOLUME;
             Stripe aStripe( drawing::Position3D(0,FIXED_SIZE_FOR_3D_CHART_VOLUME,zPos)
                 , drawing::Direction3D(0,-FIXED_SIZE_FOR_3D_CHART_VOLUME,0)
                 , drawing::Direction3D(FIXED_SIZE_FOR_3D_CHART_VOLUME,0,0) );
-            if( CuboidPlanePosition_Front==eBackWallPos )
+            if( eBackWallPos==CuboidPlanePosition_Front )
             {
                 aStripe = Stripe( drawing::Position3D(0,FIXED_SIZE_FOR_3D_CHART_VOLUME,zPos)
                 , drawing::Direction3D(FIXED_SIZE_FOR_3D_CHART_VOLUME,0,0)
@@ -554,7 +545,7 @@ void VDiagram::createShapes_3d()
             {
                 //we always need this object as dummy object for correct scene dimensions
                 //but it should not be visible in this case:
-                AbstractShapeFactory::makeShapeInvisible( xShape );
+                ShapeFactory::makeShapeInvisible( xShape );
             }
         }
     }
@@ -568,7 +559,7 @@ void VDiagram::createShapes_3d()
         {
             //ignore distance and focal length from file format and model completely
             //use vrp only to indicate the distance of the camera and thus influence the perspective
-            xDestProp->setPropertyValue( UNO_NAME_3D_SCENE_DISTANCE, uno::makeAny(
+            xDestProp->setPropertyValue( UNO_NAME_3D_SCENE_DISTANCE, uno::Any(
                                         static_cast<sal_Int32>(ThreeDHelper::getCameraDistance( xSourceProp ))));
             xDestProp->setPropertyValue( UNO_NAME_3D_SCENE_PERSPECTIVE,
                                         xSourceProp->getPropertyValue( UNO_NAME_3D_SCENE_PERSPECTIVE));
@@ -600,19 +591,20 @@ void VDiagram::createShapes_3d()
                 aEffectiveTranformation.shearXY(m_fYAnglePi,-m_fXAnglePi);
 
             //#i98497# 3D charts are rendered with wrong size
-            E3DModifySceneSnapRectUpdater aUpdater(lcl_getE3dScene( m_xOuterGroupShape ));
+            E3DModifySceneSnapRectUpdater aUpdater(lcl_getE3dScene(m_xOuterGroupShape));
+
             xDestProp->setPropertyValue( UNO_NAME_3D_TRANSFORM_MATRIX,
-                    uno::makeAny( BaseGFXHelper::B3DHomMatrixToHomogenMatrix( aEffectiveTranformation ) ) );
+                    uno::Any( BaseGFXHelper::B3DHomMatrixToHomogenMatrix( aEffectiveTranformation ) ) );
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2" );
     }
 
     //add floor plate
     {
-        uno::Reference< beans::XPropertySet > xFloorProp( nullptr );
+        uno::Reference< beans::XPropertySet > xFloorProp;
         if( m_xDiagram.is() )
             xFloorProp.set( m_xDiagram->getFloor() );
 
@@ -626,16 +618,16 @@ void VDiagram::createShapes_3d()
                 , xFloorProp, PropertyMapper::getPropertyNameMapForFillAndLineProperties(), bDoubleSided );
 
         CuboidPlanePosition eBottomPos( ThreeDHelper::getAutomaticCuboidPlanePositionForStandardBottom( uno::Reference< beans::XPropertySet >( m_xDiagram, uno::UNO_QUERY ) ) );
-        if( !bAddFloorAndWall || (CuboidPlanePosition_Bottom!=eBottomPos) )
+        if( !bAddFloorAndWall || (eBottomPos!=CuboidPlanePosition_Bottom) )
         {
             //we always need this object as dummy object for correct scene dimensions
             //but it should not be visible in this case:
-            AbstractShapeFactory::makeShapeInvisible( xShape );
+            ShapeFactory::makeShapeInvisible( xShape );
         }
         else
         {
             OUString aFloorCID( ObjectIdentifier::createClassifiedIdentifier( OBJECTTYPE_DIAGRAM_FLOOR, OUString() ) );//@todo read CID from model
-            AbstractShapeFactory::setShapeName( xShape, aFloorCID );
+            ShapeFactory::setShapeName( xShape, aFloorCID );
         }
     }
 
@@ -657,13 +649,14 @@ void VDiagram::createShapes_3d()
                 ::basegfx::B3DHomMatrix aM;
                 aM.translate(GRID_TO_WALL_DISTANCE/fXScale, GRID_TO_WALL_DISTANCE/fYScale, GRID_TO_WALL_DISTANCE/fZScale);
                 aM.scale( fXScale, fYScale, fZScale );
-                E3DModifySceneSnapRectUpdater aUpdater(lcl_getE3dScene( m_xOuterGroupShape ));
+                E3DModifySceneSnapRectUpdater aUpdater(lcl_getE3dScene(m_xOuterGroupShape));
+
                 xShapeProp->setPropertyValue( UNO_NAME_3D_TRANSFORM_MATRIX
-                    , uno::makeAny(BaseGFXHelper::B3DHomMatrixToHomogenMatrix(aM)) );
+                    , uno::Any(BaseGFXHelper::B3DHomMatrixToHomogenMatrix(aM)) );
             }
             catch( const uno::Exception& e )
             {
-                ASSERT_EXCEPTION( e );
+                SAL_WARN("chart2", "Exception caught. " << e );
             }
         }
     }

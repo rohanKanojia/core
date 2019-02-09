@@ -25,10 +25,10 @@
 
 using namespace com::sun::star;
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL ucpdav1_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * ucpdav1_component_getFactory(
     const sal_Char * pImplName, void * pServiceManager, void * /*pRegistryKey*/ )
 {
-    void * pRet = 0;
+    void * pRet = nullptr;
 
     uno::Reference< lang::XMultiServiceFactory > xSMgr(
             static_cast< lang::XMultiServiceFactory * >( pServiceManager ) );

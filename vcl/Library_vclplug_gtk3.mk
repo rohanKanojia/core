@@ -27,14 +27,10 @@ $(eval $(call gb_Library_add_cxxflags,vclplug_gtk3, \
 
 $(eval $(call gb_Library_set_include,vclplug_gtk3,\
     $$(INCLUDE) \
+    $$(GTK3_CFLAGS) \
     -I$(SRCDIR)/vcl/inc \
     -I$(SRCDIR)/vcl/unx \
     -I$(SRCDIR)/vcl/unx/gtk3 \
-))
-
-$(eval $(call gb_Library_add_cxxflags,vclplug_gtk3,\
-    $$(INCLUDE) \
-    $$(GTK3_CFLAGS) \
 ))
 
 $(eval $(call gb_Library_add_defs,vclplug_gtk3,\
@@ -58,6 +54,7 @@ $(eval $(call gb_Library_add_libs,vclplug_gtk3,\
 
 $(eval $(call gb_Library_use_libraries,vclplug_gtk3,\
     vcl \
+    svl \
     tl \
     utl \
     sot \
@@ -75,8 +72,10 @@ $(eval $(call gb_Library_use_libraries,vclplug_gtk3,\
 
 $(eval $(call gb_Library_use_externals,vclplug_gtk3,\
 	boost_headers \
-	glew \
+	epoxy \
 	dbus \
+	graphite \
+	harfbuzz \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,vclplug_gtk3,\

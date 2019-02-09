@@ -17,19 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dlg_InsertTitle.hxx"
-#include "res_Titles.hxx"
-#include "ResId.hxx"
-#include "ObjectNameProvider.hxx"
+#include <dlg_InsertTitle.hxx>
+#include <res_Titles.hxx>
+#include <ObjectNameProvider.hxx>
 
 namespace chart
 {
 
-SchTitleDlg::SchTitleDlg(vcl::Window* pWindow, const TitleDialogData& rInput )
-    : ModalDialog(pWindow, "InsertTitleDialog", "modules/schart/ui/inserttitledlg.ui")
-    , m_xTitleResources(new TitleResources(*this, true))
+SchTitleDlg::SchTitleDlg(weld::Window* pWindow, const TitleDialogData& rInput)
+    : GenericDialogController(pWindow, "modules/schart/ui/inserttitledlg.ui", "InsertTitleDialog")
+    , m_xTitleResources(new TitleResources(*m_xBuilder, true))
 {
-    SetText( ObjectNameProvider::getName(OBJECTTYPE_TITLE, true));
+    m_xDialog->set_title(ObjectNameProvider::getName(OBJECTTYPE_TITLE, true));
     m_xTitleResources->writeToResources( rInput );
 }
 

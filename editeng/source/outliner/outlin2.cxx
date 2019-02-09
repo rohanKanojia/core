@@ -22,7 +22,7 @@
 #include <editeng/editeng.hxx>
 #include <editeng/editview.hxx>
 #include <editeng/editdata.hxx>
-#include <editeng/eerdll.hxx>
+
 #include <editeng/lrspitem.hxx>
 #include <editeng/fhgtitem.hxx>
 #include <svl/style.hxx>
@@ -31,10 +31,10 @@
 #include <editeng/forbiddencharacterstable.hxx>
 
 #include <editeng/outliner.hxx>
-#include <paralist.hxx>
+#include "paralist.hxx"
 #include <editeng/outlobj.hxx>
-#include <outleeng.hxx>
-#include <outlundo.hxx>
+#include "outleeng.hxx"
+#include "outlundo.hxx"
 #include <editeng/eeitem.hxx>
 #include <editeng/editstat.hxx>
 
@@ -72,7 +72,7 @@ bool Outliner::IsUndoEnabled() const
     return pEditEngine->IsUndoEnabled();
 }
 
-MapMode Outliner::GetRefMapMode() const
+MapMode const & Outliner::GetRefMapMode() const
 {
     return pEditEngine->GetRefMapMode();
 }
@@ -87,7 +87,7 @@ void Outliner::SetBackgroundColor( const Color& rColor )
     pEditEngine->SetBackgroundColor( rColor );
 }
 
-Color Outliner::GetBackgroundColor() const
+Color const & Outliner::GetBackgroundColor() const
 {
     return pEditEngine->GetBackgroundColor();
 }
@@ -113,7 +113,7 @@ void Outliner::SetModifyHdl( const Link<LinkParamNone*,void>& rLink )
     pEditEngine->SetModifyHdl( rLink );
 }
 
-Link<LinkParamNone*,void> Outliner::GetModifyHdl() const
+Link<LinkParamNone*,void> const & Outliner::GetModifyHdl() const
 {
     return pEditEngine->GetModifyHdl();
 }
@@ -133,7 +133,7 @@ void Outliner::SetStatusEventHdl( const Link<EditStatus&, void>& rLink )
     pEditEngine->SetStatusEventHdl( rLink );
 }
 
-Link<EditStatus&, void> Outliner::GetStatusEventHdl() const
+Link<EditStatus&, void> const & Outliner::GetStatusEventHdl() const
 {
     return pEditEngine->GetStatusEventHdl();
 }
@@ -163,7 +163,7 @@ void Outliner::SetWordDelimiters( const OUString& rDelimiters )
     pEditEngine->SetWordDelimiters( rDelimiters );
 }
 
-OUString Outliner::GetWordDelimiters() const
+OUString const & Outliner::GetWordDelimiters() const
 {
     return pEditEngine->GetWordDelimiters();
 }
@@ -173,7 +173,7 @@ OUString Outliner::GetWord( sal_Int32 nPara, sal_Int32 nIndex )
     return pEditEngine->GetWord( nPara, nIndex );
 }
 
-void Outliner::Draw( OutputDevice* pOutDev, const Rectangle& rOutRect )
+void Outliner::Draw( OutputDevice* pOutDev, const tools::Rectangle& rOutRect )
 {
     pEditEngine->Draw( pOutDev, rOutRect );
 }
@@ -228,17 +228,17 @@ void Outliner::SetMaxAutoPaperSize( const Size& rSz )
     pEditEngine->SetMaxAutoPaperSize( rSz );
 }
 
-bool Outliner::IsExpanded( Paragraph* pPara ) const
+bool Outliner::IsExpanded( Paragraph const * pPara ) const
 {
     return pParaList->HasVisibleChildren( pPara );
 }
 
-Paragraph* Outliner::GetParent( Paragraph* pParagraph ) const
+Paragraph* Outliner::GetParent( Paragraph const * pParagraph ) const
 {
     return pParaList->GetParent( pParagraph );
 }
 
-sal_Int32 Outliner::GetChildCount( Paragraph* pParent ) const
+sal_Int32 Outliner::GetChildCount( Paragraph const * pParent ) const
 {
     return pParaList->GetChildCount( pParent );
 }
@@ -283,7 +283,7 @@ EEControlBits Outliner::GetControlWord() const
     return pEditEngine->GetControlWord();
 }
 
-void Outliner::SetAsianCompressionMode( sal_uInt16 n )
+void Outliner::SetAsianCompressionMode( CharCompressType n )
 {
     pEditEngine->SetAsianCompressionMode( n );
 }
@@ -303,14 +303,14 @@ void Outliner::UndoActionStart( sal_uInt16 nId )
     pEditEngine->UndoActionStart( nId );
 }
 
-void Outliner::UndoActionEnd( sal_uInt16 nId )
+void Outliner::UndoActionEnd()
 {
-    pEditEngine->UndoActionEnd( nId );
+    pEditEngine->UndoActionEnd();
 }
 
-void Outliner::InsertUndo( EditUndo* pUndo )
+void Outliner::InsertUndo( std::unique_ptr<EditUndo> pUndo )
 {
-    pEditEngine->GetUndoManager().AddUndoAction( pUndo );
+    pEditEngine->GetUndoManager().AddUndoAction( std::move(pUndo) );
 }
 
 bool Outliner::IsInUndo()
@@ -358,11 +358,6 @@ void Outliner::SetDefaultLanguage( LanguageType eLang )
     pEditEngine->SetDefaultLanguage( eLang );
 }
 
-LanguageType Outliner::GetDefaultLanguage() const
-{
-    return pEditEngine->GetDefaultLanguage();
-}
-
 void Outliner::CompleteOnlineSpelling()
 {
     pEditEngine->CompleteOnlineSpelling();
@@ -389,21 +384,22 @@ bool Outliner::SpellNextDocument()
 }
 
 
-void Outliner::SetSpeller( Reference< XSpellChecker1 > &xSpeller )
+void Outliner::SetSpeller( Reference< XSpellChecker1 > const &xSpeller )
 {
     pEditEngine->SetSpeller( xSpeller );
 }
-Reference< XSpellChecker1 > Outliner::GetSpeller()
+
+Reference< XSpellChecker1 > const & Outliner::GetSpeller()
 {
     return pEditEngine->GetSpeller();
 }
 
-void Outliner::SetForbiddenCharsTable( const rtl::Reference<SvxForbiddenCharactersTable>& xForbiddenChars )
+void Outliner::SetForbiddenCharsTable(const std::shared_ptr<SvxForbiddenCharactersTable>& xForbiddenChars)
 {
-    EditEngine::SetForbiddenCharsTable( xForbiddenChars );
+    EditEngine::SetForbiddenCharsTable(xForbiddenChars);
 }
 
-void Outliner::SetHyphenator( Reference< XHyphenator >& xHyph )
+void Outliner::SetHyphenator( Reference< XHyphenator > const & xHyph )
 {
     pEditEngine->SetHyphenator( xHyph );
 }
@@ -413,19 +409,14 @@ OutputDevice* Outliner::GetRefDevice() const
     return pEditEngine->GetRefDevice();
 }
 
-sal_uLong Outliner::GetTextHeight( sal_Int32 nParagraph ) const
+tools::Rectangle Outliner::GetParaBounds( sal_Int32 nParagraph ) const
 {
-    return pEditEngine->GetTextHeight(nParagraph );
+    return pEditEngine->GetParaBounds(nParagraph );
 }
 
 Point Outliner::GetDocPos( const Point& rPaperPos ) const
 {
     return pEditEngine->GetDocPos( rPaperPos );
-}
-
-Point Outliner::GetDocPosTopLeft( sal_Int32 nParagraph )
-{
-    return pEditEngine->GetDocPosTopLeft( nParagraph );
 }
 
 bool Outliner::IsTextPos( const Point& rPaperPos, sal_uInt16 nBorder )
@@ -444,7 +435,7 @@ bool Outliner::IsTextPos( const Point& rPaperPos, sal_uInt16 nBorder, bool* pbBu
         sal_Int32 nPara = pEditEngine->FindParagraph( aDocPos.Y() );
         if ( ( nPara != EE_PARA_NOT_FOUND ) && ImplHasNumberFormat( nPara ) )
         {
-            Rectangle aBulArea = ImpCalcBulletArea( nPara, true, true );
+            tools::Rectangle aBulArea = ImpCalcBulletArea( nPara, true, true );
             if ( aBulArea.IsInside( rPaperPos ) )
             {
                 bTextPos = true;
@@ -500,7 +491,7 @@ void Outliner::SetGlobalCharStretching( sal_uInt16 nX, sal_uInt16 nY )
     {
         Paragraph* pPara = pParaList->GetParagraph( nPara );
         if ( pPara )
-            pPara->aBulSize.Width() = -1;
+            pPara->aBulSize.setWidth( -1 );
     }
 
     pEditEngine->SetGlobalCharStretching( nX, nY );
@@ -526,14 +517,19 @@ const EditEngine& Outliner::GetEditEngine() const
     return *pEditEngine;
 }
 
-void Outliner::SetVertical( bool b )
+void Outliner::SetVertical( bool bVertical, bool bTopToBottom)
 {
-    pEditEngine->SetVertical( b );
+    pEditEngine->SetVertical(bVertical, bTopToBottom);
 }
 
 bool Outliner::IsVertical() const
 {
     return pEditEngine->IsVertical();
+}
+
+bool Outliner::IsTopToBottom() const
+{
+    return pEditEngine->IsTopToBottom();
 }
 
 void Outliner::SetFixedCellHeight( bool bUseFixedCellHeight )
@@ -549,11 +545,6 @@ void Outliner::SetDefaultHorizontalTextDirection( EEHorizontalTextDirection eHTe
 EEHorizontalTextDirection Outliner::GetDefaultHorizontalTextDirection() const
 {
     return pEditEngine->GetDefaultHorizontalTextDirection();
-}
-
-SvtScriptType Outliner::GetScriptType( const ESelection& rSelection ) const
-{
-    return pEditEngine->GetScriptType( rSelection );
 }
 
 LanguageType Outliner::GetLanguage( sal_Int32 nPara, sal_Int32 nPos ) const
@@ -581,17 +572,17 @@ bool Outliner::IsForceAutoColor() const
     return pEditEngine->IsForceAutoColor();
 }
 
-bool Outliner::SpellSentence(EditView& rEditView, svx::SpellPortions& rToFill, bool bIsGrammarChecking )
+bool Outliner::SpellSentence(EditView const & rEditView, svx::SpellPortions& rToFill )
 {
-    return pEditEngine->SpellSentence(rEditView, rToFill, bIsGrammarChecking );
+    return pEditEngine->SpellSentence(rEditView, rToFill );
 }
 
-void Outliner::PutSpellingToSentenceStart( EditView& rEditView )
+void Outliner::PutSpellingToSentenceStart( EditView const & rEditView )
 {
     pEditEngine->PutSpellingToSentenceStart( rEditView );
 }
 
-void Outliner::ApplyChangedSentence(EditView& rEditView, const svx::SpellPortions& rNewPortions, bool bRecheck )
+void Outliner::ApplyChangedSentence(EditView const & rEditView, const svx::SpellPortions& rNewPortions, bool bRecheck )
 {
     pEditEngine->ApplyChangedSentence( rEditView, rNewPortions, bRecheck );
 }

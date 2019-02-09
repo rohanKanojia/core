@@ -35,9 +35,9 @@ namespace drawinglayer
         class SdrOle2Primitive2D : public BasePrimitive2D
         {
         private:
-            Primitive2DContainer                         maOLEContent;
-            basegfx::B2DHomMatrix                       maTransform;
-            attribute::SdrLineFillShadowTextAttribute   maSdrLFSTAttribute;
+            Primitive2DContainer const                        maOLEContent;
+            basegfx::B2DHomMatrix const                       maTransform;
+            attribute::SdrLineFillShadowTextAttribute const   maSdrLFSTAttribute;
 
         public:
             SdrOle2Primitive2D(
@@ -54,7 +54,7 @@ namespace drawinglayer
             virtual bool operator==(const BasePrimitive2D& rPrimitive) const override;
 
             // local decomposition.
-            virtual Primitive2DContainer get2DDecomposition(const geometry::ViewInformation2D& aViewInformation) const override;
+            virtual void get2DDecomposition(Primitive2DDecompositionVisitor& rVisitor, const geometry::ViewInformation2D& aViewInformation) const override;
 
             // provide unique ID
             DeclPrimitive2DIDBlock()

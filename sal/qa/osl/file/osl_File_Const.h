@@ -65,11 +65,13 @@ const sal_Char pBuffer_Blank[]  = "";
 #   include <errno.h>
 #   include <fcntl.h>
 #   include <sys/stat.h>
-#   if !defined(MACOSX) && !defined(IOS) && !defined(__OpenBSD__) && !defined(__FreeBSD__) && !defined(__NetBSD__) && !defined (DRAGONFLY)
+#   if !defined(MACOSX) && !defined(IOS) && !defined(__OpenBSD__) && !defined(__FreeBSD__) && !defined(__NetBSD__) && !defined (DRAGONFLY) && !defined(HAIKU)
 #       include <sys/statfs.h>
 #   else
 #       include <sys/param.h>
-#       include <sys/mount.h>
+#       ifndef HAIKU
+#           include <sys/mount.h>
+#       endif
 #   endif
 #   if !defined(ANDROID)
 #        include <sys/statvfs.h>
@@ -83,10 +85,7 @@ const sal_Char pBuffer_Blank[]  = "";
 #endif
 
 #if defined(_WIN32)                      // Windows
-#       include <tchar.h>
 #       include <io.h>
-#       include <stdio.h>
-#       include <stdlib.h>
 #   define PATH_MAX             MAX_PATH
 #   define TEST_PLATFORM        "c:/"
 #   define TEST_PLATFORM_ROOT   "c:/"
@@ -110,7 +109,7 @@ OUString aUserDirectorySys( TEST_PLATFORM_ROOT TEST_PLATFORM_TEMP "" );
 // common used URL:temp, canonical, root, relative, link,etc
 
 OUString aCanURL1( FILE_PREFIX TEST_PLATFORM TEST_PLATFORM_TEMP "/canonical.name" );
-rtl::OUString aCanURL2(
+OUString aCanURL2(
     RTL_CONSTASCII_USTRINGPARAM("ca@#;+.,$///78no\0ni..name"));
 OUString aCanURL3( "ca@#;+.,$//tmp/678nonical//name" );
 OUString aCanURL4( "canonical.name" );
@@ -163,7 +162,7 @@ OUString aTypeURL3( FILE_PREFIX "" );
 
 #if ( defined UNX )                                     //          Unix
 OUString aVolURL1( FILE_PREFIX  "");            //ufs       Solaris/Linux
-#ifdef SOLARIS
+#ifdef __sun
 OUString aVolURL2( FILE_PREFIX  "dev/fd" );     //fd        Solaris
 #else
 OUString aVolURL2( FILE_PREFIX  "dev/floppy/0u1440" );  //fd0       Linux

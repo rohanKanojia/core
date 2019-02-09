@@ -20,15 +20,18 @@
 #define INCLUDED_SW_SOURCE_UIBASE_DOCVW_FRMSIDEBARWINCONTAINER_HXX
 
 #include <sal/types.h>
+#include <memory>
 #include <vector>
 
 class SwFrame;
 class SwFormatField;
 namespace vcl { class Window; }
+namespace sw { namespace annotation {
+    class SwAnnotationWin;
+} }
 
 namespace sw { namespace sidebarwindows {
 
-class SwSidebarWin;
 class FrameSidebarWinContainer;
 
 class SwFrameSidebarWinContainer
@@ -39,21 +42,21 @@ class SwFrameSidebarWinContainer
 
         bool insert( const SwFrame& rFrame,
                      const SwFormatField& rFormatField,
-                     SwSidebarWin& rSidebarWin );
+                     sw::annotation::SwAnnotationWin& rSidebarWin );
 
         bool remove( const SwFrame& rFrame,
-                     const SwSidebarWin& rSidebarWin );
+                     const sw::annotation::SwAnnotationWin& rSidebarWin );
 
         bool empty( const SwFrame& rFrame );
 
-        SwSidebarWin* get( const SwFrame& rFrame,
+        sw::annotation::SwAnnotationWin* get( const SwFrame& rFrame,
                            const sal_Int32 nIndex );
 
         void getAll( const SwFrame& rFrame,
                      std::vector< vcl::Window* >* pSidebarWins );
 
     private:
-        FrameSidebarWinContainer* mpFrameSidebarWinContainer;
+        std::unique_ptr<FrameSidebarWinContainer> mpFrameSidebarWinContainer;
 };
 
 } } // eof of namespace sw::sidebarwindows::

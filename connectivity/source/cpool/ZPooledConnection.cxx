@@ -22,7 +22,6 @@
 #include <connectivity/ConnectionWrapper.hxx>
 #include <com/sun/star/sdbc/XCloseable.hpp>
 #include <comphelper/types.hxx>
-#include <comphelper/uno3.hxx>
 #include <cppuhelper/component.hxx>
 
 using namespace ::com::sun::star::uno;
@@ -34,7 +33,7 @@ using namespace connectivity;
 using namespace ::osl;
 
 OPooledConnection::OPooledConnection(const Reference< XConnection >& _xConnection,
-                                    const Reference< ::com::sun::star::reflection::XProxyFactory >& _rxProxyFactory)
+                                    const Reference< css::reflection::XProxyFactory >& _rxProxyFactory)
     : OPooledConnection_Base(m_aMutex)
     ,m_xRealConnection(_xConnection)
     ,m_xProxyFactory(_rxProxyFactory)
@@ -48,18 +47,18 @@ void SAL_CALL OPooledConnection::disposing()
     MutexGuard aGuard(m_aMutex);
     if (m_xComponent.is())
         m_xComponent->removeEventListener(this);
-m_xComponent.clear();
+    m_xComponent.clear();
     ::comphelper::disposeComponent(m_xRealConnection);
 }
 
 // XEventListener
-void SAL_CALL OPooledConnection::disposing( const EventObject& /*Source*/ ) throw (RuntimeException, std::exception)
+void SAL_CALL OPooledConnection::disposing( const EventObject& /*Source*/ )
 {
 m_xComponent.clear();
 }
 
 //XPooledConnection
-Reference< XConnection > OPooledConnection::getConnection()  throw(SQLException, RuntimeException, std::exception)
+Reference< XConnection > OPooledConnection::getConnection()
 {
     if(!m_xComponent.is() && m_xRealConnection.is())
     {

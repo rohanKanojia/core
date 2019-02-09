@@ -20,10 +20,11 @@
 #ifndef INCLUDED_COMPHELPER_BASICIO_HXX
 #define INCLUDED_COMPHELPER_BASICIO_HXX
 
-#include <com/sun/star/io/XPersistObject.hpp>
-#include <com/sun/star/awt/FontDescriptor.hpp>
+#include <com/sun/star/io/XObjectOutputStream.hpp>
+#include <com/sun/star/io/XObjectInputStream.hpp>
 #include <comphelper/comphelperdllapi.h>
 
+namespace com { namespace sun { namespace star { namespace awt { struct FontDescriptor; } } } }
 
 namespace comphelper
 {
@@ -63,28 +64,18 @@ COMPHELPER_DLLPUBLIC const css::uno::Reference<css::io::XObjectOutputStream>& op
 template <class ELEMENT>
 const css::uno::Reference<css::io::XObjectInputStream>& operator >> (const css::uno::Reference<css::io::XObjectInputStream>& _rxInStream, css::uno::Sequence<ELEMENT>& _rSeq)
 {
-    sal_Int32 nLen = _rxInStream->readLong();
-    _rSeq.realloc(nLen);
-    if (nLen)
-    {
-        ELEMENT* pElement = _rSeq.getArray();
-        for (sal_Int32 i=0; i<nLen; ++i, ++pElement)
-            _rxInStream >> *pElement;
-    }
+    _rSeq.realloc(_rxInStream->readLong());
+    for (ELEMENT& rElement : _rSeq)
+        _rxInStream >> rElement;
     return _rxInStream;
 }
 
 template <class ELEMENT>
 const css::uno::Reference<css::io::XObjectOutputStream>& operator << (const css::uno::Reference<css::io::XObjectOutputStream>& _rxOutStream, const css::uno::Sequence<ELEMENT>& _rSeq)
 {
-    sal_Int32 nLen = _rSeq.getLength();
-    _rxOutStream->writeLong(nLen);
-    if (nLen)
-    {
-        const ELEMENT* pElement = _rSeq.getConstArray();
-        for (sal_Int32 i = 0; i < nLen; ++i, ++pElement)
-            _rxOutStream << *pElement;
-    }
+    _rxOutStream->writeLong(_rSeq.getLength());
+    for (const ELEMENT& rElement : _rSeq)
+        _rxOutStream << rElement;
     return _rxOutStream;
 }
 

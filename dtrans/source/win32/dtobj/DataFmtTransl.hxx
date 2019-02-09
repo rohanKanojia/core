@@ -26,13 +26,11 @@
 #include <sal/types.h>
 #include <rtl/ustring.hxx>
 
-#if defined _MSC_VER
-#pragma warning(push,1)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
+#include <objidl.h>
 
 // declaration
 
@@ -47,18 +45,18 @@ public:
     css::datatransfer::DataFlavor getDataFlavorFromFormatEtc(
         const FORMATETC& aFormatEtc, LCID lcid = GetThreadLocale( ) ) const;
 
-    CFormatEtc    SAL_CALL getFormatEtcForClipformat( CLIPFORMAT cf ) const;
-    CFormatEtc    SAL_CALL getFormatEtcForClipformatName( const OUString& aClipFmtName ) const;
-    OUString SAL_CALL getClipboardFormatName( CLIPFORMAT aClipformat ) const;
+    static CFormatEtc getFormatEtcForClipformat( CLIPFORMAT cf );
+    static CFormatEtc getFormatEtcForClipformatName( const OUString& aClipFmtName );
+    static OUString getClipboardFormatName( CLIPFORMAT aClipformat );
 
-    sal_Bool SAL_CALL isHTMLFormat( CLIPFORMAT cf ) const;
-    sal_Bool SAL_CALL isTextHtmlFormat( CLIPFORMAT cf ) const;
-    sal_Bool SAL_CALL isOemOrAnsiTextFormat( CLIPFORMAT cf ) const;
-    sal_Bool SAL_CALL isUnicodeTextFormat( CLIPFORMAT cf ) const;
-    sal_Bool SAL_CALL isTextFormat( CLIPFORMAT cf ) const;
+    static bool isHTMLFormat( CLIPFORMAT cf );
+    static bool isTextHtmlFormat( CLIPFORMAT cf );
+    static bool isOemOrAnsiTextFormat( CLIPFORMAT cf );
+    static bool isUnicodeTextFormat( CLIPFORMAT cf );
+    static bool isTextFormat( CLIPFORMAT cf );
 
 private:
-    OUString SAL_CALL getTextCharsetFromLCID( LCID lcid, CLIPFORMAT aClipformat ) const;
+    static OUString getTextCharsetFromLCID( LCID lcid, CLIPFORMAT aClipformat );
 
 private:
     css::uno::Reference< css::datatransfer::XDataFormatTranslator >   m_XDataFormatTranslator;

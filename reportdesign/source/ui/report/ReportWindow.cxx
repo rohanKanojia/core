@@ -16,33 +16,32 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "ReportWindow.hxx"
-#include "ReportSection.hxx"
-#include "SectionView.hxx"
-#include "ViewsWindow.hxx"
-#include "DesignView.hxx"
-#include "UITools.hxx"
+#include <ReportWindow.hxx>
+#include <ReportSection.hxx>
+#include <SectionView.hxx>
+#include <ViewsWindow.hxx>
+#include <DesignView.hxx>
+#include <UITools.hxx>
 
-#include <tools/debug.hxx>
 #include <svtools/colorcfg.hxx>
 #include <svl/itempool.hxx>
 #include <unotools/syslocale.hxx>
+#include <unotools/localedatawrapper.hxx>
 
 #include <vcl/settings.hxx>
 
-#include "RptDef.hxx"
-#include "dlgedfunc.hxx"
-#include "RptModel.hxx"
-#include "uistrings.hrc"
-#include "RptPage.hxx"
-#include "ReportController.hxx"
-#include "EndMarker.hxx"
-#include "ColorChanger.hxx"
-#include "ScrollHelper.hxx"
+#include <RptDef.hxx>
+#include <dlgedfunc.hxx>
+#include <RptModel.hxx>
+#include <strings.hxx>
+#include <RptPage.hxx>
+#include <ReportController.hxx>
+#include <EndMarker.hxx>
+#include <ColorChanger.hxx>
+#include <ScrollHelper.hxx>
 
-#include "helpids.hrc"
-#include "dlgedfac.hxx"
-#include <toolkit/helper/vclunohelper.hxx>
+#include <helpids.h>
+#include <dlgedfac.hxx>
 
 
 #define SECTION_OFFSET  3
@@ -64,7 +63,7 @@ OReportWindow::OReportWindow(OScrollWindowHelper* _pParent,ODesignView* _pView)
 ,m_pObjFac( new DlgEdFactory() )
 {
     SetHelpId(UID_RPT_REPORTWINDOW);
-    SetMapMode( MapMode( MAP_100TH_MM ) );
+    SetMapMode( MapMode( MapUnit::Map100thMM ) );
 
     m_aViewsWindow->Show();
 
@@ -76,7 +75,7 @@ OReportWindow::OReportWindow(OScrollWindowHelper* _pParent,ODesignView* _pView)
     m_aHRuler->SetMargin1();
     m_aHRuler->SetMargin2();
     const MeasurementSystem eSystem = SvtSysLocale().GetLocaleData().getMeasurementSystemEnum();
-    m_aHRuler->SetUnit(MEASURE_METRIC == eSystem ? FUNIT_CM : FUNIT_INCH);
+    m_aHRuler->SetUnit(MeasurementSystem::Metric == eSystem ? FieldUnit::CM : FieldUnit::INCH);
 
     ImplInitSettings();
     m_pReportListener = addStyleListener(_pView->getController().getReportDefinition(),this);
@@ -103,7 +102,7 @@ void OReportWindow::SetInsertObj( sal_uInt16 eObj,const OUString& _sShapeType )
     m_aViewsWindow->SetInsertObj( eObj,_sShapeType);
 }
 
-OUString OReportWindow::GetInsertObjString() const
+OUString const & OReportWindow::GetInsertObjString() const
 {
     return m_aViewsWindow->GetInsertObjString();
 }
@@ -146,7 +145,7 @@ sal_Int32 OReportWindow::getMaxMarkerWidth() const
 {
     Fraction aStartWidth(long(REPORT_STARTMARKER_WIDTH));
     aStartWidth *= m_aViewsWindow->GetMapMode().GetScaleX();
-    return sal_Int32((long)aStartWidth);
+    return sal_Int32(static_cast<long>(aStartWidth));
 }
 
 sal_Int32 OReportWindow::GetTotalWidth() const
@@ -157,10 +156,9 @@ sal_Int32 OReportWindow::GetTotalWidth() const
         Fraction aStartWidth(long(REPORT_ENDMARKER_WIDTH + REPORT_STARTMARKER_WIDTH ));
         const Fraction aZoom(m_pView->getController().getZoomValue(),100);
         aStartWidth *= aZoom;
-        const sal_Int32 nPaperWidth = getStyleProperty<awt::Size>(m_pView->getController().getReportDefinition(),PROPERTY_PAPERSIZE).Width;
-        Fraction aPaperWidth(nPaperWidth,1);
-        aPaperWidth *= aZoom;
-        const Size aPageSize = LogicToPixel(Size(aPaperWidth,0));
+        sal_Int32 nPaperWidth = getStyleProperty<awt::Size>(m_pView->getController().getReportDefinition(),PROPERTY_PAPERSIZE).Width;
+        nPaperWidth = long(nPaperWidth * aZoom);
+        const Size aPageSize = LogicToPixel(Size(nPaperWidth,0));
         nWidth = aPageSize.Width() + long(aStartWidth);
     }
     return nWidth;
@@ -174,8 +172,8 @@ void OReportWindow::Resize()
         const Size aTotalOutputSize = GetOutputSizePixel();
         Fraction aStartWidth(long(REPORT_STARTMARKER_WIDTH)*m_pView->getController().getZoomValue(),100);
 
-        const Point aOffset = LogicToPixel( Point( SECTION_OFFSET, 0 ), MAP_APPFONT );
-        Point aStartPoint((long)aStartWidth + aOffset.X(),0);
+        const Point aOffset = LogicToPixel(Point(SECTION_OFFSET, 0), MapMode(MapUnit::MapAppFont));
+        Point aStartPoint(static_cast<long>(aStartWidth) + aOffset.X(),0);
         uno::Reference<report::XReportDefinition> xReportDefinition = getReportView()->getController().getReportDefinition();
         const sal_Int32 nPaperWidth = getStyleProperty<awt::Size>(xReportDefinition,PROPERTY_PAPERSIZE).Width;
         sal_Int32 nLeftMargin = getStyleProperty<sal_Int32>(xReportDefinition,PROPERTY_LEFTMARGIN);
@@ -184,7 +182,7 @@ void OReportWindow::Resize()
         nLeftMargin     = m_aViewsWindow->LogicToPixel(Size(nLeftMargin,0)).Width();
         nRightMargin    = m_aViewsWindow->LogicToPixel(Size(nRightMargin,0)).Width();
 
-        aPageSize.Height() = m_aHRuler->GetSizePixel().Height();
+        aPageSize.setHeight( m_aHRuler->GetSizePixel().Height() );
 
         const long nTermp(m_aViewsWindow->getTotalHeight() + aPageSize.Height());
         long nSectionsHeight = ::std::max<long>(nTermp,aTotalOutputSize.Height());
@@ -194,10 +192,10 @@ void OReportWindow::Resize()
         m_aHRuler->SetMargin1(0);
         m_aHRuler->SetMargin2(aPageSize.Width() - nLeftMargin - nRightMargin);
 
-        aStartPoint.Y() += aPageSize.Height();
+        aStartPoint.AdjustY(aPageSize.Height() );
         nSectionsHeight -= aStartPoint.Y();
 
-        aStartPoint.X() = aOffset.X();
+        aStartPoint.setX( aOffset.X() );
 
         m_aViewsWindow->SetPosSizePixel(aStartPoint,Size(aTotalOutputSize.Width(),nSectionsHeight));
     }
@@ -288,10 +286,10 @@ void OReportWindow::SelectAll(const sal_uInt16 _nObjectType)
     m_aViewsWindow->SelectAll(_nObjectType);
 }
 
-void OReportWindow::unmarkAllObjects(OSectionView* _pSectionView)
+void OReportWindow::unmarkAllObjects()
 {
 
-    m_aViewsWindow->unmarkAllObjects(_pSectionView);
+    m_aViewsWindow->unmarkAllObjects(nullptr);
 }
 
 void OReportWindow::showProperties(const uno::Reference< report::XSection>& _xReportComponent)
@@ -305,7 +303,7 @@ bool OReportWindow::handleKeyEvent(const KeyEvent& _rEvent)
     return m_aViewsWindow->handleKeyEvent(_rEvent);
 }
 
-void OReportWindow::setMarked(OSectionView* _pSectionView, bool _bMark)
+void OReportWindow::setMarked(OSectionView const * _pSectionView, bool _bMark)
 {
     if ( _pSectionView )
         m_aViewsWindow->setMarked(_pSectionView,_bMark);
@@ -351,9 +349,8 @@ void OReportWindow::collapseSections(const uno::Sequence< css::beans::PropertyVa
     m_aViewsWindow->collapseSections(_aCollpasedSections);
 }
 
-void OReportWindow::alignMarkedObjects(sal_Int32 _nControlModification,bool _bAlignAtSection)
+void OReportWindow::alignMarkedObjects(ControlModification _nControlModification, bool _bAlignAtSection)
 {
-
     m_aViewsWindow->alignMarkedObjects(_nControlModification, _bAlignAtSection);
 }
 
@@ -397,7 +394,7 @@ void OReportWindow::fillControlModelSelection(::std::vector< uno::Reference< uno
 sal_Int32 OReportWindow::impl_getRealPixelWidth() const
 {
     const sal_Int32 nPaperWidth = getStyleProperty<awt::Size>(m_pView->getController().getReportDefinition(),PROPERTY_PAPERSIZE).Width;
-    MapMode aMap( MAP_100TH_MM );
+    MapMode aMap( MapUnit::Map100thMM );
     const Size aPageSize = LogicToPixel(Size(nPaperWidth,0),aMap);
     return aPageSize.Width() + REPORT_ENDMARKER_WIDTH + REPORT_STARTMARKER_WIDTH + SECTION_OFFSET;
 }
@@ -415,14 +412,14 @@ sal_uInt16 OReportWindow::getZoomFactor(SvxZoomType _eType) const
             break;
         case SvxZoomType::WHOLEPAGE:
             {
-                nZoom = (sal_uInt16)(long)Fraction(aSize.Width()*100,impl_getRealPixelWidth());
-                MapMode aMap( MAP_100TH_MM );
+                nZoom = static_cast<sal_uInt16>(static_cast<long>(Fraction(aSize.Width()*100,impl_getRealPixelWidth())));
+                MapMode aMap( MapUnit::Map100thMM );
                 const Size aHeight = m_aViewsWindow->LogicToPixel(m_aViewsWindow->PixelToLogic(Size(0,GetTotalHeight() + m_aHRuler->GetSizePixel().Height())),aMap);
-                nZoom = ::std::min(nZoom,(sal_uInt16)(long)Fraction(aSize.Height()*100,aHeight.Height()));
+                nZoom = ::std::min(nZoom,static_cast<sal_uInt16>(static_cast<long>(Fraction(aSize.Height()*100,aHeight.Height()))));
             }
             break;
         case SvxZoomType::PAGEWIDTH:
-            nZoom = (sal_uInt16)(long)Fraction(aSize.Width()*100,impl_getRealPixelWidth());
+            nZoom = static_cast<sal_uInt16>(static_cast<long>(Fraction(aSize.Width()*100,impl_getRealPixelWidth())));
             break;
         default:
             break;
@@ -431,9 +428,8 @@ sal_uInt16 OReportWindow::getZoomFactor(SvxZoomType _eType) const
     return nZoom;
 }
 
-void OReportWindow::_propertyChanged(const beans::PropertyChangeEvent& _rEvent) throw( uno::RuntimeException)
+void OReportWindow::_propertyChanged(const beans::PropertyChangeEvent&)
 {
-    (void)_rEvent;
     Resize();
     m_aViewsWindow->Resize();
     Invalidate(InvalidateFlags::Transparent);

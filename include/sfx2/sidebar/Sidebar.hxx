@@ -39,7 +39,7 @@ public:
     */
     static void ShowPanel (
         const OUString& rsPanelId,
-        const css::uno::Reference<css::frame::XFrame>& rxFrame);
+        const css::uno::Reference<css::frame::XFrame>& rxFrame, bool bFocus = false);
 
     static bool IsPanelVisible(
         const OUString& rsPanelId,

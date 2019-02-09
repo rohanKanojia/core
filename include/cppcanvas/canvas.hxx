@@ -69,6 +69,14 @@ namespace cppcanvas
             ANTIALIASING_EXTRA_SIZE=2
         };
 
+        Canvas() = default;
+        Canvas(Canvas const &) = default;
+        Canvas(Canvas &&) = default;
+        Canvas & operator =(Canvas const &) = default;
+#if !(defined __GNUC__ && !defined __clang__ && __GNUC__ == 8) // bogus -Werror=virtual-move-assign
+        Canvas & operator =(Canvas &&) = default;
+#endif
+
         virtual ~Canvas() {}
 
         virtual void                             setTransformation( const ::basegfx::B2DHomMatrix& rMatrix ) = 0;
@@ -82,8 +90,6 @@ namespace cppcanvas
             @return NULL, if no clip is set, otherwise the current clip poly-polygon
          */
         virtual ::basegfx::B2DPolyPolygon const* getClip() const = 0;
-
-        virtual ColorSharedPtr                   createColor() const = 0;
 
         virtual CanvasSharedPtr                  clone() const = 0;
         virtual void                             clear() const = 0;

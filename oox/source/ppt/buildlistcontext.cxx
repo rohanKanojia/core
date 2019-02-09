@@ -19,11 +19,13 @@
 
 #include "buildlistcontext.hxx"
 #include <rtl/ustring.hxx>
-#include "oox/helper/attributelist.hxx"
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 namespace oox { namespace ppt {
 
-    BuildListContext::BuildListContext( FragmentHandler2& rParent )
+    BuildListContext::BuildListContext( FragmentHandler2 const & rParent )
         : FragmentHandler2( rParent )
         , mbInBldGraphic( false )
         ,   mbBuildAsOne( false )
@@ -57,9 +59,6 @@ namespace oox { namespace ppt {
             }
             return this;
         case PPT_TOKEN( bldSub ):
-            if( mbInBldGraphic )
-            {
-            }
             return this;
         case PPT_TOKEN( bldGraphic ):
         {

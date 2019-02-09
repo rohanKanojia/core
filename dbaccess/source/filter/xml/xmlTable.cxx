@@ -22,15 +22,18 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
 #include "xmlStyleImport.hxx"
 #include "xmlHierarchyCollection.hxx"
-#include "xmlstrings.hrc"
+#include <stringconstants.hxx>
+#include <strings.hxx>
 #include <ucbhelper/content.hxx>
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
-#include <comphelper/namecontainer.hxx>
-#include <tools/debug.hxx>
+#include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
+#include <comphelper/propertysequence.hxx>
 
 namespace dbaxml
 {
@@ -48,7 +51,6 @@ OXMLTable::OXMLTable( ODBFilter& _rImport
                 )
     :SvXMLImportContext( _rImport, nPrfx, _sLocalName )
     ,m_xParentContainer(_xParentContainer)
-    ,m_sServiceName(_sServiceName)
     ,m_bApplyFilter(false)
     ,m_bApplyOrder(false)
 {
@@ -87,18 +89,13 @@ OXMLTable::OXMLTable( ODBFilter& _rImport
                 break;
         }
     }
-    Sequence< Any > aArguments(2);
-    PropertyValue aValue;
-    // set as folder
-    aValue.Name = "Name";
-    aValue.Value <<= m_sName;
-    aArguments[0] <<= aValue;
-    //parent
-    aValue.Name = "Parent";
-    aValue.Value <<= m_xParentContainer;
-    aArguments[1] <<= aValue;
+    uno::Sequence<uno::Any> aArguments(comphelper::InitAnyPropertySequence(
+    {
+        {"Name", uno::Any(m_sName)}, // set as folder
+        {"Parent", uno::Any(m_xParentContainer)}
+    }));
     m_xTable.set(
-        GetOwnImport().GetComponentContext()->getServiceManager()->createInstanceWithArgumentsAndContext(m_sServiceName,aArguments, GetOwnImport().GetComponentContext()),
+        GetOwnImport().GetComponentContext()->getServiceManager()->createInstanceWithArgumentsAndContext(_sServiceName,aArguments, GetOwnImport().GetComponentContext()),
         UNO_QUERY);
 }
 
@@ -107,7 +104,7 @@ OXMLTable::~OXMLTable()
 
 }
 
-SvXMLImportContext* OXMLTable::CreateChildContext(
+SvXMLImportContextRef OXMLTable::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const uno::Reference< XAttributeList > & xAttrList )
@@ -121,14 +118,14 @@ SvXMLImportContext* OXMLTable::CreateChildContext(
             {
                 GetOwnImport().GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
                 OUString s1,s2,s3;
-                fillAttributes(nPrefix, rLocalName,xAttrList,m_sFilterStatement,s1,s2,s3);
+                fillAttributes(xAttrList,m_sFilterStatement,s1,s2,s3);
             }
             break;
         case XML_TOK_ORDER_STATEMENT:
             {
                 GetOwnImport().GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
                 OUString s1,s2,s3;
-                fillAttributes(nPrefix, rLocalName,xAttrList,m_sOrderStatement,s1,s2,s3);
+                fillAttributes(xAttrList,m_sOrderStatement,s1,s2,s3);
             }
             break;
 
@@ -173,7 +170,7 @@ void OXMLTable::setProperties(uno::Reference< XPropertySet > & _xProp )
     }
     catch(Exception&)
     {
-        OSL_FAIL("OXMLTable::EndElement -> exception catched");
+        OSL_FAIL("OXMLTable::EndElement -> exception caught");
     }
 }
 
@@ -206,15 +203,13 @@ void OXMLTable::EndElement()
         }
         catch(Exception&)
         {
-            OSL_FAIL("OXMLQuery::EndElement -> exception catched");
+            OSL_FAIL("OXMLQuery::EndElement -> exception caught");
         }
     }
 
 }
 
-void OXMLTable::fillAttributes(sal_uInt16 /*nPrfx*/
-                                ,const OUString& /*_sLocalName*/
-                                ,const uno::Reference< XAttributeList > & _xAttrList
+void OXMLTable::fillAttributes(const uno::Reference< XAttributeList > & _xAttrList
                                 ,OUString& _rsCommand
                                 ,OUString& _rsTableName
                                 ,OUString& _rsTableSchema

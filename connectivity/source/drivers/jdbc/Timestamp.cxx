@@ -17,9 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "java/sql/Timestamp.hxx"
-#include "java/tools.hxx"
-#include <comphelper/types.hxx>
+#include <java/sql/Timestamp.hxx>
+#include <java/tools.hxx>
 #include <connectivity/dbconversion.hxx>
 
 using namespace ::comphelper;
@@ -29,7 +28,7 @@ using namespace connectivity;
 
 
 jclass java_sql_Date::theClass = nullptr;
-java_sql_Date::java_sql_Date( const ::com::sun::star::util::Date& _rOut ) : java_util_Date( nullptr, nullptr )
+java_sql_Date::java_sql_Date( const css::util::Date& _rOut ) : java_util_Date( nullptr, nullptr )
 {
     SDBThreadAttach t;
     if( !t.pEnv )
@@ -46,7 +45,7 @@ java_sql_Date::java_sql_Date( const ::com::sun::star::util::Date& _rOut ) : java
     static jmethodID mID(nullptr);
     if ( !mID )
     {
-        static const char * cSignature = "(Ljava/lang/String;)Ljava/sql/Date;";
+        static const char * const cSignature = "(Ljava/lang/String;)Ljava/sql/Date;";
         mID  = t.pEnv->GetStaticMethodID( getMyClass(), "valueOf", cSignature );
     }
     OSL_ENSURE(mID,"Unknown method id!");
@@ -72,7 +71,7 @@ jclass java_sql_Date::st_getMyClass()
 }
 
 
-java_sql_Date::operator ::com::sun::star::util::Date()
+java_sql_Date::operator css::util::Date()
 {
     return ::dbtools::DBTypeConversion::toDate(toString());
 }
@@ -97,7 +96,7 @@ jclass java_sql_Time::st_getMyClass()
         theClass = findMyClass("java/sql/Time");
     return theClass;
 }
-java_sql_Time::java_sql_Time( const ::com::sun::star::util::Time& _rOut ): java_util_Date( nullptr, nullptr )
+java_sql_Time::java_sql_Time( const css::util::Time& _rOut ): java_util_Date( nullptr, nullptr )
 {
     SDBThreadAttach t;
     if( !t.pEnv )
@@ -110,12 +109,12 @@ java_sql_Time::java_sql_Time( const ::com::sun::star::util::Time& _rOut ): java_
     args[0].l = convertwchar_tToJavaString(t.pEnv,sDateStr);
 
     // Turn off Java-Call for the constructor
-    // intialise temporary variables
+    // initialise temporary variables
     jobject tempObj;
     static jmethodID mID(nullptr);
     if ( !mID )
     {
-        static const char * cSignature = "(Ljava/lang/String;)Ljava/sql/Time;";
+        static const char * const cSignature = "(Ljava/lang/String;)Ljava/sql/Time;";
         mID  = t.pEnv->GetStaticMethodID( getMyClass(), "valueOf", cSignature );
     }
     OSL_ENSURE(mID,"Unknown method id!");
@@ -126,7 +125,7 @@ java_sql_Time::java_sql_Time( const ::com::sun::star::util::Time& _rOut ): java_
     // and clean
 }
 
-java_sql_Time::operator ::com::sun::star::util::Time()
+java_sql_Time::operator css::util::Time()
 {
     return ::dbtools::DBTypeConversion::toTime(toString());
 }
@@ -152,10 +151,10 @@ jclass java_sql_Timestamp::st_getMyClass()
     return theClass;
 }
 
-java_sql_Timestamp::java_sql_Timestamp(const ::com::sun::star::util::DateTime& _rOut)
+java_sql_Timestamp::java_sql_Timestamp(const css::util::DateTime& _rOut)
                    :java_util_Date( nullptr, nullptr )
 {
-        SDBThreadAttach t;
+    SDBThreadAttach t;
     if( !t.pEnv )
         return;
     jvalue args[1];
@@ -171,7 +170,7 @@ java_sql_Timestamp::java_sql_Timestamp(const ::com::sun::star::util::DateTime& _
     static jmethodID mID(nullptr);
     if ( !mID )
     {
-        static const char * cSignature = "(Ljava/lang/String;)Ljava/sql/Timestamp;";
+        static const char * const cSignature = "(Ljava/lang/String;)Ljava/sql/Timestamp;";
         mID  = t.pEnv->GetStaticMethodID( getMyClass(), "valueOf", cSignature );
     }
     OSL_ENSURE(mID,"Unknown method id!");
@@ -183,7 +182,7 @@ java_sql_Timestamp::java_sql_Timestamp(const ::com::sun::star::util::DateTime& _
 }
 
 
-java_sql_Timestamp::operator ::com::sun::star::util::DateTime()
+java_sql_Timestamp::operator css::util::DateTime()
 {
     return ::dbtools::DBTypeConversion::toDateTime(toString());
 }

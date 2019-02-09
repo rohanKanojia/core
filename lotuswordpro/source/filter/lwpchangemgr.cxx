@@ -58,12 +58,12 @@
  *  For LWP filter architecture prototype
  ************************************************************************/
 
-#include "lwpchangemgr.hxx"
+#include <lwpchangemgr.hxx>
 #include <rtl/ustring.hxx>
 #include "lwppara.hxx"
 #include "lwpfribheader.hxx"
 #include "lwpfribptr.hxx"
-#include "lwpfrib.hxx"
+#include <lwpfrib.hxx>
 #include "lwpstory.hxx"
 #include "lwpfribsection.hxx"
 #include "lwpsection.hxx"
@@ -74,12 +74,12 @@
 #include "lwpfootnote.hxx"
 #include "lwpnotes.hxx"
 #include "lwpfribmark.hxx"
-#include "xfilter/xftextspan.hxx"
-#include "xfilter/xftextcontent.hxx"
-#include "xfilter/xftabstop.hxx"
-#include "xfilter/xflinebreak.hxx"
-#include "xfilter/xfstylemanager.hxx"
-#include "xfilter/xfhyperlink.hxx"
+#include <xfilter/xftextspan.hxx>
+#include <xfilter/xftextcontent.hxx>
+#include <xfilter/xftabstop.hxx>
+#include <xfilter/xflinebreak.hxx>
+#include <xfilter/xfstylemanager.hxx>
+#include <xfilter/xfhyperlink.hxx>
 
 LwpChangeMgr::LwpChangeMgr()
 {
@@ -89,6 +89,7 @@ LwpChangeMgr::LwpChangeMgr()
     m_pFribMap = &m_DocFribMap;
     m_ChangeList.clear();
 }
+
 LwpChangeMgr::~LwpChangeMgr()
 {
     m_pFribMap=nullptr;
@@ -102,56 +103,49 @@ void LwpChangeMgr::AddChangeFrib(LwpFrib* pFrib)
     m_nCounter++;
     OUString sID = "ct"+ OUString::number(m_nCounter);
     m_pFribMap->insert(std::pair<LwpFrib*,OUString>(pFrib,sID));
+    pFrib->Register(m_pFribMap);
 }
 
 OUString LwpChangeMgr::GetChangeID(LwpFrib* pFrib)
 {
-    std::map<LwpFrib*,OUString>::iterator iter;
-    iter = m_pFribMap->find(pFrib);
+    auto iter = m_pFribMap->find(pFrib);
     if (iter == m_pFribMap->end())
-        return OUString("");
+        return OUString();
     else
         return iter->second;
 }
 
 void LwpChangeMgr::ConvertAllChange(IXFStream* pStream)
 {
-    std::map<LwpFrib*,OUString>::iterator iter;
-    for (iter=m_DocFribMap.begin();iter !=m_DocFribMap.end();++iter)
+    for (auto const& docFrib : m_DocFribMap)
     {
-        if (iter->first->GetRevisionType() == LwpFrib::REV_INSERT)
+        if (docFrib.first->GetRevisionType() == LwpFrib::REV_INSERT)
         {
             XFChangeInsert* pInsert = new XFChangeInsert;
-            pInsert->SetChangeID(iter->second);
-            pInsert->SetEditor(iter->first->GetEditor());
+            pInsert->SetChangeID(docFrib.second);
+            pInsert->SetEditor(docFrib.first->GetEditor());
             m_ChangeList.push_back(pInsert);
         }
-        else if (iter->first->GetRevisionType() == LwpFrib::REV_DELETE)
+        else if (docFrib.first->GetRevisionType() == LwpFrib::REV_DELETE)
         {
             XFChangeDelete* pDelete = new XFChangeDelete;
-            pDelete->SetChangeID(iter->second);
-            pDelete->SetEditor(iter->first->GetEditor());
+            pDelete->SetChangeID(docFrib.second);
+            pDelete->SetEditor(docFrib.first->GetEditor());
             m_ChangeList.push_back(pDelete);
         }
     }
 
-    std::vector<XFChangeRegion*>::iterator iter1;
     pStream->GetAttrList()->Clear();
     if (m_ChangeList.empty())
             return;
     // Add for disable change tracking
     pStream->GetAttrList()->AddAttribute( "text:track-changes","false");
     pStream->StartElement( "text:tracked-changes" );
-    for (iter1=m_ChangeList.begin();iter1 !=m_ChangeList.end();++iter1)
-        (*iter1)->ToXml(pStream);
+    for (auto const& elem : m_ChangeList)
+        elem->ToXml(pStream);
 
     pStream->EndElement("text:tracked-changes");
 
-    for (iter1=m_ChangeList.begin();iter1 !=m_ChangeList.end();++iter1)
-    {
-        delete *iter1;
-        *iter1=nullptr;
-    }
     m_ChangeList.clear();
 }
 void LwpChangeMgr::SetHeadFootFribMap(bool bFlag)
@@ -167,23 +161,22 @@ void LwpChangeMgr::SetHeadFootFribMap(bool bFlag)
 
 void LwpChangeMgr::SetHeadFootChange(XFContentContainer* pCont)
 {
-    std::map<LwpFrib*,OUString>::iterator iter;
     XFChangeList* pChangeList = new XFChangeList;
 
-    for (iter=m_HeadFootFribMap.begin();iter !=m_HeadFootFribMap.end();++iter)
+    for (auto const& headFootFrib : m_HeadFootFribMap)
     {
-        if (iter->first->GetRevisionType() == LwpFrib::REV_INSERT)
+        if (headFootFrib.first->GetRevisionType() == LwpFrib::REV_INSERT)
         {
             XFChangeInsert* pInsert = new XFChangeInsert;
-            pInsert->SetChangeID(iter->second);
-            pInsert->SetEditor(iter->first->GetEditor());
+            pInsert->SetChangeID(headFootFrib.second);
+            pInsert->SetEditor(headFootFrib.first->GetEditor());
             pChangeList->Add(pInsert);
         }
-        else if (iter->first->GetRevisionType() == LwpFrib::REV_DELETE)
+        else if (headFootFrib.first->GetRevisionType() == LwpFrib::REV_DELETE)
         {
             XFChangeDelete* pDelete = new XFChangeDelete;
-            pDelete->SetChangeID(iter->second);
-            pDelete->SetEditor(iter->first->GetEditor());
+            pDelete->SetChangeID(headFootFrib.second);
+            pDelete->SetEditor(headFootFrib.first->GetEditor());
             pChangeList->Add(pDelete);
         }
     }

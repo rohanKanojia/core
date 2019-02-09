@@ -36,7 +36,7 @@ public:
     {
         const Fraction aFract(1082130431,1073741824);
         CPPUNIT_ASSERT_MESSAGE( "Fraction #1 not approximately equal to 1.007812499068677",
-                                rtl::math::approxEqual((double)aFract,1.007812499068677) );
+                                rtl::math::approxEqual(static_cast<double>(aFract),1.007812499068677) );
 
         Fraction aFract2( aFract );
         aFract2.ReduceInaccurate(8);
@@ -49,7 +49,7 @@ public:
                                 aFract3.GetNumerator() == 0x7AAAAAAA &&
                                 aFract3.GetDenominator() == 0x35555555 );
         aFract3.ReduceInaccurate(30);
-        CPPUNIT_ASSERT_MESSAGE( "Fraction #3 ReduceInaccurate errorneously cut precision",
+        CPPUNIT_ASSERT_MESSAGE( "Fraction #3 ReduceInaccurate erroneously cut precision",
                                 aFract3.GetNumerator() == 0x7AAAAAAA &&
                                 aFract3.GetDenominator() == 0x35555555 );
 
@@ -73,27 +73,12 @@ public:
                                 aFract3.GetNumerator() == 2 &&
                                 aFract3.GetDenominator() == 1 );
 
-#if SAL_TYPES_SIZEOFLONG == 8
-        Fraction aFract4(0x7AAAAAAAAAAAAAAA, 0x3555555555555555);
-        CPPUNIT_ASSERT_MESSAGE( "Fraction #4 cancellation wrong",
-                                aFract4.GetNumerator() == 0x7AAAAAAAAAAAAAAA &&
-                                aFract4.GetDenominator() == 0x3555555555555555 );
-        aFract4.ReduceInaccurate(62);
-        CPPUNIT_ASSERT_MESSAGE( "Fraction #4 ReduceInaccurate errorneously cut precision",
-                                aFract4.GetNumerator() == 0x7AAAAAAAAAAAAAAA &&
-                                aFract4.GetDenominator() == 0x3555555555555555 );
-
-        aFract4.ReduceInaccurate(61);
-        CPPUNIT_ASSERT_MESSAGE( "Fraction #4 ReduceInaccurate reduce to 61 bit failed",
-                                aFract4.GetNumerator() == 0x3D55555555555555 &&
-                                aFract4.GetDenominator() == 0x1AAAAAAAAAAAAAAA );
-#endif
     }
 
     void testMinLongDouble() {
         Fraction f(double(SAL_MIN_INT32));
-        CPPUNIT_ASSERT_EQUAL(long(SAL_MIN_INT32), f.GetNumerator());
-        CPPUNIT_ASSERT_EQUAL(1L, f.GetDenominator());
+        CPPUNIT_ASSERT_EQUAL(SAL_MIN_INT32, f.GetNumerator());
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(1), f.GetDenominator());
     }
 
     void testCreateFromDoubleIn32BitsPlatform() {

@@ -12,147 +12,71 @@
 
 #include <string.h>
 
-#include <GL/glew.h>
-
-#if defined( MACOSX )
-#elif defined( IOS )
-#elif defined( ANDROID )
-#elif defined( LIBO_HEADLESS )
-#elif defined( UNX )
-#  include <X11/Xlib.h>
-#  include <X11/Xutil.h>
-#  include "GL/glxew.h"
-#elif defined( _WIN32 )
-#ifndef INCLUDED_PRE_POST_WIN_H
-#define INCLUDED_PRE_POST_WIN_H
-#  include "prewin.h"
-#  include "postwin.h"
-#endif
-#endif
-
-#if defined( _WIN32 )
-#include <GL/wglew.h>
-#elif defined( MACOSX )
-#include <OpenGL/OpenGL.h>
-#ifdef __OBJC__
-@class NSOpenGLView;
-#else
-class NSOpenGLView;
-#endif
-#elif defined( IOS )
-#elif defined( ANDROID )
-#elif defined( LIBO_HEADLESS )
-#elif defined( UNX )
-#endif
+#include <epoxy/gl.h>
 
 #include <vcl/dllapi.h>
-#include <vcl/window.hxx>
-#include <tools/gen.hxx>
 #include <vcl/syschild.hxx>
 #include <rtl/crc.h>
 #include <rtl/ref.hxx>
 
-#include <map>
 #include <memory>
-#include <set>
 #include <unordered_map>
 
 class OpenGLFramebuffer;
 class OpenGLProgram;
 class OpenGLTexture;
-class SalGraphicsImpl;
-class OpenGLTests;
+class RenderState;
 
 /// Holds the information of our new child window
-struct GLWindow
+struct VCL_DLLPUBLIC GLWindow
 {
-#if defined( _WIN32 )
-    HWND                    hWnd;
-    HDC                     hDC;
-    HGLRC                   hRC;
-#elif defined( MACOSX )
-#elif defined( IOS )
-#elif defined( ANDROID )
-#elif defined( LIBO_HEADLESS )
-#elif defined( UNX )
-    Display*            dpy;
-    int                 screen;
-    Window              win;
-#if defined( GLX_EXT_texture_from_pixmap )
-    GLXFBConfig        fbc;
-#endif
-    XVisualInfo*       vi;
-    GLXContext         ctx;
-
-    bool HasGLXExtension( const char* name ) const;
-    const char*             GLXExtensions;
-#endif
     unsigned int            Width;
     unsigned int            Height;
-    const GLubyte*          GLExtensions;
     bool bMultiSampleSupported;
 
     GLWindow()
-        :
-#if defined( _WIN32 )
-        hWnd(NULL),
-        hDC(NULL),
-        hRC(NULL),
-#elif defined( MACOSX )
-#elif defined( IOS )
-#elif defined( ANDROID )
-#elif defined( LIBO_HEADLESS )
-#elif defined( UNX )
-        dpy(nullptr),
-        screen(0),
-        win(0),
-#if defined( GLX_EXT_texture_from_pixmap )
-        fbc(nullptr),
-#endif
-        vi(nullptr),
-        ctx(nullptr),
-        GLXExtensions(nullptr),
-#endif
-        Width(0),
-        Height(0),
-        GLExtensions(nullptr),
-        bMultiSampleSupported(false)
+        : Width(0)
+        , Height(0)
+        , bMultiSampleSupported(false)
     {
     }
 
-    ~GLWindow();
+    virtual bool Synchronize(bool bOnoff) const;
+
+    virtual ~GLWindow();
+};
+
+struct VCL_DLLPUBLIC OpenGLCapabilitySwitch
+{
+    bool mbLimitedShaderRegisters;
+
+    OpenGLCapabilitySwitch()
+        : mbLimitedShaderRegisters(false)
+    {}
 };
 
 class VCL_DLLPUBLIC OpenGLContext
 {
     friend class OpenGLTests;
+protected:
     OpenGLContext();
 public:
     static rtl::Reference<OpenGLContext> Create();
-    ~OpenGLContext();
+    virtual ~OpenGLContext();
     void acquire() { mnRefCount++; }
     void release() { if ( --mnRefCount == 0 ) delete this; }
     void dispose();
 
     void requestLegacyContext();
-    void requestSingleBufferedRendering();
 
-    bool init(vcl::Window* pParent = nullptr);
-    bool init(SystemChildWindow* pChildWindow);
+    bool init(vcl::Window* pParent);
 
-// these methods are for the deep platform layer, don't use them in normal code
-// only in vcl's platform code
-#if defined( UNX ) && !defined MACOSX && !defined IOS && !defined ANDROID && !defined(LIBO_HEADLESS)
-    bool init(Display* dpy, Window win, int screen);
-#elif defined( _WIN32 )
-    bool init( HDC hDC, HWND hWnd );
-#endif
     void reset();
 
     // use these methods right after setting a context to make sure drawing happens
     // in the right FBO (default one is for onscreen painting)
-    bool               BindFramebuffer( OpenGLFramebuffer* pFramebuffer );
-    bool               AcquireDefaultFramebuffer();
+    void               BindFramebuffer( OpenGLFramebuffer* pFramebuffer );
+    void               AcquireDefaultFramebuffer();
     OpenGLFramebuffer* AcquireFramebuffer( const OpenGLTexture& rTexture );
     static void        ReleaseFramebuffer( OpenGLFramebuffer* pFramebuffer );
     void UnbindTextureFromFramebuffers( GLuint nTexture );
@@ -164,10 +88,21 @@ public:
     // retrieve a program from the cache or compile/link it
     OpenGLProgram*      GetProgram( const OUString& rVertexShader, const OUString& rFragmentShader, const OString& preamble = "" );
     OpenGLProgram*      UseProgram( const OUString& rVertexShader, const OUString& rFragmentShader, const OString& preamble = "" );
-    void                UseNoProgram();
+
+    RenderState& state()
+    {
+        return *mpRenderState;
+    }
+
+    OpenGLCapabilitySwitch& getOpenGLCapabilitySwitch()
+    {
+        return maOpenGLCapabilitySwitch;
+    }
 
     /// Is this GL context the current context ?
-    bool isCurrent();
+    virtual bool isCurrent();
+    /// Is any GL context the current context ?
+    virtual bool isAnyCurrent();
     /// release bound resources from the current context
     static void clearCurrent();
     /// release contexts etc. before (potentially) allowing another thread run.
@@ -180,18 +115,19 @@ public:
     /// fetch any VCL context, creating one if bMakeIfNecessary is set.
     static rtl::Reference<OpenGLContext> getVCLContext(bool bMakeIfNecessary = true);
     /// make this GL context current - so it is implicit in subsequent GL calls
-    void makeCurrent();
+    virtual void makeCurrent();
     /// Put this GL context to the end of the context list.
     void registerAsCurrent();
     /// reset the GL context so this context is not implicit in subsequent GL calls.
-    void resetCurrent();
-    void swapBuffers();
-    void sync();
+    virtual void resetCurrent();
+    /// unbind the GL_FRAMEBUFFER to its default state, needed for gtk3
+    virtual void restoreDefaultFramebuffer();
+    virtual void swapBuffers();
+    virtual void sync();
     void show();
 
     void setWinPosAndSize(const Point &rPos, const Size& rSize);
-    void setWinSize(const Size& rSize);
-    const GLWindow& getOpenGLWindow() const { return m_aGLWin;}
+    virtual const GLWindow& getOpenGLWindow() const = 0;
 
     SystemChildWindow* getChildWindow();
     const SystemChildWindow* getChildWindow() const;
@@ -205,31 +141,27 @@ public:
     void setVCLOnly() { mbVCLOnly = true; }
     bool isVCLOnly() { return mbVCLOnly; }
 
-    bool supportMultiSampling() const;
-
-    static SystemWindowData generateWinData(vcl::Window* pParent, bool bRequestLegacyContext);
+    virtual SystemWindowData generateWinData(vcl::Window* pParent, bool bRequestLegacyContext);
 
 private:
-    SAL_DLLPRIVATE bool InitGLEW();
-    SAL_DLLPRIVATE void InitGLEWDebugging();
-    SAL_DLLPRIVATE bool initWindow();
-    SAL_DLLPRIVATE bool ImplInit();
-#if defined( UNX ) && !defined MACOSX && !defined IOS && !defined ANDROID && !defined(LIBO_HEADLESS)
-    SAL_DLLPRIVATE void initGLWindow(Visual* pVisual);
-#endif
+    virtual void initWindow();
+    virtual void destroyCurrentContext();
+    virtual void adjustToNewSize();
 
-#if defined(MACOSX)
-    NSOpenGLView* getOpenGLView();
-#endif
+protected:
+    bool InitGL();
+    static void InitGLDebugging();
+    static void InitChildWindow(SystemChildWindow *pChildWindow);
+    static void BuffersSwapped();
+    virtual GLWindow& getModifiableOpenGLWindow() = 0;
+    virtual bool ImplInit();
 
-    GLWindow m_aGLWin;
     VclPtr<vcl::Window> m_xWindow;
     VclPtr<vcl::Window> mpWindow; //points to m_pWindow or the parent window, don't delete it
     VclPtr<SystemChildWindow> m_pChildWindow;
     bool mbInitialized;
     int  mnRefCount;
     bool mbRequestLegacyContext;
-    bool mbUseDoubleBufferedRendering;
     bool mbVCLOnly;
 
     int mnFramebufferCount;
@@ -237,21 +169,25 @@ private:
     OpenGLFramebuffer* mpFirstFramebuffer;
     OpenGLFramebuffer* mpLastFramebuffer;
 
+    OpenGLCapabilitySwitch maOpenGLCapabilitySwitch;
+
+private:
     struct ProgramHash
     {
-        size_t operator()( const rtl::OString& aDigest ) const
+        size_t operator()( const OString& aDigest ) const
         {
-            return (size_t)( rtl_crc32( 0, aDigest.getStr(), aDigest.getLength() ) );
+            return static_cast<size_t>( rtl_crc32( 0, aDigest.getStr(), aDigest.getLength() ) );
         }
     };
 
-    typedef std::unordered_map< rtl::OString, std::shared_ptr<OpenGLProgram>, ProgramHash > ProgramCollection;
+    typedef std::unordered_map< OString, std::shared_ptr<OpenGLProgram>, ProgramHash > ProgramCollection;
     ProgramCollection maPrograms;
     OpenGLProgram* mpCurrentProgram;
 
+    std::unique_ptr<RenderState> mpRenderState;
+
 public:
     vcl::Region maClipRegion;
-    int mnPainting;
 
     // Don't hold references to ourselves:
     OpenGLContext *mpPrevContext;

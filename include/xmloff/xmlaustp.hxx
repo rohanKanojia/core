@@ -22,19 +22,28 @@
 
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
-#include <com/sun/star/xml/sax/XDocumentHandler.hpp>
-#include <xmloff/xmlprmap.hxx>
+#include <rtl/ustring.hxx>
 #include <salhelper/simplereferenceobject.hxx>
 #include <memory>
+#include <vector>
 
 class SvXMLExportPropertyMapper;
 class SvXMLNamespaceMap;
 class SvXMLAutoStylePoolP_Impl;
 class SvXMLAttributeList;
 class SvXMLExport;
+class SvXMLUnitConverter;
+struct XMLPropertyState;
+
 namespace com { namespace sun { namespace star { namespace uno
     { template<typename A> class Sequence; }
 } } }
+
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Reference; } } } }
+
+namespace com { namespace sun { namespace star { namespace xml { namespace sax { class XDocumentHandler; } } } } }
+namespace xmloff { struct AutoStyleEntry; }
+namespace rtl { template <class reference_type> class Reference; }
 
 class XMLOFF_DLLPUBLIC SvXMLAutoStylePoolP : public salhelper::SimpleReferenceObject
 {
@@ -54,7 +63,7 @@ protected:
             const SvXMLNamespaceMap& rNamespaceMap
             ) const;
 
-// this methode is executed after Properties Export, so you can e.g. export a map or so on
+// this method is executed after Properties Export, so you can e.g. export a map or so on
     virtual void exportStyleContent(
             const css::uno::Reference< css::xml::sax::XDocumentHandler > & rHandler,
             sal_Int32 nFamily,
@@ -69,7 +78,7 @@ public:
 
     SvXMLAutoStylePoolP( SvXMLExport& rExport);
 
-    virtual ~SvXMLAutoStylePoolP();
+    virtual ~SvXMLAutoStylePoolP() override;
 
     SvXMLExport& GetExport() const;
 
@@ -87,6 +96,9 @@ public:
     /// Register a name that must not be used as a generated name.
     void RegisterName( sal_Int32 nFamily, const OUString& rName );
 
+    /// Register a name that may only be used through AddNamed
+    void RegisterDefinedName(sal_Int32 nFamily, const OUString& rName);
+
     /// retrieve the registered names (names + families)
     void GetRegisteredNames(
         css::uno::Sequence<sal_Int32>& aFamilies,
@@ -94,8 +106,8 @@ public:
 
     /// register (families + names)
     void RegisterNames(
-        css::uno::Sequence<sal_Int32>& aFamilies,
-        css::uno::Sequence<OUString>& aNames );
+        css::uno::Sequence<sal_Int32> const & aFamilies,
+        css::uno::Sequence<OUString> const & aNames );
 
     /// Add an item set to the pool and return its generated name.
     OUString Add( sal_Int32 nFamily, const ::std::vector< XMLPropertyState >& rProperties );
@@ -110,13 +122,11 @@ public:
     OUString Find( sal_Int32 nFamily, const OUString& rParent, const ::std::vector< XMLPropertyState >& rProperties ) const;
 
     /** Export all item sets ofs a certain class in the order in that they have been added. */
-    void exportXML( sal_Int32 nFamily,
-        const css::uno::Reference< css::xml::sax::XDocumentHandler > & rHandler,
-        const SvXMLUnitConverter& rUnitConverter,
-        const SvXMLNamespaceMap& rNamespaceMap
-        ) const;
+    void exportXML( sal_Int32 nFamily ) const;
 
     void ClearEntries();
+
+    std::vector<xmloff::AutoStyleEntry> GetAutoStyleEntries() const;
 };
 
 #endif // INCLUDED_XMLOFF_XMLAUSTP_HXX

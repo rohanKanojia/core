@@ -65,8 +65,7 @@ class XMLPropertiesTContext_Impl : public XMLPersElemContentTContext
     css::uno::Reference< css::xml::sax::XAttributeList > m_xAttrList;
 
     XMLPropType m_ePropType;
-    bool        m_bControlStyle;
-    OUString m_aStyleFamily;
+    bool const  m_bControlStyle;
 
 public:
 
@@ -80,10 +79,7 @@ public:
     XMLPropertiesTContext_Impl( XMLTransformerBase& rTransformer,
                            const OUString& rQName,
                            XMLPropType eP,
-                           const OUString& rStyleFamily,
-                           bool _bControlStyle = false );
-
-    virtual ~XMLPropertiesTContext_Impl();
+                           bool _bControlStyle );
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 
@@ -91,25 +87,20 @@ public:
 
     static XMLPropType GetPropType( const OUString& rLocalName );
 
-    static OUString MergeUnderline( XMLTokenEnum eUnderline,
+    static OUString const & MergeUnderline( XMLTokenEnum eUnderline,
                                            bool bBold, bool bDouble );
-    static OUString MergeLineThrough( XMLTokenEnum eLineThrough,
+    static OUString const & MergeLineThrough( XMLTokenEnum eLineThrough,
                                         bool bBold, bool bDouble,
                                            sal_Unicode c );
 };
 
 XMLPropertiesTContext_Impl::XMLPropertiesTContext_Impl(
     XMLTransformerBase& rImp, const OUString& rQName, XMLPropType eP,
-        const OUString& rStyleFamily, bool _bControlStyle ) :
+    bool _bControlStyle ) :
     XMLPersElemContentTContext( rImp, rQName, XML_NAMESPACE_STYLE,
                                 XML_PROPERTIES),
     m_ePropType( eP ),
-    m_bControlStyle( _bControlStyle ),
-    m_aStyleFamily( rStyleFamily )
-{
-}
-
-XMLPropertiesTContext_Impl::~XMLPropertiesTContext_Impl()
+    m_bControlStyle( _bControlStyle )
 {
 }
 
@@ -263,7 +254,7 @@ void XMLPropertiesTContext_Impl::StartElement(
                         }
                         else
                         {
-                            OUString aAttrValue( GetXMLToken( bWordMode
+                            const OUString& aAttrValue( GetXMLToken( bWordMode
                                         ? XML_FALSE
                                         : XML_TRUE ) );
                             pAttrList->AddAttribute( aAttrQName, aAttrValue );
@@ -272,7 +263,7 @@ void XMLPropertiesTContext_Impl::StartElement(
                     break;
                 case XML_OPTACTION_KEEP_WITH_NEXT:
                     {
-                        OUString aAttrValue( GetXMLToken(
+                        const OUString& aAttrValue( GetXMLToken(
                                         IsXMLToken( rAttrValue, XML_ALWAYS )
                                                     ? XML_TRUE
                                                     : XML_FALSE) );
@@ -436,17 +427,6 @@ void XMLPropertiesTContext_Impl::StartElement(
                     }
                     break;
 
-                case XML_OPTACTION_DRAW_WRITING_MODE:
-                    if( IsXMLToken( m_aStyleFamily, XML_GRAPHICS ) )
-                    {
-                        pAttrList->AddAttribute(
-                            GetTransformer().GetNamespaceMap().GetQNameByKey(
-                                    XML_NAMESPACE_DRAW,
-                                    GetXMLToken( XML_WRITING_MODE ) ), rAttrValue );
-                    }
-                    pAttrList->AddAttribute( rAttrName, rAttrValue );
-                    break;
-
                 case XML_ATACTION_CAPTION_ESCAPE_OASIS:
                     {
                         OUString aAttrValue( rAttrValue );
@@ -491,33 +471,33 @@ void XMLPropertiesTContext_Impl::StartElement(
                     {
                         // keep original for writer graphic objects
                         // Adapts attribute values (#i49139#)
-                        OUString aNewAttrValue;
+                        OUStringBuffer aNewAttrValue;
                         SvXMLTokenEnumerator aTokenEnum( rAttrValue );
                         OUString aToken;
                         while( aTokenEnum.getNextToken( aToken ) )
                         {
                             if ( !aNewAttrValue.isEmpty() )
                             {
-                                aNewAttrValue += " ";
+                                aNewAttrValue.append(" ");
                             }
 
                             if ( IsXMLToken( aToken, XML_HORIZONTAL_ON_EVEN ) )
                             {
-                                aNewAttrValue += GetXMLToken( XML_HORIZONTAL_ON_LEFT_PAGES );
+                                aNewAttrValue.append(GetXMLToken( XML_HORIZONTAL_ON_LEFT_PAGES ));
                             }
                             else if ( IsXMLToken( aToken, XML_HORIZONTAL_ON_ODD ) )
                             {
-                                aNewAttrValue += GetXMLToken( XML_HORIZONTAL_ON_RIGHT_PAGES );
+                                aNewAttrValue.append(GetXMLToken( XML_HORIZONTAL_ON_RIGHT_PAGES ));
                             }
                             else
                             {
-                                aNewAttrValue += aToken;
+                                aNewAttrValue.append(aToken);
                             }
                         }
-                        pAttrList->AddAttribute( rAttrName, aNewAttrValue );
+                        pAttrList->AddAttribute( rAttrName, aNewAttrValue.makeStringAndClear() );
 
                         // create old draw:mirror for drawing graphic objects
-                        OUString aAttrValue( GetXMLToken( IsXMLToken( rAttrValue, XML_HORIZONTAL ) ? XML_TRUE : XML_FALSE ) );
+                        const OUString& aAttrValue( GetXMLToken( IsXMLToken( rAttrValue, XML_HORIZONTAL ) ? XML_TRUE : XML_FALSE ) );
                         pAttrList->AddAttribute( GetTransformer().GetNamespaceMap().GetQNameByKey(
                                     XML_NAMESPACE_DRAW,
                                     GetXMLToken( XML_MIRROR )), aAttrValue );
@@ -527,7 +507,7 @@ void XMLPropertiesTContext_Impl::StartElement(
                     {
                         sal_Int32 nValue;
                         ::sax::Converter::convertPercent( nValue, rAttrValue );
-                        const double fValue = ((double)nValue) / 100.0;
+                        const double fValue = static_cast<double>(nValue) / 100.0;
                         pAttrList->AddAttribute( rAttrName, OUString::number( fValue ) );
                     }
                     break;
@@ -615,8 +595,7 @@ void XMLPropertiesTContext_Impl::StartElement(
 
 void XMLPropertiesTContext_Impl::Export()
 {
-    GetTransformer().GetDocHandler()->startElement( GetExportQName(),
-                                                    m_xAttrList );
+    GetTransformer().GetDocHandler()->startElement( GetExportQName(), m_xAttrList );
     ExportContent();
     GetTransformer().GetDocHandler()->endElement( GetExportQName() );
 }
@@ -656,7 +635,7 @@ XMLPropType XMLPropertiesTContext_Impl::GetPropType( const OUString& rLocalName 
     return eProp;
 }
 
-OUString XMLPropertiesTContext_Impl::MergeUnderline(
+OUString const & XMLPropertiesTContext_Impl::MergeUnderline(
             XMLTokenEnum eUnderline, bool bBold, bool bDouble )
 {
     if( bDouble )
@@ -721,7 +700,7 @@ OUString XMLPropertiesTContext_Impl::MergeUnderline(
     return GetXMLToken( eUnderline );
 }
 
-OUString XMLPropertiesTContext_Impl::MergeLineThrough(
+OUString const & XMLPropertiesTContext_Impl::MergeLineThrough(
             XMLTokenEnum eLineThrough, bool bBold, bool bDouble,
                sal_Unicode c )
 {
@@ -776,7 +755,7 @@ rtl::Reference<XMLTransformerContext> XMLStyleOASISTContext::CreateChildContext(
             // if no properties context exist start a new one.
             if( !m_xPropContext.is() )
                 m_xPropContext = new XMLPropertiesTContext_Impl(
-                    GetTransformer(), rQName, ePropType, m_aStyleFamily, m_bControlStyle );
+                    GetTransformer(), rQName, ePropType, m_bControlStyle );
             else
                 m_xPropContext->SetQNameAndPropType( rQName, ePropType );
             pContext.set(m_xPropContext.get());
@@ -838,13 +817,11 @@ void XMLStyleOASISTContext::StartElement(
             case XML_ATACTION_STYLE_FAMILY:
                 if( IsXMLToken( rAttrValue, XML_GRAPHIC ) )
                 {
-                    m_aStyleFamily = GetXMLToken( XML_GRAPHICS ) ;
-                    pMutableAttrList->SetValueByIndex( i, m_aStyleFamily );
+                    pMutableAttrList->SetValueByIndex(
+                        i, GetXMLToken(XML_GRAPHICS) );
                 }
                 else
                 {
-                    m_aStyleFamily = rAttrValue;
-
                     if( IsXMLToken( rAttrValue, XML_PARAGRAPH ) )
                         nFamilyAttr = i;
                 }
@@ -858,7 +835,7 @@ void XMLStyleOASISTContext::StartElement(
                 break;
             case XML_ATACTION_DECODE_STYLE_NAME:
                 m_bControlStyle = rAttrValue.startsWith( "ctrl" );
-                // fall-through
+                [[fallthrough]];
             case XML_ATACTION_DECODE_STYLE_NAME_REF:
                 {
                     OUString aAttrValue( rAttrValue );
@@ -902,8 +879,7 @@ void XMLStyleOASISTContext::StartElement(
     if( m_bPersistent )
         XMLPersElemContentTContext::StartElement( xAttrList );
     else
-        GetTransformer().GetDocHandler()->startElement( GetExportQName(),
-                                                        xAttrList );
+        GetTransformer().GetDocHandler()->startElement( GetExportQName(), xAttrList );
 }
 
 void XMLStyleOASISTContext::EndElement()
@@ -944,7 +920,7 @@ bool XMLStyleOASISTContext::IsPersistent() const
 XMLTransformerActions *XMLStyleOASISTContext::CreateTransformerActions(
         sal_uInt16 nType )
 {
-    XMLTransformerActionInit *pInit = nullptr;
+    XMLTransformerActionInit const *pInit = nullptr;
 
     switch( nType )
     {

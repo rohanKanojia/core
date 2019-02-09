@@ -22,6 +22,7 @@
 
 #include <svx/svdmodel.hxx>
 #include <svx/svxdllapi.h>
+#include <memory>
 
 class SfxObjectShell;
 class SfxItemPool;
@@ -36,7 +37,7 @@ class SVX_DLLPUBLIC FmFormModel :
     public SdrModel
 {
 private:
-    FmFormModelImplData*    m_pImpl;
+    std::unique_ptr<FmFormModelImplData>    m_pImpl;
     SfxObjectShell*         m_pObjShell;
 
     bool            m_bOpenInDesignMode : 1;
@@ -46,19 +47,15 @@ private:
     void operator=(const FmFormModel& rSrcModel) = delete;
 
 public:
+    FmFormModel(
+        SfxItemPool* pPool = nullptr,
+        SfxObjectShell* pPers = nullptr);
 
-    FmFormModel(SfxItemPool* pPool=nullptr, SfxObjectShell* pPers=nullptr );
-    FmFormModel(const OUString& rPath, SfxItemPool* pPool=nullptr,
-                SfxObjectShell* pPers=nullptr );
-    FmFormModel(const OUString& rPath, SfxItemPool* pPool, SfxObjectShell* pPers,
-                bool bUseExtColorTable);
-
-    virtual ~FmFormModel();
+    virtual ~FmFormModel() override;
 
     virtual SdrPage* AllocPage(bool bMasterPage) override;
     virtual void     InsertPage(SdrPage* pPage, sal_uInt16 nPos=0xFFFF) override;
     virtual SdrPage* RemovePage(sal_uInt16 nPgNum) override;
-    virtual void     MovePage(sal_uInt16 nPgNum, sal_uInt16 nNewPos) override;
     virtual void     InsertMasterPage(SdrPage* pPage, sal_uInt16 nPos=0xFFFF) override;
     virtual SdrPage* RemoveMasterPage(sal_uInt16 nPgNum) override;
 

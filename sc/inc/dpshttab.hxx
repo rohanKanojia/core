@@ -21,17 +21,12 @@
 #define INCLUDED_SC_INC_DPSHTTAB_HXX
 
 #include "dptabdat.hxx"
-#include "global.hxx"
 #include "address.hxx"
 #include "scdllapi.h"
 #include "queryparam.hxx"
 
 #include <unordered_set>
 #include <vector>
-
-namespace com { namespace sun { namespace star { namespace sheet {
-    struct DataPilotFieldFilter;
-}}}}
 
 class ScDPDimensionSaveData;
 
@@ -43,9 +38,9 @@ class ScDPDimensionSaveData;
  */
 class ScSheetSourceDesc
 {
-    ScSheetSourceDesc(); // disabled
-
 public:
+    ScSheetSourceDesc() = delete;
+
     SC_DLLPUBLIC ScSheetSourceDesc(ScDocument* pDoc);
 
     SC_DLLPUBLIC void SetSourceRange(const ScRange& rRange);
@@ -73,10 +68,10 @@ public:
     /**
      * Check the sanity of the data source range.
      *
-     * @return 0 if the source range is sane, otherwise an error message ID is
+     * @return nullptr if the source range is sane, otherwise an error message ID is
      *         returned.
      */
-    sal_uLong CheckSourceRange() const;
+    const char* CheckSourceRange() const;
 
 private:
     mutable ScRange maSourceRange;
@@ -98,14 +93,14 @@ private:
     ScDPFilteredCache  aCacheTable;
 
 public:
-    ScSheetDPData(ScDocument* pD, const ScSheetSourceDesc& rDesc, const ScDPCache& rCache);
-    virtual ~ScSheetDPData();
+    ScSheetDPData(const ScDocument* pD, const ScSheetSourceDesc& rDesc, const ScDPCache& rCache);
+    virtual ~ScSheetDPData() override;
 
     virtual long                    GetColumnCount() override;
     virtual OUString                getDimensionName(long nColumn) override;
     virtual bool                    getIsDataLayoutDimension(long nColumn) override;
     virtual bool                    IsDateDimension(long nDim) override;
-    virtual sal_uLong               GetNumberFormat(long nDim) override;
+    virtual sal_uInt32              GetNumberFormat(long nDim) override;
     virtual void                    DisposeData() override;
     virtual void                    SetEmptyFlags( bool bIgnoreEmptyRows, bool bRepeatIfEmpty ) override;
 
@@ -119,6 +114,10 @@ public:
     virtual void                    CalcResults(CalcInfo& rInfo, bool bAutoShow) override;
     virtual const ScDPFilteredCache&   GetCacheTable() const override;
     virtual void ReloadCacheTable() override;
+
+#if DUMP_PIVOT_TABLE
+    virtual void Dump() const override;
+#endif
 };
 
 #endif

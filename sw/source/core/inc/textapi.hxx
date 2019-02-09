@@ -35,32 +35,32 @@ class SwTextAPIEditSource : public SvxEditSource
 {
     SwTextAPIEditSource_Impl* pImpl;
 
-    virtual SvxEditSource*      Clone() const override;
+    virtual std::unique_ptr<SvxEditSource> Clone() const override;
     virtual SvxTextForwarder*   GetTextForwarder() override;
     virtual void                UpdateData() override;
     explicit            SwTextAPIEditSource( const SwTextAPIEditSource& rSource );
 
 public:
                         SwTextAPIEditSource(SwDoc* pDoc);
-    virtual             ~SwTextAPIEditSource();
+    virtual             ~SwTextAPIEditSource() override;
 
     void                Dispose();
-    void                SetText( OutlinerParaObject& rText );
+    void                SetText( OutlinerParaObject const & rText );
     void                SetString( const OUString& rText );
-    OutlinerParaObject* CreateText();
+    std::unique_ptr<OutlinerParaObject> CreateText();
     OUString            GetText();
 };
 
 class SwTextAPIObject : public SvxUnoText
 {
-    SwTextAPIEditSource* pSource;
+    std::unique_ptr<SwTextAPIEditSource> pSource;
 public:
-                        SwTextAPIObject( SwTextAPIEditSource* p);
-    virtual             ~SwTextAPIObject() throw();
+                        SwTextAPIObject( std::unique_ptr<SwTextAPIEditSource> p);
+    virtual             ~SwTextAPIObject() throw() override;
     void                DisposeEditSource() { pSource->Dispose(); }
-    OutlinerParaObject* CreateText() { return pSource->CreateText(); }
+    std::unique_ptr<OutlinerParaObject> CreateText() { return pSource->CreateText(); }
     void                SetString( const OUString& rText ) { pSource->SetString( rText ); }
-    void                SetText( OutlinerParaObject& rText ) { pSource->SetText( rText ); }
+    void                SetText( OutlinerParaObject const & rText ) { pSource->SetText( rText ); }
     OUString            GetText() { return pSource->GetText(); }
 };
 

@@ -90,7 +90,7 @@ public:
         importShape() call.
     */
     bool isImportDone() const;
-    PolyPolygonVector getPolygons();
+    const PolyPolygonVector& getPolygons();
 
     double getImportedShapesCount() { return mnAscendingPrio; }
 private:
@@ -122,15 +122,14 @@ private:
             : mpGroupShape(), mxShapes(xShapes),
               mnCount(xShapes->getCount()), mnPos(0) {}
     };
-    typedef ::std::stack<XShapesEntry> XShapesStack;
 
     css::uno::Reference<css::drawing::XDrawPage> mxPage;
     css::uno::Reference<css::drawing::XDrawPagesSupplier> mxPagesSupplier;
     const SlideShowContext&                   mrContext;
     PolyPolygonVector                         maPolygons;
-    XShapesStack                              maShapesStack;
+    ::std::stack<XShapesEntry>                maShapesStack;
     double                                    mnAscendingPrio;
-    bool                                      mbConvertingMasterPage;
+    bool const                                mbConvertingMasterPage;
 };
 
 } // namespace internal

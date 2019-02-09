@@ -20,24 +20,11 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_CACHE_SLSQUEUEPROCESSOR_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_CACHE_SLSQUEUEPROCESSOR_HXX
 
-#include "cache/SlsPageCache.hxx"
+#include <cache/SlsCacheContext.hxx>
 #include "SlsRequestPriorityClass.hxx"
 #include "SlsBitmapFactory.hxx"
-#include "view/SlideSorterView.hxx"
-#include "tools/IdleDetection.hxx"
-#include "SlsBitmapCache.hxx"
-#include "sdpage.hxx"
-#include "Window.hxx"
 
-#include <svx/svdpagv.hxx>
-#include <vcl/svapp.hxx>
 #include <vcl/timer.hxx>
-
-#include <functional>
-
-namespace sd { namespace slidesorter { namespace view {
-class SlideSorterView;
-} } }
 
 namespace sd { namespace slidesorter { namespace cache {
 
@@ -49,17 +36,16 @@ class RequestQueue;
     timer is started that eventually calls ProcessRequest().  This is
     repeated until the queue is empty or Stop() is called.
 */
-class QueueProcessor
+class QueueProcessor final
 {
 public:
-    typedef ::std::function<bool ()> IdleDetectionCallback;
     QueueProcessor (
         RequestQueue& rQueue,
         const std::shared_ptr<BitmapCache>& rpCache,
         const Size& rPreviewSize,
         const bool bDoSuperSampling,
         const SharedCacheContext& rpCacheContext);
-    virtual ~QueueProcessor();
+    ~QueueProcessor();
 
     /** Start the processor.  This implementation is timer based and waits
         an defined amount of time that depends on the given argument before
@@ -70,7 +56,7 @@ public:
             shorter then that for a low priority request (denoted by a value
             of 1.)  When the timer is already running it is not modified.
     */
-    void Start (int nPriorityClass = 0);
+    void Start (int nPriorityClass);
     void Stop();
     void Pause();
     void Resume();
@@ -92,10 +78,7 @@ private:
     ::osl::Mutex maMutex;
 
     Timer  maTimer;
-    DECL_LINK_TYPED(ProcessRequestHdl, Timer *, void);
-    sal_uInt32 mnTimeBetweenHighPriorityRequests;
-    sal_uInt32 mnTimeBetweenLowPriorityRequests;
-    sal_uInt32 mnTimeBetweenRequestsWhenNotIdle;
+    DECL_LINK(ProcessRequestHdl, Timer *, void);
     Size maPreviewSize;
     bool mbDoSuperSampling;
     SharedCacheContext mpCacheContext;

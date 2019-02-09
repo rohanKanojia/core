@@ -18,13 +18,11 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
-#include <ctype.h>
-
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <canvas/canvastools.hxx>
 #include <com/sun/star/lang/NoSupportException.hpp>
-#include <osl/mutex.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <tools/diagnose_ex.h>
 #include <vcl/sysdata.hxx>
@@ -43,7 +41,7 @@ namespace dxcanvas
 {
     SpriteDeviceHelper::SpriteDeviceHelper() :
         DeviceHelper(),
-        mpSpriteCanvas( NULL ),
+        mpSpriteCanvas( nullptr ),
         mpBackBuffer(),
         mpSurfaceProxyManager(),
         mpRenderModule()
@@ -56,8 +54,8 @@ namespace dxcanvas
                                    bool                  /*bFullscreen*/ )
     {
         // #i60490# ensure backbuffer has sensible minimal size
-        const sal_Int32 w( ::std::max(sal_Int32(1),sal_Int32(rRect.Width)));
-        const sal_Int32 h( ::std::max(sal_Int32(1),sal_Int32(rRect.Height)));
+        const sal_Int32 w( std::max(sal_Int32(1),sal_Int32(rRect.Width)));
+        const sal_Int32 h( std::max(sal_Int32(1),sal_Int32(rRect.Height)));
 
         rSpriteCanvas.setWindow(
             uno::Reference<awt::XWindow2>(
@@ -102,7 +100,7 @@ namespace dxcanvas
         mpBackBuffer.reset();
         mpSurfaceProxyManager.reset();
         mpRenderModule.reset();
-        mpSpriteCanvas = NULL;
+        mpSpriteCanvas = nullptr;
 
         DeviceHelper::disposing();
     }
@@ -163,21 +161,21 @@ namespace dxcanvas
         // _always_ will have exactly one backbuffer
     }
 
-    sal_Bool SpriteDeviceHelper::showBuffer( bool, sal_Bool )
+    bool SpriteDeviceHelper::showBuffer( bool, bool )
     {
         SAL_WARN("canvas.directx", "Not supposed to be called, handled by SpriteCanvas");
-        return sal_False;
+        return false;
     }
 
-    sal_Bool SpriteDeviceHelper::switchBuffer( bool, sal_Bool )
+    bool SpriteDeviceHelper::switchBuffer( bool, bool )
     {
         SAL_WARN("canvas.directx", "Not supposed to be called, handled by SpriteCanvas");
-        return sal_False;
+        return false;
     }
 
     uno::Any SpriteDeviceHelper::isAccelerated() const
     {
-        return css::uno::makeAny(true);
+        return css::uno::Any(true);
     }
 
     void SpriteDeviceHelper::notifySizeUpdate( const awt::Rectangle& rBounds )
@@ -185,8 +183,8 @@ namespace dxcanvas
         // #i60490# ensure backbuffer has sensible minimal size
         const sal_Int32 x(rBounds.X);
         const sal_Int32 y(rBounds.Y);
-        const sal_Int32 w(::std::max(sal_Int32(1),sal_Int32(rBounds.Width)));
-        const sal_Int32 h(::std::max(sal_Int32(1),sal_Int32(rBounds.Height)));
+        const sal_Int32 w(std::max(sal_Int32(1),sal_Int32(rBounds.Width)));
+        const sal_Int32 h(std::max(sal_Int32(1),sal_Int32(rBounds.Height)));
 
         if( mpRenderModule )
             mpRenderModule->resize(::basegfx::B2IRange(x,y,x+w,y+h));
@@ -197,7 +195,7 @@ namespace dxcanvas
     void SpriteDeviceHelper::resizeBackBuffer( const ::basegfx::B2ISize& rNewSize )
     {
         // disposed?
-        if(!(mpBackBuffer))
+        if(!mpBackBuffer)
             return;
 
         mpBackBuffer->resize(rNewSize);
@@ -209,7 +207,7 @@ namespace dxcanvas
         if( mpRenderModule )
             return mpRenderModule->getHWND();
         else
-            return 0;
+            return nullptr;
     }
 
     void SpriteDeviceHelper::dumpScreenContent() const

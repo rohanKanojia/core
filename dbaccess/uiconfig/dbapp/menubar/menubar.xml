@@ -22,13 +22,14 @@
             <menu:menuitem menu:id=".uno:AddDirect"/>
             <menu:menuitem menu:id=".uno:Open"/>
             <menu:menuitem menu:id=".uno:RecentFileList"/>
+            <menu:menuitem menu:id=".uno:CloseDoc"/>
             <menu:menuseparator/>
             <menu:menuitem menu:id=".uno:AutoPilotMenu"/>
             <menu:menuseparator/>
-            <menu:menuitem menu:id=".uno:CloseDoc"/>
             <menu:menuitem menu:id=".uno:Save"/>
             <menu:menuitem menu:id=".uno:SaveAs"/>
             <menu:menuitem menu:id=".uno:SaveAll"/>
+            <menu:menuseparator/>
             <menu:menuitem menu:id=".uno:CheckOut"/>
             <menu:menuitem menu:id=".uno:CancelCheckOut"/>
             <menu:menuitem menu:id=".uno:CheckIn"/>
@@ -55,6 +56,8 @@
             <menu:menuitem menu:id=".uno:Paste"/>
             <menu:menuitem menu:id=".uno:PasteSpecial"/>
             <menu:menuseparator/>
+            <menu:menuitem menu:id=".uno:SelectAll"/>
+            <menu:menuseparator/>
             <menu:menuitem menu:id=".uno:DBDelete"/>
             <menu:menuitem menu:id=".uno:DBRename"/>
             <menu:menuitem menu:id=".uno:DBEdit"/>
@@ -63,8 +66,6 @@
             <menu:menuitem menu:id=".uno:DBConvertToView"/>
             <menu:menuitem menu:id=".uno:DBNewFormAutoPilotWithPreSelection"/>
             <menu:menuitem menu:id=".uno:DBNewReportAutoPilotWithPreSelection"/>
-            <menu:menuseparator/>
-            <menu:menuitem menu:id=".uno:SelectAll"/>
             <menu:menuseparator/>
             <menu:menu menu:id=".uno:DBDatabasePropertiesMenu">
                 <menu:menupopup>
@@ -77,40 +78,28 @@
     </menu:menu>
     <menu:menu menu:id=".uno:ViewMenu">
         <menu:menupopup>
-            <menu:menu menu:id=".uno:DBDatabaseObjectsMenu">
-                <menu:menupopup>
-                    <menu:menuitem menu:id=".uno:DBViewTables" menu:style="radio"/>
-                    <menu:menuitem menu:id=".uno:DBViewQueries" menu:style="radio"/>
-                    <menu:menuitem menu:id=".uno:DBViewForms" menu:style="radio"/>
-                    <menu:menuitem menu:id=".uno:DBViewReports" menu:style="radio"/>
-                </menu:menupopup>
-            </menu:menu>
+            <menu:menuitem menu:id=".uno:DBViewTables" menu:style="radio"/>
+            <menu:menuitem menu:id=".uno:DBViewQueries" menu:style="radio"/>
+            <menu:menuitem menu:id=".uno:DBViewForms" menu:style="radio"/>
+            <menu:menuitem menu:id=".uno:DBViewReports" menu:style="radio"/>
             <menu:menuseparator/>
+            <menu:menuitem menu:id=".uno:ToolbarMode"/>
             <menu:menuitem menu:id=".uno:AvailableToolbars"/>
             <menu:menuitem menu:id=".uno:StatusBarVisible"/>
-            <menu:menu menu:id=".uno:DBPreview">
-                <menu:menupopup>
-                    <menu:menuitem menu:id=".uno:DBDisablePreview" menu:style="radio"/>
-                    <menu:menuitem menu:id=".uno:DBShowDocInfoPreview" menu:style="radio"/>
-                    <menu:menuitem menu:id=".uno:DBShowDocPreview" menu:style="radio"/>
-                </menu:menupopup>
-            </menu:menu>
             <menu:menuseparator/>
-            <menu:menu menu:id=".uno:DBSort">
-                <menu:menupopup>
-                    <menu:menuitem menu:id=".uno:Sortup"/>
-                    <menu:menuitem menu:id=".uno:SortDown"/>
-                </menu:menupopup>
-            </menu:menu>
+            <menu:menuitem menu:id=".uno:Sortup"/>
+            <menu:menuitem menu:id=".uno:SortDown"/>
             <menu:menuitem menu:id=".uno:DBRefreshTables"/>
+            <menu:menuseparator/>
+            <menu:menuitem menu:id=".uno:DBPreview"/>
         </menu:menupopup>
     </menu:menu>
     <menu:menu menu:id=".uno:InsertMenu">
         <menu:menupopup>
-            <menu:menuitem menu:id=".uno:DBNewForm" menu:label=""/>
-            <menu:menuitem menu:id=".uno:DBNewReport" menu:label=""/>
-            <menu:menuitem menu:id=".uno:DBNewQuery" menu:label=""/>
-            <menu:menuitem menu:id=".uno:DBNewQuerySql" menu:label=""/>
+            <menu:menuitem menu:id=".uno:DBNewForm"/>
+            <menu:menuitem menu:id=".uno:DBNewReport"/>
+            <menu:menuitem menu:id=".uno:DBNewQuery"/>
+            <menu:menuitem menu:id=".uno:DBNewQuerySql"/>
             <menu:menuseparator/>
             <menu:menuitem menu:id=".uno:DBNewTable"/>
             <menu:menuitem menu:id=".uno:DBNewView"/>
@@ -131,7 +120,7 @@
                 <menu:menupopup>
                     <menu:menuitem menu:id=".uno:MacroRecorder"/>
                     <menu:menuitem menu:id=".uno:RunMacro"/>
-                    <menu:menu menu:id=".uno:ScriptOrganizer"/>
+                    <menu:menuitem menu:id=".uno:ScriptOrganizer"/>
                     <menu:menuseparator/>
                     <menu:menuitem menu:id=".uno:MacroOrganizer?TabId:short=1"/>
                 </menu:menupopup>
@@ -152,8 +141,15 @@
         <menu:menupopup>
             <menu:menuitem menu:id=".uno:HelpIndex"/>
             <menu:menuitem menu:id=".uno:ExtendedHelp"/>
+            <menu:menuitem menu:id=".uno:Documentation"/>
             <menu:menuseparator/>
+            <menu:menuitem menu:id=".uno:QuestionAnswers"/>
             <menu:menuitem menu:id=".uno:SendFeedback"/>
+            <menu:menuseparator/>
+            <menu:menuitem menu:id=".uno:SafeMode"/>
+            <menu:menuseparator/>
+            <menu:menuitem menu:id=".uno:GetInvolved"/>
+            <menu:menuitem menu:id=".uno:Donation"/>
             <menu:menuseparator/>
             <menu:menuitem menu:id=".uno:ShowLicense"/>
             <menu:menuitem menu:id=".uno:About"/>

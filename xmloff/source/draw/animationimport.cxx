@@ -17,14 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <xmloff/unointerfacetouniqueidentifiermapper.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/animations/AnimationTransformType.hpp>
 #include <com/sun/star/animations/XAnimationNodeSupplier.hpp>
-#include <com/sun/star/presentation/AnimationEffect.hpp>
-#include <com/sun/star/presentation/AnimationSpeed.hpp>
 #include <com/sun/star/animations/AnimationNodeType.hpp>
 #include <com/sun/star/animations/SequenceTimeContainer.hpp>
 #include <com/sun/star/animations/XIterateContainer.hpp>
@@ -49,25 +48,26 @@
 #include <com/sun/star/presentation/EffectCommands.hpp>
 #include <com/sun/star/util/Duration.hpp>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/string.hxx>
 
 #include <sax/tools/converter.hxx>
 
-#include <list>
+#include <vector>
+
 #include <xmloff/xmltypes.hxx>
 #include "sdpropls.hxx"
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlimp.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmluconv.hxx>
-#include <osl/mutex.hxx>
 #include <osl/diagnose.h>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmlprhdl.hxx>
-#include "anim.hxx"
-#include "facreg.hxx"
+#include <anim.hxx>
+#include <facreg.hxx>
 
-#include "animations.hxx"
-#include "animationimport.hxx"
+#include <animations.hxx>
+#include <animationimport.hxx>
 
 using namespace ::std;
 using namespace ::cppu;
@@ -88,14 +88,23 @@ using ::com::sun::star::container::XEnumeration;
 using ::com::sun::star::lang::XMultiServiceFactory;
 using ::com::sun::star::lang::XInitialization;
 
-Sequence< OUString > SAL_CALL AnimationsImport_getSupportedServiceNames() throw()
+Sequence< OUString > AnimationsImport_getSupportedServiceNames() throw()
 {
     return Sequence< OUString > { "com.sun.star.comp.Xmloff.AnimationsImport" };
 }
 
-OUString SAL_CALL AnimationsImport_getImplementationName() throw()
+OUString AnimationsImport_getImplementationName() throw()
 {
     return OUString( "xmloff::AnimationsImport" );
+}
+
+static OUString
+lcl_GetMediaReference(SvXMLImport const& rImport, OUString const& rURL)
+{
+    if (rImport.IsPackageURL(rURL))
+        return "vnd.sun.star.Package:" + rURL;
+
+    return rImport.GetAbsoluteReference(rURL);
 }
 
 namespace xmloff
@@ -106,12 +115,11 @@ class AnimationsImportHelperImpl
 private:
     SvXMLImport& mrImport;
 
-    SvXMLTokenMap* mpAnimationNodeTokenMap;
-    SvXMLTokenMap* mpAnimationNodeAttributeTokenMap;
+    std::unique_ptr<SvXMLTokenMap> mpAnimationNodeTokenMap;
+    std::unique_ptr<SvXMLTokenMap> mpAnimationNodeAttributeTokenMap;
 
 public:
     explicit AnimationsImportHelperImpl( SvXMLImport& rImport );
-    ~AnimationsImportHelperImpl();
 
     const SvXMLTokenMap& getAnimationNodeTokenMap();
     const SvXMLTokenMap& getAnimationNodeAttributeTokenMap();
@@ -127,16 +135,8 @@ public:
 };
 
 AnimationsImportHelperImpl::AnimationsImportHelperImpl( SvXMLImport& rImport )
-:   mrImport( rImport ),
-    mpAnimationNodeTokenMap( nullptr ),
-    mpAnimationNodeAttributeTokenMap( nullptr )
+:   mrImport( rImport )
 {
-}
-
-AnimationsImportHelperImpl::~AnimationsImportHelperImpl()
-{
-    delete mpAnimationNodeTokenMap;
-    delete mpAnimationNodeAttributeTokenMap;
 }
 
 const SvXMLTokenMap& AnimationsImportHelperImpl::getAnimationNodeTokenMap()
@@ -145,21 +145,21 @@ const SvXMLTokenMap& AnimationsImportHelperImpl::getAnimationNodeTokenMap()
     {
         static const SvXMLTokenMapEntry aAnimationNodeTokenMap[] =
         {
-            { XML_NAMESPACE_ANIMATION,  XML_PAR,                (sal_uInt16)AnimationNodeType::PAR },
-            { XML_NAMESPACE_ANIMATION,  XML_SEQ,                (sal_uInt16)AnimationNodeType::SEQ },
-            { XML_NAMESPACE_ANIMATION,  XML_ITERATE,            (sal_uInt16)AnimationNodeType::ITERATE },
-            { XML_NAMESPACE_ANIMATION,  XML_ANIMATE,            (sal_uInt16)AnimationNodeType::ANIMATE },
-            { XML_NAMESPACE_ANIMATION,  XML_SET,                (sal_uInt16)AnimationNodeType::SET },
-            { XML_NAMESPACE_ANIMATION,  XML_ANIMATEMOTION,      (sal_uInt16)AnimationNodeType::ANIMATEMOTION },
-            { XML_NAMESPACE_ANIMATION,  XML_ANIMATECOLOR,       (sal_uInt16)AnimationNodeType::ANIMATECOLOR },
-            { XML_NAMESPACE_ANIMATION,  XML_ANIMATETRANSFORM,   (sal_uInt16)AnimationNodeType::ANIMATETRANSFORM },
-            { XML_NAMESPACE_ANIMATION,  XML_TRANSITIONFILTER,   (sal_uInt16)AnimationNodeType::TRANSITIONFILTER },
-            { XML_NAMESPACE_ANIMATION,  XML_AUDIO,              (sal_uInt16)AnimationNodeType::AUDIO },
-            { XML_NAMESPACE_ANIMATION,  XML_COMMAND,            (sal_uInt16)AnimationNodeType::COMMAND },
+            { XML_NAMESPACE_ANIMATION,  XML_PAR,                sal_uInt16(AnimationNodeType::PAR) },
+            { XML_NAMESPACE_ANIMATION,  XML_SEQ,                sal_uInt16(AnimationNodeType::SEQ) },
+            { XML_NAMESPACE_ANIMATION,  XML_ITERATE,            sal_uInt16(AnimationNodeType::ITERATE) },
+            { XML_NAMESPACE_ANIMATION,  XML_ANIMATE,            sal_uInt16(AnimationNodeType::ANIMATE) },
+            { XML_NAMESPACE_ANIMATION,  XML_SET,                sal_uInt16(AnimationNodeType::SET) },
+            { XML_NAMESPACE_ANIMATION,  XML_ANIMATEMOTION,      sal_uInt16(AnimationNodeType::ANIMATEMOTION) },
+            { XML_NAMESPACE_ANIMATION,  XML_ANIMATECOLOR,       sal_uInt16(AnimationNodeType::ANIMATECOLOR) },
+            { XML_NAMESPACE_ANIMATION,  XML_ANIMATETRANSFORM,   sal_uInt16(AnimationNodeType::ANIMATETRANSFORM) },
+            { XML_NAMESPACE_ANIMATION,  XML_TRANSITIONFILTER,   sal_uInt16(AnimationNodeType::TRANSITIONFILTER) },
+            { XML_NAMESPACE_ANIMATION,  XML_AUDIO,              sal_uInt16(AnimationNodeType::AUDIO) },
+            { XML_NAMESPACE_ANIMATION,  XML_COMMAND,            sal_uInt16(AnimationNodeType::COMMAND) },
             XML_TOKEN_MAP_END
         };
 
-        mpAnimationNodeTokenMap = new SvXMLTokenMap( aAnimationNodeTokenMap );
+        mpAnimationNodeTokenMap = std::make_unique<SvXMLTokenMap>( aAnimationNodeTokenMap );
     }
 
     return *mpAnimationNodeTokenMap;
@@ -224,61 +224,61 @@ const SvXMLTokenMap& AnimationsImportHelperImpl::getAnimationNodeAttributeTokenM
     {
         static const SvXMLTokenMapEntry aAnimationNodeAttributeTokenMap[] =
         {
-            { XML_NAMESPACE_SMIL, XML_BEGIN,                    (sal_uInt16)ANA_Begin },
-            { XML_NAMESPACE_SMIL, XML_DUR,                      (sal_uInt16)ANA_Dur },
-            { XML_NAMESPACE_SMIL, XML_END,                      (sal_uInt16)ANA_End },
-            { XML_NAMESPACE_SMIL, XML_FILL,                     (sal_uInt16)ANA_Fill },
-            { XML_NAMESPACE_SMIL, XML_FILLDEFAULT,              (sal_uInt16)ANA_FillDefault },
-            { XML_NAMESPACE_SMIL, XML_RESTART,                  (sal_uInt16)ANA_Restart },
-            { XML_NAMESPACE_SMIL, XML_RESTARTDEFAULT,           (sal_uInt16)ANA_RestartDefault },
-            { XML_NAMESPACE_SMIL, XML_ACCELERATE,               (sal_uInt16)ANA_Accelerate },
-            { XML_NAMESPACE_SMIL, XML_DECELERATE,               (sal_uInt16)ANA_Decelerate },
-            { XML_NAMESPACE_SMIL, XML_AUTOREVERSE,              (sal_uInt16)ANA_AutoReverse },
-            { XML_NAMESPACE_SMIL, XML_REPEATCOUNT,              (sal_uInt16)ANA_RepeatCount },
-            { XML_NAMESPACE_SMIL, XML_REPEATDUR,                (sal_uInt16)ANA_RepeatDur },
-            { XML_NAMESPACE_SMIL, XML_ENDSYNC,                  (sal_uInt16)ANA_EndSync },
-            { XML_NAMESPACE_PRESENTATION, XML_NODE_TYPE,        (sal_uInt16)ANA_Node_Type },
-            { XML_NAMESPACE_PRESENTATION, XML_PRESET_ID,        (sal_uInt16)ANA_Preset_ID },
-            { XML_NAMESPACE_PRESENTATION, XML_PRESET_SUB_TYPE,  (sal_uInt16)ANA_Preset_Sub_Type },
-            { XML_NAMESPACE_PRESENTATION, XML_PRESET_CLASS,     (sal_uInt16)ANA_Preset_Class },
-            { XML_NAMESPACE_PRESENTATION, XML_AFTER_EFFECT,     (sal_uInt16)ANA_After_Effect },
-            { XML_NAMESPACE_SMIL, XML_TARGETELEMENT,            (sal_uInt16)ANA_Target },
-            { XML_NAMESPACE_XLINK, XML_HREF,                    (sal_uInt16)ANA_XLink },
-            { XML_NAMESPACE_PRESENTATION, XML_MASTER_ELEMENT,   (sal_uInt16)ANA_MasterElement },
-            { XML_NAMESPACE_ANIMATION, XML_SUB_ITEM,            (sal_uInt16)ANA_SubItem },
-            { XML_NAMESPACE_SMIL, XML_ATTRIBUTENAME,            (sal_uInt16)ANA_AttributeName },
-            { XML_NAMESPACE_SMIL, XML_VALUES,                   (sal_uInt16)ANA_Values },
-            { XML_NAMESPACE_SMIL, XML_FROM,                     (sal_uInt16)ANA_From },
-            { XML_NAMESPACE_SMIL, XML_BY,                       (sal_uInt16)ANA_By },
-            { XML_NAMESPACE_SMIL, XML_TO,                       (sal_uInt16)ANA_To },
-            { XML_NAMESPACE_SMIL, XML_KEYTIMES,                 (sal_uInt16)ANA_KeyTimes },
-            { XML_NAMESPACE_SMIL, XML_CALCMODE,                 (sal_uInt16)ANA_CalcMode },
-            { XML_NAMESPACE_SMIL, XML_ACCUMULATE,               (sal_uInt16)ANA_Accumulate },
-            { XML_NAMESPACE_PRESENTATION, XML_ADDITIVE,         (sal_uInt16)ANA_AdditiveMode },
-            { XML_NAMESPACE_SMIL, XML_ADDITIVE,                 (sal_uInt16)ANA_AdditiveMode },
-            { XML_NAMESPACE_SMIL, XML_KEYSPLINES,               (sal_uInt16)ANA_KeySplines },
-            { XML_NAMESPACE_SVG, XML_PATH,                      (sal_uInt16)ANA_Path },
-            { XML_NAMESPACE_ANIMATION, XML_COLOR_INTERPOLATION, (sal_uInt16)ANA_ColorSpace },
-            { XML_NAMESPACE_ANIMATION, XML_COLOR_INTERPOLATION_DIRECTION,       (sal_uInt16)ANA_ColorDirection },
-            { XML_NAMESPACE_SVG, XML_TYPE,                      (sal_uInt16)ANA_TransformType },
-            { XML_NAMESPACE_SMIL, XML_TYPE,                     (sal_uInt16)ANA_TransitionType },
-            { XML_NAMESPACE_SMIL, XML_SUBTYPE,                  (sal_uInt16)ANA_TransitionSubType },
-            { XML_NAMESPACE_SMIL, XML_MODE,                     (sal_uInt16)ANA_Mode },
-            { XML_NAMESPACE_SMIL, XML_DIRECTION,                (sal_uInt16)ANA_Direction },
-            { XML_NAMESPACE_SMIL, XML_FADECOLOR,                (sal_uInt16)ANA_FadeColor },
-            { XML_NAMESPACE_ANIMATION, XML_ITERATE_TYPE,        (sal_uInt16)ANA_IterateType },
-            { XML_NAMESPACE_ANIMATION, XML_ITERATE_INTERVAL,    (sal_uInt16)ANA_IterateInterval },
-            { XML_NAMESPACE_ANIMATION, XML_FORMULA,             (sal_uInt16)ANA_Formula },
-            { XML_NAMESPACE_ANIMATION, XML_ID,                  (sal_uInt16)ANA_ANIMID },
-            { XML_NAMESPACE_XML, XML_ID,                        (sal_uInt16)ANA_XMLID },
-            { XML_NAMESPACE_PRESENTATION, XML_GROUP_ID,         (sal_uInt16)ANA_Group_Id },
-            { XML_NAMESPACE_ANIMATION, XML_AUDIO_LEVEL,         (sal_uInt16)ANA_Volume },
-            { XML_NAMESPACE_ANIMATION, XML_COMMAND,             (sal_uInt16)ANA_Command },
+            { XML_NAMESPACE_SMIL, XML_BEGIN,                    sal_uInt16(ANA_Begin) },
+            { XML_NAMESPACE_SMIL, XML_DUR,                      sal_uInt16(ANA_Dur) },
+            { XML_NAMESPACE_SMIL, XML_END,                      sal_uInt16(ANA_End) },
+            { XML_NAMESPACE_SMIL, XML_FILL,                     sal_uInt16(ANA_Fill) },
+            { XML_NAMESPACE_SMIL, XML_FILLDEFAULT,              sal_uInt16(ANA_FillDefault) },
+            { XML_NAMESPACE_SMIL, XML_RESTART,                  sal_uInt16(ANA_Restart) },
+            { XML_NAMESPACE_SMIL, XML_RESTARTDEFAULT,           sal_uInt16(ANA_RestartDefault) },
+            { XML_NAMESPACE_SMIL, XML_ACCELERATE,               sal_uInt16(ANA_Accelerate) },
+            { XML_NAMESPACE_SMIL, XML_DECELERATE,               sal_uInt16(ANA_Decelerate) },
+            { XML_NAMESPACE_SMIL, XML_AUTOREVERSE,              sal_uInt16(ANA_AutoReverse) },
+            { XML_NAMESPACE_SMIL, XML_REPEATCOUNT,              sal_uInt16(ANA_RepeatCount) },
+            { XML_NAMESPACE_SMIL, XML_REPEATDUR,                sal_uInt16(ANA_RepeatDur) },
+            { XML_NAMESPACE_SMIL, XML_ENDSYNC,                  sal_uInt16(ANA_EndSync) },
+            { XML_NAMESPACE_PRESENTATION, XML_NODE_TYPE,        sal_uInt16(ANA_Node_Type) },
+            { XML_NAMESPACE_PRESENTATION, XML_PRESET_ID,        sal_uInt16(ANA_Preset_ID) },
+            { XML_NAMESPACE_PRESENTATION, XML_PRESET_SUB_TYPE,  sal_uInt16(ANA_Preset_Sub_Type) },
+            { XML_NAMESPACE_PRESENTATION, XML_PRESET_CLASS,     sal_uInt16(ANA_Preset_Class) },
+            { XML_NAMESPACE_PRESENTATION, XML_AFTER_EFFECT,     sal_uInt16(ANA_After_Effect) },
+            { XML_NAMESPACE_SMIL, XML_TARGETELEMENT,            sal_uInt16(ANA_Target) },
+            { XML_NAMESPACE_XLINK, XML_HREF,                    sal_uInt16(ANA_XLink) },
+            { XML_NAMESPACE_PRESENTATION, XML_MASTER_ELEMENT,   sal_uInt16(ANA_MasterElement) },
+            { XML_NAMESPACE_ANIMATION, XML_SUB_ITEM,            sal_uInt16(ANA_SubItem) },
+            { XML_NAMESPACE_SMIL, XML_ATTRIBUTENAME,            sal_uInt16(ANA_AttributeName) },
+            { XML_NAMESPACE_SMIL, XML_VALUES,                   sal_uInt16(ANA_Values) },
+            { XML_NAMESPACE_SMIL, XML_FROM,                     sal_uInt16(ANA_From) },
+            { XML_NAMESPACE_SMIL, XML_BY,                       sal_uInt16(ANA_By) },
+            { XML_NAMESPACE_SMIL, XML_TO,                       sal_uInt16(ANA_To) },
+            { XML_NAMESPACE_SMIL, XML_KEYTIMES,                 sal_uInt16(ANA_KeyTimes) },
+            { XML_NAMESPACE_SMIL, XML_CALCMODE,                 sal_uInt16(ANA_CalcMode) },
+            { XML_NAMESPACE_SMIL, XML_ACCUMULATE,               sal_uInt16(ANA_Accumulate) },
+            { XML_NAMESPACE_PRESENTATION, XML_ADDITIVE,         sal_uInt16(ANA_AdditiveMode) },
+            { XML_NAMESPACE_SMIL, XML_ADDITIVE,                 sal_uInt16(ANA_AdditiveMode) },
+            { XML_NAMESPACE_SMIL, XML_KEYSPLINES,               sal_uInt16(ANA_KeySplines) },
+            { XML_NAMESPACE_SVG, XML_PATH,                      sal_uInt16(ANA_Path) },
+            { XML_NAMESPACE_ANIMATION, XML_COLOR_INTERPOLATION, sal_uInt16(ANA_ColorSpace) },
+            { XML_NAMESPACE_ANIMATION, XML_COLOR_INTERPOLATION_DIRECTION,       sal_uInt16(ANA_ColorDirection) },
+            { XML_NAMESPACE_SVG, XML_TYPE,                      sal_uInt16(ANA_TransformType) },
+            { XML_NAMESPACE_SMIL, XML_TYPE,                     sal_uInt16(ANA_TransitionType) },
+            { XML_NAMESPACE_SMIL, XML_SUBTYPE,                  sal_uInt16(ANA_TransitionSubType) },
+            { XML_NAMESPACE_SMIL, XML_MODE,                     sal_uInt16(ANA_Mode) },
+            { XML_NAMESPACE_SMIL, XML_DIRECTION,                sal_uInt16(ANA_Direction) },
+            { XML_NAMESPACE_SMIL, XML_FADECOLOR,                sal_uInt16(ANA_FadeColor) },
+            { XML_NAMESPACE_ANIMATION, XML_ITERATE_TYPE,        sal_uInt16(ANA_IterateType) },
+            { XML_NAMESPACE_ANIMATION, XML_ITERATE_INTERVAL,    sal_uInt16(ANA_IterateInterval) },
+            { XML_NAMESPACE_ANIMATION, XML_FORMULA,             sal_uInt16(ANA_Formula) },
+            { XML_NAMESPACE_ANIMATION, XML_ID,                  sal_uInt16(ANA_ANIMID) },
+            { XML_NAMESPACE_XML, XML_ID,                        sal_uInt16(ANA_XMLID) },
+            { XML_NAMESPACE_PRESENTATION, XML_GROUP_ID,         sal_uInt16(ANA_Group_Id) },
+            { XML_NAMESPACE_ANIMATION, XML_AUDIO_LEVEL,         sal_uInt16(ANA_Volume) },
+            { XML_NAMESPACE_ANIMATION, XML_COMMAND,             sal_uInt16(ANA_Command) },
 
             XML_TOKEN_MAP_END
         };
 
-        mpAnimationNodeAttributeTokenMap = new SvXMLTokenMap( aAnimationNodeAttributeTokenMap );
+        mpAnimationNodeAttributeTokenMap = std::make_unique<SvXMLTokenMap>( aAnimationNodeAttributeTokenMap );
     }
 
     return *mpAnimationNodeAttributeTokenMap;
@@ -317,24 +317,6 @@ static bool isTime( const OUString& rValue )
     // return true if this is a double (if someone forgot the 's' we silently ignore it)
     // or if it's a double that ends with a 's' or 'S'
     return (nLength == 0) || ((*pStr == 's' || *pStr == 'S') && (nLength == 1));
-}
-
-static sal_Int32 count_codes( const OUString& rString, sal_Unicode nCode )
-{
-    sal_Int32 nCount = 0;
-    sal_Int32 fromIndex = 0;
-
-    while(true)
-    {
-        fromIndex = rString.indexOf( nCode, fromIndex );
-        if( fromIndex == -1 )
-            break;
-
-        fromIndex++;
-        nCount++;
-    }
-
-    return nCount;
 }
 
 Any AnimationsImportHelperImpl::convertTarget( const OUString& rValue )
@@ -410,7 +392,7 @@ Any AnimationsImportHelperImpl::convertValue( XMLTokenEnum eAttributeName, const
     {
         ValuePair aPair;
         aPair.First = convertValue( eAttributeName, rValue.copy( 0, nCommaPos ) );
-        aPair.Second = convertValue( eAttributeName, rValue.copy( nCommaPos+1, rValue.getLength() - nCommaPos - 1 ) );
+        aPair.Second = convertValue( eAttributeName, rValue.copy( nCommaPos+1 ) );
         return makeAny( aPair );
     }
     else
@@ -465,21 +447,16 @@ Sequence< Any > AnimationsImportHelperImpl::convertValueSequence( XMLTokenEnum e
 {
     Sequence< Any > aValues;
 
-    // do we have any value at all?
-    if( !rValue.isEmpty() )
+    const sal_Int32 nElements { comphelper::string::getTokenCount(rValue, ';') };
+    if ( nElements>0 )
     {
-        sal_Int32 nElements = count_codes( rValue, (sal_Unicode)';') + 1; // a non empty string has at least one value
-
         // prepare the sequence
         aValues.realloc( nElements );
 
         // fill the sequence
         Any* pValues = aValues.getArray();
-        sal_Int32 nIndex;
-        for( nIndex = 0; nElements && (nIndex >= 0); nElements-- )
-        {
+        for (sal_Int32 nIndex = 0; nIndex >= 0; )
             *pValues++ = convertValue( eAttributeName, rValue.getToken( 0, ';', nIndex ) );
-        }
     }
 
     return aValues;
@@ -489,12 +466,9 @@ Any AnimationsImportHelperImpl::convertTiming( const OUString& rValue )
 {
     Any aAny;
 
-    // do we have any value at all?
-    if( !rValue.isEmpty() )
+    const sal_Int32 nElements { comphelper::string::getTokenCount(rValue, ';') };
+    if ( nElements>0 )
     {
-        // count the values
-        sal_Int32 nElements = count_codes( rValue, (sal_Unicode)';' ) + 1; // a non empty string has at least one value
-
         if( nElements == 1 )
         {
             if( IsXMLToken( rValue, XML_MEDIA ) )
@@ -517,7 +491,7 @@ Any AnimationsImportHelperImpl::convertTiming( const OUString& rValue )
 
                 OUString aEventTrigger;
 
-                sal_Int32 nPos = rValue.indexOf( (sal_Unicode)'+' );
+                sal_Int32 nPos = rValue.indexOf( '+' );
                 if( nPos == -1 )
                 {
                     aEventTrigger = rValue;
@@ -527,20 +501,20 @@ Any AnimationsImportHelperImpl::convertTiming( const OUString& rValue )
                     aEventTrigger = rValue.copy( 0, nPos );
 
                     // convert offset
-                    aEvent.Offset <<= convertTiming( rValue.copy( nPos + 1 ) );
+                    aEvent.Offset = convertTiming( rValue.copy( nPos + 1 ) );
                 }
 
-                nPos = aEventTrigger.indexOf( (sal_Unicode)'.' );
+                nPos = aEventTrigger.indexOf( '.' );
                 if( nPos != -1 )
                 {
                     aEvent.Source <<= mrImport.getInterfaceToIdentifierMapper().getReference( aEventTrigger.copy( 0, nPos ) );
                     aEventTrigger = aEventTrigger.copy( nPos + 1 );
                 }
 
-                sal_uInt16 nEnum;
-                if( SvXMLUnitConverter::convertEnum( nEnum, aEventTrigger, getAnimationsEnumMap(Animations_EnumMap_EventTrigger) ) )
+                sal_Int16 nEnum;
+                if( SvXMLUnitConverter::convertEnum( nEnum, aEventTrigger, aAnimations_EnumMap_EventTrigger ) )
                 {
-                    aEvent.Trigger = (sal_Int16)nEnum;
+                    aEvent.Trigger = nEnum;
                 }
                 else
                 {
@@ -555,8 +529,7 @@ Any AnimationsImportHelperImpl::convertTiming( const OUString& rValue )
             // fill the sequence
             Sequence< Any > aValues( nElements );
             Any* pValues = aValues.getArray();
-            sal_Int32 nIndex = 0;
-            while( (nElements--) && (nIndex >= 0) )
+            for (sal_Int32 nIndex = 0; nIndex >= 0; )
                 *pValues++ = convertTiming( rValue.getToken( 0, ';', nIndex ) );
 
             aAny <<= aValues;
@@ -567,18 +540,14 @@ Any AnimationsImportHelperImpl::convertTiming( const OUString& rValue )
 
 Sequence< double > AnimationsImportHelperImpl::convertKeyTimes( const OUString& rValue )
 {
-    sal_Int32 nElements = 0;
-
-    if( !rValue.isEmpty() )
-        nElements = count_codes( rValue, (sal_Unicode)';' ) + 1; // a non empty string has at least one value
+    const sal_Int32 nElements { comphelper::string::getTokenCount(rValue, ';') };
 
     Sequence< double > aKeyTimes( nElements );
 
     if( nElements )
     {
         double* pValues = aKeyTimes.getArray();
-        sal_Int32 nIndex = 0;
-        while( (nElements--) && (nIndex >= 0) )
+        for (sal_Int32 nIndex = 0; nIndex >= 0; )
             *pValues++ = rValue.getToken( 0, ';', nIndex ).toDouble();
     }
 
@@ -587,18 +556,14 @@ Sequence< double > AnimationsImportHelperImpl::convertKeyTimes( const OUString& 
 
 Sequence< TimeFilterPair > AnimationsImportHelperImpl::convertTimeFilter( const OUString& rValue )
 {
-    sal_Int32 nElements = 0;
-
-    if( !rValue.isEmpty() )
-        nElements = count_codes( rValue, (sal_Unicode)';' ) + 1; // a non empty string has at least one value
+    const sal_Int32 nElements { comphelper::string::getTokenCount(rValue, ';') };
 
     Sequence< TimeFilterPair > aTimeFilter( nElements );
 
     if( nElements )
     {
         TimeFilterPair* pValues = aTimeFilter.getArray();
-        sal_Int32 nIndex = 0;
-        while( (nElements--) && (nIndex >= 0) )
+        for (sal_Int32 nIndex = 0; nIndex >= 0; )
         {
             const OUString aToken( rValue.getToken( 0, ';', nIndex ) );
 
@@ -606,7 +571,7 @@ Sequence< TimeFilterPair > AnimationsImportHelperImpl::convertTimeFilter( const 
             if( nPos >= 0 )
             {
                 pValues->Time = aToken.copy( 0, nPos ).toDouble();
-                pValues->Progress = aToken.copy( nPos+1, aToken.getLength() - nPos - 1 ).toDouble();
+                pValues->Progress = aToken.copy( nPos+1 ).toDouble();
             }
             pValues++;
         }
@@ -625,16 +590,16 @@ AnimationNodeContext::AnimationNodeContext(
         const Reference< XAnimationNode >& xParentNode,
         SvXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        AnimationsImportHelperImpl* pHelper /* = NULL */ )
+        const std::shared_ptr<AnimationsImportHelperImpl>& pHelper )
 :   SvXMLImportContext(rImport, nPrfx, rLocalName),
-    mpHelper( pHelper ),
-    mbRootContext( pHelper == nullptr )
+    mpHelper( pHelper )
 {
+    bool bRootContext = !pHelper;
     try
     {
-        if( mbRootContext )
+        if( bRootContext )
         {
-            mpHelper = new AnimationsImportHelperImpl( rImport );
+            mpHelper = std::make_shared<AnimationsImportHelperImpl>( rImport );
             mxNode = xParentNode;
         }
         else
@@ -643,7 +608,7 @@ AnimationNodeContext::AnimationNodeContext(
 
             const sal_Char* pServiceName = nullptr;
 
-            sal_Int16 nNodeType = (sal_Int16)mpHelper->getAnimationNodeTokenMap().Get( nPrfx, rLocalName );
+            sal_Int16 nNodeType = static_cast<sal_Int16>(mpHelper->getAnimationNodeTokenMap().Get( nPrfx, rLocalName ));
             switch( nNodeType )
             {
             case AnimationNodeType::SEQ:                pServiceName = "com.sun.star.animations.SequenceTimeContainer"; break;
@@ -720,12 +685,6 @@ AnimationNodeContext::AnimationNodeContext(
     }
 }
 
-AnimationNodeContext::~AnimationNodeContext()
-{
-    if( mbRootContext )
-        delete mpHelper;
-}
-
 void AnimationNodeContext::StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& )
 {
     // code of StartElement is moved to init_node that is now called
@@ -746,14 +705,14 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
         Reference< XTransitionFilter > xTransitionFilter( mxNode, UNO_QUERY );
         Reference< XIterateContainer > xIter( mxNode, UNO_QUERY );
 
-        std::list< NamedValue > aUserData;
+        std::vector< NamedValue > aUserData;
         XMLTokenEnum meAttributeName = XML_TOKEN_INVALID;
         OUString aFrom, aBy, aTo, aValues;
         bool bHaveXmlId( false );
         OUString sXmlId;
 
         const sal_Int16 nCount = xAttrList.is() ? xAttrList->getLength() : 0;
-        sal_uInt16 nEnum;
+        sal_Int16 nEnum;
         sal_Int16 nAttribute;
         for( nAttribute = 0; nAttribute < nCount; nAttribute++ )
         {
@@ -781,26 +740,26 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
             break;
             case ANA_Fill:
             {
-                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_Fill) ) )
-                    mxNode->setFill( (sal_Int16)nEnum );
+                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_Fill ) )
+                    mxNode->setFill( nEnum );
             }
             break;
             case ANA_FillDefault:
             {
-                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_FillDefault) ) )
-                    mxNode->setFillDefault( (sal_Int16)nEnum );
+                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_FillDefault ) )
+                    mxNode->setFillDefault( nEnum );
             }
             break;
             case ANA_Restart:
             {
-                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_Restart) ) )
-                    mxNode->setRestart( (sal_Int16)nEnum );
+                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_Restart ) )
+                    mxNode->setRestart( nEnum );
             }
             break;
             case ANA_RestartDefault:
             {
-                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_RestartDefault) ) )
-                    mxNode->setRestartDefault( (sal_Int16)nEnum );
+                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_RestartDefault ) )
+                    mxNode->setRestartDefault( nEnum );
             }
             break;
             case ANA_Accelerate:
@@ -834,37 +793,37 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
             break;
             case ANA_EndSync:
             {
-                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_Endsync) ) )
-                    mxNode->setEndSync( makeAny( (sal_Int16)nEnum ) );
+                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_Endsync ) )
+                    mxNode->setEndSync( makeAny( nEnum ) );
             }
             break;
             case ANA_Node_Type:
             {
-                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_EffectNodeType) ) )
-                    aUserData.push_back( NamedValue( GetXMLToken( XML_NODE_TYPE ), makeAny( (sal_Int16)nEnum ) ) );
+                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_EffectNodeType ) )
+                    aUserData.emplace_back( GetXMLToken( XML_NODE_TYPE ), makeAny( nEnum ) );
             }
             break;
             case ANA_Preset_ID:
             {
-                aUserData.push_back( NamedValue( GetXMLToken( XML_PRESET_ID ), makeAny( rValue ) ) );
+                aUserData.emplace_back( GetXMLToken( XML_PRESET_ID ), makeAny( rValue ) );
             }
             break;
             case ANA_Preset_Sub_Type:
             {
-                aUserData.push_back( NamedValue( GetXMLToken( XML_PRESET_SUB_TYPE ), makeAny( rValue ) ) );
+                aUserData.emplace_back( GetXMLToken( XML_PRESET_SUB_TYPE ), makeAny( rValue ) );
             }
             break;
             case ANA_Preset_Class:
             {
-                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_EffectPresetClass) ) )
-                    aUserData.push_back( NamedValue( GetXMLToken( XML_PRESET_CLASS ), makeAny( (sal_Int16)nEnum ) ) );
+                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_EffectPresetClass ) )
+                    aUserData.emplace_back( GetXMLToken( XML_PRESET_CLASS ), makeAny( nEnum ) );
             }
             break;
             case ANA_After_Effect:
             {
                 bool bTemp;
                 if (::sax::Converter::convertBool( bTemp, rValue ))
-                    aUserData.push_back( NamedValue( GetXMLToken( XML_AFTER_EFFECT ), makeAny( bTemp ) ) );
+                    aUserData.emplace_back( GetXMLToken( XML_AFTER_EFFECT ), makeAny( bTemp ) );
             }
             break;
             case ANA_XLink:
@@ -872,29 +831,26 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
                 if( nNodeType == AnimationNodeType::AUDIO )
                 {
                     Reference< XAudio > xAudio( mxNode, UNO_QUERY_THROW );
-                    xAudio->setSource( makeAny( GetImport().GetAbsoluteReference( rValue ) ) );
+                    xAudio->setSource( makeAny(lcl_GetMediaReference(GetImport(), rValue)) );
                     break;
                 }
-
+                [[fallthrough]];
             }
-            // fall through intended!
             case ANA_Target:
             {
-                {
-                    Any aTarget( mpHelper->convertTarget( rValue ) );
+                Any aTarget( mpHelper->convertTarget( rValue ) );
 
-                    if( xAnimate.is() )
-                    {
-                        xAnimate->setTarget( aTarget );
-                    }
-                    else if( xIter.is() )
-                    {
-                        xIter->setTarget( aTarget );
-                    }
-                    else if( xCommand.is() )
-                    {
-                        xCommand->setTarget( aTarget );
-                    }
+                if( xAnimate.is() )
+                {
+                    xAnimate->setTarget( aTarget );
+                }
+                else if( xIter.is() )
+                {
+                    xIter->setTarget( aTarget );
+                }
+                else if( xCommand.is() )
+                {
+                    xCommand->setTarget( aTarget );
                 }
             }
             break;
@@ -915,21 +871,21 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
             case ANA_MasterElement:
             {
                 Reference< XAnimationNode > xMaster( GetImport().getInterfaceToIdentifierMapper().getReference( rValue ), UNO_QUERY );
-                aUserData.push_back( NamedValue( GetXMLToken( XML_MASTER_ELEMENT ), makeAny( xMaster ) ) );
+                aUserData.emplace_back( GetXMLToken( XML_MASTER_ELEMENT ), makeAny( xMaster ) );
             }
             break;
 
             case ANA_SubItem:
             {
-                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_SubItem) ) )
+                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_SubItem ) )
                 {
                     if( xAnimate.is() )
                     {
-                        xAnimate->setSubItem( (sal_Int16)nEnum );
+                        xAnimate->setSubItem( nEnum );
                     }
                     else if( xIter.is() )
                     {
-                        xIter->setSubItem( (sal_Int16)nEnum );
+                        xIter->setSubItem( nEnum );
                     }
                 }
             }
@@ -1013,8 +969,8 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
             {
                 if( xAnimate.is() )
                 {
-                    if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_CalcMode) ) )
-                        xAnimate->setCalcMode( (sal_Int16)nEnum );
+                    if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_CalcMode ) )
+                        xAnimate->setCalcMode( nEnum );
                 }
             }
             break;
@@ -1030,8 +986,8 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
             {
                 if( xAnimate.is() )
                 {
-                    if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_AdditiveMode) ) )
-                        xAnimate->setAdditive( (sal_Int16)nEnum );
+                    if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_AdditiveMode ) )
+                        xAnimate->setAdditive( nEnum );
                 }
             }
             break;
@@ -1072,9 +1028,9 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
                 Reference< XAnimateTransform > xTransform( mxNode, UNO_QUERY );
                 if( xTransform.is() )
                 {
-                    if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_TransformType) ) )
+                    if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_TransformType ) )
                     {
-                        xTransform->setTransformType( (sal_Int16)nEnum );
+                        xTransform->setTransformType( nEnum );
                         switch( nEnum )
                         {
                         case AnimationTransformType::SCALE: meAttributeName = XML_SCALE; break;
@@ -1094,8 +1050,8 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
             {
                 if( xTransitionFilter.is() )
                 {
-                    if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_TransitionType) ) )
-                        xTransitionFilter->setTransition( (sal_Int16)nEnum );
+                    if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_TransitionType ) )
+                        xTransitionFilter->setTransition( nEnum );
                 }
             }
             break;
@@ -1104,8 +1060,8 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
             {
                 if( xTransitionFilter.is() )
                 {
-                    if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_TransitionSubType) ) )
-                        xTransitionFilter->setSubtype( (sal_Int16)nEnum );
+                    if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_TransitionSubType ) )
+                        xTransitionFilter->setSubtype( nEnum );
                 }
             }
             break;
@@ -1137,10 +1093,10 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
 
             case ANA_IterateType:
             {
-                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_IterateType) ) )
+                if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_IterateType ) )
                 {
                     if( xIter.is() )
-                        xIter->setIterateType( (sal_Int16)nEnum );
+                        xIter->setIterateType( nEnum );
                 }
             }
             break;
@@ -1172,7 +1128,7 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
 
             case ANA_Group_Id:
             {
-                aUserData.push_back( NamedValue( aLocalName, makeAny( rValue.toInt32() ) ) );
+                aUserData.emplace_back( aLocalName, makeAny( rValue.toInt32() ) );
             }
             break;
 
@@ -1180,9 +1136,9 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
             {
                 if( xCommand.is() && nNodeType == AnimationNodeType::COMMAND )
                 {
-                    if( SvXMLUnitConverter::convertEnum( nEnum, rValue, getAnimationsEnumMap(Animations_EnumMap_Command) ) )
+                    if( SvXMLUnitConverter::convertEnum( nEnum, rValue, aAnimations_EnumMap_Command ) )
                     {
-                        xCommand->setCommand( (sal_Int16)nEnum );
+                        xCommand->setCommand( nEnum );
                     }
                 }
             }
@@ -1192,7 +1148,7 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
                 // push all unknown attributes within the presentation namespace as user data
                 if( nPrefix == XML_NAMESPACE_PRESENTATION )
                 {
-                    aUserData.push_back( NamedValue( aLocalName, makeAny( rValue ) ) );
+                    aUserData.emplace_back( aLocalName, makeAny( rValue ) );
                 }
             }
         }
@@ -1209,10 +1165,8 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
         {
             Sequence< NamedValue > aUnoUserData( nUserDataCount );
             NamedValue* pData = aUnoUserData.getArray();
-            std::list< NamedValue >::iterator aIter( aUserData.begin() );
-            const std::list< NamedValue >::iterator aEnd( aUserData.end() );
-            while( aIter != aEnd )
-                *pData++ = (*aIter++);
+            for (auto const& item : aUserData)
+                *pData++ = item;
 
             mxNode->setUserData( aUnoUserData );
         }
@@ -1239,7 +1193,7 @@ void AnimationNodeContext::init_node(  const css::uno::Reference< css::xml::sax:
     }
 }
 
-SvXMLImportContext * AnimationNodeContext::CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
+SvXMLImportContextRef AnimationNodeContext::CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList )
 {
     if( mxNode.is())
@@ -1252,17 +1206,16 @@ class AnimationsImport: public SvXMLImport, public XAnimationNodeSupplier
 {
 public:
     explicit AnimationsImport( const Reference< XComponentContext > & rxContext );
-    virtual ~AnimationsImport() throw ();
 
-    SvXMLImportContext* CreateContext(sal_uInt16 nPrefix, const OUString& rLocalName,   const Reference<XAttributeList>& xAttrList) override;
+    SvXMLImportContext* CreateDocumentContext(sal_uInt16 nPrefix, const OUString& rLocalName,   const Reference<XAttributeList>& xAttrList) override;
 
     // XInterface
-    virtual Any SAL_CALL queryInterface( const Type& aType ) throw (RuntimeException, std::exception) override;
+    virtual Any SAL_CALL queryInterface( const Type& aType ) override;
     virtual void SAL_CALL acquire() throw () override;
     virtual void SAL_CALL release() throw () override;
 
     // XAnimationNodeSupplier
-    Reference< XAnimationNode > SAL_CALL getAnimationNode() throw (RuntimeException, std::exception) override;
+    Reference< XAnimationNode > SAL_CALL getAnimationNode() override;
 
 private:
     Reference< XAnimationNode > mxRootNode;
@@ -1293,12 +1246,8 @@ AnimationsImport::AnimationsImport( const Reference< XComponentContext > & rxCon
     mxRootNode.set( SequenceTimeContainer::create(rxContext), UNO_QUERY_THROW );
 }
 
-AnimationsImport::~AnimationsImport() throw ()
-{
-}
-
 // XInterface
-Any SAL_CALL AnimationsImport::queryInterface( const Type& aType ) throw (RuntimeException, std::exception)
+Any SAL_CALL AnimationsImport::queryInterface( const Type& aType )
 {
     if ( aType == cppu::UnoType<XAnimationNodeSupplier>::get())
     {
@@ -1320,7 +1269,9 @@ void SAL_CALL AnimationsImport::release() throw ()
     SvXMLImport::release();
 }
 
-SvXMLImportContext *AnimationsImport::CreateContext(sal_uInt16 nPrefix, const OUString& rLocalName, const Reference<XAttributeList>& xAttrList)
+SvXMLImportContext *AnimationsImport::CreateDocumentContext(
+        sal_uInt16 const nPrefix, const OUString& rLocalName,
+        const Reference<XAttributeList>& xAttrList)
 {
     SvXMLImportContext* pContext = nullptr;
 
@@ -1330,19 +1281,19 @@ SvXMLImportContext *AnimationsImport::CreateContext(sal_uInt16 nPrefix, const OU
     }
     else
     {
-        pContext = SvXMLImport::CreateContext(nPrefix, rLocalName, xAttrList);
+        pContext = SvXMLImport::CreateDocumentContext(nPrefix, rLocalName, xAttrList);
     }
 
     return pContext;
 }
 
 // XAnimationNodeSupplier
-Reference< XAnimationNode > SAL_CALL AnimationsImport::getAnimationNode() throw (RuntimeException, std::exception)
+Reference< XAnimationNode > SAL_CALL AnimationsImport::getAnimationNode()
 {
     return mxRootNode;
 }
 
-void AnimationNodeContext::postProcessRootNode( SvXMLImport& /*rImport*/, const Reference< XAnimationNode >& xRootNode, Reference< XPropertySet >& xPageProps )
+void AnimationNodeContext::postProcessRootNode( const Reference< XAnimationNode >& xRootNode, Reference< XPropertySet > const & xPageProps )
 {
     if( xRootNode.is() && xPageProps.is() ) try
     {
@@ -1385,7 +1336,7 @@ void AnimationNodeContext::postProcessRootNode( SvXMLImport& /*rImport*/, const 
                             Reference< XCommand > xCommand( xChildNode, UNO_QUERY_THROW );
                             if( xCommand->getCommand() == EffectCommands::STOPAUDIO )
                             {
-                                xPageProps->setPropertyValue("Sound", Any(sal_True) );
+                                xPageProps->setPropertyValue("Sound", Any(true) );
                             }
                         }
                         break;
@@ -1400,7 +1351,7 @@ void AnimationNodeContext::postProcessRootNode( SvXMLImport& /*rImport*/, const 
 
                                 Timing eTiming;
                                 if( (xAudio->getRepeatCount() >>= eTiming) && (eTiming == Timing_INDEFINITE) )
-                                    xPageProps->setPropertyValue("LoopSound", Any( sal_True ) );
+                                    xPageProps->setPropertyValue("LoopSound", Any( true ) );
                             }
                         }
                         break;
@@ -1422,7 +1373,7 @@ void AnimationNodeContext::postProcessRootNode( SvXMLImport& /*rImport*/, const 
 
 } // namespace xmloff
 
-Reference< XInterface > SAL_CALL AnimationsImport_createInstance(const Reference< XMultiServiceFactory > & rSMgr) throw( Exception )
+Reference< XInterface > AnimationsImport_createInstance(const Reference< XMultiServiceFactory > & rSMgr)
 {
     return static_cast<cppu::OWeakObject*>(new xmloff::AnimationsImport( comphelper::getComponentContext(rSMgr) ));
 }

@@ -32,7 +32,7 @@
 #include <com/sun/star/form/submission/XSubmissionSupplier.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <rtl/ustring.hxx>
-#include <xformsapi.hxx>
+#include "xformsapi.hxx"
 #include <comphelper/namedvaluecollection.hxx>
 #include <tools/diagnose_ex.h>
 
@@ -63,9 +63,8 @@ SvXMLImportContext* createXFormsModelContext(
     return new XFormsModelContext( rImport, nPrefix, rLocalName );
 }
 
-void bindXFormsValueBinding(
-    Reference<XModel> xModel,
-    pair<Reference<XPropertySet>,OUString> aPair )
+void bindXFormsValueBinding(Reference<XModel> const& xModel,
+                            const pair<Reference<XPropertySet>, OUString>& aPair)
 {
     Reference<XBindableValue> xBindable(
         aPair.first,
@@ -88,9 +87,8 @@ void bindXFormsValueBinding(
     }
 }
 
-void bindXFormsListBinding(
-    Reference<XModel> xModel,
-    ::pair<Reference<XPropertySet>,OUString> aPair )
+void bindXFormsListBinding(Reference<XModel> const& xModel,
+                           const ::pair<Reference<XPropertySet>, OUString>& aPair)
 {
     Reference<XListEntrySink> xListEntrySink(
         aPair.first,
@@ -113,9 +111,8 @@ void bindXFormsListBinding(
     }
 }
 
-void bindXFormsSubmission(
-    Reference<XModel> xModel,
-    pair<Reference<XPropertySet>,OUString> aPair )
+void bindXFormsSubmission(Reference<XModel> const& xModel,
+                          const pair<Reference<XPropertySet>, OUString>& aPair)
 {
     Reference<XSubmissionSupplier> xSubmissionSupp( aPair.first, UNO_QUERY );
     Reference<XSubmission> xSubmission(
@@ -153,44 +150,38 @@ void applyXFormsSettings( const Reference< XNameAccess >& _rXForms, const Sequen
     try
     {
         Sequence< OUString > aSettingsForModels( xModelSettings->getElementNames() );
-        for (   const OUString* pModelName = aSettingsForModels.getConstArray();
-                pModelName != aSettingsForModels.getConstArray() + aSettingsForModels.getLength();
-                ++pModelName
-            )
+        for ( auto const & modelName : aSettingsForModels )
         {
             // the settings for this particular model
             Sequence< PropertyValue > aModelSettings;
-            OSL_VERIFY( xModelSettings->getByName( *pModelName ) >>= aModelSettings );
+            OSL_VERIFY( xModelSettings->getByName( modelName ) >>= aModelSettings );
 
             // the model itself
-            if ( !_rXForms->hasByName( *pModelName ) )
+            if ( !_rXForms->hasByName( modelName ) )
             {
                 OSL_FAIL( "applyXFormsSettings: have settings for a non-existent XForms model!" );
                 continue;
             }
 
             // propagate the settings, being tolerant by omitting properties which are not supported
-            Reference< XPropertySet > xModelProps( _rXForms->getByName( *pModelName ), UNO_QUERY_THROW );
+            Reference< XPropertySet > xModelProps( _rXForms->getByName( modelName ), UNO_QUERY_THROW );
             Reference< XPropertySetInfo > xModelPSI( xModelProps->getPropertySetInfo(), UNO_SET_THROW );
 
-            for (   const PropertyValue* pSetting = aModelSettings.getConstArray();
-                    pSetting != aModelSettings.getConstArray() + aModelSettings.getLength();
-                    ++pSetting
-                )
+            for ( auto const & setting : aModelSettings )
             {
-                if ( !xModelPSI->hasPropertyByName( pSetting->Name ) )
+                if ( !xModelPSI->hasPropertyByName( setting.Name ) )
                 {
                     OSL_FAIL( "applyXFormsSettings: non-existent model property!" );
                     continue;
                 }
 
-                xModelProps->setPropertyValue( pSetting->Name, pSetting->Value );
+                xModelProps->setPropertyValue( setting.Name, setting.Value );
             }
         }
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("xmloff");
     }
 }
 

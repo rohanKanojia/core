@@ -27,7 +27,7 @@
 |*
 \************************************************************************/
 
-class SvxHyperlinkDocTp : public SvxHyperlinkTabPageBase
+class SvxHyperlinkDocTp final : public SvxHyperlinkTabPageBase
 {
 private:
     VclPtr<SvxHyperURLBox>      m_pCbbPath;
@@ -41,22 +41,19 @@ private:
 
     bool                mbMarkWndOpen;
 
-    DECL_LINK_TYPED (ClickFileopenHdl_Impl, Button*, void );
-    DECL_LINK_TYPED (ClickTargetHdl_Impl  , Button*, void );
+    DECL_LINK (ClickFileopenHdl_Impl, Button*, void );
+    DECL_LINK (ClickTargetHdl_Impl  , Button*, void );
 
-    DECL_LINK_TYPED (ModifiedPathHdl_Impl  , Edit&, void ); ///< Contents of combobox "Path" modified
-    DECL_LINK_TYPED (ModifiedTargetHdl_Impl, Edit&, void ); ///< Contents of editfield "Target" modified
+    DECL_LINK (ModifiedPathHdl_Impl  , Edit&, void ); ///< Contents of combobox "Path" modified
+    DECL_LINK (ModifiedTargetHdl_Impl, Edit&, void ); ///< Contents of editfield "Target" modified
 
-    DECL_LINK_TYPED( LostFocusPathHdl_Impl, Control&, void ); ///< Combobox "path" lost its focus
+    DECL_LINK( LostFocusPathHdl_Impl, Control&, void ); ///< Combobox "path" lost its focus
 
-    DECL_LINK_TYPED( TimeoutHdl_Impl, Timer *, void ); ///< Handler for timer -timeout
+    DECL_LINK( TimeoutHdl_Impl, Timer *, void ); ///< Handler for timer -timeout
 
-    enum EPathType { Type_Unknown, Type_Invalid,
-                     Type_ExistsFile, Type_File,
-                     Type_ExistsDir, Type_Dir };
+    enum class EPathType { Invalid, ExistsFile };
     static EPathType GetPathType ( const OUString& rStrPath );
 
-protected:
     void FillDlgFields(const OUString& rStrURL) override;
     void GetCurentItemData ( OUString& rStrURL, OUString& aStrName,
                              OUString& aStrIntName, OUString& aStrFrame,
@@ -66,11 +63,11 @@ protected:
     OUString GetCurrentURL    ();
 
 public:
-    SvxHyperlinkDocTp ( vcl::Window *pParent, IconChoiceDialog* pDlg, const SfxItemSet& rItemSet);
-    virtual ~SvxHyperlinkDocTp();
+    SvxHyperlinkDocTp ( vcl::Window *pParent, IconChoiceDialog* pDlg, const SfxItemSet* pItemSet);
+    virtual ~SvxHyperlinkDocTp() override;
     virtual void dispose() override;
 
-    static VclPtr<IconChoicePage> Create( vcl::Window* pWindow, IconChoiceDialog* pDlg, const SfxItemSet& rItemSet );
+    static VclPtr<IconChoicePage> Create( vcl::Window* pWindow, IconChoiceDialog* pDlg, const SfxItemSet* pItemSet );
 
     virtual void        SetMarkStr ( const OUString& aStrMark ) override;
 

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <weighhdl.hxx>
+#include "weighhdl.hxx"
 
 #include <sax/tools/converter.hxx>
 
@@ -36,8 +36,8 @@ using namespace ::xmloff::token;
 
 struct FontWeightMapper
 {
-    float fWeight;
-    sal_uInt16 nValue;
+    float const fWeight;
+    sal_uInt16 const nValue;
 };
 
 FontWeightMapper const aFontWeightMap[] =
@@ -89,7 +89,7 @@ bool XMLFontWeightPropHdl::importXML( const OUString& rStrImpValue, Any& rValue,
     if( bRet )
     {
         bRet = false;
-        static int nCount = sizeof(aFontWeightMap)/sizeof(FontWeightMapper);
+        int const nCount = SAL_N_ELEMENTS(aFontWeightMap);
         for (int i = 0; i < (nCount-1); ++i)
         {
             if( (nWeight >= aFontWeightMap[i].nValue) && (nWeight <= aFontWeightMap[i+1].nValue) )
@@ -121,7 +121,7 @@ bool XMLFontWeightPropHdl::exportXML( OUString& rStrExpValue, const Any& rValue,
         sal_Int32 nValue = 0;
         if( rValue >>= nValue )
         {
-            fValue = (float)nValue;
+            fValue = static_cast<float>(nValue);
             bRet = true;
         }
     }
@@ -131,26 +131,21 @@ bool XMLFontWeightPropHdl::exportXML( OUString& rStrExpValue, const Any& rValue,
     if( bRet )
     {
         sal_uInt16 nWeight = 0;
-        static int nCount = sizeof(aFontWeightMap)/sizeof(FontWeightMapper);
-        for( int i=0; i<nCount; i++ )
+        for( auto const & pair : aFontWeightMap )
         {
-            if( fValue <= aFontWeightMap[i].fWeight )
+            if( fValue <= pair.fWeight )
             {
-                 nWeight = aFontWeightMap[i].nValue;
+                 nWeight = pair.nValue;
                  break;
             }
         }
 
-        OUStringBuffer aOut;
-
         if( 400 == nWeight )
-            aOut.append( GetXMLToken(XML_WEIGHT_NORMAL) );
+            rStrExpValue = GetXMLToken(XML_WEIGHT_NORMAL);
         else if( 700 == nWeight )
-            aOut.append( GetXMLToken(XML_WEIGHT_BOLD) );
+            rStrExpValue = GetXMLToken(XML_WEIGHT_BOLD);
         else
-            ::sax::Converter::convertNumber( aOut, (sal_Int32)nWeight );
-
-        rStrExpValue = aOut.makeStringAndClear();
+            rStrExpValue = OUString::number( nWeight );
     }
 
     return bRet;

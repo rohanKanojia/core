@@ -20,20 +20,19 @@
 #define INCLUDED_DBACCESS_SOURCE_UI_QUERYDESIGN_QUERYMOVETABWINUNDOACT_HXX
 
 #include "QueryDesignUndoAction.hxx"
-#include "dbu_qry.hrc"
+#include <strings.hrc>
 #include <tools/gen.hxx>
 
 namespace dbaui
 {
 
-    // OQueryMoveTabWinUndoAct - Undo-Klasse fuer Verschieben eines TabWins
+    // OQueryMoveTabWinUndoAct - Undo class for moving a TabWin
     class OTableWindow;
-    class OJoinMoveTabWinUndoAct : public OQueryDesignUndoAction
+    class OJoinMoveTabWinUndoAct final : public OQueryDesignUndoAction
     {
         Point           m_ptNextPosition;
         VclPtr<OTableWindow>   m_pTabWin;
 
-    protected:
         void TogglePosition();
 
     public:

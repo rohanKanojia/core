@@ -20,14 +20,12 @@
 #ifndef INCLUDED_STARMATH_SOURCE_MATHMLEXPORT_HXX
 #define INCLUDED_STARMATH_SOURCE_MATHMLEXPORT_HXX
 
-#include <xmloff/xmlimp.hxx>
 #include <xmloff/xmlexp.hxx>
-#include <xmloff/DocumentSettingsContext.hxx>
 #include <xmloff/xmltoken.hxx>
 
-#include <node.hxx>
-
 class SfxMedium;
+class SmNode;
+class SmVerticalBraceNode;
 namespace com { namespace sun { namespace star {
     namespace io {
         class XOutputStream; }
@@ -42,7 +40,7 @@ class SmXMLExportWrapper
     bool bFlat;     //set true for export to flat .mml, set false for
                         //export to a .sxm (or whatever) package
 public:
-    explicit SmXMLExportWrapper(css::uno::Reference<css::frame::XModel> &rRef)
+    explicit SmXMLExportWrapper(css::uno::Reference<css::frame::XModel> const &rRef)
         : xModel(rRef), bFlat(true) {}
 
     bool Export(SfxMedium &rMedium);
@@ -51,34 +49,33 @@ public:
     static bool WriteThroughComponent(
         const css::uno::Reference< css::io::XOutputStream >&   xOutputStream,
         const css::uno::Reference< css::lang::XComponent >&    xComponent,
-        css::uno::Reference< css::uno::XComponentContext > & rxContext,
-        css::uno::Reference< css::beans::XPropertySet > & rPropSet,
+        css::uno::Reference< css::uno::XComponentContext > const & rxContext,
+        css::uno::Reference< css::beans::XPropertySet > const & rPropSet,
         const sal_Char* pComponentName );
 
     static bool WriteThroughComponent(
         const css::uno::Reference< css::embed::XStorage >& xStor,
         const css::uno::Reference< css::lang::XComponent >& xComponent,
         const sal_Char* pStreamName,
-        css::uno::Reference< css::uno::XComponentContext > & rxContext,
-        css::uno::Reference< css::beans::XPropertySet > & rPropSet,
+        css::uno::Reference< css::uno::XComponentContext > const & rxContext,
+        css::uno::Reference< css::beans::XPropertySet > const & rPropSet,
         const sal_Char* pComponentName );
 };
 
 
-class SmXMLExport : public SvXMLExport
+class SmXMLExport final : public SvXMLExport
 {
     const SmNode *  pTree;
     OUString        aText;
     bool        bSuccess;
 
-protected:
     void ExportNodes(const SmNode *pNode, int nLevel);
     void ExportTable(const SmNode *pNode, int nLevel);
     void ExportLine(const SmNode *pNode, int nLevel);
     void ExportExpression(const SmNode *pNode, int nLevel,
                           bool bNoMrowContainer = false);
-    void ExportText(const SmNode *pNode, int nLevel);
-    void ExportMath(const SmNode *pNode, int nLevel);
+    void ExportText(const SmNode *pNode);
+    void ExportMath(const SmNode *pNode);
     void ExportBinaryHorizontal(const SmNode *pNode, int nLevel);
     void ExportUnaryHorizontal(const SmNode *pNode, int nLevel);
     void ExportBrace(const SmNode *pNode, int nLevel);
@@ -89,24 +86,23 @@ protected:
     void ExportOperator(const SmNode *pNode, int nLevel);
     void ExportAttributes(const SmNode *pNode, int nLevel);
     void ExportFont(const SmNode *pNode, int nLevel);
-    void ExportVerticalBrace(const SmNode *pNode, int nLevel);
+    void ExportVerticalBrace(const SmVerticalBraceNode *pNode, int nLevel);
     void ExportMatrix(const SmNode *pNode, int nLevel);
-    void ExportBlank(const SmNode *pNode, int nLevel);
+    void ExportBlank(const SmNode *pNode);
 
 public:
     SmXMLExport(
         const css::uno::Reference< css::uno::XComponentContext >& rContext,
         OUString const & implementationName, SvXMLExportFlags nExportFlags);
-    virtual ~SmXMLExport() {};
 
     // XUnoTunnel
-    sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& rId ) throw(css::uno::RuntimeException, std::exception) override;
+    sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& rId ) override;
     static const css::uno::Sequence< sal_Int8 > & getUnoTunnelId() throw();
 
     void ExportAutoStyles_() override {}
     void ExportMasterStyles_() override {}
     void ExportContent_() override;
-    sal_uInt32 exportDoc(enum ::xmloff::token::XMLTokenEnum eClass) override;
+    ErrCode exportDoc(enum ::xmloff::token::XMLTokenEnum eClass = ::xmloff::token::XML_TOKEN_INVALID) override;
 
     virtual void GetViewSettings(css::uno::Sequence<css::beans::PropertyValue>& aProps) override;
     virtual void GetConfigurationSettings(css::uno::Sequence<css::beans::PropertyValue>& aProps) override;

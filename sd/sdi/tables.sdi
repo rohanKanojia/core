@@ -18,11 +18,6 @@
 
 shell TableObjectBar
 {
-    SID_TABLE_TOOLBOX // ole : no, status : ?
-    [
-        ExecMethod = Execute ;
-        StateMethod = GetState ;
-    ]
     SID_FRAME_LINESTYLE
     [
         ExecMethod = Execute;
@@ -83,7 +78,27 @@ shell TableObjectBar
         ExecMethod = Execute;
         StateMethod = GetState;
     ]
+    SID_TABLE_INSERT_ROW_BEFORE
+    [
+        ExecMethod = Execute;
+        StateMethod = GetState;
+    ]
+    SID_TABLE_INSERT_ROW_AFTER
+    [
+        ExecMethod = Execute;
+        StateMethod = GetState;
+    ]
     SID_TABLE_INSERT_COL_DLG
+    [
+        ExecMethod = Execute;
+        StateMethod = GetState;
+    ]
+    SID_TABLE_INSERT_COL_BEFORE
+    [
+        ExecMethod = Execute;
+        StateMethod = GetState;
+    ]
+    SID_TABLE_INSERT_COL_AFTER
     [
         ExecMethod = Execute;
         StateMethod = GetState;
@@ -129,7 +144,31 @@ shell TableObjectBar
         StateMethod = GetState;
     ]
 
+    SID_TABLE_MINIMAL_COLUMN_WIDTH
+    [
+        ExecMethod = Execute;
+        StateMethod = GetState;
+    ]
+
+    SID_TABLE_OPTIMAL_COLUMN_WIDTH
+    [
+        ExecMethod = Execute;
+        StateMethod = GetState;
+    ]
+
     SID_TABLE_DISTRIBUTE_COLUMNS
+    [
+        ExecMethod = Execute;
+        StateMethod = GetState;
+    ]
+
+    SID_TABLE_MINIMAL_ROW_HEIGHT
+    [
+        ExecMethod = Execute;
+        StateMethod = GetState;
+    ]
+
+    SID_TABLE_OPTIMAL_ROW_HEIGHT
     [
         ExecMethod = Execute;
         StateMethod = GetState;

@@ -20,6 +20,8 @@
 #include "vbaaxes.hxx"
 #include "vbaaxis.hxx"
 #include "vbachart.hxx"
+#include <basic/sberrors.hxx>
+#include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <ooo/vba/excel/XlAxisType.hpp>
 #include <ooo/vba/excel/XlAxisGroup.hpp>
@@ -45,12 +47,12 @@ class EnumWrapper : public EnumerationHelper_BASE
         sal_Int32 nIndex;
 public:
         explicit EnumWrapper( const uno::Reference< container::XIndexAccess >& xIndexAccess ) : m_xIndexAccess( xIndexAccess ), nIndex( 0 ) {}
-        virtual sal_Bool SAL_CALL hasMoreElements(  ) throw (uno::RuntimeException, std::exception) override
+        virtual sal_Bool SAL_CALL hasMoreElements(  ) override
         {
                 return ( nIndex < m_xIndexAccess->getCount() );
         }
 
-        virtual uno::Any SAL_CALL nextElement(  ) throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+        virtual uno::Any SAL_CALL nextElement(  ) override
         {
                 if ( nIndex < m_xIndexAccess->getCount() )
                         return m_xIndexAccess->getByIndex( nIndex++ );
@@ -61,21 +63,21 @@ public:
 }
 
 uno::Reference< excel::XAxis >
-ScVbaAxes::createAxis( const uno::Reference< excel::XChart >& xChart, const uno::Reference< uno::XComponentContext >& xContext,  sal_Int32 nType, sal_Int32 nAxisGroup ) throw ( uno::RuntimeException, script::BasicErrorException )
+ScVbaAxes::createAxis( const uno::Reference< excel::XChart >& xChart, const uno::Reference< uno::XComponentContext >& xContext,  sal_Int32 nType, sal_Int32 nAxisGroup )
 {
     ScVbaChart* pChart = static_cast< ScVbaChart* >( xChart.get() );
     if ( !pChart )
         throw uno::RuntimeException("Object failure, can't access chart implementation"  );
 
     uno::Reference< beans::XPropertySet > xAxisPropertySet;
-    if (((nType == xlCategory) || (nType == xlSeriesAxis) || (nType == xlValue)))
+    if ((nType == xlCategory) || (nType == xlSeriesAxis) || (nType == xlValue))
     {
         if ((nAxisGroup != xlPrimary) && (nAxisGroup != xlSecondary))
-            DebugHelper::runtimeexception(ERRCODE_BASIC_METHOD_FAILED, OUString());
+            DebugHelper::runtimeexception(ERRCODE_BASIC_METHOD_FAILED);
         xAxisPropertySet.set( pChart->getAxisPropertySet(nType, nAxisGroup), uno::UNO_QUERY_THROW );
     }
     else
-        DebugHelper::runtimeexception(ERRCODE_BASIC_METHOD_FAILED, OUString());
+        DebugHelper::runtimeexception(ERRCODE_BASIC_METHOD_FAILED);
     uno::Reference< XHelperInterface > xParent( xChart, uno::UNO_QUERY_THROW );
     return new ScVbaAxis( xParent, xContext, xAxisPropertySet, nType, nAxisGroup);
 }
@@ -100,45 +102,46 @@ public:
             bool bBool = false;
             uno::Reference< beans::XPropertySet > xDiagramPropertySet( pChart->xDiagramPropertySet() );
             if ( ( xDiagramPropertySet->getPropertyValue("HasXAxis") >>= bBool )  && bBool )
-                mCoordinates.push_back( AxesCoordinate( xlPrimary, xlCategory ) );
+                mCoordinates.emplace_back( xlPrimary, xlCategory );
             if ( ( xDiagramPropertySet->getPropertyValue("HasYAxis") >>= bBool )  && bBool )
-                mCoordinates.push_back( AxesCoordinate( xlPrimary, xlSeriesAxis ) );
+                mCoordinates.emplace_back( xlPrimary, xlSeriesAxis );
 
             if (  pChart->is3D() )
-                mCoordinates.push_back( AxesCoordinate( xlPrimary, xlValue ) );
+                mCoordinates.emplace_back( xlPrimary, xlValue );
 
             // secondary
             if ( ( xDiagramPropertySet->getPropertyValue("HasSecondaryXAxis") >>= bBool )  && bBool )
-                mCoordinates.push_back( AxesCoordinate( xlSecondary, xlCategory ) );
+                mCoordinates.emplace_back( xlSecondary, xlCategory );
             if ( ( xDiagramPropertySet->getPropertyValue("HasSecondaryYAxis") >>= bBool )  && bBool )
-                mCoordinates.push_back( AxesCoordinate( xlSecondary, xlSeriesAxis ) );
+                mCoordinates.emplace_back( xlSecondary, xlSeriesAxis );
         }
 
     }
-    virtual ::sal_Int32 SAL_CALL getCount() throw (uno::RuntimeException, std::exception) override { return mCoordinates.size(); }
-    virtual uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException, ::uno::RuntimeException, std::exception) override
+    virtual ::sal_Int32 SAL_CALL getCount() override { return mCoordinates.size(); }
+    virtual uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) override
     {
         try
         {
             AxesCoordinate dIndexes = mCoordinates[ Index ];
             return uno::makeAny( ScVbaAxes::createAxis( mxChart, mxContext, dIndexes.second, dIndexes.first ) );
         }
-        catch (const css::script::BasicErrorException& e)
+        catch (const css::script::BasicErrorException&)
         {
+            css::uno::Any anyEx = cppu::getCaughtException();
             throw css::lang::WrappedTargetException(
                    "Error Getting Index!",
                    static_cast < OWeakObject * > ( this ),
-                   makeAny( e ) );
+                   anyEx );
         }
     }
     // XElementAccess
-    virtual uno::Type SAL_CALL getElementType() throw (uno::RuntimeException, std::exception) override
+    virtual uno::Type SAL_CALL getElementType() override
     {
         return cppu::UnoType<excel::XAxis>::get();
     }
-    virtual sal_Bool SAL_CALL hasElements( ) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL hasElements( ) override
     {
-        return ( mCoordinates.size() > 0 );
+        return ( !mCoordinates.empty() );
     }
 };
 
@@ -155,19 +158,19 @@ ScVbaAxes::ScVbaAxes( const uno::Reference< XHelperInterface >& xParent,const un
 }
 
 uno::Type SAL_CALL
-ScVbaAxes::getElementType() throw (css::uno::RuntimeException)
+ScVbaAxes::getElementType()
 {
     return  cppu::UnoType<excel::XAxes>::get();
 }
 
 uno::Reference< container::XEnumeration > SAL_CALL
-ScVbaAxes::createEnumeration() throw (css::uno::RuntimeException)
+ScVbaAxes::createEnumeration()
 {
     return new EnumWrapper( m_xIndexAccess );
 }
 
 uno::Any SAL_CALL
-ScVbaAxes::Item( const css::uno::Any& _nType, const css::uno::Any& _oAxisGroup) throw (css::script::BasicErrorException, css::uno::RuntimeException)
+ScVbaAxes::Item( const css::uno::Any& _nType, const css::uno::Any& _oAxisGroup)
 {
     // #TODO map the possible index combinations to a container::XIndexAccess wrapper impl
     // using a vector of valid std::pair maybe?
@@ -198,12 +201,10 @@ ScVbaAxes::getServiceImplName()
 uno::Sequence< OUString >
 ScVbaAxes::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.excel.Axes";
-    }
+        "ooo.vba.excel.Axes"
+    };
     return aServiceNames;
 }
 

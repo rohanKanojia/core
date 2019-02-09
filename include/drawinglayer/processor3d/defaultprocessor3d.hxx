@@ -96,7 +96,6 @@ namespace drawinglayer
             /// counter for entered transparence textures
             sal_uInt32                                          mnTransparenceCounter;
 
-            /// bitfield
             bool                                                mbModulate : 1;
             bool                                                mbFilter : 1;
             bool                                                mbSimpleTextureActive : 1;
@@ -108,8 +107,8 @@ namespace drawinglayer
             void impRenderHatchTexturePrimitive3D(const primitive3d::HatchTexturePrimitive3D& rPrimitive);
             void impRenderBitmapTexturePrimitive3D(const primitive3d::BitmapTexturePrimitive3D& rPrimitive);
             void impRenderModifiedColorPrimitive3D(const primitive3d::ModifiedColorPrimitive3D& rModifiedCandidate);
-            void impRenderPolygonHairlinePrimitive3D(const primitive3d::PolygonHairlinePrimitive3D& rPrimitive);
-            void impRenderPolyPolygonMaterialPrimitive3D(const primitive3d::PolyPolygonMaterialPrimitive3D& rPrimitive);
+            void impRenderPolygonHairlinePrimitive3D(const primitive3d::PolygonHairlinePrimitive3D& rPrimitive) const;
+            void impRenderPolyPolygonMaterialPrimitive3D(const primitive3d::PolyPolygonMaterialPrimitive3D& rPrimitive) const;
             void impRenderTransformPrimitive3D(const primitive3d::TransformPrimitive3D& rTransformCandidate);
 
 
@@ -127,7 +126,7 @@ namespace drawinglayer
                 const geometry::ViewInformation3D& rViewInformation,
                 const attribute::SdrSceneAttribute& rSdrSceneAttribute,
                 const attribute::SdrLightingAttribute& rSdrLightingAttribute);
-            virtual ~DefaultProcessor3D();
+            virtual ~DefaultProcessor3D() override;
 
             /// data read access
             const attribute::SdrSceneAttribute& getSdrSceneAttribute() const { return mrSdrSceneAttribute; }

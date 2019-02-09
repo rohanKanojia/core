@@ -20,29 +20,25 @@
 #ifndef INCLUDED_COMPHELPER_SERVICEINFOHELPER_HXX
 #define INCLUDED_COMPHELPER_SERVICEINFOHELPER_HXX
 
-#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <sal/config.h>
+
+#include <initializer_list>
+#include <rtl/ustring.hxx>
+
 #include <comphelper/comphelperdllapi.h>
+
+namespace com { namespace sun { namespace star { namespace uno { template <class E> class Sequence; } } } }
 
 namespace comphelper {
 
-/** this class provides a basic helper for classes supporting the XServiceInfo Interface.
+/** This class provides a basic helper for classes supporting the XServiceInfo Interface.
  *
- *  you can override the <code>getSupprotedServiceNames</code> to implement a XServiceInfo.
- *  you can use the static helper methods to combine your services with that of parent
+ *  You can use the static helper methods to combine your services with that of parent
  *  or aggregated classes.
  */
-class COMPHELPER_DLLPUBLIC ServiceInfoHelper : public css::lang::XServiceInfo
+namespace ServiceInfoHelper
 {
-public:
-    // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception) override;
-
-    // helper
-    static void addToSequence( css::uno::Sequence< OUString >& rSeq, sal_uInt16 nServices, /* sal_Char* */... ) throw();
-
-protected:
-    ~ServiceInfoHelper() {}
+    COMPHELPER_DLLPUBLIC void addToSequence( css::uno::Sequence< OUString >& rSeq, std::initializer_list<OUString> services ) throw();
 };
 
 }

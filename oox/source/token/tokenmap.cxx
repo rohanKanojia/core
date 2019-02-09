@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/token/tokenmap.hxx"
+#include <oox/token/tokenmap.hxx>
 
 #include <string.h>
 #include <rtl/strbuf.hxx>
 #include <rtl/string.hxx>
-#include "oox/token/tokens.hxx"
+#include <oox/token/tokens.hxx>
 
 namespace oox {
 
@@ -31,18 +31,19 @@ using ::com::sun::star::uno::Sequence;
 namespace {
 // include auto-generated Perfect_Hash
 #if defined __clang__
-#if __has_warning("-Wdeprecated-register")
 #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+#if __has_warning("-Wdeprecated-register")
 #pragma GCC diagnostic ignored "-Wdeprecated-register"
 #endif
 #endif
-#include "tokenhash.inc"
+#include <tokenhash.inc>
 #if defined __clang__
-#if __has_warning("-Wdeprecated-register")
 #pragma GCC diagnostic pop
 #endif
-#endif
 } // namespace
+
+const css::uno::Sequence< sal_Int8 > TokenMap::EMPTY_BYTE_SEQ;
 
 TokenMap::TokenMap() :
     maTokenNames( static_cast< size_t >( XML_TOKEN_COUNT ) )
@@ -50,15 +51,16 @@ TokenMap::TokenMap() :
     static const sal_Char* sppcTokenNames[] =
     {
 // include auto-generated C array with token names as C strings
-#include "tokennames.inc"
+#include <tokennames.inc>
         ""
     };
 
     const sal_Char* const* ppcTokenName = sppcTokenNames;
-    for( TokenNameVector::iterator aIt = maTokenNames.begin(), aEnd = maTokenNames.end(); aIt != aEnd; ++aIt, ++ppcTokenName )
+    for (auto & tokenName : maTokenNames)
     {
         OString aUtf8Token( *ppcTokenName );
-        *aIt = Sequence< sal_Int8 >( reinterpret_cast< const sal_Int8* >( aUtf8Token.getStr() ), aUtf8Token.getLength() );
+        tokenName = Sequence< sal_Int8 >( reinterpret_cast< const sal_Int8* >( aUtf8Token.getStr() ), aUtf8Token.getLength() );
+        ++ppcTokenName;
     }
 
     for (unsigned char c = 'a'; c <= 'z'; c++)

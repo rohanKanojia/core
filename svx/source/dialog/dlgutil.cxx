@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "svx/dlgutil.hxx"
+#include <svx/dlgutil.hxx>
 #include <svl/itemset.hxx>
 #include <sfx2/sfxsids.hrc>
 #include <sfx2/module.hxx>
@@ -25,14 +25,15 @@
 #include <svl/eitem.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/objsh.hxx>
+#include <sal/log.hxx>
 
 
 FieldUnit GetModuleFieldUnit( const SfxItemSet& rSet )
 {
-    FieldUnit eUnit = FUNIT_INCH;
+    FieldUnit eUnit = FieldUnit::INCH;
     const SfxPoolItem* pItem = nullptr;
     if ( SfxItemState::SET == rSet.GetItemState( SID_ATTR_METRIC, false, &pItem ) )
-        eUnit = (FieldUnit) static_cast<const SfxUInt16Item*>(pItem)->GetValue();
+        eUnit = static_cast<FieldUnit>(static_cast<const SfxUInt16Item*>(pItem)->GetValue());
     else
     {
         return SfxModule::GetCurrentFieldUnit();

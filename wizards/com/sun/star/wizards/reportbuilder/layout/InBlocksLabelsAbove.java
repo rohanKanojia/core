@@ -40,7 +40,7 @@ public class InBlocksLabelsAbove extends ColumnarTwoColumns
     @Override
     public String getLocalizedName()
     {
-        return getResource().getResText(UIConsts.RID_REPORT + 85);
+        return getResource().getResText("RID_REPORT_85");
     }
 
     @Override
@@ -141,7 +141,7 @@ public class InBlocksLabelsAbove extends ColumnarTwoColumns
     }
 
     @Override
-    protected void insertDetailFieldTitles(int lastGroupPostion)
+    protected void insertDetailFieldTitles(int lastGroupPosition)
     {
         // we won't extra field titles
     }

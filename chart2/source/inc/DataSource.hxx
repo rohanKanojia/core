@@ -22,9 +22,7 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/chart2/data/XDataSource.hpp>
 #include <com/sun/star/chart2/data/XDataSink.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <cppuhelper/implbase.hxx>
-#include <comphelper/uno3.hxx>
 
 namespace chart
 {
@@ -36,32 +34,24 @@ class DataSource : public
         css::chart2::data::XDataSink >
 {
 public:
-    explicit DataSource( const css::uno::Reference< css::uno::XComponentContext > & xContext );
+    explicit DataSource();
     explicit DataSource(
         const css::uno::Sequence< css::uno::Reference< css::chart2::data::XLabeledDataSequence > > & rSequences );
 
-    virtual ~DataSource();
+    virtual ~DataSource() override;
 
     /// declare XServiceInfo methods
-    virtual OUString SAL_CALL getImplementationName()
-            throw( css::uno::RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-            throw( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-            throw( css::uno::RuntimeException, std::exception ) override;
-
-    static OUString getImplementationName_Static();
-    static css::uno::Sequence< OUString > getSupportedServiceNames_Static();
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
 protected:
     // ____ XDataSource ____
     virtual css::uno::Sequence< css::uno::Reference< css::chart2::data::XLabeledDataSequence > > SAL_CALL
-        getDataSequences()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getDataSequences() override;
 
     // ____ XDataSink ____
-    virtual void SAL_CALL setData( const css::uno::Sequence< css::uno::Reference< css::chart2::data::XLabeledDataSequence > >& aData )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setData( const css::uno::Sequence< css::uno::Reference< css::chart2::data::XLabeledDataSequence > >& aData ) override;
 
 private:
     css::uno::Sequence< css::uno::Reference< css::chart2::data::XLabeledDataSequence > >

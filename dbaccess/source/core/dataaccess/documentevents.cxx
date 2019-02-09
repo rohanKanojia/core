@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "documentevents.hxx"
+#include <documentevents.hxx>
 
 #include <com/sun/star/beans/PropertyValue.hpp>
 
@@ -32,8 +32,6 @@
 namespace dbaccess
 {
 
-    using ::com::sun::star::uno::XInterface;
-    using ::com::sun::star::uno::Exception;
     using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Any;
     using ::com::sun::star::beans::PropertyValue;
@@ -74,8 +72,8 @@ namespace dbaccess
             static const DocumentEventData s_aData[] = {
                 { "OnCreate",               true  },
                 { "OnLoadFinished",         true  },
-                { "OnNew",                  false },    // compatibility, see http://www.openoffice.org/issues/show_bug.cgi?id=46484
-                { "OnLoad",                 false },    // compatibility, see http://www.openoffice.org/issues/show_bug.cgi?id=46484
+                { "OnNew",                  false },    // compatibility, see https://bz.apache.org/ooo/show_bug.cgi?id=46484
+                { "OnLoad",                 false },    // compatibility, see https://bz.apache.org/ooo/show_bug.cgi?id=46484
                 { "OnSaveAs",               true  },
                 { "OnSaveAsDone",           false },
                 { "OnSaveAsFailed",         false },
@@ -145,17 +143,17 @@ namespace dbaccess
         return false;
     }
 
-    void SAL_CALL DocumentEvents::replaceByName( const OUString& _Name, const Any& _Element ) throw (IllegalArgumentException, NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+    void SAL_CALL DocumentEvents::replaceByName( const OUString& Name, const Any& Element )
     {
         ::osl::MutexGuard aGuard( m_pData->rMutex );
 
-        DocumentEventsData::iterator elementPos = m_pData->rEventsData.find( _Name );
+        DocumentEventsData::iterator elementPos = m_pData->rEventsData.find( Name );
         if ( elementPos == m_pData->rEventsData.end() )
-            throw NoSuchElementException( _Name, *this );
+            throw NoSuchElementException( Name, *this );
 
         Sequence< PropertyValue > aEventDescriptor;
-        if ( _Element.hasValue() && !( _Element >>= aEventDescriptor ) )
-            throw IllegalArgumentException( _Element.getValueTypeName(), *this, 2 );
+        if ( Element.hasValue() && !( Element >>= aEventDescriptor ) )
+            throw IllegalArgumentException( Element.getValueTypeName(), *this, 2 );
 
         // Weird enough, the event assignment UI has (well: had) the idea of using an empty "EventType"/"Script"
         // to indicate the event descriptor should be reset, instead of just passing an empty event descriptor.
@@ -178,13 +176,13 @@ namespace dbaccess
         elementPos->second = aEventDescriptor;
     }
 
-    Any SAL_CALL DocumentEvents::getByName( const OUString& _Name ) throw (NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+    Any SAL_CALL DocumentEvents::getByName( const OUString& Name )
     {
         ::osl::MutexGuard aGuard( m_pData->rMutex );
 
-        DocumentEventsData::const_iterator elementPos = m_pData->rEventsData.find( _Name );
+        DocumentEventsData::const_iterator elementPos = m_pData->rEventsData.find( Name );
         if ( elementPos == m_pData->rEventsData.end() )
-            throw NoSuchElementException( _Name, *this );
+            throw NoSuchElementException( Name, *this );
 
         Any aReturn;
         const Sequence< PropertyValue >& rEventDesc( elementPos->second );
@@ -193,26 +191,26 @@ namespace dbaccess
         return aReturn;
     }
 
-    Sequence< OUString > SAL_CALL DocumentEvents::getElementNames(  ) throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL DocumentEvents::getElementNames(  )
     {
         ::osl::MutexGuard aGuard( m_pData->rMutex );
 
         return comphelper::mapKeysToSequence( m_pData->rEventsData );
     }
 
-    sal_Bool SAL_CALL DocumentEvents::hasByName( const OUString& _Name ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL DocumentEvents::hasByName( const OUString& Name )
     {
         ::osl::MutexGuard aGuard( m_pData->rMutex );
 
-        return m_pData->rEventsData.find( _Name ) != m_pData->rEventsData.end();
+        return m_pData->rEventsData.find( Name ) != m_pData->rEventsData.end();
     }
 
-    Type SAL_CALL DocumentEvents::getElementType(  ) throw (RuntimeException, std::exception)
+    Type SAL_CALL DocumentEvents::getElementType(  )
     {
         return ::cppu::UnoType< Sequence< PropertyValue > >::get();
     }
 
-    sal_Bool SAL_CALL DocumentEvents::hasElements(  ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL DocumentEvents::hasElements(  )
     {
         ::osl::MutexGuard aGuard( m_pData->rMutex );
         return !m_pData->rEventsData.empty();

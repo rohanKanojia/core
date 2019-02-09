@@ -17,35 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
-#include <editeng/boxitem.hxx>
-#include <editeng/wghtitem.hxx>
-#include <svx/algitem.hxx>
-#include <unotools/transliterationwrapper.hxx>
-
-#include "globstr.hrc"
-#include "subtotal.hxx"
-#include "rangeutl.hxx"
-#include "attrib.hxx"
-#include "patattr.hxx"
-#include "docpool.hxx"
-#include "document.hxx"
-#include "userlist.hxx"
-#include "pivot.hxx"
-#include "rechead.hxx"
-#include <formula/errorcodes.hxx>
-#include "refupdat.hxx"
-#include "stlpool.hxx"
-#include "stlsheet.hxx"
-#include <o3tl/make_unique.hxx>
+#include <pivot.hxx>
 
 #if DEBUG_PIVOT_TABLE
 using std::cout;
 using std::endl;
 #endif
 
-using css::sheet::DataPilotFieldReference;
-using std::vector;
 
 
 // ScDPName
@@ -64,7 +42,7 @@ ScDPLabelData::Member::Member() :
     mbShowDetails(true)
 {}
 
-OUString ScDPLabelData::Member::getDisplayName() const
+OUString const & ScDPLabelData::Member::getDisplayName() const
 {
     if (!maLayoutName.isEmpty())
         return maLayoutName;
@@ -75,7 +53,7 @@ OUString ScDPLabelData::Member::getDisplayName() const
 ScDPLabelData::ScDPLabelData() :
     mnCol(-1),
     mnOriginalDim(-1),
-    mnFuncMask(PIVOT_FUNC_NONE),
+    mnFuncMask(PivotFunc::NONE),
     mnUsedHier(0),
     mnFlags(0),
     mnDupCount(0),
@@ -85,7 +63,7 @@ ScDPLabelData::ScDPLabelData() :
     mbRepeatItemLabels(false)
 {}
 
-OUString ScDPLabelData::getDisplayName() const
+OUString const & ScDPLabelData::getDisplayName() const
 {
     if (!maLayoutName.isEmpty())
         return maLayoutName;
@@ -98,7 +76,7 @@ OUString ScDPLabelData::getDisplayName() const
 ScPivotField::ScPivotField(SCCOL nNewCol) :
     nCol(nNewCol),
     mnOriginalDim(-1),
-    nFuncMask(0),
+    nFuncMask(PivotFunc::NONE),
     mnDupCount(0)
 {}
 
@@ -147,7 +125,7 @@ void ScPivotParam::SetLabelData(const ScDPLabelDataVector& rVector)
     ScDPLabelDataVector::const_iterator it;
     for (it = rVector.begin(); it != rVector.end(); ++it)
     {
-        aNewArray.push_back(o3tl::make_unique<ScDPLabelData>(*it->get()));
+        aNewArray.push_back(std::make_unique<ScDPLabelData>(**it));
     }
     maLabelArray.swap(aNewArray);
 }
@@ -173,7 +151,7 @@ ScPivotParam& ScPivotParam::operator=( const ScPivotParam& rPivotParam )
 
 // ScPivotFuncData
 
-ScPivotFuncData::ScPivotFuncData( SCCOL nCol, sal_uInt16 nFuncMask ) :
+ScPivotFuncData::ScPivotFuncData( SCCOL nCol, PivotFunc nFuncMask ) :
     mnCol( nCol ),
     mnOriginalDim(-1),
     mnFuncMask(nFuncMask),
@@ -184,7 +162,7 @@ ScPivotFuncData::ScPivotFuncData( SCCOL nCol, sal_uInt16 nFuncMask ) :
 void ScPivotFuncData::Dump() const
 {
     cout << "ScPivotFuncData: (col=" << mnCol << ", original dim=" << mnOriginalDim
-        << ", func mask=" << mnFuncMask << ", duplicate count=" << static_cast<int>(mnDupCount)
+        << ", func mask=" << static_cast<int>(mnFuncMask) << ", duplicate count=" << static_cast<int>(mnDupCount)
         << ")" << endl;
 }
 #endif

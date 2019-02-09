@@ -32,20 +32,13 @@
 class EDITENG_DLLPUBLIC SvxCharHiddenItem : public SfxBoolItem
 {
 public:
-    static SfxPoolItem* CreateDefault();
-
     SvxCharHiddenItem( const bool bHidden /*= false*/, const sal_uInt16 nId );
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
-
-    inline SvxCharHiddenItem& operator=(const SvxCharHiddenItem& rHidden) {
-            SetValue(rHidden.GetValue());
-            return *this;
-        }
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 };
 
 #endif

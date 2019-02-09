@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/diagnose.h>
+#include <memory>
 #include <com/sun/star/util/DateTime.hpp>
 #include "SerfUri.hxx"
 #include "DAVResource.hxx"
@@ -25,6 +25,8 @@
 #include "DateTimeHelper.hxx"
 #include "webdavprovider.hxx"
 #include "ContentProperties.hxx"
+
+#include <sal/log.hxx>
 
 using namespace com::sun::star;
 using namespace http_dav_ucp;
@@ -97,15 +99,9 @@ ContentProperties::ContentProperties( const DAVResource& rResource )
                 true );
     }
 
-    std::vector< DAVPropertyValue >::const_iterator it
-        = rResource.properties.begin();
-    std::vector< DAVPropertyValue >::const_iterator end
-        = rResource.properties.end();
-
-    while ( it != end )
+    for ( const auto& rProp : rResource.properties )
     {
-        addProperty( (*it) );
-        ++it;
+        addProperty( rProp );
     }
 
     if ( rResource.uri.endsWith("/") )
@@ -181,15 +177,14 @@ const PropertyValue * ContentProperties::get(
 
     if ( it == end )
     {
-        it  = m_xProps->begin();
-        while ( it != end )
-        {
-            if ( (*it).first.equalsIgnoreAsciiCase( rName ) )
-                return &(*it).second;
+        it = std::find_if(m_xProps->cbegin(), end,
+            [&rName](const PropertyValueMap::value_type& rEntry) {
+                return rEntry.first.equalsIgnoreAsciiCase( rName );
+            });
+        if ( it != end )
+            return &(*it).second;
 
-            ++it;
-        }
-        return 0;
+        return nullptr;
     }
     else
         return &(*it).second;
@@ -357,13 +352,8 @@ void ContentProperties::addProperties(
                                 const std::vector< OUString > & rProps,
                                 const ContentProperties & rContentProps )
 {
-    std::vector< OUString >::const_iterator it  = rProps.begin();
-    std::vector< OUString >::const_iterator end = rProps.end();
-
-    while ( it != end )
+    for ( const OUString & rName : rProps )
     {
-        const OUString & rName = (*it);
-
         if ( !contains( rName ) ) // ignore duplicates
         {
             const PropertyValue * pProp = rContentProps.get( rName );
@@ -377,21 +367,16 @@ void ContentProperties::addProperties(
                 addProperty( rName, uno::Any(), false );
             }
         }
-        ++it;
     }
 }
 
 
 void ContentProperties::addProperties( const ContentProperties & rProps )
 {
-    PropertyValueMap::const_iterator it = rProps.m_xProps->begin();
-    const PropertyValueMap::const_iterator end = rProps.m_xProps->end();
-
-    while ( it != end )
+    for ( const auto& rProp : *rProps.m_xProps )
     {
         addProperty(
-            (*it).first, (*it).second.value(), (*it).second.isCaseSensitive() );
-        ++it;
+            rProp.first, rProp.second.value(), rProp.second.isCaseSensitive() );
     }
 }
 
@@ -399,13 +384,9 @@ void ContentProperties::addProperties( const ContentProperties & rProps )
 void ContentProperties::addProperties(
     const std::vector< DAVPropertyValue > & rProps )
 {
-    std::vector< DAVPropertyValue >::const_iterator it  = rProps.begin();
-    const std::vector< DAVPropertyValue >::const_iterator end = rProps.end();
-
-    while ( it != end )
+    for ( const auto& rProp : rProps )
     {
-        addProperty( (*it) );
-        ++it;
+        addProperty( rProp );
     }
 }
 
@@ -509,7 +490,7 @@ void ContentProperties::addProperty( const OUString & rName,
         OUString aValue;
         rValue >>= aValue;
 
-        // Map DAV:resourceype to UCP:IsFolder, UCP:IsDocument, UCP:ContentType
+        // Map DAV:resourcetype to UCP:IsFolder, UCP:IsDocument, UCP:ContentType
         bool bFolder =
             aValue.equalsIgnoreAsciiCase( "collection" );
 
@@ -539,7 +520,7 @@ namespace
     bool isCachable( OUString const & rName,
                      bool isCaseSensitive )
     {
-        static const OUString aNonCachableProps [] =
+        const OUString aNonCachableProps [] =
         {
             DAVProperties::LOCKDISCOVERY,
 
@@ -589,17 +570,12 @@ void CachableContentProperties::addProperties(
 {
     const std::unique_ptr< PropertyValueMap > & props = rProps.getProperties();
 
-    PropertyValueMap::const_iterator it = props->begin();
-    const PropertyValueMap::const_iterator end = props->end();
-
-    while ( it != end )
+    for ( const auto& rProp : *props )
     {
-        if ( isCachable( (*it).first, (*it).second.isCaseSensitive() ) )
-            m_aProps.addProperty( (*it).first,
-                                  (*it).second.value(),
-                                  (*it).second.isCaseSensitive() );
-
-        ++it;
+        if ( isCachable( rProp.first, rProp.second.isCaseSensitive() ) )
+            m_aProps.addProperty( rProp.first,
+                                  rProp.second.value(),
+                                  rProp.second.isCaseSensitive() );
     }
 }
 
@@ -607,16 +583,11 @@ void CachableContentProperties::addProperties(
 void CachableContentProperties::addProperties(
     const std::vector< DAVPropertyValue > & rProps )
 {
-    std::vector< DAVPropertyValue >::const_iterator it  = rProps.begin();
-    const std::vector< DAVPropertyValue >::const_iterator end = rProps.end();
-
-    while ( it != end )
+    for ( const auto& rProp : rProps )
     {
-        if ( isCachable( (*it).Name, (*it).IsCaseSensitive ) )
-            m_aProps.addProperty( (*it) );
-
-        ++it;
-     }
+        if ( isCachable( rProp.Name, rProp.IsCaseSensitive ) )
+            m_aProps.addProperty( rProp );
+    }
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

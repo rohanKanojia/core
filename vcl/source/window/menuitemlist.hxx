@@ -17,13 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <rsc/rsc-vcl-shared-types.hxx>
+#include <vcl/vclenum.hxx>
 #include <vcl/image.hxx>
 #include <vcl/keycod.hxx>
 #include <vcl/menu.hxx>
+#include <vcl/vcllayout.hxx>
+#include <fontinstance.hxx>
 
 #include <com/sun/star/i18n/XCharacterClassification.hpp>
 
+#include <memory>
 #include <vector>
 
 class SalMenuItem;
@@ -33,16 +36,16 @@ struct MenuItemData
     sal_uInt16      nId;                    // SV Id
     MenuItemType    eType;                  // MenuItem-Type
     MenuItemBits    nBits;                  // MenuItem-Bits
-    Menu*           pSubMenu;               // Pointer to SubMenu
-    Menu*           pAutoSubMenu;           // Pointer to SubMenu from Resource
+    VclPtr<Menu>    pSubMenu;               // Pointer to SubMenu
     OUString        aText;                  // Menu-Text
+    SalLayoutGlyphs aTextGlyphs;            ///< Text layout of aText.
     OUString        aHelpText;              // Help-String
     OUString        aTipHelpText;           // TipHelp-String (eg, expanded filenames)
     OUString        aCommandStr;            // CommandString
     OUString        aHelpCommandStr;        // Help command string (to reference external help)
     OString         sIdent;
     OString         aHelpId;                // Help-Id
-    sal_uLong       nUserValue;             // User value
+    void*           nUserValue;             // User value
     MenuUserDataReleaseFunction aUserValueReleaseFunc;   // called when MenuItemData is destroyed
     Image           aImage;                 // Image
     vcl::KeyCode    aAccelKey;              // Accelerator-Key
@@ -50,50 +53,47 @@ struct MenuItemData
     bool            bEnabled;               // Enabled
     bool            bVisible;               // Visible (note: this flag will not override MenuFlags::HideDisabledEntries when true)
     bool            bIsTemporary;           // Temporary inserted ('No selection possible')
-    bool            bMirrorMode;
-    long            nItemImageAngle;
+    bool            bHiddenOnGUI;
     Size            aSz;                    // only temporarily valid
-    OUString        aAccessibleName;        // accessible name
+    OUString const  aAccessibleName;        // accessible name
 
-    SalMenuItem*    pSalMenuItem;           // access to native menu
+    std::unique_ptr<SalMenuItem> pSalMenuItem; // access to native menu
 
     MenuItemData()
         : nId(0)
         , eType(MenuItemType::DONTKNOW)
         , nBits(MenuItemBits::NONE)
         , pSubMenu(nullptr)
-        , pAutoSubMenu(nullptr)
-        , nUserValue(0)
+        , nUserValue(nullptr)
         , aUserValueReleaseFunc(nullptr)
         , bChecked(false)
         , bEnabled(false)
         , bVisible(false)
         , bIsTemporary(false)
-        , bMirrorMode(false)
-        , nItemImageAngle(0)
-        , pSalMenuItem(nullptr)
+        , bHiddenOnGUI(false)
     {
     }
-    MenuItemData( const OUString& rStr, const Image& rImage )
+    MenuItemData( const OUString& rStr )
         : nId(0)
         , eType(MenuItemType::DONTKNOW)
         , nBits(MenuItemBits::NONE)
         , pSubMenu(nullptr)
-        , pAutoSubMenu(nullptr)
         , aText(rStr)
-        , nUserValue(0)
+        , nUserValue(nullptr)
         , aUserValueReleaseFunc(nullptr)
-        , aImage(rImage)
+        , aImage()
         , bChecked(false)
         , bEnabled(false)
         , bVisible(false)
         , bIsTemporary(false)
-        , bMirrorMode(false)
-        , nItemImageAngle(0)
-        , pSalMenuItem(nullptr)
+        , bHiddenOnGUI(false)
     {
     }
     ~MenuItemData();
+
+    /// Computes aText's text layout (glyphs), cached in aTextGlyphs.
+    SalLayoutGlyphs* GetTextGlyphs(const OutputDevice* pOutputDevice);
+
     bool HasCheck() const
     {
         return bChecked || ( nBits & ( MenuItemBits::RADIOCHECK | MenuItemBits::CHECKABLE | MenuItemBits::AUTOCHECK ) );
@@ -103,8 +103,7 @@ struct MenuItemData
 class MenuItemList
 {
 private:
-    typedef ::std::vector< MenuItemData* > MenuItemDataList_impl;
-    MenuItemDataList_impl maItemList;
+    ::std::vector< std::unique_ptr<MenuItemData> > maItemList;
 
 public:
                     MenuItemList() {}
@@ -115,13 +114,13 @@ public:
                         MenuItemType eType,
                         MenuItemBits nBits,
                         const OUString& rStr,
-                        const Image& rImage,
                         Menu* pMenu,
                         size_t nPos,
                         const OString &rIdent
                     );
     void            InsertSeparator(const OString &rIdent, size_t nPos);
     void            Remove( size_t nPos );
+    void            Clear();
 
     MenuItemData*   GetData( sal_uInt16 nSVId, size_t& rPos ) const;
     MenuItemData*   GetData( sal_uInt16 nSVId ) const
@@ -131,15 +130,15 @@ public:
                     }
     MenuItemData*   GetDataFromPos( size_t nPos ) const
                     {
-                        return ( nPos < maItemList.size() ) ? maItemList[ nPos ] : nullptr;
+                        return ( nPos < maItemList.size() ) ? maItemList[ nPos ].get() : nullptr;
                     }
 
     MenuItemData*   SearchItem(
                         sal_Unicode cSelectChar,
                         vcl::KeyCode aKeyCode,
-                        sal_uInt16& rPos,
-                        sal_uInt16& nDuplicates,
-                        sal_uInt16 nCurrentPos
+                        size_t& rPos,
+                        size_t& nDuplicates,
+                        size_t nCurrentPos
                     ) const;
     size_t          GetItemCount( sal_Unicode cSelectChar ) const;
     size_t          GetItemCount( vcl::KeyCode aKeyCode ) const;

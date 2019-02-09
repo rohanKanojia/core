@@ -20,9 +20,11 @@
 #ifndef INCLUDED_O3TL_COW_WRAPPER_HXX
 #define INCLUDED_O3TL_COW_WRAPPER_HXX
 
+#include <memory>
 #include <osl/interlck.h>
 
 #include <utility>
+#include <cstddef>
 
 namespace o3tl
 {
@@ -34,7 +36,7 @@ namespace o3tl
      */
     struct UnsafeRefCountingPolicy
     {
-        typedef sal_uInt32 ref_count_t;
+        typedef std::size_t ref_count_t;
         static void incrementCount( ref_count_t& rCount ) { ++rCount; }
         static bool decrementCount( ref_count_t& rCount ) { return --rCount != 0; }
     };
@@ -341,12 +343,6 @@ int cow_wrapper_client::queryUnmodified() const
                                                  cow_wrapper<T,P>& b )
     {
         a.swap(b);
-    }
-
-    // to enable boost::mem_fn on cow_wrapper
-    template<class T, class P> inline T * get_pointer( const cow_wrapper<T,P>& r )
-    {
-        return r.get();
     }
 
 }

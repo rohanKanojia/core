@@ -33,7 +33,6 @@
 #endif
 
 #include <tools/svborder.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 
 #include <com/sun/star/awt/XWindowPeer.hpp>
 #include <com/sun/star/awt/PosSize.hpp>
@@ -70,6 +69,7 @@ Panel::Panel(const PanelDescriptor& rPanelDescriptor,
 Panel::~Panel()
 {
     disposeOnce();
+    assert(!mpTitleBar);
 }
 
 void Panel::ApplySettings(vcl::RenderContext& rRenderContext)
@@ -99,9 +99,9 @@ void Panel::dispose()
     vcl::Window::dispose();
 }
 
-PanelTitleBar* Panel::GetTitleBar() const
+VclPtr<PanelTitleBar> const & Panel::GetTitleBar() const
 {
-    return mpTitleBar.get();
+    return mpTitleBar;
 }
 
 void Panel::SetUIElement (const Reference<ui::XUIElement>& rxElement)
@@ -115,31 +115,26 @@ void Panel::SetUIElement (const Reference<ui::XUIElement>& rxElement)
 
 void Panel::SetExpanded (const bool bIsExpanded)
 {
-    SidebarController* pSidebarController= SidebarController::GetSidebarControllerForFrame(mxFrame);
+    SidebarController* pSidebarController = SidebarController::GetSidebarControllerForFrame(mxFrame);
 
-    if (mbIsExpanded != bIsExpanded)
+    if (mbIsExpanded == bIsExpanded)
+        return;
+
+    mbIsExpanded = bIsExpanded;
+    maDeckLayoutTrigger();
+
+    if (maContextAccess && pSidebarController)
     {
-        mbIsExpanded = bIsExpanded;
-        maDeckLayoutTrigger();
-
-        if (maContextAccess)
-        {
-            pSidebarController->GetResourceManager()->StorePanelExpansionState(
-                msPanelId,
-                bIsExpanded,
-                maContextAccess());
-        }
+        pSidebarController->GetResourceManager()->StorePanelExpansionState(
+            msPanelId,
+            bIsExpanded,
+            maContextAccess());
     }
 }
 
 bool Panel::HasIdPredicate (const OUString& rsId) const
 {
-    return msPanelId.equals(rsId);
-}
-
-void Panel::Paint (vcl::RenderContext& rRenderContext, const Rectangle& rUpdateArea)
-{
-    Window::Paint(rRenderContext, rUpdateArea);
+    return msPanelId == rsId;
 }
 
 void Panel::Resize()
@@ -156,14 +151,8 @@ void Panel::Resize()
     }
 }
 
-void Panel::Activate()
+void Panel::DataChanged (const DataChangedEvent&)
 {
-    Window::Activate();
-}
-
-void Panel::DataChanged (const DataChangedEvent& rEvent)
-{
-    (void)rEvent;
     Invalidate();
 }
 

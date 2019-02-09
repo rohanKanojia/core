@@ -19,6 +19,7 @@
 
 #include <config_features.h>
 #include <rtl/character.hxx>
+#include <sal/log.hxx>
 #include <vcl/wrkwin.hxx>
 #include <svl/rectitem.hxx>
 #include <svl/eitem.hxx>
@@ -34,20 +35,22 @@
 #include <unotools/pathoptions.hxx>
 
 #include <sfx2/app.hxx>
-#include "appdata.hxx"
+#include <appdata.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/dispatch.hxx>
-#include "sfxtypes.hxx"
+#include <sfxtypes.hxx>
 #include <sfx2/sfxsids.hrc>
-#include "helper.hxx"
+#include <helper.hxx>
 #include <sfx2/docfile.hxx>
 #include <comphelper/processfactory.hxx>
+#include <com/sun/star/ucb/CommandAbortedException.hpp>
 #include <com/sun/star/ucb/IllegalIdentifierException.hpp>
+#include <com/sun/star/ucb/ContentCreationException.hpp>
 
 #if defined(_WIN32)
 
-OUString SfxDdeServiceName_Impl( const OUString& sIn )
+static OUString SfxDdeServiceName_Impl( const OUString& sIn )
 {
     OUStringBuffer sReturn(sIn.getLength());
 
@@ -77,30 +80,30 @@ public:
 
 namespace
 {
-    sal_Bool lcl_IsDocument( const OUString& rContent )
+    bool lcl_IsDocument( const OUString& rContent )
     {
         using namespace com::sun::star;
 
-        sal_Bool bRet = sal_False;
+        bool bRet = false;
         INetURLObject aObj( rContent );
         DBG_ASSERT( aObj.GetProtocol() != INetProtocol::NotValid, "Invalid URL!" );
 
         try
         {
-            ::ucbhelper::Content aCnt( aObj.GetMainURL( INetURLObject::NO_DECODE ), uno::Reference< ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext() );
+            ::ucbhelper::Content aCnt( aObj.GetMainURL( INetURLObject::DecodeMechanism::NONE ), uno::Reference< ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext() );
             bRet = aCnt.isDocument();
         }
         catch( const ucb::CommandAbortedException& )
         {
-            SAL_INFO( "sfx2.appl", "CommandAbortedException" );
+            SAL_INFO( "sfx.appl", "CommandAbortedException" );
         }
         catch( const ucb::IllegalIdentifierException& )
         {
-            SAL_INFO( "sfx2.appl", "IllegalIdentifierException" );
+            SAL_INFO( "sfx.appl", "IllegalIdentifierException" );
         }
         catch( const ucb::ContentCreationException& )
         {
-            SAL_INFO( "sfx2.appl", "IllegalIdentifierException" );
+            SAL_INFO( "sfx.appl", "IllegalIdentifierException" );
         }
         catch( const uno::Exception& )
         {
@@ -121,7 +124,7 @@ bool ImplDdeService::MakeTopic( const OUString& rNm )
     // The Topic rNm is sought, do we have it?
     // First only loop over the ObjectShells to find those
     // with the specific name:
-    sal_Bool bRet = sal_False;
+    bool bRet = false;
     OUString sNm( rNm.toAsciiLowerCase() );
     SfxObjectShell* pShell = SfxObjectShell::GetFirst();
     while( pShell )
@@ -141,21 +144,21 @@ bool ImplDdeService::MakeTopic( const OUString& rNm )
         INetURLObject aWorkPath( SvtPathOptions().GetWorkPath() );
         INetURLObject aFile;
         if ( aWorkPath.GetNewAbsURL( rNm, &aFile ) &&
-             lcl_IsDocument( aFile.GetMainURL( INetURLObject::NO_DECODE ) ) )
+             lcl_IsDocument( aFile.GetMainURL( INetURLObject::DecodeMechanism::NONE ) ) )
         {
             // File exists? then try to load it:
-            SfxStringItem aName( SID_FILE_NAME, aFile.GetMainURL( INetURLObject::NO_DECODE ) );
-            SfxBoolItem aNewView(SID_OPEN_NEW_VIEW, sal_True);
+            SfxStringItem aName( SID_FILE_NAME, aFile.GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
+            SfxBoolItem aNewView(SID_OPEN_NEW_VIEW, true);
 
-            SfxBoolItem aSilent(SID_SILENT, sal_True);
+            SfxBoolItem aSilent(SID_SILENT, true);
             SfxDispatcher* pDispatcher = SfxGetpApp()->GetDispatcher_Impl();
             const SfxPoolItem* pRet = pDispatcher->ExecuteList(SID_OPENDOC,
                     SfxCallMode::SYNCHRON,
                     { &aName, &aNewView, &aSilent });
 
-            if( pRet && dynamic_cast< const SfxViewFrameItem *>( pRet ) !=  nullptr &&
-                ((SfxViewFrameItem*)pRet)->GetFrame() &&
-                0 != ( pShell = ((SfxViewFrameItem*)pRet)
+            if( dynamic_cast< const SfxViewFrameItem *>( pRet ) &&
+                static_cast<SfxViewFrameItem const *>(pRet)->GetFrame() &&
+                nullptr != ( pShell = static_cast<SfxViewFrameItem const *>(pRet)
                     ->GetFrame()->GetObjectShell() ) )
             {
                 SfxGetpApp()->AddDdeTopic( pShell );
@@ -190,21 +193,9 @@ OUString ImplDdeService::Topics()
 
 bool ImplDdeService::SysTopicExecute( const OUString* pStr )
 {
-    return SfxGetpApp()->DdeExecute( *pStr );
+    return SfxApplication::DdeExecute( *pStr );
 }
 #endif
-
-class SfxDdeTriggerTopic_Impl : public DdeTopic
-{
-#if defined(_WIN32)
-public:
-    SfxDdeTriggerTopic_Impl()
-        : DdeTopic( "TRIGGER" )
-        {}
-
-    virtual bool Execute( const OUString* ) override { return true; }
-#endif
-};
 
 class SfxDdeDocTopic_Impl : public DdeTopic
 {
@@ -243,7 +234,7 @@ namespace {
     rCmd = "Open(\"d:\doc\doc.sdw\")"
     rEvent = "Open"
 */
-sal_Bool SfxAppEvent_Impl( const OUString& rCmd, const OUString& rEvent,
+bool SfxAppEvent_Impl( const OUString& rCmd, const OUString& rEvent,
                            ApplicationEvent::Type eType )
 {
     OUString sEvent(rEvent + "(");
@@ -299,11 +290,11 @@ sal_Bool SfxAppEvent_Impl( const OUString& rCmd, const OUString& rEvent,
             }
 
             GetpApp()->AppEvent( ApplicationEvent(eType, aData) );
-            return sal_True;
+            return true;
         }
     }
 
-    return sal_False;
+    return false;
 }
 
 }
@@ -320,8 +311,8 @@ sal_Bool SfxAppEvent_Impl( const OUString& rCmd, const OUString& rEvent,
 long SfxApplication::DdeExecute( const OUString&   rCmd )  // Expressed in our BASIC-Syntax
 {
     // Print or Open-Event?
-    if ( !( SfxAppEvent_Impl( rCmd, "Print", ApplicationEvent::TYPE_PRINT ) ||
-            SfxAppEvent_Impl( rCmd, "Open", ApplicationEvent::TYPE_OPEN ) ) )
+    if ( !( SfxAppEvent_Impl( rCmd, "Print", ApplicationEvent::Type::Print ) ||
+            SfxAppEvent_Impl( rCmd, "Open", ApplicationEvent::Type::Open ) ) )
     {
         // all others are BASIC
         StarBASIC* pBasic = GetBasic();
@@ -423,27 +414,28 @@ bool SfxApplication::InitializeDde()
 {
     int nError = 0;
 #if defined(_WIN32)
-    DBG_ASSERT( !pAppData_Impl->pDdeService,
+    DBG_ASSERT( !pImpl->pDdeService,
                 "Dde can not be initialized multiple times" );
 
-    pAppData_Impl->pDdeService = new ImplDdeService( Application::GetAppName() );
-    nError = pAppData_Impl->pDdeService->GetError();
+    pImpl->pDdeService.reset(new ImplDdeService( Application::GetAppName() ));
+    nError = pImpl->pDdeService->GetError();
     if( !nError )
     {
-        pAppData_Impl->pDocTopics = new SfxDdeDocTopics_Impl;
+        pImpl->pDocTopics.reset(new SfxDdeDocTopics_Impl);
 
         // we certainly want to support RTF!
-        pAppData_Impl->pDdeService->AddFormat( SotClipboardFormatId::RTF );
+        pImpl->pDdeService->AddFormat( SotClipboardFormatId::RTF );
+        pImpl->pDdeService->AddFormat( SotClipboardFormatId::RICHTEXT );
 
         // Config path as a topic because of multiple starts
         INetURLObject aOfficeLockFile( SvtPathOptions().GetUserConfigPath() );
         aOfficeLockFile.insertName( "soffice.lck" );
         OUString aService( SfxDdeServiceName_Impl(
-                    aOfficeLockFile.GetMainURL(INetURLObject::DECODE_TO_IURI) ) );
+                    aOfficeLockFile.GetMainURL(INetURLObject::DecodeMechanism::ToIUri) ) );
         aService = aService.toAsciiUpperCase();
-        pAppData_Impl->pDdeService2 = new ImplDdeService( aService );
-        pAppData_Impl->pTriggerTopic = new SfxDdeTriggerTopic_Impl;
-        pAppData_Impl->pDdeService2->AddTopic( *pAppData_Impl->pTriggerTopic );
+        pImpl->pDdeService2.reset( new ImplDdeService( aService ));
+        pImpl->pTriggerTopic.reset(new SfxDdeTriggerTopic_Impl);
+        pImpl->pDdeService2->AddTopic( *pImpl->pTriggerTopic );
     }
 #endif
     return !nError;
@@ -451,59 +443,59 @@ bool SfxApplication::InitializeDde()
 
 void SfxAppData_Impl::DeInitDDE()
 {
-    DELETEZ( pTriggerTopic );
-    DELETEZ( pDdeService2 );
-    DELETEZ( pDocTopics );
-    DELETEZ( pDdeService );
+    pTriggerTopic.reset();
+    pDdeService2.reset();
+    pDocTopics.reset();
+    pDdeService.reset();
 }
 
 #if defined(_WIN32)
 void SfxApplication::AddDdeTopic( SfxObjectShell* pSh )
 {
     //OV: DDE is disconnected in server mode!
-    if( !pAppData_Impl->pDocTopics )
+    if( !pImpl->pDocTopics )
         return;
 
     // prevent double submit
     OUString sShellNm;
-    sal_Bool bFnd = sal_False;
-    for (size_t n = pAppData_Impl->pDocTopics->size(); n;)
+    bool bFnd = false;
+    for (size_t n = pImpl->pDocTopics->size(); n;)
     {
-        if( (*pAppData_Impl->pDocTopics)[ --n ]->pSh == pSh )
+        if( (*pImpl->pDocTopics)[ --n ]->pSh == pSh )
         {
             // If the document is untitled, is still a new Topic is created!
             if( !bFnd )
             {
-                bFnd = sal_True;
+                bFnd = true;
                 sShellNm = pSh->GetTitle(SFX_TITLE_FULLNAME).toAsciiLowerCase();
             }
-            OUString sNm( (*pAppData_Impl->pDocTopics)[ n ]->GetName() );
+            OUString sNm( (*pImpl->pDocTopics)[ n ]->GetName() );
             if( sShellNm == sNm.toAsciiLowerCase() )
                 return ;
         }
     }
 
     SfxDdeDocTopic_Impl *const pTopic = new SfxDdeDocTopic_Impl(pSh);
-    pAppData_Impl->pDocTopics->push_back(pTopic);
-    pAppData_Impl->pDdeService->AddTopic( *pTopic );
+    pImpl->pDocTopics->push_back(pTopic);
+    pImpl->pDdeService->AddTopic( *pTopic );
 }
 #endif
 
-void SfxApplication::RemoveDdeTopic( SfxObjectShell* pSh )
+void SfxApplication::RemoveDdeTopic( SfxObjectShell const * pSh )
 {
 #if defined(_WIN32)
     //OV: DDE is disconnected in server mode!
-    if( !pAppData_Impl->pDocTopics )
+    if( !pImpl->pDocTopics )
         return;
 
-    for (size_t n = pAppData_Impl->pDocTopics->size(); n; )
+    for (size_t n = pImpl->pDocTopics->size(); n; )
     {
-        SfxDdeDocTopic_Impl *const pTopic = (*pAppData_Impl->pDocTopics)[ --n ];
+        SfxDdeDocTopic_Impl *const pTopic = (*pImpl->pDocTopics)[ --n ];
         if (pTopic->pSh == pSh)
         {
-            pAppData_Impl->pDdeService->RemoveTopic( *pTopic );
+            pImpl->pDdeService->RemoveTopic( *pTopic );
             delete pTopic;
-            pAppData_Impl->pDocTopics->erase( pAppData_Impl->pDocTopics->begin() + n );
+            pImpl->pDocTopics->erase( pImpl->pDocTopics->begin() + n );
         }
     }
 #else
@@ -513,12 +505,12 @@ void SfxApplication::RemoveDdeTopic( SfxObjectShell* pSh )
 
 const DdeService* SfxApplication::GetDdeService() const
 {
-    return pAppData_Impl->pDdeService;
+    return pImpl->pDdeService.get();
 }
 
 DdeService* SfxApplication::GetDdeService()
 {
-    return pAppData_Impl->pDdeService;
+    return pImpl->pDdeService.get();
 }
 
 #if defined(_WIN32)
@@ -534,13 +526,13 @@ DdeData* SfxDdeDocTopic_Impl::Get(SotClipboardFormatId nFormat)
         return &aData;
     }
     aSeq.realloc( 0 );
-    return 0;
+    return nullptr;
 }
 
 bool SfxDdeDocTopic_Impl::Put( const DdeData* pData )
 {
     aSeq = css::uno::Sequence< sal_Int8 >(
-                            (sal_Int8*)(const void*)*pData, (long)*pData );
+                            static_cast<sal_Int8 const *>(pData->getData()), pData->getSize() );
     bool bRet;
     if( aSeq.getLength() )
     {

@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -70,7 +71,7 @@ public class ViewContainer extends Thread
     /**
      * ctor
      * It's private - because nobody should create any instance
-     * expect the only global one, which wil be created by ourself!
+     * expect the only global one, which will be created by ourself!
      */
     private ViewContainer()
     {
@@ -161,7 +162,7 @@ public class ViewContainer extends Thread
 
 
     /**
-     * add/remove listener for possibe shutdown events
+     * add/remove listener for possible shutdown events
      */
     public void addListener( IShutdownListener rListener )
     {
@@ -255,3 +256,5 @@ public class ViewContainer extends Thread
     private        ArrayList<IShutdownListener>        mlListener          ;
     private        boolean       mbShutdownActive    ;
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

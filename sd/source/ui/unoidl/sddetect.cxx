@@ -24,6 +24,7 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/ucb/ContentCreationException.hpp>
 #include <vcl/graphicfilter.hxx>
 #include <rtl/ustring.h>
 #include <sfx2/docfile.hxx>
@@ -49,7 +50,7 @@ SdFilterDetect::~SdFilterDetect()
 {
 }
 
-OUString SAL_CALL SdFilterDetect::detect( Sequence< beans::PropertyValue >& lDescriptor ) throw( RuntimeException, std::exception )
+OUString SAL_CALL SdFilterDetect::detect( Sequence< beans::PropertyValue >& lDescriptor )
 {
     MediaDescriptor aMediaDesc( lDescriptor );
     OUString aTypeName = aMediaDesc.getUnpackedValueOrDefault( MediaDescriptor::PROP_TYPENAME(), OUString() );
@@ -133,26 +134,26 @@ OUString SAL_CALL SdFilterDetect::detect( Sequence< beans::PropertyValue >& lDes
 }
 
 // XServiceInfo
-OUString SAL_CALL SdFilterDetect::getImplementationName() throw( RuntimeException, std::exception )
+OUString SAL_CALL SdFilterDetect::getImplementationName()
 {
     return OUString( "com.sun.star.comp.draw.FormatDetector" );
 }
 
 // XServiceInfo
-sal_Bool SAL_CALL SdFilterDetect::supportsService( const OUString& sServiceName ) throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL SdFilterDetect::supportsService( const OUString& sServiceName )
 {
     return cppu::supportsService(this, sServiceName);
 }
 
 // XServiceInfo
-Sequence< OUString > SAL_CALL SdFilterDetect::getSupportedServiceNames() throw( RuntimeException, std::exception )
+Sequence< OUString > SAL_CALL SdFilterDetect::getSupportedServiceNames()
 {
     Sequence<OUString> seqServiceNames { "com.sun.star.frame.ExtendedTypeDetection" };
     return seqServiceNames ;
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_draw_FormatDetector_get_implementation(css::uno::XComponentContext*,
                                                          css::uno::Sequence<css::uno::Any> const &)
 {

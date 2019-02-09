@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "test/text/xtext.hxx"
+#include <test/text/xtext.hxx>
 
 using namespace css;
 using namespace css::uno;
@@ -21,7 +21,7 @@ void XText::testInsertRemoveTextContent()
     uno::Reference<text::XText> xText(init(), UNO_QUERY_THROW);
     uno::Reference<text::XTextRange> xCursor(xText->createTextCursor(), UNO_QUERY_THROW);
 
-    xText->insertTextContent(xCursor, getTextContent(), sal_False);
+    xText->insertTextContent(xCursor, getTextContent(), false);
     xText->removeTextContent(getTextContent());
 }
 

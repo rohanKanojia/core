@@ -18,10 +18,11 @@
  */
 
 #include <swtypes.hxx>
-#include <selectdbtabledialog.hxx>
-#include <dbtablepreviewdialog.hxx>
+#include "selectdbtabledialog.hxx"
+#include "dbtablepreviewdialog.hxx"
 #include <svtools/simptabl.hxx>
-#include <svtools/treelistentry.hxx>
+#include <vcl/treelistentry.hxx>
+#include <osl/diagnose.h>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
 #include <com/sun/star/sdb/XQueriesSupplier.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -32,7 +33,7 @@
 #include <unomid.h>
 
 #include <dbui.hrc>
-#include <helpid.h>
+#include <strings.hrc>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::sdbcx;
@@ -46,7 +47,7 @@ class SwAddressTable : public SvSimpleTable
 {
 public:
     explicit SwAddressTable(SvSimpleTableContainer& rParent);
-    void InsertHeaderItem(sal_uInt16 nColumn, const OUString& rText, HeaderBarItemBits nBits);
+    void InsertHeaderItem(sal_uInt16 nColumn, const OUString& rText);
     virtual void Resize() override;
     void setColSizes();
 };
@@ -55,14 +56,14 @@ SwAddressTable::SwAddressTable(SvSimpleTableContainer& rParent)
     : SvSimpleTable(rParent, 0)
 {
     SetSpaceBetweenEntries(3);
-    SetSelectionMode(SINGLE_SELECTION);
+    SetSelectionMode(SelectionMode::Single);
     SetDragDropMode(DragDropMode::NONE);
     EnableAsyncDrag(false);
 }
 
-void SwAddressTable::InsertHeaderItem(sal_uInt16 nColumn, const OUString& rText, HeaderBarItemBits nBits)
+void SwAddressTable::InsertHeaderItem(sal_uInt16 nColumn, const OUString& rText)
 {
-    GetTheHeaderBar().InsertItem( nColumn, rText, 0, nBits );
+    GetTheHeaderBar().InsertItem( nColumn, rText, 0, HeaderBarItemBits::LEFT );
 }
 
 void SwAddressTable::Resize()
@@ -80,35 +81,26 @@ void SwAddressTable::setColSizes()
     long nWidth = rHB.GetSizePixel().Width();
     nWidth /= 2;
 
-    long nTabs_Impl[3];
-
-    nTabs_Impl[0] = 2;
-    nTabs_Impl[1] = 0;
-    nTabs_Impl[2] = nWidth;
-
-    SvSimpleTable::SetTabs(&nTabs_Impl[0], MAP_PIXEL);
+    long nTabs[2] = { 0, nWidth };
+    SvSimpleTable::SetTabs(SAL_N_ELEMENTS(nTabs), nTabs, MapUnit::MapPixel);
 }
 
 SwSelectDBTableDialog::SwSelectDBTableDialog(vcl::Window* pParent,
         const uno::Reference< sdbc::XConnection>& rConnection)
     : SfxModalDialog(pParent, "SelectTableDialog", "modules/swriter/ui/selecttabledialog.ui")
-    , m_sName(SW_RES(ST_NAME))
-    , m_sType(SW_RES(ST_TYPE))
-    , m_sTable(SW_RES(ST_TABLE))
-    , m_sQuery(SW_RES(ST_QUERY))
     , m_xConnection(rConnection)
 {
     get(m_pPreviewPB, "preview");
 
     SvSimpleTableContainer *pHeaderTreeContainer = get<SvSimpleTableContainer>("table");
-    Size aSize = pHeaderTreeContainer->LogicToPixel(Size(238 , 50), MAP_APPFONT);
+    Size aSize = pHeaderTreeContainer->LogicToPixel(Size(238 , 50), MapMode(MapUnit::MapAppFont));
     pHeaderTreeContainer->set_width_request(aSize.Width());
     pHeaderTreeContainer->set_height_request(aSize.Height());
     m_pTable = VclPtr<SwAddressTable>::Create(*pHeaderTreeContainer);
-    long aStaticTabs[]= { 2, 0, 0 };
-    m_pTable->SetTabs( aStaticTabs );
-    m_pTable->InsertHeaderItem(1, m_sName, HeaderBarItemBits::LEFT | HeaderBarItemBits::VCENTER);
-    m_pTable->InsertHeaderItem(2, m_sType, HeaderBarItemBits::LEFT | HeaderBarItemBits::VCENTER);
+    long const aStaticTabs[]= { 0, 0 };
+    m_pTable->SetTabs( SAL_N_ELEMENTS(aStaticTabs), aStaticTabs );
+    m_pTable->InsertHeaderItem(1, SwResId(ST_NAME) );
+    m_pTable->InsertHeaderItem(2, SwResId(ST_TYPE) );
 
     m_pPreviewPB->SetClickHdl(LINK(this, SwSelectDBTableDialog, PreviewHdl));
 
@@ -122,7 +114,7 @@ SwSelectDBTableDialog::SwSelectDBTableDialog(vcl::Window* pParent,
         {
             OUString sEntry = pTables[i];
             sEntry += "\t";
-            sEntry += m_sTable;
+            sEntry += SwResId(ST_TABLE);
             SvTreeListEntry* pEntry = m_pTable->InsertEntry(sEntry);
             pEntry->SetUserData(nullptr);
         }
@@ -137,7 +129,7 @@ SwSelectDBTableDialog::SwSelectDBTableDialog(vcl::Window* pParent,
         {
             OUString sEntry = pQueries[i];
             sEntry += "\t";
-            sEntry += m_sQuery;
+            sEntry += SwResId(ST_QUERY);
             SvTreeListEntry* pEntry = m_pTable->InsertEntry(sEntry);
             pEntry->SetUserData(reinterpret_cast<void*>(1));
         }
@@ -156,39 +148,40 @@ void SwSelectDBTableDialog::dispose()
     SfxModalDialog::dispose();
 }
 
-IMPL_LINK_TYPED(SwSelectDBTableDialog, PreviewHdl, Button*, pButton, void)
+IMPL_LINK(SwSelectDBTableDialog, PreviewHdl, Button*, pButton, void)
 {
     SvTreeListEntry* pEntry = m_pTable->FirstSelected();
-    if(pEntry)
+    if(!pEntry)
+        return;
+
+    OUString sTableOrQuery = SvTabListBox::GetEntryText(pEntry, 0);
+    sal_Int32 nCommandType = nullptr == pEntry->GetUserData() ? 0 : 1;
+
+    OUString sDataSourceName;
+    Reference<XChild> xChild(m_xConnection, UNO_QUERY);
+    if(xChild.is())
     {
-        OUString sTableOrQuery = SvTabListBox::GetEntryText(pEntry, 0);
-        sal_Int32 nCommandType = nullptr == pEntry->GetUserData() ? 0 : 1;
-
-        OUString sDataSourceName;
-        Reference<XChild> xChild(m_xConnection, UNO_QUERY);
-        if(xChild.is())
-        {
-            Reference<XDataSource> xSource(xChild->getParent(), UNO_QUERY);
-            Reference<XPropertySet> xPrSet(xSource, UNO_QUERY);
-            xPrSet->getPropertyValue("Name") >>= sDataSourceName;
-        }
-        OSL_ENSURE(!sDataSourceName.isEmpty(), "no data source found");
-        Sequence<PropertyValue> aProperties(5);
-        PropertyValue* pProperties = aProperties.getArray();
-        pProperties[0].Name = "DataSourceName";
-        pProperties[0].Value <<= sDataSourceName;
-        pProperties[1].Name = "Command";
-        pProperties[1].Value <<= sTableOrQuery;
-        pProperties[2].Name = "CommandType";
-        pProperties[2].Value <<= nCommandType;
-        pProperties[3].Name = "ShowTreeView";
-        pProperties[3].Value <<= sal_False;
-        pProperties[4].Name = "ShowTreeViewButton";
-        pProperties[4].Value <<= sal_False;
-
-        VclPtrInstance< SwDBTablePreviewDialog > pDlg(pButton, aProperties);
-        pDlg->Execute();
+        Reference<XDataSource> xSource(xChild->getParent(), UNO_QUERY);
+        Reference<XPropertySet> xPrSet(xSource, UNO_QUERY);
+        xPrSet->getPropertyValue("Name") >>= sDataSourceName;
     }
+    OSL_ENSURE(!sDataSourceName.isEmpty(), "no data source found");
+    Sequence<PropertyValue> aProperties(5);
+    PropertyValue* pProperties = aProperties.getArray();
+    pProperties[0].Name = "DataSourceName";
+    pProperties[0].Value <<= sDataSourceName;
+    pProperties[1].Name = "Command";
+    pProperties[1].Value <<= sTableOrQuery;
+    pProperties[2].Name = "CommandType";
+    pProperties[2].Value <<= nCommandType;
+    pProperties[3].Name = "ShowTreeView";
+    pProperties[3].Value <<= false;
+    pProperties[4].Name = "ShowTreeViewButton";
+    pProperties[4].Value <<= false;
+
+    VclPtrInstance< SwDBTablePreviewDialog > pDlg(pButton, aProperties);
+    pDlg->Execute();
+
 }
 
 OUString    SwSelectDBTableDialog::GetSelectedTable(bool& bIsTable)

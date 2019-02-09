@@ -17,12 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <comphelper/string.hxx>
-#include <vcl/wrkwin.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/msgbox.hxx>
-#include <vcl/svapp.hxx>
-
 #include <editeng/tstpitem.hxx>
 #include <editeng/colritem.hxx>
 #include <editeng/fontitem.hxx>
@@ -39,34 +33,39 @@
 #include <editeng/escapementitem.hxx>
 #include <editeng/shdditem.hxx>
 #include <editeng/autokernitem.hxx>
-#include <editeng/charsetcoloritem.hxx>
 #include <editeng/langitem.hxx>
 #include <editeng/emphasismarkitem.hxx>
 #include <editeng/charscaleitem.hxx>
 #include <editeng/charreliefitem.hxx>
 #include <editeng/xmlcnitm.hxx>
 #include <editeng/editids.hrc>
-#include "editeng/editdata.hxx"
-#include "editeng/lrspitem.hxx"
-#include "editeng/ulspitem.hxx"
-#include "editeng/lspcitem.hxx"
+#include <editeng/editdata.hxx>
+#include <editeng/lrspitem.hxx>
+#include <editeng/ulspitem.hxx>
+#include <editeng/lspcitem.hxx>
 
 #include <editdoc.hxx>
-#include <editdbg.hxx>
+#include "editdbg.hxx"
 #include <editeng/eerdll.hxx>
 #include <eerdll2.hxx>
-#include <impedit.hxx>
+#include "impedit.hxx"
 
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
 #include <svl/grabbagitem.hxx>
 #include <tools/stream.hxx>
 #include <tools/debug.hxx>
 #include <com/sun/star/i18n/ScriptType.hpp>
+#include <libxml/xmlwriter.h>
 
+#include <algorithm>
 #include <cassert>
 #include <limits>
-#include <algorithm>
+#include <memory>
+#include <set>
+#include <string_view>
 
 using namespace ::com::sun::star;
 
@@ -161,7 +160,7 @@ const SfxItemInfo aItemInfos[EDITITEMCOUNT] = {
         { SID_ATTR_FRAMEDIRECTION, true },         // EE_PARA_WRITINGDIR
         { 0, true },                               // EE_PARA_XMLATTRIBS
         { SID_ATTR_PARA_HANGPUNCTUATION, true },   // EE_PARA_HANGINGPUNCTUATION
-        { SID_ATTR_PARA_FORBIDDEN_RULES, true },
+        { SID_ATTR_PARA_FORBIDDEN_RULES, true },   // EE_PARA_FORBIDDENRULES
         { SID_ATTR_PARA_SCRIPTSPACE, true },       // EE_PARA_ASIANCJKSPACING
         { SID_ATTR_NUMBERING_RULE, true },         // EE_PARA_NUMBULL
         { 0, true },                               // EE_PARA_HYPHENATE
@@ -176,86 +175,43 @@ const SfxItemInfo aItemInfos[EDITITEMCOUNT] = {
         { SID_ATTR_TABSTOP, true },                // EE_PARA_TABS
         { SID_ATTR_ALIGN_HOR_JUSTIFY_METHOD, true }, // EE_PARA_JUST_METHOD
         { SID_ATTR_ALIGN_VER_JUSTIFY, true },      // EE_PARA_VER_JUST
-        { SID_ATTR_CHAR_COLOR, true },
-        { SID_ATTR_CHAR_FONT, true },
-        { SID_ATTR_CHAR_FONTHEIGHT, true },
-        { SID_ATTR_CHAR_SCALEWIDTH, true },
-        { SID_ATTR_CHAR_WEIGHT, true },
-        { SID_ATTR_CHAR_UNDERLINE, true },
-        { SID_ATTR_CHAR_STRIKEOUT, true },
-        { SID_ATTR_CHAR_POSTURE, true },
-        { SID_ATTR_CHAR_CONTOUR, true },
-        { SID_ATTR_CHAR_SHADOWED, true },
-        { SID_ATTR_CHAR_ESCAPEMENT, true },
-        { SID_ATTR_CHAR_AUTOKERN, true },
-        { SID_ATTR_CHAR_KERNING, true },
-        { SID_ATTR_CHAR_WORDLINEMODE, true },
-        { SID_ATTR_CHAR_LANGUAGE, true },
-        { SID_ATTR_CHAR_CJK_LANGUAGE, true },
-        { SID_ATTR_CHAR_CTL_LANGUAGE, true },
-        { SID_ATTR_CHAR_CJK_FONT, true },
-        { SID_ATTR_CHAR_CTL_FONT, true },
-        { SID_ATTR_CHAR_CJK_FONTHEIGHT, true },
-        { SID_ATTR_CHAR_CTL_FONTHEIGHT, true },
-        { SID_ATTR_CHAR_CJK_WEIGHT, true },
-        { SID_ATTR_CHAR_CTL_WEIGHT, true },
-        { SID_ATTR_CHAR_CJK_POSTURE, true },
-        { SID_ATTR_CHAR_CTL_POSTURE, true },
-        { SID_ATTR_CHAR_EMPHASISMARK, true },
-        { SID_ATTR_CHAR_RELIEF, true },
+        { SID_ATTR_CHAR_COLOR, true },         // EE_CHAR_COLOR
+        { SID_ATTR_CHAR_FONT, true },          // EE_CHAR_FONTINFO
+        { SID_ATTR_CHAR_FONTHEIGHT, true },    // EE_CHAR_FONTHEIGHT
+        { SID_ATTR_CHAR_SCALEWIDTH, true },    // EE_CHAR_FONTWIDTH
+        { SID_ATTR_CHAR_WEIGHT, true },        // EE_CHAR_WEIGHT
+        { SID_ATTR_CHAR_UNDERLINE, true },     // EE_CHAR_UNDERLINE
+        { SID_ATTR_CHAR_STRIKEOUT, true },     // EE_CHAR_STRIKEOUT
+        { SID_ATTR_CHAR_POSTURE, true },       // EE_CHAR_ITALIC
+        { SID_ATTR_CHAR_CONTOUR, true },       // EE_CHAR_OUTLINE
+        { SID_ATTR_CHAR_SHADOWED, true },      // EE_CHAR_SHADOW
+        { SID_ATTR_CHAR_ESCAPEMENT, true },    // EE_CHAR_ESCAPEMENT
+        { SID_ATTR_CHAR_AUTOKERN, true },      // EE_CHAR_PAIRKERNING
+        { SID_ATTR_CHAR_KERNING, true },       // EE_CHAR_KERNING
+        { SID_ATTR_CHAR_WORDLINEMODE, true },  // EE_CHAR_WLM
+        { SID_ATTR_CHAR_LANGUAGE, true },      // EE_CHAR_LANGUAGE
+        { SID_ATTR_CHAR_CJK_LANGUAGE, true },  // EE_CHAR_LANGUAGE_CJK
+        { SID_ATTR_CHAR_CTL_LANGUAGE, true },  // EE_CHAR_LANGUAGE_CTL
+        { SID_ATTR_CHAR_CJK_FONT, true },      // EE_CHAR_FONTINFO_CJK
+        { SID_ATTR_CHAR_CTL_FONT, true },      // EE_CHAR_FONTINFO_CTL
+        { SID_ATTR_CHAR_CJK_FONTHEIGHT, true }, // EE_CHAR_FONTHEIGHT_CJK
+        { SID_ATTR_CHAR_CTL_FONTHEIGHT, true }, // EE_CHAR_FONTHEIGHT_CTL
+        { SID_ATTR_CHAR_CJK_WEIGHT, true },    // EE_CHAR_WEIGHT_CJK
+        { SID_ATTR_CHAR_CTL_WEIGHT, true },    // EE_CHAR_WEIGHT_CTL
+        { SID_ATTR_CHAR_CJK_POSTURE, true },   // EE_CHAR_ITALIC_CJK
+        { SID_ATTR_CHAR_CTL_POSTURE, true },   // EE_CHAR_ITALIC_CTL
+        { SID_ATTR_CHAR_EMPHASISMARK, true },  // EE_CHAR_EMPHASISMARK
+        { SID_ATTR_CHAR_RELIEF, true },        // EE_CHAR_RELIEF
         { 0, true },                           // EE_CHAR_RUBI_DUMMY
         { 0, true },                           // EE_CHAR_XMLATTRIBS
-        { SID_ATTR_CHAR_OVERLINE, true },
+        { SID_ATTR_CHAR_OVERLINE, true },      // EE_CHAR_OVERLINE
         { SID_ATTR_CHAR_CASEMAP, true },       // EE_CHAR_CASEMAP
         { SID_ATTR_CHAR_GRABBAG, true },       // EE_CHAR_GRABBAG
         { SID_ATTR_CHAR_BACK_COLOR, true },    // EE_CHAR_BKGCOLOR
         { 0, true },                           // EE_FEATURE_TAB
         { 0, true },                           // EE_FEATURE_LINEBR
         { SID_ATTR_CHAR_CHARSETCOLOR, true },  // EE_FEATURE_NOTCONV
-        { SID_FIELD, false }
-};
-
-const sal_uInt16 aV1Map[] = {
-    3999, 4001, 4002, 4003, 4004, 4005, 4006,
-    4007, 4008, 4009, 4010, 4011, 4012, 4013, 4017, 4018, 4019 // MI: 4019?
-};
-
-const sal_uInt16 aV2Map[] = {
-    3999, 4000, 4001, 4002, 4003, 4004, 4005, 4006, 4007, 4008, 4009,
-    4010, 4011, 4012, 4013, 4014, 4015, 4016, 4018, 4019, 4020
-};
-
-const sal_uInt16 aV3Map[] = {
-    3997, 3998, 3999, 4000, 4001, 4002, 4003, 4004, 4005, 4006, 4007,
-    4009, 4010, 4011, 4012, 4013, 4014, 4015, 4016, 4017, 4018, 4019,
-    4020, 4021
-};
-
-const sal_uInt16 aV4Map[] = {
-    3994, 3995, 3996, 3997, 3998, 3999, 4000, 4001, 4002, 4003,
-    4004, 4005, 4006, 4007, 4008, 4009, 4010, 4011, 4012, 4013,
-    4014, 4015, 4016, 4017, 4018,
-    /* CJK Items inserted here: EE_CHAR_LANGUAGE - EE_CHAR_XMLATTRIBS */
-    4034, 4035, 4036, 4037
-};
-
-const sal_uInt16 aV5Map[] = {
-    3994, 3995, 3996, 3997, 3998, 3999, 4000, 4001, 4002, 4003,
-    4004, 4005, 4006, 4007, 4008, 4009, 4010, 4011, 4012, 4013,
-    4014, 4015, 4016, 4017, 4018, 4019, 4020, 4021, 4022, 4023,
-    4024, 4025, 4026, 4027, 4028, 4029, 4030, 4031, 4032, 4033,
-    /* EE_CHAR_OVERLINE inserted here */
-    4035, 4036, 4037, 4038
-};
-
-const sal_uInt16 aV6Map[] = {
-    3994, 3995, 3996, 3997, 3998, 3999, 4000, 4001, 4002, 4003,
-    4004, 4005, 4006, 4007, 4008, 4009, 4010, 4011, 4012, 4013,
-    4014, 4015, 4016, 4017, 4018, 4019, 4020, 4021, 4022, 4023,
-    4024, 4025, 4026, 4027, 4028, 4029, 4030, 4031, 4032, 4033,
-    4035, 4036, 4037, 4038,
-    /* EE_CHAR_GRABBAG inserted here */
-    4039
+        { SID_FIELD, false },                  // EE_FEATURE_FIELD
 };
 
 EditCharAttrib* MakeCharAttrib( SfxItemPool& rPool, const SfxPoolItem& rAttr, sal_Int32 nS, sal_Int32 nE )
@@ -425,7 +381,7 @@ void TextPortionList::Reset()
 
 void TextPortionList::DeleteFromPortion(sal_Int32 nDelFrom)
 {
-    DBG_ASSERT( ( nDelFrom < (sal_Int32)maPortions.size() ) || ( (nDelFrom == 0) && maPortions.empty() ), "DeleteFromPortion: Out of range" );
+    assert((nDelFrom < static_cast<sal_Int32>(maPortions.size())) || ((nDelFrom == 0) && maPortions.empty()));
     PortionsType::iterator it = maPortions.begin();
     std::advance(it, nDelFrom);
     maPortions.erase(it, maPortions.end());
@@ -433,7 +389,7 @@ void TextPortionList::DeleteFromPortion(sal_Int32 nDelFrom)
 
 sal_Int32 TextPortionList::Count() const
 {
-    return (sal_Int32)maPortions.size();
+    return static_cast<sal_Int32>(maPortions.size());
 }
 
 const TextPortion& TextPortionList::operator[](sal_Int32 nPos) const
@@ -463,7 +419,7 @@ void TextPortionList::Remove(sal_Int32 nPos)
 
 namespace {
 
-class FindTextPortionByAddress : public std::unary_function<std::unique_ptr<TextPortion>, bool>
+class FindTextPortionByAddress
 {
     const TextPortion* mp;
 public:
@@ -527,44 +483,40 @@ ExtraPortionInfo::ExtraPortionInfo()
 , nWidthFullCompression(0)
 , nPortionOffsetX(0)
 , nMaxCompression100thPercent(0)
-, nAsianCompressionTypes(0)
+, nAsianCompressionTypes(AsianCompressionFlags::Normal)
 , bFirstCharIsRightPunktuation(false)
 , bCompressed(false)
-, pOrgDXArray(nullptr)
 , lineBreaksList()
 {
 }
 
 ExtraPortionInfo::~ExtraPortionInfo()
 {
-    delete[] pOrgDXArray;
 }
 
 void ExtraPortionInfo::SaveOrgDXArray( const long* pDXArray, sal_Int32 nLen )
 {
-    delete[] pOrgDXArray;
     if (pDXArray)
     {
-        pOrgDXArray = new long[nLen];
-        memcpy( pOrgDXArray, pDXArray, nLen * sizeof(long) );
+        pOrgDXArray.reset(new long[nLen]);
+        memcpy( pOrgDXArray.get(), pDXArray, nLen * sizeof(long) );
     }
     else
-        pOrgDXArray = nullptr;
+        pOrgDXArray.reset();
 }
 
-ParaPortion::ParaPortion( ContentNode* pN )
+ParaPortion::ParaPortion( ContentNode* pN ) :
+    pNode(pN),
+    nHeight(0),
+    nInvalidPosStart(0),
+    nFirstLineOffset(0),
+    nBulletX(0),
+    nInvalidDiff(0),
+    bInvalid(true),
+    bSimple(false),
+    bVisible(true),
+    bForceRepaint(false)
 {
-
-    pNode               = pN;
-    bInvalid            = true;
-    bVisible            = true;
-    bSimple             = false;
-    bForceRepaint       = false;
-    nInvalidPosStart    = 0;
-    nInvalidDiff        = 0;
-    nHeight             = 0;
-    nFirstLineOffset    = 0;
-    nBulletX            = 0;
 }
 
 ParaPortion::~ParaPortion()
@@ -607,17 +559,15 @@ void ParaPortion::MarkInvalid( sal_Int32 nStart, sal_Int32 nDiff )
     aWritingDirectionInfos.clear();
 }
 
-void ParaPortion::MarkSelectionInvalid( sal_Int32 nStart, sal_Int32 /* nEnd */ )
+void ParaPortion::MarkSelectionInvalid( sal_Int32 nStart )
 {
     if ( !bInvalid )
     {
         nInvalidPosStart = nStart;
-//      nInvalidPosEnd = nEnd;
     }
     else
     {
         nInvalidPosStart = std::min( nInvalidPosStart, nStart );
-//      nInvalidPosEnd = pNode->Len();
     }
     nInvalidDiff = 0;
     bInvalid = true;
@@ -634,7 +584,7 @@ sal_Int32 ParaPortion::GetLineNumber( sal_Int32 nIndex ) const
     for ( sal_Int32 nLine = 0; nLine < aLineList.Count(); nLine++ )
     {
         if ( aLineList[nLine].IsIn( nIndex ) )
-            return (sal_Int32)nLine;
+            return nLine;
     }
 
     // Then it should be at the end of the last line!
@@ -739,29 +689,29 @@ sal_Int32 ParaPortionList::GetPos(const ParaPortion* p) const
 
 ParaPortion* ParaPortionList::operator [](sal_Int32 nPos)
 {
-    return 0 <= nPos && nPos < (sal_Int32)maPortions.size() ? maPortions[nPos].get() : nullptr;
+    return 0 <= nPos && nPos < static_cast<sal_Int32>(maPortions.size()) ? maPortions[nPos].get() : nullptr;
 }
 
 const ParaPortion* ParaPortionList::operator [](sal_Int32 nPos) const
 {
-    return 0 <= nPos && nPos < (sal_Int32)maPortions.size() ? maPortions[nPos].get() : nullptr;
+    return 0 <= nPos && nPos < static_cast<sal_Int32>(maPortions.size()) ? maPortions[nPos].get() : nullptr;
 }
 
-ParaPortion* ParaPortionList::Release(sal_Int32 nPos)
+std::unique_ptr<ParaPortion> ParaPortionList::Release(sal_Int32 nPos)
 {
-    if (nPos < 0 || (sal_Int32)maPortions.size() <= nPos)
+    if (nPos < 0 || static_cast<sal_Int32>(maPortions.size()) <= nPos)
     {
         SAL_WARN( "editeng", "ParaPortionList::Release - out of bounds pos " << nPos);
         return nullptr;
     }
-    ParaPortion* p = maPortions[nPos].release();
+    std::unique_ptr<ParaPortion> p = std::move(maPortions[nPos]);
     maPortions.erase(maPortions.begin()+nPos);
     return p;
 }
 
 void ParaPortionList::Remove(sal_Int32 nPos)
 {
-    if (nPos < 0 || (sal_Int32)maPortions.size() <= nPos)
+    if (nPos < 0 || static_cast<sal_Int32>(maPortions.size()) <= nPos)
     {
         SAL_WARN( "editeng", "ParaPortionList::Remove - out of bounds pos " << nPos);
         return;
@@ -769,19 +719,19 @@ void ParaPortionList::Remove(sal_Int32 nPos)
     maPortions.erase(maPortions.begin()+nPos);
 }
 
-void ParaPortionList::Insert(sal_Int32 nPos, ParaPortion* p)
+void ParaPortionList::Insert(sal_Int32 nPos, std::unique_ptr<ParaPortion> p)
 {
-    if (nPos < 0 || (sal_Int32)maPortions.size() < nPos)
+    if (nPos < 0 || static_cast<sal_Int32>(maPortions.size()) < nPos)
     {
         SAL_WARN( "editeng", "ParaPortionList::Insert - out of bounds pos " << nPos);
         return;
     }
-    maPortions.insert(maPortions.begin()+nPos, std::unique_ptr<ParaPortion>(p));
+    maPortions.insert(maPortions.begin()+nPos, std::move(p));
 }
 
-void ParaPortionList::Append(ParaPortion* p)
+void ParaPortionList::Append(std::unique_ptr<ParaPortion> p)
 {
-    maPortions.push_back(std::unique_ptr<ParaPortion>(p));
+    maPortions.push_back(std::move(p));
 }
 
 sal_Int32 ParaPortionList::Count() const
@@ -803,9 +753,9 @@ void ParaPortionList::Reset()
 long ParaPortionList::GetYOffset(const ParaPortion* pPPortion) const
 {
     long nHeight = 0;
-    for (sal_Int32 i = 0, n = maPortions.size(); i < n; ++i)
+    for (const auto & rPortion : maPortions)
     {
-        const ParaPortion* pTmpPortion = maPortions[i].get();
+        const ParaPortion* pTmpPortion = rPortion.get();
         if ( pTmpPortion == pPPortion )
             return nHeight;
         nHeight += pTmpPortion->GetHeight();
@@ -828,15 +778,15 @@ sal_Int32 ParaPortionList::FindParagraph(long nYOffset) const
 
 const ParaPortion* ParaPortionList::SafeGetObject(sal_Int32 nPos) const
 {
-    return 0 <= nPos && nPos < (sal_Int32)maPortions.size() ? maPortions[nPos].get() : nullptr;
+    return 0 <= nPos && nPos < static_cast<sal_Int32>(maPortions.size()) ? maPortions[nPos].get() : nullptr;
 }
 
 ParaPortion* ParaPortionList::SafeGetObject(sal_Int32 nPos)
 {
-    return 0 <= nPos && nPos < (sal_Int32)maPortions.size() ? maPortions[nPos].get() : nullptr;
+    return 0 <= nPos && nPos < static_cast<sal_Int32>(maPortions.size()) ? maPortions[nPos].get() : nullptr;
 }
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
 void
 ParaPortionList::DbgCheck(ParaPortionList const& rParas, EditDoc const& rDoc)
 {
@@ -874,7 +824,7 @@ void ConvertItem( SfxPoolItem& rPoolItem, MapUnit eSourceUnit, MapUnit eDestUnit
     {
         case EE_PARA_LRSPACE:
         {
-            DBG_ASSERT( dynamic_cast<const SvxLRSpaceItem *>(&rPoolItem) != nullptr, "ConvertItem: invalid Item!" );
+            assert(dynamic_cast<const SvxLRSpaceItem *>(&rPoolItem) != nullptr);
             SvxLRSpaceItem& rItem = static_cast<SvxLRSpaceItem&>(rPoolItem);
             rItem.SetTextFirstLineOfst( sal::static_int_cast< short >( OutputDevice::LogicToLogic( rItem.GetTextFirstLineOfst(), eSourceUnit, eDestUnit ) ) );
             rItem.SetTextLeft( OutputDevice::LogicToLogic( rItem.GetTextLeft(), eSourceUnit, eDestUnit ) );
@@ -883,7 +833,7 @@ void ConvertItem( SfxPoolItem& rPoolItem, MapUnit eSourceUnit, MapUnit eDestUnit
         break;
         case EE_PARA_ULSPACE:
         {
-            DBG_ASSERT( dynamic_cast<const SvxULSpaceItem *>(&rPoolItem) != nullptr, "ConvertItem: Invalid Item!" );
+            assert(dynamic_cast<const SvxULSpaceItem *>(&rPoolItem) != nullptr);
             SvxULSpaceItem& rItem = static_cast<SvxULSpaceItem&>(rPoolItem);
             rItem.SetUpper( sal::static_int_cast< sal_uInt16 >( OutputDevice::LogicToLogic( rItem.GetUpper(), eSourceUnit, eDestUnit ) ) );
             rItem.SetLower( sal::static_int_cast< sal_uInt16 >( OutputDevice::LogicToLogic( rItem.GetLower(), eSourceUnit, eDestUnit ) ) );
@@ -891,16 +841,16 @@ void ConvertItem( SfxPoolItem& rPoolItem, MapUnit eSourceUnit, MapUnit eDestUnit
         break;
         case EE_PARA_SBL:
         {
-            DBG_ASSERT( dynamic_cast<const SvxLineSpacingItem *>(&rPoolItem) != nullptr, "ConvertItem: Invalid Item!" );
+            assert(dynamic_cast<const SvxLineSpacingItem *>(&rPoolItem) != nullptr);
             SvxLineSpacingItem& rItem = static_cast<SvxLineSpacingItem&>(rPoolItem);
             // SetLineHeight changes also eLineSpace!
-            if ( rItem.GetLineSpaceRule() == SVX_LINE_SPACE_MIN )
+            if ( rItem.GetLineSpaceRule() == SvxLineSpaceRule::Min )
                 rItem.SetLineHeight( sal::static_int_cast< sal_uInt16 >( OutputDevice::LogicToLogic( rItem.GetLineHeight(), eSourceUnit, eDestUnit ) ) );
         }
         break;
         case EE_PARA_TABS:
         {
-            DBG_ASSERT( dynamic_cast<const SvxTabStopItem *>(&rPoolItem) != nullptr, "ConvertItem: Invalid Item!" );
+            assert(dynamic_cast<const SvxTabStopItem *>(&rPoolItem) != nullptr);
             SvxTabStopItem& rItem = static_cast<SvxTabStopItem&>(rPoolItem);
             SvxTabStopItem aNewItem( EE_PARA_TABS );
             for ( sal_uInt16 i = 0; i < rItem.Count(); i++ )
@@ -916,7 +866,7 @@ void ConvertItem( SfxPoolItem& rPoolItem, MapUnit eSourceUnit, MapUnit eDestUnit
         case EE_CHAR_FONTHEIGHT_CJK:
         case EE_CHAR_FONTHEIGHT_CTL:
         {
-            DBG_ASSERT( dynamic_cast<const SvxFontHeightItem *>(&rPoolItem) != nullptr, "ConvertItem: Invalid Item!" );
+            assert(dynamic_cast<const SvxFontHeightItem *>(&rPoolItem) != nullptr);
             SvxFontHeightItem& rItem = static_cast<SvxFontHeightItem&>(rPoolItem);
             rItem.SetHeight( OutputDevice::LogicToLogic( rItem.GetHeight(), eSourceUnit, eDestUnit ) );
         }
@@ -944,57 +894,53 @@ void ConvertAndPutItems( SfxItemSet& rDest, const SfxItemSet& rSource, const Map
 
         if ( rSource.GetItemState( nSourceWhich, false ) == SfxItemState::SET )
         {
-            MapUnit eSourceUnit = pSourceUnit ? *pSourceUnit : (MapUnit)pSourcePool->GetMetric( nSourceWhich );
-            MapUnit eDestUnit = pDestUnit ? *pDestUnit : (MapUnit)pDestPool->GetMetric( nWhich );
+            MapUnit eSourceUnit = pSourceUnit ? *pSourceUnit : pSourcePool->GetMetric( nSourceWhich );
+            MapUnit eDestUnit = pDestUnit ? *pDestUnit : pDestPool->GetMetric( nWhich );
             if ( eSourceUnit != eDestUnit )
             {
-                SfxPoolItem* pItem = rSource.Get( nSourceWhich ).Clone();
-//              pItem->SetWhich( nWhich );
+                std::unique_ptr<SfxPoolItem> pItem(rSource.Get( nSourceWhich ).Clone());
                 ConvertItem( *pItem, eSourceUnit, eDestUnit );
-                rDest.Put( *pItem, nWhich );
-                delete pItem;
+                pItem->SetWhich(nWhich);
+                rDest.Put( *pItem );
             }
             else
             {
-                rDest.Put( rSource.Get( nSourceWhich ), nWhich );
+                std::unique_ptr<SfxPoolItem> pNewItem(rSource.Get( nSourceWhich ).CloneSetWhich(nWhich));
+                rDest.Put( *pNewItem );
             }
         }
     }
 }
 
 EditLine::EditLine() :
+    nTxtWidth(0),
+    nStartPosX(0),
+    nStart(0),
+    nEnd(0),
+    nStartPortion(0),   // to be able to tell the difference between a line
+                        // without Portions from one with the Portion number 0
+    nEndPortion(0),
+    nHeight(0),
+    nTxtHeight(0),
+    nMaxAscent(0),
     bHangingPunctuation(false),
     bInvalid(true)
 {
-
-    nStart = nEnd = 0;
-    nStartPortion = 0;  // to be able to tell the difference between a line
-                        // without Portions from one with the Portion number 0
-    nEndPortion = 0;
-    nHeight = 0;
-    nStartPosX = 0;
-    nTxtHeight = 0;
-    nTxtWidth = 0;
-    nCrsrHeight = 0;
-    nMaxAscent = 0;
 }
 
 EditLine::EditLine( const EditLine& r ) :
+    nTxtWidth(0),
+    nStartPosX(0),
+    nStart(r.nStart),
+    nEnd(r.nEnd),
+    nStartPortion(r.nStartPortion),
+    nEndPortion(r.nEndPortion),
+    nHeight(0),
+    nTxtHeight(0),
+    nMaxAscent(0),
     bHangingPunctuation(r.bHangingPunctuation),
     bInvalid(true)
 {
-
-    nEnd = r.nEnd;
-    nStart = r.nStart;
-    nStartPortion = r.nStartPortion;
-    nEndPortion = r.nEndPortion;
-
-    nHeight = 0;
-    nStartPosX = 0;
-    nTxtHeight = 0;
-    nTxtWidth = 0;
-    nCrsrHeight = 0;
-    nMaxAscent = 0;
 }
 
 EditLine::~EditLine()
@@ -1014,7 +960,6 @@ EditLine* EditLine::Clone() const
     pL->nHeight         = nHeight;
     pL->nTxtWidth       = nTxtWidth;
     pL->nTxtHeight      = nTxtHeight;
-    pL->nCrsrHeight     = nCrsrHeight;
     pL->nMaxAscent      = nMaxAscent;
 
     return pL;
@@ -1047,11 +992,10 @@ EditLine& EditLine::operator = ( const EditLine& r )
 }
 
 
-void EditLine::SetHeight( sal_uInt16 nH, sal_uInt16 nTxtH, sal_uInt16 nCrsrH )
+void EditLine::SetHeight( sal_uInt16 nH, sal_uInt16 nTxtH )
 {
     nHeight = nH;
     nTxtHeight = ( nTxtH ? nTxtH : nH );
-    nCrsrHeight = ( nCrsrH ? nCrsrH : nTxtHeight );
 }
 
 void EditLine::SetStartPosX( long start )
@@ -1079,21 +1023,21 @@ Size EditLine::CalcTextSize( ParaPortion& rParaPortion )
             case PortionKind::HYPHENATOR:
             {
                 aTmpSz = rPortion.GetSize();
-                aSz.Width() += aTmpSz.Width();
+                aSz.AdjustWidth(aTmpSz.Width() );
                 if ( aSz.Height() < aTmpSz.Height() )
-                    aSz.Height() = aTmpSz.Height();
+                    aSz.setHeight( aTmpSz.Height() );
             }
             break;
             case PortionKind::TAB:
             {
-                aSz.Width() += rPortion.GetSize().Width();
+                aSz.AdjustWidth(rPortion.GetSize().Width() );
             }
             break;
             case PortionKind::LINEBREAK: break;
         }
     }
 
-    SetHeight( (sal_uInt16)aSz.Height() );
+    SetHeight( static_cast<sal_uInt16>(aSz.Height()) );
     return aSz;
 }
 
@@ -1113,7 +1057,7 @@ void EditLineList::Reset()
 
 void EditLineList::DeleteFromLine(sal_Int32 nDelFrom)
 {
-    DBG_ASSERT( nDelFrom <= ((sal_Int32)maLines.size() - 1), "DeleteFromLine: Out of range" );
+    assert(nDelFrom <= (static_cast<sal_Int32>(maLines.size()) - 1));
     LinesType::iterator it = maLines.begin();
     std::advance(it, nDelFrom);
     maLines.erase(it, maLines.end());
@@ -1162,7 +1106,6 @@ void EditLineList::Insert(sal_Int32 nPos, EditLine* p)
 }
 
 EditPaM::EditPaM() : pNode(nullptr), nIndex(0) {}
-EditPaM::EditPaM(const EditPaM& r) : pNode(r.pNode), nIndex(r.nIndex) {}
 EditPaM::EditPaM(ContentNode* p, sal_Int32 n) : pNode(p), nIndex(n) {}
 
 
@@ -1171,14 +1114,14 @@ void EditPaM::SetNode(ContentNode* p)
     pNode = p;
 }
 
-bool EditPaM::DbgIsBuggy( EditDoc& rDoc )
+bool EditPaM::DbgIsBuggy( EditDoc const & rDoc ) const
 {
     return !pNode ||
            rDoc.GetPos( pNode ) >= rDoc.Count() ||
            nIndex > pNode->Len();
 }
 
-bool EditSelection::DbgIsBuggy( EditDoc& rDoc )
+bool EditSelection::DbgIsBuggy( EditDoc const & rDoc ) const
 {
     return aStartPaM.DbgIsBuggy( rDoc ) || aEndPaM.DbgIsBuggy( rDoc );
 }
@@ -1187,19 +1130,16 @@ EditSelection::EditSelection()
 {
 }
 
-EditSelection::EditSelection( const EditPaM& rStartAndAnd )
+EditSelection::EditSelection( const EditPaM& rStartAndAnd ) :
+    aStartPaM(rStartAndAnd),
+    aEndPaM(rStartAndAnd)
 {
-    // could still be optimized!
-    // do no first call the Def-constructor from PaM!
-    aStartPaM = rStartAndAnd;
-    aEndPaM = rStartAndAnd;
 }
 
-EditSelection::EditSelection( const EditPaM& rStart, const EditPaM& rEnd )
+EditSelection::EditSelection( const EditPaM& rStart, const EditPaM& rEnd ) :
+    aStartPaM(rStart),
+    aEndPaM(rEnd)
 {
-    // could still be optimized!
-    aStartPaM = rStart;
-    aEndPaM = rEnd;
 }
 
 EditSelection& EditSelection::operator = ( const EditPaM& rPaM )
@@ -1241,13 +1181,6 @@ bool operator == ( const EditPaM& r1, const EditPaM& r2 )
            ( r1.GetIndex() == r2.GetIndex() );
 }
 
-EditPaM& EditPaM::operator = ( const EditPaM& rPaM )
-{
-    nIndex = rPaM.nIndex;
-    pNode = rPaM.pNode;
-    return *this;
-}
-
 bool operator != ( const EditPaM& r1, const EditPaM& r2 )
 {
     return !( r1 == r2 );
@@ -1271,13 +1204,12 @@ void ContentNode::ExpandAttribs( sal_Int32 nIndex, sal_Int32 nNew, SfxItemPool& 
     if ( !nNew )
         return;
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(aCharAttribList);
 #endif
 
     // Since features are treated differently than normal character attributes,
-    // can also the order of the start list be change!
-    // In every if ...,  in the next (n) opportunities due to bFeature or
+    // but can also affect the order of the start list.    // In every if ...,  in the next (n) opportunities due to bFeature or
     // an existing special case, must (n-1) opportunities be provided with
     // bResort. The most likely possibility receives no bResort, so that is
     // not sorted anew when all attributes are the same.
@@ -1402,22 +1334,22 @@ void ContentNode::ExpandAttribs( sal_Int32 nIndex, sal_Int32 nNew, SfxItemPool& 
         mpWrongList->TextInserted( nIndex, nNew, bSep );
     }
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(aCharAttribList);
 #endif
 }
 
-void ContentNode::CollapsAttribs( sal_Int32 nIndex, sal_Int32 nDeleted, SfxItemPool& rItemPool )
+void ContentNode::CollapseAttribs( sal_Int32 nIndex, sal_Int32 nDeleted, SfxItemPool& rItemPool )
 {
     if ( !nDeleted )
         return;
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(aCharAttribList);
 #endif
 
     // Since features are treated differently than normal character attributes,
-    // can also the order of the start list be change!
+    // but can also affect the order of the start list
     bool bResort = false;
     sal_Int32 nEndChanges = nIndex+nDeleted;
 
@@ -1474,8 +1406,8 @@ void ContentNode::CollapsAttribs( sal_Int32 nIndex, sal_Int32 nDeleted, SfxItemP
         }
         DBG_ASSERT( !pAttrib->IsFeature() || ( pAttrib->GetLen() == 1 ), "Expand: FeaturesLen != 1" );
 
-        DBG_ASSERT( pAttrib->GetStart() <= pAttrib->GetEnd(), "Collaps: Attribut distorted!" );
-        DBG_ASSERT( ( pAttrib->GetEnd() <= Len()) || bDelAttr, "Collaps: Attribute larger than paragraph!" );
+        DBG_ASSERT( pAttrib->GetStart() <= pAttrib->GetEnd(), "Collapse: Attribute distorted!" );
+        DBG_ASSERT( ( pAttrib->GetEnd() <= Len()) || bDelAttr, "Collapse: Attribute larger than paragraph!" );
         if ( bDelAttr )
         {
             bResort = true;
@@ -1496,16 +1428,16 @@ void ContentNode::CollapsAttribs( sal_Int32 nIndex, sal_Int32 nDeleted, SfxItemP
     if (mpWrongList)
         mpWrongList->TextDeleted(nIndex, nDeleted);
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(aCharAttribList);
 #endif
 }
 
 void ContentNode::CopyAndCutAttribs( ContentNode* pPrevNode, SfxItemPool& rPool, bool bKeepEndingAttribs )
 {
-    DBG_ASSERT( pPrevNode, "Copy of attributes to a null pointer?" );
+    assert(pPrevNode);
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(aCharAttribList);
     CharAttribList::DbgCheckAttribs(pPrevNode->aCharAttribList);
 #endif
@@ -1528,7 +1460,7 @@ void ContentNode::CopyAndCutAttribs( ContentNode* pPrevNode, SfxItemPool& rPool,
             if ( bKeepEndingAttribs && !pAttrib->IsFeature() && !aCharAttribList.FindAttrib( pAttrib->GetItem()->Which(), 0 ) )
             {
                 EditCharAttrib* pNewAttrib = MakeCharAttrib( rPool, *(pAttrib->GetItem()), 0, 0 );
-                DBG_ASSERT( pNewAttrib, "MakeCharAttrib failed!" );
+                assert(pNewAttrib);
                 aCharAttribList.InsertAttrib( pNewAttrib );
             }
         }
@@ -1537,7 +1469,7 @@ void ContentNode::CopyAndCutAttribs( ContentNode* pPrevNode, SfxItemPool& rPool,
             // If cut is done right at the front then the attribute must be
             // kept! Has to be copied and changed.
             EditCharAttrib* pNewAttrib = MakeCharAttrib( rPool, *(pAttrib->GetItem()), 0, pAttrib->GetEnd()-nCut );
-            DBG_ASSERT( pNewAttrib, "MakeCharAttrib failed!" );
+            assert(pNewAttrib);
             aCharAttribList.InsertAttrib( pNewAttrib );
             pAttrib->GetEnd() = nCut;
         }
@@ -1554,7 +1486,7 @@ void ContentNode::CopyAndCutAttribs( ContentNode* pPrevNode, SfxItemPool& rPool,
         pAttrib = GetAttrib(rPrevAttribs, nAttr);
     }
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(aCharAttribList);
     CharAttribList::DbgCheckAttribs(pPrevNode->aCharAttribList);
 #endif
@@ -1562,11 +1494,11 @@ void ContentNode::CopyAndCutAttribs( ContentNode* pPrevNode, SfxItemPool& rPool,
 
 void ContentNode::AppendAttribs( ContentNode* pNextNode )
 {
-    DBG_ASSERT( pNextNode, "Copy of attributes to a null pointer?" );
+    assert(pNextNode);
 
     sal_Int32 nNewStart = maString.getLength();
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(aCharAttribList);
     CharAttribList::DbgCheckAttribs(pNextNode->aCharAttribList);
 #endif
@@ -1624,7 +1556,7 @@ void ContentNode::AppendAttribs( ContentNode* pNextNode )
     // For the Attributes that just moved over:
     rNextAttribs.clear();
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(aCharAttribList);
     CharAttribList::DbgCheckAttribs(pNextNode->aCharAttribList);
 #endif
@@ -1651,7 +1583,7 @@ void ContentNode::SetStyleSheet( SfxStyleSheet* pS, const SvxFont& rFontFromStyl
     GetCharAttribs().GetDefFont() = rFontFromStyle;
     // ... then iron out the hard paragraph formatting...
     CreateFont( GetCharAttribs().GetDefFont(),
-        GetContentAttribs().GetItems(), pS == nullptr );
+                GetContentAttribs().GetItems(), pS == nullptr );
 }
 
 void ContentNode::SetStyleSheet( SfxStyleSheet* pS, bool bRecalcFont )
@@ -1690,7 +1622,7 @@ sal_uLong ContentNode::GetExpandedLen() const
     return nLen;
 }
 
-OUString ContentNode::GetExpandedText(sal_Int32 nStartPos, sal_Int32 nEndPos, bool bResolveFields) const
+OUString ContentNode::GetExpandedText(sal_Int32 nStartPos, sal_Int32 nEndPos) const
 {
     if ( nEndPos < 0 || nEndPos > Len() )
         nEndPos = Len();
@@ -1698,7 +1630,7 @@ OUString ContentNode::GetExpandedText(sal_Int32 nStartPos, sal_Int32 nEndPos, bo
     DBG_ASSERT( nStartPos <= nEndPos, "Start and End reversed?" );
 
     sal_Int32 nIndex = nStartPos;
-    OUString aStr;
+    OUStringBuffer aStr;
     const EditCharAttrib* pNextFeature = GetCharAttribs().FindFeature( nIndex );
     while ( nIndex < nEndPos )
     {
@@ -1711,19 +1643,18 @@ OUString ContentNode::GetExpandedText(sal_Int32 nStartPos, sal_Int32 nEndPos, bo
         DBG_ASSERT( nEnd >= nIndex, "End in front of the index?" );
         //!! beware of sub string length  of -1
         if (nEnd > nIndex)
-            aStr += GetString().copy(nIndex, nEnd - nIndex);
+            aStr.append( std::u16string_view(GetString()).substr(nIndex, nEnd - nIndex) );
 
         if ( pNextFeature )
         {
             switch ( pNextFeature->GetItem()->Which() )
             {
-                case EE_FEATURE_TAB:    aStr += "\t";
+                case EE_FEATURE_TAB:    aStr.append( "\t" );
                 break;
-                case EE_FEATURE_LINEBR: aStr += "\x0A";
+                case EE_FEATURE_LINEBR: aStr.append( "\x0A" );
                 break;
                 case EE_FEATURE_FIELD:
-                    if ( bResolveFields )
-                        aStr += static_cast<const EditCharAttribField*>(pNextFeature)->GetFieldValue();
+                    aStr.append( static_cast<const EditCharAttribField*>(pNextFeature)->GetFieldValue() );
                 break;
                 default:    OSL_FAIL( "What feature?" );
             }
@@ -1731,7 +1662,7 @@ OUString ContentNode::GetExpandedText(sal_Int32 nStartPos, sal_Int32 nEndPos, bo
         }
         nIndex = nEnd;
     }
-    return aStr;
+    return aStr.makeStringAndClear();
 }
 
 void ContentNode::UnExpandPosition( sal_Int32 &rPos, bool bBiasStart )
@@ -1857,25 +1788,26 @@ void ContentNode::DestroyWrongList()
     mpWrongList.reset();
 }
 
+void ContentNode::dumpAsXml(struct _xmlTextWriter* pWriter) const
+{
+    xmlTextWriterStartElement(pWriter, BAD_CAST("ContentNode"));
+    xmlTextWriterWriteAttribute(pWriter, BAD_CAST("maString"), BAD_CAST(maString.toUtf8().getStr()));
+    aContentAttribs.dumpAsXml(pWriter);
+    aCharAttribList.dumpAsXml(pWriter);
+    xmlTextWriterEndElement(pWriter);
+}
+
+
 ContentAttribs::ContentAttribs( SfxItemPool& rPool )
 : pStyle(nullptr)
-, aAttribSet( rPool, EE_PARA_START, EE_CHAR_END )
+, aAttribSet( rPool, svl::Items<EE_PARA_START, EE_CHAR_END>{} )
 {
 }
 
-ContentAttribs::ContentAttribs( const ContentAttribs& rRef )
-: pStyle(rRef.pStyle)
-, aAttribSet( rRef.aAttribSet )
-{
-}
-
-ContentAttribs::~ContentAttribs()
-{
-}
 
 SvxTabStop ContentAttribs::FindTabStop( sal_Int32 nCurPos, sal_uInt16 nDefTab )
 {
-    const SvxTabStopItem& rTabs = static_cast<const SvxTabStopItem&>( GetItem( EE_PARA_TABS ) );
+    const SvxTabStopItem& rTabs = GetItem( EE_PARA_TABS );
     for ( sal_uInt16 i = 0; i < rTabs.Count(); i++ )
     {
         const SvxTabStop& rTab = rTabs[i];
@@ -1931,6 +1863,14 @@ bool ContentAttribs::HasItem( sal_uInt16 nWhich ) const
     return bHasItem;
 }
 
+void ContentAttribs::dumpAsXml(struct _xmlTextWriter* pWriter) const
+{
+    xmlTextWriterStartElement(pWriter, BAD_CAST("ContentAttribs"));
+    xmlTextWriterWriteFormatAttribute(pWriter, BAD_CAST("style"), "%s", pStyle->GetName().toUtf8().getStr());
+    aAttribSet.dumpAsXml(pWriter);
+    xmlTextWriterEndElement(pWriter);
+}
+
 
 ItemList::ItemList() : CurrentItem( 0 )
 {
@@ -1944,7 +1884,7 @@ const SfxPoolItem* ItemList::First()
 
 const SfxPoolItem* ItemList::Next()
 {
-    if ( CurrentItem + 1 < (sal_Int32)aItemPool.size() )
+    if ( CurrentItem + 1 < static_cast<sal_Int32>(aItemPool.size()) )
     {
         ++CurrentItem;
         return aItemPool[ CurrentItem ];
@@ -1961,9 +1901,10 @@ void ItemList::Insert( const SfxPoolItem* pItem )
 
 EditDoc::EditDoc( SfxItemPool* pPool ) :
     nLastCache(0),
-    pItemPool(pPool ? pPool : new EditEngineItemPool(false)),
+    pItemPool(pPool ? pPool : new EditEngineItemPool()),
     nDefTab(DEFTAB),
     bIsVertical(false),
+    bIsTopToBottomVert(false),
     bIsFixedCellHeight(false),
     bOwnerOfPool(pPool == nullptr),
     bModified(false)
@@ -1980,20 +1921,20 @@ EditDoc::~EditDoc()
 
 namespace {
 
-class RemoveEachItemFromPool : public std::unary_function<std::unique_ptr<ContentNode>, void>
+class RemoveEachItemFromPool
 {
     EditDoc& mrDoc;
 public:
     explicit RemoveEachItemFromPool(EditDoc& rDoc) : mrDoc(rDoc) {}
     void operator() (const std::unique_ptr<ContentNode>& rNode)
     {
-        mrDoc.RemoveItemsFromPool(*rNode.get());
+        mrDoc.RemoveItemsFromPool(*rNode);
     }
 };
 
-struct ClearSpellErrorsHandler : std::unary_function<std::unique_ptr<ContentNode>, void>
+struct ClearSpellErrorsHandler
 {
-    void operator() (std::unique_ptr<ContentNode>& rNode)
+    void operator() (std::unique_ptr<ContentNode> const & rNode)
     {
         rNode->DestroyWrongList();
     }
@@ -2039,33 +1980,33 @@ void CreateFont( SvxFont& rFont, const SfxItemSet& rSet, bool bSearchInParent, S
     if ( bSearchInParent || ( rSet.GetItemState( nWhich_Language ) == SfxItemState::SET ) )
         rFont.SetLanguage( static_cast<const SvxLanguageItem&>(rSet.Get( nWhich_Language )).GetLanguage() );
     if ( bSearchInParent || ( rSet.GetItemState( EE_CHAR_COLOR ) == SfxItemState::SET ) )
-        rFont.SetColor( static_cast<const SvxColorItem&>(rSet.Get( EE_CHAR_COLOR )).GetValue() );
+        rFont.SetColor( rSet.Get( EE_CHAR_COLOR ).GetValue() );
     if ( bSearchInParent || ( rSet.GetItemState( EE_CHAR_BKGCOLOR ) == SfxItemState::SET ) )
-        rFont.SetFillColor( static_cast<const SvxBackgroundColorItem&>(rSet.Get( EE_CHAR_BKGCOLOR )).GetValue() );
+        rFont.SetFillColor( rSet.Get( EE_CHAR_BKGCOLOR ).GetValue() );
     if ( bSearchInParent || ( rSet.GetItemState( nWhich_FontHeight ) == SfxItemState::SET ) )
         rFont.SetFontSize( Size( rFont.GetFontSize().Width(), static_cast<const SvxFontHeightItem&>(rSet.Get( nWhich_FontHeight ) ).GetHeight() ) );
     if ( bSearchInParent || ( rSet.GetItemState( nWhich_Weight ) == SfxItemState::SET ) )
         rFont.SetWeight( static_cast<const SvxWeightItem&>(rSet.Get( nWhich_Weight )).GetWeight() );
     if ( bSearchInParent || ( rSet.GetItemState( EE_CHAR_UNDERLINE ) == SfxItemState::SET ) )
-        rFont.SetUnderline( static_cast<const SvxUnderlineItem&>(rSet.Get( EE_CHAR_UNDERLINE )).GetLineStyle() );
+        rFont.SetUnderline( rSet.Get( EE_CHAR_UNDERLINE ).GetLineStyle() );
     if ( bSearchInParent || ( rSet.GetItemState( EE_CHAR_OVERLINE ) == SfxItemState::SET ) )
-        rFont.SetOverline( static_cast<const SvxOverlineItem&>(rSet.Get( EE_CHAR_OVERLINE )).GetLineStyle() );
+        rFont.SetOverline( rSet.Get( EE_CHAR_OVERLINE ).GetLineStyle() );
     if ( bSearchInParent || ( rSet.GetItemState( EE_CHAR_STRIKEOUT ) == SfxItemState::SET ) )
-        rFont.SetStrikeout( static_cast<const SvxCrossedOutItem&>(rSet.Get( EE_CHAR_STRIKEOUT )).GetStrikeout() );
+        rFont.SetStrikeout( rSet.Get( EE_CHAR_STRIKEOUT ).GetStrikeout() );
     if ( bSearchInParent || ( rSet.GetItemState( EE_CHAR_CASEMAP ) == SfxItemState::SET ) )
-        rFont.SetCaseMap( static_cast<const SvxCaseMapItem&>(rSet.Get( EE_CHAR_CASEMAP )).GetCaseMap() );
+        rFont.SetCaseMap( rSet.Get( EE_CHAR_CASEMAP ).GetCaseMap() );
     if ( bSearchInParent || ( rSet.GetItemState( nWhich_Italic ) == SfxItemState::SET ) )
         rFont.SetItalic( static_cast<const SvxPostureItem&>(rSet.Get( nWhich_Italic )).GetPosture() );
     if ( bSearchInParent || ( rSet.GetItemState( EE_CHAR_OUTLINE ) == SfxItemState::SET ) )
-        rFont.SetOutline( static_cast<const SvxContourItem&>(rSet.Get( EE_CHAR_OUTLINE )).GetValue() );
+        rFont.SetOutline( rSet.Get( EE_CHAR_OUTLINE ).GetValue() );
     if ( bSearchInParent || ( rSet.GetItemState( EE_CHAR_SHADOW ) == SfxItemState::SET ) )
-        rFont.SetShadow( static_cast<const SvxShadowedItem&>(rSet.Get( EE_CHAR_SHADOW )).GetValue() );
+        rFont.SetShadow( rSet.Get( EE_CHAR_SHADOW ).GetValue() );
     if ( bSearchInParent || ( rSet.GetItemState( EE_CHAR_ESCAPEMENT ) == SfxItemState::SET ) )
     {
-        const SvxEscapementItem& rEsc = static_cast<const SvxEscapementItem&>( rSet.Get( EE_CHAR_ESCAPEMENT ) );
+        const SvxEscapementItem& rEsc = rSet.Get( EE_CHAR_ESCAPEMENT );
 
         sal_uInt16 const nProp = rEsc.GetProportionalHeight();
-        rFont.SetPropr( (sal_uInt8)nProp );
+        rFont.SetPropr( static_cast<sal_uInt8>(nProp) );
 
         short nEsc = rEsc.GetEsc();
         if ( nEsc == DFLT_ESC_AUTO_SUPER )
@@ -2075,15 +2016,15 @@ void CreateFont( SvxFont& rFont, const SfxItemSet& rSet, bool bSearchInParent, S
         rFont.SetEscapement( nEsc );
     }
     if ( bSearchInParent || ( rSet.GetItemState( EE_CHAR_PAIRKERNING ) == SfxItemState::SET ) )
-        rFont.SetKerning( static_cast<const SvxAutoKernItem&>(rSet.Get( EE_CHAR_PAIRKERNING )).GetValue() ? FontKerning::FontSpecific : FontKerning::NONE );
+        rFont.SetKerning( rSet.Get( EE_CHAR_PAIRKERNING ).GetValue() ? FontKerning::FontSpecific : FontKerning::NONE );
     if ( bSearchInParent || ( rSet.GetItemState( EE_CHAR_KERNING ) == SfxItemState::SET ) )
-        rFont.SetFixKerning( static_cast<const SvxKerningItem&>(rSet.Get( EE_CHAR_KERNING )).GetValue() );
+        rFont.SetFixKerning( rSet.Get( EE_CHAR_KERNING ).GetValue() );
     if ( bSearchInParent || ( rSet.GetItemState( EE_CHAR_WLM ) == SfxItemState::SET ) )
-        rFont.SetWordLineMode( static_cast<const SvxWordLineModeItem&>(rSet.Get( EE_CHAR_WLM )).GetValue() );
+        rFont.SetWordLineMode( rSet.Get( EE_CHAR_WLM ).GetValue() );
     if ( bSearchInParent || ( rSet.GetItemState( EE_CHAR_EMPHASISMARK ) == SfxItemState::SET ) )
-        rFont.SetEmphasisMark( static_cast<const SvxEmphasisMarkItem&>(rSet.Get( EE_CHAR_EMPHASISMARK )).GetValue() );
+        rFont.SetEmphasisMark( rSet.Get( EE_CHAR_EMPHASISMARK ).GetEmphasisMark() );
     if ( bSearchInParent || ( rSet.GetItemState( EE_CHAR_RELIEF ) == SfxItemState::SET ) )
-        rFont.SetRelief( (FontRelief)static_cast<const SvxCharReliefItem&>(rSet.Get( EE_CHAR_RELIEF )).GetValue() );
+        rFont.SetRelief( rSet.Get( EE_CHAR_RELIEF ).GetValue() );
 
     // If comparing the entire font, or if checking before each alteration
     // whether the value changes, remains relatively the same thing.
@@ -2095,10 +2036,10 @@ void CreateFont( SvxFont& rFont, const SfxItemSet& rSet, bool bSearchInParent, S
 
 void EditDoc::CreateDefFont( bool bUseStyles )
 {
-    SfxItemSet aTmpSet( GetItemPool(), EE_PARA_START, EE_CHAR_END );
+    SfxItemSet aTmpSet( GetItemPool(), svl::Items<EE_PARA_START, EE_CHAR_END>{} );
     CreateFont( aDefFont, aTmpSet );
     aDefFont.SetVertical( IsVertical() );
-    aDefFont.SetOrientation( IsVertical() ? 2700 : 0 );
+    aDefFont.SetOrientation( IsVertical() ? (IsTopToBottom() ? 2700 : 900) : 0 );
 
     for ( sal_Int32 nNode = 0; nNode < Count(); nNode++ )
     {
@@ -2116,12 +2057,12 @@ sal_Int32 EditDoc::GetPos(const ContentNode* p) const
 
 const ContentNode* EditDoc::GetObject(sal_Int32 nPos) const
 {
-    return 0 <= nPos && nPos < (sal_Int32)maContents.size() ? maContents[nPos].get() : nullptr;
+    return 0 <= nPos && nPos < static_cast<sal_Int32>(maContents.size()) ? maContents[nPos].get() : nullptr;
 }
 
 ContentNode* EditDoc::GetObject(sal_Int32 nPos)
 {
-    return 0 <= nPos && nPos < (sal_Int32)maContents.size() ? maContents[nPos].get() : nullptr;
+    return 0 <= nPos && nPos < static_cast<sal_Int32>(maContents.size()) ? maContents[nPos].get() : nullptr;
 }
 
 const ContentNode* EditDoc::operator[](sal_Int32 nPos) const
@@ -2146,7 +2087,7 @@ void EditDoc::Insert(sal_Int32 nPos, ContentNode* p)
 
 void EditDoc::Remove(sal_Int32 nPos)
 {
-    if (nPos < 0 || nPos >= (sal_Int32)maContents.size())
+    if (nPos < 0 || nPos >= static_cast<sal_Int32>(maContents.size()))
     {
         SAL_WARN( "editeng", "EditDoc::Remove - out of bounds pos " << nPos);
         return;
@@ -2156,12 +2097,12 @@ void EditDoc::Remove(sal_Int32 nPos)
 
 void EditDoc::Release(sal_Int32 nPos)
 {
-    if (nPos < 0 || nPos >= (sal_Int32)maContents.size())
+    if (nPos < 0 || nPos >= static_cast<sal_Int32>(maContents.size()))
     {
         SAL_WARN( "editeng", "EditDoc::Release - out of bounds pos " << nPos);
         return;
     }
-    maContents[nPos].release();
+    (void)maContents[nPos].release();
     maContents.erase(maContents.begin() + nPos);
 }
 
@@ -2215,10 +2156,9 @@ OUString EditDoc::GetParaAsString( sal_Int32 nNode ) const
 }
 
 OUString EditDoc::GetParaAsString(
-    const ContentNode* pNode, sal_Int32 nStartPos, sal_Int32 nEndPos,
-    bool bResolveFields)
+    const ContentNode* pNode, sal_Int32 nStartPos, sal_Int32 nEndPos)
 {
-    return pNode->GetExpandedText(nStartPos, nEndPos, bResolveFields);
+    return pNode->GetExpandedText(nStartPos, nEndPos);
 }
 
 EditPaM EditDoc::GetStartPaM() const
@@ -2299,7 +2239,7 @@ EditPaM EditDoc::InsertText( EditPaM aPaM, const OUString& rStr )
     DBG_ASSERT( rStr.indexOf( 0x0A ) == -1, "EditDoc::InsertText: Newlines prohibited in paragraph!" );
     DBG_ASSERT( rStr.indexOf( 0x0D ) == -1, "EditDoc::InsertText: Newlines prohibited in paragraph!" );
     DBG_ASSERT( rStr.indexOf( '\t' ) == -1, "EditDoc::InsertText: Newlines prohibited in paragraph!" );
-    DBG_ASSERT( aPaM.GetNode(), "Blinder PaM in EditDoc::InsertText1" );
+    assert(aPaM.GetNode());
 
     aPaM.GetNode()->Insert( rStr, aPaM.GetIndex() );
     aPaM.GetNode()->ExpandAttribs( aPaM.GetIndex(), rStr.getLength(), GetItemPool() );
@@ -2312,7 +2252,7 @@ EditPaM EditDoc::InsertText( EditPaM aPaM, const OUString& rStr )
 
 EditPaM EditDoc::InsertParaBreak( EditPaM aPaM, bool bKeepEndingAttribs )
 {
-    DBG_ASSERT( aPaM.GetNode(), "Blinder PaM in EditDoc::InsertParaBreak" );
+    assert(aPaM.GetNode());
     ContentNode* pCurNode = aPaM.GetNode();
     sal_Int32 nPos = GetPos( pCurNode );
     OUString aStr = aPaM.GetNode()->Copy( aPaM.GetIndex() );
@@ -2322,7 +2262,7 @@ EditPaM EditDoc::InsertParaBreak( EditPaM aPaM, bool bKeepEndingAttribs )
     ContentAttribs aContentAttribs( aPaM.GetNode()->GetContentAttribs() );
 
     // for a new paragraph we like to have the bullet/numbering visible by default
-    aContentAttribs.GetItems().Put( SfxBoolItem( EE_PARA_BULLETSTATE, true), EE_PARA_BULLETSTATE );
+    aContentAttribs.GetItems().Put( SfxBoolItem( EE_PARA_BULLETSTATE, true) );
 
     // ContentNode constructor copies also the paragraph attributes
     ContentNode* pNode = new ContentNode( aStr, aContentAttribs );
@@ -2335,7 +2275,7 @@ EditPaM EditDoc::InsertParaBreak( EditPaM aPaM, bool bKeepEndingAttribs )
         OUString aFollow( pStyle->GetFollow() );
         if ( !aFollow.isEmpty() && ( aFollow != pStyle->GetName() ) )
         {
-            SfxStyleSheetBase* pNext = pStyle->GetPool().Find( aFollow, pStyle->GetFamily() );
+            SfxStyleSheetBase* pNext = pStyle->GetPool()->Find( aFollow, pStyle->GetFamily() );
             pNode->SetStyleSheet( static_cast<SfxStyleSheet*>(pNext) );
         }
     }
@@ -2354,14 +2294,14 @@ EditPaM EditDoc::InsertParaBreak( EditPaM aPaM, bool bKeepEndingAttribs )
 
 EditPaM EditDoc::InsertFeature( EditPaM aPaM, const SfxPoolItem& rItem  )
 {
-    DBG_ASSERT( aPaM.GetNode(), "Blinder PaM in EditDoc::InsertFeature" );
+    assert(aPaM.GetNode());
 
     aPaM.GetNode()->Insert( OUString(CH_FEATURE), aPaM.GetIndex() );
     aPaM.GetNode()->ExpandAttribs( aPaM.GetIndex(), 1, GetItemPool() );
 
     // Create a feature-attribute for the feature...
     EditCharAttrib* pAttrib = MakeCharAttrib( GetItemPool(), rItem, aPaM.GetIndex(), aPaM.GetIndex()+1 );
-    DBG_ASSERT( pAttrib, "Why can not the feature be created?" );
+    assert(pAttrib);
     aPaM.GetNode()->GetCharAttribs().InsertAttrib( pAttrib );
 
     SetModified( true );
@@ -2393,14 +2333,14 @@ void EditDoc::RemoveChars( EditPaM aPaM, sal_Int32 nChars )
 {
     // Maybe remove Features!
     aPaM.GetNode()->Erase( aPaM.GetIndex(), nChars );
-    aPaM.GetNode()->CollapsAttribs( aPaM.GetIndex(), nChars, GetItemPool() );
+    aPaM.GetNode()->CollapseAttribs( aPaM.GetIndex(), nChars, GetItemPool() );
 
     SetModified( true );
 }
 
 void EditDoc::InsertAttribInSelection( ContentNode* pNode, sal_Int32 nStart, sal_Int32 nEnd, const SfxPoolItem& rPoolItem )
 {
-    DBG_ASSERT( pNode, "What to do with the attribute?" );
+    assert(pNode);
     DBG_ASSERT( nEnd <= pNode->Len(), "InsertAttrib: Attribute to large!" );
 
     // for Optimization:
@@ -2445,7 +2385,7 @@ bool EditDoc::RemoveAttribs( ContentNode* pNode, sal_Int32 nStart, sal_Int32 nEn
 bool EditDoc::RemoveAttribs( ContentNode* pNode, sal_Int32 nStart, sal_Int32 nEnd, EditCharAttrib*& rpStarting, EditCharAttrib*& rpEnding, sal_uInt16 nWhich )
 {
 
-    DBG_ASSERT( pNode, "What to do with the attribute?" );
+    assert(pNode);
     DBG_ASSERT( nEnd <= pNode->Len(), "InsertAttrib: Attribute to large!" );
 
     // This ends at the beginning of the selection => can be expanded
@@ -2457,7 +2397,7 @@ bool EditDoc::RemoveAttribs( ContentNode* pNode, sal_Int32 nStart, sal_Int32 nEn
 
     DBG_ASSERT( nStart <= nEnd, "Small miscalculations in InsertAttribInSelection" );
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(pNode->GetCharAttribs());
 #endif
 
@@ -2552,7 +2492,7 @@ bool EditDoc::RemoveAttribs( ContentNode* pNode, sal_Int32 nStart, sal_Int32 nEn
         SetModified(true);
     }
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(pNode->GetCharAttribs());
 #endif
 
@@ -2564,7 +2504,7 @@ void EditDoc::InsertAttrib( const SfxPoolItem& rPoolItem, ContentNode* pNode, sa
     // This method no longer checks whether a corresponding attribute already
     // exists at this place!
     EditCharAttrib* pAttrib = MakeCharAttrib( GetItemPool(), rPoolItem, nStart, nEnd );
-    DBG_ASSERT( pAttrib, "MakeCharAttrib failed!" );
+    assert(pAttrib);
     pNode->GetCharAttribs().InsertAttrib( pAttrib );
 
     SetModified( true );
@@ -2615,7 +2555,7 @@ void EditDoc::InsertAttrib( ContentNode* pNode, sal_Int32 nStart, sal_Int32 nEnd
 
 void EditDoc::FindAttribs( ContentNode* pNode, sal_Int32 nStartPos, sal_Int32 nEndPos, SfxItemSet& rCurSet )
 {
-    DBG_ASSERT( pNode, "Where to search?" );
+    assert(pNode);
     DBG_ASSERT( nStartPos <= nEndPos, "Invalid region!" );
 
     sal_uInt16 nAttr = 0;
@@ -2672,7 +2612,7 @@ void EditDoc::FindAttribs( ContentNode* pNode, sal_Int32 nStartPos, sal_Int32 nE
         while ( pAttr && ( pAttr->GetStart() < nEndPos) )
         {
             const SfxPoolItem* pItem = nullptr;
-            // Attribut is about...
+            // Attribute is about...
             if ( ( pAttr->GetStart() <= nStartPos ) && ( pAttr->GetEnd() >= nEndPos ) )
                 pItem = pAttr->GetItem();
             // Attribute starts right in the middle ...
@@ -2685,7 +2625,7 @@ void EditDoc::FindAttribs( ContentNode* pNode, sal_Int32 nStartPos, sal_Int32 nE
                 // If (...)
                 // It needs to be examined on exactly the same attribute at the
                 // break point, which is quite expensive.
-                // Since optimazation is done when inserting the  attributes
+                // Since optimization is done when inserting the attributes
                 // this case does not appear so fast...
                 // So based on the need for speed:
                 rCurSet.InvalidateItem( pAttr->GetItem()->Which() );
@@ -2719,9 +2659,36 @@ void EditDoc::FindAttribs( ContentNode* pNode, sal_Int32 nStartPos, sal_Int32 nE
     }
 }
 
+void EditDoc::dumpAsXml(struct _xmlTextWriter* pWriter) const
+{
+    bool bOwns = false;
+    if (!pWriter)
+    {
+        pWriter = xmlNewTextWriterFilename("editdoc.xml", 0);
+        xmlTextWriterSetIndent(pWriter,1);
+        xmlTextWriterSetIndentString(pWriter, BAD_CAST("  "));
+        xmlTextWriterStartDocument(pWriter, nullptr, nullptr, nullptr);
+        bOwns = true;
+    }
+
+    xmlTextWriterStartElement(pWriter, BAD_CAST("EditDoc"));
+    for (auto const & i : maContents)
+    {
+        i->dumpAsXml(pWriter);
+    }
+    xmlTextWriterEndElement(pWriter);
+
+    if (bOwns)
+    {
+       xmlTextWriterEndDocument(pWriter);
+       xmlFreeTextWriter(pWriter);
+    }
+}
+
+
 namespace {
 
-struct LessByStart : std::binary_function<std::unique_ptr<EditCharAttrib>, std::unique_ptr<EditCharAttrib>, bool>
+struct LessByStart
 {
     bool operator() (const std::unique_ptr<EditCharAttrib>& left, const std::unique_ptr<EditCharAttrib>& right) const
     {
@@ -2755,7 +2722,7 @@ void CharAttribList::InsertAttrib( EditCharAttrib* pAttrib )
 
     const sal_Int32 nStart = pAttrib->GetStart(); // may be better for Comp.Opt.
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(*this);
 #endif
 
@@ -2776,7 +2743,7 @@ void CharAttribList::InsertAttrib( EditCharAttrib* pAttrib )
 
     if (bInsert) aAttribs.push_back(std::unique_ptr<EditCharAttrib>(pAttrib));
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(*this);
 #endif
 }
@@ -2785,20 +2752,20 @@ void CharAttribList::ResortAttribs()
 {
     std::sort(aAttribs.begin(), aAttribs.end(), LessByStart());
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(*this);
 #endif
 }
 
 void CharAttribList::OptimizeRanges( SfxItemPool& rItemPool )
 {
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(*this);
 #endif
-    for (sal_Int32 i = 0; i < (sal_Int32)aAttribs.size(); ++i)
+    for (sal_Int32 i = 0; i < static_cast<sal_Int32>(aAttribs.size()); ++i)
     {
         EditCharAttrib& rAttr = *aAttribs[i].get();
-        for (sal_Int32 nNext = i+1; nNext < (sal_Int32)aAttribs.size(); ++nNext)
+        for (sal_Int32 nNext = i+1; nNext < static_cast<sal_Int32>(aAttribs.size()); ++nNext)
         {
             EditCharAttrib& rNext = *aAttribs[nNext].get();
             if (!rAttr.IsFeature() && rNext.GetStart() == rAttr.GetEnd() && rNext.Which() == rAttr.Which())
@@ -2817,7 +2784,7 @@ void CharAttribList::OptimizeRanges( SfxItemPool& rItemPool )
             }
         }
     }
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
     CharAttribList::DbgCheckAttribs(*this);
 #endif
 }
@@ -2834,7 +2801,7 @@ const EditCharAttrib* CharAttribList::FindAttrib( sal_uInt16 nWhich, sal_Int32 n
     AttribsType::const_reverse_iterator it = aAttribs.rbegin(), itEnd = aAttribs.rend();
     for (; it != itEnd; ++it)
     {
-        const EditCharAttrib& rAttr = *it->get();
+        const EditCharAttrib& rAttr = **it;
         if (rAttr.Which() == nWhich && rAttr.IsIn(nPos))
             return &rAttr;
     }
@@ -2848,7 +2815,7 @@ EditCharAttrib* CharAttribList::FindAttrib( sal_uInt16 nWhich, sal_Int32 nPos )
     AttribsType::reverse_iterator it = aAttribs.rbegin(), itEnd = aAttribs.rend();
     for (; it != itEnd; ++it)
     {
-        EditCharAttrib& rAttr = *it->get();
+        EditCharAttrib& rAttr = **it;
         if (rAttr.Which() == nWhich && rAttr.IsIn(nPos))
             return &rAttr;
     }
@@ -2857,11 +2824,10 @@ EditCharAttrib* CharAttribList::FindAttrib( sal_uInt16 nWhich, sal_Int32 nPos )
 
 const EditCharAttrib* CharAttribList::FindNextAttrib( sal_uInt16 nWhich, sal_Int32 nFromPos ) const
 {
-    DBG_ASSERT( nWhich, "FindNextAttrib: Which?" );
-    AttribsType::const_iterator it = aAttribs.begin(), itEnd = aAttribs.end();
-    for (; it != itEnd; ++it)
+    assert(nWhich);
+    for (auto const& attrib : aAttribs)
     {
-        const EditCharAttrib& rAttr = *it->get();
+        const EditCharAttrib& rAttr = *attrib;
         if (rAttr.GetStart() >= nFromPos && rAttr.Which() == nWhich)
             return &rAttr;
     }
@@ -2873,7 +2839,7 @@ bool CharAttribList::HasAttrib( sal_Int32 nStartPos, sal_Int32 nEndPos ) const
     AttribsType::const_reverse_iterator it = aAttribs.rbegin(), itEnd = aAttribs.rend();
     for (; it != itEnd; ++it)
     {
-        const EditCharAttrib& rAttr = *it->get();
+        const EditCharAttrib& rAttr = **it;
         if (rAttr.GetStart() < nEndPos && rAttr.GetEnd() > nStartPos)
             return true;
     }
@@ -2883,7 +2849,7 @@ bool CharAttribList::HasAttrib( sal_Int32 nStartPos, sal_Int32 nEndPos ) const
 
 namespace {
 
-class FindByAddress : public std::unary_function<std::unique_ptr<EditCharAttrib>, bool>
+class FindByAddress
 {
     const EditCharAttrib* mpAttr;
 public:
@@ -2905,7 +2871,7 @@ void CharAttribList::Remove(const EditCharAttrib* p)
 
 void CharAttribList::Remove(sal_Int32 nPos)
 {
-    if (nPos >= (sal_Int32)aAttribs.size())
+    if (nPos >= static_cast<sal_Int32>(aAttribs.size()))
         return;
 
     aAttribs.erase(aAttribs.begin()+nPos);
@@ -2923,7 +2889,7 @@ bool CharAttribList::HasBoundingAttrib( sal_Int32 nBound ) const
     AttribsType::const_reverse_iterator it = aAttribs.rbegin(), itEnd = aAttribs.rend();
     for (; it != itEnd; ++it)
     {
-        const EditCharAttrib& rAttr = *it->get();
+        const EditCharAttrib& rAttr = **it;
         if (rAttr.GetEnd() < nBound)
             return false;
 
@@ -2948,7 +2914,7 @@ EditCharAttrib* CharAttribList::FindEmptyAttrib( sal_uInt16 nWhich, sal_Int32 nP
 
 namespace {
 
-class FindByStartPos : public std::unary_function<std::unique_ptr<EditCharAttrib>, bool>
+class FindByStartPos
 {
     sal_Int32 mnPos;
 public:
@@ -2978,7 +2944,7 @@ const EditCharAttrib* CharAttribList::FindFeature( sal_Int32 nPos ) const
 
 namespace {
 
-class RemoveEmptyAttrItem : public std::unary_function<std::unique_ptr<EditCharAttrib>, void>
+class RemoveEmptyAttrItem
 {
     SfxItemPool& mrItemPool;
 public:
@@ -2999,7 +2965,7 @@ void CharAttribList::DeleteEmptyAttribs( SfxItemPool& rItemPool )
     bHasEmptyAttribs = false;
 }
 
-#if OSL_DEBUG_LEVEL > 0
+#if OSL_DEBUG_LEVEL > 0 && !defined NDEBUG
 void CharAttribList::DbgCheckAttribs(CharAttribList const& rAttribs)
 {
     std::set<std::pair<sal_Int32, sal_uInt16>> zero_set;
@@ -3013,49 +2979,30 @@ void CharAttribList::DbgCheckAttribs(CharAttribList const& rAttribs)
             assert(zero_set.insert(std::make_pair(rAttr->GetStart(), rAttr->Which())).second && "duplicate 0-length attribute detected");
         }
     }
-    CheckOrderedList(rAttribs.GetAttribs(), true);
-//    CheckOrderedList(rAttribs.GetAttribs(), false); // this does not work - need 2nd array to sort by ends?
+    CheckOrderedList(rAttribs.GetAttribs());
 }
 #endif
 
-
-EditEngineItemPool::EditEngineItemPool( bool bPersistenRefCounts )
-    : SfxItemPool( "EditEngineItemPool", EE_ITEMS_START, EE_ITEMS_END,
-                    aItemInfos, nullptr, bPersistenRefCounts )
+void CharAttribList::dumpAsXml(struct _xmlTextWriter* pWriter) const
 {
-    SetVersionMap( 1, 3999, 4015, aV1Map );
-    SetVersionMap( 2, 3999, 4019, aV2Map );
-    SetVersionMap( 3, 3997, 4020, aV3Map );
-    SetVersionMap( 4, 3994, 4022, aV4Map );
-    SetVersionMap( 5, 3994, 4037, aV5Map );
-    SetVersionMap( 6, 3994, 4038, aV6Map );
+    xmlTextWriterStartElement(pWriter, BAD_CAST("CharAttribList"));
+    for (auto const & i : aAttribs) {
+        i->dumpAsXml(pWriter);
+    }
+    xmlTextWriterEndElement(pWriter);
+}
 
-    SfxPoolItem** ppDefItems = EE_DLL().GetGlobalData()->GetDefItems();
-    SetDefaults( ppDefItems );
+EditEngineItemPool::EditEngineItemPool()
+    : SfxItemPool( "EditEngineItemPool", EE_ITEMS_START, EE_ITEMS_END,
+                    aItemInfos, nullptr )
+{
+    m_xDefItems = EditDLL::Get().GetGlobalData()->GetDefItems();
+    SetDefaults(m_xDefItems->getDefaults());
 }
 
 EditEngineItemPool::~EditEngineItemPool()
 {
-}
-
-SvStream& EditEngineItemPool::Store( SvStream& rStream ) const
-{
-    // for a 3.1 export a hack has to be installed, as in there is a BUG in
-    // SfxItemSet::Load, but not subsequently after 3.1.
-
-    // The selected range must be kept after Store, because itemsets are not
-    // stored until then...
-
-    long nVersion = rStream.GetVersion();
-    bool b31Format = nVersion && ( nVersion <= SOFFICE_FILEFORMAT_31 );
-
-    EditEngineItemPool* pThis = const_cast<EditEngineItemPool*>(this);
-    if ( b31Format )
-        pThis->SetStoringRange( 3997, 4022 );
-    else
-        pThis->SetStoringRange( EE_ITEMS_START, EE_ITEMS_END );
-
-    return SfxItemPool::Store( rStream );
+    ClearDefaults();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

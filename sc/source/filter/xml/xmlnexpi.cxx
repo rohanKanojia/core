@@ -17,18 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <rtl/ustrbuf.hxx>
-
 #include "xmlnexpi.hxx"
 #include "xmlimprt.hxx"
-#include "xmlcelli.hxx"
-#include "docuno.hxx"
-#include "document.hxx"
+#include <document.hxx>
 
-#include <xmloff/xmltkmap.hxx>
-#include <xmloff/nmspmap.hxx>
+#include <xmloff/xmlnmspe.hxx>
 
 using namespace com::sun::star;
+using namespace xmloff::token;
 
 ScXMLNamedExpressionsContext::GlobalInserter::GlobalInserter(ScXMLImport& rImport) : mrImport(rImport) {}
 
@@ -47,10 +43,9 @@ void ScXMLNamedExpressionsContext::SheetLocalInserter::insert(ScMyNamedExpressio
 }
 
 ScXMLNamedExpressionsContext::ScXMLNamedExpressionsContext(
-    ScXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLName,
-    const uno::Reference<xml::sax::XAttributeList>& /* xAttrList */,
+    ScXMLImport& rImport,
     Inserter* pInserter ) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     mpInserter(pInserter)
 {
     rImport.LockSolarMutex();
@@ -61,47 +56,38 @@ ScXMLNamedExpressionsContext::~ScXMLNamedExpressionsContext()
     GetScImport().UnlockSolarMutex();
 }
 
-SvXMLImportContext *ScXMLNamedExpressionsContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLNamedExpressionsContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext(nullptr);
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap(GetScImport().GetNamedExpressionsElemTokenMap());
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-    case XML_TOK_NAMED_EXPRESSIONS_NAMED_RANGE:
-        pContext = new ScXMLNamedRangeContext(
-            GetScImport(), nPrefix, rLName, xAttrList, mpInserter.get() );
-        break;
-    case XML_TOK_NAMED_EXPRESSIONS_NAMED_EXPRESSION:
-        pContext = new ScXMLNamedExpressionContext(
-            GetScImport(), nPrefix, rLName, xAttrList, mpInserter.get() );
-        break;
+        case XML_ELEMENT( TABLE, XML_NAMED_RANGE ):
+            pContext = new ScXMLNamedRangeContext(
+                GetScImport(), pAttribList, mpInserter.get() );
+            break;
+        case XML_ELEMENT( TABLE, XML_NAMED_EXPRESSION ):
+            pContext = new ScXMLNamedExpressionContext(
+                GetScImport(), pAttribList, mpInserter.get() );
+            break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLNamedExpressionsContext::EndElement()
-{
-    // happens in ScXMLImport::EndDocument()
-    // because it has to be set after the Database Ranges
-}
-
 ScXMLNamedRangeContext::ScXMLNamedRangeContext(
     ScXMLImport& rImport,
-    sal_uInt16 nPrfx,
-    const OUString& rLName,
-    const uno::Reference<xml::sax::XAttributeList>& xAttrList,
+    const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
     ScXMLNamedExpressionsContext::Inserter* pInserter ) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
-    mpInserter(pInserter)
+    ScXMLImportContext( rImport )
 {
-    if (!mpInserter)
+    if (!pInserter)
         return;
 
     ScMyNamedExpression* pNamedExpression(new ScMyNamedExpression);
@@ -110,118 +96,72 @@ ScXMLNamedRangeContext::ScXMLNamedRangeContext(
     pNamedExpression->eGrammar = formula::FormulaGrammar::mergeToGrammar(
             GetScImport().GetDocument()->GetStorageGrammar(),
             formula::FormulaGrammar::CONV_OOO);
-    sal_Int16 nAttrCount(xAttrList.is() ? xAttrList->getLength() : 0);
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetNamedRangeAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
-    {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix(GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName ));
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
 
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+    if ( rAttrList.is() )
+    {
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_NAMED_RANGE_ATTR_NAME :
+            switch (aIter.getToken())
             {
-                pNamedExpression->sName = sValue;
+                case XML_ELEMENT( TABLE, XML_NAME ):
+                    pNamedExpression->sName = aIter.toString();
+                    break;
+                case XML_ELEMENT( TABLE, XML_CELL_RANGE_ADDRESS ):
+                    pNamedExpression->sContent = aIter.toString();
+                    break;
+                case XML_ELEMENT( TABLE, XML_BASE_CELL_ADDRESS ):
+                    pNamedExpression->sBaseCellAddress = aIter.toString();
+                    break;
+                case XML_ELEMENT( TABLE, XML_RANGE_USABLE_AS ):
+                    pNamedExpression->sRangeType = aIter.toString();
+                    break;
             }
-            break;
-            case XML_TOK_NAMED_RANGE_ATTR_CELL_RANGE_ADDRESS :
-            {
-                pNamedExpression->sContent = sValue;
-            }
-            break;
-            case XML_TOK_NAMED_RANGE_ATTR_BASE_CELL_ADDRESS :
-            {
-                pNamedExpression->sBaseCellAddress = sValue;
-            }
-            break;
-            case XML_TOK_NAMED_RANGE_ATTR_RANGE_USABLE_AS :
-            {
-                pNamedExpression->sRangeType = sValue;
-            }
-            break;
         }
     }
     pNamedExpression->bIsExpression = false;
-    mpInserter->insert(pNamedExpression);
+    pInserter->insert(pNamedExpression);
 }
 
 ScXMLNamedRangeContext::~ScXMLNamedRangeContext()
 {
 }
 
-SvXMLImportContext *ScXMLNamedRangeContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLNamedRangeContext::EndElement()
-{
-}
-
 ScXMLNamedExpressionContext::ScXMLNamedExpressionContext(
-    ScXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLName,
-    const uno::Reference<xml::sax::XAttributeList>& xAttrList,
+    ScXMLImport& rImport,
+    const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
     ScXMLNamedExpressionsContext::Inserter* pInserter ) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
-    mpInserter(pInserter)
+    ScXMLImportContext( rImport )
 {
-    if (!mpInserter)
+    if (!pInserter)
         return;
 
     ScMyNamedExpression* pNamedExpression(new ScMyNamedExpression);
-    sal_Int16 nAttrCount(xAttrList.is() ? xAttrList->getLength() : 0);
-    const SvXMLTokenMap& rAttrTokenMap(GetScImport().GetNamedExpressionAttrTokenMap());
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
-    {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix(GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName ));
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
 
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+    if ( rAttrList.is() )
+    {
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_NAMED_EXPRESSION_ATTR_NAME :
+            switch (aIter.getToken())
             {
-                pNamedExpression->sName = sValue;
+                case XML_ELEMENT( TABLE, XML_NAME ):
+                    pNamedExpression->sName = aIter.toString();
+                    break;
+                case XML_ELEMENT( TABLE, XML_EXPRESSION ):
+                    GetScImport().ExtractFormulaNamespaceGrammar(
+                        pNamedExpression->sContent, pNamedExpression->sContentNmsp,
+                        pNamedExpression->eGrammar, aIter.toString() );
+                    break;
+                case XML_ELEMENT( TABLE, XML_BASE_CELL_ADDRESS ):
+                    pNamedExpression->sBaseCellAddress = aIter.toString();
+                    break;
             }
-            break;
-            case XML_TOK_NAMED_EXPRESSION_ATTR_EXPRESSION :
-            {
-                GetScImport().ExtractFormulaNamespaceGrammar(
-                    pNamedExpression->sContent, pNamedExpression->sContentNmsp,
-                    pNamedExpression->eGrammar, sValue );
-            }
-            break;
-            case XML_TOK_NAMED_EXPRESSION_ATTR_BASE_CELL_ADDRESS :
-            {
-                pNamedExpression->sBaseCellAddress = sValue;
-            }
-            break;
         }
     }
     pNamedExpression->bIsExpression = true;
-    mpInserter->insert(pNamedExpression);
+    pInserter->insert(pNamedExpression);
 }
 
 ScXMLNamedExpressionContext::~ScXMLNamedExpressionContext()
-{
-}
-
-SvXMLImportContext *ScXMLNamedExpressionContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<
-                                        css::xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLNamedExpressionContext::EndElement()
 {
 }
 

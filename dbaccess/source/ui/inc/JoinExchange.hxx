@@ -22,7 +22,7 @@
 #include "dbexchange.hxx"
 #include "TableWindowListBox.hxx"
 
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
 #include <cppuhelper/implbase1.hxx>
 
@@ -31,42 +31,39 @@ namespace dbaui
     // OJoinExchObj: Additional data to create Joins in the JoinShell
 
     typedef ::cppu::ImplHelper1< css::lang::XUnoTunnel > OJoinExchObj_Base;
-    class OJoinExchObj : public TransferableHelper, public OJoinExchObj_Base
+    class OJoinExchObj final : public TransferableHelper, public OJoinExchObj_Base
     {
-        static OUString         m_sJoinFormat;
         bool                m_bFirstEntry;
 
-    protected:
         OJoinExchangeData           m_jxdSourceDescription;
         IDragTransferableListener*  m_pDragListener;
 
-        virtual ~OJoinExchObj();
+        virtual ~OJoinExchObj() override;
 
     public:
-        OJoinExchObj(const OJoinExchangeData& jxdSource,bool _bFirstEntry=false);
+        OJoinExchObj(const OJoinExchangeData& jxdSource, bool _bFirstEntry);
 
 
         // XInterface
-        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) override;
         virtual void SAL_CALL acquire(  ) throw() override;
         virtual void SAL_CALL release(  ) throw() override;
 
         // XUnoTunnel
-        virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& _rIdentifier ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& _rIdentifier ) override;
 
         void StartDrag( vcl::Window* pWindow, sal_Int8 nDragSourceActions, IDragTransferableListener* _pListener );
 
         static OJoinExchangeData    GetSourceDescription(const css::uno::Reference< css::datatransfer::XTransferable >& _rxObject);
         static bool             isFormatAvailable( const DataFlavorExVector& _rFormats ,SotClipboardFormatId _nSlotID=SotClipboardFormatId::SBA_JOIN);
 
-    protected:
+    private:
         virtual void                AddSupportedFormats() override;
         virtual bool GetData( const css::datatransfer::DataFlavor& rFlavor, const OUString& rDestDoc ) override;
         virtual void                DragFinished( sal_Int8 nDropAction ) override;
 
         static css::uno::Sequence< sal_Int8 > getUnoTunnelImplementationId();
 
-    private:
         using TransferableHelper::StartDrag;
     };
 }

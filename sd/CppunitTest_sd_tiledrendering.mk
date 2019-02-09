@@ -19,6 +19,7 @@ $(eval $(call gb_CppunitTest_use_libraries,sd_tiledrendering, \
     comphelper \
     cppu \
     cppuhelper \
+    drawinglayer \
     editeng \
     sal \
     sfx \
@@ -31,7 +32,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sd_tiledrendering, \
     vcl \
     tl \
     utl \
-    $(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_externals,sd_tiledrendering,\
@@ -46,10 +46,7 @@ $(eval $(call gb_CppunitTest_set_include,sd_tiledrendering,\
     $$(INCLUDE) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,sd_tiledrendering,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,sd_tiledrendering))
 
 $(eval $(call gb_CppunitTest_use_ure,sd_tiledrendering))
 $(eval $(call gb_CppunitTest_use_vcl,sd_tiledrendering))
@@ -57,7 +54,5 @@ $(eval $(call gb_CppunitTest_use_vcl,sd_tiledrendering))
 $(eval $(call gb_CppunitTest_use_rdb,sd_tiledrendering,services))
 
 $(eval $(call gb_CppunitTest_use_configuration,sd_tiledrendering))
-
-$(call gb_CppunitTest_get_target,sd_tiledrendering) : $(call gb_AllLangResTarget_get_target,sd)
 
 # vim: set noet sw=4 ts=4:

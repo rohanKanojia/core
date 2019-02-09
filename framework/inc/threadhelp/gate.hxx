@@ -47,7 +47,7 @@ class Gate
             @short      ctor
             @descr      These initialize the object right as an open gate.
         *//*-*****************************************************************************************************/
-        inline Gate()
+        Gate()
             :   m_bClosed   ( false )
         {
             open();
@@ -59,7 +59,7 @@ class Gate
                         blocked threads can running ... but I don't know
                         if it's right - we are destroyed yet!?
         *//*-*****************************************************************************************************/
-        inline ~Gate()
+        ~Gate()
         {
             open();
         }
@@ -70,7 +70,7 @@ class Gate
         Gate(const Gate&) = delete;
         /*-****************************************************************************************************
             @short      copy-assignment
-            @descr      Forbid copy assiging
+            @descr      Forbid copy assigning
         *//*-*****************************************************************************************************/
         Gate& operator=(const Gate&) = delete;
 
@@ -104,7 +104,7 @@ class Gate
             // Reset condition -> wait blocks now -> gate is closed
             m_aPassage.reset();
             // Check if operation was successful!
-            // Check returns false if condition was reseted => m_bClosed will be true then => we can return true; closing ok
+            // Check returns false if condition was reset => m_bClosed will be true then => we can return true; closing ok
             m_bClosed = !m_aPassage.check();
         }
 

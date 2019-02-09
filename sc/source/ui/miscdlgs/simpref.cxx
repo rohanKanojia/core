@@ -17,16 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vcl/msgbox.hxx>
 #include <sfx2/app.hxx>
 
-#include "reffact.hxx"
-#include "document.hxx"
-#include "scresid.hxx"
-#include "globstr.hrc"
-#include "rangenam.hxx"
-#include "simpref.hxx"
-#include "scmod.hxx"
+#include <reffact.hxx>
+#include <document.hxx>
+#include <rangenam.hxx>
+#include <simpref.hxx>
+#include <scmod.hxx>
 
 ScSimpleRefDlg::ScSimpleRefDlg(SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent)
     : ScAnyRefDlg(pB, pCW, pParent, "SimpleRefDialog", "modules/scalc/ui/simplerefdialog.ui")
@@ -185,7 +182,7 @@ void ScSimpleRefDlg::RefInputDone( bool bForced)
 
 // Handler:
 
-IMPL_LINK_NOARG_TYPED(ScSimpleRefDlg, OkBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScSimpleRefDlg, OkBtnHdl, Button*, void)
 {
     bAutoReOpen=false;
     OUString aResult=m_pEdAssign->GetText();
@@ -195,7 +192,7 @@ IMPL_LINK_NOARG_TYPED(ScSimpleRefDlg, OkBtnHdl, Button*, void)
     aUnoLink.Call( aResult );
 }
 
-IMPL_LINK_NOARG_TYPED(ScSimpleRefDlg, CancelBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScSimpleRefDlg, CancelBtnHdl, Button*, void)
 {
     bAutoReOpen=false;
     OUString aResult=m_pEdAssign->GetText();

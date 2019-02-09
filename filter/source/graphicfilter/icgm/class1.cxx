@@ -18,7 +18,7 @@
  */
 
 
-#include <main.hxx>
+#include "main.hxx"
 
 
 void CGM::ImplDoClass1()
@@ -58,7 +58,7 @@ void CGM::ImplDoClass1()
         break;
         case 0x05 : /*Real Precision*/
         {
-            nUInteger = ImplGetUI16( 4 );
+            nUInteger = ImplGetUI16();
             nI0 = ImplGetI( pElement->nIntegerPrecision );  // exponent
             nI1 = ImplGetI( pElement->nIntegerPrecision );  // mantisse
             switch( nUInteger )
@@ -146,17 +146,7 @@ void CGM::ImplDoClass1()
         break;
         case 0x0a : /*Color Value Extent*/
         {
-            if ( pElement->eColorModel == CM_RGB )
-                nI1 = 6;
-            else
-            {
-                nI1 = 8;
-                mbStatus = false;                               // CMYK is not supported
-            }
-            for ( nI0 = 0; nI0 < nI1; nI0++ )
-            {
-                pElement->nColorValueExtent[ nI0 ] = (sal_uInt8)ImplGetUI( pElement->nColorPrecision );
-            }
+            nI1 = 6;
         }
         break;
         case 0x0b : /*MetaFile Element List */break;
@@ -164,9 +154,9 @@ void CGM::ImplDoClass1()
         {
             if ( mnElementSize > 1 )
             {
-                sal_uInt8* pBuf = new sal_uInt8[ mnElementSize ];
-                memcpy( pBuf, mpSource, mnElementSize );
-                maDefRepList.push_back( pBuf );
+                std::unique_ptr<sal_uInt8[]> pBuf(new sal_uInt8[ mnElementSize ]);
+                memcpy( pBuf.get(), mpSource, mnElementSize );
+                maDefRepList.push_back( std::move(pBuf) );
                 maDefRepSizeList.push_back( mnElementSize );
             }
             mnParaSize = mnElementSize;
@@ -176,8 +166,11 @@ void CGM::ImplDoClass1()
         {
             while ( mnParaSize < mnElementSize )
             {
-                sal_uInt32 nSize;
-                nSize = ImplGetUI( 1 );
+                sal_uInt32 nSize = ImplGetUI(1);
+
+                if (static_cast<sal_uIntPtr>(mpEndValidSource - (mpSource + mnParaSize)) < nSize)
+                    throw css::uno::Exception("attempt to read past end of input", nullptr);
+
                 pElement->aFontList.InsertName( mpSource + mnParaSize, nSize );
                 mnParaSize += nSize;
             }
@@ -187,17 +180,19 @@ void CGM::ImplDoClass1()
         {
             while ( mnParaSize < mnElementSize )
             {
-                sal_uInt32 nCharSetType;
-                sal_uInt32 nSize;
-                nCharSetType = ImplGetUI16();
-                nSize = ImplGetUI( 1 );
-                pElement->aFontList.InsertCharSet( (CharSetType)nCharSetType, mpSource + mnParaSize, nSize );
+                sal_uInt32 nCharSetType = ImplGetUI16();
+                sal_uInt32 nSize = ImplGetUI(1);
+
+                if (static_cast<sal_uIntPtr>(mpEndValidSource - (mpSource + mnParaSize)) < nSize)
+                    throw css::uno::Exception("attempt to read past end of input", nullptr);
+
+                pElement->aFontList.InsertCharSet( static_cast<CharSetType>(nCharSetType), mpSource + mnParaSize, nSize );
                 mnParaSize += nSize;
             }
         }
         break;
         case 0x0f : /*Character Coding Announcer*/
-            pElement->eCharacterCodingA = (CharacterCodingA)ImplGetUI16();
+            pElement->eCharacterCodingA = static_cast<CharacterCodingA>(ImplGetUI16());
         break;
         case 0x10 : /*Name Precision */break;                   // NS
         case 0x11 : /*Maximum VDC Extent */break;               // NS

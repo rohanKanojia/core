@@ -19,9 +19,10 @@
 
 #include "refvaluecomponent.hxx"
 
+#include <comphelper/property.hxx>
 #include <tools/diagnose_ex.h>
 
-#include <list>
+#include <vector>
 
 
 namespace frm
@@ -72,7 +73,7 @@ namespace frm
         switch ( _nHandle )
         {
         case PROPERTY_ID_REFVALUE:          _rValue <<= m_sReferenceValue; break;
-        case PROPERTY_ID_DEFAULT_STATE:    _rValue <<= (sal_Int16)m_eDefaultChecked; break;
+        case PROPERTY_ID_DEFAULT_STATE:    _rValue <<= static_cast<sal_Int16>(m_eDefaultChecked); break;
 
         case PROPERTY_ID_UNCHECKED_REFVALUE:
             _rValue <<= m_sNoCheckReferenceValue;
@@ -84,7 +85,7 @@ namespace frm
     }
 
 
-    void SAL_CALL OReferenceValueComponent::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _rValue ) throw (Exception, std::exception)
+    void SAL_CALL OReferenceValueComponent::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _rValue )
     {
         switch ( _nHandle )
         {
@@ -108,7 +109,7 @@ namespace frm
                      " 0--2"),
                     css::uno::Reference<css::uno::XInterface>(), -1);
             }
-            m_eDefaultChecked = (ToggleState)nDefaultChecked;
+            m_eDefaultChecked = static_cast<ToggleState>(nDefaultChecked);
             resetNoBroadcast();
         }
         break;
@@ -119,7 +120,7 @@ namespace frm
     }
 
 
-    sal_Bool SAL_CALL OReferenceValueComponent::convertFastPropertyValue( Any& _rConvertedValue, Any& _rOldValue, sal_Int32 _nHandle, const Any& _rValue ) throw (IllegalArgumentException)
+    sal_Bool SAL_CALL OReferenceValueComponent::convertFastPropertyValue( Any& _rConvertedValue, Any& _rOldValue, sal_Int32 _nHandle, const Any& _rValue )
     {
         bool bModified = false;
         switch ( _nHandle )
@@ -133,7 +134,7 @@ namespace frm
             break;
 
         case PROPERTY_ID_DEFAULT_STATE:
-            bModified = tryPropertyValue( _rConvertedValue, _rOldValue, _rValue, (sal_Int16)m_eDefaultChecked );
+            bModified = tryPropertyValue( _rConvertedValue, _rOldValue, _rValue, static_cast<sal_Int16>(m_eDefaultChecked) );
             break;
 
         default:
@@ -146,7 +147,7 @@ namespace frm
 
     Any OReferenceValueComponent::getDefaultForReset() const
     {
-        return makeAny( (sal_Int16)m_eDefaultChecked );
+        return makeAny( static_cast<sal_Int16>(m_eDefaultChecked) );
     }
 
 
@@ -162,14 +163,14 @@ namespace frm
 
     Sequence< Type > OReferenceValueComponent::getSupportedBindingTypes()
     {
-        ::std::list< Type > aTypes;
-        aTypes.push_back( cppu::UnoType<sal_Bool>::get() );
+        ::std::vector< Type > aTypes;
 
         if ( !m_sReferenceValue.isEmpty() )
-            aTypes.push_front( cppu::UnoType<OUString>::get() );
-            // push_front, because this is the preferred type
+            aTypes.push_back( cppu::UnoType<OUString>::get() );
 
-        return comphelper::containerToSequence<Type>(aTypes);
+        aTypes.push_back( cppu::UnoType<sal_Bool>::get() );
+
+        return comphelper::containerToSequence(aTypes);
     }
 
 

@@ -21,45 +21,42 @@
 
 #include <vcl/lstbox.hxx>
 #include <svl/zforlist.hxx>
-#include "swdllapi.h"
+#include <swdllapi.h>
 
 class SwView;
 
 class SW_DLLPUBLIC NumFormatListBox : public ListBox
 {
-    short               nCurrFormatType;
+    SvNumFormatType     nCurrFormatType;
+    bool                mbCurrFormatTypeNeedsInit;
     sal_Int32           nStdEntry;
     bool                bOneArea;
-    sal_uLong               nDefFormat;
-    SwView*             pVw;
-    SvNumberFormatter*  pOwnFormatter;
+    sal_uInt32          nDefFormat;
     LanguageType        eCurLanguage;
     bool                bShowLanguageControl; //determine whether the language control has
                                               //to be shown in the number format dialog
     bool                bUseAutomaticLanguage;//determine whether language is automatically assigned
 
-    DECL_DLLPRIVATE_LINK_TYPED( SelectHdl, ListBox&, void );
+    DECL_DLLPRIVATE_LINK( SelectHdl, ListBox&, void );
 
-    SAL_DLLPRIVATE double          GetDefValue(const short nFormatType) const;
-    SAL_DLLPRIVATE void            Init(short nFormatType);
-    SAL_DLLPRIVATE SwView*         GetView();
+    SAL_DLLPRIVATE static double   GetDefValue(const SvNumFormatType nFormatType);
+    SAL_DLLPRIVATE void            Init();
 
 public:
     NumFormatListBox(vcl::Window* pWin, WinBits nStyle);
 
-    virtual ~NumFormatListBox();
-    virtual void    dispose() override;
+    virtual ~NumFormatListBox() override;
 
     void            Clear();
 
-    inline void     SetOneArea(bool bOnlyOne = true) { bOneArea = bOnlyOne; }
+    void     SetOneArea(bool bOnlyOne) { bOneArea = bOnlyOne; }
 
-    void            SetFormatType(const short nFormatType);
-    inline short    GetFormatType() const { return nCurrFormatType; }
-    void            SetDefFormat(const sal_uLong nDefFormat);
-    sal_uLong           GetFormat() const;
+    void            SetFormatType(const SvNumFormatType nFormatType);
+    SvNumFormatType GetFormatType() const { return nCurrFormatType; }
+    void            SetDefFormat(const sal_uInt32 nDefFormat);
+    sal_uInt32      GetFormat() const;
 
-    inline LanguageType GetCurLanguage() const { return eCurLanguage;}
+    LanguageType GetCurLanguage() const { return eCurLanguage;}
     void                SetLanguage(LanguageType eSet)  { eCurLanguage = eSet;}
 
     void            SetAutomaticLanguage(bool bSet){bUseAutomaticLanguage = bSet;}

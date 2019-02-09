@@ -28,27 +28,21 @@
 
 #include "OConnectionPointContainerHelper.hxx"
 
-//  namespaces
-
-namespace unocontrols{
-
-//  class declaration OConnectionPointHelper
+namespace unocontrols {
 
 class OConnectionPointHelper    :   public  css::lang::XConnectionPoint
                                 ,   public  ::cppu::OWeakObject
 {
-
 public:
-
     OConnectionPointHelper( ::osl::Mutex&                       aMutex                      ,
                             OConnectionPointContainerHelper*    pContainerImplementation    ,
-                            css::uno::Type                       aType                       );
+                            css::uno::Type const &              aType                       );
 
-    virtual ~OConnectionPointHelper();
+    virtual ~OConnectionPointHelper() override;
 
     //  XInterface
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      give answer, if interface is supported
         @descr      The interfaces are searched by type.
 
@@ -61,10 +55,9 @@ public:
         @onerror    A RuntimeException is thrown.
     */
 
-    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType )
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) override;
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      increment refcount
         @seealso    XInterface
         @seealso    release()
@@ -73,7 +66,7 @@ public:
 
     virtual void SAL_CALL acquire() throw() override;
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      decrement refcount
         @seealso    XInterface
         @seealso    acquire()
@@ -84,28 +77,19 @@ public:
 
     //  XConnectionPoint
 
-    virtual css::uno::Type SAL_CALL getConnectionType()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Type SAL_CALL getConnectionType() override;
 
-    virtual css::uno::Reference< css::lang::XConnectionPointContainer > SAL_CALL getConnectionPointContainer()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Reference< css::lang::XConnectionPointContainer > SAL_CALL getConnectionPointContainer() override;
 
     virtual void SAL_CALL advise(
         const css::uno::Reference< css::uno::XInterface >& xListener
-    ) throw (
-        css::lang::ListenerExistException,
-        css::lang::InvalidListenerException ,
-        css::uno::RuntimeException, std::exception
     ) override;
 
-    virtual void SAL_CALL unadvise( const css::uno::Reference< css::uno::XInterface >& xListener )
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL unadvise( const css::uno::Reference< css::uno::XInterface >& xListener ) override;
 
-    virtual css::uno::Sequence< css::uno::Reference< css::uno::XInterface > > SAL_CALL getConnections()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Sequence< css::uno::Reference< css::uno::XInterface > > SAL_CALL getConnections() override;
 
 private:
-
     bool impl_LockContainer();
 
     void impl_UnlockContainer();
@@ -116,12 +100,11 @@ private:
     css::uno::WeakReference< css::lang::XConnectionPointContainer >   m_oContainerWeakReference;   // Reference to container-class!. Don't use Reference<...>
                                                                                             // It is a ring-reference => and must be a wekreference!
     OConnectionPointContainerHelper*                                  m_pContainerImplementation;
-    css::uno::Type                                                    m_aInterfaceType;
+    css::uno::Type const                                                    m_aInterfaceType;
     css::uno::Reference< css::uno::XInterface >                       m_xLock;
+};
 
-};  // class OConnectionPointHelper
-
-}   // namespace unocontrols
+}
 
 #endif // INCLUDED_UNOCONTROLS_SOURCE_INC_OCONNECTIONPOINTHELPER_HXX
 

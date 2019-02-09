@@ -18,6 +18,7 @@
  */
 #include <vbahelper/helperdecl.hxx>
 #include <ooo/vba/word/WdWindowState.hpp>
+#include <sfx2/viewfrm.hxx>
 #include <vcl/wrkwin.hxx>
 
 #include "vbawindow.hxx"
@@ -36,46 +37,46 @@ SwVbaWindow::SwVbaWindow(
         const uno::Reference< XHelperInterface >& xParent,
         const uno::Reference< uno::XComponentContext >& xContext,
         const uno::Reference< frame::XModel >& xModel,
-        const uno::Reference< frame::XController >& xController ) throw (uno::RuntimeException) :
+        const uno::Reference< frame::XController >& xController ) :
     WindowImpl_BASE( xParent, xContext, xModel, xController )
 {
 }
 
 void
-SwVbaWindow::Activate() throw (css::uno::RuntimeException, std::exception)
+SwVbaWindow::Activate()
 {
-    uno::Reference<SwVbaDocument> document( new SwVbaDocument(uno::Reference< XHelperInterface >( Application(), uno::UNO_QUERY_THROW ), mxContext, m_xModel) );
+    rtl::Reference<SwVbaDocument> document( new SwVbaDocument(uno::Reference< XHelperInterface >( Application(), uno::UNO_QUERY_THROW ), mxContext, m_xModel) );
 
     document->Activate();
 }
 
 void
-SwVbaWindow::Close( const uno::Any& SaveChanges, const uno::Any& RouteDocument ) throw (uno::RuntimeException, std::exception)
+SwVbaWindow::Close( const uno::Any& SaveChanges, const uno::Any& RouteDocument )
 {
     // FIXME: it is incorrect when there are more than 1 windows
-    uno::Reference<SwVbaDocument> document( new SwVbaDocument(uno::Reference< XHelperInterface >( Application(), uno::UNO_QUERY_THROW ), mxContext, m_xModel) );
+    rtl::Reference<SwVbaDocument> document( new SwVbaDocument(uno::Reference< XHelperInterface >( Application(), uno::UNO_QUERY_THROW ), mxContext, m_xModel) );
     uno::Any FileName;
     document->Close(SaveChanges, FileName, RouteDocument );
 }
 
 uno::Any SAL_CALL
-SwVbaWindow::getView() throw (uno::RuntimeException, std::exception)
+SwVbaWindow::getView()
 {
     return uno::makeAny( uno::Reference< word::XView >( new SwVbaView( this,  mxContext, m_xModel ) ) );
 }
 
-void SAL_CALL SwVbaWindow::setView( const uno::Any& _view ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL SwVbaWindow::setView( const uno::Any& _view )
 {
     sal_Int32 nType = 0;
     if( _view >>= nType )
     {
-        uno::Reference<SwVbaView> view( new SwVbaView(this,  mxContext, m_xModel) );
+        rtl::Reference<SwVbaView> view( new SwVbaView(this,  mxContext, m_xModel) );
         view->setType( nType );
     }
 }
 
 uno::Any SAL_CALL
-SwVbaWindow::getWindowState() throw (uno::RuntimeException, std::exception)
+SwVbaWindow::getWindowState()
 {
     sal_Int32 nwindowState = word::WdWindowState::wdWindowStateNormal;
     SwView* pView = word::getView( m_xModel );
@@ -92,7 +93,7 @@ SwVbaWindow::getWindowState() throw (uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL
-SwVbaWindow::setWindowState( const uno::Any& _windowstate ) throw (uno::RuntimeException, std::exception)
+SwVbaWindow::setWindowState( const uno::Any& _windowstate )
 {
     sal_Int32 nwindowState = word::WdWindowState::wdWindowStateMaximize;
     _windowstate >>= nwindowState;
@@ -108,22 +109,53 @@ SwVbaWindow::setWindowState( const uno::Any& _windowstate ) throw (uno::RuntimeE
         else if (nwindowState == word::WdWindowState::wdWindowStateNormal)
             pWork -> Restore();
         else
-            throw uno::RuntimeException("Invalid Parameter" );
+            SAL_WARN("sw.vba", "Unhandled window state " << nwindowState);
     }
 }
 
+OUString SAL_CALL
+SwVbaWindow::getCaption()
+{
+    SwView* pView = word::getView( m_xModel );
+    if( !pView )
+        return OUString("");
+
+    uno::Reference< css::beans::XPropertySet > xFrameProps( pView->GetViewFrame()->GetFrame().GetFrameInterface()->getController()->getFrame(), uno::UNO_QUERY );
+    if( !xFrameProps.is() )
+        return OUString("");
+
+    OUString sTitle;
+    xFrameProps->getPropertyValue( "Title" ) >>= sTitle;
+
+    return sTitle;
+}
+
+void SAL_CALL
+SwVbaWindow::setCaption( const OUString& _caption )
+{
+    SwView* pView = word::getView( m_xModel );
+    if( !pView )
+        return;
+
+    uno::Reference< css::beans::XPropertySet > xFrameProps( pView->GetViewFrame()->GetFrame().GetFrameInterface()->getController()->getFrame(), uno::UNO_QUERY );
+    if( !xFrameProps.is() )
+        return;
+
+    xFrameProps->setPropertyValue( "Title", uno::makeAny( _caption ) );
+}
+
 uno::Any SAL_CALL
-SwVbaWindow::Panes( const uno::Any& aIndex ) throw (uno::RuntimeException, std::exception)
+SwVbaWindow::Panes( const uno::Any& aIndex )
 {
     uno::Reference< XCollection > xPanes( new SwVbaPanes( this,  mxContext, m_xModel ) );
     if(  aIndex.getValueTypeClass() == uno::TypeClass_VOID )
         return uno::makeAny( xPanes );
 
-    return uno::Any( xPanes->Item( aIndex, uno::Any() ) );
+    return xPanes->Item( aIndex, uno::Any() );
 }
 
 uno::Any SAL_CALL
-SwVbaWindow::ActivePane() throw (uno::RuntimeException, std::exception)
+SwVbaWindow::ActivePane()
 {
     return uno::makeAny( uno::Reference< word::XPane >( new SwVbaPane( this,  mxContext, m_xModel ) ) );
 }
@@ -137,12 +169,10 @@ SwVbaWindow::getServiceImplName()
 uno::Sequence< OUString >
 SwVbaWindow::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.word.Window";
-    }
+        "ooo.vba.word.Window"
+    };
     return aServiceNames;
 }
 

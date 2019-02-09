@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "unoreflist.hxx"
-#include "document.hxx"
+#include <unoreflist.hxx>
+#include <document.hxx>
 
 ScUnoRefList::ScUnoRefList()
 {
@@ -30,16 +30,14 @@ ScUnoRefList::~ScUnoRefList()
 
 void ScUnoRefList::Add( sal_Int64 nId, const ScRangeList& rOldRanges )
 {
-    aEntries.push_back( ScUnoRefEntry( nId, rOldRanges ) );
+    aEntries.emplace_back( nId, rOldRanges );
 }
 
 void ScUnoRefList::Undo( ScDocument* pDoc )
 {
-    std::list<ScUnoRefEntry>::const_iterator aEnd( aEntries.end() );
-    for ( std::list<ScUnoRefEntry>::const_iterator aIter( aEntries.begin() );
-          aIter != aEnd; ++aIter )
+    for (auto & entry: aEntries)
     {
-        ScUnoRefUndoHint aHint( *aIter );
+        ScUnoRefUndoHint aHint(entry);
         pDoc->BroadcastUno( aHint );
     }
 }

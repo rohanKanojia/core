@@ -20,7 +20,7 @@
 #ifndef INCLUDED_CPPU_UNOTYPE_HXX
 #define INCLUDED_CPPU_UNOTYPE_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <cstddef>
 
@@ -28,9 +28,9 @@
 #include <type_traits>
 #endif
 
-#include <sal/types.h>
-#include <typelib/typeclass.h>
-#include <typelib/typedescription.h>
+#include "sal/types.h"
+#include "typelib/typeclass.h"
+#include "typelib/typedescription.h"
 
 namespace com { namespace sun { namespace star { namespace uno {
     class Type;
@@ -149,8 +149,7 @@ cppu_detail_getUnoType(
         ::typelib_TypeClass_UNSIGNED_SHORT);
 }
 
-#if LIBO_INTERNAL_ONLY \
-    && (!defined SAL_W32 || defined __MINGW32__ || defined __clang__)
+#if defined LIBO_INTERNAL_ONLY
     // cf. sal/types.h sal_Unicode
 inline css::uno::Type const &
 cppu_detail_getUnoType(SAL_UNUSED_PARAMETER sal_uInt16 const *) {
@@ -195,8 +194,7 @@ cppu_detail_getUnoType(SAL_UNUSED_PARAMETER ::cppu::UnoCharType const *) {
     return ::cppu::detail::getTypeFromTypeClass(::typelib_TypeClass_CHAR);
 }
 
-#if LIBO_INTERNAL_ONLY \
-    && (!defined SAL_W32 || defined __MINGW32__ || defined __clang__)
+#if defined LIBO_INTERNAL_ONLY
     // cf. sal/types.h sal_Unicode
 inline css::uno::Type const &
 cppu_detail_getUnoType(SAL_UNUSED_PARAMETER sal_Unicode const *) {
@@ -287,7 +285,7 @@ namespace cppu {
 */
 template< typename T > class UnoType {
 public:
-    static inline css::uno::Type const & get() {
+    static css::uno::Type const & get() {
         using namespace ::cppu::detail;
 #if defined LIBO_INTERNAL_ONLY
         typedef typename std::remove_reference<T>::type T1;

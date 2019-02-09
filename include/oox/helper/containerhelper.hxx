@@ -20,19 +20,19 @@
 #ifndef INCLUDED_OOX_HELPER_CONTAINERHELPER_HXX
 #define INCLUDED_OOX_HELPER_CONTAINERHELPER_HXX
 
-#include <map>
+#include <cstddef>
 #include <vector>
-#include <com/sun/star/uno/Reference.h>
-#include <com/sun/star/uno/Sequence.h>
-#include <oox/dllapi.h>
 
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <oox/dllapi.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 namespace com { namespace sun { namespace star {
-    namespace container { class XIndexAccess; }
-    namespace container { class XIndexContainer; }
     namespace container { class XNameAccess; }
     namespace container { class XNameContainer; }
-    namespace uno { class XComponentContext; }
+    namespace uno { class Any; }
 } } }
 
 namespace oox {
@@ -44,7 +44,7 @@ struct ValueRange
     sal_Int32           mnFirst;
     sal_Int32           mnLast;
 
-    explicit     ValueRange( sal_Int32 nValue = 0 ) : mnFirst( nValue ), mnLast( nValue ) {}
+    explicit     ValueRange( sal_Int32 nValue ) : mnFirst( nValue ), mnLast( nValue ) {}
     explicit     ValueRange( sal_Int32 nFirst, sal_Int32 nLast ) : mnFirst( nFirst ), mnLast( nLast ) {}
 
     bool         operator==( const ValueRange& rRange ) const { return (mnFirst == rRange.mnFirst) && (mnLast == rRange.mnLast); }
@@ -95,33 +95,33 @@ public:
     typedef typename container_type::const_iterator     const_iterator;
 
                  Matrix() : mnWidth( 0 ) {}
-    explicit     Matrix( size_type nWidth, size_type nHeight ) { this->resize( nWidth, nHeight ); }
-    explicit     Matrix( size_type nWidth, size_type nHeight, const_reference rData ) { this->resize( nWidth, nHeight, rData ); }
+    explicit     Matrix( size_type nWidth, size_type nHeight ) { resize( nWidth, nHeight ); }
+    explicit     Matrix( size_type nWidth, size_type nHeight, const_reference rData ) { resize( nWidth, nHeight, rData ); }
 
     bool         empty() const { return maData.empty(); }
     size_type    size() const { return maData.size(); }
     size_type    width() const { return mnWidth; }
-    size_type    height() const { return this->empty() ? 0 : (this->size() / this->width()); }
+    size_type    height() const { return empty() ? 0 : (size() / width()); }
 
-    void         clear() { this->resize( 0, 0 ); }
+    void         clear() { resize( 0, 0 ); }
     void         resize( size_type nWidth, size_type nHeight ) { mnWidth = nWidth; maData.resize( nWidth * nHeight ); }
     void         resize( size_type nWidth, size_type nHeight, const_reference rData ) { mnWidth = nWidth; maData.resize( nWidth * nHeight, rData ); }
 
     iterator     at( size_type nX, size_type nY ) { return maData.begin() + mnWidth * nY + nX; }
     const_iterator at( size_type nX, size_type nY ) const { return maData.begin() + mnWidth * nY + nX; }
 
-    reference    operator()( size_type nX, size_type nY ) { return *this->at( nX, nY ); }
-    const_reference operator()( size_type nX, size_type nY ) const { return *this->at( nX, nY ); }
+    reference    operator()( size_type nX, size_type nY ) { return *at( nX, nY ); }
+    const_reference operator()( size_type nX, size_type nY ) const { return *at( nX, nY ); }
 
     iterator     begin() { return maData.begin(); }
     const_iterator begin() const { return maData.begin(); }
     iterator     end() { return maData.end(); }
     const_iterator end() const { return maData.end(); }
 
-    iterator     row_begin( size_type nY ) { return this->at( 0, nY ); }
-    const_iterator row_begin( size_type nY ) const { return this->at( 0, nY ); }
-    iterator     row_end( size_type nY ) { return this->at( mnWidth, nY ); }
-    const_iterator row_end( size_type nY ) const { return this->at( mnWidth, nY ); }
+    iterator     row_begin( size_type nY ) { return at( 0, nY ); }
+    const_iterator row_begin( size_type nY ) const { return at( 0, nY ); }
+    iterator     row_end( size_type nY ) { return at( mnWidth, nY ); }
+    const_iterator row_end( size_type nY ) const { return at( mnWidth, nY ); }
 
     reference    row_front( size_type nY ) { return (*this)( 0, nY ); }
     const_reference row_front( size_type nY ) const { return (*this)( 0, nY ); }
@@ -293,7 +293,7 @@ template< typename VectorType >
     typedef typename VectorType::value_type ValueType;
     if( rVector.empty() )
         return css::uno::Sequence< ValueType >();
-    return css::uno::Sequence< ValueType >( &rVector.front(), static_cast< sal_Int32 >( rVector.size() ) );
+    return css::uno::Sequence<ValueType>(rVector.data(), static_cast<sal_Int32>(rVector.size()));
 }
 
 template< typename MatrixType >

@@ -19,15 +19,16 @@
 #ifndef INCLUDED_COM_SUN_STAR_UNO_REFERENCE_HXX
 #define INCLUDED_COM_SUN_STAR_UNO_REFERENCE_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <cstddef>
+#include <ostream>
 
-#include <com/sun/star/uno/Reference.h>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
-#include <com/sun/star/uno/Any.hxx>
-#include <cppu/cppudllapi.h>
+#include "com/sun/star/uno/Reference.h"
+#include "com/sun/star/uno/RuntimeException.hpp"
+#include "com/sun/star/uno/XInterface.hpp"
+#include "com/sun/star/uno/Any.hxx"
+#include "cppu/cppudllapi.h"
 
 extern "C" CPPU_DLLPUBLIC rtl_uString * SAL_CALL cppu_unsatisfied_iquery_msg(
     typelib_TypeDescriptionReference * pType )
@@ -102,9 +103,8 @@ inline interface_type * Reference< interface_type >::iset_throw(
         NULL );
 }
 
-
 template< class interface_type >
-inline Reference< interface_type >::~Reference()
+inline Reference< interface_type >::~Reference() COVERITY_NOEXCEPT_FALSE
 {
     if (_pInterface)
         _pInterface->release();
@@ -431,6 +431,19 @@ inline bool BaseReference::operator != ( const BaseReference & rRef ) const
 {
     return (! operator == ( rRef._pInterface ));
 }
+
+#if defined LIBO_INTERNAL_ONLY
+/**
+   Support for BaseReference in std::ostream (and thus in CPPUNIT_ASSERT or
+   SAL_INFO macros, for example).
+
+   @since LibreOffice 5.4
+*/
+template<typename charT, typename traits> std::basic_ostream<charT, traits> &
+operator <<(
+    std::basic_ostream<charT, traits> & stream, BaseReference const & ref)
+{ return stream << ref.get(); }
+#endif
 
 }
 }

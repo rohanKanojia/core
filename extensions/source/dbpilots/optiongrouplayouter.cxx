@@ -30,6 +30,7 @@
 #include "controlwizard.hxx"
 #include "groupboxwiz.hxx"
 #include "dbptools.hxx"
+#include <osl/diagnose.h>
 
 
 namespace dbp
@@ -75,8 +76,6 @@ namespace dbp
         // no. of buttons to create
         sal_Int32 nRadioButtons = _rSettings.aLabels.size();
 
-        sal_Int32 nTopSpace = 0;
-
         // the shape of the groupbox
         css::awt::Size aControlShapeSize = _rContext.xObjectShape->getSize();
         // maybe need to adjust the size if the control shapes
@@ -108,20 +107,20 @@ namespace dbp
         OUString sElementsName("RadioGroup");
         disambiguateName(Reference< XNameAccess >(_rContext.xForm, UNO_QUERY), sElementsName);
 
-        StringArray::const_iterator aLabelIter = _rSettings.aLabels.begin();
-        StringArray::const_iterator aValueIter = _rSettings.aValues.begin();
+        auto aLabelIter = _rSettings.aLabels.cbegin();
+        auto aValueIter = _rSettings.aValues.cbegin();
         for (sal_Int32 i=0; i<nRadioButtons; ++i, ++aLabelIter, ++aValueIter)
         {
-            aButtonPosition.Y = aShapePosition.Y + (i+1) * nTempHeight + nTopSpace;
+            aButtonPosition.Y = aShapePosition.Y + (i+1) * nTempHeight;
 
             Reference< XPropertySet > xRadioModel(
                     xDocFactory->createInstance("com.sun.star.form.component.RadioButton"),
                 UNO_QUERY);
 
             // the label
-            xRadioModel->setPropertyValue("Label", makeAny(OUString(*aLabelIter)));
+            xRadioModel->setPropertyValue("Label", makeAny(*aLabelIter));
             // the value
-            xRadioModel->setPropertyValue("RefValue", makeAny(OUString(*aValueIter)));
+            xRadioModel->setPropertyValue("RefValue", makeAny(*aValueIter));
 
             // default selection
             if (_rSettings.sDefaultField == *aLabelIter)
@@ -129,7 +128,7 @@ namespace dbp
 
             // the connection to the database field
             if (!_rSettings.sDBField.isEmpty())
-                xRadioModel->setPropertyValue("DataField", makeAny(OUString(_rSettings.sDBField)));
+                xRadioModel->setPropertyValue("DataField", makeAny(_rSettings.sDBField));
 
             // the name for the model
             xRadioModel->setPropertyValue("Name", makeAny(sElementsName));
@@ -150,8 +149,15 @@ namespace dbp
             xRadioShape->setControl(Reference< XControlModel >(xRadioModel, UNO_QUERY));
 
             // the name of the shape
-            if (xShapeProperties.is())
-                xShapeProperties->setPropertyValue("Name", makeAny(sElementsName));
+            // tdf#117282 com.sun.star.drawing.ControlShape *has* no property
+            // of type 'Name'. In older versions it was an error that this did
+            // not throw an UnknownPropertyException. Still, it was never set
+            // at the Shape/SdrObject and was lost.
+            // Thus - just do no tset it. It is/stays part of the FormControl
+            // data, so it will be shown in the FormControl dialogs. It is not
+            // shown/used in SdrObject::Name dialog (e.g. context menu/Name...)
+            // if (xShapeProperties.is())
+            //     xShapeProperties->setPropertyValue("Name", makeAny(sElementsName));
 
             // add to the page
             xPageShapes->add(xRadioShape.get());

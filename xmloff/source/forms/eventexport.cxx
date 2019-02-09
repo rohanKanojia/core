@@ -18,10 +18,9 @@
  */
 
 #include "eventexport.hxx"
-#include <osl/diagnose.h>
 #include "strings.hxx"
-#include <tools/debug.hxx>
 #include <comphelper/sequence.hxx>
+#include <sal/log.hxx>
 
 namespace xmloff
 {
@@ -39,14 +38,13 @@ namespace xmloff
 
         // translate the events
         const ScriptEventDescriptor* pEvents = _rEvents.getConstArray();
-        OUString sName;
         OUString sLibrary, sLocalMacroName;
         for (sal_Int32 i=0; i<nEvents; ++i, ++pEvents)
         {
             // the name of the event is build from listener interface and listener method name
-            sName = pEvents->ListenerType;
-            sName += EVENT_NAME_SEPARATOR;
-            sName += pEvents->EventMethod;
+            OUString sName = pEvents->ListenerType
+                + EVENT_NAME_SEPARATOR
+                + pEvents->EventMethod;
 
             Sequence< PropertyValue >& rMappedEvent = m_aMappedEvents[sName];
 
@@ -55,7 +53,7 @@ namespace xmloff
             if (pEvents->ScriptType == EVENT_STARBASIC)
             {   // for StarBasic, the library name is part of the ScriptCode
                 sal_Int32 nPrefixLen = sLocalMacroName.indexOf( ':' );
-                DBG_ASSERT( 0 <= nPrefixLen, "OEventDescriptorMapper::OEventDescriptorMapper: invalid script code prefix!" );
+                SAL_WARN_IF( 0 > nPrefixLen, "xmloff", "OEventDescriptorMapper::OEventDescriptorMapper: invalid script code prefix!" );
                 if ( 0 <= nPrefixLen )
                 {
                     // the export handler for StarBasic expects "StarOffice", not "application" for application modules ...
@@ -88,13 +86,13 @@ namespace xmloff
         }
     }
 
-    void SAL_CALL OEventDescriptorMapper::replaceByName( const OUString&, const Any& ) throw(IllegalArgumentException, NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+    void SAL_CALL OEventDescriptorMapper::replaceByName( const OUString&, const Any& )
     {
         throw IllegalArgumentException(
             "replacing is not implemented for this wrapper class.", static_cast< ::cppu::OWeakObject* >(this), 1);
     }
 
-    Any SAL_CALL OEventDescriptorMapper::getByName( const OUString& _rName ) throw(NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+    Any SAL_CALL OEventDescriptorMapper::getByName( const OUString& _rName )
     {
         MapString2PropertyValueSequence::const_iterator aPos = m_aMappedEvents.find(_rName);
         if (m_aMappedEvents.end() == aPos)
@@ -105,23 +103,23 @@ namespace xmloff
         return makeAny(aPos->second);
     }
 
-    Sequence< OUString > SAL_CALL OEventDescriptorMapper::getElementNames(  ) throw(RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL OEventDescriptorMapper::getElementNames(  )
     {
         return comphelper::mapKeysToSequence(m_aMappedEvents);
     }
 
-    sal_Bool SAL_CALL OEventDescriptorMapper::hasByName( const OUString& _rName ) throw(RuntimeException, std::exception)
+    sal_Bool SAL_CALL OEventDescriptorMapper::hasByName( const OUString& _rName )
     {
         MapString2PropertyValueSequence::const_iterator aPos = m_aMappedEvents.find(_rName);
         return m_aMappedEvents.end() != aPos;
     }
 
-    Type SAL_CALL OEventDescriptorMapper::getElementType(  ) throw(RuntimeException, std::exception)
+    Type SAL_CALL OEventDescriptorMapper::getElementType(  )
     {
         return ::cppu::UnoType<PropertyValue>::get();
     }
 
-    sal_Bool SAL_CALL OEventDescriptorMapper::hasElements(  ) throw(RuntimeException, std::exception)
+    sal_Bool SAL_CALL OEventDescriptorMapper::hasElements(  )
     {
         return !m_aMappedEvents.empty();
     }

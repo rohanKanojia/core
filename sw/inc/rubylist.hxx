@@ -19,11 +19,7 @@
 #ifndef INCLUDED_SW_INC_RUBYLIST_HXX
 #define INCLUDED_SW_INC_RUBYLIST_HXX
 
-#include <swtypes.hxx>
-#include <fmtruby.hxx>
-
-#include <memory>
-#include <vector>
+#include "fmtruby.hxx"
 
 class SwRubyListEntry
 {
@@ -33,15 +29,13 @@ public:
     SwRubyListEntry() : m_aRubyAttr( OUString() ) {}
     ~SwRubyListEntry();
 
-    OUString GetText() const                    { return m_sText; }
+    const OUString& GetText() const                    { return m_sText; }
     void SetText( const OUString& rStr )        { m_sText = rStr; }
 
     const SwFormatRuby& GetRubyAttr() const        { return m_aRubyAttr; }
           SwFormatRuby& GetRubyAttr()              { return m_aRubyAttr; }
     void SetRubyAttr( const SwFormatRuby& rAttr )  { m_aRubyAttr = rAttr; }
 };
-
-class SwRubyList : public std::vector<std::unique_ptr<SwRubyListEntry>> {};
 
 #endif  //_ INCLUDED_SW_INC_RUBYLIST_HXX
 

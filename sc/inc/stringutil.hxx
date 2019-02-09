@@ -23,20 +23,25 @@
 #include <rtl/ustring.hxx>
 #include "scdllapi.h"
 #include <i18nlangtag/lang.h>
-#include <types.hxx>
+#include "types.hxx"
 
 class SvNumberFormatter;
+enum class SvNumFormatType : sal_Int16;
 
 /**
  * Store parameters used in the ScDocument::SetString() method.  Various
  * options for string-setting operation are specified herein.
  */
-struct SC_DLLPUBLIC ScSetStringParam
+struct SAL_WARN_UNUSED SC_DLLPUBLIC ScSetStringParam
 {
+    /** Enum settings that take effect if mbDetectNumberFormat=false or if
+        true a number was not detected.
+     */
     enum TextFormatPolicy
     {
         /**
-         * Set Text number format no matter what the input string is.
+         * Set Text number format if the input string can be parsed as a number
+         * or formula text.
          */
         Always,
 
@@ -45,6 +50,12 @@ struct SC_DLLPUBLIC ScSetStringParam
          * special number but we only want to detect a simple number.
          */
         SpecialNumberOnly,
+
+        /**
+         * Keep an existing number format, do not set Text number format and do
+         * not set another number format.
+         */
+        Keep,
 
         /**
          * Never set Text number format.
@@ -82,6 +93,13 @@ struct SC_DLLPUBLIC ScSetStringParam
 
     sc::StartListeningType meStartListening;
 
+    /** When true and the string results in a compiled formula, check the
+        formula tokens for presence of functions that could trigger access to
+        external resources. This is to be set to true in import filter code,
+        but not for user input.
+     */
+    bool mbCheckLinkFormula;
+
     ScSetStringParam();
 
     /**
@@ -105,7 +123,7 @@ struct ScInputStringType
 
     OUString maText;
     double mfValue;
-    short mnFormatType;
+    SvNumFormatType mnFormatType;
 };
 
 class ScStringUtil
@@ -122,17 +140,17 @@ public:
      * @param rStr string to parse
      * @param dsep decimal separator
      * @param gsep group separator (aka thousands separator)
+     * @param dsepa decimal separator alternative, usually 0
      * @param rVal value of successfully parsed number
      *
      * @return true if the string is a valid number, false otherwise.
      */
     static bool parseSimpleNumber(
-        const OUString& rStr, sal_Unicode dsep, sal_Unicode gsep, double& rVal);
+        const OUString& rStr, sal_Unicode dsep, sal_Unicode gsep, sal_Unicode dsepa, double& rVal);
 
     static bool parseSimpleNumber(
         const char* p, size_t n, char dsep, char gsep, double& rVal);
 
-    static sal_Int32 SC_DLLPUBLIC GetQuotedTokenCount(const OUString &rIn, const OUString& rQuotedPairs, sal_Unicode cTok = ';' );
     static OUString  SC_DLLPUBLIC GetQuotedToken(const OUString &rIn, sal_Int32 nToken, const OUString& rQuotedPairs,
                                         sal_Unicode cTok,  sal_Int32& rIndex );
 

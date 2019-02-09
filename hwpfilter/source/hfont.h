@@ -22,6 +22,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <memory>
 
 #define MAXFONTS    256
 #define FONTNAMELEN 40
@@ -32,9 +33,8 @@ class HWPFile;
  * The HWPFont class has the font list for the document when it's saved.
  * @short Font information
  */
-class DLLEXPORT HWPFont
+class DLLEXPORT HWPFont final
 {
-    protected:
 /**
  * System font count for each language
  * NLanguage is 7 in common case.
@@ -43,7 +43,7 @@ class DLLEXPORT HWPFont
 /**
  * list of the font family name
  */
-        char  *fontnames[NLanguage];
+        std::unique_ptr<char[]> fontnames[NLanguage];
 
     public:
         HWPFont(void);

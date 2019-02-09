@@ -23,8 +23,7 @@
 #include <undobase.hxx>
 #include <global.hxx>
 #include <undoblk.hxx>
-
-#include <o3tl/make_unique.hxx>
+#include <columnspanset.hxx>
 
 #include <memory>
 #include <utility>
@@ -34,26 +33,29 @@ namespace sc {
 bool DocFuncUtil::hasProtectedTab( const ScDocument& rDoc, const ScMarkData& rMark )
 {
     SCTAB nTabCount = rDoc.GetTableCount();
-    ScMarkData::const_iterator itr = rMark.begin(), itrEnd = rMark.end();
-    for (; itr != itrEnd && *itr < nTabCount; ++itr)
-        if (rDoc.IsTabProtected(*itr))
+    for (const auto& rTab : rMark)
+    {
+        if (rTab >= nTabCount)
+            break;
+
+        if (rDoc.IsTabProtected(rTab))
             return true;
+    }
 
     return false;
 }
 
-std::unique_ptr<ScDocument> DocFuncUtil::createDeleteContentsUndoDoc(
+ScDocumentUniquePtr DocFuncUtil::createDeleteContentsUndoDoc(
     ScDocument& rDoc, const ScMarkData& rMark, const ScRange& rRange,
     InsertDeleteFlags nFlags, bool bOnlyMarked )
 {
-    std::unique_ptr<ScDocument> pUndoDoc(new ScDocument(SCDOCMODE_UNDO));
+    ScDocumentUniquePtr pUndoDoc(new ScDocument(SCDOCMODE_UNDO));
     SCTAB nTab = rRange.aStart.Tab();
     pUndoDoc->InitUndo(&rDoc, nTab, nTab);
     SCTAB nTabCount = rDoc.GetTableCount();
-    ScMarkData::const_iterator itr = rMark.begin(), itrEnd = rMark.end();
-    for (; itr != itrEnd; ++itr)
-        if (*itr != nTab)
-            pUndoDoc->AddUndoTab( *itr, *itr );
+    for (const auto& rTab : rMark)
+        if (rTab != nTab)
+            pUndoDoc->AddUndoTab( rTab, rTab );
     ScRange aCopyRange = rRange;
     aCopyRange.aStart.SetTab(0);
     aCopyRange.aEnd.SetTab(nTabCount-1);
@@ -69,14 +71,14 @@ std::unique_ptr<ScDocument> DocFuncUtil::createDeleteContentsUndoDoc(
         nUndoDocFlags |= InsertDeleteFlags::CONTENTS;  // copy all cells with their notes
     // do not copy note captions to undo document
     nUndoDocFlags |= InsertDeleteFlags::NOCAPTIONS;
-    rDoc.CopyToDocument(aCopyRange, nUndoDocFlags, bOnlyMarked, pUndoDoc.get(), &rMark);
+    rDoc.CopyToDocument(aCopyRange, nUndoDocFlags, bOnlyMarked, *pUndoDoc, &rMark);
 
     return pUndoDoc;
 }
 
 void DocFuncUtil::addDeleteContentsUndo(
-    svl::IUndoManager* pUndoMgr, ScDocShell* pDocSh, const ScMarkData& rMark,
-    const ScRange& rRange, std::unique_ptr<ScDocument>&& pUndoDoc, InsertDeleteFlags nFlags,
+    SfxUndoManager* pUndoMgr, ScDocShell* pDocSh, const ScMarkData& rMark,
+    const ScRange& rRange, ScDocumentUniquePtr&& pUndoDoc, InsertDeleteFlags nFlags,
     const std::shared_ptr<ScSimpleUndo::DataSpansType>& pSpans,
     bool bMulti, bool bDrawUndo )
 {
@@ -85,23 +87,20 @@ void DocFuncUtil::addDeleteContentsUndo(
             pDocSh, rMark, rRange, std::move(pUndoDoc), bMulti, nFlags, bDrawUndo));
     pUndo->SetDataSpans(pSpans);
 
-    pUndoMgr->AddUndoAction(pUndo.release());
+    pUndoMgr->AddUndoAction(std::move(pUndo));
 }
 
 std::unique_ptr<ScSimpleUndo::DataSpansType> DocFuncUtil::getNonEmptyCellSpans(
     const ScDocument& rDoc, const ScMarkData& rMark, const ScRange& rRange )
 {
     std::unique_ptr<ScSimpleUndo::DataSpansType> pDataSpans(new ScSimpleUndo::DataSpansType);
-    ScMarkData::const_iterator it = rMark.begin(), itEnd = rMark.end();
-    for (; it != itEnd; ++it)
+    for (const SCTAB nTab : rMark)
     {
-        SCTAB nTab = *it;
-
         SCCOL nCol1 = rRange.aStart.Col(), nCol2 = rRange.aEnd.Col();
         SCROW nRow1 = rRange.aStart.Row(), nRow2 = rRange.aEnd.Row();
 
         std::pair<ScSimpleUndo::DataSpansType::iterator,bool> r =
-            pDataSpans->insert(std::make_pair(nTab, o3tl::make_unique<sc::ColumnSpanSet>(false)));
+            pDataSpans->insert(std::make_pair(nTab, std::make_unique<sc::ColumnSpanSet>(false)));
 
         if (r.second)
         {

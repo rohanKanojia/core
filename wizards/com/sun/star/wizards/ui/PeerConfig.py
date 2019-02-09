@@ -43,10 +43,9 @@ class PeerConfig(object):
 
     class ImageUrlTask(object):
 
-        def __init__(self, _oModel, _oResource, _oHCResource):
+        def __init__(self, _oModel, _oResource):
             self.oModel = _oModel
             self.oResource = _oResource
-            self.oHCResource = _oHCResource
 
     def windowShown(self):
         try:
@@ -55,10 +54,7 @@ class PeerConfig(object):
                 xVclWindowPeer.setProperty(i.propnames, i.propvalues)
 
             for aImageUrlTask in self.aImageUrlTasks:
-                if isinstance(aImageUrlTask.oResource, int):
-                    sImageUrl = self.oUnoDialog.getWizardImageUrl(aImageUrlTask.oResource, aImageUrlTask.oHCResource)
-                elif isinstance(aImageUrlTask.oResource, str):
-                    sImageUrl = self.oUnoDialog.getImageUrl(aImageUrlTask.oResource, aImageUrlTask.oHCResource)
+                sImageUrl = aImageUrlTask.oResource
                 if sImageUrl != "":
                     aImageUrlTask.oModel.ImageURL = sImageUrl
 
@@ -76,6 +72,6 @@ class PeerConfig(object):
         oPeerTask = self.PeerTask(_xControl, propnames, propvalues)
         self.m_aPeerTasks.append(oPeerTask)
 
-    def setImageUrl(self, _ocontrolmodel, _oResource,  _oHCResource):
-        oImageUrlTask = self.ImageUrlTask(_ocontrolmodel, _oResource, _oHCResource)
+    def setImageUrl(self, _ocontrolmodel, _oResource):
+        oImageUrlTask = self.ImageUrlTask(_ocontrolmodel, _oResource)
         self.aImageUrlTasks.append(oImageUrlTask)

@@ -61,13 +61,13 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPTABLE_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPTABLE_HXX
 
-#include "lwpobj.hxx"
-#include "lwpobjhdr.hxx"
-#include "lwpobjid.hxx"
+#include <lwpobj.hxx>
+#include <lwpobjhdr.hxx>
+#include <lwpobjid.hxx>
 #include "lwpstory.hxx"
 #include "lwppara.hxx"
 #include "lwppagehint.hxx"
-#include "lwptools.hxx"
+#include <lwptools.hxx>
 #include "lwptablelayout.hxx"
 
 class LwpTableLayout;
@@ -78,8 +78,8 @@ class LwpTableLayout;
 class LwpSuperTable: public LwpContent
 {
 public:
-    LwpSuperTable(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpSuperTable();
+    LwpSuperTable(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpSuperTable() override;
 
     virtual void Parse(IXFStream* pOutputStream) override;
     virtual void XFConvert(XFContentContainer* pCont) override;
@@ -90,17 +90,16 @@ protected:
  * @brief
  * for VO_TABLE object reading
  */
-class LwpForkedNotifyList
+class LwpForkedNotifyList final
 {
 public:
     LwpForkedNotifyList(){}
-    ~LwpForkedNotifyList() {}
     void Read(LwpObjectStream* pObjStrm)
     {
         m_PersistentList.Read(pObjStrm);
     };
 
-protected:
+private:
     LwpNotifyListPersistent m_PersistentList;
 };
 /**
@@ -110,8 +109,8 @@ protected:
 class LwpTable: public LwpContent
 {
 public:
-    LwpTable(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpTable();
+    LwpTable(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpTable() override;
 
     virtual void Parse(IXFStream* pOutputStream) override;
     double GetWidth() {return LwpTools::ConvertFromUnitsToMetric(m_nWidth);}
@@ -153,8 +152,8 @@ protected:
 class LwpTableHeading : public LwpTable
 {
 public:
-    LwpTableHeading(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpTableHeading();
+    LwpTableHeading(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpTableHeading() override;
 
     virtual void Parse(IXFStream* pOutputStream) override;
 protected:
@@ -164,20 +163,23 @@ protected:
 class LwpParallelColumns : public LwpTable
 {
 public:
-    LwpParallelColumns(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpParallelColumns();
+    LwpParallelColumns(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpParallelColumns() override;
 protected:
     void Read() override;
     LwpObjectID     cDefaultLeftColumnStyle;
     LwpObjectID cDefaultRightColumnStyle;
 };
+
 #define MAX_NUM_ROWS 8192
-class LwpGlossary : public LwpParallelColumns
+#define MAX_NUM_COLS 255
+
+class LwpGlossary final : public LwpParallelColumns
 {
 public:
-    LwpGlossary(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpGlossary();
-protected:
+    LwpGlossary(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpGlossary() override;
+private:
     void Read() override;
     sal_uInt16 GetNumIndexRows();
 };

@@ -31,6 +31,7 @@
 #include <svx/svdmodel.hxx>
 #include <svx/svdoutl.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <o3tl/make_unique.hxx>
 
 
 using namespace com::sun::star;
@@ -64,17 +65,17 @@ namespace
         sal_Int16 nRetval(0);
         SdrPage* pPage = GetSdrPageFromXDrawPage(rxDrawPage);
 
-        if(pPage && pPage->GetModel())
+        if(pPage)
         {
             if( (pPage->GetPageNum() == 0) && !pPage->IsMasterPage() )
             {
                 // handout page!
-                return pPage->GetModel()->getHandoutPageCount();
+                return pPage->getSdrModelFromSdrPage().getHandoutPageCount();
             }
             else
             {
-                const sal_uInt16 nPageCount(pPage->GetModel()->GetPageCount());
-                nRetval = ((sal_Int16)nPageCount - 1) / 2;
+                const sal_uInt16 nPageCount(pPage->getSdrModelFromSdrPage().GetPageCount());
+                nRetval = (static_cast<sal_Int16>(nPageCount) - 1) / 2;
             }
         }
 
@@ -90,12 +91,9 @@ namespace drawinglayer
         // support for XTEXT_PAINTSHAPE_BEGIN/XTEXT_PAINTSHAPE_END Metafile comments
         // for slideshow. This uses TextHierarchyBlockPrimitive2D to mark a text block.
         // ATM there is only one text block per SdrObject, this may get more in the future
-        Primitive2DContainer SdrTextPrimitive2D::encapsulateWithTextHierarchyBlockPrimitive2D(const Primitive2DContainer& rCandidate)
+        void SdrTextPrimitive2D::encapsulateWithTextHierarchyBlockPrimitive2D(Primitive2DContainer& rContainer, const Primitive2DContainer& rCandidate)
         {
-            Primitive2DReference xReference(new TextHierarchyBlockPrimitive2D(rCandidate));
-            Primitive2DContainer xRetval { xReference };
-
-            return xRetval;
+            rContainer.push_back(new TextHierarchyBlockPrimitive2D(rCandidate));
         }
 
         SdrTextPrimitive2D::SdrTextPrimitive2D(
@@ -114,13 +112,15 @@ namespace drawinglayer
         {
             const EditTextObject& rETO = maOutlinerParaObject.GetTextObject();
 
-            mbContainsPageField = rETO.HasField(SvxPageField::StaticClassId());
-            mbContainsPageCountField = rETO.HasField(SvxPagesField::StaticClassId());
-            mbContainsOtherFields = rETO.HasField(SvxHeaderField::StaticClassId())
-                || rETO.HasField(SvxFooterField::StaticClassId())
-                || rETO.HasField(SvxDateTimeField::StaticClassId())
-                || rETO.HasField(SvxAuthorField::StaticClassId());
+            mbContainsPageField = rETO.HasField(SvxPageField::CLASS_ID);
+            mbContainsPageCountField = rETO.HasField(SvxPagesField::CLASS_ID);
+            mbContainsOtherFields = rETO.HasField(SvxHeaderField::CLASS_ID)
+                || rETO.HasField(SvxFooterField::CLASS_ID)
+                || rETO.HasField(SvxDateTimeField::CLASS_ID)
+                || rETO.HasField(SvxAuthorField::CLASS_ID);
         }
+
+        const SdrText* SdrTextPrimitive2D::getSdrText() const { return mrSdrText.get(); }
 
         bool SdrTextPrimitive2D::operator==(const BasePrimitive2D& rPrimitive) const
         {
@@ -140,7 +140,7 @@ namespace drawinglayer
             return false;
         }
 
-        Primitive2DContainer SdrTextPrimitive2D::get2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const
+        void SdrTextPrimitive2D::get2DDecomposition(Primitive2DDecompositionVisitor& rVisitor, const geometry::ViewInformation2D& rViewInformation) const
         {
             uno::Reference< drawing::XDrawPage > xCurrentlyVisualizingPage;
             bool bCurrentlyVisualizingPageIsSet(false);
@@ -189,9 +189,9 @@ namespace drawinglayer
                 }
 
                 // #i101443#  check change of TextBackgroundolor
-                if(!bDoDelete && getSdrText() && getSdrText()->GetModel())
+                if(!bDoDelete && getSdrText())
                 {
-                    SdrOutliner& rDrawOutliner = getSdrText()->GetModel()->GetDrawOutliner();
+                    SdrOutliner& rDrawOutliner = getSdrText()->GetObject().getSdrModelFromSdrObject().GetDrawOutliner();
                     aNewTextBackgroundColor = rDrawOutliner.GetBackgroundColor();
                     bNewTextBackgroundColorIsSet = true;
 
@@ -224,9 +224,9 @@ namespace drawinglayer
                     nCurrentlyValidPageCount = getPageCount(xCurrentlyVisualizingPage);
                 }
 
-                if(!bNewTextBackgroundColorIsSet && getSdrText() && getSdrText()->GetModel())
+                if(!bNewTextBackgroundColorIsSet && getSdrText())
                 {
-                    SdrOutliner& rDrawOutliner = getSdrText()->GetModel()->GetDrawOutliner();
+                    SdrOutliner& rDrawOutliner = getSdrText()->GetObject().getSdrModelFromSdrObject().GetDrawOutliner();
                     aNewTextBackgroundColor = rDrawOutliner.GetBackgroundColor();
                 }
 
@@ -237,7 +237,7 @@ namespace drawinglayer
             }
 
             // call parent
-            return BufferedDecompositionPrimitive2D::get2DDecomposition(rViewInformation);
+            BufferedDecompositionPrimitive2D::get2DDecomposition(rVisitor, rViewInformation);
         }
     } // end of namespace primitive2d
 } // end of namespace drawinglayer
@@ -247,12 +247,12 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        Primitive2DContainer SdrContourTextPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& aViewInformation) const
+        void SdrContourTextPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& aViewInformation) const
         {
             Primitive2DContainer aRetval;
             getSdrText()->GetObject().impDecomposeContourTextPrimitive(aRetval, *this, aViewInformation);
 
-            return encapsulateWithTextHierarchyBlockPrimitive2D(aRetval);
+            encapsulateWithTextHierarchyBlockPrimitive2D(rContainer, aRetval);
         }
 
         SdrContourTextPrimitive2D::SdrContourTextPrimitive2D(
@@ -279,9 +279,9 @@ namespace drawinglayer
             return false;
         }
 
-        SdrTextPrimitive2D* SdrContourTextPrimitive2D::createTransformedClone(const basegfx::B2DHomMatrix& rTransform) const
+        std::unique_ptr<SdrTextPrimitive2D> SdrContourTextPrimitive2D::createTransformedClone(const basegfx::B2DHomMatrix& rTransform) const
         {
-            return new SdrContourTextPrimitive2D(
+            return o3tl::make_unique<SdrContourTextPrimitive2D>(
                 getSdrText(),
                 getOutlinerParaObject(),
                 getUnitPolyPolygon(),
@@ -299,12 +299,12 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        Primitive2DContainer SdrPathTextPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& aViewInformation) const
+        void SdrPathTextPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& aViewInformation) const
         {
             Primitive2DContainer aRetval;
             getSdrText()->GetObject().impDecomposePathTextPrimitive(aRetval, *this, aViewInformation);
 
-            return encapsulateWithTextHierarchyBlockPrimitive2D(aRetval);
+            encapsulateWithTextHierarchyBlockPrimitive2D(rContainer, aRetval);
         }
 
         SdrPathTextPrimitive2D::SdrPathTextPrimitive2D(
@@ -331,12 +331,12 @@ namespace drawinglayer
             return false;
         }
 
-        SdrTextPrimitive2D* SdrPathTextPrimitive2D::createTransformedClone(const basegfx::B2DHomMatrix& rTransform) const
+        std::unique_ptr<SdrTextPrimitive2D> SdrPathTextPrimitive2D::createTransformedClone(const basegfx::B2DHomMatrix& rTransform) const
         {
             basegfx::B2DPolyPolygon aNewPolyPolygon(getPathPolyPolygon());
             aNewPolyPolygon.transform(rTransform);
 
-            return new SdrPathTextPrimitive2D(
+            return o3tl::make_unique<SdrPathTextPrimitive2D>(
                 getSdrText(),
                 getOutlinerParaObject(),
                 aNewPolyPolygon,
@@ -354,12 +354,12 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        Primitive2DContainer SdrBlockTextPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& aViewInformation) const
+        void SdrBlockTextPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& aViewInformation) const
         {
             Primitive2DContainer aRetval;
             getSdrText()->GetObject().impDecomposeBlockTextPrimitive(aRetval, *this, aViewInformation);
 
-            return encapsulateWithTextHierarchyBlockPrimitive2D(aRetval);
+            encapsulateWithTextHierarchyBlockPrimitive2D(rContainer, aRetval);
         }
 
         SdrBlockTextPrimitive2D::SdrBlockTextPrimitive2D(
@@ -404,9 +404,9 @@ namespace drawinglayer
             return false;
         }
 
-        SdrTextPrimitive2D* SdrBlockTextPrimitive2D::createTransformedClone(const basegfx::B2DHomMatrix& rTransform) const
+        std::unique_ptr<SdrTextPrimitive2D> SdrBlockTextPrimitive2D::createTransformedClone(const basegfx::B2DHomMatrix& rTransform) const
         {
-            return new SdrBlockTextPrimitive2D(
+            return o3tl::make_unique<SdrBlockTextPrimitive2D>(
                 getSdrText(),
                 getOutlinerParaObject(),
                 rTransform * getTextRangeTransform(),
@@ -430,12 +430,12 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-         Primitive2DContainer SdrAutoFitTextPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& aViewInformation) const
+         void SdrAutoFitTextPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& aViewInformation) const
          {
              Primitive2DContainer aRetval;
              getSdrText()->GetObject().impDecomposeAutoFitTextPrimitive(aRetval, *this, aViewInformation);
 
-             return encapsulateWithTextHierarchyBlockPrimitive2D(aRetval);
+             encapsulateWithTextHierarchyBlockPrimitive2D(rContainer, aRetval);
          }
 
          SdrAutoFitTextPrimitive2D::SdrAutoFitTextPrimitive2D(
@@ -462,9 +462,9 @@ namespace drawinglayer
              return false;
          }
 
-         SdrTextPrimitive2D* SdrAutoFitTextPrimitive2D::createTransformedClone(const ::basegfx::B2DHomMatrix& rTransform) const
+         std::unique_ptr<SdrTextPrimitive2D> SdrAutoFitTextPrimitive2D::createTransformedClone(const ::basegfx::B2DHomMatrix& rTransform) const
          {
-             return new SdrAutoFitTextPrimitive2D(getSdrText(), getOutlinerParaObject(), rTransform * getTextRangeTransform(), getWordWrap());
+             return o3tl::make_unique<SdrAutoFitTextPrimitive2D>(getSdrText(), getOutlinerParaObject(), rTransform * getTextRangeTransform(), getWordWrap());
          }
 
          // provide unique ID
@@ -486,12 +486,12 @@ namespace drawinglayer
           maTextRangeTransform(rTextRangeTransform)
         { }
 
-        Primitive2DContainer SdrChainedTextPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& aViewInformation) const
+        void SdrChainedTextPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& aViewInformation) const
         {
             Primitive2DContainer aRetval;
             getSdrText()->GetObject().impDecomposeChainedTextPrimitive(aRetval, *this, aViewInformation);
 
-            return encapsulateWithTextHierarchyBlockPrimitive2D(aRetval);
+            encapsulateWithTextHierarchyBlockPrimitive2D(rContainer, aRetval);
         }
 
         bool SdrChainedTextPrimitive2D::operator==(const BasePrimitive2D& rPrimitive) const
@@ -506,9 +506,9 @@ namespace drawinglayer
              return false;
          }
 
-        SdrTextPrimitive2D* SdrChainedTextPrimitive2D::createTransformedClone(const basegfx::B2DHomMatrix& rTransform) const
+        std::unique_ptr<SdrTextPrimitive2D> SdrChainedTextPrimitive2D::createTransformedClone(const basegfx::B2DHomMatrix& rTransform) const
         {
-            return new SdrChainedTextPrimitive2D(getSdrText(), getOutlinerParaObject(), rTransform * getTextRangeTransform());
+            return o3tl::make_unique<SdrChainedTextPrimitive2D>(getSdrText(), getOutlinerParaObject(), rTransform * getTextRangeTransform());
         }
 
         // provide unique ID
@@ -521,12 +521,12 @@ namespace drawinglayer
  {
      namespace primitive2d
      {
-        Primitive2DContainer SdrStretchTextPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& aViewInformation) const
+        void SdrStretchTextPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& aViewInformation) const
         {
             Primitive2DContainer aRetval;
             getSdrText()->GetObject().impDecomposeStretchTextPrimitive(aRetval, *this, aViewInformation);
 
-            return encapsulateWithTextHierarchyBlockPrimitive2D(aRetval);
+            encapsulateWithTextHierarchyBlockPrimitive2D(rContainer, aRetval);
         }
 
         SdrStretchTextPrimitive2D::SdrStretchTextPrimitive2D(
@@ -553,9 +553,9 @@ namespace drawinglayer
             return false;
         }
 
-        SdrTextPrimitive2D* SdrStretchTextPrimitive2D::createTransformedClone(const basegfx::B2DHomMatrix& rTransform) const
+        std::unique_ptr<SdrTextPrimitive2D> SdrStretchTextPrimitive2D::createTransformedClone(const basegfx::B2DHomMatrix& rTransform) const
         {
-            return new SdrStretchTextPrimitive2D(
+            return o3tl::make_unique<SdrStretchTextPrimitive2D>(
                 getSdrText(),
                 getOutlinerParaObject(),
                 rTransform * getTextRangeTransform(),

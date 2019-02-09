@@ -23,6 +23,7 @@
 #include <salobj.hxx>
 #include <vcl/sysdata.hxx>
 #include <vclpluginapi.h>
+#include <memory>
 
 class SalClipRegion
 {
@@ -36,7 +37,7 @@ public:
     void        UnionClipRegion( long nX, long nY, long nWidth, long nHeight );
 
     XRectangle *EndSetClipRegion()  {
-        return ClipRectangleList;   }
+        return ClipRectangleList.get(); }
     void        ResetClipRegion()   {
         numClipRectangles = 0;      }
     int         GetRectangleCount() {
@@ -44,7 +45,8 @@ public:
 
 private:
 
-    XRectangle* ClipRectangleList;
+    std::unique_ptr<XRectangle[]>
+                ClipRectangleList;
     int         numClipRectangles;
     int         maxClipRectangles;
 };
@@ -54,6 +56,7 @@ class VCLPLUG_GEN_PUBLIC X11SalObject : public SalObject
 public:
     SystemEnvData maSystemChildData;
     SalFrame*       mpParent;
+    ::Window        maParentWin;
     ::Window        maPrimary;
     ::Window        maSecondary;
     Colormap        maColormap;
@@ -61,10 +64,10 @@ public:
     bool            mbVisible;
 
     static VCL_DLLPUBLIC bool Dispatch( XEvent* pEvent );
-    static VCL_DLLPUBLIC X11SalObject* CreateObject( SalFrame* pParent, SystemWindowData* pWindowData, bool bShow = true );
+    static VCL_DLLPUBLIC X11SalObject* CreateObject( SalFrame* pParent, SystemWindowData* pWindowData, bool bShow );
 
     X11SalObject();
-    virtual ~X11SalObject();
+    virtual ~X11SalObject() override;
 
     // override all pure virtual methods
     virtual void                    ResetClipRegion() override;
@@ -75,6 +78,8 @@ public:
     virtual void                    SetPosSize( long nX, long nY, long nWidth, long nHeight ) override;
     virtual void                    Show( bool bVisible ) override;
     virtual void                    GrabFocus() override;
+
+    virtual void                    SetLeaveEnterBackgrounds(const css::uno::Sequence<css::uno::Any>& rLeaveArgs, const css::uno::Sequence<css::uno::Any>& rEnterArgs) override;
 
     virtual const SystemEnvData*    GetSystemData() const override;
 };

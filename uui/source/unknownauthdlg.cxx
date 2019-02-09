@@ -17,67 +17,50 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vcl/msgbox.hxx>
+#include <vcl/svapp.hxx>
 
-#include "ids.hrc"
+#include <strings.hrc>
 #include "unknownauthdlg.hxx"
-#include <comphelper/processfactory.hxx>
 
 #include <com/sun/star/security/DocumentDigitalSignatures.hpp>
 
 using namespace css;
 
 
-IMPL_LINK_NOARG_TYPED(UnknownAuthDialog, OKHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(UnknownAuthDialog, OKHdl_Impl, weld::Button&, void)
 {
-    if ( m_pOptionButtonAccept->IsChecked() )
+    if (m_xOptionButtonAccept->get_active())
     {
-        EndDialog( RET_OK );
-    } else
+        m_xDialog->response(RET_OK);
+    }
+    else
     {
-        EndDialog();
+        m_xDialog->response(RET_CANCEL);
     }
 }
 
-
-IMPL_LINK_NOARG_TYPED(UnknownAuthDialog, ViewCertHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(UnknownAuthDialog, ViewCertHdl_Impl, weld::Button&, void)
 {
     uno::Reference< css::security::XDocumentDigitalSignatures > xDocumentDigitalSignatures(
         css::security::DocumentDigitalSignatures::createDefault(m_xContext) );
 
-    xDocumentDigitalSignatures.get()->showCertificate(getCert());
+    xDocumentDigitalSignatures.get()->showCertificate(m_rXCert);
 }
 
-
-UnknownAuthDialog::UnknownAuthDialog(vcl::Window* pParent,
+UnknownAuthDialog::UnknownAuthDialog(weld::Window* pParent,
     const css::uno::Reference< css::security::XCertificate >& rXCert,
     const css::uno::Reference< css::uno::XComponentContext >& xContext)
-    : MessageDialog(pParent, "UnknownAuthDialog",
-        "uui/ui/unknownauthdialog.ui")
+    : MessageDialogController(pParent, "uui/ui/unknownauthdialog.ui",
+            "UnknownAuthDialog")
+    , m_xCommandButtonOK(m_xBuilder->weld_button("ok"))
+    , m_xView_Certificate(m_xBuilder->weld_button("examine"))
+    , m_xOptionButtonAccept(m_xBuilder->weld_radio_button("accept"))
+    , m_xOptionButtonDontAccept(m_xBuilder->weld_radio_button("reject"))
     , m_xContext(xContext)
     , m_rXCert(rXCert)
 {
-    get(m_pOptionButtonAccept, "accept");
-    get(m_pOptionButtonDontAccept, "reject");
-    get(m_pCommandButtonOK, "ok");
-    get(m_pView_Certificate, "examine");
-
-    m_pView_Certificate->SetClickHdl(LINK(this, UnknownAuthDialog, ViewCertHdl_Impl));
-    m_pCommandButtonOK->SetClickHdl(LINK(this, UnknownAuthDialog, OKHdl_Impl));
-}
-
-UnknownAuthDialog::~UnknownAuthDialog()
-{
-    disposeOnce();
-}
-
-void UnknownAuthDialog::dispose()
-{
-    m_pCommandButtonOK.clear();
-    m_pView_Certificate.clear();
-    m_pOptionButtonAccept.clear();
-    m_pOptionButtonDontAccept.clear();
-    MessageDialog::dispose();
+    m_xView_Certificate->connect_clicked(LINK(this, UnknownAuthDialog, ViewCertHdl_Impl));
+    m_xCommandButtonOK->connect_clicked(LINK(this, UnknownAuthDialog, OKHdl_Impl));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -29,14 +29,13 @@ $(call gb_ExternalProject_get_state_target,libmwaw,build) :
 			, \
 				--enable-shared --disable-static \
 			) \
-			--with-sharedptr=c++11 \
 			--without-docs \
 			--disable-tools \
 			--disable-zip \
 			$(if $(ENABLE_DEBUG),--enable-debug,--disable-debug) \
 			$(if $(verbose),--disable-silent-rules,--enable-silent-rules) \
 			--disable-werror \
-			CXXFLAGS="$(CXXFLAGS) $(CXXFLAGS_CXX11)" \
+			CXXFLAGS="$(gb_CXXFLAGS) $(if $(ENABLE_OPTIMIZED),$(gb_COMPILEROPTFLAGS),$(gb_COMPILERNOOPTFLAGS))" \
 			$(if $(filter LINUX,$(OS)),$(if $(SYSTEM_REVENGE),, \
 				'LDFLAGS=-Wl$(COMMA)-z$(COMMA)origin \
 					-Wl$(COMMA)-rpath$(COMMA)\$$$$ORIGIN')) \

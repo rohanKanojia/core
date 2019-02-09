@@ -7,7 +7,15 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#if defined __GNUC__ && !defined __clang__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated"
+#pragma GCC diagnostic ignored "-Wunused-but-set-parameter"
+#endif
 #include <libcmis/libcmis.hxx>
+#if defined __GNUC__ && !defined __clang__
+#pragma GCC diagnostic pop
+#endif
 
 #include <config_oauth2.h>
 #include <rtl/uri.hxx>
@@ -23,17 +31,17 @@ namespace cmis
         INetURLObject aUrl( urlStr );
 
         // Decode the authority to get the binding URL and repository id
-        OUString sDecodedHost = aUrl.GetHost( INetURLObject::DECODE_WITH_CHARSET );
+        OUString sDecodedHost = aUrl.GetHost( INetURLObject::DecodeMechanism::WithCharset );
         INetURLObject aHostUrl( sDecodedHost );
         m_sBindingUrl = aHostUrl.GetURLNoMark( );
         m_sRepositoryId = aHostUrl.GetMark( );
 
-        m_sUser = aUrl.GetUser( INetURLObject::DECODE_WITH_CHARSET );
-        m_sPass = aUrl.GetPass( INetURLObject::DECODE_WITH_CHARSET );
+        m_sUser = aUrl.GetUser( INetURLObject::DecodeMechanism::WithCharset );
+        m_sPass = aUrl.GetPass( INetURLObject::DecodeMechanism::WithCharset );
 
         // Store the path to the object
-        m_sPath = aUrl.GetURLPath( INetURLObject::DECODE_WITH_CHARSET );
-        m_sId = aUrl.GetMark( INetURLObject::DECODE_WITH_CHARSET );
+        m_sPath = aUrl.GetURLPath( INetURLObject::DecodeMechanism::WithCharset );
+        m_sId = aUrl.GetMark( INetURLObject::DecodeMechanism::WithCharset );
 
         if ( m_sPath == "/" && m_sBindingUrl.indexOf( "google" ) != -1 )
             m_sId = "root";
@@ -78,7 +86,7 @@ namespace cmis
         if ( !m_sPath.isEmpty( ) )
         {
             sal_Int32 nPos = -1;
-            OUString sEncodedPath;
+            OUStringBuffer sEncodedPath;
             do
             {
                 sal_Int32 nStartPos = nPos + 1;
@@ -90,14 +98,14 @@ namespace cmis
 
                 if ( !sSegment.isEmpty( ) )
                 {
-                    sEncodedPath += "/" + rtl::Uri::encode( sSegment,
+                    sEncodedPath.append("/").append(rtl::Uri::encode( sSegment,
                             rtl_UriCharClassRelSegment,
                             rtl_UriEncodeKeepEscapes,
-                            RTL_TEXTENCODING_UTF8 );
+                            RTL_TEXTENCODING_UTF8 ));
                 }
             }
             while ( nPos != -1 );
-            sUrl += sEncodedPath;
+            sUrl += sEncodedPath.makeStringAndClear();
         } else if ( !m_sId.isEmpty( ) )
         {
             sUrl += "#" + rtl::Uri::encode( m_sId,

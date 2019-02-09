@@ -10,7 +10,7 @@
 #ifndef INCLUDED_VCL_INC_OPENGL_X11_X11DEVICEINFO_HXX
 #define INCLUDED_VCL_INC_OPENGL_X11_X11DEVICEINFO_HXX
 
-#include "opengl/DeviceInfo.hxx"
+#include <opengl/DeviceInfo.hxx>
 
 #include <rtl/string.hxx>
 
@@ -24,7 +24,6 @@ private:
     bool mbIsIntel;
     bool mbIsOldSwrast;
     bool mbIsLlvmpipe;
-    bool mbHasTextureFromPixmap;
 
     OString maVendor;
     OString maRenderer;
@@ -41,7 +40,6 @@ private:
 
 public:
     X11OpenGLDeviceInfo();
-    virtual ~X11OpenGLDeviceInfo();
 
     virtual bool isDeviceBlocked() override;
 

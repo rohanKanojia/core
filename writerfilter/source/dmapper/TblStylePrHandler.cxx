@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <TblStylePrHandler.hxx>
-#include <PropertyMap.hxx>
+#include "TblStylePrHandler.hxx"
+#include "PropertyMap.hxx"
 #include <ooxml/resourceids.hxx>
 #include <comphelper/sequence.hxx>
 
@@ -140,8 +140,7 @@ void TblStylePrHandler::lcl_sprm(Sprm & rSprm)
                 rSprm.getId() == NS_ooxml::LN_CT_TcPrBase;
             if (bGrabBag)
             {
-                aSavedGrabBag = m_aInteropGrabBag;
-                m_aInteropGrabBag.clear();
+                std::swap(aSavedGrabBag, m_aInteropGrabBag);
             }
             resolveSprmProps( rSprm );
             if (bGrabBag)
@@ -154,7 +153,7 @@ void TblStylePrHandler::lcl_sprm(Sprm & rSprm)
                     aSavedGrabBag.push_back(getInteropGrabBag("tblPr"));
                 else if (rSprm.getId() == NS_ooxml::LN_CT_TcPrBase)
                     aSavedGrabBag.push_back(getInteropGrabBag("tcPr"));
-                m_aInteropGrabBag = aSavedGrabBag;
+                std::swap(m_aInteropGrabBag, aSavedGrabBag);
             }
         }
             break;
@@ -194,7 +193,7 @@ void TblStylePrHandler::appendInteropGrabBag(const OUString& aKey, const OUStrin
 {
     beans::PropertyValue aProperty;
     aProperty.Name = aKey;
-    aProperty.Value = uno::makeAny(aValue);
+    aProperty.Value <<= aValue;
     m_aInteropGrabBag.push_back(aProperty);
 }
 
@@ -203,7 +202,7 @@ beans::PropertyValue TblStylePrHandler::getInteropGrabBag(const OUString& aName)
     beans::PropertyValue aRet;
     aRet.Name = aName;
 
-    aRet.Value = uno::makeAny(comphelper::containerToSequence(m_aInteropGrabBag));
+    aRet.Value <<= comphelper::containerToSequence(m_aInteropGrabBag);
     return aRet;
 }
 

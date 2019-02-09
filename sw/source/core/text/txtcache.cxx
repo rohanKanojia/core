@@ -18,37 +18,36 @@
  */
 
 #include "txtcache.hxx"
-#include "txtfrm.hxx"
+#include <txtfrm.hxx>
 #include "porlay.hxx"
 
-SwTextLine::SwTextLine( SwTextFrame *pFrame, SwParaPortion *pNew ) :
-    SwCacheObj( static_cast<void*>(pFrame) ),
-    pLine( pNew )
+SwTextLine::SwTextLine( SwTextFrame const *pFrame, std::unique_ptr<SwParaPortion> pNew ) :
+    SwCacheObj( static_cast<void const *>(pFrame) ),
+    pLine( std::move(pNew) )
 {
 }
 
 SwTextLine::~SwTextLine()
 {
-    delete pLine;
 }
 
 SwCacheObj *SwTextLineAccess::NewObj()
 {
-    return new SwTextLine( const_cast<SwTextFrame *>(static_cast<SwTextFrame const *>(pOwner)) );
+    return new SwTextLine( static_cast<SwTextFrame const *>(m_pOwner) );
 }
 
 SwParaPortion *SwTextLineAccess::GetPara()
 {
     SwTextLine *pRet;
-    if ( pObj )
-        pRet = static_cast<SwTextLine*>(pObj);
+    if ( m_pObj )
+        pRet = static_cast<SwTextLine*>(m_pObj);
     else
     {
         pRet = static_cast<SwTextLine*>(Get());
-        const_cast<SwTextFrame *>(static_cast<SwTextFrame const *>(pOwner))->SetCacheIdx( pRet->GetCachePos() );
+        const_cast<SwTextFrame *>(static_cast<SwTextFrame const *>(m_pOwner))->SetCacheIdx( pRet->GetCachePos() );
     }
     if ( !pRet->GetPara() )
-        pRet->SetPara( new SwParaPortion );
+        pRet->SetPara( new SwParaPortion, true/*bDelete*/ );
     return pRet->GetPara();
 }
 
@@ -59,10 +58,10 @@ SwTextLineAccess::SwTextLineAccess( const SwTextFrame *pOwn ) :
 
 bool SwTextLineAccess::IsAvailable() const
 {
-    return pObj && static_cast<SwTextLine*>(pObj)->GetPara();
+    return m_pObj && static_cast<SwTextLine*>(m_pObj)->GetPara();
 }
 
-bool SwTextFrame::_HasPara() const
+bool SwTextFrame::HasPara_() const
 {
     SwTextLine *pTextLine = static_cast<SwTextLine*>(SwTextFrame::GetTextCache()->
                                             Get( this, GetCacheIdx(), false ));
@@ -100,8 +99,7 @@ void SwTextFrame::ClearPara()
                                         Get( this, GetCacheIdx(), false ));
         if ( pTextLine )
         {
-            delete pTextLine->GetPara();
-            pTextLine->SetPara( nullptr );
+            pTextLine->SetPara( nullptr, true/*bDelete*/ );
         }
         else
             mnCacheIndex = USHRT_MAX;
@@ -117,9 +115,7 @@ void SwTextFrame::SetPara( SwParaPortion *pNew, bool bDelete )
                                         Get( this, GetCacheIdx(), false ));
         if ( pTextLine )
         {
-            if( bDelete )
-                delete pTextLine->GetPara();
-            pTextLine->SetPara( pNew );
+            pTextLine->SetPara( pNew, bDelete );
         }
         else
         {
@@ -129,7 +125,7 @@ void SwTextFrame::SetPara( SwParaPortion *pNew, bool bDelete )
     }
     else if ( pNew )
     {   // Insert a new one
-        SwTextLine *pTextLine = new SwTextLine( this, pNew );
+        SwTextLine *pTextLine = new SwTextLine( this, std::unique_ptr<SwParaPortion>(pNew) );
         if ( SwTextFrame::GetTextCache()->Insert( pTextLine ) )
             mnCacheIndex = pTextLine->GetCachePos();
         else

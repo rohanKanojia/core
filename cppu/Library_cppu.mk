@@ -23,11 +23,6 @@ $(eval $(call gb_Library_use_external,cppu,boost_headers))
 $(eval $(call gb_Library_use_libraries,cppu,\
 	sal \
 	salhelper \
-	$(gb_UWINAPI) \
-))
-
-$(eval $(call gb_Library_add_cobjects,cppu,\
-	cppu/source/uno/EnvDcp \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,cppu,\
@@ -44,6 +39,7 @@ $(eval $(call gb_Library_add_exception_objects,cppu,\
 	cppu/source/uno/cascade_mapping \
 	cppu/source/uno/check \
 	cppu/source/uno/data \
+	cppu/source/uno/EnvDcp \
 	cppu/source/uno/EnvStack \
 	cppu/source/uno/IdentityMapping \
 	cppu/source/uno/lbenv \

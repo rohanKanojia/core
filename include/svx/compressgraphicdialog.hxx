@@ -19,57 +19,61 @@
 #ifndef INCLUDED_SVX_COMPRESSGRAPHICDIALOG_HXX
 #define INCLUDED_SVX_COMPRESSGRAPHICDIALOG_HXX
 
-#include <vcl/dialog.hxx>
-#include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/graph.hxx>
-#include <vcl/lstbox.hxx>
-#include <vcl/field.hxx>
-#include <vcl/slider.hxx>
-#include <sfx2/bindings.hxx>
+#include <sal/types.h>
 #include <svx/svxdllapi.h>
+#include <tools/gen.hxx>
+#include <tools/link.hxx>
+#include <vcl/bitmap.hxx>
+#include <vcl/weld.hxx>
+#include <vcl/graph.hxx>
 
 class SdrGrafObj;
+class SfxBindings;
+class SvStream;
 
-class SAL_WARN_UNUSED SVX_DLLPUBLIC CompressGraphicsDialog : public ModalDialog
+class SAL_WARN_UNUSED SVX_DLLPUBLIC CompressGraphicsDialog : public weld::GenericDialogController
 {
 private:
-    VclPtr<FixedText>       m_pLabelGraphicType;
-    VclPtr<FixedText>       m_pFixedText2;
-    VclPtr<FixedText>       m_pFixedText3;
-    VclPtr<FixedText>       m_pFixedText5;
-    VclPtr<FixedText>       m_pFixedText6;
+    std::unique_ptr<weld::Label>        m_xLabelGraphicType;
+    std::unique_ptr<weld::Label>        m_xFixedText2;
+    std::unique_ptr<weld::Label>        m_xFixedText3;
+    std::unique_ptr<weld::Label>        m_xFixedText5;
+    std::unique_ptr<weld::Label>        m_xFixedText6;
 
-    VclPtr<CheckBox>        m_pReduceResolutionCB;
-    VclPtr<NumericField>    m_pMFNewWidth;
-    VclPtr<NumericField>    m_pMFNewHeight;
-    VclPtr<ComboBox>        m_pResolutionLB;
-    VclPtr<RadioButton>     m_pLosslessRB;
-    VclPtr<RadioButton>     m_pJpegCompRB;
-    VclPtr<NumericField>    m_pCompressionMF;
-    VclPtr<Slider>          m_pCompressionSlider;
-    VclPtr<NumericField>    m_pQualityMF;
-    VclPtr<Slider>          m_pQualitySlider;
-    VclPtr<PushButton>      m_pBtnCalculate;
-    VclPtr<ListBox>         m_pInterpolationCombo;
+    std::unique_ptr<weld::CheckButton>  m_xReduceResolutionCB;
+    std::unique_ptr<weld::SpinButton>   m_xMFNewWidth;
+    std::unique_ptr<weld::SpinButton>   m_xMFNewHeight;
+    std::unique_ptr<weld::ComboBox> m_xResolutionLB;
+    std::unique_ptr<weld::RadioButton>  m_xLosslessRB;
+    std::unique_ptr<weld::RadioButton>  m_xJpegCompRB;
+    std::unique_ptr<weld::SpinButton>   m_xCompressionMF;
+    std::unique_ptr<weld::Scale>        m_xCompressionSlider;
+    std::unique_ptr<weld::SpinButton>   m_xQualityMF;
+    std::unique_ptr<weld::Scale>        m_xQualitySlider;
+    std::unique_ptr<weld::Button>       m_xBtnCalculate;
+    std::unique_ptr<weld::ComboBox> m_xInterpolationCombo;
 
-    SdrGrafObj*     m_pGraphicObj;
-    Graphic         m_aGraphic;
-    Size            m_aViewSize100mm;
-    Rectangle       m_aCropRectangle;
+    SdrGrafObj*     m_xGraphicObj;
+    Graphic const     m_aGraphic;
+    Size const        m_aViewSize100mm;
+    tools::Rectangle  m_aCropRectangle;
     SfxBindings&    m_rBindings;
 
     double          m_dResolution;
 
     void Initialize();
 
-    DECL_LINK_TYPED( NewWidthModifiedHdl, Edit&, void );
-    DECL_LINK_TYPED( NewHeightModifiedHdl, Edit&, void );
-    DECL_LINK_TYPED( ResolutionModifiedHdl, Edit&, void );
-    DECL_LINK_TYPED( ToggleCompressionRB, RadioButton&, void );
-    DECL_LINK_TYPED( ToggleReduceResolutionRB, CheckBox&, void );
+    DECL_LINK( SlideHdl, weld::Scale&, void );
+    DECL_LINK( NewInterpolationModifiedHdl, weld::ComboBox&, void );
+    DECL_LINK( NewQualityModifiedHdl, weld::Entry&, void );
+    DECL_LINK( NewCompressionModifiedHdl, weld::Entry&, void );
+    DECL_LINK( NewWidthModifiedHdl, weld::Entry&, void );
+    DECL_LINK( NewHeightModifiedHdl, weld::Entry&, void );
+    DECL_LINK( ResolutionModifiedHdl, weld::ComboBox&, void );
+    DECL_LINK( ToggleCompressionRB, weld::ToggleButton&, void );
+    DECL_LINK( ToggleReduceResolutionRB, weld::ToggleButton&, void );
 
-    DECL_LINK_TYPED( CalculateClickHdl, Button*, void );
+    DECL_LINK( CalculateClickHdl, weld::Button&, void );
 
     void Update();
     void UpdateNewWidthMF();
@@ -84,15 +88,14 @@ private:
     BmpScaleFlag GetSelectedInterpolationType();
 
 public:
-    CompressGraphicsDialog( vcl::Window* pParent, SdrGrafObj* pGraphicObj, SfxBindings& rBindings );
-    CompressGraphicsDialog( vcl::Window* pParent, Graphic& rGraphic, Size rViewSize100mm, Rectangle& rCropRectangle, SfxBindings& rBindings );
-    virtual ~CompressGraphicsDialog();
-    virtual void dispose() override;
+    CompressGraphicsDialog( weld::Window* pParent, SdrGrafObj* pGraphicObj, SfxBindings& rBindings );
+    CompressGraphicsDialog( weld::Window* pParent, Graphic const & rGraphic, Size rViewSize100mm, tools::Rectangle const & rCropRectangle, SfxBindings& rBindings );
+    virtual ~CompressGraphicsDialog() override;
 
     SdrGrafObj* GetCompressedSdrGrafObj();
     Graphic GetCompressedGraphic();
 
-    Rectangle GetScaledCropRectangle();
+    tools::Rectangle GetScaledCropRectangle();
 };
 
 #endif

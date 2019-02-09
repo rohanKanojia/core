@@ -17,15 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
- #include "MasterDetailLinkDialog.hxx"
- #include "formlinkdialog.hxx"
+#include <toolkit/helper/vclunohelper.hxx>
+#include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include "MasterDetailLinkDialog.hxx"
+#include "formlinkdialog.hxx"
 #include "pcrservices.hxx"
 
- extern "C" void SAL_CALL createRegistryInfo_MasterDetailLinkDialog()
+extern "C" void createRegistryInfo_MasterDetailLinkDialog()
 {
     ::pcr::OAutoRegistration< ::pcr::MasterDetailLinkDialog > aAutoRegistration;
 }
-
 
 namespace pcr
 {
@@ -40,44 +42,44 @@ namespace pcr
     {
     }
 
-    Sequence<sal_Int8> SAL_CALL MasterDetailLinkDialog::getImplementationId(  ) throw(RuntimeException, std::exception)
+    Sequence<sal_Int8> SAL_CALL MasterDetailLinkDialog::getImplementationId(  )
     {
         return css::uno::Sequence<sal_Int8>();
     }
 
 
-    Reference< XInterface > SAL_CALL MasterDetailLinkDialog::Create( const Reference< XComponentContext >& _rxContext )
+    Reference< XInterface > MasterDetailLinkDialog::Create( const Reference< XComponentContext >& _rxContext )
     {
         return *( new MasterDetailLinkDialog( _rxContext ) );
     }
 
 
-    OUString SAL_CALL MasterDetailLinkDialog::getImplementationName() throw(RuntimeException, std::exception)
+    OUString SAL_CALL MasterDetailLinkDialog::getImplementationName()
     {
         return getImplementationName_static();
     }
 
 
-    OUString MasterDetailLinkDialog::getImplementationName_static() throw(RuntimeException)
+    OUString MasterDetailLinkDialog::getImplementationName_static()
     {
         return OUString("org.openoffice.comp.form.ui.MasterDetailLinkDialog");
     }
 
 
-    css::uno::Sequence<OUString> SAL_CALL MasterDetailLinkDialog::getSupportedServiceNames() throw(RuntimeException, std::exception)
+    css::uno::Sequence<OUString> SAL_CALL MasterDetailLinkDialog::getSupportedServiceNames()
     {
         return getSupportedServiceNames_static();
     }
 
 
-    css::uno::Sequence<OUString> MasterDetailLinkDialog::getSupportedServiceNames_static() throw(RuntimeException)
+    css::uno::Sequence<OUString> MasterDetailLinkDialog::getSupportedServiceNames_static()
     {
         css::uno::Sequence<OUString> aSupported { "com.sun.star.form.MasterDetailLinkDialog" };
         return aSupported;
     }
 
 
-    Reference<XPropertySetInfo>  SAL_CALL MasterDetailLinkDialog::getPropertySetInfo() throw(RuntimeException, std::exception)
+    Reference<XPropertySetInfo>  SAL_CALL MasterDetailLinkDialog::getPropertySetInfo()
     {
         Reference<XPropertySetInfo>  xInfo( createPropertySetInfo( getInfoHelper() ) );
         return xInfo;
@@ -97,11 +99,10 @@ namespace pcr
         return new ::cppu::OPropertyArrayHelper(aProps);
     }
 
-
-    VclPtr<Dialog> MasterDetailLinkDialog::createDialog(vcl::Window* _pParent)
+    svt::OGenericUnoDialog::Dialog MasterDetailLinkDialog::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
     {
-        return VclPtr<FormLinkDialog>::Create(_pParent,m_xDetail,m_xMaster, m_aContext
-            ,m_sExplanation,m_sDetailLabel,m_sMasterLabel);
+        return svt::OGenericUnoDialog::Dialog(VclPtr<FormLinkDialog>::Create(VCLUnoHelper::GetWindow(rParent),m_xDetail,m_xMaster, m_aContext
+            ,m_sExplanation,m_sDetailLabel,m_sMasterLabel));
     }
 
     void MasterDetailLinkDialog::implInitialize(const Any& _rValue)

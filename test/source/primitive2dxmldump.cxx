@@ -9,6 +9,7 @@
 
 #include <test/primitive2dxmldump.hxx>
 #include <test/xmltesttools.hxx>
+#include <tools/XmlWriter.hxx>
 
 #include <vcl/metaact.hxx>
 #include <rtl/string.hxx>
@@ -26,8 +27,10 @@
 #include <drawinglayer/primitive2d/unifiedtransparenceprimitive2d.hxx>
 #include <drawinglayer/primitive2d/objectinfoprimitive2d.hxx>
 #include <drawinglayer/primitive2d/svggradientprimitive2d.hxx>
-
+#include <drawinglayer/primitive2d/metafileprimitive2d.hxx>
+#include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <drawinglayer/attribute/lineattribute.hxx>
+#include <drawinglayer/attribute/fontattribute.hxx>
 
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
@@ -64,9 +67,9 @@ xmlDocPtr Primitive2dXmlDump::dumpAndParse(
     if (rTempStreamName.isEmpty())
         pStream.reset(new SvMemoryStream());
     else
-        pStream.reset(new SvFileStream(rTempStreamName, STREAM_STD_READWRITE | StreamMode::TRUNC));
+        pStream.reset(new SvFileStream(rTempStreamName, StreamMode::STD_READWRITE | StreamMode::TRUNC));
 
-    XmlWriter aWriter(pStream.get());
+    tools::XmlWriter aWriter(pStream.get());
     aWriter.startDocument();
     aWriter.startElement("primitive2D");
 
@@ -84,7 +87,7 @@ xmlDocPtr Primitive2dXmlDump::dumpAndParse(
 
 void Primitive2dXmlDump::decomposeAndWrite(
     const drawinglayer::primitive2d::Primitive2DContainer& rPrimitive2DSequence,
-    XmlWriter& rWriter)
+    tools::XmlWriter& rWriter)
 {
     for (size_t i = 0; i < rPrimitive2DSequence.size(); i++)
     {
@@ -124,7 +127,7 @@ void Primitive2dXmlDump::decomposeAndWrite(
 
                 rWriter.startElement("polypolygoncolor");
                 rWriter.attribute("color", convertColorToString(rPolyPolygonColorPrimitive2D.getBColor()));
-                const basegfx::B2DPolyPolygon aB2DPolyPolygon(rPolyPolygonColorPrimitive2D.getB2DPolyPolygon());
+                const basegfx::B2DPolyPolygon& aB2DPolyPolygon(rPolyPolygonColorPrimitive2D.getB2DPolyPolygon());
                 const basegfx::B2DRange aB2DRange(aB2DPolyPolygon.getB2DRange());
                 rWriter.attribute("height", aB2DRange.getHeight());
                 rWriter.attribute("width", aB2DRange.getWidth());
@@ -133,7 +136,7 @@ void Primitive2dXmlDump::decomposeAndWrite(
                 rWriter.attribute("maxx", aB2DRange.getMaxX());
                 rWriter.attribute("maxy", aB2DRange.getMaxY());
                 rWriter.startElement("polypolygon");
-                rWriter.content(basegfx::tools::exportToSvgD(rPolyPolygonColorPrimitive2D.getB2DPolyPolygon(), true, true, false));
+                rWriter.content(basegfx::utils::exportToSvgD(rPolyPolygonColorPrimitive2D.getB2DPolyPolygon(), true, true, false));
                 rWriter.endElement();
                 rWriter.endElement();
             }
@@ -145,7 +148,7 @@ void Primitive2dXmlDump::decomposeAndWrite(
                 rWriter.startElement("polypolygonstroke");
 
                 rWriter.startElement("line");
-                drawinglayer::attribute::LineAttribute aLineAttribute = rPolyPolygonStrokePrimitive2D.getLineAttribute();
+                const drawinglayer::attribute::LineAttribute& aLineAttribute = rPolyPolygonStrokePrimitive2D.getLineAttribute();
                 rWriter.attribute("color", convertColorToString(aLineAttribute.getColor()));
                 rWriter.attribute("width", aLineAttribute.getWidth());
                 //rWriter.attribute("linejoin", aLineAttribute.getLineJoin());
@@ -155,7 +158,7 @@ void Primitive2dXmlDump::decomposeAndWrite(
                 //getStrokeAttribute()
 
                 rWriter.startElement("polypolygon");
-                rWriter.content(basegfx::tools::exportToSvgD(rPolyPolygonStrokePrimitive2D.getB2DPolyPolygon(), true, true, false));
+                rWriter.content(basegfx::utils::exportToSvgD(rPolyPolygonStrokePrimitive2D.getB2DPolyPolygon(), true, true, false));
                 rWriter.endElement();
 
                 rWriter.endElement();
@@ -170,7 +173,7 @@ void Primitive2dXmlDump::decomposeAndWrite(
                 rWriter.attribute("color", convertColorToString(rPolygonHairlinePrimitive2D.getBColor()));
 
                 rWriter.startElement("polygon");
-                rWriter.content(basegfx::tools::exportToSvgPoints(rPolygonHairlinePrimitive2D.getB2DPolygon()));
+                rWriter.content(basegfx::utils::exportToSvgPoints(rPolygonHairlinePrimitive2D.getB2DPolygon()));
                 rWriter.endElement();
 
 
@@ -189,8 +192,13 @@ void Primitive2dXmlDump::decomposeAndWrite(
                 {
                     rWriter.attribute("height", aScale.getY());
                 }
+                rWriter.attribute("x", aTranslate.getX());
+                rWriter.attribute("y", aTranslate.getY());
                 rWriter.attribute("text", rTextSimplePortionPrimitive2D.getText());
                 rWriter.attribute("fontcolor", convertColorToString(rTextSimplePortionPrimitive2D.getFontColor()));
+
+                const drawinglayer::attribute::FontAttribute& aFontAttribute = rTextSimplePortionPrimitive2D.getFontAttribute();
+                rWriter.attribute("familyname", aFontAttribute.getFamilyName());
                 rWriter.endElement();
             }
             break;
@@ -209,8 +217,8 @@ void Primitive2dXmlDump::decomposeAndWrite(
             {
                 const UnifiedTransparencePrimitive2D& rUnifiedTransparencePrimitive2D = dynamic_cast<const UnifiedTransparencePrimitive2D&>(*pBasePrimitive);
                 rWriter.startElement("unifiedtransparence");
-
-                rWriter.attribute("transparence", rUnifiedTransparencePrimitive2D.getTransparence());
+                rWriter.attribute("transparence", OString::number(rUnifiedTransparencePrimitive2D.getTransparence()));
+                decomposeAndWrite(rUnifiedTransparencePrimitive2D.getChildren(), rWriter);
 
                 rWriter.endElement();
             }
@@ -232,12 +240,25 @@ void Primitive2dXmlDump::decomposeAndWrite(
                 rWriter.startElement("svgradialgradient");
                 basegfx::B2DPoint aFocusAttribute = rSvgRadialGradientPrimitive2D.getFocal();
 
-                rWriter.attribute("radius", rSvgRadialGradientPrimitive2D.getRadius());
+                rWriter.attribute("radius", OString::number(rSvgRadialGradientPrimitive2D.getRadius()));
                 rWriter.attribute("x", aFocusAttribute.getX());
                 rWriter.attribute("y", aFocusAttribute.getY());
 
                 rWriter.endElement();
             }
+            break;
+
+            case PRIMITIVE2D_ID_METAFILEPRIMITIVE2D:
+            {
+                const MetafilePrimitive2D& rMetafilePrimitive2D = dynamic_cast<const MetafilePrimitive2D&>(*pBasePrimitive);
+                rWriter.startElement("metafile");
+                drawinglayer::primitive2d::Primitive2DContainer aPrimitiveContainer;
+                // since the graphic is not rendered in a document, we do not need a concrete view information
+                rMetafilePrimitive2D.get2DDecomposition(aPrimitiveContainer, drawinglayer::geometry::ViewInformation2D());
+                decomposeAndWrite(aPrimitiveContainer,rWriter);
+                rWriter.endElement();
+            }
+
             break;
 
             default:

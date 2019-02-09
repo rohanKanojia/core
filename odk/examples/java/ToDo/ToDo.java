@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -180,7 +181,7 @@ public class ToDo {
                 XSpreadsheet xspreadsheet = UnoRuntime.queryInterface(
                     XSpreadsheet.class, xindexaccess.getByIndex( 0 ));
 
-                // Querying for the interface XCellRange on the XSpeadsheet
+                // Querying for the interface XCellRange on the XSpreadsheet
                 XCellRange xcellrange = UnoRuntime.queryInterface( XCellRange.class, xspreadsheet );
 
                 /* Getting the gregorian calendar with the date on which to start
@@ -928,3 +929,4 @@ public class ToDo {
     }
 }
 
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

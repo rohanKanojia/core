@@ -31,8 +31,8 @@ class GIFLZWCompressor
 {
 private:
 
-    GIFImageDataOutputStream*   pIDOS;
-    GIFLZWCTreeNode*            pTable;
+    std::unique_ptr<GIFImageDataOutputStream> pIDOS;
+    std::unique_ptr<GIFLZWCTreeNode[]> pTable;
     GIFLZWCTreeNode*            pPrefix;
     sal_uInt16                  nDataSize;
     sal_uInt16                  nClearCode;
@@ -46,7 +46,7 @@ public:
                                 ~GIFLZWCompressor();
 
     void                        StartCompression( SvStream& rGIF, sal_uInt16 nPixelSize );
-    void                        Compress( sal_uInt8* pSrc, sal_uLong nSize );
+    void                        Compress(sal_uInt8* pSrc, sal_uInt32 nSize);
     void                        EndCompression();
 };
 

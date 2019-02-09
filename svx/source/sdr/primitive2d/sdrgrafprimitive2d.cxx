@@ -32,14 +32,14 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        Primitive2DContainer SdrGrafPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& /*aViewInformation*/) const
+        void SdrGrafPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& /*aViewInformation*/) const
         {
             Primitive2DContainer  aRetval;
 
             // create unit outline polygon
-            basegfx::B2DPolygon aUnitOutline(basegfx::tools::createUnitPolygon());
+            const basegfx::B2DPolygon& aUnitOutline(basegfx::utils::createUnitPolygon());
 
-            // add fill, but only when graphic ist transparent
+            // add fill, but only when graphic is transparent
             if(!getSdrLFSTAttribute().getFill().isDefault() && isTransparent())
             {
                 basegfx::B2DPolyPolygon aTransformed(aUnitOutline);
@@ -82,7 +82,7 @@ namespace drawinglayer
                     double fScaleX(0.0 != aScale.getX() ? fHalfLineWidth / fabs(aScale.getX()) : 1.0);
                     double fScaleY(0.0 != aScale.getY() ? fHalfLineWidth / fabs(aScale.getY()) : 1.0);
                     const basegfx::B2DRange aExpandedRange(-fScaleX, -fScaleY, 1.0 + fScaleX, 1.0 + fScaleY);
-                    basegfx::B2DPolygon aExpandedUnitOutline(basegfx::tools::createPolygonFromRect(aExpandedRange));
+                    basegfx::B2DPolygon aExpandedUnitOutline(basegfx::utils::createPolygonFromRect(aExpandedRange));
 
                     aExpandedUnitOutline.transform(getTransform());
                 aRetval.push_back(
@@ -114,7 +114,6 @@ namespace drawinglayer
                         getSdrLFSTAttribute().getText(),
                         getSdrLFSTAttribute().getLine(),
                         false,
-                        false,
                         false));
             }
 
@@ -126,7 +125,7 @@ namespace drawinglayer
                     getSdrLFSTAttribute().getShadow());
             }
 
-            return aRetval;
+            rContainer.insert(rContainer.end(), aRetval.begin(), aRetval.end());
         }
 
         SdrGrafPrimitive2D::SdrGrafPrimitive2D(
@@ -141,7 +140,7 @@ namespace drawinglayer
             maGraphicAttr(rGraphicAttr)
         {
             // reset some values from GraphicAttr which are part of transformation already
-            maGraphicAttr.SetRotation(0L);
+            maGraphicAttr.SetRotation(0);
         }
 
         bool SdrGrafPrimitive2D::operator==(const BasePrimitive2D& rPrimitive) const

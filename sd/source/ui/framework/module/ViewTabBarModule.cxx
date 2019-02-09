@@ -19,13 +19,13 @@
 
 #include "ViewTabBarModule.hxx"
 
-#include "framework/FrameworkHelper.hxx"
-#include "framework/ConfigurationController.hxx"
+#include <framework/FrameworkHelper.hxx>
+#include <framework/ConfigurationController.hxx>
 #include <com/sun/star/drawing/framework/XControllerManager.hpp>
 #include <com/sun/star/drawing/framework/XTabBar.hpp>
 
-#include "strings.hrc"
-#include "sdresid.hxx"
+#include <strings.hrc>
+#include <sdresid.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -91,7 +91,6 @@ void SAL_CALL ViewTabBarModule::disposing()
 
 void SAL_CALL ViewTabBarModule::notifyConfigurationChange (
     const ConfigurationChangeEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
     if (mxConfigurationController.is())
     {
@@ -126,7 +125,6 @@ void SAL_CALL ViewTabBarModule::notifyConfigurationChange (
 
 void SAL_CALL ViewTabBarModule::disposing (
     const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
 {
     if (mxConfigurationController.is()
         && rEvent.Source == mxConfigurationController)
@@ -155,7 +153,7 @@ void ViewTabBarModule::UpdateViewTabBar (const Reference<XTabBar>& rxTabBar)
             aImpressViewButton.ResourceId = FrameworkHelper::CreateResourceId(
                 FrameworkHelper::msImpressViewURL,
                 xAnchor);
-            aImpressViewButton.ButtonLabel = SD_RESSTR(STR_NORMAL_MODE);
+            aImpressViewButton.ButtonLabel = SdResId(STR_NORMAL_MODE);
             if ( ! xBar->hasTabBarButton(aImpressViewButton))
                 xBar->addTabBarButtonAfter(aImpressViewButton, aEmptyButton);
 
@@ -163,7 +161,7 @@ void ViewTabBarModule::UpdateViewTabBar (const Reference<XTabBar>& rxTabBar)
             aOutlineViewButton.ResourceId = FrameworkHelper::CreateResourceId(
                 FrameworkHelper::msOutlineViewURL,
                 xAnchor);
-            aOutlineViewButton.ButtonLabel = SD_RESSTR(STR_OUTLINE_MODE);
+            aOutlineViewButton.ButtonLabel = SdResId(STR_OUTLINE_MODE);
             if ( ! xBar->hasTabBarButton(aOutlineViewButton))
                 xBar->addTabBarButtonAfter(aOutlineViewButton, aImpressViewButton);
 
@@ -171,17 +169,9 @@ void ViewTabBarModule::UpdateViewTabBar (const Reference<XTabBar>& rxTabBar)
             aNotesViewButton.ResourceId = FrameworkHelper::CreateResourceId(
                 FrameworkHelper::msNotesViewURL,
                 xAnchor);
-            aNotesViewButton.ButtonLabel = SD_RESSTR(STR_NOTES_MODE);
+            aNotesViewButton.ButtonLabel = SdResId(STR_NOTES_MODE);
             if ( ! xBar->hasTabBarButton(aNotesViewButton))
                 xBar->addTabBarButtonAfter(aNotesViewButton, aOutlineViewButton);
-
-            TabBarButton aHandoutViewButton;
-            aHandoutViewButton.ResourceId = FrameworkHelper::CreateResourceId(
-                FrameworkHelper::msHandoutViewURL,
-                xAnchor);
-            aHandoutViewButton.ButtonLabel = SD_RESSTR(STR_HANDOUT_MASTER_MODE);
-            if ( ! xBar->hasTabBarButton(aHandoutViewButton))
-                xBar->addTabBarButtonAfter(aHandoutViewButton, aNotesViewButton);
         }
     }
 }

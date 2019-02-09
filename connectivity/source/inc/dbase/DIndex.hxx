@@ -22,8 +22,8 @@
 
 #include <connectivity/sdbcx/VIndex.hxx>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
-#include "dbase/DTable.hxx"
-#include "dbase/dindexnode.hxx"
+#include <dbase/DTable.hxx>
+#include <dbase/dindexnode.hxx>
 
 #define dBASE_III_GROUP "dBase III"
 
@@ -35,8 +35,6 @@ namespace connectivity
         class ONDXKey;
 
         typedef sdbcx::OIndex ODbaseIndex_BASE;
-        typedef file::OBoolOperator OBoolOperator_BASE;
-        typedef file::OOperand OOperand_BASE;
 
         class ODbaseIndex : public ODbaseIndex_BASE
         {
@@ -56,7 +54,7 @@ namespace connectivity
             {
                 sal_uInt32  db_rootpage;                    /* Rootpage position                */
                 sal_uInt32  db_pagecount;                   /* Page count                       */
-                sal_uInt8   db_frei[4];                     /* Reserved                         */
+                sal_uInt8   db_free[4];                     /* Reserved                         */
                 sal_uInt16  db_keylen;                      /* Key length                       */
                 sal_uInt16  db_maxkeys;                     /* Maximum number of keys per page  */
                 sal_uInt16  db_keytype;                     /* Type of key:
@@ -64,15 +62,16 @@ namespace connectivity
                                                                1 = Numerical                    */
                 sal_uInt16  db_keyrec;                      /* Length of an index record
                                                                RecordNumber + keylen            */
-                sal_uInt8   db_frei1[3];                    /* Reserved                         */
+                sal_uInt8   db_free1[3];                    /* Reserved                         */
                 sal_uInt8   db_unique;                      /* Unique                           */
                 char        db_name[488];                   /* index_name (field name)          */
             };
 
         private:
-            SvStream*       m_pFileStream;                  // Stream to read/write the index
+            std::unique_ptr<SvStream> m_pFileStream;        // Stream to read/write the index
             NDXHeader       m_aHeader;
-            ONDXPageList    m_aCollector;                   // Pool of obsolete pages
+            std::vector<ONDXPage*>
+                            m_aCollector;                   // Pool of obsolete pages
             ONDXPagePtr     m_aRoot,                        // Root of the B+ tree
                             m_aCurLeaf;                     // Current leaf
             sal_uInt16      m_nCurNode;                     // Position of the current node
@@ -86,26 +85,23 @@ namespace connectivity
             OUString getCompletePath();
             void closeImpl();
             // Closes and kills the index file and throws an error
-            void impl_killFileAndthrowError_throw(sal_uInt16 _nErrorId,const OUString& _sFile);
+            void impl_killFileAndthrowError_throw(const char* pErrorId, const OUString& _sFile);
         protected:
-            virtual ~ODbaseIndex();
+            virtual ~ODbaseIndex() override;
         public:
             ODbaseIndex(ODbaseTable* _pTable);
             ODbaseIndex(ODbaseTable* _pTable,const NDXHeader& _aHeader,const OUString& Name);
 
-            bool openIndexFile();
+            void openIndexFile();
             virtual void refreshColumns() override;
 
-            // com::sun::star::lang::XUnoTunnel
-            virtual sal_Int64 SAL_CALL getSomething( const com::sun::star::uno::Sequence< sal_Int8 >& aIdentifier ) throw(com::sun::star::uno::RuntimeException, std::exception) override;
-            static com::sun::star::uno::Sequence< sal_Int8 > getUnoTunnelImplementationId();
-
-            virtual void SAL_CALL acquire() throw() override;
-            virtual void SAL_CALL release() throw() override;
+            // css::lang::XUnoTunnel
+            virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
+            static css::uno::Sequence< sal_Int8 > getUnoTunnelImplementationId();
 
             const ODbaseTable* getTable() const { return m_pTable; }
             const NDXHeader& getHeader() const { return m_aHeader; }
-            OIndexIterator* createIterator();
+            std::unique_ptr<OIndexIterator> createIterator();
 
             void SetRootPos(sal_uInt32 nPos)        {m_nRootPage = nPos;}
             void SetPageCount(sal_uInt32 nCount)    {m_nPageCount = nCount;}
@@ -120,15 +116,15 @@ namespace connectivity
             bool Find(sal_uInt32 nRec, const ORowSetValue& rValue);
 
             void createINFEntry();
-            bool CreateImpl();
-            bool DropImpl();
+            void CreateImpl();
+            void DropImpl();
 
             DECLARE_SERVICE_INFO();
         protected:
 
             ONDXPage* CreatePage(sal_uInt32 nPagePos, ONDXPage* pParent = nullptr, bool bLoad = false);
             void Collect(ONDXPage*);
-            ONDXPagePtr getRoot();
+            ONDXPagePtr const & getRoot();
 
             bool isUnique() const { return m_IsUnique; }
             bool UseCollector() const {return m_bUseCollector;}
@@ -139,6 +135,8 @@ namespace connectivity
 
         SvStream& WriteODbaseIndex(SvStream &rStream, ODbaseIndex&);
         SvStream& operator >> (SvStream &rStream, ODbaseIndex&);
+
+        void ReadHeader(SvStream & rStream, ODbaseIndex::NDXHeader & rHeader);
     }
 }
 

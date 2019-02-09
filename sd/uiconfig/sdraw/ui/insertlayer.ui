@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.20.4 -->
+<interface domain="sd">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="InsertLayerDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Insert Layer</property>
+    <property name="title" translatable="yes" context="insertlayer|InsertLayerDialog">Insert Layer</property>
+    <property name="modal">True</property>
+    <property name="default_width">0</property>
+    <property name="default_height">0</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox4">
@@ -93,7 +96,7 @@
                       <object class="GtkEntry" id="name">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="invisible_char">●</property>
+                        <property name="activates_default">True</property>
                         <property name="width_chars">54</property>
                       </object>
                     </child>
@@ -103,7 +106,7 @@
                   <object class="GtkLabel" id="label4">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">_Name</property>
+                    <property name="label" translatable="yes" context="insertlayer|label4">_Name</property>
                     <property name="use_underline">True</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
@@ -133,7 +136,7 @@
                       <object class="GtkEntry" id="title">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="invisible_char">●</property>
+                        <property name="activates_default">True</property>
                         <property name="width_chars">54</property>
                       </object>
                     </child>
@@ -143,7 +146,7 @@
                   <object class="GtkLabel" id="label5">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">_Title</property>
+                    <property name="label" translatable="yes" context="insertlayer|label5">_Title</property>
                     <property name="use_underline">True</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
@@ -177,9 +180,11 @@
                       <object class="GtkScrolledWindow" id="scrolledwindow1">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
+                        <property name="hexpand">True</property>
+                        <property name="vexpand">True</property>
                         <property name="shadow_type">in</property>
                         <child>
-                          <object class="GtkTextView" id="textview:border">
+                          <object class="GtkTextView" id="textview">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="hexpand">True</property>
@@ -191,10 +196,10 @@
                   </object>
                 </child>
                 <child type="label">
-                  <object class="GtkLabel" id="descriptio">
+                  <object class="GtkLabel" id="description1">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">_Description</property>
+                    <property name="label" translatable="yes" context="insertlayer|description">_Description</property>
                     <property name="use_underline">True</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
@@ -210,7 +215,7 @@
             </child>
             <child>
               <object class="GtkCheckButton" id="visible">
-                <property name="label" translatable="yes">_Visible</property>
+                <property name="label" translatable="yes" context="insertlayer|visible">_Visible</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
@@ -226,7 +231,7 @@
             </child>
             <child>
               <object class="GtkCheckButton" id="printable">
-                <property name="label" translatable="yes">_Printable</property>
+                <property name="label" translatable="yes" context="insertlayer|printable">_Printable</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
@@ -242,7 +247,7 @@
             </child>
             <child>
               <object class="GtkCheckButton" id="locked">
-                <property name="label" translatable="yes">_Locked</property>
+                <property name="label" translatable="yes" context="insertlayer|locked">_Locked</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
@@ -266,9 +271,12 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">cancel</action-widget>
-      <action-widget response="0">help</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
+    <child>
+      <placeholder/>
+    </child>
   </object>
 </interface>

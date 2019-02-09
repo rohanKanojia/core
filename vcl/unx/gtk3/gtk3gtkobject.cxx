@@ -30,41 +30,52 @@
 #include <unx/gtk/gtkgdi.hxx>
 
 GtkSalObject::GtkSalObject( GtkSalFrame* pParent, bool bShow )
-        : m_pSocket( nullptr ),
-          m_pRegion( nullptr )
+        : m_pSocket(nullptr)
+        , m_pParent(pParent)
+        , m_pRegion(nullptr)
 {
-    if( pParent )
+    if( !pParent )
+        return;
+
+    // our plug window
+    m_pSocket = gtk_grid_new();
+    Show( bShow );
+    // insert into container
+    gtk_fixed_put( pParent->getFixedContainer(),
+                   m_pSocket,
+                   0, 0 );
+    // realize so we can get a window id
+    gtk_widget_realize( m_pSocket );
+
+    // system data
+    m_aSystemData.nSize         = sizeof( SystemEnvData );
+    m_aSystemData.aWindow       = pParent->GetNativeWindowHandle(m_pSocket);
+    m_aSystemData.aShellWindow  = reinterpret_cast<sal_IntPtr>(this);
+    m_aSystemData.pSalFrame     = nullptr;
+    m_aSystemData.pWidget       = m_pSocket;
+    m_aSystemData.nScreen       = pParent->getXScreenNumber().getXScreen();
+    m_aSystemData.pToolkit      = "gtk3";
+    GdkScreen* pScreen = gtk_window_get_screen(GTK_WINDOW(pParent->getWindow()));
+    GdkVisual* pVisual = gdk_screen_get_system_visual(pScreen);
+
+#if defined(GDK_WINDOWING_X11)
+    GdkDisplay *pDisplay = GtkSalFrame::getGdkDisplay();
+    if (GDK_IS_X11_DISPLAY(pDisplay))
     {
-        // our plug window
-        m_pSocket = gtk_grid_new();
-        Show( bShow );
-        // insert into container
-        gtk_fixed_put( pParent->getFixedContainer(),
-                       m_pSocket,
-                       0, 0 );
-        // realize so we can get a window id
-        gtk_widget_realize( m_pSocket );
-
-        // system data
-        m_aSystemData.nSize         = sizeof( SystemEnvData );
-        m_aSystemData.aWindow       = pParent->GetNativeWindowHandle(m_pSocket);
-        m_aSystemData.aShellWindow  = reinterpret_cast<long>(this);
-        m_aSystemData.pSalFrame     = nullptr;
-        m_aSystemData.pWidget       = m_pSocket;
-        m_aSystemData.nScreen       = pParent->getXScreenNumber().getXScreen();
-        m_aSystemData.pAppContext   = nullptr;
-        m_aSystemData.pShellWidget  = GTK_WIDGET(pParent->getWindow());
-        m_aSystemData.pToolkit      = "gtk3";
-
-        g_signal_connect( G_OBJECT(m_pSocket), "button-press-event", G_CALLBACK(signalButton), this );
-        g_signal_connect( G_OBJECT(m_pSocket), "button-release-event", G_CALLBACK(signalButton), this );
-        g_signal_connect( G_OBJECT(m_pSocket), "focus-in-event", G_CALLBACK(signalFocus), this );
-        g_signal_connect( G_OBJECT(m_pSocket), "focus-out-event", G_CALLBACK(signalFocus), this );
-        g_signal_connect( G_OBJECT(m_pSocket), "destroy", G_CALLBACK(signalDestroy), this );
-
-        // #i59255# necessary due to sync effects with java child windows
-        pParent->Flush();
+        m_aSystemData.pDisplay = gdk_x11_display_get_xdisplay(pDisplay);
+        m_aSystemData.pVisual = gdk_x11_visual_get_xvisual(pVisual);
     }
+#endif
+
+    g_signal_connect( G_OBJECT(m_pSocket), "button-press-event", G_CALLBACK(signalButton), this );
+    g_signal_connect( G_OBJECT(m_pSocket), "button-release-event", G_CALLBACK(signalButton), this );
+    g_signal_connect( G_OBJECT(m_pSocket), "focus-in-event", G_CALLBACK(signalFocus), this );
+    g_signal_connect( G_OBJECT(m_pSocket), "focus-out-event", G_CALLBACK(signalFocus), this );
+    g_signal_connect( G_OBJECT(m_pSocket), "destroy", G_CALLBACK(signalDestroy), this );
+
+    // #i59255# necessary due to sync effects with java child windows
+    pParent->Flush();
+
 }
 
 GtkSalObject::~GtkSalObject()
@@ -124,7 +135,7 @@ void GtkSalObject::SetPosSize( long nX, long nY, long nWidth, long nHeight )
         GtkFixed* pContainer = GTK_FIXED(gtk_widget_get_parent(m_pSocket));
         gtk_fixed_move( pContainer, m_pSocket, nX, nY );
         gtk_widget_set_size_request( m_pSocket, nWidth, nHeight );
-        gtk_container_resize_children( GTK_CONTAINER(pContainer) );
+        m_pParent->nopaint_container_resize_children(GTK_CONTAINER(pContainer));
     }
 }
 
@@ -150,7 +161,7 @@ gboolean GtkSalObject::signalButton( GtkWidget*, GdkEventButton* pEvent, gpointe
 
     if( pEvent->type == GDK_BUTTON_PRESS )
     {
-        pThis->CallCallback( SALOBJ_EVENT_TOTOP, nullptr );
+        pThis->CallCallback( SalObjEvent::ToTop );
     }
 
     return FALSE;
@@ -160,7 +171,7 @@ gboolean GtkSalObject::signalFocus( GtkWidget*, GdkEventFocus* pEvent, gpointer 
 {
     GtkSalObject* pThis = static_cast<GtkSalObject*>(object);
 
-    pThis->CallCallback( pEvent->in ? SALOBJ_EVENT_GETFOCUS : SALOBJ_EVENT_LOSEFOCUS, nullptr );
+    pThis->CallCallback( pEvent->in ? SalObjEvent::GetFocus : SalObjEvent::LoseFocus );
 
     return FALSE;
 }

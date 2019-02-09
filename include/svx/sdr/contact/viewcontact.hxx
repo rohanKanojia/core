@@ -24,7 +24,7 @@
 #include <svx/svxdllapi.h>
 #include <drawinglayer/primitive2d/baseprimitive2d.hxx>
 
-class SetOfByte;
+class SdrLayerIDSet;
 class SdrPage;
 class SdrObject;
 
@@ -79,9 +79,6 @@ protected:
     // asserted there
     virtual drawinglayer::primitive2d::Primitive2DContainer createViewIndependentPrimitive2DSequence() const;
 
-    // method for flushing View Independent Primitive2DContainer for VOC implementations
-    void flushViewIndependentPrimitive2DSequence() { mxViewIndependentPrimitive2DSequence.clear(); }
-
     // basic constructor. Since this is a base class only, it shall
     // never be called directly
     ViewContact();
@@ -122,13 +119,13 @@ public:
 
     // access to the local primitive. This will ensure that the primitive is
     // current in comparing the local one with a fresh created incarnation
-    drawinglayer::primitive2d::Primitive2DContainer getViewIndependentPrimitive2DSequence() const;
+    drawinglayer::primitive2d::Primitive2DContainer const & getViewIndependentPrimitive2DContainer() const;
 
     // add Gluepoints (if available)
     virtual drawinglayer::primitive2d::Primitive2DContainer createGluePointPrimitive2DSequence() const;
 
     // allow embedding if needed (e.g. for SdrObjects, evtl. Name, Title and description get added). This
-    // is a helper normally used from getViewIndependentPrimitive2DSequence(), but there is one exception
+    // is a helper normally used from getViewIndependentPrimitive2DContainer(), but there is one exception
     // for 3D scenes
     virtual drawinglayer::primitive2d::Primitive2DContainer embedToObjectSpecificInformation(const drawinglayer::primitive2d::Primitive2DContainer& rSource) const;
 

@@ -16,19 +16,15 @@ $(eval $(call gb_CppunitTest_add_exception_objects,filter_dxf_test, \
 ))
 
 $(eval $(call gb_CppunitTest_use_libraries,filter_dxf_test, \
-        gie \
+	gie \
 	sal \
 	test \
 	tl \
 	unotest \
 	vcl \
-	$(gb_UWINAPI) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,filter_dxf_test,\
-    udkapi \
-    offapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,filter_dxf_test))
 
 $(eval $(call gb_CppunitTest_use_ure,filter_dxf_test))
 $(eval $(call gb_CppunitTest_use_vcl,filter_dxf_test))

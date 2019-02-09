@@ -16,60 +16,41 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "RptPage.hxx"
-#include "RptModel.hxx"
-#include "Section.hxx"
-#include "RptObject.hxx"
+#include <RptPage.hxx>
+#include <RptModel.hxx>
+#include <Section.hxx>
+#include <RptObject.hxx>
 #include <svx/unoapi.hxx>
 #include <svx/unoshape.hxx>
-#include "ReportDrawPage.hxx"
+#include <ReportDrawPage.hxx>
 
 namespace rptui
 {
 using namespace ::com::sun::star;
 
-
-OReportPage::OReportPage( OReportModel& _rModel
-                         ,const uno::Reference< report::XSection >& _xSection )
-    :SdrPage( _rModel, false/*bMasterPage*/ )
+OReportPage::OReportPage(
+    OReportModel& _rModel,
+    const uno::Reference< report::XSection >& _xSection)
+:   SdrPage(_rModel, false/*bMasterPage*/)
     ,rModel(_rModel)
     ,m_xSection(_xSection)
-     ,m_bSpecialInsertMode(false)
+    ,m_bSpecialInsertMode(false)
 {
 }
-
-
-OReportPage::OReportPage( const OReportPage& rPage )
-    :SdrPage( rPage )
-    ,rModel(rPage.rModel)
-     ,m_xSection(rPage.m_xSection)
-     ,m_bSpecialInsertMode(rPage.m_bSpecialInsertMode)
-     ,m_aTemporaryObjectList(rPage.m_aTemporaryObjectList)
-{
-}
-
 
 OReportPage::~OReportPage()
 {
 }
 
-
-SdrPage* OReportPage::Clone() const
+SdrPage* OReportPage::CloneSdrPage(SdrModel& rTargetModel) const
 {
-    return Clone(nullptr);
-}
-
-SdrPage* OReportPage::Clone( SdrModel* const pNewModel ) const
-{
-    OReportPage *const pNewPage = new OReportPage( *this );
-    OReportModel* pReportModel = nullptr;
-    if ( pNewModel )
-    {
-        pReportModel = dynamic_cast<OReportModel*>( pNewModel );
-        assert( pReportModel );
-    }
-    pNewPage->lateInit( *this, pReportModel );
-    return pNewPage;
+    OReportModel& rOReportModel(static_cast< OReportModel& >(rTargetModel));
+    OReportPage* pClonedOReportPage(
+        new OReportPage(
+            rOReportModel,
+            m_xSection));
+    pClonedOReportPage->SdrPage::lateInit(*this);
+    return pClonedOReportPage;
 }
 
 
@@ -146,7 +127,7 @@ uno::Reference< uno::XInterface > OReportPage::createUnoPage()
     return static_cast<cppu::OWeakObject*>( new reportdesign::OReportDrawPage(this,m_xSection) );
 }
 
-void OReportPage::removeTempObject(SdrObject *_pToRemoveObj)
+void OReportPage::removeTempObject(SdrObject const *_pToRemoveObj)
 {
     if (_pToRemoveObj)
     {
@@ -155,8 +136,7 @@ void OReportPage::removeTempObject(SdrObject *_pToRemoveObj)
             SdrObject *aObj = GetObj(i);
             if (aObj && aObj == _pToRemoveObj)
             {
-                SdrObject* pObject = RemoveObject(i);
-                (void)pObject;
+                (void) RemoveObject(i);
                 break;
             }
         }
@@ -179,9 +159,9 @@ void OReportPage::resetSpecialMode()
     m_bSpecialInsertMode = false;
 }
 
-void OReportPage::NbcInsertObject(SdrObject* pObj, size_t nPos, const SdrInsertReason* pReason)
+void OReportPage::NbcInsertObject(SdrObject* pObj, size_t nPos)
 {
-    SdrPage::NbcInsertObject(pObj, nPos, pReason);
+    SdrPage::NbcInsertObject(pObj, nPos);
 
     OUnoObject* pUnoObj = dynamic_cast< OUnoObject* >( pObj );
     if (getSpecialMode())

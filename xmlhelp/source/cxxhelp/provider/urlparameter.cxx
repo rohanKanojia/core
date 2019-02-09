@@ -18,8 +18,6 @@
  */
 
 
-#include "bufferedinputstream.hxx"
-
 #include <string.h>
 #include <osl/diagnose.hxx>
 #include <osl/thread.h>
@@ -29,13 +27,16 @@
 #include <comphelper/processfactory.hxx>
 #include <rtl/uri.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <rtl/character.hxx>
 #include <libxslt/xslt.h>
 #include <libxslt/transform.h>
 #include <libxslt/xsltutils.h>
+#include <libxslt/security.h>
 #include "db.hxx"
 #include <com/sun/star/io/XActiveDataSink.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XSeekable.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/ucb/OpenCommandArgument2.hpp>
 #include <com/sun/star/ucb/OpenMode.hpp>
 #include <com/sun/star/ucb/XCommandProcessor.hpp>
@@ -48,25 +49,7 @@
 #include "urlparameter.hxx"
 #include "databases.hxx"
 
-namespace chelp {
-
-    inline bool ascii_isDigit( sal_Unicode ch )
-    {
-        return ((ch >= 0x0030) && (ch <= 0x0039));
-    }
-
-    inline bool ascii_isLetter( sal_Unicode ch )
-    {
-        return ( ( (ch >= 0x0041) && (ch <= 0x005A) ) ||
-                 ( (ch >= 0x0061) && (ch <= 0x007A) ) );
-    }
-
-    inline bool isLetterOrDigit( sal_Unicode ch )
-    {
-        return ascii_isLetter( ch ) || ascii_isDigit( ch );
-    }
-
-}
+#include <memory>
 
 using namespace cppu;
 using namespace com::sun::star::io;
@@ -80,7 +63,6 @@ using namespace chelp;
 
 URLParameter::URLParameter( const OUString& aURL,
                             Databases* pDatabases )
-    throw( css::ucb::IllegalIdentifierException )
     : m_pDatabases( pDatabases ),
       m_aURL( aURL )
 {
@@ -123,13 +105,13 @@ OString URLParameter::getByName( const char* par )
     else if( strcmp( par,"System" ) == 0 )
         val = get_system();
     else if( strcmp( par,"HelpPrefix" ) == 0 )
-        val = get_prefix();
+        val = m_aPrefix;
 
     return OString( val.getStr(),val.getLength(),RTL_TEXTENCODING_UTF8 );
 }
 
 
-OUString URLParameter::get_id()
+OUString const & URLParameter::get_id()
 {
     if( m_aId == "start" )
     {   // module is set
@@ -138,8 +120,6 @@ OUString URLParameter::get_id()
                                                          get_language() );
         if( inf )
             m_aId = inf->get_id();
-
-        m_bStart = true;
     }
 
     return m_aId;
@@ -173,16 +153,13 @@ OUString URLParameter::get_title()
 }
 
 
-OUString URLParameter::get_language()
+OUString const & URLParameter::get_language() const
 {
-    if( m_aLanguage.isEmpty() )
-        return m_aDefaultLanguage;
-
     return m_aLanguage;
 }
 
 
-OUString URLParameter::get_program()
+OUString const & URLParameter::get_program()
 {
     if( m_aProgram.isEmpty() )
     {
@@ -199,7 +176,6 @@ OUString URLParameter::get_program()
 void URLParameter::init()
 {
     m_bHelpDataFileRead = false;
-    m_bStart = false;
     m_bUseDB = true;
     m_nHitCount = 100;                // The default maximum hitcount
 }
@@ -220,7 +196,7 @@ OUString URLParameter::get_the_tag()
 }
 
 
-OUString URLParameter::get_the_path()
+OUString const & URLParameter::get_path()
 {
     if(m_bUseDB) {
         if( ! m_bHelpDataFileRead )
@@ -248,7 +224,7 @@ OUString URLParameter::get_the_title()
 }
 
 
-OUString URLParameter::get_the_jar()
+OUString URLParameter::get_jar()
 {
     if(m_bUseDB) {
         if( ! m_bHelpDataFileRead )
@@ -322,103 +298,68 @@ public:
 
     InputStreamTransformer( URLParameter* urlParam,
                             Databases*    pDatatabases,
-                            bool isRoot = false );
+                            bool isRoot );
 
-    virtual ~InputStreamTransformer();
-
-    virtual Any SAL_CALL queryInterface( const Type& rType ) throw( RuntimeException, std::exception ) override;
+    virtual Any SAL_CALL queryInterface( const Type& rType ) override;
     virtual void SAL_CALL acquire() throw() override;
     virtual void SAL_CALL release() throw() override;
 
-    virtual sal_Int32 SAL_CALL readBytes( Sequence< sal_Int8 >& aData,sal_Int32 nBytesToRead )
-        throw( NotConnectedException,
-               BufferSizeExceededException,
-               IOException,
-               RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL readBytes( Sequence< sal_Int8 >& aData,sal_Int32 nBytesToRead ) override;
 
-    virtual sal_Int32 SAL_CALL readSomeBytes( Sequence< sal_Int8 >& aData,sal_Int32 nMaxBytesToRead )
-        throw( NotConnectedException,
-               BufferSizeExceededException,
-               IOException,
-               RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL readSomeBytes( Sequence< sal_Int8 >& aData,sal_Int32 nMaxBytesToRead ) override;
 
-    virtual void SAL_CALL skipBytes( sal_Int32 nBytesToSkip ) throw( NotConnectedException,
-                                                                     BufferSizeExceededException,
-                                                                     IOException,
-                                                                     RuntimeException, std::exception ) override;
+    virtual void SAL_CALL skipBytes( sal_Int32 nBytesToSkip ) override;
 
-    virtual sal_Int32 SAL_CALL available() throw( NotConnectedException,
-                                                        IOException,
-                                                        RuntimeException, std::exception ) override;
+    virtual sal_Int32 SAL_CALL available() override;
 
-    virtual void SAL_CALL closeInput() throw( NotConnectedException,
-                                                    IOException,
-                                                    RuntimeException, std::exception ) override;
+    virtual void SAL_CALL closeInput() override;
 
-    virtual void SAL_CALL seek( sal_Int64 location ) throw( IllegalArgumentException,
-                                                            IOException,
-                                                            RuntimeException, std::exception ) override;
+    virtual void SAL_CALL seek( sal_Int64 location ) override;
 
-    virtual sal_Int64 SAL_CALL getPosition() throw( IOException,RuntimeException, std::exception ) override;
+    virtual sal_Int64 SAL_CALL getPosition() override;
 
-    virtual sal_Int64 SAL_CALL getLength() throw( IOException,RuntimeException, std::exception ) override;
+    virtual sal_Int64 SAL_CALL getLength() override;
 
     void addToBuffer( const char* buffer,int len );
 
-    sal_Int8 const * getData() const { return reinterpret_cast<sal_Int8 const *>(buffer); }
-
-    sal_Int32 getLen() const { return sal_Int32( len ); }
+    OStringBuffer const & getData() const { return buffer; }
 
 private:
 
     osl::Mutex m_aMutex;
 
-    int len,pos;
-    char *buffer;
+    int pos;
+    OStringBuffer buffer;
 };
 
 
-void URLParameter::open( const Command& aCommand,
-                         sal_Int32 CommandId,
-                         const Reference< XCommandEnvironment >& Environment,
-                         const Reference< XOutputStream >& xDataSink )
+void URLParameter::open( const Reference< XOutputStream >& xDataSink )
 {
-    (void)aCommand;
-    (void)CommandId;
-    (void)Environment;
-
     if( ! xDataSink.is() )
         return;
 
     // a standard document or else an active help text, plug in the new input stream
-    InputStreamTransformer* p = new InputStreamTransformer( this,m_pDatabases,isRoot() );
+    std::unique_ptr<InputStreamTransformer> p(new InputStreamTransformer( this,m_pDatabases,isRoot() ));
     try
     {
-        xDataSink->writeBytes( Sequence< sal_Int8 >( p->getData(),p->getLen() ) );
+        xDataSink->writeBytes( Sequence< sal_Int8 >( reinterpret_cast<const sal_Int8*>(p->getData().getStr()), p->getData().getLength() ) );
     }
     catch( const Exception& )
     {
     }
-    delete p;
+    p.reset();
     xDataSink->closeOutput();
 }
 
 
-void URLParameter::open( const Command& aCommand,
-                         sal_Int32 CommandId,
-                         const Reference< XCommandEnvironment >& Environment,
-                         const Reference< XActiveDataSink >& xDataSink )
+void URLParameter::open( const Reference< XActiveDataSink >& xDataSink )
 {
-    (void)aCommand;
-    (void)CommandId;
-    (void)Environment;
-
     // a standard document or else an active help text, plug in the new input stream
     xDataSink->setInputStream( new InputStreamTransformer( this,m_pDatabases,isRoot() ) );
 }
 
 
-void URLParameter::parse() throw( css::ucb::IllegalIdentifierException )
+void URLParameter::parse()
 {
     m_aExpr = m_aURL;
 
@@ -471,7 +412,7 @@ bool URLParameter::module()
 {
     sal_Int32 idx = 0,length = m_aExpr.getLength();
 
-    while( idx < length && isLetterOrDigit( (m_aExpr.getStr())[idx] ) )
+    while( idx < length && rtl::isAsciiAlphanumeric( m_aExpr[idx] ) )
         ++idx;
 
     if( idx != 0 )
@@ -491,10 +432,10 @@ bool URLParameter::name( bool modulePresent )
 
     sal_Int32 length = m_aExpr.getLength();
 
-    if( length != 0 && (m_aExpr.getStr())[0] == '/' )
+    if( length != 0 && m_aExpr[0] == '/' )
     {
         sal_Int32 idx = 1;
-        while( idx < length && (m_aExpr.getStr())[idx] != '?' )
+        while( idx < length && m_aExpr[idx] != '?' )
             ++idx;
 
         if( idx != 1 && ! modulePresent )
@@ -516,7 +457,7 @@ bool URLParameter::query()
 
     if( m_aExpr.isEmpty() )
         return true;
-    else if( (m_aExpr.getStr())[0] == '?' )
+    else if( m_aExpr[0] == '?' )
         query_ = m_aExpr.copy( 1 ).trim();
     else
         return false;
@@ -575,7 +516,7 @@ bool URLParameter::query()
         else if( parameter == "Active" )
             m_aActive = value;
         else if( parameter == "Version" )
-            ; // ignored (but accepted) in the build-in help, useful only for the online help
+            ; // ignored (but accepted) in the built-in help, useful only for the online help
         else
             ret = false;
     }
@@ -596,7 +537,7 @@ struct UserData {
     URLParameter*                       m_pInitial;
 };
 
-UserData *ugblData = nullptr;
+static UserData *ugblData = nullptr;
 
 extern "C" {
 
@@ -754,25 +695,21 @@ fileClose(void * context) {
 InputStreamTransformer::InputStreamTransformer( URLParameter* urlParam,
                                                 Databases*    pDatabases,
                                                 bool isRoot )
-    : len( 0 ),
-      pos( 0 ),
-      buffer( new char[1] ) // Initializing with one element to avoid gcc compiler warning
+    : pos( 0 )
 {
     if( isRoot )
     {
-        delete[] buffer;
+        buffer.setLength(0);
         pDatabases->cascadingStylesheet( urlParam->get_language(),
-                                         &buffer,
-                                         &len );
+                                         buffer );
     }
     else if( urlParam->isActive() )
     {
-        delete[] buffer;
+        buffer.setLength(0);
         pDatabases->setActiveText( urlParam->get_module(),
                                    urlParam->get_language(),
                                    urlParam->get_id(),
-                                   &buffer,
-                                   &len );
+                                   buffer );
     }
     else
     {
@@ -911,14 +848,29 @@ InputStreamTransformer::InputStreamTransformer( URLParameter* urlParam,
 
         xmlDocPtr doc = xmlParseFile("vnd.sun.star.zip:/");
 
-        xmlDocPtr res = xsltApplyStylesheet(cur, doc, parameter);
-        if (res)
+        xmlDocPtr res = nullptr;
+        xsltTransformContextPtr transformContext = xsltNewTransformContext(cur, doc);
+        if (transformContext)
         {
-            xmlChar *doc_txt_ptr=nullptr;
-            int doc_txt_len;
-            xsltSaveResultToString(&doc_txt_ptr, &doc_txt_len, res, cur);
-            addToBuffer(reinterpret_cast<char*>(doc_txt_ptr), doc_txt_len);
-            xmlFree(doc_txt_ptr);
+            xsltSecurityPrefsPtr securityPrefs = xsltNewSecurityPrefs();
+            if (securityPrefs)
+            {
+                xsltSetSecurityPrefs(securityPrefs, XSLT_SECPREF_READ_FILE, xsltSecurityAllow);
+                if (xsltSetCtxtSecurityPrefs(securityPrefs, transformContext) == 0)
+                {
+                    res = xsltApplyStylesheetUser(cur, doc, parameter, nullptr, nullptr, transformContext);
+                    if (res)
+                    {
+                        xmlChar *doc_txt_ptr=nullptr;
+                        int doc_txt_len;
+                        xsltSaveResultToString(&doc_txt_ptr, &doc_txt_len, res, cur);
+                        addToBuffer(reinterpret_cast<char*>(doc_txt_ptr), doc_txt_len);
+                        xmlFree(doc_txt_ptr);
+                    }
+                }
+                xsltFreeSecurityPrefs(securityPrefs);
+            }
+            xsltFreeTransformContext(transformContext);
         }
         xmlPopInputCallbacks(); //filePatch
         xmlPopInputCallbacks(); //helpPatch
@@ -930,17 +882,11 @@ InputStreamTransformer::InputStreamTransformer( URLParameter* urlParam,
 }
 
 
-InputStreamTransformer::~InputStreamTransformer()
-{
-    delete[] buffer;
-}
-
-
-Any SAL_CALL InputStreamTransformer::queryInterface( const Type& rType ) throw( RuntimeException, std::exception )
+Any SAL_CALL InputStreamTransformer::queryInterface( const Type& rType )
 {
     Any aRet = ::cppu::queryInterface( rType,
-                                       (static_cast< XInputStream* >(this)),
-                                       (static_cast< XSeekable* >(this)) );
+                                       static_cast< XInputStream* >(this),
+                                       static_cast< XSeekable* >(this) );
 
     return aRet.hasValue() ? aRet : OWeakObject::queryInterface( rType );
 }
@@ -959,14 +905,10 @@ void SAL_CALL InputStreamTransformer::release() throw()
 
 
 sal_Int32 SAL_CALL InputStreamTransformer::readBytes( Sequence< sal_Int8 >& aData,sal_Int32 nBytesToRead )
-    throw( NotConnectedException,
-           BufferSizeExceededException,
-           IOException,
-           RuntimeException, std::exception)
 {
     osl::MutexGuard aGuard( m_aMutex );
 
-    int curr,available_ = len-pos;
+    int curr,available_ = buffer.getLength() - pos;
     if( nBytesToRead <= available_ )
         curr = nBytesToRead;
     else
@@ -978,74 +920,60 @@ sal_Int32 SAL_CALL InputStreamTransformer::readBytes( Sequence< sal_Int8 >& aDat
     for( int k = 0; k < curr; ++k )
         aData[k] = buffer[pos++];
 
-    return curr > 0 ? curr : 0;
+    return std::max(curr, 0);
 }
 
 
 sal_Int32 SAL_CALL InputStreamTransformer::readSomeBytes( Sequence< sal_Int8 >& aData,sal_Int32 nMaxBytesToRead )
-    throw( NotConnectedException,
-           BufferSizeExceededException,
-           IOException,
-           RuntimeException, std::exception)
 {
     return readBytes( aData,nMaxBytesToRead );
 }
 
 
-void SAL_CALL InputStreamTransformer::skipBytes( sal_Int32 nBytesToSkip ) throw( NotConnectedException,
-                                                                                 BufferSizeExceededException,
-                                                                                 IOException,
-                                                                                 RuntimeException, std::exception )
+void SAL_CALL InputStreamTransformer::skipBytes( sal_Int32 nBytesToSkip )
 {
     osl::MutexGuard aGuard( m_aMutex );
     while( nBytesToSkip-- ) ++pos;
 }
 
 
-sal_Int32 SAL_CALL InputStreamTransformer::available() throw( NotConnectedException,
-                                                                    IOException,
-                                                                    RuntimeException, std::exception )
+sal_Int32 SAL_CALL InputStreamTransformer::available()
 {
     osl::MutexGuard aGuard( m_aMutex );
-    return len-pos > 0 ? len - pos : 0 ;
+    return std::min<sal_Int64>(SAL_MAX_INT32, buffer.getLength() - pos);
 }
 
 
-void SAL_CALL InputStreamTransformer::closeInput() throw( NotConnectedException,
-                                                                IOException,
-                                                                RuntimeException, std::exception )
+void SAL_CALL InputStreamTransformer::closeInput()
 {
 }
 
 
-void SAL_CALL InputStreamTransformer::seek( sal_Int64 location ) throw( IllegalArgumentException,
-                                                                        IOException,
-                                                                        RuntimeException, std::exception )
+void SAL_CALL InputStreamTransformer::seek( sal_Int64 location )
 {
     osl::MutexGuard aGuard( m_aMutex );
     if( location < 0 )
         throw IllegalArgumentException();
-    else
-        pos = sal::static_int_cast<sal_Int32>( location );
 
-    if( pos > len )
-        pos = len;
+    pos = sal::static_int_cast<sal_Int32>( location );
+
+    if( pos > buffer.getLength() )
+        pos = buffer.getLength();
 }
 
 
-sal_Int64 SAL_CALL InputStreamTransformer::getPosition() throw( IOException,
-                                                                      RuntimeException, std::exception )
+sal_Int64 SAL_CALL InputStreamTransformer::getPosition()
 {
     osl::MutexGuard aGuard( m_aMutex );
     return sal_Int64( pos );
 }
 
 
-sal_Int64 SAL_CALL InputStreamTransformer::getLength() throw( IOException,RuntimeException, std::exception )
+sal_Int64 SAL_CALL InputStreamTransformer::getLength()
 {
     osl::MutexGuard aGuard( m_aMutex );
 
-    return len;
+    return buffer.getLength();
 }
 
 
@@ -1053,12 +981,7 @@ void InputStreamTransformer::addToBuffer( const char* buffer_,int len_ )
 {
     osl::MutexGuard aGuard( m_aMutex );
 
-    char* tmp = buffer;
-    buffer = new char[ len+len_ ];
-    memcpy( static_cast<void*>(buffer),static_cast<void*>(tmp),sal_uInt32( len ) );
-    memcpy( static_cast<void*>(buffer+len),static_cast<void const *>(buffer_),sal_uInt32( len_ ) );
-    delete[] tmp;
-    len += len_;
+    buffer.append( buffer_, len_ );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

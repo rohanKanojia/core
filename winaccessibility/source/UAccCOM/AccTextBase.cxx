@@ -21,11 +21,12 @@
 // AccTextBase.cpp: implementation of the CAccTextBase class.
 
 #include "stdafx.h"
-#include <string>
 
 #include "AccTextBase.h"
 
+#include <rtl/ustrbuf.hxx>
 #include <vcl/svapp.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
 #include <com/sun/star/accessibility/AccessibleTextType.hpp>
 #include <com/sun/star/accessibility/XAccessible.hpp>
@@ -41,7 +42,7 @@ using namespace css::uno;
 // Construction/Destruction
 
 
-static OUString ReplaceFourChar(OUString oldOUString);
+static OUString ReplaceFourChar(OUString const & oldOUString);
 
 CAccTextBase::CAccTextBase()
 {}
@@ -64,7 +65,7 @@ STDMETHODIMP CAccTextBase::get_addSelection(long startOffset, long endOffset)
     ENTER_PROTECTED_BLOCK
 
     // #CHECK XInterface#
-    if(pUNOInterface == NULL)
+    if(pUNOInterface == nullptr)
         return E_FAIL;
 
     Reference<XAccessibleContext> pRContext = pUNOInterface->getAccessibleContext();
@@ -99,7 +100,7 @@ STDMETHODIMP CAccTextBase::get_attributes(long offset, long * startOffset, long 
 
     ENTER_PROTECTED_BLOCK
 
-    if (startOffset == NULL || endOffset == NULL || textAttributes == NULL)
+    if (startOffset == nullptr || endOffset == nullptr || textAttributes == nullptr)
         return E_INVALIDARG;
     // #CHECK XInterface#
     if(!pRXText.is())
@@ -110,14 +111,12 @@ STDMETHODIMP CAccTextBase::get_attributes(long offset, long * startOffset, long 
     if( offset < 0 || offset > GetXInterface()->getCharacterCount() )
         return E_FAIL;
 
-    std::wstring strAttrs;
+    OUStringBuffer strAttrs("Version:1;");
 
-    strAttrs += L"Version:1;";
-
-    Sequence< css::beans::PropertyValue > pValues = GetXInterface()->getCharacterAttributes(offset, Sequence< rtl::OUString >());
+    Sequence< css::beans::PropertyValue > pValues = GetXInterface()->getCharacterAttributes(offset, Sequence< OUString >());
     int nCount = pValues.getLength();
 
-    short numberingLevel = 0;
+    sal_Int16 numberingLevel = 0;
     OUString numberingPrefix;
     Any anyNumRule;
     bool bHaveNumberingPrefixAttr = false;
@@ -150,23 +149,19 @@ STDMETHODIMP CAccTextBase::get_attributes(long offset, long * startOffset, long 
         }
         if (bHaveNumberingLevel && bHaveNumberingRules && bHaveNumberingPrefixAttr)
         {
-            OLECHAR numProps[512] = {0};
-            strAttrs+=L";";
+            strAttrs.append(';');
             numberingPrefix = ReplaceFourChar(numberingPrefix);
-            CMAccessible::get_OLECHAR4Numbering(anyNumRule,numberingLevel,numberingPrefix,numProps);
-            strAttrs += numProps;
-            bHaveNumberingLevel = 0;
-            bHaveNumberingRules = 0;
+            strAttrs.append(CMAccessible::get_String4Numbering(anyNumRule,numberingLevel,numberingPrefix));
+            bHaveNumberingLevel = false;
+            bHaveNumberingRules = false;
         }
         if( (bHaveNumberingPrefixAttr && i > 1 ) ||
             (!bHaveNumberingPrefixAttr && i > 0 ) ) //element 0 is NumberingPrefix, not write alone
         {
-            strAttrs+=L";";
+            strAttrs.append(';');
         }
-        strAttrs += pValue.Name.getStr();
-        strAttrs += L":";
-
-        OLECHAR pTemp[2048] = {0};
+        strAttrs.append(pValue.Name);
+        strAttrs.append(':');
 
         if (pValue.Name == "CharBackColor" ||
                 pValue.Name == "CharColor" ||
@@ -174,24 +169,23 @@ STDMETHODIMP CAccTextBase::get_attributes(long offset, long * startOffset, long 
         {
             unsigned long nColor;
             pValue.Value >>= nColor;
-            OLECHAR pBuf[64];
-            swprintf( pBuf, L"%08X", nColor );
-            pTemp[0]=L'#';
-            wcscat( pTemp, pBuf );
-
+            strAttrs.append('#');
+            auto const hex = OUString::number(nColor, 16).toAsciiUpperCase();
+            for (sal_Int32 j = hex.getLength(); j < 8; ++j) {
+                strAttrs.append('0');
+            }
+            strAttrs.append(hex);
         }
         else
         {
-            CMAccessible::get_OLECHARFromAny(pValue.Value,pTemp);
+            strAttrs.append(CMAccessible::get_StringFromAny(pValue.Value));
         }
-
-        strAttrs +=pTemp;
     }
-    strAttrs +=L";";
+    strAttrs.append(';');
     // #CHECK#
     if(*textAttributes)
         SysFreeString(*textAttributes);
-    *textAttributes = SysAllocString(strAttrs.c_str());
+    *textAttributes = SysAllocString(o3tl::toW(strAttrs.makeStringAndClear().getStr()));
 
     if( offset < GetXInterface()->getCharacterCount() )
     {
@@ -221,7 +215,7 @@ STDMETHODIMP CAccTextBase::get_caretOffset(long * offset)
 
     ENTER_PROTECTED_BLOCK
 
-    if (offset == NULL)
+    if (offset == nullptr)
         return E_INVALIDARG;
     // #CHECK XInterface#
     if(!pRXText.is())
@@ -247,7 +241,7 @@ STDMETHODIMP CAccTextBase::get_characterCount(long * nCharacters)
 
     ENTER_PROTECTED_BLOCK
 
-    if (nCharacters == NULL)
+    if (nCharacters == nullptr)
         return E_INVALIDARG;
     // #CHECK XInterface#
     if(!pRXText.is())
@@ -277,7 +271,7 @@ STDMETHODIMP CAccTextBase::get_characterExtents(long offset, IA2CoordinateType c
 
     ENTER_PROTECTED_BLOCK
 
-    if (x == NULL || height == NULL || y == NULL || width == NULL)
+    if (x == nullptr || height == nullptr || y == nullptr || width == nullptr)
         return E_INVALIDARG;
     // #CHECK XInterface#
     if(!pRXText.is())
@@ -349,10 +343,10 @@ STDMETHODIMP CAccTextBase::get_nSelections(long * nSelections)
 
     ENTER_PROTECTED_BLOCK
 
-    if (nSelections == NULL)
+    if (nSelections == nullptr)
         return E_INVALIDARG;
     // #CHECK XInterface#
-    if(pUNOInterface == NULL)
+    if(pUNOInterface == nullptr)
     {
         *nSelections = 0;
         return S_OK;
@@ -395,7 +389,7 @@ STDMETHODIMP CAccTextBase::get_offsetAtPoint(long x, long y, IA2CoordinateType, 
 
     ENTER_PROTECTED_BLOCK
 
-    if (offset == NULL)
+    if (offset == nullptr)
         return E_INVALIDARG;
     // #CHECK XInterface#
     if(!pRXText.is())
@@ -424,10 +418,10 @@ STDMETHODIMP CAccTextBase::get_selection(long selectionIndex, long * startOffset
 
     ENTER_PROTECTED_BLOCK
 
-    if (startOffset == NULL || endOffset == NULL )
+    if (startOffset == nullptr || endOffset == nullptr )
         return E_INVALIDARG;
     // #CHECK XInterface#
-    if(pUNOInterface == NULL )
+    if(pUNOInterface == nullptr )
         return E_FAIL;
 
     long nSelection = 0;
@@ -473,7 +467,7 @@ STDMETHODIMP CAccTextBase::get_text(long startOffset, long endOffset, BSTR * tex
 
     ENTER_PROTECTED_BLOCK
 
-    if (text == NULL)
+    if (text == nullptr)
         return E_INVALIDARG;
     // #CHECK XInterface#
     if(!pRXText.is())
@@ -484,7 +478,7 @@ STDMETHODIMP CAccTextBase::get_text(long startOffset, long endOffset, BSTR * tex
         return E_FAIL;
     }
 
-    ::rtl::OUString ouStr;
+    OUString ouStr;
     if (endOffset == -1 )
     {
         long nLen=0;
@@ -499,7 +493,7 @@ STDMETHODIMP CAccTextBase::get_text(long startOffset, long endOffset, BSTR * tex
     }
 
     SysFreeString(*text);
-    *text = SysAllocString((OLECHAR*)ouStr.getStr());
+    *text = SysAllocString(o3tl::toW(ouStr.getStr()));
     return S_OK;
 
     LEAVE_PROTECTED_BLOCK
@@ -521,7 +515,7 @@ STDMETHODIMP CAccTextBase::get_textBeforeOffset(long offset, IA2TextBoundaryType
     ENTER_PROTECTED_BLOCK
 
     // #CHECK#
-    if (startOffset == NULL || endOffset == NULL || text == NULL)
+    if (startOffset == nullptr || endOffset == nullptr || text == nullptr)
         return E_INVALIDARG;
     // #CHECK XInterface#
     if(!pRXText.is())
@@ -582,9 +576,9 @@ STDMETHODIMP CAccTextBase::get_textBeforeOffset(long offset, IA2TextBoundaryType
     }
 
     TextSegment segment = GetXInterface()->getTextBeforeIndex( offset, sal_Int16(lUnoBoundaryType));
-    ::rtl::OUString ouStr = segment.SegmentText;
+    OUString ouStr = segment.SegmentText;
     SysFreeString(*text);
-    *text = SysAllocString((OLECHAR*)ouStr.getStr());
+    *text = SysAllocString(o3tl::toW(ouStr.getStr()));
     *startOffset = segment.SegmentStart;
     *endOffset = segment.SegmentEnd;
 
@@ -608,7 +602,7 @@ STDMETHODIMP CAccTextBase::get_textAfterOffset(long offset, IA2TextBoundaryType 
 
     ENTER_PROTECTED_BLOCK
 
-    if (startOffset == NULL || endOffset == NULL || text == NULL)
+    if (startOffset == nullptr || endOffset == nullptr || text == nullptr)
         return E_INVALIDARG;
     // #CHECK XInterface#
     if(!pRXText.is())
@@ -668,9 +662,9 @@ STDMETHODIMP CAccTextBase::get_textAfterOffset(long offset, IA2TextBoundaryType 
     }
 
     TextSegment segment = GetXInterface()->getTextBehindIndex( offset, sal_Int16(lUnoBoundaryType));
-    ::rtl::OUString ouStr = segment.SegmentText;
+    OUString ouStr = segment.SegmentText;
     SysFreeString(*text);
-    *text = SysAllocString((OLECHAR*)ouStr.getStr());
+    *text = SysAllocString(o3tl::toW(ouStr.getStr()));
     *startOffset = segment.SegmentStart;
     *endOffset = segment.SegmentEnd;
 
@@ -694,7 +688,7 @@ STDMETHODIMP CAccTextBase::get_textAtOffset(long offset, IA2TextBoundaryType bou
 
     ENTER_PROTECTED_BLOCK
 
-    if (startOffset == NULL || text == NULL ||endOffset == NULL)
+    if (startOffset == nullptr || text == nullptr ||endOffset == nullptr)
         return E_INVALIDARG;
     // #CHECK XInterface#
     if(!pRXText.is())
@@ -755,9 +749,9 @@ STDMETHODIMP CAccTextBase::get_textAtOffset(long offset, IA2TextBoundaryType bou
     }
 
     TextSegment segment = GetXInterface()->getTextAtIndex( offset, sal_Int16(lUnoBoundaryType));
-    ::rtl::OUString ouStr = segment.SegmentText;
+    OUString ouStr = segment.SegmentText;
     SysFreeString(*text);
-    *text = SysAllocString((OLECHAR*)ouStr.getStr());
+    *text = SysAllocString(o3tl::toW(ouStr.getStr()));
     *startOffset = segment.SegmentStart;
     *endOffset = segment.SegmentEnd;
 
@@ -779,7 +773,7 @@ STDMETHODIMP CAccTextBase::removeSelection(long selectionIndex)
     ENTER_PROTECTED_BLOCK
 
     // #CHECK XInterface#
-    if(pUNOInterface == NULL)
+    if(pUNOInterface == nullptr)
     {
         return E_FAIL;
     }
@@ -863,7 +857,7 @@ STDMETHODIMP CAccTextBase::get_nCharacters(long * nCharacters)
 
     ENTER_PROTECTED_BLOCK
 
-    if (nCharacters == NULL)
+    if (nCharacters == nullptr)
         return E_INVALIDARG;
     // #CHECK XInterface#
     if(!pRXText.is())
@@ -919,7 +913,7 @@ STDMETHODIMP CAccTextBase::put_XInterface(hyper pXInterface)
 
     CUNOXWrapper::put_XInterface(pXInterface);
     //special query.
-    if(pUNOInterface == NULL)
+    if(pUNOInterface == nullptr)
         return E_FAIL;
     Reference<XAccessibleContext> pRContext = pUNOInterface->getAccessibleContext();
     if( !pRContext.is() )
@@ -928,7 +922,7 @@ STDMETHODIMP CAccTextBase::put_XInterface(hyper pXInterface)
     }
     Reference<XAccessibleText> pRXI(pRContext,UNO_QUERY);
     if( !pRXI.is() )
-        pRXText = NULL;
+        pRXText = nullptr;
     else
         pRXText = pRXI;
     return S_OK;
@@ -936,28 +930,30 @@ STDMETHODIMP CAccTextBase::put_XInterface(hyper pXInterface)
     LEAVE_PROTECTED_BLOCK
 }
 
-static OUString ReplaceOneChar(OUString oldOUString, OUString replacedChar, OUString replaceStr)
+static OUString ReplaceOneChar(OUString const & oldOUString, OUString const & replacedChar, OUString const & replaceStr)
 {
-    int iReplace = oldOUString.lastIndexOf(replacedChar);
+    auto s = oldOUString;
+    int iReplace = s.lastIndexOf(replacedChar);
     if (iReplace > -1)
     {
         for(;iReplace>-1;)
         {
-            oldOUString = oldOUString.replaceAt(iReplace,1, replaceStr);
-            iReplace=oldOUString.lastIndexOf(replacedChar,iReplace);
+            s = s.replaceAt(iReplace,1, replaceStr);
+            iReplace=s.lastIndexOf(replacedChar,iReplace);
         }
     }
-    return oldOUString;
+    return s;
 }
 
-static OUString ReplaceFourChar(OUString oldOUString)
+static OUString ReplaceFourChar(OUString const & oldOUString)
 {
-    oldOUString = ReplaceOneChar(oldOUString, OUString("\\"), OUString("\\\\"));
-    oldOUString = ReplaceOneChar(oldOUString, OUString(";"), OUString("\\;"));
-    oldOUString = ReplaceOneChar(oldOUString, OUString("="), OUString("\\="));
-    oldOUString = ReplaceOneChar(oldOUString, OUString(","), OUString("\\,"));
-    oldOUString = ReplaceOneChar(oldOUString, OUString(":"), OUString("\\:"));
-    return oldOUString;
+    auto s = oldOUString;
+    s = ReplaceOneChar(s, "\\", "\\\\");
+    s = ReplaceOneChar(s, ";", "\\;");
+    s = ReplaceOneChar(s, "=", "\\=");
+    s = ReplaceOneChar(s, ",", "\\,");
+    s = ReplaceOneChar(s, ":", "\\:");
+    return s;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

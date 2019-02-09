@@ -21,10 +21,11 @@
 
 #include <sfx2/bindings.hxx>
 #include <sfx2/navigat.hxx>
-#include <sfx2/sfx.hrc>
+#include <sfx2/strings.hrc>
 #include <sfx2/app.hxx>
 #include <sfx2/sfxresid.hxx>
-#include "helpid.hrc"
+#include <helpids.h>
+#include <tools/debug.hxx>
 
 SFX_IMPL_DOCKINGWINDOW( SfxNavigatorWrapper , SID_NAVIGATOR );
 
@@ -42,6 +43,7 @@ SfxNavigatorWrapper::SfxNavigatorWrapper( vcl::Window* pParentWnd ,
 
     static_cast<SfxDockingWindow*>( GetWindow() )->Initialize( pInfo );
     SetHideNotDelete( true );
+    Show( ShowFlags::NoFocusChange );
 }
 
 SfxNavigator::SfxNavigator( SfxBindings* pBind ,
@@ -54,7 +56,7 @@ SfxNavigator::SfxNavigator( SfxBindings* pBind ,
                                             nBits )
                         , pWrapper( pChildWin )
 {
-    SetText( SfxResId(SID_NAVIGATOR).toString() );
+    SetText(SfxResId(STR_SID_NAVIGATOR));
 }
 
 void SfxNavigator::Resize()
@@ -62,16 +64,6 @@ void SfxNavigator::Resize()
     SfxDockingWindow::Resize();
     if ( pWrapper->GetContextWindow() )
         pWrapper->GetContextWindow()->SetSizePixel( GetOutputSizePixel() );
-}
-
-void SfxNavigator::Resizing( Size &rSize )
-{
-    SfxDockingWindow::Resizing( rSize );
-
-    SfxChildWindowContext *pCon = GetChildWindow_Impl()->GetContext_Impl();
-    DBG_ASSERT( pCon, "No Context!" );
-    if ( pCon )
-        pCon->Resizing( rSize );
 }
 
 bool SfxNavigator::Close()

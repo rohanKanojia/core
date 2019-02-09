@@ -22,11 +22,11 @@
 
 #include <basegfx/point/b3dpoint.hxx>
 #include <basegfx/vector/b3dvector.hxx>
-#include <basegfx/polygon/b3dpolypolygon.hxx>
-#include <basegfx/vector/b2enums.hxx>
 #include <vector>
 #include <basegfx/basegfxdllapi.h>
 
+
+namespace basegfx { class B3DPolyPolygon; }
 
 namespace basegfx
 {
@@ -34,7 +34,7 @@ namespace basegfx
     class B3DPolygon;
     class B3DRange;
 
-    namespace tools
+    namespace utils
     {
         // B3DPolygon tools
 
@@ -65,8 +65,7 @@ namespace basegfx
             const B3DPolygon& rCandidate,
             const ::std::vector<double>& rDotDashArray,
             B3DPolyPolygon* pLineTarget,
-            B3DPolyPolygon* pGapTarget = nullptr,
-            double fFullDashDotLen = 0.0);
+            double fFullDashDotLen);
 
         /** Create/replace normals for given 3d geometry with default normals from given center to outside.
             rCandidate: the 3d geometry to change
@@ -83,24 +82,24 @@ namespace basegfx
             If bChangeX, x texture coordinate will be recalculated.
             If bChangeY, y texture coordinate will be recalculated.
          */
-        BASEGFX_DLLPUBLIC B3DPolygon applyDefaultTextureCoordinatesParallel( const B3DPolygon& rCandidate, const B3DRange& rRange, bool bChangeX = true, bool bChangeY = true);
+        BASEGFX_DLLPUBLIC B3DPolygon applyDefaultTextureCoordinatesParallel( const B3DPolygon& rCandidate, const B3DRange& rRange, bool bChangeX, bool bChangeY);
 
         /** Create/replace texture coordinates for given 3d geometry with spherical one
             rCenter: the centre of the used 3d geometry
             If bChangeX, x texture coordinate will be recalculated.
             If bChangeY, y texture coordinate will be recalculated.
          */
-        BASEGFX_DLLPUBLIC B3DPolygon applyDefaultTextureCoordinatesSphere( const B3DPolygon& rCandidate, const B3DPoint& rCenter, bool bChangeX = true, bool bChangeY = true);
+        BASEGFX_DLLPUBLIC B3DPolygon applyDefaultTextureCoordinatesSphere( const B3DPolygon& rCandidate, const B3DPoint& rCenter, bool bChangeX, bool bChangeY);
 
         // isInside tests for B3DPoint. On border is not inside as long as not true is given in bWithBorder flag.
-        BASEGFX_DLLPUBLIC bool isInside(const B3DPolygon& rCandidate, const B3DPoint& rPoint, bool bWithBorder = false);
+        BASEGFX_DLLPUBLIC bool isInside(const B3DPolygon& rCandidate, const B3DPoint& rPoint, bool bWithBorder);
 
         // calculates if given point is on given line, taking care of the numerical epsilon
-        BASEGFX_DLLPUBLIC bool isPointOnLine(const B3DPoint& rStart, const B3DPoint& rEnd, const B3DPoint& rCandidate, bool bWithPoints = false);
+        BASEGFX_DLLPUBLIC bool isPointOnLine(const B3DPoint& rStart, const B3DPoint& rEnd, const B3DPoint& rCandidate, bool bWithPoints);
 
         // calculates if given point is on given polygon, taking care of the numerical epsilon. Uses
         // isPointOnLine internally
-        BASEGFX_DLLPUBLIC bool isPointOnPolygon(const B3DPolygon& rCandidate, const B3DPoint& rPoint, bool bWithPoints = true);
+        BASEGFX_DLLPUBLIC bool isPointOnPolygon(const B3DPolygon& rCandidate, const B3DPoint& rPoint);
 
         // helper to get a fCut position between a plane (given with normal and a point)
         // and a line given by start and end point
@@ -120,7 +119,7 @@ namespace basegfx
         */
         BASEGFX_DLLPUBLIC B3DPolygon snapPointsOfHorizontalOrVerticalEdges(const B3DPolygon& rCandidate);
 
-    } // end of namespace tools
+    } // end of namespace utils
 } // end of namespace basegfx
 
 #endif // INCLUDED_BASEGFX_POLYGON_B3DPOLYGONTOOLS_HXX

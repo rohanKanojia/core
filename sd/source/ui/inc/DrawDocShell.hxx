@@ -20,17 +20,15 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_DRAWDOCSHELL_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_DRAWDOCSHELL_HXX
 
+#include <o3tl/span.hxx>
 #include <sfx2/docfac.hxx>
 #include <sfx2/objsh.hxx>
 
-#include <vcl/jobset.hxx>
-#include "glob.hxx"
-#include "sdmod.hxx"
-#include "pres.hxx"
-#include "sddllapi.h"
+#include <glob.hxx>
+#include <pres.hxx>
+#include <sddllapi.h>
 #include "fupoor.hxx"
 
-class SfxStyleSheetBasePool;
 class FontList;
 class SdDrawDocument;
 class SdPage;
@@ -58,21 +56,21 @@ private:
 
 public:
     DrawDocShell (
-        SfxObjectCreateMode eMode = SfxObjectCreateMode::EMBEDDED,
-        bool bSdDataObj=false,
-        DocumentType=DOCUMENT_TYPE_IMPRESS);
+        SfxObjectCreateMode eMode,
+        bool bSdDataObj,
+        DocumentType);
 
     DrawDocShell (
         SfxModelFlags nModelCreationFlags,
-        bool bSdDataObj=false,
-        DocumentType=DOCUMENT_TYPE_IMPRESS);
+        bool bSdDataObj,
+        DocumentType);
 
     DrawDocShell (
         SdDrawDocument* pDoc,
-        SfxObjectCreateMode eMode = SfxObjectCreateMode::EMBEDDED,
-        bool bSdDataObj=false,
-        DocumentType=DOCUMENT_TYPE_IMPRESS);
-    virtual ~DrawDocShell();
+        SfxObjectCreateMode eMode,
+        bool bSdDataObj,
+        DocumentType);
+    virtual ~DrawDocShell() override;
 
     void                    UpdateRefDevice();
     virtual void            Activate( bool bMDI ) override;
@@ -91,14 +89,12 @@ public:
     virtual bool            LoadFrom( SfxMedium& rMedium ) override;
     virtual bool            SaveAs( SfxMedium &rMedium  ) override;
 
-    virtual Rectangle       GetVisArea(sal_uInt16 nAspect) const override;
-    virtual void            Draw(OutputDevice*, const JobSetup& rSetup, sal_uInt16 nAspect = ASPECT_CONTENT) override;
-    virtual ::svl::IUndoManager*
-                            GetUndoManager() override;
+    virtual ::tools::Rectangle       GetVisArea(sal_uInt16 nAspect) const override;
+    virtual void            Draw(OutputDevice*, const JobSetup& rSetup, sal_uInt16 nAspect) override;
+    virtual SfxUndoManager* GetUndoManager() override;
     virtual Printer*        GetDocumentPrinter() override;
     virtual void            OnDocumentPrinterChanged(Printer* pNewPrinter) override;
     virtual SfxStyleSheetBasePool* GetStyleSheetPool() override;
-    virtual Size            GetFirstPageSize() override;
     virtual void            FillClass(SvGlobalName* pClassName, SotClipboardFormatId* pFormat, OUString* pAppName, OUString* pFullTypeName, OUString* pShortTypeName, sal_Int32 nFileFormat, bool bTemplate = false ) const override;
     virtual void            SetModified( bool = true ) override;
     virtual VclPtr<SfxDocumentInfoDialog> CreateDocumentInfoDialog( const SfxItemSet &rSet ) override;
@@ -108,7 +104,7 @@ public:
 
     sd::ViewShell* GetViewShell() { return mpViewShell; }
     ::sd::FrameView* GetFrameView();
-    rtl::Reference<FuPoor> GetDocShellFunction() const { return mxDocShellFunction; }
+    const rtl::Reference<FuPoor>& GetDocShellFunction() const { return mxDocShellFunction; }
     void SetDocShellFunction( const rtl::Reference<FuPoor>& xFunction );
 
     SdDrawDocument*         GetDoc() { return mpDoc;}
@@ -126,15 +122,12 @@ public:
     void                    GetState(SfxItemSet&);
 
     void                    Connect(sd::ViewShell* pViewSh);
-    void                    Disconnect(sd::ViewShell* pViewSh);
+    void                    Disconnect(sd::ViewShell const * pViewSh);
     void                    UpdateTablePointers();
 
-    bool                    GotoBookmark(const OUString& rBookmark);
+    void                    GotoBookmark(const OUString& rBookmark);
 
-    bool                    IsMarked(  SdrObject* pObject  );
-    // Optionally realize multi-selection of objects
-    bool                    GetObjectIsmarked(const OUString& rBookmark, bool bRealizeMultiSelectionOfObjects = false);
-    Bitmap                  GetPagePreviewBitmap(SdPage* pPage, sal_uInt16 nMaxEdgePixel);
+    BitmapEx                GetPagePreviewBitmap(SdPage* pPage);
 
     /** checks, if the given name is a valid new name for a slide
 
@@ -151,13 +144,13 @@ public:
                 a default name of a not-yet-existing slide (e.g. 'Slide 17'),
                 sal_True is returned, but rName is set to an empty string.
      */
-    bool                    CheckPageName(vcl::Window* pWin, OUString& rName );
+    bool                    CheckPageName(weld::Window* pWin, OUString& rName );
 
-    void                    SetSlotFilter(bool bEnable = false, sal_uInt16 nCount = 0, const sal_uInt16* pSIDs = nullptr) { mbFilterEnable = bEnable; mnFilterCount = nCount; mpFilterSIDs = pSIDs; }
+    void                    SetSlotFilter(bool bEnable = false, o3tl::span<sal_uInt16 const> pSIDs = o3tl::span<sal_uInt16 const>()) { mbFilterEnable = bEnable; mpFilterSIDs = pSIDs; }
     void                    ApplySlotFilter() const;
 
-    sal_uInt16              GetStyleFamily() const { return mnStyleFamily; }
-    void                    SetStyleFamily( sal_uInt16 nSF ) { mnStyleFamily = nSF; }
+    SfxStyleFamily          GetStyleFamily() const { return mnStyleFamily; }
+    void                    SetStyleFamily( SfxStyleFamily nSF ) { mnStyleFamily = nSF; }
 
     /** executes the SID_OPENDOC slot to let the framework open a document
         with the given URL and this document as a referer */
@@ -184,6 +177,14 @@ public:
      */
     bool                    IsNewPageNameValid( OUString & rInOutPageName, bool bResetStringIfStandardName = false );
 
+    /** checks, if the given name is a *unique* name for an *existing* slide
+
+        @param rPageName the name of an existing slide
+
+        @return true, if the name is unique and the slide exists
+    */
+    bool                    IsPageNameUnique(const OUString& rPagName) const;
+
     /** Return the reference device for the current document.  When the
         inherited implementation returns a device then this is passed to the
         caller.  Otherwise the returned value depends on the printer
@@ -194,36 +195,32 @@ public:
     */
     virtual OutputDevice* GetDocumentRefDev() override;
 
-    DECL_LINK_TYPED( RenameSlideHdl, AbstractSvxNameDialog&, bool );
+    DECL_LINK( RenameSlideHdl, AbstractSvxNameDialog&, bool );
 
     // ExecuteSpellPopup now handled by DrawDocShell
-    DECL_LINK_TYPED( OnlineSpellCallback, SpellCallbackInfo&, void );
+    DECL_LINK( OnlineSpellCallback, SpellCallbackInfo&, void );
 
     void                    ClearUndoBuffer();
-
-    virtual void libreOfficeKitCallback(int nType, const char* pPayload) const override;
 
 protected:
 
     SdDrawDocument*         mpDoc;
-    SfxUndoManager*         mpUndoManager;
+    std::unique_ptr<SfxUndoManager> mpUndoManager;
     VclPtr<SfxPrinter>      mpPrinter;
     ::sd::ViewShell*        mpViewShell;
-    FontList*               mpFontList;
+    std::unique_ptr<FontList> mpFontList;
     rtl::Reference<FuPoor> mxDocShellFunction;
-    DocumentType            meDocType;
-    sal_uInt16              mnStyleFamily;
-    const sal_uInt16*       mpFilterSIDs;
-    sal_uInt16              mnFilterCount;
+    DocumentType const      meDocType;
+    SfxStyleFamily          mnStyleFamily;
+    o3tl::span<sal_uInt16 const>
+                            mpFilterSIDs;
     bool                    mbFilterEnable;
-    bool                    mbSdDataObj;
+    bool const              mbSdDataObj;
     bool                    mbInDestruction;
     bool                    mbOwnPrinter;
-    bool                    mbNewDocument;
 
     bool                    mbOwnDocument;          // if true, we own mpDoc and will delete it in our d'tor
     void                    Construct(bool bClipboard);
-    virtual void            InPlaceActivate( bool bActive ) override;
 private:
     static void setEditMode(DrawViewShell* pDrawViewShell, bool isMasterPage);
 };

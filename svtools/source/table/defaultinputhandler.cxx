@@ -18,14 +18,15 @@
  */
 
 
-#include "table/defaultinputhandler.hxx"
-#include "table/tablecontrolinterface.hxx"
+#include <table/defaultinputhandler.hxx>
+#include <table/tablecontrolinterface.hxx>
 
 #include "tabledatawindow.hxx"
 #include "mousefunction.hxx"
 
 #include <vcl/event.hxx>
 #include <vcl/cursor.hxx>
+#include <osl/diagnose.h>
 
 
 namespace svt { namespace table
@@ -87,24 +88,23 @@ namespace svt { namespace table
 
             // ask all other handlers
             bool handled = false;
-            for (   MouseFunctions::iterator handler = i_impl.aMouseFunctions.begin();
-                    ( handler != i_impl.aMouseFunctions.end() ) && !handled;
-                    ++handler
-                )
+            for (auto const& mouseFunction : i_impl.aMouseFunctions)
             {
-                if ( *handler == i_impl.pActiveFunction )
+                if (handled)
+                    break;
+                if (mouseFunction == i_impl.pActiveFunction)
                     // we already invoked this function
                     continue;
 
-                switch ( (handler->get()->*i_handlerMethod)( i_control, i_event ) )
+                switch ( (mouseFunction.get()->*i_handlerMethod)( i_control, i_event ) )
                 {
                 case ActivateFunction:
-                    i_impl.pActiveFunction = *handler;
+                    i_impl.pActiveFunction = mouseFunction;
                     handled = true;
                     break;
                 case ContinueFunction:
                 case DeactivateFunction:
-                    OSL_ENSURE( false, "lcl_delegateMouseEvent: unexpected: inactivate handler cannot be continued or deactivated!" );
+                    OSL_ENSURE( false, "lcl_delegateMouseEvent: unexpected: inactive handler cannot be continued or deactivated!" );
                     break;
                 case SkipFunction:
                     handled = false;
@@ -143,9 +143,9 @@ namespace svt { namespace table
 
         struct ActionMapEntry
         {
-            sal_uInt16              nKeyCode;
-            sal_uInt16              nKeyModifier;
-            TableControlAction  eAction;
+            sal_uInt16 const              nKeyCode;
+            sal_uInt16 const              nKeyModifier;
+            TableControlAction const  eAction;
         }
         static const aKnownActions[] = {
             { KEY_DOWN,     0,          cursorDown },

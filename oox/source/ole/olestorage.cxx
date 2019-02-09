@@ -17,11 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/ole/olestorage.hxx"
+#include <oox/ole/olestorage.hxx>
 
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/embed/XTransactedObject.hpp>
+#include <com/sun/star/io/IOException.hpp>
+#include <com/sun/star/io/NotConnectedException.hpp>
 #include <com/sun/star/io/TempFile.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
@@ -31,10 +33,10 @@
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <osl/diagnose.h>
-#include "oox/helper/binaryinputstream.hxx"
-#include "oox/helper/binaryoutputstream.hxx"
-#include "oox/helper/containerhelper.hxx"
-#include "oox/helper/helper.hxx"
+#include <oox/helper/binaryinputstream.hxx>
+#include <oox/helper/binaryoutputstream.hxx>
+#include <oox/helper/containerhelper.hxx>
+#include <oox/helper/helper.hxx>
 
 namespace oox {
 namespace ole {
@@ -58,26 +60,27 @@ public:
                             const Reference< XComponentContext >& rxContext,
                             const Reference< XNameContainer >& rxStorage,
                             const OUString& rElementName );
-    virtual             ~OleOutputStream();
 
-    virtual void SAL_CALL seek( sal_Int64 nPos ) throw( IllegalArgumentException, IOException, RuntimeException, std::exception ) override;
-    virtual sal_Int64 SAL_CALL getPosition() throw( IOException, RuntimeException, std::exception ) override;
-    virtual sal_Int64 SAL_CALL getLength() throw( IOException, RuntimeException, std::exception ) override;
+    virtual void SAL_CALL seek( sal_Int64 nPos ) override;
+    virtual sal_Int64 SAL_CALL getPosition() override;
+    virtual sal_Int64 SAL_CALL getLength() override;
 
-    virtual void SAL_CALL writeBytes( const Sequence< sal_Int8 >& rData ) throw( NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception ) override;
-    virtual void SAL_CALL flush() throw( NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception ) override;
-    virtual void SAL_CALL closeOutput() throw( NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception ) override;
+    virtual void SAL_CALL writeBytes( const Sequence< sal_Int8 >& rData ) override;
+    virtual void SAL_CALL flush() override;
+    virtual void SAL_CALL closeOutput() override;
 
 private:
-    void                ensureSeekable() const throw( IOException );
-    void                ensureConnected() const throw( NotConnectedException );
+    /// @throws IOException
+    void                ensureSeekable() const;
+    /// @throws NotConnectedException
+    void                ensureConnected() const;
 
 private:
     Reference< XNameContainer > mxStorage;
     Reference< XStream > mxTempFile;
     Reference< XOutputStream > mxOutStrm;
     Reference< XSeekable > mxSeekable;
-    OUString            maElementName;
+    OUString const      maElementName;
 };
 
 OleOutputStream::OleOutputStream( const Reference< XComponentContext >& rxContext,
@@ -96,41 +99,37 @@ OleOutputStream::OleOutputStream( const Reference< XComponentContext >& rxContex
     }
 }
 
-OleOutputStream::~OleOutputStream()
-{
-}
-
-void SAL_CALL OleOutputStream::seek( sal_Int64 nPos ) throw( IllegalArgumentException, IOException, RuntimeException, std::exception )
+void SAL_CALL OleOutputStream::seek( sal_Int64 nPos )
 {
     ensureSeekable();
     mxSeekable->seek( nPos );
 }
 
-sal_Int64 SAL_CALL OleOutputStream::getPosition() throw( IOException, RuntimeException, std::exception )
+sal_Int64 SAL_CALL OleOutputStream::getPosition()
 {
     ensureSeekable();
     return mxSeekable->getPosition();
 }
 
-sal_Int64 SAL_CALL OleOutputStream::getLength() throw( IOException, RuntimeException, std::exception )
+sal_Int64 SAL_CALL OleOutputStream::getLength()
 {
     ensureSeekable();
     return mxSeekable->getLength();
 }
 
-void SAL_CALL OleOutputStream::writeBytes( const Sequence< sal_Int8 >& rData ) throw( NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception )
+void SAL_CALL OleOutputStream::writeBytes( const Sequence< sal_Int8 >& rData )
 {
     ensureConnected();
     mxOutStrm->writeBytes( rData );
 }
 
-void SAL_CALL OleOutputStream::flush() throw( NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception )
+void SAL_CALL OleOutputStream::flush()
 {
     ensureConnected();
     mxOutStrm->flush();
 }
 
-void SAL_CALL OleOutputStream::closeOutput() throw( NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception )
+void SAL_CALL OleOutputStream::closeOutput()
 {
     ensureConnected();
     ensureSeekable();
@@ -148,13 +147,13 @@ void SAL_CALL OleOutputStream::closeOutput() throw( NotConnectedException, Buffe
         throw IOException();
 }
 
-void OleOutputStream::ensureSeekable() const throw( IOException )
+void OleOutputStream::ensureSeekable() const
 {
     if( !mxSeekable.is() )
         throw IOException();
 }
 
-void OleOutputStream::ensureConnected() const throw( NotConnectedException )
+void OleOutputStream::ensureConnected() const
 {
     if( !mxOutStrm.is() )
         throw NotConnectedException();
@@ -289,7 +288,7 @@ void OleStorage::implGetElementNames( ::std::vector< OUString >& orElementNames 
     {
         aNames = mxStorage->getElementNames();
         if( aNames.getLength() > 0 )
-            orElementNames.insert( orElementNames.end(), aNames.getConstArray(), aNames.getConstArray() + aNames.getLength() );
+            orElementNames.insert( orElementNames.end(), aNames.begin(), aNames.end() );
     }
     catch(const Exception& )
     {

@@ -63,14 +63,15 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPSTORY_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPSTORY_HXX
 
+#include <memory>
 #include "lwpcontent.hxx"
 
 class LwpPageLayout;
-class LwpStory: public LwpContent
+class LwpStory final : public LwpContent
 {
 public:
-    LwpStory(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpStory();
+    LwpStory(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpStory() override;
 private:
     //File format members:
     LwpDLVListHeadTail m_ParaList;
@@ -87,12 +88,11 @@ private:
     LwpLayout* m_pTabLayout;    //for register tab style
 
     bool m_bDropcap;
-    LwpHyperlinkMgr* m_pHyperlinkMgr;
+    std::unique_ptr<LwpHyperlinkMgr> m_pHyperlinkMgr;
     OUString m_CurrSectionName;
 
-    XFContentContainer* m_pXFContainer;
+    rtl::Reference<XFContentContainer> m_xXFContainer;
 
-protected:
     void Read() override;
     void XFConvertFrameInCell(XFContentContainer* pCont);
     void XFConvertFrameInFrame(XFContentContainer* pCont);
@@ -111,17 +111,16 @@ public:
     bool GetDropcapFlag() { return m_bDropcap; }
     LwpPageLayout* GetCurrentLayout() { return m_pCurrentLayout; }
     inline LwpMiddleLayout* GetTabLayout();//for register tab style
-    OUString GetSectionName() { return m_CurrSectionName; }
-    LwpHyperlinkMgr* GetHyperlinkMgr() { return m_pHyperlinkMgr; }
+    const OUString& GetSectionName() { return m_CurrSectionName; }
+    LwpHyperlinkMgr* GetHyperlinkMgr() { return m_pHyperlinkMgr.get(); }
 
-    inline bool IsPMModified() { return m_bPMModified; }
+    bool IsPMModified() { return m_bPMModified; }
     inline void SetPMModified(bool bPMModified);
     inline void SetDropcapFlag(bool bFlag);
     inline void SetTabLayout(LwpLayout* pLayout);
     inline void SetSectionName(const OUString& StyleName);
 
     void SetCurrentLayout(LwpPageLayout* pPageLayout);
-    void AddPageLayout(LwpPageLayout* pObject);
     LwpPageLayout* GetNextPageLayout();
     bool IsNeedSection();
     void SortPageLayout();
@@ -129,8 +128,8 @@ public:
     LwpPara* GetLastParaOfPreviousStory();
 
     OUString GetContentText(bool bAllText = false);
-    inline void AddBullStyleName2List(const OUString& rStyleName, const sal_uInt8& nPos);
-    bool IsBullStyleUsedBefore(const OUString& rStyleName, const sal_uInt8& nPos);
+    inline void AddBullStyleName2List(const OUString& rStyleName, sal_uInt8 nPos);
+    bool IsBullStyleUsedBefore(const OUString& rStyleName, sal_uInt8 nPos);
 
     OUString RegisterFirstFribStyle();
 };
@@ -165,7 +164,7 @@ void LwpStory::SetSectionName(const OUString& StyleName)
 {
     m_CurrSectionName = StyleName;
 }
-inline void LwpStory::AddBullStyleName2List(const OUString& rStyleName, const sal_uInt8& nPos)
+inline void LwpStory::AddBullStyleName2List(const OUString& rStyleName, sal_uInt8 nPos)
 {
     m_vBulletStyleNameList.push_back(std::make_pair(rStyleName, nPos));
 }

@@ -86,8 +86,6 @@ enum StgEntryType {                     // dir entry types:
     STG_EMPTY     = 0,
     STG_STORAGE   = 1,
     STG_STREAM    = 2,
-    STG_LOCKBYTES = 3,
-    STG_PROPERTY  = 4,
     STG_ROOT      = 5
 };
 
@@ -96,11 +94,6 @@ enum StgEntryRef {                      // reference blocks:
     STG_RIGHT     = 1,                  // right
     STG_CHILD     = 2,                  // child
     STG_DATA      = 3                   // data start
-};
-
-enum StgEntryTime {                     // time codes:
-    STG_MODIFIED  = 0,                  // last modification
-    STG_ACCESSED  = 1                   // last access
 };
 
 #define STGENTRY_SIZE 128
@@ -125,15 +118,15 @@ class StgEntry
     OUString    m_aName;                      // Name as Compare String (ascii, upper)
 public:
     void        Init();                     // initialize the data
-    bool        SetName( const OUString& );   // store a name (ASCII, up to 32 chars)
+    void        SetName( const OUString& );   // store a name (ASCII, up to 32 chars)
     void        GetName( OUString& rName ) const;
                                         // fill in the name
     sal_Int32   Compare( const StgEntry& ) const;   // compare two entries
     bool        Load( const void* pBuffer, sal_uInt32 nBufSize, sal_uInt64 nUnderlyingStreamSize );
     void        Store( void* );
-    StgEntryType GetType() const            { return (StgEntryType) m_cType;  }
+    StgEntryType GetType() const            { return static_cast<StgEntryType>(m_cType);  }
     sal_Int32   GetStartPage() const        { return m_nPage1; }
-    void        SetType( StgEntryType t )   { m_cType = (sal_uInt8) t; }
+    void        SetType( StgEntryType t )   { m_cType = static_cast<sal_uInt8>(t); }
     sal_Int32   GetSize() const             { return m_nSize; }
     void        SetSize( sal_Int32 n )      { m_nSize = n; }
     const ClsId& GetClassId() const         { return m_aClsId; }

@@ -20,27 +20,27 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_THEMEBUFFER_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_THEMEBUFFER_HXX
 
+#include <memory>
 #include <oox/drawingml/theme.hxx>
 #include "workbookhelper.hxx"
+#include "stylesbuffer.hxx"
 
 namespace oox {
 namespace xls {
-
-struct FontModel;
 
 class ThemeBuffer : public ::oox::drawingml::Theme, public WorkbookHelper
 {
 public:
     explicit            ThemeBuffer( const WorkbookHelper& rHelper );
-    virtual             ~ThemeBuffer();
+    virtual             ~ThemeBuffer() override;
 
     /** Returns the theme color with the specified token identifier. */
-    sal_Int32           getColorByToken( sal_Int32 nToken ) const;
+    ::Color             getColorByToken( sal_Int32 nToken ) const;
 
-    sal_Int32           getColorByIndex(size_t nIndex) const;
+    ::Color             getColorByIndex(size_t nIndex) const;
 
     /** Returns the default font data for the current file type. */
-    inline const FontModel& getDefaultFontModel() const { return *mxDefFontModel; }
+    const FontModel& getDefaultFontModel() const { return *mxDefFontModel; }
 
 private:
     typedef ::std::unique_ptr< FontModel > FontModelPtr;

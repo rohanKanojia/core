@@ -17,6 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <o3tl/make_unique.hxx>
 #include <sdr/properties/measureproperties.hxx>
 #include <svl/itemset.hxx>
 #include <svl/style.hxx>
@@ -36,23 +39,18 @@ namespace sdr
     namespace properties
     {
         // create a new itemset
-        SfxItemSet* MeasureProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
+        std::unique_ptr<SfxItemSet> MeasureProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
         {
-            return new SfxItemSet(rPool,
-
-                // range from SdrAttrObj
-                SDRATTR_START, SDRATTR_SHADOW_LAST,
-                SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST,
-                SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION,
-
-                // range from SdrMeasureObj
-                SDRATTR_MEASURE_FIRST, SDRATTR_MEASURE_LAST,
-
-                // range from SdrTextObj
-                EE_ITEMS_START, EE_ITEMS_END,
-
-                // end
-                0, 0);
+            return o3tl::make_unique<SfxItemSet>(
+                rPool,
+                svl::Items<
+                    // Ranges from SdrAttrObj, SdrMeasureObj:
+                    SDRATTR_START, SDRATTR_SHADOW_LAST,
+                    SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST,
+                    SDRATTR_MEASURE_FIRST, SDRATTR_MEASURE_LAST,
+                    SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION,
+                    // Range from SdrTextObj:
+                    EE_ITEMS_START, EE_ITEMS_END>{});
         }
 
         MeasureProperties::MeasureProperties(SdrObject& rObj)
@@ -69,9 +67,9 @@ namespace sdr
         {
         }
 
-        BaseProperties& MeasureProperties::Clone(SdrObject& rObj) const
+        std::unique_ptr<BaseProperties> MeasureProperties::Clone(SdrObject& rObj) const
         {
-            return *(new MeasureProperties(*this, rObj));
+            return std::unique_ptr<BaseProperties>(new MeasureProperties(*this, rObj));
         }
 
         void MeasureProperties::ItemSetChanged(const SfxItemSet& rSet)
@@ -87,13 +85,18 @@ namespace sdr
 
         void MeasureProperties::SetStyleSheet(SfxStyleSheet* pNewStyleSheet, bool bDontRemoveHardAttr)
         {
-            SdrMeasureObj& rObj = static_cast<SdrMeasureObj&>(GetSdrObject());
+            // call parent (always first thing to do, may create the SfxItemSet)
+            TextProperties::SetStyleSheet(pNewStyleSheet, bDontRemoveHardAttr);
 
             // local changes
+            // get access to dimension line object
+            SdrMeasureObj& rObj = static_cast<SdrMeasureObj&>(GetSdrObject());
+
+            // mark dimension line text as changed (dirty) in the dimension line object
             rObj.SetTextDirty();
 
-            // call parent
-            TextProperties::SetStyleSheet(pNewStyleSheet, bDontRemoveHardAttr);
+            // tdf#98525 ask the dimension line object to redraw the changed text
+            rObj.UndirtyText();
         }
 
         void MeasureProperties::ForceDefaultAttributes()

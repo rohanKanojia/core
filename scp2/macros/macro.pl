@@ -50,7 +50,7 @@ write_DIR_ISOLANGUAGE_ALL_LANG();
 write_DIR_ISOLANGUAGE_ALL_LANG_LPROJ();
 write_EXTRA_ALL_LANG();
 write_EXTRA_ALL_LANG_BUT_EN_US();
-write_UI_ALL_LANG_BUT_EN_US();
+write_MO_ALL_LANG_EXCEPT_EN_US_AND_QTZ();
 write_EXTRA_ALL_GOOD_HELP_LOCALIZATIONS_LANG();
 write_RESFILE_ALL_LANG();
 write_README_ALL_LANG();
@@ -167,16 +167,19 @@ sub write_EXTRA_ALL_LANG_BUT_EN_US
     print OUTFILE "\n\n";
 }
 
-sub write_UI_ALL_LANG_BUT_EN_US
+sub write_MO_ALL_LANG_EXCEPT_EN_US_AND_QTZ
 {
-    print OUTFILE "#define UI_ALL_LANG_BUT_EN_US(name) ";
+    print OUTFILE "#define MO_ALL_LANG_EXCEPT_EN_US_AND_QTZ(name) ";
     my $first = 1;
     foreach $lang (@completelangiso) {
-        if ($lang ne "en-US") {
+        if (($lang ne "en-US") and ($lang ne "qtz")) {
             print OUTFILE "; " unless $first;
             $first = 0;
+            my $SRC_ROOT = $ENV{"SRC_ROOT"};
+            my $langdir = `$SRC_ROOT/solenv/bin/localestr $lang`;
+            chomp $langdir;
             print OUTFILE
-                "\\\n\tName ($lang) = STRING(CONCAT2(name,/ui/res/$lang.zip))";
+                "\\\n\tName ($lang) = STRING(CONCAT3($langdir/LC_MESSAGES/,name,.mo))";
         }
     }
     print OUTFILE "\n\n";
@@ -185,11 +188,17 @@ sub write_UI_ALL_LANG_BUT_EN_US
 sub write_EXTRA_ALL_GOOD_HELP_LOCALIZATIONS_LANG
 {
     my $first = 1;
+    my $source;
+    if ($ENV{'ENABLE_HTMLHELP'} eq 'TRUE') {
+        $source = 'html-help'; # found in instsetoo_native/util/openoffice.lst.in's {filelistpath}/CustomTarget/helpcontent2/help3xsl/filelists
+    } else {
+        $source = 'HelpTarget';
+    }
     print OUTFILE "#define EXTRA_ALL_GOOD_HELP_LOCALIZATIONS_LANG(name) ";
     foreach $lang (@helplangs) {
         print OUTFILE ";" unless $first;
         $first = 0;
-        print OUTFILE "\\\n\tName ($lang) = EXTRAFILELISTNAME(HelpTarget/,name,/$lang)";
+        print OUTFILE "\\\n\tName ($lang) = EXTRAFILELISTNAME($source/,name,/$lang)";
     }
     print OUTFILE "\n\n";
 }

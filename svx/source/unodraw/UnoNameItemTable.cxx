@@ -19,18 +19,21 @@
 
 
 #include <set>
+
+#include <o3tl/make_unique.hxx>
+
 #include <svl/itempool.hxx>
 #include <svl/itemset.hxx>
 #include <svl/style.hxx>
+#include <comphelper/profilezone.hxx>
 #include <comphelper/sequence.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
 #include <svx/svdmodel.hxx>
 #include "UnoNameItemTable.hxx"
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 
-#include "svx/unoapi.hxx"
+#include <svx/unoapi.hxx>
 #include <memory>
 
 using namespace ::com::sun::star;
@@ -59,14 +62,6 @@ bool SvxUnoNameItemTable::isValid( const NameOrIndex* pItem ) const
 
 void SvxUnoNameItemTable::dispose()
 {
-    ItemPoolVector::iterator aIter = maItemSetVector.begin();
-    const ItemPoolVector::iterator aEnd = maItemSetVector.end();
-
-    while( aIter != aEnd )
-    {
-        delete (*aIter++);
-    }
-
     maItemSetVector.clear();
 }
 
@@ -74,31 +69,31 @@ void SvxUnoNameItemTable::Notify( SfxBroadcaster&, const SfxHint& rHint ) throw(
 {
     const SdrHint* pSdrHint = dynamic_cast<const SdrHint*>(&rHint);
 
-    if( pSdrHint && HINT_MODELCLEARED == pSdrHint->GetKind() )
+    if( pSdrHint && SdrHintKind::ModelCleared == pSdrHint->GetKind() )
         dispose();
 }
 
-sal_Bool SAL_CALL SvxUnoNameItemTable::supportsService( const  OUString& ServiceName ) throw(uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL SvxUnoNameItemTable::supportsService( const  OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-void SAL_CALL SvxUnoNameItemTable::ImplInsertByName( const OUString& aName, const uno::Any& aElement )
+void SvxUnoNameItemTable::ImplInsertByName( const OUString& aName, const uno::Any& aElement )
 {
-    SfxItemSet* mpInSet = new SfxItemSet( *mpModelPool, mnWhich, mnWhich );
-    maItemSetVector.push_back( mpInSet );
+    maItemSetVector.push_back( o3tl::make_unique< SfxItemSet >( *mpModelPool, std::initializer_list<SfxItemSet::Pair>{{mnWhich, mnWhich}} ) );
 
-    std::unique_ptr<NameOrIndex> pNewItem(createItem());
-    pNewItem->SetName( aName );
-    pNewItem->PutValue( aElement, mnMemberId );
-    mpInSet->Put( *pNewItem, mnWhich );
+    std::unique_ptr<NameOrIndex> xNewItem(createItem());
+    xNewItem->SetName(aName);
+    xNewItem->PutValue(aElement, mnMemberId);
+    xNewItem->SetWhich(mnWhich);
+    maItemSetVector.back()->Put(*xNewItem);
 }
 
 // XNameContainer
 void SAL_CALL SvxUnoNameItemTable::insertByName( const OUString& aApiName, const uno::Any& aElement )
-    throw( lang::IllegalArgumentException, container::ElementExistException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
+    comphelper::ProfileZone aZone("SvxUnoNameItemTable::insertByName");
 
     if( hasByName( aApiName ) )
         throw container::ElementExistException();
@@ -110,9 +105,9 @@ void SAL_CALL SvxUnoNameItemTable::insertByName( const OUString& aApiName, const
 
 
 void SAL_CALL SvxUnoNameItemTable::removeByName( const OUString& aApiName )
-    throw( container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
+    comphelper::ProfileZone aZone("SvxUnoNameItemTable::removeByName");
 
     // a little quickfix for 2.0 to let applications clear api
     // created items that are not used
@@ -124,20 +119,15 @@ void SAL_CALL SvxUnoNameItemTable::removeByName( const OUString& aApiName )
 
     OUString sName = SvxUnogetInternalNameForItem(mnWhich, aApiName);
 
-    ItemPoolVector::iterator aIter = maItemSetVector.begin();
-    const ItemPoolVector::iterator aEnd = maItemSetVector.end();
-
-
-    while( aIter != aEnd )
+    auto aIter = std::find_if(maItemSetVector.begin(), maItemSetVector.end(),
+        [&](const std::unique_ptr<SfxItemSet>& rpItem) {
+            const NameOrIndex *pItem = static_cast<const NameOrIndex *>(&(rpItem->Get( mnWhich ) ));
+            return sName == pItem->GetName();
+        });
+    if (aIter != maItemSetVector.end())
     {
-        const NameOrIndex *pItem = static_cast<const NameOrIndex *>(&((*aIter)->Get( mnWhich ) ));
-        if (sName.equals(pItem->GetName()))
-        {
-            delete (*aIter);
-            maItemSetVector.erase( aIter );
-            return;
-        }
-        ++aIter;
+        maItemSetVector.erase( aIter );
+        return;
     }
 
     if (!hasByName(sName))
@@ -146,29 +136,24 @@ void SAL_CALL SvxUnoNameItemTable::removeByName( const OUString& aApiName )
 
 // XNameReplace
 void SAL_CALL SvxUnoNameItemTable::replaceByName( const OUString& aApiName, const uno::Any& aElement )
-    throw( lang::IllegalArgumentException, container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
 
     OUString aName = SvxUnogetInternalNameForItem(mnWhich, aApiName);
 
-    ItemPoolVector::iterator aIter = maItemSetVector.begin();
-    const ItemPoolVector::iterator aEnd = maItemSetVector.end();
-
-    while( aIter != aEnd )
+    auto aIter = std::find_if(maItemSetVector.begin(), maItemSetVector.end(),
+        [&](const std::unique_ptr<SfxItemSet>& rpItem) {
+            const NameOrIndex *pItem = static_cast<const NameOrIndex *>(&(rpItem->Get( mnWhich ) ));
+            return aName == pItem->GetName();
+        });
+    if (aIter != maItemSetVector.end())
     {
-        const NameOrIndex *pItem = static_cast<const NameOrIndex *>(&((*aIter)->Get( mnWhich ) ));
-        if (aName.equals(pItem->GetName()))
-        {
-            NameOrIndex* pNewItem = createItem();
-            pNewItem->SetName(aName);
-            if( !pNewItem->PutValue( aElement, mnMemberId ) || !isValid( pNewItem ) )
-                throw lang::IllegalArgumentException();
-
-            (*aIter)->Put( *pNewItem );
-            return;
-        }
-        ++aIter;
+        std::unique_ptr<NameOrIndex> xNewItem(createItem());
+        xNewItem->SetName(aName);
+        if (!xNewItem->PutValue(aElement, mnMemberId) || !isValid(xNewItem.get()))
+            throw lang::IllegalArgumentException();
+        (*aIter)->Put(*xNewItem);
+        return;
     }
 
     // if it is not in our own sets, modify the pool!
@@ -179,7 +164,7 @@ void SAL_CALL SvxUnoNameItemTable::replaceByName( const OUString& aApiName, cons
     for( nSurrogate = 0; nSurrogate < nCount; nSurrogate++ )
     {
         NameOrIndex *pItem = const_cast<NameOrIndex*>(static_cast<const NameOrIndex*>(mpModelPool->GetItem2( mnWhich, nSurrogate)));
-        if (pItem && aName.equals(pItem->GetName()))
+        if (pItem && aName == pItem->GetName())
         {
             pItem->PutValue( aElement, mnMemberId );
             bFound = true;
@@ -187,10 +172,10 @@ void SAL_CALL SvxUnoNameItemTable::replaceByName( const OUString& aApiName, cons
         }
     }
 
-    if( bFound )
-        ImplInsertByName( aName, aElement );
-    else
+    if( !bFound )
         throw container::NoSuchElementException();
+
+    ImplInsertByName( aName, aElement );
 
     if( !hasByName( aName ) )
         throw container::NoSuchElementException();
@@ -198,9 +183,9 @@ void SAL_CALL SvxUnoNameItemTable::replaceByName( const OUString& aApiName, cons
 
 // XNameAccess
 uno::Any SAL_CALL SvxUnoNameItemTable::getByName( const OUString& aApiName )
-    throw( container::NoSuchElementException,  lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
+    comphelper::ProfileZone aZone("SvxUnoNameItemTable::getByName");
 
     OUString aName = SvxUnogetInternalNameForItem(mnWhich, aApiName);
 
@@ -215,7 +200,7 @@ uno::Any SAL_CALL SvxUnoNameItemTable::getByName( const OUString& aApiName )
         {
             const NameOrIndex *pItem = static_cast<const NameOrIndex*>(mpModelPool->GetItem2( mnWhich, nSurrogate ));
 
-            if (isValid(pItem) && aName.equals(pItem->GetName()))
+            if (isValid(pItem) && aName == pItem->GetName())
             {
                 pItem->QueryValue( aAny, mnMemberId );
                 return aAny;
@@ -227,7 +212,6 @@ uno::Any SAL_CALL SvxUnoNameItemTable::getByName( const OUString& aApiName )
 }
 
 uno::Sequence< OUString > SAL_CALL SvxUnoNameItemTable::getElementNames(  )
-    throw( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
 
@@ -247,18 +231,17 @@ uno::Sequence< OUString > SAL_CALL SvxUnoNameItemTable::getElementNames(  )
         aNameSet.insert(aApiName);
     }
 
-    return comphelper::containerToSequence<OUString>(aNameSet);
+    return comphelper::containerToSequence(aNameSet);
 }
 
 sal_Bool SAL_CALL SvxUnoNameItemTable::hasByName( const OUString& aApiName )
-    throw( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
 
     OUString aName = SvxUnogetInternalNameForItem(mnWhich, aApiName);
 
     if (aName.isEmpty())
-        return sal_False;
+        return false;
 
     sal_uInt32 nSurrogate;
 
@@ -267,15 +250,14 @@ sal_Bool SAL_CALL SvxUnoNameItemTable::hasByName( const OUString& aApiName )
     for( nSurrogate = 0; nSurrogate < nCount; nSurrogate++ )
     {
         const NameOrIndex *pItem = static_cast<const NameOrIndex*>(mpModelPool->GetItem2( mnWhich, nSurrogate ));
-        if (isValid(pItem) && aName.equals(pItem->GetName()))
-            return sal_True;
+        if (isValid(pItem) && aName == pItem->GetName())
+            return true;
     }
 
-    return sal_False;
+    return false;
 }
 
 sal_Bool SAL_CALL SvxUnoNameItemTable::hasElements(  )
-    throw( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
 
@@ -287,10 +269,10 @@ sal_Bool SAL_CALL SvxUnoNameItemTable::hasElements(  )
         const NameOrIndex *pItem = static_cast<const NameOrIndex*>(mpModelPool->GetItem2( mnWhich, nSurrogate ));
 
         if( isValid( pItem ) )
-            return sal_True;
+            return true;
     }
 
-    return sal_False;
+    return false;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

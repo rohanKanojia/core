@@ -7,14 +7,16 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <memory>
 #include "ucalc.hxx"
-#include "editutil.hxx"
-#include "formulacell.hxx"
-#include "cellvalue.hxx"
-#include "docsh.hxx"
-#include "clipparam.hxx"
-#include "undoblk.hxx"
-#include "scopetools.hxx"
+#include "helper/debughelper.hxx"
+#include "helper/qahelper.hxx"
+#include <editutil.hxx>
+#include <formulacell.hxx>
+#include <cellvalue.hxx>
+#include <docsh.hxx>
+#include <undoblk.hxx>
+#include <scopetools.hxx>
 #include <docfunc.hxx>
 #include <dbdocfun.hxx>
 #include <tokenarray.hxx>
@@ -25,6 +27,7 @@
 #include <sharedformula.hxx>
 
 #include <svl/sharedstring.hxx>
+#include <sfx2/docfile.hxx>
 
 #include <formula/grammar.hxx>
 
@@ -261,6 +264,29 @@ void Test::testSharedFormulas()
     CPPUNIT_ASSERT_EQUAL(static_cast<SCROW>(2), pFC->GetSharedLength());
     CPPUNIT_ASSERT_EQUAL_MESSAGE("The token is expected to be shared.", pFC->GetCode(), pFC->GetSharedCode());
 
+    // Test implicit intersection with shared formulas.
+    aPos.Set(2,0,0);
+    {
+        // Insert data in C1:D2 and formulas in E1:E2
+        const char* pData[][3] = {
+            { "5", "1", "=C:C/D:D" },
+            { "4", "2", "=C:C/D:D" }
+        };
+
+        insertRangeData(m_pDoc, aPos, pData, SAL_N_ELEMENTS(pData));
+    }
+    aPos.Set(4,1,0);
+    pFC = m_pDoc->GetFormulaCell(aPos);
+    CPPUNIT_ASSERT_MESSAGE("E2 should be a formula cell.", pFC);
+    CPPUNIT_ASSERT_EQUAL(static_cast<SCROW>(0), pFC->GetSharedTopRow());
+    CPPUNIT_ASSERT_EQUAL(static_cast<SCROW>(2), pFC->GetSharedLength());
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("The token is expected to be shared.", pFC->GetCode(), pFC->GetSharedCode());
+
+    aPos.SetRow(0);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("5/1=5", 5.0, m_pDoc->GetValue(aPos));
+    aPos.SetRow(1);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("4/2=2", 2.0, m_pDoc->GetValue(aPos));
+
     m_pDoc->DeleteTab(0);
 }
 
@@ -286,12 +312,9 @@ void Test::testSharedFormulasRefUpdate()
         insertRangeData(m_pDoc, ScAddress(1,0,0), pData, SAL_N_ELEMENTS(pData));
     }
 
-    if (!checkFormula(*m_pDoc, ScAddress(1,0,0), "A10"))
-        CPPUNIT_FAIL("Wrong formula in B1");
-    if (!checkFormula(*m_pDoc, ScAddress(1,1,0), "A11"))
-        CPPUNIT_FAIL("Wrong formula in B2");
-    if (!checkFormula(*m_pDoc, ScAddress(1,2,0), "A12"))
-        CPPUNIT_FAIL("Wrong formula in B3");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,0,0), "A10", "Wrong formula in B1");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,1,0), "A11", "Wrong formula in B2");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,2,0), "A12", "Wrong formula in B3");
 
     const ScFormulaCell* pFC = m_pDoc->GetFormulaCell(ScAddress(1,0,0));
     CPPUNIT_ASSERT_MESSAGE("This must be a shared formula cell.", pFC && pFC->IsShared());
@@ -300,12 +323,9 @@ void Test::testSharedFormulasRefUpdate()
 
     // Insert cells over A11:B11 to shift to right. This should split the B1:B3 grouping into 3.
     m_pDoc->InsertCol(ScRange(0,10,0,1,10,0));
-    if (!checkFormula(*m_pDoc, ScAddress(1,0,0), "A10"))
-        CPPUNIT_FAIL("Wrong formula in B1");
-    if (!checkFormula(*m_pDoc, ScAddress(1,1,0), "C11"))
-        CPPUNIT_FAIL("Wrong formula in B2");
-    if (!checkFormula(*m_pDoc, ScAddress(1,2,0), "A12"))
-        CPPUNIT_FAIL("Wrong formula in B3");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,0,0), "A10", "Wrong formula in B1");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,1,0), "C11", "Wrong formula in B2");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,2,0), "A12", "Wrong formula in B3");
 
     pFC = m_pDoc->GetFormulaCell(ScAddress(1,0,0));
     CPPUNIT_ASSERT_MESSAGE("B1 should be a non-shared formula cell.", pFC && !pFC->IsShared());
@@ -317,12 +337,9 @@ void Test::testSharedFormulasRefUpdate()
     // Delete cells over A11:B11 to bring it back to the previous state.
     m_pDoc->DeleteCol(ScRange(0,10,0,1,10,0));
 
-    if (!checkFormula(*m_pDoc, ScAddress(1,0,0), "A10"))
-        CPPUNIT_FAIL("Wrong formula in B1");
-    if (!checkFormula(*m_pDoc, ScAddress(1,1,0), "A11"))
-        CPPUNIT_FAIL("Wrong formula in B2");
-    if (!checkFormula(*m_pDoc, ScAddress(1,2,0), "A12"))
-        CPPUNIT_FAIL("Wrong formula in B3");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,0,0), "A10", "Wrong formula in B1");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,1,0), "A11", "Wrong formula in B2");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,2,0), "A12", "Wrong formula in B3");
 
     pFC = m_pDoc->GetFormulaCell(ScAddress(1,0,0));
     CPPUNIT_ASSERT_MESSAGE("This must be a shared formula cell.", pFC && pFC->IsShared());
@@ -331,12 +348,9 @@ void Test::testSharedFormulasRefUpdate()
 
     // Insert cells over A11:A12 and shift down.
     m_pDoc->InsertRow(ScRange(0,10,0,0,11,0));
-    if (!checkFormula(*m_pDoc, ScAddress(1,0,0), "A10"))
-        CPPUNIT_FAIL("Wrong formula in B1");
-    if (!checkFormula(*m_pDoc, ScAddress(1,1,0), "A13"))
-        CPPUNIT_FAIL("Wrong formula in B2");
-    if (!checkFormula(*m_pDoc, ScAddress(1,2,0), "A14"))
-        CPPUNIT_FAIL("Wrong formula in B3");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,0,0), "A10", "Wrong formula in B1");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,1,0), "A13", "Wrong formula in B2");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,2,0), "A14", "Wrong formula in B3");
 
     pFC = m_pDoc->GetFormulaCell(ScAddress(1,0,0));
     CPPUNIT_ASSERT_MESSAGE("B1 should be a non-shared formula cell.", pFC && !pFC->IsShared());
@@ -348,12 +362,9 @@ void Test::testSharedFormulasRefUpdate()
     // Delete A11:A12 to bring it back to the way it was.
     m_pDoc->DeleteRow(ScRange(0,10,0,0,11,0));
 
-    if (!checkFormula(*m_pDoc, ScAddress(1,0,0), "A10"))
-        CPPUNIT_FAIL("Wrong formula in B1");
-    if (!checkFormula(*m_pDoc, ScAddress(1,1,0), "A11"))
-        CPPUNIT_FAIL("Wrong formula in B2");
-    if (!checkFormula(*m_pDoc, ScAddress(1,2,0), "A12"))
-        CPPUNIT_FAIL("Wrong formula in B3");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,0,0), "A10", "Wrong formula in B1");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,1,0), "A11", "Wrong formula in B2");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,2,0), "A12", "Wrong formula in B3");
 
     pFC = m_pDoc->GetFormulaCell(ScAddress(1,0,0));
     CPPUNIT_ASSERT_MESSAGE("This must be a shared formula cell.", pFC && pFC->IsShared());
@@ -362,12 +373,9 @@ void Test::testSharedFormulasRefUpdate()
 
     // Insert cells over A11:B11 to shift to right again.
     m_pDoc->InsertCol(ScRange(0,10,0,1,10,0));
-    if (!checkFormula(*m_pDoc, ScAddress(1,0,0), "A10"))
-        CPPUNIT_FAIL("Wrong formula in B1");
-    if (!checkFormula(*m_pDoc, ScAddress(1,1,0), "C11"))
-        CPPUNIT_FAIL("Wrong formula in B2");
-    if (!checkFormula(*m_pDoc, ScAddress(1,2,0), "A12"))
-        CPPUNIT_FAIL("Wrong formula in B3");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,0,0), "A10", "Wrong formula in B1");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,1,0), "C11", "Wrong formula in B2");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,2,0), "A12", "Wrong formula in B3");
 
     pFC = m_pDoc->GetFormulaCell(ScAddress(1,0,0));
     CPPUNIT_ASSERT_MESSAGE("B1 should be a non-shared formula cell.", pFC && !pFC->IsShared());
@@ -378,12 +386,9 @@ void Test::testSharedFormulasRefUpdate()
 
     // Insert cells over A12:B12 to shift to right.
     m_pDoc->InsertCol(ScRange(0,11,0,1,11,0));
-    if (!checkFormula(*m_pDoc, ScAddress(1,0,0), "A10"))
-        CPPUNIT_FAIL("Wrong formula in B1");
-    if (!checkFormula(*m_pDoc, ScAddress(1,1,0), "C11"))
-        CPPUNIT_FAIL("Wrong formula in B2");
-    if (!checkFormula(*m_pDoc, ScAddress(1,2,0), "C12"))
-        CPPUNIT_FAIL("Wrong formula in B3");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,0,0), "A10", "Wrong formula in B1");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,1,0), "C11", "Wrong formula in B2");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,2,0), "C12", "Wrong formula in B3");
 
     pFC = m_pDoc->GetFormulaCell(ScAddress(1,0,0));
     CPPUNIT_ASSERT_MESSAGE("B1 should be a non-shared formula cell.", pFC && !pFC->IsShared());
@@ -395,12 +400,9 @@ void Test::testSharedFormulasRefUpdate()
 
     // Insert cells over A10:B10 to shift to right.
     m_pDoc->InsertCol(ScRange(0,9,0,1,9,0));
-    if (!checkFormula(*m_pDoc, ScAddress(1,0,0), "C10"))
-        CPPUNIT_FAIL("Wrong formula in B1");
-    if (!checkFormula(*m_pDoc, ScAddress(1,1,0), "C11"))
-        CPPUNIT_FAIL("Wrong formula in B2");
-    if (!checkFormula(*m_pDoc, ScAddress(1,2,0), "C12"))
-        CPPUNIT_FAIL("Wrong formula in B3");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,0,0), "C10", "Wrong formula in B1");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,1,0), "C11", "Wrong formula in B2");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,2,0), "C12", "Wrong formula in B3");
 
     // B1:B3 should be now grouped.
     pFC = m_pDoc->GetFormulaCell(ScAddress(1,0,0));
@@ -564,12 +566,9 @@ void Test::testSharedFormulasRefUpdateRange()
         insertRangeData(m_pDoc, ScAddress(1,2,0), pData, SAL_N_ELEMENTS(pData));
     }
 
-    if (!checkFormula(*m_pDoc, ScAddress(1,2,0), "SUM($A$3:$A$5)"))
-        CPPUNIT_FAIL("Wrong formula");
-    if (!checkFormula(*m_pDoc, ScAddress(1,3,0), "SUM($A$3:$A$5)"))
-        CPPUNIT_FAIL("Wrong formula");
-    if (!checkFormula(*m_pDoc, ScAddress(1,4,0), "SUM($A$3:$A$5)"))
-        CPPUNIT_FAIL("Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,2,0), "SUM($A$3:$A$5)", "Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,3,0), "SUM($A$3:$A$5)", "Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,4,0), "SUM($A$3:$A$5)", "Wrong formula");
 
     // B3:B5 should be shared.
     const ScFormulaCell* pFC = m_pDoc->GetFormulaCell(ScAddress(1,2,0));
@@ -593,17 +592,14 @@ void Test::testSharedFormulasRefUpdateRange()
     CPPUNIT_ASSERT_EQUAL(static_cast<SCROW>(4), pFC->GetSharedTopRow());
     CPPUNIT_ASSERT_EQUAL(static_cast<SCROW>(3), pFC->GetSharedLength());
 
-    if (!checkFormula(*m_pDoc, ScAddress(1,4,0), "SUM($A$5:$A$7)"))
-        CPPUNIT_FAIL("Wrong formula");
-    if (!checkFormula(*m_pDoc, ScAddress(1,5,0), "SUM($A$5:$A$7)"))
-        CPPUNIT_FAIL("Wrong formula");
-    if (!checkFormula(*m_pDoc, ScAddress(1,6,0), "SUM($A$5:$A$7)"))
-        CPPUNIT_FAIL("Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,4,0), "SUM($A$5:$A$7)", "Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,5,0), "SUM($A$5:$A$7)", "Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,6,0), "SUM($A$5:$A$7)", "Wrong formula");
 
     m_pDoc->DeleteTab(0);
 }
 
-struct SortByArea : std::binary_function<sc::AreaListener, sc::AreaListener, bool>
+struct SortByArea
 {
     bool operator ()( const sc::AreaListener& rLeft, const sc::AreaListener& rRight ) const
     {
@@ -681,7 +677,7 @@ void Test::testSharedFormulasRefUpdateRangeDeleteRow()
     ScDocFunc& rFunc = getDocShell().GetDocFunc();
     ScMarkData aMark;
     aMark.SelectOneTable(0);
-    rFunc.DeleteCells(ScRange(0,2,0,MAXCOL,2,0), &aMark, DEL_DELROWS, true);
+    rFunc.DeleteCells(ScRange(0,2,0,MAXCOL,2,0), &aMark, DelCellCmd::Rows, true);
 
     // Make sure C1:C4 belong to the same group.
     pFC = m_pDoc->GetFormulaCell(ScAddress(2,0,0));
@@ -711,6 +707,17 @@ void Test::testSharedFormulasRefUpdateRangeDeleteRow()
 
     // Undo the deletion of row 3.
     pUndoMgr->Undo();
+
+    // Make sure that C1:C2 and C4:C5 are formula groups again.
+    pFC = m_pDoc->GetFormulaCell(ScAddress(2,0,0));
+    CPPUNIT_ASSERT(pFC);
+    CPPUNIT_ASSERT_EQUAL(static_cast<SCROW>(0), pFC->GetSharedTopRow());
+    CPPUNIT_ASSERT_EQUAL(static_cast<SCROW>(2), pFC->GetSharedLength());
+
+    pFC = m_pDoc->GetFormulaCell(ScAddress(2,3,0));
+    CPPUNIT_ASSERT(pFC);
+    CPPUNIT_ASSERT_EQUAL(static_cast<SCROW>(3), pFC->GetSharedTopRow());
+    CPPUNIT_ASSERT_EQUAL(static_cast<SCROW>(2), pFC->GetSharedLength());
 
     // Check the values of formula cells again.
     CPPUNIT_ASSERT_EQUAL( 3.0, m_pDoc->GetValue(ScAddress(2,0,0)));
@@ -742,9 +749,9 @@ void Test::testSharedFormulasRefUpdateExternal()
 
     // Launch an external document shell.
     ScDocShellRef xExtDocSh = new ScDocShell;
-    OUString aExtDocName("file:///extdata.fake");
+    xExtDocSh->SetIsInUcalc();
 
-    SfxMedium* pMed = new SfxMedium(aExtDocName, STREAM_STD_READWRITE);
+    SfxMedium* pMed = new SfxMedium("file:///extdata.fake", StreamMode::STD_READWRITE);
     xExtDocSh->DoInitNew(pMed);
     ScDocument& rExtDoc = xExtDocSh->GetDocument();
 
@@ -774,54 +781,38 @@ void Test::testSharedFormulasRefUpdateExternal()
     CPPUNIT_ASSERT_EQUAL(3.0, m_pDoc->GetValue(ScAddress(0,9,0)));
 
     // Check the formulas too.
-    if (!checkFormula(*m_pDoc, ScAddress(0,6,0), "'file:///extdata.fake'#$Data.A1"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(0,7,0), "'file:///extdata.fake'#$Data.A2"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(0,8,0), "'file:///extdata.fake'#$Data.A3"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(0,9,0), "COUNTA('file:///extdata.fake'#$Data.A1:A3)"))
-        CPPUNIT_FAIL("Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,6,0), "'file:///extdata.fake'#$Data.A1", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,7,0), "'file:///extdata.fake'#$Data.A2", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,8,0), "'file:///extdata.fake'#$Data.A3", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,9,0), "COUNTA('file:///extdata.fake'#$Data.A1:A3)", "Wrong formula!");
 
     // Delete rows 1 and 2. This should not change the references in the formula cells below.
     ScDocFunc& rDocFunc = getDocShell().GetDocFunc();
     ScMarkData aMark;
     aMark.SelectOneTable(0);
-    rDocFunc.DeleteCells(ScRange(0,0,0,MAXCOL,1,0), &aMark, DEL_CELLSUP, true);
+    rDocFunc.DeleteCells(ScRange(0,0,0,MAXCOL,1,0), &aMark, DelCellCmd::CellsUp, true);
 
     // Check the shifted formula cells now in A5:A8.
-    if (!checkFormula(*m_pDoc, ScAddress(0,4,0), "'file:///extdata.fake'#$Data.A1"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(0,5,0), "'file:///extdata.fake'#$Data.A2"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(0,6,0), "'file:///extdata.fake'#$Data.A3"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(0,7,0), "COUNTA('file:///extdata.fake'#$Data.A1:A3)"))
-        CPPUNIT_FAIL("Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,4,0), "'file:///extdata.fake'#$Data.A1", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,5,0), "'file:///extdata.fake'#$Data.A2", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,6,0), "'file:///extdata.fake'#$Data.A3", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,7,0), "COUNTA('file:///extdata.fake'#$Data.A1:A3)", "Wrong formula!");
 
     // Undo and check the formulas again.
     SfxUndoManager* pUndoMgr = m_pDoc->GetUndoManager();
     CPPUNIT_ASSERT(pUndoMgr);
     pUndoMgr->Undo();
-    if (!checkFormula(*m_pDoc, ScAddress(0,6,0), "'file:///extdata.fake'#$Data.A1"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(0,7,0), "'file:///extdata.fake'#$Data.A2"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(0,8,0), "'file:///extdata.fake'#$Data.A3"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(0,9,0), "COUNTA('file:///extdata.fake'#$Data.A1:A3)"))
-        CPPUNIT_FAIL("Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,6,0), "'file:///extdata.fake'#$Data.A1", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,7,0), "'file:///extdata.fake'#$Data.A2", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,8,0), "'file:///extdata.fake'#$Data.A3", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,9,0), "COUNTA('file:///extdata.fake'#$Data.A1:A3)", "Wrong formula!");
 
     // Redo the row deletion and check the formulas again.
     pUndoMgr->Redo();
-    if (!checkFormula(*m_pDoc, ScAddress(0,4,0), "'file:///extdata.fake'#$Data.A1"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(0,5,0), "'file:///extdata.fake'#$Data.A2"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(0,6,0), "'file:///extdata.fake'#$Data.A3"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(0,7,0), "COUNTA('file:///extdata.fake'#$Data.A1:A3)"))
-        CPPUNIT_FAIL("Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,4,0), "'file:///extdata.fake'#$Data.A1", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,5,0), "'file:///extdata.fake'#$Data.A2", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,6,0), "'file:///extdata.fake'#$Data.A3", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,7,0), "COUNTA('file:///extdata.fake'#$Data.A1:A3)", "Wrong formula!");
 
     xExtDocSh->DoClose();
 
@@ -836,14 +827,10 @@ void Test::testSharedFormulasInsertRow()
         {
             // B1:B2 and B4:B5 should point to $A$5.
             SCROW pRows[] = { 0, 1, 3, 4 };
-            for (size_t i = 0, n = SAL_N_ELEMENTS(pRows); i < n; ++i)
+            for (size_t i = 0; i < SAL_N_ELEMENTS(pRows); ++i)
             {
                 ScAddress aPos(1, pRows[i], 0);
-                if (!checkFormula(*pDoc, aPos, "$A$5"))
-                {
-                    cerr << "Wrong formula!" << endl;
-                    return false;
-                }
+                ASSERT_FORMULA_EQUAL(*pDoc, aPos, "$A$5", "Wrong formula!");
             }
 
             // B1:B2 should be grouped.
@@ -870,11 +857,7 @@ void Test::testSharedFormulasInsertRow()
             for (SCROW i = 0; i <= 3; ++i)
             {
                 ScAddress aPos(1,i,0);
-                if (!checkFormula(*pDoc, aPos, "$A$4"))
-                {
-                    cerr << "Wrong formula!" << endl;
-                    return false;
-                }
+                ASSERT_FORMULA_EQUAL(*pDoc, aPos, "$A$4", "Wrong formula!");
             }
 
             // Ensure that B5 is empty.
@@ -1049,7 +1032,7 @@ void Test::testSharedFormulasDeleteColumns()
     CPPUNIT_ASSERT_EQUAL(11.0, m_pDoc->GetValue(ScAddress(2,0,0)));
 
     // Delete column B.
-    rFunc.DeleteCells(ScRange(1,0,0,1,MAXROW,0), &aMark, DEL_CELLSLEFT, true);
+    rFunc.DeleteCells(ScRange(1,0,0,1,MAXROW,0), &aMark, DelCellCmd::CellsLeft, true);
     CPPUNIT_ASSERT_EQUAL(OUString("#REF!"), m_pDoc->GetString(ScAddress(1,0,0)));
 
     // The reference should still point to row 1 but the column status should be set to 'deleted'.
@@ -1058,7 +1041,7 @@ void Test::testSharedFormulasDeleteColumns()
     const ScTokenArray* pCode = pFC->GetCode();
     CPPUNIT_ASSERT(pCode && pCode->GetLen() == 1);
     const FormulaToken* pToken = pCode->GetArray()[0];
-    CPPUNIT_ASSERT_EQUAL(svSingleRef, static_cast<StackVarEnum>(pToken->GetType()));
+    CPPUNIT_ASSERT_EQUAL(svSingleRef, pToken->GetType());
     const ScSingleRefData* pSRef = pToken->GetSingleRef();
     CPPUNIT_ASSERT(pSRef->IsColDeleted());
     CPPUNIT_ASSERT_EQUAL(static_cast<SCROW>(0), pSRef->toAbs(ScAddress(1,0,0)).Row());
@@ -1092,7 +1075,7 @@ void Test::testSharedFormulasDeleteColumns()
     }
 
     // Delete column B.
-    rFunc.DeleteCells(ScRange(1,0,0,1,MAXROW,0), &aMark, DEL_CELLSLEFT, true);
+    rFunc.DeleteCells(ScRange(1,0,0,1,MAXROW,0), &aMark, DelCellCmd::CellsLeft, true);
 
     for (SCROW i = 0; i <= 1; ++i)
     {
@@ -1156,8 +1139,7 @@ void Test::testSharedFormulasRefUpdateMoveSheets()
     for (SCROW i = 0; i <= 7; ++i)
     {
         CPPUNIT_ASSERT_EQUAL(static_cast<double>(i+1), m_pDoc->GetValue(ScAddress(0,i,1)));
-        if (!checkFormula(*m_pDoc, ScAddress(0,i,1), "Sheet2!RC"))
-            CPPUNIT_FAIL("Wrong formula expression.");
+        ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,i,1), "Sheet2!RC", "Wrong formula expression.");
     }
 
     // Insert a new sheet at the left end.
@@ -1175,8 +1157,7 @@ void Test::testSharedFormulasRefUpdateMoveSheets()
     for (SCROW i = 0; i <= 7; ++i)
     {
         CPPUNIT_ASSERT_EQUAL(static_cast<double>(i+1), m_pDoc->GetValue(ScAddress(0,i,2)));
-        if (!checkFormula(*m_pDoc, ScAddress(0,i,2), "Sheet2!RC"))
-            CPPUNIT_FAIL("Wrong formula expression.");
+        ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,i,2), "Sheet2!RC", "Wrong formula expression.");
     }
 
     // Delete Sheet4.
@@ -1193,8 +1174,7 @@ void Test::testSharedFormulasRefUpdateMoveSheets()
     for (SCROW i = 0; i <= 7; ++i)
     {
         CPPUNIT_ASSERT_EQUAL(static_cast<double>(i+1), m_pDoc->GetValue(ScAddress(0,i,1)));
-        if (!checkFormula(*m_pDoc, ScAddress(0,i,1), "Sheet2!RC"))
-            CPPUNIT_FAIL("Wrong formula expression.");
+        ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,i,1), "Sheet2!RC", "Wrong formula expression.");
     }
 
     m_pDoc->DeleteTab(2);
@@ -1222,11 +1202,8 @@ void Test::testSharedFormulasRefUpdateCopySheets()
     // Copy Sheet1 and insert the copied sheet before the current Sheet1 position.
     m_pDoc->CopyTab(0, 0);
 
-    if (!checkFormula(*m_pDoc, ScAddress(0,0,0), "$Sheet2.A1"))
-        CPPUNIT_FAIL("Wrong formula");
-
-    if (!checkFormula(*m_pDoc, ScAddress(0,1,0), "$Sheet2.A2"))
-        CPPUNIT_FAIL("Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,0,0), "$Sheet2.A1", "Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,1,0), "$Sheet2.A2", "Wrong formula");
 
     // Check the values on the copied sheet.
     CPPUNIT_ASSERT_EQUAL(1.0, m_pDoc->GetValue(ScAddress(0,0,0)));
@@ -1263,35 +1240,26 @@ void Test::testSharedFormulasRefUpdateDeleteSheets()
     CPPUNIT_ASSERT_EQUAL(2.0, m_pDoc->GetValue(ScAddress(0,1,0)));
     CPPUNIT_ASSERT_EQUAL(3.0, m_pDoc->GetValue(ScAddress(0,2,0)));
 
-    if (!checkFormula(*m_pDoc, ScAddress(0,0,0), "Sheet2.B2"))
-        CPPUNIT_FAIL("Wrong formula");
-    if (!checkFormula(*m_pDoc, ScAddress(0,1,0), "Sheet2.B3"))
-        CPPUNIT_FAIL("Wrong formula");
-    if (!checkFormula(*m_pDoc, ScAddress(0,2,0), "Sheet2.B4"))
-        CPPUNIT_FAIL("Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,0,0), "Sheet2.B2", "Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,1,0), "Sheet2.B3", "Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,2,0), "Sheet2.B4", "Wrong formula");
 
     // Delete Sheet2.
     ScDocFunc& rFunc = getDocShell().GetDocFunc();
-    rFunc.DeleteTable(1, true, true);
+    rFunc.DeleteTable(1, true);
 
-    if (!checkFormula(*m_pDoc, ScAddress(0,0,0), "#REF!.B2"))
-        CPPUNIT_FAIL("Wrong formula");
-    if (!checkFormula(*m_pDoc, ScAddress(0,1,0), "#REF!.B3"))
-        CPPUNIT_FAIL("Wrong formula");
-    if (!checkFormula(*m_pDoc, ScAddress(0,2,0), "#REF!.B4"))
-        CPPUNIT_FAIL("Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,0,0), "#REF!.B2", "Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,1,0), "#REF!.B3", "Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,2,0), "#REF!.B4", "Wrong formula");
 
     // Undo the deletion and make sure the formulas are back to the way they were.
     SfxUndoManager* pUndoMgr = m_pDoc->GetUndoManager();
     CPPUNIT_ASSERT(pUndoMgr);
     pUndoMgr->Undo();
 
-    if (!checkFormula(*m_pDoc, ScAddress(0,0,0), "Sheet2.B2"))
-        CPPUNIT_FAIL("Wrong formula");
-    if (!checkFormula(*m_pDoc, ScAddress(0,1,0), "Sheet2.B3"))
-        CPPUNIT_FAIL("Wrong formula");
-    if (!checkFormula(*m_pDoc, ScAddress(0,2,0), "Sheet2.B4"))
-        CPPUNIT_FAIL("Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,0,0), "Sheet2.B2", "Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,1,0), "Sheet2.B3", "Wrong formula");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(0,2,0), "Sheet2.B4", "Wrong formula");
 
     // TODO: We can't test redo yet as ScUndoDeleteTab::Redo() relies on
     // view shell to do its thing.
@@ -1340,8 +1308,8 @@ void Test::testSharedFormulasCopyPaste()
     ScRange aRange(1,0,0,1,9,0); // B1:B10
     ScDocument* pUndoDoc = new ScDocument(SCDOCMODE_UNDO);
     pUndoDoc->InitUndo(m_pDoc, 0, 0, true, true);
-    m_pDoc->CopyToDocument(aRange, InsertDeleteFlags::CONTENTS, false, pUndoDoc);
-    std::unique_ptr<ScUndoPaste> pUndo(createUndoPaste(getDocShell(), aRange, pUndoDoc));
+    m_pDoc->CopyToDocument(aRange, InsertDeleteFlags::CONTENTS, false, *pUndoDoc);
+    std::unique_ptr<ScUndoPaste> pUndo(createUndoPaste(getDocShell(), aRange, ScDocumentUniquePtr(pUndoDoc)));
 
     // First, make sure the formula cells are shared in the undo document.
     aPos.SetCol(1);
@@ -1390,11 +1358,8 @@ void Test::testSharedFormulaInsertColumn()
     // Insert a single column at Column F. This used to crash before fdo#74041.
     m_pDoc->InsertCol(ScRange(5,0,0,5,MAXROW,0));
 
-    if (!checkFormula(*m_pDoc, ScAddress(8,1,0), "H3*B3"))
-        CPPUNIT_FAIL("Wrong formula!");
-
-    if (!checkFormula(*m_pDoc, ScAddress(8,2,0), "H4*B4"))
-        CPPUNIT_FAIL("Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(8,1,0), "H3*B3", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(8,2,0), "H4*B4", "Wrong formula!");
 
     m_pDoc->DeleteTab(0);
 }
@@ -1426,7 +1391,8 @@ void Test::testSharedFormulaMoveBlock()
 
     // Move A1:A3 to D1:D3.
     ScDocFunc& rFunc = getDocShell().GetDocFunc();
-    rFunc.MoveBlock(ScRange(0,0,0,0,2,0), ScAddress(3,0,0), true, true, false, true);
+    bool bMoved = rFunc.MoveBlock(ScRange(0,0,0,0,2,0), ScAddress(3,0,0), true, true, false, true);
+    CPPUNIT_ASSERT(bMoved);
 
     // The result should stay the same.
     CPPUNIT_ASSERT_EQUAL(1.0, m_pDoc->GetValue(ScAddress(1,0,0)));
@@ -1479,7 +1445,8 @@ void Test::testSharedFormulaMoveBlock()
     CPPUNIT_ASSERT_EQUAL(5.0, m_pDoc->GetValue(ScAddress(1,4,0)));
 
     // Move A1:A2 to D2:D3.
-    rFunc.MoveBlock(ScRange(0,0,0,0,1,0), ScAddress(3,1,0), true, true, false, true);
+    bMoved = rFunc.MoveBlock(ScRange(0,0,0,0,1,0), ScAddress(3,1,0), true, true, false, true);
+    CPPUNIT_ASSERT(bMoved);
 
     // Check the formula values again.  They should not change.
     CPPUNIT_ASSERT_EQUAL(1.0, m_pDoc->GetValue(ScAddress(1,0,0)));
@@ -1511,19 +1478,19 @@ void Test::testSharedFormulaUpdateOnNamedRangeChange()
 
     m_pDoc->InsertTab(0, "Test");
 
-    const char* pName = "MyRange";
-    const char* pExpr1 = "$Test.$A$1:$A$3";
-    const char* pExpr2 = "$Test.$A$1:$A$4";
+    const char* const pName = "MyRange";
+    const char* const pExpr1 = "$Test.$A$1:$A$3";
+    const char* const pExpr2 = "$Test.$A$1:$A$4";
 
     RangeNameDef aName;
     aName.mpName = pName;
     aName.mpExpr = pExpr1;
     aName.mnIndex = 1;
-    ScRangeName* pNames = new ScRangeName;
-    bool bSuccess = insertRangeNames(m_pDoc, pNames, &aName, &aName + 1);
+    std::unique_ptr<ScRangeName> pNames(new ScRangeName);
+    bool bSuccess = insertRangeNames(m_pDoc, pNames.get(), &aName, &aName + 1);
     CPPUNIT_ASSERT(bSuccess);
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pNames->size());
-    m_pDoc->SetRangeName(pNames);
+    m_pDoc->SetRangeName(std::move(pNames));
 
     // Set values to A1:A4.
     m_pDoc->SetValue(ScAddress(0,0,0), 1.0);
@@ -1571,9 +1538,9 @@ void Test::testSharedFormulaUpdateOnNamedRangeChange()
     CPPUNIT_ASSERT_EQUAL(2.0, m_pDoc->GetValue(ScAddress(2,0,0)));
 
     // Update the range of MyRange.
-    pNames = new ScRangeName;
+    pNames.reset(new ScRangeName);
     aName.mpExpr = pExpr2;
-    bSuccess = insertRangeNames(m_pDoc, pNames, &aName, &aName + 1);
+    bSuccess = insertRangeNames(m_pDoc, pNames.get(), &aName, &aName + 1);
     CPPUNIT_ASSERT(bSuccess);
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pNames->size());
     ScDocFunc& rFunc = getDocShell().GetDocFunc();
@@ -1581,24 +1548,17 @@ void Test::testSharedFormulaUpdateOnNamedRangeChange()
     typedef std::map<OUString, std::unique_ptr<ScRangeName>> NameMapType;
     NameMapType aNewNames;
     OUString aScope(STR_GLOBAL_RANGE_NAME);
-    aNewNames.insert(std::make_pair(aScope, std::unique_ptr<ScRangeName>(pNames)));
+    aNewNames.insert(std::make_pair(aScope, std::move(pNames)));
     rFunc.ModifyAllRangeNames(aNewNames);
 
     // Check to make sure all displayed formulas are still good.
-    if (!checkFormula(*m_pDoc, ScAddress(1,0,0), "SUM(MyRange)"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(1,1,0), "SUM(MyRange)"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(1,2,0), "SUM(MyRange)"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(1,4,0), "ROW()"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(1,6,0), "ROW()"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(1,7,0), "ROW()"))
-        CPPUNIT_FAIL("Wrong formula!");
-    if (!checkFormula(*m_pDoc, ScAddress(2,0,0), "AVERAGE(MyRange)"))
-        CPPUNIT_FAIL("Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,0,0), "SUM(MyRange)", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,1,0), "SUM(MyRange)", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,2,0), "SUM(MyRange)", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,4,0), "ROW()", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,6,0), "ROW()", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(1,7,0), "ROW()", "Wrong formula!");
+    ASSERT_FORMULA_EQUAL(*m_pDoc, ScAddress(2,0,0), "AVERAGE(MyRange)", "Wrong formula!");
 
     // Check the calculation results as well.
     CPPUNIT_ASSERT_EQUAL(10.0, m_pDoc->GetValue(ScAddress(1,0,0)));
@@ -1632,10 +1592,8 @@ void Test::testSharedFormulaUpdateOnDBChange()
     CPPUNIT_ASSERT_MESSAGE("Failed to fetch DB collection object.", pDBs);
 
     // Define database range 'MyRange' for A1:A2.
-    ScDBData* pData = new ScDBData("MyRange", 0, 0, 0, 0, 1);
-    bool bInserted = pDBs->getNamedDBs().insert(pData);
-    if (!bInserted)
-        delete pData;
+    std::unique_ptr<ScDBData> pData(new ScDBData("MyRange", 0, 0, 0, 0, 1));
+    bool bInserted = pDBs->getNamedDBs().insert(std::move(pData));
     CPPUNIT_ASSERT_MESSAGE("Failed to insert a new database range.", bInserted);
 
     // Insert in C2:C4 a group of formula cells that reference MyRange.
@@ -1657,10 +1615,8 @@ void Test::testSharedFormulaUpdateOnDBChange()
 
     // Change the range referenced by MyRange to A1:A4.
     ScDBCollection aNewDBs(m_pDoc);
-    ScDBData* pNewData = new ScDBData("MyRange", 0, 0, 0, 0, 3);
-    bInserted = aNewDBs.getNamedDBs().insert(pNewData);
-    if (!bInserted)
-        delete pNewData;
+    std::unique_ptr<ScDBData> pNewData(new ScDBData("MyRange", 0, 0, 0, 0, 3));
+    bInserted = aNewDBs.getNamedDBs().insert(std::move(pNewData));
     CPPUNIT_ASSERT_MESSAGE("Failed to insert a new database range.", bInserted);
 
     std::vector<ScRange> aDeleted;
@@ -1840,9 +1796,9 @@ void Test::testSharedFormulaUpdateOnReplacement()
     ScMarkData aMark;
     aMark.SelectOneTable(0);
     aMark.SetMultiMarkArea(aUndoRange);
-    std::unique_ptr<ScDocument> pUndoDoc(new ScDocument(SCDOCMODE_UNDO));
+    ScDocumentUniquePtr pUndoDoc(new ScDocument(SCDOCMODE_UNDO));
     pUndoDoc->InitUndo(m_pDoc, 0, 0);
-    m_pDoc->CopyToDocument(aUndoRange, InsertDeleteFlags::CONTENTS, false, pUndoDoc.get(), &aMark);
+    m_pDoc->CopyToDocument(aUndoRange, InsertDeleteFlags::CONTENTS, false, *pUndoDoc, &aMark);
     ScUndoDeleteContents aUndo(&getDocShell(), aMark, aUndoRange, std::move(pUndoDoc), false, InsertDeleteFlags::CONTENTS, true);
 
     // Delete A4.
@@ -1951,6 +1907,48 @@ void Test::testSharedFormulaUpdateOnReplacement()
             CPPUNIT_ASSERT_EQUAL( fResult[nRow], m_pDoc->GetValue( aPos));
         }
     }
+
+    m_pDoc->DeleteTab(0);
+}
+
+void Test::testSharedFormulaDeleteTopCell()
+{
+    sc::AutoCalcSwitch aACSwitch(*m_pDoc, true); // turn on auto calc.
+
+    m_pDoc->InsertTab(0, "Test");
+
+    const char* pData[][2] = {
+        { "=SUM(B$1:B$2)", "1" },
+        { "=SUM(B$1:B$2)", "2" }
+    };
+
+    insertRangeData( m_pDoc, ScAddress(0,0,0), pData, SAL_N_ELEMENTS(pData));
+
+    // Check that A1:A2 is a formula group.
+    const ScFormulaCell* pFC = m_pDoc->GetFormulaCell( ScAddress(0,0,0));
+    CPPUNIT_ASSERT(pFC);
+    CPPUNIT_ASSERT_EQUAL(static_cast<SCROW>(0), pFC->GetSharedTopRow());
+    CPPUNIT_ASSERT_EQUAL(static_cast<SCROW>(2), pFC->GetSharedLength());
+
+    // Check results A1:A2.
+    CPPUNIT_ASSERT_EQUAL( 3.0, m_pDoc->GetValue( ScAddress(0,0,0)));
+    CPPUNIT_ASSERT_EQUAL( 3.0, m_pDoc->GetValue( ScAddress(0,1,0)));
+
+    // Delete cell A1.
+    ScMarkData aMark;
+    aMark.SelectOneTable(0);
+    getDocShell().GetDocFunc().DeleteCell( ScAddress(0,0,0), aMark, InsertDeleteFlags::CONTENTS, false);
+    // Check it's gone.
+    CPPUNIT_ASSERT(!m_pDoc->GetFormulaCell( ScAddress(0,0,0)));
+
+    // Check result A2.
+    CPPUNIT_ASSERT_EQUAL( 3.0, m_pDoc->GetValue( ScAddress(0,1,0)));
+
+    // Replace B1 with 4.
+    m_pDoc->SetString( ScAddress(1,0,0), "4");
+
+    // Check result A2.
+    CPPUNIT_ASSERT_EQUAL( 6.0, m_pDoc->GetValue( ScAddress(0,1,0)));
 
     m_pDoc->DeleteTab(0);
 }

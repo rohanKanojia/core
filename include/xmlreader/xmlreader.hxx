@@ -25,8 +25,6 @@
 #include <stack>
 #include <vector>
 
-#include <com/sun/star/container/NoSuchElementException.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
 #include <osl/file.h>
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
@@ -38,17 +36,15 @@ namespace xmlreader {
 
 class OOO_DLLPUBLIC_XMLREADER XmlReader {
 public:
-    XmlReader(char const *sStr, size_t nLength);
-
     explicit XmlReader(OUString const & fileUrl);
 
     ~XmlReader();
 
     enum { NAMESPACE_NONE = -2, NAMESPACE_UNKNOWN = -1, NAMESPACE_XML = 0 };
 
-    enum Text { TEXT_NONE, TEXT_RAW, TEXT_NORMALIZED };
+    enum class Text { NONE, Raw, Normalized };
 
-    enum Result { RESULT_BEGIN, RESULT_END, RESULT_TEXT, RESULT_DONE };
+    enum class Result { Begin, End, Text, Done };
 
     int registerNamespaceIri(Span const & iri);
 
@@ -80,8 +76,8 @@ private:
     // elements_ and attributes_):
 
     struct NamespaceData {
-        Span prefix;
-        int nsId;
+        Span const prefix;
+        int const nsId;
 
         NamespaceData():
             nsId(-1) {}
@@ -93,9 +89,9 @@ private:
     typedef std::vector< NamespaceData > NamespaceList;
 
     struct ElementData {
-        Span name;
-        NamespaceList::size_type inheritedNamespaces;
-        int defaultNamespaceId;
+        Span const name;
+        NamespaceList::size_type const inheritedNamespaces;
+        int const defaultNamespaceId;
 
         ElementData(
             Span const & theName,
@@ -127,13 +123,11 @@ private:
 
     typedef std::vector< AttributeData > Attributes;
 
-    enum State {
-        STATE_CONTENT, STATE_START_TAG, STATE_END_TAG, STATE_EMPTY_ELEMENT_TAG,
-        STATE_DONE };
+    enum class State { Content, StartTag, EndTag, EmptyElementTag, Done };
 
-    SAL_DLLPRIVATE inline char read() { return pos_ == end_ ? '\0' : *pos_++; }
+    SAL_DLLPRIVATE char read() { return pos_ == end_ ? '\0' : *pos_++; }
 
-    SAL_DLLPRIVATE inline char peek() { return pos_ == end_ ? '\0' : *pos_; }
+    SAL_DLLPRIVATE char peek() const { return pos_ == end_ ? '\0' : *pos_; }
 
     SAL_DLLPRIVATE void normalizeLineEnds(Span const & text);
 
@@ -170,9 +164,9 @@ private:
 
     SAL_DLLPRIVATE Result handleNormalizedText(Span * text);
 
-    SAL_DLLPRIVATE int toNamespaceId(NamespaceIris::size_type pos);
+    SAL_DLLPRIVATE static int toNamespaceId(NamespaceIris::size_type pos);
 
-    OUString fileUrl_;
+    OUString const fileUrl_;
     oslFileHandle fileHandle_;
     sal_uInt64 fileSize_;
     void * fileAddress_;

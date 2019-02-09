@@ -18,14 +18,10 @@
  */
 
 
-#pragma warning(push,1) // disable warnings within system headers
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#pragma warning(pop)
 
-
-void dso_init();
-void dso_exit();
-
+#include <cppinterfaceproxy.hxx>
 
 extern "C" BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpvReserved)
 {

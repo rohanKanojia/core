@@ -19,6 +19,7 @@ $(eval $(call gb_CustomTarget_register_targets,instsetoo_native/setup,\
 	$(call gb_Helper_get_rcfile,soffice) \
 	$(call gb_Helper_get_rcfile,uno) \
 	$(call gb_Helper_get_rcfile,version) \
+	$(call gb_Helper_get_rcfile,crashreport) \
 ))
 
 $(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_rcfile,bootstrap) \
@@ -29,19 +30,17 @@ $(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_
 $(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_rcfile,soffice) \
 $(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_rcfile,uno) \
 $(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_rcfile,version) \
+$(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_rcfile,crashreport) \
 	: $(SRCDIR)/instsetoo_native/CustomTarget_setup.mk
 
 $(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_rcfile,bootstrap) :
 	$(call gb_Output_announce,$(subst $(WORKDIR)/,,$@),$(true),ECH,1)
 	( \
-		echo '[ErrorReport]' \
-		&& echo 'ErrorReportPort=80' \
-		&& echo 'ErrorReportServer=report.libreoffice.org' \
-		&& echo '[Bootstrap]' \
+		echo '[Bootstrap]' \
 		&& echo 'InstallMode=<installmode>' \
 		&& echo 'ProductKey=$(PRODUCTNAME) $(PRODUCTVERSION)' \
 		$(if $(ENABLE_RELEASE_BUILD),\
-			&& echo 'UserInstallation=$$SYSUSERCONFIG/$(if $(filter-out MACOSX WNT,$(OS)),$(shell echo $(PRODUCTNAME) | tr "[:upper:]" "[:lower:]"),$(PRODUCTNAME))/4', \
+			&& echo 'UserInstallation=$$SYSUSERCONFIG/$(if $(filter-out HAIKU MACOSX WNT,$(OS)),$(shell echo $(PRODUCTNAME) | tr "[:upper:]" "[:lower:]"),$(shell echo $(PRODUCTNAME) | sed -e 's/ /%20/g'))/4', \
 			&& echo 'UserInstallation=$$ORIGIN/..') \
 	) > $@
 
@@ -52,6 +51,7 @@ $(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_
 		&& echo 'BRAND_BASE_DIR=$${ORIGIN}/..' \
 		&& echo 'BRAND_INI_DIR=$${ORIGIN}' \
 		&& echo 'BRAND_SHARE_SUBDIR=$(LIBO_SHARE_FOLDER)' \
+		&& echo 'BRAND_SHARE_RESOURCE_SUBDIR=$(LIBO_SHARE_RESOURCE_FOLDER)' \
 		&& echo 'CONFIGURATION_LAYERS=xcsxcu:$${BRAND_BASE_DIR}/$(LIBO_SHARE_FOLDER)/registry res:$${BRAND_BASE_DIR}/$(LIBO_SHARE_FOLDER)/registry $(if $(ENABLE_DCONF),dconf:* )$(if $(filter WNT,$(OS)),winreg:LOCAL_MACHINE )bundledext:$${$${BRAND_BASE_DIR}/$(LIBO_ETC_FOLDER)/$(call gb_Helper_get_rcfile,louno):BUNDLED_EXTENSIONS_USER}/registry/com.sun.star.comp.deployment.configuration.PackageRegistryBackend/configmgr.ini sharedext:$${$${BRAND_BASE_DIR}/$(LIBO_ETC_FOLDER)/$(call gb_Helper_get_rcfile,louno):SHARED_EXTENSIONS_USER}/registry/com.sun.star.comp.deployment.configuration.PackageRegistryBackend/configmgr.ini userext:$${$${BRAND_BASE_DIR}/$(LIBO_ETC_FOLDER)/$(call gb_Helper_get_rcfile,louno):UNO_USER_PACKAGES_CACHE}/registry/com.sun.star.comp.deployment.configuration.PackageRegistryBackend/configmgr.ini $(if $(filter WNT,$(OS)),winreg:CURRENT_USER )user:!$${$$BRAND_BASE_DIR/$(LIBO_ETC_FOLDER)/$(call gb_Helper_get_rcfile,bootstrap):UserInstallation}/user/registrymodifications.xcu' \
 		&& echo 'LO_JAVA_DIR=$${BRAND_BASE_DIR}/$(LIBO_SHARE_JAVA_FOLDER)' \
 		&& echo 'LO_LIB_DIR=$${BRAND_BASE_DIR}/$(LIBO_LIB_FOLDER)' \
@@ -75,9 +75,9 @@ $(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_
 	$(call gb_Output_announce,$(subst $(WORKDIR)/,,$@),$(true),ECH,1)
 	( \
 		echo '[Bootstrap]' \
-		&& echo 'PKG_BundledUnoFile=$$BUNDLED_EXTENSIONS_USER/registry/com.sun.star.comp.deployment.component.PackageRegistryBackend/$(call gb_Helper_get_rcfile,uno)' \
-		&& echo 'PKG_SharedUnoFile=$$SHARED_EXTENSIONS_USER/registry/com.sun.star.comp.deployment.component.PackageRegistryBackend/$(call gb_Helper_get_rcfile,uno)' \
-		&& echo 'PKG_UserUnoFile=$$UNO_USER_PACKAGES_CACHE/registry/com.sun.star.comp.deployment.component.PackageRegistryBackend/$(call gb_Helper_get_rcfile,uno)' \
+		&& echo 'PKG_BundledUnoFile=$$BUNDLED_EXTENSIONS_USER/registry/com.sun.star.comp.deployment.component.PackageRegistryBackend/unorc' \
+		&& echo 'PKG_SharedUnoFile=$$SHARED_EXTENSIONS_USER/registry/com.sun.star.comp.deployment.component.PackageRegistryBackend/unorc' \
+		&& echo 'PKG_UserUnoFile=$$UNO_USER_PACKAGES_CACHE/registry/com.sun.star.comp.deployment.component.PackageRegistryBackend/unorc' \
 		&& echo 'BAK_EXTENSIONS=$${$$BRAND_BASE_DIR/$(LIBO_ETC_FOLDER)/$(call gb_Helper_get_rcfile,bootstrap):UserInstallation}/user/extensions/bak' \
 		&& echo 'BUNDLED_EXTENSIONS=$$BRAND_BASE_DIR/$(LIBO_SHARE_FOLDER)/extensions' \
 		&& echo 'BUNDLED_EXTENSIONS_USER=$${$$BRAND_BASE_DIR/$(LIBO_ETC_FOLDER)/$(call gb_Helper_get_rcfile,bootstrap):UserInstallation}/user/extensions/bundled' \
@@ -104,10 +104,21 @@ $(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_
 	) > $@
 
 # for release-builds (building installers) adjust values in openoffice.lst.in
+# Added 'SecureUserConfig' flags to enable and safe user config files
+#  SecureUserConfig :           boolean - switches securing on/off - default false
+#  SecureUserConfigCompress :   boolean - defines if backup data will be compressed - default true
+#  SecureUserConfigNumCopies :  integer - defines how many compressed copies of saved content will be kept - default 2
+#  SecureUserConfigMode:        integer - defines what to secure, default is 1
+#                                           0 : only registrymodifications.xcu
+#                                           1 : a selected amount of user-defined configs
+#                                           2 : everything in the user config directory
+#  SecureUserConfigExtensions:  boolean - defines to also safe the extension configuration (which extensions
+#                                         are installed, which are activated) - default is true
 $(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_rcfile,soffice) :
 	$(call gb_Output_announce,$(subst $(WORKDIR)/,,$@),$(true),ECH,1)
 	( \
 		echo '[Bootstrap]' \
+		&& echo 'CrashDirectory=$${$$BRAND_BASE_DIR/$(LIBO_ETC_FOLDER)/$(call gb_Helper_get_rcfile,bootstrap):UserInstallation}/crash' \
 		&& echo 'HideEula=1' \
 		&& echo 'Logo=1' \
 		&& echo 'NativeProgress=false' \
@@ -115,8 +126,15 @@ $(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_
 		&& echo 'ProgressFrameColor=102,102,102' \
 		&& echo 'ProgressPosition=35,153' \
 		&& echo 'ProgressSize=444,8' \
+		&& echo 'ProgressPositionHigh=46,212' \
+		&& echo 'ProgressSizeHigh=617,12' \
 		&& echo 'ProgressTextBaseline=145' \
-		&& echo 'ProgressTextColor=255,255,255' \
+		&& echo 'ProgressTextColor=0,0,0' \
+		&& echo 'SecureUserConfig=true' \
+		&& echo 'SecureUserConfigCompress=true' \
+		&& echo 'SecureUserConfigExtensions=true' \
+		&& echo 'SecureUserConfigMode=1' \
+		&& echo 'SecureUserConfigNumCopies=2' \
 		&& echo 'URE_BOOTSTRAP=$${ORIGIN}/$(call gb_Helper_get_rcfile,fundamental)' \
 	) > $@
 
@@ -131,20 +149,43 @@ $(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_
 		&& echo 'UNO_SERVICES=$(if $(filter MACOSX,$(OS)),$${ORIGIN}/../share/misc/,$${ORIGIN}/)services.rdb $${URE_MORE_SERVICES}' \
 	) > $@
 
+
+
+
+
+define instsetoo_native_genversionini
+[Version]
+AllLanguages=$(if $(gb_WITH_LANG),$(gb_WITH_LANG),en-US)
+BuildVersion=$(BUILD_VER_STRING)
+buildid=$(shell cd $(SRCDIR) && git log -1 --format=%H)
+ExtensionUpdateURL=https://updateexte.libreoffice.org/ExtensionUpdateService/check.Update
+UpdateChannel=$(if $(ENABLE_ONLINE_UPDATE_MAR),$(shell cd $(SRCDIR) && bin/update/get_update_channel.py $(UPDATE_CONFIG)))
+ReferenceOOoMajorMinor=4.1
+UpdateID=$(PRODUCTNAME)_$(LIBO_VERSION_MAJOR)_en-US
+UpdateURL=$(if $(ENABLE_ONLINE_UPDATE),https://update.libreoffice.org/check.php$(if $(filter-out WNT,$(OS)),?pkgfmt=$(PKGFORMAT)))
+UpdateUserAgent=<PRODUCT> ($${buildid}; $${_OS}; $${_ARCH}; <OPTIONAL_OS_HW_DATA>)
+Vendor=$(OOO_VENDOR)
+endef
+
+
+
 .PHONY: $(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_rcfile,version)
 $(call gb_CustomTarget_get_workdir,instsetoo_native/setup)/$(call gb_Helper_get_rcfile,version) :
 	$(call gb_Output_announce,$(subst $(WORKDIR)/,,$@),$(true),ECH,1)
-	( \
-		echo '[Version]' \
-		&& echo 'AllLanguages=$(if $(gb_WITH_LANG),$(gb_WITH_LANG),en-US)' \
-		&& echo 'BuildVersion=$(BUILD_VER_STRING)' \
-		&& echo 'buildid=$(shell cd $(SRCDIR) && git log -1 --format=%H)' \
-		&& echo 'ExtensionUpdateURL=http://updateexte.libreoffice.org/ExtensionUpdateService/check.Update' \
-		&& echo 'ReferenceOOoMajorMinor=4.1' \
-		&& echo 'UpdateID=$(PRODUCTNAME)_$(LIBO_VERSION_MAJOR)_en-US' \
-		&& echo 'UpdateURL=$(if $(ENABLE_ONLINE_UPDATE),http://update.libreoffice.org/check.php$(if $(filter-out WNT,$(OS)),?pkgfmt=$(PKGFORMAT)))' \
-		&& echo 'UpdateUserAgent=<PRODUCT> ($${buildid}; $${_OS}; $${_ARCH}; <OPTIONAL_OS_HW_DATA>)' \
-		&& echo 'Vendor=$(OOO_VENDOR)' \
-	) > $@
+ifeq ($(HAVE_GNUMAKE_FILE_FUNC),)
+	printf '[Version]\n' > $@ && \
+	printf 'AllLanguages=$(if $(gb_WITH_LANG),$(gb_WITH_LANG),en-US)\n' >> $@ && \
+	printf 'BuildVersion=$(BUILD_VER_STRING)\n' >> $@ && \
+	printf 'buildid=$(shell cd $(SRCDIR) && git log -1 --format=%H)\n' >> $@ && \
+	printf 'ExtensionUpdateURL=https://updateexte.libreoffice.org/ExtensionUpdateService/check.Update\n' >> $@ && \
+	printf 'UpdateChannel=$(if $(ENABLE_ONLINE_UPDATE_MAR),$(shell cd $(SRCDIR) && bin/update/get_update_channel.py $(UPDATE_CONFIG)))\n' >> $@ && \
+	printf 'ReferenceOOoMajorMinor=4.1\n' >> $@ && \
+	printf 'UpdateID=$(PRODUCTNAME)_$(LIBO_VERSION_MAJOR)_en-US\n' >> $@ && \
+	printf 'UpdateURL=$(if $(ENABLE_ONLINE_UPDATE),https://update.libreoffice.org/check.php$(if $(filter-out WNT,$(OS)),?pkgfmt=$(PKGFORMAT)))\n' >> $@ && \
+	printf 'UpdateUserAgent=<PRODUCT> ($${buildid}; $${_OS}; $${_ARCH}; <OPTIONAL_OS_HW_DATA>)\n' >> $@ && \
+	printf 'Vendor=$(OOO_VENDOR)\n' >> $@
+else
+	$(file > $@, $(call instsetoo_native_genversionini))
+endif
 
 # vim: set noet sw=4 ts=4:

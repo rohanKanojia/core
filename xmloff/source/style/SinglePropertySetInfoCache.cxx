@@ -19,6 +19,7 @@
 
 #include <cppuhelper/weakref.hxx>
 #include <xmloff/SinglePropertySetInfoCache.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
 
 using namespace ::com::sun::star::uno;
 using ::com::sun::star::beans::XPropertySet;
@@ -45,7 +46,7 @@ bool SinglePropertySetInfoCache::hasProperty(
     rPropSetInfo = xWeakInfo;
     if( rPropSetInfo.is() )
     {
-        map_.insert(Map::value_type(rPropSetInfo, bRet));
+        map_.emplace(rPropSetInfo, bRet);
     }
     return bRet;
 }

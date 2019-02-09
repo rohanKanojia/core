@@ -12,16 +12,16 @@
 #include <vector>
 #include <memory>
 
-#include "swtypes.hxx"
-#include "calbck.hxx"
-#include "unocrsr.hxx"
+#include <swtypes.hxx>
+#include <calbck.hxx>
+#include <unocrsr.hxx>
 #include <vcl/svapp.hxx>
 
 class   SwWrtShell;
 struct  SwPosition;
 class SwUnoCursor;
 
-class SwNavigationMgr
+class SwNavigationMgr final : public SfxListener
 {
 private:
     /*
@@ -33,7 +33,7 @@ private:
      * (e.g. click a link, or double click an entry from the navigator).
      * Every use of the back/forward buttons results in moving the stack pointer within the navigation history
      */
-    typedef ::std::vector< sw::UnoCursorPointer > Stack_t;
+    typedef std::vector< sw::UnoCursorPointer > Stack_t;
     Stack_t m_entries;
     Stack_t::size_type m_nCurrent; /* Current position within the navigation history */
     SwWrtShell & m_rMyShell; /* The active shell within which the navigation occurs */
@@ -43,11 +43,7 @@ private:
 public:
     /* Constructor that initializes the shell to the current shell */
     SwNavigationMgr( SwWrtShell & rShell );
-    virtual ~SwNavigationMgr()
-    {
-        SolarMutexGuard g;
-        m_entries.clear();
-    }
+    ~SwNavigationMgr() override;
     /* Can we go back in the history ? */
     bool backEnabled() ;
     /* Can we go forward in the history ? */
@@ -58,6 +54,9 @@ public:
     void goForward() ;
     /* The method that adds the position pPos to the navigation history */
     bool addEntry(const SwPosition& rPos);
+    /* to get notified if our cursors self-destruct */
+    virtual void Notify(SfxBroadcaster& rBC, const SfxHint& rHint) override;
 };
 #endif
+
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

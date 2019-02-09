@@ -34,7 +34,7 @@
 
 class LinguMgrExitLstnr;
 
-namespace vcl { class Window; }
+namespace weld { class Window; }
 namespace linguistic { enum class DictionaryError; }
 
 
@@ -121,36 +121,11 @@ private:
 
 public:
     SvxDicListChgClamp( css::uno::Reference<
-        css::linguistic2::XSearchableDictionaryList >  &rxDicList );
+        css::linguistic2::XSearchableDictionaryList > const &rxDicList );
     ~SvxDicListChgClamp();
 };
 
-
-//TODO: remove those functions or make them inline
-EDITENG_DLLPUBLIC css::uno::Reference<
-    css::linguistic2::XSpellChecker1 > SvxGetSpellChecker();
-EDITENG_DLLPUBLIC css::uno::Reference<
-    css::linguistic2::XHyphenator >    SvxGetHyphenator();
-EDITENG_DLLPUBLIC css::uno::Reference<
-    css::linguistic2::XThesaurus >     SvxGetThesaurus();
-EDITENG_DLLPUBLIC css::uno::Reference<
-    css::linguistic2::XSearchableDictionaryList > SvxGetDictionaryList();
-EDITENG_DLLPUBLIC css::uno::Reference<
-    css::linguistic2::XLinguProperties >          SvxGetLinguPropertySet();
-//TODO: remove argument or provide SvxGetIgnoreAllList with the same one
-EDITENG_DLLPUBLIC css::uno::Reference<
-    css::linguistic2::XDictionary >    SvxGetOrCreatePosDic(
-            css::uno::Reference< css::linguistic2::XSearchableDictionaryList >  xDicList );
-EDITENG_DLLPUBLIC css::uno::Reference<
-    css::linguistic2::XDictionary >    SvxGetIgnoreAllList();
-EDITENG_DLLPUBLIC css::uno::Reference<
-    css::linguistic2::XDictionary >    SvxGetChangeAllList();
-
-
-// misc functions
-
-
-EDITENG_DLLPUBLIC short SvxDicError( vcl::Window *pParent, linguistic::DictionaryError nError );
+EDITENG_DLLPUBLIC short SvxDicError(weld::Window *pParent, linguistic::DictionaryError nError);
 
 
 #endif

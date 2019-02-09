@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstddef>
 #include <cstring>
 
-#include "rtl/tencinfo.h"
+#include <rtl/tencinfo.h>
 
 #include "gettextencodingdata.hxx"
 #include "tenchelp.hxx"
@@ -105,7 +105,7 @@ static bool Impl_matchString( const char* pCompStr, const char* pMatchStr )
 struct ImplStrCharsetDef
 {
     const char*             mpCharsetStr;
-    rtl_TextEncoding            meTextEncoding;
+    rtl_TextEncoding const  meTextEncoding;
 };
 
 struct ImplStrFirstPartCharsetDef
@@ -433,7 +433,7 @@ rtl_TextEncoding SAL_CALL rtl_getTextEncodingFromUnixCharset( const char* pUnixC
         pTempBuf++;
     }
 
-    /* Parttrenner gefunden */
+    /* found part separator */
     if ( pSecondPart )
     {
         /* Search for the part tab */
@@ -783,8 +783,7 @@ sal_uInt8 SAL_CALL rtl_getBestWindowsCharsetFromTextEncoding( rtl_TextEncoding e
     const ImplTextEncodingData* pData = Impl_getTextEncodingData( eTextEncoding );
     if ( pData )
         return pData->mnBestWindowsCharset;
-    else
-        return 1;
+    return 1;
 }
 
 /* ----------------------------------------------------------------------- */
@@ -794,10 +793,9 @@ const char* SAL_CALL rtl_getBestUnixCharsetFromTextEncoding( rtl_TextEncoding eT
     const ImplTextEncodingData* pData = Impl_getTextEncodingData( eTextEncoding );
     if ( pData )
         return pData->mpBestUnixCharset;
-    else if( eTextEncoding == RTL_TEXTENCODING_UNICODE )
+    if( eTextEncoding == RTL_TEXTENCODING_UNICODE )
         return "iso10646-1";
-    else
-        return nullptr;
+    return nullptr;
 }
 
 /* ----------------------------------------------------------------------- */
@@ -815,8 +813,7 @@ const char* SAL_CALL rtl_getBestMimeCharsetFromTextEncoding( rtl_TextEncoding eT
     const ImplTextEncodingData* pData = Impl_getTextEncodingData( eTextEncoding );
     if ( pData )
         return pData->mpBestMimeCharset;
-    else
-        return nullptr;
+    return nullptr;
 }
 
 /* The following two functions are based on <http://www.sharmahd.com/tm/
@@ -829,6 +826,7 @@ rtl_getTextEncodingFromWindowsCodePage(sal_uInt32 nCodePage)
 {
     switch (nCodePage)
     {
+    case 42: return RTL_TEXTENCODING_SYMBOL;
     case 437: return RTL_TEXTENCODING_IBM_437;
     case 708: return RTL_TEXTENCODING_ISO_8859_6;
     case 737: return RTL_TEXTENCODING_IBM_737;
@@ -905,6 +903,7 @@ rtl_getWindowsCodePageFromTextEncoding(rtl_TextEncoding nEncoding)
 {
     switch (nEncoding)
     {
+    case RTL_TEXTENCODING_SYMBOL: return 42;
     case RTL_TEXTENCODING_IBM_437: return 437;
  /* case RTL_TEXTENCODING_ISO_8859_6: return 708; */
     case RTL_TEXTENCODING_IBM_737: return 737;

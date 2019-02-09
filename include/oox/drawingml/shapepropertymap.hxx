@@ -20,10 +20,16 @@
 #ifndef INCLUDED_OOX_DRAWINGML_SHAPEPROPERTYMAP_HXX
 #define INCLUDED_OOX_DRAWINGML_SHAPEPROPERTYMAP_HXX
 
-#include <oox/helper/propertymap.hxx>
-#include <oox/dllapi.h>
-
+#include <cstddef>
 #include <vector>
+
+#include <com/sun/star/uno/Any.hxx>
+#include <o3tl/enumarray.hxx>
+#include <oox/dllapi.h>
+#include <oox/helper/propertymap.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <tools/color.hxx>
 
 namespace oox { class ModelObjectHelper; }
 
@@ -39,106 +45,119 @@ namespace drawingml {
     and spnFilledPropIds of oox/source/drawingml/chart/objectformatter.cxx if
     the newly inserted enum is inside the range they cover
  */
-enum ShapePropertyId
+enum class ShapeProperty
 {
-    SHAPEPROP_LineStyle,
-    SHAPEPROP_LineWidth,
-    SHAPEPROP_LineColor,
-    SHAPEPROP_LineTransparency,
-    SHAPEPROP_LineDash,                     /// Explicit line dash or name of a line dash stored in a global container.
-    SHAPEPROP_LineJoint,
-    SHAPEPROP_LineStart,                    /// Explicit line start marker or name of a line marker stored in a global container.
-    SHAPEPROP_LineStartWidth,
-    SHAPEPROP_LineStartCenter,
-    SHAPEPROP_LineEnd,                      /// Explicit line end marker or name of a line marker stored in a global container.
-    SHAPEPROP_LineEndWidth,
-    SHAPEPROP_LineEndCenter,
-    SHAPEPROP_FillStyle,
-    SHAPEPROP_FillColor,
-    SHAPEPROP_FillTransparency,
-    SHAPEPROP_GradientTransparency,
-    SHAPEPROP_FillGradient,                 /// Explicit fill gradient or name of a fill gradient stored in a global container.
-    SHAPEPROP_FillBitmapUrl,                /// Explicit fill bitmap URL or name of a fill bitmap URL stored in a global container.
-    SHAPEPROP_FillBitmapMode,
-    SHAPEPROP_FillBitmapSizeX,
-    SHAPEPROP_FillBitmapSizeY,
-    SHAPEPROP_FillBitmapOffsetX,
-    SHAPEPROP_FillBitmapOffsetY,
-    SHAPEPROP_FillBitmapRectanglePoint,
-    SHAPEPROP_FillHatch,
-    SHAPEPROP_ShadowXDistance,
-    SHAPEPROP_FillBitmapNameFromUrl,
-    SHAPEPROP_END
+    LineStyle,
+    LineWidth,
+    LineColor,
+    LineTransparency,
+    LineDash,                     ///< Explicit line dash or name of a line dash stored in a global container.
+    LineJoint,
+    LineStart,                    ///< Explicit line start marker or name of a line marker stored in a global container.
+    LineStartWidth,
+    LineStartCenter,
+    LineEnd,                      ///< Explicit line end marker or name of a line marker stored in a global container.
+    LineEndWidth,
+    LineEndCenter,
+    FillStyle,
+    FillColor,
+    FillTransparency,
+    GradientTransparency,
+    FillGradient,                 ///< Explicit fill gradient or name of a fill gradient stored in a global container.
+    FillBitmap,                   ///< Explicit fill bitmap or name of a fill bitmap stored in a global container.
+    FillBitmapMode,
+    FillBitmapSizeX,
+    FillBitmapSizeY,
+    FillBitmapOffsetX,
+    FillBitmapOffsetY,
+    FillBitmapRectanglePoint,
+    FillHatch,                    ///< Explicit fill hatch or name of a fill hatch stored in a global container.
+    FillBackground,
+    FillBitmapName,
+    ShadowXDistance,
+    LAST = ShadowXDistance
 };
+
+typedef o3tl::enumarray<ShapeProperty, sal_Int32> ShapePropertyIds;
 
 struct OOX_DLLPUBLIC ShapePropertyInfo
 {
-    std::vector<sal_Int32> maPropertyIds;
-    bool                mbNamedLineMarker;      /// True = use named line marker instead of explicit line marker.
-    bool                mbNamedLineDash;        /// True = use named line dash instead of explicit line dash.
-    bool                mbNamedFillGradient;    /// True = use named fill gradient instead of explicit fill gradient.
-    bool                mbNamedFillBitmapUrl;   /// True = use named fill bitmap URL instead of explicit fill bitmap URL.
+    const ShapePropertyIds& mrPropertyIds;
+    bool const mbNamedLineMarker;      /// True = use named line marker instead of explicit line marker.
+    bool const mbNamedLineDash;        /// True = use named line dash instead of explicit line dash.
+    bool const mbNamedFillGradient;    /// True = use named fill gradient instead of explicit fill gradient.
+    bool const mbNamedFillBitmap;      /// True = use named fill bitmap instead of explicit fill bitmap.
+    bool const mbNamedFillHatch;       /// True = use named fill hatch instead of explicit fill hatch.
 
     static ShapePropertyInfo DEFAULT;           /// Default property info (used as default parameter of other methods).
 
-    explicit            ShapePropertyInfo(
-                            const sal_Int32* pnPropertyIds,
-                            bool bNamedLineMarker,
-                            bool bNamedLineDash,
-                            bool bNamedFillGradient,
-                            bool bNamedFillBitmapUrl );
+    explicit ShapePropertyInfo(const ShapePropertyIds& rnPropertyIds,
+                               bool bNamedLineMarker, bool bNamedLineDash,
+                               bool bNamedFillGradient, bool bNamedFillBitmap, bool bNamedFillHatch);
 
-    bool         has( ShapePropertyId ePropId ) const { return maPropertyIds.size() > size_t(ePropId) && maPropertyIds[ ePropId ] >= 0; }
-    sal_Int32    operator[]( ShapePropertyId ePropId ) const { return maPropertyIds[ ePropId ]; }
+    bool has(ShapeProperty ePropId) const
+    {
+        return mrPropertyIds[ePropId] >= 0;
+    }
+    sal_Int32 operator[](ShapeProperty ePropId) const
+    {
+        return mrPropertyIds[ePropId];
+    }
 };
-
 
 class OOX_DLLPUBLIC ShapePropertyMap : public PropertyMap
 {
 public:
-    explicit            ShapePropertyMap(
-                            ModelObjectHelper& rModelObjHelper,
-                            const ShapePropertyInfo& rShapePropInfo = ShapePropertyInfo::DEFAULT );
+    explicit ShapePropertyMap(ModelObjectHelper& rModelObjHelper,
+        const ShapePropertyInfo& rShapePropInfo = ShapePropertyInfo::DEFAULT );
 
     /** Returns true, if the specified property is supported. */
-    bool                supportsProperty( ShapePropertyId ePropId ) const;
+    bool                supportsProperty( ShapeProperty ePropId ) const;
 
     /** Returns true, if named line markers are supported, and the specified
         line marker has already been inserted into the marker table. */
     bool                hasNamedLineMarkerInTable( const OUString& rMarkerName ) const;
 
     /** Sets the specified shape property to the passed value. */
-    bool                setAnyProperty( ShapePropertyId ePropId, const css::uno::Any& rValue );
+    bool                setAnyProperty( ShapeProperty ePropId, const css::uno::Any& rValue );
 
     /** Sets the specified shape property to the passed value. */
-    template< typename Type >
-    bool         setProperty( ShapePropertyId ePropId, const Type& rValue )
-                            { return setAnyProperty( ePropId, css::uno::Any( rValue ) ); }
+    template<typename Type>
+    bool setProperty(ShapeProperty ePropId, const Type& rValue)
+    {
+        return setAnyProperty(ePropId, css::uno::Any(rValue));
+    }
+    bool setProperty(ShapeProperty ePropId, const ::Color& rValue)
+    {
+        return setAnyProperty(ePropId, css::uno::makeAny(rValue));
+    }
 
     using PropertyMap::setAnyProperty;
     using PropertyMap::setProperty;
 
 private:
     /** Sets an explicit line marker, or creates a named line marker. */
-    bool                setLineMarker( sal_Int32 nPropId, const css::uno::Any& rValue );
+    bool setLineMarker( sal_Int32 nPropId, const css::uno::Any& rValue );
     /** Sets an explicit line dash, or creates a named line dash. */
-    bool                setLineDash( sal_Int32 nPropId, const css::uno::Any& rValue );
+    bool setLineDash( sal_Int32 nPropId, const css::uno::Any& rValue );
     /** Sets an explicit fill gradient, or creates a named fill gradient. */
-    bool                setFillGradient( sal_Int32 nPropId, const css::uno::Any& rValue );
+    bool setFillGradient( sal_Int32 nPropId, const css::uno::Any& rValue );
     /** Creates a named transparency gradient. */
-    bool                setGradientTrans( sal_Int32 nPropId, const css::uno::Any& rValue );
-    /** Sets an explicit fill bitmap URL, or creates a named fill bitmap URL. */
-    bool                setFillBitmapUrl( sal_Int32 nPropId, const css::uno::Any& rValue );
-    /** Sets an explicit fill bitmap URL and pushes the name to FillBitmapName */
-    bool                setFillBitmapNameFromUrl( sal_Int32 nPropId, const css::uno::Any& rValue );
+    bool setGradientTrans( sal_Int32 nPropId, const css::uno::Any& rValue );
+    /** Sets an explicit fill bitmap, or creates a named fill bitmap. */
+    bool setFillBitmap( sal_Int32 nPropId, const css::uno::Any& rValue );
+    /** Sets an explicit fill bitmap and pushes the name to FillBitmapName */
+    bool setFillBitmapName( const css::uno::Any& rValue );
+    /** Sets an explicit fill hatch, or creates a named fill hatch. */
+    bool setFillHatch( sal_Int32 nPropId, const css::uno::Any& rValue );
 
     // not implemented, to prevent implicit conversion from enum to int
-    css::uno::Any& operator[]( ShapePropertyId ePropId ) = delete;
-    const css::uno::Any& operator[]( ShapePropertyId ePropId ) const = delete;
+    css::uno::Any& operator[]( ShapeProperty ePropId ) = delete;
+    const css::uno::Any& operator[]( ShapeProperty ePropId ) const = delete;
 
 private:
     ModelObjectHelper&  mrModelObjHelper;
-    ShapePropertyInfo   maShapePropInfo;
+    ShapePropertyInfo const maShapePropInfo;
 };
 
 

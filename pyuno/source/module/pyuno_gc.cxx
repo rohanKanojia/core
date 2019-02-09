@@ -19,15 +19,15 @@
 
 #include "pyuno_impl.hxx"
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "rtl/ref.hxx"
-#include "salhelper/thread.hxx"
+#include <rtl/ref.hxx>
+#include <salhelper/thread.hxx>
 
 namespace pyuno
 {
 
-bool g_destructorsOfStaticObjectsHaveBeenCalled;
+static bool g_destructorsOfStaticObjectsHaveBeenCalled;
 class StaticDestructorGuard
 {
 public:
@@ -36,7 +36,7 @@ public:
         g_destructorsOfStaticObjectsHaveBeenCalled = true;
     }
 };
-StaticDestructorGuard guard;
+static StaticDestructorGuard guard;
 
 static bool isAfterUnloadOrPy_Finalize()
 {
@@ -49,7 +49,7 @@ public:
     GCThread( PyInterpreterState *interpreter, PyObject * object );
 
 private:
-    virtual ~GCThread() {}
+    virtual ~GCThread() override {}
 
     virtual void execute() override;
 

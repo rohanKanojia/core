@@ -10,6 +10,7 @@
 $(eval $(call gb_Library_Library,hsqldb))
 
 $(eval $(call gb_Library_set_include,hsqldb,\
+	-I$(SRCDIR)/connectivity/inc \
 	-I$(SRCDIR)/connectivity/source/inc \
 	$$(INCLUDE) \
 ))
@@ -32,7 +33,6 @@ $(eval $(call gb_Library_use_libraries,hsqldb,\
 	tl \
 	utl \
 	i18nlangtag \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_set_componentfile,hsqldb,connectivity/source/drivers/hsqldb/hsqldb))

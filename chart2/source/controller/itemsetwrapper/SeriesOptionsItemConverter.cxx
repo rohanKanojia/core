@@ -17,29 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "SeriesOptionsItemConverter.hxx"
+#include <SeriesOptionsItemConverter.hxx>
 #include "SchWhichPairs.hxx"
 
-#include "macros.hxx"
-#include "ItemPropertyMap.hxx"
-#include "GraphicPropertyItemConverter.hxx"
-#include "MultipleItemConverter.hxx"
-#include "ChartModelHelper.hxx"
-#include "AxisHelper.hxx"
-#include "DiagramHelper.hxx"
-#include "ChartTypeHelper.hxx"
-#include "DataSeriesHelper.hxx"
+#include <ChartModelHelper.hxx>
+#include <AxisHelper.hxx>
+#include <DiagramHelper.hxx>
+#include <ChartTypeHelper.hxx>
+#include <DataSeriesHelper.hxx>
+#include <ChartModel.hxx>
 
-#include <com/sun/star/chart/MissingValueTreatment.hpp>
 #include <com/sun/star/chart2/XDataSeries.hpp>
 
 #include <svl/eitem.hxx>
 #include <svl/intitem.hxx>
 #include <svl/ilstitem.hxx>
-#include <rtl/math.hxx>
-
-#include <functional>
-#include <algorithm>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
@@ -65,8 +59,6 @@ SeriesOptionsItemConverter::SeriesOptionsItemConverter(
         , m_bConnectBars(false)
         , m_bSupportingAxisSideBySide(false)
         , m_bGroupBarsPerAxis(true)
-        , m_bAllSeriesAttachedToSameAxis(true)
-        , m_nAllSeriesAxisIndex(-1)
         , m_bSupportingStartingAngle(false)
         , m_nStartingAngle(90)
         , m_bClockwise(false)
@@ -74,6 +66,7 @@ SeriesOptionsItemConverter::SeriesOptionsItemConverter(
         , m_nMissingValueTreatment(0)
         , m_bSupportingPlottingOfHiddenCells(false)
         , m_bIncludeHiddenCells(true)
+        , m_bHideLegendEntry(false)
 {
     try
     {
@@ -101,19 +94,19 @@ SeriesOptionsItemConverter::SeriesOptionsItemConverter(
 
             sal_Int32 nAxisIndex = DataSeriesHelper::getAttachedAxisIndex(xDataSeries);
 
-            uno::Sequence< sal_Int32 > m_aBarPositionSequence;
+            uno::Sequence< sal_Int32 > aBarPositionSequence;
             uno::Reference< beans::XPropertySet > xChartTypeProps( xChartType, uno::UNO_QUERY );
             if( xChartTypeProps.is() )
             {
-                if( xChartTypeProps->getPropertyValue( "OverlapSequence" ) >>= m_aBarPositionSequence )
+                if( xChartTypeProps->getPropertyValue( "OverlapSequence" ) >>= aBarPositionSequence )
                 {
-                    if( nAxisIndex >= 0 && nAxisIndex < m_aBarPositionSequence.getLength() )
-                        m_nBarOverlap = m_aBarPositionSequence[nAxisIndex];
+                    if( nAxisIndex >= 0 && nAxisIndex < aBarPositionSequence.getLength() )
+                        m_nBarOverlap = aBarPositionSequence[nAxisIndex];
                 }
-                if( xChartTypeProps->getPropertyValue( "GapwidthSequence" ) >>= m_aBarPositionSequence )
+                if( xChartTypeProps->getPropertyValue( "GapwidthSequence" ) >>= aBarPositionSequence )
                 {
-                    if( nAxisIndex >= 0 && nAxisIndex < m_aBarPositionSequence.getLength() )
-                        m_nGapWidth = m_aBarPositionSequence[nAxisIndex];
+                    if( nAxisIndex >= 0 && nAxisIndex < aBarPositionSequence.getLength() )
+                        m_nGapWidth = aBarPositionSequence[nAxisIndex];
                 }
             }
         }
@@ -128,7 +121,6 @@ SeriesOptionsItemConverter::SeriesOptionsItemConverter(
         if( m_bSupportingAxisSideBySide && xDiagramProperties.is() )
         {
             xDiagramProperties->getPropertyValue( "GroupBarsPerAxis" ) >>= m_bGroupBarsPerAxis;
-            m_bAllSeriesAttachedToSameAxis = DataSeriesHelper::areAllSeriesAttachedToSameAxis( xChartType, m_nAllSeriesAxisIndex );
         }
 
         m_bSupportingStartingAngle = ChartTypeHelper::isSupportingStartingAngle( xChartType );
@@ -157,10 +149,12 @@ SeriesOptionsItemConverter::SeriesOptionsItemConverter(
             {
             }
         }
+
+        m_bHideLegendEntry = !xPropertySet->getPropertyValue("ShowLegendEntry").get<bool>();
     }
-    catch( const uno::Exception &ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
@@ -180,7 +174,6 @@ bool SeriesOptionsItemConverter::GetItemProperty( tWhichIdType /*nWhichId*/, tPr
 }
 
 bool SeriesOptionsItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet )
-    throw( uno::Exception )
 {
     bool bChanged = false;
     switch( nWhichId )
@@ -207,11 +200,11 @@ bool SeriesOptionsItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const Sf
         {
             if( m_bSupportingOverlapAndGapWidthProperties )
             {
-                sal_Int32& rBarPosition = ( SCHATTR_BAR_OVERLAP == nWhichId ) ? m_nBarOverlap : m_nGapWidth;
+                sal_Int32& rBarPosition = ( nWhichId == SCHATTR_BAR_OVERLAP ) ? m_nBarOverlap : m_nGapWidth;
                 rBarPosition = static_cast< const SfxInt32Item & >( rItemSet.Get( nWhichId )).GetValue();
 
                 OUString aPropName("GapwidthSequence" );
-                if( SCHATTR_BAR_OVERLAP == nWhichId )
+                if( nWhichId == SCHATTR_BAR_OVERLAP )
                     aPropName = "OverlapSequence";
 
                 uno::Reference< XDataSeries > xDataSeries( GetPropertySet(), uno::UNO_QUERY );
@@ -220,22 +213,22 @@ bool SeriesOptionsItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const Sf
                 if( xChartTypeProps.is() )
                 {
                     sal_Int32 nAxisIndex = DataSeriesHelper::getAttachedAxisIndex(xDataSeries);
-                    uno::Sequence< sal_Int32 > m_aBarPositionSequence;
+                    uno::Sequence< sal_Int32 > aBarPositionSequence;
                     if( xChartTypeProps.is() )
                     {
-                        if( xChartTypeProps->getPropertyValue( aPropName ) >>= m_aBarPositionSequence )
+                        if( xChartTypeProps->getPropertyValue( aPropName ) >>= aBarPositionSequence )
                         {
-                            bool bGroupBarsPerAxis =  static_cast< const SfxBoolItem & >(rItemSet.Get( SCHATTR_GROUP_BARS_PER_AXIS )).GetValue();
+                            bool bGroupBarsPerAxis =  rItemSet.Get( SCHATTR_GROUP_BARS_PER_AXIS ).GetValue();
                             if(!bGroupBarsPerAxis)
                             {
                                 //set the same value for all axes
-                                for( sal_Int32 nN = 0; nN < m_aBarPositionSequence.getLength(); nN++ )
-                                    m_aBarPositionSequence[nN] = rBarPosition;
+                                for( sal_Int32 nN = 0; nN < aBarPositionSequence.getLength(); nN++ )
+                                    aBarPositionSequence[nN] = rBarPosition;
                             }
-                            else if( nAxisIndex >= 0 && nAxisIndex < m_aBarPositionSequence.getLength() )
-                                m_aBarPositionSequence[nAxisIndex] = rBarPosition;
+                            else if( nAxisIndex >= 0 && nAxisIndex < aBarPositionSequence.getLength() )
+                                aBarPositionSequence[nAxisIndex] = rBarPosition;
 
-                            xChartTypeProps->setPropertyValue( aPropName, uno::makeAny(m_aBarPositionSequence) );
+                            xChartTypeProps->setPropertyValue( aPropName, uno::Any(aBarPositionSequence) );
                             bChanged = true;
                         }
                     }
@@ -256,7 +249,7 @@ bool SeriesOptionsItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const Sf
                     (xDiagramProperties->getPropertyValue( "ConnectBars" ) >>= bOldConnectBars) &&
                     bOldConnectBars != m_bConnectBars )
                 {
-                    xDiagramProperties->setPropertyValue( "ConnectBars" , uno::makeAny(m_bConnectBars) );
+                    xDiagramProperties->setPropertyValue( "ConnectBars" , uno::Any(m_bConnectBars) );
                     bChanged = true;
                 }
             }
@@ -275,7 +268,7 @@ bool SeriesOptionsItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const Sf
                     (xDiagramProperties->getPropertyValue( "GroupBarsPerAxis" ) >>= bOldGroupBarsPerAxis) &&
                     bOldGroupBarsPerAxis != m_bGroupBarsPerAxis )
                 {
-                    xDiagramProperties->setPropertyValue( "GroupBarsPerAxis" , uno::makeAny(m_bGroupBarsPerAxis) );
+                    xDiagramProperties->setPropertyValue( "GroupBarsPerAxis" , uno::Any(m_bGroupBarsPerAxis) );
                     bChanged = true;
                 }
             }
@@ -290,7 +283,7 @@ bool SeriesOptionsItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const Sf
                 uno::Reference< beans::XPropertySet > xDiagramProperties( ChartModelHelper::findDiagram(m_xChartModel), uno::UNO_QUERY );
                 if( xDiagramProperties.is() )
                 {
-                    xDiagramProperties->setPropertyValue( "StartingAngle" , uno::makeAny(m_nStartingAngle) );
+                    xDiagramProperties->setPropertyValue( "StartingAngle" , uno::Any(m_nStartingAngle) );
                     bChanged = true;
                 }
             }
@@ -299,8 +292,8 @@ bool SeriesOptionsItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const Sf
 
         case SCHATTR_CLOCKWISE:
         {
-            bool bClockwise = (static_cast< const SfxBoolItem & >(
-                     rItemSet.Get( nWhichId )).GetValue() );
+            bool bClockwise = static_cast< const SfxBoolItem & >(
+                     rItemSet.Get( nWhichId )).GetValue();
             if( m_xCooSys.is() )
             {
                 uno::Reference< chart2::XAxis > xAxis( AxisHelper::getAxis( 1, 0, m_xCooSys ) );
@@ -327,13 +320,13 @@ bool SeriesOptionsItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const Sf
                         uno::Reference< beans::XPropertySet > xDiagramProperties( ChartModelHelper::findDiagram(m_xChartModel), uno::UNO_QUERY );
                         if( xDiagramProperties.is() )
                         {
-                            xDiagramProperties->setPropertyValue( "MissingValueTreatment" , uno::makeAny( nNew ));
+                            xDiagramProperties->setPropertyValue( "MissingValueTreatment" , uno::Any( nNew ));
                             bChanged = true;
                         }
                     }
                     catch( const uno::Exception& e )
                     {
-                        ASSERT_EXCEPTION( e );
+                        SAL_WARN("chart2", "Exception caught. " << e );
                     }
                 }
             }
@@ -353,13 +346,21 @@ bool SeriesOptionsItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const Sf
             }
         }
         break;
+        case SCHATTR_HIDE_LEGEND_ENTRY:
+        {
+            bool bHideLegendEntry = static_cast<const SfxBoolItem &>(rItemSet.Get(nWhichId)).GetValue();
+            if (bHideLegendEntry != m_bHideLegendEntry)
+            {
+                GetPropertySet()->setPropertyValue("ShowLegendEntry", css::uno::makeAny(!bHideLegendEntry));
+            }
+        }
+        break;
     }
     return bChanged;
 }
 
 void SeriesOptionsItemConverter::FillSpecialItem(
     sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const
-    throw( uno::Exception )
 {
     switch( nWhichId )
     {
@@ -395,8 +396,6 @@ void SeriesOptionsItemConverter::FillSpecialItem(
         }
         case SCHATTR_AXIS_FOR_ALL_SERIES:
         {
-            if( m_nAllSeriesAxisIndex != - 1)
-                rOutItemSet.Put( SfxInt32Item(nWhichId, m_nAllSeriesAxisIndex));
             break;
         }
         case SCHATTR_STARTING_ANGLE:
@@ -425,6 +424,11 @@ void SeriesOptionsItemConverter::FillSpecialItem(
         {
             if( m_bSupportingPlottingOfHiddenCells )
                 rOutItemSet.Put( SfxBoolItem(nWhichId, m_bIncludeHiddenCells) );
+            break;
+        }
+        case SCHATTR_HIDE_LEGEND_ENTRY:
+        {
+            rOutItemSet.Put(SfxBoolItem(nWhichId, m_bHideLegendEntry));
             break;
         }
         default:

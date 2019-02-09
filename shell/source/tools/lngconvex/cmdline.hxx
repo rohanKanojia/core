@@ -20,11 +20,11 @@
 #ifndef INCLUDED_SHELL_SOURCE_TOOLS_LNGCONVEX_CMDLINE_HXX
 #define INCLUDED_SHELL_SOURCE_TOOLS_LNGCONVEX_CMDLINE_HXX
 
+#include <string>
+
 #include <sal/config.h>
 
 #include <sal/types.h>
-
-#include "defs.hxx"
 
 
 /** Simple command line abstraction
@@ -69,8 +69,8 @@ private:
     static bool is_arg_name(const std::string& Argument);
 
 private:
-    size_t      m_argc;
-    char**      m_argv;
+    size_t const      m_argc;
+    char** const      m_argv;
 
 // prevent copy and assignment
 private:

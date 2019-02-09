@@ -20,8 +20,6 @@
 #ifndef INCLUDED_DESKTOP_SOURCE_DEPLOYMENT_GUI_DP_GUI_THEEXTMGR_HXX
 #define INCLUDED_DESKTOP_SOURCE_DEPLOYMENT_GUI_DP_GUI_THEEXTMGR_HXX
 
-#include <comphelper/sequence.hxx>
-
 #include <cppuhelper/implbase.hxx>
 
 #include <com/sun/star/container/XNameAccess.hpp>
@@ -55,19 +53,23 @@ private:
     css::uno::Reference< css::awt::XWindow >                  m_xParent;
     VclPtr<ExtMgrDialog>         m_pExtMgrDialog;
     VclPtr<UpdateRequiredDialog> m_pUpdReqDialog;
-    ExtensionCmdQueue           *m_pExecuteCmdQueue;
+    std::unique_ptr<ExtensionCmdQueue> m_pExecuteCmdQueue;
 
     OUString                     m_sGetExtensionsURL;
+    bool                         m_bModified;
 
 public:
     static ::rtl::Reference<TheExtensionManager> s_ExtMgr;
 
          TheExtensionManager( const css::uno::Reference< css::awt::XWindow > &xParent,
                               const css::uno::Reference< css::uno::XComponentContext > &xContext );
-        virtual ~TheExtensionManager();
+        virtual ~TheExtensionManager() override;
 
     void createDialog( const bool bCreateUpdDlg );
     sal_Int16 execute();
+
+    bool isModified() const { return m_bModified; }
+    void clearModified() { m_bModified = false; }
 
     Dialog* getDialog()
     {
@@ -81,7 +83,7 @@ public:
             return m_pExtMgrDialog.get();
         return m_pUpdReqDialog.get();
     }
-    ExtensionCmdQueue* getCmdQueue() const { return m_pExecuteCmdQueue; }
+    ExtensionCmdQueue* getCmdQueue() const { return m_pExecuteCmdQueue.get(); }
 
     void SetText( const OUString &rTitle );
     void Show();
@@ -90,18 +92,17 @@ public:
     bool isVisible();
 
 
-    void checkUpdates( bool showUpdateOnly, bool parentVisible );
+    void checkUpdates();
     bool installPackage( const OUString &rPackageURL, bool bWarnUser = false );
     void createPackageList();
 
-    static bool queryTermination();
     void terminateDialog();
 
     // Tools
     bool supportsOptions( const css::uno::Reference< css::deployment::XPackage > &xPackage ) const;
     static PackageState getPackageState( const css::uno::Reference< css::deployment::XPackage > &xPackage );
-    css::uno::Reference< css::uno::XComponentContext > getContext() const { return m_xContext; }
-    css::uno::Reference< css::deployment::XExtensionManager > getExtensionManager() const { return m_xExtensionManager; }
+    const css::uno::Reference< css::uno::XComponentContext >& getContext() const { return m_xContext; }
+    const css::uno::Reference< css::deployment::XExtensionManager >& getExtensionManager() const { return m_xExtensionManager; }
     bool isReadOnly( const css::uno::Reference< css::deployment::XPackage > &xPackage ) const;
 
 
@@ -111,18 +112,14 @@ public:
         OUString const & view = OUString() );
 
     // XEventListener
-    virtual void SAL_CALL disposing( css::lang::EventObject const & evt )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing( css::lang::EventObject const & evt ) override;
 
     // XTerminateListener
-    virtual void SAL_CALL queryTermination( css::lang::EventObject const & evt )
-        throw (css::frame::TerminationVetoException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL notifyTermination( css::lang::EventObject const & evt )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL queryTermination( css::lang::EventObject const & evt ) override;
+    virtual void SAL_CALL notifyTermination( css::lang::EventObject const & evt ) override;
 
     // XModifyListener
-    virtual void SAL_CALL modified( css::lang::EventObject const & evt )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL modified( css::lang::EventObject const & evt ) override;
 };
 
 } // namespace dp_gui

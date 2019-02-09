@@ -17,51 +17,47 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/debug.hxx>
 #include <vcl/bitmapaccess.hxx>
 #include <tools/color.hxx>
 #include <vcl/alpha.hxx>
+#include <bitmapwriteaccess.hxx>
+#include <sal/log.hxx>
 
-AlphaMask::AlphaMask()
-{
-}
+AlphaMask::AlphaMask() = default;
 
 AlphaMask::AlphaMask( const Bitmap& rBitmap ) :
     Bitmap( rBitmap )
 {
     if( !!rBitmap )
-        Bitmap::Convert( BMP_CONVERSION_8BIT_GREYS );
+        Convert( BmpConversion::N8BitGreys );
 }
 
-AlphaMask::AlphaMask( const AlphaMask& rAlphaMask ) :
-    Bitmap( rAlphaMask )
-{
-}
+AlphaMask::AlphaMask( const AlphaMask& ) = default;
 
-AlphaMask::AlphaMask( const Size& rSizePixel, sal_uInt8* pEraseTransparency ) :
+AlphaMask::AlphaMask( AlphaMask&& ) = default;
+
+AlphaMask::AlphaMask( const Size& rSizePixel, const sal_uInt8* pEraseTransparency ) :
     Bitmap( rSizePixel, 8, &Bitmap::GetGreyPalette( 256 ) )
 {
     if( pEraseTransparency )
         Bitmap::Erase( Color( *pEraseTransparency, *pEraseTransparency, *pEraseTransparency ) );
 }
 
-AlphaMask::~AlphaMask()
-{
-}
+AlphaMask::~AlphaMask() = default;
 
 AlphaMask& AlphaMask::operator=( const Bitmap& rBitmap )
 {
     *static_cast<Bitmap*>(this) = rBitmap;
 
     if( !!rBitmap )
-        Bitmap::Convert( BMP_CONVERSION_8BIT_GREYS );
+        Convert( BmpConversion::N8BitGreys );
 
     return *this;
 }
 
 const Bitmap& AlphaMask::ImplGetBitmap() const
 {
-    return( (const Bitmap&) *this );
+    return *this;
 }
 
 void AlphaMask::ImplSetBitmap( const Bitmap& rBitmap )
@@ -71,57 +67,54 @@ void AlphaMask::ImplSetBitmap( const Bitmap& rBitmap )
     *static_cast<Bitmap*>(this) = rBitmap;
 }
 
-Bitmap AlphaMask::GetBitmap() const
+Bitmap const & AlphaMask::GetBitmap() const
 {
     return ImplGetBitmap();
 }
 
-bool AlphaMask::Erase( sal_uInt8 cTransparency )
+void AlphaMask::Erase( sal_uInt8 cTransparency )
 {
-    return Bitmap::Erase( Color( cTransparency, cTransparency, cTransparency ) );
+    Bitmap::Erase( Color( cTransparency, cTransparency, cTransparency ) );
 }
 
-bool AlphaMask::Replace( const Bitmap& rMask, sal_uInt8 cReplaceTransparency )
+void AlphaMask::Replace( const Bitmap& rMask, sal_uInt8 cReplaceTransparency )
 {
-    BitmapReadAccess*   pMaskAcc = ( (Bitmap&) rMask ).AcquireReadAccess();
-    BitmapWriteAccess*  pAcc = AcquireWriteAccess();
-    bool                bRet = false;
+    Bitmap::ScopedReadAccess pMaskAcc( const_cast<Bitmap&>(rMask) );
+    AlphaScopedWriteAccess pAcc(*this);
 
     if( pMaskAcc && pAcc )
     {
         const BitmapColor   aReplace( cReplaceTransparency );
         const long          nWidth = std::min( pMaskAcc->Width(), pAcc->Width() );
         const long          nHeight = std::min( pMaskAcc->Height(), pAcc->Height() );
-        const BitmapColor   aMaskWhite( pMaskAcc->GetBestMatchingColor( Color( COL_WHITE ) ) );
+        const BitmapColor   aMaskWhite( pMaskAcc->GetBestMatchingColor( COL_WHITE ) );
 
-        for( long nY = 0L; nY < nHeight; nY++ )
-            for( long nX = 0L; nX < nWidth; nX++ )
-                if( pMaskAcc->GetPixel( nY, nX ) == aMaskWhite )
-                    pAcc->SetPixel( nY, nX, aReplace );
+        for( long nY = 0; nY < nHeight; nY++ )
+        {
+            Scanline pScanline = pAcc->GetScanline(nY);
+            Scanline pScanlineMask = pMaskAcc->GetScanline(nY);
+            for( long nX = 0; nX < nWidth; nX++ )
+                if( pMaskAcc->GetPixelFromData( pScanlineMask, nX ) == aMaskWhite )
+                    pAcc->SetPixelOnData( pScanline, nX, aReplace );
+        }
     }
-
-    Bitmap::ReleaseAccess( pMaskAcc );
-    ReleaseAccess( pAcc );
-
-    return bRet;
 }
 
-bool AlphaMask::Replace( sal_uInt8 cSearchTransparency, sal_uInt8 cReplaceTransparency )
+void AlphaMask::Replace( sal_uInt8 cSearchTransparency, sal_uInt8 cReplaceTransparency )
 {
-    BitmapWriteAccess*  pAcc = AcquireWriteAccess();
-    bool                bRet = false;
+    AlphaScopedWriteAccess pAcc(*this);
 
     if( pAcc && pAcc->GetBitCount() == 8 )
     {
         const long nWidth = pAcc->Width(), nHeight = pAcc->Height();
 
-        if( pAcc->GetScanlineFormat() == BMP_FORMAT_8BIT_PAL )
+        if( pAcc->GetScanlineFormat() == ScanlineFormat::N8BitPal )
         {
-            for( long nY = 0L; nY < nHeight; nY++ )
+            for( long nY = 0; nY < nHeight; nY++ )
             {
                 Scanline pScan = pAcc->GetScanline( nY );
 
-                for( long nX = 0L; nX < nWidth; nX++, pScan++ )
+                for( long nX = 0; nX < nWidth; nX++, pScan++ )
                 {
                     if( *pScan == cSearchTransparency )
                         *pScan = cReplaceTransparency;
@@ -132,23 +125,17 @@ bool AlphaMask::Replace( sal_uInt8 cSearchTransparency, sal_uInt8 cReplaceTransp
         {
             BitmapColor aReplace( cReplaceTransparency );
 
-            for( long nY = 0L; nY < nHeight; nY++ )
+            for( long nY = 0; nY < nHeight; nY++ )
             {
-                for( long nX = 0L; nX < nWidth; nX++ )
+                Scanline pScanline = pAcc->GetScanline(nY);
+                for( long nX = 0; nX < nWidth; nX++ )
                 {
-                    if( pAcc->GetPixel( nY, nX ).GetIndex() == cSearchTransparency )
-                        pAcc->SetPixel( nY, nX, aReplace );
+                    if( pAcc->GetIndexFromData( pScanline, nX ) == cSearchTransparency )
+                        pAcc->SetPixelOnData( pScanline, nX, aReplace );
                 }
             }
         }
-
-        bRet = true;
     }
-
-    if( pAcc )
-        ReleaseAccess( pAcc );
-
-    return bRet;
 }
 
 void AlphaMask::ReleaseAccess( BitmapReadAccess* pAccess )
@@ -156,7 +143,7 @@ void AlphaMask::ReleaseAccess( BitmapReadAccess* pAccess )
     if( pAccess )
     {
         Bitmap::ReleaseAccess( pAccess );
-        Bitmap::Convert( BMP_CONVERSION_8BIT_GREYS );
+        Convert( BmpConversion::N8BitGreys );
     }
 }
 

@@ -17,12 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <config_features.h>
+#include <config_java.h>
 
 #include <rtl/process.h>
 #include <rtl/ref.hxx>
-
-#include <tools/rc.h>
 
 #include <vcl/window.hxx>
 #include <vcl/sysdata.hxx>
@@ -37,11 +35,6 @@
 
 #if HAVE_FEATURE_JAVA
 #include <jni.h>
-#endif
-
-#include <comphelper/processfactory.hxx>
-
-#if HAVE_FEATURE_JAVA
 #include <jvmaccess/virtualmachine.hxx>
 #include <com/sun/star/java/JavaVirtualMachine.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
@@ -49,15 +42,13 @@
 
 using namespace ::com::sun::star;
 
-long ImplSysChildProc( void* pInst, SalObject* /* pObject */,
-                       sal_uInt16 nEvent, const void* /* pEvent */ )
+static void ImplSysChildProc( void* pInst, SalObjEvent nEvent )
 {
     VclPtr<SystemChildWindow> pWindow = static_cast<SystemChildWindow*>(pInst);
-    long nRet = 0;
 
     switch ( nEvent )
     {
-        case SALOBJ_EVENT_GETFOCUS:
+        case SalObjEvent::GetFocus:
             // get focus, such that all handlers are called,
             // as if this window gets the focus assuring
             // that the frame does not steal it
@@ -74,7 +65,7 @@ long ImplSysChildProc( void* pInst, SalObject* /* pObject */,
             pWindow->ImplGetFrameData()->mbInSysObjFocusHdl = false;
             break;
 
-        case SALOBJ_EVENT_LOSEFOCUS:
+        case SalObjEvent::LoseFocus:
             // trigger a LoseFocus which matches the status
             // of the window with matching Activate-Status
             pWindow->ImplGetFrameData()->mbSysObjFocus = false;
@@ -85,7 +76,7 @@ long ImplSysChildProc( void* pInst, SalObject* /* pObject */,
             }
             break;
 
-        case SALOBJ_EVENT_TOTOP:
+        case SalObjEvent::ToTop:
             pWindow->ImplGetFrameData()->mbInSysObjToTopHdl = true;
             if ( !Application::GetFocusWindow() || pWindow->HasChildPathFocus() )
                 pWindow->ToTop( ToTopFlags::NoGrabFocus );
@@ -98,9 +89,9 @@ long ImplSysChildProc( void* pInst, SalObject* /* pObject */,
                 break;
             pWindow->ImplGetFrameData()->mbInSysObjToTopHdl = false;
             break;
-    }
 
-    return nRet;
+        default: break;
+    }
 }
 
 void SystemChildWindow::ImplInitSysChild( vcl::Window* pParent, WinBits nStyle, SystemWindowData *pData, bool bShow )
@@ -119,13 +110,13 @@ void SystemChildWindow::ImplInitSysChild( vcl::Window* pParent, WinBits nStyle, 
 }
 
 SystemChildWindow::SystemChildWindow( vcl::Window* pParent, WinBits nStyle ) :
-    Window( WINDOW_SYSTEMCHILDWINDOW )
+    Window( WindowType::SYSTEMCHILDWINDOW )
 {
     ImplInitSysChild( pParent, nStyle, nullptr );
 }
 
 SystemChildWindow::SystemChildWindow( vcl::Window* pParent, WinBits nStyle, SystemWindowData *pData, bool bShow ) :
-    Window( WINDOW_SYSTEMCHILDWINDOW )
+    Window( WindowType::SYSTEMCHILDWINDOW )
 {
     ImplInitSysChild( pParent, nStyle, pData, bShow );
 }
@@ -160,37 +151,10 @@ void SystemChildWindow::EnableEraseBackground( bool bEnable )
         mpWindowImpl->mpSysObj->EnableEraseBackground( bEnable );
 }
 
-void SystemChildWindow::ImplTestJavaException( void* pEnv )
+void SystemChildWindow::SetLeaveEnterBackgrounds(const css::uno::Sequence<css::uno::Any>& rLeaveArgs, const css::uno::Sequence<css::uno::Any>& rEnterArgs)
 {
-#if HAVE_FEATURE_JAVA
-    JNIEnv*     pJavaEnv = static_cast< JNIEnv* >( pEnv );
-    jthrowable  jtThrowable = pJavaEnv->ExceptionOccurred();
-
-    if( jtThrowable )
-    { // is it a java exception ?
-#if OSL_DEBUG_LEVEL > 1
-        pJavaEnv->ExceptionDescribe();
-#endif // OSL_DEBUG_LEVEL > 1
-        pJavaEnv->ExceptionClear();
-
-        jclass          jcThrowable = pJavaEnv->FindClass("java/lang/Throwable");
-        jmethodID       jmThrowable_getMessage = pJavaEnv->GetMethodID(jcThrowable, "getMessage", "()Ljava/lang/String;");
-        jstring         jsMessage = static_cast<jstring>( pJavaEnv->CallObjectMethod(jtThrowable, jmThrowable_getMessage) );
-        OUString        ouMessage;
-
-        if(jsMessage)
-        {
-            const jchar * jcMessage = pJavaEnv->GetStringChars(jsMessage, nullptr);
-            ouMessage = OUString(
-                reinterpret_cast<sal_Unicode const *>(jcMessage));
-            pJavaEnv->ReleaseStringChars(jsMessage, jcMessage);
-        }
-
-        throw uno::RuntimeException(ouMessage);
-    }
-#else
-    (void)pEnv;
-#endif // HAVE_FEATURE_JAVA
+    if (mpWindowImpl->mpSysObj)
+        mpWindowImpl->mpSysObj->SetLeaveEnterBackgrounds(rLeaveArgs, rEnterArgs);
 }
 
 void SystemChildWindow::SetForwardKey( bool bEnable )
@@ -213,7 +177,7 @@ sal_IntPtr SystemChildWindow::GetParentWindowHandle()
 #elif defined IOS
     // Nothing
 #elif defined UNX
-    nRet = (sal_IntPtr) GetSystemData()->aWindow;
+    nRet = GetSystemData()->aWindow;
 #endif
 
     return nRet;

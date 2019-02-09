@@ -22,7 +22,7 @@
 
 #include "dbtreelistbox.hxx"
 
-#include "svtools/svlbitm.hxx"
+#include <vcl/svlbitm.hxx>
 
 namespace dbaui
 {
@@ -34,12 +34,12 @@ namespace dbaui
 */
 class OMarkableTreeListBox : public DBTreeListBox
 {
-    SvLBoxButtonData*   m_pCheckButton;
+    std::unique_ptr<SvLBoxButtonData> m_pCheckButton;
     Link<void*,void>    m_aCheckButtonHandler;
 
 public:
-    OMarkableTreeListBox( vcl::Window* pParent, WinBits nWinStyle=0 );
-    virtual ~OMarkableTreeListBox();
+    OMarkableTreeListBox( vcl::Window* pParent, WinBits nWinStyle );
+    virtual ~OMarkableTreeListBox() override;
     virtual void dispose() override;
 
     virtual void    KeyInput( const KeyEvent& rKEvt ) override;
@@ -50,7 +50,7 @@ public:
     void SetCheckHandler(const Link<void*,void>& _rHdl) { m_aCheckButtonHandler = _rHdl; }
 
 protected:
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& _rRect) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& _rRect) override;
     virtual void checkedButton_noBroadcast(SvTreeListEntry* _pEntry);
 
     SvButtonState   implDetermineState(SvTreeListEntry* _pEntry);

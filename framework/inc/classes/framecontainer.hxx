@@ -30,7 +30,6 @@
 #include <general.h>
 
 #include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/XDesktop.hpp>
 #include <com/sun/star/uno/Reference.hxx>
 
 #include <cppuhelper/weakref.hxx>
@@ -46,13 +45,13 @@ typedef ::std::vector< css::uno::Reference< css::frame::XFrame > >  TFrameContai
     @descr          Every object of frame, task or desktop hold reference to his children. These container is used as helper
                     to do this. Some helper-classes like OFrames or OTasksAccess use it to. They hold a pointer to an instance
                     of this class, which is a member of a frame, task or desktop! You can append and remove frames.
-                    It's possible to set one of these frames as active or deactive. You could have full index-access to
+                    It's possible to set one of these frames as active or deactivate. You could have full index-access to
                     container-items.
 
     @devstatus      ready to use
     @threadsafe     yes
 *//*-*************************************************************************************************************/
-class FrameContainer
+class FrameContainer final
 {
 
     // member
@@ -61,7 +60,7 @@ class FrameContainer
 
         /// list to hold all frames
         TFrameContainer m_aContainer;
-        /// one container item can be the current active frame. Its necessary for Desktop or Frame implementation.
+        /// one container item can be the current active frame. It's necessary for Desktop or Frame implementation.
         css::uno::Reference< css::frame::XFrame > m_xActiveFrame;
 
     // interface
@@ -70,7 +69,7 @@ class FrameContainer
 
         /// constructor / destructor
                  FrameContainer();
-        virtual ~FrameContainer();
+                 ~FrameContainer();
 
         /// add/remove/mark container items
         void                                      append     ( const css::uno::Reference< css::frame::XFrame >& xFrame );

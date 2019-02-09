@@ -12,20 +12,19 @@
 #include <svl/zforlist.hxx>
 #include <svl/undo.hxx>
 
-#include "formulacell.hxx"
-#include "rangelst.hxx"
-#include "scitems.hxx"
-#include "docsh.hxx"
-#include "document.hxx"
-#include "uiitems.hxx"
-#include "reffact.hxx"
-#include "scresid.hxx"
-#include "docfunc.hxx"
-#include "strload.hxx"
+#include <formulacell.hxx>
+#include <rangelst.hxx>
+#include <scitems.hxx>
+#include <docsh.hxx>
+#include <document.hxx>
+#include <uiitems.hxx>
+#include <reffact.hxx>
+#include <scresid.hxx>
+#include <docfunc.hxx>
 
-#include "StatisticsInputOutputDialog.hxx"
+#include <StatisticsInputOutputDialog.hxx>
 
-ScRangeList ScStatisticsInputOutputDialog::MakeColumnRangeList(SCTAB aTab, ScAddress aStart, ScAddress aEnd)
+ScRangeList ScStatisticsInputOutputDialog::MakeColumnRangeList(SCTAB aTab, ScAddress const & aStart, ScAddress const & aEnd)
 {
     ScRangeList aRangeList;
     for (SCCOL inCol = aStart.Col(); inCol <= aEnd.Col(); inCol++)
@@ -34,12 +33,12 @@ ScRangeList ScStatisticsInputOutputDialog::MakeColumnRangeList(SCTAB aTab, ScAdd
             ScAddress(inCol, aStart.Row(), aTab),
             ScAddress(inCol, aEnd.Row(),   aTab) );
 
-        aRangeList.Append(aColumnRange);
+        aRangeList.push_back(aColumnRange);
     }
     return aRangeList;
 }
 
-ScRangeList ScStatisticsInputOutputDialog::MakeRowRangeList(SCTAB aTab, ScAddress aStart, ScAddress aEnd)
+ScRangeList ScStatisticsInputOutputDialog::MakeRowRangeList(SCTAB aTab, ScAddress const & aStart, ScAddress const & aEnd)
 {
     ScRangeList aRangeList;
     for (SCROW inRow = aStart.Row(); inRow <= aEnd.Row(); inRow++)
@@ -48,7 +47,7 @@ ScRangeList ScStatisticsInputOutputDialog::MakeRowRangeList(SCTAB aTab, ScAddres
             ScAddress(aStart.Col(), inRow, aTab),
             ScAddress(aEnd.Col(),   inRow, aTab) );
 
-        aRangeList.Append(aRowRange);
+        aRangeList.push_back(aRowRange);
     }
     return aRangeList;
 }
@@ -194,13 +193,13 @@ void ScStatisticsInputOutputDialog::SetReference( const ScRange& rReferenceRange
         mpButtonOk->Disable();
 }
 
-IMPL_LINK_NOARG_TYPED( ScStatisticsInputOutputDialog, OkClicked, Button*, void )
+IMPL_LINK_NOARG( ScStatisticsInputOutputDialog, OkClicked, Button*, void )
 {
     CalculateInputAndWriteToOutput();
     Close();
 }
 
-IMPL_LINK_TYPED( ScStatisticsInputOutputDialog, GetFocusHandler, Control&, rCtrl, void )
+IMPL_LINK( ScStatisticsInputOutputDialog, GetFocusHandler, Control&, rCtrl, void )
 {
     mpActiveEdit = nullptr;
 
@@ -213,12 +212,12 @@ IMPL_LINK_TYPED( ScStatisticsInputOutputDialog, GetFocusHandler, Control&, rCtrl
         mpActiveEdit->SetSelection( Selection( 0, SELECTION_MAX ) );
 }
 
-IMPL_LINK_NOARG_TYPED( ScStatisticsInputOutputDialog, LoseFocusHandler, Control&, void )
+IMPL_LINK_NOARG( ScStatisticsInputOutputDialog, LoseFocusHandler, Control&, void )
 {
     mDialogLostFocus = !IsActive();
 }
 
-IMPL_LINK_NOARG_TYPED( ScStatisticsInputOutputDialog, GroupByChanged, RadioButton&, void )
+IMPL_LINK_NOARG( ScStatisticsInputOutputDialog, GroupByChanged, RadioButton&, void )
 {
     if (mpGroupByColumnsRadio->IsChecked())
         mGroupedBy = BY_COLUMN;
@@ -226,7 +225,7 @@ IMPL_LINK_NOARG_TYPED( ScStatisticsInputOutputDialog, GroupByChanged, RadioButto
         mGroupedBy = BY_ROW;
 }
 
-IMPL_LINK_NOARG_TYPED( ScStatisticsInputOutputDialog, RefInputModifyHandler, Edit&, void )
+IMPL_LINK_NOARG( ScStatisticsInputOutputDialog, RefInputModifyHandler, Edit&, void )
 {
     if ( mpActiveEdit )
     {
@@ -234,7 +233,7 @@ IMPL_LINK_NOARG_TYPED( ScStatisticsInputOutputDialog, RefInputModifyHandler, Edi
         {
             ScRangeList aRangeList;
             bool bValid = ParseWithNames( aRangeList, mpInputRangeEdit->GetText(), mDocument);
-            const ScRange* pRange = (bValid && aRangeList.size() == 1) ? aRangeList[0] : nullptr;
+            const ScRange* pRange = (bValid && aRangeList.size() == 1) ? &aRangeList[0] : nullptr;
             if (pRange)
             {
                 mInputRange = *pRange;
@@ -250,7 +249,7 @@ IMPL_LINK_NOARG_TYPED( ScStatisticsInputOutputDialog, RefInputModifyHandler, Edi
         {
             ScRangeList aRangeList;
             bool bValid = ParseWithNames( aRangeList, mpOutputRangeEdit->GetText(), mDocument);
-            const ScRange* pRange = (bValid && aRangeList.size() == 1) ? aRangeList[0] : nullptr;
+            const ScRange* pRange = (bValid && aRangeList.size() == 1) ? &aRangeList[0] : nullptr;
             if (pRange)
             {
                 mOutputAddress = pRange->aStart;
@@ -284,15 +283,15 @@ IMPL_LINK_NOARG_TYPED( ScStatisticsInputOutputDialog, RefInputModifyHandler, Edi
 
 void ScStatisticsInputOutputDialog::CalculateInputAndWriteToOutput()
 {
-    OUString aUndo(SC_STRLOAD(RID_STATISTICS_DLGS, GetUndoNameId()));
+    OUString aUndo(ScResId(GetUndoNameId()));
     ScDocShell* pDocShell = mViewData->GetDocShell();
-    svl::IUndoManager* pUndoManager = pDocShell->GetUndoManager();
-    pUndoManager->EnterListAction( aUndo, aUndo );
+    SfxUndoManager* pUndoManager = pDocShell->GetUndoManager();
+    pUndoManager->EnterListAction( aUndo, aUndo, 0, mViewData->GetViewShell()->GetViewShellId() );
 
     ScRange aOutputRange = ApplyOutput(pDocShell);
 
     pUndoManager->LeaveListAction();
-    pDocShell->PostPaint( aOutputRange, PAINT_GRID );
+    pDocShell->PostPaint( aOutputRange, PaintPartFlags::Grid );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

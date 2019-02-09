@@ -93,7 +93,7 @@ namespace drawinglayer
 
             @param nWidthToFill
 
-            @param rFillColor
+            @param rTextFillColor
             Text background color (has nothing to do with bFilled and nWidthToFill)
 
          */
@@ -119,23 +119,26 @@ namespace drawinglayer
             attribute::FontAttribute                maFontAttribute;
 
             /// The Locale for the text
-            css::lang::Locale                      maLocale;
+            css::lang::Locale                       maLocale;
 
             /// font color
             basegfx::BColor                         maFontColor;
 
+            // Whether to fill a given width with the text
+            bool                                    mbFilled;
 
-            /// #i96669# internal: add simple range buffering for this primitive
-            basegfx::B2DRange                       maB2DRange;
-            bool                                    mbFilled;           // Whether to fill a given width with the text
-            long                                    mnWidthToFill;      // the width to fill
+            // the width to fill
+            long                                    mnWidthToFill;
 
             /// The fill color of the text
             Color                                   maTextFillColor;
 
+            /// #i96669# internal: add simple range buffering for this primitive
+            basegfx::B2DRange                       maB2DRange;
+
         protected:
             /// local decomposition.
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const override;
 
         public:
             /// constructor
@@ -150,11 +153,11 @@ namespace drawinglayer
                 const basegfx::BColor& rFontColor,
                 bool bFilled = false,
                 long nWidthToFill = 0,
-                const Color& rFillColor = COL_TRANSPARENT );
+                const Color& rTextFillColor = COL_TRANSPARENT );
 
             /// helpers
             /** get text outlines as polygons and their according ObjectTransformation. Handles all
-                the necessary VCL outline extractins, scaling adaptions and other stuff.
+                the necessary VCL outline extractions, scaling adaptions and other stuff.
              */
             void getTextOutlinesAndTransformation(basegfx::B2DPolyPolygonVector& rTarget, basegfx::B2DHomMatrix& rTransformation) const;
 

@@ -22,8 +22,6 @@
 #include <sfx2/filedlghelper.hxx>
 #include <svl/zforlist.hxx>
 #include "optupdt.hxx"
-#include <dialmgr.hxx>
-#include <cuires.hrc>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
@@ -37,8 +35,11 @@
 #include <com/sun/star/util/URLTransformer.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
 #include <com/sun/star/setup/UpdateCheckConfig.hpp>
+#include <com/sun/star/configuration/ReadWriteAccess.hpp>
+#include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <osl/file.hxx>
 #include <osl/security.hxx>
+#include <sal/log.hxx>
 
 using namespace ::css;
 
@@ -67,6 +68,7 @@ SvxOnlineUpdateTabPage::SvxOnlineUpdateTabPage(vcl::Window* pParent, const SfxIt
     uno::Reference < uno::XComponentContext > xContext( ::comphelper::getProcessComponentContext() );
 
     m_xUpdateAccess = setup::UpdateCheckConfig::create( xContext );
+    m_xReadWriteAccess = css::configuration::ReadWriteAccess::create(xContext, "*");
 
     bool bDownloadSupported = false;
     m_xUpdateAccess->getByName( "DownloadSupported" ) >>= bDownloadSupported;
@@ -130,7 +132,7 @@ void SvxOnlineUpdateTabPage::UpdateLastCheckedText()
         Date  aDate( Date::EMPTY );
         tools::Time  aTime( tools::Time::EMPTY );
 
-        lastCheckedTV.Seconds = (sal_uInt32) lastChecked;
+        lastCheckedTV.Seconds = static_cast<sal_uInt32>(lastChecked);
         osl_getLocalTimeFromSystemTime( &lastCheckedTV, &lastCheckedTV );
 
         if ( osl_getDateTimeFromTimeValue(  &lastCheckedTV, &lastCheckedDT ) )
@@ -140,18 +142,17 @@ void SvxOnlineUpdateTabPage::UpdateLastCheckedText()
         }
 
         LanguageType eUILang = Application::GetSettings().GetUILanguageTag().getLanguageType();
-        SvNumberFormatter *pNumberFormatter = new SvNumberFormatter( ::comphelper::getProcessComponentContext(), eUILang );
+        std::unique_ptr<SvNumberFormatter> pNumberFormatter(new SvNumberFormatter( ::comphelper::getProcessComponentContext(), eUILang ));
         Color*      pColor = nullptr;
-        Date*       pNullDate = pNumberFormatter->GetNullDate();
-        sal_uInt32  nFormat = pNumberFormatter->GetStandardFormat( css::util::NumberFormat::DATE, eUILang );
+        const Date& rNullDate = pNumberFormatter->GetNullDate();
+        sal_uInt32  nFormat = pNumberFormatter->GetStandardFormat( SvNumFormatType::DATE, eUILang );
 
-        pNumberFormatter->GetOutputString( aDate - *pNullDate, nFormat, aDateStr, &pColor );
+        pNumberFormatter->GetOutputString( aDate - rNullDate, nFormat, aDateStr, &pColor );
 
-        nFormat = pNumberFormatter->GetStandardFormat( css::util::NumberFormat::TIME, eUILang );
+        nFormat = pNumberFormatter->GetStandardFormat( SvNumFormatType::TIME, eUILang );
         pNumberFormatter->GetOutputString( aTime.GetTimeInDays(), nFormat, aTimeStr, &pColor );
 
-        delete pColor;
-        delete pNumberFormatter;
+        pNumberFormatter.reset();
 
         aText = m_aLastCheckedTemplate;
         sal_Int32 nIndex = aText.indexOf( "%DATE%" );
@@ -180,11 +181,11 @@ void SvxOnlineUpdateTabPage::UpdateUserAgent()
         uno::Sequence< beans::StringPair > aHeaders
             = xDav->getUserRequestHeaders( aPseudoURL, ucb::WebDAVHTTPMethod(0) );
 
-        for ( auto i = aHeaders.begin(); i != aHeaders.end(); ++i )
+        for (css::beans::StringPair & aHeader : aHeaders)
         {
-            if ( i->First == "User-Agent" )
+            if ( aHeader.First == "User-Agent" )
             {
-                OUString aText = i->Second;
+                OUString aText = aHeader.Second;
                 aText = aText.replaceAll(";", ";\n");
                 aText = aText.replaceAll("(", "\n(");
                 m_pUserAgentLabel->SetText( aText );
@@ -197,9 +198,9 @@ void SvxOnlineUpdateTabPage::UpdateUserAgent()
 }
 
 VclPtr<SfxTabPage>
-SvxOnlineUpdateTabPage::Create( vcl::Window* pParent, const SfxItemSet* rAttrSet )
+SvxOnlineUpdateTabPage::Create( TabPageParent pParent, const SfxItemSet* rAttrSet )
 {
-    return VclPtr<SvxOnlineUpdateTabPage>::Create( pParent, *rAttrSet );
+    return VclPtr<SvxOnlineUpdateTabPage>::Create( pParent.pParent, *rAttrSet );
 }
 
 bool SvxOnlineUpdateTabPage::FillItemSet( SfxItemSet* )
@@ -212,7 +213,7 @@ bool SvxOnlineUpdateTabPage::FillItemSet( SfxItemSet* )
     if( m_pAutoCheckCheckBox->IsValueChangedFromSaved() )
     {
         bValue = m_pAutoCheckCheckBox->IsChecked();
-        m_xUpdateAccess->replaceByName( "AutoCheckEnabled", uno::makeAny( bValue ) );
+        m_xUpdateAccess->replaceByName( "AutoCheckEnabled", uno::Any( bValue ) );
         bModified = true;
     }
 
@@ -235,14 +236,14 @@ bool SvxOnlineUpdateTabPage::FillItemSet( SfxItemSet* )
 
     if( nValue > 0 )
     {
-        m_xUpdateAccess->replaceByName( "CheckInterval", uno::makeAny( nValue ) );
+        m_xUpdateAccess->replaceByName( "CheckInterval", uno::Any( nValue ) );
         bModified = true;
     }
 
     if( m_pAutoDownloadCheckBox->IsValueChangedFromSaved() )
     {
         bValue = m_pAutoDownloadCheckBox->IsChecked();
-        m_xUpdateAccess->replaceByName( "AutoDownloadEnabled", uno::makeAny( bValue ) );
+        m_xUpdateAccess->replaceByName( "AutoDownloadEnabled", uno::Any( bValue ) );
         bModified = true;
     }
 
@@ -250,16 +251,16 @@ bool SvxOnlineUpdateTabPage::FillItemSet( SfxItemSet* )
     m_xUpdateAccess->getByName( "DownloadDestination" ) >>= sValue;
 
     if( ( osl::FileBase::E_None == osl::FileBase::getFileURLFromSystemPath(m_pDestPath->GetText(), aURL) ) &&
-        ( ! aURL.equals( sValue ) ) )
+        ( aURL != sValue ) )
     {
-        m_xUpdateAccess->replaceByName( "DownloadDestination", uno::makeAny( aURL ) );
+        m_xUpdateAccess->replaceByName( "DownloadDestination", uno::Any( aURL ) );
         bModified = true;
     }
 
     if( m_pExtrasCheckBox->IsValueChangedFromSaved() )
     {
         bValue = m_pExtrasCheckBox->IsChecked();
-        m_xUpdateAccess->replaceByName( "ExtendedUserAgent", uno::makeAny( bValue ) );
+        m_xUpdateAccess->replaceByName( "ExtendedUserAgent", uno::Any( bValue ) );
         bModified = true;
     }
 
@@ -274,14 +275,19 @@ void SvxOnlineUpdateTabPage::Reset( const SfxItemSet* )
 {
     bool bValue = false;
     m_xUpdateAccess->getByName( "AutoCheckEnabled" ) >>= bValue;
+    beans::Property aProperty = m_xReadWriteAccess->getPropertyByHierarchicalName("/org.openoffice.Office.Jobs/Jobs/org.openoffice.Office.Jobs:Job['UpdateCheck']/Arguments/AutoCheckEnabled");
+    bool bReadOnly = (aProperty.Attributes & beans::PropertyAttribute::READONLY) != 0;
 
     m_pAutoCheckCheckBox->Check(bValue);
-    m_pEveryDayButton->Enable(bValue);
-    m_pEveryWeekButton->Enable(bValue);
-    m_pEveryMonthButton->Enable(bValue);
+    m_pAutoCheckCheckBox->Enable(!bReadOnly);
 
     sal_Int64 nValue = 0;
     m_xUpdateAccess->getByName( "CheckInterval" ) >>= nValue;
+    aProperty = m_xReadWriteAccess->getPropertyByHierarchicalName("/org.openoffice.Office.Jobs/Jobs/org.openoffice.Office.Jobs:Job['UpdateCheck']/Arguments/CheckInterval");
+    bool bReadOnly2 = (aProperty.Attributes & beans::PropertyAttribute::READONLY) != 0;
+    m_pEveryDayButton->Enable(bValue && !(bReadOnly || bReadOnly2));
+    m_pEveryWeekButton->Enable(bValue && !(bReadOnly || bReadOnly2));
+    m_pEveryMonthButton->Enable(bValue && !(bReadOnly || bReadOnly2));
 
     if( nValue == 86400 )
         m_pEveryDayButton->Check();
@@ -296,19 +302,27 @@ void SvxOnlineUpdateTabPage::Reset( const SfxItemSet* )
     m_pEveryMonthButton->SaveValue();
 
     m_xUpdateAccess->getByName( "AutoDownloadEnabled" ) >>= bValue;
+    aProperty = m_xReadWriteAccess->getPropertyByHierarchicalName("/org.openoffice.Office.Jobs/Jobs/org.openoffice.Office.Jobs:Job['UpdateCheck']/Arguments/AutoDownloadEnabled");
+    bReadOnly = (aProperty.Attributes & beans::PropertyAttribute::READONLY) != 0;
     m_pAutoDownloadCheckBox->Check(bValue);
+    m_pAutoDownloadCheckBox->Enable(!bReadOnly);
     m_pDestPathLabel->Enable();
     m_pDestPath->Enable();
-    m_pChangePathButton->Enable();
 
     OUString sValue, aPath;
     m_xUpdateAccess->getByName( "DownloadDestination" ) >>= sValue;
+    aProperty = m_xReadWriteAccess->getPropertyByHierarchicalName("/org.openoffice.Office.Jobs/Jobs/org.openoffice.Office.Jobs:Job['UpdateCheck']/Arguments/DownloadDestination");
+    bReadOnly = (aProperty.Attributes & beans::PropertyAttribute::READONLY) != 0;
+    m_pChangePathButton->Enable(!bReadOnly);
 
     if( osl::FileBase::E_None == osl::FileBase::getSystemPathFromFileURL(sValue, aPath) )
         m_pDestPath->SetText(aPath);
 
     m_xUpdateAccess->getByName( "ExtendedUserAgent" ) >>= bValue;
+    aProperty = m_xReadWriteAccess->getPropertyByHierarchicalName("/org.openoffice.Office.Jobs/Jobs/org.openoffice.Office.Jobs:Job['UpdateCheck']/Arguments/ExtendedUserAgent");
+    bReadOnly = (aProperty.Attributes & beans::PropertyAttribute::READONLY) != 0;
     m_pExtrasCheckBox->Check(bValue);
+    m_pExtrasCheckBox->Enable(!bReadOnly);
     m_pExtrasCheckBox->SaveValue();
     UpdateUserAgent();
 
@@ -319,21 +333,22 @@ void SvxOnlineUpdateTabPage::FillUserData()
 {
 }
 
-IMPL_LINK_TYPED( SvxOnlineUpdateTabPage, AutoCheckHdl_Impl, Button*, pBox, void )
+IMPL_LINK( SvxOnlineUpdateTabPage, AutoCheckHdl_Impl, Button*, pBox, void )
 {
     bool bEnabled = static_cast<CheckBox*>(pBox)->IsChecked();
-
-    m_pEveryDayButton->Enable(bEnabled);
-    m_pEveryWeekButton->Enable(bEnabled);
-    m_pEveryMonthButton->Enable(bEnabled);
+    beans::Property aProperty = m_xReadWriteAccess->getPropertyByHierarchicalName("/org.openoffice.Office.Jobs/Jobs/org.openoffice.Office.Jobs:Job['UpdateCheck']/Arguments/CheckInterval");
+    bool bReadOnly = (aProperty.Attributes & beans::PropertyAttribute::READONLY) != 0;
+    m_pEveryDayButton->Enable(bEnabled && !bReadOnly);
+    m_pEveryWeekButton->Enable(bEnabled && !bReadOnly);
+    m_pEveryMonthButton->Enable(bEnabled && !bReadOnly);
 }
 
-IMPL_LINK_TYPED( SvxOnlineUpdateTabPage, ExtrasCheckHdl_Impl, Button*, , void )
+IMPL_LINK( SvxOnlineUpdateTabPage, ExtrasCheckHdl_Impl, Button*, , void )
 {
     UpdateUserAgent();
 }
 
-IMPL_LINK_NOARG_TYPED(SvxOnlineUpdateTabPage, FileDialogHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxOnlineUpdateTabPage, FileDialogHdl_Impl, Button*, void)
 {
     uno::Reference < uno::XComponentContext > xContext( ::comphelper::getProcessComponentContext() );
     uno::Reference < ui::dialogs::XFolderPicker2 >  xFolderPicker = ui::dialogs::FolderPicker::create(xContext);
@@ -353,7 +368,7 @@ IMPL_LINK_NOARG_TYPED(SvxOnlineUpdateTabPage, FileDialogHdl_Impl, Button*, void)
     }
 }
 
-IMPL_LINK_NOARG_TYPED(SvxOnlineUpdateTabPage, CheckNowHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxOnlineUpdateTabPage, CheckNowHdl_Impl, Button*, void)
 {
     uno::Reference < uno::XComponentContext> xContext( ::comphelper::getProcessComponentContext() );
 
@@ -364,10 +379,10 @@ IMPL_LINK_NOARG_TYPED(SvxOnlineUpdateTabPage, CheckNowHdl_Impl, Button*, void)
 
         beans::NamedValue aProperty;
         aProperty.Name  = "nodepath";
-        aProperty.Value = uno::makeAny( OUString("org.openoffice.Office.Addons/AddonUI/OfficeHelp/UpdateCheckJob") );
+        aProperty.Value <<= OUString("org.openoffice.Office.Addons/AddonUI/OfficeHelp/UpdateCheckJob");
 
         uno::Sequence< uno::Any > aArgumentList( 1 );
-        aArgumentList[0] = uno::makeAny( aProperty );
+        aArgumentList[0] <<= aProperty;
 
         uno::Reference< container::XNameAccess > xNameAccess(
             xConfigProvider->createInstanceWithArguments(
@@ -397,8 +412,7 @@ IMPL_LINK_NOARG_TYPED(SvxOnlineUpdateTabPage, CheckNowHdl_Impl, Button*, void)
     }
     catch( const uno::Exception& e )
     {
-         OSL_TRACE( "Caught exception: %s\n thread terminated.\n",
-            OUStringToOString(e.Message, RTL_TEXTENCODING_UTF8).getStr());
+         SAL_WARN("cui.options", "Caught exception, thread terminated. " << e);
     }
 }
 

@@ -11,6 +11,7 @@
 #include <test/unoapi_test.hxx>
 #include <rtl/strbuf.hxx>
 #include <osl/file.hxx>
+#include <sal/log.hxx>
 
 #include <sfx2/app.hxx>
 #include <sfx2/docfilt.hxx>
@@ -21,10 +22,10 @@
 
 #include <basic/sbxdef.hxx>
 
-#include "docsh.hxx"
-#include "patattr.hxx"
-#include "scitems.hxx"
-#include "document.hxx"
+#include <docsh.hxx>
+#include <patattr.hxx>
+#include <scitems.hxx>
+#include <document.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -41,6 +42,7 @@ public:
     void testVba();
     void testMSP();
     void testPasswordProtectedStarBasic();
+    void testRowColumn();
 #endif
     CPPUNIT_TEST_SUITE(ScMacrosTest);
 #if !defined(MACOSX)
@@ -50,6 +52,7 @@ public:
     CPPUNIT_TEST(testMSP);
     CPPUNIT_TEST(testVba);
     CPPUNIT_TEST(testPasswordProtectedStarBasic);
+    CPPUNIT_TEST(testRowColumn);
 #endif
 
     CPPUNIT_TEST_SUITE_END();
@@ -80,8 +83,8 @@ void ScMacrosTest::testMSP()
     SfxObjectShell* pFoundShell = SfxObjectShell::GetShellFromComponent(xComponent);
 
     CPPUNIT_ASSERT_MESSAGE("Failed to access document shell", pFoundShell);
-    ScDocShell* xDocSh = dynamic_cast<ScDocShell*>(pFoundShell);
-    CPPUNIT_ASSERT(xDocSh != nullptr);
+    ScDocShell* pDocSh = dynamic_cast<ScDocShell*>(pFoundShell);
+    CPPUNIT_ASSERT(pDocSh != nullptr);
 
     SfxObjectShell::CallXScript(
         xComponent,
@@ -91,8 +94,8 @@ void ScMacrosTest::testMSP()
     aRet >>= sResult;
 
     SAL_INFO("sc.qa", "Result is " << sResult );
-    CPPUNIT_ASSERT_MESSAGE("TestMSP ( for fdo#67547) failed", sResult == "OK" );
-    xDocSh->DoClose();
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("TestMSP ( for fdo#67547) failed", OUString("OK"), sResult);
+    pDocSh->DoClose();
 }
 
 void ScMacrosTest::testPasswordProtectedStarBasic()
@@ -112,8 +115,8 @@ void ScMacrosTest::testPasswordProtectedStarBasic()
     SfxObjectShell* pFoundShell = SfxObjectShell::GetShellFromComponent(xComponent);
 
     CPPUNIT_ASSERT_MESSAGE("Failed to access document shell", pFoundShell);
-    ScDocShell* xDocSh = static_cast<ScDocShell*>(pFoundShell);
-    ScDocument& rDoc = xDocSh->GetDocument();
+    ScDocShell* pDocSh = static_cast<ScDocShell*>(pFoundShell);
+    ScDocument& rDoc = pDocSh->GetDocument();
 
 
     // User defined types
@@ -124,7 +127,7 @@ void ScMacrosTest::testPasswordProtectedStarBasic()
         aParams, aRet, aOutParamIndex, aOutParam);
 
     OUString aValue = rDoc.GetString(0,0,0);
-    CPPUNIT_ASSERT_MESSAGE("User defined types script did not change the value of Sheet1.A1", aValue == "success");
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("User defined types script did not change the value of Sheet1.A1", OUString("success"), aValue);
 
     // Big Module
 
@@ -134,7 +137,7 @@ void ScMacrosTest::testPasswordProtectedStarBasic()
         aParams, aRet, aOutParamIndex, aOutParam);
 
     aValue = rDoc.GetString(1,0,0);
-    CPPUNIT_ASSERT_MESSAGE("Big module script did not change the value of Sheet1.B1", aValue == "success");
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Big module script did not change the value of Sheet1.B1", OUString("success"), aValue);
 
     // far big method tdf#94617
 
@@ -144,10 +147,10 @@ void ScMacrosTest::testPasswordProtectedStarBasic()
         aParams, aRet, aOutParamIndex, aOutParam);
 
     aValue = rDoc.GetString(2,0,0);
-    CPPUNIT_ASSERT_MESSAGE("Far Method script did not change the value of Sheet1.C1", aValue == "success");
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("Far Method script did not change the value of Sheet1.C1", OUString("success"), aValue);
 
 
-    xDocSh->DoClose();
+    pDocSh->DoClose();
 }
 
 void ScMacrosTest::testStarBasic()
@@ -167,8 +170,8 @@ void ScMacrosTest::testStarBasic()
     SfxObjectShell* pFoundShell = SfxObjectShell::GetShellFromComponent(xComponent);
 
     CPPUNIT_ASSERT_MESSAGE("Failed to access document shell", pFoundShell);
-    ScDocShell* xDocSh = static_cast<ScDocShell*>(pFoundShell);
-    ScDocument& rDoc = xDocSh->GetDocument();
+    ScDocShell* pDocSh = static_cast<ScDocShell*>(pFoundShell);
+    ScDocument& rDoc = pDocSh->GetDocument();
 
     SfxObjectShell::CallXScript(
         xComponent,
@@ -177,7 +180,7 @@ void ScMacrosTest::testStarBasic()
     double aValue;
     rDoc.GetValue(0,0,0,aValue);
     CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("script did not change the value of Sheet1.A1",2.0, aValue, 0.00001);
-    xDocSh->DoClose();
+    pDocSh->DoClose();
 }
 
 void ScMacrosTest::testVba()
@@ -292,10 +295,10 @@ void ScMacrosTest::testVba()
     OUString sTempDirURL;
     osl::FileBase:: getTempDirURL( sTempDirURL );
     osl::FileBase::getSystemPathFromFileURL( sTempDirURL, sTempDir );
-    sTempDir += OUStringLiteral1<SAL_PATHDELIMITER>();
+    sTempDir += OUStringLiteral1(SAL_PATHDELIMITER);
     OUString sTestFileName("My Test WorkBook.xls");
     Sequence< uno::Any > aParams;
-    for ( sal_uInt32  i=0; i<SAL_N_ELEMENTS( testInfo ); ++i )
+    for ( size_t  i=0; i<SAL_N_ELEMENTS( testInfo ); ++i )
     {
         OUString aFileName;
         createFileURL(testInfo[i].sFileBaseName + "xls", aFileName);
@@ -311,7 +314,7 @@ void ScMacrosTest::testVba()
         Any aRet;
         Sequence< sal_Int16 > aOutParamIndex;
         Sequence< Any > aOutParam;
-        bool bWorkbooksHandling = OUString( testInfo[i].sFileBaseName ) == "Workbooks." && !sTempDir.isEmpty() ;
+        bool bWorkbooksHandling = testInfo[i].sFileBaseName == "Workbooks." && !sTempDir.isEmpty() ;
 
         if ( bWorkbooksHandling )
         {
@@ -330,8 +333,8 @@ void ScMacrosTest::testVba()
             aOutParam);
         OUString aStringRes;
         aRet >>= aStringRes;
-        SAL_INFO("sc.qa", "value of Ret " << aStringRes);
-        CPPUNIT_ASSERT_MESSAGE( "script reported failure", aStringRes == "OK" );
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(
+            "script reported failure", OUString("OK"), aStringRes);
         pFoundShell->DoClose();
         if ( bWorkbooksHandling )
         {
@@ -342,6 +345,44 @@ void ScMacrosTest::testVba()
                 osl::File::remove( sFileUrl );
         }
     }
+}
+
+void ScMacrosTest::testRowColumn()
+{
+    const OUString aFileNameBase("StarBasic.ods");
+    OUString aFileName;
+    createFileURL(aFileNameBase, aFileName);
+    uno::Reference< css::lang::XComponent > xComponent = loadFromDesktop(aFileName, "com.sun.star.sheet.SpreadsheetDocument");
+
+    CPPUNIT_ASSERT_MESSAGE("Failed to load StarBasic.ods", xComponent.is());
+
+    Any aRet;
+    Sequence< sal_Int16 > aOutParamIndex;
+    Sequence< Any > aOutParam;
+    Sequence< uno::Any > aParams;
+
+    SfxObjectShell* pFoundShell = SfxObjectShell::GetShellFromComponent(xComponent);
+
+    CPPUNIT_ASSERT_MESSAGE("Failed to access document shell", pFoundShell);
+    ScDocShell* pDocSh = static_cast<ScDocShell*>(pFoundShell);
+    ScDocument& rDoc = pDocSh->GetDocument();
+
+    SfxObjectShell::CallXScript(
+        xComponent,
+        "vnd.sun.Star.script:Standard.Module1.Macro_RowHeight?language=Basic&location=document",
+        aParams, aRet, aOutParamIndex, aOutParam);
+
+    sal_uInt16 nHeight = rDoc.GetRowHeight(0, 0) * HMM_PER_TWIPS;
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(2000), nHeight);
+
+    SfxObjectShell::CallXScript(
+        xComponent,
+        "vnd.sun.Star.script:Standard.Module1.Macro_ColumnWidth?language=Basic&location=document",
+        aParams, aRet, aOutParamIndex, aOutParam);
+    sal_uInt16 nWidth  = rDoc.GetColWidth(0, 0) * HMM_PER_TWIPS;
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(4000), nWidth);
+
+    pDocSh->DoClose();
 }
 
 #endif

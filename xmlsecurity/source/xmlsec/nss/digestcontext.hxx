@@ -31,8 +31,8 @@ private:
     ::osl::Mutex m_aMutex;
 
     PK11Context* m_pContext;
-    sal_Int32 m_nDigestLength;
-    bool m_b1KData;
+    sal_Int32 const m_nDigestLength;
+    bool const m_b1KData;
     sal_Int32 m_nDigested;
 
     bool m_bDisposed;
@@ -48,12 +48,12 @@ public:
     , m_bBroken( false )
     {}
 
-    virtual ~ODigestContext();
+    virtual ~ODigestContext() override;
 
 
     // XDigestContext
-    virtual void SAL_CALL updateDigest( const css::uno::Sequence< ::sal_Int8 >& aData ) throw (css::lang::DisposedException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< ::sal_Int8 > SAL_CALL finalizeDigestAndDispose() throw (css::lang::DisposedException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL updateDigest( const css::uno::Sequence< ::sal_Int8 >& aData ) override;
+    virtual css::uno::Sequence< ::sal_Int8 > SAL_CALL finalizeDigestAndDispose() override;
 };
 
 #endif

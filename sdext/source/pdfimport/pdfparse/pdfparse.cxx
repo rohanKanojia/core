@@ -18,11 +18,14 @@
  */
 
 
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#endif
+#include <pdfparse.hxx>
 
-#include "pdfparse.hxx"
+// boost using obsolete stuff
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4996)
+#pragma warning(disable:4503)
+#endif
 
 // workaround windows compiler: do not include multi_pass.hpp
 #include <boost/spirit/include/classic_core.hpp>
@@ -30,15 +33,22 @@
 #include <boost/spirit/include/classic_error_handling.hpp>
 #include <boost/spirit/include/classic_file_iterator.hpp>
 #include <boost/bind.hpp>
+
 #include <string.h>
 
 #include <rtl/strbuf.hxx>
+#include <rtl/ustrbuf.hxx>
 #include <rtl/alloc.h>
+#include <sal/log.hxx>
 
 // disable warnings again because someone along the line has enabled them
-#if defined _MSC_VER
-#pragma warning(push, 1)
+// (we have  included boost headers, what did you expect?)
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4996)
+#pragma warning(disable:4503)
 #endif
+
 
 using namespace boost::spirit;
 using namespace pdfparse;
@@ -49,7 +59,7 @@ class StringEmitContext : public EmitContext
     OStringBuffer m_aBuf;
     public:
     StringEmitContext() : EmitContext(), m_aBuf(256) {}
-    virtual ~StringEmitContext() {}
+
     virtual bool write( const void* pBuf, unsigned int nLen ) throw() override
     {
         m_aBuf.append( static_cast<const sal_Char*>(pBuf), nLen );
@@ -243,7 +253,7 @@ public:
                                 >> uint_p[boost::bind(&PDFGrammar::push_back_action_uint, pSelf, _1)]
                                 >> ch_p('.')
                                 >> uint_p[boost::bind(&PDFGrammar::push_back_action_uint, pSelf, _1)]
-                                >> *((~ch_p('\r') & ~ch_p('\n')))
+                                >> *(~ch_p('\r') & ~ch_p('\n'))
                                 >> eol_p
                              ])[boost::bind(&PDFGrammar::haveFile,pSelf, _1, _2)]
                           >> *( comment | object | ( xref >> trailer ) );
@@ -309,10 +319,10 @@ public:
         PDFContainer* pContainer = dynamic_cast<PDFContainer*>(m_aObjectStack.back());
         if( pContainer == nullptr )
             parseError( "comment without container", first );
-        pContainer->m_aSubElements.push_back( pComment );
+        pContainer->m_aSubElements.emplace_back( pComment );
     }
 
-    void insertNewValue( PDFEntry* pNewValue, iteratorT pPos )
+    void insertNewValue( std::unique_ptr<PDFEntry> pNewValue, iteratorT pPos )
     {
         PDFContainer* pContainer = nullptr;
         const char* pMsg = nullptr;
@@ -326,20 +336,20 @@ public:
                 if( pObj )
                 {
                     if( pObj->m_pObject == nullptr )
-                        pObj->m_pObject = pNewValue;
+                        pObj->m_pObject = pNewValue.get();
                     else
                     {
                         pMsg = "second value for object";
                         pContainer = nullptr;
                     }
                 }
-                else if( dynamic_cast<PDFDict*>(pNewValue) )
+                else if( dynamic_cast<PDFDict*>(pNewValue.get()) )
                 {
                     PDFTrailer* pTrailer = dynamic_cast<PDFTrailer*>(pContainer);
                     if( pTrailer )
                     {
                         if( pTrailer->m_pDict == nullptr )
-                            pTrailer->m_pDict = dynamic_cast<PDFDict*>(pNewValue);
+                            pTrailer->m_pDict = dynamic_cast<PDFDict*>(pNewValue.get());
                         else
                             pContainer = nullptr;
                     }
@@ -351,44 +361,43 @@ public:
             }
         }
         if( pContainer )
-            pContainer->m_aSubElements.push_back( pNewValue );
+            pContainer->m_aSubElements.emplace_back( std::move(pNewValue) );
         else
         {
             if( ! pMsg )
             {
-                if( dynamic_cast<PDFContainer*>(pNewValue) )
+                if( dynamic_cast<PDFContainer*>(pNewValue.get()) )
                     pMsg = "array without container";
                 else
                     pMsg = "value without container";
             }
-            delete pNewValue;
             parseError( pMsg, pPos );
         }
     }
 
     void pushName( iteratorT first, iteratorT last )
     {
-        insertNewValue( new PDFName(iteratorToString(first,last)), first );
+        insertNewValue( std::make_unique<PDFName>(iteratorToString(first,last)), first );
     }
 
     void pushDouble( iteratorT first, SAL_UNUSED_PARAMETER iteratorT /*last*/ )
     {
-        insertNewValue( new PDFNumber(m_fDouble), first );
+        insertNewValue( std::make_unique<PDFNumber>(m_fDouble), first );
     }
 
     void pushString( iteratorT first, iteratorT last )
     {
-        insertNewValue( new PDFString(iteratorToString(first,last)), first );
+        insertNewValue( std::make_unique<PDFString>(iteratorToString(first,last)), first );
     }
 
     void pushBool( iteratorT first, iteratorT last )
     {
-        insertNewValue( new PDFBool( (last-first == 4) ), first );
+        insertNewValue( std::make_unique<PDFBool>( last-first == 4 ), first );
     }
 
     void pushNull( iteratorT first, SAL_UNUSED_PARAMETER iteratorT )
     {
-        insertNewValue( new PDFNull(), first );
+        insertNewValue( std::make_unique<PDFNull>(), first );
     }
 
 
@@ -410,7 +419,7 @@ public:
             ( dynamic_cast<PDFFile*>(pContainer) ||
               dynamic_cast<PDFPart*>(pContainer) ) )
         {
-            pContainer->m_aSubElements.push_back( pObj );
+            pContainer->m_aSubElements.emplace_back( pObj );
             m_aObjectStack.push_back( pObj );
         }
         else
@@ -433,7 +442,7 @@ public:
         m_aUIntStack.pop_back();
         unsigned int nObject = m_aUIntStack.back();
         m_aUIntStack.pop_back();
-        insertNewValue( new PDFObjectRef(nObject,nGeneration), first );
+        insertNewValue( std::make_unique<PDFObjectRef>(nObject,nGeneration), first );
     }
 
     void beginDict( iteratorT first, SAL_UNUSED_PARAMETER iteratorT )
@@ -441,7 +450,7 @@ public:
         PDFDict* pDict = new PDFDict();
         pDict->m_nOffset = first - m_aGlobalBegin;
 
-        insertNewValue( pDict, first );
+        insertNewValue( std::unique_ptr<PDFEntry>(pDict), first );
         // will not come here if insertion fails (exception)
         m_aObjectStack.push_back( pDict );
     }
@@ -471,7 +480,7 @@ public:
         PDFArray* pArray = new PDFArray();
         pArray->m_nOffset = first - m_aGlobalBegin;
 
-        insertNewValue( pArray, first );
+        insertNewValue( std::unique_ptr<PDFEntry>(pArray), first );
         // will not come here if insertion fails (exception)
         m_aObjectStack.push_back( pArray );
     }
@@ -502,7 +511,7 @@ public:
                 PDFStream* pStream = new PDFStream( first - m_aGlobalBegin, last - m_aGlobalBegin, pDict );
 
                 pObj->m_pStream = pStream;
-                pObj->m_aSubElements.push_back( pStream );
+                pObj->m_aSubElements.emplace_back( pStream );
             }
         }
         else
@@ -522,7 +531,7 @@ public:
             ( dynamic_cast<PDFFile*>(pContainer) ||
               dynamic_cast<PDFPart*>(pContainer) ) )
         {
-            pContainer->m_aSubElements.push_back( pTrailer );
+            pContainer->m_aSubElements.emplace_back( pTrailer );
             m_aObjectStack.push_back( pTrailer );
         }
         else
@@ -555,7 +564,7 @@ PDFEntry* PDFReader::read( const char* pBuffer, unsigned int nLen )
                                   aGrammar,
                                   boost::spirit::space_p );
 #if OSL_DEBUG_LEVEL > 0
-        SAL_INFO("sdext.pdfimport.pdfparse", "parseinfo: stop = " << aInfo.stop << " (buff=" << pBuffer << ", offset = " << aInfo.stop - pBuffer << "), hit = " << (aInfo.hit ? OUString("true") : OUString("false")) << ", full = " << (aInfo.full ? OUString("true") : OUString("false")) << ", length = " << (int)aInfo.length );
+        SAL_INFO("sdext.pdfimport.pdfparse", "parseinfo: stop = " << aInfo.stop << " (buff=" << pBuffer << ", offset = " << aInfo.stop - pBuffer << "), hit = " << (aInfo.hit ? OUString("true") : OUString("false")) << ", full = " << (aInfo.full ? OUString("true") : OUString("false")) << ", length = " << static_cast<int>(aInfo.length) );
 #endif
     }
     catch( const parser_error<const char*, const char*>& rError )
@@ -567,10 +576,12 @@ PDFEntry* PDFReader::read( const char* pBuffer, unsigned int nLen )
             aTmp += "   " + OString(typeid( *(aGrammar.m_aObjectStack[i]) ).name());
 
         SAL_WARN("sdext.pdfimport.pdfparse", "parse error: " << rError.descriptor << " at buffer pos " << rError.where - pBuffer << ", object stack: " << aTmp);
+#else
+        (void)rError;
 #endif
     }
 
-    PDFEntry* pRet = NULL;
+    PDFEntry* pRet = nullptr;
     unsigned int nEntries = aGrammar.m_aObjectStack.size();
     if( nEntries == 1 )
     {
@@ -597,19 +608,19 @@ PDFEntry* PDFReader::read( const char* pFileName )
        So for the time being bite the bullet and read the whole file.
        FIXME: give Spirit 2.x another try when we upgrade boost again.
     */
-    PDFEntry* pRet = NULL;
+    PDFEntry* pRet = nullptr;
     FILE* fp = fopen( pFileName, "rb" );
     if( fp )
     {
         fseek( fp, 0, SEEK_END );
-        unsigned int nLen = (unsigned int)ftell( fp );
+        unsigned int nLen = static_cast<unsigned int>(ftell( fp ));
         fseek( fp, 0, SEEK_SET );
-        char* pBuf = (char*)rtl_allocateMemory( nLen );
+        char* pBuf = static_cast<char*>(std::malloc( nLen ));
         if( pBuf )
         {
             fread( pBuf, 1, nLen, fp );
             pRet = read( pBuf, nLen );
-            rtl_freeMemory( pBuf );
+            std::free( pBuf );
         }
         fclose( fp );
     }
@@ -638,16 +649,14 @@ PDFEntry* PDFReader::read( const char* pFileName )
     {
         SAL_WARN("sdext.pdfimport.pdfparse", "parse error: " << rError.descriptor << " at buffer pos " << rError.where - file_start);
 #if OSL_DEBUG_LEVEL > 0
-        OUString aTmp;
+        OUStringBuffer aTmp;
         unsigned int nElem = aGrammar.m_aObjectStack.size();
         for( unsigned int i = 0; i < nElem; i++ )
         {
-            aTmp += "   ";
-            aTmp += OUString(typeid( *(aGrammar.m_aObjectStack[i]) ).name(),
-                             strlen(typeid( *(aGrammar.m_aObjectStack[i]) ).name()),
-                             RTL_TEXTENCODING_ASCII_US);
+            aTmp.append("   ");
+            aTmp.appendAscii(typeid( *(aGrammar.m_aObjectStack[i]) ).name());
         }
-        SAL_WARN("sdext.pdfimport.pdfparse", "parse error object stack: " << aTmp);
+        SAL_WARN("sdext.pdfimport.pdfparse", "parse error object stack: " << aTmp.makeStringAndClear());
 #endif
     }
 
@@ -677,9 +686,8 @@ PDFEntry* PDFReader::read( const char* pFileName )
 #endif // WIN32
 }
 
-#if defined _MSC_VER
+#if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

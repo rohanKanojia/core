@@ -53,7 +53,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sc_copypaste, \
     vbahelper \
     vcl \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sc_copypaste,\
@@ -63,8 +62,9 @@ $(eval $(call gb_CppunitTest_set_include,sc_copypaste,\
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sc_copypaste,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sc_copypaste))
@@ -105,20 +105,15 @@ $(eval $(call gb_CppunitTest_use_components,sc_copypaste,\
     unotools/util/utl \
     unoxml/source/rdf/unordf \
     unoxml/source/service/unoxml \
+    uui/util/uui \
+    vcl/vcl.common \
     xmloff/util/xo \
     xmlsecurity/util/xmlsecurity \
-    xmlsecurity/util/xsec_fw \
 ))
 
-ifeq ($(OS),WNT)
-$(eval $(call gb_CppunitTest_use_components,sc_copypaste,\
-    xmlsecurity/util/xsec_xmlsec.windows \
-))
-else
 $(eval $(call gb_CppunitTest_use_components,sc_copypaste,\
     xmlsecurity/util/xsec_xmlsec \
 ))
-endif
 
 $(eval $(call gb_CppunitTest_use_configuration,sc_copypaste))
 

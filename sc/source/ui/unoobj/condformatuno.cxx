@@ -7,21 +7,23 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "condformatuno.hxx"
+#include <memory>
+#include <condformatuno.hxx>
 
-#include "document.hxx"
-#include "conditio.hxx"
-#include "colorscale.hxx"
-#include "docsh.hxx"
-#include "miscuno.hxx"
-#include "compiler.hxx"
-#include "tokenarray.hxx"
+#include <document.hxx>
+#include <conditio.hxx>
+#include <colorscale.hxx>
+#include <docsh.hxx>
+#include <miscuno.hxx>
+#include <compiler.hxx>
+#include <tokenarray.hxx>
 
-#include "cellsuno.hxx"
-#include "convuno.hxx"
+#include <cellsuno.hxx>
+#include <convuno.hxx>
 
 #include <vcl/svapp.hxx>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 
 #include <com/sun/star/sheet/DataBarAxis.hpp>
 #include <com/sun/star/sheet/IconSetType.hpp>
@@ -74,38 +76,38 @@ const SfxItemPropertyMapEntry* getConditionEntryrPropSet()
 
 struct ConditionEntryApiMap
 {
-    ScConditionMode eMode;
-    sal_Int32 nApiMode;
+    ScConditionMode const eMode;
+    sal_Int32 const nApiMode;
 };
 
-ConditionEntryApiMap aConditionEntryMap[] =
+static ConditionEntryApiMap const aConditionEntryMap[] =
 {
-    {SC_COND_EQUAL, sheet::ConditionFormatOperator::EQUAL},
-    {SC_COND_LESS, sheet::ConditionFormatOperator::LESS},
-    {SC_COND_GREATER, sheet::ConditionFormatOperator::GREATER},
-    {SC_COND_EQLESS, sheet::ConditionFormatOperator::LESS_EQUAL},
-    {SC_COND_EQGREATER, sheet::ConditionFormatOperator::GREATER_EQUAL},
-    {SC_COND_NOTEQUAL, sheet::ConditionFormatOperator::NOT_EQUAL},
-    {SC_COND_BETWEEN, sheet::ConditionFormatOperator::BETWEEN},
-    {SC_COND_NOTBETWEEN, sheet::ConditionFormatOperator::NOT_BETWEEN},
-    {SC_COND_DUPLICATE, sheet::ConditionFormatOperator::DUPLICATE},
-    {SC_COND_NOTDUPLICATE, sheet::ConditionFormatOperator::UNIQUE},
-    {SC_COND_DIRECT, sheet::ConditionFormatOperator::EXPRESSION},
-    {SC_COND_TOP10, sheet::ConditionFormatOperator::TOP_N_ELEMENTS},
-    {SC_COND_BOTTOM10, sheet::ConditionFormatOperator::BOTTOM_N_ELEMENTS},
-    {SC_COND_TOP_PERCENT, sheet::ConditionFormatOperator::TOP_N_PERCENT},
-    {SC_COND_BOTTOM_PERCENT, sheet::ConditionFormatOperator::BOTTOM_N_PERCENT},
-    {SC_COND_ABOVE_AVERAGE, sheet::ConditionFormatOperator::ABOVE_AVERAGE},
-    {SC_COND_BELOW_AVERAGE, sheet::ConditionFormatOperator::BELOW_AVERAGE},
-    {SC_COND_ABOVE_EQUAL_AVERAGE, sheet::ConditionFormatOperator::ABOVE_EQUAL_AVERAGE},
-    {SC_COND_BELOW_EQUAL_AVERAGE, sheet::ConditionFormatOperator::BELOW_EQUAL_AVERAGE},
-    {SC_COND_ERROR, sheet::ConditionFormatOperator::ERROR},
-    {SC_COND_NOERROR, sheet::ConditionFormatOperator::NO_ERROR},
-    {SC_COND_BEGINS_WITH, sheet::ConditionFormatOperator::BEGINS_WITH},
-    {SC_COND_ENDS_WITH, sheet::ConditionFormatOperator::ENDS_WITH},
-    {SC_COND_CONTAINS_TEXT, sheet::ConditionFormatOperator::CONTAINS},
-    {SC_COND_NOT_CONTAINS_TEXT, sheet::ConditionFormatOperator::NOT_CONTAINS},
-    {SC_COND_NONE, sheet::ConditionFormatOperator::EQUAL},
+    {ScConditionMode::Equal, sheet::ConditionFormatOperator::EQUAL},
+    {ScConditionMode::Less, sheet::ConditionFormatOperator::LESS},
+    {ScConditionMode::Greater, sheet::ConditionFormatOperator::GREATER},
+    {ScConditionMode::EqLess, sheet::ConditionFormatOperator::LESS_EQUAL},
+    {ScConditionMode::EqGreater, sheet::ConditionFormatOperator::GREATER_EQUAL},
+    {ScConditionMode::NotEqual, sheet::ConditionFormatOperator::NOT_EQUAL},
+    {ScConditionMode::Between, sheet::ConditionFormatOperator::BETWEEN},
+    {ScConditionMode::NotBetween, sheet::ConditionFormatOperator::NOT_BETWEEN},
+    {ScConditionMode::Duplicate, sheet::ConditionFormatOperator::DUPLICATE},
+    {ScConditionMode::NotDuplicate, sheet::ConditionFormatOperator::UNIQUE},
+    {ScConditionMode::Direct, sheet::ConditionFormatOperator::EXPRESSION},
+    {ScConditionMode::Top10, sheet::ConditionFormatOperator::TOP_N_ELEMENTS},
+    {ScConditionMode::Bottom10, sheet::ConditionFormatOperator::BOTTOM_N_ELEMENTS},
+    {ScConditionMode::TopPercent, sheet::ConditionFormatOperator::TOP_N_PERCENT},
+    {ScConditionMode::BottomPercent, sheet::ConditionFormatOperator::BOTTOM_N_PERCENT},
+    {ScConditionMode::AboveAverage, sheet::ConditionFormatOperator::ABOVE_AVERAGE},
+    {ScConditionMode::BelowAverage, sheet::ConditionFormatOperator::BELOW_AVERAGE},
+    {ScConditionMode::AboveEqualAverage, sheet::ConditionFormatOperator::ABOVE_EQUAL_AVERAGE},
+    {ScConditionMode::BelowEqualAverage, sheet::ConditionFormatOperator::BELOW_EQUAL_AVERAGE},
+    {ScConditionMode::Error, sheet::ConditionFormatOperator::ERROR},
+    {ScConditionMode::NoError, sheet::ConditionFormatOperator::NO_ERROR},
+    {ScConditionMode::BeginsWith, sheet::ConditionFormatOperator::BEGINS_WITH},
+    {ScConditionMode::EndsWith, sheet::ConditionFormatOperator::ENDS_WITH},
+    {ScConditionMode::ContainsText, sheet::ConditionFormatOperator::CONTAINS},
+    {ScConditionMode::NotContainsText, sheet::ConditionFormatOperator::NOT_CONTAINS},
+    {ScConditionMode::NONE, sheet::ConditionFormatOperator::EQUAL},
 };
 
 enum ColorScaleProperties
@@ -125,11 +127,11 @@ const SfxItemPropertyMapEntry* getColorScalePropSet()
 
 struct ColorScaleEntryTypeApiMap
 {
-    ScColorScaleEntryType eType;
-    sal_Int32 nApiType;
+    ScColorScaleEntryType const eType;
+    sal_Int32 const nApiType;
 };
 
-ColorScaleEntryTypeApiMap aColorScaleEntryTypeMap[] =
+static ColorScaleEntryTypeApiMap const aColorScaleEntryTypeMap[] =
 {
     { COLORSCALE_MIN, sheet::ColorScaleEntryType::COLORSCALE_MIN },
     { COLORSCALE_MAX, sheet::ColorScaleEntryType::COLORSCALE_MAX },
@@ -174,11 +176,11 @@ const SfxItemPropertyMapEntry* getDataBarPropSet()
 
 struct DataBarAxisApiMap
 {
-    databar::ScAxisPosition ePos;
-    sal_Int32 nApiPos;
+    databar::ScAxisPosition const ePos;
+    sal_Int32 const nApiPos;
 };
 
-DataBarAxisApiMap aDataBarAxisMap[] =
+static DataBarAxisApiMap const aDataBarAxisMap[] =
 {
     { databar::NONE, sheet::DataBarAxis::AXIS_NONE },
     { databar::AUTOMATIC, sheet::DataBarAxis::AXIS_AUTOMATIC },
@@ -187,11 +189,11 @@ DataBarAxisApiMap aDataBarAxisMap[] =
 
 struct DataBarEntryTypeApiMap
 {
-    ScColorScaleEntryType eType;
-    sal_Int32 nApiType;
+    ScColorScaleEntryType const eType;
+    sal_Int32 const nApiType;
 };
 
-DataBarEntryTypeApiMap aDataBarEntryTypeMap[] =
+static DataBarEntryTypeApiMap const aDataBarEntryTypeMap[] =
 {
     { COLORSCALE_AUTO, sheet::DataBarEntryType::DATABAR_AUTO },
     { COLORSCALE_MIN, sheet::DataBarEntryType::DATABAR_MIN },
@@ -225,8 +227,8 @@ const SfxItemPropertyMapEntry* getIconSetPropSet()
 
 struct IconSetTypeApiMap
 {
-    ScIconSetType eType;
-    sal_Int32 nApiType;
+    ScIconSetType const eType;
+    sal_Int32 const nApiType;
 };
 
 const IconSetTypeApiMap aIconSetApiMap[] =
@@ -254,11 +256,11 @@ const IconSetTypeApiMap aIconSetApiMap[] =
 
 struct IconSetEntryTypeApiMap
 {
-    ScColorScaleEntryType eType;
-    sal_Int32 nApiType;
+    ScColorScaleEntryType const eType;
+    sal_Int32 const nApiType;
 };
 
-IconSetEntryTypeApiMap aIconSetEntryTypeMap[] =
+static IconSetEntryTypeApiMap const aIconSetEntryTypeMap[] =
 {
     { COLORSCALE_MIN, sheet::IconSetFormatEntry::ICONSET_MIN },
     { COLORSCALE_VALUE, sheet::IconSetFormatEntry::ICONSET_VALUE },
@@ -286,11 +288,11 @@ const SfxItemPropertyMapEntry* getCondDatePropSet()
 
 struct DateTypeApiMap
 {
-    condformat::ScCondFormatDateType eType;
-    sal_Int32 nApiType;
+    condformat::ScCondFormatDateType const eType;
+    sal_Int32 const nApiType;
 };
 
-DateTypeApiMap aDateTypeApiMap[] =
+static DateTypeApiMap const aDateTypeApiMap[] =
 {
     { condformat::TODAY, sheet::DateType::TODAY },
     { condformat::YESTERDAY, sheet::DateType::YESTERDAY },
@@ -324,15 +326,13 @@ ScCondFormatsObj::~ScCondFormatsObj()
 
 void ScCondFormatsObj::Notify(SfxBroadcaster& /*rBC*/, const SfxHint& rHint)
 {
-    if ( dynamic_cast<const SfxSimpleHint*>(&rHint) &&
-            static_cast<const SfxSimpleHint&>(rHint).GetId() == SFX_HINT_DYING )
+    if ( rHint.GetId() == SfxHintId::Dying )
     {
-        mpDocShell = nullptr;       // ungueltig geworden
+        mpDocShell = nullptr;
     }
 }
 
 sal_Int32 ScCondFormatsObj::createByRange(const uno::Reference< sheet::XSheetCellRanges >& xRanges)
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if (!mpDocShell)
@@ -355,15 +355,14 @@ sal_Int32 ScCondFormatsObj::createByRange(const uno::Reference< sheet::XSheetCel
     if (aCoreRange.empty())
         throw lang::IllegalArgumentException();
 
-    SCTAB nTab = aCoreRange[0]->aStart.Tab();
+    SCTAB nTab = aCoreRange[0].aStart.Tab();
 
-    ScConditionalFormat* pNewFormat = new ScConditionalFormat(0, &mpDocShell->GetDocument());
+    auto pNewFormat = std::make_unique<ScConditionalFormat>(0, &mpDocShell->GetDocument());
     pNewFormat->SetRange(aCoreRange);
-    return mpDocShell->GetDocument().AddCondFormat(pNewFormat, nTab);
+    return mpDocShell->GetDocument().AddCondFormat(std::move(pNewFormat), nTab);
 }
 
 void ScCondFormatsObj::removeByID(const sal_Int32 nID)
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     ScConditionalFormatList* pFormatList = getCoreObject();
@@ -371,23 +370,23 @@ void ScCondFormatsObj::removeByID(const sal_Int32 nID)
 }
 
 uno::Sequence<uno::Reference<sheet::XConditionalFormat> > ScCondFormatsObj::getConditionalFormats()
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     ScConditionalFormatList* pFormatList = getCoreObject();
     size_t n = pFormatList->size();
     uno::Sequence<uno::Reference<sheet::XConditionalFormat> > aCondFormats(n);
     sal_Int32 i = 0;
-    for (ScConditionalFormatList::const_iterator itr = pFormatList->begin(); itr != pFormatList->end(); ++itr, ++i) {
-        uno::Reference<sheet::XConditionalFormat> xCondFormat(new ScCondFormatObj(mpDocShell, this, (*itr)->GetKey()));
+    for (const auto& rFormat : *pFormatList)
+    {
+        uno::Reference<sheet::XConditionalFormat> xCondFormat(new ScCondFormatObj(mpDocShell, this, rFormat->GetKey()));
         aCondFormats[i] = xCondFormat;
+        ++i;
     }
 
     return aCondFormats;
 }
 
 sal_Int32 ScCondFormatsObj::getLength()
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     ScConditionalFormatList* pFormatList = getCoreObject();
@@ -409,27 +408,27 @@ ScConditionalFormatList* ScCondFormatsObj::getCoreObject()
 namespace {
 
 uno::Reference<beans::XPropertySet> createConditionEntry(const ScFormatEntry* pEntry,
-        rtl::Reference<ScCondFormatObj> xParent)
+        rtl::Reference<ScCondFormatObj> const & xParent)
 {
     switch (pEntry->GetType())
     {
-        case condformat::CONDITION:
+        case ScFormatEntry::Type::Condition:
             return new ScConditionEntryObj(xParent,
                     static_cast<const ScCondFormatEntry*>(pEntry));
         break;
-        case condformat::COLORSCALE:
+        case ScFormatEntry::Type::Colorscale:
             return new ScColorScaleFormatObj(xParent,
                     static_cast<const ScColorScaleFormat*>(pEntry));
         break;
-        case condformat::DATABAR:
+        case ScFormatEntry::Type::Databar:
             return new ScDataBarFormatObj(xParent,
                     static_cast<const ScDataBarFormat*>(pEntry));
         break;
-        case condformat::ICONSET:
+        case ScFormatEntry::Type::Iconset:
             return new ScIconSetFormatObj(xParent,
                     static_cast<const ScIconSetFormat*>(pEntry));
         break;
-        case condformat::DATE:
+        case ScFormatEntry::Type::Date:
             return new ScCondDateFormatObj(xParent,
                     static_cast<const ScCondDateFormatEntry*>(pEntry));
         break;
@@ -441,7 +440,7 @@ uno::Reference<beans::XPropertySet> createConditionEntry(const ScFormatEntry* pE
 
 }
 
-ScCondFormatObj::ScCondFormatObj(ScDocShell* pDocShell, rtl::Reference<ScCondFormatsObj> xCondFormats,
+ScCondFormatObj::ScCondFormatObj(ScDocShell* pDocShell, rtl::Reference<ScCondFormatsObj> const & xCondFormats,
         sal_Int32 nKey):
     mxCondFormatList(xCondFormats),
     mpDocShell(pDocShell),
@@ -470,7 +469,6 @@ ScDocShell* ScCondFormatObj::getDocShell()
 }
 
 void ScCondFormatObj::createEntry(const sal_Int32 nType, const sal_Int32 nPos)
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     ScConditionalFormat* pFormat = getCoreObject();
@@ -482,7 +480,7 @@ void ScCondFormatObj::createEntry(const sal_Int32 nType, const sal_Int32 nPos)
     switch (nType)
     {
         case sheet::ConditionEntryType::CONDITION:
-            pNewEntry = new ScCondFormatEntry(SC_COND_EQUAL, "", "",
+            pNewEntry = new ScCondFormatEntry(ScConditionMode::Equal, "", "",
                     pDoc, pFormat->GetRange().GetTopLeftCorner(), "");
         break;
         case sheet::ConditionEntryType::COLORSCALE:
@@ -509,7 +507,6 @@ void ScCondFormatObj::createEntry(const sal_Int32 nType, const sal_Int32 nPos)
 }
 
 void ScCondFormatObj::removeByIndex(const sal_Int32 nIndex)
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if (getCoreObject()->size() >= size_t(nIndex))
@@ -519,13 +516,11 @@ void ScCondFormatObj::removeByIndex(const sal_Int32 nIndex)
 }
 
 uno::Type ScCondFormatObj::getElementType()
-    throw(uno::RuntimeException, std::exception)
 {
     return cppu::UnoType<beans::XPropertySet>::get();
 }
 
 sal_Bool ScCondFormatObj::hasElements()
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     ScConditionalFormat* pFormat = getCoreObject();
@@ -533,7 +528,6 @@ sal_Bool ScCondFormatObj::hasElements()
 }
 
 sal_Int32 ScCondFormatObj::getCount()
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     ScConditionalFormat* pFormat = getCoreObject();
@@ -542,7 +536,6 @@ sal_Int32 ScCondFormatObj::getCount()
 }
 
 uno::Any ScCondFormatObj::getByIndex(sal_Int32 nIndex)
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if (getCoreObject()->size() <= size_t(nIndex))
@@ -551,13 +544,10 @@ uno::Any ScCondFormatObj::getByIndex(sal_Int32 nIndex)
     const ScFormatEntry* pEntry = getCoreObject()->GetEntry(nIndex);
     uno::Reference<beans::XPropertySet> xCondEntry =
         createConditionEntry(pEntry, this);
-    uno::Any aAny;
-    aAny <<= xCondEntry;
-    return aAny;
+    return uno::Any(xCondEntry);
 }
 
 uno::Reference<beans::XPropertySetInfo> SAL_CALL ScCondFormatObj::getPropertySetInfo()
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     static uno::Reference<beans::XPropertySetInfo> aRef(
@@ -567,9 +557,6 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScCondFormatObj::getPropertySet
 
 void SAL_CALL ScCondFormatObj::setPropertyValue(
                         const OUString& aPropertyName, const uno::Any& aValue )
-                throw(beans::UnknownPropertyException, beans::PropertyVetoException,
-                        lang::IllegalArgumentException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -608,8 +595,6 @@ void SAL_CALL ScCondFormatObj::setPropertyValue(
 }
 
 uno::Any SAL_CALL ScCondFormatObj::getPropertyValue( const OUString& aPropertyName )
-                throw(beans::UnknownPropertyException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -640,39 +625,31 @@ uno::Any SAL_CALL ScCondFormatObj::getPropertyValue( const OUString& aPropertyNa
 
 void SAL_CALL ScCondFormatObj::addPropertyChangeListener( const OUString& /* aPropertyName */,
                             const uno::Reference<beans::XPropertyChangeListener>& /* aListener */)
-                            throw(beans::UnknownPropertyException,
-                                    lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScCondFormatObj::removePropertyChangeListener( const OUString& /* aPropertyName */,
                             const uno::Reference<beans::XPropertyChangeListener>& /* aListener */)
-                            throw(beans::UnknownPropertyException,
-                                    lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScCondFormatObj::addVetoableChangeListener( const OUString&,
                             const uno::Reference<beans::XVetoableChangeListener>&)
-                            throw(beans::UnknownPropertyException,
-                                lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScCondFormatObj::removeVetoableChangeListener( const OUString&,
                             const uno::Reference<beans::XVetoableChangeListener>&)
-                            throw(beans::UnknownPropertyException,
-                                lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 namespace {
 
-bool isObjectStillAlive(ScConditionalFormat* pFormat, const ScFormatEntry* pEntry)
+bool isObjectStillAlive(const ScConditionalFormat* pFormat, const ScFormatEntry* pEntry)
 {
     for(size_t i = 0, n= pFormat->size(); i < n; ++i)
     {
@@ -684,7 +661,7 @@ bool isObjectStillAlive(ScConditionalFormat* pFormat, const ScFormatEntry* pEntr
 
 }
 
-ScConditionEntryObj::ScConditionEntryObj(rtl::Reference<ScCondFormatObj> xParent,
+ScConditionEntryObj::ScConditionEntryObj(rtl::Reference<ScCondFormatObj> const & xParent,
         const ScCondFormatEntry* pFormat):
     mpDocShell(xParent->getDocShell()),
     mxParent(xParent),
@@ -707,13 +684,11 @@ ScCondFormatEntry* ScConditionEntryObj::getCoreObject()
 }
 
 sal_Int32 ScConditionEntryObj::getType()
-    throw(uno::RuntimeException, std::exception)
 {
     return sheet::ConditionEntryType::CONDITION;
 }
 
 uno::Reference<beans::XPropertySetInfo> SAL_CALL ScConditionEntryObj::getPropertySetInfo()
-    throw(uno::RuntimeException, std::exception)
 {
     static uno::Reference<beans::XPropertySetInfo> aRef(
         new SfxItemPropertySetInfo( maPropSet.getPropertyMap() ));
@@ -722,9 +697,6 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScConditionEntryObj::getPropert
 
 void SAL_CALL ScConditionEntryObj::setPropertyValue(
                         const OUString& aPropertyName, const uno::Any& aValue )
-                throw(beans::UnknownPropertyException, beans::PropertyVetoException,
-                        lang::IllegalArgumentException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -748,6 +720,7 @@ void SAL_CALL ScConditionEntryObj::setPropertyValue(
             if ((aValue >>= aFormula) && !aFormula.isEmpty())
             {
                 ScCompiler aComp(&mpDocShell->GetDocument(), getCoreObject()->GetSrcPos());
+                aComp.SetGrammar(mpDocShell->GetDocument().GetGrammar());
                 std::unique_ptr<ScTokenArray> pArr(aComp.CompileString(aFormula));
                 getCoreObject()->SetFormula1(*pArr);
             }
@@ -759,6 +732,7 @@ void SAL_CALL ScConditionEntryObj::setPropertyValue(
             if ((aValue >>= aFormula) && !aFormula.isEmpty())
             {
                 ScCompiler aComp(&mpDocShell->GetDocument(), getCoreObject()->GetSrcPos());
+                aComp.SetGrammar(mpDocShell->GetDocument().GetGrammar());
                 std::unique_ptr<ScTokenArray> pArr(aComp.CompileString(aFormula));
                 getCoreObject()->SetFormula2(*pArr);
             }
@@ -769,11 +743,11 @@ void SAL_CALL ScConditionEntryObj::setPropertyValue(
             sal_Int32 nVal;
             if (aValue >>= nVal)
             {
-                for (size_t i = 0; i < SAL_N_ELEMENTS(aConditionEntryMap); ++i)
+                for (ConditionEntryApiMap const & rEntry : aConditionEntryMap)
                 {
-                    if (aConditionEntryMap[i].nApiMode == nVal)
+                    if (rEntry.nApiMode == nVal)
                     {
-                        getCoreObject()->SetOperation(aConditionEntryMap[i].eMode);
+                        getCoreObject()->SetOperation(rEntry.eMode);
                         break;
                     }
                 }
@@ -786,8 +760,6 @@ void SAL_CALL ScConditionEntryObj::setPropertyValue(
 }
 
 uno::Any SAL_CALL ScConditionEntryObj::getPropertyValue( const OUString& aPropertyName )
-                throw(beans::UnknownPropertyException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -819,11 +791,11 @@ uno::Any SAL_CALL ScConditionEntryObj::getPropertyValue( const OUString& aProper
         case Operator:
         {
             ScConditionMode eMode = getCoreObject()->GetOperation();
-            for (size_t i = 0; i < SAL_N_ELEMENTS(aConditionEntryMap); ++i)
+            for (ConditionEntryApiMap const & rEntry : aConditionEntryMap)
             {
-                if (aConditionEntryMap[i].eMode == eMode)
+                if (rEntry.eMode == eMode)
                 {
-                    aAny <<= aConditionEntryMap[i].nApiMode;
+                    aAny <<= rEntry.nApiMode;
                     break;
                 }
             }
@@ -837,37 +809,29 @@ uno::Any SAL_CALL ScConditionEntryObj::getPropertyValue( const OUString& aProper
 
 void SAL_CALL ScConditionEntryObj::addPropertyChangeListener( const OUString& /* aPropertyName */,
                             const uno::Reference<beans::XPropertyChangeListener>& /* aListener */)
-                            throw(beans::UnknownPropertyException,
-                                    lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScConditionEntryObj::removePropertyChangeListener( const OUString& /* aPropertyName */,
                             const uno::Reference<beans::XPropertyChangeListener>& /* aListener */)
-                            throw(beans::UnknownPropertyException,
-                                    lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScConditionEntryObj::addVetoableChangeListener( const OUString&,
                             const uno::Reference<beans::XVetoableChangeListener>&)
-                            throw(beans::UnknownPropertyException,
-                                lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScConditionEntryObj::removeVetoableChangeListener( const OUString&,
                             const uno::Reference<beans::XVetoableChangeListener>&)
-                            throw(beans::UnknownPropertyException,
-                                lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
-ScColorScaleFormatObj::ScColorScaleFormatObj(rtl::Reference<ScCondFormatObj> xParent,
+ScColorScaleFormatObj::ScColorScaleFormatObj(rtl::Reference<ScCondFormatObj> const & xParent,
         const ScColorScaleFormat* pFormat):
     mxParent(xParent),
     maPropSet(getColorScalePropSet()),
@@ -889,13 +853,11 @@ ScColorScaleFormat* ScColorScaleFormatObj::getCoreObject()
 }
 
 sal_Int32 ScColorScaleFormatObj::getType()
-    throw(uno::RuntimeException, std::exception)
 {
     return sheet::ConditionEntryType::COLORSCALE;
 }
 
 uno::Reference<beans::XPropertySetInfo> SAL_CALL ScColorScaleFormatObj::getPropertySetInfo()
-    throw(uno::RuntimeException, std::exception)
 {
     static uno::Reference<beans::XPropertySetInfo> aRef(
         new SfxItemPropertySetInfo( maPropSet.getPropertyMap() ));
@@ -904,16 +866,16 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScColorScaleFormatObj::getPrope
 
 namespace {
 
-void setColorScaleEntry(ScColorScaleEntry* pEntry, uno::Reference<sheet::XColorScaleEntry> xEntry)
+void setColorScaleEntry(ScColorScaleEntry* pEntry, uno::Reference<sheet::XColorScaleEntry> const & xEntry)
 {
     ScColorScaleEntryType eType = ScColorScaleEntryType();
     sal_Int32 nApiType = xEntry->getType();
     bool bFound = false;
-    for (size_t i = 0; i < SAL_N_ELEMENTS(aColorScaleEntryTypeMap); ++i)
+    for (ColorScaleEntryTypeApiMap const & rEntry : aColorScaleEntryTypeMap)
     {
-        if (aColorScaleEntryTypeMap[i].nApiType == nApiType)
+        if (rEntry.nApiType == nApiType)
         {
-            eType = aColorScaleEntryTypeMap[i].eType;
+            eType = rEntry.eType;
             bFound = true;
             break;
         }
@@ -923,7 +885,7 @@ void setColorScaleEntry(ScColorScaleEntry* pEntry, uno::Reference<sheet::XColorS
         throw lang::IllegalArgumentException();
 
     pEntry->SetType(eType);
-    pEntry->SetColor(xEntry->getColor());
+    pEntry->SetColor(Color(xEntry->getColor()));
     switch (eType)
     {
         case COLORSCALE_FORMULA:
@@ -942,9 +904,6 @@ void setColorScaleEntry(ScColorScaleEntry* pEntry, uno::Reference<sheet::XColorS
 
 void SAL_CALL ScColorScaleFormatObj::setPropertyValue(
                         const OUString& aPropertyName, const uno::Any& aValue )
-                throw(beans::UnknownPropertyException, beans::PropertyVetoException,
-                        lang::IllegalArgumentException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -958,20 +917,19 @@ void SAL_CALL ScColorScaleFormatObj::setPropertyValue(
         case ColorScaleEntries:
         {
             uno::Sequence<uno::Reference<sheet::XColorScaleEntry> > aEntries;
-            if (aValue >>= aEntries)
-            {
-                if (aEntries.getLength() < 2)
-                    throw lang::IllegalArgumentException();
-
-                // TODO: we need to make sure that there are enough entries
-                size_t n = size_t(aEntries.getLength());
-                for (size_t i = 0; i < n; ++i)
-                {
-                    setColorScaleEntry(getCoreObject()->GetEntry(i), aEntries[i]);
-                }
-            }
-            else
+            if (!(aValue >>= aEntries))
                 throw lang::IllegalArgumentException();
+
+            if (aEntries.getLength() < 2)
+                throw lang::IllegalArgumentException();
+
+            // TODO: we need to make sure that there are enough entries
+            size_t n = size_t(aEntries.getLength());
+            for (size_t i = 0; i < n; ++i)
+            {
+                setColorScaleEntry(getCoreObject()->GetEntry(i), aEntries[i]);
+            }
+
         }
         break;
         default:
@@ -980,8 +938,6 @@ void SAL_CALL ScColorScaleFormatObj::setPropertyValue(
 }
 
 uno::Any SAL_CALL ScColorScaleFormatObj::getPropertyValue( const OUString& aPropertyName )
-                throw(beans::UnknownPropertyException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -1013,37 +969,29 @@ uno::Any SAL_CALL ScColorScaleFormatObj::getPropertyValue( const OUString& aProp
 
 void SAL_CALL ScColorScaleFormatObj::addPropertyChangeListener( const OUString& /* aPropertyName */,
                             const uno::Reference<beans::XPropertyChangeListener>& /* aListener */)
-                            throw(beans::UnknownPropertyException,
-                                    lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScColorScaleFormatObj::removePropertyChangeListener( const OUString& /* aPropertyName */,
                             const uno::Reference<beans::XPropertyChangeListener>& /* aListener */)
-                            throw(beans::UnknownPropertyException,
-                                    lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScColorScaleFormatObj::addVetoableChangeListener( const OUString&,
                             const uno::Reference<beans::XVetoableChangeListener>&)
-                            throw(beans::UnknownPropertyException,
-                                lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScColorScaleFormatObj::removeVetoableChangeListener( const OUString&,
                             const uno::Reference<beans::XVetoableChangeListener>&)
-                            throw(beans::UnknownPropertyException,
-                                lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
-ScColorScaleEntryObj::ScColorScaleEntryObj(rtl::Reference<ScColorScaleFormatObj> xParent,
+ScColorScaleEntryObj::ScColorScaleEntryObj(rtl::Reference<ScColorScaleFormatObj> const & xParent,
         size_t nPos):
     mxParent(xParent),
     mnPos(nPos)
@@ -1064,27 +1012,24 @@ ScColorScaleEntry* ScColorScaleEntryObj::getCoreObject()
 }
 
 util::Color ScColorScaleEntryObj::getColor()
-    throw(uno::RuntimeException, std::exception)
 {
     Color aColor = getCoreObject()->GetColor();
-    return aColor.GetColor();
+    return sal_Int32(aColor);
 }
 
 void ScColorScaleEntryObj::setColor(util::Color aColor)
-    throw(uno::RuntimeException, std::exception)
 {
     getCoreObject()->SetColor(Color(aColor));
 }
 
 sal_Int32 ScColorScaleEntryObj::getType()
-    throw(uno::RuntimeException, std::exception)
 {
     ScColorScaleEntry* pEntry = getCoreObject();
-    for (size_t i = 0; i < SAL_N_ELEMENTS(aColorScaleEntryTypeMap); ++i)
+    for (ColorScaleEntryTypeApiMap const & rEntry : aColorScaleEntryTypeMap)
     {
-        if (aColorScaleEntryTypeMap[i].eType == pEntry->GetType())
+        if (rEntry.eType == pEntry->GetType())
         {
-            return aColorScaleEntryTypeMap[i].nApiType;
+            return rEntry.nApiType;
         }
     }
 
@@ -1092,14 +1037,13 @@ sal_Int32 ScColorScaleEntryObj::getType()
 }
 
 void ScColorScaleEntryObj::setType(sal_Int32 nType)
-    throw(uno::RuntimeException, std::exception)
 {
     ScColorScaleEntry* pEntry = getCoreObject();
-    for (size_t i = 0; i < SAL_N_ELEMENTS(aColorScaleEntryTypeMap); ++i)
+    for (ColorScaleEntryTypeApiMap const & rEntry : aColorScaleEntryTypeMap)
     {
-        if (aColorScaleEntryTypeMap[i].nApiType == nType)
+        if (rEntry.nApiType == nType)
         {
-            pEntry->SetType(aColorScaleEntryTypeMap[i].eType);
+            pEntry->SetType(rEntry.eType);
             return;
         }
     }
@@ -1107,7 +1051,6 @@ void ScColorScaleEntryObj::setType(sal_Int32 nType)
 }
 
 OUString ScColorScaleEntryObj::getFormula()
-    throw(uno::RuntimeException, std::exception)
 {
     ScColorScaleEntry* pEntry = getCoreObject();
     switch (pEntry->GetType())
@@ -1123,7 +1066,6 @@ OUString ScColorScaleEntryObj::getFormula()
 }
 
 void ScColorScaleEntryObj::setFormula(const OUString& rFormula)
-    throw(uno::RuntimeException, std::exception)
 {
     ScColorScaleEntry* pEntry = getCoreObject();
     switch (pEntry->GetType())
@@ -1139,7 +1081,7 @@ void ScColorScaleEntryObj::setFormula(const OUString& rFormula)
 }
 
 
-ScDataBarFormatObj::ScDataBarFormatObj(rtl::Reference<ScCondFormatObj> xParent,
+ScDataBarFormatObj::ScDataBarFormatObj(rtl::Reference<ScCondFormatObj> const & xParent,
         const ScDataBarFormat* pFormat):
     mxParent(xParent),
     maPropSet(getDataBarPropSet()),
@@ -1161,13 +1103,11 @@ ScDataBarFormat* ScDataBarFormatObj::getCoreObject()
 }
 
 sal_Int32 ScDataBarFormatObj::getType()
-    throw(uno::RuntimeException, std::exception)
 {
     return sheet::ConditionEntryType::DATABAR;
 }
 
 uno::Reference<beans::XPropertySetInfo> SAL_CALL ScDataBarFormatObj::getPropertySetInfo()
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     static uno::Reference<beans::XPropertySetInfo> aRef(
@@ -1177,16 +1117,16 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScDataBarFormatObj::getProperty
 
 namespace {
 
-void setDataBarEntry(ScColorScaleEntry* pEntry, uno::Reference<sheet::XDataBarEntry> xEntry)
+void setDataBarEntry(ScColorScaleEntry* pEntry, uno::Reference<sheet::XDataBarEntry> const & xEntry)
 {
     ScColorScaleEntryType eType = ScColorScaleEntryType();
     sal_Int32 nApiType = xEntry->getType();
     bool bFound = false;
-    for (size_t i = 0; i < SAL_N_ELEMENTS(aDataBarEntryTypeMap); ++i)
+    for (DataBarEntryTypeApiMap const & rEntry : aDataBarEntryTypeMap)
     {
-        if (aDataBarEntryTypeMap[i].nApiType == nApiType)
+        if (rEntry.nApiType == nApiType)
         {
-            eType = aDataBarEntryTypeMap[i].eType;
+            eType = rEntry.eType;
             bFound = true;
             break;
         }
@@ -1214,9 +1154,6 @@ void setDataBarEntry(ScColorScaleEntry* pEntry, uno::Reference<sheet::XDataBarEn
 
 void SAL_CALL ScDataBarFormatObj::setPropertyValue(
                         const OUString& aPropertyName, const uno::Any& aValue )
-                throw(beans::UnknownPropertyException, beans::PropertyVetoException,
-                        lang::IllegalArgumentException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -1232,12 +1169,12 @@ void SAL_CALL ScDataBarFormatObj::setPropertyValue(
             sal_Int32 nVal;
             if (aValue >>= nVal)
             {
-                for (size_t i = 0; i < SAL_N_ELEMENTS(aDataBarAxisMap); ++i)
+                for (DataBarAxisApiMap const & rEntry : aDataBarAxisMap)
                 {
-                    if (aDataBarAxisMap[i].nApiPos == nVal)
+                    if (rEntry.nApiPos == nVal)
                     {
                         getCoreObject()->GetDataBarData()->meAxisPosition =
-                            aDataBarAxisMap[i].ePos;
+                            rEntry.ePos;
                         break;
                     }
                 }
@@ -1277,76 +1214,70 @@ void SAL_CALL ScDataBarFormatObj::setPropertyValue(
         break;
         case DataBar_Color:
         {
-            sal_Int32 nColor = COL_AUTO;
+            Color nColor = COL_AUTO;
             if (aValue >>= nColor)
             {
-                getCoreObject()->GetDataBarData()->maPositiveColor.SetColor(nColor);
+                getCoreObject()->GetDataBarData()->maPositiveColor = nColor;
             }
         }
         break;
         case AxisColor:
         {
-            sal_Int32 nAxisColor = COL_AUTO;
+            Color nAxisColor = COL_AUTO;
             if (aValue >>= nAxisColor)
             {
-                getCoreObject()->GetDataBarData()->maAxisColor.SetColor(nAxisColor);
+                getCoreObject()->GetDataBarData()->maAxisColor = nAxisColor;
             }
         }
         break;
         case NegativeColor:
         {
-            sal_Int32 nNegativeColor = COL_AUTO;
-            if ((aValue >>= nNegativeColor) && getCoreObject()->GetDataBarData()->mbNeg)
-            {
-                getCoreObject()->GetDataBarData()->mpNegativeColor->SetColor(nNegativeColor);
-            }
-            else
+            Color nNegativeColor = COL_AUTO;
+            if (!(aValue >>= nNegativeColor) || !getCoreObject()->GetDataBarData()->mbNeg)
                 throw lang::IllegalArgumentException();
+
+            (*getCoreObject()->GetDataBarData()->mpNegativeColor) = nNegativeColor;
+
         }
         break;
         case DataBarEntries:
         {
             uno::Sequence<uno::Reference<sheet::XDataBarEntry> > aEntries;
-            if (aValue >>= aEntries)
-            {
-                if (aEntries.getLength() != 2)
-                    throw lang::IllegalArgumentException();
-
-                setDataBarEntry(getCoreObject()->GetDataBarData()->mpLowerLimit.get(),
-                        aEntries[0]);
-                setDataBarEntry(getCoreObject()->GetDataBarData()->mpUpperLimit.get(),
-                        aEntries[1]);
-            }
-            else
+            if (!(aValue >>= aEntries))
                 throw lang::IllegalArgumentException();
+
+            if (aEntries.getLength() != 2)
+                throw lang::IllegalArgumentException();
+
+            setDataBarEntry(getCoreObject()->GetDataBarData()->mpLowerLimit.get(),
+                    aEntries[0]);
+            setDataBarEntry(getCoreObject()->GetDataBarData()->mpUpperLimit.get(),
+                    aEntries[1]);
+
         }
         break;
         case MinimumLength:
         {
             double nLength = 0;
-            if ((aValue >>= nLength) && nLength < 100 && nLength >= 0)
-            {
-                getCoreObject()->GetDataBarData()->mnMinLength = nLength;
-            }
-            else throw lang::IllegalArgumentException();
+            if (!(aValue >>= nLength) || nLength >= 100 || nLength < 0)
+                throw lang::IllegalArgumentException();
+            getCoreObject()->GetDataBarData()->mnMinLength = nLength;
+
         }
         break;
         case MaximumLength:
         {
             double nLength = 0;
-            if ((aValue >>= nLength) && nLength <= 100 && nLength > 0)
-            {
-                getCoreObject()->GetDataBarData()->mnMaxLength = nLength;
-            }
-            else throw lang::IllegalArgumentException();
+            if (!(aValue >>= nLength) || nLength > 100 || nLength <= 0)
+                throw lang::IllegalArgumentException();
+            getCoreObject()->GetDataBarData()->mnMaxLength = nLength;
+
         }
         break;
     }
 }
 
 uno::Any SAL_CALL ScDataBarFormatObj::getPropertyValue( const OUString& aPropertyName )
-                throw(beans::UnknownPropertyException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -1362,11 +1293,11 @@ uno::Any SAL_CALL ScDataBarFormatObj::getPropertyValue( const OUString& aPropert
         {
             databar::ScAxisPosition ePos = getCoreObject()->GetDataBarData()->meAxisPosition;
             sal_Int32 nApiPos = sheet::DataBarAxis::AXIS_NONE;
-            for (size_t i = 0; i < SAL_N_ELEMENTS(aDataBarAxisMap); ++i)
+            for (DataBarAxisApiMap const & rEntry : aDataBarAxisMap)
             {
-                if (aDataBarAxisMap[i].ePos == ePos)
+                if (rEntry.ePos == ePos)
                 {
-                    nApiPos = aDataBarAxisMap[i].nApiPos;
+                    nApiPos = rEntry.nApiPos;
                 }
             }
 
@@ -1390,22 +1321,19 @@ uno::Any SAL_CALL ScDataBarFormatObj::getPropertyValue( const OUString& aPropert
         break;
         case DataBar_Color:
         {
-            sal_Int32 nColor = getCoreObject()->GetDataBarData()->maPositiveColor.GetColor();
-            aAny <<= nColor;
+            aAny <<= getCoreObject()->GetDataBarData()->maPositiveColor;
         }
         break;
         case AxisColor:
         {
-            sal_Int32 nAxisColor = getCoreObject()->GetDataBarData()->maAxisColor.GetColor();
-            aAny <<= nAxisColor;
+            aAny <<= getCoreObject()->GetDataBarData()->maAxisColor;
         }
         break;
         case NegativeColor:
         {
             if (getCoreObject()->GetDataBarData()->mbNeg && getCoreObject()->GetDataBarData()->mpNegativeColor)
             {
-                sal_Int32 nNegativeColor = getCoreObject()->GetDataBarData()->mpNegativeColor->GetColor();
-                aAny <<= nNegativeColor;
+                aAny <<= *getCoreObject()->GetDataBarData()->mpNegativeColor;
             }
         }
         break;
@@ -1423,37 +1351,29 @@ uno::Any SAL_CALL ScDataBarFormatObj::getPropertyValue( const OUString& aPropert
 
 void SAL_CALL ScDataBarFormatObj::addPropertyChangeListener( const OUString& /* aPropertyName */,
                             const uno::Reference<beans::XPropertyChangeListener>& /* aListener */)
-                            throw(beans::UnknownPropertyException,
-                                    lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScDataBarFormatObj::removePropertyChangeListener( const OUString& /* aPropertyName */,
                             const uno::Reference<beans::XPropertyChangeListener>& /* aListener */)
-                            throw(beans::UnknownPropertyException,
-                                    lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScDataBarFormatObj::addVetoableChangeListener( const OUString&,
                             const uno::Reference<beans::XVetoableChangeListener>&)
-                            throw(beans::UnknownPropertyException,
-                                lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScDataBarFormatObj::removeVetoableChangeListener( const OUString&,
                             const uno::Reference<beans::XVetoableChangeListener>&)
-                            throw(beans::UnknownPropertyException,
-                                lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
-ScDataBarEntryObj::ScDataBarEntryObj(rtl::Reference<ScDataBarFormatObj> xParent,
+ScDataBarEntryObj::ScDataBarEntryObj(rtl::Reference<ScDataBarFormatObj> const & xParent,
         size_t nPos):
     mxParent(xParent),
     mnPos(nPos)
@@ -1477,14 +1397,13 @@ ScColorScaleEntry* ScDataBarEntryObj::getCoreObject()
 }
 
 sal_Int32 ScDataBarEntryObj::getType()
-    throw(uno::RuntimeException, std::exception)
 {
     ScColorScaleEntry* pEntry = getCoreObject();
-    for (size_t i = 0; i < SAL_N_ELEMENTS(aDataBarEntryTypeMap); ++i)
+    for (DataBarEntryTypeApiMap const & rEntry : aDataBarEntryTypeMap)
     {
-        if (aDataBarEntryTypeMap[i].eType == pEntry->GetType())
+        if (rEntry.eType == pEntry->GetType())
         {
-            return aDataBarEntryTypeMap[i].nApiType;
+            return rEntry.nApiType;
         }
     }
 
@@ -1492,14 +1411,13 @@ sal_Int32 ScDataBarEntryObj::getType()
 }
 
 void ScDataBarEntryObj::setType(sal_Int32 nType)
-    throw(uno::RuntimeException, std::exception)
 {
     ScColorScaleEntry* pEntry = getCoreObject();
-    for (size_t i = 0; i < SAL_N_ELEMENTS(aDataBarEntryTypeMap); ++i)
+    for (DataBarEntryTypeApiMap const & rEntry : aDataBarEntryTypeMap)
     {
-        if (aDataBarEntryTypeMap[i].nApiType == nType)
+        if (rEntry.nApiType == nType)
         {
-            pEntry->SetType(aDataBarEntryTypeMap[i].eType);
+            pEntry->SetType(rEntry.eType);
             return;
         }
     }
@@ -1507,7 +1425,6 @@ void ScDataBarEntryObj::setType(sal_Int32 nType)
 }
 
 OUString ScDataBarEntryObj::getFormula()
-    throw(uno::RuntimeException, std::exception)
 {
     ScColorScaleEntry* pEntry = getCoreObject();
     switch (pEntry->GetType())
@@ -1523,7 +1440,6 @@ OUString ScDataBarEntryObj::getFormula()
 }
 
 void ScDataBarEntryObj::setFormula(const OUString& rFormula)
-    throw(uno::RuntimeException, std::exception)
 {
     ScColorScaleEntry* pEntry = getCoreObject();
     switch (pEntry->GetType())
@@ -1539,7 +1455,7 @@ void ScDataBarEntryObj::setFormula(const OUString& rFormula)
 }
 
 
-ScIconSetFormatObj::ScIconSetFormatObj(rtl::Reference<ScCondFormatObj> xParent,
+ScIconSetFormatObj::ScIconSetFormatObj(rtl::Reference<ScCondFormatObj> const & xParent,
         const ScIconSetFormat* pFormat):
     mxParent(xParent),
     maPropSet(getIconSetPropSet()),
@@ -1561,13 +1477,11 @@ ScIconSetFormat* ScIconSetFormatObj::getCoreObject()
 }
 
 sal_Int32 ScIconSetFormatObj::getType()
-    throw(uno::RuntimeException, std::exception)
 {
     return sheet::ConditionEntryType::ICONSET;
 }
 
 uno::Reference<beans::XPropertySetInfo> SAL_CALL ScIconSetFormatObj::getPropertySetInfo()
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     static uno::Reference<beans::XPropertySetInfo> aRef(
@@ -1577,17 +1491,17 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScIconSetFormatObj::getProperty
 
 namespace {
 
-void setIconSetEntry(ScIconSetFormat* pFormat, uno::Reference<sheet::XIconSetEntry> xEntry, size_t nPos)
+void setIconSetEntry(ScIconSetFormat* pFormat, uno::Reference<sheet::XIconSetEntry> const & xEntry, size_t nPos)
 {
     ScIconSetFormatData* pData = pFormat->GetIconSetData();
     ScColorScaleEntryType eType = ScColorScaleEntryType();
     sal_Int32 nApiType = xEntry->getType();
     bool bFound = false;
-    for (size_t i = 0; i < SAL_N_ELEMENTS(aIconSetEntryTypeMap); ++i)
+    for (IconSetEntryTypeApiMap const & rEntry : aIconSetEntryTypeMap)
     {
-        if (aIconSetEntryTypeMap[i].nApiType == nApiType)
+        if (rEntry.nApiType == nApiType)
         {
-            eType = aIconSetEntryTypeMap[i].eType;
+            eType = rEntry.eType;
             bFound = true;
             break;
         }
@@ -1615,9 +1529,6 @@ void setIconSetEntry(ScIconSetFormat* pFormat, uno::Reference<sheet::XIconSetEnt
 
 void SAL_CALL ScIconSetFormatObj::setPropertyValue(
                         const OUString& aPropertyName, const uno::Any& aValue )
-                throw(beans::UnknownPropertyException, beans::PropertyVetoException,
-                        lang::IllegalArgumentException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -1648,11 +1559,11 @@ void SAL_CALL ScIconSetFormatObj::setPropertyValue(
             aValue >>= nApiType;
             ScIconSetType eType = IconSet_3Arrows;
             bool bFound = false;
-            for (size_t i = 0; i < SAL_N_ELEMENTS(aIconSetApiMap); ++i)
+            for (const IconSetTypeApiMap & rEntry : aIconSetApiMap)
             {
-                if (aIconSetApiMap[i].nApiType == nApiType)
+                if (rEntry.nApiType == nApiType)
                 {
-                    eType = aIconSetApiMap[i].eType;
+                    eType = rEntry.eType;
                     bFound = true;
                     break;
                 }
@@ -1670,18 +1581,17 @@ void SAL_CALL ScIconSetFormatObj::setPropertyValue(
         case IconSetEntries:
         {
             uno::Sequence<uno::Reference<sheet::XIconSetEntry> > aEntries;
-            if (aValue >>= aEntries)
-            {
-                // TODO: we need to check that the number of entries
-                // corresponds to the icon type
-                sal_Int32 nLength = aEntries.getLength();
-                for (size_t i = 0; i < size_t(nLength); ++i)
-                {
-                    setIconSetEntry(getCoreObject(), aEntries[i], i);
-                }
-            }
-            else
+            if (!(aValue >>= aEntries))
                 throw lang::IllegalArgumentException();
+
+            // TODO: we need to check that the number of entries
+            // corresponds to the icon type
+            sal_Int32 nLength = aEntries.getLength();
+            for (size_t i = 0; i < size_t(nLength); ++i)
+            {
+                setIconSetEntry(getCoreObject(), aEntries[i], i);
+            }
+
         }
         break;
         default:
@@ -1690,8 +1600,6 @@ void SAL_CALL ScIconSetFormatObj::setPropertyValue(
 }
 
 uno::Any SAL_CALL ScIconSetFormatObj::getPropertyValue( const OUString& aPropertyName )
-                throw(beans::UnknownPropertyException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -1713,11 +1621,11 @@ uno::Any SAL_CALL ScIconSetFormatObj::getPropertyValue( const OUString& aPropert
         case Icons:
         {
             ScIconSetType eType = getCoreObject()->GetIconSetData()->eIconSetType;
-            for (size_t i = 0; i < SAL_N_ELEMENTS(aIconSetApiMap); ++i)
+            for (const IconSetTypeApiMap & rEntry : aIconSetApiMap)
             {
-                if (aIconSetApiMap[i].eType == eType)
+                if (rEntry.eType == eType)
                 {
-                    aAny <<= aIconSetApiMap[i].nApiType;
+                    aAny <<= rEntry.nApiType;
                     break;
                 }
             }
@@ -1725,9 +1633,9 @@ uno::Any SAL_CALL ScIconSetFormatObj::getPropertyValue( const OUString& aPropert
         break;
         case IconSetEntries:
         {
-            uno::Sequence<uno::Reference<sheet::XIconSetEntry> > aEntries(getCoreObject()->size());
-            size_t i = 0;
-            for (auto it = getCoreObject()->begin(), itEnd = getCoreObject()->end(); it != itEnd; ++it, ++i)
+            size_t nSize = getCoreObject()->size();
+            uno::Sequence<uno::Reference<sheet::XIconSetEntry> > aEntries(nSize);
+            for (size_t i = 0; i < nSize; ++i)
             {
                 aEntries[i] = new ScIconSetEntryObj(this, i);
             }
@@ -1742,37 +1650,29 @@ uno::Any SAL_CALL ScIconSetFormatObj::getPropertyValue( const OUString& aPropert
 
 void SAL_CALL ScIconSetFormatObj::addPropertyChangeListener( const OUString& /* aPropertyName */,
                             const uno::Reference<beans::XPropertyChangeListener>& /* aListener */)
-                            throw(beans::UnknownPropertyException,
-                                    lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScIconSetFormatObj::removePropertyChangeListener( const OUString& /* aPropertyName */,
                             const uno::Reference<beans::XPropertyChangeListener>& /* aListener */)
-                            throw(beans::UnknownPropertyException,
-                                    lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScIconSetFormatObj::addVetoableChangeListener( const OUString&,
                             const uno::Reference<beans::XVetoableChangeListener>&)
-                            throw(beans::UnknownPropertyException,
-                                lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScIconSetFormatObj::removeVetoableChangeListener( const OUString&,
                             const uno::Reference<beans::XVetoableChangeListener>&)
-                            throw(beans::UnknownPropertyException,
-                                lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
-ScIconSetEntryObj::ScIconSetEntryObj(rtl::Reference<ScIconSetFormatObj> xParent,
+ScIconSetEntryObj::ScIconSetEntryObj(rtl::Reference<ScIconSetFormatObj> const & xParent,
         size_t nPos):
     mxParent(xParent),
     mnPos(nPos)
@@ -1793,18 +1693,17 @@ ScColorScaleEntry* ScIconSetEntryObj::getCoreObject()
 }
 
 sal_Int32 ScIconSetEntryObj::getType()
-    throw(uno::RuntimeException, std::exception)
 {
     ScColorScaleEntry* pEntry = getCoreObject();
     // the first entry always is minimum
     if (mnPos == 0)
         return sheet::IconSetFormatEntry::ICONSET_MIN;
 
-    for (size_t i = 0; i < SAL_N_ELEMENTS(aIconSetEntryTypeMap); ++i)
+    for (IconSetEntryTypeApiMap const & rEntry : aIconSetEntryTypeMap)
     {
-        if (aIconSetEntryTypeMap[i].eType == pEntry->GetType())
+        if (rEntry.eType == pEntry->GetType())
         {
-            return aIconSetEntryTypeMap[i].nApiType;
+            return rEntry.nApiType;
         }
     }
 
@@ -1812,18 +1711,17 @@ sal_Int32 ScIconSetEntryObj::getType()
 }
 
 void ScIconSetEntryObj::setType(sal_Int32 nType)
-    throw(uno::RuntimeException, std::exception)
 {
     // first entry is always MIN
     if (mnPos == 0)
         return;
 
     ScColorScaleEntry* pEntry = getCoreObject();
-    for (size_t i = 0; i < SAL_N_ELEMENTS(aIconSetEntryTypeMap); ++i)
+    for (IconSetEntryTypeApiMap const & rEntry : aIconSetEntryTypeMap)
     {
-        if (aIconSetEntryTypeMap[i].nApiType == nType)
+        if (rEntry.nApiType == nType)
         {
-            pEntry->SetType(aIconSetEntryTypeMap[i].eType);
+            pEntry->SetType(rEntry.eType);
             return;
         }
     }
@@ -1831,7 +1729,6 @@ void ScIconSetEntryObj::setType(sal_Int32 nType)
 }
 
 OUString ScIconSetEntryObj::getFormula()
-    throw(uno::RuntimeException, std::exception)
 {
     ScColorScaleEntry* pEntry = getCoreObject();
     switch (pEntry->GetType())
@@ -1847,7 +1744,6 @@ OUString ScIconSetEntryObj::getFormula()
 }
 
 void ScIconSetEntryObj::setFormula(const OUString& rFormula)
-    throw(uno::RuntimeException, std::exception)
 {
     ScColorScaleEntry* pEntry = getCoreObject();
     switch (pEntry->GetType())
@@ -1862,7 +1758,7 @@ void ScIconSetEntryObj::setFormula(const OUString& rFormula)
     }
 }
 
-ScCondDateFormatObj::ScCondDateFormatObj(rtl::Reference<ScCondFormatObj> xParent,
+ScCondDateFormatObj::ScCondDateFormatObj(rtl::Reference<ScCondFormatObj> const & xParent,
         const ScCondDateFormatEntry* pFormat):
     mxParent(xParent),
     maPropSet(getCondDatePropSet()),
@@ -1884,13 +1780,11 @@ ScCondDateFormatEntry* ScCondDateFormatObj::getCoreObject()
 }
 
 sal_Int32 ScCondDateFormatObj::getType()
-    throw(uno::RuntimeException, std::exception)
 {
     return sheet::ConditionEntryType::DATE;
 }
 
 uno::Reference<beans::XPropertySetInfo> SAL_CALL ScCondDateFormatObj::getPropertySetInfo()
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     static uno::Reference<beans::XPropertySetInfo> aRef(
@@ -1900,9 +1794,6 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScCondDateFormatObj::getPropert
 
 void SAL_CALL ScCondDateFormatObj::setPropertyValue(
                         const OUString& aPropertyName, const uno::Any& aValue )
-                throw(beans::UnknownPropertyException, beans::PropertyVetoException,
-                        lang::IllegalArgumentException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -1916,12 +1807,11 @@ void SAL_CALL ScCondDateFormatObj::setPropertyValue(
         case Date_StyleName:
         {
             OUString aStyleName;
-            if (aValue >>= aStyleName)
-            {
-                getCoreObject()->SetStyleName(aStyleName);
-            }
-            else
+            if (!(aValue >>= aStyleName))
                 throw lang::IllegalArgumentException();
+
+            getCoreObject()->SetStyleName(aStyleName);
+
         }
         break;
         case DateType:
@@ -1930,11 +1820,11 @@ void SAL_CALL ScCondDateFormatObj::setPropertyValue(
             if (!(aValue >>= nApiType))
                 throw lang::IllegalArgumentException();
 
-            for (size_t i = 0; i < SAL_N_ELEMENTS(aDateTypeApiMap); ++i)
+            for (DateTypeApiMap const & rEntry : aDateTypeApiMap)
             {
-                if (aDateTypeApiMap[i].nApiType == nApiType)
+                if (rEntry.nApiType == nApiType)
                 {
-                    getCoreObject()->SetDateType(aDateTypeApiMap[i].eType);
+                    getCoreObject()->SetDateType(rEntry.eType);
                     break;
                 }
             }
@@ -1946,8 +1836,6 @@ void SAL_CALL ScCondDateFormatObj::setPropertyValue(
 }
 
 uno::Any SAL_CALL ScCondDateFormatObj::getPropertyValue( const OUString& aPropertyName )
-                throw(beans::UnknownPropertyException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -1969,11 +1857,11 @@ uno::Any SAL_CALL ScCondDateFormatObj::getPropertyValue( const OUString& aProper
         case DateType:
         {
             condformat::ScCondFormatDateType eType = getCoreObject()->GetDateType();
-            for (size_t i = 0; i < SAL_N_ELEMENTS(aDateTypeApiMap); ++i)
+            for (DateTypeApiMap const & rEntry : aDateTypeApiMap)
             {
-                if (aDateTypeApiMap[i].eType == eType)
+                if (rEntry.eType == eType)
                 {
-                    aAny <<= aDateTypeApiMap[i].nApiType;
+                    aAny <<= rEntry.nApiType;
                     break;
                 }
             }
@@ -1987,32 +1875,24 @@ uno::Any SAL_CALL ScCondDateFormatObj::getPropertyValue( const OUString& aProper
 
 void SAL_CALL ScCondDateFormatObj::addPropertyChangeListener( const OUString& /* aPropertyName */,
                             const uno::Reference<beans::XPropertyChangeListener>& /* aListener */)
-                            throw(beans::UnknownPropertyException,
-                                    lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScCondDateFormatObj::removePropertyChangeListener( const OUString& /* aPropertyName */,
                             const uno::Reference<beans::XPropertyChangeListener>& /* aListener */)
-                            throw(beans::UnknownPropertyException,
-                                    lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScCondDateFormatObj::addVetoableChangeListener( const OUString&,
                             const uno::Reference<beans::XVetoableChangeListener>&)
-                            throw(beans::UnknownPropertyException,
-                                lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }
 
 void SAL_CALL ScCondDateFormatObj::removeVetoableChangeListener( const OUString&,
                             const uno::Reference<beans::XVetoableChangeListener>&)
-                            throw(beans::UnknownPropertyException,
-                                lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SAL_WARN("sc", "not implemented");
 }

@@ -38,8 +38,6 @@ class GeneratedTypeSet {
 public:
     GeneratedTypeSet() {}
 
-    ~GeneratedTypeSet() {}
-
     /**
        Add a type to the set of generated types.
 
@@ -60,10 +58,10 @@ public:
     { return m_set.find(type) != m_set.end(); }
 
 private:
-    GeneratedTypeSet(GeneratedTypeSet &) = delete;
-    void operator =(const GeneratedTypeSet&) = delete;
+    GeneratedTypeSet(GeneratedTypeSet const &) = delete;
+    GeneratedTypeSet& operator =(GeneratedTypeSet const &) = delete;
 
-    std::unordered_set< OString, OStringHash > m_set;
+    std::unordered_set< OString > m_set;
 };
 
 }

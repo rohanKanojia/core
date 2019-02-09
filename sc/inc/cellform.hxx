@@ -20,7 +20,6 @@
 #ifndef INCLUDED_SC_INC_CELLFORM_HXX
 #define INCLUDED_SC_INC_CELLFORM_HXX
 
-#include <tools/solar.h>
 #include "scdllapi.h"
 #include <rtl/ustring.hxx>
 
@@ -30,29 +29,22 @@ class ScDocument;
 class ScAddress;
 struct ScRefCellValue;
 
-enum ScForceTextFmt {
-    ftDontForce,            ///< numbers as numbers
-    ftForce,                ///< numbers as text
-    ftCheck                 ///< is the numberformat a textformat?
-};
-
 class SC_DLLPUBLIC ScCellFormat
 {
 public:
 
     static void GetString(
-        ScRefCellValue& rCell, sal_uLong nFormat, OUString& rString,
+        ScRefCellValue& rCell, sal_uInt32 nFormat, OUString& rString,
         Color** ppColor, SvNumberFormatter& rFormatter, const ScDocument* pDoc, bool bNullVals = true,
-        bool bFormula  = false, ScForceTextFmt eForceTextFmt = ftDontForce,
-        bool bUseStarFormat = false );
+        bool bFormula  = false, bool bUseStarFormat = false );
 
     static OUString GetString(
-        ScDocument& rDoc, const ScAddress& rPos, sal_uLong nFormat,
+        ScDocument& rDoc, const ScAddress& rPos, sal_uInt32 nFormat,
         Color** ppColor, SvNumberFormatter& rFormatter, bool bNullVals = true,
-        bool bFormula  = false, ScForceTextFmt eForceTextFmt = ftDontForce );
+        bool bFormula  = false );
 
     static void GetInputString(
-        ScRefCellValue& rCell, sal_uLong nFormat, OUString& rString, SvNumberFormatter& rFormatter,
+        ScRefCellValue& rCell, sal_uInt32 nFormat, OUString& rString, SvNumberFormatter& rFormatter,
         const ScDocument* pDoc );
 
     static OUString GetOutputString(

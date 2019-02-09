@@ -17,27 +17,30 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/ole/olehelper.hxx"
+#include <oox/ole/olehelper.hxx>
 
 #include <rtl/ustrbuf.hxx>
 #include <sot/storage.hxx>
 #include <osl/diagnose.h>
-#include "oox/helper/binaryinputstream.hxx"
-#include "oox/helper/graphichelper.hxx"
-#include "oox/token/tokens.hxx"
-#include "oox/ole/axcontrol.hxx"
-#include "oox/helper/propertymap.hxx"
-#include "oox/helper/propertyset.hxx"
-#include "oox/ole/olestorage.hxx"
+#include <oox/helper/binaryinputstream.hxx>
+#include <oox/helper/binaryoutputstream.hxx>
+#include <oox/helper/graphichelper.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
+#include <oox/ole/axcontrol.hxx>
+#include <oox/helper/propertymap.hxx>
+#include <oox/helper/propertyset.hxx>
+#include <oox/ole/olestorage.hxx>
 
+#include <com/sun/star/awt/XControlModel.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/form/FormComponentType.hpp>
-#include <com/sun/star/form/XFormsSupplier.hpp>
-#include <com/sun/star/form/XForm.hpp>
+#include <com/sun/star/form/XFormComponent.hpp>
+#include <com/sun/star/frame/XFrame.hpp>
+#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/drawing/XDrawPageSupplier.hpp>
-#include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/awt/Size.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <tools/globname.hxx>
 #include <unotools/streamwrap.hxx>
@@ -47,24 +50,15 @@ namespace oox {
 namespace ole {
 
 using ::com::sun::star::form::XFormComponent;
-using ::com::sun::star::form::XForm;
 using ::com::sun::star::awt::XControlModel;
 using ::com::sun::star::awt::Size;
 using ::com::sun::star::frame::XModel;
-using ::com::sun::star::form::XFormsSupplier;
-using ::com::sun::star::drawing::XDrawPage;
-using ::com::sun::star::drawing::XDrawPageSupplier;
-using ::com::sun::star::drawing::XShapes;
 using ::com::sun::star::io::XOutputStream;
 using ::com::sun::star::io::XInputStream;
 using ::com::sun::star::beans::XPropertySet;
 using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::XInterface;
 using ::com::sun::star::uno::UNO_QUERY;
 using ::com::sun::star::uno::XComponentContext;
-using ::com::sun::star::container::XIndexContainer;
-using ::com::sun::star::container::XNameContainer;
-using ::com::sun::star::lang::XMultiServiceFactory;
 using ::com::sun::star::lang::XServiceInfo;
 
 using namespace ::com::sun::star::form;
@@ -81,15 +75,15 @@ const sal_uInt32 OLE_PALETTECOLOR_MASK      = 0x0000FFFF;
 const sal_uInt32 OLE_SYSTEMCOLOR_MASK       = 0x0000FFFF;
 
 /** Swaps the red and blue component of the passed color. */
-inline sal_uInt32 lclSwapRedBlue( sal_uInt32 nColor )
+sal_uInt32 lclSwapRedBlue( sal_uInt32 nColor )
 {
     return static_cast< sal_uInt32 >( (nColor & 0xFF00FF00) | ((nColor & 0x0000FF) << 16) | ((nColor & 0xFF0000) >> 16) );
 }
 
 /** Returns the UNO RGB color from the passed encoded OLE BGR color. */
-inline sal_Int32 lclDecodeBgrColor( sal_uInt32 nOleColor )
+::Color lclDecodeBgrColor( sal_uInt32 nOleColor )
 {
-    return static_cast< sal_Int32 >( lclSwapRedBlue( nOleColor ) & 0xFFFFFF );
+    return ::Color( lclSwapRedBlue( nOleColor ) & 0xFFFFFF );
 }
 
 const sal_uInt32 OLE_STDPIC_ID              = 0x0000746C;
@@ -103,7 +97,7 @@ struct GUIDCNamePair
 struct IdCntrlData
 {
     sal_Int16 nId;
-    GUIDCNamePair aData;
+    GUIDCNamePair const aData;
 };
 
 const sal_Int16 TOGGLEBUTTON = -1;
@@ -120,7 +114,7 @@ public:
 
 classIdToGUIDCNamePairMap::classIdToGUIDCNamePairMap()
 {
-    IdCntrlData initialCntrlData[] =
+    static IdCntrlData const initialCntrlData[] =
     {
         // Command button MUST be at index 0
         { FormComponentType::COMMANDBUTTON,
@@ -179,8 +173,8 @@ classIdToGUIDCNamePairMap::classIdToGUIDCNamePairMap()
              { AX_GUID_SCROLLBAR, "ScrollBar"},
         }
     };
-    int length = SAL_N_ELEMENTS( initialCntrlData );
-    IdCntrlData* pData = initialCntrlData;
+    int const length = SAL_N_ELEMENTS( initialCntrlData );
+    IdCntrlData const * pData = initialCntrlData;
     for ( int index = 0; index < length; ++index, ++pData )
         mnIdToGUIDCNamePairMap[ pData->nId ] = pData->aData;
 };
@@ -211,17 +205,16 @@ StdFontInfo::StdFontInfo() :
 {
 }
 
-StdFontInfo::StdFontInfo( const OUString& rName, sal_uInt32 nHeight,
-        sal_uInt16 nWeight, sal_uInt16 nCharSet, sal_uInt8 nFlags ) :
+StdFontInfo::StdFontInfo( const OUString& rName, sal_uInt32 nHeight ) :
     maName( rName ),
     mnHeight( nHeight ),
-    mnWeight( nWeight ),
-    mnCharSet( nCharSet ),
-    mnFlags( nFlags )
+    mnWeight( OLE_STDFONT_NORMAL ),
+    mnCharSet( WINDOWS_CHARSET_ANSI ),
+    mnFlags( 0 )
 {
 }
 
-sal_Int32 OleHelper::decodeOleColor(
+::Color OleHelper::decodeOleColor(
         const GraphicHelper& rGraphicHelper, sal_uInt32 nOleColor, bool bDefaultColorBgr )
 {
     static const sal_Int32 spnSystemColors[] =
@@ -308,15 +301,12 @@ bool OleHelper::importStdFont( StdFontInfo& orFontInfo, BinaryInputStream& rInSt
     return !rInStrm.isEof() && (nVersion <= 1);
 }
 
-bool OleHelper::importStdPic( StreamDataSequence& orGraphicData, BinaryInputStream& rInStrm, bool bWithGuid )
+bool OleHelper::importStdPic( StreamDataSequence& orGraphicData, BinaryInputStream& rInStrm )
 {
-    if( bWithGuid )
-    {
-        bool bIsStdPic = importGuid( rInStrm ) == OLE_GUID_STDPIC;
-        OSL_ENSURE( bIsStdPic, "OleHelper::importStdPic - unexpected header GUID, expected StdPic" );
-        if( !bIsStdPic )
-            return false;
-    }
+    bool bIsStdPic = importGuid( rInStrm ) == OLE_GUID_STDPIC;
+    OSL_ENSURE( bIsStdPic, "OleHelper::importStdPic - unexpected header GUID, expected StdPic" );
+    if( !bIsStdPic )
+        return false;
 
     sal_uInt32 nStdPicId;
     sal_Int32 nBytes;
@@ -326,7 +316,7 @@ bool OleHelper::importStdPic( StreamDataSequence& orGraphicData, BinaryInputStre
     return !rInStrm.isEof() && (nStdPicId == OLE_STDPIC_ID) && (nBytes > 0) && (rInStrm.readData( orGraphicData, nBytes ) == nBytes);
 }
 
-Reference< css::frame::XFrame > lcl_getFrame( const  Reference< css::frame::XModel >& rxModel )
+static Reference< css::frame::XFrame > lcl_getFrame( const  Reference< css::frame::XModel >& rxModel )
 {
     Reference< css::frame::XFrame > xFrame;
     if ( rxModel.is() )
@@ -337,36 +327,7 @@ Reference< css::frame::XFrame > lcl_getFrame( const  Reference< css::frame::XMod
     return xFrame;
 }
 
-class OleFormCtrlExportHelper
-{
-    ::oox::ole::EmbeddedControl maControl;
-    ::oox::ole::ControlModelBase* mpModel;
-    ::oox::GraphicHelper maGrfHelper;
-    Reference< XModel > mxDocModel;
-    Reference< XControlModel > mxControlModel;
-
-    OUString maName;
-    OUString maTypeName;
-    OUString maFullName;
-    OUString maGUID;
-public:
-    OleFormCtrlExportHelper( const Reference< XComponentContext >& rxCtx, const Reference< XModel >& xDocModel, const Reference< XControlModel >& xModel );
-    virtual ~OleFormCtrlExportHelper() { }
-    OUString getGUID()
-    {
-        OUString sResult;
-        if ( maGUID.getLength() > 2 )
-            sResult = maGUID.copy(1, maGUID.getLength() - 2 );
-        return sResult;
-    }
-    const OUString& getFullName() { return maFullName; }
-    const OUString& getTypeName() { return maTypeName; }
-    bool isValid() { return mpModel != nullptr; }
-    void exportName( const Reference< XOutputStream >& rxOut );
-    void exportCompObj( const Reference< XOutputStream >& rxOut );
-    void exportControl( const Reference< XOutputStream >& rxOut, const css::awt::Size& rSize );
-};
-OleFormCtrlExportHelper::OleFormCtrlExportHelper(  const Reference< XComponentContext >& rxCtx, const Reference< XModel >& rxDocModel, const Reference< XControlModel >& xCntrlModel ) : maControl( "Unknown" ), mpModel( nullptr ), maGrfHelper( rxCtx, lcl_getFrame( rxDocModel ), StorageRef() ), mxDocModel( rxDocModel ), mxControlModel( xCntrlModel )
+OleFormCtrlExportHelper::OleFormCtrlExportHelper(  const Reference< XComponentContext >& rxCtx, const Reference< XModel >& rxDocModel, const Reference< XControlModel >& xCntrlModel ) : mpModel( nullptr ), maGrfHelper( rxCtx, lcl_getFrame( rxDocModel ), StorageRef() ), mxDocModel( rxDocModel ), mxControlModel( xCntrlModel )
 {
     // try to get the guid
     Reference< css::beans::XPropertySet > xProps( xCntrlModel, UNO_QUERY );
@@ -413,12 +374,16 @@ OleFormCtrlExportHelper::OleFormCtrlExportHelper(  const Reference< XComponentCo
                 aPropSet.getProperty(maName, PROP_Name );
                 maTypeName = OUString::createFromAscii( it->second.sName );
                 maFullName = "Microsoft Forms 2.0 " + maTypeName;
-                maControl =  EmbeddedControl( maName );
+                mpControl.reset(new EmbeddedControl( maName ));
                 maGUID = OUString::createFromAscii( it->second.sGUID );
-                mpModel = maControl.createModelFromGuid( maGUID );
+                mpModel = mpControl->createModelFromGuid( maGUID );
             }
         }
     }
+}
+
+OleFormCtrlExportHelper::~OleFormCtrlExportHelper()
+{
 }
 
 void OleFormCtrlExportHelper::exportName( const Reference< XOutputStream >& rxOut )
@@ -435,13 +400,14 @@ void OleFormCtrlExportHelper::exportCompObj( const Reference< XOutputStream >& r
         mpModel->exportCompObj( aOut );
 }
 
-void OleFormCtrlExportHelper::exportControl( const Reference< XOutputStream >& rxOut, const Size& rSize )
+void OleFormCtrlExportHelper::exportControl( const Reference< XOutputStream >& rxOut, const Size& rSize, bool bAutoClose )
 {
-    oox::BinaryXOutputStream aOut( rxOut, false );
+    oox::BinaryXOutputStream aOut( rxOut, bAutoClose );
     if ( mpModel )
     {
         ::oox::ole::ControlConverter aConv(  mxDocModel, maGrfHelper );
-        maControl.convertFromProperties( mxControlModel, aConv );
+        if(mpControl)
+            mpControl->convertFromProperties( mxControlModel, aConv );
         mpModel->maSize.first = rSize.Width;
         mpModel->maSize.second = rSize.Height;
         mpModel->exportBinaryModel( aOut );
@@ -472,11 +438,11 @@ MSConvertOCXControls::importControlFromStream( ::oox::BinaryInputStream& rInStrm
 }
 
 bool
-MSConvertOCXControls::ReadOCXCtlsStream( tools::SvRef<SotStorageStream>& rSrc1, Reference< XFormComponent > & rxFormComp,
+MSConvertOCXControls::ReadOCXCtlsStream( tools::SvRef<SotStorageStream> const & rSrc1, Reference< XFormComponent > & rxFormComp,
                                    sal_Int32 nPos,
                                    sal_Int32 nStreamSize)
 {
-    if ( rSrc1.Is()  )
+    if ( rSrc1.is()  )
     {
         BinaryXInputStream aCtlsStrm( Reference< XInputStream >( new utl::OSeekableInputStreamWrapper( *rSrc1 ) ), true );
         aCtlsStrm.seek( nPos );
@@ -521,18 +487,18 @@ bool MSConvertOCXControls::importControlFromStream( ::oox::BinaryInputStream& rI
     return rxFormComp.is();
 }
 
-bool MSConvertOCXControls::ReadOCXStorage( tools::SvRef<SotStorage>& xOleStg,
+bool MSConvertOCXControls::ReadOCXStorage( tools::SvRef<SotStorage> const & xOleStg,
                                   Reference< XFormComponent > & rxFormComp )
 {
-    if ( xOleStg.Is() )
+    if ( xOleStg.is() )
     {
-        tools::SvRef<SotStorageStream> pNameStream = xOleStg->OpenSotStream( "\3OCXNAME");
+        tools::SvRef<SotStorageStream> pNameStream = xOleStg->OpenSotStream("\3OCXNAME", StreamMode::READ);
         BinaryXInputStream aNameStream( Reference< XInputStream >( new utl::OSeekableInputStreamWrapper( *pNameStream ) ), true );
 
-        tools::SvRef<SotStorageStream> pContents = xOleStg->OpenSotStream( "contents");
+        tools::SvRef<SotStorageStream> pContents = xOleStg->OpenSotStream("contents", StreamMode::READ);
         BinaryXInputStream aInStrm(  Reference< XInputStream >( new utl::OSeekableInputStreamWrapper( *pContents ) ), true );
 
-        tools::SvRef<SotStorageStream> pClsStrm = xOleStg->OpenSotStream("\1CompObj");
+        tools::SvRef<SotStorageStream> pClsStrm = xOleStg->OpenSotStream("\1CompObj", StreamMode::READ);
         BinaryXInputStream aClsStrm( Reference< XInputStream >( new utl::OSeekableInputStreamWrapper(*pClsStrm ) ), true );
         aClsStrm.skip(12);
 
@@ -563,13 +529,13 @@ bool MSConvertOCXControls::WriteOCXExcelKludgeStream( const css::uno::Reference<
     SvGlobalName aName;
     OUString sId = exportHelper.getGUID();
     aName.MakeId(sId);
-    BinaryXOutputStream xOut( xOutStrm, false );
-    OleHelper::exportGuid( xOut, aName );
+    BinaryXOutputStream aOut( xOutStrm, false );
+    OleHelper::exportGuid( aOut, aName );
     exportHelper.exportControl( xOutStrm, rSize );
     return true;
 }
 
-bool MSConvertOCXControls::WriteOCXStream( const Reference< XModel >& rxModel, tools::SvRef<SotStorage> &xOleStg,
+bool MSConvertOCXControls::WriteOCXStream( const Reference< XModel >& rxModel, tools::SvRef<SotStorage> const &xOleStg,
     const Reference< XControlModel > &rxControlModel,
     const css::awt::Size& rSize, OUString &rName)
 {

@@ -20,10 +20,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_ANNOTATIONS_ANNOTATIONTAG_HXX
 #define INCLUDED_SD_SOURCE_UI_ANNOTATIONS_ANNOTATIONTAG_HXX
 
-#include <com/sun/star/office/XAnnotation.hpp>
-#include <basegfx/polygon/b2dpolypolygon.hxx>
-#include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include "smarttag.hxx"
+#include <smarttag.hxx>
+
+namespace com { namespace sun { namespace star { namespace office { class XAnnotation; } } } }
 
 namespace sd {
 
@@ -31,11 +30,11 @@ class View;
 class AnnotationManagerImpl;
 class AnnotationWindow;
 
-class AnnotationTag : public SmartTag
+class AnnotationTag final : public SmartTag
 {
 public:
-    AnnotationTag( AnnotationManagerImpl& rManager, ::sd::View& rView, const css::uno::Reference< css::office::XAnnotation >& xAnnotation, Color& rColor, int nIndex, const vcl::Font& rFont );
-    virtual ~AnnotationTag();
+    AnnotationTag( AnnotationManagerImpl& rManager, ::sd::View& rView, const css::uno::Reference< css::office::XAnnotation >& xAnnotation, Color const & rColor, int nIndex, const vcl::Font& rFont );
+    virtual ~AnnotationTag() override;
 
     /// @return true if the SmartTag handled the event.
     virtual bool MouseButtonDown( const MouseEvent&, SmartHdl& ) override;
@@ -50,38 +49,37 @@ public:
     virtual bool Command( const CommandEvent& rCEvt ) override;
 
     // callbacks from sdr view
-    virtual sal_uLong GetMarkablePointCount() const override;
-    virtual sal_uLong GetMarkedPointCount() const override;
-    virtual bool MarkPoint(SdrHdl& rHdl, bool bUnmark=false) override;
+    virtual sal_Int32 GetMarkablePointCount() const override;
+    virtual sal_Int32 GetMarkedPointCount() const override;
+    virtual bool MarkPoint(SdrHdl& rHdl, bool bUnmark) override;
     virtual void CheckPossibilities() override;
-    virtual bool MarkPoints(const Rectangle* pRect, bool bUnmark) override;
+    virtual bool MarkPoints(const ::tools::Rectangle* pRect, bool bUnmark) override;
 
     void Move( int nDX, int nDY );
     bool OnMove( const KeyEvent& rKEvt );
 
     BitmapEx CreateAnnotationBitmap(bool);
 
-    css::uno::Reference< css::office::XAnnotation > GetAnnotation() const { return mxAnnotation; }
+    const css::uno::Reference< css::office::XAnnotation >& GetAnnotation() const { return mxAnnotation; }
 
     void OpenPopup( bool bEdit );
     void ClosePopup();
 
-protected:
+private:
     virtual void addCustomHandles( SdrHdlList& rHandlerList ) override;
     virtual bool getContext( SdrViewContext& rContext ) override;
     virtual void disposing() override;
     virtual void select() override;
     virtual void deselect() override;
 
-    DECL_LINK_TYPED( WindowEventHandler, VclWindowEvent&, void );
-    DECL_LINK_TYPED( ClosePopupHdl, void*, void );
+    DECL_LINK( WindowEventHandler, VclWindowEvent&, void );
+    DECL_LINK( ClosePopupHdl, void*, void );
 
-private:
     AnnotationManagerImpl& mrManager;
     css::uno::Reference< css::office::XAnnotation > mxAnnotation;
     VclPtr<AnnotationWindow>                        mpAnnotationWindow;
-    Color                                           maColor;
-    int                                             mnIndex;
+    Color const                                     maColor;
+    int const                                       mnIndex;
     const vcl::Font&                                mrFont;
     Size                                            maSize;
     ImplSVEvent *                                   mnClosePopupEvent;

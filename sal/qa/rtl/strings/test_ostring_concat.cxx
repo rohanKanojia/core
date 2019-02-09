@@ -9,7 +9,6 @@
 
 // activate support for detecting errors instead of getting compile errors
 #define RTL_STRING_UNITTEST_CONCAT
-bool rtl_string_unittest_invalid_concat = false;
 
 #include <sal/types.h>
 #include <cppunit/TestFixture.h>
@@ -22,11 +21,13 @@ bool rtl_string_unittest_invalid_concat = false;
 
 #include <typeinfo>
 
+bool rtl_string_unittest_invalid_concat = false;
+
 using namespace rtl;
 
 namespace std
 {
-template< typename charT, typename traits > std::basic_ostream<charT, traits> &
+template< typename charT, typename traits > static std::basic_ostream<charT, traits> &
 operator <<(
     std::basic_ostream<charT, traits> & stream, const std::type_info& info )
 {
@@ -78,10 +79,6 @@ void test::ostring::StringConcat::checkConcat()
     CPPUNIT_ASSERT_EQUAL(( typeid( OStringConcat< OString, const char* > )), typeid( OString( "foo" ) + d3 ));
     CPPUNIT_ASSERT_EQUAL( OString( "fooabc" ), OString( OString( "foo" ) + d4 ));
     CPPUNIT_ASSERT_EQUAL(( typeid( OStringConcat< OString, char* > )), typeid( OString( "foo" ) + d4 ));
-#ifdef __GNUC__
-    CPPUNIT_ASSERT_EQUAL( OString( "foobar" ), OString( OStringBuffer( "foo" ) + OString( "bar" )));
-    CPPUNIT_ASSERT_EQUAL(( typeid( OStringConcat< OStringBuffer, OString > )), typeid( OStringBuffer( "foo" ) + OString( "bar" )));
-#endif
 }
 
 void test::ostring::StringConcat::checkEnsureCapacity()
@@ -95,7 +92,7 @@ void test::ostring::StringConcat::checkEnsureCapacity()
     rtl_string_ensureCapacity( &str, 4 ); // should be no-op
     CPPUNIT_ASSERT_EQUAL( sal_Int32( 4 ), str->length );
     CPPUNIT_ASSERT_EQUAL( 1, int( str->refCount ));
-    CPPUNIT_ASSERT( oldStr == str );
+    CPPUNIT_ASSERT_EQUAL( str, oldStr );
 
     rtl_string_acquire( oldStr );
     CPPUNIT_ASSERT_EQUAL( 2, int( str->refCount ));
@@ -104,7 +101,7 @@ void test::ostring::StringConcat::checkEnsureCapacity()
     CPPUNIT_ASSERT_EQUAL( 1, int( str->refCount ));
     // a copy was forced because of refcount
     CPPUNIT_ASSERT( oldStr != str );
-    CPPUNIT_ASSERT( strcmp( oldStr->buffer, str->buffer ) == 0 );
+    CPPUNIT_ASSERT_EQUAL( 0, strcmp( oldStr->buffer, str->buffer ) );
     CPPUNIT_ASSERT_EQUAL( 1, int( oldStr->refCount ));
     rtl_string_release( str );
     str = oldStr;
@@ -114,7 +111,7 @@ void test::ostring::StringConcat::checkEnsureCapacity()
     CPPUNIT_ASSERT_EQUAL( sal_Int32( 4 ), str->length ); // size is still 4
     CPPUNIT_ASSERT_EQUAL( 1, int( str->refCount ));
     CPPUNIT_ASSERT( oldStr != str );
-    CPPUNIT_ASSERT( strcmp( oldStr->buffer, str->buffer ) == 0 );
+    CPPUNIT_ASSERT_EQUAL( 0, strcmp( oldStr->buffer, str->buffer ) );
     CPPUNIT_ASSERT_EQUAL( 1, int( oldStr->refCount ));
     strcpy( str->buffer, "01234567890123456789" ); // but there should be extra capacity
     str->length += 20;
@@ -141,6 +138,7 @@ void test::ostring::StringConcat::checkAppend()
 void test::ostring::StringConcat::checkInvalid()
 {
     CPPUNIT_ASSERT( !INVALID_CONCAT( OString() + OString()));
+    CPPUNIT_ASSERT( INVALID_CONCAT( OString( "a" ) + OStringBuffer( "b" )));
     CPPUNIT_ASSERT( INVALID_CONCAT( OString( "a" ) + OUString( "b" )));
     CPPUNIT_ASSERT( INVALID_CONCAT( OString( "a" ) + OUStringBuffer( "b" )));
     CPPUNIT_ASSERT( INVALID_CONCAT( OString( "a" ) + OUStringLiteral( "b" )));
@@ -149,6 +147,13 @@ void test::ostring::StringConcat::checkInvalid()
     rtl_uString* rus = nullptr;
     CPPUNIT_ASSERT( INVALID_CONCAT( OUString( "b" ) + rs ));
     CPPUNIT_ASSERT( INVALID_CONCAT( OUString( "b" ) + rus ));
+
+#if 0
+    // Should fail to compile, to avoid use of OStringConcat lvalues that
+    // contain dangling references to temporaries:
+    auto const conc = OStringLiteral("foo") + "bar";
+    (void) OString(conc);
+#endif
 }
 
 }} // namespace

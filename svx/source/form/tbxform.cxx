@@ -25,25 +25,19 @@
 #include <vcl/toolbox.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/settings.hxx>
-#include "fmitems.hxx"
-#include "formtoolbars.hxx"
+#include <formtoolbars.hxx>
 
 
 #include <svx/dialmgr.hxx>
-#include <svx/dialogs.hrc>
-#include "svx/tbxctl.hxx"
-#include "tbxform.hxx"
-#include "svx/fmresids.hrc"
-#include "fmhelp.hrc"
+#include <svx/svxids.hrc>
+#include <svx/strings.hrc>
+#include <svx/tbxctl.hxx>
+#include <tbxform.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/viewsh.hxx>
-#include <sfx2/imagemgr.hxx>
-#include <com/sun/star/beans/XPropertySet.hpp>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::frame;
-using ::com::sun::star::beans::XPropertySet;
 
 SvxFmAbsRecWin::SvxFmAbsRecWin( vcl::Window* _pParent, SfxToolBoxControl* _pController )
     :NumericField( _pParent, WB_BORDER )
@@ -61,27 +55,27 @@ SvxFmAbsRecWin::SvxFmAbsRecWin( vcl::Window* _pParent, SfxToolBoxControl* _pCont
 
 void SvxFmAbsRecWin::FirePosition( bool _bForce )
 {
-    if ( _bForce || IsValueChangedFromSaved() )
+    if ( !_bForce && !IsValueChangedFromSaved() )
+        return;
+
+    sal_Int64 nRecord = GetValue();
+    if (nRecord < GetMin() || nRecord > GetMax())
     {
-        sal_Int64 nRecord = GetValue();
-        if (nRecord < GetMin() || nRecord > GetMax())
-        {
-            return;
-        }
-
-        SfxInt32Item aPositionParam( FN_PARAM_1, static_cast<sal_Int32>(nRecord) );
-
-        Any a;
-        Sequence< PropertyValue > aArgs( 1 );
-        aArgs[0].Name = "Position";
-        aPositionParam.QueryValue( a );
-        aArgs[0].Value = a;
-        m_pController->Dispatch( ".uno:AbsoluteRecord",
-                                 aArgs );
-        m_pController->updateStatus();
-
-        SaveValue();
+        return;
     }
+
+    SfxInt32Item aPositionParam( FN_PARAM_1, static_cast<sal_Int32>(nRecord) );
+
+    Any a;
+    Sequence< PropertyValue > aArgs( 1 );
+    aArgs[0].Name = "Position";
+    aPositionParam.QueryValue( a );
+    aArgs[0].Value = a;
+    m_pController->Dispatch( ".uno:AbsoluteRecord",
+                             aArgs );
+    m_pController->updateStatus();
+
+    SaveValue();
 }
 
 
@@ -133,17 +127,14 @@ void SvxFmTbxCtlAbsRec::StateChanged( sal_uInt16 nSID, SfxItemState eState, cons
         pWin->SetText(OUString());
 
 
-    // Enablen/disablen des Fensters
+    // enabling/disabling of the window
     pToolBox->EnableItem(nId, bEnable);
     SfxToolBoxControl::StateChanged( nSID, eState,pState );
 }
 
-
 VclPtr<vcl::Window> SvxFmTbxCtlAbsRec::CreateItemWindow( vcl::Window* pParent )
 {
-    VclPtrInstance<SvxFmAbsRecWin> pWin( pParent, this );
-    pWin->SetUniqueId( UID_ABSOLUTE_RECORD_WINDOW );
-    return pWin.get();
+    return VclPtrInstance<SvxFmAbsRecWin>(pParent, this);
 }
 
 SFX_IMPL_TOOLBOX_CONTROL( SvxFmTbxCtlRecText, SfxBoolItem );
@@ -153,21 +144,19 @@ SvxFmTbxCtlRecText::SvxFmTbxCtlRecText( sal_uInt16 nSlotId, sal_uInt16 nId, Tool
 {
 }
 
-
 SvxFmTbxCtlRecText::~SvxFmTbxCtlRecText()
 {
 }
 
-
 VclPtr<vcl::Window> SvxFmTbxCtlRecText::CreateItemWindow( vcl::Window* pParent )
 {
-    OUString aText(SVX_RESSTR(RID_STR_REC_TEXT));
+    OUString aText(SvxResId(RID_STR_REC_TEXT));
     VclPtrInstance<FixedText> pFixedText( pParent );
     Size aSize( pFixedText->GetTextWidth( aText ), pFixedText->GetTextHeight( ) );
     pFixedText->SetText( aText );
-    aSize.Width() += 6;
+    aSize.AdjustWidth(6 );
     pFixedText->SetSizePixel( aSize );
-    pFixedText->SetBackground(Wallpaper(Color(COL_TRANSPARENT)));
+    pFixedText->SetBackground(Wallpaper(COL_TRANSPARENT));
 
     return pFixedText;
 }
@@ -187,13 +176,13 @@ SvxFmTbxCtlRecFromText::~SvxFmTbxCtlRecFromText()
 
 VclPtr<vcl::Window> SvxFmTbxCtlRecFromText::CreateItemWindow( vcl::Window* pParent )
 {
-    OUString aText(SVX_RESSTR(RID_STR_REC_FROM_TEXT));
+    OUString aText(SvxResId(RID_STR_REC_FROM_TEXT));
     VclPtrInstance<FixedText> pFixedText( pParent, WB_CENTER );
     Size aSize( pFixedText->GetTextWidth( aText ), pFixedText->GetTextHeight( ) );
-    aSize.Width() += 12;
+    aSize.AdjustWidth(12 );
     pFixedText->SetText( aText );
     pFixedText->SetSizePixel( aSize );
-    pFixedText->SetBackground(Wallpaper(Color(COL_TRANSPARENT)));
+    pFixedText->SetBackground(Wallpaper(COL_TRANSPARENT));
     return pFixedText.get();
 }
 
@@ -215,9 +204,9 @@ SvxFmTbxCtlRecTotal::~SvxFmTbxCtlRecTotal()
 VclPtr<vcl::Window> SvxFmTbxCtlRecTotal::CreateItemWindow( vcl::Window* pParent )
 {
     pFixedText.reset(VclPtr<FixedText>::Create( pParent ));
-    OUString aSample("123456");
+    OUString const aSample("123456");
     Size aSize( pFixedText->GetTextWidth( aSample ), pFixedText->GetTextHeight( ) );
-    aSize.Width() += 12;
+    aSize.AdjustWidth(12 );
     pFixedText->SetSizePixel( aSize );
     pFixedText->SetBackground();
     pFixedText->SetPaintTransparent(true);
@@ -228,7 +217,7 @@ VclPtr<vcl::Window> SvxFmTbxCtlRecTotal::CreateItemWindow( vcl::Window* pParent 
 void SvxFmTbxCtlRecTotal::StateChanged( sal_uInt16 nSID, SfxItemState eState, const SfxPoolItem* pState )
 {
 
-    // Setzen des FixedTextes
+    // setting the FixedText
     if (GetSlotId() != SID_FM_RECORD_TOTAL)
         return;
 

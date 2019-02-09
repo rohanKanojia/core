@@ -17,31 +17,31 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 #include <exception>
 #include <memory>
 #include <vector>
 
-#include "com/sun/star/connection/XConnection.hpp"
-#include "com/sun/star/io/IOException.hpp"
-#include "com/sun/star/uno/Any.hxx"
-#include "com/sun/star/uno/Exception.hpp"
-#include "com/sun/star/uno/Reference.hxx"
-#include "com/sun/star/uno/RuntimeException.hpp"
-#include "com/sun/star/uno/Sequence.hxx"
-#include "com/sun/star/uno/Type.hxx"
-#include "com/sun/star/uno/XCurrentContext.hpp"
-#include "com/sun/star/uno/XInterface.hpp"
-#include "cppu/unotype.hxx"
-#include "rtl/byteseq.h"
-#include "rtl/ustring.hxx"
-#include "sal/log.hxx"
-#include "sal/types.h"
-#include "typelib/typeclass.h"
-#include "typelib/typedescription.h"
-#include "typelib/typedescription.hxx"
+#include <com/sun/star/connection/XConnection.hpp>
+#include <com/sun/star/io/IOException.hpp>
+#include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Exception.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <com/sun/star/uno/Type.hxx>
+#include <com/sun/star/uno/XCurrentContext.hpp>
+#include <com/sun/star/uno/XInterface.hpp>
+#include <cppu/unotype.hxx>
+#include <rtl/byteseq.h>
+#include <rtl/ustring.hxx>
+#include <sal/log.hxx>
+#include <sal/types.h>
+#include <typelib/typeclass.h>
+#include <typelib/typedescription.h>
+#include <typelib/typedescription.hxx>
 
 #include "binaryany.hxx"
 #include "bridge.hxx"
@@ -78,7 +78,7 @@ css::uno::Sequence< sal_Int8 > read(
     return buf;
 }
 
-extern "C" void SAL_CALL request(void * pThreadSpecificData) {
+extern "C" void request(void * pThreadSpecificData) {
     assert(pThreadSpecificData != nullptr);
     std::unique_ptr< IncomingRequest >(
         static_cast< IncomingRequest * >(pThreadSpecificData))->
@@ -120,7 +120,7 @@ void Reader::execute() {
             block.done();
         }
     } catch (const css::uno::Exception & e) {
-        SAL_WARN("binaryurp", "caught UNO exception '" << e.Message << '\'');
+        SAL_WARN("binaryurp", "caught UNO exception '" << e << '\'');
     } catch (const std::exception & e) {
         SAL_WARN("binaryurp", "caught C++ exception '" << e.what() << '\'');
     }
@@ -182,7 +182,7 @@ void Reader::readMessage(Unmarshal & unmarshal) {
         oid = unmarshal.readOid();
         if (oid.isEmpty()) {
             throw css::io::IOException(
-                "binaryurp::Unmarshal: emtpy OID");
+                "binaryurp::Unmarshal: empty OID");
         }
         lastOid_ = oid;
     } else {

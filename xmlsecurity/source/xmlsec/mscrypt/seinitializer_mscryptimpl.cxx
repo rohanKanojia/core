@@ -22,19 +22,20 @@
 
 #include "securityenvironment_mscryptimpl.hxx"
 
-#include "xmlsecurity/xmlsec-wrapper.h"
-#include "xmlsec/mscrypto/app.h"
+#include <xmlsec-wrapper.h>
+#include <xmlsec/mscng/app.h>
 #include <com/sun/star/xml/crypto/SecurityEnvironment.hpp>
 #include <com/sun/star/xml/crypto/XMLSecurityContext.hpp>
-#include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
+#include <svl/cryptosign.hxx>
 
-namespace cssu = com::sun::star::uno;
+using namespace com::sun::star;
 namespace cssl = com::sun::star::lang;
 namespace cssxc = com::sun::star::xml::crypto;
 
 SEInitializer_MSCryptImpl::SEInitializer_MSCryptImpl(
-    const cssu::Reference< cssu::XComponentContext > &rxContext)
+    const uno::Reference< uno::XComponentContext > &rxContext)
     :mxContext( rxContext )
 {
 }
@@ -44,89 +45,88 @@ SEInitializer_MSCryptImpl::~SEInitializer_MSCryptImpl()
 }
 
 /* XSEInitializer */
-cssu::Reference< cssxc::XXMLSecurityContext > SAL_CALL
+uno::Reference< cssxc::XXMLSecurityContext > SAL_CALL
     SEInitializer_MSCryptImpl::createSecurityContext(
     const OUString& sCertDB )
-    throw (cssu::RuntimeException)
 {
     const char* n_pCertStore ;
     HCERTSTORE  n_hStoreHandle ;
+    OString sCertDir;
 
     //Initialize the crypto engine
     if( sCertDB.getLength() > 0 )
     {
-        OString sCertDir(sCertDB.getStr(), sCertDB.getLength(), RTL_TEXTENCODING_ASCII_US);
+        sCertDir = OString(sCertDB.getStr(), sCertDB.getLength(), RTL_TEXTENCODING_ASCII_US);
         n_pCertStore = sCertDir.getStr();
-        n_hStoreHandle = CertOpenSystemStore( NULL, n_pCertStore ) ;
-        if( n_hStoreHandle == NULL )
+        n_hStoreHandle = CertOpenSystemStoreW( NULL, o3tl::toW(sCertDB.getStr())) ;
+        if( n_hStoreHandle == nullptr )
         {
-            return NULL;
+            return nullptr;
         }
     }
     else
     {
-        n_pCertStore = NULL ;
-        n_hStoreHandle = NULL ;
+        n_pCertStore = nullptr ;
+        n_hStoreHandle = nullptr ;
     }
 
-    xmlSecMSCryptoAppInit( n_pCertStore ) ;
+    xmlSecMSCngAppInit(n_pCertStore);
 
     try {
         /* Build Security Environment */
-        cssu::Reference< cssxc::XSecurityEnvironment > xSecEnv = cssxc::SecurityEnvironment::create( mxContext );
+        uno::Reference< cssxc::XSecurityEnvironment > xSecEnv = cssxc::SecurityEnvironment::create( mxContext );
 
         /* Setup key slot and certDb */
-        cssu::Reference< cssl::XUnoTunnel > xSecEnvTunnel( xSecEnv, cssu::UNO_QUERY_THROW );
-        SecurityEnvironment_MSCryptImpl* pSecEnv = ( SecurityEnvironment_MSCryptImpl* )xSecEnvTunnel->getSomething( SecurityEnvironment_MSCryptImpl::getUnoTunnelId() ) ;
-        if( pSecEnv == NULL )
+        uno::Reference< cssl::XUnoTunnel > xSecEnvTunnel( xSecEnv, uno::UNO_QUERY_THROW );
+        SecurityEnvironment_MSCryptImpl* pSecEnv = reinterpret_cast<SecurityEnvironment_MSCryptImpl*>(xSecEnvTunnel->getSomething( SecurityEnvironment_MSCryptImpl::getUnoTunnelId() ));
+        if( pSecEnv == nullptr )
         {
-            if( n_hStoreHandle != NULL )
+            if( n_hStoreHandle != nullptr )
             {
                 CertCloseStore( n_hStoreHandle, CERT_CLOSE_STORE_FORCE_FLAG ) ;
             }
 
-            xmlSecMSCryptoAppShutdown() ;
-            return NULL;
+            xmlSecMSCngAppShutdown();
+            return nullptr;
         }
 
-        if( n_hStoreHandle != NULL )
+        if( n_hStoreHandle != nullptr )
         {
             pSecEnv->setCryptoSlot( n_hStoreHandle ) ;
             pSecEnv->setCertDb( n_hStoreHandle ) ;
         }
         else
         {
-            pSecEnv->enableDefaultCrypt( sal_True ) ;
+            pSecEnv->enableDefaultCrypt( true ) ;
         }
 
         /* Build XML Security Context */
-        cssu::Reference< cssxc::XXMLSecurityContext > xSecCtx = cssxc::XMLSecurityContext::create( mxContext );
+        uno::Reference< cssxc::XXMLSecurityContext > xSecCtx = cssxc::XMLSecurityContext::create( mxContext );
 
         xSecCtx->setDefaultSecurityEnvironmentIndex(xSecCtx->addSecurityEnvironment( xSecEnv )) ;
         return xSecCtx;
     }
-    catch( cssu::Exception& )
+    catch( uno::Exception& )
     {
-        if( n_hStoreHandle != NULL )
+        if( n_hStoreHandle != nullptr )
         {
             CertCloseStore( n_hStoreHandle, CERT_CLOSE_STORE_FORCE_FLAG ) ;
         }
 
-        xmlSecMSCryptoAppShutdown() ;
-        return NULL;
+        xmlSecMSCngAppShutdown();
+        return nullptr;
     }
 }
 
-void SAL_CALL SEInitializer_MSCryptImpl::freeSecurityContext( const cssu::Reference< cssxc::XXMLSecurityContext >&)
-    throw (cssu::RuntimeException)
+void SAL_CALL SEInitializer_MSCryptImpl::freeSecurityContext( const uno::Reference< cssxc::XXMLSecurityContext >&)
 {
     /*
-    cssu::Reference< cssxc::XSecurityEnvironment > xSecEnv
+    uno::Reference< cssxc::XSecurityEnvironment > xSecEnv
         = securityContext->getSecurityEnvironment();
 
     if( xSecEnv.is() )
     {
-        cssu::Reference< cssl::XUnoTunnel > xEnvTunnel( xSecEnv , cssu::UNO_QUERY ) ;
+        uno::Reference< cssl::XUnoTunnel > xEnvTunnel( xSecEnv , uno::UNO_QUERY ) ;
         if( xEnvTunnel.is() )
         {
             SecurityEnvironment_MSCryptImpl* pSecEnv = ( SecurityEnvironment_MSCryptImpl* )xEnvTunnel->getSomething( SecurityEnvironment_MSCryptImpl::getUnoTunnelId() ) ;
@@ -144,45 +144,31 @@ void SAL_CALL SEInitializer_MSCryptImpl::freeSecurityContext( const cssu::Refere
     }
     */
 
-    xmlSecMSCryptoAppShutdown() ;
-}
-
-OUString SEInitializer_MSCryptImpl_getImplementationName()
-    throw (cssu::RuntimeException)
-{
-    return OUString( "com.sun.star.xml.security.bridge.xmlsec.SEInitializer_MSCryptImpl" );
-}
-
-cssu::Sequence< OUString > SAL_CALL SEInitializer_MSCryptImpl_getSupportedServiceNames()
-    throw (cssu::RuntimeException)
-{
-    cssu::Sequence<OUString> aRet { "com.sun.star.xml.crypto.SEInitializer" };
-    return aRet;
-}
-
-cssu::Reference< cssu::XInterface > SAL_CALL SEInitializer_MSCryptImpl_createInstance( const cssu::Reference< cssl::XMultiServiceFactory > & rSMgr)
-    throw( cssu::Exception )
-{
-    return (cppu::OWeakObject*) new SEInitializer_MSCryptImpl( comphelper::getComponentContext(rSMgr) );
+    xmlSecMSCngAppShutdown();
 }
 
 /* XServiceInfo */
 OUString SAL_CALL SEInitializer_MSCryptImpl::getImplementationName()
-    throw (cssu::RuntimeException)
 {
-    return SEInitializer_MSCryptImpl_getImplementationName();
+    return OUString("com.sun.star.xml.crypto.SEInitializer");
 }
 
 sal_Bool SAL_CALL SEInitializer_MSCryptImpl::supportsService( const OUString& rServiceName )
-    throw (cssu::RuntimeException)
 {
     return cppu::supportsService( this, rServiceName );
 }
 
-cssu::Sequence< OUString > SAL_CALL SEInitializer_MSCryptImpl::getSupportedServiceNames()
-    throw (cssu::RuntimeException)
+uno::Sequence< OUString > SAL_CALL SEInitializer_MSCryptImpl::getSupportedServiceNames()
 {
-    return SEInitializer_MSCryptImpl_getSupportedServiceNames();
+    uno::Sequence<OUString> aRet { "com.sun.star.xml.crypto.SEInitializer" };
+    return aRet;
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+com_sun_star_xml_crypto_SEInitializer_get_implementation(
+    uno::XComponentContext* pCtx, uno::Sequence<uno::Any> const& /*rSeq*/)
+{
+    return cppu::acquire(new SEInitializer_MSCryptImpl(pCtx));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

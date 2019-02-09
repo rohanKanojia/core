@@ -19,10 +19,12 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_INC_SCALEAUTOMATISM_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_INC_SCALEAUTOMATISM_HXX
 
-#include "chartview/ExplicitScaleValues.hxx"
 #include <com/sun/star/chart2/ScaleData.hpp>
 
 #include <tools/date.hxx>
+
+namespace chart { struct ExplicitIncrementData; }
+namespace chart { struct ExplicitScaleData; }
 
 namespace chart
 {
@@ -42,7 +44,6 @@ class ScaleAutomatism
 public:
     explicit            ScaleAutomatism(
                             const css::chart2::ScaleData& rSourceScale, const Date& rNullDate );
-    virtual             ~ScaleAutomatism();
 
     /** Expands own value range with the passed minimum and maximum.
      *
@@ -96,8 +97,8 @@ public:
                             ExplicitScaleData& rExplicitScale,
                             ExplicitIncrementData& rExplicitIncrement ) const;
 
-    css::chart2::ScaleData getScale() const { return m_aSourceScale;}
-    Date getNullDate() const { return m_aNullDate;}
+    const css::chart2::ScaleData& getScale() const { return m_aSourceScale;}
+    const Date& getNullDate() const { return m_aNullDate;}
 
 private:
     /** Fills the passed scale data and increment data for category scaling. */

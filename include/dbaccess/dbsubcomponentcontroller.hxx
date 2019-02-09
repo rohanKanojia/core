@@ -20,31 +20,44 @@
 #ifndef INCLUDED_DBACCESS_DBSUBCOMPONENTCONTROLLER_HXX
 #define INCLUDED_DBACCESS_DBSUBCOMPONENTCONTROLLER_HXX
 
-#include <dbaccess/genericcontroller.hxx>
-
-#include <com/sun/star/document/XScriptInvocationContext.hpp>
-#include <com/sun/star/sdbc/XConnection.hpp>
-#include <com/sun/star/sdbc/XDatabaseMetaData.hpp>
-#include <com/sun/star/sdbc/XDataSource.hpp>
-#include <com/sun/star/util/XNumberFormatter.hpp>
-#include <com/sun/star/util/XModifiable.hpp>
-
-#include <comphelper/broadcasthelper.hxx>
-#include <comphelper/proparrhlp.hxx>
-#include <comphelper/propertycontainer.hxx>
-#include <connectivity/dbmetadata.hxx>
-#include <cppuhelper/implbase.hxx>
-
+#include <exception>
 #include <memory>
 
+#include <com/sun/star/beans/PropertyVetoException.hpp>
+#include <com/sun/star/document/XScriptInvocationContext.hpp>
+#include <com/sun/star/lang/EventObject.hpp>
+#include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <com/sun/star/uno/Type.hxx>
+#include <com/sun/star/util/XModifiable.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <dbaccess/dbaccessdllapi.h>
+#include <dbaccess/genericcontroller.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+
+namespace com { namespace sun { namespace star {
+    namespace beans { class XPropertySet; }
+    namespace beans { struct PropertyValue; }
+    namespace document { class XEmbeddedScripts; }
+    namespace frame { class XModel; }
+    namespace sdbc { class XConnection; }
+    namespace sdbc { class XDatabaseMetaData; }
+    namespace uno { class XComponentContext; }
+    namespace util { class XModifyListener; }
+    namespace util { class XNumberFormatter; }
+} } }
+
+namespace dbtools {
+    class DatabaseMetaData;
+    class SQLExceptionInfo;
+}
 
 namespace dbaui
 {
-
-
     //= DBSubComponentController
-
-    class DBSubComponentController;
 
     typedef ::cppu::ImplInheritanceHelper<   OGenericUnoController
                                          ,   css::document::XScriptInvocationContext
@@ -76,7 +89,6 @@ namespace dbaui
         virtual void     impl_onModifyChanged();
 
     public:
-
         bool            isReadOnly()            const;
         bool            isEditable()            const;
         void            setEditable(bool _bEditable);
@@ -137,29 +149,29 @@ namespace dbaui
 
         /** returns the number formatter
         */
-        css::uno::Reference< css::util::XNumberFormatter >    getNumberFormatter() const;
+        css::uno::Reference< css::util::XNumberFormatter > const & getNumberFormatter() const;
 
         // css::frame::XController
-        virtual sal_Bool SAL_CALL suspend(sal_Bool bSuspend) throw( css::uno::RuntimeException, std::exception ) override;
-        virtual sal_Bool SAL_CALL attachModel(const css::uno::Reference< css::frame::XModel > & xModel) throw( css::uno::RuntimeException, std::exception ) override;
+        virtual sal_Bool SAL_CALL suspend(sal_Bool bSuspend) override;
+        virtual sal_Bool SAL_CALL attachModel(const css::uno::Reference< css::frame::XModel > & xModel) override;
 
         // XScriptInvocationContext
-        virtual css::uno::Reference< css::document::XEmbeddedScripts > SAL_CALL getScriptContainer() throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::document::XEmbeddedScripts > SAL_CALL getScriptContainer() override;
 
         // XModifiable
-        virtual sal_Bool SAL_CALL isModified(  ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL setModified( sal_Bool bModified ) throw (css::beans::PropertyVetoException, css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL isModified(  ) override;
+        virtual void SAL_CALL setModified( sal_Bool bModified ) override;
 
         // XModifyBroadcaster
-        virtual void SAL_CALL addModifyListener( const css::uno::Reference< css::util::XModifyListener >& aListener ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL removeModifyListener( const css::uno::Reference< css::util::XModifyListener >& aListener ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL addModifyListener( const css::uno::Reference< css::util::XModifyListener >& aListener ) override;
+        virtual void SAL_CALL removeModifyListener( const css::uno::Reference< css::util::XModifyListener >& aListener ) override;
 
         // XTitle
-        virtual OUString SAL_CALL getTitle(  ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getTitle(  ) override;
 
     protected:
         DBSubComponentController(const css::uno::Reference< css::uno::XComponentContext>& _rxORB);
-        virtual ~DBSubComponentController();
+        virtual ~DBSubComponentController() override;
 
         void                disconnect();
         virtual void        reconnect( bool _bUI );
@@ -175,22 +187,19 @@ namespace dbaui
 
     protected:
         // XEventListener
-        virtual void SAL_CALL disposing(const css::lang::EventObject& Source) throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL disposing(const css::lang::EventObject& Source) override;
 
         // OComponentHelper
         virtual void SAL_CALL disposing() override;
 
         // XInterface
-        virtual css::uno::Any  SAL_CALL queryInterface(const css::uno::Type& _rType) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any  SAL_CALL queryInterface(const css::uno::Type& _rType) override;
 
         // XTypeProvider
-        virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) override;
 
     protected:
         sal_Int32 getCurrentStartNumber() const;
-
-    private:
-        DBSubComponentController();    // never implemented
     };
 
 

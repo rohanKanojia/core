@@ -25,8 +25,6 @@
 
 #include <cppuhelper/implbase.hxx>
 
-#include <osl/mutex.hxx>
-
 class AccObjectManagerAgent;
 
 /**
@@ -45,13 +43,13 @@ protected:
     AccObjectManagerAgent* pAgent;
 public:
     AccEventListener( css::accessibility::XAccessible* pAcc, AccObjectManagerAgent* Agent);
-    virtual ~AccEventListener();
+    virtual ~AccEventListener() override;
 
     // XEventListener
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw (css::uno::RuntimeException) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
     // XAccessibleEventListener
-    virtual void SAL_CALL notifyEvent( const css::accessibility::AccessibleEventObject& aEvent ) throw (css::uno::RuntimeException) override;
+    virtual void SAL_CALL notifyEvent( const css::accessibility::AccessibleEventObject& aEvent ) override;
 
     //for name changed event
     virtual void HandleNameChangedEvent(css::uno::Any name);

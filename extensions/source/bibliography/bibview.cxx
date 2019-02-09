@@ -18,7 +18,7 @@
  */
 
 
-#include "bib.hrc"
+#include <strings.hrc>
 #include "bibcont.hxx"
 #include "bibbeam.hxx"
 #include "general.hxx"
@@ -32,7 +32,7 @@
 #include <vcl/svapp.hxx>
 #include <com/sun/star/sdbc/XResultSetUpdate.hpp>
 #include <com/sun/star/form/XLoadable.hpp>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 #include <tools/debug.hxx>
 
 using namespace ::com::sun::star;
@@ -41,6 +41,21 @@ using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::uno;
 
+namespace
+{
+    class MessageWithCheck : public weld::MessageDialogController
+    {
+    private:
+        std::unique_ptr<weld::CheckButton> m_xWarningOnBox;
+    public:
+        MessageWithCheck(weld::Window *pParent)
+            : MessageDialogController(pParent, "modules/sbibliography/ui/querydialog.ui", "QueryDialog", "ask")
+            , m_xWarningOnBox(m_xBuilder->weld_check_button("ask"))
+        {
+        }
+        bool get_active() const { return m_xWarningOnBox->get_active(); }
+    };
+}
 
 namespace bib
 {
@@ -90,10 +105,7 @@ namespace bib
                     else
                         xResUpd->updateRow();
                 }
-                catch( const uno::Exception& rEx)
-                {
-                   (void) rEx;
-                }
+                catch( const uno::Exception&) {}
             }
         }
 
@@ -111,7 +123,6 @@ namespace bib
         // TODO:
         // this is _strange_: Why not updating the existent general page?
         // I consider the current behaviour a HACK.
-        // frank.schoenheit@sun.com
         if ( m_pGeneralPage )
         {
             m_pGeneralPage->Hide();
@@ -141,12 +152,14 @@ namespace bib
             else if(bExecute)
             {
                 sErrorString += "\n";
-                sErrorString += BIB_RESSTR(RID_MAP_QUESTION);
-                ScopedVclPtrInstance< QueryBox > aQuery(this, WB_YES_NO, sErrorString);
-                aQuery->SetDefaultCheckBoxText();
-                short nResult = aQuery->Execute();
-                BibModul::GetConfig()->SetShowColumnAssignmentWarning(
-                    !aQuery->GetCheckBoxState());
+                sErrorString += BibResId(RID_MAP_QUESTION);
+
+                MessageWithCheck aQueryBox(GetFrameWeld());
+                aQueryBox.set_primary_text(sErrorString);
+
+                short nResult = aQueryBox.run();
+                BibModul::GetConfig()->SetShowColumnAssignmentWarning(!aQueryBox.get_active());
+
                 if( RET_YES != nResult )
                 {
                     bExecute = false;
@@ -175,7 +188,7 @@ namespace bib
         mpBibView->Resize();
     }
 
-    IMPL_LINK_NOARG_TYPED( BibView, CallMappingHdl, void*, void)
+    IMPL_LINK_NOARG( BibView, CallMappingHdl, void*, void)
     {
         m_pDatMan->CreateMappingDialog( this );
     }

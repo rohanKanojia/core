@@ -26,19 +26,18 @@ class SbxArray;
 
 // SBXSCAN.CXX
 extern void ImpCvtNum( double nNum, short nPrec, OUString& rRes, bool bCoreString=false );
-extern SbxError ImpScan
+extern ErrCode ImpScan
     ( const OUString& rSrc, double& nVal, SbxDataType& rType, sal_uInt16* pLen,
-      bool bAllowIntntl=false, bool bOnlyIntntl=false );
+      bool bOnlyIntntl );
 
 // with advanced evaluation (International, "TRUE"/"FALSE")
 extern bool ImpConvStringExt( OUString& rSrc, SbxDataType eTargetType );
 
-void ImpGetIntntlSep( sal_Unicode& rcDecimalSep, sal_Unicode& rcThousandSep );
+void ImpGetIntntlSep( sal_Unicode& rcDecimalSep, sal_Unicode& rcThousandSep, sal_Unicode& rcDecimalSepAlt );
 
 // SBXINT.CXX
 
-double      ImpRound( double );
-sal_Int16       ImpGetInteger( const SbxValues* );
+sal_Int16   ImpGetInteger( const SbxValues* );
 void        ImpPutInteger( SbxValues*, sal_Int16 );
 
 sal_Int64   ImpGetInt64( const SbxValues* );
@@ -71,12 +70,12 @@ sal_Int64   ImpGetCurrency( const SbxValues* );
 void        ImpPutCurrency( SbxValues*, const sal_Int64 );
 
 inline  sal_Int64   ImpDoubleToCurrency( double d )
-                    {   if (d > 0) return (sal_Int64)( d * CURRENCY_FACTOR + 0.5);
-                              else return (sal_Int64)( d * CURRENCY_FACTOR - 0.5);
+                    {   if (d > 0) return static_cast<sal_Int64>( d * CURRENCY_FACTOR + 0.5);
+                              else return static_cast<sal_Int64>( d * CURRENCY_FACTOR - 0.5);
                     }
 
 inline  double      ImpCurrencyToDouble( const sal_Int64 r )
-                    { return (double)r / (double)CURRENCY_FACTOR; }
+                    { return static_cast<double>(r) / double(CURRENCY_FACTOR); }
 
 
 // SBXDEC.CXX

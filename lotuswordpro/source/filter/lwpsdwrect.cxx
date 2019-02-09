@@ -64,54 +64,30 @@
 /**************************************************************************
  * @short:  Default constructor
 **************************************************************************/
-SdwRectangle::SdwRectangle() : m_bRotated(false)
+SdwRectangle::SdwRectangle()
+    : m_bRotated(false)
+    // m_nRectCorner array fields are default initialized with Point()
 {
-    for (sal_uInt16 i = 0; i < 4; i++)
-    {
-        m_nRectCorner[0] = Point(0, 0);
-    }
 }
 /**************************************************************************
  * @short:  Constructor
  * @param:  aPt0~aPt3 four corner points of a rectangle.
 **************************************************************************/
 SdwRectangle::SdwRectangle(const Point& rPt0, const Point& rPt1,
-        const Point& rPt2, const Point& rPt3) : m_bRotated(true)
-{
-    m_nRectCorner[0] = rPt0;
-    m_nRectCorner[1] = rPt1;
-    m_nRectCorner[2] = rPt2;
-    m_nRectCorner[3] = rPt3;
-
-    if (rPt0.Y() == rPt1.Y() && rPt0.Y() < rPt3.Y())
-    {
-        m_bRotated = false;
-    }
-}
-
-/**************************************************************************
- * @short:  Copy constructor
-**************************************************************************/
-SdwRectangle::SdwRectangle(const SdwRectangle& rOther)
-{
-    m_nRectCorner[0] = rOther.m_nRectCorner[0];
-    m_nRectCorner[1] = rOther.m_nRectCorner[1];
-    m_nRectCorner[2] = rOther.m_nRectCorner[2];
-    m_nRectCorner[3] = rOther.m_nRectCorner[3];
-
-    m_bRotated  = rOther.IsRectRotated();
-}
-SdwRectangle::~SdwRectangle()
+        const Point& rPt2, const Point& rPt3)
+    : m_bRotated(rPt0.Y() != rPt1.Y() || rPt0.Y() >= rPt3.Y())
+    , m_nRectCorner({{rPt0, rPt1, rPt2, rPt3}})
 {
 }
+
 /**************************************************************************
  * @short:  Calculate and return center point of the rectangle.
  * @return: center point
 **************************************************************************/
 Point SdwRectangle::GetRectCenter() const
 {
-    long nX = (long)((double)(m_nRectCorner[0].X() + m_nRectCorner[2].X())/2 + 0.5);
-    long nY = (long)((double)(m_nRectCorner[0].Y() + m_nRectCorner[2].Y())/2 + 0.5);
+    long nX = static_cast<long>(static_cast<double>(m_nRectCorner[0].X() + m_nRectCorner[2].X())/2 + 0.5);
+    long nY = static_cast<long>(static_cast<double>(m_nRectCorner[0].Y() + m_nRectCorner[2].Y())/2 + 0.5);
 
     return Point(nX, nY);
 }
@@ -126,7 +102,7 @@ long SdwRectangle::GetWidth() const
     long nX1 = m_nRectCorner[1].X();
     long nY1 = m_nRectCorner[1].Y();
 
-    return (long)CalcDistBetween2Points(nX0, nY0, nX1, nY1);
+    return static_cast<long>(CalcDistBetween2Points(nX0, nY0, nX1, nY1));
 }
 /**************************************************************************
  * @short:  Calculate height of the rectangle.
@@ -139,13 +115,13 @@ long SdwRectangle::GetHeight() const
     long nX2 = m_nRectCorner[2].X();
     long nY2 = m_nRectCorner[2].Y();
 
-    return (long)CalcDistBetween2Points(nX1, nY1, nX2, nY2);
+    return static_cast<long>(CalcDistBetween2Points(nX1, nY1, nX2, nY2));
 }
 /**************************************************************************
  * @short:  Calculate coordinate of the original rectangle.
  * @return: a prz rectangle
 **************************************************************************/
-Rectangle SdwRectangle::GetOriginalRect() const
+tools::Rectangle SdwRectangle::GetOriginalRect() const
 {
     if (m_bRotated)
     {
@@ -153,15 +129,15 @@ Rectangle SdwRectangle::GetOriginalRect() const
         long nWidth = GetWidth();
         Point aCenter = GetRectCenter();
 
-        Point aLT(aCenter.X()-(long)((double)nWidth/2+0.5),
-            aCenter.Y()-(long)((double)nHeight/2+0.5));
+        Point aLT(aCenter.X()-static_cast<long>(static_cast<double>(nWidth)/2+0.5),
+            aCenter.Y()-static_cast<long>(static_cast<double>(nHeight)/2+0.5));
         Point aRB(aLT.X()+nWidth, aLT.Y()+nHeight);
 
-        return Rectangle(aLT, aRB);
+        return tools::Rectangle(aLT, aRB);
     }
     else
     {
-        return Rectangle(m_nRectCorner[3], m_nRectCorner[1]);
+        return tools::Rectangle(m_nRectCorner[3], m_nRectCorner[1]);
     }
 }
 /**************************************************************************
@@ -175,16 +151,16 @@ double SdwRectangle::GetRotationAngle() const
         return 0.00;
     }
 
-    double fX1 = (double)(m_nRectCorner[1].X());
-    double fY1 = (double)(m_nRectCorner[1].Y());
-    double fX2 = (double)(m_nRectCorner[2].X());
-    double fY2 = (double)(m_nRectCorner[2].Y());
+    double fX1 = static_cast<double>(m_nRectCorner[1].X());
+    double fY1 = static_cast<double>(m_nRectCorner[1].Y());
+    double fX2 = static_cast<double>(m_nRectCorner[2].X());
+    double fY2 = static_cast<double>(m_nRectCorner[2].Y());
     double fMidX = (fX1 + fX2) / 2;
     double fMidY = (fY1 + fY2) / 2;
 
     Point aCenter = GetRectCenter();
-    double fCenterX = (double)aCenter.X();
-    double fCenterY = (double)aCenter.Y();
+    double fCenterX = static_cast<double>(aCenter.X());
+    double fCenterY = static_cast<double>(aCenter.Y());
 
     double fAngle = atan2((fMidY - fCenterY), (fMidX - fCenterX));
 
@@ -193,7 +169,7 @@ double SdwRectangle::GetRotationAngle() const
 
 double SdwRectangle::CalcDistBetween2Points(long nX1, long nY1, long nX2, long nY2)
 {
-    return sqrt((double)((nX1-nX2)*(nX1-nX2) + (nY1-nY2)*(nY1-nY2)));
+    return sqrt(static_cast<double>((nX1-nX2)*(nX1-nX2) + (nY1-nY2)*(nY1-nY2)));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

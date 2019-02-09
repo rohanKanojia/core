@@ -21,80 +21,84 @@
 
 #include <sal/types.h>
 #include <rtl/ustring.hxx>
-#include <tools/solar.h>
+#include <o3tl/typed_flags_set.hxx>
 
 // TokenGroups
-#define TGOPER          0x00000001
-#define TGRELATION      0x00000002
-#define TGSUM           0x00000004
-#define TGPRODUCT       0x00000008
-#define TGUNOPER        0x00000010
-#define TGPOWER         0x00000020
-#define TGATTRIBUT      0x00000040
-#define TGALIGN         0x00000080
-#define TGFUNCTION      0x00000100
-#define TGBLANK         0x00000200
-#define TGLBRACES       0x00000400
-#define TGRBRACES       0x00000800
-#define TGCOLOR         0x00001000
-#define TGFONT          0x00002000
-#define TGSTANDALONE    0x00004000
-#define TGDISCARDED     0x00008000
-#define TGLIMIT         0x00010000
-#define TGFONTATTR      0x00020000
-
+enum class TG {
+    NONE          = 0x000000,
+    Oper          = 0x000001,
+    Relation      = 0x000002,
+    Sum           = 0x000004,
+    Product       = 0x000008,
+    UnOper        = 0x000010,
+    Power         = 0x000020,
+    Attribute     = 0x000040,
+    Align         = 0x000080,
+    Function      = 0x000100,
+    Blank         = 0x000200,
+    LBrace        = 0x000400,
+    RBrace        = 0x000800,
+    Color         = 0x001000,
+    Font          = 0x002000,
+    Standalone    = 0x004000,
+    Limit         = 0x010000,
+    FontAttr      = 0x020000
+};
+namespace o3tl {
+    template<> struct typed_flags<TG> : is_typed_flags<TG, 0x037fff> {};
+}
 
 enum SmTokenType
 {
-/*  0*/ TEND,           TLGROUP,        TRGROUP,        TLPARENT,       TRPARENT,
-/*  5*/ TLBRACKET,      TRBRACKET,      TPLUS,          TMINUS,         TMULTIPLY,
-/* 10*/ TDIVIDEBY,      TASSIGN,        TPOUND,         TSPECIAL,       TSLASH,
-/* 15*/ TBACKSLASH,     TBLANK,         TSBLANK,        TRSUB,          TRSUP,
-/* 20*/ TCSUB,          TCSUP,          TLSUB,          TLSUP,          TGT,
-/* 25*/ TLT,            TAND,           TOR,            TINTERSECT,     TUNION,
-/* 30*/ TNEWLINE,       TBINOM,         TFROM,          TTO,            TINT,
-/* 35*/ TSUM,           TOPER,          TABS,           TSQRT,          TFACT,
-/* 40*/ TNROOT,         TOVER,          TTIMES,         TGE,            TLE,
-/* 45*/ TGG,            TLL,            TDOTSAXIS,      TDOTSLOW,       TDOTSVERT,
-/* 50*/ TDOTSDIAG,      TDOTSUP,        TDOTSDOWN,      TACUTE,         TBAR,
-/* 55*/ TBREVE,         TCHECK,         TCIRCLE,        TDOT,           TDDOT,
-/* 60*/ TDDDOT,         TGRAVE,         THAT,           TTILDE,         TVEC,
-/* 65*/ TUNDERLINE,     TOVERLINE,      TOVERSTRIKE,    TITALIC,        TNITALIC,
-/* 70*/ TBOLD,          TNBOLD,         TPHANTOM,       TFONT,          TSIZE,
-/* 75*/ TCOLOR,         TALIGNL,        TALIGNC,        TALIGNR,        TLEFT,
-/* 80*/ TRIGHT,         TLANGLE,        TLBRACE,        TLLINE,         TLDLINE,
-/* 85*/ TLCEIL,         TLFLOOR,        TNONE,          TMLINE,         TRANGLE,
-/* 90*/ TRBRACE,        TRLINE,         TRDLINE,        TRCEIL,         TRFLOOR,
-/* 95*/ TSIN,           TCOS,           TTAN,           TCOT,           TFUNC,
-/*100*/ TSTACK,         TMATRIX,        TMATFORM,       TDPOUND,        TPLACE,
-/*105*/ TTEXT,          TNUMBER,        TCHARACTER,     TIDENT,         TNEQ,
-/*110*/ TEQUIV,         TDEF,           TPROP,          TSIM,           TSIMEQ,
-/*115*/ TAPPROX,        TPARALLEL,      TORTHO,         TIN,            TNOTIN,
-/*120*/ TSUBSET,        TSUBSETEQ,      TSUPSET,        TSUPSETEQ,      TPLUSMINUS,
-/*125*/ TMINUSPLUS,     TOPLUS,         TOMINUS,        TDIV,           TOTIMES,
-/*130*/ TODIVIDE,       TTRANSL,        TTRANSR,        TIINT,          TIIINT,
-/*135*/ TLINT,          TLLINT,         TLLLINT,        TPROD,          TCOPROD,
-/*140*/ TFORALL,        TEXISTS,        TNOTEXISTS,     TLIM,           TNABLA,
-/*145*/ TTOWARD,        TSINH,          TCOSH,          TTANH,          TCOTH,
-/*150*/ TASIN,          TACOS,          TATAN,          TLN,            TLOG,
-/*155*/ TUOPER,         TBOPER,         TBLACK,         TWHITE,         TRED,
-/*160*/ TGREEN,         TBLUE,          TCYAN,          TMAGENTA,       TYELLOW,
-/*165*/ TFIXED,         TSANS,          TSERIF,         TPOINT,         TASINH,
-/*170*/ TACOSH,         TATANH,         TACOTH,         TACOT,          TEXP,
-/*175*/ TCDOT,          TODOT,          TLESLANT,       TGESLANT,       TNSUBSET,
-/*180*/ TNSUPSET,       TNSUBSETEQ,     TNSUPSETEQ,     TPARTIAL,       TNEG,
-/*185*/ TNI,            TBACKEPSILON,   TALEPH,         TIM,            TRE,
-/*190*/ TWP,            TEMPTYSET,      TINFINITY,      TESCAPE,        TLIMSUP,
-/*195*/ TLIMINF,        TNDIVIDES,      TDRARROW,       TDLARROW,       TDLRARROW,
-/*200*/ TUNDERBRACE,    TOVERBRACE,     TCIRC,          TTOP,           THBAR,
-/*205*/ TLAMBDABAR,     TLEFTARROW,     TRIGHTARROW,    TUPARROW,       TDOWNARROW,
-/*210*/ TDIVIDES,       TNDIBVIDES,     TSETN,          TSETZ,          TSETQ,
-/*215*/ TSETR,          TSETC,          TWIDEVEC,       TWIDETILDE,     TWIDEHAT,
-/*220*/ TWIDESLASH,     TWIDEBACKSLASH, TLDBRACKET,     TRDBRACKET,     TNOSPACE,
-/*225*/ TUNKNOWN,       TPRECEDES,      TSUCCEEDS,      TPRECEDESEQUAL, TSUCCEEDSEQUAL,
-/*230*/ TPRECEDESEQUIV, TSUCCEEDSEQUIV, TNOTPRECEDES,   TNOTSUCCEEDS,   TSILVER,
-/*235*/ TGRAY,          TMAROON,        TPURPLE,        TLIME,          TOLIVE,
-/*240*/ TNAVY,          TTEAL,          TAQUA,          TFUCHSIA,       TINTD
+    TEND,           TLGROUP,        TRGROUP,        TLPARENT,       TRPARENT,
+    TLBRACKET,      TRBRACKET,      TPLUS,          TMINUS,         TMULTIPLY,
+    TDIVIDEBY,      TASSIGN,        TPOUND,         TSPECIAL,       TSLASH,
+    TBACKSLASH,     TBLANK,         TSBLANK,        TRSUB,          TRSUP,
+    TCSUB,          TCSUP,          TLSUB,          TLSUP,          TGT,
+    TLT,            TAND,           TOR,            TINTERSECT,     TUNION,
+    TNEWLINE,       TBINOM,         TFROM,          TTO,            TINT,
+    TSUM,           TOPER,          TABS,           TSQRT,          TFACT,
+    TNROOT,         TOVER,          TTIMES,         TGE,            TLE,
+    TGG,            TLL,            TDOTSAXIS,      TDOTSLOW,       TDOTSVERT,
+    TDOTSDIAG,      TDOTSUP,        TDOTSDOWN,      TACUTE,         TBAR,
+    TBREVE,         TCHECK,         TCIRCLE,        TDOT,           TDDOT,
+    TDDDOT,         TGRAVE,         THAT,           TTILDE,         TVEC,
+    TUNDERLINE,     TOVERLINE,      TOVERSTRIKE,    TITALIC,        TNITALIC,
+    TBOLD,          TNBOLD,         TPHANTOM,       TFONT,          TSIZE,
+    TCOLOR,         TALIGNL,        TALIGNC,        TALIGNR,        TLEFT,
+    TRIGHT,         TLANGLE,        TLBRACE,        TLLINE,         TLDLINE,
+    TLCEIL,         TLFLOOR,        TNONE,          TMLINE,         TRANGLE,
+    TRBRACE,        TRLINE,         TRDLINE,        TRCEIL,         TRFLOOR,
+    TSIN,           TCOS,           TTAN,           TCOT,           TFUNC,
+    TSTACK,         TMATRIX,        TDPOUND,        TPLACE,
+    TTEXT,          TNUMBER,        TCHARACTER,     TIDENT,         TNEQ,
+    TEQUIV,         TDEF,           TPROP,          TSIM,           TSIMEQ,
+    TAPPROX,        TPARALLEL,      TORTHO,         TIN,            TNOTIN,
+    TSUBSET,        TSUBSETEQ,      TSUPSET,        TSUPSETEQ,      TPLUSMINUS,
+    TMINUSPLUS,     TOPLUS,         TOMINUS,        TDIV,           TOTIMES,
+    TODIVIDE,       TTRANSL,        TTRANSR,        TIINT,          TIIINT,
+    TLINT,          TLLINT,         TLLLINT,        TPROD,          TCOPROD,
+    TFORALL,        TEXISTS,        TNOTEXISTS,     TLIM,           TNABLA,
+    TTOWARD,        TSINH,          TCOSH,          TTANH,          TCOTH,
+    TASIN,          TACOS,          TATAN,          TLN,            TLOG,
+    TUOPER,         TBOPER,         TBLACK,         TWHITE,         TRED,
+    TGREEN,         TBLUE,          TCYAN,          TMAGENTA,       TYELLOW,
+    TFIXED,         TSANS,          TSERIF,         TASINH,
+    TACOSH,         TATANH,         TACOTH,         TACOT,          TEXP,
+    TCDOT,          TODOT,          TLESLANT,       TGESLANT,       TNSUBSET,
+    TNSUPSET,       TNSUBSETEQ,     TNSUPSETEQ,     TPARTIAL,       TNEG,
+    TNI,            TBACKEPSILON,   TALEPH,         TIM,            TRE,
+    TWP,            TEMPTYSET,      TINFINITY,      TESCAPE,        TLIMSUP,
+    TLIMINF,        TNDIVIDES,      TDRARROW,       TDLARROW,       TDLRARROW,
+    TUNDERBRACE,    TOVERBRACE,     TCIRC,          THBAR,
+    TLAMBDABAR,     TLEFTARROW,     TRIGHTARROW,    TUPARROW,       TDOWNARROW,
+    TDIVIDES,       TSETN,          TSETZ,          TSETQ,
+    TSETR,          TSETC,          TWIDEVEC,       TWIDETILDE,     TWIDEHAT,
+    TWIDESLASH,     TWIDEBACKSLASH, TLDBRACKET,     TRDBRACKET,     TNOSPACE,
+    TUNKNOWN,       TPRECEDES,      TSUCCEEDS,      TPRECEDESEQUAL, TSUCCEEDSEQUAL,
+    TPRECEDESEQUIV, TSUCCEEDSEQUIV, TNOTPRECEDES,   TNOTSUCCEEDS,   TSILVER,
+    TGRAY,          TMAROON,        TPURPLE,        TLIME,          TOLIVE,
+    TNAVY,          TTEAL,          TAQUA,          TFUCHSIA,       TINTD
 };
 
 struct SmToken
@@ -105,28 +109,28 @@ struct SmToken
     sal_Unicode cMathChar;
 
     // parse-help info
-    sal_uLong       nGroup;
+    TG              nGroup;
     sal_uInt16      nLevel;
 
     // token position
-    sal_Int32      nRow;
-    sal_Int32      nCol;
+    sal_Int32      nRow; // 1-based
+    sal_Int32      nCol; // 1-based
 
     SmToken();
     SmToken(SmTokenType eTokenType,
             sal_Unicode cMath,
             const sal_Char* pText,
-            sal_uLong nTokenGroup = 0,
+            TG nTokenGroup = TG::NONE,
             sal_uInt16 nTokenLevel = 0);
 };
 
 struct SmTokenTableEntry
 {
     const sal_Char* pIdent;
-    SmTokenType     eType;
-    sal_Unicode     cMathChar;
-    sal_uLong       nGroup;
-    sal_uInt16      nLevel;
+    SmTokenType const     eType;
+    sal_Unicode const     cMathChar;
+    TG const              nGroup;
+    sal_uInt16 const      nLevel;
 };
 
 #endif

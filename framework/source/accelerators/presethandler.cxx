@@ -21,7 +21,7 @@
 
 #include <classes/fwkresid.hxx>
 
-#include "classes/resource.hrc"
+#include <strings.hrc>
 #include <services.h>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -54,10 +54,8 @@ namespace {
     @descr  This struct is allegedly shared and must be used within a
             synchronized section. But it isn't.
  */
-struct TSharedStorages
+struct TSharedStorages final
 {
-    public:
-
         StorageHolder m_lStoragesShare;
         StorageHolder m_lStoragesUser;
 
@@ -65,8 +63,6 @@ struct TSharedStorages
             : m_lStoragesShare()
             , m_lStoragesUser ()
         {};
-
-        virtual ~TSharedStorages() {};
 };
 
 /** @short  provides access to the:
@@ -153,16 +149,16 @@ OUString lcl_getLocalizedMessage(::sal_Int32 nID)
     switch(nID)
     {
         case ID_CORRUPT_UICONFIG_SHARE :
-                sMessage = FWK_RESSTR(STR_CORRUPT_UICFG_SHARE);
+                sMessage = FwkResId(STR_CORRUPT_UICFG_SHARE);
 
                 break;
 
         case ID_CORRUPT_UICONFIG_USER :
-                sMessage = FWK_RESSTR(STR_CORRUPT_UICFG_USER);
+                sMessage = FwkResId(STR_CORRUPT_UICFG_USER);
                 break;
 
         case ID_CORRUPT_UICONFIG_GENERAL :
-                sMessage = FWK_RESSTR(STR_CORRUPT_UICFG_GENERAL);
+                sMessage = FwkResId(STR_CORRUPT_UICFG_GENERAL);
                 break;
     }
 
@@ -174,7 +170,7 @@ void lcl_throwCorruptedUIConfigurationException(
 {
     css::uno::Exception e;
     bool ok = (exception >>= e);
-    OSL_ASSERT(ok); (void) ok; // avoid warnings
+    OSL_ASSERT(ok);
     throw css::configuration::CorruptedUIConfigurationException(
         lcl_getLocalizedMessage(id),
         css::uno::Reference< css::uno::XInterface >(),
@@ -289,19 +285,13 @@ css::uno::Reference< css::embed::XStorage > PresetHandler::getOrCreateRootStorag
     return xStorage;
 }
 
-css::uno::Reference< css::embed::XStorage > PresetHandler::getWorkingStorageShare()
-{
-    SolarMutexGuard g;
-    return m_xWorkingStorageShare;
-}
-
 css::uno::Reference< css::embed::XStorage > PresetHandler::getWorkingStorageUser()
 {
     SolarMutexGuard g;
     return m_xWorkingStorageUser;
 }
 
-css::uno::Reference< css::embed::XStorage > PresetHandler::getParentStorageShare(const css::uno::Reference< css::embed::XStorage >& /*xChild*/)
+css::uno::Reference< css::embed::XStorage > PresetHandler::getParentStorageShare()
 {
     css::uno::Reference< css::embed::XStorage > xWorking;
     {
@@ -312,7 +302,7 @@ css::uno::Reference< css::embed::XStorage > PresetHandler::getParentStorageShare
     return SharedStorages::get().m_lStoragesShare.getParentStorage(xWorking);
 }
 
-css::uno::Reference< css::embed::XStorage > PresetHandler::getParentStorageUser(const css::uno::Reference< css::embed::XStorage >& /*xChild*/)
+css::uno::Reference< css::embed::XStorage > PresetHandler::getParentStorageUser()
 {
     css::uno::Reference< css::embed::XStorage > xWorking;
     {
@@ -367,9 +357,9 @@ void PresetHandler::connectToResource(      PresetHandler::EConfigType          
     // a) inside share layer we should not create any new structures... We have to use
     //    existing ones only!
     // b) inside user layer we can (SOFT mode!) but sometimes we should not (HARD mode!)
-    //    create new empty structures. We should preferr using of any existing structure.
+    //    create new empty structures. We should prefer using of any existing structure.
     sal_Int32 eShareMode = (css::embed::ElementModes::READ      | css::embed::ElementModes::NOCREATE);
-    sal_Int32 eUserMode  = (css::embed::ElementModes::READWRITE                                     );
+    sal_Int32 eUserMode  = css::embed::ElementModes::READWRITE;
 
     OUStringBuffer sRelPathBuf(1024);
     OUString       sRelPathShare;
@@ -586,7 +576,8 @@ css::uno::Reference< css::io::XStream > PresetHandler::openPreset(const OUString
     return xStream;
 }
 
-css::uno::Reference< css::io::XStream > PresetHandler::openTarget(const OUString& sTarget)
+css::uno::Reference< css::io::XStream > PresetHandler::openTarget(
+        const OUString& sTarget, sal_Int32 const nMode)
 {
     css::uno::Reference< css::embed::XStorage > xFolder;
     {
@@ -598,26 +589,9 @@ css::uno::Reference< css::io::XStream > PresetHandler::openTarget(const OUString
     if (!xFolder.is())
        return css::uno::Reference< css::io::XStream >();
 
-    OUString sFile(sTarget);
-    sFile += ".xml";
+    OUString const sFile(sTarget + ".xml");
 
-    // try it in read/write mode first and ignore errors.
-    css::uno::Reference< css::io::XStream > xStream;
-    try
-    {
-        xStream = xFolder->openStreamElement(sFile, css::embed::ElementModes::READWRITE);
-        return xStream;
-    }
-    catch(const css::uno::RuntimeException&)
-        { throw; }
-    catch(const css::uno::Exception&)
-        { xStream.clear(); }
-
-    // try it readonly if it failed before.
-    // inform user about errors (use original exceptions!)
-    xStream    = xFolder->openStreamElement(sFile, css::embed::ElementModes::READ);
-
-    return xStream;
+    return xFolder->openStreamElement(sFile, nMode);
 }
 
 void PresetHandler::commitUserChanges()
@@ -787,7 +761,7 @@ css::uno::Reference< css::embed::XStorage > PresetHandler::impl_openLocalizedPat
 
     // it doesn't matter, if there is a locale fallback or not
     // If creation of storages is allowed, we do it anyway.
-    // Otherwhise we have no acc config at all, which can make other trouble.
+    // Otherwise we have no acc config at all, which can make other trouble.
     OUString sLocalizedPath;
     sLocalizedPath  = sPath;
     sLocalizedPath += "/";

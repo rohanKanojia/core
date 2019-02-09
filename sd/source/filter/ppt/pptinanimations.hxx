@@ -20,18 +20,15 @@
 #ifndef INCLUDED_SD_SOURCE_FILTER_PPT_PPTINANIMATIONS_HXX
 #define INCLUDED_SD_SOURCE_FILTER_PPT_PPTINANIMATIONS_HXX
 
-#include <com/sun/star/animations/XTimeContainer.hpp>
-#include <com/sun/star/drawing/XDrawPage.hpp>
-
-#include "pptanimations.hxx"
-#include <animations.hxx>
+#include <oox/ppt/pptfilterhelpers.hxx>
 
 #ifdef DBG_ANIM_LOG
 #include <stdio.h>
 #endif
-#include <filter/msfilter/svdfppt.hxx>
 
-#include <list>
+namespace com { namespace sun { namespace star { namespace animations { class XAnimationNode; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawPage; } } } }
+namespace ppt { struct AnimationNode; }
 
 class DffRecordHeader;
 class SvStream;
@@ -75,14 +72,10 @@ private:
     void importAttributeNamesContainer( const Atom* pAtom, OUString& rAttributeNames );
     void importTargetElementContainer( const Atom* pAtom, css::uno::Any& rTarget, sal_Int16& nSubType );
 
-    static void fillNode( css::uno::Reference< css::animations::XAnimationNode >& xTiming, const AnimationNode& rNode, const PropertySet& rSet );
+    static void fillNode( css::uno::Reference< css::animations::XAnimationNode > const & xTiming, const AnimationNode& rNode, const PropertySet& rSet );
     static css::uno::Reference< css::animations::XAnimationNode > createNode( const Atom* pAtom, const AnimationNode& rNode );
 
     bool convertAnimationNode( const css::uno::Reference< css::animations::XAnimationNode >& xNode, const css::uno::Reference< css::animations::XAnimationNode >& xParent );
-    static bool convertAnimationValue( oox::ppt::MS_AttributeNames eAttribute, css::uno::Any& rValue );
-
-    void processAfterEffectNodes();
-
     css::uno::Any  implGetColorAny( sal_Int32 nMode, sal_Int32  nA, sal_Int32 nB, sal_Int32 nC );
     static sal_Int16            implGetColorSpace( sal_Int32 nMode, sal_Int32  nA, sal_Int32 nB, sal_Int32 nC );
 
@@ -92,7 +85,7 @@ private:
     ImplSdPPTImport* mpPPTImport;
     SvStream&   mrStCtrl;
 
-    sd::AfterEffectNodeList maAfterEffectNodes;
+    std::vector< sd::AfterEffectNode > maAfterEffectNodes;
 
 #ifdef DBG_ANIM_LOG
     FILE * mpFile;

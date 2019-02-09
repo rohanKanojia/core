@@ -46,7 +46,7 @@ class MeasureHandler : public LoggedProperties
 
 public:
     MeasureHandler();
-    virtual ~MeasureHandler();
+    virtual ~MeasureHandler() override;
 
     sal_Int32 getMeasureValue() const;
 
@@ -57,7 +57,7 @@ public:
     void enableInteropGrabBag(const OUString& aName);
     css::beans::PropertyValue getInteropGrabBag();
 };
-typedef std::shared_ptr
+typedef tools::SvRef
     < MeasureHandler >  MeasureHandlerPtr;
 }}
 

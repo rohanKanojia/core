@@ -60,17 +60,13 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPTABOVERRIDE_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPTABOVERRIDE_HXX
 
-#include "lwpoverride.hxx"
-#include "lwpobjid.hxx"
+#include <lwpoverride.hxx>
+#include <lwpobjid.hxx>
 
-class   LwpTabOverride : public LwpOverride
+class LwpTabOverride final : public LwpOverride
 {
 public:
     LwpTabOverride()
-    {
-    }
-
-    virtual ~LwpTabOverride()
     {
     }
 
@@ -88,17 +84,12 @@ public:
     }
 
     inline LwpObjectID& GetTabRackID();
-    inline bool IsTabRackOverridden();
     inline void Override(LwpTabOverride* pOther);
-    inline void OverrideTabRack(LwpObjectID* pTabRackID);
-
-protected:
-    LwpTabOverride(LwpTabOverride const& rOther);
 
 private:
+    LwpTabOverride(LwpTabOverride const& rOther);
     LwpTabOverride& operator=(LwpTabOverride const& rOther) = delete;
 
-private:
     LwpObjectID m_aTabRackID;
     enum
     {
@@ -115,21 +106,11 @@ inline void LwpTabOverride::Override(LwpTabOverride* pOther)
 {
     if (m_nApply & TO_TABRACK)
     {
-        if (IsTabRackOverridden())
-            //m_aTabRackID = *(pOther->GetTabRackID());
-            pOther->OverrideTabRack(&GetTabRackID());
+        if ((m_nOverride & TO_TABRACK) != 0)
+            pOther->m_aTabRackID = GetTabRackID();
     }
 }
 
-inline bool LwpTabOverride::IsTabRackOverridden()
-{
-    return (m_nOverride & TO_TABRACK) != 0;
-}
-
-inline void LwpTabOverride::OverrideTabRack(LwpObjectID* pTabRackID)
-{
-    m_aTabRackID = *pTabRackID;
-}
 #endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

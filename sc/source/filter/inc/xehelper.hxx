@@ -21,9 +21,10 @@
 #define INCLUDED_SC_SOURCE_FILTER_INC_XEHELPER_HXX
 
 #include <memory>
+#include <rangelst.hxx>
 #include "xladdress.hxx"
 #include "xeroot.hxx"
-#include "xestring.hxx"
+#include "xlstring.hxx"
 
 // Export progress bar ========================================================
 
@@ -32,7 +33,7 @@ class ScfProgressBar;
 /** The main progress bar for the export filter.
 
     This class encapsulates creation and initialization of sub progress
-    segments. The Activate***Segment() functions activate a specific segement
+    segments. The Activate***Segment() functions activate a specific segment
     of the main progress bar. The implementation of these functions contain the
     calculation of the needed size of the segment. Following calls of the
     Progress() function increase the currently activated sub segment.
@@ -41,7 +42,7 @@ class XclExpProgressBar : protected XclExpRoot
 {
 public:
     explicit            XclExpProgressBar( const XclExpRoot& rRoot );
-    virtual             ~XclExpProgressBar();
+    virtual             ~XclExpProgressBar() override;
 
     /** Initializes all segments and sub progress bars. */
     void                Initialize();
@@ -69,7 +70,7 @@ private:
     ScfProgressBar*     mpSubRowFinal;      /// Sub progress bar for finalizing ROW records.
     sal_Int32           mnSegRowFinal;      /// Progress segment for finalizing ROW records.
 
-    sal_Size            mnRowCount;         /// Number of created ROW records.
+    std::size_t         mnRowCount;         /// Number of created ROW records.
 };
 
 // Calc->Excel cell address/range conversion ==================================
@@ -177,7 +178,7 @@ public:
     typedef std::shared_ptr< XclExpHyperlink > XclExpHyperlinkRef;
 
     explicit            XclExpHyperlinkHelper( const XclExpRoot& rRoot, const ScAddress& rScPos );
-                        virtual ~XclExpHyperlinkHelper();
+                        virtual ~XclExpHyperlinkHelper() override;
 
     /** Processes the passed URL field (tries to create a HLINK record).
         @return  The representation string of the URL field. */
@@ -185,17 +186,17 @@ public:
 
     /** Returns true, if a single HLINK record has been created. */
     bool                HasLinkRecord() const;
-    /** Returns the craeted single HLINk record, or an empty reference. */
+    /** Returns the created single HLINk record, or an empty reference. */
     XclExpHyperlinkRef  GetLinkRecord();
 
     /** Returns true, if multiple URLs have been processed. */
-    inline bool         HasMultipleUrls() const { return mbMultipleUrls; }
+    bool         HasMultipleUrls() const { return mbMultipleUrls; }
     /** Returns a string containing all processed URLs. */
-    inline const OUString& GetUrlList() { return maUrlList; }
+    const OUString& GetUrlList() { return maUrlList; }
 
 private:
     XclExpHyperlinkRef  mxLinkRec;          /// Created HLINK record.
-    ScAddress           maScPos;            /// Cell position to set at the HLINK record.
+    ScAddress const     maScPos;            /// Cell position to set at the HLINK record.
     OUString            maUrlList;          /// List with all processed URLs.
     bool                mbMultipleUrls;     /// true = Multiple URL fields processed.
 };
@@ -229,7 +230,7 @@ public:
     static XclExpStringRef CreateString(
                             const XclExpRoot& rRoot,
                             const OUString& rString,
-                            XclStrFlags nFlags = EXC_STR_DEFAULT,
+                            XclStrFlags nFlags = XclStrFlags::NONE,
                             sal_uInt16 nMaxLen = EXC_STR_MAXLEN );
 
     /** Creates a new unformatted string from the passed character.
@@ -242,7 +243,7 @@ public:
     static XclExpStringRef CreateString(
                             const XclExpRoot& rRoot,
                             sal_Unicode cChar,
-                            XclStrFlags nFlags = EXC_STR_DEFAULT,
+                            XclStrFlags nFlags = XclStrFlags::NONE,
                             sal_uInt16 nMaxLen = EXC_STR_MAXLEN );
 
     /** Appends an unformatted string to an Excel string object.
@@ -279,7 +280,7 @@ public:
                             const XclExpRoot& rRoot,
                             const OUString& rString,
                             const ScPatternAttr* pCellAttr,
-                            XclStrFlags nFlags = EXC_STR_DEFAULT,
+                            XclStrFlags nFlags = XclStrFlags::NONE,
                             sal_uInt16 nMaxLen = EXC_STR_MAXLEN );
 
     /** Creates a new formatted string from a Calc edit cell.
@@ -296,7 +297,7 @@ public:
                             const EditTextObject& rEditText,
                             const ScPatternAttr* pCellAttr,
                             XclExpHyperlinkHelper& rLinkHelper,
-                            XclStrFlags nFlags = EXC_STR_DEFAULT,
+                            XclStrFlags nFlags = XclStrFlags::NONE,
                             sal_uInt16 nMaxLen = EXC_STR_MAXLEN );
 
     /** Creates a new formatted string from a drawing text box.
@@ -308,7 +309,7 @@ public:
     static XclExpStringRef CreateString(
                             const XclExpRoot& rRoot,
                             const SdrTextObj& rTextObj,
-                            XclStrFlags nFlags = EXC_STR_DEFAULT );
+                            XclStrFlags nFlags = XclStrFlags::NONE );
 
     /** Creates a new formatted string from a edit text string.
         @param rEditObj  The edittext object.
@@ -317,7 +318,7 @@ public:
     static XclExpStringRef CreateString(
                             const XclExpRoot& rRoot,
                             const EditTextObject& rEditObj,
-                            XclStrFlags nFlags = EXC_STR_DEFAULT );
+                            XclStrFlags nFlags = XclStrFlags::NONE );
 
     /** Returns the script type first text portion different to WEAK, or the system
         default script type, if there is only weak script in the passed string. */
@@ -326,12 +327,10 @@ public:
 
 // Header/footer conversion ===================================================
 
-class EditEngine;
-
 /** Converts edit engine text objects to an Excel header/footer string.
     @descr  Header/footer content is divided into three parts: Left, center and
     right portion. All formatting information will be encoded in the Excel string
-    using special character seuences. A control sequence starts with the ampersand
+    using special character sequences. A control sequence starts with the ampersand
     character.
 
     Supported control sequences:
@@ -374,9 +373,9 @@ public:
                             const EditTextObject* pRightObj );
 
     /** Returns the last generated header/footer string. */
-    inline const OUString& GetHFString() const { return maHFString; }
+    const OUString& GetHFString() const { return maHFString; }
     /** Returns the total height of the last generated header/footer in twips. */
-    inline sal_Int32    GetTotalHeight() const { return mnTotalHeight; }
+    sal_Int32    GetTotalHeight() const { return mnTotalHeight; }
 
 private:
     /** Converts the text object contents and stores it in the passed string. */
@@ -426,7 +425,7 @@ public:
                    ~XclExpCachedMatrix();
 
     /** Returns the byte count of all contained data. */
-    sal_Size        GetSize() const;
+    std::size_t     GetSize() const;
     /** Writes the complete matrix to stream. */
     void            Save( XclExpStream& rStrm ) const;
 

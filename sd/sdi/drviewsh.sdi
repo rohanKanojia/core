@@ -137,19 +137,24 @@ interface ImpressEditView : DrawView
     [
         ExecMethod = Execute ;
         StateMethod = GetState ;
-        GroupId = GID_DOCUMENT ;
+        GroupId = SfxGroupId::Document ;
     ]
     SID_SEARCH_ITEM // ole : ?, status : ?
     [
         ExecMethod = Execute ;
         StateMethod = GetState ;
     ]
-    SID_SHOW_POSTIT
+    SID_TOGGLE_NOTES
     [
         ExecMethod = ExecuteAnnotation;
         StateMethod = GetAnnotationState;
     ]
     SID_INSERT_POSTIT
+    [
+        ExecMethod = ExecuteAnnotation;
+        StateMethod = GetAnnotationState;
+    ]
+    SID_EDIT_POSTIT
     [
         ExecMethod = ExecuteAnnotation;
         StateMethod = GetAnnotationState;

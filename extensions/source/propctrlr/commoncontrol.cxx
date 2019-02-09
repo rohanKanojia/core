@@ -22,7 +22,6 @@
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
 #include <vcl/combobox.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 
 
 namespace pcr
@@ -32,7 +31,6 @@ namespace pcr
     using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Reference;
     using ::com::sun::star::inspection::XPropertyControlContext;
-    using ::com::sun::star::awt::XWindow;
     using ::com::sun::star::uno::Exception;
     using ::com::sun::star::inspection::XPropertyControl;
 
@@ -48,12 +46,12 @@ namespace pcr
     {
     }
 
-    void SAL_CALL CommonBehaviourControlHelper::setControlContext( const Reference< XPropertyControlContext >& _controlcontext ) throw (RuntimeException)
+    void CommonBehaviourControlHelper::setControlContext( const Reference< XPropertyControlContext >& _controlcontext )
     {
         m_xContext = _controlcontext;
     }
 
-    void SAL_CALL CommonBehaviourControlHelper::notifyModifiedValue(  ) throw (RuntimeException)
+    void CommonBehaviourControlHelper::notifyModifiedValue(  )
     {
         if ( isModified() && m_xContext.is() )
         {
@@ -64,7 +62,7 @@ namespace pcr
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
             }
         }
     }
@@ -90,22 +88,27 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
     }
 
 
-    IMPL_LINK_NOARG_TYPED( CommonBehaviourControlHelper, EditModifiedHdl, Edit&, void )
+    IMPL_LINK_NOARG( CommonBehaviourControlHelper, EditModifiedHdl, Edit&, void )
     {
         setModified();
     }
 
-    IMPL_LINK_NOARG_TYPED( CommonBehaviourControlHelper, ModifiedHdl, ListBox&, void )
+    IMPL_LINK_NOARG( CommonBehaviourControlHelper, ModifiedHdl, ListBox&, void )
     {
         setModified();
     }
 
-    IMPL_LINK_NOARG_TYPED( CommonBehaviourControlHelper, GetFocusHdl, Control&, void )
+    IMPL_LINK_NOARG( CommonBehaviourControlHelper, ColorModifiedHdl, SvxColorListBox&, void )
+    {
+        setModified();
+    }
+
+    IMPL_LINK_NOARG( CommonBehaviourControlHelper, GetFocusHdl, Control&, void )
     {
         try
         {
@@ -114,12 +117,12 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
     }
 
 
-    IMPL_LINK_NOARG_TYPED( CommonBehaviourControlHelper, LoseFocusHdl, Control&, void )
+    IMPL_LINK_NOARG( CommonBehaviourControlHelper, LoseFocusHdl, Control&, void )
     {
         // TODO/UNOize: should this be outside the default control's implementations? If somebody
         // has an own control implementation, which does *not* do this - would this be allowed?

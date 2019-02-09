@@ -20,10 +20,11 @@
 #include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/range/b2drange.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <com/sun/star/geometry/AffineMatrix2D.hpp>
 #include <com/sun/star/geometry/RealRectangle2D.hpp>
 #include <rtl/instance.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
 
 
 using namespace com::sun::star;
@@ -66,7 +67,6 @@ namespace drawinglayer
             // the point in time
             double                                      mfViewTime;
 
-            // bitfield
             bool                                        mbReducedDisplayQuality : 1;
 
             // the complete PropertyValue representation (if already created)
@@ -428,20 +428,15 @@ namespace drawinglayer
         {
         }
 
-        ViewInformation2D::ViewInformation2D(const ViewInformation2D& rCandidate)
-        :   mpViewInformation2D(rCandidate.mpViewInformation2D)
-        {
-        }
+        ViewInformation2D::ViewInformation2D(const ViewInformation2D&) = default;
 
-        ViewInformation2D::~ViewInformation2D()
-        {
-        }
+        ViewInformation2D::ViewInformation2D(ViewInformation2D&&) = default;
 
-        ViewInformation2D& ViewInformation2D::operator=(const ViewInformation2D& rCandidate)
-        {
-            mpViewInformation2D = rCandidate.mpViewInformation2D;
-            return *this;
-        }
+        ViewInformation2D::~ViewInformation2D() = default;
+
+        ViewInformation2D& ViewInformation2D::operator=(const ViewInformation2D&) = default;
+
+        ViewInformation2D& ViewInformation2D::operator=(ViewInformation2D&&) = default;
 
         bool ViewInformation2D::operator==(const ViewInformation2D& rCandidate) const
         {

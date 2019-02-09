@@ -18,21 +18,27 @@
  */
 
 #include <vcl/svapp.hxx>
-#include <vcl/msgbox.hxx>
-
-#include <osl/mutex.hxx>
 
 #include <toolkit/helper/vclunohelper.hxx>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
+#include <com/sun/star/deployment/DeploymentException.hpp>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
+#include <com/sun/star/frame/TerminationVetoException.hpp>
+#include <com/sun/star/ucb/CommandAbortedException.hpp>
+#include <com/sun/star/ucb/CommandFailedException.hpp>
+#include <comphelper/propertysequence.hxx>
+#include <cppuhelper/exc_hlp.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
 #include "dp_gui_dialog2.hxx"
 #include "dp_gui_extensioncmdqueue.hxx"
 #include "dp_gui_theextmgr.hxx"
-#include "dp_identifier.hxx"
-#include "dp_update.hxx"
+#include <dp_identifier.hxx>
+#include <dp_update.hxx>
 
 #define USER_PACKAGE_MANAGER    "user"
 #define SHARED_PACKAGE_MANAGER  "shared"
@@ -54,30 +60,29 @@ TheExtensionManager::TheExtensionManager( const uno::Reference< awt::XWindow > &
     m_xParent( xParent ),
     m_pExtMgrDialog( nullptr ),
     m_pUpdReqDialog( nullptr ),
-    m_pExecuteCmdQueue( nullptr )
+    m_bModified(false)
 {
     m_xExtensionManager = deployment::ExtensionManager::get( xContext );
     m_xExtensionManager->addModifyListener( this );
 
     uno::Reference< lang::XMultiServiceFactory > xConfig(
         configuration::theDefaultProvider::get(xContext));
-    uno::Any args[1];
-    beans::PropertyValue aValue( OUString("nodepath"), 0, uno::Any( OUString("/org.openoffice.Office.OptionsDialog/Nodes") ),
-                                 beans::PropertyState_DIRECT_VALUE );
-    args[0] <<= aValue;
+    uno::Sequence<uno::Any> args(comphelper::InitAnyPropertySequence(
+    {
+        {"nodepath", uno::Any(OUString("/org.openoffice.Office.OptionsDialog/Nodes"))}
+    }));
     m_xNameAccessNodes.set(
-        xConfig->createInstanceWithArguments( "com.sun.star.configuration.ConfigurationAccess",
-                                              uno::Sequence< uno::Any >( args, 1 )),
+        xConfig->createInstanceWithArguments( "com.sun.star.configuration.ConfigurationAccess", args),
         uno::UNO_QUERY_THROW);
 
     // get the 'get more extensions here' url
+    uno::Sequence<uno::Any> args2(comphelper::InitAnyPropertySequence(
+    {
+        {"nodepath", uno::Any(OUString("/org.openoffice.Office.ExtensionManager/ExtensionRepositories"))}
+    }));
     uno::Reference< container::XNameAccess > xNameAccessRepositories;
-    beans::PropertyValue aValue2( OUString("nodepath"), 0, uno::Any( OUString("/org.openoffice.Office.ExtensionManager/ExtensionRepositories") ),
-                                  beans::PropertyState_DIRECT_VALUE );
-    args[0] <<= aValue2;
     xNameAccessRepositories.set(
-        xConfig->createInstanceWithArguments( "com.sun.star.configuration.ConfigurationAccess",
-                                              uno::Sequence< uno::Any >( args, 1 )),
+        xConfig->createInstanceWithArguments( "com.sun.star.configuration.ConfigurationAccess", args2),
         uno::UNO_QUERY_THROW);
     try
     {   //throws css::container::NoSuchElementException, css::lang::WrappedTargetException
@@ -101,7 +106,6 @@ TheExtensionManager::~TheExtensionManager()
 {
     m_pUpdReqDialog.disposeAndClear();
     m_pExtMgrDialog.disposeAndClear();
-    delete m_pExecuteCmdQueue;
 }
 
 
@@ -114,8 +118,7 @@ void TheExtensionManager::createDialog( const bool bCreateUpdDlg )
         if ( !m_pUpdReqDialog )
         {
             m_pUpdReqDialog = VclPtr<UpdateRequiredDialog>::Create( nullptr, this );
-            delete m_pExecuteCmdQueue;
-            m_pExecuteCmdQueue = new ExtensionCmdQueue( m_pUpdReqDialog.get(), this, m_xContext );
+            m_pExecuteCmdQueue.reset( new ExtensionCmdQueue( m_pUpdReqDialog.get(), this, m_xContext ) );
             createPackageList();
         }
     }
@@ -125,8 +128,7 @@ void TheExtensionManager::createDialog( const bool bCreateUpdDlg )
             m_pExtMgrDialog = VclPtr<ExtMgrDialog>::Create( VCLUnoHelper::GetWindow(m_xParent), this );
         else
             m_pExtMgrDialog = VclPtr<ExtMgrDialog>::Create( nullptr, this, Dialog::InitFlag::NoParent );
-        delete m_pExecuteCmdQueue;
-        m_pExecuteCmdQueue = new ExtensionCmdQueue( m_pExtMgrDialog.get(), this, m_xContext );
+        m_pExecuteCmdQueue.reset( new ExtensionCmdQueue( m_pExtMgrDialog.get(), this, m_xContext ) );
         m_pExtMgrDialog->setGetExtensionsURL( m_sGetExtensionsURL );
         createPackageList();
     }
@@ -188,7 +190,7 @@ bool TheExtensionManager::isVisible()
 }
 
 
-void TheExtensionManager::checkUpdates( bool /* bShowUpdateOnly */, bool /*bParentVisible*/ )
+void TheExtensionManager::checkUpdates()
 {
     std::vector< uno::Reference< deployment::XPackage >  > vEntries;
     uno::Sequence< uno::Sequence< uno::Reference< deployment::XPackage > > > xAllPackages;
@@ -203,7 +205,9 @@ void TheExtensionManager::checkUpdates( bool /* bShowUpdateOnly */, bool /*bPare
     } catch ( const ucb::CommandAbortedException & ) {
         return;
     } catch ( const lang::IllegalArgumentException & e ) {
-        throw uno::RuntimeException( e.Message, e.Context );
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw css::lang::WrappedTargetRuntimeException( e.Message,
+                        e.Context, anyEx );
     }
 
     for ( sal_Int32 i = 0; i < xAllPackages.getLength(); ++i )
@@ -246,16 +250,6 @@ bool TheExtensionManager::installPackage( const OUString &rPackageURL, bool bWar
 }
 
 
-bool TheExtensionManager::queryTermination()
-{
-    if ( dp_misc::office_is_running() )
-        return true;
-    // the standalone application unopkg must not close ( and quit ) the dialog
-    // when there are still actions in the queue
-    return true;
-}
-
-
 void TheExtensionManager::terminateDialog()
 {
     if ( ! dp_misc::office_is_running() )
@@ -282,7 +276,9 @@ void TheExtensionManager::createPackageList()
     } catch ( const ucb::CommandAbortedException & ) {
         return;
     } catch ( const lang::IllegalArgumentException & e ) {
-        throw uno::RuntimeException( e.Message, e.Context );
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw css::lang::WrappedTargetRuntimeException( e.Message,
+                        e.Context, anyEx );
     }
 
     for ( sal_Int32 i = 0; i < xAllPackages.getLength(); ++i )
@@ -339,8 +335,7 @@ PackageState TheExtensionManager::getPackageState( const uno::Reference< deploym
         throw;
     }
     catch (const uno::Exception & exc) {
-        (void) exc;
-        OSL_FAIL( OUStringToOString( exc.Message, RTL_TEXTENCODING_UTF8 ).getStr() );
+        SAL_WARN( "desktop", exc );
         return NOT_AVAILABLE;
     }
 }
@@ -376,7 +371,7 @@ bool TheExtensionManager::supportsOptions( const uno::Reference< deployment::XPa
     for ( int i = 0; i < seqNames.getLength(); i++ )
     {
         uno::Any anyNode = m_xNameAccessNodes->getByName( seqNames[i] );
-        //If we have a node then then it must contain the set of leaves. This is part of OptionsDialog.xcs
+        //If we have a node then it must contain the set of leaves. This is part of OptionsDialog.xcs
         uno::Reference< XInterface> xIntNode = anyNode.get< uno::Reference< XInterface > >();
         uno::Reference< container::XNameAccess > xNode( xIntNode, uno::UNO_QUERY_THROW );
 
@@ -411,7 +406,6 @@ bool TheExtensionManager::supportsOptions( const uno::Reference< deployment::XPa
 
 // XEventListener
 void TheExtensionManager::disposing( lang::EventObject const & rEvt )
-    throw ( uno::RuntimeException, std::exception )
 {
     bool shutDown = (rEvt.Source == m_xDesktop);
 
@@ -436,7 +430,6 @@ void TheExtensionManager::disposing( lang::EventObject const & rEvt )
 
 // XTerminateListener
 void TheExtensionManager::queryTermination( ::lang::EventObject const & )
-    throw ( frame::TerminationVetoException, uno::RuntimeException, std::exception )
 {
     DialogHelper *pDialogHelper = getDialogHelper();
 
@@ -449,6 +442,7 @@ void TheExtensionManager::queryTermination( ::lang::EventObject const & )
     }
     else
     {
+        clearModified();
         if ( m_pExtMgrDialog )
             m_pExtMgrDialog->Close();
         if ( m_pUpdReqDialog )
@@ -458,7 +452,6 @@ void TheExtensionManager::queryTermination( ::lang::EventObject const & )
 
 
 void TheExtensionManager::notifyTermination( ::lang::EventObject const & rEvt )
-    throw ( uno::RuntimeException, std::exception )
 {
     disposing( rEvt );
 }
@@ -466,8 +459,8 @@ void TheExtensionManager::notifyTermination( ::lang::EventObject const & rEvt )
 
 // XModifyListener
 void TheExtensionManager::modified( ::lang::EventObject const & /*rEvt*/ )
-    throw ( uno::RuntimeException, std::exception )
 {
+    m_bModified = true;
     getDialogHelper()->prepareChecking();
     createPackageList();
     getDialogHelper()->checkEntries();

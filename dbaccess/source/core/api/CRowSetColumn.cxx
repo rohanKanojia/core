@@ -18,14 +18,13 @@
  */
 
 
-#include "dbastrings.hrc"
-#include "apitools.hxx"
+#include <stringconstants.hxx>
+#include <apitools.hxx>
 #include "CRowSetColumn.hxx"
 
 #include <com/sun/star/sdb/XColumn.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 
-#include <comphelper/types.hxx>
 #include <cppuhelper/typeprovider.hxx>
 
 using namespace ::com::sun::star::uno;
@@ -77,7 +76,7 @@ ORowSetColumn::ORowSetColumn( const Reference < XResultSetMetaData >& _xMetaData
     Sequence< Property > aRegisteredProperties;
     describeProperties( aRegisteredProperties );
 
-    return new ::cppu::OPropertyArrayHelper( ::comphelper::concatSequences( aDescriptor, aRegisteredProperties ), sal_False );
+    return new ::cppu::OPropertyArrayHelper( ::comphelper::concatSequences( aDescriptor, aRegisteredProperties ), false );
 }
 
 ::cppu::IPropertyArrayHelper& ORowSetColumn::getInfoHelper()
@@ -85,7 +84,7 @@ ORowSetColumn::ORowSetColumn( const Reference < XResultSetMetaData >& _xMetaData
     return *static_cast< ::comphelper::OPropertyArrayUsageHelper< ORowSetColumn >* >(this)->getArrayHelper();
 }
 
-void SAL_CALL ORowSetColumn::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle,const Any& rValue )throw (Exception, std::exception)
+void SAL_CALL ORowSetColumn::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle,const Any& rValue )
 {
     OSL_ENSURE( nHandle != PROPERTY_ID_VALUE, "ORowSetColumn::setFastPropertyValue_NoBroadcast: hmm? This property is marked as READONLY!" );
     if ( nHandle != PROPERTY_ID_VALUE )

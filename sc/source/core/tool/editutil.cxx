@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
-#include <comphelper/string.hxx>
+#include <scitems.hxx>
+#include <comphelper/processfactory.hxx>
 #include <editeng/eeitem.hxx>
 
 #include <svx/algitem.hxx>
@@ -34,23 +34,25 @@
 #include <vcl/outdev.hxx>
 #include <svl/inethist.hxx>
 #include <unotools/syslocale.hxx>
+#include <sfx2/objsh.hxx>
+#include <osl/diagnose.h>
 
 #include <com/sun/star/text/textfield/Type.hpp>
 #include <com/sun/star/document/XDocumentProperties.hpp>
 
-#include "editutil.hxx"
-#include "global.hxx"
-#include "attrib.hxx"
-#include "document.hxx"
-#include "docpool.hxx"
-#include "patattr.hxx"
-#include "scmod.hxx"
-#include "inputopt.hxx"
-#include "compiler.hxx"
+#include <editutil.hxx>
+#include <global.hxx>
+#include <attrib.hxx>
+#include <document.hxx>
+#include <docpool.hxx>
+#include <patattr.hxx>
+#include <scmod.hxx>
+#include <inputopt.hxx>
+#include <compiler.hxx>
 
 using namespace com::sun::star;
 
-//  Delimiters zusaetzlich zu EditEngine-Default:
+//  delimiters additionally to EditEngine default:
 
 ScEditUtil::ScEditUtil( ScDocument* pDocument, SCCOL nX, SCROW nY, SCTAB nZ,
                             const Point& rScrPosPixel,
@@ -63,7 +65,7 @@ ScEditUtil::ScEditUtil( ScDocument* pDocument, SCCOL nX, SCROW nY, SCTAB nZ,
 OUString ScEditUtil::ModifyDelimiters( const OUString& rOld )
 {
     // underscore is used in function argument names
-    OUString aRet = comphelper::string::remove(rOld, '_') +
+    OUString aRet = rOld.replaceAll("_", "") +
         "=()+-*/^&<>" +
         ScCompiler::GetNativeSymbol(ocSep); // argument separator is localized.
     return aRet;
@@ -111,6 +113,11 @@ OUString ScEditUtil::GetMultilineString( const EditTextObject& rEdit )
 
 OUString ScEditUtil::GetString( const EditTextObject& rEditText, const ScDocument* pDoc )
 {
+    if( !rEditText.HasField())
+        return GetMultilineString( rEditText );
+
+    static osl::Mutex aMutex;
+    osl::MutexGuard aGuard( aMutex);
     // ScFieldEditEngine is needed to resolve field contents.
     if (pDoc)
     {
@@ -123,17 +130,15 @@ OUString ScEditUtil::GetString( const EditTextObject& rEditText, const ScDocumen
     }
     else
     {
-        static osl::Mutex aMutex;
-        osl::MutexGuard aGuard( aMutex);
         EditEngine& rEE = ScGlobal::GetStaticFieldEditEngine();
         rEE.SetText( rEditText);
         return GetMultilineString( rEE);
     }
 }
 
-EditTextObject* ScEditUtil::CreateURLObjectFromURL( ScDocument& rDoc, const OUString& rURL, const OUString& rText )
+std::unique_ptr<EditTextObject> ScEditUtil::CreateURLObjectFromURL( ScDocument& rDoc, const OUString& rURL, const OUString& rText )
 {
-    SvxURLField aUrlField( rURL, rText, SVXURLFORMAT_APPDEFAULT);
+    SvxURLField aUrlField( rURL, rText, SvxURLFormat::AppDefault);
     EditEngine& rEE = rDoc.GetEditEngine();
     rEE.SetText( EMPTY_OUSTRING );
     rEE.QuickInsertField( SvxFieldItem( aUrlField, EE_FEATURE_FIELD ),
@@ -153,20 +158,19 @@ void ScEditUtil::RemoveCharAttribs( EditTextObject& rEditText, const ScPatternAt
         { ATTR_FONT_WEIGHT, EE_CHAR_WEIGHT },
         { ATTR_FONT_COLOR,  EE_CHAR_COLOR }
     };
-    sal_uInt16 nMapCount = SAL_N_ELEMENTS(AttrTypeMap);
 
     const SfxItemSet& rSet = rAttr.GetItemSet();
     const SfxPoolItem* pItem;
-    for (sal_uInt16 i = 0; i < nMapCount; ++i)
+    for (size_t i = 0; i < SAL_N_ELEMENTS(AttrTypeMap); ++i)
     {
         if ( rSet.GetItemState(AttrTypeMap[i].nAttrType, false, &pItem) == SfxItemState::SET )
             rEditText.RemoveCharAttribs(AttrTypeMap[i].nCharType);
     }
 }
 
-EditTextObject* ScEditUtil::Clone( const EditTextObject& rObj, ScDocument& rDestDoc )
+std::unique_ptr<EditTextObject> ScEditUtil::Clone( const EditTextObject& rObj, ScDocument& rDestDoc )
 {
-    EditTextObject* pNew = nullptr;
+    std::unique_ptr<EditTextObject> pNew;
 
     EditEngine& rEngine = rDestDoc.GetEditEngine();
     if (rObj.HasOnlineSpellErrors())
@@ -191,7 +195,7 @@ EditTextObject* ScEditUtil::Clone( const EditTextObject& rObj, ScDocument& rDest
 }
 
 OUString ScEditUtil::GetCellFieldValue(
-    const SvxFieldData& rFieldData, const ScDocument* pDoc, Color** ppTextColor )
+    const SvxFieldData& rFieldData, const ScDocument* pDoc, boost::optional<Color>* ppTextColor )
 {
     OUString aRet;
     switch (rFieldData.GetClassId())
@@ -199,15 +203,15 @@ OUString ScEditUtil::GetCellFieldValue(
         case text::textfield::Type::URL:
         {
             const SvxURLField& rField = static_cast<const SvxURLField&>(rFieldData);
-            OUString aURL = rField.GetURL();
+            const OUString& aURL = rField.GetURL();
 
             switch (rField.GetFormat())
             {
-                case SVXURLFORMAT_APPDEFAULT: //TODO: configurable with App???
-                case SVXURLFORMAT_REPR:
+                case SvxURLFormat::AppDefault: //TODO: configurable with App???
+                case SvxURLFormat::Repr:
                     aRet = rField.GetRepresentation();
                 break;
-                case SVXURLFORMAT_URL:
+                case SvxURLFormat::Url:
                     aRet = aURL;
                 break;
                 default:
@@ -218,7 +222,7 @@ OUString ScEditUtil::GetCellFieldValue(
                 INetURLHistory::GetOrCreate()->QueryUrl(aURL) ? svtools::LINKSVISITED : svtools::LINKS;
 
             if (ppTextColor)
-                *ppTextColor = new Color( SC_MOD()->GetColorConfig().GetColorValue(eEntry).nColor );
+                *ppTextColor = SC_MOD()->GetColorConfig().GetColorValue(eEntry).nColor;
         }
         break;
         case text::textfield::Type::EXTENDED_TIME:
@@ -271,13 +275,13 @@ OUString ScEditUtil::GetCellFieldValue(
             aRet = "?";
     }
 
-    if (aRet.isEmpty())        // leer ist baeh
-        aRet = " ";         // Space ist Default der Editengine
+    if (aRet.isEmpty())        // empty is yuck
+        aRet = " ";         // space is default of EditEngine
 
     return aRet;
 }
 
-Rectangle ScEditUtil::GetEditArea( const ScPatternAttr* pPattern, bool bForceToTop )
+tools::Rectangle ScEditUtil::GetEditArea( const ScPatternAttr* pPattern, bool bForceToTop )
 {
     // bForceToTop = always align to top, for editing
     // (sal_False for querying URLs etc.)
@@ -290,87 +294,85 @@ Rectangle ScEditUtil::GetEditArea( const ScPatternAttr* pPattern, bool bForceToT
     bool bLayoutRTL = pDoc->IsLayoutRTL( nTab );
     long nLayoutSign = bLayoutRTL ? -1 : 1;
 
-    const ScMergeAttr* pMerge = static_cast<const ScMergeAttr*>(&pPattern->GetItem(ATTR_MERGE));
-    long nCellX = (long) ( pDoc->GetColWidth(nCol,nTab) * nPPTX );
+    const ScMergeAttr* pMerge = &pPattern->GetItem(ATTR_MERGE);
+    long nCellX = static_cast<long>( pDoc->GetColWidth(nCol,nTab) * nPPTX );
     if ( pMerge->GetColMerge() > 1 )
     {
         SCCOL nCountX = pMerge->GetColMerge();
         for (SCCOL i=1; i<nCountX; i++)
-            nCellX += (long) ( pDoc->GetColWidth(nCol+i,nTab) * nPPTX );
+            nCellX += static_cast<long>( pDoc->GetColWidth(nCol+i,nTab) * nPPTX );
     }
-    long nCellY = (long) ( pDoc->GetRowHeight(nRow,nTab) * nPPTY );
+    long nCellY = static_cast<long>( pDoc->GetRowHeight(nRow,nTab) * nPPTY );
     if ( pMerge->GetRowMerge() > 1 )
     {
         SCROW nCountY = pMerge->GetRowMerge();
-        nCellY += (long) pDoc->GetScaledRowHeight( nRow+1, nRow+nCountY-1, nTab, nPPTY);
+        nCellY += static_cast<long>(pDoc->GetScaledRowHeight( nRow+1, nRow+nCountY-1, nTab, nPPTY));
     }
 
-    const SvxMarginItem* pMargin = static_cast<const SvxMarginItem*>(&pPattern->GetItem(ATTR_MARGIN));
+    const SvxMarginItem* pMargin = &pPattern->GetItem(ATTR_MARGIN);
     sal_uInt16 nIndent = 0;
-    if ( static_cast<const SvxHorJustifyItem&>(pPattern->GetItem(ATTR_HOR_JUSTIFY)).GetValue() ==
-                SVX_HOR_JUSTIFY_LEFT )
-        nIndent = static_cast<const SfxUInt16Item&>(pPattern->GetItem(ATTR_INDENT)).GetValue();
-    long nPixDifX   = (long) ( ( pMargin->GetLeftMargin() + nIndent ) * nPPTX );
-    aStartPos.X()   += nPixDifX * nLayoutSign;
-    nCellX          -= nPixDifX + (long) ( pMargin->GetRightMargin() * nPPTX );     // wegen Umbruch etc.
+    if ( pPattern->GetItem(ATTR_HOR_JUSTIFY).GetValue() ==
+                SvxCellHorJustify::Left )
+        nIndent = pPattern->GetItem(ATTR_INDENT).GetValue();
+    long nPixDifX   = static_cast<long>( ( pMargin->GetLeftMargin() + nIndent ) * nPPTX );
+    aStartPos.AdjustX(nPixDifX * nLayoutSign );
+    nCellX          -= nPixDifX + static_cast<long>( pMargin->GetRightMargin() * nPPTX );     // due to line feed, etc.
 
-    //  vertikale Position auf die in der Tabelle anpassen
+    //  align vertical position to the one in the table
 
     long nPixDifY;
-    long nTopMargin = (long) ( pMargin->GetTopMargin() * nPPTY );
-    SvxCellVerJustify eJust = (SvxCellVerJustify) static_cast<const SvxVerJustifyItem&>(pPattern->
-                                                GetItem(ATTR_VER_JUSTIFY)).GetValue();
+    long nTopMargin = static_cast<long>( pMargin->GetTopMargin() * nPPTY );
+    SvxCellVerJustify eJust = pPattern->GetItem(ATTR_VER_JUSTIFY).GetValue();
 
     //  asian vertical is always edited top-aligned
-    bool bAsianVertical = static_cast<const SfxBoolItem&>(pPattern->GetItem( ATTR_STACKED )).GetValue() &&
-        static_cast<const SfxBoolItem&>(pPattern->GetItem( ATTR_VERTICAL_ASIAN )).GetValue();
+    bool bAsianVertical = pPattern->GetItem( ATTR_STACKED ).GetValue() &&
+        pPattern->GetItem( ATTR_VERTICAL_ASIAN ).GetValue();
 
-    if ( eJust == SVX_VER_JUSTIFY_TOP ||
+    if ( eJust == SvxCellVerJustify::Top ||
             ( bForceToTop && ( SC_MOD()->GetInputOptions().GetTextWysiwyg() || bAsianVertical ) ) )
         nPixDifY = nTopMargin;
     else
     {
         MapMode aMode = pDev->GetMapMode();
-        pDev->SetMapMode( MAP_PIXEL );
+        pDev->SetMapMode(MapMode(MapUnit::MapPixel));
 
         long nTextHeight = pDoc->GetNeededSize( nCol, nRow, nTab,
                                                 pDev, nPPTX, nPPTY, aZoomX, aZoomY, false );
         if (!nTextHeight)
-        {                                   // leere Zelle
+        {                                   // empty cell
             vcl::Font aFont;
             // font color doesn't matter here
             pPattern->GetFont( aFont, SC_AUTOCOL_BLACK, pDev, &aZoomY );
             pDev->SetFont(aFont);
             nTextHeight = pDev->GetTextHeight() + nTopMargin +
-                            (long) ( pMargin->GetBottomMargin() * nPPTY );
+                            static_cast<long>( pMargin->GetBottomMargin() * nPPTY );
         }
 
         pDev->SetMapMode(aMode);
 
         if ( nTextHeight > nCellY + nTopMargin || bForceToTop )
-            nPixDifY = 0;                           // zu gross -> oben anfangen
+            nPixDifY = 0;                           // too large -> begin at the top
         else
         {
-            if ( eJust == SVX_VER_JUSTIFY_CENTER )
+            if ( eJust == SvxCellVerJustify::Center )
                 nPixDifY = nTopMargin + ( nCellY - nTextHeight ) / 2;
             else
                 nPixDifY = nCellY - nTextHeight + nTopMargin;       // JUSTIFY_BOTTOM
         }
     }
 
-    aStartPos.Y() += nPixDifY;
+    aStartPos.AdjustY(nPixDifY );
     nCellY      -= nPixDifY;
 
     if ( bLayoutRTL )
-        aStartPos.X() -= nCellX - 2;    // excluding grid on both sides
+        aStartPos.AdjustX( -(nCellX - 2) );    // excluding grid on both sides
 
-                                                        //  -1 -> Gitter nicht ueberschreiben
-    return Rectangle( aStartPos, Size(nCellX-1,nCellY-1) );
+                                                        //  -1 -> don't overwrite grid
+    return tools::Rectangle( aStartPos, Size(nCellX-1,nCellY-1) );
 }
 
 ScEditAttrTester::ScEditAttrTester( ScEditEngineDefaulter* pEng ) :
     pEngine( pEng ),
-    pEditAttrs( nullptr ),
     bNeedsObject( false ),
     bNeedsCellAttr( false )
 {
@@ -381,8 +383,8 @@ ScEditAttrTester::ScEditAttrTester( ScEditEngineDefaulter* pEng ) :
     else
     {
         const SfxPoolItem* pItem = nullptr;
-        pEditAttrs = new SfxItemSet( pEngine->GetAttribs(
-                                        ESelection(0,0,0,pEngine->GetTextLen(0)), EditEngineAttribs_OnlyHard ) );
+        pEditAttrs.reset( new SfxItemSet( pEngine->GetAttribs(
+                                        ESelection(0,0,0,pEngine->GetTextLen(0)), EditEngineAttribs::OnlyHard ) ) );
         const SfxItemSet& rEditDefaults = pEngine->GetDefaults();
 
         for (sal_uInt16 nId = EE_CHAR_START; nId <= EE_CHAR_END && !bNeedsObject; nId++)
@@ -411,7 +413,7 @@ ScEditAttrTester::ScEditAttrTester( ScEditEngineDefaulter* pEng ) :
             }
         }
 
-        //  Feldbefehle enthalten?
+        //  contains field commands?
 
         SfxItemState eFieldState = pEditAttrs->GetItemState( EE_FEATURE_FIELD, false );
         if ( eFieldState == SfxItemState::DONTCARE || eFieldState == SfxItemState::SET )
@@ -427,7 +429,6 @@ ScEditAttrTester::ScEditAttrTester( ScEditEngineDefaulter* pEng ) :
 
 ScEditAttrTester::~ScEditAttrTester()
 {
-    delete pEditAttrs;
 }
 
 ScEnginePoolHelper::ScEnginePoolHelper( SfxItemPool* pEnginePoolP,
@@ -622,7 +623,7 @@ void ScEditEngineDefaulter::RepeatDefaults()
 
 void ScEditEngineDefaulter::RemoveParaAttribs()
 {
-    SfxItemSet* pCharItems = nullptr;
+    std::unique_ptr<SfxItemSet> pCharItems;
     bool bUpdateMode = GetUpdateMode();
     if ( bUpdateMode )
         SetUpdateMode( false );
@@ -640,7 +641,7 @@ void ScEditEngineDefaulter::RemoveParaAttribs()
                 if ( !pDefaults || *pParaItem != pDefaults->Get(nWhich) )
                 {
                     if (!pCharItems)
-                        pCharItems = new SfxItemSet( GetEmptyItemSet() );
+                        pCharItems.reset(new SfxItemSet( GetEmptyItemSet() ));
                     pCharItems->Put( *pParaItem );
                 }
             }
@@ -655,9 +656,8 @@ void ScEditEngineDefaulter::RemoveParaAttribs()
             //  that are not overridden by existing character attributes
 
             sal_Int32 nStart = 0;
-            for ( std::vector<sal_Int32>::const_iterator it(aPortions.begin()); it != aPortions.end(); ++it )
+            for ( const sal_Int32 nEnd : aPortions )
             {
-                sal_Int32 nEnd = *it;
                 ESelection aSel( nPar, nStart, nPar, nEnd );
                 SfxItemSet aOldCharAttrs = GetAttribs( aSel );
                 SfxItemSet aNewCharAttrs = *pCharItems;
@@ -678,7 +678,7 @@ void ScEditEngineDefaulter::RemoveParaAttribs()
                 nStart = nEnd;
             }
 
-            DELETEZ( pCharItems );
+            pCharItems.reset();
         }
 
         if ( rParaAttribs.Count() )
@@ -694,15 +694,15 @@ void ScEditEngineDefaulter::RemoveParaAttribs()
 }
 
 ScTabEditEngine::ScTabEditEngine( ScDocument* pDoc )
-        : ScEditEngineDefaulter( pDoc->GetEnginePool() )
+        : ScFieldEditEngine( pDoc, pDoc->GetEnginePool() )
 {
     SetEditTextObjectPool( pDoc->GetEditPool() );
-    Init(static_cast<const ScPatternAttr&>(pDoc->GetPool()->GetDefaultItem(ATTR_PATTERN)));
+    Init(pDoc->GetPool()->GetDefaultItem(ATTR_PATTERN));
 }
 
 ScTabEditEngine::ScTabEditEngine( const ScPatternAttr& rPattern,
-            SfxItemPool* pEnginePoolP, SfxItemPool* pTextObjectPool )
-        : ScEditEngineDefaulter( pEnginePoolP )
+            SfxItemPool* pEngineItemPool, ScDocument* pDoc, SfxItemPool* pTextObjectPool )
+        : ScFieldEditEngine( pDoc, pEngineItemPool, pTextObjectPool )
 {
     if ( pTextObjectPool )
         SetEditTextObjectPool( pTextObjectPool );
@@ -711,17 +711,17 @@ ScTabEditEngine::ScTabEditEngine( const ScPatternAttr& rPattern,
 
 void ScTabEditEngine::Init( const ScPatternAttr& rPattern )
 {
-    SetRefMapMode(MAP_100TH_MM);
+    SetRefMapMode(MapMode(MapUnit::Map100thMM));
     SfxItemSet* pEditDefaults = new SfxItemSet( GetEmptyItemSet() );
     rPattern.FillEditItemSet( pEditDefaults );
     SetDefaults( pEditDefaults );
-    // wir haben keine StyleSheets fuer Text
+    // we have no StyleSheets for text
     SetControlWord( GetControlWord() & ~EEControlBits::RTFSTYLESHEETS );
 }
 
-//      Feldbefehle fuer Kopf- und Fusszeilen
+//      field commands for header and footer
 
-//      Zahlen aus \sw\source\core\doc\numbers.cxx
+//      numbers from \sw\source\core\doc\numbers.cxx
 
 static OUString lcl_GetCharStr( sal_Int32 nNo )
 {
@@ -735,7 +735,7 @@ static OUString lcl_GetCharStr( sal_Int32 nNo )
         nCalc = nNo % coDiff;
         if( !nCalc )
             nCalc = coDiff;
-        aStr = OUString( (sal_Unicode)('a' - 1 + nCalc ) ) + aStr;
+        aStr = OUStringLiteral1( 'a' - 1 + nCalc ) + aStr;
         nNo = sal::static_int_cast<sal_Int32>( nNo - nCalc );
         if( nNo )
             nNo /= coDiff;
@@ -750,45 +750,43 @@ static OUString lcl_GetNumStr(sal_Int32 nNo, SvxNumType eType)
     {
         switch( eType )
         {
-        case SVX_CHARS_UPPER_LETTER:
-        case SVX_CHARS_LOWER_LETTER:
+        case css::style::NumberingType::CHARS_UPPER_LETTER:
+        case css::style::NumberingType::CHARS_LOWER_LETTER:
             aTmpStr = lcl_GetCharStr( nNo );
             break;
 
-        case SVX_ROMAN_UPPER:
-        case SVX_ROMAN_LOWER:
+        case css::style::NumberingType::ROMAN_UPPER:
+        case css::style::NumberingType::ROMAN_LOWER:
             if( nNo < 4000 )
-                aTmpStr = SvxNumberFormat::CreateRomanString( nNo, ( eType == SVX_ROMAN_UPPER ) );
+                aTmpStr = SvxNumberFormat::CreateRomanString( nNo, ( eType == css::style::NumberingType::ROMAN_UPPER ) );
             else
                 aTmpStr.clear();
             break;
 
-        case SVX_NUMBER_NONE:
+        case css::style::NumberingType::NUMBER_NONE:
             aTmpStr.clear();
             break;
 
 //      CHAR_SPECIAL:
 //          ????
 
-//      case ARABIC:    ist jetzt default
+//      case ARABIC:    is default now
         default:
             aTmpStr = OUString::number(nNo);
             break;
         }
 
-        if( SVX_CHARS_UPPER_LETTER == eType )
+        if( css::style::NumberingType::CHARS_UPPER_LETTER == eType )
             aTmpStr = aTmpStr.toAsciiUpperCase();
     }
     return aTmpStr;
 }
 
 ScHeaderFieldData::ScHeaderFieldData()
-    :
-        aDate( Date::EMPTY ),
-        aTime( tools::Time::EMPTY )
+    : aDateTime ( DateTime::EMPTY )
 {
     nPageNo = nTotalPages = 0;
-    eNumType = SVX_ARABIC;
+    eNumType = SVX_NUM_ARABIC;
 }
 
 ScHeaderEditEngine::ScHeaderEditEngine( SfxItemPool* pEnginePoolP )
@@ -798,7 +796,7 @@ ScHeaderEditEngine::ScHeaderEditEngine( SfxItemPool* pEnginePoolP )
 
 OUString ScHeaderEditEngine::CalcFieldValue( const SvxFieldItem& rField,
                                     sal_Int32 /* nPara */, sal_Int32 /* nPos */,
-                                    Color*& /* rTxtColor */, Color*& /* rFldColor */ )
+                                    boost::optional<Color>& /* rTxtColor */, boost::optional<Color>& /* rFldColor */ )
 {
     const SvxFieldData* pFieldData = rField.GetField();
     if (!pFieldData)
@@ -817,7 +815,7 @@ OUString ScHeaderEditEngine::CalcFieldValue( const SvxFieldItem& rField,
         case text::textfield::Type::EXTENDED_TIME:
         case text::textfield::Type::TIME:
             // For now, time field in the header / footer is always dynamic.
-            aRet = ScGlobal::pLocaleData->getTime(aData.aTime);
+            aRet = ScGlobal::pLocaleData->getTime(aData.aDateTime);
         break;
         case text::textfield::Type::DOCINFO_TITLE:
             aRet = aData.aTitle;
@@ -826,7 +824,7 @@ OUString ScHeaderEditEngine::CalcFieldValue( const SvxFieldItem& rField,
         {
             switch (static_cast<const SvxExtFileField*>(pFieldData)->GetFormat())
             {
-                case SVXFILEFORMAT_FULLPATH :
+                case SvxFileFormat::PathFull :
                     aRet = aData.aLongDocName;
                 break;
                 default:
@@ -838,7 +836,7 @@ OUString ScHeaderEditEngine::CalcFieldValue( const SvxFieldItem& rField,
             aRet = aData.aTabName;
         break;
         case text::textfield::Type::DATE:
-            aRet = ScGlobal::pLocaleData->getDate(aData.aDate);
+            aRet = ScGlobal::pLocaleData->getDate(aData.aDateTime);
         break;
         default:
             aRet = "?";
@@ -847,7 +845,7 @@ OUString ScHeaderEditEngine::CalcFieldValue( const SvxFieldItem& rField,
     return aRet;
 }
 
-//                          Feld-Daten
+//                          field data
 
 ScFieldEditEngine::ScFieldEditEngine(
     ScDocument* pDoc, SfxItemPool* pEnginePoolP,
@@ -862,7 +860,7 @@ ScFieldEditEngine::ScFieldEditEngine(
 
 OUString ScFieldEditEngine::CalcFieldValue( const SvxFieldItem& rField,
                                     sal_Int32 /* nPara */, sal_Int32 /* nPos */,
-                                    Color*& rTxtColor, Color*& /* rFldColor */ )
+                                    boost::optional<Color>& rTxtColor, boost::optional<Color>& /* rFldColor */ )
 {
     const SvxFieldData* pFieldData = rField.GetField();
 

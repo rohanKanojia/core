@@ -21,47 +21,46 @@
 #define INCLUDED_STARMATH_SOURCE_MATHMLIMPORT_HXX
 
 #include <xmloff/xmlimp.hxx>
-#include <xmloff/xmlexp.hxx>
-#include <xmloff/DocumentSettingsContext.hxx>
-#include <xmloff/xmltoken.hxx>
+#include <vcl/errcode.hxx>
 
-#include <node.hxx>
+#include <deque>
 #include <memory>
 
+class SmNode;
 class SfxMedium;
 namespace com { namespace sun { namespace star {
-    namespace io {
-        class XIutputStream; }
     namespace beans {
         class XPropertySet; }
 } } }
 
+
+typedef std::deque<std::unique_ptr<SmNode>> SmNodeStack;
 
 class SmXMLImportWrapper
 {
     css::uno::Reference<css::frame::XModel> xModel;
 
 public:
-    explicit SmXMLImportWrapper(css::uno::Reference<css::frame::XModel> &rRef)
+    explicit SmXMLImportWrapper(css::uno::Reference<css::frame::XModel> const &rRef)
         : xModel(rRef) {}
 
-    sal_uLong Import(SfxMedium &rMedium);
+    ErrCode Import(SfxMedium &rMedium);
 
-    static sal_uLong ReadThroughComponent(
+    static ErrCode ReadThroughComponent(
         const css::uno::Reference< css::io::XInputStream >& xInputStream,
         const css::uno::Reference< css::lang::XComponent >& xModelComponent,
-        css::uno::Reference< css::uno::XComponentContext > & rxContext,
-        css::uno::Reference< css::beans::XPropertySet > & rPropSet,
+        css::uno::Reference< css::uno::XComponentContext > const & rxContext,
+        css::uno::Reference< css::beans::XPropertySet > const & rPropSet,
         const sal_Char* pFilterName,
         bool bEncrypted );
 
-    static sal_uLong ReadThroughComponent(
+    static ErrCode ReadThroughComponent(
         const css::uno::Reference< css::embed::XStorage >& xStorage,
         const css::uno::Reference< css::lang::XComponent >& xModelComponent,
         const sal_Char* pStreamName,
         const sal_Char* pCompatibilityStreamName,
-        css::uno::Reference< css::uno::XComponentContext > & rxContext,
-        css::uno::Reference< css::beans::XPropertySet > & rPropSet,
+        css::uno::Reference< css::uno::XComponentContext > const & rxContext,
+        css::uno::Reference< css::beans::XPropertySet > const & rPropSet,
         const sal_Char* pFilterName );
 };
 
@@ -78,153 +77,94 @@ class SmXMLImport : public SvXMLImport
     std::unique_ptr<SvXMLTokenMap> pPresTableElemTokenMap;
     std::unique_ptr<SvXMLTokenMap> pColorTokenMap;
     std::unique_ptr<SvXMLTokenMap> pActionAttrTokenMap;
+    std::unique_ptr<SvXMLTokenMap> pMspaceAttrTokenMap;
 
         SmNodeStack aNodeStack;
         bool bSuccess;
+        int nParseDepth;
         OUString aText;
 
 public:
     SmXMLImport(
         const css::uno::Reference< css::uno::XComponentContext >& rContext,
         OUString const & implementationName, SvXMLImportFlags nImportFlags);
-    virtual ~SmXMLImport() throw ();
+    virtual ~SmXMLImport() throw () override;
 
     // XUnoTunnel
-    sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& rId ) throw(css::uno::RuntimeException, std::exception) override;
+    sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& rId ) override;
     static const css::uno::Sequence< sal_Int8 > & getUnoTunnelId() throw();
 
-    void SAL_CALL endDocument()
-        throw( css::xml::sax::SAXException,
-        css::uno::RuntimeException, std::exception ) override;
+    void SAL_CALL endDocument() override;
 
-    SvXMLImportContext *CreateContext(sal_uInt16 nPrefix,
+    SvXMLImportContext *CreateDocumentContext(sal_uInt16 nPrefix,
         const OUString &rLocalName,
         const css::uno::Reference <
         css::xml::sax::XAttributeList> &xAttrList) override;
+    SvXMLImportContext *CreateFastContext( sal_Int32 nElement,
+        const css::uno::Reference<
+        css::xml::sax::XFastAttributeList >& xAttrList ) override;
     SvXMLImportContext *CreateRowContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateEncloseContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateFracContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateNumberContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateTextContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateAnnotationContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateStringContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateIdentifierContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateOperatorContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateSpaceContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateSqrtContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateRootContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateStyleContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreatePaddedContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreatePhantomContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateFencedContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateErrorContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateSubContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateSupContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateSubSupContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateUnderContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateOverContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateUnderOverContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateMultiScriptsContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateNoneContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreatePrescriptsContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateTableContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateTableRowContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateTableCellContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateAlignGroupContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
     SvXMLImportContext *CreateActionContext(sal_uInt16 nPrefix,
-        const OUString &rLocalName,
-        const css::uno::Reference <
-        css::xml::sax::XAttributeList> &xAttrList);
+        const OUString &rLocalName);
 
     const SvXMLTokenMap &GetPresLayoutElemTokenMap();
     const SvXMLTokenMap &GetPresLayoutAttrTokenMap();
@@ -236,19 +176,20 @@ public:
     const SvXMLTokenMap &GetPresTableElemTokenMap();
     const SvXMLTokenMap &GetColorTokenMap();
     const SvXMLTokenMap &GetActionAttrTokenMap();
+    const SvXMLTokenMap &GetMspaceAttrTokenMap();
 
     SmNodeStack & GetNodeStack()    { return aNodeStack; }
-    SmNode *GetTree()
-    {
-        return popOrZero(aNodeStack);
-    }
 
     bool GetSuccess()              { return bSuccess; }
-    SAL_WARN_UNUSED_RESULT OUString GetText() { return aText; }
+    [[nodiscard]] const OUString& GetText() { return aText; }
     void SetText(const OUString &rStr) { aText = rStr; }
 
     virtual void SetViewSettings(const css::uno::Sequence<css::beans::PropertyValue>& aViewProps) override;
     virtual void SetConfigurationSettings(const css::uno::Sequence<css::beans::PropertyValue>& aViewProps) override;
+
+    void IncParseDepth() { ++nParseDepth; }
+    bool TooDeep() const { return nParseDepth >= 2048; }
+    void DecParseDepth() { --nParseDepth; }
 };
 
 
@@ -288,7 +229,8 @@ enum SmXMLPresLayoutAttrTokenMap
     XML_TOK_FONTSIZE,
     XML_TOK_FONTFAMILY,
     XML_TOK_COLOR,
-    XML_TOK_MATHCOLOR
+    XML_TOK_MATHCOLOR,
+    XML_TOK_MATHVARIANT
 };
 
 
@@ -338,6 +280,10 @@ enum SmXMLActionAttrTokenMap
     XML_TOK_SELECTION
 };
 
+enum SmXMLMspaceAttrTokenMap
+{
+    XML_TOK_WIDTH
+};
 
 #endif
 

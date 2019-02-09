@@ -19,6 +19,8 @@
 #include <osl/file.hxx>
 #include <rtl/bootstrap.hxx>
 
+#include <com/sun/star/awt/Key.hpp>
+
 #if defined __clang__ && defined __linux__
 #include <cxxabi.h>
 #include <config_options.h>
@@ -35,6 +37,35 @@ using namespace ::boost;
 using namespace ::lok;
 using namespace ::std;
 
+namespace {
+
+void processEventsToIdle()
+{
+    typedef void (ProcessEventsToIdleFn)(void);
+    static ProcessEventsToIdleFn *processFn = nullptr;
+    if (!processFn)
+    {
+        void *me = dlopen(nullptr, RTLD_NOW);
+        processFn = reinterpret_cast<ProcessEventsToIdleFn *>(dlsym(me, "unit_lok_process_events_to_idle"));
+    }
+
+    CPPUNIT_ASSERT(processFn);
+
+    (*processFn)();
+}
+
+void insertString(Document& rDocument, const std::string& s)
+{
+    for (const char c : s)
+    {
+        rDocument.postKeyEvent(LOK_KEYEVENT_KEYINPUT, c, 0);
+        rDocument.postKeyEvent(LOK_KEYEVENT_KEYUP, c, 0);
+        processEventsToIdle();
+    }
+}
+
+}
+
 OUString getFileURLFromSystemPath(OUString const & path)
 {
     OUString url;
@@ -46,7 +77,7 @@ OUString getFileURLFromSystemPath(OUString const & path)
 }
 
 // We specifically don't use the usual BootStrapFixture, as LOK does
-// all it's own setup and bootstrapping, and should be useable in a
+// all its own setup and bootstrapping, and should be usable in a
 // raw C++ program.
 class TiledRenderingTest : public ::CppUnit::TestFixture
 {
@@ -54,6 +85,9 @@ public:
     const string m_sSrcRoot;
     const string m_sInstDir;
     const string m_sLOPath;
+
+    std::unique_ptr<Document> loadDocument( Office *pOffice, const string &pName,
+                                            const char *pFilterOptions = nullptr );
 
     TiledRenderingTest()
         : m_sSrcRoot( getenv( "SRC_ROOT" ) )
@@ -72,6 +106,8 @@ public:
     void testDocumentTypes( Office* pOffice );
     void testImpressSlideNames( Office* pOffice );
     void testCalcSheetNames( Office* pOffice );
+    void testPaintPartTile( Office* pOffice );
+    void testDocumentLoadLanguage(Office* pOffice);
 #if 0
     void testOverlay( Office* pOffice );
 #endif
@@ -98,6 +134,8 @@ void TiledRenderingTest::runAllTests()
     testDocumentTypes( pOffice.get() );
     testImpressSlideNames( pOffice.get() );
     testCalcSheetNames( pOffice.get() );
+    testPaintPartTile( pOffice.get() );
+    testDocumentLoadLanguage(pOffice.get());
 #if 0
     testOverlay( pOffice.get() );
 #endif
@@ -124,19 +162,26 @@ int getDocumentType( Office* pOffice, const string& rPath )
     return pDocument->getDocumentType();
 }
 
+std::unique_ptr<Document> TiledRenderingTest::loadDocument( Office *pOffice, const string &pName,
+                                                            const char *pFilterOptions )
+{
+    const string sDocPath = m_sSrcRoot + "/libreofficekit/qa/data/" + pName;
+    const string sLockFile = m_sSrcRoot +"/libreofficekit/qa/data/.~lock." + pName + "#";
+
+    remove( sLockFile.c_str() );
+
+    return std::unique_ptr<Document>(pOffice->documentLoad( sDocPath.c_str(), pFilterOptions ));
+}
+
 void TiledRenderingTest::testDocumentTypes( Office* pOffice )
 {
-    const string sTextDocPath = m_sSrcRoot + "/libreofficekit/qa/data/blank_text.odt";
-    const string sTextLockFile = m_sSrcRoot +"/libreofficekit/qa/data/.~lock.blank_text.odt#";
+    std::unique_ptr<Document> pDocument(loadDocument(pOffice, "blank_text.odt"));
 
-    // FIXME: same comment as below wrt lockfile removal.
-    remove( sTextLockFile.c_str() );
-
-    std::unique_ptr<Document> pDocument(pOffice->documentLoad( sTextDocPath.c_str()));
     CPPUNIT_ASSERT(pDocument.get());
     CPPUNIT_ASSERT_EQUAL(LOK_DOCTYPE_TEXT, static_cast<LibreOfficeKitDocumentType>(pDocument->getDocumentType()));
     // This crashed.
     pDocument->postUnoCommand(".uno:Bold");
+    processEventsToIdle();
 
     const string sPresentationDocPath = m_sSrcRoot + "/libreofficekit/qa/data/blank_presentation.odp";
     const string sPresentationLockFile = m_sSrcRoot +"/libreofficekit/qa/data/.~lock.blank_presentation.odp#";
@@ -144,27 +189,18 @@ void TiledRenderingTest::testDocumentTypes( Office* pOffice )
     // FIXME: same comment as below wrt lockfile removal.
     remove( sPresentationLockFile.c_str() );
 
-    CPPUNIT_ASSERT( getDocumentType( pOffice, sPresentationDocPath ) == LOK_DOCTYPE_PRESENTATION );
+    CPPUNIT_ASSERT_EQUAL(LOK_DOCTYPE_PRESENTATION, static_cast<LibreOfficeKitDocumentType>(getDocumentType(pOffice, sPresentationDocPath)));
 
     // TODO: do this for all supported document types
 }
 
 void TiledRenderingTest::testImpressSlideNames( Office* pOffice )
 {
-    const string sDocPath = m_sSrcRoot + "/libreofficekit/qa/data/impress_slidenames.odp";
-    const string sLockFile = m_sSrcRoot +"/libreofficekit/qa/data/.~lock.impress_slidenames.odp#";
+    std::unique_ptr<Document> pDocument(loadDocument(pOffice, "impress_slidenames.odp"));
 
-    // FIXME: this is a temporary hack: LOK will fail when trying to open a
-    // locked file, and since we're reusing the file for a different unit
-    // test it's entirely possible that an unwanted lock file will remain.
-    // Hence forcefully remove it here.
-    remove( sLockFile.c_str() );
-
-    std::unique_ptr< Document> pDocument( pOffice->documentLoad( sDocPath.c_str() ) );
-
-    CPPUNIT_ASSERT( pDocument->getParts() == 3 );
-    CPPUNIT_ASSERT( strcmp( pDocument->getPartName( 0 ), "TestText1" ) == 0 );
-    CPPUNIT_ASSERT( strcmp( pDocument->getPartName( 1 ), "TestText2" ) == 0 );
+    CPPUNIT_ASSERT_EQUAL(3, pDocument->getParts());
+    CPPUNIT_ASSERT_EQUAL(std::string("TestText1"), std::string(pDocument->getPartName(0)));
+    CPPUNIT_ASSERT_EQUAL(std::string("TestText2"), std::string(pDocument->getPartName(1)));
     // The third slide hasn't had a name given to it (i.e. using the rename
     // context menu in Impress), thus it should (as far as I can determine)
     // have a localised version of "Slide 3".
@@ -172,18 +208,93 @@ void TiledRenderingTest::testImpressSlideNames( Office* pOffice )
 
 void TiledRenderingTest::testCalcSheetNames( Office* pOffice )
 {
-    const string sDocPath = m_sSrcRoot + "/libreofficekit/qa/data/calc_sheetnames.ods";
-    const string sLockFile = m_sSrcRoot +"/libreofficekit/qa/data/.~lock.calc_sheetnames.ods#";
+    std::unique_ptr<Document> pDocument(loadDocument(pOffice, "calc_sheetnames.ods"));
+
+    CPPUNIT_ASSERT_EQUAL(3, pDocument->getParts());
+    CPPUNIT_ASSERT_EQUAL(std::string("TestText1"), std::string(pDocument->getPartName(0)));
+    CPPUNIT_ASSERT_EQUAL(std::string("TestText2"), std::string(pDocument->getPartName(1)));
+    CPPUNIT_ASSERT_EQUAL(std::string("Sheet3"), std::string(pDocument->getPartName(2)));
+}
+
+void TiledRenderingTest::testPaintPartTile(Office* pOffice)
+{
+    std::unique_ptr<Document> pDocument(loadDocument(pOffice, "blank_text.odt"));
+
+    CPPUNIT_ASSERT(pDocument.get());
+    CPPUNIT_ASSERT_EQUAL(LOK_DOCTYPE_TEXT, static_cast<LibreOfficeKitDocumentType>(pDocument->getDocumentType()));
+
+    // Create two views.
+    pDocument->getView();
+    pDocument->createView();
+
+    int nView2 = pDocument->getView();
+
+    // Destroy the current view
+    pDocument->destroyView(nView2);
+
+    int nCanvasWidth = 256;
+    int nCanvasHeight = 256;
+    std::vector<unsigned char> aBuffer(nCanvasWidth * nCanvasHeight * 4);
+
+    // And try to paintPartTile() - this used to crash when the current viewId
+    // was destroyed
+    pDocument->paintPartTile(aBuffer.data(), /*nPart=*/0, nCanvasWidth, nCanvasHeight, /*nTilePosX=*/0, /*nTilePosY=*/0, /*nTileWidth=*/3840, /*nTileHeight=*/3840);
+}
+
+void TiledRenderingTest::testDocumentLoadLanguage(Office* pOffice)
+{
+    std::unique_ptr<Document> pDocument(loadDocument(pOffice, "blank_text.odt", "Language=en-US"));
+
+    // assert that '.' is the decimal separator
+    insertString(*pDocument, "1.5");
+
+    pDocument->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, css::awt::Key::RIGHT);
+    pDocument->postKeyEvent(LOK_KEYEVENT_KEYUP, 0, css::awt::Key::RIGHT);
+    processEventsToIdle();
+
+    insertString(*pDocument, "=2*A1");
+
+    pDocument->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, css::awt::Key::RETURN);
+    pDocument->postKeyEvent(LOK_KEYEVENT_KEYUP, 0, css::awt::Key::RETURN);
+    processEventsToIdle();
+    pDocument->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, css::awt::Key::UP);
+    pDocument->postKeyEvent(LOK_KEYEVENT_KEYUP, 0, css::awt::Key::UP);
+    processEventsToIdle();
+
+#if 0
+    // FIXME disabled, as occasionally fails
+    // we've got a meaningful result
+    OString aResult = pDocument->getTextSelection("text/plain;charset=utf-8");
+    CPPUNIT_ASSERT_EQUAL(OString("3\n"), aResult);
+
+    pDocument.reset(nullptr);
 
     // FIXME: LOK will fail when trying to open a locked file
-    remove( sLockFile.c_str() );
+    remove(sLockFile.c_str());
 
-    std::unique_ptr< Document> pDocument( pOffice->documentLoad( sDocPath.c_str() ) );
+    // load the file again, now in another language
+    pDocument.reset(pOffice->documentLoad(sDocPath.c_str(), "Language=cs-CZ"));
 
-    CPPUNIT_ASSERT( pDocument->getParts() == 3 );
-    CPPUNIT_ASSERT( strcmp( pDocument->getPartName( 0 ), "TestText1" ) == 0 );
-    CPPUNIT_ASSERT( strcmp( pDocument->getPartName( 1 ), "TestText2" ) == 0 );
-    CPPUNIT_ASSERT( strcmp( pDocument->getPartName( 2 ), "Sheet3" ) == 0 );
+    // with cs-CZ, the decimal separator is ',' instead, assert that
+    insertString(*pDocument, "1,5");
+
+    pDocument->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, css::awt::Key::RIGHT);
+    pDocument->postKeyEvent(LOK_KEYEVENT_KEYUP, 0, css::awt::Key::RIGHT);
+    processEventsToIdle();
+
+    insertString(*pDocument, "=2*A1");
+
+    pDocument->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, css::awt::Key::RETURN);
+    pDocument->postKeyEvent(LOK_KEYEVENT_KEYUP, 0, css::awt::Key::RETURN);
+    processEventsToIdle();
+    pDocument->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, css::awt::Key::UP);
+    pDocument->postKeyEvent(LOK_KEYEVENT_KEYUP, 0, css::awt::Key::UP);
+    processEventsToIdle();
+
+    // we've got a meaningful result
+    aResult = pDocument->getTextSelection("text/plain;charset=utf-8");
+    CPPUNIT_ASSERT_EQUAL(OString("3\n"), aResult);
+#endif
 }
 
 #if 0
@@ -191,7 +302,7 @@ static void dumpRGBABitmap( const OUString& rPath, const unsigned char* pBuffer,
                             const int nWidth, const int nHeight )
 {
     Bitmap aBitmap( Size( nWidth, nHeight ), 32 );
-    Bitmap::ScopedWriteAccess pWriteAccess( aBitmap );
+    BitmapScopedWriteAccess pWriteAccess( aBitmap );
     memcpy( pWriteAccess->GetBuffer(), pBuffer, 4*nWidth*nHeight );
 
     BitmapEx aBitmapEx( aBitmap );

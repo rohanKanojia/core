@@ -20,7 +20,6 @@
 #include <osl/diagnose.h>
 #include <basegfx/polygon/b3dpolypolygon.hxx>
 #include <basegfx/polygon/b3dpolygon.hxx>
-#include <rtl/instance.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/matrix/b3dhommatrix.hxx>
 #include <functional>
@@ -29,7 +28,7 @@
 
 class ImplB3DPolyPolygon
 {
-    typedef ::std::vector< ::basegfx::B3DPolygon >  PolygonVector;
+    typedef std::vector< ::basegfx::B3DPolygon >  PolygonVector;
 
     PolygonVector                                   maPolygons;
 
@@ -155,66 +154,67 @@ public:
 
     const basegfx::B3DPolygon* begin() const
     {
-        if(maPolygons.empty())
+        if (maPolygons.empty())
             return nullptr;
         else
-            return &maPolygons.front();
+            return maPolygons.data();
     }
 
     const basegfx::B3DPolygon* end() const
     {
-        if(maPolygons.empty())
+        if (maPolygons.empty())
             return nullptr;
         else
-            return (&maPolygons.back())+1;
+            return maPolygons.data() + maPolygons.size();
     }
 
     basegfx::B3DPolygon* begin()
     {
-        if(maPolygons.empty())
+        if (maPolygons.empty())
             return nullptr;
         else
-            return &maPolygons.front();
+            return maPolygons.data();
     }
 
     basegfx::B3DPolygon* end()
     {
-        if(maPolygons.empty())
+        if (maPolygons.empty())
             return nullptr;
         else
-            return &(maPolygons.back())+1;
+            return maPolygons.data() + maPolygons.size();
     }
 };
 
 namespace basegfx
 {
-    namespace { struct DefaultPolyPolygon : public rtl::Static<B3DPolyPolygon::ImplType,
-                                                               DefaultPolyPolygon> {}; }
+    namespace {
+
+    B3DPolyPolygon::ImplType const & getDefaultPolyPolygon() {
+        static B3DPolyPolygon::ImplType const singleton;
+        return singleton;
+    }
+
+    }
 
     B3DPolyPolygon::B3DPolyPolygon() :
-        mpPolyPolygon(DefaultPolyPolygon::get())
+        mpPolyPolygon(getDefaultPolyPolygon())
     {
     }
 
-    B3DPolyPolygon::B3DPolyPolygon(const B3DPolyPolygon& rPolyPolygon) :
-        mpPolyPolygon(rPolyPolygon.mpPolyPolygon)
-    {
-    }
+    B3DPolyPolygon::B3DPolyPolygon(const B3DPolyPolygon&) = default;
+
+    B3DPolyPolygon::B3DPolyPolygon(B3DPolyPolygon&&) = default;
 
     B3DPolyPolygon::B3DPolyPolygon(const B3DPolygon& rPolygon) :
         mpPolyPolygon( ImplB3DPolyPolygon(rPolygon) )
     {
     }
 
-    B3DPolyPolygon::~B3DPolyPolygon()
-    {
-    }
+    B3DPolyPolygon::~B3DPolyPolygon() = default;
 
-    B3DPolyPolygon& B3DPolyPolygon::operator=(const B3DPolyPolygon& rPolyPolygon)
-    {
-        mpPolyPolygon = rPolyPolygon.mpPolyPolygon;
-        return *this;
-    }
+    B3DPolyPolygon& B3DPolyPolygon::operator=(const B3DPolyPolygon&) = default;
+
+    B3DPolyPolygon& B3DPolyPolygon::operator=(B3DPolyPolygon&&) = default;
 
     bool B3DPolyPolygon::operator==(const B3DPolyPolygon& rPolyPolygon) const
     {
@@ -234,7 +234,7 @@ namespace basegfx
         return mpPolyPolygon->count();
     }
 
-    B3DPolygon B3DPolyPolygon::getB3DPolygon(sal_uInt32 nIndex) const
+    B3DPolygon const & B3DPolyPolygon::getB3DPolygon(sal_uInt32 nIndex) const
     {
         OSL_ENSURE(nIndex < mpPolyPolygon->count(), "B3DPolyPolygon access outside range (!)");
 
@@ -253,7 +253,7 @@ namespace basegfx
     {
         for(sal_uInt32 a(0); a < mpPolyPolygon->count(); a++)
         {
-            if((mpPolyPolygon->getB3DPolygon(a)).areBColorsUsed())
+            if(mpPolyPolygon->getB3DPolygon(a).areBColorsUsed())
             {
                 return true;
             }
@@ -278,7 +278,7 @@ namespace basegfx
     {
         for(sal_uInt32 a(0); a < mpPolyPolygon->count(); a++)
         {
-            if((mpPolyPolygon->getB3DPolygon(a)).areNormalsUsed())
+            if(mpPolyPolygon->getB3DPolygon(a).areNormalsUsed())
             {
                 return true;
             }
@@ -303,7 +303,7 @@ namespace basegfx
     {
         for(sal_uInt32 a(0); a < mpPolyPolygon->count(); a++)
         {
-            if((mpPolyPolygon->getB3DPolygon(a)).areTextureCoordinatesUsed())
+            if(mpPolyPolygon->getB3DPolygon(a).areTextureCoordinatesUsed())
             {
                 return true;
             }
@@ -340,7 +340,7 @@ namespace basegfx
 
     void B3DPolyPolygon::clear()
     {
-        mpPolyPolygon = DefaultPolyPolygon::get();
+        mpPolyPolygon = getDefaultPolyPolygon();
     }
 
     void B3DPolyPolygon::flip()
@@ -354,7 +354,7 @@ namespace basegfx
 
         for(sal_uInt32 a(0); !bRetval && a < mpPolyPolygon->count(); a++)
         {
-            if((mpPolyPolygon->getB3DPolygon(a)).hasDoublePoints())
+            if(mpPolyPolygon->getB3DPolygon(a).hasDoublePoints())
             {
                 bRetval = true;
             }

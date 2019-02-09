@@ -19,16 +19,13 @@
 #ifndef INCLUDED_EXTENSIONS_SOURCE_OLE_WINDATA_HXX
 #define INCLUDED_EXTENSIONS_SOURCE_OLE_WINDATA_HXX
 
-#pragma warning (push,1)
-#pragma warning (disable:4668)
-#pragma warning (disable:4548)
-
-#include "oleidl.h"
+#include <oleidl.h>
 
 #if defined __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wall"
 #pragma clang diagnostic ignored "-Wextra"
+#pragma clang diagnostic ignored "-Wignored-attributes"
 #pragma clang diagnostic ignored "-Wint-to-pointer-cast"
 #pragma clang diagnostic ignored "-Winvalid-noreturn"
 #pragma clang diagnostic ignored "-Wmicrosoft"
@@ -42,12 +39,8 @@
 #pragma clang diagnostic pop
 #endif
 
-#pragma warning (pop)
+#include <osl/diagnose.h>
 
-#include "osl/diagnose.h"
-
-namespace ole_adapter
-{
 //Wrapper for VARDESC
 class VarDesc
 {
@@ -60,13 +53,13 @@ public:
 
     explicit VarDesc(ITypeInfo* pTypeInfo) :
       m_pTypeInfo(pTypeInfo),
-      m_pVarDesc(NULL)
+      m_pVarDesc(nullptr)
    {
        OSL_ASSERT(pTypeInfo);
    }
    ~VarDesc()
    {
-      if (m_pVarDesc != NULL)
+      if (m_pVarDesc != nullptr)
       {
          m_pTypeInfo->ReleaseVarDesc(m_pVarDesc);
       }
@@ -100,7 +93,7 @@ public:
 
     explicit FuncDesc(ITypeInfo * pTypeInfo) :
         m_pTypeInfo(pTypeInfo),
-        m_pFuncDesc(NULL)
+        m_pFuncDesc(nullptr)
         {
             OSL_ASSERT(pTypeInfo);
         }
@@ -133,17 +126,17 @@ public:
     FUNCDESC* Detach()
     {
         FUNCDESC* pDesc = m_pFuncDesc;
-        m_pFuncDesc = NULL;
+        m_pFuncDesc = nullptr;
         return pDesc;
     }
 
     void ReleaseFUNCDESC()
     {
-        if (m_pFuncDesc != NULL)
+        if (m_pFuncDesc != nullptr)
         {
             m_pTypeInfo->ReleaseFuncDesc(m_pFuncDesc);
         }
-        m_pFuncDesc = NULL;
+        m_pFuncDesc = nullptr;
     }
 };
 //Wrapper for EXCEPINFO structure
@@ -158,11 +151,11 @@ public:
    }
    ~ExcepInfo()
    {
-         if (bstrSource != NULL)
+         if (bstrSource != nullptr)
          ::SysFreeString(bstrSource);
-      if (bstrDescription != NULL)
+      if (bstrDescription != nullptr)
         ::SysFreeString(bstrDescription);
-      if (bstrHelpFile != NULL)
+      if (bstrHelpFile != nullptr)
         ::SysFreeString(bstrHelpFile);
    }
 };
@@ -178,13 +171,13 @@ public:
 
     explicit TypeAttr(ITypeInfo* pTypeInfo) :
       m_pTypeInfo( pTypeInfo ),
-      m_pTypeAttr( NULL )
+      m_pTypeAttr( nullptr )
    {
        OSL_ASSERT(pTypeInfo);
    }
    ~TypeAttr() throw()
    {
-        if (m_pTypeAttr != NULL)
+        if (m_pTypeAttr != nullptr)
         {
             m_pTypeInfo->ReleaseTypeAttr(m_pTypeAttr);
         }
@@ -200,9 +193,6 @@ public:
       return m_pTypeAttr;
    }
 };
-
-
-}
 
 #endif
 

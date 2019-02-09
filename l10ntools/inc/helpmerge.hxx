@@ -41,20 +41,18 @@ private:
 
 public:
     HelpParser( const OString &rHelpFile );
-    ~HelpParser(){};
 
 /// Method append a PO file with the content of a parsed XML file
 /// @PRECOND rHelpFile is valid
     static bool CreatePO( const OString &rPOFile_in, const OString &sHelpFile,
                           XMLFile *pXmlFile, const OString &rGsi1 );
 
-/// Method merges the String from the POfile into XMLfile. Both Strings must
-/// point to existing files.
-    bool Merge( const OString &rPOFile_in, const OString &rDestinationFile_in ,
+/// Method merges the String into XMLfile, which must point to an existing file.
+    bool Merge( const OString &rDestinationFile_in ,
         const OString& sLanguage , MergeDataFile* pMergeDataFile );
 
 private:
-    bool MergeSingleFile( XMLFile* file , MergeDataFile* pMergeDataFile , const OString& sLanguage , OString const & sPath );
+    void MergeSingleFile( XMLFile* file , MergeDataFile* pMergeDataFile , const OString& sLanguage , OString const & sPath );
 
     static void ProcessHelp( LangHashMap* aLangHM , const OString& sCur , ResData *pResData , MergeDataFile* pMergeDataFile );
 };

@@ -19,34 +19,29 @@
 
 #include <dbaccess/dbaundomanager.hxx>
 #include <dbaccess/dataview.hxx>
-#include "singledoccontroller.hxx"
-#include "browserids.hxx"
-#include "dbu_misc.hrc"
-#include "dbustrings.hrc"
-#include "moduledbu.hxx"
+#include <core_resource.hxx>
+#include <singledoccontroller.hxx>
+#include <browserids.hxx>
+#include <strings.hrc>
+#include <stringconstants.hxx>
 
 #include <svl/undo.hxx>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <osl/diagnose.h>
 
 namespace dbaui
 {
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
-    using ::com::sun::star::uno::Exception;
     using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Sequence;
     using ::com::sun::star::uno::XComponentContext;
     using ::com::sun::star::document::XUndoManager;
-    using ::com::sun::star::lang::XMultiServiceFactory;
     using ::com::sun::star::beans::PropertyValue;
     using ::com::sun::star::lang::EventObject;
 
     // OSingleDocumentController_Data
     struct OSingleDocumentController_Data
     {
-        Reference< UndoManager >  m_xUndoManager;
+        rtl::Reference< UndoManager >  m_xUndoManager;
 
         OSingleDocumentController_Data( ::cppu::OWeakObject& i_parent, ::osl::Mutex& i_mutex )
             :m_xUndoManager( new UndoManager( i_parent, i_mutex ) )
@@ -72,12 +67,6 @@ namespace dbaui
         m_pData->m_xUndoManager->disposing();
     }
 
-    void SAL_CALL OSingleDocumentController::disposing( const EventObject& i_event ) throw( RuntimeException, std::exception )
-    {
-        // simply disambiguate
-        OSingleDocumentController_Base::disposing( i_event );
-    }
-
     void OSingleDocumentController::ClearUndoManager()
     {
         GetUndoManager().Clear();
@@ -88,20 +77,20 @@ namespace dbaui
         return m_pData->m_xUndoManager->GetSfxUndoManager();
     }
 
-    void OSingleDocumentController::addUndoActionAndInvalidate(SfxUndoAction *_pAction)
+    void OSingleDocumentController::addUndoActionAndInvalidate(std::unique_ptr<SfxUndoAction> _pAction)
     {
         // add undo action
-        GetUndoManager().AddUndoAction( _pAction );
+        GetUndoManager().AddUndoAction( std::move(_pAction) );
 
         // when we add an undo action the controller was modified
-        setModified( sal_True );
+        setModified( true );
 
         // now inform me that or states changed
         InvalidateFeature( ID_BROWSER_UNDO );
         InvalidateFeature( ID_BROWSER_REDO );
     }
 
-    Reference< XUndoManager > SAL_CALL OSingleDocumentController::getUndoManager(  ) throw (RuntimeException, std::exception)
+    Reference< XUndoManager > SAL_CALL OSingleDocumentController::getUndoManager(  )
     {
         return m_pData->m_xUndoManager.get();
     }
@@ -115,7 +104,7 @@ namespace dbaui
                 aReturn.bEnabled = isEditable() && GetUndoManager().GetUndoActionCount() != 0;
                 if ( aReturn.bEnabled )
                 {
-                    OUString sUndo(ModuleRes(STR_UNDO_COLON));
+                    OUString sUndo(DBA_RES(STR_UNDO_COLON));
                     sUndo += " ";
                     sUndo += GetUndoManager().GetUndoActionComment();
                     aReturn.sTitle = sUndo;
@@ -126,7 +115,7 @@ namespace dbaui
                 aReturn.bEnabled = isEditable() && GetUndoManager().GetRedoActionCount() != 0;
                 if ( aReturn.bEnabled )
                 {
-                    OUString sRedo(ModuleRes(STR_REDO_COLON));
+                    OUString sRedo(DBA_RES(STR_REDO_COLON));
                     sRedo += " ";
                     sRedo += GetUndoManager().GetRedoActionComment();
                     aReturn.sTitle = sRedo;

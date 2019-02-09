@@ -21,6 +21,7 @@
 
 #include <editeng/editengdllapi.h>
 #include <editeng/svxenum.hxx>
+#include <i18nlangtag/lang.h>
 #include <rtl/ustring.hxx>
 #include <com/sun/star/uno/Reference.hxx>
 #include <vcl/vclptr.hxx>
@@ -54,9 +55,7 @@ private:
         css::uno::XInterface >             xLast;  // result of last spelling/hyphenation attempt
     css::uno::Reference<
         css::linguistic2::XHyphenator >    xHyph;
-    SdrObject*  mpTextObj;
     bool        bOtherCntnt : 1; // set => Check special sections initially
-    bool        bDialog     : 1; // Is pWin the Svx...Dialog?
     bool        bHyphen     : 1; // Split instead of spell checking
     bool        bReverse    : 1; // Reverse spell check
     bool        bStartDone  : 1; // Beginning already corrected
@@ -74,28 +73,28 @@ private:
 
 public:
     SvxSpellWrapper( vcl::Window* pWn,
-                     const bool bStart = false, const bool bIsAllRight = false );
+                     const bool bStart, const bool bIsAllRight );
     SvxSpellWrapper( vcl::Window* pWn,
-                     css::uno::Reference< css::linguistic2::XHyphenator >  &xHyphenator,
-                     const bool bStart = false, const bool bOther = false );
+                     css::uno::Reference< css::linguistic2::XHyphenator > const &xHyphenator,
+                     const bool bStart, const bool bOther );
 
     virtual ~SvxSpellWrapper();
 
     static sal_Int16    CheckSpellLang(
-                            css::uno::Reference< css::linguistic2::XSpellChecker1 >  xSpell,
-                            sal_Int16 nLang );
+                            css::uno::Reference< css::linguistic2::XSpellChecker1 > const & xSpell,
+                            LanguageType nLang );
     static sal_Int16    CheckHyphLang(
-                            css::uno::Reference< css::linguistic2::XHyphenator >  xHyph,
-                            sal_Int16 nLang );
+                            css::uno::Reference< css::linguistic2::XHyphenator >const & xHyph,
+                            LanguageType nLang );
 
     static void         ShowLanguageErrors();
 
     void            SpellDocument();        // Perform Spell Checking
-    inline bool     IsStartDone(){ return bStartDone; }
-    inline bool     IsEndDone(){ return bEndDone; }
-    inline bool     IsHyphen(){ return bHyphen; } // Split instead of Spell check
-    inline void     SetHyphen() { bHyphen = true; }
-    inline bool     IsAllRight()        { return bAllRight; }
+    bool     IsStartDone(){ return bStartDone; }
+    bool     IsEndDone(){ return bEndDone; }
+    bool     IsHyphen(){ return bHyphen; } // Split instead of Spell check
+    void     SetHyphen() { bHyphen = true; }
+    bool     IsAllRight()        { return bAllRight; }
 
 protected:
     const css::uno::Reference< css::uno::XInterface >&
@@ -107,13 +106,11 @@ protected:
     virtual void SpellStart( SvxSpellArea eSpell ); // Preparing the area
     virtual void SpellContinue();     // Check Areas
                                           // Result available through GetLast
-    virtual void ReplaceAll( const OUString &rNewText, sal_Int16 nLanguage ); //Replace word from the replace list
+    virtual void ReplaceAll( const OUString &rNewText ); //Replace word from the replace list
     static css::uno::Reference< css::linguistic2::XDictionary >
                  GetAllRightDic();
     virtual void SpellEnd();                        // Finish area
     virtual void InsertHyphen( const sal_Int32 nPos ); // Insert hyphen
-
-    void SetCurTextObj( SdrObject* pObj ) { mpTextObj = pObj; }
 };
 
 #endif

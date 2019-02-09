@@ -20,9 +20,9 @@
 #define INCLUDED_SW_INC_FCHRFMT_HXX
 
 #include <svl/poolitem.hxx>
-#include <calbck.hxx>
-#include <format.hxx>
-#include <charfmt.hxx>
+#include "calbck.hxx"
+#include "format.hxx"
+#include "charfmt.hxx"
 
 class SwTextCharFormat;
 class IntlWrapper;
@@ -30,19 +30,17 @@ class IntlWrapper;
 class SW_DLLPUBLIC SwFormatCharFormat: public SfxPoolItem, public SwClient
 {
     friend class SwTextCharFormat;
-    SwTextCharFormat* pTextAttr;     ///< My text attribute.
+    SwTextCharFormat* m_pTextAttribute;     ///< My text attribute.
 
 public:
-    SwFormatCharFormat() : pTextAttr(nullptr) {}
-
     /// single argument ctors shall be explicit.
     explicit SwFormatCharFormat( SwCharFormat *pFormat );
-    virtual ~SwFormatCharFormat();
+    virtual ~SwFormatCharFormat() override;
 
     /// @@@ public copy ctor, but no copy assignment?
     SwFormatCharFormat( const SwFormatCharFormat& rAttr );
 protected:
-   virtual void Modify( const SfxPoolItem*, const SfxPoolItem* ) override;
+    virtual void Modify( const SfxPoolItem*, const SfxPoolItem* ) override;
 
 private:
     /// @@@ public copy ctor, but no copy assignment?
@@ -54,17 +52,21 @@ public:
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper*    pIntl = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper&    rIntl ) const override;
 
     virtual bool QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
     virtual bool    GetInfo( SfxPoolItem& rInfo ) const override;
 
-    void SetCharFormat( SwFormat* pFormat ) { pFormat->Add(this); }
+    void SetCharFormat( SwFormat* pFormat )
+    {
+        assert(!pFormat->IsDefault()); // expose cases that lead to use-after-free
+        pFormat->Add(this);
+    }
     SwCharFormat* GetCharFormat() const { return const_cast<SwCharFormat*>(static_cast<const SwCharFormat*>(GetRegisteredIn())); }
 };
 #endif

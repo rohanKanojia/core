@@ -20,13 +20,13 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_XEROOT_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_XEROOT_HXX
 
-#include <com/sun/star/beans/NamedValue.hpp>
-
 #include "xlroot.hxx"
-#include "compiler.hxx"
+#include <compiler.hxx>
 #include <memory>
 
 // Forward declarations of objects in public use ==============================
+
+namespace com { namespace sun { namespace star { namespace beans { struct NamedValue; } } } }
 
 class XclExpRecordBase;
 class XclExpString;
@@ -104,8 +104,8 @@ struct XclExpRootData : public XclRootData
     OStringBuffer       maStringBuf;        /// buffer to avoid massive OUString allocations
 
     explicit            XclExpRootData( XclBiff eBiff, SfxMedium& rMedium,
-                            tools::SvRef<SotStorage> xRootStrg, ScDocument& rDoc, rtl_TextEncoding eTextEnc );
-    virtual             ~XclExpRootData();
+                            const tools::SvRef<SotStorage>& xRootStrg, ScDocument& rDoc, rtl_TextEncoding eTextEnc );
+    virtual             ~XclExpRootData() override;
 };
 
 /** Access to global data from other classes. */
@@ -115,9 +115,9 @@ public:
     explicit            XclExpRoot( XclExpRootData& rExpRootData );
 
     /** Returns this root instance - for code readability in derived classes. */
-    inline const XclExpRoot& GetRoot() const { return *this; }
+    const XclExpRoot& GetRoot() const { return *this; }
     /** Returns true, if URLs should be stored relative to the document location. */
-    inline bool         IsRelUrl() const { return mrExpData.mbRelUrl; }
+    bool         IsRelUrl() const { return mrExpData.mbRelUrl; }
     sc::CompileFormulaContext& GetCompileFormulaContext() const { return *mrExpData.mpCompileFormulaCxt; }
 
     /** Returns the buffer for Calc->Excel sheet index conversion. */
@@ -155,7 +155,7 @@ public:
     XclExpDxfs&          GetDxfs() const;
 
     /** Clean and return the OStringBuffer */
-    inline OStringBuffer&   GetStringBuf() const { mrExpData.maStringBuf.setLength(0); return mrExpData.maStringBuf; }
+    OStringBuffer&   GetStringBuf() const { mrExpData.maStringBuf.setLength(0); return mrExpData.maStringBuf; }
 
     XclExpXmlPivotTableManager& GetXmlPivotTableManager();
 
@@ -177,12 +177,12 @@ public:
 
     static css::uno::Sequence< css::beans::NamedValue > GenerateEncryptionData( const OUString& aPass );
     css::uno::Sequence< css::beans::NamedValue > GetEncryptionData() const;
-    css::uno::Sequence< css::beans::NamedValue > GenerateDefaultEncryptionData() const;
+    static css::uno::Sequence< css::beans::NamedValue > GenerateDefaultEncryptionData();
 
 private:
 
     /** Returns the local or global link manager, depending on current context. */
-    XclExpRootData::XclExpLinkMgrRef GetLocalLinkMgrRef() const;
+    XclExpRootData::XclExpLinkMgrRef const & GetLocalLinkMgrRef() const;
 
 private:
     XclExpRootData& mrExpData;      /// Reference to the global export data struct.

@@ -63,12 +63,13 @@ $(call gb_SdiTarget_get_clean_target,%) :
 			$(call gb_SdiTarget_get_target,$*))
 
 define gb_SdiTarget_SdiTarget
-$(call gb_SdiTarget_get_target,$(1)) : INCLUDE := $$(subst -I. ,-I$$(dir $(SRCDIR)/$(1)) ,$$(SOLARINC))
+$(call gb_SdiTarget_get_target,$(1)) : INCLUDE := $(SOLARINC) -I$$(dir $(SRCDIR)/$(1))
 $(call gb_SdiTarget_get_target,$(1)) : EXPORTS := $(SRCDIR)/$(2).sdi
 ifeq ($(gb_FULLDEPS),$(true))
 -include $(call gb_SdiTarget_get_dep_target,$(1))
 $(call gb_SdiTarget_get_dep_target,$(1)) :| $(dir $(call gb_SdiTarget_get_dep_target,$(1))).dir
 endif
+$(call gb_Helper_make_userfriendly_targets,$(1),SdiTarget)
 endef
 
 define gb_SdiTarget_set_include

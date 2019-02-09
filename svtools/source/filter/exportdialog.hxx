@@ -21,19 +21,14 @@
 #ifndef INCLUDED_SVTOOLS_SOURCE_FILTER_EXPORTDIALOG_HXX
 #define INCLUDED_SVTOOLS_SOURCE_FILTER_EXPORTDIALOG_HXX
 
-#include <vcl/fltcall.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/field.hxx>
-#include <vcl/layout.hxx>
-#include <vcl/lstbox.hxx>
-#include <vcl/msgbox.hxx>
-#include <vcl/scrbar.hxx>
+#include <FltCallDialogParameter.hxx>
+#include <vcl/weld.hxx>
+#include <tools/stream.hxx>
 #include <com/sun/star/document/XExporter.hpp>
 #include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/drawing/XDrawPage.hpp>
+#include <memory>
 
 /*************************************************************************
 |*
@@ -42,7 +37,7 @@
 \************************************************************************/
 
 class FilterConfigItem;
-class ExportDialog : public ModalDialog
+class ExportDialog : public weld::GenericDialogController
 {
 private:
 
@@ -52,79 +47,37 @@ private:
                                mxContext;
     const css::uno::Reference< css::lang::XComponent >&
                                mxSourceDocument;
+    const css::uno::Reference< css::graphic::XGraphic >&
+                               mxGraphic;
 
-    VclPtr<NumericField>       mpMfSizeX;
-    VclPtr<ListBox>            mpLbSizeX;
-    VclPtr<NumericField>       mpMfSizeY;
-    VclPtr<FixedText>          mpFtResolution;
-    VclPtr<NumericField>       mpNfResolution;
-    VclPtr<ListBox>            mpLbResolution;
+    OUString const            msEstimatedSizePix1;
+    OUString const            msEstimatedSizePix2;
+    OUString const            msEstimatedSizeVec;
 
-    VclPtr<VclContainer>       mpColorDepth;
-    VclPtr<ListBox>            mpLbColorDepth;
+    OUString const            ms1BitThreshold;
+    OUString const            ms1BitDithered;
+    OUString const            ms4BitGrayscale;
+    OUString const            ms4BitColorPalette;
+    OUString const            ms8BitGrayscale;
+    OUString const            ms8BitColorPalette;
+    OUString const            ms24BitColor;
 
-    VclPtr<VclContainer>       mpJPGQuality;
-    VclPtr<VclContainer>       mpPNGCompression;
-
-    VclPtr<ScrollBar>          mpSbCompression;
-    VclPtr<NumericField>       mpNfCompression;
-
-    VclPtr<VclContainer>       mpMode;
-    VclPtr<CheckBox>           mpCbInterlaced;
-
-    VclPtr<VclContainer>       mpBMPCompression;
-    VclPtr<CheckBox>           mpCbRLEEncoding;
-
-    VclPtr<VclContainer>       mpDrawingObjects;
-    VclPtr<CheckBox>           mpCbSaveTransparency;
-
-    VclPtr<VclContainer>       mpEncoding;
-    VclPtr<RadioButton>        mpRbBinary;
-    VclPtr<RadioButton>        mpRbText;
-
-    VclPtr<VclContainer>       mpEPSGrid;
-    VclPtr<CheckBox>           mpCbEPSPreviewTIFF;
-    VclPtr<CheckBox>           mpCbEPSPreviewEPSI;
-    VclPtr<RadioButton>        mpRbEPSLevel1;
-    VclPtr<RadioButton>        mpRbEPSLevel2;
-    VclPtr<RadioButton>        mpRbEPSColorFormat1;
-    VclPtr<RadioButton>        mpRbEPSColorFormat2;
-    VclPtr<RadioButton>        mpRbEPSCompressionLZW;
-    VclPtr<RadioButton>        mpRbEPSCompressionNone;
-
-    VclPtr<VclContainer>       mpInfo;
-    VclPtr<FixedText>          mpFtEstimatedSize;
-
-    VclPtr<OKButton>           mpBtnOK;
-
-    OUString            msEstimatedSizePix1;
-    OUString            msEstimatedSizePix2;
-    OUString            msEstimatedSizeVec;
-
-    OUString            ms1BitTreshold;
-    OUString            ms1BitDithered;
-    OUString            ms4BitGrayscale;
-    OUString            ms4BitColorPalette;
-    OUString            ms8BitGrayscale;
-    OUString            ms8BitColorPalette;
-    OUString            ms24BitColor;
-
-    FilterConfigItem*   mpOptionsItem;
-    FilterConfigItem*   mpFilterOptionsItem;
+    std::unique_ptr<FilterConfigItem> mpOptionsItem;
+    std::unique_ptr<FilterConfigItem> mpFilterOptionsItem;
 
     OUString            maExt;
     sal_Int16           mnFormat;
     sal_Int32           mnMaxFilesizeForRealtimePreview;
 
-    SvStream*           mpTempStream;
-    Bitmap              maBitmap;
+    std::unique_ptr<SvMemoryStream> mpTempStream;
+    BitmapEx            maBitmap;
 
     css::awt::Size      maOriginalSize;     // the original graphic size in 1/100mm
     css::awt::Size      maSize;             // for vector graphics it always contains the logical size in 1/100mm
 
-    bool                mbIsPixelFormat;
-    bool                mbExportSelection;
-    bool                mbPreserveAspectRatio;
+    bool const                mbIsPixelFormat;
+    bool const                mbExportSelection;
+    bool                mbGraphicsSource;   // whether source document is graphics (Draw, Impress) or not (Calc, Writer)
 
     sal_Int32           mnInitialResolutionUnit;
 
@@ -138,43 +91,91 @@ private:
     css::uno::Reference< css::drawing::XDrawPage >
                         mxPage;
 
+    weld::Scale* mpSbCompression;
+    weld::SpinButton* mpNfCompression;
 
-                        DECL_LINK_TYPED( UpdateHdl, Button*, void );
-                        DECL_LINK_TYPED( SelectListBoxHdl, ListBox&, void );
-                        DECL_LINK_TYPED( SelectHdl, Edit&, void );
-                        DECL_LINK_TYPED( UpdateHdlMtfSizeX, Edit&, void );
-                        DECL_LINK_TYPED( UpdateHdlMtfSizeY, Edit&, void );
-                        DECL_LINK_TYPED( UpdateHdlNfResolution, Edit&, void );
-                        DECL_LINK_TYPED( SbCompressionUpdateHdl, ScrollBar*, void );
+    std::unique_ptr<weld::SpinButton> mxMfSizeX;
+    std::unique_ptr<weld::ComboBox> mxLbSizeX;
+    std::unique_ptr<weld::SpinButton> mxMfSizeY;
+    std::unique_ptr<weld::Label> mxFtResolution;
+    std::unique_ptr<weld::SpinButton> mxNfResolution;
+    std::unique_ptr<weld::ComboBox> mxLbResolution;
 
-                        DECL_LINK_TYPED( OK, Button*, void );
+    std::unique_ptr<weld::Widget> mxColorDepth;
+    std::unique_ptr<weld::ComboBox> mxLbColorDepth;
 
-                        void setupSizeControls();
-                        void createFilterOptions();
-                        void setupControls();
-                        void updateControls();
+    std::unique_ptr<weld::Widget> mxJPGQuality;
+    std::unique_ptr<weld::Widget> mxPNGCompression;
 
-                        void GetGraphicSource();
-                        void GetGraphicStream();
-                        static Bitmap GetGraphicBitmap( SvStream& rStream );
-                        css::uno::Sequence< css::beans::PropertyValue >
-                            GetFilterData( bool bUpdateConfig );
+    std::unique_ptr<weld::Scale> mxSbPngCompression;
+    std::unique_ptr<weld::SpinButton> mxNfPngCompression;
 
-                        sal_uInt32 GetRawFileSize() const;
-                        bool IsTempExportAvailable() const;
+    std::unique_ptr<weld::Scale> mxSbJpgCompression;
+    std::unique_ptr<weld::SpinButton> mxNfJpgCompression;
 
-                        css::awt::Size
-                            GetOriginalSize();
+    std::unique_ptr<weld::Widget> mxMode;
+    std::unique_ptr<weld::CheckButton> mxCbInterlaced;
 
-                        sal_Int32 GetDefaultUnit();
+    std::unique_ptr<weld::Widget> mxBMPCompression;
+    std::unique_ptr<weld::CheckButton> mxCbRLEEncoding;
+
+    std::unique_ptr<weld::Widget> mxDrawingObjects;
+    std::unique_ptr<weld::CheckButton> mxCbSaveTransparency;
+
+    std::unique_ptr<weld::Widget> mxEncoding;
+    std::unique_ptr<weld::RadioButton> mxRbBinary;
+    std::unique_ptr<weld::RadioButton> mxRbText;
+
+    std::unique_ptr<weld::Widget> mxEPSGrid;
+    std::unique_ptr<weld::CheckButton> mxCbEPSPreviewTIFF;
+    std::unique_ptr<weld::CheckButton> mxCbEPSPreviewEPSI;
+    std::unique_ptr<weld::RadioButton> mxRbEPSLevel1;
+    std::unique_ptr<weld::RadioButton> mxRbEPSLevel2;
+    std::unique_ptr<weld::RadioButton> mxRbEPSColorFormat1;
+    std::unique_ptr<weld::RadioButton> mxRbEPSColorFormat2;
+    std::unique_ptr<weld::RadioButton> mxRbEPSCompressionLZW;
+    std::unique_ptr<weld::RadioButton> mxRbEPSCompressionNone;
+
+    std::unique_ptr<weld::Widget> mxInfo;
+    std::unique_ptr<weld::Label> mxFtEstimatedSize;
+
+    std::unique_ptr<weld::Button> mxBtnOK;
+
+    DECL_LINK(UpdateHdl, weld::ToggleButton&, void);
+    DECL_LINK(SelectListBoxHdl, weld::ComboBox&, void);
+    DECL_LINK(SelectHdl, weld::SpinButton&, void);
+    DECL_LINK(UpdateHdlMtfSizeX, weld::SpinButton&, void);
+    DECL_LINK(UpdateHdlMtfSizeY, weld::SpinButton&, void);
+    DECL_LINK(UpdateHdlNfResolution, weld::SpinButton&, void);
+    DECL_LINK(SbCompressionUpdateHdl, weld::Scale&, void);
+
+    DECL_LINK(OK, weld::Button&, void);
+
+    void setupSizeControls();
+    void createFilterOptions();
+    void setupControls();
+    void updateControls();
+
+    void GetGraphicSource();
+    void GetGraphicStream();
+    static BitmapEx GetGraphicBitmap( SvStream& rStream );
+    css::uno::Sequence< css::beans::PropertyValue >
+        GetFilterData( bool bUpdateConfig );
+
+    sal_uInt32 GetRawFileSize() const;
+    bool IsTempExportAvailable() const;
+
+    css::awt::Size GetOriginalSize();
+
+    sal_Int32 GetDefaultUnit();
 
 public:
-                        ExportDialog( FltCallDialogParameter& rPara,
-                            const css::uno::Reference< css::uno::XComponentContext >& rxContext,
-                            const css::uno::Reference< css::lang::XComponent >& rxSourceDocument,
-                            bool bExportSelection, bool bIsExportVectorFormat );
-                        virtual ~ExportDialog();
-                        virtual void dispose() override;
+    ExportDialog( FltCallDialogParameter& rPara,
+        const css::uno::Reference< css::uno::XComponentContext >& rxContext,
+        const css::uno::Reference< css::lang::XComponent >& rxSourceDocument,
+        bool bExportSelection, bool bIsExportVectorFormat, bool bGraphicsSource,
+        const css::uno::Reference< css::graphic::XGraphic >& rxGraphic);
+    virtual ~ExportDialog() override;
 };
 
 

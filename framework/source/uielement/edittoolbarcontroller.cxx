@@ -17,42 +17,36 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "uielement/edittoolbarcontroller.hxx"
+#include <uielement/edittoolbarcontroller.hxx>
 
 #include <com/sun/star/util/XURLTransformer.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/frame/status/ItemStatus.hpp>
-#include <com/sun/star/frame/status/ItemState.hpp>
-#include <com/sun/star/frame/status/Visibility.hpp>
-#include <com/sun/star/frame/XControlNotificationListener.hpp>
 
 #include <svtools/toolboxcontroller.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/mnemonic.hxx>
 #include <vcl/toolbox.hxx>
+#include <vcl/event.hxx>
 
 using namespace ::com::sun::star;
 using namespace css::uno;
 using namespace css::beans;
 using namespace css::lang;
 using namespace css::frame;
-using namespace css::frame::status;
 using namespace css::util;
 
 namespace framework
 {
 
 // Wrapper class to notify controller about events from edit.
-// Unfortunaltly the events are notifed through virtual methods instead
+// Unfortunaltly the events are notified through virtual methods instead
 // of Listeners.
 
 class EditControl : public Edit
 {
     public:
         EditControl( vcl::Window* pParent, WinBits nStyle, EditToolbarController* pEditToolbarController );
-        virtual ~EditControl();
+        virtual ~EditControl() override;
         virtual void dispose() override;
 
         virtual void Modify() override;
@@ -139,7 +133,6 @@ EditToolbarController::~EditToolbarController()
 }
 
 void SAL_CALL EditToolbarController::dispose()
-throw ( RuntimeException, std::exception )
 {
     SolarMutexGuard aSolarMutexGuard;
 
@@ -177,7 +170,7 @@ void EditToolbarController::LoseFocus()
     notifyFocusLost();
 }
 
-bool EditToolbarController::PreNotify( NotifyEvent& rNEvt )
+bool EditToolbarController::PreNotify( NotifyEvent const & rNEvt )
 {
     if( rNEvt.GetType() == MouseNotifyEvent::KEYINPUT )
     {

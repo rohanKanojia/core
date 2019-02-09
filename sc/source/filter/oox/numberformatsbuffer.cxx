@@ -17,11 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "numberformatsbuffer.hxx"
+#include <numberformatsbuffer.hxx>
+#include <biffhelper.hxx>
 
-#include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/i18n/NumberFormatIndex.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/util/XNumberFormatTypes.hpp>
 #include <com/sun/star/util/XNumberFormats.hpp>
 #include <com/sun/star/util/XNumberFormatsSupplier.hpp>
@@ -33,18 +32,17 @@
 #include <osl/thread.h>
 #include <rtl/ustrbuf.hxx>
 #include <svl/intitem.hxx>
-#include <oox/core/filterbase.hxx>
+#include <svl/itemset.hxx>
+#include <oox/helper/binaryinputstream.hxx>
 #include <oox/helper/attributelist.hxx>
-#include <oox/helper/propertymap.hxx>
-#include "biffinputstream.hxx"
-#include "scitems.hxx"
-#include "document.hxx"
-#include "ftools.hxx"
+#include <oox/token/tokens.hxx>
+#include <scitems.hxx>
+#include <document.hxx>
+#include <ftools.hxx>
 
 namespace oox {
 namespace xls {
 
-using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::util;
@@ -56,8 +54,8 @@ struct BuiltinFormat
 {
     sal_Int32           mnNumFmtId;         /// Built-in number format index.
     const sal_Char*     mpcFmtCode;         /// Format string, UTF-8, may be 0 (mnPredefId is used then).
-    sal_Int16           mnPredefId;         /// Predefined format index, if mpcFmtCode is 0.
-    sal_Int32           mnReuseId;          /// Use this format, if mpcFmtCode is 0 and mnPredefId is -1.
+    sal_Int16 const     mnPredefId;         /// Predefined format index, if mpcFmtCode is 0.
+    sal_Int32 const     mnReuseId;          /// Use this format, if mpcFmtCode is 0 and mnPredefId is -1.
 };
 
 /** Defines a literal built-in number format. */
@@ -1851,12 +1849,12 @@ class NumberFormatFinalizer
 public:
     explicit            NumberFormatFinalizer( const WorkbookHelper& rHelper );
 
-    inline void         operator()( NumberFormat& rNumFmt ) const
+    void         operator()( NumberFormat& rNumFmt ) const
                             { rNumFmt.finalizeImport( mxNumFmts, maEnUsLocale ); }
 
 private:
     Reference< XNumberFormats > mxNumFmts;
-    Locale              maEnUsLocale;
+    Locale const              maEnUsLocale;
 };
 
 NumberFormatFinalizer::NumberFormatFinalizer( const WorkbookHelper& rHelper ) :
@@ -1873,6 +1871,30 @@ NumberFormatFinalizer::NumberFormatFinalizer( const WorkbookHelper& rHelper ) :
     OSL_ENSURE( mxNumFmts.is(), "NumberFormatFinalizer::NumberFormatFinalizer - cannot get number formats" );
 }
 
+sal_Int32 lclPosToken ( const OUString& sFormat, const OUString& sSearch, sal_Int32 nStartPos )
+{
+    sal_Int32 nLength = sFormat.getLength();
+    for ( sal_Int32 i = nStartPos; i < nLength && i >= 0 ; i++ )
+    {
+        switch(sFormat[i])
+        {
+            case '\"' : // skip text
+                i = sFormat.indexOf('\"',i+1);
+                break;
+            case '['  : // skip condition
+                i = sFormat.indexOf(']',i+1);
+                break;
+            default :
+                if ( sFormat.match(sSearch, i) )
+                    return i;
+                break;
+        }
+        if ( i < 0 )
+            i--;
+    }
+    return -2;
+}
+
 } // namespace
 
 NumberFormat::NumberFormat( const WorkbookHelper& rHelper ) :
@@ -1882,11 +1904,27 @@ NumberFormat::NumberFormat( const WorkbookHelper& rHelper ) :
 
 void NumberFormat::setFormatCode( const OUString& rFmtCode )
 {
-    // especiall for a fraction code '\ ?/?' is passed to us in xml, the '\' is not
+    // Special case for fraction code '\ ?/?', it is passed to us in xml, the '\' is not
     // an escape character but merely should be telling the formatter to display the next
     // char in the format ( afaics it does that anyhow )
+    sal_Int32 nPosEscape = 0;
+    sal_Int32 nErase = 0;
+    sal_Int32 nLastIndex = rFmtCode.getLength() - 1;
+    OUStringBuffer sFormat = rFmtCode;
 
-    maModel.maFmtCode = rFmtCode.replaceAll("\\", "");
+    while ( ( nPosEscape = lclPosToken( rFmtCode, "\\ ", nPosEscape ) ) > 0 )
+    {
+        sal_Int32 nPos = nPosEscape + 2;
+        while ( nPos < nLastIndex && ( rFmtCode[nPos] == '?' || rFmtCode[nPos] == '#' || rFmtCode[nPos] == '0' ) )
+            nPos++;
+        if ( nPos < nLastIndex && rFmtCode[nPos] == '/' )
+        {
+            sFormat.remove(nPosEscape - nErase, 1);
+            nErase ++;
+        }  // tdf#81939 preserve other escape characters
+        nPosEscape = lclPosToken( rFmtCode, ";", nPosEscape ); // skip to next format
+    }
+    maModel.maFmtCode = sFormat.makeStringAndClear();
 }
 
 void NumberFormat::setFormatCode( const Locale& rLocale, const sal_Char* pcFmtCode )
@@ -1911,11 +1949,11 @@ void NumberFormat::finalizeImport( const Reference< XNumberFormats >& rxNumFmts,
         maApiData.mnIndex = lclCreatePredefinedFormat( rxNumFmts, maModel.mnPredefId, maModel.maLocale );
 }
 
-sal_uLong NumberFormat::fillToItemSet( SfxItemSet& rItemSet, bool bSkipPoolDefs ) const
+sal_uInt32 NumberFormat::fillToItemSet( SfxItemSet& rItemSet, bool bSkipPoolDefs ) const
 {
     const ScDocument& rDoc = getScDocument();
-    static sal_uLong  nDflt = rDoc.GetFormatTable()->GetStandardFormat( ScGlobal::eLnge );
-    sal_uLong nScNumFmt = nDflt;
+    static sal_uInt32  nDflt = rDoc.GetFormatTable()->GetStandardIndex( ScGlobal::eLnge );
+    sal_uInt32 nScNumFmt = nDflt;
     if ( maApiData.mnIndex )
         nScNumFmt = maApiData.mnIndex;
 
@@ -1926,11 +1964,6 @@ sal_uLong NumberFormat::fillToItemSet( SfxItemSet& rItemSet, bool bSkipPoolDefs 
         nScNumFmt = 0;
 
     return nScNumFmt;
-}
-
-void NumberFormat::writeToPropertyMap( PropertyMap& rPropMap ) const
-{
-    rPropMap.setProperty( PROP_NumberFormat, maApiData.mnIndex);
 }
 
 NumberFormatsBuffer::NumberFormatsBuffer( const WorkbookHelper& rHelper )
@@ -1948,17 +1981,14 @@ NumberFormatsBuffer::NumberFormatsBuffer( const WorkbookHelper& rHelper )
     insertBuiltinFormats();
 }
 
-NumberFormatRef NumberFormatsBuffer::createNumFmt( sal_Int32 nNumFmtId, const OUString& rFmtCode )
+NumberFormatRef NumberFormatsBuffer::createNumFmt( sal_uInt32 nNumFmtId, const OUString& rFmtCode )
 {
     NumberFormatRef xNumFmt;
-    if( nNumFmtId >= 0 )
-    {
-        xNumFmt.reset( new NumberFormat( *this ) );
-        maNumFmts[ nNumFmtId ] = xNumFmt;
-        if ( nNumFmtId > mnHighestId )
-            mnHighestId = nNumFmtId;
-        xNumFmt->setFormatCode( rFmtCode );
-    }
+    xNumFmt.reset( new NumberFormat( *this ) );
+    maNumFmts[ nNumFmtId ] = xNumFmt;
+    if ( nNumFmtId > mnHighestId )
+        mnHighestId = nNumFmtId;
+    xNumFmt->setFormatCode( rFmtCode );
     return xNumFmt;
 }
 
@@ -1981,7 +2011,7 @@ void NumberFormatsBuffer::finalizeImport()
     maNumFmts.forEach( NumberFormatFinalizer( *this ) );
 }
 
-sal_uLong NumberFormatsBuffer::fillToItemSet( SfxItemSet& rItemSet, sal_Int32 nNumFmtId, bool bSkipPoolDefs ) const
+sal_uInt32 NumberFormatsBuffer::fillToItemSet( SfxItemSet& rItemSet, sal_uInt32 nNumFmtId, bool bSkipPoolDefs ) const
 {
     const NumberFormat* pNumFmt = maNumFmts.get(nNumFmtId).get();
     if (!pNumFmt)
@@ -1990,20 +2020,13 @@ sal_uLong NumberFormatsBuffer::fillToItemSet( SfxItemSet& rItemSet, sal_Int32 nN
     return pNumFmt->fillToItemSet( rItemSet, bSkipPoolDefs);
 }
 
-void NumberFormatsBuffer::writeToPropertyMap( PropertyMap& rPropMap, sal_Int32 nNumFmtId ) const
-{
-    if( const NumberFormat* pNumFmt = maNumFmts.get( nNumFmtId ).get() )
-        pNumFmt->writeToPropertyMap( rPropMap );
-}
-
 void NumberFormatsBuffer::insertBuiltinFormats()
 {
     // build a map containing pointers to all tables
     typedef ::std::map< OUString, const BuiltinFormatTable* > BuiltinMap;
     BuiltinMap aBuiltinMap;
-    for( const BuiltinFormatTable* pTable = spBuiltinFormatTables;
-            pTable != STATIC_ARRAY_END( spBuiltinFormatTables ); ++pTable )
-        aBuiltinMap[ OUString::createFromAscii( pTable->mpcLocale ) ] = pTable;
+    for(auto const &rTable : spBuiltinFormatTables)
+        aBuiltinMap[ OUString::createFromAscii(rTable.mpcLocale) ] = &rTable;
 
     // convert locale string to locale struct
     Locale aSysLocale( LanguageTag::convertToLocale( maLocaleStr));
@@ -2025,7 +2048,7 @@ void NumberFormatsBuffer::insertBuiltinFormats()
         aBuiltinVec.push_back( aMIt->second );
 
     // insert the default formats in the format map (in reverse order from default table to system locale)
-    typedef ::std::map< sal_Int32, sal_Int32 > ReuseMap;
+    typedef ::std::map< sal_uInt32, sal_uInt32 > ReuseMap;
     ReuseMap aReuseMap;
     for( BuiltinVec::reverse_iterator aVIt = aBuiltinVec.rbegin(), aVEnd = aBuiltinVec.rend(); aVIt != aVEnd; ++aVIt )
     {
@@ -2054,11 +2077,11 @@ void NumberFormatsBuffer::insertBuiltinFormats()
     }
 
     // copy reused number formats
-    for( ReuseMap::const_iterator aRIt = aReuseMap.begin(), aREnd = aReuseMap.end(); aRIt != aREnd; ++aRIt )
+    for( const auto& [rNumFmtId, rReuseId] : aReuseMap )
     {
-        maNumFmts[ aRIt->first ] = maNumFmts[ aRIt->second ];
-        if ( aRIt->first > mnHighestId )
-            mnHighestId = aRIt->first;
+        maNumFmts[ rNumFmtId ] = maNumFmts[ rReuseId ];
+        if ( rNumFmtId > mnHighestId )
+            mnHighestId = rNumFmtId;
     }
 }
 

@@ -58,7 +58,7 @@
  * Margins object, include left margin,right margin,top margin and bottom margin.
  ************************************************************************/
 
-#include "xfmargins.hxx"
+#include <xfilter/xfmargins.hxx>
 
 XFMargins::XFMargins()
 {
@@ -99,7 +99,7 @@ void    XFMargins::ToXml(IXFStream *pStrm)
     }
 }
 
-bool operator==(XFMargins& indent1, XFMargins& indent2)
+bool operator==(XFMargins const & indent1, XFMargins const & indent2)
 {
     return (
         (indent1.m_nFlag == indent2.m_nFlag) &&
@@ -109,19 +109,10 @@ bool operator==(XFMargins& indent1, XFMargins& indent2)
         (indent1.m_fBottom == indent2.m_fBottom)
         );
 }
-bool operator!=(XFMargins& indent1, XFMargins& indent2)
+bool operator!=(XFMargins const & indent1, XFMargins const & indent2)
 {
     return !(indent1==indent2);
 }
 
-XFMargins& XFMargins::operator=(const XFMargins& other)
-{
-    m_nFlag = other.m_nFlag;
-    m_fLeft = other.m_fLeft;
-    m_fRight = other.m_fRight;
-    m_fTop = other.m_fTop;
-    m_fBottom = other.m_fBottom;
-    return *this;
-}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

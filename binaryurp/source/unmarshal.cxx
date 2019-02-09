@@ -17,32 +17,32 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 #include <cstdlib>
 #include <new>
 #include <vector>
 
-#include "com/sun/star/io/IOException.hpp"
-#include "com/sun/star/uno/Reference.hxx"
-#include "com/sun/star/uno/RuntimeException.hpp"
-#include "com/sun/star/uno/Sequence.hxx"
-#include "com/sun/star/uno/XInterface.hpp"
-#include "cppu/unotype.hxx"
-#include "rtl/byteseq.hxx"
-#include "rtl/ref.hxx"
-#include "rtl/textcvt.h"
-#include "rtl/textenc.h"
-#include "rtl/ustring.h"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
-#include "typelib/typeclass.h"
-#include "typelib/typedescription.h"
-#include "typelib/typedescription.hxx"
-#include "uno/any2.h"
-#include "uno/data.h"
-#include "uno/dispatcher.hxx"
+#include <com/sun/star/io/IOException.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <com/sun/star/uno/XInterface.hpp>
+#include <cppu/unotype.hxx>
+#include <rtl/byteseq.hxx>
+#include <rtl/ref.hxx>
+#include <rtl/textcvt.h>
+#include <rtl/textenc.h>
+#include <rtl/ustring.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <typelib/typeclass.h>
+#include <typelib/typedescription.h>
+#include <typelib/typedescription.hxx>
+#include <uno/any2.h>
+#include <uno/data.h>
+#include <uno/dispatcher.hxx>
 
 #include "binaryany.hxx"
 #include "bridge.hxx"
@@ -55,7 +55,7 @@ namespace binaryurp {
 namespace {
 
 void * allocate(sal_Size size) {
-    void * p = rtl_allocateMemory(size);
+    void * p = std::malloc(size);
     if (p == nullptr) {
         throw std::bad_alloc();
     }
@@ -145,8 +145,7 @@ css::uno::TypeDescription Unmarshal::readType() {
                 "binaryurp::Unmarshal: cache flag of simple type is set");
         }
         return css::uno::TypeDescription(
-            *typelib_static_type_getByTypeClass(
-                static_cast< typelib_TypeClass >(tc)));
+            *typelib_static_type_getByTypeClass(tc));
     case typelib_TypeClass_SEQUENCE:
     case typelib_TypeClass_ENUM:
     case typelib_TypeClass_STRUCT:
@@ -163,9 +162,7 @@ css::uno::TypeDescription Unmarshal::readType() {
             } else {
                 OUString const str(readString());
                 css::uno::TypeDescription t(str);
-                if (!t.is() ||
-                    t.get()->eTypeClass != static_cast< typelib_TypeClass >(tc))
-                {
+                if (!t.is() || t.get()->eTypeClass != tc) {
 
                     throw css::io::IOException(
                         "binaryurp::Unmarshal: type with unknown name: " + str);

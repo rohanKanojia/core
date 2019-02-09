@@ -20,7 +20,7 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_SDBTOOLS_CONNECTION_DATASOURCEMETADATA_HXX
 #define INCLUDED_DBACCESS_SOURCE_SDBTOOLS_CONNECTION_DATASOURCEMETADATA_HXX
 
-#include "connectiondependent.hxx"
+#include <connectiondependent.hxx>
 
 #include <com/sun/star/sdb/tools/XDataSourceMetaData.hpp>
 
@@ -55,10 +55,10 @@ namespace sdbtools
         );
 
         // XDataSourceMetaData
-        virtual sal_Bool SAL_CALL supportsQueriesInFrom() throw (css::sdbc::SQLException, css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL supportsQueriesInFrom() override;
 
     protected:
-        virtual ~DataSourceMetaData();
+        virtual ~DataSourceMetaData() override;
 
     private:
         DataSourceMetaData( const DataSourceMetaData& ) = delete;

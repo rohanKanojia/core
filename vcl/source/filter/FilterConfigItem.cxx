@@ -21,14 +21,16 @@
 
 #include <unotools/configmgr.hxx>
 #include <comphelper/processfactory.hxx>
-#include <comphelper/string.hxx>
 #include <osl/diagnose.h>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/util/XChangesBatch.hpp>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
+#include <com/sun/star/awt/Size.hpp>
+#include <com/sun/star/task/XStatusIndicator.hpp>
 
 using namespace ::com::sun::star::lang      ;   // XMultiServiceFactory
 using namespace ::com::sun::star::beans     ;   // PropertyValue
@@ -39,28 +41,19 @@ using namespace ::com::sun::star::container ;
 using namespace ::com::sun::star::configuration;
 using namespace ::com::sun::star::task      ;   // XStatusIndicator
 
-static bool ImpIsTreeAvailable( Reference< XMultiServiceFactory >& rXCfgProv, const OUString& rTree )
+static bool ImpIsTreeAvailable( Reference< XMultiServiceFactory > const & rXCfgProv, const OUString& rTree )
 {
     bool bAvailable = !rTree.isEmpty();
     if ( bAvailable )
     {
-        using comphelper::string::getTokenCount;
-
-        sal_Int32 nTokenCount = getTokenCount(rTree, '/');
-        sal_Int32 i = 0;
-
+        sal_Int32 nIdx{0};
         if ( rTree[0] == '/' )
-            ++i;
-        if ( rTree.endsWith("/") )
-            --nTokenCount;
-
-        Any aAny;
-        aAny <<= rTree.getToken(i++, '/');
+            ++nIdx;
 
         // creation arguments: nodepath
         PropertyValue aPathArgument;
         aPathArgument.Name = "nodepath";
-        aPathArgument.Value = aAny;
+        aPathArgument.Value <<= rTree.getToken(0, '/', nIdx);
 
         Sequence< Any > aArguments( 1 );
         aArguments[ 0 ] <<= aPathArgument;
@@ -78,7 +71,8 @@ static bool ImpIsTreeAvailable( Reference< XMultiServiceFactory >& rXCfgProv, co
         }
         if ( xReadAccess.is() )
         {
-            for ( ; bAvailable && ( i < nTokenCount ); i++ )
+            const sal_Int32 nEnd {rTree.getLength()};
+            while (bAvailable && nIdx>=0 && nIdx<nEnd)
             {
                 Reference< XHierarchicalNameAccess > xHierarchicalNameAccess
                     ( xReadAccess, UNO_QUERY );
@@ -87,7 +81,7 @@ static bool ImpIsTreeAvailable( Reference< XMultiServiceFactory >& rXCfgProv, co
                     bAvailable = false;
                 else
                 {
-                    OUString aNode( rTree.getToken(i, '/') );
+                    const OUString aNode( rTree.getToken(0, '/', nIdx) );
                     if ( !xHierarchicalNameAccess->hasByHierarchicalName( aNode ) )
                         bAvailable = false;
                     else
@@ -113,23 +107,13 @@ void FilterConfigItem::ImpInitTree( const OUString& rSubTree )
     OUString sTree = "/org.openoffice." + rSubTree;
     if ( ImpIsTreeAvailable(xCfgProv, sTree) )
     {
-        Any aAny;
         // creation arguments: nodepath
         PropertyValue aPathArgument;
-        aAny <<= sTree;
         aPathArgument.Name = "nodepath";
-        aPathArgument.Value = aAny;
+        aPathArgument.Value <<= sTree;
 
-        // creation arguments: commit mode
-        PropertyValue aModeArgument;
-        bool bAsynchron = true;
-        aAny <<= bAsynchron;
-        aModeArgument.Name = "lazywrite";
-        aModeArgument.Value = aAny;
-
-        Sequence< Any > aArguments( 2 );
+        Sequence< Any > aArguments( 1 );
         aArguments[ 0 ] <<= aPathArgument;
-        aArguments[ 1 ] <<= aModeArgument;
 
         try
         {
@@ -151,7 +135,7 @@ FilterConfigItem::FilterConfigItem( const OUString& rSubTree )
     ImpInitTree( rSubTree );
 }
 
-FilterConfigItem::FilterConfigItem( css::uno::Sequence< css::beans::PropertyValue >* pFilterData )
+FilterConfigItem::FilterConfigItem( css::uno::Sequence< css::beans::PropertyValue > const * pFilterData )
     : bModified(false)
 {
     if ( pFilterData )
@@ -159,7 +143,7 @@ FilterConfigItem::FilterConfigItem( css::uno::Sequence< css::beans::PropertyValu
 }
 
 FilterConfigItem::FilterConfigItem( const OUString& rSubTree,
-    css::uno::Sequence< css::beans::PropertyValue >* pFilterData )
+    css::uno::Sequence< css::beans::PropertyValue > const * pFilterData )
 {
     ImpInitTree( rSubTree );
 
@@ -195,26 +179,22 @@ void FilterConfigItem::WriteModifiedConfig()
     }
 }
 
-bool FilterConfigItem::ImplGetPropertyValue( Any& rAny, const Reference< XPropertySet >& rXPropSet, const OUString& rString, bool bTestPropertyAvailability )
+bool FilterConfigItem::ImplGetPropertyValue( Any& rAny, const Reference< XPropertySet >& rXPropSet, const OUString& rString )
 {
     bool bRetValue = true;
 
     if ( rXPropSet.is() )
     {
-        if ( bTestPropertyAvailability )
+        bRetValue = false;
+        try
         {
-            bRetValue = false;
-            try
-            {
-                Reference< XPropertySetInfo >
-                    aXPropSetInfo( rXPropSet->getPropertySetInfo() );
-                if ( aXPropSetInfo.is() )
-                    bRetValue = aXPropSetInfo->hasPropertyByName( rString );
-            }
-            catch( css::uno::Exception& )
-            {
-
-            }
+            Reference< XPropertySetInfo >
+                aXPropSetInfo( rXPropSet->getPropertySetInfo() );
+            if ( aXPropSetInfo.is() )
+                bRetValue = aXPropSetInfo->hasPropertyByName( rString );
+        }
+        catch( css::uno::Exception& )
+        {
         }
         if ( bRetValue )
         {
@@ -287,7 +267,7 @@ bool FilterConfigItem::ReadBool( const OUString& rKey, bool bDefault )
     {
         pPropVal->Value >>= bRetValue;
     }
-    else if ( ImplGetPropertyValue( aAny, xPropSet, rKey, true ) )
+    else if ( ImplGetPropertyValue( aAny, xPropSet, rKey ) )
     {
         aAny >>= bRetValue;
     }
@@ -307,7 +287,7 @@ sal_Int32 FilterConfigItem::ReadInt32( const OUString& rKey, sal_Int32 nDefault 
     {
         pPropVal->Value >>= nRetValue;
     }
-    else if ( ImplGetPropertyValue( aAny, xPropSet, rKey, true ) )
+    else if ( ImplGetPropertyValue( aAny, xPropSet, rKey ) )
     {
         aAny >>= nRetValue;
     }
@@ -327,7 +307,7 @@ OUString FilterConfigItem::ReadString( const OUString& rKey, const OUString& rDe
     {
         pPropVal->Value >>= aRetValue;
     }
-    else if ( ImplGetPropertyValue( aAny, xPropSet, rKey, true ) )
+    else if ( ImplGetPropertyValue( aAny, xPropSet, rKey ) )
     {
         aAny >>= aRetValue;
     }
@@ -348,17 +328,16 @@ void FilterConfigItem::WriteBool( const OUString& rKey, bool bNewValue )
     if ( xPropSet.is() )
     {
         Any aAny;
-        if ( ImplGetPropertyValue( aAny, xPropSet, rKey, true ) )
+        if ( ImplGetPropertyValue( aAny, xPropSet, rKey ) )
         {
             bool bOldValue(true);
             if ( aAny >>= bOldValue )
             {
                 if ( bOldValue != bNewValue )
                 {
-                    aAny <<= bNewValue;
                     try
                     {
-                        xPropSet->setPropertyValue( rKey, aAny );
+                        xPropSet->setPropertyValue( rKey, Any(bNewValue) );
                         bModified = true;
                     }
                     catch ( css::uno::Exception& )
@@ -382,17 +361,16 @@ void FilterConfigItem::WriteInt32( const OUString& rKey, sal_Int32 nNewValue )
     {
         Any aAny;
 
-        if ( ImplGetPropertyValue( aAny, xPropSet, rKey, true ) )
+        if ( ImplGetPropertyValue( aAny, xPropSet, rKey ) )
         {
             sal_Int32 nOldValue = 0;
             if ( aAny >>= nOldValue )
             {
                 if ( nOldValue != nNewValue )
                 {
-                    aAny <<= nNewValue;
                     try
                     {
-                        xPropSet->setPropertyValue( rKey, aAny );
+                        xPropSet->setPropertyValue( rKey, Any(nNewValue) );
                         bModified = true;
                     }
                     catch ( css::uno::Exception& )

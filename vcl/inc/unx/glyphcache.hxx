@@ -20,39 +20,37 @@
 #ifndef INCLUDED_VCL_INC_GENERIC_GLYPHCACHE_HXX
 #define INCLUDED_VCL_INC_GENERIC_GLYPHCACHE_HXX
 
-#include <config_graphite.h>
-
+#include <memory>
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_GLYPH_H
 
 #include <com/sun/star/i18n/XBreakIterator.hpp>
 #include <tools/gen.hxx>
+#include <tools/solar.h>
 #include <vcl/dllapi.h>
 #include <vcl/metric.hxx>
 
-#include <fontinstance.hxx>
 #include <sallayout.hxx>
-#include "fontattributes.hxx"
-#include "impfontmetricdata.hxx"
+#include <fontattributes.hxx>
+#include <fontselect.hxx>
+#include <impfontmetricdata.hxx>
+#include <hb-ot.h>
 
 #include <unordered_map>
 
-class FreetypeManager;
+class FreetypeFont;
+class FreetypeFontInstance;
 class FreetypeFontInfo;
-class GlyphData;
-class GraphiteFaceWrapper;
 class FontConfigFontOptions;
 class PhysicalFontCollection;
-class ServerFont;
-class ServerFontLayout;
-class ServerFontLayoutEngine;
+class FreetypeFont;
 class SvpGcpHelper;
 
 namespace basegfx { class B2DPolyPolygon; }
 namespace vcl { struct FontCapabilities; }
 
-class VCL_DLLPUBLIC GlyphCache
+class VCL_DLLPUBLIC GlyphCache final
 {
 public:
     explicit                GlyphCache();
@@ -67,125 +65,62 @@ public:
 
     void                    AnnounceFonts( PhysicalFontCollection* ) const;
 
-    ServerFont*             CacheFont( const FontSelectPattern& );
-    void                    UncacheFont( ServerFont& );
+    FreetypeFont*           CacheFont(LogicalFontInstance* pFontInstance);
+    void                    UncacheFont( FreetypeFont& );
     void                    ClearFontCache();
-    void                    InvalidateAllGlyphs();
+    void                    ClearFontOptions();
 
 private:
-    friend class ServerFont;
-    // used by ServerFont class only
-    void                    AddedGlyph( ServerFont&, GlyphData& );
-    void                    RemovingGlyph();
-    void                    UsingGlyph( ServerFont&, GlyphData& );
-    void                    GrowNotify();
-
-private:
+    static void             InitFreetype();
     void                    GarbageCollect();
+    FreetypeFont*           CreateFont(LogicalFontInstance* pLogicalFont);
 
     // the GlyphCache's FontList matches a font request to a serverfont instance
     // the FontList key's mpFontData member is reinterpreted as integer font id
-    struct IFSD_Equal{  bool operator()( const FontSelectPattern&, const FontSelectPattern& ) const; };
-    struct IFSD_Hash{ size_t operator()( const FontSelectPattern& ) const; };
-    typedef std::unordered_map<FontSelectPattern,ServerFont*,IFSD_Hash,IFSD_Equal > FontList;
+    struct IFSD_Equal{  bool operator()( const rtl::Reference<LogicalFontInstance>&, const rtl::Reference<LogicalFontInstance>& ) const; };
+    struct IFSD_Hash{ size_t operator()( const rtl::Reference<LogicalFontInstance>& ) const; };
+    typedef std::unordered_map<rtl::Reference<LogicalFontInstance>,std::unique_ptr<FreetypeFont>,IFSD_Hash,IFSD_Equal > FontList;
+    typedef std::unordered_map<sal_IntPtr, std::unique_ptr<FreetypeFontInfo>> FontInfoList;
 
     FontList                maFontList;
-    sal_uLong               mnMaxSize;      // max overall cache size in bytes
+    static constexpr sal_uLong gnMaxSize = 1500000;  // max overall cache size in bytes
     mutable sal_uLong       mnBytesUsed;
-    mutable long            mnLruIndex;
-    mutable int             mnGlyphCount;
-    ServerFont*             mpCurrentGCFont;
+    FreetypeFont*           mpCurrentGCFont;
 
-    FreetypeManager*        mpFtManager;
+    FontInfoList            m_aFontInfoList;
+    sal_IntPtr              m_nMaxFontId;
 };
 
-class GlyphMetric
+class VCL_DLLPUBLIC FreetypeFont final
 {
 public:
-                            GlyphMetric() : mnAdvanceWidth(0) {}
-
-    Point                   GetOffset() const   { return maOffset; }
-    Size                    GetSize() const     { return maSize; }
-    long                    GetCharWidth() const { return mnAdvanceWidth; }
-
-protected:
-    friend class GlyphData;
-    void                    SetOffset( int nX, int nY ) { maOffset = Point( nX, nY); }
-    void                    SetDelta( int nX, int nY )  { maDelta = Point( nX, nY); }
-    void                    SetSize( const Size& s )    { maSize = s; }
-    void                    SetCharWidth( long nW )     { mnAdvanceWidth = nW; }
-
-private:
-    long                    mnAdvanceWidth;
-    Point                   maDelta;
-    Point                   maOffset;
-    Size                    maSize;
-};
-
-class GlyphData
-{
-public:
-                            GlyphData() : mnLruValue(0) {}
-
-    const GlyphMetric&      GetMetric() const           { return maGlyphMetric; }
-
-    void                    SetSize( const Size& s)     { maGlyphMetric.SetSize( s ); }
-    void                    SetOffset( int nX, int nY ) { maGlyphMetric.SetOffset( nX, nY ); }
-    void                    SetDelta( int nX, int nY )  { maGlyphMetric.SetDelta( nX, nY ); }
-    void                    SetCharWidth( long nW )     { maGlyphMetric.SetCharWidth( nW ); }
-
-    void                    SetLruValue( int n ) const  { mnLruValue = n; }
-    long                    GetLruValue() const         { return mnLruValue;}
-
-private:
-    GlyphMetric             maGlyphMetric;
-
-    // used by GlyphCache for cache LRU algorithm
-    mutable long            mnLruValue;
-};
-
-class VCL_DLLPUBLIC ServerFont
-{
-public:
-                            ServerFont( const FontSelectPattern&, FreetypeFontInfo* );
-    virtual                 ~ServerFont();
+                            FreetypeFont(LogicalFontInstance* pFontInstance, FreetypeFontInfo*);
+                            ~FreetypeFont();
 
     const OString&          GetFontFileName() const;
+    int                     GetFontFaceIndex() const;
     bool                    TestFont() const { return mbFaceOk;}
     FT_Face                 GetFtFace() const;
     int                     GetLoadFlags() const { return (mnLoadFlags & ~FT_LOAD_IGNORE_TRANSFORM); }
-    void                    SetFontOptions(const std::shared_ptr<FontConfigFontOptions>&);
-    std::shared_ptr<FontConfigFontOptions> GetFontOptions() const;
+    const FontConfigFontOptions* GetFontOptions() const;
+    void                    ClearFontOptions();
     bool                    NeedsArtificialBold() const { return mbArtBold; }
     bool                    NeedsArtificialItalic() const { return mbArtItalic; }
 
-    const FontSelectPattern& GetFontSelData() const      { return maFontSelData; }
-
-    void                    GetFontMetric( ImplFontMetricDataPtr&, long& rFactor ) const;
-    const unsigned char*    GetTable( const char* pName, sal_uLong* pLength );
-    int                     GetEmUnits() const { return maFaceFT->units_per_EM;}
-    double                  GetStretch() { return mfStretch; }
-    const FontCharMapPtr    GetFontCharMap() const;
+    void                    GetFontMetric(ImplFontMetricDataRef const &) const;
+    const unsigned char*    GetTable( const char* pName, sal_uLong* pLength ) const;
+    const FontCharMapRef    GetFontCharMap() const;
     bool                    GetFontCapabilities(vcl::FontCapabilities &) const;
 
-    GlyphData&              GetGlyphData( sal_GlyphId );
-    const GlyphMetric&      GetGlyphMetric( sal_GlyphId aGlyphId )
-                            { return GetGlyphData( aGlyphId ).GetMetric(); }
-
-#if ENABLE_GRAPHITE
-    GraphiteFaceWrapper* GetGraphiteFace() const;
-#endif
-
-    sal_GlyphId             GetGlyphIndex( sal_UCS4 ) const;
-    sal_GlyphId             GetRawGlyphIndex( sal_UCS4, sal_UCS4 = 0 ) const;
-    sal_GlyphId             FixupGlyphIndex( sal_GlyphId aGlyphId, sal_UCS4 ) const;
-    bool                    GetGlyphOutline( sal_GlyphId aGlyphId, basegfx::B2DPolyPolygon& ) const;
+    bool                    GetGlyphBoundRect(sal_GlyphId, tools::Rectangle&, bool) const;
+    bool                    GetGlyphOutline(sal_GlyphId, basegfx::B2DPolyPolygon&, bool) const;
     bool                    GetAntialiasAdvice() const;
+
+    FreetypeFontInstance*   GetFontInstance() const { return mpFontInstance.get(); }
 
 private:
     friend class GlyphCache;
-    friend class ServerFontLayout;
-    friend class ServerFontInstance;
+    friend class FreetypeFontInstance;
     friend class X11SalGraphics;
     friend class CairoTextRender;
 
@@ -194,105 +129,36 @@ private:
     long                    Release() const;
     sal_uLong               GetByteCount() const { return mnBytesUsed; }
 
-    void                    InitGlyphData( sal_GlyphId, GlyphData& ) const;
-    void                    GarbageCollect( long );
     void                    ReleaseFromGarbageCollect();
 
-    void                    ApplyGlyphTransform( int nGlyphFlags, FT_GlyphRec_*, bool ) const;
-    void                    ApplyGSUB( const FontSelectPattern& );
+    void                    ApplyGlyphTransform(bool bVertical, FT_Glyph) const;
 
-    ServerFontLayoutEngine* GetLayoutEngine();
-
-    typedef std::unordered_map<int,GlyphData> GlyphList;
-    mutable GlyphList       maGlyphList;
-
-    const FontSelectPattern maFontSelData;
+    rtl::Reference<FreetypeFontInstance> mpFontInstance;
 
     // used by GlyphCache for cache LRU algorithm
     mutable long            mnRefCount;
     mutable sal_uLong       mnBytesUsed;
 
-    ServerFont*             mpPrevGCFont;
-    ServerFont*             mpNextGCFont;
+    FreetypeFont*           mpPrevGCFont;
+    FreetypeFont*           mpNextGCFont;
 
     // 16.16 fixed point values used for a rotated font
     long                    mnCos;
     long                    mnSin;
 
     int                     mnWidth;
-    int                     mnPrioEmbedded;
-    int                     mnPrioAntiAlias;
-    int                     mnPrioAutoHint;
-    FreetypeFontInfo*             mpFontInfo;
+    int const               mnPrioAntiAlias;
+    FreetypeFontInfo*       mpFontInfo;
     FT_Int                  mnLoadFlags;
     double                  mfStretch;
     FT_FaceRec_*            maFaceFT;
     FT_SizeRec_*            maSizeFT;
 
-    std::shared_ptr<FontConfigFontOptions> mxFontOptions;
+    mutable std::unique_ptr<FontConfigFontOptions> mxFontOptions;
 
     bool                    mbFaceOk;
     bool                    mbArtItalic;
     bool                    mbArtBold;
-    bool                    mbUseGamma;
-
-    typedef std::unordered_map<int,int> GlyphSubstitution;
-    GlyphSubstitution       maGlyphSubstitution;
-
-    ServerFontLayoutEngine* mpLayoutEngine;
-};
-
-// a class for cache entries for physical font instances that are based on serverfonts
-class VCL_DLLPUBLIC ServerFontInstance : public LogicalFontInstance
-{
-public:
-                            ServerFontInstance( FontSelectPattern& );
-    virtual                 ~ServerFontInstance();
-
-    void                    SetServerFont(ServerFont* p);
-    void                    HandleFontOptions();
-
-private:
-    ServerFont*             mpServerFont;
-    std::shared_ptr<FontConfigFontOptions> mxFontOptions;
-    bool                    mbGotFontOptions;
-
-};
-
-class VCL_DLLPUBLIC ServerFontLayout : public GenericSalLayout
-{
-public:
-                            ServerFontLayout( ServerFont& );
-
-    virtual bool            LayoutText( ImplLayoutArgs& ) override;
-    virtual void            AdjustLayout( ImplLayoutArgs& ) override;
-    virtual void            DrawText( SalGraphics& ) const override;
-
-    void                    SetNeedFallback(
-                                ImplLayoutArgs& rArgs,
-                                sal_Int32 nIndex,
-                                bool bRightToLeft);
-
-    ServerFont&             GetServerFont() const   { return mrServerFont; }
-
-    virtual std::shared_ptr<vcl::TextLayoutCache>
-        CreateTextLayoutCache(OUString const&) const override;
-
-private:
-    ServerFont&             mrServerFont;
-    css::uno::Reference<css::i18n::XBreakIterator> mxBreak;
-
-                            ServerFontLayout( const ServerFontLayout& ) = delete;
-                            ServerFontLayout& operator=( const ServerFontLayout& ) = delete;
-
-};
-
-class ServerFontLayoutEngine
-{
-public:
-    virtual                 ~ServerFontLayoutEngine() {}
-
-    virtual bool            Layout(ServerFontLayout&, ImplLayoutArgs&) = 0;
 };
 
 #endif // INCLUDED_VCL_INC_GENERIC_GLYPHCACHE_HXX

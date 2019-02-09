@@ -12,14 +12,12 @@ $(eval $(call gb_Library_Library,store))
 $(eval $(call gb_Library_use_external,store,boost_headers))
 
 $(eval $(call gb_Library_add_defs,store,\
-	$(LFS_CFLAGS) \
 	-DSTORE_DLLIMPLEMENTATION \
 ))
 
 $(eval $(call gb_Library_use_libraries,store,\
 	sal \
 	salhelper \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,store,\

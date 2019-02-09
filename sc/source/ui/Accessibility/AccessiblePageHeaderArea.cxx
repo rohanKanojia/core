@@ -19,30 +19,27 @@
 
 #include <sal/config.h>
 
-#include <memory>
-#include <utility>
-
 #include <tools/gen.hxx>
-#include "AccessiblePageHeaderArea.hxx"
-#include "AccessibleText.hxx"
-#include "AccessibilityHints.hxx"
-#include "editsrc.hxx"
-#include "prevwsh.hxx"
-#include "prevloc.hxx"
-#include "scresid.hxx"
-#include "sc.hrc"
+#include <AccessiblePageHeaderArea.hxx>
+#include <AccessibleText.hxx>
+#include <AccessibilityHints.hxx>
+#include <editsrc.hxx>
+#include <prevwsh.hxx>
+#include <prevloc.hxx>
+#include <scresid.hxx>
+#include <strings.hrc>
+#include <strings.hxx>
 
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <editeng/editobj.hxx>
 #include <svx/AccessibleTextHelper.hxx>
-#include <comphelper/servicehelper.hxx>
 #include <unotools/accessiblestatesethelper.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <toolkit/helper/convert.hxx>
 #include <vcl/svapp.hxx>
-#include <o3tl/make_unique.hxx>
+
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
 
@@ -52,13 +49,10 @@ ScAccessiblePageHeaderArea::ScAccessiblePageHeaderArea(
         const uno::Reference<XAccessible>& rxParent,
         ScPreviewShell* pViewShell,
         const EditTextObject* pEditObj,
-        bool bHeader,
         SvxAdjust eAdjust)
         : ScAccessibleContextBase(rxParent, AccessibleRole::TEXT),
         mpEditObj(pEditObj->Clone()),
-        mpTextHelper(nullptr),
         mpViewShell(pViewShell),
-        mbHeader(bHeader),
         meAdjust(eAdjust)
 {
     if (mpViewShell)
@@ -83,11 +77,8 @@ void SAL_CALL ScAccessiblePageHeaderArea::disposing()
         mpViewShell->RemoveAccessibilityObject(*this);
         mpViewShell = nullptr;
     }
-    if (mpTextHelper)
-        DELETEZ(mpTextHelper);
-    if (mpEditObj)
-        DELETEZ(mpEditObj);
-
+    mpTextHelper.reset();
+    mpEditObj.reset();
     ScAccessibleContextBase::disposing();
 }
 
@@ -95,20 +86,16 @@ void SAL_CALL ScAccessiblePageHeaderArea::disposing()
 
 void ScAccessiblePageHeaderArea::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if (pSimpleHint)
+    // only notify if child exist, otherwise it is not necessary
+    if (rHint.GetId() == SfxHintId::ScAccVisAreaChanged)
     {
-        // only notify if child exist, otherwise it is not necessary
-        if (pSimpleHint->GetId() == SC_HINT_ACC_VISAREACHANGED)
-        {
-            if (mpTextHelper)
-                mpTextHelper->UpdateChildren();
+        if (mpTextHelper)
+            mpTextHelper->UpdateChildren();
 
-            AccessibleEventObject aEvent;
-            aEvent.EventId = AccessibleEventId::VISIBLE_DATA_CHANGED;
-            aEvent.Source = uno::Reference< XAccessibleContext >(this);
-            CommitChange(aEvent);
-        }
+        AccessibleEventObject aEvent;
+        aEvent.EventId = AccessibleEventId::VISIBLE_DATA_CHANGED;
+        aEvent.Source = uno::Reference< XAccessibleContext >(this);
+        CommitChange(aEvent);
     }
     ScAccessibleContextBase::Notify(rBC, rHint);
 }
@@ -116,7 +103,6 @@ void ScAccessiblePageHeaderArea::Notify( SfxBroadcaster& rBC, const SfxHint& rHi
 
 uno::Reference< XAccessible > SAL_CALL ScAccessiblePageHeaderArea::getAccessibleAtPoint(
         const awt::Point& rPoint )
-        throw (uno::RuntimeException, std::exception)
 {
     uno::Reference<XAccessible> xRet;
     if (containsPoint(rPoint))
@@ -137,7 +123,6 @@ uno::Reference< XAccessible > SAL_CALL ScAccessiblePageHeaderArea::getAccessible
 
 sal_Int32 SAL_CALL
     ScAccessiblePageHeaderArea::getAccessibleChildCount()
-                    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -148,8 +133,6 @@ sal_Int32 SAL_CALL
 
 uno::Reference< XAccessible > SAL_CALL
     ScAccessiblePageHeaderArea::getAccessibleChild(sal_Int32 nIndex)
-        throw (uno::RuntimeException,
-        lang::IndexOutOfBoundsException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -160,7 +143,6 @@ uno::Reference< XAccessible > SAL_CALL
 
 uno::Reference<XAccessibleStateSet> SAL_CALL
     ScAccessiblePageHeaderArea::getAccessibleStateSet()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     uno::Reference<XAccessibleStateSet> xParentStates;
@@ -188,14 +170,12 @@ uno::Reference<XAccessibleStateSet> SAL_CALL
 
 OUString SAL_CALL
        ScAccessiblePageHeaderArea::getImplementationName()
-    throw (uno::RuntimeException, std::exception)
 {
     return OUString("ScAccessiblePageHeaderArea");
 }
 
 uno::Sequence< OUString> SAL_CALL
        ScAccessiblePageHeaderArea::getSupportedServiceNames()
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Sequence< OUString > aSequence = ScAccessibleContextBase::getSupportedServiceNames();
     sal_Int32 nOldSize(aSequence.getLength());
@@ -210,26 +190,24 @@ uno::Sequence< OUString> SAL_CALL
 
 uno::Sequence<sal_Int8> SAL_CALL
     ScAccessiblePageHeaderArea::getImplementationId()
-    throw (uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 //===== internal ==============================================================
-OUString SAL_CALL ScAccessiblePageHeaderArea::createAccessibleDescription()
-    throw(uno::RuntimeException, std::exception)
+OUString ScAccessiblePageHeaderArea::createAccessibleDescription()
 {
     OUString sDesc;
     switch (meAdjust)
     {
-    case SVX_ADJUST_LEFT :
-        sDesc = OUString(ScResId(STR_ACC_LEFTAREA_DESCR));
+    case SvxAdjust::Left :
+        sDesc = STR_ACC_LEFTAREA_DESCR;
         break;
-    case SVX_ADJUST_RIGHT:
-        sDesc = OUString(ScResId(STR_ACC_RIGHTAREA_DESCR));
+    case SvxAdjust::Right:
+        sDesc = STR_ACC_RIGHTAREA_DESCR;
         break;
-    case SVX_ADJUST_CENTER:
-        sDesc = OUString(ScResId(STR_ACC_CENTERAREA_DESCR));
+    case SvxAdjust::Center:
+        sDesc = STR_ACC_CENTERAREA_DESCR;
         break;
     default:
         OSL_FAIL("wrong adjustment found");
@@ -238,20 +216,19 @@ OUString SAL_CALL ScAccessiblePageHeaderArea::createAccessibleDescription()
     return sDesc;
 }
 
-OUString SAL_CALL ScAccessiblePageHeaderArea::createAccessibleName()
-    throw (uno::RuntimeException, std::exception)
+OUString ScAccessiblePageHeaderArea::createAccessibleName()
 {
     OUString sName;
     switch (meAdjust)
     {
-    case SVX_ADJUST_LEFT :
-        sName = OUString(ScResId(STR_ACC_LEFTAREA_NAME));
+    case SvxAdjust::Left :
+        sName = ScResId(STR_ACC_LEFTAREA_NAME);
         break;
-    case SVX_ADJUST_RIGHT:
-        sName = OUString(ScResId(STR_ACC_RIGHTAREA_NAME));
+    case SvxAdjust::Right:
+        sName = ScResId(STR_ACC_RIGHTAREA_NAME);
         break;
-    case SVX_ADJUST_CENTER:
-        sName = OUString(ScResId(STR_ACC_CENTERAREA_NAME));
+    case SvxAdjust::Center:
+        sName = ScResId(STR_ACC_CENTERAREA_NAME);
         break;
     default:
         OSL_FAIL("wrong adjustment found");
@@ -260,10 +237,9 @@ OUString SAL_CALL ScAccessiblePageHeaderArea::createAccessibleName()
     return sName;
 }
 
-Rectangle ScAccessiblePageHeaderArea::GetBoundingBoxOnScreen() const
-    throw(css::uno::RuntimeException, std::exception)
+tools::Rectangle ScAccessiblePageHeaderArea::GetBoundingBoxOnScreen() const
 {
-    Rectangle aRect;
+    tools::Rectangle aRect;
     if (mxParent.is())
     {
         uno::Reference<XAccessibleContext> xContext = mxParent->getAccessibleContext();
@@ -271,16 +247,15 @@ Rectangle ScAccessiblePageHeaderArea::GetBoundingBoxOnScreen() const
         if (xComp.is())
         {
             // has the same size and position on screen like the parent
-            aRect = Rectangle(VCLPoint(xComp->getLocationOnScreen()), VCLRectangle(xComp->getBounds()).GetSize());
+            aRect = tools::Rectangle(VCLPoint(xComp->getLocationOnScreen()), VCLRectangle(xComp->getBounds()).GetSize());
         }
     }
     return aRect;
 }
 
-Rectangle ScAccessiblePageHeaderArea::GetBoundingBox() const
-    throw (css::uno::RuntimeException, std::exception)
+tools::Rectangle ScAccessiblePageHeaderArea::GetBoundingBox() const
 {
-    Rectangle aRect;
+    tools::Rectangle aRect;
     if (mxParent.is())
     {
         uno::Reference<XAccessibleContext> xContext = mxParent->getAccessibleContext();
@@ -288,7 +263,7 @@ Rectangle ScAccessiblePageHeaderArea::GetBoundingBox() const
         if (xComp.is())
         {
             // has the same size and position on screen like the parent and so the pos is (0, 0)
-            Rectangle aNewRect(Point(0, 0), VCLRectangle(xComp->getBounds()).GetSize());
+            tools::Rectangle aNewRect(Point(0, 0), VCLRectangle(xComp->getBounds()).GetSize());
             aRect = aNewRect;
         }
     }
@@ -300,9 +275,10 @@ void ScAccessiblePageHeaderArea::CreateTextHelper()
 {
     if (!mpTextHelper)
     {
-        ::std::unique_ptr< SvxEditSource > pEditSource (new ScAccessibilityEditSource(o3tl::make_unique<ScAccessibleHeaderTextData>(mpViewShell, mpEditObj, mbHeader, meAdjust)));
-
-        mpTextHelper = new ::accessibility::AccessibleTextHelper(std::move(pEditSource));
+        mpTextHelper.reset( new ::accessibility::AccessibleTextHelper(
+            std::make_unique<ScAccessibilityEditSource>(
+                std::make_unique<ScAccessibleHeaderTextData>(
+                    mpViewShell, mpEditObj.get(), meAdjust))) );
         mpTextHelper->SetEventSource(this);
     }
 }

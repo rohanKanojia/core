@@ -26,7 +26,6 @@
 #include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/frame/XModel2.hpp>
 #include <com/sun/star/frame/FrameSearchFlag.hpp>
-#include <com/sun/star/lang/XServiceInfo.hpp>
 
 #include <tools/diagnose_ex.h>
 
@@ -40,15 +39,12 @@ namespace basctl { namespace docs {
     using ::com::sun::star::uno::UNO_SET_THROW;
     using ::com::sun::star::frame::Desktop;
     using ::com::sun::star::frame::XDesktop2;
-    using ::com::sun::star::container::XEnumerationAccess;
     using ::com::sun::star::container::XEnumeration;
     using ::com::sun::star::frame::XModel;
-    using ::com::sun::star::frame::XFramesSupplier;
     using ::com::sun::star::frame::XFrames;
     using ::com::sun::star::frame::XController;
     using ::com::sun::star::frame::XModel2;
     using ::com::sun::star::uno::UNO_QUERY;
-    using ::com::sun::star::lang::XServiceInfo;
     using ::com::sun::star::uno::Sequence;
     using ::com::sun::star::frame::XFrame;
 
@@ -101,7 +97,7 @@ namespace basctl { namespace docs {
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("basctl.basicide");
             }
         }
 
@@ -109,19 +105,16 @@ namespace basctl { namespace docs {
             const IDocumentDescriptorFilter* _pFilter )
         {
             // ensure we don't encounter some models multiple times
-            ::std::set< Reference< XModel >, ::comphelper::OInterfaceCompare< XModel > > aEncounteredModels;
+            std::set< Reference< XModel >, ::comphelper::OInterfaceCompare< XModel > > aEncounteredModels;
 
-            for (   const Reference< XFrame >* pFrame = _rFrames.getConstArray();
-                    pFrame != _rFrames.getConstArray() + _rFrames.getLength();
-                    ++pFrame
-                )
+            for ( auto const & rFrame : _rFrames )
             {
                 try
                 {
-                    OSL_ENSURE( pFrame->is(), "lcl_getDocuments_nothrow: illegal frame!" );
-                    if ( !pFrame->is() )
+                    OSL_ENSURE( rFrame.is(), "lcl_getDocuments_nothrow: illegal frame!" );
+                    if ( !rFrame.is() )
                         continue;
-                    Reference< XController > xController( (*pFrame)->getController() );
+                    Reference< XController > xController( rFrame->getController() );
                     if ( !xController.is() )
                         continue;
 
@@ -150,7 +143,7 @@ namespace basctl { namespace docs {
                 }
                 catch( const Exception& )
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    DBG_UNHANDLED_EXCEPTION("basctl.basicide");
                 }
             }
         }
@@ -170,7 +163,7 @@ namespace basctl { namespace docs {
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
     }
 

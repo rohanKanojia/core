@@ -17,19 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
+#include <cassert>
 #include <list>
 #include <vector>
 
-#include "com/sun/star/bridge/XInstanceProvider.hpp"
-#include "cppuhelper/exc_hlp.hxx"
-#include "rtl/byteseq.hxx"
-#include "rtl/ref.hxx"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
-#include "typelib/typedescription.hxx"
-#include "uno/dispatcher.hxx"
+#include <com/sun/star/bridge/XInstanceProvider.hpp>
+#include <com/sun/star/container/NoSuchElementException.hpp>
+#include <cppuhelper/exc_hlp.hxx>
+#include <o3tl/runtimetooustring.hxx>
+#include <rtl/byteseq.hxx>
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/log.hxx>
+#include <sal/types.h>
+#include <typelib/typedescription.hxx>
+#include <uno/dispatcher.hxx>
 
 #include "binaryany.hxx"
 #include "bridge.hxx"
@@ -51,7 +55,9 @@ IncomingRequest::IncomingRequest(
     setter_(setter), inArguments_(inArguments),
     currentContextMode_(currentContextMode), currentContext_(currentContext)
 {
-    OSL_ASSERT(bridge.is() && member.is() && member.get()->bComplete);
+    assert(bridge.is());
+    assert(member.is());
+    assert(member.get()->bComplete);
 }
 
 IncomingRequest::~IncomingRequest() {}
@@ -73,10 +79,8 @@ void IncomingRequest::execute() const {
                 isExc = !execute_throw(&ret, &outArgs);
             } catch (const std::exception & e) {
                 throw css::uno::RuntimeException(
-                    "caught C++ exception: " +
-                    OStringToOUString(
-                         OString(e.what()), RTL_TEXTENCODING_ASCII_US));
-                    // best-effort string conversion
+                    "caught C++ exception: "
+                    + o3tl::runtimeToOUString(e.what()));
             }
         } catch (const css::uno::RuntimeException &) {
             css::uno::Any exc(cppu::getCaughtException());
@@ -98,17 +102,14 @@ void IncomingRequest::execute() const {
                 tid_, member_, setter_, isExc, ret, outArgs, false);
             return;
         } catch (const css::uno::RuntimeException & e) {
-            OSL_TRACE(
-                "caught UNO runtime exception '%s'",
-                (OUStringToOString(e.Message, RTL_TEXTENCODING_UTF8).
-                 getStr()));
+            SAL_INFO("binaryurp", "caught " << e);
         } catch (const std::exception & e) {
-            OSL_TRACE("caught C++ exception '%s'", e.what());
+            SAL_INFO("binaryurp", "caught C++ exception " << e.what());
         }
         bridge_->terminate(false);
     } else {
         if (isExc) {
-            OSL_TRACE("oneway method raised exception");
+            SAL_INFO("binaryurp", "oneway method raised exception");
         }
         bridge_->decrementCalls();
     }
@@ -122,15 +123,16 @@ static size_t size_t_round(size_t val)
 bool IncomingRequest::execute_throw(
     BinaryAny * returnValue, std::vector< BinaryAny > * outArguments) const
 {
-    OSL_ASSERT(
-        returnValue != nullptr &&
+    assert(returnValue != nullptr);
+    assert(
         returnValue->getType().equals(
-            css::uno::TypeDescription(cppu::UnoType<void>::get())) &&
-        outArguments != nullptr && outArguments->empty());
+            css::uno::TypeDescription(cppu::UnoType<void>::get())));
+    assert(outArguments != nullptr);
+    assert(outArguments->empty());
     bool isExc = false;
     switch (functionId_) {
     case SPECIAL_FUNCTION_ID_RESERVED:
-        OSL_ASSERT(false); // this cannot happen
+        assert(false); // this cannot happen
         break;
     case SPECIAL_FUNCTION_ID_RELEASE:
         bridge_->releaseStub(oid_, type_);
@@ -144,11 +146,7 @@ bool IncomingRequest::execute_throw(
                 try {
                     ifc = prov->getInstance(oid_);
                 } catch (const css::container::NoSuchElementException & e) {
-                    OSL_TRACE(
-                        "initial element '%s': NoSuchElementException '%s'",
-                        OUStringToOString(oid_, RTL_TEXTENCODING_UTF8).getStr(),
-                        (OUStringToOString(e.Message, RTL_TEXTENCODING_UTF8).
-                         getStr()));
+                    SAL_INFO("binaryurp", "initial element " << oid_ << ": " << e);
                 }
             }
             if (ifc.is()) {
@@ -171,12 +169,12 @@ bool IncomingRequest::execute_throw(
             }
             break;
         }
-        // fall through
+        [[fallthrough]];
     default:
         {
-            OSL_ASSERT(object_.is());
+            assert(object_.is());
             css::uno::TypeDescription retType;
-            std::list< std::vector< char > > outBufs;
+            std::vector< std::vector< char > > outBufs;
             std::vector< void * > args;
             switch (member_.get()->eTypeClass) {
             case typelib_TypeClass_INTERFACE_ATTRIBUTE:
@@ -187,10 +185,10 @@ bool IncomingRequest::execute_throw(
                                 member_.get())->
                         pAttributeTypeRef);
                     if (setter_) {
-                        OSL_ASSERT(inArguments_.size() == 1);
+                        assert(inArguments_.size() == 1);
                         args.push_back(inArguments_[0].getValue(t));
                     } else {
-                        OSL_ASSERT(inArguments_.empty());
+                        assert(inArguments_.empty());
                         retType = t;
                     }
                     break;
@@ -211,11 +209,10 @@ bool IncomingRequest::execute_throw(
                                 css::uno::TypeDescription(
                                     mtd->pParams[j].pTypeRef));
                         } else {
-                            outBufs.push_back(
-                                std::vector< char >(size_t_round(
+                            outBufs.emplace_back(size_t_round(
                                     css::uno::TypeDescription(
                                         mtd->pParams[j].pTypeRef).
-                                    get()->nSize)));
+                                    get()->nSize));
                             p = &outBufs.back()[0];
                         }
                         args.push_back(p);
@@ -223,11 +220,11 @@ bool IncomingRequest::execute_throw(
                             outArguments->push_back(BinaryAny());
                         }
                     }
-                    OSL_ASSERT(i == inArguments_.end());
+                    assert(i == inArguments_.end());
                     break;
                 }
             default:
-                OSL_ASSERT(false); // this cannot happen
+                assert(false); // this cannot happen
                 break;
             }
             size_t nSize = 0;
@@ -252,7 +249,7 @@ bool IncomingRequest::execute_throw(
                     uno_destructData(&retBuf[0], retType.get(), nullptr);
                 }
                 if (!outArguments->empty()) {
-                    OSL_ASSERT(
+                    assert(
                         member_.get()->eTypeClass ==
                         typelib_TypeClass_INTERFACE_METHOD);
                     typelib_InterfaceMethodTypeDescription * mtd =
@@ -260,7 +257,7 @@ bool IncomingRequest::execute_throw(
                             typelib_InterfaceMethodTypeDescription * >(
                                 member_.get());
                     std::vector< BinaryAny >::iterator i(outArguments->begin());
-                    std::list< std::vector< char > >::iterator j(
+                    std::vector< std::vector< char > >::iterator j(
                         outBufs.begin());
                     for (sal_Int32 k = 0; k != mtd->nParams; ++k) {
                         if (mtd->pParams[k].bOut) {
@@ -274,8 +271,8 @@ bool IncomingRequest::execute_throw(
                                 &(*j++)[0], mtd->pParams[k].pTypeRef, nullptr);
                         }
                     }
-                    OSL_ASSERT(i == outArguments->end());
-                    OSL_ASSERT(j == outBufs.end());
+                    assert(i == outArguments->end());
+                    assert(j == outBufs.end());
                 }
             }
             break;

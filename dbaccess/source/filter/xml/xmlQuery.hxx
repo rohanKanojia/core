@@ -40,9 +40,9 @@ namespace dbaxml
                     ,const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList
                     ,const css::uno::Reference< css::container::XNameAccess >& _xParentContainer
                     );
-        virtual ~OXMLQuery();
+        virtual ~OXMLQuery() override;
 
-        virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+        virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                     const OUString& rLocalName,
                     const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
     };

@@ -7,17 +7,20 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <grouptokenconverter.hxx>
+#include <document.hxx>
+#include <formulacell.hxx>
+#include <tokenarray.hxx>
+#include <refdata.hxx>
+
 #include <formula/token.hxx>
 #include <formula/vectortoken.hxx>
-
-#include "compiler.hxx"
-#include "grouptokenconverter.hxx"
 
 using namespace formula;
 
 bool ScGroupTokenConverter::isSelfReferenceRelative(const ScAddress& rRefPos, SCROW nRelRow)
 {
-    if (rRefPos.Col() != mrPos.Col())
+    if (rRefPos.Col() != mrPos.Col() || rRefPos.Tab() != mrPos.Tab())
         return false;
 
     SCROW nLen = mrCell.GetCellGroup()->mnLength;
@@ -43,7 +46,7 @@ bool ScGroupTokenConverter::isSelfReferenceRelative(const ScAddress& rRefPos, SC
 
 bool ScGroupTokenConverter::isSelfReferenceAbsolute(const ScAddress& rRefPos)
 {
-    if (rRefPos.Col() != mrPos.Col())
+    if (rRefPos.Col() != mrPos.Col() || rRefPos.Tab() != mrPos.Tab())
         return false;
 
     SCROW nLen = mrCell.GetCellGroup()->mnLength;
@@ -83,37 +86,41 @@ SCROW ScGroupTokenConverter::trimLength(SCTAB nTab, SCCOL nCol1, SCCOL nCol2, SC
     return nRowLen;
 }
 
-ScGroupTokenConverter::ScGroupTokenConverter(ScTokenArray& rGroupTokens, ScDocument& rDoc, ScFormulaCell& rCell, const ScAddress& rPos) :
-        mrGroupTokens(rGroupTokens), mrDoc(rDoc), mrCell(rCell), mrPos(rPos)
-
+ScGroupTokenConverter::ScGroupTokenConverter(
+    ScTokenArray& rGroupTokens, ScDocument& rDoc, const ScFormulaCell& rCell, const ScAddress& rPos) :
+    mrGroupTokens(rGroupTokens),
+    mrDoc(rDoc),
+    mrCell(rCell),
+    mrPos(rPos)
 {
 }
 
-bool ScGroupTokenConverter::convert(ScTokenArray& rCode)
+bool ScGroupTokenConverter::convert( const ScTokenArray& rCode, sc::FormulaLogger::GroupScope& rScope )
 {
 #if 0
     { // debug to start with:
-        ScCompiler aComp( &mrDoc, mrPos, rCode);
-        aComp.SetGrammar(formula::FormulaGrammar::GRAM_NATIVE_XL_R1C1);
+        ScCompiler aComp( &mrDoc, mrPos, rCode, formula::FormulaGrammar::GRAM_NATIVE_XL_R1C1);
         OUStringBuffer aAsString;
         aComp.CreateStringFromTokenArray(aAsString);
     }
 #endif
 
-    rCode.Reset();
-    for (const formula::FormulaToken* p = rCode.First(); p; p = rCode.Next())
+    const SCROW nLen = mrCell.GetCellGroup()->mnLength;
+    formula::FormulaTokenArrayPlainIterator aIter(rCode);
+    for (const formula::FormulaToken* p = aIter.First(); p; p = aIter.Next())
     {
         // A reference can be either absolute or relative.  If it's absolute,
         // convert it to a static value token.  If relative, convert it to a
         // vector reference token.  Note: we only care about relative vs
         // absolute reference state for row directions.
 
-        SCROW nLen = mrCell.GetCellGroup()->mnLength;
         switch (p->GetType())
         {
             case svSingleRef:
             {
                 ScSingleRefData aRef = *p->GetSingleRef();
+                if( aRef.IsDeleted())
+                    return false;
                 ScAddress aRefPos = aRef.toAbs(mrPos);
                 if (aRef.IsRowRel())
                 {
@@ -128,13 +135,36 @@ bool ScGroupTokenConverter::convert(ScTokenArray& rCode)
 
                     formula::VectorRefArray aArray;
                     if (nTrimLen)
+                    {
+#ifdef DBG_UTIL
+                        // All the necessary Interpret() calls for all the cells
+                        // should have been already handled by ScDependantsCalculator
+                        // calling HandleRefArrayForParallelism(), and that handling also checks
+                        // for cycles etc. Recursively calling Interpret() from here (which shouldn't
+                        // happen) could lead to unhandled problems.
+                        // Also, because of caching FetchVectorRefArray() fetches values for all rows
+                        // up to the maximum one, so check those too.
+                        mrDoc.AssertNoInterpretNeeded(
+                            ScAddress(aRefPos.Col(), 0, aRefPos.Tab()), nTrimLen + aRefPos.Row());
+#endif
                         aArray = mrDoc.FetchVectorRefArray(aRefPos, nTrimLen);
+                    }
 
                     if (!aArray.isValid())
                         return false;
 
-                    formula::SingleVectorRefToken aTok(aArray, nLen, nTrimLen);
+                    formula::SingleVectorRefToken aTok(aArray, nTrimLen);
                     mrGroupTokens.AddToken(aTok);
+                    rScope.addRefMessage(mrPos, aRefPos, nLen, aArray);
+
+                    if (nTrimLen && !mxFormulaGroupContext)
+                    {
+                        //tdf#98880 if the SingleVectorRefToken relies on the
+                        //underlying storage provided by the Document
+                        //FormulaGroupContext, take a reference to it here to
+                        //ensure that backing storage exists for our lifetime
+                        mxFormulaGroupContext = mrDoc.GetFormulaGroupContext();
+                    }
                 }
                 else
                 {
@@ -147,13 +177,26 @@ bool ScGroupTokenConverter::convert(ScTokenArray& rCode)
                         return false;
 
                     mrGroupTokens.AddToken(*pNewToken);
+                    rScope.addRefMessage(mrPos, aRefPos, *pNewToken);
                 }
             }
             break;
             case svDoubleRef:
             {
+                // This code may break in case of implicit intersection, leading to unnecessarily large
+                // matrix operations and possibly incorrect results (=C:C/D:D). That is handled by
+                // having ScCompiler check that there are no possible implicit intersections.
+                // Additionally some functions such as INDEX() and OFFSET() require a reference,
+                // that is handled by blacklisting those opcodes in ScTokenArray::CheckToken().
+
                 ScComplexRefData aRef = *p->GetDoubleRef();
+                if( aRef.IsDeleted())
+                    return false;
                 ScRange aAbs = aRef.toAbs(mrPos);
+
+                // Multiple sheets not handled by vector/matrix.
+                if (aRef.Ref1.Tab() != aRef.Ref2.Tab())
+                    return false;
 
                 // Check for self reference.
                 if (aRef.Ref1.IsRowRel())
@@ -200,7 +243,13 @@ bool ScGroupTokenConverter::convert(ScTokenArray& rCode)
                     aRefPos.SetCol(i);
                     formula::VectorRefArray aArray;
                     if (nArrayLength)
+                    {
+#ifdef DBG_UTIL
+                        mrDoc.AssertNoInterpretNeeded(
+                            ScAddress(aRefPos.Col(), 0, aRefPos.Tab()), nArrayLength + aRefPos.Row());
+#endif
                         aArray = mrDoc.FetchVectorRefArray(aRefPos, nArrayLength);
+                    }
 
                     if (!aArray.isValid())
                         return false;
@@ -208,12 +257,29 @@ bool ScGroupTokenConverter::convert(ScTokenArray& rCode)
                     aArrays.push_back(aArray);
                 }
 
-                formula::DoubleVectorRefToken aTok(aArrays, nRequestedLength, nArrayLength, nRefRowSize, bAbsFirst, bAbsLast);
+                formula::DoubleVectorRefToken aTok(aArrays, nArrayLength, nRefRowSize, bAbsFirst, bAbsLast);
                 mrGroupTokens.AddToken(aTok);
+                rScope.addRefMessage(mrPos, aAbs.aStart, nRequestedLength, aArrays);
+
+                if (nArrayLength && !aArrays.empty() && !mxFormulaGroupContext)
+                {
+                    //tdf#98880 if the DoubleVectorRefToken relies on the
+                    //underlying storage provided by the Document
+                    //FormulaGroupContext, take a reference to it here to
+                    //ensure that backing storage exists for our lifetime
+                    mxFormulaGroupContext = mrDoc.GetFormulaGroupContext();
+                }
             }
             break;
             case svIndex:
             {
+                if (p->GetOpCode() != ocName)
+                {
+                    // May be DB-range or TableRef
+                    mrGroupTokens.AddToken(*p);
+                    break;
+                }
+
                 // Named range.
                 ScRangeName* pNames = mrDoc.GetRangeName();
                 if (!pNames)
@@ -232,7 +298,7 @@ bool ScGroupTokenConverter::convert(ScTokenArray& rCode)
 
                 mrGroupTokens.AddOpCode(ocOpen);
 
-                if (!convert(*pNamedTokens))
+                if (!convert(*pNamedTokens, rScope))
                     return false;
 
                 mrGroupTokens.AddOpCode(ocClose);

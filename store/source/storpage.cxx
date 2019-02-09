@@ -19,17 +19,12 @@
 
 #include "storpage.hxx"
 
-#include "sal/types.h"
-#include "sal/log.hxx"
-#include "rtl/string.h"
-#include "rtl/ref.hxx"
-#include "osl/diagnose.h"
-#include "osl/mutex.hxx"
+#include <sal/types.h>
+#include <sal/log.hxx>
+#include <rtl/string.h>
+#include <osl/mutex.hxx>
 
-#include "store/types.h"
-
-#include "object.hxx"
-#include "lockbyte.hxx"
+#include <store/types.h>
 
 #include "storbase.hxx"
 #include "stordata.hxx"
@@ -161,7 +156,7 @@ storeError OStorePageManager::remove_Impl (entry & rEntry)
     // Check current page index.
     PageHolderObject< page > xPage (aNode.get());
     sal_uInt16 i = xPage->find (rEntry), n = xPage->usageCount();
-    if (!(i < n))
+    if (i >= n)
     {
         // Path to entry not exists (Must not happen(?)).
         return store_E_NotExists;
@@ -192,7 +187,7 @@ storeError OStorePageManager::remove_Impl (entry & rEntry)
         // Check index.
         i = xPage->find (rEntry);
         n = xPage->usageCount();
-        if (!(i < n))
+        if (i >= n)
         {
             // Path to entry not exists (Must not happen(?)).
             return store_E_NotExists;
@@ -230,7 +225,7 @@ storeError OStorePageManager::namei (
         return store_E_InvalidParameter;
 
     // Check name length.
-    if (!(pName->length < STORE_MAXIMUM_NAMESIZE))
+    if (pName->length >= STORE_MAXIMUM_NAMESIZE)
         return store_E_NameTooLong;
 
     // Transform pathname into key.
@@ -280,9 +275,9 @@ storeError OStorePageManager::iget (
         if (eErrCode != store_E_NotExists)
             return eErrCode;
 
-        if (eMode == store_AccessReadWrite)
+        if (eMode == storeAccessMode::ReadWrite)
             return store_E_NotExists;
-        if (eMode == store_AccessReadOnly)
+        if (eMode == storeAccessMode::ReadOnly)
             return store_E_NotExists;
 
         if (!base::isWriteable())
@@ -477,7 +472,7 @@ storeError OStorePageManager::remove (const OStorePageKey &rKey)
 
         // Acquire page write access.
         OStorePageDescriptor aDescr (xNode->m_aDescr);
-        eErrCode = base::acquirePage (aDescr, store_AccessReadWrite);
+        eErrCode = base::acquirePage (aDescr, storeAccessMode::ReadWrite);
         if (eErrCode != store_E_None)
             return eErrCode;
 

@@ -8,8 +8,8 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mar_private.h"
-#include "mar.h"
+#include <onlineupdate/mar_private.h>
+#include <onlineupdate/mar.h>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -333,7 +333,7 @@ int get_mar_file_info_fp(FILE *fp,
     }
   }
 
-  if (ftell(fp) == offsetToContent) {
+  if (ftell(fp) == (long)offsetToContent) {
     *hasAdditionalBlocks = 0;
   } else {
     if (numAdditionalBlocks) {

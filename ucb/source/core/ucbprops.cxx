@@ -35,7 +35,7 @@
 #include <com/sun/star/ucb/VerificationMode.hpp>
 #include <com/sun/star/ucb/XDataContainer.hpp>
 
-#include <ucbprops.hxx>
+#include "ucbprops.hxx"
 
 using namespace com::sun::star::beans;
 using namespace com::sun::star::lang;
@@ -43,8 +43,7 @@ using namespace com::sun::star::uno;
 
 #define ATTR_DEFAULT ( PropertyAttribute::BOUND | PropertyAttribute::MAYBEVOID | PropertyAttribute::MAYBEDEFAULT )
 
-UcbPropertiesManager::UcbPropertiesManager(
-                        const Reference< XMultiServiceFactory >& )
+UcbPropertiesManager::UcbPropertiesManager()
 : m_pProps({
     { "Account", -1, cppu::UnoType<OUString>::get(), ATTR_DEFAULT },
     { "AutoUpdateInterval", -1, cppu::UnoType<sal_Int32>::get(), ATTR_DEFAULT },
@@ -195,11 +194,21 @@ UcbPropertiesManager::~UcbPropertiesManager()
 
 // XServiceInfo methods.
 
-
-XSERVICEINFO_IMPL_1( UcbPropertiesManager,
-                     OUString( "com.sun.star.comp.ucb.UcbPropertiesManager" ),
-                     PROPERTIES_MANAGER_SERVICE_NAME );
-
+XSERVICEINFO_COMMOM_IMPL( UcbPropertiesManager,
+                          OUString( "com.sun.star.comp.ucb.UcbPropertiesManager" ) )
+/// @throws css::uno::Exception
+static css::uno::Reference< css::uno::XInterface >
+UcbPropertiesManager_CreateInstance( const css::uno::Reference< css::lang::XMultiServiceFactory> & /*rSMgr*/ )
+{
+    css::lang::XServiceInfo* pX =
+        static_cast<css::lang::XServiceInfo*>(new UcbPropertiesManager);
+    return css::uno::Reference< css::uno::XInterface >::query( pX );
+}
+css::uno::Sequence< OUString >
+UcbPropertiesManager::getSupportedServiceNames_Static()
+{
+    return { PROPERTIES_MANAGER_SERVICE_NAME };
+}
 
 // Service factory implementation.
 
@@ -212,7 +221,6 @@ ONE_INSTANCE_SERVICE_FACTORY_IMPL( UcbPropertiesManager );
 
 // virtual
 Sequence< Property > SAL_CALL UcbPropertiesManager::getProperties()
-    throw( RuntimeException, std::exception )
 {
     return m_pProps;
 }
@@ -220,7 +228,6 @@ Sequence< Property > SAL_CALL UcbPropertiesManager::getProperties()
 
 // virtual
 Property SAL_CALL UcbPropertiesManager::getPropertyByName( const OUString& aName )
-    throw( UnknownPropertyException, RuntimeException, std::exception )
 {
     Property aProp;
     if ( queryProperty( aName, aProp ) )
@@ -232,7 +239,6 @@ Property SAL_CALL UcbPropertiesManager::getPropertyByName( const OUString& aName
 
 // virtual
 sal_Bool SAL_CALL UcbPropertiesManager::hasPropertyByName( const OUString& Name )
-    throw( RuntimeException, std::exception )
 {
     Property aProp;
     return queryProperty( Name, aProp );

@@ -17,15 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "global.hxx"
-#include "reffact.hxx"
-#include "document.hxx"
-#include "docsh.hxx"
-#include "scresid.hxx"
-#include "globstr.hrc"
+#include <global.hxx>
+#include <reffact.hxx>
+#include <document.hxx>
+#include <docsh.hxx>
+#include <chgtrack.hxx>
 
-#include "highred.hxx"
-#include <vcl/msgbox.hxx>
+#include <highred.hxx>
 #include <sfx2/app.hxx>
 
 //  class ScHighlightChgDlg
@@ -78,9 +76,7 @@ void ScHighlightChgDlg::dispose()
 
 void ScHighlightChgDlg::Init()
 {
-    ScRange aRange;
-
-    OSL_ENSURE( pViewData && pDoc, "ViewData oder Document nicht gefunden!" );
+    OSL_ENSURE( pViewData && pDoc, "ViewData or Document not found!" );
 
     ScChangeTrack* pChanges=pDoc->GetChangeTrack();
     if(pChanges!=nullptr)
@@ -88,9 +84,8 @@ void ScHighlightChgDlg::Init()
         aChangeViewSet.SetTheAuthorToShow(pChanges->GetUser());
         m_pFilterCtr->ClearAuthors();
         const std::set<OUString>& rUserColl = pChanges->GetUserCollection();
-        std::set<OUString>::const_iterator it = rUserColl.begin(), itEnd = rUserColl.end();
-        for (; it != itEnd; ++it)
-            m_pFilterCtr->InsertAuthor(*it);
+        for (const auto& rItem : rUserColl)
+            m_pFilterCtr->InsertAuthor(rItem);
     }
 
     ScChangeViewSettings* pViewSettings=pDoc->GetChangeViewSettings();
@@ -103,7 +98,7 @@ void ScHighlightChgDlg::Init()
     m_pFilterCtr->SetFirstTime(aChangeViewSet.GetTheFirstDateTime());
     m_pFilterCtr->SetLastDate(aChangeViewSet.GetTheLastDateTime());
     m_pFilterCtr->SetLastTime(aChangeViewSet.GetTheLastDateTime());
-    m_pFilterCtr->SetDateMode((sal_uInt16)aChangeViewSet.GetTheDateMode());
+    m_pFilterCtr->SetDateMode(static_cast<sal_uInt16>(aChangeViewSet.GetTheDateMode()));
     m_pFilterCtr->CheckAuthor(aChangeViewSet.HasAuthor());
     m_pFilterCtr->CheckComment(aChangeViewSet.HasComment());
     m_pFilterCtr->SetComment(aChangeViewSet.GetTheComment());
@@ -125,8 +120,8 @@ void ScHighlightChgDlg::Init()
 
     if ( !aChangeViewSet.GetTheRangeList().empty() )
     {
-        const ScRange* pRangeEntry = aChangeViewSet.GetTheRangeList().front();
-        OUString aRefStr(pRangeEntry->Format(ScRefFlags::RANGE_ABS_3D, pDoc));
+        const ScRange & rRangeEntry = aChangeViewSet.GetTheRangeList().front();
+        OUString aRefStr(rRangeEntry.Format(ScRefFlags::RANGE_ABS_3D, pDoc));
         m_pFilterCtr->SetRange(aRefStr);
     }
     m_pFilterCtr->Enable();
@@ -174,7 +169,7 @@ bool ScHighlightChgDlg::IsRefInputMode() const
     return m_pEdAssign->IsVisible();
 }
 
-IMPL_LINK_TYPED( ScHighlightChgDlg, HighlightHandle, Button*, pCb, void )
+IMPL_LINK( ScHighlightChgDlg, HighlightHandle, Button*, pCb, void )
 {
     if(pCb!=nullptr)
     {
@@ -193,7 +188,7 @@ IMPL_LINK_TYPED( ScHighlightChgDlg, HighlightHandle, Button*, pCb, void )
     }
 }
 
-IMPL_LINK_TYPED( ScHighlightChgDlg, RefHandle, SvxTPFilter*, pRef, void )
+IMPL_LINK( ScHighlightChgDlg, RefHandle, SvxTPFilter*, pRef, void )
 {
     if(pRef!=nullptr)
     {
@@ -206,7 +201,7 @@ IMPL_LINK_TYPED( ScHighlightChgDlg, RefHandle, SvxTPFilter*, pRef, void )
     }
 }
 
-IMPL_LINK_TYPED( ScHighlightChgDlg, OKBtnHdl, Button*, pOKBtn, void )
+IMPL_LINK( ScHighlightChgDlg, OKBtnHdl, Button*, pOKBtn, void )
 {
     if (pOKBtn == m_pOkButton)
     {

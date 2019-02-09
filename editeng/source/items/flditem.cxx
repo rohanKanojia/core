@@ -17,17 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <comphelper/string.hxx>
 #include <osl/file.hxx>
 #include <vcl/metaact.hxx>
 #include <svl/zforlist.hxx>
 #include <tools/urlobj.hxx>
 
 #include <editeng/flditem.hxx>
+#include <editeng/CustomPropertyField.hxx>
 #include <editeng/measfld.hxx>
-#include "editeng/unonames.hxx"
+#include <editeng/unonames.hxx>
 
 #include <tools/tenccvt.hxx>
+#include <tools/debug.hxx>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/text/XTextContent.hpp>
@@ -68,10 +69,11 @@ SvxFieldData* SvxFieldData::Create(const uno::Reference<text::XTextContent>& xTe
                         bool bIsFixed = false;
                         xPropSet->getPropertyValue(UNO_TC_PROP_IS_FIXED) >>= bIsFixed;
 
-                        SvxDateField* pData = new SvxDateField(aDate, bIsFixed ? SVXDATETYPE_FIX : SVXDATETYPE_VAR);
+                        SvxDateField* pData = new SvxDateField(aDate, bIsFixed ? SvxDateType::Fix : SvxDateType::Var);
                         sal_Int32 nNumFmt = -1;
                         xPropSet->getPropertyValue(UNO_TC_PROP_NUMFORMAT) >>= nNumFmt;
-                        if (nNumFmt >= SVXDATEFORMAT_APPDEFAULT && nNumFmt <= SVXDATEFORMAT_F)
+                        if (static_cast<SvxDateFormat>(nNumFmt) >= SvxDateFormat::AppDefault &&
+                            static_cast<SvxDateFormat>(nNumFmt) <= SvxDateFormat::F)
                             pData->SetFormat(static_cast<SvxDateFormat>(nNumFmt));
 
                         return pData;
@@ -85,11 +87,12 @@ SvxFieldData* SvxFieldData::Create(const uno::Reference<text::XTextContent>& xTe
                         bool bIsFixed = false;
                         xPropSet->getPropertyValue(UNO_TC_PROP_IS_FIXED) >>= bIsFixed;
 
-                        SvxExtTimeField* pData = new SvxExtTimeField(aTime, bIsFixed ? SVXTIMETYPE_FIX : SVXTIMETYPE_VAR);
+                        SvxExtTimeField* pData = new SvxExtTimeField(aTime, bIsFixed ? SvxTimeType::Fix : SvxTimeType::Var);
 
                         sal_Int32 nNumFmt = -1;
                         xPropSet->getPropertyValue(UNO_TC_PROP_NUMFORMAT) >>= nNumFmt;
-                        if (nNumFmt >= SVXTIMEFORMAT_APPDEFAULT && nNumFmt <= SVXTIMEFORMAT_AM_HMSH)
+                        if (static_cast<SvxTimeFormat>(nNumFmt) >= SvxTimeFormat::AppDefault &&
+                            static_cast<SvxTimeFormat>(nNumFmt) <= SvxTimeFormat::HH12_MM_SS_00_AMPM)
                             pData->SetFormat(static_cast<SvxTimeFormat>(nNumFmt));
 
                         return pData;
@@ -105,9 +108,10 @@ SvxFieldData* SvxFieldData::Create(const uno::Reference<text::XTextContent>& xTe
                     xPropSet->getPropertyValue(UNO_TC_PROP_URL_TARGET) >>= aTarget;
                     xPropSet->getPropertyValue(UNO_TC_PROP_URL) >>= aURL;
                     xPropSet->getPropertyValue(UNO_TC_PROP_URL_FORMAT) >>= nFmt;
-                    SvxURLField* pData = new SvxURLField(aURL, aRep, aRep.isEmpty() ? SVXURLFORMAT_URL : SVXURLFORMAT_REPR);
+                    SvxURLField* pData = new SvxURLField(aURL, aRep, aRep.isEmpty() ? SvxURLFormat::Url : SvxURLFormat::Repr);
                     pData->SetTargetFrame(aTarget);
-                    if (nFmt >= SVXURLFORMAT_APPDEFAULT && nFmt <= SVXURLFORMAT_REPR)
+                    if (static_cast<SvxURLFormat>(nFmt) >= SvxURLFormat::AppDefault &&
+                        static_cast<SvxURLFormat>(nFmt) <= SvxURLFormat::Repr)
                         pData->SetFormat(static_cast<SvxURLFormat>(nFmt));
 
                     return pData;
@@ -135,18 +139,18 @@ SvxFieldData* SvxFieldData::Create(const uno::Reference<text::XTextContent>& xTe
                     xPropSet->getPropertyValue(UNO_TC_PROP_CURRENT_PRESENTATION) >>= aPresentation;
                     xPropSet->getPropertyValue(UNO_TC_PROP_FILE_FORMAT) >>= nFmt;
 
-                    SvxFileFormat eFmt = SVXFILEFORMAT_NAME_EXT;
+                    SvxFileFormat eFmt = SvxFileFormat::NameAndExt;
                     switch (nFmt)
                     {
-                        case text::FilenameDisplayFormat::FULL: eFmt = SVXFILEFORMAT_FULLPATH; break;
-                        case text::FilenameDisplayFormat::PATH: eFmt = SVXFILEFORMAT_PATH;     break;
-                        case text::FilenameDisplayFormat::NAME: eFmt = SVXFILEFORMAT_NAME;     break;
+                        case text::FilenameDisplayFormat::FULL: eFmt = SvxFileFormat::PathFull; break;
+                        case text::FilenameDisplayFormat::PATH: eFmt = SvxFileFormat::PathOnly;     break;
+                        case text::FilenameDisplayFormat::NAME: eFmt = SvxFileFormat::NameOnly;     break;
                         default:;
                     }
 
                     // pass fixed attribute to constructor
                     return new SvxExtFileField(
-                            aPresentation, bIsFixed ? SVXFILETYPE_FIX : SVXFILETYPE_VAR, eFmt);
+                            aPresentation, bIsFixed ? SvxFileType::Fix : SvxFileType::Var, eFmt);
                 }
             case text::textfield::Type::AUTHOR:
                 {
@@ -179,26 +183,30 @@ SvxFieldData* SvxFieldData::Create(const uno::Reference<text::XTextContent>& xTe
 
                     // #92009# pass fixed attribute to constructor
                     SvxAuthorField* pData = new SvxAuthorField(
-                            aFirstName, aLastName, OUString(), bIsFixed ? SVXAUTHORTYPE_FIX : SVXAUTHORTYPE_VAR);
+                            aFirstName, aLastName, OUString(), bIsFixed ? SvxAuthorType::Fix : SvxAuthorType::Var);
 
-                    if (!bFullName)
+                    if (!bIsFixed)
                     {
-                        pData->SetFormat(SVXAUTHORFORMAT_SHORTNAME);
-                    }
-                    else if (nFmt >= SVXAUTHORFORMAT_FULLNAME || nFmt <= SVXAUTHORFORMAT_SHORTNAME)
-                    {
-                        pData->SetFormat(static_cast<SvxAuthorFormat>(nFmt));
+                        if (!bFullName)
+                        {
+                            pData->SetFormat(SvxAuthorFormat::ShortName);
+                        }
+                        else if (static_cast<SvxAuthorFormat>(nFmt) >= SvxAuthorFormat::FullName &&
+                                 static_cast<SvxAuthorFormat>(nFmt) <= SvxAuthorFormat::ShortName)
+                        {
+                            pData->SetFormat(static_cast<SvxAuthorFormat>(nFmt));
+                        }
                     }
 
                     return pData;
                 }
             case text::textfield::Type::MEASURE:
                 {
-                    SdrMeasureFieldKind eKind = SDRMEASUREFIELD_VALUE;
+                    SdrMeasureFieldKind eKind = SdrMeasureFieldKind::Value;
                     sal_Int16 nTmp = -1;
                     xPropSet->getPropertyValue(UNO_TC_PROP_MEASURE_KIND) >>= nTmp;
-                    if (nTmp == static_cast<sal_Int16>(SDRMEASUREFIELD_UNIT) ||
-                            nTmp == static_cast<sal_Int16>(SDRMEASUREFIELD_ROTA90BLANCS))
+                    if (nTmp == static_cast<sal_Int16>(SdrMeasureFieldKind::Unit) ||
+                            nTmp == static_cast<sal_Int16>(SdrMeasureFieldKind::Rotate90Blanks))
                         eKind = static_cast<SdrMeasureFieldKind>(nTmp);
 
                     return new SdrMeasureField(eKind);
@@ -209,6 +217,16 @@ SvxFieldData* SvxFieldData::Create(const uno::Reference<text::XTextContent>& xTe
                 return new SvxFooterField();
             case text::textfield::Type::PRESENTATION_DATE_TIME:
                 return new SvxDateTimeField();
+            case text::textfield::Type::DOCINFO_CUSTOM:
+                {
+                    OUString sName;
+                    xPropSet->getPropertyValue(UNO_TC_PROP_NAME) >>= sName;
+
+                    OUString sCurrentPresentation;
+                    xPropSet->getPropertyValue(UNO_TC_PROP_CURRENT_PRESENTATION) >>= sCurrentPresentation;
+
+                    return new editeng::CustomPropertyField(sName, sCurrentPresentation);
+                }
             default:
                 ;
         };
@@ -221,9 +239,6 @@ SvxFieldData* SvxFieldData::Create(const uno::Reference<text::XTextContent>& xTe
 }
 
 
-SV_IMPL_PERSIST1( SvxFieldData, SvPersistBase );
-
-
 SvxFieldData::SvxFieldData()
 {
 }
@@ -234,9 +249,9 @@ SvxFieldData::~SvxFieldData()
 }
 
 
-SvxFieldData* SvxFieldData::Clone() const
+std::unique_ptr<SvxFieldData> SvxFieldData::Clone() const
 {
-    return new SvxFieldData;
+    return std::make_unique<SvxFieldData>();
 }
 
 
@@ -245,16 +260,6 @@ bool SvxFieldData::operator==( const SvxFieldData& rFld ) const
     DBG_ASSERT( typeid(*this) == typeid(rFld), "==: Different Types" );
     (void)rFld;
     return true;    // Basic class is always the same.
-}
-
-
-void SvxFieldData::Load( SvPersistStream & /*rStm*/ )
-{
-}
-
-
-void SvxFieldData::Save( SvPersistStream & /*rStm*/ )
-{
 }
 
 
@@ -269,30 +274,28 @@ MetaAction* SvxFieldData::createEndComment()
 }
 
 
-SvxFieldItem::SvxFieldItem( SvxFieldData* pFld, const sal_uInt16 nId ) :
+SvxFieldItem::SvxFieldItem( std::unique_ptr<SvxFieldData> pField, const sal_uInt16 nId ) :
     SfxPoolItem( nId )
+    , mpField( std::move(pField) )
 {
-    pField = pFld;  // belongs directly to the item
 }
-
 
 SvxFieldItem::SvxFieldItem( const SvxFieldData& rField, const sal_uInt16 nId ) :
     SfxPoolItem( nId )
+    , mpField( rField.Clone() )
 {
-    pField = rField.Clone();
 }
 
 
 SvxFieldItem::SvxFieldItem( const SvxFieldItem& rItem ) :
     SfxPoolItem ( rItem )
+    , mpField( rItem.mpField ? rItem.mpField->Clone() : nullptr )
 {
-    pField = rItem.GetField() ? rItem.GetField()->Clone() : nullptr;
 }
 
 
 SvxFieldItem::~SvxFieldItem()
 {
-    delete pField;
 }
 
 
@@ -302,67 +305,28 @@ SfxPoolItem* SvxFieldItem::Clone( SfxItemPool* ) const
 }
 
 
-SfxPoolItem* SvxFieldItem::Create( SvStream& rStrm, sal_uInt16 ) const
-{
-    SvxFieldData* pData = nullptr;
-    SvPersistStream aPStrm( GetClassManager(), &rStrm );
-    aPStrm >> pData;
-
-    if( aPStrm.IsEof() )
-        aPStrm.SetError( SVSTREAM_GENERALERROR );
-
-    if ( aPStrm.GetError() == ERRCODE_IO_NOFACTORY )
-        aPStrm.ResetError();    // Actually a code for that not all were read Attr ...
-
-    return new SvxFieldItem( pData, Which() );
-}
-
-
-SvStream& SvxFieldItem::Store( SvStream& rStrm, sal_uInt16 /*nItemVersion*/ ) const
-{
-    DBG_ASSERT( pField, "SvxFieldItem::Store: Field?!" );
-    SvPersistStream aPStrm( GetClassManager(), &rStrm );
-    // The reset error in the above Create method did not exist in 3.1,
-    // therefore newer items can not be saved for 3.x-exports!
-    if ( ( rStrm.GetVersion() <= SOFFICE_FILEFORMAT_31 ) && pField &&
-            pField->GetClassId() == 50 /* SdrMeasureField */ )
-    {
-        // SvxFieldData not enough, because not registered on ClassMgr.
-        SvxURLField aDummyData;
-        WriteSvPersistBase( aPStrm , &aDummyData );
-    }
-    else
-        WriteSvPersistBase( aPStrm, pField );
-
-    return rStrm;
-}
-
-
 bool SvxFieldItem::operator==( const SfxPoolItem& rItem ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==( rItem ), "unequal which or type" );
+    assert(SfxPoolItem::operator==(rItem));
 
     const SvxFieldData* pOtherFld = static_cast<const SvxFieldItem&>(rItem).GetField();
-    if( pField == pOtherFld )
+    if( mpField.get() == pOtherFld )
         return true;
-    if( pField == nullptr || pOtherFld == nullptr )
+    if( mpField == nullptr || pOtherFld == nullptr )
         return false;
-    return ( typeid(*pField) == typeid(*pOtherFld) )
-            && ( *pField == *pOtherFld );
+    return ( typeid(*mpField) == typeid(*pOtherFld) )
+            && ( *mpField == *pOtherFld );
 }
 
 
 // The following are the derivatives of SvxFieldData ...
 
 
-SV_IMPL_PERSIST1( SvxDateField, SvxFieldData );
-
-
 SvxDateField::SvxDateField()
 {
     nFixDate = Date( Date::SYSTEM ).GetDate();
-    eType = SVXDATETYPE_VAR;
-    eFormat = SVXDATEFORMAT_STDSMALL;
+    eType = SvxDateType::Var;
+    eFormat = SvxDateFormat::StdSmall;
 }
 
 
@@ -374,9 +338,9 @@ SvxDateField::SvxDateField( const Date& rDate, SvxDateType eT, SvxDateFormat eF 
 }
 
 
-SvxFieldData* SvxDateField::Clone() const
+std::unique_ptr<SvxFieldData> SvxDateField::Clone() const
 {
-    return new SvxDateField( *this );
+    return std::make_unique<SvxDateField>( *this );
 }
 
 
@@ -392,31 +356,11 @@ bool SvxDateField::operator==( const SvxFieldData& rOther ) const
 }
 
 
-void SvxDateField::Load( SvPersistStream & rStm )
-{
-    sal_uInt16 nType, nFormat;
-
-    rStm.ReadUInt32( nFixDate );
-    rStm.ReadUInt16( nType );
-    rStm.ReadUInt16( nFormat );
-
-    eType = (SvxDateType)nType;
-    eFormat= (SvxDateFormat)nFormat;
-}
-
-
-void SvxDateField::Save( SvPersistStream & rStm )
-{
-    rStm.WriteUInt32( nFixDate );
-    rStm.WriteUInt16( eType );
-    rStm.WriteUInt16( eFormat );
-}
-
 
 OUString SvxDateField::GetFormatted( SvNumberFormatter& rFormatter, LanguageType eLang ) const
 {
     Date aDate( Date::EMPTY );
-    if ( eType == SVXDATETYPE_FIX )
+    if ( eType == SvxDateType::Fix )
         aDate.SetDate( nFixDate );
     else
         aDate = Date( Date::SYSTEM ); // current date
@@ -424,60 +368,60 @@ OUString SvxDateField::GetFormatted( SvNumberFormatter& rFormatter, LanguageType
     return GetFormatted( aDate, eFormat, rFormatter, eLang );
 }
 
-OUString SvxDateField::GetFormatted( Date& aDate, SvxDateFormat eFormat, SvNumberFormatter& rFormatter, LanguageType eLang )
+OUString SvxDateField::GetFormatted( Date const & aDate, SvxDateFormat eFormat, SvNumberFormatter& rFormatter, LanguageType eLang )
 {
-    if ( eFormat == SVXDATEFORMAT_SYSTEM )
+    if ( eFormat == SvxDateFormat::System )
     {
-        OSL_FAIL( "SVXDATEFORMAT_SYSTEM not implemented!" );
-        eFormat = SVXDATEFORMAT_STDSMALL;
+        OSL_FAIL( "SvxDateFormat::System not implemented!" );
+        eFormat = SvxDateFormat::StdSmall;
     }
-    else if ( eFormat == SVXDATEFORMAT_APPDEFAULT )
+    else if ( eFormat == SvxDateFormat::AppDefault )
     {
-        OSL_FAIL( "SVXDATEFORMAT_APPDEFAULT: take them from where? ");
-        eFormat = SVXDATEFORMAT_STDSMALL;
+        OSL_FAIL( "SvxDateFormat::AppDefault: take them from where? ");
+        eFormat = SvxDateFormat::StdSmall;
     }
 
-    sal_uLong nFormatKey;
+    sal_uInt32 nFormatKey;
 
     switch( eFormat )
     {
-        case SVXDATEFORMAT_STDSMALL:
+        case SvxDateFormat::StdSmall:
             // short
             nFormatKey = rFormatter.GetFormatIndex( NF_DATE_SYSTEM_SHORT, eLang );
         break;
-        case SVXDATEFORMAT_STDBIG:
+        case SvxDateFormat::StdBig:
             // long
             nFormatKey = rFormatter.GetFormatIndex( NF_DATE_SYSTEM_LONG, eLang );
         break;
-        case SVXDATEFORMAT_A:
+        case SvxDateFormat::A:
             // 13.02.96
             nFormatKey = rFormatter.GetFormatIndex( NF_DATE_SYS_DDMMYY, eLang );
         break;
-        case SVXDATEFORMAT_B:
+        case SvxDateFormat::B:
             // 13.02.1996
             nFormatKey = rFormatter.GetFormatIndex( NF_DATE_SYS_DDMMYYYY, eLang );
         break;
-        case SVXDATEFORMAT_C:
+        case SvxDateFormat::C:
             // 13. Feb 1996
             nFormatKey = rFormatter.GetFormatIndex( NF_DATE_SYS_DMMMYYYY, eLang );
         break;
-        case SVXDATEFORMAT_D:
+        case SvxDateFormat::D:
             // 13. February 1996
             nFormatKey = rFormatter.GetFormatIndex( NF_DATE_SYS_DMMMMYYYY, eLang );
         break;
-        case SVXDATEFORMAT_E:
+        case SvxDateFormat::E:
             // The, 13. February 1996
             nFormatKey = rFormatter.GetFormatIndex( NF_DATE_SYS_NNDMMMMYYYY, eLang );
         break;
-        case SVXDATEFORMAT_F:
+        case SvxDateFormat::F:
             // Tuesday, 13. February 1996
             nFormatKey = rFormatter.GetFormatIndex( NF_DATE_SYS_NNNNDMMMMYYYY, eLang );
         break;
         default:
-            nFormatKey = rFormatter.GetStandardFormat( css::util::NumberFormat::DATE, eLang );
+            nFormatKey = rFormatter.GetStandardFormat( SvNumFormatType::DATE, eLang );
     }
 
-    double fDiffDate = aDate - *(rFormatter.GetNullDate());
+    double fDiffDate = aDate - rFormatter.GetNullDate();
     OUString aStr;
     Color* pColor = nullptr;
     rFormatter.GetOutputString( fDiffDate, nFormatKey, aStr, &pColor );
@@ -489,12 +433,9 @@ MetaAction* SvxDateField::createBeginComment() const
     return new MetaCommentAction( "FIELD_SEQ_BEGIN" );
 }
 
-SV_IMPL_PERSIST1( SvxURLField, SvxFieldData );
-
-
 SvxURLField::SvxURLField()
 {
-    eFormat = SVXURLFORMAT_URL;
+    eFormat = SvxURLFormat::Url;
 }
 
 
@@ -505,9 +446,9 @@ SvxURLField::SvxURLField( const OUString& rURL, const OUString& rRepres, SvxURLF
 }
 
 
-SvxFieldData* SvxURLField::Clone() const
+std::unique_ptr<SvxFieldData> SvxURLField::Clone() const
 {
-    return new SvxURLField( *this );
+    return std::make_unique<SvxURLField>( *this );
 }
 
 
@@ -524,58 +465,6 @@ bool SvxURLField::operator==( const SvxFieldData& rOther ) const
 }
 
 
-static void write_unicode( SvPersistStream & rStm, const OUString& rString )
-{
-    sal_uInt16 nL =  sal::static_int_cast<sal_uInt16>(rString.getLength());
-    rStm.WriteUInt16( nL );
-    //endian specific?, yipes!
-    rStm.Write( rString.getStr(), nL*sizeof(sal_Unicode) );
-}
-
-static OUString read_unicode( SvPersistStream & rStm )
-{
-    rtl_uString *pStr = nullptr;
-    sal_uInt16 nL = 0;
-    rStm.ReadUInt16( nL );
-    const size_t nMaxRecords = rStm.remainingSize() / sizeof(sal_Unicode);
-    if (nL > nMaxRecords)
-    {
-        SAL_WARN("editeng", "Parsing error: " << nMaxRecords <<
-                 " max possible entries, but " << nL << " claimed, truncating");
-        nL = nMaxRecords;
-    }
-    if (nL)
-    {
-        pStr = rtl_uString_alloc(nL);
-        //endian specific?, yipes!
-        rStm.Read(pStr->buffer, nL*sizeof(sal_Unicode));
-    }
-    //take ownership of buffer and return, otherwise return empty string
-    return pStr ? OUString(pStr, SAL_NO_ACQUIRE) : OUString();
-}
-
-void SvxURLField::Load( SvPersistStream & rStm )
-{
-    sal_uInt16 nFormat = 0;
-
-    rStm.ReadUInt16( nFormat );
-    eFormat= (SvxURLFormat)nFormat;
-
-    aURL = read_unicode( rStm );
-    aRepresentation = read_unicode( rStm );
-    aTargetFrame = read_unicode( rStm );
-}
-
-
-void SvxURLField::Save( SvPersistStream & rStm )
-{
-    rStm.WriteUInt16( eFormat );
-
-    write_unicode( rStm, aURL );
-    write_unicode( rStm, aRepresentation );
-    write_unicode( rStm, aTargetFrame );
-}
-
 MetaAction* SvxURLField::createBeginComment() const
 {
     // #i46618# Adding target URL to metafile comment
@@ -589,26 +478,16 @@ MetaAction* SvxURLField::createBeginComment() const
 // SvxPageTitleField methods
 //
 
-SV_IMPL_PERSIST1( SvxPageTitleField, SvxFieldData );
-
 SvxPageTitleField::SvxPageTitleField() {}
 
-SvxFieldData* SvxPageTitleField::Clone() const
+std::unique_ptr<SvxFieldData> SvxPageTitleField::Clone() const
 {
-    return new SvxPageTitleField();
+    return std::make_unique<SvxPageTitleField>();
 }
 
 bool SvxPageTitleField::operator==( const SvxFieldData& rCmp ) const
 {
     return ( dynamic_cast< const SvxPageTitleField *>(&rCmp) != nullptr );
-}
-
-void SvxPageTitleField::Load( SvPersistStream & /*rStm*/ )
-{
-}
-
-void SvxPageTitleField::Save( SvPersistStream & /*rStm*/ )
-{
 }
 
 MetaAction* SvxPageTitleField::createBeginComment() const
@@ -622,26 +501,16 @@ MetaAction* SvxPageTitleField::createBeginComment() const
 // The fields that were removed from Calc:
 
 
-SV_IMPL_PERSIST1( SvxPageField, SvxFieldData );
-
 SvxPageField::SvxPageField() {}
 
-SvxFieldData* SvxPageField::Clone() const
+std::unique_ptr<SvxFieldData> SvxPageField::Clone() const
 {
-    return new SvxPageField;        // empty
+    return std::make_unique<SvxPageField>();        // empty
 }
 
 bool SvxPageField::operator==( const SvxFieldData& rCmp ) const
 {
     return ( dynamic_cast< const SvxPageField *>(&rCmp) != nullptr );
-}
-
-void SvxPageField::Load( SvPersistStream & /*rStm*/ )
-{
-}
-
-void SvxPageField::Save( SvPersistStream & /*rStm*/ )
-{
 }
 
 MetaAction* SvxPageField::createBeginComment() const
@@ -650,13 +519,11 @@ MetaAction* SvxPageField::createBeginComment() const
 }
 
 
-SV_IMPL_PERSIST1( SvxPagesField, SvxFieldData );
-
 SvxPagesField::SvxPagesField() {}
 
-SvxFieldData* SvxPagesField::Clone() const
+std::unique_ptr<SvxFieldData> SvxPagesField::Clone() const
 {
-    return new SvxPagesField;   // empty
+    return std::make_unique<SvxPagesField>();   // empty
 }
 
 bool SvxPagesField::operator==( const SvxFieldData& rCmp ) const
@@ -664,21 +531,11 @@ bool SvxPagesField::operator==( const SvxFieldData& rCmp ) const
     return ( dynamic_cast< const SvxPagesField *>(&rCmp) != nullptr);
 }
 
-void SvxPagesField::Load( SvPersistStream & /*rStm*/ )
-{
-}
-
-void SvxPagesField::Save( SvPersistStream & /*rStm*/ )
-{
-}
-
-SV_IMPL_PERSIST1( SvxTimeField, SvxFieldData );
-
 SvxTimeField::SvxTimeField() {}
 
-SvxFieldData* SvxTimeField::Clone() const
+std::unique_ptr<SvxFieldData> SvxTimeField::Clone() const
 {
-    return new SvxTimeField;    // empty
+    return std::make_unique<SvxTimeField>();    // empty
 }
 
 bool SvxTimeField::operator==( const SvxFieldData& rCmp ) const
@@ -686,42 +543,22 @@ bool SvxTimeField::operator==( const SvxFieldData& rCmp ) const
     return ( dynamic_cast< const SvxTimeField *>(&rCmp) != nullptr);
 }
 
-void SvxTimeField::Load( SvPersistStream & /*rStm*/ )
-{
-}
-
-void SvxTimeField::Save( SvPersistStream & /*rStm*/ )
-{
-}
-
 MetaAction* SvxTimeField::createBeginComment() const
 {
     return new MetaCommentAction( "FIELD_SEQ_BEGIN" );
 }
 
-SV_IMPL_PERSIST1( SvxFileField, SvxFieldData );
-
 SvxFileField::SvxFileField() {}
 
-SvxFieldData* SvxFileField::Clone() const
+std::unique_ptr<SvxFieldData> SvxFileField::Clone() const
 {
-    return new SvxFileField;    // empty
+    return std::make_unique<SvxFileField>();    // empty
 }
 
 bool SvxFileField::operator==( const SvxFieldData& rCmp ) const
 {
     return ( dynamic_cast< const SvxFileField *>(&rCmp) != nullptr );
 }
-
-void SvxFileField::Load( SvPersistStream & /*rStm*/ )
-{
-}
-
-void SvxFileField::Save( SvPersistStream & /*rStm*/ )
-{
-}
-
-SV_IMPL_PERSIST1( SvxTableField, SvxFieldData );
 
 SvxTableField::SvxTableField() : mnTab(0) {}
 
@@ -733,9 +570,9 @@ void SvxTableField::SetTab(int nTab)
 }
 
 
-SvxFieldData* SvxTableField::Clone() const
+std::unique_ptr<SvxFieldData> SvxTableField::Clone() const
 {
-    return new SvxTableField(mnTab);
+    return std::make_unique<SvxTableField>(mnTab);
 }
 
 bool SvxTableField::operator==( const SvxFieldData& rCmp ) const
@@ -746,26 +583,14 @@ bool SvxTableField::operator==( const SvxFieldData& rCmp ) const
     return mnTab == static_cast<const SvxTableField&>(rCmp).mnTab;
 }
 
-void SvxTableField::Load( SvPersistStream & /*rStm*/ )
-{
-}
-
-void SvxTableField::Save( SvPersistStream & /*rStm*/ )
-{
-}
-
-
 //      SvxExtTimeField
-
-
-SV_IMPL_PERSIST1( SvxExtTimeField, SvxFieldData );
 
 
 SvxExtTimeField::SvxExtTimeField()
     : m_nFixTime( tools::Time(tools::Time::SYSTEM).GetTime() )
 {
-    eType = SVXTIMETYPE_VAR;
-    eFormat = SVXTIMEFORMAT_STANDARD;
+    eType = SvxTimeType::Var;
+    eFormat = SvxTimeFormat::Standard;
 }
 
 
@@ -777,9 +602,9 @@ SvxExtTimeField::SvxExtTimeField( const tools::Time& rTime, SvxTimeType eT, SvxT
 }
 
 
-SvxFieldData* SvxExtTimeField::Clone() const
+std::unique_ptr<SvxFieldData> SvxExtTimeField::Clone() const
 {
-    return new SvxExtTimeField( *this );
+    return std::make_unique<SvxExtTimeField>( *this );
 }
 
 
@@ -795,48 +620,27 @@ bool SvxExtTimeField::operator==( const SvxFieldData& rOther ) const
 }
 
 
-void SvxExtTimeField::Load( SvPersistStream & rStm )
-{
-    sal_uInt16 nType, nFormat;
-
-    rStm.ReadInt64(m_nFixTime);
-    rStm.ReadUInt16( nType );
-    rStm.ReadUInt16( nFormat );
-
-    eType = (SvxTimeType) nType;
-    eFormat= (SvxTimeFormat) nFormat;
-}
-
-
-void SvxExtTimeField::Save( SvPersistStream & rStm )
-{
-    rStm.WriteInt64(m_nFixTime);
-    rStm.WriteUInt16( eType );
-    rStm.WriteUInt16( eFormat );
-}
-
-
 OUString SvxExtTimeField::GetFormatted( SvNumberFormatter& rFormatter, LanguageType eLang ) const
 {
     tools::Time aTime( tools::Time::EMPTY );
-    if ( eType == SVXTIMETYPE_FIX )
+    if ( eType == SvxTimeType::Fix )
         aTime.SetTime(m_nFixTime);
     else
         aTime = tools::Time( tools::Time::SYSTEM ); // current time
     return GetFormatted( aTime, eFormat, rFormatter, eLang );
 }
 
-OUString SvxExtTimeField::GetFormatted( tools::Time& aTime, SvxTimeFormat eFormat, SvNumberFormatter& rFormatter, LanguageType eLang )
+OUString SvxExtTimeField::GetFormatted( tools::Time const & aTime, SvxTimeFormat eFormat, SvNumberFormatter& rFormatter, LanguageType eLang )
 {
     switch( eFormat )
     {
-        case SVXTIMEFORMAT_SYSTEM :
-            OSL_FAIL( "SVXTIMEFORMAT_SYSTEM: not implemented" );
-            eFormat = SVXTIMEFORMAT_STANDARD;
+        case SvxTimeFormat::System :
+            OSL_FAIL( "SvxTimeFormat::System: not implemented" );
+            eFormat = SvxTimeFormat::Standard;
         break;
-        case SVXTIMEFORMAT_APPDEFAULT :
-            OSL_FAIL( "SVXTIMEFORMAT_APPDEFAULT: not implemented" );
-            eFormat = SVXTIMEFORMAT_STANDARD;
+        case SvxTimeFormat::AppDefault :
+            OSL_FAIL( "SvxTimeFormat::AppDefault: not implemented" );
+            eFormat = SvxTimeFormat::Standard;
         break;
         default: ;//prevent warning
     }
@@ -845,39 +649,39 @@ OUString SvxExtTimeField::GetFormatted( tools::Time& aTime, SvxTimeFormat eForma
 
     switch( eFormat )
     {
-        case SVXTIMEFORMAT_12_HM:
+        case SvxTimeFormat::HH12_MM:
             nFormatKey = rFormatter.GetFormatIndex( NF_TIME_HHMMAMPM, eLang );
             break;
-        case SVXTIMEFORMAT_12_HMSH:
+        case SvxTimeFormat::HH12_MM_SS_00:
         {
             // no builtin format available, try to insert or reuse
             OUString aFormatCode( "HH:MM:SS.00 AM/PM" );
             sal_Int32 nCheckPos;
-            short nType;
+            SvNumFormatType nType;
             rFormatter.PutandConvertEntry( aFormatCode, nCheckPos, nType,
-                                           nFormatKey, LANGUAGE_ENGLISH_US, eLang );
-            DBG_ASSERT( nCheckPos == 0, "SVXTIMEFORMAT_12_HMSH: could not insert format code" );
+                                           nFormatKey, LANGUAGE_ENGLISH_US, eLang, true);
+            DBG_ASSERT( nCheckPos == 0, "SvxTimeFormat::HH12_MM_SS_00: could not insert format code" );
             if ( nCheckPos )
             {
                 nFormatKey = rFormatter.GetFormatIndex( NF_TIME_HH_MMSS00, eLang );
             }
             break;
         }
-        case SVXTIMEFORMAT_24_HM:
+        case SvxTimeFormat::HH24_MM:
             nFormatKey = rFormatter.GetFormatIndex( NF_TIME_HHMM, eLang );
             break;
-        case SVXTIMEFORMAT_24_HMSH:
+        case SvxTimeFormat::HH24_MM_SS_00:
             nFormatKey = rFormatter.GetFormatIndex( NF_TIME_HH_MMSS00, eLang );
             break;
-        case SVXTIMEFORMAT_12_HMS:
+        case SvxTimeFormat::HH12_MM_SS:
             nFormatKey = rFormatter.GetFormatIndex( NF_TIME_HHMMSSAMPM, eLang );
             break;
-        case SVXTIMEFORMAT_24_HMS:
+        case SvxTimeFormat::HH24_MM_SS:
             nFormatKey = rFormatter.GetFormatIndex( NF_TIME_HHMMSS, eLang );
             break;
-        case SVXTIMEFORMAT_STANDARD:
+        case SvxTimeFormat::Standard:
         default:
-            nFormatKey = rFormatter.GetStandardFormat( css::util::NumberFormat::TIME, eLang );
+            nFormatKey = rFormatter.GetStandardFormat( SvNumFormatType::TIME, eLang );
     }
 
     double fFracTime = aTime.GetTimeInDays();
@@ -896,13 +700,10 @@ MetaAction* SvxExtTimeField::createBeginComment() const
 //      SvxExtFileField
 
 
-SV_IMPL_PERSIST1( SvxExtFileField, SvxFieldData );
-
-
 SvxExtFileField::SvxExtFileField()
 {
-    eType = SVXFILETYPE_VAR;
-    eFormat = SVXFILEFORMAT_FULLPATH;
+    eType = SvxFileType::Var;
+    eFormat = SvxFileFormat::PathFull;
 }
 
 
@@ -914,9 +715,9 @@ SvxExtFileField::SvxExtFileField( const OUString& rStr, SvxFileType eT, SvxFileF
 }
 
 
-SvxFieldData* SvxExtFileField::Clone() const
+std::unique_ptr<SvxFieldData> SvxExtFileField::Clone() const
 {
-    return new SvxExtFileField( *this );
+    return std::make_unique<SvxExtFileField>( *this );
 }
 
 
@@ -929,31 +730,6 @@ bool SvxExtFileField::operator==( const SvxFieldData& rOther ) const
     return ( ( aFile == rOtherFld.aFile ) &&
                 ( eType == rOtherFld.eType ) &&
                 ( eFormat == rOtherFld.eFormat ) );
-}
-
-
-void SvxExtFileField::Load( SvPersistStream & rStm )
-{
-    sal_uInt16 nType, nFormat;
-
-    // UNICODE: rStm >> aFile;
-    aFile = rStm.ReadUniOrByteString(rStm.GetStreamCharSet());
-
-    rStm.ReadUInt16( nType );
-    rStm.ReadUInt16( nFormat );
-
-    eType = (SvxFileType) nType;
-    eFormat= (SvxFileFormat) nFormat;
-}
-
-
-void SvxExtFileField::Save( SvPersistStream & rStm )
-{
-    // UNICODE: rStm << aFile;
-    rStm.WriteUniOrByteString(aFile, rStm.GetStreamCharSet());
-
-    rStm.WriteUInt16( eType );
-    rStm.WriteUInt16( eFormat );
 }
 
 
@@ -984,23 +760,23 @@ OUString SvxExtFileField::GetFormatted() const
     {
         switch( eFormat )
         {
-            case SVXFILEFORMAT_FULLPATH:
-                aString = aURLObj.getFSysPath(INetURLObject::FSYS_DETECT);
+            case SvxFileFormat::PathFull:
+                aString = aURLObj.getFSysPath(FSysStyle::Detect);
             break;
 
-            case SVXFILEFORMAT_PATH:
+            case SvxFileFormat::PathOnly:
                 aURLObj.removeSegment(INetURLObject::LAST_SEGMENT, false);
                 // #101742# Leave trailing slash at the pathname
                 aURLObj.setFinalSlash();
-                aString = aURLObj.getFSysPath(INetURLObject::FSYS_DETECT);
+                aString = aURLObj.getFSysPath(FSysStyle::Detect);
             break;
 
-            case SVXFILEFORMAT_NAME:
-                aString = aURLObj.getBase(INetURLObject::LAST_SEGMENT,true,INetURLObject::DECODE_UNAMBIGUOUS);
+            case SvxFileFormat::NameOnly:
+                aString = aURLObj.getBase(INetURLObject::LAST_SEGMENT,true,INetURLObject::DecodeMechanism::Unambiguous);
             break;
 
-            case SVXFILEFORMAT_NAME_EXT:
-                aString = aURLObj.getName(INetURLObject::LAST_SEGMENT,true,INetURLObject::DECODE_UNAMBIGUOUS);
+            case SvxFileFormat::NameAndExt:
+                aString = aURLObj.getName(INetURLObject::LAST_SEGMENT,true,INetURLObject::DecodeMechanism::Unambiguous);
             break;
         }
     }
@@ -1008,22 +784,22 @@ OUString SvxExtFileField::GetFormatted() const
     {
         switch( eFormat )
         {
-            case SVXFILEFORMAT_FULLPATH:
-                aString = aURLObj.GetMainURL( INetURLObject::DECODE_TO_IURI );
+            case SvxFileFormat::PathFull:
+                aString = aURLObj.GetMainURL( INetURLObject::DecodeMechanism::ToIUri );
             break;
 
-            case SVXFILEFORMAT_PATH:
+            case SvxFileFormat::PathOnly:
                 aURLObj.removeSegment(INetURLObject::LAST_SEGMENT, false);
                 // #101742# Leave trailing slash at the pathname
                 aURLObj.setFinalSlash();
-                aString = aURLObj.GetMainURL( INetURLObject::DECODE_TO_IURI );
+                aString = aURLObj.GetMainURL( INetURLObject::DecodeMechanism::ToIUri );
             break;
 
-            case SVXFILEFORMAT_NAME:
+            case SvxFileFormat::NameOnly:
                 aString = aURLObj.getBase();
             break;
 
-            case SVXFILEFORMAT_NAME_EXT:
+            case SvxFileFormat::NameAndExt:
                 aString = aURLObj.getName();
             break;
         }
@@ -1034,16 +810,6 @@ OUString SvxExtFileField::GetFormatted() const
 
 
 //      SvxAuthorField
-
-
-SV_IMPL_PERSIST1( SvxAuthorField, SvxFieldData );
-
-
-SvxAuthorField::SvxAuthorField()
-{
-    eType = SVXAUTHORTYPE_VAR;
-    eFormat = SVXAUTHORFORMAT_FULLNAME;
-}
 
 
 SvxAuthorField::SvxAuthorField( const OUString& rFirstName,
@@ -1059,9 +825,9 @@ SvxAuthorField::SvxAuthorField( const OUString& rFirstName,
 }
 
 
-SvxFieldData* SvxAuthorField::Clone() const
+std::unique_ptr<SvxFieldData> SvxAuthorField::Clone() const
 {
-    return new SvxAuthorField( *this );
+    return std::make_unique<SvxAuthorField>( *this );
 }
 
 
@@ -1079,51 +845,24 @@ bool SvxAuthorField::operator==( const SvxFieldData& rOther ) const
 }
 
 
-void SvxAuthorField::Load( SvPersistStream & rStm )
-{
-    sal_uInt16 nType = 0, nFormat = 0;
-
-    aName = read_unicode( rStm );
-    aFirstName = read_unicode( rStm );
-    aShortName = read_unicode( rStm );
-
-    rStm.ReadUInt16( nType );
-    rStm.ReadUInt16( nFormat );
-
-    eType = (SvxAuthorType) nType;
-    eFormat= (SvxAuthorFormat) nFormat;
-}
-
-
-void SvxAuthorField::Save( SvPersistStream & rStm )
-{
-    write_unicode( rStm, aName );
-    write_unicode( rStm, aFirstName );
-    write_unicode( rStm, aShortName );
-
-    rStm.WriteUInt16( eType );
-    rStm.WriteUInt16( eFormat );
-}
-
-
 OUString SvxAuthorField::GetFormatted() const
 {
     OUString aString;
 
     switch( eFormat )
     {
-        case SVXAUTHORFORMAT_FULLNAME:
+        case SvxAuthorFormat::FullName:
             aString = aFirstName + " " + aName;
         break;
-        case SVXAUTHORFORMAT_NAME:
+        case SvxAuthorFormat::LastName:
             aString = aName;
         break;
 
-        case SVXAUTHORFORMAT_FIRSTNAME:
+        case SvxAuthorFormat::FirstName:
             aString = aFirstName;
         break;
 
-        case SVXAUTHORFORMAT_SHORTNAME:
+        case SvxAuthorFormat::ShortName:
             aString = aShortName;
         break;
     }
@@ -1131,35 +870,11 @@ OUString SvxAuthorField::GetFormatted() const
     return aString;
 }
 
-static SvClassManager* pClassMgr=nullptr;
-
-SvClassManager& SvxFieldItem::GetClassManager()
-{
-    if ( !pClassMgr )
-    {
-        pClassMgr = new SvClassManager;
-        pClassMgr->Register(SvxFieldData::StaticClassId(),    SvxFieldData::CreateInstance);
-        pClassMgr->Register(SvxURLField::StaticClassId(),     SvxURLField::CreateInstance);
-        pClassMgr->Register(SvxDateField::StaticClassId(),    SvxDateField::CreateInstance);
-        pClassMgr->Register(SvxPageField::StaticClassId(),    SvxPageField::CreateInstance);
-        pClassMgr->Register(SvxPageTitleField::StaticClassId(), SvxPageTitleField::CreateInstance);
-        pClassMgr->Register(SvxTimeField::StaticClassId(),    SvxTimeField::CreateInstance);
-        pClassMgr->Register(SvxExtTimeField::StaticClassId(), SvxExtTimeField::CreateInstance);
-        pClassMgr->Register(SvxExtFileField::StaticClassId(), SvxExtFileField::CreateInstance);
-        pClassMgr->Register(SvxAuthorField::StaticClassId(),  SvxAuthorField::CreateInstance);
-    }
-
-    return *pClassMgr;
-}
-
-
-SV_IMPL_PERSIST1( SvxHeaderField, SvxFieldData );
-
 SvxHeaderField::SvxHeaderField() {}
 
-SvxFieldData* SvxHeaderField::Clone() const
+std::unique_ptr<SvxFieldData> SvxHeaderField::Clone() const
 {
-    return new SvxHeaderField;      // empty
+    return std::make_unique<SvxHeaderField>();      // empty
 }
 
 bool SvxHeaderField::operator==( const SvxFieldData& rCmp ) const
@@ -1167,21 +882,11 @@ bool SvxHeaderField::operator==( const SvxFieldData& rCmp ) const
     return ( dynamic_cast< const SvxHeaderField *>(&rCmp) != nullptr );
 }
 
-void SvxHeaderField::Load( SvPersistStream & /*rStm*/ )
-{
-}
-
-void SvxHeaderField::Save( SvPersistStream & /*rStm*/ )
-{
-}
-
-
-SV_IMPL_PERSIST1( SvxFooterField, SvxFieldData );
 SvxFooterField::SvxFooterField() {}
 
-SvxFieldData* SvxFooterField::Clone() const
+std::unique_ptr<SvxFieldData> SvxFooterField::Clone() const
 {
-    return new SvxFooterField;      // empty
+    return std::make_unique<SvxFooterField>();      // empty
 }
 
 bool SvxFooterField::operator==( const SvxFieldData& rCmp ) const
@@ -1189,20 +894,9 @@ bool SvxFooterField::operator==( const SvxFieldData& rCmp ) const
     return ( dynamic_cast< const SvxFooterField *>(&rCmp) != nullptr );
 }
 
-void SvxFooterField::Load( SvPersistStream & /*rStm*/ )
+std::unique_ptr<SvxFieldData> SvxDateTimeField::Clone() const
 {
-}
-
-void SvxFooterField::Save( SvPersistStream & /*rStm*/ )
-{
-}
-
-
-SV_IMPL_PERSIST1( SvxDateTimeField, SvxFieldData );
-
-SvxFieldData* SvxDateTimeField::Clone() const
-{
-    return new SvxDateTimeField;        // empty
+    return std::make_unique<SvxDateTimeField>();        // empty
 }
 
 bool SvxDateTimeField::operator==( const SvxFieldData& rCmp ) const
@@ -1210,31 +904,21 @@ bool SvxDateTimeField::operator==( const SvxFieldData& rCmp ) const
     return ( dynamic_cast< const SvxDateTimeField *>(&rCmp) != nullptr );
 }
 
-void SvxDateTimeField::Load( SvPersistStream & /*rStm*/ )
-{
-}
-
-void SvxDateTimeField::Save( SvPersistStream & /*rStm*/ )
-{
-}
-
 SvxDateTimeField::SvxDateTimeField() {}
 
 OUString SvxDateTimeField::GetFormatted(
-    Date& rDate, tools::Time& rTime, int eFormat, SvNumberFormatter& rFormatter, LanguageType eLanguage )
+    Date const & rDate, tools::Time const & rTime,
+    SvxDateFormat eDateFormat, SvxTimeFormat eTimeFormat,
+    SvNumberFormatter& rFormatter, LanguageType eLanguage )
 {
     OUString aRet;
 
-    SvxDateFormat eDateFormat = (SvxDateFormat)(eFormat & 0x0f);
-
-    if(eDateFormat)
+    if(eDateFormat != SvxDateFormat::AppDefault)
     {
         aRet = SvxDateField::GetFormatted( rDate, eDateFormat, rFormatter, eLanguage );
     }
 
-    SvxTimeFormat eTimeFormat = (SvxTimeFormat)((eFormat >> 4) & 0x0f);
-
-    if(eTimeFormat)
+    if(eTimeFormat != SvxTimeFormat::AppDefault)
     {
         OUStringBuffer aBuf(aRet);
 

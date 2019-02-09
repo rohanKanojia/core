@@ -19,7 +19,9 @@
 
 
 #include <vcl/graph.hxx>
-#include <vcl/bitmapaccess.hxx>
+#include <vcl/BitmapTools.hxx>
+#include <sal/log.hxx>
+#include <tools/stream.hxx>
 
 class FilterConfigItem;
 
@@ -40,29 +42,26 @@ class RASReader {
 
 private:
 
-    SvStream&           m_rRAS;                 // Die einzulesende RAS-Datei
+    SvStream&           m_rRAS;                 // the RAS file to be read in
 
     bool                mbStatus;
-    Bitmap              maBmp;
-    sal_Int32           mnWidth, mnHeight;      // Bildausmass in Pixeln
+    sal_Int32           mnWidth, mnHeight;      // image dimensions in pixels
     sal_uInt16          mnDstBitsPerPix;
     sal_uInt16          mnDstColors;
     sal_Int32           mnDepth, mnImageDatSize, mnType;
     sal_Int32           mnColorMapType, mnColorMapSize;
     sal_uInt8           mnRepCount, mnRepVal;   // RLE Decoding
-    bool                mbPalette;
 
-    bool                ImplReadBody(BitmapWriteAccess * pAcc);
+    bool                ImplReadBody(vcl::bitmap::RawBitmap&, std::vector<Color> const & rvPalette);
     bool                ImplReadHeader();
     sal_uInt8           ImplGetByte();
 
 public:
     explicit RASReader(SvStream &rRAS);
-    ~RASReader();
     bool                ReadRAS(Graphic & rGraphic);
 };
 
-//=================== Methoden von RASReader ==============================
+//=================== Methods of RASReader ==============================
 
 RASReader::RASReader(SvStream &rRAS)
     : m_rRAS(rRAS)
@@ -78,14 +77,8 @@ RASReader::RASReader(SvStream &rRAS)
     , mnColorMapSize(0)
     , mnRepCount(0)
     , mnRepVal(0)
-    , mbPalette(false)
 {
 }
-
-RASReader::~RASReader()
-{
-}
-
 
 bool RASReader::ReadRAS(Graphic & rGraphic)
 {
@@ -101,31 +94,32 @@ bool RASReader::ReadRAS(Graphic & rGraphic)
 
     // Kopf einlesen:
 
-    if ( !( mbStatus = ImplReadHeader() ) )
+    mbStatus = ImplReadHeader();
+    if ( !mbStatus )
         return false;
 
-    maBmp = Bitmap( Size( mnWidth, mnHeight ), mnDstBitsPerPix );
-    Bitmap::ScopedWriteAccess pAcc(maBmp);
-    if ( pAcc == nullptr )
-        return false;
+    std::vector<Color> aPalette;
+    bool bOk = true;
 
-    if ( mnDstBitsPerPix <= 8 )     // paletten bildchen
+    if ( mnDstBitsPerPix <= 8 )     // pallets pictures
     {
-        if ( mnColorMapType == RAS_COLOR_RAW_MAP )      // RAW Colormap wird geskipped
+        bool bPalette(false);
+
+        if ( mnColorMapType == RAS_COLOR_RAW_MAP )      // RAW color map is skipped
         {
             sal_uLong nCurPos = m_rRAS.Tell();
-            m_rRAS.Seek( nCurPos + mnColorMapSize );
+            bOk = checkSeek(m_rRAS, nCurPos + mnColorMapSize);
         }
-        else if ( mnColorMapType == RAS_COLOR_RGB_MAP ) // RGB koennen wir auslesen
+        else if ( mnColorMapType == RAS_COLOR_RGB_MAP ) // we can read out the RGB
         {
-            mnDstColors = (sal_uInt16)( mnColorMapSize / 3 );
+            mnDstColors = static_cast<sal_uInt16>( mnColorMapSize / 3 );
 
             if ( ( 1 << mnDstBitsPerPix ) < mnDstColors )
                 return false;
 
             if ( ( mnDstColors >= 2 ) && ( ( mnColorMapSize % 3 ) == 0 ) )
             {
-                pAcc->SetPaletteEntryCount( mnDstColors );
+                aPalette.resize(mnDstColors);
                 sal_uInt16  i;
                 sal_uInt8   nRed[256], nGreen[256], nBlue[256];
                 for ( i = 0; i < mnDstColors; i++ ) m_rRAS.ReadUChar( nRed[ i ] );
@@ -133,25 +127,25 @@ bool RASReader::ReadRAS(Graphic & rGraphic)
                 for ( i = 0; i < mnDstColors; i++ ) m_rRAS.ReadUChar( nBlue[ i ] );
                 for ( i = 0; i < mnDstColors; i++ )
                 {
-                    pAcc->SetPaletteColor( i, BitmapColor( nRed[ i ], nGreen[ i ], nBlue[ i ] ) );
+                    aPalette[i] = Color(nRed[ i ], nGreen[ i ], nBlue[ i ]);
                 }
-                mbPalette = true;
+                bPalette = true;
             }
             else
                 return false;
 
         }
-        else if ( mnColorMapType != RAS_COLOR_NO_MAP )  // alles andere ist kein standard
+        else if ( mnColorMapType != RAS_COLOR_NO_MAP )  // everything else is not standard
             return false;
 
-        if ( !mbPalette )
+        if (!bPalette)
         {
             mnDstColors = 1 << mnDstBitsPerPix;
-            pAcc->SetPaletteEntryCount( mnDstColors );
+            aPalette.resize(mnDstColors);
             for ( sal_uInt16 i = 0; i < mnDstColors; i++ )
             {
                 sal_uLong nCount = 255 - ( 255 * i / ( mnDstColors - 1 ) );
-                pAcc->SetPaletteColor( i, BitmapColor( (sal_uInt8)nCount, (sal_uInt8)nCount, (sal_uInt8)nCount ) );
+                aPalette[i] = Color(static_cast<sal_uInt8>(nCount), static_cast<sal_uInt8>(nCount), static_cast<sal_uInt8>(nCount));
             }
         }
     }
@@ -160,15 +154,34 @@ bool RASReader::ReadRAS(Graphic & rGraphic)
         if ( mnColorMapType != RAS_COLOR_NO_MAP )   // when graphic has more than 256 colors and a color map we skip
         {                                           // the colormap
             sal_uLong nCurPos = m_rRAS.Tell();
-            m_rRAS.Seek( nCurPos + mnColorMapSize );
+            bOk = checkSeek(m_rRAS, nCurPos + mnColorMapSize);
         }
     }
 
-    // Bitmap-Daten einlesen
-    mbStatus = ImplReadBody(pAcc.get());
+    if (!bOk)
+        return false;
+
+    //The RLE packets are typically three bytes in size:
+    //The first byte is a Flag Value indicating the type of RLE packet.
+    //The second byte is the Run Count.
+    //The third byte is the Run Value.
+    //
+    //for the sake of simplicity we'll assume that RAS_TYPE_BYTE_ENCODED can
+    //describe data 255 times larger than the data stored
+    size_t nMaxCompression = mnType != RAS_TYPE_BYTE_ENCODED ? 1 : 255;
+    sal_Int32 nBitSize;
+    if (o3tl::checked_multiply<sal_Int32>(mnWidth, mnHeight, nBitSize) || o3tl::checked_multiply<sal_Int32>(nBitSize, mnDepth, nBitSize))
+        return false;
+    if (m_rRAS.remainingSize() * nMaxCompression < static_cast<sal_uInt32>(nBitSize) / 8)
+        return false;
+
+    vcl::bitmap::RawBitmap aBmp(Size(mnWidth, mnHeight), 24);
+
+    // read in the bitmap data
+    mbStatus = ImplReadBody(aBmp, aPalette);
 
     if ( mbStatus )
-        rGraphic = maBmp;
+        rGraphic = vcl::bitmap::CreateFromData(std::move(aBmp));
 
     return mbStatus;
 }
@@ -177,7 +190,7 @@ bool RASReader::ImplReadHeader()
 {
     m_rRAS.ReadInt32(mnWidth).ReadInt32(mnHeight).ReadInt32(mnDepth).ReadInt32(mnImageDatSize).ReadInt32(mnType).ReadInt32(mnColorMapType).ReadInt32(mnColorMapSize);
 
-    if (mnWidth <= 0 || mnHeight <= 0 || mnImageDatSize <= 0 || !m_rRAS.good())
+    if (!m_rRAS.good() || mnWidth <= 0 || mnHeight <= 0 || mnImageDatSize <= 0)
         mbStatus = false;
 
     switch ( mnDepth )
@@ -185,7 +198,7 @@ bool RASReader::ImplReadHeader()
         case 24 :
         case  8 :
         case  1 :
-            mnDstBitsPerPix = (sal_uInt16)mnDepth;
+            mnDstBitsPerPix = static_cast<sal_uInt16>(mnDepth);
             break;
         case 32 :
             mnDstBitsPerPix = 24;
@@ -209,8 +222,23 @@ bool RASReader::ImplReadHeader()
     return mbStatus;
 }
 
+namespace
+{
+    const Color& SanitizePaletteIndex(std::vector<Color> const & rvPalette, sal_uInt8 nIndex)
+    {
+        if (nIndex >= rvPalette.size())
+        {
+            auto nSanitizedIndex = nIndex % rvPalette.size();
+            SAL_WARN_IF(nIndex != nSanitizedIndex, "filter.ras", "invalid colormap index: "
+                        << static_cast<unsigned int>(nIndex) << ", colormap len is: "
+                        << rvPalette.size());
+            nIndex = nSanitizedIndex;
+        }
+        return rvPalette[nIndex];
+    }
+}
 
-bool RASReader::ImplReadBody(BitmapWriteAccess * pAcc)
+bool RASReader::ImplReadBody(vcl::bitmap::RawBitmap& rBitmap, std::vector<Color> const & rvPalette)
 {
     sal_Int32 x, y;
     sal_uInt8    nRed, nGreen, nBlue;
@@ -229,9 +257,9 @@ bool RASReader::ImplReadBody(BitmapWriteAccess * pAcc)
                         if (!m_rRAS.good())
                             mbStatus = false;
                     }
-                    pAcc->SetPixelIndex( y, x,
+                    rBitmap.SetPixel(y, x, SanitizePaletteIndex(rvPalette,
                         sal::static_int_cast< sal_uInt8 >(
-                            nDat >> ( ( x & 7 ) ^ 7 )) );
+                            nDat >> ( ( x & 7 ) ^ 7 ))));
                 }
                 if (!( ( x - 1 ) & 0x8 ) )
                 {
@@ -249,7 +277,7 @@ bool RASReader::ImplReadBody(BitmapWriteAccess * pAcc)
                 for (x = 0; x < mnWidth && mbStatus; ++x)
                 {
                     sal_uInt8 nDat = ImplGetByte();
-                    pAcc->SetPixelIndex( y, x, nDat );
+                    rBitmap.SetPixel(y, x, SanitizePaletteIndex(rvPalette, nDat));
                     if (!m_rRAS.good())
                         mbStatus = false;
                 }
@@ -283,7 +311,7 @@ bool RASReader::ImplReadBody(BitmapWriteAccess * pAcc)
                                 nGreen = ImplGetByte();
                                 nRed = ImplGetByte();
                             }
-                            pAcc->SetPixel ( y, x, BitmapColor( nRed, nGreen, nBlue ) );
+                            rBitmap.SetPixel(y, x, Color(nRed, nGreen, nBlue));
                             if (!m_rRAS.good())
                                 mbStatus = false;
                         }
@@ -314,7 +342,7 @@ bool RASReader::ImplReadBody(BitmapWriteAccess * pAcc)
                                 nGreen = ImplGetByte();
                                 nRed = ImplGetByte();
                             }
-                            pAcc->SetPixel ( y, x, BitmapColor( nRed, nGreen, nBlue ) );
+                            rBitmap.SetPixel(y, x, Color(nRed, nGreen, nBlue));
                             if (!m_rRAS.good())
                                 mbStatus = false;
                         }
@@ -360,14 +388,23 @@ sal_uInt8 RASReader::ImplGetByte()
     }
 }
 
-//================== GraphicImport - die exportierte Funktion ================
+//================== GraphicImport - the exported function ================
 
-extern "C" SAL_DLLPUBLIC_EXPORT bool SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT bool
 iraGraphicImport( SvStream & rStream, Graphic & rGraphic, FilterConfigItem* )
 {
-    RASReader aRASReader(rStream);
+    bool bRet = false;
 
-    return aRASReader.ReadRAS(rGraphic );
+    try
+    {
+        RASReader aRASReader(rStream);
+        bRet = aRASReader.ReadRAS(rGraphic );
+    }
+    catch (...)
+    {
+    }
+
+    return bRet;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

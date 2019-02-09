@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "callform.hxx"
-#include "global.hxx"
+#include <callform.hxx>
+#include <global.hxx>
 #include <osl/diagnose.h>
 #include <osl/file.hxx>
 #include <tools/urlobj.hxx>
@@ -27,16 +27,14 @@
 #include <unotools/pathoptions.hxx>
 
 #include <com/sun/star/sdbc/XResultSet.hpp>
-#include <com/sun/star/sdbc/XRow.hpp>
-#include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <com/sun/star/ucb/XContentAccess.hpp>
 
 #include <com/sun/star/i18n/OrdinalSuffix.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <comphelper/processfactory.hxx>
-#include <comphelper/string.hxx>
 #include <unotools/configmgr.hxx>
 #include <unotools/localedatawrapper.hxx>
+
+namespace com { namespace sun { namespace star { namespace ucb { class XCommandEnvironment; } } } }
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -44,19 +42,19 @@ using namespace ::com::sun::star::ucb;
 
 void ScGlobal::InitAddIns()
 {
-    if (utl::ConfigManager::IsAvoidConfig())
+    if (utl::ConfigManager::IsFuzzing())
         return;
 
     // multi paths separated by semicolons
     SvtPathOptions aPathOpt;
-    OUString aMultiPath = aPathOpt.GetAddinPath();
+    const OUString& aMultiPath = aPathOpt.GetAddinPath();
     if (aMultiPath.isEmpty())
         return;
 
-    sal_Int32 nTokens = comphelper::string::getTokenCount(aMultiPath, ';');
-    for (sal_Int32 j = 0; j < nTokens; ++j)
+    sal_Int32 nIdx {0};
+    do
     {
-        OUString aPath = aMultiPath.getToken(j, ';');
+        OUString aPath = aMultiPath.getToken(0, ';', nIdx);
         if (aPath.isEmpty())
             continue;
 
@@ -69,7 +67,7 @@ void ScGlobal::InitAddIns()
         aObj.setFinalSlash();
         try
         {
-            ::ucbhelper::Content aCnt( aObj.GetMainURL(INetURLObject::NO_DECODE),
+            ::ucbhelper::Content aCnt( aObj.GetMainURL(INetURLObject::DecodeMechanism::NONE),
                 Reference< XCommandEnvironment >(),
                 comphelper::getProcessComponentContext() );
             Reference< sdbc::XResultSet > xResultSet;
@@ -87,9 +85,7 @@ void ScGlobal::InitAddIns()
 
             if ( xResultSet.is() )
             {
-                Reference< sdbc::XRow > xRow( xResultSet, UNO_QUERY );
-                Reference< XContentAccess >
-                    xContentAccess( xResultSet, UNO_QUERY );
+                Reference< XContentAccess > xContentAccess( xResultSet, UNO_QUERY );
                 try
                 {
                     if ( xResultSet->first() )
@@ -117,6 +113,7 @@ void ScGlobal::InitAddIns()
             OSL_FAIL( "unexpected exception caught!" );
         }
     }
+    while (nIdx>0);
 }
 
 OUString ScGlobal::GetOrdinalSuffix( sal_Int32 nNumber)

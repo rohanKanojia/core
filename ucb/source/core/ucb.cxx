@@ -24,10 +24,15 @@
 
  *************************************************************************/
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/interfacecontainer2.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <cppuhelper/queryinterface.hxx>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
+#include <com/sun/star/ucb/DuplicateProviderException.hpp>
 #include <com/sun/star/ucb/GlobalTransferCommandArgument2.hpp>
+#include <com/sun/star/ucb/UnsupportedCommandException.hpp>
 #include <com/sun/star/ucb/XCommandInfo.hpp>
 #include <com/sun/star/ucb/XContentProvider.hpp>
 #include <com/sun/star/ucb/XContentProviderSupplier.hpp>
@@ -39,6 +44,7 @@
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/uno/Any.hxx>
 #include <ucbhelper/cancelcommandexecution.hxx>
+#include <ucbhelper/getcomponentcontext.hxx>
 #include "identify.hxx"
 #include "ucbcmds.hxx"
 
@@ -227,7 +233,6 @@ bool createContentProviderData(
 UniversalContentBroker::UniversalContentBroker(
     const Reference< css::uno::XComponentContext >& xContext )
 : m_xContext( xContext ),
-  m_pDisposeEventListeners( nullptr ),
   m_nCommandId( 0 )
 {
     OSL_ENSURE( m_xContext.is(),
@@ -238,7 +243,6 @@ UniversalContentBroker::UniversalContentBroker(
 // virtual
 UniversalContentBroker::~UniversalContentBroker()
 {
-    delete m_pDisposeEventListeners;
 }
 
 
@@ -256,18 +260,17 @@ void SAL_CALL UniversalContentBroker::release()
 }
 
 css::uno::Any SAL_CALL UniversalContentBroker::queryInterface( const css::uno::Type & rType )
-    throw( css::uno::RuntimeException, std::exception )
 {
     css::uno::Any aRet = cppu::queryInterface( rType,
-                                               (static_cast< XUniversalContentBroker* >(this)),
-                                               (static_cast< XTypeProvider* >(this)),
-                                               (static_cast< XComponent* >(this)),
-                                               (static_cast< XServiceInfo* >(this)),
-                                               (static_cast< XInitialization* >(this)),
-                                               (static_cast< XContentProviderManager* >(this)),
-                                               (static_cast< XContentProvider* >(this)),
-                                               (static_cast< XContentIdentifierFactory* >(this)),
-                                               (static_cast< XCommandProcessor* >(this))
+                                               static_cast< XUniversalContentBroker* >(this),
+                                               static_cast< XTypeProvider* >(this),
+                                               static_cast< XComponent* >(this),
+                                               static_cast< XServiceInfo* >(this),
+                                               static_cast< XInitialization* >(this),
+                                               static_cast< XContentProviderManager* >(this),
+                                               static_cast< XContentProvider* >(this),
+                                               static_cast< XContentIdentifierFactory* >(this),
+                                               static_cast< XCommandProcessor* >(this)
                                                );
     return aRet.hasValue() ? aRet : OWeakObject::queryInterface( rType );
 }
@@ -292,12 +295,11 @@ XTYPEPROVIDER_IMPL_9( UniversalContentBroker,
 
 // virtual
 void SAL_CALL UniversalContentBroker::dispose()
-    throw( css::uno::RuntimeException, std::exception )
 {
     if ( m_pDisposeEventListeners && m_pDisposeEventListeners->getLength() )
     {
         EventObject aEvt;
-        aEvt.Source = (static_cast< XComponent* >(this));
+        aEvt.Source = static_cast< XComponent* >(this);
         m_pDisposeEventListeners->disposeAndClear( aEvt );
     }
 
@@ -309,10 +311,9 @@ void SAL_CALL UniversalContentBroker::dispose()
 // virtual
 void SAL_CALL UniversalContentBroker::addEventListener(
                             const Reference< XEventListener >& Listener )
-    throw( css::uno::RuntimeException, std::exception )
 {
     if ( !m_pDisposeEventListeners )
-        m_pDisposeEventListeners = new OInterfaceContainerHelper2( m_aMutex );
+        m_pDisposeEventListeners.reset( new OInterfaceContainerHelper2( m_aMutex ) );
 
     m_pDisposeEventListeners->addInterface( Listener );
 }
@@ -321,7 +322,6 @@ void SAL_CALL UniversalContentBroker::addEventListener(
 // virtual
 void SAL_CALL UniversalContentBroker::removeEventListener(
                             const Reference< XEventListener >& Listener )
-    throw( css::uno::RuntimeException, std::exception )
 {
     if ( m_pDisposeEventListeners )
         m_pDisposeEventListeners->removeInterface( Listener );
@@ -332,11 +332,23 @@ void SAL_CALL UniversalContentBroker::removeEventListener(
 
 // XServiceInfo methods.
 
+XSERVICEINFO_COMMOM_IMPL( UniversalContentBroker,
+                          OUString( "com.sun.star.comp.ucb.UniversalContentBroker" ) )
+/// @throws css::uno::Exception
+static css::uno::Reference< css::uno::XInterface >
+UniversalContentBroker_CreateInstance( const css::uno::Reference< css::lang::XMultiServiceFactory> & rSMgr )
+{
+    css::lang::XServiceInfo* pX =
+        static_cast<css::lang::XServiceInfo*>(new UniversalContentBroker( ucbhelper::getComponentContext(rSMgr) ));
+    return css::uno::Reference< css::uno::XInterface >::query( pX );
+}
 
-XSERVICEINFO_IMPL_1_CTX( UniversalContentBroker,
-                     OUString( "com.sun.star.comp.ucb.UniversalContentBroker" ),
-                     UCB_SERVICE_NAME );
-
+css::uno::Sequence< OUString >
+UniversalContentBroker::getSupportedServiceNames_Static()
+{
+    css::uno::Sequence< OUString > aSNS { UCB_SERVICE_NAME };
+    return aSNS;
+}
 
 // Service factory implementation.
 
@@ -349,8 +361,6 @@ ONE_INSTANCE_SERVICE_FACTORY_IMPL( UniversalContentBroker );
 
 // virtual
 void SAL_CALL UniversalContentBroker::initialize( const css::uno::Sequence< Any >& aArguments )
-    throw( css::uno::Exception,
-           css::uno::RuntimeException, std::exception )
 {
     {
         osl::MutexGuard aGuard(m_aMutex);
@@ -392,7 +402,6 @@ UniversalContentBroker::registerContentProvider(
                             const Reference< XContentProvider >& Provider,
                             const OUString& Scheme,
                             sal_Bool ReplaceExisting )
-    throw( DuplicateProviderException, css::uno::RuntimeException, std::exception )
 {
     osl::MutexGuard aGuard(m_aMutex);
 
@@ -438,7 +447,6 @@ UniversalContentBroker::registerContentProvider(
 void SAL_CALL UniversalContentBroker::deregisterContentProvider(
                               const Reference< XContentProvider >& Provider,
                             const OUString& Scheme )
-    throw( css::uno::RuntimeException, std::exception )
 {
     osl::MutexGuard aGuard(m_aMutex);
 
@@ -456,16 +464,10 @@ void SAL_CALL UniversalContentBroker::deregisterContentProvider(
     {
         ProviderList_Impl & rList = aMapIt->getValue();
 
-        ProviderList_Impl::iterator aListEnd(rList.end());
-        for (ProviderList_Impl::iterator aListIt(rList.begin());
-             aListIt != aListEnd; ++aListIt)
-        {
-            if ((*aListIt).getProvider() == Provider)
-            {
-                rList.erase(aListIt);
-                break;
-            }
-        }
+        auto aListIt = std::find_if(rList.begin(), rList.end(),
+            [&Provider](const ProviderListEntry_Impl& rEntry) { return rEntry.getProvider() == Provider; });
+        if (aListIt != rList.end())
+            rList.erase(aListIt);
 
         if (rList.empty())
             m_aProviders.erase(aMapIt);
@@ -476,7 +478,6 @@ void SAL_CALL UniversalContentBroker::deregisterContentProvider(
 // virtual
 css::uno::Sequence< ContentProviderInfo > SAL_CALL
                             UniversalContentBroker::queryContentProviders()
-    throw( css::uno::RuntimeException, std::exception )
 {
     // Return a list with information about active(!) content providers.
 
@@ -503,7 +504,6 @@ css::uno::Sequence< ContentProviderInfo > SAL_CALL
 Reference< XContentProvider > SAL_CALL
         UniversalContentBroker::queryContentProvider( const OUString&
                                                           Identifier )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return queryContentProvider( Identifier, false );
 }
@@ -515,7 +515,6 @@ Reference< XContentProvider > SAL_CALL
 // virtual
 Reference< XContent > SAL_CALL UniversalContentBroker::queryContent(
                         const Reference< XContentIdentifier >& Identifier )
-    throw( IllegalIdentifierException, css::uno::RuntimeException, std::exception )
 {
 
     // Let the content provider for the scheme given with the content
@@ -538,7 +537,6 @@ Reference< XContent > SAL_CALL UniversalContentBroker::queryContent(
 sal_Int32 SAL_CALL UniversalContentBroker::compareContentIds(
                                 const Reference< XContentIdentifier >& Id1,
                                 const Reference< XContentIdentifier >& Id2 )
-    throw( css::uno::RuntimeException, std::exception )
 {
     OUString aURI1( Id1->getContentIdentifier() );
     OUString aURI2( Id2->getContentIdentifier() );
@@ -565,7 +563,6 @@ sal_Int32 SAL_CALL UniversalContentBroker::compareContentIds(
 Reference< XContentIdentifier > SAL_CALL
         UniversalContentBroker::createContentIdentifier(
                                             const OUString& ContentId )
-    throw( css::uno::RuntimeException, std::exception )
 {
 
     // Let the content provider for the scheme given with content
@@ -597,7 +594,6 @@ Reference< XContentIdentifier > SAL_CALL
 
 // virtual
 sal_Int32 SAL_CALL UniversalContentBroker::createCommandIdentifier()
-    throw( RuntimeException, std::exception )
 {
     osl::MutexGuard aGuard( m_aMutex );
 
@@ -611,7 +607,6 @@ Any SAL_CALL UniversalContentBroker::execute(
                           const Command& aCommand,
                           sal_Int32,
                           const Reference< XCommandEnvironment >& Environment )
-    throw( Exception, CommandAbortedException, RuntimeException, std::exception )
 {
     Any aRet;
 
@@ -642,7 +637,7 @@ Any SAL_CALL UniversalContentBroker::execute(
             {
                 ucbhelper::cancelCommandExecution(
                     makeAny( IllegalArgumentException(
-                                    OUString( "Wrong argument type!" ),
+                                    "Wrong argument type!",
                                     static_cast< cppu::OWeakObject * >( this ),
                                     -1 ) ),
                     Environment );
@@ -666,13 +661,13 @@ Any SAL_CALL UniversalContentBroker::execute(
         {
             ucbhelper::cancelCommandExecution(
                 makeAny( IllegalArgumentException(
-                                OUString( "Wrong argument type!" ),
+                                "Wrong argument type!",
                                 static_cast< cppu::OWeakObject * >( this ),
                                 -1 ) ),
                 Environment );
             // Unreachable
         }
-        aRet <<= checkIn( aCheckinArg, Environment );
+        aRet = checkIn( aCheckinArg, Environment );
     }
     else
     {
@@ -697,17 +692,15 @@ Any SAL_CALL UniversalContentBroker::execute(
 
 // virtual
 void SAL_CALL UniversalContentBroker::releaseCommandIdentifier(sal_Int32 /*aCommandId*/)
-    throw( RuntimeException, std::exception )
 {
-    // @@@ Not implemeted ( yet).
+    // @@@ Not implemented ( yet).
 }
 
 
 // virtual
 void SAL_CALL UniversalContentBroker::abort( sal_Int32 )
-    throw( RuntimeException, std::exception )
 {
-    // @@@ Not implemeted ( yet).
+    // @@@ Not implemented ( yet).
 }
 
 
@@ -716,7 +709,6 @@ void SAL_CALL UniversalContentBroker::abort( sal_Int32 )
 
 // virtual
 void SAL_CALL UniversalContentBroker::changesOccurred( const util::ChangesEvent& Event )
-        throw( uno::RuntimeException, std::exception )
 {
     sal_Int32 nCount = Event.Changes.getLength();
     if ( nCount )
@@ -762,7 +754,6 @@ void SAL_CALL UniversalContentBroker::changesOccurred( const util::ChangesEvent&
 
 // virtual
 void SAL_CALL UniversalContentBroker::disposing(const lang::EventObject&)
-    throw( uno::RuntimeException, std::exception )
 {
     if ( m_xNotifier.is() )
     {
@@ -790,7 +781,6 @@ Reference< XContentProvider > UniversalContentBroker::queryContentProvider(
 }
 
 void UniversalContentBroker::configureUcb()
-    throw (uno::RuntimeException)
 {
     OUString aKey1;
     OUString aKey2;
@@ -804,7 +794,7 @@ void UniversalContentBroker::configureUcb()
     ContentProviderDataList aData;
     if (!getContentProviderData(aKey1, aKey2, aData))
     {
-        OSL_TRACE("UniversalContentBroker::configureUcb(): No configuration");
+        SAL_WARN( "ucb", "No configuration");
         return;
     }
 
@@ -814,20 +804,18 @@ void UniversalContentBroker::configureUcb()
 void UniversalContentBroker::prepareAndRegister(
     const ContentProviderDataList& rData)
 {
-    ContentProviderDataList::const_iterator aEnd(rData.end());
-    for (ContentProviderDataList::const_iterator aIt(rData.begin());
-         aIt != aEnd; ++aIt)
+    for (const auto& rContentProviderData : rData)
     {
         OUString aProviderArguments;
-        if (fillPlaceholders(aIt->Arguments,
+        if (fillPlaceholders(rContentProviderData.Arguments,
                              m_aArguments,
                              &aProviderArguments))
         {
             registerAtUcb(this,
                           m_xContext,
-                          aIt->ServiceName,
+                          rContentProviderData.ServiceName,
                           aProviderArguments,
-                          aIt->URLTemplate);
+                          rContentProviderData.URLTemplate);
 
         }
         else
@@ -861,11 +849,10 @@ bool UniversalContentBroker::getContentProviderData(
         makeAndAppendXMLName( aFullPath, rKey2 );
         aFullPath.append( "']/ProviderData" );
 
-        uno::Sequence< uno::Any > aArguments( 1 );
-        beans::PropertyValue      aProperty;
-        aProperty.Name = "nodepath";
-        aProperty.Value <<= aFullPath.makeStringAndClear();
-        aArguments[ 0 ] <<= aProperty;
+        uno::Sequence<uno::Any> aArguments(comphelper::InitAnyPropertySequence(
+        {
+            {"nodepath", uno::Any(aFullPath.makeStringAndClear())}
+        }));
 
         uno::Reference< uno::XInterface > xInterface(
                 xConfigProv->createInstanceWithArguments(
@@ -923,14 +910,14 @@ bool UniversalContentBroker::getContentProviderData(
     }
     catch (const uno::RuntimeException&)
     {
-        OSL_TRACE( "UniversalContentBroker::getContentProviderData - caught RuntimeException!" );
+        SAL_WARN( "ucb", "caught RuntimeException!" );
         return false;
     }
     catch (const uno::Exception&)
     {
         // createInstance, createInstanceWithArguments
 
-        OSL_TRACE( "UniversalContentBroker::getContentProviderData - caught Exception!" );
+        SAL_WARN( "ucb", "caught Exception!" );
         return false;
     }
 
@@ -941,7 +928,7 @@ bool UniversalContentBroker::getContentProviderData(
 // ProviderListEntry_Impl implementation.
 
 
-Reference< XContentProvider > ProviderListEntry_Impl::resolveProvider() const
+Reference< XContentProvider > const & ProviderListEntry_Impl::resolveProvider() const
 {
     if ( !m_xResolvedProvider.is() )
     {

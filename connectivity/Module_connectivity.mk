@@ -11,26 +11,31 @@
 $(eval $(call gb_Module_Module,connectivity))
 
 $(eval $(call gb_Module_add_targets,connectivity,\
+	Library_dbtools \
+))
+
+ifneq (,$(filter DBCONNECTIVITY,$(BUILD_TYPE)))
+
+$(eval $(call gb_Module_add_targets,connectivity,\
 	Configuration_calc \
 	Configuration_dbase \
 	Configuration_flat \
-	Configuration_mysql \
+	Configuration_mysql_jdbc \
 	Configuration_odbc \
+	Configuration_writer \
 	Library_calc \
 	Library_dbase \
 	Library_dbpool2 \
-	Library_dbtools \
 	Library_file \
 	Library_flat \
-	Library_mysql \
-	$(if $(filter ANDROID IOS,$(OS)),,Library_odbc) \
+	$(if $(filter ANDROID iOS,$(OS)),,Library_odbc) \
+	Library_mysql_jdbc \
 	Library_sdbc2 \
+	Library_writer \
 ))
 
 $(eval $(call gb_Module_add_l10n_targets,connectivity,\
-	AllLangResTarget_cnr \
-	AllLangResTarget_sdbcl \
-	AllLangResTarget_sdberr \
+       AllLangMoTarget_cnr \
 ))
 
 ifneq ($(ENABLE_JAVA),)
@@ -44,14 +49,6 @@ $(eval $(call gb_Module_add_targets,connectivity,\
 endif
 
 ifneq ($(OS),WNT)
-
-ifeq ($(ENABLE_TDEAB),TRUE)
-$(eval $(call gb_Module_add_targets,connectivity,\
-	Configuration_tdeab \
-	Library_tdeab1 \
-	Library_tdeabdrv1 \
-))
-endif
 
 ifeq ($(OS),MACOSX)
 $(eval $(call gb_Module_add_targets,connectivity,\
@@ -81,6 +78,13 @@ ifeq ($(ENABLE_FIREBIRD_SDBC),TRUE)
 $(eval $(call gb_Module_add_targets,connectivity,\
 	Configuration_firebird \
 	Library_firebird_sdbc \
+))
+endif
+
+ifeq ($(ENABLE_MARIADBC),TRUE)
+$(eval $(call gb_Module_add_targets,connectivity,\
+	Configuration_mysql \
+	Library_mysqlc \
 ))
 endif
 
@@ -127,9 +131,17 @@ $(eval $(call gb_Module_add_subsequentcheck_targets,connectivity,\
 
 endif
 
+ifneq ($(CONNECTIVITY_TEST_MYSQL_DRIVER),)
+$(eval $(call gb_Module_add_check_targets,connectivity,\
+    CppunitTest_connectivity_mysql_test \
+))
+endif
+
 # general tests
 $(eval $(call gb_Module_add_check_targets,connectivity,\
 	CppunitTest_connectivity_commontools \
 ))
+
+endif
 
 # vim: set noet sw=4 ts=4:

@@ -19,13 +19,12 @@
 #ifndef INCLUDED_FORMS_SOURCE_RICHTEXT_RICHTEXTVCLCONTROL_HXX
 #define INCLUDED_FORMS_SOURCE_RICHTEXT_RICHTEXTVCLCONTROL_HXX
 
-#include <vcl/dialog.hxx>
-#include <vcl/fixed.hxx>
 #include <vcl/button.hxx>
 #include <vcl/toolbox.hxx>
 #include <com/sun/star/awt/FontDescriptor.hpp>
 #include "rtattributes.hxx"
 #include "textattributelistener.hxx"
+#include <memory>
 
 class EditView;
 class EditEngine;
@@ -40,7 +39,7 @@ namespace frm
     class RichTextControl : public Control, public IMultiAttributeDispatcher
     {
     private:
-        RichTextControlImpl*    m_pImpl;
+        std::unique_ptr<RichTextControlImpl>    m_pImpl;
 
     public:
         RichTextControl(
@@ -51,7 +50,7 @@ namespace frm
             ITextSelectionListener* _pSelectionListener
         );
 
-        virtual ~RichTextControl( );
+        virtual ~RichTextControl( ) override;
         virtual void dispose() override;
 
         /* enables the change notifications for a particular attribute
@@ -67,7 +66,7 @@ namespace frm
            If you previously already enabled the notification for this attribute, and specified a different listener,
            then the previous listener will be replaced with the new listener, provided the latter is not <NULL/>.
         */
-        void        enableAttributeNotification( AttributeId _nAttributeId, ITextAttributeListener* _pListener = nullptr );
+        void        enableAttributeNotification( AttributeId _nAttributeId, ITextAttributeListener* _pListener );
 
         /** disables the change notifications for a particular attribute
 
@@ -108,7 +107,7 @@ namespace frm
         virtual void        GetFocus() override;
         virtual void        StateChanged( StateChangedType nStateChange ) override;
         virtual bool        PreNotify( NotifyEvent& _rNEvt ) override;
-        virtual bool        Notify( NotifyEvent& _rNEvt ) override;
+        virtual bool        EventNotify( NotifyEvent& _rNEvt ) override;
 
     private:
                 void    applyAttributes( const SfxItemSet& _rAttributesToApply );
@@ -117,7 +116,6 @@ namespace frm
 
     private:
         EditEngine&  getEngine() const;
-        vcl::Window&      getViewport() const;
     };
 
 

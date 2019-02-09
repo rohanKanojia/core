@@ -24,15 +24,16 @@
 #include <osl/process.h>
 #include <tools/urlobj.hxx>
 #include <tools/stream.hxx>
+#include <i18nlangtag/languagetag.hxx>
 #include <vcl/pngread.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/svgdata.hxx>
+#include <vcl/vectorgraphicdata.hxx>
 
 namespace {
     bool loadPng( const OUString & rPath, BitmapEx &rBitmap)
     {
         INetURLObject aObj( rPath );
-        SvFileStream aStrm( aObj.PathToFileName(), STREAM_STD_READ );
+        SvFileStream aStrm( aObj.PathToFileName(), StreamMode::STD_READ );
         if ( !aStrm.GetError() ) {
             vcl::PNGReader aReader( aStrm );
             rBitmap = aReader.Read();
@@ -61,16 +62,13 @@ bool Application::LoadBrandBitmap (const char* pName, BitmapEx &rBitmap)
     LanguageTag aLanguageTag( *pLoc);
 
     ::std::vector< OUString > aFallbacks( aLanguageTag.getFallbackStrings( true));
-    for (size_t i=0; i < aFallbacks.size(); ++i)
+    for (const OUString & aFallback : aFallbacks)
     {
-        if (tryLoadPng( aBaseDir, aBaseName + "-" + aFallbacks[i] + aPng, rBitmap))
+        if (tryLoadPng( aBaseDir, aBaseName + "-" + aFallback + aPng, rBitmap))
             return true;
     }
 
-    if (tryLoadPng( aBaseDir, aBaseName + aPng, rBitmap))
-        return true;
-
-    return false;
+    return tryLoadPng( aBaseDir, aBaseName + aPng, rBitmap);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

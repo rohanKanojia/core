@@ -19,7 +19,7 @@
 
 #include <com/sun/star/embed/EmbedMisc.hpp>
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <editeng/eeitem.hxx>
 #include <editeng/sizeitem.hxx>
 #include <svx/svdpagv.hxx>
@@ -37,15 +37,15 @@
 #include <svx/sidebar/SelectionAnalyzer.hxx>
 #include <svx/sidebar/ContextChangeEventMultiplexer.hxx>
 
-#include "drawsh.hxx"
-#include "drawview.hxx"
-#include "viewdata.hxx"
-#include "sc.hrc"
-#include "tabvwsh.hxx"
-#include "document.hxx"
-#include "drwlayer.hxx"
-#include "userdat.hxx"
-#include "drtxtob.hxx"
+#include <drawsh.hxx>
+#include <drawview.hxx>
+#include <viewdata.hxx>
+#include <sc.hrc>
+#include <tabvwsh.hxx>
+#include <document.hxx>
+#include <drwlayer.hxx>
+#include <userdat.hxx>
+#include <drtxtob.hxx>
 #include <gridwin.hxx>
 #include <svx/svdoole2.hxx>
 #include <svx/svdocapt.hxx>
@@ -58,16 +58,15 @@ ScDrawShell::ScDrawShell( ScViewData* pData ) :
     mpSelectionChangeHandler(new svx::sidebar::SelectionChangeHandler(
             [this] () { return this->GetSidebarContextName(); },
             GetFrame()->GetFrame().GetController(),
-            sfx2::sidebar::EnumContext::Context_Cell))
+            vcl::EnumContext::Context::Cell))
 {
     SetPool( &pViewData->GetScDrawView()->GetModel()->GetItemPool() );
-    ::svl::IUndoManager* pMgr = pViewData->GetSfxDocShell()->GetUndoManager();
+    SfxUndoManager* pMgr = pViewData->GetSfxDocShell()->GetUndoManager();
     SetUndoManager( pMgr );
     if ( !pViewData->GetDocument()->IsUndoEnabled() )
     {
         pMgr->SetMaxUndoActionCount( 0 );
     }
-    SetHelpId( HID_SCSHELL_DRAWSH );
     SetName("Drawing");
 
     mpSelectionChangeHandler->Connect();
@@ -78,13 +77,13 @@ ScDrawShell::~ScDrawShell()
     mpSelectionChangeHandler->Disconnect();
 }
 
-void ScDrawShell::GetState( SfxItemSet& rSet )          // Zustaende / Toggles
+void ScDrawShell::GetState( SfxItemSet& rSet )          // Conditions / Toggles
 {
     ScDrawView* pView    = pViewData->GetScDrawView();
     SdrDragMode eMode    = pView->GetDragMode();
 
-    rSet.Put( SfxBoolItem( SID_OBJECT_ROTATE, eMode == SDRDRAG_ROTATE ) );
-    rSet.Put( SfxBoolItem( SID_OBJECT_MIRROR, eMode == SDRDRAG_MIRROR ) );
+    rSet.Put( SfxBoolItem( SID_OBJECT_ROTATE, eMode == SdrDragMode::Rotate ) );
+    rSet.Put( SfxBoolItem( SID_OBJECT_MIRROR, eMode == SdrDragMode::Mirror ) );
     rSet.Put( SfxBoolItem( SID_BEZIER_EDIT, !pView->IsFrameDragSingles() ) );
 
     sal_uInt16 nFWId = ScGetFontWorkId();
@@ -102,6 +101,7 @@ void ScDrawShell::GetState( SfxItemSet& rSet )          // Zustaende / Toggles
             bDisableAnchor = true;
             rSet.DisableItem( SID_ANCHOR_PAGE );
             rSet.DisableItem( SID_ANCHOR_CELL );
+            rSet.DisableItem( SID_ANCHOR_CELL_RESIZE );
         }
     }
 
@@ -112,22 +112,31 @@ void ScDrawShell::GetState( SfxItemSet& rSet )          // Zustaende / Toggles
         case SCA_PAGE:
             rSet.Put( SfxBoolItem( SID_ANCHOR_PAGE, true ) );
             rSet.Put( SfxBoolItem( SID_ANCHOR_CELL, false ) );
+            rSet.Put( SfxBoolItem( SID_ANCHOR_CELL_RESIZE, false ) );
         break;
 
         case SCA_CELL:
-        rSet.Put( SfxBoolItem( SID_ANCHOR_PAGE, false ) );
-        rSet.Put( SfxBoolItem( SID_ANCHOR_CELL, true ) );
+            rSet.Put( SfxBoolItem( SID_ANCHOR_PAGE, false ) );
+            rSet.Put( SfxBoolItem( SID_ANCHOR_CELL, true ) );
+            rSet.Put( SfxBoolItem( SID_ANCHOR_CELL_RESIZE, false ) );
+        break;
+
+        case SCA_CELL_RESIZE:
+            rSet.Put( SfxBoolItem( SID_ANCHOR_PAGE, false ) );
+            rSet.Put( SfxBoolItem( SID_ANCHOR_CELL, false ) );
+            rSet.Put( SfxBoolItem( SID_ANCHOR_CELL_RESIZE, true ) );
         break;
 
         default:
-        rSet.Put( SfxBoolItem( SID_ANCHOR_PAGE, false ) );
-        rSet.Put( SfxBoolItem( SID_ANCHOR_CELL, false ) );
+            rSet.Put( SfxBoolItem( SID_ANCHOR_PAGE, false ) );
+            rSet.Put( SfxBoolItem( SID_ANCHOR_CELL, false ) );
+            rSet.Put( SfxBoolItem( SID_ANCHOR_CELL_RESIZE, false ) );
         break;
         }
     }
 }
 
-void ScDrawShell::GetDrawFuncState( SfxItemSet& rSet )      // Funktionen disablen
+void ScDrawShell::GetDrawFuncState( SfxItemSet& rSet )      // disable functions
 {
     ScDrawView* pView = pViewData->GetScDrawView();
 
@@ -153,10 +162,10 @@ void ScDrawShell::GetDrawFuncState( SfxItemSet& rSet )      // Funktionen disabl
     if ( !pView->IsGroupEntered() )
         rSet.DisableItem( SID_LEAVE_GROUP );
 
-    if ( nMarkCount <= 1 )                      // nichts oder nur ein Objekt selektiert
+    if ( nMarkCount <= 1 )                      // Nothing or only one object selected
     {
-            //  Ausrichtung
-        rSet.DisableItem( SID_OBJECT_ALIGN_LEFT );      // keine Ausrichtung an der Seite
+            //  alignment
+        rSet.DisableItem( SID_OBJECT_ALIGN_LEFT );      // no alignment on the side
         rSet.DisableItem( SID_OBJECT_ALIGN_CENTER );
         rSet.DisableItem( SID_OBJECT_ALIGN_RIGHT );
         rSet.DisableItem( SID_OBJECT_ALIGN_UP );
@@ -199,6 +208,8 @@ void ScDrawShell::GetDrawFuncState( SfxItemSet& rSet )      // Funktionen disabl
         rSet.DisableItem( SID_DRAW_HLINK_EDIT );
         rSet.DisableItem( SID_DRAW_HLINK_DELETE );
         rSet.DisableItem( SID_OPEN_HYPERLINK );
+        // Fit to cell only works with a single graphic
+        rSet.DisableItem( SID_FITCELLSIZE );
     }
     else if ( nMarkCount == 1 )
     {
@@ -219,7 +230,7 @@ void ScDrawShell::GetDrawFuncState( SfxItemSet& rSet )      // Funktionen disabl
         {
             SdrOle2Obj* pOleObj = static_cast<SdrOle2Obj*>(rMarkList.GetMark( 0 )->GetMarkedSdrObj());
             if (pOleObj->GetObjRef().is() &&
-                ((pOleObj->GetObjRef()->getStatus( pOleObj->GetAspect() ) & embed::EmbedMisc::MS_EMBED_RECOMPOSEONRESIZE) ) )
+                (pOleObj->GetObjRef()->getStatus( pOleObj->GetAspect() ) & embed::EmbedMisc::MS_EMBED_RECOMPOSEONRESIZE) )
                 //TODO/LATER: why different slots in Draw and Calc?
                 rSet.DisableItem(SID_ORIGINALSIZE);
         }
@@ -233,8 +244,14 @@ void ScDrawShell::GetDrawFuncState( SfxItemSet& rSet )      // Funktionen disabl
                 rSet.DisableItem( SID_COPY );
                 // Notes always default to Page anchor.
                 rSet.DisableItem( SID_ANCHOR_TOGGLE );
+                rSet.DisableItem( SID_ANCHOR_MENU );
             }
         }
+
+        // Fit to cell is only available for cell anchored graphics obviously
+        if (pView->GetAnchorType() != SCA_CELL &&
+            pView->GetAnchorType() != SCA_CELL_RESIZE)
+            rSet.DisableItem( SID_FITCELLSIZE );
     }
     if ( !bCanRename )
     {
@@ -243,21 +260,23 @@ void ScDrawShell::GetDrawFuncState( SfxItemSet& rSet )      // Funktionen disabl
         rSet.DisableItem( SID_TITLE_DESCRIPTION_OBJECT );
     }
 
-    if ( !nMarkCount )                          // nichts selektiert
+    if ( !nMarkCount )                          // nothing selected
     {
-            //  Anordnung
+            //  Arrangement
         rSet.DisableItem( SID_FRAME_UP );
         rSet.DisableItem( SID_FRAME_DOWN );
         rSet.DisableItem( SID_FRAME_TO_TOP );
         rSet.DisableItem( SID_FRAME_TO_BOTTOM );
-            //  Clipboard / loeschen
+            //  Clipboard / delete
         rSet.DisableItem( SID_DELETE );
         rSet.DisableItem( SID_DELETE_CONTENTS );
         rSet.DisableItem( SID_CUT );
         rSet.DisableItem( SID_COPY );
-            //  sonstiges
+            //  other
         rSet.DisableItem( SID_ANCHOR_TOGGLE );
+        rSet.DisableItem( SID_ANCHOR_MENU );
         rSet.DisableItem( SID_ORIGINALSIZE );
+        rSet.DisableItem( SID_FITCELLSIZE );
         rSet.DisableItem( SID_ATTR_TRANSFORM );
     }
 
@@ -267,7 +286,7 @@ void ScDrawShell::GetDrawFuncState( SfxItemSet& rSet )      // Funktionen disabl
         pView->GetAttributes( aAttrs );
         if( aAttrs.GetItemState( EE_PARA_HYPHENATE ) >= SfxItemState::DEFAULT )
         {
-            bool bValue = static_cast<const SfxBoolItem&>( aAttrs.Get( EE_PARA_HYPHENATE ) ).GetValue();
+            bool bValue = aAttrs.Get( EE_PARA_HYPHENATE ).GetValue();
             rSet.Put( SfxBoolItem( SID_ENABLE_HYPHENATION, bValue ) );
         }
     }
@@ -276,7 +295,7 @@ void ScDrawShell::GetDrawFuncState( SfxItemSet& rSet )      // Funktionen disabl
     svx::FontworkBar::getState( pView, rSet );
 }
 
-//          Attribute fuer Drawing-Objekte
+//          Attributes for Drawing-Objects
 
 void ScDrawShell::GetDrawAttrState( SfxItemSet& rSet )
 {
@@ -309,7 +328,7 @@ void ScDrawShell::GetDrawAttrState( SfxItemSet& rSet )
         bool bActionItem = false;
         if ( pDrView->IsAction() )              // action rectangle
         {
-            Rectangle aRect;
+            tools::Rectangle aRect;
             pDrView->TakeActionRect( aRect );
             if ( !aRect.IsEmpty() )
             {
@@ -324,7 +343,7 @@ void ScDrawShell::GetDrawAttrState( SfxItemSet& rSet )
         {
             if ( pDrView->AreObjectsMarked() )      // selected objects
             {
-                Rectangle aRect = pDrView->GetAllMarkedRect();
+                tools::Rectangle aRect = pDrView->GetAllMarkedRect();
                 pPV->LogicToPagePos(aRect);
                 rSet.Put( SfxPointItem( SID_ATTR_POSITION, aRect.TopLeft() ) );
                 Size aSize( aRect.Right() - aRect.Left(), aRect.Bottom() - aRect.Top() );
@@ -343,10 +362,41 @@ void ScDrawShell::GetDrawAttrState( SfxItemSet& rSet )
 
 void ScDrawShell::GetAttrFuncState(SfxItemSet &rSet)
 {
-    //  Dialoge fuer Draw-Attribute disablen, wenn noetig
+    //  Disable dialogs for Draw-attributes if necessary
 
     ScDrawView* pDrView = pViewData->GetScDrawView();
     SfxItemSet aViewSet = pDrView->GetAttrFromMarked(false);
+    const SdrMarkList& rMarkList = pDrView->GetMarkedObjectList();
+    const size_t nMarkCount = rMarkList.GetMarkCount();
+    bool bShowArea = true, bShowMeasure = true;
+
+    for ( size_t i = 0; i < nMarkCount && i < 50; ++i )
+    {
+        SdrObject* pObj = rMarkList.GetMark( i )->GetMarkedSdrObj();
+        sal_uInt16 nObjType = pObj->GetObjIdentifier();
+
+        if ( nObjType != OBJ_MEASURE )
+            bShowMeasure = false;
+
+        // If marked object is 2D, disable format area command.
+        if ( nObjType == OBJ_PLIN     ||
+             nObjType == OBJ_LINE     ||
+             nObjType == OBJ_PATHLINE ||
+             nObjType == OBJ_FREELINE ||
+             nObjType == OBJ_EDGE     ||
+             nObjType == OBJ_CARC     ||
+             bShowMeasure )
+            bShowArea = false;
+
+        if ( !bShowArea && !bShowMeasure )
+            break;
+    }
+
+    if ( !bShowArea )
+        rSet.DisableItem( SID_ATTRIBUTES_AREA );
+
+    if ( !bShowMeasure )
+        rSet.DisableItem( SID_MEASURE_DLG );
 
     if ( aViewSet.GetItemState( XATTR_LINESTYLE ) == SfxItemState::DEFAULT )
     {
@@ -358,7 +408,7 @@ void ScDrawShell::GetAttrFuncState(SfxItemSet &rSet)
         rSet.DisableItem( SID_ATTRIBUTES_AREA );
 }
 
-bool ScDrawShell::AreAllObjectsOnLayer(sal_uInt16 nLayerNo,const SdrMarkList& rMark)
+bool ScDrawShell::AreAllObjectsOnLayer(SdrLayerID nLayerNo,const SdrMarkList& rMark)
 {
     bool bResult=true;
     const size_t nCount = rMark.GetMarkCount();
@@ -389,19 +439,17 @@ void ScDrawShell::GetDrawAttrStateForIFBX( SfxItemSet& rSet )
     }
 }
 
-void ScDrawShell::Activate (const bool bMDI)
+void ScDrawShell::Activate (const bool)
 {
-    (void)bMDI;
-
     ContextChangeEventMultiplexer::NotifyContextChange(
         GetFrame()->GetFrame().GetController(),
-        ::sfx2::sidebar::EnumContext::GetContextEnum(
+        vcl::EnumContext::GetContextEnum(
             GetSidebarContextName()));
 }
 
-::rtl::OUString ScDrawShell::GetSidebarContextName()
+const OUString & ScDrawShell::GetSidebarContextName()
 {
-    return sfx2::sidebar::EnumContext::GetContextName(
+    return vcl::EnumContext::GetContextName(
         svx::sidebar::SelectionAnalyzer::GetContextForSelection_SC(
             GetDrawView()->GetMarkedObjectList()));
 }

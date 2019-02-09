@@ -22,18 +22,14 @@
 #include <X11/Xlib.h>
 #include <X11/XKBlib.h>
 
-#include "unx/saldisp.hxx"
-#include "unx/saldata.hxx"
-#include "unx/i18n_xkb.hxx"
+#include <unx/saldisp.hxx>
+#include <unx/i18n_xkb.hxx>
 
 SalI18N_KeyboardExtension::SalI18N_KeyboardExtension( Display* pDisplay )
     : mbUseExtension(true)
-    , mnDefaultGroup(0)
-    , mnGroup(0)
     , mnEventBase(0)
-    , mnErrorBase(0)
-    , mpDisplay(pDisplay)
 {
+    sal_uInt32 nDefaultGroup = 0;
 
     // allow user to set the default keyboard group idx or to disable the usage
     // of x keyboard extension at all:
@@ -45,9 +41,9 @@ SalI18N_KeyboardExtension::SalI18N_KeyboardExtension( Display* pDisplay )
     {
         mbUseExtension = pUseKeyboardExtension[0] != '\0' ;
         if ( mbUseExtension )
-            mnDefaultGroup = strtol( pUseKeyboardExtension, nullptr, 0 );
-        if ( mnDefaultGroup > XkbMaxKbdGroup )
-            mnDefaultGroup = 0;
+            nDefaultGroup = strtol( pUseKeyboardExtension, nullptr, 0 );
+        if ( nDefaultGroup > XkbMaxKbdGroup )
+            nDefaultGroup = 0;
     }
 
     // query XServer support for XKB Extension,
@@ -58,19 +54,20 @@ SalI18N_KeyboardExtension::SalI18N_KeyboardExtension( Display* pDisplay )
         int nMajorExtOpcode;
         int nExtMajorVersion = XkbMajorVersion;
         int nExtMinorVersion = XkbMinorVersion;
+        int nErrorBase = 0;
 
-        mbUseExtension = XkbQueryExtension( mpDisplay,
-            &nMajorExtOpcode, &mnEventBase, &mnErrorBase,
+        mbUseExtension = XkbQueryExtension( pDisplay,
+            &nMajorExtOpcode, &mnEventBase, &nErrorBase,
             &nExtMajorVersion, &nExtMinorVersion ) != 0;
     }
 
     // query notification for changes of the keyboard group
     if ( mbUseExtension )
     {
-        #define XkbGroupMask (  XkbGroupStateMask | XkbGroupBaseMask \
-                                | XkbGroupLatchMask | XkbGroupLockMask )
+        constexpr auto XkbGroupMask = XkbGroupStateMask | XkbGroupBaseMask
+                                | XkbGroupLatchMask | XkbGroupLockMask;
 
-        mbUseExtension = XkbSelectEventDetails( mpDisplay,
+        mbUseExtension = XkbSelectEventDetails( pDisplay,
             XkbUseCoreKbd, XkbStateNotify, XkbGroupMask, XkbGroupMask );
     }
 
@@ -78,8 +75,7 @@ SalI18N_KeyboardExtension::SalI18N_KeyboardExtension( Display* pDisplay )
     if ( mbUseExtension )
     {
         XkbStateRec aStateRecord;
-        XkbGetState( mpDisplay, XkbUseCoreKbd, &aStateRecord );
-        mnGroup = aStateRecord.group;
+        XkbGetState( pDisplay, XkbUseCoreKbd, &aStateRecord );
     }
 }
 
@@ -97,8 +93,6 @@ SalI18N_KeyboardExtension::Dispatch( XEvent* pEvent )
     switch ( nXKBType )
     {
         case XkbStateNotify:
-
-            mnGroup = reinterpret_cast<XkbStateNotifyEvent*>(pEvent)->group;
             break;
 
         default:

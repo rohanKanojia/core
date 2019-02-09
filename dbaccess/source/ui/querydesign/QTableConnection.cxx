@@ -19,8 +19,8 @@
 
 #include "QTableConnection.hxx"
 #include <osl/diagnose.h>
-#include "QueryTableView.hxx"
-#include "ConnectionLine.hxx"
+#include <QueryTableView.hxx>
+#include <ConnectionLine.hxx>
 using namespace dbaui;
 // class OQueryTableConnection
 
@@ -31,7 +31,8 @@ OQueryTableConnection::OQueryTableConnection(OQueryTableView* pContainer, const 
 }
 
 OQueryTableConnection::OQueryTableConnection(const OQueryTableConnection& rConn)
-    : OTableConnection( rConn )
+    : VclReferenceBase(),
+      OTableConnection( rConn )
     , m_bVisited(false)
 {
     // no own members, so base class functionality is sufficient

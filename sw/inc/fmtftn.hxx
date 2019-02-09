@@ -24,7 +24,7 @@
 #include <svl/poolitem.hxx>
 
 #include "swdllapi.h"
-#include <calbck.hxx>
+#include "calbck.hxx"
 
 namespace com { namespace sun { namespace star {
     namespace text { class XFootnote; }
@@ -32,17 +32,20 @@ namespace com { namespace sun { namespace star {
 
 class SwDoc;
 class SwTextFootnote;
+class SwRootFrame;
 
 // ATT_FTN
 
 class SW_DLLPUBLIC SwFormatFootnote
     : public SfxPoolItem
     , public SwModify
+    , public sw::BroadcasterMixin
 {
     friend class SwTextFootnote;
     SwTextFootnote* m_pTextAttr;   ///< My TextAttribute.
     OUString m_aNumber;     ///< User-defined 'Number'.
     sal_uInt16 m_nNumber;   ///< automatic sequence number
+    sal_uInt16 m_nNumberRLHidden; ///< automatic sequence number (hidden redlines)
     bool    m_bEndNote;     ///< Is it an End note?
 
     css::uno::WeakReference<css::text::XFootnote> m_wXFootnote;
@@ -52,7 +55,7 @@ class SW_DLLPUBLIC SwFormatFootnote
 
 public:
     SwFormatFootnote( bool bEndNote = false );
-    virtual ~SwFormatFootnote();
+    virtual ~SwFormatFootnote() override;
 
     /// "Pure virtual methods" of SfxPoolItem.
     virtual bool            operator==( const SfxPoolItem& ) const override;
@@ -64,8 +67,9 @@ public:
 
     void InvalidateFootnote();
 
-    OUString   GetNumStr() const { return m_aNumber; }
+    const OUString& GetNumStr() const { return m_aNumber; }
     sal_uInt16 GetNumber() const { return m_nNumber; }
+    sal_uInt16 GetNumberRLHidden() const { return m_nNumberRLHidden; }
     bool       IsEndNote() const { return m_bEndNote;}
 
     void SetNumStr( const OUString& rStr ) { m_aNumber = rStr; }
@@ -74,16 +78,18 @@ public:
     void SetNumber( const SwFormatFootnote& rFootnote )
     {
         m_nNumber = rFootnote.m_nNumber;
+        m_nNumberRLHidden = rFootnote.m_nNumberRLHidden;
         m_aNumber = rFootnote.m_aNumber;
     }
 
     const SwTextFootnote *GetTextFootnote() const   { return m_pTextAttr; }
           SwTextFootnote *GetTextFootnote()         { return m_pTextAttr; }
 
-    void GetFootnoteText( OUString& rStr ) const;
+    OUString GetFootnoteText(SwRootFrame const& rLayout) const;
 
     /// Returns string to be displayed of footnote / endnote.
-    OUString GetViewNumStr( const SwDoc& rDoc, bool bInclStrs = false ) const;
+    OUString GetViewNumStr(const SwDoc& rDoc, SwRootFrame const* pLayout,
+            bool bInclStrings = false) const;
 
     css::uno::WeakReference<css::text::XFootnote> const& GetXFootnote() const
         { return m_wXFootnote; }

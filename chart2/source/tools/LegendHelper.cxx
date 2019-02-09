@@ -17,14 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "LegendHelper.hxx"
-#include "macros.hxx"
+#include <LegendHelper.hxx>
+#include <ChartModel.hxx>
 #include <com/sun/star/chart/ChartLegendExpansion.hpp>
 #include <com/sun/star/chart2/LegendPosition.hpp>
 #include <com/sun/star/chart2/RelativePosition.hpp>
-#include <com/sun/star/chart2/XChartDocument.hpp>
-#include <com/sun/star/chart2/XLegend.hpp>
-#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
+#include <tools/diagnose_ex.h>
 
 using namespace ::com::sun::star;
 using ::com::sun::star::uno::Reference;
@@ -39,14 +38,14 @@ Reference< chart2::XLegend > LegendHelper::showLegend( ChartModel& rModel
     uno::Reference< beans::XPropertySet > xProp( xLegend, uno::UNO_QUERY );
     if( xProp.is())
     {
-        xProp->setPropertyValue( "Show", uno::makeAny(sal_True) );
+        xProp->setPropertyValue( "Show", uno::Any(true) );
 
         chart2::RelativePosition aRelativePosition;
         if( !(xProp->getPropertyValue( "RelativePosition") >>=  aRelativePosition) )
         {
             chart2::LegendPosition ePos = chart2::LegendPosition_LINE_END;
             if( !(xProp->getPropertyValue( "AnchorPosition") >>= ePos ) )
-                xProp->setPropertyValue( "AnchorPosition", uno::makeAny( ePos ));
+                xProp->setPropertyValue( "AnchorPosition", uno::Any( ePos ));
 
             css::chart::ChartLegendExpansion eExpansion =
                     ( ePos == chart2::LegendPosition_LINE_END ||
@@ -54,7 +53,7 @@ Reference< chart2::XLegend > LegendHelper::showLegend( ChartModel& rModel
                     ? css::chart::ChartLegendExpansion_HIGH
                     : css::chart::ChartLegendExpansion_WIDE;
             if( !(xProp->getPropertyValue( "Expansion") >>= eExpansion ) )
-                xProp->setPropertyValue( "Expansion", uno::makeAny( eExpansion ));
+                xProp->setPropertyValue( "Expansion", uno::Any( eExpansion ));
 
             xProp->setPropertyValue( "RelativePosition", uno::Any());
         }
@@ -69,7 +68,7 @@ void LegendHelper::hideLegend( ChartModel& rModel )
     uno::Reference< beans::XPropertySet > xProp( xLegend, uno::UNO_QUERY );
     if( xProp.is())
     {
-        xProp->setPropertyValue( "Show", uno::makeAny(sal_False) );
+        xProp->setPropertyValue( "Show", uno::Any(false) );
     }
 }
 
@@ -98,9 +97,9 @@ uno::Reference< chart2::XLegend > LegendHelper::getLegend(
             OSL_FAIL("need diagram for creation of legend");
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return xResult;

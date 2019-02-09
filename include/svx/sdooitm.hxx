@@ -24,20 +24,17 @@
 
 
 // class SdrOnOffItem
-// here GetValueTextByVal() returns "an" or "aus" instead
+// here GetValueTextByVal() returns "on" or "off" instead
 // of "TRUE" or "FALSE"
 
 class SVX_DLLPUBLIC SdrOnOffItem: public SfxBoolItem {
 public:
-    SdrOnOffItem(): SfxBoolItem() {}
-    SdrOnOffItem(sal_uInt16 nId, bool bOn=false): SfxBoolItem(nId,bOn) {}
-    SdrOnOffItem(sal_uInt16 nId, SvStream& rIn):  SfxBoolItem(nId,rIn) {}
+    SdrOnOffItem(sal_uInt16 nId, bool bOn): SfxBoolItem(nId,bOn) {}
     virtual SfxPoolItem* Clone(SfxItemPool* pPool=nullptr) const override;
-    virtual SfxPoolItem* Create(SvStream& rIn, sal_uInt16 nVer) const override;
 
     virtual OUString GetValueTextByVal(bool bVal) const override;
 
-    virtual bool GetPresentation(SfxItemPresentation ePres, SfxMapUnit eCoreMetric, SfxMapUnit ePresMetric, OUString& rText, const IntlWrapper * = nullptr) const override;
+    virtual bool GetPresentation(SfxItemPresentation ePres, MapUnit eCoreMetric, MapUnit ePresMetric, OUString& rText, const IntlWrapper&) const override;
 };
 
 

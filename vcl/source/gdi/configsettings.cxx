@@ -24,6 +24,8 @@
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
+#include <o3tl/any.hxx>
+#include <sal/log.hxx>
 
 using namespace utl;
 using namespace vcl;
@@ -38,14 +40,12 @@ SettingsConfigItem* SettingsConfigItem::get()
 {
     ImplSVData* pSVData = ImplGetSVData();
     if( ! pSVData->mpSettingsConfigItem )
-        pSVData->mpSettingsConfigItem = new SettingsConfigItem();
-    return pSVData->mpSettingsConfigItem;
+        pSVData->mpSettingsConfigItem.reset( new SettingsConfigItem() );
+    return pSVData->mpSettingsConfigItem.get();
 }
 
 SettingsConfigItem::SettingsConfigItem()
-        :
-        ConfigItem( OUString( SETTINGS_CONFIGNODE ),
-                    ConfigItemMode::DelayedUpdate ),
+ :  ConfigItem( SETTINGS_CONFIGNODE, ConfigItemMode::NONE ),
     m_aSettings( 0 )
 {
     getValues();
@@ -58,21 +58,18 @@ SettingsConfigItem::~SettingsConfigItem()
 
 void SettingsConfigItem::ImplCommit()
 {
-    std::unordered_map< OUString, SmallOUStrMap, OUStringHash >::const_iterator group;
-
-    for( group = m_aSettings.begin(); group != m_aSettings.end(); ++group )
+    for (auto const& setting : m_aSettings)
     {
-        OUString aKeyName( group->first );
+        OUString aKeyName( setting.first );
         /*bool bAdded =*/ AddNode( OUString(), aKeyName );
-        Sequence< PropertyValue > aValues( group->second.size() );
+        Sequence< PropertyValue > aValues( setting.second.size() );
         PropertyValue* pValues = aValues.getArray();
         int nIndex = 0;
-        SmallOUStrMap::const_iterator it;
-        for( it = group->second.begin(); it != group->second.end(); ++it )
+        for (auto const& elem : setting.second)
         {
-            pValues[nIndex].Name    = aKeyName + "/" + it->first;
+            pValues[nIndex].Name    = aKeyName + "/" + elem.first;
             pValues[nIndex].Handle  = 0;
-            pValues[nIndex].Value <<= it->second;
+            pValues[nIndex].Value <<= elem.second;
             pValues[nIndex].State   = PropertyState_DIRECT_VALUE;
             nIndex++;
         }
@@ -94,9 +91,7 @@ void SettingsConfigItem::getValues()
     for( int j = 0; j < aNames.getLength(); j++ )
     {
 #if OSL_DEBUG_LEVEL > 2
-        OSL_TRACE( "found settings data for \"%s\"\n",
-                 OUStringToOString( aNames.getConstArray()[j], RTL_TEXTENCODING_ASCII_US ).getStr()
-                 );
+        SAL_INFO( "vcl", "found settings data for " << aNames.getConstArray()[j] );
 #endif
         OUString aKeyName( aNames.getConstArray()[j] );
         Sequence< OUString > aKeys( GetNodeNames( aKeyName ) );
@@ -111,29 +106,24 @@ void SettingsConfigItem::getValues()
         const Any* pValue = aValues.getConstArray();
         for( int i = 0; i < aValues.getLength(); i++, pValue++ )
         {
-            if( pValue->getValueTypeClass() == TypeClass_STRING )
+            if( auto pLine = o3tl::tryAccess<OUString>(*pValue) )
             {
-                const OUString* pLine = static_cast<const OUString*>(pValue->getValue());
                 if( !pLine->isEmpty() )
                     m_aSettings[ aKeyName ][ pFrom[i] ] = *pLine;
 #if OSL_DEBUG_LEVEL > 2
-                OSL_TRACE( "   \"%s\"=\"%.30s\"\n",
-                         OUStringToOString( aKeys.getConstArray()[i], RTL_TEXTENCODING_ASCII_US ).getStr(),
-                         OUStringToOString( *pLine, RTL_TEXTENCODING_ASCII_US ).getStr()
-                         );
+                SAL_INFO( "vcl", "   \"" << aKeys.getConstArray()[i] << "\"=\"" << *pLine << "\"" );
 #endif
             }
         }
     }
 }
 
-const OUString& SettingsConfigItem::getValue( const OUString& rGroup, const OUString& rKey ) const
+OUString SettingsConfigItem::getValue( const OUString& rGroup, const OUString& rKey ) const
 {
-    std::unordered_map< OUString, SmallOUStrMap, OUStringHash >::const_iterator group = m_aSettings.find( rGroup );
+    std::unordered_map< OUString, SmallOUStrMap >::const_iterator group = m_aSettings.find( rGroup );
     if( group == m_aSettings.end() || group->second.find( rKey ) == group->second.end() )
     {
-        static OUString aEmpty;
-        return aEmpty;
+        return OUString();
     }
     return group->second.find(rKey)->second;
 }

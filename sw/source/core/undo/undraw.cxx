@@ -55,12 +55,8 @@ struct SwUndoGroupObjImpl
 
 // Draw-Objecte
 
-IMPL_LINK_TYPED( SwDoc, AddDrawUndo, SdrUndoAction *, pUndo, void )
+void SwDoc::AddDrawUndo( std::unique_ptr<SdrUndoAction> pUndo )
 {
-#if OSL_DEBUG_LEVEL > 1
-    SAL_INFO("sw.core", "Id: " << pUndo->GetId() << "Comment: " << pUndo->GetComment());
-#endif
-
     if (GetIDocumentUndoRedo().DoesUndo() &&
         GetIDocumentUndoRedo().DoesDrawUndo())
     {
@@ -69,37 +65,33 @@ IMPL_LINK_TYPED( SwDoc, AddDrawUndo, SdrUndoAction *, pUndo, void )
         if( pSh && pSh->HasDrawView() )
             pMarkList = &pSh->GetDrawView()->GetMarkedObjectList();
 
-        GetIDocumentUndoRedo().AppendUndo( new SwSdrUndo(pUndo, pMarkList) );
+        GetIDocumentUndoRedo().AppendUndo( std::make_unique<SwSdrUndo>(std::move(pUndo), pMarkList, this) );
     }
-    else
-        delete pUndo;
 }
 
-SwSdrUndo::SwSdrUndo( SdrUndoAction* pUndo, const SdrMarkList* pMrkLst )
-    : SwUndo( UNDO_DRAWUNDO ), pSdrUndo( pUndo )
+SwSdrUndo::SwSdrUndo( std::unique_ptr<SdrUndoAction> pUndo, const SdrMarkList* pMrkLst, const SwDoc* pDoc )
+    : SwUndo( SwUndoId::DRAWUNDO, pDoc ), pSdrUndo( std::move(pUndo) )
 {
     if( pMrkLst && pMrkLst->GetMarkCount() )
-        pMarkList = new SdrMarkList( *pMrkLst );
-    else
-        pMarkList = nullptr;
+        pMarkList.reset( new SdrMarkList( *pMrkLst ) );
 }
 
 SwSdrUndo::~SwSdrUndo()
 {
-    delete pSdrUndo;
-    delete pMarkList;
+    pSdrUndo.reset();
+    pMarkList.reset();
 }
 
 void SwSdrUndo::UndoImpl(::sw::UndoRedoContext & rContext)
 {
     pSdrUndo->Undo();
-    rContext.SetSelections(nullptr, pMarkList);
+    rContext.SetSelections(nullptr, pMarkList.get());
 }
 
 void SwSdrUndo::RedoImpl(::sw::UndoRedoContext & rContext)
 {
     pSdrUndo->Redo();
-    rContext.SetSelections(nullptr, pMarkList);
+    rContext.SetSelections(nullptr, pMarkList.get());
 }
 
 OUString SwSdrUndo::GetComment() const
@@ -116,15 +108,15 @@ static void lcl_SendRemoveToUno( SwFormat& rFormat )
 static void lcl_SaveAnchor( SwFrameFormat* pFormat, sal_uLong& rNodePos )
 {
     const SwFormatAnchor& rAnchor = pFormat->GetAnchor();
-    if ((FLY_AT_PARA == rAnchor.GetAnchorId()) ||
-        (FLY_AT_CHAR == rAnchor.GetAnchorId()) ||
-        (FLY_AT_FLY  == rAnchor.GetAnchorId()) ||
-        (FLY_AS_CHAR == rAnchor.GetAnchorId()))
+    if ((RndStdIds::FLY_AT_PARA == rAnchor.GetAnchorId()) ||
+        (RndStdIds::FLY_AT_CHAR == rAnchor.GetAnchorId()) ||
+        (RndStdIds::FLY_AT_FLY  == rAnchor.GetAnchorId()) ||
+        (RndStdIds::FLY_AS_CHAR == rAnchor.GetAnchorId()))
     {
         rNodePos = rAnchor.GetContentAnchor()->nNode.GetIndex();
         sal_Int32 nContentPos = 0;
 
-        if (FLY_AS_CHAR == rAnchor.GetAnchorId())
+        if (RndStdIds::FLY_AS_CHAR == rAnchor.GetAnchorId())
         {
             nContentPos = rAnchor.GetContentAnchor()->nContent.GetIndex();
 
@@ -142,7 +134,7 @@ static void lcl_SaveAnchor( SwFrameFormat* pFormat, sal_uLong& rNodePos )
                 pTextNd->EraseText( aIdx, 1 );
             }
         }
-        else if (FLY_AT_CHAR == rAnchor.GetAnchorId())
+        else if (RndStdIds::FLY_AT_CHAR == rAnchor.GetAnchorId())
         {
             nContentPos = rAnchor.GetContentAnchor()->nContent.GetIndex();
         }
@@ -151,30 +143,30 @@ static void lcl_SaveAnchor( SwFrameFormat* pFormat, sal_uLong& rNodePos )
     }
 }
 
-static void lcl_RestoreAnchor( SwFrameFormat* pFormat, sal_uLong& rNodePos )
+static void lcl_RestoreAnchor( SwFrameFormat* pFormat, sal_uLong nNodePos )
 {
     const SwFormatAnchor& rAnchor = pFormat->GetAnchor();
-    if ((FLY_AT_PARA == rAnchor.GetAnchorId()) ||
-        (FLY_AT_CHAR == rAnchor.GetAnchorId()) ||
-        (FLY_AT_FLY  == rAnchor.GetAnchorId()) ||
-        (FLY_AS_CHAR == rAnchor.GetAnchorId()))
+    if ((RndStdIds::FLY_AT_PARA == rAnchor.GetAnchorId()) ||
+        (RndStdIds::FLY_AT_CHAR == rAnchor.GetAnchorId()) ||
+        (RndStdIds::FLY_AT_FLY  == rAnchor.GetAnchorId()) ||
+        (RndStdIds::FLY_AS_CHAR == rAnchor.GetAnchorId()))
     {
         const sal_Int32 nContentPos = rAnchor.GetPageNum();
         SwNodes& rNds = pFormat->GetDoc()->GetNodes();
 
-        SwNodeIndex aIdx( rNds, rNodePos );
+        SwNodeIndex aIdx( rNds, nNodePos );
         SwPosition aPos( aIdx );
 
         SwFormatAnchor aTmp( rAnchor.GetAnchorId() );
-        if ((FLY_AS_CHAR == rAnchor.GetAnchorId()) ||
-            (FLY_AT_CHAR == rAnchor.GetAnchorId()))
+        if ((RndStdIds::FLY_AS_CHAR == rAnchor.GetAnchorId()) ||
+            (RndStdIds::FLY_AT_CHAR == rAnchor.GetAnchorId()))
         {
             aPos.nContent.Assign( aIdx.GetNode().GetContentNode(), nContentPos );
         }
         aTmp.SetAnchor( &aPos );
         pFormat->SetFormatAttr( aTmp );
 
-        if (FLY_AS_CHAR == rAnchor.GetAnchorId())
+        if (RndStdIds::FLY_AS_CHAR == rAnchor.GetAnchorId())
         {
             SwTextNode *pTextNd = aIdx.GetNode().GetTextNode();
             OSL_ENSURE( pTextNd, "no Text Node" );
@@ -184,24 +176,22 @@ static void lcl_RestoreAnchor( SwFrameFormat* pFormat, sal_uLong& rNodePos )
     }
 }
 
-SwUndoDrawGroup::SwUndoDrawGroup( sal_uInt16 nCnt )
-    : SwUndo( UNDO_DRAWGROUP ), nSize( nCnt + 1 ), bDelFormat( true )
+SwUndoDrawGroup::SwUndoDrawGroup( sal_uInt16 nCnt, const SwDoc* pDoc )
+    : SwUndo( SwUndoId::DRAWGROUP, pDoc ), nSize( nCnt + 1 ), bDelFormat( true )
 {
-    pObjArr = new SwUndoGroupObjImpl[ nSize ];
+    pObjArr.reset( new SwUndoGroupObjImpl[ nSize ] );
 }
 
 SwUndoDrawGroup::~SwUndoDrawGroup()
 {
     if( bDelFormat )
     {
-        SwUndoGroupObjImpl* pTmp = pObjArr + 1;
+        SwUndoGroupObjImpl* pTmp = pObjArr.get() + 1;
         for( sal_uInt16 n = 1; n < nSize; ++n, ++pTmp )
             delete pTmp->pFormat;
     }
     else
-        delete pObjArr->pFormat;
-
-    delete [] pObjArr;
+        delete pObjArr[0].pFormat;
 }
 
 void SwUndoDrawGroup::UndoImpl(::sw::UndoRedoContext &)
@@ -209,16 +199,13 @@ void SwUndoDrawGroup::UndoImpl(::sw::UndoRedoContext &)
     bDelFormat = false;
 
     // save group object
-    SwDrawFrameFormat* pFormat = pObjArr->pFormat;
-    SwDrawContact* pDrawContact = static_cast<SwDrawContact*>(pFormat->FindContactObj());
-    SdrObject* pObj = pDrawContact->GetMaster();
-    pObjArr->pObj = pObj;
+    SwDrawFrameFormat* pFormat = pObjArr[0].pFormat;
 
-    // object will destroy itself
-    pDrawContact->Changed( *pObj, SDRUSERCALL_DELETE, pObj->GetLastBoundRect() );
-    pObj->SetUserCall( nullptr );
+    pFormat->CallSwClientNotify(sw::ContactChangedHint(&pObjArr[0].pObj));
+    auto pObj = pObjArr[0].pObj;
+    pObj->SetUserCall(nullptr);
 
-    ::lcl_SaveAnchor( pFormat, pObjArr->nNodeIdx );
+    ::lcl_SaveAnchor( pFormat, pObjArr[0].nNodeIdx );
 
     // notify UNO objects to decouple
     ::lcl_SendRemoveToUno( *pFormat );
@@ -230,7 +217,7 @@ void SwUndoDrawGroup::UndoImpl(::sw::UndoRedoContext &)
 
     for( sal_uInt16 n = 1; n < nSize; ++n )
     {
-        SwUndoGroupObjImpl& rSave = *( pObjArr + n );
+        SwUndoGroupObjImpl& rSave = pObjArr[n];
 
         ::lcl_RestoreAnchor( rSave.pFormat, rSave.nNodeIdx );
         rFlyFormats.push_back( rSave.pFormat );
@@ -242,7 +229,7 @@ void SwUndoDrawGroup::UndoImpl(::sw::UndoRedoContext &)
         // #i45718# - follow-up of #i35635# move object to visible layer
         pContact->MoveObjToVisibleLayer( pObj );
 
-        SwDrawFrameFormat* pDrawFrameFormat = dynamic_cast<SwDrawFrameFormat*>(rSave.pFormat);
+        SwDrawFrameFormat* pDrawFrameFormat = rSave.pFormat;
 
         // #i45952# - notify that position attributes are already set
         OSL_ENSURE(pDrawFrameFormat,
@@ -257,19 +244,19 @@ void SwUndoDrawGroup::RedoImpl(::sw::UndoRedoContext &)
     bDelFormat = true;
 
     // remove from array
-    SwDoc* pDoc = pObjArr->pFormat->GetDoc();
+    SwDoc* pDoc = pObjArr[0].pFormat->GetDoc();
     SwFrameFormats& rFlyFormats = *pDoc->GetSpzFrameFormats();
 
     for( sal_uInt16 n = 1; n < nSize; ++n )
     {
-        SwUndoGroupObjImpl& rSave = *( pObjArr + n );
+        SwUndoGroupObjImpl& rSave = pObjArr[n];
 
         SdrObject* pObj = rSave.pObj;
 
         SwDrawContact *pContact = static_cast<SwDrawContact*>(GetUserCall(pObj));
 
         // object will destroy itself
-        pContact->Changed( *pObj, SDRUSERCALL_DELETE, pObj->GetLastBoundRect() );
+        pContact->Changed( *pObj, SdrUserCallType::Delete, pObj->GetLastBoundRect() );
         pObj->SetUserCall( nullptr );
 
         ::lcl_SaveAnchor( rSave.pFormat, rSave.nNodeIdx );
@@ -281,16 +268,16 @@ void SwUndoDrawGroup::RedoImpl(::sw::UndoRedoContext &)
     }
 
     // re-insert group object
-    ::lcl_RestoreAnchor( pObjArr->pFormat, pObjArr->nNodeIdx );
-    rFlyFormats.push_back( pObjArr->pFormat );
+    ::lcl_RestoreAnchor( pObjArr[0].pFormat, pObjArr[0].nNodeIdx );
+    rFlyFormats.push_back( pObjArr[0].pFormat );
 
-    SwDrawContact *pContact = new SwDrawContact( pObjArr->pFormat, pObjArr->pObj );
+    SwDrawContact *pContact = new SwDrawContact( pObjArr[0].pFormat, pObjArr[0].pObj );
     // #i26791# - correction: connect object to layout
     pContact->ConnectToLayout();
     // #i45718# - follow-up of #i35635# move object to visible layer
-    pContact->MoveObjToVisibleLayer( pObjArr->pObj );
+    pContact->MoveObjToVisibleLayer( pObjArr[0].pObj );
 
-    SwDrawFrameFormat* pDrawFrameFormat = dynamic_cast<SwDrawFrameFormat*>(pObjArr->pFormat);
+    SwDrawFrameFormat* pDrawFrameFormat = pObjArr[0].pFormat;
 
     // #i45952# - notify that position attributes are already set
     OSL_ENSURE(pDrawFrameFormat,
@@ -301,7 +288,7 @@ void SwUndoDrawGroup::RedoImpl(::sw::UndoRedoContext &)
 
 void SwUndoDrawGroup::AddObj( sal_uInt16 nPos, SwDrawFrameFormat* pFormat, SdrObject* pObj )
 {
-    SwUndoGroupObjImpl& rSave = *( pObjArr + nPos + 1 );
+    SwUndoGroupObjImpl& rSave = pObjArr[nPos + 1];
     rSave.pObj = pObj;
     rSave.pFormat = pFormat;
     ::lcl_SaveAnchor( pFormat, rSave.nNodeIdx );
@@ -316,27 +303,27 @@ void SwUndoDrawGroup::AddObj( sal_uInt16 nPos, SwDrawFrameFormat* pFormat, SdrOb
 
 void SwUndoDrawGroup::SetGroupFormat( SwDrawFrameFormat* pFormat )
 {
-    pObjArr->pObj = nullptr;
-    pObjArr->pFormat = pFormat;
+    pObjArr[0].pObj = nullptr;
+    pObjArr[0].pFormat = pFormat;
 }
 
-SwUndoDrawUnGroup::SwUndoDrawUnGroup( SdrObjGroup* pObj )
-    : SwUndo( UNDO_DRAWUNGROUP ), bDelFormat( false )
+SwUndoDrawUnGroup::SwUndoDrawUnGroup( SdrObjGroup* pObj, const SwDoc* pDoc )
+    : SwUndo( SwUndoId::DRAWUNGROUP, pDoc ), bDelFormat( false )
 {
-    nSize = (sal_uInt16)pObj->GetSubList()->GetObjCount() + 1;
-    pObjArr = new SwUndoGroupObjImpl[ nSize ];
+    nSize = static_cast<sal_uInt16>(pObj->GetSubList()->GetObjCount()) + 1;
+    pObjArr.reset( new SwUndoGroupObjImpl[ nSize ] );
 
     SwDrawContact *pContact = static_cast<SwDrawContact*>(GetUserCall(pObj));
     SwDrawFrameFormat* pFormat = static_cast<SwDrawFrameFormat*>(pContact->GetFormat());
 
-    pObjArr->pObj = pObj;
-    pObjArr->pFormat = pFormat;
+    pObjArr[0].pObj = pObj;
+    pObjArr[0].pFormat = pFormat;
 
     // object will destroy itself
-    pContact->Changed( *pObj, SDRUSERCALL_DELETE, pObj->GetLastBoundRect() );
+    pContact->Changed( *pObj, SdrUserCallType::Delete, pObj->GetLastBoundRect() );
     pObj->SetUserCall( nullptr );
 
-    ::lcl_SaveAnchor( pFormat, pObjArr->nNodeIdx );
+    ::lcl_SaveAnchor( pFormat, pObjArr[0].nNodeIdx );
 
        // notify UNO objects to decouple
     ::lcl_SendRemoveToUno( *pFormat );
@@ -350,14 +337,12 @@ SwUndoDrawUnGroup::~SwUndoDrawUnGroup()
 {
     if( bDelFormat )
     {
-        SwUndoGroupObjImpl* pTmp = pObjArr + 1;
+        SwUndoGroupObjImpl* pTmp = pObjArr.get() + 1;
         for( sal_uInt16 n = 1; n < nSize; ++n, ++pTmp )
             delete pTmp->pFormat;
     }
     else
-        delete pObjArr->pFormat;
-
-    delete [] pObjArr;
+        delete pObjArr[0].pFormat;
 }
 
 void SwUndoDrawUnGroup::UndoImpl(::sw::UndoRedoContext & rContext)
@@ -370,7 +355,7 @@ void SwUndoDrawUnGroup::UndoImpl(::sw::UndoRedoContext & rContext)
     // remove from array
     for( sal_uInt16 n = 1; n < nSize; ++n )
     {
-        SwUndoGroupObjImpl& rSave = *( pObjArr + n );
+        SwUndoGroupObjImpl& rSave = pObjArr[n];
 
         ::lcl_SaveAnchor( rSave.pFormat, rSave.nNodeIdx );
 
@@ -381,15 +366,15 @@ void SwUndoDrawUnGroup::UndoImpl(::sw::UndoRedoContext & rContext)
     }
 
     // re-insert group object
-    ::lcl_RestoreAnchor( pObjArr->pFormat, pObjArr->nNodeIdx );
-    rFlyFormats.push_back( pObjArr->pFormat );
+    ::lcl_RestoreAnchor( pObjArr[0].pFormat, pObjArr[0].nNodeIdx );
+    rFlyFormats.push_back( pObjArr[0].pFormat );
 
-    SwDrawContact *pContact = new SwDrawContact( pObjArr->pFormat, pObjArr->pObj );
+    SwDrawContact *pContact = new SwDrawContact( pObjArr[0].pFormat, pObjArr[0].pObj );
     pContact->ConnectToLayout();
     // #i45718# - follow-up of #i35635# move object to visible layer
-    pContact->MoveObjToVisibleLayer( pObjArr->pObj );
+    pContact->MoveObjToVisibleLayer( pObjArr[0].pObj );
 
-    SwDrawFrameFormat* pDrawFrameFormat = dynamic_cast<SwDrawFrameFormat*>(pObjArr->pFormat);
+    SwDrawFrameFormat* pDrawFrameFormat = pObjArr[0].pFormat;
 
     // #i45952# - notify that position attributes are already set
     OSL_ENSURE(pDrawFrameFormat,
@@ -403,15 +388,11 @@ void SwUndoDrawUnGroup::RedoImpl(::sw::UndoRedoContext &)
     bDelFormat = false;
 
     // save group object
-    SwDrawFrameFormat* pFormat = pObjArr->pFormat;
-    SwDrawContact* pContact = static_cast<SwDrawContact*>(pFormat->FindContactObj());
+    SwDrawFrameFormat* pFormat = pObjArr[0].pFormat;
+    pFormat->CallSwClientNotify(sw::ContactChangedHint(&(pObjArr[0].pObj)));
+    pObjArr[0].pObj->SetUserCall( nullptr );
 
-        // object will destroy itself
-    pContact->Changed( *pObjArr->pObj, SDRUSERCALL_DELETE,
-        pObjArr->pObj->GetLastBoundRect() );
-    pObjArr->pObj->SetUserCall( nullptr );
-
-    ::lcl_SaveAnchor( pFormat, pObjArr->nNodeIdx );
+    ::lcl_SaveAnchor( pFormat, pObjArr[0].nNodeIdx );
 
        // notify UNO objects to decouple
     ::lcl_SendRemoveToUno( *pFormat );
@@ -423,12 +404,12 @@ void SwUndoDrawUnGroup::RedoImpl(::sw::UndoRedoContext &)
 
     for( sal_uInt16 n = 1; n < nSize; ++n )
     {
-        SwUndoGroupObjImpl& rSave = *( pObjArr + n );
+        SwUndoGroupObjImpl& rSave = pObjArr[n];
 
         ::lcl_RestoreAnchor( rSave.pFormat, rSave.nNodeIdx );
         rFlyFormats.push_back( rSave.pFormat );
 
-        SwDrawFrameFormat* pDrawFrameFormat = dynamic_cast<SwDrawFrameFormat*>(rSave.pFormat);
+        SwDrawFrameFormat* pDrawFrameFormat = rSave.pFormat;
 
         // #i45952# - notify that position attributes are already set
         OSL_ENSURE(pDrawFrameFormat,
@@ -440,13 +421,13 @@ void SwUndoDrawUnGroup::RedoImpl(::sw::UndoRedoContext &)
 
 void SwUndoDrawUnGroup::AddObj( sal_uInt16 nPos, SwDrawFrameFormat* pFormat )
 {
-    SwUndoGroupObjImpl& rSave = *( pObjArr + nPos + 1 );
+    SwUndoGroupObjImpl& rSave = pObjArr[ nPos + 1 ];
     rSave.pFormat = pFormat;
     rSave.pObj = nullptr;
 }
 
-SwUndoDrawUnGroupConnectToLayout::SwUndoDrawUnGroupConnectToLayout()
-    : SwUndo( UNDO_DRAWUNGROUP )
+SwUndoDrawUnGroupConnectToLayout::SwUndoDrawUnGroupConnectToLayout(const SwDoc* pDoc)
+    : SwUndo( SwUndoId::DRAWUNGROUP, pDoc )
 {
 }
 
@@ -457,10 +438,9 @@ SwUndoDrawUnGroupConnectToLayout::~SwUndoDrawUnGroupConnectToLayout()
 void
 SwUndoDrawUnGroupConnectToLayout::UndoImpl(::sw::UndoRedoContext &)
 {
-    for ( std::vector< SdrObject >::size_type i = 0;
-          i < aDrawFormatsAndObjs.size(); ++i )
+    for (const std::pair< SwDrawFrameFormat*, SdrObject* > & rPair : aDrawFormatsAndObjs)
     {
-        SdrObject* pObj( aDrawFormatsAndObjs[i].second );
+        SdrObject* pObj( rPair.second );
         SwDrawContact* pDrawContact( dynamic_cast<SwDrawContact*>(pObj->GetUserCall()) );
         OSL_ENSURE( pDrawContact,
                 "<SwUndoDrawUnGroupConnectToLayout::Undo(..)> -- missing SwDrawContact instance" );
@@ -468,7 +448,7 @@ SwUndoDrawUnGroupConnectToLayout::UndoImpl(::sw::UndoRedoContext &)
         {
             // deletion of instance <pDrawContact> and thus disconnection from
             // the Writer layout.
-            pDrawContact->Changed( *pObj, SDRUSERCALL_DELETE, pObj->GetLastBoundRect() );
+            pDrawContact->Changed( *pObj, SdrUserCallType::Delete, pObj->GetLastBoundRect() );
             pObj->SetUserCall( nullptr );
         }
     }
@@ -477,11 +457,10 @@ SwUndoDrawUnGroupConnectToLayout::UndoImpl(::sw::UndoRedoContext &)
 void
 SwUndoDrawUnGroupConnectToLayout::RedoImpl(::sw::UndoRedoContext &)
 {
-    for ( std::vector< std::pair< SwDrawFrameFormat*, SdrObject* > >::size_type i = 0;
-          i < aDrawFormatsAndObjs.size(); ++i )
+    for (const std::pair< SwDrawFrameFormat*, SdrObject* > & rPair : aDrawFormatsAndObjs)
     {
-        SwDrawFrameFormat* pFormat( aDrawFormatsAndObjs[i].first );
-        SdrObject* pObj( aDrawFormatsAndObjs[i].second );
+        SwDrawFrameFormat* pFormat( rPair.first );
+        SdrObject* pObj( rPair.second );
         SwDrawContact *pContact = new SwDrawContact( pFormat, pObj );
         pContact->ConnectToLayout();
         pContact->MoveObjToVisibleLayer( pObj );
@@ -491,27 +470,24 @@ SwUndoDrawUnGroupConnectToLayout::RedoImpl(::sw::UndoRedoContext &)
 void SwUndoDrawUnGroupConnectToLayout::AddFormatAndObj( SwDrawFrameFormat* pDrawFrameFormat,
                                                      SdrObject* pDrawObject )
 {
-    aDrawFormatsAndObjs.push_back(
-            std::pair< SwDrawFrameFormat*, SdrObject* >( pDrawFrameFormat, pDrawObject ) );
+    aDrawFormatsAndObjs.emplace_back( pDrawFrameFormat, pDrawObject );
 }
 
-SwUndoDrawDelete::SwUndoDrawDelete( sal_uInt16 nCnt )
-    : SwUndo( UNDO_DRAWDELETE ), nSize( nCnt ), bDelFormat( true )
+SwUndoDrawDelete::SwUndoDrawDelete( sal_uInt16 nCnt, const SwDoc* pDoc )
+    : SwUndo( SwUndoId::DRAWDELETE, pDoc ), bDelFormat( true )
 {
-    pObjArr = new SwUndoGroupObjImpl[ nSize ];
-    pMarkLst = new SdrMarkList();
+    pObjArr.reset( new SwUndoGroupObjImpl[ nCnt ] );
+    pMarkLst.reset( new SdrMarkList() );
 }
 
 SwUndoDrawDelete::~SwUndoDrawDelete()
 {
     if( bDelFormat )
     {
-        SwUndoGroupObjImpl* pTmp = pObjArr;
+        SwUndoGroupObjImpl* pTmp = pObjArr.get();
         for( size_t n = 0; n < pMarkLst->GetMarkCount(); ++n, ++pTmp )
             delete pTmp->pFormat;
     }
-    delete [] pObjArr;
-    delete pMarkLst;
 }
 
 void SwUndoDrawDelete::UndoImpl(::sw::UndoRedoContext & rContext)
@@ -520,16 +496,16 @@ void SwUndoDrawDelete::UndoImpl(::sw::UndoRedoContext & rContext)
     SwFrameFormats & rFlyFormats = *rContext.GetDoc().GetSpzFrameFormats();
     for( size_t n = 0; n < pMarkLst->GetMarkCount(); ++n )
     {
-        SwUndoGroupObjImpl& rSave = *( pObjArr + n );
+        SwUndoGroupObjImpl& rSave = pObjArr[n];
         ::lcl_RestoreAnchor( rSave.pFormat, rSave.nNodeIdx );
         rFlyFormats.push_back( rSave.pFormat );
         SdrObject *pObj = rSave.pObj;
         SwDrawContact *pContact = new SwDrawContact( rSave.pFormat, pObj );
-        pContact->_Changed( *pObj, SDRUSERCALL_INSERTED, nullptr );
+        pContact->Changed_( *pObj, SdrUserCallType::Inserted, nullptr );
         // #i45718# - follow-up of #i35635# move object to visible layer
         pContact->MoveObjToVisibleLayer( pObj );
 
-        SwDrawFrameFormat* pDrawFrameFormat = dynamic_cast<SwDrawFrameFormat*>(rSave.pFormat);
+        SwDrawFrameFormat* pDrawFrameFormat = rSave.pFormat;
 
         // #i45952# - notify that position attributes are already set
         OSL_ENSURE(pDrawFrameFormat,
@@ -537,7 +513,7 @@ void SwUndoDrawDelete::UndoImpl(::sw::UndoRedoContext & rContext)
         if (pDrawFrameFormat)
             pDrawFrameFormat->PosAttrSet();
     }
-    rContext.SetSelections(nullptr, pMarkLst);
+    rContext.SetSelections(nullptr, pMarkLst.get());
 }
 
 void SwUndoDrawDelete::RedoImpl(::sw::UndoRedoContext & rContext)
@@ -546,13 +522,13 @@ void SwUndoDrawDelete::RedoImpl(::sw::UndoRedoContext & rContext)
     SwFrameFormats & rFlyFormats = *rContext.GetDoc().GetSpzFrameFormats();
     for( size_t n = 0; n < pMarkLst->GetMarkCount(); ++n )
     {
-        SwUndoGroupObjImpl& rSave = *( pObjArr + n );
+        SwUndoGroupObjImpl& rSave = pObjArr[n];
         SdrObject *pObj = rSave.pObj;
         SwDrawContact *pContact = static_cast<SwDrawContact*>(GetUserCall(pObj));
         SwDrawFrameFormat *pFormat = static_cast<SwDrawFrameFormat*>(pContact->GetFormat());
 
         // object will destroy itself
-        pContact->Changed( *pObj, SDRUSERCALL_DELETE, pObj->GetLastBoundRect() );
+        pContact->Changed( *pObj, SdrUserCallType::Delete, pObj->GetLastBoundRect() );
         pObj->SetUserCall( nullptr );
 
            // notify UNO objects to decouple
@@ -563,10 +539,10 @@ void SwUndoDrawDelete::RedoImpl(::sw::UndoRedoContext & rContext)
     }
 }
 
-void SwUndoDrawDelete::AddObj( sal_uInt16 , SwDrawFrameFormat* pFormat,
+void SwUndoDrawDelete::AddObj( SwDrawFrameFormat* pFormat,
                                 const SdrMark& rMark )
 {
-    SwUndoGroupObjImpl& rSave = *( pObjArr + pMarkLst->GetMarkCount() );
+    SwUndoGroupObjImpl& rSave = pObjArr[ pMarkLst->GetMarkCount() ];
     rSave.pObj = rMark.GetMarkedSdrObj();
     rSave.pFormat = pFormat;
     ::lcl_SaveAnchor( pFormat, rSave.nNodeIdx );

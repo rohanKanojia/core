@@ -39,11 +39,11 @@ public:
                             const OUString& rLocalName,
                             OUString& rText,
                             OUString * pOutId = nullptr );
-    virtual ~SchXMLParagraphContext();
+    virtual ~SchXMLParagraphContext() override;
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext* CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;

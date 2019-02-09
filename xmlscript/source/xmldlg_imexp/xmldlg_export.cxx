@@ -18,7 +18,9 @@
  */
 
 #include "exp_share.hxx"
+#include <xmlscript/xmlns.h>
 
+#include <o3tl/any.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <sal/log.hxx>
 #include <tools/diagnose_ex.h>
@@ -62,7 +64,10 @@
 #include <com/sun/star/table/CellAddress.hpp>
 #include <com/sun/star/table/CellRangeAddress.hpp>
 #include <com/sun/star/document/XStorageBasedDocument.hpp>
-#include <com/sun/star/document/GraphicObjectResolver.hpp>
+#include <com/sun/star/document/GraphicStorageHandler.hpp>
+#include <com/sun/star/document/XGraphicStorageHandler.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
+#include <com/sun/star/xml/sax/XExtendedDocumentHandler.hpp>
 
 #include <comphelper/processfactory.hxx>
 #include <i18nlangtag/languagetag.hxx>
@@ -260,12 +265,12 @@ Reference< xml::sax::XAttributeList > Style::createElement()
         // dialog:font-charwidth CDATA #IMPLIED
         if (def_descr.CharacterWidth != _descr.CharacterWidth)
         {
-            pStyle->addAttribute( XMLNS_DIALOGS_PREFIX ":font-charwidth", OUString::number( (float)_descr.CharacterWidth ) );
+            pStyle->addAttribute( XMLNS_DIALOGS_PREFIX ":font-charwidth", OUString::number( _descr.CharacterWidth ) );
         }
         // dialog:font-weight CDATA #IMPLIED
         if (def_descr.Weight != _descr.Weight)
         {
-            pStyle->addAttribute( XMLNS_DIALOGS_PREFIX ":font-weight", OUString::number( (float)_descr.Weight ) );
+            pStyle->addAttribute( XMLNS_DIALOGS_PREFIX ":font-weight", OUString::number( _descr.Weight ) );
         }
         // dialog:font-slant "(oblique|italic|reverse_oblique|reverse_italic)" #IMPLIED
         if (def_descr.Slant != _descr.Slant)
@@ -378,15 +383,15 @@ Reference< xml::sax::XAttributeList > Style::createElement()
         // dialog:font-orientation CDATA #IMPLIED
         if (def_descr.Orientation != _descr.Orientation)
         {
-            pStyle->addAttribute( XMLNS_DIALOGS_PREFIX ":font-orientation", OUString::number( (float)_descr.Orientation ) );
+            pStyle->addAttribute( XMLNS_DIALOGS_PREFIX ":font-orientation", OUString::number( _descr.Orientation ) );
         }
         // dialog:font-kerning %boolean; #IMPLIED
-        if ((def_descr.Kerning != sal_False) != (_descr.Kerning != sal_False))
+        if (bool(def_descr.Kerning) != bool(_descr.Kerning))
         {
             pStyle->addBoolAttr( XMLNS_DIALOGS_PREFIX ":font-kerning", _descr.Kerning );
         }
         // dialog:font-wordlinemode %boolean; #IMPLIED
-        if ((def_descr.WordLineMode != sal_False) != (_descr.WordLineMode != sal_False))
+        if (bool(def_descr.WordLineMode) != bool(_descr.WordLineMode))
         {
             pStyle->addBoolAttr( XMLNS_DIALOGS_PREFIX ":font-wordlinemode", _descr.WordLineMode );
         }
@@ -461,7 +466,6 @@ Reference< xml::sax::XAttributeList > Style::createElement()
 void ElementDescriptor::addNumberFormatAttr(
     Reference< beans::XPropertySet > const & xFormatProperties )
 {
-    Reference< beans::XPropertyState > xState( xFormatProperties, UNO_QUERY );
     OUString sFormat;
     lang::Locale locale;
     OSL_VERIFY( xFormatProperties->getPropertyValue( "FormatString" ) >>= sFormat );
@@ -517,9 +521,9 @@ void ElementDescriptor::readHexLongAttr( OUString const & rPropName, OUString co
     if (beans::PropertyState_DEFAULT_VALUE != _xPropState->getPropertyState( rPropName ))
     {
         Any a( _xProps->getPropertyValue( rPropName ) );
-        if (a.getValueTypeClass() == TypeClass_LONG)
+        if (auto n = o3tl::tryAccess<sal_uInt32>(a))
         {
-            addAttribute( rAttrName, "0x" + OUString::number((sal_Int64)(sal_uInt64)*static_cast<sal_uInt32 const *>(a.getValue()),16)  );
+            addAttribute( rAttrName, "0x" + OUString::number(*n, 16)  );
         }
     }
 }
@@ -529,9 +533,9 @@ void ElementDescriptor::readDateFormatAttr( OUString const & rPropName, OUString
     if (beans::PropertyState_DEFAULT_VALUE != _xPropState->getPropertyState( rPropName ))
     {
         Any a( _xProps->getPropertyValue( rPropName ) );
-        if (a.getValueTypeClass() == TypeClass_SHORT)
+        if (auto n = o3tl::tryAccess<sal_Int16>(a))
         {
-            switch (*static_cast<sal_Int16 const *>(a.getValue()))
+            switch (*n)
             {
             case 0:
                 addAttribute( rAttrName, "system_short" );
@@ -626,9 +630,9 @@ void ElementDescriptor::readTimeFormatAttr( OUString const & rPropName, OUString
     if (beans::PropertyState_DEFAULT_VALUE != _xPropState->getPropertyState( rPropName ))
     {
         Any a( _xProps->getPropertyValue( rPropName ) );
-        if (a.getValueTypeClass() == TypeClass_SHORT)
+        if (auto n = o3tl::tryAccess<sal_Int16>(a))
         {
-            switch (*static_cast<sal_Int16 const *>(a.getValue()))
+            switch (*n)
             {
             case 0:
                 addAttribute( rAttrName, "24h_short" );
@@ -663,9 +667,9 @@ void ElementDescriptor::readAlignAttr( OUString const & rPropName, OUString cons
     if (beans::PropertyState_DEFAULT_VALUE != _xPropState->getPropertyState( rPropName ))
     {
         Any a( _xProps->getPropertyValue( rPropName ) );
-        if (a.getValueTypeClass() == TypeClass_SHORT)
+        if (auto n = o3tl::tryAccess<sal_Int16>(a))
         {
-            switch (*static_cast<sal_Int16 const *>(a.getValue()))
+            switch (*n)
             {
             case 0:
                 addAttribute( rAttrName, "left" );
@@ -716,27 +720,34 @@ void ElementDescriptor::readVerticalAlignAttr( OUString const & rPropName, OUStr
     }
 }
 
-void ElementDescriptor::readImageURLAttr( OUString const & rPropName, OUString const & rAttrName )
+void ElementDescriptor::readImageOrGraphicAttr(OUString const & rAttrName)
 {
-    if (beans::PropertyState_DEFAULT_VALUE != _xPropState->getPropertyState( rPropName ))
+    OUString sURL;
+    if (beans::PropertyState_DEFAULT_VALUE != _xPropState->getPropertyState("Graphic"))
     {
-        OUString sURL;
-        _xProps->getPropertyValue( rPropName ) >>= sURL;
-
-        if ( sURL.startsWith( XMLSCRIPT_GRAPHOBJ_URLPREFIX ) )
+        uno::Reference<graphic::XGraphic> xGraphic;
+        _xProps->getPropertyValue("Graphic") >>= xGraphic;
+        if (xGraphic.is())
         {
             Reference< document::XStorageBasedDocument > xDocStorage( _xDocument, UNO_QUERY );
             if ( xDocStorage.is() )
             {
                 Reference<XComponentContext> xContext = ::comphelper::getProcessComponentContext();
-                uno::Reference< document::XGraphicObjectResolver > xGraphicResolver =
-                    document::GraphicObjectResolver::createWithStorage( xContext, xDocStorage->getDocumentStorage() );
-                sURL = xGraphicResolver->resolveGraphicObjectURL( sURL );
+                uno::Reference<document::XGraphicStorageHandler> xGraphicStorageHandler;
+                xGraphicStorageHandler.set(document::GraphicStorageHandler::createWithStorage(xContext, xDocStorage->getDocumentStorage()));
+                if (xGraphicStorageHandler.is())
+                {
+                    sURL = xGraphicStorageHandler->saveGraphic(xGraphic);
+                }
             }
         }
-        if ( !sURL.isEmpty() )
-                addAttribute( rAttrName, sURL );
     }
+    else if (beans::PropertyState_DEFAULT_VALUE != _xPropState->getPropertyState("ImageURL"))
+    {
+        _xProps->getPropertyValue("ImageURL") >>= sURL;
+    }
+    if (!sURL.isEmpty())
+        addAttribute(rAttrName, sURL);
 }
 
 void ElementDescriptor::readImageAlignAttr( OUString const & rPropName, OUString const & rAttrName )
@@ -744,9 +755,9 @@ void ElementDescriptor::readImageAlignAttr( OUString const & rPropName, OUString
     if (beans::PropertyState_DEFAULT_VALUE != _xPropState->getPropertyState( rPropName ))
     {
         Any a( _xProps->getPropertyValue( rPropName ) );
-        if (a.getValueTypeClass() == TypeClass_SHORT)
+        if (auto n = o3tl::tryAccess<sal_Int16>(a))
         {
-            switch (*static_cast<sal_Int16 const *>(a.getValue()))
+            switch (*n)
             {
             case 0:
                 addAttribute( rAttrName, "left" );
@@ -775,9 +786,9 @@ void ElementDescriptor::readImagePositionAttr( OUString const & rPropName, OUStr
     if (beans::PropertyState_DEFAULT_VALUE != _xPropState->getPropertyState( rPropName ))
     {
         Any a( _xProps->getPropertyValue( rPropName ) );
-        if (a.getValueTypeClass() == TypeClass_SHORT)
+        if (auto n = o3tl::tryAccess<sal_Int16>(a))
         {
-            switch (*static_cast<sal_Int16 const *>(a.getValue()))
+            switch (*n)
             {
             case awt::ImagePosition::LeftTop:
                 addAttribute( rAttrName, "left-top" );
@@ -831,9 +842,9 @@ void ElementDescriptor::readButtonTypeAttr( OUString const & rPropName, OUString
     if (beans::PropertyState_DEFAULT_VALUE != _xPropState->getPropertyState( rPropName ))
     {
         Any a( _xProps->getPropertyValue( rPropName ) );
-        if (a.getValueTypeClass() == TypeClass_SHORT)
+        if (auto n = o3tl::tryAccess<sal_Int16>(a))
         {
-            switch (*static_cast<sal_Int16 const *>(a.getValue()))
+            switch (static_cast<awt::PushButtonType>(*n))
             {
             case awt::PushButtonType_STANDARD:
                 addAttribute( rAttrName, "standard" );
@@ -860,9 +871,9 @@ void ElementDescriptor::readOrientationAttr( OUString const & rPropName, OUStrin
     if (beans::PropertyState_DEFAULT_VALUE != _xPropState->getPropertyState( rPropName ))
     {
         Any a( _xProps->getPropertyValue( rPropName ) );
-        if (a.getValueTypeClass() == TypeClass_LONG)
+        if (auto n = o3tl::tryAccess<sal_Int32>(a))
         {
-            switch (*static_cast<sal_Int32 const *>(a.getValue()))
+            switch (*n)
             {
             case 0:
                 addAttribute( rAttrName, "horizontal" );
@@ -883,9 +894,9 @@ void ElementDescriptor::readLineEndFormatAttr( OUString const & rPropName, OUStr
     if (beans::PropertyState_DEFAULT_VALUE != _xPropState->getPropertyState( rPropName ))
     {
         Any a( _xProps->getPropertyValue( rPropName ) );
-        if (a.getValueTypeClass() == TypeClass_SHORT)
+        if (auto n = o3tl::tryAccess<sal_Int16>(a))
         {
-            switch (*static_cast<sal_Int16 const *>(a.getValue()))
+            switch (*n)
             {
             case awt::LineEndFormat::CARRIAGE_RETURN:
                 addAttribute( rAttrName, "carriage-return" );
@@ -1020,7 +1031,7 @@ void ElementDescriptor::readImageScaleModeAttr( OUString const & rPropName, OUSt
 
         if (aImageScaleMode.getValueTypeClass() == TypeClass_SHORT)
         {
-            sal_Int16 nImageScaleMode;
+            sal_Int16 nImageScaleMode = 0;
             aImageScaleMode >>= nImageScaleMode;
 
             switch(nImageScaleMode)
@@ -1067,7 +1078,7 @@ void ElementDescriptor::readDefaults( bool supportPrintable, bool supportVisible
                     addAttribute( XMLNS_DIALOGS_PREFIX ":control-implementation", sCtrlName );
         }
     }
-    addAttribute( XMLNS_DIALOGS_PREFIX ":id", * static_cast< const OUString * >( a.getValue() ) );
+    addAttribute( XMLNS_DIALOGS_PREFIX ":id", *o3tl::doAccess<OUString>(a) );
     readShortAttr( "TabIndex", XMLNS_DIALOGS_PREFIX ":tab-index" );
 
     bool bEnabled = false;
@@ -1098,28 +1109,28 @@ void ElementDescriptor::readDefaults( bool supportPrintable, bool supportVisible
     }
     catch( Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("xmlscript.xmldlg");
     }
     // force writing of pos/size
     a = _xProps->getPropertyValue( "PositionX" );
-    if (a.getValueTypeClass() == TypeClass_LONG)
+    if (auto n = o3tl::tryAccess<sal_Int32>(a))
     {
-        addAttribute( XMLNS_DIALOGS_PREFIX ":left", OUString::number( *static_cast<sal_Int32 const *>(a.getValue()) ) );
+        addAttribute( XMLNS_DIALOGS_PREFIX ":left", OUString::number(*n) );
     }
     a = _xProps->getPropertyValue( "PositionY" );
-    if (a.getValueTypeClass() == TypeClass_LONG)
+    if (auto n = o3tl::tryAccess<sal_Int32>(a))
     {
-        addAttribute( XMLNS_DIALOGS_PREFIX ":top", OUString::number( *static_cast<sal_Int32 const *>(a.getValue()) ) );
+        addAttribute( XMLNS_DIALOGS_PREFIX ":top", OUString::number(*n) );
     }
     a = _xProps->getPropertyValue( "Width" );
-    if (a.getValueTypeClass() == TypeClass_LONG)
+    if (auto n = o3tl::tryAccess<sal_Int32>(a))
     {
-        addAttribute( XMLNS_DIALOGS_PREFIX ":width", OUString::number( *static_cast<sal_Int32 const *>(a.getValue()) ) );
+        addAttribute( XMLNS_DIALOGS_PREFIX ":width", OUString::number(*n) );
     }
     a = _xProps->getPropertyValue( "Height" );
-    if (a.getValueTypeClass() == TypeClass_LONG)
+    if (auto n = o3tl::tryAccess<sal_Int32>(a))
     {
-        addAttribute( XMLNS_DIALOGS_PREFIX ":height", OUString::number( *static_cast<sal_Int32 const *>(a.getValue()) ) );
+        addAttribute( XMLNS_DIALOGS_PREFIX ":height", OUString::number(*n) );
     }
 
     if (supportPrintable)
@@ -1131,14 +1142,6 @@ void ElementDescriptor::readDefaults( bool supportPrintable, bool supportVisible
     readStringAttr( "HelpText", XMLNS_DIALOGS_PREFIX ":help-text" );
     readStringAttr( "HelpURL", XMLNS_DIALOGS_PREFIX ":help-url" );
 }
-
-struct StringTriple
-{
-    char const * first;
-    char const * second;
-    char const * third;
-};
-extern StringTriple const * const g_pEventTranslations;
 
 void ElementDescriptor::readEvents()
 {
@@ -1206,7 +1209,7 @@ void ElementDescriptor::readEvents()
                     if ( descr.ScriptType == "StarBasic" )
                     {
                         // separate optional location
-                        sal_Int32 nIndex = descr.ScriptCode.indexOf( (sal_Unicode)':' );
+                        sal_Int32 nIndex = descr.ScriptCode.indexOf( ':' );
                         if (nIndex >= 0)
                         {
                             pElem->addAttribute( XMLNS_SCRIPT_PREFIX ":location", descr.ScriptCode.copy( 0, nIndex ) );
@@ -1236,7 +1239,7 @@ void ElementDescriptor::readEvents()
     }
 }
 
-inline bool equalFont( Style const & style1, Style const & style2 )
+static bool equalFont( Style const & style1, Style const & style2 )
 {
     awt::FontDescriptor const & f1 = style1._descr;
     awt::FontDescriptor const & f2 = style2._descr;
@@ -1247,15 +1250,15 @@ inline bool equalFont( Style const & style1, Style const & style2 )
         f1.StyleName == f2.StyleName &&
         f1.Family == f2.Family &&
         f1.CharSet == f2.CharSet &&
-        f1.Pitch == f2.CharSet &&
+        f1.Pitch == f2.Pitch &&
         f1.CharacterWidth == f2.CharacterWidth &&
         f1.Weight == f2.Weight &&
         f1.Slant == f2.Slant &&
         f1.Underline == f2.Underline &&
         f1.Strikeout == f2.Strikeout &&
         f1.Orientation == f2.Orientation &&
-        (f1.Kerning != sal_False) == (f2.Kerning != sal_False) &&
-        (f1.WordLineMode != sal_False) == (f2.WordLineMode != sal_False) &&
+        bool(f1.Kerning) == bool(f2.Kerning) &&
+        bool(f1.WordLineMode) == bool(f2.WordLineMode) &&
         f1.Type == f2.Type &&
         style1._fontRelief == style2._fontRelief &&
         style1._fontEmphasisMark == style2._fontEmphasisMark
@@ -1270,10 +1273,8 @@ OUString StyleBag::getStyleId( Style const & rStyle )
     }
 
     // lookup existing style
-    for ( size_t nStylesPos = 0; nStylesPos < _styles.size(); ++nStylesPos )
+    for (auto const & pStyle : _styles)
     {
-        Style * pStyle = _styles[ nStylesPos ];
-
         short demanded_defaults = ~rStyle._set & rStyle._all;
         // test, if defaults are not set
         if ((~pStyle->_set & demanded_defaults) == demanded_defaults &&
@@ -1334,18 +1335,14 @@ OUString StyleBag::getStyleId( Style const & rStyle )
     }
 
     // no appr style found, append new
-    Style * pStyle = new Style( rStyle );
+    std::unique_ptr<Style> pStyle(new Style( rStyle ));
     pStyle->_id = OUString::number( _styles.size() );
-    _styles.push_back( pStyle );
-    return pStyle->_id;
+    _styles.push_back( std::move(pStyle) );
+    return _styles.back()->_id;
 }
 
 StyleBag::~StyleBag()
 {
-    for ( size_t nPos = 0; nPos < _styles.size(); ++nPos )
-    {
-        delete _styles[ nPos ];
-    }
 }
 
 void StyleBag::dump( Reference< xml::sax::XExtendedDocumentHandler > const & xOut )
@@ -1356,9 +1353,9 @@ void StyleBag::dump( Reference< xml::sax::XExtendedDocumentHandler > const & xOu
         xOut->ignorableWhitespace( OUString() );
         xOut->startElement( aStylesName, Reference< xml::sax::XAttributeList >() );
         // export styles
-        for ( size_t nPos = 0; nPos < _styles.size(); ++nPos )
+        for (auto const & _style : _styles)
         {
-            Reference< xml::sax::XAttributeList > xAttr( _styles[ nPos ]->createElement() );
+            Reference< xml::sax::XAttributeList > xAttr( _style->createElement() );
             static_cast< ElementDescriptor * >( xAttr.get() )->dump( xOut.get() );
         }
         xOut->ignorableWhitespace( OUString() );
@@ -1366,7 +1363,7 @@ void StyleBag::dump( Reference< xml::sax::XExtendedDocumentHandler > const & xOu
     }
 }
 
-void SAL_CALL exportDialogModel(
+void exportDialogModel(
     Reference< xml::sax::XExtendedDocumentHandler > const & xOut,
     Reference< container::XNameContainer > const & xDialogModel,
     Reference< frame::XModel > const & xDocument )

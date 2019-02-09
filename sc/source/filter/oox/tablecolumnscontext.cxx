@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "tablecolumnscontext.hxx"
+#include <tablecolumnscontext.hxx>
 
-#include "tablecolumnsbuffer.hxx"
-#include "biffinputstream.hxx"
+#include <tablecolumnsbuffer.hxx>
+#include <oox/token/namespaces.hxx>
 
 namespace oox {
 namespace xls {

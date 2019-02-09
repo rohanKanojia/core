@@ -24,9 +24,9 @@
 #include <com/sun/star/io/XOutputStream.hpp>
 #include <comphelper/storagehelper.hxx>
 #include <cppuhelper/exc_hlp.hxx>
-#include <osl/diagnose.h>
 
 #include <osl/time.h>
+#include <osl/thread.hxx>
 
 #include <PackageConstants.hxx>
 #include <ZipEntry.hxx>
@@ -42,9 +42,9 @@ using namespace com::sun::star::packages::zip::ZipConstants;
  */
 ZipOutputStream::ZipOutputStream( const uno::Reference < io::XOutputStream > &xOStream )
 : m_xStream(xOStream)
+, mpThreadTaskTag( comphelper::ThreadPool::createThreadTaskTag() )
 , m_aChucker(xOStream)
 , m_pCurrentEntry(nullptr)
-, m_rSharedThreadPool(comphelper::ThreadPool::getSharedOptimalPool())
 {
 }
 
@@ -68,20 +68,18 @@ void ZipOutputStream::setEntry( ZipEntry *pEntry )
     }
 }
 
-void ZipOutputStream::addDeflatingThread( ZipOutputEntry *pEntry, comphelper::ThreadTask *pThread )
+void ZipOutputStream::addDeflatingThread( ZipOutputEntry *pEntry, std::unique_ptr<comphelper::ThreadTask> pThread )
 {
-    m_rSharedThreadPool.pushTask(pThread);
+    comphelper::ThreadPool::getSharedOptimalPool().pushTask(std::move(pThread));
     m_aEntries.push_back(pEntry);
 }
 
 void ZipOutputStream::rawWrite( const Sequence< sal_Int8 >& rBuffer )
-    throw(IOException, RuntimeException)
 {
     m_aChucker.WriteBytes( rBuffer );
 }
 
 void ZipOutputStream::rawCloseEntry( bool bEncrypt )
-    throw(IOException, RuntimeException)
 {
     assert(m_pCurrentEntry && "Forgot to call writeLOC()?");
     if ( m_pCurrentEntry->nMethod == DEFLATED && ( m_pCurrentEntry->nFlag & 8 ) )
@@ -93,12 +91,16 @@ void ZipOutputStream::rawCloseEntry( bool bEncrypt )
     m_pCurrentEntry = nullptr;
 }
 
-void ZipOutputStream::consumeScheduledThreadEntry(ZipOutputEntry* pCandidate)
+void ZipOutputStream::consumeScheduledThreadEntry(std::unique_ptr<ZipOutputEntry> pCandidate)
 {
     //Any exceptions thrown in the threads were caught and stored for now
-    ::css::uno::Any aCaughtException(pCandidate->getParallelDeflateException());
-    if (aCaughtException.hasValue())
-        ::cppu::throwException(aCaughtException);
+    const std::exception_ptr& rCaughtException(pCandidate->getParallelDeflateException());
+    if (rCaughtException)
+    {
+        m_aDeflateException = rCaughtException; // store it for later throwing
+        // the exception handler in DeflateThread should have cleaned temp file
+        return;
+    }
 
     writeLOC(pCandidate->getZipEntry(), pCandidate->isEncrypt());
 
@@ -120,22 +122,21 @@ void ZipOutputStream::consumeScheduledThreadEntry(ZipOutputEntry* pCandidate)
 
     pCandidate->getZipPackageStream()->successfullyWritten(pCandidate->getZipEntry());
     pCandidate->deleteBufferFile();
-    delete pCandidate;
 }
 
 void ZipOutputStream::consumeFinishedScheduledThreadEntries()
 {
     std::vector< ZipOutputEntry* > aNonFinishedEntries;
 
-    for(auto aIter = m_aEntries.begin(); aIter != m_aEntries.end(); ++aIter)
+    for(ZipOutputEntry* pEntry : m_aEntries)
     {
-        if((*aIter)->isFinished())
+        if(pEntry->isFinished())
         {
-            consumeScheduledThreadEntry(*aIter);
+            consumeScheduledThreadEntry(std::unique_ptr<ZipOutputEntry>(pEntry));
         }
         else
         {
-            aNonFinishedEntries.push_back(*aIter);
+            aNonFinishedEntries.push_back(pEntry);
         }
     }
 
@@ -143,17 +144,7 @@ void ZipOutputStream::consumeFinishedScheduledThreadEntries()
     m_aEntries = aNonFinishedEntries;
 }
 
-void ZipOutputStream::consumeAllScheduledThreadEntries()
-{
-    while(!m_aEntries.empty())
-    {
-        ZipOutputEntry* pCandidate = m_aEntries.back();
-        m_aEntries.pop_back();
-        consumeScheduledThreadEntry(pCandidate);
-    }
-}
-
-void ZipOutputStream::reduceScheduledThreadsToGivenNumberOrLess(sal_Int32 nThreads, sal_Int32 nWaitTimeInTenthSeconds)
+void ZipOutputStream::reduceScheduledThreadsToGivenNumberOrLess(sal_Int32 nThreads)
 {
     while(static_cast< sal_Int32 >(m_aEntries.size()) > nThreads)
     {
@@ -161,41 +152,48 @@ void ZipOutputStream::reduceScheduledThreadsToGivenNumberOrLess(sal_Int32 nThrea
 
         if(static_cast< sal_Int32 >(m_aEntries.size()) > nThreads)
         {
-            const TimeValue aTimeValue(0, 100000 * nWaitTimeInTenthSeconds);
-            osl_waitThread(&aTimeValue);
+            osl::Thread::wait(std::chrono::microseconds(100));
         }
     }
 }
 
 void ZipOutputStream::finish()
-    throw(IOException, RuntimeException)
 {
     assert(!m_aZipList.empty() && "Zip file must have at least one entry!");
 
     // Wait for all threads to finish & write
-    m_rSharedThreadPool.waitUntilEmpty();
+    comphelper::ThreadPool::getSharedOptimalPool().waitUntilDone(mpThreadTaskTag);
 
     // consume all processed entries
-    consumeAllScheduledThreadEntries();
+    while(!m_aEntries.empty())
+    {
+        ZipOutputEntry* pCandidate = m_aEntries.back();
+        m_aEntries.pop_back();
+        consumeScheduledThreadEntry(std::unique_ptr<ZipOutputEntry>(pCandidate));
+    }
 
     sal_Int32 nOffset= static_cast < sal_Int32 > (m_aChucker.GetPosition());
-    for (size_t i = 0; i < m_aZipList.size(); i++)
+    for (ZipEntry* p : m_aZipList)
     {
-        writeCEN( *m_aZipList[i] );
-        delete m_aZipList[i];
+        writeCEN( *p );
+        delete p;
     }
     writeEND( nOffset, static_cast < sal_Int32 > (m_aChucker.GetPosition()) - nOffset);
     m_xStream->flush();
     m_aZipList.clear();
+
+    if (m_aDeflateException)
+    {   // throw once all threads are finished and m_aEntries can be released
+        std::rethrow_exception(m_aDeflateException);
+    }
 }
 
-css::uno::Reference< css::io::XOutputStream > ZipOutputStream::getStream()
+const css::uno::Reference< css::io::XOutputStream >& ZipOutputStream::getStream()
 {
     return m_xStream;
 }
 
 void ZipOutputStream::writeEND(sal_uInt32 nOffset, sal_uInt32 nLength)
-    throw(IOException, RuntimeException)
 {
     m_aChucker.WriteInt32( ENDSIG );
     m_aChucker.WriteInt16( 0 );
@@ -219,7 +217,6 @@ static sal_uInt32 getTruncated( sal_Int64 nNum, bool *pIsTruncated )
 }
 
 void ZipOutputStream::writeCEN( const ZipEntry &rEntry )
-    throw(IOException, RuntimeException)
 {
     if ( !::comphelper::OStorageHelper::IsValidZipEntryFileName( rEntry.sPath, true ) )
         throw IOException("Unexpected character is used in file name." );
@@ -259,7 +256,6 @@ void ZipOutputStream::writeCEN( const ZipEntry &rEntry )
 }
 
 void ZipOutputStream::writeEXT( const ZipEntry &rEntry )
-    throw(IOException, RuntimeException)
 {
     bool bWrite64Header = false;
 
@@ -278,7 +274,6 @@ void ZipOutputStream::writeEXT( const ZipEntry &rEntry )
 }
 
 void ZipOutputStream::writeLOC( ZipEntry *pEntry, bool bEncrypt )
-    throw(IOException, RuntimeException)
 {
     assert(!m_pCurrentEntry && "Forgot to close an entry with rawCloseEntry()?");
     m_pCurrentEntry = pEntry;

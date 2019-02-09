@@ -42,7 +42,6 @@
 #include <cppuhelper/servicefactory.hxx>
 #include <cppuhelper/implbase.hxx>
 
-#include <osl/diagnose.h>
 
 using namespace ::std;
 using namespace ::cppu;
@@ -283,9 +282,9 @@ struct TagAttribute
                   const OUString &s_Type ,
                   const OUString &s_Value )
     {
-        this->sName     = s_Name;
-        this->sType     = s_Type;
-        this->sValue    = s_Value;
+        sName     = s_Name;
+        sType     = s_Type;
+        sValue    = s_Value;
     }
 
     OUString sName;
@@ -470,7 +469,7 @@ void OFileWriter::closeOutput()
 
 
 // Needed to switch on solaris threads
-#ifdef SOLARIS
+#ifdef __sun
 extern "C" void ChangeGlobalInit();
 #endif
 int main (int argc, char **argv)
@@ -480,7 +479,7 @@ int main (int argc, char **argv)
         printf( "usage : saxdemo inputfile outputfile\n" );
         exit( 0 );
     }
-#ifdef SOLARIS
+#ifdef __sun
     // switch on threads in solaris
     ChangeGlobalInit();
 #endif

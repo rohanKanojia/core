@@ -34,7 +34,7 @@ namespace drawinglayer
     {
         /** ControlPrimitive2D class
 
-            Base class for ControlPrimitive handling. It decoposes to a
+            Base class for ControlPrimitive handling. It decomposes to a
             graphical representation (Bitmap data) of the control. This
             representation is limited to a quadratic pixel maximum defined
             in the application settings.
@@ -59,11 +59,11 @@ namespace drawinglayer
 
             /// single local decompositions, used from create2DDecomposition()
             Primitive2DReference createBitmapDecomposition(const geometry::ViewInformation2D& rViewInformation) const;
-            Primitive2DReference createPlaceholderDecomposition(const geometry::ViewInformation2D& rViewInformation) const;
+            Primitive2DReference createPlaceholderDecomposition() const;
 
         protected:
             /// local decomposition
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const override;
 
         public:
             /// constructor
@@ -100,7 +100,7 @@ namespace drawinglayer
             DeclPrimitive2DIDBlock()
 
             /// Override standard getDecomposition to be view-dependent here
-            virtual Primitive2DContainer get2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
+            virtual void get2DDecomposition(Primitive2DDecompositionVisitor& rVisitor, const geometry::ViewInformation2D& rViewInformation) const override;
         };
     } // end of namespace primitive2d
 } // end of namespace drawinglayer

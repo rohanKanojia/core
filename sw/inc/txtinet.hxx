@@ -19,9 +19,8 @@
 #ifndef INCLUDED_SW_INC_TXTINET_HXX
 #define INCLUDED_SW_INC_TXTINET_HXX
 
-#include <txatbase.hxx>
-#include <txtatr.hxx>
-#include <calbck.hxx>
+#include "txatbase.hxx"
+#include "calbck.hxx"
 
 class SwTextNode;
 class SwCharFormat;
@@ -37,7 +36,7 @@ virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem *pNew) override;
 
 public:
     SwTextINetFormat( SwFormatINetFormat& rAttr, sal_Int32 nStart, sal_Int32 nEnd );
-    virtual ~SwTextINetFormat();
+    virtual ~SwTextINetFormat() override;
 
     virtual bool GetInfo( SfxPoolItem& rInfo ) const override;
 
@@ -70,7 +69,8 @@ inline const SwTextNode& SwTextINetFormat::GetTextNode() const
 
 inline SwTextNode& SwTextINetFormat::GetTextNode()
 {
-    return const_cast<SwTextNode&>( const_cast<SwTextINetFormat const*>(this)->GetTextNode() );
+    assert( m_pTextNode );
+    return *m_pTextNode;
 }
 
 #endif

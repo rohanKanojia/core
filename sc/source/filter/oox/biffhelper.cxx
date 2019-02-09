@@ -17,14 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "biffhelper.hxx"
+#include <biffhelper.hxx>
 
 #include <rtl/math.hxx>
-#include <rtl/tencinfo.h>
 #include <osl/diagnose.h>
-#include "biffinputstream.hxx"
-#include "worksheethelper.hxx"
-#include <oox/helper/binaryoutputstream.hxx>
+#include <oox/helper/binaryinputstream.hxx>
 
 namespace oox {
 namespace xls {
@@ -40,8 +37,8 @@ union DecodedDouble
     double              mfValue;
     sal_math_Double     maStruct;
 
-    inline explicit     DecodedDouble() {}
-    inline explicit     DecodedDouble( double fValue ) : mfValue( fValue ) {}
+    explicit     DecodedDouble() {}
+    explicit     DecodedDouble( double fValue ) : mfValue( fValue ) {}
 };
 
 } // namespace
@@ -90,7 +87,7 @@ union DecodedDouble
 
 // BIFF12 import --------------------------------------------------------------
 
-/*static*/ OUString BiffHelper::readString( SequenceInputStream& rStrm, bool b32BitLen, bool bAllowNulChars )
+/*static*/ OUString BiffHelper::readString( SequenceInputStream& rStrm, bool b32BitLen )
 {
     OUString aString;
     if( !rStrm.isEof() )
@@ -102,30 +99,10 @@ union DecodedDouble
         {
             // SequenceInputStream always supports getRemaining()
             nCharCount = ::std::min( nCharCount, static_cast< sal_Int32 >( rStrm.getRemaining() / 2 ) );
-            aString = rStrm.readUnicodeArray( nCharCount, bAllowNulChars );
+            aString = rStrm.readUnicodeArray( nCharCount );
         }
     }
     return aString;
-}
-
-// BIFF2-BIFF8 import ---------------------------------------------------------
-
-/*static*/ bool BiffHelper::isBofRecord( BiffInputStream& rStrm )
-{
-    return
-        (rStrm.getRecId() == BIFF2_ID_BOF) ||
-        (rStrm.getRecId() == BIFF3_ID_BOF) ||
-        (rStrm.getRecId() == BIFF4_ID_BOF) ||
-        (rStrm.getRecId() == BIFF5_ID_BOF);
-}
-
-/*static*/ bool BiffHelper::skipRecordBlock( BiffInputStream& rStrm, sal_uInt16 nEndRecId )
-{
-    sal_uInt16 nStartRecId = rStrm.getRecId();
-    while( rStrm.startNextRecord() && (rStrm.getRecId() != nEndRecId) )
-        if( rStrm.getRecId() == nStartRecId )
-            skipRecordBlock( rStrm, nEndRecId );
-    return !rStrm.isEof() && (rStrm.getRecId() == nEndRecId);
 }
 
 } // namespace xls

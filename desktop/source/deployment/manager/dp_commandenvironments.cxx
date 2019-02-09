@@ -56,28 +56,25 @@ BaseCommandEnv::~BaseCommandEnv()
 // XCommandEnvironment
 
 Reference<task::XInteractionHandler> BaseCommandEnv::getInteractionHandler()
-throw (uno::RuntimeException, std::exception)
 {
     return this;
 }
 
 
 Reference<ucb::XProgressHandler> BaseCommandEnv::getProgressHandler()
-throw (uno::RuntimeException, std::exception)
 {
     return this;
 }
 
 void BaseCommandEnv::handle(
     Reference< task::XInteractionRequest> const & /*xRequest*/ )
-    throw (uno::RuntimeException, std::exception)
 {
 }
 
-void BaseCommandEnv::handle_(bool approve, bool abort,
+void BaseCommandEnv::handle_(bool approve,
                              Reference< task::XInteractionRequest> const & xRequest )
 {
-    if (!approve && !abort)
+    if (!approve)
     {
         //not handled so far -> forwarding
         if (m_forwardHandler.is())
@@ -104,15 +101,6 @@ void BaseCommandEnv::handle_(bool approve, bool abort,
                     approve = false;
                 }
             }
-            else if (abort) {
-                Reference< task::XInteractionAbort > xInteractionAbort(
-                    pConts[ pos ], uno::UNO_QUERY );
-                if (xInteractionAbort.is()) {
-                    xInteractionAbort->select();
-                    // don't query again for ongoing continuations:
-                    abort = false;
-                }
-            }
         }
     }
 
@@ -120,16 +108,14 @@ void BaseCommandEnv::handle_(bool approve, bool abort,
 
 // XProgressHandler
 void BaseCommandEnv::push( uno::Any const & /*Status*/ )
-throw (uno::RuntimeException, std::exception)
 {
 }
 
 void BaseCommandEnv::update( uno::Any const & /*Status */)
-throw (uno::RuntimeException, std::exception)
 {
 }
 
-void BaseCommandEnv::pop() throw (uno::RuntimeException, std::exception)
+void BaseCommandEnv::pop()
 {
 }
 
@@ -146,7 +132,6 @@ TmpRepositoryCommandEnv::TmpRepositoryCommandEnv(
 // XInteractionHandler
 void TmpRepositoryCommandEnv::handle(
     Reference< task::XInteractionRequest> const & xRequest )
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Any request( xRequest->getRequest() );
     OSL_ASSERT( request.getValueTypeClass() == uno::TypeClass_EXCEPTION );
@@ -156,7 +141,6 @@ void TmpRepositoryCommandEnv::handle(
     deployment::InstallException instExc;
 
     bool approve = false;
-    bool abort = false;
 
     if ((request >>= verExc)
         || (request >>= licExc)
@@ -165,7 +149,7 @@ void TmpRepositoryCommandEnv::handle(
         approve = true;
     }
 
-    handle_(approve, abort, xRequest);
+    handle_(approve, xRequest);
 }
 
 
@@ -180,7 +164,6 @@ LicenseCommandEnv::LicenseCommandEnv(
 // XInteractionHandler
 void LicenseCommandEnv::handle(
     Reference< task::XInteractionRequest> const & xRequest )
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Any request( xRequest->getRequest() );
     OSL_ASSERT( request.getValueTypeClass() == uno::TypeClass_EXCEPTION );
@@ -188,7 +171,6 @@ void LicenseCommandEnv::handle(
     deployment::LicenseException licExc;
 
     bool approve = false;
-    bool abort = false;
 
     if (request >>= licExc)
     {
@@ -204,7 +186,7 @@ void LicenseCommandEnv::handle(
         }
     }
 
-    handle_(approve, abort, xRequest);
+    handle_(approve, xRequest);
 }
 
 
@@ -216,7 +198,6 @@ NoLicenseCommandEnv::NoLicenseCommandEnv(
 // XInteractionHandler
 void NoLicenseCommandEnv::handle(
     Reference< task::XInteractionRequest> const & xRequest )
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Any request( xRequest->getRequest() );
     OSL_ASSERT( request.getValueTypeClass() == uno::TypeClass_EXCEPTION );
@@ -224,13 +205,12 @@ void NoLicenseCommandEnv::handle(
     deployment::LicenseException licExc;
 
     bool approve = false;
-    bool abort = false;
 
     if (request >>= licExc)
     {
         approve = true;
     }
-    handle_(approve, abort, xRequest);
+    handle_(approve, xRequest);
 }
 
 SilentCheckPrerequisitesCommandEnv::SilentCheckPrerequisitesCommandEnv()
@@ -239,7 +219,6 @@ SilentCheckPrerequisitesCommandEnv::SilentCheckPrerequisitesCommandEnv()
 
 void SilentCheckPrerequisitesCommandEnv::handle(
        Reference< task::XInteractionRequest> const & xRequest )
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Any request( xRequest->getRequest() );
     OSL_ASSERT( request.getValueTypeClass() == uno::TypeClass_EXCEPTION );
@@ -250,7 +229,7 @@ void SilentCheckPrerequisitesCommandEnv::handle(
 
     if (request >>= licExc)
     {
-        handle_(true, false, xRequest); // approve = true, abort = false
+        handle_(true, xRequest); // approve = true
     }
     else if ((request >>= platformExc)
              || (request >>= depExc))

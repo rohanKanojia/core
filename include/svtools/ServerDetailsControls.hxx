@@ -9,37 +9,34 @@
 #ifndef INCLUDED_SVTOOLS_SERVERDETAILSCONTROLS_HXX
 #define INCLUDED_SVTOOLS_SERVERDETAILSCONTROLS_HXX
 
-#include <map>
+#include <vector>
 
-#include <com/sun/star/ucb/XCommandEnvironment.hpp>
-#include <com/sun/star/task/PasswordContainer.hpp>
-#include <com/sun/star/task/XPasswordContainer2.hpp>
+#include <com/sun/star/uno/Reference.hxx>
 
+#include <tools/link.hxx>
 #include <tools/urlobj.hxx>
-#include <vcl/builder.hxx>
-#include <vcl/button.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/field.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/layout.hxx>
-#include <vcl/msgbox.hxx>
+
+namespace com :: sun :: star :: ucb { class XCommandEnvironment; }
+namespace com :: sun :: star :: awt { class XWindow; }
+
+namespace weld {
+    class Button;
+    class ComboBox;
+    class Entry;
+    class SpinButton;
+    class ToggleButton;
+}
+
+class PlaceEditDialog;
 
 class DetailsContainer
 {
     protected:
+        PlaceEditDialog* m_pDialog;
         Link<DetailsContainer*,void> m_aChangeHdl;
-        VclPtr<VclGrid>        m_pDetailsGrid;
-        VclPtr<VclHBox>        m_pHostBox;
-        VclPtr<Edit>           m_pEDHost;
-        VclPtr<FixedText>      m_pFTHost;
-        VclPtr<NumericField>   m_pEDPort;
-        VclPtr<FixedText>      m_pFTPort;
-        VclPtr<Edit>           m_pEDRoot;
-        VclPtr<FixedText>      m_pFTRoot;
-        bool                   m_bIsActive;
 
     public:
-        DetailsContainer( VclBuilderContainer* pBuilder );
+        DetailsContainer(PlaceEditDialog* pDialog);
         virtual ~DetailsContainer( );
 
         void setChangeHdl( const Link<DetailsContainer*,void>& rLink ) { m_aChangeHdl = rLink; }
@@ -59,23 +56,21 @@ class DetailsContainer
 
         virtual bool enableUserCredentials( ) { return true; };
 
-        void setActive( bool bActive = true );
-
     protected:
         void notifyChange( );
-        DECL_LINK_TYPED ( ValueChangeHdl, Edit&, void );
+        DECL_LINK(ValueChangeHdl, weld::Entry&, void);
+        DECL_STATIC_LINK(DetailsContainer, FormatPortHdl, weld::SpinButton&, void);
 };
 
 class HostDetailsContainer : public DetailsContainer
 {
     private:
-        sal_uInt16 m_nDefaultPort;
+        sal_uInt16 const m_nDefaultPort;
         OUString m_sScheme;
         OUString m_sHost;
 
     public:
-        HostDetailsContainer( VclBuilderContainer* pBuilder, sal_uInt16 nPort, const OUString& sScheme );
-        virtual ~HostDetailsContainer( ) { };
+        HostDetailsContainer(PlaceEditDialog* pDialog, sal_uInt16 nPort, const OUString& sScheme);
 
         virtual void show( bool bShow = true ) override;
         virtual INetURLObject getUrl( ) override;
@@ -92,32 +87,26 @@ class HostDetailsContainer : public DetailsContainer
 
 class DavDetailsContainer : public HostDetailsContainer
 {
-    private:
-        VclPtr<CheckBox>   m_pCBDavs;
-
     public:
-        DavDetailsContainer( VclBuilderContainer* pBuilder );
-        virtual ~DavDetailsContainer( ) { };
+        DavDetailsContainer(PlaceEditDialog* pDialog);
 
         virtual void show( bool bShow = true ) override;
-    virtual bool enableUserCredentials( ) override { return false; };
+        virtual bool enableUserCredentials( ) override { return false; };
 
     protected:
         virtual bool verifyScheme( const OUString& rScheme ) override;
 
     private:
-        DECL_LINK_TYPED( ToggledDavsHdl, CheckBox&, void );
+        DECL_LINK(ToggledDavsHdl, weld::ToggleButton&, void);
 };
 
 class SmbDetailsContainer : public DetailsContainer
 {
     private:
-        VclPtr<Edit>           m_pEDShare;
-        VclPtr<FixedText>      m_pFTShare;
+        OUString m_sHost;
 
     public:
-        SmbDetailsContainer( VclBuilderContainer* pBuilder );
-        virtual ~SmbDetailsContainer( ) { };
+        SmbDetailsContainer(PlaceEditDialog* pDialog);
 
         virtual INetURLObject getUrl( ) override;
         virtual bool setUrl( const INetURLObject& rUrl ) override;
@@ -133,15 +122,10 @@ class CmisDetailsContainer : public DetailsContainer
         std::vector< OUString > m_aRepoIds;
         OUString m_sRepoId;
         OUString m_sBinding;
-
-        VclPtr<VclHBox>    m_pRepositoryBox;
-        VclPtr<FixedText>  m_pFTRepository;
-        VclPtr<ListBox>    m_pLBRepository;
-        VclPtr<Button>     m_pBTRepoRefresh;
+        css::uno::Reference< css::awt::XWindow > m_xParentDialog;
 
     public:
-        CmisDetailsContainer( VclBuilderContainer* pBuilder, OUString const & sBinding );
-        virtual ~CmisDetailsContainer( ) { };
+        CmisDetailsContainer(PlaceEditDialog* pDialog, OUString const & sBinding);
 
         virtual void show( bool bShow = true ) override;
         virtual INetURLObject getUrl( ) override;
@@ -151,8 +135,8 @@ class CmisDetailsContainer : public DetailsContainer
 
     private:
         void selectRepository( );
-        DECL_LINK_TYPED ( RefreshReposHdl, Button*, void );
-        DECL_LINK_TYPED ( SelectRepoHdl, ListBox&, void );
+        DECL_LINK ( RefreshReposHdl, weld::Button&, void );
+        DECL_LINK ( SelectRepoHdl, weld::ComboBox&, void );
 };
 
 #endif

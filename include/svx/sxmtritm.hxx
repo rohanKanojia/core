@@ -26,9 +26,13 @@
 class SVX_DLLPUBLIC SdrMeasureTextRota90Item: public SdrYesNoItem {
 public:
     SdrMeasureTextRota90Item(bool bOn=false): SdrYesNoItem(SDRATTR_MEASURETEXTROTA90,bOn) {}
-    SdrMeasureTextRota90Item(SvStream& rIn): SdrYesNoItem(SDRATTR_MEASURETEXTROTA90,rIn) {}
-    virtual ~SdrMeasureTextRota90Item();
+    virtual ~SdrMeasureTextRota90Item() override;
     virtual SfxPoolItem* Clone(SfxItemPool* pPool=nullptr) const override;
+
+    SdrMeasureTextRota90Item(SdrMeasureTextRota90Item const &) = default;
+    SdrMeasureTextRota90Item(SdrMeasureTextRota90Item &&) = default;
+    SdrMeasureTextRota90Item & operator =(SdrMeasureTextRota90Item const &) = delete; // due to SdrYesNoItem
+    SdrMeasureTextRota90Item & operator =(SdrMeasureTextRota90Item &&) = delete; // due to SdrYesNoItem
 };
 
 // Turn the calculated TextRect through 180 deg
@@ -36,9 +40,13 @@ public:
 class SVX_DLLPUBLIC SdrMeasureTextUpsideDownItem: public SdrYesNoItem {
 public:
     SdrMeasureTextUpsideDownItem(bool bOn=false): SdrYesNoItem(SDRATTR_MEASURETEXTUPSIDEDOWN,bOn) {}
-    SdrMeasureTextUpsideDownItem(SvStream& rIn): SdrYesNoItem(SDRATTR_MEASURETEXTUPSIDEDOWN,rIn) {}
-    virtual ~SdrMeasureTextUpsideDownItem();
+    virtual ~SdrMeasureTextUpsideDownItem() override;
     virtual SfxPoolItem* Clone(SfxItemPool* pPool=nullptr) const override;
+
+    SdrMeasureTextUpsideDownItem(SdrMeasureTextUpsideDownItem const &) = default;
+    SdrMeasureTextUpsideDownItem(SdrMeasureTextUpsideDownItem &&) = default;
+    SdrMeasureTextUpsideDownItem & operator =(SdrMeasureTextUpsideDownItem const &) = delete; // due to SdrYesNoItem
+    SdrMeasureTextUpsideDownItem & operator =(SdrMeasureTextUpsideDownItem &&) = delete; // due to SdrYesNoItem
 };
 
 #endif

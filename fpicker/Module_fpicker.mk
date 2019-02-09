@@ -12,11 +12,11 @@ $(eval $(call gb_Module_Module,fpicker))
 
 $(eval $(call gb_Module_add_targets,fpicker,\
 	Library_fps_office \
+	UIConfig_fps \
 ))
 
 $(eval $(call gb_Module_add_l10n_targets,fpicker,\
-	AllLangResTarget_fps_office \
-	UIConfig_fps \
+	AllLangMoTarget_fps \
 ))
 
 ifeq ($(OS),MACOSX)
@@ -31,5 +31,10 @@ $(eval $(call gb_Module_add_targets,fpicker,\
 	WinResTarget_fps \
 ))
 endif
+
+# screenshots
+$(eval $(call gb_Module_add_screenshot_targets,fpicker,\
+    CppunitTest_fpicker_dialogs_test \
+))
 
 # vim: set noet sw=4 ts=4:

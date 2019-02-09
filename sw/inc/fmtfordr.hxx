@@ -20,8 +20,8 @@
 #define INCLUDED_SW_INC_FMTFORDR_HXX
 
 #include <svl/eitem.hxx>
-#include <hintids.hxx>
-#include <format.hxx>
+#include "hintids.hxx"
+#include "format.hxx"
 
 enum SwFillOrder
 {
@@ -33,27 +33,18 @@ enum SwFillOrder
     SW_FILL_ORDER_END
 };
 
-class SwFormatFillOrder: public SfxEnumItem
+class SwFormatFillOrder: public SfxEnumItem<SwFillOrder>
 {
 public:
     SwFormatFillOrder( SwFillOrder = ATT_TOP_DOWN );
-    inline SwFormatFillOrder &operator=( const SwFormatFillOrder &rCpy );
 
     /// "Pure virtual methods" of SfxPoolItem.
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual sal_uInt16          GetValueCount() const override;
-
-    SwFillOrder GetFillOrder() const { return SwFillOrder(GetValue()); }
+    virtual sal_uInt16      GetValueCount() const override;
 };
 
-inline SwFormatFillOrder &SwFormatFillOrder::operator=( const SwFormatFillOrder &rCpy )
-{
-    SetValue( rCpy.GetValue() );
-    return *this;
-}
-
 inline const SwFormatFillOrder &SwAttrSet::GetFillOrder(bool bInP) const
-    { return static_cast<const SwFormatFillOrder&>(Get( RES_FILL_ORDER,bInP)); }
+    { return Get( RES_FILL_ORDER,bInP); }
 
 inline const SwFormatFillOrder &SwFormat::GetFillOrder(bool bInP) const
     { return m_aSet.GetFillOrder(bInP); }

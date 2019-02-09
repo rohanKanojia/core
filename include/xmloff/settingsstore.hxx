@@ -12,13 +12,15 @@
 #ifndef INCLUDED_XMLOFF_SETTINGSSTORE_HXX
 #define INCLUDED_XMLOFF_SETTINGSSTORE_HXX
 
-#include <vector>
-#include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/embed/XStorage.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
+
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace com { namespace sun { namespace star { namespace embed { class XStorage; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Reference; } } } }
 
 // Scans list of properties for certain URL properties that could refer
 // to internal objects, and initializes from these.
-class DocumentSettingsSerializer {
+class SAL_DLLPUBLIC_RTTI DocumentSettingsSerializer {
 public:
   // Import objects and update properties (eliding URLs)
   virtual css::uno::Sequence<css::beans::PropertyValue>

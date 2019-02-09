@@ -17,6 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <algorithm>
+
 #include <tools/stream.hxx>
 
 #include <zlib.h>
@@ -37,7 +41,7 @@
 
 static const int gz_magic[2] = { 0x1f, 0x8b }; /* gzip magic header */
 
-ZCodec::ZCodec( sal_uIntPtr nInBufSize, sal_uIntPtr nOutBufSize )
+ZCodec::ZCodec( size_t nInBufSize, size_t nOutBufSize )
     : meState(STATE_INIT)
     , mbStatus(false)
     , mbFinish(false)
@@ -118,7 +122,8 @@ void ZCodec::Compress( SvStream& rIStm, SvStream& rOStm )
     mpOStm = &rOStm;
     InitCompress();
     mpInBuf = new sal_uInt8[ mnInBufSize ];
-    while (( PZSTREAM->avail_in = rIStm.Read( PZSTREAM->next_in = mpInBuf, mnInBufSize )) != 0 )
+    while ((PZSTREAM->avail_in = rIStm.ReadBytes(
+                    PZSTREAM->next_in = mpInBuf, mnInBufSize )) != 0)
     {
         if ( PZSTREAM->avail_out == 0 )
             ImplWriteBack();
@@ -133,7 +138,7 @@ void ZCodec::Compress( SvStream& rIStm, SvStream& rOStm )
 long ZCodec::Decompress( SvStream& rIStm, SvStream& rOStm )
 {
     int err;
-    sal_uIntPtr nInToRead;
+    size_t nInToRead;
     long    nOldTotal_Out = PZSTREAM->total_out;
 
     assert(meState == STATE_INIT);
@@ -145,8 +150,9 @@ long ZCodec::Decompress( SvStream& rIStm, SvStream& rOStm )
         if ( PZSTREAM->avail_out == 0 ) ImplWriteBack();
         if ( PZSTREAM->avail_in == 0 && mnInToRead )
         {
-            nInToRead = ( mnInBufSize > mnInToRead ) ? mnInToRead : mnInBufSize;
-            PZSTREAM->avail_in = rIStm.Read( PZSTREAM->next_in = mpInBuf, nInToRead );
+            nInToRead = std::min( mnInBufSize, mnInToRead );
+            PZSTREAM->next_in = mpInBuf;
+            PZSTREAM->avail_in = rIStm.ReadBytes(mpInBuf, nInToRead);
             mnInToRead -= nInToRead;
 
             if ( mbUpdateCrc )
@@ -164,10 +170,10 @@ long ZCodec::Decompress( SvStream& rIStm, SvStream& rOStm )
     while ( ( err != Z_STREAM_END)  && ( PZSTREAM->avail_in || mnInToRead ) );
     ImplWriteBack();
 
-    return ( mbStatus ) ? (long)(PZSTREAM->total_out - nOldTotal_Out) : -1;
+    return ( mbStatus ) ? static_cast<long>(PZSTREAM->total_out - nOldTotal_Out) : -1;
 }
 
-void ZCodec::Write( SvStream& rOStm, const sal_uInt8* pData, sal_uIntPtr nSize )
+void ZCodec::Write( SvStream& rOStm, const sal_uInt8* pData, sal_uInt32 nSize )
 {
     if (meState == STATE_INIT)
     {
@@ -192,10 +198,10 @@ void ZCodec::Write( SvStream& rOStm, const sal_uInt8* pData, sal_uIntPtr nSize )
     }
 }
 
-long ZCodec::Read( SvStream& rIStm, sal_uInt8* pData, sal_uIntPtr nSize )
+long ZCodec::Read( SvStream& rIStm, sal_uInt8* pData, sal_uInt32 nSize )
 {
     int err;
-    sal_uIntPtr nInToRead;
+    size_t nInToRead;
 
     if ( mbFinish )
         return 0;           // PZSTREAM->total_out;
@@ -210,9 +216,9 @@ long ZCodec::Read( SvStream& rIStm, sal_uInt8* pData, sal_uIntPtr nSize )
     {
         if ( PZSTREAM->avail_in == 0 && mnInToRead )
         {
-            nInToRead = (mnInBufSize > mnInToRead) ? mnInToRead : mnInBufSize;
-            PZSTREAM->avail_in = rIStm.Read (
-                PZSTREAM->next_in = mpInBuf, nInToRead);
+            nInToRead = std::min(mnInBufSize, mnInToRead);
+            PZSTREAM->next_in = mpInBuf;
+            PZSTREAM->avail_in = rIStm.ReadBytes(mpInBuf, nInToRead);
             mnInToRead -= nInToRead;
 
             if ( mbUpdateCrc )
@@ -220,7 +226,7 @@ long ZCodec::Read( SvStream& rIStm, sal_uInt8* pData, sal_uIntPtr nSize )
 
         }
         err = mbStatus ? inflate(PZSTREAM, Z_NO_FLUSH) : Z_ERRNO;
-        if ( err < 0 )
+        if (err < 0 || err == Z_NEED_DICT)
         {
             // Accept Z_BUF_ERROR as EAGAIN or EWOULDBLOCK.
             mbStatus = (err == Z_BUF_ERROR);
@@ -233,13 +239,13 @@ long ZCodec::Read( SvStream& rIStm, sal_uInt8* pData, sal_uIntPtr nSize )
     if ( err == Z_STREAM_END )
         mbFinish = true;
 
-    return (mbStatus ? (long)(nSize - PZSTREAM->avail_out) : -1);
+    return (mbStatus ? static_cast<long>(nSize - PZSTREAM->avail_out) : -1);
 }
 
-long ZCodec::ReadAsynchron( SvStream& rIStm, sal_uInt8* pData, sal_uIntPtr nSize )
+long ZCodec::ReadAsynchron( SvStream& rIStm, sal_uInt8* pData, sal_uInt32 nSize )
 {
     int err = 0;
-    sal_uIntPtr nInToRead;
+    size_t nInToRead;
 
     if ( mbFinish )
         return 0;           // PZSTREAM->total_out;
@@ -254,9 +260,9 @@ long ZCodec::ReadAsynchron( SvStream& rIStm, sal_uInt8* pData, sal_uIntPtr nSize
     {
         if ( PZSTREAM->avail_in == 0 && mnInToRead )
         {
-            nInToRead = (mnInBufSize > mnInToRead) ? mnInToRead : mnInBufSize;
+            nInToRead = std::min(mnInBufSize, mnInToRead);
 
-            sal_uInt64 const nRemaining = rIStm.remainingSize();
+            sal_uInt32 const nRemaining = rIStm.remainingSize();
             if (nRemaining < nInToRead)
             {
                 rIStm.SetError( ERRCODE_IO_PENDING );
@@ -264,8 +270,8 @@ long ZCodec::ReadAsynchron( SvStream& rIStm, sal_uInt8* pData, sal_uIntPtr nSize
                 break;
             }
 
-            PZSTREAM->avail_in = rIStm.Read (
-                PZSTREAM->next_in = mpInBuf, nInToRead);
+            PZSTREAM->next_in = mpInBuf;
+            PZSTREAM->avail_in = rIStm.ReadBytes(mpInBuf, nInToRead);
             mnInToRead -= nInToRead;
 
             if ( mbUpdateCrc )
@@ -286,7 +292,7 @@ long ZCodec::ReadAsynchron( SvStream& rIStm, sal_uInt8* pData, sal_uIntPtr nSize
     if ( err == Z_STREAM_END )
         mbFinish = true;
 
-    return (mbStatus ? (long)(nSize - PZSTREAM->avail_out) : -1);
+    return (mbStatus ? static_cast<long>(nSize - PZSTREAM->avail_out) : -1);
 }
 
 void ZCodec::ImplWriteBack()
@@ -297,22 +303,23 @@ void ZCodec::ImplWriteBack()
     {
         if (meState == STATE_COMPRESS && mbUpdateCrc)
             UpdateCRC( mpOutBuf, nAvail );
-        mpOStm->Write( PZSTREAM->next_out = mpOutBuf, nAvail );
+        PZSTREAM->next_out = mpOutBuf;
+        mpOStm->WriteBytes( mpOutBuf, nAvail );
         PZSTREAM->avail_out = mnOutBufSize;
     }
 }
 
-void ZCodec::SetBreak( sal_uIntPtr nInToRead )
+void ZCodec::SetBreak( size_t nInToRead )
 {
     mnInToRead = nInToRead;
 }
 
-sal_uIntPtr ZCodec::GetBreak()
+size_t ZCodec::GetBreak() const
 {
     return ( mnInToRead + PZSTREAM->avail_in );
 }
 
-void ZCodec::SetCRC( sal_uIntPtr nCRC )
+void ZCodec::SetCRC( sal_uInt32 nCRC )
 {
     mnCRC = nCRC;
 }
@@ -333,14 +340,13 @@ void ZCodec::InitCompress()
 void ZCodec::InitDecompress(SvStream & inStream)
 {
     assert(meState == STATE_INIT);
-    meState = STATE_DECOMPRESS;
     if ( mbStatus &&  mbGzLib )
     {
         sal_uInt8 n1, n2, j, nMethod, nFlags;
-        for ( int i = 0; i < 2; i++ )   // gz - magic number
+        for (int i : gz_magic)   // gz - magic number
         {
             inStream.ReadUChar( j );
-            if ( j != gz_magic[ i ] )
+            if ( j != i )
                 mbStatus = false;
         }
         inStream.ReadUChar( nMethod );
@@ -364,7 +370,7 @@ void ZCodec::InitDecompress(SvStream & inStream)
             {
                 inStream.ReadUChar( j );
             }
-            while ( j && !inStream.IsEof() );
+            while ( j && !inStream.eof() );
         }
         /* skip the .gz file comment */
         if ( nFlags & GZ_COMMENT )
@@ -373,7 +379,7 @@ void ZCodec::InitDecompress(SvStream & inStream)
             {
                 inStream.ReadUChar( j );
             }
-            while ( j && !inStream.IsEof() );
+            while ( j && !inStream.eof() );
         }
         /* skip the header crc */
         if ( nFlags & GZ_HEAD_CRC )
@@ -385,10 +391,12 @@ void ZCodec::InitDecompress(SvStream & inStream)
     {
         mbStatus = ( inflateInit( PZSTREAM ) >= 0 );
     }
+    if ( mbStatus )
+        meState = STATE_DECOMPRESS;
     mpInBuf = new sal_uInt8[ mnInBufSize ];
 }
 
-void ZCodec::UpdateCRC ( sal_uInt8* pSource, long nDatSize)
+void ZCodec::UpdateCRC ( sal_uInt8 const * pSource, long nDatSize)
 {
     mnCRC = rtl_crc32( mnCRC, pSource, nDatSize );
 }
@@ -396,7 +404,7 @@ void ZCodec::UpdateCRC ( sal_uInt8* pSource, long nDatSize)
 bool ZCodec::AttemptDecompression(SvStream& rIStm, SvStream& rOStm)
 {
     assert(meState == STATE_INIT);
-    sal_uLong nStreamPos = rIStm.Tell();
+    sal_uInt64 nStreamPos = rIStm.Tell();
     BeginCompression(ZCODEC_DEFAULT_COMPRESSION, false/*updateCrc*/, true/*gzLib*/);
     InitDecompress(rIStm);
     EndCompression();

@@ -21,6 +21,7 @@
 
 #include <comphelper/newarray.hxx>
 
+#include <assert.h>
 #include <list>
 
 #include "hwpfile.h"
@@ -45,18 +46,18 @@ bool HBox::Read(HWPFile & )
 
 bool SkipData::Read(HWPFile & hwpf)
 {
+    uint data_block_len;
     hwpf.Read4b(&data_block_len, 1);
+
+    hchar dummy;
     hwpf.Read2b(&dummy, 1);
 
     if (!(IS_SP_SKIP_BLOCK(hh) && (hh == dummy))){
         return hwpf.SetState(HWP_InvalidFileFormat);
-     }
+    }
 
-    data_block = new char[data_block_len];
-
-    return hwpf.Read1b(data_block, data_block_len);
+    return hwpf.SkipBlock(data_block_len);
 }
-
 
 // Field code(5)
 bool FieldCode::Read(HWPFile & hwpf)
@@ -70,35 +71,34 @@ bool FieldCode::Read(HWPFile & hwpf)
 
     hwpf.Read4b(&size, 1);
     hwpf.Read2b(&dummy, 1);
-    hwpf.Read1b(&type, 2);
-    hwpf.Read4b(reserved1, 1);
+    hwpf.ReadBlock(&type, 2);
+    hwpf.Read4b(reserved1.data(), 1);
     hwpf.Read2b(&location_info, 1);
-    hwpf.Read1b(reserved2, 22);
+    hwpf.ReadBlock(reserved2.data(), 22);
     hwpf.Read4b(&len1, 1);
     hwpf.Read4b(&len2, 1);
     hwpf.Read4b(&len3, 1);
     hwpf.Read4b(&binlen, 1);
 
-    uint const len1_ = ((len1 > 1024) ? 1024 : len1) / sizeof(hchar);
-    uint const len2_ = ((len2 > 1024) ? 1024 : len2) / sizeof(hchar);
-    uint const len3_ = ((len3 > 1024) ? 1024 : len3) / sizeof(hchar);
+    uint const len1_ = std::min<uint>(len1, 1024) / sizeof(hchar);
+    uint const len2_ = std::min<uint>(len2, 1024) / sizeof(hchar);
+    uint const len3_ = std::min<uint>(len3, 1024) / sizeof(hchar);
 
-    str1 = new hchar[len1_ ? len1_ : 1];
-    str2 = new hchar[len2_ ? len2_ : 1];
-    str3 = new hchar[len3_ ? len3_ : 1];
-    bin = new char[binlen];
+    str1.reset( new hchar[len1_ ? len1_ : 1] );
+    str2.reset( new hchar[len2_ ? len2_ : 1] );
+    str3.reset( new hchar[len3_ ? len3_ : 1] );
 
-    hwpf.Read2b(str1, len1_);
+    hwpf.Read2b(str1.get(), len1_);
     hwpf.SkipBlock(len1 - (len1_ * sizeof(hchar)));
     str1[len1_ ? (len1_ - 1) : 0] = 0;
-    hwpf.Read2b(str2, len2_);
+    hwpf.Read2b(str2.get(), len2_);
     hwpf.SkipBlock(len2 - (len2_ * sizeof(hchar)));
     str2[len2_ ? (len2_ - 1) : 0] = 0;
-    hwpf.Read2b(str3, len3_);
+    hwpf.Read2b(str3.get(), len3_);
     hwpf.SkipBlock(len3 - (len3_ * sizeof(hchar)));
     str3[len3_ ? (len3_ - 1) : 0] = 0;
 
-    hwpf.ReadBlock(bin, binlen);
+    hwpf.SkipBlock(binlen);
 
      if( type[0] == 3 && type[1] == 2 ){ /* It must create a format as created date. */
           DateCode *pDate = new DateCode;
@@ -108,7 +108,7 @@ bool FieldCode::Read(HWPFile & hwpf)
                 pDate->format[i] = str3[i];
           }
           hwpf.AddDateFormat(pDate);
-          m_pDate = pDate;
+          m_pDate.reset( pDate );
      }
 
     return true;
@@ -123,7 +123,7 @@ bool Bookmark::Read(HWPFile & hwpf)
     if (!hwpf.Read2b(dummy))
         return false;
 
-    if (!(len == 34))// 2 * (BMK_COMMENT_LEN + 1) + 2
+    if (len != 34)// 2 * (BMK_COMMENT_LEN + 1) + 2
      {
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
@@ -186,7 +186,7 @@ static void UpdateBBox(FBox * fbox)
     fbox->boundey = fbox->pgy + fbox->ys - 1;
 }
 
-void Cell::Read(HWPFile & hwpf)
+bool Cell::Read(HWPFile & hwpf)
 {
     hwpf.Read2b(&p, 1);
     hwpf.Read2b(&color, 1);
@@ -197,16 +197,15 @@ void Cell::Read(HWPFile & hwpf)
     hwpf.Read2b(&txthigh, 1);
     hwpf.Read2b(&cellhigh, 1);
 
-    hwpf.Read1b(&flag, 1);
-    hwpf.Read1b(&changed, 1);
-    hwpf.Read1b(&used, 1);
-    hwpf.Read1b(&ver_align, 1);
-    hwpf.Read1b(linetype, 4);
-    hwpf.Read1b(&shade, 1);
-    hwpf.Read1b(&diagonal, 1);
-    hwpf.Read1b(&protect, 1);
+    hwpf.Read1b(flag);
+    hwpf.Read1b(changed);
+    hwpf.Read1b(used);
+    hwpf.Read1b(ver_align);
+    hwpf.ReadBlock(linetype, 4);
+    hwpf.Read1b(shade);
+    hwpf.Read1b(diagonal);
+    return hwpf.Read1b(protect);
 }
-
 
 bool TxtBox::Read(HWPFile & hwpf)
 {
@@ -221,13 +220,14 @@ bool TxtBox::Read(HWPFile & hwpf)
     hwpf.AddBox(this);
     hwpf.Read2b(&style.cap_len, 1);
     hwpf.Read2b(&dummy1, 1);
+    unsigned short next;
     hwpf.Read2b(&next, 1);
     hwpf.Read2b(&dummy2, 1);
 
     style.boxnum = fboxnum++;
      zorder = zindex++;
-    hwpf.Read1b(&style.anchor_type, 1);
-    hwpf.Read1b(&style.txtflow, 1);
+    hwpf.Read1b(style.anchor_type);
+    hwpf.Read1b(style.txtflow);
     hwpf.Read2b(&style.xpos, 1);
     hwpf.Read2b(&style.ypos, 1);
     hwpf.Read2b(&option, 1);
@@ -242,10 +242,10 @@ bool TxtBox::Read(HWPFile & hwpf)
     hwpf.Read2b(&xs, 1);
     hwpf.Read2b(&ys, 1);
     hwpf.Read2b(&cap_margin, 1);
-    hwpf.Read1b(&xpos_type, 1);
-    hwpf.Read1b(&ypos_type, 1);
-    hwpf.Read1b(&smart_linesp, 1);
-    hwpf.Read1b(&reserved1, 1);
+    hwpf.Read1b(xpos_type);
+    hwpf.Read1b(ypos_type);
+    hwpf.Read1b(smart_linesp);
+    hwpf.Read1b(reserved1);
     hwpf.Read2b(&pgx, 1);
     hwpf.Read2b(&pgy, 1);
     hwpf.Read2b(&pgno, 1);
@@ -281,89 +281,88 @@ bool TxtBox::Read(HWPFile & hwpf)
 
     UpdateBBox(this);
 
-    ncell = NCell();
-    if (!(ncell > 0)){
+    ncell = nCell;
+    if (ncell <= 0){
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
 
-    cell = ::comphelper::newArray_null<Cell>(ncell);
+    cell.reset( ::comphelper::newArray_null<Cell>(ncell) );
     if (!cell) {
         return hwpf.SetState(HWP_InvalidFileFormat);
     }
-    for (ii = 0; ii < ncell; ii++)
+    bool bSuccess = true;
+    for (ii = 0; ii < ncell && bSuccess; ii++)
     {
-        cell[ii].Read(hwpf);
-          cell[ii].key = sal::static_int_cast<unsigned char>(ii);
+        bSuccess = cell[ii].Read(hwpf);
+        cell[ii].key = sal::static_int_cast<unsigned char>(ii);
     }
+    if (!bSuccess)
+        return false;
     if (ncell == 1)
         style.cell = &cell[0];
-    plists = ::comphelper::newArray_null< std::list< HWPPara* > >(ncell);
-    if (!plists) {
-        return hwpf.SetState(HWP_InvalidFileFormat);
-    }
+    plists.resize(ncell);
     for (ii = 0; ii < ncell; ii++)
         hwpf.ReadParaList(plists[ii]);
      // caption
     hwpf.ReadParaList(caption);
 
-     if( type == 0 ){ // if table?
-          TCell* *pArr = ::comphelper::newArray_null<TCell *>(ncell);
-          if (!pArr) {
-                return hwpf.SetState(HWP_InvalidFileFormat);
-          }
-          Table *tbl = new Table;
-          for( ii = 0 ; ii < ncell; ii++)
-          {
-                tbl->columns.insert(cell[ii].x);
-                tbl->columns.insert(cell[ii].x + cell[ii].w);
-                tbl->rows.insert(cell[ii].y);
-                tbl->rows.insert(cell[ii].y + cell[ii].h);
-          }
-          for( ii = 0 ; ii < ncell; ii++)
-          {
-                TCell *tcell = new TCell;
-                tcell->nColumnIndex = tbl->columns.getIndex(cell[ii].x);
-                tcell->nColumnSpan = tbl->columns.getIndex(cell[ii].x + cell[ii].w) -
-                     tcell->nColumnIndex;
-                tcell->nRowIndex = tbl->rows.getIndex(cell[ii].y);
-                tcell->nRowSpan = tbl->rows.getIndex(cell[ii].y + cell[ii].h) -
-                     tcell->nRowIndex;
-                tcell->pCell = &cell[ii];
-                pArr[ii] = tcell;
-          }
-          TCell *tmp;
-          // Sort by row and column
-          for( ii = 0 ; ii < ncell - 1; ii++ ){
-                for( int jj = ii ; jj < ncell ; jj++){
-                     if( pArr[ii]->nRowIndex > pArr[jj]->nRowIndex ){
-                          tmp = pArr[ii];
-                          pArr[ii] = pArr[jj];
-                          pArr[jj] = tmp;
-                     }
-                }
-                for( int kk = ii ; kk > 0 ; kk--){
-                     if( ( pArr[kk]->nRowIndex == pArr[kk-1]->nRowIndex ) &&
-                            (pArr[kk]->nColumnIndex < pArr[kk-1]->nColumnIndex )){
-                          tmp = pArr[kk];
-                          pArr[kk] = pArr[kk-1];
-                          pArr[kk-1] = tmp;
-                     }
-                }
-          }
-          for( ii = 0 ; ii < ncell ; ii++ ){
-                tbl->cells.push_back(pArr[ii]);
-          }
-          tbl->box = this;
-          hwpf.AddTable(tbl);
-          m_pTable = tbl;
-          delete[] pArr;
-     }
-     else
-          m_pTable = nullptr;
+    if( type == 0 ){ // if table?
+        std::unique_ptr<TCell*[]> pArr(new TCell*[ncell]);
+        std::fill(pArr.get(), pArr.get() + ncell, nullptr);
+        if (!pArr) {
+              return hwpf.SetState(HWP_InvalidFileFormat);
+        }
+        std::unique_ptr<Table> tbl(new Table);
+        for( ii = 0 ; ii < ncell; ii++)
+        {
+            tbl->columns.insert(cell[ii].x);
+            tbl->columns.insert(cell[ii].x + cell[ii].w);
+            tbl->rows.insert(cell[ii].y);
+            tbl->rows.insert(cell[ii].y + cell[ii].h);
+        }
+        for( ii = 0 ; ii < ncell; ii++)
+        {
+            TCell *tcell = new TCell;
+            tcell->nColumnIndex = tbl->columns.getIndex(cell[ii].x);
+            tcell->nColumnSpan = tbl->columns.getIndex(cell[ii].x + cell[ii].w) -
+                tcell->nColumnIndex;
+            tcell->nRowIndex = tbl->rows.getIndex(cell[ii].y);
+            tcell->nRowSpan = tbl->rows.getIndex(cell[ii].y + cell[ii].h) -
+                tcell->nRowIndex;
+            tcell->pCell = &cell[ii];
+            pArr[ii] = tcell;
+        }
+        TCell *tmp;
+        // Sort by row and column
+        for( ii = 0 ; ii < ncell - 1; ii++ ){
+            for( int jj = ii ; jj < ncell ; jj++){
+               if( pArr[ii]->nRowIndex > pArr[jj]->nRowIndex ){
+                    tmp = pArr[ii];
+                    pArr[ii] = pArr[jj];
+                    pArr[jj] = tmp;
+               }
+            }
+            for( int kk = ii ; kk > 0 ; kk--){
+               if( ( pArr[kk]->nRowIndex == pArr[kk-1]->nRowIndex ) &&
+                      (pArr[kk]->nColumnIndex < pArr[kk-1]->nColumnIndex )){
+                    tmp = pArr[kk];
+                    pArr[kk] = pArr[kk-1];
+                    pArr[kk-1] = tmp;
+               }
+            }
+        }
+        for( ii = 0 ; ii < ncell ; ii++ ){
+            tbl->cells.emplace_back(pArr[ii]);
+        }
+        tbl->box = this;
+        m_pTable = tbl.get();
+        hwpf.AddTable(std::move(tbl));
+    }
+    else
+        m_pTable = nullptr;
 
     return !hwpf.State();
 }
-
 
 // picture(11)
 bool Picture::Read(HWPFile & hwpf)
@@ -371,9 +370,9 @@ bool Picture::Read(HWPFile & hwpf)
     hwpf.Read2b(reserved, 2);
     hwpf.Read2b(&dummy, 1);
 
-    if (!(hh == dummy && CH_PICTURE == dummy)){
+    if (!(hh == dummy && CH_PICTURE == dummy)) {
         return hwpf.SetState(HWP_InvalidFileFormat);
-     }
+    }
     hwpf.AddBox(this);
 
     hwpf.Read4b(&follow_block_size, 1);
@@ -382,8 +381,8 @@ bool Picture::Read(HWPFile & hwpf)
 
     style.boxnum = fboxnum++;
      zorder = zindex++;
-    hwpf.Read1b(&style.anchor_type, 1);           /* Reference position */
-    hwpf.Read1b(&style.txtflow, 1);               /* Avoid painting. 0-2 (seat occupied, transparency, harmony) */
+    hwpf.Read1b(style.anchor_type);               /* Reference position */
+    hwpf.Read1b(style.txtflow);                   /* Avoid painting. 0-2 (seat occupied, transparency, harmony) */
     hwpf.Read2b(&style.xpos, 1);                  /* Horizontal position: 1=left, 2=right, 3=center, and others=any */
     hwpf.Read2b(&style.ypos, 1);                  /* Vertical position: 1=top, 2=down, 3=middle, and others=any */
     hwpf.Read2b(&option, 1);                      /* Other options: Borders, reverse picture, and so on. Save as bit. */
@@ -397,10 +396,10 @@ bool Picture::Read(HWPFile & hwpf)
     hwpf.Read2b(&xs, 1);                          /* The total size (box size + caption + margin) Horizontal */
     hwpf.Read2b(&ys, 1);                          /* Vertical */
     hwpf.Read2b(&cap_margin, 1);                  /* Caption margins */
-    hwpf.Read1b(&xpos_type, 1);
-    hwpf.Read1b(&ypos_type, 1);
-    hwpf.Read1b(&smart_linesp, 1);                /* Line Spacing protection: 0 unprotected 1 protected */
-    hwpf.Read1b(&reserved1, 1);
+    hwpf.Read1b(xpos_type);
+    hwpf.Read1b(ypos_type);
+    hwpf.Read1b(smart_linesp);                    /* Line Spacing protection: 0 unprotected 1 protected */
+    hwpf.Read1b(reserved1);
     hwpf.Read2b(&pgx, 1);                         /* Real Calculated box width */
     hwpf.Read2b(&pgy, 1);                         /* Height */
     hwpf.Read2b(&pgno, 1);                        /* Page number: starts from 0 */
@@ -408,7 +407,7 @@ bool Picture::Read(HWPFile & hwpf)
     hwpf.Read2b(&cap_pos, 1);                     /* Caption positions 0-7 Menu Order. */
     hwpf.Read2b(&num, 1);                         /* Box number, serial number which starts from 0 */
 
-    hwpf.Read1b(&pictype, 1);                     /* Picture type */
+    hwpf.Read1b(pictype);                         /* Picture type */
 
     unsigned short tmp16;
     if (!hwpf.Read2b(tmp16))                      /* the real horizontal starting point where shows the picture */
@@ -424,28 +423,53 @@ bool Picture::Read(HWPFile & hwpf)
         return false;
     scale[1] = tmp16;
 
-    hwpf.Read1b(picinfo.picun.path, 256);         /* Picture File Name: when type is not a Drawing. */
-    hwpf.Read1b(reserved3, 9);                    /* Brightness / Contrast / Picture Effect, etc. */
+    hwpf.ReadBlock(picinfo.picun.path, 256);      /* Picture File Name: when type is not a Drawing. */
+    hwpf.ReadBlock(reserved3, 9);                 /* Brightness / Contrast / Picture Effect, etc. */
 
     UpdateBBox(this);
     if( pictype != PICTYPE_DRAW )
         style.cell = reserved3;
+    else
+    {
+        //picinfo.picun read above is unioned with
+        //picinfo.picdraw and so wrote to the hdo pointer
+        //value, which is definitely not useful to us
+        picinfo.picdraw.hdo = nullptr;
+    }
 
     if (follow_block_size != 0)
     {
-        follow = new unsigned char[follow_block_size];
+        follow.clear();
 
-        hwpf.Read1b(follow, follow_block_size);
+        //read potentially compressed data in blocks as its more
+        //likely large values are simply broken and we'll run out
+        //of data before we need to realloc
+        for (size_t i = 0; i < follow_block_size; i+= SAL_N_ELEMENTS(hwpf.scratch))
+        {
+           size_t nOldSize = follow.size();
+           size_t nBlock = std::min(SAL_N_ELEMENTS(hwpf.scratch), follow_block_size - nOldSize);
+           size_t nReadBlock = hwpf.ReadBlock(hwpf.scratch, nBlock);
+           if (nReadBlock)
+           {
+               follow.insert(follow.end(), hwpf.scratch, hwpf.scratch + nReadBlock);
+           }
+           if (nBlock != nReadBlock)
+               break;
+        }
+        follow_block_size = follow.size();
+
         if (pictype == PICTYPE_DRAW)
         {
-            hmem = new HMemIODev(reinterpret_cast<char *>(follow), follow_block_size);
+            HIODev* pOldMem = hmem;
+            std::unique_ptr<HMemIODev> pNewMem(new HMemIODev(reinterpret_cast<char *>(follow.data()), follow_block_size));
+            hmem = pNewMem.get();
             LoadDrawingObjectBlock(this);
             style.cell = picinfo.picdraw.hdo;
-            delete hmem;
-
-            hmem = nullptr;
+            assert(hmem == pNewMem.get());
+            pNewMem.reset();
+            hmem = pOldMem;
         }
-        else
+        else if (follow_block_size >= 4)
         {
             if ((follow[3] << 24 | follow[2] << 16 | follow[1] << 8 | follow[0]) == 0x269)
             {
@@ -493,9 +517,9 @@ bool Line::Read(HWPFile & hwpf)
     style.boxnum = fboxnum++;
      zorder = zindex++;
     style.boxtype = 'L';
-    hwpf.Read1b(&reserved2, 8);
-    hwpf.Read1b(&style.anchor_type, 1);
-    hwpf.Read1b(&style.txtflow, 1);
+    hwpf.ReadBlock(&reserved2, 8);
+    hwpf.Read1b(style.anchor_type);
+    hwpf.Read1b(style.txtflow);
     hwpf.Read2b(&style.xpos, 1);
     hwpf.Read2b(&style.ypos, 1);
     hwpf.Read2b(&option, 1);
@@ -513,8 +537,8 @@ bool Line::Read(HWPFile & hwpf)
     hwpf.linenumber = 1;
     hwpf.Read2b(&boundsy, 1);
     hwpf.Read2b(&boundey, 1);
-    hwpf.Read1b(&boundx, 1);
-    hwpf.Read1b(&draw, 1);
+    hwpf.Read1b(boundx);
+    hwpf.Read1b(draw);
 
     hwpf.Read2b(&pgx, 1);
     hwpf.Read2b(&pgy, 1);
@@ -548,7 +572,7 @@ bool Hidden::Read(HWPFile & hwpf)
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
 
-    hwpf.Read1b(info, 8);
+    hwpf.ReadBlock(info, 8);
     hwpf.ReadParaList(plist);
 
     return !hwpf.State();
@@ -573,9 +597,9 @@ bool HeaderFooter::Read(HWPFile & hwpf)
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
 
-    hwpf.Read1b(info, 8);
-    hwpf.Read1b(&type, 1);
-    hwpf.Read1b(&where, 1);
+    hwpf.ReadBlock(info, 8);
+    hwpf.Read1b(type);
+    hwpf.Read1b(where);
     lnnumber = 0;
     hwpf.ReadParaList(plist, CH_HEADER_FOOTER);
     linenumber = sal::static_int_cast<unsigned char>(lnnumber);
@@ -605,7 +629,7 @@ bool Footnote::Read(HWPFile & hwpf)
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
 
-    hwpf.Read1b(info, 8);
+    hwpf.ReadBlock(info, 8);
     hwpf.Read2b(&number, 1);
     hwpf.Read2b(&type, 1);
     unsigned short tmp16;
@@ -632,7 +656,7 @@ bool AutoNum::Read(HWPFile & hwpf)
     hwpf.Read2b(&number, 1);
     hwpf.Read2b(&dummy, 1);
 
-    if (!(hh == dummy)){
+    if (hh != dummy){
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
     return !hwpf.State();
@@ -655,7 +679,7 @@ bool NewNum::Read(HWPFile & hwpf)
     hwpf.Read2b(&number, 1);
     hwpf.Read2b(&dummy, 1);
 
-    if (!(hh == dummy)){
+    if (hh != dummy){
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
     return !hwpf.State();
@@ -677,7 +701,7 @@ bool ShowPageNum::Read(HWPFile & hwpf)
     hwpf.Read2b(&shape, 1);
     hwpf.Read2b(&dummy, 1);
 
-    if (!(hh == dummy)){
+    if (hh != dummy){
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
      m_nPageNumber = hwpf.getCurrentPage();
@@ -701,7 +725,7 @@ bool PageNumCtrl::Read(HWPFile & hwpf)
     hwpf.Read2b(&what, 1);
     hwpf.Read2b(&dummy, 1);
 
-    if (!(hh == dummy)){
+    if (hh != dummy){
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
     return !hwpf.State();
@@ -717,16 +741,16 @@ MailMerge::MailMerge()
 
 bool MailMerge::Read(HWPFile & hwpf)
 {
-    hwpf.Read1b(field_name, 20);
+    hwpf.ReadBlock(field_name, 20);
     hwpf.Read2b(&dummy, 1);
 
-    if (!(hh == dummy)){
+    if (hh != dummy){
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
     return !hwpf.State();
 }
 
-// char compositon(23)
+// char composition(23)
 Compose::Compose()
     : HBox(CH_COMPOSE)
     , dummy(0)
@@ -738,7 +762,7 @@ bool Compose::Read(HWPFile & hwpf)
     hwpf.Read2b(compose, 3);
     hwpf.Read2b(&dummy, 1);
 
-    if (!(hh == dummy)){
+    if (hh != dummy){
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
     return !hwpf.State();
@@ -757,7 +781,7 @@ bool Hyphen::Read(HWPFile & hwpf)
     hwpf.Read2b(&width, 1);
     hwpf.Read2b(&dummy, 1);
 
-    if (!(hh == dummy)){
+    if (hh != dummy){
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
     return !hwpf.State();
@@ -778,7 +802,7 @@ bool TocMark::Read(HWPFile & hwpf)
     hwpf.Read2b(&kind, 1);
     hwpf.Read2b(&dummy, 1);
 
-    if (!(hh == dummy)){
+    if (hh != dummy){
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
     return !hwpf.State();
@@ -801,7 +825,7 @@ bool IndexMark::Read(HWPFile & hwpf)
     hwpf.Read2b(&pgno, 1);
     hwpf.Read2b(&dummy, 1);
 
-    if (!(hh == dummy)){
+    if (hh != dummy){
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
     return !hwpf.State();
@@ -820,14 +844,14 @@ Outline::Outline()
 bool Outline::Read(HWPFile & hwpf)
 {
     hwpf.Read2b(&kind, 1);
-    hwpf.Read1b(&shape, 1);
-    hwpf.Read1b(&level, 1);
+    hwpf.Read1b(shape);
+    hwpf.Read1b(level);
     hwpf.Read2b(number, 7);
     hwpf.Read2b(user_shape, 7);
     hwpf.Read2b(deco, 14);
     hwpf.Read2b(&dummy, 1);
 
-    if (!(hh == dummy)){
+    if (hh != dummy){
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
     return !hwpf.State();
@@ -846,7 +870,7 @@ bool KeepSpace::Read(HWPFile & hwpf)
 {
     hwpf.Read2b(&dummy, 1);
 
-    if (!(hh == dummy)){
+    if (hh != dummy){
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
     return !hwpf.State();
@@ -865,7 +889,7 @@ bool FixedSpace::Read(HWPFile & hwpf)
 {
     hwpf.Read2b(&dummy, 1);
 
-    if (!(hh == dummy)){
+    if (hh != dummy){
         return hwpf.SetState(HWP_InvalidFileFormat);
      }
     return !hwpf.State();

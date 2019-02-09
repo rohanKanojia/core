@@ -50,7 +50,7 @@
 #     -c           : Copy debug info files to the same directory structure
 #                    as sym files
 #     -a "<archs>" : Run dump_syms -a <arch> for each space separated
-#                    cpu architecture in <archs> (only on OS X)
+#                    cpu architecture in <archs> (only on macOS)
 #     -s <srcdir>  : Use <srcdir> as the top source directory to
 #                    generate relative filenames.
 
@@ -133,7 +133,7 @@ class VCSFileInfo:
         raise NotImplementedError
 
 class CVSFileInfo(VCSFileInfo):
-    """ A class to maintiain version information for files in a CVS repository.
+    """ A class to maintain version information for files in a CVS repository.
         Derived from VCSFileInfo. """
 
     def __init__(self, file, srcdir):
@@ -340,7 +340,7 @@ class Dumper:
     def __init__(self, dump_syms, symbol_path,
                  archs=None, srcdir=None, copy_debug=False, vcsinfo=False, srcsrv=False):
         # popen likes absolute paths, at least on windows
-        self.dump_syms = os.path.abspath(dump_syms)
+        self.dump_syms = dump_syms
         self.symbol_path = symbol_path
         if archs is None:
             # makes the loop logic simpler
@@ -485,7 +485,7 @@ class Dumper_Win32(Dumper):
         or exe files with the same base name next to them."""
         if file.endswith(".pdb"):
             (path,ext) = os.path.splitext(file)
-            if os.path.isfile(path + ".exe") or os.path.isfile(path + ".dll"):
+            if os.path.isfile(path + ".exe") or os.path.isfile(path + ".dll") or os.path.isfile(path + ".bin"):
                 return True
         return False
 
@@ -606,7 +606,7 @@ def main():
                       help="Copy debug info files into the same directory structure as symbol files")
     parser.add_option("-a", "--archs",
                       action="store", dest="archs",
-                      help="Run dump_syms -a <arch> for each space separated cpu architecture in ARCHS (only on OS X)")
+                      help="Run dump_syms -a <arch> for each space separated cpu architecture in ARCHS (only on macOS)")
     parser.add_option("-s", "--srcdir",
                       action="store", dest="srcdir",
                       help="Use SRCDIR to determine relative paths to source files")

@@ -19,10 +19,12 @@
 #ifndef INCLUDED_I18NPOOL_INC_BREAKITERATOR_CJK_HXX
 #define INCLUDED_I18NPOOL_INC_BREAKITERATOR_CJK_HXX
 
-#include <breakiterator_unicode.hxx>
-#include <xdictionary.hxx>
+#include "breakiterator_unicode.hxx"
+#include "xdictionary.hxx"
 
-namespace com { namespace sun { namespace star { namespace i18n {
+#include <memory>
+
+namespace i18npool {
 
 //  class BreakIterator_CJK
 
@@ -31,22 +33,19 @@ class BreakIterator_CJK : public BreakIterator_Unicode
 public:
     BreakIterator_CJK();
 
-    Boundary SAL_CALL nextWord( const OUString& Text, sal_Int32 nStartPos,
-            const css::lang::Locale& nLocale, sal_Int16 WordType)
-            throw(css::uno::RuntimeException, std::exception) override;
-    Boundary SAL_CALL previousWord( const OUString& Text, sal_Int32 nStartPos,
-            const css::lang::Locale& nLocale, sal_Int16 WordType)
-            throw(css::uno::RuntimeException, std::exception) override;
-    Boundary SAL_CALL getWordBoundary( const OUString& Text, sal_Int32 nPos,
-            const css::lang::Locale& nLocale, sal_Int16 WordType, sal_Bool bDirection )
-            throw(css::uno::RuntimeException, std::exception) override;
-    LineBreakResults SAL_CALL getLineBreak( const OUString& Text, sal_Int32 nStartPos,
+    css::i18n::Boundary SAL_CALL nextWord( const OUString& Text, sal_Int32 nStartPos,
+            const css::lang::Locale& nLocale, sal_Int16 WordType) override;
+    css::i18n::Boundary SAL_CALL previousWord( const OUString& Text, sal_Int32 nStartPos,
+            const css::lang::Locale& nLocale, sal_Int16 WordType) override;
+    css::i18n::Boundary SAL_CALL getWordBoundary( const OUString& Text, sal_Int32 nPos,
+            const css::lang::Locale& nLocale, sal_Int16 WordType, sal_Bool bDirection ) override;
+    css::i18n::LineBreakResults SAL_CALL getLineBreak( const OUString& Text, sal_Int32 nStartPos,
         const css::lang::Locale& nLocale, sal_Int32 nMinBreakPos,
-        const LineBreakHyphenationOptions& hOptions, const LineBreakUserOptions& bOptions )
-        throw(css::uno::RuntimeException, std::exception) override;
+        const css::i18n::LineBreakHyphenationOptions& hOptions,
+        const css::i18n::LineBreakUserOptions& bOptions ) override;
 
 protected:
-    xdictionary *dict;
+    std::unique_ptr<xdictionary> m_xDict;
     OUString hangingCharacters;
 };
 
@@ -54,7 +53,6 @@ protected:
 class BreakIterator_##lang : public BreakIterator_CJK {\
 public:\
     BreakIterator_##lang (); \
-    virtual ~BreakIterator_##lang (); \
 };
 
 BREAKITERATOR_CJK( zh )
@@ -64,7 +62,7 @@ BREAKITERATOR_CJK( ko )
 
 #undef BREAKITERATOR__CJK
 
-} } } }
+}
 
 #endif // INCLUDED_I18NPOOL_INC_BREAKITERATOR_CJK_HXX
 

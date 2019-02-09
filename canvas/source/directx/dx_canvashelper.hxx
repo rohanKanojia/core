@@ -170,7 +170,7 @@ namespace dxcanvas
                                           const css::uno::Reference<
                                                   css::geometry::XMapping2D >&         xMapping );
 
-        css::uno::Reference< css::rendering::XCanvasFont > SAL_CALL
+        css::uno::Reference< css::rendering::XCanvasFont >
             createFont( const css::rendering::XCanvas*             pCanvas,
                         const css::rendering::FontRequest&         fontRequest,
                         const css::uno::Sequence<
@@ -236,10 +236,10 @@ namespace dxcanvas
         /// Provides the Gdiplus::Graphics to render into
         GraphicsProviderSharedPtr                  mpGraphicsProvider;
 
-        bool needOutput() const { return mpGraphicsProvider.get() != NULL; };
+        bool needOutput() const { return mpGraphicsProvider.get() != nullptr; };
 
         // returns transparency of color
-        void setupGraphicsState( GraphicsSharedPtr&                              rGraphics,
+        void setupGraphicsState( GraphicsSharedPtr const & rGraphics,
                                  const css::rendering::ViewState&   viewState,
                                  const css::rendering::RenderState& renderState );
 

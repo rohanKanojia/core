@@ -21,9 +21,9 @@
 #include <cppuhelper/weak.hxx>
 #include <cppuhelper/interfacecontainer.hxx>
 
-#include "intercept.hxx"
-#include "docholder.hxx"
-#include "commonembobj.hxx"
+#include <intercept.hxx>
+#include <docholder.hxx>
+#include <commonembobj.hxx>
 
 using namespace ::com::sun::star;
 
@@ -48,9 +48,7 @@ void Interceptor::DisconnectDocHolder()
 }
 
 Interceptor::Interceptor( DocumentHolder* pDocHolder )
-    : m_pDocHolder( pDocHolder ),
-      m_pDisposeEventListeners(nullptr),
-      m_pStatCL(nullptr)
+    : m_pDocHolder( pDocHolder )
 {
     m_aInterceptedURL[0] = ".uno:Save";
     m_aInterceptedURL[1] = ".uno:SaveAll";
@@ -58,13 +56,10 @@ Interceptor::Interceptor( DocumentHolder* pDocHolder )
     m_aInterceptedURL[3] = ".uno:CloseWin";
     m_aInterceptedURL[4] = ".uno:CloseFrame";
     m_aInterceptedURL[5] = ".uno:SaveAs";
-
 }
 
 Interceptor::~Interceptor()
 {
-    delete m_pDisposeEventListeners;
-    delete m_pStatCL;
 }
 
 //XDispatch
@@ -73,7 +68,6 @@ Interceptor::dispatch(
     const util::URL& URL,
     const uno::Sequence<
     beans::PropertyValue >& Arguments )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard aGuard(m_aMutex);
     if( m_pDocHolder )
@@ -100,7 +94,7 @@ Interceptor::dispatch(
             {
                 if ( aNewArgs[nInd].Name == "SaveTo" )
                 {
-                    aNewArgs[nInd].Value <<= sal_True;
+                    aNewArgs[nInd].Value <<= true;
                     break;
                 }
                 nInd++;
@@ -110,7 +104,7 @@ Interceptor::dispatch(
             {
                 aNewArgs.realloc( nInd + 1 );
                 aNewArgs[nInd].Name = "SaveTo";
-                aNewArgs[nInd].Value <<= sal_True;
+                aNewArgs[nInd].Value <<= true;
             }
 
             uno::Reference< frame::XDispatch > xDispatch = m_xSlaveDispatchProvider->queryDispatch(
@@ -126,9 +120,6 @@ Interceptor::addStatusListener(
     const uno::Reference<
     frame::XStatusListener >& Control,
     const util::URL& URL )
-    throw (
-        uno::RuntimeException, std::exception
-    )
 {
     if(!Control.is())
         return;
@@ -138,16 +129,15 @@ Interceptor::addStatusListener(
         frame::FeatureStateEvent aStateEvent;
         aStateEvent.FeatureURL.Complete = m_aInterceptedURL[0];
         aStateEvent.FeatureDescriptor = "Update";
-        aStateEvent.IsEnabled = sal_True;
-        aStateEvent.Requery = sal_False;
-        aStateEvent.State <<= ( "($1) " + m_pDocHolder->GetTitle() );
+        aStateEvent.IsEnabled = true;
+        aStateEvent.Requery = false;
+        aStateEvent.State <<= "($1) " + m_pDocHolder->GetTitle();
         Control->statusChanged(aStateEvent);
 
         {
             osl::MutexGuard aGuard(m_aMutex);
             if(!m_pStatCL)
-                m_pStatCL =
-                    new StatusChangeListenerContainer(m_aMutex);
+                m_pStatCL.reset(new StatusChangeListenerContainer(m_aMutex));
         }
 
         m_pStatCL->addInterface(URL.Complete,Control);
@@ -162,17 +152,16 @@ Interceptor::addStatusListener(
         frame::FeatureStateEvent aStateEvent;
         aStateEvent.FeatureURL.Complete = m_aInterceptedURL[i];
         aStateEvent.FeatureDescriptor = "Close and Return";
-        aStateEvent.IsEnabled = sal_True;
-        aStateEvent.Requery = sal_False;
-        aStateEvent.State <<= ( "($2) " + m_pDocHolder->GetTitle() );
+        aStateEvent.IsEnabled = true;
+        aStateEvent.Requery = false;
+        aStateEvent.State <<= "($2)" + m_pDocHolder->GetContainerName();
         Control->statusChanged(aStateEvent);
 
 
         {
             osl::MutexGuard aGuard(m_aMutex);
             if(!m_pStatCL)
-                m_pStatCL =
-                    new StatusChangeListenerContainer(m_aMutex);
+                m_pStatCL.reset(new StatusChangeListenerContainer(m_aMutex));
         }
 
         m_pStatCL->addInterface(URL.Complete,Control);
@@ -184,16 +173,15 @@ Interceptor::addStatusListener(
         frame::FeatureStateEvent aStateEvent;
         aStateEvent.FeatureURL.Complete = m_aInterceptedURL[5];
         aStateEvent.FeatureDescriptor = "SaveCopyTo";
-        aStateEvent.IsEnabled = sal_True;
-        aStateEvent.Requery = sal_False;
-        aStateEvent.State <<= (OUString( "($3)"));
+        aStateEvent.IsEnabled = true;
+        aStateEvent.Requery = false;
+        aStateEvent.State <<= OUString("($3)");
         Control->statusChanged(aStateEvent);
 
         {
             osl::MutexGuard aGuard(m_aMutex);
             if(!m_pStatCL)
-                m_pStatCL =
-                    new StatusChangeListenerContainer(m_aMutex);
+                m_pStatCL.reset(new StatusChangeListenerContainer(m_aMutex));
         }
 
         m_pStatCL->addInterface(URL.Complete,Control);
@@ -208,9 +196,6 @@ Interceptor::removeStatusListener(
     const uno::Reference<
     frame::XStatusListener >& Control,
     const util::URL& URL )
-    throw (
-        uno::RuntimeException, std::exception
-    )
 {
     if(!(Control.is() && m_pStatCL))
         return;
@@ -225,9 +210,6 @@ Interceptor::removeStatusListener(
 uno::Sequence< OUString >
 SAL_CALL
 Interceptor::getInterceptedURLs(  )
-    throw (
-        uno::RuntimeException, std::exception
-    )
 {
     // now implemented as update
 
@@ -242,9 +224,6 @@ Interceptor::queryDispatch(
     const util::URL& URL,
     const OUString& TargetFrameName,
     sal_Int32 SearchFlags )
-    throw (
-        uno::RuntimeException, std::exception
-    )
 {
     osl::MutexGuard aGuard(m_aMutex);
     if(URL.Complete == m_aInterceptedURL[0])
@@ -271,9 +250,6 @@ Interceptor::queryDispatch(
 uno::Sequence< uno::Reference< frame::XDispatch > > SAL_CALL
 Interceptor::queryDispatches(
     const uno::Sequence<frame::DispatchDescriptor >& Requests )
-    throw (
-        uno::RuntimeException, std::exception
-    )
 {
     uno::Sequence< uno::Reference< frame::XDispatch > > aRet;
     osl::MutexGuard aGuard(m_aMutex);
@@ -304,9 +280,6 @@ Interceptor::queryDispatches(
 
 uno::Reference< frame::XDispatchProvider > SAL_CALL
 Interceptor::getSlaveDispatchProvider(  )
-    throw (
-        uno::RuntimeException, std::exception
-    )
 {
     osl::MutexGuard aGuard(m_aMutex);
     return m_xSlaveDispatchProvider;
@@ -315,9 +288,6 @@ Interceptor::getSlaveDispatchProvider(  )
 void SAL_CALL
 Interceptor::setSlaveDispatchProvider(
     const uno::Reference< frame::XDispatchProvider >& NewDispatchProvider )
-    throw (
-        uno::RuntimeException, std::exception
-    )
 {
     osl::MutexGuard aGuard(m_aMutex);
     m_xSlaveDispatchProvider = NewDispatchProvider;
@@ -326,9 +296,6 @@ Interceptor::setSlaveDispatchProvider(
 
 uno::Reference< frame::XDispatchProvider > SAL_CALL
 Interceptor::getMasterDispatchProvider(  )
-    throw (
-        uno::RuntimeException, std::exception
-    )
 {
     osl::MutexGuard aGuard(m_aMutex);
     return m_xMasterDispatchProvider;
@@ -338,9 +305,6 @@ Interceptor::getMasterDispatchProvider(  )
 void SAL_CALL
 Interceptor::setMasterDispatchProvider(
     const uno::Reference< frame::XDispatchProvider >& NewSupplier )
-    throw (
-        uno::RuntimeException, std::exception
-    )
 {
     osl::MutexGuard aGuard(m_aMutex);
     m_xMasterDispatchProvider = NewSupplier;

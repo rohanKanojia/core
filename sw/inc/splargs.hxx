@@ -20,20 +20,18 @@
 #define INCLUDED_SW_INC_SPLARGS_HXX
 
 #include <i18nlangtag/lang.h>
-#include <tools/solar.h>
 #include <tools/gen.hxx>
 
 #include <com/sun/star/linguistic2/XSpellAlternatives.hpp>
 #include <com/sun/star/linguistic2/XSpellChecker1.hpp>
-#include <com/sun/star/linguistic2/XHyphenatedWord.hpp>
 
 #include <functional>
-#include <limits.h>
 
 class SwTextFrame;
 class SwTextNode;
 class SwIndex;
 namespace vcl { class Font; }
+namespace com { namespace sun { namespace star { namespace linguistic2 { class XHyphenatedWord; } } } }
 
 struct SwArgsBase     // used for text conversion (Hangul/Hanja, ...)
 {
@@ -64,8 +62,8 @@ struct SwArgsBase     // used for text conversion (Hangul/Hanja, ...)
 struct SwConversionArgs : SwArgsBase
 {
     OUString   aConvText;          // convertible text found
-    LanguageType    nConvSrcLang;       // (source) language to look for
-    LanguageType    nConvTextLang;      // language of aConvText (if the latter one was found)
+    LanguageType const nConvSrcLang;       // (source) language to look for
+    LanguageType       nConvTextLang;      // language of aConvText (if the latter one was found)
 
     // used for chinese translation
     LanguageType    nConvTargetLang;    // target language of text to be changed
@@ -91,10 +89,10 @@ struct SwSpellArgs : SwArgsBase
 
     css::uno::Reference< css::linguistic2::XSpellAlternatives > xSpellAlt;
 
-    bool bIsGrammarCheck;
+    bool const bIsGrammarCheck;
 
     SwSpellArgs(css::uno::Reference<
-            css::linguistic2::XSpellChecker1 > &rxSplChk,
+            css::linguistic2::XSpellChecker1 > const &rxSplChk,
             SwTextNode* pStart, SwIndex& rStart,
             SwTextNode* pEnd, SwIndex& rEnd,
             bool bGrammar )
@@ -111,42 +109,34 @@ struct SwSpellArgs : SwArgsBase
 
 class SwInterHyphInfo
 {
-    css::uno::Reference< css::linguistic2::XHyphenatedWord >    xHyphWord;
+    /// output: hyphenated word
+    css::uno::Reference<css::linguistic2::XHyphenatedWord> xHyphWord;
+    /// input: cursor point to locate the frame
     const Point aCursorPos;
-    bool bNoLang : 1;
-    bool bCheck  : 1;
 public:
+    /// input: requested range to hyphenate
     sal_Int32 nStart;
     sal_Int32 nEnd;
+    /// output: found word
     sal_Int32 nWordStart;
     sal_Int32 nWordLen;
 
-    SwInterHyphInfo( const Point &rCursorPos, sal_Int32 nStartPos = 0,
-        sal_Int32 nLength = SAL_MAX_INT32 )
+    SwInterHyphInfo( const Point &rCursorPos )
         : aCursorPos(rCursorPos)
-        , bNoLang(false)
-        , bCheck(false)
-        , nStart(nStartPos)
-        , nEnd(nLength == SAL_MAX_INT32 ? SAL_MAX_INT32 : nStartPos + nLength)
+        , nStart(0)
+        , nEnd(SAL_MAX_INT32)
         , nWordStart(0), nWordLen(0)
     {
-    }
-    sal_Int32 GetEnd() const
-    {
-        return nEnd;
     }
     const Point *GetCursorPos() const
     {
         return aCursorPos.X() || aCursorPos.Y() ? &aCursorPos : nullptr;
     }
-    bool IsCheck() const { return bCheck; }
-    void SetCheck( const bool bNew ) { bCheck = bNew; }
-    void SetNoLang( const bool bNew ) { bNoLang = bNew; }
     void SetHyphWord(const css::uno::Reference< css::linguistic2::XHyphenatedWord >  &rxHW)
     {
         xHyphWord = rxHW;
     }
-    css::uno::Reference< css::linguistic2::XHyphenatedWord > GetHyphWord()
+    const css::uno::Reference< css::linguistic2::XHyphenatedWord >& GetHyphWord()
     {
         return xHyphWord;
     }
@@ -158,7 +148,7 @@ namespace sw {
 typedef std::function<SwTextFrame*()> Creator;
 
 SwTextFrame *
-SwHyphIterCacheLastTextFrame(SwTextNode *, const Creator& rCreator);
+SwHyphIterCacheLastTextFrame(SwTextNode const *, const Creator& rCreator);
 
 }
 

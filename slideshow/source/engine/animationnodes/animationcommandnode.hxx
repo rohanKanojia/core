@@ -20,10 +20,10 @@
 #ifndef INCLUDED_SLIDESHOW_SOURCE_ENGINE_ANIMATIONNODES_ANIMATIONCOMMANDNODE_HXX
 #define INCLUDED_SLIDESHOW_SOURCE_ENGINE_ANIMATIONNODES_ANIMATIONCOMMANDNODE_HXX
 
-#include "basecontainernode.hxx"
-#include "iexternalmediashapebase.hxx"
-#include "soundplayer.hxx"
-#include "com/sun/star/animations/XCommand.hpp"
+#include <basecontainernode.hxx>
+#include <iexternalmediashapebase.hxx>
+#include <soundplayer.hxx>
+#include <com/sun/star/animations/XCommand.hpp>
 
 namespace slideshow {
 namespace internal {
@@ -46,9 +46,11 @@ protected:
 
 private:
     virtual void activate_st() override;
+    virtual void deactivate_st( NodeState eDestState ) override;
     virtual bool hasPendingAnimation() const override;
 
 private:
+    bool mbToggled;
     IExternalMediaShapeBaseSharedPtr mpShape;
     css::uno::Reference<css::animations::XCommand > mxCommandNode;
 };

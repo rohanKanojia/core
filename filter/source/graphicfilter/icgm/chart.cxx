@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <main.hxx>
-#include <chart.hxx>
+#include "main.hxx"
+#include "chart.hxx"
 
 
 CGMChart::CGMChart()
@@ -26,9 +26,6 @@ CGMChart::CGMChart()
 {
     for ( sal_Int8 i = 0; i < 7; i++ )
     {
-        mDataNode[ i ].nBoxX1 = mDataNode[ i ].nBoxY1 = 0 ;
-        mDataNode[ i ].nBoxX2 = mDataNode[ i ].nBoxY2 = 0 ;
-
         mDataNode[ i ].nZoneEnum = i;
     }
 }
@@ -36,34 +33,16 @@ CGMChart::CGMChart()
 CGMChart::~CGMChart()
 {
     // delete the whole textentry structure
-
-    while( !maTextEntryList.empty() )
+    for (auto & pTextEntry : maTextEntryList)
     {
-        DeleteTextEntry( maTextEntryList[ 0 ] );
+        if ( pTextEntry )
+            delete pTextEntry->pText;
     }
 }
 
-void CGMChart::DeleteTextEntry( TextEntry* pTextEntry )
+void CGMChart::InsertTextEntry( std::unique_ptr<TextEntry> pTextEntry )
 {
-    if ( pTextEntry )
-    {
-        delete pTextEntry->pText;
-        ::std::vector< TextEntry* >::iterator it;
-        for ( it = maTextEntryList.begin(); it != maTextEntryList.end(); ++it )
-        {
-            if ( *it == pTextEntry )
-            {
-                maTextEntryList.erase( it );
-                break;
-            }
-        }
-        delete pTextEntry;
-    }
-}
-
-void CGMChart::InsertTextEntry( TextEntry* pTextEntry )
-{
-    maTextEntryList.push_back( pTextEntry );
+    maTextEntryList.push_back( std::move(pTextEntry) );
 }
 
 void CGMChart::ResetAnnotation()

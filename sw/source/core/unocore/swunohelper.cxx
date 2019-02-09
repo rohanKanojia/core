@@ -28,7 +28,8 @@
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <comphelper/processfactory.hxx>
-#include <comphelper/types.hxx>
+#include <comphelper/extract.hxx>
+#include <o3tl/any.hxx>
 #include <tools/urlobj.hxx>
 #include <tools/datetime.hxx>
 #include <rtl/ustring.hxx>
@@ -36,10 +37,8 @@
 #include <ucbhelper/contentidentifier.hxx>
 #include <ucbhelper/content.hxx>
 #include <swunohelper.hxx>
-
-//UUUU
 #include <svx/xfillit0.hxx>
-#include <editeng/memberids.hrc>
+#include <editeng/memberids.h>
 #include <svl/itemset.hxx>
 
 using namespace com::sun::star;
@@ -49,17 +48,10 @@ namespace SWUnoHelper
 
 sal_Int32 GetEnumAsInt32( const css::uno::Any& rVal )
 {
-    sal_Int32 eVal;
-    try
-    {
-        eVal = comphelper::getEnumAsINT32( rVal );
-    }
-    catch( css::uno::Exception & )
-    {
-        eVal = 0;
-        OSL_FAIL( "can't get EnumAsInt32" );
-    }
-    return eVal;
+    sal_Int32 nReturn = 0;
+    if (! ::cppu::enum2int(nReturn,rVal) )
+         OSL_FAIL( "can't get EnumAsInt32" );
+    return nReturn;
 }
 
 // methods for UCB actions
@@ -77,12 +69,12 @@ bool UCB_DeleteFile( const OUString& rURL )
     catch( css::uno::Exception& )
     {
         bRemoved = false;
-        OSL_FAIL( "Exeception from executeCommand( delete )" );
+        OSL_FAIL( "Exception from executeCommand( delete )" );
     }
     return bRemoved;
 }
 
-bool UCB_CopyFile( const OUString& rURL, const OUString& rNewURL, bool bCopyIsMove )
+bool UCB_MoveFile( const OUString& rURL, const OUString& rNewURL )
 {
     bool bCopyCompleted = true;
     try
@@ -90,24 +82,22 @@ bool UCB_CopyFile( const OUString& rURL, const OUString& rNewURL, bool bCopyIsMo
         INetURLObject aURL( rNewURL );
         const OUString sName( aURL.GetName() );
         aURL.removeSegment();
-        const OUString sMainURL( aURL.GetMainURL(INetURLObject::NO_DECODE) );
+        const OUString sMainURL( aURL.GetMainURL(INetURLObject::DecodeMechanism::NONE) );
 
         ucbhelper::Content aTempContent( sMainURL,
                                 css::uno::Reference< css::ucb::XCommandEnvironment >(),
                                 comphelper::getProcessComponentContext() );
 
-        css::uno::Any aAny;
         css::ucb::TransferInfo aInfo;
         aInfo.NameClash = css::ucb::NameClash::ERROR;
         aInfo.NewTitle = sName;
         aInfo.SourceURL = rURL;
-        aInfo.MoveData = bCopyIsMove;
-        aAny <<= aInfo;
-        aTempContent.executeCommand( "transfer", aAny );
+        aInfo.MoveData = true;
+        aTempContent.executeCommand( "transfer", uno::Any(aInfo) );
     }
     catch( css::uno::Exception& )
     {
-        OSL_FAIL( "Exeception from executeCommand( transfer )" );
+        OSL_FAIL( "Exception from executeCommand( transfer )" );
         bCopyCompleted = false;
     }
     return bCopyCompleted;
@@ -121,11 +111,11 @@ bool UCB_IsCaseSensitiveFileName( const OUString& rURL )
         INetURLObject aTempObj( rURL );
         aTempObj.SetBase( aTempObj.GetBase().toAsciiLowerCase() );
         css::uno::Reference< css::ucb::XContentIdentifier > xRef1 = new
-                ucbhelper::ContentIdentifier( aTempObj.GetMainURL( INetURLObject::NO_DECODE ));
+                ucbhelper::ContentIdentifier( aTempObj.GetMainURL( INetURLObject::DecodeMechanism::NONE ));
 
         aTempObj.SetBase(aTempObj.GetBase().toAsciiUpperCase());
         css::uno::Reference< css::ucb::XContentIdentifier > xRef2 = new
-                ucbhelper::ContentIdentifier( aTempObj.GetMainURL( INetURLObject::NO_DECODE ));
+                ucbhelper::ContentIdentifier( aTempObj.GetMainURL( INetURLObject::DecodeMechanism::NONE ));
 
         css::uno::Reference< css::ucb::XUniversalContentBroker > xUcb =
               css::ucb::UniversalContentBroker::create(comphelper::getProcessComponentContext());
@@ -136,7 +126,7 @@ bool UCB_IsCaseSensitiveFileName( const OUString& rURL )
     catch( css::uno::Exception& )
     {
         bCaseSensitive = false;
-        OSL_FAIL( "Exeception from compareContentIds()" );
+        OSL_FAIL( "Exception from compareContentIds()" );
     }
     return bCaseSensitive;
 }
@@ -149,7 +139,7 @@ bool UCB_IsReadOnlyFileName( const OUString& rURL )
         ucbhelper::Content aCnt( rURL, css::uno::Reference< css::ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext() );
         css::uno::Any aAny = aCnt.getPropertyValue("IsReadOnly");
         if(aAny.hasValue())
-            bIsReadOnly = *static_cast<sal_Bool const *>(aAny.getValue());
+            bIsReadOnly = *o3tl::doAccess<bool>(aAny);
     }
     catch( css::uno::Exception& )
     {
@@ -194,7 +184,7 @@ bool UCB_IsDirectory( const OUString& rURL )
 bool UCB_GetFileListOfFolder( const OUString& rURL,
                                 std::vector<OUString>& rList,
                                 const OUString* pExtension,
-                                std::vector< ::DateTime* >* pDateTimeList )
+                                std::vector< ::DateTime >* pDateTimeList )
 {
     bool bOk = false;
     try
@@ -237,7 +227,7 @@ bool UCB_GetFileListOfFolder( const OUString& rURL,
                             if( pDateTimeList )
                             {
                                 css::util::DateTime aStamp = xRow->getTimestamp(2);
-                                ::DateTime* pDateTime = new ::DateTime(
+                                ::DateTime aDateTime(
                                         ::Date( aStamp.Day,
                                                 aStamp.Month,
                                                 aStamp.Year ),
@@ -245,7 +235,7 @@ bool UCB_GetFileListOfFolder( const OUString& rURL,
                                                 aStamp.Minutes,
                                                 aStamp.Seconds,
                                                 aStamp.NanoSeconds ));
-                                pDateTimeList->push_back( pDateTime );
+                                pDateTimeList->push_back( aDateTime );
                             }
                         }
 
@@ -267,11 +257,10 @@ bool UCB_GetFileListOfFolder( const OUString& rURL,
     return bOk;
 }
 
-//UUUU
 bool needToMapFillItemsToSvxBrushItemTypes(const SfxItemSet& rSet,
         sal_uInt16 const nMID)
 {
-    const XFillStyleItem* pXFillStyleItem(static_cast< const XFillStyleItem*  >(rSet.GetItem(XATTR_FILLSTYLE, false)));
+    const XFillStyleItem* pXFillStyleItem(rSet.GetItem<XFillStyleItem>(XATTR_FILLSTYLE, false));
 
     if(!pXFillStyleItem)
     {
@@ -322,7 +311,7 @@ bool needToMapFillItemsToSvxBrushItemTypes(const SfxItemSet& rSet,
         case drawing::FillStyle_BITMAP:
             switch (nMID)
             {
-                case MID_GRAPHIC_URL:
+                case MID_GRAPHIC:
                     return SfxItemState::SET == rSet.GetItemState(XATTR_FILLBITMAP);
                 case MID_GRAPHIC_POSITION:
                     return SfxItemState::SET == rSet.GetItemState(XATTR_FILLBMP_STRETCH)

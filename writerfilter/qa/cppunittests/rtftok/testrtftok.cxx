@@ -13,9 +13,6 @@
 #include <com/sun/star/io/WrongFormatException.hpp>
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 
-#include <osl/file.hxx>
-#include <osl/process.h>
-
 using namespace ::com::sun::star;
 
 /**
@@ -25,23 +22,14 @@ using namespace ::com::sun::star;
  * the expected bool value for given inputs. More fine-grained tests can be
  * found under sw/qa/extras/rtfimport/.
  */
-class RtfTest
-    : public test::FiltersTest
-    , public test::BootstrapFixture
+class RtfTest : public test::FiltersTest, public test::BootstrapFixture
 {
 public:
-
     virtual void setUp() override;
 
-    virtual bool load(const OUString&,
-                      const OUString& rURL, const OUString&,
-                      SfxFilterFlags, SotClipboardFormatId, unsigned int) override;
+    virtual bool load(const OUString&, const OUString& rURL, const OUString&, SfxFilterFlags,
+                      SotClipboardFormatId, unsigned int) override;
 
-    void test();
-
-    CPPUNIT_TEST_SUITE(RtfTest);
-    CPPUNIT_TEST(test);
-    CPPUNIT_TEST_SUITE_END();
 private:
     uno::Reference<document::XFilter> m_xFilter;
 };
@@ -50,17 +38,15 @@ void RtfTest::setUp()
 {
     test::BootstrapFixture::setUp();
 
-    m_xFilter.set(m_xSFactory->createInstance("com.sun.star.comp.Writer.RtfFilter"), uno::UNO_QUERY_THROW);
+    m_xFilter.set(m_xSFactory->createInstance("com.sun.star.comp.Writer.RtfFilter"),
+                  uno::UNO_QUERY_THROW);
 }
 
-bool RtfTest::load(const OUString&,
-                   const OUString& rURL, const OUString&,
-                   SfxFilterFlags, SotClipboardFormatId, unsigned int)
+bool RtfTest::load(const OUString&, const OUString& rURL, const OUString&, SfxFilterFlags,
+                   SotClipboardFormatId, unsigned int)
 {
-    uno::Sequence< beans::PropertyValue > aDescriptor =
-    {
-        beans::PropertyValue("URL", sal_Int32(0), uno::makeAny(rURL), beans::PropertyState_DIRECT_VALUE)
-    };
+    uno::Sequence<beans::PropertyValue> aDescriptor = { beans::PropertyValue(
+        "URL", sal_Int32(0), uno::makeAny(rURL), beans::PropertyState_DIRECT_VALUE) };
     try
     {
         return m_xFilter->filter(aDescriptor);
@@ -74,17 +60,18 @@ bool RtfTest::load(const OUString&,
         }
         throw;
     }
+    catch (const std::exception&)
+    {
+        return false;
+    }
 }
 
-void RtfTest::test()
+CPPUNIT_TEST_FIXTURE(RtfTest, testFilter)
 {
 #ifndef DISABLE_CVE_TESTS
-    testDir(OUString(),
-            m_directories.getURLFromSrc("/writerfilter/qa/cppunittests/rtftok/data/"));
+    testDir(OUString(), m_directories.getURLFromSrc("/writerfilter/qa/cppunittests/rtftok/data/"));
 #endif
 }
-
-CPPUNIT_TEST_SUITE_REGISTRATION(RtfTest);
 
 CPPUNIT_PLUGIN_IMPLEMENT();
 

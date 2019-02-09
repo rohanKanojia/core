@@ -37,33 +37,25 @@ class EDITENG_DLLPUBLIC SvxEmphasisMarkItem : public SfxUInt16Item
 public:
     static SfxPoolItem* CreateDefault();
 
-    SvxEmphasisMarkItem(  const FontEmphasisMark eVal /*= EMPHASISMARK_NONE*/,
+    SvxEmphasisMarkItem(  const FontEmphasisMark eVal /*= FontEmphasisMark::NONE*/,
                           const sal_uInt16 nId  );
 
     // "pure virtual Methods" from SfxPoolItem + SfxEnumItem
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
+                                    MapUnit eCoreMetric,
+                                    MapUnit ePresMetric,
                                     OUString &rText,
-                                    const IntlWrapper * = nullptr ) const override;
+                                    const IntlWrapper& ) const override;
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual SfxPoolItem*    Create(SvStream &, sal_uInt16) const override;
-    virtual SvStream&       Store(SvStream &, sal_uInt16 nItemVersion) const override;
     virtual sal_uInt16          GetVersion( sal_uInt16 nFileVersion ) const override;
 
     virtual bool            QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool            PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
-    inline SvxEmphasisMarkItem& operator=(const SvxEmphasisMarkItem& rItem )
-    {
-        SetValue( rItem.GetValue() );
-        return *this;
-    }
-
     // enum cast
     FontEmphasisMark        GetEmphasisMark() const
-                                { return (FontEmphasisMark)GetValue(); }
+                                { return static_cast<FontEmphasisMark>(GetValue()); }
 };
 
 #endif // INCLUDED_EDITENG_EMPHASISMARKITEM_HXX

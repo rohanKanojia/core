@@ -25,20 +25,19 @@
 #include <svx/svdview.hxx>
 #include <svx/fmglob.hxx>
 #include <svx/svdouno.hxx>
+#include <svx/srchdlg.hxx>
 #include <com/sun/star/form/FormButtonType.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <sfx2/htmlmode.hxx>
-#include "wrtsh.hxx"
-#include "view.hxx"
-#include "IMark.hxx"
-#include "doc.hxx"
-#include "wrtsh.hrc"
+#include <swmodule.hxx>
+#include <wrtsh.hxx>
+#include <view.hxx>
+#include <IMark.hxx>
+#include <doc.hxx>
 
 #include <unomid.h>
 
 using namespace ::com::sun::star;
-
-extern bool g_bNoInterrupt;       // in swmodule.cxx
 
 bool SwWrtShell::MoveBookMark( BookMarkMove eFuncId, const ::sw::mark::IMark* const pMark)
 {
@@ -142,12 +141,44 @@ void SwWrtShell::GotoMark( const ::sw::mark::IMark* const pMark )
 
 bool SwWrtShell::GoNextBookmark()
 {
-    return MoveBookMark( BOOKMARK_NEXT );
+    if ( !getIDocumentMarkAccess()->getBookmarksCount() )
+    {
+        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::NavElementNotFound );
+        return false;
+    }
+    LockView( true );
+    bool bRet = MoveBookMark( BOOKMARK_NEXT );
+    if ( !bRet )
+    {
+        MoveBookMark( BOOKMARK_INDEX, getIDocumentMarkAccess()->getBookmarksBegin()->get() );
+        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::EndWrapped );
+    }
+    else
+        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::Empty );
+    LockView( false );
+    ShowCursor();
+    return true;
 }
 
 bool SwWrtShell::GoPrevBookmark()
 {
-    return MoveBookMark( BOOKMARK_PREV );
+    if ( !getIDocumentMarkAccess()->getBookmarksCount() )
+    {
+        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::NavElementNotFound );
+        return false;
+    }
+    LockView( true );
+    bool bRet = MoveBookMark( BOOKMARK_PREV );
+    if ( !bRet )
+    {
+        MoveBookMark( BOOKMARK_INDEX, ( getIDocumentMarkAccess()->getBookmarksEnd() - 1 )->get() );
+        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::StartWrapped );
+    }
+    else
+        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::Empty );
+    LockView( false );
+    ShowCursor();
+    return true;
 }
 
 void SwWrtShell::ExecMacro( const SvxMacro& rMacro, OUString* pRet, SbxArray* pArgs )
@@ -159,14 +190,14 @@ void SwWrtShell::ExecMacro( const SvxMacro& rMacro, OUString* pRet, SbxArray* pA
     }
 }
 
-sal_uInt16 SwWrtShell::CallEvent( sal_uInt16 nEvent, const SwCallMouseEvent& rCallEvent,
-                                bool bChkPtr, SbxArray* pArgs)
+sal_uInt16 SwWrtShell::CallEvent( SvMacroItemId nEvent, const SwCallMouseEvent& rCallEvent,
+                                bool bChkPtr)
 {
-    return GetDoc()->CallEvent( nEvent, rCallEvent, bChkPtr, pArgs );
+    return GetDoc()->CallEvent( nEvent, rCallEvent, bChkPtr );
 }
 
     // If a util::URL-Button is selected, return its util::URL
-    // otherwise an emtpy string.
+    // otherwise an empty string.
 bool SwWrtShell::GetURLFromButton( OUString& rURL, OUString& rDescr ) const
 {
     bool bRet = false;
@@ -179,9 +210,9 @@ bool SwWrtShell::GetURLFromButton( OUString& rURL, OUString& rDescr ) const
         if (rMarkList.GetMark(0))
         {
             SdrUnoObj* pUnoCtrl = dynamic_cast<SdrUnoObj*>( rMarkList.GetMark(0)->GetMarkedSdrObj() );
-            if (pUnoCtrl && FmFormInventor == pUnoCtrl->GetObjInventor())
+            if (pUnoCtrl && SdrInventor::FmForm == pUnoCtrl->GetObjInventor())
             {
-                uno::Reference< awt::XControlModel >  xControlModel = pUnoCtrl->GetUnoControlModel();
+                const uno::Reference< awt::XControlModel >&  xControlModel = pUnoCtrl->GetUnoControlModel();
 
                 OSL_ENSURE( xControlModel.is(), "UNO-Control without Model" );
                 if( !xControlModel.is() )
@@ -191,14 +222,13 @@ bool SwWrtShell::GetURLFromButton( OUString& rURL, OUString& rDescr ) const
 
                 uno::Any aTmp;
 
-                form::FormButtonType eButtonType = form::FormButtonType_URL;
                 uno::Reference< beans::XPropertySetInfo >   xInfo = xPropSet->getPropertySetInfo();
                 if(xInfo->hasPropertyByName( "ButtonType" ))
                 {
                     aTmp = xPropSet->getPropertyValue( "ButtonType" );
                     form::FormButtonType eTmpButtonType;
                     aTmp >>= eTmpButtonType;
-                    if( eButtonType == eTmpButtonType)
+                    if( form::FormButtonType_URL == eTmpButtonType)
                     {
                         // Label
                         aTmp = xPropSet->getPropertyValue( "Label" );

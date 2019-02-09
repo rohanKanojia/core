@@ -21,9 +21,7 @@
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_DIALOGS_DATABROWSER_HXX
 
 #include <svtools/editbrowsebox.hxx>
-#include <vcl/outdev.hxx>
-#include <svtools/fmtfield.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <vcl/fmtfield.hxx>
 
 #include <memory>
 #include <vector>
@@ -33,6 +31,10 @@ namespace com { namespace sun { namespace star {
         class XChartDocument;
     }
 }}}
+
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+
+class OutputDevice;
 
 namespace chart
 {
@@ -50,7 +52,7 @@ class DataBrowser : public ::svt::EditBrowseBox
 {
 protected:
     // EditBrowseBox overridables
-    virtual void PaintCell( OutputDevice& rDev, const Rectangle& rRect, sal_uInt16 nColumnId ) const override;
+    virtual void PaintCell( OutputDevice& rDev, const tools::Rectangle& rRect, sal_uInt16 nColumnId ) const override;
     virtual bool SeekRow( long nRow ) override;
     virtual bool IsTabAllowed( bool bForward ) const override;
     virtual ::svt::CellController* GetController( long nRow, sal_uInt16 nCol ) override;
@@ -63,11 +65,9 @@ protected:
     virtual void EndScroll() override;
     virtual void MouseButtonDown( const BrowserMouseEvent& rEvt ) override;
 
-    void SetDirty();
-
 public:
     DataBrowser( vcl::Window* pParent, WinBits nStyle, bool bLiveUpdate );
-    virtual ~DataBrowser();
+    virtual ~DataBrowser() override;
     virtual void dispose() override;
 
     /** GetCellText returns the text at the given position
@@ -93,9 +93,6 @@ public:
     void SetReadOnly( bool bNewState );
     bool IsReadOnly() const { return m_bIsReadOnly;}
 
-    /// reset the dirty status, if changes have been saved
-    void SetClean();
-
     void SetDataFromModel( const css::uno::Reference< css::chart2::XChartDocument > & xChartDoc,
                            const css::uno::Reference< css::uno::XComponentContext > & xContext );
 
@@ -107,8 +104,10 @@ public:
     bool MayDeleteRow() const;
     bool MayDeleteColumn() const;
 
-    bool MaySwapRows() const;
-    bool MaySwapColumns() const;
+    bool MayMoveUpRows() const;
+    bool MayMoveDownRows() const;
+    bool MayMoveRightColumns() const;
+    bool MayMoveLeftColumns() const;
 
     // mutators mutating data
     void InsertRow();
@@ -120,20 +119,19 @@ public:
     using BrowseBox::RemoveColumn;
     using BrowseBox::MouseButtonDown;
 
-    void SwapRow();
-    void SwapColumn();
+    void MoveUpRow();
+    void MoveDownRow();
+    void MoveLeftColumn();
+    void MoveRightColumn();
 
     void SetCursorMovedHdl( const Link<DataBrowser*,void>& rLink );
 
     /// confirms all pending changes to be ready to be closed
     bool EndEditing();
 
-    // calls the protected inline-function BrowseBox::GetFirstVisibleColNumber()
-    sal_Int16 GetFirstVisibleColumNumber() const;
+    bool CellContainsNumbers( sal_uInt16 nCol ) const;
 
-    bool CellContainsNumbers( sal_Int32 nRow, sal_uInt16 nCol ) const;
-
-    sal_uInt32 GetNumberFormatKey( sal_Int32 nRow, sal_uInt16 nCol ) const;
+    sal_uInt32 GetNumberFormatKey( sal_uInt16 nCol ) const;
 
     bool IsEnableItem() { return m_bDataValid;}
     bool IsDataValid();
@@ -146,7 +144,7 @@ private:
     css::uno::Reference< css::chart2::XChartDocument > m_xChartDoc;
     std::unique_ptr< DataBrowserModel > m_apDataBrowserModel;
 
-    typedef ::std::vector< std::shared_ptr< impl::SeriesHeader > > tSeriesHeaderContainer;
+    typedef std::vector< std::shared_ptr< impl::SeriesHeader > > tSeriesHeaderContainer;
     tSeriesHeaderContainer m_aSeriesHeaders;
 
     std::shared_ptr< NumberFormatterWrapper >  m_spNumberFormatterWrapper;
@@ -154,7 +152,6 @@ private:
     /// the row that is currently painted
     long                m_nSeekRow;
     bool                m_bIsReadOnly;
-    bool                m_bIsDirty;
     bool                m_bLiveUpdate;
     bool                m_bDataValid;
 
@@ -173,10 +170,9 @@ private:
     void ImplAdjustHeaderControls();
 
     OUString GetColString( sal_Int32 nColumnId ) const;
-    static OUString GetRowString( sal_Int32 nRow );
 
-    DECL_LINK_TYPED( SeriesHeaderGotFocus, Control&, void );
-    DECL_LINK_TYPED( SeriesHeaderChanged,  impl::SeriesHeaderEdit*, void );
+    DECL_LINK( SeriesHeaderGotFocus, Control&, void );
+    DECL_LINK( SeriesHeaderChanged,  impl::SeriesHeaderEdit*, void );
 
     DataBrowser( const DataBrowser & ) = delete;
 };

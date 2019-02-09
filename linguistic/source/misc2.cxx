@@ -33,7 +33,7 @@
 #include <com/sun/star/util/thePathSettings.hpp>
 #include <o3tl/typed_flags_set.hxx>
 
-#include "linguistic/misc.hxx"
+#include <linguistic/misc.hxx>
 
 using namespace com::sun::star;
 
@@ -41,15 +41,15 @@ using namespace com::sun::star;
 /// @see GetDictionaryPaths
 enum class DictionaryPathFlags
 {
+    NONE      = 0x00,
     INTERNAL  = 0x01,
     USER      = 0x02,
-    WRITABLE  = 0x04
 };
 namespace o3tl
 {
-    template<> struct typed_flags<DictionaryPathFlags> : is_typed_flags<DictionaryPathFlags, 0x07> {};
+    template<> struct typed_flags<DictionaryPathFlags> : is_typed_flags<DictionaryPathFlags, 0x03> {};
 }
-#define PATH_FLAG_ALL       (DictionaryPathFlags::INTERNAL | DictionaryPathFlags::USER | DictionaryPathFlags::WRITABLE)
+#define PATH_FLAG_ALL       (DictionaryPathFlags::INTERNAL | DictionaryPathFlags::USER)
 
 namespace linguistic
 {
@@ -112,7 +112,7 @@ static std::vector< OUString > GetMultiPaths_Impl(
             ++nMaxEntries;
         aRes.resize( nMaxEntries );
         sal_Int32 nCount = 0;   // number of actually added entries
-        if ((nPathFlags & DictionaryPathFlags::WRITABLE) && !aWritablePath.isEmpty())
+        if (!aWritablePath.isEmpty())
             aRes[ nCount++ ] = aWritablePath;
         for (int i = 0;  i < 2;  ++i)
         {
@@ -134,10 +134,10 @@ static std::vector< OUString > GetMultiPaths_Impl(
 
 OUString GetDictionaryWriteablePath()
 {
-    std::vector< OUString > aPaths( GetMultiPaths_Impl( "Dictionary", DictionaryPathFlags::WRITABLE ) );
+    std::vector< OUString > aPaths( GetMultiPaths_Impl( "Dictionary", DictionaryPathFlags::NONE ) );
     DBG_ASSERT( aPaths.size() == 1, "Dictionary_writable path corrupted?" );
     OUString aRes;
-    if (aPaths.size() > 0)
+    if (!aPaths.empty())
         aRes = aPaths[0];
     return aRes;
 }
@@ -157,13 +157,13 @@ OUString  GetWritableDictionaryURL( const OUString &rDicName )
     aURLObj.SetSmartProtocol( INetProtocol::File );
     aURLObj.SetSmartURL( aDirName );
     DBG_ASSERT(!aURLObj.HasError(), "lng : invalid URL");
-    aURLObj.Append( rDicName, INetURLObject::ENCODE_ALL );
+    aURLObj.Append( rDicName, INetURLObject::EncodeMechanism::All );
     DBG_ASSERT(!aURLObj.HasError(), "lng : invalid URL");
 
-    // NO_DECODE preserves the escape sequences that might be included in aDirName
+    // DecodeMechanism::NONE preserves the escape sequences that might be included in aDirName
     // depending on the characters used in the path string. (Needed when comparing
     // the dictionary URL with GetDictionaryWriteablePath in DicList::createDictionary.)
-    return aURLObj.GetMainURL( INetURLObject::NO_DECODE );
+    return aURLObj.GetMainURL( INetURLObject::DecodeMechanism::NONE );
 }
 
 }   // namespace linguistic

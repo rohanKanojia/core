@@ -34,14 +34,13 @@ public:
         SYSTEM
     };
 
-    // TODO temporary until all uses are inspected and resolved
     enum DateTimeInitEmpty
     {
         EMPTY
     };
 
-                    DateTime( DateTimeInitEmpty ) : Date( Date::EMPTY ), Time( Time::EMPTY ) {}
-                    DateTime( DateTimeInitSystem ) : Date( Date::SYSTEM ), Time( Time::SYSTEM ) {}
+                    explicit DateTime( DateTimeInitEmpty ) : Date( Date::EMPTY ), Time( Time::EMPTY ) {}
+                    explicit DateTime( DateTimeInitSystem );
                     DateTime( const DateTime& rDateTime ) :
                         Date( rDateTime ), Time( rDateTime ) {}
                     DateTime( const Date& rDate ) : Date( rDate ), Time(0) {}
@@ -76,36 +75,35 @@ public:
     bool            operator >=( const DateTime& rDateTime ) const;
     bool            operator <=( const DateTime& rDateTime ) const;
 
-    long            GetSecFromDateTime( const Date& rDate ) const;
+    sal_Int64       GetSecFromDateTime( const Date& rDate ) const;
 
     void            ConvertToUTC()       { *this -= Time::GetUTCOffset(); }
     void            ConvertToLocalTime() { *this += Time::GetUTCOffset(); }
 
-    DateTime&       operator +=( long nDays )
-                        { Date::operator+=( nDays ); return *this; }
-    DateTime&       operator -=( long nDays )
-                        { Date::operator-=( nDays ); return *this; }
-    DateTime&       operator +=( double fTimeInDays );
-    DateTime&       operator -=( double fTimeInDays )
-                        { return operator+=( -fTimeInDays ); }
+    void            AddTime( double fTimeInDays );
     DateTime&       operator +=( const tools::Time& rTime );
     DateTime&       operator -=( const tools::Time& rTime );
 
-    TOOLS_DLLPUBLIC friend DateTime operator +( const DateTime& rDateTime, long nDays );
-    TOOLS_DLLPUBLIC friend DateTime operator -( const DateTime& rDateTime, long nDays );
+    TOOLS_DLLPUBLIC friend DateTime operator +( const DateTime& rDateTime, sal_Int32 nDays );
+    TOOLS_DLLPUBLIC friend DateTime operator -( const DateTime& rDateTime, sal_Int32 nDays );
     TOOLS_DLLPUBLIC friend DateTime operator +( const DateTime& rDateTime, double fTimeInDays );
     TOOLS_DLLPUBLIC friend DateTime operator -( const DateTime& rDateTime, double fTimeInDays )
                         { return operator+( rDateTime, -fTimeInDays ); }
     TOOLS_DLLPUBLIC friend DateTime operator +( const DateTime& rDateTime, const tools::Time& rTime );
     TOOLS_DLLPUBLIC friend DateTime operator -( const DateTime& rDateTime, const tools::Time& rTime );
     TOOLS_DLLPUBLIC friend double   operator -( const DateTime& rDateTime1, const DateTime& rDateTime2 );
-    TOOLS_DLLPUBLIC friend long     operator -( const DateTime& rDateTime, const Date& rDate )
-                        { return (const Date&) rDateTime - rDate; }
+    TOOLS_DLLPUBLIC friend sal_Int64 operator -( const DateTime& rDateTime, const Date& rDate )
+                        { return static_cast<const Date&>(rDateTime) - rDate; }
 
     DateTime&       operator =( const DateTime& rDateTime );
+    DateTime&       operator =( const css::util::DateTime& rUDateTime );
 
-    void            GetWin32FileDateTime( sal_uInt32 & rLower, sal_uInt32 & rUpper );
-    static DateTime CreateFromWin32FileDateTime( const sal_uInt32 & rLower, const sal_uInt32 & rUpper );
+    void            GetWin32FileDateTime( sal_uInt32 & rLower, sal_uInt32 & rUpper ) const;
+    static DateTime CreateFromWin32FileDateTime( sal_uInt32 rLower, sal_uInt32 rUpper );
+
+    /// Creates DateTime given a unix time, which is the number of seconds
+    /// elapsed since Jan 1st, 1970.
+    static DateTime CreateFromUnixTime( const double fSecondsSinceEpoch );
 };
 
 inline DateTime& DateTime::operator =( const DateTime& rDateTime )

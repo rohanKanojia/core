@@ -16,20 +16,18 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "UndoActions.hxx"
-#include "UndoEnv.hxx"
+#include <UndoActions.hxx>
+#include <UndoEnv.hxx>
 #include "formatnormalizer.hxx"
-#include "conditionupdater.hxx"
-#include "corestrings.hrc"
-#include "rptui_slotid.hrc"
-#include "RptDef.hxx"
-#include "ModuleHelper.hxx"
-#include "RptObject.hxx"
-#include "RptPage.hxx"
-#include "RptResId.hrc"
-#include "RptModel.hxx"
+#include <conditionupdater.hxx>
+#include <strings.hxx>
+#include <rptui_slotid.hrc>
+#include <RptDef.hxx>
+#include <RptObject.hxx>
+#include <RptPage.hxx>
+#include <strings.hrc>
+#include <RptModel.hxx>
 
-#include <com/sun/star/script/XEventAttacherManager.hpp>
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/beans/theIntrospection.hpp>
@@ -39,7 +37,7 @@
 #include <com/sun/star/beans/XIntrospection.hpp>
 
 #include <connectivity/dbtools.hxx>
-#include <svl/smplhint.hxx>
+#include <svl/hint.hxx>
 #include <tools/diagnose_ex.h>
 #include <comphelper/stl_types.hxx>
 #include <vcl/svapp.hxx>
@@ -62,7 +60,7 @@ namespace rptui
 
 struct PropertyInfo
 {
-    bool    bIsReadonlyOrTransient;
+    bool const bIsReadonlyOrTransient;
 
     explicit PropertyInfo( const bool i_bIsTransientOrReadOnly )
         :bIsReadonlyOrTransient( i_bIsTransientOrReadOnly )
@@ -70,7 +68,7 @@ struct PropertyInfo
     }
 };
 
-typedef std::unordered_map< OUString, PropertyInfo, OUStringHash >    PropertiesInfo;
+typedef std::unordered_map< OUString, PropertyInfo >    PropertiesInfo;
 
 struct ObjectInfo
 {
@@ -140,7 +138,7 @@ void OXUndoEnvironment::UnLock()
 }
 bool OXUndoEnvironment::IsLocked() const { return m_pImpl->m_nLocks != 0; }
 
-void OXUndoEnvironment::RemoveSection(OReportPage* _pPage)
+void OXUndoEnvironment::RemoveSection(OReportPage const * _pPage)
 {
     if ( _pPage )
     {
@@ -191,14 +189,13 @@ void OXUndoEnvironment::ModeChanged()
 
 void OXUndoEnvironment::Notify( SfxBroadcaster& /*rBC*/, const SfxHint& rHint )
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if (pSimpleHint && pSimpleHint->GetId() == SFX_HINT_MODECHANGED )
+    if (rHint.GetId() == SfxHintId::ModeChanged )
         ModeChanged();
 }
 
 //  XEventListener
 
-void SAL_CALL OXUndoEnvironment::disposing(const EventObject& e) throw( RuntimeException, std::exception )
+void SAL_CALL OXUndoEnvironment::disposing(const EventObject& e)
 {
     // check if it's an object we have cached information about
     Reference< XPropertySet > xSourceSet(e.Source, UNO_QUERY);
@@ -214,7 +211,7 @@ void SAL_CALL OXUndoEnvironment::disposing(const EventObject& e) throw( RuntimeE
 
 // XPropertyChangeListener
 
-void SAL_CALL OXUndoEnvironment::propertyChange( const PropertyChangeEvent& _rEvent ) throw(uno::RuntimeException, std::exception)
+void SAL_CALL OXUndoEnvironment::propertyChange( const PropertyChangeEvent& _rEvent )
 {
 
     ::osl::ClearableMutexGuard aGuard( m_pImpl->m_aMutex );
@@ -235,9 +232,7 @@ void SAL_CALL OXUndoEnvironment::propertyChange( const PropertyChangeEvent& _rEv
     PropertySetInfoCache::iterator objectPos = m_pImpl->m_aPropertySetCache.find(xSet);
     if (objectPos == m_pImpl->m_aPropertySetCache.end())
     {
-        objectPos = m_pImpl->m_aPropertySetCache.insert( PropertySetInfoCache::value_type(
-            xSet, ObjectInfo()
-        ) ).first;
+        objectPos = m_pImpl->m_aPropertySetCache.emplace( xSet, ObjectInfo() ).first;
         DBG_ASSERT(objectPos != m_pImpl->m_aPropertySetCache.end(), "OXUndoEnvironment::propertyChange : just inserted it ... why it's not there ?");
     }
     if ( objectPos == m_pImpl->m_aPropertySetCache.end() )
@@ -283,17 +278,17 @@ void SAL_CALL OXUndoEnvironment::propertyChange( const PropertyChangeEvent& _rEv
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("reportdesign");
         }
         const bool bTransReadOnly =
                     ( ( nPropertyAttributes & PropertyAttribute::READONLY ) != 0 )
                 ||  ( ( nPropertyAttributes & PropertyAttribute::TRANSIENT ) != 0 );
 
         // insert the new entry
-        aPropertyPos = rObjectInfo.aProperties.insert( PropertiesInfo::value_type(
+        aPropertyPos = rObjectInfo.aProperties.emplace(
             _rEvent.PropertyName,
             PropertyInfo( bTransReadOnly )
-        ) ).first;
+        ).first;
         DBG_ASSERT(aPropertyPos != rObjectInfo.aProperties.end(), "OXUndoEnvironment::propertyChange : just inserted it ... why it's not there ?");
     }
 
@@ -315,7 +310,7 @@ void SAL_CALL OXUndoEnvironment::propertyChange( const PropertyChangeEvent& _rEv
     // add their undo actions out-of-order
 
     SolarMutexGuard aSolarGuard;
-    ORptUndoPropertyAction* pUndo = nullptr;
+    std::unique_ptr<ORptUndoPropertyAction> pUndo;
     try
     {
         uno::Reference< report::XSection> xSection( xSet, uno::UNO_QUERY );
@@ -323,20 +318,20 @@ void SAL_CALL OXUndoEnvironment::propertyChange( const PropertyChangeEvent& _rEv
         {
             uno::Reference< report::XGroup> xGroup = xSection->getGroup();
             if ( xGroup.is() )
-                pUndo = new OUndoPropertyGroupSectionAction( m_pImpl->m_rModel, _rEvent, OGroupHelper::getMemberFunction( xSection ), xGroup );
+                pUndo.reset(new OUndoPropertyGroupSectionAction( m_pImpl->m_rModel, _rEvent, OGroupHelper::getMemberFunction( xSection ), xGroup ));
             else
-                pUndo = new OUndoPropertyReportSectionAction( m_pImpl->m_rModel, _rEvent, OReportHelper::getMemberFunction( xSection ), xSection->getReportDefinition() );
+                pUndo.reset(new OUndoPropertyReportSectionAction( m_pImpl->m_rModel, _rEvent, OReportHelper::getMemberFunction( xSection ), xSection->getReportDefinition() ));
         }
     }
     catch(const Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("reportdesign");
     }
 
     if ( pUndo == nullptr )
-        pUndo = new ORptUndoPropertyAction( m_pImpl->m_rModel, _rEvent );
+        pUndo.reset(new ORptUndoPropertyAction( m_pImpl->m_rModel, _rEvent ));
 
-    m_pImpl->m_rModel.GetSdrUndoManager()->AddUndoAction( pUndo );
+    m_pImpl->m_rModel.GetSdrUndoManager()->AddUndoAction( std::move(pUndo) );
     pController->InvalidateAll();
 }
 
@@ -357,12 +352,12 @@ void SAL_CALL OXUndoEnvironment::propertyChange( const PropertyChangeEvent& _rEv
 }
 // XContainerListener
 
-void SAL_CALL OXUndoEnvironment::elementInserted(const ContainerEvent& evt) throw(uno::RuntimeException, std::exception)
+void SAL_CALL OXUndoEnvironment::elementInserted(const ContainerEvent& evt)
 {
     SolarMutexGuard aSolarGuard;
     ::osl::MutexGuard aGuard( m_pImpl->m_aMutex );
 
-    // neues Object zum lauschen
+    // new listener object
     Reference< uno::XInterface >  xIface( evt.Element, UNO_QUERY );
     if ( !IsLocked() )
     {
@@ -385,7 +380,7 @@ void SAL_CALL OXUndoEnvironment::elementInserted(const ContainerEvent& evt) thro
                 }
                 catch(uno::Exception&)
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    DBG_UNHANDLED_EXCEPTION("reportdesign");
                 }
 
             }
@@ -396,7 +391,7 @@ void SAL_CALL OXUndoEnvironment::elementInserted(const ContainerEvent& evt) thro
             if ( xContainer.is() )
             {
                 m_pImpl->m_rModel.GetSdrUndoManager()->AddUndoAction(
-                    new OUndoContainerAction( m_pImpl->m_rModel, rptui::Inserted, xContainer.get(),
+                    std::make_unique<OUndoContainerAction>( m_pImpl->m_rModel, rptui::Inserted, xContainer.get(),
                         xIface, RID_STR_UNDO_ADDFUNCTION ) );
             }
         }
@@ -414,7 +409,7 @@ void OXUndoEnvironment::implSetModified()
 }
 
 
-void SAL_CALL OXUndoEnvironment::elementReplaced(const ContainerEvent& evt) throw(uno::RuntimeException, std::exception)
+void SAL_CALL OXUndoEnvironment::elementReplaced(const ContainerEvent& evt)
 {
     SolarMutexGuard aSolarGuard;
     ::osl::MutexGuard aGuard( m_pImpl->m_aMutex );
@@ -430,7 +425,7 @@ void SAL_CALL OXUndoEnvironment::elementReplaced(const ContainerEvent& evt) thro
 }
 
 
-void SAL_CALL OXUndoEnvironment::elementRemoved(const ContainerEvent& evt) throw(uno::RuntimeException, std::exception)
+void SAL_CALL OXUndoEnvironment::elementRemoved(const ContainerEvent& evt)
 {
     SolarMutexGuard aSolarGuard;
     ::osl::MutexGuard aGuard( m_pImpl->m_aMutex );
@@ -454,7 +449,7 @@ void SAL_CALL OXUndoEnvironment::elementRemoved(const ContainerEvent& evt) throw
             }
             catch(const uno::Exception&)
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("reportdesign");
             }
         }
         else
@@ -462,7 +457,7 @@ void SAL_CALL OXUndoEnvironment::elementRemoved(const ContainerEvent& evt) throw
             uno::Reference< report::XFunctions> xFunctions(evt.Source,uno::UNO_QUERY);
             if ( xFunctions.is() )
             {
-                m_pImpl->m_rModel.GetSdrUndoManager()->AddUndoAction( new OUndoContainerAction(
+                m_pImpl->m_rModel.GetSdrUndoManager()->AddUndoAction( std::make_unique<OUndoContainerAction>(
                     m_pImpl->m_rModel, rptui::Removed, xFunctions.get(), xIface, RID_STR_UNDO_ADDFUNCTION ) );
             }
         }
@@ -475,7 +470,7 @@ void SAL_CALL OXUndoEnvironment::elementRemoved(const ContainerEvent& evt) throw
 }
 
 
-void SAL_CALL OXUndoEnvironment::modified( const EventObject& /*aEvent*/ ) throw (RuntimeException, std::exception)
+void SAL_CALL OXUndoEnvironment::modified( const EventObject& /*aEvent*/ )
 {
     implSetModified();
 }
@@ -487,14 +482,13 @@ void OXUndoEnvironment::AddSection(const Reference< report::XSection > & _xSecti
     try
     {
         uno::Reference<container::XChild> xChild = _xSection.get();
-        uno::Reference<report::XGroup> xGroup(xChild->getParent(),uno::UNO_QUERY);
         m_pImpl->m_aSections.push_back(xChild);
         Reference< XInterface >  xInt(_xSection);
         AddElement(xInt);
     }
     catch(const uno::Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("reportdesign");
     }
 }
 
@@ -511,32 +505,6 @@ void OXUndoEnvironment::RemoveSection(const Reference< report::XSection > & _xSe
         RemoveElement(xInt);
     }
     catch(uno::Exception&){}
-}
-
-
-void OXUndoEnvironment::TogglePropertyListening(const Reference< XInterface > & Element)
-{
-    // am Container horchen
-    Reference< XIndexAccess >  xContainer(Element, UNO_QUERY);
-    if (xContainer.is())
-    {
-        Reference< XInterface > xInterface;
-        sal_Int32 nCount = xContainer->getCount();
-        for(sal_Int32 i = 0;i != nCount;++i)
-        {
-            xInterface.set(xContainer->getByIndex( i ),uno::UNO_QUERY);
-            TogglePropertyListening(xInterface);
-        }
-    }
-
-    Reference< XPropertySet >  xSet(Element, UNO_QUERY);
-    if (xSet.is())
-    {
-        if (!m_pImpl->m_bReadOnly)
-            xSet->addPropertyChangeListener( OUString(), this );
-        else
-            xSet->removePropertyChangeListener( OUString(), this );
-    }
 }
 
 
@@ -572,7 +540,7 @@ void OXUndoEnvironment::switchListening( const Reference< XIndexAccess >& _rxCon
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("reportdesign");
     }
 }
 

@@ -32,7 +32,7 @@ namespace internal {
 ::basegfx::B2DPolyPolygon FigureWipe::operator () ( double t )
 {
     ::basegfx::B2DPolyPolygon res(m_figure);
-    res.transform(basegfx::tools::createScaleTranslateB2DHomMatrix(t, t, 0.5, 0.5));
+    res.transform(basegfx::utils::createScaleTranslateB2DHomMatrix(t, t, 0.5, 0.5));
     return res;
 }
 
@@ -93,11 +93,11 @@ FigureWipe * FigureWipe::createHexagonWipe()
 
 FigureWipe * FigureWipe::createStarWipe( sal_Int32 nPoints )
 {
-    const double v = (M_PI / nPoints);
+    const double v = M_PI / nPoints;
     const ::basegfx::B2DPoint p_( 0.0, -M_SQRT2 );
     ::basegfx::B2DPolygon figure;
     for ( sal_Int32 pos = 0; pos < nPoints; ++pos ) {
-        const double w = (pos * 2.0 * M_PI / nPoints);
+        const double w = pos * 2.0 * M_PI / nPoints;
         ::basegfx::B2DHomMatrix aTransform;
         ::basegfx::B2DPoint p(p_);
         aTransform.rotate( -w );

@@ -25,39 +25,37 @@
 #include <svx/langbox.hxx>
 #include <svx/fontlb.hxx>
 #include <tools/color.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/lstbox.hxx>
-#include <vcl/edit.hxx>
+#include <vcl/customweld.hxx>
 #include <vcl/toolbox.hxx>
-#include <vcl/field.hxx>
-#include <vcl/window.hxx>
-
+#include <vcl/weld.hxx>
 
 class SvxNumberFormatShell;
 class SvxNumberInfoItem;
 class vector;
 
 
-class SvxNumberPreview : public vcl::Window
+class SvxNumberPreview : public weld::CustomWidgetController
 {
 private:
     OUString        aPrevStr;
     Color           aPrevCol;
     sal_Int32       mnPos;
     sal_Unicode     mnChar;
-    void            InitSettings( bool bForeground, bool bBackground );
 
 protected:
-    virtual void    Paint( vcl::RenderContext& /*rRenderContext*/, const Rectangle& rRect ) override;
-    virtual void    StateChanged( StateChangedType nStateChange ) override;
-    virtual void    DataChanged( const DataChangedEvent& rDCEvt ) override;
+    virtual void    Paint(vcl::RenderContext& rRenderContext, const ::tools::Rectangle& rRect) override;
 
 public:
-    SvxNumberPreview(vcl::Window* pParent, WinBits nStyle = WB_BORDER);
+    SvxNumberPreview();
 
     void            NotifyChange( const OUString& rPrevStr, const Color* pColor = nullptr );
-};
 
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override
+    {
+        CustomWidgetController::SetDrawingArea(pDrawingArea);
+        pDrawingArea->set_size_request(-1, pDrawingArea->get_text_height() * 3);
+    }
+};
 
 class SvxNumberFormatTabPage : public SfxTabPage
 {
@@ -66,78 +64,70 @@ class SvxNumberFormatTabPage : public SfxTabPage
     static const sal_uInt16 pRanges[];
 
 public:
-    virtual ~SvxNumberFormatTabPage();
+    virtual ~SvxNumberFormatTabPage() override;
     virtual void dispose() override;
 
-    static VclPtr<SfxTabPage>      Create( vcl::Window* pParent,
+    static VclPtr<SfxTabPage>      Create( TabPageParent pParent,
                                     const SfxItemSet* rAttrSet );
     // Returns area information.
     static const sal_uInt16* GetRanges() { return pRanges; }
 
     virtual bool            FillItemSet( SfxItemSet* rSet ) override;
     virtual void            Reset( const SfxItemSet* rSet ) override;
-    virtual sfxpg           DeactivatePage  ( SfxItemSet* pSet = nullptr ) override;
+    virtual DeactivateRC    DeactivatePage  ( SfxItemSet* pSet ) override;
 
-    void                    SetInfoItem( const SvxNumberInfoItem& rItem );
-    void                    SetNumberFormatList( const SvxNumberInfoItem& rItem )
-                                { SetInfoItem( rItem ); }
-
-    void                    SetOkHdl( const Link<SfxPoolItem*,void>& rOkHandler );
     void                    HideLanguage(bool bFlag=true);
-    virtual bool            PreNotify( NotifyEvent& rNEvt ) override;
     virtual void            PageCreated(const SfxAllItemSet& aSet) override;
 private:
-    SvxNumberFormatTabPage( vcl::Window* pParent,
-                            const SfxItemSet& rCoreAttrs );
-    VclPtr<FixedText>              m_pFtCategory;
-    VclPtr<ListBox>                m_pLbCategory;
-    VclPtr<FixedText>              m_pFtFormat;
-    VclPtr<ListBox>                m_pLbCurrency;
-    VclPtr<SvxFontListBox>         m_pLbFormat;
-    VclPtr<FixedText>              m_pFtLanguage;
-    VclPtr<SvxLanguageBox>         m_pLbLanguage;
-    VclPtr<CheckBox>               m_pCbSourceFormat;
-    VclPtr<SvxNumberPreview>       m_pWndPreview;
-    VclPtr<FixedText>              m_pFtOptions;
-    VclPtr<FixedText>              m_pFtDecimals;
-    VclPtr<NumericField>           m_pEdDecimals;
-    VclPtr<CheckBox>               m_pBtnNegRed;
-    VclPtr<FixedText>              m_pFtLeadZeroes;
-    VclPtr<NumericField>           m_pEdLeadZeroes;
-    VclPtr<CheckBox>               m_pBtnThousand;
+    SvxNumberFormatTabPage(TabPageParent pParent, const SfxItemSet& rCoreAttrs);
 
-    VclPtr<VclContainer>           m_pFormatCodeFrame;
-    VclPtr<Edit>                   m_pEdFormat;
-    VclPtr<PushButton>             m_pIbAdd;
-    VclPtr<PushButton>             m_pIbInfo;
-    VclPtr<PushButton>             m_pIbRemove;
-
-    VclPtr<FixedText>              m_pFtComment;
-    VclPtr<Edit>                   m_pEdComment;
-    Timer                   aResetWinTimer;
-
-
-    SvxNumberInfoItem*      pNumItem;
-    SvxNumberFormatShell*   pNumFmtShell;
+    std::unique_ptr<SvxNumberInfoItem>    pNumItem;
+    std::unique_ptr<SvxNumberFormatShell> pNumFmtShell;
     sal_uLong               nInitFormat;
-    Link<SfxPoolItem*,void> fnOkHdl;
 
     bool                bNumItemFlag; ///< for handling with DocShell
     bool                bOneAreaFlag;
+    bool                bLegacyAutomaticCurrency;
     short                   nFixedCategory;
 
-    OUString sAutomaticEntry;
-    OUString sThousandSeparator;
-    OUString sEngineeringNotation;
+    OUString sAutomaticLangEntry;
+    OUString sAutomaticCurrencyEntry;
 
-    VclPtr<vcl::Window>            pLastActivWindow;
+    SvxNumberPreview m_aWndPreview;
+    std::unique_ptr<weld::Label> m_xFtCategory;
+    std::unique_ptr<weld::TreeView> m_xLbCategory;
+    std::unique_ptr<weld::Label> m_xFtFormat;
+    std::unique_ptr<weld::ComboBox> m_xLbCurrency;
+    std::unique_ptr<weld::TreeView> m_xLbFormat;
+    std::unique_ptr<weld::Label> m_xFtLanguage;
+    std::unique_ptr<weld::CheckButton> m_xCbSourceFormat;
+    std::unique_ptr<weld::Label> m_xFtOptions;
+    std::unique_ptr<weld::Label> m_xFtDecimals;
+    std::unique_ptr<weld::SpinButton> m_xEdDecimals;
+    std::unique_ptr<weld::Label> m_xFtDenominator;
+    std::unique_ptr<weld::SpinButton> m_xEdDenominator;
+    std::unique_ptr<weld::CheckButton> m_xBtnNegRed;
+    std::unique_ptr<weld::Label> m_xFtLeadZeroes;
+    std::unique_ptr<weld::SpinButton> m_xEdLeadZeroes;
+    std::unique_ptr<weld::CheckButton> m_xBtnThousand;
+    std::unique_ptr<weld::CheckButton> m_xBtnEngineering;
+    std::unique_ptr<weld::Widget> m_xFormatCodeFrame;
+    std::unique_ptr<weld::Entry> m_xEdFormat;
+    std::unique_ptr<weld::Button> m_xIbAdd;
+    std::unique_ptr<weld::Button> m_xIbInfo;
+    std::unique_ptr<weld::Button> m_xIbRemove;
+    std::unique_ptr<weld::Label> m_xFtComment;
+    std::unique_ptr<weld::Entry> m_xEdComment;
+    std::unique_ptr<LanguageBox> m_xLbLanguage;
+    std::unique_ptr<weld::CustomWeld> m_xWndPreview;
 
     void    Init_Impl();
     void    FillCurrencyBox();
     void    FillFormatListBox_Impl( std::vector<OUString>& rEntries );
     void    UpdateOptions_Impl( bool bCheckCatChange );
     void    UpdateFormatListBox_Impl( bool bCat, bool bUpdateEdit );
-    void    UpdateThousandEngineeringText();
+    void    UpdateThousandEngineeringCheckBox();
+    void    UpdateDecimalsDenominatorEditBox();
     void    Obstructing();
     void    EnableBySourceFormat_Impl();
     void    SetCategory( sal_uInt16 nPos );
@@ -145,21 +135,27 @@ private:
     void    MakePreviewText( const OUString& rFormat );
     void    ChangePreviewText( sal_uInt16 nPos );
     void    AddAutomaticLanguage_Impl(LanguageType eAutoLang, bool bSelect);
-    bool    Click_Impl(PushButton* pIB);
+    bool    Click_Impl(weld::Button& rIB);
     // Handler
-    DECL_LINK_TYPED( LostFocusHdl_Impl, Control&, void );
-    DECL_LINK_TYPED( DoubleClickHdl_Impl, SvTreeListBox*, bool );
-    DECL_LINK_TYPED( SelFormatListBoxHdl_Impl, ListBox&, void );
-    DECL_LINK_TYPED( SelFormatTreeListBoxHdl_Impl, SvTreeListBox*, void );
-    DECL_LINK_TYPED( SelFormatClickHdl_Impl, Button*, void );
-    void SelFormatHdl_Impl(void*);
-    DECL_LINK_TYPED( ClickHdl_Impl, Button*, void );
-    DECL_LINK_TYPED( EditModifyHdl_Impl, Edit&, void );
-    DECL_LINK_TYPED( OptEditHdl_Impl, Edit&, void );
-    DECL_LINK_TYPED( OptClickHdl_Impl, Button*, void );
-    DECL_LINK_TYPED( TimeHdl_Impl, Timer *, void);
-    void EditHdl_Impl(Edit*);
-    void OptHdl_Impl(void*);
+    DECL_LINK(LostFocusHdl_Impl, weld::Widget&, void);
+    DECL_LINK(DoubleClickHdl_Impl, weld::TreeView&, void);
+    DECL_LINK(SelFormatListBoxHdl_Impl, weld::ComboBox&, void);
+    DECL_LINK(SelFormatTreeListBoxHdl_Impl, weld::TreeView&, void);
+    DECL_LINK(SelFormatClickHdl_Impl, weld::Button&, void);
+    void SelFormatHdl_Impl(weld::Widget*);
+    DECL_LINK(ClickHdl_Impl, weld::Button&, void);
+    DECL_LINK(EditModifyHdl_Impl, weld::Entry&, void);
+    DECL_LINK(OptEditHdl_Impl, weld::SpinButton&, void);
+    DECL_LINK(OptClickHdl_Impl, weld::Button&, void);
+    DECL_LINK(TimeHdl_Impl, Timer*, void);
+    void EditHdl_Impl(const weld::Entry*);
+    void OptHdl_Impl(const weld::Widget*);
+
+    // set and get currency, taking into account if the legacy
+    // automatic currency entry exists
+    void set_active_currency(sal_Int32 nCurCurrencyEntryPos);
+    sal_uInt32 get_active_currency() const;
+
 };
 
 #endif

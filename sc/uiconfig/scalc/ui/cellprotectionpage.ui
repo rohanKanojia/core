@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.0 -->
+<!-- Generated with glade 3.22.1 -->
+<interface domain="sc">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkGrid" id="CellProtectionPage">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -20,7 +21,6 @@
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="hexpand">True</property>
-            <property name="vexpand">True</property>
             <property name="top_padding">6</property>
             <property name="left_padding">12</property>
             <child>
@@ -32,7 +32,7 @@
                 <property name="column_spacing">12</property>
                 <child>
                   <object class="GtkCheckButton" id="checkProtected">
-                    <property name="label" translatable="yes">_Protected</property>
+                    <property name="label" translatable="yes" context="cellprotectionpage|checkProtected">_Protected</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -46,13 +46,11 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="checkHideFormula">
-                    <property name="label" translatable="yes">Hide _formula</property>
+                    <property name="label" translatable="yes" context="cellprotectionpage|checkHideFormula">Hide _formula</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -65,13 +63,11 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="checkHideAll">
-                    <property name="label" translatable="yes">Hide _all</property>
+                    <property name="label" translatable="yes" context="cellprotectionpage|checkHideAll">Hide _all</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -85,8 +81,6 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -95,17 +89,16 @@
                     <property name="can_focus">False</property>
                     <property name="halign">end</property>
                     <property name="hexpand">True</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">Cell protection is only effective after the current sheet has been protected.
+                    <property name="label" translatable="yes" context="cellprotectionpage|label1">Cell protection is only effective after the current sheet has been protected.
 
-Select 'Protect Document' from the 'Tools' menu, and specify 'Sheet'.</property>
+Select 'Protect Sheet' from the 'Tools' menu.</property>
                     <property name="wrap">True</property>
                     <property name="max_width_chars">52</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
                     <property name="height">3</property>
                   </packing>
                 </child>
@@ -117,7 +110,7 @@ Select 'Protect Document' from the 'Tools' menu, and specify 'Sheet'.</property>
           <object class="GtkLabel" id="LabelProtection">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Protection</property>
+            <property name="label" translatable="yes" context="cellprotectionpage|LabelProtection">Protection</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -127,14 +120,13 @@ Select 'Protect Document' from the 'Tools' menu, and specify 'Sheet'.</property>
       <packing>
         <property name="left_attach">0</property>
         <property name="top_attach">0</property>
-        <property name="width">1</property>
-        <property name="height">1</property>
       </packing>
     </child>
     <child>
       <object class="GtkFrame" id="framePrint">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
+        <property name="valign">start</property>
         <property name="hexpand">True</property>
         <property name="label_xalign">0</property>
         <property name="shadow_type">none</property>
@@ -151,7 +143,7 @@ Select 'Protect Document' from the 'Tools' menu, and specify 'Sheet'.</property>
                 <property name="column_spacing">12</property>
                 <child>
                   <object class="GtkCheckButton" id="checkHidePrinting">
-                    <property name="label" translatable="yes">Hide _when printing</property>
+                    <property name="label" translatable="yes" context="cellprotectionpage|checkHidePrinting">Hide _when printing</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -163,8 +155,6 @@ Select 'Protect Document' from the 'Tools' menu, and specify 'Sheet'.</property>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -173,16 +163,14 @@ Select 'Protect Document' from the 'Tools' menu, and specify 'Sheet'.</property>
                     <property name="can_focus">False</property>
                     <property name="halign">end</property>
                     <property name="hexpand">True</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">The cells selected will be omitted when printing.</property>
+                    <property name="label" translatable="yes" context="cellprotectionpage|label4">The cells selected will be omitted when printing.</property>
                     <property name="wrap">True</property>
                     <property name="width_chars">52</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
               </object>
@@ -193,7 +181,7 @@ Select 'Protect Document' from the 'Tools' menu, and specify 'Sheet'.</property>
           <object class="GtkLabel" id="label3">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Print</property>
+            <property name="label" translatable="yes" context="cellprotectionpage|label3">Print</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -203,8 +191,6 @@ Select 'Protect Document' from the 'Tools' menu, and specify 'Sheet'.</property>
       <packing>
         <property name="left_attach">0</property>
         <property name="top_attach">1</property>
-        <property name="width">1</property>
-        <property name="height">1</property>
       </packing>
     </child>
   </object>

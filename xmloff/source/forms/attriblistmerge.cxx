@@ -21,6 +21,8 @@
 
 #include <osl/diagnose.h>
 
+#include <numeric>
+
 namespace xmloff
 {
 
@@ -57,14 +59,11 @@ namespace xmloff
 
     bool OAttribListMerger::seekToName(const OUString& _rName, Reference< xml::sax::XAttributeList >& _rSubList, sal_Int16& _rLocalIndex)
     {
-        for (   AttributeListArray::const_iterator aLookupSublist = m_aLists.begin();
-                aLookupSublist != m_aLists.end();
-                ++aLookupSublist
-            )
-            for (sal_Int16 i=0; i<(*aLookupSublist)->getLength(); ++i)
-                if ((*aLookupSublist)->getNameByIndex(i) == _rName)
+        for ( const auto& rLookupSublist : m_aLists )
+            for (sal_Int16 i=0; i<rLookupSublist->getLength(); ++i)
+                if (rLookupSublist->getNameByIndex(i) == _rName)
                 {
-                    _rSubList = *aLookupSublist;
+                    _rSubList = rLookupSublist;
                     _rLocalIndex = i;
                     return true;
                 }
@@ -73,18 +72,13 @@ namespace xmloff
         return false;
     }
 
-    sal_Int16 SAL_CALL OAttribListMerger::getLength(  ) throw(RuntimeException, std::exception)
+    sal_Int16 SAL_CALL OAttribListMerger::getLength(  )
     {
-        sal_Int16 nCount = 0;
-        for (   AttributeListArray::const_iterator aAccumulate = m_aLists.begin();
-                aAccumulate != m_aLists.end();
-                ++aAccumulate
-            )
-            nCount = nCount + (*aAccumulate)->getLength();
-        return nCount;
+        return std::accumulate(m_aLists.begin(), m_aLists.end(), static_cast<sal_Int16>(0),
+            [](sal_Int16 sum, AttributeListArray::value_type& rAccumulate) { return sum + rAccumulate->getLength(); });
     }
 
-    OUString SAL_CALL OAttribListMerger::getNameByIndex( sal_Int16 i ) throw(RuntimeException, std::exception)
+    OUString SAL_CALL OAttribListMerger::getNameByIndex( sal_Int16 i )
     {
         Reference< xml::sax::XAttributeList > xSubList;
         sal_Int16 nLocalIndex;
@@ -95,7 +89,7 @@ namespace xmloff
         return xSubList->getNameByIndex(nLocalIndex);
     }
 
-    OUString SAL_CALL OAttribListMerger::getTypeByIndex( sal_Int16 i ) throw(RuntimeException, std::exception)
+    OUString SAL_CALL OAttribListMerger::getTypeByIndex( sal_Int16 i )
     {
         Reference< xml::sax::XAttributeList > xSubList;
         sal_Int16 nLocalIndex;
@@ -106,7 +100,7 @@ namespace xmloff
         return xSubList->getTypeByIndex(nLocalIndex);
     }
 
-    OUString SAL_CALL OAttribListMerger::getTypeByName( const OUString& _rName ) throw(RuntimeException, std::exception)
+    OUString SAL_CALL OAttribListMerger::getTypeByName( const OUString& _rName )
     {
         Reference< xml::sax::XAttributeList > xSubList;
         sal_Int16 nLocalIndex;
@@ -119,7 +113,7 @@ namespace xmloff
         return xSubList->getTypeByIndex(nLocalIndex);
     }
 
-    OUString SAL_CALL OAttribListMerger::getValueByIndex( sal_Int16 i ) throw(RuntimeException, std::exception)
+    OUString SAL_CALL OAttribListMerger::getValueByIndex( sal_Int16 i )
     {
         Reference< xml::sax::XAttributeList > xSubList;
         sal_Int16 nLocalIndex;
@@ -130,7 +124,7 @@ namespace xmloff
         return xSubList->getValueByIndex(nLocalIndex);
     }
 
-    OUString SAL_CALL OAttribListMerger::getValueByName( const OUString& _rName ) throw(RuntimeException, std::exception)
+    OUString SAL_CALL OAttribListMerger::getValueByName( const OUString& _rName )
     {
         Reference< xml::sax::XAttributeList > xSubList;
         sal_Int16 nLocalIndex;

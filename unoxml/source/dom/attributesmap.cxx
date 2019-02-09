@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <attributesmap.hxx>
+#include "attributesmap.hxx"
 
 #include <string.h>
 
-#include <element.hxx>
-#include <document.hxx>
+#include "element.hxx"
+#include "document.hxx"
 
 using namespace css::uno;
 using namespace css::xml::dom;
@@ -39,7 +39,7 @@ namespace DOM
     /**
     The number of nodes in this map.
     */
-    sal_Int32 SAL_CALL CAttributesMap::getLength() throw (RuntimeException, std::exception)
+    sal_Int32 SAL_CALL CAttributesMap::getLength()
     {
         ::osl::MutexGuard const g(m_rMutex);
 
@@ -61,7 +61,7 @@ namespace DOM
     Retrieves a node specified by local name
     */
     Reference< XNode > SAL_CALL
-    CAttributesMap::getNamedItem(OUString const& name) throw (RuntimeException, std::exception)
+    CAttributesMap::getNamedItem(OUString const& name)
     {
         ::osl::MutexGuard const g(m_rMutex);
 
@@ -70,11 +70,11 @@ namespace DOM
         if (pNode != nullptr)
         {
             OString o1 = OUStringToOString(name, RTL_TEXTENCODING_UTF8);
-            xmlChar const * xName = reinterpret_cast<xmlChar const *>(o1.getStr());
+            xmlChar const * pName = reinterpret_cast<xmlChar const *>(o1.getStr());
             xmlAttrPtr cur = pNode->properties;
             while (cur != nullptr)
             {
-                if( strcmp(reinterpret_cast<char const *>(xName), reinterpret_cast<char const *>(cur->name)) == 0)
+                if( strcmp(reinterpret_cast<char const *>(pName), reinterpret_cast<char const *>(cur->name)) == 0)
                 {
                     aNode.set( m_pElement->GetOwnerDocument().GetCNode(
                                    reinterpret_cast<xmlNodePtr>(cur)).get() );
@@ -92,7 +92,6 @@ namespace DOM
     Reference< XNode > SAL_CALL
     CAttributesMap::getNamedItemNS(
             OUString const& namespaceURI, OUString const& localName)
-    throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard const g(m_rMutex);
 
@@ -101,15 +100,15 @@ namespace DOM
         if (pNode != nullptr)
         {
             OString o1 = OUStringToOString(localName, RTL_TEXTENCODING_UTF8);
-            xmlChar const * xName = reinterpret_cast<xmlChar const *>(o1.getStr());
+            xmlChar const * pName = reinterpret_cast<xmlChar const *>(o1.getStr());
             OString o2 = OUStringToOString(namespaceURI, RTL_TEXTENCODING_UTF8);
-            xmlChar const*const xNs =
+            xmlChar const* pSearchNs =
                 reinterpret_cast<xmlChar const*>(o2.getStr());
-            xmlNsPtr const pNs = xmlSearchNsByHref(pNode->doc, pNode, xNs);
+            xmlNsPtr const pNs = xmlSearchNsByHref(pNode->doc, pNode, pSearchNs);
             xmlAttrPtr cur = pNode->properties;
             while (cur != nullptr && pNs != nullptr)
             {
-                if( strcmp(reinterpret_cast<char const *>(xName), reinterpret_cast<char const *>(cur->name)) == 0 &&
+                if( strcmp(reinterpret_cast<char const *>(pName), reinterpret_cast<char const *>(cur->name)) == 0 &&
                     cur->ns == pNs)
                 {
                     aNode.set( m_pElement->GetOwnerDocument().GetCNode(
@@ -126,7 +125,7 @@ namespace DOM
     Returns the indexth item in the map.
     */
     Reference< XNode > SAL_CALL
-    CAttributesMap::item(sal_Int32 index) throw (RuntimeException, std::exception)
+    CAttributesMap::item(sal_Int32 index)
     {
         ::osl::MutexGuard const g(m_rMutex);
 
@@ -156,7 +155,6 @@ namespace DOM
     */
     Reference< XNode > SAL_CALL
     CAttributesMap::removeNamedItem(OUString const& name)
-    throw (DOMException, RuntimeException, std::exception)
     {
         // no MutexGuard needed: m_pElement is const
         Reference< XAttr > const xAttr(m_pElement->getAttributeNode(name));
@@ -177,7 +175,6 @@ namespace DOM
     Reference< XNode > SAL_CALL
     CAttributesMap::removeNamedItemNS(
             OUString const& namespaceURI, OUString const& localName)
-    throw (DOMException, RuntimeException, std::exception)
     {
         // no MutexGuard needed: m_pElement is const
         Reference< XAttr > const xAttr(
@@ -198,7 +195,6 @@ namespace DOM
     */
     Reference< XNode > SAL_CALL
     CAttributesMap::setNamedItem(Reference< XNode > const& xNode)
-    throw (DOMException, RuntimeException, std::exception)
     {
         Reference< XAttr > const xAttr(xNode, UNO_QUERY);
         if (!xNode.is()) {
@@ -218,7 +214,6 @@ namespace DOM
     */
     Reference< XNode > SAL_CALL
     CAttributesMap::setNamedItemNS(Reference< XNode > const& xNode)
-    throw (DOMException, RuntimeException, std::exception)
     {
         Reference< XAttr > const xAttr(xNode, UNO_QUERY);
         if (!xNode.is()) {

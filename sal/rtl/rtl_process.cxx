@@ -17,18 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstring>
 
-#include "rtl/instance.hxx"
-#include "rtl/process.h"
-#include "rtl/uuid.h"
-#include "sal/types.h"
+#include <rtl/instance.hxx>
+#include <rtl/process.h>
+#include <rtl/uuid.h>
+#include <sal/types.h>
 
-namespace {
+namespace
+{
 
-class Id {
+class Id
+{
 public:
     Id() { rtl_createUuid(uuid_, nullptr, false); }
 
@@ -36,7 +38,7 @@ public:
     Id& operator=(const Id&) = delete;
 
     void copy(sal_uInt8 * target) const
-    { std::memcpy(target, uuid_, UUID_SIZE); }
+        { std::memcpy(target, uuid_, UUID_SIZE); }
 
 private:
     enum { UUID_SIZE = 16 };
@@ -46,9 +48,10 @@ private:
 
 struct theId: public rtl::Static< Id, theId > {};
 
-}
+} // end namespace
 
-void rtl_getGlobalProcessId(sal_uInt8 * pTargetUUID) {
+void rtl_getGlobalProcessId(sal_uInt8 * pTargetUUID)
+{
     theId::get().copy(pTargetUUID);
 }
 

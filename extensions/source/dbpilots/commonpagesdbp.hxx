@@ -29,9 +29,8 @@
 namespace dbp
 {
 
-    class OTableSelectionPage : public OControlWizardPage
+    class OTableSelectionPage final : public OControlWizardPage
     {
-    protected:
         VclPtr<FixedText>       m_pDatasourceLabel;
         VclPtr<ListBox>         m_pDatasource;
         VclPtr<PushButton>      m_pSearchDatabase;
@@ -42,10 +41,10 @@ namespace dbp
 
     public:
         explicit OTableSelectionPage(OControlWizard* _pParent);
-        virtual ~OTableSelectionPage();
+        virtual ~OTableSelectionPage() override;
         virtual void dispose() override;
 
-    protected:
+    private:
         // TabPage overridables
         void ActivatePage() override;
 
@@ -53,12 +52,10 @@ namespace dbp
         virtual void        initializePage() override;
         virtual bool        commitPage( ::svt::WizardTypes::CommitPageReason _eReason ) override;
 
-    protected:
-        DECL_LINK_TYPED( OnListboxSelection, ListBox&, void );
-        DECL_LINK_TYPED( OnListboxDoubleClicked, ListBox&, void );
-        DECL_LINK_TYPED( OnSearchClicked, Button*, void );
+        DECL_LINK( OnListboxSelection, ListBox&, void );
+        DECL_LINK( OnListboxDoubleClicked, ListBox&, void );
+        DECL_LINK( OnSearchClicked, Button*, void );
 
-        void implCollectDatasource();
         void implFillTables(const css::uno::Reference< css::sdbc::XConnection >&
                         _rxConn = css::uno::Reference< css::sdbc::XConnection >());
 
@@ -75,11 +72,11 @@ namespace dbp
 
     public:
         OMaybeListSelectionPage( OControlWizard* _pParent, const OString& _rID, const OUString& _rUIXMLDescription );
-        virtual ~OMaybeListSelectionPage();
+        virtual ~OMaybeListSelectionPage() override;
         virtual void dispose() override;
 
     protected:
-        DECL_LINK_TYPED( OnRadioSelected, Button*, void );
+        DECL_LINK( OnRadioSelected, Button*, void );
 
         // TabPage overridables
         void ActivatePage() override;
@@ -106,7 +103,7 @@ namespace dbp
 
     public:
         explicit ODBFieldPage( OControlWizard* _pParent );
-        virtual ~ODBFieldPage();
+        virtual ~ODBFieldPage() override;
         virtual void dispose() override;
 
     protected:

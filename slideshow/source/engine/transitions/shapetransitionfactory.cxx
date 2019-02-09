@@ -20,20 +20,20 @@
 
 #include <tools/diagnose_ex.h>
 
-#include <comphelper/anytostring.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <basegfx/numeric/ftools.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
+#include <sal/log.hxx>
 
 #include <com/sun/star/animations/TransitionType.hpp>
 #include <com/sun/star/animations/TransitionSubType.hpp>
 
-#include "transitionfactory.hxx"
+#include <transitionfactory.hxx>
 #include "transitionfactorytab.hxx"
 #include "transitiontools.hxx"
 #include "parametricpolypolygonfactory.hxx"
-#include "animationfactory.hxx"
+#include <animationfactory.hxx>
 #include "clippingfunctor.hxx"
 
 using namespace ::com::sun::star;
@@ -59,7 +59,7 @@ public:
         bool                                    bDirectionForward,
         bool                                    bModeIn );
 
-    virtual ~ClippingAnimation();
+    virtual ~ClippingAnimation() override;
 
     // Animation interface
 
@@ -110,12 +110,9 @@ ClippingAnimation::~ClippingAnimation()
     {
         end_();
     }
-    catch (uno::Exception &)
+    catch (const uno::Exception& e)
     {
-        OSL_FAIL( OUStringToOString(
-                        comphelper::anyToString(
-                            cppu::getCaughtException() ),
-                        RTL_TEXTENCODING_UTF8 ).getStr() );
+        SAL_WARN("slideshow", e);
     }
 }
 
@@ -351,14 +348,9 @@ AnimationActivitySharedPtr createShapeTransitionByType(
     {
         // No animation generated, maybe no table entry for given
         // transition?
-        OSL_TRACE(
-            "createShapeTransitionByType(): Unknown type/subtype (%d/%d) "
-            "combination encountered",
-            xTransition->getTransition(),
-            xTransition->getSubtype() );
-        OSL_FAIL(
-            "createShapeTransitionByType(): Unknown type/subtype "
-            "combination encountered" );
+        SAL_WARN("slideshow",
+            "createShapeTransitionByType(): Unknown type/subtype combination encountered: "
+            << xTransition->getTransition() << " " << xTransition->getSubtype() );
     }
 
     return pGeneratedActivity;

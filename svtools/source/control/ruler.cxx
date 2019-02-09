@@ -21,12 +21,17 @@
 #include <tools/debug.hxx>
 #include <vcl/svapp.hxx>
 #include <tools/poly.hxx>
+#include <vcl/event.hxx>
 #include <vcl/i18nhelp.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/vcllayout.hxx>
+#include <vcl/virdev.hxx>
+#include <sal/log.hxx>
 
+#include <svtools/accessibleruler.hxx>
 #include <svtools/ruler.hxx>
 #include <svtools/svtresid.hxx>
-#include <svtools/svtools.hrc>
+#include <svtools/strings.hrc>
 #include <svtools/colorcfg.hxx>
 
 #include <memory>
@@ -61,6 +66,37 @@ using namespace ::com::sun::star::accessibility;
 #define RULER_UNIT_LINE    10
 #define RULER_UNIT_COUNT   11
 
+namespace
+{
+/**
+ * Pre-calculates glyph items for rText on rRenderContext. Subsequent calls
+ * avoid the calculation and just return a pointer to rTextGlyphs.
+ */
+SalLayoutGlyphs* lcl_GetRulerTextGlyphs(const vcl::RenderContext& rRenderContext, const OUString& rText,
+                                        SalLayoutGlyphs& rTextGlyphs)
+{
+    if (rTextGlyphs.IsValid())
+        // Use pre-calculated result.
+        return &rTextGlyphs;
+
+    // Calculate glyph items.
+
+    std::unique_ptr<SalLayout> pLayout = rRenderContext.ImplLayout(
+        rText, 0, rText.getLength(), Point(0, 0), 0, nullptr, SalLayoutFlags::GlyphItemsOnly);
+    if (!pLayout)
+        return nullptr;
+
+    const SalLayoutGlyphs* pGlyphs = pLayout->GetGlyphs();
+    if (!pGlyphs)
+        return nullptr;
+
+    // Remember the calculation result.
+    rTextGlyphs = *pGlyphs;
+
+    return &rTextGlyphs;
+}
+}
+
 class ImplRulerData
 {
     friend class Ruler;
@@ -81,16 +117,13 @@ private:
     long       nMargin2;
     long       nLeftFrameMargin;
     long       nRightFrameMargin;
-    sal_uInt16 nMargin1Style;
-    sal_uInt16 nMargin2Style;
+    RulerMarginStyle nMargin1Style;
+    RulerMarginStyle nMargin2Style;
     bool       bAutoPageWidth;
     bool       bTextRTL;
 
 public:
     ImplRulerData();
-    ~ImplRulerData();
-
-    ImplRulerData& operator=( const ImplRulerData& rData );
 };
 
 ImplRulerData::ImplRulerData() :
@@ -104,92 +137,26 @@ ImplRulerData::ImplRulerData() :
     nMargin2          (0),
     nLeftFrameMargin  (0),
     nRightFrameMargin (0),
-    nMargin1Style     (0),
-    nMargin2Style     (0),
+    nMargin1Style     (RulerMarginStyle::NONE),
+    nMargin2Style     (RulerMarginStyle::NONE),
     bAutoPageWidth    (true), // Page width == EditWin width
     bTextRTL          (false)
 {
 }
 
-ImplRulerData::~ImplRulerData()
-{}
-
-ImplRulerData& ImplRulerData::operator=( const ImplRulerData& rData )
-{
-    if( this == &rData )
-        return *this;
-
-    nNullVirOff       = rData.nNullVirOff;
-    nRulVirOff        = rData.nRulVirOff;
-    nRulWidth         = rData.nRulWidth;
-    nPageOff          = rData.nPageOff;
-    nPageWidth        = rData.nPageWidth;
-    nNullOff          = rData.nNullOff;
-    nMargin1          = rData.nMargin1;
-    nMargin2          = rData.nMargin2;
-    nLeftFrameMargin  = rData.nLeftFrameMargin;
-    nRightFrameMargin = rData.nRightFrameMargin;
-    nMargin1Style     = rData.nMargin1Style;
-    nMargin2Style     = rData.nMargin2Style;
-    bAutoPageWidth    = rData.bAutoPageWidth;
-    bTextRTL          = rData.bTextRTL;
-
-    if ( !rData.pLines.empty() )
-    {
-        pLines.resize(rData.pLines.size());
-        std::copy(rData.pLines.begin(), rData.pLines.end(), pLines.begin());
-    }
-    else
-    {
-        pLines.clear();
-    }
-
-    if ( !rData.pBorders.empty() )
-    {
-        pBorders.resize(rData.pBorders.size());
-        std::copy(rData.pBorders.begin(), rData.pBorders.end(), pBorders.begin());
-    }
-    else
-    {
-        pBorders.clear();
-    }
-
-    if ( !rData.pIndents.empty() )
-    {
-        pIndents.resize(rData.pIndents.size());
-        std::copy(rData.pIndents.begin(), rData.pIndents.end(), pIndents.begin());
-    }
-    else
-    {
-        pIndents.clear();
-    }
-
-    if ( !rData.pTabs.empty() )
-    {
-        pTabs.resize(rData.pTabs.size());
-        std::copy(rData.pTabs.begin(), rData.pTabs.end(), pTabs.begin());
-    }
-    else
-    {
-        pTabs.clear();
-    }
-
-    return *this;
-}
-
 static const RulerUnitData aImplRulerUnitTab[RULER_UNIT_COUNT] =
 {
-{ MAP_100TH_MM,        100,    25.0,    25.0,     50.0,    100.0,  " mm"    }, // MM
-{ MAP_100TH_MM,       1000,   100.0,   500.0,   1000.0,   1000.0,  " cm"    }, // CM
-{ MAP_MM,             1000,    10.0,   250.0,    500.0,   1000.0,  " m"     }, // M
-{ MAP_CM,           100000, 12500.0, 25000.0,  50000.0, 100000.0,  " km"    }, // KM
-{ MAP_1000TH_INCH,    1000,    62.5,   125.0,    500.0,   1000.0,  "\""     }, // INCH
-{ MAP_100TH_INCH,     1200,   120.0,   120.0,    600.0,   1200.0,  "'"      }, // FOOT
-{ MAP_10TH_INCH,    633600, 63360.0, 63360.0, 316800.0, 633600.0,  " miles" }, // MILE
-{ MAP_POINT,             1,    12.0,    12.0,     12.0,     36.0,  " pt"    }, // POINT
-{ MAP_100TH_MM,        423,   423.0,   423.0,    423.0,    846.0,  " pi"    }, // PICA
-{ MAP_100TH_MM,        371,   371.0,   371.0,    371.0,    743.0,  " ch"    }, // CHAR
-{ MAP_100TH_MM,        551,   551.0,   551.0,    551.0,   1102.0,  " li"    }  // LINE
+{ MapUnit::Map100thMM,        100,    25.0,    25.0,     50.0,    100.0,  " mm"    }, // MM
+{ MapUnit::Map100thMM,       1000,   100.0,   500.0,   1000.0,   1000.0,  " cm"    }, // CM
+{ MapUnit::MapMM,             1000,    10.0,   250.0,    500.0,   1000.0,  " m"     }, // M
+{ MapUnit::MapCM,           100000, 12500.0, 25000.0,  50000.0, 100000.0,  " km"    }, // KM
+{ MapUnit::Map1000thInch,    1000,    62.5,   125.0,    500.0,   1000.0,  "\""     }, // INCH
+{ MapUnit::Map100thInch,     1200,   120.0,   120.0,    600.0,   1200.0,  "'"      }, // FOOT
+{ MapUnit::Map10thInch,    633600, 63360.0, 63360.0, 316800.0, 633600.0,  " miles" }, // MILE
+{ MapUnit::MapPoint,             1,    12.0,    12.0,     12.0,     36.0,  " pt"    }, // POINT
+{ MapUnit::Map100thMM,        423,   423.0,   423.0,    423.0,    846.0,  " pc"    }, // PICA
+{ MapUnit::Map100thMM,        371,   371.0,   371.0,    371.0,    743.0,  " ch"    }, // CHAR
+{ MapUnit::Map100thMM,        551,   551.0,   551.0,    551.0,   1102.0,  " li"    }  // LINE
 };
 
 static RulerTabData ruler_tab =
@@ -214,12 +181,12 @@ static RulerTabData ruler_tab =
 
 void Ruler::ImplInit( WinBits nWinBits )
 {
-    // Default WinBits setzen
+    // Set default WinBits
     if ( !(nWinBits & WB_VERT) )
     {
         nWinBits |= WB_HORZ;
 
-        // --- RTL --- no UI mirroring for horizontal rulers, because
+        // RTL: no UI mirroring for horizontal rulers, because
         // the document is also not mirrored
         EnableRTL( false );
     }
@@ -235,13 +202,10 @@ void Ruler::ImplInit( WinBits nWinBits )
     mnVirWidth      = 0;                    // width or height from VirtualDevice
     mnVirHeight     = 0;                    // height of width from VirtualDevice
     mnDragPos       = 0;                    // Drag-Position (Null point)
-    mnUpdateEvtId   = nullptr;                    // Update event was not sent yet
     mnDragAryPos    = 0;                    // Drag-Array-Index
-    mnDragSize      = 0;                    // Did size change at dragging
+    mnDragSize      = RulerDragSize::Move;  // Did size change at dragging
     mnDragModifier  = 0;                    // Modifier key at dragging
     mnExtraStyle    = 0;                    // Style of Extra field
-    mnExtraClicks   = 0;                    // No. of clicks for Extra field
-    mnExtraModifier = 0;                    // Modifier key at click in extra field
     mnCharWidth     = 371;
     mnLineHeight    = 551;
     mbCalc          = true;                 // Should recalculate page width
@@ -252,15 +216,14 @@ void Ruler::ImplInit( WinBits nWinBits )
     mbAutoWinWidth  = true;                 // EditWinWidth == RulerWidth
     mbActive        = true;                 // Is ruler active
     mnUpdateFlags   = 0;                    // What needs to be updated
-    mpData          = mpSaveData;           // Pointer to normal data
-    meExtraType     = RULER_EXTRA_DONTKNOW; // What is in extra field
-    meDragType      = RULER_TYPE_DONTKNOW;  // Which element is dragged
+    mpData          = mpSaveData.get();     // Pointer to normal data
+    meExtraType     = RulerExtra::DontKnow; // What is in extra field
+    meDragType      = RulerType::DontKnow;  // Which element is dragged
 
     // Initialize Units
     mnUnitIndex     = RULER_UNIT_CM;
-    meUnit          = FUNIT_CM;
+    meUnit          = FieldUnit::CM;
     maZoom          = Fraction( 1, 1 );
-    meSourceUnit    = MAP_100TH_MM;
 
     // Recalculate border widths
     if ( nWinBits & WB_BORDER )
@@ -272,24 +235,23 @@ void Ruler::ImplInit( WinBits nWinBits )
     ImplInitSettings( true, true, true );
 
     // Setup the default size
-    Rectangle aRect;
+    tools::Rectangle aRect;
     GetTextBoundRect( aRect, "0123456789" );
     long nDefHeight = aRect.GetHeight() + RULER_OFF * 2 + ruler_tab.textoff * 2 + mnBorderWidth;
 
     Size aDefSize;
     if ( nWinBits & WB_HORZ )
-        aDefSize.Height() = nDefHeight;
+        aDefSize.setHeight( nDefHeight );
     else
-        aDefSize.Width() = nDefHeight;
+        aDefSize.setWidth( nDefHeight );
     SetOutputSizePixel( aDefSize );
-    SetType(WINDOW_RULER);
-    pAccContext = nullptr;
+    SetType(WindowType::RULER);
 }
 
 Ruler::Ruler( vcl::Window* pParent, WinBits nWinStyle ) :
     Window( pParent, nWinStyle & WB_3DLOOK ),
     maVirDev( VclPtr<VirtualDevice>::Create(*this) ),
-    maMapMode( MAP_100TH_MM ),
+    maMapMode( MapUnit::Map100thMM ),
     mpSaveData(new ImplRulerData),
     mpData(nullptr),
     mpDragData(new ImplRulerData)
@@ -328,17 +290,9 @@ Ruler::~Ruler()
 
 void Ruler::dispose()
 {
-    if ( mnUpdateEvtId )
-        Application::RemoveUserEvent( mnUpdateEvtId );
-    delete mpSaveData;
-    mpSaveData = nullptr;
-    delete mpDragData;
-    mpDragData = nullptr;
-    if( pAccContext )
-    {
-        pAccContext->release();
-        pAccContext = nullptr;
-    }
+    mpSaveData.reset();
+    mpDragData.reset();
+    mxAccContext.clear();
     Window::dispose();
 }
 
@@ -381,15 +335,17 @@ void Ruler::ImplVDrawRect(vcl::RenderContext& rRenderContext, long nX1, long nY1
     }
 
     if ( mnWinStyle & WB_HORZ )
-        rRenderContext.DrawRect(Rectangle(nX1, nY1, nX2, nY2));
+        rRenderContext.DrawRect(tools::Rectangle(nX1, nY1, nX2, nY2));
     else
-        rRenderContext.DrawRect(Rectangle(nY1, nX1, nY2, nX2));
+        rRenderContext.DrawRect(tools::Rectangle(nY1, nX1, nY2, nX2));
 }
 
 void Ruler::ImplVDrawText(vcl::RenderContext& rRenderContext, long nX, long nY, const OUString& rText, long nMin, long nMax)
 {
-    Rectangle aRect;
-    rRenderContext.GetTextBoundRect(aRect, rText);
+    tools::Rectangle aRect;
+    SalLayoutGlyphs* pTextLayout
+        = lcl_GetRulerTextGlyphs(rRenderContext, rText, maTextGlyphs[rText]);
+    rRenderContext.GetTextBoundRect(aRect, rText, 0, 0, -1, 0, nullptr, pTextLayout);
 
     long nShiftX = ( aRect.GetWidth() / 2 ) + aRect.Left();
     long nShiftY = ( aRect.GetHeight() / 2 ) + aRect.Top();
@@ -397,70 +353,72 @@ void Ruler::ImplVDrawText(vcl::RenderContext& rRenderContext, long nX, long nY, 
     if ( (nX > -RULER_CLIP) && (nX < mnVirWidth + RULER_CLIP) && ( nX < nMax - nShiftX ) && ( nX > nMin + nShiftX ) )
     {
         if ( mnWinStyle & WB_HORZ )
-            rRenderContext.DrawText(Point(nX - nShiftX, nY - nShiftY), rText);
+            rRenderContext.DrawText(Point(nX - nShiftX, nY - nShiftY), rText, 0, -1, nullptr,
+                                    nullptr, pTextLayout);
         else
-            rRenderContext.DrawText(Point(nY - nShiftX, nX - nShiftY), rText);
+            rRenderContext.DrawText(Point(nY - nShiftX, nX - nShiftY), rText, 0, -1, nullptr,
+                                    nullptr, pTextLayout);
     }
 }
 
 void Ruler::ImplInvertLines(vcl::RenderContext& rRenderContext)
 {
     // Position lines
-    if (!mpData->pLines.empty() && mbActive && !mbDrag && !mbFormat && !(mnUpdateFlags & RULER_UPDATE_LINES) )
+    if (!(!mpData->pLines.empty() && mbActive && !mbDrag && !mbFormat && !(mnUpdateFlags & RULER_UPDATE_LINES)) )
+        return;
+
+    long nNullWinOff = mpData->nNullVirOff + mnVirOff;
+    long nRulX1      = mpData->nRulVirOff  + mnVirOff;
+    long nRulX2      = nRulX1 + mpData->nRulWidth;
+    long nY          = (RULER_OFF * 2) + mnVirHeight - 1;
+
+    // Calculate rectangle
+    tools::Rectangle aRect;
+    if (mnWinStyle & WB_HORZ)
+        aRect.SetBottom( nY );
+    else
+        aRect.SetRight( nY );
+
+    // Draw lines
+    for (RulerLine & rLine : mpData->pLines)
     {
-        long nNullWinOff = mpData->nNullVirOff + mnVirOff;
-        long nRulX1      = mpData->nRulVirOff  + mnVirOff;
-        long nRulX2      = nRulX1 + mpData->nRulWidth;
-        long nY          = (RULER_OFF * 2) + mnVirHeight - 1;
-
-        // Calculate rectangle
-        Rectangle aRect;
-        if (mnWinStyle & WB_HORZ)
-            aRect.Bottom() = nY;
-        else
-            aRect.Right() = nY;
-
-        // Draw lines
-        for (size_t i = 0; i < mpData->pLines.size(); i++)
+        const long n = rLine.nPos + nNullWinOff;
+        if ((n >= nRulX1) && (n < nRulX2))
         {
-            const long n = mpData->pLines[i].nPos + nNullWinOff;
-            if ((n >= nRulX1) && (n < nRulX2))
+            if (mnWinStyle & WB_HORZ )
             {
-                if (mnWinStyle & WB_HORZ )
-                {
-                    aRect.Left()   = n;
-                    aRect.Right()  = n;
-                }
-                else
-                {
-                    aRect.Top()    = n;
-                    aRect.Bottom() = n;
-                }
-                Rectangle aTempRect = aRect;
-
-                if (mnWinStyle & WB_HORZ)
-                    aTempRect.Bottom() = RULER_OFF - 1;
-                else
-                    aTempRect.Right() = RULER_OFF - 1;
-
-                rRenderContext.Erase(aTempRect);
-
-                if (mnWinStyle & WB_HORZ)
-                {
-                    aTempRect.Bottom() = aRect.Bottom();
-                    aTempRect.Top()    = aTempRect.Bottom() - RULER_OFF + 1;
-                }
-                else
-                {
-                    aTempRect.Right()  = aRect.Right();
-                    aTempRect.Left()   = aTempRect.Right() - RULER_OFF + 1;
-                }
-                rRenderContext.Erase(aTempRect);
-                Invert(aRect);
+                aRect.SetLeft( n );
+                aRect.SetRight( n );
             }
+            else
+            {
+                aRect.SetTop( n );
+                aRect.SetBottom( n );
+            }
+            tools::Rectangle aTempRect = aRect;
+
+            if (mnWinStyle & WB_HORZ)
+                aTempRect.SetBottom( RULER_OFF - 1 );
+            else
+                aTempRect.SetRight( RULER_OFF - 1 );
+
+            rRenderContext.Erase(aTempRect);
+
+            if (mnWinStyle & WB_HORZ)
+            {
+                aTempRect.SetBottom( aRect.Bottom() );
+                aTempRect.SetTop( aTempRect.Bottom() - RULER_OFF + 1 );
+            }
+            else
+            {
+                aTempRect.SetRight( aRect.Right() );
+                aTempRect.SetLeft( aTempRect.Right() - RULER_OFF + 1 );
+            }
+            rRenderContext.Erase(aTempRect);
+            Invert(aRect);
         }
-        mnUpdateFlags = 0;
     }
+    mnUpdateFlags = 0;
 }
 
 void Ruler::ImplDrawTicks(vcl::RenderContext& rRenderContext, long nMin, long nMax, long nStart, long nTop, long nBottom)
@@ -574,118 +532,118 @@ void Ruler::ImplDrawTicks(vcl::RenderContext& rRenderContext, long nMin, long nM
         rRenderContext.SetLineColor(rRenderContext.GetSettings().GetStyleSettings().GetShadowColor());
     }
 
-    if (!bNoTicks)
+    if (bNoTicks)
+        return;
+
+    long n = 0;
+    double nTick = 0.0;
+    double nTick3 = 0;
+
+    if ((mnUnitIndex != RULER_UNIT_CHAR) && (mnUnitIndex != RULER_UNIT_LINE))
     {
-        long n = 0;
-        double nTick = 0.0;
-        double nTick3 = 0;
+        nTick2 = aImplRulerUnitTab[mnUnitIndex].nTick2;
+        nTick3 = aImplRulerUnitTab[mnUnitIndex].nTick3;
+    }
 
-        if ((mnUnitIndex != RULER_UNIT_CHAR) && (mnUnitIndex != RULER_UNIT_LINE))
+    Size nTickGapSize;
+
+    nTickGapSize = rRenderContext.LogicToPixel(Size(nTickCount, nTickCount), maMapMode);
+    long nTickGap1 = mnWinStyle & WB_HORZ ? nTickGapSize.Width() : nTickGapSize.Height();
+    nTickGapSize = rRenderContext.LogicToPixel(Size(nTick2, nTick2), maMapMode);
+    long nTickGap2 = mnWinStyle & WB_HORZ ? nTickGapSize.Width() : nTickGapSize.Height();
+    nTickGapSize = rRenderContext.LogicToPixel(Size(nTick3, nTick3), maMapMode);
+    long nTickGap3 = mnWinStyle & WB_HORZ ? nTickGapSize.Width() : nTickGapSize.Height();
+
+    while (((nStart - n) >= nMin) || ((nStart + n) <= nMax))
+    {
+        // Null point
+        if (nTick == 0.0)
         {
-            nTick2 = aImplRulerUnitTab[mnUnitIndex].nTick2;
-            nTick3 = aImplRulerUnitTab[mnUnitIndex].nTick3;
-        }
-
-        Size nTickGapSize;
-
-        nTickGapSize = rRenderContext.LogicToPixel(Size(nTickCount, nTickCount), maMapMode);
-        long nTickGap1 = mnWinStyle & WB_HORZ ? nTickGapSize.Width() : nTickGapSize.Height();
-        nTickGapSize = rRenderContext.LogicToPixel(Size(nTick2, nTick2), maMapMode);
-        long nTickGap2 = mnWinStyle & WB_HORZ ? nTickGapSize.Width() : nTickGapSize.Height();
-        nTickGapSize = rRenderContext.LogicToPixel(Size(nTick3, nTick3), maMapMode);
-        long nTickGap3 = mnWinStyle & WB_HORZ ? nTickGapSize.Width() : nTickGapSize.Height();
-
-        while (((nStart - n) >= nMin) || ((nStart + n) <= nMax))
-        {
-            // Null point
-            if (nTick == 0.0)
+            if (nStart > nMin)
             {
-                if (nStart > nMin)
+                // 0 is only painted when Margin1 is not equal to zero
+                if ((mpData->nMargin1Style & RulerMarginStyle::Invisible) || (mpData->nMargin1 != 0))
                 {
-                    // 0 is only painted when Margin1 is not equal to zero
-                    if ((mpData->nMargin1Style & RULER_STYLE_INVISIBLE) || (mpData->nMargin1 != 0))
-                    {
-                        aNumString = "0";
-                        ImplVDrawText(rRenderContext, nStart, nCenter, aNumString);
-                    }
+                    aNumString = "0";
+                    ImplVDrawText(rRenderContext, nStart, nCenter, aNumString);
                 }
             }
+        }
+        else
+        {
+            aPixSize = rRenderContext.LogicToPixel(Size(nTick, nTick), maMapMode);
+
+            if (mnWinStyle & WB_HORZ)
+                n = aPixSize.Width();
+            else
+                n = aPixSize.Height();
+
+            // Tick4 - Output (Text)
+            double aStep = nTick / nTick4;
+            double aRest = std::abs(aStep - std::floor(aStep));
+            double nAcceptanceDelta = 0.0001;
+
+            if (aRest < nAcceptanceDelta)
+            {
+                if ((mnUnitIndex == RULER_UNIT_CHAR) || (mnUnitIndex == RULER_UNIT_LINE))
+                    aNumString = OUString::number(nTick / nTickUnit);
+                else
+                    aNumString = OUString::number(nTick / aImplRulerUnitTab[mnUnitIndex].nTickUnit);
+
+                long nHorizontalLocation = nStart + n;
+                ImplVDrawText(rRenderContext, nHorizontalLocation, nCenter, aNumString, nMin, nMax);
+
+                if (nMin < nHorizontalLocation && nHorizontalLocation < nMax)
+                {
+                    ImplVDrawRect(rRenderContext, nHorizontalLocation, nBottom, nHorizontalLocation + DPIOffset, nBottom - 1 * nScale);
+                    ImplVDrawRect(rRenderContext, nHorizontalLocation, nTop,    nHorizontalLocation + DPIOffset, nTop + 1 * nScale);
+                }
+
+                nHorizontalLocation = nStart - n;
+                ImplVDrawText(rRenderContext, nHorizontalLocation, nCenter, aNumString, nMin, nMax);
+
+                if (nMin < nHorizontalLocation && nHorizontalLocation < nMax)
+                {
+                    ImplVDrawRect(rRenderContext, nHorizontalLocation, nBottom,
+                                                  nHorizontalLocation + DPIOffset, nBottom - 1 * nScale);
+                    ImplVDrawRect(rRenderContext, nHorizontalLocation, nTop,
+                                                  nHorizontalLocation + DPIOffset, nTop + 1 * nScale);
+                }
+            }
+            // Tick/Tick2 - Output (Strokes)
             else
             {
-                aPixSize = rRenderContext.LogicToPixel(Size(nTick, nTick), maMapMode);
+                long nTickLength = nTickLength1;
 
-                if (mnWinStyle & WB_HORZ)
-                    n = aPixSize.Width();
-                else
-                    n = aPixSize.Height();
-
-                // Tick4 - Output (Text)
-                double aStep = (nTick / nTick4);
-                double aRest = std::abs(aStep - std::floor(aStep));
-                double nAcceptanceDelta = 0.0001;
-
+                aStep = (nTick / nTick2);
+                aRest = std::abs(aStep - std::floor(aStep));
                 if (aRest < nAcceptanceDelta)
+                    nTickLength = nTickLength2;
+
+                aStep = (nTick / nTick3);
+                aRest = std::abs(aStep - std::floor(aStep));
+                if (aRest < nAcceptanceDelta )
+                    nTickLength = nTickLength3;
+
+                if ((nTickLength == nTickLength1 && nTickGap1 > 6) ||
+                    (nTickLength == nTickLength2 && nTickGap2 > 6) ||
+                    (nTickLength == nTickLength3 && nTickGap3 > 6))
                 {
-                    if ((mnUnitIndex == RULER_UNIT_CHAR) || (mnUnitIndex == RULER_UNIT_LINE))
-                        aNumString = OUString::number(nTick / nTickUnit);
-                    else
-                        aNumString = OUString::number(nTick / aImplRulerUnitTab[mnUnitIndex].nTickUnit);
+                    long nT1 = nCenter - (nTickLength / 2.0);
+                    long nT2 = nT1 + nTickLength - 1;
+                    long nT;
 
-                    long nHorizontalLocation = nStart + n;
-                    ImplVDrawText(rRenderContext, nHorizontalLocation, nCenter, aNumString, nMin, nMax);
+                    nT = nStart + n;
 
-                    if (nMin < nHorizontalLocation && nHorizontalLocation < nMax)
-                    {
-                        ImplVDrawRect(rRenderContext, nHorizontalLocation, nBottom, nHorizontalLocation + DPIOffset, nBottom - 1 * nScale);
-                        ImplVDrawRect(rRenderContext, nHorizontalLocation, nTop,    nHorizontalLocation + DPIOffset, nTop + 1 * nScale);
-                    }
-
-                    nHorizontalLocation = nStart - n;
-                    ImplVDrawText(rRenderContext, nHorizontalLocation, nCenter, aNumString, nMin, nMax);
-
-                    if (nMin < nHorizontalLocation && nHorizontalLocation < nMax)
-                    {
-                        ImplVDrawRect(rRenderContext, nHorizontalLocation, nBottom,
-                                                      nHorizontalLocation + DPIOffset, nBottom - 1 * nScale);
-                        ImplVDrawRect(rRenderContext, nHorizontalLocation, nTop,
-                                                      nHorizontalLocation + DPIOffset, nTop + 1 * nScale);
-                    }
-                }
-                // Tick/Tick2 - Output (Strokes)
-                else
-                {
-                    long nTickLength = nTickLength1;
-
-                    aStep = (nTick / nTick2);
-                    aRest = std::abs(aStep - std::floor(aStep));
-                    if (aRest < nAcceptanceDelta)
-                        nTickLength = nTickLength2;
-
-                    aStep = (nTick / nTick3);
-                    aRest = std::abs(aStep - std::floor(aStep));
-                    if (aRest < nAcceptanceDelta )
-                        nTickLength = nTickLength3;
-
-                    if ((nTickLength == nTickLength1 && nTickGap1 > 6) ||
-                        (nTickLength == nTickLength2 && nTickGap2 > 6) ||
-                        (nTickLength == nTickLength3 && nTickGap3 > 6))
-                    {
-                        long nT1 = nCenter - (nTickLength / 2.0);
-                        long nT2 = nT1 + nTickLength - 1;
-                        long nT;
-
-                        nT = nStart + n;
-
-                        if (nT < nMax)
-                            ImplVDrawRect(rRenderContext, nT, nT1, nT + DPIOffset, nT2);
-                        nT = nStart - n;
-                        if (nT > nMin)
-                            ImplVDrawRect(rRenderContext, nT, nT1, nT + DPIOffset, nT2);
-                    }
+                    if (nT < nMax)
+                        ImplVDrawRect(rRenderContext, nT, nT1, nT + DPIOffset, nT2);
+                    nT = nStart - n;
+                    if (nT > nMin)
+                        ImplVDrawRect(rRenderContext, nT, nT1, nT + DPIOffset, nT2);
                 }
             }
-            nTick += nTickCount;
         }
+        nTick += nTickCount;
     }
 }
 
@@ -697,11 +655,10 @@ void Ruler::ImplDrawBorders(vcl::RenderContext& rRenderContext, long nMin, long 
     long    n2;
     long    nTemp1;
     long    nTemp2;
-    sal_uInt32  i;
 
-    for (i = 0; i < mpData->pBorders.size(); i++)
+    for (std::vector<RulerBorder>::size_type i = 0; i < mpData->pBorders.size(); i++)
     {
-        if (mpData->pBorders[i].nStyle & RULER_STYLE_INVISIBLE)
+        if (mpData->pBorders[i].nStyle & RulerBorderStyle::Invisible)
             continue;
 
         n1 = mpData->pBorders[i].nPos + mpData->nNullVirOff;
@@ -727,7 +684,7 @@ void Ruler::ImplDrawBorders(vcl::RenderContext& rRenderContext, long nMin, long 
                 rRenderContext.SetLineColor(rStyleSettings.GetDarkShadowColor());
                 ImplVDrawLine(rRenderContext, n2, nVirTop, n2, nVirBottom);
 
-                if (mpData->pBorders[i].nStyle & RULER_BORDER_VARIABLE)
+                if (mpData->pBorders[i].nStyle & RulerBorderStyle::Variable)
                 {
                     if (n2 - n1 > RULER_VAR_SIZE + 4)
                     {
@@ -754,7 +711,7 @@ void Ruler::ImplDrawBorders(vcl::RenderContext& rRenderContext, long nMin, long 
                     }
                 }
 
-                if (mpData->pBorders[i].nStyle & RULER_BORDER_SIZEABLE)
+                if (mpData->pBorders[i].nStyle & RulerBorderStyle::Sizeable)
                 {
                     if (n2 - n1 > RULER_VAR_SIZE + 10)
                     {
@@ -772,63 +729,47 @@ void Ruler::ImplDrawBorders(vcl::RenderContext& rRenderContext, long nMin, long 
                 n = n1 + ((n2 - n1) / 2);
                 rRenderContext.SetLineColor(rStyleSettings.GetShadowColor());
 
-                if (mpData->pBorders[i].nStyle & RULER_BORDER_SNAP)
-                    ImplVDrawLine(rRenderContext, n, nVirTop, n, nVirBottom);
-                else if (mpData->pBorders[i].nStyle & RULER_BORDER_MARGIN)
-                    ImplVDrawLine(rRenderContext, n, nVirTop, n, nVirBottom);
-                else
-                {
-                    ImplVDrawLine(rRenderContext, n - 1, nVirTop, n - 1, nVirBottom);
-                    ImplVDrawLine(rRenderContext, n + 1, nVirTop, n + 1, nVirBottom);
-                    rRenderContext.SetLineColor();
-                    rRenderContext.SetFillColor(rStyleSettings.GetWindowColor());
-                    ImplVDrawRect(rRenderContext, n, nVirTop, n, nVirBottom);
-                }
+                ImplVDrawLine(rRenderContext, n - 1, nVirTop, n - 1, nVirBottom);
+                ImplVDrawLine(rRenderContext, n + 1, nVirTop, n + 1, nVirBottom);
+                rRenderContext.SetLineColor();
+                rRenderContext.SetFillColor(rStyleSettings.GetWindowColor());
+                ImplVDrawRect(rRenderContext, n, nVirTop, n, nVirBottom);
             }
         }
     }
 }
 
-void Ruler::ImplDrawIndent(vcl::RenderContext& rRenderContext, const tools::Polygon& rPoly, sal_uInt16 nStyle, bool bIsHit)
+void Ruler::ImplDrawIndent(vcl::RenderContext& rRenderContext, const tools::Polygon& rPoly, bool bIsHit)
 {
     const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
 
-    if (nStyle & RULER_STYLE_INVISIBLE)
-        return;
-
     rRenderContext.SetLineColor(rStyleSettings.GetDarkShadowColor());
     rRenderContext.SetFillColor(bIsHit ? rStyleSettings.GetDarkShadowColor() : rStyleSettings.GetWorkspaceColor());
-    rRenderContext.DrawPolygon(rPoly);
+    tools::Polygon aPolygon(rPoly);
+    aPolygon.Optimize(PolyOptimizeFlags::CLOSE);
+    rRenderContext.DrawPolygon(aPolygon);
 }
 
 void Ruler::ImplDrawIndents(vcl::RenderContext& rRenderContext, long nMin, long nMax, long nVirTop, long nVirBottom)
 {
-    sal_uInt32  j;
     long n;
     long nIndentHeight = (mnVirHeight / 2) - 1;
     long nIndentWidth2 = nIndentHeight-3;
 
     tools::Polygon aPoly(5);
 
-    for (j = 0; j < mpData->pIndents.size(); j++)
+    for (std::vector<RulerIndent>::size_type j = 0; j < mpData->pIndents.size(); j++)
     {
-        if (mpData->pIndents[j].nStyle & RULER_STYLE_INVISIBLE)
+        if (mpData->pIndents[j].bInvisible)
             continue;
 
-        sal_uInt16  nStyle = mpData->pIndents[j].nStyle;
-        sal_uInt16  nIndentStyle = nStyle & RULER_INDENT_STYLE;
+        RulerIndentStyle nIndentStyle = mpData->pIndents[j].nStyle;
 
         n = mpData->pIndents[j].nPos+mpData->nNullVirOff;
 
         if ((n >= nMin) && (n <= nMax))
         {
-            if (nIndentStyle == RULER_INDENT_BORDER)
-            {
-                const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
-                rRenderContext.SetLineColor(rStyleSettings.GetShadowColor());
-                ImplVDrawLine(rRenderContext, n, nVirTop + 1, n, nVirBottom - 1);
-            }
-            else if (nIndentStyle == RULER_INDENT_BOTTOM)
+            if (nIndentStyle == RulerIndentStyle::Bottom)
             {
                 aPoly.SetPoint(Point(n + 0, nVirBottom - nIndentHeight), 0);
                 aPoly.SetPoint(Point(n - nIndentWidth2, nVirBottom - 3), 1);
@@ -855,19 +796,16 @@ void Ruler::ImplDrawIndents(vcl::RenderContext& rRenderContext, long nMin, long 
                     aPoly[i] = aSet;
                 }
             }
-            if (RULER_INDENT_BORDER != nIndentStyle)
+            bool bIsHit = false;
+            if (mxCurrentHitTest != nullptr && mxCurrentHitTest->eType == RulerType::Indent)
             {
-                bool bIsHit = false;
-                if(mxCurrentHitTest.get() != nullptr && mxCurrentHitTest->eType == RULER_TYPE_INDENT)
-                {
-                    bIsHit = mxCurrentHitTest->nAryPos == j;
-                }
-                else if(mbDrag && meDragType == RULER_TYPE_INDENT)
-                {
-                    bIsHit = mnDragAryPos == j;
-                }
-                ImplDrawIndent(rRenderContext, aPoly, nStyle, bIsHit);
+                bIsHit = mxCurrentHitTest->nAryPos == j;
             }
+            else if(mbDrag && meDragType == RulerType::Indent)
+            {
+                bIsHit = mnDragAryPos == j;
+            }
+            ImplDrawIndent(rRenderContext, aPoly, bIsHit);
         }
     }
 }
@@ -876,36 +814,36 @@ static void ImplCenterTabPos(Point& rPos, sal_uInt16 nTabStyle)
 {
     bool bRTL  = 0 != (nTabStyle & RULER_TAB_RTL);
     nTabStyle &= RULER_TAB_STYLE;
-    rPos.Y() += ruler_tab.height/2;
+    rPos.AdjustY(ruler_tab.height/2 );
 
     if ( (!bRTL && nTabStyle == RULER_TAB_LEFT) ||
          ( bRTL && nTabStyle == RULER_TAB_RIGHT) )
     {
-        rPos.X() -= ruler_tab.width / 2;
+        rPos.AdjustX( -(ruler_tab.width / 2) );
     }
     else if ( (!bRTL && nTabStyle == RULER_TAB_RIGHT) ||
               ( bRTL && nTabStyle == RULER_TAB_LEFT) )
     {
-        rPos.X() += ruler_tab.width / 2;
+        rPos.AdjustX(ruler_tab.width / 2 );
     }
 }
 
-static void lcl_RotateRect_Impl(Rectangle& rRect, const long nReference, bool bRightAligned)
+static void lcl_RotateRect_Impl(tools::Rectangle& rRect, const long nReference, bool bRightAligned)
 {
-    if (!rRect.IsEmpty())
-    {
-        Rectangle aTmp(rRect);
-        rRect.Top()    = aTmp.Left();
-        rRect.Bottom() = aTmp.Right();
-        rRect.Left()   = aTmp.Top();
-        rRect.Right()  = aTmp.Bottom();
+    if (rRect.IsEmpty())
+        return;
 
-        if (bRightAligned)
-        {
-            long nRef = 2 * nReference;
-            rRect.Left() = nRef - rRect.Left();
-            rRect.Right() = nRef - rRect.Right();
-        }
+    tools::Rectangle aTmp(rRect);
+    rRect.SetTop( aTmp.Left() );
+    rRect.SetBottom( aTmp.Right() );
+    rRect.SetLeft( aTmp.Top() );
+    rRect.SetRight( aTmp.Bottom() );
+
+    if (bRightAligned)
+    {
+        long nRef = 2 * nReference;
+        rRect.SetLeft( nRef - rRect.Left() );
+        rRect.SetRight( nRef - rRect.Right() );
     }
 }
 
@@ -923,67 +861,67 @@ static void ImplDrawRulerTab(vcl::RenderContext& rRenderContext, const Point& rP
     // drawn become asymmetric due to the +1 offsets
     sal_uInt16 DPIOffset = rRenderContext.GetDPIScaleFactor() - 1;
 
-    Rectangle aRect1;
-    Rectangle aRect2;
-    Rectangle aRect3;
+    tools::Rectangle aRect1;
+    tools::Rectangle aRect2;
+    tools::Rectangle aRect3;
 
     aRect3.SetEmpty();
 
     if (nTabStyle == RULER_TAB_DEFAULT)
     {
-        aRect1.Left()   = rPos.X() - ruler_tab.dwidth2 + 1;
-        aRect1.Top()    = rPos.Y() - ruler_tab.dheight2 + 1;
-        aRect1.Right()  = rPos.X() - ruler_tab.dwidth2 + ruler_tab.dwidth + DPIOffset;
-        aRect1.Bottom() = rPos.Y();
+        aRect1.SetLeft( rPos.X() - ruler_tab.dwidth2 + 1 );
+        aRect1.SetTop( rPos.Y() - ruler_tab.dheight2 + 1 );
+        aRect1.SetRight( rPos.X() - ruler_tab.dwidth2 + ruler_tab.dwidth + DPIOffset );
+        aRect1.SetBottom( rPos.Y() );
 
-        aRect2.Left()   = rPos.X() - ruler_tab.dwidth2 + ruler_tab.dwidth3;
-        aRect2.Top()    = rPos.Y() - ruler_tab.dheight + 1;
-        aRect2.Right()  = rPos.X() - ruler_tab.dwidth2 + ruler_tab.dwidth3 + ruler_tab.dwidth4 - 1;
-        aRect2.Bottom() = rPos.Y();
+        aRect2.SetLeft( rPos.X() - ruler_tab.dwidth2 + ruler_tab.dwidth3 );
+        aRect2.SetTop( rPos.Y() - ruler_tab.dheight + 1 );
+        aRect2.SetRight( rPos.X() - ruler_tab.dwidth2 + ruler_tab.dwidth3 + ruler_tab.dwidth4 - 1 );
+        aRect2.SetBottom( rPos.Y() );
 
     }
     else if ((!bRTL && nTabStyle == RULER_TAB_LEFT) || (bRTL && nTabStyle == RULER_TAB_RIGHT))
     {
-        aRect1.Left()   = rPos.X();
-        aRect1.Top()    = rPos.Y() - ruler_tab.height2 + 1;
-        aRect1.Right()  = rPos.X() + ruler_tab.width - 1;
-        aRect1.Bottom() = rPos.Y();
+        aRect1.SetLeft( rPos.X() );
+        aRect1.SetTop( rPos.Y() - ruler_tab.height2 + 1 );
+        aRect1.SetRight( rPos.X() + ruler_tab.width - 1 );
+        aRect1.SetBottom( rPos.Y() );
 
-        aRect2.Left()   = rPos.X();
-        aRect2.Top()    = rPos.Y() - ruler_tab.height + 1;
-        aRect2.Right()  = rPos.X() + ruler_tab.width2 - 1;
-        aRect2.Bottom() = rPos.Y();
+        aRect2.SetLeft( rPos.X() );
+        aRect2.SetTop( rPos.Y() - ruler_tab.height + 1 );
+        aRect2.SetRight( rPos.X() + ruler_tab.width2 - 1 );
+        aRect2.SetBottom( rPos.Y() );
     }
     else if ((!bRTL && nTabStyle == RULER_TAB_RIGHT) || (bRTL && nTabStyle == RULER_TAB_LEFT))
     {
-        aRect1.Left()   = rPos.X() - ruler_tab.width + 1;
-        aRect1.Top()    = rPos.Y() - ruler_tab.height2 + 1;
-        aRect1.Right()  = rPos.X();
-        aRect1.Bottom() = rPos.Y();
+        aRect1.SetLeft( rPos.X() - ruler_tab.width + 1 );
+        aRect1.SetTop( rPos.Y() - ruler_tab.height2 + 1 );
+        aRect1.SetRight( rPos.X() );
+        aRect1.SetBottom( rPos.Y() );
 
-        aRect2.Left()   = rPos.X() - ruler_tab.width2 + 1;
-        aRect2.Top()    = rPos.Y() - ruler_tab.height + 1;
-        aRect2.Right()  = rPos.X();
-        aRect2.Bottom() = rPos.Y();
+        aRect2.SetLeft( rPos.X() - ruler_tab.width2 + 1 );
+        aRect2.SetTop( rPos.Y() - ruler_tab.height + 1 );
+        aRect2.SetRight( rPos.X() );
+        aRect2.SetBottom( rPos.Y() );
     }
     else
     {
-        aRect1.Left()   = rPos.X() - ruler_tab.cwidth2 + 1;
-        aRect1.Top()    = rPos.Y() - ruler_tab.height2 + 1;
-        aRect1.Right()  = rPos.X() - ruler_tab.cwidth2 + ruler_tab.cwidth + DPIOffset;
-        aRect1.Bottom() = rPos.Y();
+        aRect1.SetLeft( rPos.X() - ruler_tab.cwidth2 + 1 );
+        aRect1.SetTop( rPos.Y() - ruler_tab.height2 + 1 );
+        aRect1.SetRight( rPos.X() - ruler_tab.cwidth2 + ruler_tab.cwidth + DPIOffset );
+        aRect1.SetBottom( rPos.Y() );
 
-        aRect2.Left()   = rPos.X() - ruler_tab.cwidth2 + ruler_tab.cwidth3;
-        aRect2.Top()    = rPos.Y() - ruler_tab.height + 1;
-        aRect2.Right()  = rPos.X() - ruler_tab.cwidth2 + ruler_tab.cwidth3 + ruler_tab.cwidth4 - 1;
-        aRect2.Bottom() = rPos.Y();
+        aRect2.SetLeft( rPos.X() - ruler_tab.cwidth2 + ruler_tab.cwidth3 );
+        aRect2.SetTop( rPos.Y() - ruler_tab.height + 1 );
+        aRect2.SetRight( rPos.X() - ruler_tab.cwidth2 + ruler_tab.cwidth3 + ruler_tab.cwidth4 - 1 );
+        aRect2.SetBottom( rPos.Y() );
 
         if (nTabStyle == RULER_TAB_DECIMAL)
         {
-            aRect3.Left()   = rPos.X() - ruler_tab.cwidth2 + ruler_tab.cwidth - 1;
-            aRect3.Top()    = rPos.Y() - ruler_tab.height + 1 + 1 - DPIOffset;
-            aRect3.Right()  = rPos.X() - ruler_tab.cwidth2 + ruler_tab.cwidth + DPIOffset;
-            aRect3.Bottom() = rPos.Y() - ruler_tab.height + 1 + 2;
+            aRect3.SetLeft( rPos.X() - ruler_tab.cwidth2 + ruler_tab.cwidth - 1 );
+            aRect3.SetTop( rPos.Y() - ruler_tab.height + 1 + 1 - DPIOffset );
+            aRect3.SetRight( rPos.X() - ruler_tab.cwidth2 + ruler_tab.cwidth + DPIOffset );
+            aRect3.SetBottom( rPos.Y() - ruler_tab.height + 1 + 2 );
         }
     }
     if (0 == (nWinBits & WB_HORZ))
@@ -1020,17 +958,17 @@ void Ruler::ImplDrawTab(vcl::RenderContext& rRenderContext, const Point& rPos, s
 
 void Ruler::ImplDrawTabs(vcl::RenderContext& rRenderContext, long nMin, long nMax, long nVirTop, long nVirBottom)
 {
-    for (size_t i = 0; i < mpData->pTabs.size(); i++)
+    for (RulerTab & rTab : mpData->pTabs)
     {
-        if (mpData->pTabs[i].nStyle & RULER_STYLE_INVISIBLE)
+        if (rTab.nStyle & RULER_STYLE_INVISIBLE)
             continue;
 
         long aPosition;
-        aPosition = mpData->pTabs[i].nPos;
+        aPosition = rTab.nPos;
         aPosition += +mpData->nNullVirOff;
         long nTopBottom = (GetStyle() & WB_RIGHT_ALIGNED) ? nVirTop : nVirBottom;
         if (nMin <= aPosition && aPosition <= nMax)
-            ImplDrawTab(rRenderContext, Point( aPosition, nTopBottom ), mpData->pTabs[i].nStyle);
+            ImplDrawTab(rRenderContext, Point( aPosition, nTopBottom ), rTab.nStyle);
     }
 }
 
@@ -1059,7 +997,7 @@ void Ruler::ApplySettings(vcl::RenderContext& rRenderContext)
 
     Color aColor;
     svtools::ColorConfig aColorConfig;
-    aColor = Color(aColorConfig.GetColorValue(svtools::APPBACKGROUND).nColor);
+    aColor = aColorConfig.GetColorValue(svtools::APPBACKGROUND).nColor;
     ApplyControlBackground(rRenderContext, aColor);
 }
 
@@ -1087,7 +1025,7 @@ void Ruler::ImplInitSettings(bool bFont, bool bForeground, bool bBackground)
     {
         Color aColor;
         svtools::ColorConfig aColorConfig;
-        aColor = Color(aColorConfig.GetColorValue(svtools::APPBACKGROUND).nColor);
+        aColor = aColorConfig.GetColorValue(svtools::APPBACKGROUND).nColor;
         ApplyControlBackground(*this, aColor);
     }
 
@@ -1149,7 +1087,7 @@ void Ruler::ImplCalc()
     mbCalc = false;
 }
 
-void Ruler::ImplFormat(vcl::RenderContext& rRenderContext)
+void Ruler::ImplFormat(vcl::RenderContext const & rRenderContext)
 {
     // if already formatted, don't do it again
     if (!mbFormat)
@@ -1190,13 +1128,13 @@ void Ruler::ImplFormat(vcl::RenderContext& rRenderContext)
     // initialize VirtualDevice
     if (mnWinStyle & WB_HORZ)
     {
-        aVirDevSize.Width() = mnVirWidth;
-        aVirDevSize.Height() = mnVirHeight;
+        aVirDevSize.setWidth( mnVirWidth );
+        aVirDevSize.setHeight( mnVirHeight );
     }
     else
     {
-        aVirDevSize.Height() = mnVirWidth;
-        aVirDevSize.Width() = mnVirHeight;
+        aVirDevSize.setHeight( mnVirWidth );
+        aVirDevSize.setWidth( mnVirHeight );
     }
     if (aVirDevSize != maVirDev->GetOutputSizePixel())
         maVirDev->SetOutputSizePixel(aVirDevSize);
@@ -1204,7 +1142,7 @@ void Ruler::ImplFormat(vcl::RenderContext& rRenderContext)
         maVirDev->Erase();
 
     // calculate margins
-    if (!(mpData->nMargin1Style & RULER_STYLE_INVISIBLE))
+    if (!(mpData->nMargin1Style & RulerMarginStyle::Invisible))
     {
         nM1 = mpData->nMargin1 + nNullVirOff;
         if (mpData->bAutoPageWidth)
@@ -1221,7 +1159,7 @@ void Ruler::ImplFormat(vcl::RenderContext& rRenderContext)
         nM1 = nVirLeft-1;
         nP1 = nM1;
     }
-    if (!(mpData->nMargin2Style & RULER_STYLE_INVISIBLE))
+    if (!(mpData->nMargin2Style & RulerMarginStyle::Invisible))
     {
         nM2 = mpData->nMargin2 + nNullVirOff;
         if (mpData->bAutoPageWidth)
@@ -1243,8 +1181,8 @@ void Ruler::ImplFormat(vcl::RenderContext& rRenderContext)
 
     // top/bottom border
     maVirDev->SetLineColor(rStyleSettings.GetShadowColor());
-    ImplVDrawLine(*maVirDev.get(), nVirLeft, nVirTop + 1, nM1,     nVirTop + 1); //top left line
-    ImplVDrawLine(*maVirDev.get(), nM2,      nVirTop + 1, nP2 - 1, nVirTop + 1); //top right line
+    ImplVDrawLine(*maVirDev, nVirLeft, nVirTop + 1, nM1,     nVirTop + 1); //top left line
+    ImplVDrawLine(*maVirDev, nM2,      nVirTop + 1, nP2 - 1, nVirTop + 1); //top right line
 
     nVirTop++;
     nVirBottom--;
@@ -1253,31 +1191,31 @@ void Ruler::ImplFormat(vcl::RenderContext& rRenderContext)
     maVirDev->SetLineColor();
     maVirDev->SetFillColor(rStyleSettings.GetDialogColor());
     if (nM1 > nVirLeft)
-        ImplVDrawRect(*maVirDev.get(), nP1, nVirTop + 1, nM1, nVirBottom); //left gray rectangle
+        ImplVDrawRect(*maVirDev, nP1, nVirTop + 1, nM1, nVirBottom); //left gray rectangle
     if (nM2 < nP2)
-        ImplVDrawRect(*maVirDev.get(), nM2, nVirTop + 1, nP2, nVirBottom); //right gray rectangle
+        ImplVDrawRect(*maVirDev, nM2, nVirTop + 1, nP2, nVirBottom); //right gray rectangle
     if (nM2 - nM1 > 0)
     {
         maVirDev->SetFillColor(rStyleSettings.GetWindowColor());
-        ImplVDrawRect(*maVirDev.get(), nM1 + 1, nVirTop, nM2 - 1, nVirBottom); //center rectangle
+        ImplVDrawRect(*maVirDev, nM1 + 1, nVirTop, nM2 - 1, nVirBottom); //center rectangle
     }
     maVirDev->SetLineColor(rStyleSettings.GetShadowColor());
     if (nM1 > nVirLeft)
     {
-        ImplVDrawLine(*maVirDev.get(), nM1, nVirTop + 1, nM1, nVirBottom); //right line of the left rectangle
-        ImplVDrawLine(*maVirDev.get(), nP1, nVirBottom,  nM1, nVirBottom); //bottom line of the left rectangle
+        ImplVDrawLine(*maVirDev, nM1, nVirTop + 1, nM1, nVirBottom); //right line of the left rectangle
+        ImplVDrawLine(*maVirDev, nP1, nVirBottom,  nM1, nVirBottom); //bottom line of the left rectangle
         if (nP1 >= nVirLeft)
         {
-            ImplVDrawLine(*maVirDev.get(), nP1, nVirTop + 1, nP1,     nVirBottom); //left line of the left rectangle
-            ImplVDrawLine(*maVirDev.get(), nP1, nVirBottom,  nP1 + 1, nVirBottom); //?
+            ImplVDrawLine(*maVirDev, nP1, nVirTop + 1, nP1,     nVirBottom); //left line of the left rectangle
+            ImplVDrawLine(*maVirDev, nP1, nVirBottom,  nP1 + 1, nVirBottom); //?
         }
     }
     if (nM2 < nP2)
     {
-        ImplVDrawLine(*maVirDev.get(), nM2, nVirBottom,  nP2 - 1, nVirBottom); //bottom line of the right rectangle
-        ImplVDrawLine(*maVirDev.get(), nM2, nVirTop + 1, nM2,     nVirBottom); //left line of the right rectangle
+        ImplVDrawLine(*maVirDev, nM2, nVirBottom,  nP2 - 1, nVirBottom); //bottom line of the right rectangle
+        ImplVDrawLine(*maVirDev, nM2, nVirTop + 1, nM2,     nVirBottom); //left line of the right rectangle
         if (nP2 <= nVirRight + 1)
-            ImplVDrawLine(*maVirDev.get(), nP2 - 1, nVirTop + 1, nP2 - 1, nVirBottom); //right line of the right rectangle
+            ImplVDrawLine(*maVirDev, nP2 - 1, nVirTop + 1, nP2 - 1, nVirBottom); //right line of the right rectangle
     }
 
     long nMin = nVirLeft;
@@ -1296,19 +1234,19 @@ void Ruler::ImplFormat(vcl::RenderContext& rRenderContext)
         nMax--;
 
     // Draw captions
-    ImplDrawTicks(*maVirDev.get(), nMin, nMax, nStart, nVirTop, nVirBottom);
+    ImplDrawTicks(*maVirDev, nMin, nMax, nStart, nVirTop, nVirBottom);
 
     // Draw borders
     if (!mpData->pBorders.empty())
-        ImplDrawBorders(*maVirDev.get(), nVirLeft, nP2, nVirTop, nVirBottom);
+        ImplDrawBorders(*maVirDev, nVirLeft, nP2, nVirTop, nVirBottom);
 
     // Draw indents
     if (!mpData->pIndents.empty())
-        ImplDrawIndents(*maVirDev.get(), nVirLeft, nP2, nVirTop - 1, nVirBottom + 1);
+        ImplDrawIndents(*maVirDev, nVirLeft, nP2, nVirTop - 1, nVirBottom + 1);
 
     // Tabs
     if (!mpData->pTabs.empty())
-        ImplDrawTabs(*maVirDev.get(), nVirLeft, nP2, nVirTop-1, nVirBottom + 1);
+        ImplDrawTabs(*maVirDev, nVirLeft, nP2, nVirTop-1, nVirBottom + 1);
 
     mbFormat = false;
 }
@@ -1320,10 +1258,10 @@ void Ruler::ImplInitExtraField( bool bUpdate )
     // extra field evaluate
     if ( mnWinStyle & WB_EXTRAFIELD )
     {
-        maExtraRect.Left()   = RULER_OFF;
-        maExtraRect.Top()    = RULER_OFF;
-        maExtraRect.Right()  = RULER_OFF + mnVirHeight - 1;
-        maExtraRect.Bottom() = RULER_OFF + mnVirHeight - 1;
+        maExtraRect.SetLeft( RULER_OFF );
+        maExtraRect.SetTop( RULER_OFF );
+        maExtraRect.SetRight( RULER_OFF + mnVirHeight - 1 );
+        maExtraRect.SetBottom( RULER_OFF + mnVirHeight - 1 );
         if(mpData->bTextRTL)
         {
             if(mnWinStyle & WB_HORZ)
@@ -1370,42 +1308,42 @@ void Ruler::ImplDraw(vcl::RenderContext& rRenderContext)
         ImplFormat(rRenderContext);
     }
 
-    if (IsReallyVisible())
+    if (!IsReallyVisible())
+        return;
+
+    // output the ruler to the virtual device
+    Point aOffPos;
+    Size aVirDevSize = maVirDev->GetOutputSizePixel();
+
+    if (mnWinStyle & WB_HORZ)
     {
-        // output the ruler to the virtual device
-        Point aOffPos;
-        Size aVirDevSize = maVirDev->GetOutputSizePixel();
+        aOffPos.setX( mnVirOff );
+        if (mpData->bTextRTL)
+            aVirDevSize.AdjustWidth( -(maExtraRect.GetWidth()) );
 
-        if (mnWinStyle & WB_HORZ)
-        {
-            aOffPos.X() = mnVirOff;
-            if (mpData->bTextRTL)
-                aVirDevSize.Width() -= maExtraRect.GetWidth();
-
-            aOffPos.Y() = RULER_OFF;
-        }
-        else
-        {
-            aOffPos.X() = RULER_OFF;
-            aOffPos.Y() = mnVirOff;
-        }
-        rRenderContext.DrawOutDev(aOffPos, aVirDevSize, Point(), aVirDevSize, *maVirDev.get());
-
-        // redraw positionlines
-        ImplInvertLines(rRenderContext);
+        aOffPos.setY( RULER_OFF );
     }
+    else
+    {
+        aOffPos.setX( RULER_OFF );
+        aOffPos.setY( mnVirOff );
+    }
+    rRenderContext.DrawOutDev(aOffPos, aVirDevSize, Point(), aVirDevSize, *maVirDev);
+
+    // redraw positionlines
+    ImplInvertLines(rRenderContext);
 }
 
 void Ruler::ImplDrawExtra(vcl::RenderContext& rRenderContext)
 {
     const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
-    Rectangle aRect = maExtraRect;
+    tools::Rectangle aRect = maExtraRect;
     bool bEraseRect = false;
 
-    aRect.Left()   += 2;
-    aRect.Top()    += 2;
-    aRect.Right()  -= 2;
-    aRect.Bottom() -= 2;
+    aRect.AdjustLeft(2 );
+    aRect.AdjustTop(2 );
+    aRect.AdjustRight( -2 );
+    aRect.AdjustBottom( -2 );
 
     if (mnExtraStyle & RULER_STYLE_HIGHLIGHT)
     {
@@ -1420,7 +1358,7 @@ void Ruler::ImplDrawExtra(vcl::RenderContext& rRenderContext)
     }
 
     // output content
-    if (meExtraType == RULER_EXTRA_NULLOFFSET)
+    if (meExtraType == RulerExtra::NullOffset)
     {
         rRenderContext.SetLineColor(rStyleSettings.GetButtonTextColor());
         rRenderContext.DrawLine(Point(aRect.Left() + 1, aRect.Top() + 4),
@@ -1428,7 +1366,7 @@ void Ruler::ImplDrawExtra(vcl::RenderContext& rRenderContext)
         rRenderContext.DrawLine(Point(aRect.Left() + 4, aRect.Top() + 1),
                                 Point(aRect.Left() + 4, aRect.Bottom() - 1));
     }
-    else if (meExtraType == RULER_EXTRA_TAB)
+    else if (meExtraType == RulerExtra::Tab)
     {
         sal_uInt16 nTabStyle = mnExtraStyle & RULER_TAB_STYLE;
         if (mpData->bTextRTL)
@@ -1440,13 +1378,13 @@ void Ruler::ImplDrawExtra(vcl::RenderContext& rRenderContext)
         if (0 == (nWinBits & WB_HORZ))
         {
             if ((nWinBits & WB_RIGHT_ALIGNED) != 0)
-                aDraw.Y() = 2 * aCenter.Y() - aDraw.Y();
+                aDraw.setY( 2 * aCenter.Y() - aDraw.Y() );
 
             if (mpData->bTextRTL)
             {
                 long nTemp = aDraw.X();
-                aDraw.X() = aDraw.Y();
-                aDraw.Y() = nTemp;
+                aDraw.setX( aDraw.Y() );
+                aDraw.setY( nTemp );
             }
         }
         ImplDrawTab(rRenderContext, aDraw, nTabStyle);
@@ -1476,7 +1414,7 @@ void Ruler::ImplUpdate( bool bMustCalc )
 }
 
 bool Ruler::ImplHitTest( const Point& rPos, RulerSelection* pHitTest,
-                         bool bRequireStyle, sal_uInt16 nRequiredStyle ) const
+                         bool bRequireStyle, RulerIndentStyle nRequiredStyle ) const
 {
     sal_Int32   i;
     sal_uInt16  nStyle;
@@ -1504,7 +1442,7 @@ bool Ruler::ImplHitTest( const Point& rPos, RulerSelection* pHitTest,
 
     // #i32608#
     pHitTest->nAryPos = 0;
-    pHitTest->mnDragSize = 0;
+    pHitTest->mnDragSize = RulerDragSize::Move;
     pHitTest->bSize = false;
     pHitTest->bSizeBar = false;
 
@@ -1517,27 +1455,26 @@ bool Ruler::ImplHitTest( const Point& rPos, RulerSelection* pHitTest,
 
     // test if outside
     nX -= mnVirOff;
-    long nXTemp = nX;
     if ( (nX < mpData->nRulVirOff - nXExtraOff) ||
          (nX > mpData->nRulVirOff + mpData->nRulWidth + nXExtraOff) ||
          (nY < 0) ||
          (nY > nHitBottom) )
     {
         pHitTest->nPos = 0;
-        pHitTest->eType = RULER_TYPE_OUTSIDE;
+        pHitTest->eType = RulerType::Outside;
         return false;
     }
 
     nX -= mpData->nNullVirOff;
     pHitTest->nPos  = nX;
-    pHitTest->eType = RULER_TYPE_DONTKNOW;
+    pHitTest->eType = RulerType::DontKnow;
 
     // first test the tabs
-    Rectangle aRect;
+    tools::Rectangle aRect;
     if ( !mpData->pTabs.empty() )
     {
-        aRect.Bottom()  = nHitBottom;
-        aRect.Top()     = aRect.Bottom() - ruler_tab.height - RULER_OFF;
+        aRect.SetBottom( nHitBottom );
+        aRect.SetTop( aRect.Bottom() - ruler_tab.height - RULER_OFF );
 
         for ( i = mpData->pTabs.size() - 1; i >= 0; i-- )
         {
@@ -1553,23 +1490,23 @@ bool Ruler::ImplHitTest( const Point& rPos, RulerSelection* pHitTest,
 
                     if ( nStyle == RULER_TAB_LEFT )
                     {
-                        aRect.Left()  = n1;
-                        aRect.Right() = n1 + ruler_tab.width - 1;
+                        aRect.SetLeft( n1 );
+                        aRect.SetRight( n1 + ruler_tab.width - 1 );
                     }
                     else if ( nStyle == RULER_TAB_RIGHT )
                     {
-                        aRect.Right() = n1;
-                        aRect.Left()  = n1 - ruler_tab.width - 1;
+                        aRect.SetRight( n1 );
+                        aRect.SetLeft( n1 - ruler_tab.width - 1 );
                     }
                     else
                     {
-                        aRect.Left()  = n1 - ruler_tab.cwidth2 + 1;
-                        aRect.Right() = n1 - ruler_tab.cwidth2 + ruler_tab.cwidth;
+                        aRect.SetLeft( n1 - ruler_tab.cwidth2 + 1 );
+                        aRect.SetRight( n1 - ruler_tab.cwidth2 + ruler_tab.cwidth );
                     }
 
                     if ( aRect.IsInside( Point( nX, nY ) ) )
                     {
-                        pHitTest->eType   = RULER_TYPE_TAB;
+                        pHitTest->eType   = RulerType::Tab;
                         pHitTest->nAryPos = i;
                         return true;
                     }
@@ -1586,44 +1523,35 @@ bool Ruler::ImplHitTest( const Point& rPos, RulerSelection* pHitTest,
 
         for ( i = mpData->pIndents.size(); i; i-- )
         {
-            nStyle = mpData->pIndents[i-1].nStyle;
-            if ( (! bRequireStyle || nStyle == nRequiredStyle) &&
-                 !(nStyle & RULER_STYLE_INVISIBLE) )
+            RulerIndentStyle nIndentStyle = mpData->pIndents[i-1].nStyle;
+            if ( (! bRequireStyle || nIndentStyle == nRequiredStyle) &&
+                 !mpData->pIndents[i-1].bInvisible )
             {
-                nStyle &= RULER_INDENT_STYLE;
                 n1 = mpData->pIndents[i-1].nPos;
 
-                if ( (nStyle == RULER_INDENT_BOTTOM) != !bIsHori )
+                if ( (nIndentStyle == RulerIndentStyle::Bottom) != !bIsHori )
                 {
-                    aRect.Left()    = n1-nIndentWidth2;
-                    aRect.Right()   = n1+nIndentWidth2;
-                    aRect.Top()     = nHitBottom-nIndentHeight-RULER_OFF+1;
-                    aRect.Bottom()  = nHitBottom;
+                    aRect.SetLeft( n1-nIndentWidth2 );
+                    aRect.SetRight( n1+nIndentWidth2 );
+                    aRect.SetTop( nHitBottom-nIndentHeight-RULER_OFF+1 );
+                    aRect.SetBottom( nHitBottom );
                 }
                 else
                 {
-                    aRect.Left()    = n1-nIndentWidth2;
-                    aRect.Right()   = n1+nIndentWidth2;
-                    aRect.Top()     = 0;
-                    aRect.Bottom()  = nIndentHeight+RULER_OFF-1;
+                    aRect.SetLeft( n1-nIndentWidth2 );
+                    aRect.SetRight( n1+nIndentWidth2 );
+                    aRect.SetTop( 0 );
+                    aRect.SetBottom( nIndentHeight+RULER_OFF-1 );
                 }
 
                 if ( aRect.IsInside( Point( nX, nY ) ) )
                 {
-                    pHitTest->eType     = RULER_TYPE_INDENT;
+                    pHitTest->eType     = RulerType::Indent;
                     pHitTest->nAryPos   = i-1;
                     return true;
                 }
             }
         }
-    }
-
-    // everything left and right is outside and don't take this into account
-    if ( (nXTemp < mpData->nRulVirOff) || (nXTemp > mpData->nRulVirOff+mpData->nRulWidth) )
-    {
-        pHitTest->nPos = 0;
-        pHitTest->eType = RULER_TYPE_OUTSIDE;
-        return false;
     }
 
     // test the borders
@@ -1648,18 +1576,18 @@ bool Ruler::ImplHitTest( const Point& rPos, RulerSelection* pHitTest,
 
         if ( (nX >= n1) && (nX <= n2) )
         {
-            nStyle = mpData->pBorders[i-1].nStyle;
-            if ( !(nStyle & RULER_STYLE_INVISIBLE) )
+            RulerBorderStyle nBorderStyle = mpData->pBorders[i-1].nStyle;
+            if ( !(nBorderStyle & RulerBorderStyle::Invisible) )
             {
-                pHitTest->eType     = RULER_TYPE_BORDER;
+                pHitTest->eType     = RulerType::Border;
                 pHitTest->nAryPos   = i-1;
 
-                if ( !(nStyle & RULER_BORDER_SIZEABLE) )
+                if ( !(nBorderStyle & RulerBorderStyle::Sizeable) )
                 {
-                    if ( nStyle & RULER_BORDER_MOVEABLE )
+                    if ( nBorderStyle & RulerBorderStyle::Moveable )
                     {
                         pHitTest->bSizeBar = true;
-                        pHitTest->mnDragSize = RULER_DRAGSIZE_MOVE;
+                        pHitTest->mnDragSize = RulerDragSize::Move;
                     }
                 }
                 else
@@ -1679,19 +1607,19 @@ bool Ruler::ImplHitTest( const Point& rPos, RulerSelection* pHitTest,
                     if ( nX <= n1+nMOff )
                     {
                         pHitTest->bSize = true;
-                        pHitTest->mnDragSize = RULER_DRAGSIZE_1;
+                        pHitTest->mnDragSize = RulerDragSize::N1;
                     }
                     else if ( nX >= n2-nMOff )
                     {
                         pHitTest->bSize = true;
-                        pHitTest->mnDragSize = RULER_DRAGSIZE_2;
+                        pHitTest->mnDragSize = RulerDragSize::N2;
                     }
                     else
                     {
-                        if ( nStyle & RULER_BORDER_MOVEABLE )
+                        if ( nBorderStyle & RulerBorderStyle::Moveable )
                         {
                             pHitTest->bSizeBar = true;
-                            pHitTest->mnDragSize = RULER_DRAGSIZE_MOVE;
+                            pHitTest->mnDragSize = RulerDragSize::Move;
                         }
                     }
                 }
@@ -1704,22 +1632,22 @@ bool Ruler::ImplHitTest( const Point& rPos, RulerSelection* pHitTest,
     // Margins
     int nMarginTolerance = pHitTest->bExpandTest ? nBorderTolerance : RULER_MOUSE_MARGINWIDTH;
 
-    if ( (mpData->nMargin1Style & (RULER_MARGIN_SIZEABLE | RULER_STYLE_INVISIBLE)) == RULER_MARGIN_SIZEABLE )
+    if ( (mpData->nMargin1Style & (RulerMarginStyle::Sizeable | RulerMarginStyle::Invisible)) == RulerMarginStyle::Sizeable )
     {
         n1 = mpData->nMargin1;
         if ( (nX >= n1 - nMarginTolerance) && (nX <= n1 + nMarginTolerance) )
         {
-            pHitTest->eType = RULER_TYPE_MARGIN1;
+            pHitTest->eType = RulerType::Margin1;
             pHitTest->bSize = true;
             return true;
         }
     }
-    if ( (mpData->nMargin2Style & (RULER_MARGIN_SIZEABLE | RULER_STYLE_INVISIBLE)) == RULER_MARGIN_SIZEABLE )
+    if ( (mpData->nMargin2Style & (RulerMarginStyle::Sizeable | RulerMarginStyle::Invisible)) == RulerMarginStyle::Sizeable )
     {
         n1 = mpData->nMargin2;
         if ( (nX >= n1 - nMarginTolerance) && (nX <= n1 + nMarginTolerance) )
         {
-            pHitTest->eType = RULER_TYPE_MARGIN2;
+            pHitTest->eType = RulerType::Margin2;
             pHitTest->bSize = true;
             return true;
         }
@@ -1728,8 +1656,8 @@ bool Ruler::ImplHitTest( const Point& rPos, RulerSelection* pHitTest,
     // test tabs again
     if ( !mpData->pTabs.empty() )
     {
-        aRect.Top()     = RULER_OFF;
-        aRect.Bottom()  = nHitBottom;
+        aRect.SetTop( RULER_OFF );
+        aRect.SetBottom( nHitBottom );
 
         for ( i = mpData->pTabs.size() - 1; i >= 0; i-- )
         {
@@ -1745,26 +1673,26 @@ bool Ruler::ImplHitTest( const Point& rPos, RulerSelection* pHitTest,
 
                     if ( nStyle == RULER_TAB_LEFT )
                     {
-                        aRect.Left()  = n1;
-                        aRect.Right() = n1 + ruler_tab.width - 1;
+                        aRect.SetLeft( n1 );
+                        aRect.SetRight( n1 + ruler_tab.width - 1 );
                     }
                     else if ( nStyle == RULER_TAB_RIGHT )
                     {
-                        aRect.Right() = n1;
-                        aRect.Left()  = n1 - ruler_tab.width - 1;
+                        aRect.SetRight( n1 );
+                        aRect.SetLeft( n1 - ruler_tab.width - 1 );
                     }
                     else
                     {
-                        aRect.Left()  = n1 - ruler_tab.cwidth2 + 1;
-                        aRect.Right() = n1 - ruler_tab.cwidth2 + ruler_tab.cwidth;
+                        aRect.SetLeft( n1 - ruler_tab.cwidth2 + 1 );
+                        aRect.SetRight( n1 - ruler_tab.cwidth2 + ruler_tab.cwidth );
                     }
 
-                    aRect.Left()--;
-                    aRect.Right()++;
+                    aRect.AdjustLeft( -1 );
+                    aRect.AdjustRight( 1 );
 
                     if ( aRect.IsInside( Point( nX, nY ) ) )
                     {
-                        pHitTest->eType   = RULER_TYPE_TAB;
+                        pHitTest->eType   = RulerType::Tab;
                         pHitTest->nAryPos = i;
                         return true;
                     }
@@ -1781,73 +1709,73 @@ bool Ruler::ImplDocHitTest( const Point& rPos, RulerType eDragType,
 {
     Point aPos = rPos;
     bool bRequiredStyle = false;
-    sal_uInt16 nRequiredStyle = 0;
+    RulerIndentStyle nRequiredStyle = RulerIndentStyle::Top;
 
-    if (eDragType == RULER_TYPE_INDENT)
+    if (eDragType == RulerType::Indent)
     {
         bRequiredStyle = true;
-        nRequiredStyle = RULER_INDENT_BOTTOM;
+        nRequiredStyle = RulerIndentStyle::Bottom;
     }
 
     if ( mnWinStyle & WB_HORZ )
-        aPos.X() += mnWinOff;
+        aPos.AdjustX(mnWinOff );
     else
-        aPos.Y() += mnWinOff;
+        aPos.AdjustY(mnWinOff );
 
-    if ( (eDragType == RULER_TYPE_INDENT) || (eDragType == RULER_TYPE_DONTKNOW) )
+    if ( (eDragType == RulerType::Indent) || (eDragType == RulerType::DontKnow) )
     {
         if ( mnWinStyle & WB_HORZ )
-            aPos.Y() = RULER_OFF + 1;
+            aPos.setY( RULER_OFF + 1 );
         else
-            aPos.X() = RULER_OFF + 1;
+            aPos.setX( RULER_OFF + 1 );
 
         if ( ImplHitTest( aPos, pHitTest, bRequiredStyle, nRequiredStyle ) )
         {
-            if ( (pHitTest->eType == eDragType) || (eDragType == RULER_TYPE_DONTKNOW) )
+            if ( (pHitTest->eType == eDragType) || (eDragType == RulerType::DontKnow) )
                 return true;
         }
     }
 
-    if ( (eDragType == RULER_TYPE_INDENT) ||
-         (eDragType == RULER_TYPE_TAB) ||
-         (eDragType == RULER_TYPE_DONTKNOW) )
+    if ( (eDragType == RulerType::Indent) ||
+         (eDragType == RulerType::Tab) ||
+         (eDragType == RulerType::DontKnow) )
     {
         if ( mnWinStyle & WB_HORZ )
-            aPos.Y() = mnHeight - RULER_OFF - 1;
+            aPos.setY( mnHeight - RULER_OFF - 1 );
         else
-            aPos.X() = mnWidth - RULER_OFF - 1;
+            aPos.setX( mnWidth - RULER_OFF - 1 );
 
         if ( ImplHitTest( aPos, pHitTest, bRequiredStyle, nRequiredStyle ) )
         {
-            if ( (pHitTest->eType == eDragType) || (eDragType == RULER_TYPE_DONTKNOW) )
+            if ( (pHitTest->eType == eDragType) || (eDragType == RulerType::DontKnow) )
                 return true;
         }
     }
 
-    if ( (eDragType == RULER_TYPE_MARGIN1) || (eDragType == RULER_TYPE_MARGIN2) ||
-         (eDragType == RULER_TYPE_BORDER) || (eDragType == RULER_TYPE_DONTKNOW) )
+    if ( (eDragType == RulerType::Margin1) || (eDragType == RulerType::Margin2) ||
+         (eDragType == RulerType::Border) || (eDragType == RulerType::DontKnow) )
     {
         if ( mnWinStyle & WB_HORZ )
-            aPos.Y() = RULER_OFF + (mnVirHeight / 2);
+            aPos.setY( RULER_OFF + (mnVirHeight / 2) );
         else
-            aPos.X() = RULER_OFF + (mnVirHeight / 2);
+            aPos.setX( RULER_OFF + (mnVirHeight / 2) );
 
         if ( ImplHitTest( aPos, pHitTest ) )
         {
-            if ( (pHitTest->eType == eDragType) || (eDragType == RULER_TYPE_DONTKNOW) )
+            if ( (pHitTest->eType == eDragType) || (eDragType == RulerType::DontKnow) )
                 return true;
         }
     }
 
-    pHitTest->eType = RULER_TYPE_DONTKNOW;
+    pHitTest->eType = RulerType::DontKnow;
 
     return false;
 }
 
-bool Ruler::ImplStartDrag( RulerSelection* pHitTest, sal_uInt16 nModifier )
+bool Ruler::ImplStartDrag( RulerSelection const * pHitTest, sal_uInt16 nModifier )
 {
     // don't trigger drag if a border that was clicked can not be changed
-    if ( (pHitTest->eType == RULER_TYPE_BORDER) &&
+    if ( (pHitTest->eType == RulerType::Border) &&
          !pHitTest->bSize && !pHitTest->bSizeBar )
         return false;
 
@@ -1858,7 +1786,7 @@ bool Ruler::ImplStartDrag( RulerSelection* pHitTest, sal_uInt16 nModifier )
     mnDragSize      = pHitTest->mnDragSize;
     mnDragModifier  = nModifier;
     *mpDragData     = *mpSaveData;
-    mpData          = mpDragData;
+    mpData          = mpDragData.get();
 
     // call handler
     if (StartDrag())
@@ -1873,12 +1801,12 @@ bool Ruler::ImplStartDrag( RulerSelection* pHitTest, sal_uInt16 nModifier )
     else
     {
         // otherwise reset the data
-        meDragType      = RULER_TYPE_DONTKNOW;
+        meDragType      = RulerType::DontKnow;
         mnDragPos       = 0;
         mnDragAryPos    = 0;
-        mnDragSize      = 0;
+        mnDragSize      = RulerDragSize::Move;
         mnDragModifier  = 0;
-        mpData          = mpSaveData;
+        mpData          = mpSaveData.get();
     }
 
     return false;
@@ -1967,17 +1895,17 @@ void Ruler::ImplEndDrag()
     else
         *mpSaveData = *mpDragData;
 
-    mpData = mpSaveData;
+    mpData = mpSaveData.get();
     mbDrag = false;
 
     // call handler
     EndDrag();
 
     // reset drag values
-    meDragType      = RULER_TYPE_DONTKNOW;
+    meDragType      = RulerType::DontKnow;
     mnDragPos       = 0;
     mnDragAryPos    = 0;
-    mnDragSize      = 0;
+    mnDragSize      = RulerDragSize::Move;
     mbDragCanceled  = false;
     mbDragDelete    = false;
     mnDragModifier  = 0;
@@ -1989,67 +1917,63 @@ void Ruler::ImplEndDrag()
 
 void Ruler::MouseButtonDown( const MouseEvent& rMEvt )
 {
-    if ( rMEvt.IsLeft() && !IsTracking() )
+    if ( !(rMEvt.IsLeft() && !IsTracking()) )
+        return;
+
+    Point   aMousePos = rMEvt.GetPosPixel();
+    sal_uInt16  nMouseClicks = rMEvt.GetClicks();
+    sal_uInt16  nMouseModifier = rMEvt.GetModifier();
+
+    // update ruler
+    if ( mbFormat )
     {
-        Point   aMousePos = rMEvt.GetPosPixel();
-        sal_uInt16  nMouseClicks = rMEvt.GetClicks();
-        sal_uInt16  nMouseModifier = rMEvt.GetModifier();
+        Invalidate(InvalidateFlags::NoErase);
+    }
 
-        // update ruler
-        if ( mbFormat )
-        {
-            Invalidate(InvalidateFlags::NoErase);
-        }
+    if ( maExtraRect.IsInside( aMousePos ) )
+    {
+        ExtraDown();
+    }
+    else
+    {
+        std::unique_ptr<RulerSelection> pHitTest(new RulerSelection);
+        bool bHitTestResult = ImplHitTest(aMousePos, pHitTest.get());
 
-        if ( maExtraRect.IsInside( aMousePos ) )
+        if ( nMouseClicks == 1 )
         {
-            mnExtraClicks = nMouseClicks;
-            mnExtraModifier = nMouseModifier;
-            ExtraDown();
-            mnExtraClicks = 0;
-            mnExtraModifier = 0;
-        }
-        else
-        {
-            std::unique_ptr<RulerSelection> pHitTest(new RulerSelection);
-            bool bHitTestResult = ImplHitTest(aMousePos, pHitTest.get());
-
-            if ( nMouseClicks == 1 )
+            if ( bHitTestResult )
             {
-                if ( bHitTestResult )
-                {
-                    ImplStartDrag( pHitTest.get(), nMouseModifier );
-                }
-                else
-                {
-                    // calculate position inside of ruler area
-                    if ( pHitTest->eType == RULER_TYPE_DONTKNOW )
-                    {
-                        mnDragPos = pHitTest->nPos;
-                        Click();
-                        mnDragPos = 0;
-
-                        // call HitTest again as a click, for example, could set a new tab
-                        if ( ImplHitTest(aMousePos, pHitTest.get()) )
-                            ImplStartDrag(pHitTest.get(), nMouseModifier);
-                    }
-                }
+                ImplStartDrag( pHitTest.get(), nMouseModifier );
             }
             else
             {
-                if (bHitTestResult)
+                // calculate position inside of ruler area
+                if ( pHitTest->eType == RulerType::DontKnow )
                 {
-                    mnDragPos    = pHitTest->nPos;
-                    mnDragAryPos = pHitTest->nAryPos;
+                    mnDragPos = pHitTest->nPos;
+                    Click();
+                    mnDragPos = 0;
+
+                    // call HitTest again as a click, for example, could set a new tab
+                    if ( ImplHitTest(aMousePos, pHitTest.get()) )
+                        ImplStartDrag(pHitTest.get(), nMouseModifier);
                 }
-                meDragType = pHitTest->eType;
-
-                DoubleClick();
-
-                meDragType      = RULER_TYPE_DONTKNOW;
-                mnDragPos       = 0;
-                mnDragAryPos    = 0;
             }
+        }
+        else
+        {
+            if (bHitTestResult)
+            {
+                mnDragPos    = pHitTest->nPos;
+                mnDragAryPos = pHitTest->nAryPos;
+            }
+            meDragType = pHitTest->eType;
+
+            DoubleClick();
+
+            meDragType      = RulerType::DontKnow;
+            mnDragPos       = 0;
+            mnDragAryPos    = 0;
         }
     }
 }
@@ -2062,28 +1986,28 @@ void Ruler::MouseMove( const MouseEvent& rMEvt )
 
     mxCurrentHitTest.reset(new RulerSelection);
 
-    maHoverSelection.eType = RULER_TYPE_DONTKNOW;
+    maHoverSelection.eType = RulerType::DontKnow;
 
     if (ImplHitTest( rMEvt.GetPosPixel(), mxCurrentHitTest.get() ))
     {
-        maHoverSelection = *mxCurrentHitTest.get();
+        maHoverSelection = *mxCurrentHitTest;
 
         if (mxCurrentHitTest->bSize)
         {
             if (mnWinStyle & WB_HORZ)
             {
-                if (mxCurrentHitTest->mnDragSize == RULER_DRAGSIZE_1)
+                if (mxCurrentHitTest->mnDragSize == RulerDragSize::N1)
                     ePtrStyle = PointerStyle::TabSelectW;
-                else if (mxCurrentHitTest->mnDragSize == RULER_DRAGSIZE_2)
+                else if (mxCurrentHitTest->mnDragSize == RulerDragSize::N2)
                     ePtrStyle = PointerStyle::TabSelectE;
                 else
                     ePtrStyle = PointerStyle::ESize;
             }
             else
             {
-                if (mxCurrentHitTest->mnDragSize == RULER_DRAGSIZE_1)
+                if (mxCurrentHitTest->mnDragSize == RulerDragSize::N1)
                     ePtrStyle = PointerStyle::WindowNSize;
-                else if (mxCurrentHitTest->mnDragSize == RULER_DRAGSIZE_2)
+                else if (mxCurrentHitTest->mnDragSize == RulerDragSize::N2)
                     ePtrStyle = PointerStyle::WindowSSize;
                 else
                     ePtrStyle = PointerStyle::SSize;
@@ -2098,7 +2022,7 @@ void Ruler::MouseMove( const MouseEvent& rMEvt )
         }
     }
 
-    if (mxPreviousHitTest.get() != nullptr && mxPreviousHitTest->eType != mxCurrentHitTest->eType)
+    if (mxPreviousHitTest != nullptr && mxPreviousHitTest->eType != mxCurrentHitTest->eType)
     {
         mbFormat = true;
     }
@@ -2128,7 +2052,7 @@ void Ruler::Tracking( const TrackingEvent& rTEvt )
         ImplDrag( rTEvt.GetMouseEvent().GetPosPixel() );
 }
 
-void Ruler::Paint(vcl::RenderContext& rRenderContext, const Rectangle&)
+void Ruler::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&)
 {
     ImplDraw(rRenderContext);
 
@@ -2190,28 +2114,28 @@ void Ruler::Resize()
             Invalidate(InvalidateFlags::NoErase);
         else if ( mpData->bAutoPageWidth )
         {
-            // only at AutoPageWidth muss we redraw
-            Rectangle aRect;
+            // only at AutoPageWidth do we need to redraw
+            tools::Rectangle aRect;
 
             if ( mnWinStyle & WB_HORZ )
             {
                 if ( mnWidth < aWinSize.Width() )
-                    aRect.Left() = mnWidth - RULER_RESIZE_OFF;
+                    aRect.SetLeft( mnWidth - RULER_RESIZE_OFF );
                 else
-                    aRect.Left() = aWinSize.Width() - RULER_RESIZE_OFF;
-                aRect.Right()   = aRect.Left() + RULER_RESIZE_OFF;
-                aRect.Top()     = RULER_OFF;
-                aRect.Bottom()  = RULER_OFF + mnVirHeight;
+                    aRect.SetLeft( aWinSize.Width() - RULER_RESIZE_OFF );
+                aRect.SetRight( aRect.Left() + RULER_RESIZE_OFF );
+                aRect.SetTop( RULER_OFF );
+                aRect.SetBottom( RULER_OFF + mnVirHeight );
             }
             else
             {
                 if ( mnHeight < aWinSize.Height() )
-                    aRect.Top() = mnHeight-RULER_RESIZE_OFF;
+                    aRect.SetTop( mnHeight-RULER_RESIZE_OFF );
                 else
-                    aRect.Top() = aWinSize.Height()-RULER_RESIZE_OFF;
-                aRect.Bottom() = aRect.Top() + RULER_RESIZE_OFF;
-                aRect.Left()    = RULER_OFF;
-                aRect.Right()   = RULER_OFF + mnVirHeight;
+                    aRect.SetTop( aWinSize.Height()-RULER_RESIZE_OFF );
+                aRect.SetBottom( aRect.Top() + RULER_RESIZE_OFF );
+                aRect.SetLeft( RULER_OFF );
+                aRect.SetRight( RULER_OFF + mnVirHeight );
             }
 
             Invalidate(aRect, InvalidateFlags::NoErase);
@@ -2297,7 +2221,7 @@ void Ruler::Activate()
 {
     mbActive = true;
 
-    // update positionlies - draw is delayed
+    // update positionlines - draw is delayed
     mnUpdateFlags |= RULER_UPDATE_LINES;
     Invalidate(InvalidateFlags::NoErase);
 }
@@ -2319,7 +2243,7 @@ bool Ruler::StartDocDrag( const MouseEvent& rMEvt, RulerType eDragType )
         sal_uInt16     nMouseModifier = rMEvt.GetModifier();
         RulerSelection aHitTest;
 
-        if(eDragType != RULER_TYPE_DONTKNOW)
+        if(eDragType != RulerType::DontKnow)
             aHitTest.bExpandTest = true;
 
         // update ruler
@@ -2451,52 +2375,52 @@ void Ruler::SetBorderPos( long nOff )
 
 void Ruler::SetUnit( FieldUnit eNewUnit )
 {
-    if ( meUnit != eNewUnit )
-    {
-        meUnit = eNewUnit;
-        switch ( meUnit )
-        {
-            case FUNIT_MM:
-                mnUnitIndex = RULER_UNIT_MM;
-                break;
-            case FUNIT_CM:
-                mnUnitIndex = RULER_UNIT_CM;
-                break;
-            case FUNIT_M:
-                mnUnitIndex = RULER_UNIT_M;
-                break;
-            case FUNIT_KM:
-                mnUnitIndex = RULER_UNIT_KM;
-                break;
-            case FUNIT_INCH:
-                mnUnitIndex = RULER_UNIT_INCH;
-                break;
-            case FUNIT_FOOT:
-                mnUnitIndex = RULER_UNIT_FOOT;
-                break;
-            case FUNIT_MILE:
-                mnUnitIndex = RULER_UNIT_MILE;
-                break;
-            case FUNIT_POINT:
-                mnUnitIndex = RULER_UNIT_POINT;
-                break;
-            case FUNIT_PICA:
-                mnUnitIndex = RULER_UNIT_PICA;
-                break;
-            case FUNIT_CHAR:
-                mnUnitIndex = RULER_UNIT_CHAR;
-                break;
-            case FUNIT_LINE:
-                mnUnitIndex = RULER_UNIT_LINE;
-                break;
-            default:
-                SAL_WARN( "svtools.control", "Ruler::SetUnit() - Wrong Unit" );
-                break;
-        }
+    if ( meUnit == eNewUnit )
+        return;
 
-        maMapMode.SetMapUnit( aImplRulerUnitTab[mnUnitIndex].eMapUnit );
-        ImplUpdate();
+    meUnit = eNewUnit;
+    switch ( meUnit )
+    {
+        case FieldUnit::MM:
+            mnUnitIndex = RULER_UNIT_MM;
+            break;
+        case FieldUnit::CM:
+            mnUnitIndex = RULER_UNIT_CM;
+            break;
+        case FieldUnit::M:
+            mnUnitIndex = RULER_UNIT_M;
+            break;
+        case FieldUnit::KM:
+            mnUnitIndex = RULER_UNIT_KM;
+            break;
+        case FieldUnit::INCH:
+            mnUnitIndex = RULER_UNIT_INCH;
+            break;
+        case FieldUnit::FOOT:
+            mnUnitIndex = RULER_UNIT_FOOT;
+            break;
+        case FieldUnit::MILE:
+            mnUnitIndex = RULER_UNIT_MILE;
+            break;
+        case FieldUnit::POINT:
+            mnUnitIndex = RULER_UNIT_POINT;
+            break;
+        case FieldUnit::PICA:
+            mnUnitIndex = RULER_UNIT_PICA;
+            break;
+        case FieldUnit::CHAR:
+            mnUnitIndex = RULER_UNIT_CHAR;
+            break;
+        case FieldUnit::LINE:
+            mnUnitIndex = RULER_UNIT_LINE;
+            break;
+        default:
+            SAL_WARN( "svtools.control", "Ruler::SetUnit() - Wrong Unit" );
+            break;
     }
+
+    maMapMode.SetMapUnit( aImplRulerUnitTab[mnUnitIndex].eMapUnit );
+    ImplUpdate();
 }
 
 void Ruler::SetZoom( const Fraction& rNewZoom )
@@ -2527,6 +2451,7 @@ void Ruler::SetNullOffset( long nPos )
 {
     if ( mpData->nNullOff != nPos )
     {
+        mpData->nNullVirOff += nPos - mpData->nNullOff;
         mpData->nNullOff = nPos;
         ImplUpdate();
     }
@@ -2534,7 +2459,7 @@ void Ruler::SetNullOffset( long nPos )
 
 void Ruler::SetLeftFrameMargin( long nPos )
 {
-    if ( (mpData->nLeftFrameMargin != nPos) )
+    if ( mpData->nLeftFrameMargin != nPos )
     {
         mpData->nLeftFrameMargin  = nPos;
         ImplUpdate();
@@ -2543,14 +2468,14 @@ void Ruler::SetLeftFrameMargin( long nPos )
 
 void Ruler::SetRightFrameMargin( long nPos )
 {
-    if ( (mpData->nRightFrameMargin != nPos) )
+    if ( mpData->nRightFrameMargin != nPos )
     {
         mpData->nRightFrameMargin  = nPos;
         ImplUpdate();
     }
 }
 
-void Ruler::SetMargin1( long nPos, sal_uInt16 nMarginStyle )
+void Ruler::SetMargin1( long nPos, RulerMarginStyle nMarginStyle )
 {
     if ( (mpData->nMargin1 != nPos) || (mpData->nMargin1Style != nMarginStyle) )
     {
@@ -2560,11 +2485,11 @@ void Ruler::SetMargin1( long nPos, sal_uInt16 nMarginStyle )
     }
 }
 
-void Ruler::SetMargin2( long nPos, sal_uInt16 nMarginStyle )
+void Ruler::SetMargin2( long nPos, RulerMarginStyle nMarginStyle )
 {
     DBG_ASSERT( (nPos >= mpData->nMargin1) ||
-                (mpData->nMargin1Style & RULER_STYLE_INVISIBLE) ||
-                (mpData->nMargin2Style & RULER_STYLE_INVISIBLE),
+                (mpData->nMargin1Style & RulerMarginStyle::Invisible) ||
+                (mpData->nMargin2Style & RulerMarginStyle::Invisible),
                 "Ruler::SetMargin2() - Margin2 < Margin1" );
 
     if ( (mpData->nMargin2 != nPos) || (mpData->nMargin2Style != nMarginStyle) )
@@ -2585,8 +2510,7 @@ void Ruler::SetLines( sal_uInt32 aLineArraySize, const RulerLine* pLineArray )
         const RulerLine* pAry2 = pLineArray;
         while ( i )
         {
-            if ( (aItr1->nPos   != pAry2->nPos)   ||
-                 (aItr1->nStyle != pAry2->nStyle) )
+            if ( aItr1->nPos   != pAry2->nPos )
                 break;
             ++aItr1;
             ++pAry2;
@@ -2598,10 +2522,7 @@ void Ruler::SetLines( sal_uInt32 aLineArraySize, const RulerLine* pLineArray )
 
     // New values and new share issue
     bool bMustUpdate;
-    if ( IsReallyVisible() && IsUpdateMode() )
-        bMustUpdate = true;
-    else
-        bMustUpdate = false;
+    bMustUpdate = IsReallyVisible() && IsUpdateMode();
 
     // Delete old lines
     if ( bMustUpdate )
@@ -2775,7 +2696,7 @@ void Ruler::DrawTab(vcl::RenderContext& rRenderContext, const Color &rFillColor,
 
 void Ruler::SetTextRTL(bool bRTL)
 {
-    if(mpData->bTextRTL != (bool) bRTL)
+    if(mpData->bTextRTL != bRTL)
     {
         mpData->bTextRTL = bRTL;
         if ( IsReallyVisible() && IsUpdateMode() )
@@ -2839,10 +2760,9 @@ uno::Reference< XAccessible > Ruler::CreateAccessible()
         {
             aStr = SvtResId(STR_SVT_ACC_RULER_VERT_NAME);
         }
-        pAccContext = new SvtRulerAccessible( xAccParent, *this, aStr );
-        pAccContext->acquire();
-        this->SetAccessible(pAccContext);
-        return pAccContext;
+        mxAccContext = new SvtRulerAccessible( xAccParent, *this, aStr );
+        SetAccessible(mxAccContext.get());
+        return mxAccContext.get();
     }
     else
         return uno::Reference< XAccessible >();

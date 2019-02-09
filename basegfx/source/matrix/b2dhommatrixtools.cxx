@@ -18,6 +18,7 @@
  */
 
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
+#include <basegfx/range/b2drange.hxx>
 
 #include <osl/diagnose.h>
 #include <rtl/ustring.hxx>
@@ -25,7 +26,7 @@
 
 namespace basegfx
 {
-    namespace tools
+    namespace utils
     {
         void createSinCosOrthogonal(double& o_rSin, double& o_rCos, double fRadiant)
         {
@@ -358,6 +359,49 @@ namespace basegfx
             return aRetval;
         }
 
+        BASEGFX_DLLPUBLIC B2DHomMatrix createRotateAroundCenterKeepAspectRatioStayInsideRange(
+            const basegfx::B2DRange& rTargetRange,
+            double fRotate)
+        {
+            basegfx::B2DHomMatrix aRetval;
+
+            // RotGrfFlyFrame: Create a transformation that maps the range inside of itself
+            // so that it fits, takes as much space as possible and keeps the aspect ratio
+            if(0.0 != fRotate)
+            {
+                // Fit rotated graphic to center of available space, keeping page ratio:
+                // Adapt scaling ratio of unit object and rotate it
+                aRetval.scale(1.0, rTargetRange.getHeight() / rTargetRange.getWidth());
+                aRetval.rotate(fRotate);
+
+                // get the range to see where we are in unit coordinates
+                basegfx::B2DRange aFullRange(0.0, 0.0, 1.0, 1.0);
+                aFullRange.transform(aRetval);
+
+                // detect needed scales in X/Y and choose the smallest for staying inside the
+                // available space while keeping aspect ratio of the source
+                const double fScaleX(rTargetRange.getWidth() / aFullRange.getWidth());
+                const double fScaleY(rTargetRange.getHeight() / aFullRange.getHeight());
+                const double fScaleMin(std::min(fScaleX, fScaleY));
+
+                // TopLeft to zero, then scale, then move to center of available space
+                aRetval.translate(-aFullRange.getMinX(), -aFullRange.getMinY());
+                aRetval.scale(fScaleMin, fScaleMin);
+                aRetval.translate(
+                    rTargetRange.getCenterX() - (0.5 * fScaleMin * aFullRange.getWidth()),
+                    rTargetRange.getCenterY() - (0.5 * fScaleMin * aFullRange.getHeight()));
+            }
+            else
+            {
+                // just scale/translate needed
+                aRetval *= createScaleTranslateB2DHomMatrix(
+                    rTargetRange.getRange(),
+                    rTargetRange.getMinimum());
+            }
+
+            return aRetval;
+        }
+
         /// special for the case to map from source range to target range
         B2DHomMatrix createSourceRangeTargetRangeTransform(
             const B2DRange& rSourceRange,
@@ -398,7 +442,21 @@ namespace basegfx
             return aRetval;
         }
 
-    } // end of namespace tools
+        B2DHomMatrix createCoordinateSystemTransform(
+            const B2DPoint& rOrigin,
+            const B2DVector& rX,
+            const B2DVector& rY)
+        {
+            return basegfx::B2DHomMatrix(
+                rX.getX(), rY.getX(), rOrigin.getX(),
+                rX.getY(), rY.getY(), rOrigin.getY());
+        }
+
+        B2DTuple getColumn(const B2DHomMatrix& rMatrix, sal_uInt16 nCol)
+        {
+            return B2DTuple(rMatrix.get(0, nCol), rMatrix.get(1, nCol));
+        }
+    } // end of namespace utils
 } // end of namespace basegfx
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -20,27 +20,25 @@
 #include <svl/zforlist.hxx>
 #include <svl/stritem.hxx>
 #include <vcl/builderfactory.hxx>
-#include "svtools/treelistentry.hxx"
+#include <vcl/treelistentry.hxx>
 
 #include "structpg.hxx"
-#include "formdlgs.hrc"
-#include "formula/formdata.hxx"
-#include "formula/formula.hxx"
-#include "ModuleHelper.hxx"
-#include "formula/IFunctionDescription.hxx"
-#include "ForResId.hrc"
-
+#include <formula/formdata.hxx>
+#include <formula/formula.hxx>
+#include <formula/IFunctionDescription.hxx>
+#include <formula/token.hxx>
+#include <bitmaps.hlst>
 
 namespace formula
 {
 StructListBox::StructListBox(vcl::Window* pParent, WinBits nBits ):
     SvTreeListBox(pParent, nBits)
 {
-    bActiveFlag=false;
+    bActiveFlag = false;
 
     vcl::Font aFont( GetFont() );
     Size aSize = aFont.GetFontSize();
-    aSize.Height() -= 2;
+    aSize.AdjustHeight(-2);
     aFont.SetFontSize( aSize );
     SetFont( aFont );
 }
@@ -48,33 +46,34 @@ StructListBox::StructListBox(vcl::Window* pParent, WinBits nBits ):
 SvTreeListEntry* StructListBox::InsertStaticEntry(
         const OUString& rText,
         const Image& rEntryImg,
-        SvTreeListEntry* pParent, sal_uLong nPos, IFormulaToken* pToken )
+        SvTreeListEntry* pParent, sal_uLong nPos, const FormulaToken* pToken )
 {
-    SvTreeListEntry* pEntry = InsertEntry( rText, rEntryImg, rEntryImg, pParent, false, nPos, pToken );
+    SvTreeListEntry* pEntry = InsertEntry( rText, rEntryImg, rEntryImg, pParent, false, nPos,
+            const_cast<FormulaToken*>(pToken) );
     return pEntry;
 }
 
 void StructListBox::SetActiveFlag(bool bFlag)
 {
-    bActiveFlag=bFlag;
+    bActiveFlag = bFlag;
 }
 
 
 void StructListBox::MouseButtonDown( const MouseEvent& rMEvt )
 {
-    bActiveFlag=true;
+    bActiveFlag = true;
     SvTreeListBox::MouseButtonDown(rMEvt);
 }
 
 void StructListBox::GetFocus()
 {
-    bActiveFlag=true;
+    bActiveFlag = true;
     SvTreeListBox::GetFocus();
 }
 
 void StructListBox::LoseFocus()
 {
-    bActiveFlag=false;
+    bActiveFlag = false;
     SvTreeListBox::LoseFocus();
 }
 
@@ -82,20 +81,20 @@ VCL_BUILDER_FACTORY_ARGS(StructListBox, WB_BORDER)
 
 StructPage::StructPage(vcl::Window* pParent):
     TabPage(pParent, "StructPage", "formula/ui/structpage.ui"),
-    maImgEnd        ( ModuleRes( BMP_STR_END ) ),
-    maImgError      ( ModuleRes( BMP_STR_ERROR ) ),
+    maImgEnd(BitmapEx(BMP_STR_END)),
+    maImgError(BitmapEx(BMP_STR_ERROR)),
     pSelectedToken  ( nullptr )
 {
     get(m_pTlbStruct, "struct");
-    Size aSize(LogicToPixel(Size(86, 162), MAP_APPFONT));
+    Size aSize(LogicToPixel(Size(86, 162), MapMode(MapUnit::MapAppFont)));
     m_pTlbStruct->set_height_request(aSize.Height());
     m_pTlbStruct->set_width_request(aSize.Width());
     m_pTlbStruct->SetStyle(m_pTlbStruct->GetStyle()|WB_HASLINES|WB_CLIPCHILDREN|
                         WB_HASBUTTONS|WB_HSCROLL|WB_NOINITIALSELECTION);
 
     m_pTlbStruct->SetNodeDefaultImages();
-    m_pTlbStruct->SetDefaultExpandedEntryBmp(  Image( ModuleRes( BMP_STR_OPEN  ) ) );
-    m_pTlbStruct->SetDefaultCollapsedEntryBmp( Image( ModuleRes( BMP_STR_CLOSE ) ) );
+    m_pTlbStruct->SetDefaultExpandedEntryBmp(Image(StockImage::Yes, BMP_STR_OPEN));
+    m_pTlbStruct->SetDefaultCollapsedEntryBmp(Image(StockImage::Yes, BMP_STR_CLOSE));
 
 
     m_pTlbStruct->SetSelectHdl(LINK( this, StructPage, SelectHdl ) );
@@ -119,7 +118,7 @@ void StructPage::ClearStruct()
 }
 
 SvTreeListEntry* StructPage::InsertEntry( const OUString& rText, SvTreeListEntry* pParent,
-                                       sal_uInt16 nFlag,sal_uLong nPos,IFormulaToken* pIFormulaToken)
+                                       sal_uInt16 nFlag, sal_uLong nPos, const FormulaToken* pIFormulaToken )
 {
     m_pTlbStruct->SetActiveFlag( false );
 
@@ -127,7 +126,8 @@ SvTreeListEntry* StructPage::InsertEntry( const OUString& rText, SvTreeListEntry
     switch( nFlag )
     {
         case STRUCT_FOLDER:
-            pEntry = m_pTlbStruct->InsertEntry( rText, pParent, false, nPos, pIFormulaToken );
+            pEntry = m_pTlbStruct->InsertEntry( rText, pParent, false, nPos,
+                    const_cast<FormulaToken*>(pIFormulaToken));
         break;
         case STRUCT_END:
             pEntry = m_pTlbStruct->InsertStaticEntry( rText, maImgEnd, pParent, nPos, pIFormulaToken );
@@ -137,7 +137,7 @@ SvTreeListEntry* StructPage::InsertEntry( const OUString& rText, SvTreeListEntry
         break;
     }
 
-    if( pEntry && pParent )
+    if ( pEntry && pParent )
         m_pTlbStruct->Expand( pParent );
     return pEntry;
 }
@@ -145,19 +145,19 @@ SvTreeListEntry* StructPage::InsertEntry( const OUString& rText, SvTreeListEntry
 OUString StructPage::GetEntryText(SvTreeListEntry* pEntry) const
 {
     OUString aString;
-    if(pEntry!=nullptr)
+    if (pEntry != nullptr)
         aString = m_pTlbStruct->GetEntryText(pEntry);
     return  aString;
 }
 
-IFormulaToken* StructPage::GetFunctionEntry(SvTreeListEntry* pEntry)
+const FormulaToken* StructPage::GetFunctionEntry(SvTreeListEntry* pEntry)
 {
-    if(pEntry!=nullptr)
+    if (pEntry != nullptr)
     {
-        IFormulaToken * pToken=static_cast<IFormulaToken *>(pEntry->GetUserData());
-        if(pToken!=nullptr)
+        const FormulaToken * pToken = static_cast<const FormulaToken *>(pEntry->GetUserData());
+        if (pToken != nullptr)
         {
-            if ( !(pToken->isFunction() || pToken->getArgumentCount() > 1 ) )
+            if ( !(pToken->IsFunction() || pToken->GetParamCount() > 1 ) )
             {
                 return GetFunctionEntry(m_pTlbStruct->GetParent(pEntry));
             }
@@ -170,19 +170,19 @@ IFormulaToken* StructPage::GetFunctionEntry(SvTreeListEntry* pEntry)
     return nullptr;
 }
 
-IMPL_LINK_TYPED( StructPage, SelectHdl, SvTreeListBox*, pTlb, void )
+IMPL_LINK( StructPage, SelectHdl, SvTreeListBox*, pTlb, void )
 {
-    if(m_pTlbStruct->GetActiveFlag())
+    if (m_pTlbStruct->GetActiveFlag())
     {
-        if(pTlb==m_pTlbStruct)
+        if (pTlb == m_pTlbStruct)
         {
-            SvTreeListEntry*    pCurEntry=m_pTlbStruct->GetCurEntry();
-            if(pCurEntry!=nullptr)
+            SvTreeListEntry*    pCurEntry = m_pTlbStruct->GetCurEntry();
+            if (pCurEntry != nullptr)
             {
-                pSelectedToken=static_cast<IFormulaToken *>(pCurEntry->GetUserData());
-                if(pSelectedToken!=nullptr)
+                pSelectedToken = static_cast<const FormulaToken *>(pCurEntry->GetUserData());
+                if (pSelectedToken != nullptr)
                 {
-                    if ( !(pSelectedToken->isFunction() || pSelectedToken->getArgumentCount() > 1) )
+                    if ( !(pSelectedToken->IsFunction() || pSelectedToken->GetParamCount() > 1) )
                     {
                         pSelectedToken = GetFunctionEntry(pCurEntry);
                     }

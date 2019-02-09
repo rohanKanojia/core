@@ -32,7 +32,7 @@
 #include <wrtsh.hxx>
 #include <expfld.hxx>
 #include <fldtdlg.hxx>
-#include <fldpage.hxx>
+#include "fldpage.hxx"
 #include <docufld.hxx>
 #include <cmdid.h>
 #include <globals.hrc>
@@ -41,9 +41,10 @@
 
 using namespace ::com::sun::star;
 
+// note: pAttrSet may be null if the dialog is restored on startup
 SwFieldPage::SwFieldPage(vcl::Window *pParent, const OString& rID,
-    const OUString& rUIXMLDescription, const SfxItemSet &rAttrSet)
-    : SfxTabPage(pParent, rID, rUIXMLDescription, &rAttrSet)
+    const OUString& rUIXMLDescription, const SfxItemSet *const pAttrSet)
+    : SfxTabPage(pParent, rID, rUIXMLDescription, pAttrSet)
     , m_pCurField(nullptr)
     , m_pWrtShell(nullptr)
     , m_nTypeSel(LISTBOX_ENTRY_NOTFOUND)
@@ -87,9 +88,9 @@ void SwFieldPage::Init()
             {
                 SwDoc* pDoc = pSh->GetDoc();
                 pSh->InsertFieldType( SwSetExpFieldType( pDoc,
-                                    OUString("HTML_ON"), 1));
+                                    "HTML_ON", 1));
                 pSh->InsertFieldType( SwSetExpFieldType(pDoc,
-                                    OUString("HTML_OFF"), 1));
+                                    "HTML_OFF", 1));
             }
         }
     }
@@ -116,7 +117,7 @@ void SwFieldPage::EditNewField( bool bOnlyActivate )
 
 // insert field
 void SwFieldPage::InsertField(sal_uInt16 nTypeId, sal_uInt16 nSubType, const OUString& rPar1,
-                            const OUString& rPar2, sal_uLong nFormatId,
+                            const OUString& rPar2, sal_uInt32 nFormatId,
                             sal_Unicode cSeparator, bool bIsAutomaticLanguage)
 {
     SwView* pView = GetActiveView();
@@ -148,7 +149,7 @@ void SwFieldPage::InsertField(sal_uInt16 nTypeId, sal_uInt16 nSubType, const OUS
                 aReq.AppendItem(SfxStringItem
                         (FN_PARAM_1,rPar1.getToken(1, DB_DELIM)));
                 aReq.AppendItem(SfxInt32Item
-                        (FN_PARAM_3,rPar1.getToken(1, DB_DELIM).toInt32()));
+                        (FN_PARAM_3,rPar1.getToken(2, DB_DELIM).toInt32()));
                 aReq.AppendItem(SfxStringItem
                         (FN_PARAM_2,rPar1.getToken(3, DB_DELIM)));
             }
@@ -168,7 +169,7 @@ void SwFieldPage::InsertField(sal_uInt16 nTypeId, sal_uInt16 nSubType, const OUS
     }
     else    // change field
     {
-        SwField *const pTmpField = m_pCurField->CopyField();
+        std::unique_ptr<SwField> pTmpField = m_pCurField->CopyField();
 
         OUString sPar1(rPar1);
         OUString sPar2(rPar2);
@@ -193,7 +194,7 @@ void SwFieldPage::InsertField(sal_uInt16 nTypeId, sal_uInt16 nSubType, const OUS
                 aData.nCommandType = rPar1.getToken(0, DB_DELIM, nPos).toInt32();
                 sPar1 = rPar1.copy(nPos);
 
-                static_cast<SwDBNameInfField*>(pTmpField)->SetDBData(aData);
+                static_cast<SwDBNameInfField*>(pTmpField.get())->SetDBData(aData);
             }
             break;
 
@@ -236,10 +237,10 @@ void SwFieldPage::InsertField(sal_uInt16 nTypeId, sal_uInt16 nSubType, const OUS
         case TYP_INPUTFLD:
             {
                 // User- or SetField ?
-                if (m_aMgr.GetFieldType(RES_USERFLD, sPar1) == nullptr &&
+                if (m_aMgr.GetFieldType(SwFieldIds::User, sPar1) == nullptr &&
                 !(pTmpField->GetSubType() & INP_TXT)) // SETEXPFLD
                 {
-                    SwSetExpField* pField = static_cast<SwSetExpField*>(pTmpField);
+                    SwSetExpField* pField = static_cast<SwSetExpField*>(pTmpField.get());
                     pField->SetPromptText(sPar2);
                     sPar2 = pField->GetPar2();
                 }
@@ -249,7 +250,7 @@ void SwFieldPage::InsertField(sal_uInt16 nTypeId, sal_uInt16 nSubType, const OUS
             {
                 if( nSubType == nsSwDocInfoSubType::DI_CUSTOM )
                 {
-                    SwDocInfoField* pDocInfo = static_cast<SwDocInfoField*>( pTmpField );
+                    SwDocInfoField* pDocInfo = static_cast<SwDocInfoField*>( pTmpField.get() );
                     pDocInfo->SetName( rPar1 );
                 }
             }
@@ -261,7 +262,7 @@ void SwFieldPage::InsertField(sal_uInt16 nTypeId, sal_uInt16 nSubType, const OUS
         pTmpField->SetSubType(nSubType);
         pTmpField->SetAutomaticLanguage(bIsAutomaticLanguage);
 
-        m_aMgr.UpdateCurField( nFormatId, sPar1, sPar2, pTmpField );
+        m_aMgr.UpdateCurField( nFormatId, sPar1, sPar2, std::move(pTmpField) );
 
         m_pCurField = m_aMgr.GetCurField();
 
@@ -281,7 +282,7 @@ void SwFieldPage::InsertField(sal_uInt16 nTypeId, sal_uInt16 nSubType, const OUS
 void SwFieldPage::SavePos( const ListBox* pLst1 )
 {
     if( pLst1 && pLst1->GetEntryCount() )
-        m_aLstStrArr[ 0 ] = pLst1->GetSelectEntry();
+        m_aLstStrArr[ 0 ] = pLst1->GetSelectedEntry();
     else
         m_aLstStrArr[ 0 ].clear();
     m_aLstStrArr[ 1 ].clear();
@@ -298,13 +299,13 @@ void SwFieldPage::RestorePos(ListBox* pLst1)
 }
 
 // Insert new fields
-IMPL_LINK_TYPED( SwFieldPage, TreeListBoxInsertHdl, SvTreeListBox*, pBtn, bool )
+IMPL_LINK( SwFieldPage, TreeListBoxInsertHdl, SvTreeListBox*, pBtn, bool )
 {
     InsertHdl(pBtn);
     return false;
 }
 
-IMPL_LINK_TYPED( SwFieldPage, ListBoxInsertHdl, ListBox&, rBox, void )
+IMPL_LINK( SwFieldPage, ListBoxInsertHdl, ListBox&, rBox, void )
 {
     InsertHdl(&rBox);
 }
@@ -344,7 +345,7 @@ void SwFieldPage::EnableInsert(bool bEnable)
     m_bInsert = bEnable;
 }
 
-IMPL_LINK_NOARG_TYPED(SwFieldPage, NumFormatHdl, ListBox&, void)
+IMPL_LINK_NOARG(SwFieldPage, NumFormatHdl, ListBox&, void)
 {
     InsertHdl(nullptr);
 }

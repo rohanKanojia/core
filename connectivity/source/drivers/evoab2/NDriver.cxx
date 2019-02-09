@@ -23,14 +23,13 @@
 #include <connectivity/dbexception.hxx>
 #include <osl/file.hxx>
 #include <osl/security.hxx>
-#include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/ucb/XContentAccess.hpp>
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <ucbhelper/content.hxx>
 #include <signal.h>
-#include "resource/common_res.hrc"
-#include "resource/sharedresources.hxx"
+#include <strings.hrc>
+#include <resource/sharedresources.hxx>
 
 using namespace osl;
 using namespace connectivity::evoab;
@@ -55,7 +54,7 @@ void OEvoabDriver::disposing()
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
-    // when driver will be destroied so all our connections have to be destroied as well
+    // when driver will be destroyed so all our connections have to be destroyed as well
     for (OWeakRefArray::iterator i = m_xConnections.begin(); m_xConnections.end() != i; ++i)
     {
         Reference< XComponent > xComp(i->get(), UNO_QUERY);
@@ -65,7 +64,7 @@ void OEvoabDriver::disposing()
             {
                 xComp->dispose();
             }
-            catch (const com::sun::star::lang::DisposedException&)
+            catch (const css::lang::DisposedException&)
             {
                 xComp.clear();
             }
@@ -79,7 +78,7 @@ void OEvoabDriver::disposing()
 
 // static ServiceInfo
 
-OUString OEvoabDriver::getImplementationName_Static(  ) throw(RuntimeException)
+OUString OEvoabDriver::getImplementationName_Static(  )
 {
     return OUString(EVOAB_DRIVER_IMPL_NAME);
     // this name is referenced in the configuration and in the evoab.xml
@@ -87,7 +86,7 @@ OUString OEvoabDriver::getImplementationName_Static(  ) throw(RuntimeException)
 }
 
 
-Sequence< OUString > OEvoabDriver::getSupportedServiceNames_Static(  ) throw (RuntimeException)
+Sequence< OUString > OEvoabDriver::getSupportedServiceNames_Static(  )
 {
     // which service is supported
     // for more information @see com.sun.star.sdbc.Driver
@@ -95,28 +94,28 @@ Sequence< OUString > OEvoabDriver::getSupportedServiceNames_Static(  ) throw (Ru
     return aSNS;
 }
 
-OUString SAL_CALL OEvoabDriver::getImplementationName(  ) throw(RuntimeException, std::exception)
+OUString SAL_CALL OEvoabDriver::getImplementationName(  )
 {
     return getImplementationName_Static();
 }
 
-sal_Bool SAL_CALL OEvoabDriver::supportsService( const OUString& _rServiceName ) throw(RuntimeException, std::exception)
+sal_Bool SAL_CALL OEvoabDriver::supportsService( const OUString& _rServiceName )
 {
     return cppu::supportsService(this, _rServiceName);
 }
 
-Sequence< OUString > SAL_CALL OEvoabDriver::getSupportedServiceNames(  ) throw(RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL OEvoabDriver::getSupportedServiceNames(  )
 {
     return getSupportedServiceNames_Static();
 }
 
 
-::com::sun::star::uno::Reference< ::com::sun::star::uno::XInterface >  SAL_CALL connectivity::evoab::OEvoabDriver_CreateInstance(const ::com::sun::star::uno::Reference< ::com::sun::star::lang::XMultiServiceFactory >& _rxFactory) throw( ::com::sun::star::uno::Exception )
+css::uno::Reference< css::uno::XInterface > connectivity::evoab::OEvoabDriver_CreateInstance(const css::uno::Reference< css::lang::XMultiServiceFactory >& _rxFactory)
 {
     return *(new OEvoabDriver(_rxFactory));
 }
 
-Reference< XConnection > SAL_CALL OEvoabDriver::connect( const OUString& url, const Sequence< PropertyValue >& info ) throw(SQLException, RuntimeException, std::exception)
+Reference< XConnection > SAL_CALL OEvoabDriver::connect( const OUString& url, const Sequence< PropertyValue >& info )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if (ODriver_BASE::rBHelper.bDisposed)
@@ -127,20 +126,19 @@ Reference< XConnection > SAL_CALL OEvoabDriver::connect( const OUString& url, co
 
     OEvoabConnection* pCon = new OEvoabConnection( *this );
     pCon->construct(url,info);
-        Reference< XConnection > xCon = pCon;
-        m_xConnections.push_back(WeakReferenceHelper(*pCon));
+    Reference< XConnection > xCon = pCon;
+    m_xConnections.push_back(WeakReferenceHelper(*pCon));
 
     return xCon;
 }
 
 sal_Bool SAL_CALL OEvoabDriver::acceptsURL( const OUString& url )
-    throw(SQLException, RuntimeException, std::exception)
 {
     return acceptsURL_Stat(url);
 }
 
 
-Sequence< DriverPropertyInfo > SAL_CALL OEvoabDriver::getPropertyInfo( const OUString& url, const Sequence< PropertyValue >& /*info*/ ) throw(SQLException, RuntimeException, std::exception)
+Sequence< DriverPropertyInfo > SAL_CALL OEvoabDriver::getPropertyInfo( const OUString& url, const Sequence< PropertyValue >& /*info*/ )
 {
     if ( ! acceptsURL(url) )
     {
@@ -154,12 +152,12 @@ Sequence< DriverPropertyInfo > SAL_CALL OEvoabDriver::getPropertyInfo( const OUS
 }
 
 
-sal_Int32 SAL_CALL OEvoabDriver::getMajorVersion(  ) throw(RuntimeException, std::exception)
+sal_Int32 SAL_CALL OEvoabDriver::getMajorVersion(  )
 {
     return 1;
 }
 
-sal_Int32 SAL_CALL OEvoabDriver::getMinorVersion(  ) throw(RuntimeException, std::exception)
+sal_Int32 SAL_CALL OEvoabDriver::getMinorVersion(  )
 {
     return 0;
 }

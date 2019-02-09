@@ -20,10 +20,9 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_CSVTABLEBOX_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_CSVTABLEBOX_HXX
 
-#include <vcl/ctrl.hxx>
 #include <vcl/scrbar.hxx>
 #include <vcl/vclptr.hxx>
-#include "scdllapi.h"
+#include <scdllapi.h>
 #include "csvcontrol.hxx"
 #include "csvruler.hxx"
 #include "csvgrid.hxx"
@@ -63,8 +62,11 @@ private:
 
 public:
     explicit                    ScCsvTableBox( vcl::Window* pParent, WinBits nBits );
-    virtual                     ~ScCsvTableBox();
+    virtual                     ~ScCsvTableBox() override;
     virtual void                dispose() override;
+
+    // workaround VS2013 bug in handling virtual bases
+                                ScCsvTableBox( const ScCsvTableBox& ) = delete;
 
     /** Finishes initialization. Must be called after constructing a new object. */
     void Init();
@@ -85,10 +87,10 @@ private:
     SAL_DLLPRIVATE void                        InitVScrollBar();
 
     /** Calculates and sets valid position offset nearest to nPos. */
-    SAL_DLLPRIVATE inline void                 ImplSetPosOffset( sal_Int32 nPos )
+    SAL_DLLPRIVATE void                 ImplSetPosOffset( sal_Int32 nPos )
                                     { maData.mnPosOffset = std::max( std::min( nPos, GetMaxPosOffset() ), sal_Int32( 0 ) ); }
     /** Calculates and sets valid line offset nearest to nLine. */
-    SAL_DLLPRIVATE inline void                 ImplSetLineOffset( sal_Int32 nLine )
+    SAL_DLLPRIVATE void                 ImplSetLineOffset( sal_Int32 nLine )
                                     { maData.mnLineOffset = std::max( std::min( nLine, GetMaxLineOffset() ), sal_Int32( 0 ) ); }
     /** Moves controls (not cursors!) so that nPos becomes visible. */
     SAL_DLLPRIVATE void                        MakePosVisible( sal_Int32 nPos );
@@ -98,14 +100,14 @@ public:
     /** Fills all cells of all lines with the passed texts (Unicode strings). */
     void                        SetUniStrings(
                                     const OUString* pTextLines, const OUString& rSepChars,
-                                    sal_Unicode cTextSep, bool bMergeSep );
+                                    sal_Unicode cTextSep, bool bMergeSep, bool bRemoveSpace );
 
     // column settings --------------------------------------------------------
 public:
     /** Reads UI strings for data types from the list box. */
     void                        InitTypes( const ListBox& rListBox );
     /** Returns the data type of the selected columns. */
-    inline sal_Int32            GetSelColumnType() const { return maGrid->GetSelColumnType(); }
+    sal_Int32            GetSelColumnType() const { return maGrid->GetSelColumnType(); }
 
     /** Fills the options object with current column data. */
     void                        FillColumnData( ScAsciiOptions& rOptions ) const;
@@ -113,9 +115,9 @@ public:
     // event handling ---------------------------------------------------------
 public:
     /** Sets a new handler for "update cell texts" requests. */
-    inline void                 SetUpdateTextHdl( const Link<ScCsvTableBox&,void>& rHdl ) { maUpdateTextHdl = rHdl; }
+    void                 SetUpdateTextHdl( const Link<ScCsvTableBox&,void>& rHdl ) { maUpdateTextHdl = rHdl; }
     /** Sets a new handler for "column selection changed" events. */
-    inline void                 SetColTypeHdl( const Link<ScCsvTableBox&,void>& rHdl ) { maColTypeHdl = rHdl; }
+    void                 SetColTypeHdl( const Link<ScCsvTableBox&,void>& rHdl ) { maColTypeHdl = rHdl; }
 
 protected:
     virtual void                Resize() override;
@@ -123,9 +125,9 @@ protected:
     virtual Size                GetOptimalSize() const override;
 
 private:
-    DECL_DLLPRIVATE_LINK_TYPED( CsvCmdHdl, ScCsvControl&, void );
-    DECL_DLLPRIVATE_LINK_TYPED( ScrollHdl, ScrollBar*, void );
-    DECL_DLLPRIVATE_LINK_TYPED( ScrollEndHdl, ScrollBar*, void );
+    DECL_DLLPRIVATE_LINK( CsvCmdHdl, ScCsvControl&, void );
+    DECL_DLLPRIVATE_LINK( ScrollHdl, ScrollBar*, void );
+    DECL_DLLPRIVATE_LINK( ScrollEndHdl, ScrollBar*, void );
 
     // accessibility ----------------------------------------------------------
 public:

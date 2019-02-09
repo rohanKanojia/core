@@ -22,7 +22,7 @@
 
 #include <vector>
 #include <rtl/ustring.hxx>
-#include <swdllapi.h>
+#include "swdllapi.h"
 
 enum SwUndoArg
 {
@@ -39,8 +39,6 @@ class SW_DLLPUBLIC SwRewriter
 
 public:
     SwRewriter();
-    SwRewriter(const SwRewriter & rSrc);
-    ~SwRewriter();
 
     void AddRule(SwUndoArg eWhat, const OUString & rWith);
 

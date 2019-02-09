@@ -79,24 +79,13 @@ namespace logging
         {
             struct Variable
             {
-                const sal_Char*         pVariablePattern;
-                const sal_Int32         nPatternLength;
-                rtl_TextEncoding        eEncoding;
-                const OUString   sVariableValue;
-
-                Variable( const sal_Char* _pVariablePattern,  const sal_Int32 _nPatternLength, rtl_TextEncoding _eEncoding,
-                        const OUString& _rVariableValue )
-                    :pVariablePattern( _pVariablePattern )
-                    ,nPatternLength( _nPatternLength )
-                    ,eEncoding( _eEncoding )
-                    ,sVariableValue( _rVariableValue )
-                {
-                }
+                OUStringLiteral pVariablePattern;
+                OUString sVariableValue;
             };
 
             OUString sLoggerName;
             try { sLoggerName = _rxLogger->getName(); }
-            catch( const Exception& ) { DBG_UNHANDLED_EXCEPTION(); }
+            catch( const Exception& ) { DBG_UNHANDLED_EXCEPTION("extensions.logging"); }
 
             TimeValue aTimeValue;
             oslDateTime aDateTime;
@@ -107,52 +96,46 @@ namespace logging
             const size_t buffer_size = sizeof( buffer );
 
             snprintf( buffer, buffer_size, "%04i-%02i-%02i",
-                      (int)aDateTime.Year,
-                      (int)aDateTime.Month,
-                      (int)aDateTime.Day );
-            rtl::OUString sDate = rtl::OUString::createFromAscii( buffer );
+                      static_cast<int>(aDateTime.Year),
+                      static_cast<int>(aDateTime.Month),
+                      static_cast<int>(aDateTime.Day) );
+            OUString sDate = OUString::createFromAscii( buffer );
 
             snprintf( buffer, buffer_size, "%02i-%02i-%02i.%03i",
-                (int)aDateTime.Hours,
-                (int)aDateTime.Minutes,
-                (int)aDateTime.Seconds,
+                static_cast<int>(aDateTime.Hours),
+                static_cast<int>(aDateTime.Minutes),
+                static_cast<int>(aDateTime.Seconds),
                 ::sal::static_int_cast< sal_Int16 >( aDateTime.NanoSeconds / 10000000 ) );
-            rtl::OUString sTime = rtl::OUString::createFromAscii( buffer );
+            OUString sTime = OUString::createFromAscii( buffer );
 
-            rtl::OUStringBuffer aBuff;
+            OUStringBuffer aBuff;
             aBuff.append( sDate );
             aBuff.append( '.' );
             aBuff.append( sTime );
-            rtl::OUString sDateTime = aBuff.makeStringAndClear();
+            OUString sDateTime = aBuff.makeStringAndClear();
 
             oslProcessIdentifier aProcessId = 0;
             oslProcessInfo info;
             info.Size = sizeof (oslProcessInfo);
             if ( osl_getProcessInfo ( nullptr, osl_Process_IDENTIFIER, &info ) == osl_Process_E_None)
                 aProcessId = info.Ident;
-            rtl::OUString aPID = OUString::number( aProcessId );
+            OUString aPID = OUString::number( aProcessId );
 
-            Variable aVariables[] =
+            Variable const aVariables[] =
             {
-                Variable( RTL_CONSTASCII_USTRINGPARAM( "$(loggername)" ), sLoggerName ),
-                Variable( RTL_CONSTASCII_USTRINGPARAM( "$(date)" ), sDate ),
-                Variable( RTL_CONSTASCII_USTRINGPARAM( "$(time)" ), sTime ),
-                Variable( RTL_CONSTASCII_USTRINGPARAM( "$(datetime)" ), sDateTime ),
-                Variable( RTL_CONSTASCII_USTRINGPARAM( "$(pid)" ), aPID )
+                {OUStringLiteral("$(loggername)"), sLoggerName},
+                {OUStringLiteral("$(date)"), sDate},
+                {OUStringLiteral("$(time)"), sTime},
+                {OUStringLiteral("$(datetime)"), sDateTime},
+                {OUStringLiteral("$(pid)"), aPID}
             };
 
-            for ( size_t i = 0; i < SAL_N_ELEMENTS( aVariables ); ++i )
+            for (Variable const & aVariable : aVariables)
             {
-                OUString sPattern( aVariables[i].pVariablePattern, aVariables[i].nPatternLength, aVariables[i].eEncoding );
-                sal_Int32 nVariableIndex = _inout_rFileURL.indexOf( sPattern );
-                if  (   ( nVariableIndex == 0 )
-                    ||  (   ( nVariableIndex > 0 )
-                        &&  ( sPattern[ nVariableIndex - 1 ] != '$' )
-                        )
-                    )
+                sal_Int32 nVariableIndex = _inout_rFileURL.indexOf( aVariable.pVariablePattern );
+                if  (nVariableIndex >= 0)
                 {
-                    // found an (unescaped) variable
-                    _inout_rFileURL = _inout_rFileURL.replaceAt( nVariableIndex, sPattern.getLength(), aVariables[i].sVariableValue );
+                    _inout_rFileURL = _inout_rFileURL.replaceAt( nVariableIndex, aVariable.pVariablePattern.size, aVariable.sVariableValue );
                 }
             }
         }
@@ -204,7 +187,7 @@ namespace logging
                     pSetting->Value = xServiceSettingsNode->getByName( *pSettingNames );
 
                     if ( _pSettingTranslation )
-                        (_pSettingTranslation)( _rxLogger, pSetting->Name, pSetting->Value );
+                        _pSettingTranslation( _rxLogger, pSetting->Name, pSetting->Value );
                 }
             }
 
@@ -248,7 +231,7 @@ namespace logging
             // write access to the "Settings" node (which includes settings for all loggers)
             Sequence< Any > aArguments(1);
             aArguments[0] <<= NamedValue(
-                OUString( "nodepath" ),
+                "nodepath",
                 makeAny( OUString( "/org.openoffice.Office.Logging/Settings" ) )
             );
             Reference< XNameContainer > xAllSettings( xConfigProvider->createInstanceWithArguments(
@@ -301,7 +284,7 @@ namespace logging
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.logging");
         }
     }
 

@@ -26,44 +26,20 @@
     the service we do nothing.
 */
 
-#ifdef _MSC_VER
-#pragma warning(push, 1) /* disable warnings within system headers */
-#endif
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <msiquery.h>
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 
-/*
-    Advapi.dll needs to be loaded dynamically because the service
-    control functions are not available under Windows 9x.
-*/
-typedef BOOL (__stdcall * CloseServiceHandle_t)(SC_HANDLE);
-typedef BOOL (__stdcall * ControlService_t)(SC_HANDLE, DWORD, LPSERVICE_STATUS);
-typedef SC_HANDLE (__stdcall * OpenSCManager_t)(LPCSTR, LPCSTR, DWORD);
-typedef SC_HANDLE (__stdcall * OpenService_t)(SC_HANDLE, LPCSTR, DWORD);
-typedef BOOL (__stdcall * QueryServiceStatus_t)(SC_HANDLE, LPSERVICE_STATUS);
-typedef BOOL (__stdcall * StartService_t)(SC_HANDLE, DWORD, LPCSTR*);
+const wchar_t * const INDEXING_SERVICE_NAME = L"cisvc";
 
-CloseServiceHandle_t CloseServiceHandle_ = NULL;
-ControlService_t ControlService_ = NULL;
-OpenSCManager_t OpenSCManager_ = NULL;
-OpenService_t OpenService_ = NULL;
-QueryServiceStatus_t QueryServiceStatus_ = NULL;
-StartService_t StartService_ = NULL;
-
-const TCHAR* const INDEXING_SERVICE_NAME = TEXT("cisvc");
-
-bool StopIndexingService(SC_HANDLE hService)
+static bool StopIndexingService(SC_HANDLE hService)
 {
     SERVICE_STATUS status;
 
-    if (ControlService_(hService, SERVICE_CONTROL_STOP, &status))
+    if (ControlService(hService, SERVICE_CONTROL_STOP, &status))
     {
         // Check the status until the service is no longer stop pending.
-        if (QueryServiceStatus_(hService, &status))
+        if (QueryServiceStatus(hService, &status))
         {
             DWORD startTime = GetTickCount();
             DWORD oldCheckPoint = status.dwCheckPoint;
@@ -83,7 +59,7 @@ bool StopIndexingService(SC_HANDLE hService)
                 Sleep(waitTime);
 
                 // Check the status again.
-                if (!QueryServiceStatus_(hService, &status) ||
+                if (!QueryServiceStatus(hService, &status) ||
                     (status.dwCurrentState == SERVICE_STOPPED))
                     break;
 
@@ -102,14 +78,14 @@ bool StopIndexingService(SC_HANDLE hService)
     return (status.dwCurrentState == SERVICE_STOPPED);
 }
 
-void StartIndexingService(SC_HANDLE hService)
+static void StartIndexingService(SC_HANDLE hService)
 {
-    if (StartService_(hService, 0, NULL))
+    if (StartServiceW(hService, 0, nullptr))
     {
         SERVICE_STATUS status;
 
         // Check the status until the service is no longer stop pending.
-        if (QueryServiceStatus_(hService, &status))
+        if (QueryServiceStatus(hService, &status))
         {
             DWORD startTime = GetTickCount();
             DWORD oldCheckPoint = status.dwCheckPoint;
@@ -129,7 +105,7 @@ void StartIndexingService(SC_HANDLE hService)
                 Sleep(waitTime);
 
                 // Check the status again.
-                if (!QueryServiceStatus_(hService, &status) ||
+                if (!QueryServiceStatus(hService, &status) ||
                     (status.dwCurrentState == SERVICE_STOPPED))
                     break;
 
@@ -148,36 +124,16 @@ void StartIndexingService(SC_HANDLE hService)
     }
 }
 
-extern "C" UINT __stdcall RestartIndexingService(MSIHANDLE)
+extern "C" __declspec(dllexport) UINT __stdcall RestartIndexingService(MSIHANDLE)
 {
-    //MessageBox(NULL, TEXT("Restarting Indexing Service"), TEXT("Message"), MB_OK | MB_ICONINFORMATION);
-
-    HMODULE hAdvapi32 = LoadLibrary("advapi32.dll");
-
-    if (hAdvapi32)
-    {
-        CloseServiceHandle_ = reinterpret_cast<CloseServiceHandle_t>(GetProcAddress(hAdvapi32, "CloseServiceHandle"));
-        ControlService_ = reinterpret_cast<ControlService_t>(GetProcAddress(hAdvapi32, "ControlService"));
-        OpenSCManager_ = reinterpret_cast<OpenSCManager_t>(GetProcAddress(hAdvapi32, "OpenSCManagerA"));
-        OpenService_ = reinterpret_cast<OpenService_t>(GetProcAddress(hAdvapi32, "OpenServiceA"));
-        QueryServiceStatus_ = reinterpret_cast<QueryServiceStatus_t>(GetProcAddress(hAdvapi32, "QueryServiceStatus"));
-        StartService_ = reinterpret_cast<StartService_t>(GetProcAddress(hAdvapi32, "StartServiceA"));
-    }
-
-    /* On systems other than Windows 2000/XP the service API
-       functions might not be available */
-    if (!hAdvapi32 ||
-        !(CloseServiceHandle_ && ControlService_ && OpenSCManager_ && OpenService_ && QueryServiceStatus_ && StartService_))
-        return ERROR_SUCCESS;
-
-    SC_HANDLE hSCManager = OpenSCManager_(
-        NULL, // local machine
-        NULL, // ServicesActive database
+    SC_HANDLE hSCManager = OpenSCManagerW(
+        nullptr, // local machine
+        nullptr, // ServicesActive database
         SC_MANAGER_ALL_ACCESS);
 
-    if (hSCManager != NULL)
+    if (hSCManager != nullptr)
     {
-        SC_HANDLE hIndexingService = OpenService_(
+        SC_HANDLE hIndexingService = OpenServiceW(
             hSCManager, INDEXING_SERVICE_NAME, SERVICE_QUERY_STATUS | SERVICE_START | SERVICE_STOP);
 
         if (hIndexingService)
@@ -185,15 +141,15 @@ extern "C" UINT __stdcall RestartIndexingService(MSIHANDLE)
             SERVICE_STATUS status;
             ZeroMemory(&status, sizeof(status));
 
-            if (QueryServiceStatus_(hIndexingService, &status) &&
+            if (QueryServiceStatus(hIndexingService, &status) &&
                 (status.dwCurrentState == SERVICE_RUNNING))
             {
                 if (StopIndexingService(hIndexingService))
                     StartIndexingService(hIndexingService);
             }
-            CloseServiceHandle_(hIndexingService);
+            CloseServiceHandle(hIndexingService);
         }
-        CloseServiceHandle_(hSCManager);
+        CloseServiceHandle(hSCManager);
     }
     return ERROR_SUCCESS;
 }

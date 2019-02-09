@@ -20,7 +20,7 @@
 #define INCLUDED_DBACCESS_SOURCE_UI_INC_BROWSERIDS_HXX
 
 #include <svx/svxids.hrc>
-#include "dbaccess_slotid.hrc"
+#include <dbaccess_slotid.hrc>
 
 #define ID_BROWSER_COPY                     SID_COPY
 #define ID_BROWSER_CUT                      SID_CUT
@@ -47,11 +47,11 @@
 #define ID_BROWSER_REMOVEFILTER             SID_FM_REMOVE_FILTER_SORT
 #define ID_BROWSER_FILTERED                 SID_FM_FORM_FILTERED
 #define ID_BROWSER_REFRESH                  SID_FM_REFRESH
-#define ID_BROWSER_COLATTRSET               20  // Spaltenformatierung
-#define ID_BROWSER_COLWIDTH                 21  // Spaltenbreite
-#define ID_BROWSER_TABLEATTR                22  // table format attributes
-#define ID_BROWSER_ROWHEIGHT                23  // Zeilenhoehe
-#define ID_BROWSER_COLUMNINFO               24  // copies the column description to insert it into the table design
+#define ID_BROWSER_COLATTRSET               10020  // column formatting
+#define ID_BROWSER_COLWIDTH                 10021  // column width
+#define ID_BROWSER_TABLEATTR                10022  // table format attributes
+#define ID_BROWSER_ROWHEIGHT                10023  // row height
+#define ID_BROWSER_COLUMNINFO               10024  // copies the column description to insert it into the table design
 #define ID_BROWSER_ADDTABLE                 SID_FM_ADDTABLE
 #define ID_BROWSER_EXPLORER                 SID_DSBROWSER_EXPLORER
 #define ID_BROWSER_DOCUMENT_DATASOURCE      SID_DOCUMENT_DATA_SOURCE
@@ -95,14 +95,7 @@
 #define ID_BROWSER_CLOSE                    SID_CLOSEWIN
 #define ID_BROWSER_ESCAPEPROCESSING         SID_FM_NATIVESQL
 
-#define ID_QUERY_FUNCTION                   (SID_SBA_START + 41) // Funktionen anzeigen
-#define ID_QUERY_TABLENAME                  (SID_SBA_START + 42) // Tabellennamen anzeigen
-#define ID_QUERY_ALIASNAME                  (SID_SBA_START + 43) // Aliasnamen anzeigen
-#define ID_QUERY_DISTINCT                   (SID_SBA_START + 44) // Distinct anzeigen
-#define ID_QUERY_EDIT_JOINCONNECTION        (SID_SBA_START + 45) // show-edit Join
 #define ID_BROWSER_INSERT_ROW               (SID_SBA_START + 46) // insert row
-#define ID_QUERY_ZOOM_IN                    SID_ZOOM_IN
-#define ID_QUERY_ZOOM_OUT                   SID_ZOOM_OUT
 
 
 #endif // INCLUDED_DBACCESS_SOURCE_UI_INC_BROWSERIDS_HXX

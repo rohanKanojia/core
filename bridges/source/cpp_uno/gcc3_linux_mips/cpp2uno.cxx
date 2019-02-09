@@ -21,10 +21,10 @@
 #include <typelib/typedescription.hxx>
 #include <uno/data.h>
 #include <osl/endian.h>
-#include "bridges/cpp_uno/shared/bridge.hxx"
-#include "bridges/cpp_uno/shared/cppinterfaceproxy.hxx"
-#include "bridges/cpp_uno/shared/types.hxx"
-#include "bridges/cpp_uno/shared/vtablefactory.hxx"
+#include "bridge.hxx"
+#include "cppinterfaceproxy.hxx"
+#include "types.hxx"
+#include "vtablefactory.hxx"
 #include "share.hxx"
 
 #include <stdio.h>
@@ -37,7 +37,6 @@ using namespace com::sun::star::uno;
 #ifdef BRDEBUG
 #include <rtl/strbuf.hxx>
 #include <rtl/ustrbuf.hxx>
-#include <osl/mutex.hxx>
 using namespace ::std;
 using namespace ::osl;
 using namespace ::rtl;
@@ -56,8 +55,6 @@ using namespace ::rtl;
 #else
 #define IS_BIG_ENDIAN 0
 #endif
-
-using namespace ::com::sun::star::uno;
 
 namespace
 {
@@ -731,7 +728,7 @@ bridges::cpp_uno::shared::VtableFactory::mapBlockToVtable(void * block)
 }
 
 
-sal_Size bridges::cpp_uno::shared::VtableFactory::getBlockSize(
+std::size_t bridges::cpp_uno::shared::VtableFactory::getBlockSize(
     sal_Int32 slotCount)
 {
     return (slotCount + 2) * sizeof (Slot) + slotCount * codeSnippetSize;

@@ -17,7 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "listenercontainers.hxx"
+#include <listenercontainers.hxx>
+#include <osl/diagnose.h>
 
 
 namespace frm

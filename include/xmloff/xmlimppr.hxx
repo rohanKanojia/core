@@ -23,14 +23,20 @@
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
 #include <sal/types.h>
-#include <com/sun/star/xml/sax/XAttributeList.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/beans/XMultiPropertySet.hpp>
-#include <com/sun/star/beans/XTolerantMultiPropertySet.hpp>
+#include <rtl/ustring.hxx>
 
 #include <vector>
 #include <salhelper/simplereferenceobject.hxx>
+
+namespace com { namespace sun { namespace star { namespace beans { class XMultiPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySetInfo; } } } }
+namespace com { namespace sun { namespace star { namespace beans { class XTolerantMultiPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class Any; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Reference; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Sequence; } } } }
+namespace com { namespace sun { namespace star { namespace xml { namespace sax { class XAttributeList; } } } } }
 
 struct XMLPropertyState;
 class XMLPropertySetMapper;
@@ -47,7 +53,7 @@ class SvXMLImport;
  */
 struct ContextID_Index_Pair
 {
-    sal_Int16 nContextID;
+    sal_Int16 const nContextID;
     sal_Int32 nIndex;
 };
 
@@ -57,8 +63,8 @@ class XMLOFF_DLLPUBLIC SvXMLImportPropertyMapper : public salhelper::SimpleRefer
 
     SvXMLImport& rImport;   // access to error handling
 
-    SvXMLImportPropertyMapper(SvXMLImportPropertyMapper &) = delete;
-    void operator =(SvXMLImportPropertyMapper &) = delete;
+    SvXMLImportPropertyMapper(SvXMLImportPropertyMapper const &) = delete;
+    SvXMLImportPropertyMapper& operator =(SvXMLImportPropertyMapper const &) = delete;
 
 protected:
 
@@ -70,7 +76,7 @@ public:
     SvXMLImportPropertyMapper(
             const rtl::Reference< XMLPropertySetMapper >& rMapper,
             SvXMLImport& rImport);
-    virtual ~SvXMLImportPropertyMapper();
+    virtual ~SvXMLImportPropertyMapper() override;
 
     // Add a ImportPropertyMapper at the end of the import mapper chain.
     // The added mapper MUST not be used outside the Mapper chain any longer,
@@ -133,7 +139,7 @@ public:
 
         // parameter for use by txtstyli.cxx; allows efficient
         // catching the combined characters property
-        ContextID_Index_Pair* pSpecialContextIds = nullptr );
+        ContextID_Index_Pair* pSpecialContextIds );
 
     /** implementation helper for FillPropertySet: fill an XMultiPropertySet.
      * If unsuccessul, set return value. */
@@ -145,7 +151,7 @@ public:
 
         // parameters for use by txtstyli.cxx; allows efficient
         // catching the combined characters property
-        ContextID_Index_Pair* pSpecialContextIds = nullptr );
+        ContextID_Index_Pair* pSpecialContextIds );
 
     /** implementation helper for FillPropertySet: fill an XTolerantMultiPropertySet.
      * If unsuccessul, set return value. */
@@ -157,7 +163,7 @@ public:
 
         // parameters for use by txtstyli.cxx; allows efficient
         // catching the combined characters property
-        ContextID_Index_Pair* pSpecialContextIds = nullptr );
+        ContextID_Index_Pair* pSpecialContextIds );
 
 
     static void PrepareForMultiPropertySet_(

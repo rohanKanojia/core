@@ -36,7 +36,6 @@
 #include "cppunit/TestFixture.h"
 #include "cppunit/extensions/HelperMacros.h"
 #include "cppunit/plugin/TestPlugIn.h"
-#include <osl/diagnose.h>
 #include <rtl/string.h>
 #include <rtl/string.hxx>
 #include <rtl/textenc.h>
@@ -239,7 +238,7 @@ void Test::testParse() {
                 data[i].pathSegmentCount, uriRef->getPathSegmentCount());
             TEST_ASSERT_EQUAL(
                 "testParse", i, data[i].uriReference,
-                OUString(""), uriRef->getPathSegment(-1));
+                OUString(), uriRef->getPathSegment(-1));
             TEST_ASSERT_EQUAL(
                 "testParse", i, data[i].uriReference,
                 OUString::createFromAscii(data[i].pathSegment0),

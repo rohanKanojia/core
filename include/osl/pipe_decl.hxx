@@ -19,9 +19,9 @@
 #ifndef INCLUDED_OSL_PIPE_DECL_HXX
 #define INCLUDED_OSL_PIPE_DECL_HXX
 
-#include <osl/pipe.h>
-#   include <osl/security.hxx>
-#include <rtl/ustring.hxx>
+#include "osl/pipe.h"
+#   include "osl/security.hxx"
+#include "rtl/ustring.hxx"
 
 namespace osl {
 
@@ -37,7 +37,7 @@ protected:
 public:
 
     /** Does not create a pipe. Use assignment operator to
-        make this a useable pipe.
+        make this a usable pipe.
     */
     inline Pipe();
 
@@ -57,6 +57,10 @@ public:
     /** Copy constructor.
     */
     inline Pipe(const Pipe& pipe);
+
+#if defined LIBO_INTERNAL_ONLY
+    inline Pipe(Pipe && other);
+#endif
 
     /** Constructs a Pipe reference without acquiring the handle
     */
@@ -103,6 +107,10 @@ public:
     */
     inline Pipe& SAL_CALL operator= (const Pipe& pipe);
 
+#if defined LIBO_INTERNAL_ONLY
+    inline Pipe & operator =(Pipe && other);
+#endif
+
     /** Assignment operator. If pipe was already created, the old one will
         be discarded.
     */
@@ -147,25 +155,23 @@ public:
     inline StreamPipe();
 
     /** Creates pipe as wrapper around the underlying oslPipe.
+
         @param Pipe
     */
     inline StreamPipe(oslPipe Pipe);
 
-    /** Copy constructor.
-        @param Pipe
-    */
-    inline StreamPipe(const StreamPipe& Pipe);
-
     /** Creates a pipe.
-        @param strName
-        @param Options
+
+        @param[in] strName Pipe name
+        @param[in] Options Pipe options
     */
     inline StreamPipe(const ::rtl::OUString& strName, oslPipeOptions Options = osl_Pipe_OPEN);
 
     /** Creates a pipe.
-        @param strName
-        @param Options
-        @param rSec
+
+        @param[in] strName Pipe name
+        @param[in] Options Pipe options
+        @param[in] rSec    Security for the pipe
     */
     inline StreamPipe(const ::rtl::OUString& strName, oslPipeOptions Options, const Security &rSec );
 
@@ -176,7 +182,8 @@ public:
     /** Attaches the oslPipe to this object. If the object
         already was attached to an oslPipe, the old one will
         be closed and destroyed.
-        @param Pipe
+
+        @param[in] Pipe    Pipe to attach to this object
     */
     inline StreamPipe & SAL_CALL operator=(oslPipe Pipe);
 
@@ -186,39 +193,45 @@ public:
 
     /** Tries to receives BytesToRead data from the connected pipe,
 
-        @param pBuffer [out] Points to a buffer that will be filled with the received
-        data.
-        @param BytesToRead [in] The number of bytes to read. pBuffer must have at least
-        this size.
+        @param[out] pBuffer Points to a buffer that will be filled with the received
+                     data.
+        @param[in] BytesToRead The number of bytes to read. pBuffer must have at least
+                     this size.
+
         @return the number of received bytes.
     */
     inline sal_Int32 SAL_CALL recv(void* pBuffer, sal_Int32 BytesToRead) const;
 
     /** Tries to sends BytesToSend data from the connected pipe.
 
-        @param pBuffer [in] Points to a buffer that contains the send-data.
-        @param BytesToSend [in] The number of bytes to send. pBuffer must have at least
-        this size.
+        @param[in] pBuffer Points to a buffer that contains the send-data.
+        @param[in] BytesToSend The number of bytes to send. pBuffer must have at least
+                       this size.
+
         @return the number of transferred bytes.
     */
     inline sal_Int32 SAL_CALL send(const void* pBuffer, sal_Int32 BytesToSend) const;
 
     /** Retrieves n bytes from the stream and copies them into pBuffer.
         The method avoids incomplete reads due to packet boundaries.
-        @param pBuffer receives the read data.
-        @param n the number of bytes to read. pBuffer must be large enough
+
+        @param[in] pBuffer receives the read data.
+        @param[in] n the number of bytes to read. pBuffer must be large enough
         to hold the n bytes!
+
         @return the number of read bytes. The number will only be smaller than
-        n if an exceptional condition (e.g. connection closed) occurs.
+            n if an exceptional condition (e.g. connection closed) occurs.
     */
     inline sal_Int32 SAL_CALL read(void* pBuffer, sal_Int32 n) const;
 
     /** Writes n bytes from pBuffer to the stream. The method avoids
         incomplete writes due to packet boundaries.
-        @param pBuffer contains the data to be written.
-        @param n the number of bytes to write.
+
+        @param[in] pBuffer contains the data to be written.
+        @param[in] n the number of bytes to write.
+
         @return the number of written bytes. The number will only be smaller than
-        n if an exceptional condition (e.g. connection closed) occurs.
+            n if an exceptional condition (e.g. connection closed) occurs.
     */
     sal_Int32 SAL_CALL write(const void* pBuffer, sal_Int32 n) const;
 };

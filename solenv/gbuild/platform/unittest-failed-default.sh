@@ -19,6 +19,7 @@
 cat << EOF
 
 Error: a unit test failed, please do one of:
+
 make $1Test_$2 CPPUNITTRACE="gdb --args"
     # for interactive debugging on Linux
 make $1Test_$2 VALGRIND=memcheck
@@ -26,7 +27,24 @@ make $1Test_$2 VALGRIND=memcheck
 make $1Test_$2 DEBUGCPPUNIT=TRUE
     # for exception catching
 
+You can limit the execution to just one particular test by:
+
 EOF
+
+case $1 in
+    Python)
+    cat << EOF
+make PYTHON_TEST_NAME="testXYZ" ...above mentioned params...
+
+EOF
+    ;;
+    *)
+    cat << EOF
+make CPPUNIT_TEST_NAME="testXYZ" ...above mentioned params...
+
+EOF
+    ;;
+esac
 
 exit 1
 

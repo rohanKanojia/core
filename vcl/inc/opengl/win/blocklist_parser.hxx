@@ -10,7 +10,7 @@
 #include <vcl/dllapi.h>
 #include <xmlreader/xmlreader.hxx>
 #include <vector>
-#include "opengl/win/WinDeviceInfo.hxx"
+#include <opengl/win/WinDeviceInfo.hxx>
 
 class InvalidFileException
 {
@@ -24,7 +24,6 @@ public:
 
 private:
     void handleEntry(wgl::DriverInfo& rDriver, xmlreader::XmlReader& rReader);
-    void handleDevices(wgl::DriverInfo& rDriver, xmlreader::XmlReader& rReader);
     void handleList(xmlreader::XmlReader& rReader);
     void handleContent(xmlreader::XmlReader& rReader);
 

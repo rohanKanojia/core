@@ -23,13 +23,10 @@
 #include <memory>
 #include <stack>
 #include <filter/msfilter/escherex.hxx>
-#include "xlescher.hxx"
 #include "xeroot.hxx"
-#include <vector>
+#include <unotools/tempfile.hxx>
 
-namespace utl { class TempFile; }
-
-class SvStream;
+namespace com { namespace sun { namespace star { namespace awt { class XControlModel; } } } }
 
 class XclEscherExGlobal : public EscherExGlobal, protected XclExpRoot
 {
@@ -53,13 +50,12 @@ class XclEscherClientTextbox;
 class XclExpOcxControlObj;
 class XclExpTbxControlObj;
 class XclExpShapeObj;
-class EscherExHostAppData;
 class ShapeInteractionHelper
 {
 public:
    static XclExpShapeObj* CreateShapeObj( XclExpObjectManager& rObjMgr, const css::uno::Reference<
                             css::drawing::XShape >& xShape, ScDocument* pDoc );
-   static void PopulateShapeInteractionInfo( XclExpObjectManager& rObjMgr, const css::uno::Reference< css::drawing::XShape >& xShape, EscherExHostAppData& rHostAppData );
+   static void PopulateShapeInteractionInfo( const XclExpObjectManager& rObjMgr, const css::uno::Reference< css::drawing::XShape >& xShape, EscherExHostAppData& rHostAppData );
 };
 
 class XclEscherEx : public EscherEx, protected XclExpRoot
@@ -70,7 +66,7 @@ public:
                             XclExpObjectManager& rObjMgr,
                             SvStream& rStrm,
                             const XclEscherEx* pParent = nullptr );
-    virtual             ~XclEscherEx();
+    virtual             ~XclEscherEx() override;
 
     /** Called by MSODRAWING record constructors to initialize the DFF stream
         fragment they will own. returns the DFF fragment identifier. */
@@ -93,7 +89,7 @@ public:
 
     virtual EscherExHostAppData* StartShape(
                             const css::uno::Reference< css::drawing::XShape>& rxShape,
-                            const Rectangle* pChildAnchor ) override;
+                            const tools::Rectangle* pChildAnchor ) override;
     virtual void                EndShape( sal_uInt16 nShapeType, sal_uInt32 nShapeID ) override;
     virtual EscherExHostAppData*    EnterAdditionalTextGroup() override;
 
@@ -102,34 +98,34 @@ public:
     /** Creates an OCX form control OBJ record from the passed form control.
         @descr  Writes the form control data to the 'Ctls' stream. */
     std::unique_ptr<XclExpOcxControlObj> CreateOCXCtrlObj(
-                            css::uno::Reference< css::drawing::XShape > xShape,
-                            const Rectangle* pChildAnchor );
+                            css::uno::Reference< css::drawing::XShape > const & xShape,
+                            const tools::Rectangle* pChildAnchor );
 
 private:
     tools::SvRef<SotStorageStream>  mxCtlsStrm;         /// The 'Ctls' stream.
     /** Creates a TBX form control OBJ record from the passed form control. */
     std::unique_ptr<XclExpTbxControlObj> CreateTBXCtrlObj(
-                            css::uno::Reference< css::drawing::XShape > xShape,
-                            const Rectangle* pChildAnchor );
+                            css::uno::Reference< css::drawing::XShape > const & xShape,
+                            const tools::Rectangle* pChildAnchor );
 
 private:
     /** Tries to get the name of a Basic macro from a control. */
     void                ConvertTbxMacro(
                             XclExpTbxControlObj& rTbxCtrlObj,
-                            css::uno::Reference< css::awt::XControlModel > xCtrlModel );
+                            css::uno::Reference< css::awt::XControlModel > const & xCtrlModel );
 
     void                DeleteCurrAppData();
 
 private:
     XclExpObjectManager&    mrObjMgr;
-    std::stack< std::pair< XclObj*, XclEscherHostAppData* > > aStack;
+    std::stack< std::pair< XclObj*, std::unique_ptr<XclEscherHostAppData> > > aStack;
     XclObj*                 pCurrXclObj;
-    XclEscherHostAppData*   pCurrAppData;
-    XclEscherClientData*    pTheClientData; // always the same
+    std::unique_ptr<XclEscherHostAppData> pCurrAppData;
+    std::unique_ptr<XclEscherClientData>  pTheClientData; // always the same
     XclEscherClientTextbox* pAdditionalText;
     sal_uInt16              nAdditionalText;
     sal_uInt32              mnNextKey;
-    bool                    mbIsRootDff;
+    bool const              mbIsRootDff;
 };
 
 // --- class XclEscherHostAppData ------------------------------------
@@ -142,8 +138,8 @@ private:
 public:
                                 XclEscherHostAppData() : bStackedGroup( false )
                                     {}
-    inline  void                SetStackedGroup( bool b )   { bStackedGroup = b; }
-    inline  bool                IsStackedGroup() const  { return bStackedGroup; }
+    void                SetStackedGroup( bool b )   { bStackedGroup = b; }
+    bool                IsStackedGroup() const  { return bStackedGroup; }
 };
 
 // --- class XclEscherClientData -------------------------------------
@@ -172,7 +168,7 @@ public:
                             XclObj* pObj );
 
                                 //! ONLY for the AdditionalText mimic
-    inline  void        SetXclObj( XclObj* p )  { pXclObj = p; }
+    void        SetXclObj( XclObj* p )  { pXclObj = p; }
 
     virtual void        WriteData( EscherEx& rEx ) const override;
 };

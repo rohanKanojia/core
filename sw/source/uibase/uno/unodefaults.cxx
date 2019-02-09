@@ -17,15 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <unodefaults.hxx>
+#include "unodefaults.hxx"
 #include <svx/unoprov.hxx>
 #include <drawdoc.hxx>
 #include <doc.hxx>
 #include <IDocumentDrawModelAccess.hxx>
 
-SwSvxUnoDrawPool::SwSvxUnoDrawPool( SwDoc* pDoc ) throw() :
-    SvxUnoDrawPool(pDoc->getIDocumentDrawModelAccess().GetDrawModel(), SVXUNO_SERVICEID_COM_SUN_STAR_DRAWING_DEFAULTS_WRITER),
-    m_pDoc(pDoc)
+SwSvxUnoDrawPool::SwSvxUnoDrawPool(SwDoc* pDoc)
+    : SvxUnoDrawPool(pDoc->getIDocumentDrawModelAccess().GetDrawModel(), SVXUNO_SERVICEID_COM_SUN_STAR_DRAWING_DEFAULTS_WRITER)
+    , m_pDoc(pDoc)
 {
 }
 

@@ -52,49 +52,45 @@ namespace dbmm
     };
 
     // PreparationPage
-    class PreparationPage : public MacroMigrationPage
+    class PreparationPage final : public MacroMigrationPage
     {
     public:
         explicit PreparationPage(vcl::Window *pParent);
-        virtual ~PreparationPage();
+        virtual ~PreparationPage() override;
         virtual void dispose() override;
 
         static VclPtr<TabPage> Create( ::svt::RoadmapWizard& _rParentDialog );
 
-    public:
         void    showCloseDocsError(bool _bShow);
 
-    protected:
+    private:
         VclPtr<FixedText>  m_pCloseDocError;
     };
 
     // SaveDBDocPage
-    class SaveDBDocPage : public MacroMigrationPage
+    class SaveDBDocPage final : public MacroMigrationPage
     {
     public:
         explicit SaveDBDocPage(MacroMigrationDialog& _rParentDialog);
-        virtual ~SaveDBDocPage();
+        virtual ~SaveDBDocPage() override;
         virtual void dispose() override;
         static VclPtr<TabPage> Create( ::svt::RoadmapWizard& _rParentDialog );
 
-    public:
         OUString getBackupLocation() const { return m_pLocationController->getURL(); }
         void            grabLocationFocus() { m_pSaveAsLocation->GrabFocus(); }
 
-    protected:
+    private:
         VclPtr< ::svt::OFileURLControl>  m_pSaveAsLocation;
         VclPtr<PushButton>             m_pBrowseSaveAsLocation;
         VclPtr<FixedText>              m_pStartMigration;
-        svx::DatabaseLocationInputController* m_pLocationController;
+        std::unique_ptr<svx::DatabaseLocationInputController> m_pLocationController;
 
-    protected:
         // IWizardPageController overridables
         virtual void        initializePage() override;
         virtual bool        commitPage( ::svt::WizardTypes::CommitPageReason _eReason ) override;
         virtual bool        canAdvance() const override;
 
-    private:
-        DECL_LINK_TYPED( OnLocationModified, Edit&, void );
+        DECL_LINK( OnLocationModified, Edit&, void );
         void impl_updateLocationDependentItems();
     };
 
@@ -103,7 +99,7 @@ namespace dbmm
     {
     public:
         explicit ProgressPage(vcl::Window *pParent);
-        virtual ~ProgressPage();
+        virtual ~ProgressPage() override;
         virtual void dispose() override;
 
         static VclPtr<TabPage> Create( ::svt::RoadmapWizard& _rParentDialog );
@@ -136,7 +132,7 @@ namespace dbmm
     {
     public:
         explicit ResultPage(vcl::Window *pParent);
-        virtual ~ResultPage();
+        virtual ~ResultPage() override;
         virtual void dispose() override;
 
         static VclPtr<TabPage> Create( ::svt::RoadmapWizard& _rParentDialog );

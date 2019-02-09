@@ -20,41 +20,31 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_XML_XMLCONSOLIDATIONCONTEXT_HXX
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLCONSOLIDATIONCONTEXT_HXX
 
-#include "global.hxx"
-#include "address.hxx"
-#include <xmloff/xmlimp.hxx>
-#include "xmlimprt.hxx"
+#include <global.hxx>
+#include <address.hxx>
+#include "importcontext.hxx"
 
 
-class ScXMLConsolidationContext : public SvXMLImportContext
+namespace sax_fastparser { class FastAttributeList; }
+
+class ScXMLConsolidationContext : public ScXMLImportContext
 {
 private:
     OUString             sSourceList;
     OUString             sUseLabel;
-    ScAddress                   aTargetAddr;
-    ScSubTotalFunc              eFunction;
-    bool                        bLinkToSource;
-    bool                        bTargetAddr;
-
-protected:
-    const ScXMLImport&          GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport&                GetScImport()       { return static_cast<ScXMLImport&>(GetImport()); }
+    ScAddress            aTargetAddr;
+    ScSubTotalFunc       eFunction;
+    bool                 bLinkToSource;
+    bool                 bTargetAddr;
 
 public:
                                 ScXMLConsolidationContext(
                                     ScXMLImport& rImport,
-                                    sal_uInt16 nPrfx,
-                                    const OUString& rLName,
-                                    const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList
+                                    const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList
                                     );
-    virtual                     ~ScXMLConsolidationContext();
+    virtual                     ~ScXMLConsolidationContext() override;
 
-    virtual SvXMLImportContext* CreateChildContext(
-                                    sal_uInt16 nPrefix,
-                                    const OUString& rLocalName,
-                                    const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList
-                                    ) override;
-    virtual void                EndElement() override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 };
 
 #endif

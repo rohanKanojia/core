@@ -7,19 +7,30 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "interpre.hxx"
+#include <interpre.hxx>
+#include <jumpmatrix.hxx>
+#include <formulacell.hxx>
+#include <scmatrix.hxx>
 #include <rtl/strbuf.hxx>
+#include <rtl/character.hxx>
 #include <formula/errorcodes.hxx>
+#include <sfx2/bindings.hxx>
+#include <sfx2/linkmgr.hxx>
 #include <svtools/miscopt.hxx>
+#include <tools/urlobj.hxx>
 
 #include <com/sun/star/ucb/XSimpleFileAccess3.hpp>
 #include <com/sun/star/ucb/SimpleFileAccess.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 
-#include "libxml/xpath.h"
+#include <libxml/xpath.h>
 #include <datastreamgettime.hxx>
 #include <dpobject.hxx>
 #include <document.hxx>
+#include <tokenarray.hxx>
+#include <webservicelink.hxx>
+
+#include <sc.hrc>
 
 #include <cstring>
 #include <memory>
@@ -33,11 +44,64 @@ void ScInterpreter::ScFilterXML()
     sal_uInt8 nParamCount = GetByte();
     if (MustHaveParamCount( nParamCount, 2 ) )
     {
+        SCSIZE nMatCols = 1, nMatRows = 1, nNode = 0;
+        const ScMatrix* pPathMatrix = nullptr;
+        // In array/matrix context node elements' results are to be
+        // subsequently stored. Check this before obtaining any argument from
+        // the stack so the stack type can be used.
+        if (pJumpMatrix || IsInArrayContext())
+        {
+            if (pJumpMatrix)
+            {
+                // Single result, GetString() will retrieve the corresponding
+                // argument and JumpMatrix() will store it at the proper
+                // position. Note that nMatCols and nMatRows are still 1.
+                SCSIZE nCurCol = 0, nCurRow = 0;
+                pJumpMatrix->GetPos( nCurCol, nCurRow);
+                nNode = nCurRow;
+            }
+            else if (bMatrixFormula)
+            {
+                // If there is no formula cell then continue with a single
+                // result.
+                if (pMyFormulaCell)
+                {
+                    SCCOL nCols;
+                    SCROW nRows;
+                    pMyFormulaCell->GetMatColsRows( nCols, nRows);
+                    nMatCols = nCols;
+                    nMatRows = nRows;
+                }
+            }
+            else if (GetStackType() == formula::svMatrix)
+            {
+                pPathMatrix = pStack[sp-1]->GetMatrix();
+                if (!pPathMatrix)
+                {
+                    PushIllegalParameter();
+                    return;
+                }
+                pPathMatrix->GetDimensions( nMatCols, nMatRows);
+
+                /* TODO: it is unclear what should happen if there are
+                 * different path arguments in matrix elements. We may have to
+                 * evaluate each, and for repeated identical paths use
+                 * subsequent nodes. As is, the path at 0,0 is used as obtained
+                 * by GetString(). */
+
+            }
+        }
+        if (!nMatCols || !nMatRows)
+        {
+            PushNoValue();
+            return;
+        }
+
         OUString aXPathExpression = GetString().getString();
         OUString aString = GetString().getString();
         if(aString.isEmpty() || aXPathExpression.isEmpty())
         {
-            PushError( errNoValue );
+            PushError( FormulaError::NoValue );
             return;
         }
 
@@ -54,7 +118,7 @@ void ScInterpreter::ScFilterXML()
 
         if(!pDoc)
         {
-            PushError( errNoValue );
+            PushError( FormulaError::NoValue );
             return;
         }
 
@@ -66,49 +130,82 @@ void ScInterpreter::ScFilterXML()
 
         if(!pXPathObj)
         {
-            PushError( errNoValue );
+            PushError( FormulaError::NoValue );
             return;
         }
-
-        rtl::OUString aResult;
 
         switch(pXPathObj->type)
         {
             case XPATH_UNDEFINED:
+                PushNoValue();
                 break;
             case XPATH_NODESET:
                 {
                     xmlNodeSetPtr pNodeSet = pXPathObj->nodesetval;
                     if(!pNodeSet)
                     {
-                        PushError( errNoValue );
+                        PushError( FormulaError::NoValue );
                         return;
                     }
 
-                    size_t nSize = pNodeSet->nodeNr;
-                    if( nSize >= 1 )
+                    const size_t nSize = pNodeSet->nodeNr;
+                    if (nNode >= nSize)
                     {
-                        if(pNodeSet->nodeTab[0]->type == XML_NAMESPACE_DECL)
+                        // For pJumpMatrix
+                        PushError( FormulaError::NotAvailable);
+                        return;
+                    }
+
+                    /* TODO: for nMatCols>1 IF stack type is svMatrix, i.e.
+                     * pPathMatrix!=nullptr, we may want a result matrix with
+                     * nMatCols columns as well, but clarify first how to treat
+                     * differing path elements. */
+
+                    ScMatrixRef xResMat;
+                    if (nMatRows > 1)
+                    {
+                        xResMat = GetNewMat( 1, nMatRows, true);
+                        if (!xResMat)
                         {
-                            xmlNsPtr ns = reinterpret_cast<xmlNsPtr>(pNodeSet->nodeTab[0]);
-                            xmlNodePtr cur = reinterpret_cast<xmlNodePtr>(ns->next);
-                            std::shared_ptr<xmlChar> pChar2(xmlNodeGetContent(cur), xmlFree);
-                            aResult = OStringToOUString(OString(reinterpret_cast<char*>(pChar2.get())), RTL_TEXTENCODING_UTF8);
+                            PushError( FormulaError::CodeOverflow);
+                            return;
+                        }
+                    }
+
+                    for ( ; nNode < nMatRows; ++nNode)
+                    {
+                        if( nSize > nNode )
+                        {
+                            OUString aResult;
+                            if(pNodeSet->nodeTab[nNode]->type == XML_NAMESPACE_DECL)
+                            {
+                                xmlNsPtr ns = reinterpret_cast<xmlNsPtr>(pNodeSet->nodeTab[nNode]);
+                                xmlNodePtr cur = reinterpret_cast<xmlNodePtr>(ns->next);
+                                std::shared_ptr<xmlChar> pChar2(xmlNodeGetContent(cur), xmlFree);
+                                aResult = OStringToOUString(OString(reinterpret_cast<char*>(pChar2.get())), RTL_TEXTENCODING_UTF8);
+                            }
+                            else
+                            {
+                                xmlNodePtr cur = pNodeSet->nodeTab[nNode];
+                                std::shared_ptr<xmlChar> pChar2(xmlNodeGetContent(cur), xmlFree);
+                                aResult = OStringToOUString(OString(reinterpret_cast<char*>(pChar2.get())), RTL_TEXTENCODING_UTF8);
+                            }
+                            if (xResMat)
+                                xResMat->PutString( mrStrPool.intern( aResult), 0, nNode);
+                            else
+                                PushString(aResult);
                         }
                         else
                         {
-                            xmlNodePtr cur = pNodeSet->nodeTab[0];
-                            std::shared_ptr<xmlChar> pChar2(xmlNodeGetContent(cur), xmlFree);
-                            aResult = OStringToOUString(OString(reinterpret_cast<char*>(pChar2.get())), RTL_TEXTENCODING_UTF8);
+                            if (xResMat)
+                                xResMat->PutError( FormulaError::NotAvailable, 0, nNode);
+                            else
+                                PushError( FormulaError::NotAvailable );
                         }
                     }
-                    else
-                    {
-                        PushError( errNoValue );
-                        return;
-                    }
+                    if (xResMat)
+                        PushMatrix( xResMat);
                 }
-                PushString(aResult);
                 break;
             case XPATH_BOOLEAN:
                 {
@@ -145,6 +242,37 @@ void ScInterpreter::ScFilterXML()
     }
 }
 
+static ScWebServiceLink* lcl_GetWebServiceLink(const sfx2::LinkManager* pLinkMgr, const OUString& rURL)
+{
+    size_t nCount = pLinkMgr->GetLinks().size();
+    for (size_t i=0; i<nCount; ++i)
+    {
+        ::sfx2::SvBaseLink* pBase = pLinkMgr->GetLinks()[i].get();
+        if (ScWebServiceLink* pLink = dynamic_cast<ScWebServiceLink*>(pBase))
+        {
+            if (pLink->GetURL() == rURL)
+                return pLink;
+        }
+    }
+
+    return nullptr;
+}
+
+static bool lcl_FunctionAccessLoadWebServiceLink( OUString& rResult, ScDocument* pDoc, const OUString& rURI )
+{
+    // For FunctionAccess service always force a changed data update.
+    ScWebServiceLink aLink( pDoc, rURI);
+    if (aLink.DataChanged( OUString(), css::uno::Any()) != sfx2::SvBaseLink::UpdateResult::SUCCESS)
+        return false;
+
+    if (!aLink.HasResult())
+        return false;
+
+    rResult = aLink.GetResult();
+
+    return true;
+}
+
 void ScInterpreter::ScWebservice()
 {
     sal_uInt8 nParamCount = GetByte();
@@ -152,54 +280,127 @@ void ScInterpreter::ScWebservice()
     {
         OUString aURI = GetString().getString();
 
-        if(aURI.isEmpty())
+        if (aURI.isEmpty())
         {
-            PushError( errNoValue );
+            PushError( FormulaError::NoValue );
             return;
         }
 
-        uno::Reference< ucb::XSimpleFileAccess3 > xFileAccess( ucb::SimpleFileAccess::create( comphelper::getProcessComponentContext() ), uno::UNO_QUERY );
-        if(!xFileAccess.is())
+        INetURLObject aObj(aURI, INetProtocol::File);
+        INetProtocol eProtocol = aObj.GetProtocol();
+        if (eProtocol != INetProtocol::Http && eProtocol != INetProtocol::Https)
         {
-            PushError( errNoValue );
+            PushError(FormulaError::NoValue);
             return;
         }
 
-        uno::Reference< io::XInputStream > xStream;
-        try {
-            xStream = xFileAccess->openFileRead( aURI );
-        }
-        catch (...)
+        if (!mpLinkManager)
         {
-            // don't let any exceptions pass
-            PushError( errNoValue );
+            if (!pDok->IsFunctionAccess() || pDok->HasLinkFormulaNeedingCheck())
+            {
+                PushError( FormulaError::NoValue);
+            }
+            else
+            {
+                OUString aResult;
+                if (lcl_FunctionAccessLoadWebServiceLink( aResult, pDok, aURI))
+                    PushString( aResult);
+                else
+                    PushError( FormulaError::NoValue);
+            }
             return;
         }
-        if ( !xStream.is() )
+
+        // Need to reinterpret after loading (build links)
+        rArr.AddRecalcMode( ScRecalcMode::ONLOAD_LENIENT );
+
+        //  while the link is not evaluated, idle must be disabled (to avoid circular references)
+        bool bOldEnabled = pDok->IsIdleEnabled();
+        pDok->EnableIdle(false);
+
+        // Get/ Create link object
+        ScWebServiceLink* pLink = lcl_GetWebServiceLink(mpLinkManager, aURI);
+
+        bool bWasError = (pMyFormulaCell && pMyFormulaCell->GetRawError() != FormulaError::NONE);
+
+        if (!pLink)
         {
-            PushError( errNoValue );
-            return;
+            pLink = new ScWebServiceLink(pDok, aURI);
+            mpLinkManager->InsertFileLink(*pLink, OBJECT_CLIENT_FILE, aURI);
+            if ( mpLinkManager->GetLinks().size() == 1 )                    // the first one?
+            {
+                SfxBindings* pBindings = pDok->GetViewBindings();
+                if (pBindings)
+                    pBindings->Invalidate( SID_LINKS );             // Link-Manager enabled
+            }
+
+            //if the document was just loaded, but the ScDdeLink entry was missing, then
+            //don't update this link until the links are updated in response to the users
+            //decision
+            if (!pDok->HasLinkFormulaNeedingCheck())
+            {
+                pLink->Update();
+            }
+
+            if (pMyFormulaCell)
+            {
+                // StartListening after the Update to avoid circular references
+                pMyFormulaCell->StartListening(*pLink);
+            }
+        }
+        else
+        {
+            if (pMyFormulaCell)
+                pMyFormulaCell->StartListening(*pLink);
         }
 
-        const sal_Int32 BUF_LEN = 8000;
-        uno::Sequence< sal_Int8 > buffer( BUF_LEN );
-        OStringBuffer aBuffer( 64000 );
+        //  If an new Error from Reschedule appears when the link is executed then reset the errorflag
+        if (pMyFormulaCell && pMyFormulaCell->GetRawError() != FormulaError::NONE && !bWasError)
+            pMyFormulaCell->SetErrCode(FormulaError::NONE);
 
-        sal_Int32 nRead = 0;
-        while ( ( nRead = xStream->readBytes( buffer, BUF_LEN ) ) == BUF_LEN )
+        //  check the value
+        if (pLink->HasResult())
+            PushString(pLink->GetResult());
+        else if (pDok->HasLinkFormulaNeedingCheck())
         {
-            aBuffer.append( reinterpret_cast< const char* >( buffer.getConstArray() ), nRead );
+            // If this formula cell is recalculated just after load and the
+            // expression is exactly WEBSERVICE("literal_URI") (i.e. no other
+            // calculation involved, not even a cell reference) and a cached
+            // result is set as hybrid string then use that as result value to
+            // prevent a #VALUE! result due to the "Automatic update of
+            // external links has been disabled."
+            // This will work only once, as the new formula cell result won't
+            // be a hybrid anymore.
+            /* TODO: the FormulaError::LinkFormulaNeedingCheck could be used as
+             * a signal for the formula cell to keep the hybrid string as
+             * result of the overall formula *iff* no higher prioritized
+             * ScRecalcMode than ONLOAD_LENIENT is present in the entire
+             * document (i.e. the formula result could not be influenced by an
+             * ONLOAD_MUST or ALWAYS recalc, necessary as we don't track
+             * interim results of subexpressions that could be compared), which
+             * also means to track setting ScRecalcMode somehow.. note this is
+             * just a vague idea so far and might or might not work. */
+            if (pMyFormulaCell && pMyFormulaCell->HasHybridStringResult())
+            {
+                if (pMyFormulaCell->GetCode()->GetCodeLen() == 2)
+                {
+                    formula::FormulaToken const * const * pRPN = pMyFormulaCell->GetCode()->GetCode();
+                    if (pRPN[0]->GetType() == formula::svString && pRPN[1]->GetOpCode() == ocWebservice)
+                        PushString( pMyFormulaCell->GetResultString());
+                    else
+                        PushError(FormulaError::LinkFormulaNeedingCheck);
+                }
+                else
+                    PushError(FormulaError::LinkFormulaNeedingCheck);
+            }
+            else
+                PushError(FormulaError::LinkFormulaNeedingCheck);
         }
+        else
+            PushError(FormulaError::NoValue);
 
-        if ( nRead > 0 )
-        {
-            aBuffer.append( reinterpret_cast< const char* >( buffer.getConstArray() ), nRead );
-        }
-
-        xStream->closeInput();
-
-        OUString aContent = OStringToOUString( aBuffer.makeStringAndClear(), RTL_TEXTENCODING_UTF8 );
-        PushString( aContent );
+        pDok->EnableIdle(bOldEnabled);
+        mpLinkManager->CloseCachedComps();
     }
 }
 
@@ -221,7 +422,7 @@ void ScInterpreter::ScEncodeURL()
         OUString aStr = GetString().getString();
         if ( aStr.isEmpty() )
         {
-            PushError( errNoValue );
+            PushError( FormulaError::NoValue );
             return;
         }
 
@@ -236,7 +437,14 @@ void ScInterpreter::ScEncodeURL()
             else
             {
                 aUrlBuf.append( '%' );
-                aUrlBuf.append( OString::number( static_cast<unsigned char>( c ), 16 ).toAsciiUpperCase() );
+                OString convertedChar = OString::number( static_cast<unsigned char>( c ), 16 ).toAsciiUpperCase();
+                // RFC 3986 indicates:
+                // "A percent-encoded octet is encoded as a character triplet,
+                // consisting of the percent character "%" followed by the two hexadecimal digits
+                // representing that octet's numeric value"
+                if (convertedChar.getLength() == 1)
+                    aUrlBuf.append("0");
+                aUrlBuf.append(convertedChar);
             }
         }
         PushString( OUString::fromUtf8( aUrlBuf.makeStringAndClear() ) );
@@ -252,15 +460,12 @@ void ScInterpreter::ScDebugVar()
     SvtMiscOptions aMiscOptions;
     if (!aMiscOptions.IsExperimentalMode())
     {
-        PushError(ScErrorCodes::errNoName);
+        PushError(FormulaError::NoName);
         return;
     }
 
     if (!MustHaveParamCount(GetByte(), 1))
-    {
-        PushIllegalParameter();
         return;
-    }
 
     rtl_uString* p = GetString().getDataIgnoreCase();
     if (!p)
@@ -284,11 +489,11 @@ void ScInterpreter::ScDebugVar()
         PushDouble(fVal);
     }
     else if (aStrUpper == "DATASTREAM_IMPORT")
-        PushDouble( sc::datastream_get_time( 0 ) );
+        PushDouble( sc::datastream_get_time( sc::DebugTime::Import ) );
     else if (aStrUpper == "DATASTREAM_RECALC")
-        PushDouble( sc::datastream_get_time( 1 ) );
+        PushDouble( sc::datastream_get_time( sc::DebugTime::Recalc ) );
     else if (aStrUpper == "DATASTREAM_RENDER")
-        PushDouble( sc::datastream_get_time( 2 ) );
+        PushDouble( sc::datastream_get_time( sc::DebugTime::Render ) );
     else
         PushIllegalParameter();
 }

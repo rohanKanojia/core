@@ -17,11 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "connectionsbuffer.hxx"
+#include <connectionsbuffer.hxx>
+#include <biffhelper.hxx>
 
 #include <osl/diagnose.h>
 #include <oox/helper/attributelist.hxx>
-#include "biffinputstream.hxx"
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
+#include <oox/helper/binaryinputstream.hxx>
 
 namespace oox {
 namespace xls {
@@ -102,10 +105,10 @@ WebPrModel& ConnectionModel::createWebPr()
     return *mxWebPr;
 }
 
-Connection::Connection( const WorkbookHelper& rHelper, sal_Int32 nConnId ) :
+Connection::Connection( const WorkbookHelper& rHelper ) :
     WorkbookHelper( rHelper )
 {
-    maModel.mnId = nConnId;
+    maModel.mnId = -1;
 }
 
 void Connection::importConnection( const AttributeList& rAttribs )
@@ -150,7 +153,7 @@ void Connection::importWebPr( const AttributeList& rAttribs )
     rWebPr.mbHtmlTables      = rAttribs.getBool( XML_htmlTables, false );
 }
 
-void Connection::importTables( const AttributeList& /*rAttribs*/ )
+void Connection::importTables()
 {
     if( maModel.mxWebPr.get() )
     {
@@ -288,8 +291,8 @@ Connection& ConnectionsBuffer::createConnection()
 
 void ConnectionsBuffer::finalizeImport()
 {
-    for( ConnectionVector::iterator aIt = maConnections.begin(), aEnd = maConnections.end(); aIt != aEnd; ++aIt )
-        insertConnectionToMap( *aIt );
+    for( const auto& rxConnection : maConnections )
+        insertConnectionToMap( rxConnection );
 }
 
 ConnectionRef ConnectionsBuffer::getConnection( sal_Int32 nConnId ) const

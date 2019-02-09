@@ -25,19 +25,14 @@
 
 #include "impldde.hxx"
 
-#include <comphelper/string.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/button.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 #include <sot/exchange.hxx>
 #include <rtl/strbuf.hxx>
 #include <rtl/ustring.hxx>
 
 #include <sfx2/lnkbase.hxx>
 #include <sfx2/linkmgr.hxx>
-#include <sfx2/sfxresid.hxx>
 
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
@@ -47,91 +42,71 @@
 
 #include <unotools/securityoptions.hxx>
 
-#define DDELINK_ERROR_APP   1
-#define DDELINK_ERROR_DATA  2
-
 using namespace ::com::sun::star::uno;
 
 namespace sfx2
 {
 
-class SvDDELinkEditDialog : public ModalDialog
+class SvDDELinkEditDialog : public weld::GenericDialogController
 {
-    VclPtr<Edit>            m_pEdDdeApp;
-    VclPtr<Edit>            m_pEdDdeTopic;
-    VclPtr<Edit>            m_pEdDdeItem;
-    VclPtr<OKButton>        m_pOKButton;
+    std::unique_ptr<weld::Entry> m_xEdDdeApp;
+    std::unique_ptr<weld::Entry> m_xEdDdeTopic;
+    std::unique_ptr<weld::Entry> m_xEdDdeItem;
+    std::unique_ptr<weld::Button> m_xOKButton;
 
-    DECL_LINK_TYPED( EditHdl_Impl, Edit&, void );
+    DECL_LINK(EditHdl_Impl, weld::Entry&, void);
 public:
-    SvDDELinkEditDialog( vcl::Window* pParent, SvBaseLink* );
-    virtual ~SvDDELinkEditDialog();
-    virtual void dispose() override;
+    SvDDELinkEditDialog(weld::Window* pParent, SvBaseLink const*);
     OUString GetCmd() const;
 };
 
-SvDDELinkEditDialog::SvDDELinkEditDialog( vcl::Window* pParent, SvBaseLink* pLink )
-    : ModalDialog( pParent, "LinkEditDialog", "sfx/ui/linkeditdialog.ui" )
+SvDDELinkEditDialog::SvDDELinkEditDialog(weld::Window* pParent, SvBaseLink const * pLink)
+    : GenericDialogController(pParent, "sfx/ui/linkeditdialog.ui", "LinkEditDialog")
+    , m_xEdDdeApp(m_xBuilder->weld_entry("app"))
+    , m_xEdDdeTopic(m_xBuilder->weld_entry("file"))
+    , m_xEdDdeItem(m_xBuilder->weld_entry("category"))
+    , m_xOKButton(m_xBuilder->weld_button("ok"))
 {
-    get(m_pOKButton, "ok");
-    get(m_pEdDdeApp, "app");
-    get(m_pEdDdeTopic, "file");
-    get(m_pEdDdeItem, "category");
-
     OUString sServer, sTopic, sItem;
     sfx2::LinkManager::GetDisplayNames( pLink, &sServer, &sTopic, &sItem );
 
-    m_pEdDdeApp->SetText( sServer );
-    m_pEdDdeTopic->SetText( sTopic );
-    m_pEdDdeItem->SetText( sItem );
+    m_xEdDdeApp->set_text( sServer );
+    m_xEdDdeTopic->set_text( sTopic );
+    m_xEdDdeItem->set_text( sItem );
 
-    m_pEdDdeApp->SetModifyHdl( LINK( this, SvDDELinkEditDialog, EditHdl_Impl));
-    m_pEdDdeTopic->SetModifyHdl( LINK( this, SvDDELinkEditDialog, EditHdl_Impl));
-    m_pEdDdeItem->SetModifyHdl( LINK( this, SvDDELinkEditDialog, EditHdl_Impl));
+    m_xEdDdeApp->connect_changed( LINK( this, SvDDELinkEditDialog, EditHdl_Impl));
+    m_xEdDdeTopic->connect_changed( LINK( this, SvDDELinkEditDialog, EditHdl_Impl));
+    m_xEdDdeItem->connect_changed( LINK( this, SvDDELinkEditDialog, EditHdl_Impl));
 
-    m_pOKButton->Enable( !sServer.isEmpty() && !sTopic.isEmpty() && !sItem.isEmpty() );
-}
-
-SvDDELinkEditDialog::~SvDDELinkEditDialog()
-{
-    disposeOnce();
-}
-
-void SvDDELinkEditDialog::dispose()
-{
-    m_pEdDdeApp.clear();
-    m_pEdDdeTopic.clear();
-    m_pEdDdeItem.clear();
-    m_pOKButton.clear();
-    ModalDialog::dispose();
+    m_xOKButton->set_sensitive(!sServer.isEmpty() && !sTopic.isEmpty() && !sItem.isEmpty());
 }
 
 OUString SvDDELinkEditDialog::GetCmd() const
 {
-    OUString sCmd( m_pEdDdeApp->GetText() ), sRet;
-    ::sfx2::MakeLnkName( sRet, &sCmd, m_pEdDdeTopic->GetText(), m_pEdDdeItem->GetText() );
+    OUString sCmd( m_xEdDdeApp->get_text() ), sRet;
+    ::sfx2::MakeLnkName( sRet, &sCmd, m_xEdDdeTopic->get_text(), m_xEdDdeItem->get_text() );
     return sRet;
 }
 
-IMPL_LINK_NOARG_TYPED( SvDDELinkEditDialog, EditHdl_Impl, Edit&, void)
+IMPL_LINK_NOARG( SvDDELinkEditDialog, EditHdl_Impl, weld::Entry&, void)
 {
-    m_pOKButton->Enable( !m_pEdDdeApp->GetText().isEmpty() &&
-                         !m_pEdDdeTopic->GetText().isEmpty() &&
-                         !m_pEdDdeItem->GetText().isEmpty() );
+    m_xOKButton->set_sensitive(!m_xEdDdeApp->get_text().isEmpty() &&
+                               !m_xEdDdeTopic->get_text().isEmpty() &&
+                               !m_xEdDdeItem->get_text().isEmpty() );
 }
 
 SvDDEObject::SvDDEObject()
-    : pConnection( nullptr ), pLink( nullptr ), pRequest( nullptr ), pGetData( nullptr ), nError( 0 )
+    :  pGetData( nullptr )
 {
     SetUpdateTimeout( 100 );
-    bWaitForData = sal_False;
+    bWaitForData = false;
 }
 
 SvDDEObject::~SvDDEObject()
 {
-    delete pLink;
-    delete pRequest;
-    delete pConnection;
+    pLink.reset();
+    pRequest.reset();
+    pConnection.reset();
 }
 
 bool SvDDEObject::GetData( css::uno::Any & rData /*out param*/,
@@ -146,17 +121,14 @@ bool SvDDEObject::GetData( css::uno::Any & rData /*out param*/,
         OUString sServer( pConnection->GetServiceName() );
         OUString sTopic( pConnection->GetTopicName() );
 
-        delete pConnection;
-        pConnection = new DdeConnection( sServer, sTopic );
-        if( pConnection->GetError() )
-            nError = DDELINK_ERROR_APP;
+        pConnection.reset( new DdeConnection( sServer, sTopic ) );
     }
 
     if( bWaitForData ) // we are in an rekursive loop, get out again
         return false;
 
     // Lock against Reentrance
-    bWaitForData = sal_True;
+    bWaitForData = true;
 
     // if you want to print, we'll wait until the data is available
     if( bSynchron )
@@ -171,18 +143,13 @@ bool SvDDEObject::GetData( css::uno::Any & rData /*out param*/,
             aReq.Execute();
         } while( aReq.GetError() && ImplHasOtherFormat( aReq ) );
 
-        if( pConnection->GetError() )
-            nError = DDELINK_ERROR_DATA;
-
-        bWaitForData = sal_False;
+        bWaitForData = false;
     }
     else
     {
         // otherwise it will be executed asynchronously
         {
-            delete pRequest;
-
-            pRequest = new DdeRequest( *pConnection, sItem );
+            pRequest.reset( new DdeRequest( *pConnection, sItem ) );
             pRequest->SetDataHdl( LINK( this, SvDDEObject, ImplGetDDEData ) );
             pRequest->SetDoneHdl( LINK( this, SvDDEObject, ImplDoneDDEData ) );
             pRequest->SetFormat( SotExchange::GetFormatIdFromMimeType(
@@ -221,31 +188,28 @@ bool SvDDEObject::Connect( SvBaseLink * pSvLink )
     if( sServer.isEmpty() || sTopic.isEmpty() || sItem.isEmpty() )
         return false;
 
-    pConnection = new DdeConnection( sServer, sTopic );
+    pConnection.reset( new DdeConnection( sServer, sTopic ) );
     if( pConnection->GetError() )
     {
         // check if the DDE server knows the "SYSTEM" topic
         bool bSysTopic = false;
         if (!sTopic.equalsIgnoreAsciiCase("SYSTEM"))
         {
-            DdeConnection aTmp(sServer, OUString("SYSTEM"));
+            DdeConnection aTmp(sServer, "SYSTEM");
             bSysTopic = !aTmp.GetError();
         }
 
         if( bSysTopic )
         {
             // if the system topic works then the server is up but just doesn't know the original topic
-            nError = DDELINK_ERROR_DATA;
             return false;
         }
-
-        nError = DDELINK_ERROR_APP;
     }
 
     if( SfxLinkUpdateMode::ALWAYS == nLinkType && !pLink && !pConnection->GetError() )
     {
         // Setting up Hot Link, Data will be available at some point later on
-        pLink = new DdeHotLink( *pConnection, sItem );
+        pLink.reset( new DdeHotLink( *pConnection, sItem ) );
         pLink->SetDataHdl( LINK( this, SvDDEObject, ImplGetDDEData ) );
         pLink->SetDoneHdl( LINK( this, SvDDEObject, ImplDoneDDEData ) );
         pLink->SetFormat( pSvLink->GetContentType() );
@@ -265,12 +229,12 @@ bool SvDDEObject::Connect( SvBaseLink * pSvLink )
     return true;
 }
 
-void SvDDEObject::Edit( vcl::Window* pParent, sfx2::SvBaseLink* pBaseLink, const Link<const OUString&, void>& rEndEditHdl )
+void SvDDEObject::Edit(weld::Window* pParent, sfx2::SvBaseLink* pBaseLink, const Link<const OUString&, void>& rEndEditHdl)
 {
-    ScopedVclPtrInstance< SvDDELinkEditDialog > aDlg(pParent, pBaseLink);
-    if ( RET_OK == aDlg->Execute() && rEndEditHdl.IsSet() )
+    SvDDELinkEditDialog aDlg(pParent, pBaseLink);
+    if (RET_OK == aDlg.run() && rEndEditHdl.IsSet())
     {
-        OUString sCommand = aDlg->GetCmd();
+        OUString sCommand = aDlg.GetCmd();
         rEndEditHdl.Call( sCommand );
     }
 }
@@ -306,14 +270,8 @@ bool SvDDEObject::ImplHasOtherFormat( DdeTransaction& rReq )
 }
 
 bool SvDDEObject::IsPending() const
-/*  [Description]
-
+/*
     The method determines whether the data-object can be read from a DDE.
-
-    Returned is the following:
-        ERRCODE_NONE                    if it has been completely read
-        ERRCODE_SO_PENDING              if it has not been completely read
-        ERRCODE_SO_FALSE                otherwise
 */
 {
     return bWaitForData;
@@ -324,7 +282,7 @@ bool SvDDEObject::IsDataComplete() const
     return bWaitForData;
 }
 
-IMPL_LINK_TYPED( SvDDEObject, ImplGetDDEData, const DdeData*, pData, void )
+IMPL_LINK( SvDDEObject, ImplGetDDEData, const DdeData*, pData, void )
 {
     SotClipboardFormatId nFmt = pData->GetFormat();
     switch( nFmt )
@@ -337,8 +295,8 @@ IMPL_LINK_TYPED( SvDDEObject, ImplGetDDEData, const DdeData*, pData, void )
 
     default:
         {
-            const sal_Char* p = static_cast<sal_Char const *>(pData->operator const void*());
-            long nLen = SotClipboardFormatId::STRING == nFmt ? (p ? strlen( p ) : 0) : (long)*pData;
+            const sal_Char* p = static_cast<sal_Char const *>(pData->getData());
+            long nLen = SotClipboardFormatId::STRING == nFmt ? (p ? strlen( p ) : 0) : pData->getSize();
 
             Sequence< sal_Int8 > aSeq( reinterpret_cast<const sal_Int8*>(p), nLen );
             if( pGetData )
@@ -352,21 +310,21 @@ IMPL_LINK_TYPED( SvDDEObject, ImplGetDDEData, const DdeData*, pData, void )
                 aVal <<= aSeq;
                 DataChanged( SotExchange::GetFormatMimeType(
                                                 pData->GetFormat() ), aVal );
-                bWaitForData = sal_False;
+                bWaitForData = false;
             }
         }
     }
 }
 
-IMPL_LINK_TYPED( SvDDEObject, ImplDoneDDEData, bool, bValid, void )
+IMPL_LINK( SvDDEObject, ImplDoneDDEData, bool, bValid, void )
 {
     if( !bValid && ( pRequest || pLink ))
     {
         DdeTransaction* pReq = nullptr;
         if( !pLink || ( pLink && pLink->IsBusy() ))
-            pReq = pRequest;  // only the one that is ready
+            pReq = pRequest.get();  // only the one that is ready
         else if( pRequest && pRequest->IsBusy() )
-            pReq = pLink;  // only the one that is ready
+            pReq = pLink.get();  // only the one that is ready
 
         if( pReq )
         {
@@ -374,15 +332,15 @@ IMPL_LINK_TYPED( SvDDEObject, ImplDoneDDEData, bool, bValid, void )
             {
                 pReq->Execute();
             }
-            else if( pReq == pRequest )
+            else if( pReq == pRequest.get() )
             {
-                bWaitForData = sal_False;
+                bWaitForData = false;
             }
         }
     }
     else
         // End waiting
-        bWaitForData = sal_False;
+        bWaitForData = false;
 }
 
 }

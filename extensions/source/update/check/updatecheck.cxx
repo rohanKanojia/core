@@ -25,11 +25,9 @@
 #include <com/sun/star/beans/XFastPropertySet.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/DispatchResultEvent.hpp>
-#include <com/sun/star/frame/DispatchResultState.hpp>
 #include <com/sun/star/office/Quickstart.hpp>
 #include <com/sun/star/system/SystemShellExecute.hpp>
+#include <com/sun/star/system/SystemShellExecuteException.hpp>
 #include <com/sun/star/system/SystemShellExecuteFlags.hpp>
 #include <com/sun/star/task/XJob.hpp>
 #include <com/sun/star/task/XJobExecutor.hpp>
@@ -41,18 +39,13 @@
 #include <osl/module.hxx>
 #include <osl/file.hxx>
 #include <sal/macros.h>
+#include <sal/log.hxx>
 
 #ifdef _WIN32
-#ifdef _MSC_VER
-#pragma warning(push,1) // disable warnings within system headers
-//#pragma warning(disable: 4917)
-#endif
 #include <objbase.h>
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 #endif
 
+#include "onlinecheck.hxx"
 #include "updateprotocol.hxx"
 #include "updatecheckconfig.hxx"
 
@@ -70,25 +63,18 @@ namespace uno = com::sun::star::uno ;
 #define PROPERTY_CLICK_HDL      "MenuClickHDL"
 #define PROPERTY_SHOW_MENUICON  "MenuIconVisible"
 
-#if defined(_WIN32)
-extern "C" bool SAL_CALL WNT_hasInternetConnection();
-#endif
-
 // Returns the URL of the release note for the given position
 OUString getReleaseNote(const UpdateInfo& rInfo, sal_uInt8 pos, bool autoDownloadEnabled)
 {
-    std::vector< ReleaseNote >::const_iterator iter = rInfo.ReleaseNotes.begin();
-    while( iter != rInfo.ReleaseNotes.end() )
+    for (auto const& elem : rInfo.ReleaseNotes)
     {
-        if( pos == iter->Pos )
+        if( pos == elem.Pos )
         {
-            if( (pos > 2) || !autoDownloadEnabled || iter->URL2.isEmpty() )
-                return iter->URL;
+            if( (pos > 2) || !autoDownloadEnabled || elem.URL2.isEmpty() )
+                return elem.URL;
         }
-        else if( (pos == iter->Pos2) && ((1 == iter->Pos) || (2 == iter->Pos)) && autoDownloadEnabled )
-            return iter->URL2;
-
-        ++iter;
+        else if( (pos == elem.Pos2) && ((1 == elem.Pos) || (2 == elem.Pos)) && autoDownloadEnabled )
+            return elem.URL2;
     }
 
     return OUString();
@@ -98,7 +84,7 @@ OUString getReleaseNote(const UpdateInfo& rInfo, sal_uInt8 pos, bool autoDownloa
 namespace
 {
 
-inline OUString getBuildId()
+OUString getBuildId()
 {
     OUString aPathVal("${$BRAND_BASE_DIR/" LIBO_ETC_FOLDER "/" SAL_CONFIGFILE("version") ":buildid}");
     rtl::Bootstrap::expandMacros(aPathVal);
@@ -106,8 +92,8 @@ inline OUString getBuildId()
 }
 
 
-#if defined LINUX || defined SOLARIS
-inline OUString getBaseInstallation()
+#if (defined LINUX || defined __sun)
+OUString getBaseInstallation()
 {
     OUString aPathVal("$BRAND_BASE_DIR");
     rtl::Bootstrap::expandMacros(aPathVal);
@@ -116,9 +102,9 @@ inline OUString getBaseInstallation()
 #endif
 
 
-inline bool isObsoleteUpdateInfo(const OUString& rBuildId)
+bool isObsoleteUpdateInfo(const OUString& rBuildId)
 {
-    return !rBuildId.equals(getBuildId()) && !rBuildId.isEmpty();
+    return rBuildId != getBuildId() && !rBuildId.isEmpty();
 }
 
 
@@ -234,7 +220,7 @@ public:
     virtual void cancel() override;
 
 protected:
-    virtual ~UpdateCheckThread();
+    virtual ~UpdateCheckThread() override;
 
     virtual void SAL_CALL run() override;
     virtual void SAL_CALL onTerminated() override;
@@ -245,7 +231,7 @@ protected:
 private:
 
     /* Used to avoid dialup login windows (on platforms we know how to double this) */
-    static inline bool hasInternetConnection()
+    static bool hasInternetConnection()
     {
 #ifdef _WIN32
         return WNT_hasInternetConnection();
@@ -255,7 +241,7 @@ private:
     }
 
     /* Creates a new instance of UpdateInformationProvider and returns this instance */
-    inline uno::Reference<deployment::XUpdateInformationProvider> createProvider()
+    uno::Reference<deployment::XUpdateInformationProvider> createProvider()
     {
         osl::MutexGuard aGuard(m_aMutex);
         m_xProvider = deployment::UpdateInformationProvider::create(m_xContext);
@@ -263,11 +249,11 @@ private:
     };
 
     /* Returns the remembered instance of UpdateInformationProvider if any */
-    inline uno::Reference<deployment::XUpdateInformationProvider> getProvider()
+    uno::Reference<deployment::XUpdateInformationProvider> getProvider()
         { osl::MutexGuard aGuard(m_aMutex); return m_xProvider; };
 
     /* Releases the remembered instance of UpdateInformationProvider if any */
-    inline void clearProvider()
+    void clearProvider()
         { osl::MutexGuard aGuard(m_aMutex); m_xProvider.clear(); };
 
     osl::Mutex      m_aMutex;
@@ -297,8 +283,7 @@ public:
     explicit MenuBarButtonJob(const rtl::Reference< UpdateCheck >& rUpdateCheck);
 
     // XJob
-    virtual uno::Any SAL_CALL execute(const uno::Sequence<beans::NamedValue>&)
-        throw (lang::IllegalArgumentException, uno::Exception, std::exception) override;
+    virtual uno::Any SAL_CALL execute(const uno::Sequence<beans::NamedValue>&) override;
 
 private:
     rtl::Reference< UpdateCheck > m_aUpdateCheck;
@@ -319,7 +304,7 @@ public:
     virtual void SAL_CALL onTerminated() override;
 
 protected:
-    virtual ~DownloadThread();
+    virtual ~DownloadThread() override;
 
 private:
     osl::Condition& m_aCondition;
@@ -338,7 +323,7 @@ public:
     virtual void SAL_CALL onTerminated() override;
 
 protected:
-    virtual ~ShutdownThread();
+    virtual ~ShutdownThread() override;
 
 private:
     osl::Condition m_aCondition;
@@ -486,7 +471,7 @@ UpdateCheckThread::run()
             rModel.clear();
 
             // last == 0 means check immediately
-            bool checkNow = ! (last > 0);
+            bool checkNow = last <= 0;
 
             // Reset the condition to avoid busy loops
             if( osl::Condition::result_ok == aResult )
@@ -540,8 +525,7 @@ UpdateCheckThread::run()
 
     catch(const uno::Exception& e) {
         // Silently catch all errors
-        OSL_TRACE( "Caught exception: %s\n thread terminated.\n",
-            OUStringToOString(e.Message, RTL_TEXTENCODING_UTF8).getStr() );
+        SAL_WARN("extensions.update", "Caught exception, thread terminated. " << e );
     }
 }
 
@@ -556,8 +540,7 @@ ManualUpdateCheckThread::run()
     }
     catch(const uno::Exception& e) {
         // Silently catch all errors
-        OSL_TRACE( "Caught exception: %s\n thread terminated.\n",
-            OUStringToOString(e.Message, RTL_TEXTENCODING_UTF8).getStr() );
+        SAL_WARN("extensions.update", "Caught exception, thread terminated. " << e );
     }
 }
 
@@ -570,7 +553,6 @@ MenuBarButtonJob::MenuBarButtonJob(const rtl::Reference< UpdateCheck >& rUpdateC
 
 uno::Any SAL_CALL
 MenuBarButtonJob::execute(const uno::Sequence<beans::NamedValue>& )
-    throw (lang::IllegalArgumentException, uno::Exception, std::exception)
 {
     if ( m_aUpdateCheck->shouldShowExtUpdDlg() )
         m_aUpdateCheck->showExtensionDialog();
@@ -606,7 +588,7 @@ DownloadThread::run()
 
 #ifdef _WIN32
     CoUninitialize();
-    CoInitialize( NULL );
+    CoInitialize( nullptr );
 #endif
 
     while( schedule() )
@@ -771,7 +753,7 @@ UpdateCheck::initialize(const uno::Sequence< beans::NamedValue >& rValues,
                         }
                         else // Calculate initial percent value.
                         {
-                            sal_Int32 nPercent = (sal_Int32) (100 * nFileSize / nDownloadSize);
+                            sal_Int32 nPercent = static_cast<sal_Int32>(100 * nFileSize / nDownloadSize);
                             getUpdateHandler()->setProgress( nPercent );
                         }
                     }
@@ -846,6 +828,12 @@ UpdateCheck::download()
     State eState = m_eState;
     aGuard.clear();
 
+    if (aInfo.Sources.empty())
+    {
+        SAL_WARN("extensions.update", "download called without source");
+        return;
+    }
+
     if( aInfo.Sources[0].IsDirect )
     {
         // Ignore second click of a double click
@@ -886,23 +874,24 @@ UpdateCheck::install()
         OUString aInstallImage(m_aImageName);
         osl::FileBase::getSystemPathFromFileURL(aInstallImage, aInstallImage);
 
-        OUString aParameter;
-        sal_Int32 nFlags = c3s::SystemShellExecuteFlags::DEFAULTS;
-#if ( defined LINUX || defined SOLARIS )
+        sal_Int32 nFlags;
+#if (defined LINUX || defined __sun)
         nFlags = 42;
-        aParameter = getBaseInstallation();
+        OUString aParameter = getBaseInstallation();
         if( !aParameter.isEmpty() )
             osl::FileBase::getSystemPathFromFileURL(aParameter, aParameter);
 
         aParameter += " &";
+#else
+        nFlags = c3s::SystemShellExecuteFlags::DEFAULTS;
+        OUString const aParameter;
 #endif
 
         rtl::Reference< UpdateCheckConfig > rModel = UpdateCheckConfig::get( m_xContext );
         rModel->clearLocalFileName();
 
         xShellExecute->execute(aInstallImage, aParameter, nFlags);
-        ShutdownThread *pShutdownThread = new ShutdownThread( m_xContext );
-        (void) pShutdownThread;
+        new ShutdownThread( m_xContext );
     } catch(const uno::Exception&) {
         m_aUpdateHandler->setErrorMessage( m_aUpdateHandler->getDefaultInstErrMsg() );
     }
@@ -1230,7 +1219,7 @@ UpdateCheck::setUpdateInfo(const UpdateInfo& aInfo)
 {
     osl::ClearableMutexGuard aGuard(m_aMutex);
 
-    bool bSuppressBubble = aInfo.BuildId.equals(m_aUpdateInfo.BuildId);
+    bool bSuppressBubble = aInfo.BuildId == m_aUpdateInfo.BuildId;
     m_aUpdateInfo = aInfo;
 
     OSL_ASSERT(DISABLED == m_eState || CHECK_SCHEDULED == m_eState);
@@ -1258,18 +1247,15 @@ UpdateCheck::setUpdateInfo(const UpdateInfo& aInfo)
     // Decide whether to use alternate release note pos ..
     bool autoDownloadEnabled = rModel->isAutoDownloadEnabled();
 
-    std::vector< ReleaseNote >::iterator iter2 = m_aUpdateInfo.ReleaseNotes.begin();
-    while( iter2 != m_aUpdateInfo.ReleaseNotes.end() )
+    for (auto & elem : m_aUpdateInfo.ReleaseNotes)
     {
-        if( ((1 == iter2->Pos) || (2 == iter2->Pos)) && autoDownloadEnabled && !iter2->URL2.isEmpty())
+        if( ((1 == elem.Pos) || (2 == elem.Pos)) && autoDownloadEnabled && !elem.URL2.isEmpty())
         {
-            iter2->URL = iter2->URL2;
-            (iter2->URL2).clear();
-            iter2->Pos = iter2->Pos2;
-            iter2->Pos2 = 0;
+            elem.URL = elem.URL2;
+            elem.URL2.clear();
+            elem.Pos = elem.Pos2;
+            elem.Pos2 = 0;
         }
-
-        ++iter2;
     }
 
     // do not move below store/clear ..
@@ -1312,7 +1298,7 @@ UpdateCheck::setCheckFailedState()
 }
 
 
-void UpdateCheck::handleMenuBarUI( rtl::Reference< UpdateHandler > rUpdateHandler,
+void UpdateCheck::handleMenuBarUI( const rtl::Reference< UpdateHandler >& rUpdateHandler,
                                    UpdateState& eState,
                                    bool suppressBubble )
 {
@@ -1330,7 +1316,7 @@ void UpdateCheck::handleMenuBarUI( rtl::Reference< UpdateHandler > rUpdateHandle
     {
         if( UPDATESTATE_NO_UPDATE_AVAIL == eState )
         {
-            xMenuBarUI->setPropertyValue( PROPERTY_SHOW_MENUICON, uno::makeAny(sal_False) );
+            xMenuBarUI->setPropertyValue( PROPERTY_SHOW_MENUICON, uno::makeAny(false) );
         }
         else
         {
@@ -1338,10 +1324,10 @@ void UpdateCheck::handleMenuBarUI( rtl::Reference< UpdateHandler > rUpdateHandle
             xMenuBarUI->setPropertyValue( PROPERTY_TEXT, uno::makeAny(rUpdateHandler->getBubbleText(eState)) );
 
             if( ! suppressBubble && ( ! rUpdateHandler->isVisible() || rUpdateHandler->isMinimized() ) )
-                xMenuBarUI->setPropertyValue( PROPERTY_SHOW_BUBBLE, uno::makeAny( sal_True ) );
+                xMenuBarUI->setPropertyValue( PROPERTY_SHOW_BUBBLE, uno::makeAny( true ) );
 
             if( UPDATESTATE_CHECKING != eState )
-                xMenuBarUI->setPropertyValue( PROPERTY_SHOW_MENUICON, uno::makeAny(sal_True) );
+                xMenuBarUI->setPropertyValue( PROPERTY_SHOW_MENUICON, uno::makeAny(true) );
         }
     }
 }

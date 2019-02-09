@@ -20,8 +20,12 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_CONNECTIONSBUFFER_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_CONNECTIONSBUFFER_HXX
 
+#include <memory>
 #include <oox/helper/refvector.hxx>
 #include "workbookhelper.hxx"
+
+namespace oox { class AttributeList; }
+namespace oox { class SequenceInputStream; }
 
 namespace oox {
 namespace xls {
@@ -50,7 +54,7 @@ struct WebPrModel
     bool                mbSourceData;       /// True = import XML source data referred by HTML table.
     bool                mbParsePre;         /// True = parse preformatted sections (<pre> tag).
     bool                mbConsecutive;      /// True = join consecutive delimiters.
-    bool                mbFirstRow;         /// True = use column withs of first row for entire <pre> tag.
+    bool                mbFirstRow;         /// True = use column widths of first row for entire <pre> tag.
     bool                mbXl97Created;      /// True = web query created with Excel 97.
     bool                mbTextDates;        /// True = read date values as text, false = parse dates.
     bool                mbXl2000Refreshed;  /// True = refreshed with Excel 2000 or newer.
@@ -93,14 +97,14 @@ struct ConnectionModel
 class Connection : public WorkbookHelper
 {
 public:
-    explicit            Connection( const WorkbookHelper& rHelper, sal_Int32 nConnId = -1 );
+    explicit            Connection( const WorkbookHelper& rHelper );
 
     /** Imports connection settings from the connection element. */
     void                importConnection( const AttributeList& rAttribs );
     /** Imports web query settings from the webPr element. */
     void                importWebPr( const AttributeList& rAttribs );
     /** Imports web query table settings from the tables element. */
-    void                importTables( const AttributeList& rAttribs );
+    void                importTables();
     /** Imports a web query table identifier from the m, s, or x element. */
     void                importTable( const AttributeList& rAttribs, sal_Int32 nElement );
 
@@ -114,9 +118,9 @@ public:
     void                importWebPrTable( SequenceInputStream& rStrm, sal_Int32 nRecId );
 
     /** Returns the unique connection identifier. */
-    inline sal_Int32    getConnectionId() const { return maModel.mnId; }
+    sal_Int32    getConnectionId() const { return maModel.mnId; }
     /** Returns the source data type of the connection. */
-    inline sal_Int32    getConnectionType() const { return maModel.mnType; }
+    sal_Int32    getConnectionType() const { return maModel.mnType; }
     /** Returns read-only access to the connection model data. */
     const ConnectionModel& getModel() const { return maModel; }
 

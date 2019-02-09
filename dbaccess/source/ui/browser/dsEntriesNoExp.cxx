@@ -21,16 +21,15 @@
 
 #include <memory>
 
-#include "unodatbr.hxx"
-#include "browserids.hxx"
-#include "listviewitems.hxx"
-#include "imageprovider.hxx"
+#include <unodatbr.hxx>
+#include <browserids.hxx>
+#include <listviewitems.hxx>
+#include <imageprovider.hxx>
 #include <osl/diagnose.h>
 #include "dbtreeview.hxx"
-#include "dbtreelistbox.hxx"
-#include "dbu_brw.hrc"
+#include <dbtreelistbox.hxx>
 #include "dbtreemodel.hxx"
-#include "svtools/treelistentry.hxx"
+#include <vcl/treelistentry.hxx>
 
 using namespace ::com::sun::star::frame;
 using namespace ::dbtools;
@@ -38,7 +37,7 @@ using namespace ::svx;
 
 namespace dbaui
 {
-SbaTableQueryBrowser::EntryType SbaTableQueryBrowser::getChildType( SvTreeListEntry* _pEntry ) const
+SbaTableQueryBrowser::EntryType SbaTableQueryBrowser::getChildType( SvTreeListEntry const * _pEntry ) const
 {
     OSL_ENSURE(isContainer(_pEntry), "SbaTableQueryBrowser::getChildType: invalid entry!");
     switch (getEntryType(_pEntry))
@@ -106,11 +105,11 @@ SbaTableQueryBrowser::EntryType SbaTableQueryBrowser::getEntryType( const SvTree
 
 void SbaTableQueryBrowser::select(SvTreeListEntry* _pEntry, bool _bSelect)
 {
-    SvLBoxItem* pTextItem = _pEntry ? _pEntry->GetFirstItem(SV_ITEM_ID_BOLDLBSTRING) : nullptr;
+    SvLBoxItem* pTextItem = _pEntry ? _pEntry->GetFirstItem(SvLBoxItemType::String) : nullptr;
     if (pTextItem)
     {
         static_cast<OBoldListboxString*>(pTextItem)->emphasize(_bSelect);
-        m_pTreeModel->InvalidateEntry(_pEntry);
+        m_pTreeView->GetTreeModel()->InvalidateEntry(_pEntry);
     }
     else {
         OSL_FAIL("SbaTableQueryBrowser::select: invalid entry!");
@@ -122,13 +121,13 @@ void SbaTableQueryBrowser::selectPath(SvTreeListEntry* _pEntry, bool _bSelect)
     while (_pEntry)
     {
         select(_pEntry, _bSelect);
-        _pEntry = m_pTreeModel->GetParent(_pEntry);
+        _pEntry = m_pTreeView->GetTreeModel()->GetParent(_pEntry);
     }
 }
 
 bool SbaTableQueryBrowser::isSelected(SvTreeListEntry* _pEntry)
 {
-    SvLBoxItem* pTextItem = _pEntry ? _pEntry->GetFirstItem(SV_ITEM_ID_BOLDLBSTRING) : nullptr;
+    SvLBoxItem* pTextItem = _pEntry ? _pEntry->GetFirstItem(SvLBoxItemType::String) : nullptr;
     if (pTextItem)
         return static_cast<OBoldListboxString*>(pTextItem)->isEmphasized();
     else {
@@ -156,6 +155,10 @@ void SbaTableQueryBrowser::describeSupportedFeatures()
     implDescribeSupportedFeature( ".uno:Title",                             ID_BROWSER_TITLE );
     if ( !m_bShowMenu )
     {
+        implDescribeSupportedFeature( ".uno:DSBEditDB",          ID_TREE_EDIT_DATABASE );
+        implDescribeSupportedFeature( ".uno:DSBCloseConnection", ID_TREE_CLOSE_CONN );
+        implDescribeSupportedFeature( ".uno:DSBAdministrate",    ID_TREE_ADMINISTRATE );
+
         implDescribeSupportedFeature( ".uno:DSBrowserExplorer",                 ID_BROWSER_EXPLORER, CommandGroup::VIEW );
 
         implDescribeSupportedFeature( ".uno:DSBFormLetter",                     ID_BROWSER_FORMLETTER, CommandGroup::DOCUMENT );
@@ -194,14 +197,15 @@ void SbaTableQueryBrowser::notifyHiContrastChanged()
 {
     if ( m_pTreeView )
     {
+        auto pTreeModel = m_pTreeView->GetTreeModel();
         // change all bitmap entries
-        SvTreeListEntry* pEntryLoop = m_pTreeModel->First();
+        SvTreeListEntry* pEntryLoop = pTreeModel->First();
         while ( pEntryLoop )
         {
             DBTreeListUserData* pData = static_cast<DBTreeListUserData*>(pEntryLoop->GetUserData());
             if ( !pData )
             {
-                pEntryLoop = m_pTreeModel->Next(pEntryLoop);
+                pEntryLoop = pTreeModel->Next(pEntryLoop);
                 continue;
             }
 
@@ -232,7 +236,7 @@ void SbaTableQueryBrowser::notifyHiContrastChanged()
             for (sal_uInt16 i=0;i<nCount;++i)
             {
                 SvLBoxItem& rItem = pEntryLoop->GetItem(i);
-                if (rItem.GetType() != SV_ITEM_ID_LBOXCONTEXTBMP)
+                if (rItem.GetType() != SvLBoxItemType::ContextBmp)
                     continue;
 
                 SvLBoxContextBmp& rContextBitmapItem = static_cast< SvLBoxContextBmp& >( rItem );
@@ -242,7 +246,7 @@ void SbaTableQueryBrowser::notifyHiContrastChanged()
                 break;
             }
 
-            pEntryLoop = m_pTreeModel->Next(pEntryLoop);
+            pEntryLoop = pTreeModel->Next(pEntryLoop);
         }
     }
 }

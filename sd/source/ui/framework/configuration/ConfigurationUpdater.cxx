@@ -21,11 +21,14 @@
 #include "ConfigurationTracer.hxx"
 #include "ConfigurationClassifier.hxx"
 #include "ConfigurationControllerBroadcaster.hxx"
-#include "framework/Configuration.hxx"
-#include "framework/FrameworkHelper.hxx"
+#include "ConfigurationControllerResourceManager.hxx"
+#include <framework/Configuration.hxx>
+#include <framework/FrameworkHelper.hxx>
 
+#include <com/sun/star/drawing/framework/XControllerManager.hpp>
 #include <comphelper/scopeguard.hxx>
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 
 using namespace ::com::sun::star;
@@ -77,19 +80,14 @@ ConfigurationUpdater::ConfigurationUpdater (
     // and the requested configuration differ.  With the timer we try
     // updates until the two configurations are the same.
     maUpdateTimer.SetTimeout(snNormalTimeout);
-    maUpdateTimer.SetTimeoutHdl(LINK(this,ConfigurationUpdater,TimeoutHandler));
-    SetControllerManager(rxControllerManager);
+    maUpdateTimer.SetDebugName("sd::ConfigurationUpdater maUpdateTimer");
+    maUpdateTimer.SetInvokeHandler(LINK(this,ConfigurationUpdater,TimeoutHandler));
+    mxControllerManager = rxControllerManager;
 }
 
 ConfigurationUpdater::~ConfigurationUpdater()
 {
     maUpdateTimer.Stop();
-}
-
-void ConfigurationUpdater::SetControllerManager(
-    const Reference<XControllerManager>& rxControllerManager)
-{
-    mxControllerManager = rxControllerManager;
 }
 
 void ConfigurationUpdater::RequestUpdate (
@@ -141,7 +139,7 @@ void ConfigurationUpdater::UpdateConfiguration()
         ConfigurationClassifier aClassifier(mxRequestedConfiguration, mxCurrentConfiguration);
         if (aClassifier.Partition())
         {
-#if OSL_DEBUG_LEVEL >= 2
+#if DEBUG_SD_CONFIGURATION_TRACE
             SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": ConfigurationUpdater::UpdateConfiguration(");
             ConfigurationTracer::TraceConfiguration(
                 mxRequestedConfiguration, "requested configuration");
@@ -174,7 +172,7 @@ void ConfigurationUpdater::UpdateConfiguration()
         else
         {
             SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": nothing to do");
-#if OSL_DEBUG_LEVEL >= 2
+#if DEBUG_SD_CONFIGURATION_TRACE
             ConfigurationTracer::TraceConfiguration(
                 mxRequestedConfiguration, "requested configuration");
             ConfigurationTracer::TraceConfiguration(
@@ -184,7 +182,7 @@ void ConfigurationUpdater::UpdateConfiguration()
     }
     catch(const RuntimeException &)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("sd");
     }
 
     SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": ConfigurationUpdater::UpdateConfiguration)");
@@ -202,10 +200,9 @@ void ConfigurationUpdater::CleanRequestedConfiguration()
         {
             Reference<XConfigurationController> xCC (
                 mxControllerManager->getConfigurationController());
-            vector<Reference<XResourceId> >::iterator iId;
-            for (iId=aResourcesToDeactivate.begin(); iId!=aResourcesToDeactivate.end(); ++iId)
-                if (iId->is())
-                    xCC->requestResourceDeactivation(*iId);
+            for (auto& rxId : aResourcesToDeactivate)
+                if (rxId.is())
+                    xCC->requestResourceDeactivation(rxId);
         }
     }
 }
@@ -236,7 +233,7 @@ void ConfigurationUpdater::UpdateCore (const ConfigurationClassifier& rClassifie
 {
     try
     {
-#if OSL_DEBUG_LEVEL >= 2
+#if DEBUG_SD_CONFIGURATION_TRACE
         rClassifier.TraceResourceIdVector(
             "requested but not current resources:", rClassifier.GetC1minusC2());
         rClassifier.TraceResourceIdVector(
@@ -252,7 +249,7 @@ void ConfigurationUpdater::UpdateCore (const ConfigurationClassifier& rClassifie
         mpResourceManager->DeactivateResources(rClassifier.GetC2minusC1(), mxCurrentConfiguration);
         mpResourceManager->ActivateResources(rClassifier.GetC1minusC2(), mxCurrentConfiguration);
 
-#if OSL_DEBUG_LEVEL >= 2
+#if DEBUG_SD_CONFIGURATION_TRACE
         SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": ConfigurationController::UpdateConfiguration)");
         ConfigurationTracer::TraceConfiguration(
             mxRequestedConfiguration, "requested configuration");
@@ -268,7 +265,7 @@ void ConfigurationUpdater::UpdateCore (const ConfigurationClassifier& rClassifie
     }
     catch(const RuntimeException&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("sd");
     }
 }
 
@@ -326,9 +323,8 @@ void ConfigurationUpdater::CheckPureAnchors (
         if (bDeactiveCurrentResource)
         {
             SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": deactivating pure anchor " <<
-                OUStringToOString(
-                    FrameworkHelper::ResourceIdToString(xResourceId),
-                    RTL_TEXTENCODING_UTF8).getStr() << "because it has no children");
+                    FrameworkHelper::ResourceIdToString(xResourceId) <<
+                    "because it has no children");
             // Erase element from current configuration.
             for (sal_Int32 nI=nIndex; nI<nCount-2; ++nI)
                 aResources[nI] = aResources[nI+1];
@@ -356,7 +352,7 @@ void ConfigurationUpdater::UnlockUpdates()
 
 std::shared_ptr<ConfigurationUpdaterLock> ConfigurationUpdater::GetLock()
 {
-    return std::shared_ptr<ConfigurationUpdaterLock>(new ConfigurationUpdaterLock(*this));
+    return std::make_shared<ConfigurationUpdaterLock>(*this);
 }
 
 void ConfigurationUpdater::SetUpdateBeingProcessed (bool bValue)
@@ -364,16 +360,14 @@ void ConfigurationUpdater::SetUpdateBeingProcessed (bool bValue)
     mbUpdateBeingProcessed = bValue;
 }
 
-IMPL_LINK_NOARG_TYPED(ConfigurationUpdater, TimeoutHandler, Timer *, void)
+IMPL_LINK_NOARG(ConfigurationUpdater, TimeoutHandler, Timer *, void)
 {
-    OSL_TRACE("configuration update timer");
     if ( ! mbUpdateBeingProcessed
         && mxCurrentConfiguration.is()
         && mxRequestedConfiguration.is())
     {
         if ( ! AreConfigurationsEquivalent(mxCurrentConfiguration, mxRequestedConfiguration))
         {
-            OSL_TRACE("configurations differ, requesting update");
             RequestUpdate(mxRequestedConfiguration);
         }
     }

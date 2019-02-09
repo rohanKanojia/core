@@ -37,7 +37,6 @@ class XMLChartPlotAreaOOoTContext  : public XMLProcAttrTransformerContext
 public:
     explicit XMLChartPlotAreaOOoTContext(
         XMLTransformerBase & rTransformer, const OUString & rQName );
-    virtual ~XMLChartPlotAreaOOoTContext();
 
     virtual rtl::Reference<XMLTransformerContext> CreateChildContext( sal_uInt16 nPrefix,
                                    const OUString& rLocalName,
@@ -46,10 +45,9 @@ public:
     virtual void EndElement() override;
     virtual void ExportContent() override;
 
-protected:
+private:
     void AddContent( rtl::Reference<XMLAxisOOoContext> const & pContent );
 
-private:
     XMLAxisContextVector m_aChildContexts;
 };
 

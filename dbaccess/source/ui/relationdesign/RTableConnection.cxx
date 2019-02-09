@@ -18,11 +18,10 @@
  */
 
 #include "RTableConnection.hxx"
-#include <tools/debug.hxx>
-#include "RelationTableView.hxx"
+#include <RelationTableView.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
-#include "ConnectionLine.hxx"
+#include <ConnectionLine.hxx>
 
 using namespace dbaui;
 // class ORelationTableConnection
@@ -33,7 +32,7 @@ ORelationTableConnection::ORelationTableConnection( ORelationTableView* pContain
 }
 
 ORelationTableConnection::ORelationTableConnection( const ORelationTableConnection& rConn )
-    : OTableConnection( rConn )
+    : VclReferenceBase(), OTableConnection( rConn )
 {
     // no own members, thus the base class functionality is enough
 }
@@ -48,33 +47,31 @@ ORelationTableConnection& ORelationTableConnection::operator=( const ORelationTa
     return *this;
 }
 
-void ORelationTableConnection::Draw(vcl::RenderContext& rRenderContext, const Rectangle& rRect )
+void ORelationTableConnection::Draw(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect )
 {
     OTableConnection::Draw(rRenderContext, rRect);
     ORelationTableConnectionData* pData = static_cast< ORelationTableConnectionData* >(GetData().get());
-    if (pData && (pData->GetCardinality() == CARDINAL_UNDEFINED))
+    if (pData && (pData->GetCardinality() == Cardinality::Undefined))
         return;
 
     // search lines for top line
-    Rectangle aBoundingRect;
+    tools::Rectangle aBoundingRect;
     long nTop = GetBoundingRect().Bottom();
     long nTemp;
 
     const OConnectionLine* pTopLine = nullptr;
-    const ::std::vector<OConnectionLine*>& rConnLineList = GetConnLineList();
-    std::vector<OConnectionLine*>::const_iterator aIter = rConnLineList.begin();
-    std::vector<OConnectionLine*>::const_iterator aEnd = rConnLineList.end();
+    const std::vector<std::unique_ptr<OConnectionLine>>& rConnLineList = GetConnLineList();
 
-    for(;aIter != aEnd;++aIter)
+    for (auto const& elem : rConnLineList)
     {
-        if( (*aIter)->IsValid() )
+        if( elem->IsValid() )
         {
-            aBoundingRect = (*aIter)->GetBoundingRect();
+            aBoundingRect = elem->GetBoundingRect();
             nTemp = aBoundingRect.Top();
             if(nTemp < nTop)
             {
                 nTop = nTemp;
-                pTopLine = (*aIter);
+                pTopLine = elem.get();
             }
         }
     }
@@ -83,28 +80,29 @@ void ORelationTableConnection::Draw(vcl::RenderContext& rRenderContext, const Re
     if (!pTopLine)
         return;
 
-    Rectangle aSourcePos = pTopLine->GetSourceTextPos();
-    Rectangle aDestPos = pTopLine->GetDestTextPos();
+    tools::Rectangle aSourcePos = pTopLine->GetSourceTextPos();
+    tools::Rectangle aDestPos = pTopLine->GetDestTextPos();
 
     OUString aSourceText;
     OUString aDestText;
 
     switch (pData->GetCardinality())
     {
-    case CARDINAL_ONE_MANY:
+    case Cardinality::OneMany:
         aSourceText = "1";
         aDestText   = "n";
         break;
 
-    case CARDINAL_MANY_ONE:
+    case Cardinality::ManyOne:
         aSourceText = "n";
         aDestText   = "1";
         break;
 
-    case CARDINAL_ONE_ONE:
+    case Cardinality::OneOne:
         aSourceText = "1";
         aDestText   = "1";
         break;
+    default: break;
     }
 
     if (IsSelected())

@@ -17,20 +17,16 @@ $(eval $(call gb_Module_add_targets,bridges,\
 		$(if $(filter MACOSX,$(OS)),Package_jnilib_java_uno) \
 	) \
 	$(if $(filter ARM,$(CPUNAME)),\
-		$(if $(filter IOS,$(OS)),\
-			CustomTarget_gcc3_ios_arm) \
 		$(if $(filter ANDROID LINUX,$(OS)),\
 			CustomTarget_gcc3_linux_arm) \
 	) \
 ))
 
-ifneq ($(OS), EMSCRIPTEN)
 ifeq (,$(filter build,$(gb_Module_SKIPTARGETS)))
 ifeq ($(strip $(bridges_SELECTED_BRIDGE)),)
 $(call gb_Output_error,no bridge selected for build: bailing out)
 else ifneq ($(words $(bridges_SELECTED_BRIDGE)),1)
 $(call gb_Output_error,multiple bridges selected for build: $(bridges_SELECTED_BRIDGE))
-endif
 endif
 endif
 

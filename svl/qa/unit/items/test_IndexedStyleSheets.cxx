@@ -23,15 +23,14 @@ using namespace svl;
 class MockedStyleSheet : public SfxStyleSheetBase
 {
     public:
-    MockedStyleSheet(const rtl::OUString& name, SfxStyleFamily fam = SFX_STYLE_FAMILY_CHAR)
-    : SfxStyleSheetBase(name, nullptr, fam, 0)
-    {;}
+    MockedStyleSheet(const OUString& name, SfxStyleFamily fam = SfxStyleFamily::Char)
+    : SfxStyleSheetBase(name, nullptr, fam, SfxStyleSearchBits::Auto)
+    {}
 
 };
 
 struct DummyPredicate : public StyleSheetPredicate {
-    bool Check(const SfxStyleSheetBase& styleSheet) override {
-        (void)styleSheet; // fix compiler warning
+    bool Check(const SfxStyleSheetBase&) override {
         return true;
     }
 };
@@ -73,10 +72,8 @@ void IndexedStyleSheetsTest::InstantiationWorks()
 
 void IndexedStyleSheetsTest::AddedStylesheetsCanBeFoundAndRetrievedByPosition()
 {
-    rtl::OUString name1("name1");
-    rtl::OUString name2("name2");
-    rtl::Reference<SfxStyleSheetBase> sheet1(new MockedStyleSheet(name1));
-    rtl::Reference<SfxStyleSheetBase> sheet2(new MockedStyleSheet(name2));
+    rtl::Reference<SfxStyleSheetBase> sheet1(new MockedStyleSheet("name1"));
+    rtl::Reference<SfxStyleSheetBase> sheet2(new MockedStyleSheet("name2"));
     IndexedStyleSheets iss;
     iss.AddStyleSheet(sheet1);
     iss.AddStyleSheet(sheet2);
@@ -87,7 +84,7 @@ void IndexedStyleSheetsTest::AddedStylesheetsCanBeFoundAndRetrievedByPosition()
 
 void IndexedStyleSheetsTest::AddingSameStylesheetTwiceHasNoEffect()
 {
-    rtl::Reference<SfxStyleSheetBase> sheet1(new MockedStyleSheet(rtl::OUString("sheet1")));
+    rtl::Reference<SfxStyleSheetBase> sheet1(new MockedStyleSheet("sheet1"));
     IndexedStyleSheets iss;
     iss.AddStyleSheet(sheet1);
     CPPUNIT_ASSERT_EQUAL(1u, iss.GetNumberOfStyleSheets());
@@ -97,10 +94,8 @@ void IndexedStyleSheetsTest::AddingSameStylesheetTwiceHasNoEffect()
 
 void IndexedStyleSheetsTest::RemovedStyleSheetIsNotFound()
 {
-    rtl::OUString name1("name1");
-    rtl::OUString name2("name2");
-    rtl::Reference<SfxStyleSheetBase> sheet1(new MockedStyleSheet(name1));
-    rtl::Reference<SfxStyleSheetBase> sheet2(new MockedStyleSheet(name2));
+    rtl::Reference<SfxStyleSheetBase> sheet1(new MockedStyleSheet("name1"));
+    rtl::Reference<SfxStyleSheetBase> sheet2(new MockedStyleSheet("name2"));
     IndexedStyleSheets iss;
     iss.AddStyleSheet(sheet1);
     iss.AddStyleSheet(sheet2);
@@ -111,8 +106,8 @@ void IndexedStyleSheetsTest::RemovedStyleSheetIsNotFound()
 
 void IndexedStyleSheetsTest::RemovingStyleSheetWhichIsNotAvailableHasNoEffect()
 {
-    rtl::Reference<SfxStyleSheetBase> sheet1(new MockedStyleSheet(rtl::OUString("sheet1")));
-    rtl::Reference<SfxStyleSheetBase> sheet2(new MockedStyleSheet(rtl::OUString("sheet2")));
+    rtl::Reference<SfxStyleSheetBase> sheet1(new MockedStyleSheet("sheet1"));
+    rtl::Reference<SfxStyleSheetBase> sheet2(new MockedStyleSheet("sheet2"));
     IndexedStyleSheets iss;
     iss.AddStyleSheet(sheet1);
     CPPUNIT_ASSERT_EQUAL(1u, iss.GetNumberOfStyleSheets());
@@ -122,8 +117,8 @@ void IndexedStyleSheetsTest::RemovingStyleSheetWhichIsNotAvailableHasNoEffect()
 
 void IndexedStyleSheetsTest::StyleSheetsCanBeRetrievedByTheirName()
 {
-    rtl::OUString name1("name1");
-    rtl::OUString name2("name2");
+    OUString name1("name1");
+    OUString name2("name2");
     rtl::Reference<SfxStyleSheetBase> sheet1(new MockedStyleSheet(name1));
     rtl::Reference<SfxStyleSheetBase> sheet2(new MockedStyleSheet(name2));
     rtl::Reference<SfxStyleSheetBase> sheet3(new MockedStyleSheet(name1));
@@ -147,8 +142,8 @@ void IndexedStyleSheetsTest::StyleSheetsCanBeRetrievedByTheirName()
 
 void IndexedStyleSheetsTest::KnowsThatItStoresAStyleSheet()
 {
-    rtl::OUString name1("name1");
-    rtl::OUString name2("name2");
+    OUString const name1("name1");
+    OUString const name2("name2");
     rtl::Reference<SfxStyleSheetBase> sheet1(new MockedStyleSheet(name1));
     rtl::Reference<SfxStyleSheetBase> sheet2(new MockedStyleSheet(name1));
     rtl::Reference<SfxStyleSheetBase> sheet3(new MockedStyleSheet(name2));
@@ -169,31 +164,28 @@ void IndexedStyleSheetsTest::KnowsThatItStoresAStyleSheet()
 
 void IndexedStyleSheetsTest::PositionCanBeQueriedByFamily()
 {
-    rtl::OUString name1("name1");
-    rtl::OUString name2("name2");
-    rtl::OUString name3("name3");
-    rtl::Reference<SfxStyleSheetBase> sheet1(new MockedStyleSheet(name1, SFX_STYLE_FAMILY_CHAR));
-    rtl::Reference<SfxStyleSheetBase> sheet2(new MockedStyleSheet(name2, SFX_STYLE_FAMILY_PARA));
-    rtl::Reference<SfxStyleSheetBase> sheet3(new MockedStyleSheet(name3, SFX_STYLE_FAMILY_CHAR));
+    rtl::Reference<SfxStyleSheetBase> sheet1(new MockedStyleSheet("name1", SfxStyleFamily::Char));
+    rtl::Reference<SfxStyleSheetBase> sheet2(new MockedStyleSheet("name2", SfxStyleFamily::Para));
+    rtl::Reference<SfxStyleSheetBase> sheet3(new MockedStyleSheet("name3", SfxStyleFamily::Char));
 
     IndexedStyleSheets iss;
     iss.AddStyleSheet(sheet1);
     iss.AddStyleSheet(sheet2);
     iss.AddStyleSheet(sheet3);
 
-    const std::vector<unsigned>& v = iss.GetStyleSheetPositionsByFamily(SFX_STYLE_FAMILY_CHAR);
+    const std::vector<unsigned>& v = iss.GetStyleSheetPositionsByFamily(SfxStyleFamily::Char);
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Separation by family works.", static_cast<size_t>(2), v.size());
 
-    const std::vector<unsigned>& w = iss.GetStyleSheetPositionsByFamily(SFX_STYLE_FAMILY_ALL);
+    const std::vector<unsigned>& w = iss.GetStyleSheetPositionsByFamily(SfxStyleFamily::All);
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Wildcard works for family queries.", static_cast<size_t>(3), w.size());
 }
 
 void IndexedStyleSheetsTest::OnlyOneStyleSheetIsReturnedWhenReturnFirstIsUsed()
 {
-    rtl::OUString name("name1");
-    rtl::Reference<SfxStyleSheetBase> sheet1(new MockedStyleSheet(name, SFX_STYLE_FAMILY_CHAR));
-    rtl::Reference<SfxStyleSheetBase> sheet2(new MockedStyleSheet(name, SFX_STYLE_FAMILY_PARA));
-    rtl::Reference<SfxStyleSheetBase> sheet3(new MockedStyleSheet(name, SFX_STYLE_FAMILY_CHAR));
+    OUString name("name1");
+    rtl::Reference<SfxStyleSheetBase> sheet1(new MockedStyleSheet(name, SfxStyleFamily::Char));
+    rtl::Reference<SfxStyleSheetBase> sheet2(new MockedStyleSheet(name, SfxStyleFamily::Para));
+    rtl::Reference<SfxStyleSheetBase> sheet3(new MockedStyleSheet(name, SfxStyleFamily::Char));
 
     IndexedStyleSheets iss;
     iss.AddStyleSheet(sheet1);
@@ -203,7 +195,7 @@ void IndexedStyleSheetsTest::OnlyOneStyleSheetIsReturnedWhenReturnFirstIsUsed()
     DummyPredicate predicate; // returns always true, i.e., all style sheets match the predicate.
 
     std::vector<unsigned> v = iss.FindPositionsByNameAndPredicate(name, predicate,
-            IndexedStyleSheets::RETURN_FIRST);
+            IndexedStyleSheets::SearchBehavior::ReturnFirst);
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Only one style sheet is returned.", static_cast<size_t>(1), v.size());
 
     std::vector<unsigned> w = iss.FindPositionsByNameAndPredicate(name, predicate);

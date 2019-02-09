@@ -17,16 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xlescher.hxx"
+#include <xlescher.hxx>
 
 #include <com/sun/star/drawing/XControlShape.hpp>
 #include <com/sun/star/script/ScriptEventDescriptor.hpp>
-#include <svx/unoapi.hxx>
-#include "document.hxx"
-#include "xestream.hxx"
-#include "xistream.hxx"
-#include "xlroot.hxx"
-#include "xltools.hxx"
+#include <document.hxx>
+#include <xistream.hxx>
+#include <xlroot.hxx>
+#include <xltools.hxx>
 
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::UNO_QUERY;
@@ -45,20 +43,20 @@ double lclGetTwipsScale( MapUnit eMapUnit )
         Calc's strange definition of a point (1 inch == 72.27 points, instead
         of 72 points).
         NOTE: Calc's definition changed from TeX points (72.27) to PS points
-        (72), so the MAP_TWIP case now actually also delivers a scale of 1.0
+        (72), so the MapUnit::MapTwip case now actually also delivers a scale of 1.0
     */
     double fScale = 1.0;
     switch( eMapUnit )
     {
-        case MAP_TWIP:      fScale = 1;               break;  // Calc twips <-> real twips
-        case MAP_100TH_MM:  fScale = HMM_PER_TWIPS;   break;  // Calc twips <-> 1/100mm
+        case MapUnit::MapTwip:      fScale = 1;               break;  // Calc twips <-> real twips
+        case MapUnit::Map100thMM:  fScale = HMM_PER_TWIPS;   break;  // Calc twips <-> 1/100mm
         default:            OSL_FAIL( "lclGetTwipsScale - map unit not implemented" );
     }
     return fScale;
 }
 
 /** Calculates a drawing layer X position (in twips) from an object column position. */
-long lclGetXFromCol( ScDocument& rDoc, SCTAB nScTab, sal_uInt16 nXclCol, sal_uInt16 nOffset, double fScale )
+long lclGetXFromCol( const ScDocument& rDoc, SCTAB nScTab, sal_uInt16 nXclCol, sal_uInt16 nOffset, double fScale )
 {
     SCCOL nScCol = static_cast< SCCOL >( nXclCol );
     return static_cast< long >( fScale * (rDoc.GetColOffset( nScCol, nScTab ) +
@@ -66,7 +64,7 @@ long lclGetXFromCol( ScDocument& rDoc, SCTAB nScTab, sal_uInt16 nXclCol, sal_uIn
 }
 
 /** Calculates a drawing layer Y position (in twips) from an object row position. */
-long lclGetYFromRow( ScDocument& rDoc, SCTAB nScTab, sal_uInt16 nXclRow, sal_uInt16 nOffset, double fScale )
+long lclGetYFromRow( const ScDocument& rDoc, SCTAB nScTab, sal_uInt16 nXclRow, sal_uInt16 nOffset, double fScale )
 {
     SCROW nScRow = static_cast< SCROW >( nXclRow );
     return static_cast< long >( fScale * (rDoc.GetRowOffset( nScRow, nScTab ) +
@@ -75,7 +73,7 @@ long lclGetYFromRow( ScDocument& rDoc, SCTAB nScTab, sal_uInt16 nXclRow, sal_uIn
 
 /** Calculates an object column position from a drawing layer X position (in twips). */
 void lclGetColFromX(
-        ScDocument& rDoc, SCTAB nScTab, sal_uInt16& rnXclCol,
+        const ScDocument& rDoc, SCTAB nScTab, sal_uInt16& rnXclCol,
         sal_uInt16& rnOffset, sal_uInt16 nXclStartCol, sal_uInt16 nXclMaxCol,
         long& rnStartW, long nX, double fScale )
 {
@@ -94,7 +92,7 @@ void lclGetColFromX(
 
 /** Calculates an object row position from a drawing layer Y position (in twips). */
 void lclGetRowFromY(
-        ScDocument& rDoc, SCTAB nScTab, sal_uInt32& rnXclRow,
+        const ScDocument& rDoc, SCTAB nScTab, sal_uInt32& rnXclRow,
         sal_uInt32& rnOffset, sal_uInt32 nXclStartRow, sal_uInt32 nXclMaxRow,
         long& rnStartH, long nY, double fScale )
 {
@@ -119,11 +117,11 @@ void lclGetRowFromY(
 }
 
 /** Mirrors a rectangle (from LTR to RTL layout or vice versa). */
-void lclMirrorRectangle( Rectangle& rRect )
+void lclMirrorRectangle( tools::Rectangle& rRect )
 {
     long nLeft = rRect.Left();
-    rRect.Left() = -rRect.Right();
-    rRect.Right() = -nLeft;
+    rRect.SetLeft( -rRect.Right() );
+    rRect.SetRight( -nLeft );
 }
 
 sal_uInt16 lclGetEmbeddedScale( long nPageSize, sal_Int32 nPageScale, long nPos, double fPosScale )
@@ -141,15 +139,15 @@ XclObjAnchor::XclObjAnchor() :
 {
 }
 
-Rectangle XclObjAnchor::GetRect( const XclRoot& rRoot, SCTAB nScTab, MapUnit eMapUnit ) const
+tools::Rectangle XclObjAnchor::GetRect( const XclRoot& rRoot, SCTAB nScTab, MapUnit eMapUnit ) const
 {
     ScDocument& rDoc = rRoot.GetDoc();
     double fScale = lclGetTwipsScale( eMapUnit );
-    Rectangle aRect(
-        lclGetXFromCol( rDoc, nScTab, maFirst.mnCol, mnLX, fScale ),
-        lclGetYFromRow( rDoc, nScTab, maFirst.mnRow, mnTY, fScale ),
-        lclGetXFromCol( rDoc, nScTab, maLast.mnCol,  mnRX + 1, fScale ),
-        lclGetYFromRow( rDoc, nScTab, maLast.mnRow,  mnBY, fScale ) );
+    tools::Rectangle aRect(
+        lclGetXFromCol(rDoc, nScTab, std::min<SCCOL>(maFirst.mnCol, MAXCOL), mnLX, fScale),
+        lclGetYFromRow(rDoc, nScTab, std::min<SCROW>(maFirst.mnRow, MAXROW), mnTY, fScale),
+        lclGetXFromCol(rDoc, nScTab, std::min<SCCOL>(maLast.mnCol, MAXCOL),  mnRX + 1, fScale),
+        lclGetYFromRow(rDoc, nScTab, std::min<SCROW>(maLast.mnRow, MAXROW),  mnBY, fScale));
 
     // adjust coordinates in mirrored sheets
     if( rDoc.IsLayoutRTL( nScTab ) )
@@ -157,14 +155,14 @@ Rectangle XclObjAnchor::GetRect( const XclRoot& rRoot, SCTAB nScTab, MapUnit eMa
     return aRect;
 }
 
-void XclObjAnchor::SetRect( const XclRoot& rRoot, SCTAB nScTab, const Rectangle& rRect, MapUnit eMapUnit )
+void XclObjAnchor::SetRect( const XclRoot& rRoot, SCTAB nScTab, const tools::Rectangle& rRect, MapUnit eMapUnit )
 {
     ScDocument& rDoc = rRoot.GetDoc();
     sal_uInt16 nXclMaxCol = rRoot.GetXclMaxPos().Col();
     sal_uInt16 nXclMaxRow = static_cast<sal_uInt16>( rRoot.GetXclMaxPos().Row());
 
     // adjust coordinates in mirrored sheets
-    Rectangle aRect( rRect );
+    tools::Rectangle aRect( rRect );
     if( rDoc.IsLayoutRTL( nScTab ) )
         lclMirrorRectangle( aRect );
 
@@ -178,13 +176,13 @@ void XclObjAnchor::SetRect( const XclRoot& rRoot, SCTAB nScTab, const Rectangle&
 }
 
 void XclObjAnchor::SetRect( const Size& rPageSize, sal_Int32 nScaleX, sal_Int32 nScaleY,
-        const Rectangle& rRect, MapUnit eMapUnit )
+        const tools::Rectangle& rRect, MapUnit eMapUnit )
 {
     double fScale = 1.0;
     switch( eMapUnit )
     {
-        case MAP_TWIP:      fScale = HMM_PER_TWIPS; break;  // Calc twips -> 1/100mm
-        case MAP_100TH_MM:  fScale = 1.0;           break;  // Calc 1/100mm -> 1/100mm
+        case MapUnit::MapTwip:      fScale = HMM_PER_TWIPS; break;  // Calc twips -> 1/100mm
+        case MapUnit::Map100thMM:  fScale = 1.0;           break;  // Calc 1/100mm -> 1/100mm
         default:            OSL_FAIL( "XclObjAnchor::SetRect - map unit not implemented" );
     }
 
@@ -287,7 +285,7 @@ void XclObjTextData::ReadTxo8( XclImpStream& rStrm )
     mnFormatSize = rStrm.ReaduInt16();
 }
 
-Reference< XControlModel > XclControlHelper::GetControlModel( Reference< XShape > xShape )
+Reference< XControlModel > XclControlHelper::GetControlModel( Reference< XShape > const & xShape )
 {
     Reference< XControlModel > xCtrlModel;
     Reference< XControlShape > xCtrlShape( xShape, UNO_QUERY );
@@ -330,7 +328,7 @@ bool XclControlHelper::FillMacroDescriptor( ScriptEventDescriptor& rDescriptor,
 }
 
 OUString XclControlHelper::ExtractFromMacroDescriptor(
-        const ScriptEventDescriptor& rDescriptor, XclTbxEventType eEventType, SfxObjectShell* /*pShell*/ )
+        const ScriptEventDescriptor& rDescriptor, XclTbxEventType eEventType )
 {
     if( (!rDescriptor.ScriptCode.isEmpty()) &&
             rDescriptor.ScriptType.equalsIgnoreAsciiCase("Script") &&

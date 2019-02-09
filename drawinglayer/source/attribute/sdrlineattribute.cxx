@@ -35,7 +35,7 @@ namespace drawinglayer
             double                                  mfTransparence;     // [0.0 .. 1.0], 0.0==no transp.
             basegfx::BColor                         maColor;            // color of line
             css::drawing::LineCap                   meCap;              // BUTT, ROUND, or SQUARE
-            ::std::vector< double >                 maDotDashArray;     // array of double which defines the dot-dash pattern
+            std::vector< double >                 maDotDashArray;     // array of double which defines the dot-dash pattern
             double                                  mfFullDotDashLen;   // sum of maDotDashArray (for convenience)
 
             ImpSdrLineAttribute(
@@ -44,7 +44,7 @@ namespace drawinglayer
                 double fTransparence,
                 const basegfx::BColor& rColor,
                 css::drawing::LineCap eCap,
-                const ::std::vector< double >& rDotDashArray,
+                const std::vector< double >& rDotDashArray,
                 double fFullDotDashLen)
             :   meJoin(eJoin),
                 mfWidth(fWidth),
@@ -73,7 +73,7 @@ namespace drawinglayer
             double getTransparence() const { return mfTransparence; }
             const basegfx::BColor& getColor() const { return maColor; }
             css::drawing::LineCap getCap() const { return meCap; }
-            const ::std::vector< double >& getDotDashArray() const { return maDotDashArray; }
+            const std::vector< double >& getDotDashArray() const { return maDotDashArray; }
             double getFullDotDashLen() const { return mfFullDotDashLen; }
 
             bool operator==(const ImpSdrLineAttribute& rCandidate) const
@@ -99,7 +99,7 @@ namespace drawinglayer
             double fTransparence,
             const basegfx::BColor& rColor,
             css::drawing::LineCap eCap,
-            const ::std::vector< double >& rDotDashArray,
+            const std::vector< double >& rDotDashArray,
             double fFullDotDashLen)
         :   mpSdrLineAttribute(
                 ImpSdrLineAttribute(
@@ -119,25 +119,20 @@ namespace drawinglayer
         {
         }
 
-        SdrLineAttribute::SdrLineAttribute(const SdrLineAttribute& rCandidate)
-        :   mpSdrLineAttribute(rCandidate.mpSdrLineAttribute)
-        {
-        }
+        SdrLineAttribute::SdrLineAttribute(const SdrLineAttribute&) = default;
 
-        SdrLineAttribute::~SdrLineAttribute()
-        {
-        }
+        SdrLineAttribute::SdrLineAttribute(SdrLineAttribute&&) = default;
+
+        SdrLineAttribute::~SdrLineAttribute() = default;
 
         bool SdrLineAttribute::isDefault() const
         {
             return mpSdrLineAttribute.same_object(theGlobalDefault::get());
         }
 
-        SdrLineAttribute& SdrLineAttribute::operator=(const SdrLineAttribute& rCandidate)
-        {
-            mpSdrLineAttribute = rCandidate.mpSdrLineAttribute;
-            return *this;
-        }
+        SdrLineAttribute& SdrLineAttribute::operator=(const SdrLineAttribute&) = default;
+
+        SdrLineAttribute& SdrLineAttribute::operator=(SdrLineAttribute&&) = default;
 
         bool SdrLineAttribute::operator==(const SdrLineAttribute& rCandidate) const
         {
@@ -168,7 +163,7 @@ namespace drawinglayer
             return mpSdrLineAttribute->getColor();
         }
 
-        const ::std::vector< double >& SdrLineAttribute::getDotDashArray() const
+        const std::vector< double >& SdrLineAttribute::getDotDashArray() const
         {
             return mpSdrLineAttribute->getDotDashArray();
         }

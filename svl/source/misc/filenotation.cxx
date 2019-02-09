@@ -59,7 +59,7 @@ namespace svt
                 aSmartParser.SetSmartProtocol( INetProtocol::File );
                 if ( aSmartParser.SetSmartURL( _rSystemPath ) )
                 {
-                    m_sFileURL = aSmartParser.GetMainURL( INetURLObject::NO_DECODE );
+                    m_sFileURL = aSmartParser.GetMainURL( INetURLObject::DecodeMechanism::NONE );
                     osl_getSystemPathFromFileURL( m_sFileURL.pData, &m_sSystem.pData );
                     bSuccess = true;
                 }
@@ -70,11 +70,10 @@ namespace svt
         return bSuccess;
     }
 
-    bool OFileNotation::implInitWithURLNotation( const OUString& _rURL )
+    void OFileNotation::implInitWithURLNotation( const OUString& _rURL )
     {
         m_sFileURL = _rURL;
         osl_getSystemPathFromFileURL( _rURL.pData, &m_sSystem.pData );
-        return true;
     }
 
     void OFileNotation::construct( const OUString& _rUrlOrPath )
@@ -86,7 +85,8 @@ namespace svt
         {
             case INetProtocol::File:
                 // file URL
-                bSuccess = implInitWithURLNotation( _rUrlOrPath );
+                implInitWithURLNotation( _rUrlOrPath );
+                bSuccess = true;
                 break;
 
             case INetProtocol::NotValid:
@@ -103,10 +103,9 @@ namespace svt
         }
 
         OSL_ENSURE( bSuccess, "OFileNotation::OFileNotation: could not detect the format!" );
-        (void)bSuccess;
     }
 
-    OUString OFileNotation::get(NOTATION _eOutputNotation)
+    OUString OFileNotation::get(NOTATION _eOutputNotation) const
     {
         switch (_eOutputNotation)
         {

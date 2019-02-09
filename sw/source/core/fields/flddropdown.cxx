@@ -21,7 +21,6 @@
 
 #include <algorithm>
 
-#include <osl/diagnose.h>
 #include <svl/poolitem.hxx>
 #include <comphelper/sequence.hxx>
 
@@ -33,7 +32,7 @@ using namespace com::sun::star;
 using std::vector;
 
 SwDropDownFieldType::SwDropDownFieldType()
-    : SwFieldType(RES_DROPDOWN)
+    : SwFieldType(SwFieldIds::Dropdown)
 {
 }
 
@@ -62,7 +61,7 @@ SwDropDownField::~SwDropDownField()
 {
 }
 
-OUString SwDropDownField::Expand() const
+OUString SwDropDownField::ExpandImpl(SwRootFrame const*const) const
 {
     OUString sSelect = GetSelectedItem();
     if (sSelect.isEmpty())
@@ -77,9 +76,9 @@ OUString SwDropDownField::Expand() const
     return sSelect;
 }
 
-SwField * SwDropDownField::Copy() const
+std::unique_ptr<SwField> SwDropDownField::Copy() const
 {
-    return new SwDropDownField(*this);
+    return std::make_unique<SwDropDownField>(*this);
 }
 
 OUString SwDropDownField::GetPar1() const
@@ -125,7 +124,7 @@ uno::Sequence<OUString> SwDropDownField::GetItemSequence() const
 }
 
 
-bool SwDropDownField::SetSelectedItem(const OUString & rItem)
+void SwDropDownField::SetSelectedItem(const OUString & rItem)
 {
     vector<OUString>::const_iterator aIt =
         std::find(aValues.begin(), aValues.end(), rItem);
@@ -134,8 +133,6 @@ bool SwDropDownField::SetSelectedItem(const OUString & rItem)
         aSelectedItem = *aIt;
     else
         aSelectedItem.clear();
-
-    return (aIt != aValues.end());
 }
 
 void SwDropDownField::SetName(const OUString & rName)
@@ -172,11 +169,10 @@ bool SwDropDownField::QueryValue(::uno::Any &rVal, sal_uInt16 nWhich) const
         break;
     case FIELD_PROP_STRINGS:
         rVal <<= GetItemSequence();
-
         break;
 
     default:
-        OSL_FAIL("illegal property");
+        assert(false);
     }
     return true;
 }
@@ -216,7 +212,7 @@ bool SwDropDownField::PutValue(const uno::Any &rVal,
         break;
 
     default:
-        OSL_FAIL("illegal property");
+        assert(false);
     }
     return true;
 }

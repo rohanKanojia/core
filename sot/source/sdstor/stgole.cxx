@@ -17,17 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <algorithm>
 
-#include "rtl/string.h"
+#include <rtl/string.h>
 #include "stgole.hxx"
-#include "sot/storinfo.hxx"
-#include <memory>
+#include <sot/storinfo.hxx>
 #include <sot/exchange.hxx>
 
-#ifdef _MSC_VER
-#pragma warning(disable: 4342)
-#endif
 ///////////////////////// class StgInternalStream
 
 StgInternalStream::StgInternalStream( BaseStorage& rStg, const OUString& rName, bool bWr )
@@ -36,7 +33,7 @@ StgInternalStream::StgInternalStream( BaseStorage& rStg, const OUString& rName, 
     StreamMode nMode = bWr
                  ? StreamMode::WRITE | StreamMode::SHARE_DENYALL
                  : StreamMode::READ | StreamMode::SHARE_DENYWRITE | StreamMode::NOCREATE;
-    m_pStrm = rStg.OpenStream( rName, nMode );
+    m_pStrm.reset( rStg.OpenStream( rName, nMode ) );
 
     // set the error code right here in the stream
     SetError( rStg.GetError() );
@@ -45,10 +42,9 @@ StgInternalStream::StgInternalStream( BaseStorage& rStg, const OUString& rName, 
 
 StgInternalStream::~StgInternalStream()
 {
-    delete m_pStrm;
 }
 
-sal_uLong StgInternalStream::GetData( void* pData, sal_uLong nSize )
+std::size_t StgInternalStream::GetData(void* pData, std::size_t nSize)
 {
     if( m_pStrm )
     {
@@ -60,7 +56,7 @@ sal_uLong StgInternalStream::GetData( void* pData, sal_uLong nSize )
         return 0;
 }
 
-sal_uLong StgInternalStream::PutData( const void* pData, sal_uLong nSize )
+std::size_t StgInternalStream::PutData(const void* pData, std::size_t nSize)
 {
     if( m_pStrm )
     {
@@ -95,7 +91,7 @@ void StgInternalStream::Commit()
 ///////////////////////// class StgCompObjStream
 
 StgCompObjStream::StgCompObjStream( BaseStorage& rStg, bool bWr )
-    : StgInternalStream( rStg, OUString("\1CompObj"), bWr )
+    : StgInternalStream( rStg, "\1CompObj", bWr )
 {
     memset( &m_aClsId, 0, sizeof( ClsId ) );
     m_nCbFormat = SotClipboardFormatId::NONE;
@@ -106,12 +102,12 @@ bool StgCompObjStream::Load()
     memset( &m_aClsId, 0, sizeof( ClsId ) );
     m_nCbFormat = SotClipboardFormatId::NONE;
     m_aUserName.clear();
-    if( GetError() != SVSTREAM_OK )
+    if( GetError() != ERRCODE_NONE )
         return false;
-    Seek( 8L );     // skip the first part
+    Seek( 8 );     // skip the first part
     sal_Int32 nMarker = 0;
     ReadInt32( nMarker );
-    if( nMarker == -1L )
+    if( nMarker == -1 )
     {
         ReadClsId( *this, m_aClsId );
         sal_Int32 nLen1 = 0;
@@ -119,11 +115,11 @@ bool StgCompObjStream::Load()
         if ( nLen1 > 0 )
         {
             // higher bits are ignored
-            sal_uLong nStrLen = ::std::min( nLen1, (sal_Int32)0xFFFE );
+            sal_uLong nStrLen = ::std::min( nLen1, sal_Int32(0xFFFE) );
 
             std::unique_ptr<sal_Char[]> p(new sal_Char[ nStrLen+1 ]);
             p[nStrLen] = 0;
-            if( Read( p.get(), nStrLen ) == nStrLen )
+            if (ReadBytes( p.get(), nStrLen ) == nStrLen)
             {
                 //The encoding here is "ANSI", which is pretty useless seeing as
                 //the actual codepage used doesn't seem to be specified/stored
@@ -131,26 +127,26 @@ bool StgCompObjStream::Load()
                 //all platforms and envs
                 //https://bz.apache.org/ooo/attachment.cgi?id=68668
                 //for a good edge-case example
-                m_aUserName = nStrLen ? OUString( p.get(), nStrLen, RTL_TEXTENCODING_MS_1252 ) : OUString();
+                m_aUserName = OUString(p.get(), nStrLen, RTL_TEXTENCODING_MS_1252);
                 m_nCbFormat = ReadClipboardFormat( *this );
             }
             else
                 SetError( SVSTREAM_GENERALERROR );
         }
     }
-    return GetError() == SVSTREAM_OK;
+    return GetError() == ERRCODE_NONE;
 }
 
 bool StgCompObjStream::Store()
 {
-    if( GetError() != SVSTREAM_OK )
+    if( GetError() != ERRCODE_NONE )
         return false;
-    Seek( 0L );
+    Seek( 0 );
     OString aAsciiUserName(OUStringToOString(m_aUserName, RTL_TEXTENCODING_MS_1252));
     WriteInt16( 1 );          // Version?
     WriteInt16( -2 );                     // 0xFFFE = Byte Order Indicator
     WriteInt32( 0x0A03 );         // Windows 3.10
-    WriteInt32( -1L );
+    WriteInt32( -1 );
     WriteClsId( *this, m_aClsId );             // Class ID
     WriteInt32( aAsciiUserName.getLength() + 1 );
     WriteCharPtr( aAsciiUserName.getStr() );
@@ -158,30 +154,29 @@ bool StgCompObjStream::Store()
     WriteClipboardFormat( *this, m_nCbFormat );
     WriteInt32( 0 );             // terminator
     Commit();
-    return GetError() == SVSTREAM_OK;
+    return GetError() == ERRCODE_NONE;
 }
 
 /////////////////////////// class StgOleStream
 
-StgOleStream::StgOleStream( BaseStorage& rStg, bool bWr )
-    : StgInternalStream( rStg, OUString("\1Ole"), bWr )
+StgOleStream::StgOleStream( BaseStorage& rStg )
+    : StgInternalStream( rStg, "\1Ole", true )
 {
-    m_nFlags = 0;
 }
 
 bool StgOleStream::Store()
 {
-    if( GetError() != SVSTREAM_OK )
+    if( GetError() != ERRCODE_NONE )
         return false;
 
-    Seek( 0L );
+    Seek( 0 );
     WriteInt32( 0x02000001 );         // OLE version, format
-    WriteInt32( m_nFlags );             // Object flags
+    WriteInt32( 0 );             // Object flags
     WriteInt32( 0 );                  // Update Options
     WriteInt32( 0 );                  // reserved
     WriteInt32( 0 );                 // Moniker 1
     Commit();
-    return GetError() == SVSTREAM_OK;
+    return GetError() == ERRCODE_NONE;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

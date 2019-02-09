@@ -14,10 +14,9 @@
 #include "scdllapi.h"
 #include "global.hxx"
 
-#include <com/sun/star/sheet/GeneralFunction.hpp>
-
 class SvNumberFormatter;
 struct ScDPNumGroupInfo;
+enum class ScGeneralFunction;
 
 class ScDPUtil
 {
@@ -46,11 +45,11 @@ public:
 
     static sal_Int32 getDatePartValue(
         double fValue, const ScDPNumGroupInfo* pInfo, sal_Int32 nDatePart,
-        SvNumberFormatter* pFormatter);
+        const SvNumberFormatter* pFormatter);
 
     static OUString getDisplayedMeasureName(const OUString& rName, ScSubTotalFunc eFunc);
 
-    static ScSubTotalFunc toSubTotalFunc(css::sheet::GeneralFunction eGenFunc);
+    static ScSubTotalFunc toSubTotalFunc(ScGeneralFunction eGenFunc);
 };
 
 #endif

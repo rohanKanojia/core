@@ -28,7 +28,6 @@
 #include <com/sun/star/frame/DispatchResultState.hpp>
 
 #include <vcl/svapp.hxx>
-#include <comphelper/processfactory.hxx>
 
 namespace framework{
 
@@ -63,7 +62,7 @@ SystemExec::~SystemExec()
 
 css::uno::Reference< css::frame::XDispatch > SAL_CALL SystemExec::queryDispatch( const css::util::URL&  aURL    ,
                                                                                  const OUString&,
-                                                                                       sal_Int32 ) throw( css::uno::RuntimeException, std::exception )
+                                                                                       sal_Int32 )
 {
     css::uno::Reference< css::frame::XDispatch > xDispatcher;
     if (aURL.Complete.startsWith(PROTOCOL_VALUE))
@@ -71,13 +70,13 @@ css::uno::Reference< css::frame::XDispatch > SAL_CALL SystemExec::queryDispatch(
     return xDispatcher;
 }
 
-css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL SystemExec::queryDispatches( const css::uno::Sequence< css::frame::DispatchDescriptor >& lDescriptor ) throw( css::uno::RuntimeException, std::exception )
+css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL SystemExec::queryDispatches( const css::uno::Sequence< css::frame::DispatchDescriptor >& lDescriptor )
 {
     sal_Int32 nCount = lDescriptor.getLength();
     css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > lDispatcher( nCount );
     for( sal_Int32 i=0; i<nCount; ++i )
     {
-        lDispatcher[i] = this->queryDispatch(
+        lDispatcher[i] = queryDispatch(
                             lDescriptor[i].FeatureURL,
                             lDescriptor[i].FrameName,
                             lDescriptor[i].SearchFlags);
@@ -86,14 +85,14 @@ css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL Syst
 }
 
 void SAL_CALL SystemExec::dispatch( const css::util::URL&                                  aURL       ,
-                                    const css::uno::Sequence< css::beans::PropertyValue >& lArguments ) throw( css::uno::RuntimeException, std::exception )
+                                    const css::uno::Sequence< css::beans::PropertyValue >& lArguments )
 {
     dispatchWithNotification(aURL, lArguments, css::uno::Reference< css::frame::XDispatchResultListener >());
 }
 
 void SAL_CALL SystemExec::dispatchWithNotification( const css::util::URL&                                             aURL      ,
                                                     const css::uno::Sequence< css::beans::PropertyValue >&,
-                                                    const css::uno::Reference< css::frame::XDispatchResultListener >& xListener ) throw( css::uno::RuntimeException, std::exception )
+                                                    const css::uno::Reference< css::frame::XDispatchResultListener >& xListener )
 {
     // convert "systemexec:file:///c:/temp/test.html" => "file:///c:/temp/test.html"
     sal_Int32 c = aURL.Complete.getLength()-PROTOCOL_LENGTH;
@@ -110,7 +109,7 @@ void SAL_CALL SystemExec::dispatchWithNotification( const css::util::URL&       
     {
         css::uno::Reference< css::util::XStringSubstitution > xPathSubst( css::util::PathSubstitution::create(m_xContext) );
 
-        OUString sSystemURL = xPathSubst->substituteVariables(sSystemURLWithVariables, sal_True); // sal_True force an exception if unknown variables exists !
+        OUString sSystemURL = xPathSubst->substituteVariables(sSystemURLWithVariables, true); // sal_True force an exception if unknown variables exists !
 
         css::uno::Reference< css::system::XSystemShellExecute > xShell = css::system::SystemShellExecute::create( m_xContext );
 
@@ -124,13 +123,13 @@ void SAL_CALL SystemExec::dispatchWithNotification( const css::util::URL&       
 }
 
 void SAL_CALL SystemExec::addStatusListener( const css::uno::Reference< css::frame::XStatusListener >&,
-                                             const css::util::URL& ) throw( css::uno::RuntimeException, std::exception )
+                                             const css::util::URL& )
 {
     // not supported yet
 }
 
 void SAL_CALL SystemExec::removeStatusListener( const css::uno::Reference< css::frame::XStatusListener >&,
-                                                const css::util::URL& ) throw( css::uno::RuntimeException, std::exception )
+                                                const css::util::URL& )
 {
     // not supported yet
 }

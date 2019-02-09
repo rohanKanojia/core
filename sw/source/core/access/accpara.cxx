@@ -32,19 +32,20 @@
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
 #include <com/sun/star/accessibility/AccessibleTextType.hpp>
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <unotools/accessiblestatesethelper.hxx>
+#include <com/sun/star/i18n/Boundary.hpp>
 #include <com/sun/star/i18n/CharacterIteratorMode.hpp>
 #include <com/sun/star/i18n/WordType.hpp>
 #include <com/sun/star/i18n/XBreakIterator.hpp>
 #include <com/sun/star/beans/UnknownPropertyException.hpp>
 #include <breakit.hxx>
-#include <accpara.hxx>
-#include <access.hrc>
-#include <accportions.hxx>
+#include "accpara.hxx"
+#include "accportions.hxx"
 #include <sfx2/viewsh.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/dispatch.hxx>
@@ -54,8 +55,8 @@
 #include <doc.hxx>
 #include <IDocumentRedlineAccess.hxx>
 #include <txtatr.hxx>
-#include <acchyperlink.hxx>
-#include <acchypertextdata.hxx>
+#include "acchyperlink.hxx"
+#include "acchypertextdata.hxx"
 #include <unotools/accessiblerelationsethelper.hxx>
 #include <com/sun/star/accessibility/AccessibleRelationType.hpp>
 #include <section.hxx>
@@ -67,8 +68,8 @@
 #include <fmtfld.hxx>
 #include <modcfg.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include "swmodule.hxx"
-#include "redline.hxx"
+#include <swmodule.hxx>
+#include <redline.hxx>
 #include <com/sun/star/awt/FontWeight.hpp>
 #include <com/sun/star/awt/FontStrikeout.hpp>
 #include <com/sun/star/awt/FontSlant.hpp>
@@ -78,23 +79,22 @@
 #include <frmatr.hxx>
 #include <unosett.hxx>
 #include <paratr.hxx>
-#include <com/sun/star/container/XIndexReplace.hpp>
 #include <unomap.hxx>
 #include <unoprnms.hxx>
 #include <com/sun/star/text/WritingMode2.hpp>
 #include <viewimp.hxx>
-#include <textmarkuphelper.hxx>
-#include <parachangetrackinginfo.hxx>
+#include "textmarkuphelper.hxx"
+#include "parachangetrackinginfo.hxx"
 #include <com/sun/star/text/TextMarkupType.hpp>
-#include <comphelper/servicehelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <svx/colorwindow.hxx>
+#include <editeng/editids.hrc>
 
 #include <reffld.hxx>
 #include <expfld.hxx>
 #include <flddat.hxx>
-#include <fldui.hrc>
 #include "../../uibase/inc/fldmgr.hxx"
-#include "fldbas.hxx"      // SwField
+#include <fldbas.hxx>      // SwField
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
@@ -118,18 +118,7 @@ namespace com { namespace sun { namespace star {
 const sal_Char sServiceName[] = "com.sun.star.text.AccessibleParagraphView";
 const sal_Char sImplementationName[] = "com.sun.star.comp.Writer.SwAccessibleParagraphView";
 
-const SwTextNode* SwAccessibleParagraph::GetTextNode() const
-{
-    const SwFrame* pFrame = GetFrame();
-    OSL_ENSURE( pFrame->IsTextFrame(), "The text frame has mutated!" );
-
-    const SwTextNode* pNode = static_cast<const SwTextFrame*>(pFrame)->GetTextNode();
-    OSL_ENSURE( pNode != nullptr, "A text frame without a text node." );
-
-    return pNode;
-}
-
-OUString SwAccessibleParagraph::GetString()
+OUString const & SwAccessibleParagraph::GetString()
 {
     return GetPortionData().GetAccessibleString();
 }
@@ -149,20 +138,21 @@ sal_Int32 SwAccessibleParagraph::GetCaretPos()
 
     if( pCaret != nullptr )
     {
-        const SwTextNode* pNode = GetTextNode();
+        SwTextFrame const*const pTextFrame(static_cast<SwTextFrame const*>(GetFrame()));
+        assert(pTextFrame);
 
         // check whether the point points into 'our' node
         SwPosition* pPoint = pCaret->GetPoint();
-        if( pNode->GetIndex() == pPoint->nNode.GetIndex() )
+        if (sw::FrameContainsNode(*pTextFrame, pPoint->nNode.GetIndex()))
         {
             // same node? Then check whether it's also within 'our' part
             // of the paragraph
-            const sal_Int32 nIndex = pPoint->nContent.GetIndex();
+            const TextFrameIndex nIndex = pTextFrame->MapModelToViewPos(*pPoint);
             if(!GetPortionData().IsValidCorePosition( nIndex ) ||
-                ( GetPortionData().IsZeroCorePositionData() && nIndex== 0) )
+                (GetPortionData().IsZeroCorePositionData()
+                  && nIndex == TextFrameIndex(0)))
             {
-                const SwTextFrame *pTextFrame = dynamic_cast<const SwTextFrame*>( GetFrame()  );
-                bool bFormat = (pTextFrame && pTextFrame->HasPara());
+                bool bFormat = pTextFrame->HasPara();
                 if(bFormat)
                 {
                     ClearPortionData();
@@ -195,129 +185,6 @@ sal_Int32 SwAccessibleParagraph::GetCaretPos()
     return nRet;
 }
 
-bool SwAccessibleParagraph::GetSelection(
-    sal_Int32& nStart, sal_Int32& nEnd)
-{
-    bool bRet = false;
-    nStart = -1;
-    nEnd = -1;
-
-    // get the selection, and test whether it affects our text node
-    SwPaM* pCursor = GetCursor( true ); // #i27301# - consider adjusted method signature
-    if( pCursor != nullptr )
-    {
-        // get SwPosition for my node
-        const SwTextNode* pNode = GetTextNode();
-        sal_uLong nHere = pNode->GetIndex();
-
-        // iterate over ring
-        for(SwPaM& rTmpCursor : pCursor->GetRingContainer())
-        {
-            // ignore, if no mark
-            if( rTmpCursor.HasMark() )
-            {
-                // check whether nHere is 'inside' pCursor
-                SwPosition* pStart = rTmpCursor.Start();
-                sal_uLong nStartIndex = pStart->nNode.GetIndex();
-                SwPosition* pEnd = rTmpCursor.End();
-                sal_uLong nEndIndex = pEnd->nNode.GetIndex();
-                if( ( nHere >= nStartIndex ) &&
-                    ( nHere <= nEndIndex )      )
-                {
-                    // translate start and end positions
-
-                    // start position
-                    sal_Int32 nLocalStart = -1;
-                    if( nHere > nStartIndex )
-                    {
-                        // selection starts in previous node:
-                        // then our local selection starts with the paragraph
-                        nLocalStart = 0;
-                    }
-                    else
-                    {
-                        OSL_ENSURE( nHere == nStartIndex,
-                                    "miscalculated index" );
-
-                        // selection starts in this node:
-                        // then check whether it's before or inside our part of
-                        // the paragraph, and if so, get the proper position
-                        const sal_Int32 nCoreStart = pStart->nContent.GetIndex();
-                        if( nCoreStart <
-                            GetPortionData().GetFirstValidCorePosition() )
-                        {
-                            nLocalStart = 0;
-                        }
-                        else if( nCoreStart <=
-                                 GetPortionData().GetLastValidCorePosition() )
-                        {
-                            OSL_ENSURE(
-                                GetPortionData().IsValidCorePosition(
-                                                                  nCoreStart ),
-                                 "problem determining valid core position" );
-
-                            nLocalStart =
-                                GetPortionData().GetAccessiblePosition(
-                                                                  nCoreStart );
-                        }
-                    }
-
-                    // end position
-                    sal_Int32 nLocalEnd = -1;
-                    if( nHere < nEndIndex )
-                    {
-                        // selection ends in following node:
-                        // then our local selection extends to the end
-                        nLocalEnd = GetPortionData().GetAccessibleString().
-                                                                   getLength();
-                    }
-                    else
-                    {
-                        OSL_ENSURE( nHere == nEndIndex,
-                                    "miscalculated index" );
-
-                        // selection ends in this node: then select everything
-                        // before our part of the node
-                        const sal_Int32 nCoreEnd = pEnd->nContent.GetIndex();
-                        if( nCoreEnd >
-                                GetPortionData().GetLastValidCorePosition() )
-                        {
-                            // selection extends beyond out part of this para
-                            nLocalEnd = GetPortionData().GetAccessibleString().
-                                                                   getLength();
-                        }
-                        else if( nCoreEnd >=
-                                 GetPortionData().GetFirstValidCorePosition() )
-                        {
-                            // selection is inside our part of this para
-                            OSL_ENSURE(
-                                GetPortionData().IsValidCorePosition(
-                                                                  nCoreEnd ),
-                                 "problem determining valid core position" );
-
-                            nLocalEnd = GetPortionData().GetAccessiblePosition(
-                                                                   nCoreEnd );
-                        }
-                    }
-
-                    if( ( nLocalStart != -1 ) && ( nLocalEnd != -1 ) )
-                    {
-                        nStart = nLocalStart;
-                        nEnd = nLocalEnd;
-                        bRet = true;
-                    }
-                }
-                // else: this PaM doesn't point to this paragraph
-            }
-            // else: this PaM is collapsed and doesn't select anything
-            if(bRet)
-                break;
-        }
-    // else: nocursor -> no selection
-    }
-    return bRet;
-}
-
 // #i27301# - new parameter <_bForSelection>
 SwPaM* SwAccessibleParagraph::GetCursor( const bool _bForSelection )
 {
@@ -345,7 +212,8 @@ SwPaM* SwAccessibleParagraph::GetCursor( const bool _bForSelection )
 
 bool SwAccessibleParagraph::IsHeading() const
 {
-    const SwTextNode *pTextNd = GetTextNode();
+    SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+    const SwTextNode *pTextNd = pFrame->GetTextNodeForParaProps();
     return pTextNd->IsOutline();
 }
 
@@ -368,10 +236,11 @@ void SwAccessibleParagraph::GetStates(
 
     // FOCUSED (simulates node index of cursor)
     SwPaM* pCaret = GetCursor( false ); // #i27301# - consider adjusted method signature
-    const SwTextNode* pTextNd = GetTextNode();
-    if( pCaret != nullptr && pTextNd != nullptr &&
-        pTextNd->GetIndex() == pCaret->GetPoint()->nNode.GetIndex() &&
-        nOldCaretPos != -1)
+    SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+    assert(pFrame);
+    if (pCaret != nullptr &&
+        sw::FrameContainsNode(*pFrame, pCaret->GetPoint()->nNode.GetIndex()) &&
+        m_nOldCaretPos != -1)
     {
         vcl::Window *pWin = GetWindow();
         if( pWin && pWin->HasFocus() )
@@ -381,7 +250,7 @@ void SwAccessibleParagraph::GetStates(
     }
 }
 
-void SwAccessibleParagraph::_InvalidateContent( bool bVisibleDataFired )
+void SwAccessibleParagraph::InvalidateContent_( bool bVisibleDataFired )
 {
     OUString sOldText( GetString() );
 
@@ -396,9 +265,9 @@ void SwAccessibleParagraph::_InvalidateContent( bool bVisibleDataFired )
         aEvent.EventId = AccessibleEventId::TEXT_CHANGED;
 
         // determine exact changes between sOldText and rText
-        comphelper::OCommonAccessibleText::implInitTextChangedEvent(
-            sOldText, rText,
-            aEvent.OldValue, aEvent.NewValue );
+        (void)comphelper::OCommonAccessibleText::implInitTextChangedEvent(sOldText, rText,
+                                                                          aEvent.OldValue,
+                                                                          aEvent.NewValue);
 
         FireAccessibleEvent( aEvent );
         uno::Reference< XAccessible > xparent = getAccessibleParent();
@@ -421,13 +290,13 @@ void SwAccessibleParagraph::_InvalidateContent( bool bVisibleDataFired )
 
     bool bNewIsHeading = IsHeading();
     //Get the real heading level, Heading1 ~ Heading10
-    nHeadingLevel = GetRealHeadingLevel();
+    m_nHeadingLevel = GetRealHeadingLevel();
     bool bOldIsHeading;
     {
         osl::MutexGuard aGuard( m_Mutex );
-        bOldIsHeading = bIsHeading;
-        if( bIsHeading != bNewIsHeading )
-            bIsHeading = bNewIsHeading;
+        bOldIsHeading = m_bIsHeading;
+        if( m_bIsHeading != bNewIsHeading )
+            m_bIsHeading = bNewIsHeading;
     }
 
     if( bNewIsHeading != bOldIsHeading )
@@ -445,9 +314,9 @@ void SwAccessibleParagraph::_InvalidateContent( bool bVisibleDataFired )
         OUString sOldDesc;
         {
             osl::MutexGuard aGuard( m_Mutex );
-            sOldDesc = sDesc;
-            if( sDesc != sNewDesc )
-                sDesc = sNewDesc;
+            sOldDesc = m_sDesc;
+            if( m_sDesc != sNewDesc )
+                m_sDesc = sNewDesc;
         }
 
         if( sNewDesc != sOldDesc )
@@ -463,15 +332,15 @@ void SwAccessibleParagraph::_InvalidateContent( bool bVisibleDataFired )
     }
 }
 
-void SwAccessibleParagraph::_InvalidateCursorPos()
+void SwAccessibleParagraph::InvalidateCursorPos_()
 {
     // The text is changed
     sal_Int32 nNew = GetCaretPos();
     sal_Int32 nOld;
     {
         osl::MutexGuard aGuard( m_Mutex );
-        nOld = nOldCaretPos;
-        nOldCaretPos = nNew;
+        nOld = m_nOldCaretPos;
+        m_nOldCaretPos = nNew;
     }
     if( -1 != nNew )
     {
@@ -482,37 +351,38 @@ void SwAccessibleParagraph::_InvalidateCursorPos()
     }
 
     vcl::Window *pWin = GetWindow();
-    if( nOld != nNew )
+    if( nOld == nNew )
+        return;
+
+    // The cursor's node position is simulated by the focus!
+    if( pWin && pWin->HasFocus() && -1 == nOld )
+        FireStateChangedEvent( AccessibleStateType::FOCUSED, true );
+
+    AccessibleEventObject aEvent;
+    aEvent.EventId = AccessibleEventId::CARET_CHANGED;
+    aEvent.OldValue <<= nOld;
+    aEvent.NewValue <<= nNew;
+
+    FireAccessibleEvent( aEvent );
+
+    if( pWin && pWin->HasFocus() && -1 == nNew )
+        FireStateChangedEvent( AccessibleStateType::FOCUSED, false );
+    //To send TEXT_SELECTION_CHANGED event
+    sal_Int32 nStart=0;
+    sal_Int32 nEnd  =0;
+    bool bCurSelection = GetSelection(nStart,nEnd);
+    if(m_bLastHasSelection || bCurSelection )
     {
-        // The cursor's node position is simulated by the focus!
-        if( pWin && pWin->HasFocus() && -1 == nOld )
-            FireStateChangedEvent( AccessibleStateType::FOCUSED, true );
-
-        AccessibleEventObject aEvent;
-        aEvent.EventId = AccessibleEventId::CARET_CHANGED;
-        aEvent.OldValue <<= nOld;
-        aEvent.NewValue <<= nNew;
-
-        FireAccessibleEvent( aEvent );
-
-        if( pWin && pWin->HasFocus() && -1 == nNew )
-            FireStateChangedEvent( AccessibleStateType::FOCUSED, false );
-        //To send TEXT_SELECTION_CHANGED event
-        sal_Int32 nStart=0;
-        sal_Int32 nEnd  =0;
-        bool bCurSelection=GetSelection(nStart,nEnd);
-        if(m_bLastHasSelection || bCurSelection )
-        {
-            aEvent.EventId = AccessibleEventId::TEXT_SELECTION_CHANGED;
-            aEvent.OldValue <<= uno::Any();
-            aEvent.NewValue <<= uno::Any();
-            FireAccessibleEvent(aEvent);
-        }
-        m_bLastHasSelection =bCurSelection;
+        aEvent.EventId = AccessibleEventId::TEXT_SELECTION_CHANGED;
+        aEvent.OldValue.clear();
+        aEvent.NewValue.clear();
+        FireAccessibleEvent(aEvent);
     }
+    m_bLastHasSelection =bCurSelection;
+
 }
 
-void SwAccessibleParagraph::_InvalidateFocus()
+void SwAccessibleParagraph::InvalidateFocus_()
 {
     vcl::Window *pWin = GetWindow();
     if( pWin )
@@ -520,7 +390,7 @@ void SwAccessibleParagraph::_InvalidateFocus()
         sal_Int32 nPos;
         {
             osl::MutexGuard aGuard( m_Mutex );
-            nPos = nOldCaretPos;
+            nPos = m_nOldCaretPos;
         }
         OSL_ENSURE( nPos != -1, "focus object should be selected" );
 
@@ -530,51 +400,45 @@ void SwAccessibleParagraph::_InvalidateFocus()
 }
 
 SwAccessibleParagraph::SwAccessibleParagraph(
-        SwAccessibleMap* pInitMap,
+        std::shared_ptr<SwAccessibleMap> const& pInitMap,
         const SwTextFrame& rTextFrame )
-    : SwClient( const_cast<SwTextNode*>(rTextFrame.GetTextNode()) ) // #i108125#
-    , SwAccessibleContext( pInitMap, AccessibleRole::PARAGRAPH, &rTextFrame )
-    , sDesc()
-    , pPortionData( nullptr )
-    , pHyperTextData( nullptr )
-    , nOldCaretPos( -1 )
-    , bIsHeading( false )
+    : SwAccessibleContext( pInitMap, AccessibleRole::PARAGRAPH, &rTextFrame )
+    , m_sDesc()
+    , m_nOldCaretPos( -1 )
+    , m_bIsHeading( false )
     //Get the real heading level, Heading1 ~ Heading10
-    , nHeadingLevel (-1)
-    , aSelectionHelper( *this )
+    , m_nHeadingLevel (-1)
+    , m_aSelectionHelper( *this )
     , mpParaChangeTrackInfo( new SwParaChangeTrackingInfo( rTextFrame ) ) // #i108125#
     , m_bLastHasSelection(false)  //To add TEXT_SELECTION_CHANGED event
 {
-    SolarMutexGuard aGuard;
-
-    bIsHeading = IsHeading();
+    StartListening(const_cast<SwTextFrame&>(rTextFrame));
+    m_bIsHeading = IsHeading();
     //Get the real heading level, Heading1 ~ Heading10
-    nHeadingLevel = GetRealHeadingLevel();
+    m_nHeadingLevel = GetRealHeadingLevel();
     SetName( OUString() ); // set an empty accessibility name for paragraphs
 
     // If this object has the focus, then it is remembered by the map itself.
-    nOldCaretPos = GetCaretPos();
+    m_nOldCaretPos = GetCaretPos();
 }
 
 SwAccessibleParagraph::~SwAccessibleParagraph()
 {
     SolarMutexGuard aGuard;
 
-    delete pPortionData;
-    delete pHyperTextData;
-    delete mpParaChangeTrackInfo; // #i108125#
-    if(GetRegisteredIn())
-        GetRegisteredIn()->Remove(this);
+    m_pPortionData.reset();
+    m_pHyperTextData.reset();
+    mpParaChangeTrackInfo.reset(); // #i108125#
+    EndListeningAll();
 }
 
 bool SwAccessibleParagraph::HasCursor()
 {
     osl::MutexGuard aGuard( m_Mutex );
-    return nOldCaretPos != -1;
+    return m_nOldCaretPos != -1;
 }
 
 void SwAccessibleParagraph::UpdatePortionData()
-    throw( uno::RuntimeException )
 {
     // obtain the text frame
     OSL_ENSURE( GetFrame() != nullptr, "The text frame has vanished!" );
@@ -582,21 +446,17 @@ void SwAccessibleParagraph::UpdatePortionData()
     const SwTextFrame* pFrame = static_cast<const SwTextFrame*>( GetFrame() );
 
     // build new portion data
-    delete pPortionData;
-    pPortionData = new SwAccessiblePortionData(
-        pFrame->GetTextNode(), GetMap()->GetShell()->GetViewOptions() );
-    pFrame->VisitPortions( *pPortionData );
+    m_pPortionData.reset( new SwAccessiblePortionData(
+        pFrame, GetMap()->GetShell()->GetViewOptions()) );
+    pFrame->VisitPortions( *m_pPortionData );
 
-    OSL_ENSURE( pPortionData != nullptr, "UpdatePortionData() failed" );
+    OSL_ENSURE( m_pPortionData != nullptr, "UpdatePortionData() failed" );
 }
 
 void SwAccessibleParagraph::ClearPortionData()
 {
-    delete pPortionData;
-    pPortionData = nullptr;
-
-    delete pHyperTextData;
-    pHyperTextData = nullptr;
+    m_pPortionData.reset();
+    m_pHyperTextData.reset();
 }
 
 void SwAccessibleParagraph::ExecuteAtViewShell( sal_uInt16 nSlot )
@@ -633,17 +493,17 @@ SwXTextPortion* SwAccessibleParagraph::CreateUnoPortion(
                 IsValidRange(nStartIndex, nEndIndex, GetString().getLength()),
                 "please check parameters before calling this method" );
 
-    const sal_Int32 nStart = GetPortionData().GetModelPosition( nStartIndex );
-    const sal_Int32 nEnd = (nEndIndex == -1) ? (nStart + 1) :
-                        GetPortionData().GetModelPosition( nEndIndex );
+    const TextFrameIndex nStart = GetPortionData().GetCoreViewPosition(nStartIndex);
+    const TextFrameIndex nEnd = (nEndIndex == -1)
+            ? (nStart + TextFrameIndex(1))
+            : GetPortionData().GetCoreViewPosition(nEndIndex);
 
     // create UNO cursor
-    SwTextNode* pTextNode = const_cast<SwTextNode*>( GetTextNode() );
-    SwIndex aIndex( pTextNode, nStart );
-    SwPosition aStartPos( *pTextNode, aIndex );
-    auto pUnoCursor(pTextNode->GetDoc()->CreateUnoCursor( aStartPos ));
+    SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+    SwPosition aStartPos(pFrame->MapViewToModelPos(nStart));
+    auto pUnoCursor(const_cast<SwDoc&>(pFrame->GetDoc()).CreateUnoCursor(aStartPos));
     pUnoCursor->SetMark();
-    pUnoCursor->GetMark()->nContent = nEnd;
+    *pUnoCursor->GetMark() = pFrame->MapViewToModelPos(nEnd);
 
     // create a (dummy) text portion to be returned
     uno::Reference<text::XText> aEmpty;
@@ -673,55 +533,15 @@ bool SwAccessibleParagraph::IsValidRange(
     return IsValidPosition(nBegin, nLength) && IsValidPosition(nEnd, nLength);
 }
 
-SwTOXSortTabBase* SwAccessibleParagraph::GetTOXSortTabBase()
-{
-    const SwTextNode* pTextNd = GetTextNode();
-    if( pTextNd )
-    {
-        const SwSectionNode * pSectNd = pTextNd->FindSectionNode();
-        if( pSectNd )
-        {
-            const SwSection * pSect = &pSectNd->GetSection();
-            const  SwTOXBaseSection *pTOXBaseSect = static_cast<const SwTOXBaseSection *>(pSect);
-            if( pSect->GetType() == TOX_CONTENT_SECTION )
-            {
-                SwTOXSortTabBase* pSortBase = nullptr;
-                size_t nSize = pTOXBaseSect->GetTOXSortTabBases().size();
-
-                for(size_t nIndex = 0; nIndex<nSize; nIndex++ )
-                {
-                    pSortBase = pTOXBaseSect->GetTOXSortTabBases()[nIndex];
-                    if( pSortBase->pTOXNd == pTextNd )
-                        break;
-                }
-
-                if (pSortBase)
-                {
-                    return pSortBase;
-                }
-            }
-        }
-    }
-    return nullptr;
-}
-
 //the function is to check whether the position is in a redline range.
-const SwRangeRedline* SwAccessibleParagraph::GetRedlineAtIndex( sal_Int32 )
+const SwRangeRedline* SwAccessibleParagraph::GetRedlineAtIndex()
 {
     const SwRangeRedline* pRedline = nullptr;
     SwPaM* pCrSr = GetCursor( true );
     if ( pCrSr )
     {
         SwPosition* pStart = pCrSr->Start();
-        const SwTextNode* pNode = GetTextNode();
-        if ( pNode )
-        {
-            const SwDoc* pDoc = pNode->GetDoc();
-            if ( pDoc )
-            {
-                pRedline = pDoc->getIDocumentRedlineAccess().GetRedline( *pStart, nullptr );
-            }
-        }
+        pRedline = pStart->GetDoc()->getIDocumentRedlineAccess().GetRedline(*pStart, nullptr);
     }
 
     return pRedline;
@@ -731,7 +551,6 @@ const SwRangeRedline* SwAccessibleParagraph::GetRedlineAtIndex( sal_Int32 )
 
 bool SwAccessibleParagraph::GetCharBoundary(
     i18n::Boundary& rBound,
-    const OUString&,
     sal_Int32 nPos )
 {
     if( GetPortionData().FillBoundaryIFDateField( rBound,  nPos) )
@@ -747,38 +566,23 @@ bool SwAccessibleParagraph::GetWordBoundary(
     const OUString& rText,
     sal_Int32 nPos )
 {
-    bool bRet = false;
-
     // now ask the Break-Iterator for the word
-    OSL_ENSURE( g_pBreakIt != nullptr, "We always need a break." );
-    OSL_ENSURE( g_pBreakIt->GetBreakIter().is(), "No break-iterator." );
-    if( g_pBreakIt->GetBreakIter().is() )
-    {
-        // get locale for this position
-        const sal_Int32 nModelPos = GetPortionData().GetModelPosition( nPos );
-        lang::Locale aLocale = g_pBreakIt->GetLocale(
-                              GetTextNode()->GetLang( nModelPos ) );
+    assert(g_pBreakIt && g_pBreakIt->GetBreakIter().is());
 
-        // which type of word are we interested in?
-        // (DICTIONARY_WORD includes punctuation, ANY_WORD doesn't.)
-        const sal_Int16 nWordType = i18n::WordType::ANY_WORD;
+    // get locale for this position
+    SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+    const TextFrameIndex nCorePos = GetPortionData().GetCoreViewPosition(nPos);
+    lang::Locale aLocale = g_pBreakIt->GetLocale(pFrame->GetLangOfChar(nCorePos, 0, true));
 
-        // get word boundary, as the Break-Iterator sees fit.
-        rBound = g_pBreakIt->GetBreakIter()->getWordBoundary(
-            rText, nPos, aLocale, nWordType, sal_True );
+    // which type of word are we interested in?
+    // (DICTIONARY_WORD includes punctuation, ANY_WORD doesn't.)
+    const sal_Int16 nWordType = i18n::WordType::ANY_WORD;
 
-        // If we have a break-iterator let's trust that it
-        // does the right thing.
-        bRet = true;
-    }
-    else
-    {
-        // no break Iterator -> no word
-        rBound.startPos = nPos;
-        rBound.endPos = nPos;
-    }
+    // get word boundary, as the Break-Iterator sees fit.
+    rBound = g_pBreakIt->GetBreakIter()->getWordBoundary(
+        rText, nPos, aLocale, nWordType, true );
 
-    return bRet;
+    return true;
 }
 
 bool SwAccessibleParagraph::GetSentenceBoundary(
@@ -787,11 +591,8 @@ bool SwAccessibleParagraph::GetSentenceBoundary(
     sal_Int32 nPos )
 {
     const sal_Unicode* pStr = rText.getStr();
-    if (pStr)
-    {
-        while( pStr[nPos] == sal_Unicode(' ') && nPos < rText.getLength())
-            nPos++;
-    }
+    while( nPos < rText.getLength() && pStr[nPos] == u' ' )
+        nPos++;
 
     GetPortionData().GetSentenceBoundary( rBound, nPos );
     return true;
@@ -811,8 +612,7 @@ bool SwAccessibleParagraph::GetLineBoundary(
 
 bool SwAccessibleParagraph::GetParagraphBoundary(
     i18n::Boundary& rBound,
-    const OUString& rText,
-    sal_Int32 )
+    const OUString& rText )
 {
     rBound.startPos = 0;
     rBound.endPos = rText.getLength();
@@ -821,7 +621,6 @@ bool SwAccessibleParagraph::GetParagraphBoundary(
 
 bool SwAccessibleParagraph::GetAttributeBoundary(
     i18n::Boundary& rBound,
-    const OUString&,
     sal_Int32 nPos )
 {
     GetPortionData().GetAttributeBoundary( rBound, nPos );
@@ -833,36 +632,25 @@ bool SwAccessibleParagraph::GetGlyphBoundary(
     const OUString& rText,
     sal_Int32 nPos )
 {
-    bool bRet = false;
-
     // ask the Break-Iterator for the glyph by moving one cell
     // forward, and then one cell back
-    OSL_ENSURE( g_pBreakIt != nullptr, "We always need a break." );
-    OSL_ENSURE( g_pBreakIt->GetBreakIter().is(), "No break-iterator." );
-    if( g_pBreakIt->GetBreakIter().is() )
-    {
-        // get locale for this position
-        const sal_Int32 nModelPos = GetPortionData().GetModelPosition( nPos );
-        lang::Locale aLocale = g_pBreakIt->GetLocale(
-                              GetTextNode()->GetLang( nModelPos ) );
+    assert(g_pBreakIt && g_pBreakIt->GetBreakIter().is());
 
-        // get word boundary, as the Break-Iterator sees fit.
-        const sal_Int16 nIterMode = i18n::CharacterIteratorMode::SKIPCELL;
-        sal_Int32 nDone = 0;
-        rBound.endPos = g_pBreakIt->GetBreakIter()->nextCharacters(
-             rText, nPos, aLocale, nIterMode, 1, nDone );
-        rBound.startPos = g_pBreakIt->GetBreakIter()->previousCharacters(
-             rText, rBound.endPos, aLocale, nIterMode, 1, nDone );
-        bRet = ((rBound.startPos <= nPos) && (nPos <= rBound.endPos));
-        OSL_ENSURE( rBound.startPos <= nPos, "start pos too high" );
-        OSL_ENSURE( rBound.endPos >= nPos, "end pos too low" );
-    }
-    else
-    {
-        // no break Iterator -> no glyph
-        rBound.startPos = nPos;
-        rBound.endPos = nPos;
-    }
+    // get locale for this position
+    SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+    const TextFrameIndex nCorePos = GetPortionData().GetCoreViewPosition(nPos);
+    lang::Locale aLocale = g_pBreakIt->GetLocale(pFrame->GetLangOfChar(nCorePos, 0, true));
+
+    // get word boundary, as the Break-Iterator sees fit.
+    const sal_Int16 nIterMode = i18n::CharacterIteratorMode::SKIPCELL;
+    sal_Int32 nDone = 0;
+    rBound.endPos = g_pBreakIt->GetBreakIter()->nextCharacters(
+         rText, nPos, aLocale, nIterMode, 1, nDone );
+    rBound.startPos = g_pBreakIt->GetBreakIter()->previousCharacters(
+         rText, rBound.endPos, aLocale, nIterMode, 1, nDone );
+    bool bRet = ((rBound.startPos <= nPos) && (nPos <= rBound.endPos));
+    OSL_ENSURE( rBound.startPos <= nPos, "start pos too high" );
+    OSL_ENSURE( rBound.endPos >= nPos, "end pos too low" );
 
     return bRet;
 }
@@ -872,11 +660,6 @@ bool SwAccessibleParagraph::GetTextBoundary(
     const OUString& rText,
     sal_Int32 nPos,
     sal_Int16 nTextType )
-    throw (
-        lang::IndexOutOfBoundsException,
-        lang::IllegalArgumentException,
-        uno::RuntimeException,
-        std::exception)
 {
     // error checking
     if( !( AccessibleTextType::LINE == nTextType
@@ -889,7 +672,7 @@ bool SwAccessibleParagraph::GetTextBoundary(
     switch( nTextType )
     {
         case AccessibleTextType::WORD:
-            bRet = GetWordBoundary( rBound, rText, nPos );
+            bRet = GetWordBoundary(rBound, rText, nPos);
             break;
 
         case AccessibleTextType::SENTENCE:
@@ -897,11 +680,11 @@ bool SwAccessibleParagraph::GetTextBoundary(
             break;
 
         case AccessibleTextType::PARAGRAPH:
-            bRet = GetParagraphBoundary( rBound, rText, nPos );
+            bRet = GetParagraphBoundary( rBound, rText );
             break;
 
         case AccessibleTextType::CHARACTER:
-            bRet = GetCharBoundary( rBound, rText, nPos );
+            bRet = GetCharBoundary( rBound, nPos );
             break;
 
         case AccessibleTextType::LINE:
@@ -913,7 +696,7 @@ bool SwAccessibleParagraph::GetTextBoundary(
             break;
 
         case AccessibleTextType::ATTRIBUTE_RUN:
-            bRet = GetAttributeBoundary( rBound, rText, nPos );
+            bRet = GetAttributeBoundary( rBound, nPos );
             break;
 
         case AccessibleTextType::GLYPH:
@@ -928,42 +711,39 @@ bool SwAccessibleParagraph::GetTextBoundary(
 }
 
 OUString SAL_CALL SwAccessibleParagraph::getAccessibleDescription()
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC( XAccessibleContext );
+    ThrowIfDisposed();
 
     osl::MutexGuard aGuard2( m_Mutex );
-    if( sDesc.isEmpty() )
-        sDesc = GetDescription();
+    if( m_sDesc.isEmpty() )
+        m_sDesc = GetDescription();
 
-    return sDesc;
+    return m_sDesc;
 }
 
 lang::Locale SAL_CALL SwAccessibleParagraph::getLocale()
-        throw (IllegalAccessibleComponentStateException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     const SwTextFrame *pTextFrame = dynamic_cast<const SwTextFrame*>( GetFrame()  );
     if( !pTextFrame )
     {
-        THROW_RUNTIME_EXCEPTION( XAccessibleContext, "internal error (no text frame)" );
+        throw uno::RuntimeException("no SwTextFrame", static_cast<cppu::OWeakObject*>(this));
     }
 
-    const SwTextNode *pTextNd = pTextFrame->GetTextNode();
-    lang::Locale aLoc( g_pBreakIt->GetLocale( pTextNd->GetLang( 0 ) ) );
+    lang::Locale aLoc(g_pBreakIt->GetLocale(pTextFrame->GetLangOfChar(TextFrameIndex(0), 0, true)));
 
     return aLoc;
 }
 
 // #i27138# - paragraphs are in relation CONTENT_FLOWS_FROM and/or CONTENT_FLOWS_TO
 uno::Reference<XAccessibleRelationSet> SAL_CALL SwAccessibleParagraph::getAccessibleRelationSet()
-    throw ( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
-    CHECK_FOR_DEFUNC( XAccessibleContext );
+
+    ThrowIfDisposed();
 
     utl::AccessibleRelationSetHelper* pHelper = new utl::AccessibleRelationSetHelper();
 
@@ -995,27 +775,23 @@ uno::Reference<XAccessibleRelationSet> SAL_CALL SwAccessibleParagraph::getAccess
 }
 
 void SAL_CALL SwAccessibleParagraph::grabFocus()
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC( XAccessibleContext );
+    ThrowIfDisposed();
 
     // get cursor shell
     SwCursorShell *pCursorSh = GetCursorShell();
     SwPaM *pCursor = GetCursor( false ); // #i27301# - consider new method signature
     const SwTextFrame *pTextFrame = static_cast<const SwTextFrame*>( GetFrame() );
-    const SwTextNode* pTextNd = pTextFrame->GetTextNode();
 
-    if( pCursorSh != nullptr && pTextNd != nullptr &&
+    if (pCursorSh != nullptr &&
         ( pCursor == nullptr ||
-           pCursor->GetPoint()->nNode.GetIndex() != pTextNd->GetIndex() ||
-          !pTextFrame->IsInside( pCursor->GetPoint()->nContent.GetIndex()) ) )
+          !sw::FrameContainsNode(*pTextFrame, pCursor->GetPoint()->nNode.GetIndex()) ||
+          !pTextFrame->IsInside(pTextFrame->MapModelToViewPos(*pCursor->GetPoint()))))
     {
         // create pam for selection
-        SwIndex aIndex( const_cast< SwTextNode * >( pTextNd ),
-                        pTextFrame->GetOfst() );
-        SwPosition aStartPos( *pTextNd, aIndex );
+        SwPosition const aStartPos(pTextFrame->MapViewToModelPos(pTextFrame->GetOfst()));
         SwPaM aPaM( aStartPos );
 
         // set PaM at cursor shell
@@ -1039,12 +815,10 @@ static bool lcl_GetBackgroundColor( Color & rColor,
     const SvxBrushItem* pBackgrdBrush = nullptr;
     const Color* pSectionTOXColor = nullptr;
     SwRect aDummyRect;
-
-    //UUUU
     drawinglayer::attribute::SdrAllFillAttributesHelperPtr aFillAttributes;
 
     if ( pFrame &&
-         pFrame->GetBackgroundBrush( aFillAttributes, pBackgrdBrush, pSectionTOXColor, aDummyRect, false ) )
+         pFrame->GetBackgroundBrush( aFillAttributes, pBackgrdBrush, pSectionTOXColor, aDummyRect, false, /*bConsiderTextBox=*/false ) )
     {
         if ( pSectionTOXColor )
         {
@@ -1067,7 +841,6 @@ static bool lcl_GetBackgroundColor( Color & rColor,
 }
 
 sal_Int32 SAL_CALL SwAccessibleParagraph::getForeground()
-                                throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -1077,11 +850,11 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getForeground()
     {
         if ( aBackgroundCol.IsDark() )
         {
-            return COL_WHITE;
+            return sal_Int32(COL_WHITE);
         }
         else
         {
-            return COL_BLACK;
+            return sal_Int32(COL_BLACK);
         }
     }
 
@@ -1089,7 +862,6 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getForeground()
 }
 
 sal_Int32 SAL_CALL SwAccessibleParagraph::getBackground()
-                                throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -1097,27 +869,24 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getBackground()
 
     if ( lcl_GetBackgroundColor( aBackgroundCol, GetFrame(), GetCursorShell() ) )
     {
-        return aBackgroundCol.GetColor();
+        return sal_Int32(aBackgroundCol);
     }
 
     return SwAccessibleContext::getBackground();
 }
 
 OUString SAL_CALL SwAccessibleParagraph::getImplementationName()
-        throw( uno::RuntimeException, std::exception )
 {
     return OUString(sImplementationName);
 }
 
 sal_Bool SAL_CALL SwAccessibleParagraph::supportsService(
         const OUString& sTestServiceName)
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, sTestServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL SwAccessibleParagraph::getSupportedServiceNames()
-        throw( uno::RuntimeException, std::exception )
 {
     uno::Sequence< OUString > aRet(2);
     OUString* pArray = aRet.getArray();
@@ -1126,71 +895,50 @@ uno::Sequence< OUString > SAL_CALL SwAccessibleParagraph::getSupportedServiceNam
     return aRet;
 }
 
-uno::Sequence< OUString > getAttributeNames()
+static uno::Sequence< OUString > const & getAttributeNames()
 {
-    static uno::Sequence< OUString >* pNames = nullptr;
-
-    if( pNames == nullptr )
+    static uno::Sequence< OUString > const aNames
     {
         // Add the font name to attribute list
-        uno::Sequence< OUString >* pSeq = new uno::Sequence< OUString >( 13 );
-
-        OUString* pStrings = pSeq->getArray();
-
         // sorted list of strings
-        sal_Int32 i = 0;
-
-        pStrings[i++] = UNO_NAME_CHAR_BACK_COLOR;
-        pStrings[i++] = UNO_NAME_CHAR_COLOR;
-        pStrings[i++] = UNO_NAME_CHAR_CONTOURED;
-        pStrings[i++] = UNO_NAME_CHAR_EMPHASIS;
-        pStrings[i++] = UNO_NAME_CHAR_ESCAPEMENT;
-        pStrings[i++] = UNO_NAME_CHAR_FONT_NAME;
-        pStrings[i++] = UNO_NAME_CHAR_HEIGHT;
-        pStrings[i++] = UNO_NAME_CHAR_POSTURE;
-        pStrings[i++] = UNO_NAME_CHAR_SHADOWED;
-        pStrings[i++] = UNO_NAME_CHAR_STRIKEOUT;
-        pStrings[i++] = UNO_NAME_CHAR_UNDERLINE;
-        pStrings[i++] = UNO_NAME_CHAR_UNDERLINE_COLOR;
-        pStrings[i++] = UNO_NAME_CHAR_WEIGHT;
-        assert(i == pSeq->getLength());
-        pNames = pSeq;
-    }
-    return *pNames;
+        UNO_NAME_CHAR_BACK_COLOR,
+        UNO_NAME_CHAR_COLOR,
+        UNO_NAME_CHAR_CONTOURED,
+        UNO_NAME_CHAR_EMPHASIS,
+        UNO_NAME_CHAR_ESCAPEMENT,
+        UNO_NAME_CHAR_FONT_NAME,
+        UNO_NAME_CHAR_HEIGHT,
+        UNO_NAME_CHAR_POSTURE,
+        UNO_NAME_CHAR_SHADOWED,
+        UNO_NAME_CHAR_STRIKEOUT,
+        UNO_NAME_CHAR_UNDERLINE,
+        UNO_NAME_CHAR_UNDERLINE_COLOR,
+        UNO_NAME_CHAR_WEIGHT,
+    };
+    return aNames;
 }
 
-uno::Sequence< OUString > getSupplementalAttributeNames()
+static uno::Sequence< OUString > const & getSupplementalAttributeNames()
 {
-    static uno::Sequence< OUString >* pNames = nullptr;
-
-    if( pNames == nullptr )
+    static uno::Sequence< OUString > const aNames
     {
-        uno::Sequence< OUString >* pSeq = new uno::Sequence< OUString >( 9 );
-
-        OUString* pStrings = pSeq->getArray();
-
         // sorted list of strings
-        sal_Int32 i = 0;
-
-        pStrings[i++] = UNO_NAME_NUMBERING_LEVEL;
-        pStrings[i++] = UNO_NAME_NUMBERING_RULES;
-        pStrings[i++] = UNO_NAME_PARA_ADJUST;
-        pStrings[i++] = UNO_NAME_PARA_BOTTOM_MARGIN;
-        pStrings[i++] = UNO_NAME_PARA_FIRST_LINE_INDENT;
-        pStrings[i++] = UNO_NAME_PARA_LEFT_MARGIN;
-        pStrings[i++] = UNO_NAME_PARA_LINE_SPACING;
-        pStrings[i++] = UNO_NAME_PARA_RIGHT_MARGIN;
-        pStrings[i++] = UNO_NAME_TABSTOPS;
-        assert(i == pSeq->getLength());
-        pNames = pSeq;
-    }
-    return *pNames;
+        UNO_NAME_NUMBERING_LEVEL,
+        UNO_NAME_NUMBERING_RULES,
+        UNO_NAME_PARA_ADJUST,
+        UNO_NAME_PARA_BOTTOM_MARGIN,
+        UNO_NAME_PARA_FIRST_LINE_INDENT,
+        UNO_NAME_PARA_LEFT_MARGIN,
+        UNO_NAME_PARA_LINE_SPACING,
+        UNO_NAME_PARA_RIGHT_MARGIN,
+        UNO_NAME_TABSTOPS,
+    };
+    return aNames;
 }
 
 // XInterface
 
 uno::Any SwAccessibleParagraph::queryInterface( const uno::Type& rType )
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Any aRet;
     if ( rType == cppu::UnoType<XAccessibleText>::get())
@@ -1252,7 +1000,7 @@ uno::Any SwAccessibleParagraph::queryInterface( const uno::Type& rType )
 }
 
 // XTypeProvider
-uno::Sequence< uno::Type > SAL_CALL SwAccessibleParagraph::getTypes() throw(uno::RuntimeException, std::exception)
+uno::Sequence< uno::Type > SAL_CALL SwAccessibleParagraph::getTypes()
 {
     uno::Sequence< uno::Type > aTypes( SwAccessibleContext::getTypes() );
 
@@ -1274,25 +1022,23 @@ uno::Sequence< uno::Type > SAL_CALL SwAccessibleParagraph::getTypes() throw(uno:
 }
 
 uno::Sequence< sal_Int8 > SAL_CALL SwAccessibleParagraph::getImplementationId()
-        throw(uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
-// XAccesibleText
+// XAccessibleText
 
 sal_Int32 SwAccessibleParagraph::getCaretPosition()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     sal_Int32 nRet = GetCaretPos();
     {
         osl::MutexGuard aOldCaretPosGuard( m_Mutex );
-        OSL_ENSURE( nRet == nOldCaretPos, "caret pos out of sync" );
-        nOldCaretPos = nRet;
+        OSL_ENSURE( nRet == m_nOldCaretPos, "caret pos out of sync" );
+        m_nOldCaretPos = nRet;
     }
     if( -1 != nRet )
     {
@@ -1304,11 +1050,10 @@ sal_Int32 SwAccessibleParagraph::getCaretPosition()
 }
 
 sal_Bool SAL_CALL SwAccessibleParagraph::setCaretPosition( sal_Int32 nIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     // parameter checking
     sal_Int32 nLength = GetString().getLength();
@@ -1324,9 +1069,9 @@ sal_Bool SAL_CALL SwAccessibleParagraph::setCaretPosition( sal_Int32 nIndex )
     if( pCursorShell != nullptr )
     {
         // create pam for selection
-        SwTextNode* pNode = const_cast<SwTextNode*>( GetTextNode() );
-        SwIndex aIndex( pNode, GetPortionData().GetModelPosition(nIndex));
-        SwPosition aStartPos( *pNode, aIndex );
+        SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+        TextFrameIndex const nFrameIndex(GetPortionData().GetCoreViewPosition(nIndex));
+        SwPosition aStartPos(pFrame->MapViewToModelPos(nFrameIndex));
         SwPaM aPaM( aStartPos );
 
         // set PaM at cursor shell
@@ -1337,28 +1082,25 @@ sal_Bool SAL_CALL SwAccessibleParagraph::setCaretPosition( sal_Int32 nIndex )
 }
 
 sal_Unicode SwAccessibleParagraph::getCharacter( sal_Int32 nIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     OUString sText( GetString() );
 
     // return character (if valid)
-    if( IsValidChar(nIndex, sText.getLength() ) )
-    {
-        return sText[nIndex];
-    }
-    else
+    if( !IsValidChar(nIndex, sText.getLength() ) )
         throw lang::IndexOutOfBoundsException();
+
+    return sText[nIndex];
 }
 
 css::uno::Sequence< css::style::TabStop > SwAccessibleParagraph::GetCurrentTabStop( sal_Int32 nIndex  )
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     /*  #i12332# The position after the string needs special treatment.
         IsValidChar -> IsValidPosition
@@ -1376,26 +1118,25 @@ css::uno::Sequence< css::style::TabStop > SwAccessibleParagraph::GetCurrentTabSt
     aMoveState.m_bRealHeight = true;
     aMoveState.m_bRealWidth = true;
     SwSpecialPos aSpecialPos;
-    SwTextNode* pNode = const_cast<SwTextNode*>( GetTextNode() );
+    SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
 
     /*  #i12332# FillSpecialPos does not accept nIndex ==
          GetString().getLength(). In that case nPos is set to the
          length of the string in the core. This way GetCharRect
          returns the rectangle for a cursor at the end of the
          paragraph. */
-    const sal_Int32 nPos = bBehindText
-        ? pNode->GetText().getLength()
+    const TextFrameIndex nPos = bBehindText
+        ? TextFrameIndex(pFrame->GetText().getLength())
         : GetPortionData().FillSpecialPos(nIndex, aSpecialPos, aMoveState.m_pSpecialPos );
 
     // call GetCharRect
     SwRect aCoreRect;
-    SwIndex aIndex( pNode, nPos );
-    SwPosition aPosition( *pNode, aIndex );
+    SwPosition aPosition(pFrame->MapViewToModelPos(nPos));
     GetFrame()->GetCharRect( aCoreRect, aPosition, &aMoveState );
 
     // already get the caret position
     css::uno::Sequence< css::style::TabStop > tabs;
-    const sal_Int32 nStrLen = GetTextNode()->GetText().getLength();
+    const sal_Int32 nStrLen = pFrame->GetText().getLength();
     if( nStrLen > 0 )
     {
         SwFrame* pTFrame = const_cast<SwFrame*>(GetFrame());
@@ -1406,11 +1147,14 @@ css::uno::Sequence< css::style::TabStop > SwAccessibleParagraph::GetCurrentTabSt
     {
         // translate core coordinates into accessibility coordinates
         vcl::Window *pWin = GetWindow();
-        CHECK_FOR_WINDOW( XAccessibleComponent, pWin );
+        if (!pWin)
+        {
+            throw uno::RuntimeException("no Window", static_cast<cppu::OWeakObject*>(this));
+        }
 
         SwRect aTmpRect(0, 0, tabs[0].Position, 0);
 
-        Rectangle aScreenRect( GetMap()->CoreToPixel( aTmpRect.SVRect() ));
+        tools::Rectangle aScreenRect( GetMap()->CoreToPixel( aTmpRect.SVRect() ));
         SwRect aFrameLogBounds( GetBounds( *(GetMap()) ) ); // twip rel to doc root
 
         Point aFramePixPos( GetMap()->CoreToPixel( aFrameLogBounds.SVRect() ).TopLeft() );
@@ -1426,7 +1170,7 @@ struct IndexCompare
 {
     const PropertyValue* pValues;
     explicit IndexCompare( const PropertyValue* pVals ) : pValues(pVals) {}
-    bool operator() ( const sal_Int32& a, const sal_Int32& b ) const
+    bool operator() ( sal_Int32 a, sal_Int32 b ) const
     {
         return (pValues[a].Name < pValues[b].Name);
     }
@@ -1437,48 +1181,44 @@ OUString SwAccessibleParagraph::GetFieldTypeNameAtIndex(sal_Int32 nIndex)
     OUString strTypeName;
     SwFieldMgr aMgr;
     SwTextField* pTextField = nullptr;
-    SwTextNode* pTextNd = const_cast<SwTextNode*>( GetTextNode() );
-    SwIndex fldIndex( pTextNd, nIndex );
     sal_Int32 nFieldIndex = GetPortionData().GetFieldIndex(nIndex);
     if (nFieldIndex >= 0)
     {
-        const SwpHints* pSwpHints = GetTextNode()->GetpSwpHints();
-        if (pSwpHints)
+        SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+        sw::MergedAttrIter iter(*pFrame);
+        while (SwTextAttr const*const pHt = iter.NextAttr())
         {
-            const size_t nSize = pSwpHints->Count();
-            for( size_t i = 0; i < nSize; ++i )
+            if ((pHt->Which() == RES_TXTATR_FIELD
+                   || pHt->Which() == RES_TXTATR_ANNOTATION
+                   || pHt->Which() == RES_TXTATR_INPUTFIELD)
+                 && (nFieldIndex-- == 0))
             {
-                const SwTextAttr* pHt = pSwpHints->Get(i);
-                if ( ( pHt->Which() == RES_TXTATR_FIELD
-                       || pHt->Which() == RES_TXTATR_ANNOTATION
-                       || pHt->Which() == RES_TXTATR_INPUTFIELD )
+                pTextField = const_cast<SwTextField*>(
+                            static_txtattr_cast<SwTextField const*>(pHt));
+                break;
+            }
+            else if (pHt->Which() == RES_TXTATR_REFMARK
                      && (nFieldIndex-- == 0))
-                {
-                    pTextField = const_cast<SwTextField*>(
-                                static_txtattr_cast<SwTextField const*>(pHt));
-                    break;
-                }
-                else if (pHt->Which() == RES_TXTATR_REFMARK
-                         && (nFieldIndex-- == 0))
-                    strTypeName = "set reference";
+            {
+                strTypeName = "set reference";
             }
         }
     }
     if (pTextField)
     {
-        const SwField* pField = (pTextField->GetFormatField()).GetField();
+        const SwField* pField = pTextField->GetFormatField().GetField();
         if (pField)
         {
             strTypeName = SwFieldType::GetTypeStr(pField->GetTypeId());
-            const sal_uInt16 nWhich = pField->GetTyp()->Which();
+            const SwFieldIds nWhich = pField->GetTyp()->Which();
             OUString sEntry;
-            sal_Int32 subType = 0;
+            sal_uInt32 subType = 0;
             switch (nWhich)
             {
-            case RES_DOCSTATFLD:
+            case SwFieldIds::DocStat:
                 subType = static_cast<const SwDocStatField*>(pField)->GetSubType();
                 break;
-            case RES_GETREFFLD:
+            case SwFieldIds::GetRef:
                 {
                     switch( pField->GetSubType() )
                     {
@@ -1520,12 +1260,12 @@ OUString SwAccessibleParagraph::GetFieldTypeNameAtIndex(sal_Int32 nIndex)
                     }
                 }
                 break;
-            case RES_DATETIMEFLD:
+            case SwFieldIds::DateTime:
                 subType = static_cast<const SwDateTimeField*>(pField)->GetSubType();
                 break;
-            case RES_JUMPEDITFLD:
+            case SwFieldIds::JumpEdit:
                 {
-                    const sal_uInt16 nFormat= pField->GetFormat();
+                    const sal_uInt32 nFormat= pField->GetFormat();
                     const sal_uInt16 nSize = aMgr.GetFormatCount(pField->GetTypeId(), false);
                     if (nFormat < nSize)
                     {
@@ -1538,11 +1278,11 @@ OUString SwAccessibleParagraph::GetFieldTypeNameAtIndex(sal_Int32 nIndex)
                     }
                 }
                 break;
-            case RES_EXTUSERFLD:
+            case SwFieldIds::ExtUser:
                 subType = static_cast<const SwExtUserField*>(pField)->GetSubType();
                 break;
-            case RES_HIDDENTXTFLD:
-            case RES_SETEXPFLD:
+            case SwFieldIds::HiddenText:
+            case SwFieldIds::SetExp:
                 {
                     sEntry = pField->GetTyp()->GetName();
                     if (sEntry.getLength() > 0)
@@ -1552,11 +1292,11 @@ OUString SwAccessibleParagraph::GetFieldTypeNameAtIndex(sal_Int32 nIndex)
                     }
                 }
                 break;
-            case RES_DOCINFOFLD:
+            case SwFieldIds::DocInfo:
                 subType = pField->GetSubType();
                 subType &= 0x00ff;
                 break;
-            case RES_REFPAGESETFLD:
+            case SwFieldIds::RefPageSet:
                 {
                     const SwRefPageSetField* pRPld = static_cast<const SwRefPageSetField*>(pField);
                     bool bOn = pRPld->IsOn();
@@ -1567,25 +1307,26 @@ OUString SwAccessibleParagraph::GetFieldTypeNameAtIndex(sal_Int32 nIndex)
                         strTypeName += "off";
                 }
                 break;
-            case RES_AUTHORFLD:
+            case SwFieldIds::Author:
                 {
                     strTypeName += "-";
                     strTypeName += aMgr.GetFormatStr(pField->GetTypeId(), pField->GetFormat() & 0xff);
                 }
                 break;
+            default: break;
             }
-            if (subType > 0 || (subType == 0 && (nWhich == RES_DOCINFOFLD || nWhich == RES_EXTUSERFLD || nWhich == RES_DOCSTATFLD)))
+            if (subType > 0 || nWhich == SwFieldIds::DocInfo || nWhich == SwFieldIds::ExtUser || nWhich == SwFieldIds::DocStat)
             {
                 std::vector<OUString> aLst;
                 aMgr.GetSubTypes(pField->GetTypeId(), aLst);
-                if (static_cast<size_t>(subType) < aLst.size())
+                if (subType < aLst.size())
                     sEntry = aLst[subType];
                 if (sEntry.getLength() > 0)
                 {
-                    if (nWhich == RES_DOCINFOFLD)
+                    if (nWhich == SwFieldIds::DocInfo)
                     {
                         strTypeName = sEntry;
-                        sal_uInt32 nSize = aMgr.GetFormatCount(pField->GetTypeId(), false);
+                        sal_uInt16 nSize = aMgr.GetFormatCount(pField->GetTypeId(), false);
                         const sal_uInt16 nExSub = pField->GetSubType() & 0xff00;
                         if (nSize > 0 && nExSub > 0)
                         {
@@ -1612,17 +1353,15 @@ OUString SwAccessibleParagraph::GetFieldTypeNameAtIndex(sal_Int32 nIndex)
 uno::Sequence<PropertyValue> SwAccessibleParagraph::getCharacterAttributes(
     sal_Int32 nIndex,
     const uno::Sequence< OUString >& aRequestedAttributes )
-    throw (lang::IndexOutOfBoundsException,
-           uno::RuntimeException,
-           std::exception)
 {
 
     SolarMutexGuard aGuard;
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+
+    ThrowIfDisposed();
 
     const OUString& rText = GetString();
 
-    if( ! IsValidChar( nIndex, rText.getLength()+1 ) )
+    if (!IsValidPosition(nIndex, rText.getLength()))
         throw lang::IndexOutOfBoundsException();
 
     bool bSupplementalMode = false;
@@ -1643,19 +1382,17 @@ uno::Sequence<PropertyValue> SwAccessibleParagraph::getCharacterAttributes(
     // merge default and run attributes
     std::vector< PropertyValue > aValues( aDefAttrSeq.size() );
     sal_Int32 i = 0;
-    for ( tAccParaPropValMap::const_iterator aDefIter = aDefAttrSeq.begin();
-          aDefIter != aDefAttrSeq.end();
-          ++aDefIter )
+    for ( const auto& rDefEntry : aDefAttrSeq )
     {
         tAccParaPropValMap::const_iterator aRunIter =
-                                        aRunAttrSeq.find( aDefIter->first );
+                                        aRunAttrSeq.find( rDefEntry.first );
         if ( aRunIter != aRunAttrSeq.end() )
         {
             aValues[i] = aRunIter->second;
         }
         else
         {
-            aValues[i] = aDefIter->second;
+            aValues[i] = rDefEntry.second;
         }
         ++i;
     }
@@ -1666,27 +1403,25 @@ uno::Sequence<PropertyValue> SwAccessibleParagraph::getCharacterAttributes(
             aSupplementalNames = getSupplementalAttributeNames();
 
         tAccParaPropValMap aSupplementalAttrSeq;
-        _getSupplementalAttributesImpl( nIndex, aSupplementalNames, aSupplementalAttrSeq );
+        _getSupplementalAttributesImpl( aSupplementalNames, aSupplementalAttrSeq );
 
         aValues.resize( aValues.size() + aSupplementalAttrSeq.size() );
 
-        for ( tAccParaPropValMap::const_iterator aSupplementalIter = aSupplementalAttrSeq.begin();
-            aSupplementalIter != aSupplementalAttrSeq.end();
-            ++aSupplementalIter )
+        for ( const auto& rSupplementalEntry : aSupplementalAttrSeq )
         {
-            aValues[i] = aSupplementalIter->second;
+            aValues[i] = rSupplementalEntry.second;
             ++i;
         }
 
         _correctValues( nIndex, aValues );
 
-        aValues.resize( aValues.size() + 1 );
+        aValues.emplace_back();
 
         OUString strTypeName = GetFieldTypeNameAtIndex(nIndex);
         if (!strTypeName.isEmpty())
         {
-            aValues.resize( aValues.size() + 1 );
-            PropertyValue& rValueFT = aValues[aValues.size() - 1];
+            aValues.emplace_back();
+            PropertyValue& rValueFT = aValues.back();
             rValueFT.Name = "FieldType";
             rValueFT.Value <<= strTypeName.toAsciiLowerCase();
             rValueFT.Handle = -1;
@@ -1696,18 +1431,18 @@ uno::Sequence<PropertyValue> SwAccessibleParagraph::getCharacterAttributes(
         //sort property values
         // build sorted index array
         sal_Int32 nLength = aValues.size();
-        sal_Int32* pIndices = new sal_Int32[nLength];
-        for( i = 0; i < nLength; i++ )
-            pIndices[i] = i;
-        sort( &pIndices[0], &pIndices[nLength], IndexCompare(aValues.data()) );
+        std::vector<sal_Int32> aIndices;
+        aIndices.reserve(nLength);
+        for (i = 0; i < nLength; ++i)
+            aIndices.push_back(i);
+        std::sort(aIndices.begin(), aIndices.end(), IndexCompare(aValues.data()));
         // create sorted sequences according to index array
         uno::Sequence<PropertyValue> aNewValues( nLength );
         PropertyValue* pNewValues = aNewValues.getArray();
-        for( i = 0; i < nLength; i++ )
+        for (i = 0; i < nLength; ++i)
         {
-            pNewValues[i] = aValues[pIndices[i]];
+            pNewValues[i] = aValues[aIndices[i]];
         }
-        delete[] pIndices;
         return aNewValues;
     }
 
@@ -1729,21 +1464,20 @@ void SwAccessibleParagraph::_getDefaultAttributesImpl(
         const bool bOnlyCharAttrs )
 {
     // retrieve default attributes
-    const SwTextNode* pTextNode( GetTextNode() );
+    SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+    const SwTextNode *const pTextNode(pFrame->GetTextNodeForParaProps());
     std::unique_ptr<SfxItemSet> pSet;
     if ( !bOnlyCharAttrs )
     {
         pSet.reset( new SfxItemSet( const_cast<SwAttrPool&>(pTextNode->GetDoc()->GetAttrPool()),
-                               RES_CHRATR_BEGIN, RES_CHRATR_END - 1,
+                               svl::Items<RES_CHRATR_BEGIN, RES_CHRATR_END - 1,
                                RES_PARATR_BEGIN, RES_PARATR_END - 1,
-                               RES_FRMATR_BEGIN, RES_FRMATR_END - 1,
-                               0 ) );
+                               RES_FRMATR_BEGIN, RES_FRMATR_END - 1>{} ) );
     }
     else
     {
         pSet.reset( new SfxItemSet( const_cast<SwAttrPool&>(pTextNode->GetDoc()->GetAttrPool()),
-                               RES_CHRATR_BEGIN, RES_CHRATR_END - 1,
-                               0 ) );
+                               svl::Items<RES_CHRATR_BEGIN, RES_CHRATR_END - 1>{} ) );
     }
     // #i82637# - From the perspective of the a11y API the default character
     // attributes are the character attributes, which are set at the paragraph style
@@ -1754,9 +1488,8 @@ void SwAccessibleParagraph::_getDefaultAttributesImpl(
     if ( !bOnlyCharAttrs )
     {
         SfxItemSet aParaSet( const_cast<SwAttrPool&>(pTextNode->GetDoc()->GetAttrPool()),
-                             RES_PARATR_BEGIN, RES_PARATR_END - 1,
-                             RES_FRMATR_BEGIN, RES_FRMATR_END - 1,
-                             0 );
+                             svl::Items<RES_PARATR_BEGIN, RES_PARATR_END - 1,
+                             RES_FRMATR_BEGIN, RES_FRMATR_END - 1>{} );
         pTextNode->SwContentNode::GetAttr( aParaSet );
         pSet->Put( aParaSet );
     }
@@ -1766,8 +1499,7 @@ void SwAccessibleParagraph::_getDefaultAttributesImpl(
     if ( pTextNode->GetTextColl() )
     {
         SfxItemSet aCharSet( const_cast<SwAttrPool&>(pTextNode->GetDoc()->GetAttrPool()),
-                             RES_CHRATR_BEGIN, RES_CHRATR_END - 1,
-                             0 );
+                             svl::Items<RES_CHRATR_BEGIN, RES_CHRATR_END - 1>{} );
         SetPutRecursive( aCharSet, pTextNode->GetTextColl()->GetAttrSet() );
         pSet->Put( aCharSet );
     }
@@ -1778,24 +1510,22 @@ void SwAccessibleParagraph::_getDefaultAttributesImpl(
         const SfxItemPropertyMap& rPropMap =
                     aSwMapProvider.GetPropertySet( PROPERTY_MAP_TEXT_CURSOR )->getPropertyMap();
         PropertyEntryVector_t aPropertyEntries = rPropMap.getPropertyEntries();
-        PropertyEntryVector_t::const_iterator aPropIt = aPropertyEntries.begin();
-        while ( aPropIt != aPropertyEntries.end() )
+        for ( const auto& rProp : aPropertyEntries )
         {
-            const SfxPoolItem* pItem = pSet->GetItem( aPropIt->nWID );
+            const SfxPoolItem* pItem = pSet->GetItem( rProp.nWID );
             if ( pItem )
             {
                 uno::Any aVal;
-                pItem->QueryValue( aVal, aPropIt->nMemberId );
+                pItem->QueryValue( aVal, rProp.nMemberId );
 
                 PropertyValue rPropVal;
-                rPropVal.Name = aPropIt->sName;
+                rPropVal.Name = rProp.sName;
                 rPropVal.Value = aVal;
                 rPropVal.Handle = -1;
                 rPropVal.State = beans::PropertyState_DEFAULT_VALUE;
 
                 aDefAttrSeq[rPropVal.Name] = rPropVal;
             }
-            ++aPropIt;
         }
 
         // #i72800#
@@ -1884,10 +1614,10 @@ void SwAccessibleParagraph::_getDefaultAttributesImpl(
 
 uno::Sequence< PropertyValue > SwAccessibleParagraph::getDefaultAttributes(
         const uno::Sequence< OUString >& aRequestedAttributes )
-        throw ( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+
+    ThrowIfDisposed();
 
     tAccParaPropValMap aDefAttrSeq;
     _getDefaultAttributesImpl( aRequestedAttributes, aDefAttrSeq );
@@ -1903,7 +1633,7 @@ uno::Sequence< PropertyValue > SwAccessibleParagraph::getDefaultAttributes(
         else
         {
             const OUString* aRequestedAttrIter =
-                  ::std::find( aRequestedAttributes.begin(), aRequestedAttributes.end(), sMMToPixelRatio );
+                  std::find( aRequestedAttributes.begin(), aRequestedAttributes.end(), sMMToPixelRatio );
             if ( aRequestedAttrIter != aRequestedAttributes.end() )
                 bProvideMMToPixelRatio = true;
         }
@@ -1913,11 +1643,9 @@ uno::Sequence< PropertyValue > SwAccessibleParagraph::getDefaultAttributes(
                                             ( bProvideMMToPixelRatio ? 1 : 0 ) );
     PropertyValue* pValues = aValues.getArray();
     sal_Int32 i = 0;
-    for ( tAccParaPropValMap::const_iterator aIter  = aDefAttrSeq.begin();
-          aIter != aDefAttrSeq.end();
-          ++aIter )
+    for ( const auto& rEntry : aDefAttrSeq )
     {
-        pValues[i] = aIter->second;
+        pValues[i] = rEntry.second;
         ++i;
     }
 
@@ -1928,8 +1656,8 @@ uno::Sequence< PropertyValue > SwAccessibleParagraph::getDefaultAttributes(
         rPropVal.Name = sMMToPixelRatio;
         const Size a100thMMSize( 1000, 1000 );
         const Size aPixelSize = GetMap()->LogicToPixel( a100thMMSize );
-        const float fRatio = ((float)a100thMMSize.Width()/100)/aPixelSize.Width();
-        rPropVal.Value = uno::makeAny( fRatio );
+        const float fRatio = (static_cast<float>(a100thMMSize.Width())/100)/aPixelSize.Width();
+        rPropVal.Value <<= fRatio;
         rPropVal.Handle = -1;
         rPropVal.State = beans::PropertyState_DEFAULT_VALUE;
         pValues[ aValues.getLength() - 1 ] = rPropVal;
@@ -1944,24 +1672,22 @@ void SwAccessibleParagraph::_getRunAttributesImpl(
         tAccParaPropValMap& rRunAttrSeq )
 {
     // create PaM for character at position <nIndex>
-    SwPaM* pPaM( nullptr );
+    std::unique_ptr<SwPaM> pPaM;
+    const TextFrameIndex nCorePos(GetPortionData().GetCoreViewPosition(nIndex));
+    SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+    SwPosition const aModelPos(pFrame->MapViewToModelPos(nCorePos));
+    SwTextNode *const pTextNode(aModelPos.nNode.GetNode().GetTextNode());
     {
-        const SwTextNode* pTextNode( GetTextNode() );
-        SwPosition* pStartPos = new SwPosition( *pTextNode );
-        pStartPos->nContent.Assign( const_cast<SwTextNode*>(pTextNode), nIndex );
-        SwPosition* pEndPos = new SwPosition( *pTextNode );
-        pEndPos->nContent.Assign( const_cast<SwTextNode*>(pTextNode), nIndex+1 );
-
-        pPaM = new SwPaM( *pStartPos, *pEndPos );
-
-        delete pStartPos;
-        delete pEndPos;
+        SwPosition const aEndPos(*pTextNode,
+            aModelPos.nContent.GetIndex() == pTextNode->Len()
+                ? pTextNode->Len() // ???
+                : aModelPos.nContent.GetIndex() + 1);
+        pPaM.reset(new SwPaM(aModelPos, aEndPos));
     }
 
     // retrieve character attributes for the created PaM <pPaM>
     SfxItemSet aSet( pPaM->GetDoc()->GetAttrPool(),
-                     RES_CHRATR_BEGIN, RES_CHRATR_END -1,
-                     0 );
+                     svl::Items<RES_CHRATR_BEGIN, RES_CHRATR_END -1>{} );
     // #i82637#
     // From the perspective of the a11y API the character attributes, which
     // are set at the automatic paragraph style of the paragraph, are treated
@@ -1969,12 +1695,10 @@ void SwAccessibleParagraph::_getRunAttributesImpl(
     //    SwXTextCursor::GetCursorAttr( *pPaM, aSet, sal_True, sal_True );
     // get character attributes from automatic paragraph style and merge these into <aSet>
     {
-        const SwTextNode* pTextNode( GetTextNode() );
         if ( pTextNode->HasSwAttrSet() )
         {
             SfxItemSet aAutomaticParaStyleCharAttrs( pPaM->GetDoc()->GetAttrPool(),
-                                                     RES_CHRATR_BEGIN, RES_CHRATR_END -1,
-                                                     0 );
+                                                     svl::Items<RES_CHRATR_BEGIN, RES_CHRATR_END -1>{} );
             aAutomaticParaStyleCharAttrs.Put( *(pTextNode->GetpSwAttrSet()), false );
             aSet.Put( aAutomaticParaStyleCharAttrs );
         }
@@ -1982,8 +1706,7 @@ void SwAccessibleParagraph::_getRunAttributesImpl(
     // get character attributes at <pPaM> and merge these into <aSet>
     {
         SfxItemSet aCharAttrsAtPaM( pPaM->GetDoc()->GetAttrPool(),
-                                    RES_CHRATR_BEGIN, RES_CHRATR_END -1,
-                                    0 );
+                                    svl::Items<RES_CHRATR_BEGIN, RES_CHRATR_END -1>{} );
         SwUnoCursorHelper::GetCursorAttr(*pPaM, aCharAttrsAtPaM, true);
         aSet.Put( aCharAttrsAtPaM );
     }
@@ -1999,19 +1722,18 @@ void SwAccessibleParagraph::_getRunAttributesImpl(
             const SfxItemPropertyMap& rPropMap =
                     aSwMapProvider.GetPropertySet( PROPERTY_MAP_TEXT_CURSOR )->getPropertyMap();
             PropertyEntryVector_t aPropertyEntries = rPropMap.getPropertyEntries();
-            PropertyEntryVector_t::const_iterator aPropIt = aPropertyEntries.begin();
-            while ( aPropIt != aPropertyEntries.end() )
+            for ( const auto& rProp : aPropertyEntries )
             {
                 const SfxPoolItem* pItem( nullptr );
                 // #i82637# - Found character attributes, whose value equals the value of
                 // the corresponding default character attributes, are excluded.
-                if ( aSet.GetItemState( aPropIt->nWID, true, &pItem ) == SfxItemState::SET )
+                if ( aSet.GetItemState( rProp.nWID, true, &pItem ) == SfxItemState::SET )
                 {
                     uno::Any aVal;
-                    pItem->QueryValue( aVal, aPropIt->nMemberId );
+                    pItem->QueryValue( aVal, rProp.nMemberId );
 
                     PropertyValue rPropVal;
-                    rPropVal.Name = aPropIt->sName;
+                    rPropVal.Name = rProp.sName;
                     rPropVal.Value = aVal;
                     rPropVal.Handle = -1;
                     rPropVal.State = PropertyState_DIRECT_VALUE;
@@ -2024,8 +1746,6 @@ void SwAccessibleParagraph::_getRunAttributesImpl(
                         aRunAttrSeq[rPropVal.Name] = rPropVal;
                     }
                 }
-
-                ++aPropIt;
             }
         }
 
@@ -2047,22 +1767,19 @@ void SwAccessibleParagraph::_getRunAttributesImpl(
             }
         }
     }
-
-    delete pPaM;
 }
 
 uno::Sequence< PropertyValue > SwAccessibleParagraph::getRunAttributes(
         sal_Int32 nIndex,
         const uno::Sequence< OUString >& aRequestedAttributes )
-        throw ( lang::IndexOutOfBoundsException,
-                uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+
+    ThrowIfDisposed();
 
     {
         const OUString& rText = GetString();
-        if ( !IsValidChar( nIndex, rText.getLength() ) )
+        if (!IsValidPosition(nIndex, rText.getLength()))
         {
             throw lang::IndexOutOfBoundsException();
         }
@@ -2075,21 +1792,21 @@ uno::Sequence< PropertyValue > SwAccessibleParagraph::getRunAttributes(
 }
 
 void SwAccessibleParagraph::_getSupplementalAttributesImpl(
-        const sal_Int32,
         const uno::Sequence< OUString >& aRequestedAttributes,
         tAccParaPropValMap& rSupplementalAttrSeq )
 {
-    const SwTextNode* pTextNode( GetTextNode() );
+    SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+    const SwTextNode *const pTextNode(pFrame->GetTextNodeForParaProps());
     std::unique_ptr<SfxItemSet> pSet;
-    pSet.reset( new SfxItemSet( const_cast<SwAttrPool&>(pTextNode->GetDoc()->GetAttrPool()),
-        RES_PARATR_ADJUST, RES_PARATR_ADJUST,
-        RES_PARATR_TABSTOP, RES_PARATR_TABSTOP,
-        RES_PARATR_LINESPACING, RES_PARATR_LINESPACING,
-        RES_UL_SPACE, RES_UL_SPACE,
-        RES_LR_SPACE, RES_LR_SPACE,
-        RES_PARATR_NUMRULE, RES_PARATR_NUMRULE,
-        RES_PARATR_LIST_BEGIN, RES_PARATR_LIST_END-1,
-        0 ) );
+    pSet.reset(
+        new SfxItemSet(
+            const_cast<SwAttrPool&>(pTextNode->GetDoc()->GetAttrPool()),
+            svl::Items<
+                RES_PARATR_LINESPACING, RES_PARATR_ADJUST,
+                RES_PARATR_TABSTOP, RES_PARATR_TABSTOP,
+                RES_PARATR_NUMRULE, RES_PARATR_NUMRULE,
+                RES_PARATR_LIST_BEGIN, RES_PARATR_LIST_END - 1,
+                RES_LR_SPACE, RES_UL_SPACE>{}));
 
     if ( pTextNode->HasBullet() || pTextNode->HasNumber() )
     {
@@ -2142,7 +1859,7 @@ void SwAccessibleParagraph::_correctValues( const sal_Int32 nIndex,
 {
     PropertyValue ChangeAttr, ChangeAttrColor;
 
-    const SwRangeRedline* pRedline = GetRedlineAtIndex( nIndex );
+    const SwRangeRedline* pRedline = GetRedlineAtIndex();
     if ( pRedline )
     {
 
@@ -2163,7 +1880,7 @@ void SwAccessibleParagraph::_correctValues( const sal_Int32 nIndex,
                 break;
             }
         }
-        switch( aChangeAttr.nItemId )
+        switch( aChangeAttr.m_nItemId )
         {
         case SID_ATTR_CHAR_WEIGHT:
             ChangeAttr.Name = UNO_NAME_CHAR_WEIGHT;
@@ -2179,31 +1896,44 @@ void SwAccessibleParagraph::_correctValues( const sal_Int32 nIndex,
             break;
         case SID_ATTR_CHAR_UNDERLINE:
             ChangeAttr.Name = UNO_NAME_CHAR_UNDERLINE;
-            ChangeAttr.Value <<= aChangeAttr.nAttr; //underline line
+            ChangeAttr.Value <<= aChangeAttr.m_nAttr; //underline line
             break;
         }
-        if( aChangeAttr.nColor != COL_NONE_COLOR )
+        if( aChangeAttr.m_nColor != COL_NONE_COLOR )
         {
-            if( aChangeAttr.nItemId == SID_ATTR_BRUSH )
+            if( aChangeAttr.m_nItemId == SID_ATTR_BRUSH )
             {
                 ChangeAttrColor.Name = UNO_NAME_CHAR_BACK_COLOR;
-                if( aChangeAttr.nColor == COL_TRANSPARENT )//char backcolor
+                if( aChangeAttr.m_nColor == COL_TRANSPARENT )//char backcolor
                     ChangeAttrColor.Value <<= COL_BLUE;
                 else
-                    ChangeAttrColor.Value <<= aChangeAttr.nColor;
+                    ChangeAttrColor.Value <<= aChangeAttr.m_nColor;
             }
             else
             {
                 ChangeAttrColor.Name = UNO_NAME_CHAR_COLOR;
-                if( aChangeAttr.nColor == COL_TRANSPARENT )//char color
+                if( aChangeAttr.m_nColor == COL_TRANSPARENT )//char color
                     ChangeAttrColor.Value <<= COL_BLUE;
                 else
-                    ChangeAttrColor.Value <<= aChangeAttr.nColor;
+                    ChangeAttrColor.Value <<= aChangeAttr.m_nColor;
             }
         }
     }
 
-    const SwTextNode* pTextNode( GetTextNode() );
+    // sw_redlinehide: this function only needs SwWrongList for 1 character,
+    // and the end is excluded by InWrongWord(),
+    // so it ought to work to just pick the wrong-list/node that contains
+    // the character following the given nIndex
+    SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+    TextFrameIndex const nCorePos(GetPortionData().GetCoreViewPosition(nIndex));
+    std::pair<SwTextNode*, sal_Int32> pos(pFrame->MapViewToModel(nCorePos));
+    if (pos.first->Len() == pos.second
+        && nCorePos != TextFrameIndex(pFrame->GetText().getLength()))
+    {
+        pos = pFrame->MapViewToModel(nCorePos + TextFrameIndex(1)); // try this one instead
+        assert(pos.first->Len() != pos.second);
+    }
+    const SwTextNode *const pTextNode(pos.first);
 
     sal_Int32 nValues = rValues.size();
     for (sal_Int32 i = 0;  i < nValues;  ++i)
@@ -2227,12 +1957,12 @@ void SwAccessibleParagraph::_correctValues( const sal_Int32 nIndex,
         {
             uno::Any &anyChar = rValue.Value;
             sal_uInt32 crBack = static_cast<sal_uInt32>( reinterpret_cast<sal_uIntPtr>(anyChar.pReserved));
-            if (COL_AUTO == crBack)
+            if (COL_AUTO == Color(crBack))
             {
                 uno::Reference<XAccessibleComponent> xComponent(this);
                 if (xComponent.is())
                 {
-                    crBack = (sal_uInt32)xComponent->getBackground();
+                    crBack = static_cast<sal_uInt32>(xComponent->getBackground());
                 }
                 rValue.Value <<= crBack;
             }
@@ -2243,17 +1973,17 @@ void SwAccessibleParagraph::_correctValues( const sal_Int32 nIndex,
         if (rValue.Name == UNO_NAME_CHAR_COLOR)
         {
             if( GetPortionData().IsInGrayPortion( nIndex ) )
-                 rValue.Value <<= SwViewOption::GetFieldShadingsColor().GetColor();
+                 rValue.Value <<= SwViewOption::GetFieldShadingsColor();
             uno::Any &anyChar = rValue.Value;
             sal_uInt32 crChar = static_cast<sal_uInt32>( reinterpret_cast<sal_uIntPtr>(anyChar.pReserved));
 
-            if( COL_AUTO == crChar )
+            if( COL_AUTO == Color(crChar) )
             {
                 uno::Reference<XAccessibleComponent> xComponent(this);
                 if (xComponent.is())
                 {
                     Color cr(xComponent->getBackground());
-                    crChar = cr.IsDark() ? COL_WHITE : COL_BLACK;
+                    crChar = sal_uInt32(cr.IsDark() ? COL_WHITE : COL_BLACK);
                     rValue.Value <<= crChar;
                 }
             }
@@ -2270,11 +2000,11 @@ void SwAccessibleParagraph::_correctValues( const sal_Int32 nIndex,
                 const SwWrongList* pWrongList = pTextNode->GetWrong();
                 if( nullptr != pWrongList )
                 {
-                    sal_Int32 nBegin = nIndex;
+                    sal_Int32 nBegin = pos.second;
                     sal_Int32 nLen = 1;
-                    if( pWrongList->InWrongWord(nBegin,nLen) && !pTextNode->IsSymbol(nBegin) )
+                    if (pWrongList->InWrongWord(nBegin, nLen) && !pTextNode->IsSymbolAt(nBegin))
                     {
-                        rValue.Value <<= (sal_uInt16)LINESTYLE_WAVE;
+                        rValue.Value <<= sal_uInt16(LINESTYLE_WAVE);
                     }
                 }
             }
@@ -2291,11 +2021,11 @@ void SwAccessibleParagraph::_correctValues( const sal_Int32 nIndex,
                 const SwWrongList* pWrongList = pTextNode->GetWrong();
                 if( nullptr != pWrongList )
                 {
-                    sal_Int32 nBegin = nIndex;
+                    sal_Int32 nBegin = pos.second;
                     sal_Int32 nLen = 1;
-                    if( pWrongList->InWrongWord(nBegin,nLen) && !pTextNode->IsSymbol(nBegin) )
+                    if (pWrongList->InWrongWord(nBegin, nLen) && !pTextNode->IsSymbolAt(nBegin))
                     {
-                        rValue.Value <<= (sal_Int32)0x00ff0000;
+                        rValue.Value <<= sal_Int32(0x00ff0000);
                         continue;
                     }
                 }
@@ -2303,13 +2033,13 @@ void SwAccessibleParagraph::_correctValues( const sal_Int32 nIndex,
 
             uno::Any &anyChar = rValue.Value;
             sal_uInt32 crUnderline = static_cast<sal_uInt32>( reinterpret_cast<sal_uIntPtr>(anyChar.pReserved));
-            if ( COL_AUTO == crUnderline )
+            if ( COL_AUTO == Color(crUnderline) )
             {
                 uno::Reference<XAccessibleComponent> xComponent(this);
                 if (xComponent.is())
                 {
                     Color cr(xComponent->getBackground());
-                    crUnderline = cr.IsDark() ? COL_WHITE : COL_BLACK;
+                    crUnderline = sal_uInt32(cr.IsDark() ? COL_WHITE : COL_BLACK);
                     rValue.Value <<= crUnderline;
                 }
             }
@@ -2345,7 +2075,7 @@ void SwAccessibleParagraph::_correctValues( const sal_Int32 nIndex,
         {
             if ( GetPortionData().IsIndexInFootnode(nIndex) )
             {
-                rValue.Value <<= (sal_Int32)101;
+                rValue.Value <<= sal_Int32(101);
             }
             continue;
         }
@@ -2354,11 +2084,10 @@ void SwAccessibleParagraph::_correctValues( const sal_Int32 nIndex,
 
 awt::Rectangle SwAccessibleParagraph::getCharacterBounds(
     sal_Int32 nIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     // #i12332# The position after the string needs special treatment.
     // IsValidChar -> IsValidPosition
@@ -2375,28 +2104,30 @@ awt::Rectangle SwAccessibleParagraph::getCharacterBounds(
     aMoveState.m_bRealHeight = true;
     aMoveState.m_bRealWidth = true;
     SwSpecialPos aSpecialPos;
-    SwTextNode* pNode = const_cast<SwTextNode*>( GetTextNode() );
+    SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
 
     /**  #i12332# FillSpecialPos does not accept nIndex ==
          GetString().getLength(). In that case nPos is set to the
          length of the string in the core. This way GetCharRect
          returns the rectangle for a cursor at the end of the
          paragraph. */
-    const sal_Int32 nPos = bBehindText
-        ? pNode->GetText().getLength()
+    const TextFrameIndex nPos = bBehindText
+        ? TextFrameIndex(pFrame->GetText().getLength())
         : GetPortionData().FillSpecialPos(nIndex, aSpecialPos, aMoveState.m_pSpecialPos );
 
     // call GetCharRect
     SwRect aCoreRect;
-    SwIndex aIndex( pNode, nPos );
-    SwPosition aPosition( *pNode, aIndex );
+    SwPosition aPosition(pFrame->MapViewToModelPos(nPos));
     GetFrame()->GetCharRect( aCoreRect, aPosition, &aMoveState );
 
     // translate core coordinates into accessibility coordinates
     vcl::Window *pWin = GetWindow();
-    CHECK_FOR_WINDOW( XAccessibleComponent, pWin );
+    if (!pWin)
+    {
+        throw uno::RuntimeException("no Window", static_cast<cppu::OWeakObject*>(this));
+    }
 
-    Rectangle aScreenRect( GetMap()->CoreToPixel( aCoreRect.SVRect() ));
+    tools::Rectangle aScreenRect( GetMap()->CoreToPixel( aCoreRect.SVRect() ));
     SwRect aFrameLogBounds( GetBounds( *(GetMap()) ) ); // twip rel to doc root
 
     Point aFramePixPos( GetMap()->CoreToPixel( aFrameLogBounds.SVRect() ).TopLeft() );
@@ -2409,30 +2140,26 @@ awt::Rectangle SwAccessibleParagraph::getCharacterBounds(
 }
 
 sal_Int32 SwAccessibleParagraph::getCharacterCount()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     return GetString().getLength();
 }
 
 sal_Int32 SwAccessibleParagraph::getIndexAtPoint( const awt::Point& rPoint )
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
-
-    // construct SwPosition (where GetCursorOfst() will put the result into)
-    SwTextNode* pNode = const_cast<SwTextNode*>( GetTextNode() );
-    SwIndex aIndex( pNode, 0);
-    SwPosition aPos( *pNode, aIndex );
+    ThrowIfDisposed();
 
     // construct Point (translate into layout coordinates)
     vcl::Window *pWin = GetWindow();
-    CHECK_FOR_WINDOW( XAccessibleComponent, pWin );
+    if (!pWin)
+    {
+        throw uno::RuntimeException("no Window", static_cast<cppu::OWeakObject*>(this));
+    }
     Point aPoint( rPoint.X, rPoint.Y );
     SwRect aLogBounds( GetBounds( *(GetMap()), GetFrame() ) ); // twip rel to doc root
     Point aPixPos( GetMap()->CoreToPixel( aLogBounds.SVRect() ).TopLeft() );
@@ -2461,14 +2188,17 @@ sal_Int32 SwAccessibleParagraph::getIndexAtPoint( const awt::Point& rPoint )
     OSL_ENSURE( GetFrame() != nullptr, "The text frame has vanished!" );
     OSL_ENSURE( GetFrame()->IsTextFrame(), "The text frame has mutated!" );
     const SwTextFrame* pFrame = static_cast<const SwTextFrame*>( GetFrame() );
+    // construct SwPosition (where GetCursorOfst() will put the result into)
+    SwTextNode* pNode = const_cast<SwTextNode*>(pFrame->GetTextNodeFirst());
+    SwPosition aPos(*pNode, 0);
     SwCursorMoveState aMoveState;
     aMoveState.m_bPosMatchesBounds = true;
     const bool bSuccess = pFrame->GetCursorOfst( &aPos, aCorePoint, &aMoveState );
 
-    SwIndex aContentIdx = aPos.nContent;
-    const sal_Int32 nIndex = aContentIdx.GetIndex();
-    if ( nIndex > 0 )
+    TextFrameIndex nIndex = pFrame->MapModelToViewPos(aPos);
+    if (TextFrameIndex(0) < nIndex)
     {
+        assert(bSuccess);
         SwRect aResultRect;
         pFrame->GetCharRect( aResultRect, aPos );
         bool bVert = pFrame->IsVertical();
@@ -2478,28 +2208,28 @@ sal_Int32 SwAccessibleParagraph::getIndexAtPoint( const awt::Point& rPoint )
              ( bVert && aResultRect.Pos().getY() > aCorePoint.getY()) ||
              ( bR2L  && aResultRect.Right()   < aCorePoint.getX()) )
         {
-            SwIndex aIdxPrev( pNode, nIndex - 1);
-            SwPosition aPosPrev( *pNode, aIdxPrev );
+            SwPosition aPosPrev(pFrame->MapViewToModelPos(nIndex - TextFrameIndex(1)));
             SwRect aResultRectPrev;
             pFrame->GetCharRect( aResultRectPrev, aPosPrev );
             if ( (!bVert && aResultRectPrev.Pos().getX() < aCorePoint.getX() && aResultRect.Pos().getY() == aResultRectPrev.Pos().getY()) ||
                  ( bVert && aResultRectPrev.Pos().getY() < aCorePoint.getY() && aResultRect.Pos().getX() == aResultRectPrev.Pos().getX()) ||
                  (  bR2L && aResultRectPrev.Right()   > aCorePoint.getX() && aResultRect.Pos().getY() == aResultRectPrev.Pos().getY()) )
-                aPos = aPosPrev;
+            {
+                --nIndex;
+            }
         }
     }
 
-    return bSuccess ?
-        GetPortionData().GetAccessiblePosition( aPos.nContent.GetIndex() )
-        : -1L;
+    return bSuccess
+        ? GetPortionData().GetAccessiblePosition(nIndex)
+        : -1;
 }
 
 OUString SwAccessibleParagraph::getSelectedText()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     sal_Int32 nStart, nEnd;
     bool bSelected = GetSelection( nStart, nEnd );
@@ -2509,11 +2239,10 @@ OUString SwAccessibleParagraph::getSelectedText()
 }
 
 sal_Int32 SwAccessibleParagraph::getSelectionStart()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     sal_Int32 nStart, nEnd;
     GetSelection( nStart, nEnd );
@@ -2521,11 +2250,10 @@ sal_Int32 SwAccessibleParagraph::getSelectionStart()
 }
 
 sal_Int32 SwAccessibleParagraph::getSelectionEnd()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     sal_Int32 nStart, nEnd;
     GetSelection( nStart, nEnd );
@@ -2533,11 +2261,10 @@ sal_Int32 SwAccessibleParagraph::getSelectionEnd()
 }
 
 sal_Bool SwAccessibleParagraph::setSelection( sal_Int32 nStartIndex, sal_Int32 nEndIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     // parameter checking
     sal_Int32 nLength = GetString().getLength();
@@ -2553,13 +2280,12 @@ sal_Bool SwAccessibleParagraph::setSelection( sal_Int32 nStartIndex, sal_Int32 n
     if( pCursorShell != nullptr )
     {
         // create pam for selection
-        SwTextNode* pNode = const_cast<SwTextNode*>( GetTextNode() );
-        SwIndex aIndex( pNode, GetPortionData().GetModelPosition(nStartIndex));
-        SwPosition aStartPos( *pNode, aIndex );
-        SwPaM aPaM( aStartPos );
+        SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+        TextFrameIndex const nStart(GetPortionData().GetCoreViewPosition(nStartIndex));
+        TextFrameIndex const nEnd(GetPortionData().GetCoreViewPosition(nEndIndex));
+        SwPaM aPaM(pFrame->MapViewToModelPos(nStart));
         aPaM.SetMark();
-        aPaM.GetPoint()->nContent =
-            GetPortionData().GetModelPosition(nEndIndex);
+        *aPaM.GetPoint() = pFrame->MapViewToModelPos(nEnd);
 
         // set PaM at cursor shell
         bRet = Select( aPaM );
@@ -2569,39 +2295,35 @@ sal_Bool SwAccessibleParagraph::setSelection( sal_Int32 nStartIndex, sal_Int32 n
 }
 
 OUString SwAccessibleParagraph::getText()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     return GetString();
 }
 
 OUString SwAccessibleParagraph::getTextRange(
     sal_Int32 nStartIndex, sal_Int32 nEndIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     OUString sText( GetString() );
 
-    if ( IsValidRange( nStartIndex, nEndIndex, sText.getLength() ) )
-    {
-        OrderRange( nStartIndex, nEndIndex );
-        return sText.copy(nStartIndex, nEndIndex-nStartIndex );
-    }
-    else
+    if ( !IsValidRange( nStartIndex, nEndIndex, sText.getLength() ) )
         throw lang::IndexOutOfBoundsException();
+
+    OrderRange( nStartIndex, nEndIndex );
+    return sText.copy(nStartIndex, nEndIndex-nStartIndex );
 }
 
-/*accessibility::*/TextSegment SwAccessibleParagraph::getTextAtIndex( sal_Int32 nIndex, sal_Int16 nTextType ) throw (lang::IndexOutOfBoundsException, lang::IllegalArgumentException, uno::RuntimeException, std::exception)
+/*accessibility::*/TextSegment SwAccessibleParagraph::getTextAtIndex( sal_Int32 nIndex, sal_Int16 nTextType )
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     /*accessibility::*/TextSegment aResult;
     aResult.SegmentStart = -1;
@@ -2633,11 +2355,11 @@ OUString SwAccessibleParagraph::getTextRange(
     return aResult;
 }
 
-/*accessibility::*/TextSegment SwAccessibleParagraph::getTextBeforeIndex( sal_Int32 nIndex, sal_Int16 nTextType ) throw (lang::IndexOutOfBoundsException, lang::IllegalArgumentException, uno::RuntimeException, std::exception)
+/*accessibility::*/TextSegment SwAccessibleParagraph::getTextBeforeIndex( sal_Int32 nIndex, sal_Int16 nTextType )
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     const OUString rText = GetString();
 
@@ -2704,11 +2426,11 @@ OUString SwAccessibleParagraph::getTextRange(
     return aResult;
 }
 
-/*accessibility::*/TextSegment SwAccessibleParagraph::getTextBehindIndex( sal_Int32 nIndex, sal_Int16 nTextType ) throw (lang::IndexOutOfBoundsException, lang::IllegalArgumentException, uno::RuntimeException, std::exception)
+/*accessibility::*/TextSegment SwAccessibleParagraph::getTextBehindIndex( sal_Int32 nIndex, sal_Int16 nTextType )
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     /*accessibility::*/TextSegment aResult;
     aResult.SegmentStart = -1;
@@ -2802,57 +2524,55 @@ OUString SwAccessibleParagraph::getTextRange(
 }
 
 sal_Bool SwAccessibleParagraph::copyText( sal_Int32 nStartIndex, sal_Int32 nEndIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
     SolarMutexGuard aGuard;
+
+    ThrowIfDisposed();
 
     // select and copy (through dispatch mechanism)
     setSelection( nStartIndex, nEndIndex );
     ExecuteAtViewShell( SID_COPY );
-    return sal_True;
+    return true;
 }
 
-// XAccesibleEditableText
+// XAccessibleEditableText
 
 sal_Bool SwAccessibleParagraph::cutText( sal_Int32 nStartIndex, sal_Int32 nEndIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
-    CHECK_FOR_DEFUNC( XAccessibleEditableText );
     SolarMutexGuard aGuard;
 
+    ThrowIfDisposed();
+
     if( !IsEditableState() )
-        return sal_False;
+        return false;
 
     // select and cut (through dispatch mechanism)
     setSelection( nStartIndex, nEndIndex );
     ExecuteAtViewShell( SID_CUT );
-    return sal_True;
+    return true;
 }
 
 sal_Bool SwAccessibleParagraph::pasteText( sal_Int32 nIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
-    CHECK_FOR_DEFUNC( XAccessibleEditableText );
     SolarMutexGuard aGuard;
 
+    ThrowIfDisposed();
+
     if( !IsEditableState() )
-        return sal_False;
+        return false;
 
     // select and paste (through dispatch mechanism)
     setSelection( nIndex, nIndex );
     ExecuteAtViewShell( SID_PASTE );
-    return sal_True;
+    return true;
 }
 
 sal_Bool SwAccessibleParagraph::deleteText( sal_Int32 nStartIndex, sal_Int32 nEndIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     return replaceText( nStartIndex, nEndIndex, OUString() );
 }
 
 sal_Bool SwAccessibleParagraph::insertText( const OUString& sText, sal_Int32 nIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     return replaceText( nIndex, nIndex, sText );
 }
@@ -2860,62 +2580,57 @@ sal_Bool SwAccessibleParagraph::insertText( const OUString& sText, sal_Int32 nIn
 sal_Bool SwAccessibleParagraph::replaceText(
     sal_Int32 nStartIndex, sal_Int32 nEndIndex,
     const OUString& sReplacement )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC( XAccessibleEditableText );
+    ThrowIfDisposed();
 
     const OUString& rText = GetString();
 
-    if( IsValidRange( nStartIndex, nEndIndex, rText.getLength() ) )
-    {
-        if( !IsEditableState() )
-            return sal_False;
-
-        SwTextNode* pNode = const_cast<SwTextNode*>( GetTextNode() );
-
-        // translate positions
-        sal_Int32 nStart;
-        sal_Int32 nEnd;
-        bool bSuccess = GetPortionData().GetEditableRange(
-                                        nStartIndex, nEndIndex, nStart, nEnd );
-
-        // edit only if the range is editable
-        if( bSuccess )
-        {
-            // create SwPosition for nStartIndex
-            SwIndex aIndex( pNode, nStart );
-            SwPosition aStartPos( *pNode, aIndex );
-
-            // create SwPosition for nEndIndex
-            SwPosition aEndPos( aStartPos );
-            aEndPos.nContent = nEnd;
-
-            // now create XTextRange as helper and set string
-            const uno::Reference<text::XTextRange> xRange(
-                SwXTextRange::CreateXTextRange(
-                    *pNode->GetDoc(), aStartPos, &aEndPos));
-            xRange->setString(sReplacement);
-
-            // delete portion data
-            ClearPortionData();
-        }
-
-        return bSuccess;
-    }
-    else
+    if( !IsValidRange( nStartIndex, nEndIndex, rText.getLength() ) )
         throw lang::IndexOutOfBoundsException();
+
+    if( !IsEditableState() )
+        return false;
+
+    // translate positions
+    TextFrameIndex nStart;
+    TextFrameIndex nEnd;
+    bool bSuccess = GetPortionData().GetEditableRange(
+                                    nStartIndex, nEndIndex, nStart, nEnd );
+
+    // edit only if the range is editable
+    if( bSuccess )
+    {
+        SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+        // create SwPosition for nStartIndex
+        SwPosition aStartPos(pFrame->MapViewToModelPos(nStart));
+
+        // create SwPosition for nEndIndex
+        SwPosition aEndPos(pFrame->MapViewToModelPos(nEnd));
+
+        // now create XTextRange as helper and set string
+        const uno::Reference<text::XTextRange> xRange(
+            SwXTextRange::CreateXTextRange(
+                const_cast<SwDoc&>(pFrame->GetDoc()), aStartPos, &aEndPos));
+        xRange->setString(sReplacement);
+
+        // delete portion data
+        ClearPortionData();
+    }
+
+    return bSuccess;
+
 }
 
 sal_Bool SwAccessibleParagraph::setAttributes(
     sal_Int32 nStartIndex,
     sal_Int32 nEndIndex,
     const uno::Sequence<PropertyValue>& rAttributeSet )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    CHECK_FOR_DEFUNC( XAccessibleEditableText );
+
+    ThrowIfDisposed();
 
     const OUString& rText = GetString();
 
@@ -2923,7 +2638,7 @@ sal_Bool SwAccessibleParagraph::setAttributes(
         throw lang::IndexOutOfBoundsException();
 
     if( !IsEditableState() )
-        return sal_False;
+        return false;
 
     // create a (dummy) text portion for the sole purpose of calling
     // setPropertyValue on it
@@ -2933,24 +2648,24 @@ sal_Bool SwAccessibleParagraph::setAttributes(
     // build sorted index array
     sal_Int32 nLength = rAttributeSet.getLength();
     const PropertyValue* pPairs = rAttributeSet.getConstArray();
-    sal_Int32* pIndices = new sal_Int32[nLength];
-    sal_Int32 i;
-    for( i = 0; i < nLength; i++ )
-        pIndices[i] = i;
-    sort( &pIndices[0], &pIndices[nLength], IndexCompare(pPairs) );
+    std::vector<sal_Int32> aIndices;
+    aIndices.reserve(nLength);
+    for (sal_Int32 i = 0; i < nLength; ++i)
+        aIndices.push_back(i);
+    std::sort(aIndices.begin(), aIndices.end(), IndexCompare(pPairs));
 
     // create sorted sequences according to index array
     uno::Sequence< OUString > aNames( nLength );
     OUString* pNames = aNames.getArray();
     uno::Sequence< uno::Any > aValues( nLength );
     uno::Any* pValues = aValues.getArray();
-    for( i = 0; i < nLength; i++ )
+    for (sal_Int32 i = 0; i < nLength; ++i)
     {
-        const PropertyValue& rVal = pPairs[pIndices[i]];
+        const PropertyValue& rVal = pPairs[aIndices[i]];
         pNames[i]  = rVal.Name;
         pValues[i] = rVal.Value;
     }
-    delete[] pIndices;
+    aIndices.clear();
 
     // now set the values
     bool bRet = true;
@@ -2968,7 +2683,6 @@ sal_Bool SwAccessibleParagraph::setAttributes(
 }
 
 sal_Bool SwAccessibleParagraph::setText( const OUString& sText )
-    throw (uno::RuntimeException, std::exception)
 {
     return replaceText(0, GetString().getLength(), sText);
 }
@@ -2977,114 +2691,108 @@ sal_Bool SwAccessibleParagraph::setText( const OUString& sText )
 
 void SwAccessibleParagraph::selectAccessibleChild(
     sal_Int32 nChildIndex )
-    throw ( lang::IndexOutOfBoundsException,
-            uno::RuntimeException, std::exception )
 {
-    CHECK_FOR_DEFUNC( XAccessibleSelection );
+    ThrowIfDisposed();
 
-    aSelectionHelper.selectAccessibleChild(nChildIndex);
+    m_aSelectionHelper.selectAccessibleChild(nChildIndex);
 }
 
 sal_Bool SwAccessibleParagraph::isAccessibleChildSelected(
     sal_Int32 nChildIndex )
-    throw ( lang::IndexOutOfBoundsException,
-            uno::RuntimeException, std::exception )
 {
-    CHECK_FOR_DEFUNC( XAccessibleSelection );
+    ThrowIfDisposed();
 
-    return aSelectionHelper.isAccessibleChildSelected(nChildIndex);
+    return m_aSelectionHelper.isAccessibleChildSelected(nChildIndex);
 }
 
 void SwAccessibleParagraph::clearAccessibleSelection(  )
-    throw ( uno::RuntimeException, std::exception )
 {
-    CHECK_FOR_DEFUNC( XAccessibleSelection );
+    ThrowIfDisposed();
 }
 
 void SwAccessibleParagraph::selectAllAccessibleChildren(  )
-    throw ( uno::RuntimeException, std::exception )
 {
-    CHECK_FOR_DEFUNC( XAccessibleSelection );
+    ThrowIfDisposed();
 
-    aSelectionHelper.selectAllAccessibleChildren();
+    m_aSelectionHelper.selectAllAccessibleChildren();
 }
 
 sal_Int32 SwAccessibleParagraph::getSelectedAccessibleChildCount(  )
-    throw ( uno::RuntimeException, std::exception )
 {
-    CHECK_FOR_DEFUNC( XAccessibleSelection );
+    ThrowIfDisposed();
 
-    return aSelectionHelper.getSelectedAccessibleChildCount();
+    return m_aSelectionHelper.getSelectedAccessibleChildCount();
 }
 
 uno::Reference<XAccessible> SwAccessibleParagraph::getSelectedAccessibleChild(
     sal_Int32 nSelectedChildIndex )
-    throw ( lang::IndexOutOfBoundsException,
-            uno::RuntimeException, std::exception)
 {
-    CHECK_FOR_DEFUNC( XAccessibleSelection );
+    ThrowIfDisposed();
 
-    return aSelectionHelper.getSelectedAccessibleChild(nSelectedChildIndex);
+    return m_aSelectionHelper.getSelectedAccessibleChild(nSelectedChildIndex);
 }
 
 // index has to be treated as global child index.
 void SwAccessibleParagraph::deselectAccessibleChild(
     sal_Int32 nChildIndex )
-    throw ( lang::IndexOutOfBoundsException,
-            uno::RuntimeException, std::exception )
 {
-    CHECK_FOR_DEFUNC( XAccessibleSelection );
+    ThrowIfDisposed();
 
-    aSelectionHelper.deselectAccessibleChild( nChildIndex );
+    m_aSelectionHelper.deselectAccessibleChild( nChildIndex );
 }
 
 // XAccessibleHypertext
 
 class SwHyperlinkIter_Impl
 {
-    const SwpHints *pHints;
-    sal_Int32 nStt;
-    sal_Int32 nEnd;
-    size_t nPos;
+    SwTextFrame const& m_rFrame;
+    sw::MergedAttrIter m_Iter;
+    TextFrameIndex const m_nStt;
+    TextFrameIndex m_nEnd;
 
 public:
-    explicit SwHyperlinkIter_Impl( const SwTextFrame *pTextFrame );
-    const SwTextAttr *next();
-    size_t getCurrHintPos() const { return nPos-1; }
+    explicit SwHyperlinkIter_Impl(const SwTextFrame & rTextFrame);
+    const SwTextAttr *next(SwTextNode const** ppNode = nullptr);
 
-    sal_Int32 startIdx() const { return nStt; }
-    sal_Int32 endIdx() const { return nEnd; }
+    TextFrameIndex startIdx() const { return m_nStt; }
+    TextFrameIndex endIdx() const { return m_nEnd; }
 };
 
-SwHyperlinkIter_Impl::SwHyperlinkIter_Impl( const SwTextFrame *pTextFrame ) :
-    pHints( pTextFrame->GetTextNode()->GetpSwpHints() ),
-    nStt( pTextFrame->GetOfst() ),
-    nPos( 0 )
+SwHyperlinkIter_Impl::SwHyperlinkIter_Impl(const SwTextFrame & rTextFrame)
+    : m_rFrame(rTextFrame)
+    , m_Iter(rTextFrame)
+    , m_nStt(rTextFrame.GetOfst())
 {
-    const SwTextFrame *pFollFrame = pTextFrame->GetFollow();
-    nEnd = pFollFrame ? pFollFrame->GetOfst() : pTextFrame->GetTextNode()->Len();
+    const SwTextFrame *const pFollFrame = rTextFrame.GetFollow();
+    m_nEnd = pFollFrame ? pFollFrame->GetOfst() : TextFrameIndex(rTextFrame.GetText().getLength());
 }
 
-const SwTextAttr *SwHyperlinkIter_Impl::next()
+const SwTextAttr *SwHyperlinkIter_Impl::next(SwTextNode const** ppNode)
 {
     const SwTextAttr *pAttr = nullptr;
-    if( pHints )
+    if (ppNode)
     {
-        while( !pAttr && nPos < pHints->Count() )
+        *ppNode = nullptr;
+    }
+
+    SwTextNode const* pNode(nullptr);
+    while (SwTextAttr const*const pHt = m_Iter.NextAttr(&pNode))
+    {
+        if (RES_TXTATR_INETFMT == pHt->Which())
         {
-            const SwTextAttr *pHt = pHints->Get(nPos);
-            if( RES_TXTATR_INETFMT == pHt->Which() )
+            const TextFrameIndex nHtStt(m_rFrame.MapModelToView(pNode, pHt->GetStart()));
+            const TextFrameIndex nHtEnd(m_rFrame.MapModelToView(pNode, *pHt->GetAnyEnd()));
+            if (nHtEnd > nHtStt &&
+                ((nHtStt >= m_nStt && nHtStt < m_nEnd) ||
+                 (nHtEnd > m_nStt && nHtEnd <= m_nEnd)))
             {
-                const sal_Int32 nHtStt = pHt->GetStart();
-                const sal_Int32 nHtEnd = *pHt->GetAnyEnd();
-                if( nHtEnd > nHtStt &&
-                    ( (nHtStt >= nStt && nHtStt < nEnd) ||
-                      (nHtEnd > nStt && nHtEnd <= nEnd) ) )
+                pAttr = pHt;
+                if (ppNode)
                 {
-                    pAttr = pHt;
+                    *ppNode = pNode;
                 }
+                break;
             }
-            ++nPos;
         }
     }
 
@@ -3092,17 +2800,16 @@ const SwTextAttr *SwHyperlinkIter_Impl::next()
 };
 
 sal_Int32 SAL_CALL SwAccessibleParagraph::getHyperLinkCount()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC( XAccessibleHypertext );
+    ThrowIfDisposed();
 
     sal_Int32 nCount = 0;
     // #i77108# - provide hyperlinks also in editable documents.
 
     const SwTextFrame *pTextFrame = static_cast<const SwTextFrame*>( GetFrame() );
-    SwHyperlinkIter_Impl aIter( pTextFrame );
+    SwHyperlinkIter_Impl aIter(*pTextFrame);
     while( aIter.next() )
         nCount++;
 
@@ -3111,87 +2818,53 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getHyperLinkCount()
 
 uno::Reference< XAccessibleHyperlink > SAL_CALL
     SwAccessibleParagraph::getHyperLink( sal_Int32 nLinkIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    CHECK_FOR_DEFUNC( XAccessibleHypertext );
+
+    ThrowIfDisposed();
 
     uno::Reference< XAccessibleHyperlink > xRet;
 
     const SwTextFrame *pTextFrame = static_cast<const SwTextFrame*>( GetFrame() );
-    SwHyperlinkIter_Impl aHIter( pTextFrame );
-    sal_Int32 nTIndex = -1;
-    SwTOXSortTabBase* pTBase = GetTOXSortTabBase();
-    SwTextAttr* pHt = const_cast<SwTextAttr*>(aHIter.next());
-    while( (nLinkIndex < getHyperLinkCount()) && nTIndex < nLinkIndex)
+    SwHyperlinkIter_Impl aHIter(*pTextFrame);
+    SwTextNode const* pNode(nullptr);
+    SwTextAttr* pHt = const_cast<SwTextAttr*>(aHIter.next(&pNode));
+    for (sal_Int32 nTIndex = 0; pHt && nTIndex <= nLinkIndex; ++nTIndex)
     {
-        sal_Int32 nHStt = -1;
-        bool bH = false;
-
-        if( pHt )
-            nHStt = pHt->GetStart();
-        bool bTOC = false;
-        // Inside TOC & get the first link
-        if( pTBase && nTIndex == -1 )
-        {
-            nTIndex++;
-            bTOC = true;
-        }
-        else if( nHStt >= 0 )
-        {
-              // only hyperlink available
-            nTIndex++;
-            bH = true;
-        }
-
         if( nTIndex == nLinkIndex )
         {   // found
-            if( bH )
-            {   // it's a hyperlink
-                if( pHt )
+            if (!m_pHyperTextData)
+                m_pHyperTextData.reset( new SwAccessibleHyperTextData );
+            SwAccessibleHyperTextData::iterator aIter =
+                m_pHyperTextData ->find( pHt );
+            if (aIter != m_pHyperTextData->end())
+            {
+                xRet = (*aIter).second;
+            }
+            if (!xRet.is())
+            {
+                TextFrameIndex const nHintStart(pTextFrame->MapModelToView(pNode, pHt->GetStart()));
+                TextFrameIndex const nHintEnd(pTextFrame->MapModelToView(pNode, *pHt->GetAnyEnd()));
+                const sal_Int32 nTmpHStt = GetPortionData().GetAccessiblePosition(
+                    max(aHIter.startIdx(), nHintStart));
+                const sal_Int32 nTmpHEnd = GetPortionData().GetAccessiblePosition(
+                    min(aHIter.endIdx(), nHintEnd));
+                xRet = new SwAccessibleHyperlink(*pHt,
+                    *this, nTmpHStt, nTmpHEnd );
+                if (aIter != m_pHyperTextData->end())
                 {
-                    if( !pHyperTextData )
-                        pHyperTextData = new SwAccessibleHyperTextData;
-                    SwAccessibleHyperTextData::iterator aIter =
-                        pHyperTextData ->find( pHt );
-                    if( aIter != pHyperTextData->end() )
-                    {
-                        xRet = (*aIter).second;
-                    }
-                    if( !xRet.is() )
-                    {
-                        {
-                            const sal_Int32 nTmpHStt= GetPortionData().GetAccessiblePosition(
-                                max( aHIter.startIdx(), pHt->GetStart() ) );
-                            const sal_Int32 nTmpHEnd= GetPortionData().GetAccessiblePosition(
-                                min( aHIter.endIdx(), *pHt->GetAnyEnd() ) );
-                            xRet = new SwAccessibleHyperlink( aHIter.getCurrHintPos(),
-                                this, nTmpHStt, nTmpHEnd );
-                        }
-                        if( aIter != pHyperTextData->end() )
-                        {
-                            (*aIter).second = xRet;
-                        }
-                        else
-                        {
-                            SwAccessibleHyperTextData::value_type aEntry( pHt, xRet );
-                            pHyperTextData->insert( aEntry );
-                        }
-                    }
+                    (*aIter).second = xRet;
+                }
+                else
+                {
+                    m_pHyperTextData->emplace( pHt, xRet );
                 }
             }
             break;
         }
 
-        // iterate next
-        if( bH )
-            // iterate next hyperlink
-            pHt = const_cast<SwTextAttr*>(aHIter.next());
-        else if(bTOC)
-            continue;
-        else
-            // no candidate, exit
-            break;
+        // iterate next hyperlink
+        pHt = const_cast<SwTextAttr*>(aHIter.next(&pNode));
     }
     if( !xRet.is() )
         throw lang::IndexOutOfBoundsException();
@@ -3200,10 +2873,10 @@ uno::Reference< XAccessibleHyperlink > SAL_CALL
 }
 
 sal_Int32 SAL_CALL SwAccessibleParagraph::getHyperLinkIndex( sal_Int32 nCharIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    CHECK_FOR_DEFUNC( XAccessibleHypertext );
+
+    ThrowIfDisposed();
 
     // parameter checking
     sal_Int32 nLength = GetString().getLength();
@@ -3216,14 +2889,16 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getHyperLinkIndex( sal_Int32 nCharInde
     // #i77108#
     {
         const SwTextFrame *pTextFrame = static_cast<const SwTextFrame*>( GetFrame() );
-        SwHyperlinkIter_Impl aHIter( pTextFrame );
+        SwHyperlinkIter_Impl aHIter(*pTextFrame);
 
-        const sal_Int32 nIdx = GetPortionData().GetModelPosition( nCharIndex );
+        const TextFrameIndex nIdx = GetPortionData().GetCoreViewPosition(nCharIndex);
         sal_Int32 nPos = 0;
-        const SwTextAttr *pHt = aHIter.next();
-        while( pHt && !(nIdx >= pHt->GetStart() && nIdx < *pHt->GetAnyEnd()) )
+        SwTextNode const* pNode(nullptr);
+        const SwTextAttr *pHt = aHIter.next(&pNode);
+        while (pHt && !(nIdx >= pTextFrame->MapModelToView(pNode, pHt->GetStart())
+                     && nIdx < pTextFrame->MapModelToView(pNode, *pHt->GetAnyEnd())))
         {
-            pHt = aHIter.next();
+            pHt = aHIter.next(&pNode);
             nPos++;
         }
 
@@ -3233,15 +2908,11 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getHyperLinkIndex( sal_Int32 nCharInde
 
     if (nRet == -1)
         throw lang::IndexOutOfBoundsException();
-    else
-        return nRet;
-    //return nRet;
+     return nRet;
 }
 
 // #i71360#, #i108125# - adjustments for change tracking text markup
 sal_Int32 SAL_CALL SwAccessibleParagraph::getTextMarkupCount( sal_Int32 nTextMarkupType )
-                                        throw (lang::IllegalArgumentException,
-                                               uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -3259,7 +2930,8 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getTextMarkupCount( sal_Int32 nTextMar
         break;
         default:
         {
-            pTextMarkupHelper.reset( new SwTextMarkupHelper( GetPortionData(), *GetTextNode() ) );
+            SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+            pTextMarkupHelper.reset(new SwTextMarkupHelper(GetPortionData(), *pFrame));
         }
     }
 
@@ -3268,24 +2940,30 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getTextMarkupCount( sal_Int32 nTextMar
 
 //MSAA Extension Implementation in app  module
 sal_Bool SAL_CALL SwAccessibleParagraph::scrollToPosition( const css::awt::Point&, sal_Bool )
-    throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
 {
-    return sal_False;
+    return false;
 }
 
 sal_Int32 SAL_CALL SwAccessibleParagraph::getSelectedPortionCount(  )
-    throw (css::uno::RuntimeException,
-           std::exception)
 {
     SolarMutexGuard g;
 
-    sal_Int32 nSeleted = 0;
+    sal_Int32 nSelected = 0;
     SwPaM* pCursor = GetCursor( true );
     if( pCursor != nullptr )
     {
         // get SwPosition for my node
-        const SwTextNode* pNode = GetTextNode();
-        sal_uLong nHere = pNode->GetIndex();
+        SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+        sal_uLong nFirstNode(pFrame->GetTextNodeFirst()->GetIndex());
+        sal_uLong nLastNode;
+        if (sw::MergedPara const*const pMerged = pFrame->GetMergedPara())
+        {
+            nLastNode = pMerged->pLastNode->GetIndex();
+        }
+        else
+        {
+            nLastNode = nFirstNode;
+        }
 
         // iterate over ring
         for(SwPaM& rTmpCursor : pCursor->GetRingContainer())
@@ -3293,61 +2971,51 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getSelectedPortionCount(  )
             // ignore, if no mark
             if( rTmpCursor.HasMark() )
             {
-                // check whether nHere is 'inside' pCursor
+                // check whether frame's node(s) are 'inside' pCursor
                 SwPosition* pStart = rTmpCursor.Start();
                 sal_uLong nStartIndex = pStart->nNode.GetIndex();
                 SwPosition* pEnd = rTmpCursor.End();
                 sal_uLong nEndIndex = pEnd->nNode.GetIndex();
-                if( ( nHere >= nStartIndex ) &&
-                    ( nHere <= nEndIndex )      )
+                if ((nStartIndex <= nLastNode) && (nFirstNode <= nEndIndex))
                 {
-                    nSeleted++;
+                    nSelected++;
                 }
                 // else: this PaM doesn't point to this paragraph
             }
             // else: this PaM is collapsed and doesn't select anything
         }
     }
-    return nSeleted;
+    return nSelected;
 
 }
 
 sal_Int32 SAL_CALL SwAccessibleParagraph::getSeletedPositionStart( sal_Int32 nSelectedPortionIndex )
-    throw (css::lang::IndexOutOfBoundsException,
-           css::uno::RuntimeException,
-           std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     sal_Int32 nStart, nEnd;
-    /*sal_Bool bSelected = */GetSelectionAtIndex(nSelectedPortionIndex, nStart, nEnd );
+    /*sal_Bool bSelected = */GetSelectionAtIndex(&nSelectedPortionIndex, nStart, nEnd );
     return nStart;
 }
 
 sal_Int32 SAL_CALL SwAccessibleParagraph::getSeletedPositionEnd( sal_Int32 nSelectedPortionIndex )
-    throw (css::lang::IndexOutOfBoundsException,
-           css::uno::RuntimeException,
-           std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     sal_Int32 nStart, nEnd;
-    /*sal_Bool bSelected = */GetSelectionAtIndex(nSelectedPortionIndex, nStart, nEnd );
+    /*sal_Bool bSelected = */GetSelectionAtIndex(&nSelectedPortionIndex, nStart, nEnd );
     return nEnd;
 }
 
 sal_Bool SAL_CALL SwAccessibleParagraph::removeSelection( sal_Int32 selectionIndex )
-    throw (css::lang::IndexOutOfBoundsException,
-           css::uno::RuntimeException,
-           std::exception)
 {
     SolarMutexGuard g;
 
-    if(selectionIndex < 0) return sal_False;
+    if(selectionIndex < 0) return false;
 
     sal_Int32 nSelected = selectionIndex;
 
@@ -3359,8 +3027,17 @@ sal_Bool SAL_CALL SwAccessibleParagraph::removeSelection( sal_Int32 selectionInd
         bool bRet = false;
 
         // get SwPosition for my node
-        const SwTextNode* pNode = GetTextNode();
-        sal_uLong nHere = pNode->GetIndex();
+        SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+        sal_uLong nFirstNode(pFrame->GetTextNodeFirst()->GetIndex());
+        sal_uLong nLastNode;
+        if (sw::MergedPara const*const pMerged = pFrame->GetMergedPara())
+        {
+            nLastNode = pMerged->pLastNode->GetIndex();
+        }
+        else
+        {
+            nLastNode = nFirstNode;
+        }
 
         // iterate over ring
         SwPaM* pRingStart = pCursor;
@@ -3369,13 +3046,12 @@ sal_Bool SAL_CALL SwAccessibleParagraph::removeSelection( sal_Int32 selectionInd
             // ignore, if no mark
             if( pCursor->HasMark() )
             {
-                // check whether nHere is 'inside' pCursor
+                // check whether frame's node(s) are 'inside' pCursor
                 SwPosition* pStart = pCursor->Start();
                 sal_uLong nStartIndex = pStart->nNode.GetIndex();
                 SwPosition* pEnd = pCursor->End();
                 sal_uLong nEndIndex = pEnd->nNode.GetIndex();
-                if( ( nHere >= nStartIndex ) &&
-                    ( nHere <= nEndIndex )      )
+                if ((nStartIndex <= nLastNode) && (nFirstNode <= nEndIndex))
                 {
                     if( nSelected == 0 )
                     {
@@ -3395,17 +3071,14 @@ sal_Bool SAL_CALL SwAccessibleParagraph::removeSelection( sal_Int32 selectionInd
         }
         while( !bRet && (pCursor != pRingStart) );
     }
-    return sal_True;
+    return true;
 }
 
 sal_Int32 SAL_CALL SwAccessibleParagraph::addSelection( sal_Int32, sal_Int32 startOffset, sal_Int32 endOffset)
-    throw (css::lang::IndexOutOfBoundsException,
-           css::uno::RuntimeException,
-           std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC_THIS( XAccessibleText, *this );
+    ThrowIfDisposed();
 
     // parameter checking
     sal_Int32 nLength = GetString().getLength();
@@ -3418,7 +3091,7 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::addSelection( sal_Int32, sal_Int32 sta
     for ( sal_Int32 i = nSelectedCount ; i >= 0 ; i--)
     {
         sal_Int32 nStart, nEnd;
-        bool bSelected = GetSelectionAtIndex(i, nStart, nEnd );
+        bool bSelected = GetSelectionAtIndex(&i, nStart, nEnd );
         if(bSelected)
         {
             if(nStart <= nEnd )
@@ -3453,10 +3126,11 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::addSelection( sal_Int32, sal_Int32 sta
     {
         // create pam for selection
         pCursorShell->StartAction();
+        SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
         SwPaM* aPaM = pCursorShell->CreateCursor();
         aPaM->SetMark();
-        aPaM->GetPoint()->nContent = GetPortionData().GetModelPosition(startOffset);
-        aPaM->GetMark()->nContent =  GetPortionData().GetModelPosition(endOffset);
+        *aPaM->GetPoint() = pFrame->MapViewToModelPos(GetPortionData().GetCoreViewPosition(startOffset));
+        *aPaM->GetMark() = pFrame->MapViewToModelPos(GetPortionData().GetCoreViewPosition(endOffset));
         pCursorShell->EndAction();
     }
 
@@ -3466,9 +3140,6 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::addSelection( sal_Int32, sal_Int32 sta
 /*accessibility::*/TextSegment SAL_CALL
         SwAccessibleParagraph::getTextMarkup( sal_Int32 nTextMarkupIndex,
                                               sal_Int32 nTextMarkupType )
-                                        throw (lang::IndexOutOfBoundsException,
-                                               lang::IllegalArgumentException,
-                                               uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -3486,7 +3157,8 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::addSelection( sal_Int32, sal_Int32 sta
         break;
         default:
         {
-            pTextMarkupHelper.reset( new SwTextMarkupHelper( GetPortionData(), *GetTextNode() ) );
+            SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+            pTextMarkupHelper.reset(new SwTextMarkupHelper(GetPortionData(), *pFrame));
         }
     }
 
@@ -3496,9 +3168,6 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::addSelection( sal_Int32, sal_Int32 sta
 uno::Sequence< /*accessibility::*/TextSegment > SAL_CALL
         SwAccessibleParagraph::getTextMarkupAtIndex( sal_Int32 nCharIndex,
                                                      sal_Int32 nTextMarkupType )
-                                        throw (lang::IndexOutOfBoundsException,
-                                               lang::IllegalArgumentException,
-                                               uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -3523,7 +3192,8 @@ uno::Sequence< /*accessibility::*/TextSegment > SAL_CALL
         break;
         default:
         {
-            pTextMarkupHelper.reset( new SwTextMarkupHelper( GetPortionData(), *GetTextNode() ) );
+            SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+            pTextMarkupHelper.reset(new SwTextMarkupHelper(GetPortionData(), *pFrame));
         }
     }
 
@@ -3532,8 +3202,6 @@ uno::Sequence< /*accessibility::*/TextSegment > SAL_CALL
 
 // #i89175#
 sal_Int32 SAL_CALL SwAccessibleParagraph::getLineNumberAtIndex( sal_Int32 nIndex )
-                                        throw (lang::IndexOutOfBoundsException,
-                                               uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -3550,8 +3218,6 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getLineNumberAtIndex( sal_Int32 nIndex
 
 /*accessibility::*/TextSegment SAL_CALL
         SwAccessibleParagraph::getTextAtLineNumber( sal_Int32 nLineNo )
-                                        throw (lang::IndexOutOfBoundsException,
-                                               uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -3576,7 +3242,6 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getLineNumberAtIndex( sal_Int32 nIndex
 }
 
 /*accessibility::*/TextSegment SAL_CALL SwAccessibleParagraph::getTextAtLineWithCaret()
-                                        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -3592,7 +3257,6 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getLineNumberAtIndex( sal_Int32 nIndex
 }
 
 sal_Int32 SAL_CALL SwAccessibleParagraph::getNumberOfLineWithCaret()
-                                        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -3620,9 +3284,12 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getNumberOfLineWithCaret()
                 const SwRect& aCursorCoreRect = pCursorShell->GetCharRect();
                 // translate core coordinates into accessibility coordinates
                 vcl::Window *pWin = GetWindow();
-                CHECK_FOR_WINDOW( XAccessibleComponent, pWin );
+                if (!pWin)
+                {
+                    throw uno::RuntimeException("no Window", static_cast<cppu::OWeakObject*>(this));
+                }
 
-                Rectangle aScreenRect( GetMap()->CoreToPixel( aCursorCoreRect.SVRect() ));
+                tools::Rectangle aScreenRect( GetMap()->CoreToPixel( aCursorCoreRect.SVRect() ));
 
                 SwRect aFrameLogBounds( GetBounds( *(GetMap()) ) ); // twip rel to doc root
                 Point aFramePixPos( GetMap()->CoreToPixel( aFrameLogBounds.SVRect() ).TopLeft() );
@@ -3647,30 +3314,36 @@ sal_Int32 SAL_CALL SwAccessibleParagraph::getNumberOfLineWithCaret()
 }
 
 // #i108125#
-void SwAccessibleParagraph::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew )
+void SwAccessibleParagraph::Notify(SfxBroadcaster&, const SfxHint&)
 {
     mpParaChangeTrackInfo->reset();
-
-    CheckRegistration( pOld, pNew );
 }
 
 bool SwAccessibleParagraph::GetSelectionAtIndex(
-    sal_Int32& nIndex, sal_Int32& nStart, sal_Int32& nEnd)
+    sal_Int32 * pSelection, sal_Int32& nStart, sal_Int32& nEnd)
 {
-        if(nIndex < 0) return false;
+    if (pSelection && *pSelection < 0) return false;
 
     bool bRet = false;
     nStart = -1;
     nEnd = -1;
-    sal_Int32 nSelected = nIndex;
 
     // get the selection, and test whether it affects our text node
     SwPaM* pCursor = GetCursor( true );
     if( pCursor != nullptr )
     {
         // get SwPosition for my node
-        const SwTextNode* pNode = GetTextNode();
-        sal_uLong nHere = pNode->GetIndex();
+        SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(GetFrame()));
+        sal_uLong nFirstNode(pFrame->GetTextNodeFirst()->GetIndex());
+        sal_uLong nLastNode;
+        if (sw::MergedPara const*const pMerged = pFrame->GetMergedPara())
+        {
+            nLastNode = pMerged->pLastNode->GetIndex();
+        }
+        else
+        {
+            nLastNode = nFirstNode;
+        }
 
         // iterate over ring
         for(SwPaM& rTmpCursor : pCursor->GetRingContainer())
@@ -3678,21 +3351,20 @@ bool SwAccessibleParagraph::GetSelectionAtIndex(
             // ignore, if no mark
             if( rTmpCursor.HasMark() )
             {
-                // check whether nHere is 'inside' pCursor
+                // check whether frame's node(s) are 'inside' pCursor
                 SwPosition* pStart = rTmpCursor.Start();
                 sal_uLong nStartIndex = pStart->nNode.GetIndex();
                 SwPosition* pEnd = rTmpCursor.End();
                 sal_uLong nEndIndex = pEnd->nNode.GetIndex();
-                if( ( nHere >= nStartIndex ) &&
-                    ( nHere <= nEndIndex )      )
+                if ((nStartIndex <= nLastNode) && (nFirstNode <= nEndIndex))
                 {
-                    if( nSelected == 0 )
+                    if (!pSelection || *pSelection == 0)
                     {
                         // translate start and end positions
 
                         // start position
                         sal_Int32 nLocalStart = -1;
-                        if( nHere > nStartIndex )
+                        if (nStartIndex < nFirstNode)
                         {
                             // selection starts in previous node:
                             // then our local selection starts with the paragraph
@@ -3700,12 +3372,13 @@ bool SwAccessibleParagraph::GetSelectionAtIndex(
                         }
                         else
                         {
-                            assert(nHere == nStartIndex);
+                            assert(FrameContainsNode(*pFrame, nStartIndex));
 
                             // selection starts in this node:
                             // then check whether it's before or inside our part of
                             // the paragraph, and if so, get the proper position
-                            const sal_Int32 nCoreStart = pStart->nContent.GetIndex();
+                            const TextFrameIndex nCoreStart =
+                                pFrame->MapModelToViewPos(*pStart);
                             if( nCoreStart <
                                 GetPortionData().GetFirstValidCorePosition() )
                             {
@@ -3715,7 +3388,7 @@ bool SwAccessibleParagraph::GetSelectionAtIndex(
                                      GetPortionData().GetLastValidCorePosition() )
                             {
                                 SAL_WARN_IF(
-                                    GetPortionData().IsValidCorePosition(
+                                    !GetPortionData().IsValidCorePosition(
                                                                   nCoreStart),
                                     "sw.a11y",
                                     "problem determining valid core position");
@@ -3728,7 +3401,7 @@ bool SwAccessibleParagraph::GetSelectionAtIndex(
 
                         // end position
                         sal_Int32 nLocalEnd = -1;
-                        if( nHere < nEndIndex )
+                        if (nLastNode < nEndIndex)
                         {
                             // selection ends in following node:
                             // then our local selection extends to the end
@@ -3737,11 +3410,12 @@ bool SwAccessibleParagraph::GetSelectionAtIndex(
                         }
                         else
                         {
-                            assert(nHere == nEndIndex);
+                            assert(FrameContainsNode(*pFrame, nEndIndex));
 
                             // selection ends in this node: then select everything
                             // before our part of the node
-                            const sal_Int32 nCoreEnd = pEnd->nContent.GetIndex();
+                            const TextFrameIndex nCoreEnd =
+                                pFrame->MapModelToViewPos(*pEnd);
                             if( nCoreEnd >
                                     GetPortionData().GetLastValidCorePosition() )
                             {
@@ -3754,7 +3428,7 @@ bool SwAccessibleParagraph::GetSelectionAtIndex(
                             {
                                 // selection is inside our part of this para
                                 SAL_WARN_IF(
-                                    GetPortionData().IsValidCorePosition(
+                                    !GetPortionData().IsValidCorePosition(
                                                                   nCoreEnd),
                                     "sw.a11y",
                                     "problem determining valid core position");
@@ -3773,7 +3447,7 @@ bool SwAccessibleParagraph::GetSelectionAtIndex(
                     } // if hit the index
                     else
                     {
-                        nSelected--;
+                        --*pSelection;
                     }
                 }
                 // else: this PaM doesn't point to this paragraph
@@ -3785,7 +3459,7 @@ bool SwAccessibleParagraph::GetSelectionAtIndex(
     }
     // else: nocursor -> no selection
 
-    if( bRet )
+    if (pSelection && bRet)
     {
         sal_Int32 nCaretPos = GetCaretPos();
         if( nStart == nCaretPos )
@@ -3798,12 +3472,12 @@ bool SwAccessibleParagraph::GetSelectionAtIndex(
     return bRet;
 }
 
-sal_Int16 SAL_CALL SwAccessibleParagraph::getAccessibleRole() throw (css::uno::RuntimeException, std::exception)
+sal_Int16 SAL_CALL SwAccessibleParagraph::getAccessibleRole()
 {
     SolarMutexGuard g;
 
     //Get the real heading level, Heading1 ~ Heading10
-    if (nHeadingLevel > 0)
+    if (m_nHeadingLevel > 0)
     {
         return AccessibleRole::HEADING;
     }
@@ -3817,8 +3491,7 @@ sal_Int16 SAL_CALL SwAccessibleParagraph::getAccessibleRole() throw (css::uno::R
 sal_Int32 SwAccessibleParagraph::GetRealHeadingLevel()
 {
     uno::Reference< css::beans::XPropertySet > xPortion = CreateUnoPortion( 0, 0 );
-    OUString pString = "ParaStyleName";
-    uno::Any styleAny = xPortion->getPropertyValue( pString );
+    uno::Any styleAny = xPortion->getPropertyValue( "ParaStyleName" );
     OUString sValue;
     if (styleAny >>= sValue)
     {
@@ -3838,14 +3511,13 @@ sal_Int32 SwAccessibleParagraph::GetRealHeadingLevel()
 }
 
 uno::Any SAL_CALL SwAccessibleParagraph::getExtendedAttributes()
-        throw (css::lang::IndexOutOfBoundsException, css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
     uno::Any Ret;
     OUString strHeading("heading-level:");
-    if( nHeadingLevel >= 0 )
-        strHeading += OUString::number(nHeadingLevel);
+    if( m_nHeadingLevel >= 0 )
+        strHeading += OUString::number(m_nHeadingLevel);
     strHeading += ";";
 
     strHeading += strHeading.copy(8); // tdf#84102: expose the same attribute with the name "level"

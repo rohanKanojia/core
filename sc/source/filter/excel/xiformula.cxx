@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xiformula.hxx"
-#include "rangelst.hxx"
-#include "xistream.hxx"
+#include <xiformula.hxx>
+#include <rangelst.hxx>
+#include <xistream.hxx>
 
-#include "excform.hxx"
+#include <excform.hxx>
 
 // Formula compiler ===========================================================
 
@@ -36,7 +36,7 @@ public:
                             ScRangeList& rScRanges, XclFormulaType eType,
                             const XclTokenArray& rXclTokArr, XclImpStream& rStrm );
 
-    const ScTokenArray* CreateFormula( XclFormulaType eType, const XclTokenArray& rXclTokArr );
+    std::unique_ptr<ScTokenArray> CreateFormula( XclFormulaType eType, const XclTokenArray& rXclTokArr );
 
 };
 
@@ -56,14 +56,14 @@ void XclImpFmlaCompImpl::CreateRangeList(
     {
         SvMemoryStream aMemStrm;
         aMemStrm.WriteUInt16( EXC_ID_EOF ).WriteUInt16( rXclTokArr.GetSize() );
-        aMemStrm.Write( rXclTokArr.GetData(), rXclTokArr.GetSize() );
+        aMemStrm.WriteBytes(rXclTokArr.GetData(), rXclTokArr.GetSize());
         XclImpStream aFmlaStrm( aMemStrm, GetRoot() );
         aFmlaStrm.StartNextRecord();
         GetOldFmlaConverter().GetAbsRefs( rScRanges, aFmlaStrm, aFmlaStrm.GetRecSize() );
     }
 }
 
-const ScTokenArray* XclImpFmlaCompImpl::CreateFormula(
+std::unique_ptr<ScTokenArray> XclImpFmlaCompImpl::CreateFormula(
         XclFormulaType /*eType*/, const XclTokenArray& rXclTokArr )
 {
     if (rXclTokArr.Empty())
@@ -72,10 +72,10 @@ const ScTokenArray* XclImpFmlaCompImpl::CreateFormula(
     // evil hack!  are we trying to phase out the old style formula converter ?
     SvMemoryStream aMemStrm;
     aMemStrm.WriteUInt16( EXC_ID_EOF ).WriteUInt16( rXclTokArr.GetSize() );
-    aMemStrm.Write( rXclTokArr.GetData(), rXclTokArr.GetSize() );
+    aMemStrm.WriteBytes(rXclTokArr.GetData(), rXclTokArr.GetSize());
     XclImpStream aFmlaStrm( aMemStrm, GetRoot() );
     aFmlaStrm.StartNextRecord();
-    const ScTokenArray* pArray = nullptr;
+    std::unique_ptr<ScTokenArray> pArray;
     GetOldFmlaConverter().Reset();
     GetOldFmlaConverter().Convert(pArray, aFmlaStrm, aFmlaStrm.GetRecSize(), true);
     return pArray;
@@ -98,7 +98,7 @@ void XclImpFormulaCompiler::CreateRangeList(
     mxImpl->CreateRangeList( rScRanges, eType, rXclTokArr, rStrm );
 }
 
-const ScTokenArray* XclImpFormulaCompiler::CreateFormula(
+std::unique_ptr<ScTokenArray> XclImpFormulaCompiler::CreateFormula(
         XclFormulaType eType, const XclTokenArray& rXclTokArr )
 {
     return mxImpl->CreateFormula(eType, rXclTokArr);

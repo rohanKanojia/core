@@ -24,23 +24,43 @@
 #include <cppuhelper/implbase.hxx>
 #include <osl/mutex.hxx>
 
-class SHA1DigestContext : public cppu::WeakImplHelper< css::xml::crypto::XDigestContext >
+class StarOfficeSHA1DigestContext
+    : public cppu::WeakImplHelper<css::xml::crypto::XDigestContext>
 {
     ::osl::Mutex m_aMutex;
     void* m_pDigest;
 
-    SHA1DigestContext()
+    StarOfficeSHA1DigestContext()
     : m_pDigest( nullptr )
     {}
 
 public:
 
-    virtual ~SHA1DigestContext();
+    virtual ~StarOfficeSHA1DigestContext() override;
 
     static css::uno::Reference< css::xml::crypto::XDigestContext > Create();
 
-    virtual void SAL_CALL updateDigest( const css::uno::Sequence< ::sal_Int8 >& aData ) throw (css::lang::DisposedException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< ::sal_Int8 > SAL_CALL finalizeDigestAndDispose() throw (css::lang::DisposedException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL updateDigest( const css::uno::Sequence< ::sal_Int8 >& aData ) override;
+    virtual css::uno::Sequence< ::sal_Int8 > SAL_CALL finalizeDigestAndDispose() override;
+
+};
+
+class CorrectSHA1DigestContext
+    : public cppu::WeakImplHelper<css::xml::crypto::XDigestContext>
+{
+    struct Impl;
+    std::unique_ptr<Impl> m_pImpl;
+
+    CorrectSHA1DigestContext();
+
+public:
+
+    virtual ~CorrectSHA1DigestContext() override;
+
+    static css::uno::Reference<css::xml::crypto::XDigestContext> Create();
+
+    virtual void SAL_CALL updateDigest(const css::uno::Sequence<::sal_Int8>& rData) override;
+    virtual css::uno::Sequence<::sal_Int8> SAL_CALL finalizeDigestAndDispose() override;
 
 };
 

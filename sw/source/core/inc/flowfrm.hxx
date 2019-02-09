@@ -22,6 +22,8 @@
 
 #include "frmtool.hxx"
 
+class SvxFormatKeepItem;
+class SvxFormatBreakItem;
 class SwPageFrame;
 class SwRect;
 class SwBorderAttrs;
@@ -94,21 +96,21 @@ class SwFlowFrame
         optional input parameter - pointer to frame, which should be used
         instead of the direct previous frame.
     */
-    const SwFrame* _GetPrevFrameForUpperSpaceCalc( const SwFrame* _pProposedPrevFrame = nullptr ) const;
+    const SwFrame* GetPrevFrameForUpperSpaceCalc_( const SwFrame* _pProposedPrevFrame = nullptr ) const;
 
-    /** method to detemine the upper space amount, which is considered for
+    /** method to determine the upper space amount, which is considered for
         the previous frame
 
         #i11860#
     */
-    SwTwips _GetUpperSpaceAmountConsideredForPrevFrame() const;
+    SwTwips GetUpperSpaceAmountConsideredForPrevFrame() const;
 
-    /** method to detemine the upper space amount, which is considered for
+    /** method to determine the upper space amount, which is considered for
         the page grid
 
         #i11860#
     */
-    SwTwips _GetUpperSpaceAmountConsideredForPageGrid(
+    SwTwips GetUpperSpaceAmountConsideredForPageGrid_(
                                 const SwTwips _nUpperSpaceWithoutGrid ) const;
 
 protected:
@@ -122,7 +124,7 @@ protected:
     // checks if forward flow makes sense to prevent infinite moves
     inline bool IsFwdMoveAllowed();
     // #i44049# - method <CalcContent(..)> has to check this property.
-    friend void CalcContent( SwLayoutFrame *pLay, bool bNoColl, bool bNoCalcFollow );
+    friend void CalcContent( SwLayoutFrame *pLay, bool bNoColl );
     bool IsKeepFwdMoveAllowed( bool bIgnoreMyOwnKeepValue = false );    // like above, forward flow for Keep.
 
     /** method to determine overlapping of an object that requests floating
@@ -137,7 +139,7 @@ protected:
     void LockJoin()   { m_bLockJoin = true;  }
     void UnlockJoin() { m_bLockJoin = false; }
 
-    bool CheckMoveFwd( bool& rbMakePage, bool bKeep, bool bMovedBwd, bool bIgnoreMyOwnKeepValue = false );
+    bool CheckMoveFwd( bool& rbMakePage, bool bKeep, bool bIgnoreMyOwnKeepValue );
     bool MoveFwd( bool bMakePage, bool bPageBreak, bool bMoveAlways = false );
     bool MoveBwd( bool &rbReformat );
     virtual bool ShouldBwdMoved( SwLayoutFrame *pNewUpper, bool bHead, bool &rReformat )=0;
@@ -152,8 +154,8 @@ public:
     static bool IsMoveBwdJump() { return m_bMoveBwdJump; }
     static void SetMoveBwdJump( bool bNew ){ m_bMoveBwdJump = bNew; }
 
-    inline void SetUndersized( const bool bNew ) { m_bUndersized = bNew; }
-    inline bool IsUndersized()  const { return m_bUndersized; }
+    void SetUndersized( const bool bNew ) { m_bUndersized = bNew; }
+    bool IsUndersized()  const { return m_bUndersized; }
 
     bool IsPrevObjMove() const;
 
@@ -177,7 +179,9 @@ public:
     bool IsColBreak( bool bAct ) const;
 
     /** method to determine if a Keep needs to be considered (Breaks!) */
-    bool IsKeep( const SwAttrSet& rAttrs, bool bBreakCheck = false ) const;
+    bool IsKeep(SvxFormatKeepItem const& rKeep,
+                SvxFormatBreakItem const& rBreak,
+                bool bBreakCheck = false ) const;
 
     bool HasLockedFollow() const;
 
@@ -224,6 +228,8 @@ public:
 
     void SetFlyLock( bool bNew ){ m_bFlyLock = bNew; }
     bool IsFlyLock() const {    return m_bFlyLock; }
+
+    bool ForbiddenForFootnoteCntFwd() const;
 
     // Casting of a Frame into a FlowFrame (if it is one, otherwise 0)
     // These methods need to be customized in subclasses!

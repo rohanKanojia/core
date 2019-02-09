@@ -139,10 +139,15 @@ public:
     void                convertAutomaticFill(
                             PropertySet& rPropSet,
                             ObjectType eObjType,
-                            sal_Int32 nSeriesIdx = -1 );
+                            sal_Int32 nSeriesIdx );
 
     /** Returns true, if the passed shape properties have automatic fill mode. */
     static bool         isAutomaticFill( const ModelRef< Shape >& rxShapeProp );
+
+    /** Returns true, if the X Axis label rotation is 0 degree. */
+    static bool         getTextRotation(
+                            const ModelRef< TextBody >& rxTextProp,
+                            sal_Int32 nDefaultRotation = 0 );
 
 private:
     std::shared_ptr< ObjectFormatterData > mxData;

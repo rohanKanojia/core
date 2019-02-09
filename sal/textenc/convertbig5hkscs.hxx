@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SAL_TEXTENC_CONVERTBIG5HKSCS_HXX
 #define INCLUDED_SAL_TEXTENC_CONVERTBIG5HKSCS_HXX
 
-#include "sal/types.h"
+#include <sal/types.h>
 
 #include "tenchelp.hxx"
 
@@ -34,7 +34,7 @@ struct ImplBig5HkscsConverterData
     sal_Int32 const * m_pUnicodeToBig5Hkscs2001PlaneOffsets;
     ImplUniToDBCSHighTab const * m_pUnicodeToBig5Data;
     ImplDBCSEUDCData const * m_pEudcData;
-    int m_nEudcCount;
+    int const m_nEudcCount;
 };
 
 void * ImplCreateBig5HkscsToUnicodeContext();

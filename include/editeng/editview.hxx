@@ -20,31 +20,36 @@
 #ifndef INCLUDED_EDITENG_EDITVIEW_HXX
 #define INCLUDED_EDITENG_EDITVIEW_HXX
 
+#include <memory>
 #include <com/sun/star/i18n/WordType.hpp>
 
-#include <rsc/rscsfx.hxx>
+#include <svl/style.hxx>
 #include <i18nlangtag/lang.h>
 #include <tools/color.hxx>
 #include <tools/gen.hxx>
 #include <tools/link.hxx>
 #include <vcl/cursor.hxx>
+#include <vcl/errcode.hxx>
 #include <editeng/editstat.hxx>
 #include <svl/languageoptions.hxx>
 #include <LibreOfficeKit/LibreOfficeKitTypes.h>
+#include <editeng/editdata.hxx>
+#include <com/sun/star/uno/Reference.h>
+#include <editeng/editengdllapi.h>
+
 
 class EditEngine;
 class ImpEditEngine;
 class ImpEditView;
-class OutlinerSearchable;
+class OutlinerViewShell;
 class SvxSearchItem;
 class SvxFieldItem;
 namespace vcl { class Window; }
 class Pointer;
 class KeyEvent;
 class MouseEvent;
-class DropEvent;
 class CommandEvent;
-class Rectangle;
+namespace tools { class Rectangle; }
 class Pair;
 class Point;
 class Range;
@@ -54,10 +59,7 @@ class SfxStyleSheet;
 namespace vcl { class Font; }
 class FontList;
 class OutputDevice;
-
-#include <editeng/editdata.hxx>
-#include <com/sun/star/uno/Reference.h>
-#include <editeng/editengdllapi.h>
+enum class TransliterationFlags;
 
 namespace com {
 namespace sun {
@@ -70,27 +72,53 @@ namespace linguistic2 {
     class XLanguageGuessing;
 }
 }}}
+namespace basegfx { class B2DRange; }
 
 enum class ScrollRangeCheck
 {
-    NONE          = 0,   // No correction of VisArea when scrolling
     NoNegative    = 1,   // No negative VisArea when scrolling
     PaperWidthTextSize = 2,   // VisArea must be within paper width, Text Size
 };
 
+// Helper class that allows to set a callback at the EditView. When
+// set, Invalidates and repaints are suppressed at the EditView, but
+// EditViewInvalidate() will be triggered to allow the consumer to
+// react itself as needed.
+// Also Selection visualization is suppressed and EditViewSelectionChange
+// is triggered when Selection changes and needs reaction.
+class EDITENG_DLLPUBLIC EditViewCallbacks
+{
+public:
+    EditViewCallbacks() {}
+    virtual ~EditViewCallbacks();
 
-class EDITENG_DLLPUBLIC EditView
+    // call this when text visualization changed in any way. It
+    // will also update selection, so no need to call this self
+    // additionally (but will also do no harm)
+    virtual void EditViewInvalidate() const = 0;
+
+    // call this when only selection is changed. Text change will
+    // then *not* be checked and not be reacted on. Still, when
+    // only the selection is changed, this is useful and faster
+    virtual void EditViewSelectionChange() const = 0;
+};
+
+class EDITENG_DLLPUBLIC EditView final
 {
     friend class EditEngine;
     friend class ImpEditEngine;
     friend class EditSelFunctionSet;
 
+public:
+    typedef std::vector<VclPtr<vcl::Window>> OutWindowSet;
+
 public: // Needed for Undo
-    ImpEditView*    GetImpEditView() const      { return pImpEditView; }
+    ImpEditView*    GetImpEditView() const      { return pImpEditView.get(); }
     ImpEditEngine*  GetImpEditEngine() const;
 
 private:
-    ImpEditView*    pImpEditView;
+    std::unique_ptr<ImpEditView>
+                    pImpEditView;
     OUString        aDicNameSingle;
 
                     EditView( const EditView& ) = delete;
@@ -98,20 +126,31 @@ private:
 
 public:
                     EditView( EditEngine* pEng, vcl::Window* pWindow );
-    virtual         ~EditView();
+                    ~EditView();
+
+    // set EditViewCallbacks for external handling of Repaints/Visualization
+    void setEditViewCallbacks(const EditViewCallbacks* pEditViewCallbacks);
+    bool hasEditViewCallbacks() const;
 
     void            SetEditEngine( EditEngine* pEditEngine );
     EditEngine*     GetEditEngine() const;
 
     void            SetWindow( vcl::Window* pWin );
-    vcl::Window*         GetWindow() const;
+    vcl::Window*    GetWindow() const;
 
-    void            Paint( const Rectangle& rRect, OutputDevice* pTargetDevice = nullptr );
+    bool            HasOtherViewWindow( vcl::Window* pWin );
+    bool            AddOtherViewWindow( vcl::Window* pWin );
+    bool            RemoveOtherViewWindow( vcl::Window* pWin );
+
+    void            Paint( const tools::Rectangle& rRect, OutputDevice* pTargetDevice = nullptr );
+    tools::Rectangle       GetInvalidateRect() const;
+    void            InvalidateWindow(const tools::Rectangle& rClipRect);
+    void            InvalidateOtherViewWindows( const tools::Rectangle& rInvRect );
     void            Invalidate();
     Pair            Scroll( long nHorzScroll, long nVertScroll, ScrollRangeCheck nRangeCheck = ScrollRangeCheck::NoNegative );
 
-    void            ShowCursor( bool bGotoCursor = true, bool bForceVisCursor = true );
-    void            HideCursor();
+    void            ShowCursor( bool bGotoCursor = true, bool bForceVisCursor = true, bool bActivate = false );
+    void            HideCursor( bool bDeactivate = false );
 
     void            SetSelectionMode( EESelectionMode eMode );
 
@@ -123,7 +162,7 @@ public:
     void            SetSelection( const ESelection& rNewSel );
     void            SelectCurrentWord( sal_Int16 nWordType = css::i18n::WordType::ANYWORD_IGNOREWHITESPACES );
     /// Returns the rectangles of the current selection in TWIPs.
-    void GetSelectionRectangles(std::vector<Rectangle>& rLogicRects) const;
+    void GetSelectionRectangles(std::vector<tools::Rectangle>& rLogicRects) const;
 
     bool            IsInsertMode() const;
     void            SetInsertMode( bool bInsert );
@@ -135,21 +174,22 @@ public:
 
                         // VisArea position of the Output window.
                         // A size change also affects the VisArea
-    void                SetOutputArea( const Rectangle& rRect );
-    const Rectangle&    GetOutputArea() const;
+    void                SetOutputArea( const tools::Rectangle& rRect );
+    const tools::Rectangle&    GetOutputArea() const;
 
                         // Document position.
                         // A size change also affects the VisArea
-    void                SetVisArea( const Rectangle& rRect );
-    const Rectangle&    GetVisArea() const;
+    void                SetVisArea( const tools::Rectangle& rRect );
+    const tools::Rectangle&    GetVisArea() const;
 
     const Pointer&  GetPointer() const;
 
     vcl::Cursor*    GetCursor() const;
 
     void            InsertText( const OUString& rNew, bool bSelect = false );
+    void            InsertParaBreak();
 
-    bool            PostKeyEvent( const KeyEvent& rKeyEvent, vcl::Window* pFrameWin = nullptr );
+    bool            PostKeyEvent( const KeyEvent& rKeyEvent, vcl::Window const * pFrameWin = nullptr );
 
     bool            MouseButtonUp( const MouseEvent& rMouseEvent );
     bool            MouseButtonDown( const MouseEvent& rMouseEvent );
@@ -174,23 +214,25 @@ public:
     SfxItemSet          GetAttribs();
     void                SetAttribs( const SfxItemSet& rSet );
     void                RemoveAttribs( bool bRemoveParaAttribs = false, sal_uInt16 nWhich = 0 );
-    void                RemoveCharAttribs( sal_Int32 nPara, sal_uInt16 nWhich = 0 );
-    void                RemoveAttribsKeepLanguages( bool bRemoveParaAttribs = false );
+    void                RemoveCharAttribs( sal_Int32 nPara, sal_uInt16 nWhich );
+    void                RemoveAttribsKeepLanguages( bool bRemoveParaAttribs );
 
-    sal_uInt32          Read( SvStream& rInput, const OUString& rBaseURL, EETextFormat eFormat, SvKeyValueIterator* pHTTPHeaderAttrs = nullptr );
+    ErrCode             Read( SvStream& rInput, EETextFormat eFormat, SvKeyValueIterator* pHTTPHeaderAttrs );
 
     void            SetBackgroundColor( const Color& rColor );
-    Color           GetBackgroundColor() const;
+    Color const &   GetBackgroundColor() const;
 
-    /// @see vcl::ITiledRenderable::registerCallback().
-    void registerLibreOfficeKitCallback(OutlinerSearchable *pSearchable);
+    /// Informs this edit view about which view shell contains it.
+    void RegisterViewShell(OutlinerViewShell* pViewShell);
+    /// Informs this edit view about which other shell listens to it.
+    void RegisterOtherShell(OutlinerViewShell* pOtherShell);
 
     void            SetControlWord( EVControlBits nWord );
     EVControlBits   GetControlWord() const;
 
-    EditTextObject* CreateTextObject();
+    std::unique_ptr<EditTextObject> CreateTextObject();
     void            InsertText( const EditTextObject& rTextObject );
-    void            InsertText( css::uno::Reference< css::datatransfer::XTransferable > xDataObj, const OUString& rBaseURL, bool bUseSpecial );
+    void            InsertText( css::uno::Reference< css::datatransfer::XTransferable > const & xDataObj, const OUString& rBaseURL, bool bUseSpecial );
 
     css::uno::Reference< css::datatransfer::XTransferable > GetTransferable();
 
@@ -201,10 +243,10 @@ public:
     const SfxStyleSheet* GetStyleSheet() const;
     SfxStyleSheet* GetStyleSheet();
 
-    void            SetAnchorMode( EVAnchorMode eMode );
-    EVAnchorMode    GetAnchorMode() const;
+    void            SetAnchorMode( EEAnchorMode eMode );
+    EEAnchorMode    GetAnchorMode() const;
 
-    void            CompleteAutoCorrect( vcl::Window* pFrameWin = nullptr );
+    void            CompleteAutoCorrect( vcl::Window const * pFrameWin = nullptr );
 
     EESpellState    StartSpeller( bool bMultipleDoc = false );
     EESpellState    StartThesaurus();
@@ -213,11 +255,11 @@ public:
     // for text conversion
     void            StartTextConversion( LanguageType nSrcLang, LanguageType nDestLang, const vcl::Font *pDestFont, sal_Int32 nOptions, bool bIsInteractive, bool bMultipleDoc );
 
-    void            TransliterateText( sal_Int32 nTransliterationMode );
+    void            TransliterateText( TransliterationFlags nTransliterationMode );
 
     bool            IsCursorAtWrongSpelledWord();
     bool            IsWrongSpelledWordAtPos( const Point& rPosPixel, bool bMarkIfWrong = false );
-    void            ExecuteSpellPopup( const Point& rPosPixel, Link<SpellCallbackInfo&,void>* pCallBack = nullptr );
+    void            ExecuteSpellPopup( const Point& rPosPixel, Link<SpellCallbackInfo&,void> const * pCallBack );
 
     void                InsertField( const SvxFieldItem& rFld );
     const SvxFieldItem* GetFieldUnderMousePointer() const;
@@ -258,6 +300,8 @@ public:
                             bool bIsParaText );
     /// Allows adjusting the point or mark of the selection to a document coordinate.
     void SetCursorLogicPosition(const Point& rPosition, bool bPoint, bool bClearMark);
+    /// Trigger selection drawing callback in pOtherShell based on our shell's selection state.
+    void DrawSelectionXOR(OutlinerViewShell* pOtherShell);
 };
 
 #endif // INCLUDED_EDITENG_EDITVIEW_HXX

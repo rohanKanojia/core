@@ -20,23 +20,23 @@
 
 #include "pdfiadaptor.hxx"
 #include "filterdet.hxx"
-#include "saxemitter.hxx"
-#include "odfemitter.hxx"
+#include <saxemitter.hxx>
+#include <odfemitter.hxx>
 #include "inc/wrapper.hxx"
 #include "inc/contentsink.hxx"
-#include "tree/pdfiprocessor.hxx"
+#include <pdfiprocessor.hxx>
 
 #include <osl/file.h>
 #include <osl/thread.h>
-#include "sal/log.hxx"
+#include <sal/log.hxx>
 
 #include <cppuhelper/factory.hxx>
 #include <cppuhelper/implementationentry.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/uno/RuntimeException.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
-#include <com/sun/star/frame/XLoadable.hpp>
 #include <com/sun/star/xml/sax/XDocumentHandler.hpp>
 #include <com/sun/star/io/XSeekable.hpp>
 
@@ -56,7 +56,7 @@ PDFIHybridAdaptor::PDFIHybridAdaptor( const uno::Reference< uno::XComponentConte
 }
 
 // XFilter
-sal_Bool SAL_CALL PDFIHybridAdaptor::filter( const uno::Sequence< beans::PropertyValue >& rFilterData ) throw( uno::RuntimeException, std::exception )
+sal_Bool SAL_CALL PDFIHybridAdaptor::filter( const uno::Sequence< beans::PropertyValue >& rFilterData )
 {
     bool bRet = false;
     if( m_xModel.is() )
@@ -155,8 +155,7 @@ sal_Bool SAL_CALL PDFIHybridAdaptor::filter( const uno::Sequence< beans::Propert
             }
             catch(const uno::Exception& e)
             {
-                (void)e;
-                SAL_INFO("sdext.pdfimport", "subfilter exception: " << e.Message << "\n");
+                SAL_INFO("sdext.pdfimport", "subfilter: " << e);
             }
 
             SAL_INFO("sdext.pdfimport", "subfilter: " << xSubFilter.get() );
@@ -187,12 +186,12 @@ sal_Bool SAL_CALL PDFIHybridAdaptor::filter( const uno::Sequence< beans::Propert
     return bRet;
 }
 
-void SAL_CALL PDFIHybridAdaptor::cancel() throw(std::exception)
+void SAL_CALL PDFIHybridAdaptor::cancel()
 {
 }
 
 //XImporter
-void SAL_CALL PDFIHybridAdaptor::setTargetDocument( const uno::Reference< lang::XComponent >& xDocument ) throw( lang::IllegalArgumentException, std::exception )
+void SAL_CALL PDFIHybridAdaptor::setTargetDocument( const uno::Reference< lang::XComponent >& xDocument )
 {
     SAL_INFO("sdext.pdfimport", "PDFIAdaptor::setTargetDocument" );
     m_xModel.set( xDocument, uno::UNO_QUERY );
@@ -201,19 +200,16 @@ void SAL_CALL PDFIHybridAdaptor::setTargetDocument( const uno::Reference< lang::
 }
 
 OUString PDFIHybridAdaptor::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return OUString("org.libreoffice.comp.documents.HybridPDFImport");
 }
 
 sal_Bool PDFIHybridAdaptor::supportsService(OUString const & ServiceName)
-    throw (css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 css::uno::Sequence<OUString> PDFIHybridAdaptor::getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<OUString>{"com.sun.star.document.ImportFilter"};
 }
@@ -223,8 +219,7 @@ PDFIRawAdaptor::PDFIRawAdaptor( OUString const & implementationName, const uno::
     m_implementationName(implementationName),
     m_xContext( xContext ),
     m_xModel(),
-    m_pVisitorFactory(),
-    m_bEnableToplevelText(false)
+    m_pVisitorFactory()
 {
 }
 
@@ -244,10 +239,6 @@ bool PDFIRawAdaptor::parse( const uno::Reference<io::XInputStream>&       xInput
     // container for metaformat
     std::shared_ptr<PDFIProcessor> pSink(
         new PDFIProcessor(xStatus, m_xContext));
-
-    // TEMP! TEMP!
-    if( m_bEnableToplevelText )
-        pSink->enableToplevelText();
 
     bool bSuccess=false;
 
@@ -272,7 +263,7 @@ bool PDFIRawAdaptor::odfConvert( const OUString&                          rURL,
     const bool bSuccess = parse(uno::Reference<io::XInputStream>(),
                                 uno::Reference<task::XInteractionHandler>(),
                                 OUString(),
-                                xStatus,pEmitter,rURL);
+                                xStatus,pEmitter,rURL, "");
 
     // tell input stream that it is no longer needed
     xOutput->closeOutput();
@@ -283,7 +274,7 @@ bool PDFIRawAdaptor::odfConvert( const OUString&                          rURL,
 // XImportFilter
 sal_Bool SAL_CALL PDFIRawAdaptor::importer( const uno::Sequence< beans::PropertyValue >&        rSourceData,
                                             const uno::Reference< xml::sax::XDocumentHandler >& rHdl,
-                                            const uno::Sequence< OUString >&               /*rUserData*/ ) throw( uno::RuntimeException, std::exception )
+                                            const uno::Sequence< OUString >&               /*rUserData*/ )
 {
     // get the InputStream carrying the PDF content
     uno::Reference< io::XInputStream > xInput;
@@ -296,7 +287,7 @@ sal_Bool SAL_CALL PDFIRawAdaptor::importer( const uno::Sequence< beans::Property
     sal_Int32 nAttribs = rSourceData.getLength();
     for( sal_Int32 i = 0; i < nAttribs; i++, pAttribs++ )
     {
-        SAL_INFO("sdext.pdfimport","importer Attrib: " << OUStringToOString( pAttribs->Name, RTL_TEXTENCODING_UTF8 ).getStr() );
+        SAL_INFO("sdext.pdfimport", "importer Attrib: " << pAttribs->Name );
         if ( pAttribs->Name == "InputStream" )
             pAttribs->Value >>= xInput;
         else if ( pAttribs->Name == "URL" )
@@ -311,7 +302,7 @@ sal_Bool SAL_CALL PDFIRawAdaptor::importer( const uno::Sequence< beans::Property
             pAttribs->Value >>= aFilterOptions;
     }
     if( !xInput.is() )
-        return sal_False;
+        return false;
 
     XmlEmitterSharedPtr pEmitter = createSaxEmitter(rHdl);
     const bool bSuccess = parse(xInput, xInteractionHandler,
@@ -325,7 +316,7 @@ sal_Bool SAL_CALL PDFIRawAdaptor::importer( const uno::Sequence< beans::Property
 }
 
 //XImporter
-void SAL_CALL PDFIRawAdaptor::setTargetDocument( const uno::Reference< lang::XComponent >& xDocument ) throw( lang::IllegalArgumentException, std::exception )
+void SAL_CALL PDFIRawAdaptor::setTargetDocument( const uno::Reference< lang::XComponent >& xDocument )
 {
     SAL_INFO("sdext.pdfimport", "PDFIAdaptor::setTargetDocument" );
     m_xModel.set( xDocument, uno::UNO_QUERY );
@@ -334,19 +325,16 @@ void SAL_CALL PDFIRawAdaptor::setTargetDocument( const uno::Reference< lang::XCo
 }
 
 OUString PDFIRawAdaptor::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return m_implementationName;
 }
 
 sal_Bool PDFIRawAdaptor::supportsService(OUString const & ServiceName)
-    throw (css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 css::uno::Sequence<OUString> PDFIRawAdaptor::getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<OUString>{"com.sun.star.document.ImportFilter"};
 }

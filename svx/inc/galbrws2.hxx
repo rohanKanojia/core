@@ -20,12 +20,11 @@
 #ifndef INCLUDED_SVX_INC_GALBRWS2_HXX
 #define INCLUDED_SVX_INC_GALBRWS2_HXX
 
-#include <vcl/lstbox.hxx>
 #include <vcl/button.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/timer.hxx>
 #include <vcl/toolbox.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <svl/lstner.hxx>
 #include <svx/galctrl.hxx>
 #include <svtools/miscopt.hxx>
@@ -44,19 +43,19 @@ enum GalleryBrowserMode
 };
 
 
-enum GalleryBrowserTravel
+enum class GalleryBrowserTravel
 {
-    GALLERYBROWSERTRAVEL_CURRENT = 0,
-    GALLERYBROWSERTRAVEL_FIRST = 1,
-    GALLERYBROWSERTRAVEL_LAST = 2,
-    GALLERYBROWSERTRAVEL_PREVIOUS = 3,
-    GALLERYBROWSERTRAVEL_NEXT = 4
+    First, Last, Previous, Next
 };
 
-
-#define GALLERY_ITEM_THEMENAME  0x00000001
-#define GALLERY_ITEM_TITLE      0x00000002
-#define GALLERY_ITEM_PATH       0x00000004
+enum class GalleryItemFlags {
+    Title      = 0x0002,
+    Path       = 0x0004
+};
+namespace o3tl
+{
+    template<> struct typed_flags<GalleryItemFlags> : is_typed_flags<GalleryItemFlags, 0x0006> {};
+}
 
 
 class GalleryToolBox : public ToolBox
@@ -86,7 +85,6 @@ class GalleryBrowser2 : public Control, public SfxListener
 {
     friend class GalleryBrowser;
     friend class svx::sidebar::GalleryControl;
-    using Control::Notify;
     using Window::KeyInput;
 
 private:
@@ -100,7 +98,7 @@ private:
     VclPtr<GalleryToolBox> maViewBox;
     VclPtr<FixedLine>   maSeparator;
     VclPtr<FixedText>   maInfoBar;
-    sal_uIntPtr         mnCurActionPos;
+    sal_uInt32 mnCurActionPos;
     GalleryBrowserMode  meMode;
     GalleryBrowserMode  meLastMode;
 
@@ -111,8 +109,8 @@ private:
 
     void                ImplUpdateViews( sal_uInt16 nSelectionId );
     void                ImplUpdateInfoBar();
-    sal_uIntPtr               ImplGetSelectedItemId( const Point* pSelPosPixel, Point& rSelPos );
-    void                ImplSelectItemId( sal_uIntPtr nItemId );
+    sal_uInt32          ImplGetSelectedItemId( const Point* pSelPosPixel, Point& rSelPos );
+    void                ImplSelectItemId(sal_uInt32 nItemId);
 
     // Control
     virtual void        Resize() override;
@@ -121,10 +119,10 @@ private:
     // SfxListener
     virtual void        Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
-                        DECL_LINK_TYPED( SelectObjectHdl, GalleryListView*, void );
-                        DECL_LINK_TYPED( SelectObjectValueSetHdl, ValueSet*, void );
-                        DECL_LINK_TYPED( SelectTbxHdl, ToolBox*, void );
-                        DECL_LINK_TYPED( MiscHdl, LinkParamNone*, void );
+                        DECL_LINK( SelectObjectHdl, GalleryListView*, void );
+                        DECL_LINK( SelectObjectValueSetHdl, ValueSet*, void );
+                        DECL_LINK( SelectTbxHdl, ToolBox*, void );
+                        DECL_LINK( MiscHdl, LinkParamNone*, void );
 
 private:
 
@@ -132,12 +130,12 @@ private:
 
 public:
 
-    static OUString     GetItemText( const GalleryTheme& rTheme, const SgaObject& rObj, sal_uIntPtr nItemTextFlags );
+    static OUString     GetItemText( const SgaObject& rObj, GalleryItemFlags nItemTextFlags );
 
 public:
 
     GalleryBrowser2(vcl::Window* pParent, Gallery* pGallery);
-    virtual ~GalleryBrowser2();
+    virtual ~GalleryBrowser2() override;
     virtual void dispose() override;
 
     void                SelectTheme( const OUString& rThemeName );
@@ -152,22 +150,21 @@ public:
     INetURLObject       GetURL() const;
     OUString            GetFilterName() const;
 
-    sal_Int8            AcceptDrop( DropTargetHelper& rTarget, const AcceptDropEvent& rEvt );
-    sal_Int8            ExecuteDrop( DropTargetHelper& rTarget, const ExecuteDropEvent& rEvt );
-    void                StartDrag( vcl::Window* pWindow, const Point* pDragPoint = nullptr );
-    void                TogglePreview( vcl::Window* pWindow, const Point* pPreviewPoint = nullptr );
-    void                ShowContextMenu( vcl::Window* pWindow, const Point* pContextPoint = nullptr );
+    sal_Int8            AcceptDrop( DropTargetHelper& rTarget );
+    sal_Int8            ExecuteDrop( const ExecuteDropEvent& rEvt );
+    void                StartDrag( const Point* pDragPoint = nullptr );
+    void                TogglePreview();
+    void                ShowContextMenu( const Point* pContextPoint );
     bool                KeyInput( const KeyEvent& rEvt, vcl::Window* pWindow );
 
     static css::uno::Reference< css::frame::XFrame > GetFrame();
-    css::uno::Reference< css::util::XURLTransformer > GetURLTransformer() const { return m_xTransformer; }
+    const css::uno::Reference< css::util::XURLTransformer >& GetURLTransformer() const { return m_xTransformer; }
 
-    void Execute( sal_uInt16 nId );
-    void Dispatch( sal_uInt16 nId,
-                   const css::uno::Reference< css::frame::XDispatch > &rxDispatch = css::uno::Reference< css::frame::XDispatch >(),
-                   const css::util::URL &rURL = css::util::URL() );
+    void Execute(const OString &rIdent);
+    void DispatchAdd(const css::uno::Reference<css::frame::XDispatch> &rxDispatch,
+                     const css::util::URL &rURL);
 
-    DECL_STATIC_LINK_TYPED( GalleryBrowser2, AsyncDispatch_Impl, void*, void );
+    DECL_STATIC_LINK( GalleryBrowser2, AsyncDispatch_Impl, void*, void );
 };
 
 #endif

@@ -26,14 +26,13 @@
 #include <com/sun/star/frame/XSynchronousDispatch.hpp>
 
 #include <cppuhelper/implbase.hxx>
+#include <cppuhelper/weakref.hxx>
 
 namespace framework{
 
 /** @short      implements a dispatch object which can be used to load
                 non-visible components (by using the mechanism of ContentHandler)
                 or visible-components (by using the mechanism of FrameLoader).
-
-    @author     as96863
  */
 class LoadDispatcher : public  ::cppu::WeakImplHelper< css::frame::XNotifyingDispatch,          // => XDispatch => XInterface
                                                         css::frame::XSynchronousDispatch >
@@ -43,9 +42,6 @@ class LoadDispatcher : public  ::cppu::WeakImplHelper< css::frame::XNotifyingDis
 
     private:
         osl::Mutex m_mutex;
-
-        /** @short  can be used to create own needed services on demand. */
-        css::uno::Reference< css::uno::XComponentContext > m_xContext;
 
         /** @short  TODO document me */
         css::uno::WeakReference< css::frame::XFrame > m_xOwnerFrame;
@@ -89,7 +85,7 @@ class LoadDispatcher : public  ::cppu::WeakImplHelper< css::frame::XNotifyingDis
 
         /** @short  used to free internal resources.
          */
-        virtual ~LoadDispatcher();
+        virtual ~LoadDispatcher() override;
 
     // uno interface
 
@@ -98,26 +94,21 @@ class LoadDispatcher : public  ::cppu::WeakImplHelper< css::frame::XNotifyingDis
         // XNotifyingDispatch
         virtual void SAL_CALL dispatchWithNotification(const css::util::URL&                                             aURL      ,
                                                        const css::uno::Sequence< css::beans::PropertyValue >&            lArguments,
-                                                       const css::uno::Reference< css::frame::XDispatchResultListener >& xListener )
-            throw(css::uno::RuntimeException, std::exception) override;
+                                                       const css::uno::Reference< css::frame::XDispatchResultListener >& xListener ) override;
 
         // XDispatch
         virtual void SAL_CALL dispatch(const css::util::URL&                                  aURL      ,
-                                       const css::uno::Sequence< css::beans::PropertyValue >& lArguments)
-            throw(css::uno::RuntimeException, std::exception) override;
+                                       const css::uno::Sequence< css::beans::PropertyValue >& lArguments) override;
 
         virtual void SAL_CALL addStatusListener(const css::uno::Reference< css::frame::XStatusListener >& xListener,
-                                                const css::util::URL&                                     aURL     )
-            throw(css::uno::RuntimeException, std::exception) override;
+                                                const css::util::URL&                                     aURL     ) override;
 
         virtual void SAL_CALL removeStatusListener(const css::uno::Reference< css::frame::XStatusListener >& xListener,
-                                                   const css::util::URL&                                     aURL     )
-            throw(css::uno::RuntimeException, std::exception) override;
+                                                   const css::util::URL&                                     aURL     ) override;
 
         // XSynchronousDispatch
         virtual css::uno::Any SAL_CALL dispatchWithReturnValue( const css::util::URL&                                  aURL      ,
-                                                                const css::uno::Sequence< css::beans::PropertyValue >& lArguments )
-            throw( css::uno::RuntimeException, std::exception ) override;
+                                                                const css::uno::Sequence< css::beans::PropertyValue >& lArguments ) override;
 
     private:
         css::uno::Any impl_dispatch( const css::util::URL& rURL,

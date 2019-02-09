@@ -20,23 +20,19 @@
 #ifndef INCLUDED_CUI_SOURCE_DIALOGS_THESDLG_IMPL_HXX
 #define INCLUDED_CUI_SOURCE_DIALOGS_THESDLG_IMPL_HXX
 
-#include "thesdlg.hxx"
+#include <thesdlg.hxx>
 
 #include <svtools/ehdl.hxx>
+#include <vcl/svlbitm.hxx>
 #include <svx/checklbx.hxx>
 #include <vcl/button.hxx>
 #include <vcl/combobox.hxx>
 #include <vcl/edit.hxx>
 #include <vcl/image.hxx>
-#include <vcl/lstbox.hxx>
 #include <vcl/menubtn.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/timer.hxx>
 #include <vcl/wrkwin.hxx>
-
-#include <com/sun/star/linguistic2/XThesaurus.hpp>
-#include <com/sun/star/linguistic2/XMeaning.hpp>
 
 #include <stack>
 #include <map>

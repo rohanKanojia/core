@@ -80,7 +80,6 @@ void CacheUpdateListener::stopListening()
 
 
 void SAL_CALL  CacheUpdateListener::changesOccurred(const css::util::ChangesEvent& aEvent)
-    throw(css::uno::RuntimeException, std::exception)
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);
@@ -94,7 +93,7 @@ void SAL_CALL  CacheUpdateListener::changesOccurred(const css::util::ChangesEven
     aLock.clear();
     // <- SAFE
 
-    OUStringList lChangedItems;
+    std::vector<OUString> lChangedItems;
     sal_Int32    c = aEvent.Changes.getLength();
     sal_Int32    i = 0;
 
@@ -141,21 +140,17 @@ void SAL_CALL  CacheUpdateListener::changesOccurred(const css::util::ChangesEven
         if ( sNode.isEmpty() )
             continue;
 
-        OUStringList::const_iterator pIt = ::std::find(lChangedItems.begin(), lChangedItems.end(), sNode);
-        if (pIt == lChangedItems.end())
+        auto pIt = ::std::find(lChangedItems.cbegin(), lChangedItems.cend(), sNode);
+        if (pIt == lChangedItems.cend())
             lChangedItems.push_back(sNode);
     }
 
     bool                     bNotifyRefresh = false;
-    OUStringList::const_iterator pIt;
-    for (  pIt  = lChangedItems.begin();
-           pIt != lChangedItems.end()  ;
-         ++pIt                         )
+    for (auto const& changedItem : lChangedItems)
     {
-        const OUString& sItem = *pIt;
         try
         {
-            m_rCache.refreshItem(eType, sItem);
+            m_rCache.refreshItem(eType, changedItem);
         }
         catch(const css::container::NoSuchElementException&)
             {
@@ -179,7 +174,6 @@ void SAL_CALL  CacheUpdateListener::changesOccurred(const css::util::ChangesEven
 
 
 void SAL_CALL CacheUpdateListener::disposing(const css::lang::EventObject& aEvent)
-    throw(css::uno::RuntimeException, std::exception)
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);

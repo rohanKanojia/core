@@ -33,7 +33,11 @@ $(eval $(call gb_Library_set_include,msword,\
     $$(INCLUDE) \
 ))
 
-$(eval $(call gb_Library_use_sdk_api,msword))
+$(eval $(call gb_Library_use_api,msword,\
+	udkapi \
+	offapi \
+	oovbaapi \
+))
 
 $(eval $(call gb_Library_use_libraries,msword,\
     basegfx \
@@ -60,7 +64,6 @@ $(eval $(call gb_Library_use_libraries,msword,\
     ucbhelper \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_externals,msword,\
@@ -71,6 +74,7 @@ $(eval $(call gb_Library_use_externals,msword,\
 ))
 
 $(eval $(call gb_Library_add_exception_objects,msword,\
+    sw/source/filter/docx/swdocxreader \
     sw/source/filter/rtf/swparrtf \
     sw/source/filter/ww8/docxattributeoutput \
     sw/source/filter/ww8/docxexport \

@@ -20,8 +20,14 @@
 #ifndef INCLUDED_OOX_PPT_CUSTOMSHOWLISTCONTEXT_HXX
 #define INCLUDED_OOX_PPT_CUSTOMSHOWLISTCONTEXT_HXX
 
-#include <oox/core/fragmenthandler2.hxx>
 #include <vector>
+
+#include <oox/core/contexthandler.hxx>
+#include <oox/core/fragmenthandler2.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+
+namespace oox { class AttributeList; }
 
 namespace oox { namespace ppt {
 
@@ -39,10 +45,10 @@ namespace oox { namespace ppt {
         std::vector< CustomShow >& mrCustomShowList;
 
     public:
-        CustomShowListContext( ::oox::core::FragmentHandler2& rParent,
+        CustomShowListContext( ::oox::core::FragmentHandler2 const & rParent,
                 std::vector< CustomShow >& rCustomShowList );
 
-        virtual ~CustomShowListContext( );
+        virtual ~CustomShowListContext( ) override;
         virtual ::oox::core::ContextHandlerRef onCreateContext( sal_Int32 aElementToken, const AttributeList& rAttribs ) override;
     };
 

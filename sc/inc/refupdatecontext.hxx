@@ -104,24 +104,23 @@ struct RefUpdateResult
     bool mbNameModified;
 
     RefUpdateResult();
-    RefUpdateResult(const RefUpdateResult& r);
 };
 
-struct RefUpdateInsertTabContext
+struct SC_DLLPUBLIC RefUpdateInsertTabContext
 {
     ScDocument& mrDoc;
-    SCTAB mnInsertPos;
-    SCTAB mnSheets;
+    SCTAB const mnInsertPos;
+    SCTAB const mnSheets;
     UpdatedRangeNames maUpdatedNames;
 
     RefUpdateInsertTabContext(ScDocument& rDoc, SCTAB nInsertPos, SCTAB nSheets);
 };
 
-struct RefUpdateDeleteTabContext
+struct SC_DLLPUBLIC RefUpdateDeleteTabContext
 {
     ScDocument& mrDoc;
-    SCTAB mnDeletePos;
-    SCTAB mnSheets;
+    SCTAB const mnDeletePos;
+    SCTAB const mnSheets;
     UpdatedRangeNames maUpdatedNames;
 
     RefUpdateDeleteTabContext(ScDocument& rDoc, SCTAB nInsertPos, SCTAB nSheets);
@@ -130,8 +129,8 @@ struct RefUpdateDeleteTabContext
 struct RefUpdateMoveTabContext
 {
     ScDocument& mrDoc;
-    SCTAB mnOldPos;
-    SCTAB mnNewPos;
+    SCTAB const mnOldPos;
+    SCTAB const mnNewPos;
     UpdatedRangeNames maUpdatedNames;
 
     RefUpdateMoveTabContext(ScDocument& rDoc, SCTAB nOldPos, SCTAB nNewPos);

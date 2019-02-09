@@ -19,6 +19,7 @@
 
 #ifndef INCLUDED_HWPFILTER_SOURCE_HWPREADER_HXX
 #define INCLUDED_HWPFILTER_SOURCE_HWPREADER_HXX
+
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -26,6 +27,8 @@
 
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/document/XImporter.hpp>
@@ -40,6 +43,7 @@
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <cppuhelper/weak.hxx>
+#include <memory>
 
 using namespace ::cppu;
 using namespace ::com::sun::star::lang;
@@ -76,24 +80,23 @@ class HwpReader : public WeakImplHelper<XFilter>
 
 public:
     HwpReader();
-    virtual ~HwpReader();
+    virtual ~HwpReader() override;
 
 public:
     /**
      * parseStream does Parser-startup initializations
      */
-    virtual sal_Bool SAL_CALL filter(const Sequence< PropertyValue >& aDescriptor) throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL cancel() throw(RuntimeException, std::exception) override {}
-    void SAL_CALL setDocumentHandler(Reference< XDocumentHandler > xHandler)
+    virtual sal_Bool SAL_CALL filter(const Sequence< PropertyValue >& aDescriptor) override;
+    virtual void SAL_CALL cancel() override {}
+    void setDocumentHandler(Reference< XDocumentHandler > const & xHandler)
     {
         m_rxDocumentHandler = xHandler;
     }
 private:
     Reference< XDocumentHandler > m_rxDocumentHandler;
-    Reference< XAttributeList > rList;
-    AttributeListImpl *pList;
+    rtl::Reference<AttributeListImpl> mxList;
     HWPFile hwpfile;
-    HwpReaderPrivate *d;
+    std::unique_ptr<HwpReaderPrivate> d;
 private:
     /* -------- Document Parsing --------- */
     void makeMeta();
@@ -107,44 +110,44 @@ private:
 
     /* -------- Paragraph Parsing --------- */
     void parsePara(HWPPara *para);
-    void make_text_p0(HWPPara *para, bool bParaStart = false);
-    void make_text_p1(HWPPara *para, bool bParaStart = false);
-    void make_text_p3(HWPPara *para, bool bParaStart = false);
+    void make_text_p0(HWPPara *para, bool bParaStart);
+    void make_text_p1(HWPPara *para, bool bParaStart);
+    void make_text_p3(HWPPara *para, bool bParaStart);
 
     /* -------- rDocument->characters(x) --------- */
     void makeChars(hchar_string & rStr);
 
     /* -------- Special Char Parsing --------- */
-    void makeFieldCode(hchar_string & rStr, FieldCode *hbox); //6
-    void makeBookmark(Bookmark *hbox);      //6
+    void makeFieldCode(hchar_string const & rStr, FieldCode const *hbox); //6
+    void makeBookmark(Bookmark const *hbox);      //6
     void makeDateFormat(DateCode *hbox);    //7
     void makeDateCode(DateCode *hbox);      //8
-    void makeTab(Tab *hbox);            //9
+    void makeTab();            //9
     void makeTable(TxtBox *hbox);
     void makeTextBox(TxtBox *hbox);
     void makeFormula(TxtBox *hbox);
     void makeHyperText(TxtBox *hbox);
     void makePicture(Picture *hbox);
     void makePictureDRAW(HWPDrawingObject *drawobj, Picture *hbox);
-    void makeLine(Line *hbox);
+    void makeLine();
     void makeHidden(Hidden *hbox);
     void makeFootnote(Footnote *hbox);
-    void makeAutoNum(AutoNum *hbox);
+    void makeAutoNum(AutoNum const *hbox);
     void makeShowPageNum();
     void makeMailMerge(MailMerge *hbox);
-    void makeOutline(Outline *hbox);
+    void makeOutline(Outline const *hbox);
 
     /* --------- Styles Parsing ------------ */
     void makePageStyle();
-    void makeColumns(ColumnDef *);
-    void makeTStyle(CharShape *);
-    void makePStyle(ParaShape *);
+    void makeColumns(ColumnDef const *);
+    void makeTStyle(CharShape const *);
+    void makePStyle(ParaShape const *);
     void makeFStyle(FBoxStyle *);
     void makeCaptionStyle(FBoxStyle *);
     void makeDrawStyle(HWPDrawingObject *,FBoxStyle *);
     void makeTableStyle(Table *);
-    void parseCharShape(CharShape *);
-    void parseParaShape(ParaShape *);
+    void parseCharShape(CharShape const *);
+    void parseParaShape(ParaShape const *);
     static char* getTStyleName(int, char *);
     static char* getPStyleName(int, char *);
 };
@@ -153,7 +156,7 @@ class HwpImportFilter : public WeakImplHelper< XFilter, XImporter, XServiceInfo,
 {
 public:
     explicit HwpImportFilter(const Reference< XMultiServiceFactory >& rFact);
-    virtual ~HwpImportFilter();
+    virtual ~HwpImportFilter() override;
 
 public:
     static Sequence< OUString > getSupportedServiceNames_Static() throw();
@@ -161,29 +164,28 @@ public:
 
 public:
     // XFilter
-    virtual sal_Bool SAL_CALL filter( const Sequence< PropertyValue >& aDescriptor )
-        throw( RuntimeException, std::exception ) override;
-    virtual void SAL_CALL cancel() throw(RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL filter( const Sequence< PropertyValue >& aDescriptor ) override;
+    virtual void SAL_CALL cancel() override;
 
     // XImporter
-    virtual void SAL_CALL setTargetDocument( const Reference< XComponent >& xDoc)
-        throw( IllegalArgumentException, RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setTargetDocument( const Reference< XComponent >& xDoc) override;
 
     // XServiceInfo
-    OUString SAL_CALL getImplementationName() throw (RuntimeException, std::exception) override;
-    Sequence< OUString > SAL_CALL getSupportedServiceNames() throw (css::uno::RuntimeException, std::exception) override;
-    sal_Bool SAL_CALL supportsService(const OUString& ServiceName) throw (css::uno::RuntimeException, std::exception) override;
+    OUString SAL_CALL getImplementationName() override;
+    Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+    sal_Bool SAL_CALL supportsService(const OUString& ServiceName) override;
 
     //XExtendedFilterDetection
-    virtual OUString SAL_CALL detect( css::uno::Sequence< css::beans::PropertyValue >& rDescriptor ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL detect( css::uno::Sequence< css::beans::PropertyValue >& rDescriptor ) override;
 
 public:
     Reference< XFilter > rFilter;
     Reference< XImporter > rImporter;
 };
 
+/// @throws Exception
 Reference< XInterface > HwpImportFilter_CreateInstance(
-    const Reference< XMultiServiceFactory >& rSMgr ) throw( Exception )
+    const Reference< XMultiServiceFactory >& rSMgr )
 {
     HwpImportFilter *p = new HwpImportFilter( rSMgr );
 
@@ -212,7 +214,7 @@ HwpImportFilter::HwpImportFilter(const Reference< XMultiServiceFactory >& rFact)
     }
     catch( Exception & )
     {
-        printf(" fail to instanciate %s\n", WRITER_IMPORTER_NAME );
+        printf(" fail to instantiate %s\n", WRITER_IMPORTER_NAME );
         exit( 1 );
     }
 }
@@ -222,19 +224,17 @@ HwpImportFilter::~HwpImportFilter()
 }
 
 sal_Bool HwpImportFilter::filter( const Sequence< PropertyValue >& aDescriptor )
-    throw( RuntimeException, std::exception )
 {
     // delegate to IchitaroImpoter
     return rFilter->filter( aDescriptor );
 }
 
-void HwpImportFilter::cancel() throw(css::uno::RuntimeException, std::exception)
+void HwpImportFilter::cancel()
 {
     rFilter->cancel();
 }
 
 void HwpImportFilter::setTargetDocument( const Reference< XComponent >& xDoc )
-    throw( IllegalArgumentException, RuntimeException, std::exception )
 {
         // delegate
     rImporter->setTargetDocument( xDoc );
@@ -245,18 +245,18 @@ OUString HwpImportFilter::getImplementationName_Static() throw()
     return OUString( IMPLEMENTATION_NAME );
 }
 
-OUString HwpImportFilter::getImplementationName() throw(css::uno::RuntimeException, std::exception)
+OUString HwpImportFilter::getImplementationName()
 {
     return OUString( IMPLEMENTATION_NAME );
 }
 
-sal_Bool HwpImportFilter::supportsService( const OUString& ServiceName ) throw(css::uno::RuntimeException, std::exception)
+sal_Bool HwpImportFilter::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 //XExtendedFilterDetection
-OUString HwpImportFilter::detect( css::uno::Sequence< css::beans::PropertyValue >& rDescriptor ) throw (css::uno::RuntimeException, std::exception)
+OUString HwpImportFilter::detect( css::uno::Sequence< css::beans::PropertyValue >& rDescriptor )
 {
     OUString sTypeName;
 
@@ -282,7 +282,7 @@ OUString HwpImportFilter::detect( css::uno::Sequence< css::beans::PropertyValue 
     return sTypeName;
 }
 
-Sequence< OUString> HwpImportFilter::getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception)
+Sequence< OUString> HwpImportFilter::getSupportedServiceNames()
 {
     Sequence < OUString > aRet(2);
     OUString* pArray = aRet.getArray();
@@ -293,7 +293,7 @@ Sequence< OUString> HwpImportFilter::getSupportedServiceNames() throw(css::uno::
 
 extern "C"
 {
-    SAL_DLLPUBLIC_EXPORT void * SAL_CALL hwp_component_getFactory( const sal_Char * pImplName, void * pServiceManager, void *  )
+    SAL_DLLPUBLIC_EXPORT void * hwp_component_getFactory( const sal_Char * pImplName, void * pServiceManager, void *  )
     {
         void * pRet = nullptr;
 

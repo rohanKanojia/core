@@ -21,6 +21,7 @@
 #define INCLUDED_VCL_SOURCE_GDI_IMPANMVW_HXX
 
 #include <vcl/animate.hxx>
+#include <vcl/vclptr.hxx>
 
 class Animation;
 class OutputDevice;
@@ -46,13 +47,13 @@ private:
 
     friend class Animation;
 
-    Animation*      mpParent;
-    VclPtr<OutputDevice>   mpOut;
-    long            mnExtraData;
-    Point           maPt;
-    Point           maDispPt;
-    Point           maRestPt;
-    Size            maSz;
+    Animation* const      mpParent;
+    VclPtr<OutputDevice>  mpOut;
+    long const            mnExtraData;
+    Point const           maPt;
+    Point                 maDispPt;
+    Point                 maRestPt;
+    Size const            maSz;
     Size            maSzPix;
     Size            maDispSz;
     Size            maRestSz;
@@ -63,14 +64,15 @@ private:
     Disposal        meLastDisposal;
     bool            mbPause;
     bool            mbMarked;
-    bool            mbHMirr;
-    bool            mbVMirr;
+    bool const      mbHMirr;
+    bool const      mbVMirr;
 
+public:
+                    ~ImplAnimView();
 private:
                     ImplAnimView( Animation* pParent, OutputDevice* pOut,
                                   const Point& rPt, const Size& rSz, sal_uLong nExtraData,
                                   OutputDevice* pFirstFrameOutDev = nullptr );
-                    ~ImplAnimView();
 
     bool            matches( OutputDevice* pOut, long nExtraData ) const;
     void            drawToPos( sal_uLong nPos );

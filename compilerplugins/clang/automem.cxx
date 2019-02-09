@@ -7,13 +7,13 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <memory>
 #include <cassert>
 #include <string>
 #include <iostream>
 #include <fstream>
 #include <set>
 #include "plugin.hxx"
-#include "compat.hxx"
 
 /**
   Find calls to "delete x" where x is a field on an object.
@@ -23,10 +23,10 @@
 namespace {
 
 class AutoMem:
-    public RecursiveASTVisitor<AutoMem>, public loplugin::Plugin
+    public loplugin::FilteringPlugin<AutoMem>
 {
 public:
-    explicit AutoMem(InstantiationData const & data): Plugin(data), mbInsideDestructor(false) {}
+    explicit AutoMem(loplugin::InstantiationData const & data): FilteringPlugin(data), mbInsideDestructor(false) {}
 
     virtual void run() override
     {
@@ -51,12 +51,12 @@ bool AutoMem::VisitCXXDeleteExpr(const CXXDeleteExpr* expr)
 {
     if (ignoreLocation( expr ))
         return true;
-    StringRef aFileName = compiler.getSourceManager().getFilename(compiler.getSourceManager().getSpellingLoc(expr->getLocStart()));
-    if (aFileName.startswith(SRCDIR "/include/salhelper/")
-        || aFileName.startswith(SRCDIR "/include/osl/")
-        || aFileName.startswith(SRCDIR "/salhelper/")
-        || aFileName.startswith(SRCDIR "/store/")
-        || aFileName.startswith(SRCDIR "/sal/"))
+    StringRef aFileName = getFileNameOfSpellingLoc(compiler.getSourceManager().getSpellingLoc(compat::getBeginLoc(expr)));
+    if (loplugin::hasPathnamePrefix(aFileName, SRCDIR "/include/salhelper/")
+        || loplugin::hasPathnamePrefix(aFileName, SRCDIR "/include/osl/")
+        || loplugin::hasPathnamePrefix(aFileName, SRCDIR "/salhelper/")
+        || loplugin::hasPathnamePrefix(aFileName, SRCDIR "/store/")
+        || loplugin::hasPathnamePrefix(aFileName, SRCDIR "/sal/"))
         return true;
 
     if (mbInsideDestructor)
@@ -79,7 +79,7 @@ bool AutoMem::VisitCXXDeleteExpr(const CXXDeleteExpr* expr)
     report(
         DiagnosticsEngine::Warning,
         "calling delete on object field, rather use std::unique_ptr or std::scoped_ptr",
-        expr->getLocStart())
+        compat::getBeginLoc(expr))
         << expr->getSourceRange();
     return true;
 }

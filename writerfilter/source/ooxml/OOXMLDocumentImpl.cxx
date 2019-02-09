@@ -33,14 +33,18 @@
 #include "OOXMLFastDocumentHandler.hxx"
 #include "OOXMLPropertySet.hxx"
 
-#include <tools/resmgr.hxx>
+#include <sal/log.hxx>
+#include <unotools/resmgr.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
-#include <svx/dialogs.hrc>
+#include <svx/dialmgr.hxx>
+#include <svx/strings.hrc>
 #include <comphelper/sequence.hxx>
+#include <cppuhelper/exc_hlp.hxx>
 #include <unotools/mediadescriptor.hxx>
 
 #include <iostream>
+#include <sfx2/objsh.hxx>
 
 // this extern variable is declared in OOXMLStreamImpl.hxx
 OUString customTarget;
@@ -50,12 +54,10 @@ namespace writerfilter {
 namespace ooxml
 {
 
-OOXMLDocumentImpl::OOXMLDocumentImpl(OOXMLStream::Pointer_t pStream, const uno::Reference<task::XStatusIndicator>& xStatusIndicator, bool bSkipImages, const uno::Sequence<beans::PropertyValue>& rDescriptor)
+OOXMLDocumentImpl::OOXMLDocumentImpl(OOXMLStream::Pointer_t const & pStream, const uno::Reference<task::XStatusIndicator>& xStatusIndicator, bool bSkipImages, const uno::Sequence<beans::PropertyValue>& rDescriptor)
     : mpStream(pStream)
     , mxStatusIndicator(xStatusIndicator)
     , mnXNoteId(0)
-    , mXNoteType(0)
-    , mxThemeDom(nullptr)
     , mbIsSubstream(false)
     , mbSkipImages(bSkipImages)
     , mnPercentSize(0)
@@ -65,6 +67,7 @@ OOXMLDocumentImpl::OOXMLDocumentImpl(OOXMLStream::Pointer_t pStream, const uno::
     , m_rBaseURL(utl::MediaDescriptor(rDescriptor).getUnpackedValueOrDefault("DocumentBaseURL", OUString()))
     , maMediaDescriptor(rDescriptor)
 {
+    pushShapeContext();
 }
 
 OOXMLDocumentImpl::~OOXMLDocumentImpl()
@@ -81,32 +84,28 @@ void OOXMLDocumentImpl::resolveFastSubStream(Stream & rStreamHandler,
     }
     catch (uno::Exception const& e)
     {
-        SAL_INFO("writerfilter", "resolveFastSubStream: exception while "
-                "resolving stream " << nType << " : " << e.Message);
+        SAL_INFO("writerfilter.ooxml", "resolveFastSubStream: exception while "
+                "resolving stream " << nType << " : " << e);
         return;
     }
     OOXMLStream::Pointer_t savedStream = mpStream;
     mpStream = pStream;
 
-    uno::Reference< xml::sax::XFastParser > xParser
-        (mpStream->getFastParser());
+    uno::Reference<xml::sax::XFastParser> xParser(mpStream->getFastParser());
 
     if (xParser.is())
     {
         uno::Reference<uno::XComponentContext> xContext(mpStream->getContext());
         OOXMLFastDocumentHandler * pDocHandler =
-            new OOXMLFastDocumentHandler(
-                xContext, &rStreamHandler, this, mnXNoteId );
+                        new OOXMLFastDocumentHandler(xContext, &rStreamHandler, this, mnXNoteId);
 
-        uno::Reference < xml::sax::XFastDocumentHandler > xDocumentHandler
-            (pDocHandler);
-        uno::Reference < xml::sax::XFastTokenHandler > xTokenHandler(mpStream->getFastTokenHandler());
+        uno::Reference<xml::sax::XFastDocumentHandler> xDocumentHandler(pDocHandler);
+        uno::Reference<xml::sax::XFastTokenHandler> xTokenHandler(mpStream->getFastTokenHandler());
 
         xParser->setFastDocumentHandler(xDocumentHandler);
         xParser->setTokenHandler(xTokenHandler);
 
-        uno::Reference<io::XInputStream> xInputStream =
-            pStream->getDocumentStream();
+        uno::Reference<io::XInputStream> xInputStream = pStream->getDocumentStream();
 
         if (xInputStream.is())
         {
@@ -122,8 +121,8 @@ void OOXMLDocumentImpl::resolveFastSubStream(Stream & rStreamHandler,
 }
 
 void OOXMLDocumentImpl::resolveFastSubStreamWithId(Stream & rStream,
-                                      const writerfilter::Reference<Stream>::Pointer_t& pStream,
-                      sal_uInt32 nId)
+                                    const writerfilter::Reference<Stream>::Pointer_t& pStream,
+                                    sal_uInt32 nId)
 {
     rStream.substream(nId, pStream);
 }
@@ -139,14 +138,12 @@ uno::Reference<xml::dom::XDocument> OOXMLDocumentImpl::importSubStream(OOXMLStre
     }
     catch (uno::Exception const& e)
     {
-        SAL_INFO("writerfilter", "importSubStream: exception while "
-                "importing stream " << nType << " : " << e.Message);
+        SAL_INFO("writerfilter.ooxml", "importSubStream: exception while "
+                "importing stream " << nType << " : " << e);
         return xRet;
     }
 
-    uno::Reference<io::XInputStream> xInputStream =
-        pStream->getDocumentStream();
-
+    uno::Reference<io::XInputStream> xInputStream = pStream->getDocumentStream();
     if (xInputStream.is())
     {
         try
@@ -157,21 +154,17 @@ uno::Reference<xml::dom::XDocument> OOXMLDocumentImpl::importSubStream(OOXMLStre
         }
         catch (uno::Exception const& e)
         {
-            SAL_INFO("writerfilter", "importSubStream: exception while "
-                     "parsing stream " << nType << " : " << e.Message);
+            SAL_INFO("writerfilter.ooxml", "importSubStream: exception while "
+                     "parsing stream " << nType << " : " << e);
             return xRet;
         }
     }
 
-    if(OOXMLStream::CUSTOMXML == nType)
+    if (OOXMLStream::CUSTOMXML == nType)
     {
         importSubStreamRelations(pStream, OOXMLStream::CUSTOMXMLPROPS);
     }
-    if(OOXMLStream::ACTIVEX == nType)
-    {
-        importSubStreamRelations(pStream, OOXMLStream::ACTIVEXBIN);
-    }
-    if(OOXMLStream::CHARTS == nType)
+    else if (OOXMLStream::CHARTS == nType)
     {
         importSubStreamRelations(pStream, OOXMLStream::EMBEDDINGS);
     }
@@ -186,22 +179,21 @@ void OOXMLDocumentImpl::importSubStreamRelations(const OOXMLStream::Pointer_t& p
     OOXMLStream::Pointer_t cStream;
     try
     {
-       cStream = OOXMLDocumentFactory::createStream(pStream, nType);
+        cStream = OOXMLDocumentFactory::createStream(pStream, nType);
     }
     catch (uno::Exception const& e)
     {
-        SAL_WARN("writerfilter", "importSubStreamRelations: exception while "
-            "importing stream " << nType << " : " << e.Message);
+        SAL_WARN("writerfilter.ooxml", "importSubStreamRelations: exception while "
+            "importing stream " << nType << " : " << e);
         return;
     }
 
-    uno::Reference<io::XInputStream> xcpInputStream =
-            cStream->getDocumentStream();
+    uno::Reference<io::XInputStream> xcpInputStream = cStream->getDocumentStream();
 
     if (xcpInputStream.is())
     {
-        // imporing itemprops files for item.xml from customXml.
-        if(OOXMLStream::CUSTOMXMLPROPS == nType)
+        // importing itemprops files for item.xml from customXml.
+        if (OOXMLStream::CUSTOMXMLPROPS == nType)
         {
             try
             {
@@ -211,8 +203,8 @@ void OOXMLDocumentImpl::importSubStreamRelations(const OOXMLStream::Pointer_t& p
             }
             catch (uno::Exception const& e)
             {
-                SAL_WARN("writerfilter", "importSubStream: exception while "
-                         "parsing stream " << nType << " : " << e.Message);
+                SAL_WARN("writerfilter.ooxml", "importSubStream: exception while "
+                         "parsing stream " << nType << " : " << e);
                 mxCustomXmlProsDom = xRelation;
             }
 
@@ -221,14 +213,8 @@ void OOXMLDocumentImpl::importSubStreamRelations(const OOXMLStream::Pointer_t& p
                 mxCustomXmlProsDom = xRelation;
             }
         }
-        else if(OOXMLStream::ACTIVEXBIN == nType)
-        {
-            // imporing activex.bin files for activex.xml from activeX folder.
-            mxActiveXBin = xcpInputStream;
-        }
         else if(OOXMLStream::EMBEDDINGS == nType)
         {
-            // imporing activex.bin files for activex.xml from activeX folder.
             mxEmbeddings = xcpInputStream;
         }
         else if(OOXMLStream::CHARTS == nType)
@@ -250,9 +236,8 @@ sal_Int32 OOXMLDocumentImpl::getXNoteId() const
     return mnXNoteId;
 }
 
-void OOXMLDocumentImpl::setXNoteType(const Id & nId)
+void OOXMLDocumentImpl::setXNoteType(Id /*nId*/)
 {
-    mXNoteType = nId;
 }
 
 const OUString & OOXMLDocumentImpl::getTarget() const
@@ -271,20 +256,20 @@ OOXMLDocumentImpl::getSubStream(const OUString & rId)
     writerfilter::Reference<Stream>::Pointer_t pRet( pTemp = new OOXMLDocumentImpl(pStream, uno::Reference<task::XStatusIndicator>(), mbSkipImages, maMediaDescriptor));
     pTemp->setModel(mxModel);
     pTemp->setDrawPage(mxDrawPage);
-    pTemp->setIsSubstream( true );
+    pTemp->mbIsSubstream = true;
     return pRet;
 }
 
 writerfilter::Reference<Stream>::Pointer_t
-OOXMLDocumentImpl::getXNoteStream(OOXMLStream::StreamType_t nType, const Id & rType,
+OOXMLDocumentImpl::getXNoteStream(OOXMLStream::StreamType_t nType, Id aType,
                                   const sal_Int32 nId)
 {
     OOXMLStream::Pointer_t pStream =
-        (OOXMLDocumentFactory::createStream(mpStream, nType));
+        OOXMLDocumentFactory::createStream(mpStream, nType);
     // See above, no status indicator for the note stream, either.
     OOXMLDocumentImpl * pDocument = new OOXMLDocumentImpl(pStream, uno::Reference<task::XStatusIndicator>(), mbSkipImages, maMediaDescriptor);
     pDocument->setXNoteId(nId);
-    pDocument->setXNoteType(rType);
+    pDocument->setXNoteType(aType);
     pDocument->setModel(getModel());
     pDocument->setDrawPage(getDrawPage());
 
@@ -292,18 +277,18 @@ OOXMLDocumentImpl::getXNoteStream(OOXMLStream::StreamType_t nType, const Id & rT
 }
 
 void OOXMLDocumentImpl::resolveFootnote(Stream & rStream,
-                                        const Id & rType,
+                                        Id aType,
                                         const sal_Int32 nNoteId)
 {
     writerfilter::Reference<Stream>::Pointer_t pStream =
-        getXNoteStream(OOXMLStream::FOOTNOTES, rType, nNoteId);
+        getXNoteStream(OOXMLStream::FOOTNOTES, aType, nNoteId);
 
     Id nId;
-    switch (rType)
+    switch (aType)
     {
     case NS_ooxml::LN_Value_doc_ST_FtnEdn_separator:
     case NS_ooxml::LN_Value_doc_ST_FtnEdn_continuationSeparator:
-        nId = rType;
+        nId = aType;
         break;
     default:
         nId = NS_ooxml::LN_footnote;
@@ -314,18 +299,18 @@ void OOXMLDocumentImpl::resolveFootnote(Stream & rStream,
 }
 
 void OOXMLDocumentImpl::resolveEndnote(Stream & rStream,
-                                       const Id & rType,
+                                       Id aType,
                                        const sal_Int32 nNoteId)
 {
     writerfilter::Reference<Stream>::Pointer_t pStream =
-        getXNoteStream(OOXMLStream::ENDNOTES, rType, nNoteId);
+        getXNoteStream(OOXMLStream::ENDNOTES, aType, nNoteId);
 
     Id nId;
-    switch (rType)
+    switch (aType)
     {
     case NS_ooxml::LN_Value_doc_ST_FtnEdn_separator:
     case NS_ooxml::LN_Value_doc_ST_FtnEdn_continuationSeparator:
-        nId = rType;
+        nId = aType;
         break;
     default:
         nId = NS_ooxml::LN_endnote;
@@ -355,23 +340,15 @@ OOXMLPropertySet * OOXMLDocumentImpl::getPicturePropSet
 
     OOXMLValue::Pointer_t pPayloadValue(new OOXMLBinaryValue(pPicture));
 
-    OOXMLProperty::Pointer_t pPayloadProperty
-        (new OOXMLProperty(NS_ooxml::LN_payload, pPayloadValue,
-                               OOXMLProperty::ATTRIBUTE));
-
     OOXMLPropertySet::Pointer_t pBlipSet(new OOXMLPropertySet);
 
-    pBlipSet->add(pPayloadProperty);
+    pBlipSet->add(NS_ooxml::LN_payload, pPayloadValue, OOXMLProperty::ATTRIBUTE);
 
     OOXMLValue::Pointer_t pBlipValue(new OOXMLPropertySetValue(pBlipSet));
 
-    OOXMLProperty::Pointer_t pBlipProperty
-        (new OOXMLProperty(NS_ooxml::LN_blip, pBlipValue,
-                               OOXMLProperty::ATTRIBUTE));
-
     OOXMLPropertySet * pProps = new OOXMLPropertySet;
 
-    pProps->add(pBlipProperty);
+    pProps->add(NS_ooxml::LN_blip, pBlipValue, OOXMLProperty::ATTRIBUTE);
 
     return pProps;
 }
@@ -379,9 +356,9 @@ OOXMLPropertySet * OOXMLDocumentImpl::getPicturePropSet
 void OOXMLDocumentImpl::resolvePicture(Stream & rStream,
                                        const OUString & rId)
 {
-    OOXMLPropertySet * pProps = getPicturePropSet(rId);
+    OOXMLPropertySet::Pointer_t pProps(getPicturePropSet(rId));
 
-    rStream.props(writerfilter::Reference<Properties>::Pointer_t(pProps));
+    rStream.props(pProps.get());
 }
 
 OUString OOXMLDocumentImpl::getTargetForId(const OUString & rId)
@@ -434,10 +411,37 @@ void OOXMLDocumentImpl::resolveFooter(Stream & rStream,
      }
 }
 
+namespace {
+// Ensures that the indicator is reset after exiting OOXMLDocumentImpl::resolve
+class StatusIndicatorGuard{
+public:
+    explicit StatusIndicatorGuard(css::uno::Reference<css::task::XStatusIndicator> const & xStatusIndicator)
+        :mxStatusIndicator(xStatusIndicator)
+    {
+    }
+
+    ~StatusIndicatorGuard()
+    {
+        if (mxStatusIndicator.is())
+                mxStatusIndicator->end();
+    }
+
+private:
+    css::uno::Reference<css::task::XStatusIndicator> mxStatusIndicator;
+};
+}
+
 void OOXMLDocumentImpl::resolve(Stream & rStream)
 {
-    uno::Reference< xml::sax::XFastParser > xParser
-        (mpStream->getFastParser());
+    StatusIndicatorGuard aStatusIndicatorGuard(mxStatusIndicator);
+
+    if (utl::MediaDescriptor(maMediaDescriptor).getUnpackedValueOrDefault("ReadGlossaries", false))
+    {
+        resolveFastSubStream(rStream, OOXMLStream::GLOSSARY);
+        return;
+    }
+
+    uno::Reference<xml::sax::XFastParser> xParser(mpStream->getFastParser());
 
     if (mxModel.is())
     {
@@ -454,8 +458,7 @@ void OOXMLDocumentImpl::resolve(Stream & rStream)
                     // We want to care about the progress if we know the estimated paragraph count and we have given a status indicator as well.
                     // Set the end position only here, so later it's enough to check if that is non-zero in incrementProgress().
                     mnProgressEndPos = nValue;
-                    static ResMgr* pResMgr = ResMgr::CreateResMgr("svx", Application::GetSettings().GetUILanguageTag());
-                    OUString aDocLoad(ResId(RID_SVXSTR_DOC_LOAD, *pResMgr).toString());
+                    OUString aDocLoad(SvxResId(RID_SVXSTR_DOC_LOAD));
                     mxStatusIndicator->start(aDocLoad, mnProgressEndPos);
                     mnPercentSize = mnProgressEndPos / 100;
                 }
@@ -468,11 +471,9 @@ void OOXMLDocumentImpl::resolve(Stream & rStream)
         uno::Reference<uno::XComponentContext> xContext(mpStream->getContext());
 
         OOXMLFastDocumentHandler * pDocHandler =
-            new OOXMLFastDocumentHandler(
-                xContext, &rStream, this, mnXNoteId );
+                    new OOXMLFastDocumentHandler(xContext, &rStream, this, mnXNoteId);
         pDocHandler->setIsSubstream( mbIsSubstream );
-        uno::Reference < xml::sax::XFastDocumentHandler > xDocumentHandler
-            (pDocHandler);
+        uno::Reference < xml::sax::XFastDocumentHandler > xDocumentHandler(pDocHandler);
         uno::Reference < xml::sax::XFastTokenHandler > xTokenHandler(mpStream->getFastTokenHandler());
 
         resolveFastSubStream(rStream, OOXMLStream::SETTINGS);
@@ -486,8 +487,6 @@ void OOXMLDocumentImpl::resolve(Stream & rStream)
 
         // Custom xml's are handled as part of grab bag.
         resolveCustomXmlStream(rStream);
-
-        resolveActiveXStream(rStream);
 
         resolveFastSubStream(rStream, OOXMLStream::FONTTABLE);
         resolveFastSubStream(rStream, OOXMLStream::STYLES);
@@ -503,23 +502,25 @@ void OOXMLDocumentImpl::resolve(Stream & rStream)
         {
             xParser->parseStream(aParserInput);
         }
-        catch (xml::sax::SAXException const&)
+        catch (xml::sax::SAXException const& rErr)
         {
-            // don't swallow these - handlers may not have been executed,
+            // don't silently swallow these - handlers may not have been executed,
             // and the domain mapper is likely in an inconsistent state
-            throw;
+            // In case user chooses to try to continue loading, don't ask again for this file
+            SfxObjectShell* rShell = SfxObjectShell::GetShellFromComponent(mxModel);
+            if (!rShell || !rShell->IsContinueImportOnFilterExceptions("SAXException: " + rErr.Message))
+                throw;
         }
         catch (uno::RuntimeException const&)
         {
             throw;
         }
         // note: cannot throw anything other than SAXException out of here?
-        catch (uno::Exception const& e)
+        catch (uno::Exception const&)
         {
-            SAL_WARN("writerfilter.ooxml",
-                "OOXMLDocumentImpl::resolve(): exception: " << e.Message);
-            throw lang::WrappedTargetRuntimeException("", nullptr,
-                    uno::makeAny(e));
+            css::uno::Any anyEx = cppu::getCaughtException();
+            SAL_WARN("writerfilter.ooxml", "OOXMLDocumentImpl::resolve(): " << anyEx);
+            throw lang::WrappedTargetRuntimeException("", nullptr, anyEx);
         }
         catch (...)
         {
@@ -527,9 +528,6 @@ void OOXMLDocumentImpl::resolve(Stream & rStream)
                 "OOXMLDocumentImpl::resolve(): non-UNO exception");
         }
     }
-
-    if (mxStatusIndicator.is())
-        mxStatusIndicator->end();
 }
 
 void OOXMLDocumentImpl::incrementProgress()
@@ -541,7 +539,8 @@ void OOXMLDocumentImpl::incrementProgress()
     if (mnProgressEndPos && mnProgressCurrentPos > (mnProgressLastPos + mnPercentSize) && mnProgressLastPos < mnProgressEndPos)
     {
         mnProgressLastPos = mnProgressCurrentPos;
-        mxStatusIndicator->setValue(mnProgressLastPos);
+        if (mxStatusIndicator.is())
+            mxStatusIndicator->setValue(mnProgressLastPos);
     }
 }
 
@@ -549,47 +548,48 @@ void OOXMLDocumentImpl::resolveCustomXmlStream(Stream & rStream)
 {
     // Resolving all item[n].xml files from CustomXml folder.
     uno::Reference<embed::XRelationshipAccess> xRelationshipAccess;
-    xRelationshipAccess.set((dynamic_cast<OOXMLStreamImpl&>(*mpStream.get())).accessDocumentStream(), uno::UNO_QUERY_THROW);
+    xRelationshipAccess.set(dynamic_cast<OOXMLStreamImpl&>(*mpStream).accessDocumentStream(), uno::UNO_QUERY);
     if (xRelationshipAccess.is())
     {
         static const char sCustomType[] = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml";
         static const char sCustomTypeStrict[] = "http://purl.oclc.org/ooxml/officeDocument/relationships/customXml";
-        OUString sTarget("Target");
         bool bFound = false;
         sal_Int32 counter = 0;
-        uno::Sequence< uno::Sequence< beans::StringPair > >aSeqs = xRelationshipAccess->getAllRelationships();
-        std::vector< uno::Reference<xml::dom::XDocument> > aCustomXmlDomList;
-        std::vector< uno::Reference<xml::dom::XDocument> > aCustomXmlDomPropsList;
+        uno::Sequence<uno::Sequence< beans::StringPair>> aSeqs = xRelationshipAccess->getAllRelationships();
+        std::vector<uno::Reference<xml::dom::XDocument>> aCustomXmlDomList;
+        std::vector<uno::Reference<xml::dom::XDocument>> aCustomXmlDomPropsList;
         for (sal_Int32 j = 0; j < aSeqs.getLength(); j++)
         {
-            uno::Sequence< beans::StringPair > aSeq = aSeqs[j];
+            const uno::Sequence<beans::StringPair>& aSeq = aSeqs[j];
             for (sal_Int32 i = 0; i < aSeq.getLength(); i++)
             {
-                beans::StringPair aPair = aSeq[i];
+                const beans::StringPair& aPair = aSeq[i];
                 // Need to resolve only customxml files from document relationships.
                 // Skipping other files.
                 if (aPair.Second == sCustomType ||
-                        aPair.Second == sCustomTypeStrict)
+                    aPair.Second == sCustomTypeStrict)
                     bFound = true;
-                else if(aPair.First == sTarget && bFound)
+                else if (aPair.First == "Target" && bFound)
                 {
                     // Adding value to extern variable customTarget. It will be used in ooxmlstreamimpl
                     // to ensure customxml target is visited in lcl_getTarget.
                     customTarget = aPair.Second;
                 }
             }
-            if(bFound)
+
+            if (bFound)
             {
                 uno::Reference<xml::dom::XDocument> customXmlTemp = importSubStream(OOXMLStream::CUSTOMXML);
                 // This will add all item[n].xml with its relationship file i.e itemprops.xml to
                 // grabbag list.
-                if(mxCustomXmlProsDom.is() && customXmlTemp.is())
+                if (mxCustomXmlProsDom.is() && customXmlTemp.is())
                 {
                     aCustomXmlDomList.push_back(customXmlTemp);
                     aCustomXmlDomPropsList.push_back(mxCustomXmlProsDom);
                     counter++;
                     resolveFastSubStream(rStream, OOXMLStream::CUSTOMXML);
                 }
+
                 bFound = false;
             }
         }
@@ -617,12 +617,12 @@ void OOXMLDocumentImpl::resolveGlossaryStream(Stream & /*rStream*/)
     }
     catch (uno::Exception const& e)
     {
-        SAL_INFO("writerfilter", "resolveGlossaryStream: exception while "
-                 "createStream for glossary" << OOXMLStream::GLOSSARY << " : " << e.Message);
+        SAL_INFO("writerfilter.ooxml", "resolveGlossaryStream: exception while "
+                 "createStream for glossary" << OOXMLStream::GLOSSARY << " : " << e);
         return;
     }
     uno::Reference<embed::XRelationshipAccess> xRelationshipAccess;
-    xRelationshipAccess.set((dynamic_cast<OOXMLStreamImpl&>(*pStream.get())).accessDocumentStream(), uno::UNO_QUERY_THROW);
+    xRelationshipAccess.set(dynamic_cast<OOXMLStreamImpl&>(*pStream).accessDocumentStream(), uno::UNO_QUERY);
     if (xRelationshipAccess.is())
     {
 
@@ -634,6 +634,12 @@ void OOXMLDocumentImpl::resolveGlossaryStream(Stream & /*rStream*/)
               OOXMLStream::Pointer_t gStream;
               uno::Sequence< beans::StringPair > aSeq = aSeqs[j];
               //Follows following aSeq[0] is Id, aSeq[1] is Type, aSeq[2] is Target
+              if (aSeq.getLength() < 3)
+              {
+                  SAL_WARN("writerfilter.ooxml", "too short sequence");
+                  continue;
+              }
+
               OUString gId(aSeq[0].Second);
               OUString gType(aSeq[1].Second);
               OUString gTarget(aSeq[2].Second);
@@ -684,19 +690,19 @@ void OOXMLDocumentImpl::resolveGlossaryStream(Stream & /*rStream*/)
                   }
                   catch (uno::Exception const& e)
                   {
-                      SAL_INFO("writerfilter", "importSubStream: exception while "
-                      "parsing stream of Type" << nType << " : " << e.Message);
+                      SAL_INFO("writerfilter.ooxml", "importSubStream: exception while "
+                      "parsing stream of Type" << nType << " : " << e);
                       return;
                   }
 
                   if (xDom.is())
                   {
                       uno::Sequence< uno::Any > glossaryTuple (5);
-                      glossaryTuple[0] = uno::makeAny(xDom);
-                      glossaryTuple[1] = uno::makeAny(gId);
-                      glossaryTuple[2] = uno::makeAny(gType);
-                      glossaryTuple[3] = uno::makeAny(gTarget);
-                      glossaryTuple[4] = uno::makeAny(contentType);
+                      glossaryTuple[0] <<= xDom;
+                      glossaryTuple[1] <<= gId;
+                      glossaryTuple[2] <<= gType;
+                      glossaryTuple[3] <<= gTarget;
+                      glossaryTuple[4] <<= contentType;
                       aGlossaryDomList.push_back(glossaryTuple);
                       counter++;
                   }
@@ -709,18 +715,16 @@ void OOXMLDocumentImpl::resolveGlossaryStream(Stream & /*rStream*/)
 void OOXMLDocumentImpl::resolveEmbeddingsStream(const OOXMLStream::Pointer_t& pStream)
 {
     uno::Reference<embed::XRelationshipAccess> xRelationshipAccess;
-    xRelationshipAccess.set((dynamic_cast<OOXMLStreamImpl&>(*pStream.get())).accessDocumentStream(), uno::UNO_QUERY_THROW);
-    std::vector<css::beans::PropertyValue> aEmbeddings;
+    xRelationshipAccess.set(dynamic_cast<OOXMLStreamImpl&>(*pStream).accessDocumentStream(), uno::UNO_QUERY);
     if (xRelationshipAccess.is())
     {
-        OUString sChartType("http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart");
-        OUString sChartTypeStrict("http://purl.oclc.org/ooxml/officeDocument/relationships/chart");
-        OUString sFootersType("http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer");
-        OUString sFootersTypeStrict("http://purl.oclc.org/ooxml/officeDocument/relationships/footer");
-        OUString sHeaderType("http://schemas.openxmlformats.org/officeDocument/2006/relationships/header");
-        OUString sHeaderTypeStrict("http://purl.oclc.org/ooxml/officeDocument/relationships/header");
+        OUString const sChartType("http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart");
+        OUString const sChartTypeStrict("http://purl.oclc.org/ooxml/officeDocument/relationships/chart");
+        OUString const sFootersType("http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer");
+        OUString const sFootersTypeStrict("http://purl.oclc.org/ooxml/officeDocument/relationships/footer");
+        OUString const sHeaderType("http://schemas.openxmlformats.org/officeDocument/2006/relationships/header");
+        OUString const sHeaderTypeStrict("http://purl.oclc.org/ooxml/officeDocument/relationships/header");
 
-        OUString sTarget("Target");
         bool bFound = false;
         bool bHeaderFooterFound = false;
         OOXMLStream::StreamType_t streamType = OOXMLStream::UNKNOWN;
@@ -748,14 +752,14 @@ void OOXMLDocumentImpl::resolveEmbeddingsStream(const OOXMLStream::Pointer_t& pS
                     bHeaderFooterFound = true;
                     streamType = OOXMLStream::HEADER;
                 }
-                else if(aPair.First == sTarget && ( bFound || bHeaderFooterFound ))
+                else if(aPair.First == "Target" && ( bFound || bHeaderFooterFound ))
                 {
                     // Adding value to extern variable customTarget. It will be used in ooxmlstreamimpl
                     // to ensure chart.xml target is visited in lcl_getTarget.
                     customTarget = aPair.Second;
                 }
             }
-            if(( bFound || bHeaderFooterFound))
+            if( bFound || bHeaderFooterFound)
             {
                 if(bFound)
                 {
@@ -763,22 +767,28 @@ void OOXMLDocumentImpl::resolveEmbeddingsStream(const OOXMLStream::Pointer_t& pS
                 }
                 if(bHeaderFooterFound)
                 {
-                    OOXMLStream::Pointer_t Stream = OOXMLDocumentFactory::createStream(pStream, streamType);
-                    if(Stream)
-                        resolveEmbeddingsStream(Stream);
+                    try
+                    {
+                        OOXMLStream::Pointer_t Stream = OOXMLDocumentFactory::createStream(pStream, streamType);
+                        if (Stream)
+                            resolveEmbeddingsStream(Stream);
+                    }
+                    catch (uno::Exception const& e)
+                    {
+                        SAL_INFO("writerfilter.ooxml", "resolveEmbeddingsStream: can't find header/footer whilst "
+                               "resolving stream " << streamType << " : " << e);
+                        return;
+                    }
                 }
 
                 beans::PropertyValue embeddingsTemp;
                 // This will add all .xlsx and .bin to grabbag list.
-                if(bFound)
+                if(bFound && mxEmbeddings.is())
                 {
-                    if(mxEmbeddings.is())
-                    {
-                        embeddingsTemp.Name = embeddingsTarget;
-                        embeddingsTemp.Value = uno::makeAny(mxEmbeddings);
-                        aEmbeddings.push_back(embeddingsTemp);
-                        mxEmbeddings.clear();
-                    }
+                    embeddingsTemp.Name = embeddingsTarget;
+                    embeddingsTemp.Value <<= mxEmbeddings;
+                    aEmbeddings.push_back(embeddingsTemp);
+                    mxEmbeddings.clear();
                 }
                 bFound = false;
                 bHeaderFooterFound = false;
@@ -787,63 +797,6 @@ void OOXMLDocumentImpl::resolveEmbeddingsStream(const OOXMLStream::Pointer_t& pS
     }
     if (!aEmbeddings.empty())
         mxEmbeddingsList = comphelper::containerToSequence(aEmbeddings);
-}
-
-void OOXMLDocumentImpl::resolveActiveXStream(Stream & rStream)
-{
-    // Resolving all ActiveX[n].xml files from ActiveX folder.
-    uno::Reference<embed::XRelationshipAccess> xRelationshipAccess;
-    xRelationshipAccess.set((dynamic_cast<OOXMLStreamImpl&>(*mpStream.get())).accessDocumentStream(), uno::UNO_QUERY_THROW);
-    if (xRelationshipAccess.is())
-    {
-        static const char sCustomType[] = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/control";
-        static const char sCustomTypeStrict[] = "http://purl.oclc.org/ooxml/officeDocument/relationships/control";
-        OUString sTarget("Target");
-        bool bFound = false;
-        sal_Int32 counter = 0;
-        uno::Sequence< uno::Sequence< beans::StringPair > > aSeqs = xRelationshipAccess->getAllRelationships();
-        uno::Sequence<uno::Reference<xml::dom::XDocument> > xActiveXDomListTemp(aSeqs.getLength());
-        uno::Sequence<uno::Reference<io::XInputStream> > xActiveXBinListTemp(aSeqs.getLength());
-        for (sal_Int32 j = 0; j < aSeqs.getLength(); j++)
-        {
-            uno::Sequence< beans::StringPair > aSeq = aSeqs[j];
-            for (sal_Int32 i = 0; i < aSeq.getLength(); i++)
-            {
-                beans::StringPair aPair = aSeq[i];
-                // Need to resolve only ActiveX files from document relationships.
-                // Skipping other files.
-                if (aPair.Second == sCustomType ||
-                        aPair.Second == sCustomTypeStrict)
-                    bFound = true;
-                else if(aPair.First == sTarget && bFound)
-                {
-                    // Adding value to extern variable customTarget. It will be used in ooxmlstreamimpl
-                    // to ensure ActiveX.xml target is visited in lcl_getTarget.
-                    customTarget = aPair.Second;
-                }
-            }
-            if(bFound)
-            {
-                uno::Reference<xml::dom::XDocument> activeXTemp = importSubStream(OOXMLStream::ACTIVEX);
-                // This will add all ActiveX[n].xml to grabbag list.
-                if(activeXTemp.is())
-                {
-                    xActiveXDomListTemp[counter] = activeXTemp;
-                    if(mxActiveXBin.is())
-                    {
-                        xActiveXBinListTemp[counter] = mxActiveXBin;
-                    }
-                    counter++;
-                    resolveFastSubStream(rStream, OOXMLStream::ACTIVEX);
-                }
-                bFound = false;
-            }
-        }
-        xActiveXDomListTemp.realloc(counter);
-        xActiveXBinListTemp.realloc(counter);
-        mxActiveXDomList = xActiveXDomListTemp;
-        mxActiveXBinList = xActiveXBinListTemp;
-    }
 }
 
 uno::Reference<xml::dom::XDocument> OOXMLDocumentImpl::getGlossaryDocDom( )
@@ -883,11 +836,6 @@ uno::Reference<drawing::XDrawPage> OOXMLDocumentImpl::getDrawPage()
     return mxDrawPage;
 }
 
-uno::Reference<io::XInputStream> OOXMLDocumentImpl::getStorageStream()
-{
-    return mpStream->getStorageStream();
-}
-
 const uno::Sequence<beans::PropertyValue>& OOXMLDocumentImpl::getMediaDescriptor()
 {
     return maMediaDescriptor;
@@ -895,12 +843,27 @@ const uno::Sequence<beans::PropertyValue>& OOXMLDocumentImpl::getMediaDescriptor
 
 void OOXMLDocumentImpl::setShapeContext( uno::Reference<xml::sax::XFastShapeContextHandler> xContext )
 {
-    mxShapeContext = xContext;
+    if (!maShapeContexts.empty())
+        maShapeContexts.top() = xContext;
 }
 
 uno::Reference<xml::sax::XFastShapeContextHandler> OOXMLDocumentImpl::getShapeContext( )
 {
-    return mxShapeContext;
+    if (!maShapeContexts.empty())
+        return maShapeContexts.top();
+    else
+        return uno::Reference<xml::sax::XFastShapeContextHandler>();
+}
+
+void OOXMLDocumentImpl::pushShapeContext()
+{
+    maShapeContexts.push(uno::Reference<xml::sax::XFastShapeContextHandler>());
+}
+
+void OOXMLDocumentImpl::popShapeContext()
+{
+    if (!maShapeContexts.empty())
+        maShapeContexts.pop();
 }
 
 uno::Reference<xml::dom::XDocument> OOXMLDocumentImpl::getThemeDom( )
@@ -916,16 +879,6 @@ uno::Sequence<uno::Reference<xml::dom::XDocument> > OOXMLDocumentImpl::getCustom
 uno::Sequence<uno::Reference<xml::dom::XDocument> > OOXMLDocumentImpl::getCustomXmlDomPropsList( )
 {
     return mxCustomXmlDomPropsList;
-}
-
-uno::Sequence<uno::Reference<xml::dom::XDocument> > OOXMLDocumentImpl::getActiveXDomList( )
-{
-    return mxActiveXDomList;
-}
-
-uno::Sequence<uno::Reference<io::XInputStream> > OOXMLDocumentImpl::getActiveXBinList( )
-{
-    return mxActiveXBinList;
 }
 
 uno::Sequence<beans::PropertyValue > OOXMLDocumentImpl::getEmbeddingsList( )

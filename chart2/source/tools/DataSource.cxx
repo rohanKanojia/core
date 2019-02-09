@@ -17,27 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DataSource.hxx"
-#include "LabeledDataSequence.hxx"
+#include <DataSource.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
-using ::osl::MutexGuard;
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::RuntimeException;
 
 using namespace ::com::sun::star;
 
-namespace
-{
-static const char lcl_aServiceName[] = "com.sun.star.comp.chart.DataSource";
-}  // anonymous namespace
 
 namespace chart
 {
 
-DataSource::DataSource(
-    const Reference< uno::XComponentContext > & /*xContext*/ )
+DataSource::DataSource()
 {}
 
 DataSource::DataSource(
@@ -50,54 +45,38 @@ DataSource::~DataSource()
 
 // ____ XDataSource ____
 Sequence< Reference< chart2::data::XLabeledDataSequence > > SAL_CALL DataSource::getDataSequences()
-    throw (uno::RuntimeException, std::exception)
 {
     return m_aDataSeq;
 }
 
 // ____ XDataSink ____
 void SAL_CALL DataSource::setData( const Sequence< Reference< chart2::data::XLabeledDataSequence > >& aData )
-    throw (uno::RuntimeException, std::exception)
 {
     m_aDataSeq = aData;
 }
 
-Sequence< OUString > DataSource::getSupportedServiceNames_Static()
-{
-    Sequence<OUString> aServices { "com.sun.star.chart2.data.DataSource" };
-    return aServices;
-}
-
 OUString SAL_CALL DataSource::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getImplementationName_Static();
-}
-
-OUString DataSource::getImplementationName_Static()
-{
-    return OUString(lcl_aServiceName);
+    return OUString("com.sun.star.comp.chart.DataSource");
 }
 
 sal_Bool SAL_CALL DataSource::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL DataSource::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return { "com.sun.star.chart2.data.DataSource" };
 }
 
 } // namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
-com_sun_star_comp_chart_DataSource_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+com_sun_star_comp_chart_DataSource_get_implementation(css::uno::XComponentContext *,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new ::chart::DataSource(context));
+    return cppu::acquire(new ::chart::DataSource);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

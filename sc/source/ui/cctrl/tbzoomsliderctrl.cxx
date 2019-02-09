@@ -16,7 +16,7 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "tbzoomsliderctrl.hxx"
+#include <tbzoomsliderctrl.hxx>
 #include <vcl/image.hxx>
 #include <vcl/toolbox.hxx>
 #include <vcl/virdev.hxx>
@@ -27,13 +27,12 @@
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/objsh.hxx>
 #include <svx/zoomslideritem.hxx>
-#include <svx/dialmgr.hxx>
-#include <svx/dialogs.hrc>
 #include <set>
-#include "docsh.hxx"
-#include "stlpool.hxx"
-#include "scitems.hxx"
-#include "printfun.hxx"
+#include <docsh.hxx>
+#include <stlpool.hxx>
+#include <scitems.hxx>
+#include <printfun.hxx>
+#include <bitmaps.hlst>
 
 // class ScZoomSliderControl ---------------------------------------
 
@@ -61,7 +60,7 @@ void ScZoomSliderControl::StateChanged( sal_uInt16 /*nSID*/, SfxItemState eState
     ScZoomSliderWnd*        pBox = static_cast<ScZoomSliderWnd*>(rTbx.GetItemWindow( nId ));
     OSL_ENSURE( pBox ,"Control not found!" );
 
-    if ( SfxItemState::DEFAULT != eState || dynamic_cast<const SfxVoidItem*>( pState) !=  nullptr )
+    if ( SfxItemState::DEFAULT != eState || pState->IsVoidItem() )
     {
         SvxZoomSliderItem aZoomSliderItem( 100 );
         pBox->Disable();
@@ -94,31 +93,28 @@ struct ScZoomSliderWnd::ScZoomSliderWnd_Impl
     sal_uInt16                   mnCurrentZoom;
     sal_uInt16                   mnMinZoom;
     sal_uInt16                   mnMaxZoom;
-    sal_uInt16                   mnSliderCenter;
     std::vector< long >      maSnappingPointOffsets;
     std::vector< sal_uInt16 >    maSnappingPointZooms;
     Image                    maSliderButton;
     Image                    maIncreaseButton;
     Image                    maDecreaseButton;
-    bool                     mbValuesSet;
     bool                     mbOmitPaint;
 
     explicit ScZoomSliderWnd_Impl( sal_uInt16 nCurrentZoom ) :
         mnCurrentZoom( nCurrentZoom ),
         mnMinZoom( 10 ),
         mnMaxZoom( 400 ),
-        mnSliderCenter( 100 ),
         maSnappingPointOffsets(),
         maSnappingPointZooms(),
         maSliderButton(),
         maIncreaseButton(),
         maDecreaseButton(),
-        mbValuesSet( true ),
         mbOmitPaint( false )
         {
-
         }
 };
+
+static constexpr sal_uInt16 gnSliderCenter(100);
 
 const long nButtonWidth     = 10;
 const long nButtonHeight    = 10;
@@ -143,20 +139,13 @@ sal_uInt16 ScZoomSliderWnd::Offset2Zoom( long nOffset ) const
         return mpImpl->mnMaxZoom;
 
     // check for snapping points:
-    sal_uInt16 nCount = 0;
-    std::vector< long >::iterator aSnappingPointIter;
-    for ( aSnappingPointIter = mpImpl->maSnappingPointOffsets.begin();
-        aSnappingPointIter != mpImpl->maSnappingPointOffsets.end();
-        ++aSnappingPointIter )
+    auto aSnappingPointIter = std::find_if(mpImpl->maSnappingPointOffsets.begin(), mpImpl->maSnappingPointOffsets.end(),
+        [nOffset](const long nCurrent) { return std::abs(nCurrent - nOffset) < nSnappingEpsilon; });
+    if (aSnappingPointIter != mpImpl->maSnappingPointOffsets.end())
     {
-        const long nCurrent = *aSnappingPointIter;
-        if ( std::abs(nCurrent - nOffset) < nSnappingEpsilon )
-        {
-            nOffset = nCurrent;
-            nRet = mpImpl->maSnappingPointZooms[ nCount ];
-            break;
-        }
-        ++nCount;
+        nOffset = *aSnappingPointIter;
+        auto nCount = static_cast<sal_uInt16>(std::distance(mpImpl->maSnappingPointOffsets.begin(), aSnappingPointIter));
+        nRet = mpImpl->maSnappingPointZooms[ nCount ];
     }
 
     if( 0 == nRet )
@@ -164,7 +153,7 @@ sal_uInt16 ScZoomSliderWnd::Offset2Zoom( long nOffset ) const
         if( nOffset < nControlWidth / 2 )
         {
             // first half of slider
-            const long nFirstHalfRange      = mpImpl->mnSliderCenter - mpImpl->mnMinZoom;
+            const long nFirstHalfRange      = gnSliderCenter - mpImpl->mnMinZoom;
             const long nHalfSliderWidth     = nControlWidth/2 - nSliderXOffset;
             const long nZoomPerSliderPixel  = (1000 * nFirstHalfRange) / nHalfSliderWidth;
             const long nOffsetToSliderLeft  = nOffset - nSliderXOffset;
@@ -173,11 +162,11 @@ sal_uInt16 ScZoomSliderWnd::Offset2Zoom( long nOffset ) const
         else
         {
             // second half of slider
-            const long nSecondHalfRange         = mpImpl->mnMaxZoom - mpImpl->mnSliderCenter;
+            const long nSecondHalfRange         = mpImpl->mnMaxZoom - gnSliderCenter;
             const long nHalfSliderWidth         = nControlWidth/2 - nSliderXOffset;
             const long nZoomPerSliderPixel      = 1000 * nSecondHalfRange / nHalfSliderWidth;
             const long nOffsetToSliderCenter    = nOffset - nControlWidth/2;
-            nRet = mpImpl->mnSliderCenter + sal_uInt16( nOffsetToSliderCenter * nZoomPerSliderPixel / 1000 );
+            nRet = gnSliderCenter + sal_uInt16( nOffsetToSliderCenter * nZoomPerSliderPixel / 1000 );
         }
     }
 
@@ -197,18 +186,18 @@ long ScZoomSliderWnd::Zoom2Offset( sal_uInt16 nCurrentZoom ) const
     long  nRect = nSliderXOffset;
 
     const long nHalfSliderWidth = nControlWidth/2 - nSliderXOffset;
-    if( nCurrentZoom <= mpImpl->mnSliderCenter )
+    if( nCurrentZoom <= gnSliderCenter )
     {
         nCurrentZoom = nCurrentZoom - mpImpl->mnMinZoom;
-        const long nFirstHalfRange = mpImpl->mnSliderCenter - mpImpl->mnMinZoom;
+        const long nFirstHalfRange = gnSliderCenter - mpImpl->mnMinZoom;
         const long nSliderPixelPerZoomPercent = 1000 * nHalfSliderWidth  / nFirstHalfRange;
         const long nOffset = (nSliderPixelPerZoomPercent * nCurrentZoom) / 1000;
         nRect += nOffset;
     }
     else
     {
-        nCurrentZoom = nCurrentZoom - mpImpl->mnSliderCenter;
-        const long nSecondHalfRange = mpImpl->mnMaxZoom - mpImpl->mnSliderCenter;
+        nCurrentZoom = nCurrentZoom - gnSliderCenter;
+        const long nSecondHalfRange = mpImpl->mnMaxZoom - gnSliderCenter;
         const long nSliderPixelPerZoomPercent = 1000 * nHalfSliderWidth  / nSecondHalfRange;
         const long nOffset = (nSliderPixelPerZoomPercent * nCurrentZoom) / 1000;
         nRect += nHalfSliderWidth + nOffset;
@@ -224,10 +213,10 @@ ScZoomSliderWnd::ScZoomSliderWnd( vcl::Window* pParent,
                 aLogicalSize( 115, 40 ),
                 m_xDispatchProvider( rDispatchProvider )
 {
-    mpImpl->maSliderButton      = Image( SVX_RES( RID_SVXBMP_SLIDERBUTTON   ) );
-    mpImpl->maIncreaseButton    = Image( SVX_RES( RID_SVXBMP_SLIDERINCREASE ) );
-    mpImpl->maDecreaseButton    = Image( SVX_RES( RID_SVXBMP_SLIDERDECREASE ) );
-    Size  aSliderSize           = LogicToPixel( Size( aLogicalSize), MapMode( MAP_10TH_MM ) );
+    mpImpl->maSliderButton      = Image(StockImage::Yes, RID_SVXBMP_SLIDERBUTTON);
+    mpImpl->maIncreaseButton    = Image(StockImage::Yes, RID_SVXBMP_SLIDERINCREASE);
+    mpImpl->maDecreaseButton    = Image(StockImage::Yes, RID_SVXBMP_SLIDERDECREASE);
+    Size  aSliderSize           = LogicToPixel( aLogicalSize, MapMode( MapUnit::Map10thMM ) );
     SetSizePixel( Size( aSliderSize.Width() * nSliderWidth-1, aSliderSize.Height() + nSliderHeight ) );
 }
 
@@ -238,14 +227,12 @@ ScZoomSliderWnd::~ScZoomSliderWnd()
 
 void ScZoomSliderWnd::dispose()
 {
-    delete mpImpl;
+    mpImpl.reset();
     vcl::Window::dispose();
 }
 
 void ScZoomSliderWnd::MouseButtonDown( const MouseEvent& rMEvt )
 {
-    if ( !mpImpl->mbValuesSet )
-        return ;
     Size aSliderWindowSize = GetOutputSizePixel();
 
     const Point aPoint = rMEvt.GetPosPixel();
@@ -279,7 +266,7 @@ void ScZoomSliderWnd::MouseButtonDown( const MouseEvent& rMEvt )
     if( nOldZoom == mpImpl->mnCurrentZoom )
         return ;
 
-    Rectangle aRect( Point( 0, 0 ), aSliderWindowSize );
+    tools::Rectangle aRect( Point( 0, 0 ), aSliderWindowSize );
 
     Invalidate(aRect);
     mpImpl->mbOmitPaint = true;
@@ -300,9 +287,6 @@ void ScZoomSliderWnd::MouseButtonDown( const MouseEvent& rMEvt )
 
 void ScZoomSliderWnd::MouseMove( const MouseEvent& rMEvt )
 {
-    if ( !mpImpl->mbValuesSet )
-        return ;
-
     Size aSliderWindowSize   = GetOutputSizePixel();
     const long nControlWidth = aSliderWindowSize.Width();
     const short nButtons     = rMEvt.GetButtons();
@@ -316,7 +300,7 @@ void ScZoomSliderWnd::MouseMove( const MouseEvent& rMEvt )
         {
             mpImpl->mnCurrentZoom = Offset2Zoom( aPoint.X() );
 
-            Rectangle aRect(Point(0, 0), aSliderWindowSize);
+            tools::Rectangle aRect(Point(0, 0), aSliderWindowSize);
             Invalidate(aRect);
 
             mpImpl->mbOmitPaint = true; // optimization: paint before executing command,
@@ -347,11 +331,11 @@ void ScZoomSliderWnd::UpdateFromItem( const SvxZoomSliderItem* pZoomSliderItem )
         mpImpl->mnMaxZoom     = pZoomSliderItem->GetMaxZoom();
 
         OSL_ENSURE( mpImpl->mnMinZoom <= mpImpl->mnCurrentZoom &&
-            mpImpl->mnMinZoom <  mpImpl->mnSliderCenter &&
+            mpImpl->mnMinZoom <  gnSliderCenter &&
             mpImpl->mnMaxZoom >= mpImpl->mnCurrentZoom &&
-            mpImpl->mnMaxZoom > mpImpl->mnSliderCenter,
+            mpImpl->mnMaxZoom > gnSliderCenter,
             "Looks like the zoom slider item is corrupted" );
-       const css::uno::Sequence < sal_Int32 > rSnappingPoints = pZoomSliderItem->GetSnappingPoints();
+       const css::uno::Sequence < sal_Int32 >& rSnappingPoints = pZoomSliderItem->GetSnappingPoints();
        mpImpl->maSnappingPointOffsets.clear();
        mpImpl->maSnappingPointZooms.clear();
 
@@ -360,16 +344,14 @@ void ScZoomSliderWnd::UpdateFromItem( const SvxZoomSliderItem* pZoomSliderItem )
        for ( sal_Int32 j = 0; j < rSnappingPoints.getLength(); ++j )
        {
            const sal_Int32 nSnappingPoint = rSnappingPoints[j];
-           aTmpSnappingPoints.insert( (sal_uInt16)nSnappingPoint );
+           aTmpSnappingPoints.insert( static_cast<sal_uInt16>(nSnappingPoint) );
        }
 
-       // remove snapping points that are to close to each other:
-       std::set< sal_uInt16 >::iterator aSnappingPointIter;
+       // remove snapping points that are too close to each other:
        long nLastOffset = 0;
 
-       for ( aSnappingPointIter = aTmpSnappingPoints.begin(); aSnappingPointIter != aTmpSnappingPoints.end(); ++aSnappingPointIter )
+       for ( const sal_uInt16 nCurrent : aTmpSnappingPoints )
        {
-           const sal_uInt16 nCurrent = *aSnappingPointIter;
            const long nCurrentOffset = Zoom2Offset( nCurrent );
 
            if ( nCurrentOffset - nLastOffset >= nSnappingPointsMinDist )
@@ -382,46 +364,46 @@ void ScZoomSliderWnd::UpdateFromItem( const SvxZoomSliderItem* pZoomSliderItem )
     }
 
     Size aSliderWindowSize = GetOutputSizePixel();
-    Rectangle aRect(Point(0, 0), aSliderWindowSize);
+    tools::Rectangle aRect(Point(0, 0), aSliderWindowSize);
 
     if ( !mpImpl->mbOmitPaint )
        Invalidate(aRect);
 }
 
-void ScZoomSliderWnd::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void ScZoomSliderWnd::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& /*rRect*/)
 {
-    DoPaint(rRenderContext, rRect);
+    DoPaint(rRenderContext);
 }
 
-void ScZoomSliderWnd::DoPaint(vcl::RenderContext& rRenderContext, const Rectangle& /*rRect*/)
+void ScZoomSliderWnd::DoPaint(vcl::RenderContext& rRenderContext)
 {
     if (mpImpl->mbOmitPaint)
         return;
 
     Size aSliderWindowSize(GetOutputSizePixel());
-    Rectangle aRect(Point(0, 0), aSliderWindowSize);
+    tools::Rectangle aRect(Point(0, 0), aSliderWindowSize);
 
     ScopedVclPtrInstance< VirtualDevice > pVDev(rRenderContext);
     pVDev->SetOutputSizePixel(aSliderWindowSize);
 
-    Rectangle aSlider = aRect;
+    tools::Rectangle aSlider = aRect;
 
-    aSlider.Top() += (aSliderWindowSize.Height() - nSliderHeight) / 2 - 1;
-    aSlider.Bottom() = aSlider.Top() + nSliderHeight;
-    aSlider.Left() += nSliderXOffset;
-    aSlider.Right() -= nSliderXOffset;
+    aSlider.AdjustTop((aSliderWindowSize.Height() - nSliderHeight) / 2 - 1 );
+    aSlider.SetBottom( aSlider.Top() + nSliderHeight );
+    aSlider.AdjustLeft(nSliderXOffset );
+    aSlider.AdjustRight( -nSliderXOffset );
 
-    Rectangle aFirstLine(aSlider);
-    aFirstLine.Bottom() = aFirstLine.Top();
+    tools::Rectangle aFirstLine(aSlider);
+    aFirstLine.SetBottom( aFirstLine.Top() );
 
-    Rectangle aSecondLine(aSlider);
-    aSecondLine.Top() = aSecondLine.Bottom();
+    tools::Rectangle aSecondLine(aSlider);
+    aSecondLine.SetTop( aSecondLine.Bottom() );
 
-    Rectangle aLeft(aSlider);
-    aLeft.Right() = aLeft.Left();
+    tools::Rectangle aLeft(aSlider);
+    aLeft.SetRight( aLeft.Left() );
 
-    Rectangle aRight(aSlider);
-    aRight.Left() = aRight.Right();
+    tools::Rectangle aRight(aSlider);
+    aRight.SetLeft( aRight.Right() );
 
     // draw VirtualDevice's background color
     Color aStartColor = rRenderContext.GetSettings().GetStyleSettings().GetFaceColor();
@@ -432,55 +414,52 @@ void ScZoomSliderWnd::DoPaint(vcl::RenderContext& rRenderContext, const Rectangl
 
     Gradient aGradient;
     aGradient.SetAngle(0);
-    aGradient.SetStyle(GradientStyle_LINEAR);
+    aGradient.SetStyle(GradientStyle::Linear);
 
     aGradient.SetStartColor(aStartColor);
     aGradient.SetEndColor(aEndColor);
     pVDev->DrawGradient(aRect, aGradient);
 
     // draw slider
-    pVDev->SetLineColor(Color(COL_WHITE));
+    pVDev->SetLineColor(COL_WHITE);
     pVDev->DrawRect(aSecondLine);
     pVDev->DrawRect(aRight);
 
-    pVDev->SetLineColor(Color(COL_GRAY));
+    pVDev->SetLineColor(COL_GRAY);
     pVDev->DrawRect(aFirstLine);
     pVDev->DrawRect(aLeft);
 
     // draw snapping points:
-    std::vector<long>::iterator aSnappingPointIter;
-    for (aSnappingPointIter = mpImpl->maSnappingPointOffsets.begin();
-        aSnappingPointIter != mpImpl->maSnappingPointOffsets.end();
-        ++aSnappingPointIter)
+    for (const auto& rSnappingPointOffset : mpImpl->maSnappingPointOffsets)
     {
-        pVDev->SetLineColor(Color(COL_GRAY));
-        Rectangle aSnapping(aRect);
-        aSnapping.Bottom()   = aSlider.Top();
-        aSnapping.Top() = aSnapping.Bottom() - nSnappingHeight;
-        aSnapping.Left() += *aSnappingPointIter;
-        aSnapping.Right() = aSnapping.Left();
+        pVDev->SetLineColor(COL_GRAY);
+        tools::Rectangle aSnapping(aRect);
+        aSnapping.SetBottom( aSlider.Top() );
+        aSnapping.SetTop( aSnapping.Bottom() - nSnappingHeight );
+        aSnapping.AdjustLeft(rSnappingPointOffset );
+        aSnapping.SetRight( aSnapping.Left() );
         pVDev->DrawRect(aSnapping);
 
-        aSnapping.Top() += nSnappingHeight + nSliderHeight;
-        aSnapping.Bottom() += nSnappingHeight + nSliderHeight;
+        aSnapping.AdjustTop(nSnappingHeight + nSliderHeight );
+        aSnapping.AdjustBottom(nSnappingHeight + nSliderHeight );
         pVDev->DrawRect(aSnapping);
     }
 
     // draw slider button
     Point aImagePoint = aRect.TopLeft();
-    aImagePoint.X() += Zoom2Offset(mpImpl->mnCurrentZoom);
-    aImagePoint.X() -= nButtonWidth / 2;
-    aImagePoint.Y() += (aSliderWindowSize.Height() - nButtonHeight) / 2;
+    aImagePoint.AdjustX(Zoom2Offset(mpImpl->mnCurrentZoom) );
+    aImagePoint.AdjustX( -(nButtonWidth / 2) );
+    aImagePoint.AdjustY( (aSliderWindowSize.Height() - nButtonHeight) / 2 );
     pVDev->DrawImage(aImagePoint, mpImpl->maSliderButton);
 
     // draw decrease button
     aImagePoint = aRect.TopLeft();
-    aImagePoint.X() += (nSliderXOffset - nIncDecWidth) / 2;
-    aImagePoint.Y() += (aSliderWindowSize.Height() - nIncDecHeight) / 2;
+    aImagePoint.AdjustX((nSliderXOffset - nIncDecWidth) / 2 );
+    aImagePoint.AdjustY((aSliderWindowSize.Height() - nIncDecHeight) / 2 );
     pVDev->DrawImage(aImagePoint, mpImpl->maDecreaseButton);
 
     // draw increase button
-    aImagePoint.X() = aRect.TopLeft().X() + aSliderWindowSize.Width() - nIncDecWidth - (nSliderXOffset - nIncDecWidth) / 2;
+    aImagePoint.setX( aRect.TopLeft().X() + aSliderWindowSize.Width() - nIncDecWidth - (nSliderXOffset - nIncDecWidth) / 2 );
     pVDev->DrawImage(aImagePoint, mpImpl->maIncreaseButton);
 
     rRenderContext.DrawOutDev(Point(0, 0), aSliderWindowSize, Point(0, 0), aSliderWindowSize, *pVDev);

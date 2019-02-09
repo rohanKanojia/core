@@ -23,8 +23,7 @@
 #include <svx/svddrag.hxx>
 #include <svx/svdview.hxx>
 #include <svx/svdorect.hxx>
-#include "svdglob.hxx"
-#include "svx/svdstr.hrc"
+#include <svx/strings.hrc>
 #include <svx/svdoashp.hxx>
 #include <tools/bigint.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
@@ -37,29 +36,29 @@ sal_uInt32 SdrTextObj::GetHdlCount() const
     return 8L;
 }
 
-SdrHdl* SdrTextObj::GetHdl(sal_uInt32 nHdlNum) const
+void SdrTextObj::AddToHdlList(SdrHdlList& rHdlList) const
 {
-    SdrHdl* pH=nullptr;
-    Point aPnt;
-    SdrHdlKind eKind=HDL_MOVE;
-    switch (nHdlNum) {
-        case 0: aPnt=maRect.TopLeft();      eKind=HDL_UPLFT; break;
-        case 1: aPnt=maRect.TopCenter();    eKind=HDL_UPPER; break;
-        case 2: aPnt=maRect.TopRight();     eKind=HDL_UPRGT; break;
-        case 3: aPnt=maRect.LeftCenter();   eKind=HDL_LEFT ; break;
-        case 4: aPnt=maRect.RightCenter();  eKind=HDL_RIGHT; break;
-        case 5: aPnt=maRect.BottomLeft();   eKind=HDL_LWLFT; break;
-        case 6: aPnt=maRect.BottomCenter(); eKind=HDL_LOWER; break;
-        case 7: aPnt=maRect.BottomRight();  eKind=HDL_LWRGT; break;
-    }
-    if (aGeo.nShearAngle!=0) ShearPoint(aPnt,maRect.TopLeft(),aGeo.nTan);
-    if (aGeo.nRotationAngle!=0) RotatePoint(aPnt,maRect.TopLeft(),aGeo.nSin,aGeo.nCos);
-    if (eKind!=HDL_MOVE) {
-        pH=new SdrHdl(aPnt,eKind);
+    for(sal_uInt32 nHdlNum=0; nHdlNum<8; ++nHdlNum)
+    {
+        Point aPnt;
+        SdrHdlKind eKind = SdrHdlKind::UpperLeft;
+        switch (nHdlNum) {
+            case 0: aPnt=maRect.TopLeft();      eKind=SdrHdlKind::UpperLeft; break;
+            case 1: aPnt=maRect.TopCenter();    eKind=SdrHdlKind::Upper; break;
+            case 2: aPnt=maRect.TopRight();     eKind=SdrHdlKind::UpperRight; break;
+            case 3: aPnt=maRect.LeftCenter();   eKind=SdrHdlKind::Left ; break;
+            case 4: aPnt=maRect.RightCenter();  eKind=SdrHdlKind::Right; break;
+            case 5: aPnt=maRect.BottomLeft();   eKind=SdrHdlKind::LowerLeft; break;
+            case 6: aPnt=maRect.BottomCenter(); eKind=SdrHdlKind::Lower; break;
+            case 7: aPnt=maRect.BottomRight();  eKind=SdrHdlKind::LowerRight; break;
+        }
+        if (aGeo.nShearAngle!=0) ShearPoint(aPnt,maRect.TopLeft(),aGeo.nTan);
+        if (aGeo.nRotationAngle!=0) RotatePoint(aPnt,maRect.TopLeft(),aGeo.nSin,aGeo.nCos);
+        std::unique_ptr<SdrHdl> pH(new SdrHdl(aPnt,eKind));
         pH->SetObj(const_cast<SdrTextObj*>(this));
         pH->SetRotationAngle(aGeo.nRotationAngle);
+        rHdlList.AddHdl(std::move(pH));
     }
-    return pH;
 }
 
 
@@ -68,12 +67,12 @@ bool SdrTextObj::hasSpecialDrag() const
     return true;
 }
 
-Rectangle SdrTextObj::ImpDragCalcRect(const SdrDragStat& rDrag) const
+tools::Rectangle SdrTextObj::ImpDragCalcRect(const SdrDragStat& rDrag) const
 {
-    Rectangle aTmpRect(maRect);
+    tools::Rectangle aTmpRect(maRect);
     const SdrHdl* pHdl=rDrag.GetHdl();
-    SdrHdlKind eHdl=pHdl==nullptr ? HDL_MOVE : pHdl->GetKind();
-    bool bEcke=(eHdl==HDL_UPLFT || eHdl==HDL_UPRGT || eHdl==HDL_LWLFT || eHdl==HDL_LWRGT);
+    SdrHdlKind eHdl=pHdl==nullptr ? SdrHdlKind::Move : pHdl->GetKind();
+    bool bEcke=(eHdl==SdrHdlKind::UpperLeft || eHdl==SdrHdlKind::UpperRight || eHdl==SdrHdlKind::LowerLeft || eHdl==SdrHdlKind::LowerRight);
     bool bOrtho=rDrag.GetView()!=nullptr && rDrag.GetView()->IsOrtho();
     bool bBigOrtho=bEcke && bOrtho && rDrag.GetView()->IsBigOrtho();
     Point aPos(rDrag.GetNow());
@@ -82,14 +81,14 @@ Rectangle SdrTextObj::ImpDragCalcRect(const SdrDragStat& rDrag) const
     // Unshear:
     if (aGeo.nShearAngle!=0) ShearPoint(aPos,aTmpRect.TopLeft(),-aGeo.nTan);
 
-    bool bLft=(eHdl==HDL_UPLFT || eHdl==HDL_LEFT  || eHdl==HDL_LWLFT);
-    bool bRgt=(eHdl==HDL_UPRGT || eHdl==HDL_RIGHT || eHdl==HDL_LWRGT);
-    bool bTop=(eHdl==HDL_UPRGT || eHdl==HDL_UPPER || eHdl==HDL_UPLFT);
-    bool bBtm=(eHdl==HDL_LWRGT || eHdl==HDL_LOWER || eHdl==HDL_LWLFT);
-    if (bLft) aTmpRect.Left()  =aPos.X();
-    if (bRgt) aTmpRect.Right() =aPos.X();
-    if (bTop) aTmpRect.Top()   =aPos.Y();
-    if (bBtm) aTmpRect.Bottom()=aPos.Y();
+    bool bLft=(eHdl==SdrHdlKind::UpperLeft || eHdl==SdrHdlKind::Left  || eHdl==SdrHdlKind::LowerLeft);
+    bool bRgt=(eHdl==SdrHdlKind::UpperRight || eHdl==SdrHdlKind::Right || eHdl==SdrHdlKind::LowerRight);
+    bool bTop=(eHdl==SdrHdlKind::UpperRight || eHdl==SdrHdlKind::Upper || eHdl==SdrHdlKind::UpperLeft);
+    bool bBtm=(eHdl==SdrHdlKind::LowerRight || eHdl==SdrHdlKind::Lower || eHdl==SdrHdlKind::LowerLeft);
+    if (bLft) aTmpRect.SetLeft(aPos.X() );
+    if (bRgt) aTmpRect.SetRight(aPos.X() );
+    if (bTop) aTmpRect.SetTop(aPos.Y() );
+    if (bBtm) aTmpRect.SetBottom(aPos.Y() );
     if (bOrtho) { // Ortho
         long nWdt0=maRect.Right() -maRect.Left();
         long nHgt0=maRect.Bottom()-maRect.Top();
@@ -114,26 +113,26 @@ Rectangle SdrTextObj::ImpDragCalcRect(const SdrDragStat& rDrag) const
             if (bUseX) {
                 long nNeed=long(BigInt(nHgt0)*BigInt(nXMul)/BigInt(nXDiv));
                 if (bYNeg) nNeed=-nNeed;
-                if (bTop) aTmpRect.Top()=aTmpRect.Bottom()-nNeed;
-                if (bBtm) aTmpRect.Bottom()=aTmpRect.Top()+nNeed;
+                if (bTop) aTmpRect.SetTop(aTmpRect.Bottom()-nNeed );
+                if (bBtm) aTmpRect.SetBottom(aTmpRect.Top()+nNeed );
             } else {
                 long nNeed=long(BigInt(nWdt0)*BigInt(nYMul)/BigInt(nYDiv));
                 if (bXNeg) nNeed=-nNeed;
-                if (bLft) aTmpRect.Left()=aTmpRect.Right()-nNeed;
-                if (bRgt) aTmpRect.Right()=aTmpRect.Left()+nNeed;
+                if (bLft) aTmpRect.SetLeft(aTmpRect.Right()-nNeed );
+                if (bRgt) aTmpRect.SetRight(aTmpRect.Left()+nNeed );
             }
         } else { // apex handles
             if ((bLft || bRgt) && nXDiv!=0) {
                 long nHgt0b=maRect.Bottom()-maRect.Top();
                 long nNeed=long(BigInt(nHgt0b)*BigInt(nXMul)/BigInt(nXDiv));
-                aTmpRect.Top()-=(nNeed-nHgt0b)/2;
-                aTmpRect.Bottom()=aTmpRect.Top()+nNeed;
+                aTmpRect.AdjustTop( -((nNeed-nHgt0b)/2) );
+                aTmpRect.SetBottom(aTmpRect.Top()+nNeed );
             }
             if ((bTop || bBtm) && nYDiv!=0) {
                 long nWdt0b=maRect.Right()-maRect.Left();
                 long nNeed=long(BigInt(nWdt0b)*BigInt(nYMul)/BigInt(nYDiv));
-                aTmpRect.Left()-=(nNeed-nWdt0b)/2;
-                aTmpRect.Right()=aTmpRect.Left()+nNeed;
+                aTmpRect.AdjustLeft( -((nNeed-nWdt0b)/2) );
+                aTmpRect.SetRight(aTmpRect.Left()+nNeed );
             }
         }
     }
@@ -147,7 +146,7 @@ Rectangle SdrTextObj::ImpDragCalcRect(const SdrDragStat& rDrag) const
 
 bool SdrTextObj::applySpecialDrag(SdrDragStat& rDrag)
 {
-    Rectangle aNewRect(ImpDragCalcRect(rDrag));
+    tools::Rectangle aNewRect(ImpDragCalcRect(rDrag));
 
     if(aNewRect.TopLeft() != maRect.TopLeft() && (aGeo.nRotationAngle || aGeo.nShearAngle))
     {
@@ -183,7 +182,7 @@ OUString SdrTextObj::getSpecialDragComment(const SdrDragStat& /*rDrag*/) const
 bool SdrTextObj::BegCreate(SdrDragStat& rStat)
 {
     rStat.SetOrtho4Possible();
-    Rectangle aRect1(rStat.GetStart(), rStat.GetNow());
+    tools::Rectangle aRect1(rStat.GetStart(), rStat.GetNow());
     aRect1.Justify();
     rStat.SetActionRect(aRect1);
     maRect = aRect1;
@@ -192,7 +191,7 @@ bool SdrTextObj::BegCreate(SdrDragStat& rStat)
 
 bool SdrTextObj::MovCreate(SdrDragStat& rStat)
 {
-    Rectangle aRect1;
+    tools::Rectangle aRect1;
     rStat.TakeCreateRect(aRect1);
     ImpJustifyRect(aRect1);
     rStat.SetActionRect(aRect1);
@@ -216,7 +215,7 @@ bool SdrTextObj::EndCreate(SdrDragStat& rStat, SdrCreateCmd eCmd)
     if (dynamic_cast<const SdrRectObj *>(this) != nullptr) {
         static_cast<SdrRectObj*>(this)->SetXPolyDirty();
     }
-    return (eCmd==SDRCREATE_FORCEEND || rStat.GetPointCount()>=2);
+    return (eCmd==SdrCreateCmd::ForceEnd || rStat.GetPointCount()>=2);
 }
 
 void SdrTextObj::BrkCreate(SdrDragStat& /*rStat*/)
@@ -230,13 +229,13 @@ bool SdrTextObj::BckCreate(SdrDragStat& /*rStat*/)
 
 basegfx::B2DPolyPolygon SdrTextObj::TakeCreatePoly(const SdrDragStat& rDrag) const
 {
-    Rectangle aRect1;
+    tools::Rectangle aRect1;
     rDrag.TakeCreateRect(aRect1);
     aRect1.Justify();
 
     basegfx::B2DPolyPolygon aRetval;
     const basegfx::B2DRange aRange(aRect1.Left(), aRect1.Top(), aRect1.Right(), aRect1.Bottom());
-    aRetval.append(basegfx::tools::createPolygonFromRect(aRange));
+    aRetval.append(basegfx::utils::createPolygonFromRect(aRange));
     return aRetval;
 }
 

@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <accessibility/standard/vclxaccessibletabpagewindow.hxx>
+#include <standard/vclxaccessibletabpagewindow.hxx>
 #include <toolkit/helper/convert.hxx>
 #include <vcl/tabctrl.hxx>
 #include <vcl/tabpage.hxx>
-
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -41,7 +41,7 @@ VCLXAccessibleTabPageWindow::VCLXAccessibleTabPageWindow( VCLXWindow* pVCLXWindo
     if ( m_pTabPage )
     {
         vcl::Window* pParent = m_pTabPage->GetAccessibleParentWindow();
-        if ( pParent && pParent->GetType() == WINDOW_TABCONTROL )
+        if ( pParent && pParent->GetType() == WindowType::TABCONTROL )
         {
             m_pTabControl = static_cast< TabControl* >( pParent );
             if ( m_pTabControl )
@@ -58,24 +58,19 @@ VCLXAccessibleTabPageWindow::VCLXAccessibleTabPageWindow( VCLXWindow* pVCLXWindo
 }
 
 
-VCLXAccessibleTabPageWindow::~VCLXAccessibleTabPageWindow()
-{
-}
-
-
 // OCommonAccessibleComponent
 
 
-awt::Rectangle VCLXAccessibleTabPageWindow::implGetBounds() throw (RuntimeException)
+awt::Rectangle VCLXAccessibleTabPageWindow::implGetBounds()
 {
     awt::Rectangle aBounds( 0, 0, 0, 0 );
 
     if ( m_pTabControl )
     {
-        Rectangle aPageRect = m_pTabControl->GetTabBounds( m_nPageId );
+        tools::Rectangle aPageRect = m_pTabControl->GetTabBounds( m_nPageId );
         if ( m_pTabPage )
         {
-            Rectangle aRect = Rectangle( m_pTabPage->GetPosPixel(), m_pTabPage->GetSizePixel() );
+            tools::Rectangle aRect = tools::Rectangle( m_pTabPage->GetPosPixel(), m_pTabPage->GetSizePixel() );
             aRect.Move( -aPageRect.Left(), -aPageRect.Top() );
             aBounds = AWTRectangle( aRect );
         }
@@ -100,7 +95,7 @@ void VCLXAccessibleTabPageWindow::disposing()
 // XAccessibleContext
 
 
-Reference< XAccessible > VCLXAccessibleTabPageWindow::getAccessibleParent(  ) throw (RuntimeException, std::exception)
+Reference< XAccessible > VCLXAccessibleTabPageWindow::getAccessibleParent(  )
 {
     OExternalLockGuard aGuard( this );
 
@@ -114,9 +109,9 @@ Reference< XAccessible > VCLXAccessibleTabPageWindow::getAccessibleParent(  ) th
             if ( xCont.is() )
             {
                 sal_uInt16 const nPagePos(m_pTabControl->GetPagePos(m_nPageId));
-                SAL_WARN_IF(TAB_PAGE_NOTFOUND == nPagePos, "accessibility",
+                SAL_WARN_IF(nPagePos == TAB_PAGE_NOTFOUND, "accessibility",
                         "getAccessibleParent(): no tab page");
-                if (TAB_PAGE_NOTFOUND != nPagePos)
+                if (nPagePos != TAB_PAGE_NOTFOUND)
                 {
                     xParent = xCont->getAccessibleChild(nPagePos);
                 }
@@ -128,7 +123,7 @@ Reference< XAccessible > VCLXAccessibleTabPageWindow::getAccessibleParent(  ) th
 }
 
 
-sal_Int32 VCLXAccessibleTabPageWindow::getAccessibleIndexInParent(  ) throw (RuntimeException, std::exception)
+sal_Int32 VCLXAccessibleTabPageWindow::getAccessibleIndexInParent(  )
 {
     OExternalLockGuard aGuard( this );
 

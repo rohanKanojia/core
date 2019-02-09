@@ -26,18 +26,20 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <list>
 #include <map>
 #include <vector>
 
 #include <basic/sbx.hxx>
 #include <basic/sbxvar.hxx>
+#include <runtime.hxx>
 #include <osl/thread.h>
 #include <osl/diagnose.h>
 #include <rtl/ref.hxx>
 #include <rtl/string.hxx>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 #include <salhelper/simplereferenceobject.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
 #undef max
 
@@ -62,10 +64,10 @@ using namespace css;
 namespace {
 
 char * address(std::vector< char > & blob) {
-    return blob.empty() ? 0 : &blob[0];
+    return blob.empty() ? nullptr : &blob[0];
 }
 
-SbError convert(OUString const & source, OString * target) {
+ErrCode convert(OUString const & source, OString * target) {
     return
         source.convertToString(
             target, osl_getThreadTextEncoding(),
@@ -75,7 +77,7 @@ SbError convert(OUString const & source, OString * target) {
         //TODO: more specific errcode?
 }
 
-SbError convert(char const * source, sal_Int32 length, OUString * target) {
+ErrCode convert(char const * source, sal_Int32 length, OUString * target) {
     return
         rtl_convertStringToUString(
             &target->pData, source, length, osl_getThreadTextEncoding(),
@@ -108,8 +110,8 @@ public:
     const MarshalData& operator=(const MarshalData&) = delete;
 
     std::vector< char > * newBlob() {
-        blobs_.push_front(std::vector< char >());
-        return &blobs_.front();
+        blobs_.push_back(std::vector< char >());
+        return &blobs_.back();
     }
 
     std::vector< UnmarshalData > unmarshal;
@@ -117,7 +119,7 @@ public:
     std::vector< StringData > unmarshalStrings;
 
 private:
-    std::list< std::vector< char > > blobs_;
+    std::vector< std::vector< char > > blobs_;
 };
 
 std::size_t align(std::size_t address, std::size_t alignment) {
@@ -142,8 +144,8 @@ template< typename T > void add(
     *reinterpret_cast< T * >(align(blob, alignment, offset, sizeof (T))) = data;
 }
 
-std::size_t alignment(SbxVariable * variable) {
-    OSL_ASSERT(variable != 0);
+std::size_t alignment(SbxVariable const * variable) {
+    OSL_ASSERT(variable != nullptr);
     if ((variable->GetType() & SbxARRAY) == 0) {
         switch (variable->GetType()) {
         case SbxINTEGER:
@@ -183,16 +185,16 @@ std::size_t alignment(SbxVariable * variable) {
     }
 }
 
-SbError marshal(
+ErrCode marshal(
     bool outer, SbxVariable * variable, bool special,
     std::vector< char > & blob, std::size_t offset, MarshalData & data);
 
-SbError marshalString(
+ErrCode marshalString(
     SbxVariable * variable, bool special, MarshalData & data, void ** buffer)
 {
-    OSL_ASSERT(variable != 0 && buffer != 0);
+    OSL_ASSERT(variable != nullptr && buffer != nullptr);
     OString str;
-    SbError e = convert(variable->GetOUString(), &str);
+    ErrCode e = convert(variable->GetOUString(), &str);
     if (e != ERRCODE_NONE) {
         return e;
     }
@@ -203,15 +205,15 @@ SbError marshalString(
     return ERRCODE_NONE;
 }
 
-SbError marshalStruct(
-    SbxVariable * variable, std::vector< char > & blob, std::size_t offset,
+ErrCode marshalStruct(
+    SbxVariable const * variable, std::vector< char > & blob, std::size_t offset,
     MarshalData & data)
 {
-    OSL_ASSERT(variable != 0);
+    OSL_ASSERT(variable != nullptr);
     SbxArray * props = dynamic_cast<SbxObject*>( variable->GetObject() )->
         GetProperties();
     for (sal_uInt16 i = 0; i < props->Count(); ++i) {
-        SbError e = marshal(false, props->Get(i), false, blob, offset, data);
+        ErrCode e = marshal(false, props->Get(i), false, blob, offset, data);
         if (e != ERRCODE_NONE) {
             return e;
         }
@@ -219,11 +221,11 @@ SbError marshalStruct(
     return ERRCODE_NONE;
 }
 
-SbError marshalArray(
-    SbxVariable * variable, std::vector< char > & blob, std::size_t offset,
+ErrCode marshalArray(
+    SbxVariable const * variable, std::vector< char > & blob, std::size_t offset,
     MarshalData & data)
 {
-    OSL_ASSERT(variable != 0);
+    OSL_ASSERT(variable != nullptr);
     SbxDimArray * arr = dynamic_cast<SbxDimArray*>( variable->GetObject() );
     int dims = arr->GetDims();
     std::vector< sal_Int32 > low(dims);
@@ -232,7 +234,7 @@ SbError marshalArray(
         arr->GetDim32(i + 1, low[i], up[i]);
     }
     for (std::vector< sal_Int32 > idx = low;;) {
-        SbError e = marshal(
+        ErrCode e = marshal(
             false, arr->Get32(&idx[0]), false, blob, offset, data);
         if (e != ERRCODE_NONE) {
             return e;
@@ -251,14 +253,20 @@ SbError marshalArray(
 
 // 8-aligned structs are only 4-aligned on stack, so alignment of members in
 // such structs must take that into account via "offset"
-SbError marshal(
+ErrCode marshal(
     bool outer, SbxVariable * variable, bool special,
     std::vector< char > & blob, std::size_t offset, MarshalData & data)
 {
-    OSL_ASSERT(variable != 0);
-    if (!(variable->GetFlags() & SbxFlagBits::Reference)) {
-        if ((variable->GetType() & SbxARRAY) == 0) {
-            switch (variable->GetType()) {
+    OSL_ASSERT(variable != nullptr);
+
+    SbxDataType eVarType = variable->GetType();
+    bool bByVal = !(variable->GetFlags() & SbxFlagBits::Reference);
+    if( !bByVal && !SbiRuntime::isVBAEnabled() && eVarType == SbxSTRING )
+        bByVal = true;
+
+    if (bByVal) {
+        if ((eVarType & SbxARRAY) == 0) {
+            switch (eVarType) {
             case SbxINTEGER:
                 add(blob, variable->GetInteger(), outer ? 8 : 2, offset);
                 break;
@@ -274,7 +282,7 @@ SbError marshal(
             case SbxSTRING:
                 {
                     void * p;
-                    SbError e = marshalString(variable, special, data, &p);
+                    ErrCode e = marshalString(variable, special, data, &p);
                     if (e != ERRCODE_NONE) {
                         return e;
                     }
@@ -284,7 +292,7 @@ SbError marshal(
             case SbxOBJECT:
                 {
                     align(blob, outer ? 8 : alignment(variable), offset, 0);
-                    SbError e = marshalStruct(variable, blob, offset, data);
+                    ErrCode e = marshalStruct(variable, blob, offset, data);
                     if (e != ERRCODE_NONE) {
                         return e;
                     }
@@ -301,30 +309,30 @@ SbError marshal(
                 break;
             }
         } else {
-            SbError e = marshalArray(variable, blob, offset, data);
+            ErrCode e = marshalArray(variable, blob, offset, data);
             if (e != ERRCODE_NONE) {
                 return e;
             }
         }
     } else {
-        if ((variable->GetType() & SbxARRAY) == 0) {
-            switch (variable->GetType()) {
+        if ((eVarType & SbxARRAY) == 0) {
+            switch (eVarType) {
             case SbxINTEGER:
             case SbxLONG:
             case SbxSINGLE:
             case SbxDOUBLE:
             case SbxBOOL:
             case SbxBYTE:
-                add(blob, variable->GetValues_Impl(), 8, offset);
+                add(blob, variable->data(), 8, offset);
                 break;
             case SbxSTRING:
                 {
-                    std::vector< char > * blob2 = data.newBlob();
                     void * p;
-                    SbError e = marshalString(variable, special, data, &p);
+                    ErrCode e = marshalString(variable, special, data, &p);
                     if (e != ERRCODE_NONE) {
                         return e;
                     }
+                    std::vector< char >* blob2 = data.newBlob();
                     add(*blob2, p, 8, 0);
                     add(blob, address(*blob2), 8, offset);
                     break;
@@ -332,7 +340,7 @@ SbError marshal(
             case SbxOBJECT:
                 {
                     std::vector< char > * blob2 = data.newBlob();
-                    SbError e = marshalStruct(variable, *blob2, 0, data);
+                    ErrCode e = marshalStruct(variable, *blob2, 0, data);
                     if (e != ERRCODE_NONE) {
                         return e;
                     }
@@ -349,7 +357,7 @@ SbError marshal(
             }
         } else {
             std::vector< char > * blob2 = data.newBlob();
-            SbError e = marshalArray(variable, *blob2, 0, data);
+            ErrCode e = marshalArray(variable, *blob2, 0, data);
             if (e != ERRCODE_NONE) {
                 return e;
             }
@@ -370,7 +378,7 @@ template< typename T > T read(void const ** pointer) {
 }
 
 void const * unmarshal(SbxVariable * variable, void const * data) {
-    OSL_ASSERT(variable != 0);
+    OSL_ASSERT(variable != nullptr);
     if ((variable->GetType() & SbxARRAY) == 0) {
         switch (variable->GetType()) {
         case SbxINTEGER:
@@ -436,9 +444,9 @@ void const * unmarshal(SbxVariable * variable, void const * data) {
     return data;
 }
 
-SbError unmarshalString(StringData const & data, SbxVariable & result) {
+ErrCode unmarshalString(StringData const & data, SbxVariable const & result) {
     OUString str;
-    if (data.buffer != 0) {
+    if (data.buffer != nullptr) {
         char const * p = static_cast< char const * >(data.buffer);
         sal_Int32 len;
         if (data.special) {
@@ -450,7 +458,7 @@ SbError unmarshalString(StringData const & data, SbxVariable & result) {
         } else {
             len = rtl_str_getLength(p);
         }
-        SbError e = convert(p, len, &str);
+        ErrCode e = convert(p, len, &str);
         if (e != ERRCODE_NONE) {
             return e;
         }
@@ -464,11 +472,11 @@ struct ProcData {
     FARPROC proc;
 };
 
-SbError call(
+ErrCode call(
     OUString const & dll, ProcData const & proc, SbxArray * arguments,
     SbxVariable & result)
 {
-    if (arguments->Count() > 20)
+    if (arguments && arguments->Count() > 20)
         return ERRCODE_BASIC_NOT_IMPLEMENTED;
 
     std::vector< char > stack;
@@ -481,8 +489,8 @@ SbError call(
     bool special =
         dll.equalsIgnoreAsciiCase("KERNEL32.DLL") &&
         (proc.name == OString("GetLogicalDriveStringsA"));
-    for (int i = 1; i < (arguments == 0 ? 0 : arguments->Count()); ++i) {
-        SbError e = marshal(
+    for (int i = 1; i < (arguments == nullptr ? 0 : arguments->Count()); ++i) {
+        ErrCode e = marshal(
             true, arguments->Get(i), special && i == 2, stack, stack.size(),
             data);
         if (e != ERRCODE_NONE) {
@@ -496,8 +504,8 @@ SbError call(
     // We fake all calls as being to a varargs function,
     // as this means any floating-point argument among the first four
     // ones will end up in a XMM register where the callee expects it.
-    sal_Int32 (*proc_i)(double d, ...) = (sal_Int32 (*)(double, ...)) proc.proc;
-    double (*proc_d)(double d, ...) = (double (*)(double, ...)) proc.proc;
+    sal_Int32 (*proc_i)(double d, ...) = reinterpret_cast<sal_Int32 (*)(double, ...)>(proc.proc);
+    double (*proc_d)(double d, ...) = reinterpret_cast<double (*)(double, ...)>(proc.proc);
 
     sal_Int64 iRetVal = 0;
     double dRetVal = 0.0;
@@ -511,50 +519,50 @@ SbError call(
     case SbxBOOL:
     case SbxBYTE:
         iRetVal =
-            proc_i(*(double *)&stack[0*8],
-                   *(double *)&stack[1*8],
-                   *(double *)&stack[2*8],
-                   *(double *)&stack[3*8],
-                   *(sal_uInt64 *)&stack[4*8],
-                   *(sal_uInt64 *)&stack[5*8],
-                   *(sal_uInt64 *)&stack[6*8],
-                   *(sal_uInt64 *)&stack[7*8],
-                   *(sal_uInt64 *)&stack[8*8],
-                   *(sal_uInt64 *)&stack[9*8],
-                   *(sal_uInt64 *)&stack[10*8],
-                   *(sal_uInt64 *)&stack[11*8],
-                   *(sal_uInt64 *)&stack[12*8],
-                   *(sal_uInt64 *)&stack[13*8],
-                   *(sal_uInt64 *)&stack[14*8],
-                   *(sal_uInt64 *)&stack[15*8],
-                   *(sal_uInt64 *)&stack[16*8],
-                   *(sal_uInt64 *)&stack[17*8],
-                   *(sal_uInt64 *)&stack[18*8],
-                   *(sal_uInt64 *)&stack[19*8]);
+            proc_i(*reinterpret_cast<double *>(&stack[0]),
+                   *reinterpret_cast<double *>(&stack[1*8]),
+                   *reinterpret_cast<double *>(&stack[2*8]),
+                   *reinterpret_cast<double *>(&stack[3*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[4*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[5*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[6*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[7*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[8*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[9*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[10*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[11*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[12*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[13*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[14*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[15*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[16*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[17*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[18*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[19*8]));
         break;
     case SbxSINGLE:
     case SbxDOUBLE:
         dRetVal =
-            proc_d(*(double *)&stack[0*8],
-                   *(double *)&stack[1*8],
-                   *(double *)&stack[2*8],
-                   *(double *)&stack[3*8],
-                   *(sal_uInt64 *)&stack[4*8],
-                   *(sal_uInt64 *)&stack[5*8],
-                   *(sal_uInt64 *)&stack[6*8],
-                   *(sal_uInt64 *)&stack[7*8],
-                   *(sal_uInt64 *)&stack[8*8],
-                   *(sal_uInt64 *)&stack[9*8],
-                   *(sal_uInt64 *)&stack[10*8],
-                   *(sal_uInt64 *)&stack[11*8],
-                   *(sal_uInt64 *)&stack[12*8],
-                   *(sal_uInt64 *)&stack[13*8],
-                   *(sal_uInt64 *)&stack[14*8],
-                   *(sal_uInt64 *)&stack[15*8],
-                   *(sal_uInt64 *)&stack[16*8],
-                   *(sal_uInt64 *)&stack[17*8],
-                   *(sal_uInt64 *)&stack[18*8],
-                   *(sal_uInt64 *)&stack[19*8]);
+            proc_d(*reinterpret_cast<double *>(&stack[0]),
+                   *reinterpret_cast<double *>(&stack[1*8]),
+                   *reinterpret_cast<double *>(&stack[2*8]),
+                   *reinterpret_cast<double *>(&stack[3*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[4*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[5*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[6*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[7*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[8*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[9*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[10*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[11*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[12*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[13*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[14*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[15*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[16*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[17*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[18*8]),
+                   *reinterpret_cast<sal_uInt64 *>(&stack[19*8]));
         break;
     default:
         break;
@@ -579,7 +587,7 @@ SbError call(
         {
             char const * s1 = reinterpret_cast< char const * >(iRetVal);
             OUString s2;
-            SbError e = convert(s1, rtl_str_getLength(s1), &s2);
+            ErrCode e = convert(s1, rtl_str_getLength(s1), &s2);
             if (e != ERRCODE_NONE) {
                 return e;
             }
@@ -590,7 +598,7 @@ SbError call(
         //TODO
         break;
     case SbxBOOL:
-        result.PutBool(static_cast< sal_Bool >(iRetVal));
+        result.PutBool(bool(iRetVal));
         break;
     case SbxBYTE:
         result.PutByte(static_cast< sal_uInt8 >(iRetVal));
@@ -599,19 +607,17 @@ SbError call(
         OSL_ASSERT(false);
         break;
     }
-    for (int i = 1; i < (arguments == 0 ? 0 : arguments->Count()); ++i) {
+    for (int i = 1; i < (arguments == nullptr ? 0 : arguments->Count()); ++i) {
         arguments->Get(i)->ResetFlag(SbxFlagBits::Reference);
             //TODO: skipped for errors?!?
     }
-    for (std::vector< UnmarshalData >::iterator i(data.unmarshal.begin());
-         i != data.unmarshal.end(); ++i)
+    for (auto const& elem : data.unmarshal)
     {
-        unmarshal(i->variable, i->buffer);
+        unmarshal(elem.variable, elem.buffer);
     }
-    for (std::vector< StringData >::iterator i(data.unmarshalStrings.begin());
-         i != data.unmarshalStrings.end(); ++i)
+    for (auto const& elem : data.unmarshalStrings)
     {
-        SbError e = unmarshalString(*i, result);
+        ErrCode e = unmarshalString(elem, result);
         if (e != ERRCODE_NONE) {
             return e;
         }
@@ -619,28 +625,28 @@ SbError call(
     return ERRCODE_NONE;
 }
 
-SbError getProcData(HMODULE handle, OUString const & name, ProcData * proc)
+ErrCode getProcData(HMODULE handle, OUString const & name, ProcData * proc)
 {
-    OSL_ASSERT(proc != 0);
+    OSL_ASSERT(proc != nullptr);
     if (name.getLength() != 0 && name[0] == '@') { //TODO: "@" vs. "#"???
         sal_Int32 n = name.copy(1).toInt32(); //TODO: handle bad input
         if (n <= 0 || n > 0xFFFF) {
             return ERRCODE_BASIC_BAD_ARGUMENT; //TODO: more specific errcode?
         }
         FARPROC p = GetProcAddress(handle, reinterpret_cast< LPCSTR >(n));
-        if (p != 0) {
+        if (p != nullptr) {
             proc->name = OString("#") + OString::number(n);
             proc->proc = p;
             return ERRCODE_NONE;
         }
     } else {
         OString name8;
-        SbError e = convert(name, &name8);
+        ErrCode e = convert(name, &name8);
         if (e != ERRCODE_NONE) {
             return e;
         }
         FARPROC p = GetProcAddress(handle, name8.getStr());
-        if (p != 0) {
+        if (p != nullptr) {
             proc->name = name8;
             proc->proc = p;
             return ERRCODE_NONE;
@@ -649,7 +655,7 @@ SbError getProcData(HMODULE handle, OUString const & name, ProcData * proc)
         if (i != -1) {
             name8 = name8.copy(0, i);
             p = GetProcAddress(handle, name8.getStr());
-            if (p != 0) {
+            if (p != nullptr) {
                 proc->name = name8;
                 proc->proc = p;
                 return ERRCODE_NONE;
@@ -657,14 +663,14 @@ SbError getProcData(HMODULE handle, OUString const & name, ProcData * proc)
         }
         OString real(OString("_") + name8);
         p = GetProcAddress(handle, real.getStr());
-        if (p != 0) {
+        if (p != nullptr) {
             proc->name = real;
             proc->proc = p;
             return ERRCODE_NONE;
         }
         real = name8 + OString("A");
         p = GetProcAddress(handle, real.getStr());
-        if (p != 0) {
+        if (p != nullptr) {
             proc->name = real;
             proc->proc = p;
             return ERRCODE_NONE;
@@ -677,32 +683,32 @@ struct Dll: public salhelper::SimpleReferenceObject {
 private:
     typedef std::map< OUString, ProcData > Procs;
 
-    virtual ~Dll();
+    virtual ~Dll() override;
 
 public:
-    Dll(): handle(0) {}
+    Dll(): handle(nullptr) {}
 
-    SbError getProc(OUString const & name, ProcData * proc);
+    ErrCode getProc(OUString const & name, ProcData * proc);
 
     HMODULE handle;
     Procs procs;
 };
 
 Dll::~Dll() {
-    if (handle != 0 && !FreeLibrary(handle)) {
-        OSL_TRACE("FreeLibrary(%p) failed with %u", handle, GetLastError());
+    if (handle != nullptr && !FreeLibrary(handle)) {
+        SAL_WARN("basic", "FreeLibrary(" << handle << ") failed with " << GetLastError());
     }
 }
 
-SbError Dll::getProc(OUString const & name, ProcData * proc) {
+ErrCode Dll::getProc(OUString const & name, ProcData * proc) {
     Procs::iterator i(procs.find(name));
     if (i != procs.end()) {
         *proc = i->second;
         return ERRCODE_NONE;
     }
-    SbError e = getProcData(handle, name, proc);
+    ErrCode e = getProcData(handle, name, proc);
     if (e == ERRCODE_NONE) {
-        procs.insert(Procs::value_type(name, *proc));
+        procs.emplace(name, *proc);
     }
     return e;
 }
@@ -734,18 +740,18 @@ public:
 Dll * SbiDllMgr::Impl::getDll(OUString const & name) {
     Dlls::iterator i(dlls.find(name));
     if (i == dlls.end()) {
-        i = dlls.insert(Dlls::value_type(name, new Dll)).first;
-        HMODULE h = LoadLibraryW(reinterpret_cast<LPCWSTR>(name.getStr()));
-        if (h == 0) {
+        i = dlls.emplace(name, new Dll).first;
+        HMODULE h = LoadLibraryW(o3tl::toW(name.getStr()));
+        if (h == nullptr) {
             dlls.erase(i);
-            return 0;
+            return nullptr;
         }
         i->second->handle = h;
     }
     return i->second.get();
 }
 
-SbError SbiDllMgr::Call(
+ErrCode SbiDllMgr::Call(
     OUString const & function, OUString const & library,
     SbxArray * arguments, SbxVariable & result, bool cdeclConvention)
 {
@@ -754,11 +760,11 @@ SbError SbiDllMgr::Call(
     }
     OUString dllName(fullDllName(library));
     Dll * dll = impl_->getDll(dllName);
-    if (dll == 0) {
+    if (dll == nullptr) {
         return ERRCODE_BASIC_BAD_DLL_LOAD;
     }
     ProcData proc;
-    SbError e = dll->getProc(function, &proc);
+    ErrCode e = dll->getProc(function, &proc);
     if (e != ERRCODE_NONE) {
         return e;
     }

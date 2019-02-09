@@ -18,7 +18,7 @@
  */
 
 
-#include "helper.hxx"
+#include <helper.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
@@ -37,6 +37,7 @@
 #include <com/sun/star/io/XInputStream.hpp>
 #include <unotools/localedatawrapper.hxx>
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
 
 #include <tools/debug.hxx>
 #include <tools/urlobj.hxx>
@@ -101,7 +102,7 @@ std::vector<OUString> SfxContentHelper::GetResultSet( const OUString& rURL )
                     aRow += aType;
                     aRow += "\t";
                     aRow += xContentAccess->queryContentIdentifierString();
-                    aList.push_back( OUString( aRow ) );
+                    aList.push_back( aRow );
                 }
             }
             catch( const ucb::CommandAbortedException& )
@@ -116,7 +117,7 @@ std::vector<OUString> SfxContentHelper::GetResultSet( const OUString& rURL )
     }
     catch( const uno::Exception& e )
     {
-        SAL_WARN( "sfx.bastyp", "GetResultSet: Any other exception: " << e.Message );
+        SAL_WARN( "sfx.bastyp", "GetResultSet: " << e );
     }
 
     return aList;
@@ -224,7 +225,7 @@ bool SfxContentHelper::IsHelpErrorDocument( const OUString& rURL )
     bool bRet = false;
     try
     {
-        ::ucbhelper::Content aCnt( INetURLObject( rURL ).GetMainURL( INetURLObject::NO_DECODE ),
+        ::ucbhelper::Content aCnt( INetURLObject( rURL ).GetMainURL( INetURLObject::DecodeMechanism::NONE ),
                       uno::Reference< ucb::XCommandEnvironment >(),
                       comphelper::getProcessComponentContext() );
         if ( !( aCnt.getPropertyValue( "IsErrorDocument" ) >>= bRet ) )
@@ -247,7 +248,7 @@ sal_Int64 SfxContentHelper::GetSize( const OUString& rContent )
     DBG_ASSERT( aObj.GetProtocol() != INetProtocol::NotValid, "Invalid URL!" );
     try
     {
-        ::ucbhelper::Content aCnt( aObj.GetMainURL( INetURLObject::NO_DECODE ), uno::Reference< ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext() );
+        ::ucbhelper::Content aCnt( aObj.GetMainURL( INetURLObject::DecodeMechanism::NONE ), uno::Reference< ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext() );
         aCnt.getPropertyValue( "Size" ) >>= nSize;
     }
     catch( const ucb::CommandAbortedException& )

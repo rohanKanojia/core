@@ -28,9 +28,9 @@
 
 #include <com/sun/star/xml/sax/Parser.hpp>
 #include <com/sun/star/xml/sax/Writer.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/io/XActiveDataSource.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
-#include <comphelper/processfactory.hxx>
+#include <cppuhelper/exc_hlp.hxx>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
@@ -53,8 +53,7 @@ MenuConfiguration::~MenuConfiguration()
 }
 
 Reference< XIndexAccess > MenuConfiguration::CreateMenuBarConfigurationFromXML(
-    Reference< XInputStream >& rInputStream )
-        throw (WrappedTargetException, RuntimeException)
+    Reference< XInputStream > const & rInputStream )
 {
     Reference< XParser > xParser = Parser::create( m_xContext );
 
@@ -82,27 +81,29 @@ Reference< XIndexAccess > MenuConfiguration::CreateMenuBarConfigurationFromXML(
     }
     catch ( const RuntimeException& e )
     {
-        throw WrappedTargetException( e.Message, Reference< XInterface >(), Any() );
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw WrappedTargetException( e.Message, Reference< XInterface >(), anyEx );
     }
     catch( const SAXException& e )
     {
+        css::uno::Any anyEx = cppu::getCaughtException();
         SAXException aWrappedSAXException;
 
         if ( !( e.WrappedException >>= aWrappedSAXException ))
-            throw WrappedTargetException( e.Message, Reference< XInterface >(), Any() );
+            throw WrappedTargetException( e.Message, Reference< XInterface >(), anyEx );
         else
-            throw WrappedTargetException( aWrappedSAXException.Message, Reference< XInterface >(), Any() );
+            throw WrappedTargetException( aWrappedSAXException.Message, Reference< XInterface >(), e.WrappedException );
     }
     catch( const css::io::IOException& e )
     {
-        throw WrappedTargetException( e.Message, Reference< XInterface >(), Any() );
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw WrappedTargetException( e.Message, Reference< XInterface >(), anyEx );
     }
 }
 
 void MenuConfiguration::StoreMenuBarConfigurationToXML(
-    Reference< XIndexAccess >& rMenuBarConfiguration,
-    Reference< XOutputStream >& rOutputStream, bool bIsMenuBar )
-    throw (WrappedTargetException, RuntimeException)
+    Reference< XIndexAccess > const & rMenuBarConfiguration,
+    Reference< XOutputStream > const & rOutputStream, bool bIsMenuBar )
 {
     Reference< XWriter > xWriter = Writer::create(m_xContext);
     xWriter->setOutputStream( rOutputStream );
@@ -114,37 +115,40 @@ void MenuConfiguration::StoreMenuBarConfigurationToXML(
     }
     catch ( const RuntimeException& e )
     {
-        throw WrappedTargetException( e.Message, Reference< XInterface >(), Any() );
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw WrappedTargetException( e.Message, Reference< XInterface >(), anyEx );
     }
     catch ( const SAXException& e )
     {
-        throw WrappedTargetException( e.Message, Reference< XInterface >(), Any() );
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw WrappedTargetException( e.Message, Reference< XInterface >(), anyEx );
     }
     catch ( const css::io::IOException& e )
     {
-        throw WrappedTargetException( e.Message, Reference< XInterface >(), Any() );
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw WrappedTargetException( e.Message, Reference< XInterface >(), anyEx );
     }
 }
 
-sal_uIntPtr MenuAttributes::CreateAttribute(const OUString& rFrame, const OUString& rImageIdStr)
+void* MenuAttributes::CreateAttribute(const OUString& rFrame, const OUString& rImageIdStr)
 {
     MenuAttributes* pAttributes = new MenuAttributes(rFrame, rImageIdStr);
     pAttributes->acquire();
-    return reinterpret_cast<sal_uIntPtr>(pAttributes);
+    return pAttributes;
 }
 
-sal_uIntPtr MenuAttributes::CreateAttribute(const css::uno::WeakReference<css::frame::XDispatchProvider>& rDispatchProvider)
+void* MenuAttributes::CreateAttribute(const css::uno::WeakReference<css::frame::XDispatchProvider>& rDispatchProvider)
 {
     MenuAttributes* pAttributes = new MenuAttributes(rDispatchProvider);
     pAttributes->acquire();
-    return reinterpret_cast<sal_uIntPtr>(pAttributes);
+    return pAttributes;
 }
 
-void MenuAttributes::ReleaseAttribute(sal_uIntPtr nAttributePtr)
+void MenuAttributes::ReleaseAttribute(void* nAttributePtr)
 {
     if (!nAttributePtr)
         return;
-    MenuAttributes* pAttributes = reinterpret_cast<MenuAttributes*>(nAttributePtr);
+    MenuAttributes* pAttributes = static_cast<MenuAttributes*>(nAttributePtr);
     pAttributes->release();
 }
 

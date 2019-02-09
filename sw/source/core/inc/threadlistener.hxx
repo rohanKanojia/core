@@ -19,8 +19,8 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_THREADLISTENER_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_THREADLISTENER_HXX
 
-#include <ifinishedthreadlistener.hxx>
-#include <observablethread.hxx>
+#include "ifinishedthreadlistener.hxx"
+#include "observablethread.hxx"
 
 class ThreadManager;
 
@@ -39,7 +39,7 @@ class ThreadListener : public IFinishedThreadListener
     public:
 
         ThreadListener( ThreadManager& rThreadListenerOwner );
-        virtual ~ThreadListener();
+        virtual ~ThreadListener() override;
 
         void ListenToThread( const oslInterlockedCount nThreadID,
                              ObservableThread& rThread );

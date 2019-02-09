@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <config_features.h>
+#include <config_java.h>
 
 #include <connectivity/CommonTools.hxx>
 #include <connectivity/dbtools.hxx>
@@ -26,18 +26,17 @@
 #include <com/sun/star/util/DateTime.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
-#include <comphelper/extract.hxx>
 #include <cppuhelper/interfacecontainer.h>
-#include "TConnection.hxx"
-#include <comphelper/types.hxx>
+#include <TConnection.hxx>
 #include <com/sun/star/java/JavaVirtualMachine.hpp>
 #if HAVE_FEATURE_JAVA
 #include <jvmaccess/virtualmachine.hxx>
 #endif
+#include <rtl/character.hxx>
 #include <rtl/process.h>
 
 using namespace ::comphelper;
-inline sal_Unicode rtl_ascii_toUpperCase( sal_Unicode ch )
+static sal_Unicode rtl_ascii_toUpperCase( sal_Unicode ch )
 {
     return ch >= 0x0061 && ch <= 0x007a ? ch + 0x20 : ch;
 }
@@ -75,8 +74,10 @@ namespace connectivity
                         else
                             pWild += pos;
                     else
-                        break;          // WARNING in certain circumstances
-                // it will run into the next 'case'!!
+                        break;
+                    // WARNING/TODO: in certain circumstances it will run into
+                    // the next 'case'!
+                    [[fallthrough]];
                 case CHAR_WILD:
                     while ( *pWild == CHAR_WILD )
                         pWild++;
@@ -131,7 +132,7 @@ namespace connectivity
             Any uaJVM = xVM->getJavaVM( processID );
             sal_Int64 nTemp;
             if (!(uaJVM >>= nTemp)) {
-                throw Exception(); // -5
+                throw Exception("cannot get result for getJavaVM", nullptr); // -5
             }
             aRet = reinterpret_cast<jvmaccess::VirtualMachine *>(
                 static_cast<sal_IntPtr>(nTemp));
@@ -164,11 +165,10 @@ namespace connectivity
 #endif
 }
 
-#include <ctype.h>
 namespace dbtools
 {
 
-bool isCharOk(sal_Unicode c,const OUString& _rSpecials)
+static bool isCharOk(sal_Unicode c,const OUString& _rSpecials)
 {
 
     return ( ((c >= 97) && (c <= 122)) || ((c >= 65) && (c <=  90)) || ((c >= 48) && (c <=  57)) ||
@@ -181,7 +181,7 @@ bool isValidSQLName(const OUString& rName,const OUString& _rSpecials)
     // Test for correct naming (in SQL sense)
     // This is important for table names for example
     const sal_Unicode* pStr = rName.getStr();
-    if (*pStr > 127 || isdigit(*pStr))
+    if (*pStr > 127 || rtl::isAsciiDigit(*pStr))
         return false;
 
     for (; *pStr; ++pStr )
@@ -209,21 +209,19 @@ OUString convertName2SQLName(const OUString& rName,const OUString& _rSpecials)
 {
     if(isValidSQLName(rName,_rSpecials))
         return rName;
-    OUString aNewName(rName);
+
     const sal_Unicode* pStr = rName.getStr();
+    // if not valid
+    if (*pStr >= 128 || rtl::isAsciiDigit(*pStr))
+        return OUString();
+
+    OUStringBuffer aNewName(rName);
     sal_Int32 nLength = rName.getLength();
-    bool bValid(*pStr < 128 && !isdigit(*pStr));
-    for (sal_Int32 i=0; bValid && i < nLength; ++pStr,++i )
-        if(!isCharOk(*pStr,_rSpecials))
-        {
-            aNewName = aNewName.replace(*pStr,'_');
-            pStr = aNewName.getStr() + i;
-        }
+    for (sal_Int32 i=0; i < nLength; ++i)
+        if(!isCharOk(aNewName[i],_rSpecials))
+            aNewName[i] = '_';
 
-    if ( !bValid )
-        aNewName.clear();
-
-    return aNewName;
+    return aNewName.makeStringAndClear();
 }
 
 OUString quoteName(const OUString& _rQuote, const OUString& _rName)

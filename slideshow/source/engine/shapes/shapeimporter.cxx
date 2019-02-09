@@ -18,10 +18,9 @@
  */
 
 #include <vcl/cvtgrf.hxx>
+#include <vcl/GraphicObject.hxx>
 #include <tools/urlobj.hxx>
 #include <tools/stream.hxx>
-#include <svtools/grfmgr.hxx>
-#include <unotools/ucbstreamhelper.hxx>
 #include <unotools/streamwrap.hxx>
 #include <basegfx/point/b2dpoint.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
@@ -36,6 +35,7 @@
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/drawing/XLayerSupplier.hpp>
 #include <com/sun/star/drawing/XLayerManager.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
@@ -45,11 +45,11 @@
 #include "backgroundshape.hxx"
 #include "mediashape.hxx"
 #include "appletshape.hxx"
-#include "shapeimporter.hxx"
-#include "slideshowexceptions.hxx"
+#include <shapeimporter.hxx>
+#include <slideshowexceptions.hxx>
 #include "gdimtftools.hxx"
-#include "tools.hxx"
-#include "slideshowcontext.hxx"
+#include <tools.hxx>
+#include <slideshowcontext.hxx>
 
 #include <memory>
 
@@ -60,84 +60,25 @@ namespace internal {
 
 namespace {
 
-bool importShapeGraphic(
-    GraphicObject & o_rGraphic,
-    uno::Reference<beans::XPropertySet> const& xPropSet )
+std::unique_ptr<GraphicObject> importShapeGraphic(uno::Reference<beans::XPropertySet> const& xPropSet)
 {
-    OUString aURL;
-    if( !getPropertyValue( aURL, xPropSet, "GraphicURL") ||
-        aURL.isEmpty() )
+    std::unique_ptr<GraphicObject> xRet;
+
+    uno::Reference<graphic::XGraphic> xGraphic;
+    if (!getPropertyValue(xGraphic, xPropSet, "Graphic") || !xGraphic.is())
     {
         // no or empty property - cannot import shape graphic
-        return false;
+        return xRet;
     }
 
-    OUString const aVndUrl(
-        "vnd.sun.star.GraphicObject:"  );
-    sal_Int32 nIndex( aURL.indexOf( aVndUrl ) );
+    Graphic aGraphic(xGraphic);
+    xRet.reset(new GraphicObject(aGraphic));
 
-    if(nIndex != -1)
+    if (GraphicType::Default == xRet->GetType() || GraphicType::NONE == xRet->GetType())
     {
-        // skip past the end of the "vnd..." prefix
-        nIndex += aVndUrl.getLength();
-
-        if(nIndex >= aURL.getLength())
-        {
-            OSL_FAIL( "ShapeImporter::importShape(): "
-                        "embedded graphic has no graphic ID" );
-            return false;
-        }
-
-        // unique ID string found in URL, extract
-        // to separate string
-        OUString const aUniqueId(
-            aURL.copy( nIndex, aURL.getLength() - nIndex ) );
-
-        // TODO(T2): Creating a GraphicObject is not
-        // thread safe (internally calls VCL, and has
-        // unguarded internal singleton mpGlobalMgr)
-
-        // fetch already loaded graphic from graphic manager.
-        OString const aOldString(OUStringToOString(aUniqueId,
-            RTL_TEXTENCODING_UTF8));
-        o_rGraphic = GraphicObject( aOldString );
-
-
-        if( GRAPHIC_DEFAULT == o_rGraphic.GetType()
-            || GRAPHIC_NONE == o_rGraphic.GetType() )
-        {
-            // even the GrfMgr does not seem to know this graphic
-            return false;
-        }
+        xRet.reset();
     }
-    else
-    {
-        // no special string found, graphic must be
-        // external. Load via GraphicIm porter
-        INetURLObject aTmp( aURL );
-        std::unique_ptr<SvStream> pGraphicStream(
-            utl::UcbStreamHelper::CreateStream(
-                aTmp.GetMainURL( INetURLObject::NO_DECODE ),
-                StreamMode::READ ) );
-        if( !pGraphicStream )
-        {
-            OSL_FAIL( "ShapeImporter::importShape(): "
-                        "cannot create input stream for graphic" );
-            return false;
-        }
-
-        Graphic aTmpGraphic;
-        if( GraphicConverter::Import(
-                *pGraphicStream, aTmpGraphic ) != ERRCODE_NONE )
-        {
-            OSL_FAIL( "ShapeImporter::importShape(): "
-                        "Failed to import shape graphic from given URL" );
-            return false;
-        }
-
-        o_rGraphic = GraphicObject( aTmpGraphic );
-    }
-    return true;
+    return xRet;
 }
 
 /** This shape implementation just acts as a dummy for the layermanager.
@@ -231,8 +172,8 @@ bool ShapeOfGroup::isContentChanged() const
 basegfx::B2DRectangle ShapeOfGroup::getBounds() const
 {
     basegfx::B2DRectangle const groupPosSize( mpGroupShape->getBounds() );
-    double const posX = (groupPosSize.getMinX() + maPosOffset.getX());
-    double const posY = (groupPosSize.getMinY() + maPosOffset.getY());
+    double const posX = groupPosSize.getMinX() + maPosOffset.getX();
+    double const posY = groupPosSize.getMinY() + maPosOffset.getY();
     return basegfx::B2DRectangle( posX, posY, posX + mnWidth, posY + mnHeight );
 }
 
@@ -307,18 +248,17 @@ ShapeSharedPtr ShapeImporter::createShape(
     }
     else if( shapeType == "com.sun.star.drawing.GraphicObjectShape" || shapeType == "com.sun.star.presentation.GraphicObjectShape" )
     {
-        GraphicObject aGraphicObject;
-
         // to get hold of GIF animations, inspect Graphic
         // objects more thoroughly (the plain-jane shape
         // metafile of course would only contain the first
         // animation frame)
-        if( !importShapeGraphic( aGraphicObject, xPropSet ) )
+        std::unique_ptr<GraphicObject> xGraphicObject(importShapeGraphic(xPropSet));
+        if (!xGraphicObject)
             return ShapeSharedPtr(); // error loading graphic -
                                      // no placeholders in
                                      // slideshow
 
-        if( !aGraphicObject.IsAnimated() )
+        if (!xGraphicObject->IsAnimated())
         {
             // no animation - simply utilize plain draw shape import
 
@@ -357,7 +297,7 @@ ShapeSharedPtr ShapeImporter::createShape(
         getPropertyValue( nRotation, xPropSet, "RotateAngle" );
 
         GraphicAttr aGraphAttrs;
-        aGraphAttrs.SetDrawMode( (GraphicDrawMode)eColorMode );
+        aGraphAttrs.SetDrawMode( static_cast<GraphicDrawMode>(eColorMode) );
         aGraphAttrs.SetLuminance( nLuminance );
         aGraphAttrs.SetContrast( nContrast );
         aGraphAttrs.SetChannelR( nRed );
@@ -381,9 +321,9 @@ ShapeSharedPtr ShapeImporter::createShape(
 
 
         Graphic aGraphic(
-            aGraphicObject.GetTransformedGraphic(
-                aGraphicObject.GetPrefSize(),
-                aGraphicObject.GetPrefMapMode(),
+            xGraphicObject->GetTransformedGraphic(
+                xGraphicObject->GetPrefSize(),
+                xGraphicObject->GetPrefMapMode(),
                 aGraphAttrs ) );
 
         return DrawShape::create( xCurrShape,
@@ -580,7 +520,7 @@ bool ShapeImporter::isImportDone() const
     return maShapesStack.empty();
 }
 
-PolyPolygonVector ShapeImporter::getPolygons()
+const PolyPolygonVector& ShapeImporter::getPolygons()
 {
     return maPolygons;
 }

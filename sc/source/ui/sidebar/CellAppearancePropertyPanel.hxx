@@ -22,23 +22,14 @@
 #include <sfx2/sidebar/ControllerItem.hxx>
 #include <sfx2/sidebar/IContextChangeReceiver.hxx>
 #include <svx/sidebar/PanelLayout.hxx>
-#include <memory>
+#include <vcl/image.hxx>
 
-class FixedText;
-namespace svx { namespace sidebar {
-    class PopupControl;
-    class PopupContainer;
-}}
-namespace sc { namespace sidebar {
-    class CellLineStylePopup;
-    class CellBorderStylePopup;
-    class CellLineStyleControl;
-    class CellBorderUpdater;
-}}
 class ToolBox;
-class CheckBox;
 
 namespace sc { namespace sidebar {
+
+class CellBorderStylePopup;
+class CellLineStylePopup;
 
 class CellAppearancePropertyPanel
 :   public PanelLayout,
@@ -46,8 +37,8 @@ class CellAppearancePropertyPanel
     public ::sfx2::sidebar::ControllerItem::ItemUpdateReceiverInterface
 {
 private:
-    friend class CellLineStyleControl;
-    friend class CellBorderStyleControl;
+    friend class CellLineStylePopup;
+    friend class CellBorderStylePopup;
 
 public:
     static VclPtr<vcl::Window> Create(
@@ -59,7 +50,7 @@ public:
         const DataChangedEvent& rEvent) override;
 
     virtual void HandleContextChange(
-        const ::sfx2::sidebar::EnumContext& rContext) override;
+        const vcl::EnumContext& rContext) override;
 
     virtual void NotifyItemUpdate(
         const sal_uInt16 nSId,
@@ -69,12 +60,12 @@ public:
 
     SfxBindings* GetBindings() { return mpBindings;}
 
-    // constructor/destuctor
+    // constructor/destructor
     CellAppearancePropertyPanel(
         vcl::Window* pParent,
         const css::uno::Reference<css::frame::XFrame>& rxFrame,
         SfxBindings* pBindings);
-    virtual ~CellAppearancePropertyPanel();
+    virtual ~CellAppearancePropertyPanel() override;
     virtual void dispose() override;
 
 private:
@@ -83,7 +74,6 @@ private:
     VclPtr<ToolBox>                                mpTBCellBorder;
     VclPtr<ToolBox>                                mpTBLineStyle;
     VclPtr<ToolBox>                                mpTBLineColor;
-    std::unique_ptr< CellBorderUpdater > mpCellBorderUpdater;
 
     ::sfx2::sidebar::ControllerItem         maLineStyleControl;
     ::sfx2::sidebar::ControllerItem         maBorderOuterControl;
@@ -93,29 +83,28 @@ private:
     ::sfx2::sidebar::ControllerItem         maBorderBLTRControl;
 
     // images
-    Image                                   maIMGCellBorder;
-    Image                                   maIMGLineStyle1;
-    Image                                   maIMGLineStyle2;
-    Image                                   maIMGLineStyle3;
-    Image                                   maIMGLineStyle4;
-    Image                                   maIMGLineStyle5;
-    Image                                   maIMGLineStyle6;
-    Image                                   maIMGLineStyle7;
-    Image                                   maIMGLineStyle8;
-    Image                                   maIMGLineStyle9;
+    Image const                             maIMGCellBorder;
+    Image const                             maIMGLineStyle1;
+    Image const                             maIMGLineStyle2;
+    Image const                             maIMGLineStyle3;
+    Image const                             maIMGLineStyle4;
+    Image const                             maIMGLineStyle5;
+    Image const                             maIMGLineStyle6;
+    Image const                             maIMGLineStyle7;
+    Image const                             maIMGLineStyle8;
+    Image const                             maIMGLineStyle9;
 
     // BorderStyle defines
-    sal_uInt16                              mnIn;
-    sal_uInt16                              mnOut;
-    sal_uInt16                              mnDis;
-    sal_uInt16                              mnTLBRIn;
-    sal_uInt16                              mnTLBROut;
-    sal_uInt16                              mnTLBRDis;
-    sal_uInt16                              mnBLTRIn;
-    sal_uInt16                              mnBLTROut;
-    sal_uInt16                              mnBLTRDis;
+    sal_uInt16                              mnInWidth;
+    sal_uInt16                              mnOutWidth;
+    sal_uInt16                              mnDistance;
+    sal_uInt16                              mnDiagTLBRInWidth;
+    sal_uInt16                              mnDiagTLBROutWidth;
+    sal_uInt16                              mnDiagTLBRDistance;
+    sal_uInt16                              mnDiagBLTRInWidth;
+    sal_uInt16                              mnDiagBLTROutWidth;
+    sal_uInt16                              mnDiagBLTRDistance;
 
-    /// bitfield
     bool                                    mbBorderStyleAvailable : 1;
 
     // CellBorder defines
@@ -129,30 +118,23 @@ private:
     bool                                    mbOuterBorder : 1; // mbLeft || mbRight || mbTop || mbBottom
     bool                                    mbInnerBorder : 1; // mbVer || mbHor || bLeft || bRight || bTop || bBottom
 
-    bool                                    mbTLBR : 1;
-    bool                                    mbBLTR : 1;
+    bool                                    mbDiagTLBR : 1;
+    bool                                    mbDiagBLTR : 1;
 
     // popups
-    std::unique_ptr< CellLineStylePopup > mpCellLineStylePopup;
-    std::unique_ptr< CellBorderStylePopup > mpCellBorderStylePopup;
+    VclPtr<CellLineStylePopup>              mxCellLineStylePopup;
+    VclPtr<CellBorderStylePopup>            mxCellBorderStylePopup;
 
-    ::sfx2::sidebar::EnumContext            maContext;
-    SfxBindings*                            mpBindings;
+    vcl::EnumContext                        maContext;
+    SfxBindings* const                      mpBindings;
 
-    DECL_LINK_TYPED(TbxCellBorderSelectHdl, ToolBox*, void);
-    DECL_LINK_TYPED(TbxLineStyleSelectHdl, ToolBox*, void);
-
-    // for CellLineStyle popup
-    svx::sidebar::PopupControl* CreateCellLineStylePopupControl(svx::sidebar::PopupContainer* pParent);
-    void EndCellLineStylePopupMode();
-
-    // for CellBorderStyle popup
-    svx::sidebar::PopupControl* CreateCellBorderStylePopupControl(svx::sidebar::PopupContainer* pParent);
-    void EndCellBorderStylePopupMode();
+    DECL_LINK(TbxCellBorderSelectHdl, ToolBox*, void);
+    DECL_LINK(TbxLineStyleSelectHdl, ToolBox*, void);
 
     void Initialize();
     void SetStyleIcon();
     void UpdateControlState();
+    void UpdateCellBorder(bool bTop, bool bBot, bool bLeft, bool bRight, bool bVer, bool bHor);
 };
 
 } } // end of namespace ::sc::sidebar

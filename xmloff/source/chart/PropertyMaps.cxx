@@ -28,13 +28,13 @@
 #include <sax/tools/converter.hxx>
 
 #include "SchXMLTools.hxx"
-#include "XMLChartPropertySetMapper.hxx"
+#include <XMLChartPropertySetMapper.hxx>
 #include "XMLErrorIndicatorPropertyHdl.hxx"
 #include "XMLErrorBarStylePropertyHdl.hxx"
 #include "XMLTextOrientationHdl.hxx"
 #include "XMLSymbolTypePropertyHdl.hxx"
 #include "XMLAxisPositionPropertyHdl.hxx"
-#include "../draw/propimp0.hxx"
+#include <propimp0.hxx>
 
 #include <xmloff/EnumPropertyHdl.hxx>
 #include <xmloff/XMLConstantsPropertyHandler.hxx>
@@ -45,7 +45,9 @@
 #include <xmloff/NamedBoolPropertyHdl.hxx>
 #include <xmloff/xmlexp.hxx>
 #include <xmloff/xmltoken.hxx>
+#include <xmloff/prhdlfac.hxx>
 
+#include <com/sun/star/awt/Size.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/LineJoint.hpp>
@@ -56,8 +58,8 @@
 #include <com/sun/star/chart/ChartAxisPosition.hpp>
 #include <com/sun/star/chart2/XChartDocument.hpp>
 #include <com/sun/star/chart2/data/XRangeXMLConversion.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
 
-#include <comphelper/extract.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/math.hxx>
 
@@ -69,12 +71,12 @@ using namespace ::xmloff::token;
 
 namespace {
 
-SvXMLEnumMapEntry const aLineStyleMap[] =
+SvXMLEnumMapEntry<drawing::LineStyle> const aLineStyleMap[] =
 {
     { XML_NONE,     drawing::LineStyle_NONE },
     { XML_SOLID,    drawing::LineStyle_SOLID },
     { XML_DASH,     drawing::LineStyle_DASH },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::LineStyle(0) }
 };
 
 }
@@ -106,24 +108,20 @@ const XMLPropertyHandler* XMLChartPropHdlFactory::GetPropertyHandler( sal_Int32 
                 break;
 
             case XML_SCH_TYPE_AXIS_LABEL_POSITION:
-                pHdl = new XMLEnumPropertyHdl( aXMLChartAxisLabelPositionEnumMap,
-                                               cppu::UnoType<chart::ChartAxisLabelPosition>::get());
+                pHdl = new XMLEnumPropertyHdl( aXMLChartAxisLabelPositionEnumMap);
                 break;
 
             case XML_SCH_TYPE_TICK_MARK_POSITION:
-                pHdl = new XMLEnumPropertyHdl( aXMLChartAxisMarkPositionEnumMap,
-                                               cppu::UnoType<chart::ChartAxisMarkPosition>::get());
+                pHdl = new XMLEnumPropertyHdl( aXMLChartAxisMarkPositionEnumMap);
                 break;
 
             case XML_SCH_TYPE_AXIS_ARRANGEMENT:
-                pHdl = new XMLEnumPropertyHdl( aXMLChartAxisArrangementEnumMap,
-                                               cppu::UnoType<chart::ChartAxisArrangeOrderType>::get());
+                pHdl = new XMLEnumPropertyHdl( aXMLChartAxisArrangementEnumMap);
                 break;
 
             case XML_SCH_TYPE_ERROR_BAR_STYLE:
                 // here we have a constant rather than an enum
-                pHdl = new XMLErrorBarStylePropertyHdl( aXMLChartErrorBarStyleEnumMap,
-                                               ::cppu::UnoType<sal_Int32>::get() );
+                pHdl = new XMLErrorBarStylePropertyHdl( aXMLChartErrorBarStyleEnumMap );
                 break;
 
             case XML_SCH_TYPE_ERROR_INDICATOR_LOWER:
@@ -135,25 +133,21 @@ const XMLPropertyHandler* XMLChartPropHdlFactory::GetPropertyHandler( sal_Int32 
 
             case XML_SCH_TYPE_SOLID_TYPE:
                 // here we have a constant rather than an enum
-                pHdl = new XMLEnumPropertyHdl( aXMLChartSolidTypeEnumMap,
-                                               ::cppu::UnoType<sal_Int32>::get() );
+                pHdl = new XMLEnumPropertyHdl( aXMLChartSolidTypeEnumMap );
                 break;
             case XML_SCH_TYPE_LABEL_PLACEMENT_TYPE:
                 // here we have a constant rather than an enum
-                pHdl = new XMLEnumPropertyHdl( aXMLChartDataLabelPlacementEnumMap,
-                                                ::cppu::UnoType<sal_Int32>::get() );
+                pHdl = new XMLEnumPropertyHdl( aXMLChartDataLabelPlacementEnumMap );
                 break;
             case XML_SCH_TYPE_DATAROWSOURCE:
-                pHdl = new XMLEnumPropertyHdl( aXMLChartDataRowSourceTypeEnumMap,
-                                               cppu::UnoType<chart::ChartDataRowSource>::get());
+                pHdl = new XMLEnumPropertyHdl( aXMLChartDataRowSourceTypeEnumMap);
                 break;
             case XML_SCH_TYPE_TEXT_ORIENTATION:
-                pHdl = new XMLTextOrientationHdl();
+                pHdl = new XMLTextOrientationHdl;
                 break;
 
             case XML_SCH_TYPE_INTERPOLATION:
-                pHdl = new XMLEnumPropertyHdl( aXMLChartInterpolationTypeEnumMap,
-                                               ::cppu::UnoType<sal_Int32>::get() );
+                pHdl = new XMLEnumPropertyHdl( aXMLChartInterpolationTypeEnumMap );
                 break;
             case XML_SCH_TYPE_SYMBOL_TYPE:
                 pHdl = new XMLSymbolTypePropertyHdl( false );
@@ -164,11 +158,10 @@ const XMLPropertyHandler* XMLChartPropHdlFactory::GetPropertyHandler( sal_Int32 
                 break;
 
             case XML_SCH_TYPE_MISSING_VALUE_TREATMENT:
-                pHdl = new XMLEnumPropertyHdl( aXMLChartMissingValueTreatmentEnumMap,
-                                               ::cppu::UnoType<sal_Int32>::get() );
+                pHdl = new XMLEnumPropertyHdl( aXMLChartMissingValueTreatmentEnumMap );
                 break;
             case XML_SCH_TYPE_LABEL_BORDER_STYLE:
-                pHdl = new XMLEnumPropertyHdl(aLineStyleMap, cppu::UnoType<drawing::LineStyle>::get());
+                pHdl = new XMLEnumPropertyHdl( aLineStyleMap );
             break;
             case XML_SCH_TYPE_LABEL_BORDER_OPACITY:
                 pHdl = new XMLOpacityPropertyHdl(nullptr);
@@ -217,13 +210,11 @@ void XMLChartExportPropertyMapper::ContextFilter(
     bool bCheckAuto = false;
 
     // filter properties
-    for( std::vector< XMLPropertyState >::iterator property = rProperties.begin();
-         property != rProperties.end();
-         ++property )
+    for( auto& rProperty : rProperties )
     {
         // find properties with context
         // to prevent writing this property set mnIndex member to -1
-        switch( getPropertySetMapper()->GetEntryContextId( property->mnIndex ))
+        switch( getPropertySetMapper()->GetEntryContextId( rProperty.mnIndex ))
         {
             // if Auto... is set the corresponding properties mustn't be exported
             case XML_SCH_CONTEXT_MIN:
@@ -251,7 +242,7 @@ void XMLChartExportPropertyMapper::ContextFilter(
             // the following property is deprecated
             // element-item symbol-image is used now
             case XML_SCH_CONTEXT_SPECIAL_SYMBOL_IMAGE_NAME:
-                property->mnIndex = -1;
+                rProperty.mnIndex = -1;
                 break;
 
             case XML_SCH_CONTEXT_STOCK_WITH_VOLUME:
@@ -261,7 +252,7 @@ void XMLChartExportPropertyMapper::ContextFilter(
                 // because there, the transformation to OOo is done after the
                 // complete export of the chart in OASIS format.
                 if( mrExport.getExportFlags() & SvXMLExportFlags::OASIS )
-                    property->mnIndex = -1;
+                    rProperty.mnIndex = -1;
                 break;
         }
 
@@ -275,7 +266,7 @@ void XMLChartExportPropertyMapper::ContextFilter(
                     uno::Any aAny = rPropSet->getPropertyValue( aAutoPropName );
                     aAny >>= bAuto;
                     if( bAuto )
-                        property->mnIndex = -1;
+                        rProperty.mnIndex = -1;
                 }
                 catch(const beans::UnknownPropertyException&)
                 {
@@ -298,15 +289,20 @@ void XMLChartExportPropertyMapper::handleElementItem(
     {
         case XML_SCH_CONTEXT_SPECIAL_SYMBOL_IMAGE:
             {
-                OUString aURLStr;
-                rProperty.maValue >>= aURLStr;
+                uno::Reference<graphic::XGraphic> xGraphic;
+                rProperty.maValue >>= xGraphic;
 
+                OUString sInternalURL;
                 // export as XLink reference into the package
                 // if embedding is off
-                OUString sTempURL( mrExport.AddEmbeddedGraphicObject( aURLStr ));
-                if( !sTempURL.isEmpty() )
+                if (xGraphic.is())
                 {
-                    mrExport.AddAttribute( XML_NAMESPACE_XLINK, XML_HREF, sTempURL );
+                    OUString aOutMimeType;
+                    sInternalURL = mrExport.AddEmbeddedXGraphic(xGraphic, aOutMimeType);
+                }
+                if (!sInternalURL.isEmpty())
+                {
+                    mrExport.AddAttribute(XML_NAMESPACE_XLINK, XML_HREF, sInternalURL);
                 }
 
                 {
@@ -319,8 +315,8 @@ void XMLChartExportPropertyMapper::handleElementItem(
 
                     // export as Base64 embedded graphic
                     // if embedding is on
-                    if( !aURLStr.isEmpty())
-                        mrExport.AddEmbeddedGraphicObjectAsBase64( aURLStr );
+                    if (xGraphic.is())
+                        mrExport.AddEmbeddedXGraphicAsBase64(xGraphic);
                 }
             }
             break;
@@ -360,8 +356,15 @@ OUString convertRange( const OUString & rRange, const uno::Reference< chart2::XC
         return aResult;
     uno::Reference< chart2::data::XRangeXMLConversion > xConversion(
         xDoc->getDataProvider(), uno::UNO_QUERY );
-    if( xConversion.is())
-        aResult = xConversion->convertRangeToXML( rRange );
+    try
+    {
+        if( xConversion.is())
+            aResult = xConversion->convertRangeToXML( rRange );
+    }
+    catch (css::lang::IllegalArgumentException&)
+    {
+    }
+
     return aResult;
 }
 
@@ -408,14 +411,14 @@ void XMLChartExportPropertyMapper::handleSpecialItem(
                 {
                     // convert from 100th degrees to degrees (double)
                     rProperty.maValue >>= nValue;
-                    double fVal = (double)(nValue) / 100.0;
+                    double fVal = static_cast<double>(nValue) / 100.0;
                     ::sax::Converter::convertDouble( sValueBuffer, fVal );
                 }
                 break;
             case XML_SCH_CONTEXT_SPECIAL_DATA_LABEL_NUMBER:
                 {
                     rProperty.maValue >>= nValue;
-                    if((( nValue & chart::ChartDataCaption::VALUE ) == chart::ChartDataCaption::VALUE ))
+                    if( ( nValue & chart::ChartDataCaption::VALUE ) == chart::ChartDataCaption::VALUE )
                     {
                         if( ( nValue & chart::ChartDataCaption::PERCENT ) == chart::ChartDataCaption::PERCENT )
                         {
@@ -557,7 +560,7 @@ bool XMLChartImportPropertyMapper::handleSpecialItem(
         {
             case XML_SCH_CONTEXT_SPECIAL_TICKS_MAJ_INNER:
             case XML_SCH_CONTEXT_SPECIAL_TICKS_MIN_INNER:
-                ::sax::Converter::convertBool( bValue, rValue );
+                (void)::sax::Converter::convertBool( bValue, rValue );
                 // modify old value
                 rProperty.maValue >>= nValue;
                 if( bValue )
@@ -568,7 +571,7 @@ bool XMLChartImportPropertyMapper::handleSpecialItem(
                 break;
             case XML_SCH_CONTEXT_SPECIAL_TICKS_MAJ_OUTER:
             case XML_SCH_CONTEXT_SPECIAL_TICKS_MIN_OUTER:
-                ::sax::Converter::convertBool( bValue, rValue );
+                (void)::sax::Converter::convertBool( bValue, rValue );
                 // modify old value
                 rProperty.maValue >>= nValue;
                 if( bValue )
@@ -582,7 +585,7 @@ bool XMLChartImportPropertyMapper::handleSpecialItem(
                     // convert from degrees (double) to 100th degrees (integer)
                     double fVal;
                     ::sax::Converter::convertDouble( fVal, rValue );
-                    nValue = (sal_Int32)( fVal * 100.0 );
+                    nValue = static_cast<sal_Int32>( fVal * 100.0 );
                     rProperty.maValue <<= nValue;
                 }
                 break;
@@ -603,7 +606,7 @@ bool XMLChartImportPropertyMapper::handleSpecialItem(
                 break;
             case XML_SCH_CONTEXT_SPECIAL_DATA_LABEL_TEXT:
                 rProperty.maValue >>= nValue;
-                ::sax::Converter::convertBool( bValue, rValue );
+                (void)::sax::Converter::convertBool( bValue, rValue );
                 if( bValue )
                     SCH_XML_SETFLAG( nValue, chart::ChartDataCaption::TEXT );
                 else
@@ -612,7 +615,7 @@ bool XMLChartImportPropertyMapper::handleSpecialItem(
                 break;
             case XML_SCH_CONTEXT_SPECIAL_DATA_LABEL_SYMBOL:
                 rProperty.maValue >>= nValue;
-                ::sax::Converter::convertBool( bValue, rValue );
+                (void)::sax::Converter::convertBool( bValue, rValue );
                 if( bValue )
                     SCH_XML_SETFLAG( nValue, chart::ChartDataCaption::SYMBOL );
                 else
@@ -641,7 +644,7 @@ bool XMLChartImportPropertyMapper::handleSpecialItem(
 
             // deprecated from 6.0 beta on
             case XML_SCH_CONTEXT_SPECIAL_SYMBOL_IMAGE_NAME:
-                rProperty.maValue <<= mrImport.ResolveGraphicObjectURL( rValue, false );
+                rProperty.maValue <<= mrImport.loadGraphicByURL(rValue);
                 break;
 
             case XML_SCH_CONTEXT_SPECIAL_REGRESSION_TYPE:

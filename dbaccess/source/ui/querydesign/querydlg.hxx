@@ -25,28 +25,25 @@
 #include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
 
-#include "QEnumTypes.hxx"
+#include <QEnumTypes.hxx>
 
-#include "RelControliFace.hxx"
-#include "JoinTableView.hxx"
+#include <RelControliFace.hxx>
+#include <JoinTableView.hxx>
 
 
 namespace dbaui
 {
     class OTableListBoxControl;
     class OQueryTableView;
-    class DlgQryJoin :  public ModalDialog
+    class DlgQryJoin final :  public ModalDialog
                         ,public IRelationControlInterface
     {
-    protected:
         VclPtr<FixedText>              m_pML_HelpText;
         VclPtr<OKButton>               m_pPB_OK;
         VclPtr<ListBox>                m_pLB_JoinType;
         VclPtr<CheckBox>               m_pCBNatural;
 
-        OTableListBoxControl*               m_pTableControl;
-        OJoinTableView::OTableWindowMap*    m_pTableMap;
-        VclPtr<OQueryTableView>             m_pTableView;
+        std::unique_ptr<OTableListBoxControl> m_pTableControl;
 
         EJoinType                           eJoinType;
         TTableConnectionData::value_type    m_pConnData; // contains left and right table
@@ -54,9 +51,9 @@ namespace dbaui
         css::uno::Reference< css::sdbc::XConnection > m_xConnection;
 
 
-        DECL_LINK_TYPED( OKClickHdl, Button*, void );
-        DECL_LINK_TYPED( LBChangeHdl, ListBox&, void );
-        DECL_LINK_TYPED( NaturalToggleHdl, CheckBox&, void );
+        DECL_LINK( OKClickHdl, Button*, void );
+        DECL_LINK( LBChangeHdl, ListBox&, void );
+        DECL_LINK( NaturalToggleHdl, CheckBox&, void );
 
         /** setJoinType enables and set the new join type
             @param  _eNewJoinType   the new jointype
@@ -65,10 +62,10 @@ namespace dbaui
     public:
         DlgQryJoin( OQueryTableView * pParent,
                     const TTableConnectionData::value_type& pData,
-                    OJoinTableView::OTableWindowMap*    _pTableMap,
+                    const OJoinTableView::OTableWindowMap*    _pTableMap,
                     const css::uno::Reference< css::sdbc::XConnection >& _xConnection,
                     bool _bAllowTableSelect);
-        virtual ~DlgQryJoin();
+        virtual ~DlgQryJoin() override;
         virtual void dispose() override;
         EJoinType GetJoinType() const { return eJoinType; };
 

@@ -19,8 +19,9 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_LAYOUTER_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_LAYOUTER_HXX
 
-#include "swtypes.hxx"
+#include <swtypes.hxx>
 #include <unordered_map>
+#include <memory>
 
 class SwEndnoter;
 class SwDoc;
@@ -41,15 +42,15 @@ class SwLayoutFrame;
 
 class SwLayouter
 {
-    SwEndnoter* mpEndnoter;
-    SwLooping* mpLooping;
-    void _CollectEndnotes( SwSectionFrame* pSect );
-    bool StartLooping( SwPageFrame* pPage );
+    std::unique_ptr<SwEndnoter> mpEndnoter;
+    std::unique_ptr<SwLooping> mpLooping;
+    void CollectEndnotes_( SwSectionFrame* pSect );
+    bool StartLooping( SwPageFrame const * pPage );
 
     // --> #i28701#
-    SwMovedFwdFramesByObjPos* mpMovedFwdFrames;
+    std::unique_ptr<SwMovedFwdFramesByObjPos> mpMovedFwdFrames;
     // --> #i35911#
-    SwObjsMarkedAsTmpConsiderWrapInfluence* mpObjsTmpConsiderWrapInfl;
+    std::unique_ptr<SwObjsMarkedAsTmpConsiderWrapInfluence> mpObjsTmpConsiderWrapInfl;
 
 public:
     // --> #i65250#
@@ -95,17 +96,17 @@ private:
 public:
     SwLayouter();
     ~SwLayouter();
-    void InsertEndnotes( SwSectionFrame* pSect );
+    void InsertEndnotes( SwSectionFrame const * pSect );
     void CollectEndnote( SwFootnoteFrame* pFootnote );
     bool HasEndnotes() const;
 
-    void LoopControl( SwPageFrame* pPage, sal_uInt8 nLoop );
+    void LoopControl( SwPageFrame* pPage );
     void EndLoopControl();
     void LoopingLouieLight( const SwDoc& rDoc, const SwTextFrame& rFrame );
 
     static void CollectEndnotes( SwDoc* pDoc, SwSectionFrame* pSect );
-    static bool Collecting( SwDoc* pDoc, SwSectionFrame* pSect, SwFootnoteFrame* pFootnote );
-    static bool StartLoopControl( SwDoc* pDoc, SwPageFrame *pPage );
+    static bool Collecting( SwDoc* pDoc, SwSectionFrame const * pSect, SwFootnoteFrame* pFootnote );
+    static bool StartLoopControl( SwDoc* pDoc, SwPageFrame const *pPage );
 
     // --> #i28701#
     static void ClearMovedFwdFrames( const SwDoc& _rDoc );
@@ -127,6 +128,10 @@ public:
     static void InsertObjForTmpConsiderWrapInfluence(
                                         const SwDoc& _rDoc,
                                         SwAnchoredObject& _rAnchoredObj );
+    static void RemoveObjForTmpConsiderWrapInfluence(
+                                        const SwDoc& _rDoc,
+                                        SwAnchoredObject& _rAnchoredObj );
+
     // --> #i65250#
     static bool MoveBwdSuppressed( const SwDoc& p_rDoc,
                                    const SwFlowFrame& p_rFlowFrame,

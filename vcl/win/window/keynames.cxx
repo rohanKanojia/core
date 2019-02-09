@@ -21,10 +21,15 @@
 #include <rtl/ustring.hxx>
 #include <sal/macros.h>
 
+#include <win/salframe.h>
+
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 
 // Use unique ;) names to avoid clashes with the KEY_* (especially
-// KEY_SHIFT) from <rsc/rsc-vcl-shared-types.hxx>
+// KEY_SHIFT) from <vcl/vclenum.hxx>
 
 #define PAPUGA_KEY_ESC         0x10000
 #define PAPUGA_KEY_BACK        0xE0000
@@ -192,7 +197,7 @@ namespace vcl_sal {
     };
 
     // translate keycodes, used within the displayed menu shortcuts
-    OUString getKeysReplacementName( OUString pLang, LONG nSymbol )
+    OUString getKeysReplacementName( OUString const & pLang, LONG nSymbol )
     {
         for( unsigned int n = 0; n < SAL_N_ELEMENTS(aKeyboards); n++ )
         {

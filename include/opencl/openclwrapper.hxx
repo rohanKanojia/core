@@ -10,23 +10,22 @@
 #ifndef INCLUDED_SC_SOURCE_CORE_OPENCL_OPENCLWRAPPER_HXX
 #define INCLUDED_SC_SOURCE_CORE_OPENCL_OPENCLWRAPPER_HXX
 
-#include <cassert>
 #include <vector>
 
 #include <clew/clew.h>
 
-#include <sal/detail/log.h>
 #include <opencl/opencldllapi.h>
-#include <opencl/platforminfo.hxx>
-#include <osl/file.hxx>
-#include <rtl/string.hxx>
+#include <rtl/ustring.hxx>
 
 #define MAX_CLFILE_NUM 50
 #define OPENCL_CMDQUEUE_SIZE 1 // number of command queues per OpenCL device.
 
 #include <cstdio>
 
-namespace opencl {
+struct OpenCLPlatformInfo;
+
+namespace openclwrapper
+{
 
 struct KernelEnv
 {
@@ -35,22 +34,29 @@ struct KernelEnv
     cl_program mpkProgram;
 };
 
-struct GPUEnv
+struct OPENCL_DLLPUBLIC GPUEnv
 {
     //share vb in all modules in hb library
     cl_platform_id mpPlatformID;
     cl_context mpContext;
     cl_device_id mpDevID;
     cl_command_queue mpCmdQueue[OPENCL_CMDQUEUE_SIZE];
+    bool mbCommandQueueInitialized;
     cl_program mpArryPrograms[MAX_CLFILE_NUM]; //one program object maps one kernel source file
     int mnIsUserCreated; // 1: created , 0:no create and needed to create by opencl wrapper
     int mnCmdQueuePos;
     bool mnKhrFp64Flag;
     bool mnAmdFp64Flag;
-    cl_uint mnPreferredVectorWidthFloat;
+    bool mbNeedsTDRAvoidance;
+
+    static bool isOpenCLEnabled();
 };
 
 extern OPENCL_DLLPUBLIC GPUEnv gpuEnv;
+extern OPENCL_DLLPUBLIC sal_uInt64 kernelFailures;
+
+OPENCL_DLLPUBLIC bool canUseOpenCL();
+
 OPENCL_DLLPUBLIC bool generatBinFromKernelSource( cl_program program, const char * clFileName );
 OPENCL_DLLPUBLIC bool buildProgramFromBinary(const char* buildOption, GPUEnv* gpuEnv, const char* filename, int idx);
 OPENCL_DLLPUBLIC void setKernelEnv( KernelEnv *envInfo );
@@ -61,11 +67,13 @@ OPENCL_DLLPUBLIC const std::vector<OpenCLPlatformInfo>& fillOpenCLInfo();
  *
  * @param pDeviceId the id of the opencl device of type cl_device_id, NULL means use software calculation
  * @param bAutoSelect use the algorithm to select the best OpenCL device
+ * @param rOutSelectedDeviceVersionIDString returns the selected device's version string.
  *
  * @return returns true if there is a valid opencl device that has been set up
  */
 OPENCL_DLLPUBLIC bool switchOpenCLDevice(const OUString* pDeviceId, bool bAutoSelect,
-                                         bool bForceEvaluation);
+                                         bool bForceEvaluation,
+                                         OUString& rOutSelectedDeviceVersionIDString);
 
 OPENCL_DLLPUBLIC void getOpenCLDeviceInfo(size_t& rDeviceId, size_t& rPlatformId);
 

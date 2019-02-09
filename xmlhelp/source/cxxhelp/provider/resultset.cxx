@@ -34,15 +34,14 @@ using namespace chelp;
 DynamicResultSet::DynamicResultSet(
     const Reference< XComponentContext >& rxContext,
     const OpenCommandArgument2& rCommand,
-    ResultSetFactory* pFactory )
+    std::unique_ptr<ResultSetFactory> pFactory )
     : ResultSetImplHelper( rxContext, rCommand ),
-      m_pFactory( pFactory )
+      m_pFactory( std::move(pFactory) )
 {
 }
 
 DynamicResultSet::~DynamicResultSet()
 {
-    delete m_pFactory;
 }
 
 // Non-interface methods.

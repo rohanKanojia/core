@@ -20,7 +20,11 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_FRMINF_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_FRMINF_HXX
 
-#include "swtypes.hxx"
+#include <swtypes.hxx>
+
+#include "TextFrameIndex.hxx"
+
+#include <vector>
 
 class SwTextFrame;
 class SwPaM;
@@ -34,7 +38,7 @@ class SwTextFrameInfo
     static SwTwips GetLineStart( const SwTextCursor &rLine );
 
 public:
-    inline SwTextFrameInfo( const SwTextFrame *pTextFrame ) : pFrame(pTextFrame) { }
+    SwTextFrameInfo( const SwTextFrame *pTextFrame ) : pFrame(pTextFrame) { }
 
     // Does the paragraph fit into a single line?
     bool IsOneLine() const;
@@ -46,15 +50,16 @@ public:
     SwTwips GetLineStart() const;
 
     // return center position of the next character
-    SwTwips GetCharPos( sal_Int32 nChar, bool bCenter = true ) const;
+    SwTwips GetCharPos(TextFrameIndex nChar, bool bCenter = true) const;
 
     // collect all whitespaces at the beginning and end of a line in Pam
-    void GetSpaces( SwPaM &rPam, bool bWithLineBreak ) const;
+    void GetSpaces(std::vector<std::pair<TextFrameIndex, TextFrameIndex>> &,
+            bool bWithLineBreak) const;
 
     // Is a bullet point/symbol/etc. at the first text position?
-    bool IsBullet( sal_Int32 nTextPos ) const;
+    bool IsBullet(TextFrameIndex nTextPos) const;
 
-    // determine intentation for first line
+    // determine indentation for first line
     SwTwips GetFirstIndent() const;
 
     const SwTextFrame* GetFrame() const { return pFrame; }
@@ -62,8 +67,8 @@ public:
         { pFrame = pNew; return *this; }
 
     // Is it a comparison? Returns position in frame.
-    sal_Int32 GetBigIndent( sal_Int32& rFndPos,
-                        const SwTextFrame *pNextFrame = nullptr ) const;
+    sal_Int32 GetBigIndent( TextFrameIndex & rFndPos,
+                        const SwTextFrame *pNextFrame ) const;
 };
 
 #endif

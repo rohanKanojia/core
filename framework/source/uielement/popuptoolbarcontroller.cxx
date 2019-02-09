@@ -17,14 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <classes/resource.hrc>
-#include <classes/fwkresid.hxx>
+#include <bitmaps.hlst>
 
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include <comphelper/processfactory.hxx>
 #include <comphelper/propertyvalue.hxx>
-#include <comphelper/propertysequence.hxx>
 #include <framework/menuconfiguration.hxx>
 #include <rtl/ref.hxx>
 #include <svtools/imagemgr.hxx>
@@ -37,14 +34,16 @@
 #include <vcl/commandinfoprovider.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/toolbox.hxx>
+#include <sal/log.hxx>
 
 #include <com/sun/star/awt/PopupMenuDirection.hpp>
 #include <com/sun/star/awt/XPopupMenu.hpp>
 #include <com/sun/star/frame/thePopupMenuControllerFactory.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/frame/XPopupMenuController.hpp>
+#include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/frame/XSubToolbarController.hpp>
 #include <com/sun/star/frame/XUIControllerFactory.hpp>
+#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/ucb/CommandFailedException.hpp>
 #include <com/sun/star/ucb/ContentCreationException.hpp>
@@ -52,7 +51,8 @@
 
 using namespace framework;
 
-namespace {
+namespace
+{
 
 typedef cppu::ImplInheritanceHelper< svt::ToolboxController,
                                     css::lang::XServiceInfo >
@@ -61,16 +61,14 @@ typedef cppu::ImplInheritanceHelper< svt::ToolboxController,
 class PopupMenuToolbarController : public ToolBarBase
 {
 public:
-    virtual ~PopupMenuToolbarController();
-
     // XComponent
-    virtual void SAL_CALL dispose() throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL dispose() override;
     // XInitialization
-    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
     // XToolbarController
-    virtual css::uno::Reference< css::awt::XWindow > SAL_CALL createPopupWindow() throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::awt::XWindow > SAL_CALL createPopupWindow() override;
     // XStatusListener
-    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
 
 protected:
     PopupMenuToolbarController( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
@@ -79,7 +77,6 @@ protected:
     virtual ToolBoxItemBits getDropDownStyle() const;
     void createPopupMenuController();
 
-    css::uno::Reference< css::uno::XComponentContext >      m_xContext;
     bool                                                    m_bHasController;
     OUString                                                m_aPopupCommand;
     css::uno::Reference< css::awt::XPopupMenu >             m_xPopupMenu;
@@ -92,18 +89,13 @@ private:
 PopupMenuToolbarController::PopupMenuToolbarController(
     const css::uno::Reference< css::uno::XComponentContext >& xContext,
     const OUString &rPopupCommand )
-    : m_xContext( xContext )
+    : ToolBarBase( xContext, css::uno::Reference< css::frame::XFrame >(), /*aCommandURL*/OUString() )
     , m_bHasController( false )
     , m_aPopupCommand( rPopupCommand )
 {
 }
 
-PopupMenuToolbarController::~PopupMenuToolbarController()
-{
-}
-
 void SAL_CALL PopupMenuToolbarController::dispose()
-throw ( css::uno::RuntimeException, std::exception )
 {
     svt::ToolboxController::dispose();
 
@@ -131,7 +123,6 @@ throw ( css::uno::RuntimeException, std::exception )
 
 void SAL_CALL PopupMenuToolbarController::initialize(
     const css::uno::Sequence< css::uno::Any >& aArguments )
-throw ( css::uno::Exception, css::uno::RuntimeException, std::exception )
 {
     ToolboxController::initialize( aArguments );
 
@@ -148,7 +139,7 @@ throw ( css::uno::Exception, css::uno::RuntimeException, std::exception )
     }
     catch (const css::uno::Exception& e)
     {
-        SAL_INFO( "fwk.uielement", "Caught an exception: " << e.Message );
+        SAL_INFO( "fwk.uielement", e );
     }
 
     SolarMutexGuard aSolarLock;
@@ -166,7 +157,6 @@ throw ( css::uno::Exception, css::uno::RuntimeException, std::exception )
 }
 
 void SAL_CALL PopupMenuToolbarController::statusChanged( const css::frame::FeatureStateEvent& rEvent )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     ToolBox* pToolBox = nullptr;
     sal_uInt16 nItemId = 0;
@@ -181,7 +171,6 @@ void SAL_CALL PopupMenuToolbarController::statusChanged( const css::frame::Featu
 
 css::uno::Reference< css::awt::XWindow > SAL_CALL
 PopupMenuToolbarController::createPopupWindow()
-    throw ( css::uno::RuntimeException, std::exception )
 {
     css::uno::Reference< css::awt::XWindow > xRet;
 
@@ -198,7 +187,13 @@ PopupMenuToolbarController::createPopupWindow()
 
     pToolBox->SetItemDown( m_nToolBoxId, true );
     WindowAlign eAlign( pToolBox->GetAlign() );
-    sal_uInt16 nId = m_xPopupMenu->execute(
+
+    // If the parent ToolBox is in popup mode (e.g. sub toolbar, overflow popup),
+    // its ToolBarManager can be disposed along with our controller, destroying
+    // m_xPopupMenu, while the latter still in execute. This should be fixed at a
+    // different level, for now just hold it here so it won't crash.
+    css::uno::Reference< css::awt::XPopupMenu > xPopupMenu ( m_xPopupMenu );
+    sal_uInt16 nId = xPopupMenu->execute(
         css::uno::Reference< css::awt::XWindowPeer >( getParent(), css::uno::UNO_QUERY ),
         VCLUnoHelper::ConvertToAWTRect( pToolBox->GetItemRect( m_nToolBoxId ) ),
         ( eAlign == WindowAlign::Top || eAlign == WindowAlign::Bottom ) ?
@@ -207,7 +202,7 @@ PopupMenuToolbarController::createPopupWindow()
     pToolBox->SetItemDown( m_nToolBoxId, false );
 
     if ( nId )
-        functionExecuted( m_xPopupMenu->getCommand( nId ) );
+        functionExecuted( xPopupMenu->getCommand( nId ) );
 
     return xRet;
 }
@@ -252,7 +247,7 @@ void PopupMenuToolbarController::createPopupMenuController()
         catch ( const css::uno::Exception &e )
         {
             m_xPopupMenu.clear();
-            SAL_INFO( "fwk.uielement", "Caught an exception: " << e.Message );
+            SAL_INFO( "fwk.uielement", e );
         }
     }
 }
@@ -263,15 +258,22 @@ public:
     GenericPopupToolbarController( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
                                    const css::uno::Sequence< css::uno::Any >& rxArgs );
 
+    // XInitialization
+    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& rxArgs ) override;
+
+    // XStatusListener
+    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
+
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw (css::uno::RuntimeException) override;
+    virtual OUString SAL_CALL getImplementationName() override;
 
-    virtual sal_Bool SAL_CALL supportsService(OUString const & rServiceName) throw (css::uno::RuntimeException) override;
+    virtual sal_Bool SAL_CALL supportsService(OUString const & rServiceName) override;
 
-    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() throw (css::uno::RuntimeException) override;
+    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
 
 private:
-    bool m_bSplitButton;
+    bool m_bSplitButton, m_bReplaceWithLast;
+    void functionExecuted(const OUString &rCommand) override;
     ToolBoxItemBits getDropDownStyle() const override;
 };
 
@@ -279,38 +281,100 @@ GenericPopupToolbarController::GenericPopupToolbarController(
     const css::uno::Reference< css::uno::XComponentContext >& xContext,
     const css::uno::Sequence< css::uno::Any >& rxArgs )
     : PopupMenuToolbarController( xContext )
-    , m_bSplitButton( false )
+    , m_bReplaceWithLast( false )
 {
     css::beans::PropertyValue aPropValue;
     for ( const auto& arg: rxArgs )
     {
         if ( ( arg >>= aPropValue ) && aPropValue.Name == "Value" )
         {
-            aPropValue.Value >>= m_aPopupCommand;
+            OUString aValue;
+            aPropValue.Value >>= aValue;
+            m_aPopupCommand = aValue.getToken(0, ';');
+            m_bReplaceWithLast = aValue.getToken(1, ';').toBoolean();
             break;
         }
     }
-    if ( !m_aPopupCommand.isEmpty() )
-        m_bSplitButton = true;
+    m_bSplitButton = m_bReplaceWithLast || !m_aPopupCommand.isEmpty();
 }
 
 OUString GenericPopupToolbarController::getImplementationName()
-    throw (css::uno::RuntimeException)
 {
     return OUString("com.sun.star.comp.framework.GenericPopupToolbarController");
 }
 
 sal_Bool GenericPopupToolbarController::supportsService(OUString const & rServiceName)
-    throw (css::uno::RuntimeException)
 {
     return cppu::supportsService( this, rServiceName );
 }
 
 css::uno::Sequence<OUString> GenericPopupToolbarController::getSupportedServiceNames()
-    throw (css::uno::RuntimeException)
 {
-    css::uno::Sequence<OUString> aRet { "com.sun.star.frame.ToolbarController" };
-    return aRet;
+    return {"com.sun.star.frame.ToolbarController"};
+}
+
+void GenericPopupToolbarController::initialize( const css::uno::Sequence< css::uno::Any >& rxArgs )
+{
+    PopupMenuToolbarController::initialize( rxArgs );
+    if ( m_bReplaceWithLast )
+        // Create early, so we can use the menu is statusChanged method.
+        createPopupMenuController();
+}
+
+void GenericPopupToolbarController::statusChanged( const css::frame::FeatureStateEvent& rEvent )
+{
+    SolarMutexGuard aGuard;
+
+    if ( m_bReplaceWithLast && !rEvent.IsEnabled && m_xPopupMenu.is() )
+    {
+        Menu* pVclMenu = VCLXMenu::GetImplementation( m_xPopupMenu )->GetMenu();
+
+        ToolBox* pToolBox = nullptr;
+        sal_uInt16 nId = 0;
+        if ( getToolboxId( nId, &pToolBox ) && pToolBox->IsItemEnabled( nId ) )
+        {
+            pVclMenu->Activate();
+            pVclMenu->Deactivate();
+        }
+
+        for ( sal_uInt16 i = 0; i < pVclMenu->GetItemCount(); ++i )
+        {
+            sal_uInt16 nItemId = pVclMenu->GetItemId( i );
+            if ( nItemId && pVclMenu->IsItemEnabled( nItemId ) && !pVclMenu->GetPopupMenu( nItemId ) )
+            {
+                functionExecuted( pVclMenu->GetItemCommand( nItemId ) );
+                return;
+            }
+        }
+    }
+
+    PopupMenuToolbarController::statusChanged( rEvent );
+}
+
+void GenericPopupToolbarController::functionExecuted( const OUString& rCommand )
+{
+    if ( m_bReplaceWithLast )
+    {
+        removeStatusListener( m_aCommandURL );
+
+        OUString aRealCommand( vcl::CommandInfoProvider::GetRealCommandForCommand( rCommand, m_sModuleName ) );
+        m_aCommandURL = aRealCommand.isEmpty() ? rCommand : aRealCommand;
+        addStatusListener( m_aCommandURL );
+
+        ToolBox* pToolBox = nullptr;
+        sal_uInt16 nId = 0;
+        if ( getToolboxId( nId, &pToolBox ) )
+        {
+            pToolBox->SetItemCommand( nId, rCommand );
+            pToolBox->SetHelpText( nId, OUString() ); // Will retrieve the new one from help.
+            pToolBox->SetItemText( nId, vcl::CommandInfoProvider::GetLabelForCommand( rCommand, m_sModuleName ) );
+            pToolBox->SetQuickHelpText( nId, vcl::CommandInfoProvider::GetTooltipForCommand( rCommand, m_xFrame ) );
+
+            Image aImage = vcl::CommandInfoProvider::GetImageForCommand(rCommand, m_xFrame, pToolBox->GetImageSize());
+            if ( !!aImage )
+                pToolBox->SetItemImage( nId, aImage );
+        }
+    }
 }
 
 ToolBoxItemBits GenericPopupToolbarController::getDropDownStyle() const
@@ -326,79 +390,68 @@ public:
     explicit SaveToolbarController( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
 
     // XInitialization
-    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw ( css::uno::Exception, css::uno::RuntimeException, std::exception ) override;
-
-    // XUpdatable
-    virtual void SAL_CALL update() throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
     // XSubToolbarController
     // Ugly HACK to cause ToolBarManager ask our controller for updated image, in case of icon theme change.
-    virtual sal_Bool SAL_CALL opensSubToolbar() throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual OUString SAL_CALL getSubToolbarName() throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL functionSelected( const OUString& aCommand ) throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL updateImage() throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual sal_Bool SAL_CALL opensSubToolbar() override;
+    virtual OUString SAL_CALL getSubToolbarName() override;
+    virtual void SAL_CALL functionSelected( const OUString& aCommand ) override;
+    virtual void SAL_CALL updateImage() override;
 
     // XStatusListener
-    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
 
     // XModifyListener
-    virtual void SAL_CALL modified( const css::lang::EventObject& rEvent ) throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL modified( const css::lang::EventObject& rEvent ) override;
 
     // XEventListener
-    virtual void SAL_CALL disposing( const css::lang::EventObject& rEvent ) throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& rEvent ) override;
 
     // XComponent
-    virtual void SAL_CALL dispose() throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL dispose() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw ( css::uno::RuntimeException ) override;
-    virtual sal_Bool SAL_CALL supportsService( OUString const & rServiceName ) throw ( css::uno::RuntimeException ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw ( css::uno::RuntimeException ) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( OUString const & rServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
 private:
-    bool m_bSaveAsModeAllowed;
-    bool m_bSaveAsModeActive;
+    bool m_bReadOnly;
     bool m_bModified;
+    css::uno::Reference< css::frame::XStorable > m_xStorable;
     css::uno::Reference< css::util::XModifiable > m_xModifiable;
 };
 
 SaveToolbarController::SaveToolbarController( const css::uno::Reference< css::uno::XComponentContext >& rxContext )
     : ImplInheritanceHelper( rxContext, ".uno:SaveAsMenu" )
-    , m_bSaveAsModeAllowed( true )
-    , m_bSaveAsModeActive( false )
+    , m_bReadOnly( false )
     , m_bModified( false )
 {
 }
 
 void SaveToolbarController::initialize( const css::uno::Sequence< css::uno::Any >& aArguments )
-    throw ( css::uno::Exception, css::uno::RuntimeException, std::exception )
 {
     PopupMenuToolbarController::initialize( aArguments );
 
     ToolBox* pToolBox = nullptr;
     sal_uInt16 nId = 0;
-    if ( getToolboxId( nId, &pToolBox ) && pToolBox->GetItemCommand( nId ) != m_aCommandURL )
-    {
-        m_bSaveAsModeAllowed = false;
-        pToolBox->SetItemBits( nId, pToolBox->GetItemBits( nId ) & ~ ToolBoxItemBits::DROPDOWN );
-    }
+    if ( !getToolboxId( nId, &pToolBox ) )
+        return;
 
     css::uno::Reference< css::frame::XController > xController( m_xFrame->getController(), css::uno::UNO_QUERY );
     if ( xController.is() )
         m_xModifiable.set( xController->getModel(), css::uno::UNO_QUERY );
 
-    if ( !m_xModifiable.is() )
-    {
+    if ( m_xModifiable.is() && pToolBox->GetItemCommand( nId ) == m_aCommandURL )
+        // Will also enable the save as only mode.
+        m_xStorable.set( m_xModifiable, css::uno::UNO_QUERY );
+    else if ( !m_xModifiable.is() )
         // Can be in table/query design.
-        m_bSaveAsModeAllowed = false;
         m_xModifiable.set( xController, css::uno::UNO_QUERY );
-    }
-}
-
-void SaveToolbarController::update()
-    throw ( css::uno::RuntimeException, std::exception )
-{
-    PopupMenuToolbarController::update();
+    else
+        // Simple save button, without the dropdown.
+        pToolBox->SetItemBits( nId, pToolBox->GetItemBits( nId ) & ~ ToolBoxItemBits::DROPDOWN );
 
     if ( m_xModifiable.is() )
     {
@@ -408,24 +461,20 @@ void SaveToolbarController::update()
 }
 
 sal_Bool SaveToolbarController::opensSubToolbar()
-    throw ( css::uno::RuntimeException, std::exception )
 {
-    return sal_True;
+    return true;
 }
 
 OUString SaveToolbarController::getSubToolbarName()
-    throw ( css::uno::RuntimeException, std::exception )
 {
     return OUString();
 }
 
 void SaveToolbarController::functionSelected( const OUString& /*aCommand*/ )
-    throw ( css::uno::RuntimeException, std::exception )
 {
 }
 
 void SaveToolbarController::updateImage()
-    throw ( css::uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     ToolBox* pToolBox = nullptr;
@@ -433,49 +482,54 @@ void SaveToolbarController::updateImage()
     if ( !getToolboxId( nId, &pToolBox ) )
         return;
 
-    bool bLargeIcons = pToolBox->GetToolboxButtonSize() == TOOLBOX_BUTTONSIZE_LARGE;
+    vcl::ImageType eImageType = pToolBox->GetImageSize();
+
     Image aImage;
 
-    if ( m_bSaveAsModeActive )
+    if ( m_bReadOnly )
     {
-        aImage = vcl::CommandInfoProvider::Instance().GetImageForCommand( ".uno:SaveAs", bLargeIcons, m_xFrame );
+        aImage = vcl::CommandInfoProvider::GetImageForCommand(".uno:SaveAs", m_xFrame, eImageType);
     }
     else if ( m_bModified )
     {
-        Image aResImage( bLargeIcons ? FwkResId( IMG_SAVEMODIFIED_LARGE ) : FwkResId( IMG_SAVEMODIFIED_SMALL ) );
-        aImage = aResImage;
+        if (eImageType == vcl::ImageType::Size26)
+            aImage = Image(StockImage::Yes, BMP_SAVEMODIFIED_LARGE);
+        else if (eImageType == vcl::ImageType::Size32)
+            aImage = Image(StockImage::Yes, BMP_SAVEMODIFIED_EXTRALARGE);
+        else
+            aImage = Image(StockImage::Yes, BMP_SAVEMODIFIED_SMALL);
     }
 
     if ( !aImage )
-        aImage = vcl::CommandInfoProvider::Instance().GetImageForCommand( m_aCommandURL, bLargeIcons, m_xFrame );
+        aImage = vcl::CommandInfoProvider::GetImageForCommand(m_aCommandURL, m_xFrame, eImageType);
 
     if ( !!aImage )
         pToolBox->SetItemImage( nId, aImage );
 }
 
 void SaveToolbarController::statusChanged( const css::frame::FeatureStateEvent& rEvent )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     ToolBox* pToolBox = nullptr;
     sal_uInt16 nId = 0;
     if ( !getToolboxId( nId, &pToolBox ) )
         return;
 
-    if ( !m_bSaveAsModeAllowed )
-        pToolBox->EnableItem( nId, rEvent.IsEnabled );
-    else if ( m_bSaveAsModeActive == bool( rEvent.IsEnabled ) )
+    bool bLastReadOnly = m_bReadOnly;
+    m_bReadOnly = m_xStorable.is() && m_xStorable->isReadonly();
+    if ( bLastReadOnly != m_bReadOnly )
     {
-        m_bSaveAsModeActive = !m_bSaveAsModeActive;
         pToolBox->SetQuickHelpText( nId,
-            vcl::CommandInfoProvider::Instance().GetTooltipForCommand( rEvent.IsEnabled ? m_aCommandURL : OUString( ".uno:SaveAs" ), m_xFrame ) );
-        pToolBox->SetItemBits( nId, pToolBox->GetItemBits( nId ) & ~( rEvent.IsEnabled ? ToolBoxItemBits::DROPDOWNONLY : ToolBoxItemBits::DROPDOWN ) );
-        pToolBox->SetItemBits( nId, pToolBox->GetItemBits( nId ) |  ( rEvent.IsEnabled ? ToolBoxItemBits::DROPDOWN : ToolBoxItemBits::DROPDOWNONLY ) );
+            vcl::CommandInfoProvider::GetTooltipForCommand( m_bReadOnly ? OUString( ".uno:SaveAs" ) : m_aCommandURL, m_xFrame ) );
+        pToolBox->SetItemBits( nId, pToolBox->GetItemBits( nId ) & ~( m_bReadOnly ? ToolBoxItemBits::DROPDOWN : ToolBoxItemBits::DROPDOWNONLY ) );
+        pToolBox->SetItemBits( nId, pToolBox->GetItemBits( nId ) |  ( m_bReadOnly ? ToolBoxItemBits::DROPDOWNONLY : ToolBoxItemBits::DROPDOWN ) );
         updateImage();
     }
+
+    if ( !m_bReadOnly )
+        pToolBox->EnableItem( nId, rEvent.IsEnabled );
 }
 
 void SaveToolbarController::modified( const css::lang::EventObject& /*rEvent*/ )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     bool bLastModified = m_bModified;
     m_bModified = m_xModifiable->isModified();
@@ -484,16 +538,17 @@ void SaveToolbarController::modified( const css::lang::EventObject& /*rEvent*/ )
 }
 
 void SaveToolbarController::disposing( const css::lang::EventObject& rEvent )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     if ( rEvent.Source == m_xModifiable )
+    {
         m_xModifiable.clear();
+        m_xStorable.clear();
+    }
     else
         PopupMenuToolbarController::disposing( rEvent );
 }
 
 void SaveToolbarController::dispose()
-    throw ( css::uno::RuntimeException, std::exception )
 {
     PopupMenuToolbarController::dispose();
     if ( m_xModifiable.is() )
@@ -501,25 +556,22 @@ void SaveToolbarController::dispose()
         m_xModifiable->removeModifyListener( this );
         m_xModifiable.clear();
     }
+    m_xStorable.clear();
 }
 
 OUString SaveToolbarController::getImplementationName()
-    throw ( css::uno::RuntimeException )
 {
     return OUString("com.sun.star.comp.framework.SaveToolbarController");
 }
 
 sal_Bool SaveToolbarController::supportsService( OUString const & rServiceName )
-    throw ( css::uno::RuntimeException )
 {
     return cppu::supportsService( this, rServiceName );
 }
 
 css::uno::Sequence< OUString > SaveToolbarController::getSupportedServiceNames()
-    throw ( css::uno::RuntimeException )
 {
-    css::uno::Sequence<OUString> aRet { "com.sun.star.frame.ToolbarController" };
-    return aRet;
+    return {"com.sun.star.frame.ToolbarController"};
 }
 
 class NewToolbarController : public PopupMenuToolbarController
@@ -528,20 +580,18 @@ public:
     explicit NewToolbarController( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
 
     // XServiceInfo
-    OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException) override;
+    OUString SAL_CALL getImplementationName() override;
 
-    virtual sal_Bool SAL_CALL supportsService(OUString const & rServiceName) throw (css::uno::RuntimeException) override;
+    virtual sal_Bool SAL_CALL supportsService(OUString const & rServiceName) override;
 
-    css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-        throw (css::uno::RuntimeException) override;
+    css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
 
-    void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
 private:
     void functionExecuted( const OUString &rCommand ) override;
-    void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) throw ( css::uno::RuntimeException, std::exception ) override;
-    void SAL_CALL execute( sal_Int16 KeyModifier ) throw (css::uno::RuntimeException, std::exception) override;
+    void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
+    void SAL_CALL execute( sal_Int16 KeyModifier ) override;
     void setItemImage( const OUString &rCommand );
 
     OUString m_aLastURL;
@@ -554,26 +604,21 @@ NewToolbarController::NewToolbarController(
 }
 
 OUString NewToolbarController::getImplementationName()
-    throw (css::uno::RuntimeException)
 {
     return OUString("org.apache.openoffice.comp.framework.NewToolbarController");
 }
 
 sal_Bool NewToolbarController::supportsService(OUString const & rServiceName)
-    throw (css::uno::RuntimeException)
 {
     return cppu::supportsService( this, rServiceName );
 }
 
 css::uno::Sequence<OUString> NewToolbarController::getSupportedServiceNames()
-    throw (css::uno::RuntimeException)
 {
-    css::uno::Sequence<OUString> aRet { "com.sun.star.frame.ToolbarController" };
-    return aRet;
+    return {"com.sun.star.frame.ToolbarController"};
 }
 
 void SAL_CALL NewToolbarController::initialize( const css::uno::Sequence< css::uno::Any >& aArguments )
-throw ( css::uno::Exception, css::uno::RuntimeException, std::exception )
 {
     PopupMenuToolbarController::initialize( aArguments );
 
@@ -582,7 +627,6 @@ throw ( css::uno::Exception, css::uno::RuntimeException, std::exception )
 }
 
 void SAL_CALL NewToolbarController::statusChanged( const css::frame::FeatureStateEvent& rEvent )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     if ( rEvent.IsEnabled )
     {
@@ -606,7 +650,6 @@ void SAL_CALL NewToolbarController::statusChanged( const css::frame::FeatureStat
 }
 
 void SAL_CALL NewToolbarController::execute( sal_Int16 /*KeyModifier*/ )
-throw ( css::uno::RuntimeException, std::exception )
 {
     osl::MutexGuard aGuard( m_aMutex );
     if ( !m_aLastURL.getLength() )
@@ -625,7 +668,7 @@ throw ( css::uno::RuntimeException, std::exception )
             dynamic_cast< PopupMenu * >( pTkPopupMenu->GetMenu() ) : nullptr;
 
         if ( pVCLPopupMenu )
-            pMenuAttributes = reinterpret_cast< MenuAttributes* >(
+            pMenuAttributes = static_cast< MenuAttributes* >(
                 pVCLPopupMenu->GetUserValue( pVCLPopupMenu->GetCurItemId() ) );
 
         if ( pMenuAttributes )
@@ -648,7 +691,7 @@ void NewToolbarController::functionExecuted( const OUString &rCommand )
     it return the existing state of the given URL in the popupmenu of this toolbox control.
 
     If the given URL can be located as an action command of one menu item of the
-    popup menu of this control, we return sal_True. Otherwhise we return sal_False.
+    popup menu of this control, we return sal_True. Otherwise we return sal_False.
     Further we return a fallback URL, in case we have to return sal_False. Because
     the outside code must select a valid item of the popup menu every time ...
     and we define it here. By the way this method was written to handle
@@ -671,7 +714,7 @@ void NewToolbarController::functionExecuted( const OUString &rCommand )
                 contains the image of the menu for the URL.
 
     @return sal_True - if URL could be located as an item of the popup menu.
-            sal_False - otherwhise.
+            sal_False - otherwise.
 */
 bool Impl_ExistURLInMenu(
     const css::uno::Reference< css::awt::XPopupMenu > &rPopupMenu,
@@ -765,7 +808,7 @@ void NewToolbarController::setItemImage( const OUString &rCommand )
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_framework_GenericPopupToolbarController_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &args)
@@ -773,7 +816,7 @@ com_sun_star_comp_framework_GenericPopupToolbarController_get_implementation(
     return cppu::acquire(new GenericPopupToolbarController(context, args));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_framework_SaveToolbarController_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)
@@ -781,7 +824,7 @@ com_sun_star_comp_framework_SaveToolbarController_get_implementation(
     return cppu::acquire(new SaveToolbarController(context));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 org_apache_openoffice_comp_framework_NewToolbarController_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)

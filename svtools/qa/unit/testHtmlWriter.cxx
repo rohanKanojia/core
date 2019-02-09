@@ -8,11 +8,11 @@
  *
  */
 
-#include "cppunit/TestCase.h"
-#include "cppunit/TestFixture.h"
-#include "cppunit/TestSuite.h"
-#include "cppunit/extensions/HelperMacros.h"
-#include "cppunit/plugin/TestPlugIn.h"
+#include <cppunit/TestCase.h>
+#include <cppunit/TestFixture.h>
+#include <cppunit/TestSuite.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
 
 #include <tools/stream.hxx>
 #include <svtools/HtmlWriter.hxx>
@@ -25,7 +25,7 @@ OString extractFromStream(SvMemoryStream& rStream)
     rStream.WriteChar('\0');
     rStream.Flush();
     rStream.Seek(STREAM_SEEK_TO_BEGIN);
-    return OString(static_cast<const sal_Char*>(rStream.GetBuffer()));
+    return OString(static_cast<const sal_Char*>(rStream.GetData()));
 }
 
 }
@@ -39,7 +39,9 @@ public:
     void testSingleElementWithContent();
     void testSingleElementWithContentAndAttributes();
     void testNested();
+    void testNamespace();
     void testAttributeValues();
+    void testCharacters();
 
     CPPUNIT_TEST_SUITE(Test);
     CPPUNIT_TEST(testSingleElement);
@@ -47,7 +49,9 @@ public:
     CPPUNIT_TEST(testSingleElementWithContent);
     CPPUNIT_TEST(testSingleElementWithContentAndAttributes);
     CPPUNIT_TEST(testNested);
+    CPPUNIT_TEST(testNamespace);
     CPPUNIT_TEST(testAttributeValues);
+    CPPUNIT_TEST(testCharacters);
 
     CPPUNIT_TEST_SUITE_END();
 };
@@ -63,7 +67,7 @@ void Test::testSingleElement()
         aHtml.end();
 
         OString aString = extractFromStream(aStream);
-        CPPUNIT_ASSERT_EQUAL(aString, OString("<abc/>"));
+        CPPUNIT_ASSERT_EQUAL(OString("<abc/>"), aString);
     }
 
     {
@@ -75,7 +79,7 @@ void Test::testSingleElement()
 
         OString aString = extractFromStream(aStream);
 
-        CPPUNIT_ASSERT_EQUAL(aString, OString("<abc/>"));
+        CPPUNIT_ASSERT_EQUAL(OString("<abc/>"), aString);
     }
 }
 
@@ -92,7 +96,7 @@ void Test::testSingleElementWithAttributes()
 
         OString aString = extractFromStream(aStream);
 
-        CPPUNIT_ASSERT_EQUAL(aString, OString("<abc x=\"y\"/>"));
+        CPPUNIT_ASSERT_EQUAL(OString("<abc x=\"y\"/>"), aString);
     }
 
     {
@@ -107,7 +111,7 @@ void Test::testSingleElementWithAttributes()
 
         OString aString = extractFromStream(aStream);
 
-        CPPUNIT_ASSERT_EQUAL(aString, OString("<abc x=\"y\" q=\"w\"/>"));
+        CPPUNIT_ASSERT_EQUAL(OString("<abc x=\"y\" q=\"w\"/>"), aString);
     }
 }
 
@@ -122,7 +126,7 @@ void Test::testSingleElementWithContent()
 
     OString aString = extractFromStream(aStream);
 
-    CPPUNIT_ASSERT_EQUAL(aString, OString("<abc/>"));
+    CPPUNIT_ASSERT_EQUAL(OString("<abc/>"), aString);
 }
 
 void Test::testSingleElementWithContentAndAttributes()
@@ -138,7 +142,7 @@ void Test::testSingleElementWithContentAndAttributes()
 
     OString aString = extractFromStream(aStream);
 
-    CPPUNIT_ASSERT_EQUAL(aString, OString("<abc x=\"y\" q=\"w\"/>"));
+    CPPUNIT_ASSERT_EQUAL(OString("<abc x=\"y\" q=\"w\"/>"), aString);
 }
 
 void Test::testNested()
@@ -157,6 +161,20 @@ void Test::testNested()
     CPPUNIT_ASSERT_EQUAL(OString("<abc><xyz/></abc>"), aString);
 }
 
+void Test::testNamespace()
+{
+    SvMemoryStream aStream;
+
+    HtmlWriter aHtml(aStream, "reqif-xhtml");
+    aHtml.prettyPrint(false);
+    aHtml.single("br");
+
+    OString aString = extractFromStream(aStream);
+
+    // This was <br/>, namespace request was ignored.
+    CPPUNIT_ASSERT_EQUAL(OString("<reqif-xhtml:br/>"), aString);
+}
+
 void Test::testAttributeValues()
 {
     SvMemoryStream aStream;
@@ -172,6 +190,21 @@ void Test::testAttributeValues()
     OString aString = extractFromStream(aStream);
 
     CPPUNIT_ASSERT_EQUAL(OString("<abc one=\"one\" two=\"two\" three=\"12\"/>"), aString);
+}
+
+void Test::testCharacters()
+{
+    SvMemoryStream aStream;
+
+    HtmlWriter aHtml(aStream);
+    aHtml.prettyPrint(false);
+    aHtml.start("abc");
+    aHtml.characters("hello");
+    aHtml.end();
+
+    OString aString = extractFromStream(aStream);
+
+    CPPUNIT_ASSERT_EQUAL(OString("<abc>hello</abc>"), aString);
 }
 
 CPPUNIT_TEST_SUITE_REGISTRATION(Test);

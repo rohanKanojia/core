@@ -44,7 +44,6 @@ $(eval $(call gb_Library_use_libraries,chartcontroller,\
     ucbhelper \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_set_componentfile,chartcontroller,chart2/source/controller/chartcontroller))
@@ -76,7 +75,6 @@ $(eval $(call gb_Library_add_exception_objects,chartcontroller,\
     chart2/source/controller/chartapiwrapper/WrappedCharacterHeightProperty \
     chart2/source/controller/chartapiwrapper/WrappedDataCaptionProperties \
     chart2/source/controller/chartapiwrapper/WrappedGapwidthProperty \
-    chart2/source/controller/chartapiwrapper/WrappedGL3DProperties \
     chart2/source/controller/chartapiwrapper/WrappedNumberFormatProperty \
     chart2/source/controller/chartapiwrapper/WrappedScaleProperty \
     chart2/source/controller/chartapiwrapper/WrappedScaleTextProperties \
@@ -89,7 +87,6 @@ $(eval $(call gb_Library_add_exception_objects,chartcontroller,\
     chart2/source/controller/chartapiwrapper/WrappedTextRotationProperty \
     chart2/source/controller/dialogs/ChangingResource \
     chart2/source/controller/dialogs/ChartTypeDialogController \
-    chart2/source/controller/dialogs/GL3DBarChartDialogController \
     chart2/source/controller/dialogs/DataBrowser \
     chart2/source/controller/dialogs/DataBrowserModel \
     chart2/source/controller/dialogs/DialogModel \
@@ -128,7 +125,6 @@ $(eval $(call gb_Library_add_exception_objects,chartcontroller,\
     chart2/source/controller/dialogs/tp_AxisPositions \
     chart2/source/controller/dialogs/tp_ChartType \
     chart2/source/controller/dialogs/tp_DataLabel \
-    chart2/source/controller/dialogs/tp_DataSourceControls \
     chart2/source/controller/dialogs/tp_DataSource \
     chart2/source/controller/dialogs/tp_ErrorBars \
     chart2/source/controller/dialogs/tp_LegendPosition \
@@ -199,9 +195,7 @@ $(eval $(call gb_Library_add_exception_objects,chartcontroller,\
     chart2/source/controller/sidebar/ChartSeriesPanel \
     chart2/source/controller/sidebar/ChartSidebarModifyListener \
     chart2/source/controller/sidebar/ChartSidebarSelectionListener \
+    chart2/source/controller/uitest/uiobject \
 ))
-
-# Runtime dependency for unit-tests
-$(eval $(call gb_Library_use_restarget,chartcontroller,chartcontroller))
 
 # vim: set noet sw=4 ts=4:

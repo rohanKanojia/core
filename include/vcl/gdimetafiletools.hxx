@@ -19,7 +19,8 @@
 #ifndef INCLUDED_VCL_GDIMETAFILETOOLS_HXX
 #define INCLUDED_VCL_GDIMETAFILETOOLS_HXX
 
-#include <vcl/gdimtf.hxx>
+#include <vcl/dllapi.h>
+class GDIMetaFile;
 
 
 // #i121267# Added tooling to be able to support old exporters which are based on
@@ -28,7 +29,7 @@
 // The given metafile will internally clip it's graphic content against the
 // included clip regions so that it is safe to ignore clip actions there. This
 // is not done completely, but implemented and extended as needed (on demand)
-// since all this is a workarund; the better and long term solution will be to
+// since all this is a workaround; the better and long term solution will be to
 // reimplement these im/exports to use primitives and not metafiles as base
 // information.
 
@@ -38,6 +39,16 @@ void VCL_DLLPUBLIC clipMetafileContentAgainstOwnRegions(GDIMetaFile& rSource);
 // Allow to check if a Metafile contains clipping or not
 
 bool VCL_DLLPUBLIC usesClipActions(const GDIMetaFile& rSource);
+
+// hook to access metafile members in classes of modules above vcl. Currently
+// used in MetafilePrimitive2D to be able to access the local Metafile member
+// e.g. from vcl module
+class VCL_DLLPUBLIC MetafileAccessor
+{
+public:
+    virtual void accessMetafile(GDIMetaFile& rTargetMetafile) const = 0;
+    virtual ~MetafileAccessor();
+};
 
 
 #endif // INCLUDED_VCL_GDIMETAFILETOOLS_HXX

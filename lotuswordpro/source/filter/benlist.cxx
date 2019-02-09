@@ -57,19 +57,19 @@
 namespace OpenStormBento
 {
 
-pCBenNamedObject
-FindNamedObject(pCUtList pList, const char * sName,
-  pCUtListElmt * ppPrev)
+CBenNamedObject *
+FindNamedObject(CUtList * pList, const OString& rName,
+  CUtListElmt ** ppPrev)
 {
     CUtListElmt& rTerminating = pList->GetTerminating();
-    for (pCUtListElmt pCurr = pList->GetLast(); pCurr != &rTerminating;
+    for (CUtListElmt * pCurr = pList->GetLast(); pCurr != &rTerminating;
       pCurr = pCurr->GetPrev())
     {
-        pCBenNamedObjectListElmt pCurrNamedObjectListElmt =
-          static_cast<pCBenNamedObjectListElmt>(pCurr);
+        CBenNamedObjectListElmt * pCurrNamedObjectListElmt =
+          static_cast<CBenNamedObjectListElmt *>(pCurr);
 
-        int Comp = strcmp(sName, pCurrNamedObjectListElmt->GetNamedObject()->
-          GetNameCStr());
+        sal_Int32 Comp = rName.compareTo(pCurrNamedObjectListElmt->GetNamedObject()->
+          GetName());
 
         if (Comp == 0)
             return pCurrNamedObjectListElmt->GetNamedObject();
@@ -89,14 +89,14 @@ FindNamedObject(pCUtList pList, const char * sName,
 }
 
 // Assume list is of BenIDListElmt list elements, sorted by ID
-pCBenIDListElmt
-FindID(pCUtList pList, BenObjectID ObjectID, pCUtListElmt * ppPrev)
+CBenIDListElmt *
+FindID(CUtList * pList, BenObjectID ObjectID, CUtListElmt ** ppPrev)
 {
     CUtListElmt& rTerminating = pList->GetTerminating();
-    for (pCUtListElmt pCurr = pList->GetLast(); pCurr != &rTerminating;
+    for (CUtListElmt * pCurr = pList->GetLast(); pCurr != &rTerminating;
       pCurr = pCurr->GetPrev())
     {
-        pCBenIDListElmt pCurrIDListElmt = static_cast<pCBenIDListElmt>(pCurr);
+        CBenIDListElmt * pCurrIDListElmt = static_cast<CBenIDListElmt *>(pCurr);
 
         if (ObjectID == pCurrIDListElmt->GetID())
             return pCurrIDListElmt;

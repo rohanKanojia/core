@@ -21,47 +21,36 @@
 #define INCLUDED_SC_SOURCE_UI_INC_ACCESSIBILITYHINTS_HXX
 
 #include "viewdata.hxx"
-#include <com/sun/star/uno/XInterface.hpp>
-#include <svl/smplhint.hxx>
 #include <svl/hint.hxx>
-
-#define SC_HINT_ACC_SIMPLE_START    SFX_HINT_USER00
-#define SC_HINT_ACC_TABLECHANGED    SC_HINT_ACC_SIMPLE_START + 1
-#define SC_HINT_ACC_CURSORCHANGED   SC_HINT_ACC_SIMPLE_START + 2
-#define SC_HINT_ACC_VISAREACHANGED  SC_HINT_ACC_SIMPLE_START + 3
-#define SC_HINT_ACC_ENTEREDITMODE   SC_HINT_ACC_SIMPLE_START + 4
-#define SC_HINT_ACC_LEAVEEDITMODE   SC_HINT_ACC_SIMPLE_START + 5
-#define SC_HINT_ACC_MAKEDRAWLAYER   SC_HINT_ACC_SIMPLE_START + 6
-#define SC_HINT_ACC_WINDOWRESIZED   SC_HINT_ACC_SIMPLE_START + 7
 
 class ScAccWinFocusLostHint : public SfxHint
 {
 public:
-                virtual ~ScAccWinFocusLostHint();
+                virtual ~ScAccWinFocusLostHint() override;
 };
 
 class ScAccWinFocusGotHint : public SfxHint
 {
 public:
-                virtual ~ScAccWinFocusGotHint();
+                virtual ~ScAccWinFocusGotHint() override;
 };
 
 class ScAccGridWinFocusLostHint : public ScAccWinFocusLostHint
 {
-    ScSplitPos  eOldGridWin;
+    ScSplitPos const  eOldGridWin;
 public:
                 ScAccGridWinFocusLostHint( ScSplitPos eOldGridWin );
-                virtual ~ScAccGridWinFocusLostHint();
+                virtual ~ScAccGridWinFocusLostHint() override;
 
     ScSplitPos  GetOldGridWin() const { return eOldGridWin; }
 };
 
 class ScAccGridWinFocusGotHint : public ScAccWinFocusGotHint
 {
-    ScSplitPos  eNewGridWin;
+    ScSplitPos const  eNewGridWin;
 public:
                 ScAccGridWinFocusGotHint( ScSplitPos eNewGridWin );
-                virtual ~ScAccGridWinFocusGotHint();
+                virtual ~ScAccGridWinFocusGotHint() override;
 
     ScSplitPos  GetNewGridWin() const { return eNewGridWin; }
 };

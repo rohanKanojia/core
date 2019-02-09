@@ -25,12 +25,12 @@
 #include <com/sun/star/io/XOutputStream.hpp>
 #include <com/sun/star/xml/crypto/XCipherContext.hpp>
 
+#include <comphelper/refcountedmutex.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <rtl/ref.hxx>
 #include <package/Inflater.hxx>
 #include <ZipEntry.hxx>
 #include <CRC32.hxx>
-#include <mutexholder.hxx>
 
 namespace com { namespace sun { namespace star { namespace uno {
     class XComponentContext;
@@ -41,13 +41,12 @@ namespace com { namespace sun { namespace star { namespace uno {
 #define UNBUFF_STREAM_WRAPPEDRAW    2
 
 class EncryptionData;
-class XUnbufferedStream : public cppu::WeakImplHelper
+class XUnbufferedStream final : public cppu::WeakImplHelper
 <
     css::io::XInputStream
 >
 {
-protected:
-    rtl::Reference<SotMutexHolder> maMutexHolder;
+    rtl::Reference<comphelper::RefCountedMutex> maMutexHolder;
 
     css::uno::Reference < css::io::XInputStream > mxZipStream;
     css::uno::Reference < css::io::XSeekable > mxZipSeek;
@@ -56,18 +55,18 @@ protected:
     sal_Int32 mnBlockSize;
     css::uno::Reference< css::xml::crypto::XCipherContext > m_xCipherContext;
     ZipUtils::Inflater maInflater;
-    bool mbRawStream, mbWrappedRaw, mbFinished;
+    bool mbRawStream, mbWrappedRaw;
     sal_Int16 mnHeaderToRead;
     sal_Int64 mnZipCurrent, mnZipEnd, mnZipSize, mnMyCurrent;
     CRC32 maCRC;
-    bool mbCheckCRC;
+    bool const mbCheckCRC;
 
 public:
     XUnbufferedStream(
                  const css::uno::Reference< css::uno::XComponentContext >& xContext,
-                 const rtl::Reference<SotMutexHolder>& aMutexHolder,
-                 ZipEntry & rEntry,
-                 css::uno::Reference < css::io::XInputStream > xNewZipStream,
+                 const rtl::Reference<comphelper::RefCountedMutex>& aMutexHolder,
+                 ZipEntry const & rEntry,
+                 css::uno::Reference < css::io::XInputStream > const & xNewZipStream,
                  const ::rtl::Reference< EncryptionData >& rData,
                  sal_Int8 nStreamMode,
                  bool bIsEncrypted,
@@ -76,23 +75,20 @@ public:
 
     // allows to read package raw stream
     XUnbufferedStream(
-                 const css::uno::Reference< css::uno::XComponentContext >& xContext,
+                 const rtl::Reference<comphelper::RefCountedMutex>& aMutexHolder,
                  const css::uno::Reference < css::io::XInputStream >& xRawStream,
                  const ::rtl::Reference< EncryptionData >& rData );
 
-    virtual ~XUnbufferedStream();
+    sal_Int64 getSize() { return mnZipSize; }
+
+    virtual ~XUnbufferedStream() override;
 
     // XInputStream
-    virtual sal_Int32 SAL_CALL readBytes( css::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead )
-        throw(css::io::NotConnectedException, css::io::BufferSizeExceededException, css::io::IOException, css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int32 SAL_CALL readSomeBytes( css::uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead )
-        throw(css::io::NotConnectedException, css::io::BufferSizeExceededException, css::io::IOException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL skipBytes( sal_Int32 nBytesToSkip )
-        throw(css::io::NotConnectedException, css::io::BufferSizeExceededException, css::io::IOException, css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int32 SAL_CALL available(  )
-        throw(css::io::NotConnectedException, css::io::IOException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL closeInput(  )
-        throw(css::io::NotConnectedException, css::io::IOException, css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL readBytes( css::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead ) override;
+    virtual sal_Int32 SAL_CALL readSomeBytes( css::uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead ) override;
+    virtual void SAL_CALL skipBytes( sal_Int32 nBytesToSkip ) override;
+    virtual sal_Int32 SAL_CALL available(  ) override;
+    virtual void SAL_CALL closeInput(  ) override;
 };
 #endif
 

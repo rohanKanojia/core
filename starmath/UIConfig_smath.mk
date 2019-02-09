@@ -14,6 +14,7 @@ $(eval $(call gb_UIConfig_add_menubarfiles,modules/smath,\
 ))
 
 $(eval $(call gb_UIConfig_add_popupmenufiles,modules/smath,\
+	starmath/uiconfig/smath/popupmenu/edit \
 	starmath/uiconfig/smath/popupmenu/view \
 ))
 

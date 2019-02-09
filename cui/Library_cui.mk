@@ -13,6 +13,7 @@ $(eval $(call gb_Library_set_componentfile,cui,cui/util/cui))
 
 $(eval $(call gb_Library_set_include,cui,\
     $$(INCLUDE) \
+    -I$(SRCDIR)/cui/inc \
     -I$(SRCDIR)/cui/source/inc \
 ))
 
@@ -20,8 +21,6 @@ $(eval $(call gb_Library_set_precompiled_header,cui,$(SRCDIR)/cui/inc/pch/precom
 
 $(eval $(call gb_Library_add_defs,cui,\
     $(if $(filter TRUE,$(ENABLE_GTK)),-DENABLE_GTK) \
-    $(if $(filter TRUE,$(ENABLE_TDE)),-DENABLE_TDE) \
-    $(if $(filter TRUE,$(ENABLE_KDE4)),-DENABLE_KDE4) \
 ))
 
 $(eval $(call gb_Library_use_custom_headers,cui,\
@@ -60,19 +59,22 @@ $(eval $(call gb_Library_use_libraries,cui,\
     ucbhelper \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_externals,cui,\
 	boost_headers \
 	$(call gb_Helper_optional,OPENCL,\
 		clew) \
+    $(call gb_Helper_optional,DESKTOP,\
+		curl) \
     icuuc \
     icu_headers \
+    orcus-parser \
+    orcus \
 ))
-ifeq ($(ENABLE_OPENGL),TRUE)
+ifeq ($(DISABLE_GUI),)
 $(eval $(call gb_Library_use_externals,cui,\
-     glew \
+     epoxy \
  ))
 endif
 
@@ -87,9 +89,12 @@ $(eval $(call gb_Library_add_exception_objects,cui,\
     cui/source/customize/acccfg \
     cui/source/customize/cfg \
     cui/source/customize/cfgutil \
+    cui/source/customize/CommandCategoryListBox \
     cui/source/customize/eventdlg \
     cui/source/customize/macropg \
-    cui/source/customize/selector \
+    cui/source/customize/SvxConfigPageHelper \
+    cui/source/customize/SvxMenuConfigPage \
+    cui/source/customize/SvxToolbarConfigPage \
     cui/source/dialogs/about \
     cui/source/dialogs/colorpicker \
     cui/source/dialogs/cuicharmap \
@@ -100,6 +105,7 @@ $(eval $(call gb_Library_add_exception_objects,cui,\
     cui/source/dialogs/cuiimapwnd \
     cui/source/dialogs/cuitbxform \
     cui/source/dialogs/dlgname \
+    cui/source/dialogs/FontFeaturesDialog \
     cui/source/dialogs/hangulhanjadlg \
     cui/source/dialogs/hldocntp \
     cui/source/dialogs/hldoctp \
@@ -115,9 +121,13 @@ $(eval $(call gb_Library_add_exception_objects,cui,\
     cui/source/dialogs/multipat \
     cui/source/dialogs/newtabledlg \
     cui/source/dialogs/passwdomdlg \
+    cui/source/dialogs/screenshotannotationdlg \
     cui/source/dialogs/pastedlg \
     cui/source/dialogs/postdlg \
     cui/source/dialogs/scriptdlg \
+    cui/source/dialogs/SignatureLineDialogBase \
+    cui/source/dialogs/SignatureLineDialog \
+    cui/source/dialogs/SignSignatureLineDialog \
     cui/source/dialogs/sdrcelldlg \
     cui/source/dialogs/showcols \
     cui/source/dialogs/SpellAttrib \
@@ -159,14 +169,13 @@ $(eval $(call gb_Library_add_exception_objects,cui,\
     cui/source/options/optjava \
     cui/source/options/optjsearch \
     cui/source/options/optlingu \
-    cui/source/options/optmemory \
 	$(call gb_Helper_optional,OPENCL, \
 	    cui/source/options/optopencl) \
     cui/source/options/optpath \
     cui/source/options/optsave \
     cui/source/options/optupdt \
-    cui/source/options/personalization \
-    cui/source/options/personasdochandler \
+    $(call gb_Helper_optional,DESKTOP,\
+        cui/source/options/personalization) \
     cui/source/options/radiobtnbox \
     cui/source/options/sdbcdriverenum \
     cui/source/options/securityoptions \
@@ -177,7 +186,6 @@ $(eval $(call gb_Library_add_exception_objects,cui,\
     cui/source/tabpages/autocdlg \
     cui/source/tabpages/backgrnd \
     cui/source/tabpages/bbdlg \
-    cui/source/tabpages/borderconn \
     cui/source/tabpages/border \
     cui/source/tabpages/chardlg \
     cui/source/tabpages/connect \
@@ -204,7 +212,9 @@ $(eval $(call gb_Library_add_exception_objects,cui,\
     cui/source/tabpages/tpline \
     cui/source/tabpages/tplnedef \
     cui/source/tabpages/tplneend \
+    cui/source/tabpages/tppattern \
     cui/source/tabpages/tpshadow \
+    cui/source/tabpages/tptrans \
     cui/source/tabpages/transfrm \
     cui/source/uno/services \
 ))

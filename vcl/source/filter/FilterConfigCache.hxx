@@ -55,21 +55,9 @@ class FilterConfigCache
         static const char* ExternalPixelFilterNameList[];
     };
 
-    typedef std::vector< FilterConfigCacheEntry > CacheVector;
 
-    CacheVector         aImport;
-    CacheVector         aExport;
-    bool            bUseConfig;
-
-    static bool   bInitialized;
-    static sal_Int32  nIndType;
-    static sal_Int32  nIndUIName;
-    static sal_Int32  nIndDocumentService;
-    static sal_Int32  nIndFilterService;
-    static sal_Int32  nIndFlags;
-    static sal_Int32  nIndUserData;
-    static sal_Int32  nIndFileFormatVersion;
-    static sal_Int32  nIndTemplateName;
+    std::vector< FilterConfigCacheEntry >         aImport;
+    std::vector< FilterConfigCacheEntry >         aExport;
 
     static const char*  InternalFilterListForSvxLight[];
 

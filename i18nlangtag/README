@@ -41,9 +41,6 @@ When changing a (translation's) language tag (for example, 'ca-XV' to 'ca-valenc
 * i18nlangtag/qa/cppunit/test_languagetag.cxx
 ** add a unit test for the new tag and old tag
 
-* instsetoo_native/util/pack.lst
-** replace the tag in List_of_languages and sort alphabetically
-
 * l10ntools/source/ulfconv/msi-encodinglist.txt
 ** replace the tag and sort alphabetically
 
@@ -107,11 +104,6 @@ If dictionary is to be renamed, for example ku-TR to kmr-Latn:
 *** change to STR_DESC_MODULE_EXTENSION_DICTIONARY_KMR_LATN
 ** en-US = "Kurdish (Turkey) spelling dictionary"
 *** change to "Kurdish, Northern, Latin script spelling dictionary"
-* scp2/source/ooo/common_brand.scp
-** Directory gid_Brand_Dir_Share_Extensions_Dict_Ku_Tr
-*** change to gid_Brand_Dir_Share_Extensions_Dict_Kmr_Latn
-** DosName = "dict-ku-TR";
-*** change to "dict-kmr-Latn"
 * setup_native/source/packinfo/packinfo_office.txt
 ** module = "gid_Module_Root_Extension_Dictionary_Ku_Tr"
 *** change to "gid_Module_Root_Extension_Dictionary_Kmr_Latn"

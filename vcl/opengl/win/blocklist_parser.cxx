@@ -7,7 +7,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "opengl/win/blocklist_parser.hxx"
+#include <opengl/win/blocklist_parser.hxx>
+
+#include <sal/log.hxx>
 
 WinBlocklistParser::WinBlocklistParser(const OUString& rURL,
         std::vector<wgl::DriverInfo>& rDriverList)
@@ -131,8 +133,12 @@ OUString getVendor(const OString& rString)
     {
         return "0x1414";
     }
-
-    throw InvalidFileException();
+    else
+    {
+        // Allow having simply the hex number as such there, too. After all, it's hex numbers that
+        // are output to opengl_device.log.
+        return OStringToOUString(rString, RTL_TEXTENCODING_UTF8);
+    }
 }
 
 uint64_t getVersion(const OString& rString)
@@ -149,9 +155,7 @@ uint64_t getVersion(const OString& rString)
     return nVersion;
 }
 
-}
-
-void WinBlocklistParser::handleDevices(wgl::DriverInfo& rDriver, xmlreader::XmlReader& rReader)
+void handleDevices(wgl::DriverInfo& rDriver, xmlreader::XmlReader& rReader)
 {
     int nLevel = 1;
     bool bInMsg = false;
@@ -162,9 +166,9 @@ void WinBlocklistParser::handleDevices(wgl::DriverInfo& rDriver, xmlreader::XmlR
         int nsId;
 
         xmlreader::XmlReader::Result res = rReader.nextItem(
-                xmlreader::XmlReader::TEXT_NORMALIZED, &name, &nsId);
+                xmlreader::XmlReader::Text::Normalized, &name, &nsId);
 
-        if (res == xmlreader::XmlReader::RESULT_BEGIN)
+        if (res == xmlreader::XmlReader::Result::Begin)
         {
             ++nLevel;
             if (nLevel > 2)
@@ -190,14 +194,14 @@ void WinBlocklistParser::handleDevices(wgl::DriverInfo& rDriver, xmlreader::XmlR
             else
                 throw InvalidFileException();
         }
-        else if (res == xmlreader::XmlReader::RESULT_END)
+        else if (res == xmlreader::XmlReader::Result::End)
         {
             --nLevel;
             bInMsg = false;
             if (!nLevel)
                 break;
         }
-        else if (res == xmlreader::XmlReader::RESULT_TEXT)
+        else if (res == xmlreader::XmlReader::Result::Text)
         {
             if (bInMsg)
             {
@@ -206,6 +210,8 @@ void WinBlocklistParser::handleDevices(wgl::DriverInfo& rDriver, xmlreader::XmlR
             }
         }
     }
+}
+
 }
 
 void WinBlocklistParser::handleEntry(wgl::DriverInfo& rDriver, xmlreader::XmlReader& rReader)
@@ -267,7 +273,7 @@ void WinBlocklistParser::handleEntry(wgl::DriverInfo& rDriver, xmlreader::XmlRea
         else
         {
             OString aAttrName(name.begin, name.length);
-            SAL_WARN("vcl.opengl.win", "unsupported attribute: " << aAttrName);
+            SAL_WARN("vcl.opengl", "unsupported attribute: " << aAttrName);
         }
     }
 
@@ -282,9 +288,9 @@ void WinBlocklistParser::handleList(xmlreader::XmlReader& rReader)
     while (true)
     {
         xmlreader::XmlReader::Result res = rReader.nextItem(
-                xmlreader::XmlReader::TEXT_NONE, &name, &nsId);
+                xmlreader::XmlReader::Text::NONE, &name, &nsId);
 
-        if (res == xmlreader::XmlReader::RESULT_BEGIN)
+        if (res == xmlreader::XmlReader::Result::Begin)
         {
             if (name.equals("entry"))
             {
@@ -303,7 +309,7 @@ void WinBlocklistParser::handleList(xmlreader::XmlReader& rReader)
                 throw InvalidFileException();
             }
         }
-        else if (res == xmlreader::XmlReader::RESULT_END)
+        else if (res == xmlreader::XmlReader::Result::End)
         {
             break;
         }
@@ -318,9 +324,9 @@ void WinBlocklistParser::handleContent(xmlreader::XmlReader& rReader)
         int nsId;
 
         xmlreader::XmlReader::Result res = rReader.nextItem(
-                xmlreader::XmlReader::TEXT_NONE, &name, &nsId);
+                xmlreader::XmlReader::Text::NONE, &name, &nsId);
 
-        if (res == xmlreader::XmlReader::RESULT_BEGIN)
+        if (res == xmlreader::XmlReader::Result::Begin)
         {
             if (name.equals("whitelist"))
             {
@@ -340,7 +346,7 @@ void WinBlocklistParser::handleContent(xmlreader::XmlReader& rReader)
                 throw InvalidFileException();
             }
         }
-        else if (res == xmlreader::XmlReader::RESULT_END)
+        else if (res == xmlreader::XmlReader::Result::End)
         {
             if (name.equals("whitelist")
                     ||
@@ -349,7 +355,7 @@ void WinBlocklistParser::handleContent(xmlreader::XmlReader& rReader)
                 meBlockType = BlockType::UNKNOWN;
             }
         }
-        else if (res == xmlreader::XmlReader::RESULT_DONE)
+        else if (res == xmlreader::XmlReader::Result::Done)
         {
             break;
         }

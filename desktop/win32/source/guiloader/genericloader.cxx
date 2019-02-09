@@ -17,44 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#define UNICODE
-#define _UNICODE
-
-#define WIN32_LEAN_AND_MEAN
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#endif
-#include <windows.h>
-#include <shellapi.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
-
-#include <tchar.h>
-
-#include <malloc.h>
-#include <string.h>
-#include <stdlib.h>
-#include <systools/win32/uwinapi.h>
-
 #include <tools/pathutils.hxx>
 #include "../loader.hxx"
 
-
 static int GenericMain()
 {
-    TCHAR               szTargetFileName[MAX_PATH];
-    TCHAR               szIniDirectory[MAX_PATH];
-    STARTUPINFO         aStartupInfo;
+    WCHAR        szTargetFileName[MAX_PATH];
+    WCHAR        szIniDirectory[MAX_PATH];
+    STARTUPINFOW aStartupInfo;
 
-    desktop_win32::getPaths(szTargetFileName, szIniDirectory);
+    desktop_win32::extendLoaderEnvironment(szTargetFileName, szIniDirectory);
 
     ZeroMemory( &aStartupInfo, sizeof(aStartupInfo) );
     aStartupInfo.cb = sizeof(aStartupInfo);
 
-    GetStartupInfo( &aStartupInfo );
+    GetStartupInfoW( &aStartupInfo );
 
-    DWORD   dwExitCode = (DWORD)-1;
+    DWORD   dwExitCode = DWORD(-1);
 
     PROCESS_INFORMATION aProcessInfo;
 
@@ -69,10 +48,10 @@ static int GenericMain()
     bool hasRedirect =
         tools::buildPath(
             redirect, szIniDirectory, szIniDirectory + iniDirLen,
-            MY_STRING(L"redirect.ini")) != NULL &&
-        (GetBinaryType(redirect, &dummy) || // cheaper check for file existence?
+            MY_STRING(L"redirect.ini")) != nullptr &&
+        (GetBinaryTypeW(redirect, &dummy) || // cheaper check for file existence?
          GetLastError() != ERROR_FILE_NOT_FOUND);
-    LPTSTR cl1 = GetCommandLine();
+    LPWSTR cl1 = GetCommandLineW();
     WCHAR * cl2 = new WCHAR[
         wcslen(cl1) +
         (hasRedirect
@@ -98,14 +77,14 @@ static int GenericMain()
     }
     desktop_win32::commandLineAppend(p, MY_STRING(L"\""));
 
-    BOOL fSuccess = CreateProcess(
+    BOOL fSuccess = CreateProcessW(
         szTargetFileName,
         cl2,
-        NULL,
-        NULL,
+        nullptr,
+        nullptr,
         TRUE,
         0,
-        NULL,
+        nullptr,
         szIniDirectory,
         &aStartupInfo,
         &aProcessInfo );
@@ -127,7 +106,7 @@ static int GenericMain()
             {
                 MSG msg;
 
-                PeekMessage( &msg, NULL, 0, 0, PM_REMOVE );
+                PeekMessageW( &msg, nullptr, 0, 0, PM_REMOVE );
             }
         } while ( WAIT_OBJECT_0 + 1 == dwWaitResult );
 
@@ -141,22 +120,12 @@ static int GenericMain()
     return dwExitCode;
 }
 
-
-#ifdef __MINGW32__
-int WINAPI WinMain( HINSTANCE, HINSTANCE, LPSTR, int )
-#else
-int WINAPI _tWinMain( HINSTANCE, HINSTANCE, LPTSTR, int )
-#endif
+int WINAPI wWinMain( HINSTANCE, HINSTANCE, LPWSTR, int )
 {
     return GenericMain();
 }
 
-
-#ifdef __MINGW32__
-int __cdecl main()
-#else
-int __cdecl _tmain()
-#endif
+int __cdecl wmain()
 {
     return GenericMain();
 }

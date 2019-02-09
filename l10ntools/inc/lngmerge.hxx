@@ -20,15 +20,13 @@
 #ifndef INCLUDED_L10NTOOLS_INC_LNGMERGE_HXX
 #define INCLUDED_L10NTOOLS_INC_LNGMERGE_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <iosfwd>
 #include <vector>
 
 #include "common.hxx"
 #include "export.hxx"
-
-typedef std::vector< OString* > LngLineList;
 
 #define LNG_OK              0x0000
 #define LNG_COULD_NOT_OPEN  0x0001
@@ -43,8 +41,7 @@ typedef std::vector< OString* > LngLineList;
 class LngParser
 {
 private:
-    sal_uInt16 nError;
-    LngLineList *pLines;
+    std::vector<OString> mvLines;
     OString sSource;
     std::vector<OString> aLanguages;
 
@@ -57,8 +54,8 @@ public:
     LngParser(const OString &rLngFile);
     ~LngParser();
 
-    bool CreatePO( const OString &rPOFile );
-    bool Merge(const OString &rPOFile, const OString &rDestinationFile,
+    void CreatePO( const OString &rPOFile );
+    void Merge(const OString &rPOFile, const OString &rDestinationFile,
          const OString &rLanguage );
 };
 

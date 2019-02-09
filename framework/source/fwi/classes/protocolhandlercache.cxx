@@ -29,6 +29,7 @@
 #include <tools/wldcrd.hxx>
 #include <unotools/configpaths.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <vcl/svapp.hxx>
 
 #define SETNAME_HANDLER "HandlerSet" // name of configuration set inside package
@@ -72,10 +73,10 @@ PatternHash::const_iterator findPatternKey(PatternHash const * hash, const OUStr
                 That means it use two static member list to hold all necessary information
                 and a ref count mechanism to create/destroy it on demand.
  */
-HandlerHash* HandlerCache::m_pHandler  = nullptr;
-PatternHash* HandlerCache::m_pPattern  = nullptr;
+std::unique_ptr<HandlerHash> HandlerCache::s_pHandler;
+std::unique_ptr<PatternHash> HandlerCache::s_pPattern;
 sal_Int32    HandlerCache::m_nRefCount = 0;
-HandlerCFGAccess* HandlerCache::m_pConfig = nullptr;
+HandlerCFGAccess* HandlerCache::s_pConfig = nullptr;
 
 /**
     @short      ctor of the cache of all registered protocol handler
@@ -90,11 +91,11 @@ HandlerCache::HandlerCache()
 
     if (m_nRefCount==0)
     {
-        m_pHandler = new HandlerHash();
-        m_pPattern = new PatternHash();
-        m_pConfig  = new HandlerCFGAccess(PACKAGENAME_PROTOCOLHANDLER);
-        m_pConfig->read(&m_pHandler,&m_pPattern);
-        m_pConfig->setCache(this);
+        s_pHandler.reset(new HandlerHash);
+        s_pPattern.reset(new PatternHash);
+        s_pConfig = new HandlerCFGAccess(PACKAGENAME_PROTOCOLHANDLER);
+        s_pConfig->read(*s_pHandler, *s_pPattern);
+        s_pConfig->setCache(this);
     }
 
     ++m_nRefCount;
@@ -111,14 +112,12 @@ HandlerCache::~HandlerCache()
 
     if( m_nRefCount==1)
     {
-        m_pConfig->setCache(nullptr);
+        s_pConfig->setCache(nullptr);
 
-        delete m_pConfig;
-        delete m_pHandler;
-        delete m_pPattern;
-        m_pConfig = nullptr;
-        m_pHandler= nullptr;
-        m_pPattern= nullptr;
+        delete s_pConfig;
+        s_pConfig = nullptr;
+        s_pHandler.reset();
+        s_pPattern.reset();
     }
 
     --m_nRefCount;
@@ -135,10 +134,10 @@ bool HandlerCache::search( const OUString& sURL, ProtocolHandler* pReturn ) cons
 
     SolarMutexGuard aGuard;
 
-    PatternHash::const_iterator pItem = findPatternKey(m_pPattern, sURL);
-    if (pItem!=m_pPattern->end())
+    PatternHash::const_iterator pItem = findPatternKey(s_pPattern.get(), sURL);
+    if (pItem != s_pPattern->end())
     {
-        *pReturn = (*m_pHandler)[pItem->second];
+        *pReturn = (*s_pHandler)[pItem->second];
         bFound = true;
     }
 
@@ -156,18 +155,12 @@ bool HandlerCache::search( const css::util::URL& aURL, ProtocolHandler* pReturn 
     return search( aURL.Complete, pReturn );
 }
 
-void HandlerCache::takeOver(HandlerHash* pHandler, PatternHash* pPattern)
+void HandlerCache::takeOver(std::unique_ptr<HandlerHash> pHandler, std::unique_ptr<PatternHash> pPattern)
 {
     SolarMutexGuard aGuard;
 
-    HandlerHash* pOldHandler = m_pHandler;
-    PatternHash* pOldPattern = m_pPattern;
-
-    m_pHandler = pHandler;
-    m_pPattern = pPattern;
-
-    delete pOldHandler;
-    delete pOldPattern;
+    s_pHandler = std::move(pHandler);
+    s_pPattern = std::move(pPattern);
 }
 
 /**
@@ -191,17 +184,16 @@ HandlerCFGAccess::HandlerCFGAccess( const OUString& sPackage )
     @descr      User use us as a wrapper between configuration api and his internal structures.
                 He give us some pointer to his member and we fill it.
 
-    @param      pHandler
-                pointer to a list of protocol handler infos
+    @param      rHandlerHash
+                list of protocol handler infos
 
-    @param      pPattern
+    @param      rPatternHash
                 reverse map of handler pattern to her uno names
  */
-void HandlerCFGAccess::read( HandlerHash** ppHandler ,
-                             PatternHash** ppPattern )
+void HandlerCFGAccess::read( HandlerHash& rHandlerHash, PatternHash& rPatternHash )
 {
     // list of all uno implementation names without encoding
-    css::uno::Sequence< OUString > lNames = GetNodeNames( SETNAME_HANDLER, ::utl::CONFIG_NAME_LOCAL_PATH );
+    css::uno::Sequence< OUString > lNames = GetNodeNames( SETNAME_HANDLER, ::utl::ConfigNameFormat::LocalPath );
     sal_Int32 nSourceCount = lNames.getLength();
     sal_Int32 nTargetCount = nSourceCount;
     // list of all full qualified path names of configuration entries
@@ -240,32 +232,25 @@ void HandlerCFGAccess::read( HandlerHash** ppHandler ,
         aHandler.m_lProtocols = Converter::convert_seqOUString2OUStringList(lTemp);
 
         // register his pattern into the performance search hash
-        for (std::vector<OUString>::iterator pItem =aHandler.m_lProtocols.begin();
-                                    pItem!=aHandler.m_lProtocols.end();
-                                    ++pItem                             )
+        for (auto const& item : aHandler.m_lProtocols)
         {
-            (**ppPattern)[*pItem] = lNames[nSource];
+            rPatternHash[item] = lNames[nSource];
         }
 
         // insert the handler info into the normal handler cache
-        (**ppHandler)[lNames[nSource]] = aHandler;
+        rHandlerHash[lNames[nSource]] = aHandler;
         ++nSource;
     }
 }
 
 void HandlerCFGAccess::Notify(const css::uno::Sequence< OUString >& /*lPropertyNames*/)
 {
-    HandlerHash* pHandler = new HandlerHash;
-    PatternHash* pPattern = new PatternHash;
+    std::unique_ptr<HandlerHash> pHandler(new HandlerHash);
+    std::unique_ptr<PatternHash> pPattern(new PatternHash);
 
-    read(&pHandler, &pPattern);
+    read(*pHandler, *pPattern);
     if (m_pCache)
-        m_pCache->takeOver(pHandler, pPattern);
-    else
-    {
-        delete pHandler;
-        delete pPattern;
-    }
+        m_pCache->takeOver(std::move(pHandler), std::move(pPattern));
 }
 
 void HandlerCFGAccess::ImplCommit()

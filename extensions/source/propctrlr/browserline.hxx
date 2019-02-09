@@ -75,14 +75,14 @@ namespace pcr
         {
             return m_xControl;
         }
-        inline vcl::Window* getControlWindow() const
+        vcl::Window* getControlWindow() const
         {
             return m_pControlWindow;
         }
 
         const OUString&     GetEntryName() const { return m_sEntryName; }
 
-        void                SetComponentHelpIds( const OString& _rHelpId, const OString& _sPrimaryButtonId, const OString& _sSecondaryButtonId );
+        void                SetComponentHelpIds(const OString& _rHelpId);
 
         void                SetTitle(const OUString& rString );
         void                FullFillTitleString();
@@ -113,16 +113,15 @@ namespace pcr
         void                IndentTitle( bool _bIndent );
 
     private:
-        DECL_LINK_TYPED( OnButtonClicked, Button*, void );
-        DECL_LINK_TYPED( OnButtonFocus, Control&, void );
+        DECL_LINK( OnButtonClicked, Button*, void );
+        DECL_LINK( OnButtonFocus, Control&, void );
 
-        void    implHideBrowseButton( bool _bPrimary, bool _bReLayout );
+        void    implHideBrowseButton(bool _bPrimary);
         void    implUpdateEnabledDisabled();
 
         void    impl_layoutComponents();
 
         PushButton& impl_ensureButton( bool _bPrimary );
-        static void impl_getImagesFromURL_nothrow( const OUString& _rImageURL, Image& _out_rImage );
     };
 
 

@@ -22,16 +22,16 @@
 
 #include <config_features.h>
 
-#include "premac.h"
+#include <premac.h>
 #include <Cocoa/Cocoa.h>
-#include "postmac.h"
+#include <postmac.h>
 
-#include "com/sun/star/uno/Reference.hxx"
+#include <com/sun/star/uno/Reference.hxx>
 
 #include <vcl/ptrstyle.hxx>
 
-#include "svdata.hxx"
-#include "salwtype.hxx"
+#include <svdata.hxx>
+#include <salwtype.hxx>
 
 #include <functional>
 #include <list>
@@ -43,8 +43,9 @@
 #include <cstdio>
 #include <cstdarg>
 
-#include "apple_remote/RemoteMainController.h"
+#include <apple_remote/RemoteMainController.h>
 
+class AquaSalFrame;
 class AquaSalInstance;
 class SalObject;
 class SalFrame;
@@ -53,26 +54,16 @@ class SalPrinter;
 class SystemFontList;
 
 #define SAL_CLIPRECT_COUNT 16
-
-class AquaSalFrame;
-struct FrameHash : public std::hash<sal_IntPtr>
-{
-    size_t operator()(const AquaSalFrame* frame) const
-    { return std::hash<sal_IntPtr>::operator()( reinterpret_cast<const sal_IntPtr>(frame) ); }
-};
-
 #define INVALID_CURSOR_PTR reinterpret_cast<NSCursor*>(0xdeadbeef)
 
 // Singleton, instantiated from Application::Application() in
-// vcl/source/app/svapp.cxx through InitSalData().
+// vcl/source/app/svapp.cxx.
 
 class SalData
 {
 public:
     SALTIMERPROC                                  mpTimerProc;      // timer callback proc
-    AquaSalInstance                              *mpFirstInstance;  // pointer of first instance
-    std::list<AquaSalFrame*>                      maFrames;         // list of all frames
-    std::unordered_set<const AquaSalFrame*,FrameHash>  maFrameCheck;// for fast check of frame existence
+    AquaSalInstance                              *mpInstance;
     std::list<AquaSalFrame*>                      maPresentationFrames;  // list of frames in presentation mode
     SalObject                                    *mpFirstObject;    // pointer of first object window
     SalVirtualDevice                             *mpFirstVD;        // first VirDev

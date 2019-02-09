@@ -119,7 +119,10 @@ public class ParagraphStyle extends TestCase  {
 
         XPropertySet xStyleProp = UnoRuntime.queryInterface(XPropertySet.class, oMyStyle);
         short exclude = PropertyAttribute.READONLY;
-        String[] names = utils.getFilteredPropertyNames(xStyleProp, (short)0, exclude);
+
+        String[] skipPropertiesNamed = { "ParaBackGraphicURL" };
+
+        String[] names = utils.getFilteredPropertyNames(xStyleProp, (short)0, exclude, skipPropertiesNamed);
         tEnv.addObjRelation("PropertyNames", names);
 
         return tEnv;

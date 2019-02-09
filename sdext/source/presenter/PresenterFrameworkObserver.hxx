@@ -41,7 +41,6 @@ class PresenterFrameworkObserver
       public PresenterFrameworkObserverInterfaceBase
 {
 public:
-    typedef ::std::function<bool ()> Predicate;
     typedef ::std::function<void (bool)> Action;
 
     PresenterFrameworkObserver(const PresenterFrameworkObserver&) = delete;
@@ -52,22 +51,15 @@ public:
         const Action& rAction);
 
     virtual void SAL_CALL disposing() override;
-    virtual void SAL_CALL disposing (const css::lang::EventObject& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing (const css::lang::EventObject& rEvent) override;
     virtual void SAL_CALL notifyConfigurationChange (
-        const css::drawing::framework::ConfigurationChangeEvent& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::drawing::framework::ConfigurationChangeEvent& rEvent) override;
 
 private:
     css::uno::Reference<css::drawing::framework::XConfigurationController> mxConfigurationController;
-    Predicate maPredicate;
     Action maAction;
 
     /** Create a new PresenterFrameworkObserver object.
-        @param rsEventName
-            An event name other than ConfigurationUpdateEnd.  When the
-            observer shall only listen for ConfigurationUpdateEnd then pass
-            an empty name.
         @param rPredicate
             This functor tests whether the action is to be executed or not.
         @param rAction
@@ -76,16 +68,10 @@ private:
     */
     PresenterFrameworkObserver (
         const css::uno::Reference<css::drawing::framework::XConfigurationController>&rxController,
-        const OUString& rsEventName,
-        const Predicate& rPredicate,
         const Action& rAction);
-    virtual ~PresenterFrameworkObserver();
+    virtual ~PresenterFrameworkObserver() override;
 
     void Shutdown();
-
-    /** Predicate that always returns true.
-    */
-    static bool True();
 };
 
 } }  // end of namespace ::sdext::presenter

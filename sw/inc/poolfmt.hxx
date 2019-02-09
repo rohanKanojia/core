@@ -20,8 +20,8 @@
 #define INCLUDED_SW_INC_POOLFMT_HXX
 
 #include <limits.h>
-#include <tools/solar.h>
 #include <editeng/frmdir.hxx>
+#include <i18nlangtag/lang.h>
 
 /** POOLCOLL-IDs:
 // +----+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
@@ -77,6 +77,8 @@ const sal_uInt16 POOLGRP_CHARFMT        = (0 << 11) + POOLGRP_NOCOLLID;
 const sal_uInt16 POOLGRP_FRAMEFMT       = (1 << 11) + POOLGRP_NOCOLLID;
 const sal_uInt16 POOLGRP_PAGEDESC       = (2 << 11) + POOLGRP_NOCOLLID;
 const sal_uInt16 POOLGRP_NUMRULE        = (3 << 11) + POOLGRP_NOCOLLID;
+const sal_uInt16 POOLGRP_TABSTYLE       = (4 << 11) + POOLGRP_NOCOLLID;
+const sal_uInt16 POOLGRP_CELLSTYLE      = (5 << 11) + POOLGRP_NOCOLLID;
 
 /// Recognize whether it's a user defined style or not:
 const sal_uInt16 POOL_IDUSER_FMT =
@@ -184,17 +186,59 @@ RES_POOLPAGE_END
 enum RES_POOL_NUMRULE_TYPE
 {
 RES_POOLNUMRULE_BEGIN = POOLGRP_NUMRULE,
-RES_POOLNUMRULE_NUM1 = RES_POOLNUMRULE_BEGIN,       ///< NumRule Numbering 1.
-RES_POOLNUMRULE_NUM2,                               ///< NumRule Numbering 2.
-RES_POOLNUMRULE_NUM3,                               ///< NumRule Numbering 3.
-RES_POOLNUMRULE_NUM4,                               ///< NumRule Numbering 4.
-RES_POOLNUMRULE_NUM5,                               ///< NumRule Numbering 5.
+RES_POOLNUMRULE_NUM1 = RES_POOLNUMRULE_BEGIN,       ///< NumRule Numbering 123.
+RES_POOLNUMRULE_NUM2,                               ///< NumRule Numbering ABC.
+RES_POOLNUMRULE_NUM3,                               ///< NumRule Numbering abc.
+RES_POOLNUMRULE_NUM4,                               ///< NumRule Numbering IVX.
+RES_POOLNUMRULE_NUM5,                               ///< NumRule Numbering ivx.
 RES_POOLNUMRULE_BUL1,                               ///< NumRule Bullets 1.
 RES_POOLNUMRULE_BUL2,                               ///< NumRule Bullets 2.
 RES_POOLNUMRULE_BUL3,                               ///< NumRule Bullets 3.
 RES_POOLNUMRULE_BUL4,                               ///< NumRule Bullets 4.
 RES_POOLNUMRULE_BUL5,                               ///< NumRule Bullets 5.
 RES_POOLNUMRULE_END
+};
+
+// IDs for table styles.
+enum RES_POOL_TABSTYLE_TYPE
+{
+RES_POOLTABSTYLE_BEGIN = POOLGRP_TABSTYLE,
+RES_POOLTABSTYLE_DEFAULT = RES_POOLTABSTYLE_BEGIN,
+// 16 old styles
+RES_POOLTABLESTYLE_3D,
+RES_POOLTABLESTYLE_BLACK1,
+RES_POOLTABLESTYLE_BLACK2,
+RES_POOLTABLESTYLE_BLUE,
+RES_POOLTABLESTYLE_BROWN,
+RES_POOLTABLESTYLE_CURRENCY,
+RES_POOLTABLESTYLE_CURRENCY_3D,
+RES_POOLTABLESTYLE_CURRENCY_GRAY,
+RES_POOLTABLESTYLE_CURRENCY_LAVENDER,
+RES_POOLTABLESTYLE_CURRENCY_TURQUOISE,
+RES_POOLTABLESTYLE_GRAY,
+RES_POOLTABLESTYLE_GREEN,
+RES_POOLTABLESTYLE_LAVENDER,
+RES_POOLTABLESTYLE_RED,
+RES_POOLTABLESTYLE_TURQUOISE,
+RES_POOLTABLESTYLE_YELLOW,
+// 10 new styles since LibreOffice 6.0
+RES_POOLTABLESTYLE_LO6_ACADEMIC,
+RES_POOLTABLESTYLE_LO6_BOX_LIST_BLUE,
+RES_POOLTABLESTYLE_LO6_BOX_LIST_GREEN,
+RES_POOLTABLESTYLE_LO6_BOX_LIST_RED,
+RES_POOLTABLESTYLE_LO6_BOX_LIST_YELLOW,
+RES_POOLTABLESTYLE_LO6_ELEGANT,
+RES_POOLTABLESTYLE_LO6_FINANCIAL,
+RES_POOLTABLESTYLE_LO6_SIMPLE_GRID_COLUMNS,
+RES_POOLTABLESTYLE_LO6_SIMPLE_GRID_ROWS,
+RES_POOLTABLESTYLE_LO6_SIMPLE_LIST_SHADED,
+RES_POOLTABSTYLE_END
+};
+
+enum RES_POOL_CELLSTYLE_TYPE
+{
+RES_POOLCELLSTYLE_BEGIN = POOLGRP_CELLSTYLE,
+RES_POOLCELLSTYLE_END = RES_POOLCELLSTYLE_BEGIN
 };
 
 // IDs for paragraph styles.
@@ -283,7 +327,8 @@ RES_POOLCOLL_LISTS_END,
 RES_POOLCOLL_EXTRA_BEGIN = COLL_EXTRA_BITS,
 
 /// Subgroup header.
-RES_POOLCOLL_HEADER = RES_POOLCOLL_EXTRA_BEGIN,         ///< Header Left&Right.
+RES_POOLCOLL_HEADERFOOTER = RES_POOLCOLL_EXTRA_BEGIN,   ///< Header and Footer.
+RES_POOLCOLL_HEADER,                                    ///< Header Left&Right.
 RES_POOLCOLL_HEADERL,                                   ///< Header Left.
 RES_POOLCOLL_HEADERR,                                   ///< Header Right.
 
@@ -301,6 +346,7 @@ RES_POOLCOLL_LABEL,                                     ///< Base labels.
 RES_POOLCOLL_LABEL_ABB,                                 ///< Label illustration.
 RES_POOLCOLL_LABEL_TABLE,                               ///< Label table.
 RES_POOLCOLL_LABEL_FRAME,                               ///< Label frame.
+RES_POOLCOLL_LABEL_FIGURE,                              ///< Label figure
 
 /// Other stuff.
 RES_POOLCOLL_FRAME,                                     ///< Frames.
@@ -399,7 +445,7 @@ RES_POOLCOLL_HTML_END
             the parent in all other cases. */
 sal_uInt16 GetPoolParent( sal_uInt16 nId );
 
-SvxFrameDirection GetDefaultFrameDirection(sal_uLong nLanguage);
+SvxFrameDirection GetDefaultFrameDirection(LanguageType nLanguage);
 
 bool IsConditionalByPoolId(sal_uInt16 nId);
 

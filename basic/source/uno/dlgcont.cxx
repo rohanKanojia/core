@@ -23,6 +23,7 @@
 #include <com/sun/star/xml/sax/Writer.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/io/XInputStreamProvider.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/ucb/XSimpleFileAccess2.hpp>
 #include <com/sun/star/io/XActiveDataSource.hpp>
@@ -30,11 +31,12 @@
 #include <com/sun/star/xml/sax/XExtendedDocumentHandler.hpp>
 #include <com/sun/star/resource/StringResourceWithStorage.hpp>
 #include <com/sun/star/resource/StringResourceWithLocation.hpp>
-#include <com/sun/star/document/GraphicObjectResolver.hpp>
-#include "dlgcont.hxx"
+#include <com/sun/star/document/GraphicStorageHandler.hpp>
+#include <com/sun/star/document/XGraphicStorageHandler.hpp>
+#include <dlgcont.hxx>
+#include <comphelper/fileformat.h>
 #include <comphelper/processfactory.hxx>
 #include <unotools/streamwrap.hxx>
-#include <osl/mutex.hxx>
 
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
@@ -43,7 +45,8 @@
 #include <cppuhelper/factory.hxx>
 #include <svtools/sfxecode.hxx>
 #include <svtools/ehdl.hxx>
-#include <svtools/grfmgr.hxx>
+#include <vcl/GraphicObject.hxx>
+#include <i18nlangtag/languagetag.hxx>
 
 namespace basic
 {
@@ -58,17 +61,16 @@ using namespace com::sun::star::script;
 using namespace com::sun::star::xml::sax;
 using namespace com::sun::star;
 using namespace cppu;
-using namespace osl;
 
 using com::sun::star::uno::Reference;
 
 
 // Implementation class SfxDialogLibraryContainer
 
-const sal_Char* SAL_CALL SfxDialogLibraryContainer::getInfoFileName() const { return "dialog"; }
-const sal_Char* SAL_CALL SfxDialogLibraryContainer::getOldInfoFileName() const { return "dialogs"; }
-const sal_Char* SAL_CALL SfxDialogLibraryContainer::getLibElementFileExtension() const { return "xdl"; }
-const sal_Char* SAL_CALL SfxDialogLibraryContainer::getLibrariesDir() const { return "Dialogs"; }
+const sal_Char* SfxDialogLibraryContainer::getInfoFileName() const { return "dialog"; }
+const sal_Char* SfxDialogLibraryContainer::getOldInfoFileName() const { return "dialogs"; }
+const sal_Char* SfxDialogLibraryContainer::getLibElementFileExtension() const { return "xdl"; }
+const sal_Char* SfxDialogLibraryContainer::getLibrariesDir() const { return "Dialogs"; }
 
 // Ctor for service
 SfxDialogLibraryContainer::SfxDialogLibraryContainer()
@@ -98,7 +100,7 @@ SfxLibrary* SfxDialogLibraryContainer::implCreateLibraryLink
     return pRet;
 }
 
-Any SAL_CALL SfxDialogLibraryContainer::createEmptyLibraryElement()
+Any SfxDialogLibraryContainer::createEmptyLibraryElement()
 {
     Reference< XInputStreamProvider > xISP;
     Any aRetAny;
@@ -106,12 +108,12 @@ Any SAL_CALL SfxDialogLibraryContainer::createEmptyLibraryElement()
     return aRetAny;
 }
 
-bool SAL_CALL SfxDialogLibraryContainer::isLibraryElementValid(const Any& rElement) const
+bool SfxDialogLibraryContainer::isLibraryElementValid(const Any& rElement) const
 {
     return SfxDialogLibrary::containsValidDialog(rElement);
 }
 
-bool writeOasis2OOoLibraryElement(
+static bool writeOasis2OOoLibraryElement(
     const Reference< XInputStream >& xInput, const Reference< XOutputStream >& xOutput )
 {
     Reference< XComponentContext > xContext(
@@ -146,13 +148,12 @@ bool writeOasis2OOoLibraryElement(
     return true;
 }
 
-void SAL_CALL SfxDialogLibraryContainer::writeLibraryElement
+void SfxDialogLibraryContainer::writeLibraryElement
 (
     const Reference < XNameContainer >& xLib,
     const OUString& aElementName,
     const Reference< XOutputStream >& xOutput
 )
-    throw(Exception)
 {
     Any aElement = xLib->getByName( aElementName );
     Reference< XInputStreamProvider > xISP;
@@ -185,7 +186,7 @@ void SAL_CALL SfxDialogLibraryContainer::writeLibraryElement
     xInput->closeInput();
 }
 
-void SfxDialogLibraryContainer::storeLibrariesToStorage( const uno::Reference< embed::XStorage >& xStorage ) throw ( RuntimeException, WrappedTargetException, std::exception )
+void SfxDialogLibraryContainer::storeLibrariesToStorage( const uno::Reference< embed::XStorage >& xStorage )
 {
     LibraryContainerMethodGuard aGuard( *this );
     mbOasis2OOoFormat = false;
@@ -238,19 +239,19 @@ void SfxDialogLibraryContainer::storeLibrariesToStorage( const uno::Reference< e
                         mxContext->getServiceManager()->createInstanceWithContext("com.sun.star.awt.UnoControlDialogModel", mxContext),
                         UNO_QUERY );
                     ::xmlscript::importDialogModel( xInput, xDialogModel, mxContext, mxOwnerDocument );
-                    std::vector< OUString > vEmbeddedImageURLs;
-                    GraphicObject::InspectForGraphicObjectImageURL( Reference<XInterface>(xDialogModel, UNO_QUERY),  vEmbeddedImageURLs );
-                    if ( !vEmbeddedImageURLs.empty() )
+                    std::vector<uno::Reference<graphic::XGraphic>> vxGraphicList;
+                    vcl::graphic::SearchForGraphics(Reference<XInterface>(xDialogModel, UNO_QUERY), vxGraphicList);
+                    if (!vxGraphicList.empty())
                     {
                         // Export the images to the storage
-                        Reference< document::XGraphicObjectResolver > xGraphicResolver =
-                            document::GraphicObjectResolver::createWithStorage( mxContext, xStorage );
-                        std::vector< OUString >::iterator it = vEmbeddedImageURLs.begin();
-                        std::vector< OUString >::iterator it_end = vEmbeddedImageURLs.end();
-                        if ( xGraphicResolver.is() )
+                        Reference<document::XGraphicStorageHandler> xGraphicStorageHandler;
+                        xGraphicStorageHandler.set(document::GraphicStorageHandler::createWithStorage(mxContext, xStorage));
+                        if (xGraphicStorageHandler.is())
                         {
-                            for ( sal_Int32 count = 0; it != it_end; ++it, ++count )
-                                xGraphicResolver->resolveGraphicObjectURL( *it );
+                            for (uno::Reference<graphic::XGraphic> const & rxGraphic : vxGraphicList)
+                            {
+                                xGraphicStorageHandler->saveGraphic(rxGraphic);
+                            }
                         }
                     }
                 }
@@ -261,7 +262,7 @@ void SfxDialogLibraryContainer::storeLibrariesToStorage( const uno::Reference< e
 }
 
 
-Any SAL_CALL SfxDialogLibraryContainer::importLibraryElement
+Any SfxDialogLibraryContainer::importLibraryElement
     ( const Reference < XNameContainer >& /*xLib*/,
       const OUString& /*aElementName */, const OUString& aFile,
       const uno::Reference< io::XInputStream >& xElementStream )
@@ -272,7 +273,7 @@ Any SAL_CALL SfxDialogLibraryContainer::importLibraryElement
     //Reference< XMultiServiceFactory > xMSF( comphelper::getProcessServiceFactory() );
     //if( !xMSF.is() )
     //{
-    //  OSL_FAIL( "### couldn't get ProcessServiceFactory\n" );
+    //  OSL_FAIL( "### couldn't get ProcessServiceFactory" );
     //  return aRetAny;
     //}
 
@@ -283,7 +284,7 @@ Any SAL_CALL SfxDialogLibraryContainer::importLibraryElement
         UNO_QUERY );
     if( !xDialogModel.is() )
     {
-        OSL_FAIL( "### couldn't create com.sun.star.awt.UnoControlDialogModel component\n" );
+        OSL_FAIL( "### couldn't create com.sun.star.awt.UnoControlDialogModel component" );
         return aRetAny;
     }
 
@@ -322,7 +323,7 @@ Any SAL_CALL SfxDialogLibraryContainer::importLibraryElement
     }
     catch(const Exception& )
     {
-        OSL_FAIL( "Parsing error\n" );
+        OSL_FAIL( "Parsing error" );
         SfxErrorContext aEc( ERRCTX_SFX_LOADBASIC, aFile );
         ErrorHandler::HandleError( ERRCODE_IO_GENERAL );
         return aRetAny;
@@ -335,7 +336,7 @@ Any SAL_CALL SfxDialogLibraryContainer::importLibraryElement
     return aRetAny;
 }
 
-void SAL_CALL SfxDialogLibraryContainer::importFromOldStorage( const OUString& )
+void SfxDialogLibraryContainer::importFromOldStorage( const OUString& )
 {
     // Nothing to do here, old dialogs cannot be imported
 }
@@ -359,8 +360,7 @@ Reference< css::resource::XStringResourcePersistence >
     // get ui locale
     ::com::sun  ::star::lang::Locale aLocale = Application::GetSettings().GetUILanguageTag().getLocale();
 
-    OUString aComment(aResourceFileCommentBase);
-    aComment += aLibName;
+    OUString aComment= aResourceFileCommentBase + aLibName;
 
     bool bStorage = mxStorage.is();
     if( bStorage )
@@ -371,16 +371,20 @@ Reference< css::resource::XStringResourcePersistence >
             xLibrariesStor = mxStorage->openStorageElement( maLibrariesDir, embed::ElementModes::READ );
                 // TODO: Should be READWRITE with new storage concept using store() instead of storeTo()
             if ( !xLibrariesStor.is() )
-                throw uno::RuntimeException();
+                throw uno::RuntimeException("null returned from openStorageElement");
 
             xLibraryStor = xLibrariesStor->openStorageElement( aLibName, embed::ElementModes::READ );
                 // TODO: Should be READWRITE with new storage concept using store() instead of storeTo()
             if ( !xLibraryStor.is() )
-                throw uno::RuntimeException();
+                throw uno::RuntimeException("null returned from openStorageElement");
         }
         catch(const uno::Exception& )
         {
-            // TODO: Error handling?
+            // Something went wrong while trying to get the storage library.
+            // Return an object that supports StringResourceWithStorage, give it a storage location later.
+            xRet = Reference< resource::XStringResourcePersistence >(
+              mxContext->getServiceManager()->createInstanceWithContext("com.sun.star.resource.StringResourceWithStorage", mxContext),
+              UNO_QUERY );
             return xRet;
         }
 
@@ -420,12 +424,12 @@ void SfxDialogLibraryContainer::onNewRootStorage()
             try {
                 xLibrariesStor = mxStorage->openStorageElement( maLibrariesDir, embed::ElementModes::READWRITE );
                 if ( !xLibrariesStor.is() )
-                    throw uno::RuntimeException();
+                    throw uno::RuntimeException("null returned from openStorageElement");
 
                 OUString aLibName = pDialogLibrary->getName();
                 xLibraryStor = xLibrariesStor->openStorageElement( aLibName, embed::ElementModes::READWRITE );
                 if ( !xLibraryStor.is() )
-                    throw uno::RuntimeException();
+                    throw uno::RuntimeException("null returned from openStorageElement");
 
                 Reference< resource::XStringResourceWithStorage >
                     xStringResourceWithStorage( xStringResourcePersistence, UNO_QUERY );
@@ -441,25 +445,22 @@ void SfxDialogLibraryContainer::onNewRootStorage()
 }
 
 sal_Bool SAL_CALL
-SfxDialogLibraryContainer:: HasExecutableCode( const OUString& /*Library*/ ) throw (uno::RuntimeException, std::exception)
+SfxDialogLibraryContainer:: HasExecutableCode( const OUString& /*Library*/ )
 {
-    return sal_False; // dialog library has no executable code
+    return false; // dialog library has no executable code
 }
 
 // Service
 
-OUString SAL_CALL SfxDialogLibraryContainer::getImplementationName( ) throw (RuntimeException, std::exception)
+OUString SAL_CALL SfxDialogLibraryContainer::getImplementationName( )
 {
     return OUString("com.sun.star.comp.sfx2.DialogLibraryContainer");
 }
 
-Sequence< OUString > SAL_CALL SfxDialogLibraryContainer::getSupportedServiceNames( ) throw (RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL SfxDialogLibraryContainer::getSupportedServiceNames( )
 {
-    Sequence< OUString > aServiceNames( 2 );
-    aServiceNames[0] = "com.sun.star.script.DocumentDialogLibraryContainer";
-    // plus, for compatibility:
-    aServiceNames[1] = "com.sun.star.script.DialogLibraryContainer";
-    return aServiceNames;
+    return {"com.sun.star.script.DocumentDialogLibraryContainer",
+            "com.sun.star.script.DialogLibraryContainer"}; // for compatibility
 }
 
 // Implementation class SfxDialogLibrary
@@ -531,8 +532,7 @@ void SfxDialogLibrary::storeResourcesAsURL
 void SfxDialogLibrary::storeResourcesToURL( const OUString& URL,
     const Reference< task::XInteractionHandler >& xHandler )
 {
-    OUString aComment(aResourceFileCommentBase);
-    aComment += m_aName;
+    OUString aComment = aResourceFileCommentBase + m_aName;
 
     if( m_xStringResourcePersistence.is() )
     {
@@ -543,8 +543,7 @@ void SfxDialogLibrary::storeResourcesToURL( const OUString& URL,
 
 void SfxDialogLibrary::storeResourcesToStorage( const css::uno::Reference< css::embed::XStorage >& xStorage )
 {
-    OUString aComment(aResourceFileCommentBase);
-    aComment += m_aName;
+    OUString aComment = aResourceFileCommentBase + m_aName;
 
     if( m_xStringResourcePersistence.is() )
     {
@@ -556,7 +555,7 @@ void SfxDialogLibrary::storeResourcesToStorage( const css::uno::Reference< css::
 
 // XStringResourceSupplier
 Reference< resource::XStringResourceResolver >
-    SAL_CALL SfxDialogLibrary::getStringResource(  ) throw (RuntimeException, std::exception)
+    SAL_CALL SfxDialogLibrary::getStringResource(  )
 {
     if( !m_xStringResourcePersistence.is() )
         m_xStringResourcePersistence = m_pParent->implCreateStringResource( this );
@@ -572,14 +571,14 @@ bool SfxDialogLibrary::containsValidDialog( const css::uno::Any& aElement )
     return xISP.is();
 }
 
-bool SAL_CALL SfxDialogLibrary::isLibraryElementValid(const css::uno::Any& rElement) const
+bool SfxDialogLibrary::isLibraryElementValid(const css::uno::Any& rElement) const
 {
     return SfxDialogLibrary::containsValidDialog(rElement);
 }
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_sfx2_DialogLibraryContainer_get_implementation(css::uno::XComponentContext*,
                                                            css::uno::Sequence<css::uno::Any> const &)
 {

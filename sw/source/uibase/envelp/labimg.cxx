@@ -17,14 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <o3tl/any.hxx>
 #include <tools/stream.hxx>
-#include <tools/resid.hxx>
+#include <osl/diagnose.h>
 #include <com/sun/star/uno/Sequence.hxx>
+#include <sfx2/sfxsids.hrc>
 #include <unotools/useroptions.hxx>
 #include <swmodule.hxx>
-#include "labimg.hxx"
-#include "cmdid.h"
-#include "swtypes.hxx"
+#include <labimg.hxx>
+#include <cmdid.h>
+#include <swtypes.hxx>
 #include <unomid.h>
 
 using namespace utl;
@@ -52,12 +56,6 @@ SwLabItem::SwLabItem() :
     m_lPHeight = 5669; // 10 cm
 }
 
-SwLabItem::SwLabItem(const SwLabItem& rItem) :
-    SfxPoolItem(FN_LABEL)
-{
-        *this = rItem;
-}
-
 SwLabItem& SwLabItem::operator =(const SwLabItem& rItem)
 {
     m_bAddr    = rItem.m_bAddr;
@@ -70,7 +68,6 @@ SwLabItem& SwLabItem::operator =(const SwLabItem& rItem)
     m_aType    = rItem.m_aType;
     m_bPage    = rItem.m_bPage;
     m_bSynchron = rItem.m_bSynchron;
-    m_aBin     = rItem.m_aBin;
     m_nCol     = rItem.m_nCol;
     m_nRow     = rItem.m_nRow;
     m_lHDist   = rItem.m_lHDist;
@@ -128,7 +125,6 @@ bool SwLabItem::operator ==(const SfxPoolItem& rItem) const
            m_bCont    == rLab.m_bCont   &&
            m_bPage    == rLab.m_bPage   &&
            m_bSynchron == rLab.m_bSynchron &&
-           m_aBin     == rLab.m_aBin    &&
            m_nCol     == rLab.m_nCol    &&
            m_nRow     == rLab.m_nRow    &&
            m_lHDist   == rLab.m_lHDist  &&
@@ -286,7 +282,7 @@ SwLabCfgItem::SwLabCfgItem(bool bLabel) :
                     bNoConfigValues = false;
                 switch(nProperty)
                 {
-                    case  0: aItem.m_bCont = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;// "Medium/Continuous",
+                    case  0: aItem.m_bCont = *o3tl::doAccess<bool>(pValues[nProp]); break;// "Medium/Continuous",
                     case  1: pValues[nProp] >>= aItem.m_aMake;            break;// "Medium/Brand",
                     case  2: pValues[nProp] >>= aItem.m_aType;            break;// "Medium/Type",
                     case  3: pValues[nProp] >>= aItem.m_nCols;            break;// "Format/Column",
@@ -323,11 +319,11 @@ SwLabCfgItem::SwLabCfgItem(bool bLabel) :
                         pValues[nProp] >>= aItem.m_lPHeight;
                         aItem.m_lPHeight = convertMm100ToTwip(aItem.m_lPHeight);
                     break;// "Format/PageHeight",
-                    case 13: aItem.m_bSynchron = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;// "Option/Synchronize",
-                    case 14: aItem.m_bPage = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;// "Option/Page",
+                    case 13: aItem.m_bSynchron = *o3tl::doAccess<bool>(pValues[nProp]); break;// "Option/Synchronize",
+                    case 14: aItem.m_bPage = *o3tl::doAccess<bool>(pValues[nProp]); break;// "Option/Page",
                     case 15: pValues[nProp] >>= aItem.m_nCol;             break;// "Option/Column",
                     case 16: pValues[nProp] >>= aItem.m_nRow;             break;// "Option/Row"
-                    case 17: aItem.m_bAddr = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;// "Inscription/UseAddress",
+                    case 17: aItem.m_bAddr = *o3tl::doAccess<bool>(pValues[nProp]); break;// "Inscription/UseAddress",
                     case 18: pValues[nProp] >>= aItem.m_aWriting;         break;// "Inscription/Address",
                     case 19: pValues[nProp] >>= aItem.m_sDBName;          break;// "Inscription/Database"
                     case 20: pValues[nProp] >>= aItem.m_aPrivFirstName;   break;// "PrivateAddress/FirstName",
@@ -368,29 +364,30 @@ SwLabCfgItem::SwLabCfgItem(bool bLabel) :
             }
         }
     }
-    if(!bIsLabel && bNoConfigValues)
-    {
 
-        SvtUserOptions& rUserOpt = SW_MOD()->GetUserOptions();
-        aItem.m_aPrivFirstName = rUserOpt.GetFirstName();
-        aItem.m_aPrivName = rUserOpt.GetLastName();
-        aItem.m_aPrivShortCut = rUserOpt.GetID();
-        aItem.m_aCompCompany = rUserOpt.GetCompany();
-        aItem.m_aCompStreet = aItem.m_aPrivStreet = rUserOpt.GetStreet();
+    if(bIsLabel || !bNoConfigValues)
+        return;
 
-        aItem.m_aCompCountry = aItem.m_aPrivCountry = rUserOpt.GetCountry();
-        aItem.m_aCompZip = aItem.m_aPrivZip= rUserOpt.GetZip();
-        aItem.m_aCompCity = aItem.m_aPrivCity = rUserOpt.GetCity();
-        aItem.m_aPrivTitle = rUserOpt.GetTitle();
-        aItem.m_aCompPosition = rUserOpt.GetPosition();
-        aItem.m_aPrivPhone = rUserOpt.GetTelephoneHome();
-        aItem.m_aCompPhone = rUserOpt.GetTelephoneWork();
-        aItem.m_aCompFax = aItem.m_aPrivFax = rUserOpt.GetFax();
-        aItem.m_aCompMail = aItem.m_aPrivMail = rUserOpt.GetEmail();
-        aItem.m_aCompState = aItem.m_aPrivState = rUserOpt.GetState();
-        aItem.m_bSynchron = true;
-        SetModified();
-    }
+    SvtUserOptions& rUserOpt = SW_MOD()->GetUserOptions();
+    aItem.m_aPrivFirstName = rUserOpt.GetFirstName();
+    aItem.m_aPrivName = rUserOpt.GetLastName();
+    aItem.m_aPrivShortCut = rUserOpt.GetID();
+    aItem.m_aCompCompany = rUserOpt.GetCompany();
+    aItem.m_aCompStreet = aItem.m_aPrivStreet = rUserOpt.GetStreet();
+
+    aItem.m_aCompCountry = aItem.m_aPrivCountry = rUserOpt.GetCountry();
+    aItem.m_aCompZip = aItem.m_aPrivZip= rUserOpt.GetZip();
+    aItem.m_aCompCity = aItem.m_aPrivCity = rUserOpt.GetCity();
+    aItem.m_aPrivTitle = rUserOpt.GetTitle();
+    aItem.m_aCompPosition = rUserOpt.GetPosition();
+    aItem.m_aPrivPhone = rUserOpt.GetTelephoneHome();
+    aItem.m_aCompPhone = rUserOpt.GetTelephoneWork();
+    aItem.m_aCompFax = aItem.m_aPrivFax = rUserOpt.GetFax();
+    aItem.m_aCompMail = aItem.m_aPrivMail = rUserOpt.GetEmail();
+    aItem.m_aCompState = aItem.m_aPrivState = rUserOpt.GetState();
+    aItem.m_bSynchron = true;
+    SetModified();
+
 }
 
 void SwLabCfgItem::Notify( const css::uno::Sequence< OUString >& ) {}

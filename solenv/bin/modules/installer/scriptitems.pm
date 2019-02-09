@@ -632,15 +632,11 @@ sub replace_setup_variables
 
     my $productname = $hashref->{'PRODUCTNAME'};
     my $productversion = $hashref->{'PRODUCTVERSION'};
-    my $userdirproductversion = "";
-    if ( $hashref->{'USERDIRPRODUCTVERSION'} ) { $userdirproductversion = $hashref->{'USERDIRPRODUCTVERSION'}; }
+    my $libo_version_major = "";
+    if ( $hashref->{'LIBO_VERSION_MAJOR'} ) { $libo_version_major = $hashref->{'LIBO_VERSION_MAJOR'}; }
     my $productkey = $productname . " " . $productversion;
 
     # string $buildid, which is used to replace the setup variable <buildid>
-
-    my $localminor = "flat";
-    if ( $installer::globals::minor ne "" ) { $localminor = $installer::globals::minor; }
-    else { $localminor = $installer::globals::lastminor; }
 
     my $localbuild = $installer::globals::build;
 
@@ -648,13 +644,31 @@ sub replace_setup_variables
 
     my $buildidstring = `cd $ENV{'SRCDIR'} 2>&1 >/dev/null && git log -n 1 --pretty=format:"%H"`;
     if ($? || !$buildidstring) {
-        $buildidstring = $localbuild . $localminor . "(Build:" . $installer::globals::buildid . ")";
+        $buildidstring = $localbuild . "(Build:" . $installer::globals::buildid . ")";
     }
 
-    if ( $localminor =~ /^\s*\w(\d+)\w*\s*$/ ) { $localminor = $1; }
-
-    my $updateid = $productname . "_" . $userdirproductversion . "_" . $$languagestringref;
+    my $updateid = $productname . "_" . $libo_version_major . "_" . $$languagestringref;
     $updateid =~ s/ /_/g;
+
+    my $updatechannel = "";
+    if ( $ENV{'UPDATE_CONFIG'} && $ENV{'UPDATE_CONFIG'} ne "")
+    {
+        open(CONFIG, glob($ENV{'UPDATE_CONFIG'}));
+        while (<CONFIG>)
+        {
+            chomp;
+            if (/^s*(\S+)=(\S+)$/)
+            {
+                $key = $1;
+                $val = $2;
+                if ($key eq "channel")
+                {
+                    $updatechannel = $val;
+                }
+            }
+        }
+        close(CONFIG);
+    }
 
     for ( my $i = 0; $i <= $#{$itemsarrayref}; $i++ )
     {
@@ -669,6 +683,7 @@ sub replace_setup_variables
         $value =~ s/\<alllanguages\>/$languagesstring/;
         $value =~ s/\<sourceid\>/$installer::globals::build/;
         $value =~ s/\<updateid\>/$updateid/;
+        $value =~ s/\<updatechannel\>/$updatechannel/;
         $value =~ s/\<pkgformat\>/$installer::globals::packageformat/;
         $ENV{'OOO_VENDOR'} = "" if !defined $ENV{'OOO_VENDOR'};
         $value =~ s/\<vendor\>/$ENV{'OOO_VENDOR'}/;
@@ -1569,7 +1584,10 @@ sub optimize_list
 
 sub collect_directories_from_filesarray
 {
-    my ($filesarrayref) = @_;
+    my ($filesarrayref, $unixlinksarrayref) = @_;
+    my @allfiles;
+    push @allfiles, @{$filesarrayref};
+    push @allfiles, @{$unixlinksarrayref};
 
     my @alldirectories = ();
     my %alldirectoryhash = ();
@@ -1579,9 +1597,9 @@ sub collect_directories_from_filesarray
     # Preparing this already as hash, although the only needed value at the moment is the HostName
     # But also adding: "specificlanguage" and "Dir" (for instance gid_Dir_Program)
 
-    for ( my $i = 0; $i <= $#{$filesarrayref}; $i++ )
+    for ( my $i = 0; $i <= $#allfiles; $i++ )
     {
-        my $onefile = ${$filesarrayref}[$i];
+        my $onefile = $allfiles[$i];
         my $destinationpath = $onefile->{'destination'};
         installer::pathanalyzer::get_path_from_fullqualifiedname(\$destinationpath);
         $destinationpath =~ s/\Q$installer::globals::separator\E\s*$//;     # removing ending slashes or backslashes
@@ -1595,6 +1613,7 @@ sub collect_directories_from_filesarray
                 $directoryhash{'specificlanguage'} = $onefile->{'specificlanguage'};
                 $directoryhash{'Dir'} = $onefile->{'Dir'};
                 $directoryhash{'modules'} = $onefile->{'modules'}; # NEW, saving modules
+                $directoryhash{'gid'} = $onefile->{'gid'};
 
                 $predefinedprogdir_added ||= $onefile->{'Dir'} eq "PREDEFINED_PROGDIR";
 
@@ -1604,6 +1623,15 @@ sub collect_directories_from_filesarray
             {
                 # Adding the modules to the module list!
                 $alldirectoryhash{$destinationpath}->{'modules'} .= "," . $onefile->{'modules'};
+                # Save file's gid iff this directory appears in only a single
+                # file's FILELIST (so that unused directories will be filtered
+                # out in remove_not_required_spellcheckerlanguage_files, based
+                # on gid):
+                if ($alldirectoryhash{$destinationpath}->{'gid'}
+                    ne $onefile->{'gid'})
+                {
+                    $alldirectoryhash{$destinationpath}->{'gid'} = '';
+                }
             }
         } while ($destinationpath =~ s/(^.*\S)\Q$installer::globals::separator\E(\S.*?)\s*$/$1/);  # as long as the path contains slashes
     }
@@ -1694,7 +1722,7 @@ sub collect_directories_with_create_flag_from_directoryarray
                         $directoryhash{'HostName'} = $directoryname;
                         $directoryhash{'specificlanguage'} = $onedir->{'specificlanguage'};
                         $directoryhash{'Dir'} = $onedir->{'gid'};
-                        if ( ! $installer::globals::iswindowsbuild ) { $directoryhash{'Styles'} = "(CREATE)"; } # Exeception for Windows?
+                        if ( ! $installer::globals::iswindowsbuild ) { $directoryhash{'Styles'} = "(CREATE)"; } # Exception for Windows?
 
                         # saving also the modules
                         $directoryhash{'modules'} = $onedir->{'modules'};

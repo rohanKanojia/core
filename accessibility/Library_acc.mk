@@ -35,7 +35,6 @@ $(eval $(call gb_Library_use_libraries,acc,\
     tl \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,acc,\
@@ -85,6 +84,8 @@ $(eval $(call gb_Library_add_exception_objects,acc,\
     accessibility/source/standard/vclxaccessibleedit \
     accessibility/source/standard/vclxaccessiblefixedhyperlink \
     accessibility/source/standard/vclxaccessiblefixedtext \
+    accessibility/source/standard/vclxaccessibleheaderbar \
+    accessibility/source/standard/vclxaccessibleheaderbaritem \
     accessibility/source/standard/vclxaccessiblelist \
     accessibility/source/standard/vclxaccessiblelistbox \
     accessibility/source/standard/vclxaccessiblelistitem \

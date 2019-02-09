@@ -63,7 +63,6 @@ namespace SchXMLTools
         XML_CHART_CLASS_BAR,
         XML_CHART_CLASS_STOCK,
         XML_CHART_CLASS_BUBBLE,
-        XML_CHART_CLASS_GL3DBAR,
         XML_CHART_CLASS_ADDIN,
         XML_CHART_CLASS_UNKNOWN
     };
@@ -123,7 +122,7 @@ namespace SchXMLTools
     bool getXMLRangePropertyFromDataSequence(
         const css::uno::Reference< css::chart2::data::XDataSequence > & xDataSequence,
         OUString & rOutXMLRange,
-        bool bClearProp = false );
+        bool bClearProp );
 
     css::uno::Reference< css::chart2::data::XDataProvider > getDataProviderFromParent( const css::uno::Reference< css::chart2::XChartDocument >& xChartDoc );
 

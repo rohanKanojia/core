@@ -11,9 +11,11 @@
 #ifndef INCLUDED_SVX_COLORSETS_HXX
 #define INCLUDED_SVX_COLORSETS_HXX
 
-#include <svx/svxdllapi.h>
 #include <vector>
+
 #include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <svx/svxdllapi.h>
 #include <tools/color.hxx>
 
 namespace svx
@@ -25,7 +27,6 @@ class SVX_DLLPUBLIC ColorSet
     std::vector<Color> maColors;
 public:
     ColorSet(OUString const & aName);
-    ~ColorSet();
 
     void add(sal_uInt32 nIndex, sal_uInt32 aColorData)
     {

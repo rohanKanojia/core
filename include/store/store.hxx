@@ -22,30 +22,24 @@
 
 #include <store/store.h>
 #include <sal/types.h>
-#include <stddef.h>
 #include <rtl/ustring.hxx>
 #include <store/types.h>
 
 namespace store
 {
 
-/*========================================================================
- *
- * OStoreStream interface.
- *
- *======================================================================*/
 class OStoreStream
 {
 public:
     /** Construction.
      */
-    inline OStoreStream()
+    OStoreStream()
         : m_hImpl (nullptr)
     {}
 
     /** Destruction.
      */
-    inline ~OStoreStream()
+    ~OStoreStream()
     {
         if (m_hImpl)
             (void) store_releaseHandle (m_hImpl);
@@ -53,7 +47,7 @@ public:
 
     /** Copy construction.
      */
-    inline OStoreStream (OStoreStream const & rhs)
+    OStoreStream (OStoreStream const & rhs)
         : m_hImpl (rhs.m_hImpl)
     {
         if (m_hImpl)
@@ -62,7 +56,7 @@ public:
 
     /** Assignment.
      */
-    inline OStoreStream & operator= (OStoreStream const & rhs)
+    OStoreStream & operator= (OStoreStream const & rhs)
     {
         if (rhs.m_hImpl)
             (void) store_acquireHandle (rhs.m_hImpl);
@@ -72,22 +66,13 @@ public:
         return *this;
     }
 
-    /** Construction from Stream Handle.
-     */
-    inline explicit OStoreStream (storeStreamHandle Handle)
-        : m_hImpl (Handle)
-    {
-        if (m_hImpl)
-            (void) store_acquireHandle (m_hImpl);
-    }
-
     /** Open the stream.
         @see store_openStream()
      */
-    inline storeError create (
+    storeError create (
         storeFileHandle       hFile,
-        rtl::OUString const & rPath,
-        rtl::OUString const & rName,
+        OUString const & rPath,
+        OUString const & rName,
         storeAccessMode       eMode)
     {
         if (m_hImpl)
@@ -101,7 +86,7 @@ public:
     /** Read from the stream.
         @see store_readStream()
      */
-    inline storeError readAt (
+    storeError readAt (
         sal_uInt32   nOffset,
         void *       pBuffer,
         sal_uInt32   nBytes,
@@ -116,7 +101,7 @@ public:
     /** Write to the stream.
         @see store_writeStream()
      */
-    inline storeError writeAt (
+    storeError writeAt (
         sal_uInt32   nOffset,
         void const * pBuffer,
         sal_uInt32   nBytes,
@@ -134,23 +119,18 @@ private:
     storeStreamHandle m_hImpl;
 };
 
-/*========================================================================
- *
- * OStoreDirectory interface.
- *
- *======================================================================*/
 class OStoreDirectory
 {
 public:
     /** Construction.
      */
-    inline OStoreDirectory()
+    OStoreDirectory()
         : m_hImpl (nullptr)
     {}
 
     /** Destruction.
      */
-    inline ~OStoreDirectory()
+    ~OStoreDirectory()
     {
         if (m_hImpl)
             (void) store_releaseHandle (m_hImpl);
@@ -158,16 +138,24 @@ public:
 
     /** Copy construction.
      */
-    inline OStoreDirectory (OStoreDirectory const & rhs)
+    OStoreDirectory (OStoreDirectory const & rhs)
         : m_hImpl (rhs.m_hImpl)
     {
         if (m_hImpl)
             (void) store_acquireHandle (m_hImpl);
     }
 
+    /** Move construction.
+     */
+    OStoreDirectory (OStoreDirectory && rhs)
+        : m_hImpl (rhs.m_hImpl)
+    {
+        rhs.m_hImpl = nullptr;
+    }
+
     /** Assignment.
      */
-    inline OStoreDirectory & operator= (OStoreDirectory const & rhs)
+    OStoreDirectory & operator= (OStoreDirectory const & rhs)
     {
         if (rhs.m_hImpl)
             (void) store_acquireHandle (rhs.m_hImpl);
@@ -177,22 +165,24 @@ public:
         return *this;
     }
 
-    /** Construction from Directory Handle.
+    /** Move assignment.
      */
-    inline explicit OStoreDirectory (storeDirectoryHandle Handle)
-        : m_hImpl (Handle)
+    OStoreDirectory & operator= (OStoreDirectory && rhs)
     {
         if (m_hImpl)
-            (void) store_acquireHandle (m_hImpl);
+            (void) store_releaseHandle (m_hImpl);
+        m_hImpl = rhs.m_hImpl;
+        rhs.m_hImpl = nullptr;
+        return *this;
     }
 
     /** Open the directory.
         @see store_openDirectory()
      */
-    inline storeError create (
+    storeError create (
         storeFileHandle       hFile,
-        rtl::OUString const & rPath,
-        rtl::OUString const & rName,
+        OUString const & rPath,
+        OUString const & rName,
         storeAccessMode       eMode)
     {
         if (m_hImpl)
@@ -212,7 +202,7 @@ public:
     /** Find first directory entry.
         @see store_findFirst()
      */
-    inline storeError first (iterator& it)
+    storeError first (iterator& it)
     {
         if (!m_hImpl)
             return store_E_InvalidHandle;
@@ -223,7 +213,7 @@ public:
     /** Find next directory entry.
         @see store_findNext()
      */
-    inline storeError next (iterator& it)
+    storeError next (iterator& it)
     {
         if (!m_hImpl)
             return store_E_InvalidHandle;
@@ -237,23 +227,18 @@ private:
     storeDirectoryHandle m_hImpl;
 };
 
-/*========================================================================
- *
- * OStoreFile interface.
- *
- *======================================================================*/
 class OStoreFile
 {
 public:
     /** Construction.
      */
-    inline OStoreFile()
+    OStoreFile()
         : m_hImpl (nullptr)
     {}
 
     /** Destruction.
      */
-    inline ~OStoreFile()
+    ~OStoreFile()
     {
         if (m_hImpl)
             (void) store_releaseHandle (m_hImpl);
@@ -261,7 +246,7 @@ public:
 
     /** Copy construction.
      */
-    inline OStoreFile (OStoreFile const & rhs)
+    OStoreFile (OStoreFile const & rhs)
         : m_hImpl (rhs.m_hImpl)
     {
         if (m_hImpl)
@@ -270,7 +255,7 @@ public:
 
     /** Assignment.
      */
-    inline OStoreFile & operator= (OStoreFile const & rhs)
+    OStoreFile & operator= (OStoreFile const & rhs)
     {
         if (rhs.m_hImpl)
             (void) store_acquireHandle (rhs.m_hImpl);
@@ -280,18 +265,9 @@ public:
         return *this;
     }
 
-    /** Construction from File Handle.
-     */
-    inline explicit OStoreFile (storeFileHandle Handle)
-        : m_hImpl (Handle)
-    {
-        if (m_hImpl)
-            (void) store_acquireHandle (m_hImpl);
-    }
-
     /** Conversion into File Handle.
      */
-    inline operator storeFileHandle() const
+    operator storeFileHandle() const
     {
         return m_hImpl;
     }
@@ -299,7 +275,7 @@ public:
     /** Check for a valid File Handle.
         @return sal_True if valid, sal_False otherwise.
      */
-    inline bool isValid() const
+    bool isValid() const
     {
         return (m_hImpl != nullptr);
     }
@@ -307,23 +283,22 @@ public:
     /** Open the file.
         @see store_openFile()
      */
-    inline storeError create (
-        rtl::OUString const & rFilename,
-        storeAccessMode       eAccessMode,
-        sal_uInt16            nPageSize = STORE_DEFAULT_PAGESIZE)
+    storeError create(
+        OUString const & rFilename,
+        storeAccessMode       eAccessMode )
     {
         if (m_hImpl)
         {
             (void) store_releaseHandle (m_hImpl);
             m_hImpl = nullptr;
         }
-        return store_openFile (rFilename.pData, eAccessMode, nPageSize, &m_hImpl);
+        return store_openFile (rFilename.pData, eAccessMode, STORE_DEFAULT_PAGESIZE, &m_hImpl);
     }
 
     /** Open the temporary file in memory.
         @see store_createMemoryFile()
      */
-    inline storeError createInMemory ()
+    storeError createInMemory ()
     {
         if (m_hImpl)
         {
@@ -336,7 +311,7 @@ public:
     /** Close the file.
         @see store_closeFile()
      */
-    inline void close()
+    void close()
     {
         if (m_hImpl)
         {
@@ -348,7 +323,7 @@ public:
     /** Flush the file.
         @see store_flushFile()
      */
-    inline storeError flush() const
+    storeError flush() const
     {
         if (!m_hImpl)
             return store_E_InvalidHandle;
@@ -359,8 +334,8 @@ public:
     /** Remove a file entry.
         @see store_remove()
      */
-    inline storeError remove (
-        rtl::OUString const & rPath, rtl::OUString const & rName)
+    storeError remove (
+        OUString const & rPath, OUString const & rName)
     {
         if (!m_hImpl)
             return store_E_InvalidHandle;
@@ -374,15 +349,8 @@ private:
     storeFileHandle m_hImpl;
 };
 
-/*========================================================================
- *
- * The End.
- *
- *======================================================================*/
-
 } // namespace store
 
 #endif /* ! INCLUDED_STORE_STORE_HXX */
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

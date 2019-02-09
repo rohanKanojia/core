@@ -29,16 +29,9 @@ in this Software without prior written authorization from the X Consortium.
 
 #include "def.h"
 #include <string.h>
-size_t pr( struct inclist *ip, char *file,char *base);
+static size_t pr( struct inclist *ip, char *file,char *base);
 
-extern struct   inclist inclist[ MAXFILES ],
-                *inclistp;
-extern char *objprefix;
-extern char *objsuffix;
 extern int  width;
-extern boolean  printed;
-extern boolean  verbose;
-extern boolean  show_where_not;
 
 void add_include(struct filepointer *filep, struct inclist *file, struct inclist *file_red, char *include, boolean dot, boolean failOK, struct IncludesCollection* incCollection, struct symhash *symbols)
 {
@@ -63,23 +56,23 @@ void add_include(struct filepointer *filep, struct inclist *file, struct inclist
         show_where_not = FALSE;
     }
 
-    if (newfile) {
+    if (!newfile)
+        return;
 
-        /* Only add new dependency files if they don't have "/usr/include" in them. */
-        if (!(newfile && newfile->i_file && strstr(newfile->i_file, "/usr/"))) {
-            included_by(file, newfile);
-        }
+    /* Only add new dependency files if they don't have "/usr/include" in them. */
+    if (!(newfile->i_file && strstr(newfile->i_file, "/usr/"))) {
+        included_by(file, newfile);
+    }
 
-        if (!newfile->i_searched) {
-            newfile->i_searched = TRUE;
-            content = getfile(newfile->i_file);
-            find_includes(content, newfile, file_red, 0, failOK, incCollection, symbols);
-            freefile(content);
-        }
+    if (!newfile->i_searched) {
+        newfile->i_searched = TRUE;
+        content = getfile(newfile->i_file);
+        find_includes(content, newfile, file_red, 0, failOK, incCollection, symbols);
+        freefile(content);
     }
 }
 
-void pr_dummy(struct inclist  *ip)
+static void pr_dummy(struct inclist const *ip)
 {
     fwrite(ip->i_file, strlen(ip->i_file), 1, stdout);
     fwrite(" :\n\n", 4, 1, stdout);

@@ -22,6 +22,8 @@ static ::osl::Mutex m_aMetaMutex;
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/sdb/ErrorCondition.hpp>
 
+#include <sal/log.hxx>
+
 #include "MorkParser.hxx"
 
 using namespace connectivity;
@@ -38,8 +40,8 @@ MDatabaseMetaDataHelper::~MDatabaseMetaDataHelper()
 {
 }
 
-bool MDatabaseMetaDataHelper::getTableStrings( OConnection* _pCon,
-                                                   ::std::vector< OUString >& _rStrings)
+void MDatabaseMetaDataHelper::getTableStrings( OConnection* _pCon,
+                                                   std::vector< OUString >& _rStrings)
 {
     SAL_INFO("connectivity.mork", "=> MDatabaseMetaDataHelper::getTableStrings()");
 
@@ -51,8 +53,9 @@ bool MDatabaseMetaDataHelper::getTableStrings( OConnection* _pCon,
     std::set<std::string> lists;
     MorkParser* pMork = _pCon->getMorkParser("AddressBook");
     pMork->retrieveLists(lists);
-    for (::std::set<std::string>::const_iterator iter = lists.begin(); iter != lists.end(); ++iter) {
-        OUString groupTableName = OStringToOUString((*iter).c_str(), RTL_TEXTENCODING_UTF8);
+    for (auto const& elem : lists)
+    {
+        OUString groupTableName = OStringToOUString(elem.c_str(), RTL_TEXTENCODING_UTF8);
         SAL_INFO("connectivity.mork", "add Table " << groupTableName);
 
         _rStrings.push_back(groupTableName);
@@ -63,19 +66,18 @@ bool MDatabaseMetaDataHelper::getTableStrings( OConnection* _pCon,
     std::set<std::string> lists_history;
     pMork = _pCon->getMorkParser("CollectedAddressBook");
     pMork->retrieveLists(lists_history);
-    for (::std::set<std::string>::const_iterator iter = lists_history.begin(); iter != lists_history.end(); ++iter) {
-        OUString groupTableName = OStringToOUString((*iter).c_str(), RTL_TEXTENCODING_UTF8);
+    for (auto const& elem : lists_history)
+    {
+        OUString groupTableName = OStringToOUString(elem.c_str(), RTL_TEXTENCODING_UTF8);
         SAL_INFO("connectivity.mork", "add Table " << groupTableName);
 
         _rStrings.push_back(groupTableName);
         // remember the list in the mork parser, we'll use it later
         pMork->lists_.push_back(groupTableName);
     }
-
-    return true;
 }
 
-bool MDatabaseMetaDataHelper::getTables( OConnection* _pCon,
+void MDatabaseMetaDataHelper::getTables( OConnection* _pCon,
                                              const OUString& tableNamePattern,
                                              ODatabaseMetaDataResultSet::ORows& _rRows)
 {
@@ -91,15 +93,13 @@ bool MDatabaseMetaDataHelper::getTables( OConnection* _pCon,
     ODatabaseMetaDataResultSet::ORows().swap(aRows); // this makes real clear where memory is freed as well
     aRows.clear();
 
-    ::std::vector< OUString > tables;
+    std::vector< OUString > tables;
 
-    if ( !getTableStrings( _pCon, tables ) )
-        return false;
+    getTableStrings( _pCon, tables );
 
-    for ( size_t i = 0; i < tables.size(); i++ ) {
+    for (OUString& aTableName : tables) {
         ODatabaseMetaDataResultSet::ORow aRow { nullptr, nullptr, nullptr };
 
-        OUString aTableName  = tables[i];
         SAL_INFO("connectivity.mork", "TableName: " << aTableName );
 
 
@@ -127,7 +127,6 @@ bool MDatabaseMetaDataHelper::getTables( OConnection* _pCon,
     }
 
     _rRows = aRows;
-    return true;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -52,13 +52,13 @@ namespace pq_sdbc_driver
 class KeyColumn : public ReflectionBase
 {
 public:
-    KeyColumn( const ::rtl::Reference< RefCountedMutex > & refMutex,
-               const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection > & connection,
+    KeyColumn( const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+               const css::uno::Reference< css::sdbc::XConnection > & connection,
                ConnectionSettings *pSettings);
 
 public: // XDataDescriptorFactory
-    virtual ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > SAL_CALL
-    createDataDescriptor(  ) throw (::com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL
+    createDataDescriptor(  ) override;
 
 };
 
@@ -66,13 +66,13 @@ class KeyColumnDescriptor : public ReflectionBase
 {
 public:
     KeyColumnDescriptor(
-        const ::rtl::Reference< RefCountedMutex > & refMutex,
-        const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection > & connection,
+        const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+        const css::uno::Reference< css::sdbc::XConnection > & connection,
         ConnectionSettings *pSettings);
 
 public: // XDataDescriptorFactory
-    virtual ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > SAL_CALL
-    createDataDescriptor(  ) throw (::com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL
+    createDataDescriptor(  ) override;
 
 };
 

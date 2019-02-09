@@ -24,14 +24,14 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
 #include "xmlEnums.hxx"
-#include "xmlstrings.hrc"
+#include <stringconstants.hxx>
+#include <strings.hxx>
 #include <com/sun/star/sdbcx/XDataDescriptorFactory.hpp>
 #include <com/sun/star/sdbcx/XAppend.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/container/XChild.hpp>
 #include "xmlStyleImport.hxx"
-#include <tools/debug.hxx>
 
 namespace dbaxml
 {

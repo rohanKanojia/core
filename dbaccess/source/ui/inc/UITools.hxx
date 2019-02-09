@@ -23,12 +23,13 @@
 #include <comphelper/stl_types.hxx>
 #include "TypeInfo.hxx"
 #include <editeng/svxenum.hxx>
+#include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/taskpanelist.hxx>
 #include <connectivity/dbtools.hxx>
 
 #include <memory>
 
-#define RET_ALL     10
+#define RET_ALL     100
 
 // we only need forward decl here
 namespace com { namespace sun { namespace star {
@@ -46,6 +47,7 @@ namespace com { namespace sun { namespace star {
     namespace awt
     {
         struct FontDescriptor;
+        class XWindow;
     }
     namespace sdbc
     {
@@ -68,6 +70,7 @@ namespace svt
 }
 
 namespace vcl { class Window; }
+namespace weld {class Window; }
 class ToolBox;
 namespace vcl { class Font; }
 class SvNumberFormatter;
@@ -88,7 +91,7 @@ namespace dbaui
                                     const OUString& _rsDataSourceName,
                                     const css::uno::Reference< css::container::XNameAccess >& _xDatabaseContext,
                                     const css::uno::Reference< css::uno::XComponentContext >& _rxContext,
-                                    css::uno::Reference< css::lang::XEventListener>& _rEvtLst,
+                                    css::uno::Reference< css::lang::XEventListener> const & _rEvtLst,
                                     css::uno::Reference< css::sdbc::XConnection>& _rOUTConnection );
     /** creates a new connection and appends the eventlistener
         @param  _xDataSource            the datasource
@@ -100,17 +103,8 @@ namespace dbaui
     ::dbtools::SQLExceptionInfo createConnection(
                                     const css::uno::Reference< css::beans::XPropertySet >& _xDataSource,
                                     const css::uno::Reference< css::uno::XComponentContext >& _rxContext,
-                                    css::uno::Reference< css::lang::XEventListener>& _rEvtLst,
+                                    css::uno::Reference< css::lang::XEventListener> const & _rEvtLst,
                                     css::uno::Reference< css::sdbc::XConnection>& _rOUTConnection );
-
-    /**  creates a error dialog which displays the SQLExceptionInfo. Also it supports a "more" button where detailed information are available
-        @param  _rInfo                  the error which should be shown, if the info is not valid no error dialog will appear
-        @param  _pParent                the parent of the error dialog
-        @param  _rxContext              need to create the dialog
-    */
-    void showError( const ::dbtools::SQLExceptionInfo& _rInfo,
-                    vcl::Window* _pParent,
-                    const css::uno::Reference< css::uno::XComponentContext >& _rxContext);
 
     /** fills a map and a vector with localized type names
         @param  _rxConnection   the connection to access the metadata
@@ -121,7 +115,7 @@ namespace dbaui
     void fillTypeInfo(  const css::uno::Reference< css::sdbc::XConnection>& _rxConnection,
                         const OUString& _rsTypeNames,
                         OTypeInfoMap& _rTypeInfoMap,
-                        ::std::vector<OTypeInfoMap::iterator>& _rTypeInfoIters);
+                        std::vector<OTypeInfoMap::iterator>& _rTypeInfoIters);
 
     /** fill a column with data of a field description
         @param  _rxColumn   the column which should be filled
@@ -180,7 +174,7 @@ namespace dbaui
         @param css::awt::TextAlign& _nAlignment
         @return the corresponding SvxCellHorJustify
     */
-    SvxCellHorJustify mapTextJustify(const sal_Int32& _nAlignment);
+    SvxCellHorJustify mapTextJustify(sal_Int32 _nAlignment);
 
     /** call the format dialog and set the selected format at the column
         @param  _xAffectedCol   Font to be converted
@@ -189,27 +183,27 @@ namespace dbaui
     void callColumnFormatDialog(const css::uno::Reference< css::beans::XPropertySet>& _xAffectedCol,
                                 const css::uno::Reference< css::beans::XPropertySet>& _xField,
                                 SvNumberFormatter* _pFormatter,
-                                vcl::Window* _pParent);
+                                const vcl::Window* _pParent);
 
     /** second variant of the function before
     */
-    bool callColumnFormatDialog(vcl::Window* _pParent,
+    bool callColumnFormatDialog(const vcl::Window* _pParent,
                                     SvNumberFormatter* _pFormatter,
                                     sal_Int32 _nDataType,
                                     sal_Int32& _nFormatKey,
                                     SvxCellHorJustify& _eJustify,
                                     bool  _bHasFormat);
     /** append a name to tablefilter of a datasource
-        @param  _xConnection    the connection is need to get the datasource
-        @param  _sName          the name which should be appended
-        @param  _rxContext      needed to check if datasource is available
-        @param  _pParent        needed when an error must be shown
+        @param  xConnection    the connection is need to get the datasource
+        @param  rName          the name which should be appended
+        @param  rxContext      needed to check if datasource is available
+        @param  pParent        needed when an error must be shown
         @return false when datsource is not available otherwise true
     */
-    bool appendToFilter(const css::uno::Reference< css::sdbc::XConnection>& _xConnection,
-                            const OUString& _sName,
-                            const css::uno::Reference< css::uno::XComponentContext >& _rxContext,
-                            vcl::Window* _pParent);
+    bool appendToFilter(const css::uno::Reference< css::sdbc::XConnection>& xConnection,
+                        const OUString& rName,
+                        const css::uno::Reference< css::uno::XComponentContext >& rxContext,
+                        weld::Window* pParent);
 
     /** notifySystemWindow adds or remove the given window _pToRegister at the Systemwindow found when search _pWindow.
         @param  _pWindow
@@ -222,7 +216,7 @@ namespace dbaui
             ::comphelper::mem_fun(&TaskPaneList::AddWindow)
             ::comphelper::mem_fun(&TaskPaneList::RemoveWindow)
     */
-    void notifySystemWindow(vcl::Window* _pWindow,
+    void notifySystemWindow(vcl::Window const * _pWindow,
                             vcl::Window* _pToRegister,
                             const ::comphelper::mem_fun1_t<TaskPaneList,vcl::Window*>& _rMemFunc);
 
@@ -278,18 +272,10 @@ namespace dbaui
                                 ,bool& _rAutoIncrementValueEnabled
                                 ,OUString& _rsAutoIncrementValue);
 
-    /** creates the URL or the help agent
-        @param  _sModuleName
-        @param  _nHelpId
-        @return
-            The URL for the help agent to dispatch.
-    */
-    css::util::URL createHelpAgentURL(const OUString& _sModuleName,const OString& _rHelpId);
-
     /** set the evaluation flag at the number formatter
         @param  _rxFormatter
     */
-    void setEvalDateFormatForFormatter(css::uno::Reference< css::util::XNumberFormatter >& _rxFormatter);
+    void setEvalDateFormatForFormatter(css::uno::Reference< css::util::XNumberFormatter > const & _rxFormatter);
 
     /** query for a type info which can be used to create a primary key column
         @param  _rTypeInfo
@@ -315,21 +301,21 @@ namespace dbaui
     */
 
     /** returns the result of the user action when view the query dialog.
-        @param  _pParent
+        @param  pParent
             The parent of the dialog
-        @param  _nTitle
+        @param  pTitle
             A string resource id for the text which will be displayed as title.
-        @param  _nText
+        @param  pText
             A string resource id for the text which will be displayed above the buttons.
             When the string contains a #1. This will be replaced by the name.
-        @param  _bAll
+        @param  bAll
             When set to <TRUE/>, the all button will be appended.
-        @param  _sName
+        @param  rName
             The name of the object to ask for.
         @return
             RET_YES, RET_NO, RET_ALL
     */
-    sal_Int32 askForUserAction(vcl::Window* _pParent,sal_uInt16 _nTitle,sal_uInt16 _nText,bool _bAll,const OUString& _sName);
+    sal_Int32 askForUserAction(weld::Window* pParent, const char* pTitle, const char* pText, bool bAll, const OUString& rName);
 
     /** creates a new view from a query or table
         @param  _sName
@@ -365,7 +351,7 @@ namespace dbaui
                                             ,OUString& _rsDatabaseName);
 
     /** returns the standard database filter
-        @retrun
+        @return
             the filter
     */
     std::shared_ptr<const SfxFilter> getStandardDatabaseFilter();
@@ -408,10 +394,6 @@ namespace dbaui
             The multi service factory
     */
     css::uno::Reference< css::util::XNumberFormatter > getNumberFormatter(const css::uno::Reference< css::sdbc::XConnection >& _rxConnection,const css::uno::Reference< css::uno::XComponentContext >& _rxContext );
-
-    // this completes a help url with the system parameters "Language" and "System"
-    // detect installed locale
-    void AppendConfigToken( OUString& _rURL, bool _bQuestionMark );
 
 }
 #endif // INCLUDED_DBACCESS_SOURCE_UI_INC_UITOOLS_HXX

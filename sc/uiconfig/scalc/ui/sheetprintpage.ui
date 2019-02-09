@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.0 -->
+<!-- Generated with glade 3.22.1 -->
+<interface domain="sc">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkAdjustment" id="adjustmentFirstPage">
     <property name="lower">1.05</property>
     <property name="upper">9999.0400000000009</property>
@@ -11,6 +12,18 @@
     <property name="lower">1</property>
     <property name="upper">1000</property>
     <property name="value">1</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkAdjustment" id="adjustmentPage1">
+    <property name="lower">1</property>
+    <property name="upper">1000</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkAdjustment" id="adjustmentPage2">
+    <property name="lower">1</property>
+    <property name="upper">1000</property>
     <property name="step_increment">1</property>
     <property name="page_increment">10</property>
   </object>
@@ -59,7 +72,7 @@
                     <property name="column_spacing">12</property>
                     <child>
                       <object class="GtkRadioButton" id="radioBTN_TOPDOWN">
-                        <property name="label" translatable="yes">_Top to bottom, then right</property>
+                        <property name="label" translatable="yes" context="sheetprintpage|radioBTN_TOPDOWN">_Top to bottom, then right</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -72,13 +85,11 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">0</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkRadioButton" id="radioBTN_LEFTRIGHT">
-                        <property name="label" translatable="yes">_Left to right, then down</property>
+                        <property name="label" translatable="yes" context="sheetprintpage|radioBTN_LEFTRIGHT">_Left to right, then down</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -93,25 +104,24 @@
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">1</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="checkBTN_PAGENO">
-                        <property name="label" translatable="yes">First _page number:</property>
+                        <property name="label" translatable="yes" context="sheetprintpage|checkBTN_PAGENO">First _page number:</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
                         <property name="use_underline">True</property>
                         <property name="xalign">0</property>
                         <property name="draw_indicator">True</property>
+                        <accessibility>
+                          <relation type="label-for" target="spinED_PAGENO"/>
+                        </accessibility>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
                         <property name="top_attach">2</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
@@ -119,14 +129,15 @@
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="max_length">5</property>
-                        <property name="invisible_char">•</property>
+                        <property name="activates_default">True</property>
                         <property name="adjustment">adjustmentFirstPage</property>
+                        <accessibility>
+                          <relation type="labelled-by" target="checkBTN_PAGENO"/>
+                        </accessibility>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
                         <property name="top_attach">2</property>
-                        <property name="width">1</property>
-                        <property name="height">1</property>
                       </packing>
                     </child>
                     <child>
@@ -166,7 +177,7 @@
           <object class="GtkLabel" id="labelPageOrder">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Page Order</property>
+            <property name="label" translatable="yes" context="sheetprintpage|labelPageOrder">Page Order</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -176,8 +187,6 @@
       <packing>
         <property name="left_attach">0</property>
         <property name="top_attach">0</property>
-        <property name="width">1</property>
-        <property name="height">1</property>
       </packing>
     </child>
     <child>
@@ -202,7 +211,7 @@
                 <property name="column_homogeneous">True</property>
                 <child>
                   <object class="GtkCheckButton" id="checkBTN_HEADER">
-                    <property name="label" translatable="yes">_Column and row headers</property>
+                    <property name="label" translatable="yes" context="sheetprintpage|checkBTN_HEADER">_Column and row headers</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -213,13 +222,11 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="checkBTN_GRID">
-                    <property name="label" translatable="yes">_Grid</property>
+                    <property name="label" translatable="yes" context="sheetprintpage|checkBTN_GRID">_Grid</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -231,13 +238,11 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="checkBTN_NOTES">
-                    <property name="label" translatable="yes">_Comments</property>
+                    <property name="label" translatable="yes" context="sheetprintpage|checkBTN_NOTES">_Comments</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -248,13 +253,11 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="checkBTN_OBJECTS">
-                    <property name="label" translatable="yes">_Objects/Images</property>
+                    <property name="label" translatable="yes" context="sheetprintpage|checkBTN_OBJECTS">_Objects/Images</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -265,13 +268,11 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">3</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="checkBTN_CHARTS">
-                    <property name="label" translatable="yes">Charts</property>
+                    <property name="label" translatable="yes" context="sheetprintpage|checkBTN_CHARTS">Charts</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -282,13 +283,11 @@
                   <packing>
                     <property name="left_attach">2</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="checkBTN_DRAWINGS">
-                    <property name="label" translatable="yes">_Drawing objects</property>
+                    <property name="label" translatable="yes" context="sheetprintpage|checkBTN_DRAWINGS">_Drawing objects</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -299,13 +298,11 @@
                   <packing>
                     <property name="left_attach">2</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="checkBTN_FORMULAS">
-                    <property name="label" translatable="yes">_Formulas</property>
+                    <property name="label" translatable="yes" context="sheetprintpage|checkBTN_FORMULAS">_Formulas</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -316,13 +313,11 @@
                   <packing>
                     <property name="left_attach">2</property>
                     <property name="top_attach">2</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="checkBTN_NULLVALS">
-                    <property name="label" translatable="yes">_Zero values</property>
+                    <property name="label" translatable="yes" context="sheetprintpage|checkBTN_NULLVALS">_Zero values</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -333,8 +328,6 @@
                   <packing>
                     <property name="left_attach">2</property>
                     <property name="top_attach">3</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -357,7 +350,7 @@
           <object class="GtkLabel" id="labelPrint">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Print</property>
+            <property name="label" translatable="yes" context="sheetprintpage|labelPrint">Print</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -367,8 +360,6 @@
       <packing>
         <property name="left_attach">0</property>
         <property name="top_attach">1</property>
-        <property name="width">1</property>
-        <property name="height">1</property>
       </packing>
     </child>
     <child>
@@ -392,16 +383,14 @@
                   <object class="GtkLabel" id="labelScalingMode">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">Scaling _mode:</property>
+                    <property name="label" translatable="yes" context="sheetprintpage|labelScalingMode">Scaling _mode:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">comboLB_SCALEMODE</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
                 </child>
                 <child>
@@ -411,7 +400,7 @@
                     <property name="orientation">vertical</property>
                     <property name="spacing">6</property>
                     <child>
-                      <object class="GtkHBox" id="boxSCALEALL">
+                      <object class="GtkBox" id="boxSCALEALL">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="spacing">12</property>
@@ -419,10 +408,10 @@
                           <object class="GtkLabel" id="labelSF">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">0</property>
-                            <property name="label" translatable="yes">_Scaling factor:</property>
+                            <property name="label" translatable="yes" context="sheetprintpage|labelSF">_Scaling factor:</property>
                             <property name="use_underline">True</property>
-                            <property name="mnemonic_widget">spinED_SCALEALL:0%</property>
+                            <property name="mnemonic_widget">spinED_SCALEALL</property>
+                            <property name="xalign">0</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -431,11 +420,10 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkSpinButton" id="spinED_SCALEALL:0%">
+                          <object class="GtkSpinButton" id="spinED_SCALEALL">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="invisible_char">•</property>
-                            <property name="invisible_char_set">True</property>
+                            <property name="activates_default">True</property>
                             <property name="adjustment">adjustmentScalingFactor</property>
                           </object>
                           <packing>
@@ -459,66 +447,71 @@
                         <property name="column_spacing">12</property>
                         <property name="row_homogeneous">True</property>
                         <child>
-                          <object class="GtkLabel" id="labelWP">
+                          <object class="GtkCheckButton" id="labelWP">
+                            <property name="label" translatable="yes" context="sheetprintpage|labelWP">_Width in pages:</property>
                             <property name="visible">True</property>
-                            <property name="can_focus">False</property>
-                            <property name="xalign">0</property>
-                            <property name="label" translatable="yes">_Width in pages:</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">False</property>
                             <property name="use_underline">True</property>
-                            <property name="mnemonic_widget">spinED_SCALEPAGEWIDTH</property>
+                            <property name="xalign">0</property>
+                            <property name="draw_indicator">True</property>
+                            <accessibility>
+                              <relation type="label-for" target="spinED_SCALEPAGEWIDTH"/>
+                            </accessibility>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
                             <property name="top_attach">0</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkLabel" id="labelHP">
+                          <object class="GtkCheckButton" id="labelHP">
+                            <property name="label" translatable="yes" context="sheetprintpage|labelHP">_Height in pages:</property>
                             <property name="visible">True</property>
-                            <property name="can_focus">False</property>
-                            <property name="xalign">0</property>
-                            <property name="label" translatable="yes">_Height in pages:</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">False</property>
                             <property name="use_underline">True</property>
-                            <property name="mnemonic_widget">spinED_SCALEPAGEHEIGHT</property>
+                            <property name="xalign">0</property>
+                            <property name="draw_indicator">True</property>
+                            <accessibility>
+                              <relation type="label-for" target="spinED_SCALEPAGEHEIGHT"/>
+                            </accessibility>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
                             <property name="top_attach">1</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                         <child>
                           <object class="GtkSpinButton" id="spinED_SCALEPAGEWIDTH">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="invisible_char">•</property>
+                            <property name="activates_default">True</property>
                             <property name="shadow_type">none</property>
-                            <property name="invisible_char_set">True</property>
                             <property name="adjustment">adjustmentPage</property>
+                            <accessibility>
+                              <relation type="labelled-by" target="labelWP"/>
+                            </accessibility>
                           </object>
                           <packing>
                             <property name="left_attach">1</property>
                             <property name="top_attach">0</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                         <child>
                           <object class="GtkSpinButton" id="spinED_SCALEPAGEHEIGHT">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="invisible_char">•</property>
-                            <property name="invisible_char_set">True</property>
-                            <property name="adjustment">adjustmentPage</property>
+                            <property name="activates_default">True</property>
+                            <property name="shadow_type">none</property>
+                            <property name="adjustment">adjustmentPage1</property>
+                            <accessibility>
+                              <relation type="labelled-by" target="labelHP"/>
+                            </accessibility>
                           </object>
                           <packing>
                             <property name="left_attach">1</property>
                             <property name="top_attach">1</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                       </object>
@@ -529,7 +522,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkHBox" id="boxNP">
+                      <object class="GtkBox" id="boxNP">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="spacing">12</property>
@@ -537,10 +530,10 @@
                           <object class="GtkLabel" id="labelNP">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">0</property>
-                            <property name="label" translatable="yes">N_umber of pages:</property>
+                            <property name="label" translatable="yes" context="sheetprintpage|labelNP">N_umber of pages:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">spinED_SCALEPAGENUM</property>
+                            <property name="xalign">0</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -552,9 +545,8 @@
                           <object class="GtkSpinButton" id="spinED_SCALEPAGENUM">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="invisible_char">•</property>
-                            <property name="invisible_char_set">True</property>
-                            <property name="adjustment">adjustmentPage</property>
+                            <property name="activates_default">True</property>
+                            <property name="adjustment">adjustmentPage2</property>
                             <property name="update_policy">if-valid</property>
                           </object>
                           <packing>
@@ -574,31 +566,25 @@
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">1</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
-                </child>
-                <child>
-                  <placeholder/>
                 </child>
                 <child>
                   <object class="GtkComboBoxText" id="comboLB_SCALEMODE">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="entry_text_column">0</property>
-                    <property name="id_column">1</property>
                     <items>
-                      <item translatable="yes">Reduce/enlarge printout</item>
-                      <item translatable="yes">Fit print range(s) to width/height</item>
-                      <item translatable="yes">Fit print range(s) on number of pages</item>
+                      <item translatable="yes" context="sheetprintpage|comboLB_SCALEMODE">Reduce/enlarge printout</item>
+                      <item translatable="yes" context="sheetprintpage|comboLB_SCALEMODE">Fit print range(s) to width/height</item>
+                      <item translatable="yes" context="sheetprintpage|comboLB_SCALEMODE">Fit print range(s) on number of pages</item>
                     </items>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">0</property>
-                    <property name="width">1</property>
-                    <property name="height">1</property>
                   </packing>
+                </child>
+                <child>
+                  <placeholder/>
                 </child>
               </object>
             </child>
@@ -608,7 +594,7 @@
           <object class="GtkLabel" id="labelScale">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Scale</property>
+            <property name="label" translatable="yes" context="sheetprintpage|labelScale">Scale</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -618,8 +604,6 @@
       <packing>
         <property name="left_attach">0</property>
         <property name="top_attach">2</property>
-        <property name="width">1</property>
-        <property name="height">1</property>
       </packing>
     </child>
   </object>

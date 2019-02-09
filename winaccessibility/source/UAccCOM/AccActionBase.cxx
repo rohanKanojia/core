@@ -29,6 +29,8 @@
 #include <com/sun/star/accessibility/XAccessibleContext.hpp>
 
 #include <vcl/svapp.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
+#include <comphelper/AccessibleImplementationHelper.hxx>
 
 #include "AccessibleKeyStroke.h"
 
@@ -50,57 +52,6 @@ CAccActionBase::~CAccActionBase()
 {}
 
 /**
- * Helper function used for getting default action by UNO role.
- *
- * @param    pRContext    UNO context interface pointer.
- * @param    pRet         the corresponding string to be returned.
- */
-void GetDfActionByUNORole(XAccessibleContext* pRContext, BSTR* pRet)
-{
-    // #CHECK#
-    if(pRContext == NULL || pRet == NULL)
-    {
-        return;
-    }
-
-    long Role = pRContext->getAccessibleRole();
-
-    switch(Role)
-    {
-    case PUSH_BUTTON:
-        *pRet = ::SysAllocString(PRESS_STR);
-        break;
-    case RADIO_BUTTON:
-    case MENU_ITEM:
-    case LIST_ITEM:
-        *pRet = ::SysAllocString(SELECT_STR);
-        break;
-    case CHECK_BOX:
-        {
-            Reference< XAccessibleStateSet > pRState = pRContext->getAccessibleStateSet();
-            if( !pRState.is() )
-            {
-                return;
-            }
-
-            Sequence<short> pStates = pRState->getStates();
-            int count = pStates.getLength();
-            *pRet = ::SysAllocString(CHECK_STR);
-            for( int iIndex = 0;iIndex < count;iIndex++ )
-            {
-                if( pStates[iIndex] == AccessibleStateType::CHECKED )
-                {
-                    SAFE_SYSFREESTRING(*pRet);
-                    *pRet = ::SysAllocString(UNCHECK_STR);
-                    break;
-                }
-            }
-            break;
-        }
-    }
-}
-
-/**
  * Returns the number of action.
  *
  * @param    nActions    the number of action.
@@ -112,7 +63,7 @@ STDMETHODIMP CAccActionBase::nActions(/*[out,retval]*/long* nActions)
     ENTER_PROTECTED_BLOCK
 
     // #CHECK#
-    if( pRXAct.is() && nActions != NULL )
+    if( pRXAct.is() && nActions != nullptr )
     {
         *nActions = GetXInterface()->getAccessibleActionCount();
         return S_OK;
@@ -157,18 +108,18 @@ STDMETHODIMP CAccActionBase::get_description(long actionIndex,BSTR __RPC_FAR *de
     ENTER_PROTECTED_BLOCK
 
     // #CHECK#
-    if(description == NULL)
+    if(description == nullptr)
         return E_INVALIDARG;
 
     // #CHECK XInterface#
     if(!pRXAct.is())
         return E_FAIL;
 
-    ::rtl::OUString ouStr = GetXInterface()->getAccessibleActionDescription(actionIndex);
+    OUString ouStr = GetXInterface()->getAccessibleActionDescription(actionIndex);
     // #CHECK#
 
     SAFE_SYSFREESTRING(*description);
-    *description = SysAllocString((OLECHAR*)ouStr.getStr());
+    *description = SysAllocString(o3tl::toW(ouStr.getStr()));
 
     return S_OK;
 
@@ -215,22 +166,20 @@ STDMETHODIMP CAccActionBase::get_keyBinding(
     if( !binding.is() )
         return E_FAIL;
 
-    long nCount = (binding.get())->getAccessibleKeyBindingCount();
+    long nCount = binding.get()->getAccessibleKeyBindingCount();
 
-    OLECHAR wString[64];
-
-    *keyBinding = (BSTR*)::CoTaskMemAlloc(nCount*sizeof(BSTR));
+    *keyBinding = static_cast<BSTR*>(::CoTaskMemAlloc(nCount*sizeof(BSTR)));
 
     // #CHECK Memory Allocation#
-    if(*keyBinding == NULL)
+    if(*keyBinding == nullptr)
         return E_FAIL;
 
     for( int index = 0;index < nCount;index++ )
     {
-        memset(wString,0,sizeof(wString));
-        GetkeyBindingStrByXkeyBinding( (binding.get())->getAccessibleKeyBinding(index), wString );
+        auto const wString = comphelper::GetkeyBindingStrByXkeyBinding(
+            binding.get()->getAccessibleKeyBinding(index));
 
-        (*keyBinding)[index] = SysAllocString(wString);
+        (*keyBinding)[index] = SysAllocString(o3tl::toW(wString.getStr()));
     }
 
     *nBinding = nCount;
@@ -253,7 +202,7 @@ STDMETHODIMP CAccActionBase::put_XInterface(hyper pXInterface)
     CUNOXWrapper::put_XInterface(pXInterface);
 
     //special query.
-    if(pUNOInterface == NULL)
+    if(pUNOInterface == nullptr)
         return E_FAIL;
     Reference<XAccessibleContext> pRContext = pUNOInterface->getAccessibleContext();
     if( !pRContext.is() )
@@ -261,128 +210,12 @@ STDMETHODIMP CAccActionBase::put_XInterface(hyper pXInterface)
 
     Reference<XAccessibleAction> pRXI(pRContext,UNO_QUERY);
     if( !pRXI.is() )
-        pRXAct = NULL;
+        pRXAct = nullptr;
     else
         pRXAct = pRXI.get();
     return S_OK;
 
     LEAVE_PROTECTED_BLOCK
-}
-
-/**
- * Helper function used for converting keybinding to string.
- *
- * @param    keySet    the key stroke sequence.
- * @param    pString   the output keybinding string.
- */
-void CAccActionBase::GetkeyBindingStrByXkeyBinding( const Sequence< KeyStroke > &keySet, OLECHAR* pString )
-{
-    // #CHECK#
-    if(pString == NULL)
-        return;
-
-    for( int iIndex = 0;iIndex < keySet.getLength();iIndex++ )
-    {
-        KeyStroke stroke = keySet[iIndex];
-        OLECHAR wString[64] = {NULL};
-        wcscat(wString, OLESTR("\n"));
-        wcscat(wString, &stroke.KeyChar);
-
-        wcscat( pString, wString);
-    }
-}
-
-/**
- * Helper function used for converting key code to ole string.
- *
- * @param    key    the key code.
- */
-OLECHAR const * CAccActionBase::getOLECHARFromKeyCode(long key)
-{
-    static struct keyMap
-    {
-        int keyCode;
-        OLECHAR const * key;
-    }
-    map[] =
-        {
-#define CODEENTRY(key)   {KEYCODE_##key, L#key}
-            {MODIFIER_SHIFT, L"SHIFT" },
-            {MODIFIER_CTRL, L"CTRL" },
-            {MODIFIER_ALT, L"ALT" },
-            CODEENTRY(NUM0),CODEENTRY(NUM1),CODEENTRY(NUM2),CODEENTRY(NUM3),CODEENTRY(NUM4),CODEENTRY(NUM5),
-            CODEENTRY(NUM6),CODEENTRY(NUM7),CODEENTRY(NUM8),CODEENTRY(NUM9),
-            CODEENTRY(A),CODEENTRY(B),CODEENTRY(C),CODEENTRY(D),CODEENTRY(E),CODEENTRY(F),
-            CODEENTRY(G),CODEENTRY(H),CODEENTRY(I),CODEENTRY(J),CODEENTRY(K),CODEENTRY(L),
-            CODEENTRY(M),CODEENTRY(N),CODEENTRY(O),CODEENTRY(P),CODEENTRY(Q),CODEENTRY(R),
-            CODEENTRY(S),CODEENTRY(T),CODEENTRY(U),CODEENTRY(V),CODEENTRY(W),CODEENTRY(X),
-            CODEENTRY(Y),CODEENTRY(Z),
-            CODEENTRY(F1),CODEENTRY(F2),CODEENTRY(F3),CODEENTRY(F4),CODEENTRY(F5),CODEENTRY(F6),
-            CODEENTRY(F7),CODEENTRY(F8),CODEENTRY(F9),CODEENTRY(F10),CODEENTRY(F11),CODEENTRY(F12),
-            CODEENTRY(F13),CODEENTRY(F14),CODEENTRY(F15),CODEENTRY(F16),CODEENTRY(F17),CODEENTRY(F18),
-            CODEENTRY(F19),CODEENTRY(F20),CODEENTRY(F21),CODEENTRY(F22),CODEENTRY(F23),CODEENTRY(F24),
-            CODEENTRY(F25),CODEENTRY(F26),
-
-            { KEYCODE_DOWN, L"DOWN" },
-            { KEYCODE_UP, L"UP" },
-            { KEYCODE_LEFT, L"LEFT" },
-            { KEYCODE_RIGHT, L"RIGHT" },
-            { KEYCODE_HOME, L"HOME" },
-            { KEYCODE_END, L"END" },
-            { KEYCODE_PAGEUP, L"PAGEUP" },
-            { KEYCODE_PAGEDOWN, L"PAGEDOWN" },
-            { KEYCODE_RETURN, L"RETURN" },
-            { KEYCODE_ESCAPE, L"ESCAPE" },
-            { KEYCODE_TAB, L"TAB" },
-            { KEYCODE_BACKSPACE, L"BACKSPACE" },
-            { KEYCODE_SPACE, L"SPACE" },
-            { KEYCODE_INSERT, L"INSERT" },
-            { KEYCODE_DELETE, L"DELETE" },
-            { KEYCODE_ADD, L"ADD" },
-            { KEYCODE_SUBTRACT, L"SUBTRACT" },
-            { KEYCODE_MULTIPLY, L"MULTIPLY" },
-            { KEYCODE_DIVIDE, L"DIVIDE" },
-            { KEYCODE_POINT, L"POINT" },
-            { KEYCODE_COMMA, L"COMMA" },
-            { KEYCODE_LESS, L"LESS" },
-            { KEYCODE_GREATER, L"GREATER" },
-            { KEYCODE_EQUAL, L"EQUAL" },
-            { KEYCODE_OPEN, L"OPEN" },
-            { KEYCODE_CUT, L"CUT" },
-            { KEYCODE_COPY, L"COPY" },
-            { KEYCODE_PASTE, L"PASTE" },
-            { KEYCODE_UNDO, L"UNDO" },
-            { KEYCODE_REPEAT, L"REPEAT" },
-            { KEYCODE_FIND, L"FIND" },
-            { KEYCODE_PROPERTIES, L"PROPERTIES" },
-            { KEYCODE_FRONT, L"FRONT" },
-            { KEYCODE_CONTEXTMENU, L"CONTEXTMENU" },
-            { KEYCODE_HELP, L"HELP" },
-        };
-    static long nCount = SAL_N_ELEMENTS(map);
-
-    long min = 0;
-    long max = nCount-1;
-    long mid = nCount/2;
-    while(min<max)
-    {
-        if(key<map[mid].keyCode)
-            max = mid-1;
-        else if(key>map[mid].keyCode)
-            min = mid+1;
-        else
-            break;
-        mid = (min+max)/2;
-    }
-
-    if(key == map[mid].keyCode)
-    {
-        return map[mid].key;
-    }
-    else
-    {
-        return NULL;
-    }
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

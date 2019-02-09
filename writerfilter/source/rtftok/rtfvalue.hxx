@@ -11,8 +11,24 @@
 #define INCLUDED_WRITERFILTER_SOURCE_RTFTOK_RTFVALUE_HXX
 
 #include <dmapper/resourcemodel.hxx>
-#include <com/sun/star/io/XInputStream.hpp>
-#include <com/sun/star/embed/XEmbeddedObject.hpp>
+
+namespace com
+{
+namespace sun
+{
+namespace star
+{
+namespace embed
+{
+class XEmbeddedObject;
+}
+namespace io
+{
+class XInputStream;
+}
+}
+}
+}
 
 namespace writerfilter
 {
@@ -20,53 +36,57 @@ namespace rtftok
 {
 class RTFSprms;
 class RTFShape;
+class RTFPicture;
 /// Value of an RTF keyword
-class RTFValue
-    : public Value
+class RTFValue : public Value
 {
 public:
-    typedef std::shared_ptr<RTFValue> Pointer_t;
-    RTFValue(int nValue, const OUString& sValue, RTFSprms rAttributes, RTFSprms rSprms,
-             css::uno::Reference<css::drawing::XShape> const& xShape,
-             css::uno::Reference<css::io::XInputStream> const& xStream,
-             css::uno::Reference<css::embed::XEmbeddedObject> const& xObject,
-             bool bForceString, const RTFShape& aShape);
+    using Pointer_t = tools::SvRef<RTFValue>;
+    RTFValue(int nValue, OUString sValue, const RTFSprms& rAttributes, const RTFSprms& rSprms,
+             css::uno::Reference<css::drawing::XShape> xShape,
+             css::uno::Reference<css::io::XInputStream> xStream,
+             css::uno::Reference<css::embed::XEmbeddedObject> xObject, bool bForceString,
+             const RTFShape& aShape, const RTFPicture& rPicture);
     RTFValue();
-    RTFValue(int nValue);
-    RTFValue(const OUString& sValue, bool bForce = false);
-    RTFValue(RTFSprms rAttributes);
-    RTFValue(RTFSprms rAttributes, RTFSprms rSprms);
-    RTFValue(css::uno::Reference<css::drawing::XShape> const& xShape);
-    RTFValue(css::uno::Reference<css::io::XInputStream> const& xStream);
-    RTFValue(css::uno::Reference<css::embed::XEmbeddedObject> const& xObject);
-    RTFValue(const RTFShape& aShape);
-    virtual ~RTFValue();
+    explicit RTFValue(int nValue);
+    RTFValue(OUString sValue, bool bForce = false);
+    explicit RTFValue(const RTFSprms& rAttributes);
+    RTFValue(const RTFSprms& rAttributes, const RTFSprms& rSprms);
+    explicit RTFValue(css::uno::Reference<css::drawing::XShape> xShape);
+    explicit RTFValue(css::uno::Reference<css::io::XInputStream> xStream);
+    explicit RTFValue(css::uno::Reference<css::embed::XEmbeddedObject> xObject);
+    explicit RTFValue(const RTFShape& aShape);
+    explicit RTFValue(const RTFPicture& rPicture);
+    ~RTFValue() override;
     void setString(const OUString& sValue);
-    virtual int getInt() const override;
-    virtual OUString getString() const override;
-    virtual css::uno::Any getAny() const override;
-    virtual writerfilter::Reference<Properties>::Pointer_t getProperties() override;
-    virtual writerfilter::Reference<BinaryObj>::Pointer_t getBinary() override;
+    int getInt() const override;
+    OUString getString() const override;
+    css::uno::Any getAny() const override;
+    writerfilter::Reference<Properties>::Pointer_t getProperties() override;
+    writerfilter::Reference<BinaryObj>::Pointer_t getBinary() override;
 #ifdef DEBUG_WRITERFILTER
-    virtual std::string toString() const override;
+    std::string toString() const override;
 #endif
     RTFValue* Clone();
     RTFValue* CloneWithSprms(RTFSprms const& rAttributes, RTFSprms const& rSprms);
     RTFSprms& getAttributes();
     RTFSprms& getSprms();
     RTFShape& getShape() const;
+    RTFPicture& getPicture() const;
     bool equals(RTFValue& rOther);
-private:
     RTFValue& operator=(RTFValue const& rOther) = delete;
-    int m_nValue;
+
+private:
+    int const m_nValue = 0;
     OUString m_sValue;
-    std::shared_ptr<RTFSprms> m_pAttributes;
-    std::shared_ptr<RTFSprms> m_pSprms;
+    tools::SvRef<RTFSprms> m_pAttributes;
+    tools::SvRef<RTFSprms> m_pSprms;
     css::uno::Reference<css::drawing::XShape> m_xShape;
     css::uno::Reference<css::io::XInputStream> m_xStream;
     css::uno::Reference<css::embed::XEmbeddedObject> m_xObject;
-    bool m_bForceString;
-    std::shared_ptr<RTFShape> m_pShape;
+    bool const m_bForceString = false;
+    tools::SvRef<RTFShape> m_pShape;
+    tools::SvRef<RTFPicture> m_pPicture;
 };
 } // namespace rtftok
 } // namespace writerfilter

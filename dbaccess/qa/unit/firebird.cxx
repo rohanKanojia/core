@@ -16,6 +16,7 @@
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XStatement.hpp>
 #include <svtools/miscopt.hxx>
+#include <config_firebird.h>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::sdb;
@@ -29,20 +30,11 @@ public:
     void testEmptyDBConnection();
     void testIntegerDatabase();
 
-    virtual void setUp() override;
-
     CPPUNIT_TEST_SUITE(FirebirdTest);
     CPPUNIT_TEST(testEmptyDBConnection);
     CPPUNIT_TEST(testIntegerDatabase);
     CPPUNIT_TEST_SUITE_END();
 };
-
-void FirebirdTest::setUp()
-{
-    DBTestBase::setUp();
-    SvtMiscOptions aMiscOptions;
-    aMiscOptions.SetExperimentalMode(true);
-}
 
 /**
  * Test the loading of an "empty" file, i.e. the embedded database has not yet
@@ -50,8 +42,9 @@ void FirebirdTest::setUp()
  */
 void FirebirdTest::testEmptyDBConnection()
 {
+    auto const tmp = createTempCopy("firebird_empty.odb");
     uno::Reference< XOfficeDatabaseDocument > xDocument =
-        getDocumentForFileName("firebird_empty.odb");
+        getDocumentForUrl(tmp.GetURL());
 
     getConnectionForDocument(xDocument);
 
@@ -65,7 +58,7 @@ void FirebirdTest::testEmptyDBConnection()
 void FirebirdTest::testIntegerDatabase()
 {
     uno::Reference< XOfficeDatabaseDocument > xDocument =
-        getDocumentForFileName("firebird_integer_x64le.odb");
+        getDocumentForFileName("firebird_integer_ods12.odb");
 
     uno::Reference< XConnection > xConnection =
         getConnectionForDocument(xDocument);
@@ -83,15 +76,15 @@ void FirebirdTest::testIntegerDatabase()
     uno::Reference< XColumnLocate > xColumnLocate(xRow, UNO_QUERY);
     CPPUNIT_ASSERT(xColumnLocate.is());
 
-    CPPUNIT_ASSERT(sal_Int16(-30000) ==
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(-30000),
         xRow->getShort(xColumnLocate->findColumn("_SMALLINT")));
-    CPPUNIT_ASSERT(sal_Int32(-2100000000) ==
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(-2100000000),
         xRow->getInt(xColumnLocate->findColumn("_INT")));
-    CPPUNIT_ASSERT(SAL_CONST_INT64(-9000000000000000000) ==
+    CPPUNIT_ASSERT_EQUAL(SAL_CONST_INT64(-9000000000000000000),
         xRow->getLong(xColumnLocate->findColumn("_BIGINT")));
-    CPPUNIT_ASSERT("5" ==
+    CPPUNIT_ASSERT_EQUAL(OUString("5"),
         xRow->getString(xColumnLocate->findColumn("_CHAR")));
-    CPPUNIT_ASSERT("5" ==
+    CPPUNIT_ASSERT_EQUAL(OUString("5"),
         xRow->getString(xColumnLocate->findColumn("_VARCHAR")));
 
     CPPUNIT_ASSERT(!xResultSet->next()); // Should only be one row

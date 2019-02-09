@@ -25,7 +25,7 @@
 #include <vcl/gdimtf.hxx>
 #include <svx/svxdllapi.h>
 
-class SVX_DLLPUBLIC SdrExchangeView: public SdrObjEditView
+class SVX_DLLPUBLIC SdrExchangeView : public SdrObjEditView
 {
     friend class SdrPageView;
 
@@ -40,7 +40,9 @@ protected:
 
 protected:
     // #i71538# make constructors of SdrView sub-components protected to avoid incomplete incarnations which may get casted to SdrView
-    SdrExchangeView(SdrModel* pModel1, OutputDevice* pOut = nullptr);
+    SdrExchangeView(
+        SdrModel& rSdrModel,
+        OutputDevice* pOut);
 
 public:
     // Output all marked objects on the specified OutputDevice
@@ -68,24 +70,20 @@ public:
     // the page-local layer is merged. If there's no more room left for
     // additional page-local layers, the corresponding objects are assigned
     // the default layer (layer 0, document-global standard layer).
-    virtual SdrModel*   GetMarkedObjModel() const;
+    virtual std::unique_ptr<SdrModel> CreateMarkedObjModel() const;
 
     Graphic         GetAllMarkedGraphic() const;
 
-    /** Generate a Graphic for the given draw object in the given model
+    /** Generate a Graphic for the given draw object
 
-        @param pModel
-        Must not be NULL. Denotes the draw model the object is a part
-        of.
-
-        @param pObj
+        @param rSdrObject
         The object (can also be a group object) to retrieve a Graphic
-        for. Must not be NULL.
+        for.
 
         @return a graphical representation of the given object, as it
         appears on screen (e.g. with rotation, if any, applied).
      */
-    static Graphic  GetObjGraphic( const SdrModel* pModel, const SdrObject* pObj );
+    static Graphic GetObjGraphic(const SdrObject& rSdrObject);
 
     // The new Draw objects are marked for all paste methods.
     // If bAddMark is true, the new Draw objects are added to an existing
@@ -109,8 +107,8 @@ public:
     virtual bool Paste(
         const SdrModel& rMod, const Point& rPos, SdrObjList* pLst, SdrInsertFlags nOptions);
 
-    bool            Paste(const OUString& rStr, const Point& rPos, SdrObjList* pLst=nullptr, SdrInsertFlags nOptions=SdrInsertFlags::NONE);
-    bool            Paste(SvStream& rInput, const OUString& rBaseURL, sal_uInt16 eFormat, const Point& rPos, SdrObjList* pLst=nullptr, SdrInsertFlags nOptions=SdrInsertFlags::NONE);
+    bool            Paste(const OUString& rStr, const Point& rPos, SdrObjList* pLst, SdrInsertFlags nOptions);
+    bool            Paste(SvStream& rInput, EETextFormat eFormat, const Point& rPos, SdrObjList* pLst, SdrInsertFlags nOptions);
 };
 
 #endif // INCLUDED_SVX_SVDXCGV_HXX

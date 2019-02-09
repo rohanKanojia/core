@@ -18,23 +18,23 @@
  */
 
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include "currentcontextchecker.hxx"
 
-#include "com/sun/star/uno/Any.hxx"
-#include "com/sun/star/uno/Reference.hxx"
-#include "com/sun/star/uno/RuntimeException.hpp"
-#include "com/sun/star/uno/XCurrentContext.hpp"
-#include "cppu/unotype.hxx"
+#include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/uno/XCurrentContext.hpp>
+#include <cppu/unotype.hxx>
 #include <cppuhelper/implbase.hxx>
-#include "osl/diagnose.h"
-#include "osl/diagnose.hxx"
-#include "rtl/string.h"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
-#include "test/testtools/bridgetest/XCurrentContextChecker.hpp"
-#include "uno/current_context.hxx"
+#include <osl/diagnose.h>
+#include <osl/diagnose.hxx>
+#include <rtl/string.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <test/testtools/bridgetest/XCurrentContextChecker.hpp>
+#include <uno/current_context.hxx>
 
 namespace {
 
@@ -48,21 +48,15 @@ class CurrentContext:
 public:
     CurrentContext();
 
-    virtual ~CurrentContext();
-
     CurrentContext(const CurrentContext&) = delete;
     CurrentContext& operator=(const CurrentContext&) = delete;
 
-    virtual css::uno::Any SAL_CALL getValueByName(OUString const & Name)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL getValueByName(OUString const & Name) override;
 };
 
 CurrentContext::CurrentContext() {}
 
-CurrentContext::~CurrentContext() {}
-
 css::uno::Any CurrentContext::getValueByName(OUString const & Name)
-    throw (css::uno::RuntimeException, std::exception)
 {
     return Name == KEY ? css::uno::makeAny(OUString(VALUE)) : css::uno::Any();
 }
@@ -77,7 +71,6 @@ sal_Bool testtools::bridgetest::CurrentContextChecker::perform(
     css::uno::Reference<
         ::test::testtools::bridgetest::XCurrentContextChecker > const & other,
     ::sal_Int32 setSteps, ::sal_Int32 checkSteps)
-    throw (css::uno::RuntimeException, std::exception)
 {
     if (setSteps == 0) {
         css::uno::ContextLayer layer(new CurrentContext);

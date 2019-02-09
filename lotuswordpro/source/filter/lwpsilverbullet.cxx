@@ -58,17 +58,18 @@
  *  For LWP filter architecture prototype
  ************************************************************************/
 
-#include "lwpglobalmgr.hxx"
+#include <memory>
+#include <lwpglobalmgr.hxx>
 #include "lwpsilverbullet.hxx"
 #include "lwpdoc.hxx"
 #include "lwpdivinfo.hxx"
-#include "lwpfoundry.hxx"
+#include <lwpfoundry.hxx>
 #include "lwpstory.hxx"
 #include "lwppara.hxx"
-#include "xfilter/xfliststyle.hxx"
-#include "xfilter/xfstylemanager.hxx"
+#include <xfilter/xfliststyle.hxx>
+#include <xfilter/xfstylemanager.hxx>
 
-LwpSilverBullet::LwpSilverBullet(LwpObjectHeader& objHdr, LwpSvStream* pStrm)
+LwpSilverBullet::LwpSilverBullet(LwpObjectHeader const & objHdr, LwpSvStream* pStrm)
     : LwpDLNFVList(objHdr, pStrm)
     , m_nFlags(0)
     , m_nUseCount(0)
@@ -78,7 +79,6 @@ LwpSilverBullet::LwpSilverBullet(LwpObjectHeader& objHdr, LwpSvStream* pStrm)
 
 LwpSilverBullet::~LwpSilverBullet()
 {
-    delete m_pAtomHolder;
 }
 
 void LwpSilverBullet::Read()
@@ -86,7 +86,7 @@ void LwpSilverBullet::Read()
     LwpDLNFVList::Read();
 
     m_nFlags = m_pObjStrm->QuickReaduInt16();
-    m_aStory.ReadIndexed(m_pObjStrm);
+    m_aStory.ReadIndexed(m_pObjStrm.get());
 
     sal_uInt16 nNumPos = m_pObjStrm->QuickReaduInt16();
 
@@ -98,7 +98,7 @@ void LwpSilverBullet::Read()
 
     m_nUseCount = m_pObjStrm->QuickReaduInt32();
 
-    m_pAtomHolder->Read(m_pObjStrm);
+    m_pAtomHolder->Read(m_pObjStrm.get());
 }
 
 /**
@@ -108,7 +108,7 @@ void LwpSilverBullet::Read()
  */
 void LwpSilverBullet::RegisterStyle()
 {
-    XFListStyle* pListStyle = new XFListStyle();
+    std::unique_ptr<XFListStyle> xListStyle(new XFListStyle());
     XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
 
     GetBulletPara();
@@ -147,11 +147,11 @@ void LwpSilverBullet::RegisterStyle()
                     }
 
                     //set numbering format into the style-list.
-                    pListStyle->SetListNumber(nPos, aFmt, pParaNumber->GetStart()+1);
+                    xListStyle->SetListNumber(nPos, aFmt, pParaNumber->GetStart()+1);
 
                     if (bCumulative && nPos > 1)
                     {
-                        pListStyle->SetDisplayLevel(nPos, nDisplayLevel);
+                        xListStyle->SetDisplayLevel(nPos, nDisplayLevel);
                     }
 
                 }
@@ -167,18 +167,18 @@ void LwpSilverBullet::RegisterStyle()
                         aSuffix = aParaNumbering.pSuffix->GetText();
                     }
 
-                    pListStyle->SetListBullet(nPos, GetNumCharByStyleID(pParaNumber),
+                    xListStyle->SetListBullet(nPos, GetNumCharByStyleID(pParaNumber),
                         "Times New Roman", aPrefix, aSuffix);
                 }
 
-                pListStyle->SetListPosition(nPos, 0.0, 0.635, 0.0);
+                xListStyle->SetListPosition(nPos, 0.0, 0.635, 0.0);
                 aParaNumbering.clear();
             }
         }
     }
 
     //add style-list to style manager.
-    m_strStyleName = pXFStyleManager->AddStyle(pListStyle).m_pStyle->GetStyleName();
+    m_strStyleName = pXFStyleManager->AddStyle(std::move(xListStyle)).m_pStyle->GetStyleName();
 }
 
 /**
@@ -213,9 +213,9 @@ OUString LwpSilverBullet::GetBulletFontName()
 /**
  * @short:   Get bullet character of the bullet vo_para.
  * @descr:
- * @return:  An UChar32 bulle character.
+ * @return:  An UChar32 bullet character.
  */
-OUString LwpSilverBullet::GetBulletChar()
+OUString const & LwpSilverBullet::GetBulletChar()
 {
     return m_xBulletPara->GetBulletChar();
 }
@@ -246,7 +246,7 @@ LwpPara* LwpSilverBullet::GetBulletPara()
  *          includes numbering prefix, format and suffix.
  * @return:  An OUString object which store the numbering character.
  */
-OUString LwpSilverBullet::GetNumCharByStyleID(LwpFribParaNumber* pParaNumber)
+OUString LwpSilverBullet::GetNumCharByStyleID(LwpFribParaNumber const * pParaNumber)
 {
     if (!pParaNumber)
     {
@@ -281,19 +281,19 @@ OUString LwpSilverBullet::GetNumCharByStyleID(LwpFribParaNumber* pParaNumber)
         break;
     case NUMCHAR_Chinese1:
         {
-        sal_Unicode sBuf[13] = {0x58f9,0x002c,0x0020,0x8d30,0x002c,0x0020,0x53c1,0x002c,0x0020,0x002e,0x002e,0x002e,0x0};
+        sal_Unicode const sBuf[13] = {0x58f9,0x002c,0x0020,0x8d30,0x002c,0x0020,0x53c1,0x002c,0x0020,0x002e,0x002e,0x002e,0x0};
         strNumChar = OUString(sBuf);
         }
         break;
     case NUMCHAR_Chinese2:
         {
-        sal_Unicode sBuf[13] = {0x4e00,0x002c,0x0020,0x4e8c,0x002c,0x0020,0x4e09,0x002c,0x0020,0x002e,0x002e,0x002e,0x0};
+        sal_Unicode const sBuf[13] = {0x4e00,0x002c,0x0020,0x4e8c,0x002c,0x0020,0x4e09,0x002c,0x0020,0x002e,0x002e,0x002e,0x0};
         strNumChar = OUString(sBuf);
         }
         break;
     case NUMCHAR_Chinese3:
         {
-        sal_Unicode sBuf[13] = {0x7532,0x002c,0x0020,0x4e59,0x002c,0x0020,0x4e19,0x002c,0x0020,0x002e,0x002e,0x002e,0x0};
+        sal_Unicode const sBuf[13] = {0x7532,0x002c,0x0020,0x4e59,0x002c,0x0020,0x4e19,0x002c,0x0020,0x002e,0x002e,0x002e,0x0};
         strNumChar = OUString(sBuf);
         }
         break;

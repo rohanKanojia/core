@@ -14,7 +14,7 @@
    All trademarks and registered trademarks mentioned herein are the
    property of their respective owners.
 
-   Copyright © 2000, 2014 LibreOffice contributors. All rights reserved.
+   Copyright © 2000–2019 LibreOffice contributors. All rights reserved.
 
    This product is based on OpenOffice.org. Portions of this software are
    copyright © 2000-2011, Oracle and/or its affiliates.
@@ -481,6 +481,14 @@ fontconfig
    OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
    PERFORMANCE OF THIS SOFTWARE.
 
+GpgME
+
+   License (software): LGPLv2.1+
+   License (manual+tools): GPLv3+
+
+   See GNU Lesser General Public License Version 2.1 below
+   See GNU General Public License Version 3 below
+
 Graphite2
 
    The following software may be included in this product: Graphite2. Use
@@ -914,9 +922,17 @@ JDOM
    <brett_AT_jdom_DOT_org>. For more information on the JDOM Project,
    please see http://www.jdom.org/.
 
-libatomic-ops
+libassuan
 
-   The following software may be included in this product: libatomic-ops.
+   License (library): LGPLv2.1+
+   License (manual): GPLv3+
+
+   See GNU Lesser General Public License Version 2.1 below
+   See GNU General Public License Version 3 below
+
+libatomic_ops
+
+   The following software may be included in this product: libatomic_ops.
    Use of any of this software is governed by the terms of the license
    below:
 
@@ -1045,53 +1061,13 @@ libfreehand
 
    See MPL Version 2 below
 
-libgltf
+libgpg-error
 
-   The following software may be included in this product: libgltf. Use
-   of any of this software is governed by the terms of the license below:
+   License (library): LGPLv2.1+
+   License (manual+tools): GPLv2+ with exception
 
-   License for libgltf except trackball.h and trackball.cpp source files:
-
-   MPL 2
-
-   See MPL Version 2 below
-
-   License for trackball.h and trackball.cpp source files:
-
-   (c) Copyright 1993, 1994, Silicon Graphics, Inc.
-   ALL RIGHTS RESERVED
-   Permission to use, copy, modify, and distribute this software for
-   any purpose and without fee is hereby granted, provided that the above
-   copyright notice appear in all copies and that both the copyright notice
-   and this permission notice appear in supporting documentation, and that
-   the name of Silicon Graphics, Inc. not be used in advertising
-   or publicity pertaining to distribution of the software without specific,
-   written prior permission.
-
-   THE MATERIAL EMBODIED ON THIS SOFTWARE IS PROVIDED TO YOU "AS-IS"
-   AND WITHOUT WARRANTY OF ANY KIND, EXPRESS, IMPLIED OR OTHERWISE,
-   INCLUDING WITHOUT LIMITATION, ANY WARRANTY OF MERCHANTABILITY OR
-   FITNESS FOR A PARTICULAR PURPOSE.  IN NO EVENT SHALL SILICON
-   GRAPHICS, INC.  BE LIABLE TO YOU OR ANYONE ELSE FOR ANY DIRECT,
-   SPECIAL, INCIDENTAL, INDIRECT OR CONSEQUENTIAL DAMAGES OF ANY
-   KIND, OR ANY DAMAGES WHATSOEVER, INCLUDING WITHOUT LIMITATION,
-   LOSS OF PROFIT, LOSS OF USE, SAVINGS OR REVENUE, OR THE CLAIMS OF
-   THIRD PARTIES, WHETHER OR NOT SILICON GRAPHICS, INC.  HAS BEEN
-   ADVISED OF THE POSSIBILITY OF SUCH LOSS, HOWEVER CAUSED AND ON
-   ANY THEORY OF LIABILITY, ARISING OUT OF OR IN CONNECTION WITH THE
-   POSSESSION, USE OR PERFORMANCE OF THIS SOFTWARE.
-
-   US Government Users Restricted Rights
-   Use, duplication, or disclosure by the Government is subject to
-   restrictions set forth in FAR 52.227.19(c)(2) or subparagraph
-   (c)(1)(ii) of the Rights in Technical Data and Computer Software
-   clause at DFARS 252.227-7013 and/or in similar or successor
-   clauses in the FAR or the DOD or NASA FAR Supplement.
-   Unpublished-- rights reserved under the copyright laws of the
-   United States.  Contractor/manufacturer is Silicon Graphics,
-   Inc., 2011 N.  Shoreline Blvd., Mountain View, CA 94039-7311.
-
-   OpenGL(TM) is a trademark of Silicon Graphics, Inc.
+   See GNU Lesser General Public License Version 2.1 below
+   See GNU General Public License Version 2 below
 
 liblangtag
 
@@ -2369,6 +2345,44 @@ STLPort
      no representations about the suitability of this software for any
      purpose. It is provided "as is" without express or implied warranty.
 
+SVGPathSeg polyfill
+
+   The following software may be included in this product: SVGPathSeg
+   polyfill. Use of any of this software is governed by the terms of
+   the license below:
+
+   Copyright 2015 The Chromium Authors. All rights reserved.
+
+   The Chromium Authors can be found at
+   http://src.chromium.org/svn/trunk/src/AUTHORS
+
+   Redistribution and use in source and binary forms, with or without
+   modification, are permitted provided that the following conditions are
+   met:
+
+      * Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+      * Redistributions in binary form must reproduce the above
+   copyright notice, this list of conditions and the following disclaimer
+   in the documentation and/or other materials provided with the
+   distribution.
+      * Neither the name of Google Inc. nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
 TWAIN
 
    The following software may be included in this product: TWAIN. Use of
@@ -2689,25 +2703,6 @@ zlib
    Only third party extensions are listed here whose source code is not in
    the LibreOffice tree.
 
-Barcode
-
-   The following software may be included in this product: Barcode. Use of
-   any of this software is governed by the terms of the license below:
-
-   Copyright (C) Dániel Darabos and Kálmán Szalai
-
-   This program is free software: you can redistribute it and/or modify it
-   under the terms of the GNU General Public License as published by the
-   Free Software Foundation, either version 3 of the License, or (at your
-   option) any later version.
-
-   This program is distributed in the hope that it will be useful, but
-   WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-   General Public License for more details.
-
-   See GPL Version 3 below
-
 Convert Text to Number
 
    The following software may be included in this product: Convert Text to
@@ -2715,27 +2710,6 @@ Convert Text to Number
    license below:
 
    Copyright (C) 2008/2009 - Cor Nouws
-
-   See LGPL Version 3 below
-
-OpenOffice.org2GoogleDocs - export & import to Google Docs, Zoho, WebDAV
-
-   The following software may be included in this product:
-   OpenOffice.org2GoogleDocs - export & import to Google Docs, Zoho,
-   WebDAV. Use of any of this software is governed by the terms of the
-   license below:
-
-   Copyright © Przemyslaw Rumik
-
-   See LGPL Version 3 below
-
-Hungarian cross-reference toolbar
-
-   The following software may be included in this product: Hungarian
-   cross-reference toolbar. Use of any of this software is governed by the
-   terms of the license below:
-
-   2009-2010 (c) László Németh, license: GNU LGPL
 
    See LGPL Version 3 below
 
@@ -2772,17 +2746,6 @@ Numbertext
 
    See LGPL Version 3 below
 
-SmART Gallery (Diagram)
-
-   The following software may be included in this product: SmART Gallery
-   (Diagram). Use of any of this software is governed by the terms of the
-   license below:
-
-   Copyright © Tibor Hornyák and OxygenOffice Professional Team -
-   http://ooop.sf.net/
-
-   See LGPL Version 3 below
-
 Solver for Nonlinear Programming
 
    The following software may be included in this product: Solver for
@@ -2790,37 +2753,6 @@ Solver for Nonlinear Programming
    terms of the license below:
 
    Copyright 2009 by Sun Microsystems, Inc.
-
-   See LGPL Version 3 below
-
-Typography Toolbar
-
-   The following software may be included in this product: Typography
-   Toolbar. Use of any of this software is governed by the terms of the
-   license below:
-
-   2009-2010 (c) László Németh, license: GNU LGPL
-
-   See LGPL Version 3 below
-
-Validator
-
-   The following software may be included in this product: Validator. Use
-   of any of this software is governed by the terms of the license below:
-
-   Copyright © Tibor Hornyák and OxygenOffice Professional Team -
-   http://ooop.sf.net/
-
-   See LGPL Version 3 below
-
-WatchWindow
-
-   The following software may be included in this product: WatchWindow.
-   Use of any of this software is governed by the terms of the license
-   below:
-
-   Copyright © Tibor Hornyák and OxygenOffice Professional Team -
-   http://ooop.sf.net/
 
    See LGPL Version 3 below
 
@@ -3178,30 +3110,6 @@ Linux Libertine G and Linux Biolinum G
    OR CONSEQUENTIAL DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR
    OTHERWISE, ARISING FROM, OUT OF THE USE OR INABILITY TO USE THE FONT
    SOFTWARE OR FROM OTHER DEALINGS IN THE FONT SOFTWARE.
-
-Open Sans
-
-   The following software may be included in this product: Open Sans
-   fonts. Use of any of this software is governed by the terms of the
-   license below:
-
-   See Apache License Version 2.0 below
-
-PT Serif
-
-   The following software may be included in this product: PT Serif fonts.
-   Use of any of this software is governed by the terms of the license
-   below:
-
-   Copyright (c) 2010, ParaType Ltd.
-   (http://www.paratype.com/public), with Reserved Font Names "PT
-   Sans", "PT Serif" and "ParaType".
-
-   This Font Software is licensed under the SIL Open Font License, Version
-   1.1. This license is copied below, and is also available with a
-   FAQ at: http://scripts.sil.org/OFL
-
-   See SIL Open Font License, Version 1.1 below
 
 Source Code Pro
 
@@ -3953,7 +3861,7 @@ The 40 level includes words from Alan's 3esl list found in version 4.0
 of his 12dicts package.  Like his other stuff the 3esl list is also in the
 public domain.
 
-The 50 level includes Brian's frequency class 1, words words appearing
+The 50 level includes Brian's frequency class 1, words appearing
 in at least 5 of 12 of the dictionaries as indicated in the 12Dicts
 package, and uppercase words in at least 4 of the previous 12
 dictionaries.  A decent number of proper names is also included: The
@@ -4034,7 +3942,7 @@ Accent information was taken from UKACD.
 My VARCON package was used to create the American, British, and
 Canadian word list.
 
-Since the original word lists used used in the VARCON package came
+Since the original word lists used in the VARCON package came
 from the Ispell distribution they are under the Ispell copyright:
 
   Copyright 1993, Geoff Kuenning, Granada Hills, CA

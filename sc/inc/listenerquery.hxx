@@ -10,14 +10,12 @@
 #ifndef SC_LISTENERQUERY_HXX
 #define SC_LISTENERQUERY_HXX
 
-#include <address.hxx>
+#include "address.hxx"
+#include "rangelst.hxx"
 #include <svl/listener.hxx>
 
 #include <unordered_map>
 #include <vector>
-#include <memory>
-
-class ScRangeList;
 
 namespace sc {
 
@@ -33,7 +31,7 @@ public:
     typedef std::unordered_map<SCTAB,ColsType> TabsType;
 
     RefQueryFormulaGroup();
-    virtual ~RefQueryFormulaGroup();
+    virtual ~RefQueryFormulaGroup() override;
 
     void setSkipRange( const ScRange& rRange );
     void add( const ScAddress& rPos );
@@ -51,15 +49,14 @@ private:
 
 class QueryRange : public SvtListener::QueryBase
 {
-    struct Impl;
-    std::unique_ptr<Impl> mpImpl;
+    ScRangeList maRanges;
 
     QueryRange( const QueryRange& ) = delete;
     QueryRange& operator= ( const QueryRange& ) = delete;
 
 public:
     QueryRange();
-    virtual ~QueryRange();
+    virtual ~QueryRange() override;
 
     void add( const ScRange& rRange );
 

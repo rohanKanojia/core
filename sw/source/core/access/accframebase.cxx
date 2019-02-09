@@ -29,13 +29,14 @@
 #include <cntfrm.hxx>
 #include <fmtcntnt.hxx>
 #include <ndindex.hxx>
-#include "fesh.hxx"
+#include <fesh.hxx>
 #include <hints.hxx>
-#include "accmap.hxx"
+#include <accmap.hxx>
 #include "accframebase.hxx"
 
 #include <crsrsh.hxx>
 #include <txtfrm.hxx>
+#include <notxtfrm.hxx>
 #include <ndtxt.hxx>
 #include <dcontact.hxx>
 #include <fmtanchr.hxx>
@@ -50,9 +51,8 @@ bool SwAccessibleFrameBase::IsSelected()
     assert(GetMap());
     const SwViewShell *pVSh = GetMap()->GetShell();
     assert(pVSh);
-    if( dynamic_cast<const SwFEShell*>( pVSh) !=  nullptr )
+    if( auto pFESh = dynamic_cast<const SwFEShell*>(pVSh) )
     {
-        const SwFEShell *pFESh = static_cast< const SwFEShell * >( pVSh );
         const SwFrame *pFlyFrame = pFESh->GetSelectedFlyFrame();
         if( pFlyFrame == GetFrame() )
             bRet = true;
@@ -82,7 +82,7 @@ void SwAccessibleFrameBase::GetStates(
     if( IsSelected() )
     {
         rStateSet.AddState( AccessibleStateType::SELECTED );
-        assert(bIsSelected && "bSelected out of sync");
+        SAL_WARN_IF(!m_bIsSelected, "sw.a11y", "bSelected out of sync");
         ::rtl::Reference < SwAccessibleContext > xThis( this );
         GetMap()->SetCursorContext( xThis );
 
@@ -94,15 +94,15 @@ void SwAccessibleFrameBase::GetStates(
         rStateSet.AddState( AccessibleStateType::SELECTED );
 }
 
-sal_uInt8 SwAccessibleFrameBase::GetNodeType( const SwFlyFrame *pFlyFrame )
+SwNodeType SwAccessibleFrameBase::GetNodeType( const SwFlyFrame *pFlyFrame )
 {
-    sal_uInt8 nType = ND_TEXTNODE;
+    SwNodeType nType = SwNodeType::Text;
     if( pFlyFrame->Lower() )
     {
          if( pFlyFrame->Lower()->IsNoTextFrame() )
         {
-            const SwContentFrame *pContentFrame =
-                static_cast<const SwContentFrame *>( pFlyFrame->Lower() );
+            const SwNoTextFrame *const pContentFrame =
+                static_cast<const SwNoTextFrame *>(pFlyFrame->Lower());
             nType = pContentFrame->GetNode()->GetNodeType();
         }
     }
@@ -124,31 +124,29 @@ sal_uInt8 SwAccessibleFrameBase::GetNodeType( const SwFlyFrame *pFlyFrame )
 }
 
 SwAccessibleFrameBase::SwAccessibleFrameBase(
-        SwAccessibleMap* pInitMap,
+        std::shared_ptr<SwAccessibleMap> const& pInitMap,
         sal_Int16 nInitRole,
         const SwFlyFrame* pFlyFrame  ) :
     SwAccessibleContext( pInitMap, nInitRole, pFlyFrame ),
-    bIsSelected( false )
+    m_bIsSelected( false )
 {
-    SolarMutexGuard aGuard;
-
     const SwFrameFormat *pFrameFormat = pFlyFrame->GetFormat();
     const_cast< SwFrameFormat * >( pFrameFormat )->Add( this );
 
     SetName( pFrameFormat->GetName() );
 
-    bIsSelected = IsSelected();
+    m_bIsSelected = IsSelected();
 }
 
-void SwAccessibleFrameBase::_InvalidateCursorPos()
+void SwAccessibleFrameBase::InvalidateCursorPos_()
 {
     bool bNewSelected = IsSelected();
     bool bOldSelected;
 
     {
         osl::MutexGuard aGuard( m_Mutex );
-        bOldSelected = bIsSelected;
-        bIsSelected = bNewSelected;
+        bOldSelected = m_bIsSelected;
+        m_bIsSelected = bNewSelected;
     }
 
     if( bNewSelected )
@@ -184,7 +182,7 @@ void SwAccessibleFrameBase::_InvalidateCursorPos()
     }
 }
 
-void SwAccessibleFrameBase::_InvalidateFocus()
+void SwAccessibleFrameBase::InvalidateFocus_()
 {
     vcl::Window *pWin = GetWindow();
     if( pWin )
@@ -193,7 +191,7 @@ void SwAccessibleFrameBase::_InvalidateFocus()
 
         {
             osl::MutexGuard aGuard( m_Mutex );
-            bSelected = bIsSelected;
+            bSelected = m_bIsSelected;
         }
         assert(bSelected && "focus object should be selected");
 
@@ -205,7 +203,7 @@ void SwAccessibleFrameBase::_InvalidateFocus()
 bool SwAccessibleFrameBase::HasCursor()
 {
     osl::MutexGuard aGuard( m_Mutex );
-    return bIsSelected;
+    return m_bIsSelected;
 }
 
 SwAccessibleFrameBase::~SwAccessibleFrameBase()
@@ -247,14 +245,14 @@ void SwAccessibleFrameBase::Modify( const SfxPoolItem* pOld, const SfxPoolItem *
     case RES_OBJECTDYING:
         // mba: it seems that this class intentionally does not call code in base class SwClient
         if( pOld && ( GetRegisteredIn() == static_cast< SwModify *>( static_cast< const SwPtrMsgPoolItem * >( pOld )->pObject ) ) )
-            GetRegisteredInNonConst()->Remove( this );
+            EndListeningAll();
         break;
 
     case RES_FMT_CHG:
         if( pOld &&
             static_cast< const SwFormatChg * >(pNew)->pChangedFormat == GetRegisteredIn() &&
             static_cast< const SwFormatChg * >(pOld)->pChangedFormat->IsFormatInDTOR() )
-            GetRegisteredInNonConst()->Remove( this );
+            EndListeningAll();
         break;
 
     default:
@@ -263,14 +261,11 @@ void SwAccessibleFrameBase::Modify( const SfxPoolItem* pOld, const SfxPoolItem *
     }
 }
 
-void SwAccessibleFrameBase::Dispose( bool bRecursive )
+void SwAccessibleFrameBase::Dispose(bool bRecursive, bool bCanSkipInvisible)
 {
     SolarMutexGuard aGuard;
-
-    if( GetRegisteredIn() )
-        GetRegisteredInNonConst()->Remove( this );
-
-    SwAccessibleContext::Dispose( bRecursive );
+    EndListeningAll();
+    SwAccessibleContext::Dispose(bRecursive, bCanSkipInvisible);
 }
 
 //Get the selection cursor of the document.
@@ -306,14 +301,14 @@ bool SwAccessibleFrameBase::GetSelectedState( )
         return true;
     }
 
-    // SELETED.
+    // SELECTED.
     SwFlyFrame* pFlyFrame = getFlyFrame();
     const SwFrameFormat *pFrameFormat = pFlyFrame->GetFormat();
-    const SwFormatAnchor& pAnchor = pFrameFormat->GetAnchor();
-    const SwPosition *pPos = pAnchor.GetContentAnchor();
+    const SwFormatAnchor& rAnchor = pFrameFormat->GetAnchor();
+    const SwPosition *pPos = rAnchor.GetContentAnchor();
     if( !pPos )
         return false;
-    int pIndex = pPos->nContent.GetIndex();
+    int nIndex = pPos->nContent.GetIndex();
     if( pPos->nNode.GetNode().GetTextNode() )
     {
         SwPaM* pCursor = GetCursor();
@@ -336,13 +331,13 @@ bool SwAccessibleFrameBase::GetSelectedState( )
                     sal_uLong nEndIndex = pEnd->nNode.GetIndex();
                     if( ( nHere >= nStartIndex ) && (nHere <= nEndIndex)  )
                     {
-                        if( pAnchor.GetAnchorId() == FLY_AS_CHAR )
+                        if( rAnchor.GetAnchorId() == RndStdIds::FLY_AS_CHAR )
                         {
-                            if( ((nHere == nStartIndex) && (pIndex >= pStart->nContent.GetIndex())) || (nHere > nStartIndex) )
-                                if( ((nHere == nEndIndex) && (pIndex < pEnd->nContent.GetIndex())) || (nHere < nEndIndex) )
+                            if( ((nHere == nStartIndex) && (nIndex >= pStart->nContent.GetIndex())) || (nHere > nStartIndex) )
+                                if( ((nHere == nEndIndex) && (nIndex < pEnd->nContent.GetIndex())) || (nHere < nEndIndex) )
                                     return true;
                         }
-                        else if( pAnchor.GetAnchorId() == FLY_AT_PARA )
+                        else if( rAnchor.GetAnchorId() == RndStdIds::FLY_AT_PARA )
                         {
                             if( ((nHere > nStartIndex) || pStart->nContent.GetIndex() ==0 )
                                 && (nHere < nEndIndex ) )

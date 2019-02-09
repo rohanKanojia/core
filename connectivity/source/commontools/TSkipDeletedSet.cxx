@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TSkipDeletedSet.hxx"
+#include <TSkipDeletedSet.hxx>
 #include <osl/diagnose.h>
 #include <sal/log.hxx>
 #include <algorithm>
@@ -75,7 +75,7 @@ bool OSkipDeletedSet::skipDeleted(IResultSetHelper::Movement _eCursorPosition, s
         {
             bDataFound = m_pHelper->move(IResultSetHelper::FIRST, 0, _bRetrieveData);
             if(bDataFound && (m_bDeletedVisible || !m_pHelper->isRowDeleted()))
-                //m_aBookmarksPositions.push_back(m_aBookmarks.insert(TInt2IntMap::value_type(m_pHelper->getDriverPos(),m_aBookmarksPositions.size()+1)).first);
+                //m_aBookmarksPositions.push_back(m_aBookmarks.emplace( m_pHelper->getDriverPos(),m_aBookmarksPositions.size()+1)).first);
                 m_aBookmarksPositions.push_back(m_pHelper->getDriverPos());
         }
         else
@@ -95,7 +95,7 @@ bool OSkipDeletedSet::skipDeleted(IResultSetHelper::Movement _eCursorPosition, s
             if( bDataFound && ( m_bDeletedVisible || !m_pHelper->isRowDeleted()) )
             {   // we weren't on the last row we remember it and move on
                 m_aBookmarksPositions.push_back(m_pHelper->getDriverPos());
-                //m_aBookmarksPositions.push_back(m_aBookmarks.insert(TInt2IntMap::value_type(m_pHelper->getDriverPos(),m_aBookmarksPositions.size()+1)).first);
+                //m_aBookmarksPositions.push_back(m_aBookmarks.emplace( m_pHelper->getDriverPos(),m_aBookmarksPositions.size()+1)).first);
             }
             else if(!bDataFound && !m_aBookmarksPositions.empty() )
             {
@@ -121,7 +121,7 @@ bool OSkipDeletedSet::skipDeleted(IResultSetHelper::Movement _eCursorPosition, s
             bDone = (--nDelOffset) == 0;
             if ( !bDone )
                 m_aBookmarksPositions.push_back(m_pHelper->getDriverPos());
-            //m_aBookmarksPositions.push_back(m_aBookmarks.insert(TInt2IntMap::value_type(m_pHelper->getDriverPos(),m_aBookmarksPositions.size()+1)).first);
+            //m_aBookmarksPositions.push_back(m_aBookmarks.emplace( m_pHelper->getDriverPos(),m_aBookmarksPositions.size()+1)).first);
         }
         else
             bDone = false;
@@ -137,7 +137,7 @@ bool OSkipDeletedSet::skipDeleted(IResultSetHelper::Movement _eCursorPosition, s
             bDone = (--nDelOffset) == 0;
             if ( !bDone )
                 m_aBookmarksPositions.push_back(m_pHelper->getDriverPos());
-            //m_aBookmarksPositions.push_back(m_aBookmarks.insert(TInt2IntMap::value_type(m_pHelper->getDriverPos(),m_aBookmarksPositions.size()+1)).first);
+            //m_aBookmarksPositions.push_back(m_aBookmarks.emplace( m_pHelper->getDriverPos(),m_aBookmarksPositions.size()+1)).first);
         }
         else
             bDone = false;
@@ -148,14 +148,14 @@ bool OSkipDeletedSet::skipDeleted(IResultSetHelper::Movement _eCursorPosition, s
         const sal_Int32 nDriverPos = m_pHelper->getDriverPos();
         if ( m_bDeletedVisible )
         {
-            if ( nDriverPos > (sal_Int32)m_aBookmarksPositions.size() )
+            if ( nDriverPos > static_cast<sal_Int32>(m_aBookmarksPositions.size()) )
                 m_aBookmarksPositions.push_back(nDriverPos);
         }
-        else if ( ::std::find(m_aBookmarksPositions.begin(),m_aBookmarksPositions.end(),nDriverPos) == m_aBookmarksPositions.end() )
+        else if ( std::find(m_aBookmarksPositions.begin(),m_aBookmarksPositions.end(),nDriverPos) == m_aBookmarksPositions.end() )
             m_aBookmarksPositions.push_back(nDriverPos);
         /*sal_Int32 nDriverPos = m_pHelper->getDriverPos();
         if(m_aBookmarks.find(nDriverPos) == m_aBookmarks.end())
-            m_aBookmarksPositions.push_back(m_aBookmarks.insert(TInt2IntMap::value_type(nDriverPos,m_aBookmarksPositions.size()+1)).first);*/
+            m_aBookmarksPositions.push_back(m_aBookmarks.emplace( nDriverPos,m_aBookmarksPositions.size()+1)).first);*/
     }
 
     return bDataFound;
@@ -167,7 +167,7 @@ bool OSkipDeletedSet::moveAbsolute(sal_Int32 _nPos,bool _bRetrieveData)
     sal_Int32 nNewPos = _nPos;
     if(nNewPos > 0)
     {
-        if((sal_Int32)m_aBookmarksPositions.size() < nNewPos)
+        if(static_cast<sal_Int32>(m_aBookmarksPositions.size()) < nNewPos)
         {
             // bookmark isn't known yet
             // start at the last known position
@@ -179,7 +179,7 @@ bool OSkipDeletedSet::moveAbsolute(sal_Int32 _nPos,bool _bRetrieveData)
                 {
                     ++nCurPos;
                     m_aBookmarksPositions.push_back(m_pHelper->getDriverPos());
-                    //m_aBookmarksPositions.push_back(m_aBookmarks.insert(TInt2IntMap::value_type(m_pHelper->getDriverPos(),m_aBookmarksPositions.size()+1)).first);
+                    //m_aBookmarksPositions.push_back(m_aBookmarks.emplace( m_pHelper->getDriverPos(),m_aBookmarksPositions.size()+1)).first);
                     --nNewPos;
                 }
             } // if ( m_aBookmarksPositions.empty() )
@@ -199,7 +199,7 @@ bool OSkipDeletedSet::moveAbsolute(sal_Int32 _nPos,bool _bRetrieveData)
                 {
                     ++nCurPos;
                     m_aBookmarksPositions.push_back(m_pHelper->getDriverPos());
-                    //m_aBookmarksPositions.push_back(m_aBookmarks.insert(TInt2IntMap::value_type(m_pHelper->getDriverPos(),m_aBookmarksPositions.size()+1)).first);
+                    //m_aBookmarksPositions.push_back(m_aBookmarks.emplace( m_pHelper->getDriverPos(),m_aBookmarksPositions.size()+1)).first);
                     --nNewPos;
                 }
             }
@@ -225,44 +225,30 @@ bool OSkipDeletedSet::moveAbsolute(sal_Int32 _nPos,bool _bRetrieveData)
 
 void OSkipDeletedSet::clear()
 {
-    ::std::vector<sal_Int32>().swap(m_aBookmarksPositions);
-    //TInt2IntMap().swap(m_aBookmarks);
+    std::vector<sal_Int32>().swap(m_aBookmarksPositions);
 }
 
 sal_Int32 OSkipDeletedSet::getMappedPosition(sal_Int32 _nPos) const
 {
-    ::std::vector<sal_Int32>::const_iterator aFind = ::std::find(m_aBookmarksPositions.begin(),m_aBookmarksPositions.end(),_nPos);
+    std::vector<sal_Int32>::const_iterator aFind = std::find(m_aBookmarksPositions.begin(),m_aBookmarksPositions.end(),_nPos);
     if ( aFind !=  m_aBookmarksPositions.end() )
         return (aFind - m_aBookmarksPositions.begin()) + 1;
-    /*TInt2IntMap::const_iterator aFind = m_aBookmarks.find(_nPos);
-    OSL_ENSURE(aFind != m_aBookmarks.end(),"OSkipDeletedSet::getMappedPosition() invalid bookmark!");
-    return aFind->second;*/
     OSL_FAIL("Why!");
     return -1;
 }
 
 void OSkipDeletedSet::insertNewPosition(sal_Int32 _nPos)
 {
-    //OSL_ENSURE(m_aBookmarks.find(_nPos) == m_aBookmarks.end(),"OSkipDeletedSet::insertNewPosition: Invalid position");
-    //m_aBookmarksPositions.push_back(m_aBookmarks.insert(TInt2IntMap::value_type(_nPos,m_aBookmarksPositions.size()+1)).first);
-    //OSL_ENSURE(::std::find(m_aBookmarksPositions.begin(),m_aBookmarksPositions.end(),_nPos) == m_aBookmarksPositions.end(),"Invalid driver pos");
     m_aBookmarksPositions.push_back(_nPos);
 }
 
 void OSkipDeletedSet::deletePosition(sal_Int32 _nBookmark)
 {
-    ::std::vector<sal_Int32>::iterator aFind = ::std::find(m_aBookmarksPositions.begin(),m_aBookmarksPositions.end(),_nBookmark);
+    std::vector<sal_Int32>::iterator aFind = std::find(m_aBookmarksPositions.begin(),m_aBookmarksPositions.end(),_nBookmark);
     if ( aFind !=  m_aBookmarksPositions.end() )
     {
-    //TInt2IntMap::iterator aFind = m_aBookmarks.find(_nPos);
-    //OSL_ENSURE(aFind != m_aBookmarks.end(),"OSkipDeletedSet::deletePosition() bookmark not found!");
-    //TInt2IntMap::iterator aIter = aFind;
         m_aBookmarksPositions.erase(aFind);
-        //for (; aFind != m_aBookmarksPositions.end() ; ++aIter)
-           // --(aFind->second);
-    } // if ( aFind !=  m_aBookmarksPositions.end() )
-    //m_aBookmarksPositions.erase(m_aBookmarksPositions.begin() + aFind->second-1);
-    //m_aBookmarks.erase(_nPos);
+    }
 }
 
 

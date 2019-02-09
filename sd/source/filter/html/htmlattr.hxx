@@ -23,21 +23,19 @@
 #include <vcl/ctrl.hxx>
 #include <tools/color.hxx>
 
-class SdHtmlAttrPreview : public Control
+class SdHtmlAttrPreview final : public Control
 {
-protected:
-
     Color   m_aBackColor, m_aTextColor, m_aLinkColor;
     Color   m_aVLinkColor, m_aALinkColor;
 
 public:
     SdHtmlAttrPreview( vcl::Window* pParent, WinBits nStyle );
-    virtual ~SdHtmlAttrPreview();
+    virtual ~SdHtmlAttrPreview() override;
 
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const ::tools::Rectangle& rRect) override;
 
-    void    SetColors( Color& aBack, Color& aText, Color& aLink,
-                       Color& aVLink, Color& aALink );
+    void    SetColors( Color const & aBack, Color const & aText, Color const & aLink,
+                       Color const & aVLink, Color const & aALink );
 };
 
 #endif // INCLUDED_SD_SOURCE_FILTER_HTML_HTMLATTR_HXX

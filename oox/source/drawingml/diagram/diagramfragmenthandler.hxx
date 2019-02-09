@@ -20,37 +20,37 @@
 #ifndef INCLUDED_OOX_SOURCE_DRAWINGML_DIAGRAM_DIAGRAMFRAGMENTHANDLER_HXX
 #define INCLUDED_OOX_SOURCE_DRAWINGML_DIAGRAM_DIAGRAMFRAGMENTHANDLER_HXX
 
-#include "oox/core/fragmenthandler2.hxx"
-#include "drawingml/diagram/diagram.hxx"
+#include <oox/core/fragmenthandler2.hxx>
+#include <drawingml/diagram/diagram.hxx>
 
 namespace oox { namespace drawingml {
 
 class DiagramDataFragmentHandler : public ::oox::core::FragmentHandler2
 {
 public:
-    DiagramDataFragmentHandler( oox::core::XmlFilterBase& rFilter, const OUString& rFragmentPath, const DiagramDataPtr& rDataPtr ) throw();
-    virtual ~DiagramDataFragmentHandler() throw();
+    DiagramDataFragmentHandler(oox::core::XmlFilterBase& rFilter, const OUString& rFragmentPath, const DiagramDataPtr& rDataPtr);
+    virtual ~DiagramDataFragmentHandler() throw() override;
 
-    virtual void SAL_CALL endDocument() throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL endDocument() override;
     virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 
 private:
 
-    DiagramDataPtr  mpDataPtr;
+    DiagramDataPtr const mpDataPtr;
 };
 
 class DiagramLayoutFragmentHandler : public ::oox::core::FragmentHandler2
 {
 public:
-    DiagramLayoutFragmentHandler( oox::core::XmlFilterBase& rFilter, const OUString& rFragmentPath, const DiagramLayoutPtr& rDataPtr ) throw();
-    virtual ~DiagramLayoutFragmentHandler() throw();
+    DiagramLayoutFragmentHandler(oox::core::XmlFilterBase& rFilter, const OUString& rFragmentPath, const DiagramLayoutPtr& rDataPtr);
+    virtual ~DiagramLayoutFragmentHandler() throw() override;
 
-    virtual void SAL_CALL endDocument() throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL endDocument() override;
     virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 
 private:
 
-    DiagramLayoutPtr    mpDataPtr;
+    DiagramLayoutPtr const mpDataPtr;
 };
 
 class DiagramQStylesFragmentHandler : public ::oox::core::FragmentHandler2

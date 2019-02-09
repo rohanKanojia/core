@@ -20,25 +20,22 @@
 #define INCLUDED_VCL_DIBTOOLS_HXX
 
 #include <vcl/dllapi.h>
-#include <vcl/mapmod.hxx>
-#include <tools/rc.hxx>
-#include <vcl/region.hxx>
-#include <vcl/alpha.hxx>
+#include <vcl/salbtype.hxx>
 
 // predefines
 
 class SvStream;
 class BitmapEx;
 class Bitmap;
+class AlphaMask;
 
 // - Compression defines
 
-#define COMPRESS_OWN                ('S'|('D'<<8UL))
-#define COMPRESS_NONE               ( 0UL )
-#define RLE_8                       ( 1UL )
-#define RLE_4                       ( 2UL )
+#define COMPRESS_NONE               ( 0 )
+#define RLE_8                       ( 1 )
+#define RLE_4                       ( 2 )
 #define BITFIELDS                   ( 3UL )
-#define ZCOMPRESS                   ( COMPRESS_OWN | 0x01000000UL ) /* == 'SD01' (binary) */
+#define ZCOMPRESS                   ( ('S'|('D'<<8UL)) | 0x01000000UL ) /* == 'SD01' (binary) */
 
 bool VCL_DLLPUBLIC ReadDIB( // ReadDIB(rBitmap, rIStm, true);
     Bitmap& rTarget,
@@ -48,25 +45,41 @@ bool VCL_DLLPUBLIC ReadDIB( // ReadDIB(rBitmap, rIStm, true);
 
 bool VCL_DLLPUBLIC ReadDIBBitmapEx(
     BitmapEx& rTarget,
-    SvStream& rIStm);
+    SvStream& rIStm,
+    bool bFileHeader = true,
+    bool bMSOFormat = false);
 
 bool VCL_DLLPUBLIC ReadDIBV5(
     Bitmap& rTarget,
     AlphaMask& rTargetAlpha,
     SvStream& rIStm);
 
+bool VCL_DLLPUBLIC ReadRawDIB(
+    Bitmap& rTarget,
+    const unsigned char* pBuf,
+    const ScanlineFormat nFormat,
+    const int nHeight,
+    const int nStride);
 
-bool VCL_DLLPUBLIC WriteDIB( // WriteDIB(rBitmap, rOStm, false, true);
+
+bool VCL_DLLPUBLIC WriteDIB(
     const Bitmap& rSource,
     SvStream& rOStm,
     bool bCompressed,
     bool bFileHeader);
 
+// compressed, with file header
+bool VCL_DLLPUBLIC WriteDIB(
+    const BitmapEx& rSource,
+    SvStream& rOStm,
+    bool bCompressed = true);
+
 bool VCL_DLLPUBLIC WriteDIBBitmapEx(
     const BitmapEx& rSource,
     SvStream& rOStm);
 
-sal_uInt32 getDIBV5HeaderSize();
+// needed in emfio for emf/wmf migration
+sal_uInt32 VCL_DLLPUBLIC getDIBV5HeaderSize();
 
 #endif // INCLUDED_VCL_DIBTOOLS_HXX
 

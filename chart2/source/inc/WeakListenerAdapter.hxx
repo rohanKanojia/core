@@ -19,7 +19,6 @@
 #ifndef INCLUDED_CHART2_SOURCE_INC_WEAKLISTENERADAPTER_HXX
 #define INCLUDED_CHART2_SOURCE_INC_WEAKLISTENERADAPTER_HXX
 
-#include <com/sun/star/uno/XWeak.hpp>
 #include <com/sun/star/lang/XEventListener.hpp>
 #include <com/sun/star/util/XModifyListener.hpp>
 #include <com/sun/star/view/XSelectionChangeListener.hpp>
@@ -52,14 +51,11 @@ public:
     explicit WeakListenerAdapter( const css::uno::WeakReference< Listener > & xListener ) :
             m_xListener( xListener )
     {}
-    virtual ~WeakListenerAdapter()
-    {}
 
 protected:
     // ____ XEventListener (base of all listeners) ____
     virtual void SAL_CALL disposing(
-        const css::lang::EventObject& Source )
-        throw (css::uno::RuntimeException) SAL_OVERRIDE
+        const css::lang::EventObject& Source ) override
     {
         css::uno::Reference< css::lang::XEventListener > xEventListener(
                   css::uno::Reference< Listener >( m_xListener), css::uno::UNO_QUERY );
@@ -82,12 +78,11 @@ class WeakModifyListenerAdapter :
 public:
     explicit WeakModifyListenerAdapter(
         const css::uno::WeakReference< css::util::XModifyListener > & xListener );
-    virtual ~WeakModifyListenerAdapter();
+    virtual ~WeakModifyListenerAdapter() override;
 
 protected:
     // ____ XModifyListener ____
-    virtual void SAL_CALL modified( const css::lang::EventObject& aEvent )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL modified( const css::lang::EventObject& aEvent ) override;
 };
 
 class WeakSelectionChangeListenerAdapter :
@@ -96,13 +91,12 @@ class WeakSelectionChangeListenerAdapter :
 public:
     explicit WeakSelectionChangeListenerAdapter(
         const css::uno::Reference< css::view::XSelectionChangeListener > & xListener );
-    virtual ~WeakSelectionChangeListenerAdapter();
+    virtual ~WeakSelectionChangeListenerAdapter() override;
 
 protected:
     // ____ XSelectionChangeListener ____
     virtual void SAL_CALL selectionChanged(
-        const css::lang::EventObject& aEvent )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& aEvent ) override;
 };
 
 } //  namespace chart

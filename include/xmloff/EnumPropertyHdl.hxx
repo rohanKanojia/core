@@ -21,8 +21,9 @@
 #define INCLUDED_XMLOFF_ENUMPROPERTYHDL_HXX
 
 #include <xmloff/xmlprhdl.hxx>
-#include <com/sun/star/uno/Type.h>
-#include <xmloff/xmlement.hxx>
+#include <cppu/unotype.hxx>
+
+template <typename EnumT> struct SvXMLEnumMapEntry;
 
 /**
     PropertyHandler for a generic xml enumeration type:
@@ -30,12 +31,14 @@
 class XMLOFF_DLLPUBLIC XMLEnumPropertyHdl : public XMLPropertyHandler
 {
 private:
-    const SvXMLEnumMapEntry* mpEnumMap;
+    const SvXMLEnumMapEntry<sal_uInt16>* mpEnumMap;
     const css::uno::Type & mrType;
 
 public:
-    XMLEnumPropertyHdl( const SvXMLEnumMapEntry* pEnumMap, const css::uno::Type & rType ) : mpEnumMap( pEnumMap ), mrType( rType ) {}
-    virtual ~XMLEnumPropertyHdl();
+    template<typename EnumT>
+    XMLEnumPropertyHdl( const SvXMLEnumMapEntry<EnumT>* pEnumMap)
+        : mpEnumMap( reinterpret_cast<const SvXMLEnumMapEntry<sal_uInt16>*>(pEnumMap) ), mrType( ::cppu::UnoType<EnumT>::get() ) {}
+    virtual ~XMLEnumPropertyHdl() override;
 
     virtual bool importXML( const OUString& rStrImpValue, css::uno::Any& rValue, const SvXMLUnitConverter& rUnitConverter ) const override;
     virtual bool exportXML( OUString& rStrExpValue, const css::uno::Any& rValue, const SvXMLUnitConverter& rUnitConverter ) const override;

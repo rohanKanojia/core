@@ -3,9 +3,12 @@ package org.libreoffice;
 import android.graphics.Bitmap;
 import android.graphics.PointF;
 import android.graphics.RectF;
+import android.util.Log;
 import android.view.KeyEvent;
 
 import org.libreoffice.canvas.SelectionHandle;
+import org.libreoffice.ui.LibreOfficeUIActivity;
+import org.mozilla.gecko.ZoomConstraints;
 import org.mozilla.gecko.gfx.CairoImage;
 import org.mozilla.gecko.gfx.ComposedTileLayer;
 import org.mozilla.gecko.gfx.GeckoLayerClient;
@@ -20,18 +23,19 @@ import java.util.concurrent.LinkedBlockingQueue;
  * Thread that communicates with LibreOffice through LibreOfficeKit JNI interface. The thread
  * consumes events from other threads (mainly the UI thread) and acts accordingly.
  */
-public class LOKitThread extends Thread {
+class LOKitThread extends Thread {
     private static final String LOGTAG = LOKitThread.class.getSimpleName();
 
     private LinkedBlockingQueue<LOEvent> mEventQueue = new LinkedBlockingQueue<LOEvent>();
 
-    private LibreOfficeMainActivity mApplication;
     private TileProvider mTileProvider;
     private InvalidationHandler mInvalidationHandler;
     private ImmutableViewportMetrics mViewportMetrics;
     private GeckoLayerClient mLayerClient;
+    private LibreOfficeMainActivity mContext;
 
-    public LOKitThread() {
+    LOKitThread(LibreOfficeMainActivity context) {
+        mContext = context;
         mInvalidationHandler = null;
         TileProviderFactory.initialize();
     }
@@ -151,47 +155,148 @@ public class LOKitThread extends Thread {
     private void refresh() {
         mLayerClient.clearAndResetlayers();
         redraw();
-    }
-
-    /**
-     * Change part of the document.
-     */
-    private void changePart(int partIndex) {
-        LOKitShell.showProgressSpinner();
-        mTileProvider.changePart(partIndex);
-        mViewportMetrics = mLayerClient.getViewportMetrics();
-        mLayerClient.setViewportMetrics(mViewportMetrics.scaleTo(0.9f, new PointF()));
-        refresh();
-        LOKitShell.hideProgressSpinner();
-    }
-
-    /**
-     * Handle load document event.
-     * @param filename - filename where the document is located
-     */
-    private void loadDocument(String filename) {
-        if (mApplication == null) {
-            mApplication = LibreOfficeMainActivity.mAppContext;
+        updatePartPageRectangles();
+        if (mTileProvider.isSpreadsheet()) {
+            updateCalcHeaders();
         }
+    }
 
-        mLayerClient = LibreOfficeMainActivity.getLayerClient();
+    /**
+     * Update part page rectangles which hold positions of each document page.
+     * Result is stored in DocumentOverlayView class.
+     */
+    private void updatePartPageRectangles() {
+        if (mTileProvider == null) {
+            Log.d(LOGTAG, "mTileProvider==null when calling updatePartPageRectangles");
+            return;
+        }
+        String partPageRectString = ((LOKitTileProvider) mTileProvider).getPartPageRectangles();
+        List<RectF> partPageRectangles = mInvalidationHandler.convertPayloadToRectangles(partPageRectString);
+        mContext.getDocumentOverlay().setPartPageRectangles(partPageRectangles);
+    }
 
-        mInvalidationHandler = new InvalidationHandler(LibreOfficeMainActivity.mAppContext);
-        mTileProvider = TileProviderFactory.create(mLayerClient, mInvalidationHandler, filename);
+    private void updatePageSize(int pageWidth, int pageHeight){
+        mTileProvider.setDocumentSize(pageWidth, pageHeight);
+        redraw();
+    }
+
+    private void updateZoomConstraints() {
+        if (mTileProvider == null) return;
+        mLayerClient = mContext.getLayerClient();
+        if (mTileProvider.isSpreadsheet()) {
+            // Calc has a fixed zoom at 1x and doesn't allow zooming for now
+            mLayerClient.setZoomConstraints(new ZoomConstraints(false, 1f, 0f, 0f));
+        } else {
+            // Set min zoom to the page width so that you cannot zoom below page width
+            // applies to all types of document; in the future spreadsheets may be singled out
+            float minZoom = mLayerClient.getViewportMetrics().getWidth()/mTileProvider.getPageWidth();
+            mLayerClient.setZoomConstraints(new ZoomConstraints(true, 1f, minZoom, 0f));
+        }
+    }
+
+
+    /**
+     * Resume the document with the current part
+     */
+
+    private void resumeDocument(String filename, int partIndex){
+
+        mLayerClient = mContext.getLayerClient();
+
+        mInvalidationHandler = new InvalidationHandler(mContext);
+        mTileProvider = TileProviderFactory.create(mContext, mInvalidationHandler, filename);
 
         if (mTileProvider.isReady()) {
-            LOKitShell.showProgressSpinner();
-            refresh();
-            LOKitShell.hideProgressSpinner();
+            updateZoomConstraints();
+            changePart(partIndex);
         } else {
             closeDocument();
         }
     }
 
     /**
+     * Change part of the document.
+     */
+    private void changePart(int partIndex) {
+        LOKitShell.showProgressSpinner(mContext);
+        mTileProvider.changePart(partIndex);
+        mViewportMetrics = mLayerClient.getViewportMetrics();
+        // mLayerClient.setViewportMetrics(mViewportMetrics.scaleTo(0.9f, new PointF()));
+        refresh();
+        LOKitShell.hideProgressSpinner(mContext);
+    }
+
+    /**
+     * Handle load document event.
+     * @param filePath - filePath to where the document is located
+     */
+    private void loadDocument(String filePath) {
+        mLayerClient = mContext.getLayerClient();
+
+        mInvalidationHandler = new InvalidationHandler(mContext);
+        mTileProvider = TileProviderFactory.create(mContext, mInvalidationHandler, filePath);
+
+        if (mTileProvider.isReady()) {
+            LOKitShell.showProgressSpinner(mContext);
+            updateZoomConstraints();
+            LOKitShell.getMainHandler().post(new Runnable() {
+                @Override
+                public void run() {
+                    refresh();
+                }
+            });
+            LOKitShell.hideProgressSpinner(mContext);
+        } else {
+            closeDocument();
+        }
+    }
+
+    /**
+     * Handle load new document event.
+     * @param filePath - filePath to where new document is to be created
+     * @param fileType - fileType what type of new document is to be loaded
+     */
+    private void loadNewDocument(String filePath, String fileType) {
+        mLayerClient = mContext.getLayerClient();
+
+        mInvalidationHandler = new InvalidationHandler(mContext);
+        mTileProvider = TileProviderFactory.create(mContext, mInvalidationHandler, fileType);
+
+        if (mTileProvider.isReady()) {
+            LOKitShell.showProgressSpinner(mContext);
+            updateZoomConstraints();
+            refresh();
+            LOKitShell.hideProgressSpinner(mContext);
+
+            if (fileType.matches(LibreOfficeUIActivity.NEW_WRITER_STRING_KEY))
+                mTileProvider.saveDocumentAs(filePath, "odt");
+            else if (fileType.matches(LibreOfficeUIActivity.NEW_CALC_STRING_KEY))
+                mTileProvider.saveDocumentAs(filePath, "ods");
+            else if (fileType.matches(LibreOfficeUIActivity.NEW_IMPRESS_STRING_KEY))
+                mTileProvider.saveDocumentAs(filePath, "odp");
+            else
+                mTileProvider.saveDocumentAs(filePath, "odg");
+
+        } else {
+            closeDocument();
+        }
+    }
+
+    /**
+     * Save the currently loaded document.
+     */
+    private void saveDocumentAs(String filePath, String fileType) {
+       if (mTileProvider == null) {
+           Log.e(LOGTAG, "Error in saving, Tile Provider instance is null");
+       } else {
+           mTileProvider.saveDocumentAs(filePath, fileType);
+       }
+    }
+
+    /**
      * Close the currently loaded document.
      */
-    public void closeDocument() {
+    private void closeDocument() {
         if (mTileProvider != null) {
             mTileProvider.close();
             mTileProvider = null;
@@ -204,7 +309,16 @@ public class LOKitThread extends Thread {
     private void processEvent(LOEvent event) {
         switch (event.mType) {
             case LOEvent.LOAD:
-                loadDocument(event.mString);
+                loadDocument(event.filePath);
+                break;
+            case LOEvent.LOAD_NEW:
+                loadNewDocument(event.filePath, event.fileType);
+                break;
+            case LOEvent.SAVE_AS:
+                saveDocumentAs(event.filePath, event.fileType);
+                break;
+            case LOEvent.RESUME:
+                resumeDocument(event.mString, event.mPartIndex);
                 break;
             case LOEvent.CLOSE:
                 closeDocument();
@@ -234,30 +348,65 @@ public class LOKitThread extends Thread {
                 changeHandlePosition(event.mHandleType, event.mDocumentCoordinate);
                 break;
             case LOEvent.SWIPE_LEFT:
-                onSwipeLeft();
+                if (null != mTileProvider) onSwipeLeft();
                 break;
             case LOEvent.SWIPE_RIGHT:
-                onSwipeRight();
+                if (null != mTileProvider) onSwipeRight();
                 break;
             case LOEvent.NAVIGATION_CLICK:
                 mInvalidationHandler.changeStateTo(InvalidationHandler.OverlayState.NONE);
                 break;
             case LOEvent.UNO_COMMAND:
-                mTileProvider.postUnoCommand(event.mString, event.mValue);
+                if (null == mTileProvider)
+                    Log.e(LOGTAG, "no mTileProvider when trying to process "+event.mValue+" from UNO_COMMAND "+event.mString);
+                else
+                    mTileProvider.postUnoCommand(event.mString, event.mValue);
+                break;
+            case LOEvent.UPDATE_PART_PAGE_RECT:
+                updatePartPageRectangles();
+                break;
+            case LOEvent.UPDATE_ZOOM_CONSTRAINTS:
+                updateZoomConstraints();
+                break;
+            case LOEvent.UPDATE_CALC_HEADERS:
+                updateCalcHeaders();
+                break;
+            case LOEvent.UNO_COMMAND_NOTIFY:
+                if (null == mTileProvider)
+                    Log.e(LOGTAG, "no mTileProvider when trying to process "+event.mValue+" from UNO_COMMAND "+event.mString);
+                else
+                    mTileProvider.postUnoCommand(event.mString, event.mValue, event.mNotify);
+                break;
+            case LOEvent.REFRESH:
+                refresh();
+                break;
+            case LOEvent.PAGE_SIZE_CHANGED:
+                updatePageSize(event.mPageWidth, event.mPageHeight);
                 break;
         }
+    }
+
+    private void updateCalcHeaders() {
+        if (null == mTileProvider) return;
+        LOKitTileProvider tileProvider = (LOKitTileProvider)mTileProvider;
+        String values = tileProvider.getCalcHeaders();
+        mContext.getCalcHeadersController().setHeaders(values);
     }
 
     /**
      * Request a change of the handle position.
      */
     private void changeHandlePosition(SelectionHandle.HandleType handleType, PointF documentCoordinate) {
-        if (handleType == SelectionHandle.HandleType.MIDDLE) {
-            mTileProvider.setTextSelectionReset(documentCoordinate);
-        } else if (handleType == SelectionHandle.HandleType.START) {
-            mTileProvider.setTextSelectionStart(documentCoordinate);
-        } else if (handleType == SelectionHandle.HandleType.END) {
-            mTileProvider.setTextSelectionEnd(documentCoordinate);
+        switch (handleType) {
+            case MIDDLE:
+                mTileProvider.setTextSelectionReset(documentCoordinate);
+                break;
+            case START:
+                mTileProvider.setTextSelectionStart(documentCoordinate);
+                break;
+            case END:
+                mTileProvider.setTextSelectionEnd(documentCoordinate);
+                break;
         }
     }
 

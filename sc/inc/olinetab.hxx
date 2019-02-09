@@ -37,7 +37,7 @@ class ScOutlineEntry
     bool        bVisible;
 
 public:
-    ScOutlineEntry( SCCOLROW nNewStart, SCCOLROW nNewSize, bool bNewHidden = false );
+    ScOutlineEntry( SCCOLROW nNewStart, SCCOLROW nNewSize, bool bNewHidden );
     ScOutlineEntry( const ScOutlineEntry& rEntry );
 
     SC_DLLPUBLIC SCCOLROW GetStart() const { return nStart;}
@@ -54,7 +54,7 @@ public:
      */
     SC_DLLPUBLIC bool IsVisible() const { return bVisible;}
 
-    void                    Move( SCsCOLROW nDelta );
+    void                    Move( SCCOLROW nDelta );
     void                    SetSize( SCSIZE nNewSize );
     void                    SetPosSize( SCCOLROW nNewPos, SCSIZE nNewSize );
     void                    SetHidden( bool bNewHidden );
@@ -98,7 +98,6 @@ private:
         SCCOLROW nSearchPos, size_t& rFindLevel, size_t& rFindIndex,
         size_t nMaxLevel = SC_OL_MAXDEPTH);
 
-    void RemoveSub(SCCOLROW nStartPos, SCCOLROW nEndPos, size_t nLevel);
     void PromoteSub(SCCOLROW nStartPos, SCCOLROW nEndPos, size_t nStartLevel);
 
 public:
@@ -136,7 +135,7 @@ public:
     bool ManualAction(
         SCCOLROW nStartPos, SCCOLROW nEndPos, bool bShow, const ScTable& rTable, bool bCol);
 
-    void finalizeImport(ScTable& rTable);
+    void finalizeImport(const ScTable& rTable);
 
     void RemoveAll();
 };

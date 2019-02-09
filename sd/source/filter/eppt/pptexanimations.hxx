@@ -20,23 +20,26 @@
 #ifndef INCLUDED_SD_SOURCE_FILTER_EPPT_PPTEXANIMATIONS_HXX
 #define INCLUDED_SD_SOURCE_FILTER_EPPT_PPTEXANIMATIONS_HXX
 
-#include <com/sun/star/animations/XTimeContainer.hpp>
-#include <com/sun/star/drawing/XDrawPage.hpp>
-#include <com/sun/star/animations/XAnimate.hpp>
-#include <com/sun/star/beans/NamedValue.hpp>
-#include "../ppt/pptanimations.hxx"
-#include <pptexsoundcollection.hxx>
-#include <filter/msfilter/escherex.hxx>
-
 #ifdef DBG_ANIM_LOG
 #include <stdio.h>
 #endif
 
-#include <memory>
+#include <rtl/ustring.hxx>
+#include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Reference.h>
 
-#include <list>
+#include <memory>
+#include <vector>
+
+namespace com { namespace sun { namespace star { namespace animations { class XAnimate; } } } }
+namespace com { namespace sun { namespace star { namespace animations { class XAnimationNode; } } } }
+namespace com { namespace sun { namespace star { namespace beans { struct NamedValue; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawPage; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShape; } } } }
+namespace ppt { class ExSoundCollection; }
 
 class SvStream;
+class EscherSolverContainer;
 
 namespace ppt
 {
@@ -72,24 +75,23 @@ class AnimationExporter
     static bool getColorAny( const css::uno::Any& rAny, const sal_Int16 nColorSpace, sal_Int32& rMode, sal_Int32& rA, sal_Int32& rB, sal_Int32& rC );
     static bool exportAnimProperty( SvStream& rStrm, const sal_uInt16 nPropertyId, const css::uno::Any& rAny, const TranslateMode eTranslateMode );
     static void exportAnimPropertyString( SvStream& rStrm, const sal_uInt16 nPropertyId, const OUString& rVal, const TranslateMode eTranslateMode );
-    static void exportAnimPropertyFloat( SvStream& rStrm, const sal_uInt16 nPropertyId, const double& rVal, const TranslateMode eTranslateMode );
-    static void exportAnimPropertyuInt32( SvStream& rStrm, const sal_uInt16 nPropertyId, const sal_uInt32 nVal, const TranslateMode eTranslateMode );
-    static void exportAnimPropertyByte( SvStream& rStrm, const sal_uInt16 nPropertyId, const sal_uInt8 nVal, const TranslateMode eTranslateMode );
+    static void exportAnimPropertyFloat( SvStream& rStrm, const sal_uInt16 nPropertyId, const double& rVal );
+    static void exportAnimPropertyuInt32( SvStream& rStrm, const sal_uInt16 nPropertyId, const sal_uInt32 nVal );
+    static void exportAnimPropertyByte( SvStream& rStrm, const sal_uInt16 nPropertyId, const sal_uInt8 nVal );
 
     /** if available exportAnimPropertySet
        @return the css::presentation::EffectNodeType*/
     static sal_Int16 exportAnimPropertySet( SvStream& rStrm, const css::uno::Reference< css::animations::XAnimationNode >& xNode );
     static void exportAnimNode( SvStream& rStrm, const css::uno::Reference< css::animations::XAnimationNode >& xNode,
-                        const css::uno::Reference< css::animations::XAnimationNode >* pParent, const sal_Int32 nGroupLevel, const sal_Int16 nFillDefault );
+                        const sal_Int16 nFillDefault );
     void exportAnimate( SvStream& rStrm, const css::uno::Reference< css::animations::XAnimationNode >& xNode );
     void exportAnimateTarget( SvStream& rStrm, const css::uno::Reference< css::animations::XAnimationNode >& xNode, const sal_uInt32 nForceAttributeName = 0, int nAfterEffectType = AFTEREFFECT_NONE );
     void exportAnimateSet( SvStream& rStrm, const css::uno::Reference< css::animations::XAnimationNode >&  xNode, int nAfterEffectType );
     static void exportAnimAction( SvStream& rStrm, const css::uno::Reference< css::animations::XAnimationNode >& xNode );
     void exportAnimEvent( SvStream& rStrm, const css::uno::Reference< css::animations::XAnimationNode >& xNode, const sal_Int32 nFlags = 0 );
-    void exportNode( SvStream& rStrm, css::uno::Reference< css::animations::XAnimationNode > xNode,
-                        const css::uno::Reference< css::animations::XAnimationNode >* xParent,
-                            const sal_uInt16 nContainerRecType, const sal_uInt16 nInstance, const sal_Int32 nGroupLevel, const bool bTakeBackInteractiveSequenceTiming,
-                                const sal_Int16 nFillDefault );
+    void exportNode( SvStream& rStrm, css::uno::Reference< css::animations::XAnimationNode > const & xNode,
+                     const sal_uInt16 nContainerRecType, const sal_uInt16 nInstance, const sal_Int32 nGroupLevel, const bool bTakeBackInteractiveSequenceTiming,
+                     const sal_Int16 nFillDefault );
     void exportAnimateTargetElement( SvStream& rStrm, const css::uno::Any& rAny, const bool bCreate2b01Atom );
     static void exportAnimateKeyPoints( SvStream& rStrm, const css::uno::Reference< css::animations::XAnimate >& xAnimate );
     static void exportAnimValue( SvStream& rStrm, const css::uno::Reference< css::animations::XAnimationNode >& xNode, const bool bExportAlways );
@@ -109,7 +111,7 @@ class AnimationExporter
 
     static css::uno::Reference< css::animations::XAnimationNode > createAfterEffectNodeClone( const css::uno::Reference< css::animations::XAnimationNode >& xNode );
 
-    std::list< AfterEffectNodePtr > maAfterEffectNodes;
+    std::vector< AfterEffectNodePtr > maAfterEffectNodes;
 
 public:
     AnimationExporter( const EscherSolverContainer& rSolverContainer, ppt::ExSoundCollection& rExSoundCollection );
@@ -122,7 +124,7 @@ public:
     static css::uno::Any convertAnimateValue( const css::uno::Any& rSource, const OUString& rAttributeName );
         static bool GetNodeType( const css::uno::Reference< css::animations::XAnimationNode >& xNode, sal_Int16& nType );
         static sal_Int16 GetFillMode( const css::uno::Reference< css::animations::XAnimationNode >& xNode, const sal_Int16 nFillDefault );
-        static void GetUserData( const css::uno::Sequence< css::beans::NamedValue >& rUserData, const css::uno::Any ** pAny, sal_Size nLen );
+        static void GetUserData( const css::uno::Sequence< css::beans::NamedValue >& rUserData, const css::uno::Any ** pAny, std::size_t nLen );
         static sal_uInt32 TranslatePresetSubType( const sal_uInt32 nPresetClass, const sal_uInt32 nPresetId, const OUString& rPresetSubType );
         static sal_uInt32 GetPresetID( const OUString& rPreset, sal_uInt32 nAPIPresetClass, bool& bPresetId );
         static sal_uInt32 GetValueTypeForAttributeName( const OUString& rAttributeName );

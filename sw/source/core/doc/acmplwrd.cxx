@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <comphelper/string.hxx>
 #include <tools/urlobj.hxx>
 #include <hintids.hxx>
 #include <hints.hxx>
@@ -33,11 +32,13 @@
 #include <calbck.hxx>
 #include <IDocumentStylePoolAccess.hxx>
 #include <editeng/svxacorr.hxx>
+#include <osl/diagnose.h>
 
 #include <editeng/acorrcfg.hxx>
 #include <sfx2/docfile.hxx>
 #include <docsh.hxx>
 
+#include <cassert>
 #include <vector>
 
 class SwAutoCompleteClient : public SwClient
@@ -50,7 +51,7 @@ class SwAutoCompleteClient : public SwClient
 public:
     SwAutoCompleteClient(SwAutoCompleteWord& rToTell, SwDoc& rSwDoc);
     SwAutoCompleteClient(const SwAutoCompleteClient& rClient);
-    virtual ~SwAutoCompleteClient();
+    virtual ~SwAutoCompleteClient() override;
 
     SwAutoCompleteClient& operator=(const SwAutoCompleteClient& rClient);
 
@@ -84,9 +85,9 @@ class SwAutoCompleteString
 #endif
     SwDocPtrVector aSourceDocs;
     public:
-        SwAutoCompleteString(const OUString& rStr, sal_Int32 nPos, sal_Int32 nLen);
+        SwAutoCompleteString(const OUString& rStr, sal_Int32 nLen);
 
-        virtual ~SwAutoCompleteString();
+        virtual ~SwAutoCompleteString() override;
         void        AddDocument(const SwDoc& rDoc);
         //returns true if last document reference has been removed
         bool        RemoveDocument(const SwDoc& rDoc);
@@ -124,6 +125,8 @@ SwAutoCompleteClient::~SwAutoCompleteClient()
 {
 #if OSL_DEBUG_LEVEL > 0
     --nSwAutoCompleteClientCount;
+#else
+    (void) this;
 #endif
 }
 
@@ -131,10 +134,7 @@ SwAutoCompleteClient& SwAutoCompleteClient::operator=(const SwAutoCompleteClient
 {
     pAutoCompleteWord = rClient.pAutoCompleteWord;
     pDoc = rClient.pDoc;
-    if(rClient.GetRegisteredIn())
-        const_cast<SwModify*>(rClient.GetRegisteredIn())->Add(this);
-    else if(GetRegisteredIn())
-        GetRegisteredInNonConst()->Remove(this);
+    StartListeningToSameModifyAs(rClient);
     return *this;
 }
 
@@ -145,7 +145,7 @@ void SwAutoCompleteClient::Modify( const SfxPoolItem* pOld, const SfxPoolItem *)
     case RES_REMOVE_UNO_OBJECT:
     case RES_OBJECTDYING:
         if( static_cast<void*>(GetRegisteredIn()) == static_cast<const SwPtrMsgPoolItem *>(pOld)->pObject )
-            static_cast<SwModify*>(GetRegisteredIn())->Remove(this);
+            EndListeningAll();
         pAutoCompleteWord->DocumentDying(*pDoc);
         break;
     }
@@ -153,31 +153,23 @@ void SwAutoCompleteClient::Modify( const SfxPoolItem* pOld, const SfxPoolItem *)
 
 void SwAutoCompleteWord_Impl::AddDocument(SwDoc& rDoc)
 {
-    SwAutoCompleteClientVector::iterator aIt;
-    for(aIt = aClientVector.begin(); aIt != aClientVector.end(); ++aIt)
-    {
-        if(&aIt->GetDoc() == &rDoc)
-            return;
-    }
-    aClientVector.push_back(SwAutoCompleteClient(rAutoCompleteWord, rDoc));
+    if (std::any_of(aClientVector.begin(), aClientVector.end(),
+            [&rDoc](SwAutoCompleteClient& rClient) { return &rClient.GetDoc() == &rDoc; }))
+        return;
+    aClientVector.emplace_back(rAutoCompleteWord, rDoc);
 }
 
 void SwAutoCompleteWord_Impl::RemoveDocument(const SwDoc& rDoc)
 {
-    SwAutoCompleteClientVector::iterator aIt;
-    for(aIt = aClientVector.begin(); aIt != aClientVector.end(); ++aIt)
-    {
-        if(&aIt->GetDoc() == &rDoc)
-        {
-            aClientVector.erase(aIt);
-            return;
-        }
-    }
+    auto aIt = std::find_if(aClientVector.begin(), aClientVector.end(),
+        [&rDoc](SwAutoCompleteClient& rClient) { return &rClient.GetDoc() == &rDoc; });
+    if (aIt != aClientVector.end())
+        aClientVector.erase(aIt);
 }
 
 SwAutoCompleteString::SwAutoCompleteString(
-            const OUString& rStr, sal_Int32 const nPos, sal_Int32 const nLen)
-    : editeng::IAutoCompleteString(rStr.copy(nPos, nLen))
+            const OUString& rStr, sal_Int32 const nLen)
+    : editeng::IAutoCompleteString(rStr.copy(0, nLen))
 {
 #if OSL_DEBUG_LEVEL > 0
     ++nSwAutoCompleteStringCount;
@@ -188,33 +180,32 @@ SwAutoCompleteString::~SwAutoCompleteString()
 {
 #if OSL_DEBUG_LEVEL > 0
     --nSwAutoCompleteStringCount;
+#else
+    (void) this;
 #endif
 }
 
 void SwAutoCompleteString::AddDocument(const SwDoc& rDoc)
 {
-    for(SwDocPtrVector::iterator aIt = aSourceDocs.begin(); aIt != aSourceDocs.end(); ++aIt)
-    {
-        if( *aIt == &rDoc )
-            return;
-    }
+    auto aIt = std::find(aSourceDocs.begin(), aSourceDocs.end(), &rDoc);
+    if (aIt != aSourceDocs.end())
+        return;
     aSourceDocs.push_back(&rDoc);
 }
 
 bool SwAutoCompleteString::RemoveDocument(const SwDoc& rDoc)
 {
-    for(SwDocPtrVector::iterator aIt = aSourceDocs.begin(); aIt != aSourceDocs.end(); ++aIt)
+    auto aIt = std::find(aSourceDocs.begin(), aSourceDocs.end(), &rDoc);
+    if (aIt != aSourceDocs.end())
     {
-        if( *aIt == &rDoc )
-        {
-            aSourceDocs.erase(aIt);
-            return aSourceDocs.empty();
-        }
+        aSourceDocs.erase(aIt);
+        return aSourceDocs.empty();
     }
     return false;
 }
 
-SwAutoCompleteWord::SwAutoCompleteWord( sal_uInt16 nWords, sal_uInt16 nMWrdLen ) :
+SwAutoCompleteWord::SwAutoCompleteWord(
+    editeng::SortedAutoCompleteStrings::size_type nWords, sal_uInt16 nMWrdLen ):
     pImpl(new SwAutoCompleteWord_Impl(*this)),
     nMaxCount( nWords ),
     nMinWrdLen( nMWrdLen ),
@@ -244,9 +235,8 @@ bool SwAutoCompleteWord::InsertWord( const OUString& rWord, SwDoc& rDoc )
             return false;
     }
 
-    OUString aNewWord(rWord);
-    aNewWord = comphelper::string::remove(aNewWord, CH_TXTATR_INWORD);
-    aNewWord = comphelper::string::remove(aNewWord, CH_TXTATR_BREAKWORD);
+    OUString aNewWord = rWord.replaceAll(OUStringLiteral1(CH_TXTATR_INWORD), "")
+                             .replaceAll(OUStringLiteral1(CH_TXTATR_BREAKWORD), "");
 
     pImpl->AddDocument(rDoc);
     bool bRet = false;
@@ -256,12 +246,12 @@ bool SwAutoCompleteWord::InsertWord( const OUString& rWord, SwDoc& rDoc )
 
     if( !bLockWordLst && nWrdLen >= nMinWrdLen )
     {
-        SwAutoCompleteString* pNew = new SwAutoCompleteString( aNewWord, 0, nWrdLen );
+        SwAutoCompleteString* pNew = new SwAutoCompleteString( aNewWord, nWrdLen );
         pNew->AddDocument(rDoc);
         std::pair<editeng::SortedAutoCompleteStrings::const_iterator, bool>
             aInsPair = m_WordList.insert(pNew);
 
-        m_LookupTree.insert( OUString(aNewWord).copy(0, nWrdLen) );
+        m_LookupTree.insert( aNewWord.copy(0, nWrdLen) );
 
         if (aInsPair.second)
         {
@@ -299,12 +289,13 @@ bool SwAutoCompleteWord::InsertWord( const OUString& rWord, SwDoc& rDoc )
     return bRet;
 }
 
-void SwAutoCompleteWord::SetMaxCount( sal_uInt16 nNewMax )
+void SwAutoCompleteWord::SetMaxCount(
+    editeng::SortedAutoCompleteStrings::size_type nNewMax )
 {
     if( nNewMax < nMaxCount && aLRULst.size() > nNewMax )
     {
         // remove the trailing ones
-        sal_uInt16 nLRUIndex = nNewMax-1;
+        SwAutoCompleteStringPtrDeque::size_type nLRUIndex = nNewMax-1;
         while (nNewMax < m_WordList.size() && nLRUIndex < aLRULst.size())
         {
             editeng::SortedAutoCompleteStrings::const_iterator it =
@@ -345,26 +336,13 @@ void SwAutoCompleteWord::SetMinWordLen( sal_uInt16 n )
 /** Return all words matching a given prefix
  *
  *  @param aMatch the prefix to search for
- *  @param aWords the words to search in
+ *  @param rWords the words found matching
  */
-bool SwAutoCompleteWord::GetWordsMatching(const OUString& aMatch, std::vector<OUString>& aWords) const
+bool SwAutoCompleteWord::GetWordsMatching(const OUString& aMatch, std::vector<OUString>& rWords) const
 {
-    OUString aStringRoot = aMatch;
-
-    std::vector<OUString> suggestions;
-    m_LookupTree.findSuggestions(aStringRoot, suggestions);
-
-    if (suggestions.empty())
-    {
-        return false;
-    }
-
-    for (size_t i = 0; i < suggestions.size(); i++)
-    {
-        aWords.push_back( suggestions[i] );
-    }
-
-    return true;
+    assert(rWords.empty());
+    m_LookupTree.findSuggestions(aMatch, rWords);
+    return !rWords.empty();
 }
 
 void SwAutoCompleteWord::CheckChangedList(

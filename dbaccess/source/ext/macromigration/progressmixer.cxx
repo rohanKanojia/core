@@ -58,7 +58,7 @@ namespace dbmm
         }
     };
 
-    typedef ::std::map< PhaseID, PhaseData >   Phases;
+    typedef std::map< PhaseID, PhaseData >   Phases;
 
     // ProgressMixer_Data
     struct ProgressMixer_Data
@@ -97,16 +97,13 @@ namespace dbmm
 
             // tell the single phases their "overall starting point"
             PhaseWeight nRunningWeight( 0 );
-            for (   Phases::iterator phase = _rData.aPhases.begin();
-                    phase != _rData.aPhases.end();
-                    ++phase
-                )
+            for (auto & phase : _rData.aPhases)
             {
-                phase->second.nGlobalStart = (sal_uInt32)( nRunningWeight * _rData.nOverallStretch );
-                nRunningWeight += phase->second.nWeight;
+                phase.second.nGlobalStart = static_cast<sal_uInt32>( nRunningWeight * _rData.nOverallStretch );
+                nRunningWeight += phase.second.nWeight;
 
-                sal_uInt32 nNextPhaseStart = (sal_uInt32)( nRunningWeight * _rData.nOverallStretch );
-                phase->second.nGlobalRange = nNextPhaseStart - phase->second.nGlobalStart;
+                sal_uInt32 nNextPhaseStart = static_cast<sal_uInt32>( nRunningWeight * _rData.nOverallStretch );
+                phase.second.nGlobalRange = nNextPhaseStart - phase.second.nGlobalStart;
             }
 
             _rData.rConsumer.start( OVERALL_RANGE );
@@ -152,8 +149,7 @@ namespace dbmm
         const PhaseData& rPhase( m_pData->pCurrentPhase->second );
 
         double nLocalProgress = 1.0 * _nPhaseProgress / rPhase.nRange;
-        sal_uInt32 nOverallProgress = (sal_uInt32)
-            ( rPhase.nGlobalStart + nLocalProgress * rPhase.nGlobalRange );
+        sal_uInt32 nOverallProgress = static_cast<sal_uInt32>( rPhase.nGlobalStart + nLocalProgress * rPhase.nGlobalRange );
 
         m_pData->rConsumer.advance( nOverallProgress );
     }

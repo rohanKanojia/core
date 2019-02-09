@@ -23,6 +23,7 @@
 // ***************************************************************************************************
 // ***************************************************************************************************
 
+#include <memory>
 #include <sfx2/shell.hxx>
 #include <sfx2/module.hxx>
 #include <vcl/event.hxx>
@@ -57,11 +58,11 @@ namespace svx
 
 class SAL_WARN_UNUSED SVX_DLLPUBLIC FmDesignModeChangedHint : public SfxHint
 {
-    bool m_bDesignMode;
+    bool const m_bDesignMode;
 
 public:
     FmDesignModeChangedHint( bool bDesMode );
-    virtual ~FmDesignModeChangedHint();
+    virtual ~FmDesignModeChangedHint() override;
 
     bool GetDesignMode() const { return m_bDesignMode; }
 };
@@ -71,7 +72,7 @@ class SVX_DLLPUBLIC FmFormShell : public SfxShell
     friend class FmFormView;
     friend class FmXFormShell;
 
-    FmXFormShell*   m_pImpl;
+    rtl::Reference<FmXFormShell> m_pImpl;
     FmFormView*     m_pFormView;
     FmFormModel*    m_pFormModel;
 
@@ -85,16 +86,6 @@ class SVX_DLLPUBLIC FmFormShell : public SfxShell
         // (the FormView itself is not a broadcaster, therefore it can't always correctly notify the
         // form explorer who is interested in the event)
 
-    class FormShellWaitObject
-    {
-    public:
-        FormShellWaitObject(const FmFormShell* _pShell);
-        ~FormShellWaitObject();
-    };
-    friend class FormShellWaitObject;
-
-    const OutputDevice* GetCurrentViewDevice() const { return m_pFormView ? m_pFormView->GetActualOutDev() : nullptr; }
-
 public:
     SFX_DECL_INTERFACE(SVX_INTERFACE_FORM_SH)
 
@@ -104,11 +95,11 @@ private:
 
 public:
     FmFormShell(SfxViewShell* pParent, FmFormView* pView = nullptr);
-    virtual ~FmFormShell();
+    virtual ~FmFormShell() override;
 
     void Execute( SfxRequest& );
     void GetState( SfxItemSet& );
-    virtual bool HasUIFeature( sal_uInt32 nFeature ) override;
+    virtual bool HasUIFeature(SfxShellFeature nFeature) const override;
 
     void ExecuteTextAttribute( SfxRequest& );
     void GetTextAttributeState( SfxItemSet& );
@@ -121,7 +112,7 @@ public:
     FmFormView*  GetFormView() const { return m_pFormView; }
     FmFormModel* GetFormModel() const { return m_pFormModel; }
     FmFormPage*  GetCurPage() const;
-    FmXFormShell* GetImpl() const {return m_pImpl;};
+    FmXFormShell* GetImpl() const {return m_pImpl.get();};
 
     bool PrepareClose(bool bUI = true);
 

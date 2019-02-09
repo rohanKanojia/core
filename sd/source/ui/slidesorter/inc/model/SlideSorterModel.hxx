@@ -22,16 +22,14 @@
 
 class SdDrawDocument;
 
-#include "model/SlsPageEnumeration.hxx"
-#include "model/SlsSharedPageDescriptor.hxx"
+#include <model/SlsSharedPageDescriptor.hxx>
 
-#include "pres.hxx"
-#include <com/sun/star/drawing/XDrawPage.hpp>
+#include <pres.hxx>
 #include <osl/mutex.hxx>
 #include <vcl/region.hxx>
+#include <com/sun/star/uno/Reference.hxx>
 
 #include <vector>
-#include <functional>
 
 class SdrPage;
 class SdPage;
@@ -39,6 +37,9 @@ class SdPage;
 namespace sd { namespace slidesorter {
 class SlideSorter;
 } }
+
+namespace com { namespace sun { namespace star { namespace container { class XIndexAccess; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawPage; } } } }
 
 namespace sd { namespace slidesorter { namespace model {
 
@@ -49,12 +50,12 @@ inline sal_Int32 FromCoreIndex (const sal_uInt16 nCoreIndex) { return (nCoreInde
     this set of slides can be modified (but do not call it directly, use
     SlideSorterController::SetDocumentSlides() instead.)
 */
-class SlideSorterModel
+class SlideSorterModel final
 {
 public:
     SlideSorterModel (SlideSorter& rSlideSorter);
 
-    virtual ~SlideSorterModel();
+    ~SlideSorterModel();
     void Dispose();
 
     /** This method is present to let the view create a ShowView for
@@ -74,7 +75,6 @@ public:
     bool SetEditMode (EditMode eEditMode);
 
     EditMode GetEditMode() const { return meEditMode;}
-    PageKind GetPageType() const { return mePageKind;}
 
     /** Return the number of slides in the document regardless of whether
         they are visible or not or whether they are hidden or not.
@@ -208,10 +208,8 @@ private:
     mutable ::osl::Mutex maMutex;
     SlideSorter& mrSlideSorter;
     css::uno::Reference<css::container::XIndexAccess> mxSlides;
-    PageKind mePageKind;
     EditMode meEditMode;
-    typedef ::std::vector<SharedPageDescriptor> DescriptorContainer;
-    mutable DescriptorContainer maPageDescriptors;
+    mutable ::std::vector<SharedPageDescriptor> maPageDescriptors;
 
     /** Resize the descriptor container according to current values of
         page kind and edit mode.
@@ -219,8 +217,9 @@ private:
     void AdaptSize();
 
     SdPage* GetPage (const sal_Int32 nCoreIndex) const;
-    void InsertSlide (SdPage* pPage);
-    void DeleteSlide (const SdPage* pPage);
+    void InsertSlide (SdPage* pPage, bool bMarkSelected);
+    // return if this page was marked as selected before being removed
+    bool DeleteSlide (const SdPage* pPage);
     void UpdateIndices (const sal_Int32 nFirstIndex);
 };
 

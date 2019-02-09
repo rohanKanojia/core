@@ -21,7 +21,6 @@
 
 #include <sfx2/tabdlg.hxx>
 #include <vcl/button.hxx>
-#include <vcl/lstbox.hxx>
 #include <vcl/field.hxx>
 #include <vcl/fixed.hxx>
 #include <sfx2/basedlgs.hxx>
@@ -33,44 +32,40 @@ class SwMailConfigPage : public SfxTabPage
 {
     friend class SwTestAccountSettingsDialog;
 
-    VclPtr<Edit>            m_pDisplayNameED;
-    VclPtr<Edit>            m_pAddressED;
+    std::unique_ptr<SwMailMergeConfigItem>  m_pConfigItem;
 
-    VclPtr<CheckBox>        m_pReplyToCB;
-    VclPtr<FixedText>        m_pReplyToFT;
-    VclPtr<Edit>            m_pReplyToED;
+    std::unique_ptr<weld::Entry> m_xDisplayNameED;
+    std::unique_ptr<weld::Entry> m_xAddressED;
+    std::unique_ptr<weld::CheckButton> m_xReplyToCB;
+    std::unique_ptr<weld::Label> m_xReplyToFT;
+    std::unique_ptr<weld::Entry> m_xReplyToED;
+    std::unique_ptr<weld::Entry> m_xServerED;
+    std::unique_ptr<weld::SpinButton> m_xPortNF;
+    std::unique_ptr<weld::CheckButton> m_xSecureCB;
+    std::unique_ptr<weld::Button> m_xServerAuthenticationPB;
+    std::unique_ptr<weld::Button> m_xTestPB;
 
-    VclPtr<Edit>            m_pServerED;
-    VclPtr<NumericField>    m_pPortNF;
-
-    VclPtr<CheckBox>        m_pSecureCB;
-
-    VclPtr<PushButton>      m_pServerAuthenticationPB;
-    VclPtr<PushButton>      m_pTestPB;
-
-    SwMailMergeConfigItem*  m_pConfigItem;
-
-    DECL_LINK_TYPED(ReplyToHdl, Button*, void);
-    DECL_LINK_TYPED(AuthenticationHdl, Button*, void);
-    DECL_LINK_TYPED(TestHdl, Button*, void);
+    DECL_LINK(ReplyToHdl, weld::ToggleButton&, void);
+    DECL_LINK(AuthenticationHdl, weld::Button&, void);
+    DECL_LINK(TestHdl, weld::Button&, void);
+    DECL_LINK(SecureHdl, weld::ToggleButton&, void);
 
 public:
-    SwMailConfigPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual ~SwMailConfigPage();
+    SwMailConfigPage(TabPageParent pParent, const SfxItemSet& rSet);
+    virtual ~SwMailConfigPage() override;
     virtual void        dispose() override;
 
-    static VclPtr<SfxTabPage> Create( vcl::Window* pParent,
-                                      const SfxItemSet* rAttrSet);
+    static VclPtr<SfxTabPage> Create(TabPageParent pParent,
+                                     const SfxItemSet* rAttrSet);
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;
-
 };
 
-class SwMailConfigDlg : public SfxSingleTabDialog
+class SwMailConfigDlg : public SfxSingleTabDialogController
 {
 public:
-    SwMailConfigDlg(vcl::Window* pParent, SfxItemSet& rSet);
+    SwMailConfigDlg(weld::Window* pParent, SfxItemSet& rSet);
 };
 
 #endif

@@ -24,12 +24,13 @@
 
 #include <memory>
 
-#include "address.hxx"
-#include "types.hxx"
+#include <address.hxx>
+#include <types.hxx>
 
 class ScDocument;
 struct ScDBQueryParamBase;
 struct ScQueryParamBase;
+enum class FormulaError : sal_uInt16;
 
 /**
  * Base class for abstracting range data backends for database functions.
@@ -37,7 +38,7 @@ struct ScQueryParamBase;
 class ScDBRangeBase
 {
 public:
-    enum RefType { INTERNAL, EXTERNAL }; // TODO: We may not need this after all... (kohei)
+    ScDBRangeBase() = delete;
 
     virtual ~ScDBRangeBase() = 0;
 
@@ -69,7 +70,7 @@ public:
      * @return 0-based column index
      */
     virtual SCCOL findFieldColumn(SCCOL nIndex) const = 0;
-    virtual SCCOL findFieldColumn(const OUString& rStr, sal_uInt16* pErr = nullptr) const = 0;
+    virtual SCCOL findFieldColumn(const OUString& rStr, FormulaError* pErr = nullptr) const = 0;
     virtual std::unique_ptr<ScDBQueryParamBase> createQueryParam(const ScDBRangeBase* pQueryRef) const = 0;
     virtual bool isRangeEqual(const ScRange& rRange) const = 0;
 
@@ -84,16 +85,14 @@ protected:
     static void fillQueryOptions(ScQueryParamBase* pParam);
 
 private:
-    ScDBRangeBase(); // disabled
-
-    ScDocument* mpDoc;
+    ScDocument* const mpDoc;
 };
 
 class ScDBInternalRange : public ScDBRangeBase
 {
 public:
     explicit ScDBInternalRange(ScDocument* pDoc, const ScRange& rRange);
-    virtual ~ScDBInternalRange();
+    virtual ~ScDBInternalRange() override;
 
     const ScRange& getRange() const { return maRange;}
 
@@ -122,19 +121,19 @@ public:
      * @return 0-based column index
      */
     virtual SCCOL findFieldColumn(SCCOL nIndex) const override;
-    virtual SCCOL findFieldColumn(const OUString& rStr, sal_uInt16* pErr = nullptr) const override;
+    virtual SCCOL findFieldColumn(const OUString& rStr, FormulaError* pErr = nullptr) const override;
     virtual std::unique_ptr<ScDBQueryParamBase> createQueryParam(const ScDBRangeBase* pQueryRef) const override;
     virtual bool isRangeEqual(const ScRange& rRange) const override;
 
 private:
-    ScRange maRange;
+    ScRange const maRange;
 };
 
 class ScDBExternalRange : public ScDBRangeBase
 {
 public:
     explicit ScDBExternalRange(ScDocument* pDoc, const ScMatrixRef& pMat);
-    virtual ~ScDBExternalRange();
+    virtual ~ScDBExternalRange() override;
 
     virtual SCCOL getColSize() const override;
     virtual SCROW getRowSize() const override;
@@ -162,7 +161,7 @@ public:
      * @return 0-based column index
      */
     virtual SCCOL findFieldColumn(SCCOL nIndex) const override;
-    virtual SCCOL findFieldColumn(const OUString& rStr, sal_uInt16* pErr = nullptr) const override;
+    virtual SCCOL findFieldColumn(const OUString& rStr, FormulaError* pErr = nullptr) const override;
     virtual std::unique_ptr<ScDBQueryParamBase> createQueryParam(const ScDBRangeBase* pQueryRef) const override;
     virtual bool isRangeEqual(const ScRange& rRange) const override;
 

@@ -19,12 +19,13 @@
 
 
 #include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 
-#include "cell.hxx"
+#include <cell.hxx>
 #include "tablerow.hxx"
 #include "tableundo.hxx"
-#include "svx/svdmodel.hxx"
-#include "svx/svdotable.hxx"
+#include <svx/svdmodel.hxx>
+#include <svx/svdotable.hxx>
 
 
 using namespace ::com::sun::star::uno;
@@ -72,15 +73,14 @@ void TableRow::dispose()
     mxTableModel.clear();
     if( !maCells.empty() )
     {
-        CellVector::iterator aIter( maCells.begin() );
-        while( aIter != maCells.end() )
-            (*aIter++)->dispose();
+        for( auto& rpCell : maCells )
+            rpCell->dispose();
         CellVector().swap(maCells);
     }
 }
 
 
-void TableRow::throwIfDisposed() const throw (css::uno::RuntimeException)
+void TableRow::throwIfDisposed() const
 {
     if( !mxTableModel.is() )
         throw DisposedException();
@@ -100,7 +100,7 @@ TableRow& TableRow::operator=( const TableRow& r )
 }
 
 
-void TableRow::insertColumns( sal_Int32 nIndex, sal_Int32 nCount, CellVector::iterator* pIter /* = 0 */  )
+void TableRow::insertColumns( sal_Int32 nIndex, sal_Int32 nCount, CellVector::iterator const * pIter /* = 0 */  )
 {
     throwIfDisposed();
     if( nCount )
@@ -127,8 +127,7 @@ void TableRow::removeColumns( sal_Int32 nIndex, sal_Int32 nCount )
         if( (nIndex + nCount) < static_cast< sal_Int32 >( maCells.size() ) )
         {
             CellVector::iterator aBegin( maCells.begin() );
-            while( nIndex-- && (aBegin != maCells.end()) )
-                ++aBegin;
+            std::advance(aBegin, nIndex);
 
             if( nCount > 1 )
             {
@@ -149,11 +148,15 @@ void TableRow::removeColumns( sal_Int32 nIndex, sal_Int32 nCount )
     }
 }
 
+const TableModelRef& TableRow::getModel() const
+{
+    return mxTableModel;
+}
 
 // XCellRange
 
 
-Reference< XCell > SAL_CALL TableRow::getCellByPosition( sal_Int32 nColumn, sal_Int32 nRow ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+Reference< XCell > SAL_CALL TableRow::getCellByPosition( sal_Int32 nColumn, sal_Int32 nRow )
 {
     throwIfDisposed();
     if( nRow != 0 )
@@ -163,7 +166,7 @@ Reference< XCell > SAL_CALL TableRow::getCellByPosition( sal_Int32 nColumn, sal_
 }
 
 
-Reference< XCellRange > SAL_CALL TableRow::getCellRangeByPosition( sal_Int32 nLeft, sal_Int32 nTop, sal_Int32 nRight, sal_Int32 nBottom ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+Reference< XCellRange > SAL_CALL TableRow::getCellRangeByPosition( sal_Int32 nLeft, sal_Int32 nTop, sal_Int32 nRight, sal_Int32 nBottom )
 {
     throwIfDisposed();
     if( (nLeft >= 0 ) && (nTop == 0) && (nRight >= nLeft) && (nBottom == 0)  )
@@ -174,7 +177,7 @@ Reference< XCellRange > SAL_CALL TableRow::getCellRangeByPosition( sal_Int32 nLe
 }
 
 
-Reference< XCellRange > SAL_CALL TableRow::getCellRangeByName( const OUString& /*aRange*/ ) throw (RuntimeException, std::exception)
+Reference< XCellRange > SAL_CALL TableRow::getCellRangeByName( const OUString& /*aRange*/ )
 {
     throwIfDisposed();
     return Reference< XCellRange >();
@@ -184,13 +187,13 @@ Reference< XCellRange > SAL_CALL TableRow::getCellRangeByName( const OUString& /
 // XNamed
 
 
-OUString SAL_CALL TableRow::getName() throw (RuntimeException, std::exception)
+OUString SAL_CALL TableRow::getName()
 {
     return maName;
 }
 
 
-void SAL_CALL TableRow::setName( const OUString& aName ) throw (RuntimeException, std::exception)
+void SAL_CALL TableRow::setName( const OUString& aName )
 {
     maName = aName;
 }
@@ -199,21 +202,22 @@ void SAL_CALL TableRow::setName( const OUString& aName ) throw (RuntimeException
 // XFastPropertySet
 
 
-void SAL_CALL TableRow::setFastPropertyValue( sal_Int32 nHandle, const Any& aValue ) throw (UnknownPropertyException, PropertyVetoException, IllegalArgumentException, css::lang::WrappedTargetException, RuntimeException, std::exception)
+void SAL_CALL TableRow::setFastPropertyValue( sal_Int32 nHandle, const Any& aValue )
 {
-    bool bOk = false;
-    bool bChange = false;
+    if(!mxTableModel.is() || nullptr == mxTableModel->getSdrTableObj())
+        return;
 
-    TableRowUndo* pUndo = nullptr;
-
-    SdrModel* pModel = mxTableModel->getSdrTableObj()->GetModel();
-
-    const bool bUndo = mxTableModel.is() && mxTableModel->getSdrTableObj() && mxTableModel->getSdrTableObj()->IsInserted() && pModel && pModel->IsUndoEnabled();
+    SdrTableObj& rTableObj(*mxTableModel->getSdrTableObj());
+    SdrModel& rModel(rTableObj.getSdrModelFromSdrObject());
+    bool bOk(false);
+    bool bChange(false);
+    std::unique_ptr<TableRowUndo> pUndo;
+    const bool bUndo(rTableObj.IsInserted() && rModel.IsUndoEnabled());
 
     if( bUndo )
     {
         TableRowRef xThis( this );
-        pUndo = new TableRowUndo( xThis );
+        pUndo.reset(new TableRowUndo( xThis ));
     }
 
     switch( nHandle )
@@ -268,12 +272,11 @@ void SAL_CALL TableRow::setFastPropertyValue( sal_Int32 nHandle, const Any& aVal
             break;
         }
     default:
-        delete pUndo;
-        throw UnknownPropertyException();
+        throw UnknownPropertyException( OUString::number(nHandle), static_cast<cppu::OWeakObject*>(this));
     }
+
     if( !bOk )
     {
-        delete pUndo;
         throw IllegalArgumentException();
     }
 
@@ -281,17 +284,14 @@ void SAL_CALL TableRow::setFastPropertyValue( sal_Int32 nHandle, const Any& aVal
     {
         if( pUndo )
         {
-            pModel->AddUndo( pUndo );
-            pUndo = nullptr;
+            rModel.AddUndo( std::move(pUndo) );
         }
-        mxTableModel->setModified(sal_True);
+        mxTableModel->setModified(true);
     }
-
-    delete pUndo;
 }
 
 
-Any SAL_CALL TableRow::getFastPropertyValue( sal_Int32 nHandle ) throw (UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception)
+Any SAL_CALL TableRow::getFastPropertyValue( sal_Int32 nHandle )
 {
     switch( nHandle )
     {
@@ -299,54 +299,48 @@ Any SAL_CALL TableRow::getFastPropertyValue( sal_Int32 nHandle ) throw (UnknownP
     case Property_OptimalHeight:    return Any( mbOptimalHeight );
     case Property_IsVisible:        return Any( mbIsVisible );
     case Property_IsStartOfNewPage: return Any( mbIsStartOfNewPage );
-    default:                        throw UnknownPropertyException();
+    default:                        throw UnknownPropertyException( OUString::number(nHandle), static_cast<cppu::OWeakObject*>(this));
     }
 }
 
 
 rtl::Reference< FastPropertySetInfo > TableRow::getStaticPropertySetInfo()
 {
-    static rtl::Reference< FastPropertySetInfo > xInfo;
-    if( !xInfo.is() )
-    {
-        ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-        if( !xInfo.is() )
-        {
-            PropertyVector aProperties(6);
+    static rtl::Reference<FastPropertySetInfo> xInfo = []() {
+        PropertyVector aProperties(6);
 
-            aProperties[0].Name = "Height";
-            aProperties[0].Handle = Property_Height;
-            aProperties[0].Type = ::cppu::UnoType<sal_Int32>::get();
-            aProperties[0].Attributes = 0;
+        aProperties[0].Name = "Height";
+        aProperties[0].Handle = Property_Height;
+        aProperties[0].Type = ::cppu::UnoType<sal_Int32>::get();
+        aProperties[0].Attributes = 0;
 
-            aProperties[1].Name = "OptimalHeight";
-            aProperties[1].Handle = Property_OptimalHeight;
-            aProperties[1].Type = cppu::UnoType<bool>::get();
-            aProperties[1].Attributes = 0;
+        aProperties[1].Name = "OptimalHeight";
+        aProperties[1].Handle = Property_OptimalHeight;
+        aProperties[1].Type = cppu::UnoType<bool>::get();
+        aProperties[1].Attributes = 0;
 
-            aProperties[2].Name = "IsVisible";
-            aProperties[2].Handle = Property_IsVisible;
-            aProperties[2].Type = cppu::UnoType<bool>::get();
-            aProperties[2].Attributes = 0;
+        aProperties[2].Name = "IsVisible";
+        aProperties[2].Handle = Property_IsVisible;
+        aProperties[2].Type = cppu::UnoType<bool>::get();
+        aProperties[2].Attributes = 0;
 
-            aProperties[3].Name = "IsStartOfNewPage";
-            aProperties[3].Handle = Property_IsStartOfNewPage;
-            aProperties[3].Type = cppu::UnoType<bool>::get();
-            aProperties[3].Attributes = 0;
+        aProperties[3].Name = "IsStartOfNewPage";
+        aProperties[3].Handle = Property_IsStartOfNewPage;
+        aProperties[3].Type = cppu::UnoType<bool>::get();
+        aProperties[3].Attributes = 0;
 
-            aProperties[4].Name = "Size";
-            aProperties[4].Handle = Property_Height;
-            aProperties[4].Type = ::cppu::UnoType<sal_Int32>::get();
-            aProperties[4].Attributes = 0;
+        aProperties[4].Name = "Size";
+        aProperties[4].Handle = Property_Height;
+        aProperties[4].Type = ::cppu::UnoType<sal_Int32>::get();
+        aProperties[4].Attributes = 0;
 
-            aProperties[5].Name = "OptimalSize";
-            aProperties[5].Handle = Property_OptimalHeight;
-            aProperties[5].Type = cppu::UnoType<bool>::get();
-            aProperties[5].Attributes = 0;
+        aProperties[5].Name = "OptimalSize";
+        aProperties[5].Handle = Property_OptimalHeight;
+        aProperties[5].Type = cppu::UnoType<bool>::get();
+        aProperties[5].Attributes = 0;
 
-            xInfo.set( new FastPropertySetInfo(aProperties) );
-        }
-    }
+        return rtl::Reference<FastPropertySetInfo>(new FastPropertySetInfo(aProperties));
+    }();
 
     return xInfo;
 }

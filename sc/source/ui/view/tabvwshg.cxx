@@ -17,6 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <config_features.h>
+
 #include <tools/urlobj.hxx>
 #include <svx/fmglob.hxx>
 #include <svx/svdouno.hxx>
@@ -30,10 +32,10 @@
 
 using namespace com::sun::star;
 
-#include "tabvwsh.hxx"
-#include "document.hxx"
-#include "drawview.hxx"
-#include "globstr.hrc"
+#include <tabvwsh.hxx>
+#include <document.hxx>
+#include <drawview.hxx>
+#include <globstr.hrc>
 #include <gridwin.hxx>
 #include <avmedia/mediawindow.hxx>
 
@@ -58,8 +60,11 @@ void ScTabViewShell::InsertURLButton( const OUString& rName, const OUString& rUR
     ScDrawView* pDrView = pView->GetScDrawView();
     SdrModel*   pModel  = pDrView->GetModel();
 
-    SdrObject* pObj = SdrObjFactory::MakeNewObject(FmFormInventor, OBJ_FM_BUTTON,
-                               pDrView->GetSdrPageView()->GetPage(), pModel);
+    SdrObject* pObj = SdrObjFactory::MakeNewObject(
+        *pModel,
+        SdrInventor::FmForm,
+        OBJ_FM_BUTTON);
+
     SdrUnoObj* pUnoCtrl = dynamic_cast<SdrUnoObj*>( pObj );
     OSL_ENSURE( pUnoCtrl, "no SdrUnoObj");
     if( !pUnoCtrl )
@@ -71,30 +76,25 @@ void ScTabViewShell::InsertURLButton( const OUString& rName, const OUString& rUR
         return;
 
     uno::Reference< beans::XPropertySet > xPropSet( xControlModel, uno::UNO_QUERY );
-    uno::Any aAny;
 
-    aAny <<= OUString(rName);
-    xPropSet->setPropertyValue("Label", aAny );
+    xPropSet->setPropertyValue("Label", uno::Any(rName) );
 
     OUString aTmp = INetURLObject::GetAbsURL( pDoc->GetDocumentShell()->GetMedium()->GetBaseURL(), rURL );
-    aAny <<= aTmp;
-    xPropSet->setPropertyValue("TargetURL", aAny );
+    xPropSet->setPropertyValue("TargetURL", uno::Any(aTmp) );
 
     if( !rTarget.isEmpty() )
     {
-        aAny <<= rTarget;
-        xPropSet->setPropertyValue("TargetFrame", aAny );
+        xPropSet->setPropertyValue("TargetFrame", uno::Any(rTarget) );
     }
 
-    form::FormButtonType eButtonType = form::FormButtonType_URL;
-    aAny <<= eButtonType;
-    xPropSet->setPropertyValue("ButtonType", aAny );
+    xPropSet->setPropertyValue("ButtonType", uno::Any(form::FormButtonType_URL) );
 
+#if HAVE_FEATURE_AVMEDIA
         if ( ::avmedia::MediaWindow::isMediaURL( rURL, ""/*TODO?*/ ) )
     {
-        aAny <<= sal_True;
-        xPropSet->setPropertyValue("DispatchURLInternal", aAny );
+        xPropSet->setPropertyValue("DispatchURLInternal", uno::Any(true) );
     }
+#endif
 
     Point aPos;
     if (pInsPos)
@@ -106,9 +106,9 @@ void ScTabViewShell::InsertURLButton( const OUString& rName, const OUString& rUR
     Size aSize = GetActiveWin()->PixelToLogic(Size(140, 20));
 
     if ( pDoc->IsNegativePage(nTab) )
-        aPos.X() -= aSize.Width();
+        aPos.AdjustX( -(aSize.Width()) );
 
-    pObj->SetLogicRect(Rectangle(aPos, aSize));
+    pObj->SetLogicRect(tools::Rectangle(aPos, aSize));
 
     // for the old VC-Button the position/size had to be set explicitly once more
     // that seems not to be needed with UnoControls

@@ -20,13 +20,11 @@
 #ifndef INCLUDED_SLIDESHOW_SOURCE_ENGINE_EFFECTREWINDER_HXX
 #define INCLUDED_SLIDESHOW_SOURCE_ENGINE_EFFECTREWINDER_HXX
 
-#include "animationnode.hxx"
-#include "eventhandler.hxx"
-#include "animationeventhandler.hxx"
-#include "event.hxx"
-#include "screenupdater.hxx"
-
-#include <com/sun/star/presentation/XSlideShow.hpp>
+#include <animationnode.hxx>
+#include <eventhandler.hxx>
+#include <animationeventhandler.hxx>
+#include <event.hxx>
+#include <screenupdater.hxx>
 
 #include <functional>
 #include <memory>

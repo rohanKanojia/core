@@ -28,7 +28,7 @@ static void lcl_AppendTwoDigits( OStringBuffer &rBuffer, sal_Int32 nNum )
 
 OString DateTimeToOString( const DateTime& rDateTime )
 {
-    DateTime aInUTC( rDateTime );
+    const DateTime& aInUTC( rDateTime );
 // HACK: this is correct according to the spec, but MSOffice believes everybody lives
 // in UTC+0 when reading it back
 //    aInUTC.ConvertToUTC();
@@ -73,4 +73,10 @@ OString DateToDDMMYYYYOString( const Date& rDate )
     aBuffer.append( sal_Int32( rDate.GetYear() ) );
 
     return aBuffer.makeStringAndClear();
+}
+
+std::ostream& operator<<(std::ostream& os, const Date& rDate)
+{
+    os << rDate.GetYear() << "-" << rDate.GetMonth() << "-" << rDate.GetDay();
+    return os;
 }

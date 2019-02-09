@@ -17,14 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/resid.hxx>
 #include <hintids.hxx>
 #include <swtypes.hxx>
 #include <txtatr.hxx>
 #include <ndtxt.hxx>
 #include <txttxmrk.hxx>
 #include <tox.hxx>
-#include <poolfmt.hrc>
+#include <strings.hrc>
 #include <doc.hxx>
 #include <docary.hxx>
 #include <paratr.hxx>
@@ -35,6 +34,8 @@
 #include <calbck.hxx>
 
 #include <boost/optional.hpp>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
 #include <algorithm>
 
@@ -165,7 +166,7 @@ void SwTOXMark::InvalidateTOXMark()
     NotifyClients(&aMsgHint, &aMsgHint);
 }
 
-OUString SwTOXMark::GetText() const
+OUString SwTOXMark::GetText(SwRootFrame const*const pLayout) const
 {
     if( !m_aAltText.isEmpty() )
         return m_aAltText;
@@ -177,7 +178,7 @@ OUString SwTOXMark::GetText() const
         if( pEndIdx )
         {
             const sal_Int32 nStt = m_pTextAttr->GetStart();
-            return m_pTextAttr->GetpTextNd()->GetExpandText( nStt, *pEndIdx-nStt );
+            return m_pTextAttr->GetpTextNd()->GetExpandText(pLayout, nStt, *pEndIdx-nStt);
         }
     }
 
@@ -211,6 +212,91 @@ SwTOXType::SwTOXType(const SwTOXType& rCopy)
 {
 }
 
+static const char* STR_POOLCOLL_TOX_ARY[] =
+{
+    // Subcategory Index-Directories
+    STR_POOLCOLL_TOX_IDXH,
+    STR_POOLCOLL_TOX_IDX1,
+    STR_POOLCOLL_TOX_IDX2,
+    STR_POOLCOLL_TOX_IDX3,
+    STR_POOLCOLL_TOX_IDXBREAK
+};
+
+static const char* STR_POOLCOLL_TOX_CNTNT_ARY[] =
+{
+    // Subcategory Tables of Contents
+    STR_POOLCOLL_TOX_CNTNTH,
+    STR_POOLCOLL_TOX_CNTNT1,
+    STR_POOLCOLL_TOX_CNTNT2,
+    STR_POOLCOLL_TOX_CNTNT3,
+    STR_POOLCOLL_TOX_CNTNT4,
+    STR_POOLCOLL_TOX_CNTNT5
+};
+
+static const char* STR_POOLCOLL_TOX_CNTNT_EXTRA_ARY[] =
+{
+    // Subcategory Table of Contents more Levels 5 - 10
+    STR_POOLCOLL_TOX_CNTNT6,
+    STR_POOLCOLL_TOX_CNTNT7,
+    STR_POOLCOLL_TOX_CNTNT8,
+    STR_POOLCOLL_TOX_CNTNT9,
+    STR_POOLCOLL_TOX_CNTNT10
+};
+
+static const char* STR_POOLCOLL_TOX_USER_ARY[] =
+{
+    // Subcategory User-Directories:
+    STR_POOLCOLL_TOX_USERH,
+    STR_POOLCOLL_TOX_USER1,
+    STR_POOLCOLL_TOX_USER2,
+    STR_POOLCOLL_TOX_USER3,
+    STR_POOLCOLL_TOX_USER4,
+    STR_POOLCOLL_TOX_USER5
+};
+
+static const char* STR_POOLCOLL_TOX_USER_EXTRA_ARY[] =
+{
+    // Subcategory User-Directories more Levels 5 - 10
+    STR_POOLCOLL_TOX_USER6,
+    STR_POOLCOLL_TOX_USER7,
+    STR_POOLCOLL_TOX_USER8,
+    STR_POOLCOLL_TOX_USER9,
+    STR_POOLCOLL_TOX_USER10
+};
+
+static const char* STR_POOLCOLL_TOX_ILLUS_ARY[] =
+{
+    // Illustrations Index
+    STR_POOLCOLL_TOX_ILLUSH,
+    STR_POOLCOLL_TOX_ILLUS1
+};
+
+static const char* STR_POOLCOLL_TOX_OBJECT_ARY[] =
+{
+    //  Object Index
+    STR_POOLCOLL_TOX_OBJECTH,
+    STR_POOLCOLL_TOX_OBJECT1
+};
+
+static const char* STR_POOLCOLL_TOX_TABLES_ARY[] =
+{
+    //  Tables Index
+    STR_POOLCOLL_TOX_TABLESH,
+    STR_POOLCOLL_TOX_TABLES1
+};
+
+static const char* STR_POOLCOLL_TOX_AUTHORITIES_ARY[] =
+{
+    //  Index of Authorities
+    STR_POOLCOLL_TOX_AUTHORITIESH,
+    STR_POOLCOLL_TOX_AUTHORITIES1
+};
+
+static const char* STR_POOLCOLL_TOX_CITATION_ARY[] =
+{
+    STR_POOLCOLL_TOX_CITATION
+};
+
 // Edit forms
 SwForm::SwForm( TOXTypes eTyp ) // #i21237#
     : m_eType( eTyp ), m_nFormMaxLevel( SwForm::GetFormMaxLevel( eTyp )),
@@ -218,7 +304,6 @@ SwForm::SwForm( TOXTypes eTyp ) // #i21237#
     m_bCommaSeparated(false)
 {
     //bHasFirstTabPos =
-    m_bGenerateTabPos = false;
     m_bIsRelTabPos = true;
 
     // The table of contents has a certain number of headlines + headings
@@ -226,17 +311,17 @@ SwForm::SwForm( TOXTypes eTyp ) // #i21237#
     // Keyword has 3 levels + headings+ separator
     // Indexes of tables, object illustrations and authorities consist of a heading and one level
 
-    sal_uInt16 nPoolId;
+    const char** pPoolId;
     switch( m_eType )
     {
-    case TOX_INDEX:         nPoolId = STR_POOLCOLL_TOX_IDXH;    break;
-    case TOX_USER:          nPoolId = STR_POOLCOLL_TOX_USERH;   break;
-    case TOX_CONTENT:       nPoolId = STR_POOLCOLL_TOX_CNTNTH;  break;
-    case TOX_ILLUSTRATIONS: nPoolId = STR_POOLCOLL_TOX_ILLUSH;  break;
-    case TOX_OBJECTS      : nPoolId = STR_POOLCOLL_TOX_OBJECTH; break;
-    case TOX_TABLES       : nPoolId = STR_POOLCOLL_TOX_TABLESH; break;
-    case TOX_AUTHORITIES  : nPoolId = STR_POOLCOLL_TOX_AUTHORITIESH;    break;
-    case TOX_CITATION  : nPoolId = STR_POOLCOLL_TOX_CITATION; break;
+    case TOX_INDEX:         pPoolId = STR_POOLCOLL_TOX_ARY;    break;
+    case TOX_USER:          pPoolId = STR_POOLCOLL_TOX_USER_ARY;   break;
+    case TOX_CONTENT:       pPoolId = STR_POOLCOLL_TOX_CNTNT_ARY;  break;
+    case TOX_ILLUSTRATIONS: pPoolId = STR_POOLCOLL_TOX_ILLUS_ARY;  break;
+    case TOX_OBJECTS      : pPoolId = STR_POOLCOLL_TOX_OBJECT_ARY; break;
+    case TOX_TABLES       : pPoolId = STR_POOLCOLL_TOX_TABLES_ARY; break;
+    case TOX_AUTHORITIES  : pPoolId = STR_POOLCOLL_TOX_AUTHORITIES_ARY;    break;
+    case TOX_CITATION  : pPoolId = STR_POOLCOLL_TOX_CITATION_ARY; break;
     default:
         OSL_ENSURE( false, "invalid TOXTyp");
         return ;
@@ -246,17 +331,17 @@ SwForm::SwForm( TOXTypes eTyp ) // #i21237#
     if (TOX_CONTENT == m_eType || TOX_ILLUSTRATIONS == m_eType )
     {
         SwFormToken aLinkStt (TOKEN_LINK_START);
-        aLinkStt.sCharStyleName = SW_RES(STR_POOLCHR_TOXJUMP);
+        aLinkStt.sCharStyleName = SwResId(STR_POOLCHR_TOXJUMP);
         aTokens.push_back(aLinkStt);
     }
 
     if (TOX_CONTENT == m_eType)
     {
-        aTokens.push_back(SwFormToken(TOKEN_ENTRY_NO));
-        aTokens.push_back(SwFormToken(TOKEN_ENTRY_TEXT));
+        aTokens.emplace_back(TOKEN_ENTRY_NO);
+        aTokens.emplace_back(TOKEN_ENTRY_TEXT);
     }
     else
-        aTokens.push_back(SwFormToken(TOKEN_ENTRY));
+        aTokens.emplace_back(TOKEN_ENTRY);
 
     if (TOX_AUTHORITIES != m_eType)
     {
@@ -265,16 +350,16 @@ SwForm::SwForm( TOXTypes eTyp ) // #i21237#
 
         // #i36870# right aligned tab for all
         aToken.cTabFillChar = '.';
-        aToken.eTabAlign = SVX_TAB_ADJUST_END;
+        aToken.eTabAlign = SvxTabAdjust::End;
 
         aTokens.push_back(aToken);
-        aTokens.push_back(SwFormToken(TOKEN_PAGE_NUMS));
+        aTokens.emplace_back(TOKEN_PAGE_NUMS);
     }
 
     if (TOX_CONTENT == m_eType || TOX_ILLUSTRATIONS == m_eType)
-        aTokens.push_back(SwFormToken(TOKEN_LINK_END));
+        aTokens.emplace_back(TOKEN_LINK_END);
 
-    SetTemplate( 0, SW_RESSTR( nPoolId++ ));
+    SetTemplate(0, SwResId(*pPoolId++));
 
     if(TOX_INDEX == m_eType)
     {
@@ -287,19 +372,20 @@ SwForm::SwForm( TOXTypes eTyp ) // #i21237#
                 aTmpTokens.push_back(aTmpToken);
 
                 SetPattern( i, aTmpTokens );
-                SetTemplate( i, SW_RESSTR( STR_POOLCOLL_TOX_IDXBREAK    ));
+                SetTemplate(i, SwResId(STR_POOLCOLL_TOX_IDXBREAK));
             }
             else
             {
                 SetPattern( i, aTokens );
-                SetTemplate( i, SW_RESSTR( STR_POOLCOLL_TOX_IDX1 + i - 2 ));
+                SetTemplate(i, SwResId(STR_POOLCOLL_TOX_ARY[i - 1]));
             }
         }
     }
     else
-        for( sal_uInt16 i = 1; i < GetFormMax(); ++i, ++nPoolId )    // Number 0 is the title
+    {
+        for (sal_uInt16 i = 1; i < GetFormMax(); ++i, ++pPoolId)    // Number 0 is the title
         {
-            if(TOX_AUTHORITIES == m_eType)
+            if (TOX_AUTHORITIES == m_eType)
             {
                 SwFormTokens aAuthTokens;
                 lcl_FillAuthPattern(aAuthTokens, i);
@@ -309,13 +395,14 @@ SwForm::SwForm( TOXTypes eTyp ) // #i21237#
                 SetPattern( i, aTokens );
 
             if( TOX_CONTENT == m_eType && 6 == i )
-                nPoolId = STR_POOLCOLL_TOX_CNTNT6;
+                pPoolId = STR_POOLCOLL_TOX_CNTNT_EXTRA_ARY;
             else if( TOX_USER == m_eType && 6 == i )
-                nPoolId = STR_POOLCOLL_TOX_USER6;
-            else if( TOX_AUTHORITIES == m_eType )
-                nPoolId = STR_POOLCOLL_TOX_AUTHORITIES1;
-            SetTemplate( i, SW_RESSTR( nPoolId ) );
+                pPoolId = STR_POOLCOLL_TOX_USER_EXTRA_ARY;
+            else if( TOX_AUTHORITIES == m_eType ) //reuse the same STR_POOLCOLL_TOX_AUTHORITIES1 id each time
+                pPoolId = STR_POOLCOLL_TOX_AUTHORITIES_ARY + 1;
+            SetTemplate(i, SwResId(*pPoolId));
         }
+    }
 }
 
 SwForm::SwForm(const SwForm& rForm)
@@ -330,7 +417,6 @@ SwForm& SwForm::operator=(const SwForm& rForm)
     m_nFormMaxLevel = rForm.m_nFormMaxLevel;
 //  nFirstTabPos = rForm.nFirstTabPos;
 //  bHasFirstTabPos = rForm.bHasFirstTabPos;
-    m_bGenerateTabPos = rForm.m_bGenerateTabPos;
     m_bIsRelTabPos = rForm.m_bIsRelTabPos;
     m_bCommaSeparated = rForm.m_bCommaSeparated;
     for(sal_uInt16 i=0; i < m_nFormMaxLevel; ++i)
@@ -362,7 +448,7 @@ sal_uInt16 SwForm::GetFormMaxLevel( TOXTypes eTOXType )
     return 0;
 }
 
-void SwForm::AdjustTabStops( SwDoc& rDoc ) // #i21237#
+void SwForm::AdjustTabStops( SwDoc const & rDoc ) // #i21237#
 {
     const sal_uInt16 nFormMax = GetFormMax();
     for ( sal_uInt16 nLevel = 1; nLevel < nFormMax; ++nLevel )
@@ -387,7 +473,7 @@ void SwForm::AdjustTabStops( SwDoc& rDoc ) // #i21237#
             {
                 const SvxTabStop& rTab = rTabStops[nTab];
 
-                if ( rTab.GetAdjustment() == SVX_TAB_ADJUST_DEFAULT )
+                if ( rTab.GetAdjustment() == SvxTabAdjust::Default )
                     continue; // ignore the default tab stop
 
                 aIt = find_if( aIt, aCurrentPattern.end(), SwFormTokenEqualToFormTokenType(TOKEN_TAB_STOP) );
@@ -397,8 +483,8 @@ void SwForm::AdjustTabStops( SwDoc& rDoc ) // #i21237#
                     aIt->nTabStopPosition = rTab.GetTabPos();
                     aIt->eTabAlign =
                         ( nTab == nTabCount - 1
-                          && rTab.GetAdjustment() == SVX_TAB_ADJUST_RIGHT )
-                        ? SVX_TAB_ADJUST_END
+                          && rTab.GetAdjustment() == SvxTabAdjust::Right )
+                        ? SvxTabAdjust::End
                         : rTab.GetAdjustment();
                     aIt->cTabFillChar = rTab.GetFill();
                     ++aIt;
@@ -425,13 +511,13 @@ OUString SwForm::GetFormText()        {return OUString("<X>");}
 OUString SwForm::GetFormAuth()        {return OUString("<A>");}
 
 SwTOXBase::SwTOXBase(const SwTOXType* pTyp, const SwForm& rForm,
-                     sal_uInt16 nCreaType, const OUString& rTitle )
+                     SwTOXElement nCreaType, const OUString& rTitle )
     : SwClient(const_cast<SwModify*>(static_cast<SwModify const *>(pTyp)))
     , m_aForm(rForm)
     , m_aTitle(rTitle)
-    , m_eLanguage((LanguageType)::GetAppLanguage())
+    , m_eLanguage(::GetAppLanguage())
     , m_nCreateType(nCreaType)
-    , m_nOLEOptions(0)
+    , m_nOLEOptions(SwTOOElements::NONE)
     , m_eCaptionDisplay(CAPTION_COMPLETE)
     , m_bProtected( true )
     , m_bFromChapter(false)
@@ -440,7 +526,7 @@ SwTOXBase::SwTOXBase(const SwTOXType* pTyp, const SwForm& rForm,
     , maMSTOCExpression()
     , mbKeepExpression(true)
 {
-    m_aData.nOptions = 0;
+    m_aData.nOptions = SwTOIOptions::NONE;
 }
 
 SwTOXBase::SwTOXBase( const SwTOXBase& rSource, SwDoc* pDoc )
@@ -459,7 +545,7 @@ void SwTOXBase::CopyTOXBase( SwDoc* pDoc, const SwTOXBase& rSource )
 {
     maMSTOCExpression = rSource.maMSTOCExpression;
     SwTOXType* pType = const_cast<SwTOXType*>(rSource.GetTOXType());
-    if( pDoc && !pDoc->GetTOXTypes().Contains( pType ))
+    if( pDoc && !pDoc->GetTOXTypes().IsAlive(pType))
     {
         // type not in pDoc, so create it now
         const SwTOXTypes& rTypes = pDoc->GetTOXTypes();
@@ -500,7 +586,7 @@ void SwTOXBase::CopyTOXBase( SwDoc* pDoc, const SwTOXBase& rSource )
     for( sal_uInt16 i = 0; i < MAXLEVEL; ++i )
         m_aStyleNames[i] = rSource.m_aStyleNames[i];
 
-    // its the same data type!
+    // it's the same data type!
     m_aData.nOptions =  rSource.m_aData.nOptions;
 
     if( !pDoc || pDoc->IsCopyIsMove() )
@@ -612,7 +698,7 @@ OUString SwFormToken::GetString() const
         case TOKEN_TAB_STOP:
             sData += OUString::number( nTabStopPosition ) + ","
                   +  OUString::number( static_cast< sal_Int32 >(eTabAlign) ) + ","
-                  +  OUString(cTabFillChar) + ","
+                  +  OUStringLiteral1(cTabFillChar) + ","
                   +  OUString::number( bWithTab ? 1 : 0 );
             break;
         case TOKEN_CHAPTER_INFO:
@@ -622,9 +708,9 @@ OUString SwFormToken::GetString() const
                   +  OUString::number( nOutlineLevel );
             break;
         case TOKEN_TEXT:
-            sData += OUStringLiteral1<TOX_STYLE_DELIMITER>()
-                  +  sText.replaceAll(OUStringLiteral1<TOX_STYLE_DELIMITER>(), "")
-                  +  OUStringLiteral1<TOX_STYLE_DELIMITER>();
+            sData += OUStringLiteral1(TOX_STYLE_DELIMITER)
+                  +  sText.replaceAll(OUStringLiteral1(TOX_STYLE_DELIMITER), "")
+                  +  OUStringLiteral1(TOX_STYLE_DELIMITER);
             break;
         case TOKEN_AUTHORITY:
             if (nAuthorityField<10)
@@ -635,6 +721,7 @@ OUString SwFormToken::GetString() const
             {
                  sData = OUString::number( nAuthorityField ) + sData;
             }
+            break;
         default:
             break;
     }
@@ -648,42 +735,37 @@ OUString SwFormToken::GetString() const
    Returns the type of a token.
 
    @param sToken     the string representation of the token
-   @param pTokenLen  return parameter the length of the head of the token
-
-   If pTokenLen is non-NULL the length of the token's head is
-   written to *pTokenLen
+   @param rTokenLen  return parameter the length of the head of the token
 
    @return the type of the token
 */
 static FormTokenType lcl_GetTokenType(const OUString & sToken,
-                                      sal_Int32 *const pTokenLen)
+                                      sal_Int32 & rTokenLen)
 {
     static struct
     {
-        OUString sNm;
-        sal_uInt16 nOffset;
-        FormTokenType eToken;
+        OUString const sTokenStart;
+        sal_Int16 const nTokenLength;
+        FormTokenType eTokenType;
     } const aTokenArr[] = {
-        { SwForm::GetFormTab(),         1, TOKEN_TAB_STOP },
-        { SwForm::GetFormPageNums(),    1, TOKEN_PAGE_NUMS },
-        { SwForm::GetFormLinkStt(),     1, TOKEN_LINK_START },
-        { SwForm::GetFormLinkEnd(),     1, TOKEN_LINK_END },
-        { SwForm::GetFormEntryNum(),    1, TOKEN_ENTRY_NO },
-        { SwForm::GetFormEntryText(),    1, TOKEN_ENTRY_TEXT },
-        { SwForm::GetFormChapterMark(), 1, TOKEN_CHAPTER_INFO },
-        { SwForm::GetFormText(),        1, TOKEN_TEXT },
-        { SwForm::GetFormEntry(),       1, TOKEN_ENTRY },
-        { SwForm::GetFormAuth(),        3, TOKEN_AUTHORITY }
+        { SwForm::GetFormTab().copy(0, 2),         3, TOKEN_TAB_STOP },
+        { SwForm::GetFormPageNums().copy(0, 2),    3, TOKEN_PAGE_NUMS },
+        { SwForm::GetFormLinkStt().copy(0, 3),     4, TOKEN_LINK_START },
+        { SwForm::GetFormLinkEnd().copy(0, 3),     4, TOKEN_LINK_END },
+        { SwForm::GetFormEntryNum().copy(0, 3),    4, TOKEN_ENTRY_NO },
+        { SwForm::GetFormEntryText().copy(0, 3),   4, TOKEN_ENTRY_TEXT },
+        { SwForm::GetFormChapterMark().copy(0, 2), 3, TOKEN_CHAPTER_INFO },
+        { SwForm::GetFormText().copy(0, 2),        3, TOKEN_TEXT },
+        { SwForm::GetFormEntry().copy(0, 2),       3, TOKEN_ENTRY },
+        { SwForm::GetFormAuth().copy(0, 2),        5, TOKEN_AUTHORITY }
     };
 
-    for( size_t i = 0; i<SAL_N_ELEMENTS(aTokenArr); ++i )
+    for(const auto & i : aTokenArr)
     {
-        const sal_Int32 nLen(aTokenArr[i].sNm.getLength());
-        if( sToken.startsWith( aTokenArr[i].sNm.copy(0, nLen - aTokenArr[i].nOffset) ))
+        if( sToken.startsWith( i.sTokenStart ) )
         {
-            if (pTokenLen)
-                *pTokenLen = nLen;
-            return aTokenArr[ i ].eToken;
+            rTokenLen = i.nTokenLength;
+            return i.eTokenType;
         }
     }
 
@@ -743,7 +825,7 @@ lcl_BuildToken(const OUString & sPattern, sal_Int32 & nCurPatternPos)
     OUString sToken( lcl_SearchNextToken(sPattern, nCurPatternPos) );
     nCurPatternPos += sToken.getLength();
     sal_Int32 nTokenLen = 0;
-    FormTokenType const eTokenType = lcl_GetTokenType(sToken, &nTokenLen);
+    FormTokenType const eTokenType = lcl_GetTokenType(sToken, nTokenLen);
     if (TOKEN_END == eTokenType) // invalid input? skip it
     {
         nCurPatternPos = sPattern.getLength();
@@ -758,8 +840,9 @@ lcl_BuildToken(const OUString & sPattern, sal_Int32 & nCurPatternPos)
     const OUString sAuthFieldEnum = sToken.copy( 2, 2 );
     sToken = sToken.copy( nTokenLen, sToken.getLength() - nTokenLen - 1);
 
-    eRet.sCharStyleName = sToken.getToken( 0, ',');
-    OUString sTmp( sToken.getToken( 1, ',' ));
+    sal_Int32 nIdx{ 0 };
+    eRet.sCharStyleName = sToken.getToken( 0, ',', nIdx );
+    OUString sTmp( sToken.getToken( 0, ',', nIdx ));
     if( !sTmp.isEmpty() )
         eRet.nPoolId = static_cast<sal_uInt16>(sTmp.toInt32());
 
@@ -769,10 +852,10 @@ lcl_BuildToken(const OUString & sPattern, sal_Int32 & nCurPatternPos)
     case TOKEN_CHAPTER_INFO:
 //i53420
     case TOKEN_ENTRY_NO:
-        sTmp = sToken.getToken( 2, ',' );
+        sTmp = sToken.getToken( 0, ',', nIdx ); // token 2
         if( !sTmp.isEmpty() )
             eRet.nChapterFormat = static_cast<sal_uInt16>(sTmp.toInt32());
-        sTmp = sToken.getToken( 3, ',' );
+        sTmp = sToken.getToken( 0, ',', nIdx ); // token 3
         if( !sTmp.isEmpty() )
             eRet.nOutlineLevel = static_cast<sal_uInt16>(sTmp.toInt32()); //the maximum outline level to examine
         break;
@@ -794,19 +877,19 @@ lcl_BuildToken(const OUString & sPattern, sal_Int32 & nCurPatternPos)
         break;
 
     case TOKEN_TAB_STOP:
-        sTmp = sToken.getToken( 2, ',' );
+        sTmp = sToken.getToken( 0, ',', nIdx ); // token 2
         if( !sTmp.isEmpty() )
             eRet.nTabStopPosition = sTmp.toInt32();
 
-        sTmp = sToken.getToken( 3, ',' );
+        sTmp = sToken.getToken( 0, ',', nIdx ); // token 3
         if( !sTmp.isEmpty() )
             eRet.eTabAlign = static_cast<SvxTabAdjust>(sTmp.toInt32());
 
-        sTmp = sToken.getToken( 4, ',' );
+        sTmp = sToken.getToken( 0, ',', nIdx ); // token 4
         if( !sTmp.isEmpty() )
             eRet.cTabFillChar = sTmp[0];
 
-        sTmp = sToken.getToken( 5, ',' );
+        sTmp = sToken.getToken( 0, ',', nIdx ); // token 5
         if( !sTmp.isEmpty() )
             eRet.bWithTab = 0 != sTmp.toInt32();
         break;

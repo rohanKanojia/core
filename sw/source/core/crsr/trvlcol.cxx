@@ -23,7 +23,7 @@
 #include <cntfrm.hxx>
 #include <swcrsr.hxx>
 #include <viscrs.hxx>
-#include <callnk.hxx>
+#include "callnk.hxx"
 
 SwLayoutFrame* GetCurrColumn( const SwLayoutFrame* pLayFrame )
 {
@@ -64,15 +64,8 @@ SwContentFrame* GetColumnEnd( const SwLayoutFrame* pColFrame )
     return pRet;
 }
 
-SwWhichColumn fnColumnPrev = &GetPrevColumn;
-SwWhichColumn fnColumnCurr = &GetCurrColumn;
-SwWhichColumn fnColumnNext = &GetNextColumn;
-SwPosColumn fnColumnStart = &GetColumnStt;
-SwPosColumn fnColumnEnd = &GetColumnEnd;
-
-bool SwCursorShell::MoveColumn( SwWhichColumn fnWhichCol, SwPosColumn fnPosCol )
+void SwCursorShell::MoveColumn( SwWhichColumn fnWhichCol, SwPosColumn fnPosCol )
 {
-    bool bRet = false;
     if( !m_pTableCursor )
     {
         SwLayoutFrame* pLayFrame = GetCurrFrame()->GetUpper();
@@ -87,11 +80,11 @@ bool SwCursorShell::MoveColumn( SwWhichColumn fnWhichCol, SwPosColumn fnPosCol )
 
                 pCnt->Calc(GetOut());
 
-                Point aPt( pCnt->Frame().Pos() + pCnt->Prt().Pos() );
+                Point aPt( pCnt->getFrameArea().Pos() + pCnt->getFramePrintArea().Pos() );
                 if( fnPosCol == GetColumnEnd )
                 {
-                    aPt.setX(aPt.getX() + pCnt->Prt().Width());
-                    aPt.setY(aPt.getY() + pCnt->Prt().Height());
+                    aPt.setX(aPt.getX() + pCnt->getFramePrintArea().Width());
+                    aPt.setY(aPt.getY() + pCnt->getFramePrintArea().Height());
                 }
 
                 pCnt->GetCursorOfst( m_pCurrentCursor->GetPoint(), aPt );
@@ -100,12 +93,10 @@ bool SwCursorShell::MoveColumn( SwWhichColumn fnWhichCol, SwPosColumn fnPosCol )
                     !m_pCurrentCursor->IsSelOvr() )
                 {
                     UpdateCursor();
-                    bRet = true;
                 }
             }
         }
     }
-    return bRet;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

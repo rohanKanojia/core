@@ -40,13 +40,15 @@ class VCLPLUG_GEN_PUBLIC X11SalBitmap : public SalBitmap
 {
 private:
 
-    static BitmapBuffer*        ImplCreateDIB(
+    static std::unique_ptr<BitmapBuffer>
+                                ImplCreateDIB(
                                     const Size& rSize,
                                     sal_uInt16 nBitCount,
                                     const BitmapPalette& rPal
                                 );
 
-    static BitmapBuffer*        ImplCreateDIB(
+    static std::unique_ptr<BitmapBuffer>
+                                ImplCreateDIB(
                                     Drawable aDrawable,
                                     SalX11Screen nXScreen,
                                     long nDrawableDepth,
@@ -68,8 +70,8 @@ public:
 
 private:
 
-    BitmapBuffer*   mpDIB;
-    ImplSalDDB*     mpDDB;
+    std::unique_ptr<BitmapBuffer> mpDIB;
+    mutable std::unique_ptr<ImplSalDDB> mpDDB;
     bool            mbGrey;
 
 public:
@@ -85,7 +87,7 @@ public:
                                 );
 
     SAL_DLLPRIVATE XImage*      ImplCreateXImage(
-                                    SalDisplay* pSalDisp,
+                                    SalDisplay const * pSalDisp,
                                     SalX11Screen nXScreen,
                                     long nDepth,
                                     const SalTwoRect& rTwoRect
@@ -109,7 +111,7 @@ public:
 public:
 
                                 X11SalBitmap();
-    virtual                     ~X11SalBitmap();
+    virtual                     ~X11SalBitmap() override;
 
     // override pure virtual methods
     virtual bool                Create(
@@ -144,8 +146,9 @@ public:
     virtual void                ReleaseBuffer( BitmapBuffer* pBuffer, BitmapAccessMode nMode ) override;
     virtual bool                GetSystemData( BitmapSystemData& rData ) override;
 
+    virtual bool                ScalingSupported() const override;
     virtual bool                Scale( const double& rScaleX, const double& rScaleY, BmpScaleFlag nScaleFlag ) override;
-    virtual bool                Replace( const Color& rSearchColor, const Color& rReplaceColor, sal_uLong nTol ) override;
+    virtual bool                Replace( const Color& rSearchColor, const Color& rReplaceColor, sal_uInt8 nTol ) override;
 };
 
 
@@ -155,14 +158,13 @@ private:
 
     Pixmap          maPixmap;
     SalTwoRect      maTwoRect;
-    long            mnDepth;
-    SalX11Screen    mnXScreen;
+    long const            mnDepth;
+    SalX11Screen const    mnXScreen;
 
     static void     ImplDraw(
                         Drawable aSrcDrawable,
                         long nSrcDrawableDepth,
                         Drawable aDstDrawable,
-                        long nDstDrawableDepth,
                         long nSrcX,
                         long nSrcY,
                         long nDestWidth,
@@ -197,40 +199,32 @@ public:
     long            ImplGetWidth() const { return maTwoRect.mnDestWidth; }
     long            ImplGetHeight() const { return maTwoRect.mnDestHeight; }
     long            ImplGetDepth() const { return mnDepth; }
-    sal_uIntPtr     ImplGetMemSize() const
-                    {
-                        return( ( maTwoRect.mnDestWidth * maTwoRect.mnDestHeight * mnDepth ) >> 3 );
-                    }
-    SalX11Screen    ImplGetScreen() const { return mnXScreen; }
+    const SalX11Screen& ImplGetScreen() const { return mnXScreen; }
 
     bool            ImplMatches( SalX11Screen nXScreen, long nDepth, const SalTwoRect& rTwoRect ) const;
 
     void            ImplDraw(
                         Drawable aDrawable,
-                        long nDrawableDepth,
                         const SalTwoRect& rTwoRect,
                         const GC& rGC
                     ) const;
 };
 
 
-struct ImplBmpObj;
+class X11SalBitmap;
 
 class ImplSalBitmapCache
 {
 private:
-    typedef ::std::list< ImplBmpObj* > BmpList_impl;
-
-    BmpList_impl    maBmpList;
-    sal_uIntPtr     mnTotalSize;
+    std::vector<X11SalBitmap*>  maBmpList;
 
 public:
 
                     ImplSalBitmapCache();
                     ~ImplSalBitmapCache();
 
-    void            ImplAdd( X11SalBitmap* pBmp, sal_uIntPtr nMemSize = 0UL );
-    void            ImplRemove( X11SalBitmap* pBmp );
+    void            ImplAdd( X11SalBitmap* pBmp );
+    void            ImplRemove( X11SalBitmap const * pBmp );
     void            ImplClear();
 };
 

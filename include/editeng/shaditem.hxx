@@ -43,9 +43,10 @@ public:
 
     explicit SvxShadowItem( const sal_uInt16 nId ,
                  const Color *pColor = nullptr, const sal_uInt16 nWidth = 100 /*5pt*/,
-                 const SvxShadowLocation eLoc = SVX_SHADOW_NONE );
+                 const SvxShadowLocation eLoc = SvxShadowLocation::NONE );
 
     inline SvxShadowItem& operator=( const SvxShadowItem& rFmtShadow );
+    SvxShadowItem(SvxShadowItem const &) = default; // SfxPoolItem copy function dichotomy
 
     // "pure virtual Methods" from SfxPoolItem
     virtual bool             operator==( const SfxPoolItem& ) const override;
@@ -53,9 +54,9 @@ public:
     virtual bool             PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     virtual SfxPoolItem*     Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual SfxPoolItem*     Create(SvStream &, sal_uInt16) const override;
@@ -76,7 +77,6 @@ public:
     sal_uInt16 CalcShadowSpace( SvxShadowItemSide nShadow ) const;
 
     virtual sal_uInt16      GetValueCount() const override;
-    virtual OUString   GetValueTextByPos( sal_uInt16 nPos ) const override;
     virtual sal_uInt16      GetEnumValue() const override;
     virtual void            SetEnumValue( sal_uInt16 nNewVal ) override;
     void dumpAsXml(struct _xmlTextWriter* pWriter) const override;

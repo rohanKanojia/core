@@ -20,67 +20,28 @@
 #define INCLUDED_CUI_SOURCE_INC_SWPOSSIZETABPAGE_HXX
 
 #include <sfx2/tabdlg.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/field.hxx>
-#include <vcl/layout.hxx>
-#include <vcl/lstbox.hxx>
 #include <svx/swframeposstrings.hxx>
 #include <svx/swframeexample.hxx>
+#include <vcl/weld.hxx>
 
 // SvxSwPosSizeTabPage - position and size page for Writer drawing objects
 struct FrmMap;
 class SdrView;
 struct SvxSwFrameValidation;
+enum class SvxAnchorIds;
 
 class SvxSwPosSizeTabPage : public SfxTabPage
 {
     using TabPage::DeactivatePage;
 
-    VclPtr<MetricField>  m_pWidthMF;
-    VclPtr<MetricField>  m_pHeightMF;
-    VclPtr<CheckBox>     m_pKeepRatioCB;
-
-    VclPtr<RadioButton>  m_pToPageRB;
-    VclPtr<RadioButton>  m_pToParaRB;
-    VclPtr<RadioButton>  m_pToCharRB;
-    VclPtr<RadioButton>  m_pAsCharRB;
-    VclPtr<RadioButton>  m_pToFrameRB;
-
-    VclPtr<TriStateBox>  m_pPositionCB;
-    VclPtr<TriStateBox>  m_pSizeCB;
-
-    VclPtr<VclContainer> m_pPosFrame;
-    VclPtr<FixedText>    m_pHoriFT;
-    VclPtr<ListBox>      m_pHoriLB;
-    VclPtr<FixedText>    m_pHoriByFT;
-    VclPtr<MetricField>  m_pHoriByMF;
-    VclPtr<FixedText>    m_pHoriToFT;
-    VclPtr<ListBox>      m_pHoriToLB;
-
-    VclPtr<CheckBox>     m_pHoriMirrorCB;
-
-    VclPtr<FixedText>    m_pVertFT;
-    VclPtr<ListBox>      m_pVertLB;
-    VclPtr<FixedText>    m_pVertByFT;
-    VclPtr<MetricField>  m_pVertByMF;
-    VclPtr<FixedText>    m_pVertToFT;
-    VclPtr<ListBox>      m_pVertToLB;
-
-    VclPtr<CheckBox>     m_pFollowCB;
-
-    VclPtr<SvxSwFrameExample> m_pExampleWN;
-
     Link<SvxSwFrameValidation&,void> m_aValidateLink;
 
-    //'string provider'
-    SvxSwFramePosString m_aFramePosString;
-
-    Rectangle           m_aRect; //size of all selected objects
-    Rectangle           m_aWorkArea;
+    ::tools::Rectangle           m_aRect; //size of all selected objects
+    ::tools::Rectangle           m_aWorkArea;
     Point               m_aAnchorPos;
 
-    FrmMap* m_pVMap;
-    FrmMap* m_pHMap;
+    FrmMap const * m_pVMap;
+    FrmMap const * m_pHMap;
     const SdrView*      m_pSdrView;
 
     // initial values
@@ -91,32 +52,59 @@ class SvxSwPosSizeTabPage : public SfxTabPage
 
     double  m_fWidthHeightRatio; //width-to-height ratio to support the KeepRatio button
     bool    m_bHtmlMode;
-    bool    m_bAtHoriPosModified;
-    bool    m_bAtVertPosModified;
     bool    m_bIsVerticalFrame;
     bool    m_bPositioningDisabled;
     bool    m_bIsMultiSelection;
     bool    m_bIsInRightToLeft;
+    TriState    m_nProtectSizeState;
 
+    SwFrameExample m_aExampleWN;
 
-    DECL_LINK_TYPED(RangeModifyHdl, Control&, void);
-    DECL_LINK_TYPED(RangeModifyClickHdl, Button*, void);
-    DECL_LINK_TYPED(AnchorTypeHdl, Button*, void);
-    DECL_LINK_TYPED( PosHdl, ListBox&, void );
-    DECL_LINK_TYPED( RelHdl, ListBox&, void );
-    DECL_LINK_TYPED(MirrorHdl, Button*, void);
-    DECL_LINK_TYPED( ModifyHdl, Edit&, void );
-    DECL_LINK_TYPED(ProtectHdl, Button*, void);
+    std::unique_ptr<weld::MetricSpinButton> m_xWidthMF;
+    std::unique_ptr<weld::MetricSpinButton> m_xHeightMF;
+    std::unique_ptr<weld::CheckButton> m_xKeepRatioCB;
+    std::unique_ptr<weld::RadioButton> m_xToPageRB;
+    std::unique_ptr<weld::RadioButton> m_xToParaRB;
+    std::unique_ptr<weld::RadioButton> m_xToCharRB;
+    std::unique_ptr<weld::RadioButton> m_xAsCharRB;
+    std::unique_ptr<weld::RadioButton> m_xToFrameRB;
+    std::unique_ptr<weld::CheckButton> m_xPositionCB;
+    std::unique_ptr<weld::CheckButton> m_xSizeCB;
+    std::unique_ptr<weld::Widget> m_xPosFrame;
+    std::unique_ptr<weld::Label> m_xHoriFT;
+    std::unique_ptr<weld::ComboBox> m_xHoriLB;
+    std::unique_ptr<weld::Label> m_xHoriByFT;
+    std::unique_ptr<weld::MetricSpinButton> m_xHoriByMF;
+    std::unique_ptr<weld::Label> m_xHoriToFT;
+    std::unique_ptr<weld::ComboBox> m_xHoriToLB;
+    std::unique_ptr<weld::CheckButton> m_xHoriMirrorCB;
+    std::unique_ptr<weld::Label> m_xVertFT;
+    std::unique_ptr<weld::ComboBox> m_xVertLB;
+    std::unique_ptr<weld::Label> m_xVertByFT;
+    std::unique_ptr<weld::MetricSpinButton> m_xVertByMF;
+    std::unique_ptr<weld::Label> m_xVertToFT;
+    std::unique_ptr<weld::ComboBox> m_xVertToLB;
+    std::unique_ptr<weld::CheckButton> m_xFollowCB;
+    std::unique_ptr<weld::CustomWeld> m_xExampleWN;
 
-    void            InitPos(short nAnchorType, sal_uInt16 nH, sal_uInt16 nHRel,
+    DECL_LINK(RangeModifyHdl, weld::Widget&, void);
+    DECL_LINK(RangeModifyClickHdl, weld::ToggleButton&, void);
+    DECL_LINK(AnchorTypeHdl, weld::ToggleButton&, void);
+    DECL_LINK(PosHdl, weld::ComboBox&, void);
+    DECL_LINK(RelHdl, weld::ComboBox&, void);
+    DECL_LINK(MirrorHdl, weld::ToggleButton&, void);
+    DECL_LINK(ModifyHdl, weld::MetricSpinButton&, void);
+    DECL_LINK(ProtectHdl, weld::ToggleButton&, void);
+
+    void            InitPos(RndStdIds nAnchorType, sal_uInt16 nH, sal_uInt16 nHRel,
                             sal_uInt16 nV,  sal_uInt16 nVRel,
                             long   nX,  long   nY);
-    sal_uInt16          GetMapPos(FrmMap *pMap, ListBox &rAlignLB);
-    static short        GetAlignment(FrmMap *pMap, sal_uInt16 nMapPos, ListBox &rAlignLB, ListBox &rRelationLB);
-    static short        GetRelation(FrmMap *pMap, ListBox &rRelationLB);
-    short               GetAnchorType(bool* pbHasChanged = nullptr);
-    void                FillRelLB(FrmMap *pMap, sal_uInt16 nLBSelPos, sal_uInt16 nAlign, sal_uInt16 nRel, ListBox &rLB, FixedText &rFT);
-    sal_uInt16          FillPosLB(FrmMap *pMap, sal_uInt16 nAlign, const sal_uInt16 _nRel, ListBox &rLB);
+    static sal_uInt16   GetMapPos(FrmMap const *pMap, const weld::ComboBox& rAlignLB);
+    static short        GetAlignment(FrmMap const *pMap, sal_uInt16 nMapPos, const weld::ComboBox& rRelationLB);
+    static short        GetRelation(const weld::ComboBox& rRelationLB);
+    RndStdIds           GetAnchorType(bool* pbHasChanged = nullptr);
+    void                FillRelLB(FrmMap const *pMap, sal_uInt16 nLBSelPos, sal_uInt16 nAlign, sal_uInt16 nRel, weld::ComboBox& rLB, weld::Label& rFT);
+    sal_uInt16          FillPosLB(FrmMap const *pMap, sal_uInt16 nAlign, const sal_uInt16 _nRel, weld::ComboBox& rLB);
 
     void            UpdateExample();
 
@@ -124,19 +112,19 @@ class SvxSwPosSizeTabPage : public SfxTabPage
     void setOptimalRelWidth();
 
 public:
-    SvxSwPosSizeTabPage( vcl::Window* pParent, const SfxItemSet& rInAttrs  );
-    virtual ~SvxSwPosSizeTabPage();
+    SvxSwPosSizeTabPage(TabPageParent pParent, const SfxItemSet& rInAttrs);
     virtual void dispose() override;
+    virtual ~SvxSwPosSizeTabPage() override;
 
-    static VclPtr<SfxTabPage> Create( vcl::Window*, const SfxItemSet* );
+    static VclPtr<SfxTabPage> Create( TabPageParent, const SfxItemSet* );
     static const sal_uInt16*     GetRanges();
 
     virtual bool FillItemSet( SfxItemSet* ) override;
     virtual void Reset( const SfxItemSet * ) override;
 
-    virtual sfxpg DeactivatePage( SfxItemSet* pSet ) override;
+    virtual DeactivateRC DeactivatePage( SfxItemSet* pSet ) override;
 
-    void    EnableAnchorTypes(sal_uInt16 nAnchorEnable);
+    void    EnableAnchorTypes(SvxAnchorIds nAnchorEnable);
 
     void SetValidateFramePosLink( const Link<SvxSwFrameValidation&,void>& rLink )
             {m_aValidateLink = rLink;}

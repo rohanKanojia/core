@@ -25,9 +25,9 @@ $(eval $(call gb_Library_use_externals,tk,\
     boost_headers \
 ))
 
-ifeq ($(ENABLE_OPENGL),TRUE)
+ifeq ($(DISABLE_GUI),)
 $(eval $(call gb_Library_use_externals,tk,\
-    glew \
+    epoxy \
 ))
 endif
 $(eval $(call gb_Library_set_include,tk,\
@@ -53,7 +53,6 @@ $(eval $(call gb_Library_use_libraries,tk,\
     tl \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,tk,\
@@ -110,7 +109,7 @@ $(eval $(call gb_Library_add_exception_objects,tk,\
     toolkit/source/controls/unocontrolmodel \
     toolkit/source/controls/unocontrols \
     toolkit/source/helper/accessibilityclient \
-    toolkit/source/helper/externallock \
+    toolkit/source/helper/btndlg \
     toolkit/source/helper/formpdfexport \
     toolkit/source/helper/imagealign \
     toolkit/source/helper/listenermultiplexer \
@@ -131,7 +130,7 @@ $(eval $(call gb_Library_add_libs,tk,\
 ))
 endif
 
-ifeq ($(OS),IOS)
+ifeq ($(OS),iOS)
 $(eval $(call gb_Library_add_cxxflags,tk,\
     $(gb_OBJCXXFLAGS)))
 endif

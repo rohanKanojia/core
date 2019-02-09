@@ -56,33 +56,31 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWP9READER_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWP9READER_HXX
 
-#include "lwpheader.hxx"
-#include "lwpsvstream.hxx"
-#include "lwpfilehdr.hxx"
-#include "lwpobjfactory.hxx"
-#include "xfilter/ixfstream.hxx"
+#include <lwpheader.hxx>
+#include <lwpsvstream.hxx>
+#include <lwpfilehdr.hxx>
+#include <lwpobjfactory.hxx>
+#include <xfilter/ixfstream.hxx>
 
 /**
  * @brief   Reader framework class for Lotus Word Pro 9 file
 */
-class Lwp9Reader
+class Lwp9Reader final
 {
 public:
     Lwp9Reader(LwpSvStream* InputStream, IXFStream* pStream);
-    ~Lwp9Reader(){}
 private:
     LwpSvStream*      m_pDocStream;
     IXFStream*        m_pStream;
     LwpObjectFactory* m_pObjMgr;
     LwpFileHeader     m_LwpFileHdr;             //LWP7 object
-protected:
-    void ReadFileHeader();
+    bool ReadFileHeader();
     void ReadIndex();
-    void ParseDocument();
+    bool ParseDocument();
     void WriteDocHeader();
     void WriteDocEnd();
 public:
-    void Read();
+    bool Read();
 };
 #endif
 

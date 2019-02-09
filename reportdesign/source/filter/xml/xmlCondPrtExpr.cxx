@@ -24,8 +24,7 @@
 #include "xmlEnums.hxx"
 #include "xmlControlProperty.hxx"
 #include "xmlComponent.hxx"
-#include "xmlstrings.hrc"
-#include <tools/debug.hxx>
+#include <strings.hxx>
 
 namespace rptxml
 {
@@ -68,7 +67,7 @@ OXMLCondPrtExpr::OXMLCondPrtExpr( ORptFilter& _rImport,
     }
     catch(const Exception&)
     {
-        OSL_FAIL("Exception catched while putting Function props!");
+        OSL_FAIL("Exception caught while putting Function props!");
     }
 }
 

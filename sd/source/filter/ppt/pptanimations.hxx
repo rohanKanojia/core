@@ -21,11 +21,6 @@
 #define INCLUDED_SD_SOURCE_FILTER_PPT_PPTANIMATIONS_HXX
 
 #include <com/sun/star/uno/Any.h>
-#include <com/sun/star/animations/TransitionType.hpp>
-#include <com/sun/star/animations/TransitionSubType.hpp>
-#include <com/sun/star/presentation/EffectPresetClass.hpp>
-
-#include <oox/ppt/pptfilterhelpers.hxx>
 
 #include <map>
 #include <sal/types.h>
@@ -130,11 +125,15 @@ namespace ppt
 #define DFF_ANIM_PRESS_CLASS_OLE_ACTION     5
 #define DFF_ANIM_PRESS_CLASS_MEDIACALL      6
 
+// Effect node type.
 #define DFF_ANIM_NODE_TYPE_ON_CLICK         1
 #define DFF_ANIM_NODE_TYPE_WITH_PREVIOUS    2
 #define DFF_ANIM_NODE_TYPE_AFTER_PREVIOUS   3
 #define DFF_ANIM_NODE_TYPE_MAIN_SEQUENCE    4
 #define DFF_ANIM_NODE_TYPE_INTERACTIVE_SEQ  5
+#define DFF_ANIM_NODE_TYPE_CLICK_PARALLEL   6
+#define DFF_ANIM_NODE_TYPE_WITH_GROUP       7
+#define DFF_ANIM_NODE_TYPE_AFTER_GROUP      8
 #define DFF_ANIM_NODE_TYPE_TIMING_ROOT      9
 
 /* constants for fill entry in AnimationNode */
@@ -200,7 +199,7 @@ public:
     }
 public:
 
-    friend SvStream& WriteAnimationNode(SvStream& rOut, AnimationNode& rAtom);
+    friend SvStream& WriteAnimationNode(SvStream& rOut, AnimationNode const & rAtom);
 };
 
 } // namespace ppt

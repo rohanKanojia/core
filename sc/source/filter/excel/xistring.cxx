@@ -17,15 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xistring.hxx"
-#include "xlstyle.hxx"
-#include "xistream.hxx"
-#include "xiroot.hxx"
+#include <xistring.hxx>
+#include <xlstyle.hxx>
+#include <xistream.hxx>
+#include <xiroot.hxx>
+#include <xltools.hxx>
+#include <sal/log.hxx>
 
 // Byte/Unicode strings =======================================================
 
 /** All allowed flags for import. */
-const XclStrFlags nAllowedFlags = EXC_STR_8BITLENGTH | EXC_STR_SMARTFLAGS | EXC_STR_SEPARATEFORMATS;
+const XclStrFlags nAllowedFlags = XclStrFlags::EightBitLength | XclStrFlags::SmartFlags | XclStrFlags::SeparateFormats;
 
 XclImpString::XclImpString()
 {
@@ -42,13 +44,13 @@ XclImpString::~XclImpString()
 
 void XclImpString::Read( XclImpStream& rStrm, XclStrFlags nFlags )
 {
-    if( !::get_flag( nFlags, EXC_STR_SEPARATEFORMATS ) )
+    if( !( nFlags & XclStrFlags::SeparateFormats ) )
         maFormats.clear();
 
     SAL_WARN_IF(
-        (nFlags & ~nAllowedFlags) != 0, "sc.filter",
+        nFlags & ~nAllowedFlags, "sc.filter",
         "XclImpString::Read - unknown flag");
-    bool b16BitLen = !::get_flag( nFlags, EXC_STR_8BITLENGTH );
+    bool b16BitLen = !( nFlags & XclStrFlags::EightBitLength );
 
     switch( rStrm.GetRoot().GetBiff() )
     {
@@ -65,7 +67,7 @@ void XclImpString::Read( XclImpStream& rStrm, XclStrFlags nFlags )
             // --- string header ---
             sal_uInt16 nChars = b16BitLen ? rStrm.ReaduInt16() : rStrm.ReaduInt8();
             sal_uInt8 nFlagField = 0;
-            if( nChars || !::get_flag( nFlags, EXC_STR_SMARTFLAGS ) )
+            if( nChars || !( nFlags & XclStrFlags::SmartFlags ) )
                 nFlagField = rStrm.ReaduInt8();
 
             bool b16Bit, bRich, bFarEast;
@@ -79,7 +81,7 @@ void XclImpString::Read( XclImpStream& rStrm, XclStrFlags nFlags )
 
             // --- formatting ---
             if( nRunCount > 0 )
-                ReadFormats( rStrm, nRunCount );
+                ReadFormats( rStrm, maFormats, nRunCount );
 
             // --- extended (FarEast) information ---
             rStrm.Ignore( nExtInf );
@@ -96,7 +98,7 @@ void XclImpString::AppendFormat( XclFormatRunVec& rFormats, sal_uInt16 nChar, sa
     // #i33341# real life -- same character index may occur several times
     OSL_ENSURE( rFormats.empty() || (rFormats.back().mnChar <= nChar), "XclImpString::AppendFormat - wrong char order" );
     if( rFormats.empty() || (rFormats.back().mnChar < nChar) )
-        rFormats.push_back( XclFormatRun( nChar, nFontIdx ) );
+        rFormats.emplace_back( nChar, nFontIdx );
     else
         rFormats.back().mnFontIdx = nFontIdx;
 }

@@ -21,29 +21,26 @@
 #define INCLUDED_VCL_ACCEL_HXX
 
 #include <tools/link.hxx>
-#include <tools/resid.hxx>
-#include <tools/rc.hxx>
 #include <vcl/keycod.hxx>
 #include <vcl/dllapi.h>
+#include <memory>
 
 class ImplAccelData;
 class ImplAccelEntry;
+class CommandEvent;
 
-class VCL_DLLPUBLIC Accelerator : public Resource
+class VCL_DLLPUBLIC Accelerator
 {
     friend class ImplAccelManager;
 
 private:
-    ImplAccelData*          mpData;
-    OUString                maHelpStr;
+    std::unique_ptr<ImplAccelData> mpData;
     Link<Accelerator&,void> maActivateHdl;
     Link<Accelerator&,void> maSelectHdl;
 
     // Will be set by AcceleratorManager
     vcl::KeyCode            maCurKeyCode;
     sal_uInt16              mnCurId;
-    sal_uInt16              mnCurRepeat;
-    bool                    mbIsCancel;
     bool*                   mpDel;
 
     SAL_DLLPRIVATE  void    ImplInit();
@@ -58,27 +55,21 @@ private:
     SAL_DLLPRIVATE  ImplAccelEntry*
                             ImplGetAccelData( const vcl::KeyCode& rKeyCode ) const;
 
-protected:
-    SAL_DLLPRIVATE  void    ImplLoadRes( const ResId& rResId );
-
 public:
                             Accelerator();
                             Accelerator( const Accelerator& rAccel );
-                            Accelerator( const ResId& rResId );
-    virtual                 ~Accelerator();
+                            ~Accelerator();
 
     void                    Activate();
     void                    Select();
 
     void                    InsertItem( sal_uInt16 nItemId, const vcl::KeyCode& rKeyCode );
-    void                    InsertItem( const ResId& rResId );
 
     sal_uInt16              GetCurItemId() const { return mnCurId; }
     const vcl::KeyCode&     GetCurKeyCode() const { return maCurKeyCode; }
 
     sal_uInt16              GetItemCount() const;
     sal_uInt16              GetItemId( sal_uInt16 nPos ) const;
-    vcl::KeyCode            GetKeyCode( sal_uInt16 nItemId ) const;
 
     Accelerator*            GetAccel( sal_uInt16 nItemId ) const;
 
@@ -86,6 +77,9 @@ public:
     void                    SetSelectHdl( const Link<Accelerator&,void>& rLink ) { maSelectHdl = rLink; }
 
     Accelerator&            operator=( const Accelerator& rAccel );
+
+    static bool             ToggleMnemonicsOnHierarchy(const CommandEvent& rCEvent, const vcl::Window *pWindow);
+    static void             GenerateAutoMnemonicsOnHierarchy(const vcl::Window* pWindow);
 };
 
 #endif // INCLUDED_VCL_ACCEL_HXX

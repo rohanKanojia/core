@@ -17,26 +17,29 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <viewsh.hxx>
-#include "swfntcch.hxx"
-#include "fmtcol.hxx"
-#include "swfont.hxx"
+#include <sal/config.h>
 
-// aus atrstck.cxx
+#include <shellio.hxx>
+#include <viewsh.hxx>
+#include <swfntcch.hxx>
+#include <fmtcol.hxx>
+#include <fntcache.hxx>
+#include <swfont.hxx>
+
+// from atrstck.cxx
 extern const sal_uInt8 StackPos[];
 
-// globale Variablen, werden in SwFntCch.Hxx bekanntgegeben
-// Der FontCache wird in TextInit.Cxx _TXTINIT erzeugt und in _TXTEXIT geloescht
+// FontCache is created in txtinit.cxx TextInit_ and deleted in TextFinit
 SwFontCache *pSwFontCache = nullptr;
 
 SwFontObj::SwFontObj( const void *pOwn, SwViewShell *pSh ) :
     SwCacheObj( pOwn ),
-    aSwFont( &static_cast<SwTextFormatColl const *>(pOwn)->GetAttrSet(), pSh ? &pSh->getIDocumentSettingAccess() : nullptr )
+    m_aSwFont( &static_cast<SwTextFormatColl const *>(pOwn)->GetAttrSet(), pSh ? &pSh->getIDocumentSettingAccess() : nullptr )
 {
-    aSwFont.GoMagic( pSh, aSwFont.GetActual() );
+    m_aSwFont.AllocFontCacheId( pSh, m_aSwFont.GetActual() );
     const SwAttrSet& rAttrSet = static_cast<SwTextFormatColl const *>(pOwn)->GetAttrSet();
     for (sal_uInt16 i = RES_CHRATR_BEGIN; i < RES_CHRATR_END; i++)
-        pDefaultArray[ StackPos[ i ] ] = &rAttrSet.Get( i );
+        m_pDefaultArray[ StackPos[ i ] ] = &rAttrSet.Get( i );
 }
 
 SwFontObj::~SwFontObj()
@@ -46,7 +49,7 @@ SwFontObj::~SwFontObj()
 SwFontAccess::SwFontAccess( const void *pOwn, SwViewShell *pSh ) :
     SwCacheAccess( *pSwFontCache, pOwn,
             static_cast<const SwTextFormatColl*>(pOwn)->IsInSwFntCache() ),
-    pShell( pSh )
+    m_pShell( pSh )
 {
 }
 
@@ -57,8 +60,16 @@ SwFontObj *SwFontAccess::Get( )
 
 SwCacheObj *SwFontAccess::NewObj( )
 {
-    const_cast<SwTextFormatColl*>(static_cast<const SwTextFormatColl*>(pOwner))->SetInSwFntCache( true );
-    return new SwFontObj( pOwner, pShell );
+    const_cast<SwTextFormatColl*>(static_cast<const SwTextFormatColl*>(m_pOwner))->SetInSwFntCache( true );
+    return new SwFontObj( m_pOwner, m_pShell );
+}
+
+SAL_DLLPUBLIC_EXPORT void FlushFontCache()
+{
+    if (pSwFontCache)
+        pSwFontCache->Flush();
+    if (pFntCache)
+        pFntCache->Flush();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

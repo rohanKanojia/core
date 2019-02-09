@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include "XMLExportDatabaseRanges.hxx"
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
@@ -25,28 +26,24 @@
 #include "xmlexprt.hxx"
 #include "XMLExportIterator.hxx"
 #include "XMLConverter.hxx"
-#include "unonames.hxx"
-#include "dbdata.hxx"
-#include "document.hxx"
-#include "globstr.hrc"
-#include "globalnames.hxx"
+#include <unonames.hxx>
+#include <dbdata.hxx>
+#include <document.hxx>
+#include <globalnames.hxx>
 #include "XMLExportSharedData.hxx"
-#include "rangeutl.hxx"
-#include "subtotalparam.hxx"
-#include "queryparam.hxx"
-#include "queryentry.hxx"
+#include <rangeutl.hxx>
+#include <subtotalparam.hxx>
+#include <queryparam.hxx>
+#include <queryentry.hxx>
 #include <sortparam.hxx>
 
 #include <svx/dataaccessdescriptor.hxx>
 
 #include <com/sun/star/sheet/DataImportMode.hpp>
-#include <com/sun/star/table/TableSortField.hpp>
-#include <com/sun/star/table/TableSortFieldType.hpp>
-#include <com/sun/star/sheet/XSubTotalField.hpp>
 #include <com/sun/star/sheet/XDatabaseRanges.hpp>
 #include <com/sun/star/sheet/XDatabaseRange.hpp>
-#include <com/sun/star/table/TableOrientation.hpp>
 #include <comphelper/extract.hxx>
+#include <osl/diagnose.h>
 
 #include <map>
 
@@ -55,6 +52,71 @@
 
 using namespace com::sun::star;
 using namespace xmloff::token;
+
+void writeSort(ScXMLExport& mrExport, const ScSortParam& aParam, const ScRange& aRange, const ScDocument* mpDoc)
+{
+    // Count sort items first.
+    size_t nSortCount = 0;
+    for (; nSortCount < aParam.GetSortKeyCount(); ++nSortCount)
+    {
+        if (!aParam.maKeyState[nSortCount].bDoSort)
+            break;
+    }
+
+    if (!nSortCount)
+        // Nothing to export.
+        return;
+
+    ScAddress aOutPos(aParam.nDestCol, aParam.nDestRow, aParam.nDestTab);
+
+    if (!aParam.bIncludePattern)
+        mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_BIND_STYLES_TO_CONTENT, XML_FALSE);
+
+    if (!aParam.bInplace)
+    {
+        OUString aStr;
+        ScRangeStringConverter::GetStringFromAddress(
+            aStr, aOutPos, mpDoc, ::formula::FormulaGrammar::CONV_OOO);
+        mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_TARGET_RANGE_ADDRESS, aStr);
+    }
+
+    if (aParam.bCaseSens)
+        mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_CASE_SENSITIVE, XML_TRUE);
+
+    mrExport.AddLanguageTagAttributes( XML_NAMESPACE_TABLE, XML_NAMESPACE_TABLE, aParam.aCollatorLocale, false);
+    if (!aParam.aCollatorAlgorithm.isEmpty())
+        mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_ALGORITHM, aParam.aCollatorAlgorithm);
+
+    SvXMLElementExport aElemS(mrExport, XML_NAMESPACE_TABLE, XML_SORT, true, true);
+
+    SCCOLROW nFieldStart = aParam.bByRow ? aRange.aStart.Col() : aRange.aStart.Row();
+
+    for (size_t i = 0; i < nSortCount; ++i)
+    {
+            // Convert field value from absolute to relative.
+        SCCOLROW nField = aParam.maKeyState[i].nField - nFieldStart;
+        mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_FIELD_NUMBER, OUString::number(nField));
+
+        if (!aParam.maKeyState[i].bAscending)
+            mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_ORDER, XML_DESCENDING);
+
+        if (aParam.bUserDef)
+        {
+            OUStringBuffer aBuf;
+            aBuf.append(SC_USERLIST);
+            aBuf.append(static_cast<sal_Int32>(aParam.nUserIndex));
+            mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_DATA_TYPE, aBuf.makeStringAndClear());
+        }
+        else
+        {
+            // Right now we only support automatic field type.  In the
+            // future we may support numeric or alphanumeric field type.
+            mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_DATA_TYPE, XML_AUTOMATIC);
+        }
+
+        SvXMLElementExport aElemSb(mrExport, XML_NAMESPACE_TABLE, XML_SORT_BY, true, true);
+    }
+}
 
 ScXMLExportDatabaseRanges::ScXMLExportDatabaseRanges(ScXMLExport& rTempExport)
     : rExport(rTempExport),
@@ -116,10 +178,10 @@ ScMyEmptyDatabaseRangesContainer ScXMLExportDatabaseRanges::GetEmptyDatabaseRang
 
 namespace {
 
-class WriteDatabaseRange : public ::std::unary_function<ScDBData, void>
+class WriteDatabaseRange
 {
     ScXMLExport& mrExport;
-    ScDocument* mpDoc;
+    ScDocument* const mpDoc;
     sal_Int32 mnCounter;
     ScDBCollection::RangeType meRangeType;
 public:
@@ -211,9 +273,12 @@ private:
 
         SvXMLElementExport aElemDR(mrExport, XML_NAMESPACE_TABLE, XML_DATABASE_RANGE, true, true);
 
+        ScSortParam aParam;
+        rData.GetSortParam(aParam);
+
         writeImport(rData);
         writeFilter(rData);
-        writeSort(rData);
+        writeSort(mrExport, aParam, aRange, mpDoc);
         writeSubtotals(rData);
     }
 
@@ -227,11 +292,11 @@ private:
 
         svx::ODataAccessDescriptor aDescriptor;
         aDescriptor.setDataSource(aParam.aDBName);
-        if (aDescriptor.has(svx::daDataSource))
+        if (aDescriptor.has(svx::DataAccessDescriptorProperty::DataSource))
         {
             sDatabaseName = aParam.aDBName;
         }
-        else if (aDescriptor.has(svx::daConnectionResource))
+        else if (aDescriptor.has(svx::DataAccessDescriptorProperty::ConnectionResource))
         {
             sConRes = aParam.aDBName;
         }
@@ -298,76 +363,6 @@ private:
         }
     }
 
-    void writeSort(const ScDBData& rData)
-    {
-        ScSortParam aParam;
-        rData.GetSortParam(aParam);
-
-        // Count sort items first.
-        size_t nSortCount = 0;
-        for (; nSortCount < aParam.GetSortKeyCount(); ++nSortCount)
-        {
-            if (!aParam.maKeyState[nSortCount].bDoSort)
-                break;
-        }
-
-        if (!nSortCount)
-            // Nothing to export.
-            return;
-
-        ScAddress aOutPos(aParam.nDestCol, aParam.nDestRow, aParam.nDestTab);
-
-        if (!aParam.bIncludePattern)
-            mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_BIND_STYLES_TO_CONTENT, XML_FALSE);
-
-        if (!aParam.bInplace)
-        {
-            OUString aStr;
-            ScRangeStringConverter::GetStringFromAddress(
-                aStr, aOutPos, mpDoc, ::formula::FormulaGrammar::CONV_OOO);
-            mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_TARGET_RANGE_ADDRESS, aStr);
-        }
-
-        if (aParam.bCaseSens)
-            mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_CASE_SENSITIVE, XML_TRUE);
-
-        mrExport.AddLanguageTagAttributes( XML_NAMESPACE_TABLE, XML_NAMESPACE_TABLE, aParam.aCollatorLocale, false);
-        if (!aParam.aCollatorAlgorithm.isEmpty())
-            mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_ALGORITHM, aParam.aCollatorAlgorithm);
-
-        SvXMLElementExport aElemS(mrExport, XML_NAMESPACE_TABLE, XML_SORT, true, true);
-
-        ScRange aRange;
-        rData.GetArea(aRange);
-        SCCOLROW nFieldStart = aParam.bByRow ? aRange.aStart.Col() : aRange.aStart.Row();
-
-        for (size_t i = 0; i < nSortCount; ++i)
-        {
-            // Convert field value from absolute to relative.
-            SCCOLROW nField = aParam.maKeyState[i].nField - nFieldStart;
-            mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_FIELD_NUMBER, OUString::number(nField));
-
-            if (!aParam.maKeyState[i].bAscending)
-                mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_ORDER, XML_DESCENDING);
-
-            if (aParam.bUserDef)
-            {
-                OUStringBuffer aBuf;
-                aBuf.append(SC_USERLIST);
-                aBuf.append(static_cast<sal_Int32>(aParam.nUserIndex));
-                mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_DATA_TYPE, aBuf.makeStringAndClear());
-            }
-            else
-            {
-                // Right now we only support automatic field type.  In the
-                // future we may support numeric or alphanumeric field type.
-                mrExport.AddAttribute(XML_NAMESPACE_TABLE, XML_DATA_TYPE, XML_AUTOMATIC);
-            }
-
-            SvXMLElementExport aElemSb(mrExport, XML_NAMESPACE_TABLE, XML_SORT_BY, true, true);
-        }
-    }
-
     static OUString getOperatorXML(const ScQueryEntry& rEntry, utl::SearchParam::SearchType eSearchType)
     {
         switch (rEntry.eOp)
@@ -395,7 +390,7 @@ private:
                 else if (rEntry.IsQueryByNonEmpty())
                     return GetXMLToken(XML_NOEMPTY);
 
-                if (eSearchType == utl::SearchParam::SRCH_REGEXP)
+                if (eSearchType == utl::SearchParam::SearchType::Regexp)
                     return GetXMLToken(XML_MATCH);
                 else
                     return OUString("=");
@@ -409,7 +404,7 @@ private:
             case SC_LESS_EQUAL:
                 return OUString("<=");
             case SC_NOT_EQUAL:
-                if (eSearchType == utl::SearchParam::SRCH_REGEXP)
+                if (eSearchType == utl::SearchParam::SearchType::Regexp)
                     return GetXMLToken(XML_NOMATCH);
                 else
                     return OUString("!=");
@@ -423,7 +418,7 @@ private:
         return OUString("=");
     }
 
-    class WriteSetItem : public std::unary_function<ScQueryEntry::Item, void>
+    class WriteSetItem
     {
         ScXMLExport& mrExport;
     public:
@@ -469,7 +464,7 @@ private:
         else
         {
             // Multi-item condition.
-            OSL_ASSERT(rItems.size() > 1);
+            assert( rItems.size() > 1 && "rItems should have more than 1 element");
 
             // Store the 1st value for backward compatibility.
             const ScQueryEntry::Item& rItem = rItems.front();
@@ -697,7 +692,7 @@ void ScXMLExportDatabaseRanges::WriteDatabaseRanges()
     {
         const ScDBData* p = pDoc->GetAnonymousDBData(i);
         if (p)
-            aSheetDBs.insert(SheetLocalDBs::value_type(i, p));
+            aSheetDBs.emplace(i, p);
     }
 
     bool bHasRanges = !aSheetDBs.empty();

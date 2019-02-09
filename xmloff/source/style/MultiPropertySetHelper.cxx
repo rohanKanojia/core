@@ -18,32 +18,25 @@
  */
 
 
-#include "MultiPropertySetHelper.hxx"
+#include <MultiPropertySetHelper.hxx>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/XMultiPropertySet.hpp>
-#include <com/sun/star/lang/XServiceInfo.hpp>
 
-#include <algorithm>
-
+#include <sal/log.hxx>
 
 using ::com::sun::star::beans::XMultiPropertySet;
 using ::com::sun::star::beans::XPropertySet;
 using ::com::sun::star::beans::XPropertySetInfo;
-using ::com::sun::star::lang::XServiceInfo;
 using ::com::sun::star::uno::Any;
 using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::UNO_QUERY;
-using ::std::sort;
 
 
 MultiPropertySetHelper::MultiPropertySetHelper(
     const sal_Char** pNames ) :
-        pPropertyNames( nullptr ),
         nLength( 0 ),
         aPropertySequence(),
-        pSequenceIndex( nullptr ),
         aValues(),
         pValues( nullptr )
 {
@@ -52,7 +45,7 @@ MultiPropertySetHelper::MultiPropertySetHelper(
         nLength++;
 
     // allocate array and create strings
-    pPropertyNames = new OUString[nLength];
+    pPropertyNames.reset( new OUString[nLength] );
     for( sal_Int16 i = 0; i < nLength; i++ )
         pPropertyNames[i] = OUString::createFromAscii( pNames[i] );
 }
@@ -61,20 +54,17 @@ MultiPropertySetHelper::MultiPropertySetHelper(
 MultiPropertySetHelper::~MultiPropertySetHelper()
 {
     pValues = nullptr; // memory 'owned' by aValues
-
-    delete[] pSequenceIndex;
-    delete[] pPropertyNames;
 }
 
 
 void MultiPropertySetHelper::hasProperties(
     const Reference<XPropertySetInfo> & rInfo )
 {
-    DBG_ASSERT( rInfo.is(), "I'd really like an XPropertySetInfo here." );
+    SAL_WARN_IF( !rInfo.is(), "xmloff", "I'd really like an XPropertySetInfo here." );
 
     // allocate sequence index
-    if ( nullptr == pSequenceIndex )
-        pSequenceIndex = new sal_Int16[nLength] ;
+    if ( !pSequenceIndex )
+        pSequenceIndex.reset( new sal_Int16[nLength] );
 
     // construct pSequenceIndex
     sal_Int16 nNumberOfProperties = 0;
@@ -113,7 +103,7 @@ bool MultiPropertySetHelper::checkedProperties()
 void MultiPropertySetHelper::getValues(
     const Reference<XMultiPropertySet> & rMultiPropertySet )
 {
-    DBG_ASSERT( rMultiPropertySet.is(), "We need an XMultiPropertySet." );
+    SAL_WARN_IF( !rMultiPropertySet.is(), "xmloff", "We need an XMultiPropertySet." );
 
     aValues = rMultiPropertySet->getPropertyValues( aPropertySequence );
     pValues = aValues.getConstArray();
@@ -122,11 +112,11 @@ void MultiPropertySetHelper::getValues(
 void MultiPropertySetHelper::getValues(
     const Reference<XPropertySet> & rPropertySet )
 {
-    DBG_ASSERT( rPropertySet.is(), "We need an XPropertySet." );
+    SAL_WARN_IF( !rPropertySet.is(), "xmloff", "We need an XPropertySet." );
 
     // re-alloc aValues (if necessary) and fill with values from XPropertySet
     sal_Int16 nSupportedPropertiesCount =
-        (sal_Int16)aPropertySequence.getLength();
+        static_cast<sal_Int16>(aPropertySequence.getLength());
     if ( aValues.getLength() != nSupportedPropertiesCount )
         aValues.realloc( nSupportedPropertiesCount );
     Any* pMutableArray = aValues.getArray();

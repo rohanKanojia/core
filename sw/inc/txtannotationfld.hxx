@@ -20,10 +20,9 @@
 #ifndef INCLUDED_SW_INC_TXTANNOTATIONFLD_HXX
 #define INCLUDED_SW_INC_TXTANNOTATIONFLD_HXX
 
-#include <txtfld.hxx>
-#include <IMark.hxx>
+#include "txtfld.hxx"
 
-class SwDoc;
+namespace sw { namespace mark { class IMark; } }
 
 class SwTextAnnotationField : public SwTextField
 {
@@ -33,7 +32,7 @@ public:
         sal_Int32 const nStart,
         bool const bInClipboard );
 
-    virtual ~SwTextAnnotationField();
+    virtual ~SwTextAnnotationField() override;
 
     ::sw::mark::IMark* GetAnnotationMark() const;
 };

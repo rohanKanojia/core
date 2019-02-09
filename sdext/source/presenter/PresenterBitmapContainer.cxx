@@ -26,7 +26,6 @@
 #include <com/sun/star/rendering/CompositeOperation.hpp>
 #include <com/sun/star/rendering/XIntegerBitmap.hpp>
 #include <osl/diagnose.h>
-#include <boost/bind.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -107,7 +106,7 @@ SharedBitmapDescriptor PresenterBitmapContainer::GetBitmap (
     BitmapContainer::const_iterator iSet (maIconContainer.find(rsName));
     if (iSet != maIconContainer.end())
         return iSet->second;
-    else if (mpParentContainer.get() != nullptr)
+    else if (mpParentContainer != nullptr)
         return mpParentContainer->GetBitmap(rsName);
     else
         return SharedBitmapDescriptor();
@@ -129,7 +128,10 @@ void PresenterBitmapContainer::LoadBitmaps (
         {
             PresenterConfigurationAccess::ForAll(
                 rxBitmapList,
-                ::boost::bind(&PresenterBitmapContainer::ProcessBitmap, this, _1, _2));
+                [this](OUString const& rKey, Reference<beans::XPropertySet> const& xProps)
+                {
+                    this->ProcessBitmap(rKey, xProps);
+                });
         }
     }
     catch (Exception&)
@@ -315,7 +317,7 @@ PresenterBitmapContainer::BitmapDescriptor::BitmapDescriptor (
       mxDisabledBitmap(),
       mxMaskBitmap()
 {
-    if (rpDefault.get() != nullptr)
+    if (rpDefault != nullptr)
     {
         mnWidth = rpDefault->mnWidth;
         mnHeight = rpDefault->mnHeight;
@@ -334,13 +336,13 @@ PresenterBitmapContainer::BitmapDescriptor::BitmapDescriptor (
     }
 }
 
-css::uno::Reference<css::rendering::XBitmap>
+const css::uno::Reference<css::rendering::XBitmap>&
     PresenterBitmapContainer::BitmapDescriptor::GetNormalBitmap() const
 {
     return mxNormalBitmap;
 }
 
-css::uno::Reference<css::rendering::XBitmap>
+css::uno::Reference<css::rendering::XBitmap> const &
     PresenterBitmapContainer::BitmapDescriptor::GetBitmap(const Mode eMode) const
 {
     switch (eMode)

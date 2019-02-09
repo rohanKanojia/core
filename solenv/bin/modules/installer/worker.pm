@@ -730,7 +730,7 @@ sub generate_cygwin_paths
         }
     }
 
-    # Checking existence fo cyg_sourcepath for every file
+    # Checking existence of cyg_sourcepath for every file
     for ( my $i = 0; $i <= $#{$filesref}; $i++ )
     {
         if (( ! exists(${$filesref}[$i]->{'cyg_sourcepath'}) ) || ( ${$filesref}[$i]->{'cyg_sourcepath'} eq "" ))
@@ -886,7 +886,7 @@ sub collectpackagemaps
 {
     my ( $installdir, $languagestringref, $allvariables ) = @_;
 
-    installer::logger::include_header_into_logfile("Collecing all packagemaps (pkgmap):");
+    installer::logger::include_header_into_logfile("Collecting all packagemaps (pkgmap):");
 
     my $pkgmapdir = installer::systemactions::create_directories("pkgmap", $languagestringref);
     my $subdirname = $allvariables->{'UNIXPRODUCTNAME'} . "_pkgmaps";

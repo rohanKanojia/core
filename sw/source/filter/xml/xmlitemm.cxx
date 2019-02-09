@@ -17,7 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <editeng/memberids.hrc>
+#include <editeng/memberids.h>
+#include <editeng/xmlcnitm.hxx>
 #include <hintids.hxx>
 #include <svx/unomid.hxx>
 #include <xmloff/xmlnmspe.hxx>
@@ -25,6 +26,7 @@
 #include <xmloff/xmltoken.hxx>
 
 #include <unomid.h>
+#include <fmtfsize.hxx>
 
 using namespace ::xmloff::token;
 
@@ -39,7 +41,7 @@ using namespace ::xmloff::token;
 
 #define M_END { 0, XML_TOKEN_INVALID, 0, 0 }
 
-SvXMLItemMapEntry aXMLTableItemMap[] =
+SvXMLItemMapEntry const aXMLTableItemMap[] =
 {
     // RES_FILL_ORDER
     // not required
@@ -119,14 +121,14 @@ SvXMLItemMapEntry aXMLTableItemMap[] =
     M_END
 };
 
-SvXMLItemMapEntry aXMLTableColItemMap[] =
+SvXMLItemMapEntry const aXMLTableColItemMap[] =
 {
     M_E_SI( STYLE,  COLUMN_WIDTH,     RES_FRM_SIZE, MID_FRMSIZE_COL_WIDTH ),
     MAP_ENTRY( STYLE,        REL_COLUMN_WIDTH, RES_FRM_SIZE, MID_FRMSIZE_REL_COL_WIDTH ),
     M_END
 };
 
-SvXMLItemMapEntry aXMLTableRowItemMap[] =
+SvXMLItemMapEntry const aXMLTableRowItemMap[] =
 {
     // RES_FILL_ORDER
     // not required
@@ -198,7 +200,7 @@ SvXMLItemMapEntry aXMLTableRowItemMap[] =
     M_END
 };
 
-SvXMLItemMapEntry aXMLTableCellItemMap[] =
+SvXMLItemMapEntry const aXMLTableCellItemMap[] =
 {
     // RES_FILL_ORDER
     // not required

@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -101,7 +102,7 @@ public class UnoDialogSample2 extends UnoDialogSample {
             oUnoDialogSample2 = new UnoDialogSample2(xContext, xMCF, oUnoObject);
             oUnoDialogSample2.initialize( new String[] {"Height", "Moveable", "Name","PositionX","PositionY", "Step", "TabIndex","Title","Width"},
                                           new Object[] { Integer.valueOf(nDialogHeight), Boolean.TRUE, "Dialog1", Integer.valueOf(102),Integer.valueOf(41), Integer.valueOf(1), Short.valueOf((short) 0), "Inspect a Uno-Object", Integer.valueOf(nDialogWidth)});
-            String sIntroLabel = "This Dialog lists information about a given Uno-Object.\nIt offers a view to inspect all suppported servicenames, exported interfaces, methods and properties.";
+            String sIntroLabel = "This Dialog lists information about a given Uno-Object.\nIt offers a view to inspect all supported servicenames, exported interfaces, methods and properties.";
             oUnoDialogSample2.insertMultiLineFixedText(nControlPosX, 27, nControlWidth, 4, 1, sIntroLabel);
             // get the data from the UNO object...
             String[] sSupportedServiceNames = oUnoDialogSample2.getSupportedServiceNames();
@@ -258,3 +259,5 @@ public class UnoDialogSample2 extends UnoDialogSample {
     }
 
 }// end of class
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

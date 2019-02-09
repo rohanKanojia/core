@@ -18,17 +18,21 @@ class SVL_DLLPUBLIC SfxInt64Item : public SfxPoolItem
     sal_Int64 mnValue;
 
 public:
-    SfxInt64Item( sal_uInt16 nWhich = 0, sal_Int64 nVal = 0 );
+    SfxInt64Item( sal_uInt16 nWhich, sal_Int64 nVal );
     SfxInt64Item( sal_uInt16 nWhich, SvStream & rStream );
-    SfxInt64Item( const SfxInt64Item& rItem );
 
-    virtual ~SfxInt64Item();
+    virtual ~SfxInt64Item() override;
+
+    SfxInt64Item(SfxInt64Item const &) = default;
+    SfxInt64Item(SfxInt64Item &&) = default;
+    SfxInt64Item & operator =(SfxInt64Item const &) = delete; // due to SfxPoolItem;
+    SfxInt64Item & operator =(SfxInt64Item &&) = delete; // due to SfxPoolItem
 
     virtual bool operator== ( const SfxPoolItem& rItem ) const override;
 
     virtual bool GetPresentation(
-        SfxItemPresentation, SfxMapUnit, SfxMapUnit,
-        OUString& rText, const IntlWrapper* pIntlWrapper = nullptr ) const override;
+        SfxItemPresentation, MapUnit, MapUnit,
+        OUString& rText, const IntlWrapper& rIntlWrapper ) const override;
 
     virtual bool QueryValue(
         css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;

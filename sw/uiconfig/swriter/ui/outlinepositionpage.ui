@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
-  <requires lib="LibreOffice" version="1.0"/>
+<!-- Generated with glade 3.20.4 -->
+<interface domain="sw">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkAdjustment" id="adjustment1">
     <property name="upper">19.989999999999998</property>
     <property name="step_increment">0.050000000000000003</property>
@@ -14,39 +13,33 @@
     <property name="step_increment">0.050000000000000003</property>
     <property name="page_increment">10</property>
   </object>
-  <object class="GtkListStore" id="liststore1">
-    <columns>
-      <!-- column-name gchararray1 -->
-      <column type="gchararray"/>
-    </columns>
-    <data>
-      <row>
-        <col id="0" translatable="yes">Left</col>
-      </row>
-      <row>
-        <col id="0" translatable="yes">Centered</col>
-      </row>
-      <row>
-        <col id="0" translatable="yes">Right</col>
-      </row>
-    </data>
+  <object class="GtkAdjustment" id="adjustment3">
+    <property name="upper">19.989999999999998</property>
+    <property name="step_increment">0.050000000000000003</property>
+    <property name="page_increment">10</property>
   </object>
-  <object class="GtkListStore" id="liststore2">
+  <object class="GtkAdjustment" id="adjustment4">
+    <property name="upper">100</property>
+    <property name="step_increment">0.01</property>
+    <property name="page_increment">1</property>
+  </object>
+  <object class="GtkAdjustment" id="adjustment5">
+    <property name="upper">100</property>
+    <property name="step_increment">0.01</property>
+    <property name="page_increment">1</property>
+  </object>
+  <object class="GtkAdjustment" id="adjustment6">
+    <property name="upper">100</property>
+    <property name="step_increment">0.01</property>
+    <property name="page_increment">1</property>
+  </object>
+  <object class="GtkTreeStore" id="liststore1">
     <columns>
-      <!-- column-name gchararray1 -->
+      <!-- column-name text -->
+      <column type="gchararray"/>
+      <!-- column-name id -->
       <column type="gchararray"/>
     </columns>
-    <data>
-      <row>
-        <col id="0" translatable="yes">Tab stop</col>
-      </row>
-      <row>
-        <col id="0" translatable="yes">Space</col>
-      </row>
-      <row>
-        <col id="0" translatable="yes">Nothing</col>
-      </row>
-    </data>
   </object>
   <object class="GtkBox" id="OutlinePositionPage">
     <property name="visible">True</property>
@@ -68,14 +61,32 @@
             <property name="top_padding">6</property>
             <property name="left_padding">12</property>
             <child>
-              <object class="GtkTreeView" id="levellb:border">
+              <object class="GtkScrolledWindow">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
-                <property name="headers_visible">False</property>
-                <property name="search_column">0</property>
-                <child internal-child="selection">
-                  <object class="GtkTreeSelection" id="treeview-selection6">
-                    <property name="mode">multiple</property>
+                <property name="shadow_type">in</property>
+                <child>
+                  <object class="GtkTreeView" id="levellb">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="model">liststore1</property>
+                    <property name="headers_visible">False</property>
+                    <property name="headers_clickable">False</property>
+                    <property name="search_column">0</property>
+                    <property name="show_expanders">False</property>
+                    <child internal-child="selection">
+                      <object class="GtkTreeSelection" id="treeview-selection1"/>
+                    </child>
+                    <child>
+                      <object class="GtkTreeViewColumn" id="treeviewcolumn1">
+                        <child>
+                          <object class="GtkCellRendererText" id="cellrenderertext1"/>
+                          <attributes>
+                            <attribute name="text">0</attribute>
+                          </attributes>
+                        </child>
+                      </object>
+                    </child>
                   </object>
                 </child>
               </object>
@@ -86,7 +97,7 @@
           <object class="GtkLabel" id="1">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Level</property>
+            <property name="label" translatable="yes" context="outlinepositionpage|1">Level</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -134,10 +145,10 @@
                       <object class="GtkLabel" id="numalign">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">1</property>
-                        <property name="label" translatable="yes">Numbering alignment:</property>
+                        <property name="label" translatable="yes" context="outlinepositionpage|numalign">Numbering alignment:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">numalignlb</property>
+                        <property name="xalign">1</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -145,10 +156,14 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkComboBox" id="numalignlb">
+                      <object class="GtkComboBoxText" id="numalignlb">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="model">liststore1</property>
+                        <items>
+                          <item translatable="yes" context="outlinepositionpage|liststore1">Left</item>
+                          <item translatable="yes" context="outlinepositionpage|liststore1">Centered</item>
+                          <item translatable="yes" context="outlinepositionpage|liststore1">Right</item>
+                        </items>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
@@ -159,12 +174,12 @@
                       <object class="GtkLabel" id="numdist">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">1</property>
-                        <property name="label" translatable="yes">Minimum space between
+                        <property name="label" translatable="yes" context="outlinepositionpage|numdist">Minimum space between
 numbering and text:</property>
                         <property name="use_underline">True</property>
                         <property name="justify">right</property>
-                        <property name="mnemonic_widget">numdistmf:0.00cm</property>
+                        <property name="mnemonic_widget">numdistmf</property>
+                        <property name="xalign">1</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -172,11 +187,11 @@ numbering and text:</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="numdistmf:0.00cm">
+                      <object class="GtkSpinButton" id="numdistmf">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="invisible_char">●</property>
-                        <property name="adjustment">adjustment1</property>
+                        <property name="activates_default">True</property>
+                        <property name="adjustment">adjustment3</property>
                         <property name="digits">2</property>
                       </object>
                       <packing>
@@ -188,10 +203,10 @@ numbering and text:</property>
                       <object class="GtkLabel" id="numberingwidth">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">1</property>
-                        <property name="label" translatable="yes">Width of numbering:</property>
+                        <property name="label" translatable="yes" context="outlinepositionpage|numberingwidth">Width of numbering:</property>
                         <property name="use_underline">True</property>
-                        <property name="mnemonic_widget">numberingwidthmf:0.00cm</property>
+                        <property name="mnemonic_widget">numberingwidthmf</property>
+                        <property name="xalign">1</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -199,10 +214,10 @@ numbering and text:</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="numberingwidthmf:0.00cm">
+                      <object class="GtkSpinButton" id="numberingwidthmf">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="invisible_char">●</property>
+                        <property name="activates_default">True</property>
                         <property name="adjustment">adjustment1</property>
                         <property name="digits">2</property>
                       </object>
@@ -213,11 +228,12 @@ numbering and text:</property>
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="relative">
-                        <property name="label" translatable="yes">Relative</property>
+                        <property name="label" translatable="yes" context="outlinepositionpage|relative">Relative</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
                         <property name="halign">end</property>
+                        <property name="use_underline">True</property>
                         <property name="xalign">0</property>
                         <property name="draw_indicator">True</property>
                       </object>
@@ -230,10 +246,10 @@ numbering and text:</property>
                       <object class="GtkLabel" id="indent">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">1</property>
-                        <property name="label" translatable="yes">Indent:</property>
+                        <property name="label" translatable="yes" context="outlinepositionpage|indent">Indent:</property>
                         <property name="use_underline">True</property>
-                        <property name="mnemonic_widget">indentmf:0.00cm</property>
+                        <property name="mnemonic_widget">indentmf</property>
+                        <property name="xalign">1</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -241,10 +257,10 @@ numbering and text:</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="indentmf:0.00cm">
+                      <object class="GtkSpinButton" id="indentmf">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="invisible_char">●</property>
+                        <property name="activates_default">True</property>
                         <property name="adjustment">adjustment2</property>
                         <property name="digits">2</property>
                       </object>
@@ -257,10 +273,10 @@ numbering and text:</property>
                       <object class="GtkLabel" id="indentat">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">1</property>
-                        <property name="label" translatable="yes">Indent at:</property>
+                        <property name="label" translatable="yes" context="outlinepositionpage|indentat">Indent at:</property>
                         <property name="use_underline">True</property>
-                        <property name="mnemonic_widget">indentatmf:0.00cm</property>
+                        <property name="mnemonic_widget">indentatmf</property>
+                        <property name="xalign">1</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -268,10 +284,11 @@ numbering and text:</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="indentatmf:0.00cm">
+                      <object class="GtkSpinButton" id="indentatmf">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="invisible_char">●</property>
+                        <property name="activates_default">True</property>
+                        <property name="adjustment">adjustment6</property>
                         <property name="digits">2</property>
                       </object>
                       <packing>
@@ -283,10 +300,10 @@ numbering and text:</property>
                       <object class="GtkLabel" id="num2align">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">1</property>
-                        <property name="label" translatable="yes">Numbering alignment:</property>
+                        <property name="label" translatable="yes" context="outlinepositionpage|num2align">Numbering alignment:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">num2alignlb</property>
+                        <property name="xalign">1</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -294,7 +311,7 @@ numbering and text:</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkComboBox" id="num2alignlb">
+                      <object class="GtkComboBoxText" id="num2alignlb">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                       </object>
@@ -307,10 +324,10 @@ numbering and text:</property>
                       <object class="GtkLabel" id="alignedat">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">1</property>
-                        <property name="label" translatable="yes">Aligned at:</property>
+                        <property name="label" translatable="yes" context="outlinepositionpage|alignedat">Aligned at:</property>
                         <property name="use_underline">True</property>
-                        <property name="mnemonic_widget">alignedatmf:0.00cm</property>
+                        <property name="mnemonic_widget">alignedatmf</property>
+                        <property name="xalign">1</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -318,10 +335,11 @@ numbering and text:</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="alignedatmf:0.00cm">
+                      <object class="GtkSpinButton" id="alignedatmf">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="invisible_char">●</property>
+                        <property name="activates_default">True</property>
+                        <property name="adjustment">adjustment4</property>
                         <property name="digits">2</property>
                       </object>
                       <packing>
@@ -333,10 +351,10 @@ numbering and text:</property>
                       <object class="GtkLabel" id="at">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">1</property>
-                        <property name="label" translatable="yes">at:</property>
+                        <property name="label" translatable="yes" context="outlinepositionpage|at">Tab stop at:</property>
                         <property name="use_underline">True</property>
-                        <property name="mnemonic_widget">atmf:0.00cm</property>
+                        <property name="mnemonic_widget">atmf</property>
+                        <property name="xalign">1</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -344,10 +362,11 @@ numbering and text:</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="atmf:0.00cm">
+                      <object class="GtkSpinButton" id="atmf">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="invisible_char">●</property>
+                        <property name="activates_default">True</property>
+                        <property name="adjustment">adjustment5</property>
                         <property name="digits">2</property>
                       </object>
                       <packing>
@@ -356,10 +375,15 @@ numbering and text:</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkComboBox" id="numfollowedbylb">
+                      <object class="GtkComboBoxText" id="numfollowedbylb">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="model">liststore2</property>
+                        <items>
+                          <item translatable="yes" context="outlinepositionpage|liststore2">Tab stop</item>
+                          <item translatable="yes" context="outlinepositionpage|liststore2">Space</item>
+                          <item translatable="yes" context="outlinepositionpage|liststore2">Nothing</item>
+                          <item translatable="yes" context="outlinepositionpage|liststore2">New Line</item>
+                        </items>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
@@ -371,10 +395,10 @@ numbering and text:</property>
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="hexpand">True</property>
-                        <property name="xalign">1</property>
-                        <property name="label" translatable="yes">Numbering followed by:</property>
+                        <property name="label" translatable="yes" context="outlinepositionpage|numfollowedby">Numbering followed by:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">numfollowedbylb</property>
+                        <property name="xalign">1</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -392,7 +416,7 @@ numbering and text:</property>
               <object class="GtkLabel" id="label10">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Position and Spacing</property>
+                <property name="label" translatable="yes" context="outlinepositionpage|label10">Position and Spacing</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -414,11 +438,14 @@ numbering and text:</property>
             <property name="column_spacing">12</property>
             <child>
               <object class="GtkButton" id="standard">
-                <property name="label" translatable="yes">Default</property>
+                <property name="label" translatable="yes" context="outlinepositionpage|standard">Default</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
                 <property name="valign">end</property>
+                <accessibility>
+                  <relation type="member-of" target="label10"/>
+                </accessibility>
               </object>
               <packing>
                 <property name="left_attach">1</property>
@@ -426,7 +453,7 @@ numbering and text:</property>
               </packing>
             </child>
             <child>
-              <object class="swuilo-NumberingPreview" id="preview">
+              <object class="GtkDrawingArea" id="preview">
                 <property name="width_request">250</property>
                 <property name="height_request">120</property>
                 <property name="visible">True</property>

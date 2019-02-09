@@ -25,10 +25,9 @@
 #include <com/sun/star/form/ListSourceType.hpp>
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
 #include <tools/debug.hxx>
-#include <vcl/msgbox.hxx>
 #include <connectivity/dbtools.hxx>
-#include "dbpilots.hrc"
-#include <comphelper/extract.hxx>
+#include <helpids.h>
+#include <sal/log.hxx>
 
 
 namespace dbp
@@ -73,11 +72,11 @@ namespace dbp
         {
             case FormComponentType::LISTBOX:
                 m_bListBox = true;
-                setTitleBase(ModuleRes(RID_STR_LISTWIZARD_TITLE).toString());
+                setTitleBase(compmodule::ModuleRes(RID_STR_LISTWIZARD_TITLE));
                 return true;
             case FormComponentType::COMBOBOX:
                 m_bListBox = false;
-                setTitleBase(ModuleRes(RID_STR_COMBOWIZARD_TITLE).toString());
+                setTitleBase(compmodule::ModuleRes(RID_STR_COMBOWIZARD_TITLE));
                 return true;
         }
         return false;
@@ -172,17 +171,17 @@ namespace dbp
             }
 
             // ListSourceType: SQL
-            getContext().xObjectModel->setPropertyValue("ListSourceType", makeAny((sal_Int32)ListSourceType_SQL));
+            getContext().xObjectModel->setPropertyValue("ListSourceType", makeAny(sal_Int32(ListSourceType_SQL)));
 
             if (isListBox())
             {
                 // BoundColumn: 1
-                getContext().xObjectModel->setPropertyValue("BoundColumn", makeAny((sal_Int16)1));
+                getContext().xObjectModel->setPropertyValue("BoundColumn", makeAny(sal_Int16(1)));
 
                 // build the statement to set as list source
                 OUString sStatement = "SELECT " +
-                    OUString( getSettings().sListContentField ) +  ", " + OUString( getSettings().sLinkedListField ) +
-                    " FROM " + OUString( getSettings().sListContentTable );
+                    getSettings().sListContentField +  ", " + getSettings().sLinkedListField +
+                    " FROM " + getSettings().sListContentTable;
                 Sequence< OUString > aListSource { sStatement };
                 getContext().xObjectModel->setPropertyValue("ListSource", makeAny(aListSource));
             }
@@ -190,13 +189,13 @@ namespace dbp
             {
                 // build the statement to set as list source
                 OUString sStatement = "SELECT DISTINCT " +
-                    OUString( getSettings().sListContentField ) +
-                    " FROM " + OUString( getSettings().sListContentTable );
-                getContext().xObjectModel->setPropertyValue( "ListSource", makeAny(OUString(sStatement)));
+                    getSettings().sListContentField +
+                    " FROM " + getSettings().sListContentTable;
+                getContext().xObjectModel->setPropertyValue( "ListSource", makeAny(sStatement));
             }
 
             // the bound field
-            getContext().xObjectModel->setPropertyValue("DataField", makeAny(OUString(getSettings().sLinkedFormField)));
+            getContext().xObjectModel->setPropertyValue("DataField", makeAny(getSettings().sLinkedFormField));
         }
         catch(const Exception&)
         {
@@ -254,7 +253,7 @@ namespace dbp
             }
             catch(const Exception&)
             {
-                DBG_ASSERT(false, "OLinkFieldsPage::initializePage: caught an exception while retrieving the columns!");
+                SAL_WARN( "extensions.dbpilots", "OLinkFieldsPage::initializePage: caught an exception while retrieving the columns!");
             }
         }
         return aColumnNames;
@@ -294,19 +293,19 @@ namespace dbp
         if (!OLCPage::canAdvance())
             return false;
 
-        return 0 != m_pSelectTable->GetSelectEntryCount();
+        return 0 != m_pSelectTable->GetSelectedEntryCount();
     }
 
 
-    IMPL_LINK_NOARG_TYPED( OContentTableSelection, OnTableSelected, ListBox&, void )
+    IMPL_LINK_NOARG( OContentTableSelection, OnTableSelected, ListBox&, void )
     {
         updateDialogTravelUI();
     }
 
 
-    IMPL_LINK_TYPED( OContentTableSelection, OnTableDoubleClicked, ListBox&, _rListBox, void )
+    IMPL_LINK( OContentTableSelection, OnTableDoubleClicked, ListBox&, _rListBox, void )
     {
-        if (_rListBox.GetSelectEntryCount())
+        if (_rListBox.GetSelectedEntryCount())
             getDialog()->travelNext();
     }
 
@@ -340,7 +339,7 @@ namespace dbp
             return false;
 
         OListComboSettings& rSettings = getSettings();
-        rSettings.sListContentTable = m_pSelectTable->GetSelectEntry();
+        rSettings.sListContentTable = m_pSelectTable->GetSelectedEntry();
         if (rSettings.sListContentTable.isEmpty() && (::svt::WizardTypes::eTravelBackward != _eReason))
             // need to select a table
             return false;
@@ -354,7 +353,7 @@ namespace dbp
         get(m_pSelectTableField, "selectfield");
         get(m_pDisplayedField, "displayfield");
         get(m_pInfo, "info");
-        m_pInfo->SetText(ModuleRes( isListBox() ? RID_STR_FIELDINFO_LISTBOX : RID_STR_FIELDINFO_COMBOBOX).toString());
+        m_pInfo->SetText(compmodule::ModuleRes( isListBox() ? RID_STR_FIELDINFO_LISTBOX : RID_STR_FIELDINFO_COMBOBOX));
         m_pSelectTableField->SetSelectHdl(LINK(this, OContentFieldSelection, OnFieldSelected));
         m_pSelectTableField->SetDoubleClickHdl(LINK(this, OContentFieldSelection, OnTableDoubleClicked));
     }
@@ -370,11 +369,6 @@ namespace dbp
         m_pDisplayedField.clear();
         m_pInfo.clear();
         OLCPage::dispose();
-    }
-
-    void OContentFieldSelection::ActivatePage()
-    {
-        OLCPage::ActivatePage();
     }
 
 
@@ -395,21 +389,21 @@ namespace dbp
         if (!OLCPage::canAdvance())
             return false;
 
-        return 0 != m_pSelectTableField->GetSelectEntryCount();
+        return 0 != m_pSelectTableField->GetSelectedEntryCount();
     }
 
 
-    IMPL_LINK_NOARG_TYPED( OContentFieldSelection, OnTableDoubleClicked, ListBox&, void )
+    IMPL_LINK_NOARG( OContentFieldSelection, OnTableDoubleClicked, ListBox&, void )
     {
-        if (m_pSelectTableField->GetSelectEntryCount())
+        if (m_pSelectTableField->GetSelectedEntryCount())
             getDialog()->travelNext();
     }
 
 
-    IMPL_LINK_NOARG_TYPED( OContentFieldSelection, OnFieldSelected, ListBox&, void )
+    IMPL_LINK_NOARG( OContentFieldSelection, OnFieldSelected, ListBox&, void )
     {
         updateDialogTravelUI();
-        m_pDisplayedField->SetText(m_pSelectTableField->GetSelectEntry());
+        m_pDisplayedField->SetText(m_pSelectTableField->GetSelectedEntry());
     }
 
 
@@ -418,7 +412,7 @@ namespace dbp
         if (!OLCPage::commitPage(_eReason))
             return false;
 
-        getSettings().sListContentField = m_pSelectTableField->GetSelectEntry();
+        getSettings().sListContentField = m_pSelectTableField->GetSelectedEntry();
 
         return true;
     }
@@ -486,12 +480,12 @@ namespace dbp
     }
 
 
-    IMPL_LINK_NOARG_TYPED(OLinkFieldsPage, OnSelectionModified, Edit&, void)
+    IMPL_LINK_NOARG(OLinkFieldsPage, OnSelectionModified, Edit&, void)
     {
         implCheckFinish();
     }
 
-    IMPL_LINK_NOARG_TYPED(OLinkFieldsPage, OnSelectionModifiedCombBox, ComboBox&, void)
+    IMPL_LINK_NOARG(OLinkFieldsPage, OnSelectionModifiedCombBox, ComboBox&, void)
     {
         implCheckFinish();
     }
@@ -510,15 +504,13 @@ namespace dbp
     OComboDBFieldPage::OComboDBFieldPage( OControlWizard* _pParent )
         :ODBFieldPage(_pParent)
     {
-        setDescriptionText(ModuleRes(RID_STR_COMBOWIZ_DBFIELD).toString());
+        setDescriptionText(compmodule::ModuleRes(RID_STR_COMBOWIZ_DBFIELD));
     }
-
 
     OUString& OComboDBFieldPage::getDBFieldSetting()
     {
-        return getSettings().sLinkedFormField;
+        return static_cast<OListComboWizard*>(getDialog())->getSettings().sLinkedFormField;
     }
-
 
     void OComboDBFieldPage::ActivatePage()
     {
@@ -526,13 +518,11 @@ namespace dbp
         getDialog()->enableButtons(WizardButtonFlags::FINISH, true);
     }
 
-
     bool OComboDBFieldPage::canAdvance() const
     {
         // we're on the last page here, no travelNext allowed ...
         return false;
     }
-
 
 }   // namespace dbp
 

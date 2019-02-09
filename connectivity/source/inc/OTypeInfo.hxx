@@ -29,48 +29,19 @@ namespace connectivity
     struct OTypeInfo
     {
         OUString aTypeName;      // Name of the type in the database
-        OUString aLiteralPrefix; // Prefix for quoting
-        OUString aLiteralSuffix; // Suffix for quoting
-        OUString aCreateParams;  // Parameter for creating
         OUString aLocalTypeName;
 
         sal_Int32       nPrecision;     // Length of the type
 
         sal_Int16       nMaximumScale;  // Decimal places
-        sal_Int16       nMinimumScale;  // Minimum decimal places
 
         sal_Int16       nType;          // Database type
-        sal_Int16       nSearchType;    // Can we search for the type?
-        sal_Int16       nNumPrecRadix;  // indicating the radix, which is usually 2 or 10
-
-        bool        bCurrency       : 1;    // Currency
-        bool        bAutoIncrement  : 1;    // Is it an autoincrementing field?
-        bool        bNullable       : 1;    // Can the field be NULL?
-        bool        bCaseSensitive  : 1;    // Is the type case sensitive?
-        bool        bUnsigned       : 1;    // Is the type unsigned?
 
         OTypeInfo()
                 :nPrecision(0)
                 ,nMaximumScale(0)
-                ,nMinimumScale(0)
-                ,nType( ::com::sun::star::sdbc::DataType::OTHER)
-                ,nSearchType( ::com::sun::star::sdbc::ColumnSearch::FULL)
-                ,nNumPrecRadix(0)
-                ,bCurrency(false)
-                ,bAutoIncrement(false)
-                ,bNullable(true)
-                ,bCaseSensitive(false)
-                ,bUnsigned(false)
+                ,nType( css::sdbc::DataType::OTHER)
         {}
-
-        inline static void * SAL_CALL operator new( size_t nSize )
-            { return ::rtl_allocateMemory( nSize ); }
-        inline static void * SAL_CALL operator new( size_t /*nSize*/,void* _pHint )
-            { return _pHint; }
-        inline static void SAL_CALL operator delete( void * pMem )
-            { ::rtl_freeMemory( pMem ); }
-        inline static void SAL_CALL operator delete( void * /*pMem*/,void* /*_pHint*/ )
-            {  }
 
         bool operator == (const OTypeInfo& lh) const { return lh.nType == nType; }
         bool operator != (const OTypeInfo& lh) const { return lh.nType != nType; }

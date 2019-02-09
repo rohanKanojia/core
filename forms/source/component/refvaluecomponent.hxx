@@ -20,8 +20,8 @@
 #ifndef INCLUDED_FORMS_SOURCE_COMPONENT_REFVALUECOMPONENT_HXX
 #define INCLUDED_FORMS_SOURCE_COMPONENT_REFVALUECOMPONENT_HXX
 
-#include "FormComponent.hxx"
-#include "togglestate.hxx"
+#include <FormComponent.hxx>
+#include <togglestate.hxx>
 
 
 namespace frm
@@ -54,15 +54,13 @@ namespace frm
             const OUString& _rDefault
         );
         DECLARE_DEFAULT_CLONE_CTOR( OReferenceValueComponent )
-        virtual ~OReferenceValueComponent();
+        virtual ~OReferenceValueComponent() override;
 
         // OPropertySet and friends
         virtual void SAL_CALL getFastPropertyValue(css::uno::Any& rValue, sal_Int32 nHandle) const override;
-        virtual void SAL_CALL setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const css::uno::Any& rValue )
-                    throw (css::uno::Exception, std::exception) override;
+        virtual void SAL_CALL setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const css::uno::Any& rValue ) override;
         virtual sal_Bool SAL_CALL convertFastPropertyValue(
-                    css::uno::Any& _rConvertedValue, css::uno::Any& _rOldValue, sal_Int32 _nHandle, const css::uno::Any& _rValue )
-                    throw (css::lang::IllegalArgumentException) override;
+                    css::uno::Any& _rConvertedValue, css::uno::Any& _rOldValue, sal_Int32 _nHandle, const css::uno::Any& _rValue ) override;
         virtual void describeFixedProperties(
             css::uno::Sequence< css::beans::Property >& /* [out] */ _rProps
         ) const override;

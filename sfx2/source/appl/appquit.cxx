@@ -29,40 +29,36 @@
 #include <unotools/saveopt.hxx>
 #include <unotools/misccfg.hxx>
 
-#include "app.hrc"
 #include <sfx2/app.hxx>
 #include <sfx2/evntconf.hxx>
 #include <sfx2/unoctitm.hxx>
-#include "appdata.hxx"
+#include <appdata.hxx>
 #include <sfx2/viewsh.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/printer.hxx>
-#include "arrdecl.hxx"
-#include <sfx2/sfxresid.hxx>
+#include <arrdecl.hxx>
 #include <sfx2/event.hxx>
 #include <sfx2/templdlg.hxx>
 #include <sfx2/msgpool.hxx>
 #include <sfx2/docfile.hxx>
-#include "sfxtypes.hxx"
-#include "sfxlocal.hrc"
+#include <sfxtypes.hxx>
 #include <sfx2/fcontnr.hxx>
-#include "nochaos.hxx"
+#include <nochaos.hxx>
 #include <sfx2/doctempl.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/docfac.hxx>
-#include "appbaslib.hxx"
-#include "childwinimpl.hxx"
+#include <appbaslib.hxx>
+#include <childwinimpl.hxx>
 #include <ctrlfactoryimpl.hxx>
 #include <shellimpl.hxx>
 #include <basic/basicmanagerrepository.hxx>
-#include <svtools/svtresid.hxx>
 
 using ::basic::BasicManagerRepository;
 
 void SfxApplication::Deinitialize()
 {
-    if ( pAppData_Impl->bDowning )
+    if ( pImpl->bDowning )
         return;
 
 #if HAVE_FEATURE_SCRIPTING
@@ -71,70 +67,60 @@ void SfxApplication::Deinitialize()
     SaveBasicAndDialogContainer();
 #endif
 
-    pAppData_Impl->bDowning = true; // due to Timer from DecAliveCount and QueryExit
+    pImpl->bDowning = true; // due to Timer from DecAliveCount and QueryExit
 
-    DELETEZ( pAppData_Impl->pTemplates );
+    DELETEZ( pImpl->pTemplates );
 
     // By definition there shouldn't be any open view frames when we reach
     // this method. Therefore this call makes no sense and is the source of
     // some stack traces, which we don't understand.
     // For more information see:
-    pAppData_Impl->bDowning = false;
+    pImpl->bDowning = false;
     DBG_ASSERT( !SfxViewFrame::GetFirst(),
                 "existing SfxViewFrame after Execute" );
     DBG_ASSERT( !SfxObjectShell::GetFirst(),
                 "existing SfxObjectShell after Execute" );
-    pAppData_Impl->pAppDispat->Pop( *this, SfxDispatcherPopFlags::POP_UNTIL );
-    pAppData_Impl->pAppDispat->Flush();
-    pAppData_Impl->bDowning = true;
-    pAppData_Impl->pAppDispat->DoDeactivate_Impl( true, nullptr );
+    pImpl->pAppDispat->Pop( *this, SfxDispatcherPopFlags::POP_UNTIL );
+    pImpl->pAppDispat->Flush();
+    pImpl->bDowning = true;
+    pImpl->pAppDispat->DoDeactivate_Impl( true, nullptr );
 
     // Release Controller and others
     // then the remaining components should also disappear ( Beamer! )
 
 #if HAVE_FEATURE_SCRIPTING
     BasicManagerRepository::resetApplicationBasicManager();
-    pAppData_Impl->pBasicManager->reset( nullptr );
+    pImpl->pBasicManager->reset( nullptr );
         // this will also delete pBasMgr
 #endif
 
-    DBG_ASSERT( pAppData_Impl->pViewFrame == nullptr, "active foreign ViewFrame" );
-
-    delete[] pAppData_Impl->pInterfaces;
-    pAppData_Impl->pInterfaces = nullptr;
+    DBG_ASSERT( pImpl->pViewFrame == nullptr, "active foreign ViewFrame" );
 
     // free administration managers
-    DELETEZ(pAppData_Impl->pAppDispat);
-    SfxResId::DeleteResMgr();
-    SvtResId::DeleteResMgr();
+    DELETEZ(pImpl->pAppDispat);
 
     // from here no SvObjects have to exists
-    DELETEZ(pAppData_Impl->pMatcher);
+    DELETEZ(pImpl->pMatcher);
 
-    DELETEX(SfxSlotPool, pAppData_Impl->pSlotPool);
-    DELETEX(SfxChildWinFactArr_Impl, pAppData_Impl->pFactArr);
+    DELETEZ(pImpl->pSlotPool);
+    DELETEZ(pImpl->pFactArr);
 
-    DELETEX(SfxTbxCtrlFactArr_Impl, pAppData_Impl->pTbxCtrlFac);
-    DELETEX(SfxStbCtrlFactArr_Impl, pAppData_Impl->pStbCtrlFac);
-    DELETEX(SfxViewFrameArr_Impl, pAppData_Impl->pViewFrames);
-    DELETEX(SfxViewShellArr_Impl, pAppData_Impl->pViewShells);
-    DELETEX(SfxObjectShellArr_Impl, pAppData_Impl->pObjShells);
+    DELETEZ(pImpl->pTbxCtrlFac);
+    DELETEZ(pImpl->pStbCtrlFac);
+    DELETEZ(pImpl->pViewFrames);
+    DELETEZ(pImpl->pViewShells);
+    DELETEZ(pImpl->pObjShells);
 
     //TODO/CLEANUP
     //ReleaseArgs could be used instead!
-    pAppData_Impl->pPool = nullptr;
+    pImpl->pPool = nullptr;
     NoChaos::ReleaseItemPool();
 
 #if HAVE_FEATURE_SCRIPTING
-    DELETEZ(pAppData_Impl->pBasicResMgr);
+    delete pImpl->m_pSbxErrorHdl;
 #endif
-    DELETEZ(pAppData_Impl->pSvtResMgr);
-
-#if HAVE_FEATURE_SCRIPTING
-    delete pAppData_Impl->m_pSbxErrorHdl;
-#endif
-    delete pAppData_Impl->m_pSoErrorHdl;
-    delete pAppData_Impl->m_pToolsErrorHdl;
+    delete pImpl->m_pSoErrorHdl;
+    delete pImpl->m_pToolsErrorHdl;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

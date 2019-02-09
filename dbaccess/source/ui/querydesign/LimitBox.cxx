@@ -8,17 +8,17 @@
  */
 
 #include <vcl/builderfactory.hxx>
-#include "LimitBox.hxx"
-#include "dbu_qry.hrc"
-#include "moduledbu.hxx"
+#include <LimitBox.hxx>
+#include <strings.hrc>
+#include <core_resource.hxx>
 
-#define ALL_STRING ModuleRes(STR_QUERY_LIMIT_ALL).toString()
+#define ALL_STRING DBA_RES(STR_QUERY_LIMIT_ALL)
 #define ALL_INT -1
 
 namespace global{
 
 /// Default values
-sal_Int64 aDefLimitAry[] =
+sal_Int64 const aDefLimitAry[] =
 {
     5,
     10,
@@ -32,8 +32,8 @@ namespace dbaui
 {
 
 
-LimitBox::LimitBox( vcl::Window* pParent, WinBits nStyle )
-    : NumericBox( pParent, nStyle )
+LimitBox::LimitBox( vcl::Window* pParent )
+    : NumericBox( pParent, WB_DROPDOWN | WB_VSCROLL )
 {
     SetShowTrailingZeros( false );
     SetDecimalDigits( 0 );
@@ -100,14 +100,11 @@ void LimitBox::LoadDefaultLimits()
 {
     InsertValue( ALL_INT );
 
-    const unsigned nSize = SAL_N_ELEMENTS(global::aDefLimitAry);
-    for( unsigned nIndex = 0; nIndex< nSize; ++nIndex)
+    for(long nIndex : global::aDefLimitAry)
     {
-        InsertValue( global::aDefLimitAry[nIndex] );
+        InsertValue( nIndex );
     }
 }
-
-VCL_BUILDER_FACTORY_ARGS( LimitBox, WB_DROPDOWN | WB_VSCROLL )
 
 } ///dbaui namespace
 

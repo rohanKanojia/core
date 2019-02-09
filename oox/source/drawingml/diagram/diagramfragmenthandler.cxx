@@ -17,12 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/diagnose.h>
 
 #include "diagramdefinitioncontext.hxx"
 #include "diagramfragmenthandler.hxx"
 #include "datamodelcontext.hxx"
-#include "drawingml/colorchoicecontext.hxx"
+#include <drawingml/colorchoicecontext.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star::xml::sax;
@@ -33,7 +34,6 @@ namespace oox { namespace drawingml {
 DiagramDataFragmentHandler::DiagramDataFragmentHandler( XmlFilterBase& rFilter,
                                                         const OUString& rFragmentPath,
                                                         const DiagramDataPtr& rDataPtr )
-    throw( )
     : FragmentHandler2( rFilter, rFragmentPath )
     , mpDataPtr( rDataPtr )
 {
@@ -45,7 +45,6 @@ DiagramDataFragmentHandler::~DiagramDataFragmentHandler( ) throw ()
 }
 
 void SAL_CALL DiagramDataFragmentHandler::endDocument()
-    throw (SAXException, RuntimeException, std::exception)
 {
 
 }
@@ -68,7 +67,6 @@ DiagramDataFragmentHandler::onCreateContext( ::sal_Int32 aElement,
 DiagramLayoutFragmentHandler::DiagramLayoutFragmentHandler( XmlFilterBase& rFilter,
                                                         const OUString& rFragmentPath,
                                                         const DiagramLayoutPtr& rDataPtr )
-    throw( )
     : FragmentHandler2( rFilter, rFragmentPath )
     , mpDataPtr( rDataPtr )
 {
@@ -80,7 +78,6 @@ DiagramLayoutFragmentHandler::~DiagramLayoutFragmentHandler( ) throw ()
 }
 
 void SAL_CALL DiagramLayoutFragmentHandler::endDocument()
-    throw (SAXException, RuntimeException, std::exception)
 {
 
 }
@@ -92,7 +89,7 @@ DiagramLayoutFragmentHandler::onCreateContext( ::sal_Int32 aElement,
     switch( aElement )
     {
     case DGM_TOKEN( layoutDef ):
-        return new DiagramDefinitionContext( *this, AttributeList( rAttribs ), mpDataPtr );
+        return new DiagramDefinitionContext( *this, rAttribs, mpDataPtr );
     default:
         break;
     }
@@ -114,7 +111,7 @@ DiagramQStylesFragmentHandler::DiagramQStylesFragmentHandler( XmlFilterBase& rFi
     const AttributeList& rAttribs,
     ShapeStyleRef& o_rStyle )
 {
-    o_rStyle.mnThemedIdx = (nElement == DGM_TOKEN(fontRef)) ?
+    o_rStyle.mnThemedIdx = (nElement == A_TOKEN(fontRef)) ?
         rAttribs.getToken( XML_idx, XML_none ) : rAttribs.getInteger( XML_idx, 0 );
     return new ColorContext( *this, o_rStyle.maPhClr );
 }
@@ -123,7 +120,7 @@ DiagramQStylesFragmentHandler::DiagramQStylesFragmentHandler( XmlFilterBase& rFi
                                                                                const AttributeList& rAttribs )
 {
     // state-table like way of navigating the color fragment. we
-    // currently ignore everything except styleLbl in the colorsDef
+    // currently ignore everything except styleLbl in the styleDef
     // element
     switch( getCurrentElement() )
     {
@@ -137,16 +134,16 @@ DiagramQStylesFragmentHandler::DiagramQStylesFragmentHandler( XmlFilterBase& rFi
         {
             switch( nElement )
             {
-                case DGM_TOKEN(lnRef) :     // CT_StyleMatrixReference
+                case A_TOKEN(lnRef):     // CT_StyleMatrixReference
                     return createStyleMatrixContext(nElement,rAttribs,
                                                     maStyleEntry.maLineStyle);
-                case DGM_TOKEN(fillRef) :   // CT_StyleMatrixReference
+                case A_TOKEN(fillRef):   // CT_StyleMatrixReference
                     return createStyleMatrixContext(nElement,rAttribs,
                                                     maStyleEntry.maFillStyle);
-                case DGM_TOKEN(effectRef) : // CT_StyleMatrixReference
+                case A_TOKEN(effectRef): // CT_StyleMatrixReference
                     return createStyleMatrixContext(nElement,rAttribs,
                                                     maStyleEntry.maEffectStyle);
-                case DGM_TOKEN(fontRef) :   // CT_FontRe    ference
+                case A_TOKEN(fontRef):   // CT_FontReference
                     return createStyleMatrixContext(nElement,rAttribs,
                                                     maStyleEntry.maTextStyle);
             }

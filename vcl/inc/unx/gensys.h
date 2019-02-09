@@ -23,7 +23,7 @@
 #include <salsys.hxx>
 #include <salframe.hxx>
 #include <vclpluginapi.h>
-#include <list>
+#include <vector>
 
 /*
  * Helps de-tangle the rather horrible ShowNativeMessageBox API
@@ -32,11 +32,10 @@ class VCL_DLLPUBLIC SalGenericSystem : public SalSystem
 {
  public:
     SalGenericSystem();
-    virtual ~SalGenericSystem();
+    virtual ~SalGenericSystem() override;
     virtual int ShowNativeDialog( const OUString& rTitle,
                                   const OUString& rMessage,
-                                  const std::list< OUString >& rButtons,
-                                  int nDefButton ) = 0;
+                                  const std::vector< OUString >& rButtons ) = 0;
 
     virtual int ShowNativeMessageBox( const OUString& rTitle,
                                       const OUString& rMessage) override;

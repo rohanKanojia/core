@@ -21,42 +21,23 @@
 #include <com/sun/star/uno/Sequence.hxx>
 #include <osl/diagnose.h>
 
-#include "filtopt.hxx"
-#include "miscuno.hxx"
+#include <filtopt.hxx>
+#include <miscuno.hxx>
 
 using namespace utl;
 using namespace css::uno;
 
 #define CFGPATH_FILTER          "Office.Calc/Filter/Import"
 
-#define SCFILTOPT_COLSCALE      0
-#define SCFILTOPT_ROWSCALE      1
 #define SCFILTOPT_WK3           2
-#define SCFILTOPT_COUNT         3
-
-Sequence<OUString> ScFilterOptions::GetPropertyNames()
-{
-    static const char* aPropNames[] =
-    {
-        "MS_Excel/ColScale",            // SCFILTOPT_COLSCALE
-        "MS_Excel/RowScale",            // SCFILTOPT_ROWSCALE
-        "Lotus123/WK3"                  // SCFILTOPT_WK3
-    };
-    Sequence<OUString> aNames(SCFILTOPT_COUNT);
-    OUString* pNames = aNames.getArray();
-    for(int i = 0; i < SCFILTOPT_COUNT; i++)
-        pNames[i] = OUString::createFromAscii(aPropNames[i]);
-
-    return aNames;
-}
 
 ScFilterOptions::ScFilterOptions() :
-    ConfigItem( OUString( CFGPATH_FILTER ) ),
-    bWK3Flag( false ),
-    fExcelColScale( 0 ),
-    fExcelRowScale( 0 )
+    ConfigItem( CFGPATH_FILTER ),
+    bWK3Flag( false )
 {
-    Sequence<OUString> aNames = GetPropertyNames();
+    Sequence<OUString> aNames { "MS_Excel/ColScale",  // SCFILTOPT_COLSCALE
+                                "MS_Excel/RowScale",  // SCFILTOPT_ROWSCALE
+                                "Lotus123/WK3" };     // SCFILTOPT_WK3
     Sequence<Any> aValues = GetProperties(aNames);
     const Any* pValues = aValues.getConstArray();
     OSL_ENSURE(aValues.getLength() == aNames.getLength(), "GetProperties failed");
@@ -69,12 +50,6 @@ ScFilterOptions::ScFilterOptions() :
             {
                 switch(nProp)
                 {
-                    case SCFILTOPT_COLSCALE:
-                        pValues[nProp] >>= fExcelColScale;
-                        break;
-                    case SCFILTOPT_ROWSCALE:
-                        pValues[nProp] >>= fExcelRowScale;
-                        break;
                     case SCFILTOPT_WK3:
                         bWK3Flag = ScUnoHelpFunctions::GetBoolFromAny( pValues[nProp] );
                         break;

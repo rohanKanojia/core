@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svgdocument.hxx>
+#include <svgdocument.hxx>
 
 namespace svgio
 {
@@ -33,25 +33,19 @@ namespace svgio
 
         SvgDocument::~SvgDocument()
         {
-            while(!maNodes.empty())
-            {
-                SvgNode* pCandidate = maNodes[maNodes.size() - 1];
-                delete pCandidate;
-                maNodes.pop_back();
-            }
         }
 
-        void SvgDocument::appendNode(SvgNode* pNode)
+        void SvgDocument::appendNode(std::unique_ptr<SvgNode> pNode)
         {
-            OSL_ENSURE(pNode, "OOps, empty node added (!)");
-            maNodes.push_back(pNode);
+            assert(pNode);
+            maNodes.push_back(std::move(pNode));
         }
 
         void SvgDocument::addSvgNodeToMapper(const OUString& rStr, const SvgNode& rNode)
         {
             if(!rStr.isEmpty())
             {
-                maIdTokenMapperList.insert(IdTokenValueType(rStr, &rNode));
+                maIdTokenMapperList.emplace(rStr, &rNode);
             }
         }
 
@@ -81,7 +75,7 @@ namespace svgio
         {
             if(!rStr.isEmpty())
             {
-                maIdStyleTokenMapperList.insert(IdStyleTokenValueType(rStr, &rSvgStyleAttributes));
+                maIdStyleTokenMapperList.emplace(rStr, &rSvgStyleAttributes);
             }
         }
 

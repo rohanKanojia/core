@@ -17,10 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "autofiltercontext.hxx"
+#include <autofiltercontext.hxx>
+#include <biffhelper.hxx>
 
-#include "autofilterbuffer.hxx"
-#include "biffinputstream.hxx"
+#include <autofilterbuffer.hxx>
+#include <oox/token/namespaces.hxx>
 
 namespace oox {
 namespace xls {

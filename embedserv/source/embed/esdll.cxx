@@ -18,25 +18,11 @@
  */
 
 #define _WIN32_DCOM
-#ifdef _MSC_VER
-#pragma warning(disable : 4917 4555)
-#endif
 
-#ifdef __MINGW32__
-#define _INIT_ATL_COMMON_VARS
-#endif
-
-#include "stdafx.h"
+#include <stdafx.h>
 
 #include <atlbase.h>
-#ifdef _MSC_VER
-#pragma warning( push )
-#pragma warning( disable: 4710 )
-#endif
 CComModule _Module;
-#ifdef _MSC_VER
-#pragma warning( pop )
-#endif
 #include <atlcom.h>
 
 BEGIN_OBJECT_MAP(ObjectMap)
@@ -52,8 +38,8 @@ END_OBJECT_MAP()
 // DLL Entry Point
 
 
-#include "syswinwrapper.hxx"
-#include "docholder.hxx"
+#include <syswinwrapper.hxx>
+#include <docholder.hxx>
 
 
 HINSTANCE DocumentHolder::m_hInstance;
@@ -67,7 +53,7 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD dwReason, LPVOID /*lpReserved*/)
 
     if (dwReason == DLL_PROCESS_ATTACH)
     {
-        _Module.Init(ObjectMap, hInstance, NULL);
+        _Module.Init(ObjectMap, hInstance);
         DisableThreadLibraryCalls(hInstance);
     }
     else if (dwReason == DLL_PROCESS_DETACH)

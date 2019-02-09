@@ -25,10 +25,10 @@
 #include <uno/data.h>
 #include <typelib/typedescription.hxx>
 
-#include "bridges/cpp_uno/shared/bridge.hxx"
-#include "bridges/cpp_uno/shared/cppinterfaceproxy.hxx"
-#include "bridges/cpp_uno/shared/types.hxx"
-#include "bridges/cpp_uno/shared/vtablefactory.hxx"
+#include "bridge.hxx"
+#include "cppinterfaceproxy.hxx"
+#include "types.hxx"
+#include "vtablefactory.hxx"
 
 #include "share.hxx"
 
@@ -48,7 +48,7 @@ static typelib_TypeClass cpp2uno_call(
 {
         int ng = 0; //number of gpr registers used
 #ifndef __NO_FPRS__
-        int nf = 0; //number of fpr regsiters used
+        int nf = 0; //number of fpr registers used
 #endif
         void ** pCppStack; //temporary stack pointer
 
@@ -631,7 +631,7 @@ unsigned char *  codeSnippet( unsigned char * code, sal_Int32 functionIndex, sal
 
     // #now load up the pointer to the saved fpr registers
     //  addi    r6,r1,-2016
-    // if no dedicated floating point registers are used than we have NULL
+    // if no dedicated floating point registers are used then we have NULL
     // pointer there
     //  li      r6, 0
 
@@ -710,7 +710,7 @@ bridges::cpp_uno::shared::VtableFactory::mapBlockToVtable(void * block)
     return static_cast< Slot * >(block) + 2;
 }
 
-sal_Size bridges::cpp_uno::shared::VtableFactory::getBlockSize(
+std::size_t bridges::cpp_uno::shared::VtableFactory::getBlockSize(
     sal_Int32 slotCount)
 {
     return (slotCount + 2) * sizeof (Slot) + slotCount * codeSnippetSize;

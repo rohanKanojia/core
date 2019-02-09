@@ -19,28 +19,23 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_XML_XMLCONTI_HXX
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLCONTI_HXX
 
-#include <xmloff/xmlimp.hxx>
 #include <rtl/ustrbuf.hxx>
-#include "xmlimprt.hxx"
+#include "importcontext.hxx"
 
-class ScXMLContentContext : public SvXMLImportContext
+class ScXMLContentContext : public ScXMLImportContext
 {
     OUStringBuffer sOUText;
     OUStringBuffer& sValue;
-
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
 
 public:
 
     ScXMLContentContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
                        const OUString& rLName,
-                       const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
-                        OUStringBuffer& sValue);
+                       OUStringBuffer& sValue);
 
-    virtual ~ScXMLContentContext();
+    virtual ~ScXMLContentContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                                      const OUString& rLocalName,
                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
 

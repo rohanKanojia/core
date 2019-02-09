@@ -19,8 +19,8 @@
 
 #include <svl/urlbmk.hxx>
 
-#include "lnktrans.hxx"
-#include "scmod.hxx"
+#include <lnktrans.hxx>
+#include <scmod.hxx>
 
 using namespace com::sun::star;
 
@@ -63,11 +63,6 @@ bool ScLinkTransferObj::GetData(
         bOK = SetINetBookmark( aBmk, rFlavor );
     }
     return bOK;
-}
-
-void ScLinkTransferObj::ObjectReleased()
-{
-    TransferableHelper::ObjectReleased();
 }
 
 void ScLinkTransferObj::DragFinished( sal_Int8 nDropAction )

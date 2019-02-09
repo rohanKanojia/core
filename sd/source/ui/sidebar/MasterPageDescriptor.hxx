@@ -23,6 +23,9 @@
 #include "MasterPageContainer.hxx"
 #include <memory>
 
+namespace sd { class PreviewRenderer; }
+class SdDrawDocument;
+
 namespace sd { namespace sidebar {
 
 class PageObjectProvider;
@@ -46,8 +49,6 @@ public:
         const bool bIsPrecious,
         const std::shared_ptr<PageObjectProvider>& rpPageObjectProvider,
         const std::shared_ptr<PreviewProvider>& rpPreviewProvider);
-    MasterPageDescriptor (const MasterPageDescriptor& rDescriptor);
-    ~MasterPageDescriptor();
 
     void SetToken (MasterPageContainer::Token aToken);
 
@@ -69,7 +70,7 @@ public:
         @return
             The returned preview may be empty.
     */
-    Image GetPreview (MasterPageContainer::PreviewSize ePreviewSize) const;
+    const Image& GetPreview (MasterPageContainer::PreviewSize ePreviewSize) const;
 
     /** Use the PreviewProvider to get access to a preview of the master
         page.
@@ -203,12 +204,12 @@ public:
     sal_Int32 mnUseCount;
 
     class URLComparator { public:
-        OUString msURL;
+        OUString const msURL;
         explicit URLComparator (const OUString& sURL);
         bool operator() (const SharedMasterPageDescriptor& rDescriptor);
     };
     class StyleNameComparator { public:
-        OUString msStyleName;
+        OUString const msStyleName;
         explicit StyleNameComparator (const OUString& sStyleName);
         bool operator() (const SharedMasterPageDescriptor& rDescriptor);
     };
@@ -221,7 +222,7 @@ public:
         explicit AllComparator(const SharedMasterPageDescriptor& rDescriptor);
         bool operator() (const SharedMasterPageDescriptor& rDescriptor);
     private:
-        SharedMasterPageDescriptor mpDescriptor;
+        SharedMasterPageDescriptor const mpDescriptor;
     };
 
 };

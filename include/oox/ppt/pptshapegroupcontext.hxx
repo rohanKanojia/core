@@ -20,27 +20,35 @@
 #ifndef INCLUDED_OOX_PPT_PPTSHAPEGROUPCONTEXT_HXX
 #define INCLUDED_OOX_PPT_PPTSHAPEGROUPCONTEXT_HXX
 
+#include <oox/core/contexthandler.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
 #include <oox/drawingml/shapegroupcontext.hxx>
-#include <oox/drawingml/color.hxx>
 #include <oox/ppt/slidepersist.hxx>
+#include <sal/types.h>
+
+namespace oox {
+    class AttributeList;
+    namespace core { class ContextHandler2Helper; }
+    namespace drawingml { class Color; }
+}
 
 namespace oox { namespace ppt {
 
 class PPTShapeGroupContext : public ::oox::drawingml::ShapeGroupContext
 {
-    SlidePersistPtr     mpSlidePersistPtr;
-    ShapeLocation       meShapeLocation;
+    SlidePersistPtr const mpSlidePersistPtr;
+    ShapeLocation const meShapeLocation;
     oox::drawingml::ShapePtr    pGraphicShape;
 
     void                applyFontRefColor(const oox::drawingml::ShapePtr& pShape, const oox::drawingml::Color& rFontRefColor);
 
 public:
     PPTShapeGroupContext(
-        ::oox::core::ContextHandler2Helper& rParent,
+        ::oox::core::ContextHandler2Helper const & rParent,
         const oox::ppt::SlidePersistPtr& rSlidePersistPtr,
         const oox::ppt::ShapeLocation eShapeLocation,
-        oox::drawingml::ShapePtr pMasterShapePtr,
-        oox::drawingml::ShapePtr pGroupShapePtr );
+        const oox::drawingml::ShapePtr& pMasterShapePtr,
+        const oox::drawingml::ShapePtr& pGroupShapePtr );
 
     virtual ::oox::core::ContextHandlerRef
         onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;

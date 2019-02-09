@@ -17,7 +17,6 @@
 #include <vcl/wrkwin.hxx>
 #include <vcl/canvastools.hxx>
 
-#include <comphelper/processfactory.hxx>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
@@ -42,7 +41,7 @@ public:
 void CanvasTest::testComposite()
 {
 #ifdef LINUX
-    VclPtrInstance<WorkWindow> pWin( nullptr, WB_STDWORK );
+    ScopedVclPtrInstance<WorkWindow> pWin( nullptr, WB_STDWORK );
 
     uno::Reference<rendering::XCanvas> xCanvas = pWin->GetCanvas ();
     if( !xCanvas.is() )

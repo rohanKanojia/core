@@ -21,11 +21,12 @@
 
 #include <algorithm>
 
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <com/sun/star/lang/NoSupportException.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <com/sun/star/registry/XRegistryKey.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
+#include <sal/log.hxx>
 #include <tools/diagnose_ex.h>
 #include <vcl/bitmapex.hxx>
 #include <vcl/canvastools.hxx>
@@ -65,9 +66,8 @@ namespace vclcanvas
     }
 
     Canvas::Canvas( const uno::Sequence< uno::Any >&                aArguments,
-                    const uno::Reference< uno::XComponentContext >& rxContext ) :
-        maArguments(aArguments),
-        mxComponentContext( rxContext )
+                    const uno::Reference< uno::XComponentContext >& /*rxContext*/ ) :
+        maArguments(aArguments)
     {
     }
 
@@ -98,9 +98,7 @@ namespace vclcanvas
 
         OutputDevice* pOutDev = reinterpret_cast<OutputDevice*>(nPtr);
         if( !pOutDev )
-            throw lang::NoSupportException(
-                OUString( "Passed OutDev invalid!" ),
-                nullptr);
+            throw lang::NoSupportException("Passed OutDev invalid!", nullptr);
 
         OutDevProviderSharedPtr pOutdevProvider( new OutDevHolder(*pOutDev) );
 
@@ -123,13 +121,11 @@ namespace vclcanvas
     {
         SolarMutexGuard aGuard;
 
-        mxComponentContext.clear();
-
         // forward to parent
         CanvasBaseT::disposeThis();
     }
 
-    OUString SAL_CALL Canvas::getServiceName(  ) throw (css::uno::RuntimeException, std::exception)
+    OUString SAL_CALL Canvas::getServiceName(  )
     {
         return OUString( CANVAS_SERVICE_NAME );
     }

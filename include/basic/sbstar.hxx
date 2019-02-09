@@ -24,7 +24,6 @@
 #include <basic/sbxobj.hxx>
 #include <basic/sbmod.hxx>
 #include <rtl/ustring.hxx>
-#include <osl/mutex.hxx>
 #include <tools/link.hxx>
 
 #include <basic/sbdef.hxx>
@@ -54,42 +53,39 @@ class BASIC_DLLPUBLIC StarBASIC : public SbxObject
     SbxArrayRef     xUnoListeners;          // Listener handled by CreateUnoListener
 
    // Handler-Support:
-    Link<StarBASIC*,bool>       aErrorHdl;              // Error handler
-    Link<StarBASIC*,sal_uInt16> aBreakHdl;              // Breakpoint handler
+    Link<StarBASIC*,bool>            aErrorHdl;              // Error handler
+    Link<StarBASIC*,BasicDebugFlags> aBreakHdl;              // Breakpoint handler
     bool            bNoRtl;                 // if true: do not search RTL
     bool            bBreak;                 // if true: Break, otherwise Step
     bool            bDocBasic;
     bool            bVBAEnabled;
-    BasicLibInfo*   pLibInfo;           // Info block for basic manager
     bool            bQuit;
 
     SbxObjectRef pVBAGlobals;
-    BASIC_DLLPRIVATE SbxObject* getVBAGlobals( );
 
     BASIC_DLLPRIVATE void implClearDependingVarsOnDelete( StarBASIC* pDeletedBasic );
 
 protected:
-    bool                                CError( SbError, const OUString&, sal_Int32, sal_Int32, sal_Int32 );
+    bool                                CError( ErrCode, const OUString&, sal_Int32, sal_Int32, sal_Int32 );
 private:
-    BASIC_DLLPRIVATE void               RTError( SbError, sal_Int32, sal_Int32, sal_Int32 );
-    BASIC_DLLPRIVATE bool               RTError( SbError, const OUString& rMsg, sal_Int32, sal_Int32, sal_Int32 );
-    BASIC_DLLPRIVATE sal_uInt16         BreakPoint( sal_Int32 nLine, sal_Int32 nCol1, sal_Int32 nCol2 );
-    BASIC_DLLPRIVATE sal_uInt16         StepPoint( sal_Int32 nLine, sal_Int32 nCol1, sal_Int32 nCol2 );
+    BASIC_DLLPRIVATE bool               RTError( ErrCode, const OUString& rMsg, sal_Int32, sal_Int32, sal_Int32 );
+    BASIC_DLLPRIVATE BasicDebugFlags    BreakPoint( sal_Int32 nLine, sal_Int32 nCol1, sal_Int32 nCol2 );
+    BASIC_DLLPRIVATE BasicDebugFlags    StepPoint( sal_Int32 nLine, sal_Int32 nCol1, sal_Int32 nCol2 );
     virtual bool LoadData( SvStream&, sal_uInt16 ) override;
     virtual bool StoreData( SvStream& ) const override;
 
 protected:
-    bool        ErrorHdl();
-    sal_uInt16  BreakHdl();
-    virtual ~StarBASIC();
+    bool             ErrorHdl();
+    BasicDebugFlags  BreakHdl();
+    virtual ~StarBASIC() override;
 
 public:
 
-    SBX_DECL_PERSIST_NODATA(SBXCR_SBX,SBXID_BASIC,1);
+    SBX_DECL_PERSIST_NODATA(SBXID_BASIC,1);
 
     StarBASIC( StarBASIC* pParent = nullptr, bool bIsDocBasic = false );
 
-    // #51727 SetModified overridden so that the Modfied-State is
+    // #51727 SetModified overridden so that the Modified-State is
         // not delivered to Parent.
     virtual void SetModified( bool ) override;
 
@@ -102,12 +98,12 @@ public:
     SbModule*       MakeModule( const OUString& rName, const OUString& rSrc );
     SbModule*       MakeModule( const OUString& rName, const css::script::ModuleInfo& mInfo, const OUString& rSrc );
     static void     Stop();
-    static void     Error( SbError );
-    static void     Error( SbError, const OUString& rMsg );
-    static void     FatalError( SbError );
-    static void     FatalError( SbError, const OUString& rMsg );
+    static void     Error( ErrCode );
+    static void     Error( ErrCode, const OUString& rMsg );
+    static void     FatalError( ErrCode );
+    static void     FatalError( ErrCode, const OUString& rMsg );
     static bool     IsRunning();
-    static SbError  GetErrBasic();
+    static ErrCode  GetErrBasic();
     // #66536 make additional message accessible by RTL function Error
     static OUString GetErrorMsg();
     static sal_Int32 GetErl();
@@ -116,10 +112,10 @@ public:
     virtual bool Call( const OUString&, SbxArray* = nullptr ) override;
 
     SbModules&      GetModules() { return pModules; }
-    SbxObject*      GetRtl()     { return pRtl;     }
+    SbxObject*      GetRtl()     { return pRtl.get();     }
     SbModule*       FindModule( const OUString& );
     // Run init code of all modules (including the inserted Doc-Basics)
-    void            InitAllModules( StarBASIC* pBasicNotToInit = nullptr );
+    void            InitAllModules( StarBASIC const * pBasicNotToInit = nullptr );
     void            DeInitAllModules();
     void            ClearAllModuleVars();
 
@@ -127,24 +123,23 @@ public:
     static sal_uInt16 GetLine();
     static sal_uInt16 GetCol1();
     static sal_uInt16 GetCol2();
-    static void     SetErrorData( SbError nCode, sal_uInt16 nLine,
+    static void     SetErrorData( ErrCode nCode, sal_uInt16 nLine,
                                   sal_uInt16 nCol1, sal_uInt16 nCol2 );
 
     // Specific to error handler
-    static void     MakeErrorText( SbError, const OUString& aMsg );
+    static void     MakeErrorText( ErrCode, const OUString& aMsg );
     static const    OUString& GetErrorText();
-    static SbError  GetErrorCode();
-    static bool     IsCompilerError();
-    static sal_uInt16 GetVBErrorCode( SbError nError );
-    static SbError  GetSfxFromVBError( sal_uInt16 nError );
+    static ErrCode const & GetErrorCode();
+    static sal_uInt16 GetVBErrorCode( ErrCode nError );
+    static ErrCode  GetSfxFromVBError( sal_uInt16 nError );
     bool            IsBreak() const             { return bBreak; }
 
-    static Link<StarBASIC*,bool> GetGlobalErrorHdl();
+    static Link<StarBASIC*,bool> const & GetGlobalErrorHdl();
     static void     SetGlobalErrorHdl( const Link<StarBASIC*,bool>& rNewHdl );
 
-    static void     SetGlobalBreakHdl( const Link<StarBASIC*,sal_uInt16>& rNewHdl );
+    static void     SetGlobalBreakHdl( const Link<StarBASIC*,BasicDebugFlags>& rNewHdl );
 
-    SbxArrayRef     getUnoListeners();
+    SbxArrayRef const & getUnoListeners();
 
     static SbxBase* FindSBXInCurrentScope( const OUString& rName );
     static SbMethod* GetActiveMethod( sal_uInt16 nLevel = 0 );
@@ -158,6 +153,8 @@ public:
     bool GetUNOConstant( const OUString& rName, css::uno::Any& aOut );
     void QuitAndExitApplication();
     bool IsQuitApplication() { return bQuit; };
+
+    SbxObject* getVBAGlobals( );
 
     static css::uno::Reference< css::frame::XModel >
         GetModelFromBasic( SbxObject* pBasic );

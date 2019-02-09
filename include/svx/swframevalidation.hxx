@@ -18,22 +18,23 @@
  */
 #ifndef INCLUDED_SVX_SWFRAMEVALIDATION_HXX
 #define INCLUDED_SVX_SWFRAMEVALIDATION_HXX
+
 #include <sal/types.h>
 #include <tools/gen.hxx>
 #include <limits.h>
+#include <svx/swframetypes.hxx>
 
 /*
   struct to determine min/max values for fly frame positioning in Writer
  */
 struct SvxSwFrameValidation
 {
-    sal_Int16           nAnchorType; //css::text::TextContentAnchorType
+    RndStdIds           nAnchorType;
     sal_Int16           nHoriOrient; //css::text::HoriOrientation
     sal_Int16           nVertOrient; //css::text::VertOrientation
     sal_Int16           nHRelOrient; //css::text::RelOrientation
     sal_Int16           nVRelOrient; //css::text::RelOrientation
     bool                bAutoHeight;
-    bool                bAutoWidth;
     bool                bMirror;
     bool                bFollowTextFlow;
 
@@ -56,13 +57,12 @@ struct SvxSwFrameValidation
     Size    aPercentSize;   // Size for 100% value
 
     SvxSwFrameValidation() :
-        nAnchorType(0),
+        nAnchorType(RndStdIds::FLY_AT_PARA),
         nHoriOrient(0),
         nVertOrient(0),
         nHRelOrient(0),
         nVRelOrient(0),
         bAutoHeight(false),
-        bAutoWidth(false),
         bMirror(false),
         bFollowTextFlow( false ),
         nHPos(0),

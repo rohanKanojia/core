@@ -19,20 +19,21 @@
 
 #include <sal/config.h>
 
-#include "uiservices.hxx"
+#include <uiservices.hxx>
 #include "unoDirectSql.hxx"
-#include "dbu_reghelper.hxx"
+#include <dbu_reghelper.hxx>
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/connection/XConnection.hpp>
 #include <com/sun/star/container/XNamed.hpp>
-#include "directsql.hxx"
-#include "dbustrings.hrc"
-#include "datasourceconnector.hxx"
+#include <directsql.hxx>
+#include <stringconstants.hxx>
+#include <datasourceconnector.hxx>
+#include <toolkit/helper/vclunohelper.hxx>
 #include <tools/diagnose_ex.h>
 #include <comphelper/processfactory.hxx>
 
-extern "C" void SAL_CALL createRegistryInfo_ODirectSQLDialog()
+extern "C" void createRegistryInfo_ODirectSQLDialog()
 {
     static ::dbaui::OMultiInstanceAutoRegistration< ::dbaui::ODirectSQLDialog > aAutoRegistration;
 }
@@ -61,7 +62,6 @@ namespace dbaui
     }
 
     css::uno::Sequence<sal_Int8> ODirectSQLDialog::getImplementationId()
-        throw (css::uno::RuntimeException, std::exception)
     {
         return css::uno::Sequence<sal_Int8>();
     }
@@ -71,17 +71,18 @@ namespace dbaui
     IMPLEMENT_SERVICE_INFO_GETSUPPORTED1_STATIC(ODirectSQLDialog, SERVICE_SDB_DIRECTSQLDIALOG)
 
     css::uno::Reference< css::uno::XInterface >
-        SAL_CALL ODirectSQLDialog::Create(const css::uno::Reference< css::lang::XMultiServiceFactory >& _rxORB)
+        ODirectSQLDialog::Create(const css::uno::Reference< css::lang::XMultiServiceFactory >& _rxORB)
     {
         return static_cast< XServiceInfo* >(new ODirectSQLDialog( comphelper::getComponentContext(_rxORB)));
     }
 
     IMPLEMENT_PROPERTYCONTAINER_DEFAULTS( ODirectSQLDialog )
 
-    VclPtr<Dialog> ODirectSQLDialog::createDialog(vcl::Window* _pParent)
+    svt::OGenericUnoDialog::Dialog ODirectSQLDialog::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
     {
         // obtain all the objects needed for the dialog
         Reference< XConnection > xConnection = m_xActiveConnection;
+        auto _pParent = VCLUnoHelper::GetWindow(rParent);
         if ( !xConnection.is() )
         {
             try
@@ -92,15 +93,18 @@ namespace dbaui
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
             }
         }
-        if ( !xConnection.is() )
+        if (!xConnection.is())
+        {
             // can't create the dialog if I have improper settings
-            return nullptr;
+            return svt::OGenericUnoDialog::Dialog();
+        }
 
-        return VclPtr<DirectSQLDialog>::Create( _pParent, xConnection );
+        return svt::OGenericUnoDialog::Dialog(VclPtr<DirectSQLDialog>::Create(_pParent, xConnection));
     }
+
     void ODirectSQLDialog::implInitialize(const Any& _rValue)
     {
         PropertyValue aProperty;

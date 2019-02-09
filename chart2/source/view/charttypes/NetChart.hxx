@@ -20,7 +20,8 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_CHARTTYPES_NETCHART_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_CHARTTYPES_NETCHART_HXX
 
-#include "VSeriesPlotter.hxx"
+#include <memory>
+#include <VSeriesPlotter.hxx>
 
 namespace chart
 {
@@ -34,12 +35,11 @@ public:
     NetChart( const css::uno::Reference< css::chart2::XChartType >& xChartTypeModel
              , sal_Int32 nDimensionCount
              , bool bNoArea
-             , PlottingPositionHelper* pPlottingPositionHelper //takes ownership
+             , std::unique_ptr<PlottingPositionHelper> pPlottingPositionHelper //takes ownership
              );
-    virtual ~NetChart();
+    virtual ~NetChart() override;
 
     virtual void createShapes() override;
-    virtual void addSeries( VDataSeries* pSeries, sal_Int32 zSlot = -1, sal_Int32 xSlot = -1,sal_Int32 ySlot = -1 ) override;
 
     virtual css::drawing::Direction3D  getPreferredDiagramAspectRatio() const override;
 
@@ -49,17 +49,17 @@ public:
     virtual bool isSeparateStackingForDifferentSigns( sal_Int32 nDimensionIndex ) override;
 
     virtual LegendSymbolStyle getLegendSymbolStyle() override;
-    virtual css::uno::Any getExplicitSymbol( const VDataSeries& rSeries, sal_Int32 nPointIndex=-1/*-1 for series symbol*/ ) override;
+    virtual css::uno::Any getExplicitSymbol( const VDataSeries& rSeries, sal_Int32 nPointIndex/*-1 for series symbol*/ ) override;
 
 private: //methods
     void impl_createSeriesShapes();
     bool impl_createArea( VDataSeries* pSeries
                 , css::drawing::PolyPolygonShape3D* pSeriesPoly
-                , css::drawing::PolyPolygonShape3D* pPreviousSeriesPoly
-                , PlottingPositionHelper* pPosHelper );
+                , css::drawing::PolyPolygonShape3D const * pPreviousSeriesPoly
+                , PlottingPositionHelper const * pPosHelper );
     bool impl_createLine( VDataSeries* pSeries
                 , css::drawing::PolyPolygonShape3D* pSeriesPoly
-                , PlottingPositionHelper* pPosHelper );
+                , PlottingPositionHelper const * pPosHelper );
 
 private: //member
     std::unique_ptr<PlottingPositionHelper> m_pMainPosHelper;

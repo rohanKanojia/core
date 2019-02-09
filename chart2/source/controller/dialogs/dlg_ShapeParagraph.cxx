@@ -17,9 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dlg_ShapeParagraph.hxx"
-#include "ResId.hxx"
-#include "ResourceIds.hrc"
+#include <dlg_ShapeParagraph.hxx>
 
 #include <svl/cjkoptions.hxx>
 #include <svl/intitem.hxx>
@@ -31,11 +29,9 @@ using namespace ::com::sun::star;
 namespace chart
 {
 
-ShapeParagraphDialog::ShapeParagraphDialog(vcl::Window* pParent,
+ShapeParagraphDialog::ShapeParagraphDialog(weld::Window* pParent,
     const SfxItemSet* pAttr)
-    : SfxTabDialog(pParent, "ParagraphDialog",
-        "modules/schart/ui/paradialog.ui", pAttr)
-    , m_nTabPageId(0)
+    : SfxTabDialogController(pParent, "modules/schart/ui/paradialog.ui", "ParagraphDialog", pAttr)
 {
     SvtCJKOptions aCJKOptions;
 
@@ -49,16 +45,17 @@ ShapeParagraphDialog::ShapeParagraphDialog(vcl::Window* pParent,
     {
         RemoveTabPage("labelTP_PARA_ASIAN");
     }
-    m_nTabPageId = AddTabPage("labelTP_TABULATOR", RID_SVXPAGE_TABULATOR);
+    AddTabPage("labelTP_TABULATOR", RID_SVXPAGE_TABULATOR);
 }
 
-void ShapeParagraphDialog::PageCreated( sal_uInt16 nId, SfxTabPage& rPage )
+void ShapeParagraphDialog::PageCreated(const OString& rId, SfxTabPage& rPage)
 {
-    if (nId == m_nTabPageId)
+    if (rId == "labelTP_TABULATOR")
     {
         SfxAllItemSet aSet( *( GetInputSetImpl()->GetPool() ) );
-        aSet.Put( SfxUInt16Item( SID_SVXTABULATORTABPAGE_CONTROLFLAGS,
-            ( TABTYPE_ALL &~TABTYPE_LEFT ) | ( TABFILL_ALL &~TABFILL_NONE ) ) );
+        TabulatorDisableFlags const nFlags(( TabulatorDisableFlags::TypeMask &~TabulatorDisableFlags::TypeLeft ) |
+                                     ( TabulatorDisableFlags::FillMask &~TabulatorDisableFlags::FillNone ));
+        aSet.Put( SfxUInt16Item( SID_SVXTABULATORTABPAGE_DISABLEFLAGS, static_cast<sal_uInt16>(nFlags)) );
         rPage.PageCreated( aSet );
     }
 }

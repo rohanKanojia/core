@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <svtools/acceleratorexecute.hxx>
 
 #include <com/sun/star/frame/ModuleManager.hpp>
@@ -31,10 +32,9 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/util/URLTransformer.hpp>
-#include <toolkit/helper/vclunohelper.hxx>
-#include <comphelper/processfactory.hxx>
 #include <cppuhelper/implbase.hxx>
 
+#include <vcl/evntpost.hxx>
 #include <vcl/window.hxx>
 #include <vcl/svapp.hxx>
 #include <osl/mutex.hxx>
@@ -42,29 +42,29 @@
 namespace svt
 {
 
-class SVT_DLLPRIVATE AsyncAccelExec : public cppu::WeakImplHelper<css::lang::XEventListener>
+class AsyncAccelExec : public cppu::WeakImplHelper<css::lang::XEventListener>
 {
     private:
         css::uno::Reference<css::lang::XComponent> m_xFrame;
         css::uno::Reference< css::frame::XDispatch > m_xDispatch;
-        css::util::URL m_aURL;
+        css::util::URL const m_aURL;
         vcl::EventPoster m_aAsyncCallback;
     public:
 
         /** creates a new instance of this class, which can be used
             one times only!
 
-            This instance can be forced to execute it's internal set request
-            asynchronous. After that it deletes itself !
+            This instance can be forced to execute its internal set request
+            asynchronous. After that it deletes itself!
          */
-        static AsyncAccelExec* createOnShotInstance(const css::uno::Reference<css::lang::XComponent>& xFrame,
+        static AsyncAccelExec* createOneShotInstance(const css::uno::Reference<css::lang::XComponent>& xFrame,
                                                     const css::uno::Reference<css::frame::XDispatch>& xDispatch,
                                                     const css::util::URL& rURL);
 
         void execAsync();
     private:
 
-        virtual void SAL_CALL disposing(const css::lang::EventObject&) throw (css::uno::RuntimeException, std::exception) override
+        virtual void SAL_CALL disposing(const css::lang::EventObject&) override
         {
             m_xFrame->removeEventListener(this);
             m_xFrame.clear();
@@ -74,11 +74,11 @@ class SVT_DLLPRIVATE AsyncAccelExec : public cppu::WeakImplHelper<css::lang::XEv
         /** @short  allow creation of instances of this class
                     by using our factory only!
          */
-        SVT_DLLPRIVATE AsyncAccelExec(const css::uno::Reference<css::lang::XComponent>& xFrame,
+        AsyncAccelExec(const css::uno::Reference<css::lang::XComponent>& xFrame,
                                       const css::uno::Reference< css::frame::XDispatch >& xDispatch,
                                       const css::util::URL& rURL);
 
-        DECL_DLLPRIVATE_LINK_TYPED(impl_ts_asyncCallback, LinkParamNone*, void);
+        DECL_LINK(impl_ts_asyncCallback, LinkParamNone*, void);
 };
 
 
@@ -202,7 +202,7 @@ bool AcceleratorExecute::execute(const css::awt::KeyEvent& aAWTKey)
     {
         // Note: Such instance can be used one times only and destroy itself afterwards .-)
         css::uno::Reference<css::lang::XComponent> xFrame(xProvider, css::uno::UNO_QUERY);
-        AsyncAccelExec* pExec = AsyncAccelExec::createOnShotInstance(xFrame, xDispatch, aURL);
+        AsyncAccelExec* pExec = AsyncAccelExec::createOneShotInstance(xFrame, xDispatch, aURL);
         pExec->execAsync();
     }
 
@@ -214,7 +214,7 @@ css::awt::KeyEvent AcceleratorExecute::st_VCLKey2AWTKey(const vcl::KeyCode& aVCL
 {
     css::awt::KeyEvent aAWTKey;
     aAWTKey.Modifiers = 0;
-    aAWTKey.KeyCode   = (sal_Int16)aVCLKey.GetCode();
+    aAWTKey.KeyCode   = static_cast<sal_Int16>(aVCLKey.GetCode());
 
     if (aVCLKey.IsShift())
         aAWTKey.Modifiers |= css::awt::KeyModifier::SHIFT;
@@ -234,7 +234,7 @@ vcl::KeyCode AcceleratorExecute::st_AWTKey2VCLKey(const css::awt::KeyEvent& aAWT
     bool bMod1  = ((aAWTKey.Modifiers & css::awt::KeyModifier::MOD1 ) == css::awt::KeyModifier::MOD1  );
     bool bMod2  = ((aAWTKey.Modifiers & css::awt::KeyModifier::MOD2 ) == css::awt::KeyModifier::MOD2  );
     bool bMod3  = ((aAWTKey.Modifiers & css::awt::KeyModifier::MOD3 ) == css::awt::KeyModifier::MOD3  );
-    sal_uInt16   nKey   = (sal_uInt16)aAWTKey.KeyCode;
+    sal_uInt16   nKey   = static_cast<sal_uInt16>(aAWTKey.KeyCode);
 
     return vcl::KeyCode(nKey, bShift, bMod1, bMod2, bMod3);
 }
@@ -373,8 +373,8 @@ css::uno::Reference< css::ui::XAcceleratorConfiguration > AcceleratorExecute::st
     {
         sModule = xModuleDetection->identify(xFrame);
     }
-    catch(const css::uno::RuntimeException&rEx)
-        { (void) rEx; throw; }
+    catch(const css::uno::RuntimeException&)
+        { throw; }
     catch(const css::uno::Exception&)
         { return css::uno::Reference< css::ui::XAcceleratorConfiguration >(); }
 
@@ -439,7 +439,7 @@ AsyncAccelExec::AsyncAccelExec(const css::uno::Reference<css::lang::XComponent>&
 {
 }
 
-AsyncAccelExec* AsyncAccelExec::createOnShotInstance(const css::uno::Reference<css::lang::XComponent> &xFrame,
+AsyncAccelExec* AsyncAccelExec::createOneShotInstance(const css::uno::Reference<css::lang::XComponent> &xFrame,
                                                      const css::uno::Reference< css::frame::XDispatch >& xDispatch,
                                                      const css::util::URL& rURL)
 {
@@ -456,7 +456,7 @@ void AsyncAccelExec::execAsync()
     m_aAsyncCallback.Post();
 }
 
-IMPL_LINK_NOARG_TYPED(AsyncAccelExec, impl_ts_asyncCallback, LinkParamNone*, void)
+IMPL_LINK_NOARG(AsyncAccelExec, impl_ts_asyncCallback, LinkParamNone*, void)
 {
     if (m_xDispatch.is())
     {

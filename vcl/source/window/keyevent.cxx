@@ -19,14 +19,7 @@
 
 #include <com/sun/star/awt/KeyEvent.hpp>
 #include <com/sun/star/awt/KeyModifier.hpp>
-#include <tools/debug.hxx>
 #include <vcl/event.hxx>
-
-KeyEvent::KeyEvent (const KeyEvent& rKeyEvent) :
-    maKeyCode (rKeyEvent.maKeyCode),
-    mnRepeat  (rKeyEvent.mnRepeat),
-    mnCharCode(rKeyEvent.mnCharCode)
-{}
 
 KeyEvent KeyEvent::LogicalTextDirectionality (TextDirectionality eMode) const
 {
@@ -37,7 +30,7 @@ KeyEvent KeyEvent::LogicalTextDirectionality (TextDirectionality eMode) const
 
     switch (eMode)
     {
-        case TextDirectionality_RightToLeft_TopToBottom:
+        case TextDirectionality::RightToLeft_TopToBottom:
             switch (nCode)
             {
                 case KEY_LEFT:  aClone.maKeyCode = vcl::KeyCode(KEY_RIGHT, nMod); break;
@@ -45,7 +38,7 @@ KeyEvent KeyEvent::LogicalTextDirectionality (TextDirectionality eMode) const
             }
             break;
 
-        case TextDirectionality_TopToBottom_RightToLeft:
+        case TextDirectionality::TopToBottom_RightToLeft:
             switch (nCode)
             {
                 case KEY_DOWN:  aClone.maKeyCode = vcl::KeyCode(KEY_RIGHT, nMod); break;
@@ -55,7 +48,17 @@ KeyEvent KeyEvent::LogicalTextDirectionality (TextDirectionality eMode) const
             }
             break;
 
-        case TextDirectionality_LeftToRight_TopToBottom:
+        case TextDirectionality::BottomToTop_LeftToRight:
+            switch (nCode)
+            {
+                case KEY_DOWN:  aClone.maKeyCode = vcl::KeyCode(KEY_LEFT, nMod); break;
+                case KEY_UP:    aClone.maKeyCode = vcl::KeyCode(KEY_RIGHT, nMod); break;
+                case KEY_LEFT:  aClone.maKeyCode = vcl::KeyCode(KEY_UP, nMod); break;
+                case KEY_RIGHT: aClone.maKeyCode = vcl::KeyCode(KEY_DOWN, nMod); break;
+            }
+            break;
+
+        case TextDirectionality::LeftToRight_TopToBottom:
             /* do nothing */
             break;
     }

@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SLIDESHOW_SOURCE_ENGINE_REHEARSETIMINGSACTIVITY_HXX
 #define INCLUDED_SLIDESHOW_SOURCE_ENGINE_REHEARSETIMINGSACTIVITY_HXX
 
-#include "activity.hxx"
+#include <activity.hxx>
 
 #include <basegfx/range/b2drange.hxx>
 
@@ -52,7 +52,7 @@ public:
     static std::shared_ptr<RehearseTimingsActivity> create(
         const SlideShowContext& rContext );
 
-    virtual ~RehearseTimingsActivity();
+    virtual ~RehearseTimingsActivity() override;
     RehearseTimingsActivity(const RehearseTimingsActivity&) = delete;
     RehearseTimingsActivity& operator=(const RehearseTimingsActivity&) = delete;
 

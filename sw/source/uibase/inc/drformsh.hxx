@@ -34,9 +34,9 @@ private:
 
 public:
                 SwDrawFormShell(SwView &rView);
-    virtual     ~SwDrawFormShell();
+    virtual     ~SwDrawFormShell() override;
 
-    void        Execute(SfxRequest &);
+    void        Execute(SfxRequest const &);
     void        GetState(SfxItemSet &);
 };
 

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "store/store.h"
+#include <store/store.h>
 
 #include <sal/types.h>
 #include <rtl/string.hxx>
@@ -64,7 +64,7 @@ using namespace store;
 /*
  * store_acquireHandle.
  */
-storeError SAL_CALL store_acquireHandle (
+storeError store_acquireHandle (
     storeHandle Handle
 ) SAL_THROW_EXTERN_C()
 {
@@ -79,7 +79,7 @@ storeError SAL_CALL store_acquireHandle (
 /*
  * store_releaseHandle.
  */
-storeError SAL_CALL store_releaseHandle (
+storeError store_releaseHandle (
     storeHandle Handle
 ) SAL_THROW_EXTERN_C()
 {
@@ -99,7 +99,7 @@ storeError SAL_CALL store_releaseHandle (
 /*
  * store_createMemoryFile.
  */
-storeError SAL_CALL store_createMemoryFile (
+storeError store_createMemoryFile (
     sal_uInt16       nPageSize,
     storeFileHandle *phFile
 ) SAL_THROW_EXTERN_C()
@@ -120,7 +120,7 @@ storeError SAL_CALL store_createMemoryFile (
         return store_E_OutOfMemory;
 
     eErrCode = xManager->initialize (
-        &*xLockBytes, store_AccessCreate, nPageSize);
+        &*xLockBytes, storeAccessMode::Create, nPageSize);
     if (eErrCode != store_E_None)
         return eErrCode;
 
@@ -133,7 +133,7 @@ storeError SAL_CALL store_createMemoryFile (
 /*
  * store_openFile.
  */
-storeError SAL_CALL store_openFile (
+storeError store_openFile (
     rtl_uString     *pFilename,
     storeAccessMode  eAccessMode,
     sal_uInt16       nPageSize,
@@ -171,7 +171,7 @@ storeError SAL_CALL store_openFile (
 /*
  * store_closeFile.
  */
-storeError SAL_CALL store_closeFile (
+storeError store_closeFile (
     storeFileHandle Handle
 ) SAL_THROW_EXTERN_C()
 {
@@ -188,7 +188,7 @@ storeError SAL_CALL store_closeFile (
 /*
  * store_flushFile.
  */
-storeError SAL_CALL store_flushFile (
+storeError store_flushFile (
     storeFileHandle Handle
 ) SAL_THROW_EXTERN_C()
 {
@@ -208,10 +208,10 @@ storeError SAL_CALL store_flushFile (
 /*
  * store_openDirectory.
  */
-storeError SAL_CALL store_openDirectory (
+storeError store_openDirectory (
     storeFileHandle       hFile,
-    rtl_uString          *pPath,
-    rtl_uString          *pName,
+    rtl_uString const    *pPath,
+    rtl_uString const    *pName,
     storeAccessMode       eAccessMode,
     storeDirectoryHandle *phDirectory
 ) SAL_THROW_EXTERN_C()
@@ -248,7 +248,7 @@ storeError SAL_CALL store_openDirectory (
 /*
  * store_findFirst.
  */
-storeError SAL_CALL store_findFirst (
+storeError store_findFirst (
     storeDirectoryHandle  Handle,
     storeFindData        *pFindData
 ) SAL_THROW_EXTERN_C()
@@ -265,14 +265,14 @@ storeError SAL_CALL store_findFirst (
     memset (pFindData, 0, sizeof (storeFindData));
 
     // Find first.
-    pFindData->m_nReserved = (sal_uInt32)(~0);
+    pFindData->m_nReserved = sal_uInt32(~0);
     return xDirectory->iterate (*pFindData);
 }
 
 /*
  * store_findNext.
  */
-storeError SAL_CALL store_findNext (
+storeError store_findNext (
     storeDirectoryHandle  Handle,
     storeFindData        *pFindData
 ) SAL_THROW_EXTERN_C()
@@ -302,10 +302,10 @@ storeError SAL_CALL store_findNext (
 /*
  * store_openStream
  */
-storeError SAL_CALL store_openStream (
+storeError store_openStream (
     storeFileHandle    hFile,
-    rtl_uString       *pPath,
-    rtl_uString       *pName,
+    rtl_uString const *pPath,
+    rtl_uString const *pName,
     storeAccessMode    eAccessMode,
     storeStreamHandle *phStream
 ) SAL_THROW_EXTERN_C()
@@ -342,7 +342,7 @@ storeError SAL_CALL store_openStream (
 /*
  * store_readStream.
  */
-storeError SAL_CALL store_readStream (
+storeError store_readStream (
     storeStreamHandle  Handle,
     sal_uInt32         nOffset,
     void              *pBuffer,
@@ -364,7 +364,7 @@ storeError SAL_CALL store_readStream (
 /*
  * store_writeStream.
  */
-storeError SAL_CALL store_writeStream (
+storeError store_writeStream (
     storeStreamHandle  Handle,
     sal_uInt32         nOffset,
     const void        *pBuffer,
@@ -386,10 +386,10 @@ storeError SAL_CALL store_writeStream (
 /*
  * store_remove.
  */
-storeError SAL_CALL store_remove (
+storeError store_remove (
     storeFileHandle Handle,
-    rtl_uString    *pPath,
-    rtl_uString    *pName
+    rtl_uString const *pPath,
+    rtl_uString const *pName
 ) SAL_THROW_EXTERN_C()
 {
     storeError eErrCode = store_E_None;

@@ -74,11 +74,11 @@ published service GraphicDescriptor
             <li>image/x-dxf</li>
             <li>image/x-met</li>
             <li>image/x-pict</li>
-            <li>image/x-sgf</li>
             <li>image/x-svm</li>
             <li>image/x-wmf</li>
-            <li>image/x-sgv</li>
             <li>image/x-emf</li>
+            <li>image/svg+xml</li>
+            <li>application/pdf</li>
             <li>image/x-vclgraphic</li>
         </ul>
 
@@ -136,6 +136,18 @@ published service GraphicDescriptor
         querying for the GraphicDescriptor</p>
     */
     [optional, property] boolean Animated;
+
+    /** Indicates that the graphic is an external linked graphic
+
+        @since LibreOffice 6.1
+    */
+    [optional, property] boolean Linked;
+
+    /** The URL of the location from where the graphic was loaded from
+
+        @since LibreOffice 6.1
+    */
+    [optional, property] string OriginURL;
 };
 
 } ; } ; } ; } ;

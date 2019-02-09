@@ -34,16 +34,15 @@
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/numeric/ftools.hxx>
 
-#include "tools.hxx"
-#include "eventqueue.hxx"
-#include "eventmultiplexer.hxx"
-#include "listenercontainer.hxx"
-#include "delayevent.hxx"
-#include "unoview.hxx"
-#include "unoviewcontainer.hxx"
+#include <tools.hxx>
+#include <eventqueue.hxx>
+#include <eventmultiplexer.hxx>
+#include <listenercontainer.hxx>
+#include <delayevent.hxx>
+#include <unoview.hxx>
+#include <unoviewcontainer.hxx>
 
-#include <boost/mem_fn.hpp>
-
+#include <functional>
 #include <memory>
 #include <algorithm>
 #include <vector>
@@ -54,7 +53,7 @@ using namespace ::com::sun::star;
 namespace std
 {
     // add operator== for weak_ptr, so we can use std::find over lists of them
-    template<typename T> bool operator==( weak_ptr<T> const& rLHS,
+    template<typename T> static bool operator==( weak_ptr<T> const& rLHS,
                                           weak_ptr<T> const& rRHS )
     {
         return rLHS.lock().get() == rRHS.lock().get();
@@ -126,24 +125,17 @@ public:
     virtual void SAL_CALL disposing() override;
 
 private:
-    virtual void SAL_CALL disposing( const lang::EventObject& Source )
-        throw (uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing( const lang::EventObject& Source ) override;
 
     // XMouseListener implementation
-    virtual void SAL_CALL mousePressed( const awt::MouseEvent& e )
-        throw (uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL mouseReleased( const awt::MouseEvent& e )
-        throw (uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL mouseEntered( const awt::MouseEvent& e )
-        throw (uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL mouseExited( const awt::MouseEvent& e )
-        throw (uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL mousePressed( const awt::MouseEvent& e ) override;
+    virtual void SAL_CALL mouseReleased( const awt::MouseEvent& e ) override;
+    virtual void SAL_CALL mouseEntered( const awt::MouseEvent& e ) override;
+    virtual void SAL_CALL mouseExited( const awt::MouseEvent& e ) override;
 
     // XMouseMotionListener implementation
-    virtual void SAL_CALL mouseDragged( const awt::MouseEvent& e )
-        throw (uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL mouseMoved( const awt::MouseEvent& e )
-        throw (uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL mouseDragged( const awt::MouseEvent& e ) override;
+    virtual void SAL_CALL mouseMoved( const awt::MouseEvent& e ) override;
 
 
     EventQueue*           mpEventQueue;
@@ -310,7 +302,7 @@ void SAL_CALL EventMultiplexerListener::disposing()
 }
 
 void SAL_CALL EventMultiplexerListener::disposing(
-    const lang::EventObject& /*rSource*/ ) throw (uno::RuntimeException, std::exception)
+    const lang::EventObject& /*rSource*/ )
 {
     // there's no real point in acting on this message - after all,
     // the event sources are the XSlideShowViews, which must be
@@ -322,7 +314,7 @@ void SAL_CALL EventMultiplexerListener::disposing(
 }
 
 void SAL_CALL EventMultiplexerListener::mousePressed(
-    const awt::MouseEvent& e ) throw (uno::RuntimeException, std::exception)
+    const awt::MouseEvent& e )
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -337,7 +329,7 @@ void SAL_CALL EventMultiplexerListener::mousePressed(
 }
 
 void SAL_CALL EventMultiplexerListener::mouseReleased(
-    const awt::MouseEvent& e ) throw (uno::RuntimeException, std::exception)
+    const awt::MouseEvent& e )
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -352,20 +344,20 @@ void SAL_CALL EventMultiplexerListener::mouseReleased(
 }
 
 void SAL_CALL EventMultiplexerListener::mouseEntered(
-    const awt::MouseEvent& /*e*/ ) throw (uno::RuntimeException, std::exception)
+    const awt::MouseEvent& /*e*/ )
 {
     // not used here
 }
 
 void SAL_CALL EventMultiplexerListener::mouseExited(
-    const awt::MouseEvent& /*e*/ ) throw (uno::RuntimeException, std::exception)
+    const awt::MouseEvent& /*e*/ )
 {
     // not used here
 }
 
 // XMouseMotionListener implementation
 void SAL_CALL EventMultiplexerListener::mouseDragged(
-    const awt::MouseEvent& e ) throw (uno::RuntimeException, std::exception)
+    const awt::MouseEvent& e )
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -380,7 +372,7 @@ void SAL_CALL EventMultiplexerListener::mouseDragged(
 }
 
 void SAL_CALL EventMultiplexerListener::mouseMoved(
-    const awt::MouseEvent& e ) throw (uno::RuntimeException, std::exception)
+    const awt::MouseEvent& e )
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -406,21 +398,21 @@ bool EventMultiplexerImpl::notifyAllAnimationHandlers( ImplAnimationHandlers con
 template <typename XSlideShowViewFunc>
 void EventMultiplexerImpl::forEachView( XSlideShowViewFunc pViewMethod )
 {
-    if( pViewMethod )
+    if( !pViewMethod )
+        return;
+
+    // (un)register mouse listener on all views
+    for( UnoViewVector::const_iterator aIter( mrViewContainer.begin() ),
+             aEnd( mrViewContainer.end() ); aIter != aEnd; ++aIter )
     {
-        // (un)register mouse listener on all views
-        for( UnoViewVector::const_iterator aIter( mrViewContainer.begin() ),
-                 aEnd( mrViewContainer.end() ); aIter != aEnd; ++aIter )
+        uno::Reference<presentation::XSlideShowView> xView ((*aIter)->getUnoView());
+        if (xView.is())
         {
-            uno::Reference<presentation::XSlideShowView> xView ((*aIter)->getUnoView());
-            if (xView.is())
-            {
-                (xView.get()->*pViewMethod)( mxListener.get() );
-            }
-            else
-            {
-                OSL_ASSERT(xView.is());
-            }
+            (xView.get()->*pViewMethod)( mxListener.get() );
+        }
+        else
+        {
+            OSL_ASSERT(xView.is());
         }
     }
 }
@@ -1003,25 +995,25 @@ void EventMultiplexer::notifyUserPaintStrokeWidth( double rUserStrokeWidth )
 void EventMultiplexer::notifyUserPaintDisabled()
 {
     mpImpl->maUserPaintEventHandlers.applyAll(
-        boost::mem_fn(&UserPaintEventHandler::disable));
+        std::mem_fn(&UserPaintEventHandler::disable));
 }
 
 void EventMultiplexer::notifySwitchPenMode(){
     mpImpl->maUserPaintEventHandlers.applyAll(
-        boost::mem_fn(&UserPaintEventHandler::switchPenMode));
+        std::mem_fn(&UserPaintEventHandler::switchPenMode));
 }
 
 void EventMultiplexer::notifySwitchEraserMode(){
     mpImpl->maUserPaintEventHandlers.applyAll(
-        boost::mem_fn(&UserPaintEventHandler::switchEraserMode));
+        std::mem_fn(&UserPaintEventHandler::switchEraserMode));
 }
 
 //adding erasing all ink features with UserPaintOverlay
-void EventMultiplexer::notifyEraseAllInk( bool const& rEraseAllInk )
+void EventMultiplexer::notifyEraseAllInk( bool bEraseAllInk )
 {
     mpImpl->maUserPaintEventHandlers.applyAll(
-        [&rEraseAllInk]( const UserPaintEventHandlerSharedPtr& pHandler )
-        { return pHandler->eraseAllInkChanged( rEraseAllInk ); } );
+        [&bEraseAllInk]( const UserPaintEventHandlerSharedPtr& pHandler )
+        { return pHandler->eraseAllInkChanged( bEraseAllInk ); } );
 }
 
 //adding erasing features with UserPaintOverlay
@@ -1040,13 +1032,13 @@ bool EventMultiplexer::notifyNextEffect()
 void EventMultiplexer::notifySlideStartEvent()
 {
     mpImpl->maSlideStartHandlers.applyAll(
-        boost::mem_fn(&EventHandler::handleEvent) );
+        std::mem_fn(&EventHandler::handleEvent) );
 }
 
 bool EventMultiplexer::notifySlideEndEvent()
 {
     return mpImpl->maSlideEndHandlers.applyAll(
-        boost::mem_fn(&EventHandler::handleEvent) );
+        std::mem_fn(&EventHandler::handleEvent) );
 }
 
 bool EventMultiplexer::notifyAnimationStart(
@@ -1066,7 +1058,7 @@ bool EventMultiplexer::notifyAnimationEnd(
 bool EventMultiplexer::notifySlideAnimationsEnd()
 {
     return mpImpl->maSlideAnimationsEndHandlers.applyAll(
-        boost::mem_fn(&EventHandler::handleEvent));
+        std::mem_fn(&EventHandler::handleEvent));
 }
 
 bool EventMultiplexer::notifyAudioStopped(
@@ -1135,9 +1127,9 @@ void EventMultiplexer::notifyViewRemoved( const UnoViewSharedPtr& rView )
         { return pHandler.lock()->viewRemoved( rView ); } );
 }
 
-bool EventMultiplexer::notifyViewChanged( const UnoViewSharedPtr& rView )
+void EventMultiplexer::notifyViewChanged( const UnoViewSharedPtr& rView )
 {
-    return mpImpl->maViewHandlers.applyAll(
+    mpImpl->maViewHandlers.applyAll(
         [&rView]( const ViewEventHandlerWeakPtr& pHandler )
         { return pHandler.lock()->viewChanged( rView ); } );
 }
@@ -1155,7 +1147,7 @@ void EventMultiplexer::notifyViewChanged( const uno::Reference<presentation::XSl
 void EventMultiplexer::notifyViewsChanged()
 {
     mpImpl->maViewHandlers.applyAll(
-        boost::mem_fn( &ViewEventHandler::viewsChanged ));
+        std::mem_fn( &ViewEventHandler::viewsChanged ));
 }
 
 void EventMultiplexer::notifyViewClobbered(

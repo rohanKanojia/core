@@ -10,9 +10,14 @@
 #ifndef INCLUDED_OOX_OLE_AXBINARYWRITER_HXX
 #define INCLUDED_OOX_OLE_AXBINARYWRITER_HXX
 
+#include <cstddef>
 #include <utility>
+
 #include <oox/helper/binaryoutputstream.hxx>
+#include <oox/helper/binarystreambase.hxx>
 #include <oox/helper/refvector.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 namespace oox {
 namespace ole {
@@ -63,8 +68,8 @@ public:
 private:
     BinaryOutputStream*  mpOutStrm;           ///< The wrapped input stream.
     sal_Int64           mnStrmPos;          ///< Tracks relative position in the stream.
-    sal_Int64           mnStrmSize;         ///< Size of the wrapped stream data.
-    sal_Int64           mnWrappedBeginPos;     ///< starting pos or wrapped stream
+    sal_Int64 const     mnStrmSize;         ///< Size of the wrapped stream data.
+    sal_Int64 const     mnWrappedBeginPos;     ///< starting pos or wrapped stream
 };
 
 /** A pair of integer values as a property. */
@@ -80,8 +85,8 @@ public:
     /** Write an integer property value to the stream, the
         respective flag in the property mask is set. */
     template< typename StreamType, typename DataType >
-    void                writeIntProperty( DataType& ornValue )
-                            { if( startNextProperty() ) maOutStrm.writeAligned< StreamType >( ornValue ); }
+    void                writeIntProperty( DataType ornValue )
+                            { startNextProperty(); maOutStrm.writeAligned< StreamType >( ornValue ); }
     /** Write a boolean property value to the stream, the
         respective flag in the property mask is set. */
     void                writeBoolProperty( bool orbValue );
@@ -101,7 +106,7 @@ public:
 
 private:
     bool                ensureValid();
-    bool                startNextProperty( bool bSkip = false );
+    void                startNextProperty( bool bSkip = false );
 
 private:
     /** Base class for complex properties such as string, point, size, GUID, picture. */
@@ -125,7 +130,7 @@ private:
     struct StringProperty : public ComplexProperty
     {
         OUString&    mrValue;
-        sal_uInt32          mnSize;
+        sal_uInt32 const    mnSize;
 
         explicit            StringProperty( OUString& rValue, sal_uInt32 nSize ) :
                                 mrValue( rValue ), mnSize( nSize ) {}
@@ -149,7 +154,7 @@ private:
     sal_Int64           mnPropFlags;        ///< Flags specifying existing properties.
     sal_Int64           mnNextProp;         ///< Next property to read.
     bool                mbValid;            ///< True = stream still valid.
-    bool                mb64BitPropFlags;
+    bool const          mb64BitPropFlags;
 };
 
 

@@ -17,15 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstdlib>
 #include <iostream>
 #include <stdio.h>
-#include <string.h>
+#include <string>
 #include <stack>
 
-#include "sal/main.h"
+#include <sal/main.h>
 
 #include <com/sun/star/lang/XComponent.hpp>
 
@@ -39,7 +39,6 @@
 #include <cppuhelper/bootstrap.hxx>
 #include <cppuhelper/implbase.hxx>
 
-#include <osl/diagnose.h>
 
 #include "LocaleNode.hxx"
 
@@ -63,8 +62,7 @@ public:
     {}
 
 public:
-    virtual sal_Int32 SAL_CALL readBytes( Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead )
-        throw(NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception) override
+    virtual sal_Int32 SAL_CALL readBytes( Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead ) override
         {
             nBytesToRead = (nBytesToRead > m_seq.getLength() - nPos ) ?
                 m_seq.getLength() - nPos :
@@ -75,23 +73,19 @@ public:
         }
     virtual sal_Int32 SAL_CALL readSomeBytes(
         css::uno::Sequence< sal_Int8 >& aData,
-        sal_Int32 nMaxBytesToRead )
-        throw(NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception) override
+        sal_Int32 nMaxBytesToRead ) override
         {
             return readBytes( aData, nMaxBytesToRead );
         }
-    virtual void SAL_CALL skipBytes( sal_Int32 /*nBytesToSkip*/ )
-        throw(NotConnectedException, BufferSizeExceededException, IOException, RuntimeException, std::exception) override
+    virtual void SAL_CALL skipBytes( sal_Int32 /*nBytesToSkip*/ ) override
         {
             // not implemented
         }
-    virtual sal_Int32 SAL_CALL available(  )
-        throw(NotConnectedException, IOException, RuntimeException, std::exception) override
+    virtual sal_Int32 SAL_CALL available(  ) override
         {
             return m_seq.getLength() - nPos;
         }
-    virtual void SAL_CALL closeInput(  )
-        throw(NotConnectedException, IOException, RuntimeException, std::exception) override
+    virtual void SAL_CALL closeInput(  ) override
         {
             // not needed
         }
@@ -102,7 +96,7 @@ public:
 
 // Helper : create an input stream from a file
 
-Reference< XInputStream > createStreamFromFile(
+static Reference< XInputStream > createStreamFromFile(
     const char *pcFile )
 {
     Reference<  XInputStream >  r;
@@ -154,13 +148,12 @@ public:
     TestDocumentHandler(const char* locale, const char* outFile )
         : rootNode(nullptr)
         , nError(0)
+        , theLocale(locale)
         , of(outFile, locale)
     {
-        strncpy( theLocale, locale, sizeof(theLocale) );
-        theLocale[sizeof(theLocale)-1] = 0;
     }
 
-    virtual ~TestDocumentHandler(  )
+    virtual ~TestDocumentHandler(  ) override
     {
         of.closeOutput();
         delete rootNode;
@@ -168,7 +161,7 @@ public:
 
 
 public: // Error handler
-    virtual void SAL_CALL error(const Any& aSAXParseException) throw (SAXException, RuntimeException, std::exception) override
+    virtual void SAL_CALL error(const Any& aSAXParseException) override
     {
         ++nError;
         printf( "Error !\n" );
@@ -177,12 +170,12 @@ public: // Error handler
             Reference < XInterface >() ,
             aSAXParseException );
     }
-    virtual void SAL_CALL fatalError(const Any& /*aSAXParseException*/) throw (SAXException, RuntimeException, std::exception) override
+    virtual void SAL_CALL fatalError(const Any& /*aSAXParseException*/) override
     {
         ++nError;
         printf( "Fatal Error !\n" );
     }
-    virtual void SAL_CALL warning(const Any& /*aSAXParseException*/) throw (SAXException, RuntimeException, std::exception) override
+    virtual void SAL_CALL warning(const Any& /*aSAXParseException*/) override
     {
         printf( "Warning !\n" );
     }
@@ -194,15 +187,15 @@ public: // ExtendedDocumentHandler
     stack<LocaleNode *> currentNode ;
     LocaleNode * rootNode;
 
-    virtual void SAL_CALL startDocument() throw (SAXException, RuntimeException, std::exception) override
+    virtual void SAL_CALL startDocument() override
     {
-    printf( "parsing document %s started\n", theLocale);
+    printf( "parsing document %s started\n", theLocale.c_str());
     of.writeAsciiString("#include <sal/types.h>\n\n\n");
     of.writeAsciiString("#include <stdio.h>\n\n");
     of.writeAsciiString("extern \"C\" {\n\n");
     }
 
-    virtual void SAL_CALL endDocument() throw (SAXException, RuntimeException, std::exception) override
+    virtual void SAL_CALL endDocument() override
     {
         if (rootNode)
         {
@@ -210,24 +203,23 @@ public: // ExtendedDocumentHandler
             int err = rootNode->getError();
             if (err)
             {
-                printf( "Error: in data for %s: %d\n", theLocale, err);
+                printf( "Error: in data for %s: %d\n", theLocale.c_str(), err);
                 nError += err;
             }
         }
         else
         {
             ++nError;
-            printf( "Error: no data for %s\n", theLocale);
+            printf( "Error: no data for %s\n", theLocale.c_str());
         }
-        printf( "parsing document %s finished\n", theLocale);
+        printf( "parsing document %s finished\n", theLocale.c_str());
 
         of.writeAsciiString("} // extern \"C\"\n\n");
         of.closeOutput();
     }
 
     virtual void SAL_CALL startElement(const OUString& aName,
-                              const Reference< XAttributeList > & xAttribs)
-        throw (SAXException,RuntimeException, std::exception) override
+                              const Reference< XAttributeList > & xAttribs) override
     {
 
         LocaleNode * l =  LocaleNode::createNode (aName, xAttribs);
@@ -241,37 +233,35 @@ public: // ExtendedDocumentHandler
     }
 
 
-    virtual void SAL_CALL endElement(const OUString& /*aName*/) throw (SAXException,RuntimeException, std::exception) override
+    virtual void SAL_CALL endElement(const OUString& /*aName*/) override
     {
         currentNode.pop();
     }
 
-    virtual void SAL_CALL characters(const OUString& aChars) throw (SAXException,RuntimeException, std::exception) override
+    virtual void SAL_CALL characters(const OUString& aChars) override
     {
 
         LocaleNode * l = currentNode.top();
         l->setValue (aChars);
     }
 
-    virtual void SAL_CALL ignorableWhitespace(const OUString& /*aWhitespaces*/) throw (SAXException,RuntimeException, std::exception) override
+    virtual void SAL_CALL ignorableWhitespace(const OUString& /*aWhitespaces*/) override
     {
     }
 
-    virtual void SAL_CALL processingInstruction(const OUString& /*aTarget*/, const OUString& /*aData*/) throw (SAXException,RuntimeException, std::exception) override
+    virtual void SAL_CALL processingInstruction(const OUString& /*aTarget*/, const OUString& /*aData*/) override
     {
         // ignored
     }
 
-    virtual void SAL_CALL setDocumentLocator(const Reference< XLocator> & /*xLocator*/)
-        throw (SAXException,RuntimeException, std::exception) override
+    virtual void SAL_CALL setDocumentLocator(const Reference< XLocator> & /*xLocator*/) override
     {
         // ignored
     }
 
     virtual InputSource SAL_CALL resolveEntity(
         const OUString& sPublicId,
-        const OUString& sSystemId)
-        throw (RuntimeException, std::exception) override
+        const OUString& sSystemId) override
     {
         InputSource source;
         source.sSystemId = sSystemId;
@@ -283,27 +273,27 @@ public: // ExtendedDocumentHandler
         return source;
     }
 
-    virtual void SAL_CALL startCDATA() throw (SAXException,RuntimeException, std::exception) override
+    virtual void SAL_CALL startCDATA() override
     {
     }
-    virtual void SAL_CALL endCDATA() throw (RuntimeException, std::exception) override
+    virtual void SAL_CALL endCDATA() override
     {
     }
-    virtual void SAL_CALL comment(const OUString& /*sComment*/) throw (SAXException,RuntimeException, std::exception) override
+    virtual void SAL_CALL comment(const OUString& /*sComment*/) override
     {
     }
-    virtual void SAL_CALL unknown(const OUString& /*sString*/) throw (SAXException,RuntimeException, std::exception) override
+    virtual void SAL_CALL unknown(const OUString& /*sString*/) override
     {
     }
 
-    virtual void SAL_CALL allowLineBreak() throw (SAXException, RuntimeException, std::exception ) override
+    virtual void SAL_CALL allowLineBreak() override
     {
 
     }
 
 public:
     int nError;
-    sal_Char theLocale[50];
+    std::string theLocale;
     OFileWriter of;
 };
 

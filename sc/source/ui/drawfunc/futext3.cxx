@@ -28,24 +28,25 @@
 #include <sfx2/objsh.hxx>
 #include <editeng/writingmodeitem.hxx>
 
-#include "global.hxx"
-#include "drwlayer.hxx"
-#include "userdat.hxx"
-#include "tabvwsh.hxx"
-#include "document.hxx"
-#include "editutil.hxx"
-#include "futext.hxx"
-#include "docsh.hxx"
-#include "postit.hxx"
-#include "globstr.hrc"
-#include "attrib.hxx"
-#include "scitems.hxx"
-#include "drawview.hxx"
-#include "undocell.hxx"
+#include <global.hxx>
+#include <drwlayer.hxx>
+#include <userdat.hxx>
+#include <tabvwsh.hxx>
+#include <document.hxx>
+#include <editutil.hxx>
+#include <futext.hxx>
+#include <docsh.hxx>
+#include <postit.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <attrib.hxx>
+#include <scitems.hxx>
+#include <drawview.hxx>
+#include <undocell.hxx>
 
-//  Editieren von Notiz-Legendenobjekten muss immer ueber StopEditMode beendet werden,
-//  damit die Aenderungen ins Dokument uebernommen werden!
-//  (Fontwork-Execute in drawsh und drtxtob passiert nicht fuer Legendenobjekte)
+//  Editing of Note-Key-Objects has to be stopped always via StopEditMode,
+//  so that changes are taken over into the document!
+//  (Fontwork-Execute in drawsh and drtxtob does not happen for Key-Objects)
 
 void FuText::StopEditMode()
 {
@@ -56,7 +57,7 @@ void FuText::StopEditMode()
     if ( pObject->GetLayer() == SC_LAYER_INTERN )
         pView->LockInternalLayer();
 
-    ScViewData& rViewData = pViewShell->GetViewData();
+    ScViewData& rViewData = rViewShell.GetViewData();
     ScDocument& rDoc = *rViewData.GetDocument();
     ScDrawLayer* pDrawLayer = rDoc.GetDrawLayer();
     OSL_ENSURE( pDrawLayer && (pDrawLayer == pDrDoc), "FuText::StopEditMode - missing or different drawing layers" );
@@ -67,33 +68,33 @@ void FuText::StopEditMode()
     {
         aNotePos = pCaptData->maStart;
         pNote = rDoc.GetNote( aNotePos );
-        OSL_ENSURE( pNote && (pNote->GetCaption() == pObject), "FuText::StopEditMode - missing or invalid cell note" );
+        OSL_ENSURE( pNote && (pNote->GetCaption().get() == pObject), "FuText::StopEditMode - missing or invalid cell note" );
     }
 
     ScDocShell* pDocShell = rViewData.GetDocShell();
-    ::svl::IUndoManager* pUndoMgr = rDoc.IsUndoEnabled() ? pDocShell->GetUndoManager() : nullptr;
+    SfxUndoManager* pUndoMgr = rDoc.IsUndoEnabled() ? pDocShell->GetUndoManager() : nullptr;
     bool bNewNote = false;
     if( pNote && pUndoMgr )
     {
         /*  Put all undo actions already collected (e.g. create caption object)
             and all following undo actions (text changed) together into a ListAction. */
-        SdrUndoGroup* pCalcUndo = pDrawLayer->GetCalcUndo();
+        std::unique_ptr<SdrUndoGroup> pCalcUndo = pDrawLayer->GetCalcUndo();
 
         if(pCalcUndo)
         {
-            const OUString aUndoStr = ScGlobal::GetRscString( STR_UNDO_EDITNOTE );
-            pUndoMgr->EnterListAction( aUndoStr, aUndoStr );
+            const OUString aUndoStr = ScResId( STR_UNDO_EDITNOTE );
+            pUndoMgr->EnterListAction( aUndoStr, aUndoStr, 0, rViewShell.GetViewShellId() );
 
             /*  Note has been created before editing, if first undo action is
                 an insert action. Needed below to decide whether to drop the
                 undo if editing a new note has been cancelled. */
-            bNewNote = (pCalcUndo->GetActionCount() > 0) && dynamic_cast< SdrUndoNewObj* >(pCalcUndo->GetAction( 0 ));
+            bNewNote = (pCalcUndo->GetActionCount() > 0) && dynamic_cast< ScUndoNewSdrCaptionObj* >(pCalcUndo->GetAction( 0 ));
 
             // create a "insert note" undo action if needed
             if( bNewNote )
-                pUndoMgr->AddUndoAction( new ScUndoReplaceNote( *pDocShell, aNotePos, pNote->GetNoteData(), true, pCalcUndo ) );
+                pUndoMgr->AddUndoAction( std::make_unique<ScUndoReplaceNote>( *pDocShell, aNotePos, pNote->GetNoteData(), true, std::move(pCalcUndo) ) );
             else
-                pUndoMgr->AddUndoAction( pCalcUndo );
+                pUndoMgr->AddUndoAction( std::move(pCalcUndo) );
         }
     }
 
@@ -106,12 +107,12 @@ void FuText::StopEditMode()
         below together with the cell note if the text is empty (independent of
         border and area formatting). It is possible to prevent automatic
         deletion by passing sal_True to this function. The return value changes
-        from SDRENDTEXTEDIT_DELETED to SDRENDTEXTEDIT_SHOULDBEDELETED in this
+        from SdrEndTextEditKind::Deleted to SdrEndTextEditKind::ShouldBeDeleted in this
         case. */
     /*SdrEndTextEditKind eResult =*/ pView->SdrEndTextEdit( pNote != nullptr );
 
     // or ScEndTextEdit (with drawview.hxx)
-    pViewShell->SetDrawTextUndo( nullptr );
+    rViewShell.SetDrawTextUndo( nullptr );
 
     vcl::Cursor* pCur = pWindow->GetCursor();
     if( pCur && pCur->IsVisible() )
@@ -119,6 +120,8 @@ void FuText::StopEditMode()
 
     if( pNote )
     {
+        ScTabView::OnLOKNoteStateChanged( pNote );
+
         // hide the caption object if it is in hidden state
         pNote->ShowCaptionTemp( aNotePos, false );
 
@@ -140,7 +143,7 @@ void FuText::StopEditMode()
                 // delete note from document (removes caption, but does not delete it)
                 rDoc.ReleaseNote(aNotePos);
                 // create undo action for removed note
-                pUndoMgr->AddUndoAction( new ScUndoReplaceNote( *pDocShell, aNotePos, aNoteData, false, pDrawLayer->GetCalcUndo() ) );
+                pUndoMgr->AddUndoAction( std::make_unique<ScUndoReplaceNote>( *pDocShell, aNotePos, aNoteData, false, pDrawLayer->GetCalcUndo() ) );
             }
             else
             {
@@ -160,7 +163,7 @@ void FuText::StopEditMode()
                 to deleted text. If the note has been created *and* is deleted,
                 the last undo action can be removed completely. Note: The
                 function LeaveListAction() removes the last action by itself,
-                if it is empty (when result is SDRENDTEXTEDIT_UNCHANGED). */
+                if it is empty (when result is SdrEndTextEditKind::Unchanged). */
             if( bNewNote && bDeleteNote )
             {
                 pUndoMgr->RemoveLastUndoAction();
@@ -170,14 +173,13 @@ void FuText::StopEditMode()
                 SfxListUndoAction* pAction = dynamic_cast< SfxListUndoAction* >( pUndoMgr->GetUndoAction() );
                 OSL_ENSURE( pAction, "FuText::StopEditMode - list undo action expected" );
                 if( pAction )
-                    pAction->SetComment( ScGlobal::GetRscString( bNewNote ? STR_UNDO_INSERTNOTE : STR_UNDO_DELETENOTE ) );
+                    pAction->SetComment( ScResId( bNewNote ? STR_UNDO_INSERTNOTE : STR_UNDO_DELETENOTE ) );
             }
         }
 
         // invalidate stream positions only for the affected sheet
         rDoc.LockStreamValid(false);
-        if (rDoc.IsStreamValid(aNotePos.Tab()))
-            rDoc.SetStreamValid(aNotePos.Tab(), false);
+        rDoc.SetStreamValid(aNotePos.Tab(), false);
     }
 }
 

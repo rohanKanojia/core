@@ -19,14 +19,16 @@
 
 
 #include <svtools/svmedit.hxx>
+#include <vcl/event.hxx>
 #include <vcl/xtextedt.hxx>
+#include <vcl/textview.hxx>
 #include <vcl/builderfactory.hxx>
 #include <svtools/editsyntaxhighlighter.hxx>
 #include <vcl/txtattr.hxx>
 
 
 MultiLineEditSyntaxHighlight::MultiLineEditSyntaxHighlight( vcl::Window* pParent, WinBits nWinStyle,
-    HighlighterLanguage aLanguage): MultiLineEdit(pParent,nWinStyle), mbDoBracketHilight(true), aHighlighter(aLanguage)
+    HighlighterLanguage aLanguage): MultiLineEdit(pParent,nWinStyle), aHighlighter(aLanguage)
 {
     EnableUpdateData(300);
 }
@@ -72,44 +74,44 @@ void MultiLineEditSyntaxHighlight::DoBracketHilight(sal_uInt16 nKey)
         }
     }
 
-    if (nChar != -1)
+    if (nChar == -1)
+        return;
+
+    sal_uInt32 nPara = nStartPara;
+    do
     {
-        sal_uInt32 nPara = nStartPara;
-        do
+        if (nPara == nStartPara && nStartPos == 0)
+            continue;
+
+        OUString aLine( GetTextEngine()->GetText( nPara ) );
+
+        if (aLine.isEmpty())
+            continue;
+
+        for (sal_Int32 i = (nPara==nStartPara) ? nStartPos-1 : aLine.getLength()-1; i>0; --i)
         {
-            if (nPara == nStartPara && nStartPos == 0)
-                continue;
-
-            OUString aLine( GetTextEngine()->GetText( nPara ) );
-
-            if (aLine.isEmpty())
-                continue;
-
-            for (sal_Int32 i = (nPara==nStartPara) ? nStartPos-1 : aLine.getLength()-1; i>0; --i)
+            if (aLine[i] == nChar)
             {
-                if (aLine[i] == nChar)
+                if (!nCount)
                 {
-                    if (!nCount)
-                    {
-                        GetTextEngine()->SetAttrib( TextAttribFontWeight( WEIGHT_ULTRABOLD ), nPara, i, i+1 );
-                        GetTextEngine()->SetAttrib( TextAttribFontColor( Color(0,0,0) ), nPara, i, i+1 );
-                        GetTextEngine()->SetAttrib( TextAttribFontWeight( WEIGHT_ULTRABOLD ), nStartPara, nStartPos, nStartPos );
-                        GetTextEngine()->SetAttrib( TextAttribFontColor( Color(0,0,0) ), nStartPara, nStartPos, nStartPos );
-                        return;
-                    }
-                    else
-                        --nCount;
+                    GetTextEngine()->SetAttrib( TextAttribFontWeight( WEIGHT_ULTRABOLD ), nPara, i, i+1 );
+                    GetTextEngine()->SetAttrib( TextAttribFontColor( Color(0,0,0) ), nPara, i, i+1 );
+                    GetTextEngine()->SetAttrib( TextAttribFontWeight( WEIGHT_ULTRABOLD ), nStartPara, nStartPos, nStartPos );
+                    GetTextEngine()->SetAttrib( TextAttribFontColor( Color(0,0,0) ), nStartPara, nStartPos, nStartPos );
+                    return;
                 }
-                if (aLine[i] == nKey)
-                    ++nCount;
+                else
+                    --nCount;
             }
-        } while (nPara--);
-    }
+            if (aLine[i] == nKey)
+                ++nCount;
+        }
+    } while (nPara--);
 }
 
 bool MultiLineEditSyntaxHighlight::PreNotify( NotifyEvent& rNEvt )
 {
-    if ( mbDoBracketHilight && (rNEvt.GetType() == MouseNotifyEvent::KEYINPUT) )
+    if ( rNEvt.GetType() == MouseNotifyEvent::KEYINPUT )
         DoBracketHilight(rNEvt.GetKeyEvent()->GetCharCode());
 
     return MultiLineEdit::PreNotify(rNEvt);
@@ -124,13 +126,13 @@ Color MultiLineEditSyntaxHighlight::GetColorValue(TokenType aToken)
         {
             switch (aToken)
             {
-                case TokenType::Identifier: aColor = (ColorData)m_aColorConfig.GetColorValue(svtools::SQLIDENTIFIER).nColor; break;
-                case TokenType::Number:     aColor = (ColorData)m_aColorConfig.GetColorValue(svtools::SQLNUMBER).nColor; break;
-                case TokenType::String:     aColor = (ColorData)m_aColorConfig.GetColorValue(svtools::SQLSTRING).nColor; break;
-                case TokenType::Operator:   aColor = (ColorData)m_aColorConfig.GetColorValue(svtools::SQLOPERATOR).nColor; break;
-                case TokenType::Keywords:   aColor = (ColorData)m_aColorConfig.GetColorValue(svtools::SQLKEYWORD).nColor; break;
-                case TokenType::Parameter:  aColor = (ColorData)m_aColorConfig.GetColorValue(svtools::SQLPARAMETER).nColor; break;
-                case TokenType::Comment:    aColor = (ColorData)m_aColorConfig.GetColorValue(svtools::SQLCOMMENT).nColor; break;
+                case TokenType::Identifier: aColor = m_aColorConfig.GetColorValue(svtools::SQLIDENTIFIER).nColor; break;
+                case TokenType::Number:     aColor = m_aColorConfig.GetColorValue(svtools::SQLNUMBER).nColor; break;
+                case TokenType::String:     aColor = m_aColorConfig.GetColorValue(svtools::SQLSTRING).nColor; break;
+                case TokenType::Operator:   aColor = m_aColorConfig.GetColorValue(svtools::SQLOPERATOR).nColor; break;
+                case TokenType::Keywords:   aColor = m_aColorConfig.GetColorValue(svtools::SQLKEYWORD).nColor; break;
+                case TokenType::Parameter:  aColor = m_aColorConfig.GetColorValue(svtools::SQLPARAMETER).nColor; break;
+                case TokenType::Comment:    aColor = m_aColorConfig.GetColorValue(svtools::SQLCOMMENT).nColor; break;
                 default:            aColor = Color(0,0,0);
             }
             break;
@@ -167,10 +169,9 @@ void MultiLineEditSyntaxHighlight::UpdateData()
         GetTextEngine()->RemoveAttribs( nLine );
         std::vector<HighlightPortion> aPortions;
         aHighlighter.getHighlightPortions( aLine, aPortions );
-        for (std::vector<HighlightPortion>::iterator i(aPortions.begin());
-             i != aPortions.end(); ++i)
+        for (auto const& portion : aPortions)
         {
-            GetTextEngine()->SetAttrib( TextAttribFontColor( GetColorValue(i->tokenType) ), nLine, i->nBegin, i->nEnd );
+            GetTextEngine()->SetAttrib( TextAttribFontColor( GetColorValue(portion.tokenType) ), nLine, portion.nBegin, portion.nEnd );
         }
     }
     GetTextView()->ShowCursor( false );

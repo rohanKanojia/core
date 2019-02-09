@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -86,7 +87,7 @@ class SalesFilter implements XActionListener, XPropertyChangeListener, XResetLis
             m_xFilterList.setPropertyValue( "Dropdown", Boolean.TRUE );
             m_xFilterList.setPropertyValue( "LineCount", Short.valueOf( (short)11 ) );
             m_xFilterList.setPropertyValue( "StringItemList", new String[] { "ever (means no filter)", "this morning", "1 week ago", "1 month ago", "1 year ago", "<other>" } );
-            m_xFilterList.setPropertyValue( "DefaultSelection", new Short[] { Short.valueOf( (short)0 ) } );
+            m_xFilterList.setPropertyValue( "DefaultSelection", new short[] { (short)0 } );
 
             m_xApplyFilter.setPropertyValue( "Label", "Apply Filter" );
 
@@ -505,3 +506,5 @@ class SalesFilter implements XActionListener, XPropertyChangeListener, XResetLis
     }
 
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

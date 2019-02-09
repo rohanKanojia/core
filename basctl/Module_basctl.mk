@@ -23,16 +23,18 @@ ifneq ($(filter SCRIPTING,$(BUILD_TYPE)),)
 
 $(eval $(call gb_Module_add_targets,basctl,\
 	Library_basctl \
+	UIConfig_basicide \
 ))
 
 $(eval $(call gb_Module_add_l10n_targets,basctl,\
-	AllLangResTarget_basctl \
+	AllLangMoTarget_basctl \
 ))
 
 endif
 
-$(eval $(call gb_Module_add_l10n_targets,basctl,\
-	UIConfig_basicide \
+# screenshots
+$(eval $(call gb_Module_add_screenshot_targets,basctl,\
+    CppunitTest_basctl_dialogs_test \
 ))
 
 # vim: set noet sw=4 ts=4:

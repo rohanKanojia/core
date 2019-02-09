@@ -23,7 +23,7 @@
 #include "LoggedResources.hxx"
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
-#include <i18nlangtag/languagetag.hxx>
+#include <i18nlangtag/lang.h>
 #include <map>
 #include <memory>
 
@@ -39,7 +39,7 @@ class ThemeTable : public LoggedProperties, public LoggedTable
 
 public:
     ThemeTable();
-    virtual ~ThemeTable();
+    virtual ~ThemeTable() override;
 
     const OUString getFontNameForTheme(const Id id) const;
     static OUString getStringForTheme(const Id id);
@@ -57,7 +57,7 @@ public:
     static OUString fromLocaleToScriptTag(const OUString& sLocale);
     static OUString fromLCIDToScriptTag(LanguageType lang);
 };
-typedef std::shared_ptr< ThemeTable >          ThemeTablePtr;
+typedef tools::SvRef< ThemeTable >          ThemeTablePtr;
 }}
 
 #endif

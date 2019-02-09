@@ -25,7 +25,9 @@
 #include "ximpnote.hxx"
 #include <tools/debug.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
+#include <com/sun/star/style/XStyle.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <com/sun/star/presentation/XPresentationPage.hpp>
@@ -35,16 +37,18 @@
 #include <com/sun/star/beans/XPropertyState.hpp>
 #include <com/sun/star/presentation/XHandoutMasterSupplier.hpp>
 #include <comphelper/namecontainer.hxx>
+#include <xmloff/autolayout.hxx>
 #include <xmloff/xmlprcon.hxx>
 #include <xmloff/families.hxx>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <svl/zforlist.hxx>
-#include "PropertySetMerger.hxx"
+#include <PropertySetMerger.hxx>
 #include "sdpropls.hxx"
 #include "layerimp.hxx"
 #include <xmloff/XMLGraphicsDefaultStyle.hxx>
-#include "XMLNumberStylesImport.hxx"
+#include <XMLNumberStylesImport.hxx>
 #include <xmloff/xmlerror.hxx>
+#include <xmloff/table/XMLTableImport.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -62,10 +66,8 @@ public:
                  ::std::vector< XMLPropertyState > &rProps,
                  const rtl::Reference < SvXMLImportPropertyMapper > &rMap );
 
-    virtual ~SdXMLDrawingPagePropertySetContext();
-
     using SvXMLPropertySetContext::CreateChildContext;
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                                    const OUString& rLocalName,
                                    const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList,
                                    ::std::vector< XMLPropertyState > &rProperties,
@@ -84,18 +86,14 @@ SdXMLDrawingPagePropertySetContext::SdXMLDrawingPagePropertySetContext(
 {
 }
 
-SdXMLDrawingPagePropertySetContext::~SdXMLDrawingPagePropertySetContext()
-{
-}
-
-SvXMLImportContext *SdXMLDrawingPagePropertySetContext::CreateChildContext(
+SvXMLImportContextRef SdXMLDrawingPagePropertySetContext::CreateChildContext(
                    sal_uInt16 p_nPrefix,
                    const OUString& rLocalName,
                    const uno::Reference< xml::sax::XAttributeList > & xAttrList,
                    ::std::vector< XMLPropertyState > &rProperties,
                    const XMLPropertyState& rProp )
 {
-    SvXMLImportContext *pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     switch( mxMapper->getPropertySetMapper()->GetEntryContextId( rProp.mnIndex ) )
     {
@@ -118,12 +116,12 @@ SvXMLImportContext *SdXMLDrawingPagePropertySetContext::CreateChildContext(
     }
     }
 
-    if( !pContext )
-        pContext = SvXMLPropertySetContext::CreateChildContext( p_nPrefix, rLocalName,
+    if (!xContext)
+        xContext = SvXMLPropertySetContext::CreateChildContext( p_nPrefix, rLocalName,
                                                             xAttrList,
                                                             rProperties, rProp );
 
-    return pContext;
+    return xContext;
 }
 
 class SdXMLDrawingPageStyleContext : public XMLPropStyleContext
@@ -137,9 +135,8 @@ public:
         const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList,
         SvXMLStylesContext& rStyles,
         sal_uInt16 nFamily = XML_STYLE_FAMILY_SD_DRAWINGPAGE_ID);
-    virtual ~SdXMLDrawingPageStyleContext();
 
-    SvXMLImportContext * CreateChildContext(
+    SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
@@ -162,16 +159,12 @@ SdXMLDrawingPageStyleContext::SdXMLDrawingPageStyleContext(
 {
 }
 
-SdXMLDrawingPageStyleContext::~SdXMLDrawingPageStyleContext()
-{
-}
-
-SvXMLImportContext *SdXMLDrawingPageStyleContext::CreateChildContext(
+SvXMLImportContextRef SdXMLDrawingPageStyleContext::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const uno::Reference< xml::sax::XAttributeList > & xAttrList )
 {
-    SvXMLImportContext *pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     if( XML_NAMESPACE_STYLE == nPrefix &&
         IsXMLToken( rLocalName, XML_DRAWING_PAGE_PROPERTIES ) )
@@ -179,17 +172,17 @@ SvXMLImportContext *SdXMLDrawingPageStyleContext::CreateChildContext(
         rtl::Reference < SvXMLImportPropertyMapper > xImpPrMap =
             GetStyles()->GetImportPropertyMapper( GetFamily() );
         if( xImpPrMap.is() )
-            pContext = new SdXMLDrawingPagePropertySetContext( GetImport(), nPrefix,
+            xContext = new SdXMLDrawingPagePropertySetContext( GetImport(), nPrefix,
                                                     rLocalName, xAttrList,
                                                     GetProperties(),
                                                     xImpPrMap );
     }
 
-    if( !pContext )
-        pContext = XMLPropStyleContext::CreateChildContext( nPrefix, rLocalName,
+    if (!xContext)
+        xContext = XMLPropStyleContext::CreateChildContext( nPrefix, rLocalName,
                                                           xAttrList );
 
-    return pContext;
+    return xContext;
 }
 
 void SdXMLDrawingPageStyleContext::Finish( bool bOverwrite )
@@ -200,19 +193,18 @@ void SdXMLDrawingPageStyleContext::Finish( bool bOverwrite )
 
     const rtl::Reference< XMLPropertySetMapper >& rImpPrMap = GetStyles()->GetImportPropertyMapper( GetFamily() )->getPropertySetMapper();
 
-    ::std::vector< XMLPropertyState >::iterator property = rProperties.begin();
-    for(; property != rProperties.end(); ++property)
+    for(auto& property : rProperties)
     {
-        if( property->mnIndex == -1 )
+        if( property.mnIndex == -1 )
             continue;
 
-        sal_Int16 nContextID = rImpPrMap->GetEntryContextId(property->mnIndex);
+        sal_Int16 nContextID = rImpPrMap->GetEntryContextId(property.mnIndex);
         switch( nContextID )
         {
             case CTF_DATE_TIME_FORMAT:
             {
                 OUString sStyleName;
-                (*property).maValue >>= sStyleName;
+                property.maValue >>= sStyleName;
 
                 sal_Int32 nStyle = 0;
 
@@ -223,7 +215,7 @@ void SdXMLDrawingPageStyleContext::Finish( bool bOverwrite )
                 if( pSdNumStyle )
                     nStyle = pSdNumStyle->GetDrawKey();
 
-                (*property).maValue <<= nStyle;
+                property.maValue <<= nStyle;
             }
             break;
         }
@@ -260,7 +252,7 @@ void SdXMLDrawingPageStyleContext::FillPropertySet(
 
     rtl::Reference < SvXMLImportPropertyMapper > xImpPrMap =
         GetStyles()->GetImportPropertyMapper( GetFamily() );
-    DBG_ASSERT( xImpPrMap.is(), "There is the import prop mapper" );
+    SAL_WARN_IF( !xImpPrMap.is(), "xmloff", "There is the import prop mapper" );
     if( xImpPrMap.is() )
         xImpPrMap->FillPropertySet( GetProperties(), rPropSet, aContextIDs );
 
@@ -299,12 +291,12 @@ SdXMLPageMasterStyleContext::SdXMLPageMasterStyleContext(
     const OUString& rLName,
     const uno::Reference< xml::sax::XAttributeList>& xAttrList)
 :   SvXMLStyleContext(rImport, nPrfx, rLName, xAttrList, XML_STYLE_FAMILY_SD_PAGEMASTERSTYLECONEXT_ID),
-    mnBorderBottom( 0L ),
-    mnBorderLeft( 0L ),
-    mnBorderRight( 0L ),
-    mnBorderTop( 0L ),
-    mnWidth( 0L ),
-    mnHeight( 0L ),
+    mnBorderBottom( 0 ),
+    mnBorderLeft( 0 ),
+    mnBorderRight( 0 ),
+    mnBorderTop( 0 ),
+    mnWidth( 0 ),
+    mnHeight( 0 ),
     meOrientation(GetSdImport().IsDraw() ? view::PaperOrientation_PORTRAIT : view::PaperOrientation_LANDSCAPE)
 {
     // set family to something special at SvXMLStyleContext
@@ -379,8 +371,7 @@ SdXMLPageMasterContext::SdXMLPageMasterContext(
     sal_uInt16 nPrfx,
     const OUString& rLName,
     const uno::Reference< xml::sax::XAttributeList>& xAttrList)
-:   SvXMLStyleContext(rImport, nPrfx, rLName, xAttrList, XML_STYLE_FAMILY_SD_PAGEMASTERCONEXT_ID),
-    mpPageMasterStyle( nullptr )
+:   SvXMLStyleContext(rImport, nPrfx, rLName, xAttrList, XML_STYLE_FAMILY_SD_PAGEMASTERCONEXT_ID)
 {
     // set family to something special at SvXMLStyleContext
     // for differences in search-methods
@@ -391,54 +382,38 @@ SdXMLPageMasterContext::SdXMLPageMasterContext(
         OUString sAttrName = xAttrList->getNameByIndex(i);
         OUString aLocalName;
         sal_uInt16 nPrefix = GetSdImport().GetNamespaceMap().GetKeyByAttrName(sAttrName, &aLocalName);
-        OUString sValue = xAttrList->getValueByIndex(i);
         const SvXMLTokenMap& rAttrTokenMap = GetSdImport().GetPageMasterAttrTokenMap();
 
         switch(rAttrTokenMap.Get(nPrefix, aLocalName))
         {
             case XML_TOK_PAGEMASTER_NAME:
             {
-                msName = sValue;
                 break;
             }
         }
     }
 }
 
-SdXMLPageMasterContext::~SdXMLPageMasterContext()
-{
-    // release remembered contexts, they are no longer needed
-    if(mpPageMasterStyle)
-    {
-        mpPageMasterStyle->ReleaseRef();
-        mpPageMasterStyle = nullptr;
-    }
-}
-
-SvXMLImportContext *SdXMLPageMasterContext::CreateChildContext(
+SvXMLImportContextRef SdXMLPageMasterContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList >& xAttrList )
 {
-    SvXMLImportContext* pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     if(nPrefix == XML_NAMESPACE_STYLE && IsXMLToken( rLocalName, XML_PAGE_LAYOUT_PROPERTIES) )
     {
-        pContext = new SdXMLPageMasterStyleContext(GetSdImport(), nPrefix, rLocalName, xAttrList);
-
-        // remember SdXMLPresentationPlaceholderContext for later evaluation
-        pContext->AddFirstRef();
-        DBG_ASSERT(!mpPageMasterStyle, "PageMasterStyle is set, there seem to be two of them (!)");
-        mpPageMasterStyle = static_cast<SdXMLPageMasterStyleContext*>(pContext);
+        DBG_ASSERT(!mxPageMasterStyle.is(), "PageMasterStyle is set, there seem to be two of them (!)");
+        mxPageMasterStyle.set(new SdXMLPageMasterStyleContext(GetSdImport(), nPrefix, rLocalName, xAttrList));
+        xContext = mxPageMasterStyle.get();
     }
 
     // call base class
-    if(!pContext)
-        pContext = SvXMLStyleContext::CreateChildContext(nPrefix, rLocalName, xAttrList);
+    if (!xContext)
+        xContext = SvXMLStyleContext::CreateChildContext(nPrefix, rLocalName, xAttrList);
 
-    return pContext;
+    return xContext;
 }
-
 
 SdXMLPresentationPageLayoutContext::SdXMLPresentationPageLayoutContext(
     SdXMLImport& rImport,
@@ -446,52 +421,35 @@ SdXMLPresentationPageLayoutContext::SdXMLPresentationPageLayoutContext(
     const OUString& rLName,
     const uno::Reference< xml::sax::XAttributeList >& xAttrList)
 :   SvXMLStyleContext(rImport, nPrfx, rLName, xAttrList, XML_STYLE_FAMILY_SD_PRESENTATIONPAGELAYOUT_ID),
-    mnTypeId( 20 ) // AUTOLAYOUT_NONE
+    mnTypeId( AUTOLAYOUT_NONE )
 {
     // set family to something special at SvXMLStyleContext
     // for differences in search-methods
-
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    for( sal_Int16 i=0; i < nAttrCount; i++ )
-    {
-        const OUString& rAttrName = xAttrList->getNameByIndex( i );
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetImport().GetNamespaceMap().GetKeyByAttrName( rAttrName, &aLocalName );
-
-        if(nPrefix == XML_NAMESPACE_STYLE && IsXMLToken( aLocalName, XML_NAME ) )
-        {
-            msName = xAttrList->getValueByIndex( i );
-        }
-    }
 }
 
-SdXMLPresentationPageLayoutContext::~SdXMLPresentationPageLayoutContext()
-{
-}
-
-SvXMLImportContext *SdXMLPresentationPageLayoutContext::CreateChildContext(
+SvXMLImportContextRef SdXMLPresentationPageLayoutContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList >& xAttrList )
 {
-    SvXMLImportContext* pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     if(nPrefix == XML_NAMESPACE_PRESENTATION && IsXMLToken( rLocalName, XML_PLACEHOLDER ) )
     {
+        const rtl::Reference< SdXMLPresentationPlaceholderContext > xLclContext{
+            new SdXMLPresentationPlaceholderContext(GetSdImport(), nPrefix, rLocalName, xAttrList)};
         // presentation:placeholder inside style:presentation-page-layout context
-        pContext = new SdXMLPresentationPlaceholderContext(
-            GetSdImport(), nPrefix, rLocalName, xAttrList);
+        xContext = xLclContext.get();
 
         // remember SdXMLPresentationPlaceholderContext for later evaluation
-        pContext->AddFirstRef();
-        maList.push_back( static_cast<SdXMLPresentationPlaceholderContext*>(pContext) );
+        maList.push_back(xLclContext);
     }
 
     // call base class
-    if(!pContext)
-        pContext = SvXMLStyleContext::CreateChildContext(nPrefix, rLocalName, xAttrList);
+    if (!xContext)
+        xContext = SvXMLStyleContext::CreateChildContext(nPrefix, rLocalName, xAttrList);
 
-    return pContext;
+    return xContext;
 }
 
 void SdXMLPresentationPageLayoutContext::EndElement()
@@ -501,28 +459,28 @@ void SdXMLPresentationPageLayoutContext::EndElement()
     // at the moment only use number of types used there
     if( !maList.empty() )
     {
-        SdXMLPresentationPlaceholderContext* pObj0 = maList[ 0 ];
+        SdXMLPresentationPlaceholderContext* pObj0 = maList[ 0 ].get();
         if( pObj0->GetName() == "handout" )
         {
             switch( maList.size() )
             {
             case 1:
-                mnTypeId = 22; // AUTOLAYOUT_HANDOUT1
+                mnTypeId = AUTOLAYOUT_HANDOUT1;
                 break;
             case 2:
-                mnTypeId = 23; // AUTOLAYOUT_HANDOUT2
+                mnTypeId = AUTOLAYOUT_HANDOUT2;
                 break;
             case 3:
-                mnTypeId = 24; // AUTOLAYOUT_HANDOUT3
+                mnTypeId = AUTOLAYOUT_HANDOUT3;
                 break;
             case 4:
-                mnTypeId = 25; // AUTOLAYOUT_HANDOUT4
+                mnTypeId = AUTOLAYOUT_HANDOUT4;
                 break;
             case 9:
-                mnTypeId = 31; // AUTOLAYOUT_HANDOUT9
+                mnTypeId = AUTOLAYOUT_HANDOUT9;
                 break;
             default:
-                mnTypeId = 26; // AUTOLAYOUT_HANDOUT6
+                mnTypeId = AUTOLAYOUT_HANDOUT6;
             }
         }
         else
@@ -533,175 +491,169 @@ void SdXMLPresentationPageLayoutContext::EndElement()
                 {
                     if( pObj0->GetName() == "title" )
                     {
-                        mnTypeId = 19; // AUTOLAYOUT_ONLY_TITLE
+                        mnTypeId = AUTOLAYOUT_TITLE_ONLY;
                     }
                     else
                     {
-                        mnTypeId = 32; // AUTOLAYOUT_ONLY_TEXT
+                        mnTypeId = AUTOLAYOUT_ONLY_TEXT;
                     }
                     break;
                 }
                 case 2:
                 {
-                    SdXMLPresentationPlaceholderContext* pObj1 = maList[ 1 ];
+                    SdXMLPresentationPlaceholderContext* pObj1 = maList[ 1 ].get();
 
                     if( pObj1->GetName() == "subtitle" )
                     {
-                        mnTypeId = 0; // AUTOLAYOUT_TITLE
+                        mnTypeId = AUTOLAYOUT_TITLE;
                     }
                     else if( pObj1->GetName() == "outline" )
                     {
-                        mnTypeId = 1; // AUTOLAYOUT_ENUM
+                        mnTypeId = AUTOLAYOUT_TITLE_CONTENT;
                     }
                     else if( pObj1->GetName() == "chart" )
                     {
-                        mnTypeId = 2; // AUTOLAYOUT_CHART
+                        mnTypeId = AUTOLAYOUT_CHART;
                     }
                     else if( pObj1->GetName() == "table" )
                     {
-                        mnTypeId = 8; // AUTOLAYOUT_TAB
+                        mnTypeId = AUTOLAYOUT_TAB;
                     }
                     else if( pObj1->GetName() == "object" )
                     {
-                        mnTypeId = 11; // AUTOLAYOUT_OBJ
+                        mnTypeId = AUTOLAYOUT_OBJ;
                     }
                     else if( pObj1->GetName() == "vertical_outline" )
                     {
                         if( pObj0->GetName() == "vertical_title" )
                         {
-                            // AUTOLAYOUT_VERTICAL_TITLE_VERTICAL_OUTLINE
-                            mnTypeId = 28;
+                            mnTypeId = AUTOLAYOUT_VTITLE_VCONTENT;
                         }
                         else
                         {
-                            // AUTOLAYOUT_TITLE_VERTICAL_OUTLINE
-                            mnTypeId = 29;
+                            mnTypeId = AUTOLAYOUT_TITLE_VCONTENT;
                         }
                     }
                     else
                     {
-                        mnTypeId = 21; // AUTOLAYOUT_NOTES
+                        mnTypeId = AUTOLAYOUT_NOTES;
                     }
                     break;
                 }
                 case 3:
                 {
-                    SdXMLPresentationPlaceholderContext* pObj1 = maList[ 1 ];
-                    SdXMLPresentationPlaceholderContext* pObj2 = maList[ 2 ];
+                    SdXMLPresentationPlaceholderContext* pObj1 = maList[ 1 ].get();
+                    SdXMLPresentationPlaceholderContext* pObj2 = maList[ 2 ].get();
 
                     if( pObj1->GetName() == "outline" )
                     {
                         if( pObj2->GetName() == "outline" )
                         {
-                            mnTypeId = 3; // AUTOLAYOUT_2TEXT
+                            mnTypeId = AUTOLAYOUT_TITLE_2CONTENT;
                         }
                         else if( pObj2->GetName() == "chart" )
                         {
-                            mnTypeId = 4; // AUTOLAYOUT_TEXTCHART
+                            mnTypeId = AUTOLAYOUT_TEXTCHART;
                         }
                         else if( pObj2->GetName() == "graphic" )
                         {
-                            mnTypeId = 6; // AUTOLAYOUT_TEXTCLIP
+                            mnTypeId = AUTOLAYOUT_TEXTCLIP;
                         }
                         else
                         {
                             if(pObj1->GetX() < pObj2->GetX())
                             {
-                                mnTypeId = 10; // AUTOLAYOUT_TEXTOBJ -> outline left, object right
+                                mnTypeId = AUTOLAYOUT_TEXTOBJ; // outline left, object right
                             }
                             else
                             {
-                                mnTypeId = 17; // AUTOLAYOUT_TEXTOVEROBJ -> outline top, object right
+                                mnTypeId = AUTOLAYOUT_TEXTOVEROBJ; // outline top, object right
                             }
                         }
                     }
                     else if( pObj1->GetName() == "chart" )
                     {
-                        mnTypeId = 7; // AUTOLAYOUT_CHARTTEXT
+                        mnTypeId = AUTOLAYOUT_CHARTTEXT;
                     }
                     else if( pObj1->GetName() == "graphic" )
                     {
                         if( pObj2->GetName() == "vertical_outline" )
                         {
-                            // AUTOLAYOUT_TITLE_VERTICAL_OUTLINE_CLIPART
-                            mnTypeId = 30;
+                            mnTypeId = AUTOLAYOUT_TITLE_2VTEXT;
                         }
                         else
                         {
-                            mnTypeId = 9; // AUTOLAYOUT_CLIPTEXT
+                            mnTypeId = AUTOLAYOUT_CLIPTEXT;
                         }
                     }
                     else if( pObj1->GetName() == "vertical_outline" )
                     {
-                        // AUTOLAYOUT_VERTICAL_TITLE_TEXT_CHART
-                        mnTypeId = 27;
+                        mnTypeId = AUTOLAYOUT_VTITLE_VCONTENT_OVER_VCONTENT;
                     }
                     else
                     {
                         if(pObj1->GetX() < pObj2->GetX())
                         {
-                            mnTypeId = 13; // AUTOLAYOUT_OBJTEXT -> left, right
+                            mnTypeId = AUTOLAYOUT_OBJTEXT; // left, right
                         }
                         else
                         {
-                            mnTypeId = 14; // AUTOLAYOUT_OBJOVERTEXT -> top, bottom
+                            mnTypeId = AUTOLAYOUT_TITLE_CONTENT_OVER_CONTENT; // top, bottom
                         }
                     }
                     break;
                 }
                 case 4:
                 {
-                    SdXMLPresentationPlaceholderContext* pObj1 = maList[ 1 ];
-                    SdXMLPresentationPlaceholderContext* pObj2 = maList[ 2 ];
+                    SdXMLPresentationPlaceholderContext* pObj1 = maList[ 1 ].get();
+                    SdXMLPresentationPlaceholderContext* pObj2 = maList[ 2 ].get();
 
                     if( pObj1->GetName() == "object" )
                     {
                         if(pObj1->GetX() < pObj2->GetX())
                         {
-                            mnTypeId = 16; // AUTOLAYOUT_2OBJOVERTEXT
+                            mnTypeId = AUTOLAYOUT_TITLE_2CONTENT_OVER_CONTENT;
                         }
                         else
                         {
-                            mnTypeId = 15; // AUTOLAYOUT_2OBJTEXT
+                            mnTypeId = AUTOLAYOUT_TITLE_2CONTENT_CONTENT;
                         }
                     }
                     else
                     {
-                        mnTypeId = 12; // AUTOLAYOUT_TEXT2OBJ
+                        mnTypeId = AUTOLAYOUT_TITLE_CONTENT_2CONTENT;
                     }
                     break;
                 }
                 case 5:
                 {
-                    SdXMLPresentationPlaceholderContext* pObj1 = maList[ 1 ];
+                    SdXMLPresentationPlaceholderContext* pObj1 = maList[ 1 ].get();
 
                     if( pObj1->GetName() == "object" )
                     {
-                        mnTypeId = 18; // AUTOLAYOUT_4OBJ
+                        mnTypeId = AUTOLAYOUT_TITLE_4CONTENT;
                     }
                     else
                     {
-                        mnTypeId = 33; // AUTOLAYOUT_4CLIPART
+                        mnTypeId = AUTOLAYOUT_4CLIPART;
                     }
                      break;
 
                 }
                 case 7:
                 {
-                    mnTypeId = 33; // AUTOLAYOUT_6CLIPART
+                    mnTypeId = AUTOLAYOUT_4CLIPART; // FIXME: not AUTOLAYOUT_TITLE_6CONTENT?
                     break;
                 }
                 default:
                 {
-                    mnTypeId = 20; // AUTOLAYOUT_NONE
+                    mnTypeId = AUTOLAYOUT_NONE;
                     break;
                 }
             }
         }
 
         // release remembered contexts, they are no longer needed
-        for ( size_t i = maList.size(); i > 0; )
-            maList[ --i ]->ReleaseRef();
         maList.clear();
     }
 }
@@ -712,10 +664,7 @@ SdXMLPresentationPlaceholderContext::SdXMLPresentationPlaceholderContext(
     OUString& rLName,
     const uno::Reference< xml::sax::XAttributeList>& xAttrList)
 :   SvXMLImportContext( rImport, nPrfx, rLName),
-    mnX(0L),
-    mnY(0L),
-    mnWidth(1L),
-    mnHeight(1L)
+    mnX(0)
 {
     sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
     for(sal_Int16 i=0; i < nAttrCount; i++)
@@ -741,20 +690,14 @@ SdXMLPresentationPlaceholderContext::SdXMLPresentationPlaceholderContext(
             }
             case XML_TOK_PRESENTATIONPLACEHOLDER_Y:
             {
-                GetSdImport().GetMM100UnitConverter().convertMeasureToCore(
-                        mnY, sValue);
                 break;
             }
             case XML_TOK_PRESENTATIONPLACEHOLDER_WIDTH:
             {
-                GetSdImport().GetMM100UnitConverter().convertMeasureToCore(
-                        mnWidth, sValue);
                 break;
             }
             case XML_TOK_PRESENTATIONPLACEHOLDER_HEIGHT:
             {
-                GetSdImport().GetMM100UnitConverter().convertMeasureToCore(
-                        mnHeight, sValue);
                 break;
             }
         }
@@ -771,10 +714,11 @@ SdXMLMasterPageContext::SdXMLMasterPageContext(
     sal_uInt16 nPrfx,
     const OUString& rLName,
     const uno::Reference< xml::sax::XAttributeList>& xAttrList,
-    uno::Reference< drawing::XShapes >& rShapes)
+    uno::Reference< drawing::XShapes > const & rShapes)
 :   SdXMLGenericPageContext( rImport, nPrfx, rLName, xAttrList, rShapes )
 {
     const bool bHandoutMaster = IsXMLToken( rLName, XML_HANDOUT_MASTER );
+    OUString sStyleName, sPageMasterName;
 
     const sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
     for(sal_Int16 i=0; i < nAttrCount; i++)
@@ -799,12 +743,12 @@ SdXMLMasterPageContext::SdXMLMasterPageContext(
             }
             case XML_TOK_MASTERPAGE_PAGE_MASTER_NAME:
             {
-                msPageMasterName = sValue;
+                sPageMasterName = sValue;
                 break;
             }
             case XML_TOK_MASTERPAGE_STYLE_NAME:
             {
-                msStyleName = sValue;
+                sStyleName = sValue;
                 break;
             }
             case XML_TOK_MASTERPAGE_PAGE_LAYOUT_NAME:
@@ -846,12 +790,12 @@ SdXMLMasterPageContext::SdXMLMasterPageContext(
     }
 
     // set page-master?
-    if(!msPageMasterName.isEmpty())
+    if(!sPageMasterName.isEmpty())
     {
-        SetPageMaster( msPageMasterName );
+        SetPageMaster( sPageMasterName );
     }
 
-    SetStyle( msStyleName );
+    SetStyle( sStyleName );
 
     SetLayout();
 
@@ -868,20 +812,20 @@ void SdXMLMasterPageContext::EndElement()
     if(!msName.isEmpty() && GetSdImport().GetShapeImport()->GetStylesContext())
     {
         SvXMLImportContext* pContext = GetSdImport().GetShapeImport()->GetStylesContext();
-        if( dynamic_cast<const SdXMLStylesContext*>(pContext) !=  nullptr )
-            static_cast<SdXMLStylesContext*>(pContext)->SetMasterPageStyles(*this);
+        if (SdXMLStylesContext* pSdContext = dynamic_cast<SdXMLStylesContext*>(pContext))
+            pSdContext->SetMasterPageStyles(*this);
     }
 
     SdXMLGenericPageContext::EndElement();
     GetImport().GetShapeImport()->endPage(GetLocalShapesContext());
 }
 
-SvXMLImportContext* SdXMLMasterPageContext::CreateChildContext(
+SvXMLImportContextRef SdXMLMasterPageContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList>& xAttrList )
 {
-    SvXMLImportContext* pContext = nullptr;
+    SvXMLImportContextRef xContext;
     const SvXMLTokenMap& rTokenMap = GetSdImport().GetMasterPageElemTokenMap();
 
     // some special objects inside style:masterpage context
@@ -898,7 +842,7 @@ SvXMLImportContext* SdXMLMasterPageContext::CreateChildContext(
                     XML_STYLE_FAMILY_SD_PRESENTATION_ID);
 
                 // add this style to the outer StylesContext class for later processing
-                pContext = pNew;
+                xContext = pNew;
                 GetSdImport().GetShapeImport()->GetStylesContext()->AddStyle(*pNew);
             }
             break;
@@ -918,7 +862,7 @@ SvXMLImportContext* SdXMLMasterPageContext::CreateChildContext(
                         if(xNewShapes.is())
                         {
                             // presentation:notes inside master-page context
-                            pContext = new SdXMLNotesContext( GetSdImport(), nPrefix, rLocalName, xAttrList, xNewShapes);
+                            xContext = new SdXMLNotesContext( GetSdImport(), nPrefix, rLocalName, xAttrList, xNewShapes);
                         }
                     }
                 }
@@ -927,12 +871,11 @@ SvXMLImportContext* SdXMLMasterPageContext::CreateChildContext(
     }
 
     // call base class
-    if(!pContext)
-        pContext = SdXMLGenericPageContext::CreateChildContext(nPrefix, rLocalName, xAttrList);
+    if (!xContext)
+        xContext = SdXMLGenericPageContext::CreateChildContext(nPrefix, rLocalName, xAttrList);
 
-    return pContext;
+    return xContext;
 }
-
 
 SdXMLStylesContext::SdXMLStylesContext(
     SdXMLImport& rImport,
@@ -943,14 +886,8 @@ SdXMLStylesContext::SdXMLStylesContext(
     mbIsAutoStyle(bIsAutoStyle)
 {
     Reference< uno::XComponentContext > xContext = rImport.GetComponentContext();
-    mpNumFormatter = new SvNumberFormatter( xContext, LANGUAGE_SYSTEM );
-    mpNumFmtHelper = new SvXMLNumFmtHelper( mpNumFormatter, xContext );
-}
-
-SdXMLStylesContext::~SdXMLStylesContext()
-{
-    delete mpNumFmtHelper;
-    delete mpNumFormatter;
+    mpNumFormatter = std::make_unique<SvNumberFormatter>( xContext, LANGUAGE_SYSTEM );
+    mpNumFmtHelper = std::make_unique<SvXMLNumFmtHelper>( mpNumFormatter.get(), xContext );
 }
 
 SvXMLStyleContext* SdXMLStylesContext::CreateStyleChildContext(
@@ -1071,12 +1008,6 @@ SvXMLStyleContext* SdXMLStylesContext::CreateDefaultStyleStyleChildContext(
     return pContext;
 }
 
-sal_uInt16 SdXMLStylesContext::GetFamily( const OUString& rFamily ) const
-{
-    // call base class
-    return SvXMLStylesContext::GetFamily(rFamily);
-}
-
 rtl::Reference< SvXMLImportPropertyMapper > SdXMLStylesContext::GetImportPropertyMapper(
     sal_uInt16 nFamily) const
 {
@@ -1088,7 +1019,7 @@ rtl::Reference< SvXMLImportPropertyMapper > SdXMLStylesContext::GetImportPropert
     {
         if(!xPresImpPropMapper.is())
         {
-            rtl::Reference< XMLShapeImportHelper > aImpHelper = ((SvXMLImport&)GetImport()).GetShapeImport();
+            rtl::Reference< XMLShapeImportHelper > aImpHelper = const_cast<SvXMLImport&>(GetImport()).GetShapeImport();
             const_cast<SdXMLStylesContext*>(this)->xPresImpPropMapper =
                 aImpHelper->GetPresPagePropsMapper();
         }
@@ -1134,21 +1065,18 @@ void SdXMLStylesContext::EndElement()
         GetImport().GetFormImport()->setAutoStyleContext( this );
 
         // associate AutoStyles with styles in preparation to setting Styles on shapes
-        for(sal_uInt32 a(0L); a < GetStyleCount(); a++)
+        for(sal_uInt32 a(0); a < GetStyleCount(); a++)
         {
             const SvXMLStyleContext* pStyle = GetStyle(a);
-            if(pStyle && dynamic_cast<const XMLShapeStyleContext*>(pStyle) !=  nullptr)
+            if (const XMLShapeStyleContext* pDocStyle = dynamic_cast<const XMLShapeStyleContext*>(pStyle))
             {
-                const XMLShapeStyleContext* pDocStyle = static_cast<const XMLShapeStyleContext*>(pStyle);
-
                 SvXMLStylesContext* pStylesContext = GetSdImport().GetShapeImport()->GetStylesContext();
-                if( pStylesContext )
+                if (pStylesContext)
                 {
                     pStyle = pStylesContext->FindStyleChildContext(pStyle->GetFamily(), pStyle->GetParentName());
 
-                    if(pStyle && dynamic_cast<const XMLShapeStyleContext*>(pStyle) !=  nullptr)
+                    if (const XMLShapeStyleContext* pParentStyle = dynamic_cast<const XMLShapeStyleContext*>(pStyle))
                     {
-                        const XMLShapeStyleContext* pParentStyle = static_cast<const XMLShapeStyleContext*>(pStyle);
                         if(pParentStyle->GetStyle().is())
                         {
                             const_cast<XMLShapeStyleContext*>(pDocStyle)->SetStyle(pParentStyle->GetStyle());
@@ -1183,7 +1111,7 @@ void SdXMLStylesContext::EndElement()
 // set master-page styles (all with family="presentation" and a special
 // prefix) on given master-page.
 
-void SdXMLStylesContext::SetMasterPageStyles(SdXMLMasterPageContext& rMaster) const
+void SdXMLStylesContext::SetMasterPageStyles(SdXMLMasterPageContext const & rMaster) const
 {
     const uno::Reference<container::XNameAccess>& rStyleFamilies =
         GetSdImport().GetLocalDocStyleFamilies();
@@ -1259,18 +1187,13 @@ static bool canSkipReset(const OUString &rName, const XMLPropStyleContext* pProp
         if (nIndexStyle != -1)
         {
             const ::std::vector< XMLPropertyState > &rProperties = pPropStyle->GetProperties();
-            ::std::vector< XMLPropertyState >::const_iterator property = rProperties.begin();
-            for(; property != rProperties.end(); ++property)
+            auto property = std::find_if(rProperties.cbegin(), rProperties.cend(),
+                [nIndexStyle](const XMLPropertyState& rProp) { return rProp.mnIndex == nIndexStyle; });
+            if (property != rProperties.cend())
             {
-                sal_Int32 nIdx = property->mnIndex;
-                if (nIdx == nIndexStyle)
-                {
-                    bool bNewStyleTextAutoGrowHeight(false);
-                    property->maValue >>= bNewStyleTextAutoGrowHeight;
-                    if (bNewStyleTextAutoGrowHeight == bOldStyleTextAutoGrowHeight)
-                        bCanSkipReset = true;
-                    break;
-                }
+                bool bNewStyleTextAutoGrowHeight(false);
+                property->maValue >>= bNewStyleTextAutoGrowHeight;
+                bCanSkipReset = (bNewStyleTextAutoGrowHeight == bOldStyleTextAutoGrowHeight);
             }
         }
     }
@@ -1279,7 +1202,7 @@ static bool canSkipReset(const OUString &rName, const XMLPropStyleContext* pProp
 
 // help function used by ImpSetGraphicStyles() and ImpSetMasterPageStyles()
 
-void SdXMLStylesContext::ImpSetGraphicStyles( uno::Reference< container::XNameAccess >& xPageStyles,  sal_uInt16 nFamily,  const OUString& rPrefix) const
+void SdXMLStylesContext::ImpSetGraphicStyles( uno::Reference< container::XNameAccess > const & xPageStyles,  sal_uInt16 nFamily,  const OUString& rPrefix) const
 {
     sal_Int32 nPrefLen(rPrefix.getLength());
 
@@ -1309,7 +1232,7 @@ void SdXMLStylesContext::ImpSetGraphicStyles( uno::Reference< container::XNameAc
                 if( nPrefLen )
                 {
                     sal_Int32 nStylePrefLen = aStyleName.lastIndexOf( '-' ) + 1;
-                    if( (nPrefLen != nStylePrefLen) ||  (aStyleName.compareTo( rPrefix, nPrefLen ) != 0) )
+                    if( (nPrefLen != nStylePrefLen) || !aStyleName.startsWith(rPrefix) )
                         continue;
 
                     aStyleName = aStyleName.copy( nPrefLen );
@@ -1334,7 +1257,7 @@ void SdXMLStylesContext::ImpSetGraphicStyles( uno::Reference< container::XNameAc
                     {
                         rtl::Reference < XMLPropertySetMapper > xPrMap;
                         rtl::Reference < SvXMLImportPropertyMapper > xImpPrMap = GetImportPropertyMapper( nFamily );
-                        DBG_ASSERT( xImpPrMap.is(), "There is the import prop mapper" );
+                        SAL_WARN_IF( !xImpPrMap.is(), "xmloff", "There is the import prop mapper" );
                         if( xImpPrMap.is() )
                             xPrMap = xImpPrMap->getPropertySetMapper();
                         if( xPrMap.is() )
@@ -1395,7 +1318,7 @@ void SdXMLStylesContext::ImpSetGraphicStyles( uno::Reference< container::XNameAc
     }
 
     // now set parents for all styles (when necessary)
-    for(a = 0L; a < GetStyleCount(); a++)
+    for(a = 0; a < GetStyleCount(); a++)
     {
         const SvXMLStyleContext* pStyle = GetStyle(a);
 
@@ -1405,7 +1328,7 @@ void SdXMLStylesContext::ImpSetGraphicStyles( uno::Reference< container::XNameAc
             if( nPrefLen )
             {
                 sal_Int32 nStylePrefLen = aStyleName.lastIndexOf( '-' ) + 1;
-                if( (nPrefLen != nStylePrefLen) ||  (aStyleName.compareTo( rPrefix, nPrefLen ) != 0) )
+                if( (nPrefLen != nStylePrefLen) || !aStyleName.startsWith( rPrefix ) )
                     continue;
 
                 aStyleName = aStyleName.copy( nPrefLen );
@@ -1419,7 +1342,7 @@ void SdXMLStylesContext::ImpSetGraphicStyles( uno::Reference< container::XNameAc
                 if( nPrefLen )
                 {
                     sal_Int32 nStylePrefLen = sParentStyleDisplayName.lastIndexOf( '-' ) + 1;
-                    if( (nPrefLen != nStylePrefLen) || (sParentStyleDisplayName.compareTo( rPrefix, nPrefLen ) != 0) )
+                    if( (nPrefLen != nStylePrefLen) || !sParentStyleDisplayName.startsWith( rPrefix ) )
                         continue;
 
                     sParentStyleDisplayName = sParentStyleDisplayName.copy( nPrefLen );
@@ -1442,13 +1365,12 @@ uno::Reference< container::XNameAccess > SdXMLStylesContext::getPageLayouts() co
 {
     uno::Reference< container::XNameContainer > xLayouts( comphelper::NameContainer_createInstance( ::cppu::UnoType<sal_Int32>::get()) );
 
-    for(sal_uInt32 a(0L); a < GetStyleCount(); a++)
+    for(sal_uInt32 a(0); a < GetStyleCount(); a++)
     {
         const SvXMLStyleContext* pStyle = GetStyle(a);
-        if(pStyle && dynamic_cast<const SdXMLPresentationPageLayoutContext*>(pStyle) !=  nullptr)
+        if (const SdXMLPresentationPageLayoutContext* pContext = dynamic_cast<const SdXMLPresentationPageLayoutContext*>(pStyle))
         {
-            xLayouts->insertByName( pStyle->GetName(), uno::makeAny(
-            (sal_Int32)static_cast<const SdXMLPresentationPageLayoutContext*>(pStyle)->GetTypeId() ) );
+            xLayouts->insertByName(pStyle->GetName(), uno::makeAny(static_cast<sal_Int32>(pContext->GetTypeId())));
         }
     }
 
@@ -1463,19 +1385,12 @@ SdXMLMasterStylesContext::SdXMLMasterStylesContext(
 {
 }
 
-SdXMLMasterStylesContext::~SdXMLMasterStylesContext()
-{
-    for ( size_t i = maMasterPageList.size(); i > 0; )
-        maMasterPageList[ --i ]->ReleaseRef();
-    maMasterPageList.clear();
-}
-
-SvXMLImportContext* SdXMLMasterStylesContext::CreateChildContext(
+SvXMLImportContextRef SdXMLMasterStylesContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList >& xAttrList)
 {
-    SvXMLImportContext* pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     if(nPrefix == XML_NAMESPACE_STYLE
        && IsXMLToken( rLocalName, XML_MASTER_PAGE ) )
@@ -1505,16 +1420,16 @@ SvXMLImportContext* SdXMLMasterStylesContext::CreateChildContext(
                 uno::Reference< drawing::XShapes > xNewShapes(xNewMasterPage, uno::UNO_QUERY);
                 if(xNewShapes.is() && GetSdImport().GetShapeImport()->GetStylesContext())
                 {
-                    pContext = new SdXMLMasterPageContext(GetSdImport(),
-                        nPrefix, rLocalName, xAttrList, xNewShapes);
-
-                    pContext->AddFirstRef();
-                    maMasterPageList.push_back( static_cast<SdXMLMasterPageContext*>(pContext) );
+                    const rtl::Reference<SdXMLMasterPageContext> xLclContext{
+                        new SdXMLMasterPageContext(GetSdImport(),
+                            nPrefix, rLocalName, xAttrList, xNewShapes)};
+                    xContext = xLclContext.get();
+                    maMasterPageList.push_back(xLclContext);
                 }
             }
         }
     }
-    else    if(nPrefix == XML_NAMESPACE_STYLE
+    else if(nPrefix == XML_NAMESPACE_STYLE
         && IsXMLToken( rLocalName, XML_HANDOUT_MASTER ) )
     {
         uno::Reference< presentation::XHandoutMasterSupplier > xHandoutSupp( GetSdImport().GetModel(), uno::UNO_QUERY );
@@ -1523,21 +1438,21 @@ SvXMLImportContext* SdXMLMasterStylesContext::CreateChildContext(
             uno::Reference< drawing::XShapes > xHandoutPage( xHandoutSupp->getHandoutMasterPage(), uno::UNO_QUERY );
             if(xHandoutPage.is() && GetSdImport().GetShapeImport()->GetStylesContext())
             {
-                pContext = new SdXMLMasterPageContext(GetSdImport(),
+                xContext = new SdXMLMasterPageContext(GetSdImport(),
                     nPrefix, rLocalName, xAttrList, xHandoutPage);
             }
         }
     }
     else if( (nPrefix == XML_NAMESPACE_DRAW )&& IsXMLToken( rLocalName, XML_LAYER_SET ) )
     {
-        pContext = new SdXMLLayerSetContext( GetImport(), nPrefix, rLocalName, xAttrList );
+        xContext = new SdXMLLayerSetContext( GetImport(), nPrefix, rLocalName, xAttrList );
     }
 
     // call base class
-    if(!pContext)
-        pContext = SvXMLImportContext::CreateChildContext(nPrefix, rLocalName, xAttrList);
+    if (!xContext)
+        xContext = SvXMLImportContext::CreateChildContext(nPrefix, rLocalName, xAttrList);
 
-    return pContext;
+    return xContext;
 }
 
 SdXMLHeaderFooterDeclContext::SdXMLHeaderFooterDeclContext(SvXMLImport& rImport,

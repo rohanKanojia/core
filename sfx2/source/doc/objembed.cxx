@@ -26,13 +26,10 @@
 
 #include <sfx2/objsh.hxx>
 #include <sfx2/app.hxx>
-#include "objshimp.hxx"
-#include <sfx2/sfx.hrc>
+#include <objshimp.hxx>
 #include <sfx2/event.hxx>
 
-#include <comphelper/seqstream.hxx>
-#include <comphelper/processfactory.hxx>
-#include <comphelper/storagehelper.hxx>
+#include <comphelper/fileformat.h>
 #include <svtools/embedtransfer.hxx>
 #include <tools/fract.hxx>
 #include <vcl/outdev.hxx>
@@ -55,7 +52,7 @@ SfxObjectShell* SfxObjectShell::GetParentShellByModel_Impl()
             {
                 SvGlobalName aSfxIdent( SFX_GLOBAL_CLASSID );
                 pResult = reinterpret_cast<SfxObjectShell*>(xParentTunnel->getSomething(
-                                                uno::Sequence< sal_Int8 >( aSfxIdent.GetByteSequence() ) ) );
+                                                aSfxIdent.GetByteSequence() ) );
             }
         }
     }
@@ -92,39 +89,39 @@ void SfxObjectShell::OnDocumentPrinterChanged( Printer* /*pNewPrinter*/ )
 }
 
 
-Rectangle SfxObjectShell::GetVisArea( sal_uInt16 nAspect ) const
+tools::Rectangle SfxObjectShell::GetVisArea( sal_uInt16 nAspect ) const
 {
     if( nAspect == ASPECT_CONTENT )
-        return pImp->m_aVisArea;
+        return pImpl->m_aVisArea;
     else if( nAspect == ASPECT_THUMBNAIL )
     {
-        Rectangle aRect;
+        tools::Rectangle aRect;
         aRect.SetSize( OutputDevice::LogicToLogic( Size( 5000, 5000 ),
-                                         MAP_100TH_MM, GetMapUnit() ) );
+                         MapMode(MapUnit::Map100thMM), MapMode(GetMapUnit())));
         return aRect;
     }
-    return Rectangle();
+    return tools::Rectangle();
 }
 
 
-const Rectangle& SfxObjectShell::GetVisArea() const
+const tools::Rectangle& SfxObjectShell::GetVisArea() const
 {
-    pImp->m_aVisArea = GetVisArea( ASPECT_CONTENT );
-    return pImp->m_aVisArea;
+    pImpl->m_aVisArea = GetVisArea( ASPECT_CONTENT );
+    return pImpl->m_aVisArea;
 }
 
 
-void SfxObjectShell::SetVisArea( const Rectangle & rVisArea )
+void SfxObjectShell::SetVisArea( const tools::Rectangle & rVisArea )
 {
-    if( pImp->m_aVisArea != rVisArea )
+    if( pImpl->m_aVisArea != rVisArea )
     {
-        pImp->m_aVisArea = rVisArea;
+        pImpl->m_aVisArea = rVisArea;
         if ( GetCreateMode() == SfxObjectCreateMode::EMBEDDED )
         {
             if ( IsEnableSetModified() )
                 SetModified();
 
-            SfxGetpApp()->NotifyEvent(SfxEventHint( SFX_EVENT_VISAREACHANGED, GlobalEventConfig::GetEventName(GlobalEventId::VISAREACHANGED), this));
+            SfxGetpApp()->NotifyEvent(SfxEventHint( SfxEventHintId::VisAreaChanged, GlobalEventConfig::GetEventName(GlobalEventId::VISAREACHANGED), this));
         }
     }
 }
@@ -132,25 +129,19 @@ void SfxObjectShell::SetVisArea( const Rectangle & rVisArea )
 
 void SfxObjectShell::SetVisAreaSize( const Size & rVisSize )
 {
-    SetVisArea( Rectangle( GetVisArea().TopLeft(), rVisSize ) );
-}
-
-
-sal_uIntPtr SfxObjectShell::GetMiscStatus() const
-{
-    return 0;
+    SetVisArea( tools::Rectangle( GetVisArea().TopLeft(), rVisSize ) );
 }
 
 
 MapUnit SfxObjectShell::GetMapUnit() const
 {
-    return pImp->m_nMapUnit;
+    return pImpl->m_nMapUnit;
 }
 
 
 void SfxObjectShell::SetMapUnit( MapUnit nMapUnit )
 {
-    pImp->m_nMapUnit = nMapUnit;
+    pImpl->m_nMapUnit = nMapUnit;
 }
 
 
@@ -161,11 +152,9 @@ void SfxObjectShell::FillTransferableObjectDescriptor( TransferableObjectDescrip
     FillClass( &rDesc.maClassName, &nClipFormat, &aAppName, &rDesc.maTypeName, &aShortName, SOFFICE_FILEFORMAT_CURRENT );
 
     rDesc.mnViewAspect = ASPECT_CONTENT;
-    rDesc.mnOle2Misc = GetMiscStatus();
-    rDesc.maSize = OutputDevice::LogicToLogic( GetVisArea().GetSize(), GetMapUnit(), MAP_100TH_MM );
+    rDesc.maSize = OutputDevice::LogicToLogic(GetVisArea().GetSize(), MapMode(GetMapUnit()), MapMode(MapUnit::Map100thMM));
     rDesc.maDragStartPos = Point();
     rDesc.maDisplayName.clear();
-    rDesc.mbCanLink = false;
 }
 
 
@@ -196,8 +185,8 @@ void SfxObjectShell::DoDraw_Impl( OutputDevice* pDev,
                                const JobSetup & rSetup,
                                sal_uInt16 nAspect )
 {
-    Rectangle aVisArea  = GetVisArea( nAspect );
-    // MapUnit des Ziels
+    tools::Rectangle aVisArea  = GetVisArea( nAspect );
+    // MapUnit of the target
     MapMode aMapMode( GetMapUnit() );
     aMapMode.SetScaleX( rScaleX );
     aMapMode.SetScaleY( rScaleY );
@@ -246,15 +235,15 @@ void SfxObjectShell::DoDraw_Impl( OutputDevice* pDev,
 
 comphelper::EmbeddedObjectContainer& SfxObjectShell::GetEmbeddedObjectContainer() const
 {
-    if ( !pImp->mpObjectContainer )
-        pImp->mpObjectContainer = new comphelper::EmbeddedObjectContainer( const_cast<SfxObjectShell*>(this)->GetStorage(), GetModel() );
-    return *pImp->mpObjectContainer;
+    if ( !pImpl->mpObjectContainer )
+        pImpl->mpObjectContainer = new comphelper::EmbeddedObjectContainer( const_cast<SfxObjectShell*>(this)->GetStorage(), GetModel() );
+    return *pImpl->mpObjectContainer;
 }
 
 void SfxObjectShell::ClearEmbeddedObjects()
 {
-    // frees alle space taken by embedded objects
-    DELETEZ( pImp->mpObjectContainer );
+    // frees all space taken by embedded objects
+    DELETEZ( pImpl->mpObjectContainer );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

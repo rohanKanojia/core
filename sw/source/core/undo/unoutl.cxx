@@ -17,16 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "doc.hxx"
-#include "swundo.hxx"
-#include "pam.hxx"
-#include "ndtxt.hxx"
+#include <doc.hxx>
+#include <swundo.hxx>
+#include <pam.hxx>
+#include <ndtxt.hxx>
 
 #include <UndoCore.hxx>
 
 SwUndoOutlineLeftRight::SwUndoOutlineLeftRight( const SwPaM& rPam,
                                                 short nOff )
-    : SwUndo( UNDO_OUTLINE_LR ), SwUndRng( rPam ), nOffset( nOff )
+    : SwUndo( SwUndoId::OUTLINE_LR, rPam.GetDoc() ), SwUndRng( rPam ), nOffset( nOff )
 {
 }
 

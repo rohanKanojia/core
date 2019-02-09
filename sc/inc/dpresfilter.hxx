@@ -10,11 +10,15 @@
 #ifndef INCLUDED_SC_INC_DPRESFILTER_HXX
 #define INCLUDED_SC_INC_DPRESFILTER_HXX
 
-#include "dpitemdata.hxx"
+#include <rtl/ustring.hxx>
+#include "calcmacros.hxx"
 
+#include <memory>
 #include <map>
 #include <vector>
 #include <unordered_map>
+
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Sequence; } } } }
 
 namespace com { namespace sun { namespace star { namespace sheet {
     struct DataPilotFieldFilter;
@@ -22,11 +26,12 @@ namespace com { namespace sun { namespace star { namespace sheet {
 
 struct ScDPResultFilter
 {
-    OUString maDimName;
+    OUString const maDimName;
+    OUString maValueName;
     OUString maValue;
 
     bool mbHasValue:1;
-    bool mbDataLayout:1;
+    bool const mbDataLayout:1;
 
     ScDPResultFilter(const OUString& rDimName, bool bDataLayout);
 };
@@ -53,13 +58,12 @@ public:
 private:
 
     struct MemberNode;
-    struct DimensionNode;
-    typedef std::map<OUString, MemberNode*> MembersType;
-    typedef std::map<OUString, DimensionNode*> DimensionsType;
+    typedef std::map<OUString, std::shared_ptr<MemberNode> > MembersType;
 
     struct DimensionNode
     {
-        MembersType maChildMembers;
+        MembersType maChildMembersValueNames;
+        MembersType maChildMembersValues;
 
         DimensionNode();
         DimensionNode(const DimensionNode&) = delete;
@@ -74,7 +78,7 @@ private:
     struct MemberNode
     {
         ValuesType maValues;
-        DimensionsType maChildDimensions;
+        std::map<OUString, std::unique_ptr<DimensionNode>> maChildDimensions;
 
         MemberNode();
         MemberNode(const MemberNode&) = delete;
@@ -96,7 +100,7 @@ private:
     LeafValuesType maLeafValues;
 
     OUString maPrimaryDimName;
-    MemberNode* mpRoot;
+    std::unique_ptr<MemberNode> mpRoot;
 
 public:
 
@@ -109,13 +113,9 @@ public:
      * by row dimension order then by column dimension order.
      *
      * @param rFilter set of filters.
-     * @param nCol column position relative to the top-left cell within the
-     *             data field range.
-     * @param nRow row position relative to the top-left cell within the data
-     *             field range.
      * @param fVal result value, as displayed in the table output.
      */
-    void add(const std::vector<ScDPResultFilter>& rFilter, long nCol, long nRow, double fVal);
+    void add(const std::vector<ScDPResultFilter>& rFilter, double fVal);
 
     void swap(ScDPResultTree& rOther);
 

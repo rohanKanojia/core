@@ -8,9 +8,9 @@
  */
 
 #include <memory>
+#include <com/sun/star/awt/XWindow.hpp>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/uno/Reference.h>
 #include <com/sun/star/ucb/XContent.hpp>
@@ -21,9 +21,9 @@
 #include <iostream>
 #include <libetonyek/libetonyek.h>
 #include <libodfgen/libodfgen.hxx>
-#include <osl/diagnose.h>
 #include <rtl/tencinfo.h>
 #include <ucbhelper/content.hxx>
+#include <unotools/ucbhelper.hxx>
 
 #include <DirectoryStream.hxx>
 #include <DocumentHandler.hxx>
@@ -36,7 +36,6 @@
 using std::shared_ptr;
 
 using com::sun::star::io::XInputStream;
-using com::sun::star::uno::Exception;
 using com::sun::star::uno::Reference;
 using com::sun::star::uno::RuntimeException;
 using com::sun::star::uno::Sequence;
@@ -48,15 +47,15 @@ using writerperfect::DocumentHandler;
 using writerperfect::WPXSvInputStream;
 
 namespace beans = com::sun::star::beans;
-namespace container = com::sun::star::container;
 namespace ucb = com::sun::star::ucb;
 
-bool KeynoteImportFilter::doImportDocument(librevenge::RVNGInputStream &rInput, OdpGenerator &rGenerator, utl::MediaDescriptor &)
+bool KeynoteImportFilter::doImportDocument(weld::Window*, librevenge::RVNGInputStream& rInput,
+                                           OdpGenerator& rGenerator, utl::MediaDescriptor&)
 {
     return libetonyek::EtonyekDocument::parse(&rInput, &rGenerator);
 }
 
-bool KeynoteImportFilter::doDetectFormat(librevenge::RVNGInputStream &rInput, OUString &rTypeName)
+bool KeynoteImportFilter::doDetectFormat(librevenge::RVNGInputStream& rInput, OUString& rTypeName)
 {
     if (libetonyek::EtonyekDocument::isSupported(&rInput))
     {
@@ -68,8 +67,8 @@ bool KeynoteImportFilter::doDetectFormat(librevenge::RVNGInputStream &rInput, OU
 }
 
 // XExtendedFilterDetection
-OUString SAL_CALL KeynoteImportFilter::detect(css::uno::Sequence< css::beans::PropertyValue > &Descriptor)
-throw(css::uno::RuntimeException, std::exception)
+OUString SAL_CALL
+KeynoteImportFilter::detect(css::uno::Sequence<css::beans::PropertyValue>& Descriptor)
 {
     sal_Int32 nLength = Descriptor.getLength();
     sal_Int32 nNewLength = nLength + 2;
@@ -78,14 +77,14 @@ throw(css::uno::RuntimeException, std::exception)
     sal_Int32 nUCBContentLocation = -1;
     bool bIsPackage = false;
     bool bUCBContentChanged = false;
-    const beans::PropertyValue *pValue = Descriptor.getConstArray();
-    Reference < XInputStream > xInputStream;
-    Reference < ucb::XContent > xContent;
-    Sequence < beans::NamedValue > lComponentDataNV;
-    Sequence < beans::PropertyValue > lComponentDataPV;
+    const beans::PropertyValue* pValue = Descriptor.getConstArray();
+    Reference<XInputStream> xInputStream;
+    Reference<ucb::XContent> xContent;
+    Sequence<beans::NamedValue> lComponentDataNV;
+    Sequence<beans::PropertyValue> lComponentDataPV;
     bool bComponentDataNV = true;
 
-    for (sal_Int32 i = 0 ; i < nLength; i++)
+    for (sal_Int32 i = 0; i < nLength; i++)
     {
         if (pValue[i].Name == "TypeName")
         {
@@ -116,7 +115,7 @@ throw(css::uno::RuntimeException, std::exception)
     if (!xInputStream.is())
         return OUString();
 
-    shared_ptr< librevenge::RVNGInputStream > input(new WPXSvInputStream(xInputStream));
+    shared_ptr<librevenge::RVNGInputStream> input(new WPXSvInputStream(xInputStream));
 
     /* Apple Keynote documents come in two variants:
      * * actual files (zip), only produced by Keynote 5 (at least with
@@ -133,7 +132,8 @@ throw(css::uno::RuntimeException, std::exception)
      */
     if (xContent.is())
     {
-        ucbhelper::Content aContent(xContent, Reference< ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext());
+        ucbhelper::Content aContent(xContent, utl::UCBContentHelper::getDefaultCommandEnvironment(),
+                                    comphelper::getProcessComponentContext());
         try
         {
             if (aContent.isFolder())
@@ -149,34 +149,34 @@ throw(css::uno::RuntimeException, std::exception)
     }
 
     libetonyek::EtonyekDocument::Type type = libetonyek::EtonyekDocument::TYPE_UNKNOWN;
-    const libetonyek::EtonyekDocument::Confidence confidence = libetonyek::EtonyekDocument::isSupported(input.get(), &type);
-    if ((libetonyek::EtonyekDocument::CONFIDENCE_NONE == confidence) || (libetonyek::EtonyekDocument::TYPE_KEYNOTE != type))
+    const libetonyek::EtonyekDocument::Confidence confidence
+        = libetonyek::EtonyekDocument::isSupported(input.get(), &type);
+    if ((libetonyek::EtonyekDocument::CONFIDENCE_NONE == confidence)
+        || (libetonyek::EtonyekDocument::TYPE_KEYNOTE != type))
         return OUString();
 
     if (confidence == libetonyek::EtonyekDocument::CONFIDENCE_SUPPORTED_PART)
     {
-        if (bIsPackage)   // we passed a directory stream, but the filter claims it's APXL file?
+        if (bIsPackage) // we passed a directory stream, but the filter claims it's APXL file?
             return OUString();
 
-        const Reference < container::XChild > xChild(xContent, UNO_QUERY);
-        if (xChild.is())
+        const std::shared_ptr<writerperfect::DirectoryStream> pDir
+            = writerperfect::DirectoryStream::createForParent(xContent);
+        input = pDir;
+        if (bool(input))
         {
-            const Reference < ucb::XContent > xPackageContent(xChild->getParent(), UNO_QUERY);
-            if (xPackageContent.is())
+            if (libetonyek::EtonyekDocument::CONFIDENCE_EXCELLENT
+                == libetonyek::EtonyekDocument::isSupported(input.get()))
             {
-                input.reset(new writerperfect::DirectoryStream(xPackageContent));
-                if (libetonyek::EtonyekDocument::CONFIDENCE_EXCELLENT == libetonyek::EtonyekDocument::isSupported(input.get()))
-                {
-                    xContent = xPackageContent;
-                    bUCBContentChanged = true;
-                    bIsPackage = true;
-                }
-                else
-                {
-                    // The passed stream has been detected as APXL file, but its parent dir is not a valid Keynote
-                    // package? Something is wrong here...
-                    return OUString();
-                }
+                xContent = pDir->getContent();
+                bUCBContentChanged = true;
+                bIsPackage = true;
+            }
+            else
+            {
+                // The passed stream has been detected as APXL file, but its parent dir is not a valid Keynote
+                // package? Something is wrong here...
+                return OUString();
             }
         }
     }
@@ -210,7 +210,7 @@ throw(css::uno::RuntimeException, std::exception)
             lComponentDataNV.realloc(nCDSize + 1);
             beans::NamedValue aValue;
             aValue.Name = "IsPackage";
-            aValue.Value = comphelper::makeBoolAny(true);
+            aValue.Value <<= true;
             lComponentDataNV[nCDSize] = aValue;
             Descriptor[nComponentDataLocation].Value <<= lComponentDataNV;
         }
@@ -220,7 +220,7 @@ throw(css::uno::RuntimeException, std::exception)
             lComponentDataPV.realloc(nCDSize + 1);
             beans::PropertyValue aProp;
             aProp.Name = "IsPackage";
-            aProp.Value = comphelper::makeBoolAny(true);
+            aProp.Value <<= true;
             aProp.Handle = -1;
             aProp.State = beans::PropertyState_DIRECT_VALUE;
             lComponentDataPV[nCDSize] = aProp;
@@ -239,32 +239,27 @@ throw(css::uno::RuntimeException, std::exception)
 
 // XServiceInfo
 OUString SAL_CALL KeynoteImportFilter::getImplementationName()
-throw (RuntimeException, std::exception)
 {
     return OUString("org.libreoffice.comp.Impress.KeynoteImportFilter");
 }
 
-sal_Bool SAL_CALL KeynoteImportFilter::supportsService(const OUString &rServiceName)
-throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL KeynoteImportFilter::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-Sequence< OUString > SAL_CALL KeynoteImportFilter::getSupportedServiceNames()
-throw (RuntimeException, std::exception)
+Sequence<OUString> SAL_CALL KeynoteImportFilter::getSupportedServiceNames()
 {
-    Sequence < OUString > aRet(2);
-    OUString *pArray = aRet.getArray();
+    Sequence<OUString> aRet(2);
+    OUString* pArray = aRet.getArray();
     pArray[0] = "com.sun.star.document.ImportFilter";
     pArray[1] = "com.sun.star.document.ExtendedTypeDetection";
     return aRet;
 }
 
-extern "C"
-SAL_DLLPUBLIC_EXPORT css::uno::XInterface *SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 org_libreoffice_comp_Impress_KeynoteImportFilter_get_implementation(
-    css::uno::XComponentContext *const context,
-    const css::uno::Sequence<css::uno::Any> &)
+    css::uno::XComponentContext* const context, const css::uno::Sequence<css::uno::Any>&)
 {
     return cppu::acquire(new KeynoteImportFilter(context));
 }

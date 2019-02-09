@@ -23,11 +23,14 @@
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
 #include <com/sun/star/awt/XWindow.hpp>
 #include <com/sun/star/sdbc/DriverManager.hpp>
+#include <comphelper/propertysequence.hxx>
 #include <vcl/stdtext.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
-#include "abpresid.hrc"
-#include "componentmodule.hxx"
+#include <strings.hrc>
+#include <componentmodule.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/waitobj.hxx>
+#include <osl/diagnose.h>
 
 
 namespace abp
@@ -50,7 +53,7 @@ namespace abp
     {
         DBG_ASSERT(m_xContext.is(), "OAdminDialogInvokation::OAdminDialogInvokation: invalid service factory!");
         DBG_ASSERT(m_xDataSource.is(), "OAdminDialogInvokation::OAdminDialogInvokation: invalid preferred name!");
-        DBG_ASSERT(m_pMessageParent, "OAdminDialogInvokation::OAdminDialogInvokation: invalid message parent!");
+        assert(m_pMessageParent && "OAdminDialogInvokation::OAdminDialogInvokation: invalid message parent!");
     }
 
 
@@ -66,19 +69,13 @@ namespace abp
             static const char s_sDataSourceTypeChangeDialog[] = "com.sun.star.sdb.DataSourceTypeChangeDialog";
 
             // the parameters for the call
-            Sequence< Any > aArguments(3);
-            Any* pArguments = aArguments.getArray();
+            Sequence<Any> aArguments(comphelper::InitAnyPropertySequence(
+            {
+                {"ParentWindow", Any(VCLUnoHelper::GetInterface(m_pMessageParent))},
+                {"Title", Any(compmodule::ModuleRes(RID_STR_ADMINDIALOGTITLE))},
+                {"InitialSelection", Any(m_xDataSource)}, // the name of the new data source
+            }));
 
-            // the parent window
-            Reference< XWindow > xDialogParent = VCLUnoHelper::GetInterface(m_pMessageParent);
-            *pArguments++ <<= PropertyValue(OUString("ParentWindow"), -1, makeAny(xDialogParent), PropertyState_DIRECT_VALUE);
-
-            // the title of the dialog
-            OUString sAdminDialogTitle(ModuleRes(RID_STR_ADMINDIALOGTITLE).toString());
-            *pArguments++ <<= PropertyValue(OUString("Title"), -1, makeAny(sAdminDialogTitle), PropertyState_DIRECT_VALUE);
-
-            // the name of the new data source
-            *pArguments++ <<= PropertyValue(OUString("InitialSelection"), -1, makeAny(m_xDataSource), PropertyState_DIRECT_VALUE);
 
             // create the dialog
             Reference< XExecutableDialog > xDialog;
@@ -106,7 +103,7 @@ namespace abp
                     return true;
             }
             else
-                ShowServiceNotAvailableError(m_pMessageParent, s_sAdministrationServiceName, true);
+                ShowServiceNotAvailableError(m_pMessageParent->GetFrameWeld(), s_sAdministrationServiceName, true);
         }
         catch(const Exception&)
         {

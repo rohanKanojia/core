@@ -22,41 +22,40 @@
 #include <com/sun/star/presentation/EffectNodeType.hpp>
 #include <com/sun/star/presentation/ParagraphTarget.hpp>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
-#include <com/sun/star/animations/XIterateContainer.hpp>
 #include <com/sun/star/presentation/EffectPresetClass.hpp>
 #include <com/sun/star/presentation/EffectCommands.hpp>
 #include <com/sun/star/text/XTextRange.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/drawing/XDrawPage.hpp>
-#include <svx/ShapeTypeHandler.hxx>
 #include "CustomAnimationList.hxx"
-#include "CustomAnimation.hrc"
-#include "CustomAnimationPreset.hxx"
+#include <CustomAnimationPreset.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/builderfactory.hxx>
-#include <o3tl/make_unique.hxx>
+#include <vcl/commandevent.hxx>
+#include <vcl/event.hxx>
+#include <tools/debug.hxx>
+#include <osl/diagnose.h>
 
-#include "sdresid.hxx"
+#include <sdresid.hxx>
 
-#include "svtools/svlbitm.hxx"
-#include "svtools/treelistentry.hxx"
-#include "svtools/viewdataentry.hxx"
+#include <vcl/svlbitm.hxx>
+#include <vcl/treelistentry.hxx>
+#include <vcl/viewdataentry.hxx>
 
-#include "res_bmp.hrc"
-#include "glob.hrc"
+
+#include <strings.hrc>
+#include <bitmaps.hlst>
 
 #include <algorithm>
 #include <memory>
 
 using namespace ::com::sun::star;
-using namespace ::com::sun::star::animations;
 using namespace ::com::sun::star::presentation;
 
 using ::com::sun::star::uno::UNO_QUERY;
 using ::com::sun::star::uno::UNO_QUERY_THROW;
 using ::com::sun::star::uno::Any;
-using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Exception;
 using ::com::sun::star::uno::XInterface;
@@ -70,11 +69,10 @@ using ::com::sun::star::container::XEnumerationAccess;
 using ::com::sun::star::container::XEnumeration;
 using ::com::sun::star::beans::XPropertySet;
 using ::com::sun::star::beans::XPropertySetInfo;
-using ::accessibility::ShapeTypeHandler;
 
 namespace sd {
 
-// go recursivly through all shapes in the given XShapes collection and return true as soon as the
+// go recursively through all shapes in the given XShapes collection and return true as soon as the
 // given shape is found. nIndex is incremented for each shape with the same shape type as the given
 // shape is found until the given shape is found.
 static bool getShapeIndex(  const Reference< XShapes >& xShapes, const Reference< XShape >& xShape, sal_Int32& nIndex )
@@ -129,16 +127,25 @@ OUString getShapeDescription( const Reference< XShape >& xShape, bool bWithText 
 {
     OUString aDescription;
     Reference< XPropertySet > xSet( xShape, UNO_QUERY );
+    bool bAppendIndex = true;
+
     if( xSet.is() )
     {
-        Reference< XPropertySetInfo > xInfo( xSet->getPropertySetInfo() );
-        const OUString aPropName( "UINameSingular");
-        if( xInfo->hasPropertyByName( aPropName ) )
-            xSet->getPropertyValue( aPropName ) >>= aDescription;
+        Reference<XPropertySetInfo> xInfo(xSet->getPropertySetInfo());
+
+        xSet->getPropertyValue("Name") >>= aDescription;
+        bAppendIndex = aDescription.isEmpty();
+
+        const OUString aPropName("UINameSingular");
+        if(xInfo->hasPropertyByName(aPropName))
+            xSet->getPropertyValue(aPropName) >>= aDescription;
     }
 
-    aDescription += " ";
-    aDescription += OUString::number( getShapeIndex( xShape ) );
+    if (bAppendIndex)
+    {
+        aDescription += " ";
+        aDescription += OUString::number(getShapeIndex(xShape));
+    }
 
     if( bWithText )
     {
@@ -150,8 +157,8 @@ OUString getShapeDescription( const Reference< XShape >& xShape, bool bWithText 
             {
                 aDescription += ": ";
 
-                aText = aText.replace( (sal_Unicode)'\n', (sal_Unicode)' ' );
-                aText = aText.replace( (sal_Unicode)'\r', (sal_Unicode)' ' );
+                aText = aText.replace( '\n', ' ' );
+                aText = aText.replace( '\r', ' ' );
 
                 aDescription += aText;
             }
@@ -160,7 +167,7 @@ OUString getShapeDescription( const Reference< XShape >& xShape, bool bWithText 
     return aDescription;
 }
 
-static OUString getDescription( const Any& rTarget, bool bWithText = true )
+static OUString getDescription( const Any& rTarget, bool bWithText )
 {
     OUString aDescription;
 
@@ -205,51 +212,41 @@ class CustomAnimationListEntryItem : public SvLBoxString
 {
 public:
     CustomAnimationListEntryItem(const OUString& aDescription,
-                                 CustomAnimationEffectPtr pEffect, CustomAnimationList* pParent);
-    virtual ~CustomAnimationListEntryItem();
-    void InitViewData(SvTreeListBox*,SvTreeListEntry*,SvViewDataItem*) override;
-    SvLBoxItem* Create() const override;
-    void Clone(SvLBoxItem* pSource) override;
+                                 const CustomAnimationEffectPtr& pEffect, CustomAnimationList* pParent);
+    void InitViewData(SvTreeListBox*,SvTreeListEntry*,SvViewDataItem* = nullptr) override;
+    virtual std::unique_ptr<SvLBoxItem> Clone(SvLBoxItem const * pSource) const override;
 
     virtual void Paint(const Point&, SvTreeListBox& rDev, vcl::RenderContext& rRenderContext,
                        const SvViewDataEntry* pView,const SvTreeListEntry& rEntry) override;
 private:
     VclPtr<CustomAnimationList> mpParent;
-    OUString        msDescription;
+    OUString const  msDescription;
     OUString        msEffectName;
-    CustomAnimationEffectPtr mpEffect;
-    const CustomAnimationPresets* mpCustomAnimationPresets;
-    const long nIconWidth = 19;
-    const long nItemMinHeight = 38;
+    CustomAnimationEffectPtr const mpEffect;
+    static const long nIconWidth = 19;
+    static const long nItemMinHeight = 38;
 };
 
-CustomAnimationListEntryItem::CustomAnimationListEntryItem( const OUString& aDescription, CustomAnimationEffectPtr pEffect, CustomAnimationList* pParent  )
+CustomAnimationListEntryItem::CustomAnimationListEntryItem( const OUString& aDescription, const CustomAnimationEffectPtr& pEffect, CustomAnimationList* pParent  )
 : SvLBoxString( aDescription )
 , mpParent( pParent )
 , msDescription( aDescription )
 , msEffectName( OUString() )
 , mpEffect(pEffect)
-, mpCustomAnimationPresets(&CustomAnimationPresets::getCustomAnimationPresets())
 {
     switch(mpEffect->getPresetClass())
     {
     case EffectPresetClass::ENTRANCE:
-        msEffectName = SD_RESSTR(STR_CUSTOMANIMATION_ENTRANCE); break;
+        msEffectName = SdResId(STR_CUSTOMANIMATION_ENTRANCE); break;
     case EffectPresetClass::EXIT:
-        msEffectName = SD_RESSTR(STR_CUSTOMANIMATION_EXIT); break;
+        msEffectName = SdResId(STR_CUSTOMANIMATION_EXIT); break;
     case EffectPresetClass::EMPHASIS:
-        msEffectName = SD_RESSTR(STR_CUSTOMANIMATION_EMPHASIS); break;
+        msEffectName = SdResId(STR_CUSTOMANIMATION_EMPHASIS); break;
     case EffectPresetClass::MOTIONPATH:
-        msEffectName = SD_RESSTR(STR_CUSTOMANIMATION_MOTION_PATHS); break;
+        msEffectName = SdResId(STR_CUSTOMANIMATION_MOTION_PATHS); break;
     }
-    msEffectName = msEffectName.replaceFirst( "%1" , mpCustomAnimationPresets->getUINameForPresetId(mpEffect->getPresetId()));
+    msEffectName = msEffectName.replaceFirst( "%1" , CustomAnimationPresets::getCustomAnimationPresets().getUINameForPresetId(mpEffect->getPresetId()));
 }
-
-
-CustomAnimationListEntryItem::~CustomAnimationListEntryItem()
-{
-}
-
 
 void CustomAnimationListEntryItem::InitViewData( SvTreeListBox* pView, SvTreeListEntry* pEntry, SvViewDataItem* pViewData )
 {
@@ -262,7 +259,7 @@ void CustomAnimationListEntryItem::InitViewData( SvTreeListBox* pView, SvTreeLis
 
     Size aSize( width, pView->GetTextHeight() );
     if( aSize.Height() < nItemMinHeight )
-        aSize.Height() = nItemMinHeight;
+        aSize.setHeight( nItemMinHeight );
     pViewData->maSize = aSize;
 }
 
@@ -278,99 +275,90 @@ void CustomAnimationListEntryItem::Paint(const Point& rPos, SvTreeListBox& rDev,
     sal_Int16 nNodeType = mpEffect->getNodeType();
     if (nNodeType == EffectNodeType::ON_CLICK )
     {
-        rRenderContext.DrawImage( aPos, mpParent->getImage(IMG_CUSTOMANIMATION_ON_CLICK));
+        rRenderContext.DrawImage(aPos, Image(StockImage::Yes, BMP_CUSTOMANIMATION_ON_CLICK));
     }
     else if (nNodeType == EffectNodeType::AFTER_PREVIOUS)
     {
-        rRenderContext.DrawImage(aPos, mpParent->getImage(IMG_CUSTOMANIMATION_AFTER_PREVIOUS));
+        rRenderContext.DrawImage(aPos, Image(StockImage::Yes, BMP_CUSTOMANIMATION_AFTER_PREVIOUS));
     }
     else if (nNodeType == EffectNodeType::WITH_PREVIOUS)
     {
         //FIXME With previous image not defined in CustomAnimation.src
     }
 
-    aPos.X() += nIconWidth;
+    aPos.AdjustX(nIconWidth );
 
 
     rRenderContext.DrawText(aPos, rRenderContext.GetEllipsisString(msDescription, rDev.GetOutputSizePixel().Width() - aPos.X()));
 
-    aPos.Y() += nIconWidth;
+    aPos.AdjustY(nIconWidth );
 
-    sal_uInt16 nImage;
+    OUString sImage;
     switch (mpEffect->getPresetClass())
     {
     case EffectPresetClass::ENTRANCE:
-        nImage = IMG_CUSTOMANIMATION_ENTRANCE_EFFECT; break;
+        sImage = BMP_CUSTOMANIMATION_ENTRANCE_EFFECT; break;
     case EffectPresetClass::EXIT:
-        nImage =  IMG_CUSTOMANIMATION_EXIT_EFFECT; break;
+        sImage = BMP_CUSTOMANIMATION_EXIT_EFFECT; break;
     case EffectPresetClass::EMPHASIS:
-        nImage =  IMG_CUSTOMANIMATION_EMPHASIS_EFFECT; break;
+        sImage = BMP_CUSTOMANIMATION_EMPHASIS_EFFECT; break;
     case EffectPresetClass::MOTIONPATH:
-        nImage = IMG_CUSTOMANIMATION_MOTION_PATH; break;
+        sImage = BMP_CUSTOMANIMATION_MOTION_PATH; break;
     case EffectPresetClass::OLEACTION:
-        nImage = IMG_CUSTOMANIMATION_OLE; break;
+        sImage = BMP_CUSTOMANIMATION_OLE; break;
     case EffectPresetClass::MEDIACALL:
         switch (mpEffect->getCommand())
         {
         case EffectCommands::TOGGLEPAUSE:
-            nImage = IMG_CUSTOMANIMATION_MEDIA_PAUSE; break;
+            sImage = BMP_CUSTOMANIMATION_MEDIA_PAUSE; break;
         case EffectCommands::STOP:
-            nImage = IMG_CUSTOMANIMATION_MEDIA_STOP; break;
+            sImage = BMP_CUSTOMANIMATION_MEDIA_STOP; break;
         case EffectCommands::PLAY:
         default:
-            nImage = IMG_CUSTOMANIMATION_MEDIA_PLAY; break;
+            sImage = BMP_CUSTOMANIMATION_MEDIA_PLAY; break;
         }
         break;
     default:
-        nImage = 0xffff;
+        break;
     }
 
-    if (nImage != 0xffff)
+    if (!sImage.isEmpty())
     {
-        const Image& rImage = mpParent->getImage(nImage);
+        Image aImage(StockImage::Yes, sImage);
         Point aImagePos(aPos);
-        aImagePos.Y() += (aSize.Height()/2 - rImage.GetSizePixel().Height()) >> 1;
-        rRenderContext.DrawImage(aImagePos, rImage);
+        aImagePos.AdjustY((aSize.Height()/2 - aImage.GetSizePixel().Height()) >> 1 );
+        rRenderContext.DrawImage(aImagePos, aImage);
     }
 
-    aPos.X() += nIconWidth;
-    aPos.Y() += (aSize.Height()/2 - rDev.GetTextHeight()) >> 1;
+    aPos.AdjustX(nIconWidth );
+    aPos.AdjustY((aSize.Height()/2 - rDev.GetTextHeight()) >> 1 );
 
     rRenderContext.DrawText(aPos, rRenderContext.GetEllipsisString(msEffectName, rDev.GetOutputSizePixel().Width() - aPos.X()));
 }
 
-SvLBoxItem* CustomAnimationListEntryItem::Create() const
+std::unique_ptr<SvLBoxItem> CustomAnimationListEntryItem::Clone(SvLBoxItem const *) const
 {
     return nullptr;
-}
-
-void CustomAnimationListEntryItem::Clone( SvLBoxItem* )
-{
 }
 
 class CustomAnimationListEntry : public SvTreeListEntry
 {
 public:
     CustomAnimationListEntry();
-    explicit CustomAnimationListEntry( CustomAnimationEffectPtr pEffect );
-    virtual ~CustomAnimationListEntry();
+    explicit CustomAnimationListEntry(const CustomAnimationEffectPtr& pEffect);
 
-    CustomAnimationEffectPtr getEffect() const { return mpEffect; }
+    const CustomAnimationEffectPtr& getEffect() const { return mpEffect; }
 
 private:
-    CustomAnimationEffectPtr mpEffect;
+    CustomAnimationEffectPtr const mpEffect;
 };
 
 CustomAnimationListEntry::CustomAnimationListEntry()
 {
 }
 
-CustomAnimationListEntry::CustomAnimationListEntry( CustomAnimationEffectPtr pEffect )
+CustomAnimationListEntry::CustomAnimationListEntry(const CustomAnimationEffectPtr& pEffect)
 : mpEffect( pEffect )
-{
-}
-
-CustomAnimationListEntry::~CustomAnimationListEntry()
 {
 }
 
@@ -378,24 +366,19 @@ class CustomAnimationTriggerEntryItem : public SvLBoxString
 {
 public:
     explicit        CustomAnimationTriggerEntryItem( const OUString& aDescription );
-    virtual         ~CustomAnimationTriggerEntryItem();
-    void            InitViewData( SvTreeListBox*,SvTreeListEntry*,SvViewDataItem* ) override;
-    SvLBoxItem*     Create() const override;
-    void            Clone( SvLBoxItem* pSource ) override;
+
+    void            InitViewData( SvTreeListBox*,SvTreeListEntry*,SvViewDataItem* = nullptr ) override;
+    virtual std::unique_ptr<SvLBoxItem> Clone(SvLBoxItem const * pSource) const override;
     virtual void Paint(const Point& rPos, SvTreeListBox& rOutDev, vcl::RenderContext& rRenderContext,
                        const SvViewDataEntry* pView, const SvTreeListEntry& rEntry) override;
 
 private:
-    OUString        msDescription;
-    const long nIconWidth = 19;
+    OUString const        msDescription;
+    static const long nIconWidth = 19;
 };
 
 CustomAnimationTriggerEntryItem::CustomAnimationTriggerEntryItem( const OUString& aDescription )
 : SvLBoxString( aDescription ), msDescription( aDescription )
-{
-}
-
-CustomAnimationTriggerEntryItem::~CustomAnimationTriggerEntryItem()
 {
 }
 
@@ -406,7 +389,7 @@ void CustomAnimationTriggerEntryItem::InitViewData( SvTreeListBox* pView, SvTree
 
     Size aSize(pView->GetTextWidth( msDescription ) + 2 * nIconWidth, pView->GetTextHeight() );
     if( aSize.Height() < nIconWidth )
-        aSize.Height() = nIconWidth;
+        aSize.setHeight( nIconWidth );
     pViewData->maSize = aSize;
 }
 
@@ -417,7 +400,7 @@ void CustomAnimationTriggerEntryItem::Paint(const Point& rPos, SvTreeListBox& rD
 
     Point aPos(0, rPos.Y());
 
-    Rectangle aOutRect(aPos, aSize);
+    ::tools::Rectangle aOutRect(aPos, aSize);
 
     // fill the background
     Color aColor(rRenderContext.GetSettings().GetStyleSettings().GetDialogColor());
@@ -437,24 +420,20 @@ void CustomAnimationTriggerEntryItem::Paint(const Point& rPos, SvTreeListBox& rD
     // draw the category title
 
     int nVertBorder = ((aSize.Height() - rDev.GetTextHeight()) >> 1);
-    int nHorzBorder = rRenderContext.LogicToPixel(Size(3, 3), MAP_APPFONT).Width();
+    int nHorzBorder = rRenderContext.LogicToPixel(Size(3, 3), MapMode(MapUnit::MapAppFont)).Width();
 
-    aOutRect.Left() += nHorzBorder;
-    aOutRect.Right() -= nHorzBorder;
-    aOutRect.Top() += nVertBorder;
-    aOutRect.Bottom() -= nVertBorder;
+    aOutRect.AdjustLeft(nHorzBorder );
+    aOutRect.AdjustRight( -nHorzBorder );
+    aOutRect.AdjustTop( nVertBorder );
+    aOutRect.AdjustBottom( -nVertBorder );
 
     rRenderContext.DrawText(aOutRect, rRenderContext.GetEllipsisString(msDescription, aOutRect.GetWidth()));
     rRenderContext.Pop();
 }
 
-SvLBoxItem* CustomAnimationTriggerEntryItem::Create() const
+std::unique_ptr<SvLBoxItem> CustomAnimationTriggerEntryItem::Clone(SvLBoxItem const *) const
 {
     return nullptr;
-}
-
-void CustomAnimationTriggerEntryItem::Clone( SvLBoxItem* )
-{
 }
 
 CustomAnimationList::CustomAnimationList( vcl::Window* pParent )
@@ -463,28 +442,285 @@ CustomAnimationList::CustomAnimationList( vcl::Window* pParent )
     , mpController(nullptr)
     , mnLastGroupId(0)
     , mpLastParentEntry(nullptr)
+    , mpDndEffectDragging(nullptr)
+    , mpDndEffectInsertBefore(nullptr)
 {
-
     EnableContextMenuHandling();
-    SetSelectionMode( MULTIPLE_SELECTION );
+    SetSelectionMode( SelectionMode::Multiple );
     SetOptimalImageIndent();
     SetNodeDefaultImages();
+
+    SetDragDropMode(DragDropMode::CTRL_MOVE);
+}
+
+// D'n'D #1: Record selected effects for drag'n'drop.
+void CustomAnimationList::StartDrag( sal_Int8 nAction, const Point& rPosPixel )
+{
+    // Record which effects are selected:
+    // Since NextSelected(..) iterates through the selected items in the order they
+    // were selected, create a sorted list for simpler drag'n'drop algorithms.
+    mDndEffectsSelected.clear();
+    for( SvTreeListEntry* pEntry = First(); pEntry; pEntry = Next(pEntry) )
+    {
+        if( IsSelected(pEntry) )
+        {
+            mDndEffectsSelected.push_back( pEntry );
+        }
+    }
+
+    // Allow normal proccessing; this calls our NotifyStartDrag().
+    SvTreeListBox::StartDrag( nAction, rPosPixel );
+}
+
+// D'n'D #2: Prepare selected element for moving.
+DragDropMode CustomAnimationList::NotifyStartDrag( TransferDataContainer& /*rData*/, SvTreeListEntry* pEntry )
+{
+    // Restore selection for multiple selected effects.
+    // Do it here to remove a flicker on the UI with effects being unselected and reselected.
+    for( auto &pEffect : mDndEffectsSelected )
+        SelectListEntry( pEffect, true);
+
+    // Note: pEntry is the effect with focus (if multiple effects are selected)
+    mpDndEffectDragging = pEntry;
+    mpDndEffectInsertBefore = pEntry;
+
+    return DragDropMode::CTRL_MOVE;
+}
+
+// D'n'D #3: Called each time mouse moves during drag
+sal_Int8 CustomAnimationList::AcceptDrop( const AcceptDropEvent& rEvt )
+{
+    /*
+        Don't call SvTreeListBox::AcceptDrop because it puts an unnecessary
+        highlight via ImplShowTargetEmphasis()
+    */
+
+    sal_Int8 ret = DND_ACTION_NONE;
+
+    const bool bIsMove = ( DND_ACTION_MOVE == rEvt.mnAction );
+    if( mpDndEffectDragging && !rEvt.mbLeaving && bIsMove )
+    {
+        SvTreeListEntry* pEntry = GetDropTarget( rEvt.maPosPixel );
+
+        const bool bOverASelectedEffect =
+            std::find( mDndEffectsSelected.begin(), mDndEffectsSelected.end(), pEntry ) != mDndEffectsSelected.end();
+        if( pEntry && !bOverASelectedEffect )
+        {
+            ReparentChildrenDuringDrag();
+
+            ReorderEffectsInUiDuringDragOver( pEntry );
+        }
+
+        // Return DND_ACTION_MOVE on internal drag'n'drops so that ExecuteDrop() is called.
+        // Return MOVE even if we are over other dragged effect because dragged effect moves.
+        ret = DND_ACTION_MOVE;
+    }
+
+    return ret;
+}
+
+// D'n'D: For each dragged effect, re-parent (only in the UI) non-selected
+//        visible children so they are not dragged with the parent.
+void CustomAnimationList::ReparentChildrenDuringDrag()
+{
+    /*
+        Re-parent (only in the UI!):
+          a) the dragged effect's first non-selected child to the root, and
+          b) the remaining non-selected children to that re-parented 1st child.
+    */
+    for( auto &pEffect : mDndEffectsSelected )
+    {
+        const bool bExpandedWithChildren = GetVisibleChildCount( pEffect ) > 0;
+        if( bExpandedWithChildren )
+        {
+            SvTreeListEntry* pEntryParent = GetParent( pEffect );
+
+            SvTreeListEntry* pFirstNonSelectedChild = nullptr;
+            sal_uLong nInsertNextChildPos = 0;
+
+            // Process all children of this effect
+            SvTreeListEntry* pChild = FirstChild( pEffect );
+            while( pChild && ( GetParent( pChild ) == pEffect ) )
+            {
+                // Start by finding next child because if pChild moves, we cannot then
+                // ask it what the next child is because it's no longer with its siblings.
+                SvTreeListEntry* pNextChild = Next( pChild );
+
+                // Skip selected effects: they stay with their previous parent to be moved.
+                // During drag, the IsSelected() set changes, so use mDndEffectsSelected instead
+                const bool bIsSelected = std::find( mDndEffectsSelected.begin(), mDndEffectsSelected.end(), pChild ) != mDndEffectsSelected.end();
+                if( !bIsSelected )
+                {
+                    // Re-parent 1st non-selected child to root, below all the other children.
+                    if( !pFirstNonSelectedChild )
+                    {
+                        pFirstNonSelectedChild = pChild;
+                        sal_uLong nInsertAfterPos = SvTreeList::GetRelPos( pEffect ) + 1;
+                        pModel->Move( pFirstNonSelectedChild, pEntryParent, nInsertAfterPos );
+                    }
+                    else
+                    {
+                        // Re-parent remaining non-selected children to 1st child
+                        ++nInsertNextChildPos;
+                        pModel->Move( pChild, pFirstNonSelectedChild, nInsertNextChildPos );
+                    }
+                }
+
+                pChild = pNextChild;
+            }
+
+            // Expand all children (they were previously visible)
+            if( pFirstNonSelectedChild )
+                Expand( pFirstNonSelectedChild );
+
+        }
+    }
+}
+
+// D'n'D: Update UI to show where dragged event will appear if dropped now.
+void CustomAnimationList::ReorderEffectsInUiDuringDragOver( SvTreeListEntry* pOverEntry )
+{
+    /*
+        Update the order of effects in *just the UI* while the user is dragging.
+        The model (MainSequence) will only be changed after the user drops
+        the effect so that there is minimal work to do if the drag is canceled.
+        Plus only one undo record should be created per drag, and changing
+        the model recreates all effects (on a background timer) which invalidates
+        all effect pointers.
+    */
+
+    // Compute new location in *UI*
+    SvTreeListEntry* pNewParent = nullptr;
+    sal_uLong nInsertAfterPos = 0;
+
+    Point aPosOverEffect( GetEntryPosition(pOverEntry) );
+    Point aPosDraggedEffect( GetEntryPosition(mpDndEffectDragging) );
+    const bool bDraggingUp = (aPosDraggedEffect.Y() - aPosOverEffect.Y()) > 0;
+
+    if( bDraggingUp )
+    {
+        // Drag up   --> place above the element we are over
+        pNewParent = GetParent( pOverEntry );
+        nInsertAfterPos = SvTreeList::GetRelPos( pOverEntry );
+        mpDndEffectInsertBefore = pOverEntry;
+    }
+    else
+    {
+        // Drag down -->  place below the element we are over
+        SvTreeListEntry* pNextVisBelowTarget = NextVisible( pOverEntry );
+        if( pNextVisBelowTarget )
+        {
+            // Match parent of NEXT visible effect (works for sub-items too)
+            pNewParent = GetParent( pNextVisBelowTarget );
+            nInsertAfterPos = SvTreeList::GetRelPos( pNextVisBelowTarget );
+            mpDndEffectInsertBefore = pNextVisBelowTarget;
+        }
+        else
+        {
+            // Over the last element: no next to work with
+            pNewParent = GetParent( pOverEntry );
+            nInsertAfterPos = SvTreeList::GetRelPos( pOverEntry ) + 1;
+            mpDndEffectInsertBefore = nullptr;
+        }
+    }
+
+    // Move each selected effect in *just* the UI to show where it would be if dropped.
+    // This leaves the exist parent relationships in the non-dragged elements so that
+    // the list does not seem to change structure during drag. Parent relationships will
+    // be correctly recreated on drop.
+    for( auto aItr = mDndEffectsSelected.rbegin();
+         aItr != mDndEffectsSelected.rend();
+         ++aItr)
+    {
+        SvTreeListEntry* pEffect = *aItr;
+
+        // Move only effects whose parents is not selected because
+        // they will automatically move when their parent is moved.
+        const bool bParentIsSelected =
+            std::find(mDndEffectsSelected.begin(), mDndEffectsSelected.end(), GetParent(pEffect)) != mDndEffectsSelected.end();
+
+        if( !bParentIsSelected )
+        {
+            // If the current effect is being moved down, the insert position must be decremented
+            // after move if it will have the same parent as it currently does because it moves
+            // from above the insertion point to below it, hence changing its index.
+            // Must decide move-up vs move-down for each effect being dragged because we may be
+            // processing a discontinuous set of selected effects (some below, some above insertion point)
+            Point aCurPosOverEffect( GetEntryPosition( pOverEntry ) );
+            Point aCurPosMovedEffect( GetEntryPosition( pEffect ) );
+            const bool bCurDraggingDown = ( aCurPosMovedEffect.Y() - aCurPosOverEffect.Y() ) < 0;
+            const bool bWillHaveSameParent = ( pNewParent == GetParent(pEffect) );
+
+            pModel->Move( pEffect, pNewParent, nInsertAfterPos );
+
+            if( bCurDraggingDown && bWillHaveSameParent )
+                --nInsertAfterPos;
+        }
+    }
+
+    // Restore selection (calling Select() is slow; SelectListEntry() is faster)
+    for( auto &pEffect : mDndEffectsSelected )
+        SelectListEntry( pEffect, true);
+}
+
+// D'n'D #5: Tell model to update effect order.
+sal_Int8 CustomAnimationList::ExecuteDrop( const ExecuteDropEvent& /*rEvt*/ )
+{
+    // NOTE: We cannot just override NotifyMoving() because it's not called
+    //       since we dynamically reorder effects during drag.
+
+    sal_Int8 ret = DND_ACTION_NONE;
+
+    const bool bMovingEffect = ( mpDndEffectDragging != nullptr );
+    const bool bMoveNotSelf  = ( mpDndEffectInsertBefore != mpDndEffectDragging );
+    const bool bHaveSequence = ( mpMainSequence.get() != nullptr );
+
+    if( bMovingEffect && bMoveNotSelf && bHaveSequence )
+    {
+        CustomAnimationListEntry*  pTarget = static_cast< CustomAnimationListEntry* >( mpDndEffectInsertBefore );
+
+        // Build list of effects
+        std::vector< CustomAnimationEffectPtr > aEffects;
+        for( auto &pEntry : mDndEffectsSelected )
+        {
+            CustomAnimationListEntry* pCustomAnimationEffect = static_cast< CustomAnimationListEntry* >( pEntry );
+            aEffects.push_back( pCustomAnimationEffect->getEffect() );
+        }
+
+        // Callback to observer to have it update the model.
+        // If pTarget is null, pass nullptr to indicate end of list.
+        mpController->onDragNDropComplete(
+            aEffects,
+            pTarget ? pTarget->getEffect() : nullptr );
+
+        // Reset selection
+        Select( mpDndEffectDragging );
+
+        ret = DND_ACTION_MOVE;
+    }
+
+    // NOTE: Don't call SvTreeListBox::ExecuteDrop(...) because all required
+    //       move operations have been completed here to update the model.
+    return ret;
+}
+
+// D'n'D #6: Cleanup (regardless of if we were target of drop or not)
+void CustomAnimationList::DragFinished( sal_Int8 /*nDropAction*/ )
+{
+    mpDndEffectDragging = nullptr;
+    mpDndEffectInsertBefore = nullptr;
+    mDndEffectsSelected.clear();
+
+    // Rebuild because we may have re-parented the dragged effect's first child.
+    // Can hit this without running ExecuteDrop(...) when drag canceled.
+    mpMainSequence->rebuild();
+
+    // Note: Don't call SvTreeListBox::DragFinished(...) because we don't call
+    //       SvTreeListBox::ExecuteDrop(...) which sets variables that are
+    //       needed in its DragFinished(...) method.
 }
 
 VCL_BUILDER_FACTORY(CustomAnimationList)
-
-const Image&  CustomAnimationList::getImage( sal_uInt16 nId )
-{
-    DBG_ASSERT( (nId >= IMG_CUSTOMANIMATION_ON_CLICK) && (nId <= IMG_CUSTOMANIMATION_MEDIA_STOP), "sd::CustomAnimationList::getImage(), illegal index!" );
-
-    Image& rImage = maImages[nId - IMG_CUSTOMANIMATION_ON_CLICK];
-
-    // load on demand
-    if( rImage.GetSizePixel().Width() == 0 )
-        rImage = Image(SdResId( nId ) );
-
-    return rImage;
-}
 
 CustomAnimationList::~CustomAnimationList()
 {
@@ -497,6 +733,10 @@ void CustomAnimationList::dispose()
         mpMainSequence->removeListener( this );
 
     clear();
+
+    mxMenu.disposeAndClear();
+    mxBuilder.reset();
+
     SvTreeListBox::dispose();
 }
 
@@ -505,8 +745,12 @@ void CustomAnimationList::KeyInput( const KeyEvent& rKEvt )
     const int nKeyCode = rKEvt.GetKeyCode().GetCode();
     switch( nKeyCode )
     {
-        case KEY_DELETE:    mpController->onContextMenu( CM_REMOVE ); return;
-        case KEY_INSERT:    mpController->onContextMenu( CM_CREATE ); return;
+        case KEY_DELETE:
+            mpController->onContextMenu("remove");
+            return;
+        case KEY_INSERT:
+            mpController->onContextMenu("create");
+            return;
         case KEY_SPACE:
             {
                 const Point aPos;
@@ -563,7 +807,7 @@ void CustomAnimationList::update( const MainSequencePtr& pMainSequence )
         mpMainSequence->addListener( this );
 }
 
-struct stl_append_effect_func : public std::unary_function<CustomAnimationEffectPtr, void>
+struct stl_append_effect_func
 {
     explicit stl_append_effect_func( CustomAnimationList& rList ) : mrList( rList ) {}
     void operator()(const CustomAnimationEffectPtr& pEffect);
@@ -582,8 +826,9 @@ void CustomAnimationList::update()
 
     CustomAnimationListEntry* pEntry = nullptr;
 
-    std::list< CustomAnimationEffectPtr > aExpanded;
-    std::list< CustomAnimationEffectPtr > aSelected;
+    std::vector< CustomAnimationEffectPtr > aVisible;
+    std::vector< CustomAnimationEffectPtr > aSelected;
+    CustomAnimationEffectPtr aCurrent;
 
     CustomAnimationEffectPtr pFirstSelEffect;
     CustomAnimationEffectPtr pLastSelEffect;
@@ -617,7 +862,7 @@ void CustomAnimationList::update()
             nLastSelOld = GetAbsPos( pEntry );
         }
 
-        // save selection and expand states
+        // save selection, current, and expand (visible) states
         pEntry = static_cast<CustomAnimationListEntry*>(First());
 
         while( pEntry )
@@ -625,8 +870,8 @@ void CustomAnimationList::update()
             CustomAnimationEffectPtr pEffect( pEntry->getEffect() );
             if( pEffect.get() )
             {
-                if( IsExpanded( pEntry ) )
-                    aExpanded.push_back( pEffect );
+                if( IsEntryVisible( pEntry ) )
+                    aVisible.push_back( pEffect );
 
                 if( IsSelected( pEntry ) )
                     aSelected.push_back( pEffect );
@@ -634,6 +879,10 @@ void CustomAnimationList::update()
 
             pEntry = static_cast<CustomAnimationListEntry*>(Next( pEntry ));
         }
+
+        pEntry = static_cast<CustomAnimationListEntry*>(GetCurEntry());
+        if( pEntry )
+            aCurrent = pEntry->getEffect();
     }
 
     // rebuild list
@@ -645,23 +894,19 @@ void CustomAnimationList::update()
         std::for_each( mpMainSequence->getBegin(), mpMainSequence->getEnd(), stl_append_effect_func( *this ) );
         mpLastParentEntry = nullptr;
 
-        const InteractiveSequenceList& rISL = mpMainSequence->getInteractiveSequenceList();
+        auto rInteractiveSequenceVector = mpMainSequence->getInteractiveSequenceVector();
 
-        InteractiveSequenceList::const_iterator aIter( rISL.begin() );
-        const InteractiveSequenceList::const_iterator aEnd( rISL.end() );
-        while( aIter != aEnd )
+        for (InteractiveSequencePtr const& pIS : rInteractiveSequenceVector)
         {
-            InteractiveSequencePtr pIS( (*aIter++) );
-
             Reference< XShape > xShape( pIS->getTriggerShape() );
             if( xShape.is() )
             {
                 SvTreeListEntry* pLBoxEntry = new CustomAnimationListEntry;
-                pLBoxEntry->AddItem(o3tl::make_unique<SvLBoxContextBmp>(Image(), Image(), false));
-                OUString aDescription = SD_RESSTR(STR_CUSTOMANIMATION_TRIGGER);
+                pLBoxEntry->AddItem(std::make_unique<SvLBoxContextBmp>(Image(), Image(), false));
+                OUString aDescription = SdResId(STR_CUSTOMANIMATION_TRIGGER);
                 aDescription += ": ";
                 aDescription += getShapeDescription( xShape, false );
-                pLBoxEntry->AddItem(o3tl::make_unique<CustomAnimationTriggerEntryItem>(aDescription));
+                pLBoxEntry->AddItem(std::make_unique<CustomAnimationTriggerEntryItem>(aDescription));
                 Insert( pLBoxEntry );
                 SvViewDataEntry* pViewData = GetViewData( pLBoxEntry );
                 if( pViewData )
@@ -672,7 +917,7 @@ void CustomAnimationList::update()
             }
         }
 
-        // restore selection and expand states
+        // restore selection state, expand state, and current-entry (under cursor)
         pEntry = static_cast<CustomAnimationListEntry*>(First());
 
         while( pEntry )
@@ -680,11 +925,20 @@ void CustomAnimationList::update()
             CustomAnimationEffectPtr pEffect( pEntry->getEffect() );
             if( pEffect.get() )
             {
-                if( std::find( aExpanded.begin(), aExpanded.end(), pEffect ) != aExpanded.end() )
-                    Expand( pEntry );
+                // Any effects that were visible should still be visible, so expand their parents.
+                // (a previously expanded parent may have moved leaving a child to now be the new parent to expand)
+                if( std::find( aVisible.begin(), aVisible.end(), pEffect ) != aVisible.end() )
+                {
+                    if( GetParent(pEntry) )
+                        Expand( GetParent(pEntry) );
+                }
 
                 if( std::find( aSelected.begin(), aSelected.end(), pEffect ) != aSelected.end() )
                     Select( pEntry );
+
+                // Restore the cursor; don't use SetCurEntry() as it may deselect other effects
+                if( pEffect == aCurrent )
+                    SetCursor( pEntry );
 
                 if( pEffect == pFirstSelEffect )
                     nFirstSelNew = GetAbsPos( pEntry );
@@ -765,8 +1019,8 @@ void CustomAnimationList::append( CustomAnimationEffectPtr pEffect )
         // create an entry for the effect
         SvTreeListEntry* pEntry = new CustomAnimationListEntry( pEffect );
 
-        pEntry->AddItem(o3tl::make_unique<SvLBoxContextBmp>(Image(), Image(), false));
-        pEntry->AddItem(o3tl::make_unique<CustomAnimationListEntryItem>(aDescription, pEffect, this));
+        pEntry->AddItem(std::make_unique<SvLBoxContextBmp>(Image(), Image(), false));
+        pEntry->AddItem(std::make_unique<CustomAnimationListEntryItem>(aDescription, pEffect, this));
 
         if( pParentEntry )
         {
@@ -790,7 +1044,7 @@ void CustomAnimationList::append( CustomAnimationEffectPtr pEffect )
     }
 }
 
-void selectShape( SvTreeListBox* pTreeList, const Reference< XShape >& xShape )
+static void selectShape( SvTreeListBox* pTreeList, const Reference< XShape >& xShape )
 {
     CustomAnimationListEntry* pEntry = static_cast< CustomAnimationListEntry* >(pTreeList->First());
     while( pEntry )
@@ -868,6 +1122,21 @@ bool CustomAnimationList::isExpanded( const CustomAnimationEffectPtr& pEffect ) 
     return (pEntry == nullptr) || IsExpanded( pEntry );
 }
 
+bool CustomAnimationList::isVisible( const CustomAnimationEffectPtr& pEffect ) const
+{
+    CustomAnimationListEntry* pEntry = static_cast<CustomAnimationListEntry*>(First());
+
+    while( pEntry )
+    {
+        if( pEntry->getEffect() == pEffect )
+            break;
+
+        pEntry = static_cast<CustomAnimationListEntry*>(Next( pEntry ));
+    }
+
+    return (pEntry == nullptr) || IsEntryVisible( pEntry );
+}
+
 EffectSequence CustomAnimationList::getSelection() const
 {
     EffectSequence aSelection;
@@ -888,12 +1157,12 @@ EffectSequence CustomAnimationList::getSelection() const
             {
                 if( !IsSelected( pChild ) )
                 {
-                    CustomAnimationEffectPtr pChildEffect( pChild->getEffect() );
+                    const CustomAnimationEffectPtr& pChildEffect( pChild->getEffect() );
                     if( pChildEffect.get() )
                         aSelection.push_back( pChildEffect );
                 }
 
-                pChild = dynamic_cast< CustomAnimationListEntry* >(  NextSibling( pChild ) );
+                pChild = dynamic_cast< CustomAnimationListEntry* >(  pChild->NextSibling() );
             }
         }
 
@@ -909,10 +1178,11 @@ bool CustomAnimationList::DoubleClickHdl()
     return false;
 }
 
-std::unique_ptr<PopupMenu> CustomAnimationList::CreateContextMenu()
+VclPtr<PopupMenu> CustomAnimationList::CreateContextMenu()
 {
-    std::unique_ptr<PopupMenu> pMenu(
-        new PopupMenu(SdResId( RID_EFFECT_CONTEXTMENU )));
+    mxMenu.disposeAndClear();
+    mxBuilder.reset(new VclBuilder(nullptr, VclBuilderContainer::getUIRootDir(), "modules/simpress/ui/effectmenu.ui", ""));
+    mxMenu.set(mxBuilder->get_menu("menu"));
 
     sal_Int16 nNodeType = -1;
     sal_Int16 nEntries = 0;
@@ -941,23 +1211,18 @@ std::unique_ptr<PopupMenu> CustomAnimationList::CreateContextMenu()
         pEntry = static_cast< CustomAnimationListEntry* >(NextSelected( pEntry ));
     }
 
-    pMenu->CheckItem( CM_WITH_CLICK, nNodeType == EffectNodeType::ON_CLICK );
-    pMenu->CheckItem( CM_WITH_PREVIOUS, nNodeType == EffectNodeType::WITH_PREVIOUS );
-    pMenu->CheckItem( CM_AFTER_PREVIOUS, nNodeType == EffectNodeType::AFTER_PREVIOUS );
-    pMenu->EnableItem( CM_OPTIONS, nEntries == 1 );
-    pMenu->EnableItem( CM_DURATION, nEntries == 1 );
+    mxMenu->CheckItem("onclick", nNodeType == EffectNodeType::ON_CLICK);
+    mxMenu->CheckItem("withprev", nNodeType == EffectNodeType::WITH_PREVIOUS);
+    mxMenu->CheckItem("afterprev", nNodeType == EffectNodeType::AFTER_PREVIOUS);
+    mxMenu->EnableItem(mxMenu->GetItemId("options"), nEntries == 1);
+    mxMenu->EnableItem(mxMenu->GetItemId("timing"), nEntries == 1);
 
-    return pMenu;
+    return mxMenu;
 }
 
-void CustomAnimationList::ExcecuteContextMenuAction( sal_uInt16 nSelectedPopupEntry )
+void CustomAnimationList::ExecuteContextMenuAction( sal_uInt16 nSelectedPopupEntry )
 {
-    mpController->onContextMenu( nSelectedPopupEntry );
-}
-
-void CustomAnimationList::SetTabs()
-{
-    SvTreeListBox::SetTabs();
+    mpController->onContextMenu(mxMenu->GetItemIdent(nSelectedPopupEntry));
 }
 
 void CustomAnimationList::notify_change()
@@ -966,7 +1231,7 @@ void CustomAnimationList::notify_change()
     mpController->onSelect();
 }
 
-void CustomAnimationList::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void CustomAnimationList::Paint(vcl::RenderContext& rRenderContext, const ::tools::Rectangle& rRect)
 {
     if( mbIgnorePaint )
         return;
@@ -978,16 +1243,16 @@ void CustomAnimationList::Paint(vcl::RenderContext& rRenderContext, const Rectan
     {
         Color aOldColor(rRenderContext.GetTextColor());
         rRenderContext.SetTextColor(rRenderContext.GetSettings().GetStyleSettings().GetDisableColor());
-        ::Point aOffset(rRenderContext.LogicToPixel(Point(6, 6), MAP_APPFONT));
+        ::Point aOffset(rRenderContext.LogicToPixel(Point(6, 6), MapMode(MapUnit::MapAppFont)));
 
-        Rectangle aRect(Point(0,0), GetOutputSizePixel());
+        ::tools::Rectangle aRect(Point(0,0), GetOutputSizePixel());
 
-        aRect.Left() += aOffset.X();
-        aRect.Top() += aOffset.Y();
-        aRect.Right() -= aOffset.X();
-        aRect.Bottom() -= aOffset.Y();
+        aRect.AdjustLeft(aOffset.X() );
+        aRect.AdjustTop(aOffset.Y() );
+        aRect.AdjustRight( -(aOffset.X()) );
+        aRect.AdjustBottom( -(aOffset.Y()) );
 
-        rRenderContext.DrawText(aRect, SD_RESSTR(STR_CUSTOMANIMATION_LIST_HELPTEXT),
+        rRenderContext.DrawText(aRect, SdResId(STR_CUSTOMANIMATION_LIST_HELPTEXT),
                                 DrawTextFlags::MultiLine | DrawTextFlags::WordBreak | DrawTextFlags::Center | DrawTextFlags::VCenter );
 
         rRenderContext.SetTextColor(aOldColor);

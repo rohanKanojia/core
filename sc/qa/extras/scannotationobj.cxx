@@ -8,8 +8,11 @@
  */
 
 #include <test/calc_unoapi_test.hxx>
+#include <test/container/xchild.hxx>
 #include <test/sheet/xsheetannotation.hxx>
+#include <test/sheet/xsheetannotationshapesupplier.hxx>
 
+#include <com/sun/star/sheet/XSheetAnnotationShapeSupplier.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/sheet/XSpreadsheet.hpp>
@@ -24,9 +27,9 @@ using namespace css::uno;
 
 namespace sc_apitest {
 
-#define NUMBER_OF_TESTS 5
-
-class ScAnnontationObj : public CalcUnoApiTest, public apitest::XSheetAnnotation
+class ScAnnontationObj : public CalcUnoApiTest, public apitest::XSheetAnnotation,
+                                                public apitest::XSheetAnnotationShapeSupplier,
+                                                public apitest::XChild
 {
 public:
     ScAnnontationObj();
@@ -38,20 +41,26 @@ public:
     virtual uno::Reference< sheet::XSheetAnnotation> getAnnotation(table::CellAddress&) override;
 
     CPPUNIT_TEST_SUITE(ScAnnontationObj);
+
+    // XChild
+    CPPUNIT_TEST(testGetSetParent);
+
+    // XSheetAnnotation
     CPPUNIT_TEST(testGetPosition);
     CPPUNIT_TEST(testGetAuthor);
     CPPUNIT_TEST(testGetDate);
     CPPUNIT_TEST(testGetIsVisible);
     CPPUNIT_TEST(testSetIsVisible);
+
+    // XSheetAnnotationShapeSupplier
+    CPPUNIT_TEST(testGetAnnotationShape);
+
     CPPUNIT_TEST_SUITE_END();
 private:
 
-    static sal_Int32 nTest;
-    static uno::Reference< lang::XComponent > mxComponent;
+    uno::Reference< lang::XComponent > mxComponent;
 };
 
-sal_Int32 ScAnnontationObj::nTest = 0;
-uno::Reference< lang::XComponent > ScAnnontationObj::mxComponent;
 
 ScAnnontationObj::ScAnnontationObj()
        : CalcUnoApiTest("/sc/qa/extras/testdocuments")
@@ -72,44 +81,33 @@ uno::Reference< sheet::XSheetAnnotation> ScAnnontationObj::getAnnotation(table::
     uno::Reference< sheet::XSheetAnnotationAnchor > xAnnotationAnchor(xCell, UNO_QUERY_THROW);
     uno::Reference< sheet::XSheetAnnotation > xSheetAnnotation( xAnnotationAnchor->getAnnotation(), UNO_QUERY_THROW);
 
-    CPPUNIT_ASSERT(xSheetAnnotation.is());
-
     return xSheetAnnotation;
 }
 
 uno::Reference< uno::XInterface > ScAnnontationObj::init()
 {
-
-    // get the test file
-    OUString aFileURL;
-    createFileURL("ScAnnotationObj.ods", aFileURL);
-    if(!mxComponent.is())
-        mxComponent = loadFromDesktop(aFileURL);
-    CPPUNIT_ASSERT_MESSAGE("Component not loaded",mxComponent.is());
-
     // tested annotation is in sheet 0 cell C2
-    table::CellAddress xCellAddress;
-    xCellAddress.Sheet = 0;
-    xCellAddress.Row = 1;
-    xCellAddress.Column = 2;
+    table::CellAddress aCellAddress;
+    aCellAddress.Sheet = 0;
+    aCellAddress.Row = 1;
+    aCellAddress.Column = 2;
 
-    return getAnnotation(xCellAddress);
+    return getAnnotation(aCellAddress);
 }
 
 void ScAnnontationObj::setUp()
 {
-    nTest++;
     CalcUnoApiTest::setUp();
+
+    // get the test file
+    OUString aFileURL;
+    createFileURL("ScAnnotationObj.ods", aFileURL);
+    mxComponent = loadFromDesktop(aFileURL);
 }
 
 void ScAnnontationObj::tearDown()
 {
-    if (nTest == NUMBER_OF_TESTS)
-    {
-        closeDocument(mxComponent);
-        mxComponent.clear();
-    }
-
+    closeDocument(mxComponent);
     CalcUnoApiTest::tearDown();
 }
 

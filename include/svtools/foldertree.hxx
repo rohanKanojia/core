@@ -11,26 +11,18 @@
 #define INCLUDED_SVTOOLS_FOLDERTREE_HXX
 
 #include <com/sun/star/uno/Sequence.hxx>
-#include <com/sun/star/ucb/XCommandEnvironment.hpp>
-#include <com/sun/star/task/InteractionHandler.hpp>
-
-#include <officecfg/Office/Common.hxx>
 
 #include <svtools/svtdllapi.h>
-#include <svtools/svtools.hrc>
-#include <svtools/svtresid.hxx>
-#include <svtools/treelistentry.hxx>
 
-#include <tools/urlobj.hxx>
+#include <tools/wintypes.hxx>
+#include <vcl/treelistbox.hxx>
 
-#include <ucbhelper/commandenvironment.hxx>
+namespace com :: sun :: star :: ucb { class XCommandEnvironment; }
 
-#include <vcl/image.hxx>
-#include <vcl/lstbox.hxx>
+class SvTreeListEntry;
 
 using namespace ::com::sun::star::ucb;
 using namespace ::com::sun::star::uno;
-using namespace ::com::sun::star::task;
 using namespace ::svt;
 
 class SVT_DLLPUBLIC FolderTree : public SvTreeListBox
@@ -39,8 +31,6 @@ private:
     Reference< XCommandEnvironment > m_xEnv;
     ::osl::Mutex m_aMutex;
     Sequence< OUString > m_aBlackList;
-    Image m_aFolderImage;
-    Image m_aFolderExpandedImage;
 
     OUString m_sLastUpdatedDir;
 

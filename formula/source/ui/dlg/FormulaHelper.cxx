@@ -19,7 +19,8 @@
 
 #include <algorithm>
 
-#include "formula/formulahelper.hxx"
+#include <formula/formulahelper.hxx>
+#include <formula/IFunctionDescription.hxx>
 #include <unotools/charclass.hxx>
 #include <unotools/syslocale.hxx>
 
@@ -91,7 +92,6 @@ bool FormulaHelper::GetNextFunc( const OUString&  rFormula,
         if ( ppFDesc )
         {
             *ppFDesc = nullptr;
-            const OUString sTemp( aFname );
             const sal_uInt32 nCategoryCount = m_pFunctionManager->getCount();
             for(sal_uInt32 j= 0; j < nCategoryCount && !*ppFDesc; ++j)
             {
@@ -100,7 +100,7 @@ bool FormulaHelper::GetNextFunc( const OUString&  rFormula,
                 for(sal_uInt32 i = 0 ; i < nCount; ++i)
                 {
                     const IFunctionDescription* pCurrent = pCategory->getFunction(i);
-                    if ( pCurrent->getFunctionName().equalsIgnoreAsciiCase(sTemp) )
+                    if ( pCurrent->getFunctionName().equalsIgnoreAsciiCase(aFname) )
                     {
                         *ppFDesc = pCurrent;
                         break;
@@ -147,7 +147,7 @@ void FormulaHelper::FillArgStrings( const OUString&   rFormula,
                 _rArgs.push_back(rFormula.copy( nStart, nEnd-1-nStart ));
             else
             {
-                _rArgs.push_back(OUString());
+                _rArgs.emplace_back();
                 bLast = true;
             }
         }
@@ -157,13 +157,13 @@ void FormulaHelper::FillArgStrings( const OUString&   rFormula,
             if ( nStart < nEnd )
                 _rArgs.push_back( rFormula.copy( nStart, nEnd-nStart ) );
             else
-                _rArgs.push_back(OUString());
+                _rArgs.emplace_back();
         }
     }
 
     if ( bLast )
         for ( ; i<nArgs; i++ )
-            _rArgs.push_back(OUString());
+            _rArgs.emplace_back();
 }
 
 
@@ -179,7 +179,7 @@ void FormulaHelper::GetArgStrings( ::std::vector< OUString >& _rArgs,
 }
 
 
-inline bool IsFormulaText( const CharClass* _pCharClass,const OUString& rStr, sal_Int32 nPos )
+static bool IsFormulaText( const CharClass* _pCharClass,const OUString& rStr, sal_Int32 nPos )
 {
     if( _pCharClass->isLetterNumeric( rStr, nPos ) )
         return true;
@@ -223,8 +223,12 @@ sal_Int32 FormulaHelper::GetFunctionStart( const OUString&   rFormula,
                     if (nParPos > 0)
                         nParPos--;
                 }
-                else if ( !(bFound = ( rFormula[nParPos] == '(' ) ) )
-                    nParPos--;
+                else
+                {
+                    bFound = rFormula[nParPos] == '(';
+                    if ( !bFound )
+                        nParPos--;
+                }
             }
         }
         else
@@ -238,8 +242,12 @@ sal_Int32 FormulaHelper::GetFunctionStart( const OUString&   rFormula,
                         nParPos++;
                     nParPos++;
                 }
-                else if ( !(bFound = ( rFormula[nParPos] == '(' ) ) )
-                    nParPos++;
+                else
+                {
+                    bFound = rFormula[nParPos] == '(';
+                    if ( !bFound )
+                        nParPos++;
+                }
             }
         }
 

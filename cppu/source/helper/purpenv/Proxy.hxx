@@ -20,13 +20,13 @@
 #ifndef INCLUDED_CPPU_SOURCE_HELPER_PURPENV_PROXY_HXX
 #define INCLUDED_CPPU_SOURCE_HELPER_PURPENV_PROXY_HXX
 
-#include "osl/interlck.h"
+#include <osl/interlck.h>
 
-#include "uno/environment.hxx"
-#include "uno/mapping.hxx"
-#include "uno/dispatcher.h"
+#include <uno/environment.hxx>
+#include <uno/mapping.hxx>
+#include <uno/dispatcher.h>
 
-#include "cppu/helper/purpenv/Mapping.hxx"
+#include <cppu/helper/purpenv/Mapping.hxx>
 
 
 class Proxy : public uno_Interface
@@ -42,7 +42,7 @@ class Proxy : public uno_Interface
     // mapping information
     uno_Interface                    *  m_pUnoI; // wrapped interface
     typelib_InterfaceTypeDescription *  m_pTypeDescr;
-    rtl::OUString                       m_aOId;
+    OUString                            m_aOId;
 
     cppu::helper::purpenv::ProbeFun   * m_probeFun;
     void                              * m_pProbeContext;
@@ -53,7 +53,7 @@ public:
                    uno_Environment                        * pFrom,
                    uno_Interface                          * pUnoI,
                    typelib_InterfaceTypeDescription       * pTypeDescr,
-                   rtl::OUString                    const & rOId,
+                   OUString                         const & rOId,
                    cppu::helper::purpenv::ProbeFun        * probeFun,
                    void                                   * pProbeContext);
     ~Proxy();
@@ -72,7 +72,7 @@ public:
 
 };
 
-extern "C" void SAL_CALL Proxy_free(uno_ExtEnvironment * pEnv, void * pProxy) SAL_THROW_EXTERN_C();
+extern "C" void Proxy_free(uno_ExtEnvironment * pEnv, void * pProxy) SAL_THROW_EXTERN_C();
 
 #endif
 

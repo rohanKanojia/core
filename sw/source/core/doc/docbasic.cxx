@@ -20,8 +20,9 @@
 #include <hintids.hxx>
 
 #include <rtl/ustring.hxx>
-#include <svtools/imap.hxx>
-#include <svtools/imapobj.hxx>
+#include <sal/log.hxx>
+#include <vcl/imap.hxx>
+#include <vcl/imapobj.hxx>
 #include <basic/sbx.hxx>
 #include <frmfmt.hxx>
 #include <fmtinfmt.hxx>
@@ -54,16 +55,16 @@ static Sequence<Any> *lcl_docbasic_convertArgs( SbxArray& rArgs )
                 pUnoArgs[i] <<= pVar->GetOUString();
                 break;
             case SbxCHAR:
-                pUnoArgs[i] <<= (sal_Int16)pVar->GetChar() ;
+                pUnoArgs[i] <<= static_cast<sal_Int16>(pVar->GetChar()) ;
                 break;
             case SbxUSHORT:
-                pUnoArgs[i] <<= (sal_Int16)pVar->GetUShort();
+                pUnoArgs[i] <<= static_cast<sal_Int16>(pVar->GetUShort());
                 break;
             case SbxLONG:
-                pUnoArgs[i] <<= (sal_Int32)pVar->GetLong();
+                pUnoArgs[i] <<= pVar->GetLong();
                 break;
             default:
-                pUnoArgs[i].setValue(nullptr, cppu::UnoType<void>::get());
+                pUnoArgs[i].clear();
                 break;
             }
         }
@@ -72,9 +73,8 @@ static Sequence<Any> *lcl_docbasic_convertArgs( SbxArray& rArgs )
     return pRet;
 }
 
-bool SwDoc::ExecMacro( const SvxMacro& rMacro, OUString* pRet, SbxArray* pArgs )
+void SwDoc::ExecMacro( const SvxMacro& rMacro, OUString* pRet, SbxArray* pArgs )
 {
-    ErrCode eErr = 0;
     switch( rMacro.GetScriptType() )
     {
     case STARBASIC:
@@ -82,7 +82,7 @@ bool SwDoc::ExecMacro( const SvxMacro& rMacro, OUString* pRet, SbxArray* pArgs )
             SbxBaseRef aRef;
             SbxValue* pRetValue = new SbxValue;
             aRef = pRetValue;
-            eErr = mpDocShell->CallBasic( rMacro.GetMacName(),
+            mpDocShell->CallBasic( rMacro.GetMacName(),
                                          rMacro.GetLibName(),
                                          pArgs, pRet ? pRetValue : nullptr );
 
@@ -117,21 +117,18 @@ bool SwDoc::ExecMacro( const SvxMacro& rMacro, OUString* pRet, SbxArray* pArgs )
             Sequence< sal_Int16 > aOutArgsIndex;
             Sequence< Any > aOutArgs;
 
-            OSL_TRACE( "SwDoc::ExecMacro URL is %s", OUStringToOString( rMacro.GetMacName(),
-                RTL_TEXTENCODING_UTF8).getStr() );
+            SAL_INFO("sw", "SwDoc::ExecMacro URL is " << rMacro.GetMacName() );
 
-            eErr = mpDocShell->CallXScript(
+            mpDocShell->CallXScript(
                 rMacro.GetMacName(), *pUnoArgs, aRet, aOutArgsIndex, aOutArgs);
 
             break;
         }
     }
-
-    return 0 == eErr;
 }
 
-sal_uInt16 SwDoc::CallEvent( sal_uInt16 nEvent, const SwCallMouseEvent& rCallEvent,
-                    bool bCheckPtr, SbxArray* pArgs )
+sal_uInt16 SwDoc::CallEvent( SvMacroItemId nEvent, const SwCallMouseEvent& rCallEvent,
+                    bool bCheckPtr )
 {
     if( !mpDocShell )        // we can't do that without a DocShell!
         return 0;
@@ -165,8 +162,12 @@ sal_uInt16 SwDoc::CallEvent( sal_uInt16 nEvent, const SwCallMouseEvent& rCallEve
             const SwFrameFormat* pFormat = rCallEvent.PTR.pFormat;
             if( bCheckPtr )
             {
-                if ( GetSpzFrameFormats()->Contains( pFormat ) )
+                if (GetSpzFrameFormats()->IsAlive(pFormat))
                     bCheckPtr = false;      // misuse as a flag
+                else
+                    // this shouldn't be possible now that SwCallMouseEvent
+                    // listens for dying format?
+                    assert(false);
             }
             if( !bCheckPtr )
                 pTable = &pFormat->GetMacro().GetMacroTable();
@@ -180,7 +181,7 @@ sal_uInt16 SwDoc::CallEvent( sal_uInt16 nEvent, const SwCallMouseEvent& rCallEve
             {
                 const SwFrameFormat* pFormat = rCallEvent.PTR.IMAP.pFormat;
                 const ImageMap* pIMap;
-                if( GetSpzFrameFormats()->Contains( pFormat ) &&
+                if (GetSpzFrameFormats()->IsAlive(pFormat) &&
                     nullptr != (pIMap = pFormat->GetURL().GetMap()) )
                 {
                     for( size_t nPos = pIMap->GetIMapObjectCount(); nPos; )
@@ -207,31 +208,20 @@ sal_uInt16 SwDoc::CallEvent( sal_uInt16 nEvent, const SwCallMouseEvent& rCallEve
             const SvxMacro& rMacro = *pTable->Get( nEvent );
             if( STARBASIC == rMacro.GetScriptType() )
             {
-                nRet += 0 == mpDocShell->CallBasic( rMacro.GetMacName(),
-                                    rMacro.GetLibName(), pArgs ) ? 1 : 0;
+                nRet += ERRCODE_NONE == mpDocShell->CallBasic( rMacro.GetMacName(),
+                                    rMacro.GetLibName(), nullptr ) ? 1 : 0;
             }
             else if( EXTENDED_STYPE == rMacro.GetScriptType() )
             {
-                std::unique_ptr<Sequence<Any> > pUnoArgs;
-
-                if( pArgs )
-                {
-                    pUnoArgs.reset(lcl_docbasic_convertArgs( *pArgs ));
-                }
-
-                if (!pUnoArgs)
-                {
-                    pUnoArgs.reset(new Sequence <Any> (0));
-                }
+                std::unique_ptr<Sequence<Any> > pUnoArgs(new Sequence<Any>());
 
                 Any aRet;
                 Sequence< sal_Int16 > aOutArgsIndex;
                 Sequence< Any > aOutArgs;
 
-                OSL_TRACE( "SwDoc::CallEvent URL is %s", OUStringToOString(
-                    rMacro.GetMacName(), RTL_TEXTENCODING_UTF8).getStr() );
+                SAL_INFO("sw", "SwDoc::CallEvent URL is " << rMacro.GetMacName() );
 
-                nRet += 0 == mpDocShell->CallXScript(
+                nRet += ERRCODE_NONE == mpDocShell->CallXScript(
                     rMacro.GetMacName(), *pUnoArgs,aRet, aOutArgsIndex, aOutArgs) ? 1 : 0;
             }
             // JavaScript calls are ignored

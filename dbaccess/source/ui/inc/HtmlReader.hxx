@@ -29,35 +29,29 @@ class SvStream;
 
 namespace dbaui
 {
-    class OHTMLReader : public HTMLParser, public ODatabaseExport
+    class OHTMLReader final : public HTMLParser, public ODatabaseExport
     {
         OUString            m_sCurrent;
         sal_Int32           m_nTableCount;
-        sal_Int16           m_nWidth;
         sal_Int16           m_nColumnWidth; ///< maximum column width
-        bool            m_bMetaOptions; ///< true when we scanned the meta information
-        bool            m_bSDNum;
 
-    protected:
-        virtual void        NextToken( int nToken ) override; // base class
-        virtual bool        CreateTable(int nToken) override;
+        virtual void        NextToken( HtmlTokenId nToken ) override; // base class
+        bool                CreateTable( HtmlTokenId nToken );
         virtual TypeSelectionPageFactory
                             getTypeSelectionPageFactory() override;
 
         void                TableDataOn(SvxCellHorJustify& eVal);
-        void                TableFontOn(css::awt::FontDescriptor& _rFont,sal_Int32 &_rTextColor);
+        void                TableFontOn(css::awt::FontDescriptor& _rFont, Color &_rTextColor);
         sal_Int16           GetWidthPixel( const HTMLOption& rOption );
         void                setTextEncoding();
         void                fetchOptions();
-        virtual ~OHTMLReader();
+        virtual ~OHTMLReader() override;
 
     public:
         OHTMLReader(SvStream& rIn,
                     const SharedConnection& _rxConnection,
                     const css::uno::Reference< css::util::XNumberFormatter >& _rxNumberF,
-                    const css::uno::Reference< css::uno::XComponentContext >& _rxContext,
-                    const TColumnVector* rList = nullptr,
-                    const OTypeInfoMap* _pInfoMap = nullptr);
+                    const css::uno::Reference< css::uno::XComponentContext >& _rxContext);
         // required for automatic type recognition
         OHTMLReader(SvStream& rIn,
                     sal_Int32 nRows,
@@ -69,11 +63,7 @@ namespace dbaui
                     bool _bAutoIncrementEnabled);
 
         virtual SvParserState CallParser() override;// base class
-        virtual void release() override;
-        ///< @attention recovers only valid data if 1. CTOR has been used
     };
-
-    typedef tools::SvRef<OHTMLReader> OHTMLReaderRef;
 }
 #endif
 

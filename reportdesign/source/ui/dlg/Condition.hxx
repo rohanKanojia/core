@@ -20,12 +20,13 @@
 #ifndef INCLUDED_REPORTDESIGN_SOURCE_UI_DLG_CONDITION_HXX
 #define INCLUDED_REPORTDESIGN_SOURCE_UI_DLG_CONDITION_HXX
 
-#include "conditionalexpression.hxx"
+#include <conditionalexpression.hxx>
 
 #include <com/sun/star/report/XFormatCondition.hpp>
 
 #include <dbaccess/ToolBoxHelper.hxx>
 
+#include <svx/colorwindow.hxx>
 #include <svx/fntctrl.hxx>
 
 #include <vcl/fixed.hxx>
@@ -53,13 +54,25 @@ namespace rptui
         VclPtr<Edit>       m_pSubEdit;
         VclPtr<PushButton> m_pFormula;
 
-        DECL_LINK_TYPED( OnFormula,   Button*, void );
+        DECL_LINK( OnFormula,   Button*, void );
     public:
         ConditionField(Condition* pParent, Edit* pSubEdit, PushButton *pFormula);
         void GrabFocus() { m_pSubEdit->GrabFocus(); }
         void Show(bool bShow) { m_pSubEdit->Show(bShow); m_pFormula->Show(bShow); }
         void SetText(const OUString& rText) { m_pSubEdit->SetText(rText); }
         OUString GetText() const { return m_pSubEdit->GetText(); }
+    };
+
+    class ConditionColorWrapper
+    {
+    public:
+        ConditionColorWrapper(Condition* pControl);
+        void SetSlotId(sal_uInt16 nSlotId) { mnSlotId = nSlotId; }
+        void operator()(const OUString& rCommand, const NamedColor& rColor);
+        void dispose();
+    private:
+        VclPtr<Condition> mxControl;
+        sal_uInt16 mnSlotId;
     };
 
     //= Condition
@@ -74,25 +87,28 @@ namespace rptui
         sal_uInt16                  m_nBackgroundColorId;
         sal_uInt16                  m_nFontColorId;
         sal_uInt16                  m_nFontDialogId;
+        std::shared_ptr<PaletteManager> m_xPaletteManager;
+        ColorStatus                 m_aColorStatus;
+        ConditionColorWrapper       m_aColorWrapper;
 
         ::rptui::OReportController& m_rController;
         IConditionalFormatAction&   m_rAction;
         VclPtr<FixedText>                  m_pHeader;
         VclPtr<ListBox>                    m_pConditionType;
         VclPtr<ListBox>                    m_pOperationList;
-        ConditionField*                    m_pCondLHS;
+        std::unique_ptr<ConditionField>    m_pCondLHS;
         VclPtr<FixedText>                  m_pOperandGlue;
-        ConditionField*                    m_pCondRHS;
+        std::unique_ptr<ConditionField>    m_pCondRHS;
         VclPtr<ToolBox>                    m_pActions;
         VclPtr<SvxFontPrevWindow>          m_pPreview;
         VclPtr<PushButton>                 m_pMoveUp;
         VclPtr<PushButton>                 m_pMoveDown;
         VclPtr<PushButton>                 m_pAddCondition;
         VclPtr<PushButton>                 m_pRemoveCondition;
-        VclPtr<OColorPopup>                m_pColorFloat;
+        VclPtr<SvxColorWindow>             m_pColorFloat;
 
-        svx::ToolboxButtonColorUpdater*   m_pBtnUpdaterFontColor; // updates the color below the toolbar icon
-        svx::ToolboxButtonColorUpdater*   m_pBtnUpdaterBackgroundColor;
+        std::unique_ptr<svx::ToolboxButtonColorUpdater> m_pBtnUpdaterFontColor; // updates the color below the toolbar icon
+        std::unique_ptr<svx::ToolboxButtonColorUpdater> m_pBtnUpdaterBackgroundColor;
 
 
         size_t                          m_nCondIndex;
@@ -100,13 +116,13 @@ namespace rptui
 
         ConditionalExpressions          m_aConditionalExpressions;
 
-        DECL_LINK_TYPED( OnFormatAction, ToolBox*, void );
-        DECL_LINK_TYPED( DropdownClick, ToolBox*, void );
-        DECL_LINK_TYPED( OnConditionAction, Button*, void );
+        DECL_LINK( OnFormatAction, ToolBox*, void );
+        DECL_LINK( DropdownClick, ToolBox*, void );
+        DECL_LINK( OnConditionAction, Button*, void );
 
     public:
         Condition( vcl::Window* _pParent, IConditionalFormatAction& _rAction, ::rptui::OReportController& _rController );
-        virtual ~Condition();
+        virtual ~Condition() override;
         virtual void dispose() override;
 
         /** will be called when the id of the image list needs to change.
@@ -146,9 +162,9 @@ namespace rptui
 
         /** forward to the parent class
         */
-        void    ApplyCommand(sal_uInt16 _nCommandId, const ::Color& _aColor );
+        void    ApplyCommand( sal_uInt16 _nCommandId, const NamedColor& rNamedColor );
 
-        inline ::rptui::OReportController& getController() const { return m_rController; }
+        ::rptui::OReportController& getController() const { return m_rController; }
 
         sal_uInt16 mapToolbarItemToSlotId(sal_uInt16 nItemId) const;
 
@@ -167,20 +183,20 @@ namespace rptui
         void    impl_setCondition( const OUString& _rConditionFormula );
 
     private:
-        DECL_LINK_TYPED( OnTypeSelected, ListBox&, void );
-        DECL_LINK_TYPED( OnOperationSelected, ListBox&, void );
+        DECL_LINK( OnTypeSelected, ListBox&, void );
+        DECL_LINK( OnOperationSelected, ListBox&, void );
     };
 
 
     inline ConditionType Condition::impl_getCurrentConditionType() const
     {
-        return sal::static_int_cast< ConditionType >( m_pConditionType->GetSelectEntryPos() );
+        return sal::static_int_cast< ConditionType >( m_pConditionType->GetSelectedEntryPos() );
     }
 
 
     inline ComparisonOperation Condition::impl_getCurrentComparisonOperation() const
     {
-        return sal::static_int_cast< ComparisonOperation >( m_pOperationList->GetSelectEntryPos() );
+        return sal::static_int_cast< ComparisonOperation >( m_pOperationList->GetSelectedEntryPos() );
     }
 
 

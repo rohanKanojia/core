@@ -23,10 +23,10 @@
 
 // implementation
 
-CStgTransferHelper::CStgTransferHelper( sal_Bool bAutoInit,
+CStgTransferHelper::CStgTransferHelper( bool bAutoInit,
                                         HGLOBAL hGlob,
-                                        sal_Bool bDelStgOnRelease ) :
-    m_lpStream( NULL ),
+                                        bool bDelStgOnRelease ) :
+    m_lpStream( nullptr ),
     m_bDelStgOnRelease( bDelStgOnRelease )
 {
     if ( bAutoInit )
@@ -43,7 +43,7 @@ CStgTransferHelper::~CStgTransferHelper( )
 
 // TransferData into the
 
-void SAL_CALL CStgTransferHelper::write( const void* lpData, ULONG cb, ULONG* cbWritten )
+void CStgTransferHelper::write( const void* lpData, ULONG cb, ULONG* cbWritten )
 {
     HRESULT hr = E_FAIL;
 
@@ -66,7 +66,7 @@ void SAL_CALL CStgTransferHelper::write( const void* lpData, ULONG cb, ULONG* cb
 
 // read
 
-void SAL_CALL CStgTransferHelper::read( LPVOID pv, ULONG cb, ULONG* pcbRead )
+void CStgTransferHelper::read( LPVOID pv, ULONG cb, ULONG* pcbRead )
 {
     HRESULT hr = E_FAIL;
 
@@ -79,17 +79,17 @@ void SAL_CALL CStgTransferHelper::read( LPVOID pv, ULONG cb, ULONG* pcbRead )
 
 // GetHGlobal
 
-HGLOBAL SAL_CALL CStgTransferHelper::getHGlobal( ) const
+HGLOBAL CStgTransferHelper::getHGlobal( ) const
 {
     OSL_ASSERT( m_lpStream );
 
-    HGLOBAL hGlob = NULL;
+    HGLOBAL hGlob = nullptr;
 
     if ( m_lpStream )
     {
         HRESULT hr = GetHGlobalFromStream( m_lpStream, &hGlob );
         if ( FAILED( hr ) )
-            hGlob = NULL;
+            hGlob = nullptr;
     }
 
     return hGlob;
@@ -97,7 +97,7 @@ HGLOBAL SAL_CALL CStgTransferHelper::getHGlobal( ) const
 
 // getIStream
 
-void SAL_CALL CStgTransferHelper::getIStream( LPSTREAM* ppStream )
+void CStgTransferHelper::getIStream( LPSTREAM* ppStream )
 {
     OSL_ASSERT( ppStream );
     *ppStream = m_lpStream;
@@ -107,23 +107,23 @@ void SAL_CALL CStgTransferHelper::getIStream( LPSTREAM* ppStream )
 
 // Init
 
-void SAL_CALL CStgTransferHelper::init( SIZE_T newSize,
+void CStgTransferHelper::init( SIZE_T newSize,
                                         sal_uInt32 uiFlags,
-                                        sal_Bool bDelStgOnRelease )
+                                        bool bDelStgOnRelease )
 {
     cleanup( );
 
     m_bDelStgOnRelease      = bDelStgOnRelease;
 
     HGLOBAL hGlob = GlobalAlloc( uiFlags, newSize );
-    if ( NULL == hGlob )
+    if ( nullptr == hGlob )
         throw CStgTransferException( STG_E_MEDIUMFULL );
 
     HRESULT hr = CreateStreamOnHGlobal( hGlob, m_bDelStgOnRelease, &m_lpStream );
     if ( FAILED( hr ) )
     {
         GlobalFree( hGlob );
-        m_lpStream = NULL;
+        m_lpStream = nullptr;
         throw CStgTransferException( hr );
     }
 
@@ -136,8 +136,8 @@ void SAL_CALL CStgTransferHelper::init( SIZE_T newSize,
 
 // Init
 
-void SAL_CALL CStgTransferHelper::init( HGLOBAL hGlob,
-                                         sal_Bool bDelStgOnRelease )
+void CStgTransferHelper::init( HGLOBAL hGlob,
+                                        bool bDelStgOnRelease )
 {
     cleanup( );
 
@@ -150,7 +150,7 @@ void SAL_CALL CStgTransferHelper::init( HGLOBAL hGlob,
 
 // free the global memory and invalidate the stream pointer
 
-void SAL_CALL CStgTransferHelper::cleanup( )
+void CStgTransferHelper::cleanup( )
 {
     if ( m_lpStream && !m_bDelStgOnRelease )
     {
@@ -162,22 +162,22 @@ void SAL_CALL CStgTransferHelper::cleanup( )
     if ( m_lpStream )
     {
         m_lpStream->Release( );
-        m_lpStream = NULL;
+        m_lpStream = nullptr;
     }
 }
 
 // return the size of memory we point to
 
-sal_uInt32 SAL_CALL CStgTransferHelper::memSize( CLIPFORMAT cf ) const
+sal_uInt32 CStgTransferHelper::memSize( CLIPFORMAT cf ) const
 {
     DWORD dwSize = 0;
 
-    if ( NULL != m_lpStream )
+    if ( nullptr != m_lpStream )
     {
         HGLOBAL hGlob;
         GetHGlobalFromStream( m_lpStream, &hGlob );
 
-        if ( CF_TEXT == cf || RegisterClipboardFormat( "HTML Format" ) == cf )
+        if ( CF_TEXT == cf || RegisterClipboardFormatW( L"HTML Format" ) == cf )
         {
             sal_Char* pText = static_cast< sal_Char* >( GlobalLock( hGlob ) );
             if ( pText )

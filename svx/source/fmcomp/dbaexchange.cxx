@@ -22,11 +22,10 @@
 #include <com/sun/star/sdb/CommandType.hpp>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
 #include <com/sun/star/sdb/XSQLQueryComposerFactory.hpp>
-#include "fmprop.hrc"
+#include <fmprop.hxx>
 #include <comphelper/extract.hxx>
 #include <sot/formats.hxx>
 #include <sot/exchange.hxx>
-#include <comphelper/propertysetinfo.hxx>
 
 
 namespace svx
@@ -41,16 +40,14 @@ namespace svx
     using namespace ::com::sun::star::sdbcx;
     using namespace ::com::sun::star::container;
     using namespace ::com::sun::star::datatransfer;
-    using namespace ::comphelper;
 
     OColumnTransferable::OColumnTransferable(const OUString& _rDatasource
-                                            ,const OUString& _rConnectionResource
                                             ,const OUString& _rCommand
                                             ,const OUString& _rFieldName
                                             ,ColumnTransferFormatFlags _nFormats)
         :m_nFormatFlags(_nFormats)
     {
-        implConstruct(_rDatasource,_rConnectionResource, css::sdb::CommandType::TABLE, _rCommand, _rFieldName);
+        implConstruct(_rDatasource,OUString(), css::sdb::CommandType::TABLE, _rCommand, _rFieldName);
     }
 
 
@@ -58,14 +55,14 @@ namespace svx
         :m_nFormatFlags(_nFormats)
     {
         OUString sDataSource, sDatabaseLocation, sConnectionResource, sCommand, sFieldName;
-        if ( _rDescriptor.has( daDataSource ) )         _rDescriptor[ daDataSource ] >>= sDataSource;
-        if ( _rDescriptor.has( daDatabaseLocation ) )   _rDescriptor[ daDatabaseLocation ] >>= sDatabaseLocation;
-        if ( _rDescriptor.has( daConnectionResource ) ) _rDescriptor[ daConnectionResource ] >>= sConnectionResource;
-        if ( _rDescriptor.has( daCommand ) )            _rDescriptor[ daCommand ] >>= sCommand;
-        if ( _rDescriptor.has( daColumnName ) )         _rDescriptor[ daColumnName ] >>= sFieldName;
+        if ( _rDescriptor.has( DataAccessDescriptorProperty::DataSource ) )         _rDescriptor[ DataAccessDescriptorProperty::DataSource ] >>= sDataSource;
+        if ( _rDescriptor.has( DataAccessDescriptorProperty::DatabaseLocation ) )   _rDescriptor[ DataAccessDescriptorProperty::DatabaseLocation ] >>= sDatabaseLocation;
+        if ( _rDescriptor.has( DataAccessDescriptorProperty::ConnectionResource ) ) _rDescriptor[ DataAccessDescriptorProperty::ConnectionResource ] >>= sConnectionResource;
+        if ( _rDescriptor.has( DataAccessDescriptorProperty::Command ) )            _rDescriptor[ DataAccessDescriptorProperty::Command ] >>= sCommand;
+        if ( _rDescriptor.has( DataAccessDescriptorProperty::ColumnName ) )         _rDescriptor[ DataAccessDescriptorProperty::ColumnName ] >>= sFieldName;
 
         sal_Int32 nCommandType = CommandType::TABLE;
-        OSL_VERIFY( _rDescriptor[ daCommandType ] >>= nCommandType );
+        OSL_VERIFY( _rDescriptor[ DataAccessDescriptorProperty::CommandType ] >>= nCommandType );
 
 
         implConstruct(
@@ -74,10 +71,10 @@ namespace svx
 
         if ( m_nFormatFlags & ColumnTransferFormatFlags::COLUMN_DESCRIPTOR )
         {
-            if ( _rDescriptor.has( daConnection ) )
-                m_aDescriptor[ daConnection ] = _rDescriptor[ daConnection ];
-            if ( _rDescriptor.has( daColumnObject ) )
-                m_aDescriptor[ daColumnObject ] = _rDescriptor[ daColumnObject ];
+            if ( _rDescriptor.has( DataAccessDescriptorProperty::Connection ) )
+                m_aDescriptor[ DataAccessDescriptorProperty::Connection ] = _rDescriptor[ DataAccessDescriptorProperty::Connection ];
+            if ( _rDescriptor.has( DataAccessDescriptorProperty::ColumnObject ) )
+                m_aDescriptor[ DataAccessDescriptorProperty::ColumnObject ] = _rDescriptor[ DataAccessDescriptorProperty::ColumnObject ];
         }
     }
 
@@ -141,9 +138,9 @@ namespace svx
         if ((m_nFormatFlags & ColumnTransferFormatFlags::COLUMN_DESCRIPTOR) == ColumnTransferFormatFlags::COLUMN_DESCRIPTOR)
         {
             if (_rxColumn.is())
-                m_aDescriptor[daColumnObject] <<= _rxColumn;
+                m_aDescriptor[DataAccessDescriptorProperty::ColumnObject] <<= _rxColumn;
             if (_rxConnection.is())
-                m_aDescriptor[daConnection] <<= _rxConnection;
+                m_aDescriptor[DataAccessDescriptorProperty::Connection] <<= _rxConnection;
         }
     }
 
@@ -166,7 +163,7 @@ namespace svx
                                             ,const OUString& _rCommand
                                             , const OUString& _rFieldName)
     {
-        const sal_Unicode       cSeparator = sal_Unicode(11);
+        const sal_Unicode       cSeparator = u'\x000B';
         const OUString   sSeparator(&cSeparator, 1);
 
         m_sCompatibleFormat.clear();
@@ -197,11 +194,11 @@ namespace svx
         {
             m_aDescriptor.setDataSource(_rDatasource);
             if ( !_rConnectionResource.isEmpty() )
-                m_aDescriptor[daConnectionResource] <<= _rConnectionResource;
+                m_aDescriptor[DataAccessDescriptorProperty::ConnectionResource] <<= _rConnectionResource;
 
-            m_aDescriptor[daCommand]        <<= _rCommand;
-            m_aDescriptor[daCommandType]    <<= _nCommandType;
-            m_aDescriptor[daColumnName]     <<= _rFieldName;
+            m_aDescriptor[DataAccessDescriptorProperty::Command]        <<= _rCommand;
+            m_aDescriptor[DataAccessDescriptorProperty::CommandType]    <<= _nCommandType;
+            m_aDescriptor[DataAccessDescriptorProperty::ColumnName]     <<= _rFieldName;
         }
     }
 
@@ -230,7 +227,7 @@ namespace svx
             default: break;
         }
         if (nFormatId == getDescriptorFormatId())
-            return SetAny( makeAny( m_aDescriptor.createPropertyValueSequence() ), _rFlavor );
+            return SetAny( makeAny( m_aDescriptor.createPropertyValueSequence() ) );
 
         return false;
     }
@@ -241,20 +238,13 @@ namespace svx
         bool bFieldFormat       = bool(_nFormats & ColumnTransferFormatFlags::FIELD_DESCRIPTOR);
         bool bControlFormat     = bool(_nFormats & ColumnTransferFormatFlags::CONTROL_EXCHANGE);
         bool bDescriptorFormat  = bool(_nFormats & ColumnTransferFormatFlags::COLUMN_DESCRIPTOR);
-        for (   DataFlavorExVector::const_iterator aCheck = _rFlavors.begin();
-                aCheck != _rFlavors.end();
-                ++aCheck
-            )
-        {
-            if (bFieldFormat && (SotClipboardFormatId::SBA_FIELDDATAEXCHANGE == aCheck->mnSotId))
-                return true;
-            if (bControlFormat && (SotClipboardFormatId::SBA_CTRLDATAEXCHANGE == aCheck->mnSotId))
-                return true;
-            if (bDescriptorFormat && (getDescriptorFormatId() == aCheck->mnSotId))
-                return true;
-        }
-
-        return false;
+        SotClipboardFormatId nFormatId = getDescriptorFormatId();
+        return std::any_of(_rFlavors.begin(), _rFlavors.end(),
+            [&](const DataFlavorEx& rCheck) {
+                return (bFieldFormat && (SotClipboardFormatId::SBA_FIELDDATAEXCHANGE == rCheck.mnSotId))
+                    || (bControlFormat && (SotClipboardFormatId::SBA_CTRLDATAEXCHANGE == rCheck.mnSotId))
+                    || (bDescriptorFormat && (nFormatId == rCheck.mnSotId));
+            });
     }
 
 
@@ -290,15 +280,15 @@ namespace svx
         {
             // and build an own descriptor
             if ( !sDatasource.isEmpty() )
-                aDescriptor[daDataSource]   <<= sDatasource;
+                aDescriptor[DataAccessDescriptorProperty::DataSource]   <<= sDatasource;
             if ( !sDatabaseLocation.isEmpty() )
-                aDescriptor[daDatabaseLocation] <<= sDatabaseLocation;
+                aDescriptor[DataAccessDescriptorProperty::DatabaseLocation] <<= sDatabaseLocation;
             if ( !sConnectionResource.isEmpty() )
-                aDescriptor[daConnectionResource]   <<= sConnectionResource;
+                aDescriptor[DataAccessDescriptorProperty::ConnectionResource]   <<= sConnectionResource;
 
-            aDescriptor[daCommand]      <<= sCommand;
-            aDescriptor[daCommandType]  <<= nCommandType;
-            aDescriptor[daColumnName]   <<= sFieldName;
+            aDescriptor[DataAccessDescriptorProperty::Command]      <<= sCommand;
+            aDescriptor[DataAccessDescriptorProperty::CommandType]  <<= nCommandType;
+            aDescriptor[DataAccessDescriptorProperty::ColumnName]   <<= sFieldName;
         }
         return aDescriptor;
     }
@@ -315,16 +305,16 @@ namespace svx
         if ( _rData.HasFormat(getDescriptorFormatId()) )
         {
             ODataAccessDescriptor aDescriptor = extractColumnDescriptor(_rData);
-            if ( aDescriptor.has(daDataSource) )
-                aDescriptor[daDataSource]           >>= _rDatasource;
-            if ( aDescriptor.has(daDatabaseLocation) )
-                aDescriptor[daDatabaseLocation]     >>= _rDatabaseLocation;
-            if ( aDescriptor.has(daConnectionResource) )
-                aDescriptor[daConnectionResource]   >>= _rConnectionResource;
+            if ( aDescriptor.has(DataAccessDescriptorProperty::DataSource) )
+                aDescriptor[DataAccessDescriptorProperty::DataSource]           >>= _rDatasource;
+            if ( aDescriptor.has(DataAccessDescriptorProperty::DatabaseLocation) )
+                aDescriptor[DataAccessDescriptorProperty::DatabaseLocation]     >>= _rDatabaseLocation;
+            if ( aDescriptor.has(DataAccessDescriptorProperty::ConnectionResource) )
+                aDescriptor[DataAccessDescriptorProperty::ConnectionResource]   >>= _rConnectionResource;
 
-            aDescriptor[daCommand]              >>= _rCommand;
-            aDescriptor[daCommandType]          >>= _nCommandType;
-            aDescriptor[daColumnName]           >>= _rFieldName;
+            aDescriptor[DataAccessDescriptorProperty::Command]              >>= _rCommand;
+            aDescriptor[DataAccessDescriptorProperty::CommandType]          >>= _nCommandType;
+            aDescriptor[DataAccessDescriptorProperty::ColumnName]           >>= _rFieldName;
             return true;
         }
 
@@ -340,7 +330,7 @@ namespace svx
         OUString sFieldDescription;
         (void)const_cast<TransferableDataHelper&>(_rData).GetString(nRecognizedFormat, sFieldDescription);
 
-        const sal_Unicode cSeparator = sal_Unicode(11);
+        const sal_Unicode cSeparator = u'\x000B';
         _rDatasource    = sFieldDescription.getToken(0, cSeparator);
         _rCommand       = sFieldDescription.getToken(1, cSeparator);
         _nCommandType   = sFieldDescription.getToken(2, cSeparator).toInt32();
@@ -371,23 +361,21 @@ namespace svx
 
     ODataAccessObjectTransferable::ODataAccessObjectTransferable(
             const OUString&  _rDatasource
-            ,const OUString& _rConnectionResource
-            ,const sal_Int32        _nCommandType
+            ,const sal_Int32  _nCommandType
             ,const OUString& _rCommand
         )
     {
-        construct(_rDatasource,_rConnectionResource,_nCommandType,_rCommand,nullptr,(CommandType::COMMAND == _nCommandType),_rCommand);
+        construct(_rDatasource,OUString(),_nCommandType,_rCommand,nullptr,(CommandType::COMMAND == _nCommandType),_rCommand);
     }
 
     ODataAccessObjectTransferable::ODataAccessObjectTransferable(
                     const OUString&  _rDatasource
-                    ,const OUString& _rConnectionResource
-                    ,const sal_Int32        _nCommandType
+                    ,const sal_Int32 _nCommandType
                     ,const OUString& _rCommand
                     ,const Reference< XConnection >& _rxConnection)
     {
         OSL_ENSURE(_rxConnection.is(),"Wrong ctor used.!");
-        construct(_rDatasource,_rConnectionResource,_nCommandType,_rCommand,_rxConnection,(CommandType::COMMAND == _nCommandType),_rCommand);
+        construct(_rDatasource,OUString(),_nCommandType,_rCommand,_rxConnection,(CommandType::COMMAND == _nCommandType),_rCommand);
     }
 
 
@@ -428,7 +416,7 @@ namespace svx
                     ,sConnectionResource
                     ,nObjectType
                     ,sObjectName,xConnection
-                    ,!((CommandType::QUERY == nObjectType))
+                    ,CommandType::QUERY != nObjectType
                     ,sCompleteStatement);
     }
 
@@ -436,7 +424,7 @@ namespace svx
     void ODataAccessObjectTransferable::AddSupportedFormats()
     {
         sal_Int32 nObjectType = CommandType::COMMAND;
-        m_aDescriptor[daCommandType] >>= nObjectType;
+        m_aDescriptor[DataAccessDescriptorProperty::CommandType] >>= nObjectType;
         switch (nObjectType)
         {
             case CommandType::TABLE:
@@ -463,7 +451,7 @@ namespace svx
             case SotClipboardFormatId::DBACCESS_TABLE:
             case SotClipboardFormatId::DBACCESS_QUERY:
             case SotClipboardFormatId::DBACCESS_COMMAND:
-                return SetAny( makeAny(m_aDescriptor.createPropertyValueSequence()), rFlavor );
+                return SetAny( makeAny(m_aDescriptor.createPropertyValueSequence()) );
 
             case SotClipboardFormatId::SBA_DATAEXCHANGE:
                 return SetString(m_sCompatibleObjectDescription, rFlavor);
@@ -475,19 +463,12 @@ namespace svx
 
     bool ODataAccessObjectTransferable::canExtractObjectDescriptor(const DataFlavorExVector& _rFlavors)
     {
-        for (   DataFlavorExVector::const_iterator aCheck = _rFlavors.begin();
-                aCheck != _rFlavors.end();
-                ++aCheck
-            )
-        {
-            if (SotClipboardFormatId::DBACCESS_TABLE == aCheck->mnSotId)
-                return true;
-            if (SotClipboardFormatId::DBACCESS_QUERY == aCheck->mnSotId)
-                return true;
-            if (SotClipboardFormatId::DBACCESS_COMMAND == aCheck->mnSotId)
-                return true;
-        }
-        return false;
+        return std::any_of(_rFlavors.begin(), _rFlavors.end(),
+            [](const DataFlavorEx& rCheck) {
+                return SotClipboardFormatId::DBACCESS_TABLE == rCheck.mnSotId
+                    || SotClipboardFormatId::DBACCESS_QUERY == rCheck.mnSotId
+                    || SotClipboardFormatId::DBACCESS_COMMAND == rCheck.mnSotId;
+            });
     }
 
 
@@ -559,16 +540,15 @@ namespace svx
         m_aDescriptor.setDataSource(_rDatasource);
         // build the descriptor (the property sequence)
         if ( !_rConnectionResource.isEmpty() )
-            m_aDescriptor[daConnectionResource] <<= _rConnectionResource;
+            m_aDescriptor[DataAccessDescriptorProperty::ConnectionResource] <<= _rConnectionResource;
         if ( _rxConnection.is() )
-            m_aDescriptor[daConnection]     <<= _rxConnection;
-        m_aDescriptor[daCommand]        <<= _rCommand;
-        m_aDescriptor[daCommandType]    <<= _nCommandType;
+            m_aDescriptor[DataAccessDescriptorProperty::Connection]     <<= _rxConnection;
+        m_aDescriptor[DataAccessDescriptorProperty::Command]        <<= _rCommand;
+        m_aDescriptor[DataAccessDescriptorProperty::CommandType]    <<= _nCommandType;
 
         // extract the single values from the sequence
 
         OUString sObjectName;
-        OUString sDatasourceName = _rDatasource;
         sObjectName = _rCommand;
 
         // for compatibility: create a string which can be used for the SotClipboardFormatId::SBA_DATAEXCHANGE format
@@ -576,14 +556,14 @@ namespace svx
         bool bTreatAsStatement = (CommandType::COMMAND == _nCommandType);
             // statements are - in this old and ugly format - described as queries
 
-        const sal_Unicode       cSeparator = sal_Unicode(11);
+        const sal_Unicode       cSeparator = u'\x000B';
         const OUString   sSeparator(&cSeparator, 1);
 
         const sal_Unicode       cTableMark = '1';
         const sal_Unicode       cQueryMark = '0';
 
         // build the descriptor string
-        m_sCompatibleObjectDescription += sDatasourceName;
+        m_sCompatibleObjectDescription += _rDatasource;
         m_sCompatibleObjectDescription += sSeparator;
         m_sCompatibleObjectDescription += bTreatAsStatement ? OUString() : sObjectName;
         m_sCompatibleObjectDescription += sSeparator;
@@ -631,7 +611,7 @@ namespace svx
         const SotClipboardFormatId nFormatId = SotExchange::GetFormat(_rFlavor);
         if (nFormatId == getDescriptorFormatId())
         {
-            return SetAny( makeAny( m_aDescriptors ), _rFlavor );
+            return SetAny( makeAny( m_aDescriptors ) );
         }
 
         return false;
@@ -640,14 +620,9 @@ namespace svx
 
     bool OMultiColumnTransferable::canExtractDescriptor(const DataFlavorExVector& _rFlavors)
     {
-        DataFlavorExVector::const_iterator aCheck = _rFlavors.begin();
-        for (   ;
-                aCheck != _rFlavors.end() && getDescriptorFormatId() == aCheck->mnSotId;
-                ++aCheck
-            )
-            ;
-
-        return aCheck == _rFlavors.end();
+        const SotClipboardFormatId nFormatId = getDescriptorFormatId();
+        return std::all_of(_rFlavors.begin(), _rFlavors.end(),
+            [&nFormatId](const DataFlavorEx& rCheck) { return nFormatId == rCheck.mnSotId; });
     }
 
 

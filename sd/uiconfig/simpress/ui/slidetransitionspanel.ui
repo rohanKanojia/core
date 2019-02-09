@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<interface domain="sd">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkImage" id="image1">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -30,7 +30,12 @@
                 <property name="can_focus">False</property>
                 <property name="hexpand">True</property>
                 <property name="vexpand">True</property>
-                <child/>
+                <property name="top_padding">6</property>
+                <property name="left_padding">6</property>
+                <property name="right_padding">6</property>
+                <child>
+                  <placeholder/>
+                </child>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -64,11 +69,13 @@
                     <property name="row_spacing">6</property>
                     <property name="column_spacing">12</property>
                     <child>
-                      <object class="GtkLabel" id="speed_label">
+                      <object class="GtkLabel" id="duration_label">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="halign">end</property>
-                        <property name="label" translatable="yes">Speed:</property>
+                        <property name="label" translatable="yes" context="slidetransitionspanel|duration_label">Duration:</property>
+                        <property name="use_underline">True</property>
+                        <property name="mnemonic_widget">transition_duration:0.00sec</property>
                         <property name="xalign">0</property>
                       </object>
                       <packing>
@@ -77,15 +84,12 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkComboBoxText" id="speed_list">
+                      <object class="VclComboBoxNumeric" id="transition_duration:0.00sec">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
+                        <property name="has_tooltip">True</property>
+                        <property name="tooltip_text" translatable="yes" context="slidetransitionspanel|transition_duration|tooltip_text">Select the speed of Slide Transition.</property>
                         <property name="hexpand">True</property>
-                        <items>
-                          <item translatable="yes">Slow</item>
-                          <item translatable="yes">Medium</item>
-                          <item translatable="yes">Fast</item>
-                        </items>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
@@ -97,7 +101,9 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="halign">end</property>
-                        <property name="label" translatable="yes">Sound:</property>
+                        <property name="label" translatable="yes" context="slidetransitionspanel|sound_label">Sound:</property>
+                        <property name="use_underline">True</property>
+                        <property name="mnemonic_widget">sound_list</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -110,9 +116,9 @@
                         <property name="can_focus">False</property>
                         <property name="hexpand">True</property>
                         <items>
-                          <item translatable="yes">No sound</item>
-                          <item translatable="yes">Stop previous sound</item>
-                          <item translatable="yes">Other sound...</item>
+                          <item translatable="yes" context="slidetransitionspanel|sound_list">No sound</item>
+                          <item translatable="yes" context="slidetransitionspanel|sound_list">Stop previous sound</item>
+                          <item translatable="yes" context="slidetransitionspanel|sound_list">Other sound...</item>
                         </items>
                       </object>
                       <packing>
@@ -122,10 +128,11 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="loop_sound">
-                        <property name="label" translatable="yes">Loop until next sound</property>
+                        <property name="label" translatable="yes" context="slidetransitionspanel|loop_sound">Loop until next sound</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
+                        <property name="use_underline">True</property>
                         <property name="xalign">0</property>
                         <property name="draw_indicator">True</property>
                       </object>
@@ -138,7 +145,10 @@
                       <object class="GtkLabel" id="variant_label">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Variant:</property>
+                        <property name="halign">end</property>
+                        <property name="label" translatable="yes" context="slidetransitionspanel|variant_label">Variant:</property>
+                        <property name="use_underline">True</property>
+                        <property name="mnemonic_widget">variant_list</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -166,7 +176,7 @@
               <object class="GtkLabel" id="label1">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Modify Transition</property>
+                <property name="label" translatable="yes" context="slidetransitionspanel|label1">Modify Transition</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -199,10 +209,11 @@
                     <property name="column_spacing">12</property>
                     <child>
                       <object class="GtkRadioButton" id="rb_mouse_click">
-                        <property name="label" translatable="yes">On mouse click</property>
+                        <property name="label" translatable="yes" context="slidetransitionspanel|rb_mouse_click">On mouse click</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
+                        <property name="use_underline">True</property>
                         <property name="xalign">0</property>
                         <property name="draw_indicator">True</property>
                         <property name="group">rb_mouse_click</property>
@@ -215,10 +226,11 @@
                     </child>
                     <child>
                       <object class="GtkRadioButton" id="rb_auto_after">
-                        <property name="label" translatable="yes">Automatically after:</property>
+                        <property name="label" translatable="yes" context="slidetransitionspanel|rb_auto_after">Automatically after:</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
+                        <property name="use_underline">True</property>
                         <property name="xalign">0</property>
                         <property name="draw_indicator">True</property>
                         <property name="group">rb_mouse_click</property>
@@ -232,7 +244,6 @@
                       <object class="GtkSpinButton" id="auto_after_value:0sec">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="invisible_char">●</property>
                         <property name="digits">2</property>
                       </object>
                       <packing>
@@ -248,7 +259,7 @@
               <object class="GtkLabel" id="label2">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Advance Slide</property>
+                <property name="label" translatable="yes" context="slidetransitionspanel|label2">Advance Slide</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -273,7 +284,7 @@
                 <property name="layout_style">center</property>
                 <child>
                   <object class="GtkButton" id="apply_to_all">
-                    <property name="label" translatable="yes">Apply Transition to All Slides</property>
+                    <property name="label" translatable="yes" context="slidetransitionspanel|apply_to_all">Apply Transition to All Slides</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
@@ -311,10 +322,11 @@
                 <property name="spacing">18</property>
                 <child>
                   <object class="GtkCheckButton" id="auto_preview">
-                    <property name="label" translatable="yes">Automatic Preview</property>
+                    <property name="label" translatable="yes" context="slidetransitionspanel|auto_preview">Automatic Preview</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
+                    <property name="use_underline">True</property>
                     <property name="xalign">0</property>
                     <property name="draw_indicator">True</property>
                   </object>
@@ -326,7 +338,7 @@
                 </child>
                 <child>
                   <object class="GtkButton" id="play">
-                    <property name="label" translatable="yes">Play</property>
+                    <property name="label" translatable="yes" context="slidetransitionspanel|play">Play</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>

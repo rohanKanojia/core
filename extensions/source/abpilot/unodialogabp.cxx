@@ -20,9 +20,11 @@
 #include "unodialogabp.hxx"
 #include <cppuhelper/typeprovider.hxx>
 #include "abspilot.hxx"
-#include <comphelper/processfactory.hxx>
 #include <comphelper/sequence.hxx>
-#include <vcl/msgbox.hxx>
+#include <toolkit/helper/vclunohelper.hxx>
+#include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/awt/XWindow.hpp>
 
 #define PROPERTY_ID_DATASOURCENAME  3
 
@@ -41,7 +43,7 @@ namespace abp
             &m_sDataSourceName, cppu::UnoType<decltype(m_sDataSourceName)>::get() );
     }
 
-    Any SAL_CALL OABSPilotUno::queryInterface( const Type& aType ) throw (RuntimeException, std::exception)
+    Any SAL_CALL OABSPilotUno::queryInterface( const Type& aType )
     {
         Any aReturn = svt::OGenericUnoDialog::queryInterface( aType );
         return aReturn.hasValue() ? aReturn : OABSPilotUno_JBase::queryInterface( aType );
@@ -57,7 +59,7 @@ namespace abp
         svt::OGenericUnoDialog::release();
     }
 
-    Sequence< Type > SAL_CALL OABSPilotUno::getTypes(  ) throw (RuntimeException, std::exception)
+    Sequence< Type > SAL_CALL OABSPilotUno::getTypes(  )
     {
         return ::comphelper::concatSequences(
             svt::OGenericUnoDialog::getTypes(),
@@ -65,22 +67,22 @@ namespace abp
         );
     }
 
-    Sequence<sal_Int8> SAL_CALL OABSPilotUno::getImplementationId(  ) throw(RuntimeException, std::exception)
+    Sequence<sal_Int8> SAL_CALL OABSPilotUno::getImplementationId(  )
     {
         return css::uno::Sequence<sal_Int8>();
     }
 
-    OUString SAL_CALL OABSPilotUno::getImplementationName() throw(RuntimeException, std::exception)
+    OUString SAL_CALL OABSPilotUno::getImplementationName()
     {
         return OUString("org.openoffice.comp.abp.OAddressBookSourcePilot");
     }
 
-    css::uno::Sequence<OUString> SAL_CALL OABSPilotUno::getSupportedServiceNames() throw(RuntimeException, std::exception)
+    css::uno::Sequence<OUString> SAL_CALL OABSPilotUno::getSupportedServiceNames()
     {
         return { "com.sun.star.ui.dialogs.AddressBookSourcePilot" };
     }
 
-    Reference<XPropertySetInfo>  SAL_CALL OABSPilotUno::getPropertySetInfo() throw(RuntimeException, std::exception)
+    Reference<XPropertySetInfo>  SAL_CALL OABSPilotUno::getPropertySetInfo()
     {
         Reference<XPropertySetInfo>  xInfo( createPropertySetInfo( getInfoHelper() ) );
         return xInfo;
@@ -100,25 +102,25 @@ namespace abp
         return new ::cppu::OPropertyArrayHelper(aProps);
     }
 
-    void SAL_CALL OABSPilotUno::initialize( const Sequence< Any >& aArguments ) throw(Exception, RuntimeException, std::exception)
+    void SAL_CALL OABSPilotUno::initialize( const Sequence< Any >& aArguments )
     {
         Reference<awt::XWindow> xParentWindow;
         if (aArguments.getLength() == 1 && (aArguments[0] >>= xParentWindow) ) {
             Sequence< Any > aNewArgs(1);
-            aNewArgs[0] <<= PropertyValue( OUString("ParentWindow"), 0, makeAny(xParentWindow), PropertyState_DIRECT_VALUE );
+            aNewArgs[0] <<= PropertyValue( "ParentWindow", 0, makeAny(xParentWindow), PropertyState_DIRECT_VALUE );
             OGenericUnoDialog::initialize(aNewArgs);
         } else {
             OGenericUnoDialog::initialize(aArguments);
         }
     }
 
-    VclPtr<Dialog> OABSPilotUno::createDialog(vcl::Window* _pParent)
+    svt::OGenericUnoDialog::Dialog OABSPilotUno::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
     {
-        return VclPtr<OAddessBookSourcePilot>::Create(_pParent, m_aContext );
+        return svt::OGenericUnoDialog::Dialog(VclPtr<OAddressBookSourcePilot>::Create(VCLUnoHelper::GetWindow(rParent), m_aContext));
     }
 
 
-    Any SAL_CALL OABSPilotUno::execute( const Sequence< NamedValue >& /*lArgs*/ ) throw (IllegalArgumentException, Exception, RuntimeException, std::exception)
+    Any SAL_CALL OABSPilotUno::execute( const Sequence< NamedValue >& /*lArgs*/ )
     {
         // not interested in the context, not interested in the args
         // -> call the execute method of the XExecutableDialog
@@ -129,7 +131,7 @@ namespace abp
         // User has one chance to accept it or not.
         // (or he can start it again by using wizard-menu!)
         // So we should deregister it on our general job execution service by using right protocol parameters.
-        css::uno::Sequence< css::beans::NamedValue > lProtocol { { "Deactivate", css::uno::makeAny( sal_True ) } };
+        css::uno::Sequence< css::beans::NamedValue > lProtocol { { "Deactivate", css::uno::makeAny( true ) } };
         return makeAny( lProtocol );
     }
 
@@ -137,7 +139,7 @@ namespace abp
     {
         if ( _nExecutionResult == RET_OK )
         {
-            const AddressSettings& aSettings = static_cast<OAddessBookSourcePilot*>(m_pDialog.get())->getSettings();
+            const AddressSettings& aSettings = static_cast<OAddressBookSourcePilot*>(m_aDialog.m_xVclDialog.get())->getSettings();
             m_sDataSourceName = aSettings.bRegisterDataSource ? aSettings.sRegisteredDataSourceName : aSettings.sDataSourceName;
         }
     }
@@ -145,13 +147,11 @@ namespace abp
 
 }   // namespace abp
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 org_openoffice_comp_abp_OAddressBookSourcePilot(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)
 {
-    abp::OModule::setResourceFilePrefix("abp");
-
     return cppu::acquire(new abp::OABSPilotUno(context));
 }
 

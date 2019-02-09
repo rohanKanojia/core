@@ -17,29 +17,26 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ChartController.hxx"
+#include <ChartController.hxx>
 
-#include "macros.hxx"
-#include "ChartWindow.hxx"
-#include "DrawViewWrapper.hxx"
-#include "PositionAndSizeHelper.hxx"
-#include "ChartModelHelper.hxx"
+#include <ChartWindow.hxx>
+#include <DrawViewWrapper.hxx>
+#include <PositionAndSizeHelper.hxx>
+#include <ChartModel.hxx>
+#include <ChartModelHelper.hxx>
 #include "UndoGuard.hxx"
-#include "Strings.hrc"
-#include "ObjectNameProvider.hxx"
-#include "DiagramHelper.hxx"
-#include "chartview/ExplicitValueProvider.hxx"
-#include "CommonConverters.hxx"
+#include <ObjectNameProvider.hxx>
+#include <DiagramHelper.hxx>
+#include <chartview/ExplicitValueProvider.hxx>
+#include <CommonConverters.hxx>
 #include <svx/ActionDescriptionProvider.hxx>
 
-#include <vcl/msgbox.hxx>
+#include <sal/log.hxx>
 #include <svx/svxids.hrc>
 #include <svx/rectenum.hxx>
 #include <svl/aeitem.hxx>
 #include <svx/svxdlg.hxx>
-#include <svx/dialogs.hrc>
 #include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
 #include <memory>
 
 namespace chart
@@ -47,58 +44,58 @@ namespace chart
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
 
-void lcl_getPositionAndSizeFromItemSet( const SfxItemSet& rItemSet, awt::Rectangle& rPosAndSize, const awt::Size& rOriginalSize )
+static void lcl_getPositionAndSizeFromItemSet( const SfxItemSet& rItemSet, awt::Rectangle& rPosAndSize, const awt::Size& rOriginalSize )
 {
     long nPosX(0);
     long nPosY(0);
     long nSizX(0);
     long nSizY(0);
 
-    RECT_POINT eRP = (RECT_POINT)RP_LT;
+    RectPoint eRP = RectPoint::LT;
 
     const SfxPoolItem* pPoolItem=nullptr;
     //read position
-    if (SfxItemState::SET==rItemSet.GetItemState(SID_ATTR_TRANSFORM_POS_X,true,&pPoolItem))
+    if (rItemSet.GetItemState(SID_ATTR_TRANSFORM_POS_X,true,&pPoolItem)==SfxItemState::SET)
         nPosX= static_cast<const SfxInt32Item*>(pPoolItem)->GetValue();
-    if (SfxItemState::SET==rItemSet.GetItemState(SID_ATTR_TRANSFORM_POS_Y,true,&pPoolItem))
+    if (rItemSet.GetItemState(SID_ATTR_TRANSFORM_POS_Y,true,&pPoolItem)==SfxItemState::SET)
         nPosY=static_cast<const SfxInt32Item*>(pPoolItem)->GetValue();
     //read size
-    if (SfxItemState::SET==rItemSet.GetItemState(SID_ATTR_TRANSFORM_WIDTH,true,&pPoolItem))
+    if (rItemSet.GetItemState(SID_ATTR_TRANSFORM_WIDTH,true,&pPoolItem)==SfxItemState::SET)
         nSizX=static_cast<const SfxUInt32Item*>(pPoolItem)->GetValue();
-    if (SfxItemState::SET==rItemSet.GetItemState(SID_ATTR_TRANSFORM_HEIGHT,true,&pPoolItem))
+    if (rItemSet.GetItemState(SID_ATTR_TRANSFORM_HEIGHT,true,&pPoolItem)==SfxItemState::SET)
         nSizY=static_cast<const SfxUInt32Item*>(pPoolItem)->GetValue();
-    if (SfxItemState::SET==rItemSet.GetItemState(SID_ATTR_TRANSFORM_SIZE_POINT,true,&pPoolItem))
-        eRP=(RECT_POINT)static_cast<const SfxAllEnumItem*>(pPoolItem)->GetValue();
+    if (rItemSet.GetItemState(SID_ATTR_TRANSFORM_SIZE_POINT,true,&pPoolItem)==SfxItemState::SET)
+        eRP=static_cast<RectPoint>(static_cast<const SfxAllEnumItem*>(pPoolItem)->GetValue());
 
     switch( eRP )
     {
-        case RP_LT:
+        case RectPoint::LT:
             break;
-        case RP_MT:
+        case RectPoint::MT:
             nPosX += ( rOriginalSize.Width - nSizX ) / 2;
             break;
-        case RP_RT:
+        case RectPoint::RT:
             nPosX += rOriginalSize.Width - nSizX;
             break;
-        case RP_LM:
+        case RectPoint::LM:
             nPosY += ( rOriginalSize.Height - nSizY ) / 2;
             break;
-        case RP_MM:
+        case RectPoint::MM:
             nPosX += ( rOriginalSize.Width  - nSizX ) / 2;
             nPosY += ( rOriginalSize.Height - nSizY ) / 2;
             break;
-        case RP_RM:
+        case RectPoint::RM:
             nPosX += rOriginalSize.Width - nSizX;
             nPosY += ( rOriginalSize.Height - nSizY ) / 2;
             break;
-        case RP_LB:
+        case RectPoint::LB:
             nPosY += rOriginalSize.Height - nSizY;
             break;
-        case RP_MB:
+        case RectPoint::MB:
             nPosX += ( rOriginalSize.Width - nSizX ) / 2;
             nPosY += rOriginalSize.Height - nSizY;
             break;
-        case RP_RB:
+        case RectPoint::RB:
             nPosX += rOriginalSize.Width - nSizX;
             nPosY += rOriginalSize.Height - nSizY;
             break;
@@ -119,13 +116,13 @@ void ChartController::executeDispatch_PositionAndSize()
     awt::Size aSelectedSize;
     ExplicitValueProvider* pProvider( ExplicitValueProvider::getExplicitValueProvider( m_xChartView ) );
     if( pProvider )
-        aSelectedSize = ToSize( ( pProvider->getRectangleOfObject( aCID ) ) );
+        aSelectedSize = ToSize( pProvider->getRectangleOfObject( aCID ) );
 
     ObjectType eObjectType = ObjectIdentifier::getObjectType( aCID );
 
     UndoGuard aUndoGuard(
         ActionDescriptionProvider::createDescription(
-            ActionDescriptionProvider::POS_SIZE,
+            ActionDescriptionProvider::ActionType::PosSize,
             ObjectNameProvider::getName( eObjectType)),
         m_xUndoManager );
 
@@ -134,15 +131,14 @@ void ChartController::executeDispatch_PositionAndSize()
         SfxItemSet aItemSet = m_pDrawViewWrapper->getPositionAndSizeItemSetFromMarkedObject();
 
         //prepare and open dialog
-        SdrView* pSdrView = m_pDrawViewWrapper;
+        SdrView* pSdrView = m_pDrawViewWrapper.get();
         bool bResizePossible = m_aSelection.isResizeableObjectSelected();
 
         SolarMutexGuard aGuard;
         SvxAbstractDialogFactory * pFact = SvxAbstractDialogFactory::Create();
-        OSL_ENSURE( pFact, "No dialog factory" );
-        std::unique_ptr<SfxAbstractTabDialog> pDlg(pFact->CreateSchTransformTabDialog(
-            m_pChartWindow, &aItemSet, pSdrView, RID_SCH_TransformTabDLG_SVXPAGE_ANGLE, bResizePossible ));
-        OSL_ENSURE( pDlg, "Couldn't create SchTransformTabDialog" );
+        vcl::Window* pWin = GetChartWindow();
+        ScopedVclPtr<SfxAbstractTabDialog> pDlg(pFact->CreateSchTransformTabDialog(
+            pWin ? pWin->GetFrameWeld() : nullptr, &aItemSet, pSdrView, bResizePossible));
 
         if( pDlg->Execute() == RET_OK )
         {
@@ -171,7 +167,7 @@ void ChartController::executeDispatch_PositionAndSize()
     }
     catch(const uno::Exception& e)
     {
-        ASSERT_EXCEPTION( e );
+        SAL_WARN("chart2", "Exception caught. " << e );
     }
 }
 

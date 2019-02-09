@@ -39,7 +39,7 @@ SwEditShell::InsertSection(
     if( !IsTableMode() )
     {
         StartAllAction();
-        GetDoc()->GetIDocumentUndoRedo().StartUndo( UNDO_INSSECTION, nullptr );
+        GetDoc()->GetIDocumentUndoRedo().StartUndo( SwUndoId::INSSECTION, nullptr );
 
         for(SwPaM& rPaM : GetCursor()->GetRingContainer())
         {
@@ -49,7 +49,7 @@ SwEditShell::InsertSection(
                 pRet = pNew;
         }
 
-        GetDoc()->GetIDocumentUndoRedo().EndUndo( UNDO_INSSECTION, nullptr );
+        GetDoc()->GetIDocumentUndoRedo().EndUndo( SwUndoId::INSSECTION, nullptr );
         EndAllAction();
     }
     return pRet;
@@ -89,7 +89,8 @@ SwSection* SwEditShell::GetAnySection( bool bOutOfTab, const Point* pPt )
         Point aPt( *pPt );
         GetLayout()->GetCursorOfst( &aPos, aPt );
         SwContentNode *pNd = aPos.nNode.GetNode().GetContentNode();
-        pFrame = pNd->getLayoutFrame( GetLayout(), pPt );
+        std::pair<Point, bool> const tmp(*pPt, true);
+        pFrame = pNd->getLayoutFrame(GetLayout(), nullptr, &tmp);
     }
     else
         pFrame = GetCurrFrame( false );
@@ -171,7 +172,7 @@ void SwEditShell::SetSectionAttr( const SfxItemSet& rSet,
                                     SwSectionFormat* pSectFormat )
 {
     if( pSectFormat )
-        _SetSectionAttr( *pSectFormat, rSet );
+        SetSectionAttr_( *pSectFormat, rSet );
     else
     {
         // for all section in the selection
@@ -187,10 +188,10 @@ void SwEditShell::SetSectionAttr( const SfxItemSet& rSet,
             if( pSttSectNd || pEndSectNd )
             {
                 if( pSttSectNd )
-                    _SetSectionAttr( *pSttSectNd->GetSection().GetFormat(),
+                    SetSectionAttr_( *pSttSectNd->GetSection().GetFormat(),
                                     rSet );
                 if( pEndSectNd && pSttSectNd != pEndSectNd )
-                    _SetSectionAttr( *pEndSectNd->GetSection().GetFormat(),
+                    SetSectionAttr_( *pEndSectNd->GetSection().GetFormat(),
                                     rSet );
 
                 if( pSttSectNd && pEndSectNd )
@@ -210,7 +211,7 @@ void SwEditShell::SetSectionAttr( const SfxItemSet& rSet,
                             || ( aSIdx.GetNode().IsEndNode() &&
                                 nullptr != ( pSttSectNd = aSIdx.GetNode().
                                     StartOfSectionNode()->GetSectionNode())) )
-                            _SetSectionAttr( *pSttSectNd->GetSection().GetFormat(),
+                            SetSectionAttr_( *pSttSectNd->GetSection().GetFormat(),
                                             rSet );
                         ++aSIdx;
                     }
@@ -221,7 +222,7 @@ void SwEditShell::SetSectionAttr( const SfxItemSet& rSet,
     }
 }
 
-void SwEditShell::_SetSectionAttr( SwSectionFormat& rSectFormat,
+void SwEditShell::SetSectionAttr_( SwSectionFormat& rSectFormat,
                                     const SfxItemSet& rSet )
 {
     StartAllAction();
@@ -368,7 +369,7 @@ static const SwNode* lcl_SpecialInsertNode(const SwPosition* pCurrentPos)
             ++aEnd;
         bool bEnd = ( aEnd == pInnermostNode->EndOfSectionNode()->GetIndex() );
 
-        // evalutate result: if both start + end, end is preferred
+        // evaluate result: if both start + end, end is preferred
         if( bEnd )
             pReturn = pInnermostNode->EndOfSectionNode();
         else if ( bStart )
@@ -392,10 +393,8 @@ bool SwEditShell::CanSpecialInsert() const
 /** check whether a node can be special-inserted (alt-Enter), and do so. Return
     whether insertion was possible.
  */
-bool SwEditShell::DoSpecialInsert()
+void SwEditShell::DoSpecialInsert()
 {
-    bool bRet = false;
-
     // get current node
     SwPosition* pCursorPos = GetCursor()->GetPoint();
     const SwNode* pInsertNode = lcl_SpecialInsertNode( pCursorPos );
@@ -410,7 +409,7 @@ bool SwEditShell::DoSpecialInsert()
         SwPosition aInsertPos( aInsertIndex );
 
         // insert a new text node, and set the cursor
-        bRet = GetDoc()->getIDocumentContentOperations().AppendTextNode( aInsertPos );
+         GetDoc()->getIDocumentContentOperations().AppendTextNode( aInsertPos );
         *pCursorPos = aInsertPos;
 
         // call AttrChangeNotify for the UI
@@ -418,8 +417,6 @@ bool SwEditShell::DoSpecialInsert()
 
         EndAllAction();
     }
-
-    return bRet;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

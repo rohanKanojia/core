@@ -17,14 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
 
-#include "svx/svdotable.hxx"
+#include <com/sun/star/lang/NoSupportException.hpp>
+#include <svx/svdotable.hxx>
 #include "cellcursor.hxx"
 #include "tablelayouter.hxx"
-#include "cell.hxx"
-#include "svx/svdmodel.hxx"
-#include "svx/svdstr.hrc"
-#include "svdglob.hxx"
+#include <cell.hxx>
+#include <svx/svdmodel.hxx>
+#include <svx/strings.hrc>
+#include <svx/dialmgr.hxx>
 
 
 using namespace ::com::sun::star::uno;
@@ -50,19 +52,19 @@ CellCursor::~CellCursor()
 // XCellCursor
 
 
-Reference< XCell > SAL_CALL CellCursor::getCellByPosition( sal_Int32 nColumn, sal_Int32 nRow ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+Reference< XCell > SAL_CALL CellCursor::getCellByPosition( sal_Int32 nColumn, sal_Int32 nRow )
 {
     return CellRange::getCellByPosition( nColumn, nRow );
 }
 
 
-Reference< XCellRange > SAL_CALL CellCursor::getCellRangeByPosition( sal_Int32 nLeft, sal_Int32 nTop, sal_Int32 nRight, sal_Int32 nBottom ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+Reference< XCellRange > SAL_CALL CellCursor::getCellRangeByPosition( sal_Int32 nLeft, sal_Int32 nTop, sal_Int32 nRight, sal_Int32 nBottom )
 {
     return CellRange::getCellRangeByPosition( nLeft, nTop, nRight, nBottom );
 }
 
 
-Reference< XCellRange > SAL_CALL CellCursor::getCellRangeByName( const OUString& aRange ) throw (RuntimeException, std::exception)
+Reference< XCellRange > SAL_CALL CellCursor::getCellRangeByName( const OUString& aRange )
 {
     return CellRange::getCellRangeByName( aRange );
 }
@@ -71,21 +73,21 @@ Reference< XCellRange > SAL_CALL CellCursor::getCellRangeByName( const OUString&
 // XCellCursor
 
 
-void SAL_CALL CellCursor::gotoStart(  ) throw (RuntimeException, std::exception)
+void SAL_CALL CellCursor::gotoStart(  )
 {
     mnRight = mnLeft;
     mnBottom = mnTop;
 }
 
 
-void SAL_CALL CellCursor::gotoEnd(  ) throw (RuntimeException, std::exception)
+void SAL_CALL CellCursor::gotoEnd(  )
 {
     mnLeft = mnRight;
     mnTop = mnBottom;
 }
 
 
-void SAL_CALL CellCursor::gotoNext(  ) throw (RuntimeException, std::exception)
+void SAL_CALL CellCursor::gotoNext(  )
 {
     if( mxTable.is() )
     {
@@ -113,7 +115,7 @@ void SAL_CALL CellCursor::gotoNext(  ) throw (RuntimeException, std::exception)
 }
 
 
-void SAL_CALL CellCursor::gotoPrevious(  ) throw (RuntimeException, std::exception)
+void SAL_CALL CellCursor::gotoPrevious(  )
 {
     if( mxTable.is() )
     {
@@ -133,7 +135,7 @@ void SAL_CALL CellCursor::gotoPrevious(  ) throw (RuntimeException, std::excepti
 }
 
 
-void SAL_CALL CellCursor::gotoOffset( ::sal_Int32 nColumnOffset, ::sal_Int32 nRowOffset ) throw (RuntimeException, std::exception)
+void SAL_CALL CellCursor::gotoOffset( ::sal_Int32 nColumnOffset, ::sal_Int32 nRowOffset )
 {
     if( mxTable.is() )
     {
@@ -231,7 +233,7 @@ bool CellCursor::GetMergedSelection( CellPos& rStart, CellPos& rEnd )
 }
 
 
-void SAL_CALL CellCursor::merge(  ) throw (NoSupportException, RuntimeException, std::exception)
+void SAL_CALL CellCursor::merge(  )
 {
     CellPos aStart, aEnd;
     if( !GetMergedSelection( aStart, aEnd ) )
@@ -240,17 +242,16 @@ void SAL_CALL CellCursor::merge(  ) throw (NoSupportException, RuntimeException,
     if( !mxTable.is() || (mxTable->getSdrTableObj() == nullptr) )
         throw DisposedException();
 
-    SdrModel* pModel = mxTable->getSdrTableObj()->GetModel();
-    const bool bUndo = pModel && mxTable->getSdrTableObj()->IsInserted() && pModel->IsUndoEnabled();
+    SdrModel& rModel(mxTable->getSdrTableObj()->getSdrModelFromSdrObject());
+    const bool bUndo(mxTable->getSdrTableObj()->IsInserted() && rModel.IsUndoEnabled());
 
     if( bUndo )
-        pModel->BegUndo( ImpGetResStr(STR_TABLE_MERGE) );
+        rModel.BegUndo( SvxResId(STR_TABLE_MERGE) );
 
     try
     {
         mxTable->merge( aStart.mnCol, aStart.mnRow, aEnd.mnCol - aStart.mnCol + 1, aEnd.mnRow - aStart.mnRow + 1 );
-        mxTable->optimize();
-        mxTable->setModified(sal_True);
+        mxTable->setModified(true);
     }
     catch( Exception& )
     {
@@ -258,10 +259,9 @@ void SAL_CALL CellCursor::merge(  ) throw (NoSupportException, RuntimeException,
     }
 
     if( bUndo )
-        pModel->EndUndo();
+        rModel.EndUndo();
 
-    if( pModel )
-        pModel->SetChanged();
+    rModel.SetChanged();
 }
 
 
@@ -493,7 +493,7 @@ void CellCursor::split_vertical( sal_Int32 nRows )
 }
 
 
-void SAL_CALL CellCursor::split( sal_Int32 nColumns, sal_Int32 nRows ) throw (NoSupportException, IllegalArgumentException, RuntimeException, std::exception)
+void SAL_CALL CellCursor::split( sal_Int32 nColumns, sal_Int32 nRows )
 {
     if( (nColumns < 0) || (nRows < 0) )
         throw IllegalArgumentException();
@@ -501,10 +501,11 @@ void SAL_CALL CellCursor::split( sal_Int32 nColumns, sal_Int32 nRows ) throw (No
     if( !mxTable.is() || (mxTable->getSdrTableObj() == nullptr) )
         throw DisposedException();
 
-    SdrModel* pModel = mxTable->getSdrTableObj()->GetModel();
-    const bool bUndo = pModel && mxTable->getSdrTableObj()->IsInserted() && pModel->IsUndoEnabled();
+    SdrModel& rModel(mxTable->getSdrTableObj()->getSdrModelFromSdrObject());
+    const bool bUndo(mxTable->getSdrTableObj()->IsInserted() && rModel.IsUndoEnabled());
+
     if( bUndo )
-        pModel->BegUndo( ImpGetResStr(STR_TABLE_SPLIT) );
+        rModel.BegUndo( SvxResId(STR_TABLE_SPLIT) );
 
     try
     {
@@ -515,7 +516,7 @@ void SAL_CALL CellCursor::split( sal_Int32 nColumns, sal_Int32 nRows ) throw (No
             split_vertical( nRows );
 
         if( nColumns > 0 ||nRows > 0 )
-            mxTable->setModified(sal_True);
+            mxTable->setModified(true);
     }
     catch( Exception& )
     {
@@ -524,14 +525,13 @@ void SAL_CALL CellCursor::split( sal_Int32 nColumns, sal_Int32 nRows ) throw (No
     }
 
     if( bUndo )
-        pModel->EndUndo();
+        rModel.EndUndo();
 
-    if( pModel )
-        pModel->SetChanged();
+    rModel.SetChanged();
 }
 
 
-sal_Bool SAL_CALL CellCursor::isMergeable(  ) throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL CellCursor::isMergeable(  )
 {
     CellPos aStart, aEnd;
     return GetMergedSelection( aStart, aEnd );

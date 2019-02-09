@@ -20,9 +20,9 @@
 #define INCLUDED_SW_INC_HHCWRP_HXX
 
 #include <editeng/hangulhanja.hxx>
+#include "swdllapi.h"
 
 class SwView;
-namespace vcl { class Window; }
 class SwWrtShell;
 struct SwConversionArgs;
 class SwPaM;
@@ -33,8 +33,8 @@ class SW_DLLPUBLIC SwHHCWrapper : public editeng::HangulHanjaConversion
     VclPtr<vcl::Window>     m_pWin;
     SwWrtShell &m_rWrtShell;
 
-    SwConversionArgs *m_pConvArgs;    /**< object for arguments (and results) needed
-                                       to find of next convertible text portion */
+    std::unique_ptr<SwConversionArgs> m_pConvArgs;    /**< object for arguments (and results) needed
+                                                       to find of next convertible text portion */
 
     sal_Int32       m_nLastPos;       /**< starting position of the last found text part
                                        (needs to be sth that gets not moved like
@@ -47,18 +47,16 @@ class SW_DLLPUBLIC SwHHCWrapper : public editeng::HangulHanjaConversion
     bool        m_bIsDrawObj;
     bool        m_bIsOtherContent;
     bool        m_bStartChk;
-    bool        m_bIsSelection;       ///< true if only the selected text should be converted
+    bool const  m_bIsSelection;       ///< true if only the selected text should be converted
     bool        m_bStartDone;
     bool        m_bEndDone;
 
     /// from SvxSpellWrapper copied and modified
     bool        ConvNext_impl();        ///< former SpellNext
-    bool        FindConvText_impl();    ///< former FindSpellError
+    void        FindConvText_impl();    ///< former FindSpellError
 
-    /// from SwSpellWrapper copied and modified
-    bool        HasOtherCnt_impl();
     void        ConvStart_impl( SwConversionArgs *pConvArgs, SvxSpellArea eSpell );   ///< former SpellStart
-    void        ConvEnd_impl( SwConversionArgs *pConvArgs );                          ///< former SpellEnd
+    void        ConvEnd_impl( SwConversionArgs const *pConvArgs );                          ///< former SpellEnd
     bool        ConvContinue_impl( SwConversionArgs *pConvArgs );                     ///< former SpellContinue
 
     void        SelectNewUnit_impl( const sal_Int32 nUnitStart,
@@ -68,9 +66,6 @@ class SW_DLLPUBLIC SwHHCWrapper : public editeng::HangulHanjaConversion
                             const css::uno::Sequence< sal_Int32 > *pOffsets,
                             SwPaM *pCursor );
     void        ChangeText_impl( const OUString &rNewText, bool bKeepAttributes );
-
-    inline bool IsDrawObj()             { return m_bIsDrawObj; }
-    inline void SetDrawObj( bool bNew ) { m_bIsDrawObj = bNew; }
 
 protected:
     virtual void    GetNextPortion( OUString& rNextPortion,
@@ -97,7 +92,7 @@ public:
         sal_Int32 nConvOptions, bool bIsInteractive,
         bool bStart, bool bOther, bool bSelection );
 
-    virtual ~SwHHCWrapper();
+    virtual ~SwHHCWrapper() override;
 
     void    Convert();
 };

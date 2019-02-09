@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "tools/IconCache.hxx"
+#include <memory>
+#include <tools/IconCache.hxx>
 
-#include "sdresid.hxx"
+#include <tools/debug.hxx>
 #include <osl/doublecheckedlocking.h>
 #include <osl/getglobalmutex.hxx>
 #include <unordered_map>
@@ -39,23 +40,23 @@ private:
     */
     static IconCache* s_pIconCache;
 
-    typedef std::unordered_map<sal_uInt16,Image> ImageContainer;
+    typedef std::unordered_map<OUString, Image> ImageContainer;
     ImageContainer maContainer;
 
-    Image GetIcon (sal_uInt16 nResourceId);
+    Image GetIcon(const OUString& rResourceId);
 };
 
 IconCache* IconCache::Implementation::s_pIconCache = nullptr;
 
-Image IconCache::Implementation::GetIcon (sal_uInt16 nResourceId)
+Image IconCache::Implementation::GetIcon(const OUString& rResourceId)
 {
     Image aResult;
     ImageContainer::iterator iImage;
-    iImage = maContainer.find (nResourceId);
+    iImage = maContainer.find(rResourceId);
     if (iImage == maContainer.end())
     {
-        aResult = Image(BitmapEx(SdResId(nResourceId)));
-        maContainer[nResourceId] = aResult;
+        aResult = Image(StockImage::Yes, rResourceId);
+        maContainer[rResourceId] = aResult;
     }
     else
         aResult = iImage->second;
@@ -90,13 +91,13 @@ IconCache& IconCache::Instance()
     return *Implementation::s_pIconCache;
 }
 
-Image IconCache::GetIcon (sal_uInt16 nResourceId)
+Image IconCache::GetIcon(const OUString& rResourceId)
 {
-    return mpImpl->GetIcon (nResourceId);
+    return mpImpl->GetIcon(rResourceId);
 }
 
 IconCache::IconCache()
-    : mpImpl (new Implementation())
+    : mpImpl (new Implementation)
 {
 }
 

@@ -20,12 +20,19 @@
 #ifndef INCLUDED_OOX_OLE_AXCONTROL_HXX
 #define INCLUDED_OOX_OLE_AXCONTROL_HXX
 
+#include <memory>
+#include <vector>
+
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <oox/dllapi.h>
 #include <oox/helper/binarystreambase.hxx>
 #include <oox/helper/propertyset.hxx>
 #include <oox/ole/axbinaryreader.hxx>
+#include <oox/ole/axfontdata.hxx>
 #include <oox/ole/olehelper.hxx>
-#include <oox/dllapi.h>
-#include <memory>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 namespace com { namespace sun { namespace star {
     namespace awt { class XControlModel; }
@@ -38,6 +45,7 @@ namespace com { namespace sun { namespace star {
 
 namespace oox {
     class BinaryInputStream;
+    class BinaryOutputStream;
     class GraphicHelper;
     class PropertyMap;
 }
@@ -165,11 +173,10 @@ enum ApiControlType
 
 
 /** Specifies how a form control supports transparent background. */
-enum ApiTransparencyMode
+enum class ApiTransparencyMode
 {
-    API_TRANSPARENCY_NOTSUPPORTED,      ///< Control does not support transparency.
-    API_TRANSPARENCY_VOID,              ///< Transparency is enabled by missing fill color.
-    API_TRANSPARENCY_PAINTTRANSPARENT   ///< Transparency is enabled by the 'PaintTransparent' property.
+    NotSupported,      ///< Control does not support transparency.
+    Void,              ///< Transparency is enabled by missing fill color.
 };
 
 /** Specifies how a form control supports the DefaultState property. */
@@ -184,14 +191,14 @@ enum ApiDefaultStateMode
 /** A base class with useful helper functions for something that is able to
     convert ActiveX and ComCtl form controls.
  */
-class OOX_DLLPUBLIC ControlConverter
+class OOX_DLLPUBLIC ControlConverter final
 {
 public:
     explicit            ControlConverter(
                             const css::uno::Reference< css::frame::XModel >& rxDocModel,
                             const GraphicHelper& rGraphicHelper,
                             bool bDefaultColorBgr = true );
-    virtual             ~ControlConverter();
+                        ~ControlConverter();
 
     // Generic conversion -----------------------------------------------------
 
@@ -212,7 +219,7 @@ public:
                             sal_uInt32 nOleColor ) const;
 
     static void         convertToMSColor(
-                            PropertySet& rPropSet,
+                            PropertySet const & rPropSet,
                             sal_Int32 nPropId,
                             sal_uInt32& nOleColor,
                             sal_uInt32 nDefault = 0 );
@@ -229,7 +236,7 @@ public:
                             bool bHorizontal );
 
     static void         convertToMSOrientation(
-                            PropertySet& rPropMap,
+                            PropertySet const & rPropMap,
                             bool& bHorizontal );
 
     /** Converts the vertical alignment to UNO properties. */
@@ -274,7 +281,7 @@ public:
                             sal_Int32 nSpecialEffect ) const;
 
     static void        convertToAxBorder(
-                            PropertySet& rPropSet,
+                            PropertySet const & rPropSet,
                             sal_uInt32& nBorderColor,
                             sal_Int32& nBorderStyle,
                             sal_Int32& nSpecialEffect );
@@ -285,7 +292,7 @@ public:
                             sal_Int32 nSpecialEffect );
 
     static void         convertToAxVisualEffect(
-                            PropertySet& rPropSet,
+                            PropertySet const & rPropSet,
                             sal_Int32& nSpecialEffect );
 
     /** Converts the passed picture stream and Forms 2.0 position to UNO
@@ -300,9 +307,7 @@ public:
     void                convertAxPicture(
                             PropertyMap& rPropMap,
                             const StreamDataSequence& rPicData,
-                            sal_Int32 nPicSizeMode,
-                            sal_Int32 nPicAlign,
-                            bool bPicTiling ) const;
+                            sal_Int32 nPicSizeMode ) const;
 
     /** Converts the Forms 2.0 value for checked/unchecked/dontknow to UNO
         properties. */
@@ -314,11 +319,10 @@ public:
                             bool bAwtModel );
 
     static void        convertToAxState(
-                            PropertySet& rPropSet,
+                            PropertySet const & rPropSet,
                             OUString& rValue,
                             sal_Int32& nMultiSelect,
-                            ApiDefaultStateMode eDefStateMode,
-                            bool bAwtModel );
+                            ApiDefaultStateMode eDefStateMode );
 
     /** Converts the Forms 2.0 control orientation to UNO properties. */
     static void        convertAxOrientation(
@@ -327,8 +331,7 @@ public:
                             sal_Int32 nOrientation );
 
     static void        convertToAxOrientation(
-                            PropertySet& rPropSet,
-                            const AxPairData& rSize,
+                            PropertySet const & rPropSet,
                             sal_Int32& nOrientation );
 
 private:
@@ -336,7 +339,7 @@ private:
     const GraphicHelper& mrGraphicHelper;
     mutable PropertySet maAddressConverter;
     mutable PropertySet maRangeConverter;
-    bool                mbDefaultColorBgr;
+    bool const          mbDefaultColorBgr;
 };
 
 
@@ -391,8 +394,7 @@ class ComCtlModelBase : public ControlModelBase
 {
 public:
     explicit            ComCtlModelBase(
-                            sal_uInt32 nDataPartId5, sal_uInt32 nDataPartId6, sal_uInt16 nVersion,
-                            bool bCommonPart, bool bComplexPart );
+                            sal_uInt32 nDataPartId5, sal_uInt32 nDataPartId6, sal_uInt16 nVersion );
 
     virtual bool        importBinaryModel( BinaryInputStream& rInStrm ) override;
     virtual void        convertProperties( PropertyMap& rPropMap, const ControlConverter& rConv ) const override;
@@ -420,10 +422,8 @@ protected:
     const sal_uInt16    mnVersion;          ///< Current version of the ComCtl control model.
 
 private:
-    sal_uInt32          mnDataPartId5;      ///< Identifier for version 5.0 control data.
-    sal_uInt32          mnDataPartId6;      ///< Identifier for version 6.0 control data.
-    bool                mbCommonPart;       ///< True = the COMCTL_COMMONDATA part exists.
-    bool                mbComplexPart;      ///< True = the COMCTL_COMPLEXDATA part exists.
+    sal_uInt32 const    mnDataPartId5;      ///< Identifier for version 5.0 control data.
+    sal_uInt32 const    mnDataPartId6;      ///< Identifier for version 6.0 control data.
 };
 
 
@@ -498,7 +498,7 @@ public: // direct access needed for legacy VML drawing controls
     AxFontData          maFontData;         ///< The font settings.
 
 private:
-    bool                mbSupportsAlign;    ///< True = UNO model supports Align property.
+    bool const          mbSupportsAlign;    ///< True = UNO model supports Align property.
 };
 
 
@@ -598,8 +598,8 @@ public:
     sal_uInt32   mnTabStyle;
     sal_uInt32   mnTabData;
     sal_uInt32   mnVariousPropertyBits;
-    std::vector< ::rtl::OUString > maItems; // captions for each tab
-    std::vector< ::rtl::OUString > maTabNames; // names for each tab
+    std::vector< OUString > maItems; // captions for each tab
+    std::vector< OUString > maTabNames; // names for each tab
 };
 
 
@@ -614,6 +614,7 @@ public:
     virtual bool        importBinaryModel( BinaryInputStream& rInStrm ) override;
     virtual void        exportBinaryModel( BinaryOutputStream& rOutStrm ) override;
     virtual void        convertProperties( PropertyMap& rPropMap, const ControlConverter& rConv ) const override;
+    virtual void        convertFromProperties( PropertySet& rPropSet, const ControlConverter& rConv ) override;
 
 public: // direct access needed for legacy VML drawing controls
     StreamDataSequence  maPictureData;      ///< Binary picture stream.
@@ -827,7 +828,7 @@ public: // direct access needed for legacy VML drawing controls
     sal_Int32           mnPicAlign;         ///< Anchor position of the picture.
     sal_Int32           mnPicSizeMode;      ///< Clip, stretch, zoom.
     bool                mbPicTiling;        ///< True = picture is repeated.
-    bool                mbFontSupport;      ///< True = control supports the font property.
+    bool const          mbFontSupport;      ///< True = control supports the font property.
 };
 
 
@@ -898,7 +899,6 @@ class OOX_DLLPUBLIC EmbeddedControl
 {
 public:
     explicit            EmbeddedControl( const OUString& rName );
-    virtual             ~EmbeddedControl();
 
     /** Creates and returns the internal control model of the specified type. */
     template< typename ModelType >
@@ -963,8 +963,7 @@ public:
     explicit            EmbeddedForm(
                             const css::uno::Reference< css::frame::XModel >& rxDocModel,
                             const css::uno::Reference< css::drawing::XDrawPage >& rxDrawPage,
-                            const GraphicHelper& rGraphicHelper,
-                            bool bDefaultColorBgr = true );
+                            const GraphicHelper& rGraphicHelper );
 
     /** Converts the passed control and inserts the control model into the form.
         @return  The API control model, if conversion was successful. */
@@ -977,11 +976,11 @@ public:
 
 private:
     /** Creates the form that will hold the form controls. */
-    css::uno::Reference< css::container::XIndexContainer >
+    css::uno::Reference< css::container::XIndexContainer > const &
                         createXForm();
 
 private:
-    ControlConverter                                       maControlConv;
+    ControlConverter const                                 maControlConv;
     css::uno::Reference< css::lang::XMultiServiceFactory > mxModelFactory;
     css::uno::Reference< css::form::XFormsSupplier >       mxFormsSupp;
     css::uno::Reference< css::container::XIndexContainer > mxFormIC;

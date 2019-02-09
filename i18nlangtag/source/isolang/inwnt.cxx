@@ -20,18 +20,12 @@
 
 #include <sal/config.h>
 
-#ifdef _MSC_VER
-#pragma warning(push,1) // disable warnings within system headers
-#endif
 #include <windef.h>
 #include <winbase.h>
 #include <winnls.h>
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 #include <osl/mutex.hxx>
 #include <rtl/instance.hxx>
-#include "i18nlangtag/mslangid.hxx"
+#include <i18nlangtag/mslangid.hxx>
 
 static LanguageType nImplSystemLanguage = LANGUAGE_DONTKNOW;
 static LanguageType nImplSystemUILanguage = LANGUAGE_DONTKNOW;
@@ -60,12 +54,12 @@ static void getPlatformSystemLanguageImpl( LanguageType& rSystemLanguage,
         {
             LANGID nLangId;
 
-            nLangId = (pGetUserDefault)();
+            nLangId = pGetUserDefault();
             nLang = GetSVLang( nLangId );
 
             if ( nLang == LANGUAGE_DONTKNOW )
             {
-                nLangId = (pGetSystemDefault)();
+                nLangId = pGetSystemDefault();
                 nLang = GetSVLang( nLangId );
             }
             OSL_DOUBLE_CHECKED_LOCKING_MEMORY_BARRIER();

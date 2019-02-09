@@ -57,7 +57,8 @@
  * @file
  * Polyline.
  ************************************************************************/
-#include "xfdrawpolyline.hxx"
+#include <xfilter/xfdrawpolyline.hxx>
+#include <rtl/ustrbuf.hxx>
 
 XFDrawPolyline::XFDrawPolyline()
 {
@@ -66,7 +67,6 @@ XFDrawPolyline::XFDrawPolyline()
 void XFDrawPolyline::ToXml(IXFStream *pStrm)
 {
     IXFAttrList *pAttrList = pStrm->GetAttrList();
-    std::vector<XFPoint>::iterator it;
 
     pAttrList->Clear();
     //view-box:
@@ -77,16 +77,15 @@ void XFDrawPolyline::ToXml(IXFStream *pStrm)
     pAttrList->AddAttribute( "svg:viewBox", strViewBox);
 
     //points
-    OUString   strPoints;
-    for( it = m_aPoints.begin(); it != m_aPoints.end(); ++it )
+    OUStringBuffer strPoints;
+    for (auto const& point : m_aPoints)
     {
-        XFPoint pt = *it;
-        double  x = (pt.GetX()-rect.GetX())*1000;
-        double  y = (pt.GetY()-rect.GetY())*1000;
-        strPoints += OUString::number(x) + "," + OUString::number(y) + " ";
+        double  x = (point.GetX()-rect.GetX())*1000;
+        double  y = (point.GetY()-rect.GetY())*1000;
+        strPoints.append(OUString::number(x)).append(",").append(OUString::number(y)).append(" ");
     }
-    strPoints = strPoints.trim();
-    pAttrList->AddAttribute( "draw:points", strPoints);
+    strPoints.stripEnd(' ');
+    pAttrList->AddAttribute( "draw:points", strPoints.makeStringAndClear());
 
     SetPosition(rect.GetX(),rect.GetY(),rect.GetWidth(),rect.GetHeight());
     XFDrawObject::ToXml(pStrm);
@@ -103,27 +102,24 @@ XFRect  XFDrawPolyline::CalcViewBox()
     double  x2 = 0;
     double  y2 = 0;
     XFPoint aPoint;
-    std::vector<XFPoint>::iterator it = m_aPoints.begin();
 
     assert(!m_aPoints.empty());
 
-    aPoint = *it;
     x1 = aPoint.GetX();
     x2 = aPoint.GetX();
     y1 = aPoint.GetY();
     y2 = aPoint.GetY();
-    for( ; it != m_aPoints.end(); ++it )
+    for (auto const& point : m_aPoints)
     {
-        aPoint = *it;
-        if( x1>aPoint.GetX() )
-            x1 = aPoint.GetX();
-        if( x2<aPoint.GetX() )
-            x2 = aPoint.GetX();
+        if( x1>point.GetX() )
+            x1 = point.GetX();
+        if( x2<point.GetX() )
+            x2 = point.GetX();
 
-        if( y1>aPoint.GetY() )
-            y1 = aPoint.GetY();
-        if( y2<aPoint.GetY() )
-            y2 = aPoint.GetY();
+        if( y1>point.GetY() )
+            y1 = point.GetY();
+        if( y2<point.GetY() )
+            y2 = point.GetY();
     }
     return XFRect(x1,y1,x2-x1,y2-y1);
 }

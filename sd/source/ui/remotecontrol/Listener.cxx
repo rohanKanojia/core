@@ -7,18 +7,19 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <comphelper/processfactory.hxx>
-#include <com/sun/star/presentation/XPresentationSupplier.hpp>
-#include <com/sun/star/presentation/XPresentation2.hpp>
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
 #include <vcl/svapp.hxx>
 
+#include "Communicator.hxx"
 #include "Listener.hxx"
 #include "ImagePreparer.hxx"
+#include "Transmitter.hxx"
+
+#include <com/sun/star/presentation/XSlideShowController.hpp>
 
 using namespace sd;
 using namespace ::com::sun::star::presentation;
-using namespace ::com::sun::star::frame;
 
 Listener::Listener( const ::rtl::Reference<Communicator>& rCommunicator,
                     sd::Transmitter *aTransmitter  ):
@@ -64,50 +65,36 @@ void Listener::init( const css::uno::Reference< css::presentation::XSlideShowCon
 //----- XAnimationListener ----------------------------------------------------
 
 void SAL_CALL Listener::beginEvent(const css::uno::Reference<
-    css::animations::XAnimationNode >&  rNode ) throw (css::uno::RuntimeException, std::exception)
-{
-    (void) rNode;
-}
+    css::animations::XAnimationNode >& )
+{}
 
 void SAL_CALL Listener::endEvent( const css::uno::Reference<
-    css::animations::XAnimationNode >& rNode ) throw (css::uno::RuntimeException, std::exception)
-{
-    (void) rNode;
-}
+    css::animations::XAnimationNode >& )
+{}
 
 void SAL_CALL Listener::repeat( const css::uno::Reference<
-    css::animations::XAnimationNode >& rNode, ::sal_Int32 aRepeat )
-     throw (css::uno::RuntimeException, std::exception)
-{
-    (void) rNode;
-    (void) aRepeat;
-}
+    css::animations::XAnimationNode >&, ::sal_Int32 )
+{}
 
 //----- XSlideShowListener ----------------------------------------------------
 
 void SAL_CALL Listener::paused()
-    throw (css::uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL Listener::resumed()
-    throw (css::uno::RuntimeException, std::exception)
 {
 }
 
-void SAL_CALL Listener::slideEnded (sal_Bool bReverse)
-    throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL Listener::slideEnded (sal_Bool)
 {
-    (void) bReverse;
 }
 
 void SAL_CALL Listener::hyperLinkClicked (const OUString &)
-    throw (css::uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL Listener::slideTransitionStarted()
-    throw (css::uno::RuntimeException, std::exception)
 {
     sal_Int32 aSlide = mController->getCurrentSlideIndex();
 
@@ -123,12 +110,10 @@ void SAL_CALL Listener::slideTransitionStarted()
 }
 
 void SAL_CALL Listener::slideTransitionEnded()
-    throw (css::uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL Listener::slideAnimationsEnded()
-    throw (css::uno::RuntimeException, std::exception)
 {
 }
 
@@ -144,10 +129,8 @@ void SAL_CALL Listener::disposing()
 }
 
 void SAL_CALL Listener::disposing (
-    const css::lang::EventObject& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
+    const css::lang::EventObject&)
 {
-    (void) rEvent;
     dispose();
 }
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

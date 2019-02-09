@@ -25,12 +25,17 @@
 
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
-SvxForbiddenCharactersTable::SvxForbiddenCharactersTable( const css::uno::Reference< css::uno::XComponentContext >& rxContext)
+SvxForbiddenCharactersTable::SvxForbiddenCharactersTable(const css::uno::Reference< css::uno::XComponentContext >& rxContext)
+    : m_xContext(rxContext)
 {
-    m_xContext = rxContext;
 }
 
-const css::i18n::ForbiddenCharacters* SvxForbiddenCharactersTable::GetForbiddenCharacters( sal_uInt16 nLanguage, bool bGetDefault )
+std::shared_ptr<SvxForbiddenCharactersTable> SvxForbiddenCharactersTable::makeForbiddenCharactersTable(const css::uno::Reference< css::uno::XComponentContext>& rxContext)
+{
+    return std::shared_ptr<SvxForbiddenCharactersTable>(new SvxForbiddenCharactersTable(rxContext));
+}
+
+const css::i18n::ForbiddenCharacters* SvxForbiddenCharactersTable::GetForbiddenCharacters( LanguageType nLanguage, bool bGetDefault )
 {
     css::i18n::ForbiddenCharacters* pForbiddenCharacters = nullptr;
     Map::iterator it = maMap.find( nLanguage );
@@ -45,12 +50,12 @@ const css::i18n::ForbiddenCharacters* SvxForbiddenCharactersTable::GetForbiddenC
     return pForbiddenCharacters;
 }
 
-void SvxForbiddenCharactersTable::SetForbiddenCharacters( sal_uInt16 nLanguage, const css::i18n::ForbiddenCharacters& rForbiddenChars )
+void SvxForbiddenCharactersTable::SetForbiddenCharacters( LanguageType nLanguage, const css::i18n::ForbiddenCharacters& rForbiddenChars )
 {
     maMap[ nLanguage ] = rForbiddenChars;
 }
 
-void SvxForbiddenCharactersTable::ClearForbiddenCharacters( sal_uInt16 nLanguage )
+void SvxForbiddenCharactersTable::ClearForbiddenCharacters( LanguageType nLanguage )
 {
     maMap.erase( nLanguage );
 }

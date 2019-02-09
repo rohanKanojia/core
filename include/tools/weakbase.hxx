@@ -30,64 +30,55 @@ namespace tools
 template< class reference_type >
 inline WeakReference< reference_type >::WeakReference()
 {
-    mpWeakConnection = new WeakConnection<reference_type>( 0 );
-    mpWeakConnection->acquire();
+    mpWeakConnection = new WeakConnection;
 }
 
 template< class reference_type >
 inline WeakReference< reference_type >::WeakReference( reference_type* pReference )
 {
-    if( pReference )
-        mpWeakConnection = pReference->getWeakConnection();
-    else
-        mpWeakConnection = new WeakConnection<reference_type>( 0 );
-
-    mpWeakConnection->acquire();
+    reset( pReference );
 }
 
 template< class reference_type >
 inline WeakReference< reference_type >::WeakReference( const WeakReference< reference_type >& rWeakRef )
 {
     mpWeakConnection = rWeakRef.mpWeakConnection;
-    mpWeakConnection->acquire();
 }
 
 template< class reference_type >
-inline WeakReference< reference_type >::~WeakReference()
+inline WeakReference< reference_type >::WeakReference( WeakReference< reference_type >&& rWeakRef )
 {
-    mpWeakConnection->release();
+    mpWeakConnection = std::move(rWeakRef.mpWeakConnection);
 }
 
 template< class reference_type >
 inline bool WeakReference< reference_type >::is() const
 {
-    return mpWeakConnection->mpReference != 0;
+    return mpWeakConnection->mpReference != nullptr;
 }
 
 template< class reference_type >
 inline reference_type * WeakReference< reference_type >::get() const
 {
-    return mpWeakConnection->mpReference;
+    auto pWeakBase = mpWeakConnection->mpReference;
+    auto pRet = dynamic_cast<reference_type *>(pWeakBase);
+    assert((pWeakBase && pRet) || (!pWeakBase && !pRet));
+    return pRet;
 }
 
 template< class reference_type >
 inline void WeakReference< reference_type >::reset( reference_type* pReference )
 {
-    mpWeakConnection->release();
-
     if( pReference )
         mpWeakConnection = pReference->getWeakConnection();
     else
-        mpWeakConnection = new WeakConnection<reference_type>( 0 );
-
-    mpWeakConnection->acquire();
+        mpWeakConnection = new WeakConnection;
 }
 
 template< class reference_type >
 inline reference_type * WeakReference< reference_type >::operator->() const
 {
-    OSL_PRECOND(mpWeakConnection, "tools::WeakReference::operator->() : null body");
-    return mpWeakConnection->mpReference;
+    return get();
 }
 
 template< class reference_type >
@@ -125,48 +116,29 @@ inline WeakReference<reference_type>& WeakReference<reference_type>::operator= (
     const WeakReference<reference_type>& rReference)
 {
     if (&rReference != this)
-    {
-        mpWeakConnection->release();
-
         mpWeakConnection = rReference.mpWeakConnection;
-        mpWeakConnection->acquire();
-    }
     return *this;
 }
 
 template< class reference_type >
-inline WeakBase< reference_type >::WeakBase()
+inline WeakReference<reference_type>& WeakReference<reference_type>::operator= (
+    WeakReference<reference_type>&& rReference)
 {
-    mpWeakConnection = nullptr;
+    mpWeakConnection = std::move(rReference.mpWeakConnection);
+    return *this;
 }
 
-template< class reference_type >
-inline WeakBase< reference_type >::~WeakBase()
+inline void WeakBase::clearWeak()
 {
-    if( mpWeakConnection )
-    {
-        mpWeakConnection->mpReference = 0;
-        mpWeakConnection->release();
-        mpWeakConnection = nullptr;
-    }
+    if( mpWeakConnection.is() )
+        mpWeakConnection->mpReference = nullptr;
 }
 
-template< class reference_type >
-inline void WeakBase< reference_type >::clearWeak()
+inline WeakConnection* WeakBase::getWeakConnection()
 {
-    if( mpWeakConnection )
-        mpWeakConnection->mpReference = 0;
-}
-
-template< class reference_type >
-inline WeakConnection< reference_type >* WeakBase< reference_type >::getWeakConnection()
-{
-    if( !mpWeakConnection )
-    {
-        mpWeakConnection = new WeakConnection< reference_type >( static_cast< reference_type* >( this ) );
-        mpWeakConnection->acquire();
-    }
-    return mpWeakConnection;
+    if( !mpWeakConnection.is() )
+        mpWeakConnection = new WeakConnection( this );
+    return mpWeakConnection.get();
 }
 
 }

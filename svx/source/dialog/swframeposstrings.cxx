@@ -17,46 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <cassert>
+
 #include <svx/swframeposstrings.hxx>
-#include <tools/rc.hxx>
-#include <tools/debug.hxx>
+#include <tools/resary.hxx>
 #include <svx/dialmgr.hxx>
-#include <svx/dialogs.hrc>
+#include <svx/strings.hrc>
+#include <swframeposstrings.hrc>
 
-class SvxSwFramePosString_Impl : public Resource
+OUString SvxSwFramePosString::GetString(StringId eId)
 {
-    friend class SvxSwFramePosString;
-    OUString aStrings[SvxSwFramePosString::STR_MAX];
-public:
-    SvxSwFramePosString_Impl();
-};
-SvxSwFramePosString_Impl::SvxSwFramePosString_Impl() :
-    Resource(SVX_RES(RID_SVXSW_FRAMEPOSITIONS))
-{
-    for(sal_uInt16 i = 0; i < SvxSwFramePosString::STR_MAX; i++)
-    {
-        //string ids have to start at 1
-        aStrings[i] = SVX_RESSTR(i + 1);
-    }
-    FreeResource();
-}
-
-SvxSwFramePosString::SvxSwFramePosString() :
-    pImpl(new SvxSwFramePosString_Impl)
-{
-}
-
-SvxSwFramePosString::~SvxSwFramePosString()
-{
-    delete pImpl;
-}
-
-const OUString& SvxSwFramePosString::GetString(StringId eId)
-{
-    DBG_ASSERT(eId >= 0 && eId < STR_MAX, "invalid StringId");
-    if(!(eId >= 0 && eId < STR_MAX))
-        eId = LEFT;
-    return pImpl->aStrings[eId];
+    static_assert(
+        (SAL_N_ELEMENTS(RID_SVXSW_FRAMEPOSITIONS)
+         == SvxSwFramePosString::STR_MAX),
+        "RID_SVXSW_FRAMEPOSITIONS too small");
+    assert(eId >= 0 && eId < STR_MAX);
+    return SvxResId(RID_SVXSW_FRAMEPOSITIONS[eId]);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

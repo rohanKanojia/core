@@ -61,17 +61,16 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPMARKER_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPMARKER_HXX
 
-#include "lwpobj.hxx"
-#include "lwpobjid.hxx"
+#include <lwpobj.hxx>
+#include <lwpobjid.hxx>
 #include "lwpdlvlist.hxx"
-#include "lwpfrib.hxx"
-#include "xfilter/xftextspan.hxx"
+#include <lwpfrib.hxx>
+#include <xfilter/xftextspan.hxx>
 
 class LwpMarker : public LwpDLNFPVList
 {
 public:
-    LwpMarker(LwpObjectHeader &objHdr, LwpSvStream *pStrm);
-    virtual ~LwpMarker(){}
+    LwpMarker(LwpObjectHeader const &objHdr, LwpSvStream *pStrm);
     void Read() override;
     OUString GetNamedProperty(const OUString& name);
 protected:
@@ -93,7 +92,6 @@ class LwpFribRange
 {
 public:
     LwpFribRange(){}
-    ~LwpFribRange(){}
     void Read(LwpObjectStream* pObjStrm);
 private:
     LwpObjectID m_StartPara;
@@ -103,8 +101,7 @@ private:
 class LwpStoryMarker : public LwpMarker
 {
 public:
-    LwpStoryMarker(LwpObjectHeader &objHdr, LwpSvStream *pStrm);
-    virtual ~LwpStoryMarker(){}
+    LwpStoryMarker(LwpObjectHeader const &objHdr, LwpSvStream *pStrm);
     void Read() override;
 private:
     LwpFribRange m_Range;
@@ -114,8 +111,7 @@ private:
 class LwpCHBlkMarker : public LwpStoryMarker
 {
 public:
-    LwpCHBlkMarker(LwpObjectHeader &objHdr, LwpSvStream *pStrm);
-    virtual ~LwpCHBlkMarker(){}
+    LwpCHBlkMarker(LwpObjectHeader const &objHdr, LwpSvStream *pStrm);
     void Read() override;
     sal_uInt16 GetAction(){return m_nAction;}
     void ConvertCHBlock(XFContentContainer* pXFPara,sal_uInt8 nType);
@@ -172,13 +168,12 @@ private:
 class LwpBookMark : public LwpDLNFVList
 {
 public:
-    LwpBookMark(LwpObjectHeader &objHdr, LwpSvStream *pStrm);
-    virtual ~LwpBookMark(){}
+    LwpBookMark(LwpObjectHeader const &objHdr, LwpSvStream *pStrm);
 protected:
     void Read() override;
 public:
     bool IsRightMarker(LwpObjectID objMarker);
-    OUString GetName();
+    OUString const & GetName();
 private:
     enum {  BKMK_NOTESFX = 0x0001,
         BKMK_OLDNOTESFX = 0x0002
@@ -190,8 +185,7 @@ private:
 class LwpFieldMark : public LwpStoryMarker
 {
 public:
-    LwpFieldMark(LwpObjectHeader &objHdr, LwpSvStream *pStrm);
-    virtual ~LwpFieldMark(){}
+    LwpFieldMark(LwpObjectHeader const &objHdr, LwpSvStream *pStrm);
     void Read() override;
     void ParseIndex(OUString& sKey1,OUString& sKey2);
     void ParseTOC(OUString& sLevel,OUString& sText);
@@ -200,7 +194,7 @@ public:
     bool IsDateTimeField(sal_uInt8& type,OUString& formula);
     bool IsCrossRefField(sal_uInt8& nType, OUString& sMarkName);
     bool IsDocPowerField(sal_uInt8& nType,OUString& sFormula);
-    OUString GetFormula(){return m_Formula.str();}
+    OUString const & GetFormula(){return m_Formula.str();}
     void SetStyleFlag(bool bFalg){m_bHasStyle = bFalg;}
     bool GetStyleFlag(){return m_bHasStyle;}
     bool GetStart(){return m_bHasStart;}
@@ -254,14 +248,13 @@ private:
 class LwpRubyMarker : public LwpStoryMarker
 {
 public:
-    LwpRubyMarker(LwpObjectHeader &objHdr, LwpSvStream *pStrm);
-    virtual ~LwpRubyMarker(){}
+    LwpRubyMarker(LwpObjectHeader const &objHdr, LwpSvStream *pStrm);
     void Read() override;
-    OUString GetRubyText(){return m_strRubyText;}
+    const OUString& GetRubyText(){return m_strRubyText;}
     void SetRubyText(const OUString& sText){m_strRubyText = sText;}
-    OUString GetTextStyleName(){return m_TextStyle;}
+    const OUString& GetTextStyleName(){return m_TextStyle;}
     void SetTextStyleName(const OUString& sName){m_TextStyle = sName;}
-    OUString GetRubyStyleName(){return m_RubyStyle;}
+    const OUString& GetRubyStyleName(){return m_RubyStyle;}
     void SetRubyStyleName(const OUString& sName){m_RubyStyle = sName;}
 private:
     LwpObjectID m_objLayout;

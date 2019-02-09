@@ -19,58 +19,70 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_INSTABLE_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_INSTABLE_HXX
 
-#include <rtl/ustring.hxx>
-#include <vcl/button.hxx>
-#include <vcl/field.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/layout.hxx>
 #include <sfx2/basedlgs.hxx>
-#include <actctrl.hxx>
+#include <sal/types.h>
+#include <rtl/ustring.hxx>
+#include <tools/link.hxx>
+#include <vcl/vclreferencebase.hxx>
+#include <vcl/button.hxx>
+#include <vcl/edit.hxx>
+#include <vcl/field.hxx>
+#include <vcl/layout.hxx>
 
-class SwWrtShell;
-class SwTableAutoFormat;
-class SwView;
-struct SwInsertTableOptions;
+#include "wrtsh.hxx"
+#include "autoformatpreview.hxx"
+#include <view.hxx>
+#include <tblafmt.hxx>
+#include <itabenum.hxx>
 
-class SwInsTableDlg : public SfxModalDialog
+class SwInsTableDlg : public SfxDialogController
 {
-    VclPtr<Edit>           m_pNameEdit;
     TextFilter      m_aTextFilter;
 
-    VclPtr<NumericField>   m_pColNF;
-    VclPtr<NumericField>   m_pRowNF;
-
-    VclPtr<CheckBox>       m_pHeaderCB;
-    VclPtr<CheckBox>       m_pRepeatHeaderCB;
-    VclPtr<NumericField>   m_pRepeatHeaderNF;
-    VclPtr<VclContainer>   m_pRepeatGroup;
-
-    VclPtr<CheckBox>       m_pDontSplitCB;
-    VclPtr<CheckBox>       m_pBorderCB;
-
-    VclPtr<PushButton>     m_pInsertBtn;
-    VclPtr<PushButton>     m_pAutoFormatBtn;
-
     SwWrtShell*     pShell;
-    SwTableAutoFormat* pTAutoFormat;
+    SwTableAutoFormatTable* pTableTable;
+    SwTableAutoFormat*      pTAutoFormat;
+
+    sal_uInt8       lbIndex;
+    sal_uInt8       tbIndex;
+    sal_uInt8       minTableIndexInLb;
+    sal_uInt8       maxTableIndexInLb;
     sal_Int64       nEnteredValRepeatHeaderNF;
 
-    DECL_LINK_TYPED( ModifyName, Edit&, void );
-    DECL_LINK_TYPED( ModifyRowCol, Edit&, void );
-    DECL_LINK_TYPED( AutoFormatHdl, Button*, void );
-    DECL_LINK_TYPED( OKHdl, Button*, void);
-    DECL_LINK_TYPED( CheckBoxHdl, Button* = nullptr, void);
-    DECL_LINK_TYPED( ReapeatHeaderCheckBoxHdl, Button* = nullptr, void);
-    DECL_LINK_TYPED( ModifyRepeatHeaderNF_Hdl, Edit&, void );
+    AutoFormatPreview m_aWndPreview;
+
+    std::unique_ptr<weld::Entry> m_xNameEdit;
+    std::unique_ptr<weld::SpinButton> m_xColNF;
+    std::unique_ptr<weld::SpinButton> m_xRowNF;
+    std::unique_ptr<weld::CheckButton> m_xHeaderCB;
+    std::unique_ptr<weld::CheckButton> m_xRepeatHeaderCB;
+    std::unique_ptr<weld::SpinButton> m_xRepeatHeaderNF;
+    std::unique_ptr<weld::Widget> m_xRepeatGroup;
+    std::unique_ptr<weld::CheckButton> m_xDontSplitCB;
+    std::unique_ptr<weld::Button> m_xInsertBtn;
+    std::unique_ptr<weld::TreeView> m_xLbFormat;
+    std::unique_ptr<weld::CustomWeld> m_xWndPreview;
+
+    // Returns 255 if mapping is not possible.
+    // This means there cannot be more than 255 autotable style.
+    sal_uInt8 lbIndexToTableIndex( const sal_uInt8 listboxIndex );
+    void InitAutoTableFormat();
+
+    DECL_LINK(TextFilterHdl, OUString&, bool);
+    DECL_LINK(SelFormatHdl, weld::TreeView&, void);
+    DECL_LINK(ModifyName, weld::Entry&, void);
+    DECL_LINK(ModifyRowCol, weld::SpinButton&, void);
+    DECL_LINK(OKHdl, weld::Button&, void);
+    DECL_LINK(CheckBoxHdl, weld::ToggleButton&, void);
+    DECL_LINK(RepeatHeaderCheckBoxHdl, weld::ToggleButton&, void);
+    DECL_LINK(ModifyRepeatHeaderNF_Hdl, weld::SpinButton&, void);
 
 public:
-    SwInsTableDlg( SwView& rView );
-    virtual ~SwInsTableDlg();
-    virtual void dispose() override;
+    SwInsTableDlg(SwView& rView);
 
     void GetValues( OUString& rName, sal_uInt16& rRow, sal_uInt16& rCol,
                     SwInsertTableOptions& rInsTableOpts, OUString& rTableAutoFormatName,
-                    SwTableAutoFormat *& prTAFormat );
+                    std::unique_ptr<SwTableAutoFormat>& prTAFormat );
 };
 
 #endif

@@ -20,30 +20,29 @@
 #ifndef INCLUDED_VCL_INC_WALL2_HXX
 #define INCLUDED_VCL_INC_WALL2_HXX
 
+#include <boost/optional.hpp>
+
 class ImplWallpaper
 {
     friend class Wallpaper;
 
 private:
-    Color           maColor;
-    BitmapEx*       mpBitmap;
-    Gradient*       mpGradient;
-    Rectangle*      mpRect;
+    Color                       maColor;
+    std::unique_ptr<BitmapEx>   mpBitmap;
+    std::unique_ptr<Gradient>   mpGradient;
+    boost::optional<tools::Rectangle>  mpRect;
     WallpaperStyle  meStyle;
-    sal_uLong       mnRefCount;
-    BitmapEx*       mpCache;
+    std::unique_ptr<BitmapEx>   mpCache;
+
+public:
+    ImplWallpaper();
+    ImplWallpaper( const ImplWallpaper& rImplWallpaper );
+    ~ImplWallpaper();
+
+    bool operator==( const ImplWallpaper& rImplWallpaper ) const = delete;
 
     friend SvStream& ReadImplWallpaper( SvStream& rIStm, ImplWallpaper& rImplWallpaper );
     friend SvStream& WriteImplWallpaper( SvStream& rOStm, const ImplWallpaper& rImplWallpaper );
-
-public:
-                    ImplWallpaper();
-                    ImplWallpaper( const ImplWallpaper& rImplWallpaper );
-                    ~ImplWallpaper();
-
-    void            ImplSetCachedBitmap( BitmapEx& rBmp );
-    const BitmapEx* ImplGetCachedBitmap() { return mpCache; }
-    void            ImplReleaseCachedBitmap();
 };
 
 #endif // INCLUDED_VCL_INC_WALL2_HXX

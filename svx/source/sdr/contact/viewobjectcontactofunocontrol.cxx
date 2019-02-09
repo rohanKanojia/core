@@ -22,15 +22,14 @@
 #include <sdr/contact/viewcontactofunocontrol.hxx>
 #include <svx/sdr/contact/displayinfo.hxx>
 #include <svx/sdr/properties/properties.hxx>
-#include <sdr/contact/objectcontactofpageview.hxx>
+#include <svx/sdr/contact/objectcontactofpageview.hxx>
 #include <svx/sdr/primitive2d/svx_primitivetypes2d.hxx>
 #include <svx/svdouno.hxx>
 #include <svx/svdpagv.hxx>
 #include <svx/svdview.hxx>
 #include <svx/sdrpagewindow.hxx>
-#include "svx/sdrpaintwindow.hxx"
+#include <svx/sdrpaintwindow.hxx>
 
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/awt/XControl.hpp>
 #include <com/sun/star/awt/XControlModel.hpp>
 #include <com/sun/star/awt/XControlContainer.hpp>
@@ -42,14 +41,13 @@
 #include <com/sun/star/awt/InvalidateStyle.hpp>
 #include <com/sun/star/util/XModeChangeListener.hpp>
 #include <com/sun/star/util/XModeChangeBroadcaster.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/container/XContainerListener.hpp>
 #include <com/sun/star/container/XContainer.hpp>
 
 #include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/scopeguard.hxx>
-#include <comphelper/sequence.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <tools/diagnose_ex.h>
@@ -67,38 +65,32 @@ Below is a list of issues which existed in the past. Whenever you change code he
 verify those issues are still fixed. (Whenever you have some additional time, you're encouraged to write
 an automatic test for one or more of those issues for which this is possible :)
 
-http://www.openoffice.org/issues/show_bug.cgi?id=105992
-zooming documents containg (alive) form controls improperly positions the controls
+https://bz.apache.org/ooo/show_bug.cgi?id=105992
+zooming documents containing (alive) form controls improperly positions the controls
 
-http://www.openoffice.org/issues/show_bug.cgi?id=104362
+https://bz.apache.org/ooo/show_bug.cgi?id=104362
 crash when copy a control
 
-http://www.openoffice.org/issues/show_bug.cgi?id=104544
+https://bz.apache.org/ooo/show_bug.cgi?id=104544
 Gridcontrol duplicated after design view on/off
 
-http://www.openoffice.org/issues/show_bug.cgi?id=102089
+https://bz.apache.org/ooo/show_bug.cgi?id=102089
 print preview shows control elements with property printable=false
 
-http://www.openoffice.org/issues/show_bug.cgi?id=102090
+https://bz.apache.org/ooo/show_bug.cgi?id=102090
 problem with setVisible on TextControl
 
-http://www.openoffice.org/issues/show_bug.cgi?id=103138
+https://bz.apache.org/ooo/show_bug.cgi?id=103138
 loop when insert a control in draw
 
-http://www.openoffice.org/issues/show_bug.cgi?id=101398
+https://bz.apache.org/ooo/show_bug.cgi?id=101398
 initially-displaying a document with many controls is very slow
 
-http://www.openoffice.org/issues/show_bug.cgi?id=72429
+https://bz.apache.org/ooo/show_bug.cgi?id=72429
 repaint error in form wizard in bugdoc database
 
-http://www.openoffice.org/issues/show_bug.cgi?id=72694
+https://bz.apache.org/ooo/show_bug.cgi?id=72694
 form control artifacts when scrolling a text fast
-
-
-issues in the old (Sun-internal) bug tracking system:
-
-#110592#
-form controls being in redlining or in hidden section are visible in alive-mode
 
 */
 
@@ -114,7 +106,6 @@ namespace sdr { namespace contact {
     using ::com::sun::star::uno::Exception;
     using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::awt::XControl;
-    using ::com::sun::star::lang::XMultiServiceFactory;
     using ::com::sun::star::awt::XControlModel;
     using ::com::sun::star::awt::XControlContainer;
     using ::com::sun::star::awt::XWindow;
@@ -122,10 +113,8 @@ namespace sdr { namespace contact {
     using ::com::sun::star::awt::XWindowListener;
     using ::com::sun::star::awt::PosSize::POSSIZE;
     using ::com::sun::star::awt::XView;
-    using ::com::sun::star::awt::XGraphics;
     using ::com::sun::star::awt::WindowEvent;
     using ::com::sun::star::beans::XPropertySet;
-    using ::com::sun::star::beans::XPropertySetInfo;
     using ::com::sun::star::lang::XComponent;
     using ::com::sun::star::awt::XWindowPeer;
     using ::com::sun::star::beans::XPropertyChangeListener;
@@ -182,23 +171,23 @@ namespace sdr { namespace contact {
         }
 
     public:
-        inline  bool    is() const { return m_xControl.is() && m_xControlWindow.is() && m_xControlView.is(); }
-        inline  void    clear() { m_xControl.clear(); m_xControlWindow.clear(); m_xControlView.clear(); }
+        bool    is() const { return m_xControl.is() && m_xControlWindow.is() && m_xControlView.is(); }
+        void    clear() { m_xControl.clear(); m_xControlWindow.clear(); m_xControlView.clear(); }
 
         // delegators for the methods of the UNO interfaces
         // Note all those will crash if called for a NULL object.
-        inline bool     isDesignMode() const                        { return m_xControl->isDesignMode();         }
-        inline void     setDesignMode( const bool _bDesign ) const  { m_xControl->setDesignMode( _bDesign );     }
-        inline bool     isVisible() const                           { return m_xControlWindow->isVisible();      }
-        inline void     setVisible( const bool _bVisible ) const    { m_xControlWindow->setVisible( _bVisible ); }
-        inline Reference< XControlModel >
+        bool     isDesignMode() const                        { return m_xControl->isDesignMode();         }
+        void     setDesignMode( const bool _bDesign ) const  { m_xControl->setDesignMode( _bDesign );     }
+        bool     isVisible() const                           { return m_xControlWindow->isVisible();      }
+        void     setVisible( const bool _bVisible ) const    { m_xControlWindow->setVisible( _bVisible ); }
+        Reference< XControlModel >
                         getModel() const { return m_xControl->getModel(); }
-        inline void     setModel( const Reference< XControlModel >& _m ) const { m_xControl->setModel( _m ); }
+        void     setModel( const Reference< XControlModel >& _m ) const { m_xControl->setModel( _m ); }
 
-        inline void     addWindowListener( const Reference< XWindowListener >& _l ) const    { m_xControlWindow->addWindowListener( _l );    }
-        inline void     removeWindowListener( const Reference< XWindowListener >& _l ) const { m_xControlWindow->removeWindowListener( _l ); }
-               void     setPosSize( const Rectangle& _rPosSize ) const;
-               Rectangle
+        void     addWindowListener( const Reference< XWindowListener >& _l ) const    { m_xControlWindow->addWindowListener( _l );    }
+        void     removeWindowListener( const Reference< XWindowListener >& _l ) const { m_xControlWindow->removeWindowListener( _l ); }
+               void     setPosSize( const tools::Rectangle& _rPosSize ) const;
+               tools::Rectangle
                         getPosSize() const;
                void     setZoom( const ::basegfx::B2DVector& _rScale ) const;
                ::basegfx::B2DVector
@@ -207,27 +196,26 @@ namespace sdr { namespace contact {
                void     invalidate() const;
 
     public:
-        inline  const Reference< XControl >&    getControl() const  { return m_xControl; }
+        const Reference< XControl >&    getControl() const  { return m_xControl; }
     };
 
 
-    bool operator==( const ControlHolder& _rControl, const Reference< XInterface >& _rxCompare )
+    static bool operator==( const ControlHolder& _rControl, const Reference< XInterface >& _rxCompare )
     {
         return _rControl.getControl() == _rxCompare;
     }
 
-    bool operator==( const ControlHolder& _rControl, const Any& _rxCompare )
+    static bool operator==( const ControlHolder& _rControl, const Any& _rxCompare )
     {
         return _rControl == Reference< XInterface >( _rxCompare, UNO_QUERY );
     }
 
-    void ControlHolder::setPosSize( const Rectangle& _rPosSize ) const
+    void ControlHolder::setPosSize( const tools::Rectangle& _rPosSize ) const
     {
         // no check whether we're valid, this is the responsibility of the caller
 
-        // don't call setPosSize when pos/size did not change
-        // #i104181# / 2009-08-18 / frank.schoenheit@sun.com
-        ::Rectangle aCurrentRect( getPosSize() );
+        // don't call setPosSize when pos/size did not change #i104181#
+        ::tools::Rectangle aCurrentRect( getPosSize() );
         if ( aCurrentRect != _rPosSize )
         {
             m_xControlWindow->setPosSize(
@@ -238,7 +226,7 @@ namespace sdr { namespace contact {
     }
 
 
-    ::Rectangle ControlHolder::getPosSize() const
+    ::tools::Rectangle ControlHolder::getPosSize() const
     {
         // no check whether we're valid, this is the responsibility of the caller
         return VCLUnoHelper::ConvertToVCLRect( m_xControlWindow->getPosSize() );
@@ -248,7 +236,7 @@ namespace sdr { namespace contact {
     void ControlHolder::setZoom( const ::basegfx::B2DVector& _rScale ) const
     {
         // no check whether we're valid, this is the responsibility of the caller
-        m_xControlView->setZoom( (float)_rScale.getX(), (float)_rScale.getY() );
+        m_xControlView->setZoom( static_cast<float>(_rScale.getX()), static_cast<float>(_rScale.getY()) );
     }
 
 
@@ -257,7 +245,7 @@ namespace sdr { namespace contact {
         Reference< XWindowPeer > xPeer( m_xControl->getPeer() );
         if ( xPeer.is() )
         {
-            vcl::Window* pWindow = VCLUnoHelper::GetWindow( xPeer );
+            VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xPeer );
             OSL_ENSURE( pWindow, "ControlHolder::invalidate: no implementation access!" );
             if ( pWindow )
                 pWindow->Invalidate();
@@ -270,15 +258,15 @@ namespace sdr { namespace contact {
         // no check whether we're valid, this is the responsibility of the caller
 
         // Argh. Why does XView have a setZoom only, but not a getZoom?
-        vcl::Window* pWindow = VCLUnoHelper::GetWindow( m_xControl->getPeer() );
+        VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( m_xControl->getPeer() );
         OSL_ENSURE( pWindow, "ControlHolder::getZoom: no implementation access!" );
 
         ::basegfx::B2DVector aZoom( 1, 1 );
         if ( pWindow )
         {
             const Fraction& rZoom( pWindow->GetZoom() );
-            aZoom.setX( (double)rZoom );
-            aZoom.setY( (double)rZoom );
+            aZoom.setX( static_cast<double>(rZoom) );
+            aZoom.setY( static_cast<double>(rZoom) );
         }
         return aZoom;
     }
@@ -287,7 +275,7 @@ namespace sdr { namespace contact {
 
     /** positions a control, and sets its zoom mode, using a given transformation and output device
      */
-    void adjustControlGeometry_throw( const ControlHolder& _rControl, const Rectangle& _rLogicBoundingRect,
+    static void adjustControlGeometry_throw( const ControlHolder& _rControl, const tools::Rectangle& _rLogicBoundingRect,
         const basegfx::B2DHomMatrix& _rViewTransformation, const ::basegfx::B2DHomMatrix& _rZoomLevelNormalization )
     {
         OSL_PRECOND( _rControl.is(), "UnoControlContactHelper::adjustControlGeometry_throw: illegal control!" );
@@ -310,7 +298,7 @@ namespace sdr { namespace contact {
         ::basegfx::B2DPoint aBottomRight( _rLogicBoundingRect.Right(), _rLogicBoundingRect.Bottom() );
         aBottomRight *= _rViewTransformation;
 
-        const Rectangle aPaintRectPixel( (long)aTopLeft.getX(), (long)aTopLeft.getY(), (long)aBottomRight.getX(), (long)aBottomRight.getY() );
+        const tools::Rectangle aPaintRectPixel( static_cast<long>(aTopLeft.getX()), static_cast<long>(aTopLeft.getY()), static_cast<long>(aBottomRight.getX()), static_cast<long>(aBottomRight.getY()) );
         _rControl.setPosSize( aPaintRectPixel );
 
         // determine the scale from the current view transformation, and the normalization matrix
@@ -323,7 +311,7 @@ namespace sdr { namespace contact {
 
     /** disposes the given control
      */
-    void disposeAndClearControl_nothrow( ControlHolder& _rControl )
+    static void disposeAndClearControl_nothrow( ControlHolder& _rControl )
     {
         try
         {
@@ -333,7 +321,7 @@ namespace sdr { namespace contact {
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
         _rControl.clear();
     }
@@ -497,11 +485,11 @@ namespace sdr { namespace contact {
                                         ,   XModeChangeListener
                                         >   ViewObjectContactOfUnoControl_Impl_Base;
 
-    class SVX_DLLPRIVATE ViewObjectContactOfUnoControl_Impl:
+    class ViewObjectContactOfUnoControl_Impl:
         public ViewObjectContactOfUnoControl_Impl_Base
     {
     private:
-        // fdo#41935 note that access to members is protected with SolarMutex;
+        // tdf#41935 note that access to members is protected with SolarMutex;
         // the class previously had its own mutex but that is prone to deadlock
 
         /// the instance whose IMPL we are
@@ -572,10 +560,10 @@ namespace sdr { namespace contact {
 
             If you want to ensure that the control exists before accessing it, use ->ensureControl
         */
-        inline const ControlHolder&
+        const ControlHolder&
                 getExistentControl() const { return m_aControl; }
 
-        inline bool
+        bool
                 hasControl() const { return m_aControl.is(); }
 
         /** positions our XControl according to the geometry settings in the SdrUnoObj, modified by the given
@@ -601,12 +589,12 @@ namespace sdr { namespace contact {
         /** determines whether our control is currently visible
             @nofail
         */
-        bool    isControlVisible() const { return impl_isControlVisible_nofail(); }
+        bool    isControlVisible() const { return m_bControlIsVisible; }
 
         /// creates an XControl for the given device and SdrUnoObj
         static bool
                 createControlForDevice(
-                    IPageViewAccess& _rPageView,
+                    IPageViewAccess const & _rPageView,
                     const OutputDevice& _rDevice,
                     const SdrUnoObj& _rUnoObject,
                     const basegfx::B2DHomMatrix& _rInitialViewTransformation,
@@ -622,27 +610,27 @@ namespace sdr { namespace contact {
         }
 
     protected:
-        virtual ~ViewObjectContactOfUnoControl_Impl();
+        virtual ~ViewObjectContactOfUnoControl_Impl() override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const EventObject& Source ) throw(RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const EventObject& Source ) override;
 
         // XWindowListener
-        virtual void SAL_CALL windowResized( const WindowEvent& e ) throw(RuntimeException, std::exception) override;
-        virtual void SAL_CALL windowMoved( const WindowEvent& e ) throw(RuntimeException, std::exception) override;
-        virtual void SAL_CALL windowShown( const EventObject& e ) throw(RuntimeException, std::exception) override;
-        virtual void SAL_CALL windowHidden( const EventObject& e ) throw(RuntimeException, std::exception) override;
+        virtual void SAL_CALL windowResized( const WindowEvent& e ) override;
+        virtual void SAL_CALL windowMoved( const WindowEvent& e ) override;
+        virtual void SAL_CALL windowShown( const EventObject& e ) override;
+        virtual void SAL_CALL windowHidden( const EventObject& e ) override;
 
         // XPropertyChangeListener
-        virtual void SAL_CALL propertyChange( const PropertyChangeEvent& evt ) throw(RuntimeException, std::exception) override;
+        virtual void SAL_CALL propertyChange( const PropertyChangeEvent& evt ) override;
 
         // XModeChangeListener
-        virtual void SAL_CALL modeChanged( const ModeChangeEvent& _rSource ) throw (RuntimeException, std::exception) override;
+        virtual void SAL_CALL modeChanged( const ModeChangeEvent& _rSource ) override;
 
         // XContainerListener
-        virtual void SAL_CALL elementInserted( const css::container::ContainerEvent& Event ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL elementRemoved( const css::container::ContainerEvent& Event ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL elementReplaced( const css::container::ContainerEvent& Event ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL elementInserted( const css::container::ContainerEvent& Event ) override;
+        virtual void SAL_CALL elementRemoved( const css::container::ContainerEvent& Event ) override;
+        virtual void SAL_CALL elementReplaced( const css::container::ContainerEvent& Event ) override;
 
     private:
         /** retrieves the SdrPageView which our associated SdrPageViewWindow belongs to
@@ -712,7 +700,7 @@ namespace sdr { namespace contact {
                 We're not disposed.
         */
         static void impl_adjustControlVisibilityToLayerVisibility_throw( const ControlHolder& _rxControl, const SdrUnoObj& _rUnoObject,
-            IPageViewAccess& _rPageView, bool _bIsCurrentlyVisible, bool _bForce );
+            IPageViewAccess const & _rPageView, bool _bIsCurrentlyVisible, bool _bForce );
 
         /** starts or stops listening at various aspects of our control
 
@@ -753,16 +741,6 @@ namespace sdr { namespace contact {
         */
         bool    impl_isDisposed_nofail() const { return m_pAntiImpl == nullptr; }
 
-        /** determines whether our control is currently visible
-            @nofail
-        */
-        bool    impl_isControlVisible_nofail() const { return m_bControlIsVisible; }
-
-        /** determines whether we are currently a listener at the control for design-mode relevant facets
-            @nofail
-        */
-        bool    impl_isDesignModeListening_nofail() const { return m_bIsDesignModeListening; }
-
         /** determines whether the control currently is in design mode
 
             @precond
@@ -770,7 +748,7 @@ namespace sdr { namespace contact {
                 an SdrPageView (which carries this flag), or somebody explicitly set it from
                 outside.
         */
-        inline bool impl_isControlDesignMode_nothrow() const
+        bool impl_isControlDesignMode_nothrow() const
         {
             DBG_ASSERT( m_eControlDesignMode != eUnknown, "ViewObjectContactOfUnoControl_Impl::impl_isControlDesignMode_nothrow: mode is still unknown!" );
             return m_eControlDesignMode == eDesign;
@@ -779,7 +757,7 @@ namespace sdr { namespace contact {
         /** ensures that we have a control for the given PageView/OutputDevice
         */
         bool impl_ensureControl_nothrow(
-                IPageViewAccess& _rPageView,
+                IPageViewAccess const & _rPageView,
                 const OutputDevice& _rDevice,
                 const basegfx::B2DHomMatrix& _rInitialViewTransformation
              );
@@ -793,13 +771,14 @@ namespace sdr { namespace contact {
         typedef ::drawinglayer::primitive2d::BufferedDecompositionPrimitive2D  BufferedDecompositionPrimitive2D;
 
     protected:
-        virtual ::drawinglayer::primitive2d::Primitive2DContainer
+        virtual void
             get2DDecomposition(
+                ::drawinglayer::primitive2d::Primitive2DDecompositionVisitor& rVisitor,
                 const ::drawinglayer::geometry::ViewInformation2D& rViewInformation
             ) const override;
 
-        virtual ::drawinglayer::primitive2d::Primitive2DContainer
-            create2DDecomposition(
+        virtual void create2DDecomposition(
+                ::drawinglayer::primitive2d::Primitive2DContainer& rContainer,
                 const ::drawinglayer::geometry::ViewInformation2D& rViewInformation
             ) const override;
 
@@ -860,9 +839,9 @@ namespace sdr { namespace contact {
     #endif
 
         ::basegfx::B2DHomMatrix aScaleNormalization;
-        MapMode aCurrentDeviceMapMode( rPageViewDevice.GetMapMode() );
-        aScaleNormalization.set( 0, 0, (double)aCurrentDeviceMapMode.GetScaleX() );
-        aScaleNormalization.set( 1, 1, (double)aCurrentDeviceMapMode.GetScaleY() );
+        const MapMode& aCurrentDeviceMapMode( rPageViewDevice.GetMapMode() );
+        aScaleNormalization.set( 0, 0, static_cast<double>(aCurrentDeviceMapMode.GetScaleX()) );
+        aScaleNormalization.set( 1, 1, static_cast<double>(aCurrentDeviceMapMode.GetScaleY()) );
         m_aZoomLevelNormalization *= aScaleNormalization;
 
     #if OSL_DEBUG_LEVEL > 0
@@ -939,12 +918,7 @@ namespace sdr { namespace contact {
             SdrUnoObj* pUnoObject( nullptr );
             if ( getUnoObject( pUnoObject ) )
             {
-                Point aGridOffset = pUnoObject->GetGridOffset();
-                Rectangle aRect( pUnoObject->GetLogicRect() );
-                // Hack for calc, transform position of object according
-                // to current zoom so as objects relative position to grid
-                // appears stable
-                aRect += aGridOffset;
+                const tools::Rectangle aRect( pUnoObject->GetLogicRect() );
                 UnoControlContactHelper::adjustControlGeometry_throw( m_aControl, aRect, _rViewTransformation, m_aZoomLevelNormalization );
             }
             else
@@ -952,7 +926,7 @@ namespace sdr { namespace contact {
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
     }
 
@@ -1009,7 +983,7 @@ namespace sdr { namespace contact {
     }
 
 
-    bool ViewObjectContactOfUnoControl_Impl::impl_ensureControl_nothrow( IPageViewAccess& _rPageView, const OutputDevice& _rDevice,
+    bool ViewObjectContactOfUnoControl_Impl::impl_ensureControl_nothrow( IPageViewAccess const & _rPageView, const OutputDevice& _rDevice,
         const basegfx::B2DHomMatrix& _rInitialViewTransformation )
     {
         if ( m_bCreatingControl )
@@ -1018,13 +992,12 @@ namespace sdr { namespace contact {
             // We once had a situation where this was called reentrantly, which lead to all kind of strange effects. All
             // those affected the grid control, which is the only control so far which is visible in design mode (and
             // not only in alive mode).
-            // Creating the control triggered an Window::Update on some of its child windows, which triggered a
+            // Creating the control triggered a Window::Update on some of its child windows, which triggered a
             // Paint on parent of the grid control (e.g. the SwEditWin), which triggered a reentrant call to this method,
             // which it is not really prepared for.
 
             // /me thinks that re-entrance should be caught on a higher level, i.e. the Drawing Layer should not allow
-            // reentrant paint requests. For the moment, until /me can discuss this with AW, catch it here.
-            // 2009-08-27 / #i104544# frank.schoenheit@sun.com
+            // reentrant paint requests. For the moment, until /me can discuss this with AW, catch it here. #i104544#
             return false;
         }
 
@@ -1041,8 +1014,7 @@ namespace sdr { namespace contact {
             // - we don't belong to a page view, and are simply painted onto different devices
             // The first sounds strange (doesn't it?), the second means we could perhaps
             // optimize this in the future - there is no need to re-create the control every time,
-            // is it?
-            // #i74523# / 2007-02-15 / frank.schoenheit@sun.com
+            // is it? #i74523#
             if ( m_xContainer.is() )
                 impl_switchContainerListening_nothrow( false );
             impl_switchControlListening_nothrow( false );
@@ -1074,7 +1046,7 @@ namespace sdr { namespace contact {
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
 
         // start listening at all aspects of the control which are interesting to us ...
@@ -1088,13 +1060,13 @@ namespace sdr { namespace contact {
     }
 
 
-    bool ViewObjectContactOfUnoControl_Impl::createControlForDevice( IPageViewAccess& _rPageView,
+    bool ViewObjectContactOfUnoControl_Impl::createControlForDevice( IPageViewAccess const & _rPageView,
         const OutputDevice& _rDevice, const SdrUnoObj& _rUnoObject, const basegfx::B2DHomMatrix& _rInitialViewTransformation,
         const basegfx::B2DHomMatrix& _rInitialZoomNormalization, ControlHolder& _out_rControl )
     {
         _out_rControl.clear();
 
-        Reference< XControlModel > xControlModel( _rUnoObject.GetUnoControlModel() );
+        const Reference< XControlModel >& xControlModel( _rUnoObject.GetUnoControlModel() );
         DBG_ASSERT( xControlModel.is(), "ViewObjectContactOfUnoControl_Impl::createControlForDevice: no control model at the SdrUnoObject!?" );
         if ( !xControlModel.is() )
             return false;
@@ -1102,19 +1074,14 @@ namespace sdr { namespace contact {
         bool bSuccess = false;
         try
         {
-            const OUString sControlServiceName( _rUnoObject.GetUnoControlTypeName() );
+            const OUString& sControlServiceName( _rUnoObject.GetUnoControlTypeName() );
 
             Reference< css::uno::XComponentContext > xContext = ::comphelper::getProcessComponentContext();
             _out_rControl = Reference<XControl>( xContext->getServiceManager()->createInstanceWithContext(sControlServiceName, xContext), UNO_QUERY_THROW );
 
             // knit the model and the control
             _out_rControl.setModel( xControlModel );
-            Point aGridOffset =  _rUnoObject.GetGridOffset();
-            Rectangle aRect( _rUnoObject.GetLogicRect() );
-            // Hack for calc, transform position of object according
-            // to current zoom so as objects relative position to grid
-            // appears stable
-            aRect += aGridOffset;
+            const tools::Rectangle aRect( _rUnoObject.GetLogicRect() );
 
             // proper geometry
             UnoControlContactHelper::adjustControlGeometry_throw(
@@ -1141,7 +1108,7 @@ namespace sdr { namespace contact {
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
 
         if ( !bSuccess )
@@ -1185,12 +1152,12 @@ namespace sdr { namespace contact {
             return;
 
         SdrPageViewAccess aPVAccess( *pPageView );
-        impl_adjustControlVisibilityToLayerVisibility_throw( m_aControl, *pUnoObject, aPVAccess, impl_isControlVisible_nofail(), false/*_bForce*/ );
+        impl_adjustControlVisibilityToLayerVisibility_throw( m_aControl, *pUnoObject, aPVAccess, m_bControlIsVisible, false/*_bForce*/ );
     }
 
 
     void ViewObjectContactOfUnoControl_Impl::impl_adjustControlVisibilityToLayerVisibility_throw( const ControlHolder& _rControl,
-        const SdrUnoObj& _rUnoObject, IPageViewAccess& _rPageView, bool _bIsCurrentlyVisible, bool _bForce )
+        const SdrUnoObj& _rUnoObject, IPageViewAccess const & _rPageView, bool _bIsCurrentlyVisible, bool _bForce )
     {
         // in design mode, there is no problem with the visibility: The XControl is hidden by
         // default, and the Drawing Layer will simply not call our paint routine, if we're in
@@ -1225,7 +1192,7 @@ namespace sdr { namespace contact {
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
     }
 
@@ -1256,14 +1223,14 @@ namespace sdr { namespace contact {
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
     }
 
 
     void ViewObjectContactOfUnoControl_Impl::impl_switchDesignModeListening_nothrow( bool _bStart )
     {
-        if ( impl_isDesignModeListening_nofail() != _bStart )
+        if ( m_bIsDesignModeListening != _bStart )
         {
             m_bIsDesignModeListening = _bStart;
             impl_switchPropertyListening_nothrow( _bStart );
@@ -1287,7 +1254,7 @@ namespace sdr { namespace contact {
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
     }
 
@@ -1306,20 +1273,19 @@ namespace sdr { namespace contact {
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
         return bIsPrintable;
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::disposing( const EventObject& Source ) throw(RuntimeException, std::exception)
+    void SAL_CALL ViewObjectContactOfUnoControl_Impl::disposing( const EventObject& Source )
     {
         SolarMutexGuard aSolarGuard;
             // some code below - in particular our disposal - might trigger actions which require the
             // SolarMutex. In particular, in our disposal, we remove ourself as listener from the control,
             // which alone needs the SolarMutex. Of course this - a removeFooListener needed the SolarMutex -
-            // is the real bug. Toolkit really is infested with solar mutex usage ... :(
-            // #i82169# / 2007-11-14 / frank.schoenheit@sun.com
+            // is the real bug. Toolkit really is infested with solar mutex usage ... :( #i82169#
 
         if ( !m_aControl.is() )
             return;
@@ -1338,33 +1304,33 @@ namespace sdr { namespace contact {
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::windowResized( const WindowEvent& /*e*/ ) throw(RuntimeException, std::exception)
+    void SAL_CALL ViewObjectContactOfUnoControl_Impl::windowResized( const WindowEvent& /*e*/ )
     {
         // not interested in
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::windowMoved( const WindowEvent& /*e*/ ) throw(RuntimeException, std::exception)
+    void SAL_CALL ViewObjectContactOfUnoControl_Impl::windowMoved( const WindowEvent& /*e*/ )
     {
         // not interested in
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::windowShown( const EventObject& /*e*/ ) throw(RuntimeException, std::exception)
+    void SAL_CALL ViewObjectContactOfUnoControl_Impl::windowShown( const EventObject& /*e*/ )
     {
         SolarMutexGuard aSolarGuard;
         m_bControlIsVisible = true;
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::windowHidden( const EventObject& /*e*/ ) throw(RuntimeException, std::exception)
+    void SAL_CALL ViewObjectContactOfUnoControl_Impl::windowHidden( const EventObject& /*e*/ )
     {
         SolarMutexGuard aSolarGuard;
         m_bControlIsVisible = false;
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::propertyChange( const PropertyChangeEvent& /*_rEvent*/ ) throw(RuntimeException, std::exception)
+    void SAL_CALL ViewObjectContactOfUnoControl_Impl::propertyChange( const PropertyChangeEvent& /*_rEvent*/ )
     {
         SolarMutexGuard aSolarGuard;
             // (re)painting might require VCL operations, which need the SolarMutex
@@ -1385,7 +1351,7 @@ namespace sdr { namespace contact {
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::modeChanged( const ModeChangeEvent& _rSource ) throw (RuntimeException, std::exception)
+    void SAL_CALL ViewObjectContactOfUnoControl_Impl::modeChanged( const ModeChangeEvent& _rSource )
     {
         SolarMutexGuard aSolarGuard;
 
@@ -1402,25 +1368,24 @@ namespace sdr { namespace contact {
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::elementInserted( const ContainerEvent& /*_Event*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL ViewObjectContactOfUnoControl_Impl::elementInserted( const ContainerEvent& /*_Event*/ )
     {
         // not interested in
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::elementRemoved( const ContainerEvent& Event ) throw (RuntimeException, std::exception)
+    void SAL_CALL ViewObjectContactOfUnoControl_Impl::elementRemoved( const ContainerEvent& Event )
     {
         SolarMutexGuard aSolarGuard;
             // some code below - in particular our disposal - might trigger actions which require the
             // SolarMutex. In particular, in our disposal, we remove ourself as listener from the control,
             // which alone needs the SolarMutex. Of course this - a removeFooListener needed the SolarMutex -
-            // is the real bug. Toolkit really is infested with solar mutex usage ... :(
-            // #i82169# / 2007-11-14 / frank.schoenheit@sun.com
+            // is the real bug. Toolkit really is infested with solar mutex usage ... :( #i82169#
         DBG_ASSERT( Event.Source == m_xContainer, "ViewObjectContactOfUnoControl_Impl::elementRemoved: where did this come from?" );
 
         if ( m_aControl == Event.Element )
@@ -1428,7 +1393,7 @@ namespace sdr { namespace contact {
     }
 
 
-    void SAL_CALL ViewObjectContactOfUnoControl_Impl::elementReplaced( const ContainerEvent& Event ) throw (RuntimeException, std::exception)
+    void SAL_CALL ViewObjectContactOfUnoControl_Impl::elementReplaced( const ContainerEvent& Event )
     {
         SolarMutexGuard aSolarGuard;
         DBG_ASSERT( Event.Source == m_xContainer, "ViewObjectContactOfUnoControl_Impl::elementReplaced: where did this come from?" );
@@ -1481,7 +1446,7 @@ namespace sdr { namespace contact {
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
     }
 
@@ -1513,12 +1478,7 @@ namespace sdr { namespace contact {
         // Do use model data directly to create the correct geometry. Do NOT
         // use getBoundRect()/getSnapRect() here; these will use the sequence of
         // primitives themselves in the long run.
-        Rectangle aSdrGeoData( _rVOC.GetSdrUnoObj().GetGeoRect() );
-        Point aGridOffset = _rVOC.GetSdrUnoObj().GetGridOffset();
-        // Hack for calc, transform position of object according
-        // to current zoom so as objects relative position to grid
-        // appears stable
-        aSdrGeoData += aGridOffset;
+        const tools::Rectangle aSdrGeoData( _rVOC.GetSdrUnoObj().GetGeoRect() );
         const basegfx::B2DRange aRange(
             aSdrGeoData.Left(),
             aSdrGeoData.Top(),
@@ -1542,7 +1502,7 @@ namespace sdr { namespace contact {
     }
 
 
-    ::drawinglayer::primitive2d::Primitive2DContainer LazyControlCreationPrimitive2D::get2DDecomposition( const ::drawinglayer::geometry::ViewInformation2D& _rViewInformation ) const
+    void LazyControlCreationPrimitive2D::get2DDecomposition( ::drawinglayer::primitive2d::Primitive2DDecompositionVisitor& rVisitor, const ::drawinglayer::geometry::ViewInformation2D& _rViewInformation ) const
     {
     #if OSL_DEBUG_LEVEL > 0
         ::basegfx::B2DVector aScale, aTranslate;
@@ -1551,11 +1511,11 @@ namespace sdr { namespace contact {
     #endif
         if ( m_pVOCImpl->hasControl() )
             impl_positionAndZoomControl( _rViewInformation );
-        return BufferedDecompositionPrimitive2D::get2DDecomposition( _rViewInformation );
+        BufferedDecompositionPrimitive2D::get2DDecomposition( rVisitor, _rViewInformation );
     }
 
 
-    ::drawinglayer::primitive2d::Primitive2DContainer LazyControlCreationPrimitive2D::create2DDecomposition( const ::drawinglayer::geometry::ViewInformation2D& _rViewInformation ) const
+    void LazyControlCreationPrimitive2D::create2DDecomposition( ::drawinglayer::primitive2d::Primitive2DContainer& rContainer, const ::drawinglayer::geometry::ViewInformation2D& _rViewInformation ) const
     {
     #if OSL_DEBUG_LEVEL > 0
         ::basegfx::B2DVector aScale, aTranslate;
@@ -1582,17 +1542,19 @@ namespace sdr { namespace contact {
 
         // check if we already have an XControl.
         if ( !xControlModel.is() || !rControl.is() )
+        {
             // use the default mechanism. This will create a ControlPrimitive2D without
             // handing over a XControl. If not even a XControlModel exists, it will
             // create the SdrObject fallback visualisation
-            return rViewContactOfUnoControl.getViewIndependentPrimitive2DSequence();
+            drawinglayer::primitive2d::Primitive2DContainer aTmp = rViewContactOfUnoControl.getViewIndependentPrimitive2DContainer();
+            rContainer.insert(rContainer.end(), aTmp.begin(), aTmp.end());
+            return;
+        }
 
         // create a primitive and hand over the existing xControl. This will
         // allow the primitive to not need to create another one on demand.
-        const drawinglayer::primitive2d::Primitive2DReference xRetval( new ::drawinglayer::primitive2d::ControlPrimitive2D(
+        rContainer.push_back( new ::drawinglayer::primitive2d::ControlPrimitive2D(
             m_aTransformation, xControlModel, rControl.getControl() ) );
-
-        return drawinglayer::primitive2d::Primitive2DContainer { xRetval };
     }
 
 
@@ -1659,7 +1621,7 @@ namespace sdr { namespace contact {
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
     }
 
@@ -1691,8 +1653,7 @@ namespace sdr { namespace contact {
             // remove this when #i115754# is fixed
             return drawinglayer::primitive2d::Primitive2DContainer();
 
-        // ignore existing controls which are in alive mode and manually switched to "invisible"
-        // #102090# / 2009-06-05 / frank.schoenheit@sun.com
+        // ignore existing controls which are in alive mode and manually switched to "invisible" #i102090#
         const ControlHolder& rControl( m_pImpl->getExistentControl() );
         if ( rControl.is() && !rControl.isDesignMode() && !rControl.isVisible() )
             return drawinglayer::primitive2d::Primitive2DContainer();

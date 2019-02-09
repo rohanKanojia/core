@@ -27,6 +27,7 @@
 #include <basegfx/color/bcolor.hxx>
 #include <drawinglayer/primitive2d/polygonprimitive2d.hxx>
 #include <drawinglayer/primitive2d/sdrdecompositiontools2d.hxx>
+#include <tools/debug.hxx>
 
 
 namespace sdr
@@ -63,7 +64,7 @@ namespace sdr
                 for(sal_uInt32 a(0); a < nObjectCount; a++)
                 {
                     const ViewContact& rCandidate(GetViewContact(a));
-                    const drawinglayer::primitive2d::Primitive2DContainer aCandSeq(rCandidate.getViewIndependentPrimitive2DSequence());
+                    const drawinglayer::primitive2d::Primitive2DContainer& aCandSeq(rCandidate.getViewIndependentPrimitive2DContainer());
 
                     xRetval.insert(xRetval.end(), aCandSeq.begin(), aCandSeq.end());
                 }
@@ -71,11 +72,7 @@ namespace sdr
             else
             {
                 // append an invisible outline for the cases where no visible content exists
-                Rectangle aCurrentBoundRect(GetSdrObjGroup().GetLastBoundRect());
-                // Hack for calc, transform position of object according
-                // to current zoom so as objects relative position to grid
-                // appears stable
-                aCurrentBoundRect += GetSdrObjGroup().GetGridOffset();
+                const tools::Rectangle aCurrentBoundRect(GetSdrObjGroup().GetLastBoundRect());
                 const basegfx::B2DRange aCurrentRange(
                     aCurrentBoundRect.Left(), aCurrentBoundRect.Top(),
                     aCurrentBoundRect.Right(), aCurrentBoundRect.Bottom());

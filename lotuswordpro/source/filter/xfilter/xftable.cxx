@@ -57,10 +57,10 @@
  * @file
  * Table object.
  ************************************************************************/
-#include "xftable.hxx"
-#include "xfrow.hxx"
-#include "xfcolstyle.hxx"
-#include "xfstylemanager.hxx"
+#include <xfilter/xftable.hxx>
+#include <xfilter/xfrow.hxx>
+#include <xfilter/xfcolstyle.hxx>
+#include <xfilter/xfstylemanager.hxx>
 #include <cassert>
 
 XFTable::XFTable()
@@ -72,12 +72,6 @@ XFTable::XFTable()
 
 XFTable::~XFTable()
 {
-    std::map<sal_uInt16, XFRow*>::iterator it;
-    for( it=m_aRows.begin(); it!=m_aRows.end(); ++it )
-    {
-        XFRow *pRow = (*it).second;
-        delete pRow;
-    }
     m_aRows.clear();
     m_aColumns.clear();
 }
@@ -87,21 +81,26 @@ void    XFTable::SetColumnStyle(sal_Int32 col, const OUString& style)
     m_aColumns[col] = style;
 }
 
-void XFTable::AddRow(XFRow *pRow)
+void XFTable::AddRow(rtl::Reference<XFRow> const & rRow)
 {
-    assert(pRow);
+    assert(rRow.get());
 
-    int row = pRow->GetRow();
+    for (sal_Int32 i = 0; i < rRow->GetCellCount(); ++i)
+    {
+        XFCell* pFirstCell = rRow->GetCell(i + 1); //starts at 1, not 0
+        if (pFirstCell->GetSubTable() == this)
+            throw std::runtime_error("table is a subtable of itself");
+    }
+
+    int row = rRow->GetRow();
 
     if( row<1 )
-        pRow->SetRow(m_aRows.size()+1);
+        rRow->SetRow(m_aRows.size()+1);
 
-    row = pRow->GetRow();
-    if( m_aRows.find(row) != m_aRows.end() )
-        delete m_aRows[row];
+    row = rRow->GetRow();
 
-    pRow->SetOwnerTable(this);
-    m_aRows[row] = pRow;
+    rRow->SetOwnerTable(this);
+    m_aRows[row] = rRow;
 }
 
 void XFTable::AddHeaderRow(XFRow *pRow)
@@ -126,11 +125,10 @@ OUString XFTable::GetTableName()
 sal_uInt16 XFTable::GetRowCount()
 {
     sal_uInt16 rowMax = 0;
-    std::map<sal_uInt16, XFRow*>::iterator it;
-    for( it=m_aRows.begin(); it!=m_aRows.end(); ++it )
+    for (auto const& row : m_aRows)
     {
-        if (it->first > rowMax)
-            rowMax = it->first;
+        if (row.first > rowMax)
+            rowMax = row.first;
     }
 
     return rowMax;
@@ -138,17 +136,16 @@ sal_uInt16 XFTable::GetRowCount()
 
 XFRow*  XFTable::GetRow(sal_Int32 row)
 {
-    return m_aRows[row];
+    return m_aRows[row].get();
 }
 
 sal_Int32   XFTable::GetColumnCount()
 {
     int     colMax = -1;
-    std::map<sal_Int32,OUString>::iterator it;
-    for( it=m_aColumns.begin(); it!=m_aColumns.end(); ++it )
+    for (auto const& column : m_aColumns)
     {
-        if( it->first>colMax )
-            colMax = it->first;
+        if( column.first>colMax )
+            colMax = column.first;
     }
     return colMax;
 }
@@ -178,10 +175,9 @@ void    XFTable::ToXml(IXFStream *pStrm)
     //output columns:
     {
         int lastCol = 0;
-        std::map<sal_Int32,OUString>::iterator it;
-        for( it=m_aColumns.begin(); it!=m_aColumns.end(); ++it )
+        for (auto const& column : m_aColumns)
         {
-            sal_Int32   col = (*it).first;
+            sal_Int32   col = column.first;
             OUString   style = m_aColumns[col];
 
             //default col repeated:
@@ -219,11 +215,10 @@ void    XFTable::ToXml(IXFStream *pStrm)
     {
         int     lastRow = 0;
 
-        std::map<sal_uInt16, XFRow* >::iterator it = m_aRows.begin();
-        for( ; it!=m_aRows.end(); ++it )
+        for (auto const& elem : m_aRows)
         {
-            int row = (*it).first;
-            XFRow *pRow = (*it).second;
+            int row = elem.first;
+            XFRow *pRow = elem.second.get();
 
             //null row repeated:
             if( row>lastRow+1 )
@@ -232,9 +227,9 @@ void    XFTable::ToXml(IXFStream *pStrm)
                 pNullRow->SetStyleName(m_strDefRowStyle);
                 if( row>lastRow+2)
                     pNullRow->SetRepeated(row-lastRow-1);
-                XFCell *pCell = new XFCell();
-                pCell->SetStyleName(m_strDefCellStyle);
-                pNullRow->AddCell(pCell);
+                rtl::Reference<XFCell> xCell(new XFCell);
+                xCell->SetStyleName(m_strDefCellStyle);
+                pNullRow->AddCell(xCell);
                 pNullRow->ToXml(pStrm);
             }
             pRow->ToXml(pStrm);

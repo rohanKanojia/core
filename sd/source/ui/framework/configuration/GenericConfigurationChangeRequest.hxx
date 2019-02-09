@@ -20,25 +20,20 @@
 #ifndef INCLUDED_SD_SOURCE_UI_FRAMEWORK_CONFIGURATION_GENERICCONFIGURATIONCHANGEREQUEST_HXX
 #define INCLUDED_SD_SOURCE_UI_FRAMEWORK_CONFIGURATION_GENERICCONFIGURATIONCHANGEREQUEST_HXX
 
-#include "MutexOwner.hxx"
+#include <MutexOwner.hxx>
 #include <com/sun/star/drawing/framework/XConfigurationChangeRequest.hpp>
 #include <com/sun/star/container/XNamed.hpp>
-#include <com/sun/star/drawing/framework/XConfiguration.hpp>
-#include <com/sun/star/drawing/framework/XResourceId.hpp>
-#include <com/sun/star/lang/IllegalArgumentException.hpp>
-#include <com/sun/star/beans/PropertyValues.hpp>
 #include <cppuhelper/compbase.hxx>
 
-namespace {
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XConfiguration; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XResourceId; } } } } }
+
+namespace sd { namespace framework {
 
 typedef ::cppu::WeakComponentImplHelper <
       css::drawing::framework::XConfigurationChangeRequest,
       css::container::XNamed
     > GenericConfigurationChangeRequestInterfaceBase;
-
-} // end of anonymous namespace.
-
-namespace sd { namespace framework {
 
 /** This implementation of the XConfigurationChangeRequest interface
     represents a single explicit request for a configuration change.  On its
@@ -63,14 +58,14 @@ public:
         @param eMode
             The mode specifies whether to activate or to deactivate the
             resource.
+        @throws css::css::lang::IllegalArgumentException
     */
     GenericConfigurationChangeRequest (
         const css::uno::Reference<css::drawing::framework::XResourceId>&
             rxResourceId,
-        const Mode eMode)
-        throw (css::lang::IllegalArgumentException);
+        const Mode eMode);
 
-    virtual ~GenericConfigurationChangeRequest() throw();
+    virtual ~GenericConfigurationChangeRequest() throw() override;
 
     // XConfigurationChangeOperation
 
@@ -82,22 +77,19 @@ public:
             The configuration to which the requested change is made.
     */
     virtual void SAL_CALL execute (
-        const css::uno::Reference<css::drawing::framework::XConfiguration>& rxConfiguration)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference<css::drawing::framework::XConfiguration>& rxConfiguration) override;
 
     // XNamed
 
     /** Return a human readable string representation.  This is used for
         debugging purposes.
     */
-    virtual OUString SAL_CALL getName()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getName() override;
 
     /** This call is ignored because the XNamed interface is (mis)used to
         give access to a human readable name for debugging purposes.
     */
-    virtual void SAL_CALL setName (const OUString& rName)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setName (const OUString& rName) override;
 
 private:
     const css::uno::Reference<css::drawing::framework::XResourceId> mxResourceId;

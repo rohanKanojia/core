@@ -41,7 +41,7 @@ enum FilterType
  * setSourceDocument or setTargetDocument determines which Impl function the filter
  * member calls */
 
-class XmlFilterAdaptor : public cppu::WeakImplHelper
+class XmlFilterAdaptor final : public cppu::WeakImplHelper
 <
     css::document::XFilter,
     css::document::XExporter,
@@ -50,9 +50,6 @@ class XmlFilterAdaptor : public cppu::WeakImplHelper
     css::lang::XServiceInfo
 >
 {
-
-protected:
-
     css::uno::Reference< css::uno::XComponentContext > mxContext;
     css::uno::Reference< css::lang::XComponent > mxDoc;
     OUString msFilterName;
@@ -60,11 +57,11 @@ protected:
     OUString msTemplateName;
     FilterType meType;
 
-    bool SAL_CALL exportImpl( const css::uno::Sequence< css::beans::PropertyValue >& aDescriptor )
-        throw (css::uno::RuntimeException);
+    /// @throws css::uno::RuntimeException
+    bool exportImpl( const css::uno::Sequence< css::beans::PropertyValue >& aDescriptor );
 
-    bool SAL_CALL importImpl( const css::uno::Sequence< css::beans::PropertyValue >& aDescriptor )
-        throw (css::uno::RuntimeException, std::exception);
+    /// @throws css::uno::RuntimeException
+    bool importImpl( const css::uno::Sequence< css::beans::PropertyValue >& aDescriptor );
 
 
 public:
@@ -75,72 +72,48 @@ public:
     {
     }
 
-    virtual ~XmlFilterAdaptor() {}
-
-
     // XFilter
 
-    virtual sal_Bool SAL_CALL filter( const css::uno::Sequence< css::beans::PropertyValue >& aDescriptor )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL filter( const css::uno::Sequence< css::beans::PropertyValue >& aDescriptor ) override;
 
-    virtual void SAL_CALL cancel(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL cancel(  ) override;
 
 
     // XExporter
 
-    virtual void SAL_CALL setSourceDocument( const css::uno::Reference< css::lang::XComponent >& xDoc )
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setSourceDocument( const css::uno::Reference< css::lang::XComponent >& xDoc ) override;
 
 
     // XImporter
 
-    virtual void SAL_CALL setTargetDocument( const css::uno::Reference< css::lang::XComponent >& xDoc )
-
-        throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setTargetDocument( const css::uno::Reference< css::lang::XComponent >& xDoc ) override;
 
 
     // XInitialization
 
-    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments )
-
-        throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
 
     // XServiceInfo
 
-    virtual OUString SAL_CALL getImplementationName(  )
+    virtual OUString SAL_CALL getImplementationName(  ) override;
 
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
 
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-
-        throw (css::uno::RuntimeException, std::exception) override;
-
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  )
-
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 
 };
 
+/// @throws css::uno::RuntimeException
+OUString XmlFilterAdaptor_getImplementationName();
 
-OUString XmlFilterAdaptor_getImplementationName()
-    throw ( css::uno::RuntimeException );
+/// @throws css::uno::RuntimeException
+css::uno::Sequence< OUString > XmlFilterAdaptor_getSupportedServiceNames(  );
 
-
-bool SAL_CALL XmlFilterAdaptor_supportsService( const OUString& ServiceName )
-    throw ( css::uno::RuntimeException );
-
-
-css::uno::Sequence< OUString > SAL_CALL XmlFilterAdaptor_getSupportedServiceNames(  )
-    throw ( css::uno::RuntimeException );
-
-
+/// @throws css::uno::Exception
 css::uno::Reference< css::uno::XInterface >
 
-SAL_CALL XmlFilterAdaptor_createInstance( const css::uno::Reference< css::lang::XMultiServiceFactory > & rSMgr)
-
-    throw ( css::uno::Exception );
+XmlFilterAdaptor_createInstance( const css::uno::Reference< css::lang::XMultiServiceFactory > & rSMgr);
 
 
 #endif

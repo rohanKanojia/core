@@ -20,20 +20,19 @@
 
 #include <sal/macros.h>
 
-#include "fmhelp.hrc"
-#include "fmprop.hrc"
-#include "fmPropBrw.hxx"
-#include "svx/fmresids.hrc"
-#include "fmservs.hxx"
-#include "fmshimp.hxx"
-#include "fmpgeimp.hxx"
+#include <fmprop.hxx>
+#include <fmPropBrw.hxx>
+#include <svx/strings.hrc>
+#include <fmservs.hxx>
+#include <fmshimp.hxx>
+#include <fmpgeimp.hxx>
 
-#include "svx/dialmgr.hxx"
-#include "svx/fmpage.hxx"
-#include "svx/fmshell.hxx"
-#include "svx/sdrpagewindow.hxx"
-#include "svx/svdpagv.hxx"
-#include "svx/svxids.hrc"
+#include <svx/dialmgr.hxx>
+#include <svx/fmpage.hxx>
+#include <svx/fmshell.hxx>
+#include <svx/sdrpagewindow.hxx>
+#include <svx/svdpagv.hxx>
+#include <svx/svxids.hrc>
 
 #include <com/sun/star/awt/XLayoutConstrains.hpp>
 #include <com/sun/star/awt/XControlContainer.hpp>
@@ -45,13 +44,14 @@
 #include <com/sun/star/form/inspection/DefaultFormComponentInspectorModel.hpp>
 #include <com/sun/star/frame/Frame.hpp>
 #include <com/sun/star/inspection/ObjectInspector.hpp>
-#include <com/sun/star/inspection/ObjectInspectorModel.hpp>
 #include <com/sun/star/inspection/XObjectInspectorUI.hpp>
 #include <com/sun/star/inspection/DefaultHelpProvider.hpp>
+#include <com/sun/star/util/VetoException.hpp>
 
 #include <comphelper/processfactory.hxx>
 #include <comphelper/property.hxx>
 #include <comphelper/sequence.hxx>
+#include <comphelper/types.hxx>
 #include <cppuhelper/component_context.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/childwin.hxx>
@@ -64,14 +64,21 @@
 #include <tools/diagnose_ex.h>
 #include <unotools/confignode.hxx>
 #include <vcl/stdtext.hxx>
+#include <vcl/weld.hxx>
 
 #include <algorithm>
 
 using namespace ::com::sun::star;
+using namespace ::com::sun::star::beans;
+using namespace ::com::sun::star::container;
+using namespace ::com::sun::star::form;
+using namespace ::com::sun::star::form::inspection;
+using namespace ::com::sun::star::frame;
+using namespace ::com::sun::star::inspection;
+using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::util;
-using namespace ::com::sun::star::inspection;
-using namespace ::com::sun::star::form::inspection;
+using namespace ::svxform;
 using ::com::sun::star::awt::XWindow;
 
 //= FmPropBrwMgr
@@ -95,17 +102,10 @@ const long STD_WIN_SIZE_Y = 350;
 const long STD_MIN_SIZE_X = 250;
 const long STD_MIN_SIZE_Y = 250;
 
-using namespace ::com::sun::star::uno;
-using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::form;
-using namespace ::com::sun::star::frame;
-using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::container;
-using namespace ::svxform;
 
-OUString GetUIHeadlineName(sal_Int16 nClassId, const Any& aUnoObj)
+static OUString GetUIHeadlineName(sal_Int16 nClassId, const Any& aUnoObj)
 {
-    sal_uInt16 nClassNameResourceId = 0;
+    const char* pClassNameResourceId = nullptr;
 
     switch ( nClassId )
     {
@@ -113,12 +113,12 @@ OUString GetUIHeadlineName(sal_Int16 nClassId, const Any& aUnoObj)
         {
             Reference< XInterface >  xIFace;
             aUnoObj >>= xIFace;
-            nClassNameResourceId = RID_STR_PROPTITLE_EDIT;
+            pClassNameResourceId = RID_STR_PROPTITLE_EDIT;
             if (xIFace.is())
             {   // we have a chance to check if it's a formatted field model
                 Reference< XServiceInfo >  xInfo(xIFace, UNO_QUERY);
                 if (xInfo.is() && (xInfo->supportsService(FM_SUN_COMPONENT_FORMATTEDFIELD)))
-                    nClassNameResourceId = RID_STR_PROPTITLE_FORMATTED;
+                    pClassNameResourceId = RID_STR_PROPTITLE_FORMATTED;
                 else if (!xInfo.is())
                 {
                     // couldn't distinguish between formatted and edit with the service name, so try with the properties
@@ -127,7 +127,7 @@ OUString GetUIHeadlineName(sal_Int16 nClassId, const Any& aUnoObj)
                     {
                         Reference< XPropertySetInfo >  xPropsInfo = xProps->getPropertySetInfo();
                         if (xPropsInfo.is() && xPropsInfo->hasPropertyByName(FM_PROP_FORMATSSUPPLIER))
-                            nClassNameResourceId = RID_STR_PROPTITLE_FORMATTED;
+                            pClassNameResourceId = RID_STR_PROPTITLE_FORMATTED;
                     }
                 }
             }
@@ -135,51 +135,51 @@ OUString GetUIHeadlineName(sal_Int16 nClassId, const Any& aUnoObj)
         break;
 
         case FormComponentType::COMMANDBUTTON:
-            nClassNameResourceId = RID_STR_PROPTITLE_PUSHBUTTON; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_PUSHBUTTON; break;
         case FormComponentType::RADIOBUTTON:
-            nClassNameResourceId = RID_STR_PROPTITLE_RADIOBUTTON; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_RADIOBUTTON; break;
         case FormComponentType::CHECKBOX:
-            nClassNameResourceId = RID_STR_PROPTITLE_CHECKBOX; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_CHECKBOX; break;
         case FormComponentType::LISTBOX:
-            nClassNameResourceId = RID_STR_PROPTITLE_LISTBOX; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_LISTBOX; break;
         case FormComponentType::COMBOBOX:
-            nClassNameResourceId = RID_STR_PROPTITLE_COMBOBOX; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_COMBOBOX; break;
         case FormComponentType::GROUPBOX:
-            nClassNameResourceId = RID_STR_PROPTITLE_GROUPBOX; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_GROUPBOX; break;
         case FormComponentType::IMAGEBUTTON:
-            nClassNameResourceId = RID_STR_PROPTITLE_IMAGEBUTTON; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_IMAGEBUTTON; break;
         case FormComponentType::FIXEDTEXT:
-            nClassNameResourceId = RID_STR_PROPTITLE_FIXEDTEXT; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_FIXEDTEXT; break;
         case FormComponentType::GRIDCONTROL:
-            nClassNameResourceId = RID_STR_PROPTITLE_DBGRID; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_DBGRID; break;
         case FormComponentType::FILECONTROL:
-            nClassNameResourceId = RID_STR_PROPTITLE_FILECONTROL; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_FILECONTROL; break;
         case FormComponentType::DATEFIELD:
-            nClassNameResourceId = RID_STR_PROPTITLE_DATEFIELD; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_DATEFIELD; break;
         case FormComponentType::TIMEFIELD:
-            nClassNameResourceId = RID_STR_PROPTITLE_TIMEFIELD; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_TIMEFIELD; break;
         case FormComponentType::NUMERICFIELD:
-            nClassNameResourceId = RID_STR_PROPTITLE_NUMERICFIELD; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_NUMERICFIELD; break;
         case FormComponentType::CURRENCYFIELD:
-            nClassNameResourceId = RID_STR_PROPTITLE_CURRENCYFIELD; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_CURRENCYFIELD; break;
         case FormComponentType::PATTERNFIELD:
-            nClassNameResourceId = RID_STR_PROPTITLE_PATTERNFIELD; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_PATTERNFIELD; break;
         case FormComponentType::IMAGECONTROL:
-            nClassNameResourceId = RID_STR_PROPTITLE_IMAGECONTROL; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_IMAGECONTROL; break;
         case FormComponentType::HIDDENCONTROL:
-            nClassNameResourceId = RID_STR_PROPTITLE_HIDDEN; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_HIDDEN; break;
         case FormComponentType::SCROLLBAR:
-            nClassNameResourceId = RID_STR_PROPTITLE_SCROLLBAR; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_SCROLLBAR; break;
         case FormComponentType::SPINBUTTON:
-            nClassNameResourceId = RID_STR_PROPTITLE_SPINBUTTON; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_SPINBUTTON; break;
         case FormComponentType::NAVIGATIONBAR:
-            nClassNameResourceId = RID_STR_PROPTITLE_NAVBAR; break;
+            pClassNameResourceId = RID_STR_PROPTITLE_NAVBAR; break;
         case FormComponentType::CONTROL:
         default:
-            nClassNameResourceId = RID_STR_CONTROL; break;
+            pClassNameResourceId = RID_STR_CONTROL; break;
     }
 
-    return SVX_RESSTR(nClassNameResourceId);
+    return SvxResId(pClassNameResourceId);
 }
 
 FmPropBrw::FmPropBrw( const Reference< XComponentContext >& _xORB, SfxBindings* _pBindings,
@@ -187,14 +187,12 @@ FmPropBrw::FmPropBrw( const Reference< XComponentContext >& _xORB, SfxBindings* 
     :SfxFloatingWindow(_pBindings, _pMgr, _pParent, WinBits(WB_STDMODELESS|WB_SIZEABLE|WB_3DLOOK|WB_ROLLABLE) )
     ,SfxControllerItem(SID_FM_PROPERTY_CONTROL, *_pBindings)
     ,m_bInitialStateChange(true)
-    ,m_bInStateChange( false )
     ,m_xORB(_xORB)
 {
 
     ::Size aPropWinSize(STD_WIN_SIZE_X,STD_WIN_SIZE_Y);
     SetMinOutputSizePixel(::Size(STD_MIN_SIZE_X,STD_MIN_SIZE_Y));
     SetOutputSizePixel(aPropWinSize);
-    SetUniqueId(UID_FORMPROPBROWSER_FRAME);
 
     try
     {
@@ -224,7 +222,7 @@ FmPropBrw::FmPropBrw( const Reference< XComponentContext >& _xORB, SfxBindings* 
 
 
     if ( m_xBrowserComponentWindow.is() )
-        m_xBrowserComponentWindow->setVisible( sal_True );
+        m_xBrowserComponentWindow->setVisible( true );
 
     if ( _pInfo )
         m_sLastActivePage = _pInfo->aExtraString;
@@ -271,13 +269,13 @@ void FmPropBrw::dispose()
                                              , OUString( "DialogParentWindow" )
                                              , OUString( "ControlContext" )
                                              , OUString( "ControlShapeAccess" ) };
-            for ( size_t i = 0; i < SAL_N_ELEMENTS(pProps); ++i )
-                xName->removeByName( pProps[i] );
+            for (const auto & i : pProps)
+                xName->removeByName( i );
         }
     }
     catch (const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("svx");
     }
     ::SfxControllerItem::dispose();
     SfxFloatingWindow::dispose();
@@ -341,7 +339,7 @@ bool FmPropBrw::Close()
         try
         {
             Reference< XController > xController( m_xMeAsFrame->getController() );
-            if ( xController.is() && !xController->suspend( sal_True ) )
+            if ( xController.is() && !xController->suspend( true ) )
                 return false;
         }
         catch( const Exception& )
@@ -382,7 +380,7 @@ bool FmPropBrw::implIsReadOnlyModel() const
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("svx");
     }
     return true;
 }
@@ -397,7 +395,7 @@ void FmPropBrw::implSetNewSelection( const InterfaceBag& _rSelection )
             Reference< XObjectInspector > xInspector( m_xBrowserController, UNO_QUERY_THROW );
 
             // tell it the objects to inspect
-            xInspector->inspect( comphelper::containerToSequence< Reference< XInterface > >(_rSelection) );
+            xInspector->inspect( comphelper::containerToSequence(_rSelection) );
         }
         catch( const VetoException& )
         {
@@ -414,13 +412,13 @@ void FmPropBrw::implSetNewSelection( const InterfaceBag& _rSelection )
 
         if ( _rSelection.empty() )
         {
-            sTitle = SVX_RESSTR(RID_STR_NO_PROPERTIES);
+            sTitle = SvxResId(RID_STR_NO_PROPERTIES);
         }
         else if ( _rSelection.size() > 1 )
         {
             // no form component and (no form or no name) -> Multiselection
-            sTitle = SVX_RESSTR(RID_STR_PROPERTIES_CONTROL);
-            sTitle += SVX_RESSTR(RID_STR_PROPTITLE_MULTISELECT);
+            sTitle = SvxResId(RID_STR_PROPERTIES_CONTROL);
+            sTitle += SvxResId(RID_STR_PROPTITLE_MULTISELECT);
         }
         else
         {
@@ -430,15 +428,15 @@ void FmPropBrw::implSetNewSelection( const InterfaceBag& _rSelection )
                 sal_Int16 nClassID = FormComponentType::CONTROL;
                 xSingleSelection->getPropertyValue( FM_PROP_CLASSID ) >>= nClassID;
 
-                sTitle = SVX_RESSTR(RID_STR_PROPERTIES_CONTROL);
+                sTitle = SvxResId(RID_STR_PROPERTIES_CONTROL);
                 sTitle += GetUIHeadlineName(nClassID, makeAny(xSingleSelection));
             }
             else if ( Reference< XForm >( xSingleSelection, UNO_QUERY ).is() )
-                sTitle = SVX_RESSTR(RID_STR_PROPERTIES_FORM);
+                sTitle = SvxResId(RID_STR_PROPERTIES_FORM);
         }
 
         if ( implIsReadOnlyModel() )
-            sTitle += SVX_RESSTR(RID_STR_READONLY_VIEW);
+            sTitle += SvxResId(RID_STR_READONLY_VIEW);
 
         SetText( sTitle );
 
@@ -482,7 +480,7 @@ void FmPropBrw::FillInfo( SfxChildWinInfo& rInfo ) const
 }
 
 
-IMPL_LINK_NOARG_TYPED( FmPropBrw, OnAsyncGetFocus, void*, void )
+IMPL_LINK_NOARG( FmPropBrw, OnAsyncGetFocus, void*, void )
 {
     if (m_xBrowserComponentWindow.is())
         m_xBrowserComponentWindow->setFocus();
@@ -519,7 +517,7 @@ void FmPropBrw::impl_createPropertyBrowser_throw( FmFormShell* _pFormShell )
 
         if(pPageView)
         {
-            SdrPageWindow* pPageWindow = pPageView->GetPageWindow(0L);
+            SdrPageWindow* pPageWindow = pPageView->GetPageWindow(0);
 
             if(pPageWindow)
             {
@@ -542,10 +540,10 @@ void FmPropBrw::impl_createPropertyBrowser_throw( FmFormShell* _pFormShell )
     // a ComponentContext for the
     ::cppu::ContextEntry_Init aHandlerContextInfo[] =
     {
-        ::cppu::ContextEntry_Init( OUString( "ContextDocument" ), makeAny( xDocument ) ),
-        ::cppu::ContextEntry_Init( OUString( "DialogParentWindow" ), makeAny( xParentWindow ) ),
-        ::cppu::ContextEntry_Init( OUString( "ControlContext" ), makeAny( xControlContext ) ),
-        ::cppu::ContextEntry_Init( OUString( "ControlShapeAccess" ), makeAny( xControlMap ) )
+        ::cppu::ContextEntry_Init( "ContextDocument", makeAny( xDocument ) ),
+        ::cppu::ContextEntry_Init( "DialogParentWindow", makeAny( xParentWindow ) ),
+        ::cppu::ContextEntry_Init( "ControlContext", makeAny( xControlContext ) ),
+        ::cppu::ContextEntry_Init( "ControlShapeAccess", makeAny( xControlMap ) )
     };
     m_xInspectorContext.set(
         ::cppu::createComponentContext( aHandlerContextInfo, SAL_N_ELEMENTS( aHandlerContextInfo ),
@@ -567,8 +565,8 @@ void FmPropBrw::impl_createPropertyBrowser_throw( FmFormShell* _pFormShell )
 
     if ( !m_xBrowserController.is() )
     {
-        OUString sServiceName( "com.sun.star.inspection.ObjectInspector" );
-        ShowServiceNotAvailableError( GetParent(), sServiceName, true );
+        vcl::Window *pWin = GetParent();
+        ShowServiceNotAvailableError(pWin ? pWin->GetFrameWeld() : nullptr, "com.sun.star.inspection.ObjectInspector", true);
     }
     else
     {
@@ -613,7 +611,7 @@ void FmPropBrw::impl_ensurePropertyBrowser_nothrow( FmFormShell* _pFormShell )
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("svx");
     }
     m_xLastKnownDocument = xDocument;
 }
@@ -624,7 +622,6 @@ void FmPropBrw::StateChanged(sal_uInt16 nSID, SfxItemState eState, const SfxPool
     if (!pState  || SID_FM_PROPERTY_CONTROL != nSID)
         return;
 
-    m_bInStateChange = true;
     try
     {
         if (eState >= SfxItemState::DEFAULT)
@@ -632,7 +629,7 @@ void FmPropBrw::StateChanged(sal_uInt16 nSID, SfxItemState eState, const SfxPool
             FmFormShell* pShell = dynamic_cast<FmFormShell*>( static_cast<const SfxObjectItem*>(pState)->GetShell() );
             InterfaceBag aSelection;
             if ( pShell )
-                pShell->GetImpl()->getCurrentSelection( aSelection );
+                pShell->GetImpl()->getCurrentSelection_Lock(aSelection);
 
             impl_ensurePropertyBrowser_nothrow( pShell );
 
@@ -673,7 +670,6 @@ void FmPropBrw::StateChanged(sal_uInt16 nSID, SfxItemState eState, const SfxPool
     {
         OSL_FAIL("FmPropBrw::StateChanged: Exception occurred!");
     }
-    m_bInStateChange = false;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

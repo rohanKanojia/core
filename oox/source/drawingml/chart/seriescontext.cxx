@@ -17,13 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/chart/seriescontext.hxx"
+#include <drawingml/chart/seriescontext.hxx>
 
-#include "drawingml/shapepropertiescontext.hxx"
-#include "drawingml/textbodycontext.hxx"
-#include "drawingml/chart/datasourcecontext.hxx"
-#include "drawingml/chart/seriesmodel.hxx"
-#include "drawingml/chart/titlecontext.hxx"
+#include <drawingml/shapepropertiescontext.hxx>
+#include <drawingml/textbodycontext.hxx>
+#include <drawingml/chart/datasourcecontext.hxx>
+#include <drawingml/chart/seriesmodel.hxx>
+#include <drawingml/chart/titlecontext.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 namespace oox {
 namespace drawingml {
@@ -78,7 +82,7 @@ ContextHandlerRef lclDataLabelSharedCreateContext( ContextHandler2& rContext,
     return nullptr;
 }
 
-void lclDataLabelSharedCharacters( ContextHandler2& rContext, const OUString& rChars, DataLabelModelBase& orModel )
+void lclDataLabelSharedCharacters( ContextHandler2 const & rContext, const OUString& rChars, DataLabelModelBase& orModel )
 {
     if( rContext.isCurrentElement( C_TOKEN( separator ) ) )
         orModel.moaSeparator = rChars;
@@ -89,6 +93,7 @@ void lclDataLabelSharedCharacters( ContextHandler2& rContext, const OUString& rC
 DataLabelContext::DataLabelContext( ContextHandler2Helper& rParent, DataLabelModel& rModel ) :
     ContextBase< DataLabelModel >( rParent, rModel )
 {
+    mrModel.mbDeleted = false;
 }
 
 DataLabelContext::~DataLabelContext()
@@ -97,7 +102,6 @@ DataLabelContext::~DataLabelContext()
 
 ContextHandlerRef DataLabelContext::onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs )
 {
-    mrModel.mbDeleted = false;
     if( isRootElement() ) switch( nElement )
     {
         case C_TOKEN( idx ):
@@ -120,6 +124,7 @@ void DataLabelContext::onCharacters( const OUString& rChars )
 DataLabelsContext::DataLabelsContext( ContextHandler2Helper& rParent, DataLabelsModel& rModel ) :
     ContextBase< DataLabelsModel >( rParent, rModel )
 {
+    mrModel.mbDeleted = false;
 }
 
 DataLabelsContext::~DataLabelsContext()
@@ -128,7 +133,6 @@ DataLabelsContext::~DataLabelsContext()
 
 ContextHandlerRef DataLabelsContext::onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs )
 {
-    mrModel.mbDeleted = false;
     bool bMSO2007Doc = getFilter().isMSO2007Document();
     if( isRootElement() ) switch( nElement )
     {
@@ -470,7 +474,7 @@ ContextHandlerRef BarSeriesContext::onCreateContext( sal_Int32 nElement, const A
                 case C_TOKEN( pictureOptions ):
                     return new PictureOptionsContext( *this, mrModel.mxPicOptions.create(bMSO2007Doc) );
                 case C_TOKEN( shape ):
-                    mrModel.monShape = rAttribs.getToken( bMSO2007Doc ? XML_val : XML_box );
+                    mrModel.monShape = rAttribs.getToken(XML_val);
                     return nullptr;
                 case C_TOKEN( trendline ):
                     return new TrendlineContext( *this, mrModel.maTrendlines.create(bMSO2007Doc) );

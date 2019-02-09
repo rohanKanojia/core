@@ -44,15 +44,15 @@ namespace sfx2
     {
         friend class FileDialogHelper;
 
-        css::uno::Reference < css::ui::dialogs::XFilePicker2 > mxFileDlg;
+        css::uno::Reference < css::ui::dialogs::XFilePicker3 > mxFileDlg;
         css::uno::Reference < css::container::XNameAccess >   mxFilterCFG;
 
         std::vector< css::beans::StringPair >   maFilters;
 
         SfxFilterMatcher*           mpMatcher;
-        GraphicFilter*              mpGraphicFilter;
+        std::unique_ptr<GraphicFilter> mpGraphicFilter;
         FileDialogHelper*           mpAntiImpl;
-        VclPtr<vcl::Window>         mpPreferredParentWindow;
+        weld::Window*               mpFrameWeld;
 
         ::std::vector< OUString > mlLastURLs;
 
@@ -72,8 +72,6 @@ namespace sfx2
 
         ImplSVEvent *               mnPostUserEventId;
 
-        ErrCode                     mnError;
-
         FileDialogHelper::Context   meContext;
 
         bool                    mbHasPassword           : 1;
@@ -81,11 +79,9 @@ namespace sfx2
         bool                    m_bHaveFilterOptions    : 1;
         bool                    mbHasVersions           : 1;
         bool                    mbHasAutoExt            : 1;
-        bool                    mbAddGraphicFilter      : 1;
         bool                    mbHasPreview            : 1;
         bool                    mbShowPreview           : 1;
         bool                    mbIsSaveDlg             : 1;
-        bool                    mbIsSaveACopyDlg        : 1;
         bool                    mbExport                : 1;
 
         bool                    mbDeleteMatcher         : 1;
@@ -109,7 +105,7 @@ namespace sfx2
         void                    updateExportButton();
         void                    updateSelectionBox();
         void                    updateVersions();
-        void                    updatePreviewState( bool _bUpdatePreviewWindow = true );
+        void                    updatePreviewState( bool _bUpdatePreviewWindow );
         void                    dispose();
 
         void                    loadConfig();
@@ -128,13 +124,12 @@ namespace sfx2
 
         void                    setControlHelpIds( const sal_Int16* _pControlId, const char** _pHelpId );
 
-        bool                CheckFilterOptionsCapability( const std::shared_ptr<const SfxFilter>& _pFilter );
+        bool                    CheckFilterOptionsCapability( const std::shared_ptr<const SfxFilter>& _pFilter );
 
-        bool                isInOpenMode() const;
+        bool                    isInOpenMode() const;
         OUString                getCurrentFilterUIName() const;
 
         void                    LoadLastUsedFilter( const OUString& _rContextIdentifier );
-        void                    SaveLastUsedFilter( const OUString& _rContextIdentifier );
         void                    SaveLastUsedFilter();
 
         void                    implInitializeFileName( );
@@ -145,26 +140,26 @@ namespace sfx2
                                                       std::vector<OUString>&                   rpURLList,
                                                       const std::shared_ptr<const SfxFilter>&  pFilter  );
 
-        DECL_LINK_TYPED( TimeOutHdl_Impl, Idle *, void);
-        DECL_LINK_TYPED( InitControls, void*, void );
+        DECL_LINK( TimeOutHdl_Impl, Timer *, void);
+        DECL_LINK( InitControls, void*, void );
 
     public:
         // XFilePickerListener methods
-        virtual void SAL_CALL               fileSelectionChanged( const css::ui::dialogs::FilePickerEvent& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
-        virtual void SAL_CALL               directoryChanged( const css::ui::dialogs::FilePickerEvent& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
-        virtual OUString SAL_CALL           helpRequested( const css::ui::dialogs::FilePickerEvent& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
-        virtual void SAL_CALL               controlStateChanged( const css::ui::dialogs::FilePickerEvent& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
-        virtual void SAL_CALL               dialogSizeChanged() throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL               fileSelectionChanged( const css::ui::dialogs::FilePickerEvent& aEvent ) override;
+        virtual void SAL_CALL               directoryChanged( const css::ui::dialogs::FilePickerEvent& aEvent ) override;
+        virtual OUString SAL_CALL           helpRequested( const css::ui::dialogs::FilePickerEvent& aEvent ) override;
+        virtual void SAL_CALL               controlStateChanged( const css::ui::dialogs::FilePickerEvent& aEvent ) override;
+        virtual void SAL_CALL               dialogSizeChanged() override;
 
         // XDialogClosedListener methods
-        virtual void SAL_CALL               dialogClosed( const css::ui::dialogs::DialogClosedEvent& _rEvent ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL               dialogClosed( const css::ui::dialogs::DialogClosedEvent& _rEvent ) override;
 
         // XEventListener methods
-        virtual void SAL_CALL       disposing( const css::lang::EventObject& Source ) throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL       disposing( const css::lang::EventObject& Source ) override;
 
         // handle XFilePickerListener events
-        void                    handleFileSelectionChanged( const css::ui::dialogs::FilePickerEvent& aEvent );
-        void                    handleDirectoryChanged( const css::ui::dialogs::FilePickerEvent& aEvent );
+        void                    handleFileSelectionChanged();
+        void                    handleDirectoryChanged();
         static OUString         handleHelpRequested( const css::ui::dialogs::FilePickerEvent& aEvent );
         void                    handleControlStateChanged( const css::ui::dialogs::FilePickerEvent& aEvent );
         void                    handleDialogSizeChanged();
@@ -173,16 +168,16 @@ namespace sfx2
                                 FileDialogHelper_Impl(
                                     FileDialogHelper* _pAntiImpl,
                                     const short nDialogType,
-                                    sal_Int64 nFlags,
-                                    sal_Int16 nDialog = SFX2_IMPL_DIALOG_CONFIG,
-                                    vcl::Window* _pPreferredParentWindow = nullptr,
+                                    FileDialogFlags nFlags,
+                                    sal_Int16 nDialog,
+                                    weld::Window* pFrameWeld,
                                     const OUString& sStandardDir = OUString(),
                                     const css::uno::Sequence< OUString >&   rBlackList = css::uno::Sequence< OUString >()
                                 );
-        virtual                 ~FileDialogHelper_Impl();
+        virtual                 ~FileDialogHelper_Impl() override;
 
         ErrCode                 execute( std::vector<OUString>& rpURLList,
-                                         SfxItemSet *&   rpSet,
+                                         std::unique_ptr<SfxItemSet>& rpSet,
                                          OUString&       rFilter );
         ErrCode                 execute();
 
@@ -211,8 +206,10 @@ namespace sfx2
 
         void                    SetContext( FileDialogHelper::Context _eNewContext );
 
-        inline bool             isSystemFilePicker() const { return mbSystemPicker; }
-        inline bool             isPasswordEnabled() const { return mbIsPwdEnabled; }
+        bool             isSystemFilePicker() const { return mbSystemPicker; }
+        bool             isPasswordEnabled() const { return mbIsPwdEnabled; }
+
+        css::uno::Reference<css::awt::XWindow> GetFrameInterface();
     };
 
 }   // end of namespace sfx2

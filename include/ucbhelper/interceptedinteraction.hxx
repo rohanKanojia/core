@@ -25,7 +25,7 @@
 #include <com/sun/star/task/XInteractionHandler.hpp>
 
 #include <com/sun/star/task/XInteractionRequest.hpp>
-#include <cppuhelper/implbase1.hxx>
+#include <cppuhelper/implbase.hxx>
 #include <ucbhelper/ucbhelperdllapi.h>
 
 
@@ -40,7 +40,7 @@ namespace ucbhelper{
               only
             - or as base class if interactions must be modified.
  */
-class UCBHELPER_DLLPUBLIC InterceptedInteraction : public ::cppu::WeakImplHelper1< css::task::XInteractionHandler >
+class UCBHELPER_DLLPUBLIC InterceptedInteraction : public ::cppu::WeakImplHelper< css::task::XInteractionHandler >
 {
 
     // types
@@ -64,24 +64,7 @@ class UCBHELPER_DLLPUBLIC InterceptedInteraction : public ::cppu::WeakImplHelper
             css::uno::Type Continuation;
 
 
-            /** @short  specify, if both interactions must have the same type
-                        or can be derived from.
-
-                @descr  Interaction base on exceptions - and exceptions are real types.
-                        So they can be checked in its type. These parameter "MatchExact"
-                        influence the type-check in the following way:
-                            TRUE  => the exception will be intercepted only
-                                     if it supports exactly the same type ...
-                                     or
-                            FALSE => derived exceptions will be intercepted too.
-
-                @attention  This parameter does not influence the check of the continuation
-                            type! The continuation must be matched exactly every time ...
-             */
-            bool MatchExact;
-
-
-            /** @short  its an unique identifier, which must be managed by the outside code.
+            /** @short  it's an unique identifier, which must be managed by the outside code.
 
                 @descr  If there is a derived class, which overwrites the InterceptedInteraction::intercepted()
                         method, it will be called with a reference to an InterceptedRequest struct.
@@ -98,39 +81,9 @@ class UCBHELPER_DLLPUBLIC InterceptedInteraction : public ::cppu::WeakImplHelper
              */
             InterceptedRequest()
             {
-                MatchExact = false;
                 Handle     = INVALID_HANDLE;
             }
 
-
-            /** @short  initialize this instance.
-
-                @param  nHandle
-                        used to identify every intercepted request
-
-                @param  aRequest
-                        must contain an exception object, which can be checked
-                        in its uno-type against the later handled interaction.
-
-                @param  aContinuation
-                        must contain a continuation object, which is used
-                        in its uno-type to locate the same continuation
-                        inside the list of possible ones.
-
-                @param  bMatchExact
-                        influence the type check of the interception request.
-                        Its not used to check the continuation!
-             */
-            InterceptedRequest(      sal_Int32                nHandle      ,
-                               const css::uno::Any&           aRequest     ,
-                               const css::uno::Type&          aContinuation,
-                                     bool                     bMatchExact  )
-            {
-                Handle       = nHandle;
-                Request      = aRequest;
-                Continuation = aContinuation;
-                MatchExact   = bMatchExact;
-            }
         };
 
 
@@ -144,7 +97,7 @@ class UCBHELPER_DLLPUBLIC InterceptedInteraction : public ::cppu::WeakImplHelper
             /** none of the specified interceptions match the incoming request */
             E_NOT_INTERCEPTED,
             /** the request could be intercepted - but the specified continuation could not be located.
-                Thats normally an error of the programmer. May be the interaction request does not use
+                That's normally an error of the programmer. May be the interaction request does not use
                 the right set of continuations ... or the interception list contains the wrong continuation. */
             E_NO_CONTINUATION_FOUND,
             /** the request could be intercepted and the specified continuation could be selected successfully. */
@@ -178,19 +131,6 @@ class UCBHELPER_DLLPUBLIC InterceptedInteraction : public ::cppu::WeakImplHelper
         /** @short  initialize a new instance with default values.
          */
         InterceptedInteraction();
-
-
-        /** @short  initialize a new instance with real values.
-
-            @param  xInterceptedHandler
-                    the outside interaction handler, which should
-                    be intercepted here.
-
-            @param  lInterceptions
-                    the list of intercepted requests.
-         */
-        InterceptedInteraction(const css::uno::Reference< css::task::XInteractionHandler >& xInterceptedHandler,
-                               const ::std::vector< InterceptedRequest >&                                             lInterceptions     );
 
 
         /** @short  initialize a new instance with the interaction handler,
@@ -236,7 +176,7 @@ class UCBHELPER_DLLPUBLIC InterceptedInteraction : public ::cppu::WeakImplHelper
                     const css::uno::Type&                                                                                             aType         );
 
 
-    // useable for derived classes
+    // usable for derived classes
     protected:
 
 
@@ -293,8 +233,7 @@ class UCBHELPER_DLLPUBLIC InterceptedInteraction : public ::cppu::WeakImplHelper
             @param  xRequest
                     the interaction request, which should be intercepted.
          */
-        virtual void SAL_CALL handle(const css::uno::Reference< css::task::XInteractionRequest >& xRequest)
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL handle(const css::uno::Reference< css::task::XInteractionRequest >& xRequest) override;
 
 
     // helper
@@ -321,8 +260,8 @@ class UCBHELPER_DLLPUBLIC InterceptedInteraction : public ::cppu::WeakImplHelper
             @param  xRequest
                     the interaction request, which should be intercepted.
 
-            @return A identifier, which inidicates if the request was intercepted,
-                    the continuation was found and selected ... or not.
+            @return A identifier, which indicates if the request was intercepted,
+                    the continuation was found and selected... or not.
          */
         UCBHELPER_DLLPRIVATE EInterceptionState impl_interceptRequest(const css::uno::Reference< css::task::XInteractionRequest >& xRequest);
 };

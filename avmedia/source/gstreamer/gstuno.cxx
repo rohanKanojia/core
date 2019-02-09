@@ -17,7 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "mediamisc.hxx"
+#include <mediamisc.hxx>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include "gstmanager.hxx"
 
 using namespace ::com::sun::star;
@@ -34,12 +35,12 @@ using namespace ::com::sun::star;
 #  define SERVICE_NAME AVMEDIA_MANAGER_SERVICE_NAME // "com.sun.star.comp.avmedia.Manager_GStreamer"
 #endif
 
-static uno::Reference< uno::XInterface > SAL_CALL create_MediaPlayer( const uno::Reference< lang::XMultiServiceFactory >&  )
+static uno::Reference< uno::XInterface > create_MediaPlayer( const uno::Reference< lang::XMultiServiceFactory >&  )
 {
     return uno::Reference< uno::XInterface >( *new ::avmedia::gstreamer::Manager );
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL avmediagst_component_getFactory( const sal_Char* pImplName, void* pServiceManager, void* /*pRegistryKey*/ )
+extern "C" SAL_DLLPUBLIC_EXPORT void* avmediagst_component_getFactory( const sal_Char* pImplName, void* pServiceManager, void* /*pRegistryKey*/ )
 {
     uno::Reference< lang::XSingleServiceFactory > xFactory;
     void*                                   pRet = nullptr;

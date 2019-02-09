@@ -32,9 +32,9 @@ namespace drawinglayer
         {
         public:
             // one set of attributes for FormText (FontWork) outline visualisation
-            LineAttribute                       maLineAttribute;
-            StrokeAttribute                     maStrokeAttribute;
-            sal_uInt8                           mnTransparence;
+            LineAttribute const                       maLineAttribute;
+            StrokeAttribute const                     maStrokeAttribute;
+            sal_uInt8 const                           mnTransparence;
 
             ImpSdrFormTextOutlineAttribute(
                 const LineAttribute& rLineAttribute,
@@ -105,6 +105,12 @@ namespace drawinglayer
         SdrFormTextOutlineAttribute& SdrFormTextOutlineAttribute::operator=(const SdrFormTextOutlineAttribute& rCandidate)
         {
             mpSdrFormTextOutlineAttribute = rCandidate.mpSdrFormTextOutlineAttribute;
+            return *this;
+        }
+
+        SdrFormTextOutlineAttribute& SdrFormTextOutlineAttribute::operator=(SdrFormTextOutlineAttribute&& rCandidate)
+        {
+            mpSdrFormTextOutlineAttribute = std::move(rCandidate.mpSdrFormTextOutlineAttribute);
             return *this;
         }
 

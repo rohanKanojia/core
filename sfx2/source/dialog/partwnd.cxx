@@ -31,11 +31,12 @@
 #include <com/sun/star/util/XCloseable.hpp>
 #include <com/sun/star/util/CloseVetoException.hpp>
 #include <comphelper/processfactory.hxx>
+#include <osl/diagnose.h>
 
 #include <toolkit/helper/vclunohelper.hxx>
 
 #include <sfx2/sfxsids.hrc>
-#include "partwnd.hxx"
+#include <partwnd.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
@@ -114,7 +115,7 @@ SfxPartDockWnd_Impl::SfxPartDockWnd_Impl
         css::uno::Reference< css::beans::XPropertySet > xLMPropSet( xFrame->getLayoutManager(), css::uno::UNO_QUERY_THROW );
 
         const OUString aAutomaticToolbars( "AutomaticToolbars" );
-        xLMPropSet->setPropertyValue( aAutomaticToolbars, css::uno::Any( sal_False ));
+        xLMPropSet->setPropertyValue( aAutomaticToolbars, css::uno::Any( false ));
     }
     catch( css::uno::RuntimeException& )
     {
@@ -138,18 +139,6 @@ SfxPartDockWnd_Impl::SfxPartDockWnd_Impl
 }
 
 
-void SfxPartDockWnd_Impl::Resize()
-
-/*  [Description]
-
-    Adjusting the size of the controls wrt the new window size
-*/
-
-{
-    SfxDockingWindow::Resize();
-}
-
-
 bool SfxPartDockWnd_Impl::QueryClose()
 {
     bool bClose = true;
@@ -161,7 +150,7 @@ bool SfxPartDockWnd_Impl::QueryClose()
         {
             css::uno::Reference< css::frame::XController >  xCtrl = xFrame->getController();
             if( xCtrl.is() )
-                bClose = xCtrl->suspend( sal_True );
+                bClose = xCtrl->suspend( true );
         }
     }
 
@@ -169,7 +158,7 @@ bool SfxPartDockWnd_Impl::QueryClose()
 }
 
 
-bool SfxPartDockWnd_Impl::Notify( NotifyEvent& rEvt )
+bool SfxPartDockWnd_Impl::EventNotify( NotifyEvent& rEvt )
 {
     if( rEvt.GetType() == MouseNotifyEvent::GETFOCUS )
     {
@@ -182,7 +171,7 @@ bool SfxPartDockWnd_Impl::Notify( NotifyEvent& rEvt )
         }
     }
 
-    return SfxDockingWindow::Notify( rEvt );
+    return SfxDockingWindow::EventNotify( rEvt );
 }
 
 void SfxPartDockWnd_Impl::FillInfo( SfxChildWinInfo& rInfo ) const

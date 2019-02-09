@@ -19,6 +19,8 @@
 #ifndef INCLUDED_FILTER_SOURCE_CONFIG_CACHE_BASECONTAINER_HXX
 #define INCLUDED_FILTER_SOURCE_CONFIG_CACHE_BASECONTAINER_HXX
 
+#include <memory>
+
 #include "filtercache.hxx"
 #include <com/sun/star/uno/Exception.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
@@ -75,7 +77,7 @@ class BaseContainer : public BaseLock
         /** @short  local filter cache, which is used to collect changes on the
                     filter configuration first and flush it later.
 
-            @descr  Normally this member isn't used nor initialized. Thats true,
+            @descr  Normally this member isn't used nor initialized. That's true,
                     if this container is used for reading only. The first write access
                     (e.g. by calling insertByName()) creates a copy of the current
                     global cache m_rCache to initialize the m_pFlushCache member.
@@ -87,7 +89,7 @@ class BaseContainer : public BaseLock
                     m_rCache listen on the global configuration, where m_pFlushCache
                     write its data. m_rCache update itself automatically.
          */
-        FilterCache* m_pFlushCache;
+        std::unique_ptr<FilterCache> m_pFlushCache;
 
         /** @short  specify, which sub container of the used filter cache
                     must be wrapped by this container interface. */
@@ -119,7 +121,7 @@ class BaseContainer : public BaseLock
 
         /** @short  standard dtor.
          */
-        virtual ~BaseContainer();
+        virtual ~BaseContainer() override;
 
 
         /** @short  initialize this generic intsnace with some specialized values
@@ -169,14 +171,15 @@ class BaseContainer : public BaseLock
 
             @descr  If no exception occurs, its guaranteed, that the member m_rFlushCache
                     was initialized right and can be used further.
+
+            @throws css::uno::RuntimeException
          */
-        void impl_initFlushMode()
-            throw (css::uno::RuntimeException);
+        void impl_initFlushMode();
 
 
         /** @short  returns a pointer to the current used cache member.
 
-            @descr  Its a point to the FilterCache instance behind m_pFlushCache
+            @descr  It's a point to the FilterCache instance behind m_pFlushCache
                     or m_rCache.
 
             @note   The lifetime of this pointer is restricted to the time, where
@@ -202,59 +205,38 @@ class BaseContainer : public BaseLock
 
         // XServiceInfo
 
-        virtual OUString SAL_CALL getImplementationName()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getImplementationName() override;
 
-        virtual sal_Bool SAL_CALL supportsService(const OUString& sServiceName)
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL supportsService(const OUString& sServiceName) override;
 
-        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
 
         // XNameContainer
 
         virtual void SAL_CALL insertByName(const OUString& sItem ,
-                                           const css::uno::Any&   aValue)
-            throw (css::lang::IllegalArgumentException  ,
-                   css::container::ElementExistException,
-                   css::lang::WrappedTargetException    ,
-                   css::uno::RuntimeException, std::exception           ) override;
+                                           const css::uno::Any&   aValue) override;
 
-        virtual void SAL_CALL removeByName(const OUString& sItem)
-            throw (css::container::NoSuchElementException,
-                   css::lang::WrappedTargetException     ,
-                   css::uno::RuntimeException, std::exception            ) override;
+        virtual void SAL_CALL removeByName(const OUString& sItem) override;
 
 
         // XNameReplace
 
         virtual void SAL_CALL replaceByName(const OUString& sItem ,
-                                            const css::uno::Any&   aValue)
-            throw (css::lang::IllegalArgumentException   ,
-                   css::container::NoSuchElementException,
-                   css::lang::WrappedTargetException     ,
-                   css::uno::RuntimeException, std::exception            ) override;
+                                            const css::uno::Any&   aValue) override;
 
 
         // XElementAccess
 
-        virtual css::uno::Any SAL_CALL getByName(const OUString& sItem)
-            throw (css::container::NoSuchElementException,
-                   css::lang::WrappedTargetException     ,
-                   css::uno::RuntimeException, std::exception            ) override;
+        virtual css::uno::Any SAL_CALL getByName(const OUString& sItem) override;
 
-        virtual css::uno::Sequence< OUString > SAL_CALL getElementNames()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getElementNames() override;
 
-        virtual sal_Bool SAL_CALL hasByName(const OUString& sItem)
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL hasByName(const OUString& sItem) override;
 
-        virtual css::uno::Type SAL_CALL getElementType()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Type SAL_CALL getElementType() override;
 
-        virtual sal_Bool SAL_CALL hasElements()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL hasElements() override;
 
 
         // XContainerQuery
@@ -262,23 +244,18 @@ class BaseContainer : public BaseLock
         // must be implemented really by derived class ...
         // We implement return of an empty result here only!
         // But we show an assertion :-)
-        virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createSubSetEnumerationByQuery(const OUString& sQuery)
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createSubSetEnumerationByQuery(const OUString& sQuery) override;
 
-        virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createSubSetEnumerationByProperties(const css::uno::Sequence< css::beans::NamedValue >& lProperties)
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createSubSetEnumerationByProperties(const css::uno::Sequence< css::beans::NamedValue >& lProperties) override;
 
 
         // XFlushable
 
-        virtual void SAL_CALL flush()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL flush() override;
 
-        virtual void SAL_CALL addFlushListener(const css::uno::Reference< css::util::XFlushListener >& xListener)
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL addFlushListener(const css::uno::Reference< css::util::XFlushListener >& xListener) override;
 
-        virtual void SAL_CALL removeFlushListener(const css::uno::Reference< css::util::XFlushListener >& xListener)
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL removeFlushListener(const css::uno::Reference< css::util::XFlushListener >& xListener) override;
 };
 
     } // namespace config

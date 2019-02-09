@@ -19,9 +19,9 @@
 
 
 #include <basic/sbx.hxx>
-#include "parser.hxx"
-#include "image.hxx"
-#include "sbobjmod.hxx"
+#include <parser.hxx>
+#include <image.hxx>
+#include <sbobjmod.hxx>
 #include <svtools/miscopt.hxx>
 #include <rtl/character.hxx>
 #include <memory>
@@ -41,7 +41,7 @@ bool SbModule::Compile()
     SbModule* pOld = GetSbData()->pCompMod;
     GetSbData()->pCompMod = this;
 
-    std::unique_ptr<SbiParser> pParser(new SbiParser( static_cast<StarBASIC*>(GetParent()), this ));
+    auto pParser = std::make_unique<SbiParser>( pBasic, this );
     while( pParser->Parse() ) {}
     if( !pParser->GetErrors() )
         pParser->aGen.Save();
@@ -57,7 +57,7 @@ bool SbModule::Compile()
     bool bRet = IsCompiled();
     if( bRet )
     {
-        if( nullptr == dynamic_cast<const SbObjModule*>( this) )
+        if( dynamic_cast<const SbObjModule*>( this) == nullptr )
             pBasic->ClearAllModuleVars();
         RemoveVars(); // remove 'this' Modules variables
         // clear all method statics

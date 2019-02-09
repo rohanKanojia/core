@@ -7,14 +7,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "test/sheet/xdatapilotdescriptor.hxx"
+#include <test/sheet/xdatapilotdescriptor.hxx>
 
 #include <com/sun/star/sheet/XDataPilotDescriptor.hpp>
 #include <com/sun/star/table/CellRangeAddress.hpp>
 #include <com/sun/star/sheet/DataPilotFieldOrientation.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 
-#include "cppunit/extensions/HelperMacros.h"
+#include <cppunit/extensions/HelperMacros.h>
 
 #include <rtl/ustring.hxx>
 
@@ -31,7 +31,7 @@ void XDataPilotDescriptor::testTag()
     uno::Reference< sheet::XDataPilotDescriptor > xDescr(init(), UNO_QUERY_THROW);
     xDescr->setTag(aTag);
     OUString aNewTag = xDescr->getTag();
-    CPPUNIT_ASSERT( aTag == aNewTag );
+    CPPUNIT_ASSERT_EQUAL( aTag, aNewTag );
 }
 
 void XDataPilotDescriptor::testSourceRange()
@@ -50,11 +50,11 @@ void XDataPilotDescriptor::testSourceRange()
     table::CellRangeAddress aReturn;
     aReturn = xDescr->getSourceRange();
 
-    CPPUNIT_ASSERT(aAddress.Sheet == aReturn.Sheet);
-    CPPUNIT_ASSERT(aAddress.StartColumn == aReturn.StartColumn);
-    CPPUNIT_ASSERT(aAddress.StartRow == aReturn.StartRow);
-    CPPUNIT_ASSERT(aAddress.EndColumn == aReturn.EndColumn);
-    CPPUNIT_ASSERT(aAddress.EndRow == aReturn.EndRow);
+    CPPUNIT_ASSERT_EQUAL(aAddress.Sheet, aReturn.Sheet);
+    CPPUNIT_ASSERT_EQUAL(aAddress.StartColumn, aReturn.StartColumn);
+    CPPUNIT_ASSERT_EQUAL(aAddress.StartRow, aReturn.StartRow);
+    CPPUNIT_ASSERT_EQUAL(aAddress.EndColumn, aReturn.EndColumn);
+    CPPUNIT_ASSERT_EQUAL(aAddress.EndRow, aReturn.EndRow);
 
     //restore old settings
     xDescr->setSourceRange(aOldAddress);
@@ -67,17 +67,9 @@ void XDataPilotDescriptor::testGetFilterDescriptor()
     CPPUNIT_ASSERT(xSheetFilterDescr.is());
 }
 
-void XDataPilotDescriptor::testGetDataPilotFields_Impl( uno::Reference< sheet::XDataPilotDescriptor > xDescr)
+void XDataPilotDescriptor::testGetDataPilotFields_Impl( uno::Reference< sheet::XDataPilotDescriptor > const & xDescr)
 {
-    //this method should only be called once but needs to be called before any of the other tests
-    static bool bCalled = false;
-    if (bCalled)
-        return;
-    else
-        bCalled = true;
-
     uno::Reference< container::XIndexAccess > xIndex(xDescr->getDataPilotFields(), UNO_QUERY_THROW);
-    CPPUNIT_ASSERT( xIndex.is());
 
     sal_Int32 nCount = xIndex->getCount();
 
@@ -85,13 +77,11 @@ void XDataPilotDescriptor::testGetDataPilotFields_Impl( uno::Reference< sheet::X
     for (sal_Int32 i = 0; i < nCount && i < 5; ++i)
     {
         uno::Reference< container::XNamed > xNamed( xIndex->getByIndex( i ), UNO_QUERY_THROW);
-        CPPUNIT_ASSERT(xNamed.is());
         OUString aName = xNamed->getName();
         maFieldNames.push_back(aName);
         CPPUNIT_ASSERT( aName != "Data" );
 
         uno::Reference< beans::XPropertySet > xPropSet( xNamed, UNO_QUERY_THROW);
-        CPPUNIT_ASSERT( xPropSet.is() );
 
         switch ( i % 5 )
         {
@@ -185,7 +175,7 @@ void XDataPilotDescriptor::testGetHiddenFields()
     checkName( xIndex, 3 );
 }
 
-void XDataPilotDescriptor::checkName( uno::Reference< container::XIndexAccess > xIndex, sal_Int32 nIndex )
+void XDataPilotDescriptor::checkName( uno::Reference< container::XIndexAccess > const & xIndex, sal_Int32 nIndex )
 {
     CPPUNIT_ASSERT(xIndex.is());
     CPPUNIT_ASSERT(maFieldNames.size() >= static_cast<size_t>(nIndex));

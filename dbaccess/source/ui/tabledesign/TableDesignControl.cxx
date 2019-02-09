@@ -17,14 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TableDesignControl.hxx"
-#include "dbu_tbl.hrc"
-#include "TableDesignView.hxx"
-#include "TableController.hxx"
-#include "browserids.hxx"
+#include <TableDesignControl.hxx>
+#include <TableDesignView.hxx>
+#include <TableController.hxx>
+#include <browserids.hxx>
 #include <com/sun/star/util/URL.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include "dbaccess_helpid.hrc"
+#include <vcl/builder.hxx>
+#include <vcl/commandevent.hxx>
+#include <helpids.h>
 
 using namespace ::dbaui;
 using namespace ::svt;
@@ -35,15 +36,16 @@ using namespace ::com::sun::star::util;
 #define HANDLE_ID 0
 
 OTableRowView::OTableRowView(vcl::Window* pParent)
-    :EditBrowseBox(pParent, ModuleRes(RID_DB_TAB_EDITOR),EditBrowseBoxFlags::NONE,
-                    BrowserMode::COLUMNSELECTION | BrowserMode::MULTISELECTION | BrowserMode::AUTOSIZE_LASTCOL |
-                    BrowserMode::KEEPHIGHLIGHT | BrowserMode::HLINES | BrowserMode::VLINES)
-    ,m_nDataPos(-1)
-    ,m_nCurrentPos(-1)
-    ,m_nCurUndoActId(0)
-    ,m_bClipboardFilled(false)
+    : EditBrowseBox(pParent, EditBrowseBoxFlags::NONE, WB_TABSTOP|WB_HIDE|WB_3DLOOK,
+                    BrowserMode::COLUMNSELECTION | BrowserMode::MULTISELECTION |
+                    BrowserMode::AUTOSIZE_LASTCOL | BrowserMode::KEEPHIGHLIGHT |
+                    BrowserMode::HLINES | BrowserMode::VLINES)
+    , m_nDataPos(-1)
+    , m_nCurrentPos(-1)
+    , m_nCurUndoActId(0)
 {
-
+    SetHelpId(HID_TABDESIGN_BACKGROUND);
+    SetSizePixel(LogicToPixel(Size(40, 12), MapMode(MapUnit::MapAppFont)));
 }
 
 void OTableRowView::Init()
@@ -62,8 +64,8 @@ void OTableRowView::Init()
     // set up HandleColumn for at maximum 5 digits
     InsertHandleColumn(static_cast<sal_uInt16>(GetTextWidth(OUString('0')) * 4)/*, sal_True */);
 
-    BrowserMode nMode = BrowserMode::COLUMNSELECTION | BrowserMode::MULTISELECTION | BrowserMode::KEEPHIGHLIGHT |
-                        BrowserMode::HLINES | BrowserMode::VLINES | BrowserMode::AUTOSIZE_LASTCOL;
+    BrowserMode const nMode = BrowserMode::COLUMNSELECTION | BrowserMode::MULTISELECTION | BrowserMode::KEEPHIGHLIGHT |
+                              BrowserMode::HLINES | BrowserMode::VLINES | BrowserMode::AUTOSIZE_LASTCOL;
 
     SetMode(nMode);
 }
@@ -102,48 +104,46 @@ void OTableRowView::Command(const CommandEvent& rEvt)
                 return;
             }
 
-            sal_uInt16 nColId = GetColumnAtXPosPixel(rEvt.GetMousePosPixel().X());
+            sal_uInt16 nColId = GetColumnId(GetColumnAtXPosPixel(rEvt.GetMousePosPixel().X()));
             long   nRow = GetRowAtYPosPixel(rEvt.GetMousePosPixel().Y());
 
             if ( nColId == HANDLE_ID )
             {
-                PopupMenu aContextMenu(ModuleRes(RID_TABLEDESIGNROWPOPUPMENU));
+                VclBuilder aBuilder(nullptr, VclBuilderContainer::getUIRootDir(), "dbaccess/ui/querycolmenu.ui", "");
+                VclPtr<PopupMenu> aContextMenu(aBuilder.get_menu("menu"));
                 long nSelectRowCount = GetSelectRowCount();
-                aContextMenu.EnableItem( SID_CUT, nSelectRowCount != 0);
-                aContextMenu.EnableItem( SID_COPY, nSelectRowCount  != 0);
-                aContextMenu.EnableItem( SID_PASTE, m_bClipboardFilled );
-                aContextMenu.EnableItem( SID_DELETE, false );
-                switch (aContextMenu.Execute(this, rEvt.GetMousePosPixel()))
+                aContextMenu->EnableItem(aContextMenu->GetItemId("cut"), nSelectRowCount != 0);
+                aContextMenu->EnableItem(aContextMenu->GetItemId("copy"), nSelectRowCount  != 0);
+                aContextMenu->EnableItem(aContextMenu->GetItemId("paste"), false);
+                aContextMenu->EnableItem(aContextMenu->GetItemId("delete"), false);
+                aContextMenu->Execute(this, rEvt.GetMousePosPixel());
+                OString sIdent = aContextMenu->GetCurItemIdent();
+                if (sIdent == "cut")
+                    cut();
+                else if (sIdent == "copy")
+                    copy();
+                else if (sIdent == "paste")
                 {
-                    case SID_CUT:
-                        cut();
-                        break;
-                    case SID_COPY:
-                        copy();
-                        break;
-                    case SID_PASTE:
-                        Paste( nRow );
-                        SetNoSelection();
-                        GoToRow( nRow );
-                        SeekRow( nRow );
-                        break;
-
-                    case SID_DELETE:
-                        DeleteRows();
-                        break;
-                    case SID_TABLEDESIGN_INSERTROWS:
-                        InsertNewRows( nRow );
-                        SetNoSelection();
-                        GoToRow( nRow );
-                        SeekRow( nRow );
-                        break;
-                    default:
-                        break;
+                    Paste( nRow );
+                    SetNoSelection();
+                    GoToRow( nRow );
+                    SeekRow( nRow );
                 }
+                else if (sIdent == "delete")
+                    DeleteRows();
+                else if (sIdent == "insert")
+                {
+                    InsertNewRows( nRow );
+                    SetNoSelection();
+                    GoToRow( nRow );
+                    SeekRow( nRow );
+                }
+
+                return;
             }
 
+            [[fallthrough]];
         }
-        //fall-through
         default:
             EditBrowseBox::Command(rEvt);
     }

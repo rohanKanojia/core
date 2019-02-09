@@ -19,15 +19,16 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_AXES_TICKMARKS_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_AXES_TICKMARKS_HXX
 
-#include "TickmarkProperties.hxx"
-#include "VAxisProperties.hxx"
-#include "chartview/ExplicitScaleValues.hxx"
+#include <chartview/ExplicitScaleValues.hxx>
 #include <basegfx/vector/b2dvector.hxx>
 #include <com/sun/star/drawing/PointSequenceSequence.hpp>
-#include <com/sun/star/drawing/XShape.hpp>
-#include <com/sun/star/uno/Sequence.h>
 
 #include <vector>
+
+namespace chart { struct AxisProperties; }
+namespace chart { struct TickmarkProperties; }
+namespace com { namespace sun { namespace star { namespace chart2 { class XScaling; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShape; } } } }
 
 namespace chart {
 
@@ -45,6 +46,7 @@ struct TickInfo
     sal_Int32 nFactorForLimitedTextWidth;//categories in higher levels of complex categories can have more place than a single simple category
 
 //methods:
+    TickInfo() = delete;
     explicit TickInfo( const css::uno::Reference<css::chart2::XScaling>& xInverse );
 
     /**
@@ -54,8 +56,6 @@ struct TickInfo
      */
     double getUnscaledTickValue() const;
     sal_Int32 getScreenDistanceBetweenTicks( const TickInfo& rOherTickInfo ) const;
-private:
-    TickInfo();
 };
 
 typedef std::vector<TickInfo>           TickInfoArrayType;
@@ -73,7 +73,7 @@ class PureTickIter : public TickIter
 {
 public:
     explicit PureTickIter( TickInfoArrayType& rTickInfoVector );
-    virtual ~PureTickIter();
+    virtual ~PureTickIter() override;
     virtual TickInfo* firstInfo() override;
     virtual TickInfo* nextInfo() override;
 
@@ -93,11 +93,6 @@ public:
     void getAllTicks( TickInfoArraysType& rAllTickInfos ) const;
     void getAllTicksShifted( TickInfoArraysType& rAllTickInfos ) const;
 
-    /**
-     * Determine the screen positions of all ticks based on their numeric values.
-     */
-    virtual void updateScreenValues( TickInfoArraysType& rAllTickInfos ) const;
-
 private: //methods
     bool        isDateAxis() const;
 
@@ -111,7 +106,7 @@ protected: //member
     double    m_fScaledVisibleMax;
 };
 
-class TickFactory2D : public TickFactory
+class TickFactory2D final : public TickFactory
 {
 public:
     TickFactory2D(
@@ -120,7 +115,7 @@ public:
         , const ::basegfx::B2DVector& rStartScreenPos, const ::basegfx::B2DVector& rEndScreenPos
         , const ::basegfx::B2DVector& rAxisLineToLabelLineShift );
 
-    virtual ~TickFactory2D();
+    virtual ~TickFactory2D() override;
 
     static sal_Int32    getTickScreenDistance( TickIter& rIter );
 
@@ -133,15 +128,17 @@ public:
         , bool bIncludeFarAwayDistanceIfSo = false
         , bool bIncludeSpaceBetweenTickAndText = true ) const;
 
-    virtual void updateScreenValues( TickInfoArraysType& rAllTickInfos ) const override;
+    /**
+     * Determine the screen positions of all ticks based on their numeric values.
+     */
+    void updateScreenValues( TickInfoArraysType& rAllTickInfos ) const;
 
     bool  isHorizontalAxis() const;
     bool  isVerticalAxis() const;
 
-protected: //methods
+private:
     ::basegfx::B2DVector     getTickScreenPosition2D( double fScaledLogicTickValue ) const;
 
-private: //member
     ::basegfx::B2DVector    m_aAxisStartScreenPosition2D;
     ::basegfx::B2DVector    m_aAxisEndScreenPosition2D;
 

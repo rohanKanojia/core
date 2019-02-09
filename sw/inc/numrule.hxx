@@ -21,17 +21,17 @@
 
 #include <sal/types.h>
 #include <rtl/ustring.hxx>
-#include <editeng/svxenum.hxx>
 #include <editeng/numitem.hxx>
+#include <i18nlangtag/lang.h>
 #include "swdllapi.h"
-#include <swtypes.hxx>
-#include <calbck.hxx>
-#include <hints.hxx>
-#include <SwNumberTreeTypes.hxx>
-#include <ndarr.hxx>
+#include "swtypes.hxx"
+#include "calbck.hxx"
+#include "SwNumberTreeTypes.hxx"
+#include "ndarr.hxx"
 #include <unordered_map>
+#include <memory>
 #include <vector>
-#include <charfmt.hxx>
+#include "charfmt.hxx"
 
 class SwTextFormatColl;
 class IDocumentListsAccess;
@@ -39,7 +39,6 @@ class SwNodeNum;
 namespace vcl { class Font; }
 class SvxBrushItem;
 class SfxGrabBagItem;
-class SvxNumRule;
 class SwDoc;
 class SwFormatVertOrient;
 class SwTextNode;
@@ -49,7 +48,7 @@ const sal_Unicode cBulletChar = 0x2022; ///< Character for lists.
 
 class SW_DLLPUBLIC SwNumFormat : public SvxNumberFormat, public SwClient
 {
-    SwFormatVertOrient* m_pVertOrient;
+    std::unique_ptr<SwFormatVertOrient> m_pVertOrient;
     //For i120928,record the cp info of graphic within bullet
     sal_Unicode     m_cGrfBulletCP;
     SAL_DLLPRIVATE void UpdateNumNodes( SwDoc* pDoc );
@@ -65,7 +64,7 @@ public:
     SwNumFormat( const SwNumFormat& );
     SwNumFormat( const SvxNumberFormat&, SwDoc* pDoc);
 
-    virtual ~SwNumFormat();
+    virtual ~SwNumFormat() override;
 
     SwNumFormat& operator=( const SwNumFormat& );
 
@@ -75,7 +74,7 @@ public:
     SwCharFormat* GetCharFormat() const { return const_cast<SwCharFormat*>(static_cast<const SwCharFormat*>(GetRegisteredIn())); }
     void       SetCharFormat( SwCharFormat* );
 
-    void                    SetCharFormatName(const OUString& rSet);
+    using SvxNumberFormat::SetCharFormatName;
     virtual OUString        GetCharFormatName() const override;
 
     //For i120928,access the cp info of graphic within bullet
@@ -84,15 +83,12 @@ public:
 
     virtual void    SetGraphicBrush( const SvxBrushItem* pBrushItem, const Size* pSize = nullptr, const sal_Int16* pOrient = nullptr) override;
 
-    virtual void                SetVertOrient(sal_Int16 eSet) override;
-    virtual sal_Int16   GetVertOrient() const override;
     const SwFormatVertOrient*      GetGraphicOrientation() const;
 
     bool IsEnumeration() const; // #i22362#
     bool IsItemize() const; // #i29560#
 };
 
-class SwPaM;
 enum SwNumRuleType { OUTLINE_RULE = 0, NUM_RULE = 1, RULE_END = 2 };
 class SW_DLLPUBLIC SwNumRule
 {
@@ -108,7 +104,7 @@ public:
     };
 
 private:
-    friend void _FinitCore();
+    friend void FinitCore();
 
     static SwNumFormat* maBaseFormats [ RULE_END ][ MAXLEVEL ];
     static const sal_uInt16 maDefNumIndents[ MAXLEVEL ];
@@ -116,7 +112,7 @@ private:
     static SwNumFormat* maLabelAlignmentBaseFormats [ RULE_END ][ MAXLEVEL ];
     static sal_uInt16 mnRefCount;
 
-    SwNumFormat* maFormats[ MAXLEVEL ];
+    std::unique_ptr<SwNumFormat> maFormats[ MAXLEVEL ];
 
     /** container for associated text nodes */
     tTextNodeList maTextNodeList;
@@ -125,7 +121,7 @@ private:
     tParagraphStyleList maParagraphStyleList;
 
     /** unordered_map containing "name->rule" relation */
-    std::unordered_map<OUString, SwNumRule *, OUStringHash> * mpNumRuleMap;
+    std::unordered_map<OUString, SwNumRule *> * mpNumRuleMap;
 
     OUString msName;
     SwNumRuleType meRuleType;
@@ -136,7 +132,7 @@ private:
     bool mbInvalidRuleFlag : 1;
     bool mbContinusNum : 1;  ///< Continuous numbering without levels.
     bool mbAbsSpaces : 1;    ///< Levels represent absolute indents.
-    bool mbHidden : 1;       ///< Is the numering rule to be hidden in the UI?
+    bool mbHidden : 1;       ///< Is the numbering rule to be hidden in the UI?
     bool mbCountPhantoms;
 
     const SvxNumberFormat::SvxNumPositionAndSpaceMode meDefaultNumberFormatPositionAndSpaceMode;
@@ -171,15 +167,13 @@ public:
                           const bool bInclStrings = true,
                           const bool bOnlyArabic = false,
                           const unsigned int _nRestrictToThisLevel = MAXLEVEL,
-                          Extremities* pExtremities = nullptr ) const;
+                          Extremities* pExtremities = nullptr,
+                          LanguageType nLang = LANGUAGE_SYSTEM) const;
     OUString MakeRefNumString( const SwNodeNum& rNodeNum,
-                             const bool bInclSuperiorNumLabels = false,
-                             const sal_uInt8 nRestrictInclToThisLevel = 0 ) const;
+                             const bool bInclSuperiorNumLabels,
+                             const int nRestrictInclToThisLevel ) const;
 
-    /**
-
-       @return list of associated text nodes
-    */
+    /** @return list of associated text nodes */
     void GetTextNodeList( SwNumRule::tTextNodeList& rTextNodeList ) const;
     SwNumRule::tTextNodeList::size_type GetTextNodeListSize() const;
 
@@ -190,11 +184,11 @@ public:
     void AddParagraphStyle( SwTextFormatColl& rTextFormatColl );
     void RemoveParagraphStyle( SwTextFormatColl& rTextFormatColl );
 
-    inline void SetDefaultListId( const OUString& sDefaultListId )
+    void SetDefaultListId( const OUString& sDefaultListId )
     {
         msDefaultListId = sDefaultListId;
     }
-    inline OUString GetDefaultListId() const
+    const OUString& GetDefaultListId() const
     {
         return msDefaultListId;
     }
@@ -204,7 +198,7 @@ public:
        @param pNumRuleMap      map to register in
      */
     void SetNumRuleMap(
-                std::unordered_map<OUString, SwNumRule *, OUStringHash>* pNumRuleMap );
+                std::unordered_map<OUString, SwNumRule *>* pNumRuleMap );
 
     static OUString GetOutlineRuleName();
 
@@ -224,7 +218,7 @@ public:
        and copies them if appropriate. */
     void CheckCharFormats( SwDoc* pDoc );
 
-    OUString GetName() const { return msName; }
+    const OUString& GetName() const { return msName; }
 
     void SetName( const OUString& rNm,
                   IDocumentListsAccess& rDocListAccess );
@@ -260,7 +254,7 @@ public:
     SvxNumRule  MakeSvxNumRule() const;
 
     /// change indent of all list levels by given difference
-    void ChangeIndent( const short nDiff );
+    void ChangeIndent( const sal_Int32 nDiff );
     /// set indent of certain list level to given value
     void SetIndent( const short nNewIndent,
                     const sal_uInt16 nListLevel );
@@ -277,44 +271,28 @@ public:
 /// namespace for static functions and methods for numbering and bullets
 namespace numfunc
 {
-    /** retrieve font family name used for the default bullet list characters
-
-        @author OD
-    */
-    OUString GetDefBulletFontname();
+    /** retrieve font family name used for the default bullet list characters */
+    OUString const & GetDefBulletFontname();
 
     /** determine if default bullet font is user defined
 
         The default bullet font is user defined, if it is given in the user configuration
-
-        @author OD
     */
     bool IsDefBulletFontUserDefined();
 
-    /** retrieve font used for the default bullet list characters
-
-        @author OD
-    */
+    /** retrieve font used for the default bullet list characters */
     SW_DLLPUBLIC const vcl::Font& GetDefBulletFont();
 
-    /** retrieve unicode of character used for the default bullet list for the given list level
-
-        @author OD
-    */
+    /** retrieve unicode of character used for the default bullet list for the given list level */
     sal_Unicode GetBulletChar( sal_uInt8 nLevel );
 
     /** configuration, if at first position of the first list item the <TAB>-key
         increased the indent of the complete list or only demotes this list item.
         The same for <SHIFT-TAB>-key at the same position for decreasing the
         indent of the complete list or only promotes this list item.
-
-        @author OD
     */
     bool ChangeIndentOnTabAtFirstPosOfFirstListItem();
 
-    /**
-        @author OD
-    */
     SvxNumberFormat::SvxNumPositionAndSpaceMode GetDefaultPositionAndSpaceMode();
 }
 

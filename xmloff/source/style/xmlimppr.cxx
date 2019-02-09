@@ -24,7 +24,10 @@
 #include <com/sun/star/beans/UnknownPropertyException.hpp>
 #include <com/sun/star/beans/PropertyVetoException.hpp>
 #include <com/sun/star/beans/TolerantPropertySetResultType.hpp>
+#include <com/sun/star/beans/XTolerantMultiPropertySet.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <osl/diagnose.h>
 #include <xmloff/xmlprmap.hxx>
 #include <xmloff/nmspmap.hxx>
@@ -40,7 +43,6 @@
 #include <xmloff/maptype.hxx>
 
 #include <algorithm>
-#include <functional>
 #include <utility>
 #include <vector>
 
@@ -282,9 +284,7 @@ void SvXMLImportPropertyMapper::importXML(
                         // #106963#; use userdefined attribute only if it is in the specified property range
                         if( nIndex != -1 && nIndex >= nStartIdx && nIndex < nEndIdx)
                         {
-                            Any aAny;
-                            aAny <<= xAttrContainer;
-                            XMLPropertyState aNewProperty( nIndex, aAny );
+                            XMLPropertyState aNewProperty( nIndex, Any(xAttrContainer) );
 
                             // push it on our stack so we export it later
                             rProperties.push_back( aNewProperty );
@@ -307,9 +307,7 @@ void SvXMLImportPropertyMapper::importXML(
 
                         sName.append( aLocalName );
 
-                        Any aAny;
-                        aAny <<= aData;
-                        xAttrContainer->insertByName( sName.makeStringAndClear(), aAny );
+                        xAttrContainer->insertByName( sName.makeStringAndClear(), Any(aData) );
                     }
                 }
             }
@@ -354,7 +352,7 @@ void SvXMLImportPropertyMapper::FillPropertySequence(
         pProps->Name = maPropMapper->GetEntryAPIName( nIdx );
         if( !pProps->Name.isEmpty() )
         {
-            pProps->Value <<= rProp.maValue;
+            pProps->Value = rProp.maValue;
             ++pProps;
             ++nValueCount;
         }
@@ -370,8 +368,6 @@ void SvXMLImportPropertyMapper::CheckSpecialContext(
 {
     OSL_ENSURE( rPropSet.is(), "need an XPropertySet" );
     sal_Int32 nCount = aProperties.size();
-
-    Reference< XPropertySetInfo > xInfo(rPropSet->getPropertySetInfo());
 
     for( sal_Int32 i=0; i < nCount; i++ )
     {
@@ -552,8 +548,7 @@ bool SvXMLImportPropertyMapper::FillPropertySet_(
 typedef pair<const OUString*, const Any* > PropertyPair;
 typedef vector<PropertyPair> PropertyPairs;
 
-struct PropertyPairLessFunctor :
-    public std::binary_function<PropertyPair, PropertyPair, bool>
+struct PropertyPairLessFunctor
 {
     bool operator()( const PropertyPair& a, const PropertyPair& b ) const
     {
@@ -592,10 +587,10 @@ void SvXMLImportPropertyMapper::PrepareForMultiPropertySet_(
         if ( ( 0 == ( nPropFlags & MID_FLAG_NO_PROPERTY ) ) &&
              ( ( 0 != ( nPropFlags & MID_FLAG_MUST_EXIST ) ) ||
                !rPropSetInfo.is() ||
-               (rPropSetInfo.is() && rPropSetInfo->hasPropertyByName( rPropName )) ) )
+               rPropSetInfo->hasPropertyByName(rPropName) ) )
         {
             // save property into property pair structure
-            aPropertyPairs.push_back( PropertyPair( &rPropName, &rProp.maValue ) );
+            aPropertyPairs.emplace_back( &rPropName, &rProp.maValue );
         }
 
         // handle no-property and special items
@@ -634,12 +629,10 @@ void SvXMLImportPropertyMapper::PrepareForMultiPropertySet_(
 
     // copy values into sequences
     i = 0;
-    for( PropertyPairs::iterator aIter = aPropertyPairs.begin();
-         aIter != aPropertyPairs.end();
-         ++aIter )
+    for( const auto& rPropertyPair : aPropertyPairs )
     {
-        pNamesArray[i] = *(aIter->first);
-        pValuesArray[i++] = *(aIter->second);
+        pNamesArray[i] = *(rPropertyPair.first);
+        pValuesArray[i++] = *(rPropertyPair.second);
     }
 }
 

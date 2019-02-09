@@ -17,14 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "AccObjectManagerAgent.hxx"
-#include "AccObjectWinManager.hxx"
+#include <AccObjectManagerAgent.hxx>
+#include <AccObjectWinManager.hxx>
 
 #if defined __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnon-virtual-dtor"
 #endif
-#include  "UAccCOM.h"
+#include  <UAccCOM.h>
 #if defined __clang__
 #pragma clang diagnostic pop
 #endif
@@ -81,8 +81,8 @@ void  AccObjectManagerAgent::UpdateValue( XAccessible* pXAcc, Any pAny )
 }
 
 /**
-   * Interface of updating MSAA value when UNO value_changed event occurs.If we can not
-   * find new value,we'll get new value from pXAcc to update com value.
+   * Interface of updating MSAA value when UNO value_changed event occurs. If we can not
+   * find new value, we'll get new value from pXAcc to update com value.
    * @param pXAcc Uno XAccessible interface of control.
    * @return
    */
@@ -135,7 +135,7 @@ void  AccObjectManagerAgent::UpdateDescription( XAccessible* pXAcc, Any newDesc 
 }
 
 /**
-   * When a new UNO XAccessible object is found by listener,we'll create a corresponding
+   * When a new UNO XAccessible object is found by listener, we create a corresponding
    * com object and insert it to our manager list.
    * @param pXAcc Uno XAccessible interface of control.
    * @param pWnd The top window handle containing control.
@@ -167,7 +167,7 @@ AccObjectManagerAgent::SaveTopWindowHandle(sal_Int64 hWnd, XAccessible* pXAcc)
 
 
 /**
-   * When a UNO XAccessible object's new children are found by listener,we'll create
+   * When a UNO XAccessible object's new children are found by listener, we create
    * corresponding com objects and insert them to our manager list.
    * @param pXAcc Uno XAccessible interface of control.
    * @param pWnd The top window handle containing control.
@@ -177,13 +177,13 @@ bool
 AccObjectManagerAgent::InsertChildrenAccObj(XAccessible* pXAcc, sal_Int64 pWnd)
 {
     if( pWinManager )
-        return pWinManager->InsertChildrenAccObj( pXAcc, HWND((void*)pWnd) );
+        return pWinManager->InsertChildrenAccObj( pXAcc, HWND(reinterpret_cast<void*>(pWnd)) );
 
     return false;
 }
 
 /**
-   * When a new UNO XAccessible object is destroied,we'll delete its corresponding
+   * When a new UNO XAccessible object is destroyed, we delete its corresponding
    * com object and remove it from our manager list.
    * @param pXAcc Uno XAccessible interface of control.
    * @return
@@ -195,7 +195,7 @@ void AccObjectManagerAgent::DeleteAccObj( XAccessible* pXAcc )
 }
 
 /**
-   * When new UNO children XAccessible objects are destroyed,we'll delete their
+   * When new UNO children XAccessible objects are destroyed, we delete their
    * corresponding com objects and remove them from our manager list.
    * @param pXAcc Uno XAccessible interface of control.
    * @return
@@ -262,7 +262,7 @@ bool AccObjectManagerAgent::NotifyAccEvent(short pEvent, XAccessible* pXAcc)
 bool AccObjectManagerAgent::IsContainer( XAccessible* pXAcc )
 {
     if(pWinManager)
-        return pWinManager->IsContainer(pXAcc);
+        return AccObjectWinManager::IsContainer(pXAcc);
 
     return false;
 }
@@ -277,11 +277,11 @@ IMAccessible* AccObjectManagerAgent::GetIMAccByXAcc(XAccessible* pXAcc)
     if(pWinManager)
         return pWinManager->GetIMAccByXAcc(pXAcc);
 
-    return NULL;
+    return nullptr;
 }
 
 /**
-   * Notify manger when a XAccessible object is destroying.
+   * Notify manager when a XAccessible object is destroying.
    * @param pXAcc Uno XAccessible interface of control.
    * @return.
    */
@@ -312,7 +312,7 @@ bool AccObjectManagerAgent::GetIAccessibleFromXAccessible(
 {
     if(pWinManager)
     {
-        *ppXI = (IAccessible*)pWinManager->GetIMAccByXAcc(pXAcc);
+        *ppXI = reinterpret_cast<IAccessible*>(pWinManager->GetIMAccByXAcc(pXAcc));
         if(*ppXI)
             return true;
     }
@@ -324,7 +324,7 @@ XAccessible* AccObjectManagerAgent::GetParentXAccessible( XAccessible* pXAcc )
     if(pWinManager)
         return pWinManager->GetParentXAccessible( pXAcc );
 
-    return NULL;
+    return nullptr;
 }
 
 short AccObjectManagerAgent::GetParentRole( XAccessible* pXAcc )
@@ -359,7 +359,7 @@ bool AccObjectManagerAgent::IsSpecialToolboItem(XAccessible* pXAcc)
 short AccObjectManagerAgent::GetRole(XAccessible* pXAcc)
 {
     if(pWinManager)
-        return pWinManager->GetRole( pXAcc );
+        return AccObjectWinManager::GetRole( pXAcc );
 
     return -1;
 }
@@ -370,7 +370,7 @@ XAccessible* AccObjectManagerAgent::GetAccDocByAccTopWin( XAccessible* pXAcc )
     {
         return pWinManager->GetAccDocByAccTopWin( pXAcc );
     }
-    return NULL;
+    return nullptr;
 }
 bool AccObjectManagerAgent::IsTopWinAcc(XAccessible* pXAcc)
 {
@@ -384,7 +384,7 @@ bool AccObjectManagerAgent::IsTopWinAcc(XAccessible* pXAcc)
 bool AccObjectManagerAgent::IsStateManageDescendant(XAccessible* pXAcc)
 {
     if(pWinManager)
-        return pWinManager->IsStateManageDescendant( pXAcc );
+        return AccObjectWinManager::IsStateManageDescendant( pXAcc );
 
     return false;
 }

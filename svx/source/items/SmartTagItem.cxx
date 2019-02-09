@@ -19,6 +19,7 @@
 
 #include <comphelper/propertysequence.hxx>
 #include <svx/SmartTagItem.hxx>
+#include <sal/log.hxx>
 
 #include <com/sun/star/container/XStringKeyMap.hpp>
 
@@ -26,7 +27,7 @@
 using namespace ::com::sun::star;
 
 
-SfxPoolItem* SvxSmartTagItem::CreateDefault() { DBG_ASSERT(false, "No SvxSmartTagItem factory available"); return nullptr; }
+SfxPoolItem* SvxSmartTagItem::CreateDefault() { SAL_WARN( "svx", "No SvxSmartTagItem factory available"); return nullptr; }
 
 SvxSmartTagItem::SvxSmartTagItem( const sal_uInt16 nId,
                                   const css::uno::Sequence < css::uno::Sequence< css::uno::Reference< css::smarttags::XSmartTagAction > > >& rActionComponentsSequence,
@@ -73,7 +74,7 @@ bool SvxSmartTagItem::PutValue( const uno::Any& /*rVal*/, sal_uInt8 /* nMemberId
 
 bool SvxSmartTagItem::operator==( const SfxPoolItem& rAttr ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==(rAttr), "unequal types" );
+    assert(SfxPoolItem::operator==(rAttr));
 
     const SvxSmartTagItem& rItem = static_cast<const SvxSmartTagItem&>(rAttr);
 
@@ -90,18 +91,6 @@ bool SvxSmartTagItem::operator==( const SfxPoolItem& rAttr ) const
 SfxPoolItem* SvxSmartTagItem::Clone( SfxItemPool * ) const
 {
     return new SvxSmartTagItem( *this );
-}
-
-
-SvStream& SvxSmartTagItem::Store( SvStream& rStream, sal_uInt16 /*nItemVersion*/ ) const
-{
-    return rStream;
-}
-
-
-SfxPoolItem* SvxSmartTagItem::Create(SvStream& , sal_uInt16) const
-{
-    return nullptr;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

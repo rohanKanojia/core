@@ -745,7 +745,7 @@
       </info>
       <prop oor:name="OutputToLetter" oor:type="xs:boolean" oor:nillable="false">
         <info>
-          <desc>Determines whether the document output is a letter, not an e-mail.</desc>
+          <desc>Determines whether the document output is a letter, not an email.</desc>
           <label>Output as letter</label>
         </info>
         <value>true</value>
@@ -807,8 +807,8 @@
       </prop>
       <prop oor:name="IsEMailGreetingLine" oor:type="xs:boolean" oor:nillable="false">
         <info>
-          <desc>Determines whether an e-mail should have a greeting line.</desc>
-          <label>E-mail greeting line</label>
+          <desc>Determines whether an email should have a greeting line.</desc>
+          <label>Email greeting line</label>
         </info>
         <value>true</value>
       </prop>
@@ -821,8 +821,8 @@
       </prop>
       <prop oor:name="IsEMailIndividualGreetingLine" oor:type="xs:boolean" oor:nillable="false">
         <info>
-          <desc>Determines whether in an e-mail an individual greeting line is used instead of a neutral one.</desc>
-          <label>Use individual greeting line in e-Mail</label>
+          <desc>Determines whether in an email an individual greeting line is used instead of a neutral one.</desc>
+          <label>Use individual greeting line in email</label>
         </info>
         <value>true</value>
       </prop>
@@ -871,13 +871,13 @@
       <prop oor:name="MailDisplayName" oor:type="xs:string">
         <info>
           <desc>Contains the display name of the mail address.</desc>
-          <label>e-Mail Name</label>
+          <label>Email Name</label>
         </info>
       </prop>
       <prop oor:name="MailAddress" oor:type="xs:string">
         <info>
-          <desc>e-Mail address.</desc>
-          <label>e-Mail address</label>
+          <desc>Email address.</desc>
+          <label>Email address</label>
         </info>
       </prop>
       <prop oor:name="IsMailReplyTo" oor:type="xs:boolean">
@@ -972,8 +972,8 @@
       </prop>
       <prop oor:name="EMailSupported" oor:type="xs:boolean">
         <info>
-          <desc>Determines whether e-Mail is supported.</desc>
-          <label>E-Mail supported</label>
+          <desc>Determines whether email is supported.</desc>
+          <label>Email supported</label>
         </info>
       </prop>
       <set oor:name="AddressDataAssignments" oor:node-type="AddressDataAssignment">
@@ -1052,6 +1052,22 @@
           <info>
             <desc>Enables the writer to prevent the display of tips for document content programmatically.</desc>
             <label>Show document content tips</label>
+          </info>
+          <value>true</value>
+        </prop>
+        <prop oor:name="ShowInlineTooltips" oor:type="xs:boolean" oor:nillable="false">
+          <!-- UIHints: Tools - Options - Text document - Contents - [Section] Display -->
+          <info>
+            <desc>Enables the writer to show the display of tips for tracked changes.</desc>
+            <label>Show inline tips</label>
+          </info>
+          <value>true</value>
+        </prop>
+        <prop oor:name="UseHeaderFooterMenu" oor:type="xs:boolean" oor:nillable="false">
+          <!-- UIHints: Insert - Header and Footer - [x] Use... -->
+          <info>
+            <desc>Enables the writer to use the advanced menu on headers/footers.</desc>
+            <label>Use advanced header/footer menu</label>
           </info>
           <value>true</value>
         </prop>
@@ -1506,7 +1522,7 @@
             </enumeration>
           </constraints>
         </prop>
-        <prop oor:name="TabStop" oor:type="xs:int" oor:nillable="false">
+        <prop oor:name="TabStop" oor:type="xs:int" oor:nillable="false" oor:localized="true">
           <!-- OldPath: Writer/Layout -->
           <!-- OldLocation: Soffice.cfg -->
           <!-- UIHints: Tools - Options - Text document - Layout - [Section] Tab stops -->
@@ -2280,7 +2296,7 @@
             <desc>Specifies whether only entries with the defined format are accepted. This option is only available if the number format recognition is active (Number_recognition = True).</desc>
             <label>Number format recognition</label>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
         <prop oor:name="Alignment" oor:type="xs:boolean" oor:nillable="false">
           <!-- OldPath: Writer/Insert/IntoTables -->
@@ -2290,7 +2306,7 @@
             <desc>Specifies whether all numbers are aligned below right of the cell and not above left (as in the case of text). This option is only available if number format recognition is active (Number_recognition = True).</desc>
             <label>Alignment</label>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
       </group>
     </group>
@@ -2692,7 +2708,7 @@
         <info>
           <desc>Specifies the settings for inserting captions for various object types.</desc>
         </info>
-        <prop oor:name="CaptionOrderNumberingFirst" oor:type="xs:boolean">
+        <prop oor:name="CaptionOrderNumberingFirst" oor:type="xs:boolean" oor:localized="true">
           <info>
             <desc>Specifies the order of the captions. If true, the number appears in front of the category.</desc>
             <label>Caption order: Numbering first</label>
@@ -4250,9 +4266,9 @@
           <prop oor:name="ChangeUnderlineWeight" oor:type="xs:boolean" oor:nillable="false">
             <!-- OldPath: Writer/AutoFormat/Options -->
             <!-- OldLocation: Soffice.cfg -->
-            <!-- UIHints: Tools  AutoCorrect/AutoFormat  Options - Automatic *bold* and _underline_ -->
+            <!-- UIHints: Tools  AutoCorrect/AutoFormat  Options - Automatic *bold*, /italic/, -strikeout- and _underline_ -->
             <info>
-              <desc>Specifies whether text is formatted in bold or underlined when the corresponding characters are entered (*bold*, _underline_).</desc>
+              <desc>Specifies whether text is formatted in bold or underlined when the corresponding characters are entered (*bold*, /italic/, -strikeout-, _underline_).</desc>
               <label>Apply underline or bold</label>
             </info>
             <value>true</value>
@@ -5271,8 +5287,8 @@
           <!-- OldLocation: Soffice.cfg -->
           <!-- UIHints: File  New  BusinessCards  Private -->
           <info>
-            <desc>Specifies your e-mail address.</desc>
-            <label>E-mail</label>
+            <desc>Specifies your email address.</desc>
+            <label>Email</label>
           </info>
         </prop>
       </group>
@@ -5402,7 +5418,7 @@
           <!-- OldLocation: Soffice.cfg -->
           <!-- UIHints: File  New  BusinessCards  Business -->
           <info>
-            <desc>Specifies your e-mail address.</desc>
+            <desc>Specifies your email address.</desc>
             <label>Email</label>
           </info>
         </prop>

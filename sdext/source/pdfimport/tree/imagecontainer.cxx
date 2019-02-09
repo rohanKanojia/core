@@ -18,21 +18,18 @@
  */
 
 
-#include "imagecontainer.hxx"
-#include "genericelements.hxx"
-#include "xmlemitter.hxx"
+#include <imagecontainer.hxx>
+#include <genericelements.hxx>
+#include <xmlemitter.hxx>
 
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <osl/diagnose.h>
 #include <osl/file.h>
 #include <rtl/crc.h>
 
 #include <com/sun/star/graphic/XGraphicProvider.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-
-#include <comphelper/stl_types.hxx>
-
-#include <boost/bind.hpp>
 
 using namespace com::sun::star;
 
@@ -57,9 +54,9 @@ OUString encodeBase64( const sal_Int8* i_pBuffer, const sal_uInt32 i_nBufferLeng
     sal_Int32 nBufPos( 0 );
     for( sal_Int32 i = 0; i < nFullTripleLength; i += 3, nBufPos += 4 )
     {
-        const sal_Int32 nBinary = (((sal_uInt8)i_pBuffer[i + 0]) << 16) +
-                                  (((sal_uInt8)i_pBuffer[i + 1]) <<  8) +
-                                  ((sal_uInt8)i_pBuffer[i + 2]);
+        const sal_Int32 nBinary = (static_cast<sal_uInt8>(i_pBuffer[i + 0]) << 16) +
+                                  (static_cast<sal_uInt8>(i_pBuffer[i + 1]) <<  8) +
+                                  static_cast<sal_uInt8>(i_pBuffer[i + 2]);
 
         aBuf.append("====");
 
@@ -82,10 +79,10 @@ OUString encodeBase64( const sal_Int8* i_pBuffer, const sal_uInt32 i_nBufferLeng
         const sal_Int32 nStart(i_nBufferLength-nRemain);
         switch(nRemain)
         {
-            case 1: nBinary = ((sal_uInt8)i_pBuffer[nStart + 0]) << 16;
+            case 1: nBinary = static_cast<sal_uInt8>(i_pBuffer[nStart + 0]) << 16;
                 break;
-            case 2: nBinary = (((sal_uInt8)i_pBuffer[nStart + 0]) << 16) +
-                              (((sal_uInt8)i_pBuffer[nStart + 1]) <<  8);
+            case 2: nBinary = (static_cast<sal_uInt8>(i_pBuffer[nStart + 0]) << 16) +
+                              (static_cast<sal_uInt8>(i_pBuffer[nStart + 1]) <<  8);
                 break;
         }
         sal_uInt8 nIndex (static_cast<sal_uInt8>((nBinary & 0xFC0000) >> 18));
@@ -126,16 +123,23 @@ void ImageContainer::writeBase64EncodedStream( ImageId nId, EmitContext& rContex
     const beans::PropertyValue* pAry(rEntry.getConstArray());
     const sal_Int32             nLen(rEntry.getLength());
     const beans::PropertyValue* pValue(
-        std::find_if(pAry,pAry+nLen,
-                     boost::bind(comphelper::TPropertyValueEqualFunctor(),
-                                 _1,
-                                 OUString("InputSequence"))));
-    OSL_ENSURE( pValue != pAry+nLen,
-                "InputSequence not found" );
+        std::find_if(pAry, pAry+nLen,
+            [] (beans::PropertyValue const& v) -> bool {
+                return v.Name == "InputSequence";
+            }));
+
+    if (pValue == pAry + nLen )
+    {
+        SAL_WARN("sdext.pdfimport", "InputSequence not found");
+        return;
+    }
 
     uno::Sequence<sal_Int8> aData;
     if( !(pValue->Value >>= aData) )
-        OSL_FAIL("Wrong data type");
+    {
+        SAL_WARN("sdext.pdfimport", "Wrong data type");
+        return;
+    }
 
     rContext.rEmitter.write( encodeBase64( aData.getConstArray(), aData.getLength() ));
 }

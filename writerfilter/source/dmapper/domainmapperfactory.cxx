@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <DomainMapper.hxx>
+#include "DomainMapper.hxx"
 #include <unotools/mediadescriptor.hxx>
 
 namespace writerfilter
@@ -20,7 +20,7 @@ Stream::Pointer_t DomainMapperFactory::createMapper(css::uno::Reference<css::uno
         css::uno::Reference<css::lang::XComponent> const& xModel,
         bool bRepairStorage,
         SourceDocumentType eDocumentType,
-        utl::MediaDescriptor& rMediaDesc)
+        utl::MediaDescriptor const& rMediaDesc)
 {
 #ifdef DEBUG_WRITERFILTER
     OUString sURL = rMediaDesc.getUnpackedValueOrDefault(utl::MediaDescriptor::PROP_URL(), OUString());

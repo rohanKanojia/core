@@ -20,7 +20,7 @@
 #ifndef INCLUDED_VCL_UNX_GENERIC_DTRANS_X11_TRANSFERABLE_HXX
 #define INCLUDED_VCL_UNX_GENERIC_DTRANS_X11_TRANSFERABLE_HXX
 
-#include <X11_selection.hxx>
+#include "X11_selection.hxx"
 #include <com/sun/star/datatransfer/XTransferable.hpp>
 
 #include <com/sun/star/lang/XEventListener.hpp>
@@ -31,26 +31,20 @@ namespace x11 {
     class X11Transferable : public ::cppu::WeakImplHelper< css::datatransfer::XTransferable >
     {
         SelectionManager&               m_rManager;
-        Atom                m_aSelection;
+        Atom const                m_aSelection;
     public:
-        X11Transferable( SelectionManager& rManager, Atom selection = None );
-        virtual ~X11Transferable();
+        X11Transferable( SelectionManager& rManager, Atom selection );
+        virtual ~X11Transferable() override;
 
         /*
          * XTransferable
          */
 
-        virtual css::uno::Any SAL_CALL getTransferData( const css::datatransfer::DataFlavor& aFlavor )
-            throw(css::datatransfer::UnsupportedFlavorException,
-                  css::io::IOException,
-                  css::uno::RuntimeException, std::exception
-                  ) override;
+        virtual css::uno::Any SAL_CALL getTransferData( const css::datatransfer::DataFlavor& aFlavor ) override;
 
-        virtual css::uno::Sequence< css::datatransfer::DataFlavor > SAL_CALL getTransferDataFlavors(  )
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< css::datatransfer::DataFlavor > SAL_CALL getTransferDataFlavors(  ) override;
 
-        virtual sal_Bool SAL_CALL isDataFlavorSupported( const css::datatransfer::DataFlavor& aFlavor )
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL isDataFlavorSupported( const css::datatransfer::DataFlavor& aFlavor ) override;
     };
 
 } // namespace

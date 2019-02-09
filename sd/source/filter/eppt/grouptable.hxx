@@ -21,6 +21,8 @@
 #define INCLUDED_SD_SOURCE_FILTER_EPPT_GROUPTABLE_HXX
 
 #include <com/sun/star/container/XIndexAccess.hpp>
+#include <memory>
+#include <vector>
 
 struct GroupEntry
 {
@@ -28,7 +30,7 @@ struct GroupEntry
     sal_uInt32                  mnCount;
     css::uno::Reference< css::container::XIndexAccess >           mXIndexAccess;
 
-    explicit GroupEntry( css::uno::Reference< css::container::XIndexAccess > & rIndex )
+    explicit GroupEntry( css::uno::Reference< css::container::XIndexAccess > const & rIndex )
     {
         mXIndexAccess = rIndex;
         mnCount =mXIndexAccess->getCount();
@@ -40,8 +42,6 @@ struct GroupEntry
         mnCount = nCount;
         mnCurrentPos = 0;
     };
-
-    ~GroupEntry(){};
 };
 
 class GroupTable
@@ -49,23 +49,20 @@ class GroupTable
     protected:
 
         sal_uInt32              mnIndex;
-        sal_uInt32              mnCurrentGroupEntry;
-        sal_uInt32              mnMaxGroupEntry;
         sal_uInt32              mnGroupsClosed;
-        GroupEntry**            mpGroupEntry;
-
-        void                    ImplResizeGroupTable( sal_uInt32 nEntrys );
+        std::vector<std::unique_ptr<GroupEntry>>
+                                mvGroupEntry;
 
     public:
 
         sal_uInt32              GetCurrentGroupIndex() const { return mnIndex; };
-        sal_Int32               GetCurrentGroupLevel() const { return mnCurrentGroupEntry - 1; };
+        sal_Int32               GetCurrentGroupLevel() const { return mvGroupEntry.size() - 1; };
         css::uno::Reference< css::container::XIndexAccess > &
-                                GetCurrentGroupAccess() const { return mpGroupEntry[  mnCurrentGroupEntry - 1 ]->mXIndexAccess; };
+                                GetCurrentGroupAccess() const { return mvGroupEntry.back()->mXIndexAccess; };
         sal_uInt32              GetGroupsClosed();
         void                    ResetGroupTable( sal_uInt32 nCount );
         void                    ClearGroupTable();
-        bool                    EnterGroup( css::uno::Reference< css::container::XIndexAccess > & rIndex );
+        bool                    EnterGroup( css::uno::Reference< css::container::XIndexAccess > const & rIndex );
         bool                    GetNextGroupEntry();
                                 GroupTable();
                                 ~GroupTable();

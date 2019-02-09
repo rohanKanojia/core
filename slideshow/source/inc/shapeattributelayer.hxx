@@ -47,27 +47,13 @@ namespace slideshow
             changes, clients can assume that the object's state has
             changed.
          */
-        class State
+        class State final
         {
         public:
-            virtual ~State() {}
 
             /// Abstract, numerically encoded state ID
             typedef ::std::size_t StateId;
-
-            /** This method returns a numerical state identifier.
-
-                The state ID returned by this method abstractly
-                encodes the object's state. When this ID changes,
-                clients can assume that the object's state has
-                changed.
-
-                @return an abstract, numerical state ID.
-             */
-            ;
         };
-
-        typedef ::std::shared_ptr< State > StateSharedPtr;
 
         class ShapeAttributeLayer;
 
@@ -124,7 +110,7 @@ namespace slideshow
                 @attention
                 This method is only supposed to be called from Shape objects
              */
-            ShapeAttributeLayerSharedPtr getChildLayer() const;
+            const ShapeAttributeLayerSharedPtr& getChildLayer() const;
 
             /** Set the additive mode for possible child attributes
 
@@ -389,21 +375,6 @@ namespace slideshow
              */
             void setCharColor( const RGBColor& nNewColor );
 
-            /** Query whether the char rotation angle attribute is valid
-             */
-            bool isCharRotationAngleValid() const;
-            /** Query the current text rotation angle of the shape
-
-                @return the text rotation angle in degrees.
-             */
-            double getCharRotationAngle() const;
-            /** Set the new text rotation angle of the shape
-
-                @param rNewAngle
-                New text rotation angle in degrees.
-             */
-            void setCharRotationAngle( const double& rNewAngle );
-
             /** Query whether the char weight attribute is valid
              */
             bool isCharWeightValid() const;
@@ -516,7 +487,6 @@ namespace slideshow
             double                                      mnShearXAngle;
             double                                      mnShearYAngle;
             double                                      mnAlpha;
-            double                                      mnCharRotationAngle;
             double                                      mnCharScale;
             double                                      mnCharWeight;
 
@@ -555,7 +525,6 @@ namespace slideshow
 
             bool                                        mbAlphaValid            : 1;
 
-            bool                                        mbCharRotationAngleValid: 1;
             bool                                        mbCharScaleValid        : 1;
 
             bool                                        mbDimColorValid         : 1;

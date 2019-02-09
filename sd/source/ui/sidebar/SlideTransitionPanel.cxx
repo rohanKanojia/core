@@ -18,9 +18,9 @@
  */
 
 #include "SlideTransitionPanel.hxx"
-#include "createslidetransitionpanel.hxx"
+#include <createslidetransitionpanel.hxx>
 
-#include "ViewShellBase.hxx"
+#include <ViewShellBase.hxx>
 
 namespace sd { namespace sidebar {
 
@@ -32,6 +32,7 @@ SlideTransitionPanel::SlideTransitionPanel (
     : PanelBase(pParentWindow, rViewShellBase),
       mxFrame( rxFrame )
 {
+    SetStyle( GetStyle() | WB_DIALOGCONTROL );
 #ifdef DEBUG
     SetText(OUString("sd:SlideTransitionPanel"));
 #endif

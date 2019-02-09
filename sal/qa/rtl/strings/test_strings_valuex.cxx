@@ -10,7 +10,7 @@
 #include <sal/types.h>
 #include <cppunit/TestFixture.h>
 #include <cppunit/extensions/HelperMacros.h>
-#include "rtl/ustring.hxx"
+#include <rtl/ustring.hxx>
 #include <iostream>
 
 namespace test { namespace strings {
@@ -43,23 +43,21 @@ namespace {
 template< typename T >
 void testBoolean() {
     CPPUNIT_ASSERT_EQUAL( T( "false" ), T::boolean( false ) );
-    CPPUNIT_ASSERT_EQUAL( T( "false" ), T::boolean( sal_False ) );
     CPPUNIT_ASSERT_EQUAL( T( "true" ), T::boolean( true ) );
-    CPPUNIT_ASSERT_EQUAL( T( "true" ), T::boolean( sal_True ) );
 }
 
 }
 
 void test::strings::valueX::testOBoolean() {
-    testBoolean<rtl::OString>();
+    testBoolean<OString>();
 }
 
 void test::strings::valueX::testOUBoolean() {
-    testBoolean<rtl::OUString>();
+    testBoolean<OUString>();
 }
 
 template< typename T >
-void testInt() {
+static void testInt() {
     CPPUNIT_ASSERT_EQUAL( T( "30039062" ), T::number( 30039062 ));
 
     // test the overloading resolution
@@ -93,25 +91,25 @@ void testInt() {
 }
 
 void test::strings::valueX::testOUInt() {
-    testInt<rtl::OUString>();
+    testInt<OUString>();
 }
 
 void test::strings::valueX::testOInt() {
-    testInt<rtl::OString>();
+    testInt<OString>();
 }
 
 template< typename T >
-void testFloat() {
+static void testFloat() {
     CPPUNIT_ASSERT_EQUAL( T( "39062.2" ), T::number( 39062.2f ));
     CPPUNIT_ASSERT_EQUAL( T( "30039062.2" ), T::number( 30039062.2 ));
     // long double not supported
 }
 
 void test::strings::valueX::testOUFloat() {
-    testFloat<rtl::OUString>();
+    testFloat<OUString>();
 }
 
 void test::strings::valueX::testOFloat() {
-    testFloat<rtl::OString>();
+    testFloat<OString>();
 }
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

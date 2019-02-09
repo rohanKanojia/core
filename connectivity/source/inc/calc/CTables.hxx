@@ -20,7 +20,7 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_CALC_CTABLES_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_CALC_CTABLES_HXX
 
-#include "file/FTables.hxx"
+#include <file/FTables.hxx>
 
 namespace connectivity
 {
@@ -33,8 +33,8 @@ namespace connectivity
         protected:
             virtual sdbcx::ObjectType createObject(const OUString& _rName) override;
         public:
-            OCalcTables(const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XDatabaseMetaData >& _rMetaData,::cppu::OWeakObject& _rParent, ::osl::Mutex& _rMutex,
-                const TStringVector &_rVector) : OCalcTables_BASE(_rMetaData,_rParent,_rMutex,_rVector)
+            OCalcTables(const css::uno::Reference< css::sdbc::XDatabaseMetaData >& _rMetaData,::cppu::OWeakObject& _rParent, ::osl::Mutex& _rMutex,
+                const ::std::vector< OUString> &_rVector) : OCalcTables_BASE(_rMetaData,_rParent,_rMutex,_rVector)
             {}
         };
     }

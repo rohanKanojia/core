@@ -35,17 +35,17 @@ namespace sdr
         {
             drawinglayer::primitive2d::Primitive2DContainer aRetval;
 
-            if(getOverlayManager() && (getShowBounds() || getExtendedLines()))
+            if(getOverlayManager() && (mbShowBounds || mbExtendedLines))
             {
                 const basegfx::BColor aRGBColorA(getOverlayManager()->getStripeColorA().getBColor());
                 const basegfx::BColor aRGBColorB(getOverlayManager()->getStripeColorB().getBColor());
                 const double fStripeLengthPixel(getOverlayManager()->getStripeLengthPixel());
                 const basegfx::B2DRange aRollingRectangle(getBasePosition(), getSecondPosition());
 
-                if(getShowBounds())
+                if(mbShowBounds)
                 {
                     // view-independent part, create directly
-                    const basegfx::B2DPolygon aPolygon(basegfx::tools::createPolygonFromRect(aRollingRectangle));
+                    const basegfx::B2DPolygon aPolygon(basegfx::utils::createPolygonFromRect(aRollingRectangle));
 
                     aRetval.resize(2);
                     aRetval[0] = new drawinglayer::primitive2d::PolyPolygonMarkerPrimitive2D(
@@ -66,7 +66,7 @@ namespace sdr
                         false);
                 }
 
-                if(getExtendedLines())
+                if(mbExtendedLines)
                 {
                     // view-dependent part, use helper primitive
                     const drawinglayer::primitive2d::Primitive2DReference aReference(
@@ -94,7 +94,7 @@ namespace sdr
             const basegfx::B2DPoint& rSecondPos,
             bool bExtendedLines,
             bool bShowBounds)
-        :   OverlayObjectWithBasePosition(rBasePos, Color(COL_BLACK)),
+        :   OverlayObjectWithBasePosition(rBasePos, COL_BLACK),
             maSecondPosition(rSecondPos),
             mbExtendedLines(bExtendedLines),
             mbShowBounds(bShowBounds)

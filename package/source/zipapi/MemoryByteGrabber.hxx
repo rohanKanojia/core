@@ -23,29 +23,30 @@
 #include <com/sun/star/io/XSeekable.hpp>
 #include <string.h>
 
-class MemoryByteGrabber
+class MemoryByteGrabber final
 {
-protected:
-    const css::uno::Sequence < sal_Int8 > maBuffer;
     const sal_Int8 *mpBuffer;
     sal_Int32 mnCurrent, mnEnd;
 public:
     MemoryByteGrabber ( const css::uno::Sequence < sal_Int8 > & rBuffer )
-    : maBuffer ( rBuffer )
-    , mpBuffer ( rBuffer.getConstArray() )
+    : mpBuffer ( rBuffer.getConstArray() )
     , mnCurrent ( 0 )
     , mnEnd ( rBuffer.getLength() )
     {
     }
-    MemoryByteGrabber()
-    {
-    }
+    MemoryByteGrabber(css::uno::Sequence<sal_Int8> &&) = delete;
+
     const sal_Int8 * getCurrentPos () { return mpBuffer + mnCurrent; }
+
+    sal_Int32 remainingSize() const { return mnEnd - mnCurrent; }
 
     // XInputStream chained
 
-    void SAL_CALL skipBytes( sal_Int32 nBytesToSkip )
-        throw(css::io::NotConnectedException, css::io::BufferSizeExceededException, css::io::IOException, css::uno::RuntimeException)
+    /// @throws css::io::NotConnectedException
+    /// @throws css::io::BufferSizeExceededException
+    /// @throws css::io::IOException
+    /// @throws css::uno::RuntimeException
+    void skipBytes( sal_Int32 nBytesToSkip )
     {
         mnCurrent += nBytesToSkip;
     }

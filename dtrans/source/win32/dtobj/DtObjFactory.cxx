@@ -21,15 +21,11 @@
 
 #include "XTDataObject.hxx"
 
-// namespace directives
-
 using namespace com::sun::star::uno;
 using namespace com::sun::star::datatransfer;
 using namespace com::sun::star::lang;
 
-// implementation
-
-IDataObjectPtr SAL_CALL CDTransObjFactory::createDataObjFromTransferable(const Reference<XComponentContext>& rxContext,
+IDataObjectPtr CDTransObjFactory::createDataObjFromTransferable(const Reference<XComponentContext>& rxContext,
                                                                        const Reference< XTransferable >& refXTransferable)
 {
     return (IDataObjectPtr(new CXTDataObject(rxContext, refXTransferable)));

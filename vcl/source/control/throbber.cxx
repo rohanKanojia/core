@@ -28,6 +28,7 @@
 #include <comphelper/namedvaluecollection.hxx>
 #include <comphelper/processfactory.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <tools/diagnose_ex.h>
 #include <tools/urlobj.hxx>
 
@@ -45,10 +46,9 @@ Throbber::Throbber( vcl::Window* i_parentWindow, WinBits i_style )
     ,mbRepeat( true )
     ,mnStepTime( 100 )
     ,mnCurStep( 0 )
-    ,meImageSet( IMAGES_AUTO )
 {
     maWaitTimer.SetTimeout( mnStepTime );
-    maWaitTimer.SetTimeoutHdl( LINK( this, Throbber, TimeOutHdl ) );
+    maWaitTimer.SetInvokeHandler( LINK( this, Throbber, TimeOutHdl ) );
 
     SetScaleMode( ImageScaleMode::NONE );
     initImages();
@@ -70,7 +70,6 @@ namespace
     ::std::vector< Image > lcl_loadImageSet( const Throbber::ImageSet i_imageSet )
     {
         ::std::vector< Image > aImages;
-        ENSURE_OR_RETURN( i_imageSet != Throbber::IMAGES_NONE, "lcl_loadImageSet: illegal image set", aImages );
 
         const Reference< css::uno::XComponentContext > aContext( ::comphelper::getProcessComponentContext() );
         const Reference< XGraphicProvider > xGraphicProvider( css::graphic::GraphicProvider::create(aContext) );
@@ -79,15 +78,12 @@ namespace
         aImages.reserve( aImageURLs.size() );
 
         ::comphelper::NamedValueCollection aMediaProperties;
-        for (   ::std::vector< OUString >::const_iterator imageURL = aImageURLs.begin();
-                imageURL != aImageURLs.end();
-                ++imageURL
-            )
+        for ( const auto& rImageURL : aImageURLs )
         {
             Reference< XGraphic > xGraphic;
-            aMediaProperties.put( "URL", *imageURL );
+            aMediaProperties.put( "URL", rImageURL );
             xGraphic.set( xGraphicProvider->queryGraphic( aMediaProperties.getPropertyValues() ), UNO_QUERY );
-            aImages.push_back( Image( xGraphic ) );
+            aImages.emplace_back( xGraphic );
         }
 
         return aImages;
@@ -97,29 +93,17 @@ namespace
 void Throbber::Resize()
 {
     ImageControl::Resize();
-
-    if ( meImageSet == IMAGES_AUTO )
-        initImages();
+    initImages();
 }
 
 void Throbber::initImages()
 {
-    if ( meImageSet == IMAGES_NONE )
-        return;
-
     try
     {
         ::std::vector< ::std::vector< Image > > aImageSets;
-        if ( meImageSet == IMAGES_AUTO )
-        {
-            aImageSets.push_back( lcl_loadImageSet( IMAGES_16_PX ) );
-            aImageSets.push_back( lcl_loadImageSet( IMAGES_32_PX ) );
-            aImageSets.push_back( lcl_loadImageSet( IMAGES_64_PX ) );
-        }
-        else
-        {
-            aImageSets.push_back( lcl_loadImageSet( meImageSet ) );
-        }
+        aImageSets.push_back( lcl_loadImageSet( ImageSet::N16px ) );
+        aImageSets.push_back( lcl_loadImageSet( ImageSet::N32px ) );
+        aImageSets.push_back( lcl_loadImageSet( ImageSet::N64px ) );
 
         // find the best matching image set (size-wise)
         const ::Size aWindowSizePixel = GetSizePixel();
@@ -186,7 +170,7 @@ void Throbber::setImageList( ::std::vector< Image > const& i_images )
 
     maImageList = i_images;
 
-    const Image aInitialImage( maImageList.size() ? maImageList[ 0 ] : Image() );
+    const Image aInitialImage( !maImageList.empty() ? maImageList[ 0 ] : Image() );
     SetImage( aInitialImage );
 }
 
@@ -200,13 +184,9 @@ void Throbber::setImageList( ::std::vector< Image > const& i_images )
     size_t index = 0;
     switch ( i_imageSet )
     {
-    case IMAGES_16_PX:  index = 0;  break;
-    case IMAGES_32_PX:  index = 1;  break;
-    case IMAGES_64_PX:  index = 2;  break;
-    case IMAGES_NONE:
-    case IMAGES_AUTO:
-        OSL_ENSURE( false, "Throbber::getDefaultImageURLs: illegal image set!" );
-        return aImageURLs;
+    case ImageSet::N16px:  index = 0;  break;
+    case ImageSet::N32px:  index = 1;  break;
+    case ImageSet::N64px:  index = 2;  break;
     }
 
     aImageURLs.reserve( nImageCounts[index] );
@@ -227,7 +207,7 @@ void Throbber::setImageList( ::std::vector< Image > const& i_images )
     return aImageURLs;
 }
 
-IMPL_LINK_NOARG_TYPED(Throbber, TimeOutHdl, Timer *, void)
+IMPL_LINK_NOARG(Throbber, TimeOutHdl, Timer *, void)
 {
     SolarMutexGuard aGuard;
     if ( maImageList.empty() )

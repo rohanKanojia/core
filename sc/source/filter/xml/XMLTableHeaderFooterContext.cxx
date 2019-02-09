@@ -17,15 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/text/XText.hpp>
+#include <com/sun/star/sheet/XHeaderFooterContent.hpp>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmlnmspe.hxx>
+#include <xmloff/xmlimp.hxx>
 #include "XMLTableHeaderFooterContext.hxx"
 #include <xmloff/xmltoken.hxx>
 #include <comphelper/extract.hxx>
 
-#include "unonames.hxx"
-#include "textuno.hxx"
+#include <unonames.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -40,19 +42,18 @@ XMLTableHeaderFooterContext::XMLTableHeaderFooterContext( SvXMLImport& rImport, 
                        const uno::Reference<
                             xml::sax::XAttributeList > & xAttrList,
                        const Reference < XPropertySet > & rPageStylePropSet,
-                       bool bFooter, bool bLft ) :
+                       bool bFooter, bool bLeft ) :
     SvXMLImportContext( rImport, nPrfx, rLName ),
     xPropSet( rPageStylePropSet ),
     sOn( bFooter ? OUString(SC_UNO_PAGE_FTRON) : OUString(SC_UNO_PAGE_HDRON) ),
-    sShareContent( bFooter ? OUString(SC_UNO_PAGE_FTRSHARED) : OUString(SC_UNO_PAGE_HDRSHARED) ),
-    sContent( bFooter ? OUString(SC_UNO_PAGE_RIGHTFTRCON) : OUString(SC_UNO_PAGE_RIGHTHDRCON) ),
-    sContentLeft( bFooter ? OUString(SC_UNO_PAGE_LEFTFTRCONT) : OUString(SC_UNO_PAGE_LEFTHDRCONT) ),
-    bDisplay( true ),
-    bLeft( bLft ),
     bContainsLeft(false),
     bContainsRight(false),
     bContainsCenter(false)
 {
+    OUString sContent( bFooter ? OUString(SC_UNO_PAGE_RIGHTFTRCON) : OUString(SC_UNO_PAGE_RIGHTHDRCON) );
+    OUString sContentLeft( bFooter ? OUString(SC_UNO_PAGE_LEFTFTRCONT) : OUString(SC_UNO_PAGE_LEFTHDRCONT) );
+    OUString sShareContent( bFooter ? OUString(SC_UNO_PAGE_FTRSHARED) : OUString(SC_UNO_PAGE_HDRSHARED) );
+    bool bDisplay( true );
     sal_Int16 nAttrCount(xAttrList.is() ? xAttrList->getLength() : 0);
     for( sal_Int16 i=0; i < nAttrCount; ++i )
     {
@@ -82,7 +83,7 @@ XMLTableHeaderFooterContext::XMLTableHeaderFooterContext( SvXMLImport& rImport, 
         {
             if( !::cppu::any2bool(xPropSet->getPropertyValue( sShareContent )) )
                 // share headers
-                xPropSet->setPropertyValue( sShareContent, uno::makeAny(sal_True) );
+                xPropSet->setPropertyValue( sShareContent, uno::makeAny(true) );
         }
     }
     else
@@ -100,11 +101,9 @@ XMLTableHeaderFooterContext::XMLTableHeaderFooterContext( SvXMLImport& rImport, 
 
 XMLTableHeaderFooterContext::~XMLTableHeaderFooterContext()
 {
-    rtl::Reference<ScHeaderFooterContentObj> pImp = ScHeaderFooterContentObj::getImplementation( xHeaderFooterContent );
-    pImp->dispose();
 }
 
-SvXMLImportContext *XMLTableHeaderFooterContext::CreateChildContext(
+SvXMLImportContextRef XMLTableHeaderFooterContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList > & xAttrList )
@@ -159,7 +158,7 @@ SvXMLImportContext *XMLTableHeaderFooterContext::CreateChildContext(
                     xText->setString("");
                     //SvXMLImport aSvXMLImport( GetImport() );
                     uno::Reference < text::XTextCursor > xTempTextCursor(xText->createTextCursor());
-                    pContext = new XMLHeaderFooterRegionContext( GetImport(), nPrefix, rLocalName, xAttrList, xTempTextCursor);
+                    pContext = new XMLHeaderFooterRegionContext( GetImport(), nPrefix, rLocalName, xTempTextCursor);
                 }
             }
         }
@@ -201,8 +200,6 @@ void XMLTableHeaderFooterContext::EndElement()
 
 XMLHeaderFooterRegionContext::XMLHeaderFooterRegionContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
                        const OUString& rLName,
-                       const uno::Reference<
-                            xml::sax::XAttributeList > & /* xAttrList */,
                        uno::Reference< text::XTextCursor >& xCursor ) :
     SvXMLImportContext( rImport, nPrfx, rLName ),
     xTextCursor ( xCursor )
@@ -215,7 +212,7 @@ XMLHeaderFooterRegionContext::~XMLHeaderFooterRegionContext()
 {
 }
 
-SvXMLImportContext *XMLHeaderFooterRegionContext::CreateChildContext(
+SvXMLImportContextRef XMLHeaderFooterRegionContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList > & xAttrList )

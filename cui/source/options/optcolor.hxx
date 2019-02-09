@@ -20,7 +20,6 @@
 #define INCLUDED_CUI_SOURCE_OPTIONS_OPTCOLOR_HXX
 
 #include <sfx2/tabdlg.hxx>
-#include <vcl/group.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
 
@@ -38,25 +37,25 @@ class SvxColorOptionsTabPage : public SfxTabPage
 
     bool bFillItemSetCalled;
 
-    svtools::EditableColorConfig* pColorConfig;
-    svtools::EditableExtendedColorConfig* pExtColorConfig;
+    std::unique_ptr<svtools::EditableColorConfig> pColorConfig;
+    std::unique_ptr<svtools::EditableExtendedColorConfig> pExtColorConfig;
 
-    DECL_LINK_TYPED(SchemeChangedHdl_Impl, ListBox&, void);
-    DECL_LINK_TYPED(SaveDeleteHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(CheckNameHdl_Impl, AbstractSvxNameDialog&, bool);
+    DECL_LINK(SchemeChangedHdl_Impl, ListBox&, void);
+    DECL_LINK(SaveDeleteHdl_Impl, Button*, void);
+    DECL_LINK(CheckNameHdl_Impl, AbstractSvxNameDialog&, bool);
     void UpdateColorConfig();
 
 public:
     SvxColorOptionsTabPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual ~SvxColorOptionsTabPage(  );
+    virtual ~SvxColorOptionsTabPage(  ) override;
     virtual void        dispose() override;
 
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rAttrSet );
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rAttrSet );
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;
 
-    virtual sfxpg       DeactivatePage( SfxItemSet* pSet ) override;
+    virtual DeactivateRC   DeactivatePage( SfxItemSet* pSet ) override;
     virtual void        FillUserData() override;
 
 };

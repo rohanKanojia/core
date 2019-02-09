@@ -22,6 +22,7 @@
 #include <sal/config.h>
 #include <sfx2/dllapi.h>
 #include <sal/types.h>
+#include <vcl/errcode.hxx>
 #include <com/sun/star/uno/Reference.hxx>
 
 
@@ -42,7 +43,7 @@ namespace sfx2 {
     @param  i_xDocProps     Document meta-data
     @param  i_pStorage      OLE Storage
  */
-sal_uInt32 SFX2_DLLPUBLIC LoadOlePropertySet(
+ErrCode SFX2_DLLPUBLIC LoadOlePropertySet(
     const css::uno::Reference< css::document::XDocumentProperties>& i_xDocProps,
     SotStorage* i_pStorage );
 
@@ -57,13 +58,13 @@ sal_uInt32 SFX2_DLLPUBLIC LoadOlePropertySet(
 bool SFX2_DLLPUBLIC SaveOlePropertySet(
     const css::uno::Reference< css::document::XDocumentProperties>& i_xDocProps,
     SotStorage* i_pStorage,
-    const css::uno::Sequence<sal_uInt8> * i_pThumb = nullptr,
-    const css::uno::Sequence<sal_uInt8> * i_pGuid = nullptr,
-    const css::uno::Sequence<sal_uInt8> * i_pHyperlinks = nullptr);
+    const css::uno::Sequence<sal_Int8> * i_pThumb = nullptr,
+    const css::uno::Sequence<sal_Int8> * i_pGuid = nullptr,
+    const css::uno::Sequence<sal_Int8> * i_pHyperlinks = nullptr);
 
 
-css::uno::Sequence<sal_uInt8> SFX2_DLLPUBLIC convertMetaFile(
-    GDIMetaFile* i_pThumb);
+css::uno::Sequence<sal_Int8> SFX2_DLLPUBLIC convertMetaFile(
+    GDIMetaFile const * i_pThumb);
 
 } // namespace sfx2
 

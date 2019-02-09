@@ -19,13 +19,12 @@
 
 #include <hintids.hxx>
 
-#include <com/sun/star/i18n/TransliterationModules.hpp>
-#include <com/sun/star/i18n/TransliterationModulesExtra.hpp>
 #include <com/sun/star/i18n/TextConversionOption.hpp>
-#include <com/sun/star/ui/dialogs/XSLTFilterDialog.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
 
 #include <i18nlangtag/mslangid.hxx>
+#include <i18nutil/transliteration.hxx>
 #include <sfx2/objface.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/bindings.hxx>
@@ -56,12 +55,12 @@
 #include <editeng/contouritem.hxx>
 #include <editeng/postitem.hxx>
 #include <editeng/frmdiritem.hxx>
+#include <svx/postattr.hxx>
 #include <svx/svdoutl.hxx>
 #include <svl/whiter.hxx>
 #include <svl/cjkoptions.hxx>
 #include <svl/ctloptions.hxx>
 #include <unotools/useroptions.hxx>
-#include <vcl/msgbox.hxx>
 #include <editeng/flditem.hxx>
 #include <editeng/editstat.hxx>
 #include <svx/hlnkitem.hxx>
@@ -75,7 +74,6 @@
 #include <viewopt.hxx>
 #include <wrtsh.hxx>
 #include <uitool.hxx>
-#include <popup.hrc>
 #include <chrdlgmodes.hxx>
 #include <pardlg.hxx>
 #include <swdtflvr.hxx>
@@ -89,20 +87,20 @@
 
 #include <cmdid.h>
 #include <globals.hrc>
-#include <shells.hrc>
+#include <strings.hrc>
 #include <breakit.hxx>
-#include "annotsh.hxx"
-#include "view.hxx"
+#include <annotsh.hxx>
+#include <view.hxx>
 #include <PostItMgr.hxx>
-#include <SidebarWin.hxx>
+#include <AnnotationWin.hxx>
 
-#include "swtypes.hxx"
+#include <swtypes.hxx>
 
 #include <svx/svxdlg.hxx>
 #include <svx/dialogs.hrc>
 
 #include <svx/svxids.hrc>
-#include <sfx2/sidebar/EnumContext.hxx>
+#include <vcl/EnumContext.hxx>
 #include <svl/itempool.hxx>
 #include <editeng/outliner.hxx>
 #include <editeng/editeng.hxx>
@@ -113,12 +111,11 @@
 
 #include <docsh.hxx>
 #include <svl/undo.hxx>
-#include "swabstdlg.hxx"
-#include "chrdlg.hrc"
-#include "misc.hrc"
+#include <swabstdlg.hxx>
 #include <app.hrc>
 
 #include <comphelper/string.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <cppuhelper/bootstrap.hxx>
 
 #include <langhelper.hxx>
@@ -131,7 +128,7 @@ using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::i18n;
 
-#define SwAnnotationShell
+#define ShellClass_SwAnnotationShell
 
 #include <sfx2/msg.hxx>
 #include <swslots.hxx>
@@ -140,13 +137,13 @@ SFX_IMPL_INTERFACE(SwAnnotationShell, SfxShell)
 
 void SwAnnotationShell::InitInterface_Impl()
 {
-    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, RID_TEXT_TOOLBOX);
+    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, SfxVisibilityFlags::Invisible, ToolbarId::Text_Toolbox_Sw);
 
     GetStaticInterface()->RegisterPopupMenu("annotation");
 }
 
 
-SfxItemPool* SwAnnotationShell::GetAnnotationPool(SwView& rV)
+SfxItemPool* SwAnnotationShell::GetAnnotationPool(SwView const & rV)
 {
     SwWrtShell &rSh = rV.GetWrtShell();
     return rSh.GetAttrPool().GetSecondaryPool();
@@ -156,14 +153,14 @@ SwAnnotationShell::SwAnnotationShell( SwView& r )
     : rView(r)
 {
     SetPool(SwAnnotationShell::GetAnnotationPool(rView));
-    SfxShell::SetContextName(sfx2::sidebar::EnumContext::GetContextName(sfx2::sidebar::EnumContext::Context_Annotation));
+    SfxShell::SetContextName(vcl::EnumContext::GetContextName(vcl::EnumContext::Context::Annotation));
 }
 
 SwAnnotationShell::~SwAnnotationShell()
 {
 }
 
-::svl::IUndoManager* SwAnnotationShell::GetUndoManager()
+SfxUndoManager* SwAnnotationShell::GetUndoManager()
 {
     SwPostItMgr* pPostItMgr = rView.GetPostItMgr();
     if ( !pPostItMgr ||
@@ -195,8 +192,7 @@ void SwAnnotationShell::Exec( SfxRequest &rReq )
         case SID_PARASPACE_INCREASE:
         case SID_PARASPACE_DECREASE:
         {
-            SvxULSpaceItem aULSpace(
-                static_cast< const SvxULSpaceItem& >( aEditAttr.Get( EE_PARA_ULSPACE ) ) );
+            SvxULSpaceItem aULSpace( aEditAttr.Get( EE_PARA_ULSPACE ) );
             sal_uInt16 nUpper = aULSpace.GetUpper();
             sal_uInt16 nLower = aULSpace.GetLower();
 
@@ -283,7 +279,7 @@ void SwAnnotationShell::Exec( SfxRequest &rReq )
                 }
                 else
                 {
-                    FontLineStyle eFU = static_cast<const SvxUnderlineItem&>( aEditAttr.Get( EE_CHAR_UNDERLINE ) ).GetLineStyle();
+                    FontLineStyle eFU = aEditAttr.Get( EE_CHAR_UNDERLINE ).GetLineStyle();
                     aNewAttr.Put( SvxUnderlineItem( eFU != LINESTYLE_NONE ?LINESTYLE_NONE : LINESTYLE_SINGLE,  EE_CHAR_UNDERLINE ) );
                 }
             }
@@ -291,7 +287,7 @@ void SwAnnotationShell::Exec( SfxRequest &rReq )
         }
         case SID_ATTR_CHAR_OVERLINE:
         {
-             FontLineStyle eFO = static_cast<const SvxOverlineItem&>(aEditAttr.Get(EE_CHAR_OVERLINE)).GetLineStyle();
+            FontLineStyle eFO = aEditAttr.Get(EE_CHAR_OVERLINE).GetLineStyle();
             aNewAttr.Put(SvxOverlineItem(eFO == LINESTYLE_SINGLE ? LINESTYLE_NONE : LINESTYLE_SINGLE, EE_CHAR_OVERLINE));
             break;
         }
@@ -306,35 +302,35 @@ void SwAnnotationShell::Exec( SfxRequest &rReq )
         case SID_ATTR_CHAR_AUTOKERN  :   nEEWhich = EE_CHAR_PAIRKERNING; break;
         case SID_ATTR_CHAR_ESCAPEMENT:   nEEWhich = EE_CHAR_ESCAPEMENT; break;
         case SID_ATTR_PARA_ADJUST_LEFT:
-            aNewAttr.Put(SvxAdjustItem(SVX_ADJUST_LEFT, EE_PARA_JUST));
+            aNewAttr.Put(SvxAdjustItem(SvxAdjust::Left, EE_PARA_JUST));
         break;
         case SID_ATTR_PARA_ADJUST_CENTER:
-            aNewAttr.Put(SvxAdjustItem(SVX_ADJUST_CENTER, EE_PARA_JUST));
+            aNewAttr.Put(SvxAdjustItem(SvxAdjust::Center, EE_PARA_JUST));
         break;
         case SID_ATTR_PARA_ADJUST_RIGHT:
-            aNewAttr.Put(SvxAdjustItem(SVX_ADJUST_RIGHT, EE_PARA_JUST));
+            aNewAttr.Put(SvxAdjustItem(SvxAdjust::Right, EE_PARA_JUST));
         break;
         case SID_ATTR_PARA_ADJUST_BLOCK:
-            aNewAttr.Put(SvxAdjustItem(SVX_ADJUST_BLOCK, EE_PARA_JUST));
+            aNewAttr.Put(SvxAdjustItem(SvxAdjust::Block, EE_PARA_JUST));
         break;
 
         case SID_ATTR_PARA_LINESPACE_10:
         {
-            SvxLineSpacingItem aItem(SVX_LINESPACE_ONE_LINE, EE_PARA_SBL);
+            SvxLineSpacingItem aItem(LINE_SPACE_DEFAULT_HEIGHT, EE_PARA_SBL);
             aItem.SetPropLineSpace(100);
             aNewAttr.Put(aItem);
         }
         break;
         case SID_ATTR_PARA_LINESPACE_15:
         {
-            SvxLineSpacingItem aItem(SVX_LINESPACE_ONE_POINT_FIVE_LINES, EE_PARA_SBL);
+            SvxLineSpacingItem aItem(LINE_SPACE_DEFAULT_HEIGHT, EE_PARA_SBL);
             aItem.SetPropLineSpace(150);
             aNewAttr.Put(aItem);
         }
         break;
         case SID_ATTR_PARA_LINESPACE_20:
         {
-            SvxLineSpacingItem aItem(SVX_LINESPACE_TWO_LINES, EE_PARA_SBL);
+            SvxLineSpacingItem aItem(LINE_SPACE_DEFAULT_HEIGHT, EE_PARA_SBL);
             aItem.SetPropLineSpace(200);
             aNewAttr.Put(aItem);
         }
@@ -346,7 +342,7 @@ void SwAnnotationShell::Exec( SfxRequest &rReq )
             {
                 sal_Int32 nParaCount = pOutliner->GetParagraphCount();
                 if (nParaCount > 0)
-                    pOLV->SelectRange(0L, nParaCount );
+                    pOLV->SelectRange(0, nParaCount );
             }
             break;
         }
@@ -359,27 +355,25 @@ void SwAnnotationShell::Exec( SfxRequest &rReq )
         case FN_SET_SUPER_SCRIPT:
         {
             SvxEscapementItem aItem(EE_CHAR_ESCAPEMENT);
-            SvxEscapement eEsc = (SvxEscapement ) static_cast<const SvxEscapementItem&>(
-                            aEditAttr.Get( EE_CHAR_ESCAPEMENT ) ).GetEnumValue();
+            SvxEscapement eEsc = static_cast<SvxEscapement>(aEditAttr.Get( EE_CHAR_ESCAPEMENT ).GetEnumValue());
 
-            if( eEsc == SVX_ESCAPEMENT_SUPERSCRIPT )
-                aItem.SetEscapement( SVX_ESCAPEMENT_OFF );
+            if( eEsc == SvxEscapement::Superscript )
+                aItem.SetEscapement( SvxEscapement::Off );
             else
-                aItem.SetEscapement( SVX_ESCAPEMENT_SUPERSCRIPT );
-            aNewAttr.Put( aItem, EE_CHAR_ESCAPEMENT );
+                aItem.SetEscapement( SvxEscapement::Superscript );
+            aNewAttr.Put( aItem );
         }
         break;
         case FN_SET_SUB_SCRIPT:
         {
             SvxEscapementItem aItem(EE_CHAR_ESCAPEMENT);
-            SvxEscapement eEsc = (SvxEscapement ) static_cast<const SvxEscapementItem&>(
-                            aEditAttr.Get( EE_CHAR_ESCAPEMENT ) ).GetEnumValue();
+            SvxEscapement eEsc = static_cast<SvxEscapement>(aEditAttr.Get( EE_CHAR_ESCAPEMENT ).GetEnumValue());
 
-            if( eEsc == SVX_ESCAPEMENT_SUBSCRIPT )
-                aItem.SetEscapement( SVX_ESCAPEMENT_OFF );
+            if( eEsc == SvxEscapement::Subscript )
+                aItem.SetEscapement( SvxEscapement::Off );
             else
-                aItem.SetEscapement( SVX_ESCAPEMENT_SUBSCRIPT );
-            aNewAttr.Put( aItem, EE_CHAR_ESCAPEMENT );
+                aItem.SetEscapement( SvxEscapement::Subscript );
+            aNewAttr.Put( aItem );
         }
         break;
         case SID_HYPERLINK_SETLINK:
@@ -391,12 +385,12 @@ void SwAnnotationShell::Exec( SfxRequest &rReq )
             if(pItem)
             {
                 const SvxHyperlinkItem& rHLinkItem = *static_cast<const SvxHyperlinkItem *>(pItem);
-                SvxURLField aField(rHLinkItem.GetURL(), rHLinkItem.GetName(), SVXURLFORMAT_APPDEFAULT);
+                SvxURLField aField(rHLinkItem.GetURL(), rHLinkItem.GetName(), SvxURLFormat::AppDefault);
                 aField.SetTargetFrame(rHLinkItem.GetTargetFrame());
 
                 const SvxFieldItem* pFieldItem = pOLV->GetFieldAtSelection();
 
-                if (pFieldItem && dynamic_cast< const SvxURLField *>( pFieldItem->GetField() ) != nullptr )
+                if (pFieldItem && dynamic_cast<const SvxURLField *>(pFieldItem->GetField()) != nullptr)
                 {
                     // Select the field so that it will be deleted during insert
                     ESelection aSel = pOLV->GetSelection();
@@ -480,7 +474,7 @@ void SwAnnotationShell::Exec( SfxRequest &rReq )
                 FieldUnit eMetric = ::GetDfltMetric(dynamic_cast<SwWebView*>( pView) !=  nullptr );
                 SW_MOD()->PutItem(SfxUInt16Item(SID_ATTR_METRIC, eMetric));
                 */
-                SfxItemSet aDlgAttr(GetPool(), EE_ITEMS_START, EE_ITEMS_END);
+                SfxItemSet aDlgAttr(GetPool(), svl::Items<EE_ITEMS_START, EE_ITEMS_END>{});
 
                 // util::Language does not exist in the EditEngine! Therefore not included in the set.
 
@@ -488,10 +482,7 @@ void SwAnnotationShell::Exec( SfxRequest &rReq )
                 aDlgAttr.Put( SvxKerningItem(0, RES_CHRATR_KERNING) );
 
                 SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-                OSL_ENSURE(pFact, "SwAbstractDialogFactory fail!");
-
-                std::unique_ptr<SfxAbstractTabDialog> pDlg(pFact->CreateSwCharDlg( rView.GetWindow(), rView, aDlgAttr, SwCharDlgMode::Ann));
-                OSL_ENSURE(pDlg, "Dialog creation failed!");
+                ScopedVclPtr<SfxAbstractTabDialog> pDlg(pFact->CreateSwCharDlg(rView.GetFrameWeld(), rView, aDlgAttr, SwCharDlgMode::Ann));
                 if (nSlot == SID_CHAR_DLG_EFFECT)
                 {
                     pDlg->SetCurPageId("fonteffects");
@@ -525,27 +516,22 @@ void SwAnnotationShell::Exec( SfxRequest &rReq )
                 FieldUnit eMetric = ::GetDfltMetric(dynamic_cast<SwWebView*>( pView) !=  nullptr );
                 SW_MOD()->PutItem(SfxUInt16Item(SID_ATTR_METRIC, eMetric));
                 */
-                SfxItemSet aDlgAttr(GetPool(),
-                                    EE_ITEMS_START, EE_ITEMS_END,
-                                    SID_ATTR_PARA_HYPHENZONE, SID_ATTR_PARA_HYPHENZONE,
-                                    SID_ATTR_PARA_SPLIT, SID_ATTR_PARA_SPLIT,
-                                    SID_ATTR_PARA_WIDOWS, SID_ATTR_PARA_WIDOWS,
-                                    SID_ATTR_PARA_ORPHANS, SID_ATTR_PARA_ORPHANS,
-                                    0);
+                SfxItemSet aDlgAttr(
+                    GetPool(),
+                    svl::Items<
+                        EE_ITEMS_START, EE_ITEMS_END,
+                        SID_ATTR_PARA_HYPHENZONE, SID_ATTR_PARA_WIDOWS>{});
 
                 aDlgAttr.Put(aEditAttr);
 
                 aDlgAttr.Put( SvxHyphenZoneItem( false, RES_PARATR_HYPHENZONE) );
-                aDlgAttr.Put( SvxFormatBreakItem( SVX_BREAK_NONE, RES_BREAK ) );
+                aDlgAttr.Put( SvxFormatBreakItem( SvxBreak::NONE, RES_BREAK ) );
                 aDlgAttr.Put( SvxFormatSplitItem( true, RES_PARATR_SPLIT ) );
                 aDlgAttr.Put( SvxWidowsItem( 0, RES_PARATR_WIDOWS ) );
                 aDlgAttr.Put( SvxOrphansItem( 0, RES_PARATR_ORPHANS ) );
 
                 SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-                OSL_ENSURE(pFact, "SwAbstractDialogFactory fail!");
-
-                std::unique_ptr<SfxAbstractTabDialog> pDlg(pFact->CreateSwParaDlg( rView.GetWindow(), rView, aDlgAttr, nullptr, true ));
-                OSL_ENSURE(pDlg, "Dialog creation failed!");
+                ScopedVclPtr<SfxAbstractTabDialog> pDlg(pFact->CreateSwParaDlg(rView.GetFrameWeld(), rView, aDlgAttr, true));
                 sal_uInt16 nRet = pDlg->Execute();
                 if(RET_OK == nRet)
                 {
@@ -576,26 +562,27 @@ void SwAnnotationShell::Exec( SfxRequest &rReq )
                 if( !static_cast<const SfxBoolItem*>(pPoolItem)->GetValue() )
                     bLeftToRight = !bLeftToRight;
             }
-            SfxItemSet aAttr( *aNewAttr.GetPool(),
-                        EE_PARA_JUST, EE_PARA_JUST,
-                        EE_PARA_WRITINGDIR, EE_PARA_WRITINGDIR,
-                        0 );
+            SfxItemSet aAttr(
+                *aNewAttr.GetPool(),
+                svl::Items<
+                    EE_PARA_WRITINGDIR, EE_PARA_WRITINGDIR,
+                    EE_PARA_JUST, EE_PARA_JUST>{});
 
-            sal_uInt16 nAdjust = SVX_ADJUST_LEFT;
+            SvxAdjust nAdjust = SvxAdjust::Left;
             if( SfxItemState::SET == aEditAttr.GetItemState(EE_PARA_JUST, true, &pPoolItem ) )
-                nAdjust = static_cast<const SvxAdjustItem*>(pPoolItem)->GetEnumValue();
+                nAdjust = static_cast<const SvxAdjustItem*>(pPoolItem)->GetAdjust();
 
             if( bLeftToRight )
             {
-                aAttr.Put( SvxFrameDirectionItem( FRMDIR_HORI_LEFT_TOP, EE_PARA_WRITINGDIR ) );
-                if( nAdjust == SVX_ADJUST_RIGHT )
-                    aAttr.Put( SvxAdjustItem( SVX_ADJUST_LEFT, EE_PARA_JUST ) );
+                aAttr.Put( SvxFrameDirectionItem( SvxFrameDirection::Horizontal_LR_TB, EE_PARA_WRITINGDIR ) );
+                if( nAdjust == SvxAdjust::Right )
+                    aAttr.Put( SvxAdjustItem( SvxAdjust::Left, EE_PARA_JUST ) );
             }
             else
             {
-                aAttr.Put( SvxFrameDirectionItem( FRMDIR_HORI_RIGHT_TOP, EE_PARA_WRITINGDIR ) );
-                if( nAdjust == SVX_ADJUST_LEFT )
-                    aAttr.Put( SvxAdjustItem( SVX_ADJUST_RIGHT, EE_PARA_JUST ) );
+                aAttr.Put( SvxFrameDirectionItem( SvxFrameDirection::Horizontal_RL_TB, EE_PARA_WRITINGDIR ) );
+                if( nAdjust == SvxAdjust::Left )
+                    aAttr.Put( SvxAdjustItem( SvxAdjust::Right, EE_PARA_JUST ) );
             }
             pOLV->SetAttribs(aAttr);
             break;
@@ -603,11 +590,13 @@ void SwAnnotationShell::Exec( SfxRequest &rReq )
     }
 
     if(nEEWhich && pNewAttrs)
-        aNewAttr.Put(pNewAttrs->Get(nWhich), nEEWhich);
+    {
+        std::unique_ptr<SfxPoolItem> pNewItem(pNewAttrs->Get(nWhich).CloneSetWhich(nEEWhich));
+        aNewAttr.Put(*pNewItem);
+    }
 
-    Rectangle aNullRect;
-    Rectangle aOutRect = pOLV->GetOutputArea();
-    if (aNullRect != aOutRect)
+    tools::Rectangle aOutRect = pOLV->GetOutputArea();
+    if (tools::Rectangle() != aOutRect)
         pOLV->SetAttribs(aNewAttr);
 
     rView.GetViewFrame()->GetBindings().InvalidateAll(false);
@@ -639,12 +628,15 @@ void SwAnnotationShell::GetState(SfxItemSet& rSet)
         switch( nSlotId )
         {
             case SID_ATTR_PARA_LRSPACE:
+            case SID_ATTR_PARA_LEFTSPACE:
+            case SID_ATTR_PARA_RIGHTSPACE:
+            case SID_ATTR_PARA_FIRSTLINESPACE:
             {
                 SfxItemState eState = aEditAttr.GetItemState( EE_PARA_LRSPACE );
                 if( eState >= SfxItemState::DEFAULT )
                 {
-                    SvxLRSpaceItem aLR = static_cast<const SvxLRSpaceItem&>( aEditAttr.Get( EE_PARA_LRSPACE ) );
-                    aLR.SetWhich(SID_ATTR_PARA_LRSPACE);
+                    SvxLRSpaceItem aLR = aEditAttr.Get( EE_PARA_LRSPACE );
+                    aLR.SetWhich(nSlotId);
                     rSet.Put(aLR);
                 }
                 else
@@ -656,7 +648,7 @@ void SwAnnotationShell::GetState(SfxItemSet& rSet)
                 SfxItemState eState = aEditAttr.GetItemState( EE_PARA_SBL );
                 if( eState >= SfxItemState::DEFAULT )
                 {
-                    SvxLineSpacingItem aLR = static_cast<const SvxLineSpacingItem&>( aEditAttr.Get( EE_PARA_SBL ) );
+                    const SvxLineSpacingItem& aLR = aEditAttr.Get( EE_PARA_SBL );
                     rSet.Put(aLR);
                 }
                 else
@@ -664,20 +656,25 @@ void SwAnnotationShell::GetState(SfxItemSet& rSet)
             }
             break;
             case SID_ATTR_PARA_ULSPACE:
+            case SID_ATTR_PARA_ABOVESPACE:
+            case SID_ATTR_PARA_BELOWSPACE:
             case SID_PARASPACE_INCREASE:
             case SID_PARASPACE_DECREASE:
                 {
                     SfxItemState eState = aEditAttr.GetItemState( EE_PARA_ULSPACE );
                     if( eState >= SfxItemState::DEFAULT )
                     {
-                        SvxULSpaceItem aULSpace = static_cast<const SvxULSpaceItem&>( aEditAttr.Get( EE_PARA_ULSPACE ) );
+                        SvxULSpaceItem aULSpace = aEditAttr.Get( EE_PARA_ULSPACE );
                         if ( !aULSpace.GetUpper() && !aULSpace.GetLower() )
                             rSet.DisableItem( SID_PARASPACE_DECREASE );
                         else if ( aULSpace.GetUpper() >= 5670 && aULSpace.GetLower() >= 5670 )
                             rSet.DisableItem( SID_PARASPACE_INCREASE );
-                        if ( nSlotId == SID_ATTR_PARA_ULSPACE )
+                        if ( nSlotId == SID_ATTR_PARA_ULSPACE
+                            || nSlotId == SID_ATTR_PARA_BELOWSPACE
+                            || nSlotId == SID_ATTR_PARA_ABOVESPACE
+                        )
                         {
-                            aULSpace.SetWhich(SID_ATTR_PARA_ULSPACE);
+                            aULSpace.SetWhich(nSlotId);
                             rSet.Put(aULSpace);
                         }
                     }
@@ -686,6 +683,8 @@ void SwAnnotationShell::GetState(SfxItemSet& rSet)
                         rSet.DisableItem( SID_PARASPACE_INCREASE );
                         rSet.DisableItem( SID_PARASPACE_DECREASE );
                         rSet.InvalidateItem( SID_ATTR_PARA_ULSPACE );
+                        rSet.InvalidateItem( SID_ATTR_PARA_ABOVESPACE );
+                        rSet.InvalidateItem( SID_ATTR_PARA_BELOWSPACE );
                     }
                 }
                 break;
@@ -702,7 +701,10 @@ void SwAnnotationShell::GetState(SfxItemSet& rSet)
                     aSetItem.GetItemSet().Put( aEditAttr, false );
                     const SfxPoolItem* pI = aSetItem.GetItemOfScript( nScriptType );
                     if( pI )
-                        rSet.Put( *pI, nWhich );
+                    {
+                        std::unique_ptr<SfxPoolItem> pNewItem(pI->CloneSetWhich(nWhich));
+                        rSet.Put( *pNewItem );
+                    }
                     else
                         rSet.InvalidateItem( nWhich );
                 }
@@ -720,17 +722,14 @@ void SwAnnotationShell::GetState(SfxItemSet& rSet)
             case FN_SET_SUPER_SCRIPT:
             case FN_SET_SUB_SCRIPT:
             {
-                sal_uInt16 nEsc = 0;
-                const SfxPoolItem *pEscItem = nullptr;
+                SvxEscapement nEsc;
                 if (nWhich==FN_SET_SUPER_SCRIPT)
-                    nEsc = SVX_ESCAPEMENT_SUPERSCRIPT;
+                    nEsc = SvxEscapement::Superscript;
                 else
-                    nEsc = SVX_ESCAPEMENT_SUBSCRIPT;
+                    nEsc = SvxEscapement::Subscript;
 
-                if( !pEscItem )
-                    pEscItem = &aEditAttr.Get( EE_CHAR_ESCAPEMENT );
-
-                if( nEsc == static_cast<const SvxEscapementItem*>(pEscItem)->GetEnumValue() )
+                const SfxPoolItem *pEscItem = &aEditAttr.Get( EE_CHAR_ESCAPEMENT );
+                if( nEsc == static_cast<const SvxEscapementItem*>(pEscItem)->GetEscapement() )
                     rSet.Put( SfxBoolItem( nWhich, true ));
                 else
                     rSet.InvalidateItem( nWhich );
@@ -741,25 +740,22 @@ void SwAnnotationShell::GetState(SfxItemSet& rSet)
             case SID_ATTR_PARA_ADJUST_CENTER:
             case SID_ATTR_PARA_ADJUST_BLOCK:
                 {
-                    const SfxPoolItem *pAdjust = nullptr;
-                    int eAdjust = 0;
-
+                    SvxAdjust eAdjust = SvxAdjust::Left;
                     if (nWhich==SID_ATTR_PARA_ADJUST_LEFT)
-                        eAdjust = SVX_ADJUST_LEFT;
+                        eAdjust = SvxAdjust::Left;
                     else if (nWhich==SID_ATTR_PARA_ADJUST_RIGHT)
-                        eAdjust = SVX_ADJUST_RIGHT;
+                        eAdjust = SvxAdjust::Right;
                     else if (nWhich==SID_ATTR_PARA_ADJUST_CENTER)
-                        eAdjust = SVX_ADJUST_CENTER;
+                        eAdjust = SvxAdjust::Center;
                     else if (nWhich==SID_ATTR_PARA_ADJUST_BLOCK)
-                        eAdjust = SVX_ADJUST_BLOCK;
+                        eAdjust = SvxAdjust::Block;
 
-                    if( !pAdjust )
-                        aEditAttr.GetItemState( EE_PARA_JUST, false, &pAdjust);
+                    const SfxPoolItem *pAdjust = nullptr;
+                    aEditAttr.GetItemState( EE_PARA_JUST, false, &pAdjust);
 
                     if( !pAdjust || IsInvalidItem( pAdjust ))
                     {
                         rSet.InvalidateItem( nSlotId );
-                        nSlotId = 0;
                     }
                     else
                     {
@@ -774,9 +770,7 @@ void SwAnnotationShell::GetState(SfxItemSet& rSet)
             case SID_ATTR_PARA_LINESPACE_15:
             case SID_ATTR_PARA_LINESPACE_20:
                 {
-                    const SfxPoolItem *pLSpace = nullptr;
                     int nLSpace = 0;
-
                     if (nWhich==SID_ATTR_PARA_LINESPACE_10)
                         nLSpace = 100;
                     else if (nWhich==SID_ATTR_PARA_LINESPACE_15)
@@ -784,13 +778,12 @@ void SwAnnotationShell::GetState(SfxItemSet& rSet)
                     else if (nWhich==SID_ATTR_PARA_LINESPACE_20)
                         nLSpace = 200;
 
-                    if( !pLSpace )
-                        aEditAttr.GetItemState( EE_PARA_SBL, false, &pLSpace );
+                    const SfxPoolItem *pLSpace = nullptr;
+                    aEditAttr.GetItemState( EE_PARA_SBL, false, &pLSpace );
 
                     if( !pLSpace || IsInvalidItem( pLSpace ))
                     {
                         rSet.InvalidateItem( nSlotId );
-                        nSlotId = 0;
                     }
                     else
                     {
@@ -822,20 +815,22 @@ void SwAnnotationShell::GetState(SfxItemSet& rSet)
                     else
                     {
                         bool bFlag = false;
-                        switch( static_cast<const SvxFrameDirectionItem&>( aEditAttr.Get( EE_PARA_WRITINGDIR ) ).GetValue() )
+                        switch( aEditAttr.Get( EE_PARA_WRITINGDIR ).GetValue() )
                         {
-                            case FRMDIR_HORI_LEFT_TOP:
+                            case SvxFrameDirection::Horizontal_LR_TB:
                             {
                                 bFlag = nWhich == SID_ATTR_PARA_LEFT_TO_RIGHT;
                                 rSet.Put( SfxBoolItem( nWhich, bFlag ));
                                 break;
                             }
-                            case FRMDIR_HORI_RIGHT_TOP:
+                            case SvxFrameDirection::Horizontal_RL_TB:
                             {
                                 bFlag = nWhich != SID_ATTR_PARA_LEFT_TO_RIGHT;
                                 rSet.Put( SfxBoolItem( nWhich, bFlag ));
                                 break;
                             }
+                            default:
+                                break;
                         }
                     }
                 }
@@ -843,8 +838,6 @@ void SwAnnotationShell::GetState(SfxItemSet& rSet)
             break;
             case SID_INSERT_RLM :
             case SID_INSERT_LRM :
-            case SID_INSERT_ZWNBSP :
-            case SID_INSERT_ZWSP:
             {
                 SvtCTLOptions aCTLOptions;
                 bool bEnabled = aCTLOptions.IsCTLFontEnabled();
@@ -860,15 +853,16 @@ void SwAnnotationShell::GetState(SfxItemSet& rSet)
 
         if(nEEWhich)
         {
-            rSet.Put(aEditAttr.Get(nEEWhich), nWhich);
-        if(nEEWhich == EE_CHAR_KERNING)
-        {
-            SfxItemState eState = aEditAttr.GetItemState( EE_CHAR_KERNING );
-            if ( eState == SfxItemState::DONTCARE )
+            std::unique_ptr<SfxPoolItem> pNewItem(aEditAttr.Get(nEEWhich).CloneSetWhich(nWhich));
+            rSet.Put(*pNewItem);
+            if(nEEWhich == EE_CHAR_KERNING)
             {
-                rSet.InvalidateItem(EE_CHAR_KERNING);
+                SfxItemState eState = aEditAttr.GetItemState( EE_CHAR_KERNING );
+                if ( eState == SfxItemState::DONTCARE )
+                {
+                    rSet.InvalidateItem(EE_CHAR_KERNING);
+                }
             }
-        }
         }
 
         if (pPostItMgr->GetActiveSidebarWin()->GetLayoutStatus()==SwPostItHelper::DELETED)
@@ -888,15 +882,13 @@ void SwAnnotationShell::StateSearch(SfxItemSet &rSet)
     rView.StateSearch(rSet);
 }
 
-void SwAnnotationShell::ExecClpbrd(SfxRequest &rReq)
+void SwAnnotationShell::ExecClpbrd(SfxRequest const &rReq)
 {
     SwPostItMgr* pPostItMgr = rView.GetPostItMgr();
     if ( !pPostItMgr || !pPostItMgr->HasActiveSidebarWin() )
         return;
 
     OutlinerView* pOLV = pPostItMgr->GetActiveSidebarWin()->GetOutlinerView();
-    SfxItemSet aEditAttr(pOLV->GetAttribs());
-    SfxItemSet aNewAttr(*aEditAttr.GetPool(), aEditAttr.GetRanges());
 
     long aOldHeight = pPostItMgr->GetActiveSidebarWin()->GetPostItTextHeight();
     sal_uInt16 nSlot = rReq.GetSlot();
@@ -912,6 +904,10 @@ void SwAnnotationShell::ExecClpbrd(SfxRequest &rReq)
             break;
         case SID_PASTE:
             if (pPostItMgr->GetActiveSidebarWin()->GetLayoutStatus()!=SwPostItHelper::DELETED)
+                pOLV->PasteSpecial();
+            break;
+        case SID_PASTE_UNFORMATTED:
+            if (pPostItMgr->GetActiveSidebarWin()->GetLayoutStatus()!=SwPostItHelper::DELETED)
                 pOLV->Paste();
             break;
         case SID_PASTE_SPECIAL:
@@ -919,10 +915,11 @@ void SwAnnotationShell::ExecClpbrd(SfxRequest &rReq)
             if (pPostItMgr->GetActiveSidebarWin()->GetLayoutStatus()!=SwPostItHelper::DELETED)
             {
                 SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-                std::unique_ptr<SfxAbstractPasteDialog> pDlg(pFact->CreatePasteDialog( &rView.GetEditWin() ));
+                ScopedVclPtr<SfxAbstractPasteDialog> pDlg(pFact->CreatePasteDialog(rView.GetEditWin().GetFrameWeld()));
 
                 pDlg->Insert( SotClipboardFormatId::STRING, OUString() );
                 pDlg->Insert( SotClipboardFormatId::RTF,    OUString() );
+                pDlg->Insert( SotClipboardFormatId::RICHTEXT,    OUString() );
 
                 TransferableDataHelper aDataHelper( TransferableDataHelper::CreateFromSystemClipboard( &rView.GetEditWin() ) );
 
@@ -942,10 +939,10 @@ void SwAnnotationShell::ExecClpbrd(SfxRequest &rReq)
         {
             SotClipboardFormatId nFormat = SotClipboardFormatId::NONE;
             const SfxPoolItem* pItem;
-            if ( rReq.GetArgs() && rReq.GetArgs()->GetItemState(nSlot, true, &pItem) == SfxItemState::SET &&
-                                    dynamic_cast< const SfxUInt32Item *>( pItem ) !=  nullptr )
+            if (rReq.GetArgs() && rReq.GetArgs()->GetItemState(nSlot, true, &pItem) == SfxItemState::SET)
             {
-                nFormat = static_cast<SotClipboardFormatId>(static_cast<const SfxUInt32Item*>(pItem)->GetValue());
+                if (const SfxUInt32Item* pUInt32Item = dynamic_cast<const SfxUInt32Item *>(pItem))
+                    nFormat = static_cast<SotClipboardFormatId>(pUInt32Item->GetValue());
             }
 
             if ( nFormat != SotClipboardFormatId::NONE )
@@ -969,7 +966,8 @@ void SwAnnotationShell::StateClpbrd(SfxItemSet &rSet)
     OutlinerView* pOLV = pPostItMgr->GetActiveSidebarWin()->GetOutlinerView();
 
     TransferableDataHelper aDataHelper( TransferableDataHelper::CreateFromSystemClipboard( &rView.GetEditWin() ) );
-    bool bPastePossible = ( aDataHelper.HasFormat( SotClipboardFormatId::STRING ) || aDataHelper.HasFormat( SotClipboardFormatId::RTF ) );
+    bool bPastePossible = ( aDataHelper.HasFormat( SotClipboardFormatId::STRING ) || aDataHelper.HasFormat( SotClipboardFormatId::RTF )
+        || aDataHelper.HasFormat( SotClipboardFormatId::RICHTEXT ));
     bPastePossible = bPastePossible &&  (pPostItMgr->GetActiveSidebarWin()->GetLayoutStatus()!=SwPostItHelper::DELETED);
 
     SfxWhichIter aIter(rSet);
@@ -992,6 +990,7 @@ void SwAnnotationShell::StateClpbrd(SfxItemSet &rSet)
                 break;
             }
             case SID_PASTE:
+            case SID_PASTE_UNFORMATTED:
             case SID_PASTE_SPECIAL:
                 {
                     if( !bPastePossible )
@@ -1005,6 +1004,8 @@ void SwAnnotationShell::StateClpbrd(SfxItemSet &rSet)
                         SvxClipboardFormatItem aFormats( SID_CLIPBOARD_FORMAT_ITEMS );
                         if ( aDataHelper.HasFormat( SotClipboardFormatId::RTF ) )
                             aFormats.AddClipbrdFormat( SotClipboardFormatId::RTF );
+                        if ( aDataHelper.HasFormat( SotClipboardFormatId::RICHTEXT ) )
+                            aFormats.AddClipbrdFormat( SotClipboardFormatId::RICHTEXT );
                         aFormats.AddClipbrdFormat( SotClipboardFormatId::STRING );
                         rSet.Put( aFormats );
                     }
@@ -1065,13 +1066,11 @@ void SwAnnotationShell::StateInsert(SfxItemSet &rSet)
 
                     if (pFieldItem)
                     {
-                        const SvxFieldData* pField = pFieldItem->GetField();
-
-                        if (dynamic_cast< const SvxURLField *>( pField ) !=  nullptr)
+                        if (const SvxURLField* pURLField = dynamic_cast<const SvxURLField *>(pFieldItem->GetField()))
                         {
-                            aHLinkItem.SetName(static_cast<const SvxURLField*>( pField)->GetRepresentation());
-                            aHLinkItem.SetURL(static_cast<const SvxURLField*>( pField)->GetURL());
-                            aHLinkItem.SetTargetFrame(static_cast<const SvxURLField*>( pField)->GetTargetFrame());
+                            aHLinkItem.SetName(pURLField->GetRepresentation());
+                            aHLinkItem.SetURL(pURLField->GetURL());
+                            aHLinkItem.SetTargetFrame(pURLField->GetTargetFrame());
                         }
                     }
                     else
@@ -1082,7 +1081,7 @@ void SwAnnotationShell::StateInsert(SfxItemSet &rSet)
                     }
 
                     sal_uInt16 nHtmlMode = ::GetHtmlMode(rView.GetDocShell());
-                    aHLinkItem.SetInsertMode((SvxLinkInsertMode)(aHLinkItem.GetInsertMode() |
+                    aHLinkItem.SetInsertMode(static_cast<SvxLinkInsertMode>(aHLinkItem.GetInsertMode() |
                         ((nHtmlMode & HTMLMODE_ON) != 0 ? HLINK_HTMLMODE : 0)));
 
                     rSet.Put(aHLinkItem);
@@ -1097,7 +1096,7 @@ void SwAnnotationShell::StateInsert(SfxItemSet &rSet)
     }
 }
 
-void SwAnnotationShell::NoteExec(SfxRequest &rReq)
+void SwAnnotationShell::NoteExec(SfxRequest const &rReq)
 {
     SwPostItMgr* pPostItMgr = rView.GetPostItMgr();
     if ( !pPostItMgr )
@@ -1106,12 +1105,12 @@ void SwAnnotationShell::NoteExec(SfxRequest &rReq)
     sal_uInt16 nSlot = rReq.GetSlot();
     switch (nSlot)
     {
-    case FN_REPLY:
-    case FN_POSTIT:
-    case FN_DELETE_COMMENT:
-        if ( pPostItMgr->HasActiveSidebarWin() )
-            pPostItMgr->GetActiveSidebarWin()->ExecuteCommand(nSlot);
-        break;
+        case FN_REPLY:
+        case FN_POSTIT:
+        case FN_DELETE_COMMENT:
+            if ( pPostItMgr->HasActiveSidebarWin() )
+                pPostItMgr->GetActiveSidebarWin()->ExecuteCommand(nSlot);
+            break;
 
         case FN_DELETE_ALL_NOTES:
             pPostItMgr->Delete();
@@ -1179,7 +1178,7 @@ void SwAnnotationShell::GetNoteState(SfxItemSet &rSet)
             else
             {
                 OUString aText( nSlotId == FN_DELETE_NOTE_AUTHOR ?
-                                SW_RES( STR_DELETE_NOTE_AUTHOR ) : SW_RES( STR_HIDE_NOTE_AUTHOR ) );
+                                SwResId( STR_DELETE_NOTE_AUTHOR ) : SwResId( STR_HIDE_NOTE_AUTHOR ) );
                 SwRewriter aRewriter;
                 aRewriter.AddRule( UndoArg1, pPostItMgr->GetActiveSidebarWin()->GetAuthor() );
                 aText = aRewriter.Apply( aText );
@@ -1201,7 +1200,7 @@ void SwAnnotationShell::GetNoteState(SfxItemSet &rSet)
                     OUString sAuthor;
                     if( (sAuthor = aUserOpt.GetFullName()).isEmpty() &&
                         (sAuthor = aUserOpt.GetID()).isEmpty() )
-                        sAuthor = SW_RES( STR_REDLINE_UNKNOWN_AUTHOR );
+                        sAuthor = SwResId( STR_REDLINE_UNKNOWN_AUTHOR );
                     if (sAuthor == pPostItMgr->GetActiveSidebarWin()->GetAuthor())
                         rSet.DisableItem(nWhich);
                 }
@@ -1229,7 +1228,6 @@ void SwAnnotationShell::ExecLingu(SfxRequest &rReq)
         return;
 
     OutlinerView* pOLV = pPostItMgr->GetActiveSidebarWin()->GetOutlinerView();
-    SfxItemSet aEditAttr(pOLV->GetAttribs());
     sal_uInt16 nSlot = rReq.GetSlot();
     SwWrtShell &rSh = rView.GetWrtShell();
     bool bRestoreSelection = false;
@@ -1286,13 +1284,10 @@ void SwAnnotationShell::ExecLingu(SfxRequest &rReq)
                         if( xInit.is() )
                         {
                             //  initialize dialog
-                            Reference< awt::XWindow > xDialogParentWindow(nullptr);
-                            Sequence<Any> aSeq(1);
-                            Any* pArray = aSeq.getArray();
-                            PropertyValue aParam;
-                            aParam.Name = "ParentWindow";
-                            aParam.Value <<= makeAny(xDialogParentWindow);
-                            pArray[0] <<= makeAny(aParam);
+                            uno::Sequence<uno::Any> aSeq(comphelper::InitAnyPropertySequence(
+                            {
+                                {"ParentWindow", uno::Any(Reference<awt::XWindow>())}
+                            }));
                             xInit->initialize( aSeq );
 
                             //execute dialog
@@ -1318,9 +1313,9 @@ void SwAnnotationShell::ExecLingu(SfxRequest &rReq)
                                 }
 
                                 //execute translation
-                                sal_Int16 nSourceLang = bToSimplified ? LANGUAGE_CHINESE_TRADITIONAL : LANGUAGE_CHINESE_SIMPLIFIED;
-                                sal_Int16 nTargetLang = bToSimplified ? LANGUAGE_CHINESE_SIMPLIFIED : LANGUAGE_CHINESE_TRADITIONAL;
-                                sal_Int32 nOptions    = bUseVariants ? i18n::TextConversionOption::USE_CHARACTER_VARIANTS : 0;
+                                LanguageType nSourceLang = bToSimplified ? LANGUAGE_CHINESE_TRADITIONAL : LANGUAGE_CHINESE_SIMPLIFIED;
+                                LanguageType nTargetLang = bToSimplified ? LANGUAGE_CHINESE_SIMPLIFIED : LANGUAGE_CHINESE_TRADITIONAL;
+                                sal_Int32 nOptions       = bUseVariants ? i18n::TextConversionOption::USE_CHARACTER_VARIANTS : 0;
                                 if( !bCommonTerms )
                                     nOptions = nOptions | i18n::TextConversionOption::CHARACTER_BY_CHARACTER;
 
@@ -1353,7 +1348,6 @@ void SwAnnotationShell::GetLinguState(SfxItemSet &rSet)
         return;
 
     OutlinerView* pOLV = pPostItMgr->GetActiveSidebarWin()->GetOutlinerView();
-    SfxItemSet aEditAttr(pOLV->GetAttribs());
 
     SfxWhichIter aIter(rSet);
     sal_uInt16 nWhich = aIter.FirstWhich();
@@ -1417,7 +1411,7 @@ void SwAnnotationShell::GetLinguState(SfxItemSet &rSet)
     }
 }
 
-void SwAnnotationShell::ExecTransliteration(SfxRequest &rReq)
+void SwAnnotationShell::ExecTransliteration(SfxRequest const &rReq)
 {
     SwPostItMgr* pPostItMgr = rView.GetPostItMgr();
     if (!pPostItMgr || !pPostItMgr->HasActiveSidebarWin())
@@ -1428,49 +1422,47 @@ void SwAnnotationShell::ExecTransliteration(SfxRequest &rReq)
     if (!pOLV)
         return;
 
-    using namespace ::com::sun::star::i18n;
-
-    sal_uInt32 nMode = 0;
+    TransliterationFlags nMode = TransliterationFlags::NONE;
 
     switch( rReq.GetSlot() )
     {
         case SID_TRANSLITERATE_SENTENCE_CASE:
-            nMode = TransliterationModulesExtra::SENTENCE_CASE;
+            nMode = TransliterationFlags::SENTENCE_CASE;
             break;
         case SID_TRANSLITERATE_TITLE_CASE:
-            nMode = TransliterationModulesExtra::TITLE_CASE;
+            nMode = TransliterationFlags::TITLE_CASE;
             break;
         case SID_TRANSLITERATE_TOGGLE_CASE:
-            nMode = TransliterationModulesExtra::TOGGLE_CASE;
+            nMode = TransliterationFlags::TOGGLE_CASE;
             break;
         case SID_TRANSLITERATE_UPPER:
-            nMode = TransliterationModules_LOWERCASE_UPPERCASE;
+            nMode = TransliterationFlags::LOWERCASE_UPPERCASE;
             break;
         case SID_TRANSLITERATE_LOWER:
-            nMode = TransliterationModules_UPPERCASE_LOWERCASE;
+            nMode = TransliterationFlags::UPPERCASE_LOWERCASE;
             break;
         case SID_TRANSLITERATE_HALFWIDTH:
-            nMode = TransliterationModules_FULLWIDTH_HALFWIDTH;
+            nMode = TransliterationFlags::FULLWIDTH_HALFWIDTH;
             break;
         case SID_TRANSLITERATE_FULLWIDTH:
-            nMode = TransliterationModules_HALFWIDTH_FULLWIDTH;
+            nMode = TransliterationFlags::HALFWIDTH_FULLWIDTH;
             break;
         case SID_TRANSLITERATE_HIRAGANA:
-            nMode = TransliterationModules_KATAKANA_HIRAGANA;
+            nMode = TransliterationFlags::KATAKANA_HIRAGANA;
             break;
         case SID_TRANSLITERATE_KATAGANA:
-            nMode = TransliterationModules_HIRAGANA_KATAKANA;
+            nMode = TransliterationFlags::HIRAGANA_KATAKANA;
             break;
 
         default:
             OSL_ENSURE(false, "wrong dispatcher");
     }
 
-    if( nMode )
+    if( nMode != TransliterationFlags::NONE )
         pOLV->TransliterateText( nMode );
 }
 
-void SwAnnotationShell::ExecRotateTransliteration( SfxRequest & rReq )
+void SwAnnotationShell::ExecRotateTransliteration( SfxRequest const & rReq )
 {
     if( rReq.GetSlot() == SID_TRANSLITERATE_ROTATE_CASE )
     {
@@ -1490,8 +1482,9 @@ void SwAnnotationShell::ExecRotateTransliteration( SfxRequest & rReq )
 void SwAnnotationShell::ExecUndo(SfxRequest &rReq)
 {
     const SfxItemSet* pArgs = rReq.GetArgs();
-    ::svl::IUndoManager* pUndoManager = GetUndoManager();
+    SfxUndoManager* pUndoManager = GetUndoManager();
     SwWrtShell &rSh = rView.GetWrtShell();
+    SwUndoId nUndoId(SwUndoId::EMPTY);
 
     long aOldHeight = rView.GetPostItMgr()->HasActiveSidebarWin()
                       ? rView.GetPostItMgr()->GetActiveSidebarWin()->GetPostItTextHeight()
@@ -1506,6 +1499,13 @@ void SwAnnotationShell::ExecUndo(SfxRequest &rReq)
     {
         case SID_UNDO:
         {
+            rSh.GetLastUndoInfo(nullptr, &nUndoId);
+            if (nUndoId == SwUndoId::CONFLICT)
+            {
+                rReq.SetReturnValue( SfxUInt32Item(nId, static_cast<sal_uInt32>(SID_REPAIRPACKAGE)) );
+                break;
+            }
+
             if ( pUndoManager )
             {
                 sal_uInt16 nCount = pUndoManager->GetUndoActionCount();
@@ -1530,6 +1530,13 @@ void SwAnnotationShell::ExecUndo(SfxRequest &rReq)
 
         case SID_REDO:
         {
+            (void)rSh.GetFirstRedoInfo(nullptr, &nUndoId);
+            if (nUndoId == SwUndoId::CONFLICT)
+            {
+                rReq.SetReturnValue( SfxUInt32Item(nId, static_cast<sal_uInt32>(SID_REPAIRPACKAGE)) );
+                break;
+            }
+
             if ( pUndoManager )
             {
                 sal_uInt16 nCount = pUndoManager->GetRedoActionCount();
@@ -1566,8 +1573,9 @@ void SwAnnotationShell::StateUndo(SfxItemSet &rSet)
         return;
 
     SfxWhichIter aIter(rSet);
+    SwUndoId nUndoId(SwUndoId::EMPTY);
     sal_uInt16 nWhich = aIter.FirstWhich();
-    ::svl::IUndoManager* pUndoManager = GetUndoManager();
+    SfxUndoManager* pUndoManager = GetUndoManager();
     SfxViewFrame *pSfxViewFrame = rView.GetViewFrame();
     SwWrtShell &rSh = rView.GetWrtShell();
 
@@ -1580,9 +1588,13 @@ void SwAnnotationShell::StateUndo(SfxItemSet &rSet)
                 sal_uInt16 nCount = pUndoManager ? pUndoManager->GetUndoActionCount() : 0;
                 if ( nCount )
                     pSfxViewFrame->GetSlotState( nWhich, pSfxViewFrame->GetInterface(), &rSet );
-                else if (rSh.GetLastUndoInfo(nullptr, nullptr))
+                else if (rSh.GetLastUndoInfo(nullptr, &nUndoId))
                 {
                     rSet.Put( SfxStringItem( nWhich, rSh.GetDoString(SwWrtShell::UNDO)) );
+                }
+                else if (nUndoId == SwUndoId::CONFLICT)
+                {
+                    rSet.Put( SfxUInt32Item(nWhich, static_cast<sal_uInt32>(SID_REPAIRPACKAGE)) );
                 }
                 else
                     rSet.DisableItem(nWhich);
@@ -1593,9 +1605,13 @@ void SwAnnotationShell::StateUndo(SfxItemSet &rSet)
                 sal_uInt16 nCount = pUndoManager ? pUndoManager->GetRedoActionCount() : 0;
                 if ( nCount )
                     pSfxViewFrame->GetSlotState( nWhich, pSfxViewFrame->GetInterface(), &rSet );
-                else if (rSh.GetFirstRedoInfo(nullptr))
+                else if (rSh.GetFirstRedoInfo(nullptr, &nUndoId))
                 {
                     rSet.Put(SfxStringItem( nWhich, rSh.GetDoString(SwWrtShell::REDO)) );
+                }
+                else if (nUndoId == SwUndoId::CONFLICT)
+                {
+                    rSet.Put( SfxUInt32Item(nWhich, static_cast<sal_uInt32>(SID_REPAIRPACKAGE)) );
                 }
                 else
                     rSet.DisableItem(nWhich);
@@ -1606,25 +1622,25 @@ void SwAnnotationShell::StateUndo(SfxItemSet &rSet)
             {
                 if( pUndoManager )
                 {
-                    OUString (::svl::IUndoManager:: *fnGetComment)( size_t, bool const ) const;
+                    OUString (SfxUndoManager:: *fnGetComment)( size_t, bool const ) const;
 
                     sal_uInt16 nCount;
                     if( SID_GETUNDOSTRINGS == nWhich )
                     {
                         nCount = pUndoManager->GetUndoActionCount();
-                        fnGetComment = &::svl::IUndoManager::GetUndoActionComment;
+                        fnGetComment = &SfxUndoManager::GetUndoActionComment;
                     }
                     else
                     {
                         nCount = pUndoManager->GetRedoActionCount();
-                        fnGetComment = &::svl::IUndoManager::GetRedoActionComment;
+                        fnGetComment = &SfxUndoManager::GetRedoActionComment;
                     }
 
-                    OUString sList;
+                    OUStringBuffer sList;
                     if( nCount )
                     {
                         for( sal_uInt16 n = 0; n < nCount; ++n )
-                            sList += (pUndoManager->*fnGetComment)( n, ::svl::IUndoManager::TopLevel ) + "\n";
+                            sList.append( (pUndoManager->*fnGetComment)( n, SfxUndoManager::TopLevel ) ).append("\n");
                     }
 
                     SfxStringListItem aItem( nWhich );
@@ -1634,13 +1650,13 @@ void SwAnnotationShell::StateUndo(SfxItemSet &rSet)
                         rSh.GetDoStrings( SwWrtShell::UNDO, aItem );
                     }
                     else if ((nWhich == SID_GETREDOSTRINGS) &&
-                             (rSh.GetFirstRedoInfo(nullptr)))
+                             (rSh.GetFirstRedoInfo(nullptr, nullptr)))
                     {
                         rSh.GetDoStrings( SwWrtShell::UNDO, aItem );
                     }
 
-                    sList += aItem.GetString();
-                    aItem.SetString( sList );
+                    sList.append(aItem.GetString());
+                    aItem.SetString( sList.makeStringAndClear() );
                     rSet.Put( aItem );
                 }
                 else
@@ -1694,8 +1710,8 @@ void SwAnnotationShell::InsertSymbol(SfxRequest& rReq)
         sSym = static_cast<const SfxStringItem*>(pItem)->GetValue();
         const SfxPoolItem* pFtItem = nullptr;
         pArgs->GetItemState( GetPool().GetWhich(SID_ATTR_SPECIALCHAR), false, &pFtItem);
-        const SfxStringItem* pFontItem = dynamic_cast<const SfxStringItem*>( pFtItem  );
-        if ( pFontItem )
+
+        if (const SfxStringItem* pFontItem = dynamic_cast<const SfxStringItem*>(pFtItem))
             sFontName = pFontItem->GetValue();
     }
 
@@ -1725,89 +1741,73 @@ void SwAnnotationShell::InsertSymbol(SfxRequest& rReq)
         aAllSet.Put( SfxBoolItem( FN_PARAM_1, false ) );
 
         SwViewOption aOpt(*rView.GetWrtShell().GetViewOptions());
-        OUString sSymbolFont = aOpt.GetSymbolFont();
+        const OUString& sSymbolFont = aOpt.GetSymbolFont();
         if( !sSymbolFont.isEmpty() )
             aAllSet.Put( SfxStringItem( SID_FONT_NAME, sSymbolFont ) );
         else
             aAllSet.Put( SfxStringItem( SID_FONT_NAME, aSetDlgFont.GetFamilyName() ) );
 
         // If character is selected then it can be shown.
-        std::unique_ptr<SfxAbstractDialog> pDlg(pFact->CreateSfxDialog( rView.GetWindow(), aAllSet,
-            rView.GetViewFrame()->GetFrame().GetFrameInterface(), RID_SVXDLG_CHARMAP ));
-
-        sal_uInt16 nResult = pDlg->Execute();
-        if( nResult == RET_OK )
-        {
-            const SfxStringItem* pCItem = SfxItemSet::GetItem<SfxStringItem>(pDlg->GetOutputItemSet(), SID_CHARMAP, false);
-            const SvxFontItem* pFontItem = SfxItemSet::GetItem<SvxFontItem>(pDlg->GetOutputItemSet(), SID_ATTR_CHAR_FONT, false);
-            if ( pFontItem )
-            {
-                aFont.SetFamilyName( pFontItem->GetFamilyName() );
-                aFont.SetStyleName( pFontItem->GetStyleName() );
-                aFont.SetCharSet( pFontItem->GetCharSet() );
-                aFont.SetPitch( pFontItem->GetPitch() );
-            }
-
-            if ( pCItem )
-            {
-                sSym  = pCItem->GetValue();
-                aOpt.SetSymbolFont(aFont.GetFamilyName());
-                SW_MOD()->ApplyUsrPref(aOpt, &rView);
-            }
-        }
+        ScopedVclPtr<SfxAbstractDialog> pDlg(pFact->CreateCharMapDialog(rView.GetFrameWeld(), aAllSet, true));
+        pDlg->Execute();
+        return;
     }
 
-    if( !sSym.isEmpty() )
+    // do not flicker
+    pOLV->HideCursor();
+    Outliner * pOutliner = pOLV->GetOutliner();
+    pOutliner->SetUpdateMode(false);
+
+    SfxItemSet aOldSet( pOLV->GetAttribs() );
+    SfxItemSet aFontSet(
+        *aOldSet.GetPool(),
+        svl::Items<
+            EE_CHAR_FONTINFO, EE_CHAR_FONTINFO,
+            EE_CHAR_FONTINFO_CJK, EE_CHAR_FONTINFO_CTL>{});
+    aFontSet.Set( aOldSet );
+
+    // Insert string
+    pOLV->InsertText( sSym);
+
+    // Attributing (set font)
+    SfxItemSet aSetFont( *aFontSet.GetPool(), aFontSet.GetRanges() );
+    SvxFontItem aFontItem (aFont.GetFamilyType(), aFont.GetFamilyName(),
+                            aFont.GetStyleName(), aFont.GetPitch(),
+                            aFont.GetCharSet(),
+                            EE_CHAR_FONTINFO );
+    SvtScriptType nScriptBreak = g_pBreakIt->GetAllScriptsOfText( sSym );
+    if( SvtScriptType::LATIN & nScriptBreak )
+        aSetFont.Put( aFontItem );
+    if( SvtScriptType::ASIAN & nScriptBreak )
     {
-        // do not flicker
-        pOLV->HideCursor();
-        Outliner * pOutliner = pOLV->GetOutliner();
-        pOutliner->SetUpdateMode(false);
-
-        SfxItemSet aOldSet( pOLV->GetAttribs() );
-        SfxItemSet aFontSet( *aOldSet.GetPool(),
-                            EE_CHAR_FONTINFO, EE_CHAR_FONTINFO,
-                            EE_CHAR_FONTINFO_CJK, EE_CHAR_FONTINFO_CJK,
-                            EE_CHAR_FONTINFO_CTL, EE_CHAR_FONTINFO_CTL,
-                            0 );
-        aFontSet.Set( aOldSet );
-
-        // Insert string
-        pOLV->InsertText( sSym);
-
-        // Attributing (set font)
-        SfxItemSet aSetFont( *aFontSet.GetPool(), aFontSet.GetRanges() );
-        SvxFontItem aFontItem (aFont.GetFamilyType(), aFont.GetFamilyName(),
-                                aFont.GetStyleName(), aFont.GetPitch(),
-                                aFont.GetCharSet(),
-                                EE_CHAR_FONTINFO );
-        SvtScriptType nScriptBreak = g_pBreakIt->GetAllScriptsOfText( sSym );
-        if( SvtScriptType::LATIN & nScriptBreak )
-            aSetFont.Put( aFontItem, EE_CHAR_FONTINFO );
-        if( SvtScriptType::ASIAN & nScriptBreak )
-            aSetFont.Put( aFontItem, EE_CHAR_FONTINFO_CJK );
-        if( SvtScriptType::COMPLEX & nScriptBreak )
-            aSetFont.Put( aFontItem, EE_CHAR_FONTINFO_CTL );
-        pOLV->SetAttribs(aSetFont);
-
-        // Erase selection
-        ESelection aSel(pOLV->GetSelection());
-        aSel.nStartPara = aSel.nEndPara;
-        aSel.nStartPos = aSel.nEndPos;
-        pOLV->SetSelection(aSel);
-
-        // Restore old font
-        pOLV->SetAttribs( aFontSet );
-
-        // From now on show it again
-        pOutliner->SetUpdateMode(true);
-        pOLV->ShowCursor();
-
-        rReq.AppendItem( SfxStringItem( GetPool().GetWhich(SID_CHARMAP), sSym ) );
-        if(!aFont.GetFamilyName().isEmpty())
-            rReq.AppendItem( SfxStringItem( SID_ATTR_SPECIALCHAR, aFont.GetFamilyName() ) );
-        rReq.Done();
+        aFontItem.SetWhich(EE_CHAR_FONTINFO_CJK);
+        aSetFont.Put( aFontItem );
     }
+    if( SvtScriptType::COMPLEX & nScriptBreak )
+    {
+        aFontItem.SetWhich(EE_CHAR_FONTINFO_CTL);
+        aSetFont.Put( aFontItem );
+    }
+    pOLV->SetAttribs(aSetFont);
+
+    // Erase selection
+    ESelection aSel(pOLV->GetSelection());
+    aSel.nStartPara = aSel.nEndPara;
+    aSel.nStartPos = aSel.nEndPos;
+    pOLV->SetSelection(aSel);
+
+    // Restore old font
+    pOLV->SetAttribs( aFontSet );
+
+    // From now on show it again
+    pOutliner->SetUpdateMode(true);
+    pOLV->ShowCursor();
+
+    rReq.AppendItem( SfxStringItem( GetPool().GetWhich(SID_CHARMAP), sSym ) );
+    if(!aFont.GetFamilyName().isEmpty())
+        rReq.AppendItem( SfxStringItem( SID_ATTR_SPECIALCHAR, aFont.GetFamilyName() ) );
+    rReq.Done();
+
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

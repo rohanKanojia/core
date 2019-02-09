@@ -17,16 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "WExtendPages.hxx"
-#include "RtfReader.hxx"
-#include "HtmlReader.hxx"
-#include "WCopyTable.hxx"
+#include <WExtendPages.hxx>
+#include <RtfReader.hxx>
+#include <HtmlReader.hxx>
+#include <WCopyTable.hxx>
 
 using namespace dbaui;
 using namespace com::sun::star;
-SvParser* OWizHTMLExtend::createReader(sal_Int32 _nRows)
+
+void OWizHTMLExtend::createReaderAndCallParser(sal_Int32 _nRows)
 {
-    return new OHTMLReader(*m_pParserStream,
+    tools::SvRef<OHTMLReader> xParser = new OHTMLReader(*m_pParserStream,
                             _nRows,
                             m_pParent->GetColumnPositions(),
                             m_pParent->GetFormatter(),
@@ -34,11 +35,12 @@ SvParser* OWizHTMLExtend::createReader(sal_Int32 _nRows)
                             &m_pParent->getDestVector(),
                             &m_pParent->getTypeInfo(),
                             m_pParent->shouldCreatePrimaryKey());
+    xParser->CallParser();
 }
 
-SvParser* OWizRTFExtend::createReader(sal_Int32 _nRows)
+void OWizRTFExtend::createReaderAndCallParser(sal_Int32 _nRows)
 {
-    return new ORTFReader(*m_pParserStream,
+    tools::SvRef<ORTFReader> xParser = new ORTFReader(*m_pParserStream,
                             _nRows,
                             m_pParent->GetColumnPositions(),
                             m_pParent->GetFormatter(),
@@ -46,6 +48,7 @@ SvParser* OWizRTFExtend::createReader(sal_Int32 _nRows)
                             &m_pParent->getDestVector(),
                             &m_pParent->getTypeInfo(),
                             m_pParent->shouldCreatePrimaryKey());
+    xParser->CallParser();
 }
 
 OWizNormalExtend::OWizNormalExtend(vcl::Window* pParent) : OWizTypeSelect( pParent )
@@ -53,9 +56,8 @@ OWizNormalExtend::OWizNormalExtend(vcl::Window* pParent) : OWizTypeSelect( pPare
     EnableAuto(false);
 }
 
-SvParser* OWizNormalExtend::createReader(sal_Int32 /*_nRows*/)
+void OWizNormalExtend::createReaderAndCallParser(sal_Int32 /*_nRows*/)
 {
-    return nullptr;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

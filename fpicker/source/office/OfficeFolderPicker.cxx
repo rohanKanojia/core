@@ -43,33 +43,36 @@ SvtFolderPicker::~SvtFolderPicker()
 {
 }
 
-void SAL_CALL SvtFolderPicker::setTitle( const OUString& _rTitle ) throw (RuntimeException, std::exception)
+void SAL_CALL SvtFolderPicker::setTitle( const OUString& _rTitle )
 {
     OCommonPicker::setTitle( _rTitle );
 }
 
-sal_Int16 SAL_CALL SvtFolderPicker::execute(  ) throw (RuntimeException, std::exception)
+sal_Int16 SAL_CALL SvtFolderPicker::execute(  )
 {
     return OCommonPicker::execute();
 }
 
-void SAL_CALL SvtFolderPicker::setDialogTitle( const OUString& _rTitle) throw (RuntimeException, std::exception)
+void SAL_CALL SvtFolderPicker::setDialogTitle( const OUString& _rTitle)
 {
     setTitle( _rTitle );
 }
 
-void SAL_CALL SvtFolderPicker::startExecuteModal( const Reference< css::ui::dialogs::XDialogClosedListener >& xListener ) throw (RuntimeException, std::exception)
+void SAL_CALL SvtFolderPicker::startExecuteModal( const Reference< css::ui::dialogs::XDialogClosedListener >& xListener )
 {
     m_xListener = xListener;
     prepareDialog();
     prepareExecute();
-    getDialog()->EnableAutocompletion();
-    getDialog()->StartExecuteModal( LINK( this, SvtFolderPicker, DialogClosedHdl ) );
+    SvtFileDialog_Base* pDialog = getDialog();
+    pDialog->EnableAutocompletion();
+    pDialog->StartExecuteAsync([this](sal_Int32 nResult){
+        DialogClosedHdl(nResult);
+    });
 }
 
 VclPtr<SvtFileDialog_Base> SvtFolderPicker::implCreateDialog( vcl::Window* _pParent )
 {
-    return VclPtr<SvtFileDialog>::Create( _pParent, SFXWB_PATHDIALOG );
+    return VclPtr<SvtFileDialog>::Create( _pParent, PickerFlags::PathDialog );
 }
 
 sal_Int16 SvtFolderPicker::implExecutePicker( )
@@ -90,17 +93,17 @@ void SvtFolderPicker::prepareExecute()
         getDialog()->SetPath( m_aDisplayDirectory );
     else
     {
-        // Default-Standard-Dir setzen
+        // set the default standard dir
         INetURLObject aStdDirObj( SvtPathOptions().GetWorkPath() );
-        getDialog()->SetPath( aStdDirObj.GetMainURL( INetURLObject::NO_DECODE) );
+        getDialog()->SetPath( aStdDirObj.GetMainURL( INetURLObject::DecodeMechanism::NONE) );
     }
 }
 
-IMPL_LINK_TYPED( SvtFolderPicker, DialogClosedHdl, Dialog&, rDlg, void )
+void SvtFolderPicker::DialogClosedHdl(sal_Int32 nResult)
 {
     if ( m_xListener.is() )
     {
-        sal_Int16 nRet = static_cast< sal_Int16 >( rDlg.GetResult() );
+        sal_Int16 nRet = static_cast<sal_Int16>(nResult);
         css::ui::dialogs::DialogClosedEvent aEvent( *this, nRet );
         m_xListener->dialogClosed( aEvent );
         m_xListener.clear();
@@ -108,12 +111,11 @@ IMPL_LINK_TYPED( SvtFolderPicker, DialogClosedHdl, Dialog&, rDlg, void )
 }
 
 void SAL_CALL SvtFolderPicker::setDisplayDirectory( const OUString& aDirectory )
-    throw( IllegalArgumentException, RuntimeException, std::exception )
 {
     m_aDisplayDirectory = aDirectory;
 }
 
-OUString SAL_CALL SvtFolderPicker::getDisplayDirectory() throw( RuntimeException, std::exception )
+OUString SAL_CALL SvtFolderPicker::getDisplayDirectory()
 {
     if ( ! getDialog() )
         return m_aDisplayDirectory;
@@ -126,7 +128,7 @@ OUString SAL_CALL SvtFolderPicker::getDisplayDirectory() throw( RuntimeException
     return OUString();
 }
 
-OUString SAL_CALL SvtFolderPicker::getDirectory() throw( RuntimeException, std::exception )
+OUString SAL_CALL SvtFolderPicker::getDirectory()
 {
     if ( ! getDialog() )
         return m_aDisplayDirectory;
@@ -140,30 +142,29 @@ OUString SAL_CALL SvtFolderPicker::getDirectory() throw( RuntimeException, std::
 }
 
 void SAL_CALL SvtFolderPicker::setDescription( const OUString& aDescription )
-    throw( RuntimeException, std::exception )
 {
     m_aDescription = aDescription;
 }
 
-void SvtFolderPicker::cancel() throw (RuntimeException, std::exception)
+void SvtFolderPicker::cancel()
 {
     OCommonPicker::cancel();
 }
 
 /* XServiceInfo */
-OUString SAL_CALL SvtFolderPicker::getImplementationName() throw( RuntimeException, std::exception )
+OUString SAL_CALL SvtFolderPicker::getImplementationName()
 {
     return impl_getStaticImplementationName();
 }
 
 /* XServiceInfo */
-sal_Bool SAL_CALL SvtFolderPicker::supportsService( const OUString& sServiceName ) throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL SvtFolderPicker::supportsService( const OUString& sServiceName )
 {
     return cppu::supportsService(this, sServiceName);
 }
 
 /* XServiceInfo */
-Sequence< OUString > SAL_CALL SvtFolderPicker::getSupportedServiceNames() throw( RuntimeException, std::exception )
+Sequence< OUString > SAL_CALL SvtFolderPicker::getSupportedServiceNames()
 {
     return impl_getStaticSupportedServiceNames();
 }
@@ -182,8 +183,7 @@ OUString SvtFolderPicker::impl_getStaticImplementationName()
 }
 
 /* Helper for registry */
-Reference< XInterface > SAL_CALL SvtFolderPicker::impl_createInstance( const Reference< XComponentContext >&  )
-    throw( Exception )
+Reference< XInterface > SvtFolderPicker::impl_createInstance( const Reference< XComponentContext >&  )
 {
     return Reference< XInterface >( *new SvtFolderPicker );
 }

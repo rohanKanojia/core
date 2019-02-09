@@ -20,12 +20,12 @@
 #ifndef INCLUDED_OSL_MODULE_HXX
 #define INCLUDED_OSL_MODULE_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <cstddef>
 
-#include <rtl/ustring.hxx>
-#include <osl/module.h>
+#include "rtl/ustring.hxx"
+#include "osl/module.h"
 
 namespace osl
 {
@@ -45,19 +45,11 @@ public:
         Similar to getUrlFromAddress, but use a function address to get URL of the Module.
         Use Function pointer as symbol address to conceal type conversion.
 
-        @param addr
-        [in] function address in oslGenericFunction format.
+        @param[in] addr            function address in oslGenericFunction format.
+        @param[in,out] libraryUrl  receives the URL of the module.
 
-        @param libraryUrl
-        [in|out] receives the URL of the module.
-
-        @return
-        <dl>
-        <dt>true</dt>
-        <dd>on success</dd>
-        <dt>false</dt>
-        <dd>can not get the URL from the specified function address or the parameter is invalid.</dd>
-        </dl>
+        @retval true on success
+        @retval false can not get the URL from the specified function address or the parameter is invalid.
 
         @see getUrlFromAddress
     */
@@ -131,7 +123,7 @@ public:
 
     void* SAL_CALL getSymbol( const ::rtl::OUString& strSymbolName)
     {
-    return ( osl_getSymbol( m_Module, strSymbolName.pData ) );
+        return osl_getSymbol( m_Module, strSymbolName.pData );
     }
 
     /** Get function address by the function name in the module.
@@ -139,22 +131,16 @@ public:
         getFunctionSymbol is an alternative function for getSymbol.
         Use Function pointer as symbol address to conceal type conversion.
 
-        @param ustrFunctionSymbolName
-        [in] Function name to be looked up.
+        @param[in] ustrFunctionSymbolName  Function name to be looked up.
 
-        @return
-        <dl>
-        <dt>oslGenericFunction format function address</dt>
-        <dd>on success</dd>
-        <dt>NULL</dt>
-        <dd>lookup failed or parameter is somewhat invalid</dd>
-        </dl>
+        @retval oslGenericFunction format function address on success
+        @retval NULL lookup failed or parameter is somewhat invalid
 
         @see getSymbol
     */
     oslGenericFunction SAL_CALL getFunctionSymbol( const ::rtl::OUString& ustrFunctionSymbolName ) const
     {
-        return ( osl_getFunctionSymbol( m_Module, ustrFunctionSymbolName.pData ) );
+        return osl_getFunctionSymbol( m_Module, ustrFunctionSymbolName.pData );
     }
 
     /// @since LibreOffice 3.5

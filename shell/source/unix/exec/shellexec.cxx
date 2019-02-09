@@ -19,92 +19,76 @@
 
 #include <config_folders.h>
 
-#include <osl/diagnose.h>
 #include <osl/thread.h>
 #include <osl/process.h>
 #include <osl/file.hxx>
+#include <rtl/strbuf.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
 #include <rtl/uri.hxx>
 #include "shellexec.hxx"
+#include <com/sun/star/system/SystemShellExecuteException.hpp>
 #include <com/sun/star/system/SystemShellExecuteFlags.hpp>
 
 #include <com/sun/star/util/theMacroExpander.hpp>
-#include <com/sun/star/uri/XExternalUriReferenceTranslator.hpp>
 #include <com/sun/star/uri/ExternalUriReferenceTranslator.hpp>
 #include <com/sun/star/uri/UriReferenceFactory.hpp>
 #include <cppuhelper/supportsservice.hxx>
+#include <comphelper/lok.hxx>
 
-#include "uno/current_context.hxx"
+#include <uno/current_context.hxx>
 
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
 
-
-// namespace directives
-
-
 using com::sun::star::system::XSystemShellExecute;
 using com::sun::star::system::SystemShellExecuteException;
-
-using osl::FileBase;
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::system::SystemShellExecuteFlags;
 using namespace cppu;
 
-namespace // private
+namespace
 {
-    Sequence< OUString > SAL_CALL ShellExec_getSupportedServiceNames()
+    Sequence< OUString > ShellExec_getSupportedServiceNames()
     {
         Sequence< OUString > aRet { "com.sun.star.system.SystemShellExecute" };
         return aRet;
     }
-}
 
-void escapeForShell( OStringBuffer & rBuffer, const OString & rURL)
-{
-    sal_Int32 nmax = rURL.getLength();
-    for(sal_Int32 n=0; n < nmax; ++n)
+    void escapeForShell( OStringBuffer & rBuffer, const OString & rURL)
     {
-        // escape every non alpha numeric characters (excluding a few "known good") by prepending a '\'
-        sal_Char c = rURL[n];
-        if( ( c < 'A' || c > 'Z' ) && ( c < 'a' || c > 'z' ) && ( c < '0' || c > '9' )  && c != '/' && c != '.' )
-            rBuffer.append( '\\' );
+        sal_Int32 nmax = rURL.getLength();
+        for(sal_Int32 n=0; n < nmax; ++n)
+        {
+            // escape every non alpha numeric characters (excluding a few "known good") by prepending a '\'
+            sal_Char c = rURL[n];
+            if( ( c < 'A' || c > 'Z' ) && ( c < 'a' || c > 'z' ) && ( c < '0' || c > '9' )  && c != '/' && c != '.' )
+                rBuffer.append( '\\' );
 
-        rBuffer.append( c );
+            rBuffer.append( c );
+        }
     }
 }
-
 
 ShellExec::ShellExec( const Reference< XComponentContext >& xContext ) :
     WeakImplHelper< XSystemShellExecute, XServiceInfo >(),
     m_xContext(xContext)
 {
-    try {
-        Reference< XCurrentContext > xCurrentContext(getCurrentContext());
-
-        if (xCurrentContext.is())
-        {
-            Any aValue = xCurrentContext->getValueByName( "system.desktop-environment" );
-
-            OUString aDesktopEnvironment;
-            if (aValue >>= aDesktopEnvironment)
-            {
-                m_aDesktopEnvironment = OUStringToOString(aDesktopEnvironment, RTL_TEXTENCODING_ASCII_US);
-            }
-        }
-    } catch (const RuntimeException &) {
-    }
 }
 
-
 void SAL_CALL ShellExec::execute( const OUString& aCommand, const OUString& aParameter, sal_Int32 nFlags )
-    throw (IllegalArgumentException, SystemShellExecuteException, RuntimeException, std::exception)
 {
     OStringBuffer aBuffer, aLaunchBuffer;
+
+    if (comphelper::LibreOfficeKit::isActive())
+    {
+        SAL_WARN("shell", "Unusual - shell attempt to launch " << aCommand << " with params " << aParameter << " under lok");
+        return;
+    }
 
     // DESKTOP_LAUNCH, see http://freedesktop.org/pipermail/xdg/2004-August/004489.html
     static const char *pDesktopLaunch = getenv( "DESKTOP_LAUNCH" );
@@ -154,7 +138,6 @@ void SAL_CALL ShellExec::execute( const OUString& aCommand, const OUString& aPar
         aBuffer.append("open --");
 #else
         // Just use xdg-open on non-Mac
-
         aBuffer.append("/usr/bin/xdg-open");
 #endif
         aBuffer.append(" ");
@@ -214,22 +197,18 @@ void SAL_CALL ShellExec::execute( const OUString& aCommand, const OUString& aPar
 }
 
 // XServiceInfo
+
 OUString SAL_CALL ShellExec::getImplementationName(  )
-    throw( RuntimeException, std::exception )
 {
     return OUString("com.sun.star.comp.system.SystemShellExecute");
 }
 
-//  XServiceInfo
 sal_Bool SAL_CALL ShellExec::supportsService( const OUString& ServiceName )
-    throw( RuntimeException, std::exception )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-//  XServiceInfo
 Sequence< OUString > SAL_CALL ShellExec::getSupportedServiceNames(   )
-    throw( RuntimeException, std::exception )
 {
     return ShellExec_getSupportedServiceNames();
 }

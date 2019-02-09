@@ -20,102 +20,124 @@
 #include <wrtsh.hxx>
 #include <fldbas.hxx>
 #include <fldmgr.hxx>
-#include <vcl/msgbox.hxx>
 #include <DropDownFieldDialog.hxx>
 #include <flddropdown.hxx>
-#include <fldui.hrc>
 
 #include <memory>
 
 using namespace ::com::sun::star;
 
 // edit insert-field
-sw::DropDownFieldDialog::DropDownFieldDialog(vcl::Window *pParent, SwWrtShell &rS,
-                              SwField* pField, bool bNextButton)
-    : SvxStandardDialog(pParent, "DropdownFieldDialog",
-        "modules/swriter/ui/dropdownfielddialog.ui")
-    , rSh( rS )
-    , pDropField(nullptr)
+sw::DropDownFieldDialog::DropDownFieldDialog(weld::Window *pParent, SwWrtShell &rS,
+                              SwField* pField, bool bPrevButton, bool bNextButton)
+    : GenericDialogController(pParent, "modules/swriter/ui/dropdownfielddialog.ui", "DropdownFieldDialog")
+    , m_rSh( rS )
+    , m_pDropField(nullptr)
+    , m_pPressedButton(nullptr)
+    , m_xListItemsLB(m_xBuilder->weld_tree_view("list"))
+    , m_xOKPB(m_xBuilder->weld_button("ok"))
+    , m_xPrevPB(m_xBuilder->weld_button("prev"))
+    , m_xNextPB(m_xBuilder->weld_button("next"))
+    , m_xEditPB(m_xBuilder->weld_button("edit"))
 {
-    get(m_pListItemsLB, "list");
-    m_pListItemsLB->SetDropDownLineCount(12);
-    m_pListItemsLB->set_width_request(m_pListItemsLB->approximate_char_width()*32);
-    get(m_pOKPB, "ok");
-    get(m_pNextPB, "next");
-    get(m_pEditPB, "edit");
-    Link<ListBox&, void> aDoubleLk = LINK(this, DropDownFieldDialog, DoubleClickHdl);
-    m_pListItemsLB->SetDoubleClickHdl( aDoubleLk );
+    m_xListItemsLB->set_size_request(m_xListItemsLB->get_approximate_digit_width() * 24,
+                                     m_xListItemsLB->get_height_rows(12));
+    Link<weld::TreeView&, void> aDoubleLk = LINK(this, DropDownFieldDialog, DoubleClickHdl);
+    m_xListItemsLB->connect_row_activated( aDoubleLk );
 
-    Link<Button*,void> aButtonLk = LINK(this, DropDownFieldDialog, ButtonHdl);
-    m_pEditPB->SetClickHdl(aButtonLk);
-    if( bNextButton )
+    Link<weld::Button&, void> aEditButtonLk = LINK(this, DropDownFieldDialog, EditHdl);
+    Link<weld::Button&,void> aPrevButtonLk = LINK(this, DropDownFieldDialog, PrevHdl);
+    Link<weld::Button&, void> aNextButtonLk = LINK(this, DropDownFieldDialog, NextHdl);
+    m_xEditPB->connect_clicked(aEditButtonLk);
+    if( bPrevButton || bNextButton )
     {
-        m_pNextPB->Show();
-        m_pNextPB->SetClickHdl(aButtonLk);
+        m_xPrevPB->show();
+        m_xPrevPB->connect_clicked(aPrevButtonLk);
+        m_xPrevPB->set_sensitive(bPrevButton);
+
+        m_xNextPB->show();
+        m_xNextPB->connect_clicked(aNextButtonLk);
+        m_xNextPB->set_sensitive(bNextButton);
     }
-    if( RES_DROPDOWN == pField->GetTyp()->Which() )
+    if( SwFieldIds::Dropdown == pField->GetTyp()->Which() )
     {
 
-        pDropField = static_cast<SwDropDownField*>(pField);
-        OUString sTitle = GetText();
-        sTitle += pDropField->GetPar2();
-        SetText(sTitle);
-        uno::Sequence< OUString > aItems = pDropField->GetItemSequence();
+        m_pDropField = static_cast<SwDropDownField*>(pField);
+        OUString sTitle = m_xDialog->get_title();
+        sTitle += m_pDropField->GetPar2();
+        m_xDialog->set_title(sTitle);
+        uno::Sequence< OUString > aItems = m_pDropField->GetItemSequence();
         const OUString* pArray = aItems.getConstArray();
-        for(sal_Int32 i = 0; i < aItems.getLength(); i++)
-            m_pListItemsLB->InsertEntry(pArray[i]);
-        m_pListItemsLB->SelectEntry(pDropField->GetSelectedItem());
+        for (sal_Int32 i = 0; i < aItems.getLength(); ++i)
+            m_xListItemsLB->append_text(pArray[i]);
+        m_xListItemsLB->select_text(m_pDropField->GetSelectedItem());
     }
 
-    bool bEnable = !rSh.IsCursorReadonly();
-    m_pOKPB->Enable( bEnable );
+    bool bEnable = !m_rSh.IsCursorReadonly();
+    m_xOKPB->set_sensitive(bEnable);
 
-    m_pListItemsLB->GrabFocus();
+    m_xListItemsLB->grab_focus();
 }
 
 sw::DropDownFieldDialog::~DropDownFieldDialog()
 {
-    disposeOnce();
-}
-
-void sw::DropDownFieldDialog::dispose()
-{
-    m_pListItemsLB.clear();
-    m_pOKPB.clear();
-    m_pNextPB.clear();
-    m_pEditPB.clear();
-    SvxStandardDialog::dispose();
 }
 
 void sw::DropDownFieldDialog::Apply()
 {
-    if(pDropField)
+    if (m_pDropField)
     {
-        OUString sSelect = m_pListItemsLB->GetSelectEntry();
-        if(pDropField->GetPar1() != sSelect)
+        OUString sSelect = m_xListItemsLB->get_selected_text();
+        if (m_pDropField->GetPar1() != sSelect)
         {
-            rSh.StartAllAction();
+            m_rSh.StartAllAction();
 
             std::unique_ptr<SwDropDownField> const pCopy(
-                static_cast<SwDropDownField *>( pDropField->CopyField() ) );
+                static_cast<SwDropDownField*>(m_pDropField->CopyField().release()));
 
             pCopy->SetPar1(sSelect);
-            rSh.SwEditShell::UpdateFields(*pCopy);
+            m_rSh.SwEditShell::UpdateOneField(*pCopy);
 
-            rSh.SetUndoNoResetModified();
-            rSh.EndAllAction();
+            m_rSh.SetUndoNoResetModified();
+            m_rSh.EndAllAction();
         }
     }
 }
 
-IMPL_LINK_TYPED(sw::DropDownFieldDialog, ButtonHdl, Button*, pButton, void)
+bool sw::DropDownFieldDialog::PrevButtonPressed() const
 {
-    EndDialog(m_pNextPB == pButton ? RET_OK : RET_YES );
+    return m_pPressedButton == m_xPrevPB.get();
 }
 
-IMPL_LINK_NOARG_TYPED(sw::DropDownFieldDialog, DoubleClickHdl, ListBox&, void)
+bool sw::DropDownFieldDialog::NextButtonPressed() const
 {
-    EndDialog(RET_OK);
+    return m_pPressedButton == m_xNextPB.get();
+}
+
+IMPL_LINK_NOARG(sw::DropDownFieldDialog, EditHdl, weld::Button&, void)
+{
+    m_pPressedButton = m_xEditPB.get();
+    m_xDialog->response(RET_YES);
+}
+
+IMPL_LINK_NOARG(sw::DropDownFieldDialog, PrevHdl, weld::Button&, void)
+{
+    m_pPressedButton = m_xPrevPB.get();
+    m_xDialog->response(RET_OK);
+}
+
+IMPL_LINK_NOARG(sw::DropDownFieldDialog, NextHdl, weld::Button&, void)
+{
+    m_pPressedButton = m_xNextPB.get();
+    m_xDialog->response(RET_OK);
+}
+
+IMPL_LINK_NOARG(sw::DropDownFieldDialog, DoubleClickHdl, weld::TreeView&, void)
+{
+    // tdf#114144, when next is available make double-click accept and go to next field
+    if (m_xNextPB->get_visible() && m_xNextPB->get_sensitive())
+        m_pPressedButton = m_xNextPB.get();
+    m_xDialog->response(RET_OK);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

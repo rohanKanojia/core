@@ -23,65 +23,69 @@
 #include <editeng/svxenum.hxx>
 #include <rtl/textenc.h>
 #include "parcss1.hxx"
+#include <o3tl/typed_flags_set.hxx>
 
+#include <array>
+#include <map>
 #include <memory>
 #include <vector>
-#include <map>
 
 class SfxItemPool;
 class SvxBoxItem;
 class FontList;
+enum class SvxBoxItemLine;
 
 enum SvxCSS1Position
 {
-    SVX_CSS1_POS_NONE,          // nichts angegeben
+    SVX_CSS1_POS_NONE,          // nothing specified
     SVX_CSS1_POS_STATIC,        // normal
-    SVX_CSS1_POS_ABSOLUTE,      // absolut
-    SVX_CSS1_POS_RELATIVE,      // relativ
-    SVX_CSS1_POS_END
+    SVX_CSS1_POS_ABSOLUTE,      // absolute
+    SVX_CSS1_POS_RELATIVE,      // relative
 };
 
 enum SvxCSS1LengthType
 {
-    SVX_CSS1_LTYPE_NONE,        // nichts angegeben
-    SVX_CSS1_LTYPE_AUTO,        // automatisch
+    SVX_CSS1_LTYPE_NONE,        // nothing specified
+    SVX_CSS1_LTYPE_AUTO,        // automatic
     SVX_CSS1_LTYPE_TWIP,        // twip
-    SVX_CSS1_LTYPE_PERCENTAGE,  // %-Angabe
-    SVX_CSS1_LTYPE_END
+    SVX_CSS1_LTYPE_PERCENTAGE,  // percentage value
 };
 
 // Feature: PrintExt
 enum SvxCSS1SizeType
 {
-    SVX_CSS1_STYPE_NONE,        // nichts angegeben
-    SVX_CSS1_STYPE_AUTO,        // automatisch
+    SVX_CSS1_STYPE_NONE,        // nothing specified
+    SVX_CSS1_STYPE_AUTO,        // automatic
     SVX_CSS1_STYPE_TWIP,        // twip
-    SVX_CSS1_STYPE_LANDSCAPE,   // Landscape
-    SVX_CSS1_STYPE_PORTRAIT,    // Landscape
-    SVX_CSS1_STYPE_END
+    SVX_CSS1_STYPE_LANDSCAPE,   // landscape
+    SVX_CSS1_STYPE_PORTRAIT,    // portrait
 };
 
 enum SvxCSS1PageBreak
 {
-    SVX_CSS1_PBREAK_NONE,       // nichts angegeben
-    SVX_CSS1_PBREAK_AUTO,       // automatisch
-    SVX_CSS1_PBREAK_ALWAYS,     // immer
-    SVX_CSS1_PBREAK_AVOID,      // nie
-    SVX_CSS1_PBREAK_LEFT,       // naechste Seite ist eine linke
-    SVX_CSS1_PBREAK_RIGHT,      // naechste Seite ist eine rechte
-    SVX_CSS1_PBREAK_END
+    SVX_CSS1_PBREAK_NONE,       // nothing specified
+    SVX_CSS1_PBREAK_AUTO,       // automatic
+    SVX_CSS1_PBREAK_ALWAYS,     // always
+    SVX_CSS1_PBREAK_AVOID,      // never
+    SVX_CSS1_PBREAK_LEFT,       // next page is a left one
+    SVX_CSS1_PBREAK_RIGHT,      // next page is a right one
 };
 
 
-#define CSS1_SCRIPT_WESTERN 0x01
-#define CSS1_SCRIPT_CJK     0x02
-#define CSS1_SCRIPT_CTL     0x04
-#define CSS1_SCRIPT_ALL     0x07
+enum class Css1ScriptFlags {
+    Western = 0x01,
+    CJK     = 0x02,
+    CTL     = 0x04,
+    AllMask = Western | CJK | CTL,
+};
+namespace o3tl {
+    template<> struct typed_flags<Css1ScriptFlags> : is_typed_flags<Css1ScriptFlags, 0x07> {};
+}
 
 struct CSS1PropertyEnum
 {
-    const sal_Char *pName;  // Wert einer Property
-    sal_uInt16 nEnum;           // und der dazugehoerige Wert eines Enums
+    const sal_Char *pName;  // property value
+    sal_uInt16 const nEnum;       // and the corresponding value of enum
 };
 
 namespace editeng { class SvxBorderLine; }
@@ -93,43 +97,49 @@ namespace editeng { class SvxBorderLine; }
 struct SvxCSS1BorderInfo;
 class SvxCSS1PropertyInfo
 {
-    SvxCSS1BorderInfo *aBorderInfos[4];
+    std::array<std::unique_ptr<SvxCSS1BorderInfo>,4> m_aBorderInfos;
 
     void DestroyBorderInfos();
 
 public:
+    static constexpr sal_uInt16 UNSET_BORDER_DISTANCE = SAL_MAX_UINT16;
 
-    OUString aId;             // ID fuer Bookmarks, Rahmen etc.
+    OUString m_aId;             // ID for bookmarks, frame, and so
 
-    bool bTopMargin : 1;
-    bool bBottomMargin : 1;
+    bool m_bTopMargin : 1;
+    bool m_bBottomMargin : 1;
 
-    bool bLeftMargin : 1;
-    bool bRightMargin : 1;
-    bool bTextIndent : 1;
+    bool m_bLeftMargin : 1;
+    bool m_bRightMargin : 1;
+    bool m_bTextIndent : 1;
+    bool m_bNumbering : 1;
+    bool m_bBullet : 1;
 
-    SvxAdjust eFloat;
+    SvxAdjust m_eFloat;
 
-    SvxCSS1Position ePosition;
+    SvxCSS1Position m_ePosition;
 
-    sal_uInt16 nTopBorderDistance;
-    sal_uInt16 nBottomBorderDistance;
-    sal_uInt16 nLeftBorderDistance;
-    sal_uInt16 nRightBorderDistance;
+    sal_uInt16 m_nTopBorderDistance;
+    sal_uInt16 m_nBottomBorderDistance;
+    sal_uInt16 m_nLeftBorderDistance;
+    sal_uInt16 m_nRightBorderDistance;
 
-    sal_uInt16 nColumnCount;
+    SvxNumType m_nNumberingType;
+    sal_Unicode m_cBulletChar;
 
-    long nLeft, nTop;
-    long nWidth, nHeight;
-    long nLeftMargin, nRightMargin;
+    sal_uInt16 m_nColumnCount;
 
-    SvxCSS1LengthType eLeftType, eTopType;
-    SvxCSS1LengthType eWidthType, eHeightType;
+    long m_nLeft, m_nTop;
+    long m_nWidth, m_nHeight;
+    long m_nLeftMargin, m_nRightMargin;
 
-    SvxCSS1SizeType eSizeType;
+    SvxCSS1LengthType m_eLeftType, m_eTopType;
+    SvxCSS1LengthType m_eWidthType, m_eHeightType;
 
-    SvxCSS1PageBreak ePageBreakBefore;
-    SvxCSS1PageBreak ePageBreakAfter;
+    SvxCSS1SizeType m_eSizeType;
+
+    SvxCSS1PageBreak m_ePageBreakBefore;
+    SvxCSS1PageBreak m_ePageBreakAfter;
 
     SvxCSS1PropertyInfo();
     SvxCSS1PropertyInfo( const SvxCSS1PropertyInfo& rProp );
@@ -154,10 +164,6 @@ class SvxCSS1MapEntry
     SvxCSS1PropertyInfo aPropInfo;
 
 public:
-    SvxCSS1MapEntry( SfxItemPool& rPool, const sal_uInt16 *pWhichMap ) :
-        aItemSet( rPool, pWhichMap )
-    {}
-
     SvxCSS1MapEntry( const SfxItemSet& rItemSet,
                      const SvxCSS1PropertyInfo& rProp );
 
@@ -168,17 +174,16 @@ public:
     SvxCSS1PropertyInfo& GetPropertyInfo() { return aPropInfo; }
 };
 
-// Diese Klasse bereitet den Output des CSS1-Parsers auf,
-// indem die CSS1-Properties in SvxItem(Set)s umgewandelt werden.
-// Ausserdem werden die Selektoren samt zugehoeriger Item-Set
-// gespeichert.
-// Ein abgeleiteter Parser kann dies fuer einzelne Selektoren unterdruecken,
-// indem er die Methode StyleParsed ueberlaed.
+// Class is processing the CSS1-Parser output by converting the CSS1 properties
+// into SvxItem(Set). Also the selectors together with associated ItemSet are
+// saved.
+// A derived parser can suppress this for certain selectors by overriding
+// the method StyleParsed.
 
 class SvxCSS1Parser : public CSS1Parser
 {
-    typedef ::std::vector<std::unique_ptr<CSS1Selector>> CSS1Selectors;
-    typedef ::std::map<OUString, std::unique_ptr<SvxCSS1MapEntry>> CSS1Map;
+    typedef std::vector<std::unique_ptr<CSS1Selector>> CSS1Selectors;
+    typedef std::map<OUString, std::unique_ptr<SvxCSS1MapEntry>> CSS1Map;
     CSS1Selectors m_Selectors;   // List of "open" Selectors
 
     CSS1Map m_Ids;
@@ -186,26 +191,19 @@ class SvxCSS1Parser : public CSS1Parser
     CSS1Map m_Pages;
     CSS1Map m_Tags;
 
-    OUString sBaseURL;
+    OUString const sBaseURL;
 
-    SfxItemSet *pSheetItemSet;  // der Item-Set fuer Style-Sheets
-    SfxItemSet *pItemSet;       // der aktuelle Item-Set
-    SvxCSS1MapEntry *pSearchEntry;
+    std::unique_ptr<SfxItemSet> pSheetItemSet;  // item set of Style-Sheet
+    SfxItemSet *pItemSet;       // current item set
 
-    SvxCSS1PropertyInfo *pSheetPropInfo;
+    std::unique_ptr<SvxCSS1PropertyInfo> pSheetPropInfo;
     SvxCSS1PropertyInfo *pPropInfo;
 
-    sal_uInt16 nMinFixLineSpace;    // Mindest-Abstand fuer festen Zeilenabstand
+    static constexpr sal_uInt16 gnMinFixLineSpace = MM50/2;    // minimum spacing for fixed line spacing
 
     rtl_TextEncoding    eDfltEnc;
-    sal_uInt16          nScriptFlags;
-
     bool bIgnoreFontFamily;
-
-    void ParseProperty( const OUString& rProperty,
-                        const CSS1Expression *pExpr );
-
-    std::vector<sal_uInt16> aWhichMap;        // Which-Map des Parser
+    std::vector<sal_uInt16> aWhichMap;        // Which-Map of Parser
 
     using CSS1Parser::ParseStyleOption;
 
@@ -213,13 +211,11 @@ protected:
 
     using CSS1Parser::ParseStyleSheet;
 
-    // Diese Methode wird fuer jeden Selektor mit dem zugehoerigen
-    // Item-Set aufgerufen. Fuer einen Selektor koennen mehrere
-    // Aufrufe erfolgen.
-    // wenn true zuruckgegeben wird, wird der Item-Set bzw. der
-    // Selektor nicht mehr gespeichert!
-    // Der ItemSet darf entsprechend modifiziert werden!
-    // Die Implementierung dieser Methode gibt false zurueck.
+    // This method is called for every selector with according item set.
+    // For a selector multiple calls are possible.
+    // If true is returned then the item set resp. the selector isn't saved anymore!
+    // The ItemSet may be modified accordingly!
+    // The implementation returns false.
     virtual void StyleParsed( const CSS1Selector *pSelector,
                               SfxItemSet& rItemSet,
                               SvxCSS1PropertyInfo& rPropInfo );
@@ -228,42 +224,39 @@ protected:
     /// the content of the aItemSet will be copied into all recently
     /// created Styles.
     /// Derived classes should not override this method!
-    virtual bool SelectorParsed( CSS1Selector *pSelector, bool bFirst ) override;
+    virtual void SelectorParsed( std::unique_ptr<CSS1Selector> pSelector, bool bFirst ) override;
 
     /// Will be called for every parsed Property.  Adds the item to the
     /// pItemSet.
     /// Derived classes should not override this method!
-    virtual bool DeclarationParsed( const OUString& rProperty,
-                                    const CSS1Expression *pExpr ) override;
+    virtual void DeclarationParsed( const OUString& rProperty,
+                                    std::unique_ptr<CSS1Expression> pExpr ) override;
 
 public:
 
     SvxCSS1Parser( SfxItemPool& rPool,
                     const OUString& rBaseURL,
-                   sal_uInt16 nMinFixLineSp,
-                   sal_uInt16 *pWhichIds=nullptr, sal_uInt16 nWhichIds=0 );
-    virtual ~SvxCSS1Parser();
+                   sal_uInt16 const *pWhichIds, sal_uInt16 nWhichIds );
+    virtual ~SvxCSS1Parser() override;
 
     bool IsIgnoreFontFamily() const { return bIgnoreFontFamily; }
     void SetIgnoreFontFamily( bool bSet ) { bIgnoreFontFamily = bSet; }
 
-    // Parsen eines Style-Sheets. Fuer jeden gefundenen Selektor
-    // wird StyleParsed mit dem entsprechenem Item-Set aufgerufen
+    // Parse a style sheet. For every found selector a StyleParsed with
+    // according item set is called.
     virtual bool ParseStyleSheet( const OUString& rIn );
 
-    // Parsen einer Style-Option. Hier wird einfach nur der Item-Set
-    // gefuellt.
+    // Parse style option. Here only the item set is filled.
     void ParseStyleOption( const OUString& rIn, SfxItemSet& rItemSet,
                            SvxCSS1PropertyInfo& rPropInfo );
 
-    // Umwandeln eines Strings in den Wert eines Enums
+    // convert a string to enum value
     static bool GetEnum( const CSS1PropertyEnum *pPropTable,
                          const OUString& rValue, sal_uInt16 &rEnum );
 
-    // Pixel in Twips wandeln
     static void PixelToTwip( long &nWidth, long &nHeight );
 
-    // Die Font-Hoehe fuer eine bestimmte Font-Groesse (0-6) ermitteln
+    // determine the font height of a certain font size (0-6)
     virtual sal_uInt32 GetFontHeight( sal_uInt16 nSize ) const;
 
     virtual const FontList *GetFontList() const;
@@ -300,14 +293,10 @@ public:
                       SvxCSS1PropertyInfo& rTargetInfo,
                       bool bSmart );
 
-    sal_uInt16 GetMinFixLineSpace() const { return nMinFixLineSpace; }
+    static sal_uInt16 GetMinFixLineSpace() { return gnMinFixLineSpace; }
 
     virtual void SetDfltEncoding( rtl_TextEncoding eEnc );
     rtl_TextEncoding GetDfltEncoding() const { return eDfltEnc; }
-
-    bool IsSetWesternProps() const { return (nScriptFlags & CSS1_SCRIPT_WESTERN) != 0; }
-    bool IsSetCJKProps() const { return (nScriptFlags & CSS1_SCRIPT_CJK) != 0; }
-    bool IsSetCTLProps() const { return (nScriptFlags & CSS1_SCRIPT_CTL) != 0; }
 
     const OUString& GetBaseURL() const { return sBaseURL;}
 

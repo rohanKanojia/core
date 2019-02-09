@@ -25,15 +25,15 @@
 #include <svx/svddrgmt.hxx>
 #include <svx/svdtrans.hxx>
 #include <svx/obj3d.hxx>
-#include <svx/polysc3d.hxx>
 #include <svx/e3dundo.hxx>
-#include <svx/dialogs.hrc>
+#include <svx/strings.hrc>
 #include <svx/sdr/overlay/overlaypolypolygon.hxx>
 #include <svx/sdr/overlay/overlaymanager.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
 #include <svx/sdr/contact/viewcontactofe3dscene.hxx>
 #include <drawinglayer/geometry/viewinformation3d.hxx>
 #include <svx/e3dsceneupdater.hxx>
+#include <o3tl/make_unique.hxx>
 
 
 E3dDragMethod::E3dDragMethod (
@@ -74,16 +74,15 @@ E3dDragMethod::E3dDragMethod (
         if(pE3dObj)
         {
             // fill new interaction unit
-            E3dDragMethodUnit aNewUnit;
-            aNewUnit.mp3DObj = pE3dObj;
+            E3dDragMethodUnit aNewUnit(*pE3dObj);
 
             // get transformations
             aNewUnit.maInitTransform = aNewUnit.maTransform = pE3dObj->GetTransform();
 
-            if(pE3dObj->GetParentObj())
+            if(nullptr != pE3dObj->getParentE3dSceneFromE3dObject())
             {
                 // get transform between object and world, normally scene transform
-                aNewUnit.maInvDisplayTransform = aNewUnit.maDisplayTransform = pE3dObj->GetParentObj()->GetFullTransform();
+                aNewUnit.maInvDisplayTransform = aNewUnit.maDisplayTransform = pE3dObj->getParentE3dSceneFromE3dObject()->GetFullTransform();
                 aNewUnit.maInvDisplayTransform.invert();
             }
 
@@ -112,10 +111,10 @@ void E3dDragMethod::TakeSdrDragComment(OUString& /*rStr*/) const
 
 bool E3dDragMethod::BeginSdrDrag()
 {
-    if(E3DDRAG_CONSTR_Z == meConstraint)
+    if(E3dDragConstraint::Z == meConstraint)
     {
         const sal_uInt32 nCnt(maGrp.size());
-        DragStat().Ref1() = maFullBound.Center();
+        DragStat().SetRef1( maFullBound.Center() );
 
         for(sal_uInt32 nOb(0); nOb < nCnt; nOb++)
         {
@@ -152,19 +151,21 @@ bool E3dDragMethod::EndSdrDrag(bool /*bCopy*/)
     {
         const bool bUndo = getSdrDragView().IsUndoEnabled();
         if( bUndo )
-            getSdrDragView().BegUndo(SVX_RESSTR(RID_SVX_3D_UNDO_ROTATE));
+            getSdrDragView().BegUndo(SvxResId(RID_SVX_3D_UNDO_ROTATE));
         sal_uInt32 nOb(0);
 
         for(nOb=0;nOb<nCnt;nOb++)
         {
             E3dDragMethodUnit& rCandidate = maGrp[nOb];
-            E3DModifySceneSnapRectUpdater aUpdater(rCandidate.mp3DObj);
-            rCandidate.mp3DObj->SetTransform(rCandidate.maTransform);
+            E3DModifySceneSnapRectUpdater aUpdater(&rCandidate.mr3DObj);
+            rCandidate.mr3DObj.SetTransform(rCandidate.maTransform);
             if( bUndo )
             {
-                getSdrDragView().AddUndo(new E3dRotateUndoAction(rCandidate.mp3DObj->GetModel(),
-                    rCandidate.mp3DObj, rCandidate.maInitTransform,
-                    rCandidate.maTransform));
+                getSdrDragView().AddUndo(
+                    o3tl::make_unique<E3dRotateUndoAction>(
+                        rCandidate.mr3DObj,
+                        rCandidate.maInitTransform,
+                        rCandidate.maTransform));
             }
         }
         if( bUndo )
@@ -186,8 +187,8 @@ void E3dDragMethod::CancelSdrDrag()
             {
                 // Restore transformation
                 E3dDragMethodUnit& rCandidate = maGrp[nOb];
-                E3DModifySceneSnapRectUpdater aUpdater(rCandidate.mp3DObj);
-                rCandidate.mp3DObj->SetTransform(rCandidate.maInitTransform);
+                E3DModifySceneSnapRectUpdater aUpdater(&rCandidate.mr3DObj);
+                rCandidate.mr3DObj.SetTransform(rCandidate.maInitTransform);
             }
         }
     }
@@ -208,7 +209,9 @@ void E3dDragMethod::MoveSdrDrag(const Point& /*rPnt*/)
 // Draw the wire frame model
 
 // for migration from XOR to overlay
-void E3dDragMethod::CreateOverlayGeometry(sdr::overlay::OverlayManager& rOverlayManager)
+void E3dDragMethod::CreateOverlayGeometry(
+    sdr::overlay::OverlayManager& rOverlayManager,
+    const sdr::contact::ObjectContact& rObjectContact)
 {
     const sal_uInt32 nCnt(maGrp.size());
     basegfx::B2DPolyPolygon aResult;
@@ -225,28 +228,37 @@ void E3dDragMethod::CreateOverlayGeometry(sdr::overlay::OverlayManager& rOverlay
 
             if(nPlyCnt)
             {
-                const sdr::contact::ViewContactOfE3dScene& rVCScene = static_cast< sdr::contact::ViewContactOfE3dScene& >(rCandidate.mp3DObj->GetScene()->GetViewContact());
-                const drawinglayer::geometry::ViewInformation3D aViewInfo3D(rVCScene.getViewInformation3D());
-                const basegfx::B3DHomMatrix aWorldToView(aViewInfo3D.getDeviceToView() * aViewInfo3D.getProjection() * aViewInfo3D.getOrientation());
-                const basegfx::B3DHomMatrix aTransform(aWorldToView * rCandidate.maDisplayTransform);
+                const E3dScene* pScene(rCandidate.mr3DObj.getRootE3dSceneFromE3dObject());
 
-                // transform to relative scene coordinates
-                basegfx::B2DPolyPolygon aPolyPolygon(basegfx::tools::createB2DPolyPolygonFromB3DPolyPolygon(aCandidate, aTransform));
+                if(nullptr != pScene)
+                {
+                    const sdr::contact::ViewContactOfE3dScene& rVCScene = static_cast< sdr::contact::ViewContactOfE3dScene& >(pScene->GetViewContact());
+                    const drawinglayer::geometry::ViewInformation3D& aViewInfo3D(rVCScene.getViewInformation3D());
+                    const basegfx::B3DHomMatrix aWorldToView(aViewInfo3D.getDeviceToView() * aViewInfo3D.getProjection() * aViewInfo3D.getOrientation());
+                    const basegfx::B3DHomMatrix aTransform(aWorldToView * rCandidate.maDisplayTransform);
 
-                // transform to 2D view coordinates
-                aPolyPolygon.transform(rVCScene.getObjectTransformation());
+                    // transform to relative scene coordinates
+                    basegfx::B2DPolyPolygon aPolyPolygon(basegfx::utils::createB2DPolyPolygonFromB3DPolyPolygon(aCandidate, aTransform));
 
-                aResult.append(aPolyPolygon);
+                    // transform to 2D view coordinates
+                    aPolyPolygon.transform(rVCScene.getObjectTransformation());
+
+                    aResult.append(aPolyPolygon);
+                }
             }
         }
     }
 
     if(aResult.count())
     {
-        sdr::overlay::OverlayPolyPolygonStripedAndFilled* pNew = new sdr::overlay::OverlayPolyPolygonStripedAndFilled(
-            aResult);
-        rOverlayManager.add(*pNew);
-        addToOverlayObjectList(*pNew);
+        std::unique_ptr<sdr::overlay::OverlayPolyPolygonStripedAndFilled> pNew(
+            new sdr::overlay::OverlayPolyPolygonStripedAndFilled(
+                aResult));
+
+        insertNewlyCreatedOverlayObjectForSdrDragMethod(
+            std::move(pNew),
+            rObjectContact,
+            rOverlayManager);
     }
 }
 
@@ -262,17 +274,17 @@ E3dDragRotate::E3dDragRotate(SdrDragView &_rView,
 
     if(nCnt)
     {
-        const E3dScene *pScene = maGrp[0].mp3DObj->GetScene();
+        const E3dScene* pScene(maGrp[0].mr3DObj.getRootE3dSceneFromE3dObject());
 
-        if(pScene)
+        if(nullptr != pScene)
         {
             const sdr::contact::ViewContactOfE3dScene& rVCScene = static_cast< sdr::contact::ViewContactOfE3dScene& >(pScene->GetViewContact());
-            const drawinglayer::geometry::ViewInformation3D aViewInfo3D(rVCScene.getViewInformation3D());
+            const drawinglayer::geometry::ViewInformation3D& aViewInfo3D(rVCScene.getViewInformation3D());
 
             for(sal_uInt32 nOb(0); nOb < nCnt; nOb++)
             {
                 E3dDragMethodUnit& rCandidate = maGrp[nOb];
-                basegfx::B3DPoint aObjCenter = rCandidate.mp3DObj->GetBoundVolume().getCenter();
+                basegfx::B3DPoint aObjCenter = rCandidate.mr3DObj.GetBoundVolume().getCenter();
                 const basegfx::B3DHomMatrix aTransform(aViewInfo3D.getOrientation() * rCandidate.maDisplayTransform * rCandidate.maInitTransform);
 
                 aObjCenter = aTransform * aObjCenter;
@@ -282,7 +294,7 @@ E3dDragRotate::E3dDragRotate(SdrDragView &_rView,
             // Divide by the number
             if(nCnt > 1)
             {
-                maGlobalCenter /= (double)nCnt;
+                maGlobalCenter /= static_cast<double>(nCnt);
             }
 
             // get rotate center and transform to 3D eye coordinates
@@ -334,11 +346,11 @@ void E3dDragRotate::MoveSdrDrag(const Point& rPnt)
             double fWAngle, fHAngle;
             E3dDragMethodUnit& rCandidate = maGrp[nOb];
 
-            if(E3DDRAG_CONSTR_Z == meConstraint)
+            if(E3dDragConstraint::Z == meConstraint)
             {
-                fWAngle = NormAngle360(GetAngle(rPnt - DragStat().GetRef1()) -
+                fWAngle = NormAngle36000(GetAngle(rPnt - DragStat().GetRef1()) -
                     rCandidate.mnStartAngle) - rCandidate.mnLastAngle;
-                rCandidate.mnLastAngle = (long)fWAngle + rCandidate.mnLastAngle;
+                rCandidate.mnLastAngle = static_cast<long>(fWAngle) + rCandidate.mnLastAngle;
                 fWAngle /= 100.0;
                 fHAngle = 0.0;
             }
@@ -346,10 +358,10 @@ void E3dDragRotate::MoveSdrDrag(const Point& rPnt)
             {
                 if ((maFullBound.GetWidth() == 0) || (maFullBound.GetHeight() == 0))
                     throw o3tl::divide_by_zero();
-                fWAngle = 90.0 * (double)(rPnt.X() - maLastPos.X())
-                    / (double)maFullBound.GetWidth();
-                fHAngle = 90.0 * (double)(rPnt.Y() - maLastPos.Y())
-                    / (double)maFullBound.GetHeight();
+                fWAngle = 90.0 * static_cast<double>(rPnt.X() - maLastPos.X())
+                    / static_cast<double>(maFullBound.GetWidth());
+                fHAngle = 90.0 * static_cast<double>(rPnt.Y() - maLastPos.Y())
+                    / static_cast<double>(maFullBound.GetHeight());
             }
             long nSnap = 0;
 
@@ -358,62 +370,67 @@ void E3dDragRotate::MoveSdrDrag(const Point& rPnt)
 
             if(nSnap != 0)
             {
-                fWAngle = (double)(((long) fWAngle + nSnap/2) / nSnap * nSnap);
-                fHAngle = (double)(((long) fHAngle + nSnap/2) / nSnap * nSnap);
+                fWAngle = static_cast<double>((static_cast<long>(fWAngle) + nSnap/2) / nSnap * nSnap);
+                fHAngle = static_cast<double>((static_cast<long>(fHAngle) + nSnap/2) / nSnap * nSnap);
             }
 
             // to radians
-            fWAngle *= F_PI180;
-            fHAngle *= F_PI180;
+            fWAngle = basegfx::deg2rad(fWAngle);
+            fHAngle = basegfx::deg2rad(fHAngle);
 
             // Determine transformation
             basegfx::B3DHomMatrix aRotMat;
-            if(E3DDRAG_CONSTR_Y & meConstraint)
+            if(E3dDragConstraint::Y & meConstraint)
             {
                 if(nModifier & KEY_MOD2)
                     aRotMat.rotate(0.0, 0.0, fWAngle);
                 else
                     aRotMat.rotate(0.0, fWAngle, 0.0);
             }
-            else if(E3DDRAG_CONSTR_Z & meConstraint)
+            else if(E3dDragConstraint::Z & meConstraint)
             {
                 if(nModifier & KEY_MOD2)
                     aRotMat.rotate(0.0, fWAngle, 0.0);
                 else
                     aRotMat.rotate(0.0, 0.0, fWAngle);
             }
-            if(E3DDRAG_CONSTR_X & meConstraint)
+            if(E3dDragConstraint::X & meConstraint)
             {
                 aRotMat.rotate(fHAngle, 0.0, 0.0);
             }
 
-            // Transformation in eye coordinates, there rotate then and back
-            const sdr::contact::ViewContactOfE3dScene& rVCScene = static_cast< sdr::contact::ViewContactOfE3dScene& >(rCandidate.mp3DObj->GetScene()->GetViewContact());
-            const drawinglayer::geometry::ViewInformation3D aViewInfo3D(rVCScene.getViewInformation3D());
-            basegfx::B3DHomMatrix aInverseOrientation(aViewInfo3D.getOrientation());
-            aInverseOrientation.invert();
+            const E3dScene* pScene(rCandidate.mr3DObj.getRootE3dSceneFromE3dObject());
 
-            basegfx::B3DHomMatrix aTransMat(rCandidate.maDisplayTransform);
-            aTransMat *= aViewInfo3D.getOrientation();
-            aTransMat.translate(-maGlobalCenter.getX(), -maGlobalCenter.getY(), -maGlobalCenter.getZ());
-            aTransMat *= aRotMat;
-            aTransMat.translate(maGlobalCenter.getX(), maGlobalCenter.getY(), maGlobalCenter.getZ());
-            aTransMat *= aInverseOrientation;
-            aTransMat *= rCandidate.maInvDisplayTransform;
-
-            // ...and apply
-            rCandidate.maTransform *= aTransMat;
-
-            if(mbMoveFull)
+            if(nullptr != pScene)
             {
-                E3DModifySceneSnapRectUpdater aUpdater(rCandidate.mp3DObj);
-                rCandidate.mp3DObj->SetTransform(rCandidate.maTransform);
-            }
-            else
-            {
-                Hide();
-                rCandidate.maWireframePoly.transform(aTransMat);
-                Show();
+                // Transformation in eye coordinates, there rotate then and back
+                const sdr::contact::ViewContactOfE3dScene& rVCScene = static_cast< sdr::contact::ViewContactOfE3dScene& >(pScene->GetViewContact());
+                const drawinglayer::geometry::ViewInformation3D& aViewInfo3D(rVCScene.getViewInformation3D());
+                basegfx::B3DHomMatrix aInverseOrientation(aViewInfo3D.getOrientation());
+                aInverseOrientation.invert();
+
+                basegfx::B3DHomMatrix aTransMat(rCandidate.maDisplayTransform);
+                aTransMat *= aViewInfo3D.getOrientation();
+                aTransMat.translate(-maGlobalCenter.getX(), -maGlobalCenter.getY(), -maGlobalCenter.getZ());
+                aTransMat *= aRotMat;
+                aTransMat.translate(maGlobalCenter.getX(), maGlobalCenter.getY(), maGlobalCenter.getZ());
+                aTransMat *= aInverseOrientation;
+                aTransMat *= rCandidate.maInvDisplayTransform;
+
+                // ...and apply
+                rCandidate.maTransform *= aTransMat;
+
+                if(mbMoveFull)
+                {
+                    E3DModifySceneSnapRectUpdater aUpdater(&rCandidate.mr3DObj);
+                    rCandidate.mr3DObj.SetTransform(rCandidate.maTransform);
+                }
+                else
+                {
+                    Hide();
+                    rCandidate.maWireframePoly.transform(aTransMat);
+                    Show();
+                }
             }
         }
         maLastPos = rPnt;
@@ -441,39 +458,39 @@ E3dDragMove::E3dDragMove(SdrDragView &_rView,
 {
     switch(meWhatDragHdl)
     {
-        case HDL_LEFT:
+        case SdrHdlKind::Left:
             maScaleFixPos = maFullBound.RightCenter();
             break;
-        case HDL_RIGHT:
+        case SdrHdlKind::Right:
             maScaleFixPos = maFullBound.LeftCenter();
             break;
-        case HDL_UPPER:
+        case SdrHdlKind::Upper:
             maScaleFixPos = maFullBound.BottomCenter();
             break;
-        case HDL_LOWER:
+        case SdrHdlKind::Lower:
             maScaleFixPos = maFullBound.TopCenter();
             break;
-        case HDL_UPLFT:
+        case SdrHdlKind::UpperLeft:
             maScaleFixPos = maFullBound.BottomRight();
             break;
-        case HDL_UPRGT:
+        case SdrHdlKind::UpperRight:
             maScaleFixPos = maFullBound.BottomLeft();
             break;
-        case HDL_LWLFT:
+        case SdrHdlKind::LowerLeft:
             maScaleFixPos = maFullBound.TopRight();
             break;
-        case HDL_LWRGT:
+        case SdrHdlKind::LowerRight:
             maScaleFixPos = maFullBound.TopLeft();
             break;
         default:
-            // Moving the object, HDL_MOVE
+            // Moving the object, SdrHdlKind::Move
             break;
     }
 
     // Override when IsResizeAtCenter()
     if(getSdrDragView().IsResizeAtCenter())
     {
-        meWhatDragHdl = HDL_USER;
+        meWhatDragHdl = SdrHdlKind::User;
         maScaleFixPos = maFullBound.Center();
     }
 }
@@ -487,7 +504,7 @@ void E3dDragMove::MoveSdrDrag(const Point& rPnt)
 
     if(DragStat().CheckMinMoved(rPnt))
     {
-        if(HDL_MOVE == meWhatDragHdl)
+        if(SdrHdlKind::Move == meWhatDragHdl)
         {
             // Translation
             // Determine the motion vector
@@ -505,64 +522,69 @@ void E3dDragMove::MoveSdrDrag(const Point& rPnt)
             for(sal_uInt32 nOb(0); nOb < nCnt; nOb++)
             {
                 E3dDragMethodUnit& rCandidate = maGrp[nOb];
-                const sdr::contact::ViewContactOfE3dScene& rVCScene = static_cast< sdr::contact::ViewContactOfE3dScene& >(rCandidate.mp3DObj->GetScene()->GetViewContact());
-                const drawinglayer::geometry::ViewInformation3D aViewInfo3D(rVCScene.getViewInformation3D());
+                const E3dScene* pScene(rCandidate.mr3DObj.getRootE3dSceneFromE3dObject());
 
-                // move coor from 2d world to 3d Eye
-                basegfx::B2DPoint aGlobalMoveHead2D((double)(rPnt.X() - maLastPos.X()), (double)(rPnt.Y() - maLastPos.Y()));
-                basegfx::B2DPoint aGlobalMoveTail2D(0.0, 0.0);
-                basegfx::B2DHomMatrix aInverseSceneTransform(rVCScene.getObjectTransformation());
-
-                aInverseSceneTransform.invert();
-                aGlobalMoveHead2D = aInverseSceneTransform * aGlobalMoveHead2D;
-                aGlobalMoveTail2D = aInverseSceneTransform * aGlobalMoveTail2D;
-
-                basegfx::B3DPoint aMoveHead3D(aGlobalMoveHead2D.getX(), aGlobalMoveHead2D.getY(), 0.5);
-                basegfx::B3DPoint aMoveTail3D(aGlobalMoveTail2D.getX(), aGlobalMoveTail2D.getY(), 0.5);
-                basegfx::B3DHomMatrix aInverseViewToEye(aViewInfo3D.getDeviceToView() * aViewInfo3D.getProjection());
-                aInverseViewToEye.invert();
-
-                aMoveHead3D = aInverseViewToEye * aMoveHead3D;
-                aMoveTail3D = aInverseViewToEye * aMoveTail3D;
-
-                // eventually switch movement from XY to XZ plane
-                if(nModifier & KEY_MOD2)
+                if(nullptr != pScene)
                 {
-                    double fZwi = aMoveHead3D.getY();
-                    aMoveHead3D.setY(aMoveHead3D.getZ());
-                    aMoveHead3D.setZ(fZwi);
+                    const sdr::contact::ViewContactOfE3dScene& rVCScene = static_cast< sdr::contact::ViewContactOfE3dScene& >(pScene->GetViewContact());
+                    const drawinglayer::geometry::ViewInformation3D& aViewInfo3D(rVCScene.getViewInformation3D());
 
-                    fZwi = aMoveTail3D.getY();
-                    aMoveTail3D.setY(aMoveTail3D.getZ());
-                    aMoveTail3D.setZ(fZwi);
-                }
+                    // move coor from 2d world to 3d Eye
+                    basegfx::B2DPoint aGlobalMoveHead2D(static_cast<double>(rPnt.X() - maLastPos.X()), static_cast<double>(rPnt.Y() - maLastPos.Y()));
+                    basegfx::B2DPoint aGlobalMoveTail2D(0.0, 0.0);
+                    basegfx::B2DHomMatrix aInverseSceneTransform(rVCScene.getObjectTransformation());
 
-                // Motion vector from eye coordinates to parent coordinates
-                basegfx::B3DHomMatrix aInverseOrientation(aViewInfo3D.getOrientation());
-                aInverseOrientation.invert();
-                basegfx::B3DHomMatrix aCompleteTrans(rCandidate.maInvDisplayTransform * aInverseOrientation);
+                    aInverseSceneTransform.invert();
+                    aGlobalMoveHead2D = aInverseSceneTransform * aGlobalMoveHead2D;
+                    aGlobalMoveTail2D = aInverseSceneTransform * aGlobalMoveTail2D;
 
-                aMoveHead3D = aCompleteTrans * aMoveHead3D;
-                aMoveTail3D = aCompleteTrans* aMoveTail3D;
+                    basegfx::B3DPoint aMoveHead3D(aGlobalMoveHead2D.getX(), aGlobalMoveHead2D.getY(), 0.5);
+                    basegfx::B3DPoint aMoveTail3D(aGlobalMoveTail2D.getX(), aGlobalMoveTail2D.getY(), 0.5);
+                    basegfx::B3DHomMatrix aInverseViewToEye(aViewInfo3D.getDeviceToView() * aViewInfo3D.getProjection());
+                    aInverseViewToEye.invert();
 
-                // build transformation
-                basegfx::B3DHomMatrix aTransMat;
-                basegfx::B3DPoint aTranslate(aMoveHead3D - aMoveTail3D);
-                aTransMat.translate(aTranslate.getX(), aTranslate.getY(), aTranslate.getZ());
+                    aMoveHead3D = aInverseViewToEye * aMoveHead3D;
+                    aMoveTail3D = aInverseViewToEye * aMoveTail3D;
 
-                // ...and apply
-                rCandidate.maTransform *= aTransMat;
+                    // eventually switch movement from XY to XZ plane
+                    if(nModifier & KEY_MOD2)
+                    {
+                        double fZwi = aMoveHead3D.getY();
+                        aMoveHead3D.setY(aMoveHead3D.getZ());
+                        aMoveHead3D.setZ(fZwi);
 
-                if(mbMoveFull)
-                {
-                    E3DModifySceneSnapRectUpdater aUpdater(rCandidate.mp3DObj);
-                    rCandidate.mp3DObj->SetTransform(rCandidate.maTransform);
-                }
-                else
-                {
-                    Hide();
-                    rCandidate.maWireframePoly.transform(aTransMat);
-                    Show();
+                        fZwi = aMoveTail3D.getY();
+                        aMoveTail3D.setY(aMoveTail3D.getZ());
+                        aMoveTail3D.setZ(fZwi);
+                    }
+
+                    // Motion vector from eye coordinates to parent coordinates
+                    basegfx::B3DHomMatrix aInverseOrientation(aViewInfo3D.getOrientation());
+                    aInverseOrientation.invert();
+                    basegfx::B3DHomMatrix aCompleteTrans(rCandidate.maInvDisplayTransform * aInverseOrientation);
+
+                    aMoveHead3D = aCompleteTrans * aMoveHead3D;
+                    aMoveTail3D = aCompleteTrans* aMoveTail3D;
+
+                    // build transformation
+                    basegfx::B3DHomMatrix aTransMat;
+                    basegfx::B3DPoint aTranslate(aMoveHead3D - aMoveTail3D);
+                    aTransMat.translate(aTranslate.getX(), aTranslate.getY(), aTranslate.getZ());
+
+                    // ...and apply
+                    rCandidate.maTransform *= aTransMat;
+
+                    if(mbMoveFull)
+                    {
+                        E3DModifySceneSnapRectUpdater aUpdater(&rCandidate.mr3DObj);
+                        rCandidate.mr3DObj.SetTransform(rCandidate.maTransform);
+                    }
+                    else
+                    {
+                        Hide();
+                        rCandidate.maWireframePoly.transform(aTransMat);
+                        Show();
+                    }
                 }
             }
         }
@@ -576,114 +598,118 @@ void E3dDragMove::MoveSdrDrag(const Point& rPnt)
             for(sal_uInt32 nOb(0); nOb < nCnt; nOb++)
             {
                 E3dDragMethodUnit& rCandidate = maGrp[nOb];
-                const basegfx::B3DPoint aObjectCenter(rCandidate.mp3DObj->GetBoundVolume().getCenter());
+                const basegfx::B3DPoint aObjectCenter(rCandidate.mr3DObj.GetBoundVolume().getCenter());
+                const E3dScene* pScene(rCandidate.mr3DObj.getRootE3dSceneFromE3dObject());
 
-                // transform from 2D world view to 3D eye
-                const sdr::contact::ViewContactOfE3dScene& rVCScene = static_cast< sdr::contact::ViewContactOfE3dScene& >(rCandidate.mp3DObj->GetScene()->GetViewContact());
-                const drawinglayer::geometry::ViewInformation3D aViewInfo3D(rVCScene.getViewInformation3D());
-
-                basegfx::B2DPoint aGlobalScaleStart2D((double)(aStartPos.X()), (double)(aStartPos.Y()));
-                basegfx::B2DPoint aGlobalScaleNext2D((double)(rPnt.X()), (double)(rPnt.Y()));
-                basegfx::B2DPoint aGlobalScaleFixPos2D((double)(maScaleFixPos.X()), (double)(maScaleFixPos.Y()));
-                basegfx::B2DHomMatrix aInverseSceneTransform(rVCScene.getObjectTransformation());
-
-                aInverseSceneTransform.invert();
-                aGlobalScaleStart2D = aInverseSceneTransform * aGlobalScaleStart2D;
-                aGlobalScaleNext2D = aInverseSceneTransform * aGlobalScaleNext2D;
-                aGlobalScaleFixPos2D = aInverseSceneTransform * aGlobalScaleFixPos2D;
-
-                basegfx::B3DPoint aGlobalScaleStart3D(aGlobalScaleStart2D.getX(), aGlobalScaleStart2D.getY(), aObjectCenter.getZ());
-                basegfx::B3DPoint aGlobalScaleNext3D(aGlobalScaleNext2D.getX(), aGlobalScaleNext2D.getY(), aObjectCenter.getZ());
-                basegfx::B3DPoint aGlobalScaleFixPos3D(aGlobalScaleFixPos2D.getX(), aGlobalScaleFixPos2D.getY(), aObjectCenter.getZ());
-                basegfx::B3DHomMatrix aInverseViewToEye(aViewInfo3D.getDeviceToView() * aViewInfo3D.getProjection());
-
-                aInverseViewToEye.invert();
-                basegfx::B3DPoint aScStart(aInverseViewToEye * aGlobalScaleStart3D);
-                basegfx::B3DPoint aScNext(aInverseViewToEye * aGlobalScaleNext3D);
-                basegfx::B3DPoint aScFixPos(aInverseViewToEye * aGlobalScaleFixPos3D);
-
-                // constraints?
-                switch(meWhatDragHdl)
+                if(nullptr != pScene)
                 {
-                    case HDL_LEFT:
-                    case HDL_RIGHT:
-                        // to constrain on X -> Y equal
-                        aScNext.setY(aScFixPos.getY());
-                        break;
-                    case HDL_UPPER:
-                    case HDL_LOWER:
-                        // constrain to auf Y -> X equal
-                        aScNext.setX(aScFixPos.getX());
-                        break;
-                    default:
-                        break;
-                }
+                    // transform from 2D world view to 3D eye
+                    const sdr::contact::ViewContactOfE3dScene& rVCScene = static_cast< sdr::contact::ViewContactOfE3dScene& >(pScene->GetViewContact());
+                    const drawinglayer::geometry::ViewInformation3D& aViewInfo3D(rVCScene.getViewInformation3D());
 
-                // get scale vector in eye coordinates
-                basegfx::B3DPoint aScaleVec(aScStart - aScFixPos);
-                aScaleVec.setZ(1.0);
+                    basegfx::B2DPoint aGlobalScaleStart2D(static_cast<double>(aStartPos.X()), static_cast<double>(aStartPos.Y()));
+                    basegfx::B2DPoint aGlobalScaleNext2D(static_cast<double>(rPnt.X()), static_cast<double>(rPnt.Y()));
+                    basegfx::B2DPoint aGlobalScaleFixPos2D(static_cast<double>(maScaleFixPos.X()), static_cast<double>(maScaleFixPos.Y()));
+                    basegfx::B2DHomMatrix aInverseSceneTransform(rVCScene.getObjectTransformation());
 
-                if(aScaleVec.getX() != 0.0)
-                {
-                    aScaleVec.setX((aScNext.getX() - aScFixPos.getX()) / aScaleVec.getX());
-                }
-                else
-                {
-                    aScaleVec.setX(1.0);
-                }
+                    aInverseSceneTransform.invert();
+                    aGlobalScaleStart2D = aInverseSceneTransform * aGlobalScaleStart2D;
+                    aGlobalScaleNext2D = aInverseSceneTransform * aGlobalScaleNext2D;
+                    aGlobalScaleFixPos2D = aInverseSceneTransform * aGlobalScaleFixPos2D;
 
-                if(aScaleVec.getY() != 0.0)
-                {
-                    aScaleVec.setY((aScNext.getY() - aScFixPos.getY()) / aScaleVec.getY());
-                }
-                else
-                {
-                    aScaleVec.setY(1.0);
-                }
+                    basegfx::B3DPoint aGlobalScaleStart3D(aGlobalScaleStart2D.getX(), aGlobalScaleStart2D.getY(), aObjectCenter.getZ());
+                    basegfx::B3DPoint aGlobalScaleNext3D(aGlobalScaleNext2D.getX(), aGlobalScaleNext2D.getY(), aObjectCenter.getZ());
+                    basegfx::B3DPoint aGlobalScaleFixPos3D(aGlobalScaleFixPos2D.getX(), aGlobalScaleFixPos2D.getY(), aObjectCenter.getZ());
+                    basegfx::B3DHomMatrix aInverseViewToEye(aViewInfo3D.getDeviceToView() * aViewInfo3D.getProjection());
 
-                // SHIFT-key used?
-                if(getSdrDragView().IsOrtho())
-                {
-                    if(fabs(aScaleVec.getX()) > fabs(aScaleVec.getY()))
+                    aInverseViewToEye.invert();
+                    basegfx::B3DPoint aScStart(aInverseViewToEye * aGlobalScaleStart3D);
+                    basegfx::B3DPoint aScNext(aInverseViewToEye * aGlobalScaleNext3D);
+                    basegfx::B3DPoint aScFixPos(aInverseViewToEye * aGlobalScaleFixPos3D);
+
+                    // constraints?
+                    switch(meWhatDragHdl)
                     {
-                        // X is biggest
-                        aScaleVec.setY(aScaleVec.getX());
+                        case SdrHdlKind::Left:
+                        case SdrHdlKind::Right:
+                            // to constrain on X -> Y equal
+                            aScNext.setY(aScFixPos.getY());
+                            break;
+                        case SdrHdlKind::Upper:
+                        case SdrHdlKind::Lower:
+                            // constrain to Y -> X equal
+                            aScNext.setX(aScFixPos.getX());
+                            break;
+                        default:
+                            break;
+                    }
+
+                    // get scale vector in eye coordinates
+                    basegfx::B3DPoint aScaleVec(aScStart - aScFixPos);
+                    aScaleVec.setZ(1.0);
+
+                    if(aScaleVec.getX() != 0.0)
+                    {
+                        aScaleVec.setX((aScNext.getX() - aScFixPos.getX()) / aScaleVec.getX());
                     }
                     else
                     {
-                        // Y is biggest
-                        aScaleVec.setX(aScaleVec.getY());
+                        aScaleVec.setX(1.0);
                     }
-                }
 
-                // build transformation
-                basegfx::B3DHomMatrix aInverseOrientation(aViewInfo3D.getOrientation());
-                aInverseOrientation.invert();
+                    if(aScaleVec.getY() != 0.0)
+                    {
+                        aScaleVec.setY((aScNext.getY() - aScFixPos.getY()) / aScaleVec.getY());
+                    }
+                    else
+                    {
+                        aScaleVec.setY(1.0);
+                    }
 
-                basegfx::B3DHomMatrix aNewTrans = rCandidate.maInitTransform;
-                aNewTrans *= rCandidate.maDisplayTransform;
-                aNewTrans *= aViewInfo3D.getOrientation();
-                aNewTrans.translate(-aScFixPos.getX(), -aScFixPos.getY(), -aScFixPos.getZ());
-                aNewTrans.scale(aScaleVec.getX(), aScaleVec.getY(), aScaleVec.getZ());
-                aNewTrans.translate(aScFixPos.getX(), aScFixPos.getY(), aScFixPos.getZ());
-                aNewTrans *= aInverseOrientation;
-                aNewTrans *= rCandidate.maInvDisplayTransform;
+                    // SHIFT-key used?
+                    if(getSdrDragView().IsOrtho())
+                    {
+                        if(fabs(aScaleVec.getX()) > fabs(aScaleVec.getY()))
+                        {
+                            // X is biggest
+                            aScaleVec.setY(aScaleVec.getX());
+                        }
+                        else
+                        {
+                            // Y is biggest
+                            aScaleVec.setX(aScaleVec.getY());
+                        }
+                    }
 
-                // ...and apply
-                rCandidate.maTransform = aNewTrans;
+                    // build transformation
+                    basegfx::B3DHomMatrix aInverseOrientation(aViewInfo3D.getOrientation());
+                    aInverseOrientation.invert();
 
-                if(mbMoveFull)
-                {
-                    E3DModifySceneSnapRectUpdater aUpdater(rCandidate.mp3DObj);
-                    rCandidate.mp3DObj->SetTransform(rCandidate.maTransform);
-                }
-                else
-                {
-                    Hide();
-                    rCandidate.maWireframePoly.clear();
-                    rCandidate.maWireframePoly = rCandidate.mp3DObj->CreateWireframe();
-                    rCandidate.maWireframePoly.transform(rCandidate.maTransform);
-                    Show();
+                    basegfx::B3DHomMatrix aNewTrans = rCandidate.maInitTransform;
+                    aNewTrans *= rCandidate.maDisplayTransform;
+                    aNewTrans *= aViewInfo3D.getOrientation();
+                    aNewTrans.translate(-aScFixPos.getX(), -aScFixPos.getY(), -aScFixPos.getZ());
+                    aNewTrans.scale(aScaleVec.getX(), aScaleVec.getY(), aScaleVec.getZ());
+                    aNewTrans.translate(aScFixPos.getX(), aScFixPos.getY(), aScFixPos.getZ());
+                    aNewTrans *= aInverseOrientation;
+                    aNewTrans *= rCandidate.maInvDisplayTransform;
+
+                    // ...and apply
+                    rCandidate.maTransform = aNewTrans;
+
+                    if(mbMoveFull)
+                    {
+                        E3DModifySceneSnapRectUpdater aUpdater(&rCandidate.mr3DObj);
+                        rCandidate.mr3DObj.SetTransform(rCandidate.maTransform);
+                    }
+                    else
+                    {
+                        Hide();
+                        rCandidate.maWireframePoly.clear();
+                        rCandidate.maWireframePoly = rCandidate.mr3DObj.CreateWireframe();
+                        rCandidate.maWireframePoly.transform(rCandidate.maTransform);
+                        Show();
+                    }
                 }
             }
         }

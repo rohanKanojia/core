@@ -24,10 +24,8 @@ using ::comphelper::PropertyInfo;
 using ::comphelper::MasterPropertySetInfo;
 using ::com::sun::star::uno::Type;
 using ::com::sun::star::uno::Sequence;
-using ::com::sun::star::uno::XInterface;
 using ::com::sun::star::uno::RuntimeException;
 using ::com::sun::star::beans::Property;
-using ::com::sun::star::beans::XPropertySetInfo;
 using ::com::sun::star::beans::UnknownPropertyException;
 
 MasterPropertySetInfo::MasterPropertySetInfo( PropertyInfo const * pMap )
@@ -63,7 +61,6 @@ void MasterPropertySetInfo::add( PropertyInfoHash &rHash, sal_uInt8 nMapId )
 }
 
 Sequence< ::Property > SAL_CALL MasterPropertySetInfo::getProperties()
-    throw(css::uno::RuntimeException, std::exception)
 {
     sal_Int32 nSize = maMap.size();
     if( maProperties.getLength() != nSize )
@@ -71,21 +68,21 @@ Sequence< ::Property > SAL_CALL MasterPropertySetInfo::getProperties()
         maProperties.realloc ( nSize );
         Property* pProperties = maProperties.getArray();
 
-        for (PropertyDataHash::const_iterator aIter(maMap.begin()), aEnd(maMap.end()) ; aIter != aEnd; ++aIter, ++pProperties)
+        for (auto const& elem : maMap)
         {
-            PropertyInfo const * pInfo = (*aIter).second->mpInfo;
+            PropertyInfo const * pInfo = elem.second->mpInfo;
 
             pProperties->Name = pInfo->maName;
             pProperties->Handle = pInfo->mnHandle;
             pProperties->Type = pInfo->maType;
             pProperties->Attributes = pInfo->mnAttributes;
+            ++pProperties;
         }
     }
     return maProperties;
 }
 
 Property SAL_CALL MasterPropertySetInfo::getPropertyByName( const OUString& rName )
-    throw(::UnknownPropertyException, css::uno::RuntimeException, std::exception)
 {
     PropertyDataHash::iterator aIter = maMap.find( rName );
 
@@ -103,7 +100,6 @@ Property SAL_CALL MasterPropertySetInfo::getPropertyByName( const OUString& rNam
 }
 
 sal_Bool SAL_CALL MasterPropertySetInfo::hasPropertyByName( const OUString& rName )
-    throw(css::uno::RuntimeException, std::exception)
 {
     return maMap.find ( rName ) != maMap.end();
 }

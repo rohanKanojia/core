@@ -21,14 +21,14 @@
 #define INCLUDED_VCL_DECOVIEW_HXX
 
 #include <vcl/dllapi.h>
+#include <vcl/outdev.hxx>
 #include <vcl/vclptr.hxx>
-#include <rsc/rsc-vcl-shared-types.hxx>
+#include <vcl/vclenum.hxx>
 #include <o3tl/typed_flags_set.hxx>
 
-class Rectangle;
+namespace tools { class Rectangle; }
 class Point;
 class Color;
-class OutputDevice;
 
 // Flags for DrawSymbol()
 enum class DrawSymbolFlags
@@ -84,8 +84,7 @@ enum class DrawButtonFlags
     Checked                 = 0x0008,
     DontKnow                = 0x0010,
     Mono                    = 0x0020,
-    NoFill                  = 0x0040,
-    Disabled                = 0x0080,
+    Disabled                = 0x0040,
     Highlight               = 0x0100,
     Flat                    = 0x0200,
     NoLeftLightBorder       = 0x1000,
@@ -94,7 +93,7 @@ enum class DrawButtonFlags
 };
 namespace o3tl
 {
-    template<> struct typed_flags<DrawButtonFlags> : is_typed_flags<DrawButtonFlags, 0x73ff> {};
+    template<> struct typed_flags<DrawButtonFlags> : is_typed_flags<DrawButtonFlags, 0x737f> {};
 }
 
 class VCL_DLLPUBLIC DecorationView
@@ -105,17 +104,17 @@ private:
 public:
     DecorationView(OutputDevice* pOutDev);
 
-    void                DrawSymbol( const Rectangle& rRect, SymbolType eType,
+    void                DrawSymbol( const tools::Rectangle& rRect, SymbolType eType,
                                     const Color& rColor, DrawSymbolFlags nStyle = DrawSymbolFlags::NONE );
-    void                DrawFrame( const Rectangle& rRect,
+    void                DrawFrame( const tools::Rectangle& rRect,
                                    const Color& rLeftTopColor,
                                    const Color& rRightBottomColor );
-    void                DrawHighlightFrame( const Rectangle& rRect,
-                                            DrawHighlightFrameStyle nStyle = DrawHighlightFrameStyle::Out );
-    Rectangle           DrawFrame( const Rectangle& rRect, DrawFrameStyle nStyle = DrawFrameStyle::Out, DrawFrameFlags nFlags = DrawFrameFlags::NONE );
-    Rectangle           DrawButton( const Rectangle& rRect, DrawButtonFlags nStyle );
+    void                DrawHighlightFrame( const tools::Rectangle& rRect,
+                                            DrawHighlightFrameStyle nStyle );
+    tools::Rectangle           DrawFrame( const tools::Rectangle& rRect, DrawFrameStyle nStyle = DrawFrameStyle::Out, DrawFrameFlags nFlags = DrawFrameFlags::NONE );
+    tools::Rectangle           DrawButton( const tools::Rectangle& rRect, DrawButtonFlags nStyle );
     void                DrawSeparator( const Point& rStart, const Point& rStop, bool bVertical = true );
-    void                DrawHandle(const Rectangle& rRectangle);
+    void                DrawHandle(const tools::Rectangle& rRectangle);
 };
 
 #endif // INCLUDED_VCL_DECOVIEW_HXX

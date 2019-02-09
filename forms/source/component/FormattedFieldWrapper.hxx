@@ -20,7 +20,7 @@
 #ifndef INCLUDED_FORMS_SOURCE_COMPONENT_FORMATTEDFIELDWRAPPER_HXX
 #define INCLUDED_FORMS_SOURCE_COMPONENT_FORMATTEDFIELDWRAPPER_HXX
 
-#include "FormComponent.hxx"
+#include <FormComponent.hxx>
 #include <cppuhelper/implbase3.hxx>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/util/XCloneable.hpp>
@@ -37,22 +37,19 @@ typedef ::cppu::WeakAggImplHelper3  <   css::io::XPersistObject
                                     ,   css::util::XCloneable
                                     >   OFormattedFieldWrapper_Base;
 
-class OFormattedFieldWrapper : public OFormattedFieldWrapper_Base
+class OFormattedFieldWrapper final : public OFormattedFieldWrapper_Base
 {
     css::uno::Reference< css::uno::XComponentContext> m_xContext;
 
-protected:
     css::uno::Reference< css::uno::XAggregation>      m_xAggregate;
 
     rtl::Reference< OEditModel > m_pEditPart;
     // if we act as formatted this is used to write the EditModel part
     css::uno::Reference< css::io::XPersistObject>     m_xFormattedPart;
 
-private:
     OFormattedFieldWrapper(const css::uno::Reference< css::uno::XComponentContext>& _rxFactory);
 
-protected:
-    virtual ~OFormattedFieldWrapper();
+    virtual ~OFormattedFieldWrapper() override;
 
 public:
     // if we act as formatted, this is the PersistObject interface of our aggregate, used
@@ -63,22 +60,22 @@ public:
 
     // UNO
     DECLARE_UNO3_AGG_DEFAULTS(OFormattedFieldWrapper, OWeakAggObject)
-    virtual css::uno::Any SAL_CALL queryAggregation(const css::uno::Type& _rType) throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL queryAggregation(const css::uno::Type& _rType) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 
     // XPersistObject
-    virtual OUString SAL_CALL getServiceName() throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL write(const css::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream) throw(css::io::IOException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL read(const css::uno::Reference< css::io::XObjectInputStream>& _rxInStream) throw(css::io::IOException, css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getServiceName() override;
+    virtual void SAL_CALL write(const css::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream) override;
+    virtual void SAL_CALL read(const css::uno::Reference< css::io::XObjectInputStream>& _rxInStream) override;
 
     // XCloneable
-    virtual css::uno::Reference< css::util::XCloneable > SAL_CALL createClone(  ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::util::XCloneable > SAL_CALL createClone(  ) override;
 
-protected:
+private:
     /// ensure we're in a defined state, which means a FormattedModel _OR_ an EditModel
     void ensureAggregate();
 };

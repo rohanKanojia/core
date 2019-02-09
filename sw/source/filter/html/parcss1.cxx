@@ -17,19 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <ctype.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <osl/diagnose.h>
+#include <rtl/character.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <tools/color.hxx>
 #include <vcl/svapp.hxx>
 #include <svtools/htmltokn.h>
 #include <comphelper/string.hxx>
 #include "css1kywd.hxx"
 #include "parcss1.hxx"
 
-// Loop-Check: Um Endlos-Schleifen zu vermeiden, wird in jeder
-// Schalife geprueft, ob ein Fortschritt in der Eingabe-Position
-// stattgefunden hat
+// Loop-Check: Used to avoid infinite loops, is checked after every
+// loop, if there is progress of the input position
 #define LOOP_CHECK
 
 #ifdef LOOP_CHECK
@@ -39,8 +40,8 @@
 #define LOOP_CHECK_RESTART \
     nOldInPos = SAL_MAX_INT32;
 #define LOOP_CHECK_CHECK( where ) \
-    OSL_ENSURE( nOldInPos!=nInPos || cNextCh==(sal_Unicode)EOF, where );    \
-    if( nOldInPos==nInPos && cNextCh!=(sal_Unicode)EOF )                    \
+    OSL_ENSURE( nOldInPos!=nInPos || cNextCh==sal_Unicode(EOF), where );    \
+    if( nOldInPos==nInPos && cNextCh!=sal_Unicode(EOF) )                    \
         break;                                                              \
     else                                                                    \
         nOldInPos = nInPos;
@@ -60,7 +61,7 @@ void CSS1Parser::InitRead( const OUString& rIn )
     nlLineNr = 0;
     nlLinePos = 0;
 
-    bWhiteSpace = true; // Wenn noch nichts gelesen wurde ist das wie WS
+    bWhiteSpace = true; // if nothing was read it's like there was WS
     bEOF = false;
     eState = CSS1_PAR_WORKING;
     nValue = 0.;
@@ -76,7 +77,7 @@ sal_Unicode CSS1Parser::GetNextChar()
     if( nInPos >= aIn.getLength() )
     {
         bEOF = true;
-        return (sal_Unicode)EOF;
+        return sal_Unicode(EOF);
     }
 
     sal_Unicode c = aIn[nInPos];
@@ -84,22 +85,22 @@ sal_Unicode CSS1Parser::GetNextChar()
 
     if( c == '\n' )
     {
-        IncLineNr();
-        SetLinePos( 1L );
+        ++nlLineNr;
+        nlLinePos = 1;
     }
     else
-        IncLinePos();
+        ++nlLinePos;
 
     return c;
 }
 
-// Diese Funktion realisiert den in
+// This function implements the scanner described in
 
-//      http://www.w3.orh/pub/WWW/TR/WD-css1.html
-// bzw. http://www.w3.orh/pub/WWW/TR/WD-css1-960220.html
+//       http://www.w3.org/pub/WWW/TR/WD-css1.html
+// resp. http://www.w3.org/pub/WWW/TR/WD-css1-960220.html
 
-// beschriebenen Scanner fuer CSS1. Es handelt sich um eine direkte
-// Umsetzung der dort beschriebenen Lex-Grammatik
+// for CSS1. It's a direct implementation of the
+// described Lex grammar.
 
 CSS1Token CSS1Parser::GetNextToken()
 {
@@ -107,7 +108,7 @@ CSS1Token CSS1Parser::GetNextToken()
     aToken.clear();
 
     do {
-        // Merken, ob davor White-Space gelesen wurde
+        // remember if white space was read
         bool bPrevWhiteSpace = bWhiteSpace;
         bWhiteSpace = false;
 
@@ -143,7 +144,7 @@ CSS1Token CSS1Parser::GetNextToken()
                 cNextCh = GetNextChar();
                 if (rtl::isAsciiAlpha(cNextCh))
                 {
-                    // den naechsten Identifer scannen
+                    // scan the next identifier
                     OUStringBuffer sTmpBuffer(32);
                     do {
                         sTmpBuffer.append( cNextCh );
@@ -151,9 +152,9 @@ CSS1Token CSS1Parser::GetNextToken()
                     } while( (rtl::isAsciiAlphanumeric(cNextCh) ||
                              '-' == cNextCh) && !IsEOF() );
 
-                    aToken += sTmpBuffer.makeStringAndClear();
+                    aToken += sTmpBuffer;
 
-                    // und schauen, ob wir ihn kennen
+                    // check if we know it
                     switch( aToken[0] )
                     {
                     case 'i':
@@ -168,9 +169,8 @@ CSS1Token CSS1Parser::GetNextToken()
                         break;
                     }
 
-                    // Fehlerbehandlung: '@ident' und alles bis
-                    // zu einem Semikolon der dem Ende des folgenden
-                    // Blocks ignorieren
+                    // error handling: ignore '@indent' and the rest until
+                    // semicolon at end of the next block
                     if( CSS1_NULL==nRet )
                     {
                         aToken.clear();
@@ -226,7 +226,7 @@ CSS1Token CSS1Parser::GetNextToken()
 
         case '!': // '!' 'legal' | '!' 'important' | syntax error
             {
-                // White Space ueberlesen
+                // ignore white space
                 cNextCh = GetNextChar();
                 while( ( ' ' == cNextCh ||
                        (cNextCh >= 0x09 && cNextCh <= 0x0d) ) && !IsEOF() )
@@ -237,7 +237,7 @@ CSS1Token CSS1Parser::GetNextToken()
 
                 if( 'i'==cNextCh || 'I'==cNextCh)
                 {
-                    // den naechsten Identifer scannen
+                    // scan next identifier
                     OUStringBuffer sTmpBuffer(32);
                     do {
                         sTmpBuffer.append( cNextCh );
@@ -245,7 +245,7 @@ CSS1Token CSS1Parser::GetNextToken()
                     } while( (rtl::isAsciiAlphanumeric(cNextCh) ||
                              '-' == cNextCh) && !IsEOF() );
 
-                    aToken += sTmpBuffer.makeStringAndClear();
+                    aToken += sTmpBuffer;
 
                     if( ( 'i'==aToken[0] || 'I'==aToken[0] ) &&
                         aToken.equalsIgnoreAsciiCase( "important" ) )
@@ -255,7 +255,7 @@ CSS1Token CSS1Parser::GetNextToken()
                     }
                     else
                     {
-                        // Fehlerbehandlung: '!' ignorieren, IDENT nicht
+                        // error handling: ignore '!', not IDENT
                         nRet = CSS1_IDENT;
                     }
 
@@ -264,7 +264,7 @@ CSS1Token CSS1Parser::GetNextToken()
                 }
                 else
                 {
-                    // Fehlerbehandlung: '!' ignorieren
+                    // error handling: ignore '!'
                     bNextCh = false;
                 }
             }
@@ -273,7 +273,7 @@ CSS1Token CSS1Parser::GetNextToken()
         case '\"':
         case '\'': // STRING
             {
-                // \... geht noch nicht!!!
+                // \... isn't possible yet!!!
                 sal_Unicode cQuoteChar = cNextCh;
                 cNextCh = GetNextChar();
 
@@ -283,7 +283,7 @@ CSS1Token CSS1Parser::GetNextToken()
                     cNextCh = GetNextChar();
                 } while( cQuoteChar != cNextCh && !IsEOF() );
 
-                aToken += sTmpBuffer.toString();
+                aToken += sTmpBuffer;
 
                 nRet = CSS1_STRING;
             }
@@ -300,14 +300,14 @@ CSS1Token CSS1Parser::GetNextToken()
         case '8':
         case '9': // NUMBER | PERCENTAGE | LENGTH
             {
-                // die aktuelle Position retten
-                sal_Size nInPosSave = nInPos;
+                // save current position
+                std::size_t nInPosSave = nInPos;
                 sal_Unicode cNextChSave = cNextCh;
                 sal_uInt32 nlLineNrSave = nlLineNr;
                 sal_uInt32 nlLinePosSave = nlLinePos;
                 bool bEOFSave = bEOF;
 
-                // erstmal versuchen eine Hex-Zahl zu scannen
+                // first try to parse a hex digit
                 OUStringBuffer sTmpBuffer( 16 );
                 do {
                     sTmpBuffer.append( cNextCh );
@@ -320,33 +320,33 @@ CSS1Token CSS1Parser::GetNextToken()
 
                 if( sTmpBuffer.getLength()==6 )
                 {
-                    // wir haben eine hexadezimale Farbe gefunden
-                    aToken += sTmpBuffer.makeStringAndClear();
+                    // we found a color in hex
+                    aToken += sTmpBuffer;
                     nRet = CSS1_HEXCOLOR;
                     bNextCh = false;
 
                     break;
                 }
 
-                // sonst versuchen wir es mit einer Zahl
+                // otherwise we try a number
                 nInPos = nInPosSave;
                 cNextCh = cNextChSave;
                 nlLineNr = nlLineNrSave;
                 nlLinePos = nlLinePosSave;
                 bEOF = bEOFSave;
 
-                // erstmal die Zahl scannen
-                sTmpBuffer.setLength( 0L );
+                // first parse the number
+                sTmpBuffer.setLength( 0 );
                 do {
                     sTmpBuffer.append( cNextCh );
                     cNextCh = GetNextChar();
                 } while( (('0'<=cNextCh && '9'>=cNextCh) || '.'==cNextCh) &&
                          !IsEOF() );
 
-                aToken += sTmpBuffer.makeStringAndClear();
+                aToken += sTmpBuffer;
                 nValue = aToken.toDouble();
 
-                // White Space ueberlesen
+                // ignore white space
                 while( ( ' ' == cNextCh ||
                        (cNextCh >= 0x09 && cNextCh <= 0x0d) ) && !IsEOF() )
                 {
@@ -354,7 +354,7 @@ CSS1Token CSS1Parser::GetNextToken()
                     cNextCh = GetNextChar();
                 }
 
-                // und nun Schauen, ob es eine Einheit gibt
+                // check now, of there is an unit
                 switch( cNextCh )
                 {
                 case '%': // PERCENTAGE
@@ -373,14 +373,14 @@ CSS1Token CSS1Parser::GetNextToken()
                 case 'm':
                 case 'M': // LENGTH mm | LENGTH IDENT
                     {
-                        // die aktuelle Position retten
+                        // save current position
                         sal_Int32 nInPosOld = nInPos;
                         sal_Unicode cNextChOld = cNextCh;
                         sal_uLong nlLineNrOld  = nlLineNr;
                         sal_uLong nlLinePosOld = nlLinePos;
                         bool bEOFOld = bEOF;
 
-                        // den naechsten Identifer scannen
+                        // parse the next identifier
                         OUString aIdent;
                         OUStringBuffer sTmpBuffer2(64);
                         do {
@@ -389,9 +389,9 @@ CSS1Token CSS1Parser::GetNextToken()
                         } while( (rtl::isAsciiAlphanumeric(cNextCh) ||
                                  '-' == cNextCh) && !IsEOF() );
 
-                        aIdent += sTmpBuffer2.makeStringAndClear();
+                        aIdent += sTmpBuffer2;
 
-                        // Ist es eine Einheit?
+                        // Is it an unit?
                         const sal_Char *pCmp1 = nullptr, *pCmp2 = nullptr, *pCmp3 = nullptr;
                         double nScale1 = 1., nScale2 = 1.;
                         CSS1Token nToken1 = CSS1_LENGTH,
@@ -436,7 +436,7 @@ CSS1Token CSS1Parser::GetNextToken()
                         }
 
                         double nScale = 0.0;
-                        OSL_ENSURE( pCmp1, "Wo kommt das erste Zeichen her?" );
+                        OSL_ENSURE( pCmp1, "Where does the first digit come from?" );
                         if( aIdent.equalsIgnoreAsciiCaseAscii( pCmp1 ) )
                         {
                             nScale = nScale1;
@@ -486,7 +486,7 @@ CSS1Token CSS1Parser::GetNextToken()
             break;
 
         case ':': // ':'
-            // link/visited/active abfangen !!!
+            // catch link/visited/active !!!
             nRet = CSS1_COLON;
             break;
 
@@ -524,14 +524,14 @@ CSS1Token CSS1Parser::GetNextToken()
                 ('a'<=cNextCh && 'f'>=cNextCh) ||
                 ('A'<=cNextCh && 'F'>=cNextCh) )
             {
-                // die aktuelle Position retten
+                // save current position
                 sal_Int32 nInPosSave = nInPos;
                 sal_Unicode cNextChSave = cNextCh;
                 sal_uLong nlLineNrSave = nlLineNr;
                 sal_uLong nlLinePosSave = nlLinePos;
                 bool bEOFSave = bEOF;
 
-                // erstmal versuchen eine Hex-Zahl zu scannen
+                // first try to parse a hex digit
                 OUStringBuffer sTmpBuffer(6);
                 do {
                     sTmpBuffer.append( cNextCh );
@@ -544,15 +544,15 @@ CSS1Token CSS1Parser::GetNextToken()
 
                 if( sTmpBuffer.getLength()==6 || sTmpBuffer.getLength()==3 )
                 {
-                    // wir haben eine hexadezimale Farbe gefunden
-                    aToken += sTmpBuffer.makeStringAndClear();
+                    // we found a color in hex
+                    aToken += sTmpBuffer;
                     nRet = CSS1_HEXCOLOR;
                     bNextCh = false;
 
                     break;
                 }
 
-                // sonst versuchen wir es mit einer Zahl
+                // otherwise we try a number
                 nInPos = nInPosSave;
                 cNextCh = cNextChSave;
                 nlLineNr = nlLineNrSave;
@@ -571,14 +571,14 @@ CSS1Token CSS1Parser::GetNextToken()
             bWhiteSpace = true;
             break;
 
-        case (sal_Unicode)EOF:
+        case sal_Unicode(EOF):
             if( IsEOF() )
             {
                 eState = CSS1_PAR_ACCEPTED;
                 bNextCh = false;
                 break;
             }
-            // no break
+            [[fallthrough]];
 
         default: // IDENT | syntax error
             if (rtl::isAsciiAlpha(cNextCh))
@@ -587,7 +587,7 @@ CSS1Token CSS1Parser::GetNextToken()
 
                 bool bHexColor = true;
 
-                // den naechsten Identifer scannen
+                // parse the next identifier
                 OUStringBuffer sTmpBuffer(64);
                 do {
                     sTmpBuffer.append( cNextCh );
@@ -602,7 +602,7 @@ CSS1Token CSS1Parser::GetNextToken()
                 } while( (rtl::isAsciiAlphanumeric(cNextCh) ||
                            '-' == cNextCh) && !IsEOF() );
 
-                aToken += sTmpBuffer.makeStringAndClear();
+                aToken += sTmpBuffer;
 
                 if( bHexColor && sTmpBuffer.getLength()==6 )
                 {
@@ -629,7 +629,7 @@ CSS1Token CSS1Parser::GetNextToken()
                         cNextCh = GetNextChar();
                     } while( (nNestCnt>1 || ')'!=cNextCh) && !IsEOF() );
                     sTmpBuffer2.append( cNextCh );
-                    aToken += sTmpBuffer2.makeStringAndClear();
+                    aToken += sTmpBuffer2;
                     bNextCh = true;
                     nRet = 'u'==aToken[0] || 'U'==aToken[0]
                                 ? CSS1_URL
@@ -641,7 +641,7 @@ CSS1Token CSS1Parser::GetNextToken()
                     nRet = CSS1_IDENT;
                 }
             }
-            // Fehlerbehandlung: Zeichen ignorieren
+            // error handling: ignore digit
             break;
         }
         if( bNextCh )
@@ -652,13 +652,13 @@ CSS1Token CSS1Parser::GetNextToken()
     return nRet;
 }
 
-// Dies folegenden Funktionen realisieren den in
+// These functions implement the parser described in
 
-//      http://www.w3.orh/pub/WWW/TR/WD-css1.html
-// bzw. http://www.w3.orh/pub/WWW/TR/WD-css1-960220.html
+//       http://www.w3.org/pub/WWW/TR/WD-css1.html
+// resp. http://www.w3.org/pub/WWW/TR/WD-css1-960220.html
 
-// beschriebenen Parser fuer CSS1. Es handelt sich um eine direkte
-// Umsetzung der dort beschriebenen Grammatik
+// for CSS1. It's a direct implementation of the
+// described Lex grammar.
 
 // stylesheet
 //  : import* rule*
@@ -677,13 +677,13 @@ void CSS1Parser::ParseStyleSheet()
     bool bDone = false;
     while( !bDone && IsParserWorking() )
     {
-        LOOP_CHECK_CHECK( "Endlos-Schleife in ParseStyleSheet()/import *" )
+        LOOP_CHECK_CHECK( "Infinite loop in ParseStyleSheet()/import *" )
 
         switch( nToken )
         {
         case CSS1_IMPORT_SYM:
             // IMPORT_SYM url
-            // url ueberspringen wir ungeprueft
+            // URL are skipped without checks
             nToken = GetNextToken();
             break;
         case CSS1_IDENT:            // Look-Aheads
@@ -694,7 +694,7 @@ void CSS1Parser::ParseStyleSheet()
             bDone = true;
             break;
         default:
-            // Fehlerbehandlung: ueberlesen
+            // error handling: ignore
             break;
         }
 
@@ -707,7 +707,7 @@ void CSS1Parser::ParseStyleSheet()
     // rule *
     while( IsParserWorking() )
     {
-        LOOP_CHECK_CHECK( "Endlos-Schleife in ParseStyleSheet()/rule *" )
+        LOOP_CHECK_CHECK( "Infinite loop in ParseStyleSheet()/rule *" )
 
         switch( nToken )
         {
@@ -719,7 +719,7 @@ void CSS1Parser::ParseStyleSheet()
             ParseRule();
             break;
         default:
-            // Fehlerbehandlung: ueberlesen
+            // error handling: ignore
             nToken = GetNextToken();
             break;
         }
@@ -733,22 +733,21 @@ void CSS1Parser::ParseStyleSheet()
 void CSS1Parser::ParseRule()
 {
     // selector
-    CSS1Selector *pSelector = ParseSelector();
+    std::unique_ptr<CSS1Selector> pSelector = ParseSelector();
     if( !pSelector )
         return;
 
-    // Selektor verarbeiten
-    if( SelectorParsed( pSelector, true ) )
-        delete pSelector;
+    // process selector
+    SelectorParsed( std::move(pSelector), true );
 
     LOOP_CHECK_DECL
 
     // [ ',' selector ]*
     while( CSS1_COMMA==nToken && IsParserWorking() )
     {
-        LOOP_CHECK_CHECK( "Endlos-Schleife in ParseRule()/selector *" )
+        LOOP_CHECK_CHECK( "Infinite loop in ParseRule()/selector *" )
 
-        // ',' ueberelesen
+        // ignore ','
         nToken = GetNextToken();
 
         // selector
@@ -756,9 +755,8 @@ void CSS1Parser::ParseRule()
         if( !pSelector )
             return;
 
-        // Selektor verarbeiten
-        if( SelectorParsed( pSelector, false ) )
-            delete pSelector;
+        // process selector
+        SelectorParsed( std::move(pSelector), false );
     }
 
     // '{'
@@ -768,20 +766,19 @@ void CSS1Parser::ParseRule()
 
     // declaration
     OUString aProperty;
-    CSS1Expression *pExpr = ParseDeclaration( aProperty );
+    std::unique_ptr<CSS1Expression> pExpr = ParseDeclaration( aProperty );
     if( !pExpr )
         return;
 
-    // expression verarbeiten
-    if( DeclarationParsed( aProperty, pExpr ) )
-        delete pExpr;
+    // process expression
+    DeclarationParsed( aProperty, std::move(pExpr) );
 
     LOOP_CHECK_RESTART
 
     // [ ';' declaration ]*
     while( CSS1_SEMICOLON==nToken && IsParserWorking() )
     {
-        LOOP_CHECK_CHECK( "Endlos-Schleife in ParseRule()/declaration *" )
+        LOOP_CHECK_CHECK( "Infinite loop in ParseRule()/declaration *" )
 
         // ';'
         nToken = GetNextToken();
@@ -789,12 +786,11 @@ void CSS1Parser::ParseRule()
         // declaration
         if( CSS1_IDENT == nToken )
         {
-            CSS1Expression *pExp = ParseDeclaration( aProperty );
+            std::unique_ptr<CSS1Expression> pExp = ParseDeclaration( aProperty );
             if( pExp )
             {
-                // expression verarbeiten
-                if( DeclarationParsed( aProperty, pExp ) )
-                    delete pExp;
+                // process expression
+                DeclarationParsed( aProperty, std::move(pExp));
             }
         }
     }
@@ -824,9 +820,10 @@ void CSS1Parser::ParseRule()
 // pseude_element
 //  : IDENT
 
-CSS1Selector *CSS1Parser::ParseSelector()
+std::unique_ptr<CSS1Selector> CSS1Parser::ParseSelector()
 {
-    CSS1Selector *pRoot = nullptr, *pLast = nullptr;
+    std::unique_ptr<CSS1Selector> pRoot;
+    CSS1Selector *pLast = nullptr;
 
     bool bDone = false;
     CSS1Selector *pNew = nullptr;
@@ -836,7 +833,7 @@ CSS1Selector *CSS1Parser::ParseSelector()
     // simple_selector+
     while( !bDone && IsParserWorking() )
     {
-        LOOP_CHECK_CHECK( "Endlos-Schleife in ParseSelector()" )
+        LOOP_CHECK_CHECK( "Infinite loop in ParseSelector()" )
 
         bool bNextToken = true;
 
@@ -864,13 +861,13 @@ CSS1Selector *CSS1Parser::ParseSelector()
                     }
                     else
                     {
-                        // class fehlt
+                        // missing class
                         return pRoot;
                     }
                 }
                 else
                 {
-                    // das war jetzt ein Look-Ahead
+                    // that was a look-ahead
                     bNextToken = false;
                 }
                 pNew = new CSS1Selector( eType, aElement );
@@ -889,7 +886,7 @@ CSS1Selector *CSS1Parser::ParseSelector()
             }
             else
             {
-                // class fehlt
+                // missing class
                 return pRoot;
             }
             break;
@@ -906,7 +903,7 @@ CSS1Selector *CSS1Parser::ParseSelector()
             }
             else
             {
-                // id_selector fehlt
+                // missing id_selector
                 return pRoot;
             }
             break;
@@ -919,20 +916,20 @@ CSS1Selector *CSS1Parser::ParseSelector()
             break;
 
         default:
-            // wir wissen nicht was kommt, also aufhoehren
+            // stop because we don't know what's next
             bDone = true;
             break;
         }
 
-        // falls ein Selektor angelegt wurd, ihn speichern
+        // if created a new selector then save it
         if( pNew )
         {
             OSL_ENSURE( (pRoot!=nullptr) == (pLast!=nullptr),
-                    "Root-Selektor, aber kein Last" );
+                    "Root-Selector, but no Last" );
             if( pLast )
                 pLast->SetNext( pNew );
             else
-                pRoot = pNew;
+                pRoot.reset(pNew);
 
             pLast = pNew;
             pNew = nullptr;
@@ -944,7 +941,7 @@ CSS1Selector *CSS1Parser::ParseSelector()
 
     if( !pRoot )
     {
-        // simple_selector fehlt
+        // missing simple_selector
         return pRoot;
     }
 
@@ -960,7 +957,7 @@ CSS1Selector *CSS1Parser::ParseSelector()
         }
         else
         {
-            // pseudo_element fehlt
+            // missing pseudo_element
             return pRoot;
         }
     }
@@ -989,16 +986,17 @@ CSS1Selector *CSS1Parser::ParseSelector()
 // property
 //  : ident
 
-// das Vorzeichen wird nur fuer numerische Werte (ausser PERCENTAGE)
-// beruecksichtigt und wird auf nValue angewendet!
-CSS1Expression *CSS1Parser::ParseDeclaration( OUString& rProperty )
+// the sign is only used for numeric values (except PERCENTAGE)
+// and it's applied on nValue!
+std::unique_ptr<CSS1Expression> CSS1Parser::ParseDeclaration( OUString& rProperty )
 {
-    CSS1Expression *pRoot = nullptr, *pLast = nullptr;
+    std::unique_ptr<CSS1Expression> pRoot;
+    CSS1Expression *pLast = nullptr;
 
     // property
     if( CSS1_IDENT != nToken )
     {
-        // property fehlt
+        // missing property
         return pRoot;
     }
     rProperty = aToken;
@@ -1008,14 +1006,14 @@ CSS1Expression *CSS1Parser::ParseDeclaration( OUString& rProperty )
     // ':'
     if( CSS1_COLON != nToken )
     {
-        // ':' fehlt
+        // missing ':'
         return pRoot;
     }
     nToken = GetNextToken();
 
     // term [operator term]*
-    // hier sind wir sehr lax, was die Syntax angeht, sollte aber kein
-    // Problem sein
+    // here we're pretty lax regarding the syntax, but this shouldn't
+    // be a problem
     bool bDone = false;
     sal_Unicode cSign = 0, cOp = 0;
     CSS1Expression *pNew = nullptr;
@@ -1024,7 +1022,7 @@ CSS1Expression *CSS1Parser::ParseDeclaration( OUString& rProperty )
 
     while( !bDone && IsParserWorking() )
     {
-        LOOP_CHECK_CHECK( "Endlos-Schleife in ParseDeclaration()" )
+        LOOP_CHECK_CHECK( "Infinite loop in ParseDeclaration()" )
 
         switch( nToken )
         {
@@ -1043,7 +1041,7 @@ CSS1Expression *CSS1Parser::ParseDeclaration( OUString& rProperty )
         case CSS1_EMX:
             if( '-'==cSign )
                 nValue = -nValue;
-            //fall-through
+            [[fallthrough]];
         case CSS1_STRING:
         case CSS1_PERCENTAGE:
         case CSS1_IDENT:
@@ -1051,7 +1049,7 @@ CSS1Expression *CSS1Parser::ParseDeclaration( OUString& rProperty )
         case CSS1_RGB:
         case CSS1_HEXCOLOR:
             pNew = new CSS1Expression( nToken, aToken, nValue, cOp );
-            nValue = 0; // sonst landet das auch im naechsten Ident
+            nValue = 0; // otherwise this also is applied to next ident
             cSign = 0;
             cOp = 0;
             break;
@@ -1071,15 +1069,15 @@ CSS1Expression *CSS1Parser::ParseDeclaration( OUString& rProperty )
             break;
         }
 
-        // falls ein Expression angelegt wurde, diesen speichern
+        // if created a new expression save it
         if( pNew )
         {
             OSL_ENSURE( (pRoot!=nullptr) == (pLast!=nullptr),
-                    "Root-Selektor, aber kein Last" );
+                    "Root-Selector, but no Last" );
             if( pLast )
                 pLast->SetNext( pNew );
             else
-                pRoot = pNew;
+                pRoot.reset(pNew);
 
             pLast = pNew;
             pNew = nullptr;
@@ -1091,7 +1089,7 @@ CSS1Expression *CSS1Parser::ParseDeclaration( OUString& rProperty )
 
     if( !pRoot )
     {
-        // term fehlt
+        // missing term
         return pRoot;
     }
 
@@ -1122,42 +1120,40 @@ CSS1Parser::~CSS1Parser()
 {
 }
 
-bool CSS1Parser::ParseStyleSheet( const OUString& rIn )
+void CSS1Parser::ParseStyleSheet( const OUString& rIn )
 {
     OUString aTmp( rIn );
 
     sal_Unicode c;
     while( !aTmp.isEmpty() &&
            ( ' '==(c=aTmp[0]) || '\t'==c || '\r'==c || '\n'==c ) )
-        aTmp = aTmp.copy( 1, aTmp.getLength() - 1 );
+        aTmp = aTmp.copy( 1 );
 
     while( !aTmp.isEmpty() && ( ' '==(c=aTmp[aTmp.getLength()-1])
            || '\t'==c || '\r'==c || '\n'==c ) )
         aTmp = aTmp.copy( 0, aTmp.getLength()-1 );
 
-    // SGML-Kommentare entfernen
+    // remove SGML comments
     if( aTmp.getLength() >= 4 &&
         aTmp.startsWith( "<!--" ) )
-        aTmp = aTmp.copy( 4, aTmp.getLength() - 4 );
+        aTmp = aTmp.copy( 4 );
 
     if( aTmp.getLength() >=3 &&
         aTmp.endsWith("-->") )
         aTmp = aTmp.copy( 0, aTmp.getLength() - 3 );
 
     if( aTmp.isEmpty() )
-        return true;
+        return;
 
     InitRead( aTmp );
 
     ParseStyleSheet();
-
-    return true;
 }
 
-bool CSS1Parser::ParseStyleOption( const OUString& rIn )
+void CSS1Parser::ParseStyleOption( const OUString& rIn )
 {
     if( rIn.isEmpty() )
-        return true;
+        return;
 
     InitRead( rIn );
 
@@ -1168,50 +1164,40 @@ bool CSS1Parser::ParseStyleOption( const OUString& rIn )
     }
 
     OUString aProperty;
-    CSS1Expression *pExpr = ParseDeclaration( aProperty );
+    std::unique_ptr<CSS1Expression> pExpr = ParseDeclaration( aProperty );
     if( !pExpr )
-    {
-        return false;
-    }
+        return;
 
-    // expression verarbeiten
-    if( DeclarationParsed( aProperty, pExpr ) )
-        delete pExpr;
+    // process expression
+    DeclarationParsed( aProperty, std::move(pExpr) );
 
     LOOP_CHECK_DECL
 
     // [ ';' declaration ]*
     while( CSS1_SEMICOLON==nToken && IsParserWorking() )
     {
-        LOOP_CHECK_CHECK( "Endlos-Schleife in ParseStyleOption()" )
+        LOOP_CHECK_CHECK( "Infinite loop in ParseStyleOption()" )
 
         nToken = GetNextToken();
         if( CSS1_IDENT==nToken )
         {
-            CSS1Expression *pExp = ParseDeclaration( aProperty );
+            std::unique_ptr<CSS1Expression> pExp = ParseDeclaration( aProperty );
             if( pExp )
             {
-                // expression verarbeiten
-                if( DeclarationParsed( aProperty, pExp ) )
-                    delete pExp;
+                // process expression
+                DeclarationParsed( aProperty, std::move(pExp) );
             }
         }
     }
-
-    return true;
 }
 
-bool CSS1Parser::SelectorParsed( CSS1Selector* /* pSelector */, bool /*bFirst*/ )
+void CSS1Parser::SelectorParsed( std::unique_ptr<CSS1Selector> /* pSelector */, bool /*bFirst*/ )
 {
-    // Selektor loeschen
-    return true;
 }
 
-bool CSS1Parser::DeclarationParsed( const OUString& /*rProperty*/,
-                                    const CSS1Expression * /* pExpr */ )
+void CSS1Parser::DeclarationParsed( const OUString& /*rProperty*/,
+                                    std::unique_ptr<CSS1Expression> /* pExpr */ )
 {
-    // Deklaration loeschen
-    return true;
 }
 
 CSS1Selector::~CSS1Selector()
@@ -1226,13 +1212,13 @@ CSS1Expression::~CSS1Expression()
 
 void CSS1Expression::GetURL( OUString& rURL  ) const
 {
-    OSL_ENSURE( CSS1_URL==eType, "CSS1-Ausruck ist keine Farbe URL" );
+    OSL_ENSURE( CSS1_URL==eType, "CSS1-Expression is not URL" );
 
     OSL_ENSURE( aValue.startsWithIgnoreAsciiCase( "url" ) &&
                 aValue.getLength() > 5 &&
                 '(' == aValue[3] &&
                 ')' == aValue[aValue.getLength()-1],
-                "keine gueltiges URL(...)" );
+                "no valid URL(...)" );
 
     if( aValue.getLength() > 5 )
     {
@@ -1254,7 +1240,7 @@ bool CSS1Expression::GetColor( Color &rColor ) const
 {
     OSL_ENSURE( CSS1_IDENT==eType || CSS1_RGB==eType ||
                 CSS1_HEXCOLOR==eType || CSS1_STRING==eType,
-                "CSS1-Ausruck kann keine Farbe sein" );
+                "CSS1-Expression cannot be colour" );
 
     bool bRet = false;
     sal_uInt32 nColor = SAL_MAX_UINT32;
@@ -1298,7 +1284,7 @@ bool CSS1Expression::GetColor( Color &rColor ) const
             rColor.SetGreen( aColors[1] );
             rColor.SetBlue( aColors[2] );
 
-            bRet = true;    // etwas anderes als eine Farbe kann es nicht sein
+            bRet = true;    // something different than a colour isn't possible
         }
         break;
 
@@ -1312,10 +1298,10 @@ bool CSS1Expression::GetColor( Color &rColor ) const
         if( bRet || CSS1_STRING != eType || aValue.isEmpty() ||
             aValue[0] != '#' )
             break;
-
+        [[fallthrough]];
     case CSS1_HEXCOLOR:
         {
-            // HACK fuer MS-IE: DIe Farbe kann auch in einem String stehen
+            // MS-IE hack: colour can also be a string
             sal_Int32 nOffset = CSS1_STRING==eType ? 1 : 0;
             bool bDouble = aValue.getLength()-nOffset == 3;
             sal_Int32 i = nOffset, nEnd = (bDouble ? 3 : 6) + nOffset;
@@ -1353,9 +1339,9 @@ bool CSS1Expression::GetColor( Color &rColor ) const
 
     if( bRet && nColor!=SAL_MAX_UINT32 )
     {
-        rColor.SetRed( (sal_uInt8)((nColor & 0x00ff0000UL) >> 16) );
-        rColor.SetGreen( (sal_uInt8)((nColor & 0x0000ff00UL) >> 8) );
-        rColor.SetBlue( (sal_uInt8)(nColor & 0x000000ffUL) );
+        rColor.SetRed( static_cast<sal_uInt8>((nColor & 0x00ff0000UL) >> 16) );
+        rColor.SetGreen( static_cast<sal_uInt8>((nColor & 0x0000ff00UL) >> 8) );
+        rColor.SetBlue( static_cast<sal_uInt8>(nColor & 0x000000ffUL) );
     }
 
     return bRet;

@@ -20,23 +20,20 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_SLIDESORTER_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_SLIDESORTER_HXX
 
-#include "fupoor.hxx"
-#include "Window.hxx"
-#include <com/sun/star/frame/XController.hpp>
 #include <cppuhelper/weakref.hxx>
-#include <sfx2/viewfrm.hxx>
 #include <vcl/scrbar.hxx>
-#include "sddllapi.h"
+#include <sddllapi.h>
 #include <memory>
 
-class ScrollBar;
-class ScrollBarBox;
 namespace vcl { class Window; }
+namespace com { namespace sun { namespace star { namespace frame { class XController; } } } }
+namespace rtl { template <class reference_type> class Reference; }
 
 namespace sd {
 class ViewShell;
 class ViewShellBase;
 class Window;
+class FuPoor;
 }
 
 namespace sd { namespace slidesorter { namespace model {
@@ -64,11 +61,11 @@ namespace sd { namespace slidesorter {
 
     Note that this class is not in its final state.
 */
-class SlideSorter
+class SlideSorter final
 {
     friend class controller::SlotManager;
 public:
-    virtual ~SlideSorter();
+    ~SlideSorter();
 
     /// Forbid copy construction and copy assignment
     SlideSorter(const SlideSorter&) = delete;
@@ -115,26 +112,25 @@ public:
     */
     static std::shared_ptr<SlideSorter> CreateSlideSorter (
         ViewShellBase& rBase,
-        ViewShell* pViewShell,
         vcl::Window& rParentWindow);
 
     /** Return the control of the vertical scroll bar.
     */
-    VclPtr<ScrollBar> GetVerticalScrollBar() const { return mpVerticalScrollBar;}
+    const VclPtr<ScrollBar>& GetVerticalScrollBar() const { return mpVerticalScrollBar;}
 
     /** Return the control of the horizontal scroll bar.
     */
-    VclPtr<ScrollBar> GetHorizontalScrollBar() const { return mpHorizontalScrollBar;}
+    const VclPtr<ScrollBar>& GetHorizontalScrollBar() const { return mpHorizontalScrollBar;}
 
     /** Return the scroll bar filler that paints the little square that is
         enclosed by the two scroll bars.
     */
-    VclPtr<ScrollBarBox> GetScrollBarFiller (void) const { return mpScrollBarBox;}
+    const VclPtr<ScrollBarBox>& GetScrollBarFiller (void) const { return mpScrollBarBox;}
 
     /** Return the content window.  This is a sibling and is geometrically
         enclosed by the scroll bars.
     */
-    VclPtr<sd::Window> GetContentWindow() const { return mpContentWindow;}
+    const VclPtr<sd::Window>& GetContentWindow() const { return mpContentWindow;}
 
     model::SlideSorterModel& GetModel() const;
 
@@ -160,7 +156,7 @@ public:
     */
     ViewShellBase* GetViewShellBase() const { return mpViewShellBase;}
 
-    void Paint (const Rectangle& rRepaintArea);
+    void Paint (const ::tools::Rectangle& rRepaintArea);
 
     /** Place and size the controls and windows.  You may want to call this
         method when something has changed that for instance affects the
@@ -170,7 +166,7 @@ public:
         const Point& rOffset,
         const Size& rSize);
 
-    bool RelocateToWindow (vcl::Window* pWindow);
+    void RelocateToWindow (vcl::Window* pWindow);
 
     /** Set the current function at the view shell or, when it is not
         present, set it at the content window.  This method supports the use
@@ -181,13 +177,13 @@ public:
     /** Return a collection of properties that are used throughout the slide
         sorter.
     */
-    std::shared_ptr<controller::Properties> GetProperties() const;
+    std::shared_ptr<controller::Properties> const & GetProperties() const;
 
     /** Return the active theme which gives access to colors and fonts.
     */
-    std::shared_ptr<view::Theme> GetTheme() const;
+    std::shared_ptr<view::Theme> const & GetTheme() const;
 
-protected:
+private:
     /** This virtual method makes it possible to create a specialization of
         the slide sorter view shell that works with its own implementation
         of model, view, and controller.  The default implementation simply
@@ -202,19 +198,6 @@ protected:
     */
     model::SlideSorterModel* CreateModel();
 
-    /** Create the view for the view shell.  When called from the default
-        implementation of CreateModelViewController() then the model but not
-        the controller does exist.  Test their pointers when in doubt.
-    */
-    view::SlideSorterView* CreateView();
-
-    /** Create the controller for the view shell.  When called from the default
-        implementation of CreateModelViewController() then both the view and
-        the controller do exist.  Test their pointers when in doubt.
-    */
-    controller::SlideSorterController* CreateController();
-
-private:
     bool mbIsValid;
 
     std::unique_ptr<controller::SlideSorterController> mpSlideSorterController;
@@ -227,10 +210,6 @@ private:
     VclPtr<ScrollBar> mpHorizontalScrollBar;
     VclPtr<ScrollBar> mpVerticalScrollBar;
     VclPtr<ScrollBarBox> mpScrollBarBox;
-
-    /** Set this flag to <TRUE/> to force a layout before the next paint.
-    */
-    bool mbLayoutPending;
 
     /** Some slide sorter wide properties that are used in different
         classes.
@@ -246,7 +225,6 @@ private:
         ScrollBarBox* pScrollBarBox);
     SlideSorter (
         ViewShellBase& rBase,
-        ViewShell* pViewShell,
         vcl::Window& rParentWindow);
 
     void Init();
@@ -256,7 +234,7 @@ private:
        This method is usually called exactly one time from the
        constructor.
     */
-    void SetupControls (vcl::Window* pParentWindow);
+    void SetupControls();
 
     /** This method is usually called exactly one time from the
         constructor.

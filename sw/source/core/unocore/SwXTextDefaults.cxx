@@ -19,8 +19,8 @@
 
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
+#include <osl/diagnose.h>
 
 #include <SwXTextDefaults.hxx>
 #include <SwStyleNameMapper.hxx>
@@ -36,6 +36,7 @@
 #include <unoprnms.hxx>
 #include <unocrsrhelper.hxx>
 #include <hintids.hxx>
+#include <fmtpdsc.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -53,14 +54,12 @@ SwXTextDefaults::~SwXTextDefaults ()
 }
 
 uno::Reference< XPropertySetInfo > SAL_CALL SwXTextDefaults::getPropertySetInfo(  )
-        throw(RuntimeException, std::exception)
 {
     static uno::Reference < XPropertySetInfo > xRef = m_pPropSet->getPropertySetInfo();
     return xRef;
 }
 
 void SAL_CALL SwXTextDefaults::setPropertyValue( const OUString& rPropertyName, const Any& aValue )
-        throw(UnknownPropertyException, PropertyVetoException, IllegalArgumentException, WrappedTargetException, RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if (!m_pDoc)
@@ -74,7 +73,7 @@ void SAL_CALL SwXTextDefaults::setPropertyValue( const OUString& rPropertyName, 
     const SfxPoolItem& rItem = m_pDoc->GetDefault(pMap->nWID);
     if (RES_PAGEDESC == pMap->nWID && MID_PAGEDESC_PAGEDESCNAME == pMap->nMemberId)
     {
-        SfxItemSet aSet( m_pDoc->GetAttrPool(), RES_PAGEDESC, RES_PAGEDESC );
+        SfxItemSet aSet( m_pDoc->GetAttrPool(), svl::Items<RES_PAGEDESC, RES_PAGEDESC>{} );
         aSet.Put(rItem);
         SwUnoCursorHelper::SetPageDesc( aValue, *m_pDoc, aSet );
         m_pDoc->SetDefault(aSet.Get(RES_PAGEDESC));
@@ -83,49 +82,44 @@ void SAL_CALL SwXTextDefaults::setPropertyValue( const OUString& rPropertyName, 
              (RES_TXTATR_CHARFMT == pMap->nWID))
     {
         OUString uStyle;
-        if(aValue >>= uStyle)
-        {
-            OUString sStyle;
-            SwStyleNameMapper::FillUIName(uStyle, sStyle, nsSwGetPoolIdFromName::GET_POOLID_CHRFMT, true );
-            SwDocStyleSheet* pStyle =
-                static_cast<SwDocStyleSheet*>(m_pDoc->GetDocShell()->GetStyleSheetPool()->Find(sStyle, SFX_STYLE_FAMILY_CHAR));
-            SwFormatDrop* pDrop = nullptr;
-            SwFormatCharFormat *pCharFormat = nullptr;
-            if(pStyle)
-            {
-                rtl::Reference< SwDocStyleSheet > xStyle( new SwDocStyleSheet( *pStyle ) );
-                if (RES_PARATR_DROP == pMap->nWID)
-                {
-                    pDrop = static_cast<SwFormatDrop*>(rItem.Clone());   // because rItem is const...
-                    pDrop->SetCharFormat(xStyle->GetCharFormat());
-                    m_pDoc->SetDefault(*pDrop);
-                }
-                else // RES_TXTATR_CHARFMT == pMap->nWID
-                {
-                    pCharFormat = static_cast<SwFormatCharFormat*>(rItem.Clone());   // because rItem is const...
-                    pCharFormat->SetCharFormat(xStyle->GetCharFormat());
-                    m_pDoc->SetDefault(*pCharFormat);
-                }
-            }
-            else
-                throw lang::IllegalArgumentException();
-            delete pDrop;
-            delete pCharFormat;
-        }
-        else
+        if(!(aValue >>= uStyle))
             throw lang::IllegalArgumentException();
+
+        OUString sStyle;
+        SwStyleNameMapper::FillUIName(uStyle, sStyle, SwGetPoolIdFromName::ChrFmt );
+        SwDocStyleSheet* pStyle =
+            static_cast<SwDocStyleSheet*>(m_pDoc->GetDocShell()->GetStyleSheetPool()->Find(sStyle, SfxStyleFamily::Char));
+        std::unique_ptr<SwFormatDrop> pDrop;
+        std::unique_ptr<SwFormatCharFormat> pCharFormat;
+        if(!pStyle)
+            throw lang::IllegalArgumentException();
+
+        rtl::Reference< SwDocStyleSheet > xStyle( new SwDocStyleSheet( *pStyle ) );
+        if (xStyle->GetCharFormat() == m_pDoc->GetDfltCharFormat())
+            return; // don't SetCharFormat with formats from mpDfltCharFormat
+
+        if (RES_PARATR_DROP == pMap->nWID)
+        {
+            pDrop.reset(static_cast<SwFormatDrop*>(rItem.Clone()));   // because rItem is const...
+            pDrop->SetCharFormat(xStyle->GetCharFormat());
+            m_pDoc->SetDefault(*pDrop);
+        }
+        else // RES_TXTATR_CHARFMT == pMap->nWID
+        {
+            pCharFormat.reset(static_cast<SwFormatCharFormat*>(rItem.Clone()));   // because rItem is const...
+            pCharFormat->SetCharFormat(xStyle->GetCharFormat());
+            m_pDoc->SetDefault(*pCharFormat);
+        }
     }
     else
     {
-        SfxPoolItem * pNewItem = rItem.Clone();
+        std::unique_ptr<SfxPoolItem> pNewItem(rItem.Clone());
         pNewItem->PutValue( aValue, pMap->nMemberId);
         m_pDoc->SetDefault(*pNewItem);
-        delete pNewItem;
     }
 }
 
 Any SAL_CALL SwXTextDefaults::getPropertyValue( const OUString& rPropertyName )
-        throw(UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if (!m_pDoc)
@@ -140,32 +134,27 @@ Any SAL_CALL SwXTextDefaults::getPropertyValue( const OUString& rPropertyName )
 }
 
 void SAL_CALL SwXTextDefaults::addPropertyChangeListener( const OUString& /*rPropertyName*/, const uno::Reference< XPropertyChangeListener >& /*xListener*/ )
-        throw(UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception)
 {
     OSL_FAIL ( "not implemented" );
 }
 
 void SAL_CALL SwXTextDefaults::removePropertyChangeListener( const OUString& /*rPropertyName*/, const uno::Reference< XPropertyChangeListener >& /*xListener*/ )
-        throw(UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception)
 {
     OSL_FAIL ( "not implemented" );
 }
 
 void SAL_CALL SwXTextDefaults::addVetoableChangeListener( const OUString& /*rPropertyName*/, const uno::Reference< XVetoableChangeListener >& /*xListener*/ )
-        throw(UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception)
 {
     OSL_FAIL ( "not implemented" );
 }
 
 void SAL_CALL SwXTextDefaults::removeVetoableChangeListener( const OUString& /*rPropertyName*/, const uno::Reference< XVetoableChangeListener >& /*xListener*/ )
-        throw(UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception)
 {
     OSL_FAIL ( "not implemented" );
 }
 
 // XPropertyState
 PropertyState SAL_CALL SwXTextDefaults::getPropertyState( const OUString& rPropertyName )
-        throw(UnknownPropertyException, RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     PropertyState eRet = PropertyState_DIRECT_VALUE;
@@ -182,7 +171,6 @@ PropertyState SAL_CALL SwXTextDefaults::getPropertyState( const OUString& rPrope
 }
 
 Sequence< PropertyState > SAL_CALL SwXTextDefaults::getPropertyStates( const Sequence< OUString >& rPropertyNames )
-        throw(UnknownPropertyException, RuntimeException, std::exception)
 {
     const sal_Int32 nCount = rPropertyNames.getLength();
     const OUString * pNames = rPropertyNames.getConstArray();
@@ -196,7 +184,6 @@ Sequence< PropertyState > SAL_CALL SwXTextDefaults::getPropertyStates( const Seq
 }
 
 void SAL_CALL SwXTextDefaults::setPropertyToDefault( const OUString& rPropertyName )
-        throw(UnknownPropertyException, RuntimeException, std::exception)
 {
     if (!m_pDoc)
         throw RuntimeException();
@@ -210,7 +197,6 @@ void SAL_CALL SwXTextDefaults::setPropertyToDefault( const OUString& rPropertyNa
 }
 
 Any SAL_CALL SwXTextDefaults::getPropertyDefault( const OUString& rPropertyName )
-        throw(UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception)
 {
     if (!m_pDoc)
         throw RuntimeException();
@@ -228,19 +214,16 @@ Any SAL_CALL SwXTextDefaults::getPropertyDefault( const OUString& rPropertyName 
 }
 
 OUString SAL_CALL SwXTextDefaults::getImplementationName(  )
-    throw (RuntimeException, std::exception)
 {
     return OUString("SwXTextDefaults");
 }
 
 sal_Bool SAL_CALL SwXTextDefaults::supportsService( const OUString& rServiceName )
-    throw (RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL SwXTextDefaults::getSupportedServiceNames(  )
-    throw (RuntimeException, std::exception)
 {
     uno::Sequence< OUString > aRet(7);
     OUString* pArr = aRet.getArray();

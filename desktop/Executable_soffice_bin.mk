@@ -9,8 +9,6 @@
 
 $(eval $(call gb_Executable_Executable,soffice_bin))
 
-$(eval $(call gb_Executable_set_targettype_gui,soffice_bin,YES))
-
 $(eval $(call gb_Executable_set_include,soffice_bin,\
     $$(INCLUDE) \
     -I$(SRCDIR)/desktop/source/inc \
@@ -19,7 +17,6 @@ $(eval $(call gb_Executable_set_include,soffice_bin,\
 $(eval $(call gb_Executable_use_libraries,soffice_bin,\
     sal \
     sofficeapp \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Executable_add_cobjects,soffice_bin,\
@@ -36,7 +33,7 @@ endif
 
 ifeq ($(OS),WNT)
 
-$(eval $(call gb_Executable_set_targettype_gui,soffice_bin,YES))
+$(eval $(call gb_Executable_set_targettype_gui,soffice_bin,NO))
 
 $(eval $(call gb_Executable_add_nativeres,soffice_bin,sofficebin/officeloader))
 

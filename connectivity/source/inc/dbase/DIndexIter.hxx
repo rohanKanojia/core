@@ -20,9 +20,9 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_DBASE_DINDEXITER_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_DBASE_DINDEXITER_HXX
 
-#include "file/fcode.hxx"
-#include "dbase/DIndex.hxx"
-#include "dbase/dindexnode.hxx"
+#include <file/fcode.hxx>
+#include <dbase/DIndex.hxx>
+#include <dbase/dindexnode.hxx>
 
 namespace connectivity
 {
@@ -31,12 +31,11 @@ namespace connectivity
 
         // IndexIterator
 
-        class OIndexIterator
+        class OIndexIterator final
         {
-        protected:
             file::OBoolOperator*    m_pOperator;
             const file::OOperand*   m_pOperand;
-            ODbaseIndex*            m_pIndex;
+            rtl::Reference<ODbaseIndex> m_xIndex;
             ONDXPagePtr             m_aRoot,
                                     m_aCurLeaf;
             sal_uInt16              m_nCurNode;
@@ -52,18 +51,15 @@ namespace connectivity
             ONDXKey* GetNextKey();
 
         public:
-            OIndexIterator(ODbaseIndex* pInd,
-                            file::OBoolOperator* pOp,
-                            const file::OOperand* pOper)
-                :m_pOperator(pOp)
-                ,m_pOperand(pOper)
-                ,m_pIndex(pInd)
+            OIndexIterator(ODbaseIndex* pInd)
+                :m_pOperator(nullptr)
+                ,m_pOperand(nullptr)
+                ,m_xIndex(pInd)
                 ,m_nCurNode(NODE_NOTFOUND)
             {
-                pInd->acquire();
             }
 
-            virtual ~OIndexIterator();
+            ~OIndexIterator();
             sal_uInt32 First();
             sal_uInt32 Next();
 

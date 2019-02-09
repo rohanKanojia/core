@@ -67,15 +67,6 @@ namespace basegfx
             @param rVec
             The 2D Vector which will be copied.
         */
-        B2DVector(const B2DVector& rVec)
-        :   B2DTuple(rVec)
-        {}
-
-        /** Create a copy of a 2D Vector
-
-            @param rVec
-            The 2D Vector which will be copied.
-        */
         explicit B2DVector(const ::basegfx::B2IVector& rVec)
         :   B2DTuple(rVec)
         {}
@@ -85,9 +76,6 @@ namespace basegfx
         */
         B2DVector(const ::basegfx::B2DTuple& rTuple)
         :   B2DTuple(rTuple)
-        {}
-
-        ~B2DVector()
         {}
 
         /** *=operator to allow usage from B2DVector, too
@@ -165,7 +153,7 @@ namespace basegfx
             The second 2D Vector
 
             @return
-            The Angle value of the two involved 2D Vectors in -pi/2 < return < pi/2
+            The Angle value of the two involved 2D Vectors ranging from -pi to +pi
         */
         double angle( const B2DVector& rVec ) const;
 

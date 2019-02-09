@@ -19,16 +19,15 @@
 #ifndef INCLUDED_PACKAGE_INC_ZIPENUMERATION_HXX
 #define INCLUDED_PACKAGE_INC_ZIPENUMERATION_HXX
 
-#include <HashMaps.hxx>
+#include "HashMaps.hxx"
 
-class ZipEnumeration
+class ZipEnumeration final
 {
-protected:
     EntryHash       &rEntryHash;
     EntryHash::const_iterator aIterator;
 public:
-    bool SAL_CALL hasMoreElements();
-    const ZipEntry * SAL_CALL nextElement();
+    bool hasMoreElements();
+    const ZipEntry * nextElement();
     ZipEnumeration( EntryHash &rNewEntryHash );
     ~ZipEnumeration();
 };

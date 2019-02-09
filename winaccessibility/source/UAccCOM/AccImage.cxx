@@ -24,12 +24,13 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnon-virtual-dtor"
 #endif
-#include  "UAccCOM.h"
+#include  <UAccCOM.h>
 #if defined __clang__
 #pragma clang diagnostic pop
 #endif
 
 #include <vcl/svapp.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
 #include <com/sun/star/accessibility/XAccessible.hpp>
 #include <com/sun/star/accessibility/XAccessibleContext.hpp>
@@ -49,14 +50,14 @@ STDMETHODIMP CAccImage::get_description(BSTR * description)
     ENTER_PROTECTED_BLOCK
 
     // #CHECK#
-    if (description == NULL)
+    if (description == nullptr)
         return E_INVALIDARG;
     if( !pRXImg.is() )
         return E_FAIL;
 
-    ::rtl::OUString ouStr = GetXInterface()->getAccessibleImageDescription();
+    OUString ouStr = GetXInterface()->getAccessibleImageDescription();
     SAFE_SYSFREESTRING(*description);
-    *description = SysAllocString((OLECHAR*)ouStr.getStr());
+    *description = SysAllocString(o3tl::toW(ouStr.getStr()));
 
     return S_OK;
 
@@ -91,7 +92,7 @@ STDMETHODIMP CAccImage::put_XInterface(hyper pXInterface)
 
     CUNOXWrapper::put_XInterface(pXInterface);
     //special query.
-    if(pUNOInterface == NULL)
+    if(pUNOInterface == nullptr)
         return E_FAIL;
 
     Reference<XAccessibleContext> pRContext = pUNOInterface->getAccessibleContext();
@@ -101,7 +102,7 @@ STDMETHODIMP CAccImage::put_XInterface(hyper pXInterface)
     }
     Reference<XAccessibleImage> pRXI(pRContext,UNO_QUERY);
     if( !pRXI.is() )
-        pRXImg = NULL;
+        pRXImg = nullptr;
     else
         pRXImg = pRXI.get();
     return S_OK;

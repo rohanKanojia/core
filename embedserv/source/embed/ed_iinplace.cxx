@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "embeddoc.hxx"
+#include <embeddoc.hxx>
 #include <osl/diagnose.h>
 
 
@@ -26,7 +26,7 @@ STDMETHODIMP EmbedDocument_Impl::GetWindow(HWND *hWnd)
     OSL_ENSURE(m_pDocHolder,"no document for inplace activation");
 
     *hWnd = m_pDocHolder->GetTopMostWinHandle();
-    if(*hWnd != NULL)
+    if(*hWnd != nullptr)
         return NOERROR;
     else
         return ERROR;

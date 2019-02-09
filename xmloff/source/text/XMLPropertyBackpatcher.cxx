@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/uno/Reference.h>
 
@@ -24,7 +25,6 @@
 #include "XMLPropertyBackpatcher.hxx"
 #include <xmloff/txtimp.hxx>
 
-using ::std::vector;
 using ::std::map;
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Any;
@@ -35,9 +35,6 @@ template<class A>
 XMLPropertyBackpatcher<A>::XMLPropertyBackpatcher(
     const OUString& sPropName)
 :   sPropertyName(sPropName)
-,   bDefaultHandling(false)
-,   bPreserveProperty(false)
-,   sPreservePropertyName()
 {
 }
 
@@ -45,7 +42,6 @@ XMLPropertyBackpatcher<A>::XMLPropertyBackpatcher(
 template<class A>
 XMLPropertyBackpatcher<A>::~XMLPropertyBackpatcher()
 {
-    SetDefault();
 }
 
 
@@ -58,45 +54,23 @@ void XMLPropertyBackpatcher<A>::ResolveId(
     aIDMap[sName] = aValue;
 
     // backpatch old references, if backpatch list exists
-    if (aBackpatchListMap.count(sName))
+    auto it = aBackpatchListMap.find(sName);
+    if (it != aBackpatchListMap.end())
     {
         // aah, we have a backpatch list!
-        BackpatchListType* pList =
-            static_cast<BackpatchListType*>(aBackpatchListMap[sName]);
+        std::unique_ptr<BackpatchListType> pList = std::move(it->second);
 
         // a) remove list from list map
-        aBackpatchListMap.erase(sName);
+        aBackpatchListMap.erase(it);
 
         // b) for every item, set SequenceNumber
         //    (and preserve Property, if appropriate)
         Any aAny;
         aAny <<= aValue;
-        if (bPreserveProperty)
+        for(auto& rBackpatch : *pList)
         {
-            // preserve version
-            for(BackpatchListType::iterator aIter = pList->begin();
-                aIter != pList->end();
-                ++aIter)
-            {
-                Reference<XPropertySet> xProp = (*aIter);
-                Any aPres = xProp->getPropertyValue(sPreservePropertyName);
-                xProp->setPropertyValue(sPropertyName, aAny);
-                xProp->setPropertyValue(sPreservePropertyName, aPres);
-            }
+            rBackpatch->setPropertyValue(sPropertyName, aAny);
         }
-        else
-        {
-            // without preserve
-            for(BackpatchListType::iterator aIter = pList->begin();
-                aIter != pList->end();
-                ++aIter)
-            {
-                (*aIter)->setPropertyValue(sPropertyName, aAny);
-            }
-        }
-
-        // c) delete list
-        delete pList;
     }
     // else: no backpatch list -> then we're finished
 }
@@ -106,21 +80,10 @@ void XMLPropertyBackpatcher<A>::SetProperty(
     const Reference<XPropertySet> & xPropSet,
     const OUString& sName)
 {
-    Reference<XPropertySet> xNonConstPropSet(xPropSet);
-    SetProperty(xNonConstPropSet, sName);
-}
-
-template<class A>
-void XMLPropertyBackpatcher<A>::SetProperty(
-    Reference<XPropertySet> & xPropSet,
-    const OUString& sName)
-{
     if (aIDMap.count(sName))
     {
         // we know this ID -> set property
-        Any aAny;
-        aAny <<= aIDMap[sName];
-        xPropSet->setPropertyValue(sPropertyName, aAny);
+        xPropSet->setPropertyValue(sPropertyName, css::uno::Any(aIDMap[sName]));
     }
     else
     {
@@ -128,21 +91,11 @@ void XMLPropertyBackpatcher<A>::SetProperty(
         if (! aBackpatchListMap.count(sName))
         {
             // create backpatch list for this name
-            BackpatchListType* pTmp = new BackpatchListType() ;
-            aBackpatchListMap[sName] = static_cast<void*>(pTmp);
+            aBackpatchListMap.emplace(sName, new BackpatchListType);
         }
 
         // insert footnote
-        static_cast<BackpatchListType*>(aBackpatchListMap[sName])->push_back(xPropSet);
-    }
-}
-
-template<class A>
-void XMLPropertyBackpatcher<A>::SetDefault()
-{
-    if (bDefaultHandling)
-    {
-        // not implemented yet
+        aBackpatchListMap[sName]->push_back(xPropSet);
     }
 }
 
@@ -168,7 +121,7 @@ std::shared_ptr<XMLTextImportHelper::BackpatcherImpl>
 XMLTextImportHelper::MakeBackpatcherImpl()
 {
     // n.b.: the shared_ptr stores the dtor!
-    return std::shared_ptr<BackpatcherImpl>(new BackpatcherImpl);
+    return std::make_shared<BackpatcherImpl>();
 }
 
 static OUString GetSequenceNumber()
@@ -192,7 +145,7 @@ static OUString GetSequenceNumber()
 
 XMLPropertyBackpatcher<sal_Int16>& XMLTextImportHelper::GetFootnoteBP()
 {
-    if (!m_xBackpatcherImpl->m_pFootnoteBackpatcher.get())
+    if (!m_xBackpatcherImpl->m_pFootnoteBackpatcher)
     {
         m_xBackpatcherImpl->m_pFootnoteBackpatcher.reset(
             new XMLPropertyBackpatcher<sal_Int16>(GetSequenceNumber()));
@@ -202,7 +155,7 @@ XMLPropertyBackpatcher<sal_Int16>& XMLTextImportHelper::GetFootnoteBP()
 
 XMLPropertyBackpatcher<sal_Int16>& XMLTextImportHelper::GetSequenceIdBP()
 {
-    if (!m_xBackpatcherImpl->m_pSequenceIdBackpatcher.get())
+    if (!m_xBackpatcherImpl->m_pSequenceIdBackpatcher)
     {
         m_xBackpatcherImpl->m_pSequenceIdBackpatcher.reset(
             new XMLPropertyBackpatcher<sal_Int16>(GetSequenceNumber()));
@@ -212,11 +165,10 @@ XMLPropertyBackpatcher<sal_Int16>& XMLTextImportHelper::GetSequenceIdBP()
 
 XMLPropertyBackpatcher<OUString>& XMLTextImportHelper::GetSequenceNameBP()
 {
-    static const char s_SourceName[] = "SourceName";
-    if (!m_xBackpatcherImpl->m_pSequenceNameBackpatcher.get())
+    if (!m_xBackpatcherImpl->m_pSequenceNameBackpatcher)
     {
         m_xBackpatcherImpl->m_pSequenceNameBackpatcher.reset(
-            new XMLPropertyBackpatcher<OUString>(s_SourceName));
+            new XMLPropertyBackpatcher<OUString>("SourceName"));
     }
     return *m_xBackpatcherImpl->m_pSequenceNameBackpatcher;
 }

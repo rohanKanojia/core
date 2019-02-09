@@ -19,7 +19,9 @@
 #ifndef INCLUDED_SW_INC_FMTRUBY_HXX
 #define INCLUDED_SW_INC_FMTRUBY_HXX
 
+#include "swdllapi.h"
 #include <svl/poolitem.hxx>
+#include <com/sun/star/text/RubyAdjust.hpp>
 
 class SwTextRuby;
 
@@ -27,17 +29,17 @@ class SW_DLLPUBLIC SwFormatRuby : public SfxPoolItem
 {
     friend class SwTextRuby;
 
-    OUString sRubyText;                      ///< The ruby txt.
-    OUString sCharFormatName;                  ///< Name of the charformat.
-    SwTextRuby* pTextAttr;                    ///< The TextAttribute.
-    sal_uInt16 nCharFormatId;                  ///< PoolId of the charformat.
-    sal_uInt16 nPosition;                   ///< Position of the Ruby-character.
-    sal_uInt16 nAdjustment;                 ///< Specific adjustment of the Ruby-ch.
+    OUString m_sRubyText;                     ///< The ruby text.
+    OUString m_sCharFormatName;               ///< Name of the charformat.
+    SwTextRuby* m_pTextAttr;                  ///< The TextAttribute.
+    sal_uInt16 m_nCharFormatId;               ///< PoolId of the charformat.
+    sal_uInt16 m_nPosition;                   ///< Position of the Ruby-character.
+    css::text::RubyAdjust m_eAdjustment;      ///< Specific adjustment of the Ruby-ch.
 
 public:
     SwFormatRuby( const OUString& rRubyText );
     SwFormatRuby( const SwFormatRuby& rAttr );
-    virtual ~SwFormatRuby();
+    virtual ~SwFormatRuby() override;
 
     SwFormatRuby& operator=( const SwFormatRuby& rAttr );
 
@@ -46,30 +48,30 @@ public:
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper* pIntl = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& rIntl ) const override;
 
     virtual bool QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
-    const SwTextRuby* GetTextRuby() const         { return pTextAttr; }
+    const SwTextRuby* GetTextRuby() const         { return m_pTextAttr; }
 
-    OUString GetText() const                    { return sRubyText; }
-    void SetText( const OUString& rText )        { sRubyText = rText; }
+    const OUString& GetText() const                    { return m_sRubyText; }
+    void SetText( const OUString& rText )        { m_sRubyText = rText; }
 
-    OUString GetCharFormatName() const             { return sCharFormatName; }
-    void SetCharFormatName( const OUString& rNm )  { sCharFormatName = rNm; }
+    const OUString& GetCharFormatName() const             { return m_sCharFormatName; }
+    void SetCharFormatName( const OUString& rNm )  { m_sCharFormatName = rNm; }
 
-    sal_uInt16 GetCharFormatId() const                 { return nCharFormatId; }
-    void SetCharFormatId( sal_uInt16 nNew )            { nCharFormatId = nNew; }
+    sal_uInt16 GetCharFormatId() const                 { return m_nCharFormatId; }
+    void SetCharFormatId( sal_uInt16 nNew )            { m_nCharFormatId = nNew; }
 
-    sal_uInt16 GetPosition() const                  { return nPosition; }
-    void SetPosition( sal_uInt16 nNew )             { nPosition = nNew; }
+    sal_uInt16 GetPosition() const                  { return m_nPosition; }
+    void SetPosition( sal_uInt16 nNew )             { m_nPosition = nNew; }
 
-    sal_uInt16 GetAdjustment() const                { return nAdjustment; }
-    void SetAdjustment( sal_uInt16 nNew )           { nAdjustment = nNew; }
+    css::text::RubyAdjust GetAdjustment() const       { return m_eAdjustment; }
+    void SetAdjustment( css::text::RubyAdjust nNew )  { m_eAdjustment = nNew; }
 };
 
 #endif

@@ -24,10 +24,10 @@
 #include <DataSeriesHelper.hxx>
 #include <DiagramHelper.hxx>
 #include <ItemPropertyMap.hxx>
-#include <SchWhichPairs.hxx>
-#include <macros.hxx>
+#include "SchWhichPairs.hxx"
 #include <unonames.hxx>
 
+#include <sal/log.hxx>
 #include <editeng/brushitem.hxx>
 #include <editeng/sizeitem.hxx>
 #include <svl/ilstitem.hxx>
@@ -35,6 +35,7 @@
 #include <svl/stritem.hxx>
 #include <svx/tabline.hxx>
 
+#include <com/sun/star/chart2/AxisType.hpp>
 #include <com/sun/star/chart2/DataPointLabel.hpp>
 #include <com/sun/star/chart2/Symbol.hpp>
 #include <memory>
@@ -49,15 +50,12 @@ namespace {
 
 const ItemPropertyMapType& getTextLabelPropertyMap()
 {
-    static ItemPropertyMapType aMap(
-        MakeItemPropertyMap
-        IPM_MAP_ENTRY(XATTR_LINESTYLE, CHART_UNONAME_LABEL_BORDER_STYLE, 0)
-        IPM_MAP_ENTRY(XATTR_LINEWIDTH, CHART_UNONAME_LABEL_BORDER_WIDTH, 0)
-        IPM_MAP_ENTRY(XATTR_LINEDASH,  CHART_UNONAME_LABEL_BORDER_DASH, 0)
-        IPM_MAP_ENTRY(XATTR_LINECOLOR, CHART_UNONAME_LABEL_BORDER_COLOR, 0)
-        IPM_MAP_ENTRY(XATTR_LINETRANSPARENCE, CHART_UNONAME_LABEL_BORDER_TRANS, 0)
-    );
-
+    static ItemPropertyMapType aMap{
+        {XATTR_LINESTYLE, {CHART_UNONAME_LABEL_BORDER_STYLE, 0}},
+        {XATTR_LINEWIDTH, {CHART_UNONAME_LABEL_BORDER_WIDTH, 0}},
+        {XATTR_LINEDASH,  {CHART_UNONAME_LABEL_BORDER_DASH, 0}},
+        {XATTR_LINECOLOR, {CHART_UNONAME_LABEL_BORDER_COLOR, 0}},
+        {XATTR_LINETRANSPARENCE, {CHART_UNONAME_LABEL_BORDER_TRANS, 0}}};
     return aMap;
 };
 
@@ -93,14 +91,14 @@ bool numberFormatFromItemToPropertySet(
     if (!xPropertySet.is())
         return bChanged;
 
-    OUString aPropertyName = (SID_ATTR_NUMBERFORMAT_VALUE == nWhichId) ? OUString(CHART_UNONAME_NUMFMT) : OUString("PercentageNumberFormat");
-    sal_uInt16 nSourceWhich = (SID_ATTR_NUMBERFORMAT_VALUE == nWhichId) ? SID_ATTR_NUMBERFORMAT_SOURCE : SCHATTR_PERCENT_NUMBERFORMAT_SOURCE;
+    OUString aPropertyName = (nWhichId == SID_ATTR_NUMBERFORMAT_VALUE) ? OUString(CHART_UNONAME_NUMFMT) : OUString("PercentageNumberFormat");
+    sal_uInt16 nSourceWhich = (nWhichId == SID_ATTR_NUMBERFORMAT_VALUE) ? SID_ATTR_NUMBERFORMAT_SOURCE : SCHATTR_PERCENT_NUMBERFORMAT_SOURCE;
 
-    if (SfxItemState::SET != rItemSet.GetItemState(nSourceWhich))
+    if (rItemSet.GetItemState(nSourceWhich) != SfxItemState::SET)
         return bChanged;
 
     uno::Any aValue;
-    bool bUseSourceFormat = (static_cast<const SfxBoolItem&>(rItemSet.Get(nSourceWhich)).GetValue());
+    bool bUseSourceFormat = static_cast<const SfxBoolItem&>(rItemSet.Get(nSourceWhich)).GetValue();
     if (!bUseSourceFormat)
     {
         SfxItemState aState = rItemSet.GetItemState(nWhichId);
@@ -109,7 +107,7 @@ bool numberFormatFromItemToPropertySet(
             sal_Int32 nFmt = static_cast<sal_Int32>(
                 static_cast<const SfxUInt32Item&>(
                     rItemSet.Get(nWhichId)).GetValue());
-            aValue = uno::makeAny(nFmt);
+            aValue <<= nFmt;
         }
         else
             return bChanged;
@@ -141,15 +139,15 @@ bool useSourceFormatFromItemToPropertySet(
     bool bChanged = false;
     if (!xPropertySet.is())
         return bChanged;
-    OUString aPropertyName = (SID_ATTR_NUMBERFORMAT_SOURCE == nWhichId) ? OUString(CHART_UNONAME_NUMFMT) : OUString("PercentageNumberFormat");
-    sal_uInt16 nFormatWhich = (SID_ATTR_NUMBERFORMAT_SOURCE == nWhichId) ? SID_ATTR_NUMBERFORMAT_VALUE : SCHATTR_PERCENT_NUMBERFORMAT_VALUE;
+    OUString aPropertyName = (nWhichId == SID_ATTR_NUMBERFORMAT_SOURCE) ? OUString(CHART_UNONAME_NUMFMT) : OUString("PercentageNumberFormat");
+    sal_uInt16 nFormatWhich = (nWhichId == SID_ATTR_NUMBERFORMAT_SOURCE) ? SID_ATTR_NUMBERFORMAT_VALUE : SCHATTR_PERCENT_NUMBERFORMAT_VALUE;
 
-    if (SfxItemState::SET != rItemSet.GetItemState(nWhichId))
+    if (rItemSet.GetItemState(nWhichId) != SfxItemState::SET)
         return bChanged;
 
     uno::Any aNewValue;
-    bool bUseSourceFormat = (static_cast<const SfxBoolItem&>(
-            rItemSet.Get(nWhichId)).GetValue());
+    bool bUseSourceFormat = static_cast<const SfxBoolItem&>(
+            rItemSet.Get(nWhichId)).GetValue();
     if (!bUseSourceFormat)
     {
         SfxItemState aState = rItemSet.GetItemState(nFormatWhich);
@@ -198,21 +196,20 @@ TextLabelItemConverter::TextLabelItemConverter(
     mbDataSeries(bDataSeries),
     mbForbidPercentValue(true)
 {
-    maConverters.push_back(new CharacterPropertyItemConverter(rPropertySet, rItemPool, pRefSize, "ReferencePageSize"));
+    maConverters.emplace_back(new CharacterPropertyItemConverter(rPropertySet, rItemPool, pRefSize, "ReferencePageSize"));
 
     uno::Reference<XDiagram> xDiagram(ChartModelHelper::findDiagram(xChartModel));
     uno::Reference<XChartType> xChartType(DiagramHelper::getChartTypeOfSeries(xDiagram, xSeries));
     bool bFound = false;
     bool bAmbiguous = false;
     bool bSwapXAndY = DiagramHelper::getVertical(xDiagram, bFound, bAmbiguous);
-    maAvailableLabelPlacements = ChartTypeHelper::getSupportedLabelPlacements(xChartType, DiagramHelper::getDimension(xDiagram), bSwapXAndY, xSeries);
+    maAvailableLabelPlacements = ChartTypeHelper::getSupportedLabelPlacements(xChartType, bSwapXAndY, xSeries);
 
-    mbForbidPercentValue = AxisType::CATEGORY != ChartTypeHelper::getAxisType(xChartType, 0);
+    mbForbidPercentValue = ChartTypeHelper::getAxisType(xChartType, 0) != AxisType::CATEGORY;
 }
 
 TextLabelItemConverter::~TextLabelItemConverter()
 {
-    std::for_each(maConverters.begin(), maConverters.end(), std::default_delete<ItemConverter>());
 }
 
 void TextLabelItemConverter::FillItemSet( SfxItemSet& rOutItemSet ) const
@@ -254,7 +251,6 @@ bool TextLabelItemConverter::GetItemProperty( tWhichIdType nWhichId, tPropertyNa
 }
 
 bool TextLabelItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet& rItemSet )
-    throw (uno::Exception)
 {
     bool bChanged = false;
 
@@ -271,9 +267,9 @@ bool TextLabelItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxIte
             chart2::DataPointLabel aLabel;
             if (aOldValue >>= aLabel)
             {
-                sal_Bool& rValue = (SCHATTR_DATADESCR_SHOW_NUMBER == nWhichId) ? aLabel.ShowNumber : (
-                    (SCHATTR_DATADESCR_SHOW_PERCENTAGE == nWhichId) ? aLabel.ShowNumberInPercent : (
-                        (SCHATTR_DATADESCR_SHOW_CATEGORY == nWhichId) ? aLabel.ShowCategoryName : aLabel.ShowLegendSymbol));
+                sal_Bool& rValue = (nWhichId == SCHATTR_DATADESCR_SHOW_NUMBER) ? aLabel.ShowNumber : (
+                    (nWhichId == SCHATTR_DATADESCR_SHOW_PERCENTAGE) ? aLabel.ShowNumberInPercent : (
+                        (nWhichId == SCHATTR_DATADESCR_SHOW_CATEGORY) ? aLabel.ShowCategoryName : aLabel.ShowLegendSymbol));
                 bool bOldValue = rValue;
                 rValue = rItem.GetValue();
                 if (mbDataSeries)
@@ -282,13 +278,13 @@ bool TextLabelItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxIte
                     if (bOldValue != bool(rValue) ||
                         DataSeriesHelper::hasAttributedDataPointDifferentValue(xSeries, CHART_UNONAME_LABEL, aOldValue))
                     {
-                        DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints(xSeries, CHART_UNONAME_LABEL, uno::makeAny(aLabel));
+                        DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints(xSeries, CHART_UNONAME_LABEL, uno::Any(aLabel));
                         bChanged = true;
                     }
                 }
                 else if (bOldValue != bool(rValue))
                 {
-                    GetPropertySet()->setPropertyValue(CHART_UNONAME_LABEL, uno::makeAny(aLabel));
+                    GetPropertySet()->setPropertyValue(CHART_UNONAME_LABEL, uno::Any(aLabel));
                     bChanged = true;
                 }
             }
@@ -316,22 +312,22 @@ bool TextLabelItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxIte
                 if (mbDataSeries)
                 {
                     Reference<chart2::XDataSeries> xSeries(GetPropertySet(), uno::UNO_QUERY);
-                    if (!aOldValue.equals(aNewValue) ||
-                        DataSeriesHelper::hasAttributedDataPointDifferentValue(xSeries, "LabelSeparator", uno::makeAny(aOldValue)))
+                    if (aOldValue != aNewValue ||
+                        DataSeriesHelper::hasAttributedDataPointDifferentValue(xSeries, "LabelSeparator", uno::Any(aOldValue)))
                     {
-                        DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints(xSeries, "LabelSeparator", uno::makeAny(aNewValue));
+                        DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints(xSeries, "LabelSeparator", uno::Any(aNewValue));
                         bChanged = true;
                     }
                 }
-                else if (!aOldValue.equals(aNewValue))
+                else if (aOldValue != aNewValue)
                 {
-                    GetPropertySet()->setPropertyValue("LabelSeparator", uno::makeAny(aNewValue));
+                    GetPropertySet()->setPropertyValue("LabelSeparator", uno::Any(aNewValue));
                     bChanged = true;
                 }
             }
             catch (const uno::Exception& e)
             {
-                ASSERT_EXCEPTION(e);
+                SAL_WARN("chart2", "Exception caught. " << e);
             }
         }
         break;
@@ -347,21 +343,21 @@ bool TextLabelItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxIte
                 {
                     Reference< chart2::XDataSeries > xSeries( GetPropertySet(), uno::UNO_QUERY);
                     if( bOld!=bNew ||
-                        DataSeriesHelper::hasAttributedDataPointDifferentValue( xSeries, "TextWordWrap", uno::makeAny( bOld ) ) )
+                        DataSeriesHelper::hasAttributedDataPointDifferentValue( xSeries, "TextWordWrap", uno::Any( bOld ) ) )
                     {
-                        DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints( xSeries, "TextWordWrap", uno::makeAny( bNew ) );
+                        DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints( xSeries, "TextWordWrap", uno::Any( bNew ) );
                         bChanged = true;
                     }
                 }
                 else if( bOld!=bNew )
                 {
-                    GetPropertySet()->setPropertyValue( "TextWordWrap", uno::makeAny( bNew ));
+                    GetPropertySet()->setPropertyValue( "TextWordWrap", uno::Any( bNew ));
                     bChanged = true;
                 }
             }
             catch( const uno::Exception& e )
             {
-                ASSERT_EXCEPTION( e );
+                SAL_WARN("chart2", "Exception caught. " << e );
             }
         }
         break;
@@ -380,21 +376,21 @@ bool TextLabelItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxIte
                 {
                     Reference<chart2::XDataSeries> xSeries(GetPropertySet(), uno::UNO_QUERY);
                     if (nOld != nNew ||
-                        DataSeriesHelper::hasAttributedDataPointDifferentValue(xSeries, "LabelPlacement", uno::makeAny(nOld)))
+                        DataSeriesHelper::hasAttributedDataPointDifferentValue(xSeries, "LabelPlacement", uno::Any(nOld)))
                     {
-                        DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints(xSeries, "LabelPlacement", uno::makeAny(nNew));
+                        DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints(xSeries, "LabelPlacement", uno::Any(nNew));
                         bChanged = true;
                     }
                 }
                 else if (nOld != nNew)
                 {
-                    GetPropertySet()->setPropertyValue("LabelPlacement", uno::makeAny(nNew));
+                    GetPropertySet()->setPropertyValue("LabelPlacement", uno::Any(nNew));
                     bChanged = true;
                 }
             }
             catch (const uno::Exception& e)
             {
-                ASSERT_EXCEPTION(e);
+                SAL_WARN("chart2", "Exception caught. " << e);
             }
         }
         break;
@@ -434,7 +430,7 @@ bool TextLabelItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxIte
                 if (bDeleteSymbol)
                     GetPropertySet()->setPropertyValue("Symbol", uno::Any());
                 else
-                    GetPropertySet()->setPropertyValue("Symbol", uno::makeAny(aSymbol));
+                    GetPropertySet()->setPropertyValue("Symbol", uno::Any(aSymbol));
                 bChanged = true;
             }
         }
@@ -452,7 +448,7 @@ bool TextLabelItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxIte
                 aSymbol.Size.Width = aSize.getWidth();
                 aSymbol.Size.Height = aSize.getHeight();
 
-                GetPropertySet()->setPropertyValue("Symbol", uno::makeAny(aSymbol));
+                GetPropertySet()->setPropertyValue("Symbol", uno::Any(aSymbol));
                 bChanged = true;
             }
         }
@@ -474,7 +470,7 @@ bool TextLabelItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxIte
                     if (aSymbol.Graphic != xGraphic)
                     {
                         aSymbol.Graphic = xGraphic;
-                        GetPropertySet()->setPropertyValue("Symbol", uno::makeAny(aSymbol));
+                        GetPropertySet()->setPropertyValue("Symbol", uno::Any(aSymbol));
                         bChanged = true;
                     }
                 }
@@ -492,7 +488,7 @@ bool TextLabelItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxIte
 
             if (!bPropExisted || fOldValue != fValue)
             {
-                GetPropertySet()->setPropertyValue("TextRotation", uno::makeAny(fValue));
+                GetPropertySet()->setPropertyValue("TextRotation", uno::Any(fValue));
                 bChanged = true;
             }
         }
@@ -503,7 +499,6 @@ bool TextLabelItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxIte
 }
 
 void TextLabelItemConverter::FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet& rOutItemSet ) const
-    throw (uno::Exception)
 {
     switch (nWhichId)
     {
@@ -515,16 +510,16 @@ void TextLabelItemConverter::FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet& r
             chart2::DataPointLabel aLabel;
             if (GetPropertySet()->getPropertyValue(CHART_UNONAME_LABEL) >>= aLabel)
             {
-                bool bValue = (SCHATTR_DATADESCR_SHOW_NUMBER == nWhichId) ? aLabel.ShowNumber : (
-                    (SCHATTR_DATADESCR_SHOW_PERCENTAGE == nWhichId) ? aLabel.ShowNumberInPercent : (
-                        (SCHATTR_DATADESCR_SHOW_CATEGORY == nWhichId) ? aLabel.ShowCategoryName : aLabel.ShowLegendSymbol));
+                bool bValue = (nWhichId == SCHATTR_DATADESCR_SHOW_NUMBER) ? aLabel.ShowNumber : (
+                    (nWhichId == SCHATTR_DATADESCR_SHOW_PERCENTAGE) ? aLabel.ShowNumberInPercent : (
+                        (nWhichId == SCHATTR_DATADESCR_SHOW_CATEGORY) ? aLabel.ShowCategoryName : aLabel.ShowLegendSymbol));
 
                 rOutItemSet.Put(SfxBoolItem(nWhichId, bValue));
 
                 if (mbDataSeries)
                 {
                     if (DataSeriesHelper::hasAttributedDataPointDifferentValue(
-                            Reference<chart2::XDataSeries>(GetPropertySet(), uno::UNO_QUERY), CHART_UNONAME_LABEL, uno::makeAny(aLabel)))
+                            Reference<chart2::XDataSeries>(GetPropertySet(), uno::UNO_QUERY), CHART_UNONAME_LABEL, uno::Any(aLabel)))
                     {
                         rOutItemSet.InvalidateItem(nWhichId);
                     }
@@ -556,7 +551,7 @@ void TextLabelItemConverter::FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet& r
         break;
         case SCHATTR_PERCENT_NUMBERFORMAT_SOURCE:
         {
-            bool bNumberFormatIsSet = (GetPropertySet()->getPropertyValue("PercentageNumberFormat").hasValue());
+            bool bNumberFormatIsSet = GetPropertySet()->getPropertyValue("PercentageNumberFormat").hasValue();
             rOutItemSet.Put(SfxBoolItem(nWhichId, !bNumberFormatIsSet));
         }
         break;
@@ -570,7 +565,7 @@ void TextLabelItemConverter::FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet& r
             }
             catch (const uno::Exception& e)
             {
-                ASSERT_EXCEPTION(e);
+                SAL_WARN("chart2", "Exception caught. " << e);
             }
         }
         break;
@@ -584,7 +579,7 @@ void TextLabelItemConverter::FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet& r
             }
             catch( const uno::Exception& e )
             {
-                ASSERT_EXCEPTION( e );
+                SAL_WARN("chart2", "Exception caught. " << e );
             }
         }
         break;
@@ -600,7 +595,7 @@ void TextLabelItemConverter::FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet& r
             }
             catch (const uno::Exception& e)
             {
-                ASSERT_EXCEPTION(e);
+                SAL_WARN("chart2", "Exception caught. " << e);
             }
         }
         break;

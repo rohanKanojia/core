@@ -23,22 +23,19 @@
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/drawing/LineJoint.hpp>
 #include <com/sun/star/drawing/LineCap.hpp>
-#include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/presentation/AnimationSpeed.hpp>
 #include <com/sun/star/presentation/FadeEffect.hpp>
-#include <com/sun/star/drawing/ConnectorType.hpp>
-#include <com/sun/star/drawing/RectanglePoint.hpp>
-#include <com/sun/star/drawing/CircleKind.hpp>
 
-#include <com/sun/star/drawing/BitmapMode.hpp>
 #include <com/sun/star/text/WritingMode.hpp>
+#include <com/sun/star/text/WritingMode2.hpp>
 #include <xmloff/EnumPropertyHdl.hxx>
 #include <xmloff/NamedBoolPropertyHdl.hxx>
 #include <xmloff/WordWrapPropertyHdl.hxx>
+#include <enummaps.hxx>
 #include "numithdl.hxx"
-#include "XMLBitmapRepeatOffsetPropertyHandler.hxx"
-#include "XMLFillBitmapSizePropertyHandler.hxx"
-#include "XMLBitmapLogicalSizePropertyHandler.hxx"
+#include <XMLBitmapRepeatOffsetPropertyHandler.hxx>
+#include <XMLFillBitmapSizePropertyHandler.hxx>
+#include <XMLBitmapLogicalSizePropertyHandler.hxx>
 #include <com/sun/star/drawing/TextAnimationKind.hpp>
 #include <com/sun/star/drawing/TextAnimationDirection.hpp>
 #include <com/sun/star/drawing/TextHorizontalAdjust.hpp>
@@ -49,19 +46,21 @@
 #include <xmloff/controlpropertyhdl.hxx>
 #include <xmloff/xmltoken.hxx>
 #include "sdpropls.hxx"
-#include "propimp0.hxx"
+#include <propimp0.hxx>
 #include <xmloff/xmlexp.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <com/sun/star/drawing/NormalsKind.hpp>
 #include <com/sun/star/drawing/TextureProjectionMode.hpp>
 #include <com/sun/star/drawing/TextureKind.hpp>
 #include <com/sun/star/drawing/TextureMode.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <xmloff/txtprmap.hxx>
-#include "XMLClipPropertyHandler.hxx"
-#include "XMLIsPercentagePropertyHandler.hxx"
-#include "XMLPercentOrMeasurePropertyHandler.hxx"
-#include "animations.hxx"
+#include <XMLClipPropertyHandler.hxx>
+#include <XMLIsPercentagePropertyHandler.hxx>
+#include <XMLPercentOrMeasurePropertyHandler.hxx>
+#include <animations.hxx>
 #include <sax/tools/converter.hxx>
+#include <xmlsdtypes.hxx>
 
 #include "sdxmlexp_impl.hxx"
 
@@ -131,7 +130,8 @@ const XMLPropertyMapEntry aXMLSDProperties[] =
     GMAP( "TextVerticalAdjust",             XML_NAMESPACE_DRAW, XML_TEXTAREA_VERTICAL_ALIGN,    XML_SD_TYPE_VERTICAL_ALIGN, 0 ),
     GMAP( "TextAutoGrowHeight",             XML_NAMESPACE_DRAW, XML_AUTO_GROW_HEIGHT,       XML_TYPE_BOOL, 0 ),
     GMAP( "TextAutoGrowWidth",              XML_NAMESPACE_DRAW, XML_AUTO_GROW_WIDTH,        XML_TYPE_BOOL, 0 ),
-    GMAP( "TextFitToSize",                  XML_NAMESPACE_DRAW, XML_FIT_TO_SIZE,            XML_SD_TYPE_FITTOSIZE, 0 ),
+    GMAP( "TextFitToSize",                  XML_NAMESPACE_DRAW, XML_FIT_TO_SIZE,            XML_SD_TYPE_FITTOSIZE|MID_FLAG_MERGE_PROPERTY, 0),
+    GMAPV( "TextFitToSize",                 XML_NAMESPACE_STYLE, XML_SHRINK_TO_FIT,         XML_SD_TYPE_FITTOSIZE_AUTOFIT|MID_FLAG_MERGE_PROPERTY, 0, SvtSaveOptions::ODFVER_012 ),
     GMAP( "TextContourFrame",               XML_NAMESPACE_DRAW, XML_FIT_TO_CONTOUR,         XML_TYPE_BOOL, 0 ),
     GMAP( "TextMaximumFrameHeight",         XML_NAMESPACE_FO,   XML_MAX_HEIGHT,             XML_TYPE_MEASURE, 0 ),
     GMAP( "TextMaximumFrameWidth",          XML_NAMESPACE_FO,   XML_MAX_WIDTH,              XML_TYPE_MEASURE, 0 ),
@@ -245,7 +245,22 @@ const XMLPropertyMapEntry aXMLSDProperties[] =
     GMAP( "FontWorkHideForm",               XML_NAMESPACE_DRAW, XML_FONTWORK_HIDE_FORM,             XML_TYPE_BOOL,              CTF_FONTWORK_HIDEFORM   ),
     GMAP( "FontWorkShadowTransparence",     XML_NAMESPACE_DRAW, XML_FONTWORK_SHADOW_TRANSPARENCE,   XML_TYPE_PERCENT,           CTF_FONTWORK_SHADOWTRANSPARENCE ),
 
-    // control attributes (border exists one mor time for the text additions of shapes)
+    // #FontWork# attributes
+    GMAP( "FontWorkStyle",                  XML_NAMESPACE_DRAW_EXT, XML_FONTWORK_STYLE,                 XML_SD_TYPE_FONTWORK_STYLE | MID_FLAG_ELEMENT_ITEM_EXPORT, CTF_FONTWORK_STYLE  ),
+    GMAP( "FontWorkAdjust",                 XML_NAMESPACE_DRAW_EXT, XML_FONTWORK_ADJUST,                XML_SD_TYPE_FONTWORK_ADJUST | MID_FLAG_ELEMENT_ITEM_EXPORT,CTF_FONTWORK_ADJUST ),
+    GMAP( "FontWorkDistance",               XML_NAMESPACE_DRAW_EXT, XML_FONTWORK_DISTANCE,              XML_TYPE_MEASURE | MID_FLAG_ELEMENT_ITEM_EXPORT,           CTF_FONTWORK_DISTANCE   ),
+    GMAP( "FontWorkStart",                  XML_NAMESPACE_DRAW_EXT, XML_FONTWORK_START,                 XML_TYPE_MEASURE | MID_FLAG_ELEMENT_ITEM_EXPORT,           CTF_FONTWORK_START  ),
+    GMAP( "FontWorkMirror",                 XML_NAMESPACE_DRAW_EXT, XML_FONTWORK_MIRROR,                XML_TYPE_BOOL | MID_FLAG_ELEMENT_ITEM_EXPORT,              CTF_FONTWORK_MIRROR ),
+    GMAP( "FontWorkOutline",                XML_NAMESPACE_DRAW_EXT, XML_FONTWORK_OUTLINE,               XML_TYPE_BOOL | MID_FLAG_ELEMENT_ITEM_EXPORT,              CTF_FONTWORK_OUTLINE    ),
+    GMAP( "FontWorkShadow",                 XML_NAMESPACE_DRAW_EXT, XML_FONTWORK_SHADOW,                XML_SD_TYPE_FONTWORK_SHADOW | MID_FLAG_ELEMENT_ITEM_EXPORT,CTF_FONTWORK_SHADOW ),
+    GMAP( "FontWorkShadowColor",            XML_NAMESPACE_DRAW_EXT, XML_FONTWORK_SHADOW_COLOR,          XML_TYPE_COLOR | MID_FLAG_ELEMENT_ITEM_EXPORT,             CTF_FONTWORK_SHADOWCOLOR    ),
+    GMAP( "FontWorkShadowOffsetX",          XML_NAMESPACE_DRAW_EXT, XML_FONTWORK_SHADOW_OFFSET_X,       XML_TYPE_MEASURE | MID_FLAG_ELEMENT_ITEM_EXPORT,           CTF_FONTWORK_SHADOWOFFSETX  ),
+    GMAP( "FontWorkShadowOffsetY",          XML_NAMESPACE_DRAW_EXT, XML_FONTWORK_SHADOW_OFFSET_Y,       XML_TYPE_MEASURE | MID_FLAG_ELEMENT_ITEM_EXPORT,           CTF_FONTWORK_SHADOWOFFSETY  ),
+    GMAP( "FontWorkForm",                   XML_NAMESPACE_DRAW_EXT, XML_FONTWORK_FORM,                  XML_SD_TYPE_FONTWORK_FORM | MID_FLAG_ELEMENT_ITEM_EXPORT,  CTF_FONTWORK_FORM   ),
+    GMAP( "FontWorkHideForm",               XML_NAMESPACE_DRAW_EXT, XML_FONTWORK_HIDE_FORM,             XML_TYPE_BOOL | MID_FLAG_ELEMENT_ITEM_EXPORT,              CTF_FONTWORK_HIDEFORM   ),
+    GMAP( "FontWorkShadowTransparence",     XML_NAMESPACE_DRAW_EXT, XML_FONTWORK_SHADOW_TRANSPARENCE,   XML_TYPE_PERCENT | MID_FLAG_ELEMENT_ITEM_EXPORT,           CTF_FONTWORK_SHADOWTRANSPARENCE ),
+
+    // control attributes (border exists one more time for the text additions of shapes)
     GMAP( "ControlSymbolColor",             XML_NAMESPACE_DRAW, XML_SYMBOL_COLOR,           XML_TYPE_COLOR, 0 ),
     GMAP( "ControlBackground",              XML_NAMESPACE_FO,   XML_BACKGROUND_COLOR,       XML_TYPE_COLOR|MID_FLAG_MULTI_PROPERTY, 0 ),
     GMAP( "ControlBorder",                  XML_NAMESPACE_FO,   XML_BORDER,                 XML_SD_TYPE_CONTROL_BORDER|MID_FLAG_MULTI_PROPERTY|MID_FLAG_MERGE_ATTRIBUTE, 0 ),
@@ -315,6 +330,7 @@ const XMLPropertyMapEntry aXMLSDPresPageProps[] =
     DPMAP( "FillHatchName",             XML_NAMESPACE_DRAW, XML_FILL_HATCH_NAME,        XML_TYPE_STYLENAME|MID_FLAG_NO_PROPERTY_IMPORT, CTF_FILLHATCHNAME ),
     GMAP( "FillBackground",                 XML_NAMESPACE_DRAW, XML_FILL_HATCH_SOLID,       XML_TYPE_BOOL, 0 ),
     DPMAP( "FillBitmapName",                XML_NAMESPACE_DRAW, XML_FILL_IMAGE_NAME,    XML_TYPE_STYLENAME|MID_FLAG_NO_PROPERTY_IMPORT, CTF_FILLBITMAPNAME ),
+    DPMAP( "FillTransparence",              XML_NAMESPACE_DRAW, XML_OPACITY,           XML_TYPE_NEG_PERCENT|MID_FLAG_MULTI_PROPERTY,  0 ),
     DPMAP( "FillTransparenceGradientName",  XML_NAMESPACE_DRAW, XML_OPACITY_NAME,       XML_TYPE_STYLENAME|MID_FLAG_NO_PROPERTY_IMPORT, CTF_FILLTRANSNAME ),
     DPMAP( "FillBitmapSizeX",           XML_NAMESPACE_DRAW, XML_FILL_IMAGE_WIDTH,       XML_SD_TYPE_FILLBITMAPSIZE|MID_FLAG_MULTI_PROPERTY, 0 ),
     DPMAP( "FillBitmapLogicalSize",     XML_NAMESPACE_DRAW, XML_FILL_IMAGE_WIDTH,       XML_SD_TYPE_LOGICAL_SIZE|MID_FLAG_MULTI_PROPERTY, 0 ),
@@ -365,60 +381,60 @@ const XMLPropertyMapEntry aXMLTableShapeAttributes[] =
 
 // implementation of factory for own graphic properties
 
-static SvXMLEnumMapEntry const aXML_LineStyle_EnumMap[] =
+static SvXMLEnumMapEntry<drawing::LineStyle> const aXML_LineStyle_EnumMap[] =
 {
     { XML_NONE,     drawing::LineStyle_NONE },
     { XML_SOLID,    drawing::LineStyle_SOLID },
     { XML_DASH,     drawing::LineStyle_DASH },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::LineStyle(0) }
 };
 
-static SvXMLEnumMapEntry const aXML_LineJoint_EnumMap[] =
+static SvXMLEnumMapEntry<drawing::LineJoint> const aXML_LineJoint_EnumMap[] =
 {
     { XML_NONE,     drawing::LineJoint_NONE },
     { XML_MITER,    drawing::LineJoint_MITER },
     { XML_ROUND,    drawing::LineJoint_ROUND },
     { XML_BEVEL,    drawing::LineJoint_BEVEL },
     { XML_MIDDLE,   drawing::LineJoint_MIDDLE },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::LineJoint(0) }
 };
 
-static SvXMLEnumMapEntry const aXML_LineCap_EnumMap[] =
+static SvXMLEnumMapEntry<drawing::LineCap> const aXML_LineCap_EnumMap[] =
 {
     { XML_BUTT, drawing::LineCap_BUTT },
     { XML_ROUND, drawing::LineCap_ROUND },
     // use XML_GRADIENTSTYLE_SQUARE as XML_SQUARE, is defined as "square" already
     { XML_GRADIENTSTYLE_SQUARE, drawing::LineCap_SQUARE },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::LineCap(0) }
 };
 
-SvXMLEnumMapEntry aXML_FillStyle_EnumMap[] =
+SvXMLEnumMapEntry<drawing::FillStyle> const aXML_FillStyle_EnumMap[] =
 {
     { XML_NONE,     drawing::FillStyle_NONE },
     { XML_SOLID,    drawing::FillStyle_SOLID },
     { XML_BITMAP,   drawing::FillStyle_BITMAP },
     { XML_GRADIENT, drawing::FillStyle_GRADIENT },
     { XML_HATCH,    drawing::FillStyle_HATCH },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::FillStyle(0) }
 };
 
-static SvXMLEnumMapEntry const aXML_PresChange_EnumMap[] =
+static SvXMLEnumMapEntry<sal_Int32> const aXML_PresChange_EnumMap[] =
 {
     { XML_MANUAL,           0 },
     { XML_AUTOMATIC,        1 },
     { XML_SEMI_AUTOMATIC,   2 },
-    { XML_TOKEN_INVALID,                    0 }
+    { XML_TOKEN_INVALID,    0 }
 };
 
-static SvXMLEnumMapEntry const aXML_TransSpeed_EnumMap[] =
+static SvXMLEnumMapEntry<presentation::AnimationSpeed> const aXML_TransSpeed_EnumMap[] =
 {
     { XML_FAST,     presentation::AnimationSpeed_FAST },
     { XML_MEDIUM,   presentation::AnimationSpeed_MEDIUM },
     { XML_SLOW,     presentation::AnimationSpeed_SLOW },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, presentation::AnimationSpeed(0) }
 };
 
-static SvXMLEnumMapEntry const aXML_FadeEffect_EnumMap[] =
+static SvXMLEnumMapEntry<presentation::FadeEffect> const aXML_FadeEffect_EnumMap[] =
 {
     { XML_NONE,                 presentation::FadeEffect_NONE },
     { XML_FADE_FROM_LEFT,       presentation::FadeEffect_FADE_FROM_LEFT },
@@ -477,68 +493,68 @@ static SvXMLEnumMapEntry const aXML_FadeEffect_EnumMap[] =
     { XML_UNCOVER_TO_LOWERLEFT, presentation::FadeEffect_UNCOVER_TO_LOWERLEFT },
     { XML_VERTICAL_CHECKERBOARD,presentation::FadeEffect_VERTICAL_CHECKERBOARD },
     { XML_HORIZONTAL_CHECKERBOARD,presentation::FadeEffect_HORIZONTAL_CHECKERBOARD },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, presentation::FadeEffect(0) }
 };
 
-SvXMLEnumMapEntry const   aXML_ConnectionKind_EnumMap[] =
+SvXMLEnumMapEntry<drawing::ConnectorType> const aXML_ConnectionKind_EnumMap[] =
 {
     { XML_STANDARD,     drawing::ConnectorType_STANDARD },
     { XML_CURVE,        drawing::ConnectorType_CURVE },
     { XML_LINE,         drawing::ConnectorType_LINE },
     { XML_LINES,        drawing::ConnectorType_LINES },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::ConnectorType(0) }
 };
 
-SvXMLEnumMapEntry aXML_BitmapMode_EnumMap[] =
+SvXMLEnumMapEntry<drawing::BitmapMode> const aXML_BitmapMode_EnumMap[] =
 {
     { XML_REPEAT,                   drawing::BitmapMode_REPEAT },
     { XML_STRETCH,                  drawing::BitmapMode_STRETCH },
     { XML_BACKGROUND_NO_REPEAT,     drawing::BitmapMode_NO_REPEAT },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::BitmapMode(0) }
 };
 
 // 3D EnumMaps
 
-static SvXMLEnumMapEntry const  aXML_NormalsKind_EnumMap[] =
+static SvXMLEnumMapEntry<drawing::NormalsKind> const  aXML_NormalsKind_EnumMap[] =
 {
     { XML_OBJECT,       drawing::NormalsKind_SPECIFIC },
     { XML_FLAT,         drawing::NormalsKind_FLAT },
     { XML_SPHERE,       drawing::NormalsKind_SPHERE },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::NormalsKind(0) }
 };
 
-static SvXMLEnumMapEntry const  aXML_TexGenerationX_EnumMap[] =
+static SvXMLEnumMapEntry<drawing::TextureProjectionMode> const  aXML_TexGenerationX_EnumMap[] =
 {
     { XML_OBJECT,       drawing::TextureProjectionMode_OBJECTSPECIFIC },
     { XML_PARALLEL,     drawing::TextureProjectionMode_PARALLEL },
     { XML_SPHERE,       drawing::TextureProjectionMode_SPHERE },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::TextureProjectionMode(0) }
 };
 
-static SvXMLEnumMapEntry const  aXML_TexGenerationY_EnumMap[] =
+static SvXMLEnumMapEntry<drawing::TextureProjectionMode> const  aXML_TexGenerationY_EnumMap[] =
 {
     { XML_OBJECT,       drawing::TextureProjectionMode_OBJECTSPECIFIC },
     { XML_PARALLEL,     drawing::TextureProjectionMode_PARALLEL },
     { XML_SPHERE,       drawing::TextureProjectionMode_SPHERE },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::TextureProjectionMode(0) }
 };
 
-static SvXMLEnumMapEntry const  aXML_TexKind_EnumMap[] =
+static SvXMLEnumMapEntry<drawing::TextureKind> const  aXML_TexKind_EnumMap[] =
 {
     { XML_LUMINANCE,    drawing::TextureKind_LUMINANCE },
     { XML_COLOR,        drawing::TextureKind_COLOR },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::TextureKind(0) }
 };
 
-static SvXMLEnumMapEntry const  aXML_TexMode_EnumMap[] =
+static SvXMLEnumMapEntry<drawing::TextureMode> const  aXML_TexMode_EnumMap[] =
 {
     { XML_REPLACE,      drawing::TextureMode_REPLACE },
     { XML_MODULATE,     drawing::TextureMode_MODULATE },
     { XML_BLEND,        drawing::TextureMode_BLEND },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::TextureMode(0) }
 };
 
-SvXMLEnumMapEntry aXML_RefPoint_EnumMap[] =
+SvXMLEnumMapEntry<drawing::RectanglePoint> const aXML_RefPoint_EnumMap[] =
 {
     { XML_TOP_LEFT,     drawing::RectanglePoint_LEFT_TOP },
     { XML_TOP,          drawing::RectanglePoint_MIDDLE_TOP },
@@ -549,91 +565,101 @@ SvXMLEnumMapEntry aXML_RefPoint_EnumMap[] =
     { XML_BOTTOM_LEFT,  drawing::RectanglePoint_LEFT_BOTTOM },
     { XML_BOTTOM,       drawing::RectanglePoint_MIDDLE_BOTTOM },
     { XML_BOTTOM_RIGHT, drawing::RectanglePoint_RIGHT_BOTTOM },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::RectanglePoint(0) }
 };
 
-SvXMLEnumMapEntry const aXML_CircleKind_EnumMap[] =
+SvXMLEnumMapEntry<drawing::CircleKind> const aXML_CircleKind_EnumMap[] =
 {
     { XML_FULL,         drawing::CircleKind_FULL },
     { XML_SECTION,      drawing::CircleKind_SECTION },
     { XML_CUT,          drawing::CircleKind_CUT },
     { XML_ARC,          drawing::CircleKind_ARC },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::CircleKind(0) }
 };
 
-static SvXMLEnumMapEntry const aXML_WritingMode_EnumMap[] =
+static SvXMLEnumMapEntry<text::WritingMode> const aXML_WritingMode_EnumMap[] =
 {
     { XML_TB_RL,        text::WritingMode_TB_RL },
     { XML_LR_TB,        text::WritingMode_LR_TB },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, text::WritingMode(0) }
 };
 
-static SvXMLEnumMapEntry const pXML_TextAnimation_Enum[] =
+static SvXMLEnumMapEntry<drawing::TextAnimationKind> const pXML_TextAnimation_Enum[] =
 {
     { XML_NONE,         drawing::TextAnimationKind_NONE },
     { XML_BLINKING,     drawing::TextAnimationKind_BLINK }, // will be filtered
     { XML_SCROLL,       drawing::TextAnimationKind_SCROLL },
     { XML_ALTERNATE,    drawing::TextAnimationKind_ALTERNATE },
     { XML_SLIDE,        drawing::TextAnimationKind_SLIDE },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::TextAnimationKind(0) }
 };
 
-static SvXMLEnumMapEntry const pXML_TextAnimation_Blinking_Enum[] =
+static SvXMLEnumMapEntry<drawing::TextAnimationKind> const pXML_TextAnimation_Blinking_Enum[] =
 {
     { XML_FALSE,        drawing::TextAnimationKind_NONE },
     { XML_TRUE,         drawing::TextAnimationKind_BLINK },
     { XML_FALSE,        drawing::TextAnimationKind_SCROLL },
     { XML_FALSE,        drawing::TextAnimationKind_ALTERNATE },
     { XML_FALSE,        drawing::TextAnimationKind_SLIDE },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::TextAnimationKind(0) }
 };
 
-static SvXMLEnumMapEntry const pXML_TextAnimationDirection_Enum[] =
+static SvXMLEnumMapEntry<drawing::TextAnimationDirection> const pXML_TextAnimationDirection_Enum[] =
 {
     { XML_LEFT,         drawing::TextAnimationDirection_LEFT },
     { XML_RIGHT,        drawing::TextAnimationDirection_RIGHT },    // will be filtered
     { XML_UP,           drawing::TextAnimationDirection_UP },
     { XML_DOWN,         drawing::TextAnimationDirection_DOWN },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::TextAnimationDirection(0) }
 };
 
-static SvXMLEnumMapEntry const pXML_TextAlign_Enum[] =
+static SvXMLEnumMapEntry<drawing::TextHorizontalAdjust> const pXML_TextAlign_Enum[] =
 {
     { XML_LEFT,         drawing::TextHorizontalAdjust_LEFT },
     { XML_CENTER,       drawing::TextHorizontalAdjust_CENTER },
     { XML_RIGHT,        drawing::TextHorizontalAdjust_RIGHT },
     { XML_JUSTIFY,      drawing::TextHorizontalAdjust_BLOCK },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::TextHorizontalAdjust(0) }
 };
 
-static SvXMLEnumMapEntry const pXML_VerticalAlign_Enum[] =
+static SvXMLEnumMapEntry<drawing::TextVerticalAdjust> const pXML_VerticalAlign_Enum[] =
 {
     { XML_TOP,          drawing::TextVerticalAdjust_TOP },
     { XML_MIDDLE,       drawing::TextVerticalAdjust_CENTER },
     { XML_BOTTOM,       drawing::TextVerticalAdjust_BOTTOM },
     { XML_JUSTIFY,      drawing::TextVerticalAdjust_BLOCK },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::TextVerticalAdjust(0) }
 };
 
-static SvXMLEnumMapEntry const pXML_FitToSize_Enum_Odf12[] =
+// note: PROPORTIONAL and ALLLINES are the same thing now!
+static SvXMLEnumMapEntry<drawing::TextFitToSizeType> const pXML_FitToSize_Enum_Odf12[] =
 {
     { XML_FALSE,        drawing::TextFitToSizeType_NONE },
     { XML_TRUE,         drawing::TextFitToSizeType_PROPORTIONAL },
     { XML_TRUE,         drawing::TextFitToSizeType_ALLLINES },
-    { XML_TRUE,         drawing::TextFitToSizeType_AUTOFIT },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_FALSE,        drawing::TextFitToSizeType_AUTOFIT },
+    { XML_TOKEN_INVALID, drawing::TextFitToSizeType(0) }
 };
 
-static SvXMLEnumMapEntry const pXML_FitToSize_Enum[] =
+static SvXMLEnumMapEntry<drawing::TextFitToSizeType> const pXML_FitToSize_Enum[] =
 {
     { XML_FALSE,        drawing::TextFitToSizeType_NONE },
     { XML_TRUE,         drawing::TextFitToSizeType_PROPORTIONAL },
     { XML_ALL,          drawing::TextFitToSizeType_ALLLINES },
     { XML_SHRINK_TO_FIT,drawing::TextFitToSizeType_AUTOFIT },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, drawing::TextFitToSizeType(0) }
 };
 
-static SvXMLEnumMapEntry const pXML_MeasureUnit_Enum[] =
+static SvXMLEnumMapEntry<drawing::TextFitToSizeType> const pXML_ShrinkToFit_Enum[] =
+{
+    { XML_FALSE,        drawing::TextFitToSizeType_NONE },
+    { XML_FALSE,        drawing::TextFitToSizeType_PROPORTIONAL },
+    { XML_FALSE,        drawing::TextFitToSizeType_ALLLINES },
+    { XML_TRUE,         drawing::TextFitToSizeType_AUTOFIT },
+    { XML_TOKEN_INVALID, drawing::TextFitToSizeType(0) }
+};
+
+static SvXMLEnumMapEntry<sal_Int32> const pXML_MeasureUnit_Enum[] =
 {
     { XML_AUTOMATIC,    0 },
     { XML_UNIT_MM,      1 },
@@ -648,53 +674,53 @@ static SvXMLEnumMapEntry const pXML_MeasureUnit_Enum[] =
     { XML_TOKEN_INVALID,0 }
 };
 
-static SvXMLEnumMapEntry const pXML_Measure_HAlign_Enum[] =
+static SvXMLEnumMapEntry<drawing::MeasureTextHorzPos> const pXML_Measure_HAlign_Enum[] =
 {
     { XML_AUTOMATIC,        drawing::MeasureTextHorzPos_AUTO },
     { XML_LEFT_OUTSIDE,     drawing::MeasureTextHorzPos_LEFTOUTSIDE },
     { XML_INSIDE,           drawing::MeasureTextHorzPos_INSIDE },
     { XML_RIGHT_OUTSIDE,    drawing::MeasureTextHorzPos_RIGHTOUTSIDE},
-    { XML_TOKEN_INVALID,0 }
+    { XML_TOKEN_INVALID, drawing::MeasureTextHorzPos(0) }
 };
 
-static SvXMLEnumMapEntry const pXML_Measure_VAlign_Enum[] =
+static SvXMLEnumMapEntry<drawing::MeasureTextVertPos> const pXML_Measure_VAlign_Enum[] =
 {
     { XML_AUTOMATIC,    drawing::MeasureTextVertPos_AUTO },
     { XML_ABOVE,        drawing::MeasureTextVertPos_EAST },
     { XML_BELOW,        drawing::MeasureTextVertPos_WEST },
     { XML_CENTER,       drawing::MeasureTextVertPos_CENTERED },
-    { XML_TOKEN_INVALID,0 }
+    { XML_TOKEN_INVALID, drawing::MeasureTextVertPos(0) }
 };
 
 // #FontWork#
-static SvXMLEnumMapEntry const pXML_Fontwork_Style_Enum[] =
+static SvXMLEnumMapEntry<sal_Int32> const pXML_Fontwork_Style_Enum[] =
 {
-    { XML_ROTATE,       0 }, //XFT_ROTATE,
-    { XML_UPRIGHT,      1 }, //XFT_UPRIGHT,
-    { XML_SLANT_X,      2 }, //XFT_SLANTX,
-    { XML_SLANT_Y,      3 }, //XFT_SLANTY,
-    { XML_NONE,         4 }, //XFT_NONE
+    { XML_ROTATE,       0 }, //XFormTextStyle::Rotate,
+    { XML_UPRIGHT,      1 }, //XFormTextStyle::Upright,
+    { XML_SLANT_X,      2 }, //XFormTextStyle::SlantX,
+    { XML_SLANT_Y,      3 }, //XFormTextStyle::SlantY,
+    { XML_NONE,         4 }, //XFormTextStyle::NONE
     { XML_TOKEN_INVALID,0 }
 };
 
-static SvXMLEnumMapEntry const pXML_Fontwork_Adjust_Enum[] =
+static SvXMLEnumMapEntry<sal_Int32> const pXML_Fontwork_Adjust_Enum[] =
 {
-    { XML_LEFT,         0 }, //XFT_LEFT,
-    { XML_RIGHT,        1 }, //XFT_RIGHT,
-    { XML_AUTOSIZE,     2 }, //XFT_AUTOSIZE,
-    { XML_CENTER,       3 }, //XFT_CENTER
+    { XML_LEFT,         0 }, //XFormTextAdjust::Left,
+    { XML_RIGHT,        1 }, //XFormTextAdjust::Right,
+    { XML_AUTOSIZE,     2 }, //XFormTextAdjust::AutoSize,
+    { XML_CENTER,       3 }, //XFormTextAdjust::Center
     { XML_TOKEN_INVALID,0 }
 };
 
-static SvXMLEnumMapEntry const pXML_Fontwork_Shadow_Enum[] =
+static SvXMLEnumMapEntry<sal_Int32> const pXML_Fontwork_Shadow_Enum[] =
 {
-    { XML_NORMAL,       0 }, //XFTSHADOW_NORMAL,
-    { XML_SLANT,        1 }, //XFTSHADOW_SLANT,
-    { XML_NONE,         2 }, //XFTSHADOW_NONE
+    { XML_NORMAL,       0 }, //XFormTextShadow::Normal,
+    { XML_SLANT,        1 }, //XFormTextShadow::Slant,
+    { XML_NONE,         2 }, //XFormTextShadow::NONE
     { XML_TOKEN_INVALID,0 }
 };
 
-static SvXMLEnumMapEntry const pXML_Fontwork_Form_Enum[] =
+static SvXMLEnumMapEntry<sal_Int32> const pXML_Fontwork_Form_Enum[] =
 {
     { XML_NONE,             0 }, //XFTFORM_NONE,
     { XML_TOPCIRCLE,        1 }, //XFTFORM_TOPCIRC,
@@ -712,19 +738,19 @@ static SvXMLEnumMapEntry const pXML_Fontwork_Form_Enum[] =
     { XML_TOKEN_INVALID,0 }
 };
 
-static SvXMLEnumMapEntry const pXML_Caption_Esc_Dir_Enum[] =
+static SvXMLEnumMapEntry<sal_Int32> const pXML_Caption_Esc_Dir_Enum[] =
 {
-    { XML_HORIZONTAL,       0 }, //SDRCAPT_ESCHORIZONTAL,
-    { XML_VERTICAL,         1 }, //SDRCAPT_ESCVERTICAL,
-    { XML_AUTO,             2 }, //SDRCAPT_ESCBESTFIT,
+    { XML_HORIZONTAL,       0 }, //SdrCaptionEscDir::Horizontal,
+    { XML_VERTICAL,         1 }, //SdrCaptionEscDir::Vertical,
+    { XML_AUTO,             2 }, //SdrCaptionEscDir::BestFit,
     { XML_TOKEN_INVALID,0 }
 };
 
-static SvXMLEnumMapEntry const pXML_Caption_Type_Enum[] =
+static SvXMLEnumMapEntry<sal_Int32> const pXML_Caption_Type_Enum[] =
 {
-    { XML_STRAIGHT_LINE,            0 }, //SDRCAPT_TYPE1,
-    { XML_ANGLED_LINE,              1 }, //SDRCAPT_TYPE2,
-    { XML_ANGLED_CONNECTOR_LINE,    2 }, //SDRCAPT_TYPE3,
+    { XML_STRAIGHT_LINE,            0 }, //SdrCaptionType::Type1,
+    { XML_ANGLED_LINE,              1 }, //SdrCaptionType::Type2,
+    { XML_ANGLED_CONNECTOR_LINE,    2 }, //SdrCaptionType::Type3,
     { XML_TOKEN_INVALID,0 }
 };
 
@@ -810,15 +836,9 @@ bool XMLMoveSizeProtectHdl::exportXML( OUString& rStrExpValue, const Any& rValue
 class XMLSdHeaderFooterVisibilityTypeHdl : public XMLPropertyHandler
 {
 public:
-    virtual ~XMLSdHeaderFooterVisibilityTypeHdl();
-
     virtual bool importXML( const OUString& rStrImpValue, css::uno::Any& rValue, const SvXMLUnitConverter& rUnitConverter ) const override;
     virtual bool exportXML( OUString& rStrExpValue, const css::uno::Any& rValue, const SvXMLUnitConverter& rUnitConverter ) const override;
 };
-
-XMLSdHeaderFooterVisibilityTypeHdl::~XMLSdHeaderFooterVisibilityTypeHdl()
-{
-}
 
 bool XMLSdHeaderFooterVisibilityTypeHdl::importXML(
         const OUString& rStrImpValue,
@@ -853,12 +873,90 @@ bool XMLSdHeaderFooterVisibilityTypeHdl::exportXML(
     return bRet;
 }
 
-XMLSdPropHdlFactory::XMLSdPropHdlFactory( uno::Reference< frame::XModel > xModel, SvXMLImport& rImport )
+class XMLSdRotationAngleTypeHdl : public XMLPropertyHandler
+{
+public:
+    virtual bool importXML(const OUString& rStrImpValue, css::uno::Any& rValue, const SvXMLUnitConverter& rUnitConverter) const override;
+    virtual bool exportXML(OUString& rStrExpValue, const css::uno::Any& rValue, const SvXMLUnitConverter& rUnitConverter) const override;
+};
+
+bool XMLSdRotationAngleTypeHdl::importXML(
+    const OUString& rStrImpValue,
+    css::uno::Any& rValue,
+    const SvXMLUnitConverter&) const
+{
+    sal_Int32 nValue;
+    bool const bRet = ::sax::Converter::convertNumber(nValue, rStrImpValue);
+    if (bRet)
+    {
+        nValue = (nValue % 360);
+        if (nValue < 0)
+            nValue = 360 + nValue;
+        sal_Int32 nAngle;
+        if (nValue < 45 || nValue > 315)
+            nAngle = 0;
+        else if (nValue < 180)
+            nAngle = 9000;
+        else /* if nValue <= 315 ) */
+            nAngle = 27000;
+
+        rValue <<= nAngle;
+    }
+    return bRet;
+}
+
+bool XMLSdRotationAngleTypeHdl::exportXML(
+    OUString& rStrExpValue,
+    const Any& rValue,
+    const SvXMLUnitConverter&) const
+{
+    sal_Int32 nAngle;
+    bool bRet = (rValue >>= nAngle) && nAngle != 0;
+    if (bRet)
+    {
+        rStrExpValue = OUString::number(nAngle / 100);
+    }
+    return bRet;
+}
+
+class XMLFitToSizeEnumPropertyHdl : public XMLEnumPropertyHdl
+{
+public:
+    XMLFitToSizeEnumPropertyHdl(
+            const SvXMLEnumMapEntry<drawing::TextFitToSizeType> *const pMap)
+        : XMLEnumPropertyHdl(pMap) {}
+
+    virtual bool importXML(const OUString& rStrImpValue, uno::Any& rValue,
+                           const SvXMLUnitConverter& rUC) const override
+    {
+        // we don't know here what the actual attribute name is -
+        // but we can combine the 2 attributes by just taking the
+        // "largest" result value; this can never result in ALLLINES
+        // so the implementation has to interpret PROPORTIONAL as ALLLINES;
+        // both "true" is invalid anyway.
+        Any any;
+        auto const bRet = XMLEnumPropertyHdl::importXML(rStrImpValue, any, rUC);
+        if (!bRet)
+        {
+            return false;
+        }
+        assert(any.hasValue());
+        if (!rValue.hasValue() ||
+            rValue.get<drawing::TextFitToSizeType>() < any.get<drawing::TextFitToSizeType>())
+        {
+            rValue = any;
+        }
+        return true;
+    }
+};
+
+
+XMLSdPropHdlFactory::XMLSdPropHdlFactory( uno::Reference< frame::XModel > const & xModel, SvXMLImport& rImport )
 : mxModel( xModel ), mpExport(nullptr), mpImport( &rImport )
 {
 }
 
-XMLSdPropHdlFactory::XMLSdPropHdlFactory( uno::Reference< frame::XModel > xModel, SvXMLExport& rExport )
+XMLSdPropHdlFactory::XMLSdPropHdlFactory( uno::Reference< frame::XModel > const & xModel, SvXMLExport& rExport )
 : mxModel( xModel ), mpExport( &rExport ), mpImport(nullptr)
 {
 }
@@ -876,27 +974,27 @@ const XMLPropertyHandler* XMLSdPropHdlFactory::GetPropertyHandler( sal_Int32 nTy
         {
             case XML_SD_TYPE_STROKE :
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_LineStyle_EnumMap, cppu::UnoType<drawing::LineStyle>::get());
+                pHdl = new XMLEnumPropertyHdl( aXML_LineStyle_EnumMap);
                 break;
             }
             case XML_SD_TYPE_LINEJOIN :
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_LineJoint_EnumMap, cppu::UnoType<drawing::LineJoint>::get());
+                pHdl = new XMLEnumPropertyHdl( aXML_LineJoint_EnumMap);
                 break;
             }
             case XML_SD_TYPE_LINECAP :
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_LineCap_EnumMap, ::cppu::UnoType<drawing::LineCap>::get() );
+                pHdl = new XMLEnumPropertyHdl( aXML_LineCap_EnumMap );
                 break;
             }
             case XML_SD_TYPE_FILLSTYLE :
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_FillStyle_EnumMap, cppu::UnoType<drawing::FillStyle>::get());
+                pHdl = new XMLEnumPropertyHdl( aXML_FillStyle_EnumMap );
                 break;
             }
             case XML_SD_TYPE_PRESPAGE_TYPE :
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_PresChange_EnumMap, ::cppu::UnoType<sal_Int32>::get() );
+                pHdl = new XMLEnumPropertyHdl( aXML_PresChange_EnumMap );
                 break;
             }
             case XML_SD_TYPE_SHADOW :
@@ -911,17 +1009,17 @@ const XMLPropertyHandler* XMLSdPropHdlFactory::GetPropertyHandler( sal_Int32 nTy
             }
             case XML_SD_TYPE_PRESPAGE_STYLE :
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_FadeEffect_EnumMap, ::cppu::UnoType<presentation::FadeEffect>::get() );
+                pHdl = new XMLEnumPropertyHdl( aXML_FadeEffect_EnumMap );
                 break;
             }
             case XML_SD_TYPE_PRESPAGE_SPEED :
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_TransSpeed_EnumMap, cppu::UnoType<presentation::AnimationSpeed>::get());
+                pHdl = new XMLEnumPropertyHdl( aXML_TransSpeed_EnumMap );
                 break;
             }
             case XML_SD_TYPE_PRESPAGE_DURATION :
             {
-                pHdl = new XMLDurationPropertyHdl();
+                pHdl = new XMLDurationPropertyHdl;
                 break;
             }
             case XML_SD_TYPE_TEXT_CROSSEDOUT :
@@ -936,7 +1034,7 @@ const XMLPropertyHandler* XMLSdPropHdlFactory::GetPropertyHandler( sal_Int32 nTy
             }
             case XML_SD_TYPE_WRITINGMODE :
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_WritingMode_EnumMap, cppu::UnoType<text::WritingMode>::get());
+                pHdl = new XMLEnumPropertyHdl( aXML_WritingMode_EnumMap );
                 break;
             }
             case XML_SD_TYPE_PRESPAGE_VISIBILITY :
@@ -963,7 +1061,7 @@ const XMLPropertyHandler* XMLSdPropHdlFactory::GetPropertyHandler( sal_Int32 nTy
 
             case XML_SD_TYPE_NORMALS_KIND:
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_NormalsKind_EnumMap, cppu::UnoType<drawing::NormalsKind>::get());
+                pHdl = new XMLEnumPropertyHdl( aXML_NormalsKind_EnumMap );
                 break;
             }
             case XML_SD_TYPE_NORMALS_DIRECTION:
@@ -973,22 +1071,22 @@ const XMLPropertyHandler* XMLSdPropHdlFactory::GetPropertyHandler( sal_Int32 nTy
             }
             case XML_SD_TYPE_TEX_GENERATION_MODE_X:
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_TexGenerationX_EnumMap, cppu::UnoType<drawing::TextureProjectionMode>::get());
+                pHdl = new XMLEnumPropertyHdl( aXML_TexGenerationX_EnumMap );
                 break;
             }
             case XML_SD_TYPE_TEX_GENERATION_MODE_Y:
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_TexGenerationY_EnumMap, cppu::UnoType<drawing::TextureProjectionMode>::get());
+                pHdl = new XMLEnumPropertyHdl( aXML_TexGenerationY_EnumMap );
                 break;
             }
             case XML_SD_TYPE_TEX_KIND:
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_TexKind_EnumMap, cppu::UnoType<drawing::TextureKind>::get());
+                pHdl = new XMLEnumPropertyHdl( aXML_TexKind_EnumMap );
                 break;
             }
             case XML_SD_TYPE_TEX_MODE:
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_TexMode_EnumMap, cppu::UnoType<drawing::TextureMode>::get());
+                pHdl = new XMLEnumPropertyHdl( aXML_TexMode_EnumMap );
                 break;
             }
             case XML_SD_TYPE_NUMBULLET:
@@ -1003,7 +1101,7 @@ const XMLPropertyHandler* XMLSdPropHdlFactory::GetPropertyHandler( sal_Int32 nTy
             }
             case XML_SD_TYPE_BITMAP_MODE:
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_BitmapMode_EnumMap, cppu::UnoType<drawing::BitmapMode>::get());
+                pHdl = new XMLEnumPropertyHdl( aXML_BitmapMode_EnumMap );
                 break;
             }
             case XML_SD_TYPE_BITMAPREPOFFSETX:
@@ -1024,50 +1122,58 @@ const XMLPropertyHandler* XMLSdPropHdlFactory::GetPropertyHandler( sal_Int32 nTy
             }
             case XML_SD_TYPE_BITMAP_REFPOINT:
             {
-                pHdl = new XMLEnumPropertyHdl( aXML_RefPoint_EnumMap, cppu::UnoType<css::drawing::RectanglePoint>::get());
+                pHdl = new XMLEnumPropertyHdl( aXML_RefPoint_EnumMap);
                 break;
             }
             case XML_TYPE_TEXT_ANIMATION:
-                pHdl = new XMLEnumPropertyHdl( pXML_TextAnimation_Enum, cppu::UnoType<css::drawing::TextAnimationKind>::get());
+                pHdl = new XMLEnumPropertyHdl( pXML_TextAnimation_Enum);
                 break;
             case XML_TYPE_TEXT_ANIMATION_BLINKING:
-                pHdl = new XMLEnumPropertyHdl( pXML_TextAnimation_Blinking_Enum, cppu::UnoType<css::drawing::TextAnimationKind>::get());
+                pHdl = new XMLEnumPropertyHdl( pXML_TextAnimation_Blinking_Enum);
                 break;
             case XML_TYPE_TEXT_ANIMATION_DIRECTION:
-                pHdl = new XMLEnumPropertyHdl( pXML_TextAnimationDirection_Enum, cppu::UnoType<css::drawing::TextAnimationDirection>::get());
+                pHdl = new XMLEnumPropertyHdl( pXML_TextAnimationDirection_Enum);
                 break;
             case XML_TYPE_TEXT_ANIMATION_STEPS:
                 pHdl = new XMLTextAnimationStepPropertyHdl;
                 break;
             case XML_SD_TYPE_TEXT_ALIGN:
-                pHdl = new XMLEnumPropertyHdl( pXML_TextAlign_Enum, cppu::UnoType<css::drawing::TextHorizontalAdjust>::get());
+                pHdl = new XMLEnumPropertyHdl( pXML_TextAlign_Enum);
                 break;
             case XML_SD_TYPE_VERTICAL_ALIGN:
-                pHdl = new XMLEnumPropertyHdl( pXML_VerticalAlign_Enum, cppu::UnoType<css::drawing::TextVerticalAdjust>::get());
+                pHdl = new XMLEnumPropertyHdl( pXML_VerticalAlign_Enum);
                 break;
             case XML_SD_TYPE_FITTOSIZE:
                 {
-                    if (mpExport && (mpExport->getDefaultVersion()
-                                        <= SvtSaveOptions::ODFVER_012))
+                    if (mpExport
+#if 1
+// TODO: remove in a couple releases, when users have the import of style:shrink-to-fit
+                            && (mpExport->getDefaultVersion()
+                                        <= SvtSaveOptions::ODFVER_012)
+#endif
+                        )
                     {
-                        pHdl = new XMLEnumPropertyHdl(pXML_FitToSize_Enum_Odf12,
-                            cppu::UnoType<css::drawing::TextFitToSizeType>::get());
+                        pHdl = new XMLFitToSizeEnumPropertyHdl(pXML_FitToSize_Enum_Odf12);
                     }
                     else
-                    {
-                        pHdl = new XMLEnumPropertyHdl(pXML_FitToSize_Enum,
-                            cppu::UnoType<css::drawing::TextFitToSizeType>::get());
+                    {   // import all values written by old LO
+                        pHdl = new XMLFitToSizeEnumPropertyHdl(pXML_FitToSize_Enum);
                     }
                 }
                 break;
+            case XML_SD_TYPE_FITTOSIZE_AUTOFIT:
+                {
+                    pHdl = new XMLFitToSizeEnumPropertyHdl(pXML_ShrinkToFit_Enum);
+                }
+                break;
             case XML_SD_TYPE_MEASURE_UNIT:
-                pHdl = new XMLEnumPropertyHdl( pXML_MeasureUnit_Enum, ::cppu::UnoType<sal_Int32>::get() );
+                pHdl = new XMLEnumPropertyHdl( pXML_MeasureUnit_Enum );
                 break;
             case XML_SD_TYPE_MEASURE_HALIGN:
-                pHdl = new XMLEnumPropertyHdl( pXML_Measure_HAlign_Enum, cppu::UnoType<css::drawing::MeasureTextHorzPos>::get());
+                pHdl = new XMLEnumPropertyHdl( pXML_Measure_HAlign_Enum);
                 break;
             case XML_SD_TYPE_MEASURE_VALIGN:
-                pHdl = new XMLEnumPropertyHdl( pXML_Measure_VAlign_Enum, cppu::UnoType<css::drawing::MeasureTextVertPos>::get());
+                pHdl = new XMLEnumPropertyHdl( pXML_Measure_VAlign_Enum);
                 break;
             case XML_SD_TYPE_MEASURE_PLACING:
                 {
@@ -1083,16 +1189,16 @@ const XMLPropertyHandler* XMLSdPropHdlFactory::GetPropertyHandler( sal_Int32 nTy
 
             // #FontWork#
             case XML_SD_TYPE_FONTWORK_STYLE     :
-                pHdl = new XMLEnumPropertyHdl( pXML_Fontwork_Style_Enum , ::cppu::UnoType<sal_Int32>::get());
+                pHdl = new XMLEnumPropertyHdl( pXML_Fontwork_Style_Enum );
                 break;
             case XML_SD_TYPE_FONTWORK_ADJUST        :
-                pHdl = new XMLEnumPropertyHdl( pXML_Fontwork_Adjust_Enum , ::cppu::UnoType<sal_Int32>::get());
+                pHdl = new XMLEnumPropertyHdl( pXML_Fontwork_Adjust_Enum );
                 break;
             case XML_SD_TYPE_FONTWORK_SHADOW        :
-                pHdl = new XMLEnumPropertyHdl( pXML_Fontwork_Shadow_Enum , ::cppu::UnoType<sal_Int32>::get());
+                pHdl = new XMLEnumPropertyHdl( pXML_Fontwork_Shadow_Enum );
                 break;
             case XML_SD_TYPE_FONTWORK_FORM      :
-                pHdl = new XMLEnumPropertyHdl( pXML_Fontwork_Form_Enum , ::cppu::UnoType<sal_Int32>::get());
+                pHdl = new XMLEnumPropertyHdl( pXML_Fontwork_Form_Enum );
                 break;
 
             case XML_SD_TYPE_CONTROL_BORDER:
@@ -1114,19 +1220,19 @@ const XMLPropertyHandler* XMLSdPropHdlFactory::GetPropertyHandler( sal_Int32 nTy
                 break;
             }
             case XML_SD_TYPE_CAPTION_IS_ESC_REL:
-                pHdl = new XMLIsPercentagePropertyHandler();
+                pHdl = new XMLIsPercentagePropertyHandler;
                 break;
             case XML_SD_TYPE_CAPTION_ESC_REL:
-                pHdl = new XMLCaptionEscapeRelative();
+                pHdl = new XMLCaptionEscapeRelative;
                 break;
             case XML_SD_TYPE_CAPTION_ESC_ABS:
                 pHdl = new XMLPercentOrMeasurePropertyHandler;
                 break;
             case XML_SD_TYPE_CAPTION_ESC_DIR:
-                pHdl = new XMLEnumPropertyHdl( pXML_Caption_Esc_Dir_Enum , ::cppu::UnoType<sal_Int32>::get());
+                pHdl = new XMLEnumPropertyHdl( pXML_Caption_Esc_Dir_Enum );
                 break;
             case XML_SD_TYPE_CAPTION_TYPE:
-                pHdl = new XMLEnumPropertyHdl( pXML_Caption_Type_Enum , ::cppu::UnoType<sal_Int32>::get());
+                pHdl = new XMLEnumPropertyHdl( pXML_Caption_Type_Enum );
                 break;
             case XML_SD_TYPE_DATETIMEUPDATE:
                 pHdl = new XMLNamedBoolPropertyHdl( GetXMLToken(XML_FIXED), GetXMLToken(XML_VARIABLE) );
@@ -1135,10 +1241,10 @@ const XMLPropertyHandler* XMLSdPropHdlFactory::GetPropertyHandler( sal_Int32 nTy
                 pHdl = new XMLDateTimeFormatHdl( mpExport );
                 break;
             case XML_SD_TYPE_TRANSITION_TYPE:
-                pHdl = new XMLEnumPropertyHdl( xmloff::getAnimationsEnumMap(xmloff::Animations_EnumMap_TransitionType) , ::cppu::UnoType<sal_Int16>::get());
+                pHdl = new XMLEnumPropertyHdl( xmloff::aAnimations_EnumMap_TransitionType );
                 break;
             case XML_SD_TYPE_TRANSTIION_SUBTYPE:
-                pHdl = new XMLEnumPropertyHdl( xmloff::getAnimationsEnumMap(xmloff::Animations_EnumMap_TransitionSubType) , ::cppu::UnoType<sal_Int16>::get());
+                pHdl = new XMLEnumPropertyHdl( xmloff::aAnimations_EnumMap_TransitionSubType );
                 break;
             case XML_SD_TYPE_TRANSTIION_DIRECTION:
                 pHdl = new XMLNamedBoolPropertyHdl( GetXMLToken(XML_FORWARD), GetXMLToken(XML_REVERSE) );
@@ -1152,7 +1258,10 @@ const XMLPropertyHandler* XMLSdPropHdlFactory::GetPropertyHandler( sal_Int32 nTy
                 pHdl = new XMLMoveSizeProtectHdl( nType );
                 break;
             case XML_SD_TYPE_HEADER_FOOTER_VISIBILITY_TYPE:
-                pHdl = new XMLSdHeaderFooterVisibilityTypeHdl();
+                pHdl = new XMLSdHeaderFooterVisibilityTypeHdl;
+                break;
+            case XML_SD_TYPE_CELL_ROTATION_ANGLE:
+                pHdl = new XMLSdRotationAngleTypeHdl;
                 break;
         }
 
@@ -1230,11 +1339,9 @@ void XMLShapeExportPropertyMapper::ContextFilter(
     XMLPropertyState* pControlWritingMode = nullptr;
 
     // filter properties
-    for( std::vector< XMLPropertyState >::iterator aIter = rProperties.begin();
-         aIter != rProperties.end();
-         ++aIter )
+    for( auto& rProp : rProperties )
     {
-            XMLPropertyState *property = &(*aIter);
+        XMLPropertyState *property = &rProp;
         if( property->mnIndex == -1 )
             continue;
 
@@ -1251,7 +1358,7 @@ void XMLShapeExportPropertyMapper::ContextFilter(
             case CTF_SD_NUMBERINGRULES_NAME:
                 {
                     // this property is not exported in the style:properties element
-                    // because its an XIndexAccess and not a string.
+                    // because it's an XIndexAccess and not a string.
                     // This will be handled in SvXMLAutoStylePoolP::exportStyleAttributes
                     // This is suboptimal
                     if( !mbIsInAutoStyles )
@@ -1276,7 +1383,18 @@ void XMLShapeExportPropertyMapper::ContextFilter(
                 pControlWritingMode = property;
                 break;
             case CTF_TEXTWRITINGMODE:
-                pTextWritingMode = property;
+                {
+                    pTextWritingMode = property;
+                    sal_Int32 eWritingMode;
+                    if (property->maValue >>= eWritingMode)
+                    {
+                        if (text::WritingMode2::LR_TB == eWritingMode)
+                        {
+                            property->mnIndex = -1;
+                            pTextWritingMode = nullptr;
+                        }
+                    }
+                }
                 break;
             case CTF_REPEAT_OFFSET_X:
                 pRepeatOffsetX = property;
@@ -1453,7 +1571,7 @@ void XMLShapeExportPropertyMapper::ContextFilter(
 
         if(pFontWorkStyle->maValue >>= nStyle)
         {
-            if(/*XFT_NONE*/4 == nStyle)
+            if(/*XFormTextStyle::NONE*/4 == nStyle)
             {
                 pFontWorkStyle->mnIndex = -1;
                 if(pFontWorkAdjust)
@@ -1581,11 +1699,9 @@ void XMLPageExportPropertyMapper::ContextFilter(
     sal_Int16 nTransitionType = 0;
 
     // filter properties
-    for( std::vector< XMLPropertyState >::iterator aIter = rProperties.begin();
-         aIter != rProperties.end();
-         ++aIter )
+    for( auto& rProp : rProperties )
     {
-        XMLPropertyState *property = &(*aIter);
+        XMLPropertyState *property = &rProp;
         if( property->mnIndex == -1 )
             continue;
 
@@ -1633,7 +1749,7 @@ void XMLPageExportPropertyMapper::ContextFilter(
                 }
                 break;
             case CTF_PAGE_TRANSITION_FADECOLOR:
-                if( (!(mrExport.getExportFlags() & SvXMLExportFlags::OASIS)) )
+                if( !(mrExport.getExportFlags() & SvXMLExportFlags::OASIS) )
                     (*property).mnIndex = -1;
                 else
                     pTransitionFadeColor = property;

@@ -20,10 +20,10 @@
 #ifndef INCLUDED_STORE_SOURCE_STORPAGE_HXX
 #define INCLUDED_STORE_SOURCE_STORPAGE_HXX
 
-#include "sal/types.h"
+#include <sal/types.h>
+#include <rtl/string.h>
 
 #include "object.hxx"
-#include "lockbyte.hxx"
 
 #include "storbase.hxx"
 #include "storbios.hxx"
@@ -32,19 +32,13 @@
 namespace store
 {
 
+class ILockBytes;
 struct OStoreDirectoryPageData;
 class  OStoreDirectoryPageObject;
 
-/*========================================================================
- *
- * OStorePageManager interface.
- *
- *======================================================================*/
 class OStorePageManager : public store::OStorePageBIOS
 {
 public:
-    /** Construction.
-     */
     OStorePageManager();
 
     /** Initialization (two-phase construction).
@@ -90,13 +84,9 @@ public:
     virtual bool isKindOf (sal_uInt32 nTypeId) override;
 
 protected:
-    /** Destruction.
-    */
-    virtual ~OStorePageManager();
+    virtual ~OStorePageManager() override;
 
 private:
-    /** Implementation.
-    */
     typedef OStorePageBIOS            base;
     typedef OStorePageManager         self;
 
@@ -122,11 +112,11 @@ private:
 
     /** DirectoryPage I/O (managed).
      */
-    storeError load_dirpage_Impl ( // @@@ => private: iget() @@@
+    storeError load_dirpage_Impl(
         const OStorePageKey       &rKey,
         OStoreDirectoryPageObject &rPage);
 
-    storeError save_dirpage_Impl ( // @@@ => private: iget(), rebuild() @@@
+    storeError save_dirpage_Impl(
         const OStorePageKey       &rKey,
         OStoreDirectoryPageObject &rPage);
 
@@ -147,7 +137,7 @@ private:
 
 inline bool OStorePageManager::isValid() const
 {
-    return (base::isValid() /* @@@ NYI && (m_aRoot.is()) */);
+    return base::isValid();
 }
 
 template<> inline OStorePageManager*
@@ -160,12 +150,6 @@ SAL_CALL query (OStoreObject *pHandle, SAL_UNUSED_PARAMETER OStorePageManager*)
     }
     return nullptr;
 }
-
-/*========================================================================
- *
- * The End.
- *
- *======================================================================*/
 
 } // namespace store
 

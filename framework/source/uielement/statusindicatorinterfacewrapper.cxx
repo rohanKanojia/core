@@ -21,7 +21,6 @@
 #include <uielement/progressbarwrapper.hxx>
 
 #include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
 
 using namespace cppu;
 using namespace com::sun::star::uno;
@@ -44,7 +43,6 @@ StatusIndicatorInterfaceWrapper::~StatusIndicatorInterfaceWrapper()
 void SAL_CALL StatusIndicatorInterfaceWrapper::start(
     const OUString& sText,
     sal_Int32              nRange )
-throw( css::uno::RuntimeException, std::exception )
 {
     Reference< XComponent > xComp( m_xStatusIndicatorImpl );
     if ( xComp.is() )
@@ -56,7 +54,6 @@ throw( css::uno::RuntimeException, std::exception )
 }
 
 void SAL_CALL StatusIndicatorInterfaceWrapper::end()
-throw( css::uno::RuntimeException, std::exception )
 {
     Reference< XComponent > xComp( m_xStatusIndicatorImpl );
     if ( xComp.is() )
@@ -68,7 +65,6 @@ throw( css::uno::RuntimeException, std::exception )
 }
 
 void SAL_CALL StatusIndicatorInterfaceWrapper::reset()
-throw( css::uno::RuntimeException, std::exception )
 {
     Reference< XComponent > xComp( m_xStatusIndicatorImpl );
     if ( xComp.is() )
@@ -81,7 +77,6 @@ throw( css::uno::RuntimeException, std::exception )
 
 void SAL_CALL StatusIndicatorInterfaceWrapper::setText(
     const OUString& sText )
-throw( css::uno::RuntimeException, std::exception )
 {
     Reference< XComponent > xComp( m_xStatusIndicatorImpl );
     if ( xComp.is() )
@@ -94,7 +89,6 @@ throw( css::uno::RuntimeException, std::exception )
 
 void SAL_CALL StatusIndicatorInterfaceWrapper::setValue(
     sal_Int32 nValue )
-throw( css::uno::RuntimeException, std::exception )
 {
     Reference< XComponent > xComp( m_xStatusIndicatorImpl );
     if ( xComp.is() )

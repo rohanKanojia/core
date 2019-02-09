@@ -13,7 +13,7 @@ $(eval $(call gb_Module_add_targets,ucb,\
 	Library_cached1 \
 	Library_srtrs1 \
 	Library_ucb1 \
-	$(if $(ENABLE_CMIS),Library_ucpcmis1) \
+	$(if $(ENABLE_LIBCMIS),Library_ucpcmis1) \
 	$(if $(WITH_WEBDAV),Library_ucpdav1) \
 	Library_ucpexpand1 \
 	Library_ucpext \
@@ -35,6 +35,9 @@ ifeq ($(WITH_WEBDAV),neon)
 
 $(eval $(call gb_Module_add_check_targets,ucb,\
     CppunitTest_ucb_webdav_local_neon \
+    CppunitTest_ucb_webdav_neon_opts \
+    CppunitTest_ucb_webdav_propfindcache \
+    CppunitTest_ucb_webdav_res_access \
 ))
 
 endif

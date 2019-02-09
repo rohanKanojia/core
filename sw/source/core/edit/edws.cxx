@@ -17,9 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <editsh.hxx>
+
+#include <officecfg/Office/Common.hxx>
+#include <unotools/configmgr.hxx>
 #include <vcl/window.hxx>
 
-#include <editsh.hxx>
 #include <doc.hxx>
 #include <IDocumentUndoRedo.hxx>
 #include <IDocumentState.hxx>
@@ -28,19 +31,30 @@
 #include <acorrect.hxx>
 #include <swtable.hxx>
 #include <ndtxt.hxx>
+#include <txtfrm.hxx>
 #include <swundo.hxx>
 #include <SwRewriter.hxx>
 
 // masqueraded copy constructor
 SwEditShell::SwEditShell( SwEditShell& rEdSH, vcl::Window *pWindow )
     : SwCursorShell( rEdSH, pWindow )
+    , m_bNbspRunNext(false)   // TODO: would copying that make sense? only if editing continues
+    , m_bDoParagraphSignatureValidation(true)
 {
 }
 
 SwEditShell::SwEditShell( SwDoc& rDoc, vcl::Window *pWindow, const SwViewOption *pOptions )
     : SwCursorShell( rDoc, pWindow, pOptions )
+    , m_bNbspRunNext(false)
+    , m_bDoParagraphSignatureValidation(true)
 {
-    GetDoc()->GetIDocumentUndoRedo().DoUndo(true);
+    if (!utl::ConfigManager::IsFuzzing() && 0 < officecfg::Office::Common::Undo::Steps::get())
+    {
+        GetDoc()->GetIDocumentUndoRedo().DoUndo(true);
+    }
+
+    // Restore the paragraph metadata fields and validate signatures.
+    RestoreMetadataFieldsAndValidateParagraphSignatures();
 }
 
 SwEditShell::~SwEditShell() // USED
@@ -72,8 +86,8 @@ void SwEditShell::StartAllAction()
 {
     for(SwViewShell& rCurrentShell : GetRingContainer())
     {
-        if( dynamic_cast<const SwEditShell *>(&rCurrentShell) != nullptr )
-            static_cast<SwEditShell*>(&rCurrentShell)->StartAction();
+        if (SwEditShell* pEditShell = dynamic_cast<SwEditShell*>(&rCurrentShell))
+            pEditShell->StartAction();
         else
             rCurrentShell.StartAction();
     }
@@ -116,9 +130,10 @@ sal_uInt16 SwEditShell::GetCntType() const
     else
         switch( GetCursor()->GetNode().GetNodeType() )
         {
-        case ND_TEXTNODE:   nRet = CNT_TXT; break;
-        case ND_GRFNODE:    nRet = CNT_GRF; break;
-        case ND_OLENODE:    nRet = CNT_OLE; break;
+        case SwNodeType::Text:   nRet = CNT_TXT; break;
+        case SwNodeType::Grf:    nRet = CNT_GRF; break;
+        case SwNodeType::Ole:    nRet = CNT_OLE; break;
+        default: break;
         }
 
     OSL_ASSERT( nRet );
@@ -139,13 +154,8 @@ bool SwEditShell::HasOtherCnt() const
         return true;
 
     pNd = &rNds.GetEndOfAutotext();
-    if ( 1 != (pNd->GetIndex() - pNd->StartOfSectionIndex()) )
-        return true;
-
-    return false;
+    return 1 != (pNd->GetIndex() - pNd->StartOfSectionIndex());
 }
-
-// access control functions for file name handling
 
 SwActContext::SwActContext(SwEditShell *pShell)
     : m_rShell(*pShell)
@@ -153,7 +163,7 @@ SwActContext::SwActContext(SwEditShell *pShell)
     m_rShell.StartAction();
 }
 
-SwActContext::~SwActContext()
+SwActContext::~SwActContext() COVERITY_NOEXCEPT_FALSE
 {
     m_rShell.EndAction();
 }
@@ -164,7 +174,7 @@ SwMvContext::SwMvContext(SwEditShell *pShell)
     m_rShell.SttCursorMove();
 }
 
-SwMvContext::~SwMvContext()
+SwMvContext::~SwMvContext() COVERITY_NOEXCEPT_FALSE
 {
     m_rShell.EndCursorMove();
 }
@@ -178,12 +188,12 @@ SwFrameFormat *SwEditShell::GetTableFormat() // fastest test on a table
 // TODO: Why is this called 3x for a new document?
 sal_uInt16 SwEditShell::GetTOXTypeCount(TOXTypes eTyp) const
 {
-    return mpDoc->GetTOXTypeCount(eTyp);
+    return mxDoc->GetTOXTypeCount(eTyp);
 }
 
 void SwEditShell::InsertTOXType(const SwTOXType& rTyp)
 {
-    mpDoc->InsertTOXType(rTyp);
+    mxDoc->InsertTOXType(rTyp);
 }
 
 void SwEditShell::DoUndo( bool bOn )
@@ -224,11 +234,18 @@ SwUndoId SwEditShell::EndUndo(SwUndoId eUndoId, const SwRewriter *pRewriter)
 { return GetDoc()->GetIDocumentUndoRedo().EndUndo(eUndoId, pRewriter); }
 
 bool     SwEditShell::GetLastUndoInfo(OUString *const o_pStr,
-                                      SwUndoId *const o_pId) const
-{ return GetDoc()->GetIDocumentUndoRedo().GetLastUndoInfo(o_pStr, o_pId); }
+                                      SwUndoId *const o_pId,
+                                      const SwView* pView) const
+{
+    return GetDoc()->GetIDocumentUndoRedo().GetLastUndoInfo(o_pStr, o_pId, pView);
+}
 
-bool     SwEditShell::GetFirstRedoInfo(OUString *const o_pStr) const
-{ return GetDoc()->GetIDocumentUndoRedo().GetFirstRedoInfo(o_pStr); }
+bool SwEditShell::GetFirstRedoInfo(OUString *const o_pStr,
+                                   SwUndoId *const o_pId,
+                                   const SwView* pView) const
+{
+    return GetDoc()->GetIDocumentUndoRedo().GetFirstRedoInfo(o_pStr, o_pId, pView);
+}
 
 SwUndoId SwEditShell::GetRepeatInfo(OUString *const o_pStr) const
 { return GetDoc()->GetIDocumentUndoRedo().GetRepeatInfo(o_pStr); }
@@ -246,10 +263,12 @@ void SwEditShell::AutoCorrect( SvxAutoCorrect& rACorr, bool bInsert,
 
     SwAutoCorrDoc aSwAutoCorrDoc( *this, *pCursor, cChar );
     // FIXME: this _must_ be called with reference to the actual node text!
-    OUString const& rNodeText(pTNd->GetText());
+    SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(pTNd->getLayoutFrame(GetLayout())));
+    TextFrameIndex const nPos(pFrame->MapModelToViewPos(*pCursor->GetPoint()));
+    OUString const& rMergedText(pFrame->GetText());
     rACorr.DoAutoCorrect( aSwAutoCorrDoc,
-                    rNodeText, pCursor->GetPoint()->nContent.GetIndex(),
-                    cChar, bInsert, GetWin() );
+                    rMergedText, sal_Int32(nPos),
+                    cChar, bInsert, m_bNbspRunNext, GetWin() );
     if( cChar )
         SaveTableBoxContent( pCursor->GetPoint() );
     EndAllAction();
@@ -260,19 +279,20 @@ void SwEditShell::SetNewDoc()
     GetDoc()->getIDocumentState().SetNewDoc(true);
 }
 
-bool SwEditShell::GetPrevAutoCorrWord( SvxAutoCorrect& rACorr, OUString& rWord )
+bool SwEditShell::GetPrevAutoCorrWord( SvxAutoCorrect const & rACorr, OUString& rWord )
 {
     SET_CURR_SHELL( this );
 
     bool bRet;
     SwPaM* pCursor = getShellCursor( true );
-    const sal_Int32 nPos = pCursor->GetPoint()->nContent.GetIndex();
     SwTextNode* pTNd = pCursor->GetNode().GetTextNode();
-    if( pTNd && nPos )
+    if (pTNd)
     {
         SwAutoCorrDoc aSwAutoCorrDoc( *this, *pCursor, 0 );
+        SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(pTNd->getLayoutFrame(GetLayout())));
+        TextFrameIndex const nPos(pFrame->MapModelToViewPos(*pCursor->GetPoint()));
         bRet = rACorr.GetPrevAutoCorrWord( aSwAutoCorrDoc,
-                                            pTNd->GetText(), nPos, rWord );
+                    pFrame->GetText(), sal_Int32(nPos), rWord );
     }
     else
         bRet = false;

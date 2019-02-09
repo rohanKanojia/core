@@ -23,14 +23,11 @@
 #include <svl/aeitem.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewsh.hxx>
-#include <sfx2/imagemgr.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <vcl/toolbox.hxx>
 
-#include <svx/dialmgr.hxx>
-#include <svx/dialogs.hrc>
-#include "svx/tbxctl.hxx"
-#include "svx/tbxcolor.hxx"
+#include <svx/tbxctl.hxx>
+#include <svx/tbxcolor.hxx>
 #include <com/sun/star/frame/XLayoutManager.hpp>
 
 SFX_IMPL_TOOLBOX_CONTROL(SvxTbxCtlDraw, SfxBoolItem);
@@ -46,7 +43,7 @@ SvxTbxCtlDraw::SvxTbxCtlDraw( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx 
     rTbx.Invalidate();
 }
 
-void SAL_CALL SvxTbxCtlDraw::initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw ( css::uno::Exception, css::uno::RuntimeException, std::exception)
+void SAL_CALL SvxTbxCtlDraw::initialize( const css::uno::Sequence< css::uno::Any >& aArguments )
 {
     svt::ToolboxController::initialize(aArguments);
     /*

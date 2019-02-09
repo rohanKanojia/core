@@ -17,25 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 
-#include "com/sun/star/beans/XMultiPropertySet.hpp"
-#include "com/sun/star/beans/XPropertiesChangeListener.hpp"
-#include "officecfg/Office/Common.hxx"
-#include "sqledit.hxx"
-#include "QueryTextView.hxx"
-#include "querycontainerwindow.hxx"
-#include <tools/debug.hxx>
-#include "dbaccess_helpid.hrc"
-#include "browserids.hxx"
-#include "querycontroller.hxx"
-#include "undosqledit.hxx"
-#include "QueryDesignView.hxx"
-#include <svl/smplhint.hxx>
+#include <com/sun/star/beans/XMultiPropertySet.hpp>
+#include <com/sun/star/beans/XPropertiesChangeListener.hpp>
+#include <officecfg/Office/Common.hxx>
+#include <sqledit.hxx>
+#include <QueryTextView.hxx>
+#include <querycontainerwindow.hxx>
+#include <helpids.h>
+#include <browserids.hxx>
+#include <querycontroller.hxx>
+#include <undosqledit.hxx>
+#include <QueryDesignView.hxx>
 #include <vcl/settings.hxx>
 #include <cppuhelper/implbase.hxx>
+#include <vcl/event.hxx>
+#include <vcl/svapp.hxx>
 
 using namespace dbaui;
 
@@ -46,18 +46,16 @@ public:
     explicit ChangesListener(OSqlEdit & editor): editor_(editor) {}
 
 private:
-    virtual ~ChangesListener() {}
+    virtual ~ChangesListener() override {}
 
-    virtual void SAL_CALL disposing(css::lang::EventObject const &)
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual void SAL_CALL disposing(css::lang::EventObject const &) override
     {
         osl::MutexGuard g(editor_.m_mutex);
         editor_.m_notifier.clear();
     }
 
     virtual void SAL_CALL propertiesChange(
-        css::uno::Sequence< css::beans::PropertyChangeEvent > const &)
-        throw (css::uno::RuntimeException, std::exception) override
+        css::uno::Sequence< css::beans::PropertyChangeEvent > const &) override
     {
         SolarMutexGuard g;
         editor_.ImplSetFont();
@@ -66,8 +64,8 @@ private:
     OSqlEdit & editor_;
 };
 
-OSqlEdit::OSqlEdit( OQueryTextView* pParent,  WinBits nWinStyle ) :
-    MultiLineEditSyntaxHighlight( pParent, nWinStyle )
+OSqlEdit::OSqlEdit( OQueryTextView* pParent ) :
+    MultiLineEditSyntaxHighlight( pParent, WB_LEFT | WB_VSCROLL | WB_BORDER )
     ,m_pView(pParent)
     ,m_bAccelAction( false )
     ,m_bStopTimer(false )
@@ -76,10 +74,10 @@ OSqlEdit::OSqlEdit( OQueryTextView* pParent,  WinBits nWinStyle ) :
     SetModifyHdl( LINK(this, OSqlEdit, ModifyHdl) );
 
     m_timerUndoActionCreation.SetTimeout(1000);
-    m_timerUndoActionCreation.SetTimeoutHdl(LINK(this, OSqlEdit, OnUndoActionTimer));
+    m_timerUndoActionCreation.SetInvokeHandler(LINK(this, OSqlEdit, OnUndoActionTimer));
 
     m_timerInvalidate.SetTimeout(200);
-    m_timerInvalidate.SetTimeoutHdl(LINK(this, OSqlEdit, OnInvalidateTimer));
+    m_timerInvalidate.SetInvokeHandler(LINK(this, OSqlEdit, OnInvalidateTimer));
     m_timerInvalidate.Start();
 
     ImplSetFont();
@@ -150,17 +148,17 @@ void OSqlEdit::GetFocus()
     MultiLineEditSyntaxHighlight::GetFocus();
 }
 
-IMPL_LINK_NOARG_TYPED(OSqlEdit, OnUndoActionTimer, Timer *, void)
+IMPL_LINK_NOARG(OSqlEdit, OnUndoActionTimer, Timer *, void)
 {
     OUString aText = GetText();
     if(aText != m_strOrigText)
     {
         OJoinController& rController = m_pView->getContainerWindow()->getDesignView()->getController();
         SfxUndoManager& rUndoMgr = rController.GetUndoManager();
-        OSqlEditUndoAct* pUndoAct = new OSqlEditUndoAct( this );
+        std::unique_ptr<OSqlEditUndoAct> pUndoAct(new OSqlEditUndoAct( this ));
 
         pUndoAct->SetOriginalText( m_strOrigText );
-        rUndoMgr.AddUndoAction( pUndoAct );
+        rUndoMgr.AddUndoAction( std::move(pUndoAct) );
 
         rController.InvalidateFeature(SID_UNDO);
         rController.InvalidateFeature(SID_REDO);
@@ -169,7 +167,7 @@ IMPL_LINK_NOARG_TYPED(OSqlEdit, OnUndoActionTimer, Timer *, void)
     }
 }
 
-IMPL_LINK_NOARG_TYPED(OSqlEdit, OnInvalidateTimer, Timer *, void)
+IMPL_LINK_NOARG(OSqlEdit, OnInvalidateTimer, Timer *, void)
 {
     OJoinController& rController = m_pView->getContainerWindow()->getDesignView()->getController();
     rController.InvalidateFeature(SID_CUT);
@@ -178,7 +176,7 @@ IMPL_LINK_NOARG_TYPED(OSqlEdit, OnInvalidateTimer, Timer *, void)
         m_timerInvalidate.Start();
 }
 
-IMPL_LINK_NOARG_TYPED(OSqlEdit, ModifyHdl, Edit&, void)
+IMPL_LINK_NOARG(OSqlEdit, ModifyHdl, Edit&, void)
 {
     if (m_timerUndoActionCreation.IsActive())
         m_timerUndoActionCreation.Stop();
@@ -186,7 +184,7 @@ IMPL_LINK_NOARG_TYPED(OSqlEdit, ModifyHdl, Edit&, void)
 
     OJoinController& rController = m_pView->getContainerWindow()->getDesignView()->getController();
     if (!rController.isModified())
-        rController.setModified( sal_True );
+        rController.setModified( true );
 
     rController.InvalidateFeature(SID_SBA_QRY_EXECUTE);
     rController.InvalidateFeature(SID_CUT);
@@ -219,7 +217,7 @@ void OSqlEdit::startTimer()
         m_timerInvalidate.Start();
 }
 
-void OSqlEdit::ConfigurationChanged( utl::ConfigurationBroadcaster* pOption, sal_uInt32 )
+void OSqlEdit::ConfigurationChanged( utl::ConfigurationBroadcaster* pOption, ConfigurationHints )
 {
     assert( pOption == &m_ColorConfig );
     (void) pOption; // avoid warnings

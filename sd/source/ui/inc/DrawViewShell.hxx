@@ -20,22 +20,24 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_DRAWVIEWSHELL_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_DRAWVIEWSHELL_HXX
 
+#include <memory>
 #include "ViewShell.hxx"
 #include "tools/AsynchronousCall.hxx"
-#include <sfx2/viewfac.hxx>
-#include <sfx2/viewsh.hxx>
 #include "TabControl.hxx"
-#include "pres.hxx"
-#include <svx/sidebar/SelectionChangeHandler.hxx>
-#include <com/sun/star/lang/XEventListener.hpp>
-#include <com/sun/star/scanner/XScannerManager2.hpp>
+#include <glob.hxx>
+#include <pres.hxx>
 #include <unotools/caserotate.hxx>
+#include <unotools/options.hxx>
+#include <sddllapi.h>
+
+namespace svx { namespace sidebar { class SelectionChangeHandler; } }
+namespace com { namespace sun { namespace star { namespace lang { class XEventListener; } } } }
+namespace com { namespace sun { namespace star { namespace scanner { class XScannerManager2; } } } }
 
 class Outliner;
 class SdPage;
 class SdStyleSheet;
 class SdrExternalToolEdit;
-class DrawDocShell;
 class TabBar;
 class SdrObject;
 class SdrPageView;
@@ -65,7 +67,8 @@ class ViewOverlayManager;
 */
 class DrawViewShell
     : public ViewShell,
-      public SfxListener
+      public SfxListener,
+      public utl::ConfigurationListener
 {
 public:
     SFX_DECL_INTERFACE(SD_IF_SDDRAWVIEWSHELL)
@@ -85,20 +88,19 @@ public:
             one view shell to the next.
     */
     DrawViewShell (
-        SfxViewFrame* pFrame,
         ViewShellBase& rViewShellBase,
         vcl::Window* pParentWindow,
-        PageKind ePageKind = PK_STANDARD,
-        FrameView* pFrameView = nullptr);
+        PageKind ePageKind,
+        FrameView* pFrameView);
 
-    virtual ~DrawViewShell();
+    virtual ~DrawViewShell() override;
 
     virtual void Init (bool bIsMainViewShell) override;
 
     virtual void Shutdown() override;
 
     void PrePaint() override;
-    virtual void Paint(const Rectangle& rRect, ::sd::Window* pWin) override;
+    virtual void Paint(const ::tools::Rectangle& rRect, ::sd::Window* pWin) override;
 
     /** Arrange and resize the GUI elements like rulers, sliders, and
         buttons as well as the actual document view according to the size of
@@ -114,22 +116,21 @@ public:
     virtual void    MouseButtonUp(const MouseEvent& rMEvt, ::sd::Window* pWin) override;
     virtual void    MouseButtonDown(const MouseEvent& rMEvt, ::sd::Window* pWin) override;
     virtual void    Command(const CommandEvent& rCEvt, ::sd::Window* pWin) override;
+    bool            IsMouseButtonDown() { return mbMouseButtonDown; }
+    bool            IsMouseSelecting() { return mbMouseSelecting; }
 
     virtual void    Resize() override;
 
-    void            ShowMousePosInfo(const Rectangle& rRect, ::sd::Window* pWin);
+    void            ShowMousePosInfo(const ::tools::Rectangle& rRect, ::sd::Window const * pWin);
 
     virtual void    ChangeEditMode (EditMode eMode, bool bIsLayerModeActive);
 
     virtual void    SetZoom( long nZoom ) override;
-    virtual void    SetZoomRect( const Rectangle& rZoomRect ) override;
+    virtual void    SetZoomRect( const ::tools::Rectangle& rZoomRect ) override;
 
-    void            InsertURLField(const OUString& rURL, const OUString& rText, const OUString& rTarget,
-                                   const Point* pPos);
+    void            InsertURLField(const OUString& rURL, const OUString& rText, const OUString& rTarget);
     void            InsertURLButton(const OUString& rURL, const OUString& rText, const OUString& rTarget,
                                     const Point* pPos);
-
-    virtual void    SetUIUnit(FieldUnit eUnit) override;
 
     void            SelectionHasChanged();
     void            ModelHasChanged();
@@ -137,8 +138,8 @@ public:
     virtual void    Deactivate(bool IsMDIActivate) override;
     virtual void    UIActivating( SfxInPlaceClient* ) override;
     virtual void    UIDeactivated( SfxInPlaceClient* ) override;
-    OUString        GetSelectionText( bool bCompleteWords = false );
-    bool            HasSelection( bool bText = true ) const;
+    OUString        GetSelectionText( bool bCompleteWords );
+    bool            HasSelection( bool bText ) const;
 
     //If we are editing an PRESOBJ_OUTLINE return the Outliner and fill rSel
     //with the current selection
@@ -157,6 +158,10 @@ public:
     void            GetModeSwitchingMenuState (SfxItemSet &rSet);
     void            GetAttrState(SfxItemSet& rSet);
     void            GetSnapItemState(SfxItemSet& rSet);
+
+    void            SetPageProperties (SfxRequest& rReq);
+    void            GetPageProperties(SfxItemSet& rSet);
+    void            GetMarginProperties(SfxItemSet& rSet);
 
     void            GetState (SfxItemSet& rSet);
     void            Execute (SfxRequest& rReq);
@@ -179,7 +184,7 @@ public:
     void            ExecNavigatorWin(SfxRequest& rReq);
     void            GetNavigatorWinState(SfxItemSet& rSet);
 
-    void            ExecutePropPanelAttr (SfxRequest& rReq);
+    void            ExecutePropPanelAttr (SfxRequest const & rReq);
     void            GetStatePropPanelAttr(SfxItemSet& rSet);
 
     void            ExecEffectWin(SfxRequest& rReq);
@@ -187,19 +192,19 @@ public:
     void            Update3DWindow();
     void            AssignFrom3DWindow();
 
-    void            ExecGallery(SfxRequest& rReq);
+    void            ExecGallery(SfxRequest const & rReq);
 
-    void            ExecBmpMask( SfxRequest& rReq );
+    void            ExecBmpMask( SfxRequest const & rReq );
     void            GetBmpMaskState( SfxItemSet& rSet );
 
-    void            ExecIMap( SfxRequest& rReq );
+    void            ExecIMap( SfxRequest const & rReq );
     void            GetIMapState( SfxItemSet& rSet );
 
     void            FuTemporary(SfxRequest& rReq);
     void            FuPermanent(SfxRequest& rReq);
     void            FuSupport(SfxRequest& rReq);
     void            FuDeleteSelectedObjects();
-    void            FuSupportRotate(SfxRequest& rReq);
+    void            FuSupportRotate(SfxRequest const & rReq);
     void            FuTable(SfxRequest& rReq);
 
     void            AttrExec (SfxRequest& rReq);
@@ -217,9 +222,9 @@ public:
     void            ExecGoToLastPage (SfxRequest& rReq);
     void            GetStateGoToLastPage (SfxItemSet& rSet);
 
-    void            ExecChar(SfxRequest& rReq);
+    SD_DLLPUBLIC void ExecChar(SfxRequest& rReq);
 
-    void            ExecuteAnnotation (SfxRequest& rRequest);
+    void            ExecuteAnnotation (SfxRequest const & rRequest);
     void            GetAnnotationState (SfxItemSet& rItemSet);
 
     void            StartRulerDrag (const Ruler& rRuler, const MouseEvent& rMEvt);
@@ -228,7 +233,7 @@ public:
 
     PageKind        GetPageKind() { return mePageKind; }
     void            SetPageKind( PageKind ePageKind ) { mePageKind = ePageKind; }
-    Point           GetMousePos() { return maMousePos; }
+    const Point&    GetMousePos() { return maMousePos; }
     void            SetMousePosFreezed( bool bIn ) { mbMousePosFreezed = bIn; }
 
     EditMode        GetEditMode() const { return meEditMode; }
@@ -248,7 +253,7 @@ public:
     //false.
     void            FreshNavigatrEntry();
     void            FreshNavigatrTree();
-    void            MakeVisible(const Rectangle& rRect, vcl::Window& rWin);
+    void            MakeVisible(const ::tools::Rectangle& rRect, vcl::Window& rWin);
 
     virtual void    ReadFrameViewData(FrameView* pView) override;
     virtual void    WriteFrameViewData() override;
@@ -256,7 +261,7 @@ public:
     virtual ErrCode DoVerb(long nVerb) override;
     virtual bool    ActivateObject(SdrOle2Obj* pObj, long nVerb) override;
 
-    void            SetZoomOnPage( bool bZoom = true ) { mbZoomOnPage = bZoom; }
+    void            SetZoomOnPage( bool bZoom ) { mbZoomOnPage = bZoom; }
     bool            IsZoomOnPage() { return mbZoomOnPage; }
     static void     CheckLineTo (SfxRequest& rReq);
     void            SetChildWindowState( SfxItemSet& rSet );
@@ -265,29 +270,29 @@ public:
 
     void            LockInput();
     void            UnlockInput();
-    bool            IsInputLocked() const { return mnLockCount > 0UL; }
+    bool            IsInputLocked() const { return mnLockCount > 0; }
 
-    sal_uInt16      GetCurPageId() { return maTabControl->GetCurPageId(); }
+    sal_uInt16      GetCurPagePos() { return maTabControl->GetCurPagePos(); }
 
     /** Show controls of the UI or hide them, depending on the given flag.
         Do not call this method directly.  Call the method at ViewShellBase
         instead.
     */
-    virtual void    ShowUIControls (bool bVisible = true) override;
+    virtual void    ShowUIControls (bool bVisible) override;
 
-    void            ScannerEvent( const css::lang::EventObject& rEventObject );
+    void            ScannerEvent();
 
     bool            IsLayerModeActive() const { return mbIsLayerModeActive;}
 
     virtual sal_Int8    AcceptDrop( const AcceptDropEvent& rEvt, DropTargetHelper& rTargetHelper,
-                                    ::sd::Window* pTargetWindow, sal_uInt16 nPage, sal_uInt16 nLayer ) override;
+                                    ::sd::Window* pTargetWindow, sal_uInt16 nPage, SdrLayerID nLayer ) override;
     virtual sal_Int8    ExecuteDrop( const ExecuteDropEvent& rEvt, DropTargetHelper& rTargetHelper,
-                                    ::sd::Window* pTargetWindow, sal_uInt16 nPage, sal_uInt16 nLayer ) override;
+                                    ::sd::Window* pTargetWindow, sal_uInt16 nPage, SdrLayerID nLayer ) override;
 
-    virtual void    WriteUserDataSequence ( css::uno::Sequence < css::beans::PropertyValue >&, bool bBrowse = false ) override;
-    virtual void    ReadUserDataSequence ( const css::uno::Sequence < css::beans::PropertyValue >&, bool bBrowse = false ) override;
+    virtual void    WriteUserDataSequence ( css::uno::Sequence < css::beans::PropertyValue >& ) override;
+    virtual void    ReadUserDataSequence ( const css::uno::Sequence < css::beans::PropertyValue >& ) override;
 
-    virtual void    VisAreaChanged(const Rectangle& rRect) override;
+    virtual void    VisAreaChanged(const ::tools::Rectangle& rRect) override;
 
     /** Create an accessible object representing the specified window.
         @param pWindow
@@ -304,7 +309,7 @@ public:
         administrator.
         @return
             The number of layers managed by the layer tab control.  The
-            returned value is independent of whether the layer modus is
+            returned value is independent of whether the layer mode is
             currently active and the tab control is visible.
     */
     int GetTabLayerCount() const;
@@ -323,18 +328,18 @@ public:
         @param nId
             The id is expected to be a number between zero (inclusive) and
             the number of layers as returned by the
-            <member>GetTabLayerCount</member> method (exclusive).  Note that
-            Invalid values are ignored.  No excpetion is thrown in that case.
+            <member>GetTabLayerCount</member> method (exclusive). Note that
+            Invalid values are ignored. No exception is thrown in that case.
     */
     void SetActiveTabLayerIndex (int nId);
 
     /** Return a pointer to the tab control for pages.
     */
-    TabControl& GetPageTabControl() { return *maTabControl.get(); }
+    TabControl& GetPageTabControl() { return *maTabControl; }
 
     /** Return a pointer to the tab control for layers.
     */
-    LayerTabBar* GetLayerTabControl();
+    SD_DLLPUBLIC LayerTabBar* GetLayerTabControl(); // export for unit test
 
     /** Renames the given slide using an SvxNameDialog
 
@@ -352,25 +357,23 @@ public:
 
     virtual css::uno::Reference<css::drawing::XDrawSubController> CreateSubController() override;
 
-    DrawView*   GetDrawView() const { return mpDrawView; }
+    DrawView*   GetDrawView() const { return mpDrawView.get(); }
 
     /** Relocation to a new parent window is not supported for DrawViewShell
         objects so this method always returns <FALSE/>.
     */
     virtual bool RelocateToParentWindow (vcl::Window* pParentWindow) override;
 
-    OUString GetSidebarContextName() const;
+    OUString const & GetSidebarContextName() const;
 
-    const Color& GetAppBackgroundColor() const { return mnAppBackgroundColor; }
-    void SetAppBackgroundColor( Color nNewColor )  { mnAppBackgroundColor = nNewColor; }
     bool IsInSwitchPage() { return mbIsInSwitchPage; }
 
     //move this method to ViewShell.
     //void  NotifyAccUpdate();
 protected:
-    DrawView*           mpDrawView;
+    std::unique_ptr<DrawView> mpDrawView;
     SdPage*             mpActualPage;
-    Rectangle           maMarkRect;
+    ::tools::Rectangle           maMarkRect;
     Point               maMousePos;
     bool                mbMousePosFreezed;
     VclPtr<TabControl>  maTabControl;
@@ -382,27 +385,26 @@ protected:
     bool                mbReadOnly;
     static bool         mbPipette;
 
-                    DECL_LINK_TYPED( ClipboardChanged, TransferableDataHelper*, void );
-                    DECL_LINK_TYPED( TabSplitHdl, TabBar *, void );
-                    DECL_LINK_TYPED( NameObjectHdl, AbstractSvxObjectNameDialog&, bool );
-                    DECL_LINK_TYPED( RenameSlideHdl, AbstractSvxNameDialog&, bool );
+                    DECL_LINK( ClipboardChanged, TransferableDataHelper*, void );
+                    DECL_LINK( TabSplitHdl, TabBar *, void );
+                    DECL_LINK( NameObjectHdl, AbstractSvxObjectNameDialog&, bool );
+                    DECL_LINK( RenameSlideHdl, AbstractSvxNameDialog&, bool );
 
     void            DeleteActualPage();
     void            DeleteActualLayer();
 
-    virtual SvxRuler* CreateHRuler(::sd::Window* pWin) override;
-    virtual SvxRuler* CreateVRuler(::sd::Window* pWin) override;
+    virtual VclPtr<SvxRuler> CreateHRuler(::sd::Window* pWin) override;
+    virtual VclPtr<SvxRuler> CreateVRuler(::sd::Window* pWin) override;
     virtual void    UpdateHRuler() override;
     virtual void    UpdateVRuler() override;
     virtual void    SetZoomFactor(const Fraction& rZoomX, const Fraction& rZoomY) override;
 
-    void            SetupPage( Size &rSize, long nLeft, long nRight, long nUpper, long nLower,
+    void            SetupPage( Size const &rSize, long nLeft, long nRight, long nUpper, long nLower,
                                bool bSize, bool bMargin, bool bScaleAll );
 
     void            GetMenuStateSel(SfxItemSet& rSet);
 
 private:
-    void ShowSlideShow(SfxRequest& rReq);
     /** This flag controls whether the layer mode is active, i.e. the layer
         dialog is visible.
     */
@@ -443,26 +445,16 @@ private:
 
     css::uno::Reference< css::scanner::XScannerManager2 > mxScannerManager;
     css::uno::Reference< css::lang::XEventListener >      mxScannerListener;
-    TransferableClipboardListener*                        mpClipEvtLstnr;
+    rtl::Reference<TransferableClipboardListener>         mxClipEvtLstnr;
     bool                                                  mbPastePossible;
+    bool                                                  mbMouseButtonDown;
+    bool                                                  mbMouseSelecting;
 
     virtual void Notify (SfxBroadcaster& rBC, const SfxHint& rHint) override;
 
-    /** Stop a running slide show.  The frame the show is running in is
-        destroyed if
-        a) it is running in its own frame, i.e. is a full screen show and
-        b) the given flag bCloseFrame is true.
-        @param bCloseFrame
-            Be careful with this flag when stopping a full screen show.
-            When called from the destructor the flag has to be <FALSE/> or
-            otherwise we run into a loop of calls to destructors of the view
-            and the frame.
-            When called from other places the flag should be <TRUE/> so that
-            not an empty frame remains. When called with <TRUE/> it is the
-            responsibility of the caller to avoid an illegal reentrant
-            call.
+    /** Stop a running slide show.
     */
-    void StopSlideShow (bool bCloseFrame);
+    void StopSlideShow();
 
     /** Show the context menu for snap lines and points.  Because snap lines
         can not be selected the index of the snap line/point for which the
@@ -488,6 +480,10 @@ private:
     ::std::unique_ptr< ViewOverlayManager > mpViewOverlayManager;
 
     std::vector<std::unique_ptr<SdrExternalToolEdit>> m_ExternalEdits;
+
+    virtual void ConfigurationChanged( utl::ConfigurationBroadcaster* pCb, ConfigurationHints ) override;
+
+    void ConfigureAppBackgroundColor( svtools::ColorConfig* pColorConfig = nullptr );
 
     // The colour of the area behind the slide (used to be called "Wiese")
     Color mnAppBackgroundColor;

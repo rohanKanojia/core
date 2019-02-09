@@ -19,14 +19,14 @@
 
 #include <vcl/outdev.hxx>
 
-#include "drawutil.hxx"
-#include "document.hxx"
-#include "global.hxx"
-#include "viewdata.hxx"
+#include <drawutil.hxx>
+#include <document.hxx>
+#include <global.hxx>
+#include <viewdata.hxx>
 
-void ScDrawUtil::CalcScale( ScDocument* pDoc, SCTAB nTab,
+void ScDrawUtil::CalcScale( const ScDocument* pDoc, SCTAB nTab,
                             SCCOL nStartCol, SCROW nStartRow, SCCOL nEndCol, SCROW nEndRow,
-                            OutputDevice* pDev,
+                            const OutputDevice* pDev,
                             const Fraction& rZoomX, const Fraction& rZoomY,
                             double nPPTX, double nPPTY,
                             Fraction& rScaleX, Fraction& rScaleY )
@@ -38,7 +38,7 @@ void ScDrawUtil::CalcScale( ScDocument* pDoc, SCTAB nTab,
     for (SCCOL i=nStartCol; i<nEndCol; i++)
     {
         sal_uInt16 nWidth = pDoc->GetColWidth(i,nTab);
-        nTwipsX += (long) nWidth;
+        nTwipsX += static_cast<long>(nWidth);
         nPixelX += ScViewData::ToPixel( nWidth, nPPTX );
     }
 
@@ -56,27 +56,27 @@ void ScDrawUtil::CalcScale( ScDocument* pDoc, SCTAB nTab,
         nPixelY += ScViewData::ToPixel(nHeight, nPPTY);
     }
 
-    MapMode aHMMMode( MAP_100TH_MM, Point(), rZoomX, rZoomY );
+    MapMode aHMMMode( MapUnit::Map100thMM, Point(), rZoomX, rZoomY );
     Point aPixelLog = pDev->PixelToLogic( Point( nPixelX,nPixelY ), aHMMMode );
 
     //  Fraction(double) ctor can be used here (and avoid overflows of PixelLog * Zoom)
     //  because ReduceInaccurate is called later anyway.
 
     if ( aPixelLog.X() && nTwipsX )
-        rScaleX = Fraction( ((double)aPixelLog.X()) *
-                            ((double)rZoomX.GetNumerator()) /
-                            ((double)nTwipsX) /
-                            ((double)HMM_PER_TWIPS) /
-                            ((double)rZoomX.GetDenominator()) );
+        rScaleX = Fraction( static_cast<double>(aPixelLog.X()) *
+                            static_cast<double>(rZoomX.GetNumerator()) /
+                            static_cast<double>(nTwipsX) /
+                            HMM_PER_TWIPS /
+                            static_cast<double>(rZoomX.GetDenominator()) );
     else
         rScaleX = Fraction( 1, 1 );
 
     if ( aPixelLog.Y() && nTwipsY )
-        rScaleY = Fraction( ((double)aPixelLog.Y()) *
-                            ((double)rZoomY.GetNumerator()) /
-                            ((double)nTwipsY) /
-                            ((double)HMM_PER_TWIPS) /
-                            ((double)rZoomY.GetDenominator()) );
+        rScaleY = Fraction( static_cast<double>(aPixelLog.Y()) *
+                            static_cast<double>(rZoomY.GetNumerator()) /
+                            static_cast<double>(nTwipsY) /
+                            HMM_PER_TWIPS /
+                            static_cast<double>(rZoomY.GetDenominator()) );
     else
         rScaleY = Fraction( 1, 1 );
 

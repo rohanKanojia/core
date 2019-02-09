@@ -27,23 +27,20 @@ private:
 public:
     Directories();
 
-    OUString getSrcRootURL()       { return m_aSrcRootURL; }
-    OUString getSrcRootPath()      { return m_aSrcRootPath; }
+    const OUString& getSrcRootURL()  const { return m_aSrcRootURL; }
+    const OUString& getSrcRootPath() const { return m_aSrcRootPath; }
 
-    // return a URL to a given c-str path from the source directory
-    OUString getURLFromSrc( const char *pPath );
-    OUString getURLFromSrc( const OUString& rPath );
+    // return a URL to a given path from the source directory
+    OUString getURLFromSrc(const OUString& rPath) const;
 
-    // return a Path to a given c-str path from the source directory
-    OUString getPathFromSrc( const char *pPath );
+    // return a Path to a given path from the source directory
+    OUString getPathFromSrc(const OUString& rPath) const;
 
-    // return a URL to a given c-str path from the workdir directory
-    OUString getURLFromWorkdir( const char *pPath );
+    // return a URL to a given path from the workdir directory
+    OUString getURLFromWorkdir(const OUString &rPath) const;
 
-#ifdef _WIN32
-    // return a Path to a given c-str path from the workdir directory
-    OUString getPathFromWorkdir( const char *pPath );
-#endif
+    // return a Path to a given path from the workdir directory
+    OUString getPathFromWorkdir(const OUString &rPath) const;
 };
 
 }

@@ -86,9 +86,21 @@ namespace drawinglayer
         class DRAWINGLAYER_DLLPUBLIC TextHierarchyParagraphPrimitive2D : public GroupPrimitive2D
         {
         private:
+            // outline level of the encapsulated paragraph data.
+            // -1 means no level, >= 0 is the level
+            sal_Int16           mnOutlineLevel;
+
         public:
             /// constructor
-            explicit TextHierarchyParagraphPrimitive2D(const Primitive2DContainer& rChildren);
+            explicit TextHierarchyParagraphPrimitive2D(
+                const Primitive2DContainer& rChildren,
+                sal_Int16 nOutlineLevel = -1);
+
+            /// data read access
+            sal_Int16 getOutlineLevel() const { return mnOutlineLevel; }
+
+            /// compare operator
+            virtual bool operator==(const BasePrimitive2D& rPrimitive) const override;
 
             /// provide unique ID
             DeclPrimitive2DIDBlock()
@@ -148,19 +160,23 @@ namespace drawinglayer
         class DRAWINGLAYER_DLLPUBLIC TextHierarchyFieldPrimitive2D : public GroupPrimitive2D
         {
         private:
+            /// field type definition
             FieldType                               meType;
-            OUString                           maString;
+
+            /// field data as name/value pairs (dependent of field type definition)
+            std::vector< std::pair< OUString, OUString>>    meNameValue;
 
         public:
             /// constructor
             TextHierarchyFieldPrimitive2D(
                 const Primitive2DContainer& rChildren,
                 const FieldType& rFieldType,
-                const OUString& rString);
+                const std::vector< std::pair< OUString, OUString>>* pNameValue = nullptr);
 
             /// data read access
             FieldType getType() const { return meType; }
-            const OUString& getString() const { return maString; }
+            const std::vector< std::pair< OUString, OUString>>& getNameValue() const { return meNameValue; }
+            OUString getValue(const OUString& rName) const;
 
             /// compare operator
             virtual bool operator==(const BasePrimitive2D& rPrimitive) const override;

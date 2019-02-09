@@ -37,9 +37,9 @@
 #include <osl/diagnose.h>
 #include <unotools/tempfile.hxx>
 #include <unotools/localfilehelper.hxx>
-#include <unotools/ucbstreamhelper.hxx>
 #include <xmloff/xmlexp.hxx>
 #include <xmloff/xmlimp.hxx>
+#include <xmloff/xmlexppr.hxx>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <memory>
 
@@ -70,7 +70,7 @@ public:
         bool      bSet;
         TCell(  sal_Int32 _nColSpan,
                 sal_Int32 _nRowSpan,
-                Reference<XReportComponent> _xElement = Reference<XReportComponent>()) :
+                Reference<XReportComponent> const & _xElement = Reference<XReportComponent>()) :
         nColSpan(_nColSpan)
         ,nRowSpan(_nRowSpan)
         ,xElement(_xElement)
@@ -84,11 +84,10 @@ public:
         {}
     };
     typedef ::std::pair< OUString ,OUString> TStringPair;
-    typedef ::std::vector< OUString>                         TStringVec;
     typedef ::std::map< Reference<XPropertySet> ,OUString >  TPropertyStyleMap;
-    typedef ::std::map< Reference<XPropertySet> ,  TStringVec>      TGridStyleMap;
+    typedef ::std::map< Reference<XPropertySet> ,  std::vector<OUString>>      TGridStyleMap;
     typedef ::std::vector< TCell >                                  TRow;
-    typedef ::std::vector< ::std::pair< sal_Bool, TRow > >          TGrid;
+    typedef ::std::vector< ::std::pair< bool, TRow > >              TGrid;
     typedef ::std::map< Reference<XPropertySet> ,TGrid >            TSectionsGrid;
     typedef ::std::map< Reference<XGroup> ,Reference<XFunction> >   TGroupFunctionMap;
 private:
@@ -101,7 +100,6 @@ private:
 
     OUString                                 m_sTableStyle;
     OUString                                 m_sCellStyle;
-    OUString                                 m_sColumnStyle;
     rtl::Reference < SvXMLExportPropertyMapper>       m_xTableStylesExportPropertySetMapper;
     rtl::Reference < SvXMLExportPropertyMapper>       m_xCellStylesExportPropertySetMapper;
     rtl::Reference < SvXMLExportPropertyMapper>       m_xColumnStylesExportPropertySetMapper;
@@ -132,17 +130,14 @@ private:
     void                    exportAutoStyle(const Reference<XSection>& _xProp);
     void                    exportReportComponentAutoStyles(const Reference<XSection>& _xProp);
     void                    collectComponentStyles();
-    void                    collectStyleNames(sal_Int32 _nFamily,const ::std::vector< sal_Int32>& _aSize, ORptExport::TStringVec& _rStyleNames);
+    void                    collectStyleNames(sal_Int32 _nFamily,const ::std::vector< sal_Int32>& _aSize, std::vector<OUString>& _rStyleNames);
     void                    exportParagraph(const Reference< XReportControlModel >& _xReportElement);
     bool                    exportFormula(enum ::xmloff::token::XMLTokenEnum eName,const OUString& _sFormula);
     void                    exportGroupsExpressionAsFunction(const Reference< XGroups>& _xGroups);
     static OUString  convertFormula(const OUString& _sFormula);
 
-    static OUString         implConvertNumber(sal_Int32 _nValue);
-
-private:
-                                    ORptExport();
     virtual void                    SetBodyAttributes() override;
+
 protected:
 
     virtual void                    ExportStyles_( bool bUsed ) override;
@@ -150,26 +145,27 @@ protected:
     virtual void                    ExportContent_() override;
     virtual void                    ExportMasterStyles_() override;
     virtual void                    ExportFontDecls_() override;
-    virtual sal_uInt32              exportDoc( enum ::xmloff::token::XMLTokenEnum eClass ) override;
     virtual SvXMLAutoStylePoolP*    CreateAutoStylePool() override;
     virtual XMLShapeExport*         CreateShapeExport() override;
 
-    virtual                 ~ORptExport(){};
+    virtual                 ~ORptExport() override {};
 public:
 
     ORptExport(const Reference< XComponentContext >& _rxContext, OUString const & implementationName, SvXMLExportFlags nExportFlag);
 
-    static css::uno::Sequence< OUString > getSupportedServiceNames_Static() throw( css::uno::RuntimeException );
-    static OUString getImplementationName_Static() throw( css::uno::RuntimeException );
-    static css::uno::Reference< css::uno::XInterface > SAL_CALL
+    /// @throws css::uno::RuntimeException
+    static css::uno::Sequence< OUString > getSupportedServiceNames_Static();
+    /// @throws css::uno::RuntimeException
+    static OUString getImplementationName_Static();
+    static css::uno::Reference< css::uno::XInterface >
         create(css::uno::Reference< css::uno::XComponentContext > const & xContext);
 
     // XExporter
-    virtual void SAL_CALL setSourceDocument( const css::uno::Reference< css::lang::XComponent >& xDoc ) throw(css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setSourceDocument( const css::uno::Reference< css::lang::XComponent >& xDoc ) override;
 
-    inline Reference<XReportDefinition> getReportDefinition() const { return m_xReportDefinition; }
+    const Reference<XReportDefinition>& getReportDefinition() const { return m_xReportDefinition; }
 
-    rtl::Reference < XMLPropertySetMapper > GetCellStylePropertyMapper() const { return m_xCellStylesPropertySetMapper;}
+    const rtl::Reference < XMLPropertySetMapper >& GetCellStylePropertyMapper() const { return m_xCellStylesPropertySetMapper;}
 };
 
 /** Exports only settings
@@ -179,9 +175,11 @@ public:
 class ORptExportHelper
 {
 public:
-    static OUString getImplementationName_Static(  ) throw (css::uno::RuntimeException);
-    static Sequence< OUString > getSupportedServiceNames_Static(  ) throw(css::uno::RuntimeException);
-    static css::uno::Reference< css::uno::XInterface > SAL_CALL
+    /// @throws css::uno::RuntimeException
+    static OUString getImplementationName_Static(  );
+    /// @throws css::uno::RuntimeException
+    static Sequence< OUString > getSupportedServiceNames_Static(  );
+    static css::uno::Reference< css::uno::XInterface >
         create(css::uno::Reference< css::uno::XComponentContext > const & xContext);
 };
 
@@ -192,9 +190,11 @@ public:
 class ORptContentExportHelper
 {
 public:
-    static OUString getImplementationName_Static(  ) throw (css::uno::RuntimeException);
-    static Sequence< OUString > getSupportedServiceNames_Static(  ) throw(css::uno::RuntimeException);
-    static css::uno::Reference< css::uno::XInterface > SAL_CALL
+    /// @throws css::uno::RuntimeException
+    static OUString getImplementationName_Static(  );
+    /// @throws css::uno::RuntimeException
+    static Sequence< OUString > getSupportedServiceNames_Static(  );
+    static css::uno::Reference< css::uno::XInterface >
         create(css::uno::Reference< css::uno::XComponentContext > const & xContext);
 };
 
@@ -205,9 +205,11 @@ public:
 class ORptStylesExportHelper
 {
 public:
-    static OUString getImplementationName_Static(  ) throw (css::uno::RuntimeException);
-    static Sequence< OUString > getSupportedServiceNames_Static(  ) throw(css::uno::RuntimeException);
-    static css::uno::Reference< css::uno::XInterface > SAL_CALL
+    /// @throws css::uno::RuntimeException
+    static OUString getImplementationName_Static(  );
+    /// @throws css::uno::RuntimeException
+    static Sequence< OUString > getSupportedServiceNames_Static(  );
+    static css::uno::Reference< css::uno::XInterface >
         create(css::uno::Reference< css::uno::XComponentContext > const & xContext);
 };
 
@@ -218,9 +220,11 @@ public:
 class ORptMetaExportHelper
 {
 public:
-    static OUString getImplementationName_Static(  ) throw (css::uno::RuntimeException);
-    static Sequence< OUString > getSupportedServiceNames_Static(  ) throw(css::uno::RuntimeException);
-    static css::uno::Reference< css::uno::XInterface > SAL_CALL
+    /// @throws css::uno::RuntimeException
+    static OUString getImplementationName_Static(  );
+    /// @throws css::uno::RuntimeException
+    static Sequence< OUString > getSupportedServiceNames_Static(  );
+    static css::uno::Reference< css::uno::XInterface >
         create(css::uno::Reference< css::uno::XComponentContext > const & xContext);
 };
 /** Exports all
@@ -230,9 +234,11 @@ public:
 class ODBFullExportHelper
 {
 public:
-    static OUString getImplementationName_Static(  ) throw (css::uno::RuntimeException);
-    static Sequence< OUString > getSupportedServiceNames_Static(  ) throw(css::uno::RuntimeException);
-    static css::uno::Reference< css::uno::XInterface > SAL_CALL
+    /// @throws css::uno::RuntimeException
+    static OUString getImplementationName_Static(  );
+    /// @throws css::uno::RuntimeException
+    static Sequence< OUString > getSupportedServiceNames_Static(  );
+    static css::uno::Reference< css::uno::XInterface >
         create(css::uno::Reference< css::uno::XComponentContext > const & xContext);
 };
 

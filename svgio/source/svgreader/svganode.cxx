@@ -17,9 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svganode.hxx>
-#include <drawinglayer/primitive2d/transformprimitive2d.hxx>
-#include <drawinglayer/primitive2d/unifiedtransparenceprimitive2d.hxx>
+#include <svganode.hxx>
 
 namespace svgio
 {
@@ -29,14 +27,12 @@ namespace svgio
             SvgDocument& rDocument,
             SvgNode* pParent)
         :   SvgNode(SVGTokenA, rDocument, pParent),
-            maSvgStyleAttributes(*this),
-            mpaTransform(nullptr)
+            maSvgStyleAttributes(*this)
         {
         }
 
         SvgANode::~SvgANode()
         {
-            delete mpaTransform;
         }
 
         const SvgStyleAttributes* SvgANode::getSvgStyleAttributes() const
@@ -50,7 +46,7 @@ namespace svgio
             SvgNode::parseAttribute(rTokenName, aSVGToken, aContent);
 
             // read style attributes
-            maSvgStyleAttributes.parseStyleAttribute(rTokenName, aSVGToken, aContent, false);
+            maSvgStyleAttributes.parseStyleAttribute(aSVGToken, aContent, false);
 
             // parse own
             switch(aSVGToken)
@@ -85,21 +81,21 @@ namespace svgio
             // #i125258# for SVGTokenA decompose children
             const SvgStyleAttributes* pStyle = getSvgStyleAttributes();
 
-            if(pStyle)
+            if(!pStyle)
+                return;
+
+            const double fOpacity(pStyle->getOpacity().getNumber());
+
+            if(fOpacity > 0.0 && Display_none != getDisplay())
             {
-                const double fOpacity(pStyle->getOpacity().getNumber());
+                drawinglayer::primitive2d::Primitive2DContainer aContent;
 
-                if(fOpacity > 0.0 && Display_none != getDisplay())
+                // decompose children
+                SvgNode::decomposeSvgNode(aContent, bReferenced);
+
+                if(!aContent.empty())
                 {
-                    drawinglayer::primitive2d::Primitive2DContainer aContent;
-
-                    // decompose children
-                    SvgNode::decomposeSvgNode(aContent, bReferenced);
-
-                    if(!aContent.empty())
-                    {
-                        pStyle->add_postProcess(rTarget, aContent, getTransform());
-                    }
+                    pStyle->add_postProcess(rTarget, aContent, getTransform());
                 }
             }
         }

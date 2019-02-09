@@ -20,8 +20,8 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_VIEW_SLSVIEWCACHECONTEXT_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_VIEW_SLSVIEWCACHECONTEXT_HXX
 
-#include "cache/SlsCacheContext.hxx"
-#include "model/SlsSharedPageDescriptor.hxx"
+#include <cache/SlsCacheContext.hxx>
+#include <model/SlsSharedPageDescriptor.hxx>
 
 namespace sd { namespace slidesorter { namespace model {
 class SlideSorterModel;
@@ -40,8 +40,8 @@ class ViewCacheContext : public cache::CacheContext
 {
 public:
     explicit ViewCacheContext (SlideSorter& rSlideSorter);
-    virtual ~ViewCacheContext();
-    virtual void NotifyPreviewCreation (cache::CacheKey aKey, const Bitmap& rPreview) override;
+    virtual ~ViewCacheContext() override;
+    virtual void NotifyPreviewCreation (cache::CacheKey aKey) override;
     virtual bool IsIdle() override;
     virtual bool IsVisible (cache::CacheKey aKey) override;
     virtual const SdrPage* GetPage (cache::CacheKey aKey) override;

@@ -19,9 +19,9 @@
 
 #include <sal/config.h>
 
+#include <algorithm>
 #include <sstream>
-
-#include <tools/debug.hxx>
+#include <o3tl/safeint.hxx>
 #include <tools/gen.hxx>
 #include <tools/stream.hxx>
 
@@ -42,7 +42,17 @@ SvStream& WritePair( SvStream& rOStream, const Pair& rPair )
     return rOStream;
 }
 
-void Rectangle::SetSize( const Size& rSize )
+OString Pair::toString() const
+{
+    std::stringstream ss;
+    // Note that this is not just used for debugging output but the
+    // format is parsed by external code (passed in callbacks to
+    // LibreOfficeKit clients). So don't change.
+    ss << A() << ", " << B();
+    return ss.str().c_str();
+}
+
+void tools::Rectangle::SetSize( const Size& rSize )
 {
     if ( rSize.Width() < 0 )
         nRight  = nLeft + rSize.Width() +1;
@@ -59,7 +69,36 @@ void Rectangle::SetSize( const Size& rSize )
         nBottom = RECT_EMPTY;
 }
 
-Rectangle& Rectangle::Union( const Rectangle& rRect )
+void tools::Rectangle::SaturatingSetSize(const Size& rSize)
+{
+    if (rSize.Width() < 0)
+        nRight = o3tl::saturating_add(nLeft, (rSize.Width() + 1));
+    else if ( rSize.Width() > 0 )
+        nRight = o3tl::saturating_add(nLeft, (rSize.Width() - 1));
+    else
+        nRight = RECT_EMPTY;
+
+    if ( rSize.Height() < 0 )
+        nBottom = o3tl::saturating_add(nTop, (rSize.Height() + 1));
+    else if ( rSize.Height() > 0 )
+        nBottom = o3tl::saturating_add(nTop, (rSize.Height() - 1));
+    else
+        nBottom = RECT_EMPTY;
+}
+
+void tools::Rectangle::SaturatingSetX(long x)
+{
+    nRight = o3tl::saturating_add(nRight, x - nLeft);
+    nLeft = x;
+}
+
+void tools::Rectangle::SaturatingSetY(long y)
+{
+    nBottom = o3tl::saturating_add(nBottom, y - nTop);
+    nTop = y;
+}
+
+tools::Rectangle& tools::Rectangle::Union( const tools::Rectangle& rRect )
 {
     if ( rRect.IsEmpty() )
         return *this;
@@ -77,18 +116,18 @@ Rectangle& Rectangle::Union( const Rectangle& rRect )
     return *this;
 }
 
-Rectangle& Rectangle::Intersection( const Rectangle& rRect )
+tools::Rectangle& tools::Rectangle::Intersection( const tools::Rectangle& rRect )
 {
     if ( IsEmpty() )
         return *this;
     if ( rRect.IsEmpty() )
     {
-        *this = Rectangle();
+        *this = tools::Rectangle();
         return *this;
     }
 
     // Justify rectangle
-    Rectangle aTmpRect( rRect );
+    tools::Rectangle aTmpRect( rRect );
     Justify();
     aTmpRect.Justify();
 
@@ -100,31 +139,25 @@ Rectangle& Rectangle::Intersection( const Rectangle& rRect )
 
     // Determine if intersection is empty
     if ( nRight < nLeft || nBottom < nTop )
-        *this = Rectangle();
+        *this = tools::Rectangle();
 
     return *this;
 }
 
-void Rectangle::Justify()
+void tools::Rectangle::Justify()
 {
-    long nHelp;
-
     if ( (nRight < nLeft) && (nRight != RECT_EMPTY) )
     {
-        nHelp = nLeft;
-        nLeft = nRight;
-        nRight = nHelp;
+        std::swap(nLeft, nRight);
     }
 
     if ( (nBottom < nTop) && (nBottom != RECT_EMPTY) )
     {
-        nHelp = nBottom;
-        nBottom = nTop;
-        nTop = nHelp;
+        std::swap(nBottom, nTop);
     }
 }
 
-bool Rectangle::IsInside( const Point& rPoint ) const
+bool tools::Rectangle::IsInside( const Point& rPoint ) const
 {
     if ( IsEmpty() )
         return false;
@@ -152,21 +185,20 @@ bool Rectangle::IsInside( const Point& rPoint ) const
     return true;
 }
 
-bool Rectangle::IsInside( const Rectangle& rRect ) const
+bool tools::Rectangle::IsInside( const tools::Rectangle& rRect ) const
 {
-    if ( IsInside( rRect.TopLeft() ) && IsInside( rRect.BottomRight() ) )
-        return true;
-    else
-        return false;
+    return IsInside( rRect.TopLeft() ) && IsInside( rRect.BottomRight() );
 }
 
-bool Rectangle::IsOver( const Rectangle& rRect ) const
+bool tools::Rectangle::IsOver( const tools::Rectangle& rRect ) const
 {
     // If there's no intersection, they don't overlap
     return !GetIntersection( rRect ).IsEmpty();
 }
 
-SvStream& ReadRectangle( SvStream& rIStream, Rectangle& rRect )
+namespace tools
+{
+SvStream& ReadRectangle( SvStream& rIStream, tools::Rectangle& rRect )
 {
     sal_Int32 nTmpL(0), nTmpT(0), nTmpR(0), nTmpB(0);
 
@@ -180,7 +212,7 @@ SvStream& ReadRectangle( SvStream& rIStream, Rectangle& rRect )
     return rIStream;
 }
 
-SvStream& WriteRectangle( SvStream& rOStream, const Rectangle& rRect )
+SvStream& WriteRectangle( SvStream& rOStream, const tools::Rectangle& rRect )
 {
     rOStream.WriteInt32( rRect.nLeft )
             .WriteInt32( rRect.nTop )
@@ -189,10 +221,14 @@ SvStream& WriteRectangle( SvStream& rOStream, const Rectangle& rRect )
 
     return rOStream;
 }
+}
 
-OString Rectangle::toString() const
+OString tools::Rectangle::toString() const
 {
     std::stringstream ss;
+    // Note that this is not just used for debugging output but the
+    // format is parsed by external code (passed in callbacks to
+    // LibreOfficeKit clients). So don't change.
     ss << getX() << ", " << getY() << ", " << getWidth() << ", " << getHeight();
     return ss.str().c_str();
 }

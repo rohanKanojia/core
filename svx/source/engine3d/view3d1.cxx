@@ -18,17 +18,16 @@
  */
 
 
-#include "svx/svditer.hxx"
+#include <svx/svditer.hxx>
 #include <svx/svdpool.hxx>
 #include <svx/svdmodel.hxx>
 #include <svx/svxids.hrc>
 #include <svx/xtable.hxx>
 #include <svx/fmview.hxx>
-#include <svx/dialogs.hrc>
+#include <svx/strings.hrc>
 #include <svx/dialmgr.hxx>
-#include "svx/globl3d.hxx"
+#include <svx/globl3d.hxx>
 #include <svx/obj3d.hxx>
-#include <svx/polysc3d.hxx>
 #include <svx/e3ditem.hxx>
 #include <editeng/colritem.hxx>
 #include <svx/lathe3d.hxx>
@@ -50,16 +49,18 @@ void E3dView::ConvertMarkedToPolyObj()
     {
         SdrObject* pObj = GetMarkedObjectByIndex(0);
 
-        if (pObj && dynamic_cast< const E3dPolyScene* >(pObj) !=  nullptr)
+        if (pObj)
         {
-            bool bBezier = false;
-            pNewObj = static_cast<E3dPolyScene*>(pObj)->ConvertToPolyObj(bBezier, false/*bLineToArea*/);
-
-            if (pNewObj)
+            auto pScene = dynamic_cast< const E3dScene* >(pObj);
+            if (pScene)
             {
-                BegUndo(SVX_RESSTR(RID_SVX_3D_UNDO_EXTRUDE));
-                ReplaceObjectAtView(pObj, *GetSdrPageView(), pNewObj);
-                EndUndo();
+                pNewObj = pScene->ConvertToPolyObj(false/*bBezier*/, false/*bLineToArea*/);
+                if (pNewObj)
+                {
+                    BegUndo(SvxResId(RID_SVX_3D_UNDO_EXTRUDE));
+                    ReplaceObjectAtView(pObj, *GetSdrPageView(), pNewObj);
+                    EndUndo();
+                }
             }
         }
     }
@@ -70,7 +71,7 @@ void E3dView::ConvertMarkedToPolyObj()
     }
 }
 
-void Imp_E3dView_InorderRun3DObjects(const SdrObject* pObj, sal_uInt32& rMask)
+static void Imp_E3dView_InorderRun3DObjects(const SdrObject* pObj, sal_uInt32& rMask)
 {
     if(dynamic_cast< const E3dLatheObj* >(pObj) !=  nullptr)
     {
@@ -101,11 +102,10 @@ SfxItemSet E3dView::Get3DAttributes() const
     // Creating itemset with corresponding field
     SfxItemSet aSet(
         mpModel->GetItemPool(),
-        SDRATTR_START,      SDRATTR_END,
-        SID_ATTR_3D_INTERN, SID_ATTR_3D_INTERN,
-        0, 0);
+        svl::Items<SDRATTR_START,      SDRATTR_END,
+        SID_ATTR_3D_INTERN, SID_ATTR_3D_INTERN>{});
 
-    sal_uInt32 nSelectedItems(0L);
+    sal_uInt32 nSelectedItems(0);
 
     // get attributes from all selected objects
     MergeAttrFromMarked(aSet, false);
@@ -127,7 +127,7 @@ SfxItemSet E3dView::Get3DAttributes() const
     if(!nSelectedItems)
     {
         // Get defaults and apply
-        SfxItemSet aDefaultSet(mpModel->GetItemPool(), SDRATTR_3D_FIRST, SDRATTR_3D_LAST);
+        SfxItemSet aDefaultSet(mpModel->GetItemPool(), svl::Items<SDRATTR_3D_FIRST, SDRATTR_3D_LAST>{});
         GetAttributes(aDefaultSet);
         aSet.Put(aDefaultSet);
 
@@ -145,7 +145,7 @@ SfxItemSet E3dView::Get3DAttributes() const
 
 void E3dView::Set3DAttributes( const SfxItemSet& rAttr)
 {
-    sal_uInt32 nSelectedItems(0L);
+    sal_uInt32 nSelectedItems(0);
 
     // #i94832# removed usage of E3DModifySceneSnapRectUpdater here.
     // They are not needed here, they are already handled in SetAttrToMarked
@@ -167,7 +167,7 @@ void E3dView::Set3DAttributes( const SfxItemSet& rAttr)
     if(!nSelectedItems)
     {
         // Set defaults
-        SfxItemSet aDefaultSet(mpModel->GetItemPool(), SDRATTR_3D_FIRST, SDRATTR_3D_LAST);
+        SfxItemSet aDefaultSet(mpModel->GetItemPool(), svl::Items<SDRATTR_3D_FIRST, SDRATTR_3D_LAST>{});
         aDefaultSet.Put(rAttr);
         SetAttributes(aDefaultSet);
     }
@@ -175,12 +175,12 @@ void E3dView::Set3DAttributes( const SfxItemSet& rAttr)
 
 double E3dView::GetDefaultCamPosZ()
 {
-    return (double) static_cast<const SfxUInt32Item&>(mpModel->GetItemPool().GetDefaultItem(SDRATTR_3DSCENE_DISTANCE)).GetValue();
+    return static_cast<double>(mpModel->GetItemPool().GetDefaultItem(SDRATTR_3DSCENE_DISTANCE).GetValue());
 }
 
 double E3dView::GetDefaultCamFocal()
 {
-    return (double) static_cast<const SfxUInt32Item&>(mpModel->GetItemPool().GetDefaultItem(SDRATTR_3DSCENE_FOCAL_LENGTH)).GetValue();
+    return static_cast<double>(mpModel->GetItemPool().GetDefaultItem(SDRATTR_3DSCENE_FOCAL_LENGTH).GetValue());
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

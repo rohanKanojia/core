@@ -20,6 +20,7 @@
 #ifndef INCLUDED_SFX2_MIECLIP_HXX
 #define INCLUDED_SFX2_MIECLIP_HXX
 
+#include <memory>
 #include <rtl/ustring.hxx>
 #include <sal/config.h>
 #include <sal/types.h>
@@ -31,11 +32,11 @@ class SvData;
 
 class SFX2_DLLPUBLIC MSE40HTMLClipFormatObj
 {
-    SvStream* pStrm;
-    OUString  sBaseURL;
+    std::unique_ptr<SvStream> pStrm;
+    OUString                  sBaseURL;
 
 public:
-    MSE40HTMLClipFormatObj() : pStrm(nullptr)         {}
+    MSE40HTMLClipFormatObj() {}
     ~MSE40HTMLClipFormatObj();
 
     SvStream* IsValid( SvStream& );

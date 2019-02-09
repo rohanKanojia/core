@@ -20,8 +20,8 @@
 #define INCLUDED_SVL_CJKOPTIONS_HXX
 
 #include <svl/svldllapi.h>
-#include <sal/types.h>
 #include <unotools/options.hxx>
+#include <memory>
 
 class SvtCJKOptions_Impl;
 
@@ -30,7 +30,7 @@ class SvtCJKOptions_Impl;
 class SVL_DLLPUBLIC SvtCJKOptions: public utl::detail::Options
 {
 private:
-    SvtCJKOptions_Impl*    pImp;
+    std::shared_ptr<SvtCJKOptions_Impl>    pImpl;
 
 public:
 
@@ -50,7 +50,7 @@ public:
 
     // bDontLoad is for referencing purposes only
     SvtCJKOptions(bool bDontLoad = false);
-    virtual ~SvtCJKOptions();
+    virtual ~SvtCJKOptions() override;
 
     bool IsCJKFontEnabled() const;
     bool IsVerticalTextEnabled() const;

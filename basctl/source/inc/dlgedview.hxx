@@ -39,16 +39,20 @@ private:
 
 public:
 
-    DlgEdView (SdrModel& rModel, OutputDevice& rOut, DlgEditor& rEditor);
-    virtual ~DlgEdView();
+    DlgEdView(
+        SdrModel& rSdrModel,
+        OutputDevice& rOut,
+        DlgEditor& rEditor);
+
+    virtual ~DlgEdView() override;
 
     virtual void MarkListHasChanged() override;
-    virtual void MakeVisible( const Rectangle& rRect, vcl::Window& rWin ) override;
+    virtual void MakeVisible( const tools::Rectangle& rRect, vcl::Window& rWin ) override;
 
 protected:
     /// override to handle HitTest for some objects specially
     using SdrView::CheckSingleSdrObjectHit;
-    virtual SdrObject* CheckSingleSdrObjectHit(const Point& rPnt, sal_uInt16 nTol, SdrObject* pObj, SdrPageView* pPV, SdrSearchOptions nOptions, const SetOfByte* pMVisLay) const override;
+    virtual SdrObject* CheckSingleSdrObjectHit(const Point& rPnt, sal_uInt16 nTol, SdrObject* pObj, SdrPageView* pPV, SdrSearchOptions nOptions, const SdrLayerIDSet* pMVisLay) const override;
 };
 
 } // namespace basctl

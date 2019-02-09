@@ -24,10 +24,20 @@ $(eval $(call gb_Library_use_api,PresentationMinimizer,\
     udkapi \
 ))
 
+$(eval $(call gb_Library_set_include,PresentationMinimizer,\
+    $$(INCLUDE) \
+    -I$(SRCDIR)/sdext/inc \
+))
+
 $(eval $(call gb_Library_use_libraries,PresentationMinimizer,\
+    comphelper \
     cppu \
     cppuhelper \
     sal \
+	sfx \
+	svt \
+	vcl \
+    tl \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,PresentationMinimizer,\

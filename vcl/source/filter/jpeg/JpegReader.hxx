@@ -21,9 +21,13 @@
 #define INCLUDED_VCL_SOURCE_FILTER_JPEG_JPEGREADER_HXX
 
 #include <vcl/graph.hxx>
+#include <vcl/bitmap.hxx>
 #include <vcl/fltcall.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/task/XStatusIndicator.hpp>
+#include <bitmapwriteaccess.hxx>
+
+enum class GraphicFilterImportFlags;
 
 enum ReadState
 {
@@ -39,34 +43,31 @@ struct JPEGCreateBitmapParam
     unsigned long density_unit;
     unsigned long X_density;
     unsigned long Y_density;
-    long     bGray;
 
-    long     nAlignedWidth;  // these members will be filled by the
-    bool     bTopDown;      // CreateBitmap method in svtools
+    bool bGray;
 };
 
 class JPEGReader : public GraphicReader
 {
     SvStream&           mrStream;
-    Bitmap              maBmp;
-    Bitmap              maBmp1;
-    BitmapWriteAccess*  mpAcc;
-    BitmapWriteAccess*  mpAcc1;
-    unsigned char *     mpBuffer;
-    long                mnLastPos;
-    long                mnFormerPos;
-    long                mnLastLines;
-    bool                mbSetLogSize;
+    std::unique_ptr<Bitmap> mpBitmap;
+    std::unique_ptr<Bitmap> mpIncompleteAlpha;
 
-    Graphic CreateIntermediateGraphic( const Bitmap& rBitmap, long nLines );
-    void    FillBitmap();
+    long const          mnLastPos;
+    long                mnLastLines;
+    bool const          mbSetLogSize;
+
+    Graphic CreateIntermediateGraphic(long nLines);
 
 public:
-            JPEGReader( SvStream& rStream, void* pCallData, bool bSetLogSize );
-    virtual ~JPEGReader();
+            JPEGReader( SvStream& rStream, GraphicFilterImportFlags nImportFlags );
+    virtual ~JPEGReader() override;
 
-    ReadState   Read( Graphic& rGraphic );
-    unsigned char * CreateBitmap( JPEGCreateBitmapParam& param );
+    ReadState Read(Graphic& rGraphic, GraphicFilterImportFlags nImportFlags, BitmapScopedWriteAccess* ppAccess);
+
+    bool CreateBitmap(JPEGCreateBitmapParam const & param);
+
+    Bitmap& GetBitmap() { return *mpBitmap; }
 };
 
 #endif // INCLUDED_VCL_SOURCE_FILTER_JPEG_JPEGREADER_HXX

@@ -34,22 +34,18 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/document/XLinkTargetSupplier.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/io/IOException.hpp>
 
 #include <toolkit/helper/vclunohelper.hxx>
-#include "svtools/treelistentry.hxx"
+#include <vcl/treelistentry.hxx>
 
-#include <cuires.hrc>
-#include "hlmarkwn.hxx"
-#include "hltpbase.hxx"
+#include <strings.hrc>
+#include <hlmarkwn.hxx>
+#include <hltpbase.hxx>
 
 using namespace ::com::sun::star;
 
-/*************************************************************************
-|*
-|* Userdata-struct for tree-entries
-|*
-|************************************************************************/
-
+// Userdata-struct for tree-entries
 struct TargetData
 {
     OUString aUStrLinkname;
@@ -63,9 +59,7 @@ struct TargetData
     }
 };
 
-//#                                                                      #
-//# Tree-Window                                                          #
-//#                                                                      #
+// Tree-Window
 SvxHlmarkTreeLBox::SvxHlmarkTreeLBox(vcl::Window* pParent, WinBits nStyle)
     : SvTreeListBox(pParent, nStyle)
     , mpParentWnd(nullptr)
@@ -84,21 +78,14 @@ void SvxHlmarkTreeLBox::dispose()
     SvTreeListBox::dispose();
 }
 
-VCL_BUILDER_DECL_FACTORY(SvxHlmarkTreeLBox)
-{
-    WinBits nWinStyle = WB_TABSTOP;
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nWinStyle |= WB_BORDER;
-    rRet = VclPtr<SvxHlmarkTreeLBox>::Create(pParent, nWinStyle);
-}
+VCL_BUILDER_FACTORY_CONSTRUCTOR(SvxHlmarkTreeLBox, WB_TABSTOP)
 
 Size SvxHlmarkTreeLBox::GetOptimalSize() const
 {
-    return LogicToPixel(Size(103, 162), MAP_APPFONT);
+    return LogicToPixel(Size(103, 162), MapMode(MapUnit::MapAppFont));
 }
 
-void SvxHlmarkTreeLBox::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void SvxHlmarkTreeLBox::Paint(vcl::RenderContext& rRenderContext, const ::tools::Rectangle& rRect)
 {
     if (!mpParentWnd || mpParentWnd->mnError == LERR_NOERROR)
     {
@@ -108,37 +95,30 @@ void SvxHlmarkTreeLBox::Paint(vcl::RenderContext& rRenderContext, const Rectangl
     {
         Erase(rRenderContext);
 
-        Rectangle aDrawRect(Point( 0, 0 ), GetSizePixel());
+        ::tools::Rectangle aDrawRect(Point( 0, 0 ), GetSizePixel());
 
         OUString aStrMessage;
 
         switch (mpParentWnd->mnError)
         {
         case LERR_NOENTRIES :
-            aStrMessage = CUI_RESSTR( RID_SVXSTR_HYPDLG_ERR_LERR_NOENTRIES );
+            aStrMessage = CuiResId( RID_SVXSTR_HYPDLG_ERR_LERR_NOENTRIES );
             break;
         case LERR_DOCNOTOPEN :
-            aStrMessage = CUI_RESSTR( RID_SVXSTR_HYPDLG_ERR_LERR_DOCNOTOPEN );
+            aStrMessage = CuiResId( RID_SVXSTR_HYPDLG_ERR_LERR_DOCNOTOPEN );
             break;
         }
 
-        rRenderContext.DrawText(aDrawRect, aStrMessage, DrawTextFlags::Left | DrawTextFlags::MultiLine | DrawTextFlags::WordBreak);
+        rRenderContext.DrawText(aDrawRect, aStrMessage, DrawTextFlags::Left
+                | DrawTextFlags::MultiLine | DrawTextFlags::WordBreak);
     }
 }
 
 
-//#                                                                      #
-//# Window-Class                                                         #
-//#                                                                      #
-
-
-/*************************************************************************
-|*
-|* Constructor / Destructor
-|*
-|************************************************************************/
+//*** Window-Class ***
+// Constructor / Destructor
 SvxHlinkDlgMarkWnd::SvxHlinkDlgMarkWnd( SvxHyperlinkTabPageBase *pParent )
-    : ModalDialog(pParent, "HyperlinkMark", "cui/ui/hyperlinkmarkdialog.ui")
+    : FloatingWindow(pParent, "HyperlinkMark", "cui/ui/hyperlinkmarkdialog.ui")
     , mbUserMoved(false)
     , mpParent(pParent)
     , mnError(LERR_NOERROR)
@@ -170,14 +150,10 @@ void SvxHlinkDlgMarkWnd::dispose()
     mpBtClose.clear();
     mpLbTree.clear();
     mpParent.clear();
-    ModalDialog::dispose();
+    FloatingWindow::dispose();
 }
 
-/*************************************************************************
-|*
-|* Set an errorstatus
-|*
-|************************************************************************/
+// Set an errorstatus
 sal_uInt16 SvxHlinkDlgMarkWnd::SetError( sal_uInt16 nError)
 {
     sal_uInt16 nOldError = mnError;
@@ -191,12 +167,7 @@ sal_uInt16 SvxHlinkDlgMarkWnd::SetError( sal_uInt16 nError)
     return nOldError;
 }
 
-/*************************************************************************
-|*
-|* Move window
-|*
-|************************************************************************/
-
+// Move window
 bool SvxHlinkDlgMarkWnd::MoveTo ( Point aNewPos )
 {
     if ( !mbUserMoved )
@@ -248,7 +219,7 @@ namespace
                 }
                 break;
             }
-            pEntry = SvTreeListBox::NextSibling(pEntry);
+            pEntry = pEntry->NextSibling();
         }
     }
 }
@@ -263,7 +234,7 @@ void SvxHlinkDlgMarkWnd::RestoreLastSelection()
 
     OUString sLastSelectedMark;
     std::deque<OUString> aLastSelectedPath;
-    SvtViewOptions aViewSettings( E_DIALOG, TG_SETTING_MANAGER );
+    SvtViewOptions aViewSettings( EViewType::Dialog, TG_SETTING_MANAGER );
     if (aViewSettings.Exists())
     {
         //Maybe we might want to have some sort of mru list and keep a mapping
@@ -274,9 +245,8 @@ void SvxHlinkDlgMarkWnd::RestoreLastSelection()
         aViewSettings.GetUserItem(TG_SETTING_LASTPATH) >>= aTmp;
         aLastSelectedPath = comphelper::sequenceToContainer< std::deque<OUString> >(aTmp);
     }
-    //fallback to previous entry selected the last
-    //time we executed this dialog. First see if
-    //the exact mark exists and re-use that
+    //fallback to previous entry selected the last time we executed this dialog.
+    //First see if the exact mark exists and re-use that
     if (!sLastSelectedMark.isEmpty())
         bSelectedEntry = SelectEntry(sLastSelectedMark);
     //Otherwise just select the closest path available
@@ -288,12 +258,7 @@ void SvxHlinkDlgMarkWnd::RestoreLastSelection()
     }
 }
 
-/*************************************************************************
-|*
-|* Interface to refresh tree
-|*
-|************************************************************************/
-
+// Interface to refresh tree
 void SvxHlinkDlgMarkWnd::RefreshTree (const OUString& aStrURL)
 {
     OUString aUStrURL;
@@ -326,12 +291,7 @@ void SvxHlinkDlgMarkWnd::RefreshTree (const OUString& aStrURL)
     maStrLastURL = aStrURL;
 }
 
-/*************************************************************************
-|*
-|* get links from document
-|*
-|************************************************************************/
-
+// get links from document
 bool SvxHlinkDlgMarkWnd::RefreshFromDoc(const OUString& aURL)
 {
     mnError = LERR_NOERROR;
@@ -390,12 +350,8 @@ bool SvxHlinkDlgMarkWnd::RefreshFromDoc(const OUString& aURL)
     }
     return (mnError==0);
 }
-/*************************************************************************
-|*
-|* Fill Tree-Control
-|*
-|************************************************************************/
 
+// Fill Tree-Control
 int SvxHlinkDlgMarkWnd::FillTree( const uno::Reference< container::XNameAccess >& xLinks, SvTreeListEntry* pParentEntry )
 {
     int nEntries=0;
@@ -403,7 +359,6 @@ int SvxHlinkDlgMarkWnd::FillTree( const uno::Reference< container::XNameAccess >
     const sal_uLong nLinks = aNames.getLength();
     const OUString* pNames = aNames.getConstArray();
 
-    Color aMaskColor( COL_LIGHTMAGENTA );
     const OUString aProp_LinkDisplayName( "LinkDisplayName" );
     const OUString aProp_LinkTarget( "com.sun.star.document.LinkTarget" );
     const OUString aProp_LinkDisplayBitmap( "LinkDisplayBitmap" );
@@ -450,10 +405,11 @@ int SvxHlinkDlgMarkWnd::FillTree( const uno::Reference< container::XNameAccess >
                 try
                 {
                     // get bitmap for the tree-entry
-                    uno::Reference< awt::XBitmap > aXBitmap( xTarget->getPropertyValue( aProp_LinkDisplayBitmap ), uno::UNO_QUERY );
+                    uno::Reference< awt::XBitmap >
+                        aXBitmap( xTarget->getPropertyValue( aProp_LinkDisplayBitmap ), uno::UNO_QUERY );
                     if( aXBitmap.is() )
                     {
-                        Image aBmp( VCLUnoHelper::GetBitmap( aXBitmap ).GetBitmap(), aMaskColor );
+                        Image aBmp(BitmapEx(VCLUnoHelper::GetBitmap(aXBitmap).GetBitmap(), /*mask*/COL_LIGHTMAGENTA));
                         // insert Displayname into treelist with bitmaps
                         pEntry = mpLbTree->InsertEntry ( aStrDisplayname,
                                                         aBmp, aBmp,
@@ -495,12 +451,7 @@ int SvxHlinkDlgMarkWnd::FillTree( const uno::Reference< container::XNameAccess >
     return nEntries;
 }
 
-/*************************************************************************
-|*
-|* Clear Tree
-|*
-|************************************************************************/
-
+// Clear Tree
 void SvxHlinkDlgMarkWnd::ClearTree()
 {
     SvTreeListEntry* pEntry = mpLbTree->First();
@@ -516,12 +467,7 @@ void SvxHlinkDlgMarkWnd::ClearTree()
     mpLbTree->Clear();
 }
 
-/*************************************************************************
-|*
-|* Find Entry for String
-|*
-|************************************************************************/
-
+// Find Entry for String
 SvTreeListEntry* SvxHlinkDlgMarkWnd::FindEntry (const OUString& aStrName)
 {
     bool bFound=false;
@@ -539,12 +485,7 @@ SvTreeListEntry* SvxHlinkDlgMarkWnd::FindEntry (const OUString& aStrName)
     return pEntry;
 }
 
-/*************************************************************************
-|*
-|* Select Entry
-|*
-|************************************************************************/
-
+// Select Entry
 bool SvxHlinkDlgMarkWnd::SelectEntry(const OUString& aStrMark)
 {
     SvTreeListEntry* pEntry = FindEntry(aStrMark);
@@ -555,19 +496,14 @@ bool SvxHlinkDlgMarkWnd::SelectEntry(const OUString& aStrMark)
     return true;
 }
 
-/*************************************************************************
-|*
-|* Click on Apply-Button / Doubleclick on item in tree
-|*
-|************************************************************************/
-
-IMPL_LINK_NOARG_TYPED(SvxHlinkDlgMarkWnd, DoubleClickApplyHdl_Impl, SvTreeListBox*, bool)
+// Click on Apply-Button / Double-click on item in tree
+IMPL_LINK_NOARG(SvxHlinkDlgMarkWnd, DoubleClickApplyHdl_Impl, SvTreeListBox*, bool)
 {
     ClickApplyHdl_Impl(nullptr);
     return false;
 }
 
-IMPL_LINK_NOARG_TYPED(SvxHlinkDlgMarkWnd, ClickApplyHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxHlinkDlgMarkWnd, ClickApplyHdl_Impl, Button*, void)
 {
     SvTreeListEntry* pEntry = mpLbTree->GetCurEntry();
 
@@ -582,13 +518,8 @@ IMPL_LINK_NOARG_TYPED(SvxHlinkDlgMarkWnd, ClickApplyHdl_Impl, Button*, void)
     }
 }
 
-/*************************************************************************
-|*
-|* Click on Close-Button
-|*
-|************************************************************************/
-
-IMPL_LINK_NOARG_TYPED(SvxHlinkDlgMarkWnd, ClickCloseHdl_Impl, Button*, void)
+// Click on Close-Button
+IMPL_LINK_NOARG(SvxHlinkDlgMarkWnd, ClickCloseHdl_Impl, Button*, void)
 {
     SvTreeListEntry* pEntry = mpLbTree->GetCurEntry();
     if ( pEntry )
@@ -612,12 +543,12 @@ IMPL_LINK_NOARG_TYPED(SvxHlinkDlgMarkWnd, ClickCloseHdl_Impl, Button*, void)
 
         uno::Sequence< beans::NamedValue > aSettings
         {
-            { TG_SETTING_LASTMARK, css::uno::makeAny(sLastSelectedMark) },
-            { TG_SETTING_LASTPATH, css::uno::makeAny(comphelper::containerToSequence<OUString>(aLastSelectedPath)) }
+            { TG_SETTING_LASTMARK, css::uno::Any(sLastSelectedMark) },
+            { TG_SETTING_LASTPATH, css::uno::Any(comphelper::containerToSequence(aLastSelectedPath)) }
         };
 
         // write
-        SvtViewOptions aViewSettings( E_DIALOG, TG_SETTING_MANAGER );
+        SvtViewOptions aViewSettings( EViewType::Dialog, TG_SETTING_MANAGER );
         aViewSettings.SetUserData( aSettings );
     }
 

@@ -24,7 +24,7 @@
 
 namespace sd {
 
-class FuEditGluePoints
+class FuEditGluePoints final
     : public FuDraw
 {
 public:
@@ -46,17 +46,18 @@ public:
     //Add Shift+UP/DOWN/LEFT/RIGHT key to move the position of insert point,
     //and SHIFT+ENTER key to decide the position and draw the new insert point
     virtual void ForcePointer(const MouseEvent* pMEvt = nullptr) override;
+
 private:
-    bool   bBeginInsertPoint;
+    bool     bBeginInsertPoint;
     Point    oldPoint;
-protected:
+
     FuEditGluePoints (
         ViewShell* pViewSh,
         ::sd::Window* pWin,
         ::sd::View* pView,
         SdDrawDocument* pDoc,
         SfxRequest& rReq);
-    virtual ~FuEditGluePoints();
+    virtual ~FuEditGluePoints() override;
 };
 
 } // end of namespace sd

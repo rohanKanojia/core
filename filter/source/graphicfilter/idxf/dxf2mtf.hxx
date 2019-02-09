@@ -25,11 +25,6 @@
 #include <vcl/lineinfo.hxx>
 
 enum PenStyle { PEN_NULL, PEN_SOLID, PEN_DOT, PEN_DASH, PEN_DASHDOT };
-enum BrushStyle { BRUSH_NULL, BRUSH_SOLID, BRUSH_HORZ, BRUSH_VERT,
-                  BRUSH_CROSS, BRUSH_DIAGCROSS, BRUSH_UPDIAG, BRUSH_DOWNDIAG,
-                  BRUSH_25, BRUSH_50, BRUSH_75,
-                  BRUSH_BITMAP };
-
 
 class DXF2GDIMetaFile {
 private:
@@ -52,6 +47,7 @@ private:
     Color       aActLineColor;
     Color       aActFillColor;
     vcl::Font   aActFont;
+    const LineInfo aDefaultLineInfo; // to share between lines to reduce memory
 
     static sal_uLong CountEntities(const DXFEntities & rEntities);
 
@@ -63,12 +59,12 @@ private:
 
     DXFLineInfo GetEntityDXFLineInfo(const DXFBasicEntity & rE);
 
-    bool SetLineAttribute(const DXFBasicEntity & rE, sal_uLong nWidth=0);
+    bool SetLineAttribute(const DXFBasicEntity & rE);
 
     bool SetAreaAttribute(const DXFBasicEntity & rE);
 
     bool SetFontAttribute(const DXFBasicEntity & rE, short nAngle,
-                          sal_uInt16 nHeight, double fWidthScale);
+                          sal_uInt16 nHeight);
 
     void DrawLineEntity(const DXFLineEntity & rE, const DXFTransform & rTransform);
 
@@ -100,6 +96,8 @@ private:
 
     void DrawEntities(const DXFEntities & rEntities,
                       const DXFTransform & rTransform);
+
+    void DrawLine(const Point& rA, const Point& rB);
 
 public:
 

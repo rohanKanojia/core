@@ -20,8 +20,17 @@
 #ifndef INCLUDED_OOX_DUMP_OLEDUMPER_HXX
 #define INCLUDED_OOX_DUMP_OLEDUMPER_HXX
 
-#include <oox/helper/storagebase.hxx>
+#include <map>
+#include <memory>
+#include <vector>
+
+#include <com/sun/star/uno/Reference.hxx>
 #include <oox/dump/dumperbase.hxx>
+#include <oox/helper/binaryinputstream.hxx>
+#include <oox/helper/storagebase.hxx>
+#include <rtl/textenc.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 #if OOX_INCLUDE_DUMPER
 
@@ -41,7 +50,7 @@ protected:
     OUString     dumpAnsiString32( const String& rName );
     OUString     dumpUniString32( const String& rName );
 
-    sal_Int32           dumpStdClipboardFormat( const String& rName = EMPTY_STRING );
+    sal_Int32    dumpStdClipboardFormat( const String& rName );
     OUString     dumpAnsiString32OrStdClip( const String& rName );
     OUString     dumpUniString32OrStdClip( const String& rName );
 
@@ -135,7 +144,6 @@ protected:
     OleStorageObject() {}
 
     using               StorageObjectBase::construct;
-    void                construct( const ObjectBase& rParent, const StorageRef& rxStrg, const OUString& rSysPath );
 
     virtual void        implDumpStream(
                             const css::uno::Reference< css::io::XInputStream >& rxStrm,
@@ -166,11 +174,11 @@ private:
     bool                dumpComCtlComplex();
 
 protected:
-    sal_uInt32          mnDataId5;
-    sal_uInt32          mnDataId6;
-    sal_uInt16          mnVersion;
-    bool                mbCommonPart;
-    bool                mbComplexPart;
+    sal_uInt32 const    mnDataId5;
+    sal_uInt32 const    mnDataId6;
+    sal_uInt16 const    mnVersion;
+    bool const          mbCommonPart;
+    bool const          mbComplexPart;
 };
 
 
@@ -342,9 +350,9 @@ private:
     {
         enum LargePropertyType { PROPTYPE_POS, PROPTYPE_SIZE, PROPTYPE_GUID, PROPTYPE_STRING, PROPTYPE_STRINGARRAY };
 
-        LargePropertyType   mePropType;
-        OUString     maItemName;
-        sal_uInt32          mnDataSize;
+        LargePropertyType const mePropType;
+        OUString const maItemName;
+        sal_uInt32 const    mnDataSize;
         OUString*    mpItemValue;
         explicit     LargeProperty( LargePropertyType ePropType, const String& rItemName, sal_uInt32 nDataSize, OUString* pItemValue = nullptr ) :
                                 mePropType( ePropType ), maItemName( rItemName ), mnDataSize( nDataSize ), mpItemValue( pItemValue ) {}
@@ -353,8 +361,8 @@ private:
 
     struct StreamProperty
     {
-        OUString     maItemName;
-        sal_uInt16          mnData;
+        OUString const maItemName;
+        sal_uInt16 const    mnData;
         explicit     StreamProperty( const String& rItemName, sal_uInt16 nData ) :
                                 maItemName( rItemName ), mnData( nData ) {}
     };
@@ -726,10 +734,9 @@ protected:
     virtual void        implDumpRecordBody() override;
 
 private:
-    OUString     dumpByteString( const String& rName = EMPTY_STRING );
-    OUString     dumpUniString( const String& rName = EMPTY_STRING );
-
-    OUString     dumpByteStringWithLength( const String& rName = EMPTY_STRING );
+    OUString     dumpByteString( const String& rName );
+    OUString     dumpUniString( const String& rName );
+    OUString     dumpByteStringWithLength( const String& rName );
 
 private:
     VbaSharedData&      mrVbaData;
@@ -754,7 +761,7 @@ protected:
 
 private:
     VbaSharedData&      mrVbaData;
-    sal_Int32           mnStrmOffset;
+    sal_Int32 const     mnStrmOffset;
 };
 
 

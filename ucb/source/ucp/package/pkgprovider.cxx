@@ -24,12 +24,17 @@
 
  *************************************************************************/
 
-#include <osl/diagnose.h>
 #include <comphelper/processfactory.hxx>
+#include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/weak.hxx>
+#include <cppuhelper/queryinterface.hxx>
 #include <ucbhelper/contentidentifier.hxx>
+#include <ucbhelper/getcomponentcontext.hxx>
+#include <ucbhelper/macros.hxx>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
+#include <com/sun/star/ucb/IllegalIdentifierException.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include "pkgprovider.hxx"
 #include "pkgcontent.hxx"
 #include "pkguri.hxx"
@@ -49,7 +54,7 @@ class Package : public cppu::OWeakObject,
 {
     friend class ContentProvider;
 
-    OUString                                        m_aName;
+    OUString const                                       m_aName;
     uno::Reference< container::XHierarchicalNameAccess > m_xNA;
     ContentProvider*                                     m_pOwner;
 
@@ -58,12 +63,11 @@ public:
              const uno::Reference< container::XHierarchicalNameAccess > & xNA,
              ContentProvider* pOwner )
     : m_aName( rName ), m_xNA( xNA ), m_pOwner( pOwner ) {}
-    virtual ~Package() { m_pOwner->removePackage( m_aName ); }
+    virtual ~Package() override { m_pOwner->removePackage( m_aName ); }
 
     // XInterface
     virtual uno::Any SAL_CALL
-    queryInterface( const uno::Type& aType )
-        throw( uno::RuntimeException, std::exception ) override
+    queryInterface( const uno::Type& aType ) override
     { return m_xNA->queryInterface( aType ); }
     virtual void SAL_CALL
     acquire() throw() override
@@ -74,26 +78,15 @@ public:
 
     // XHierarchicalNameAccess
     virtual uno::Any SAL_CALL
-    getByHierarchicalName( const OUString& aName )
-        throw( container::NoSuchElementException, uno::RuntimeException, std::exception ) override
+    getByHierarchicalName( const OUString& aName ) override
     { return m_xNA->getByHierarchicalName( aName ); }
     virtual sal_Bool SAL_CALL
-    hasByHierarchicalName( const OUString& aName )
-        throw( uno::RuntimeException, std::exception ) override
+    hasByHierarchicalName( const OUString& aName ) override
     { return m_xNA->hasByHierarchicalName( aName ); }
 };
 
 
-// Packages.
-typedef std::unordered_map
-<
-    OUString,
-    Package*,
-    OUStringHash
->
-PackageMap;
-
-class Packages : public PackageMap {};
+class Packages : public std::unordered_map<OUString, Package*> {};
 
 }
 
@@ -103,8 +96,7 @@ using namespace package_ucp;
 // ContentProvider Implementation.
 ContentProvider::ContentProvider(
             const uno::Reference< uno::XComponentContext >& rxContext )
-: ::ucbhelper::ContentProviderImplHelper( rxContext ),
-  m_pPackages( nullptr )
+: ::ucbhelper::ContentProviderImplHelper( rxContext )
 {
 }
 
@@ -112,7 +104,6 @@ ContentProvider::ContentProvider(
 // virtual
 ContentProvider::~ContentProvider()
 {
-    delete m_pPackages;
 }
 
 // XInterface methods.
@@ -129,12 +120,11 @@ void SAL_CALL ContentProvider::release()
 }
 
 css::uno::Any SAL_CALL ContentProvider::queryInterface( const css::uno::Type & rType )
-    throw( css::uno::RuntimeException, std::exception )
 {
     css::uno::Any aRet = cppu::queryInterface( rType,
-                                               (static_cast< lang::XTypeProvider* >(this)),
-                                               (static_cast< lang::XServiceInfo* >(this)),
-                                               (static_cast< ucb::XContentProvider* >(this))
+                                               static_cast< lang::XTypeProvider* >(this),
+                                               static_cast< lang::XServiceInfo* >(this),
+                                               static_cast< ucb::XContentProvider* >(this)
                                                );
     return aRet.hasValue() ? aRet : OWeakObject::queryInterface( rType );
 }
@@ -150,11 +140,23 @@ XTYPEPROVIDER_IMPL_3( ContentProvider,
 
 // XServiceInfo methods.
 
+XSERVICEINFO_COMMOM_IMPL( ContentProvider,
+                          OUString( "com.sun.star.comp.ucb.PackageContentProvider" ) )
+/// @throws css::uno::Exception
+static css::uno::Reference< css::uno::XInterface >
+ContentProvider_CreateInstance( const css::uno::Reference< css::lang::XMultiServiceFactory> & rSMgr )
+{
+    css::lang::XServiceInfo* pX =
+        static_cast<css::lang::XServiceInfo*>(new ContentProvider( ucbhelper::getComponentContext(rSMgr) ));
+    return css::uno::Reference< css::uno::XInterface >::query( pX );
+}
 
-XSERVICEINFO_IMPL_1_CTX( ContentProvider,
-                     OUString( "com.sun.star.comp.ucb.PackageContentProvider" ),
-                     "com.sun.star.ucb.PackageContentProvider" );
-
+css::uno::Sequence< OUString >
+ContentProvider::getSupportedServiceNames_Static()
+{
+    css::uno::Sequence< OUString > aSNS { "com.sun.star.ucb.PackageContentProvider" };
+    return aSNS;
+}
 
 // Service factory implementation.
 
@@ -168,7 +170,6 @@ ONE_INSTANCE_SERVICE_FACTORY_IMPL( ContentProvider );
 // virtual
 uno::Reference< ucb::XContent > SAL_CALL ContentProvider::queryContent(
             const uno::Reference< ucb::XContentIdentifier >& Identifier )
-    throw( ucb::IllegalIdentifierException, uno::RuntimeException, std::exception )
 {
     if ( !Identifier.is() )
         return uno::Reference< ucb::XContent >();
@@ -221,7 +222,7 @@ ContentProvider::createPackage( const PackageUri & rURI )
         }
     }
     else
-        m_pPackages = new Packages;
+        m_pPackages.reset( new Packages );
 
     // Create new package...
     uno::Sequence< uno::Any > aArguments( 1 );
@@ -241,8 +242,9 @@ ContentProvider::createPackage( const PackageUri & rURI )
     }
     catch ( uno::Exception const & e )
     {
+        css::uno::Any anyEx = cppu::getCaughtException();
         throw css::lang::WrappedTargetRuntimeException(
-            e.Message, e.Context, css::uno::makeAny(e));
+            e.Message, e.Context, anyEx);
     }
 
     rtl::Reference< Package> xPackage = new Package( rURL, xNameAccess, this );

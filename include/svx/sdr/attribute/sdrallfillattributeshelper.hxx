@@ -19,15 +19,16 @@
 #ifndef INCLUDED_SVX_SDR_ATTRIBUTE_SDRALLFILLATTRIBUTESHELPER_HXX
 #define INCLUDED_SVX_SDR_ATTRIBUTE_SDRALLFILLATTRIBUTESHELPER_HXX
 
-#include "svx/svxdllapi.h"
+#include <svx/svxdllapi.h>
 #include <drawinglayer/attribute/fillgradientattribute.hxx>
 #include <drawinglayer/attribute/sdrfillattribute.hxx>
 #include <drawinglayer/primitive2d/baseprimitive2d.hxx>
-#include <tools/color.hxx>
 #include <svl/itemset.hxx>
 #include <memory>
 
 //////////////////////////////////////////////////////////////////////////////
+
+class Color;
 
 namespace drawinglayer
 {
@@ -46,7 +47,6 @@ namespace drawinglayer
                 const basegfx::B2DRange& rPaintRange,
                 const basegfx::B2DRange& rDefineRange);
 
-        protected:
         public:
             SdrAllFillAttributesHelper(const Color& rColor);
             SdrAllFillAttributesHelper(const SfxItemSet& rSet);
@@ -54,7 +54,6 @@ namespace drawinglayer
 
             bool isUsed() const;
             bool hasSdrFillAttribute() const { return maFillAttribute.get(); }
-            bool hasFillGradientAttribute() const { return maFillGradientAttribute.get(); }
             bool isTransparent() const;
 
             const drawinglayer::attribute::SdrFillAttribute& getFillAttribute() const;

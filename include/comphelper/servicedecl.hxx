@@ -23,7 +23,6 @@
 #include <cppuhelper/implbase.hxx>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <uno/environment.h>
 
 #include <functional>
 #include <initializer_list>
@@ -109,11 +108,10 @@ public:
     template <typename ImplClassT>
     ServiceDecl( ImplClassT const& implClass,
                  char const* pImplName,
-                 char const* pSupportedServiceNames, char cDelim = ';' )
+                 char const* pSupportedServiceNames )
         : m_createFunc(implClass.m_createFunc),
           m_pImplName(pImplName),
-          m_pServiceNames(pSupportedServiceNames),
-          m_cDelim(cDelim) {}
+          m_pServiceNames(pSupportedServiceNames) {}
 
     /// @internal gets called by component_getFactoryHelper()
     void * getFactory( sal_Char const* pImplName ) const;
@@ -134,7 +132,6 @@ private:
     detail::CreateFuncF const m_createFunc;
     char const* const m_pImplName;
     char const* const m_pServiceNames;
-    char const m_cDelim;
 };
 
 /** To specify whether the implementation class expects arguments
@@ -164,16 +161,14 @@ public:
         : BaseT(xContext), m_rServiceDecl(rServiceDecl) {}
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException) override {
+    virtual OUString SAL_CALL getImplementationName() override {
         return m_rServiceDecl.getImplementationName();
     }
-    virtual sal_Bool SAL_CALL supportsService( OUString const& name )
-        throw (css::uno::RuntimeException) override {
+    virtual sal_Bool SAL_CALL supportsService( OUString const& name ) override {
         return m_rServiceDecl.supportsService(name);
     }
     virtual css::uno::Sequence< OUString>
-    SAL_CALL getSupportedServiceNames() throw (css::uno::RuntimeException) override {
+    SAL_CALL getSupportedServiceNames() override {
         return m_rServiceDecl.getSupportedServiceNames();
     }
 
@@ -207,10 +202,6 @@ public:
         css::uno::Sequence<css::uno::Any> const& args,
         css::uno::Reference<css::uno::XComponentContext> const& xContext )
         : ServiceImpl_BASE(rServiceDecl, args, xContext) {}
-    InheritingServiceImpl(
-        ServiceDecl const& rServiceDecl,
-        css::uno::Reference<css::uno::XComponentContext> const& xContext )
-        : ServiceImpl_BASE(rServiceDecl, xContext) {}
 };
 
 template <typename ServiceImplT>

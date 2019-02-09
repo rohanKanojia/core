@@ -35,7 +35,7 @@ namespace framework{
 
 /*-****************************************************************************************************
     @short      initialize instance with necessary information
-    @descr      We need a valid uno service manager to create or instanciate new services.
+    @descr      We need a valid uno service manager to create or instantiate new services.
                 All other information to create frames or tasks come in on right interface methods.
 
     @param      xContext
@@ -57,7 +57,7 @@ TaskCreator::~TaskCreator()
 /*-****************************************************************************************************
     TODO document me
 *//*-*****************************************************************************************************/
-css::uno::Reference< css::frame::XFrame > TaskCreator::createTask( const OUString& sName )
+css::uno::Reference< css::frame::XFrame > TaskCreator::createTask( const OUString& sName, const utl::MediaDescriptor& rDescriptor )
 {
     css::uno::Reference< css::lang::XSingleServiceFactory > xCreator;
     OUString sCreator = IMPLEMENTATIONNAME_FWK_TASKCREATOR;
@@ -65,8 +65,8 @@ css::uno::Reference< css::frame::XFrame > TaskCreator::createTask( const OUStrin
     try
     {
         if (
-            ( TargetHelper::matchSpecialTarget(sName, TargetHelper::E_BLANK  ) ) ||
-            ( TargetHelper::matchSpecialTarget(sName, TargetHelper::E_DEFAULT) )
+            ( TargetHelper::matchSpecialTarget(sName, TargetHelper::ESpecialTarget::Blank  ) ) ||
+            ( TargetHelper::matchSpecialTarget(sName, TargetHelper::ESpecialTarget::Default) )
            )
         {
 
@@ -80,13 +80,13 @@ css::uno::Reference< css::frame::XFrame > TaskCreator::createTask( const OUStrin
     {}
 
     // no catch here ... without an task creator service we can't open ANY document window within the office.
-    // Thats IMHO not a good idea. Then we should accept the stacktrace showing us the real problem.
+    // That's IMHO not a good idea. Then we should accept the stacktrace showing us the real problem.
     // BTW: The used fallback creator service (IMPLEMENTATIONNAME_FWK_TASKCREATOR) is implemented in the same
     // library then these class here ... Why we should not be able to create it ?
     if ( ! xCreator.is())
         xCreator = css::frame::TaskCreator::create(m_xContext);
 
-    css::uno::Sequence< css::uno::Any > lArgs(5);
+    css::uno::Sequence< css::uno::Any > lArgs(6);
     css::beans::NamedValue              aArg;
 
     aArg.Name    = ARGUMENT_PARENTFRAME;
@@ -94,7 +94,7 @@ css::uno::Reference< css::frame::XFrame > TaskCreator::createTask( const OUStrin
     lArgs[0]   <<= aArg;
 
     aArg.Name    = ARGUMENT_CREATETOPWINDOW;
-    aArg.Value <<= sal_True;
+    aArg.Value <<= true;
     lArgs[1]   <<= aArg;
 
     aArg.Name    = ARGUMENT_MAKEVISIBLE;
@@ -102,12 +102,18 @@ css::uno::Reference< css::frame::XFrame > TaskCreator::createTask( const OUStrin
     lArgs[2]   <<= aArg;
 
     aArg.Name    = ARGUMENT_SUPPORTPERSISTENTWINDOWSTATE;
-    aArg.Value <<= sal_True;
+    aArg.Value <<= true;
     lArgs[3]   <<= aArg;
 
     aArg.Name    = ARGUMENT_FRAMENAME;
     aArg.Value <<= sName;
     lArgs[4]   <<= aArg;
+
+    bool bHidden
+        = rDescriptor.getUnpackedValueOrDefault("HiddenForConversion", false);
+    aArg.Name = "HiddenForConversion";
+    aArg.Value <<= bHidden;
+    lArgs[5] <<= aArg;
 
     css::uno::Reference< css::frame::XFrame > xTask(xCreator->createInstanceWithArguments(lArgs), css::uno::UNO_QUERY_THROW);
     return xTask;

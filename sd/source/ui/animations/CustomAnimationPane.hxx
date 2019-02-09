@@ -20,26 +20,22 @@
 #ifndef INCLUDED_SD_SOURCE_UI_ANIMATIONS_CUSTOMANIMATIONPANE_HXX
 #define INCLUDED_SD_SOURCE_UI_ANIMATIONS_CUSTOMANIMATIONPANE_HXX
 
-#include <com/sun/star/drawing/XDrawView.hpp>
-#include <com/sun/star/frame/XModel.hpp>
-#include <vcl/dialog.hxx>
 #include <vcl/layout.hxx>
+#include <vcl/field.hxx>
 #include <svx/sidebar/PanelLayout.hxx>
-#include <sfx2/sidebar/ControlFactory.hxx>
-#include "CustomAnimationPreset.hxx"
 #include "CustomAnimationList.hxx"
 #include "CategoryListBox.hxx"
-#include "motionpathtag.hxx"
-#include "misc/scopelock.hxx"
-#include "CustomAnimationPreset.hxx"
+#include <misc/scopelock.hxx>
+
 #include <vector>
 
-class PushButton;
-class FixedLine;
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawPage; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawView; } } } }
+namespace sd { class CustomAnimationPresets; }
+namespace sd { class MotionPathTag; }
+
 class FixedText;
-class ListBox;
-class ComboBox;
-class CheckBox;
+namespace weld { class ComboBox; }
 
 enum class PathKind { NONE, CURVE, POLYGON, FREEFORM };
 
@@ -64,23 +60,22 @@ class CustomAnimationPane : public PanelLayout, public ICustomAnimationListContr
     friend class MotionPathTag;
 public:
     CustomAnimationPane( vcl::Window* pParent, ViewShellBase& rBase, const css::uno::Reference<css::frame::XFrame>& rxFrame );
-    virtual ~CustomAnimationPane();
+    CustomAnimationPane( vcl::Window* pParent, ViewShellBase& rBase, const css::uno::Reference<css::frame::XFrame>& rxFrame, bool bHorizontal );
+    virtual ~CustomAnimationPane() override;
     virtual void dispose() override;
 
     // callbacks
     void onSelectionChanged();
     void onChangeCurrentPage();
     void onAdd();
-    void animationChange();
     void onRemove();
     void onChangeStart();
     void onChangeStart( sal_Int16 nNodeType );
-    void onChangeProperty();
     void onChangeSpeed();
 
     // methods
     void preview( const css::uno::Reference< css::animations::XAnimationNode >& xAnimationNode );
-    void remove( CustomAnimationEffectPtr& pEffect );
+    void remove( CustomAnimationEffectPtr const & pEffect );
 
     // Control
     virtual void StateChanged( StateChangedType nStateChange ) override;
@@ -89,77 +84,89 @@ public:
     // ICustomAnimationListController
     virtual void onSelect() override;
     virtual void onDoubleClick() override;
-    virtual void onContextMenu( sal_uInt16 nSelectedPopupEntry ) override;
+    virtual void onContextMenu(const OString& rIdent) override;
+    virtual void onDragNDropComplete( std::vector< CustomAnimationEffectPtr > pEffectsDragged, CustomAnimationEffectPtr pEffectInsertBefore ) override;
 
     // Window
     virtual void DataChanged (const DataChangedEvent& rEvent) override;
 
     void addUndo();
 
-    float getDuration();
+    double getDuration();
     void updatePathFromMotionPathTag( const rtl::Reference< MotionPathTag >& xTag );
 
 private:
+    void initialize();
     void addListener();
     void removeListener();
     void updateControls();
     void updateMotionPathTags();
-    void markShapesFromSelectedEffects();
 
     void showOptions(const OString& sPage = OString());
     void moveSelection( bool bUp );
     void onPreview( bool bForcePreview );
 
-    STLPropertySet* createSelectionSet();
-    void changeSelection( STLPropertySet* pResultSet, STLPropertySet* pOldSet );
+    std::unique_ptr<STLPropertySet> createSelectionSet();
+    void changeSelection( STLPropertySet const * pResultSet, STLPropertySet const * pOldSet );
 
     static css::uno::Any getProperty1Value( sal_Int32 nType, const CustomAnimationEffectPtr& pEffect );
     bool setProperty1Value( sal_Int32 nType, const CustomAnimationEffectPtr& pEffect, const css::uno::Any& rValue );
     void UpdateLook();
-    sal_uInt32 fillAnimationLB();
+    sal_uInt32 fillAnimationLB( bool bHasText );
+    PathKind getCreatePathKind() const;
+    void createPath( PathKind eKind, std::vector< ::com::sun::star::uno::Any >& rTargets, double fDuration );
 
-    DECL_LINK_TYPED( implControlListBoxHdl, ListBox&, void );
-    DECL_LINK_TYPED( implClickHdl, Button*, void );
-    DECL_LINK_TYPED( implPropertyHdl, LinkParamNone*, void );
-    DECL_LINK_TYPED( EventMultiplexerListener, tools::EventMultiplexerEvent&, void );
-    DECL_LINK_TYPED( lateInitCallback, Timer *, void );
-    DECL_LINK_TYPED( UpdateAnimationLB, ListBox&, void );
-    DECL_LINK_TYPED( AnimationSelectHdl, ListBox&, void );
-    void implControlHdl(Control*);
+    DECL_LINK( implControlListBoxHdl, ListBox&, void );
+    DECL_LINK( implClickHdl, Button*, void );
+    DECL_LINK( implPropertyHdl, LinkParamNone*, void );
+    DECL_LINK( EventMultiplexerListener, tools::EventMultiplexerEvent&, void );
+    DECL_LINK( lateInitCallback, Timer *, void );
+    DECL_LINK( DurationModifiedHdl, Edit&, void );
+    DECL_LINK( DelayModifiedHdl, Edit&, void );
+    DECL_LINK( DelayLoseFocusHdl, Control&, void );
+    DECL_LINK( UpdateAnimationLB, ListBox&, void );
+    DECL_LINK( AnimationSelectHdl, ListBox&, void );
+    void implControlHdl(Control const *);
 
 private:
     ViewShellBase& mrBase;
 
     const CustomAnimationPresets* mpCustomAnimationPresets;
 
-    VclPtr<PushButton> mpPBAddEffect;
-    VclPtr<PushButton> mpPBRemoveEffect;
-    VclPtr<FixedText>  mpFTEffect;
-    VclPtr<FixedText>  mpFTStart;
-    VclPtr<ListBox>    mpLBStart;
-    VclPtr<FixedText>  mpFTProperty;
-    VclPtr<VclHBox>    mpPlaceholderBox;
-    VclPtr<PropertyControl>    mpLBProperty;
-    VclPtr<PushButton> mpPBPropertyMore;
-    VclPtr<FixedText>  mpFTSpeed;
-    VclPtr<ListBox>   mpCBSpeed;
-    VclPtr<CustomAnimationList>    mpCustomAnimationList;
-    VclPtr<PushButton> mpPBMoveUp;
-    VclPtr<PushButton> mpPBMoveDown;
-    VclPtr<PushButton> mpPBPlay;
-    VclPtr<CheckBox>   mpCBAutoPreview;
-    VclPtr<FixedText> mpFTCategory;
-    VclPtr<ListBox>    mpLBCategory;
-    VclPtr<FixedText> mpFTAnimation;
+    // UI Elements
+    VclPtr<FixedText>   mpFTAnimation;
+    VclPtr<CustomAnimationList> mpCustomAnimationList;
+    VclPtr<PushButton>  mpPBAddEffect;
+    VclPtr<PushButton>  mpPBRemoveEffect;
+    VclPtr<PushButton>  mpPBMoveUp;
+    VclPtr<PushButton>  mpPBMoveDown;
+    VclPtr<FixedText>   mpFTCategory;
+    VclPtr<ListBox>     mpLBCategory;
+    VclPtr<FixedText>   mpFTEffect;
     VclPtr<CategoryListBox> mpLBAnimation;
+    VclPtr<FixedText>   mpFTStart;
+    VclPtr<ListBox>     mpLBStart;
+    VclPtr<FixedText>   mpFTProperty;
+    VclPtr<PropertyControl> mpLBProperty;
+    VclPtr<VclHBox>     mpPlaceholderBox;
+    VclPtr<PushButton>  mpPBPropertyMore;
+    VclPtr<FixedText>   mpFTDuration;
+    VclPtr<MetricBox>   mpCBXDuration;
+    VclPtr<FixedText>   mpFTStartDelay;
+    VclPtr<MetricField> mpMFStartDelay;
+    VclPtr<CheckBox>    mpCBAutoPreview;
+    VclPtr<PushButton>  mpPBPlay;
 
     OUString    maStrModify;
     OUString    maStrProperty;
 
     sal_Int32   mnPropertyType;
+    static sal_Int32 const gnMotionPathPos = 3;
     sal_Int32   mnCurvePathPos;
     sal_Int32   mnPolygonPathPos;
     sal_Int32   mnFreeformPathPos;
+
+    bool const      mbHorizontal;
 
     EffectSequence  maListSelection;
     css::uno::Any   maViewSelection;
@@ -185,9 +192,7 @@ private:
     ScopeLock maSelectionLock;
 };
 
-void fillRepeatComboBox( ListBox* pBox );
-
-void fillDurationComboBox( ListBox* pBox );
+void fillRepeatComboBox(weld::ComboBox& rBox);
 
 }
 

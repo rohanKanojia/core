@@ -17,21 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/textparagraph.hxx"
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "drawingml/textcharacterproperties.hxx"
+#include <drawingml/textparagraph.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <drawingml/textcharacterproperties.hxx>
+#include <svtools/unitconv.hxx>
 
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 #include <oox/mathml/importutils.hxx>
-#include "oox/helper/propertyset.hxx"
+#include <oox/helper/propertyset.hxx>
 #include <com/sun/star/text/XText.hpp>
 #include <com/sun/star/text/XTextCursor.hpp>
 #include <com/sun/star/text/ControlCharacter.hpp>
+#include <oox/token/properties.hxx>
 
 using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::frame;
 
 namespace oox { namespace drawingml {
 
@@ -43,6 +45,37 @@ TextParagraph::~TextParagraph()
 {
 }
 
+TextCharacterProperties TextParagraph::getCharacterStyle (
+    const TextCharacterProperties& rTextStyleProperties,
+    const TextListStyle& rTextListStyle) const
+{
+    TextParagraphPropertiesPtr pTextParagraphStyle = getParagraphStyle(rTextListStyle);
+
+    TextCharacterProperties aTextCharacterStyle;
+    if (pTextParagraphStyle.get())
+        aTextCharacterStyle.assignUsed(pTextParagraphStyle->getTextCharacterProperties());
+    aTextCharacterStyle.assignUsed(rTextStyleProperties);
+    aTextCharacterStyle.assignUsed(maProperties.getTextCharacterProperties());
+    return aTextCharacterStyle;
+}
+
+TextParagraphPropertiesPtr TextParagraph::getParagraphStyle(
+    const TextListStyle& rTextListStyle) const
+{
+    sal_Int16 nLevel = maProperties.getLevel();
+
+    SAL_INFO("oox", "TextParagraph::getParagraphStyle - level " << nLevel);
+
+    const TextParagraphPropertiesVector& rListStyle = rTextListStyle.getListStyle();
+    if (nLevel >= static_cast< sal_Int16 >(rListStyle.size()))
+        nLevel = 0;
+    TextParagraphPropertiesPtr pTextParagraphStyle;
+    if (!rListStyle.empty())
+        pTextParagraphStyle = rListStyle[nLevel];
+
+    return pTextParagraphStyle;
+}
+
 void TextParagraph::insertAt(
         const ::oox::core::XmlFilterBase& rFilterBase,
         const Reference < XText > &xText,
@@ -52,31 +85,16 @@ void TextParagraph::insertAt(
 {
     try {
         sal_Int32 nParagraphSize = 0;
-
-        sal_Int16 nLevel = maProperties.getLevel();
-
-        SAL_INFO("oox", "TextParagraph::insertAt() - level " << nLevel);
-
-        const TextParagraphPropertiesVector& rListStyle = rTextListStyle.getListStyle();
-        if ( nLevel >= static_cast< sal_Int16 >( rListStyle.size() ) )
-            nLevel = 0;
-        TextParagraphPropertiesPtr pTextParagraphStyle;
-        if ( rListStyle.size() )
-            pTextParagraphStyle = rListStyle[ nLevel ];
-
-        TextCharacterProperties aTextCharacterStyle;
-        if ( pTextParagraphStyle.get() )
-            aTextCharacterStyle.assignUsed( pTextParagraphStyle->getTextCharacterProperties() );
-        aTextCharacterStyle.assignUsed( rTextStyleProperties );
-        aTextCharacterStyle.assignUsed( maProperties.getTextCharacterProperties() );
+        TextCharacterProperties aTextCharacterStyle = getCharacterStyle(rTextStyleProperties, rTextListStyle);
 
         if( !bFirst )
         {
-            xText->insertControlCharacter( xAt, ControlCharacter::APPEND_PARAGRAPH, sal_False );
-            xAt->gotoEnd( sal_True );
+            xText->insertControlCharacter( xAt, ControlCharacter::APPEND_PARAGRAPH, false );
+            xAt->gotoEnd( true );
         }
 
         sal_Int32 nCharHeight = 0;
+        sal_Int32 nCharHeightFirst = 0;
         if ( maRuns.empty() )
         {
             PropertySet aPropSet( xAt );
@@ -84,7 +102,7 @@ void TextParagraph::insertAt(
             TextCharacterProperties aTextCharacterProps( aTextCharacterStyle );
             aTextCharacterProps.assignUsed( maEndProperties );
             if ( aTextCharacterProps.moHeight.has() )
-                nCharHeight = aTextCharacterProps.moHeight.get();
+                nCharHeight = nCharHeightFirst = aTextCharacterProps.moHeight.get();
             aTextCharacterProps.pushToPropSet( aPropSet, rFilterBase );
         }
         else
@@ -96,14 +114,19 @@ void TextParagraph::insertAt(
                 // This is currently applied to only empty runs
                 if( !nLen && ( ( aIt + 1 ) == aEnd ) )
                     (*aIt)->getTextCharacterProperties().assignUsed( maEndProperties );
-                nCharHeight = std::max< sal_Int32 >( nCharHeight, (*aIt)->insertAt( rFilterBase, xText, xAt, aTextCharacterStyle, nDefaultCharHeight ) );
+                sal_Int32 nCharHeightCurrent = (*aIt)->insertAt( rFilterBase, xText, xAt, aTextCharacterStyle, nDefaultCharHeight );
+                if(aIt == maRuns.begin())
+                    nCharHeightFirst = nCharHeightCurrent;
+                nCharHeight = std::max< sal_Int32 >( nCharHeight, nCharHeightCurrent);
                 nParagraphSize += nLen;
             }
         }
-        xAt->gotoEnd( sal_True );
+        xAt->gotoEnd( true );
 
         PropertyMap aioBulletList;
         Reference< XPropertySet > xProps( xAt, UNO_QUERY);
+
+        TextParagraphPropertiesPtr pTextParagraphStyle = getParagraphStyle(rTextListStyle);
         if ( pTextParagraphStyle.get() )
         {
             TextParagraphProperties aParaProp;
@@ -111,11 +134,23 @@ void TextParagraph::insertAt(
             aParaProp.apply( maProperties );
 
             // bullets have same color as following texts by default
-            if( !aioBulletList.hasProperty( PROP_BulletColor ) && maRuns.size() > 0
+            if( !aioBulletList.hasProperty( PROP_BulletColor ) && !maRuns.empty()
                 && (*maRuns.begin())->getTextCharacterProperties().maFillProperties.moFillType.has() )
                 aioBulletList.setProperty( PROP_BulletColor, (*maRuns.begin())->getTextCharacterProperties().maFillProperties.getBestSolidColor().getColor( rFilterBase.getGraphicHelper() ));
             if( !aioBulletList.hasProperty( PROP_BulletColor ) && aTextCharacterStyle.maFillProperties.moFillType.has() )
                 aioBulletList.setProperty( PROP_BulletColor, aTextCharacterStyle.maFillProperties.getBestSolidColor().getColor( rFilterBase.getGraphicHelper() ));
+            if( !aioBulletList.hasProperty( PROP_GraphicSize ) && !maRuns.empty()
+                && aParaProp.getBulletList().maGraphic.hasValue())
+            {
+                long nFirstCharHeightMm = TransformMetric(nCharHeightFirst > 0 ? nCharHeightFirst : 1200, FieldUnit::POINT, FieldUnit::MM);
+                float fBulletSizeRel = 1.f;
+                if( aParaProp.getBulletList().mnSize.hasValue() )
+                    fBulletSizeRel = aParaProp.getBulletList().mnSize.get<sal_Int16>() / 100.f;
+
+                css::awt::Size aBulletSize;
+                aBulletSize.Width = aBulletSize.Height = std::lround(fBulletSizeRel * nFirstCharHeightMm * OOX_BULLET_LIST_SCALE_FACTOR);
+                aioBulletList.setProperty( PROP_GraphicSize, aBulletSize);
+            }
 
             float fCharacterSize = nCharHeight > 0 ? GetFontHeight ( nCharHeight ) : pTextParagraphStyle->getCharHeightPoints( 12 );
             aParaProp.pushToPropSet( &rFilterBase, xProps, aioBulletList, &pTextParagraphStyle->getBulletList(), true, fCharacterSize, true );
@@ -128,7 +163,7 @@ void TextParagraph::insertAt(
             xProps->setPropertyValue( sNumberingLevel, Any( static_cast< sal_Int16 >( -1 ) ) );
         }
 
-// FIXME this is causing a lot of dispruption (ie does not work). I wonder what to do -- Hub
+// FIXME this is causing a lot of disruption (ie does not work). I wonder what to do -- Hub
 //          Reference< XTextRange > xEnd( xAt, UNO_QUERY );
 //      Reference< XPropertySet > xProps2( xEnd, UNO_QUERY );
 //          mpEndProperties->pushToPropSet( xProps2 );

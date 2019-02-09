@@ -26,8 +26,6 @@
 #include <vcl/vclptr.hxx>
 
 class OutputDevice;
-class Point;
-class Size;
 class StyleSettings;
 class ScDocument;
 
@@ -38,7 +36,7 @@ class ScDocument;
 class ScDPFieldButton
 {
 public:
-    ScDPFieldButton(OutputDevice* pOutDev, const StyleSettings* pStyle, const Fraction* pZoomX = nullptr, const Fraction* pZoomY = nullptr,
+    ScDPFieldButton(OutputDevice* pOutDev, const StyleSettings* pStyle, const Fraction* pZoomY = nullptr,
                     ScDocument* pDoc = nullptr);
     ~ScDPFieldButton();
 
@@ -60,7 +58,6 @@ private:
     Point                   maPos;
     Size                    maSize;
     OUString         maText;
-    Fraction                maZoomX;
     Fraction                maZoomY;
     ScDocument*             mpDoc;
     VclPtr<OutputDevice>    mpOutDev;

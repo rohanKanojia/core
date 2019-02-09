@@ -42,7 +42,7 @@
 #include <svx/svdouno.hxx>
 #include <svx/fmshell.hxx>
 #include <svx/sdrobjectfilter.hxx>
-#include "outline.hxx"
+#include <outline.hxx>
 
 using namespace ::com::sun::star;
 
@@ -140,22 +140,23 @@ void SwTextShell::ExecMove(SfxRequest &rReq)
             bRet = rSh.RightMargin( false, false );
             break;
         case FN_START_OF_DOCUMENT_SEL:
-            bRet = rSh.SttDoc( true );
+            bRet = rSh.StartOfSection( true );
             break;
         case FN_START_OF_DOCUMENT:
-            bRet = rSh.SttDoc();
+            bRet = rSh.StartOfSection();
             break;
         case FN_END_OF_DOCUMENT_SEL:
-            bRet = rSh.EndDoc( true );
+            bRet = rSh.EndOfSection( true );
             break;
         case FN_END_OF_DOCUMENT:
-            bRet = rSh.EndDoc();
+            bRet = rSh.EndOfSection();
             break;
         case FN_SELECT_WORD:
             bRet = rSh.SelNearestWrd();
             break;
         case SID_SELECTALL:
-            bRet = 0 != rSh.SelAll();
+            rSh.SelAll();
+            bRet = true;
             break;
         default:
             OSL_FAIL("wrong dispatcher");
@@ -329,7 +330,7 @@ void SwTextShell::ExecMoveMisc(SfxRequest &rReq)
 
                 std::unique_ptr< svx::ISdrObjectFilter > pFilter( FmFormShell::CreateFocusableControlFilter(
                     *pDrawView, *pWindow ) );
-                if ( !pFilter.get() )
+                if (!pFilter)
                     break;
 
                 const SdrObject* pNearestControl = rSh.GetBestObject( true, GotoObjFlags::DrawControl, false, pFilter.get() );
@@ -396,16 +397,16 @@ void SwTextShell::ExecMoveMisc(SfxRequest &rReq)
             rSh.GotoFootnoteText();
             break;
         case FN_PREV_TABLE:
-            bRet = rSh.MoveTable( fnTablePrev, fnTableStart);
+            bRet = rSh.MoveTable( GotoPrevTable, fnTableStart);
             break;
         case FN_NEXT_TABLE:
-            bRet = rSh.MoveTable(fnTableNext, fnTableStart);
+            bRet = rSh.MoveTable(GotoNextTable, fnTableStart);
             break;
         case FN_GOTO_NEXT_REGION :
-            bRet = rSh.MoveRegion(fnRegionNext, fnRegionStart);
+            bRet = rSh.MoveRegion(GotoNextRegion, fnRegionStart);
             break;
         case FN_GOTO_PREV_REGION :
-            bRet = rSh.MoveRegion(fnRegionPrev, fnRegionStart);
+            bRet = rSh.MoveRegion(GotoPrevRegion, fnRegionStart);
             break;
         case FN_NEXT_TOXMARK:
             bRet = rSh.GotoNxtPrvTOXMark();

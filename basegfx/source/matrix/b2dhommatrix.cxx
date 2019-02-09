@@ -17,13 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/diagnose.h>
-#include <rtl/instance.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <hommatrixtemplate.hxx>
 #include <basegfx/tuple/b2dtuple.hxx>
 #include <basegfx/vector/b2dvector.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
+#include <memory>
 
 namespace basegfx
 {
@@ -32,25 +31,16 @@ namespace basegfx
     {
     };
 
-    namespace { struct IdentityMatrix : public rtl::Static< B2DHomMatrix::ImplType,
-                                                            IdentityMatrix > {}; }
+    B2DHomMatrix::B2DHomMatrix() = default;
 
-    B2DHomMatrix::B2DHomMatrix() :
-        mpImpl( IdentityMatrix::get() ) // use common identity matrix
-    {
-    }
+    B2DHomMatrix::B2DHomMatrix(const B2DHomMatrix&) = default;
 
-    B2DHomMatrix::B2DHomMatrix(const B2DHomMatrix& rMat) :
-        mpImpl(rMat.mpImpl)
-    {
-    }
+    B2DHomMatrix::B2DHomMatrix(B2DHomMatrix&&) = default;
 
-    B2DHomMatrix::~B2DHomMatrix()
-    {
-    }
+    B2DHomMatrix::~B2DHomMatrix() = default;
 
     B2DHomMatrix::B2DHomMatrix(double f_0x0, double f_0x1, double f_0x2, double f_1x0, double f_1x1, double f_1x2)
-    :   mpImpl( IdentityMatrix::get() ) // use common identity matrix, will be made unique with 1st set-call
+        :   mpImpl() // identity
     {
         mpImpl->set(0, 0, f_0x0);
         mpImpl->set(0, 1, f_0x1);
@@ -60,11 +50,9 @@ namespace basegfx
         mpImpl->set(1, 2, f_1x2);
     }
 
-    B2DHomMatrix& B2DHomMatrix::operator=(const B2DHomMatrix& rMat)
-    {
-        mpImpl = rMat.mpImpl;
-        return *this;
-    }
+    B2DHomMatrix& B2DHomMatrix::operator=(const B2DHomMatrix&) = default;
+
+    B2DHomMatrix& B2DHomMatrix::operator=(B2DHomMatrix&&) = default;
 
     double B2DHomMatrix::get(sal_uInt16 nRow, sal_uInt16 nColumn) const
     {
@@ -93,15 +81,12 @@ namespace basegfx
 
     bool B2DHomMatrix::isIdentity() const
     {
-        if(mpImpl.same_object(IdentityMatrix::get()))
-            return true;
-
         return mpImpl->isIdentity();
     }
 
     void B2DHomMatrix::identity()
     {
-        mpImpl = IdentityMatrix::get();
+        *mpImpl = Impl2DHomMatrix();
     }
 
     bool B2DHomMatrix::isInvertible() const
@@ -111,19 +96,21 @@ namespace basegfx
 
     bool B2DHomMatrix::invert()
     {
-        Impl2DHomMatrix aWork(*mpImpl);
-        sal_uInt16* pIndex = new sal_uInt16[Impl2DHomMatrix_Base::getEdgeLength()];
-        sal_Int16 nParity;
-
-        if(aWork.ludcmp(pIndex, nParity))
+        if(isIdentity())
         {
-            mpImpl->doInvert(aWork, pIndex);
-            delete[] pIndex;
-
             return true;
         }
 
-        delete[] pIndex;
+        Impl2DHomMatrix aWork(*mpImpl);
+        std::unique_ptr<sal_uInt16[]> pIndex( new sal_uInt16[Impl2DHomMatrix_Base::getEdgeLength()] );
+        sal_Int16 nParity;
+
+        if(aWork.ludcmp(pIndex.get(), nParity))
+        {
+            mpImpl->doInvert(aWork, pIndex.get());
+            return true;
+        }
+
         return false;
     }
 
@@ -161,8 +148,20 @@ namespace basegfx
 
     B2DHomMatrix& B2DHomMatrix::operator*=(const B2DHomMatrix& rMat)
     {
-        if(!rMat.isIdentity())
+        if(rMat.isIdentity())
+        {
+            // multiply with identity, no change -> nothing to do
+        }
+        else if(isIdentity())
+        {
+            // we are identity, result will be rMat -> assign
+            *this = rMat;
+        }
+        else
+        {
+            // multiply
             mpImpl->doMulMatrix(*rMat.mpImpl);
+        }
 
         return *this;
     }
@@ -187,7 +186,7 @@ namespace basegfx
             double fSin(0.0);
             double fCos(1.0);
 
-            tools::createSinCosOrthogonal(fSin, fCos, fRadiant);
+            utils::createSinCosOrthogonal(fSin, fCos, fRadiant);
             Impl2DHomMatrix aRotMat;
 
             aRotMat.set(0, 0, fCos);
@@ -212,6 +211,11 @@ namespace basegfx
         }
     }
 
+    void B2DHomMatrix::translate(const B2DTuple& rTuple)
+    {
+        translate(rTuple.getX(), rTuple.getY());
+    }
+
     void B2DHomMatrix::scale(double fX, double fY)
     {
         const double fOne(1.0);
@@ -225,6 +229,11 @@ namespace basegfx
 
             mpImpl->doMulMatrix(aScaleMat);
         }
+    }
+
+    void B2DHomMatrix::scale(const B2DTuple& rTuple)
+    {
+        scale(rTuple.getX(), rTuple.getY());
     }
 
     void B2DHomMatrix::shearX(double fSx)
@@ -285,7 +294,7 @@ namespace basegfx
             {
                 // there is - 180 degree rotated
                 rScale *= -1;
-                rRotate = 180*F_PI180;
+                rRotate = M_PI;
             }
         }
         else

@@ -19,11 +19,11 @@
 #ifndef INCLUDED_CPPUHELPER_INTERFACECONTAINER_HXX
 #define INCLUDED_CPPUHELPER_INTERFACECONTAINER_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <cstddef>
 
-#include <cppuhelper/interfacecontainer.h>
+#include "cppuhelper/interfacecontainer.h"
 
 
 namespace cppu
@@ -91,7 +91,7 @@ OInterfaceContainerHelper * OMultiTypeInterfaceContainerHelperVar< key , hashImp
 {
     ::osl::MutexGuard aGuard( rMutex );
 
-     typename InterfaceMap::iterator iter = find( rKey );
+    typename InterfaceMap::iterator iter = find( rKey );
     if( iter != m_pMap->end() )
             return static_cast<OInterfaceContainerHelper*>( (*iter).second );
     return NULL;

@@ -31,13 +31,13 @@
 #include <basegfx/numeric/ftools.hxx>
 #include <basegfx/color/bcolor.hxx>
 #include <drawinglayer/primitive2d/modifiedcolorprimitive2d.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <drawinglayer/primitive2d/animatedprimitive2d.hxx>
 #include <drawinglayer/processor2d/baseprocessor2d.hxx>
 #include <svx/sdr/primitive2d/svx_primitivetypes2d.hxx>
 #include <svx/svdoole2.hxx>
-
 #include <sdr/contact/viewcontactofsdrole2obj.hxx>
+#include <drawinglayer/primitive2d/transformprimitive2d.hxx>
 
 using namespace com::sun::star;
 
@@ -58,12 +58,11 @@ protected:
     // the found animated primitives
     drawinglayer::primitive2d::Primitive2DContainer  maPrimitive2DSequence;
 
-    // bitfield
     // text animation allowed?
-    bool                                            mbTextAnimationAllowed : 1;
+    bool const                                       mbTextAnimationAllowed : 1;
 
     // graphic animation allowed?
-    bool                                            mbGraphicAnimationAllowed : 1;
+    bool const                                       mbGraphicAnimationAllowed : 1;
 
     // as tooling, the process() implementation takes over API handling and calls this
     // virtual render method when the primitive implementation is BasePrimitive2D-based.
@@ -74,7 +73,6 @@ public:
         const drawinglayer::geometry::ViewInformation2D& rViewInformation,
         bool bTextAnimationAllowed,
         bool bGraphicAnimationAllowed);
-    virtual ~AnimatedExtractingProcessor2D();
 
     // data access
     const drawinglayer::primitive2d::Primitive2DContainer& getPrimitive2DSequence() const { return maPrimitive2DSequence; }
@@ -90,10 +88,6 @@ AnimatedExtractingProcessor2D::AnimatedExtractingProcessor2D(
     maPrimitive2DSequence(),
     mbTextAnimationAllowed(bTextAnimationAllowed),
     mbGraphicAnimationAllowed(bGraphicAnimationAllowed)
-{
-}
-
-AnimatedExtractingProcessor2D::~AnimatedExtractingProcessor2D()
 {
 }
 
@@ -140,11 +134,11 @@ void AnimatedExtractingProcessor2D::processBasePrimitive2D(const drawinglayer::p
         case PRIMITIVE2D_ID_TRANSFORMPRIMITIVE2D:
 
         // decompose evtl. animated text contained in MaskPrimitive2D
-        // or group rimitives
+        // or group primitives
         case PRIMITIVE2D_ID_MASKPRIMITIVE2D :
         case PRIMITIVE2D_ID_GROUPPRIMITIVE2D :
         {
-            process(rCandidate.get2DDecomposition(getViewInformation2D()));
+            process(rCandidate);
             break;
         }
 
@@ -165,7 +159,7 @@ ViewObjectContact::ViewObjectContact(ObjectContact& rObjectContact, ViewContact&
     mrViewContact(rViewContact),
     maObjectRange(),
     mxPrimitive2DSequence(),
-    mpPrimitiveAnimation(nullptr),
+    maGridOffset(0.0, 0.0),
     mbLazyInvalidate(false)
 {
     // make the ViewContact remember me
@@ -184,11 +178,7 @@ ViewObjectContact::~ViewObjectContact()
     }
 
     // delete PrimitiveAnimation
-    if(mpPrimitiveAnimation)
-    {
-        delete mpPrimitiveAnimation;
-        mpPrimitiveAnimation = nullptr;
-    }
+    mpPrimitiveAnimation.reset();
 
     // take care of remembered ObjectContact. Remove from
     // OC first. The VC removal (below) CAN trigger a StopGettingViewed()
@@ -260,14 +250,6 @@ void ViewObjectContact::triggerLazyInvalidate()
         // reset flag
         mbLazyInvalidate = false;
 
-#if HAVE_FEATURE_DESKTOP
-        // 3D charts need to be notified separately, they are not to be
-        // drawn by the drawinglayer
-        ViewContactOfSdrOle2Obj* pViewContact = dynamic_cast<ViewContactOfSdrOle2Obj*>(&GetViewContact());
-        if (pViewContact && pViewContact->GetOle2Obj().IsReal3DChart())
-            ChartHelper::updateChart(pViewContact->GetOle2Obj().getXModel(), false);
-#endif
-
         // force ObjectRange
         getObjectRange();
 
@@ -294,11 +276,7 @@ void ViewObjectContact::ActionChildInserted(ViewContact& rChild)
 void ViewObjectContact::checkForPrimitive2DAnimations()
 {
     // remove old one
-    if(mpPrimitiveAnimation)
-    {
-        delete mpPrimitiveAnimation;
-        mpPrimitiveAnimation = nullptr;
-    }
+    mpPrimitiveAnimation.reset();
 
     // check for animated primitives
     if(!mxPrimitive2DSequence.empty())
@@ -315,7 +293,7 @@ void ViewObjectContact::checkForPrimitive2DAnimations()
             if(!aAnimatedExtractor.getPrimitive2DSequence().empty())
             {
                 // derived primitiveList is animated, setup new PrimitiveAnimation
-                mpPrimitiveAnimation =  new sdr::animation::PrimitiveAnimation(*this, aAnimatedExtractor.getPrimitive2DSequence());
+                mpPrimitiveAnimation.reset( new sdr::animation::PrimitiveAnimation(*this, aAnimatedExtractor.getPrimitive2DSequence()) );
             }
         }
     }
@@ -324,7 +302,7 @@ void ViewObjectContact::checkForPrimitive2DAnimations()
 drawinglayer::primitive2d::Primitive2DContainer ViewObjectContact::createPrimitive2DSequence(const DisplayInfo& rDisplayInfo) const
 {
     // get the view-independent Primitive from the viewContact
-    drawinglayer::primitive2d::Primitive2DContainer xRetval(GetViewContact().getViewIndependentPrimitive2DSequence());
+    drawinglayer::primitive2d::Primitive2DContainer xRetval(GetViewContact().getViewIndependentPrimitive2DContainer());
 
     if(!xRetval.empty())
     {
@@ -359,7 +337,7 @@ drawinglayer::primitive2d::Primitive2DContainer ViewObjectContact::createPrimiti
     return xRetval;
 }
 
-drawinglayer::primitive2d::Primitive2DContainer ViewObjectContact::getPrimitive2DSequence(const DisplayInfo& rDisplayInfo) const
+drawinglayer::primitive2d::Primitive2DContainer const & ViewObjectContact::getPrimitive2DSequence(const DisplayInfo& rDisplayInfo) const
 {
     drawinglayer::primitive2d::Primitive2DContainer xNewPrimitiveSequence;
 
@@ -386,8 +364,36 @@ drawinglayer::primitive2d::Primitive2DContainer ViewObjectContact::getPrimitive2
 
         // always update object range when PrimitiveSequence changes
         const drawinglayer::geometry::ViewInformation2D& rViewInformation2D(GetObjectContact().getViewInformation2D());
-        const_cast< ViewObjectContact* >(this)->maObjectRange =
-            mxPrimitive2DSequence.getB2DRange(rViewInformation2D);
+        const_cast< ViewObjectContact* >(this)->maObjectRange = mxPrimitive2DSequence.getB2DRange(rViewInformation2D);
+
+        // check and eventually embed to GridOffset transform primitive
+        if(GetObjectContact().supportsGridOffsets())
+        {
+            const basegfx::B2DVector& rGridOffset(getGridOffset());
+
+            if(0.0 != rGridOffset.getX() || 0.0 != rGridOffset.getY())
+            {
+                const basegfx::B2DHomMatrix aTranslateGridOffset(
+                    basegfx::utils::createTranslateB2DHomMatrix(
+                        rGridOffset));
+                const drawinglayer::primitive2d::Primitive2DReference aEmbed(
+                    new drawinglayer::primitive2d::TransformPrimitive2D(
+                        aTranslateGridOffset,
+                        mxPrimitive2DSequence));
+
+                // Set values at local data. So for now, the mechanism is to reset some of the
+                // defining things (mxPrimitive2DSequence, maGridOffset) and re-create the
+                // buffered data (including maObjectRange). It *could* be changed to keep
+                // the unmodified PrimitiveSequence and only update the GridOffset, but this
+                // would require a 2nd instance of maObjectRange and mxPrimitive2DSequence. I
+                // started doing so, but it just makes the code more complicated. For now,
+                // just allow re-creation of the PrimitiveSequence (and removing buffered
+                // decomposed content of it). May be optimized, though. OTOH it only happens
+                // in calc which traditionally does not have a huge amout of DrawObjects anyways.
+                const_cast< ViewObjectContact* >(this)->mxPrimitive2DSequence = drawinglayer::primitive2d::Primitive2DContainer { aEmbed };
+                const_cast< ViewObjectContact* >(this)->maObjectRange.transform(aTranslateGridOffset);
+            }
+        }
     }
 
     // return current Primitive2DContainer
@@ -448,6 +454,30 @@ drawinglayer::primitive2d::Primitive2DContainer ViewObjectContact::getPrimitive2
     }
 
     return xSeqRetval;
+}
+
+// Support getting a GridOffset per object and view for non-linear ViewToDevice
+// transformation (calc). On-demand created by delegating to the ObjectContact
+// (->View) that has then all needed information
+const basegfx::B2DVector& ViewObjectContact::getGridOffset() const
+{
+    if(0.0 == maGridOffset.getX() && 0.0 == maGridOffset.getY() && GetObjectContact().supportsGridOffsets())
+    {
+        // create on-demand
+        GetObjectContact().calculateGridOffsetForViewOjectContact(const_cast<ViewObjectContact*>(this)->maGridOffset, *this);
+    }
+
+    return maGridOffset;
+}
+
+void ViewObjectContact::resetGridOffset()
+{
+    // reset buffered GridOffset itself
+    maGridOffset.setX(0.0);
+    maGridOffset.setY(0.0);
+
+    // also reset sequence to get a re-calculation when GridOffset changes
+    mxPrimitive2DSequence.clear();
 }
 
 }}

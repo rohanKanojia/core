@@ -23,10 +23,10 @@
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <comphelper/uno3.hxx>
 #include <comphelper/sequence.hxx>
+#include <comphelper/hash.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <cppuhelper/typeprovider.hxx>
 #include <com/sun/star/reflection/ProxyFactory.hpp>
-#include <rtl/digest.h>
 #include <algorithm>
 #include <string.h>
 
@@ -105,13 +105,13 @@ OConnectionWrapper::~OConnectionWrapper()
 
 // XServiceInfo
 
-OUString SAL_CALL OConnectionWrapper::getImplementationName(  ) throw (::com::sun::star::uno::RuntimeException, std::exception)
+OUString SAL_CALL OConnectionWrapper::getImplementationName(  )
 {
     return OUString( "com.sun.star.sdbc.drivers.OConnectionWrapper" );
 }
 
 
-::com::sun::star::uno::Sequence< OUString > SAL_CALL OConnectionWrapper::getSupportedServiceNames(  ) throw(::com::sun::star::uno::RuntimeException, std::exception)
+css::uno::Sequence< OUString > SAL_CALL OConnectionWrapper::getSupportedServiceNames(  )
 {
     // first collect the services which are supported by our aggregate
     Sequence< OUString > aSupported;
@@ -120,7 +120,7 @@ OUString SAL_CALL OConnectionWrapper::getImplementationName(  ) throw (::com::su
 
     // append our own service, if necessary
     OUString sConnectionService( "com.sun.star.sdbc.Connection" );
-    if ( 0 == ::comphelper::findValue( aSupported, sConnectionService, true ).getLength() )
+    if ( ::comphelper::findValue( aSupported, sConnectionService ) == -1 )
     {
         sal_Int32 nLen = aSupported.getLength();
         aSupported.realloc( nLen + 1 );
@@ -132,19 +132,19 @@ OUString SAL_CALL OConnectionWrapper::getImplementationName(  ) throw (::com::su
 }
 
 
-sal_Bool SAL_CALL OConnectionWrapper::supportsService( const OUString& _rServiceName ) throw(::com::sun::star::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL OConnectionWrapper::supportsService( const OUString& _rServiceName )
 {
     return cppu::supportsService(this, _rServiceName);
 }
 
 
-Any SAL_CALL OConnectionWrapper::queryInterface( const Type& _rType ) throw (RuntimeException, std::exception)
+Any SAL_CALL OConnectionWrapper::queryInterface( const Type& _rType )
 {
     Any aReturn = OConnection_BASE::queryInterface(_rType);
     return aReturn.hasValue() ? aReturn : (m_xProxyConnection.is() ? m_xProxyConnection->queryAggregation(_rType) : aReturn);
 }
 
-Sequence< Type > SAL_CALL OConnectionWrapper::getTypes(  ) throw (::com::sun::star::uno::RuntimeException, std::exception)
+Sequence< Type > SAL_CALL OConnectionWrapper::getTypes(  )
 {
     return ::comphelper::concatSequences(
         OConnection_BASE::getTypes(),
@@ -152,8 +152,8 @@ Sequence< Type > SAL_CALL OConnectionWrapper::getTypes(  ) throw (::com::sun::st
     );
 }
 
-// com::sun::star::lang::XUnoTunnel
-sal_Int64 SAL_CALL OConnectionWrapper::getSomething( const Sequence< sal_Int8 >& rId ) throw(RuntimeException, std::exception)
+// css::lang::XUnoTunnel
+sal_Int64 SAL_CALL OConnectionWrapper::getSomething( const Sequence< sal_Int8 >& rId )
 {
     if (rId.getLength() == 16 && 0 == memcmp(getUnoTunnelImplementationId().getConstArray(),  rId.getConstArray(), 16 ) )
         return reinterpret_cast< sal_Int64 >( this );
@@ -166,27 +166,19 @@ sal_Int64 SAL_CALL OConnectionWrapper::getSomething( const Sequence< sal_Int8 >&
 
 Sequence< sal_Int8 > OConnectionWrapper::getUnoTunnelImplementationId()
 {
-    static ::cppu::OImplementationId * pId = nullptr;
-    if (! pId)
-    {
-        ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-        if (! pId)
-        {
-            static ::cppu::OImplementationId aId;
-            pId = &aId;
-        }
-    }
-    return pId->getImplementationId();
+    static ::cppu::OImplementationId implId;
+
+    return implId.getImplementationId();
 }
 
 namespace
 {
-    class TPropertyValueLessFunctor : public ::std::binary_function< ::com::sun::star::beans::PropertyValue,::com::sun::star::beans::PropertyValue,bool>
+    class TPropertyValueLessFunctor
     {
     public:
         TPropertyValueLessFunctor()
         {}
-        bool operator() (const ::com::sun::star::beans::PropertyValue& lhs, const ::com::sun::star::beans::PropertyValue& rhs) const
+        bool operator() (const css::beans::PropertyValue& lhs, const css::beans::PropertyValue& rhs) const
         {
             return lhs.Name.compareToIgnoreAsciiCase(rhs.Name) < 0;
         }
@@ -203,52 +195,45 @@ void OConnectionWrapper::createUniqueId( const OUString& _rURL
                     ,const OUString& _rPassword)
 {
     // first we create the digest we want to have
-    rtlDigest aDigest = rtl_digest_create( rtl_Digest_AlgorithmSHA1 );
-    rtl_digest_update(aDigest,_rURL.getStr(),_rURL.getLength()*sizeof(sal_Unicode));
+    ::comphelper::Hash sha1(::comphelper::HashType::SHA1);
+    sha1.update(reinterpret_cast<unsigned char const*>(_rURL.getStr()), _rURL.getLength() * sizeof(sal_Unicode));
     if ( !_rUserName.isEmpty() )
-        rtl_digest_update(aDigest,_rUserName.getStr(),_rUserName.getLength()*sizeof(sal_Unicode));
+        sha1.update(reinterpret_cast<unsigned char const*>(_rUserName.getStr()), _rUserName.getLength() * sizeof(sal_Unicode));
     if ( !_rPassword.isEmpty() )
-        rtl_digest_update(aDigest,_rPassword.getStr(),_rPassword.getLength()*sizeof(sal_Unicode));
+        sha1.update(reinterpret_cast<unsigned char const*>(_rPassword.getStr()), _rPassword.getLength() * sizeof(sal_Unicode));
     // now we need to sort the properties
-    PropertyValue* pBegin = _rInfo.getArray();
-    PropertyValue* pEnd   = pBegin + _rInfo.getLength();
-    ::std::sort(pBegin,pEnd,TPropertyValueLessFunctor());
+    std::sort(_rInfo.begin(),_rInfo.end(),TPropertyValueLessFunctor());
 
-    pBegin = _rInfo.getArray();
-    pEnd   = pBegin + _rInfo.getLength();
-    for (; pBegin != pEnd; ++pBegin)
+    for (PropertyValue const & prop : _rInfo)
     {
         // we only include strings an integer values
         OUString sValue;
-        if ( pBegin->Value >>= sValue )
+        if ( prop.Value >>= sValue )
             ;
         else
         {
             sal_Int32 nValue = 0;
-            if ( pBegin->Value >>= nValue )
+            if ( prop.Value >>= nValue )
                 sValue = OUString::number(nValue);
             else
             {
                 Sequence< OUString> aSeq;
-                if ( pBegin->Value >>= aSeq )
+                if ( prop.Value >>= aSeq )
                 {
-                    const OUString* pSBegin = aSeq.getConstArray();
-                    const OUString* pSEnd   = pSBegin + aSeq.getLength();
-                    for(;pSBegin != pSEnd;++pSBegin)
-                        rtl_digest_update(aDigest,pSBegin->getStr(),pSBegin->getLength()*sizeof(sal_Unicode));
+                    for(OUString const & s : aSeq)
+                        sha1.update(reinterpret_cast<unsigned char const*>(s.getStr()), s.getLength() * sizeof(sal_Unicode));
                 }
             }
         }
         if ( !sValue.isEmpty() )
         {
             // we don't have to convert this into UTF8 because we don't store on a file system
-            rtl_digest_update(aDigest,sValue.getStr(),sValue.getLength()*sizeof(sal_Unicode));
+            sha1.update(reinterpret_cast<unsigned char const*>(sValue.getStr()), sValue.getLength() * sizeof(sal_Unicode));
         }
     }
 
-    rtl_digest_get(aDigest,_pBuffer,RTL_DIGEST_LENGTH_SHA1);
-    // we have to destroy the digest
-    rtl_digest_destroy(aDigest);
+    std::vector<unsigned char> result(sha1.finalize());
+    std::copy(result.begin(), result.end(), _pBuffer);
 }
 
 

@@ -20,13 +20,22 @@
 #ifndef INCLUDED_SVX_CUBE3D_HXX
 #define INCLUDED_SVX_CUBE3D_HXX
 
+#include <basegfx/point/b3dpoint.hxx>
+#include <basegfx/vector/b3dvector.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 #include <svx/obj3d.hxx>
+#include <svx/svdobj.hxx>
 #include <svx/svxdllapi.h>
+
+namespace sdr { namespace contact { class ViewContact; } }
+
+class E3dDefaultAttributes;
 
 /*************************************************************************
 |*
 |*                                                              |
-|* Create a 3D cuboid; aPos: Center oder left, bottom, behind   |__
+|* Create a 3D cuboid; aPos: Center or left, bottom, behind     |__
 |*                           (depending on bPosIsCenter)       /
 |* nSideFlags indicates, if only some of the cuboid surfaces can
 |* be created; the corresponding bits are defined in the enum.
@@ -36,34 +45,36 @@
 |*
 \************************************************************************/
 
-enum { CUBE_BOTTOM = 0x0001, CUBE_BACK = 0x0002, CUBE_LEFT = 0x0004,
-       CUBE_TOP = 0x0008, CUBE_RIGHT = 0x0010, CUBE_FRONT = 0x0020,
-       CUBE_FULL = 0x003F, CUBE_OPEN_TB = 0x0036, CUBE_OPEN_LR = 0x002B,
-       CUBE_OPEN_FB = 0x001D };
-
-class SAL_WARN_UNUSED SVX_DLLPUBLIC E3dCubeObj : public E3dCompoundObject
+class SAL_WARN_UNUSED SVX_DLLPUBLIC E3dCubeObj final : public E3dCompoundObject
 {
-private:
     // Parameter
     basegfx::B3DPoint                   aCubePos;
     basegfx::B3DVector                  aCubeSize;
-    sal_uInt16                          nSideFlags;
 
     // BOOLeans
     bool                                bPosIsCenter : 1;
 
-protected:
-    void SetDefaultAttributes(E3dDefaultAttributes& rDefault);
-    virtual sdr::contact::ViewContact* CreateObjectSpecificViewContact() override;
+    void SetDefaultAttributes(const E3dDefaultAttributes& rDefault);
+    virtual std::unique_ptr<sdr::contact::ViewContact> CreateObjectSpecificViewContact() override;
+
+private:
+    // protected destructor - due to final, make private
+    virtual ~E3dCubeObj() override;
 
 public:
-    E3dCubeObj(E3dDefaultAttributes& rDefault, basegfx::B3DPoint aPos, const basegfx::B3DVector& r3DSize);
-    E3dCubeObj();
+    E3dCubeObj(SdrModel& rSdrModel,
+        const E3dDefaultAttributes& rDefault,
+        const basegfx::B3DPoint& aPos,
+        const basegfx::B3DVector& r3DSize);
+    E3dCubeObj(SdrModel& rSdrModel);
 
     virtual sal_uInt16 GetObjIdentifier() const override;
     virtual SdrObject* DoConvertToPolyObj(bool bBezier, bool bAddText) const override;
 
-    virtual E3dCubeObj* Clone() const override;
+    virtual E3dCubeObj* CloneSdrObject(SdrModel& rTargetModel) const override;
+
+    // implemented mainly for the purposes of Clone()
+    E3dCubeObj& operator=(const E3dCubeObj& rObj);
 
     // Set local parameters with geometry recreation
     void SetCubePos(const basegfx::B3DPoint& rNew);

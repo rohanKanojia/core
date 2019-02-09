@@ -20,7 +20,11 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_FORMATCLIPBOARD_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_FORMATCLIPBOARD_HXX
 
-#include <wrtsh.hxx>
+#include <sal/config.h>
+
+#include <memory>
+
+#include "wrtsh.hxx"
 #include <svl/itemset.hxx>
 #include <svl/style.hxx>
 
@@ -31,14 +35,13 @@ class SwFormatClipboard
 {
 public:
     SwFormatClipboard();
-    ~SwFormatClipboard();
 
     /**
      * Test if the object contains text or paragraph attribute
      */
     bool HasContent() const;
-    bool HasContentForThisType( int nSelectionType ) const;
-    static bool CanCopyThisType( int nSelectionType );
+    bool HasContentForThisType( SelectionType nSelectionType ) const;
+    static bool CanCopyThisType( SelectionType nSelectionType );
 
     /**
      * Store/Backup the text and paragraph attribute of the current selection.
@@ -46,7 +49,7 @@ public:
      * @param bPersistentCopy
      * input parameter - specify if the Paste function will erase the current object.
      */
-    void Copy( SwWrtShell& rWrtShell, SfxItemPool& rPool, bool bPersistentCopy=false );
+    void Copy( SwWrtShell& rWrtShell, SfxItemPool& rPool, bool bPersistentCopy );
 
     /**
      * Paste the stored text and paragraph attributes on the current selection and current paragraph.
@@ -58,7 +61,7 @@ public:
      * Do not paste the paragraph formats.
      */
     void Paste( SwWrtShell& rWrtShell, SfxStyleSheetBasePool* pPool
-        , bool bNoCharacterFormats=false, bool bNoParagraphFormats=false );
+        , bool bNoCharacterFormats, bool bNoParagraphFormats );
 
     /**
      * Clear the currently stored text and paragraph attributes.
@@ -66,16 +69,16 @@ public:
     void Erase();
 
 private:
-    int         m_nSelectionType;
+    SelectionType m_nSelectionType;
 
     /** automatic/named character attribute set */
-    SfxItemSet* m_pItemSet_TextAttr;
+    std::unique_ptr<SfxItemSet> m_pItemSet_TextAttr;
     /** automatic/named paragraph attribute set
      * (it can be character attribute applied to the paragraph) */
-    SfxItemSet* m_pItemSet_ParAttr;
+    std::unique_ptr<SfxItemSet> m_pItemSet_ParAttr;
 
     /** table attribute set */
-    SfxItemSet* m_pTableItemSet;
+    std::unique_ptr<SfxItemSet> m_pTableItemSet;
 
     /** name of the character format (if it exist) */
     OUString m_aCharStyle;

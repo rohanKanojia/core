@@ -18,9 +18,6 @@
  */
 
 #include "tp_ErrorBars.hxx"
-#include "ResId.hxx"
-#include "ResourceIds.hrc"
-#include "TabPageNotifiable.hxx"
 #include <vcl/settings.hxx>
 
 using namespace ::com::sun::star;
@@ -28,28 +25,21 @@ using namespace ::com::sun::star;
 namespace chart
 {
 
-ErrorBarsTabPage::ErrorBarsTabPage( vcl::Window* pParent, const SfxItemSet& rInAttrs ) :
-        SfxTabPage( pParent
-        ,"tp_ErrorBars"
-        ,"modules/schart/ui/tp_ErrorBars.ui"
-        , &rInAttrs ),
-        m_aErrorBarResources(
-            this,
-            // the parent is the tab control, of which the parent is the dialog
-            pParent->GetParentDialog(),
-            rInAttrs, /* bNoneAvailable = */ false )
+ErrorBarsTabPage::ErrorBarsTabPage(TabPageParent pParent, const SfxItemSet& rInAttrs)
+    : SfxTabPage(pParent, "modules/schart/ui/tp_ErrorBars.ui", "tp_ErrorBars", &rInAttrs)
+    , m_aErrorBarResources(m_xBuilder.get(), pParent, rInAttrs, /* bNoneAvailable = */ false)
 {
 }
 
-VclPtr<SfxTabPage> ErrorBarsTabPage::Create(
-    vcl::Window* pParent, const SfxItemSet* rOutAttrs )
+VclPtr<SfxTabPage> ErrorBarsTabPage::Create(TabPageParent pParent, const SfxItemSet* rOutAttrs)
 {
-    return VclPtr<ErrorBarsTabPage>::Create( pParent, *rOutAttrs );
+    return VclPtr<ErrorBarsTabPage>::Create(pParent, *rOutAttrs);
 }
 
 bool ErrorBarsTabPage::FillItemSet( SfxItemSet* rOutAttrs )
 {
-    return m_aErrorBarResources.FillItemSet( *rOutAttrs );
+    m_aErrorBarResources.FillItemSet( *rOutAttrs );
+    return true;
 }
 
 void ErrorBarsTabPage::Reset( const SfxItemSet* rInAttrs )

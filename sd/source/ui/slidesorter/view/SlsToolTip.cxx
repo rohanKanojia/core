@@ -17,13 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "view/SlsToolTip.hxx"
-#include "view/SlideSorterView.hxx"
-#include "view/SlsLayouter.hxx"
-#include "view/SlsTheme.hxx"
-#include "sdpage.hxx"
-#include "sdresid.hxx"
-#include "glob.hrc"
+#include <view/SlsPageObjectLayouter.hxx>
+#include <view/SlsToolTip.hxx>
+#include <view/SlideSorterView.hxx>
+#include <view/SlsLayouter.hxx>
+#include <view/SlsTheme.hxx>
+#include <SlideSorter.hxx>
+#include <Window.hxx>
+#include <sdpage.hxx>
+#include <sdresid.hxx>
+#include <strings.hrc>
 
 #include <vcl/settings.hxx>
 #include <vcl/help.hxx>
@@ -33,15 +36,13 @@ namespace sd { namespace slidesorter { namespace view {
 ToolTip::ToolTip (SlideSorter& rSlideSorter)
     : mrSlideSorter(rSlideSorter),
       msCurrentHelpText(),
-      mnHelpWindowHandle(0),
+      mnHelpWindowHandle(nullptr),
       maShowTimer(),
       maHiddenTimer()
 {
-    sd::Window *window = rSlideSorter.GetContentWindow();
-    const HelpSettings& rHelpSettings = window->GetSettings().GetHelpSettings();
-    maShowTimer.SetTimeout(rHelpSettings.GetTipDelay());
-    maShowTimer.SetTimeoutHdl(LINK(this, ToolTip, DelayTrigger));
-    maHiddenTimer.SetTimeout(rHelpSettings.GetTipDelay());
+    maShowTimer.SetTimeout(HelpSettings::GetTipDelay());
+    maShowTimer.SetInvokeHandler(LINK(this, ToolTip, DelayTrigger));
+    maHiddenTimer.SetTimeout(HelpSettings::GetTipDelay());
 }
 
 ToolTip::~ToolTip()
@@ -77,27 +78,22 @@ void ToolTip::SetPage (const model::SharedPageDescriptor& rpDescriptor)
             }
             if (sHelpText.isEmpty())
             {
-                sHelpText = SD_RESSTR(STR_PAGE);
+                sHelpText = SdResId(STR_PAGE);
                 sHelpText += OUString::number(mpDescriptor->GetPageIndex()+1);
             }
 
             msCurrentHelpText = sHelpText;
             // show new tooltip immediately, if last one was recently hidden
-            Show(maHiddenTimer.IsActive());
+            if(maHiddenTimer.IsActive())
+                DoShow();
+            else
+                maShowTimer.Start();
         }
         else
         {
             msCurrentHelpText.clear();
         }
     }
-}
-
-void ToolTip::Show (const bool bNoDelay)
-{
-    if (bNoDelay)
-        DoShow();
-    else
-        maShowTimer.Start();
 }
 
 void ToolTip::DoShow()
@@ -109,13 +105,13 @@ void ToolTip::DoShow()
         return;
     }
 
-    sd::Window *pWindow (mrSlideSorter.GetContentWindow());
+    sd::Window *pWindow (mrSlideSorter.GetContentWindow().get());
     if (!msCurrentHelpText.isEmpty() && pWindow)
     {
-        Rectangle aBox (
+        ::tools::Rectangle aBox (
             mrSlideSorter.GetView().GetLayouter().GetPageObjectLayouter()->GetBoundingBox(
                 mpDescriptor,
-                PageObjectLayouter::Preview,
+                PageObjectLayouter::Part::Preview,
                 PageObjectLayouter::WindowCoordinateSystem));
 
         // Do not show the help text when the (lower edge of the ) preview
@@ -144,18 +140,18 @@ void ToolTip::DoShow()
 
 bool ToolTip::Hide()
 {
-    if (mnHelpWindowHandle>0)
+    if (mnHelpWindowHandle)
     {
-        sd::Window *pWindow (mrSlideSorter.GetContentWindow());
+        sd::Window *pWindow (mrSlideSorter.GetContentWindow().get());
         Help::HidePopover(pWindow, mnHelpWindowHandle);
-        mnHelpWindowHandle = 0;
+        mnHelpWindowHandle = nullptr;
         return true;
     }
     else
         return false;
 }
 
-IMPL_LINK_NOARG_TYPED(ToolTip, DelayTrigger, Timer *, void)
+IMPL_LINK_NOARG(ToolTip, DelayTrigger, Timer *, void)
 {
     DoShow();
 }

@@ -24,7 +24,6 @@ $(eval $(call gb_Library_use_libraries,oglcanvas,\
 	tl \
 	i18nlangtag \
 	canvastools \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,oglcanvas,\
@@ -42,27 +41,7 @@ $(eval $(call gb_Library_add_exception_objects,oglcanvas,\
 
 $(eval $(call gb_Library_use_externals,oglcanvas,\
 	boost_headers \
-	glew \
+	epoxy \
 ))
-
-ifeq ($(strip $(OS)),MACOSX)
-$(eval $(call gb_Library_use_system_darwin_frameworks,oglcanvas,\
-    Cocoa \
-    OpenGL \
-))
-
-else ifeq ($(strip $(OS)),WNT)
-$(eval $(call gb_Library_use_system_win32_libs,oglcanvas,\
-    gdi32 \
-    glu32 \
-    opengl32 \
-))
-
-else
-$(eval $(call gb_Library_add_libs,oglcanvas,\
-    -lGL \
-    -lX11 \
-))
-endif
 
 # vim: set noet sw=4 ts=4:

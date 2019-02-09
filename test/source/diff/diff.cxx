@@ -9,7 +9,7 @@
 
 #define USE_CPPUNIT 1
 
-#include "test/xmldiff.hxx"
+#include <test/xmldiff.hxx>
 
 #include <libxml/xpath.h>
 #include <libxml/parser.h>
@@ -65,10 +65,7 @@ struct tolerance
             cmp = xmlStrcmp(attribName, rTol.attribName);
         }
 
-        if(cmp>=0)
-            return false;
-        else
-            return true;
+        return cmp < 0;
     }
 };
 
@@ -93,18 +90,17 @@ private:
     void cppunitAssertEqualDouble(const xmlNodePtr node, const xmlAttrPtr attr, double expected, double found, double delta);
 
     ToleranceContainer toleranceContainer;
-    xmlDocPtr xmlFile1;
-    xmlDocPtr xmlFile2;
+    xmlDocPtr const xmlFile1;
+    xmlDocPtr const xmlFile2;
     std::string fileName;
 };
 
 
 XMLDiff::XMLDiff( const char* pFileName, const char* pContent, int size, const char* pToleranceFile)
-    : fileName(pFileName)
+    : xmlFile1(xmlParseFile(pFileName))
+    , xmlFile2(xmlParseMemory(pContent, size))
+    , fileName(pFileName)
 {
-    xmlFile1 = xmlParseFile(pFileName);
-    xmlFile2 = xmlParseMemory(pContent, size);
-
     if(pToleranceFile)
     {
         xmlDocPtr xmlToleranceFile = xmlParseFile(pToleranceFile);
@@ -360,8 +356,36 @@ bool XMLDiff::compareAttributes(xmlNodePtr node1, xmlNodePtr node2)
 
     // unequal number of attributes
 #ifdef CPPUNIT_ASSERT
-    CPPUNIT_ASSERT(!attr1);
-    CPPUNIT_ASSERT(!attr2);
+    std::stringstream failStream("Unequal number of attributes ");
+
+    bool bAttr1 = attr1;
+    if (bAttr1)
+    {
+        failStream << "Attr1: ";
+        while (attr1 != nullptr)
+        {
+            xmlChar* val1 = xmlGetProp(node1, attr1->name);
+            failStream << BAD_CAST(attr1->name) << "=" << BAD_CAST(val1) << ", ";
+            xmlFree(val1);
+            attr1 = attr1->next;
+        }
+    }
+    CPPUNIT_ASSERT_MESSAGE(failStream.str(), !bAttr1);
+
+    bool bAttr2 = attr2;
+    if (bAttr2)
+    {
+        failStream << "Attr2: ";
+
+        while (attr2 != nullptr)
+        {
+            xmlChar* val2 = xmlGetProp(node2, attr2->name);
+            failStream << BAD_CAST(attr2->name) << "=" << BAD_CAST(val2) << ", ";
+            xmlFree(val2);
+            attr2 = attr2->next;
+        }
+    }
+    CPPUNIT_ASSERT_MESSAGE(failStream.str(), !bAttr2);
 #else
     if (attr1 || attr2)
         return false;

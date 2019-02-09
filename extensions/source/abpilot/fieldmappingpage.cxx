@@ -21,12 +21,11 @@
 #include "fieldmappingimpl.hxx"
 #include "addresssettings.hxx"
 #include "abspilot.hxx"
-#include <comphelper/processfactory.hxx>
 
 
 namespace abp
 {
-    FieldMappingPage::FieldMappingPage( OAddessBookSourcePilot* _pParent )
+    FieldMappingPage::FieldMappingPage( OAddressBookSourcePilot* _pParent )
         : AddressBookSourcePage(_pParent, "FieldAssignPage",
             "modules/sabpilot/ui/fieldassignpage.ui")
     {
@@ -55,12 +54,6 @@ namespace abp
     }
 
 
-    void FieldMappingPage::DeactivatePage()
-    {
-        AddressBookSourcePage::DeactivatePage();
-    }
-
-
     void FieldMappingPage::initializePage()
     {
         AddressBookSourcePage::initializePage();
@@ -73,19 +66,19 @@ namespace abp
         const AddressSettings& rSettings = getSettings();
         OUString sHint;
         if ( rSettings.aFieldMapping.empty() )
-            sHint = ModuleRes(RID_STR_NOFIELDSASSIGNED).toString();
+            sHint = compmodule::ModuleRes(RID_STR_NOFIELDSASSIGNED);
         m_pHint->SetText( sHint );
     }
 
 
-    IMPL_LINK_NOARG_TYPED( FieldMappingPage, OnInvokeDialog, Button*, void )
+    IMPL_LINK_NOARG( FieldMappingPage, OnInvokeDialog, Button*, void )
     {
         AddressSettings& rSettings = getSettings();
 
         // invoke the dialog doing the mapping
         if ( fieldmapping::invokeDialog( getORB(), this, getDialog()->getDataSource().getDataSource(), rSettings ) )
         {
-            if ( rSettings.aFieldMapping.size() )
+            if ( !rSettings.aFieldMapping.empty() )
                 getDialog()->travelNext();
             else
                 implUpdateHint();

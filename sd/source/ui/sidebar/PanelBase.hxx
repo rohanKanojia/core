@@ -25,8 +25,6 @@
 
 #include <vcl/ctrl.hxx>
 
-#include <memory>
-
 
 namespace sd {
     class ViewShellBase;
@@ -44,7 +42,7 @@ public:
     PanelBase (
         vcl::Window* pParentWindow,
         ViewShellBase& rViewShellBase);
-    virtual ~PanelBase();
+    virtual ~PanelBase() override;
     virtual void dispose() override;
 
     virtual void Resize() override;
@@ -59,7 +57,6 @@ protected:
         ViewShellBase& rViewShellBase) = 0;
 
 private:
-    css::uno::Reference<css::ui::XSidebar> mxSidebar;
     ViewShellBase& mrViewShellBase;
 
     bool ProvideWrappedControl();

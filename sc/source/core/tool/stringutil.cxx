@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "stringutil.hxx"
-#include "global.hxx"
+#include <stringutil.hxx>
+#include <global.hxx>
 #include <svl/zforlist.hxx>
 
 #include <rtl/ustrbuf.hxx>
@@ -30,7 +30,8 @@ ScSetStringParam::ScSetStringParam() :
     mbDetectNumberFormat(true),
     meSetTextNumFormat(Never),
     mbHandleApostrophe(true),
-    meStartListening(sc::SingleCellListening)
+    meStartListening(sc::SingleCellListening),
+    mbCheckLinkFormula(false)
 {
 }
 
@@ -49,7 +50,7 @@ void ScSetStringParam::setNumericInput()
 }
 
 bool ScStringUtil::parseSimpleNumber(
-    const OUString& rStr, sal_Unicode dsep, sal_Unicode gsep, double& rVal)
+    const OUString& rStr, sal_Unicode dsep, sal_Unicode gsep, sal_Unicode dsepa, double& rVal)
 {
     // Actually almost the entire pre-check is unnecessary and we could call
     // rtl::math::stringToDouble() just after having exchanged ascii space with
@@ -110,7 +111,7 @@ bool ScStringUtil::parseSimpleNumber(
             haveSeenDigit = true;
             ++nDigitCount;
         }
-        else if (c == dsep)
+        else if (c == dsep || (dsepa && c == dsepa))
         {
             // this is a decimal separator.
 
@@ -125,7 +126,7 @@ bool ScStringUtil::parseSimpleNumber(
 
             nPosDSep = i;
             nPosGSep = -1;
-            aBuf.append(c);
+            aBuf.append(dsep);  // append the separator that is parsed in stringToDouble() below
             nDigitCount = 0;
         }
         else if (c == gsep)
@@ -345,58 +346,6 @@ bool ScStringUtil::parseSimpleNumber(
     return true;
 }
 
-sal_Int32 ScStringUtil::GetQuotedTokenCount(const OUString &rIn, const OUString& rQuotedPairs, sal_Unicode cTok )
-{
-    assert( !(rQuotedPairs.getLength()%2) );
-    assert( rQuotedPairs.indexOf(cTok) );
-
-    // empty string: TokenCount is 0 per definition
-    if ( rIn.isEmpty() )
-        return 0;
-
-    sal_Int32      nTokCount       = 1;
-    sal_Int32      nLen            = rIn.getLength();
-    sal_Int32      nQuotedLen      = rQuotedPairs.getLength();
-    sal_Unicode         cQuotedEndChar  = 0;
-    const sal_Unicode*  pQuotedStr      = rQuotedPairs.getStr();
-    const sal_Unicode*  pStr            = rIn.getStr();
-    sal_Int32       nIndex         = 0;
-    while ( nIndex < nLen )
-    {
-        sal_Unicode c = *pStr;
-        if ( cQuotedEndChar )
-        {
-            // reached end of the quote ?
-            if ( c == cQuotedEndChar )
-                cQuotedEndChar = 0;
-        }
-        else
-        {
-            // Is the char a quote-beginn char ?
-            sal_Int32 nQuoteIndex = 0;
-            while ( nQuoteIndex < nQuotedLen )
-            {
-                if ( pQuotedStr[nQuoteIndex] == c )
-                {
-                    cQuotedEndChar = pQuotedStr[nQuoteIndex+1];
-                    break;
-                }
-                else
-                    nQuoteIndex += 2;
-            }
-
-            // If the token-char matches then increase TokCount
-            if ( c == cTok )
-                ++nTokCount;
-        }
-
-        ++pStr;
-        ++nIndex;
-    }
-
-    return nTokCount;
-}
-
 OUString ScStringUtil::GetQuotedToken(const OUString &rIn, sal_Int32 nToken, const OUString& rQuotedPairs,
                                sal_Unicode cTok, sal_Int32& rIndex )
 {
@@ -477,7 +426,7 @@ bool ScStringUtil::isMultiline( const OUString& rStr )
     if (rStr.indexOf('\n') != -1)
         return true;
 
-    if (rStr.indexOf(CHAR_CR) != -1)
+    if (rStr.indexOf('\r') != -1)
         return true;
 
     return false;
@@ -487,7 +436,7 @@ ScInputStringType ScStringUtil::parseInputString(
     SvNumberFormatter& rFormatter, const OUString& rStr, LanguageType eLang )
 {
     ScInputStringType aRet;
-    aRet.mnFormatType = 0;
+    aRet.mnFormatType = SvNumFormatType::ALL;
     aRet.meType = ScInputStringType::Unknown;
     aRet.maText = rStr;
     aRet.mfValue = 0.0;
@@ -503,7 +452,7 @@ ScInputStringType ScStringUtil::parseInputString(
         aRet.maText = rStr.copy(1);
         aRet.meType = ScInputStringType::Text;
     }
-    else        // (nur) auf englisches Zahlformat testen
+    else        // test for English number format (only)
     {
         sal_uInt32 nNumFormat = rFormatter.GetStandardIndex(eLang);
 

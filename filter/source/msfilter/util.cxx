@@ -7,12 +7,15 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <com/sun/star/awt/Size.hpp>
+#include <com/sun/star/lang/Locale.hpp>
 #include <rtl/ustring.hxx>
 #include <rtl/strbuf.hxx>
 #include <unotools/fontcvt.hxx>
 #include <unotools/fontdefs.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/salbtype.hxx>
+#include <filter/msfilter/escherex.hxx>
 #include <filter/msfilter/util.hxx>
 #include <memory>
 #include <unordered_map>
@@ -46,7 +49,7 @@ sal_uInt32 BGRToRGB(sal_uInt32 nColor)
 {
     sal_uInt8
         r(static_cast<sal_uInt8>(nColor&0xFF)),
-        g(static_cast<sal_uInt8>(((nColor)>>8)&0xFF)),
+        g(static_cast<sal_uInt8>((nColor>>8)&0xFF)),
         b(static_cast<sal_uInt8>((nColor>>16)&0xFF)),
         t(static_cast<sal_uInt8>((nColor>>24)&0xFF));
     nColor = (t<<24) + (r<<16) + (g<<8) + b;
@@ -72,15 +75,15 @@ DateTime DTTM2DateTime( long lDTTM )
     DateTime aDateTime(Date( 0 ), ::tools::Time( 0 ));
     if( lDTTM )
     {
-        sal_uInt16 lMin = (sal_uInt16)(lDTTM & 0x0000003F);
+        sal_uInt16 lMin = static_cast<sal_uInt16>(lDTTM & 0x0000003F);
         lDTTM >>= 6;
-        sal_uInt16 lHour= (sal_uInt16)(lDTTM & 0x0000001F);
+        sal_uInt16 lHour= static_cast<sal_uInt16>(lDTTM & 0x0000001F);
         lDTTM >>= 5;
-        sal_uInt16 lDay = (sal_uInt16)(lDTTM & 0x0000001F);
+        sal_uInt16 lDay = static_cast<sal_uInt16>(lDTTM & 0x0000001F);
         lDTTM >>= 5;
-        sal_uInt16 lMon = (sal_uInt16)(lDTTM & 0x0000000F);
+        sal_uInt16 lMon = static_cast<sal_uInt16>(lDTTM & 0x0000000F);
         lDTTM >>= 4;
-        sal_uInt16 lYear= (sal_uInt16)(lDTTM & 0x000001FF) + 1900;
+        sal_uInt16 lYear= static_cast<sal_uInt16>(lDTTM & 0x000001FF) + 1900;
         aDateTime = DateTime(Date(lDay, lMon, lYear), tools::Time(lHour, lMin));
     }
     return aDateTime;
@@ -118,20 +121,17 @@ sal_Unicode bestFitOpenSymbolToMSFont(sal_Unicode cChar,
           bullet symbol
         */
         rFontName = "Wingdings";
-        cChar = static_cast< sal_Unicode >(0x6C);
+        cChar = u'\x6C';
     }
     return cChar;
 }
 
 
-OString ConvertColor( const Color &rColor, bool bAutoColor )
+OString ConvertColor( const Color &rColor )
 {
     OString color( "auto" );
 
-    if (bAutoColor && rColor.GetColor() == OOXML_COLOR_AUTO)
-        return color;
-
-    if ( rColor.GetColor() != COL_AUTO )
+    if ( rColor != COL_AUTO )
     {
         const char pHexDigits[] = "0123456789ABCDEF";
         char pBuffer[] = "000000";
@@ -226,14 +226,13 @@ static const ApiPaperSize spPaperSizeTable[] =
 
 sal_Int32 PaperSizeConv::getMSPaperSizeIndex( const css::awt::Size& rSize )
 {
-    sal_Int32 nElems = SAL_N_ELEMENTS( spPaperSizeTable );
     // Need to find the best match for current size
     sal_Int32 nDeltaWidth = 0;
     sal_Int32 nDeltaHeight = 0;
 
     sal_Int32 nPaperSizeIndex = 0; // Undefined
     const ApiPaperSize* pItem = spPaperSizeTable;
-    const ApiPaperSize* pEnd =  spPaperSizeTable + nElems;
+    const ApiPaperSize* pEnd =  spPaperSizeTable + SAL_N_ELEMENTS( spPaperSizeTable );
     for ( ; pItem != pEnd; ++pItem )
     {
         sal_Int32 nCurDeltaHeight = std::abs( pItem->mnHeight - rSize.Height );
@@ -261,8 +260,7 @@ sal_Int32 PaperSizeConv::getMSPaperSizeIndex( const css::awt::Size& rSize )
 
 const ApiPaperSize& PaperSizeConv::getApiSizeForMSPaperSizeIndex( sal_Int32 nMSOPaperIndex )
 {
-    sal_Int32 nElems = SAL_N_ELEMENTS( spPaperSizeTable );
-    if ( nMSOPaperIndex  < 0 || nMSOPaperIndex > nElems - 1 )
+    if ( nMSOPaperIndex  < 0 || nMSOPaperIndex > sal_Int32(SAL_N_ELEMENTS( spPaperSizeTable )) - 1 )
         return spPaperSizeTable[ 0 ];
     return spPaperSizeTable[ nMSOPaperIndex ];
 }
@@ -313,13 +311,6 @@ WW8ReadFieldParams::WW8ReadFieldParams( const OUString& _rData )
     nSavPtr   = nNext;
 }
 
-
-WW8ReadFieldParams::~WW8ReadFieldParams()
-{
-
-}
-
-
 OUString WW8ReadFieldParams::GetResult() const
 {
     if (nFnd<0 && nSavPtr>nFnd)
@@ -367,13 +358,13 @@ sal_Int32 WW8ReadFieldParams::SkipToNextToken()
 }
 
 // FindNextPara searches the next backslash parameter or the next string
-// until the next blank or "\" or closing quatation mark
+// until the next blank or "\" or closing quotation mark
 // or the end of the string of pStr.
 //
-// Output ppNext (if ppNext != 0) Suchbeginn fuer naechsten Parameter bzw. 0
+// Output ppNext (if ppNext != 0) search begin of next parameter resp. 0
 //
 // Return value: 0 if end of string reached,
-//             ansonsten Anfang des Paramters bzw. der Zeichenkette
+//             otherwise beginning of the parameter resp. string
 //
 sal_Int32 WW8ReadFieldParams::FindNextStringPiece(const sal_Int32 nStart)
 {
@@ -401,7 +392,7 @@ sal_Int32 WW8ReadFieldParams::FindNextStringPiece(const sal_Int32 nStart)
     // quotation marks before paragraph?
     if ( aData[n]=='"' || aData[n]==0x201c || aData[n]==132 || aData[n]==0x14 )
     {
-        n++;                        // read over quatation marks
+        n++;                        // read over quotation marks
         n2 = n;                     // search for the end from here on
         while(     (nLen > n2)
                 && (aData[n2] != '"')
@@ -463,7 +454,7 @@ bool WW8ReadFieldParams::GetTokenSttFromTo(sal_Int32* pFrom, sal_Int32* pTo, sal
     return nStart && nEnd && (nMax >= nStart) && (nMax >= nEnd);
 }
 
-EquationResult Read_SubF_Combined(WW8ReadFieldParams& rReadParam)
+static EquationResult Read_SubF_Combined(WW8ReadFieldParams& rReadParam)
 {
     EquationResult aResult;
 
@@ -479,7 +470,7 @@ EquationResult Read_SubF_Combined(WW8ReadFieldParams& rReadParam)
             break;
         }
         (void)rReadParam.SkipToNextToken();
-        // intentional fall-through
+        [[fallthrough]];
     case -2:
         {
             if ( rReadParam.GetResult().startsWithIgnoreAsciiCase("(") )
@@ -549,6 +540,7 @@ EquationResult Read_SubF_Combined(WW8ReadFieldParams& rReadParam)
                     }
                 }
             }
+            break;
         }
     default:
         break;
@@ -1176,40 +1168,37 @@ static struct {
     {"textBox", mso_sptTextBox},
 };
 
-typedef std::unordered_map< const char*, const char*, rtl::CStringHash, rtl::CStringEqual> CustomShapeTypeTranslationHashMap;
-static CustomShapeTypeTranslationHashMap* pCustomShapeTypeTranslationHashMap = nullptr;
-
 const char* GetOOXMLPresetGeometry( const char* sShapeType )
 {
-    if( pCustomShapeTypeTranslationHashMap == nullptr )
+    typedef std::unordered_map< const char*, const char*, rtl::CStringHash, rtl::CStringEqual> CustomShapeTypeTranslationHashMap;
+    static CustomShapeTypeTranslationHashMap aCustomShapeTypeTranslationHashMap = [&]()
     {
-        pCustomShapeTypeTranslationHashMap = new CustomShapeTypeTranslationHashMap ();
-        for( unsigned int i = 0; i < SAL_N_ELEMENTS(pCustomShapeTypeTranslationTable); ++i )
+        CustomShapeTypeTranslationHashMap tmp;
+        for(const msfilter::util::CustomShapeTypeTranslationTable& i : pCustomShapeTypeTranslationTable)
         {
-            (*pCustomShapeTypeTranslationHashMap)[ pCustomShapeTypeTranslationTable[ i ].sOOo ] = pCustomShapeTypeTranslationTable[ i ].sMSO;
+            tmp[ i.sOOo ] = i.sMSO;
         }
-    }
+        return tmp;
+    }();
     CustomShapeTypeTranslationHashMap::iterator i(
-        pCustomShapeTypeTranslationHashMap->find(sShapeType));
-    return i == pCustomShapeTypeTranslationHashMap->end() ? "rect" : i->second;
+        aCustomShapeTypeTranslationHashMap.find(sShapeType));
+    return i == aCustomShapeTypeTranslationHashMap.end() ? "rect" : i->second;
 }
-
-typedef std::unordered_map< const char*, MSO_SPT, rtl::CStringHash, rtl::CStringEqual> DMLToVMLTranslationHashMap;
-static DMLToVMLTranslationHashMap* pDMLToVMLMap;
 
 MSO_SPT GETVMLShapeType(const OString& aType)
 {
-    const char* pDML = GetOOXMLPresetGeometry(aType.getStr());
-
-    if (!pDMLToVMLMap)
+    typedef std::unordered_map< const char*, MSO_SPT, rtl::CStringHash, rtl::CStringEqual> DMLToVMLTranslationHashMap;
+    static DMLToVMLTranslationHashMap aDMLToVMLMap = [&]()
     {
-        pDMLToVMLMap = new DMLToVMLTranslationHashMap();
-        for (size_t i = 0; i < SAL_N_ELEMENTS(pDMLToVMLTable); ++i)
-            (*pDMLToVMLMap)[pDMLToVMLTable[i].sDML] = pDMLToVMLTable[i].nVML;
-    }
+        DMLToVMLTranslationHashMap tmp;
+        for (auto& i : pDMLToVMLTable)
+            tmp[i.sDML] = i.nVML;
+        return tmp;
+    }();
 
-    DMLToVMLTranslationHashMap::iterator i(pDMLToVMLMap->find(pDML));
-    return i == pDMLToVMLMap->end() ? mso_sptNil : i->second;
+    const char* pDML = GetOOXMLPresetGeometry(aType.getStr());
+    DMLToVMLTranslationHashMap::iterator i(aDMLToVMLMap.find(pDML));
+    return i == aDMLToVMLMap.end() ? mso_sptNil : i->second;
 }
 
 bool HasTextBoxContent(sal_uInt32 nShapeType)
@@ -1296,28 +1285,28 @@ sal_uInt16 GetBestIndex(const BitmapPalette& rPalette, const BitmapColor& rBitma
 sal_uInt8 TransColToIco( const Color& rCol )
 {
     sal_uInt8 nCol = 0;      // ->Auto
-    switch( rCol.GetColor() )
+    switch( sal_uInt32(rCol) )
     {
-    case COL_BLACK:         nCol = 1;   break;
-    case COL_BLUE:          nCol = 9;   break;
-    case COL_GREEN:         nCol = 11;  break;
-    case COL_CYAN:          nCol = 10;  break;
-    case COL_RED:           nCol = 13;  break;
-    case COL_MAGENTA:       nCol = 12;  break;
-    case COL_BROWN:         nCol = 14;  break;
-    case COL_GRAY:          nCol = 15;  break;
-    case COL_LIGHTGRAY:     nCol = 16;  break;
-    case COL_LIGHTBLUE:     nCol = 2;   break;
-    case COL_LIGHTGREEN:    nCol = 4;   break;
-    case COL_LIGHTCYAN:     nCol = 3;   break;
-    case COL_LIGHTRED:      nCol = 6;   break;
-    case COL_LIGHTMAGENTA:  nCol = 5;   break;
-    case COL_YELLOW:        nCol = 7;   break;
-    case COL_WHITE:         nCol = 8;   break;
-    case COL_AUTO:          nCol = 0;   break;
+    case sal_uInt32(COL_BLACK):         nCol = 1;   break;
+    case sal_uInt32(COL_BLUE):          nCol = 9;   break;
+    case sal_uInt32(COL_GREEN):         nCol = 11;  break;
+    case sal_uInt32(COL_CYAN):          nCol = 10;  break;
+    case sal_uInt32(COL_RED):           nCol = 13;  break;
+    case sal_uInt32(COL_MAGENTA):       nCol = 12;  break;
+    case sal_uInt32(COL_BROWN):         nCol = 14;  break;
+    case sal_uInt32(COL_GRAY):          nCol = 15;  break;
+    case sal_uInt32(COL_LIGHTGRAY):     nCol = 16;  break;
+    case sal_uInt32(COL_LIGHTBLUE):     nCol = 2;   break;
+    case sal_uInt32(COL_LIGHTGREEN):    nCol = 4;   break;
+    case sal_uInt32(COL_LIGHTCYAN):     nCol = 3;   break;
+    case sal_uInt32(COL_LIGHTRED):      nCol = 6;   break;
+    case sal_uInt32(COL_LIGHTMAGENTA):  nCol = 5;   break;
+    case sal_uInt32(COL_YELLOW):        nCol = 7;   break;
+    case sal_uInt32(COL_WHITE):         nCol = 8;   break;
+    case sal_uInt32(COL_AUTO):          nCol = 0;   break;
 
     default:
-        static const ColorData aColArr[ 16 ] = {
+        static const Color aColArr[ 16 ] = {
             COL_BLACK,      COL_LIGHTBLUE,  COL_LIGHTCYAN,  COL_LIGHTGREEN,
             COL_LIGHTMAGENTA,COL_LIGHTRED,  COL_YELLOW,     COL_WHITE,
             COL_BLUE,       COL_CYAN,       COL_GREEN,      COL_MAGENTA,
@@ -1325,7 +1314,7 @@ sal_uInt8 TransColToIco( const Color& rCol )
         };
         BitmapPalette aBmpPal(16);
         for( sal_uInt16 i = 0; i < 16; ++i )
-            aBmpPal[i] = Color( aColArr[ i ] );
+            aBmpPal[i] = aColArr[ i ];
 
         nCol = static_cast< sal_uInt8 >(GetBestIndex(aBmpPal, rCol) + 1);
         break;

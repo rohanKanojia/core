@@ -25,21 +25,19 @@
 #include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
 #include <com/sun/star/ui/dialogs/XFilePreview.hpp>
 #include <com/sun/star/ui/dialogs/XFilePicker3.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/beans/StringPair.hpp>
 
-#include <list>
+#include <vector>
 #include <memory>
 #include <rtl/ustring.hxx>
 
-#include "gtk/fpicker/SalGtkPicker.hxx"
+#include <gtk/fpicker/SalGtkPicker.hxx>
 
 // Implementation class for the XFilePicker Interface
 
 struct FilterEntry;
 struct ElementEntry_Impl;
-
-typedef ::std::list < FilterEntry >     FilterList;
-typedef ::std::list < ElementEntry_Impl >   ElementList;
 
 // class declaration
 
@@ -59,107 +57,78 @@ class SalGtkFilePicker : public SalGtkPicker, public SalGtkFilePicker_Base
 
         // XFilePickerNotifier
 
-        virtual void SAL_CALL addFilePickerListener( const css::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener )
-            throw( css::uno::RuntimeException, std::exception ) override;
-        virtual void SAL_CALL removeFilePickerListener( const css::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL addFilePickerListener( const css::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener ) override;
+        virtual void SAL_CALL removeFilePickerListener( const css::uno::Reference< css::ui::dialogs::XFilePickerListener >& xListener ) override;
 
         // XExecutableDialog functions
 
-        virtual void SAL_CALL setTitle( const OUString& aTitle )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL setTitle( const OUString& aTitle ) override;
 
-        virtual sal_Int16 SAL_CALL execute()
-            throw( css::uno::RuntimeException, std::exception ) override;
+        virtual sal_Int16 SAL_CALL execute() override;
 
         // XFilePicker functions
 
-        virtual void SAL_CALL setMultiSelectionMode( sal_Bool bMode )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL setMultiSelectionMode( sal_Bool bMode ) override;
 
-        virtual void SAL_CALL setDefaultName( const OUString& aName )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL setDefaultName( const OUString& aName ) override;
 
-        virtual void SAL_CALL setDisplayDirectory( const OUString& aDirectory )
-            throw( css::lang::IllegalArgumentException,
-                css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL setDisplayDirectory( const OUString& aDirectory ) override;
 
-        virtual OUString SAL_CALL getDisplayDirectory(  )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        virtual OUString SAL_CALL getDisplayDirectory(  ) override;
 
-        virtual css::uno::Sequence< OUString > SAL_CALL getFiles(  )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getFiles(  ) override;
 
         // XFilePicker2 functions
 
-        virtual css::uno::Sequence< OUString > SAL_CALL getSelectedFiles()
-                throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getSelectedFiles() override;
 
         // XFilterManager functions
 
-        virtual void SAL_CALL appendFilter( const OUString& aTitle, const OUString& aFilter )
-            throw( css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL appendFilter( const OUString& aTitle, const OUString& aFilter ) override;
 
-        virtual void SAL_CALL setCurrentFilter( const OUString& aTitle )
-            throw( css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL setCurrentFilter( const OUString& aTitle ) override;
 
-        virtual OUString SAL_CALL getCurrentFilter(  )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        virtual OUString SAL_CALL getCurrentFilter(  ) override;
 
         // XFilterGroupManager functions
 
-        virtual void SAL_CALL appendFilterGroup( const OUString& sGroupTitle, const css::uno::Sequence< css::beans::StringPair >& aFilters )
-                throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL appendFilterGroup( const OUString& sGroupTitle, const css::uno::Sequence< css::beans::StringPair >& aFilters ) override;
 
         // XFilePickerControlAccess functions
 
-        virtual void SAL_CALL setValue( sal_Int16 nControlId, sal_Int16 nControlAction, const css::uno::Any& aValue )
-                throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL setValue( sal_Int16 nControlId, sal_Int16 nControlAction, const css::uno::Any& aValue ) override;
 
-        virtual css::uno::Any SAL_CALL getValue( sal_Int16 aControlId, sal_Int16 aControlAction )
-                throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL getValue( sal_Int16 aControlId, sal_Int16 aControlAction ) override;
 
-        virtual void SAL_CALL enableControl( sal_Int16 nControlId, sal_Bool bEnable )
-            throw(css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL enableControl( sal_Int16 nControlId, sal_Bool bEnable ) override;
 
-        virtual void SAL_CALL setLabel( sal_Int16 nControlId, const OUString& aLabel )
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL setLabel( sal_Int16 nControlId, const OUString& aLabel ) override;
 
-        virtual OUString SAL_CALL getLabel( sal_Int16 nControlId )
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getLabel( sal_Int16 nControlId ) override;
 
         // XFilePreview
 
-        virtual css::uno::Sequence< sal_Int16 > SAL_CALL getSupportedImageFormats(  )
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< sal_Int16 > SAL_CALL getSupportedImageFormats(  ) override;
 
-        virtual sal_Int32 SAL_CALL getTargetColorDepth(  )
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Int32 SAL_CALL getTargetColorDepth(  ) override;
 
-        virtual sal_Int32 SAL_CALL getAvailableWidth(  )
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Int32 SAL_CALL getAvailableWidth(  ) override;
 
-        virtual sal_Int32 SAL_CALL getAvailableHeight(  )
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Int32 SAL_CALL getAvailableHeight(  ) override;
 
-        virtual void SAL_CALL setImage( sal_Int16 aImageFormat, const css::uno::Any& aImage )
-            throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL setImage( sal_Int16 aImageFormat, const css::uno::Any& aImage ) override;
 
-        virtual sal_Bool SAL_CALL setShowState( sal_Bool bShowState )
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL setShowState( sal_Bool bShowState ) override;
 
-        virtual sal_Bool SAL_CALL getShowState(  )
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL getShowState(  ) override;
 
         // XInitialization
 
-        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments )
-            throw(css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
         // XCancellable
 
-        virtual void SAL_CALL cancel( )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL cancel( ) override;
 
         // FilePicker Event functions
 
@@ -170,7 +139,7 @@ class SalGtkFilePicker : public SalGtkPicker, public SalGtkFilePicker_Base
         bool FilterNameExists( const OUString& rTitle );
         bool FilterNameExists( const css::uno::Sequence< css::beans::StringPair >& _rGroupedFilters );
 
-        void ensureFilterList( const OUString& _rInitialCurrentFilter );
+        void ensureFilterVector( const OUString& _rInitialCurrentFilter );
 
         void impl_fileSelectionChanged( const css::ui::dialogs::FilePickerEvent& aEvent );
         void impl_directoryChanged( const css::ui::dialogs::FilePickerEvent& aEvent );
@@ -180,9 +149,9 @@ class SalGtkFilePicker : public SalGtkPicker, public SalGtkFilePicker_Base
         css::uno::Reference< css::ui::dialogs::XFilePickerListener >
             m_xListener;
         OUString msPlayLabel;
-        FilterList *m_pFilterList;
+        std::unique_ptr<std::vector<FilterEntry>> m_pFilterVector;
+        GtkWidget  *m_pParentWidget;
         GtkWidget  *m_pVBox;
-
         GtkWidget  *m_pFilterExpander;
         GtkWidget  *m_pFilterView;
         GtkListStore *m_pFilterStore;
@@ -195,6 +164,7 @@ class SalGtkFilePicker : public SalGtkPicker, public SalGtkFilePicker_Base
             LINK,
             PREVIEW,
             SELECTION,
+            GPGENCRYPTION,
             TOGGLE_LAST
               };
 
@@ -212,13 +182,13 @@ class SalGtkFilePicker : public SalGtkPicker, public SalGtkFilePicker_Base
             VERSION,
             TEMPLATE,
             IMAGE_TEMPLATE,
+            IMAGE_ANCHOR,
             LIST_LAST
               };
 
         GtkWidget *m_pHBoxs[ LIST_LAST ];
         GtkWidget *m_pAligns[ LIST_LAST ];
         GtkWidget *m_pLists[ LIST_LAST ];
-        GtkListStore *m_pListStores[ LIST_LAST ];
         GtkWidget *m_pListLabels[ LIST_LAST ];
         bool mbListVisibility[ LIST_LAST ];
         bool mbButtonVisibility[ BUTTON_LAST ];
@@ -233,8 +203,8 @@ class SalGtkFilePicker : public SalGtkPicker, public SalGtkFilePicker_Base
         gulong mHID_Preview;
         GtkWidget* m_pPreview;
         GtkFileFilter* m_pPseudoFilter;
-        sal_Int32 m_PreviewImageWidth;
-        sal_Int32 m_PreviewImageHeight;
+        static constexpr sal_Int32 g_PreviewImageWidth = 256;
+        static constexpr sal_Int32 g_PreviewImageHeight = 256;
 
         GtkWidget  *getWidget( sal_Int16 nControlId, GType *pType = nullptr);
 
@@ -263,7 +233,7 @@ class SalGtkFilePicker : public SalGtkPicker, public SalGtkFilePicker_Base
         static void update_preview_cb (GtkFileChooser *file_chooser, SalGtkFilePicker *pobjFP);
         static void dialog_mapped_cb(GtkWidget *widget, SalGtkFilePicker *pobjFP);
     public:
-         virtual ~SalGtkFilePicker();
+         virtual ~SalGtkFilePicker() override;
 
 };
 #endif // INCLUDED_VCL_UNX_GTK_FPICKER_SALGTKFILEPICKER_HXX

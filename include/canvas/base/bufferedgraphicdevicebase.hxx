@@ -59,7 +59,7 @@ namespace canvas
 
         @tpl Mutex
         Lock strategy to use. Defaults to using the
-        OBaseMutex-provided lock.  Every time one of the methods is
+        BaseMutex-provided lock.  Every time one of the methods is
         entered, an object of type Mutex is created with m_aMutex as
         the sole parameter, and destroyed again when the method scope
         is left.
@@ -78,7 +78,6 @@ namespace canvas
     {
     public:
         typedef GraphicDeviceBase< Base, DeviceHelper, Mutex, UnambiguousBase > BaseType;
-        typedef BufferedGraphicDeviceBase OurType;
         typedef Mutex MutexType;
 
         BufferedGraphicDeviceBase() :
@@ -93,34 +92,31 @@ namespace canvas
         }
 
         // XGraphicDevice
-        virtual css::uno::Reference< css::rendering::XBufferController > SAL_CALL getBufferController(  ) throw (css::uno::RuntimeException) override
+        virtual css::uno::Reference< css::rendering::XBufferController > SAL_CALL getBufferController(  ) override
         {
             return this;
         }
 
         // XBufferController
-        virtual ::sal_Int32 SAL_CALL createBuffers( ::sal_Int32 nBuffers ) throw (css::lang::IllegalArgumentException,
-                                                                                  css::uno::RuntimeException) override
+        virtual ::sal_Int32 SAL_CALL createBuffers( ::sal_Int32 nBuffers ) override
         {
-            tools::verifyRange( nBuffers, (sal_Int32)1 );
+            tools::verifyRange( nBuffers, sal_Int32(1) );
 
             return 1;
         }
 
-        virtual void SAL_CALL destroyBuffers(  ) throw (css::uno::RuntimeException) override
+        virtual void SAL_CALL destroyBuffers(  ) override
         {
         }
 
-        virtual sal_Bool SAL_CALL showBuffer( sal_Bool bUpdateAll )
-            throw (css::uno::RuntimeException,
-                   std::exception) override
+        virtual sal_Bool SAL_CALL showBuffer( sal_Bool bUpdateAll ) override
         {
             MutexType aGuard( BaseType::m_aMutex );
 
             return BaseType::maDeviceHelper.showBuffer( mbIsVisible, bUpdateAll );
         }
 
-        virtual sal_Bool SAL_CALL switchBuffer( sal_Bool bUpdateAll ) throw (css::uno::RuntimeException, std::exception) override
+        virtual sal_Bool SAL_CALL switchBuffer( sal_Bool bUpdateAll ) override
         {
             MutexType aGuard( BaseType::m_aMutex );
 
@@ -157,11 +153,6 @@ namespace canvas
                 maBounds = transformBounds( mxWindow->getPosSize() );
                 mxWindow->addWindowListener( this );
             }
-        }
-
-        const css::uno::Reference< css::awt::XWindow2 >& getWindow() const
-        {
-            return mxWindow;
         }
 
         css::uno::Any getXWindow() const
@@ -216,7 +207,7 @@ namespace canvas
         }
 
         // XWindowListener
-        virtual void disposeEventSource( const css::lang::EventObject& Source ) throw (css::uno::RuntimeException) override
+        virtual void disposeEventSource( const css::lang::EventObject& Source ) override
         {
             typename BaseType::MutexType aGuard( BaseType::m_aMutex );
 
@@ -226,24 +217,24 @@ namespace canvas
             BaseType::disposeEventSource(Source);
         }
 
-        virtual void SAL_CALL windowResized( const css::awt::WindowEvent& e ) throw (css::uno::RuntimeException) override
+        virtual void SAL_CALL windowResized( const css::awt::WindowEvent& e ) override
         {
             boundsChanged( e );
         }
 
-        virtual void SAL_CALL windowMoved( const css::awt::WindowEvent& e ) throw (css::uno::RuntimeException) override
+        virtual void SAL_CALL windowMoved( const css::awt::WindowEvent& e ) override
         {
             boundsChanged( e );
         }
 
-        virtual void SAL_CALL windowShown( const css::lang::EventObject& ) throw (css::uno::RuntimeException) override
+        virtual void SAL_CALL windowShown( const css::lang::EventObject& ) override
         {
             typename BaseType::MutexType aGuard( BaseType::m_aMutex );
 
             mbIsVisible = true;
         }
 
-        virtual void SAL_CALL windowHidden( const css::lang::EventObject& ) throw (css::uno::RuntimeException) override
+        virtual void SAL_CALL windowHidden( const css::lang::EventObject& ) override
         {
             typename BaseType::MutexType aGuard( BaseType::m_aMutex );
 

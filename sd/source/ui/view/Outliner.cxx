@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "Outliner.hxx"
+#include <Outliner.hxx>
 #include <boost/property_tree/json_parser.hpp>
 #include <vcl/wrkwin.hxx>
 #include <vcl/settings.hxx>
@@ -29,8 +29,7 @@
 #include <vcl/outdev.hxx>
 #include <svx/dlgutil.hxx>
 #include <svx/xtable.hxx>
-#include <vcl/layout.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/printer.hxx>
 #include <svx/svxerr.hxx>
@@ -38,10 +37,8 @@
 #include <svx/svdotable.hxx>
 #include <editeng/unolingu.hxx>
 #include <svx/svditer.hxx>
-#include <comphelper/extract.hxx>
 #include <com/sun/star/linguistic2/XSpellChecker1.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <comphelper/processfactory.hxx>
 #include <editeng/forbiddencharacterstable.hxx>
 #include <svx/srchdlg.hxx>
 #include <unotools/linguprops.hxx>
@@ -52,24 +49,24 @@
 #include <svtools/langtab.hxx>
 #include <tools/diagnose_ex.h>
 
-#include "strings.hrc"
-#include "sdstring.hrc"
+#include <strings.hrc>
 #include <editeng/outliner.hxx>
-#include "sdpage.hxx"
-#include "sdmod.hxx"
-#include "Window.hxx"
-#include "sdresid.hxx"
-#include "DrawViewShell.hxx"
-#include "OutlineViewShell.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "FrameView.hxx"
-#include "optsitem.hxx"
-#include "drawview.hxx"
-#include "ViewShellBase.hxx"
-#include "SpellDialogChildWindow.hxx"
-#include "ToolBarManager.hxx"
-#include "framework/FrameworkHelper.hxx"
+#include <sdpage.hxx>
+#include <sdmod.hxx>
+#include <Window.hxx>
+#include <sdresid.hxx>
+#include <DrawViewShell.hxx>
+#include <OutlineView.hxx>
+#include <OutlineViewShell.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <FrameView.hxx>
+#include <optsitem.hxx>
+#include <drawview.hxx>
+#include <ViewShellBase.hxx>
+#include <SpellDialogChildWindow.hxx>
+#include <ToolBarManager.hxx>
+#include <framework/FrameworkHelper.hxx>
 #include <svx/svxids.hrc>
 #include <editeng/editerr.hxx>
 #include <LibreOfficeKit/LibreOfficeKitEnums.h>
@@ -92,7 +89,10 @@ SearchSelection::SearchSelection(int nPage, const OString& rRectangles)
 {
 }
 
-class Outliner::Implementation
+} // end of namespace sd
+
+
+class SdOutliner::Implementation
 {
 public:
     /** The original edit mode directly after switching to a different view
@@ -111,11 +111,11 @@ public:
 
     /** Provide in the member mpOutlineView an instance of OutlinerView that
         is either taken from the ViewShell, when it is an OutlineViewShell,
-        or is created.  When an OutlinerView already exists it is initialied.
+        or is created.  When an OutlinerView already exists it is initialized.
     */
     void ProvideOutlinerView (
         Outliner& rOutliner,
-        const std::shared_ptr<ViewShell>& rpViewShell,
+        const std::shared_ptr<sd::ViewShell>& rpViewShell,
         vcl::Window* pWindow);
 
     /** This method is called when the OutlinerView is no longer used.
@@ -137,7 +137,7 @@ private:
     OutlinerView* mpOutlineView;
 };
 
-Outliner::Outliner( SdDrawDocument* pDoc, sal_uInt16 nMode )
+SdOutliner::SdOutliner( SdDrawDocument* pDoc, OutlinerMode nMode )
     : SdrOutliner( &pDoc->GetItemPool(), nMode ),
       mpImpl(new Implementation()),
       meMode(SEARCH),
@@ -152,18 +152,17 @@ Outliner::Outliner( SdDrawDocument* pDoc, sal_uInt16 nMode )
       mnPageCount(0),
       mbEndOfSearch(false),
       mbFoundObject(false),
-      mbError(false),
       mbDirectionIsForward(true),
       mbRestrictSearchToSelection(false),
       maMarkListCopy(),
       mpObj(nullptr),
       mpFirstObj(nullptr),
-      mpTextObj(nullptr),
+      mpSearchSpellTextObj(nullptr),
       mnText(0),
       mpParaObj(nullptr),
-      meStartViewMode(PK_STANDARD),
-      meStartEditMode(EM_PAGE),
-      mnStartPageIndex((sal_uInt16)-1),
+      meStartViewMode(PageKind::Standard),
+      meStartEditMode(EditMode::Page),
+      mnStartPageIndex(sal_uInt16(-1)),
       mpStartEditedObject(nullptr),
       maStartSelection(),
       mpSearchItem(nullptr),
@@ -171,8 +170,6 @@ Outliner::Outliner( SdDrawDocument* pDoc, sal_uInt16 nMode )
       maCurrentPosition(),
       maSearchStartPosition(),
       maLastValidPosition(),
-      mbExpectingSelectionChangeEvent(false),
-      mbWholeDocumentProcessed(false),
       mbPrepareSpellingPending(true)
 {
     SetStyleSheetPool(static_cast<SfxStyleSheetPool*>( mpDrawDocument->GetStyleSheetPool() ));
@@ -187,7 +184,7 @@ Outliner::Outliner( SdDrawDocument* pDoc, sal_uInt16 nMode )
 
     bool bOnlineSpell = false;
 
-    DrawDocShell* pDocSh = mpDrawDocument->GetDocSh();
+    sd::DrawDocShell* pDocSh = mpDrawDocument->GetDocSh();
 
     if (pDocSh)
     {
@@ -229,8 +226,8 @@ Outliner::Outliner( SdDrawDocument* pDoc, sal_uInt16 nMode )
     SetDefaultLanguage( Application::GetSettings().GetLanguageTag().getLanguageType() );
 }
 
-/// Nothing spectecular in the destructor.
-Outliner::~Outliner()
+/// Nothing spectacular in the destructor.
+SdOutliner::~SdOutliner()
 {
     mpImpl.reset();
 }
@@ -255,28 +252,27 @@ Outliner::~Outliner()
     directly operate on it.  No switching into other views takes place.</li>
     </ol>
 */
-void Outliner::PrepareSpelling()
+void SdOutliner::PrepareSpelling()
 {
     mbPrepareSpellingPending = false;
 
-    ViewShellBase* pBase = dynamic_cast< ViewShellBase *>( SfxViewShell::Current() );
+    sd::ViewShellBase* pBase = dynamic_cast< sd::ViewShellBase *>( SfxViewShell::Current() );
     if (pBase != nullptr)
         SetViewShell (pBase->GetMainViewShell());
-    SetRefDevice( SD_MOD()->GetRefDevice( *mpDrawDocument->GetDocSh() ) );
+    SetRefDevice( SD_MOD()->GetVirtualRefDevice() );
 
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
     if (pViewShell)
     {
         mbStringFound = false;
 
-        mbWholeDocumentProcessed = false;
         // Supposed that we are not located at the very beginning/end of
         // the document then there may be a match in the document
         // prior/after the current position.
         mbMatchMayExist = true;
 
-        maObjectIterator = ::sd::outliner::Iterator();
-        maSearchStartPosition = ::sd::outliner::Iterator();
+        maObjectIterator = sd::outliner::Iterator();
+        maSearchStartPosition = sd::outliner::Iterator();
         RememberStartPosition();
 
         mpImpl->ProvideOutlinerView(*this, pViewShell, mpWindow);
@@ -286,7 +282,7 @@ void Outliner::PrepareSpelling()
     ClearModifyFlag();
 }
 
-void Outliner::StartSpelling()
+void SdOutliner::StartSpelling()
 {
     meMode = SPELL;
     mbDirectionIsForward = true;
@@ -296,13 +292,13 @@ void Outliner::StartSpelling()
 /** Free all resources acquired during the search/spell check.  After a
     spell check the start position is restored here.
 */
-void Outliner::EndSpelling()
+void SdOutliner::EndSpelling()
 {
     // Keep old view shell alive until we release the outliner view.
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
-    std::shared_ptr<ViewShell> pOldViewShell (pViewShell);
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
+    std::shared_ptr<sd::ViewShell> pOldViewShell (pViewShell);
 
-    ViewShellBase* pBase = dynamic_cast< ViewShellBase *>( SfxViewShell::Current() );
+    sd::ViewShellBase* pBase = dynamic_cast< sd::ViewShellBase *>( SfxViewShell::Current() );
     if (pBase != nullptr)
         pViewShell = pBase->GetMainViewShell();
     else
@@ -311,7 +307,7 @@ void Outliner::EndSpelling()
 
     // When in <member>PrepareSpelling()</member> a new outline view has
     // been created then delete it here.
-    bool bViewIsDrawViewShell(pViewShell && nullptr != dynamic_cast< const DrawViewShell *>( pViewShell.get() ));
+    bool bViewIsDrawViewShell(dynamic_cast< const sd::DrawViewShell *>( pViewShell.get() ));
     if (bViewIsDrawViewShell)
     {
         SetStatusEventHdl(Link<EditStatus&,void>());
@@ -339,8 +335,8 @@ void Outliner::EndSpelling()
     // changes were done at SpellCheck
     if(IsModified())
     {
-        if(mpView && dynamic_cast< const OutlineView *>( mpView ) !=  nullptr)
-            static_cast<OutlineView*>(mpView)->PrepareClose(false);
+        if(auto pOutlineView = dynamic_cast<sd::OutlineView *>( mpView ))
+            pOutlineView->PrepareClose();
         if(mpDrawDocument && !mpDrawDocument->IsChanged())
             mpDrawDocument->SetChanged();
     }
@@ -356,13 +352,13 @@ void Outliner::EndSpelling()
     mpWeakViewShell.reset();
     mpView = nullptr;
     mpWindow = nullptr;
-    mnStartPageIndex = (sal_uInt16) -1;
+    mnStartPageIndex = sal_uInt16(-1);
 }
 
-bool Outliner::SpellNextDocument()
+bool SdOutliner::SpellNextDocument()
 {
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
-    if( nullptr != dynamic_cast< const OutlineViewShell *>( pViewShell.get() ))
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
+    if( nullptr != dynamic_cast< const sd::OutlineViewShell *>( pViewShell.get() ))
     {
         // When doing a spell check in the outline view then there is
         // only one document.
@@ -371,8 +367,8 @@ bool Outliner::SpellNextDocument()
     }
     else
     {
-        if( dynamic_cast< const OutlineView *>( mpView ) !=  nullptr)
-            static_cast<OutlineView*>(mpView)->PrepareClose(false);
+        if( dynamic_cast< const sd::OutlineView *>( mpView ) !=  nullptr)
+            static_cast<sd::OutlineView*>(mpView)->PrepareClose();
         mpDrawDocument->GetDocSh()->SetWaitCursor( true );
 
         Initialize (true);
@@ -393,7 +389,7 @@ bool Outliner::SpellNextDocument()
 /**
  * check next text object
  */
-svx::SpellPortions Outliner::GetNextSpellSentence()
+svx::SpellPortions SdOutliner::GetNextSpellSentence()
 {
     svx::SpellPortions aResult;
 
@@ -413,13 +409,11 @@ svx::SpellPortions Outliner::GetNextSpellSentence()
         {
             ESelection aCurrentSelection (pOutlinerView->GetSelection());
             if ( ! mbMatchMayExist
-                && maStartSelection.IsLess(aCurrentSelection))
+                && maStartSelection < aCurrentSelection)
                 EndOfSearch();
 
             // Advance to the next sentence.
-            bFoundNextSentence = SpellSentence (
-                pOutlinerView->GetEditView(),
-                aResult, false);
+            bFoundNextSentence = SpellSentence( pOutlinerView->GetEditView(), aResult);
         }
 
         // When no sentence with spelling errors has been found in the
@@ -437,34 +431,34 @@ svx::SpellPortions Outliner::GetNextSpellSentence()
 
 /** Go to next match.
 */
-bool Outliner::StartSearchAndReplace (const SvxSearchItem* pSearchItem)
+bool SdOutliner::StartSearchAndReplace (const SvxSearchItem* pSearchItem)
 {
     bool bEndOfSearch = true;
 
     // clear the search toolbar entry
-    SvxSearchDialogWrapper::SetSearchLabel(SL_Empty);
+    SvxSearchDialogWrapper::SetSearchLabel(SearchLabel::Empty);
 
     mpDrawDocument->GetDocSh()->SetWaitCursor( true );
     if (mbPrepareSpellingPending)
         PrepareSpelling();
-    ViewShellBase* pBase = dynamic_cast< ViewShellBase *>( SfxViewShell::Current() );
+    sd::ViewShellBase* pBase = dynamic_cast< sd::ViewShellBase *>( SfxViewShell::Current() );
     // Determine whether we have to abort the search.  This is necessary
     // when the main view shell does not support searching.
     bool bAbort = false;
     if (pBase != nullptr)
     {
-        std::shared_ptr<ViewShell> pShell (pBase->GetMainViewShell());
+        std::shared_ptr<sd::ViewShell> pShell (pBase->GetMainViewShell());
         SetViewShell(pShell);
-        if (pShell.get() == nullptr)
+        if (pShell == nullptr)
             bAbort = true;
         else
             switch (pShell->GetShellType())
             {
-                case ViewShell::ST_DRAW:
-                case ViewShell::ST_IMPRESS:
-                case ViewShell::ST_NOTES:
-                case ViewShell::ST_HANDOUT:
-                case ViewShell::ST_OUTLINE:
+                case sd::ViewShell::ST_DRAW:
+                case sd::ViewShell::ST_IMPRESS:
+                case sd::ViewShell::ST_NOTES:
+                case sd::ViewShell::ST_HANDOUT:
+                case sd::ViewShell::ST_OUTLINE:
                     bAbort = false;
                     break;
                 default:
@@ -473,7 +467,7 @@ bool Outliner::StartSearchAndReplace (const SvxSearchItem* pSearchItem)
             }
     }
 
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
     if ( ! pViewShell)
     {
         OSL_ASSERT(pViewShell);
@@ -504,7 +498,7 @@ bool Outliner::StartSearchAndReplace (const SvxSearchItem* pSearchItem)
                 if (nCommand == SvxSearchCmd::FIND)
                     bEndOfSearch = false;
             }
-            mnStartPageIndex = (sal_uInt16)-1;
+            mnStartPageIndex = sal_uInt16(-1);
         }
 
         SfxChildWindow *pChildWin =
@@ -524,19 +518,19 @@ bool Outliner::StartSearchAndReplace (const SvxSearchItem* pSearchItem)
     return bEndOfSearch;
 }
 
-void Outliner::Initialize (bool bDirectionIsForward)
+void SdOutliner::Initialize (bool bDirectionIsForward)
 {
-    const bool bIsAtEnd (maObjectIterator == ::sd::outliner::OutlinerContainer(this).end());
+    const bool bIsAtEnd (maObjectIterator == sd::outliner::OutlinerContainer(this).end());
     const bool bOldDirectionIsForward = mbDirectionIsForward;
     mbDirectionIsForward = bDirectionIsForward;
 
-    if (maObjectIterator == ::sd::outliner::Iterator())
+    if (maObjectIterator == sd::outliner::Iterator())
     {
         // Initialize a new search.
-        maObjectIterator = ::sd::outliner::OutlinerContainer(this).current();
+        maObjectIterator = sd::outliner::OutlinerContainer(this).current();
         maCurrentPosition = *maObjectIterator;
 
-        std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
+        std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
         if ( ! pViewShell)
         {
             OSL_ASSERT(pViewShell);
@@ -545,7 +539,7 @@ void Outliner::Initialize (bool bDirectionIsForward)
 
         // In case we are searching in an outline view then first remove the
         // current selection and place cursor at its start or end.
-        if( nullptr != dynamic_cast< const OutlineViewShell *>( pViewShell.get() ))
+        if( nullptr != dynamic_cast< const sd::OutlineViewShell *>( pViewShell.get() ))
         {
             ESelection aSelection = mpImpl->GetOutlinerView()->GetSelection ();
             if (mbDirectionIsForward)
@@ -563,7 +557,7 @@ void Outliner::Initialize (bool bDirectionIsForward)
 
         // When not beginning the search at the beginning of the search area
         // then there may be matches before the current position.
-        mbMatchMayExist = (maObjectIterator!=::sd::outliner::OutlinerContainer(this).begin());
+        mbMatchMayExist = (maObjectIterator!=sd::outliner::OutlinerContainer(this).begin());
     }
     else if (bOldDirectionIsForward != mbDirectionIsForward)
     {
@@ -573,14 +567,17 @@ void Outliner::Initialize (bool bDirectionIsForward)
         {
             // The iterator has pointed to end(), which after the search
             // direction is reversed, becomes begin().
-            maObjectIterator = ::sd::outliner::OutlinerContainer(this).begin();
+            maObjectIterator = sd::outliner::OutlinerContainer(this).begin();
         }
         else
         {
             // The iterator has pointed to the object one ahead/before the current
             // one.  Now move it to the one before/ahead the current one.
             ++maObjectIterator;
-            ++maObjectIterator;
+            if (maObjectIterator != sd::outliner::OutlinerContainer(this).end())
+            {
+                ++maObjectIterator;
+            }
         }
 
         mbMatchMayExist = true;
@@ -588,27 +585,25 @@ void Outliner::Initialize (bool bDirectionIsForward)
 
     // Initialize the last valid position with where the search starts so
     // that it always points to a valid position.
-    maLastValidPosition = *::sd::outliner::OutlinerContainer(this).current();
+    maLastValidPosition = *sd::outliner::OutlinerContainer(this).current();
 }
 
-bool Outliner::SearchAndReplaceAll()
+bool SdOutliner::SearchAndReplaceAll()
 {
-    DetectChange();
-
     bool bRet = true;
     // Save the current position to be restored after having replaced all
     // matches.
     RememberStartPosition ();
 
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
     if ( ! pViewShell)
     {
         OSL_ASSERT(pViewShell);
         return true;
     }
 
-    std::vector<SearchSelection> aSelections;
-    if( nullptr != dynamic_cast< const OutlineViewShell *>( pViewShell.get() ))
+    std::vector<sd::SearchSelection> aSelections;
+    if( nullptr != dynamic_cast< const sd::OutlineViewShell *>( pViewShell.get() ))
     {
         // Put the cursor to the beginning/end of the outliner.
         mpImpl->GetOutlinerView()->SetSelection (GetSearchStartPosition ());
@@ -616,20 +611,24 @@ bool Outliner::SearchAndReplaceAll()
         // The outliner does all the work for us when we are in this mode.
         SearchAndReplaceOnce();
     }
-    else if( nullptr != dynamic_cast< const DrawViewShell *>( pViewShell.get() ))
+    else if( nullptr != dynamic_cast< const sd::DrawViewShell *>( pViewShell.get() ))
     {
         // Disable selection change notifications during search all.
-        pViewShell->GetDoc()->setTiledSearching(true);
-        comphelper::ScopeGuard aGuard([pViewShell]() { pViewShell->GetDoc()->setTiledSearching(false); });
+        SfxViewShell& rSfxViewShell = pViewShell->GetViewShellBase();
+        rSfxViewShell.setTiledSearching(true);
+        comphelper::ScopeGuard aGuard([&rSfxViewShell]()
+        {
+            rSfxViewShell.setTiledSearching(false);
+        });
 
         // Go to beginning/end of document.
-        maObjectIterator = ::sd::outliner::OutlinerContainer(this).begin();
+        maObjectIterator = sd::outliner::OutlinerContainer(this).begin();
         // Switch to the first object which contains the search string.
         ProvideNextTextObject();
         if( !mbStringFound  )
         {
             RestoreStartPosition ();
-            mnStartPageIndex = (sal_uInt16)-1;
+            mnStartPageIndex = sal_uInt16(-1);
             return true;
         }
 
@@ -641,7 +640,7 @@ bool Outliner::SearchAndReplaceAll()
             if (mpSearchItem->GetCommand() == SvxSearchCmd::FIND_ALL && comphelper::LibreOfficeKit::isActive() && bFoundMatch && aSelections.size() == 1)
             {
                 // Without this, RememberStartPosition() will think it already has a remembered position.
-                mnStartPageIndex = (sal_uInt16)-1;
+                mnStartPageIndex = sal_uInt16(-1);
 
                 RememberStartPosition();
 
@@ -658,7 +657,7 @@ bool Outliner::SearchAndReplaceAll()
             aTree.put("highlightAll", true);
 
             boost::property_tree::ptree aChildren;
-            for (const SearchSelection& rSelection : aSelections)
+            for (const sd::SearchSelection& rSelection : aSelections)
             {
                 boost::property_tree::ptree aChild;
                 aChild.put("part", OString::number(rSelection.m_nPage).getStr());
@@ -670,7 +669,7 @@ bool Outliner::SearchAndReplaceAll()
             std::stringstream aStream;
             boost::property_tree::write_json(aStream, aTree);
             OString aPayload = aStream.str().c_str();
-            pViewShell->GetDoc()->libreOfficeKitCallback(LOK_CALLBACK_SEARCH_RESULT_SELECTION, aPayload.getStr());
+            rSfxViewShell.libreOfficeKitViewCallback(LOK_CALLBACK_SEARCH_RESULT_SELECTION, aPayload.getStr());
         }
     }
 
@@ -680,43 +679,48 @@ bool Outliner::SearchAndReplaceAll()
     {
         // Find-all, tiled rendering and we have at least one match.
         OString aPayload = OString::number(mnStartPageIndex);
-        pViewShell->GetDoc()->libreOfficeKitCallback(LOK_CALLBACK_SET_PART, aPayload.getStr());
+        SfxViewShell& rSfxViewShell = pViewShell->GetViewShellBase();
+        rSfxViewShell.libreOfficeKitViewCallback(LOK_CALLBACK_SET_PART, aPayload.getStr());
 
         // Emit a selection callback here:
         // 1) The original one is no longer valid, as we there was a SET_PART in between
         // 2) The underlying editeng will only talk about the first match till
         // it doesn't support multi-selection.
         std::vector<OString> aRectangles;
-        for (const SearchSelection& rSelection : aSelections)
+        for (const sd::SearchSelection& rSelection : aSelections)
         {
             if (rSelection.m_nPage == mnStartPageIndex)
                 aRectangles.push_back(rSelection.m_aRectangles);
         }
         OString sRectangles = comphelper::string::join("; ", aRectangles);
-        pViewShell->GetDoc()->libreOfficeKitCallback(LOK_CALLBACK_TEXT_SELECTION, sRectangles.getStr());
+        rSfxViewShell.libreOfficeKitViewCallback(LOK_CALLBACK_TEXT_SELECTION, sRectangles.getStr());
     }
 
-    mnStartPageIndex = (sal_uInt16)-1;
+    mnStartPageIndex = sal_uInt16(-1);
 
     return bRet;
 }
 
-bool Outliner::SearchAndReplaceOnce(std::vector<SearchSelection>* pSelections)
+bool SdOutliner::SearchAndReplaceOnce(std::vector<sd::SearchSelection>* pSelections)
 {
     DetectChange ();
 
     OutlinerView* pOutlinerView = mpImpl->GetOutlinerView();
-    if (!pOutlinerView)
-        return true; // end of search
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
 
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
+    if (!pOutlinerView || !GetEditEngine().HasView(&pOutlinerView->GetEditView()))
+    {
+        mpImpl->ProvideOutlinerView(*this, pViewShell, mpWindow);
+        pOutlinerView = mpImpl->GetOutlinerView();
+    }
+
     if (pViewShell != nullptr)
     {
         mpView = pViewShell->GetView();
         mpWindow = pViewShell->GetActiveWindow();
         pOutlinerView->SetWindow(mpWindow);
 
-        if( nullptr != dynamic_cast< const DrawViewShell *>( pViewShell.get() ))
+        if( nullptr != dynamic_cast< const sd::DrawViewShell *>( pViewShell.get() ))
         {
             // When replacing we first check if there is a selection
             // indicating a match.  If there is then replace it.  The
@@ -757,11 +761,11 @@ bool Outliner::SearchAndReplaceOnce(std::vector<SearchSelection>* pSelections)
                     }
 
                     if (meMode == SEARCH)
-                        nMatchCount = pOutlinerView->StartSearchAndReplace(*mpSearchItem);
+                        pOutlinerView->StartSearchAndReplace(*mpSearchItem);
                 }
             }
         }
-        else if( nullptr != dynamic_cast< const OutlineViewShell *>( pViewShell.get() ))
+        else if( nullptr != dynamic_cast< const sd::OutlineViewShell *>( pViewShell.get() ))
         {
             mpDrawDocument->GetDocSh()->SetWaitCursor(false);
             // The following loop is executed more than once only when a
@@ -788,18 +792,30 @@ bool Outliner::SearchAndReplaceOnce(std::vector<SearchSelection>* pSelections)
 
     if (pViewShell && comphelper::LibreOfficeKit::isActive() && mbStringFound)
     {
-        std::vector<Rectangle> aLogicRects;
+        std::vector<::tools::Rectangle> aLogicRects;
         pOutlinerView->GetSelectionRectangles(aLogicRects);
 
+        // convert to twips if in 100thmm (seems as if LibreOfficeKit is based on twips?). Do this
+        // here where we have the only place needing this, *not* in ImpEditView::GetSelectionRectangles
+        // which makes that method unusable for others
+        if (pOutlinerView->GetWindow() && MapUnit::Map100thMM == pOutlinerView->GetWindow()->GetMapMode().GetMapUnit())
+        {
+            for (tools::Rectangle& rRectangle : aLogicRects)
+            {
+                rRectangle = OutputDevice::LogicToLogic(rRectangle, MapMode(MapUnit::Map100thMM), MapMode(MapUnit::MapTwip));
+            }
+        }
+
         std::vector<OString> aLogicRectStrings;
-        std::transform(aLogicRects.begin(), aLogicRects.end(), std::back_inserter(aLogicRectStrings), [](const Rectangle& rRectangle) { return rRectangle.toString(); });
+        std::transform(aLogicRects.begin(), aLogicRects.end(), std::back_inserter(aLogicRectStrings), [](const ::tools::Rectangle& rRectangle) { return rRectangle.toString(); });
         OString sRectangles = comphelper::string::join("; ", aLogicRectStrings);
 
         if (!pSelections)
         {
             // notify LibreOfficeKit about changed page
             OString aPayload = OString::number(maCurrentPosition.mnPageIndex);
-            pViewShell->GetDoc()->libreOfficeKitCallback(LOK_CALLBACK_SET_PART, aPayload.getStr());
+            SfxViewShell& rSfxViewShell = pViewShell->GetViewShellBase();
+            rSfxViewShell.libreOfficeKitViewCallback(LOK_CALLBACK_SET_PART, aPayload.getStr());
 
             // also about search result selections
             boost::property_tree::ptree aTree;
@@ -816,11 +832,14 @@ bool Outliner::SearchAndReplaceOnce(std::vector<SearchSelection>* pSelections)
             std::stringstream aStream;
             boost::property_tree::write_json(aStream, aTree);
             aPayload = aStream.str().c_str();
-            pViewShell->GetDoc()->libreOfficeKitCallback(LOK_CALLBACK_SEARCH_RESULT_SELECTION, aPayload.getStr());
+            rSfxViewShell.libreOfficeKitViewCallback(LOK_CALLBACK_SEARCH_RESULT_SELECTION, aPayload.getStr());
         }
         else
         {
-            pSelections->push_back(SearchSelection(maCurrentPosition.mnPageIndex, sRectangles));
+            sd::SearchSelection aSelection(maCurrentPosition.mnPageIndex, sRectangles);
+            bool bDuplicate = !pSelections->empty() && pSelections->back() == aSelection;
+            if (!bDuplicate)
+                pSelections->push_back(aSelection);
         }
     }
 
@@ -830,16 +849,16 @@ bool Outliner::SearchAndReplaceOnce(std::vector<SearchSelection>* pSelections)
 /** Try to detect whether the document or the view (shell) has changed since
     the last time <member>StartSearchAndReplace()</member> has been called.
 */
-void Outliner::DetectChange()
+void SdOutliner::DetectChange()
 {
-    ::sd::outliner::IteratorPosition aPosition (maCurrentPosition);
+    sd::outliner::IteratorPosition aPosition (maCurrentPosition);
 
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
-    std::shared_ptr<DrawViewShell> pDrawViewShell (
-        std::dynamic_pointer_cast<DrawViewShell>(pViewShell));
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
+    std::shared_ptr<sd::DrawViewShell> pDrawViewShell (
+        std::dynamic_pointer_cast<sd::DrawViewShell>(pViewShell));
 
     // Detect whether the view has been switched from the outside.
-    if (pDrawViewShell.get() != nullptr
+    if (pDrawViewShell != nullptr
         && (aPosition.meEditMode != pDrawViewShell->GetEditMode()
             || aPosition.mePageKind != pDrawViewShell->GetPageKind()))
     {
@@ -853,7 +872,7 @@ void Outliner::DetectChange()
         SetUpdateMode(false);
         OutlinerView* pOutlinerView = mpImpl->GetOutlinerView();
         if (pOutlinerView != nullptr)
-            pOutlinerView->SetOutputArea( Rectangle( Point(), Size(1, 1) ) );
+            pOutlinerView->SetOutputArea( ::tools::Rectangle( Point(), Size(1, 1) ) );
         if (meMode == SPELL)
             SetPaperSize( Size(1, 1) );
         SetText(OUString(), GetParagraph(0));
@@ -861,7 +880,7 @@ void Outliner::DetectChange()
         RememberStartPosition ();
 
         mnPageCount = mpDrawDocument->GetSdPageCount(pDrawViewShell->GetPageKind());
-        maObjectIterator = ::sd::outliner::OutlinerContainer(this).current();
+        maObjectIterator = sd::outliner::OutlinerContainer(this).current();
     }
 
     // Detect change of the set of selected objects.  If their number has
@@ -869,28 +888,28 @@ void Outliner::DetectChange()
     else if (DetectSelectionChange())
     {
         HandleChangedSelection ();
-        maObjectIterator = ::sd::outliner::OutlinerContainer(this).current();
+        maObjectIterator = sd::outliner::OutlinerContainer(this).current();
     }
 
     // Detect change of page count.  Restart search at first/last page in
     // that case.
-    else if (aPosition.meEditMode == EM_PAGE
+    else if (aPosition.meEditMode == EditMode::Page
         && mpDrawDocument->GetSdPageCount(aPosition.mePageKind) != mnPageCount)
     {
         // The number of pages has changed.
         mnPageCount = mpDrawDocument->GetSdPageCount(aPosition.mePageKind);
-        maObjectIterator = ::sd::outliner::OutlinerContainer(this).current();
+        maObjectIterator = sd::outliner::OutlinerContainer(this).current();
     }
-    else if (aPosition.meEditMode == EM_MASTERPAGE
+    else if (aPosition.meEditMode == EditMode::MasterPage
         && mpDrawDocument->GetSdPageCount(aPosition.mePageKind) != mnPageCount)
     {
         // The number of master pages has changed.
         mnPageCount = mpDrawDocument->GetSdPageCount(aPosition.mePageKind);
-        maObjectIterator = ::sd::outliner::OutlinerContainer(this).current();
+        maObjectIterator = sd::outliner::OutlinerContainer(this).current();
     }
 }
 
-bool Outliner::DetectSelectionChange()
+bool SdOutliner::DetectSelectionChange()
 {
     bool bSelectionHasChanged = false;
 
@@ -926,27 +945,27 @@ bool Outliner::DetectSelectionChange()
     return bSelectionHasChanged;
 }
 
-void Outliner::RememberStartPosition()
+void SdOutliner::RememberStartPosition()
 {
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
     if ( ! pViewShell)
     {
         OSL_ASSERT(pViewShell);
         return;
     }
 
-    if ( mnStartPageIndex != (sal_uInt16) -1 )
+    if ( mnStartPageIndex != sal_uInt16(-1) )
         return;
 
-    if( nullptr != dynamic_cast< const DrawViewShell *>( pViewShell.get() ))
+    if( nullptr != dynamic_cast< const sd::DrawViewShell *>( pViewShell.get() ))
     {
-        std::shared_ptr<DrawViewShell> pDrawViewShell (
-            std::dynamic_pointer_cast<DrawViewShell>(pViewShell));
-        if (pDrawViewShell.get() != nullptr)
+        std::shared_ptr<sd::DrawViewShell> pDrawViewShell (
+            std::dynamic_pointer_cast<sd::DrawViewShell>(pViewShell));
+        if (pDrawViewShell != nullptr)
         {
             meStartViewMode = pDrawViewShell->GetPageKind();
             meStartEditMode = pDrawViewShell->GetEditMode();
-            mnStartPageIndex = pDrawViewShell->GetCurPageId() - 1;
+            mnStartPageIndex = pDrawViewShell->GetCurPagePos();
         }
 
         if (mpView != nullptr)
@@ -957,7 +976,7 @@ void Outliner::RememberStartPosition()
                 // Try to retrieve current caret position only when there is an
                 // edited object.
                 ::Outliner* pOutliner =
-                    static_cast<DrawView*>(mpView)->GetTextEditOutliner();
+                    static_cast<sd::DrawView*>(mpView)->GetTextEditOutliner();
                 if (pOutliner!=nullptr && pOutliner->GetViewCount()>0)
                 {
                     OutlinerView* pOutlinerView = pOutliner->GetView(0);
@@ -966,7 +985,7 @@ void Outliner::RememberStartPosition()
             }
         }
     }
-    else if( nullptr != dynamic_cast< const OutlineViewShell *>( pViewShell.get() ))
+    else if( nullptr != dynamic_cast< const sd::OutlineViewShell *>( pViewShell.get() ))
     {
         // Remember the current cursor position.
         OutlinerView* pView = GetView(0);
@@ -975,30 +994,30 @@ void Outliner::RememberStartPosition()
     }
     else
     {
-        mnStartPageIndex = (sal_uInt16)-1;
+        mnStartPageIndex = sal_uInt16(-1);
     }
 }
 
-void Outliner::RestoreStartPosition()
+void SdOutliner::RestoreStartPosition()
 {
     bool bRestore = true;
     // Take a negative start page index as inidicator that restoring the
     // start position is not requested.
-    if (mnStartPageIndex == (sal_uInt16)-1 )
+    if (mnStartPageIndex == sal_uInt16(-1) )
         bRestore = false;
-    // Dont't restore when the view shell is not valid.
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
+    // Don't restore when the view shell is not valid.
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
     if (pViewShell == nullptr)
         bRestore = false;
 
     if (bRestore)
     {
-        if( nullptr != dynamic_cast< const DrawViewShell *>( pViewShell.get() ))
+        if( nullptr != dynamic_cast< const sd::DrawViewShell *>( pViewShell.get() ))
         {
-            std::shared_ptr<DrawViewShell> pDrawViewShell (
-                std::dynamic_pointer_cast<DrawViewShell>(pViewShell));
+            std::shared_ptr<sd::DrawViewShell> pDrawViewShell (
+                std::dynamic_pointer_cast<sd::DrawViewShell>(pViewShell));
             SetViewMode (meStartViewMode);
-            if (pDrawViewShell.get() != nullptr)
+            if (pDrawViewShell != nullptr)
             {
                 SetPage (meStartEditMode, mnStartPageIndex);
                 mpObj = mpStartEditedObject;
@@ -1011,7 +1030,7 @@ void Outliner::RestoreStartPosition()
                 }
             }
         }
-        else if( nullptr != dynamic_cast< const OutlineViewShell *>( pViewShell.get() ))
+        else if( nullptr != dynamic_cast< const sd::OutlineViewShell *>( pViewShell.get() ))
         {
             // Set cursor to its old position.
             OutlinerView* pView = GetView(0);
@@ -1028,7 +1047,7 @@ void Outliner::RestoreStartPosition()
     expressed by setting one of the flags <member>mbFoundObject</member> or
     <member>mbEndOfSearch</member> to <TRUE/>.
 */
-void Outliner::ProvideNextTextObject()
+void SdOutliner::ProvideNextTextObject()
 {
     mbEndOfSearch = false;
     mbFoundObject = false;
@@ -1040,17 +1059,17 @@ void Outliner::ProvideNextTextObject()
     }
     catch (const css::uno::Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("sd.view");
     }
     SetUpdateMode(false);
     OutlinerView* pOutlinerView = mpImpl->GetOutlinerView();
     if (pOutlinerView != nullptr)
-        pOutlinerView->SetOutputArea( Rectangle( Point(), Size(1, 1) ) );
+        pOutlinerView->SetOutputArea( ::tools::Rectangle( Point(), Size(1, 1) ) );
     if (meMode == SPELL)
         SetPaperSize( Size(1, 1) );
     SetText(OUString(), GetParagraph(0));
 
-    mpTextObj = nullptr;
+    mpSearchSpellTextObj = nullptr;
 
     // Iterate until a valid text object has been found or the search ends.
     do
@@ -1058,11 +1077,15 @@ void Outliner::ProvideNextTextObject()
         mpObj = nullptr;
         mpParaObj = nullptr;
 
-        if (maObjectIterator != ::sd::outliner::OutlinerContainer(this).end())
+        if (maObjectIterator != sd::outliner::OutlinerContainer(this).end())
         {
             maCurrentPosition = *maObjectIterator;
+
+            // LOK: do not descent to notes or master pages when searching
+            bool bForbiddenPage = comphelper::LibreOfficeKit::isActive() && (maCurrentPosition.mePageKind != PageKind::Standard || maCurrentPosition.meEditMode != EditMode::Page);
+
             // Switch to the current object only if it is a valid text object.
-            if (IsValidTextObject (maCurrentPosition))
+            if (!bForbiddenPage && IsValidTextObject(maCurrentPosition))
             {
                 // Don't set yet in case of searching: the text object may not match.
                 if (meMode != SEARCH)
@@ -1072,11 +1095,11 @@ void Outliner::ProvideNextTextObject()
             }
             ++maObjectIterator;
 
-            if (mpObj != nullptr)
+            if (mpObj)
             {
-                PutTextIntoOutliner ();
+                PutTextIntoOutliner();
 
-                std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
+                std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
                 if (pViewShell != nullptr)
                     switch (meMode)
                     {
@@ -1105,9 +1128,9 @@ void Outliner::ProvideNextTextObject()
     while ( ! (mbFoundObject || mbEndOfSearch));
 }
 
-void Outliner::EndOfSearch()
+void SdOutliner::EndOfSearch()
 {
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
     if ( ! pViewShell)
     {
         OSL_ASSERT(pViewShell);
@@ -1117,7 +1140,7 @@ void Outliner::EndOfSearch()
     // Before we display a dialog we first jump to where the last valid text
     // object was found.  All page and view mode switching since then was
     // temporary and should not be visible to the user.
-    if(  nullptr == dynamic_cast< const OutlineViewShell *>( pViewShell.get() ))
+    if(  nullptr == dynamic_cast< const sd::OutlineViewShell *>( pViewShell.get() ))
         SetObject (maLastValidPosition);
 
     if (mbRestrictSearchToSelection)
@@ -1136,8 +1159,8 @@ void Outliner::EndOfSearch()
         {
             mbMatchMayExist = false;
             // Everything back to beginning (or end?) of the document.
-            maObjectIterator = ::sd::outliner::OutlinerContainer(this).begin();
-            if( nullptr != dynamic_cast< const OutlineViewShell *>( pViewShell.get() ))
+            maObjectIterator = sd::outliner::OutlinerContainer(this).begin();
+            if( nullptr != dynamic_cast< const sd::OutlineViewShell *>( pViewShell.get() ))
             {
                 // Set cursor to first character of the document.
                 OutlinerView* pOutlinerView = mpImpl->GetOutlinerView();
@@ -1155,17 +1178,19 @@ void Outliner::EndOfSearch()
     }
 }
 
-void Outliner::ShowEndOfSearchDialog()
+void SdOutliner::ShowEndOfSearchDialog()
 {
-    mbWholeDocumentProcessed = true;
-
     if (meMode == SEARCH)
     {
         if (!mbStringFound)
         {
-            SvxSearchDialogWrapper::SetSearchLabel(SL_NotFound);
-            mpDrawDocument->libreOfficeKitCallback(LOK_CALLBACK_SEARCH_NOT_FOUND,
-                    mpSearchItem->GetSearchString().toUtf8().getStr());
+            SvxSearchDialogWrapper::SetSearchLabel(SearchLabel::NotFound);
+            std::shared_ptr<sd::ViewShell> pViewShell(mpWeakViewShell.lock());
+            if (pViewShell)
+            {
+                SfxViewShell& rSfxViewShell = pViewShell->GetViewShellBase();
+                rSfxViewShell.libreOfficeKitViewCallback(LOK_CALLBACK_SEARCH_NOT_FOUND, mpSearchItem->GetSearchString().toUtf8().getStr());
+            }
         }
 
         // don't do anything else for search
@@ -1174,17 +1199,18 @@ void Outliner::ShowEndOfSearchDialog()
 
     OUString aString;
     if (mpView->AreObjectsMarked())
-        aString = SD_RESSTR(STR_END_SPELLING_OBJ);
+        aString = SdResId(STR_END_SPELLING_OBJ);
     else
-        aString = SD_RESSTR(STR_END_SPELLING);
+        aString = SdResId(STR_END_SPELLING);
 
-    // Show the message in an info box that is modal with respect to the
-    // whole application.
-    ScopedVclPtrInstance< MessageDialog > aInfoBox(nullptr, aString, VCL_MESSAGE_INFO);
-    ShowModalMessageBox (*aInfoBox.get());
+    // Show the message in an info box that is modal with respect to the whole application.
+    VclPtr<vcl::Window> xParent(GetMessageBoxParent());
+    std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(xParent ? xParent->GetFrameWeld() : nullptr,
+                                                  VclMessageType::Info, VclButtonsType::Ok, aString));
+    xInfoBox->run();
 }
 
-bool Outliner::ShowWrapArroundDialog()
+bool SdOutliner::ShowWrapArroundDialog()
 {
     // Determine whether to show the dialog.
     if (mpSearchItem)
@@ -1194,9 +1220,9 @@ bool Outliner::ShowWrapArroundDialog()
         if (nCommand == SvxSearchCmd::REPLACE || nCommand == SvxSearchCmd::FIND)
         {
             if (mbDirectionIsForward)
-                SvxSearchDialogWrapper::SetSearchLabel(SL_End);
+                SvxSearchDialogWrapper::SetSearchLabel(SearchLabel::End);
             else
-                SvxSearchDialogWrapper::SetSearchLabel(SL_Start);
+                SvxSearchDialogWrapper::SetSearchLabel(SearchLabel::Start);
 
             return true;
         }
@@ -1209,35 +1235,36 @@ bool Outliner::ShowWrapArroundDialog()
         return false;
 
     // The question text depends on the search direction.
-    bool bImpress = mpDrawDocument && mpDrawDocument->GetDocumentType() == DOCUMENT_TYPE_IMPRESS;
+    bool bImpress = mpDrawDocument && mpDrawDocument->GetDocumentType() == DocumentType::Impress;
 
-    sal_uInt16 nStringId;
+    const char* pStringId;
     if (mbDirectionIsForward)
-        nStringId = bImpress ? STR_SAR_WRAP_FORWARD : STR_SAR_WRAP_FORWARD_DRAW;
+        pStringId = bImpress ? STR_SAR_WRAP_FORWARD : STR_SAR_WRAP_FORWARD_DRAW;
     else
-        nStringId = bImpress ? STR_SAR_WRAP_BACKWARD : STR_SAR_WRAP_BACKWARD_DRAW;
+        pStringId = bImpress ? STR_SAR_WRAP_BACKWARD : STR_SAR_WRAP_BACKWARD_DRAW;
 
     // Pop up question box that asks the user whether to wrap around.
     // The dialog is made modal with respect to the whole application.
-    ScopedVclPtrInstance<QueryBox> aQuestionBox(nullptr, WB_YES_NO | WB_DEF_YES, SD_RESSTR(nStringId));
-    aQuestionBox->SetImage(QueryBox::GetStandardImage());
-    sal_uInt16 nBoxResult = ShowModalMessageBox(*aQuestionBox.get());
+    VclPtr<vcl::Window> xParent(GetMessageBoxParent());
+    std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(xParent ? xParent->GetFrameWeld() : nullptr,
+                                                   VclMessageType::Question, VclButtonsType::YesNo, SdResId(pStringId)));
+    sal_uInt16 nBoxResult = xQueryBox->run();
 
     return (nBoxResult == RET_YES);
 }
 
-bool Outliner::IsValidTextObject (const ::sd::outliner::IteratorPosition& rPosition)
+bool SdOutliner::IsValidTextObject (const sd::outliner::IteratorPosition& rPosition)
 {
     SdrTextObj* pObject = dynamic_cast< SdrTextObj* >( rPosition.mxObject.get() );
     return (pObject != nullptr) && pObject->HasText() && ! pObject->IsEmptyPresObj();
 }
 
-void Outliner::PutTextIntoOutliner()
+void SdOutliner::PutTextIntoOutliner()
 {
-    mpTextObj = dynamic_cast<SdrTextObj*>( mpObj );
-    if ( mpTextObj && mpTextObj->HasText() && !mpTextObj->IsEmptyPresObj() )
+    mpSearchSpellTextObj = dynamic_cast<SdrTextObj*>( mpObj );
+    if ( mpSearchSpellTextObj && mpSearchSpellTextObj->HasText() && !mpSearchSpellTextObj->IsEmptyPresObj() )
     {
-        SdrText* pText = mpTextObj->getText( maCurrentPosition.mnText );
+        SdrText* pText = mpSearchSpellTextObj->getText( maCurrentPosition.mnText );
         mpParaObj = pText ? pText->GetOutlinerParaObject() : nullptr;
 
         if (mpParaObj != nullptr)
@@ -1249,30 +1276,22 @@ void Outliner::PutTextIntoOutliner()
     }
     else
     {
-        mpTextObj = nullptr;
+        mpSearchSpellTextObj = nullptr;
     }
 }
 
-void Outliner::PrepareSpellCheck()
+void SdOutliner::PrepareSpellCheck()
 {
     EESpellState eState = HasSpellErrors();
-    DBG_ASSERT(eState != EE_SPELL_NOSPELLER, "No SpellChecker");
+    DBG_ASSERT(eState != EESpellState::NoSpeller, "No SpellChecker");
 
-    if (eState == EE_SPELL_NOLANGUAGE)
-    {
-        mbError = true;
-        mbEndOfSearch = true;
-        ScopedVclPtrInstance<MessageDialog> aErrorBox (
-            nullptr, SD_RESSTR(STR_NOLANGUAGE));
-        ShowModalMessageBox (*aErrorBox.get());
-    }
-    else if (eState != EE_SPELL_OK)
+    if (eState != EESpellState::Ok)
     {
         // When spell checking we have to test whether we have processed the
         // whole document and have reached the start page again.
         if (meMode == SPELL)
         {
-            if (maSearchStartPosition == ::sd::outliner::Iterator())
+            if (maSearchStartPosition == sd::outliner::Iterator())
                 // Remember the position of the first text object so that we
                 // know when we have processed the whole document.
                 maSearchStartPosition = maObjectIterator;
@@ -1286,7 +1305,7 @@ void Outliner::PrepareSpellCheck()
     }
 }
 
-void Outliner::PrepareSearchAndReplace()
+void SdOutliner::PrepareSearchAndReplace()
 {
     if (HasText( *mpSearchItem ))
     {
@@ -1307,12 +1326,12 @@ void Outliner::PrepareSearchAndReplace()
     }
 }
 
-void Outliner::SetViewMode (PageKind ePageKind)
+void SdOutliner::SetViewMode (PageKind ePageKind)
 {
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
-    std::shared_ptr<DrawViewShell> pDrawViewShell(
-        std::dynamic_pointer_cast<DrawViewShell>(pViewShell));
-    if (pDrawViewShell.get()!=nullptr && ePageKind != pDrawViewShell->GetPageKind())
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
+    std::shared_ptr<sd::DrawViewShell> pDrawViewShell(
+        std::dynamic_pointer_cast<sd::DrawViewShell>(pViewShell));
+    if (pDrawViewShell != nullptr && ePageKind != pDrawViewShell->GetPageKind())
     {
         // Restore old edit mode.
         pDrawViewShell->ChangeEditMode(mpImpl->meOriginalEditMode, false);
@@ -1321,33 +1340,33 @@ void Outliner::SetViewMode (PageKind ePageKind)
         OUString sViewURL;
         switch (ePageKind)
         {
-            case PK_STANDARD:
+            case PageKind::Standard:
             default:
-                sViewURL = framework::FrameworkHelper::msImpressViewURL;
+                sViewURL = sd::framework::FrameworkHelper::msImpressViewURL;
                 break;
-            case PK_NOTES:
-                sViewURL = framework::FrameworkHelper::msNotesViewURL;
+            case PageKind::Notes:
+                sViewURL = sd::framework::FrameworkHelper::msNotesViewURL;
                 break;
-            case PK_HANDOUT:
-                sViewURL = framework::FrameworkHelper::msHandoutViewURL;
+            case PageKind::Handout:
+                sViewURL = sd::framework::FrameworkHelper::msHandoutViewURL;
                 break;
         }
         // The text object iterator is destroyed when the shells are
         // switched but we need it so save it and restore it afterwards.
-        ::sd::outliner::Iterator aIterator (maObjectIterator);
+        sd::outliner::Iterator aIterator (maObjectIterator);
         bool bMatchMayExist = mbMatchMayExist;
 
-        ViewShellBase& rBase = pViewShell->GetViewShellBase();
-        SetViewShell(std::shared_ptr<ViewShell>());
-        framework::FrameworkHelper::Instance(rBase)->RequestView(
+        sd::ViewShellBase& rBase = pViewShell->GetViewShellBase();
+        SetViewShell(std::shared_ptr<sd::ViewShell>());
+        sd::framework::FrameworkHelper::Instance(rBase)->RequestView(
             sViewURL,
-            framework::FrameworkHelper::msCenterPaneURL);
+            sd::framework::FrameworkHelper::msCenterPaneURL);
 
         // Force (well, request) a synchronous update of the configuration.
         // In a better world we would handle the asynchronous view update
         // instead.  But that would involve major restructuring of the
         // Outliner code.
-        framework::FrameworkHelper::Instance(rBase)->RequestSynchronousUpdate();
+        sd::framework::FrameworkHelper::Instance(rBase)->RequestSynchronousUpdate();
         SetViewShell(rBase.GetMainViewShell());
 
         // Switching to another view shell has intermediatly called
@@ -1364,22 +1383,22 @@ void Outliner::SetViewMode (PageKind ePageKind)
 
         // Save edit mode so that it can be restored when switching the view
         // shell again.
-        pDrawViewShell = std::dynamic_pointer_cast<DrawViewShell>(pViewShell);
-        OSL_ASSERT(pDrawViewShell.get()!=nullptr);
-        if (pDrawViewShell.get() != nullptr)
+        pDrawViewShell = std::dynamic_pointer_cast<sd::DrawViewShell>(pViewShell);
+        OSL_ASSERT(pDrawViewShell != nullptr);
+        if (pDrawViewShell != nullptr)
             mpImpl->meOriginalEditMode = pDrawViewShell->GetEditMode();
     }
 }
 
-void Outliner::SetPage (EditMode eEditMode, sal_uInt16 nPageIndex)
+void SdOutliner::SetPage (EditMode eEditMode, sal_uInt16 nPageIndex)
 {
     if ( ! mbRestrictSearchToSelection)
     {
-        std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
-        std::shared_ptr<DrawViewShell> pDrawViewShell(
-            std::dynamic_pointer_cast<DrawViewShell>(pViewShell));
-        OSL_ASSERT(pDrawViewShell.get()!=nullptr);
-        if (pDrawViewShell.get() != nullptr)
+        std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
+        std::shared_ptr<sd::DrawViewShell> pDrawViewShell(
+            std::dynamic_pointer_cast<sd::DrawViewShell>(pViewShell));
+        OSL_ASSERT(pDrawViewShell != nullptr);
+        if (pDrawViewShell != nullptr)
         {
             pDrawViewShell->ChangeEditMode(eEditMode, false);
             pDrawViewShell->SwitchPage(nPageIndex);
@@ -1387,18 +1406,18 @@ void Outliner::SetPage (EditMode eEditMode, sal_uInt16 nPageIndex)
     }
 }
 
-void Outliner::EnterEditMode (bool bGrabFocus)
+void SdOutliner::EnterEditMode (bool bGrabFocus)
 {
     OutlinerView* pOutlinerView = mpImpl->GetOutlinerView();
-    if (pOutlinerView && mpTextObj)
+    if (pOutlinerView && mpSearchSpellTextObj)
     {
-        pOutlinerView->SetOutputArea( Rectangle( Point(), Size(1, 1)));
-        SetPaperSize( mpTextObj->GetLogicRect().GetSize() );
+        pOutlinerView->SetOutputArea( ::tools::Rectangle( Point(), Size(1, 1)));
+        SetPaperSize( mpSearchSpellTextObj->GetLogicRect().GetSize() );
         SdrPageView* pPV = mpView->GetSdrPageView();
 
         // Make FuText the current function.
         SfxUInt16Item aItem (SID_TEXTEDIT, 1);
-        std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
+        std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
         pViewShell->GetDispatcher()->ExecuteList(SID_TEXTEDIT,
                 SfxCallMode::SYNCHRON | SfxCallMode::RECORD, { &aItem });
 
@@ -1406,21 +1425,20 @@ void Outliner::EnterEditMode (bool bGrabFocus)
         // object that is put into edit mode would have also to be selected.
         // Starting the text edit mode is not enough so we do it here by
         // hand.
-        mbExpectingSelectionChangeEvent = true;
         mpView->UnmarkAllObj (pPV);
-        mpView->MarkObj (mpTextObj, pPV);
+        mpView->MarkObj (mpSearchSpellTextObj, pPV);
 
-        mpTextObj->setActiveText( mnText );
+        mpSearchSpellTextObj->setActiveText( mnText );
 
         // Turn on the edit mode for the text object.
-        mpView->SdrBeginTextEdit(mpTextObj, pPV, mpWindow, true, this, pOutlinerView, true, true, bGrabFocus);
+        mpView->SdrBeginTextEdit(mpSearchSpellTextObj, pPV, mpWindow, true, this, pOutlinerView, true, true, bGrabFocus);
 
         SetUpdateMode(true);
         mbFoundObject = true;
     }
 }
 
-ESelection Outliner::GetSearchStartPosition()
+ESelection SdOutliner::GetSearchStartPosition()
 {
     ESelection aPosition;
     if (mbDirectionIsForward)
@@ -1446,18 +1464,18 @@ ESelection Outliner::GetSearchStartPosition()
     return aPosition;
 }
 
-bool Outliner::HasNoPreviousMatch()
+bool SdOutliner::HasNoPreviousMatch()
 {
     OutlinerView* pOutlinerView = mpImpl->GetOutlinerView();
 
-    DBG_ASSERT (pOutlinerView!=nullptr, "outline view in Outliner::HasNoPreviousMatch is NULL");
+    DBG_ASSERT (pOutlinerView!=nullptr, "outline view in SdOutliner::HasNoPreviousMatch is NULL");
 
     // Detect whether the cursor stands at the beginning
     // resp. at the end of the text.
-    return pOutlinerView->GetSelection().IsEqual(GetSearchStartPosition ());
+    return pOutlinerView->GetSelection() == GetSearchStartPosition();
 }
 
-bool Outliner::HandleFailedSearch()
+bool SdOutliner::HandleFailedSearch()
 {
     bool bContinueSearch = false;
 
@@ -1470,7 +1488,7 @@ bool Outliner::HandleFailedSearch()
         if (HasNoPreviousMatch ())
         {
             // No match found in the whole presentation.
-            SvxSearchDialogWrapper::SetSearchLabel(SL_NotFound);
+            SvxSearchDialogWrapper::SetSearchLabel(SearchLabel::NotFound);
         }
 
         else
@@ -1484,18 +1502,18 @@ bool Outliner::HandleFailedSearch()
     return bContinueSearch;
 }
 
-SdrObject* Outliner::SetObject (
-    const ::sd::outliner::IteratorPosition& rPosition)
+SdrObject* SdOutliner::SetObject (
+    const sd::outliner::IteratorPosition& rPosition)
 {
     SetViewMode (rPosition.mePageKind);
-    SetPage (rPosition.meEditMode, (sal_uInt16)rPosition.mnPageIndex);
+    SetPage (rPosition.meEditMode, static_cast<sal_uInt16>(rPosition.mnPageIndex));
     mnText = rPosition.mnText;
     return rPosition.mxObject.get();
 }
 
-void Outliner::SetViewShell (const std::shared_ptr<ViewShell>& rpViewShell)
+void SdOutliner::SetViewShell (const std::shared_ptr<sd::ViewShell>& rpViewShell)
 {
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
     if (pViewShell != rpViewShell)
     {
         // Set the new view shell.
@@ -1522,7 +1540,7 @@ void Outliner::SetViewShell (const std::shared_ptr<ViewShell>& rpViewShell)
     }
 }
 
-void Outliner::HandleChangedSelection()
+void SdOutliner::HandleChangedSelection()
 {
     maMarkListCopy.clear();
     mbRestrictSearchToSelection = mpView->AreObjectsMarked();
@@ -1536,7 +1554,7 @@ void Outliner::HandleChangedSelection()
             maMarkListCopy.clear();
             maMarkListCopy.reserve (nCount);
             for (size_t i=0; i<nCount; ++i)
-                maMarkListCopy.push_back (rMarkList.GetMark(i)->GetMarkedSdrObj ());
+                maMarkListCopy.emplace_back(rMarkList.GetMark(i)->GetMarkedSdrObj ());
         }
         else
             // No marked object.  Is this case possible?
@@ -1544,11 +1562,11 @@ void Outliner::HandleChangedSelection()
     }
 }
 
-void Outliner::StartConversion( sal_Int16 nSourceLanguage,  sal_Int16 nTargetLanguage,
+void SdOutliner::StartConversion( LanguageType nSourceLanguage,  LanguageType nTargetLanguage,
         const vcl::Font *pTargetFont, sal_Int32 nOptions, bool bIsInteractive )
 {
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
-    bool bMultiDoc = nullptr != dynamic_cast< const DrawViewShell *>( pViewShell.get() );
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
+    bool bMultiDoc = nullptr != dynamic_cast< const sd::DrawViewShell *>( pViewShell.get() );
 
     meMode = TEXT_CONVERSION;
     mbDirectionIsForward = true;
@@ -1575,7 +1593,7 @@ void Outliner::StartConversion( sal_Int16 nSourceLanguage,  sal_Int16 nTargetLan
 /** Prepare to do a text conversion on the current text object. This
     includes putting it into edit mode.
 */
-void Outliner::PrepareConversion()
+void SdOutliner::PrepareConversion()
 {
     SetUpdateMode(true);
     if( HasConvertibleTextPortion( mnConversionLanguage ) )
@@ -1584,7 +1602,7 @@ void Outliner::PrepareConversion()
         mbStringFound = true;
         mbMatchMayExist = true;
 
-        EnterEditMode ();
+        EnterEditMode(true);
 
         mpDrawDocument->GetDocSh()->SetWaitCursor( false );
         // Start search at the right end of the current object's text
@@ -1596,15 +1614,15 @@ void Outliner::PrepareConversion()
     }
 }
 
-void Outliner::BeginConversion()
+void SdOutliner::BeginConversion()
 {
-    SetRefDevice( SD_MOD()->GetRefDevice( *mpDrawDocument->GetDocSh() ) );
+    SetRefDevice( SD_MOD()->GetVirtualRefDevice() );
 
-    ViewShellBase* pBase = dynamic_cast<ViewShellBase*>( SfxViewShell::Current() );
+    sd::ViewShellBase* pBase = dynamic_cast<sd::ViewShellBase*>( SfxViewShell::Current() );
     if (pBase != nullptr)
         SetViewShell (pBase->GetMainViewShell());
 
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
     if (pViewShell)
     {
         mbStringFound = false;
@@ -1614,8 +1632,8 @@ void Outliner::BeginConversion()
         // the current position.
         mbMatchMayExist = true;
 
-        maObjectIterator = ::sd::outliner::Iterator();
-        maSearchStartPosition = ::sd::outliner::Iterator();
+        maObjectIterator = sd::outliner::Iterator();
+        maSearchStartPosition = sd::outliner::Iterator();
         RememberStartPosition();
 
         mpImpl->ProvideOutlinerView(*this, pViewShell, mpWindow);
@@ -1625,15 +1643,15 @@ void Outliner::BeginConversion()
     ClearModifyFlag();
 }
 
-void Outliner::EndConversion()
+void SdOutliner::EndConversion()
 {
     EndSpelling();
 }
 
-bool Outliner::ConvertNextDocument()
+bool SdOutliner::ConvertNextDocument()
 {
-    std::shared_ptr<ViewShell> pViewShell (mpWeakViewShell.lock());
-    if (pViewShell && nullptr != dynamic_cast< const OutlineViewShell *>( pViewShell.get() ) )
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
+    if (dynamic_cast< const sd::OutlineViewShell *>( pViewShell.get() ) )
         return false;
 
     mpDrawDocument->GetDocSh()->SetWaitCursor( true );
@@ -1666,7 +1684,7 @@ bool Outliner::ConvertNextDocument()
     return !mbEndOfSearch;
 }
 
-sal_uInt16 Outliner::ShowModalMessageBox (Dialog& rMessageBox)
+VclPtr<vcl::Window> SdOutliner::GetMessageBoxParent()
 {
     // We assume that the parent of the given message box is NULL, i.e. it is
     // modal with respect to the top application window. However, this
@@ -1685,7 +1703,7 @@ sal_uInt16 Outliner::ShowModalMessageBox (Dialog& rMessageBox)
 
         case SPELL:
             pChildWindow = SfxViewFrame::Current()->GetChildWindow(
-                SpellDialogChildWindow::GetChildWindowId());
+                sd::SpellDialogChildWindow::GetChildWindowId());
             break;
 
         case TEXT_CONVERSION:
@@ -1696,28 +1714,24 @@ sal_uInt16 Outliner::ShowModalMessageBox (Dialog& rMessageBox)
 
     if (pChildWindow != nullptr)
         pSearchDialog = pChildWindow->GetWindow();
-    if (pSearchDialog != nullptr)
-        pSearchDialog->EnableInput(false);
 
-    sal_uInt16 nResult = rMessageBox.Execute();
+    if (pSearchDialog)
+        return pSearchDialog;
 
-    // Unlock the search dialog.
-    if (pSearchDialog != nullptr)
-        pSearchDialog->EnableInput();
-
-    return nResult;
+    std::shared_ptr<sd::ViewShell> pViewShell (mpWeakViewShell.lock());
+    return pViewShell->GetActiveWindow();
 }
 
-//===== Outliner::Implementation ==============================================
+//===== SdOutliner::Implementation ==============================================
 
-Outliner::Implementation::Implementation()
-    : meOriginalEditMode(EM_PAGE),
+SdOutliner::Implementation::Implementation()
+    : meOriginalEditMode(EditMode::Page),
       mbOwnOutlineView(false),
       mpOutlineView(nullptr)
 {
 }
 
-Outliner::Implementation::~Implementation()
+SdOutliner::Implementation::~Implementation()
 {
     if (mbOwnOutlineView && mpOutlineView!=nullptr)
     {
@@ -1732,48 +1746,53 @@ Outliner::Implementation::~Implementation()
     ProvideOutlinerView().  This is necessary to support the spell checker
     which can not cope with exchanging the OutlinerView.
 */
-void Outliner::Implementation::ProvideOutlinerView (
+void SdOutliner::Implementation::ProvideOutlinerView (
     Outliner& rOutliner,
-    const std::shared_ptr<ViewShell>& rpViewShell,
+    const std::shared_ptr<sd::ViewShell>& rpViewShell,
     vcl::Window* pWindow)
 {
-    if (rpViewShell.get() != nullptr)
+    if (rpViewShell != nullptr)
     {
         switch (rpViewShell->GetShellType())
         {
-            case ViewShell::ST_DRAW:
-            case ViewShell::ST_IMPRESS:
-            case ViewShell::ST_NOTES:
-            case ViewShell::ST_HANDOUT:
+            case sd::ViewShell::ST_DRAW:
+            case sd::ViewShell::ST_IMPRESS:
+            case sd::ViewShell::ST_NOTES:
+            case sd::ViewShell::ST_HANDOUT:
             {
                 // Create a new outline view to do the search on.
                 bool bInsert = false;
-                if (mpOutlineView!=nullptr && !mbOwnOutlineView)
+                if (mpOutlineView != nullptr && !mbOwnOutlineView)
                     mpOutlineView = nullptr;
-                if (mpOutlineView == nullptr)
+
+                if (mpOutlineView == nullptr || !rOutliner.GetEditEngine().HasView(&mpOutlineView->GetEditView()))
                 {
+                    delete mpOutlineView;
                     mpOutlineView = new OutlinerView(&rOutliner, pWindow);
                     mbOwnOutlineView = true;
                     bInsert = true;
                 }
                 else
                     mpOutlineView->SetWindow(pWindow);
+
                 EVControlBits nStat = mpOutlineView->GetControlWord();
                 nStat &= ~EVControlBits::AUTOSCROLL;
                 mpOutlineView->SetControlWord(nStat);
+
                 if (bInsert)
                     rOutliner.InsertView( mpOutlineView );
+
                 rOutliner.SetUpdateMode(false);
-                mpOutlineView->SetOutputArea (Rectangle (Point(), Size(1, 1)));
+                mpOutlineView->SetOutputArea (::tools::Rectangle (Point(), Size(1, 1)));
                 rOutliner.SetPaperSize( Size(1, 1) );
                 rOutliner.SetText(OUString(), rOutliner.GetParagraph(0));
 
                 meOriginalEditMode =
-                    std::static_pointer_cast<DrawViewShell>(rpViewShell)->GetEditMode();
+                    std::static_pointer_cast<sd::DrawViewShell>(rpViewShell)->GetEditMode();
             }
             break;
 
-            case ViewShell::ST_OUTLINE:
+            case sd::ViewShell::ST_OUTLINE:
             {
                 if (mpOutlineView!=nullptr && mbOwnOutlineView)
                     delete mpOutlineView;
@@ -1783,15 +1802,15 @@ void Outliner::Implementation::ProvideOutlinerView (
             break;
 
             default:
-            case ViewShell::ST_NONE:
-            case ViewShell::ST_PRESENTATION:
+            case sd::ViewShell::ST_NONE:
+            case sd::ViewShell::ST_PRESENTATION:
                 // Ignored
                 break;
         }
     }
 }
 
-void Outliner::Implementation::ReleaseOutlinerView()
+void SdOutliner::Implementation::ReleaseOutlinerView()
 {
     if (mbOwnOutlineView)
     {
@@ -1809,7 +1828,5 @@ void Outliner::Implementation::ReleaseOutlinerView()
         mpOutlineView = nullptr;
     }
 }
-
-} // end of namespace sd
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

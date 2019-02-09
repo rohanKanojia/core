@@ -32,29 +32,23 @@
 #include <com/sun/star/graphic/GraphicProvider.hpp>
 #include <com/sun/star/graphic/XGraphicProvider.hpp>
 #include <com/sun/star/task/XJob.hpp>
-
 #include <comphelper/processfactory.hxx>
-
-#include <osl/mutex.hxx>
-
+#include <unotools/resmgr.hxx>
 #include <vcl/window.hxx>
 #include <vcl/floatwin.hxx>
 #include <vcl/timer.hxx>
 #include <vcl/idle.hxx>
 #include <vcl/menu.hxx>
 #include <vcl/outdev.hxx>
-#include <vcl/layout.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/lineinfo.hxx>
 #include <vcl/button.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/svapp.hxx>
-#include <sfx2/sfx.hrc>
-#include "rtl/ustrbuf.hxx"
+#include <sfx2/strings.hrc>
+#include <rtl/ustrbuf.hxx>
 
-#include "updatecheckui.hrc"
-
-#define STR_NO_WEBBROWSER_FOUND  (RID_SFX_APP_START + 7)
+#include <bitmaps.hlst>
 
 #define PROPERTY_TITLE          "BubbleHeading"
 #define PROPERTY_TEXT           "BubbleText"
@@ -82,6 +76,22 @@ static OUString getImplementationName()
 namespace
 {
 
+Image GetMenuBarIcon( MenuBar const * pMBar )
+{
+    OUString sResID;
+    vcl::Window *pMBarWin = pMBar->GetWindow();
+    sal_uInt32 nMBarHeight = 20;
+
+    if ( pMBarWin )
+        nMBarHeight = pMBarWin->GetOutputSizePixel().getHeight();
+
+    if (nMBarHeight >= 35)
+        sResID = RID_UPDATE_AVAILABLE_26;
+    else
+        sResID = RID_UPDATE_AVAILABLE_16;
+
+    return Image(StockImage::Yes, sResID);
+}
 
 class BubbleWindow : public FloatingWindow
 {
@@ -93,8 +103,8 @@ class BubbleWindow : public FloatingWindow
     OUString        maBubbleText;
     Image           maBubbleImage;
     Size            maMaxTextSize;
-    Rectangle       maTitleRect;
-    Rectangle       maTextRect;
+    tools::Rectangle       maTitleRect;
+    tools::Rectangle       maTextRect;
     long            mnTipOffset;
 
 private:
@@ -103,10 +113,9 @@ private:
 public:
                     BubbleWindow( vcl::Window* pParent, const OUString& rTitle,
                                   const OUString& rText, const Image& rImage );
-                   virtual ~BubbleWindow();
 
     virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
-    virtual void    Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void    Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
     void            Resize() override;
     void            Show( bool bVisible = true, ShowFlags nFlags = ShowFlags::NoActivate );
     void            SetTipPosPixel( const Point& rTipPos ) { maTipPos = rTipPos; }
@@ -126,9 +135,8 @@ class UpdateCheckUI : public ::cppu::WeakImplHelper
     Image               maBubbleImage;
     VclPtr<BubbleWindow> mpBubbleWin;
     VclPtr<SystemWindow> mpIconSysWin;
-    MenuBar*            mpIconMBar;
-    ResMgr*             mpUpdResMgr;
-    ResMgr*             mpSfxResMgr;
+    VclPtr<MenuBar>     mpIconMBar;
+    std::locale         maSfxLocale;
     Idle                maWaitIdle;
     Timer               maTimeoutTimer;
     Link<VclWindowEvent&,void> maWindowEventHdl;
@@ -139,60 +147,45 @@ class UpdateCheckUI : public ::cppu::WeakImplHelper
     sal_uInt16              mnIconID;
 
 private:
-                    DECL_LINK_TYPED(ClickHdl, MenuBar::MenuBarButtonCallbackArg&, bool);
-                    DECL_LINK_TYPED(HighlightHdl, MenuBar::MenuBarButtonCallbackArg&, bool);
-                    DECL_LINK_TYPED(WaitTimeOutHdl, Idle *, void);
-                    DECL_LINK_TYPED(TimeOutHdl, Timer *, void);
-                    DECL_LINK_TYPED(UserEventHdl, void *, void);
-                    DECL_LINK_TYPED(WindowEventHdl, VclWindowEvent&, void);
-                    DECL_LINK_TYPED(ApplicationEventHdl, VclSimpleEvent&, void);
+                    DECL_LINK(ClickHdl, MenuBar::MenuBarButtonCallbackArg&, bool);
+                    DECL_LINK(HighlightHdl, MenuBar::MenuBarButtonCallbackArg&, bool);
+                    DECL_LINK(WaitTimeOutHdl, Timer *, void);
+                    DECL_LINK(TimeOutHdl, Timer *, void);
+                    DECL_LINK(UserEventHdl, void *, void);
+                    DECL_LINK(WindowEventHdl, VclWindowEvent&, void);
+                    DECL_LINK(ApplicationEventHdl, VclSimpleEvent&, void);
 
-    BubbleWindow*   GetBubbleWindow();
+    VclPtr<BubbleWindow> GetBubbleWindow();
     void            RemoveBubbleWindow( bool bRemoveIcon );
-    Image           GetMenuBarIcon( MenuBar* pMBar );
     void            AddMenuBarIcon( SystemWindow* pSysWin, bool bAddEventHdl );
-    Image           GetBubbleImage( OUString &rURL );
+    Image           GetBubbleImage( OUString const &rURL );
 
 public:
     explicit        UpdateCheckUI(const uno::Reference<uno::XComponentContext>&);
-    virtual        ~UpdateCheckUI();
+    virtual        ~UpdateCheckUI() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw (uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService(OUString const & serviceName)
-        throw (uno::RuntimeException, std::exception) override;
-    virtual uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-        throw (uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService(OUString const & serviceName) override;
+    virtual uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // XDocumentEventListener
-    virtual void SAL_CALL documentEventOccured(const document::DocumentEvent& Event)
-        throw (uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL disposing(const lang::EventObject& Event)
-        throw (uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL documentEventOccured(const document::DocumentEvent& Event) override;
+    virtual void SAL_CALL disposing(const lang::EventObject& Event) override;
 
     //XPropertySet
-    virtual uno::Reference< beans::XPropertySetInfo > SAL_CALL getPropertySetInfo()
-        throw ( uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL setPropertyValue(const OUString& PropertyName, const uno::Any& aValue)
-        throw( beans::UnknownPropertyException, beans::PropertyVetoException,
-               lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException, std::exception ) override;
-    virtual uno::Any SAL_CALL getPropertyValue(const OUString& PropertyName)
-        throw ( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception ) override;
+    virtual uno::Reference< beans::XPropertySetInfo > SAL_CALL getPropertySetInfo() override;
+    virtual void SAL_CALL setPropertyValue(const OUString& PropertyName, const uno::Any& aValue) override;
+    virtual uno::Any SAL_CALL getPropertyValue(const OUString& PropertyName) override;
     virtual void SAL_CALL addPropertyChangeListener(const OUString& PropertyName,
-                                                    const uno::Reference< beans::XPropertyChangeListener > & aListener)
-        throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception ) override;
+                                                    const uno::Reference< beans::XPropertyChangeListener > & aListener) override;
     virtual void SAL_CALL removePropertyChangeListener(const OUString& PropertyName,
-                                                       const uno::Reference< beans::XPropertyChangeListener > & aListener)
-        throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception ) override;
+                                                       const uno::Reference< beans::XPropertyChangeListener > & aListener) override;
     virtual void SAL_CALL addVetoableChangeListener(const OUString& PropertyName,
-                                                    const uno::Reference< beans::XVetoableChangeListener > & aListener)
-        throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception ) override;
+                                                    const uno::Reference< beans::XVetoableChangeListener > & aListener) override;
     virtual void SAL_CALL removeVetoableChangeListener(const OUString& PropertyName,
-                                                       const uno::Reference< beans::XVetoableChangeListener > & aListener)
-        throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception ) override;
+                                                       const uno::Reference< beans::XVetoableChangeListener > & aListener) override;
 };
-
 
 UpdateCheckUI::UpdateCheckUI(const uno::Reference<uno::XComponentContext>& xContext) :
       m_xContext(xContext)
@@ -202,16 +195,15 @@ UpdateCheckUI::UpdateCheckUI(const uno::Reference<uno::XComponentContext>& xCont
     , mbBubbleChanged( false )
     , mnIconID( 0 )
 {
-    mpUpdResMgr = ResMgr::CreateResMgr( "updchk" );
-    mpSfxResMgr = ResMgr::CreateResMgr( "sfx" );
+    maSfxLocale = Translate::Create("sfx");
 
     maBubbleImage = GetBubbleImage( maBubbleImageURL );
 
-    maWaitIdle.SetPriority( SchedulerPriority::LOWEST );
-    maWaitIdle.SetIdleHdl( LINK( this, UpdateCheckUI, WaitTimeOutHdl ) );
+    maWaitIdle.SetPriority( TaskPriority::LOWEST );
+    maWaitIdle.SetInvokeHandler( LINK( this, UpdateCheckUI, WaitTimeOutHdl ) );
 
     maTimeoutTimer.SetTimeout( 10000 );
-    maTimeoutTimer.SetTimeoutHdl( LINK( this, UpdateCheckUI, TimeOutHdl ) );
+    maTimeoutTimer.SetInvokeHandler( LINK( this, UpdateCheckUI, TimeOutHdl ) );
 
     uno::Reference< document::XDocumentEventBroadcaster > xBroadcaster( frame::theGlobalEventBroadcaster::get(m_xContext) );
     xBroadcaster->addDocumentEventListener( this );
@@ -221,55 +213,31 @@ UpdateCheckUI::UpdateCheckUI(const uno::Reference<uno::XComponentContext>& xCont
     Application::AddEventListener( maApplicationEventHdl );
 }
 
-
 UpdateCheckUI::~UpdateCheckUI()
 {
     Application::RemoveEventListener( maApplicationEventHdl );
     RemoveBubbleWindow( true );
-    delete mpUpdResMgr;
-    delete mpSfxResMgr;
 }
 
-
 OUString SAL_CALL
-UpdateCheckUI::getImplementationName() throw (uno::RuntimeException, std::exception)
+UpdateCheckUI::getImplementationName()
 {
     return ::getImplementationName();
 }
 
-
 uno::Sequence< OUString > SAL_CALL
-UpdateCheckUI::getSupportedServiceNames() throw (uno::RuntimeException, std::exception)
+UpdateCheckUI::getSupportedServiceNames()
 {
     return ::getServiceNames();
 }
 
 sal_Bool SAL_CALL
-UpdateCheckUI::supportsService( OUString const & serviceName ) throw (uno::RuntimeException, std::exception)
+UpdateCheckUI::supportsService( OUString const & serviceName )
 {
     return cppu::supportsService(this, serviceName);
 }
 
-
-Image UpdateCheckUI::GetMenuBarIcon( MenuBar* pMBar )
-{
-    sal_uInt32 nResID;
-    vcl::Window *pMBarWin = pMBar->GetWindow();
-    sal_uInt32 nMBarHeight = 20;
-
-    if ( pMBarWin )
-        nMBarHeight = pMBarWin->GetOutputSizePixel().getHeight();
-
-    if ( nMBarHeight >= 35 )
-        nResID = RID_UPDATE_AVAILABLE_26;
-    else
-        nResID = RID_UPDATE_AVAILABLE_16;
-
-    return Image( ResId( nResID, *mpUpdResMgr ) );
-}
-
-
-Image UpdateCheckUI::GetBubbleImage( OUString &rURL )
+Image UpdateCheckUI::GetBubbleImage( OUString const &rURL )
 {
     Image aImage;
 
@@ -300,7 +268,7 @@ Image UpdateCheckUI::GetBubbleImage( OUString &rURL )
     }
 
     if ( aImage.GetSizePixel().Width() == 0 )
-        aImage = InfoBox::GetStandardImage();
+        aImage = Image(StockImage::Yes, SV_RESID_BITMAP_INFOBOX);
 
     return aImage;
 }
@@ -361,7 +329,6 @@ void UpdateCheckUI::AddMenuBarIcon( SystemWindow *pSysWin, bool bAddEventHdl )
 
 
 void SAL_CALL UpdateCheckUI::documentEventOccured(const document::DocumentEvent& rEvent)
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -373,13 +340,11 @@ void SAL_CALL UpdateCheckUI::documentEventOccured(const document::DocumentEvent&
 
 
 void SAL_CALL UpdateCheckUI::disposing(const lang::EventObject&)
-    throw (uno::RuntimeException, std::exception)
 {
 }
 
 
 uno::Reference< beans::XPropertySetInfo > UpdateCheckUI::getPropertySetInfo()
-    throw ( uno::RuntimeException, std::exception )
 {
     return nullptr;
 }
@@ -387,8 +352,6 @@ uno::Reference< beans::XPropertySetInfo > UpdateCheckUI::getPropertySetInfo()
 
 void UpdateCheckUI::setPropertyValue(const OUString& rPropertyName,
                                      const uno::Any& rValue)
-    throw( beans::UnknownPropertyException, beans::PropertyVetoException,
-           lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -426,10 +389,9 @@ void UpdateCheckUI::setPropertyValue(const OUString& rPropertyName,
     else if( rPropertyName == PROPERTY_CLICK_HDL ) {
         uno::Reference< task::XJob > aJob;
         rValue >>= aJob;
-        if ( aJob.is() )
-            mrJob = aJob;
-        else
+        if ( !aJob.is() )
             throw lang::IllegalArgumentException();
+        mrJob = aJob;
     }
     else if (rPropertyName == PROPERTY_SHOW_MENUICON ) {
         bool bShowMenuIcon = false;
@@ -452,24 +414,23 @@ void UpdateCheckUI::setPropertyValue(const OUString& rPropertyName,
 
 
 uno::Any UpdateCheckUI::getPropertyValue(const OUString& rPropertyName)
-    throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
 
     uno::Any aRet;
 
     if( rPropertyName == PROPERTY_TITLE )
-        aRet = uno::makeAny( maBubbleTitle );
+        aRet <<= maBubbleTitle;
     else if( rPropertyName == PROPERTY_TEXT )
-        aRet = uno::makeAny( maBubbleText );
+        aRet <<= maBubbleText;
     else if( rPropertyName == PROPERTY_SHOW_BUBBLE )
-        aRet = uno::makeAny( mbShowBubble );
+        aRet <<= mbShowBubble;
     else if( rPropertyName == PROPERTY_IMAGE )
-        aRet = uno::makeAny( maBubbleImageURL );
+        aRet <<= maBubbleImageURL;
     else if( rPropertyName == PROPERTY_CLICK_HDL )
-        aRet = uno::makeAny( mrJob );
+        aRet <<= mrJob;
     else if( rPropertyName == PROPERTY_SHOW_MENUICON )
-        aRet = uno::makeAny( mbShowMenuIcon );
+        aRet <<= mbShowMenuIcon;
     else
         throw beans::UnknownPropertyException();
 
@@ -479,7 +440,6 @@ uno::Any UpdateCheckUI::getPropertyValue(const OUString& rPropertyName)
 
 void UpdateCheckUI::addPropertyChangeListener( const OUString& /*aPropertyName*/,
                                                const uno::Reference< beans::XPropertyChangeListener > & /*aListener*/)
-    throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     //no bound properties
 }
@@ -487,7 +447,6 @@ void UpdateCheckUI::addPropertyChangeListener( const OUString& /*aPropertyName*/
 
 void UpdateCheckUI::removePropertyChangeListener( const OUString& /*aPropertyName*/,
                                                   const uno::Reference< beans::XPropertyChangeListener > & /*aListener*/)
-    throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     //no bound properties
 }
@@ -495,7 +454,6 @@ void UpdateCheckUI::removePropertyChangeListener( const OUString& /*aPropertyNam
 
 void UpdateCheckUI::addVetoableChangeListener( const OUString& /*aPropertyName*/,
                                                const uno::Reference< beans::XVetoableChangeListener > & /*aListener*/)
-    throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     //no vetoable properties
 }
@@ -503,22 +461,21 @@ void UpdateCheckUI::addVetoableChangeListener( const OUString& /*aPropertyName*/
 
 void UpdateCheckUI::removeVetoableChangeListener( const OUString& /*aPropertyName*/,
                                                   const uno::Reference< beans::XVetoableChangeListener > & /*aListener*/)
-    throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     //no vetoable properties
 }
 
 
-BubbleWindow * UpdateCheckUI::GetBubbleWindow()
+VclPtr<BubbleWindow> UpdateCheckUI::GetBubbleWindow()
 {
     if ( !mpIconSysWin )
         return nullptr;
 
-    Rectangle aIconRect = mpIconMBar->GetMenuBarButtonRectPixel( mnIconID );
+    tools::Rectangle aIconRect = mpIconMBar->GetMenuBarButtonRectPixel( mnIconID );
     if( aIconRect.IsEmpty() )
         return nullptr;
 
-    BubbleWindow* pBubbleWin = mpBubbleWin;
+    auto pBubbleWin = mpBubbleWin;
 
     if ( !pBubbleWin ) {
         pBubbleWin = VclPtr<BubbleWindow>::Create( mpIconSysWin, maBubbleTitle,
@@ -571,7 +528,7 @@ void UpdateCheckUI::RemoveBubbleWindow( bool bRemoveIcon )
 }
 
 
-IMPL_LINK_NOARG_TYPED(UpdateCheckUI, ClickHdl, MenuBar::MenuBarButtonCallbackArg&, bool)
+IMPL_LINK_NOARG(UpdateCheckUI, ClickHdl, MenuBar::MenuBarButtonCallbackArg&, bool)
 {
     SolarMutexGuard aGuard;
 
@@ -586,7 +543,10 @@ IMPL_LINK_NOARG_TYPED(UpdateCheckUI, ClickHdl, MenuBar::MenuBarButtonCallbackArg
             mrJob->execute( aEmpty );
         }
         catch(const uno::Exception&) {
-            ScopedVclPtrInstance<MessageDialog>::Create( nullptr, ResId( STR_NO_WEBBROWSER_FOUND, *mpSfxResMgr ))->Execute();
+            std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(nullptr,
+                                                           VclMessageType::Warning, VclButtonsType::Ok,
+                                                           Translate::get(STR_NO_WEBBROWSER_FOUND, maSfxLocale)));
+            xErrorBox->run();
         }
     }
 
@@ -594,7 +554,7 @@ IMPL_LINK_NOARG_TYPED(UpdateCheckUI, ClickHdl, MenuBar::MenuBarButtonCallbackArg
 }
 
 
-IMPL_LINK_TYPED( UpdateCheckUI, HighlightHdl, MenuBar::MenuBarButtonCallbackArg&, rData, bool )
+IMPL_LINK( UpdateCheckUI, HighlightHdl, MenuBar::MenuBarButtonCallbackArg&, rData, bool )
 {
     if ( rData.bHighlight )
         maWaitIdle.Start();
@@ -605,7 +565,7 @@ IMPL_LINK_TYPED( UpdateCheckUI, HighlightHdl, MenuBar::MenuBarButtonCallbackArg&
 }
 
 
-IMPL_LINK_NOARG_TYPED(UpdateCheckUI, WaitTimeOutHdl, Idle *, void)
+IMPL_LINK_NOARG(UpdateCheckUI, WaitTimeOutHdl, Timer *, void)
 {
     SolarMutexGuard aGuard;
 
@@ -618,13 +578,13 @@ IMPL_LINK_NOARG_TYPED(UpdateCheckUI, WaitTimeOutHdl, Idle *, void)
 }
 
 
-IMPL_LINK_NOARG_TYPED(UpdateCheckUI, TimeOutHdl, Timer *, void)
+IMPL_LINK_NOARG(UpdateCheckUI, TimeOutHdl, Timer *, void)
 {
     RemoveBubbleWindow( false );
 }
 
 
-IMPL_LINK_NOARG_TYPED(UpdateCheckUI, UserEventHdl, void*, void)
+IMPL_LINK_NOARG(UpdateCheckUI, UserEventHdl, void*, void)
 {
     SolarMutexGuard aGuard;
 
@@ -655,11 +615,11 @@ IMPL_LINK_NOARG_TYPED(UpdateCheckUI, UserEventHdl, void*, void)
 }
 
 
-IMPL_LINK_TYPED( UpdateCheckUI, WindowEventHdl, VclWindowEvent&, rEvent, void )
+IMPL_LINK( UpdateCheckUI, WindowEventHdl, VclWindowEvent&, rEvent, void )
 {
-    sal_uLong nEventID = rEvent.GetId();
+    VclEventId nEventID = rEvent.GetId();
 
-    if ( VCLEVENT_OBJECT_DYING == nEventID )
+    if ( VclEventId::ObjectDying == nEventID )
     {
         SolarMutexGuard aGuard;
         if ( mpIconSysWin == rEvent.GetWindow() )
@@ -668,7 +628,7 @@ IMPL_LINK_TYPED( UpdateCheckUI, WindowEventHdl, VclWindowEvent&, rEvent, void )
             RemoveBubbleWindow( true );
         }
     }
-    else if ( VCLEVENT_WINDOW_MENUBARADDED == nEventID )
+    else if ( VclEventId::WindowMenubarAdded == nEventID )
     {
         SolarMutexGuard aGuard;
         vcl::Window *pWindow = rEvent.GetWindow();
@@ -681,21 +641,21 @@ IMPL_LINK_TYPED( UpdateCheckUI, WindowEventHdl, VclWindowEvent&, rEvent, void )
             }
         }
     }
-    else if ( VCLEVENT_WINDOW_MENUBARREMOVED == nEventID )
+    else if ( VclEventId::WindowMenubarRemoved == nEventID )
     {
         SolarMutexGuard aGuard;
         MenuBar *pMBar = static_cast<MenuBar*>(rEvent.GetData());
         if ( pMBar && ( pMBar == mpIconMBar ) )
             RemoveBubbleWindow( true );
     }
-    else if ( ( nEventID == VCLEVENT_WINDOW_MOVE ) ||
-              ( nEventID == VCLEVENT_WINDOW_RESIZE ) )
+    else if ( ( nEventID == VclEventId::WindowMove ) ||
+              ( nEventID == VclEventId::WindowResize ) )
     {
         SolarMutexGuard aGuard;
         if ( ( mpIconSysWin == rEvent.GetWindow() ) &&
              mpBubbleWin && ( mpIconMBar != nullptr ) )
         {
-            Rectangle aIconRect = mpIconMBar->GetMenuBarButtonRectPixel( mnIconID );
+            tools::Rectangle aIconRect = mpIconMBar->GetMenuBarButtonRectPixel( mnIconID );
             Point aWinPos = aIconRect.BottomCenter();
             mpBubbleWin->SetTipPosPixel( aWinPos );
             if ( mpBubbleWin->IsVisible() )
@@ -705,13 +665,13 @@ IMPL_LINK_TYPED( UpdateCheckUI, WindowEventHdl, VclWindowEvent&, rEvent, void )
 }
 
 
-IMPL_LINK_TYPED( UpdateCheckUI, ApplicationEventHdl, VclSimpleEvent&, rEvent, void)
+IMPL_LINK( UpdateCheckUI, ApplicationEventHdl, VclSimpleEvent&, rEvent, void)
 {
     switch (rEvent.GetId())
     {
-        case VCLEVENT_WINDOW_SHOW:
-        case VCLEVENT_WINDOW_ACTIVATE:
-        case VCLEVENT_WINDOW_GETFOCUS: {
+        case VclEventId::WindowShow:
+        case VclEventId::WindowActivate:
+        case VclEventId::WindowGetFocus: {
             SolarMutexGuard aGuard;
 
             vcl::Window *pWindow = static_cast< VclWindowEvent * >(&rEvent)->GetWindow();
@@ -726,6 +686,7 @@ IMPL_LINK_TYPED( UpdateCheckUI, ApplicationEventHdl, VclSimpleEvent&, rEvent, vo
             }
             break;
         }
+        default: break;
     }
 }
 
@@ -753,12 +714,6 @@ BubbleWindow::BubbleWindow( vcl::Window* pParent, const OUString& rTitle,
     SetBackground( Wallpaper( GetSettings().GetStyleSettings().GetHelpColor() ) );
 }
 
-
-BubbleWindow::~BubbleWindow()
-{
-}
-
-
 void BubbleWindow::Resize()
 {
     SolarMutexGuard aGuard;
@@ -770,7 +725,7 @@ void BubbleWindow::Resize()
     if ( ( aSize.Height() < 20 ) || ( aSize.Width() < 60 ) )
         return;
 
-    Rectangle aRect( 0, TIP_HEIGHT, aSize.Width(), aSize.Height() - TIP_HEIGHT );
+    tools::Rectangle aRect( 0, TIP_HEIGHT, aSize.Width(), aSize.Height() - TIP_HEIGHT );
     maRectPoly = tools::Polygon( aRect, 6, 6 );
     vcl::Region aRegion( maRectPoly );
     long nTipOffset = aSize.Width() - TIP_RIGHT_OFFSET + mnTipOffset;
@@ -802,11 +757,11 @@ void BubbleWindow::SetTitleAndText( const OUString& rTitle,
 }
 
 
-void BubbleWindow::Paint(vcl::RenderContext& /*rRenderContext*/, const Rectangle& /*rRect*/)
+void BubbleWindow::Paint(vcl::RenderContext& /*rRenderContext*/, const tools::Rectangle& /*rRect*/)
 {
     SolarMutexGuard aGuard;
 
-    LineInfo aThickLine( LINE_SOLID, 2 );
+    LineInfo aThickLine( LineStyle::Solid, 2 );
 
     DrawPolyLine( maRectPoly, aThickLine );
     DrawPolyLine( maTriPoly );
@@ -821,7 +776,6 @@ void BubbleWindow::Paint(vcl::RenderContext& /*rRenderContext*/, const Rectangle
               aThickLine );
     SetLineColor( aOldLine );
 
-    //Image aImage = InfoBox::GetStandardImage();
     Size aImgSize = maBubbleImage.GetSizePixel();
 
     DrawImage( Point( BUBBLE_BORDER, BUBBLE_BORDER + TIP_HEIGHT ), maBubbleImage );
@@ -831,12 +785,12 @@ void BubbleWindow::Paint(vcl::RenderContext& /*rRenderContext*/, const Rectangle
     aBoldFont.SetWeight( WEIGHT_BOLD );
 
     SetFont( aBoldFont );
-    Rectangle aTitleRect = maTitleRect;
+    tools::Rectangle aTitleRect = maTitleRect;
     aTitleRect.Move( aImgSize.Width(), 0 );
     DrawText( aTitleRect, maBubbleTitle, DrawTextFlags::MultiLine | DrawTextFlags::WordBreak );
 
     SetFont( aOldFont );
-    Rectangle aTextRect = maTextRect;
+    tools::Rectangle aTextRect = maTextRect;
     aTextRect.Move( aImgSize.Width(), 0 );
     DrawText( aTextRect, maBubbleText, DrawTextFlags::MultiLine | DrawTextFlags::WordBreak );
 }
@@ -864,7 +818,6 @@ void BubbleWindow::Show( bool bVisible, ShowFlags nFlags )
 
     Size aWindowSize = GetSizePixel();
 
-    // Image aImage = InfoBox::GetStandardImage();
     Size aImgSize = maBubbleImage.GetSizePixel();
 
     RecalcTextRects();
@@ -883,13 +836,13 @@ void BubbleWindow::Show( bool bVisible, ShowFlags nFlags )
         aWindowSize.setHeight( aImgSize.Height() + TIP_HEIGHT + 2 * BUBBLE_BORDER );
 
     Point aPos;
-    aPos.X() = maTipPos.X() - aWindowSize.Width() + TIP_RIGHT_OFFSET;
-    aPos.Y() = maTipPos.Y();
+    aPos.setX( maTipPos.X() - aWindowSize.Width() + TIP_RIGHT_OFFSET );
+    aPos.setY( maTipPos.Y() );
     Point aScreenPos = GetParent()->OutputToAbsoluteScreenPixel( aPos );
     if ( aScreenPos.X() < 0 )
     {
         mnTipOffset = aScreenPos.X();
-        aPos.X() -= mnTipOffset;
+        aPos.AdjustX( -(mnTipOffset) );
     }
     SetPosSizePixel( aPos, aWindowSize );
 
@@ -910,12 +863,12 @@ void BubbleWindow::RecalcTextRects()
     {
         SetFont( aBoldFont );
 
-        maTitleRect = GetTextRect( Rectangle( Point( 0, 0 ), maMaxTextSize ),
+        maTitleRect = GetTextRect( tools::Rectangle( Point( 0, 0 ), maMaxTextSize ),
                                    maBubbleTitle,
                                    DrawTextFlags::MultiLine | DrawTextFlags::WordBreak );
 
         SetFont( aOldFont );
-        maTextRect = GetTextRect( Rectangle( Point( 0, 0 ), maMaxTextSize ),
+        maTextRect = GetTextRect( tools::Rectangle( Point( 0, 0 ), maMaxTextSize ),
                                   maBubbleText,
                                   DrawTextFlags::MultiLine | DrawTextFlags::WordBreak );
 
@@ -928,8 +881,8 @@ void BubbleWindow::RecalcTextRects()
                               3 * BUBBLE_BORDER + TIP_HEIGHT );
         if ( aTotalSize.Height() > maMaxTextSize.Height() )
         {
-            maMaxTextSize.Width() = maMaxTextSize.Width() * 3 / 2;
-            maMaxTextSize.Height() = maMaxTextSize.Height() * 3 / 2;
+            maMaxTextSize.setWidth( maMaxTextSize.Width() * 3 / 2 );
+            maMaxTextSize.setHeight( maMaxTextSize.Height() * 3 / 2 );
         }
         else
             bFinished = true;
@@ -942,9 +895,10 @@ void BubbleWindow::RecalcTextRects()
 } // anonymous namespace
 
 
-static uno::Reference<uno::XInterface> SAL_CALL
+static uno::Reference<uno::XInterface>
 createInstance(const uno::Reference<uno::XComponentContext>& xContext)
 {
+    SolarMutexGuard aGuard;
     return  *new UpdateCheckUI(xContext);
 }
 
@@ -963,7 +917,7 @@ static const cppu::ImplementationEntry kImplementations_entries[] =
 } ;
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL updchkui_component_getFactory(const sal_Char *pszImplementationName, void *pServiceManager, void *pRegistryKey)
+extern "C" SAL_DLLPUBLIC_EXPORT void * updchkui_component_getFactory(const sal_Char *pszImplementationName, void *pServiceManager, void *pRegistryKey)
 {
     return cppu::component_getFactoryHelper(
         pszImplementationName,

@@ -16,9 +16,7 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "svx/sidebar/ValueSetWithTextControl.hxx"
-#include <svx/dialogs.hrc>
-#include <svx/dialmgr.hxx>
+#include <svx/sidebar/ValueSetWithTextControl.hxx>
 #include <sfx2/sidebar/Theme.hxx>
 
 #include <limits.h>
@@ -26,72 +24,22 @@
 #include <svtools/valueset.hxx>
 #include <editeng/brushitem.hxx>
 #include <vcl/graph.hxx>
+#include <vcl/event.hxx>
 #include <vcl/settings.hxx>
 
 namespace svx { namespace sidebar {
 
-ValueSetWithTextControl::ValueSetWithTextControl(
-    const tControlType eControlType,
-    vcl::Window* pParent,
-    const ResId& rResId)
-    : ValueSet( pParent, rResId )
-    , meControlType( eControlType )
-    , maItems()
+ValueSetWithTextControl::ValueSetWithTextControl(Window* pParent, WinBits nBits)
+    : ValueSet( pParent, nBits )
 {
     SetColCount();
 }
 
-void ValueSetWithTextControl::AddItem(
-    const Image& rItemImage,
-    const Image* pSelectedItemImage,
-    const OUString& rItemText,
-    const OUString* pItemHelpText )
-{
-    if ( meControlType != IMAGE_TEXT )
-    {
-        return;
-    }
-
-    ValueSetWithTextItem aItem;
-    aItem.maItemImage = rItemImage;
-    aItem.maSelectedItemImage = (pSelectedItemImage != nullptr)
-                                ? *pSelectedItemImage
-                                : rItemImage;
-
-    if ( GetDPIScaleFactor() > 1 )
-    {
-        BitmapEx b = aItem.maItemImage.GetBitmapEx();
-        b.Scale(GetDPIScaleFactor(), GetDPIScaleFactor());
-        aItem.maItemImage = Image(b);
-
-        if ( pSelectedItemImage != nullptr )
-        {
-            b = aItem.maSelectedItemImage.GetBitmapEx();
-            b.Scale(GetDPIScaleFactor(), GetDPIScaleFactor());
-            aItem.maSelectedItemImage = Image(b);
-        }
-    }
-
-    aItem.maItemText = rItemText;
-
-    maItems.push_back( aItem );
-
-    InsertItem( maItems.size() );
-    SetItemText( maItems.size(),
-                    (pItemHelpText != nullptr) ? *pItemHelpText : rItemText );
-}
-
 
 void ValueSetWithTextControl::AddItem(
     const OUString& rItemText,
-    const OUString& rItemText2,
-    const OUString* pItemHelpText )
+    const OUString& rItemText2 )
 {
-    if ( meControlType != TEXT_TEXT )
-    {
-        return;
-    }
-
     ValueSetWithTextItem aItem;
     aItem.maItemText = rItemText;
     aItem.maItemText2 = rItemText2;
@@ -99,74 +47,32 @@ void ValueSetWithTextControl::AddItem(
     maItems.push_back( aItem );
 
     InsertItem( maItems.size() );
-    SetItemText( maItems.size(),
-                    (pItemHelpText != nullptr) ? *pItemHelpText : rItemText );
+    SetItemText( maItems.size(), rItemText );
 }
-
-
-void ValueSetWithTextControl::ReplaceItemImages(
-    const sal_uInt16 nItemId,
-    const Image& rItemImage,
-    const Image* pSelectedItemImage )
-{
-    if ( meControlType != IMAGE_TEXT )
-    {
-        return;
-    }
-
-    if ( nItemId == 0 ||
-         nItemId > maItems.size() )
-    {
-        return;
-    }
-
-    maItems[nItemId-1].maItemImage = rItemImage;
-    maItems[nItemId-1].maSelectedItemImage = (pSelectedItemImage != nullptr)
-                                             ? *pSelectedItemImage
-                                             : rItemImage;
-
-//#ifndef MACOSX
-    if ( GetDPIScaleFactor() > 1 )
-    {
-        BitmapEx b = maItems[nItemId-1].maItemImage.GetBitmapEx();
-        b.Scale(GetDPIScaleFactor(), GetDPIScaleFactor());
-        maItems[nItemId-1].maItemImage = Image(b);
-
-        if ( pSelectedItemImage != nullptr )
-        {
-            b = maItems[nItemId-1].maSelectedItemImage.GetBitmapEx();
-            b.Scale(GetDPIScaleFactor(), GetDPIScaleFactor());
-            maItems[nItemId-1].maSelectedItemImage = Image(b);
-        }
-    }
-//#endif
-}
-
 
 void ValueSetWithTextControl::UserDraw( const UserDrawEvent& rUDEvt )
 {
-    const Rectangle aRect = rUDEvt.GetRect();
+    const tools::Rectangle aRect = rUDEvt.GetRect();
     vcl::RenderContext* pDev = rUDEvt.GetRenderContext();
     pDev->Push();
     const sal_uInt16 nItemId = rUDEvt.GetItemId();
 
     const long nRectHeight = aRect.GetHeight();
-    const Point aBLPos = aRect.TopLeft();
 
     vcl::Font aFont(OutputDevice::GetDefaultFont(DefaultFontType::UI_SANS, MsLangId::getSystemLanguage(), GetDefaultFontFlags::OnlyOne));
     {
         Size aSize = aFont.GetFontSize();
-        aSize.Height() = (nRectHeight*4)/9;
+        aSize.setHeight( (nRectHeight*4)/9 );
         aFont.SetFontSize( aSize );
     }
 
     {
         //draw background
-        if ( GetSelectItemId() == nItemId )
+        if ( GetSelectedItemId() == nItemId )
         {
-            Rectangle aBackRect = aRect;
-            aBackRect.Top() += 3;
-            aBackRect.Bottom() -= 2;
+            tools::Rectangle aBackRect = aRect;
+            aBackRect.AdjustTop(3 );
+            aBackRect.AdjustBottom( -2 );
             pDev->SetFillColor( sfx2::sidebar::Theme::GetColor( sfx2::sidebar::Theme::Color_Highlight ) );
             pDev->DrawRect(aBackRect);
         }
@@ -176,50 +82,27 @@ void ValueSetWithTextControl::UserDraw( const UserDrawEvent& rUDEvt )
             pDev->DrawRect(aRect);
         }
 
-        //draw image + text resp. text + text
-        Image* pImage = nullptr;
-        if ( GetSelectItemId() == nItemId )
+        if ( GetSelectedItemId() == nItemId )
         {
             aFont.SetColor( sfx2::sidebar::Theme::GetColor( sfx2::sidebar::Theme::Color_HighlightText ) );
-            pImage = &maItems[nItemId-1].maSelectedItemImage;
         }
         else
         {
             aFont.SetColor( GetSettings().GetStyleSettings().GetFieldTextColor() );
-            pImage = &maItems[nItemId-1].maItemImage;
         }
 
-        Rectangle aStrRect = aRect;
-        aStrRect.Top() += nRectHeight/4;
-        aStrRect.Bottom() -= nRectHeight/4;
+        tools::Rectangle aStrRect = aRect;
+        aStrRect.AdjustTop(nRectHeight/4 );
+        aStrRect.AdjustBottom( -(nRectHeight/4) );
 
-        switch ( meControlType )
-        {
-        case IMAGE_TEXT:
-            {
-                Point aImgStart(
-                    aBLPos.X() + 4,
-                    aBLPos.Y() + ( ( nRectHeight - pImage->GetSizePixel().Height() ) / 2 ) );
-                pDev->DrawImage( aImgStart, *pImage );
-
-                aStrRect.Left() += pImage->GetSizePixel().Width() + 12;
-                pDev->SetFont(aFont);
-                pDev->DrawText(aStrRect, maItems[nItemId-1].maItemText, DrawTextFlags::EndEllipsis);
-            }
-            break;
-        case TEXT_TEXT:
-            {
-                const long nRectWidth = aRect.GetWidth();
-                aStrRect.Left() += 8;
-                aStrRect.Right() -= (nRectWidth*2)/3;
-                pDev->SetFont(aFont);
-                pDev->DrawText(aStrRect, maItems[nItemId-1].maItemText, DrawTextFlags::EndEllipsis);
-                aStrRect.Left() += nRectWidth/3;
-                aStrRect.Right() += (nRectWidth*2)/3;
-                pDev->DrawText(aStrRect, maItems[nItemId-1].maItemText2, DrawTextFlags::EndEllipsis);
-            }
-            break;
-        }
+        const long nRectWidth = aRect.GetWidth();
+        aStrRect.AdjustLeft(8 );
+        aStrRect.AdjustRight( -((nRectWidth*2)/3) );
+        pDev->SetFont(aFont);
+        pDev->DrawText(aStrRect, maItems[nItemId-1].maItemText, DrawTextFlags::EndEllipsis);
+        aStrRect.AdjustLeft(nRectWidth/3 );
+        aStrRect.AdjustRight((nRectWidth*2)/3 );
+        pDev->DrawText(aStrRect, maItems[nItemId-1].maItemText2, DrawTextFlags::EndEllipsis);
     }
 
     Invalidate( aRect );

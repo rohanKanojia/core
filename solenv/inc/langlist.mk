@@ -37,6 +37,7 @@ cy \
 da \
 de \
 dgo \
+dsb \
 dz \
 el \
 en-GB \
@@ -49,12 +50,14 @@ eu \
 fa \
 fi \
 fr \
+fy \
 ga \
 gd \
 gl \
 gu \
 gug \
 he \
+hsb \
 hi \
 hr \
 hu \
@@ -63,6 +66,7 @@ is \
 it \
 ja \
 ka \
+kab \
 kk \
 km \
 kmr-Latn \
@@ -123,6 +127,7 @@ ug \
 uk \
 uz \
 ve \
+vec \
 vi \
 xh \
 zh-CN \

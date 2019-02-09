@@ -38,13 +38,13 @@ namespace dbaccess
     typedef std::map<sal_Int32, ORowSetCacheIterator_Helper> ORowSetCacheMap;
 
     class ORowSetCache;
-    class ORowSetCacheIterator
+    class ORowSetCacheIterator final
     {
         friend class ORowSetCache;
         ORowSetCacheMap::iterator   m_aIter;
         ORowSetCache*               m_pCache;
         ORowSetBase*                m_pRowSet;
-    protected:
+
         ORowSetCacheIterator(const ORowSetCacheMap::iterator& _rIter,ORowSetCache* _pCache,ORowSetBase* _pRowSet)
             : m_aIter(_rIter)
             ,m_pCache(_pCache)
@@ -58,7 +58,7 @@ namespace dbaccess
 
         bool isNull() const;
         ORowSetCacheIterator& operator =(const ORowSetMatrix::iterator&);
-        operator ORowSetMatrix::iterator();
+        operator ORowSetMatrix::iterator const &();
 
         ORowSetRow& operator *();
 

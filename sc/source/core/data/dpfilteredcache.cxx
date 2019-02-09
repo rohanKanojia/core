@@ -17,35 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dpfilteredcache.hxx"
-#include "document.hxx"
-#include "address.hxx"
-#include "formulacell.hxx"
-#include "dptabdat.hxx"
-#include "dptabsrc.hxx"
-#include "dpobject.hxx"
-#include "queryparam.hxx"
-#include "queryentry.hxx"
-#include "dpitemdata.hxx"
+#include <dpcache.hxx>
+#include <dpfilteredcache.hxx>
+#include <address.hxx>
+#include <queryparam.hxx>
+#include <dpitemdata.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
 
 #include <osl/diagnose.h>
-#include <com/sun/star/i18n/LocaleDataItem.hpp>
-#include <com/sun/star/sdbc/DataType.hpp>
-#include <com/sun/star/sdbc/XRow.hpp>
-#include <com/sun/star/sdbc/XRowSet.hpp>
-#include <com/sun/star/sdbc/XResultSetMetaData.hpp>
-#include <com/sun/star/sdbc/XResultSetMetaDataSupplier.hpp>
-#include <com/sun/star/util/Date.hpp>
-#include <com/sun/star/sheet/DataPilotFieldFilter.hpp>
-#include <com/sun/star/sheet/DataPilotFieldGroupBy.hpp>
+#include <algorithm>
 
 using ::std::vector;
-using ::std::pair;
-using ::com::sun::star::i18n::LocaleDataItem;
-using ::com::sun::star::uno::Exception;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Any;
-using ::com::sun::star::sheet::DataPilotFieldFilter;
 
 ScDPFilteredCache::SingleFilter::SingleFilter(const ScDPItemData& rItem) :
     maItem(rItem) {}
@@ -68,14 +52,7 @@ ScDPFilteredCache::GroupFilter::GroupFilter()
 
 bool ScDPFilteredCache::GroupFilter::match(const ScDPItemData& rCellData) const
 {
-    vector<ScDPItemData>::const_iterator it = maItems.begin(), itEnd = maItems.end();
-    for (; it != itEnd; ++it)
-    {
-        bool bMatch = *it == rCellData;
-        if (bMatch)
-            return true;
-    }
-    return false;
+    return std::find(maItems.begin(), maItems.end(), rCellData) != maItems.end();
 }
 
 std::vector<ScDPItemData> ScDPFilteredCache::GroupFilter::getMatchValues() const
@@ -156,7 +133,7 @@ void ScDPFilteredCache::fillTable(
     // Build unique field entries.
     for (SCCOL nCol = 0; nCol < nColCount; ++nCol)
     {
-        maFieldEntries.push_back( vector<SCROW>() );
+        maFieldEntries.emplace_back( );
         SCROW nMemCount = getCache().GetDimMemberCount( nCol );
         if (!nMemCount)
             continue;
@@ -183,8 +160,7 @@ void ScDPFilteredCache::fillTable(
             }
 
             SCROW nIndex = getCache().GetItemDataId(nCol, nRow, bRepeatIfEmpty);
-            SCROW nOrder = getOrder(nCol, nIndex);
-            aAdded[nOrder] = nIndex;
+            aAdded[nIndex] = nIndex;
 
             // tdf#96588 - large numbers of trailing identical empty
             // rows generate the same nIndex & nOrder.
@@ -220,7 +196,7 @@ void ScDPFilteredCache::fillTable()
     // Data rows
     for (SCCOL nCol = 0; nCol < nColCount; ++nCol)
     {
-        maFieldEntries.push_back( vector<SCROW>() );
+        maFieldEntries.emplace_back( );
         SCROW nMemCount = getCache().GetDimMemberCount( nCol );
         if (!nMemCount)
             continue;
@@ -230,8 +206,7 @@ void ScDPFilteredCache::fillTable()
         for (SCROW nRow = 0; nRow < nRowCount; ++nRow)
         {
             SCROW nIndex = getCache().GetItemDataId(nCol, nRow, false);
-            SCROW nOrder = getOrder(nCol, nIndex);
-            aAdded[nOrder] = nIndex;
+            aAdded[nIndex] = nIndex;
         }
         for (SCROW nRow = 0; nRow < nMemCount; ++nRow)
         {
@@ -250,7 +225,7 @@ bool ScDPFilteredCache::isRowActive(sal_Int32 nRow, sal_Int32* pLastRow) const
     if (pLastRow)
     {
         // Return the last row of current segment.
-        *pLastRow = nLastRowFilter < nLastRowPage ? nLastRowFilter : nLastRowPage;
+        *pLastRow = std::min(nLastRowFilter, nLastRowPage);
         *pLastRow -= 1; // End position is not inclusive. Move back one.
     }
 
@@ -381,11 +356,6 @@ void ScDPFilteredCache::filterTable(const vector<Criterion>& rCriteria, Sequence
         rTabData[i] = tableData[i];
 }
 
-SCROW ScDPFilteredCache::getOrder(long nDim, SCROW nIndex)
-{
-    return ScDPCache::GetOrder(nDim, nIndex);
-}
-
 void ScDPFilteredCache::clear()
 {
     maFieldEntries.clear();
@@ -419,11 +389,9 @@ bool ScDPFilteredCache::isRowQualified(sal_Int32 nRow, const vector<Criterion>& 
     return true;
 }
 
-#if DEBUG_PIVOT_TABLE
-using std::cout;
-using std::endl;
+#if DUMP_PIVOT_TABLE
 
-void ScDPFilteredCache::dumpRowFlag(const RowFlagType& rFlag) const
+void ScDPFilteredCache::dumpRowFlag( const RowFlagType& rFlag )
 {
     RowFlagType::const_iterator it = rFlag.begin(), itEnd = rFlag.end();
     bool bShow = it->second;

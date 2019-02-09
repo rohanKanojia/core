@@ -10,6 +10,7 @@
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/task/XInteractionHandler.hpp>
 #include <com/sun/star/ucb/XCommandInfo.hpp>
@@ -22,14 +23,15 @@
 #include <com/sun/star/xml/crypto/NSSInitializer.hpp>
 #endif
 
-#include <comphelper/processfactory.hxx>
 #include <config_oauth2.h>
 #include <rtl/uri.hxx>
+#include <sal/log.hxx>
 #include <ucbhelper/cancelcommandexecution.hxx>
 #include <ucbhelper/commandenvironment.hxx>
 #include <ucbhelper/contentidentifier.hxx>
 #include <ucbhelper/propertyvalueset.hxx>
 #include <ucbhelper/proxydecider.hxx>
+#include <ucbhelper/macros.hxx>
 
 #include "auth_provider.hxx"
 #include "certvalidation_handler.hxx"
@@ -39,18 +41,16 @@
 #include "cmis_resultset.hxx"
 #include <memory>
 
-#define OUSTR_TO_STDSTR(s) string( OUStringToOString( s, RTL_TEXTENCODING_UTF8 ).getStr() )
+#define OUSTR_TO_STDSTR(s) std::string( OUStringToOString( s, RTL_TEXTENCODING_UTF8 ).getStr() )
 #define STD_TO_OUSTR( str ) OUString( str.c_str(), str.length( ), RTL_TEXTENCODING_UTF8 )
 
 using namespace com::sun::star;
-using namespace std;
 
 namespace cmis
 {
     RepoContent::RepoContent( const uno::Reference< uno::XComponentContext >& rxContext,
         ContentProvider *pProvider, const uno::Reference< ucb::XContentIdentifier >& Identifier,
-        vector< libcmis::RepositoryPtr > aRepos )
-            throw ( ucb::ContentCreationException )
+        std::vector< libcmis::RepositoryPtr > const & aRepos )
         : ContentImplHelper( rxContext, pProvider, Identifier ),
         m_pProvider( pProvider ),
         m_aURL( Identifier->getContentIdentifier( ) ),
@@ -73,7 +73,7 @@ namespace cmis
     uno::Any RepoContent::getBadArgExcept()
     {
         return uno::makeAny( lang::IllegalArgumentException(
-            OUString("Wrong argument type!"),
+            "Wrong argument type!",
             static_cast< cppu::OWeakObject * >( this ), -1) );
     }
 
@@ -148,7 +148,7 @@ namespace cmis
         OUString sProxy = rProxy.aName;
         if ( rProxy.nPort > 0 )
             sProxy += ":" + OUString::number( rProxy.nPort );
-        libcmis::SessionFactory::setProxySettings( OUSTR_TO_STDSTR( sProxy ), string(), string(), string() );
+        libcmis::SessionFactory::setProxySettings( OUSTR_TO_STDSTR( sProxy ), std::string(), std::string(), std::string() );
 
         if ( m_aRepositories.empty() )
         {
@@ -161,60 +161,75 @@ namespace cmis
             AuthProvider authProvider( xEnv, m_xIdentifier->getContentIdentifier( ), m_aURL.getBindingUrl( ) );
             AuthProvider::setXEnv( xEnv );
 
-            string rUsername = OUSTR_TO_STDSTR( m_aURL.getUsername( ) );
-            string rPassword = OUSTR_TO_STDSTR( m_aURL.getPassword( ) );
-            if ( authProvider.authenticationQuery( rUsername, rPassword ) )
-            {
-                try
-                {
-                    // Create a session to get repositories
-                    libcmis::OAuth2DataPtr oauth2Data;
-                    if ( m_aURL.getBindingUrl( ) == GDRIVE_BASE_URL )
-                        oauth2Data.reset( new libcmis::OAuth2Data(
-                            GDRIVE_AUTH_URL, GDRIVE_TOKEN_URL,
-                            GDRIVE_SCOPE, GDRIVE_REDIRECT_URI,
-                            GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET ) );
-                    if ( m_aURL.getBindingUrl().startsWith( ALFRESCO_CLOUD_BASE_URL ) )
-                        oauth2Data.reset( new libcmis::OAuth2Data(
-                            ALFRESCO_CLOUD_AUTH_URL, ALFRESCO_CLOUD_TOKEN_URL,
-                            ALFRESCO_CLOUD_SCOPE, ALFRESCO_CLOUD_REDIRECT_URI,
-                            ALFRESCO_CLOUD_CLIENT_ID, ALFRESCO_CLOUD_CLIENT_SECRET ) );
-                    if ( m_aURL.getBindingUrl( ) == ONEDRIVE_BASE_URL )
-                    {
-                        libcmis::SessionFactory::setOAuth2AuthCodeProvider( authProvider.onedriveAuthCodeFallback );
-                        oauth2Data.reset( new libcmis::OAuth2Data(
-                            ONEDRIVE_AUTH_URL, ONEDRIVE_TOKEN_URL,
-                            ONEDRIVE_SCOPE, ONEDRIVE_REDIRECT_URI,
-                            ONEDRIVE_CLIENT_ID, ONEDRIVE_CLIENT_SECRET ) );
-                    }
+            std::string rUsername = OUSTR_TO_STDSTR( m_aURL.getUsername( ) );
+            std::string rPassword = OUSTR_TO_STDSTR( m_aURL.getPassword( ) );
 
-                    std::unique_ptr<libcmis::Session> session(libcmis::SessionFactory::createSession(
-                            OUSTR_TO_STDSTR( m_aURL.getBindingUrl( ) ),
-                            rUsername, rPassword, "", false, oauth2Data ));
-                    if (!session)
-                        ucbhelper::cancelCommandExecution(
+            bool bIsDone = false;
+
+            while( !bIsDone )
+            {
+                if ( authProvider.authenticationQuery( rUsername, rPassword ) )
+                {
+                    try
+                    {
+                        // Create a session to get repositories
+                        libcmis::OAuth2DataPtr oauth2Data;
+                        if ( m_aURL.getBindingUrl( ) == GDRIVE_BASE_URL )
+                        {
+                            libcmis::SessionFactory::setOAuth2AuthCodeProvider( AuthProvider::gdriveAuthCodeFallback );
+                            oauth2Data.reset( new libcmis::OAuth2Data(
+                                GDRIVE_AUTH_URL, GDRIVE_TOKEN_URL,
+                                GDRIVE_SCOPE, GDRIVE_REDIRECT_URI,
+                                GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET ) );
+                        }
+                        if ( m_aURL.getBindingUrl().startsWith( ALFRESCO_CLOUD_BASE_URL ) )
+                            oauth2Data.reset( new libcmis::OAuth2Data(
+                                ALFRESCO_CLOUD_AUTH_URL, ALFRESCO_CLOUD_TOKEN_URL,
+                                ALFRESCO_CLOUD_SCOPE, ALFRESCO_CLOUD_REDIRECT_URI,
+                                ALFRESCO_CLOUD_CLIENT_ID, ALFRESCO_CLOUD_CLIENT_SECRET ) );
+                        if ( m_aURL.getBindingUrl( ) == ONEDRIVE_BASE_URL )
+                        {
+                            libcmis::SessionFactory::setOAuth2AuthCodeProvider( AuthProvider::onedriveAuthCodeFallback );
+                            oauth2Data.reset( new libcmis::OAuth2Data(
+                                ONEDRIVE_AUTH_URL, ONEDRIVE_TOKEN_URL,
+                                ONEDRIVE_SCOPE, ONEDRIVE_REDIRECT_URI,
+                                ONEDRIVE_CLIENT_ID, ONEDRIVE_CLIENT_SECRET ) );
+                        }
+
+                        std::unique_ptr<libcmis::Session> session(libcmis::SessionFactory::createSession(
+                                OUSTR_TO_STDSTR( m_aURL.getBindingUrl( ) ),
+                                rUsername, rPassword, "", false, oauth2Data ));
+                        if (!session)
+                            ucbhelper::cancelCommandExecution(
+                                                ucb::IOErrorCode_INVALID_DEVICE,
+                                                uno::Sequence< uno::Any >( 0 ),
+                                                xEnv );
+                        m_aRepositories = session->getRepositories( );
+
+                        bIsDone = true;
+                    }
+                    catch ( const libcmis::Exception& e )
+                    {
+                        SAL_INFO( "ucb.ucp.cmis", "Error getting repositories: " << e.what() );
+
+                        if ( e.getType() != "permissionDenied" )
+                        {
+                            ucbhelper::cancelCommandExecution(
                                             ucb::IOErrorCode_INVALID_DEVICE,
                                             uno::Sequence< uno::Any >( 0 ),
                                             xEnv );
-                    m_aRepositories = session->getRepositories( );
+                        }
+                    }
                 }
-                catch (const libcmis::Exception& e)
+                else
                 {
-                    SAL_INFO( "ucb.ucp.cmis", "Error getting repositories: " << e.what() );
+                    // Throw user cancelled exception
                     ucbhelper::cancelCommandExecution(
-                                        ucb::IOErrorCode_INVALID_DEVICE,
+                                        ucb::IOErrorCode_ABORT,
                                         uno::Sequence< uno::Any >( 0 ),
-                                        xEnv );
+                                        xEnv,
+                                        "Authentication cancelled" );
                 }
-            }
-            else
-            {
-                // Throw user cancelled exception
-                ucbhelper::cancelCommandExecution(
-                                    ucb::IOErrorCode_ABORT,
-                                    uno::Sequence< uno::Any >( 0 ),
-                                    xEnv,
-                                    "Authentication cancelled" );
             }
         }
     }
@@ -228,12 +243,10 @@ namespace cmis
 
         if ( !m_sRepositoryId.isEmpty() )
         {
-            for ( vector< libcmis::RepositoryPtr >::iterator it = m_aRepositories.begin( );
-                    it != m_aRepositories.end( ) && nullptr == repo.get( ); ++it )
-            {
-                if ( STD_TO_OUSTR( ( *it )->getId( ) ) == m_sRepositoryId )
-                    repo = *it;
-            }
+            auto it = std::find_if(m_aRepositories.begin(), m_aRepositories.end(),
+                [&](const libcmis::RepositoryPtr& rRepo) { return STD_TO_OUSTR(rRepo->getId()) == m_sRepositoryId; });
+            if (it != m_aRepositories.end())
+                repo = *it;
         }
         else
             repo = m_aRepositories.front( );
@@ -245,16 +258,16 @@ namespace cmis
     {
         static const beans::Property aGenericProperties[] =
         {
-            beans::Property( OUString( "IsDocument" ),
+            beans::Property( "IsDocument",
                 -1, cppu::UnoType<bool>::get(),
                 beans::PropertyAttribute::BOUND | beans::PropertyAttribute::READONLY ),
-            beans::Property( OUString( "IsFolder" ),
+            beans::Property( "IsFolder",
                 -1, cppu::UnoType<bool>::get(),
                 beans::PropertyAttribute::BOUND | beans::PropertyAttribute::READONLY ),
-            beans::Property( OUString( "Title" ),
+            beans::Property( "Title",
                 -1, cppu::UnoType<OUString>::get(),
                 beans::PropertyAttribute::BOUND ),
-            beans::Property( OUString( "IsReadOnly" ),
+            beans::Property( "IsReadOnly",
                 -1, cppu::UnoType<bool>::get(),
                 beans::PropertyAttribute::BOUND | beans::PropertyAttribute::READONLY ),
         };
@@ -270,21 +283,21 @@ namespace cmis
         {
             // Required commands
             ucb::CommandInfo
-            ( OUString( "getCommandInfo" ),
+            ( "getCommandInfo",
               -1, cppu::UnoType<void>::get() ),
             ucb::CommandInfo
-            ( OUString( "getPropertySetInfo" ),
+            ( "getPropertySetInfo",
               -1, cppu::UnoType<void>::get() ),
             ucb::CommandInfo
-            ( OUString( "getPropertyValues" ),
+            ( "getPropertyValues",
               -1, cppu::UnoType<uno::Sequence< beans::Property >>::get() ),
             ucb::CommandInfo
-            ( OUString( "setPropertyValues" ),
+            ( "setPropertyValues",
               -1, cppu::UnoType<uno::Sequence< beans::PropertyValue >>::get() ),
 
             // Optional standard commands
             ucb::CommandInfo
-            ( OUString( "open" ),
+            ( "open",
               -1, cppu::UnoType<ucb::OpenCommandArgument2>::get() ),
         };
 
@@ -294,45 +307,27 @@ namespace cmis
 
     OUString RepoContent::getParentURL( )
     {
-        OUString sRet;
-
         SAL_INFO( "ucb.ucp.cmis", "RepoContent::getParentURL()" );
 
         // TODO Implement me
 
-        return sRet;
+        return OUString();
     }
 
     XTYPEPROVIDER_COMMON_IMPL( RepoContent );
 
-    void SAL_CALL RepoContent::acquire() throw()
-    {
-        ContentImplHelper::acquire();
-    }
-
-    void SAL_CALL RepoContent::release() throw()
-    {
-        ContentImplHelper::release();
-    }
-
-    uno::Any SAL_CALL RepoContent::queryInterface( const uno::Type & rType ) throw ( uno::RuntimeException, std::exception )
-    {
-        return ContentImplHelper::queryInterface(rType);
-    }
-
-    OUString SAL_CALL RepoContent::getImplementationName() throw( uno::RuntimeException, std::exception )
+    OUString SAL_CALL RepoContent::getImplementationName()
     {
        return OUString("com.sun.star.comp.CmisRepoContent");
     }
 
     uno::Sequence< OUString > SAL_CALL RepoContent::getSupportedServiceNames()
-           throw( uno::RuntimeException, std::exception )
     {
        uno::Sequence<OUString> aSNS { "com.sun.star.ucb.Content" };
        return aSNS;
     }
 
-    OUString SAL_CALL RepoContent::getContentType() throw( uno::RuntimeException, std::exception )
+    OUString SAL_CALL RepoContent::getContentType()
     {
         return OUString( CMIS_REPO_TYPE );
     }
@@ -341,7 +336,6 @@ namespace cmis
         const ucb::Command& aCommand,
         sal_Int32 /*CommandId*/,
         const uno::Reference< ucb::XCommandEnvironment >& xEnv )
-            throw( uno::Exception, ucb::CommandAbortedException, uno::RuntimeException, std::exception )
     {
         SAL_INFO( "ucb.ucp.cmis", "RepoContent::execute( ) - " << aCommand.Name );
 
@@ -378,15 +372,15 @@ namespace cmis
         return aRet;
     }
 
-    void SAL_CALL RepoContent::abort( sal_Int32 /*CommandId*/ ) throw( uno::RuntimeException, std::exception )
+    void SAL_CALL RepoContent::abort( sal_Int32 /*CommandId*/ )
     {
         SAL_INFO( "ucb.ucp.cmis", "TODO - RepoContent::abort()" );
         // TODO Implement me
     }
 
-    uno::Sequence< uno::Type > SAL_CALL RepoContent::getTypes() throw( uno::RuntimeException, std::exception )
+    uno::Sequence< uno::Type > SAL_CALL RepoContent::getTypes()
     {
-        static cppu::OTypeCollection aFolderCollection
+        static cppu::OTypeCollection s_aFolderCollection
             (CPPU_TYPE_REF( lang::XTypeProvider ),
              CPPU_TYPE_REF( lang::XServiceInfo ),
              CPPU_TYPE_REF( lang::XComponent ),
@@ -397,23 +391,22 @@ namespace cmis
              CPPU_TYPE_REF( beans::XPropertyContainer ),
              CPPU_TYPE_REF( beans::XPropertySetInfoChangeNotifier ),
              CPPU_TYPE_REF( container::XChild ) );
-        return aFolderCollection.getTypes();
+        return s_aFolderCollection.getTypes();
     }
 
-    list< uno::Reference< ucb::XContent > > RepoContent::getChildren( )
+    std::vector< uno::Reference< ucb::XContent > > RepoContent::getChildren( )
     {
-        list< uno::Reference< ucb::XContent > > result;
+        std::vector< uno::Reference< ucb::XContent > > result;
 
         // TODO Cache the results somehow
         SAL_INFO( "ucb.ucp.cmis", "RepoContent::getChildren" );
 
         if ( m_sRepositoryId.isEmpty( ) )
         {
-            for ( vector< libcmis::RepositoryPtr >::iterator it = m_aRepositories.begin( );
-                    it != m_aRepositories.end(); ++it )
+            for ( const auto& rRepo : m_aRepositories )
             {
                 URL aUrl( m_aURL );
-                aUrl.setObjectPath( STD_TO_OUSTR( ( *it )->getId( ) ) );
+                aUrl.setObjectPath( STD_TO_OUSTR( rRepo->getId( ) ) );
 
                 uno::Reference< ucb::XContentIdentifier > xId = new ucbhelper::ContentIdentifier( aUrl.asString( ) );
                 uno::Reference< ucb::XContent > xContent = new RepoContent( m_xContext, m_pProvider, xId, m_aRepositories );

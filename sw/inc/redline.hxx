@@ -22,16 +22,17 @@
 #include <tools/datetime.hxx>
 #include <rtl/ustring.hxx>
 
-#include <pam.hxx>
-#include <swtable.hxx>
+#include "pam.hxx"
 
-#include <IDocumentRedlineAccess.hxx>
+#include "IDocumentRedlineAccess.hxx"
 
-#include <svl/smplhint.hxx>
+#include <cstddef>
+#include <memory>
 #include <vector>
+#include <boost/optional.hpp>
+
 
 class SfxItemSet;
-class SwView;
 
 class SW_DLLPUBLIC SwRedlineExtraData
 {
@@ -51,13 +52,13 @@ public:
 
 class SwRedlineExtraData_FormatColl : public SwRedlineExtraData
 {
-    OUString sFormatNm;
-    SfxItemSet* pSet;
-    sal_uInt16 nPoolId;
+    OUString m_sFormatNm;
+    std::unique_ptr<SfxItemSet> m_pSet;
+    sal_uInt16 m_nPoolId;
 public:
     SwRedlineExtraData_FormatColl( const OUString& rColl, sal_uInt16 nPoolFormatId,
                                 const SfxItemSet* pSet = nullptr );
-    virtual ~SwRedlineExtraData_FormatColl();
+    virtual ~SwRedlineExtraData_FormatColl() override;
     virtual SwRedlineExtraData* CreateNew() const override;
     virtual void Reject( SwPaM& rPam ) const override;
     virtual bool operator == ( const SwRedlineExtraData& ) const override;
@@ -67,13 +68,13 @@ public:
 
 class SwRedlineExtraData_Format : public SwRedlineExtraData
 {
-    std::vector<sal_uInt16> aWhichIds;
+    std::vector<sal_uInt16> m_aWhichIds;
 
     SwRedlineExtraData_Format( const SwRedlineExtraData_Format& rCpy );
 
 public:
     SwRedlineExtraData_Format( const SfxItemSet& rSet );
-    virtual ~SwRedlineExtraData_Format();
+    virtual ~SwRedlineExtraData_Format() override;
     virtual SwRedlineExtraData* CreateNew() const override;
     virtual void Reject( SwPaM& rPam ) const override;
     virtual bool operator == ( const SwRedlineExtraData& ) const override;
@@ -82,110 +83,100 @@ public:
 /*
  * This class is used to store 'redline' data regarding formatting changes,
  * e.g. - a text portion *was* italic and now is not italic,
- * e.g. - a text portion got a hightlight to it
+ * e.g. - a text portion got a highlight to it
  *
  * The way the information is stored is in an 'SfxItemSet' that holds all
  * the WhichIds with their values.
  */
 class SW_DLLPUBLIC SwRedlineExtraData_FormattingChanges : public SwRedlineExtraData
 {
-    SfxItemSet* pSet;
+    std::unique_ptr<SfxItemSet> m_pSet;
 
     SwRedlineExtraData_FormattingChanges( const SwRedlineExtraData_FormattingChanges& rCpy );
 
 public:
     SwRedlineExtraData_FormattingChanges( const SfxItemSet* pItemSet );
-    virtual ~SwRedlineExtraData_FormattingChanges();
+    virtual ~SwRedlineExtraData_FormattingChanges() override;
     virtual SwRedlineExtraData* CreateNew() const override;
     virtual void Reject( SwPaM& rPam ) const override;
     virtual bool operator == ( const SwRedlineExtraData& ) const override;
-    SfxItemSet* GetItemSet( ) const { return pSet; }
+    SfxItemSet* GetItemSet( ) const { return m_pSet.get(); }
 };
 
 class SW_DLLPUBLIC SwRedlineData
 {
     friend class SwRangeRedline;
-    SwRedlineData* pNext;       // Points to other data.
-    SwRedlineExtraData* pExtraData;
+    SwRedlineData* m_pNext;       // Points to other data.
+    SwRedlineExtraData* m_pExtraData;
 
-    OUString sComment;
-    DateTime aStamp;
-    RedlineType_t eType;
-    sal_uInt16 nAuthor, nSeqNo;
+    OUString m_sComment;
+    DateTime m_aStamp;
+    RedlineType_t m_eType;
+    std::size_t const m_nAuthor;
+    sal_uInt16 m_nSeqNo;
 
 public:
-    SwRedlineData( RedlineType_t eT, sal_uInt16 nAut );
+    SwRedlineData( RedlineType_t eT, std::size_t nAut );
     SwRedlineData( const SwRedlineData& rCpy, bool bCpyNext = true );
 
     // For sw3io: pNext/pExtraData are taken over.
-    SwRedlineData( RedlineType_t eT, sal_uInt16 nAut, const DateTime& rDT,
-                   const OUString& rCmnt, SwRedlineData* pNxt,
-                    SwRedlineExtraData* pExtraData = nullptr );
+    SwRedlineData( RedlineType_t eT, std::size_t nAut, const DateTime& rDT,
+                   const OUString& rCmnt, SwRedlineData* pNxt );
 
     ~SwRedlineData();
 
     bool operator==( const SwRedlineData& rCmp ) const
         {
-            return nAuthor == rCmp.nAuthor &&
-                    eType == rCmp.eType &&
-                    sComment == rCmp.sComment &&
-                    (( !pNext && !rCmp.pNext ) ||
-                        ( pNext && rCmp.pNext && *pNext == *rCmp.pNext )) &&
-                    (( !pExtraData && !rCmp.pExtraData ) ||
-                        ( pExtraData && rCmp.pExtraData &&
-                            *pExtraData == *rCmp.pExtraData ));
+            return m_nAuthor == rCmp.m_nAuthor &&
+                    m_eType == rCmp.m_eType &&
+                    m_sComment == rCmp.m_sComment &&
+                    (( !m_pNext && !rCmp.m_pNext ) ||
+                        ( m_pNext && rCmp.m_pNext && *m_pNext == *rCmp.m_pNext )) &&
+                    (( !m_pExtraData && !rCmp.m_pExtraData ) ||
+                        ( m_pExtraData && rCmp.m_pExtraData &&
+                            *m_pExtraData == *rCmp.m_pExtraData ));
         }
     bool operator!=( const SwRedlineData& rCmp ) const
         {   return !operator==( rCmp ); }
 
     RedlineType_t GetType() const
-        { return ((RedlineType_t)(eType & nsRedlineType_t::REDLINE_NO_FLAG_MASK)); }
+        { return static_cast<RedlineType_t>(m_eType & nsRedlineType_t::REDLINE_NO_FLAG_MASK); }
 
-    sal_uInt16 GetAuthor() const                { return nAuthor; }
-    const OUString& GetComment() const        { return sComment; }
-    const DateTime& GetTimeStamp() const    { return aStamp; }
-    inline const SwRedlineData* Next() const{ return pNext; }
+    std::size_t GetAuthor() const                { return m_nAuthor; }
+    const OUString& GetComment() const        { return m_sComment; }
+    const DateTime& GetTimeStamp() const    { return m_aStamp; }
+    const SwRedlineData* Next() const{ return m_pNext; }
 
-    void SetComment( const OUString& rS )     { sComment = rS; }
-    void SetTimeStamp( const DateTime& rDT ) { aStamp = rDT; }
+    void SetComment( const OUString& rS )     { m_sComment = rS; }
+    void SetTimeStamp( const DateTime& rDT ) { m_aStamp = rDT; }
 
     void SetAutoFormatFlag()
-        { eType = (RedlineType_t)(eType | nsRedlineType_t::REDLINE_FORM_AUTOFMT); }
-    bool CanCombine( const SwRedlineData& rCmp ) const
-        {
-            return nAuthor == rCmp.nAuthor &&
-                    eType == rCmp.eType &&
-                    sComment == rCmp.sComment &&
-                    GetTimeStamp() == rCmp.GetTimeStamp() &&
-                    (( !pNext && !rCmp.pNext ) ||
-                        ( pNext && rCmp.pNext &&
-                        pNext->CanCombine( *rCmp.pNext ))) &&
-                    (( !pExtraData && !rCmp.pExtraData ) ||
-                        ( pExtraData && rCmp.pExtraData &&
-                            *pExtraData == *rCmp.pExtraData ));
-        }
+        { m_eType = static_cast<RedlineType_t>(m_eType | nsRedlineType_t::REDLINE_FORM_AUTOFMT); }
+    bool CanCombine( const SwRedlineData& rCmp ) const;
 
     // ExtraData gets copied, the pointer is therefore not taken over by
-    // the RedlilneObject
+    // the RedlineObject
     void SetExtraData( const SwRedlineExtraData* pData );
-    const SwRedlineExtraData* GetExtraData() const { return pExtraData; }
+    const SwRedlineExtraData* GetExtraData() const { return m_pExtraData; }
 
     // For UI-side pooling of Redline-actions.
     // At the moment only used for Autoformat with Redline.
     // Value != 0 means there can be others!
-    sal_uInt16 GetSeqNo() const                     { return nSeqNo; }
-    void SetSeqNo( sal_uInt16 nNo )                 { nSeqNo = nNo; }
+    sal_uInt16 GetSeqNo() const                     { return m_nSeqNo; }
+    void SetSeqNo( sal_uInt16 nNo )                 { m_nSeqNo = nNo; }
 
     OUString GetDescr() const;
 };
 
 class SW_DLLPUBLIC SwRangeRedline : public SwPaM
 {
-    SwRedlineData* pRedlineData;
-    SwNodeIndex* pContentSect;
-    bool bDelLastPara : 1;
-    bool bIsLastParaDelete : 1;
-    bool bIsVisible : 1;
+    SwRedlineData* m_pRedlineData;
+    SwNodeIndex* m_pContentSect;
+    bool m_bDelLastPara : 1;
+    bool m_bIsVisible : 1;
+    sal_uInt32 const m_nId;
+
+    boost::optional<long> m_oLOKLastNodeTop;
 
     void MoveToSection();
     void CopyToSection();
@@ -193,66 +184,62 @@ class SW_DLLPUBLIC SwRangeRedline : public SwPaM
     void MoveFromSection(size_t nMyPos);
 
 public:
+    static sal_uInt32 m_nLastId;
+
     SwRangeRedline( RedlineType_t eType, const SwPaM& rPam );
     SwRangeRedline( const SwRedlineData& rData, const SwPaM& rPam );
     SwRangeRedline( const SwRedlineData& rData, const SwPosition& rPos );
     // For sw3io: pData is taken over!
     SwRangeRedline(SwRedlineData* pData, const SwPosition& rPos,
                bool bDelLP) :
-        SwPaM( rPos ), pRedlineData( pData ), pContentSect( nullptr ),
-        bDelLastPara( bDelLP ), bIsLastParaDelete( false ), bIsVisible( true )
+        SwPaM( rPos ), m_pRedlineData( pData ), m_pContentSect( nullptr ),
+        m_bDelLastPara( bDelLP ), m_bIsVisible( true ), m_nId( m_nLastId++ )
     {}
     SwRangeRedline( const SwRangeRedline& );
-    virtual ~SwRangeRedline();
+    virtual ~SwRangeRedline() override;
 
-    SwNodeIndex* GetContentIdx() const { return pContentSect; }
+    sal_uInt32 GetId() const { return m_nId; }
+    SwNodeIndex* GetContentIdx() const { return m_pContentSect; }
     // For Undo.
     void SetContentIdx( const SwNodeIndex* );
 
-    bool IsVisible() const { return bIsVisible; }
-    bool IsDelLastPara() const { return bDelLastPara; }
+    bool IsVisible() const { return m_bIsVisible; }
+    bool IsDelLastPara() const { return m_bDelLastPara; }
 
-    void SetStart( const SwPosition& rPos, SwPosition* pSttPtr = nullptr )
-    {
-        if( !pSttPtr ) pSttPtr = Start();
-        *pSttPtr = rPos;
-    }
-    void SetEnd( const SwPosition& rPos, SwPosition* pEndPtr = nullptr )
-    {
-        if( !pEndPtr ) pEndPtr = End();
-        *pEndPtr = rPos;
-    }
+    void SetStart( const SwPosition& rPos, SwPosition* pSttPtr = nullptr );
+    void SetEnd( const SwPosition& rPos, SwPosition* pEndPtr = nullptr );
+
     /// Do we have a valid selection?
     bool HasValidRange() const;
 
     const SwRedlineData& GetRedlineData(sal_uInt16 nPos = 0) const;
     bool operator!=( const SwRedlineData& rCmp ) const
-        { return *pRedlineData != rCmp; }
-    void SetAutoFormatFlag()               { pRedlineData->SetAutoFormatFlag(); }
+        { return *m_pRedlineData != rCmp; }
+    void SetAutoFormatFlag()               { m_pRedlineData->SetAutoFormatFlag(); }
 
     sal_uInt16 GetStackCount() const;
-    sal_uInt16 GetAuthor( sal_uInt16 nPos = 0) const;
-    OUString GetAuthorString( sal_uInt16 nPos = 0 ) const;
+    std::size_t GetAuthor( sal_uInt16 nPos = 0) const;
+    OUString const & GetAuthorString( sal_uInt16 nPos = 0 ) const;
     const DateTime& GetTimeStamp( sal_uInt16 nPos = 0) const;
     RedlineType_t GetRealType( sal_uInt16 nPos = 0 ) const;
     RedlineType_t GetType( sal_uInt16 nPos = 0) const
-        { return ( (RedlineType_t)(GetRealType( nPos ) & nsRedlineType_t::REDLINE_NO_FLAG_MASK)); }
+        { return static_cast<RedlineType_t>(GetRealType( nPos ) & nsRedlineType_t::REDLINE_NO_FLAG_MASK); }
     const OUString& GetComment( sal_uInt16 nPos = 0 ) const;
 
-    void SetComment( const OUString& rS ) { pRedlineData->SetComment( rS ); }
+    void SetComment( const OUString& rS ) { m_pRedlineData->SetComment( rS ); }
 
     /** ExtraData gets copied, the pointer is therefore not taken over by
      *  the RedLineObject.*/
     void SetExtraData( const SwRedlineExtraData* pData )
-        { pRedlineData->SetExtraData( pData ); }
+        { m_pRedlineData->SetExtraData( pData ); }
     const SwRedlineExtraData* GetExtraData() const
-        { return pRedlineData->GetExtraData(); }
+        { return m_pRedlineData->GetExtraData(); }
 
     // For UI-side pooling of Redline-actions.
     // At the moment only used for Autoformat with Redline.
     // Value != 0 means there can be others!
-    sal_uInt16 GetSeqNo() const             { return pRedlineData->GetSeqNo(); }
-    void SetSeqNo( sal_uInt16 nNo )         { pRedlineData->SetSeqNo( nNo ); }
+    sal_uInt16 GetSeqNo() const             { return m_pRedlineData->GetSeqNo(); }
+    void SetSeqNo( sal_uInt16 nNo )         { m_pRedlineData->SetSeqNo( nNo ); }
 
     // At Hide/ShowOriginal the list is traversed two times in order to
     // hide the Del-Redlines via Copy and Delete.
@@ -266,8 +253,9 @@ public:
     /// Calculates the intersection with text node number nNdIdx.
     void CalcStartEnd(sal_uLong nNdIdx, sal_Int32& rStart, sal_Int32& rEnd) const;
 
+    enum class Invalidation { Add, Remove };
     /// Initiate the layout.
-    void InvalidateRange();
+    void InvalidateRange(Invalidation);
 
     bool IsOwnRedline( const SwRangeRedline& rRedl ) const
         { return GetAuthor() == rRedl.GetAuthor(); }
@@ -289,7 +277,11 @@ public:
 
     bool operator<( const SwRangeRedline& ) const;
     void dumpAsXml(struct _xmlTextWriter* pWriter) const;
+
+    void MaybeNotifyRedlinePositionModification(long nTop);
 };
+
+SW_DLLPUBLIC void MaybeNotifyRedlineModification(SwRangeRedline* pRedline, SwDoc* pDoc);
 
 /// Base object for 'Redlines' that are not of 'Ranged' type (like table row insert\delete)
 class SW_DLLPUBLIC SwExtraRedline
@@ -311,7 +303,7 @@ private:
 
 public:
     SwTableRowRedline(const SwRedlineData& rData, const SwTableLine& rTableLine);
-    virtual ~SwTableRowRedline();
+    virtual ~SwTableRowRedline() override;
 
     /** ExtraData gets copied, the pointer is therefore not taken over by
      *  the RedLineObject.*/
@@ -332,7 +324,7 @@ private:
 
 public:
     SwTableCellRedline(const SwRedlineData& rData, const SwTableBox& rTableBox);
-    virtual ~SwTableCellRedline();
+    virtual ~SwTableCellRedline() override;
 
     /** ExtraData gets copied, the pointer is therefore not taken over by
      *  the RedLineObject.*/
@@ -346,10 +338,14 @@ public:
 
 class SW_DLLPUBLIC SwRedlineHint : public SfxHint
 {
-#define SWREDLINE_INSERTED  1
-#define SWREDLINE_FOCUS     3
-
 };
+
+
+namespace sw {
+
+std::vector<SwRangeRedline*> GetAllValidRanges(std::unique_ptr<SwRangeRedline> p);
+
+} // namespace sw
 
 #endif
 

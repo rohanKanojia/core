@@ -20,7 +20,8 @@
 #ifndef INCLUDED_BASIC_SOURCE_INC_SCANNER_HXX
 #define INCLUDED_BASIC_SOURCE_INC_SCANNER_HXX
 
-#include <basic/sberrors.hxx>
+#include <basic/sbxdef.hxx>
+#include <vcl/errcode.hxx>
 
 // The scanner is stand-alone, i. e. it can be used from everywhere.
 // A BASIC-instance is necessary for error messages. Without BASIC
@@ -33,8 +34,8 @@ class SbiScanner
 {
     OUString   aBuf;             // input buffer
     OUString   aLine;
-    const sal_Unicode* pLine;
-    const sal_Unicode* pSaveLine;
+    sal_Int32 nLineIdx;
+    sal_Int32 nSaveLineIdx;
     StarBASIC* pBasic;                  // instance for error callbacks
 
     void scanAlphanumeric();
@@ -45,7 +46,6 @@ protected:
     OUString aError;
     SbxDataType eScanType;
     double nVal;                        // numeric value
-    sal_Int32 nCurCol1;
     sal_Int32 nSavedCol1;
     sal_Int32 nCol;
     sal_Int32 nErrors;
@@ -64,10 +64,9 @@ protected:
     bool   bPrevLineExtentsComment;     // true: Previous line is comment and ends on "... _"
 
     bool   bInStatement;
-    void   GenError( SbError );
+    void   GenError( ErrCode );
 public:
     SbiScanner( const OUString&, StarBASIC* = nullptr );
-   ~SbiScanner();
 
     void  EnableErrors()            { bError = false; }
     bool  IsHash()                  { return bHash;   }
@@ -80,8 +79,8 @@ public:
     sal_Int32 GetCol1()             { return nCol1;   }
     void  SetCol1( sal_Int32 n )    { nCol1 = n;      }
     StarBASIC* GetBasic()           { return pBasic;  }
-    void  SaveLine()            { pSaveLine = pLine; }
-    void  RestoreLine()         { pLine = pSaveLine; }
+    void  SaveLine()                { nSaveLineIdx = nLineIdx; }
+    void  RestoreLine()             { nLineIdx = nSaveLineIdx; }
     void  LockColumn();
     void  UnlockColumn();
     bool  DoesColonFollow();

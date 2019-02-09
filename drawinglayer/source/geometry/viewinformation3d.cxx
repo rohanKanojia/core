@@ -22,8 +22,9 @@
 #include <basegfx/matrix/b3dhommatrix.hxx>
 #include <com/sun/star/geometry/AffineMatrix3D.hpp>
 #include <com/sun/star/geometry/RealRectangle3D.hpp>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <rtl/instance.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
 
 
 using namespace com::sun::star;
@@ -120,7 +121,7 @@ namespace drawinglayer
                 return OUString("Time");
             }
 
-            // a central PropertyValue parsing method to allow transportatin of
+            // a central PropertyValue parsing method to allow transportation of
             // all ViewParameters using UNO API
             void impInterpretPropertyValues(const uno::Sequence< beans::PropertyValue >& rViewParameters)
             {
@@ -451,25 +452,20 @@ namespace drawinglayer
         {
         }
 
-        ViewInformation3D::ViewInformation3D(const ViewInformation3D& rCandidate)
-        :   mpViewInformation3D(rCandidate.mpViewInformation3D)
-        {
-        }
+        ViewInformation3D::ViewInformation3D(const ViewInformation3D&) = default;
 
-        ViewInformation3D::~ViewInformation3D()
-        {
-        }
+        ViewInformation3D::ViewInformation3D(ViewInformation3D&&) = default;
+
+        ViewInformation3D::~ViewInformation3D() = default;
 
         bool ViewInformation3D::isDefault() const
         {
             return mpViewInformation3D.same_object(theGlobalDefault::get());
         }
 
-        ViewInformation3D& ViewInformation3D::operator=(const ViewInformation3D& rCandidate)
-        {
-            mpViewInformation3D = rCandidate.mpViewInformation3D;
-            return *this;
-        }
+        ViewInformation3D& ViewInformation3D::operator=(const ViewInformation3D&) = default;
+
+        ViewInformation3D& ViewInformation3D::operator=(ViewInformation3D&&) = default;
 
         bool ViewInformation3D::operator==(const ViewInformation3D& rCandidate) const
         {

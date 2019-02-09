@@ -9,12 +9,11 @@
 
 #undef SC_DLLIMPLEMENTATION
 
-#include "tpdefaults.hxx"
-#include "sc.hrc"
-#include "scresid.hxx"
-#include "scmod.hxx"
-#include "defaultsoptions.hxx"
-#include "document.hxx"
+#include <tpdefaults.hxx>
+#include <sc.hrc>
+#include <scmod.hxx>
+#include <defaultsoptions.hxx>
+#include <document.hxx>
 
 ScTpDefaultsOptions::ScTpDefaultsOptions(vcl::Window *pParent, const SfxItemSet &rCoreSet) :
     SfxTabPage(pParent, "OptDefaultPage", "modules/scalc/ui/optdefaultpage.ui", &rCoreSet)
@@ -40,9 +39,9 @@ void ScTpDefaultsOptions::dispose()
     SfxTabPage::dispose();
 }
 
-VclPtr<SfxTabPage> ScTpDefaultsOptions::Create(vcl::Window *pParent, const SfxItemSet *rCoreAttrs)
+VclPtr<SfxTabPage> ScTpDefaultsOptions::Create(TabPageParent pParent, const SfxItemSet *rCoreAttrs)
 {
-    return VclPtr<ScTpDefaultsOptions>::Create(pParent, *rCoreAttrs);
+    return VclPtr<ScTpDefaultsOptions>::Create(pParent.pParent, *rCoreAttrs);
 }
 
 bool ScTpDefaultsOptions::FillItemSet(SfxItemSet *rCoreSet)
@@ -59,7 +58,7 @@ bool ScTpDefaultsOptions::FillItemSet(SfxItemSet *rCoreSet)
         aOpt.SetInitTabCount( nTabCount );
         aOpt.SetInitTabPrefix( aSheetPrefix );
 
-        rCoreSet->Put( ScTpDefaultsItem( SID_SCDEFAULTSOPTIONS, aOpt ) );
+        rCoreSet->Put( ScTpDefaultsItem( aOpt ) );
         bRet = true;
     }
     return bRet;
@@ -79,9 +78,9 @@ void ScTpDefaultsOptions::Reset(const SfxItemSet* rCoreSet)
     m_pEdSheetPrefix->SaveValue();
 }
 
-SfxTabPage::sfxpg ScTpDefaultsOptions::DeactivatePage(SfxItemSet* /*pSet*/)
+DeactivateRC ScTpDefaultsOptions::DeactivatePage(SfxItemSet* /*pSet*/)
 {
-    return KEEP_PAGE;
+    return DeactivateRC::KeepPage;
 }
 
 void ScTpDefaultsOptions::CheckNumSheets()
@@ -113,7 +112,7 @@ void ScTpDefaultsOptions::CheckPrefix(Edit* pEdit)
     }
 }
 
-void ScTpDefaultsOptions::OnFocusPrefixInput(Edit* pEdit)
+void ScTpDefaultsOptions::OnFocusPrefixInput(const Edit* pEdit)
 {
     if (!pEdit)
         return;
@@ -122,17 +121,17 @@ void ScTpDefaultsOptions::OnFocusPrefixInput(Edit* pEdit)
     maOldPrefixValue = pEdit->GetText();
 }
 
-IMPL_LINK_NOARG_TYPED(ScTpDefaultsOptions, NumModifiedHdl, Edit&, void)
+IMPL_LINK_NOARG(ScTpDefaultsOptions, NumModifiedHdl, Edit&, void)
 {
     CheckNumSheets();
 }
 
-IMPL_LINK_TYPED( ScTpDefaultsOptions, PrefixModifiedHdl, Edit&, rEdit, void )
+IMPL_LINK( ScTpDefaultsOptions, PrefixModifiedHdl, Edit&, rEdit, void )
 {
     CheckPrefix(&rEdit);
 }
 
-IMPL_LINK_TYPED( ScTpDefaultsOptions, PrefixEditOnFocusHdl, Control&, rControl, void )
+IMPL_LINK( ScTpDefaultsOptions, PrefixEditOnFocusHdl, Control&, rControl, void )
 {
     OnFocusPrefixInput(static_cast<Edit*>(&rControl));
 }

@@ -8,10 +8,13 @@
  */
 
 #define DISABLE_DYNLOADING
-#define FORCE_SYSALLOC
 #define NO_CHILD_PROCESSES
 #undef SAL_LOG_INFO
 #undef SAL_LOG_WARN
+
+#include <sal/config.h>
+
+#include <cstdlib>
 
 #include <sal/rtl/string.cxx>
 #include <sal/rtl/ustring.cxx>
@@ -33,6 +36,7 @@
 #include <sal/osl/unx/profile.cxx>
 #include <sal/osl/unx/readwrite_helper.cxx>
 #include <sal/osl/unx/security.cxx>
+#include <sal/osl/unx/socket.cxx>
 #include <sal/osl/unx/thread.cxx>
 #include <sal/osl/unx/uunxapi.cxx>
 #include <sal/rtl/alloc_arena.cxx>
@@ -56,5 +60,20 @@
 #include <sal/textenc/textcvt.cxx>
 #include <sal/textenc/textenc.cxx>
 #include <sal/textenc/unichars.cxx>
+
+#if defined MACOSX
+#include <sal/osl/unx/osxlocale.cxx>
+#include <sal/osl/unx/system.cxx>
+#endif
+
+// Called from FullTextEncodingData::get in sal/textenc/textenc.cxx, but only
+// defined for ANDROID (in ANDROID-specific sal/textenc/tables.cxx); would even
+// work to leave it undefined for LINUX due to no '-z defs' under -fsanitize=*
+// (solenv/gbuild/platform/linux.mk), but not for MACOSX:
+extern "C" ImplTextEncodingData const * sal_getFullTextEncodingData(
+    rtl_TextEncoding)
+{
+    std::abort();
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

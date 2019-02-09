@@ -23,6 +23,8 @@
 
 #include <rtl/ref.hxx>
 
+#include <svtools/acceleratorexecute.hxx>
+
 namespace sfx2 { namespace sidebar {
 
 class SidebarChildWindow;
@@ -34,10 +36,15 @@ class SidebarDockingWindow : public SfxDockingWindow
 public:
     SidebarDockingWindow(SfxBindings* pBindings, SidebarChildWindow& rChildWindow,
                          vcl::Window* pParent, WinBits nBits);
-    virtual ~SidebarDockingWindow();
+    virtual ~SidebarDockingWindow() override;
     virtual void dispose() override;
-
+    virtual bool EventNotify(NotifyEvent& rEvent) override;
     virtual bool Close() override;
+
+    void SetReadyToDrag( bool bStartDrag ) { mbIsReadyToDrag = bStartDrag; }
+    bool IsReadyToDrag() const { return mbIsReadyToDrag; }
+
+    using SfxDockingWindow::Close;
 
 protected:
     // Window overridables
@@ -49,6 +56,8 @@ protected:
 
 private:
     ::rtl::Reference<sfx2::sidebar::SidebarController> mpSidebarController;
+    bool mbIsReadyToDrag;
+    std::unique_ptr<svt::AcceleratorExecute> mpAccel;
 
     void DoDispose();
 };

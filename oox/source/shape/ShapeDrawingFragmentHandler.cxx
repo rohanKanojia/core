@@ -9,13 +9,16 @@
 
 #include "ShapeDrawingFragmentHandler.hxx"
 
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
+
 using namespace com::sun::star;
 
 namespace oox { namespace shape {
 
-ShapeDrawingFragmentHandler::ShapeDrawingFragmentHandler(oox::core::XmlFilterBase& rFilter, const OUString& rFragmentPath, oox::drawingml::ShapePtr pGroupShapePtr ) throw()
-        : FragmentHandler2(rFilter, rFragmentPath),
-        mpGroupShapePtr(pGroupShapePtr)
+ShapeDrawingFragmentHandler::ShapeDrawingFragmentHandler(oox::core::XmlFilterBase& rFilter, const OUString& rFragmentPath, oox::drawingml::ShapePtr const & pGroupShapePtr)
+    : FragmentHandler2(rFilter, rFragmentPath)
+    , mpGroupShapePtr(pGroupShapePtr)
 {
 }
 
@@ -23,7 +26,7 @@ ShapeDrawingFragmentHandler::~ShapeDrawingFragmentHandler() throw()
 {
 }
 
-void SAL_CALL ShapeDrawingFragmentHandler::endDocument() throw (xml::sax::SAXException, uno::RuntimeException, std::exception)
+void SAL_CALL ShapeDrawingFragmentHandler::endDocument()
 {
 }
 

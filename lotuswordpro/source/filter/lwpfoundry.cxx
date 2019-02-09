@@ -58,8 +58,8 @@
  *  For LWP filter architecture prototype
  ************************************************************************/
 
-#include "lwpfoundry.hxx"
-#include "lwpfilehdr.hxx"
+#include <lwpfoundry.hxx>
+#include <lwpfilehdr.hxx>
 #include "lwpdoc.hxx"
 #include "lwpmarker.hxx"
 #include "lwpholder.hxx"
@@ -68,29 +68,24 @@
 #include "lwpvpointer.hxx"
 #include "lwpsection.hxx"
 #include "lwpcharacterstyle.hxx"
-#include "lwpglobalmgr.hxx"
+#include <lwpglobalmgr.hxx>
+#include <xfilter/xfstylemanager.hxx>
+#include "lwplayout.hxx"
 
 #include <osl/diagnose.h>
-
 
 LwpFoundry::LwpFoundry(LwpObjectStream *pStrm, LwpDocument* pDoc)
     : m_pDoc(pDoc)
     , m_bRegisteredAll(false)
-    , m_pPieceMgr(nullptr)
-    , m_pStyleMgr(nullptr)
 {
     Read(pStrm);
-    m_pDropcapMgr = new LwpDropcapMgr;
-    m_pBulletStyleMgr = new LwpBulletStyleMgr();
-    m_pBulletStyleMgr->SetFoundry(this);
+    m_xDropcapMgr.reset(new LwpDropcapMgr);
+    m_xBulletStyleMgr.reset(new LwpBulletStyleMgr);
+    m_xBulletStyleMgr->SetFoundry(this);
 }
 
 LwpFoundry::~LwpFoundry()
 {
-    delete m_pPieceMgr;
-    delete m_pStyleMgr;
-    delete m_pDropcapMgr;
-    delete m_pBulletStyleMgr;
 }
 
 void LwpFoundry::Read(LwpObjectStream *pStrm)
@@ -129,9 +124,8 @@ void LwpFoundry::Read(LwpObjectStream *pStrm)
 
     if (!m_pDoc->IsChildDoc() && LwpFileHeader::m_nFileRevision >= 0x000B)
     {
-        m_pPieceMgr = new LwpPieceManager();
-
-        m_pPieceMgr->Read(pStrm);
+        m_xPieceMgr.reset(new LwpPieceManager);
+        m_xPieceMgr->Read(pStrm);
     }
 
     if( LwpFileHeader::m_nFileRevision >= 0x000B)
@@ -145,8 +139,8 @@ void LwpFoundry::Read(LwpObjectStream *pStrm)
     }
     pStrm->SkipExtra();
 
-    m_pStyleMgr = new LwpStyleManager();
-    m_pStyleMgr->SetFoundry(this);
+    m_xStyleMgr.reset(new LwpStyleManager);
+    m_xStyleMgr->SetFoundry(this);
 }
 
 void LwpFoundry::ReadStyles(LwpObjectStream *pStrm)
@@ -170,14 +164,11 @@ void LwpFoundry::ReadStyles(LwpObjectStream *pStrm)
 
 }
 
-#include "xfilter/xfstylemanager.hxx"
-#include "lwplayout.hxx"
-
 void LwpFoundry::RegisterAllLayouts()
 {
     if (m_bRegisteredAll)
     {
-        OSL_FAIL("recursive LwpFoundry::RegisterAllLayouts!\n");
+        OSL_FAIL("recursive LwpFoundry::RegisterAllLayouts!");
         return;
     }
 
@@ -451,7 +442,7 @@ LwpOrderedObject* LwpOrderedObjectManager::Enumerate(LwpOrderedObject * pLast)
     LwpListList* pList = nullptr;
     if(pLast)
     {
-        // We're at the end of Last's list (not Liszt's list).
+        // We're at the end of Last's list (not list's list).
         // Start with the next active list
         pList = dynamic_cast<LwpListList*>(pLast->GetListList().obj().get());
         pList= GetNextActiveListList(pList);
@@ -515,13 +506,13 @@ VO_PARASTYLE/VO_CHARACTERSTYLE call this method to add its created style to XFSt
 Prerequisite: pStyle has been created and all properties has been set to it.
 Return the XFStyle* added by XFStyleManager
 */
-void LwpStyleManager::AddStyle(LwpObjectID styleObjID, IXFStyle* pStyle)
+void LwpStyleManager::AddStyle(LwpObjectID styleObjID, std::unique_ptr<IXFStyle> pNewStyle)
 {
-    assert(pStyle);
+    assert(pNewStyle);
     //pStyle may change if same style is found in XFStyleManager
     XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
-    pStyle = pXFStyleManager->AddStyle(pStyle).m_pStyle;
-    m_StyleList.insert(LwpStyleMap::value_type(styleObjID, pStyle));
+    auto pStyle = pXFStyleManager->AddStyle(std::move(pNewStyle)).m_pStyle;
+    m_StyleList.emplace(styleObjID, pStyle);
 }
 
 /*

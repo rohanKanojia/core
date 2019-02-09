@@ -17,11 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "datasettings.hxx"
-#include "apitools.hxx"
-#include "dbastrings.hrc"
-#include <osl/diagnose.h>
-#include <comphelper/property.hxx>
+#include <datasettings.hxx>
+#include <apitools.hxx>
+#include <stringconstants.hxx>
 #include <comphelper/types.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <vcl/svapp.hxx>
@@ -111,21 +109,6 @@ ODataSettings_Base::ODataSettings_Base()
 {
 }
 
-ODataSettings_Base::ODataSettings_Base(const ODataSettings_Base& _rSource)
-    :m_sFilter( _rSource.m_sFilter )
-    ,m_sHavingClause( _rSource.m_sHavingClause )
-    ,m_sGroupBy( _rSource.m_sGroupBy )
-    ,m_sOrder( _rSource.m_sOrder )
-    ,m_bApplyFilter( _rSource.m_bApplyFilter )
-    ,m_aFont( _rSource.m_aFont )
-    ,m_aRowHeight( _rSource.m_aRowHeight )
-    ,m_aTextColor( _rSource.m_aTextColor )
-    ,m_aTextLineColor( _rSource.m_aTextLineColor )
-    ,m_nFontEmphasis( _rSource.m_nFontEmphasis )
-    ,m_nFontRelief( _rSource.m_nFontRelief )
-{
-}
-
 ODataSettings_Base::~ODataSettings_Base()
 {
 }
@@ -145,7 +128,7 @@ void ODataSettings::getPropertyDefaultByHandle( sal_Int32 _nHandle, Any& _rDefau
             _rDefault <<= ::comphelper::getDefaultFont();
             break;
         case PROPERTY_ID_APPLYFILTER:
-            _rDefault <<= sal_False;
+            _rDefault <<= false;
             break;
         case PROPERTY_ID_TEXTRELIEF:
             _rDefault <<= css::awt::FontRelief::NONE;

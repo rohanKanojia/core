@@ -17,16 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "tabletree.hxx"
-#include "imageprovider.hxx"
-#include "moduledbu.hxx"
-#include "dbu_control.hrc"
+#include <core_resource.hxx>
+#include <tabletree.hxx>
+#include <imageprovider.hxx>
+#include <strings.hrc>
 #include <vcl/layout.hxx>
 #include <vcl/menu.hxx>
 #include <vcl/builderfactory.hxx>
 #include <connectivity/dbtools.hxx>
 #include <comphelper/types.hxx>
-#include "dbustrings.hrc"
+#include <stringconstants.hxx>
 #include <com/sun/star/sdb/application/DatabaseObject.hpp>
 #include <com/sun/star/sdb/application/DatabaseObjectContainer.hpp>
 #include <com/sun/star/sdbc/XDriverAccess.hpp>
@@ -36,14 +36,13 @@
 #include <com/sun/star/sdb/SQLContext.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include "commontypes.hxx"
-#include "listviewitems.hxx"
+#include <commontypes.hxx>
+#include <listviewitems.hxx>
 #include <tools/diagnose_ex.h>
 #include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
 #include <connectivity/dbmetadata.hxx>
-#include "svtools/treelistentry.hxx"
-#include <o3tl/make_unique.hxx>
+#include <vcl/treelistentry.hxx>
 
 #include <algorithm>
 
@@ -75,18 +74,10 @@ OTableTreeListBox::OTableTreeListBox(vcl::Window* pParent, WinBits nWinStyle)
     implSetDefaultImages();
 }
 
-VCL_BUILDER_DECL_FACTORY(OTableTreeListBox)
-{
-    WinBits nWinStyle = 0;
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nWinStyle |= WB_BORDER;
-    rRet = VclPtr<OTableTreeListBox>::Create(pParent, nWinStyle);
-}
+VCL_BUILDER_FACTORY_CONSTRUCTOR(OTableTreeListBox, 0)
 
 void OTableTreeListBox::implSetDefaultImages()
 {
-    ImageProvider aImageProvider;
     SetDefaultExpandedEntryBmp(  ImageProvider::getFolderImage( DatabaseObject::TABLE ) );
     SetDefaultCollapsedEntryBmp( ImageProvider::getFolderImage( DatabaseObject::TABLE ) );
 }
@@ -94,12 +85,9 @@ void OTableTreeListBox::implSetDefaultImages()
 bool  OTableTreeListBox::isFolderEntry( const SvTreeListEntry* _pEntry )
 {
     sal_Int32 nEntryType = reinterpret_cast< sal_IntPtr >( _pEntry->GetUserData() );
-    if  (   ( nEntryType == DatabaseObjectContainer::TABLES )
+    return ( nEntryType == DatabaseObjectContainer::TABLES )
         ||  ( nEntryType == DatabaseObjectContainer::CATALOG )
-        ||  ( nEntryType == DatabaseObjectContainer::SCHEMA )
-        )
-        return true;
-    return false;
+        ||  ( nEntryType == DatabaseObjectContainer::SCHEMA );
 }
 
 void OTableTreeListBox::notifyHiContrastChanged()
@@ -113,7 +101,7 @@ void OTableTreeListBox::notifyHiContrastChanged()
         for (size_t i=0;i<nCount;++i)
         {
             SvLBoxItem& rItem = pEntryLoop->GetItem(i);
-            if (rItem.GetType() == SV_ITEM_ID_LBOXCONTEXTBMP)
+            if (rItem.GetType() == SvLBoxItemType::ContextBmp)
             {
                 SvLBoxContextBmp& rContextBitmapItem = static_cast< SvLBoxContextBmp& >( rItem );
 
@@ -143,7 +131,7 @@ void OTableTreeListBox::implOnNewConnection( const Reference< XConnection >& _rx
     m_xImageProvider.reset( new ImageProvider( m_xConnection  ) );
 }
 
-void OTableTreeListBox::UpdateTableList( const Reference< XConnection >& _rxConnection ) throw(SQLException, std::exception)
+void OTableTreeListBox::UpdateTableList( const Reference< XConnection >& _rxConnection )
 {
     Sequence< OUString > sTables, sViews;
 
@@ -151,7 +139,7 @@ void OTableTreeListBox::UpdateTableList( const Reference< XConnection >& _rxConn
     try
     {
         Reference< XTablesSupplier > xTableSupp( _rxConnection, UNO_QUERY_THROW );
-        sCurrentActionError = ModuleRes(STR_NOTABLEINFO);
+        sCurrentActionError = DBA_RES(STR_NOTABLEINFO);
 
         Reference< XNameAccess > xTables,xViews;
 
@@ -177,10 +165,9 @@ void OTableTreeListBox::UpdateTableList( const Reference< XConnection >& _rxConn
     }
     catch(Exception&)
     {
+        css::uno::Any anyEx = cppu::getCaughtException();
         // a non-SQLException exception occurred ... simply throw an SQLException
-        SQLException aInfo;
-        aInfo.Message = sCurrentActionError;
-        throw aInfo;
+        throw SQLException(sCurrentActionError, nullptr, "", 0, anyEx);
     }
 
     UpdateTableList( _rxConnection, sTables, sViews );
@@ -188,19 +175,19 @@ void OTableTreeListBox::UpdateTableList( const Reference< XConnection >& _rxConn
 
 namespace
 {
-    struct OViewSetter : public ::std::unary_function< OTableTreeListBox::TNames::value_type, bool>
+    struct OViewSetter
     {
         const Sequence< OUString> m_aViews;
         ::comphelper::UStringMixEqual m_aEqualFunctor;
 
         OViewSetter(const Sequence< OUString>& _rViews,bool _bCase) : m_aViews(_rViews),m_aEqualFunctor(_bCase){}
-        OTableTreeListBox::TNames::value_type operator() (const OUString& lhs)
+        OTableTreeListBox::TNames::value_type operator() (const OUString& name)
         {
             OTableTreeListBox::TNames::value_type aRet;
-            aRet.first = lhs;
-            const OUString* pIter = m_aViews.getConstArray();
-            const OUString* pEnd = m_aViews.getConstArray() + m_aViews.getLength();
-            aRet.second = ::std::any_of(pIter,pEnd,::std::bind2nd(m_aEqualFunctor,lhs));
+            aRet.first = name;
+            aRet.second = std::any_of(m_aViews.begin(), m_aViews.end(),
+                                      [this, &name](const OUString& lhs)
+                                      { return m_aEqualFunctor(lhs, name); } );
 
             return aRet;
         }
@@ -216,26 +203,24 @@ void OTableTreeListBox::UpdateTableList(
 {
     TNames aTables;
     aTables.resize(_rTables.getLength());
-    const OUString* pIter = _rTables.getConstArray();
-    const OUString* pEnd = _rTables.getConstArray() + _rTables.getLength();
     try
     {
         Reference< XDatabaseMetaData > xMeta( _rxConnection->getMetaData(), UNO_QUERY_THROW );
-        ::std::transform( pIter, pEnd,
+        std::transform( _rTables.begin(), _rTables.end(),
             aTables.begin(), OViewSetter( _rViews, xMeta->supportsMixedCaseQuotedIdentifiers() ) );
     }
     catch(Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
     UpdateTableList( _rxConnection, aTables );
 }
 
 namespace
 {
-    ::std::vector< OUString > lcl_getMetaDataStrings_throw( const Reference< XResultSet >& _rxMetaDataResult, sal_Int32 _nColumnIndex )
+    std::vector< OUString > lcl_getMetaDataStrings_throw( const Reference< XResultSet >& _rxMetaDataResult, sal_Int32 _nColumnIndex )
     {
-        ::std::vector< OUString > aStrings;
+        std::vector< OUString > aStrings;
         Reference< XRow > xRow( _rxMetaDataResult, UNO_QUERY_THROW );
         while ( _rxMetaDataResult->next() )
             aStrings.push_back( xRow->getString( _nColumnIndex ) );
@@ -261,14 +246,14 @@ void OTableTreeListBox::UpdateTableList( const Reference< XConnection >& _rxConn
         if (haveVirtualRoot())
         {
             OUString sRootEntryText;
-            if ( ::std::none_of(_rTables.begin(),_rTables.end(),
+            if ( std::none_of(_rTables.begin(),_rTables.end(),
                                 [] (const TNames::value_type& name) { return !name.second; }) )
-                sRootEntryText  = ModuleRes(STR_ALL_TABLES);
-            else if ( ::std::none_of(_rTables.begin(),_rTables.end(),
+                sRootEntryText  = DBA_RES(STR_ALL_TABLES);
+            else if ( std::none_of(_rTables.begin(),_rTables.end(),
                                      [] (const TNames::value_type& name) { return name.second; }) )
-                sRootEntryText  = ModuleRes(STR_ALL_VIEWS);
+                sRootEntryText  = DBA_RES(STR_ALL_VIEWS);
             else
-                sRootEntryText  = ModuleRes(STR_ALL_TABLES_AND_VIEWS);
+                sRootEntryText  = DBA_RES(STR_ALL_TABLES_AND_VIEWS);
             InsertEntry( sRootEntryText, nullptr, false, TREELIST_APPEND, reinterpret_cast< void* >( DatabaseObjectContainer::TABLES ) );
         }
 
@@ -277,16 +262,13 @@ void OTableTreeListBox::UpdateTableList( const Reference< XConnection >& _rxConn
             return;
 
         // get the table/view names
-        TNames::const_iterator aIter = _rTables.begin();
-        TNames::const_iterator aEnd = _rTables.end();
-
         Reference< XDatabaseMetaData > xMeta( _rxConnection->getMetaData(), UNO_QUERY_THROW );
-        for ( ; aIter != aEnd; ++aIter )
+        for (auto const& table : _rTables)
         {
             // add the entry
             implAddEntry(
                 xMeta,
-                aIter->first,
+                table.first,
                 false
             );
         }
@@ -303,26 +285,23 @@ void OTableTreeListBox::UpdateTableList( const Reference< XConnection >& _rxConn
                 // implAddEntry)
                 bool bCatalogs = bSupportsCatalogs && xMeta->isCatalogAtStart();
 
-                ::std::vector< OUString > aFolderNames( lcl_getMetaDataStrings_throw(
+                std::vector< OUString > aFolderNames( lcl_getMetaDataStrings_throw(
                     bCatalogs ? xMeta->getCatalogs() : xMeta->getSchemas(), 1 ) );
                 sal_Int32 nFolderType = bCatalogs ? DatabaseObjectContainer::CATALOG : DatabaseObjectContainer::SCHEMA;
 
                 SvTreeListEntry* pRootEntry = getAllObjectsEntry();
-                for (   ::std::vector< OUString >::const_iterator folder = aFolderNames.begin();
-                        folder != aFolderNames.end();
-                        ++folder
-                    )
+                for (auto const& folderName : aFolderNames)
                 {
-                    SvTreeListEntry* pFolder = GetEntryPosByName( *folder, pRootEntry );
+                    SvTreeListEntry* pFolder = GetEntryPosByName( folderName, pRootEntry );
                     if ( !pFolder )
-                        pFolder = InsertEntry( *folder, pRootEntry, false, TREELIST_APPEND, reinterpret_cast< void* >( nFolderType ) );
+                        InsertEntry( folderName, pRootEntry, false, TREELIST_APPEND, reinterpret_cast< void* >( nFolderType ) );
                 }
             }
         }
     }
     catch ( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -330,7 +309,7 @@ bool OTableTreeListBox::isWildcardChecked(SvTreeListEntry* _pEntry)
 {
     if (_pEntry)
     {
-        OBoldListboxString* pTextItem = static_cast<OBoldListboxString*>(_pEntry->GetFirstItem(SV_ITEM_ID_BOLDLBSTRING));
+        OBoldListboxString* pTextItem = static_cast<OBoldListboxString*>(_pEntry->GetFirstItem(SvLBoxItemType::String));
         if (pTextItem)
             return pTextItem->isEmphasized();
     }
@@ -371,7 +350,7 @@ void OTableTreeListBox::implEmphasize(SvTreeListEntry* _pEntry, bool _bChecked, 
         ||  bAllObjectsEntryAffected                    // or it is the "all objects" entry
         )
     {
-        OBoldListboxString* pTextItem = static_cast<OBoldListboxString*>(_pEntry->GetFirstItem(SV_ITEM_ID_BOLDLBSTRING));
+        OBoldListboxString* pTextItem = static_cast<OBoldListboxString*>(_pEntry->GetFirstItem(SvLBoxItemType::String));
         if (pTextItem)
             pTextItem->emphasize(_bChecked);
 
@@ -387,7 +366,7 @@ void OTableTreeListBox::implEmphasize(SvTreeListEntry* _pEntry, bool _bChecked, 
         {
             if (GetModel()->HasChildren(pChildLoop))
                 implEmphasize(pChildLoop, false, true, false);
-            pChildLoop = NextSibling(pChildLoop);
+            pChildLoop = pChildLoop->NextSibling();
         }
     }
 
@@ -404,12 +383,12 @@ void OTableTreeListBox::InitEntry(SvTreeListEntry* _pEntry, const OUString& _rSt
     OMarkableTreeListBox::InitEntry(_pEntry, _rString, _rCollapsedBitmap, _rExpandedBitmap, _eButtonKind);
 
     // replace the text item with our own one
-    SvLBoxItem* pTextItem = _pEntry->GetFirstItem(SV_ITEM_ID_LBOXSTRING);
+    SvLBoxItem* pTextItem = _pEntry->GetFirstItem(SvLBoxItemType::String);
     OSL_ENSURE(pTextItem, "OTableTreeListBox::InitEntry: no text item!?");
     size_t nTextPos = _pEntry->GetPos(pTextItem);
     OSL_ENSURE(SvTreeListEntry::ITEM_NOT_FOUND != nTextPos, "OTableTreeListBox::InitEntry: no text item pos!");
 
-    _pEntry->ReplaceItem(o3tl::make_unique<OBoldListboxString>(_rString), nTextPos);
+    _pEntry->ReplaceItem(std::make_unique<OBoldListboxString>(_rString), nTextPos);
 }
 
 SvTreeListEntry* OTableTreeListBox::implAddEntry(
@@ -486,28 +465,7 @@ NamedDatabaseObject OTableTreeListBox::describeObject( SvTreeListEntry* _pEntry 
             ||  ( nEntryType == DatabaseObjectContainer::SCHEMA )
             )
     {
-        SvTreeListEntry* pParent = GetParent( _pEntry );
-        sal_Int32 nParentEntryType = pParent ? reinterpret_cast< sal_IntPtr >( pParent->GetUserData() ) : -1;
-
-        OUStringBuffer buffer;
-        if  ( nEntryType == DatabaseObjectContainer::CATALOG )
-        {
-            if ( nParentEntryType == DatabaseObjectContainer::SCHEMA )
-            {
-                buffer.append( GetEntryText( pParent ) );
-                buffer.append( '.' );
-            }
-            buffer.append( GetEntryText( _pEntry ) );
-        }
-        else if ( nEntryType == DatabaseObjectContainer::SCHEMA )
-        {
-            if ( nParentEntryType == DatabaseObjectContainer::CATALOG )
-            {
-                buffer.append( GetEntryText( pParent ) );
-                buffer.append( '.' );
-            }
-            buffer.append( GetEntryText( _pEntry ) );
-        }
+        // nothing useful to be done
     }
     else
     {
@@ -528,7 +486,7 @@ SvTreeListEntry* OTableTreeListBox::addedTable( const OUString& _rName )
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
     return nullptr;
 }
@@ -581,7 +539,7 @@ OUString OTableTreeListBox::getQualifiedTableName( SvTreeListEntry* _pEntry ) co
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
     return OUString();
 }
@@ -619,7 +577,7 @@ SvTreeListEntry* OTableTreeListBox::getEntryByQualifiedName( const OUString& _rN
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
     return nullptr;
 }
@@ -634,7 +592,7 @@ void OTableTreeListBox::removedTable( const OUString& _rName )
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 

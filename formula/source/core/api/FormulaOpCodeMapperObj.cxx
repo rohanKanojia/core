@@ -17,20 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <sal/config.h>
 
 #include <utility>
 
-#include "formula/FormulaOpCodeMapperObj.hxx"
-#include "formula/opcode.hxx"
-#include <comphelper/sequence.hxx>
+#include <formula/FormulaCompiler.hxx>
+#include <formula/FormulaOpCodeMapperObj.hxx>
+#include <formula/opcode.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
 namespace formula
 {
     using namespace ::com::sun::star;
 
-sal_Bool SAL_CALL FormulaOpCodeMapperObj::supportsService( const OUString& _rServiceName ) throw(uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL FormulaOpCodeMapperObj::supportsService( const OUString& _rServiceName )
 {
     return cppu::supportsService(this, _rServiceName);
 }
@@ -45,14 +46,12 @@ FormulaOpCodeMapperObj::~FormulaOpCodeMapperObj()
 }
 
 ::sal_Int32 SAL_CALL FormulaOpCodeMapperObj::getOpCodeExternal()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return ocExternal;
 }
 
 
 ::sal_Int32 SAL_CALL FormulaOpCodeMapperObj::getOpCodeUnknown()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return FormulaCompiler::OpCodeMap::getOpCodeUnknown();
 }
@@ -62,8 +61,6 @@ css::uno::Sequence< css::sheet::FormulaToken >
 SAL_CALL FormulaOpCodeMapperObj::getMappings(
         const css::uno::Sequence< OUString >& rNames,
         sal_Int32 nLanguage )
-    throw ( css::lang::IllegalArgumentException,
-            css::uno::RuntimeException, std::exception)
 {
     FormulaCompiler::OpCodeMapPtr xMap = m_pCompiler->GetOpCodeMap( nLanguage);
     if (!xMap)
@@ -75,8 +72,6 @@ SAL_CALL FormulaOpCodeMapperObj::getMappings(
 css::uno::Sequence< css::sheet::FormulaOpCodeMapEntry >
 SAL_CALL FormulaOpCodeMapperObj::getAvailableMappings(
         sal_Int32 nLanguage, sal_Int32 nGroups )
-    throw ( css::lang::IllegalArgumentException,
-            css::uno::RuntimeException, std::exception)
 {
     FormulaCompiler::OpCodeMapPtr xMap = m_pCompiler->GetOpCodeMap( nLanguage);
     if (!xMap)
@@ -84,30 +79,30 @@ SAL_CALL FormulaOpCodeMapperObj::getAvailableMappings(
     return xMap->createSequenceOfAvailableMappings( *m_pCompiler,nGroups);
 }
 
-OUString SAL_CALL FormulaOpCodeMapperObj::getImplementationName(  ) throw(uno::RuntimeException, std::exception)
+OUString SAL_CALL FormulaOpCodeMapperObj::getImplementationName(  )
 {
     return getImplementationName_Static();
 }
 
-OUString SAL_CALL FormulaOpCodeMapperObj::getImplementationName_Static()
+OUString FormulaOpCodeMapperObj::getImplementationName_Static()
 {
     return OUString( "simple.formula.FormulaOpCodeMapperObj" );
 }
 
-uno::Sequence< OUString > SAL_CALL FormulaOpCodeMapperObj::getSupportedServiceNames(  ) throw(uno::RuntimeException, std::exception)
+uno::Sequence< OUString > SAL_CALL FormulaOpCodeMapperObj::getSupportedServiceNames(  )
 {
     return getSupportedServiceNames_Static();
 }
-uno::Sequence< OUString > SAL_CALL FormulaOpCodeMapperObj::getSupportedServiceNames_Static()
+uno::Sequence< OUString > FormulaOpCodeMapperObj::getSupportedServiceNames_Static()
 {
     uno::Sequence<OUString> aSeq { "com.sun.star.sheet.FormulaOpCodeMapper" };
     return aSeq;
 }
 
-uno::Reference< uno::XInterface > SAL_CALL FormulaOpCodeMapperObj::create(
+uno::Reference< uno::XInterface > FormulaOpCodeMapperObj::create(
                 uno::Reference< uno::XComponentContext > const & /*_xContext*/)
 {
-    return static_cast<sheet::XFormulaOpCodeMapper*>(new FormulaOpCodeMapperObj(::std::unique_ptr<FormulaCompiler>(new FormulaCompiler())));
+    return static_cast<sheet::XFormulaOpCodeMapper*>(new FormulaOpCodeMapperObj(std::make_unique<FormulaCompiler>()));
 }
 
 } // formula

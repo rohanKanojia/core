@@ -21,7 +21,7 @@
 #include <com/sun/star/datatransfer/XTransferable.hpp>
 #include <com/sun/star/awt/MouseButton.hpp>
 
-#include "rtl/ustring.hxx"
+#include <rtl/ustring.hxx>
 
 #include <cppuhelper/supportsservice.hxx>
 
@@ -30,7 +30,7 @@
 #include "clipboard.hxx"
 #include "DragActionConversion.hxx"
 
-#include "osx/salframe.h"
+#include <osx/salframe.h>
 
 #include <cassert>
 
@@ -47,19 +47,19 @@ using namespace com::sun::star::awt;
 using namespace com::sun::star::lang;
 using namespace comphelper;
 
-// For OOo internal D&D we provide the Transferable without NSDragPboard
-// interference as a shortcut
+// For LibreOffice internal D&D we provide the Transferable without NSDragPboard
+// interference as a shortcut, see tdf#100097 for how dbaccess depends on this
 uno::Reference<XTransferable> DragSource::g_XTransferable;
 NSView* DragSource::g_DragSourceView = nil;
 bool DragSource::g_DropSuccessSet = false;
 bool DragSource::g_DropSuccess = false;
 
-OUString dragSource_getImplementationName()
+static OUString dragSource_getImplementationName()
 {
   return OUString("com.sun.star.comp.datatransfer.dnd.OleDragSource_V1");
 }
 
-Sequence<OUString> dragSource_getSupportedServiceNames()
+static Sequence<OUString> dragSource_getSupportedServiceNames()
 {
   return { OUString("com.sun.star.datatransfer.dnd.OleDragSource") };
 }
@@ -146,6 +146,7 @@ DragSource::DragSource():
   mView(nullptr),
   mpFrame(nullptr),
   mLastMouseEventBeforeStartDrag(nil),
+  mDragSourceHelper(nil),
   m_MouseButton(0)
 {
 }
@@ -153,12 +154,11 @@ DragSource::DragSource():
 DragSource::~DragSource()
 {
     if( mpFrame && AquaSalFrame::isAlive( mpFrame ) )
-        [(id <MouseEventListener>)mView unregisterMouseEventListener: mDragSourceHelper];
+        [static_cast<id <MouseEventListener>>(mView) unregisterMouseEventListener: mDragSourceHelper];
     [mDragSourceHelper release];
 }
 
 void SAL_CALL DragSource::initialize(const Sequence< Any >& aArguments)
-  throw(Exception, std::exception)
 {
   if (aArguments.getLength() < 2)
     {
@@ -199,17 +199,15 @@ void SAL_CALL DragSource::initialize(const Sequence< Any >& aArguments)
                       static_cast<OWeakObject*>(this));
     }
 
-  [(id <MouseEventListener>)mView registerMouseEventListener: mDragSourceHelper];
+  [static_cast<id <MouseEventListener>>(mView) registerMouseEventListener: mDragSourceHelper];
 }
 
 sal_Bool SAL_CALL DragSource::isDragImageSupported(  )
-  throw(RuntimeException, std::exception)
 {
   return true;
 }
 
 sal_Int32 SAL_CALL DragSource::getDefaultCursor( sal_Int8 /*dragAction*/ )
-  throw( IllegalArgumentException, RuntimeException, std::exception)
 {
   return 0;
 }
@@ -220,12 +218,11 @@ void SAL_CALL DragSource::startDrag(const DragGestureEvent& trigger,
                                     sal_Int32 /*image*/,
                                     const uno::Reference<XTransferable >& transferable,
                                     const uno::Reference<XDragSourceListener >& listener )
-  throw( RuntimeException, std::exception)
 {
   MutexGuard guard(m_aMutex);
 
-  assert(listener.is() && "DragSource::startDrag: No XDragSourceListener provided\n");
-  assert(transferable.is() && "DragSource::startDrag: No transferable provided\n");
+  assert(listener.is() && "DragSource::startDrag: No XDragSourceListener provided");
+  assert(transferable.is() && "DragSource::startDrag: No transferable provided");
 
   trigger.Event >>= mMouseEvent;
   m_MouseButton= mMouseEvent.Buttons;
@@ -323,17 +320,17 @@ unsigned int DragSource::getSupportedDragOperations(bool isLocal) const
   return srcActions;
 }
 
-OUString SAL_CALL DragSource::getImplementationName(  ) throw (RuntimeException, std::exception)
+OUString SAL_CALL DragSource::getImplementationName(  )
 {
   return dragSource_getImplementationName();
 }
 
-sal_Bool SAL_CALL DragSource::supportsService( const OUString& ServiceName ) throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL DragSource::supportsService( const OUString& ServiceName )
 {
   return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString > SAL_CALL DragSource::getSupportedServiceNames() throw (RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL DragSource::getSupportedServiceNames()
 {
   return dragSource_getSupportedServiceNames();
 }

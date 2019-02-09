@@ -17,21 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svtools/controldims.hrc>
+#include <svtools/controldims.hxx>
 
+#include <dp_shared.hxx>
+#include <strings.hrc>
 #include "dp_gui.h"
 #include "dp_gui_extlistbox.hxx"
 #include "dp_gui_theextmgr.hxx"
 #include "dp_gui_dialog2.hxx"
-#include "dp_dependencies.hxx"
+#include <dp_dependencies.hxx>
+#include <bitmaps.hlst>
 
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/i18n/CollatorOptions.hpp>
 #include <com/sun/star/deployment/DependencyException.hpp>
 #include <com/sun/star/deployment/DeploymentException.hpp>
+#include <com/sun/star/deployment/ExtensionRemovedException.hpp>
 #include <cppuhelper/weakref.hxx>
+#include <i18nlangtag/languagetag.hxx>
+#include <vcl/event.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/builderfactory.hxx>
+#include <vcl/commandevent.hxx>
 #include <algorithm>
 
 #define USER_PACKAGE_MANAGER    "user"
@@ -54,9 +61,7 @@ struct FindWeakRef
 bool FindWeakRef::operator () (uno::WeakReference< deployment::XPackage >  const & ref)
 {
     const uno::Reference<deployment::XPackage> ext(ref);
-    if (ext == m_extension)
-        return true;
-    return false;
+    return ext == m_extension;
 }
 
 } // end namespace
@@ -84,7 +89,7 @@ Entry_Impl::Entry_Impl( const uno::Reference< deployment::XPackage > &xPackage,
         m_sTitle = xPackage->getDisplayName();
         m_sVersion = xPackage->getVersion();
         m_sDescription = xPackage->getDescription();
-    m_sLicenseText = xPackage->getLicenseText();
+        m_sLicenseText = xPackage->getLicenseText();
 
         beans::StringPair aInfo( m_xPackage->getPublisherInfo() );
         m_sPublisher = aInfo.First;
@@ -95,14 +100,8 @@ Entry_Impl::Entry_Impl( const uno::Reference< deployment::XPackage > &xPackage,
         if ( xGraphic.is() )
             m_aIcon = Image( xGraphic );
 
-        xGraphic = xPackage->getIcon( true );
-        if ( xGraphic.is() )
-            m_aIconHC = Image( xGraphic );
-        else
-            m_aIconHC = m_aIcon;
-
         if ( eState == AMBIGUOUS )
-            m_sErrorText = DialogHelper::getResourceString( RID_STR_ERROR_UNKNOWN_STATUS );
+            m_sErrorText = DpResId( RID_STR_ERROR_UNKNOWN_STATUS );
         else if ( eState == NOT_REGISTERED )
             checkDependencies();
     }
@@ -144,14 +143,14 @@ void Entry_Impl::checkDependencies()
         deployment::DependencyException depExc;
         if ( e.Cause >>= depExc )
         {
-            OUString aMissingDep( DialogHelper::getResourceString( RID_STR_ERROR_MISSING_DEPENDENCIES ) );
+            OUStringBuffer aMissingDep( DpResId( RID_STR_ERROR_MISSING_DEPENDENCIES ) );
             for ( sal_Int32 i = 0; i < depExc.UnsatisfiedDependencies.getLength(); ++i )
             {
-                aMissingDep += "\n";
-                aMissingDep += dp_misc::Dependencies::getErrorText( depExc.UnsatisfiedDependencies[i]);
+                aMissingDep.append("\n");
+                aMissingDep.append(dp_misc::Dependencies::getErrorText( depExc.UnsatisfiedDependencies[i]));
             }
-            aMissingDep += "\n";
-            m_sErrorText = aMissingDep;
+            aMissingDep.append("\n");
+            m_sErrorText = aMissingDep.makeStringAndClear();
             m_bMissingDeps = true;
         }
     }
@@ -160,7 +159,6 @@ void Entry_Impl::checkDependencies()
 // ExtensionRemovedListener
 
 void ExtensionRemovedListener::disposing( lang::EventObject const & rEvt )
-    throw ( uno::RuntimeException, std::exception )
 {
     uno::Reference< deployment::XPackage > xPackage( rEvt.Source, uno::UNO_QUERY );
 
@@ -178,7 +176,7 @@ ExtensionRemovedListener::~ExtensionRemovedListener()
 
 // ExtensionBox_Impl
 ExtensionBox_Impl::ExtensionBox_Impl(vcl::Window* pParent) :
-    IExtensionListBox( pParent, WB_BORDER | WB_TABSTOP | WB_CHILDDLGCTRL ),
+    IExtensionListBox( pParent ),
     m_bHasScrollBar( false ),
     m_bHasActive( false ),
     m_bNeedsRecalc( true ),
@@ -188,11 +186,10 @@ ExtensionBox_Impl::ExtensionBox_Impl(vcl::Window* pParent) :
     m_nActive( 0 ),
     m_nTopIndex( 0 ),
     m_nActiveHeight( 0 ),
-    m_nExtraHeight( 2 ),
-    m_aSharedImage( DialogHelper::getResId( RID_IMG_SHARED ) ),
-    m_aLockedImage( DialogHelper::getResId( RID_IMG_LOCKED ) ),
-    m_aWarningImage( DialogHelper::getResId( RID_IMG_WARNING ) ),
-    m_aDefaultImage( DialogHelper::getResId( RID_IMG_EXTENSION ) ),
+    m_aSharedImage(StockImage::Yes, RID_BMP_SHARED),
+    m_aLockedImage(StockImage::Yes, RID_BMP_LOCKED),
+    m_aWarningImage(StockImage::Yes, RID_BMP_WARNING),
+    m_aDefaultImage(StockImage::Yes, RID_BMP_EXTENSION),
     m_pScrollBar( nullptr ),
     m_pManager( nullptr )
 {
@@ -201,8 +198,6 @@ ExtensionBox_Impl::ExtensionBox_Impl(vcl::Window* pParent) :
 
 void ExtensionBox_Impl::Init()
 {
-    SetHelpId( HID_EXTENSION_MANAGER_LISTBOX );
-
     m_pScrollBar = VclPtr<ScrollBar>::Create( this, WB_VERT );
     m_pScrollBar->SetScrollHdl( LINK( this, ExtensionBox_Impl, ScrollHdl ) );
     m_pScrollBar->EnableDrag();
@@ -231,8 +226,8 @@ void ExtensionBox_Impl::Init()
 
     m_xRemoveListener = new ExtensionRemovedListener( this );
 
-    m_pLocale = new lang::Locale( Application::GetSettings().GetLanguageTag().getLocale() );
-    m_pCollator = new CollatorWrapper( ::comphelper::getProcessComponentContext() );
+    m_pLocale.reset( new lang::Locale( Application::GetSettings().GetLanguageTag().getLocale() ) );
+    m_pCollator.reset( new CollatorWrapper( ::comphelper::getProcessComponentContext() ) );
     m_pCollator->loadDefaultCollator( *m_pLocale, i18n::CollatorOptions::CollatorOptions_IGNORE_CASE );
 
     Show();
@@ -251,12 +246,10 @@ void ExtensionBox_Impl::dispose()
 
     m_bInDelete = true;
 
-    typedef std::vector< TEntry_Impl >::iterator ITER;
-
-    for ( ITER iIndex = m_vEntries.begin(); iIndex < m_vEntries.end(); ++iIndex )
+    for (auto const& entry : m_vEntries)
     {
-        (*iIndex)->m_pPublisher.disposeAndClear();
-        (*iIndex)->m_xPackage->removeEventListener( uno::Reference< lang::XEventListener > ( m_xRemoveListener, uno::UNO_QUERY ) );
+        entry->m_pPublisher.disposeAndClear();
+        entry->m_xPackage->removeEventListener( m_xRemoveListener.get() );
     }
 
     m_vEntries.clear();
@@ -265,8 +258,8 @@ void ExtensionBox_Impl::dispose()
 
     m_xRemoveListener.clear();
 
-    delete m_pLocale;
-    delete m_pCollator;
+    m_pLocale.reset();
+    m_pCollator.reset();
     ::svt::IExtensionListBox::dispose();
 }
 
@@ -306,48 +299,48 @@ void ExtensionBox_Impl::CalcActiveHeight( const long nPos )
     // calc description height
     Size aSize = GetOutputSizePixel();
     if ( m_bHasScrollBar )
-        aSize.Width() -= m_pScrollBar->GetSizePixel().Width();
+        aSize.AdjustWidth( -(m_pScrollBar->GetSizePixel().Width()) );
 
-    aSize.Width() -= ICON_OFFSET;
-    aSize.Height() = 10000;
+    aSize.AdjustWidth( -(ICON_OFFSET) );
+    aSize.setHeight( 10000 );
 
     OUString aText( m_vEntries[ nPos ]->m_sErrorText );
     if ( !aText.isEmpty() )
         aText += "\n";
     aText += m_vEntries[ nPos ]->m_sDescription;
 
-    Rectangle aRect = GetTextRect( Rectangle( Point(), aSize ), aText,
+    tools::Rectangle aRect = GetTextRect( tools::Rectangle( Point(), aSize ), aText,
                                    DrawTextFlags::MultiLine | DrawTextFlags::WordBreak );
     aTextHeight += aRect.GetHeight();
 
     if ( aTextHeight < m_nStdHeight )
         aTextHeight = m_nStdHeight;
 
+    m_nActiveHeight = aTextHeight;
+
     if ( m_vEntries[ nPos ]->m_bHasButtons )
-        m_nActiveHeight = aTextHeight + m_nExtraHeight;
-    else
-        m_nActiveHeight = aTextHeight + 2;
+        m_nActiveHeight += 2;
 }
 
-Rectangle ExtensionBox_Impl::GetEntryRect( const long nPos ) const
+tools::Rectangle ExtensionBox_Impl::GetEntryRect( const long nPos ) const
 {
     const ::osl::MutexGuard aGuard( m_entriesMutex );
 
     Size aSize( GetOutputSizePixel() );
 
     if ( m_bHasScrollBar )
-        aSize.Width() -= m_pScrollBar->GetSizePixel().Width();
+        aSize.AdjustWidth( -(m_pScrollBar->GetSizePixel().Width()) );
 
     if ( m_vEntries[ nPos ]->m_bActive )
-        aSize.Height() = m_nActiveHeight;
+        aSize.setHeight( m_nActiveHeight );
     else
-        aSize.Height() = m_nStdHeight;
+        aSize.setHeight( m_nStdHeight );
 
     Point aPos( 0, -m_nTopIndex + nPos * m_nStdHeight );
     if ( m_bHasActive && ( nPos < m_nActive ) )
-        aPos.Y() += m_nActiveHeight - m_nStdHeight;
+        aPos.AdjustY(m_nActiveHeight - m_nStdHeight );
 
-    return Rectangle( aPos, aSize );
+    return tools::Rectangle( aPos, aSize );
 }
 
 
@@ -359,11 +352,9 @@ void ExtensionBox_Impl::DeleteRemoved()
 
     if ( ! m_vRemovedEntries.empty() )
     {
-        typedef std::vector< TEntry_Impl >::iterator ITER;
-
-        for ( ITER iIndex = m_vRemovedEntries.begin(); iIndex < m_vRemovedEntries.end(); ++iIndex )
+        for (auto const& removedEntry : m_vRemovedEntries)
         {
-            (*iIndex)->m_pPublisher.disposeAndClear();
+            removedEntry->m_pPublisher.disposeAndClear();
         }
 
         m_vRemovedEntries.clear();
@@ -376,49 +367,56 @@ void ExtensionBox_Impl::DeleteRemoved()
 //This function may be called with nPos < 0
 void ExtensionBox_Impl::selectEntry( const long nPos )
 {
-    //ToDo whe should not use the guard at such a big scope here.
-    //Currently it is used to guard m_vEntries and m_nActive. m_nActive will be
-    //modified in this function.
-    //It would be probably best to always use a copy of m_vEntries
-    //and some other state variables from ExtensionBox_Impl for
-    //the whole painting operation. See issue i86993
-    ::osl::ClearableMutexGuard guard(m_entriesMutex);
-
-    if ( m_bInCheckMode )
-        return;
-
-    if ( m_bHasActive )
+    bool invalidate = false;
     {
-        if ( nPos == m_nActive )
+        //ToDo we should not use the guard at such a big scope here.
+        //Currently it is used to guard m_vEntries and m_nActive. m_nActive will be
+        //modified in this function.
+        //It would be probably best to always use a copy of m_vEntries
+        //and some other state variables from ExtensionBox_Impl for
+        //the whole painting operation. See issue i86993
+        ::osl::MutexGuard guard(m_entriesMutex);
+
+        if ( m_bInCheckMode )
             return;
 
-        m_bHasActive = false;
-        m_vEntries[ m_nActive ]->m_bActive = false;
-    }
+        if ( m_bHasActive )
+        {
+            if ( nPos == m_nActive )
+                return;
 
-    if ( ( nPos >= 0 ) && ( nPos < (long) m_vEntries.size() ) )
-    {
-        m_bHasActive = true;
-        m_nActive = nPos;
-        m_vEntries[ nPos ]->m_bActive = true;
+            m_bHasActive = false;
+            m_vEntries[ m_nActive ]->m_bActive = false;
+        }
+
+        if ( ( nPos >= 0 ) && ( nPos < static_cast<long>(m_vEntries.size()) ) )
+        {
+            m_bHasActive = true;
+            m_nActive = nPos;
+            m_vEntries[ nPos ]->m_bActive = true;
+
+            if ( IsReallyVisible() )
+            {
+                m_bAdjustActive = true;
+            }
+        }
 
         if ( IsReallyVisible() )
         {
-            m_bAdjustActive = true;
+            m_bNeedsRecalc = true;
+            invalidate = true;
         }
     }
 
-    if ( IsReallyVisible() )
+    if (invalidate)
     {
-        m_bNeedsRecalc = true;
+        SolarMutexGuard g;
         Invalidate();
     }
-
-    guard.clear();
 }
 
 
-void ExtensionBox_Impl::DrawRow(vcl::RenderContext& rRenderContext, const Rectangle& rRect, const TEntry_Impl& rEntry)
+void ExtensionBox_Impl::DrawRow(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect, const TEntry_Impl& rEntry)
 {
     const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
 
@@ -481,9 +479,6 @@ void ExtensionBox_Impl::DrawRow(vcl::RenderContext& rRenderContext, const Rectan
         rEntry->m_pPublisher->SetText(rEntry->m_sPublisher);
         Size aSize = FixedText::CalcMinimumTextSize(rEntry->m_pPublisher);
         rEntry->m_pPublisher->SetSizePixel(aSize);
-
-        if (m_aClickHdl.IsSet())
-            rEntry->m_pPublisher->SetClickHdl( m_aClickHdl );
     }
 
     // Get max title width
@@ -531,15 +526,15 @@ void ExtensionBox_Impl::DrawRow(vcl::RenderContext& rRenderContext, const Rectan
     else
         sDescription = rEntry->m_sDescription;
 
-    aPos.Y() += aTextHeight;
+    aPos.AdjustY(aTextHeight );
     if (rEntry->m_bActive)
     {
         long nExtraHeight = 0;
 
         if (rEntry->m_bHasButtons)
-            nExtraHeight = m_nExtraHeight;
+            nExtraHeight = 2;
 
-        rRenderContext.DrawText(Rectangle(aPos.X(), aPos.Y(), rRect.Right(), rRect.Bottom() - nExtraHeight),
+        rRenderContext.DrawText(tools::Rectangle(aPos.X(), aPos.Y(), rRect.Right(), rRect.Bottom() - nExtraHeight),
                                 sDescription, DrawTextFlags::MultiLine | DrawTextFlags::WordBreak );
     }
     else
@@ -575,7 +570,7 @@ void ExtensionBox_Impl::DrawRow(vcl::RenderContext& rRenderContext, const Rectan
         rRenderContext.DrawImage(aPos, Size(SMALL_ICON_SIZE, SMALL_ICON_SIZE), m_aWarningImage);
     }
 
-    rRenderContext.SetLineColor(Color(COL_LIGHTGRAY));
+    rRenderContext.SetLineColor(COL_LIGHTGRAY);
     rRenderContext.DrawLine(rRect.BottomLeft(), rRect.BottomRight());
 }
 
@@ -589,7 +584,7 @@ void ExtensionBox_Impl::RecalcAll()
 
     if ( m_bHasActive )
     {
-        Rectangle aEntryRect = GetEntryRect( m_nActive );
+        tools::Rectangle aEntryRect = GetEntryRect( m_nActive );
 
         if ( m_bAdjustActive )
         {
@@ -667,7 +662,7 @@ bool ExtensionBox_Impl::HandleCursorKey( sal_uInt16 nKeyCode )
 
     if ( nSelect < 0 )
         nSelect = 0;
-    if ( nSelect >= (long) m_vEntries.size() )
+    if ( nSelect >= static_cast<long>(m_vEntries.size()) )
         nSelect = m_vEntries.size() - 1;
 
     selectEntry( nSelect );
@@ -676,7 +671,7 @@ bool ExtensionBox_Impl::HandleCursorKey( sal_uInt16 nKeyCode )
 }
 
 
-void ExtensionBox_Impl::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rPaintRect*/)
+void ExtensionBox_Impl::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& /*rPaintRect*/)
 {
     if ( !m_bInDelete )
         DeleteRemoved();
@@ -688,17 +683,16 @@ void ExtensionBox_Impl::Paint(vcl::RenderContext& rRenderContext, const Rectangl
     Size aSize(GetOutputSizePixel());
 
     if ( m_bHasScrollBar )
-        aSize.Width() -= m_pScrollBar->GetSizePixel().Width();
+        aSize.AdjustWidth( -(m_pScrollBar->GetSizePixel().Width()) );
 
     const ::osl::MutexGuard aGuard( m_entriesMutex );
 
-    typedef std::vector< TEntry_Impl >::iterator ITER;
-    for (ITER iIndex = m_vEntries.begin(); iIndex < m_vEntries.end(); ++iIndex)
+    for (auto const& entry : m_vEntries)
     {
-        aSize.Height() = (*iIndex)->m_bActive ? m_nActiveHeight : m_nStdHeight;
-        Rectangle aEntryRect( aStart, aSize );
-        DrawRow(rRenderContext, aEntryRect, *iIndex);
-        aStart.Y() += aSize.Height();
+        aSize.setHeight( entry->m_bActive ? m_nActiveHeight : m_nStdHeight );
+        tools::Rectangle aEntryRect( aStart, aSize );
+        DrawRow(rRenderContext, aEntryRect, entry);
+        aStart.AdjustY(aSize.Height() );
     }
 }
 
@@ -756,12 +750,11 @@ void ExtensionBox_Impl::Resize()
 
 Size ExtensionBox_Impl::GetOptimalSize() const
 {
-    return LogicToPixel(Size(250, 150), MAP_APPFONT);
+    return LogicToPixel(Size(250, 150), MapMode(MapUnit::MapAppFont));
 }
 
-VCL_BUILDER_DECL_FACTORY(ExtensionBox)
+extern "C" SAL_DLLPUBLIC_EXPORT void makeExtensionBox(VclPtr<vcl::Window> & rRet, VclPtr<vcl::Window> & pParent, VclBuilder::stringmap &)
 {
-    (void)rMap;
     rRet = VclPtr<ExtensionBox_Impl>::Create(pParent);
 }
 
@@ -795,7 +788,7 @@ void ExtensionBox_Impl::MouseButtonDown( const MouseEvent& rMEvt )
 }
 
 
-bool ExtensionBox_Impl::Notify( NotifyEvent& rNEvt )
+bool ExtensionBox_Impl::EventNotify( NotifyEvent& rNEvt )
 {
     if ( !m_bInDelete )
         DeleteRemoved();
@@ -833,7 +826,7 @@ bool ExtensionBox_Impl::Notify( NotifyEvent& rNEvt )
     }
 
     if ( !bHandled )
-        return Control::Notify( rNEvt );
+        return Control::EventNotify(rNEvt);
     else
         return true;
 }
@@ -850,7 +843,7 @@ bool ExtensionBox_Impl::FindEntryPos( const TEntry_Impl& rEntry, const long nSta
 
     if ( nStart == nEnd )
     {
-        eCompare = rEntry->CompareTo( m_pCollator, m_vEntries[ nStart ] );
+        eCompare = rEntry->CompareTo( m_pCollator.get(), m_vEntries[ nStart ] );
         if ( eCompare < 0 )
             return false;
         else if ( eCompare == 0 )
@@ -871,7 +864,7 @@ bool ExtensionBox_Impl::FindEntryPos( const TEntry_Impl& rEntry, const long nSta
     }
 
     const long nMid = nStart + ( ( nEnd - nStart ) / 2 );
-    eCompare = rEntry->CompareTo( m_pCollator, m_vEntries[ nMid ] );
+    eCompare = rEntry->CompareTo( m_pCollator.get(), m_vEntries[ nMid ] );
 
     if ( eCompare < 0 )
         return FindEntryPos( rEntry, nStart, nMid-1, nPos );
@@ -892,8 +885,7 @@ bool ExtensionBox_Impl::FindEntryPos( const TEntry_Impl& rEntry, const long nSta
 
 void ExtensionBox_Impl::cleanVecListenerAdded()
 {
-    typedef ::std::vector<uno::WeakReference<deployment::XPackage> >::iterator IT;
-    IT i = m_vListenerAdded.begin();
+    auto i = m_vListenerAdded.begin();
     while( i != m_vListenerAdded.end())
     {
         const uno::Reference<deployment::XPackage> hardRef(*i);
@@ -909,12 +901,11 @@ void ExtensionBox_Impl::addEventListenerOnce(
 {
     //make sure to only add the listener once
     cleanVecListenerAdded();
-    if ( ::std::none_of(m_vListenerAdded.begin(), m_vListenerAdded.end(),
+    if ( std::none_of(m_vListenerAdded.begin(), m_vListenerAdded.end(),
                         FindWeakRef(extension)) )
     {
-        extension->addEventListener( uno::Reference< lang::XEventListener > (
-                                         m_xRemoveListener, uno::UNO_QUERY ) );
-        m_vListenerAdded.push_back(extension);
+        extension->addEventListener( m_xRemoveListener.get() );
+        m_vListenerAdded.emplace_back(extension);
     }
 }
 
@@ -958,7 +949,7 @@ void ExtensionBox_Impl::addEntry( const uno::Reference< deployment::XPackage > &
     pEntry->m_bMissingLic = bLicenseMissing;
 
     if ( bLicenseMissing )
-        pEntry->m_sErrorText = DialogHelper::getResourceString( RID_STR_ERROR_MISSING_LICENSE );
+        pEntry->m_sErrorText = DpResId( RID_STR_ERROR_MISSING_LICENSE );
 
     //access to m_nActive must be guarded
     if ( !m_bInCheckMode && m_bHasActive && ( m_nActive >= nPos ) )
@@ -971,28 +962,26 @@ void ExtensionBox_Impl::addEntry( const uno::Reference< deployment::XPackage > &
     m_bNeedsRecalc = true;
 }
 
-
 void ExtensionBox_Impl::updateEntry( const uno::Reference< deployment::XPackage > &xPackage )
 {
-    typedef std::vector< TEntry_Impl >::iterator ITER;
-    for ( ITER iIndex = m_vEntries.begin(); iIndex < m_vEntries.end(); ++iIndex )
+    for (auto const& entry : m_vEntries)
     {
-        if ( (*iIndex)->m_xPackage == xPackage )
+        if ( entry->m_xPackage == xPackage )
         {
             PackageState eState = TheExtensionManager::getPackageState( xPackage );
-            (*iIndex)->m_bHasOptions = m_pManager->supportsOptions( xPackage );
-            (*iIndex)->m_eState = eState;
-            (*iIndex)->m_sTitle = xPackage->getDisplayName();
-            (*iIndex)->m_sVersion = xPackage->getVersion();
-            (*iIndex)->m_sDescription = xPackage->getDescription();
+            entry->m_bHasOptions = m_pManager->supportsOptions( xPackage );
+            entry->m_eState = eState;
+            entry->m_sTitle = xPackage->getDisplayName();
+            entry->m_sVersion = xPackage->getVersion();
+            entry->m_sDescription = xPackage->getDescription();
 
             if ( eState == REGISTERED )
-                (*iIndex)->m_bMissingLic = false;
+                entry->m_bMissingLic = false;
 
             if ( eState == AMBIGUOUS )
-                (*iIndex)->m_sErrorText = DialogHelper::getResourceString( RID_STR_ERROR_UNKNOWN_STATUS );
-            else if ( ! (*iIndex)->m_bMissingLic )
-                (*iIndex)->m_sErrorText.clear();
+                entry->m_sErrorText = DpResId( RID_STR_ERROR_UNKNOWN_STATUS );
+            else if ( ! entry->m_bMissingLic )
+                entry->m_sErrorText.clear();
 
             if ( IsReallyVisible() )
                 Invalidate();
@@ -1000,7 +989,6 @@ void ExtensionBox_Impl::updateEntry( const uno::Reference< deployment::XPackage 
         }
     }
 }
-
 
 //This function is also called as a result of removing an extension.
 //see PackageManagerImpl::removePackage
@@ -1011,45 +999,51 @@ void ExtensionBox_Impl::removeEntry( const uno::Reference< deployment::XPackage 
 {
    if ( ! m_bInDelete )
     {
-        ::osl::ClearableMutexGuard aGuard( m_entriesMutex );
-
-        typedef std::vector< TEntry_Impl >::iterator ITER;
-
-        for ( ITER iIndex = m_vEntries.begin(); iIndex < m_vEntries.end(); ++iIndex )
+        bool invalidate = false;
         {
-            if ( (*iIndex)->m_xPackage == xPackage )
+            ::osl::ClearableMutexGuard aGuard( m_entriesMutex );
+
+            for ( auto iIndex = m_vEntries.begin(); iIndex != m_vEntries.end(); ++iIndex )
             {
-                long nPos = iIndex - m_vEntries.begin();
-
-                // Entries mustn't be removed here, because they contain a hyperlink control
-                // which can only be deleted when the thread has the solar mutex. Therefore
-                // the entry will be moved into the m_vRemovedEntries list which will be
-                // cleared on the next paint event
-                m_vRemovedEntries.push_back( *iIndex );
-                (*iIndex)->m_xPackage->removeEventListener(
-                    uno::Reference<lang::XEventListener>(m_xRemoveListener, uno::UNO_QUERY));
-                m_vEntries.erase( iIndex );
-
-                m_bNeedsRecalc = true;
-
-                if ( IsReallyVisible() )
-                    Invalidate();
-
-                if ( m_bHasActive )
+                if ( (*iIndex)->m_xPackage == xPackage )
                 {
-                    if ( nPos < m_nActive )
-                        m_nActive -= 1;
-                    else if ( ( nPos == m_nActive ) &&
-                              ( nPos == (long) m_vEntries.size() ) )
-                        m_nActive -= 1;
+                    long nPos = iIndex - m_vEntries.begin();
 
-                    m_bHasActive = false;
-                    //clear before calling out of this method
-                    aGuard.clear();
-                    selectEntry( m_nActive );
+                    // Entries mustn't be removed here, because they contain a hyperlink control
+                    // which can only be deleted when the thread has the solar mutex. Therefore
+                    // the entry will be moved into the m_vRemovedEntries list which will be
+                    // cleared on the next paint event
+                    m_vRemovedEntries.push_back( *iIndex );
+                    (*iIndex)->m_xPackage->removeEventListener(m_xRemoveListener.get());
+                    m_vEntries.erase( iIndex );
+
+                    m_bNeedsRecalc = true;
+
+                    if ( IsReallyVisible() )
+                        invalidate = true;
+
+                    if ( m_bHasActive )
+                    {
+                        if ( nPos < m_nActive )
+                            m_nActive -= 1;
+                        else if ( ( nPos == m_nActive ) &&
+                                  ( nPos == static_cast<long>(m_vEntries.size()) ) )
+                            m_nActive -= 1;
+
+                        m_bHasActive = false;
+                        //clear before calling out of this method
+                        aGuard.clear();
+                        selectEntry( m_nActive );
+                    }
+                    break;
                 }
-                break;
             }
+        }
+
+        if (invalidate)
+        {
+            SolarMutexGuard g;
+            Invalidate();
         }
     }
 }
@@ -1065,14 +1059,12 @@ void ExtensionBox_Impl::RemoveUnlocked()
 
         ::osl::ClearableMutexGuard aGuard( m_entriesMutex );
 
-        typedef std::vector< TEntry_Impl >::iterator ITER;
-
-        for ( ITER iIndex = m_vEntries.begin(); iIndex < m_vEntries.end(); ++iIndex )
+        for (auto const& entry : m_vEntries)
         {
-            if ( !(*iIndex)->m_bLocked )
+            if ( !entry->m_bLocked )
             {
                 bAllRemoved = false;
-                uno::Reference< deployment::XPackage> xPackage = (*iIndex)->m_xPackage;
+                uno::Reference< deployment::XPackage> xPackage = entry->m_xPackage;
                 aGuard.clear();
                 removeEntry( xPackage );
                 break;
@@ -1085,11 +1077,10 @@ void ExtensionBox_Impl::RemoveUnlocked()
 void ExtensionBox_Impl::prepareChecking()
 {
     m_bInCheckMode = true;
-    typedef std::vector< TEntry_Impl >::iterator ITER;
-    for ( ITER iIndex = m_vEntries.begin(); iIndex < m_vEntries.end(); ++iIndex )
+    for (auto const& entry : m_vEntries)
     {
-        (*iIndex)->m_bChecked = false;
-        (*iIndex)->m_bNew = false;
+        entry->m_bChecked = false;
+        entry->m_bNew = false;
     }
 }
 
@@ -1102,9 +1093,8 @@ void ExtensionBox_Impl::checkEntries()
     bool bNeedsUpdate = false;
 
     ::osl::ClearableMutexGuard guard(m_entriesMutex);
-    typedef std::vector< TEntry_Impl >::iterator ITER;
-    ITER iIndex = m_vEntries.begin();
-    while ( iIndex < m_vEntries.end() )
+    auto iIndex = m_vEntries.begin();
+    while ( iIndex != m_vEntries.end() )
     {
         if ( !(*iIndex)->m_bChecked )
         {
@@ -1136,8 +1126,7 @@ void ExtensionBox_Impl::checkEntries()
                     m_bHasActive = false;
                 }
                 m_vRemovedEntries.push_back( *iIndex );
-                m_vEntries.erase( iIndex );
-                iIndex = m_vEntries.begin() + nPos;
+                iIndex = m_vEntries.erase( iIndex );
             }
         }
         else
@@ -1162,27 +1151,20 @@ void ExtensionBox_Impl::checkEntries()
 }
 
 
-void ExtensionBox_Impl::SetScrollHdl( const Link<ScrollBar*,void>& rLink )
-{
-    if ( m_pScrollBar )
-        m_pScrollBar->SetScrollHdl( rLink );
-}
-
-
 void ExtensionBox_Impl::DoScroll( long nDelta )
 {
     m_nTopIndex += nDelta;
     Point aNewSBPt( m_pScrollBar->GetPosPixel() );
 
-    Rectangle aScrRect( Point(), GetOutputSizePixel() );
-    aScrRect.Right() -= m_pScrollBar->GetSizePixel().Width();
+    tools::Rectangle aScrRect( Point(), GetOutputSizePixel() );
+    aScrRect.AdjustRight( -(m_pScrollBar->GetSizePixel().Width()) );
     Scroll( 0, -nDelta, aScrRect );
 
     m_pScrollBar->SetPosPixel( aNewSBPt );
 }
 
 
-IMPL_LINK_TYPED( ExtensionBox_Impl, ScrollHdl, ScrollBar*, pScrBar, void )
+IMPL_LINK( ExtensionBox_Impl, ScrollHdl, ScrollBar*, pScrBar, void )
 {
     DoScroll( pScrBar->GetDelta() );
 }

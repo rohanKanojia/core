@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svgtspannode.hxx>
+#include <svgtspannode.hxx>
 
 namespace svgio
 {
@@ -48,10 +48,10 @@ namespace svgio
             SvgNode::parseAttribute(rTokenName, aSVGToken, aContent);
 
             // read style attributes
-            maSvgStyleAttributes.parseStyleAttribute(rTokenName, aSVGToken, aContent, false);
+            maSvgStyleAttributes.parseStyleAttribute(aSVGToken, aContent, false);
 
             // read text position attributes
-            maSvgTextPositions.parseTextPositionAttributes(rTokenName, aSVGToken, aContent);
+            maSvgTextPositions.parseTextPositionAttributes(aSVGToken, aContent);
 
             // parse own
             switch(aSVGToken)

@@ -30,13 +30,7 @@
 
 #include <stdio.h>
 
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#endif
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
 
 //  namespaces
@@ -123,7 +117,7 @@ int SAL_CALL main(int nArgc, char* Argv[], char*    )
     // Print a message if an error occurred.
     if ( xComponent.is() == sal_False )
     {
-        OSL_FAIL("Error shuting down");
+        OSL_FAIL("Error shutting down");
     }
 
     // Dispose and clear factory

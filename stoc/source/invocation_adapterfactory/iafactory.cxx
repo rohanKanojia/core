@@ -45,9 +45,11 @@
 #include <com/sun/star/registry/XRegistryKey.hpp>
 #include <com/sun/star/reflection/InvocationTargetException.hpp>
 #include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #define IMPLNAME    "com.sun.star.comp.stoc.InvocationAdapterFactory"
 
@@ -72,11 +74,11 @@ static OUString invadp_getImplementationName()
 
 struct hash_ptr
 {
-    inline size_t operator() ( void * p ) const
+    size_t operator() ( void * p ) const
         { return reinterpret_cast<size_t>(p); }
 };
-typedef std::unordered_set< void *, hash_ptr, equal_to< void * > > t_ptr_set;
-typedef std::unordered_map< void *, t_ptr_set, hash_ptr, equal_to< void * > > t_ptr_map;
+typedef std::unordered_set< void *, hash_ptr > t_ptr_set;
+typedef std::unordered_map< void *, t_ptr_set, hash_ptr > t_ptr_map;
 
 
 class FactoryImpl
@@ -100,25 +102,20 @@ public:
     t_ptr_map m_receiver2adapters;
 
     explicit FactoryImpl( Reference< XComponentContext > const & xContext );
-    virtual ~FactoryImpl();
+    virtual ~FactoryImpl() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw (RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString & rServiceName )
-        throw (RuntimeException, std::exception) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames()
-        throw (RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString & rServiceName ) override;
+    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // XInvocationAdapterFactory
     virtual Reference< XInterface > SAL_CALL createAdapter(
-        const Reference< script::XInvocation > & xReceiver, const Type & rType )
-        throw (RuntimeException, std::exception) override;
+        const Reference< script::XInvocation > & xReceiver, const Type & rType ) override;
     // XInvocationAdapterFactory2
     virtual Reference< XInterface > SAL_CALL createAdapter(
         const Reference< script::XInvocation > & xReceiver,
-        const Sequence< Type > & rTypes )
-        throw (RuntimeException, std::exception) override;
+        const Sequence< Type > & rTypes ) override;
 };
 struct AdapterImpl;
 
@@ -132,11 +129,10 @@ struct AdapterImpl
 {
     oslInterlockedCount         m_nRef;
     FactoryImpl *               m_pFactory;
-    void *                      m_key; // map key
+    void * const                m_key; // map key
     uno_Interface *             m_pReceiver; // XInvocation receiver
 
-    sal_Int32                   m_nInterfaces;
-    InterfaceAdapterImpl *      m_pInterfaces;
+    std::vector<InterfaceAdapterImpl>  m_vInterfaces;
 
     // XInvocation calls
     void getValue(
@@ -171,12 +167,11 @@ struct AdapterImpl
 
 inline AdapterImpl::~AdapterImpl()
 {
-    for ( sal_Int32 nPos = m_nInterfaces; nPos--; )
+    for ( size_t nPos = m_vInterfaces.size(); nPos--; )
     {
         ::typelib_typedescription_release(
-            &m_pInterfaces[ nPos ].m_pTypeDescr->aBase );
+            &m_vInterfaces[ nPos ].m_pTypeDescr->aBase );
     }
-    delete [] m_pInterfaces;
 
     (*m_pReceiver->release)( m_pReceiver );
     m_pFactory->release();
@@ -213,7 +208,7 @@ inline void AdapterImpl::release()
 }
 
 
-static inline void constructRuntimeException(
+static void constructRuntimeException(
     uno_Any * pExc, const OUString & rMsg )
 {
     RuntimeException exc( rMsg );
@@ -223,7 +218,7 @@ static inline void constructRuntimeException(
 }
 
 
-static inline bool type_equals(
+static bool type_equals(
     typelib_TypeDescriptionReference * pType1,
     typelib_TypeDescriptionReference * pType2 )
 {
@@ -557,17 +552,17 @@ void AdapterImpl::invoke(
 extern "C"
 {
 
-static void SAL_CALL adapter_acquire( uno_Interface * pUnoI )
+static void adapter_acquire( uno_Interface * pUnoI )
 {
     static_cast< InterfaceAdapterImpl * >( pUnoI )->m_pAdapter->acquire();
 }
 
-static void SAL_CALL adapter_release( uno_Interface * pUnoI )
+static void adapter_release( uno_Interface * pUnoI )
 {
     static_cast< InterfaceAdapterImpl * >( pUnoI )->m_pAdapter->release();
 }
 
-static void SAL_CALL adapter_dispatch(
+static void adapter_dispatch(
     uno_Interface * pUnoI, const typelib_TypeDescription * pMemberType,
     void * pReturn, void * pArgs[], uno_Any ** ppException )
 {
@@ -582,15 +577,15 @@ static void SAL_CALL adapter_dispatch(
         typelib_TypeDescriptionReference * pDemanded =
             *static_cast<typelib_TypeDescriptionReference **>(pArgs[0]);
         // pInterfaces[0] is XInterface
-        for ( sal_Int32 nPos = 0; nPos < that->m_nInterfaces; ++nPos )
+        for ( size_t nPos = 0; nPos < that->m_vInterfaces.size(); ++nPos )
         {
             typelib_InterfaceTypeDescription * pTD =
-                that->m_pInterfaces[nPos].m_pTypeDescr;
+                that->m_vInterfaces[nPos].m_pTypeDescr;
             while (pTD)
             {
                 if (type_equals( pTD->aBase.pWeakRef, pDemanded ))
                 {
-                    uno_Interface * pUnoI2 = &that->m_pInterfaces[nPos];
+                    uno_Interface * pUnoI2 = &that->m_vInterfaces[nPos];
                     ::uno_any_construct(
                         static_cast<uno_Any *>(pReturn), &pUnoI2,
                         &pTD->aBase, nullptr );
@@ -637,15 +632,14 @@ AdapterImpl::AdapterImpl(
     FactoryImpl * pFactory )
         : m_nRef( 1 ),
           m_pFactory( pFactory ),
-          m_key( key )
+          m_key( key ),
+          m_vInterfaces( rTypes.getLength() )
 {
     // init adapters
-    m_nInterfaces = rTypes.getLength();
-    m_pInterfaces = new InterfaceAdapterImpl[ rTypes.getLength() ];
     const Type * pTypes = rTypes.getConstArray();
     for ( sal_Int32 nPos = rTypes.getLength(); nPos--; )
     {
-        InterfaceAdapterImpl * pInterface = &m_pInterfaces[nPos];
+        InterfaceAdapterImpl * pInterface = &m_vInterfaces[nPos];
         pInterface->acquire = adapter_acquire;
         pInterface->release = adapter_release;
         pInterface->pDispatcher = adapter_dispatch;
@@ -659,9 +653,8 @@ AdapterImpl::AdapterImpl(
             for ( sal_Int32 n = 0; n < nPos; ++n )
             {
                 ::typelib_typedescription_release(
-                    &m_pInterfaces[ n ].m_pTypeDescr->aBase );
+                    &m_vInterfaces[ n ].m_pTypeDescr->aBase );
             }
-            delete [] m_pInterfaces;
             throw RuntimeException(
                 "cannot retrieve all interface type infos!" );
         }
@@ -762,7 +755,7 @@ FactoryImpl::~FactoryImpl()
 }
 
 
-static inline AdapterImpl * lookup_adapter(
+static AdapterImpl * lookup_adapter(
     t_ptr_set ** pp_adapter_set,
     t_ptr_map & map, void * key, Sequence< Type > const & rTypes )
 {
@@ -773,11 +766,9 @@ static inline AdapterImpl * lookup_adapter(
     // find matching adapter
     Type const * pTypes = rTypes.getConstArray();
     sal_Int32 nTypes = rTypes.getLength();
-    t_ptr_set::const_iterator iPos( adapters_set.begin() );
-    t_ptr_set::const_iterator const iEnd( adapters_set.end() );
-    while (iEnd != iPos)
+    for (const auto& rpAdapter : adapters_set)
     {
-        AdapterImpl * that = static_cast< AdapterImpl * >( *iPos );
+        AdapterImpl * that = static_cast< AdapterImpl * >( rpAdapter );
         // iterate through all types if that is a matching adapter
         sal_Int32 nPosTypes;
         for ( nPosTypes = nTypes; nPosTypes--; )
@@ -785,11 +776,11 @@ static inline AdapterImpl * lookup_adapter(
             Type const & rType = pTypes[ nPosTypes ];
             // find in adapter's type list
             sal_Int32 nPos;
-            for ( nPos = that->m_nInterfaces; nPos--; )
+            for ( nPos = that->m_vInterfaces.size(); nPos--; )
             {
                 if (::typelib_typedescriptionreference_isAssignableFrom(
                         rType.getTypeLibType(),
-                        that->m_pInterfaces[ nPos ].m_pTypeDescr->aBase.pWeakRef ))
+                        that->m_vInterfaces[ nPos ].m_pTypeDescr->aBase.pWeakRef ))
                 {
                     // found
                     break;
@@ -800,7 +791,6 @@ static inline AdapterImpl * lookup_adapter(
         }
         if (nPosTypes < 0) // all types found
             return that;
-        ++iPos;
     }
     return nullptr;
 }
@@ -810,7 +800,6 @@ static inline AdapterImpl * lookup_adapter(
 Reference< XInterface > FactoryImpl::createAdapter(
     const Reference< script::XInvocation > & xReceiver,
     const Sequence< Type > & rTypes )
-    throw (RuntimeException, std::exception)
 {
     Reference< XInterface > xRet;
     if (xReceiver.is() && rTypes.getLength())
@@ -853,7 +842,7 @@ Reference< XInterface > FactoryImpl::createAdapter(
         }
         }
         // map one interface to C++
-        uno_Interface * pUnoI = &that->m_pInterfaces[ 0 ];
+        uno_Interface * pUnoI = &that->m_vInterfaces[ 0 ];
         m_aUno2Cpp.mapInterface(
             reinterpret_cast<void **>(&xRet), pUnoI, cppu::UnoType<decltype(xRet)>::get() );
         that->release();
@@ -869,7 +858,6 @@ Reference< XInterface > FactoryImpl::createAdapter(
 
 Reference< XInterface > FactoryImpl::createAdapter(
     const Reference< script::XInvocation > & xReceiver, const Type & rType )
-    throw (RuntimeException, std::exception)
 {
     return createAdapter( xReceiver, Sequence< Type >( &rType, 1 ) );
 }
@@ -877,27 +865,23 @@ Reference< XInterface > FactoryImpl::createAdapter(
 // XServiceInfo
 
 OUString FactoryImpl::getImplementationName()
-    throw (RuntimeException, std::exception)
 {
     return invadp_getImplementationName();
 }
 
 sal_Bool FactoryImpl::supportsService( const OUString & rServiceName )
-    throw (RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 Sequence< OUString > FactoryImpl::getSupportedServiceNames()
-    throw (RuntimeException, std::exception)
 {
     return invadp_getSupportedServiceNames();
 }
 
-
-static Reference< XInterface > SAL_CALL FactoryImpl_create(
+/// @throws Exception
+static Reference< XInterface > FactoryImpl_create(
     const Reference< XComponentContext > & xContext )
-    throw (Exception)
 {
     return static_cast<cppu::OWeakObject *>(new FactoryImpl( xContext ));
 }
@@ -917,7 +901,7 @@ static const struct ::cppu::ImplementationEntry g_entries[] =
     { nullptr, nullptr, nullptr, nullptr, nullptr, 0 }
 };
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL invocadapt_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * invocadapt_component_getFactory(
     const sal_Char * pImplName, void * pServiceManager, void * pRegistryKey )
 {
     return ::cppu::component_getFactoryHelper(

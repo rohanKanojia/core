@@ -24,20 +24,19 @@
 
 #include <rtl/textenc.h>
 #include <rtl/tencinfo.h>
-
+#include <com/sun/star/io/NotConnectedException.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::io;
 
 
-#include "xml2utf.hxx"
+#include <xml2utf.hxx>
 #include <memory>
 
 namespace sax_expatwrap {
 
 sal_Int32 XMLFile2UTFConverter::readAndConvert( Sequence<sal_Int8> &seq , sal_Int32 nMaxToRead )
-    throw ( IOException, NotConnectedException , BufferSizeExceededException , RuntimeException )
 {
     if( ! m_in.is() ) {
         throw NotConnectedException();
@@ -92,7 +91,7 @@ sal_Int32 XMLFile2UTFConverter::readAndConvert( Sequence<sal_Int8> &seq , sal_In
 
             // do the encoding
             if( m_pText2Unicode && m_pUnicode2Text &&
-                m_pText2Unicode->canContinue() && m_pUnicode2Text->canContinue() ) {
+                m_pText2Unicode->canContinue() ) {
 
                 Sequence<sal_Unicode> seqUnicode = m_pText2Unicode->convert( seq );
                 seq = m_pUnicode2Text->convert( seqUnicode.getConstArray(), seqUnicode.getLength() );
@@ -115,18 +114,10 @@ sal_Int32 XMLFile2UTFConverter::readAndConvert( Sequence<sal_Int8> &seq , sal_In
     return nRead;
 }
 
-
-XMLFile2UTFConverter::~XMLFile2UTFConverter()
-{
-    delete m_pText2Unicode;
-    delete m_pUnicode2Text;
-}
-
-
 void XMLFile2UTFConverter::removeEncoding( Sequence<sal_Int8> &seq )
 {
     const sal_Int8 *pSource = seq.getArray();
-    if( ! strncmp( reinterpret_cast<const char *>(pSource), "<?xml", 4) )
+    if (seq.getLength() >= 5 && !strncmp(reinterpret_cast<const char *>(pSource), "<?xml", 5))
     {
 
         // scan for encoding
@@ -161,7 +152,6 @@ void XMLFile2UTFConverter::removeEncoding( Sequence<sal_Int8> &seq )
                                 &( seq.getArray()[nStop+1]) ,
                                 seq.getLength() - nStop -1);
                 seq.realloc( seq.getLength() - ( nStop+1 - nFound ) );
-//              str = String( (char * ) seq.getArray() , seq.getLen() );
             }
         }
     }
@@ -178,12 +168,12 @@ bool XMLFile2UTFConverter::isEncodingRecognizable( const Sequence< sal_Int8 > &s
         return false;
     }
 
-    if( ! strncmp( reinterpret_cast<const char *>(pSource), "<?xml", 4 ) ) {
+    if( ! strncmp( reinterpret_cast<const char *>(pSource), "<?xml", 5 ) ) {
         // scan if the <?xml tag finishes within this buffer
         bCheckIfFirstClosingBracketExsists = true;
     }
     else if( ('<' == pSource[0] || '<' == pSource[2] ) &&
-             ( ('?' == pSource[4] || '?' == pSource[6] ) ) )
+             ('?' == pSource[4] || '?' == pSource[6] ) )
     {
         // check for utf-16
         bCheckIfFirstClosingBracketExsists = true;
@@ -223,8 +213,7 @@ bool XMLFile2UTFConverter::scanForEncoding( Sequence< sal_Int8 > &seq )
     }
 
     // first level : detect possible file formats
-    if( ! strncmp( reinterpret_cast<const char *>(pSource), "<?xml", 4 ) ) {
-
+    if (seq.getLength() >= 5 && !strncmp(reinterpret_cast<const char *>(pSource), "<?xml", 5)) {
         // scan for encoding
         OString str( reinterpret_cast<const char *>(pSource), seq.getLength() );
 
@@ -334,8 +323,8 @@ void XMLFile2UTFConverter::initializeDecoding()
         rtl_TextEncoding encoding = rtl_getTextEncodingFromMimeCharset( m_sEncoding.getStr() );
         if( encoding != RTL_TEXTENCODING_UTF8 )
         {
-            m_pText2Unicode = new Text2UnicodeConverter( m_sEncoding );
-            m_pUnicode2Text = new Unicode2TextConverter( RTL_TEXTENCODING_UTF8 );
+            m_pText2Unicode = std::make_unique<Text2UnicodeConverter>( m_sEncoding );
+            m_pUnicode2Text = std::make_unique<Unicode2TextConverter>( RTL_TEXTENCODING_UTF8 );
         }
     }
 }
@@ -347,7 +336,6 @@ void XMLFile2UTFConverter::initializeDecoding()
 Text2UnicodeConverter::Text2UnicodeConverter( const OString &sEncoding )
     : m_convText2Unicode(nullptr)
     , m_contextText2Unicode(nullptr)
-    , m_rtlEncoding(RTL_TEXTENCODING_DONTKNOW)
 {
     rtl_TextEncoding encoding = rtl_getTextEncodingFromMimeCharset( sEncoding.getStr() );
     if( RTL_TEXTENCODING_DONTKNOW == encoding )
@@ -377,7 +365,6 @@ void Text2UnicodeConverter::init( rtl_TextEncoding encoding )
 
     m_convText2Unicode  = rtl_createTextToUnicodeConverter(encoding);
     m_contextText2Unicode = rtl_createTextToUnicodeContext( m_convText2Unicode );
-    m_rtlEncoding = encoding;
 }
 
 
@@ -423,14 +410,14 @@ Sequence<sal_Unicode> Text2UnicodeConverter::convert( const Sequence<sal_Int8> &
                                     &nSrcCvtBytes );
         nSourceCount += nSrcCvtBytes;
 
-        if( uiInfo & RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL ) {
+        if( uiInfo & RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL ) {
             // save necessary bytes for next conversion
             seqUnicode.realloc( seqUnicode.getLength() * 2 );
             continue;
         }
         break;
     }
-    if( uiInfo & RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL ) {
+    if( uiInfo & RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL ) {
         m_seqSource.realloc( nSourceSize - nSourceCount );
         memcpy( m_seqSource.getArray() , &(pbSource[nSourceCount]) , nSourceSize-nSourceCount );
     }
@@ -447,16 +434,15 @@ Sequence<sal_Unicode> Text2UnicodeConverter::convert( const Sequence<sal_Int8> &
 
 Unicode2TextConverter::Unicode2TextConverter( rtl_TextEncoding encoding )
 {
-    init( encoding );
+    m_convUnicode2Text  = rtl_createUnicodeToTextConverter( encoding );
+    m_contextUnicode2Text = rtl_createUnicodeToTextContext( m_convUnicode2Text );
 }
 
 
 Unicode2TextConverter::~Unicode2TextConverter()
 {
-    if( m_bInitialized ) {
-        rtl_destroyUnicodeToTextContext( m_convUnicode2Text , m_contextUnicode2Text );
-        rtl_destroyUnicodeToTextConverter( m_convUnicode2Text );
-    }
+    rtl_destroyUnicodeToTextContext( m_convUnicode2Text , m_contextUnicode2Text );
+    rtl_destroyUnicodeToTextConverter( m_convUnicode2Text );
 }
 
 
@@ -535,17 +521,6 @@ Sequence<sal_Int8> Unicode2TextConverter::convert(const sal_Unicode *puSource , 
 
     return seqText;
 }
-
-void Unicode2TextConverter::init( rtl_TextEncoding encoding )
-{
-    m_bCanContinue = true;
-    m_bInitialized = true;
-
-    m_convUnicode2Text  = rtl_createUnicodeToTextConverter( encoding );
-    m_contextUnicode2Text = rtl_createUnicodeToTextContext( m_convUnicode2Text );
-    m_rtlEncoding = encoding;
-};
-
 
 }
 

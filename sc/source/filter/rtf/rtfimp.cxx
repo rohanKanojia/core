@@ -17,40 +17,31 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "global.hxx"
-#include "document.hxx"
-#include "filter.hxx"
-#include "editutil.hxx"
-#include "rtfimp.hxx"
-#include "rtfparse.hxx"
-#include "ftools.hxx"
+#include <filter.hxx>
+#include <editutil.hxx>
+#include <rtfimp.hxx>
+#include <rtfparse.hxx>
+#include <ftools.hxx>
 
-FltError ScFormatFilterPluginImpl::ScImportRTF( SvStream &rStream, const OUString& rBaseURL, ScDocument *pDoc, ScRange& rRange )
+ErrCode ScFormatFilterPluginImpl::ScImportRTF( SvStream &rStream, const OUString& rBaseURL, ScDocument *pDoc, ScRange& rRange )
 {
     ScRTFImport aImp( pDoc, rRange );
-    FltError nErr = (FltError) aImp.Read( rStream, rBaseURL );
+    ErrCode nErr = aImp.Read( rStream, rBaseURL );
     ScRange aR = aImp.GetRange();
     rRange.aEnd = aR.aEnd;
     aImp.WriteToDocument();
     return nErr;
 }
 
-ScEEAbsImport *ScFormatFilterPluginImpl::CreateRTFImport( ScDocument* pDoc, const ScRange& rRange )
+std::unique_ptr<ScEEAbsImport> ScFormatFilterPluginImpl::CreateRTFImport( ScDocument* pDoc, const ScRange& rRange )
 {
-    return new ScRTFImport( pDoc, rRange );
+    return std::make_unique<ScRTFImport>( pDoc, rRange );
 }
 
 ScRTFImport::ScRTFImport( ScDocument* pDocP, const ScRange& rRange ) :
     ScEEImport( pDocP, rRange )
 {
-    mpParser = new ScRTFParser( mpEngine );
-}
-
-ScRTFImport::~ScRTFImport()
-{
-    // ordering is important; get error in some other Dtor otherwise!
-    // Is correct, as ScEEImport is Base Class
-    delete static_cast<ScRTFParser*>(mpParser);     // before EditEngine!
+    mpParser.reset(new ScRTFParser( mpEngine.get() ));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

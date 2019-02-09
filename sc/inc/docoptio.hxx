@@ -20,15 +20,10 @@
 #ifndef INCLUDED_SC_INC_DOCOPTIO_HXX
 #define INCLUDED_SC_INC_DOCOPTIO_HXX
 
-#include <unotools/configitem.hxx>
 #include <unotools/textsearch.hxx>
 #include <svl/poolitem.hxx>
-#include <svl/itemprop.hxx>
 #include "scdllapi.h"
-#include "scmod.hxx"
 #include "optutil.hxx"
-
-#include <formula/grammar.hxx>
 
 class SC_DLLPUBLIC ScDocOptions
 {
@@ -51,12 +46,8 @@ class SC_DLLPUBLIC ScDocOptions
     mutable bool bFormulaWildcardsEnabled;///< wildcards in formulas enabled, only when reading settings
     bool       bWriteCalcConfig;        ///< (subset of) Calc config will be written to user's profile
 
-    const utl::SearchParam::SearchType eSearchTypeUnknown = static_cast<utl::SearchParam::SearchType>(-1);
-
 public:
                 ScDocOptions();
-                ScDocOptions( const ScDocOptions& rCpy );
-                ~ScDocOptions();
 
     bool   IsLookUpColRowNames() const       { return bLookUpColRowNames; }
     void   SetLookUpColRowNames( bool bVal ) { bLookUpColRowNames = bVal; }
@@ -73,16 +64,15 @@ public:
     double GetIterEps() const               { return fIterEps; }
     void   SetIterEps( double fEps )        { fIterEps = fEps; }
 
-    void   GetDate( sal_uInt16& rD, sal_uInt16& rM, sal_uInt16& rY ) const
+    void   GetDate( sal_uInt16& rD, sal_uInt16& rM, sal_Int16& rY ) const
                                         { rD = nDay; rM = nMonth; rY = nYear;}
-    void   SetDate (sal_uInt16 nD, sal_uInt16 nM, sal_uInt16 nY)
+    void   SetDate (sal_uInt16 nD, sal_uInt16 nM, sal_Int16 nY)
                                         { nDay = nD; nMonth = nM; nYear = nY; }
     sal_uInt16 GetTabDistance() const { return nTabDistance;}
     void   SetTabDistance( sal_uInt16 nTabDist ) {nTabDistance = nTabDist;}
 
     void        ResetDocOptions();
 
-    inline const ScDocOptions&  operator=( const ScDocOptions& rOpt );
     inline bool                 operator==( const ScDocOptions& rOpt ) const;
     inline bool                 operator!=( const ScDocOptions& rOpt ) const;
 
@@ -97,52 +87,20 @@ public:
 
     utl::SearchParam::SearchType GetFormulaSearchType() const
     {
-        if (eFormulaSearchType == eSearchTypeUnknown)
+        if (eFormulaSearchType == utl::SearchParam::SearchType::Unknown || (bFormulaRegexEnabled && bFormulaWildcardsEnabled))
             eFormulaSearchType = utl::SearchParam::ConvertToSearchType( bFormulaWildcardsEnabled, bFormulaRegexEnabled);
         return eFormulaSearchType;
     }
 
-    void    SetFormulaRegexEnabled( bool bVal )
-    {
-        bFormulaRegexEnabled = bVal;
-        eFormulaSearchType = eSearchTypeUnknown;
-    }
-    bool    IsFormulaRegexEnabled() const       { return GetFormulaSearchType() == utl::SearchParam::SRCH_REGEXP; }
+    void    SetFormulaRegexEnabled( bool bVal );
+    bool    IsFormulaRegexEnabled() const       { return GetFormulaSearchType() == utl::SearchParam::SearchType::Regexp; }
 
-    void    SetFormulaWildcardsEnabled( bool bVal )
-    {
-        bFormulaWildcardsEnabled = bVal;
-        eFormulaSearchType = eSearchTypeUnknown;
-    }
-    bool    IsFormulaWildcardsEnabled() const       { return GetFormulaSearchType() == utl::SearchParam::SRCH_WILDCARD; }
+    void    SetFormulaWildcardsEnabled( bool bVal );
+    bool    IsFormulaWildcardsEnabled() const   { return GetFormulaSearchType() == utl::SearchParam::SearchType::Wildcard; }
 
     void    SetWriteCalcConfig( bool bVal ) { bWriteCalcConfig = bVal; }
     bool    IsWriteCalcConfig() const       { return bWriteCalcConfig; }
 };
-
-inline const ScDocOptions& ScDocOptions::operator=( const ScDocOptions& rCpy )
-{
-    bIsIgnoreCase       = rCpy.bIsIgnoreCase;
-    bIsIter             = rCpy.bIsIter;
-    nIterCount          = rCpy.nIterCount;
-    fIterEps            = rCpy.fIterEps;
-    nPrecStandardFormat = rCpy.nPrecStandardFormat;
-    nDay                = rCpy.nDay;
-    nMonth              = rCpy.nMonth;
-    nYear               = rCpy.nYear;
-    nYear2000           = rCpy.nYear2000;
-    nTabDistance        = rCpy.nTabDistance;
-    bCalcAsShown        = rCpy.bCalcAsShown;
-    bMatchWholeCell     = rCpy.bMatchWholeCell;
-    bDoAutoSpell        = rCpy.bDoAutoSpell;
-    bLookUpColRowNames  = rCpy.bLookUpColRowNames;
-    bFormulaRegexEnabled= rCpy.bFormulaRegexEnabled;
-    bFormulaWildcardsEnabled = rCpy.bFormulaWildcardsEnabled;
-    eFormulaSearchType  = rCpy.eFormulaSearchType;
-    bWriteCalcConfig    = rCpy.bWriteCalcConfig;
-
-    return *this;
-}
 
 inline bool ScDocOptions::operator==( const ScDocOptions& rOpt ) const
 {
@@ -178,11 +136,14 @@ inline bool ScDocOptions::operator!=( const ScDocOptions& rOpt ) const
 class SC_DLLPUBLIC ScTpCalcItem : public SfxPoolItem
 {
 public:
-                static SfxPoolItem* CreateDefault();
                 ScTpCalcItem( sal_uInt16 nWhich,
                               const ScDocOptions& rOpt );
-                ScTpCalcItem( const ScTpCalcItem& rItem );
-                virtual ~ScTpCalcItem();
+                virtual ~ScTpCalcItem() override;
+
+    ScTpCalcItem(ScTpCalcItem const &) = default;
+    ScTpCalcItem(ScTpCalcItem &&) = default;
+    ScTpCalcItem & operator =(ScTpCalcItem const &) = delete; // due to SfxPoolItem
+    ScTpCalcItem & operator =(ScTpCalcItem &&) = delete; // due to SfxPoolItem
 
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
@@ -190,7 +151,7 @@ public:
     const ScDocOptions& GetDocOptions() const { return theOptions; }
 
 private:
-    ScDocOptions theOptions;
+    ScDocOptions const theOptions;
 };
 
 //  Config Item containing document options
@@ -200,8 +161,8 @@ class ScDocCfg : public ScDocOptions
     ScLinkConfigItem    aCalcItem;
     ScLinkConfigItem    aLayoutItem;
 
-    DECL_LINK_TYPED( CalcCommitHdl, ScLinkConfigItem&, void );
-    DECL_LINK_TYPED( LayoutCommitHdl, ScLinkConfigItem&, void );
+    DECL_LINK( CalcCommitHdl, ScLinkConfigItem&, void );
+    DECL_LINK( LayoutCommitHdl, ScLinkConfigItem&, void );
 
     static css::uno::Sequence<OUString> GetCalcPropertyNames();
     static css::uno::Sequence<OUString> GetLayoutPropertyNames();

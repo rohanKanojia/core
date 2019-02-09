@@ -20,13 +20,11 @@
 #ifndef INCLUDED_SAL_MATHCONF_H
 #define INCLUDED_SAL_MATHCONF_H
 
-#include <osl/endian.h>
+#include "osl/endian.h"
 
-#include <float.h>
-
-#if defined SOLARIS
+#if defined __sun
 #include <ieeefp.h>
-#endif /* SOLARIS */
+#endif /* __sun */
 
 #if defined(__cplusplus) && ( defined(__GXX_EXPERIMENTAL_CXX0X__) || __cplusplus >= 201103L )
 #include <cmath>
@@ -62,7 +60,7 @@ extern "C" {
 
 
 /* SAL_MATH_FINITE(d): test double d on INFINITY, NaN et al. */
-#if !defined SOLARIS && !defined ANDROID \
+#if !defined __sun && !defined ANDROID \
                      && defined(__cplusplus) \
                      && ( defined(__GXX_EXPERIMENTAL_CXX0X__) \
                           || __cplusplus >= 201103L \

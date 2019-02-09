@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <comphelper/types.hxx>
 #include <connectivity/sdbcx/VCatalog.hxx>
 #include <connectivity/sdbcx/VCollection.hxx>
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <connectivity/sdbcx/VDescriptor.hxx>
-#include "TConnection.hxx"
-#include <comphelper/uno3.hxx>
+#include <TConnection.hxx>
 #include <connectivity/dbtools.hxx>
 
 using namespace connectivity;
@@ -37,11 +37,6 @@ using namespace ::com::sun::star::lang;
 IMPLEMENT_SERVICE_INFO(OCatalog,"com.sun.star.comp.connectivity.OCatalog","com.sun.star.sdbcx.DatabaseDefinition")
 
 OCatalog::OCatalog(const Reference< XConnection> &_xConnection) : OCatalog_BASE(m_aMutex)
-            ,connectivity::OSubComponent<OCatalog, OCatalog_BASE>(_xConnection, this)
-            ,m_pTables(nullptr)
-            ,m_pViews(nullptr)
-            ,m_pGroups(nullptr)
-            ,m_pUsers(nullptr)
 {
     try
     {
@@ -55,22 +50,7 @@ OCatalog::OCatalog(const Reference< XConnection> &_xConnection) : OCatalog_BASE(
 
 OCatalog::~OCatalog()
 {
-    delete m_pTables;
-    delete m_pViews;
-    delete m_pGroups;
-    delete m_pUsers;
 }
-
-void SAL_CALL OCatalog::acquire() throw()
-{
-    OCatalog_BASE::acquire();
-}
-
-void SAL_CALL OCatalog::release() throw()
-{
-    relase_ChildImpl();
-}
-
 
 void SAL_CALL OCatalog::disposing()
 {
@@ -85,12 +65,11 @@ void SAL_CALL OCatalog::disposing()
     if(m_pUsers)
         m_pUsers->disposing();
 
-    dispose_ChildImpl();
     OCatalog_BASE::disposing();
 }
 
 // XTablesSupplier
-Reference< XNameAccess > SAL_CALL OCatalog::getTables(  ) throw(RuntimeException, std::exception)
+Reference< XNameAccess > SAL_CALL OCatalog::getTables(  )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     checkDisposed(OCatalog_BASE::rBHelper.bDisposed);
@@ -110,11 +89,11 @@ Reference< XNameAccess > SAL_CALL OCatalog::getTables(  ) throw(RuntimeException
         // allowed
     }
 
-    return m_pTables;
+    return m_pTables.get();
 }
 
 // XViewsSupplier
-Reference< XNameAccess > SAL_CALL OCatalog::getViews(  ) throw(RuntimeException, std::exception)
+Reference< XNameAccess > SAL_CALL OCatalog::getViews(  )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     checkDisposed(OCatalog_BASE::rBHelper.bDisposed);
@@ -134,11 +113,11 @@ Reference< XNameAccess > SAL_CALL OCatalog::getViews(  ) throw(RuntimeException,
         // allowed
     }
 
-    return m_pViews;
+    return m_pViews.get();
 }
 
 // XUsersSupplier
-Reference< XNameAccess > SAL_CALL OCatalog::getUsers(  ) throw(RuntimeException, std::exception)
+Reference< XNameAccess > SAL_CALL OCatalog::getUsers(  )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     checkDisposed(OCatalog_BASE::rBHelper.bDisposed);
@@ -158,11 +137,11 @@ Reference< XNameAccess > SAL_CALL OCatalog::getUsers(  ) throw(RuntimeException,
         // allowed
     }
 
-    return m_pUsers;
+    return m_pUsers.get();
 }
 
 // XGroupsSupplier
-Reference< XNameAccess > SAL_CALL OCatalog::getGroups(  ) throw(RuntimeException, std::exception)
+Reference< XNameAccess > SAL_CALL OCatalog::getGroups(  )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     checkDisposed(OCatalog_BASE::rBHelper.bDisposed);
@@ -182,7 +161,7 @@ Reference< XNameAccess > SAL_CALL OCatalog::getGroups(  ) throw(RuntimeException
         // allowed
     }
 
-    return m_pGroups;
+    return m_pGroups.get();
 }
 
 OUString OCatalog::buildName(const Reference< XRow >& _xRow)
@@ -202,7 +181,7 @@ OUString OCatalog::buildName(const Reference< XRow >& _xRow)
     return sComposedName;
 }
 
-void OCatalog::fillNames(Reference< XResultSet >& _xResult,TStringVector& _rNames)
+void OCatalog::fillNames(Reference< XResultSet >& _xResult,::std::vector< OUString>& _rNames)
 {
     if ( _xResult.is() )
     {
@@ -219,7 +198,7 @@ void OCatalog::fillNames(Reference< XResultSet >& _xResult,TStringVector& _rName
 
 void ODescriptor::construct()
 {
-    sal_Int32 nAttrib = isNew() ? 0 : ::com::sun::star::beans::PropertyAttribute::READONLY;
+    sal_Int32 nAttrib = isNew() ? 0 : css::beans::PropertyAttribute::READONLY;
     registerProperty(OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_NAME), PROPERTY_ID_NAME ,nAttrib,&m_Name,::cppu::UnoType<OUString>::get());
 }
 

@@ -18,13 +18,11 @@
  */
 
 #include "PieChartType.hxx"
-#include "PropertyHelper.hxx"
-#include "macros.hxx"
-#include "PolarCoordinateSystem.hxx"
-#include "AxisHelper.hxx"
-#include "servicenames_charttypes.hxx"
-#include "ContainerHelper.hxx"
-#include "AxisIndexDefines.hxx"
+#include <PropertyHelper.hxx>
+#include <PolarCoordinateSystem.hxx>
+#include <AxisHelper.hxx>
+#include <servicenames_charttypes.hxx>
+#include <AxisIndexDefines.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/chart2/AxisType.hpp>
@@ -34,7 +32,6 @@ using namespace ::com::sun::star;
 using ::com::sun::star::beans::Property;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Reference;
-using ::osl::MutexGuard;
 
 namespace
 {
@@ -46,19 +43,17 @@ enum
 };
 
 void lcl_AddPropertiesToVector(
-    ::std::vector< Property > & rOutProperties )
+    std::vector< Property > & rOutProperties )
 {
-    rOutProperties.push_back(
-        Property( "UseRings",
+    rOutProperties.emplace_back( "UseRings",
                   PROP_PIECHARTTYPE_USE_RINGS,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
-    rOutProperties.push_back(
-        Property( "3DRelativeHeight",
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( "3DRelativeHeight",
                   PROP_PIECHARTTYPE_3DRELATIVEHEIGHT,
                   cppu::UnoType<sal_Int32>::get(),
-                  beans::PropertyAttribute::MAYBEVOID ));
+                  beans::PropertyAttribute::MAYBEVOID );
 }
 
 struct StaticPieChartTypeDefaults_Initializer
@@ -92,10 +87,10 @@ struct StaticPieChartTypeInfoHelper_Initializer
 private:
     static Sequence< Property > lcl_GetPropertySequence()
     {
-        ::std::vector< css::beans::Property > aProperties;
+        std::vector< css::beans::Property > aProperties;
         lcl_AddPropertiesToVector( aProperties );
 
-        ::std::sort( aProperties.begin(), aProperties.end(),
+        std::sort( aProperties.begin(), aProperties.end(),
                      ::chart::PropertyNameLess() );
 
         return comphelper::containerToSequence( aProperties );
@@ -126,9 +121,7 @@ struct StaticPieChartTypeInfo : public rtl::StaticAggregate< uno::Reference< bea
 namespace chart
 {
 
-PieChartType::PieChartType(
-    const uno::Reference< uno::XComponentContext > & xContext) :
-        ChartType( xContext )
+PieChartType::PieChartType()
 {
 }
 
@@ -142,25 +135,21 @@ PieChartType::~PieChartType()
 
 // ____ XCloneable ____
 uno::Reference< util::XCloneable > SAL_CALL PieChartType::createClone()
-    throw (uno::RuntimeException, std::exception)
 {
     return uno::Reference< util::XCloneable >( new PieChartType( *this ));
 }
 
 // ____ XChartType ____
 OUString SAL_CALL PieChartType::getChartType()
-    throw (uno::RuntimeException, std::exception)
 {
     return OUString(CHART2_SERVICE_NAME_CHARTTYPE_PIE);
 }
 
 Reference< chart2::XCoordinateSystem > SAL_CALL
     PieChartType::createCoordinateSystem( ::sal_Int32 DimensionCount )
-    throw (lang::IllegalArgumentException,
-           uno::RuntimeException, std::exception)
 {
     Reference< chart2::XCoordinateSystem > xResult(
-        new PolarCoordinateSystem( GetComponentContext(), DimensionCount ));
+        new PolarCoordinateSystem( DimensionCount ));
 
     for( sal_Int32 i=0; i<DimensionCount; ++i )
     {
@@ -192,7 +181,6 @@ Reference< chart2::XCoordinateSystem > SAL_CALL
 }
 
 uno::Sequence< OUString > PieChartType::getSupportedPropertyRoles()
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Sequence< OUString > aPropRoles(2);
     aPropRoles[0] = "FillColor";
@@ -203,7 +191,6 @@ uno::Sequence< OUString > PieChartType::getSupportedPropertyRoles()
 
 // ____ OPropertySet ____
 uno::Any PieChartType::GetDefaultValue( sal_Int32 nHandle ) const
-    throw(beans::UnknownPropertyException)
 {
     const tPropertyValueMap& rStaticDefaults = *StaticPieChartTypeDefaults::get();
     tPropertyValueMap::const_iterator aFound( rStaticDefaults.find( nHandle ) );
@@ -220,51 +207,35 @@ uno::Any PieChartType::GetDefaultValue( sal_Int32 nHandle ) const
 
 // ____ XPropertySet ____
 uno::Reference< beans::XPropertySetInfo > SAL_CALL PieChartType::getPropertySetInfo()
-    throw (uno::RuntimeException, std::exception)
 {
     return *StaticPieChartTypeInfo::get();
 }
 
-uno::Sequence< OUString > PieChartType::getSupportedServiceNames_Static()
-{
-    uno::Sequence< OUString > aServices( 3 );
-    aServices[ 0 ] = CHART2_SERVICE_NAME_CHARTTYPE_PIE;
-    aServices[ 1 ] = "com.sun.star.chart2.ChartType";
-    aServices[ 2 ] = "com.sun.star.beans.PropertySet";
-    return aServices;
-}
-
-// implement XServiceInfo methods basing upon getSupportedServiceNames_Static
 OUString SAL_CALL PieChartType::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
-OUString PieChartType::getImplementationName_Static()
 {
     return OUString("com.sun.star.comp.chart.PieChartType");
 }
 
 sal_Bool SAL_CALL PieChartType::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL PieChartType::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return {
+        CHART2_SERVICE_NAME_CHARTTYPE_PIE,
+        "com.sun.star.chart2.ChartType",
+        "com.sun.star.beans.PropertySet" };
 }
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
-com_sun_star_comp_chart_PieChartType_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+com_sun_star_comp_chart_PieChartType_get_implementation(css::uno::XComponentContext * /*context*/,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new ::chart::PieChartType(context));
+    return cppu::acquire(new ::chart::PieChartType);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

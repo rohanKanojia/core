@@ -17,26 +17,36 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
+
+#include <cppuhelper/queryinterface.hxx>
 #include <osl/diagnose.h>
-#include <osl/doublecheckedlocking.h>
 #include <rtl/uri.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <ucbhelper/contentidentifier.hxx>
+#include <ucbhelper/macros.hxx>
 #include <ucbhelper/propertyvalueset.hxx>
 #include <ucbhelper/simpleinteractionrequest.hxx>
 #include <ucbhelper/cancelcommandexecution.hxx>
 
+#include <com/sun/star/beans/IllegalTypeException.hpp>
+#include <com/sun/star/beans/NotRemoveableException.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <com/sun/star/beans/PropertyExistException.hpp>
 #include <com/sun/star/beans/PropertySetInfoChange.hpp>
 #include <com/sun/star/beans/PropertySetInfoChangeEvent.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/io/XActiveDataSink.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
 #include <com/sun/star/lang/IllegalAccessException.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
+#include <com/sun/star/sdbc/SQLException.hpp>
 #include <com/sun/star/task/PasswordContainerInteractionHandler.hpp>
 #include <com/sun/star/ucb/CommandEnvironment.hpp>
 #include <com/sun/star/ucb/CommandFailedException.hpp>
 #include <com/sun/star/ucb/ContentInfoAttribute.hpp>
+#include <com/sun/star/ucb/IllegalIdentifierException.hpp>
 #include <com/sun/star/ucb/InsertCommandArgument.hpp>
 #include <com/sun/star/ucb/InteractiveBadTransferURLException.hpp>
 #include <com/sun/star/ucb/InteractiveAugmentedIOException.hpp>
@@ -71,21 +81,21 @@
 #include "ContentProperties.hxx"
 #include "SerfUri.hxx"
 #include "UCBDeadPropertyValue.hxx"
+#include "DAVException.hxx"
 
 using namespace com::sun::star;
 using namespace http_dav_ucp;
 
 namespace
 {
-static void lcl_sendPartialGETRequest( bool &bError,
-                                       DAVException &aLastException,
-                                       const std::vector< rtl::OUString >& rProps,
-                                       std::vector< rtl::OUString > &aHeaderNames,
-                                       const std::unique_ptr< DAVResourceAccess > &xResAccess,
-                                       std::unique_ptr< ContentProperties > &xProps,
-                                       const uno::Reference< ucb::XCommandEnvironment >& xEnv )
+void lcl_sendPartialGETRequest( bool &bError,
+                                DAVException &aLastException,
+                                const std::vector< OUString >& rProps,
+                                std::vector< OUString > &aHeaderNames,
+                                const std::unique_ptr< DAVResourceAccess > &xResAccess,
+                                std::unique_ptr< ContentProperties > &xProps,
+                                const uno::Reference< ucb::XCommandEnvironment >& xEnv )
 {
-    bool bIsRequestSize = false;
     DAVResource aResource;
     DAVRequestHeaders aPartialGet;
     aPartialGet.push_back(
@@ -93,15 +103,8 @@ static void lcl_sendPartialGETRequest( bool &bError,
             OUString( "Range" ),
             OUString( "bytes=0-0" )));
 
-    for ( std::vector< rtl::OUString >::const_iterator it = aHeaderNames.begin();
-            it != aHeaderNames.end(); ++it )
-    {
-        if ( *it == "Content-Length" )
-        {
-            bIsRequestSize = true;
-            break;
-        }
-    }
+    bool bIsRequestSize = std::any_of(aHeaderNames.begin(), aHeaderNames.end(),
+        [](const OUString& rHeaderName) { return rHeaderName == "Content-Length"; });
 
     if ( bIsRequestSize )
     {
@@ -123,17 +126,16 @@ static void lcl_sendPartialGETRequest( bool &bError,
             // the ContentProperties maps "Content-Length" to the UCB "Size" property
             // This would have an unrealistic value of 1 byte because we did only a partial GET
             // Solution: if "Content-Range" is present, map it with UCB "Size" property
-            rtl::OUString aAcceptRanges, aContentRange, aContentLength;
+            OUString aAcceptRanges, aContentRange, aContentLength;
             std::vector< DAVPropertyValue > &aResponseProps = aResource.properties;
-            for ( std::vector< DAVPropertyValue >::const_iterator it = aResponseProps.begin();
-                    it != aResponseProps.end(); ++it )
+            for ( const auto& rResponseProp : aResponseProps )
             {
-                if ( it->Name == "Accept-Ranges" )
-                    it->Value >>= aAcceptRanges;
-                else if ( it->Name == "Content-Range" )
-                    it->Value >>= aContentRange;
-                else if ( it->Name == "Content-Length" )
-                    it->Value >>= aContentLength;
+                if ( rResponseProp.Name == "Accept-Ranges" )
+                    rResponseProp.Value >>= aAcceptRanges;
+                else if ( rResponseProp.Name == "Content-Range" )
+                    rResponseProp.Value >>= aContentRange;
+                else if ( rResponseProp.Name == "Content-Length" )
+                    rResponseProp.Value >>= aContentLength;
             }
 
             sal_Int64 nSize = 1;
@@ -155,18 +157,15 @@ static void lcl_sendPartialGETRequest( bool &bError,
                 sal_Int32 nSlash = aContentRange.lastIndexOf( '/' );
                 if ( nSlash != -1 )
                 {
-                    rtl::OUString aSize = aContentRange.copy( nSlash + 1 );
+                    OUString aSize = aContentRange.copy( nSlash + 1 );
                     // "*" means that the instance-length is unknown at the time when the response was generated
                     if ( aSize != "*" )
                     {
-                        for ( std::vector< DAVPropertyValue >::iterator it = aResponseProps.begin();
-                                it != aResponseProps.end(); ++it )
+                        auto it = std::find_if(aResponseProps.begin(), aResponseProps.end(),
+                            [](const DAVPropertyValue& rProp) { return rProp.Name == "Content-Length"; });
+                        if (it != aResponseProps.end())
                         {
-                            if (it->Name == "Content-Length")
-                            {
-                                it->Value <<= aSize;
-                                break;
-                            }
+                            it->Value <<= aSize;
                         }
                     }
                 }
@@ -197,7 +196,6 @@ Content::Content(
           ContentProvider* pProvider,
           const uno::Reference< ucb::XContentIdentifier >& Identifier,
           rtl::Reference< DAVSessionFactory > const & rSessionFactory )
-  throw ( ucb::ContentCreationException )
 : ContentImplHelper( rxContext, pProvider, Identifier ),
   m_eResourceType( UNKNOWN ),
   m_pProvider( pProvider ),
@@ -230,7 +228,6 @@ Content::Content(
             const uno::Reference< ucb::XContentIdentifier >& Identifier,
             rtl::Reference< DAVSessionFactory > const & rSessionFactory,
             bool isCollection )
-  throw ( ucb::ContentCreationException )
 : ContentImplHelper( rxContext, pProvider, Identifier ),
   m_eResourceType( UNKNOWN ),
   m_pProvider( pProvider ),
@@ -282,7 +279,6 @@ void SAL_CALL Content::release()
 
 // virtual
 uno::Any SAL_CALL Content::queryInterface( const uno::Type & rType )
-    throw ( uno::RuntimeException, std::exception )
 {
     // Note: isFolder may require network activities! So call it only
     //       if it is really necessary!!!
@@ -296,8 +292,7 @@ uno::Any SAL_CALL Content::queryInterface( const uno::Type & rType )
             uno::Reference< beans::XPropertySet > const xProps(
                 m_xContext, uno::UNO_QUERY_THROW );
             uno::Reference< uno::XComponentContext > xCtx;
-            xCtx.set( xProps->getPropertyValue(
-                OUString( "DefaultContext" ) ),
+            xCtx.set( xProps->getPropertyValue( "DefaultContext" ),
                 uno::UNO_QUERY_THROW );
 
             uno::Reference< task::XInteractionHandler > xIH(
@@ -336,7 +331,6 @@ XTYPEPROVIDER_COMMON_IMPL( Content );
 
 // virtual
 uno::Sequence< uno::Type > SAL_CALL Content::getTypes()
-    throw( uno::RuntimeException, std::exception )
 {
     bool bFolder = false;
     try
@@ -352,22 +346,10 @@ uno::Sequence< uno::Type > SAL_CALL Content::getTypes()
     {
     }
 
-    cppu::OTypeCollection * pCollection = 0;
-
     if ( bFolder )
     {
-        static cppu::OTypeCollection* pFolderTypes = 0;
-
-        pCollection = pFolderTypes;
-        if ( !pCollection )
-        {
-            osl::Guard< osl::Mutex > aGuard( osl::Mutex::getGlobalMutex() );
-
-            pCollection = pFolderTypes;
-            if ( !pCollection )
-            {
-                static cppu::OTypeCollection aCollection(
-                    CPPU_TYPE_REF( lang::XTypeProvider ),
+        static cppu::OTypeCollection s_aFolderTypes(
+                        CPPU_TYPE_REF( lang::XTypeProvider ),
                         CPPU_TYPE_REF( lang::XServiceInfo ),
                         CPPU_TYPE_REF( lang::XComponent ),
                         CPPU_TYPE_REF( ucb::XContent ),
@@ -377,29 +359,13 @@ uno::Sequence< uno::Type > SAL_CALL Content::getTypes()
                         CPPU_TYPE_REF( beans::XPropertyContainer ),
                         CPPU_TYPE_REF( beans::XPropertySetInfoChangeNotifier ),
                         CPPU_TYPE_REF( container::XChild ),
-                        CPPU_TYPE_REF( ucb::XContentCreator ) ); // !!
-                pCollection = &aCollection;
-                OSL_DOUBLE_CHECKED_LOCKING_MEMORY_BARRIER();
-                pFolderTypes = pCollection;
-            }
-        }
-        else {
-            OSL_DOUBLE_CHECKED_LOCKING_MEMORY_BARRIER();
-        }
+                        CPPU_TYPE_REF( ucb::XContentCreator ) );
+
+        return s_aFolderTypes.getTypes();
     }
     else
     {
-        static cppu::OTypeCollection* pDocumentTypes = 0;
-
-        pCollection = pDocumentTypes;
-        if ( !pCollection )
-        {
-            osl::Guard< osl::Mutex > aGuard( osl::Mutex::getGlobalMutex() );
-
-            pCollection = pDocumentTypes;
-            if ( !pCollection )
-            {
-                static cppu::OTypeCollection aCollection(
+        static cppu::OTypeCollection s_aDocumentTypes(
                         CPPU_TYPE_REF( lang::XTypeProvider ),
                         CPPU_TYPE_REF( lang::XServiceInfo ),
                         CPPU_TYPE_REF( lang::XComponent ),
@@ -410,17 +376,9 @@ uno::Sequence< uno::Type > SAL_CALL Content::getTypes()
                         CPPU_TYPE_REF( beans::XPropertyContainer ),
                         CPPU_TYPE_REF( beans::XPropertySetInfoChangeNotifier ),
                         CPPU_TYPE_REF( container::XChild ) );
-                pCollection = &aCollection;
-                OSL_DOUBLE_CHECKED_LOCKING_MEMORY_BARRIER();
-                pDocumentTypes = pCollection;
-            }
-        }
-        else {
-            OSL_DOUBLE_CHECKED_LOCKING_MEMORY_BARRIER();
-        }
-    }
 
-    return (*pCollection).getTypes();
+        return  s_aDocumentTypes.getTypes();
+    }
 }
 
 
@@ -429,7 +387,6 @@ uno::Sequence< uno::Type > SAL_CALL Content::getTypes()
 
 // virtual
 OUString SAL_CALL Content::getImplementationName()
-    throw( uno::RuntimeException )
 {
     return OUString( "com.sun.star.comp.ucb.WebDAVContent" );
 }
@@ -437,7 +394,6 @@ OUString SAL_CALL Content::getImplementationName()
 
 // virtual
 uno::Sequence< OUString > SAL_CALL Content::getSupportedServiceNames()
-    throw( uno::RuntimeException )
 {
     uno::Sequence<OUString> aSNS { WEBDAV_CONTENT_SERVICE_NAME };
     return aSNS;
@@ -449,7 +405,6 @@ uno::Sequence< OUString > SAL_CALL Content::getSupportedServiceNames()
 
 // virtual
 OUString SAL_CALL Content::getContentType()
-    throw( uno::RuntimeException )
 {
     bool bFolder = false;
     try
@@ -480,9 +435,6 @@ uno::Any SAL_CALL Content::execute(
         const ucb::Command& aCommand,
         sal_Int32 /*CommandId*/,
         const uno::Reference< ucb::XCommandEnvironment >& Environment )
-    throw( uno::Exception,
-           ucb::CommandAbortedException,
-           uno::RuntimeException )
 {
     SAL_INFO("ucb.ucp.webdav",  ">>>>> Content::execute: start: command: " << aCommand.Name
             << ", env: " << (Environment.is() ? "present" : "missing") );
@@ -500,7 +452,7 @@ uno::Any SAL_CALL Content::execute(
         {
             ucbhelper::cancelCommandExecution(
                 uno::makeAny( lang::IllegalArgumentException(
-                                    OUString( "Wrong argument type!" ),
+                                    "Wrong argument type!",
                                     static_cast< cppu::OWeakObject * >( this ),
                                     -1 ) ),
                 Environment );
@@ -520,7 +472,7 @@ uno::Any SAL_CALL Content::execute(
         {
             ucbhelper::cancelCommandExecution(
                 uno::makeAny( lang::IllegalArgumentException(
-                                    OUString( "Wrong argument type!" ),
+                                    "Wrong argument type!",
                                     static_cast< cppu::OWeakObject * >( this ),
                                     -1 ) ),
                 Environment );
@@ -531,7 +483,7 @@ uno::Any SAL_CALL Content::execute(
         {
             ucbhelper::cancelCommandExecution(
                 uno::makeAny( lang::IllegalArgumentException(
-                                    OUString( "No properties!" ),
+                                    "No properties!",
                                     static_cast< cppu::OWeakObject * >( this ),
                                     -1 ) ),
                 Environment );
@@ -570,7 +522,7 @@ uno::Any SAL_CALL Content::execute(
         {
             ucbhelper::cancelCommandExecution(
                 uno::makeAny( lang::IllegalArgumentException(
-                                    OUString( "Wrong argument type!" ),
+                                    "Wrong argument type!",
                                     static_cast< cppu::OWeakObject * >( this ),
                                     -1 ) ),
                 Environment );
@@ -595,7 +547,7 @@ uno::Any SAL_CALL Content::execute(
         {
             ucbhelper::cancelCommandExecution(
                 uno::makeAny( lang::IllegalArgumentException(
-                                    OUString( "Wrong argument type!" ),
+                                    "Wrong argument type!",
                                     static_cast< cppu::OWeakObject * >( this ),
                                     -1 ) ),
                 Environment );
@@ -628,7 +580,7 @@ uno::Any SAL_CALL Content::execute(
             xResAccess->DESTROY( Environment );
             {
                 osl::Guard< osl::Mutex > aGuard( m_aMutex );
-                m_xResAccess.reset( new DAVResourceAccess( *xResAccess.get() ) );
+                m_xResAccess.reset( new DAVResourceAccess( *xResAccess ) );
             }
         }
         catch ( DAVException const & e )
@@ -656,7 +608,7 @@ uno::Any SAL_CALL Content::execute(
         {
             ucbhelper::cancelCommandExecution(
                 uno::makeAny( lang::IllegalArgumentException(
-                                  OUString( "Wrong argument type!" ),
+                                  "Wrong argument type!",
                                   static_cast< cppu::OWeakObject * >( this ),
                                   -1 ) ),
                 Environment );
@@ -676,7 +628,7 @@ uno::Any SAL_CALL Content::execute(
         {
             ucbhelper::cancelCommandExecution(
                 uno::makeAny( lang::IllegalArgumentException(
-                                    OUString( "Wrong argument type!" ),
+                                    "Wrong argument type!",
                                     static_cast< cppu::OWeakObject * >( this ),
                                     -1 ) ),
                 Environment );
@@ -715,14 +667,14 @@ uno::Any SAL_CALL Content::execute(
         {
             ucbhelper::cancelCommandExecution(
                 uno::makeAny( lang::IllegalArgumentException(
-                                    OUString( "Wrong argument type!" ),
+                                    "Wrong argument type!",
                                     static_cast< cppu::OWeakObject * >( this ),
                                     -1 ) ),
                 Environment );
             // Unreachable
         }
 
-        aRet = uno::makeAny( createNewContent( aArg ) );
+        aRet <<= createNewContent( aArg );
     }
     else if ( aCommand.Name == "addProperty" )
     {
@@ -731,7 +683,7 @@ uno::Any SAL_CALL Content::execute(
         {
             ucbhelper::cancelCommandExecution(
                 uno::makeAny( lang::IllegalArgumentException(
-                                    OUString( "Wrong argument type!" ),
+                                    "Wrong argument type!",
                                     static_cast< cppu::OWeakObject * >( this ),
                                     -1 ) ),
                 Environment );
@@ -758,12 +710,12 @@ uno::Any SAL_CALL Content::execute(
     }
     else if ( aCommand.Name == "removeProperty" )
     {
-        rtl::OUString sPropName;
+        OUString sPropName;
         if ( !( aCommand.Argument >>= sPropName ) )
         {
             ucbhelper::cancelCommandExecution(
                 uno::makeAny( lang::IllegalArgumentException(
-                                    OUString( "Wrong argument type!" ),
+                                    "Wrong argument type!",
                                     static_cast< cppu::OWeakObject * >( this ),
                                     -1 ) ),
                 Environment );
@@ -805,7 +757,6 @@ uno::Any SAL_CALL Content::execute(
 
 // virtual
 void SAL_CALL Content::abort( sal_Int32 /*CommandId*/ )
-    throw( uno::RuntimeException )
 {
     try
     {
@@ -817,7 +768,7 @@ void SAL_CALL Content::abort( sal_Int32 /*CommandId*/ )
         DAVResourceAccess::abort();
         {
             osl::Guard< osl::Mutex > aGuard( m_aMutex );
-            m_xResAccess.reset( new DAVResourceAccess( *xResAccess.get() ) );
+            m_xResAccess.reset( new DAVResourceAccess( *xResAccess ) );
         }
     }
     catch ( DAVException const & )
@@ -832,10 +783,6 @@ void SAL_CALL Content::abort( sal_Int32 /*CommandId*/ )
 
 void Content::addProperty( const css::ucb::PropertyCommandArgument &aCmdArg,
                            const uno::Reference< ucb::XCommandEnvironment >& xEnv  )
-throw( beans::PropertyExistException,
-       beans::IllegalTypeException,
-       lang::IllegalArgumentException,
-       uno::RuntimeException )
 {
 //    if ( m_bTransient )
 //   @@@ ???
@@ -845,20 +792,20 @@ throw( beans::PropertyExistException,
     // check property Name
     if ( !aProperty.Name.getLength() )
         throw lang::IllegalArgumentException(
-            OUString( "\"addProperty\" with empty Property.Name"),
+            "\"addProperty\" with empty Property.Name",
             static_cast< ::cppu::OWeakObject * >( this ),
             -1 );
 
     // Check property type.
     if ( !UCBDeadPropertyValue::supportsType( aProperty.Type ) )
         throw beans::IllegalTypeException(
-            OUString( "\"addProperty\" unsupported Property.Type"),
+            "\"addProperty\" unsupported Property.Type",
             static_cast< ::cppu::OWeakObject * >( this ) );
 
     // check default value
     if ( aDefaultValue.hasValue() && aDefaultValue.getValueType() != aProperty.Type )
         throw beans::IllegalTypeException(
-            OUString( "\"addProperty\" DefaultValue does not match Property.Type"),
+            "\"addProperty\" DefaultValue does not match Property.Type",
             static_cast< ::cppu::OWeakObject * >( this ) );
 
 
@@ -868,7 +815,7 @@ throw( beans::PropertyExistException,
 
     // Take into account special properties with custom namespace
     // using <prop:the_propname xmlns:prop="the_namespace">
-    rtl::OUString aSpecialName;
+    OUString aSpecialName;
     bool bIsSpecial = DAVProperties::isUCBSpecialProperty( aProperty.Name, aSpecialName );
 
     // Note: This requires network access!
@@ -899,7 +846,7 @@ throw( beans::PropertyExistException,
         xResAccess->PROPPATCH( aProppatchValues, xEnv );
         {
             osl::Guard< osl::Mutex > aGuard( m_aMutex );
-            m_xResAccess.reset( new DAVResourceAccess( *xResAccess.get() ) );
+            m_xResAccess.reset( new DAVResourceAccess( *xResAccess ) );
         }
 
         // Notify propertyset info change listeners.
@@ -965,11 +912,8 @@ throw( beans::PropertyExistException,
     }
 }
 
-void Content::removeProperty( const rtl::OUString& Name,
+void Content::removeProperty( const OUString& Name,
                               const uno::Reference< ucb::XCommandEnvironment >& xEnv )
-throw( beans::UnknownPropertyException,
-       beans::NotRemoveableException,
-       uno::RuntimeException )
 {
 #if 0
     // @@@ REMOVABLE at the moment not properly set in the PropSetInfo
@@ -1008,7 +952,7 @@ throw( beans::UnknownPropertyException,
         xResAccess->PROPPATCH( aProppatchValues, xEnv );
         {
             osl::Guard< osl::Mutex > aGuard( m_aMutex );
-            m_xResAccess.reset( new DAVResourceAccess( *xResAccess.get() ) );
+            m_xResAccess.reset( new DAVResourceAccess( *xResAccess ) );
         }
 
         // Notify propertyset info change listeners.
@@ -1072,13 +1016,9 @@ throw( beans::UnknownPropertyException,
 }
 
 // virtual
-void SAL_CALL Content::addProperty( const rtl::OUString& Name,
+void SAL_CALL Content::addProperty( const OUString& Name,
                                     sal_Int16 Attributes,
                                     const uno::Any& DefaultValue )
-    throw( beans::PropertyExistException,
-           beans::IllegalTypeException,
-           lang::IllegalArgumentException,
-           uno::RuntimeException )
 {
     beans::Property aProperty;
     aProperty.Name = Name;
@@ -1091,10 +1031,7 @@ void SAL_CALL Content::addProperty( const rtl::OUString& Name,
 }
 
 // virtual
-void SAL_CALL Content::removeProperty( const rtl::OUString& Name )
-    throw( beans::UnknownPropertyException,
-           beans::NotRemoveableException,
-           uno::RuntimeException )
+void SAL_CALL Content::removeProperty( const OUString& Name )
 {
     removeProperty( Name,
                     uno::Reference< ucb::XCommandEnvironment >() );
@@ -1107,7 +1044,6 @@ void SAL_CALL Content::removeProperty( const rtl::OUString& Name )
 // virtual
 uno::Sequence< ucb::ContentInfo > SAL_CALL
 Content::queryCreatableContentsInfo()
-    throw( uno::RuntimeException )
 {
     osl::Guard< osl::Mutex > aGuard( m_aMutex );
 
@@ -1120,8 +1056,7 @@ Content::queryCreatableContentsInfo()
           | ucb::ContentInfoAttribute::KIND_DOCUMENT;
 
     beans::Property aProp;
-    m_pProvider->getProperty(
-        OUString( "Title" ), aProp );
+    m_pProvider->getProperty( "Title", aProp );
 
     uno::Sequence< beans::Property > aDocProps( 1 );
     aDocProps.getArray()[ 0 ] = aProp;
@@ -1142,7 +1077,6 @@ Content::queryCreatableContentsInfo()
 // virtual
 uno::Reference< ucb::XContent > SAL_CALL
 Content::createNewContent( const ucb::ContentInfo& Info )
-    throw( uno::RuntimeException )
 {
     osl::Guard< osl::Mutex > aGuard( m_aMutex );
 
@@ -1219,7 +1153,7 @@ OUString Content::getParentURL()
     if ( nPos1 == -1 )
         return OUString();
 
-    return OUString( aURL.copy( 0, nPos + 1 ) );
+    return aURL.copy( 0, nPos + 1 );
 }
 
 
@@ -1284,19 +1218,14 @@ uno::Reference< sdbc::XRow > Content::getPropertyValues(
 
         const std::unique_ptr< PropertyValueMap > & xProps = rData.getProperties();
 
-        PropertyValueMap::const_iterator it  = xProps->begin();
-        PropertyValueMap::const_iterator end = xProps->end();
-
         ContentProvider * pProvider
             = static_cast< ContentProvider * >( rProvider.get() );
         beans::Property aProp;
 
-        while ( it != end )
+        for ( const auto& rProp : *xProps )
         {
-            if ( pProvider->getProperty( (*it).first, aProp ) )
-                xRow->appendObject( aProp, (*it).second.value() );
-
-            ++it;
+            if ( pProvider->getProperty( rProp.first, aProp ) )
+                xRow->appendObject( aProp, rProp.second.value() );
         }
 
         // Append all local Additional Properties.
@@ -1313,7 +1242,6 @@ uno::Reference< sdbc::XRow > Content::getPropertyValues(
 uno::Reference< sdbc::XRow > Content::getPropertyValues(
                 const uno::Sequence< beans::Property >& rProperties,
                 const uno::Reference< ucb::XCommandEnvironment >& xEnv )
-    throw ( uno::Exception )
 {
     std::unique_ptr< ContentProperties > xProps;
     std::unique_ptr< ContentProperties > xCachedProps;
@@ -1346,7 +1274,7 @@ uno::Reference< sdbc::XRow > Content::getPropertyValues(
             }
 
             // use the cached ContentProperties instance
-            xProps.reset( new ContentProperties( *xCachedProps.get() ) );
+            xProps.reset( new ContentProperties( *xCachedProps ) );
         }
     }
 
@@ -1378,7 +1306,7 @@ uno::Reference< sdbc::XRow > Content::getPropertyValues(
                 }
 
                 // use the cached ContentProperties instance
-                xProps.reset( new ContentProperties( *xCachedProps.get() ) );
+                xProps.reset( new ContentProperties( *xCachedProps ) );
             }
 
             if ( !bHasAll )
@@ -1397,20 +1325,8 @@ uno::Reference< sdbc::XRow > Content::getPropertyValues(
                     {
                         const OUString & rName = rProperties[ n ].Name;
 
-                        std::vector< OUString >::const_iterator it
-                            = m_aFailedPropNames.begin();
-                        std::vector< OUString >::const_iterator end
-                            = m_aFailedPropNames.end();
-
-                        while ( it != end )
-                        {
-                            if ( *it == rName )
-                                break;
-
-                            ++it;
-                        }
-
-                        if ( it == end )
+                        if ( std::none_of(m_aFailedPropNames.begin(), m_aFailedPropNames.end(),
+                                [&rName](const OUString& rPropName) { return rPropName == rName; }) )
                         {
                             aProperties[ nProps ] = rProperties[ n ];
                             nProps++;
@@ -1563,7 +1479,7 @@ uno::Reference< sdbc::XRow > Content::getPropertyValues(
             //xProps.reset(
             //    new ContentProperties( aUnescapedTitle ) );
             xProps->addProperty(
-                OUString( "Title" ),
+                "Title",
                 uno::makeAny( aUnescapedTitle ),
                 true );
         }
@@ -1573,20 +1489,20 @@ uno::Reference< sdbc::XRow > Content::getPropertyValues(
                 xProps.reset( new ContentProperties( aUnescapedTitle, false ) );
             else
                 xProps->addProperty(
-                    OUString( "Title" ),
+                    "Title",
                     uno::makeAny( aUnescapedTitle ),
                     true );
 
             xProps->addProperty(
-                OUString( "IsFolder" ),
+                "IsFolder",
                 uno::makeAny( false ),
                 true );
             xProps->addProperty(
-                OUString( "IsDocument" ),
+                "IsDocument",
                 uno::makeAny( true ),
                 true );
             xProps->addProperty(
-                OUString( "ContentType" ),
+                "ContentType",
                 uno::makeAny( OUString(WEBDAV_CONTENT_TYPE) ),
                 true );
         }
@@ -1608,7 +1524,7 @@ uno::Reference< sdbc::XRow > Content::getPropertyValues(
         {
             // Add BaseURI property, if requested.
             xProps->addProperty(
-                 OUString( "BaseURI" ),
+                 "BaseURI",
                  uno::makeAny( getBaseURI( xResAccess ) ),
                  true );
         }
@@ -1616,11 +1532,10 @@ uno::Reference< sdbc::XRow > Content::getPropertyValues(
         {
             // Add CreatableContentsInfo property, if requested.
             bool bFolder = false;
-            xProps->getValue(
-                OUString( "IsFolder" ) )
+            xProps->getValue( "IsFolder" )
                     >>= bFolder;
             xProps->addProperty(
-                OUString( "CreatableContentsInfo" ),
+                "CreatableContentsInfo",
                 uno::makeAny( bFolder
                                   ? queryCreatableContentsInfo()
                                   : uno::Sequence< ucb::ContentInfo >() ),
@@ -1639,11 +1554,11 @@ uno::Reference< sdbc::XRow > Content::getPropertyValues(
         osl::Guard< osl::Mutex > aGuard( m_aMutex );
 
         if ( !m_xCachedProps.get() )
-            m_xCachedProps.reset( new CachableContentProperties( *xProps.get() ) );
+            m_xCachedProps.reset( new CachableContentProperties( *xProps ) );
         else
-            m_xCachedProps->addProperties( *xProps.get() );
+            m_xCachedProps->addProperties( *xProps );
 
-        m_xResAccess.reset( new DAVResourceAccess( *xResAccess.get() ) );
+        m_xResAccess.reset( new DAVResourceAccess( *xResAccess ) );
         m_aEscapedTitle = SerfUri::escapeSegment( aUnescapedTitle );
     }
 
@@ -1654,7 +1569,6 @@ uno::Reference< sdbc::XRow > Content::getPropertyValues(
 uno::Sequence< uno::Any > Content::setPropertyValues(
                 const uno::Sequence< beans::PropertyValue >& rValues,
                 const uno::Reference< ucb::XCommandEnvironment >& xEnv )
-    throw ( uno::Exception )
 {
     uno::Reference< ucb::XContentIdentifier >    xIdentifier;
     rtl::Reference< ContentProvider >            xProvider;
@@ -1709,7 +1623,7 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
         {
             // Read-only property!
             aRet[ n ] <<= lang::IllegalAccessException(
-                            OUString( "Property is read-only!" ),
+                            "Property is read-only!",
                             static_cast< cppu::OWeakObject * >( this ) );
             continue;
         }
@@ -1722,21 +1636,21 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
         {
             // Read-only property!
             aRet[ n ] <<= lang::IllegalAccessException(
-                OUString( "Property is read-only!" ),
+                "Property is read-only!",
                 static_cast< cppu::OWeakObject * >( this ) );
         }
         else if ( rName == "IsDocument" )
         {
             // Read-only property!
             aRet[ n ] <<= lang::IllegalAccessException(
-                OUString( "Property is read-only!" ),
+                "Property is read-only!",
                 static_cast< cppu::OWeakObject * >( this ) );
         }
         else if ( rName == "IsFolder" )
         {
             // Read-only property!
             aRet[ n ] <<= lang::IllegalAccessException(
-                            OUString( "Property is read-only!" ),
+                            "Property is read-only!",
                             static_cast< cppu::OWeakObject * >( this ) );
         }
         else if ( rName == "Title" )
@@ -1769,7 +1683,7 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
                     catch ( DAVException const & )
                     {
                         aRet[ n ] <<= lang::IllegalArgumentException(
-                            OUString( "Invalid content identifier!" ),
+                            "Invalid content identifier!",
                             static_cast< cppu::OWeakObject * >( this ),
                             -1 );
                     }
@@ -1777,7 +1691,7 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
                 else
                 {
                     aRet[ n ] <<= lang::IllegalArgumentException(
-                        OUString( "Empty title not allowed!" ),
+                        "Empty title not allowed!",
                         static_cast< cppu::OWeakObject * >( this ),
                         -1 );
                 }
@@ -1785,7 +1699,7 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
             else
             {
                 aRet[ n ] <<= beans::IllegalTypeException(
-                    OUString( "Property value has wrong type!" ),
+                    "Property value has wrong type!",
                     static_cast< cppu::OWeakObject * >( this ) );
             }
         }
@@ -1795,7 +1709,7 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
             // Optional props.
 
 
-            rtl::OUString aSpecialName;
+            OUString aSpecialName;
             bool bIsSpecial = DAVProperties::isUCBSpecialProperty( rName, aSpecialName );
 
             if ( !xInfo.is() )
@@ -1808,7 +1722,7 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
                 // PROPPATCH::set would add the property automatically, which
                 // is not allowed for "setPropertyValues" command!
                 aRet[ n ] <<= beans::UnknownPropertyException(
-                                OUString( "Property is unknown!" ),
+                                "Property is unknown!",
                                 static_cast< cppu::OWeakObject * >( this ) );
                 continue;
             }
@@ -1817,21 +1731,21 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
             {
                 // Read-only property!
                 aRet[ n ] <<= lang::IllegalAccessException(
-                                OUString( "Property is read-only!" ),
+                                "Property is read-only!",
                                 static_cast< cppu::OWeakObject * >( this ) );
             }
             else if ( rName == "DateCreated" )
             {
                 // Read-only property!
                 aRet[ n ] <<= lang::IllegalAccessException(
-                                OUString( "Property is read-only!" ),
+                                "Property is read-only!",
                                 static_cast< cppu::OWeakObject * >( this ) );
             }
             else if ( rName == "DateModified" )
             {
                 // Read-only property!
                 aRet[ n ] <<= lang::IllegalAccessException(
-                                OUString( "Property is read-only!" ),
+                                "Property is read-only!",
                                 static_cast< cppu::OWeakObject * >( this ) );
             }
             else if ( rName == "MediaType" )
@@ -1839,14 +1753,14 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
                 // Read-only property!
                 // (but could be writable, if 'getcontenttype' would be)
                 aRet[ n ] <<= lang::IllegalAccessException(
-                                OUString( "Property is read-only!" ),
+                                "Property is read-only!",
                                 static_cast< cppu::OWeakObject * >( this ) );
             }
             if ( rName == "CreatableContentsInfo" )
             {
                 // Read-only property!
                 aRet[ n ] <<= lang::IllegalAccessException(
-                                OUString( "Property is read-only!" ),
+                                "Property is read-only!",
                                 static_cast< cppu::OWeakObject * >( this ) );
             }
             else
@@ -1911,7 +1825,7 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
                     else
                     {
                         aRet[ n ] <<= uno::Exception(
-                                OUString( "No property set for storing the value!" ),
+                                "No property set for storing the value!",
                                 static_cast< cppu::OWeakObject * >( this ) );
                     }
                 }
@@ -1926,21 +1840,14 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
             // Set property values at server.
             xResAccess->PROPPATCH( aProppatchValues, xEnv );
 
-            std::vector< ProppatchValue >::const_iterator it
-                = aProppatchValues.begin();
-            std::vector< ProppatchValue >::const_iterator end
-                = aProppatchValues.end();
-
-            while ( it != end )
+            for ( const auto& rProppatchValue : aProppatchValues )
             {
-                aEvent.PropertyName = (*it).name;
+                aEvent.PropertyName = rProppatchValue.name;
                 aEvent.OldValue     = uno::Any(); // @@@ to expensive to obtain!
-                aEvent.NewValue     = (*it).value;
+                aEvent.NewValue     = rProppatchValue.value;
 
                 aChanges.getArray()[ nChanged ] = aEvent;
                 nChanged++;
-
-                ++it;
             }
         }
         catch ( DAVException const & e )
@@ -2018,7 +1925,7 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
 
                 // Set error .
                 aRet[ nTitlePos ] <<= uno::Exception(
-                    OUString( "Exchange failed!" ),
+                    "Exchange failed!",
                     static_cast< cppu::OWeakObject * >( this ) );
             }
         }
@@ -2028,7 +1935,7 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
             aNewTitle.clear();
 
             // Set error .
-            aRet[ nTitlePos ] <<= MapDAVException( e, true );
+            aRet[ nTitlePos ] = MapDAVException( e, true );
         }
     }
 
@@ -2037,8 +1944,8 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
         osl::Guard< osl::Mutex > aGuard( m_aMutex );
 
         aEvent.PropertyName = "Title";
-        aEvent.OldValue     = uno::makeAny( aOldTitle );
-        aEvent.NewValue     = uno::makeAny( aNewTitle );
+        aEvent.OldValue     <<= aOldTitle;
+        aEvent.NewValue     <<= aNewTitle;
 
         m_aEscapedTitle     = SerfUri::escapeSegment( aNewTitle );
 
@@ -2054,7 +1961,7 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
 
     {
         osl::Guard< osl::Mutex > aGuard( m_aMutex );
-        m_xResAccess.reset( new DAVResourceAccess( *xResAccess.get() ) );
+        m_xResAccess.reset( new DAVResourceAccess( *xResAccess ) );
     }
 
     return aRet;
@@ -2064,7 +1971,6 @@ uno::Sequence< uno::Any > Content::setPropertyValues(
 uno::Any Content::open(
                 const ucb::OpenCommandArgument2 & rArg,
                 const uno::Reference< ucb::XCommandEnvironment > & xEnv )
-    throw( uno::Exception )
 {
     uno::Any aRet;
 
@@ -2086,8 +1992,7 @@ uno::Any Content::open(
             // Error: Not a folder!
 
             OUStringBuffer aMsg;
-            aMsg.appendAscii( "Non-folder resource cannot be "
-                              "opened as folder! Wrong Open Mode!" );
+            aMsg.append( "Non-folder resource cannot be opened as folder! Wrong Open Mode!" );
 
             ucbhelper::cancelCommandExecution(
                 uno::makeAny(
@@ -2150,7 +2055,7 @@ uno::Any Content::open(
                         m_xCachedProps->addProperties( ContentProperties( aResource ) );
 
                     m_xResAccess.reset(
-                        new DAVResourceAccess( *xResAccess.get() ) );
+                        new DAVResourceAccess( *xResAccess ) );
                 }
             }
             catch ( DAVException const & e )
@@ -2175,7 +2080,7 @@ uno::Any Content::open(
                             new DAVResourceAccess( *m_xResAccess.get() ) );
                     }
 
-                    // fill inputsream sync; return if all data present
+                    // fill inputstream sync; return if all data present
                     DAVResource aResource;
                     std::vector< OUString > aHeaders;
 
@@ -2195,7 +2100,7 @@ uno::Any Content::open(
                                 aResource.properties );
 
                         m_xResAccess.reset(
-                            new DAVResourceAccess( *xResAccess.get() ) );
+                            new DAVResourceAccess( *xResAccess ) );
                     }
 
                     xDataSink->setInputStream( xIn );
@@ -2230,7 +2135,6 @@ uno::Any Content::open(
 void Content::post(
                 const ucb::PostCommandArgument2 & rArg,
                 const uno::Reference< ucb::XCommandEnvironment > & xEnv )
-    throw( uno::Exception )
 {
     uno::Reference< io::XActiveDataSink > xSink( rArg.Sink, uno::UNO_QUERY );
     if ( xSink.is() )
@@ -2253,7 +2157,7 @@ void Content::post(
             {
                  osl::MutexGuard aGuard( m_aMutex );
                  m_xResAccess.reset(
-                     new DAVResourceAccess( *xResAccess.get() ) );
+                     new DAVResourceAccess( *xResAccess ) );
             }
 
             xSink->setInputStream( xResult );
@@ -2287,7 +2191,7 @@ void Content::post(
                 {
                     osl::MutexGuard aGuard( m_aMutex );
                     m_xResAccess.reset(
-                        new DAVResourceAccess( *xResAccess.get() ) );
+                        new DAVResourceAccess( *xResAccess ) );
                 }
             }
             catch ( DAVException const & e )
@@ -2331,12 +2235,9 @@ void Content::queryChildren( ContentRefList& rChildren )
 
     sal_Int32 nLen = aURL.getLength();
 
-    ::ucbhelper::ContentRefList::const_iterator it  = aAllContents.begin();
-    ::ucbhelper::ContentRefList::const_iterator end = aAllContents.end();
-
-    while ( it != end )
+    for ( const auto& rChild : aAllContents )
     {
-        ::ucbhelper::ContentImplHelperRef xChild = (*it);
+        ::ucbhelper::ContentImplHelperRef xChild = rChild;
         OUString aChildURL
             = xChild->getIdentifier()->getContentIdentifier();
 
@@ -2357,7 +2258,6 @@ void Content::queryChildren( ContentRefList& rChildren )
                             xChild.get() ) ) );
             }
         }
-        ++it;
     }
 }
 
@@ -2366,7 +2266,6 @@ void Content::insert(
         const uno::Reference< io::XInputStream > & xInputStream,
         bool bReplaceExisting,
         const uno::Reference< ucb::XCommandEnvironment >& Environment )
-    throw( uno::Exception )
 {
     bool bTransient, bCollection;
     OUString aEscapedTitle;
@@ -2419,7 +2318,7 @@ void Content::insert(
         {
 #undef ERROR
             ucb::UnsupportedNameClashException aEx(
-                OUString( "Unable to write without overwrite!" ),
+                "Unable to write without overwrite!",
                 static_cast< cppu::OWeakObject * >( this ),
                 ucb::NameClash::ERROR );
 
@@ -2435,25 +2334,25 @@ void Content::insert(
                 rtl::Reference< ucbhelper::SimpleInteractionRequest > xRequest
                     = new ucbhelper::SimpleInteractionRequest(
                         aExAsAny,
-                        ucbhelper::CONTINUATION_APPROVE
-                            | ucbhelper::CONTINUATION_DISAPPROVE );
+                        ContinuationFlags::Approve
+                            | ContinuationFlags::Disapprove );
                 xIH->handle( xRequest.get() );
 
-                const sal_Int32 nResp = xRequest->getResponse();
+                const ContinuationFlags nResp = xRequest->getResponse();
 
                 switch ( nResp )
                 {
-                    case ucbhelper::CONTINUATION_UNKNOWN:
+                    case ContinuationFlags::NONE:
                         // Not handled; throw.
                         throw aEx;
 //                            break;
 
-                    case ucbhelper::CONTINUATION_APPROVE:
+                    case ContinuationFlags::Approve:
                         // Continue -> Overwrite.
                         bReplaceExisting = true;
                         break;
 
-                    case ucbhelper::CONTINUATION_DISAPPROVE:
+                    case ContinuationFlags::Disapprove:
                         // Abort.
                         throw ucb::CommandFailedException(
                                     OUString(),
@@ -2466,7 +2365,7 @@ void Content::insert(
                                     "Content::insert - "
                                     "Unknown interaction selection!" );
                         throw ucb::CommandFailedException(
-                                    OUString( "Unknown interaction selection!" ),
+                                    "Unknown interaction selection!",
                                     uno::Reference< uno::XInterface >(),
                                     aExAsAny );
 //                            break;
@@ -2527,7 +2426,7 @@ void Content::insert(
                         {
                             osl::Guard< osl::Mutex > aGuard( m_aMutex );
                             m_xResAccess.reset(
-                                new DAVResourceAccess( *xResAccess.get() ) );
+                                new DAVResourceAccess( *xResAccess ) );
                         }
 
                         // Success!
@@ -2601,7 +2500,7 @@ void Content::insert(
 
     {
         osl::Guard< osl::Mutex > aGuard( m_aMutex );
-        m_xResAccess.reset( new DAVResourceAccess( *xResAccess.get() ) );
+        m_xResAccess.reset( new DAVResourceAccess( *xResAccess ) );
     }
 }
 
@@ -2609,7 +2508,6 @@ void Content::insert(
 void Content::transfer(
         const ucb::TransferInfo & rArgs,
         const uno::Reference< ucb::XCommandEnvironment >& Environment )
-    throw( uno::Exception )
 {
     uno::Reference< uno::XComponentContext > xContext;
     uno::Reference< ucb::XContentIdentifier >    xIdentifier;
@@ -2635,25 +2533,29 @@ void Content::transfer(
         // Check source's and target's URL scheme
 
         OUString aScheme = sourceURI.GetScheme().toAsciiLowerCase();
-        if ( aScheme == WEBDAV_URL_SCHEME )
+        if ( aScheme == VNDSUNSTARWEBDAV_URL_SCHEME)
         {
-            sourceURI.SetScheme(
-                OUString( HTTP_URL_SCHEME ) );
+            sourceURI.SetScheme( HTTP_URL_SCHEME );
         }
-        else if ( aScheme == WEBDAVS_URL_SCHEME )
+        else if ( aScheme == VNDSUNSTARWEBDAVS_URL_SCHEME)
         {
-            sourceURI.SetScheme(
-                OUString( HTTPS_URL_SCHEME ) );
+            sourceURI.SetScheme( HTTPS_URL_SCHEME );
         }
         else if ( aScheme == DAV_URL_SCHEME )
         {
-            sourceURI.SetScheme(
-                OUString( HTTP_URL_SCHEME ) );
+            sourceURI.SetScheme( HTTP_URL_SCHEME );
         }
         else if ( aScheme == DAVS_URL_SCHEME )
         {
-            sourceURI.SetScheme(
-                OUString( HTTPS_URL_SCHEME ) );
+            sourceURI.SetScheme( HTTPS_URL_SCHEME );
+        }
+        else if (aScheme == WEBDAV_URL_SCHEME)
+        {
+            sourceURI.SetScheme(HTTP_URL_SCHEME);
+        }
+        else if (aScheme == WEBDAVS_URL_SCHEME)
+        {
+            sourceURI.SetScheme(HTTPS_URL_SCHEME);
         }
         else
         {
@@ -2662,7 +2564,7 @@ void Content::transfer(
                 ucbhelper::cancelCommandExecution(
                     uno::makeAny(
                         ucb::InteractiveBadTransferURLException(
-                            OUString( "Unsupported URL scheme!" ),
+                            "Unsupported URL scheme!",
                             static_cast< cppu::OWeakObject * >( this ) ) ),
                     Environment );
                 // Unreachable
@@ -2670,18 +2572,18 @@ void Content::transfer(
         }
 
         aScheme = targetURI.GetScheme().toAsciiLowerCase();
-        if ( aScheme == WEBDAV_URL_SCHEME )
-            targetURI.SetScheme(
-                OUString( HTTP_URL_SCHEME ) );
-        else if ( aScheme == WEBDAVS_URL_SCHEME )
-            targetURI.SetScheme(
-                OUString( HTTPS_URL_SCHEME ) );
+        if ( aScheme == VNDSUNSTARWEBDAV_URL_SCHEME)
+            targetURI.SetScheme( HTTP_URL_SCHEME );
+        else if ( aScheme == VNDSUNSTARWEBDAVS_URL_SCHEME)
+            targetURI.SetScheme( HTTPS_URL_SCHEME );
         else if ( aScheme == DAV_URL_SCHEME )
-            targetURI.SetScheme(
-                OUString( HTTP_URL_SCHEME ) );
+            targetURI.SetScheme( HTTP_URL_SCHEME );
         else if ( aScheme == DAVS_URL_SCHEME )
-            targetURI.SetScheme(
-                OUString( HTTPS_URL_SCHEME ) );
+            targetURI.SetScheme( HTTPS_URL_SCHEME );
+        else if (aScheme == WEBDAV_URL_SCHEME)
+            targetURI.SetScheme(HTTP_URL_SCHEME);
+        else if (aScheme == WEBDAVS_URL_SCHEME)
+            targetURI.SetScheme(HTTPS_URL_SCHEME);
 
         // @@@ This implementation of 'transfer' only works
         //     if the source and target are located at same host.
@@ -2694,7 +2596,7 @@ void Content::transfer(
         {
             ucbhelper::cancelCommandExecution(
                 uno::makeAny( ucb::InteractiveBadTransferURLException(
-                                OUString( "Different hosts!" ),
+                                "Different hosts!",
                                 static_cast< cppu::OWeakObject * >( this ) ) ),
                 Environment );
             // Unreachable
@@ -2727,7 +2629,7 @@ void Content::transfer(
                                          xResAccess->getSessionFactory(),
                                          sourceURI.GetURI() );
 
-        if ( rArgs.MoveData == sal_True )
+        if ( rArgs.MoveData )
         {
             uno::Reference< ucb::XContentIdentifier > xId
                 = new ::ucbhelper::ContentIdentifier( rArgs.SourceURL );
@@ -2822,6 +2724,7 @@ void Content::transfer(
                         Environment );
                     // Unreachable
                 }
+                [[fallthrough]];
 
                 case ucb::NameClash::OVERWRITE:
                     break;
@@ -2849,13 +2752,12 @@ void Content::transfer(
 
     {
         osl::Guard< osl::Mutex > aGuard( m_aMutex );
-        m_xResAccess.reset( new DAVResourceAccess( *xResAccess.get() ) );
+        m_xResAccess.reset( new DAVResourceAccess( *xResAccess ) );
     }
 }
 
 
 void Content::destroy( bool bDeletePhysical )
-    throw( uno::Exception )
 {
     // @@@ take care about bDeletePhysical -> trashcan support
 
@@ -2870,13 +2772,9 @@ void Content::destroy( bool bDeletePhysical )
     ::http_dav_ucp::Content::ContentRefList aChildren;
     queryChildren( aChildren );
 
-    ContentRefList::const_iterator it  = aChildren.begin();
-    ContentRefList::const_iterator end = aChildren.end();
-
-    while ( it != end )
+    for ( auto& rChild : aChildren )
     {
-        (*it)->destroy( bDeletePhysical );
-        ++it;
+        rChild->destroy( bDeletePhysical );
     }
 }
 
@@ -2909,7 +2807,6 @@ bool Content::supportsExclusiveWriteLock(
 
 void Content::lock(
         const uno::Reference< ucb::XCommandEnvironment >& Environment )
-    throw( uno::Exception )
 {
     try
     {
@@ -2936,7 +2833,7 @@ void Content::lock(
 
         {
             osl::Guard< osl::Mutex > aGuard( m_aMutex );
-            m_xResAccess.reset( new DAVResourceAccess( *xResAccess.get() ) );
+            m_xResAccess.reset( new DAVResourceAccess( *xResAccess ) );
         }
     }
     catch ( DAVException const & e )
@@ -2949,7 +2846,6 @@ void Content::lock(
 
 void Content::unlock(
         const uno::Reference< ucb::XCommandEnvironment >& Environment )
-    throw( uno::Exception )
 {
     try
     {
@@ -2964,7 +2860,7 @@ void Content::unlock(
 
         {
             osl::Guard< osl::Mutex > aGuard( m_aMutex );
-            m_xResAccess.reset( new DAVResourceAccess( *xResAccess.get() ) );
+            m_xResAccess.reset( new DAVResourceAccess( *xResAccess ) );
         }
     }
     catch ( DAVException const & e )
@@ -3007,12 +2903,9 @@ bool Content::exchangeIdentity(
             ContentRefList aChildren;
             queryChildren( aChildren );
 
-            ContentRefList::const_iterator it  = aChildren.begin();
-            ContentRefList::const_iterator end = aChildren.end();
-
-            while ( it != end )
+            for ( const auto& rChild : aChildren )
             {
-                ContentRef xChild = (*it);
+                ContentRef xChild = rChild;
 
                 // Create new content identifier for the child...
                 uno::Reference< ucb::XContentIdentifier >
@@ -3029,8 +2922,6 @@ bool Content::exchangeIdentity(
 
                 if ( !xChild->exchangeIdentity( xNewChildId ) )
                     return false;
-
-                ++it;
             }
             return true;
         }
@@ -3045,7 +2936,6 @@ bool Content::exchangeIdentity(
 
 bool Content::isFolder(
             const uno::Reference< ucb::XCommandEnvironment >& xEnv )
-    throw( uno::Exception )
 {
     {
         osl::MutexGuard aGuard( m_aMutex );
@@ -3098,13 +2988,13 @@ uno::Any Content::MapDAVException( const DAVException & e, bool bWrite )
         {
             uno::Sequence< uno::Any > aArgs( 1 );
             aArgs[ 0 ] <<= beans::PropertyValue(
-                OUString("Uri"), -1,
+                "Uri", -1,
                 uno::makeAny(aURL),
                 beans::PropertyState_DIRECT_VALUE);
 
             aException <<=
                 ucb::InteractiveAugmentedIOException(
-                    OUString( "Not found!" ),
+                    "Not found!",
                     static_cast< cppu::OWeakObject * >( this ),
                     task::InteractionClassification_ERROR,
                     ucb::IOErrorCode_NOT_EXISTING,
@@ -3186,7 +3076,7 @@ uno::Any Content::MapDAVException( const DAVException & e, bool bWrite )
 #if 1
         aException <<=
             ucb::InteractiveLockingLockedException(
-                OUString( "Locked!" ),
+                "Locked!",
                 static_cast< cppu::OWeakObject * >( this ),
                 task::InteractionClassification_ERROR,
                 aURL,
@@ -3213,7 +3103,7 @@ uno::Any Content::MapDAVException( const DAVException & e, bool bWrite )
     case DAVException::DAV_LOCKED_SELF:
         aException <<=
             ucb::InteractiveLockingLockedException(
-                OUString( "Locked (self)!" ),
+                "Locked (self)!",
                 static_cast< cppu::OWeakObject * >( this ),
                 task::InteractionClassification_ERROR,
                 aURL,
@@ -3223,7 +3113,7 @@ uno::Any Content::MapDAVException( const DAVException & e, bool bWrite )
     case DAVException::DAV_NOT_LOCKED:
         aException <<=
             ucb::InteractiveLockingNotLockedException(
-                OUString( "Not locked!" ),
+                "Not locked!",
                 static_cast< cppu::OWeakObject * >( this ),
                 task::InteractionClassification_ERROR,
                 aURL );
@@ -3232,7 +3122,7 @@ uno::Any Content::MapDAVException( const DAVException & e, bool bWrite )
     case DAVException::DAV_LOCK_EXPIRED:
         aException <<=
             ucb::InteractiveLockingLockExpiredException(
-                OUString( "Lock expired!" ),
+                "Lock expired!",
                 static_cast< cppu::OWeakObject * >( this ),
                 task::InteractionClassification_ERROR,
                 aURL );
@@ -3269,7 +3159,6 @@ void Content::cancelCommandExecution(
                 const DAVException & e,
                 const uno::Reference< ucb::XCommandEnvironment > & xEnv,
                 bool bWrite /* = false */ )
-    throw ( uno::Exception )
 {
     ucbhelper::cancelCommandExecution( MapDAVException( e, bWrite ), xEnv );
     // Unreachable
@@ -3285,8 +3174,7 @@ Content::getBaseURI( const std::unique_ptr< DAVResourceAccess > & rResAccess )
     if ( m_xCachedProps.get() )
     {
         OUString aLocation;
-        m_xCachedProps->getValue( OUString(
-                                        "Content-Location" ) ) >>= aLocation;
+        m_xCachedProps->getValue( "Content-Location" ) >>= aLocation;
         if ( aLocation.getLength() )
         {
             try
@@ -3303,7 +3191,7 @@ Content::getBaseURI( const std::unique_ptr< DAVResourceAccess > & rResAccess )
         }
     }
 
-    return OUString( rResAccess->getURL() );
+    return rResAccess->getURL();
 }
 
 
@@ -3311,7 +3199,6 @@ Content::ResourceType Content::getResourceType(
                     const uno::Reference< ucb::XCommandEnvironment >& xEnv,
                     const std::unique_ptr< DAVResourceAccess > & rResAccess,
                     bool * networkAccessAllowed )
-    throw ( uno::Exception )
 {
     {
         osl::MutexGuard g(m_aMutex);
@@ -3364,7 +3251,7 @@ Content::ResourceType Content::getResourceType(
             // resource is NON_DAV
             eResourceType = NON_DAV;
         }
-        else if (networkAccessAllowed != 0)
+        else if (networkAccessAllowed != nullptr)
         {
             *networkAccessAllowed = *networkAccessAllowed
                 && shouldAccessNetworkAfterException(e);
@@ -3392,7 +3279,6 @@ Content::ResourceType Content::getResourceType(
 
 Content::ResourceType Content::getResourceType(
                     const uno::Reference< ucb::XCommandEnvironment >& xEnv )
-    throw ( uno::Exception )
 {
     std::unique_ptr< DAVResourceAccess > xResAccess;
     {
@@ -3402,7 +3288,7 @@ Content::ResourceType Content::getResourceType(
     const Content::ResourceType & ret = getResourceType( xEnv, xResAccess );
     {
         osl::Guard< osl::Mutex > aGuard( m_aMutex );
-        m_xResAccess.reset( new DAVResourceAccess( *xResAccess.get() ) );
+        m_xResAccess.reset( new DAVResourceAccess( *xResAccess ) );
     }
     return ret;
 }

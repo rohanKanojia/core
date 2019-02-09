@@ -21,32 +21,33 @@
 #define INCLUDED_STARMATH_INC_ELEMENTSDOCKINGWINDOW_HXX
 
 #include <sfx2/dockwin.hxx>
-#include <svx/dlgctrl.hxx>
 #include <vcl/scrbar.hxx>
 
-#include <document.hxx>
-#include <node.hxx>
+#include "format.hxx"
 #include <memory>
+
+class SmDocShell;
+class SmNode;
 
 class SmElement
 {
-    SmNodePointer   mpNode;
-    OUString        maText;
-    OUString        maHelpText;
+    std::unique_ptr<SmNode> mpNode;
+    OUString const          maText;
+    OUString const          maHelpText;
 public:
     Point mBoxLocation;
     Size  mBoxSize;
 
-    SmElement(SmNodePointer pNode, const OUString& aText, const OUString& aHelpText);
+    SmElement(std::unique_ptr<SmNode>&& pNode, const OUString& aText, const OUString& aHelpText);
     virtual ~SmElement();
 
-    SmNodePointer getNode();
-    OUString      getText()
+    const std::unique_ptr<SmNode>& getNode();
+    const OUString& getText()
     {
         return maText;
     }
 
-    OUString getHelpText()
+    const OUString& getHelpText()
     {
         return maHelpText;
     }
@@ -70,24 +71,27 @@ public:
 
 class SmElementsControl : public Control
 {
-    static const sal_uInt16 aUnaryBinaryOperatorsList[][2];
-    static const sal_uInt16 aRelationsList[][2];
-    static const sal_uInt16 aSetOperations[][2];
-    static const sal_uInt16 aFunctions[][2];
-    static const sal_uInt16 aOperators[][2];
-    static const sal_uInt16 aAttributes[][2];
-    static const sal_uInt16 aBrackets[][2];
-    static const sal_uInt16 aFormats[][2];
-    static const sal_uInt16 aOthers[][2];
+    friend class ElementSelectorUIObject;
+    friend class ElementUIObject;
 
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle&) override;
+    static const std::pair<const char*, const char*> aUnaryBinaryOperatorsList[];
+    static const std::pair<const char*, const char*> aRelationsList[];
+    static const std::pair<const char*, const char*> aSetOperations[];
+    static const std::pair<const char*, const char*> aFunctions[];
+    static const std::pair<const char*, const char*> aOperators[];
+    static const std::pair<const char*, const char*> aAttributes[];
+    static const std::pair<const char*, const char*> aBrackets[];
+    static const std::pair<const char*, const char*> aFormats[];
+    static const std::pair<const char*, const char*> aOthers[];
+
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&) override;
     virtual void MouseButtonDown(const MouseEvent& rMEvt) override;
     virtual void MouseMove(const MouseEvent& rMEvt) override;
     virtual void RequestHelp(const HelpEvent& rHEvt) override;
 
     SmDocShell*   mpDocShell;
     SmFormat      maFormat;
-    sal_uInt16    maCurrentSetId;
+    OString       msCurrentSetId;
     SmElement*    mpCurrentElement;
     Link<SmElement&,void> maSelectHdlLink;
 
@@ -98,9 +102,7 @@ class SmElementsControl : public Control
 
     void addElement(const OUString& aElementVisual, const OUString& aElementSource, const OUString& aHelpText);
 
-    void addElements(const sal_uInt16 aElementsArray[][2], sal_uInt16 size);
-
-    void addSeparator();
+    void addElements(const std::pair<const char*, const char*> aElementsArray[], sal_uInt16 size);
 
     void build();
 
@@ -109,25 +111,27 @@ class SmElementsControl : public Control
     void LayoutOrPaintContents(vcl::RenderContext *pContext = nullptr);
 
 public:
-    SmElementsControl(vcl::Window *pParent);
-    virtual ~SmElementsControl();
+    explicit SmElementsControl(vcl::Window *pParent);
+    virtual ~SmElementsControl() override;
     virtual void dispose() override;
 
-    void setElementSetId(sal_uInt16 aSetId);
+    void setElementSetId(const char* pSetId);
 
     void setVerticalMode(bool bVertical);
 
     Size GetOptimalSize() const override;
 
-    DECL_LINK_TYPED( ScrollHdl, ScrollBar*, void );
+    DECL_LINK( ScrollHdl, ScrollBar*, void );
     void DoScroll(long nDelta);
 
     void SetSelectHdl(const Link<SmElement&,void>& rLink) { maSelectHdlLink = rLink; }
+
+    virtual FactoryFunction GetUITestFactory() const override;
 };
 
 class SmElementsDockingWindow : public SfxDockingWindow
 {
-    static const sal_uInt16 aCategories[];
+    static const char* aCategories[];
 
     VclPtr<SmElementsControl>  mpElementsControl;
     VclPtr<ListBox>            mpElementListBox;
@@ -135,31 +139,30 @@ class SmElementsDockingWindow : public SfxDockingWindow
     virtual void Resize() override;
     SmViewShell* GetView();
 
-    DECL_LINK_TYPED(SelectClickHandler, SmElement&, void);
-    DECL_LINK_TYPED(ElementSelectedHandle, ListBox&, void);
+    DECL_LINK(SelectClickHandler, SmElement&, void);
+    DECL_LINK(ElementSelectedHandle, ListBox&, void);
 
 public:
 
     SmElementsDockingWindow( SfxBindings* pBindings,
                              SfxChildWindow* pChildWindow,
                              vcl::Window* pParent );
-    virtual ~SmElementsDockingWindow();
+    virtual ~SmElementsDockingWindow() override;
     virtual void dispose() override;
 
-    virtual void EndDocking( const Rectangle& rReactangle, bool bFloatMode) override;
+    virtual void EndDocking( const tools::Rectangle& rReactangle, bool bFloatMode) override;
     virtual void ToggleFloatingMode() override;
 };
 
-class SmElementsDockingWindowWrapper : public SfxChildWindow
+class SmElementsDockingWindowWrapper final : public SfxChildWindow
 {
     SFX_DECL_CHILDWINDOW_WITHID(SmElementsDockingWindowWrapper);
 
-protected:
     SmElementsDockingWindowWrapper( vcl::Window* pParentWindow,
                                     sal_uInt16 nId,
                                     SfxBindings* pBindings,
                                     SfxChildWinInfo* pInfo );
-    virtual ~SmElementsDockingWindowWrapper();
+    virtual ~SmElementsDockingWindowWrapper() override;
 };
 
 #endif // INCLUDED_STARMATH_INC_ELEMENTSDOCKINGWINDOW_HXX

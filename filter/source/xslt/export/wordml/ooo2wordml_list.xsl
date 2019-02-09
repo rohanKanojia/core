@@ -229,6 +229,18 @@
                 <!-- nfcUCRoman: Uppercase roman -->
                 <w:nfc w:val="1"/>
             </xsl:when>
+            <xsl:when test="$number-format = '1st'">
+                <!-- nfcUCOrdinal: Ordinal indicator -->
+                <w:nfc w:val="5"/>
+            </xsl:when>
+            <xsl:when test="$number-format = 'One'">
+                <!-- nfcCardText: Cardinal -->
+                <w:nfc w:val="6"/>
+            </xsl:when>
+            <xsl:when test="$number-format = 'First'">
+                <!-- nfcOrdText: Ordinal -->
+                <w:nfc w:val="7"/>
+            </xsl:when>
             <xsl:when test="$number-format = '１, ２, ３, ...'">
                 <!-- '１, ２, ３, ...' also seems: decimal-full-width2 -->
                 <w:nfc w:val="14"/>
@@ -281,16 +293,20 @@
                 <w:nfc w:val="24"/>
             </xsl:when>
             <xsl:when test="$number-format ='أ, ب, ت, ...'">
-                <!-- 46.	hebrew-1-->
+                <!-- 46.    arabic-alpha-->
                 <w:nfc w:val="46"/>
             </xsl:when>
             <xsl:when test="$number-format = 'ก, ข, ฃ, ...'">
-                <!--53.	thai-letters not match well !-->
+                <!--53. thai-letters not match well !-->
                 <w:nfc w:val="53"/>
             </xsl:when>
-            <xsl:when test="$number-format='א, ב, ג, ...'">
-                <!--45.	arabic-alpha-->
+            <xsl:when test="$number-format='א, י, ק, ...'">
+                <!--45. hebrew-1-->
                 <w:nfc w:val="45"/>
+            </xsl:when>
+            <xsl:when test="$number-format='א, ב, ג, ...'">
+                <!--47. hebrew-2-->
+                <w:nfc w:val="47"/>
             </xsl:when>
             <xsl:when test="string-length($number-format)=0">
                 <w:nfc w:val="255"/>
@@ -324,7 +340,7 @@
                     </xsl:when>
                 </xsl:choose>
             </xsl:when>
-            <!-- unsupported: ordinal, cardinal-text, ordinal-text, hex, chicago, bullet, ideograph-zodiac-traditional,
+            <!-- unsupported: hex, chicago, bullet, ideograph-zodiac-traditional,
             chinese-not-impl, korean-legal, none  -->
         </xsl:choose>
     </xsl:template>

@@ -61,11 +61,12 @@ namespace cppcanvas
                 subsettable (Action::render( Subset ) works on
                 characters)
              */
-            ActionSharedPtr createTextAction( const ::Point&                 rStartPoint,
+            std::shared_ptr<Action> createTextAction( const ::Point&                 rStartPoint,
                                                      const ::Size&                  rReliefOffset,
                                                      const ::Color&                 rReliefColor,
                                                      const ::Size&                  rShadowOffset,
                                                      const ::Color&                 rShadowColor,
+                                                     const ::Color&                 rTextFillColor,
                                                      const OUString&                rText,
                                                      sal_Int32                      nStartPos,
                                                      sal_Int32                      nLen,

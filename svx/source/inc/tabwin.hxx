@@ -19,7 +19,7 @@
 #ifndef INCLUDED_SVX_SOURCE_INC_TABWIN_HXX
 #define INCLUDED_SVX_SOURCE_INC_TABWIN_HXX
 
-#include <svtools/treelistbox.hxx>
+#include <vcl/treelistbox.hxx>
 #include <vcl/floatwin.hxx>
 #include <sfx2/basedlgs.hxx>
 #include <sfx2/childwin.hxx>
@@ -27,7 +27,7 @@
 #include <com/sun/star/form/XForm.hpp>
 
 #include <comphelper/propmultiplex.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <connectivity/dbtools.hxx>
 
 
@@ -42,7 +42,7 @@ protected:
 
 public:
     FmFieldWinListBox( FmFieldWin* pParent );
-    virtual ~FmFieldWinListBox();
+    virtual ~FmFieldWinListBox() override;
     virtual void dispose() override;
 
     sal_Int8 AcceptDrop( const AcceptDropEvent& rEvt ) override;
@@ -74,27 +74,27 @@ class FmFieldWin :public SfxFloatingWindow
                        m_aObjectName;
     sal_Int32          m_nObjectType;
 
-    ::comphelper::OPropertyChangeMultiplexer*   m_pChangeListener;
+    rtl::Reference<::comphelper::OPropertyChangeMultiplexer>  m_pChangeListener;
 
 public:
     FmFieldWin(SfxBindings *pBindings,
                SfxChildWindow *pMgr, vcl::Window* pParent);
 
-    virtual ~FmFieldWin();
+    virtual ~FmFieldWin() override;
     virtual void dispose() override;
     virtual void Resize() override;
-    virtual bool Close() override;
+    using SfxFloatingWindow::Close;
     virtual void GetFocus() override;
     virtual bool PreNotify( NotifyEvent& _rNEvt ) override;
     virtual void StateChanged(sal_uInt16 nSID, SfxItemState eState,
                               const SfxPoolItem* pState) override;
 
-    void UpdateContent(FmFormShell*);
+    void UpdateContent(FmFormShell const *);
     void UpdateContent(const css::uno::Reference< css::form::XForm > &);
     void FillInfo( SfxChildWinInfo& rInfo ) const override;
 
     const OUString&      GetDatabaseName() const { return m_aDatabaseName; }
-    ::dbtools::SharedConnection GetConnection() const { return m_aConnection; }
+    const ::dbtools::SharedConnection& GetConnection() const { return m_aConnection; }
     const OUString&      GetObjectName() const { return m_aObjectName; }
     sal_Int32                   GetObjectType() const { return m_nObjectType; }
 
@@ -102,12 +102,10 @@ public:
 
 protected:
     // FmXChangeListener
-    virtual void _propertyChanged(const css::beans::PropertyChangeEvent& evt) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void _propertyChanged(const css::beans::PropertyChangeEvent& evt) override;
 
 protected:
-    inline          SfxBindings&    GetBindings()       { return SfxControllerItem::GetBindings(); }
-    inline  const   SfxBindings&    GetBindings() const { return SfxControllerItem::GetBindings(); }
-
+    using SfxControllerItem::GetBindings;
     using SfxFloatingWindow::StateChanged;
 };
 
@@ -116,7 +114,7 @@ class FmFieldWinMgr : public SfxChildWindow
 {
 public:
     FmFieldWinMgr(vcl::Window *pParent, sal_uInt16 nId,
-        SfxBindings *pBindings, SfxChildWinInfo *pInfo);
+        SfxBindings *pBindings, SfxChildWinInfo const *pInfo);
     SFX_DECL_CHILDWINDOW(FmFieldWinMgr);
 };
 

@@ -22,17 +22,14 @@
 #include "pcrservices.hxx"
 #include "formstrings.hxx"
 #include "defaultforminspection.hxx"
-#include "propctrlr.hrc"
+#include <propctrlr.h>
 
 #include <com/sun/star/beans/PropertyAttribute.hpp>
-#include <com/sun/star/form/XGridColumnFactory.hpp>
-#include <com/sun/star/form/XForm.hpp>
-#include <com/sun/star/container/XChild.hpp>
+#include <com/sun/star/util/VetoException.hpp>
 #include <cppuhelper/typeprovider.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 
 
-extern "C" void SAL_CALL createRegistryInfo_FormController()
+extern "C" void createRegistryInfo_FormController()
 {
     ::pcr::OAutoRegistration< ::pcr::FormController > aFormControllerRegistration;
     ::pcr::OAutoRegistration< ::pcr::DialogController > aDialogControllerRegistration;
@@ -62,11 +59,6 @@ namespace pcr
     using ::com::sun::star::util::VetoException;
     using ::com::sun::star::beans::PropertyVetoException;
     using ::com::sun::star::uno::UNO_QUERY;
-    using ::com::sun::star::form::XGridColumnFactory;
-    using ::com::sun::star::form::XForm;
-    using ::com::sun::star::container::XChild;
-    using ::com::sun::star::frame::XFrame;
-    using ::com::sun::star::awt::XWindow;
 
     namespace PropertyAttribute = css::beans::PropertyAttribute;
 
@@ -100,7 +92,7 @@ namespace pcr
     IMPLEMENT_FORWARD_XINTERFACE2( FormController, OPropertyBrowserController, FormController_PropertyBase1 )
 
 
-    Sequence< Type > SAL_CALL FormController::getTypes(  ) throw(RuntimeException, std::exception)
+    Sequence< Type > SAL_CALL FormController::getTypes(  )
     {
         ::cppu::OTypeCollection aTypes(
             cppu::UnoType<XPropertySet>::get(),
@@ -114,13 +106,13 @@ namespace pcr
     IMPLEMENT_GET_IMPLEMENTATION_ID( FormController )
 
 
-    OUString SAL_CALL FormController::getImplementationName(  ) throw(RuntimeException, std::exception)
+    OUString SAL_CALL FormController::getImplementationName(  )
     {
         return m_aServiceDescriptor.GetImplementationName();
     }
 
 
-    Sequence< OUString > SAL_CALL FormController::getSupportedServiceNames(  ) throw(RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL FormController::getSupportedServiceNames(  )
     {
         Sequence< OUString > aSupported( m_aServiceDescriptor.GetSupportedServiceNames() );
         aSupported.realloc( aSupported.getLength() + 1 );
@@ -129,20 +121,20 @@ namespace pcr
     }
 
 
-    OUString FormController::getImplementationName_static(  ) throw(RuntimeException)
+    OUString FormController::getImplementationName_static(  )
     {
         return OUString("org.openoffice.comp.extensions.FormController");
     }
 
 
-    Sequence< OUString > FormController::getSupportedServiceNames_static(  ) throw(RuntimeException)
+    Sequence< OUString > FormController::getSupportedServiceNames_static(  )
     {
         Sequence< OUString > aSupported { "com.sun.star.form.PropertyBrowserController" };
         return aSupported;
     }
 
 
-    Reference< XInterface > SAL_CALL FormController::Create(const Reference< XComponentContext >& _rxContext )
+    Reference< XInterface > FormController::Create(const Reference< XComponentContext >& _rxContext )
     {
         ServiceDescriptor aService;
         aService.GetImplementationName = &FormController::getImplementationName_static;
@@ -151,7 +143,7 @@ namespace pcr
     }
 
 
-    Reference< XPropertySetInfo > SAL_CALL FormController::getPropertySetInfo(  ) throw(RuntimeException, std::exception)
+    Reference< XPropertySetInfo > SAL_CALL FormController::getPropertySetInfo(  )
     {
         return ::cppu::OPropertySetHelper::createPropertySetInfo(getInfoHelper());
     }
@@ -182,7 +174,7 @@ namespace pcr
     }
 
 
-    sal_Bool SAL_CALL FormController::convertFastPropertyValue( Any & rConvertedValue, Any & rOldValue, sal_Int32 nHandle, const Any& rValue ) throw (IllegalArgumentException)
+    sal_Bool SAL_CALL FormController::convertFastPropertyValue( Any & rConvertedValue, Any & rOldValue, sal_Int32 nHandle, const Any& rValue )
     {
         switch ( nHandle )
         {
@@ -198,11 +190,11 @@ namespace pcr
 
         getFastPropertyValue( rOldValue, nHandle );
         rConvertedValue = rValue;
-        return sal_True;
+        return true;
     }
 
 
-    void SAL_CALL FormController::setFastPropertyValue_NoBroadcast(sal_Int32 _nHandle, const Any& _rValue) throw (Exception, std::exception)
+    void SAL_CALL FormController::setFastPropertyValue_NoBroadcast(sal_Int32 _nHandle, const Any& _rValue)
     {
         switch ( _nHandle )
         {
@@ -256,20 +248,20 @@ namespace pcr
     //= DialogController
 
 
-    OUString DialogController::getImplementationName_static(  ) throw(RuntimeException)
+    OUString DialogController::getImplementationName_static(  )
     {
         return OUString("org.openoffice.comp.extensions.DialogController");
     }
 
 
-    Sequence< OUString > DialogController::getSupportedServiceNames_static(  ) throw(RuntimeException)
+    Sequence< OUString > DialogController::getSupportedServiceNames_static(  )
     {
         Sequence< OUString > aSupported { "com.sun.star.awt.PropertyBrowserController" };
         return aSupported;
     }
 
 
-    Reference< XInterface > SAL_CALL DialogController::Create(const Reference< XComponentContext >& _rxContext)
+    Reference< XInterface > DialogController::Create(const Reference< XComponentContext >& _rxContext)
     {
         ServiceDescriptor aService;
         aService.GetImplementationName = &DialogController::getImplementationName_static;

@@ -21,15 +21,15 @@
 #include <vcl/virdev.hxx>
 #include <vcl/gdimtf.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
+#include <tools/debug.hxx>
 
 using namespace ::swf;
-using namespace ::std;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::io;
 
 
-static MapMode aTWIPSMode( MAP_TWIP );
-static MapMode a100thmmMode( MAP_100TH_MM );
+static MapMode aTWIPSMode( MapUnit::MapTwip );
+static MapMode a100thmmMode( MapUnit::Map100thMM );
 
 static sal_Int32 map100thmm( sal_Int32 n100thMM )
 {
@@ -39,11 +39,14 @@ static sal_Int32 map100thmm( sal_Int32 n100thMM )
 }
 
 
-Writer::Writer( sal_Int32 nTWIPWidthOutput, sal_Int32 nTWIPHeightOutput, sal_Int32 nDocWidthInput, sal_Int32 nDocHeightInput, sal_Int32 nJPEGcompressMode )
-:   mpClipPolyPolygon( nullptr ),
-    mpTag( nullptr ),
-    mpSprite( nullptr ),
+Writer::Writer( sal_Int32 nTWIPWidthOutput, sal_Int32 nTWIPHeightOutput, sal_Int32 nDocWidth, sal_Int32 nDocHeight, sal_Int32 nJPEGcompressMode )
+:   mnDocWidth( map100thmm(nDocWidth) ),
+    mnDocHeight( map100thmm(nDocHeight) ),
+    mnDocXScale( static_cast<double>(nTWIPWidthOutput) / mnDocWidth ),
+    mnDocYScale( static_cast<double>(nTWIPHeightOutput) / mnDocHeight ),
+    mpClipPolyPolygon( nullptr ),
     mnNextId( 1 ),
+    mnFrames( 0 ),
     mnGlobalTransparency(0),
     mnJPEGCompressMode(nJPEGcompressMode)
 {
@@ -55,19 +58,11 @@ Writer::Writer( sal_Int32 nTWIPWidthOutput, sal_Int32 nTWIPHeightOutput, sal_Int
     mpMovieStream = maMovieTempFile.GetStream( StreamMode::WRITE|StreamMode::TRUNC );
     mpFontsStream = maFontsTempFile.GetStream( StreamMode::WRITE|StreamMode::TRUNC );
 
-    mnFrames = 0;
-
-    mnDocWidth = map100thmm( nDocWidthInput );
-    mnDocHeight = map100thmm( nDocHeightInput );
-
-    mnDocXScale = (double)nTWIPWidthOutput / mnDocWidth;
-    mnDocYScale = (double)nTWIPHeightOutput / mnDocHeight;
-
     // define an invisible button with the size of a page
-    Rectangle aRect( 0, 0, (long)( mnDocWidth * mnDocXScale ), (long)( mnDocHeight * mnDocYScale ) );
+    tools::Rectangle aRect( 0, 0, static_cast<long>( mnDocWidth * mnDocXScale ), static_cast<long>( mnDocHeight * mnDocYScale ) );
     tools::Polygon aPoly( aRect );
-    FillStyle aFill = FillStyle( Color(COL_WHITE) );
-    mnWhiteBackgroundShapeId = defineShape( aPoly, aFill );
+    FillStyle aFill = FillStyle( COL_WHITE );
+    sal_uInt16 nWhiteBackgroundShapeId = defineShape( aPoly, aFill );
 
     ::basegfx::B2DHomMatrix m; // #i73264#
     mnPageButtonId = createID();
@@ -76,7 +71,7 @@ Writer::Writer( sal_Int32 nTWIPWidthOutput, sal_Int32 nTWIPHeightOutput, sal_Int
 
     // button records
     mpTag->addUI8( 0x08 );                      // only hit state
-    mpTag->addUI16( mnWhiteBackgroundShapeId ); // shape id of background rectangle
+    mpTag->addUI16( nWhiteBackgroundShapeId );  // shape id of background rectangle
     mpTag->addUI16( 0 );                        // depth for button DANGER!
     mpTag->addMatrix( m );                      // identity matrix
     mpTag->addUI8( 0 );                         // empty color transform
@@ -97,20 +92,17 @@ Writer::Writer( sal_Int32 nTWIPWidthOutput, sal_Int32 nTWIPHeightOutput, sal_Int
 Writer::~Writer()
 {
     mpVDev.disposeAndClear();
-    delete mpSprite;
-    delete mpTag;
 }
 
 
-void ImplCopySvStreamToXOutputStream( SvStream& rIn, Reference< XOutputStream > &xOut )
+static void ImplCopySvStreamToXOutputStream( SvStream& rIn, Reference< XOutputStream > const &xOut )
 {
     sal_uInt32 nBufferSize = 64*1024;
 
-    rIn.Seek( STREAM_SEEK_TO_END );
-    sal_uInt32 nSize = rIn.Tell();
+    sal_uInt32 nSize = rIn.TellEnd();
     rIn.Seek( STREAM_SEEK_TO_BEGIN );
 
-    Sequence< sal_Int8 > aBuffer( min( nBufferSize, nSize ) );
+    Sequence< sal_Int8 > aBuffer( std::min( nBufferSize, nSize ) );
 
     while( nSize )
     {
@@ -120,7 +112,7 @@ void ImplCopySvStreamToXOutputStream( SvStream& rIn, Reference< XOutputStream > 
             aBuffer.realloc( nSize );
         }
 
-        sal_uInt32 nRead = rIn.Read( aBuffer.getArray(), nBufferSize );
+        sal_uInt32 nRead = rIn.ReadBytes(aBuffer.getArray(), nBufferSize);
         DBG_ASSERT( nRead == nBufferSize, "ImplCopySvStreamToXOutputStream failed!" );
         xOut->writeBytes( aBuffer );
 
@@ -132,14 +124,14 @@ void ImplCopySvStreamToXOutputStream( SvStream& rIn, Reference< XOutputStream > 
 }
 
 
-void Writer::storeTo( Reference< XOutputStream > &xOutStream )
+void Writer::storeTo( Reference< XOutputStream > const &xOutStream )
 {
-    for(FontMap::iterator i = maFonts.begin(); i != maFonts.end(); ++i)
+    for (auto & font : maFonts)
     {
-        FlashFont* pFont = (*i);
-        pFont->write( *mpFontsStream );
-        delete pFont;
+        font->write( *mpFontsStream );
+        font.reset();
     }
+    maFonts.clear();
 
     // Endtag
     mpMovieStream->WriteUInt16( 0 );
@@ -155,7 +147,7 @@ void Writer::storeTo( Reference< XOutputStream > &xOutStream )
 
     aHeader.WriteUInt32( 0 );
 
-    Rectangle aDocRect( 0, 0, static_cast<long>(mnDocWidth*mnDocXScale), static_cast<long>(mnDocHeight*mnDocYScale) );
+    tools::Rectangle aDocRect( 0, 0, static_cast<long>(mnDocWidth*mnDocXScale), static_cast<long>(mnDocHeight*mnDocYScale) );
 
     aHeader.addRect( aDocRect );
 
@@ -163,7 +155,7 @@ void Writer::storeTo( Reference< XOutputStream > &xOutStream )
     aHeader.addUI8( 0 );
     aHeader.addUI8( 12 );
 
-    aHeader.addUI16( _uInt16(mnFrames) );
+    aHeader.addUI16( uInt16_(mnFrames) );
 
     const sal_uInt32 nSize = aHeader.Tell() + mpFontsStream->Tell() + mpMovieStream->Tell();
 
@@ -179,8 +171,8 @@ void Writer::storeTo( Reference< XOutputStream > &xOutStream )
 sal_uInt16 Writer::startSprite()
 {
     sal_uInt16 nShapeId = createID();
-    mvSpriteStack.push(mpSprite);
-    mpSprite = new Sprite( nShapeId );
+    mvSpriteStack.push(mpSprite.release());
+    mpSprite.reset(new Sprite( nShapeId ));
     return nShapeId;
 }
 
@@ -193,15 +185,13 @@ void Writer::endSprite()
         endTag();
 
         mpSprite->write( *mpMovieStream );
-        delete mpSprite;
+        mpSprite.reset();
 
         if (!mvSpriteStack.empty())
         {
-            mpSprite = mvSpriteStack.top();
+            mpSprite.reset( mvSpriteStack.top() );
             mvSpriteStack.pop();
         }
-        else
-            mpSprite = nullptr;
     }
 }
 
@@ -226,9 +216,9 @@ void Writer::placeShape( sal_uInt16 nID, sal_uInt16 nDepth, sal_Int32 x, sal_Int
     mpTag->addUI16( nID );          // character Id
 
     // #i73264#
-    const basegfx::B2DHomMatrix aMatrix(basegfx::tools::createTranslateB2DHomMatrix(
-        _Int16(static_cast<long>(map100thmm(x)*mnDocXScale)),
-        _Int16(static_cast<long>(map100thmm(y)*mnDocYScale))));
+    const basegfx::B2DHomMatrix aMatrix(basegfx::utils::createTranslateB2DHomMatrix(
+        Int16_(static_cast<long>(map100thmm(x)*mnDocXScale)),
+        Int16_(static_cast<long>(map100thmm(y)*mnDocYScale))));
     mpTag->addMatrix( aMatrix );        // transformation matrix
 
     endTag();
@@ -247,7 +237,7 @@ void Writer::startTag( sal_uInt8 nTagId )
 {
     DBG_ASSERT( mpTag == nullptr, "Last tag was not ended");
 
-    mpTag = new Tag( nTagId );
+    mpTag.reset( new Tag( nTagId ) );
 }
 
 
@@ -257,14 +247,12 @@ void Writer::endTag()
 
     if( mpSprite && ( (nTag == TAG_END) || (nTag == TAG_SHOWFRAME) || (nTag == TAG_DOACTION) || (nTag == TAG_STARTSOUND) || (nTag == TAG_PLACEOBJECT) || (nTag == TAG_PLACEOBJECT2) || (nTag == TAG_REMOVEOBJECT2) || (nTag == TAG_FRAMELABEL) ) )
     {
-        mpSprite->addTag( mpTag );
-        mpTag = nullptr;
+        mpSprite->addTag( std::move(mpTag) );
     }
     else
     {
         mpTag->write( *mpMovieStream );
-        delete mpTag;
-        mpTag = nullptr;
+        mpTag.reset();
     }
 }
 
@@ -285,24 +273,17 @@ sal_uInt16 Writer::defineShape( const GDIMetaFile& rMtf )
     Impl_writeActions( rMtf );
 
     sal_uInt16 nId = 0;
+    if (maShapeIds.empty())
+        return nId;
+
     {
-        CharacterIdVector::iterator aIter( maShapeIds.begin() );
-        const CharacterIdVector::iterator aEnd( maShapeIds.end() );
-
-        bool bHaveShapes = aIter != aEnd;
-
-        if (bHaveShapes)
+        nId = startSprite();
+        sal_uInt16 iDepth = 1;
+        for (auto const& shape : maShapeIds)
         {
-            nId = startSprite();
-
-            sal_uInt16 iDepth = 1;
-            for(; aIter != aEnd; ++aIter)
-            {
-                placeShape( *aIter, iDepth++, 0, 0 );
-            }
-
-            endSprite();
+            placeShape( shape, iDepth++, 0, 0 );
         }
+        endSprite();
     }
 
     maShapeIds.clear();
@@ -333,7 +314,7 @@ sal_uInt16 Writer::defineShape( const tools::PolyPolygon& rPolyPoly, const FillS
     mpTag->addUI8( 1 );         // FillStyleCount
 
     // FILLSTYLE
-    rFillStyle.addTo( mpTag );
+    rFillStyle.addTo( mpTag.get() );
 
     // LINESTYLEARRAY
     mpTag->addUI8( 0 );         // LineStyleCount
@@ -416,7 +397,7 @@ void Writer::stop()
 
 void Writer::waitOnClick( sal_uInt16 nDepth )
 {
-    placeShape( _uInt16( mnPageButtonId ), nDepth, 0, 0 );
+    placeShape( uInt16_( mnPageButtonId ), nDepth, 0, 0 );
     stop();
     showFrame();
     removeShape( nDepth );

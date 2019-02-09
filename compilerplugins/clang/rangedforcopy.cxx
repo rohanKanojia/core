@@ -12,7 +12,6 @@
 #include <iostream>
 
 #include "plugin.hxx"
-#include "compat.hxx"
 #include "clang/AST/CXXInheritance.h"
 
 // Check that we're not unnecessarily copying variables in a range based for loop
@@ -23,10 +22,11 @@ namespace
 {
 
 class RangedForCopy:
-    public RecursiveASTVisitor<RangedForCopy>, public loplugin::Plugin
+    public loplugin::FilteringPlugin<RangedForCopy>
 {
 public:
-    explicit RangedForCopy(InstantiationData const & data): Plugin(data) {}
+    explicit RangedForCopy(loplugin::InstantiationData const & data):
+        FilteringPlugin(data) {}
 
     virtual void run() override {
         TraverseDecl(compiler.getASTContext().getTranslationUnitDecl());
@@ -51,7 +51,7 @@ bool RangedForCopy::VisitCXXForRangeStmt( const CXXForRangeStmt* stmt )
         report(
                DiagnosticsEngine::Warning,
                "Loop variable passed by value, pass by reference instead, e.g. 'const %0&'",
-               varDecl->getLocStart())
+               compat::getBeginLoc(varDecl))
                << name << varDecl->getSourceRange();
     }
 

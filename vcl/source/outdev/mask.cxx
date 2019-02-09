@@ -19,12 +19,14 @@
 
 #include <cassert>
 
+#include <vcl/gdimtf.hxx>
+#include <vcl/metaact.hxx>
 #include <vcl/outdev.hxx>
 #include <vcl/virdev.hxx>
 #include <vcl/window.hxx>
 
 #include <salgdi.hxx>
-#include <impbmp.hxx>
+#include <salbmp.hxx>
 #include <outdata.hxx>
 
 void OutputDevice::DrawMask( const Point& rDestPt,
@@ -54,9 +56,9 @@ void OutputDevice::DrawMask( const Point& rDestPt, const Size& rDestSize,
     if( ImplIsRecordLayout() )
         return;
 
-    if( ROP_INVERT == meRasterOp )
+    if( RasterOp::Invert == meRasterOp )
     {
-        DrawRect( Rectangle( rDestPt, rDestSize ) );
+        DrawRect( tools::Rectangle( rDestPt, rDestSize ) );
         return;
     }
 
@@ -64,17 +66,17 @@ void OutputDevice::DrawMask( const Point& rDestPt, const Size& rDestSize,
     {
         switch( nAction )
         {
-            case( MetaActionType::MASK ):
+            case MetaActionType::MASK:
                 mpMetaFile->AddAction( new MetaMaskAction( rDestPt,
                     rBitmap, rMaskColor ) );
             break;
 
-            case( MetaActionType::MASKSCALE ):
+            case MetaActionType::MASKSCALE:
                 mpMetaFile->AddAction( new MetaMaskScaleAction( rDestPt,
                     rDestSize, rBitmap, rMaskColor ) );
             break;
 
-            case( MetaActionType::MASKSCALEPART ):
+            case MetaActionType::MASKSCALEPART:
                 mpMetaFile->AddAction( new MetaMaskScalePartAction( rDestPt, rDestSize,
                     rSrcPtPixel, rSrcSizePixel, rBitmap, rMaskColor ) );
             break;
@@ -86,9 +88,8 @@ void OutputDevice::DrawMask( const Point& rDestPt, const Size& rDestSize,
     if ( !IsDeviceOutputNecessary() )
         return;
 
-    if ( !mpGraphics )
-        if ( !AcquireGraphics() )
-            return;
+    if ( !mpGraphics && !AcquireGraphics() )
+        return;
 
     if ( mbInitClipRegion )
         InitClipRegion();
@@ -106,7 +107,7 @@ void OutputDevice::DrawDeviceMask( const Bitmap& rMask, const Color& rMaskColor,
 {
     assert(!is_double_buffered_window());
 
-    std::shared_ptr<ImpBitmap> xImpBmp = rMask.ImplGetImpBitmap();
+    const std::shared_ptr<SalBitmap>& xImpBmp = rMask.ImplGetSalBitmap();
     if (xImpBmp)
     {
         SalTwoRect aPosAry(rSrcPtPixel.X(), rSrcPtPixel.Y(), rSrcSizePixel.Width(), rSrcSizePixel.Height(),
@@ -115,7 +116,7 @@ void OutputDevice::DrawDeviceMask( const Bitmap& rMask, const Color& rMaskColor,
                            ImplLogicHeightToDevicePixel(rDestSize.Height()));
 
         // we don't want to mirror via coordinates
-        const BmpMirrorFlags nMirrFlags = AdjustTwoRect( aPosAry, xImpBmp->ImplGetSize() );
+        const BmpMirrorFlags nMirrFlags = AdjustTwoRect( aPosAry, xImpBmp->GetSize() );
 
         // check if output is necessary
         if( aPosAry.mnSrcWidth && aPosAry.mnSrcHeight && aPosAry.mnDestWidth && aPosAry.mnDestHeight )
@@ -125,12 +126,11 @@ void OutputDevice::DrawDeviceMask( const Bitmap& rMask, const Color& rMaskColor,
             {
                 Bitmap aTmp( rMask );
                 aTmp.Mirror( nMirrFlags );
-                mpGraphics->DrawMask( aPosAry, *aTmp.ImplGetImpBitmap()->ImplGetSalBitmap(),
-                                      ImplColorToSal( rMaskColor ) , this);
+                mpGraphics->DrawMask( aPosAry, *aTmp.ImplGetSalBitmap(),
+                                      rMaskColor, this);
             }
             else
-                mpGraphics->DrawMask( aPosAry, *xImpBmp->ImplGetSalBitmap(),
-                                      ImplColorToSal( rMaskColor ), this );
+                mpGraphics->DrawMask( aPosAry, *xImpBmp, rMaskColor, this );
 
         }
     }

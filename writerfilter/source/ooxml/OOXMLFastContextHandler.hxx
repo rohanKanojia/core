@@ -20,7 +20,6 @@
 #ifndef INCLUDED_WRITERFILTER_SOURCE_OOXML_OOXMLFASTCONTEXTHANDLER_HXX
 #define INCLUDED_WRITERFILTER_SOURCE_OOXML_OOXMLFASTCONTEXTHANDLER_HXX
 
-#include <string>
 #include <set>
 #include <cppuhelper/implbase.hxx>
 #include <com/sun/star/uno/XComponentContext.hpp>
@@ -28,7 +27,6 @@
 #include <com/sun/star/xml/sax/XFastShapeContextHandler.hpp>
 #include <oox/mathml/import.hxx>
 #include <oox/mathml/importutils.hxx>
-#include <svtools/embedhlp.hxx>
 #include "OOXMLParserState.hxx"
 #include "OOXMLPropertySet.hxx"
 
@@ -40,40 +38,34 @@ class OOXMLDocumentImpl;
 class OOXMLFastContextHandler: public ::cppu::WeakImplHelper<css::xml::sax::XFastContextHandler>
 {
 public:
-    typedef std::shared_ptr<OOXMLFastContextHandler> Pointer_t;
+    typedef tools::SvRef<OOXMLFastContextHandler> Pointer_t;
 
     enum ResourceEnum_t { UNKNOWN, STREAM, PROPERTIES, TABLE, SHAPE };
 
-    OOXMLFastContextHandler();
     explicit OOXMLFastContextHandler(css::uno::Reference< css::uno::XComponentContext > const & context);
 
     explicit OOXMLFastContextHandler(OOXMLFastContextHandler * pContext);
 
-    virtual ~OOXMLFastContextHandler();
+    OOXMLFastContextHandler(OOXMLFastContextHandler const &) = default;
+
+    virtual ~OOXMLFastContextHandler() override;
 
     // css::xml::sax::XFastContextHandler:
-    virtual void SAL_CALL startFastElement (Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void SAL_CALL startFastElement (Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs) override;
 
-    virtual void SAL_CALL startUnknownElement(const OUString & Namespace, const OUString & Name, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void SAL_CALL startUnknownElement(const OUString & Namespace, const OUString & Name, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual void SAL_CALL endFastElement(Token_t Element)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void SAL_CALL endFastElement(Token_t Element) override;
 
-    virtual void SAL_CALL endUnknownElement(const OUString & Namespace, const OUString & Name)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void SAL_CALL endUnknownElement(const OUString & Namespace, const OUString & Name) override;
 
     virtual css::uno::Reference<css::xml::sax::XFastContextHandler> SAL_CALL createFastChildContext(Token_t Element,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+        const css::uno::Reference<css::xml::sax::XFastAttributeList>& Attribs) override;
 
     virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createUnknownChildContext(const OUString & Namespace, const OUString & Name,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+        const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual void SAL_CALL characters(const OUString & aChars)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void SAL_CALL characters(const OUString & aChars) override;
 
     // local
 
@@ -97,9 +89,11 @@ public:
 
     virtual ResourceEnum_t getResource() const { return STREAM; }
 
-    virtual void attributes(const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) throw (css::uno::RuntimeException, css::xml::sax::SAXException);
+    /// @throws css::uno::RuntimeException
+    /// @throws css::xml::sax::SAXException
+    virtual void attributes(const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs);
 
-    virtual void newProperty(const Id & rId, const OOXMLValue::Pointer_t& pVal);
+    virtual void newProperty(Id aId, const OOXMLValue::Pointer_t& pVal);
     virtual void setPropertySet(const OOXMLPropertySet::Pointer_t& pPropertySet);
     virtual OOXMLPropertySet::Pointer_t getPropertySet() const;
 
@@ -125,14 +119,13 @@ public:
     sal_Int32 getXNoteId() const;
     void setForwardEvents(bool bForwardEvents);
     bool isForwardEvents() const;
-    virtual void setParent(OOXMLFastContextHandler * pParent);
     virtual void setId(Id nId);
     virtual Id getId() const;
 
     void setDefine(Id nDefine);
     Id getDefine() const { return mnDefine;}
 
-    OOXMLParserState::Pointer_t getParserState() const { return mpParserState;}
+    const OOXMLParserState::Pointer_t& getParserState() const { return mpParserState;}
 
     void sendTableDepth() const;
     void setHandle();
@@ -145,6 +138,8 @@ public:
     void endParagraphGroup();
     void startCharacterGroup();
     void endCharacterGroup();
+    virtual void pushBiDiEmbedLevel();
+    virtual void popBiDiEmbedLevel();
     void startSdt();
     void endSdt();
 
@@ -152,11 +147,12 @@ public:
     void fieldSeparator();
     void endField();
     void lockField();
-    void ftnednref();
+    static void ftnednref();
     void ftnedncont();
     void ftnednsep();
     void pgNum();
     void tab();
+    void symbol();
     void cr();
     void noBreakHyphen();
     void softHyphen();
@@ -168,14 +164,16 @@ public:
     void alignH(const OUString & sText);
     void alignV(const OUString & sText);
     void positivePercentage(const OUString& rText);
+    void startGlossaryEntry();
+    void endGlossaryEntry();
     void startTxbxContent();
     void endTxbxContent();
     void propagateCharacterProperties();
-    void propagateCharacterPropertiesAsSet(const Id & rId);
+    void propagateCharacterPropertiesAsSet(Id nId);
     void propagateTableProperties();
     void propagateRowProperties();
     void propagateCellProperties();
-    void sendPropertiesWithId(const Id & rId);
+    void sendPropertiesWithId(Id nId);
     void sendPropertiesToParent();
     void sendCellProperties();
     void sendRowProperties();
@@ -189,6 +187,8 @@ public:
     virtual void setDefaultStringValue();
 
     void sendPropertyToParent();
+    OOXMLFastContextHandler* getParent() const { return mpParent; }
+    void setGridAfter(const OOXMLValue::Pointer_t& pGridAfter) { mpGridAfter = pGridAfter; }
 
 protected:
     OOXMLFastContextHandler * mpParent;
@@ -205,27 +205,35 @@ protected:
     // the table depth of this context
     unsigned int mnTableDepth;
 
-    virtual void lcl_startFastElement(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception);
+    /// @throws css::uno::RuntimeException
+    /// @throws css::xml::sax::SAXException
+    virtual void lcl_startFastElement(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs);
 
-    virtual void lcl_endFastElement(Token_t Element)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception);
+    /// @throws css::uno::RuntimeException
+    /// @throws css::xml::sax::SAXException
+    virtual void lcl_endFastElement(Token_t Element);
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > lcl_createFastChildContext(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception);
+    /// @throws css::uno::RuntimeException
+    /// @throws css::xml::sax::SAXException
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > lcl_createFastChildContext(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs);
 
-    virtual void lcl_characters(const OUString & aChars)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception);
+    /// @throws css::uno::RuntimeException
+    /// @throws css::xml::sax::SAXException
+    virtual void lcl_characters(const OUString & aChars);
 
-    void startAction(Token_t Element);
-    void endAction(Token_t Element);
+    void startAction();
+    void endAction();
 
-    css::uno::Reference< css::uno::XComponentContext > getComponentContext() { return m_xContext;}
+    // 2.10 of XML 1.0 specification
+    virtual bool IsPreserveSpace() const;
+
+    const css::uno::Reference< css::uno::XComponentContext >& getComponentContext() { return m_xContext;}
 
     bool inPositionV;
+    OOXMLValue::Pointer_t mpGridAfter;
 
 private:
-    void operator =(OOXMLFastContextHandler &) = delete;
+    void operator =(OOXMLFastContextHandler const &) = delete;
     /// Handles AlternateContent. Returns true, if children of the current element should be ignored.
     bool prepareMceContext(Token_t nElement, const css::uno::Reference<css::xml::sax::XFastAttributeList>& Attribs);
 
@@ -233,48 +241,53 @@ private:
     bool m_bDiscardChildren;
     bool m_bTookChoice; ///< Did we take the Choice or want Fallback instead?
 
-    static sal_uInt32 mnInstanceCount;
-
 };
 
 class OOXMLFastContextHandlerStream : public OOXMLFastContextHandler
 {
 public:
     explicit OOXMLFastContextHandlerStream(OOXMLFastContextHandler * pContext);
-    virtual ~OOXMLFastContextHandlerStream();
+    virtual ~OOXMLFastContextHandlerStream() override;
 
     virtual ResourceEnum_t getResource() const override { return STREAM; }
 
-    OOXMLPropertySet::Pointer_t getPropertySetAttrs() const { return mpPropertySetAttrs;}
+    const OOXMLPropertySet::Pointer_t& getPropertySetAttrs() const { return mpPropertySetAttrs;}
 
-    virtual void newProperty(const Id & rId, const OOXMLValue::Pointer_t& pVal) override;
+    virtual void newProperty(Id aId, const OOXMLValue::Pointer_t& pVal) override;
     void sendProperty(Id nId);
     virtual OOXMLPropertySet::Pointer_t getPropertySet() const override;
 
     void handleHyperlink();
 
+protected:
+    virtual bool IsPreserveSpace() const override;
+
 private:
     mutable OOXMLPropertySet::Pointer_t mpPropertySetAttrs;
+    bool mbPreserveSpace    : 1;
+    bool mbPreserveSpaceSet : 1;
 };
 
 class OOXMLFastContextHandlerProperties : public OOXMLFastContextHandler
 {
 public:
     explicit OOXMLFastContextHandlerProperties(OOXMLFastContextHandler * pContext);
-    virtual ~OOXMLFastContextHandlerProperties();
+    virtual ~OOXMLFastContextHandlerProperties() override;
 
     virtual OOXMLValue::Pointer_t getValue() const override;
     virtual ResourceEnum_t getResource() const override { return PROPERTIES; }
 
-    virtual void newProperty(const Id & nId, const OOXMLValue::Pointer_t& pVal) override;
+    virtual void newProperty(Id nId, const OOXMLValue::Pointer_t& pVal) override;
 
     void handleXNotes();
     void handleHdrFtr();
     void handleComment();
     void handlePicture();
     void handleBreak();
+    void handleOutOfOrderBreak();
     void handleOLE();
     void handleFontRel();
+    void handleHyperlinkURL();
 
     virtual void setPropertySet(const OOXMLPropertySet::Pointer_t& pPropertySet) override;
     virtual OOXMLPropertySet::Pointer_t getPropertySet() const override;
@@ -283,9 +296,7 @@ protected:
     /// the properties
     OOXMLPropertySet::Pointer_t mpPropertySet;
 
-    virtual void lcl_endFastElement(Token_t Element)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
-    virtual void setParent(OOXMLFastContextHandler * pParent) override;
+    virtual void lcl_endFastElement(Token_t Element) override;
 
 private:
 
@@ -297,27 +308,25 @@ class OOXMLFastContextHandlerPropertyTable :
 {
 public:
     explicit OOXMLFastContextHandlerPropertyTable(OOXMLFastContextHandler * pContext);
-    virtual ~OOXMLFastContextHandlerPropertyTable();
+    virtual ~OOXMLFastContextHandlerPropertyTable() override;
 
-protected:
+private:
     OOXMLTable mTable;
 
-    virtual void lcl_endFastElement(Token_t Element)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
- };
+    virtual void lcl_endFastElement(Token_t Element) override;
+};
 
 class OOXMLFastContextHandlerValue :
     public OOXMLFastContextHandler
 {
 public:
     explicit OOXMLFastContextHandlerValue(OOXMLFastContextHandler * pContext);
-    virtual ~OOXMLFastContextHandlerValue();
+    virtual ~OOXMLFastContextHandlerValue() override;
 
     void setValue(const OOXMLValue::Pointer_t& pValue);
     virtual OOXMLValue::Pointer_t getValue() const override;
 
-    virtual void lcl_endFastElement(Token_t Element)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void lcl_endFastElement(Token_t Element) override;
 
     virtual std::string getType() const override { return "Value"; }
 
@@ -326,7 +335,10 @@ public:
     virtual void setDefaultHexValue() override;
     virtual void setDefaultStringValue() override;
 
-protected:
+    virtual void pushBiDiEmbedLevel() override;
+    virtual void popBiDiEmbedLevel() override;
+
+private:
     OOXMLValue::Pointer_t mpValue;
 };
 
@@ -334,19 +346,17 @@ class OOXMLFastContextHandlerTable : public OOXMLFastContextHandler
 {
 public:
     explicit OOXMLFastContextHandlerTable(OOXMLFastContextHandler * pContext);
-    virtual ~OOXMLFastContextHandlerTable();
+    virtual ~OOXMLFastContextHandlerTable() override;
 
     virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext (Token_t Element,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+        const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-protected:
+private:
     OOXMLTable mTable;
 
     css::uno::Reference<css::xml::sax::XFastContextHandler> mCurrentChild;
 
-    virtual void lcl_endFastElement(Token_t Element)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void lcl_endFastElement(Token_t Element) override;
 
     virtual ResourceEnum_t getResource() const override { return TABLE; }
 
@@ -359,7 +369,7 @@ class OOXMLFastContextHandlerXNote : public OOXMLFastContextHandlerProperties
 {
 public:
     explicit OOXMLFastContextHandlerXNote(OOXMLFastContextHandler * pContext);
-    virtual ~OOXMLFastContextHandlerXNote();
+    virtual ~OOXMLFastContextHandlerXNote() override;
 
     void checkId(const OOXMLValue::Pointer_t& pValue);
 
@@ -372,11 +382,9 @@ private:
     sal_Int32 mnMyXNoteId;
     sal_Int32 mnMyXNoteType;
 
-    virtual void lcl_startFastElement(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void lcl_startFastElement(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual void lcl_endFastElement(Token_t Element)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void lcl_endFastElement(Token_t Element) override;
 
     virtual ResourceEnum_t getResource() const override { return STREAM; }
 };
@@ -385,11 +393,11 @@ class OOXMLFastContextHandlerTextTableCell : public OOXMLFastContextHandler
 {
 public:
     explicit OOXMLFastContextHandlerTextTableCell(OOXMLFastContextHandler * pContext);
-    virtual ~OOXMLFastContextHandlerTextTableCell();
+    virtual ~OOXMLFastContextHandlerTextTableCell() override;
 
     virtual std::string getType() const override { return "TextTableCell"; }
 
-    static void startCell();
+    void startCell();
     void endCell();
 };
 
@@ -397,15 +405,14 @@ class OOXMLFastContextHandlerTextTableRow : public OOXMLFastContextHandler
 {
 public:
     explicit OOXMLFastContextHandlerTextTableRow(OOXMLFastContextHandler * pContext);
-    virtual ~OOXMLFastContextHandlerTextTableRow();
+    virtual ~OOXMLFastContextHandlerTextTableRow() override;
 
     virtual std::string getType() const override { return "TextTableRow"; }
 
     static void startRow();
     void endRow();
     void handleGridBefore( const OOXMLValue::Pointer_t& val );
-private:
-    static OOXMLProperty::Pointer_t fakeNoBorder( Id id );
+    void handleGridAfter(const OOXMLValue::Pointer_t& rValue);
 };
 
 class OOXMLFastContextHandlerTextTable : public OOXMLFastContextHandler
@@ -413,40 +420,41 @@ class OOXMLFastContextHandlerTextTable : public OOXMLFastContextHandler
 public:
     explicit OOXMLFastContextHandlerTextTable(OOXMLFastContextHandler * pContext);
 
-    virtual ~OOXMLFastContextHandlerTextTable();
+    virtual ~OOXMLFastContextHandlerTextTable() override;
 
     virtual std::string getType() const override { return "TextTable"; }
 
+    // tdf#111550
+    // when <w:tbl> appears as direct child of <w:p>, we need to rearrange this paragraph
+    // to merge with the table's first paragraph (that's what Word does in this case)
+    void start_P_Tbl();
 protected:
-    virtual void lcl_startFastElement(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void lcl_startFastElement(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual void lcl_endFastElement(Token_t Element)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void lcl_endFastElement(Token_t Element) override;
 };
 
 class OOXMLFastContextHandlerShape: public OOXMLFastContextHandlerProperties
 {
-private:
     bool m_bShapeSent;
     bool m_bShapeStarted;
+    /// Is it necessary to pop the stack in the dtor?
+    bool m_bShapeContextPushed;
+    css::uno::Reference<css::xml::sax::XFastShapeContextHandler> mrShapeContext;
 
 public:
     explicit OOXMLFastContextHandlerShape(OOXMLFastContextHandler * pContext);
-    virtual ~OOXMLFastContextHandlerShape();
+    virtual ~OOXMLFastContextHandlerShape() override;
 
     virtual std::string getType() const override { return "Shape"; }
 
     // css::xml::sax::XFastContextHandler:
-    virtual void SAL_CALL startUnknownElement (const OUString & Namespace, const OUString & Name, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void SAL_CALL startUnknownElement (const OUString & Namespace, const OUString & Name, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual void SAL_CALL endUnknownElement(const OUString & Namespace, const OUString & Name)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void SAL_CALL endUnknownElement(const OUString & Namespace, const OUString & Name) override;
 
     virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createUnknownChildContext(const OUString & Namespace, const OUString & Name,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+        const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
     virtual void setToken(Token_t nToken) override;
 
@@ -456,19 +464,13 @@ public:
     bool isShapeSent( ) { return m_bShapeSent; }
 
 protected:
-    css::uno::Reference<css::xml::sax::XFastShapeContextHandler> mrShapeContext;
+    virtual void lcl_startFastElement(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual void lcl_startFastElement(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void lcl_endFastElement(Token_t Element) override;
 
-    virtual void lcl_endFastElement(Token_t Element)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > lcl_createFastChildContext (Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > lcl_createFastChildContext (Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
-
-    virtual void lcl_characters(const OUString & aChars)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void lcl_characters(const OUString & aChars) override;
 
 };
 
@@ -481,46 +483,40 @@ protected:
 class OOXMLFastContextHandlerWrapper : public OOXMLFastContextHandler
 {
 public:
-    explicit OOXMLFastContextHandlerWrapper(OOXMLFastContextHandler * pParent, css::uno::Reference<css::xml::sax::XFastContextHandler> xContext);
-    virtual ~OOXMLFastContextHandlerWrapper();
+    OOXMLFastContextHandlerWrapper(OOXMLFastContextHandler * pParent,
+                                   css::uno::Reference<css::xml::sax::XFastContextHandler> const & xContext,
+            rtl::Reference<OOXMLFastContextHandlerShape> const & xShapeHandler);
+    virtual ~OOXMLFastContextHandlerWrapper() override;
 
     // css::xml::sax::XFastContextHandler:
-    virtual void SAL_CALL startUnknownElement(const OUString & Namespace, const OUString & Name, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void SAL_CALL startUnknownElement(const OUString & Namespace, const OUString & Name, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual void SAL_CALL endUnknownElement(const OUString & Namespace, const OUString & Name)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void SAL_CALL endUnknownElement(const OUString & Namespace, const OUString & Name) override;
 
     virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createUnknownChildContext (const OUString & Namespace, const OUString & Name,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+        const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual void attributes(const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException) override;
+    virtual void attributes(const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
     virtual ResourceEnum_t getResource() const override;
 
-    void addNamespace(const Id & nId);
+    void addNamespace(Id nId);
     void addToken( Token_t Element );
 
-    virtual void newProperty(const Id & rId, const OOXMLValue::Pointer_t& pVal) override;
+    virtual void newProperty(Id nId, const OOXMLValue::Pointer_t& pVal) override;
     virtual void setPropertySet(const OOXMLPropertySet::Pointer_t& pPropertySet) override;
     virtual OOXMLPropertySet::Pointer_t getPropertySet() const override;
 
     virtual std::string getType() const override;
 
 protected:
-    virtual void lcl_startFastElement(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void lcl_startFastElement(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual void lcl_endFastElement(Token_t Element)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void lcl_endFastElement(Token_t Element) override;
 
-    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > lcl_createFastChildContext(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > lcl_createFastChildContext(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual void lcl_characters(const OUString & aChars)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void lcl_characters(const OUString & aChars) override;
 
     virtual void setId(Id nId) override;
     virtual Id getId() const override;
@@ -529,7 +525,8 @@ protected:
     virtual Token_t getToken() const override;
 
 private:
-    css::uno::Reference<css::xml::sax::XFastContextHandler> mxContext;
+    css::uno::Reference<css::xml::sax::XFastContextHandler> mxWrappedContext;
+    rtl::Reference<OOXMLFastContextHandlerShape> mxShapeHandler;
     std::set<Id> mMyNamespaces;
     std::set<Token_t> mMyTokens;
     OOXMLPropertySet::Pointer_t mpPropertySet;
@@ -569,16 +566,14 @@ protected:
     */
     virtual void process() = 0;
 
-    virtual void lcl_startFastElement(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void lcl_startFastElement(Token_t Element, const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual void lcl_endFastElement(Token_t Element) throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void lcl_endFastElement(Token_t Element) override;
 
     virtual css::uno::Reference< css::xml::sax::XFastContextHandler > lcl_createFastChildContext(Token_t Element,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+        const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual void lcl_characters(const OUString & aChars) throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void lcl_characters(const OUString & aChars) override;
 
     // should be private, but not much point in making deep copies of it
     oox::formulaimport::XmlStreamBuilder buffer;

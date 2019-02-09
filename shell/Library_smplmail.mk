@@ -18,11 +18,10 @@ $(eval $(call gb_Library_use_system_win32_libs,smplmail,\
 $(eval $(call gb_Library_use_libraries,smplmail,\
 	cppu \
 	cppuhelper \
+	i18nlangtag \
 	sal \
-))
-
-$(eval $(call gb_Library_use_static_libraries,smplmail,\
-	simplemapi \
+	tl \
+	utl \
 ))
 
 $(eval $(call gb_Library_set_componentfile,smplmail,shell/source/win32/simplemail/smplmail))

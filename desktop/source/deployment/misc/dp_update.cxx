@@ -19,13 +19,16 @@
 
 #include <config_folders.h>
 
-#include "dp_update.hxx"
-#include "dp_version.hxx"
-#include "dp_identifier.hxx"
-#include "dp_descriptioninfoset.hxx"
+#include <dp_update.hxx>
+#include <dp_version.hxx>
+#include <dp_identifier.hxx>
+#include <dp_descriptioninfoset.hxx>
 
+#include <com/sun/star/ucb/CommandAbortedException.hpp>
+#include <com/sun/star/ucb/CommandFailedException.hpp>
 #include <osl/diagnose.h>
 #include <rtl/bootstrap.hxx>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -73,7 +76,7 @@ getUpdateInformation( Reference<deployment::XUpdateInformationProvider > const &
         out_error = e.Reason;
     } catch (const ucb::CommandAbortedException &) {
     } catch (const uno::Exception & e) {
-        out_error = uno::makeAny(e);
+        out_error <<= e;
     }
     return
         Sequence<Reference< xml::dom::XElement > >();
@@ -86,20 +89,21 @@ void getOwnUpdateInfos(
         bool & out_allFound)
 {
     bool bAllHaveOwnUpdateInformation = true;
-    for (UpdateInfoMap::iterator i = inout_map.begin(); i != inout_map.end(); ++i)
+    for (auto & inout : inout_map)
     {
-        OSL_ASSERT(i->second.extension.is());
-        Sequence<OUString> urls(i->second.extension->getUpdateInformationURLs());
+        OSL_ASSERT(inout.second.extension.is());
+        Sequence<OUString> urls(inout.second.extension->getUpdateInformationURLs());
         if (urls.getLength())
         {
-            const OUString id =  dp_misc::getIdentifier(i->second.extension);
+            const OUString search_id = dp_misc::getIdentifier(inout.second.extension);
+            SAL_INFO( "extensions.update", "Searching update for " << search_id );
             uno::Any anyError;
             //It is unclear from the idl if there can be a null reference returned.
             //However all valid information should be the same
             Sequence<Reference< xml::dom::XElement > >
-                infos(getUpdateInformation(updateInformation, urls, id, anyError));
+                infos(getUpdateInformation(updateInformation, urls, search_id, anyError));
             if (anyError.hasValue())
-                out_errors.push_back(std::make_pair(i->second.extension, anyError));
+                out_errors.emplace_back(inout.second.extension, anyError);
 
             for (sal_Int32 j = 0; j < infos.getLength(); ++j)
             {
@@ -108,21 +112,21 @@ void getOwnUpdateInfos(
                     Reference< xml::dom::XNode >(infos[j], UNO_QUERY_THROW));
                 if (!infoset.hasDescription())
                     continue;
-                boost::optional< OUString > id2(infoset.getIdentifier());
-                if (!id2)
+                boost::optional< OUString > result_id(infoset.getIdentifier());
+                if (!result_id)
                     continue;
-                OSL_ASSERT(*id2 == id);
-                if (*id2 == id)
-                {
-                    i->second.version = infoset.getVersion();
-                    i->second.info.set(infos[j], UNO_QUERY_THROW);
-                }
+                SAL_INFO( "extensions.update", "  found version "
+                          << infoset.getVersion() << " for " << *result_id );
+                if (*result_id != search_id)
+                    continue;
+                inout.second.version = infoset.getVersion();
+                inout.second.info.set(infos[j], UNO_QUERY_THROW);
                 break;
             }
         }
         else
         {
-            bAllHaveOwnUpdateInformation &= false;
+            bAllHaveOwnUpdateInformation = false;
         }
     }
     out_allFound = bAllHaveOwnUpdateInformation;
@@ -144,7 +148,7 @@ void getDefaultUpdateInfos(
                 updateInformation,
                 Sequence< OUString >(&sDefaultURL, 1), OUString(), anyError));
     if (anyError.hasValue())
-        out_errors.push_back(std::make_pair(Reference<deployment::XPackage>(), anyError));
+        out_errors.emplace_back(Reference<deployment::XPackage>(), anyError);
     for (sal_Int32 i = 0; i < infos.getLength(); ++i)
     {
         Reference< xml::dom::XNode > node(infos[i], UNO_QUERY_THROW);
@@ -189,13 +193,14 @@ bool onlyBundledExtensions(
     bool bOnlyBundled = true;
     if (extensionList)
     {
-        typedef std::vector<Reference<deployment::XPackage > >::const_iterator CIT;
-        for (CIT i(extensionList->begin()), aEnd(extensionList->end()); bOnlyBundled && i != aEnd; ++i)
+        for (auto const& elem : *extensionList)
         {
             Sequence<Reference<deployment::XPackage> > seqExt = xExtMgr->getExtensionsWithSameIdentifier(
-                dp_misc::getIdentifier(*i), (*i)->getName(), Reference<ucb::XCommandEnvironment>());
+                dp_misc::getIdentifier(elem), elem->getName(), Reference<ucb::XCommandEnvironment>());
 
             bOnlyBundled = containsBundledOnly(seqExt);
+            if (!bOnlyBundled)
+                break;
         }
     }
     else
@@ -357,24 +362,19 @@ UpdateInfoMap getOnlineUpdateInfos(
             Reference<deployment::XPackage> extension = getExtensionWithHighestVersion(seqExt);
             OSL_ASSERT(extension.is());
 
-            std::pair<UpdateInfoMap::iterator, bool> insertRet = infoMap.insert(
-                UpdateInfoMap::value_type(
-                    dp_misc::getIdentifier(extension), UpdateInfo(extension)));
+            std::pair<UpdateInfoMap::iterator, bool> insertRet = infoMap.emplace(
+                    dp_misc::getIdentifier(extension), UpdateInfo(extension));
             OSL_ASSERT(insertRet.second);
-            (void)insertRet;
         }
     }
     else
     {
-        typedef std::vector<Reference<deployment::XPackage > >::const_iterator CIT;
-        for (CIT i = extensionList->begin(); i != extensionList->end(); ++i)
+        for (auto const& elem : *extensionList)
         {
-            OSL_ASSERT(i->is());
-            std::pair<UpdateInfoMap::iterator, bool> insertRet = infoMap.insert(
-                UpdateInfoMap::value_type(
-                    dp_misc::getIdentifier(*i), UpdateInfo(*i)));
+            OSL_ASSERT(elem.is());
+            std::pair<UpdateInfoMap::iterator, bool> insertRet = infoMap.emplace(
+                    dp_misc::getIdentifier(elem), UpdateInfo(elem));
             OSL_ASSERT(insertRet.second);
-            (void)insertRet;
         }
     }
 
@@ -388,15 +388,13 @@ UpdateInfoMap getOnlineUpdateInfos(
     return infoMap;
 }
 OUString getHighestVersion(
-    OUString const & userVersion,
     OUString const & sharedVersion,
     OUString const & bundledVersion,
     OUString const & onlineVersion)
 {
-    int index = determineHighestVersion(userVersion, sharedVersion, bundledVersion, onlineVersion);
+    int index = determineHighestVersion(OUString(), sharedVersion, bundledVersion, onlineVersion);
     switch (index)
     {
-    case 0: return userVersion;
     case 1: return sharedVersion;
     case 2: return bundledVersion;
     case 3: return onlineVersion;

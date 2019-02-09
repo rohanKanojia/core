@@ -18,10 +18,11 @@
  */
 
 #include <svx/fmpage.hxx>
-#include "fmobj.hxx"
+#include <fmobj.hxx>
 #include <svx/fmglob.hxx>
 #include <svx/fmdpage.hxx>
 #include <svx/unoshape.hxx>
+#include <vcl/svapp.hxx>
 #include <cppuhelper/queryinterface.hxx>
 #include <cppuhelper/typeprovider.hxx>
 
@@ -38,12 +39,12 @@ SvxFmDrawPage::~SvxFmDrawPage() throw ()
 {
 }
 
-css::uno::Sequence< sal_Int8 > SAL_CALL SvxFmDrawPage::getImplementationId() throw(css::uno::RuntimeException, std::exception)
+css::uno::Sequence< sal_Int8 > SAL_CALL SvxFmDrawPage::getImplementationId()
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
-Any SAL_CALL SvxFmDrawPage::queryAggregation( const css::uno::Type& _rType ) throw(RuntimeException, std::exception)
+Any SAL_CALL SvxFmDrawPage::queryAggregation( const css::uno::Type& _rType )
 {
     Any aRet = ::cppu::queryInterface   (   _rType
                                         ,   static_cast< XFormsSupplier2* >( this )
@@ -55,7 +56,7 @@ Any SAL_CALL SvxFmDrawPage::queryAggregation( const css::uno::Type& _rType ) thr
     return aRet;
 }
 
-css::uno::Sequence< css::uno::Type > SAL_CALL SvxFmDrawPage::getTypes(  ) throw(css::uno::RuntimeException, std::exception)
+css::uno::Sequence< css::uno::Type > SAL_CALL SvxFmDrawPage::getTypes(  )
 {
     css::uno::Sequence< css::uno::Type > aTypes(SvxDrawPage::getTypes());
     aTypes.realloc(aTypes.getLength() + 1);
@@ -65,35 +66,38 @@ css::uno::Sequence< css::uno::Type > SAL_CALL SvxFmDrawPage::getTypes(  ) throw(
     return aTypes;
 }
 
-SdrObject *SvxFmDrawPage::_CreateSdrObject( const css::uno::Reference< css::drawing::XShape > & xDescr )
-    throw (css::uno::RuntimeException, std::exception)
+SdrObject *SvxFmDrawPage::CreateSdrObject_( const css::uno::Reference< css::drawing::XShape > & xDescr )
 {
     OUString aShapeType( xDescr->getShapeType() );
 
     if  (   aShapeType == "com.sun.star.drawing.ShapeControl"   // compatibility
         ||  aShapeType == "com.sun.star.drawing.ControlShape"
         )
-        return new FmFormObj();
+    {
+        return new FmFormObj(GetSdrPage()->getSdrModelFromSdrPage());
+    }
     else
-        return SvxDrawPage::_CreateSdrObject( xDescr );
-
+    {
+        return SvxDrawPage::CreateSdrObject_( xDescr );
+    }
 }
 
-css::uno::Reference< css::drawing::XShape >  SvxFmDrawPage::_CreateShape( SdrObject *pObj ) const
-    throw (css::uno::RuntimeException, std::exception)
+css::uno::Reference< css::drawing::XShape >  SvxFmDrawPage::CreateShape( SdrObject *pObj ) const
 {
-    if( FmFormInventor == pObj->GetObjInventor() )
+    if( SdrInventor::FmForm == pObj->GetObjInventor() )
     {
         css::uno::Reference< css::drawing::XShape >  xShape = static_cast<SvxShape*>(new SvxShapeControl( pObj ));
         return xShape;
     }
     else
-        return SvxDrawPage::_CreateShape( pObj );
+        return SvxDrawPage::CreateShape( pObj );
 }
 
 // XFormsSupplier
-css::uno::Reference< css::container::XNameContainer > SAL_CALL SvxFmDrawPage::getForms() throw( css::uno::RuntimeException, std::exception )
+css::uno::Reference< css::container::XNameContainer > SAL_CALL SvxFmDrawPage::getForms()
 {
+    SolarMutexGuard g;
+
     css::uno::Reference< css::container::XNameContainer >  xForms;
 
     FmFormPage *pFmPage = dynamic_cast<FmFormPage*>( GetSdrPage()  );
@@ -104,20 +108,15 @@ css::uno::Reference< css::container::XNameContainer > SAL_CALL SvxFmDrawPage::ge
 }
 
 // XFormsSupplier2
-sal_Bool SAL_CALL SvxFmDrawPage::hasForms() throw( css::uno::RuntimeException, std::exception )
+sal_Bool SAL_CALL SvxFmDrawPage::hasForms()
 {
+    SolarMutexGuard g;
+
     bool bHas = false;
     FmFormPage* pFormPage = dynamic_cast<FmFormPage*>( GetSdrPage()  );
     if ( pFormPage )
         bHas = pFormPage->GetForms( false ).is();
     return bHas;
 }
-
-// css::lang::XServiceInfo
-css::uno::Sequence< OUString > SAL_CALL SvxFmDrawPage::getSupportedServiceNames() throw( css::uno::RuntimeException, std::exception )
-{
-    return SvxDrawPage::getSupportedServiceNames();
-}
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

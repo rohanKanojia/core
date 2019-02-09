@@ -39,9 +39,9 @@ ParaLineSpacingPopup::~ParaLineSpacingPopup()
 
 VclPtr<SfxPopupWindow> ParaLineSpacingPopup::CreatePopupWindow()
 {
-    VclPtr<ParaLineSpacingControl> pControl = VclPtr<ParaLineSpacingControl>::Create(GetSlotId());
+    VclPtr<ParaLineSpacingControl> pControl = VclPtr<ParaLineSpacingControl>::Create(GetSlotId(), &GetToolBox());
 
-    pControl->StartPopupMode(&GetToolBox(), FloatWinPopupFlags::GrabFocus|FloatWinPopupFlags::NoAppFocusClose);
+    pControl->StartPopupMode(&GetToolBox(), FloatWinPopupFlags::GrabFocus);
 
     SetPopupWindow(pControl);
 

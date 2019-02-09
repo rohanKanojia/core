@@ -17,11 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/diagnose.h>
 
-#include "drawingml/table/tablestyletextstylecontext.hxx"
-#include "drawingml/colorchoicecontext.hxx"
-#include "oox/helper/attributelist.hxx"
+#include <drawingml/table/tablestyletextstylecontext.hxx>
+#include <drawingml/colorchoicecontext.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star;
@@ -30,7 +31,7 @@ using namespace ::com::sun::star::xml::sax;
 
 namespace oox { namespace drawingml { namespace table {
 
-TableStyleTextStyleContext::TableStyleTextStyleContext( ContextHandler2Helper& rParent,
+TableStyleTextStyleContext::TableStyleTextStyleContext( ContextHandler2Helper const & rParent,
     const AttributeList& rAttribs, TableStylePart& rTableStylePart )
 : ContextHandler2( rParent )
 , mrTableStylePart( rTableStylePart )
@@ -38,17 +39,17 @@ TableStyleTextStyleContext::TableStyleTextStyleContext( ContextHandler2Helper& r
     if( rAttribs.hasAttribute( XML_b ) ) {
         sal_Int32 nB = rAttribs.getToken( XML_b, XML_def );
         if ( nB == XML_on )
-            mrTableStylePart.getTextBoldStyle() = ::boost::optional< sal_Bool >( sal_True );
+            mrTableStylePart.getTextBoldStyle() = ::boost::optional< sal_Bool >( true );
         else if ( nB == XML_off )
-            mrTableStylePart.getTextBoldStyle() = ::boost::optional< sal_Bool >( sal_False );
+            mrTableStylePart.getTextBoldStyle() = ::boost::optional< sal_Bool >( false );
     }
 
     if( rAttribs.hasAttribute( XML_i ) ) {
         sal_Int32 nI = rAttribs.getToken( XML_i, XML_def );
         if ( nI == XML_on )
-            mrTableStylePart.getTextItalicStyle() = ::boost::optional< sal_Bool >( sal_True );
+            mrTableStylePart.getTextItalicStyle() = ::boost::optional< sal_Bool >( true );
         else if ( nI == XML_off )
-            mrTableStylePart.getTextItalicStyle() = ::boost::optional< sal_Bool >( sal_False );
+            mrTableStylePart.getTextItalicStyle() = ::boost::optional< sal_Bool >( false );
     }
 }
 

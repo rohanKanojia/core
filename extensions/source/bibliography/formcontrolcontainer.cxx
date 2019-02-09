@@ -18,11 +18,10 @@
  */
 
 #include "formcontrolcontainer.hxx"
-#include <tools/debug.hxx>
+#include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 #include <algorithm>
-#include <functional>
-
 
 namespace bib
 {
@@ -35,13 +34,12 @@ namespace bib
 
     FormControlContainer::FormControlContainer( )
         :OLoadListener( m_aMutex )
-        ,m_pFormAdapter( nullptr )
     {
     }
 
     FormControlContainer::~FormControlContainer( )
     {
-        DBG_ASSERT( !isFormConnected(), "FormControlContainer::~FormControlContainer: you should disconnect in your derived class!" );
+        SAL_WARN_IF( isFormConnected(), "extensions.biblio", "FormControlContainer::~FormControlContainer: you should disconnect in your derived class!" );
         if ( isFormConnected() )
             disconnectForm();
     }
@@ -49,33 +47,31 @@ namespace bib
     void FormControlContainer::disconnectForm()
     {
         ::osl::MutexGuard aGuard( m_aMutex );
-        DBG_ASSERT( isFormConnected(), "FormControlContainer::connectForm: not connected!" );
+        SAL_WARN_IF( !isFormConnected(), "extensions.biblio", "FormControlContainer::connectForm: not connected!" );
         if ( isFormConnected() )
         {
-            m_pFormAdapter->dispose();
-            m_pFormAdapter->release();
-            m_pFormAdapter = nullptr;
+            m_xFormAdapter->dispose();
+            m_xFormAdapter.clear();
         }
     }
 
     void FormControlContainer::connectForm( const Reference< XLoadable >& _rxForm )
     {
-        DBG_ASSERT( !isFormConnected(), "FormControlContainer::connectForm: already connected!" );
+        SAL_WARN_IF( isFormConnected(), "extensions.biblio", "FormControlContainer::connectForm: already connected!" );
 
-        DBG_ASSERT( _rxForm.is(), "FormControlContainer::connectForm: invalid form!" );
+        SAL_WARN_IF( !_rxForm.is(), "extensions.biblio", "FormControlContainer::connectForm: invalid form!" );
         if ( !isFormConnected() && _rxForm.is() )
         {
-            m_pFormAdapter = new OLoadListenerAdapter( _rxForm );
-            m_pFormAdapter->acquire();
-            m_pFormAdapter->Init( this );
+            m_xFormAdapter = new OLoadListenerAdapter( _rxForm );
+            m_xFormAdapter->Init( this );
 
-            ensureDesignMode();
+            implSetDesignMode( !m_xForm.is() || !m_xForm->isLoaded() );
         }
 
         m_xForm = _rxForm;
     }
 
-    struct ControlModeSwitch : public ::std::unary_function< Reference< XControl >, void >
+    struct ControlModeSwitch
     {
         bool bDesign;
         explicit ControlModeSwitch( bool _bDesign ) : bDesign( _bDesign ) { }
@@ -96,22 +92,16 @@ namespace bib
             if ( xControlCont.is() )
                 aControls = xControlCont->getControls();
 
-            ::std::for_each(
-                aControls.getConstArray(),
-                aControls.getConstArray() + aControls.getLength(),
+            std::for_each(
+                aControls.begin(),
+                aControls.end(),
                 ControlModeSwitch( _bDesign )
             );
         }
-        catch( const Exception& e)
+        catch( const Exception&)
         {
-            (void) e;   // make compiler happy
             OSL_FAIL( "FormControlContainer::implSetDesignMode: caught an exception!" );
         }
-    }
-
-    void FormControlContainer::ensureDesignMode()
-    {
-        implSetDesignMode( !m_xForm.is() || !m_xForm->isLoaded() );
     }
 
     void FormControlContainer::_loaded( const css::lang::EventObject& /*_rEvent*/ )

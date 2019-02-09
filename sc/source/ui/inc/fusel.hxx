@@ -28,27 +28,19 @@ class SdrPageView;
 class FuSelection : public FuDraw
 {
 public:
-    FuSelection(ScTabViewShell* pViewSh, vcl::Window* pWin, ScDrawView* pView,
-           SdrModel* pDoc, SfxRequest& rReq );
+    FuSelection(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawView* pView,
+           SdrModel* pDoc, const SfxRequest& rReq );
 
-    virtual ~FuSelection();
+    virtual ~FuSelection() override;
                                        // Mouse- & Key-Events
-    virtual bool KeyInput(const KeyEvent& rKEvt) override;
     virtual bool MouseMove(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonUp(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonDown(const MouseEvent& rMEvt) override;
-    virtual sal_uInt8 Command(const CommandEvent& rCEvt) override;
-
-    virtual void Activate() override;
-    virtual void Deactivate() override;
 
     void    ActivateNoteHandles(SdrObject* pObj);
 
-protected:
-    bool            bVCAction;
-
 private:
-    bool TestDetective( SdrPageView* pPV, const Point& rPos );  // -> fusel2
+    bool TestDetective( const SdrPageView* pPV, const Point& rPos );  // -> fusel2
 
     bool                IsNoteCaptionMarked() const;
     bool                IsNoteCaptionClicked( const Point& rPos ) const;

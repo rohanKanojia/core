@@ -17,34 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/log.hxx>
 #include <svl/itempool.hxx>
 
 #include <sfx2/ctrlitem.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/msgpool.hxx>
-#include "statcach.hxx"
+#include <statcach.hxx>
 #include <sfx2/viewfrm.hxx>
-
-#ifdef DBG_UTIL
-
-void SfxControllerItem::CheckConfigure_Impl( SfxSlotMode nType )
-{
-    // Real Slot? (i.e. no Separator etc.)
-    if ( !nId )
-        return;
-
-    // is the ID configurable at all in 'nType'?
-    const SfxSlot *pSlot = SFX_SLOTPOOL().GetSlot(nId);
-    SAL_WARN_IF( !pSlot, "sfx.control", "SfxControllerItem: binding not existing slot" );
-    SAL_WARN_IF(
-        pSlot && !pSlot->IsMode(nType), "sfx.control",
-        "SfxControllerItem: slot without ...Config-flag at SID "
-            << pSlot->GetSlotId());
-}
-
-#endif
-
 
 // returns the next registered SfxControllerItem with the same id
 
@@ -62,7 +43,7 @@ bool SfxControllerItem::IsBound() const
 }
 
 
-// registeres with the id at the bindings
+// registers with the id at the bindings
 
 void SfxControllerItem::Bind( sal_uInt16 nNewId, SfxBindings *pBindinx )
 {
@@ -202,7 +183,7 @@ SfxControllerItem::SfxControllerItem():
 }
 
 
-// creates a representation of the function nId and registeres it
+// creates a representation of the function nId and registers it
 
 SfxControllerItem::SfxControllerItem( sal_uInt16 nID, SfxBindings &rBindings ):
     nId(nID),
@@ -223,7 +204,7 @@ SfxControllerItem::~SfxControllerItem()
 void SfxControllerItem::dispose()
 {
     if ( IsBound() )
-        pBindings->Release(*this);
+        UnBind();
 }
 
 void SfxControllerItem::StateChanged
@@ -242,9 +223,6 @@ void SfxControllerItem::StateChanged
     The status of a slot may change, for example when the MDI window is
     switched or when the slot was invalidated explicitly with
     <SfxBindings::Invalidate()>.
-
-    Achtung! Die Methode wird nicht gerufen, wenn der Slot ung"ultig wurde,
-    danach jedoch wieder denselben Wert angenommen hat.
 
     Beware! The method is not called when the slot is invalid, however
     has again assumed the same value.
@@ -316,13 +294,13 @@ SfxItemState SfxControllerItem::GetItemState
                 ? SfxItemState::DISABLED
                 : IsInvalidItem(pState)
                     ? SfxItemState::DONTCARE
-                    : dynamic_cast< const SfxVoidItem *>( pState ) !=  nullptr && !pState->Which()
+                    : pState->IsVoidItem() && !pState->Which()
                         ? SfxItemState::UNKNOWN
                         : SfxItemState::DEFAULT;
 }
 
 
-SfxMapUnit SfxControllerItem::GetCoreMetric() const
+MapUnit SfxControllerItem::GetCoreMetric() const
 
 /*  [Description]
 
@@ -361,7 +339,7 @@ SfxMapUnit SfxControllerItem::GetCoreMetric() const
     }
 
     SAL_INFO( "sfx.control", "W1: Can not find ItemPool!" );
-    return SFX_MAPUNIT_100TH_MM;
+    return MapUnit::Map100thMM;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

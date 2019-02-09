@@ -19,11 +19,11 @@
 
 #include "AllMasterPagesSelector.hxx"
 #include "PreviewValueSet.hxx"
-#include "ViewShellBase.hxx"
+#include <ViewShellBase.hxx>
 #include "MasterPageContainer.hxx"
 #include "MasterPageDescriptor.hxx"
-#include "app.hrc"
-#include "helpids.h"
+#include <app.hrc>
+#include <helpids.h>
 
 #include <tools/link.hxx>
 #include <set>
@@ -53,7 +53,7 @@ class MasterPageDescriptorOrder
 public:
     bool operator() (
         const SharedMasterPageDescriptor& rp1,
-        const SharedMasterPageDescriptor& rp2)
+        const SharedMasterPageDescriptor& rp2) const
     {
         if (rp1->meOrigin == MasterPageContainer::DEFAULT)
             return true;
@@ -128,13 +128,12 @@ void AllMasterPagesSelector::NotifyContainerChangeEvent (
 {
     switch (rEvent.meEventType)
     {
-        case MasterPageContainerChangeEvent::CHILD_ADDED:
+        case MasterPageContainerChangeEvent::EventType::CHILD_ADDED:
             AddItem(rEvent.maChildToken);
             MasterPagesSelector::Fill();
             break;
 
-        case MasterPageContainerChangeEvent::INDEX_CHANGED:
-        case MasterPageContainerChangeEvent::INDEXES_CHANGED:
+        case MasterPageContainerChangeEvent::EventType::INDEX_CHANGED:
             mpSortedMasterPages->clear();
             MasterPagesSelector::Fill();
             break;
@@ -175,10 +174,8 @@ void AllMasterPagesSelector::AddItem (MasterPageContainer::Token aToken)
 
 void AllMasterPagesSelector::UpdatePageSet (ItemList& rItemList)
 {
-    SortedMasterPageDescriptorList::const_iterator iDescriptor;
-    SortedMasterPageDescriptorList::const_iterator iEnd (mpSortedMasterPages->end());
-    for (iDescriptor=mpSortedMasterPages->begin(); iDescriptor!=iEnd; ++iDescriptor)
-        rItemList.push_back((*iDescriptor)->maToken);
+    for (const auto& rxDescriptor : *mpSortedMasterPages)
+        rItemList.push_back(rxDescriptor->maToken);
 }
 
 } } // end of namespace sd::sidebar

@@ -25,18 +25,17 @@
 #include <svx/sdooitm.hxx>
 
 // SDRATTR_CAPTIONFIXEDANGLE SdrOnOffItem:
-// sal_True=Winkel durch SdrCaptionAngleItem vorgegeben
-// sal_False=Freier Winkel
+// sal_True=angle predefined by SdrCaptionAngleItem
+// sal_False=free angle
 
 // class SdrCaptionAngleItem
-// Winkelangabe in 1/100 Degree
-// Nur bei Type2, Type3 und Type4
-// und nur wenn SdrCaptionIsFixedAngleItem=TRUE
+// angle in 1/100 degree
+// only if Type2, Type3 and Type4
+// and only if SdrCaptionIsFixedAngleItem=TRUE
 
 class SdrCaptionAngleItem: public SdrAngleItem {
 public:
     SdrCaptionAngleItem(long nAngle=0): SdrAngleItem(SDRATTR_CAPTIONANGLE,nAngle) {}
-    SdrCaptionAngleItem(SvStream& rIn): SdrAngleItem(SDRATTR_CAPTIONANGLE,rIn)    {}
     virtual SfxPoolItem* Clone(SfxItemPool*) const override
     {
         return new SdrCaptionAngleItem(*this);

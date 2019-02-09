@@ -11,7 +11,6 @@
 #define INCLUDED_CHART2_INC_UNONAMES_HXX
 
 #define CHART_UNONAME_SORT_BY_XVALUES       "SortByXValues"
-#define CHART_UNONAME_ROUNDED_EDGE          "RoundedEdge"
 #define CHART_UNONAME_SPLINE_TYPE           "SplineType"
 #define CHART_UNONAME_SPLINE_ORDER          "SplineOrder"
 #define CHART_UNONAME_SPLINE_RESOLUTION     "SplineResolution"
@@ -29,6 +28,7 @@
 #define CHART_UNONAME_LABEL_BORDER_DASH     "LabelBorderDash"
 #define CHART_UNONAME_LABEL_BORDER_DASHNAME "LabelBorderDashName"
 #define CHART_UNONAME_LABEL_BORDER_TRANS    "LabelBorderTransparency"
+#define CHART_UNONAME_CUSTOM_LABEL_FIELDS   "CustomLabelFields"
 
 #endif
 

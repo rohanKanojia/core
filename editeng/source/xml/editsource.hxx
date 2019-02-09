@@ -29,16 +29,16 @@ class SvxEditEngineSource : public SvxEditSource
 {
 public:
     explicit SvxEditEngineSource( EditEngine* pEditEngine );
-    virtual ~SvxEditEngineSource();
+    virtual ~SvxEditEngineSource() override;
 
-    virtual SvxEditSource*      Clone() const override;
+    virtual std::unique_ptr<SvxEditSource> Clone() const override;
     virtual SvxTextForwarder*   GetTextForwarder() override;
     virtual void                UpdateData() override;
 
 private:
     explicit SvxEditEngineSource( SvxEditEngineSourceImpl* pImpl );
 
-    SvxEditEngineSourceImpl*    mpImpl;
+    rtl::Reference<SvxEditEngineSourceImpl> mxImpl;
 };
 
 #endif

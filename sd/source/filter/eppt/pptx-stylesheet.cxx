@@ -17,11 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <epptbase.hxx>
-#include <epptdef.hxx>
-#include <text.hxx>
+#include "epptbase.hxx"
+#include "epptdef.hxx"
+#include "text.hxx"
 #include <tools/color.hxx>
 #include <editeng/svxenum.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
 
 using namespace ::com::sun::star;
 
@@ -89,7 +90,7 @@ void PPTExCharSheet::SetStyleSheet( const css::uno::Reference< css::beans::XProp
     rLev.mnFlags = aPortionObj.mnCharAttr;
 }
 
-void PPTExCharSheet::Write( SvStream& rSt, PptEscherEx*, sal_uInt16 nLev, bool, bool bSimpleText,
+void PPTExCharSheet::Write( SvStream& rSt, sal_uInt16 nLev, bool bSimpleText,
     const css::uno::Reference< css::beans::XPropertySet > & rPagePropSet )
 {
     const PPTExCharLevel& rLev = maCharLevel[ nLev ];
@@ -102,7 +103,7 @@ void PPTExCharSheet::Write( SvStream& rSt, PptEscherEx*, sal_uInt16 nLev, bool, 
        .WriteUInt16( rLev.mnFlags )
        .WriteUInt16( rLev.mnFont );
 
-    sal_uInt32 nFontColor = rLev.mnFontColor;
+    Color nFontColor = rLev.mnFontColor;
     if ( nFontColor == COL_AUTO )
     {
         bool bIsDark = false;
@@ -111,12 +112,11 @@ void PPTExCharSheet::Write( SvStream& rSt, PptEscherEx*, sal_uInt16 nLev, bool, 
             aAny >>= bIsDark;
         nFontColor = bIsDark ? 0xffffff : 0x000000;
     }
-    nFontColor &= 0xffffff;
-    nFontColor |= 0xfe000000;
+    nFontColor.SetTransparency(0xfe);
     if ( bSimpleText )
     {
         rSt.WriteUInt16( rLev.mnFontHeight )
-           .WriteUInt32( nFontColor );
+           .WriteUInt32( sal_uInt32(nFontColor) );
     }
     else
     {
@@ -124,7 +124,7 @@ void PPTExCharSheet::Write( SvStream& rSt, PptEscherEx*, sal_uInt16 nLev, bool, 
            .WriteUInt16( 0xffff )       // unknown
            .WriteUInt16( 0xffff )       // unknown
            .WriteUInt16( rLev.mnFontHeight )
-           .WriteUInt32( nFontColor )
+           .WriteUInt32( sal_uInt32(nFontColor) )
            .WriteUInt16( rLev.mnEscapement );
     }
 }
@@ -168,7 +168,7 @@ PPTExParaSheet::PPTExParaSheet( int nInstance, sal_uInt16 nDefaultTab, PPTExBull
             {
                 nBulletChar = 0x2022;
                 nBulletOfs = 0;
-                nTextOfs = ( bHasBullet ) ? 0xd8 : 0;
+                nTextOfs = bHasBullet ? 0xd8 : 0;
             }
             break;
             case 1 :
@@ -243,21 +243,21 @@ void PPTExParaSheet::SetStyleSheet( const css::uno::Reference< css::beans::XProp
             {
                 const FontCollectionEntry* pDesc = rFontCollection.GetById( rCharLevel.mnFont );
                 if ( pDesc )
-                    nLineSpacing = (sal_Int16)( (double)nLineSpacing * pDesc->Scaling + 0.5 );
+                    nLineSpacing = static_cast<sal_Int16>( static_cast<double>(nLineSpacing) * pDesc->Scaling + 0.5 );
             }
         }
         else
         {
-            if ( rCharLevel.mnFontHeight > (sal_uInt16)( ((double)-nLineSpacing) * 0.001 * 72.0 / 2.54 ) ) // 1/100mm to point
+            if ( rCharLevel.mnFontHeight > static_cast<sal_uInt16>( static_cast<double>(-nLineSpacing) * 0.001 * 72.0 / 2.54 ) ) // 1/100mm to point
             {
                 const FontCollectionEntry* pDesc = rFontCollection.GetById( rCharLevel.mnFont );
                 if ( pDesc )
-                     nLineSpacing = (sal_Int16)( (double)100.0 * pDesc->Scaling + 0.5 );
+                     nLineSpacing = static_cast<sal_Int16>( 100.0 * pDesc->Scaling + 0.5 );
                 else
                     nLineSpacing = 100;
             }
             else
-                nLineSpacing = (sal_Int16)( (double)nLineSpacing / 4.40972 );
+                nLineSpacing = static_cast<sal_Int16>( static_cast<double>(nLineSpacing) / 4.40972 );
         }
         rLev.mnLineFeed = nLineSpacing;
     }
@@ -292,13 +292,13 @@ void PPTExParaSheet::SetStyleSheet( const css::uno::Reference< css::beans::XProp
             {
                 PPTExParaLevel& rLevel = maParaLevel[ i ];
                 if ( i )
-                    aParagraphObj.ImplGetNumberingLevel( pBuProv, i, false );
+                    aParagraphObj.ImplGetNumberingLevel( pBuProv, i, false, false );
                 rLevel.mnTextOfs = aParagraphObj.nTextOfs;
-                rLevel.mnBulletOfs = (sal_uInt16)aParagraphObj.nBulletOfs;
+                rLevel.mnBulletOfs = static_cast<sal_uInt16>(aParagraphObj.nBulletOfs);
                 rLevel.mnBulletChar = aParagraphObj.cBulletId;
                 FontCollectionEntry aFontDescEntry( aParagraphObj.aFontDesc.Name, aParagraphObj.aFontDesc.Family,
                                                         aParagraphObj.aFontDesc.Pitch, aParagraphObj.aFontDesc.CharSet );
-                rLevel.mnBulletFont = (sal_uInt16)rFontCollection.GetId( aFontDescEntry );
+                rLevel.mnBulletFont = static_cast<sal_uInt16>(rFontCollection.GetId( aFontDescEntry ));
                 rLevel.mnBulletHeight = aParagraphObj.nBulletRealSize;
                 rLevel.mnBulletColor = aParagraphObj.nBulletColor;
 
@@ -312,7 +312,7 @@ void PPTExParaSheet::SetStyleSheet( const css::uno::Reference< css::beans::XProp
     }
 }
 
-void PPTExParaSheet::Write( SvStream& rSt, PptEscherEx*, sal_uInt16 nLev, bool, bool bSimpleText,
+void PPTExParaSheet::Write( SvStream& rSt, sal_uInt16 nLev, bool bSimpleText,
     const css::uno::Reference< css::beans::XPropertySet > & rPagePropSet )
 {
     const PPTExParaLevel& rLev = maParaLevel[ nLev ];
@@ -346,7 +346,7 @@ void PPTExParaSheet::Write( SvStream& rSt, PptEscherEx*, sal_uInt16 nLev, bool, 
     if ( bSimpleText )
         nParaFlags &= 0x7fff;
     sal_uInt32 nBulletColor = rLev.mnBulletColor;
-    if ( nBulletColor == COL_AUTO )
+    if ( nBulletColor == sal_uInt32(COL_AUTO) )
     {
         bool bIsDark = false;
         css::uno::Any aAny;
@@ -388,21 +388,16 @@ PPTExStyleSheet::PPTExStyleSheet( sal_uInt16 nDefaultTab, PPTExBulletProvider* p
 {
     for ( int nInstance = EPP_TEXTTYPE_Title; nInstance <= EPP_TEXTTYPE_QuarterBody; nInstance++ )
     {
-        mpParaSheet[ nInstance ] = ( nInstance == EPP_TEXTTYPE_notUsed ) ? nullptr : new PPTExParaSheet( nInstance, nDefaultTab, pBuProv );
-        mpCharSheet[ nInstance ] = ( nInstance == EPP_TEXTTYPE_notUsed ) ? nullptr : new PPTExCharSheet( nInstance );
+        if (nInstance != EPP_TEXTTYPE_notUsed)
+        {
+            mpParaSheet[ nInstance ].reset(new PPTExParaSheet( nInstance, nDefaultTab, pBuProv ));
+            mpCharSheet[ nInstance ].reset(new PPTExCharSheet( nInstance ));
+        }
     }
 }
 
 PPTExStyleSheet::~PPTExStyleSheet()
 {
-    for ( int nInstance = EPP_TEXTTYPE_Title; nInstance <= EPP_TEXTTYPE_QuarterBody; nInstance++ )
-    {
-        if ( nInstance == EPP_TEXTTYPE_notUsed )
-            continue;
-
-        delete mpParaSheet[ nInstance ];
-        delete mpCharSheet[ nInstance ];
-    }
 }
 
 void PPTExStyleSheet::SetStyleSheet( const css::uno::Reference< css::beans::XPropertySet > & rXPropSet,
@@ -416,6 +411,8 @@ void PPTExStyleSheet::SetStyleSheet( const css::uno::Reference< css::beans::XPro
 
 bool PPTExStyleSheet::IsHardAttribute( sal_uInt32 nInstance, sal_uInt32 nLevel, PPTExTextAttr eAttr, sal_uInt32 nValue )
 {
+    assert(nInstance < PPTEX_STYLESHEETENTRYS && nLevel < 5);
+
     const PPTExParaLevel& rPara = mpParaSheet[ nInstance ]->maParaLevel[ nLevel ];
     const PPTExCharLevel& rChar = mpCharSheet[ nInstance ]->maCharLevel[ nLevel ];
 
@@ -471,7 +468,7 @@ void PPTExStyleSheet::WriteTxCFStyleAtom( SvStream& rSt )
 {
     const PPTExCharLevel& rCharStyle = mpCharSheet[ EPP_TEXTTYPE_Other ]->maCharLevel[ 0 ];
 
-    sal_uInt16 nFlags = 0x60        // ??
+    sal_uInt16 const nFlags = 0x60        // ??
                       | 0x02        // fontsize;
                       | 0x04;       // fontcolor
 
@@ -485,7 +482,7 @@ void PPTExStyleSheet::WriteTxCFStyleAtom( SvStream& rSt )
        .WriteUInt16( nCharFlags )
        .WriteInt32( -1 )                            // ?
        .WriteUInt16( rCharStyle.mnFontHeight )
-       .WriteUInt32( rCharStyle.mnFontColor );
+       .WriteUInt32( sal_uInt32(rCharStyle.mnFontColor) );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

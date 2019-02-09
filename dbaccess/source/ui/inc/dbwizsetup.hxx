@@ -21,14 +21,12 @@
 #define INCLUDED_DBACCESS_SOURCE_UI_INC_DBWIZSETUP_HXX
 
 #include <sfx2/tabdlg.hxx>
-#include "dsntypes.hxx"
+#include <dsntypes.hxx>
 #include "IItemSetHelper.hxx"
-#include <comphelper/uno3.hxx>
 #include <tools/urlobj.hxx>
 #include <memory>
 #include <svtools/roadmapwizard.hxx>
 #include <connectivity/dbtools.hxx>
-#include "moduledbu.hxx"
 
 namespace com { namespace sun { namespace star {
     namespace beans {
@@ -56,13 +54,11 @@ class ODbDataSourceAdministrationHelper;
 class OMySQLIntroPageSetup;
 class OFinalDBPageSetup;
 
-class ODbTypeWizDialogSetup : public svt::RoadmapWizard , public IItemSetHelper, public IDatabaseSettingsDialog,public dbaui::OModuleClient
+class ODbTypeWizDialogSetup final : public svt::RoadmapWizard , public IItemSetHelper, public IDatabaseSettingsDialog
 {
-
 private:
-    OModuleClient           m_aModuleClient;
-    ::std::unique_ptr<ODbDataSourceAdministrationHelper>  m_pImpl;
-    SfxItemSet*             m_pOutSet;
+    std::unique_ptr<ODbDataSourceAdministrationHelper>  m_pImpl;
+    std::unique_ptr<SfxItemSet> m_pOutSet;
     OUString                m_sURL;
     OUString                m_sOldURL;
     bool                    m_bIsConnectable : 1;
@@ -77,7 +73,7 @@ private:
     OUString                m_sRM_OracleText;
     OUString                m_sRM_MySQLText;
     OUString                m_sRM_ODBCText;
-    OUString                m_sRM_SpreadSheetText;
+    OUString                m_sRM_DocumentOrSpreadSheetText;
     OUString                m_sRM_AuthentificationText;
     OUString                m_sRM_FinalText;
     INetURLObject           m_aDocURL;
@@ -94,11 +90,11 @@ public:
         after the dialog has been destroyed
     */
     ODbTypeWizDialogSetup(vcl::Window* pParent
-        ,SfxItemSet* _pItems
+        ,SfxItemSet const * _pItems
         ,const css::uno::Reference< css::uno::XComponentContext >& _rxORB
         ,const css::uno::Any& _aDataSourceName
         );
-    virtual ~ODbTypeWizDialogSetup();
+    virtual ~ODbTypeWizDialogSetup() override;
     virtual void dispose() override;
 
     virtual const SfxItemSet* getOutputSet() const override;
@@ -106,7 +102,7 @@ public:
 
     // forwards to ODbDataSourceAdministrationHelper
     virtual css::uno::Reference< css::uno::XComponentContext > getORB() const override;
-    virtual ::std::pair< css::uno::Reference< css::sdbc::XConnection >,sal_Bool> createConnection() override;
+    virtual std::pair< css::uno::Reference< css::sdbc::XConnection >,bool> createConnection() override;
     virtual css::uno::Reference< css::sdbc::XDriver > getDriver() override;
     virtual OUString getDatasourceType(const SfxItemSet& _rSet) const override;
     virtual void clearPassword() override;
@@ -123,7 +119,7 @@ public:
     */
     bool IsTableWizardToBeStarted() const;
 
-protected:
+private:
     /// to override to create new pages
     virtual VclPtr<TabPage> createPage(WizardState _nState) override;
     virtual bool        leaveState(WizardState _nState) override;
@@ -131,17 +127,8 @@ protected:
     virtual ::svt::IWizardPageController* getPageController( TabPage* _pCurrentPage ) const override;
     virtual bool        onFinish() override;
 
-protected:
     void resetPages(const css::uno::Reference< css::beans::XPropertySet >& _rxDatasource);
 
-    enum ApplyResult
-    {
-        AR_LEAVE_MODIFIED,      // something was modified and has successfully been committed
-        AR_LEAVE_UNCHANGED,     // no changes were made
-        AR_KEEP                 // don't leave the page (e.g. because an error occurred)
-    };
-
-private:
     /** declares a path with or without authentication, as indicated by the database type
 
         @param _sURL
@@ -162,17 +149,16 @@ private:
     OUString createUniqueFileName(const INetURLObject& rURL);
     void CreateDatabase();
     void createUniqueFolderName(INetURLObject* pURL);
-    ::dbaccess::DATASOURCE_TYPE VerifyDataSourceType(const ::dbaccess::DATASOURCE_TYPE _DatabaseType) const;
+    ::dbaccess::DATASOURCE_TYPE VerifyDataSourceType(const ::dbaccess::DATASOURCE_TYPE DatabaseType) const;
 
     void updateTypeDependentStates();
     bool callSaveAsDialog();
-    bool IsConnectionUrlRequired();
-    DECL_LINK_TYPED(OnTypeSelected, OGeneralPage&, void);
-    DECL_LINK_TYPED(OnChangeCreationMode, OGeneralPageWizard&, void);
-    DECL_LINK_TYPED(OnRecentDocumentSelected, OGeneralPageWizard&, void);
-    DECL_LINK_TYPED(OnSingleDocumentChosen, OGeneralPageWizard&, void);
-    DECL_LINK_TYPED(ImplClickHdl, OMySQLIntroPageSetup*, void);
-    DECL_LINK_TYPED(ImplModifiedHdl, OGenericAdministrationPage const *, void);
+    DECL_LINK(OnTypeSelected, OGeneralPage&, void);
+    DECL_LINK(OnChangeCreationMode, OGeneralPageWizard&, void);
+    DECL_LINK(OnRecentDocumentSelected, OGeneralPageWizard&, void);
+    DECL_LINK(OnSingleDocumentChosen, OGeneralPageWizard&, void);
+    DECL_LINK(ImplClickHdl, OMySQLIntroPageSetup*, void);
+    DECL_LINK(ImplModifiedHdl, OGenericAdministrationPage const *, void);
 };
 
 }   // namespace dbaui

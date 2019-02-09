@@ -21,7 +21,7 @@
 
 #include <ucbhelper/contentidentifier.hxx>
 #include <ucbhelper/providerhelper.hxx>
-
+#include <com/sun/star/ucb/IllegalIdentifierException.hpp>
 #include <com/sun/star/ucb/OpenMode.hpp>
 
 #include "gio_datasupplier.hxx"
@@ -35,9 +35,7 @@ using namespace gio;
 namespace gio
 {
 
-typedef std::vector< ResultListEntry* > ResultList;
-
-DataSupplier::DataSupplier( const uno::Reference< ::gio::Content >& rContent, sal_Int32 nOpenMode )
+DataSupplier::DataSupplier( const rtl::Reference< ::gio::Content >& rContent, sal_Int32 nOpenMode )
     : mxContent(rContent), mnOpenMode(nOpenMode), mbCountFinal(false)
 {
 }
@@ -73,7 +71,7 @@ bool DataSupplier::getData()
                 break;
         }
 
-        maResults.push_back( new ResultListEntry( pInfo ) );
+        maResults.emplace_back( new ResultListEntry( pInfo ) );
         g_object_unref(pInfo);
     }
 
@@ -85,14 +83,6 @@ bool DataSupplier::getData()
 
 DataSupplier::~DataSupplier()
 {
-    ResultList::const_iterator it  = maResults.begin();
-    ResultList::const_iterator end = maResults.end();
-
-    while ( it != end )
-    {
-        delete (*it);
-        ++it;
-    }
 }
 
 OUString DataSupplier::queryContentIdentifierString( sal_uInt32 nIndex )
@@ -262,7 +252,7 @@ void DataSupplier::close()
 {
 }
 
-void DataSupplier::validate() throw( ucb::ResultSetException )
+void DataSupplier::validate()
 {
 }
 

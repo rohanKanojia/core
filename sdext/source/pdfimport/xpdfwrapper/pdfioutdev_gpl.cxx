@@ -28,23 +28,17 @@
 #include <memory>
 #include <vector>
 
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#endif
-
-// sigh, UTF8.h was removed in poppler-0.21.0 and put back in 0.21.1
+// sigh, UTF8.h was removed in poppler-0.21.0 and put back in 0.21.1, then renamed to UnicodeMapFuncs.h in 0.62.0
 // FIXME: we can't use #if POPPLER_CHECK_VERSION(0, 21, 0) && !POPPLER_CHECK_VERSION(0, 21, 1)
 //        because the internal poppler does not provide poppler-version.h and the macro always returns 0
-#if POPPLER_CHECK_VERSION(0, 21, 1)
-#include "UTF8.h"
+#if POPPLER_CHECK_VERSION(0, 62, 0)
+#include <UnicodeMapFuncs.h>
+#elif POPPLER_CHECK_VERSION(0, 21, 1)
+#include <UTF8.h>
 #elif POPPLER_CHECK_VERSION(0, 21, 0)
 #include "UTF.h"
 #else
 #include "UTF8.h"
-#endif
-
-#if defined _MSC_VER
-#pragma warning(pop)
 #endif
 
 #ifdef _WIN32
@@ -73,7 +67,7 @@ namespace pdfi
 {
 
 /// cut off very small numbers & clamp value to zero
-inline double normalize( double val )
+static double normalize( double val )
 {
     return fabs(val) < 0.0000001 ? 0.0 : val;
 }
@@ -86,34 +80,34 @@ namespace
 std::vector<char> lcl_escapeLineFeeds(const char* const i_pStr)
 {
     size_t nLength(strlen(i_pStr));
-    std::vector<char> pBuffer;
-    pBuffer.reserve(2*nLength+1);
+    std::vector<char> aBuffer;
+    aBuffer.reserve(2*nLength+1);
 
     const char* pRead = i_pStr;
     while( nLength-- )
     {
         if( *pRead == '\r' )
         {
-            pBuffer.push_back('\\');
-            pBuffer.push_back('r');
+            aBuffer.push_back('\\');
+            aBuffer.push_back('r');
         }
         else if( *pRead == '\n' )
         {
-            pBuffer.push_back('\\');
-            pBuffer.push_back('n');
+            aBuffer.push_back('\\');
+            aBuffer.push_back('n');
         }
         else if( *pRead == '\\' )
         {
-            pBuffer.push_back('\\');
-            pBuffer.push_back('\\');
+            aBuffer.push_back('\\');
+            aBuffer.push_back('\\');
         }
         else
-            pBuffer.push_back(*pRead);
+            aBuffer.push_back(*pRead);
         pRead++;
     }
-    pBuffer.push_back(0);
+    aBuffer.push_back(0);
 
-    return pBuffer;
+    return aBuffer;
 }
 
 }
@@ -124,12 +118,12 @@ std::vector<char> lcl_escapeLineFeeds(const char* const i_pStr)
 /// for the initial std::vector capacity when copying stream from xpdf
 #define WRITE_BUFFER_INITIAL_CAPACITY (1024*100)
 
-void initBuf(OutputBuffer& io_rBuffer)
+static void initBuf(OutputBuffer& io_rBuffer)
 {
     io_rBuffer.reserve(WRITE_BUFFER_INITIAL_CAPACITY);
 }
 
-void writeBinaryBuffer( const OutputBuffer& rBuffer )
+static void writeBinaryBuffer( const OutputBuffer& rBuffer )
 {
     // ---sync point--- see SYNC STREAMS above
     fflush(stdout);
@@ -137,14 +131,14 @@ void writeBinaryBuffer( const OutputBuffer& rBuffer )
     // put buffer to stderr
     if( !rBuffer.empty() )
         if( fwrite(&rBuffer[0], sizeof(char),
-                   rBuffer.size(), g_binary_out) != (size_t)rBuffer.size() )
+                   rBuffer.size(), g_binary_out) != static_cast<size_t>(rBuffer.size()) )
             exit(1); // error
 
     // ---sync point--- see SYNC STREAMS above
     fflush(g_binary_out);
 }
 
-bool ExtractJpegData(Stream* str, OutputBuffer& outBuf)
+static bool ExtractJpegData(Stream* str, OutputBuffer& outBuf)
 {
     int bytesToMarker = 0;
     int bytesToLen = -1;
@@ -161,7 +155,7 @@ bool ExtractJpegData(Stream* str, OutputBuffer& outBuf)
 
         if (collectBytes)
         {
-            outBuf.push_back((Output_t)b1);
+            outBuf.push_back(static_cast<Output_t>(b1));
 
             bytesToMarker--;
             bytesToLen--;
@@ -181,8 +175,8 @@ bool ExtractJpegData(Stream* str, OutputBuffer& outBuf)
                     collectBytes = true;
                     bytesToMarker = 2;
 
-                    outBuf.push_back((Output_t)0xFF);
-                    outBuf.push_back((Output_t)0xD8);
+                    outBuf.push_back(Output_t(0xFF));
+                    outBuf.push_back(Output_t(0xD8));
                 }
                 else
                 {
@@ -210,7 +204,7 @@ bool ExtractJpegData(Stream* str, OutputBuffer& outBuf)
     }
 }
 
-void writeJpeg_( OutputBuffer& o_rOutputBuf, Stream* str, bool bWithLinefeed )
+static void writeJpeg_( OutputBuffer& o_rOutputBuf, Stream* str )
 {
     // dump JPEG file as-is
 #if POPPLER_CHECK_VERSION(0, 17, 3)
@@ -223,14 +217,13 @@ void writeJpeg_( OutputBuffer& o_rOutputBuf, Stream* str, bool bWithLinefeed )
     o_rOutputBuf.clear();
     ExtractJpegData(str, o_rOutputBuf);
 
-    printf( " JPEG %d", (int)o_rOutputBuf.size() );
-    if( bWithLinefeed )
-        printf("\n");
+    printf( " JPEG %d", static_cast<int>(o_rOutputBuf.size()) );
+    printf("\n");
 
     str->close();
 }
 
-void writePbm_(OutputBuffer& o_rOutputBuf, Stream* str, int width, int height, bool bWithLinefeed, bool bInvert )
+static void writePbm_(OutputBuffer& o_rOutputBuf, Stream* str, int width, int height, bool bInvert )
 {
     // write as PBM (char by char, to avoid stdlib lineend messing)
     o_rOutputBuf.clear();
@@ -249,8 +242,7 @@ void writePbm_(OutputBuffer& o_rOutputBuf, Stream* str, int width, int height, b
     const int size = height * ((width + 7) / 8);
 
     printf( " PBM %d", size + header_size );
-    if( bWithLinefeed )
-        printf("\n");
+    printf("\n");
 
     // trim buffer to exact header length
     o_rOutputBuf.resize(header_size);
@@ -273,12 +265,11 @@ void writePbm_(OutputBuffer& o_rOutputBuf, Stream* str, int width, int height, b
     str->close();
 }
 
-void writePpm_( OutputBuffer&     o_rOutputBuf,
+static void writePpm_( OutputBuffer&     o_rOutputBuf,
                 Stream*           str,
                 int               width,
                 int               height,
-                GfxImageColorMap* colorMap,
-                bool              bWithLinefeed )
+                GfxImageColorMap* colorMap )
 {
     // write as PPM (char by char, to avoid stdlib lineend messing)
     o_rOutputBuf.clear();
@@ -301,14 +292,13 @@ void writePpm_( OutputBuffer&     o_rOutputBuf,
     const int size = width*height*3 + header_size;
 
     printf( " PPM %d", size );
-    if( bWithLinefeed )
-        printf("\n");
+    printf("\n");
 
     // trim buffer to exact header size
     o_rOutputBuf.resize(header_size);
 
     // initialize stream
-    Guchar *p;
+    unsigned char *p;
     GfxRGB rgb;
     std::unique_ptr<ImageStream> imgStr(
         new ImageStream(str,
@@ -333,81 +323,74 @@ void writePpm_( OutputBuffer&     o_rOutputBuf,
 }
 
 // call this only for 1 bit image streams !
-void writePng_( OutputBuffer&     o_rOutputBuf,
+static void writePng_( OutputBuffer&     o_rOutputBuf,
                 Stream*           str,
                 int               width,
                 int               height,
-                GfxRGB&           zeroColor,
-                GfxRGB&           oneColor,
-                bool              bIsMask,
-                bool              bWithLinefeed )
+                GfxRGB const &    zeroColor,
+                GfxRGB const &    oneColor,
+                bool              bIsMask )
 {
     o_rOutputBuf.clear();
 
     // get png image
     PngHelper::createPng( o_rOutputBuf, str, width, height, zeroColor, oneColor, bIsMask );
 
-    printf( " PNG %d", (int)o_rOutputBuf.size() );
-    if( bWithLinefeed )
-        printf("\n");
+    printf( " PNG %d", static_cast<int>(o_rOutputBuf.size()) );
+    printf("\n");
 }
 
-void writePng_( OutputBuffer& o_rOutputBuf,
+static void writePng_( OutputBuffer& o_rOutputBuf,
                 Stream* str,
                 int width, int height, GfxImageColorMap* colorMap,
                 Stream* maskStr,
-                int maskWidth, int maskHeight, GfxImageColorMap* maskColorMap,
-                bool bWithLinefeed )
+                int maskWidth, int maskHeight, GfxImageColorMap* maskColorMap )
 {
     o_rOutputBuf.clear();
 
     // get png image
     PngHelper::createPng( o_rOutputBuf, str, width, height, colorMap, maskStr, maskWidth, maskHeight, maskColorMap );
 
-    printf( " PNG %d", (int)o_rOutputBuf.size() );
-    if( bWithLinefeed )
-        printf("\n");
+    printf( " PNG %d", static_cast<int>(o_rOutputBuf.size()) );
+    printf("\n");
 }
 
-void writePng_( OutputBuffer& o_rOutputBuf,
+static void writePng_( OutputBuffer& o_rOutputBuf,
                 Stream* str,
                 int width, int height, GfxImageColorMap* colorMap,
                 Stream* maskStr,
-                int maskWidth, int maskHeight, bool maskInvert,
-                bool bWithLinefeed )
+                int maskWidth, int maskHeight, bool maskInvert )
 {
     o_rOutputBuf.clear();
 
     // get png image
     PngHelper::createPng( o_rOutputBuf, str, width, height, colorMap, maskStr, maskWidth, maskHeight, maskInvert );
 
-    printf( " PNG %d", (int)o_rOutputBuf.size() );
-    if( bWithLinefeed )
-        printf("\n");
+    printf( " PNG %d", static_cast<int>(o_rOutputBuf.size()) );
+    printf("\n");
 }
 
 // stolen from ImageOutputDev.cc
-void writeMask_( OutputBuffer& o_rOutputBuf, Stream* str, int width, int height, bool bWithLinefeed, bool bInvert )
+static void writeMask_( OutputBuffer& o_rOutputBuf, Stream* str, int width, int height, bool bInvert )
 {
     if( str->getKind() == strDCT )
-        writeJpeg_(o_rOutputBuf, str, bWithLinefeed);
+        writeJpeg_(o_rOutputBuf, str);
     else
-        writePbm_(o_rOutputBuf, str, width, height, bWithLinefeed, bInvert );
+        writePbm_(o_rOutputBuf, str, width, height, bInvert );
 }
 
-void writeImage_( OutputBuffer&     o_rOutputBuf,
+static void writeImage_( OutputBuffer&     o_rOutputBuf,
                   Stream*           str,
                   int               width,
                   int               height,
-                  GfxImageColorMap* colorMap,
-                  bool              bWithLinefeed )
+                  GfxImageColorMap* colorMap )
 {
     // dump JPEG file
     if( str->getKind() == strDCT &&
         (colorMap->getNumPixelComps() == 1 ||
          colorMap->getNumPixelComps() == 3) )
     {
-        writeJpeg_(o_rOutputBuf, str, bWithLinefeed);
+        writeJpeg_(o_rOutputBuf, str);
     }
     else if (colorMap->getNumPixelComps() == 1 &&
              colorMap->getBits() == 1)
@@ -418,30 +401,30 @@ void writeImage_( OutputBuffer&     o_rOutputBuf,
                 oneColor = { byteToCol( 0xff ), byteToCol( 0xff ), byteToCol( 0xff ) };
         if( colorMap->getColorSpace()->getMode() == csIndexed || colorMap->getColorSpace()->getMode() == csDeviceGray )
         {
-            Guchar nIndex = 0;
+            unsigned char nIndex = 0;
             colorMap->getRGB( &nIndex, &zeroColor );
             nIndex = 1;
             colorMap->getRGB( &nIndex, &oneColor );
         }
-        writePng_( o_rOutputBuf, str, width, height, zeroColor, oneColor, false, bWithLinefeed );
+        writePng_( o_rOutputBuf, str, width, height, zeroColor, oneColor, false);
     }
     else
-        writePpm_( o_rOutputBuf, str, width, height, colorMap, bWithLinefeed );
+        writePpm_( o_rOutputBuf, str, width, height, colorMap );
 }
 
 // forwarders
 
 
-inline void writeImageLF( OutputBuffer&     o_rOutputBuf,
+static void writeImageLF( OutputBuffer&     o_rOutputBuf,
                           Stream*           str,
                           int               width,
                           int               height,
-                          GfxImageColorMap* colorMap ) { writeImage_(o_rOutputBuf,str,width,height,colorMap,true); }
-inline void writeMaskLF( OutputBuffer&     o_rOutputBuf,
+                          GfxImageColorMap* colorMap ) { writeImage_(o_rOutputBuf,str,width,height,colorMap); }
+static void writeMaskLF( OutputBuffer&     o_rOutputBuf,
                          Stream*           str,
                          int               width,
                          int               height,
-                         bool              bInvert ) { writeMask_(o_rOutputBuf,str,width,height,true,bInvert); }
+                         bool              bInvert ) { writeMask_(o_rOutputBuf,str,width,height,bInvert); }
 
 
 int PDFOutDev::parseFont( long long nNewId, GfxFont* gfxFont, GfxState* state ) const
@@ -449,6 +432,9 @@ int PDFOutDev::parseFont( long long nNewId, GfxFont* gfxFont, GfxState* state ) 
     FontAttributes aNewFont;
     int nSize = 0;
 
+#if POPPLER_CHECK_VERSION(0, 64, 0)
+    const
+#endif
     GooString* pFamily = gfxFont->getName();
     if( pFamily )
     {
@@ -495,7 +481,7 @@ void PDFOutDev::writeFontFile( GfxFont* gfxFont ) const
     // ---sync point--- see SYNC STREAMS above
     fflush(stdout);
 
-    if( fwrite(pBuf, sizeof(char), nSize, g_binary_out) != (size_t)nSize )
+    if( fwrite(pBuf, sizeof(char), nSize, g_binary_out) != static_cast<size_t>(nSize) )
     {
         gfree(pBuf);
         exit(1); // error
@@ -528,13 +514,12 @@ void PDFOutDev::printPath( GfxPath* pPath )
 PDFOutDev::PDFOutDev( PDFDoc* pDoc ) :
     m_pDoc( pDoc ),
     m_aFontMap(),
-    m_pUtf8Map( new UnicodeMap("UTF-8", gTrue, &mapUTF8) ),
+    m_pUtf8Map( new UnicodeMap("UTF-8", true, &mapUTF8) ),
     m_bSkipImages(false)
 {
 }
 PDFOutDev::~PDFOutDev()
 {
-    delete m_pUtf8Map;
 }
 
 void PDFOutDev::startPage(int /*pageNum*/, GfxState* state
@@ -570,16 +555,20 @@ void PDFOutDev::processLink(Link* link, Catalog*)
     LinkAction* pAction = link->getAction();
     if (pAction && pAction->getKind() == actionURI)
     {
+#if POPPLER_CHECK_VERSION(0, 72, 0)
+        const char* pURI = static_cast<LinkURI*>(pAction)->getURI()->c_str();
+#else
         const char* pURI = static_cast<LinkURI*>(pAction)->getURI()->getCString();
+#endif
 
-        std::vector<char> pEsc( lcl_escapeLineFeeds(pURI) );
+        std::vector<char> aEsc( lcl_escapeLineFeeds(pURI) );
 
         printf( "drawLink %f %f %f %f %s\n",
                 normalize(x1),
                 normalize(y1),
                 normalize(x2),
                 normalize(y2),
-                pEsc.data() );
+                aEsc.data() );
     }
 }
 
@@ -593,7 +582,11 @@ void PDFOutDev::restoreState(GfxState*)
     printf( "restoreState\n" );
 }
 
+#if POPPLER_CHECK_VERSION(0, 71, 0)
+void PDFOutDev::setDefaultCTM(const double *pMat)
+#else
 void PDFOutDev::setDefaultCTM(double *pMat)
+#endif
 {
     assert(pMat);
 
@@ -746,9 +739,12 @@ void PDFOutDev::updateFont(GfxState *state)
         FontAttributes aFont;
         int nEmbedSize=0;
 
+#if POPPLER_CHECK_VERSION(0, 64, 0)
+        const
+#endif
         Ref* pID = gfxFont->getID();
         // TODO(Q3): Portability problem
-        long long fontID = (long long)pID->gen << 32 | (long long)pID->num;
+        long long fontID = static_cast<long long>(pID->gen) << 32 | static_cast<long long>(pID->num);
         std::unordered_map< long long, FontAttributes >::const_iterator it =
             m_aFontMap.find( fontID );
         if( it == m_aFontMap.end() )
@@ -765,7 +761,11 @@ void PDFOutDev::updateFont(GfxState *state)
 
             aFont = it->second;
 
-            std::vector<char> pEsc( lcl_escapeLineFeeds(aFont.familyName.getCString()) );
+#if POPPLER_CHECK_VERSION(0, 72, 0)
+            std::vector<char> aEsc( lcl_escapeLineFeeds(aFont.familyName.c_str()) );
+#else
+            std::vector<char> aEsc( lcl_escapeLineFeeds(aFont.familyName.getCString()) );
+#endif
             printf( " %d %d %d %d %f %d %s",
                     aFont.isEmbedded,
                     aFont.isBold,
@@ -773,7 +773,7 @@ void PDFOutDev::updateFont(GfxState *state)
                     aFont.isUnderline,
                     normalize(state->getTransformedFontSize()),
                     nEmbedSize,
-                    pEsc.data() );
+                    aEsc.data() );
         }
         printf( "\n" );
 
@@ -873,6 +873,13 @@ void PDFOutDev::drawChar(GfxState *state, double x, double y,
     if( u == nullptr )
         return;
 
+    // Fix for tdf#96080
+    if (uLen == 4 && u[0] == '\t' && u[1] == '\r' && u[2] == ' ' && u[3] == 0xA0)
+    {
+        u += 2;
+        uLen = 1;
+    }
+
     double csdx = 0.0;
     double csdy = 0.0;
     if (state->getFont()->getWMode())
@@ -912,20 +919,28 @@ void PDFOutDev::drawChar(GfxState *state, double x, double y,
             );
 
     // silence spurious warning
+#if POPPLER_CHECK_VERSION(0, 62, 0)
+    (void)&mapUTF16;
+#else
     (void)&mapUCS2;
+#endif
 
     char buf[9];
     for( int i=0; i<uLen; ++i )
     {
         buf[ m_pUtf8Map->mapUnicode(u[i], buf, sizeof(buf)-1) ] = 0;
-        std::vector<char> pEsc( lcl_escapeLineFeeds(buf) );
-        printf( "%s", pEsc.data() );
+        std::vector<char> aEsc( lcl_escapeLineFeeds(buf) );
+        printf( "%s", aEsc.data() );
     }
 
     printf( "\n" );
 }
 
+#if POPPLER_CHECK_VERSION(0, 64, 0)
+void PDFOutDev::drawString(GfxState*, const GooString* /*s*/)
+#else
 void PDFOutDev::drawString(GfxState*, GooString* /*s*/)
+#endif
 {
     // TODO(F3): NYI
 }
@@ -936,11 +951,9 @@ void PDFOutDev::endTextObject(GfxState*)
 }
 
 void PDFOutDev::drawImageMask(GfxState* pState, Object*, Stream* str,
-                              int width, int height, GBool invert,
-#if POPPLER_CHECK_VERSION(0, 12, 0)
-                              GBool /*interpolate*/,
-#endif
-                              GBool /*inlineImg*/ )
+                              int width, int height, poppler_bool invert,
+                              poppler_bool /*interpolate*/,
+                              poppler_bool /*inlineImg*/ )
 {
     if (m_bSkipImages)
         return;
@@ -957,9 +970,9 @@ void PDFOutDev::drawImageMask(GfxState* pState, Object*, Stream* str,
         GfxRGB zeroColor = { dblToCol( 0.0 ), dblToCol( 0.0 ), dblToCol( 0.0 ) };
         pState->getFillColorSpace()->getRGB( pState->getFillColor(), &zeroColor );
         if( invert )
-            writePng_( aBuf, str, width, height, oneColor, zeroColor, true, true );
+            writePng_( aBuf, str, width, height, oneColor, zeroColor, true );
         else
-            writePng_( aBuf, str, width, height, zeroColor, oneColor, true, true );
+            writePng_( aBuf, str, width, height, zeroColor, oneColor, true );
     }
     else
         writeMaskLF(aBuf, str, width, height, invert);
@@ -968,10 +981,8 @@ void PDFOutDev::drawImageMask(GfxState* pState, Object*, Stream* str,
 
 void PDFOutDev::drawImage(GfxState*, Object*, Stream* str,
                           int width, int height, GfxImageColorMap* colorMap,
-#if POPPLER_CHECK_VERSION(0, 12, 0)
-                          GBool /*interpolate*/,
-#endif
-                          int* maskColors, GBool /*inlineImg*/ )
+                          poppler_bool /*interpolate*/,
+                          int* maskColors, poppler_bool /*inlineImg*/ )
 {
     if (m_bSkipImages)
         return;
@@ -986,8 +997,8 @@ void PDFOutDev::drawImage(GfxState*, Object*, Stream* str,
         // lower bound values, second half upper bound values
         if( colorMap->getColorSpace()->getMode() == csIndexed )
         {
-            aMaskBuf.push_back( (char)maskColors[0] );
-            aMaskBuf.push_back( (char)maskColors[gfxColorMaxComps] );
+            aMaskBuf.push_back( static_cast<char>(maskColors[0]) );
+            aMaskBuf.push_back( static_cast<char>(maskColors[gfxColorMaxComps]) );
         }
         else
         {
@@ -1010,7 +1021,7 @@ void PDFOutDev::drawImage(GfxState*, Object*, Stream* str,
         }
     }
 
-    printf( " %d", (int)aMaskBuf.size() );
+    printf( " %d", static_cast<int>(aMaskBuf.size()) );
     writeImageLF( aBuf, str, width, height, colorMap );
     writeBinaryBuffer(aBuf);
     writeBinaryBuffer(aMaskBuf);
@@ -1019,44 +1030,35 @@ void PDFOutDev::drawImage(GfxState*, Object*, Stream* str,
 void PDFOutDev::drawMaskedImage(GfxState*, Object*, Stream* str,
                                 int width, int height,
                                 GfxImageColorMap* colorMap,
-#if POPPLER_CHECK_VERSION(0, 12, 0)
-                                GBool /*interpolate*/,
-#endif
+                                poppler_bool /*interpolate*/,
                                 Stream* maskStr,
                                 int maskWidth, int maskHeight,
-                                GBool maskInvert
-#if POPPLER_CHECK_VERSION(0, 12, 0)
-                                , GBool /*maskInterpolate*/
-#endif
+                                poppler_bool maskInvert, poppler_bool /*maskInterpolate*/
                                )
 {
     if (m_bSkipImages)
         return;
     OutputBuffer aBuf;     initBuf(aBuf);
     printf( "drawImage %d %d 0", width, height );
-    writePng_( aBuf, str, width, height, colorMap, maskStr, maskWidth, maskHeight, maskInvert, true );
+    writePng_( aBuf, str, width, height, colorMap, maskStr, maskWidth, maskHeight, maskInvert );
     writeBinaryBuffer( aBuf );
 }
 
 void PDFOutDev::drawSoftMaskedImage(GfxState*, Object*, Stream* str,
                                     int width, int height,
                                     GfxImageColorMap* colorMap,
-#if POPPLER_CHECK_VERSION(0, 12, 0)
-                                    GBool /*interpolate*/,
-#endif
+                                    poppler_bool /*interpolate*/,
                                     Stream* maskStr,
                                     int maskWidth, int maskHeight,
                                     GfxImageColorMap* maskColorMap
-#if POPPLER_CHECK_VERSION(0, 12, 0)
-                                    , GBool /*maskInterpolate*/
-#endif
+                                    , poppler_bool /*maskInterpolate*/
                                    )
 {
     if (m_bSkipImages)
         return;
     OutputBuffer aBuf;     initBuf(aBuf);
     printf( "drawImage %d %d 0", width, height );
-    writePng_( aBuf, str, width, height, colorMap, maskStr, maskWidth, maskHeight, maskColorMap, true );
+    writePng_( aBuf, str, width, height, colorMap, maskStr, maskWidth, maskHeight, maskColorMap );
     writeBinaryBuffer( aBuf );
 }
 

@@ -59,15 +59,15 @@ class DAVSession;
 class DAVSessionFactory : public salhelper::SimpleReferenceObject
 {
 public:
-    virtual ~DAVSessionFactory();
+    virtual ~DAVSessionFactory() override;
 
+    /// @throws DAVException
     rtl::Reference< DAVSession >
         createDAVSession( const OUString & inUri,
                           const ::uno::Sequence< css::beans::NamedValue >& rFlags,
-                          const ::uno::Reference< ::uno::XComponentContext >& rxContext )
-            throw( DAVException );
+                          const ::uno::Reference< ::uno::XComponentContext >& rxContext );
 
-    ::uno::Reference< ::uno::XComponentContext > getComponentContext() {  return m_xContext; }
+    const ::uno::Reference< ::uno::XComponentContext >& getComponentContext() {  return m_xContext; }
 private:
     typedef std::map< OUString, DAVSession * > Map;
 
@@ -77,7 +77,7 @@ private:
 
     ::uno::Reference< ::uno::XComponentContext > m_xContext;
 
-    void releaseElement( DAVSession * pElement );
+    void releaseElement( DAVSession const * pElement );
 
     friend class DAVSession;
 };

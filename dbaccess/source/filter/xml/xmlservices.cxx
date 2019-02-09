@@ -18,19 +18,21 @@
  */
 
 #include <cppuhelper/factory.hxx>
-#include <osl/diagnose.h>
-#include "flt_reghelper.hxx"
+#include <flt_reghelper.hxx>
 #include "xmlservices.hxx"
+#include <mutex>
 
 using namespace ::dbaxml;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::registry;
 
-extern "C" void SAL_CALL createRegistryInfo_dbaxml()
+extern "C" {
+
+static void createRegistryInfo_dbaxml()
 {
-    static bool bInit = false;
-    if (!bInit)
+    static std::once_flag aInit;
+    std::call_once(aInit, [&]()
     {
         createRegistryInfo_DBTypeDetection();
         createRegistryInfo_ODBFilter();
@@ -38,11 +40,13 @@ extern "C" void SAL_CALL createRegistryInfo_dbaxml()
         createRegistryInfo_OSettingsExport();
         createRegistryInfo_OFullExport();
         createRegistryInfo_DBContentLoader2();
-        bInit = true;
-    }
+        return true;
+    });
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL dbaxml_component_getFactory(
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT void* dbaxml_component_getFactory(
                     const sal_Char* pImplementationName,
                     void* pServiceManager,
                     void* /*pRegistryKey*/)

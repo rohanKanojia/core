@@ -63,10 +63,10 @@ namespace sdr
                 // direct model data is the page size, get and use it
                 const SdrPage& rOwnerPage = GetMasterPageDescriptor().GetOwnerPage();
                 const basegfx::B2DRange aInnerRange(
-                    rOwnerPage.GetLftBorder(), rOwnerPage.GetUppBorder(),
-                    rOwnerPage.GetWdt() - rOwnerPage.GetRgtBorder(),
-                    rOwnerPage.GetHgt() - rOwnerPage.GetLwrBorder());
-                const basegfx::B2DPolygon aInnerPolgon(basegfx::tools::createPolygonFromRect(aInnerRange));
+                    rOwnerPage.GetLeftBorder(), rOwnerPage.GetUpperBorder(),
+                    rOwnerPage.GetWidth() - rOwnerPage.GetRightBorder(),
+                    rOwnerPage.GetHeight() - rOwnerPage.GetLowerBorder());
+                const basegfx::B2DPolygon aInnerPolgon(basegfx::utils::createPolygonFromRect(aInnerRange));
                 const drawinglayer::primitive2d::Primitive2DReference xReference(
                     drawinglayer::primitive2d::createPolyPolygonFillPrimitive(
                         basegfx::B2DPolyPolygon(aInnerPolgon),

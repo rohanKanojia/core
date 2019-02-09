@@ -14,6 +14,7 @@ $(eval $(call gb_Library_set_componentfile,avmediavlc,avmedia/source/vlc/avmedia
 $(eval $(call gb_Library_set_include,avmediavlc,\
     $$(INCLUDE) \
     -I$(SRCDIR)/avmedia/source/inc \
+    -I$(SRCDIR)/avmedia/source/vlc/inc \
 ))
 
 $(eval $(call gb_Library_use_custom_headers,avmediavlc,\
@@ -36,7 +37,6 @@ $(eval $(call gb_Library_use_libraries,avmediavlc,\
     vcl \
     utl \
     salhelper \
-    $(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,avmediavlc,\

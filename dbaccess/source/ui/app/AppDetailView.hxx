@@ -19,7 +19,6 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_UI_APP_APPDETAILVIEW_HXX
 #define INCLUDED_DBACCESS_SOURCE_UI_APP_APPDETAILVIEW_HXX
 
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/sdbc/XConnection.hpp>
 #include <com/sun/star/ucb/XContent.hpp>
@@ -27,11 +26,11 @@
 #include <vcl/split.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/mnemonic.hxx>
-#include "IClipBoardTest.hxx"
+#include <IClipBoardTest.hxx>
 #include "AppTitleWindow.hxx"
-#include "AppElementType.hxx"
-#include <svtools/treelistbox.hxx>
-#include "VertSplitView.hxx"
+#include <AppElementType.hxx>
+#include <vcl/treelistbox.hxx>
+#include <VertSplitView.hxx>
 
 #include <vector>
 
@@ -61,18 +60,18 @@ namespace dbaui
         virtual void MouseButtonDown( const MouseEvent& rMEvt ) override;
         virtual void MouseButtonUp( const MouseEvent& rMEvt ) override;
         virtual void KeyInput( const KeyEvent& rKEvt ) override;
-        virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+        virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
         virtual void StartDrag( sal_Int8 _nAction, const Point& _rPosPixel ) override;
         virtual void GetFocus() override;
         virtual void LoseFocus() override;
 
-        inline void resetLastActive() { m_pLastActiveEntry = nullptr;}
+        void resetLastActive() { m_pLastActiveEntry = nullptr;}
 
         void    updateHelpText();
 
     protected:
         virtual void        PreparePaint(vcl::RenderContext& rRenderContext, SvTreeListEntry& rEntry) override;
-        virtual Rectangle   GetFocusRect( SvTreeListEntry* _pEntry, long _nLine ) override;
+        virtual tools::Rectangle   GetFocusRect( SvTreeListEntry* _pEntry, long _nLine ) override;
         virtual void        ModelHasCleared() override;
 
         // IMnemonicEntryList
@@ -80,7 +79,7 @@ namespace dbaui
         virtual void        ExecuteSearchEntry( const void* _pEntry ) const override;
 
     private:
-        void    onSelected( SvTreeListEntry* _pEntry ) const;
+        void    onSelected( SvTreeListEntry const * _pEntry ) const;
         /** sets a new current entry, and invalidates the old and the new one, if necessary
             @return <TRUE/> if and only if the "current entry" changed
         */
@@ -90,23 +89,23 @@ namespace dbaui
     struct TaskEntry
     {
         OUString        sUNOCommand;
-        sal_uInt16      nHelpID;
+        const char*     pHelpID;
         OUString        sTitle;
         bool            bHideWhenDisabled;
             // TODO: we should be consistent in the task pane and the menus/toolbars:
             // If an entry is disabled in the latter, it should also be disabled in the former.
             // If an entry is *hidden* in the former, it should also be hidden in the latter.
 
-        TaskEntry( const sal_Char* _pAsciiUNOCommand, sal_uInt16 _nHelpID, sal_uInt16 _nTitleResourceID, bool _bHideWhenDisabled = false );
+        TaskEntry( const sal_Char* _pAsciiUNOCommand, const char* pHelpID, const char* pTitleResourceID, bool _bHideWhenDisabled = false );
     };
-    typedef ::std::vector< TaskEntry >  TaskEntryList;
+    typedef std::vector< TaskEntry >  TaskEntryList;
 
     struct TaskPaneData
     {
         /// the tasks available in the pane
         TaskEntryList   aTasks;
         /// the resource ID for the title of the pane
-        sal_uInt16          nTitleId;
+        const char*     pTitleId;
     };
 
     class OTasksWindow : public vcl::Window
@@ -117,13 +116,13 @@ namespace dbaui
         VclPtr<FixedLine>                   m_aFL;
         VclPtr<OApplicationDetailView>      m_pDetailView;
 
-        DECL_LINK_TYPED( OnEntrySelectHdl, SvTreeListBox*, void );
+        DECL_LINK( OnEntrySelectHdl, SvTreeListBox*, void );
         void ImplInitSettings();
     protected:
         virtual void DataChanged(const DataChangedEvent& rDCEvt) override;
     public:
         OTasksWindow(vcl::Window* _pParent,OApplicationDetailView* _pDetailView);
-        virtual ~OTasksWindow();
+        virtual ~OTasksWindow() override;
         virtual void dispose() override;
 
         // Window overrides
@@ -134,13 +133,13 @@ namespace dbaui
         /// fills the Creation listbox with the necessary strings and images
         void fillTaskEntryList( const TaskEntryList& _rList );
 
-        inline bool HandleKeyInput( const KeyEvent& _rKEvt )
+        bool HandleKeyInput( const KeyEvent& _rKEvt )
         {
             return m_aCreation->HandleKeyInput( _rKEvt );
         }
 
         void Clear();
-        void setHelpText(sal_uInt16 _nId);
+        void setHelpText(const char* pId);
     };
     class OApplicationDetailView : public OSplitterView
                                  , public IClipboardTest
@@ -150,7 +149,7 @@ namespace dbaui
         VclPtr<OTitleWindow>                m_aContainer;
         OAppBorderWindow&                   m_rBorderWin;       // my parent
         VclPtr<OAppDetailPageHelper>        m_pControlHelper;
-        ::std::vector< TaskPaneData >       m_aTaskPaneData;
+        std::vector< TaskPaneData >       m_aTaskPaneData;
         MnemonicGenerator                   m_aExternalMnemonics;
 
         void ImplInitSettings();
@@ -160,10 +159,9 @@ namespace dbaui
 
     public:
         OApplicationDetailView(OAppBorderWindow& _rParent,PreviewMode _ePreviewMode);
-        virtual ~OApplicationDetailView();
+        virtual ~OApplicationDetailView() override;
         // Window overrides
         virtual void dispose() override;
-        virtual void GetFocus() override;
 
         /** creates the tables page
             @param  _xConnection
@@ -179,7 +177,7 @@ namespace dbaui
         */
         void createPage(ElementType _eType,const css::uno::Reference< css::container::XNameAccess >& _xContainer);
 
-        void setTaskExternalMnemonics( MnemonicGenerator& _rMnemonics );
+        void setTaskExternalMnemonics( MnemonicGenerator const & _rMnemonics );
 
         /** called to give the window the chance to intercept key events, while it has not
             the focus
@@ -189,8 +187,8 @@ namespace dbaui
         */
         bool    interceptKeyInput( const KeyEvent& _rEvent );
 
-        inline OAppBorderWindow& getBorderWin() const { return m_rBorderWin; }
-        inline OTasksWindow& getTasksWindow() const { return *static_cast< OTasksWindow* >( m_aTasks->getChildWindow() ); }
+        OAppBorderWindow& getBorderWin() const { return m_rBorderWin; }
+        OTasksWindow& getTasksWindow() const { return *static_cast< OTasksWindow* >( m_aTasks->getChildWindow() ); }
 
         bool isCutAllowed() override ;
         bool isCopyAllowed() override    ;
@@ -214,7 +212,7 @@ namespace dbaui
             @return
                 <TRUE/> if the entry is a leaf, otherwise <FALSE/>
         */
-        static bool isLeaf(SvTreeListEntry* _pEntry);
+        static bool isLeaf(SvTreeListEntry const * _pEntry);
 
         /** returns if one of the selected entries is a leaf
             @return
@@ -257,7 +255,7 @@ namespace dbaui
             @param  _rNames
                 The list will be filled.
         */
-        void getSelectionElementNames(::std::vector< OUString>& _rNames ) const;
+        void getSelectionElementNames(std::vector< OUString>& _rNames ) const;
 
         /** describes the current selection for the given control
         */

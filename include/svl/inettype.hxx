@@ -22,7 +22,6 @@
 
 #include <svl/svldllapi.h>
 #include <tools/inetmime.hxx>
-#include <i18nlangtag/languagetag.hxx>
 
 
 /** Definitions for frequently used media type names.
@@ -217,16 +216,9 @@ enum INetContentType
 class SVL_DLLPUBLIC INetContentTypes
 {
 public:
-    static INetContentType RegisterContentType(OUString const & rTypeName,
-                                               OUString const & rPresentation,
-                                               OUString const * pExtension = nullptr);
-
     static INetContentType GetContentType(OUString const & rTypeName);
 
     static OUString GetContentType(INetContentType eTypeID);
-
-    static OUString GetPresentation(INetContentType eTypeID,
-                                    const LanguageTag& aLocale);
 
     static INetContentType GetContentType4Extension(OUString const & rExtension);
 

@@ -23,7 +23,6 @@
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
 #include <com/sun/star/task/XStatusIndicator.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 
 #define XML_PROGRESSRANGE   "ProgressRange"
 #define XML_PROGRESSMAX     "ProgressMax"
@@ -36,7 +35,8 @@ class XMLOFF_DLLPUBLIC ProgressBarHelper
             sal_Int32                                             nRange;
             sal_Int32                                             nReference;
             sal_Int32                                             nValue;
-            bool                                                  bStrict;
+            double                                                fOldPercent;
+            bool const                                            bStrict;
             // #96469#; if the value goes over the Range the progressbar starts again
             bool                                                  bRepeat;
 
@@ -52,7 +52,7 @@ public:
             void SetReference(sal_Int32 nVal) { nReference = nVal; }
             void SetValue(sal_Int32 nValue);
             void SetRepeat(bool bValue) { bRepeat = bValue; }
-            inline void Increment(sal_Int32 nInc = 1) { SetValue( nValue+nInc ); }
+            void Increment(sal_Int32 nInc = 1) { SetValue( nValue+nInc ); }
             void End() { if (xStatusIndicator.is()) xStatusIndicator->end(); }
 
             // set the new reference and returns the new value which gives the

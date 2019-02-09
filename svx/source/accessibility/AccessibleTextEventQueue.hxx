@@ -21,13 +21,13 @@
 #define INCLUDED_SVX_SOURCE_ACCESSIBILITY_ACCESSIBLETEXTEVENTQUEUE_HXX
 
 #include <memory>
-#include <list>
+#include <deque>
 #include <algorithm>
 
 class SfxHint;
 class SdrHint;
 class TextHint;
-class SvxViewHint;
+class SvxViewChangedHint;
 class SvxEditSourceHint;
 
 namespace accessibility
@@ -41,7 +41,7 @@ namespace accessibility
     class AccessibleTextEventQueue
     {
     public:
-        typedef ::std::list< SfxHint* > EventQueue;
+        typedef ::std::deque< SfxHint* > EventQueue;
 
         AccessibleTextEventQueue();
         ~AccessibleTextEventQueue();
@@ -51,7 +51,7 @@ namespace accessibility
         /// Append event to end of queue
         void Append( const TextHint& rHint );
         /// Append event to end of queue
-        void Append( const SvxViewHint& rHint );
+        void Append( const SvxViewChangedHint& rHint );
         /// Append event to end of queue
         void Append( const SvxEditSourceHint& rHint );
 

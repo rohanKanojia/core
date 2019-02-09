@@ -29,9 +29,9 @@ class TableRow;
 class TableRowContext : public ::oox::core::ContextHandler2
 {
 public:
-    TableRowContext( ::oox::core::ContextHandler2Helper& rParent,
+    TableRowContext( ::oox::core::ContextHandler2Helper const & rParent,
                      const ::oox::AttributeList& rAttribs, TableRow& rTableRow );
-    virtual ~TableRowContext();
+    virtual ~TableRowContext() override;
 
     virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 

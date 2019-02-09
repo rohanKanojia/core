@@ -24,43 +24,87 @@
 #include <tools/wintypes.hxx>
 #include <vcl/edit.hxx>
 #include <vcl/dllapi.h>
+#include <vcl/timer.hxx>
+#include <memory>
 
 class ImpVclMEdit;
-class Timer;
 class ExtTextEngine;
-class ExtTextView;
+class TextView;
+
+class TextWindow : public vcl::Window
+{
+private:
+    VclPtr<Edit>    mxParent;
+    std::unique_ptr<ExtTextEngine> mpExtTextEngine;
+    std::unique_ptr<TextView> mpExtTextView;
+
+    bool            mbInMBDown;
+    bool            mbFocusSelectionHide;
+    bool            mbIgnoreTab;
+    bool            mbActivePopup;
+    bool            mbSelectOnTab;
+
+public:
+    explicit        TextWindow(Edit* pParent);
+    virtual         ~TextWindow() override;
+    virtual void    dispose() override;
+
+    ExtTextEngine*  GetTextEngine() const { return mpExtTextEngine.get(); }
+    TextView*       GetTextView() const { return mpExtTextView.get(); }
+
+    virtual void    MouseMove( const MouseEvent& rMEvt ) override;
+    virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
+    virtual void    MouseButtonUp( const MouseEvent& rMEvt ) override;
+    virtual void    KeyInput( const KeyEvent& rKEvent ) override;
+
+    virtual void    Command( const CommandEvent& rCEvt ) override;
+
+    virtual void    Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
+    virtual void    Resize() override;
+
+    virtual void    GetFocus() override;
+    virtual void    LoseFocus() override;
+
+    void            SetAutoFocusHide( bool bAutoHide ) { mbFocusSelectionHide = bAutoHide; }
+
+    void            SetIgnoreTab( bool bIgnore ) { mbIgnoreTab = bIgnore; }
+
+    void            DisableSelectionOnFocus() { mbSelectOnTab = false; }
+};
 
 class VCL_DLLPUBLIC VclMultiLineEdit : public Edit
 {
+    friend class VCLXAccessibleEdit;
+
 private:
-    ImpVclMEdit*      pImpVclMEdit;
+    std::unique_ptr<ImpVclMEdit> pImpVclMEdit;
 
     OUString          aSaveValue;
     Link<Edit&,void>  aModifyHdlLink;
 
-    Timer*            pUpdateDataTimer;
+    std::unique_ptr<Timer> pUpdateDataTimer;
     Link<Edit&,void>  aUpdateDataHdlLink;
 
 protected:
 
-    DECL_LINK_TYPED( ImpUpdateDataHdl, Timer*, void );
+    DECL_LINK( ImpUpdateDataHdl, Timer*, void );
     void            StateChanged( StateChangedType nType ) override;
     void            DataChanged( const DataChangedEvent& rDCEvt ) override;
     virtual bool    PreNotify( NotifyEvent& rNEvt ) override;
-    virtual bool    Notify( NotifyEvent& rNEvt ) override;
+    virtual bool    EventNotify( NotifyEvent& rNEvt ) override;
     using Control::ImplInitSettings;
-    void            ImplInitSettings( bool bFont, bool bForeground, bool bBackground );
+    void            ImplInitSettings( bool bBackground );
     static WinBits  ImplInitStyle( WinBits nStyle );
 
+    TextView*       GetTextView() const;
     ExtTextEngine*  GetTextEngine() const;
-    ExtTextView*    GetTextView() const;
     ScrollBar*      GetVScrollBar() const;
 
     virtual void ApplySettings(vcl::RenderContext& rRenderContext) override;
 public:
                     VclMultiLineEdit( vcl::Window* pParent,
-                                      WinBits nWinStyle = WB_LEFT | WB_BORDER );
-    virtual         ~VclMultiLineEdit();
+                                      WinBits nWinStyle );
+    virtual         ~VclMultiLineEdit() override;
     virtual void    dispose() override;
 
     void            SelectionChanged();
@@ -73,17 +117,17 @@ public:
     virtual bool    IsModified() const override;
 
     virtual void    EnableUpdateData( sal_uLong nTimeout = EDIT_UPDATEDATA_TIMEOUT ) override;
-    virtual void    DisableUpdateData() override { delete pUpdateDataTimer; pUpdateDataTimer = nullptr; }
+    virtual void    DisableUpdateData() override { pUpdateDataTimer.reset(); }
 
     virtual void    SetReadOnly( bool bReadOnly = true ) override;
     virtual bool    IsReadOnly() const override;
 
     void            EnableFocusSelectionHide( bool bHide );
 
-    virtual void    SetMaxTextLen(sal_Int32 nMaxLen = 0) override;
+    virtual void    SetMaxTextLen(sal_Int32 nMaxLen) override;
     virtual sal_Int32 GetMaxTextLen() const override;
 
-    void            SetMaxTextWidth( sal_uLong nMaxWidth );
+    void            SetMaxTextWidth(long nMaxWidth);
 
     virtual void    SetSelection( const Selection& rSelection ) override;
     virtual const Selection& GetSelection() const override;
@@ -107,7 +151,6 @@ public:
     void            SetRightToLeft( bool bRightToLeft );
 
     void            SaveValue()                         { aSaveValue = GetText(); }
-    const OUString&    GetSavedValue() const            { return aSaveValue; }
 
     void            SetModifyHdl( const Link<Edit&,void>& rLink ) override { aModifyHdlLink = rLink; }
     const Link<Edit&,void>&   GetModifyHdl() const override                { return aModifyHdlLink; }
@@ -130,7 +173,10 @@ public:
 
     void            EnableCursor( bool bEnable );
 
-    virtual bool set_property(const OString &rKey, const OString &rValue) override;
+    TextWindow*     GetTextWindow();
+    virtual FactoryFunction GetUITestFactory() const override;
+
+    virtual bool set_property(const OString &rKey, const OUString &rValue) override;
 };
 
 #endif // INCLUDED_VCL_VCLMEDIT_HXX

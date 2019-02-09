@@ -17,51 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <accessibility/helper/accresmgr.hxx>
+#include <helper/accresmgr.hxx>
+#include <unotools/resmgr.hxx>
 
-#include <tools/simplerm.hxx>
-#include <vcl/svapp.hxx>
-#include <vcl/settings.hxx>
-
-using namespace accessibility;
-
-// TkResMgr
-
-
-SimpleResMgr* TkResMgr::m_pImpl = nullptr;
-
-
-TkResMgr::EnsureDelete::~EnsureDelete()
+OUString AccResId(const char* pId)
 {
-    delete TkResMgr::m_pImpl;
+    return Translate::get(pId, Translate::Create("acc"));
 }
-
-
-void TkResMgr::ensureImplExists()
-{
-    if (m_pImpl)
-        return;
-
-    m_pImpl = SimpleResMgr::Create("acc", Application::GetSettings().GetUILanguageTag() );
-
-    if (m_pImpl)
-    {
-        // now that we have a impl class, make sure it's deleted on unloading the library
-        static TkResMgr::EnsureDelete s_aDeleteTheImplClass;
-    }
-}
-
-
-OUString TkResMgr::loadString( sal_uInt16 nResId )
-{
-    OUString sReturn;
-
-    ensureImplExists();
-    if ( m_pImpl )
-        sReturn = m_pImpl->ReadString( nResId );
-
-    return sReturn;
-}
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

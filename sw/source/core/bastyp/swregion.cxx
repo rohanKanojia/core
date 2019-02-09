@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "swrect.hxx"
-#include "swregion.hxx"
-#include "swtypes.hxx"
+#include <swrect.hxx>
+#include <swregion.hxx>
+#include <swtypes.hxx>
 
 SwRegionRects::SwRegionRects( const SwRect &rStartRect, sal_uInt16 nInit ) :
     SwRects(),
@@ -66,7 +66,7 @@ void SwRegionRects::operator-=( const SwRect &rRect )
         {
             SwRect aTmp( (*this)[i] );
             SwRect aInter( aTmp );
-            aInter._Intersection( rRect );
+            aInter.Intersection_( rRect );
 
             // The first Rect that should be inserted takes position of i.
             // This avoids one Delete() call.
@@ -135,7 +135,7 @@ void SwRegionRects::Invert()
     swap( aInvRegion );
 }
 
-inline SwTwips CalcArea( const SwRect &rRect )
+static SwTwips CalcArea( const SwRect &rRect )
 {
     return rRect.Width() * rRect.Height();
 }
@@ -186,7 +186,7 @@ void SwRegionRects::Compress()
                 }
             }
         }
-        i = (bRestart) ? 0 : i+1;
+        i = bRestart ? 0 : i+1;
     }
 }
 

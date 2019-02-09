@@ -33,26 +33,25 @@ private:
 
 public:
     PanesIndexAccess( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< frame::XModel >& xModel ) : mxParent( xParent ), mxContext( xContext ), mxModel( xModel ) {}
-    virtual ~PanesIndexAccess(){}
 
     // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount(  ) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Int32 SAL_CALL getCount(  ) override
     {
         return 1;
     }
-    virtual uno::Any SAL_CALL getByIndex( sal_Int32 Index ) throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual uno::Any SAL_CALL getByIndex( sal_Int32 Index ) override
     {
         if( Index != 0 )
             throw lang::IndexOutOfBoundsException();
         return uno::makeAny( uno::Reference< word::XPane >( new SwVbaPane( mxParent,  mxContext, mxModel ) ) );
     }
-    virtual uno::Type SAL_CALL getElementType(  ) throw (uno::RuntimeException, std::exception) override
+    virtual uno::Type SAL_CALL getElementType(  ) override
     {
         return cppu::UnoType<word::XPane>::get();
     }
-    virtual sal_Bool SAL_CALL hasElements(  ) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL hasElements(  ) override
     {
-        return sal_True;
+        return true;
     }
 };
 
@@ -62,12 +61,12 @@ class PanesEnumWrapper : public EnumerationHelper_BASE
     sal_Int32 nIndex;
 public:
     explicit PanesEnumWrapper( const uno::Reference< container::XIndexAccess >& xIndexAccess ) : m_xIndexAccess( xIndexAccess ), nIndex( 0 ) {}
-    virtual sal_Bool SAL_CALL hasMoreElements(  ) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL hasMoreElements(  ) override
     {
         return ( nIndex < m_xIndexAccess->getCount() );
     }
 
-    virtual uno::Any SAL_CALL nextElement(  ) throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual uno::Any SAL_CALL nextElement(  ) override
     {
         if ( nIndex < m_xIndexAccess->getCount() )
             return m_xIndexAccess->getByIndex( nIndex++ );
@@ -80,12 +79,12 @@ SwVbaPanes::SwVbaPanes( const uno::Reference< XHelperInterface >& xParent, const
 }
 // XEnumerationAccess
 uno::Type
-SwVbaPanes::getElementType() throw (uno::RuntimeException)
+SwVbaPanes::getElementType()
 {
     return cppu::UnoType<word::XPane>::get();
 }
 uno::Reference< container::XEnumeration >
-SwVbaPanes::createEnumeration() throw (uno::RuntimeException)
+SwVbaPanes::createEnumeration()
 {
     return new PanesEnumWrapper( m_xIndexAccess );
 }
@@ -105,12 +104,10 @@ SwVbaPanes::getServiceImplName()
 css::uno::Sequence<OUString>
 SwVbaPanes::getServiceNames()
 {
-    static uno::Sequence< OUString > sNames;
-    if ( sNames.getLength() == 0 )
+    static uno::Sequence< OUString > const sNames
     {
-        sNames.realloc( 1 );
-        sNames[0] = "ooo.vba.word.Panes";
-    }
+        "ooo.vba.word.Panes"
+    };
     return sNames;
 }
 

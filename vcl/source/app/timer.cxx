@@ -17,115 +17,88 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/log.hxx>
 #include <tools/time.hxx>
 #include <vcl/timer.hxx>
-#include "saltimer.hxx"
+#include <vcl/scheduler.hxx>
+#include <saltimer.hxx>
+#include <schedulerimpl.hxx>
 
 void Timer::SetDeletionFlags()
 {
     // If no AutoTimer, then stop.
     if ( !mbAuto )
-    {
-        mpSchedulerData->mbDelete = true;
-        mbActive = false;
-    }
+        Task::SetDeletionFlags();
 }
 
-bool Timer::ReadyForSchedule( bool /* bTimerOnly */, sal_uInt64 nTimeNow ) const
+sal_uInt64 Timer::UpdateMinPeriod( sal_uInt64, sal_uInt64 nTimeNow ) const
 {
-    return (mpSchedulerData->mnUpdateTime + mnTimeout) <= nTimeNow;
+    sal_uInt64 nWakeupTime = GetSchedulerData()->mnUpdateTime + mnTimeout;
+    return ( nWakeupTime <= nTimeNow )
+        ? Scheduler::ImmediateTimeoutMs : nWakeupTime - nTimeNow;
 }
 
-bool Timer::IsIdle() const
+Timer::Timer( bool bAuto, const sal_Char *pDebugName )
+    : Task( pDebugName )
+    , mnTimeout( Scheduler::ImmediateTimeoutMs )
+    , mbAuto( bAuto )
 {
-    return false;
+    SetPriority( TaskPriority::DEFAULT );
 }
 
-sal_uInt64 Timer::UpdateMinPeriod( sal_uInt64 nMinPeriod, sal_uInt64 nTime ) const
+Timer::Timer( const sal_Char *pDebugName )
+    : Timer( false, pDebugName )
 {
-    sal_uInt64 nDeltaTime;
-    //determine smallest time slot
-    if( mpSchedulerData->mnUpdateTime == nTime )
-    {
-       nDeltaTime = mnTimeout;
-       if( nDeltaTime < nMinPeriod )
-           nMinPeriod = nDeltaTime;
-    }
-    else
-    {
-        nDeltaTime = mpSchedulerData->mnUpdateTime + mnTimeout;
-        if( nDeltaTime < nTime )
-            nMinPeriod = ImmediateTimeoutMs;
-        else
-        {
-            nDeltaTime -= nTime;
-            if( nDeltaTime < nMinPeriod )
-                nMinPeriod = nDeltaTime;
-        }
-    }
-
-    return nMinPeriod;
 }
 
-Timer::Timer(const sal_Char *pDebugName) :
-    Scheduler(pDebugName),
-    mnTimeout(ImmediateTimeoutMs),
-    mbAuto(false)
+Timer::Timer( const Timer& rTimer )
+    : Timer( rTimer.mbAuto, rTimer.GetDebugName() )
 {
-    mePriority = SchedulerPriority::HIGHEST;
+    maInvokeHandler = rTimer.maInvokeHandler;
+    mnTimeout = rTimer.mnTimeout;
 }
 
-Timer::Timer( const Timer& rTimer ) :
-    Scheduler(rTimer),
-    mnTimeout(rTimer.mnTimeout),
-    mbAuto(rTimer.mbAuto)
+Timer::~Timer()
 {
-    maTimeoutHdl = rTimer.maTimeoutHdl;
+}
+
+Timer& Timer::operator=( const Timer& rTimer )
+{
+    Task::operator=( rTimer );
+    maInvokeHandler = rTimer.maInvokeHandler;
+    mnTimeout = rTimer.mnTimeout;
+    SAL_WARN_IF( mbAuto != rTimer.mbAuto, "vcl.schedule",
+        "Copying Timer with different mbAuto value!" );
+    return *this;
 }
 
 void Timer::Invoke()
 {
-    maTimeoutHdl.Call( this );
+    maInvokeHandler.Call( this );
+}
+
+void Timer::Invoke( Timer *arg )
+{
+    maInvokeHandler.Call( arg );
 }
 
 void Timer::Start()
 {
-    Scheduler::Start();
-    Scheduler::ImplStartTimer(mnTimeout);
+    Task::Start();
+    Task::StartTimer( mnTimeout );
 }
 
 void Timer::SetTimeout( sal_uInt64 nNewTimeout )
 {
     mnTimeout = nNewTimeout;
     // If timer is active, then renew clock.
-    if ( mbActive )
-    {
-        Scheduler::ImplStartTimer(mnTimeout);
-    }
+    if ( IsActive() )
+        StartTimer( mnTimeout );
 }
 
-Timer& Timer::operator=( const Timer& rTimer )
+AutoTimer::AutoTimer( const sal_Char *pDebugName )
+    : Timer( true, pDebugName )
 {
-    Scheduler::operator=(rTimer);
-    maTimeoutHdl = rTimer.maTimeoutHdl;
-    mnTimeout = rTimer.mnTimeout;
-    mbAuto = rTimer.mbAuto;
-    return *this;
 }
 
-AutoTimer::AutoTimer()
-{
-    mbAuto = true;
-}
-
-AutoTimer::AutoTimer( const AutoTimer& rTimer ) : Timer( rTimer )
-{
-    mbAuto = true;
-}
-
-AutoTimer& AutoTimer::operator=( const AutoTimer& rTimer )
-{
-    Timer::operator=( rTimer );
-    return *this;
-}
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

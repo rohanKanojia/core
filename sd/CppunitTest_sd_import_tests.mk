@@ -11,7 +11,10 @@
 
 $(eval $(call gb_CppunitTest_CppunitTest,sd_import_tests))
 
-$(eval $(call gb_CppunitTest_use_external,sd_import_tests,boost_headers))
+$(eval $(call gb_CppunitTest_use_externals,sd_import_tests,\
+	boost_headers \
+	libxml2 \
+))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,sd_import_tests, \
     sd/qa/unit/import-tests \
@@ -48,7 +51,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sd_import_tests, \
     utl \
     vcl \
     xo \
-    $(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sd_import_tests,\
@@ -57,10 +59,7 @@ $(eval $(call gb_CppunitTest_set_include,sd_import_tests,\
     $$(INCLUDE) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,sd_import_tests,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,sd_import_tests))
 
 $(eval $(call gb_CppunitTest_use_ure,sd_import_tests))
 $(eval $(call gb_CppunitTest_use_vcl,sd_import_tests))
@@ -74,12 +73,15 @@ $(eval $(call gb_CppunitTest_use_components,sd_import_tests,\
     configmgr/source/configmgr \
     dbaccess/util/dba \
     desktop/source/deployment/deployment \
+    drawinglayer/drawinglayer \
     embeddedobj/util/embobj \
+    emfio/emfio \
     filter/source/config/cache/filterconfig1 \
 	filter/source/odfflatxml/odfflatxml \
     filter/source/svg/svgfilter \
     filter/source/xmlfilteradaptor/xmlfa \
 	filter/source/xmlfilterdetect/xmlfd \
+	filter/source/storagefilterdetect/storagefd \
     forms/util/frm \
     framework/util/fwk \
     i18npool/util/i18npool \
@@ -96,6 +98,8 @@ $(eval $(call gb_CppunitTest_use_components,sd_import_tests,\
     sot/util/sot \
     svl/source/fsstor/fsstorage \
     svtools/util/svt \
+    svx/util/svxcore \
+    svgio/svgio \
     toolkit/util/tk \
     ucb/source/core/ucb1 \
     ucb/source/ucp/expand/ucpexpand1 \
@@ -105,8 +109,10 @@ $(eval $(call gb_CppunitTest_use_components,sd_import_tests,\
     unotools/util/utl \
     unoxml/source/rdf/unordf \
     unoxml/source/service/unoxml \
+    uui/util/uui \
+    vcl/vcl.common \
+    xmlscript/util/xmlscript \
     xmloff/util/xo \
-    xmlsecurity/util/xsec_fw \
     xmlsecurity/util/xmlsecurity \
 ))
 
@@ -119,7 +125,5 @@ $(eval $(call gb_CppunitTest_use_packages,sd_import_tests,\
 ifneq ($(ENABLE_PDFIMPORT),)
 $(eval $(call gb_CppunitTest_use_executable,sd_import_tests,xpdfimport))
 endif
-
-$(call gb_CppunitTest_get_target,sd_import_tests) : $(call gb_AllLangResTarget_get_target,sd)
 
 # vim: set noet sw=4 ts=4:

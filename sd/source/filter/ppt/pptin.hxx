@@ -21,7 +21,6 @@
 #define INCLUDED_SD_SOURCE_FILTER_PPT_PPTIN_HXX
 
 #include <filter/msfilter/svdfppt.hxx>
-#include <svx/msdffdef.hxx>
 #include <diadef.h>
 #include <svx/svdtypes.hxx>
 #include <memory>
@@ -31,13 +30,12 @@ class SfxMedium;
 
 /*************************************************************************
 |*
-|* lokaler Import
+|* local import
 |*
 \************************************************************************/
 
 class SdPage;
 class SdAnimationInfo;
-struct PptInteractiveInfoAtom;
 class Ppt97Animation;
 
 typedef std::shared_ptr< Ppt97Animation > Ppt97AnimationPtr;
@@ -48,7 +46,6 @@ class ImplSdPPTImport : public SdrPowerPointImport
 {
     SfxMedium&      mrMed;
     SotStorage&      mrStorage;
-//  SvStream*       mpPicStream;
     DffRecordHeader maDocHd;
     std::vector<OUString> maSlideNameList;
     bool            mbDocumentFound;
@@ -62,9 +59,9 @@ class ImplSdPPTImport : public SdrPowerPointImport
     void            SetHeaderFooterPageSettings( SdPage* pPage, const PptSlidePersistEntry* pMasterPersist );
     void            ImportPageEffect( SdPage* pPage, const bool bNewAnimationsUsed );
 
-    void            FillSdAnimationInfo( SdAnimationInfo* pInfo, PptInteractiveInfoAtom* pIAtom, const OUString& aMacroName );
+    void            FillSdAnimationInfo( SdAnimationInfo* pInfo, PptInteractiveInfoAtom const * pIAtom, const OUString& aMacroName );
 
-    virtual         SdrObject* ProcessObj( SvStream& rSt, DffObjData& rData, void* pData, Rectangle& rTextRect, SdrObject* pObj ) override;
+    virtual         SdrObject* ProcessObj( SvStream& rSt, DffObjData& rData, SvxMSDffClientData& rClientData, ::tools::Rectangle& rTextRect, SdrObject* pObj ) override;
     virtual         SdrObject* ApplyTextObj( PPTTextObj* pTextObj, SdrTextObj* pText, SdPageCapsule pPage,
                                             SfxStyleSheet*, SfxStyleSheet** ) const override;
 
@@ -74,7 +71,7 @@ public:
     OUString        ReadMedia( sal_uInt32 nMediaRef ) const;
 
     ImplSdPPTImport( SdDrawDocument* pDoc, SotStorage& rStorage, SfxMedium& rMed, PowerPointImportParam& );
-    virtual ~ImplSdPPTImport();
+    virtual ~ImplSdPPTImport() override;
 
     bool         Import();
     virtual bool ReadFormControl(  tools::SvRef<SotStorage>& rSrc1, css::uno::Reference< css::form::XFormComponent > & rFormComp ) const override;
@@ -82,14 +79,15 @@ public:
 
 class SdPPTImport
 {
-    ImplSdPPTImport* pFilter;
+    PowerPointImportParam maParam;
+    std::unique_ptr<ImplSdPPTImport> pFilter;
 
-    public:
+public:
 
-        SdPPTImport( SdDrawDocument* pDoc, SvStream& rDocStream, SotStorage& rStorage, SfxMedium& rMed );
-        ~SdPPTImport();
+    SdPPTImport( SdDrawDocument* pDoc, SvStream& rDocStream, SotStorage& rStorage, SfxMedium& rMed );
+    ~SdPPTImport();
 
-        bool Import();
+    bool Import();
 };
 
 #endif // INCLUDED_SD_SOURCE_FILTER_PPT_PPTIN_HXX

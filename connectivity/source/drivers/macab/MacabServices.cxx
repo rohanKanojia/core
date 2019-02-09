@@ -20,6 +20,7 @@
 
 #include "MacabDriver.hxx"
 #include <cppuhelper/factory.hxx>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 
 using namespace connectivity::macab;
 using ::com::sun::star::uno::Reference;
@@ -27,7 +28,7 @@ using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::lang::XSingleServiceFactory;
 using ::com::sun::star::lang::XMultiServiceFactory;
 
-typedef Reference< XSingleServiceFactory > (SAL_CALL *createFactoryFunc)
+typedef Reference< XSingleServiceFactory > (*createFactoryFunc)
         (
             const Reference< XMultiServiceFactory > & rServiceManager,
             const OUString & rComponentName,
@@ -52,7 +53,6 @@ struct ProviderRequest
     {
     }
 
-    inline
     bool CREATE_PROVIDER(
                 const OUString& Implname,
                 const Sequence< OUString > & Services,
@@ -75,7 +75,7 @@ struct ProviderRequest
 };
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL macab_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void* macab_component_getFactory(
                     const sal_Char* pImplementationName,
                     void* pServiceManager,
                     void*)

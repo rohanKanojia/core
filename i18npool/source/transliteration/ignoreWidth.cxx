@@ -18,6 +18,7 @@
  */
 
 #include <com/sun/star/uno/XComponentContext.hpp>
+#include <rtl/ref.hxx>
 
 #include <transliteration_Ignore.hxx>
 #include <transliteration_OneToOne.hxx>
@@ -25,41 +26,39 @@
 using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
-OUString SAL_CALL
-ignoreWidth::folding( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, Sequence< sal_Int32 >& offset )
-  throw(RuntimeException, std::exception)
+OUString
+ignoreWidth::foldingImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, Sequence< sal_Int32 >& offset, bool useOffset )
 {
-    Reference< fullwidthToHalfwidth > t1(new fullwidthToHalfwidth);
-    return t1->transliterate(inStr, startPos, nCount, offset);
+    rtl::Reference< fullwidthToHalfwidth > t1(new fullwidthToHalfwidth);
+    return t1->transliterateImpl(inStr, startPos, nCount, offset, useOffset);
 }
 
 Sequence< OUString > SAL_CALL
 ignoreWidth::transliterateRange( const OUString& str1, const OUString& str2 )
-  throw(RuntimeException, std::exception)
 {
-    Reference< fullwidthToHalfwidth > t1(new fullwidthToHalfwidth);
-    Reference< halfwidthToFullwidth > t2(new halfwidthToFullwidth);
+    rtl::Reference< fullwidthToHalfwidth > t1(new fullwidthToHalfwidth);
+    rtl::Reference< halfwidthToFullwidth > t2(new halfwidthToFullwidth);
 
-    return transliteration_Ignore::transliterateRange(str1, str2, *t1.get(), *t2.get());
+    return transliteration_Ignore::transliterateRange(str1, str2, *t1, *t2);
 }
 
 sal_Unicode SAL_CALL
-ignoreWidth::transliterateChar2Char( sal_Unicode inChar) throw(RuntimeException, MultipleCharsOutputException, std::exception)
+ignoreWidth::transliterateChar2Char( sal_Unicode inChar)
 {
-    Reference< fullwidthToHalfwidth > t1(new fullwidthToHalfwidth);
+    rtl::Reference< fullwidthToHalfwidth > t1(new fullwidthToHalfwidth);
     return t1->transliterateChar2Char(inChar);
 }
 
-} } } }
+}
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_i18n_Transliteration_IGNORE_WIDTH_get_implementation(
     css::uno::XComponentContext *,
     css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new css::i18n::ignoreWidth());
+    return cppu::acquire(new i18npool::ignoreWidth());
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

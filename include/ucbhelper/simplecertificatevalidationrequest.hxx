@@ -20,10 +20,11 @@
 #ifndef INCLUDED_UCBHELPER_SIMPLECERTIFICATEVALIDATIONREQUEST_HXX
 #define INCLUDED_UCBHELPER_SIMPLECERTIFICATEVALIDATIONREQUEST_HXX
 
-#include <rtl/ref.hxx>
 #include <ucbhelper/interactionrequest.hxx>
 #include <ucbhelper/ucbhelperdllapi.h>
-#include <com/sun/star/security/XCertificate.hpp>
+
+namespace com { namespace sun { namespace star { namespace uno { template <class interface_type> class Reference; } } } }
+namespace com { namespace sun { namespace star { namespace security { class XCertificate; } } } }
 
 
 namespace ucbhelper {
@@ -33,7 +34,7 @@ namespace ucbhelper {
   * Instances can be passed directly to XInteractionHandler::handle(...). Each
   * instance contains an CertificateValidationRequest and two interaction
   * continuations: "Abort" and "Approved". The parameters
-  * for the CertificateValidationRequest object are partly taken from contructors parameters and partly defaulted
+  * for the CertificateValidationRequest object are partly taken from constructors parameters and partly defaulted
   * as follows:
   *
   * Read-write values: certificateValidity, certificate
@@ -51,7 +52,7 @@ public:
       * @param lCertificateValidity contains a bitmask which validation error occur.
       * @param pCertificate contains the server certificate.
       */
-    SimpleCertificateValidationRequest( const sal_Int32 & lCertificateValidity,
+    SimpleCertificateValidationRequest( sal_Int32 lCertificateValidity,
         const css::uno::Reference<css::security::XCertificate>& certificate,
         const OUString & hostname );
 };

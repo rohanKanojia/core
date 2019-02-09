@@ -21,54 +21,16 @@
 #define INCLUDED_COMPHELPER_ACCESSIBLECONTEXTHELPER_HXX
 
 #include <cppuhelper/compbase2.hxx>
+#include <cppuhelper/basemutex.hxx>
 #include <com/sun/star/accessibility/XAccessibleContext.hpp>
 #include <com/sun/star/accessibility/XAccessibleEventBroadcaster.hpp>
-#include <com/sun/star/lang/DisposedException.hpp>
-#include <comphelper/broadcasthelper.hxx>
 #include <comphelper/comphelperdllapi.h>
+#include <comphelper/solarmutex.hxx>
+#include <memory>
 
 
 namespace comphelper
 {
-
-
-    //= IMutex
-
-
-    // This whole thingie here (own mutex classes and such) is a HACK. I hate the SolarMutex.
-    // See below for more explanations ....
-
-    /** abstract interface for implementing a mutex
-    */
-    class COMPHELPER_DLLPUBLIC IMutex
-    {
-    public:
-        virtual ~IMutex();
-        virtual void acquire() = 0;
-        virtual void release() = 0;
-    };
-
-
-    //= OMutexGuard
-
-
-    class OMutexGuard
-    {
-        IMutex* m_pMutex;
-    public:
-        inline OMutexGuard( IMutex* _pMutex )
-            :m_pMutex( _pMutex )
-        {
-            if ( m_pMutex )
-                m_pMutex->acquire();
-        }
-
-        inline ~OMutexGuard( )
-        {
-            if ( m_pMutex )
-                m_pMutex->release();
-        }
-    };
 
 
     //= OAccessibleContextHelper
@@ -82,42 +44,17 @@ namespace comphelper
     /** helper class for implementing an AccessibleContext
     */
     class COMPHELPER_DLLPUBLIC OAccessibleContextHelper
-                :public ::comphelper::OBaseMutex
+                :public ::cppu::BaseMutex
                 ,public OAccessibleContextHelper_Base
     {
+        friend class OContextEntryGuard;
     private:
-        OContextHelper_Impl*    m_pImpl;
+        std::unique_ptr<OContextHelper_Impl>    m_pImpl;
 
     protected:
-        virtual ~OAccessibleContextHelper( );
+        virtual ~OAccessibleContextHelper( ) override;
 
-        /** ctor
-
-            <p>If you need additional object safety for your class, and want to ensure that your own
-            mutex is locked before the mutex this class provides is, than use this ctor.</p>
-
-            <p>Beware that this is a hack. Unfortunately, OpenOffice.org has two different mutex hierarchies,
-            which are not compatible. In addition, wide parts of the code (especially VCL) is not thread-safe,
-            but instead relies on a <em>single global mutex</em>. As a consequence, components using
-            directly or indirectly such code need to care for this global mutex. Yes, this is as ugly as
-            anything.</p>
-
-            <p>Note that the external lock is used as additional lock, not as the only one. The own mutex of the
-            instance is used for internal actions, and every action which potentially involves external code
-            (for instance every call to a virtual method overridden by derivees) is <em>additionally</em> and
-            <em>first</em> guarded by with the external lock.</p>
-
-            <p>Beware of the lifetime of the lock - you must ensure that the lock exists at least as long as
-            the context does. A good approach to implement the lock may be to derive you own context
-            not only from OAccessibleContextHelper, but also from IMutex.</p>
-
-            <p>One more note. This lock is definitely not used once the dtor is reached. Means whatever
-            the dtor implementation does, it does <em>not</em> guard the external lock. See this as a contract.
-            <br/>You should ensure the same thing for own derivees which do not supply the lock themself,
-            but get them from yet another derivee.</p>
-            @see forgetExternalLock
-        */
-        OAccessibleContextHelper( IMutex* _pExternalLock );
+        OAccessibleContextHelper( );
 
         /** late construction
         @param _rxAccessible
@@ -139,58 +76,32 @@ namespace comphelper
         css::uno::Reference< css::accessibility::XAccessible >
                 getAccessibleCreator( ) const;
 
-    private:
-        /** forgets the reference to the external lock, if present.
-
-            <p>This means any further locking will not be guard the external lock anymore, never.</p>
-
-            <p>To be used in derived classes which do not supply the external lock themself, but instead get
-            them passed from own derivees (or clients).</p>
-        */
-        void    forgetExternalLock();
-
     public:
         // XAccessibleEventBroadcaster
-        virtual void SAL_CALL addAccessibleEventListener( const css::uno::Reference< css::accessibility::XAccessibleEventListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL removeAccessibleEventListener( const css::uno::Reference< css::accessibility::XAccessibleEventListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL addAccessibleEventListener( const css::uno::Reference< css::accessibility::XAccessibleEventListener >& xListener ) override;
+        virtual void SAL_CALL removeAccessibleEventListener( const css::uno::Reference< css::accessibility::XAccessibleEventListener >& xListener ) override;
 
         // XAccessibleContext - still waiting to be overwritten
-        virtual sal_Int32 SAL_CALL getAccessibleChildCount(  ) throw (css::uno::RuntimeException, std::exception) override = 0;
-        virtual css::uno::Reference< css::accessibility::XAccessible > SAL_CALL getAccessibleChild( sal_Int32 i ) throw (css::lang::IndexOutOfBoundsException, css::uno::RuntimeException, std::exception) override = 0;
-        virtual css::uno::Reference< css::accessibility::XAccessible > SAL_CALL getAccessibleParent(  ) throw (css::uno::RuntimeException, std::exception) override = 0;
-        virtual sal_Int16 SAL_CALL getAccessibleRole(  ) throw (css::uno::RuntimeException, std::exception) override = 0;
-        virtual OUString SAL_CALL getAccessibleDescription(  ) throw (css::uno::RuntimeException, std::exception) override = 0;
-        virtual OUString SAL_CALL getAccessibleName(  ) throw (css::uno::RuntimeException, std::exception) override = 0;
-        virtual css::uno::Reference< css::accessibility::XAccessibleRelationSet > SAL_CALL getAccessibleRelationSet(  ) throw (css::uno::RuntimeException, std::exception) override = 0;
-        virtual css::uno::Reference< css::accessibility::XAccessibleStateSet > SAL_CALL getAccessibleStateSet(  ) throw (css::uno::RuntimeException, std::exception) override = 0;
+        virtual sal_Int32 SAL_CALL getAccessibleChildCount(  ) override = 0;
+        virtual css::uno::Reference< css::accessibility::XAccessible > SAL_CALL getAccessibleChild( sal_Int32 i ) override = 0;
+        virtual css::uno::Reference< css::accessibility::XAccessible > SAL_CALL getAccessibleParent(  ) override = 0;
+        virtual sal_Int16 SAL_CALL getAccessibleRole(  ) override = 0;
+        virtual OUString SAL_CALL getAccessibleDescription(  ) override = 0;
+        virtual OUString SAL_CALL getAccessibleName(  ) override = 0;
+        virtual css::uno::Reference< css::accessibility::XAccessibleRelationSet > SAL_CALL getAccessibleRelationSet(  ) override = 0;
+        virtual css::uno::Reference< css::accessibility::XAccessibleStateSet > SAL_CALL getAccessibleStateSet(  ) override = 0;
 
         // XAccessibleContext - default implementations
         /** default implementation for retrieving the index of this object within the parent
             <p>This basic implementation here returns the index <code>i</code> of the child for which
                 <code>&lt;parent&gt;.getAccessibleChild( i )</code> equals our creator.</p>
         */
-        virtual sal_Int32 SAL_CALL getAccessibleIndexInParent(  ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Int32 SAL_CALL getAccessibleIndexInParent(  ) override;
         /** default implementation for retrieving the locale
             <p>This basic implementation returns the locale of the parent context,
             as retrieved via getAccessibleParent()->getAccessibleContext.</p>
         */
-        virtual css::lang::Locale SAL_CALL getLocale(  ) throw (css::accessibility::IllegalAccessibleComponentStateException, css::uno::RuntimeException, std::exception) override;
-
-    public:
-        // helper struct for granting selective access rights
-        struct OAccessControl
-        {
-            friend class OContextEntryGuard;
-            friend class OContextHelper_Impl;
-            friend class OExternalLockGuard;
-        private:
-            OAccessControl() { }
-        };
-
-        // ensures that the object is alive
-        inline  void            ensureAlive( const OAccessControl& ) const;
-        inline  IMutex*         getExternalLock( const OAccessControl& );
-        inline  ::osl::Mutex&   GetMutex( const OAccessControl& );
+        virtual css::lang::Locale SAL_CALL getLocale(  ) override;
 
     protected:
         // OComponentHelper
@@ -232,34 +143,12 @@ namespace comphelper
                     implGetParentContext();
 
         // access to the base class' broadcast helper/mutex
-        ::cppu::OBroadcastHelper&       GetBroadcastHelper()        { return rBHelper; }
-        const ::cppu::OBroadcastHelper& GetBroadcastHelper() const  { return rBHelper; }
         ::osl::Mutex&                   GetMutex()                  { return m_aMutex; }
-        IMutex*                         getExternalLock( );
     };
-
-
-    inline  void OAccessibleContextHelper::ensureAlive( const OAccessControl& ) const
-    {
-        ensureAlive();
-    }
-
-
-    inline  IMutex* OAccessibleContextHelper::getExternalLock( const OAccessControl& )
-    {
-        return getExternalLock();
-    }
-
-
-    inline  ::osl::Mutex& OAccessibleContextHelper::GetMutex( const OAccessControl& )
-    {
-        return GetMutex();
-    }
 
 
     //= OContextEntryGuard
 
-    typedef ::osl::ClearableMutexGuard  OContextEntryGuard_Base;
     /** helper class for guarding the entry into OAccessibleContextHelper methods.
 
         <p>The class has two responsibilities:
@@ -272,7 +161,7 @@ namespace comphelper
         you derived class.
         </p>
     */
-    class OContextEntryGuard : public OContextEntryGuard_Base
+    class OContextEntryGuard : public ::osl::ClearableMutexGuard
     {
     public:
         /** constructs the guard
@@ -285,40 +174,29 @@ namespace comphelper
         @precond <arg>_pContext</arg> != NULL
         */
         inline OContextEntryGuard( OAccessibleContextHelper* _pContext );
-
-        /** destructs the guard.
-            <p>The context (it's mutex, respectively) is unlocked.</p>
-        */
-        inline ~OContextEntryGuard();
     };
 
 
     inline OContextEntryGuard::OContextEntryGuard( OAccessibleContextHelper* _pContext  )
-        :OContextEntryGuard_Base( _pContext->GetMutex( OAccessibleContextHelper::OAccessControl() ) )
+        : ::osl::ClearableMutexGuard( _pContext->GetMutex() )
     {
-        _pContext->ensureAlive( OAccessibleContextHelper::OAccessControl() );
-    }
-
-
-    inline OContextEntryGuard::~OContextEntryGuard()
-    {
+        _pContext->ensureAlive();
     }
 
 
     //= OExternalLockGuard
 
     class OExternalLockGuard
-            :public OMutexGuard
+            :public osl::Guard<SolarMutex>
             ,public OContextEntryGuard
     {
     public:
         inline OExternalLockGuard( OAccessibleContextHelper* _pContext );
-        inline ~OExternalLockGuard( );
     };
 
 
     inline OExternalLockGuard::OExternalLockGuard( OAccessibleContextHelper* _pContext )
-        :OMutexGuard( _pContext->getExternalLock( OAccessibleContextHelper::OAccessControl() ) )
+        :osl::Guard<SolarMutex>( SolarMutex::get() )
         ,OContextEntryGuard( _pContext )
     {
         // Only lock the external mutex,
@@ -326,11 +204,6 @@ namespace comphelper
         // If you call into another UNO object with locked ::osl::Mutex,
         // this may lead to dead locks.
         clear();
-    }
-
-
-    inline OExternalLockGuard::~OExternalLockGuard( )
-    {
     }
 
 

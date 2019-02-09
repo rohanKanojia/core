@@ -20,8 +20,7 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_CACHE_SLSBITMAPFACTORY_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_CACHE_SLSBITMAPFACTORY_HXX
 
-#include "PreviewRenderer.hxx"
-#include <memory>
+#include <PreviewRenderer.hxx>
 
 class SdPage;
 class Size;
@@ -37,7 +36,7 @@ public:
     BitmapFactory();
     ~BitmapFactory();
 
-    Bitmap CreateBitmap (
+    BitmapEx CreateBitmap (
         const SdPage& rPage,
         const Size& rPixelSize,
         const bool bDoSuperSampling);

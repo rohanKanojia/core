@@ -18,6 +18,7 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <string.h>
 
@@ -27,7 +28,7 @@
 #include <basegfx/vector/b2dsize.hxx>
 #include <basegfx/vector/b2isize.hxx>
 #include <com/sun/star/lang/NoSupportException.hpp>
-#include <osl/thread.h>
+#include <osl/thread.hxx>
 #include <osl/time.h>
 #include <tools/diagnose_ex.h>
 #include <vcl/syschild.hxx>
@@ -73,8 +74,8 @@ namespace dxcanvas
         public:
 
             monitorSupport() :
-                mhLibrary(LoadLibrary("user32.dll")),
-                mpMonitorFromWindow(NULL)
+                mhLibrary(LoadLibraryW(L"user32.dll")),
+                mpMonitorFromWindow(nullptr)
             {
                 if(mhLibrary)
                     mpMonitorFromWindow = reinterpret_cast<fMonitorFromWindow>(
@@ -86,14 +87,14 @@ namespace dxcanvas
             {
                 if(mhLibrary)
                     FreeLibrary(mhLibrary);
-                mhLibrary=0;
+                mhLibrary=nullptr;
             }
 
             HMONITOR MonitorFromWindow( HWND hwnd )
             {
                 // return adapter_default in case something went wrong...
                 if(!(mpMonitorFromWindow))
-                    return HMONITOR(0);
+                    return HMONITOR(nullptr);
                 // MONITOR_DEFAULTTONEAREST
                 const DWORD dwFlags(0x00000002);
                 return mpMonitorFromWindow(hwnd,dwFlags);
@@ -127,15 +128,14 @@ namespace dxcanvas
         public:
             DXSurface( DXRenderModule&           rRenderModule,
                        const ::basegfx::B2ISize& rSize );
-            ~DXSurface();
+            ~DXSurface() override;
 
-            virtual bool selectTexture();
-            virtual bool isValid();
+            virtual bool selectTexture() override;
+            virtual bool isValid() override;
             virtual bool update( const ::basegfx::B2IPoint& rDestPos,
                                 const ::basegfx::B2IRange& rSourceRect,
-                                ::canvas::IColorBuffer&    rSource );
+                                ::canvas::IColorBuffer&    rSource ) override;
             virtual ::basegfx::B2IVector getSize();
-            COMReference<IDirect3DTexture9> getTexture() const;
 
         private:
             /// Guard local methods against concurrent access to RenderModule
@@ -146,8 +146,8 @@ namespace dxcanvas
                 ImplRenderModuleGuard(const ImplRenderModuleGuard&) = delete;
                 const ImplRenderModuleGuard& operator=(const ImplRenderModuleGuard&) = delete;
 
-                explicit inline ImplRenderModuleGuard( DXRenderModule& rRenderModule );
-                inline ~ImplRenderModuleGuard();
+                explicit ImplRenderModuleGuard( DXRenderModule& rRenderModule );
+                ~ImplRenderModuleGuard();
 
             private:
                 DXRenderModule& mrRenderModule;
@@ -168,27 +168,27 @@ namespace dxcanvas
         {
         public:
             explicit DXRenderModule( const vcl::Window& rWindow );
-            ~DXRenderModule();
+            ~DXRenderModule() override;
 
-            virtual void lock() const { maMutex.acquire(); }
-            virtual void unlock() const { maMutex.release(); }
+            virtual void lock() const override { maMutex.acquire(); }
+            virtual void unlock() const override { maMutex.release(); }
 
             virtual COMReference<IDirect3DSurface9>
-                createSystemMemorySurface( const ::basegfx::B2IVector& rSize );
-            virtual void disposing();
-            virtual HWND getHWND() const { return mhWnd; }
-            virtual void screenShot();
+                createSystemMemorySurface( const ::basegfx::B2IVector& rSize ) override;
+            virtual void disposing() override;
+            virtual HWND getHWND() const override { return mhWnd; }
+            virtual void screenShot() override;
 
             virtual bool flip( const ::basegfx::B2IRectangle& rUpdateArea,
-                               const ::basegfx::B2IRectangle& rCurrWindowArea );
+                               const ::basegfx::B2IRectangle& rCurrWindowArea ) override;
 
-            virtual void resize( const ::basegfx::B2IRange& rect );
-            virtual ::basegfx::B2IVector getPageSize();
-            virtual ::canvas::ISurfaceSharedPtr createSurface( const ::basegfx::B2IVector& surfaceSize );
-            virtual void beginPrimitive( PrimitiveType eType );
-            virtual void endPrimitive();
-            virtual void pushVertex( const ::canvas::Vertex& vertex );
-            virtual bool isError();
+            virtual void resize( const ::basegfx::B2IRange& rect ) override;
+            virtual ::basegfx::B2IVector getPageSize() override;
+            virtual std::shared_ptr<canvas::ISurface> createSurface( const ::basegfx::B2IVector& surfaceSize ) override;
+            virtual void beginPrimitive( PrimitiveType eType ) override;
+            virtual void endPrimitive() override;
+            virtual void pushVertex( const ::canvas::Vertex& vertex ) override;
+            virtual bool isError() override;
 
             COMReference<IDirect3DDevice9> getDevice() { return mpDevice; }
 
@@ -213,7 +213,7 @@ namespace dxcanvas
             COMReference<IDirect3D9>                    mpDirect3D9;
             COMReference<IDirect3DSwapChain9>           mpSwapChain;
             COMReference<IDirect3DVertexBuffer9>        mpVertexBuffer;
-            ::canvas::ISurfaceSharedPtr                 mpTexture;
+            std::shared_ptr<canvas::ISurface>                 mpTexture;
             VclPtr<SystemChildWindow>                   mpWindow;
             ::basegfx::B2IVector                        maSize;
             typedef std::vector<canvas::Vertex>         vertexCache_t;
@@ -226,7 +226,7 @@ namespace dxcanvas
             ::basegfx::B2IVector                        maPageSize;
             D3DPRESENT_PARAMETERS                       mad3dpp;
 
-            inline bool isDisposed() const { return (mhWnd==NULL); }
+            bool isDisposed() const { return (mhWnd==nullptr); }
 
             struct dxvertex
             {
@@ -246,14 +246,14 @@ namespace dxcanvas
         // DXSurface::ImplRenderModuleGuard
 
 
-        inline DXSurface::ImplRenderModuleGuard::ImplRenderModuleGuard(
+        DXSurface::ImplRenderModuleGuard::ImplRenderModuleGuard(
             DXRenderModule& rRenderModule ) :
             mrRenderModule( rRenderModule )
         {
             mrRenderModule.lock();
         }
 
-        inline DXSurface::ImplRenderModuleGuard::~ImplRenderModuleGuard()
+        DXSurface::ImplRenderModuleGuard::~ImplRenderModuleGuard()
         {
             mrRenderModule.unlock();
         }
@@ -268,7 +268,7 @@ namespace dxcanvas
         DXSurface::DXSurface( DXRenderModule&           rRenderModule,
                               const ::basegfx::B2ISize& rSize ) :
             mrRenderModule(rRenderModule),
-            mpTexture(NULL),
+            mpTexture(nullptr),
             maSize()
         {
             ImplRenderModuleGuard aGuard( mrRenderModule );
@@ -291,13 +291,13 @@ namespace dxcanvas
 
             COMReference<IDirect3DDevice9> pDevice(rRenderModule.getDevice());
 
-            IDirect3DTexture9 *pTexture(NULL);
+            IDirect3DTexture9 *pTexture(nullptr);
             if(FAILED(pDevice->CreateTexture(
                 rSize.getX(),
                 rSize.getY(),
                 1,0,D3DFMT_A8R8G8B8,
                 D3DPOOL_MANAGED,
-                &pTexture,NULL)))
+                &pTexture,nullptr)))
                 return;
 
             mpTexture=COMReference<IDirect3DTexture9>(pTexture);
@@ -389,7 +389,7 @@ namespace dxcanvas
                             pImage += rSourceRect.getMinX()*nSourceBytesPerPixel;
 
                             // calculate the destination memory address
-                            sal_uInt8 *pDst = (sal_uInt8*)aLockedRect.pBits;
+                            sal_uInt8 *pDst = static_cast<sal_uInt8*>(aLockedRect.pBits);
 
                             const sal_uInt32 nNumBytesToCopy(
                                 static_cast<sal_uInt32>(
@@ -397,7 +397,7 @@ namespace dxcanvas
                                 nSourceBytesPerPixel);
                             const sal_uInt64 nNumLines(rSourceRect.getHeight());
 
-                            for(sal_uInt32 i=0; i<nNumLines; ++i)
+                            for(sal_uInt64 i=0; i<nNumLines; ++i)
                             {
                                 memcpy(pDst,pImage,nNumBytesToCopy);
 
@@ -430,7 +430,7 @@ namespace dxcanvas
                             pImage += rSourceRect.getMinX()*nSourceBytesPerPixel;
 
                             // calculate the destination memory address
-                            sal_uInt8 *pDst = (sal_uInt8*)aLockedRect.pBits;
+                            sal_uInt8 *pDst = static_cast<sal_uInt8*>(aLockedRect.pBits);
 
                             const sal_Int32 nNumLines(
                                 sal::static_int_cast<sal_Int32>(rSourceRect.getHeight()));
@@ -479,17 +479,11 @@ namespace dxcanvas
             return maSize;
         }
 
-        COMReference<IDirect3DTexture9> DXSurface::getTexture() const
-        {
-            return mpTexture;
-        }
-
-
         // DXRenderModule::DXRenderModule
 
 
         DXRenderModule::DXRenderModule( const vcl::Window& rWindow ) :
-            mhWnd(0),
+            mhWnd(nullptr),
             mpDevice(),
             mpDirect3D9(),
             mpSwapChain(),
@@ -521,7 +515,7 @@ namespace dxcanvas
             ::basegfx::B2IVector aPageSize(maPageSize);
             while(true)
             {
-                mpTexture = ::canvas::ISurfaceSharedPtr(
+                mpTexture = std::shared_ptr<canvas::ISurface>(
                     new DXSurface(*this,aPageSize));
                 if(mpTexture->isValid())
                     break;
@@ -537,14 +531,13 @@ namespace dxcanvas
             }
             maPageSize=aPageSize;
 
-            IDirect3DVertexBuffer9 *pVB(NULL);
-            DWORD aFVF(D3DFVF_XYZRHW|D3DFVF_DIFFUSE|D3DFVF_TEX1);
+            IDirect3DVertexBuffer9 *pVB(nullptr);
             if( FAILED(mpDevice->CreateVertexBuffer(sizeof(dxvertex)*maNumVertices,
                                                     D3DUSAGE_DYNAMIC|D3DUSAGE_WRITEONLY,
-                                                    aFVF,
+                                                    D3DFVF_XYZRHW|D3DFVF_DIFFUSE|D3DFVF_TEX1,
                                                     D3DPOOL_DEFAULT,
                                                     &pVB,
-                                                    NULL)) )
+                                                    nullptr)) )
             {
                 throw lang::NoSupportException(
                     "Could not create DirectX device - out of memory!" );
@@ -573,7 +566,7 @@ namespace dxcanvas
 
             mpTexture.reset();
             mpWindow.disposeAndClear();
-            mhWnd=NULL;
+            mhWnd=nullptr;
 
             // refrain from releasing the DX9 objects. We're the only
             // ones holding references to them, and it might be
@@ -590,6 +583,14 @@ namespace dxcanvas
             // TODO(P2): get rid of those fine-grained locking
             ::osl::MutexGuard aGuard( maMutex );
 
+            // TODO(F2): since we would like to share precious hardware
+            // resources, the direct3d9 object should be global. each new
+            // request for a canvas should only create a new swapchain.
+            mpDirect3D9 = COMReference<IDirect3D9>(
+                Direct3DCreate9(D3D_SDK_VERSION));
+            if(!mpDirect3D9.is())
+                return false;
+
             maVertexCache.reserve( 1024 );
 
             mpWindow.disposeAndClear();
@@ -603,14 +604,14 @@ namespace dxcanvas
             mpWindow->SetParentClipMode(ParentClipMode::NoClip);
 
             // the system child window must not clear its background
-            mpWindow->EnableEraseBackground( sal_False );
+            mpWindow->EnableEraseBackground( false );
 
             mpWindow->SetControlForeground();
             mpWindow->SetControlBackground();
 
             const SystemEnvData *pData = mpWindow->GetSystemData();
             const HWND hwnd(reinterpret_cast<HWND>(pData->hWnd));
-            mhWnd = const_cast<HWND>(hwnd);
+            mhWnd = hwnd;
 
             ENSURE_OR_THROW( IsWindow( reinterpret_cast<HWND>(mhWnd) ),
                             "DXRenderModule::create() No valid HWND given." );
@@ -626,17 +627,12 @@ namespace dxcanvas
             // let the child window cover the same size as the parent window.
             mpWindow->setPosSizePixel(0,0,maSize.getX(),maSize.getY());
 
-            // TODO(F2): since we would like to share precious hardware
-            // resources, the direct3d9 object should be global. each new
-            // request for a canvas should only create a new swapchain.
-            mpDirect3D9 = COMReference<IDirect3D9>(
-                Direct3DCreate9(D3D_SDK_VERSION));
-            if(!mpDirect3D9.is())
-                return false;
-
             // create a device from the direct3d9 object.
             if(!(createDevice()))
+            {
+                mpWindow.disposeAndClear();
                 return false;
+            }
 
             mpWindow->Show();
 
@@ -745,9 +741,9 @@ namespace dxcanvas
             // a back buffer, and no way of falling back to a
             // different canvas implementation.
             ZeroMemory( &mad3dpp, sizeof(mad3dpp) );
-            mad3dpp.BackBufferWidth = std::max(sal_Int32(maSize.getX()),
+            mad3dpp.BackBufferWidth = std::max(maSize.getX(),
                                                sal_Int32(d3ddm.Width));
-            mad3dpp.BackBufferHeight = std::max(sal_Int32(maSize.getY()),
+            mad3dpp.BackBufferHeight = std::max(maSize.getY(),
                                                 sal_Int32(d3ddm.Height));
             mad3dpp.BackBufferCount = 1;
             mad3dpp.Windowed = TRUE;
@@ -760,7 +756,7 @@ namespace dxcanvas
             // now create the device, first try hardware vertex processing,
             // then software vertex processing. if both queries fail, we give up
             // and indicate failure.
-            IDirect3DDevice9 *pDevice(NULL);
+            IDirect3DDevice9 *pDevice(nullptr);
             if(FAILED(mpDirect3D9->CreateDevice(aAdapter,
                                                 D3DDEVTYPE_HAL,
                                                 mhWnd,
@@ -781,7 +777,7 @@ namespace dxcanvas
             mpDevice=COMReference<IDirect3DDevice9>(pDevice);
 
             // After CreateDevice, the first swap chain already exists, so just get it...
-            IDirect3DSwapChain9 *pSwapChain(NULL);
+            IDirect3DSwapChain9 *pSwapChain(nullptr);
             pDevice->GetSwapChain(0,&pSwapChain);
             mpSwapChain=COMReference<IDirect3DSwapChain9>(pSwapChain);
             if( !mpSwapChain.is() )
@@ -792,10 +788,10 @@ namespace dxcanvas
             // please note that this is only possible since we created the
             // backbuffer with copy semantics [the content is preserved after
             // calls to Present()], which is an unnecessarily expensive operation.
-            LPDIRECT3DSURFACE9 pBackBuffer = NULL;
+            LPDIRECT3DSURFACE9 pBackBuffer = nullptr;
             mpSwapChain->GetBackBuffer(0,D3DBACKBUFFER_TYPE_MONO,&pBackBuffer);
             mpDevice->SetRenderTarget( 0, pBackBuffer );
-            mpDevice->Clear(0,NULL,D3DCLEAR_TARGET,0,1.0f,0L);
+            mpDevice->Clear(0,nullptr,D3DCLEAR_TARGET,0,1.0f,0);
             pBackBuffer->Release();
 
             return true;
@@ -808,19 +804,19 @@ namespace dxcanvas
         COMReference<IDirect3DSurface9> DXRenderModule::createSystemMemorySurface( const ::basegfx::B2IVector& rSize )
         {
             if(isDisposed())
-                return COMReference<IDirect3DSurface9>(NULL);
+                return COMReference<IDirect3DSurface9>(nullptr);
 
             // please note that D3DFMT_X8R8G8B8 is the only format we're
             // able to choose here, since GetDC() doesn't support any
             // other 32bit-format.
-            IDirect3DSurface9 *pSurface(NULL);
+            IDirect3DSurface9 *pSurface(nullptr);
             if( FAILED(mpDevice->CreateOffscreenPlainSurface(
                            rSize.getX(),
                            rSize.getY(),
                            D3DFMT_X8R8G8B8,
                            D3DPOOL_SYSTEMMEM,
                            &pSurface,
-                           NULL)) )
+                           nullptr)) )
             {
                 throw lang::NoSupportException(
                     "Could not create offscreen surface - out of mem!" );
@@ -852,7 +848,7 @@ namespace dxcanvas
                     rUpdateArea.getMaxX(),
                     rUpdateArea.getMaxY()
                 };
-            HRESULT hr(mpSwapChain->Present(&aRect,&aRect,NULL,NULL,0));
+            HRESULT hr(mpSwapChain->Present(&aRect,&aRect,nullptr,nullptr,0));
             if(FAILED(hr))
             {
                 if(hr != D3DERR_DEVICELOST)
@@ -867,14 +863,13 @@ namespace dxcanvas
                     hr = mpDevice->Reset(&mad3dpp);
                     if(SUCCEEDED(hr))
                     {
-                        IDirect3DVertexBuffer9 *pVB(NULL);
-                        DWORD aFVF(D3DFVF_XYZRHW|D3DFVF_DIFFUSE|D3DFVF_TEX1);
+                        IDirect3DVertexBuffer9 *pVB(nullptr);
                         if( FAILED(mpDevice->CreateVertexBuffer(sizeof(dxvertex)*maNumVertices,
                                                                 D3DUSAGE_DYNAMIC|D3DUSAGE_WRITEONLY,
-                                                                aFVF,
+                                                                D3DFVF_XYZRHW|D3DFVF_DIFFUSE|D3DFVF_TEX1,
                                                                 D3DPOOL_DEFAULT,
                                                                 &pVB,
-                                                                NULL)) )
+                                                                nullptr)) )
                         {
                             throw lang::NoSupportException(
                                 "Could not create DirectX device - out of memory!" );
@@ -882,14 +877,11 @@ namespace dxcanvas
                         mpVertexBuffer=COMReference<IDirect3DVertexBuffer9>(pVB);
 
                         // retry after the restore
-                        if(SUCCEEDED(mpSwapChain->Present(&aRect,&aRect,NULL,NULL,0)))
+                        if(SUCCEEDED(mpSwapChain->Present(&aRect,&aRect,nullptr,nullptr,0)))
                             return true;
                     }
 
-                    TimeValue aTimeout;
-                    aTimeout.Seconds=1;
-                    aTimeout.Nanosec=0;
-                    osl_waitThread(&aTimeout);
+                    osl::Thread::wait(std::chrono::seconds(1));
                 }
                 while(hr == D3DERR_DEVICELOST);
 
@@ -951,7 +943,7 @@ namespace dxcanvas
                 // clear before, save resources
                 mpSwapChain.reset();
 
-                IDirect3DSwapChain9 *pSwapChain(NULL);
+                IDirect3DSwapChain9 *pSwapChain(nullptr);
                 if(FAILED(mpDevice->CreateAdditionalSwapChain(&mad3dpp,&pSwapChain)))
                     return;
                 mpSwapChain=COMReference<IDirect3DSwapChain9>(pSwapChain);
@@ -961,10 +953,10 @@ namespace dxcanvas
                 // please note that this is only possible since we created the
                 // backbuffer with copy semantics [the content is preserved after
                 // calls to Present()], which is an unnecessarily expensive operation.
-                LPDIRECT3DSURFACE9 pBackBuffer = NULL;
+                LPDIRECT3DSURFACE9 pBackBuffer = nullptr;
                 mpSwapChain->GetBackBuffer(0,D3DBACKBUFFER_TYPE_MONO,&pBackBuffer);
                 mpDevice->SetRenderTarget( 0, pBackBuffer );
-                mpDevice->Clear(0,NULL,D3DCLEAR_TARGET,0,1.0f,0L);
+                mpDevice->Clear(0,nullptr,D3DCLEAR_TARGET,0,1.0f,0);
                 pBackBuffer->Release();
             }
         }
@@ -984,13 +976,13 @@ namespace dxcanvas
         // DXRenderModule::createSurface
 
 
-        ::canvas::ISurfaceSharedPtr DXRenderModule::createSurface( const ::basegfx::B2IVector& surfaceSize )
+        std::shared_ptr<canvas::ISurface> DXRenderModule::createSurface( const ::basegfx::B2IVector& surfaceSize )
         {
             // TODO(P2): get rid of those fine-grained locking
             ::osl::MutexGuard aGuard( maMutex );
 
             if(isDisposed())
-                return ::canvas::ISurfaceSharedPtr();
+                return std::shared_ptr<canvas::ISurface>();
 
             const ::basegfx::B2IVector& rPageSize( getPageSize() );
             ::basegfx::B2ISize aSize(surfaceSize);
@@ -1002,7 +994,7 @@ namespace dxcanvas
             if(mpTexture.use_count() == 1)
                 return mpTexture;
 
-            return ::canvas::ISurfaceSharedPtr( new DXSurface(*this,aSize) );
+            return std::shared_ptr<canvas::ISurface>( new DXSurface(*this,aSize) );
         }
 
 
@@ -1214,13 +1206,13 @@ namespace dxcanvas
                     maReadIndex = 0;
                 }
 
-                dxvertex *vertices(NULL);
+                dxvertex *vertices(nullptr);
                 const std::size_t nNumVertices(
                     std::min(maNumVertices - maWriteIndex,
                              nSize));
                 if(FAILED(mpVertexBuffer->Lock(maWriteIndex*nVertexStride,
                                                nNumVertices*nVertexStride,
-                                               (void **)&vertices,
+                                               reinterpret_cast<void **>(&vertices),
                                                dwLockFlags)))
                     return;
 

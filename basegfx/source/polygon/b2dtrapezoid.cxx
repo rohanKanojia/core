@@ -20,6 +20,7 @@
 #include <basegfx/polygon/b2dtrapezoid.hxx>
 #include <basegfx/range/b1drange.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
+#include <basegfx/polygon/b2dpolypolygon.hxx>
 
 #include <osl/diagnose.h>
 
@@ -59,7 +60,7 @@ namespace basegfx
 
         // define vector of simple edges
 
-        typedef ::std::vector< TrDeSimpleEdge > TrDeSimpleEdges;
+        typedef std::vector< TrDeSimpleEdge > TrDeSimpleEdges;
 
         // helper class for holding a traversing edge. It will always have some
         // distance in YPos. The slope (in a numerically useful form, see comments) is
@@ -81,7 +82,7 @@ namespace basegfx
             // it is not always used
             sal_uInt32 getSortValue() const
             {
-                if(0 != mnSortValue)
+                if(mnSortValue != 0)
                     return mnSortValue;
 
                 // get radiant; has to be in the range ]0.0 .. pi[, thus scale to full
@@ -98,7 +99,7 @@ namespace basegfx
             TrDeEdgeEntry(
                 const B2DPoint* pStart,
                 const B2DPoint* pEnd,
-                sal_uInt32 nSortValue = 0)
+                sal_uInt32 nSortValue)
             :   TrDeSimpleEdge(pStart, pEnd),
                 mnSortValue(nSortValue)
             {
@@ -108,20 +109,20 @@ namespace basegfx
                     std::swap(mpStart, mpEnd);
                 }
 
-                // no horizontal edges allowed, all neeed to traverse vertically
+                // no horizontal edges allowed, all need to traverse vertically
                 OSL_ENSURE(mpEnd->getY() > mpStart->getY(), "Illegal TrDeEdgeEntry constructed (!)");
             }
 
             // data write access to StartPoint
             void setStart( const B2DPoint* pNewStart)
             {
-                OSL_ENSURE(nullptr != pNewStart, "No null pointer allowed here (!)");
+                OSL_ENSURE(pNewStart != nullptr, "No null pointer allowed here (!)");
 
                 if(mpStart != pNewStart)
                 {
                     mpStart = pNewStart;
 
-                    // no horizontal edges allowed, all neeed to traverse vertically
+                    // no horizontal edges allowed, all need to traverse vertically
                     OSL_ENSURE(mpEnd->getY() > mpStart->getY(), "Illegal TrDeEdgeEntry constructed (!)");
                 }
             }
@@ -129,13 +130,13 @@ namespace basegfx
             // data write access to EndPoint
             void setEnd( const B2DPoint* pNewEnd)
             {
-                OSL_ENSURE(nullptr != pNewEnd, "No null pointer allowed here (!)");
+                OSL_ENSURE(pNewEnd != nullptr, "No null pointer allowed here (!)");
 
                 if(mpEnd != pNewEnd)
                 {
                     mpEnd = pNewEnd;
 
-                    // no horizontal edges allowed, all neeed to traverse vertically
+                    // no horizontal edges allowed, all need to traverse vertically
                     OSL_ENSURE(mpEnd->getY() > mpStart->getY(), "Illegal TrDeEdgeEntry constructed (!)");
                 }
             }
@@ -167,7 +168,7 @@ namespace basegfx
             }
 
             // method for cut support
-            B2DPoint getCutPointForGivenY(double fGivenY)
+            B2DPoint getCutPointForGivenY(double fGivenY) const
             {
                 // Calculate cut point locally (do not use interpolate) since it is numerically
                 // necessary to guarantee the new, equal Y-coordinate
@@ -180,7 +181,7 @@ namespace basegfx
 
         // define double linked list of edges (for fast random insert)
 
-        typedef ::std::list< TrDeEdgeEntry > TrDeEdgeEntries;
+        typedef std::list< TrDeEdgeEntry > TrDeEdgeEntries;
 
     } // end of anonymous namespace
 } // end of namespace basegfx
@@ -209,7 +210,7 @@ namespace basegfx
 
             ~PointBlockAllocator()
             {
-                while(maBlocks.size() > 0)
+                while(!maBlocks.empty())
                 {
                     delete [] maBlocks.back();
                     maBlocks.pop_back();
@@ -235,7 +236,7 @@ namespace basegfx
             }
 
             /// This is a very uncommon case but why not ...
-            void freeIfLast(B2DPoint *pPoint)
+            void freeIfLast(B2DPoint const *pPoint)
             {
                 // just re-use the last point if we can.
                 if ( nCurPoint > 0 && pPoint == mpPointBase + nCurPoint - 1 )
@@ -250,7 +251,7 @@ namespace basegfx
             // local data
             sal_uInt32                  mnInitialEdgeEntryCount;
             TrDeEdgeEntries             maTrDeEdgeEntries;
-            ::std::vector< B2DPoint >   maPoints;
+            std::vector< B2DPoint >   maPoints;
             /// new points allocated for cuts
             PointBlockAllocator         maNewPoints;
 
@@ -271,7 +272,7 @@ namespace basegfx
             bool splitEdgeAtGivenPoint(
                 TrDeEdgeEntries::reference aEdge,
                 const B2DPoint& rCutPoint,
-                TrDeEdgeEntries::iterator aCurrent)
+                const TrDeEdgeEntries::iterator& aCurrent)
             {
                 // do not create edges without deltaY: do not split when start is identical
                 if(aEdge.getStart().equal(rCutPoint))
@@ -323,7 +324,7 @@ namespace basegfx
             bool testAndCorrectEdgeIntersection(
                 TrDeEdgeEntries::reference aEdgeA,
                 TrDeEdgeEntries::reference aEdgeB,
-                TrDeEdgeEntries::iterator aCurrent)
+                const TrDeEdgeEntries::iterator& aCurrent)
             {
                 // Exclude simple cases: same start or end point
                 if(aEdgeA.getStart().equal(aEdgeB.getStart()))
@@ -360,24 +361,24 @@ namespace basegfx
                 // check if one point is on the other edge (a touch, not a cut)
                 const B2DVector aDeltaB(aEdgeB.getDeltaX(), aEdgeB.getDeltaY());
 
-                if(tools::isPointOnEdge(aEdgeA.getStart(), aEdgeB.getStart(), aDeltaB))
+                if(utils::isPointOnEdge(aEdgeA.getStart(), aEdgeB.getStart(), aDeltaB))
                 {
                     return splitEdgeAtGivenPoint(aEdgeB, aEdgeA.getStart(), aCurrent);
                 }
 
-                if(tools::isPointOnEdge(aEdgeA.getEnd(), aEdgeB.getStart(), aDeltaB))
+                if(utils::isPointOnEdge(aEdgeA.getEnd(), aEdgeB.getStart(), aDeltaB))
                 {
                     return splitEdgeAtGivenPoint(aEdgeB, aEdgeA.getEnd(), aCurrent);
                 }
 
                 const B2DVector aDeltaA(aEdgeA.getDeltaX(), aEdgeA.getDeltaY());
 
-                if(tools::isPointOnEdge(aEdgeB.getStart(), aEdgeA.getStart(), aDeltaA))
+                if(utils::isPointOnEdge(aEdgeB.getStart(), aEdgeA.getStart(), aDeltaA))
                 {
                     return splitEdgeAtGivenPoint(aEdgeA, aEdgeB.getStart(), aCurrent);
                 }
 
-                if(tools::isPointOnEdge(aEdgeB.getEnd(), aEdgeA.getStart(), aDeltaA))
+                if(utils::isPointOnEdge(aEdgeB.getEnd(), aEdgeA.getStart(), aDeltaA))
                 {
                     return splitEdgeAtGivenPoint(aEdgeA, aEdgeB.getEnd(), aCurrent);
                 }
@@ -387,7 +388,7 @@ namespace basegfx
                 double fCutA(0.0);
                 double fCutB(0.0);
 
-                if(tools::findCut(
+                if(utils::findCut(
                     aEdgeA.getStart(), aDeltaA,
                     aEdgeB.getStart(), aDeltaB,
                     CutFlagValue::LINE,
@@ -423,10 +424,9 @@ namespace basegfx
                     // there were horizontal edges. These can be excluded, but
                     // cuts with other edges need to be solved and added before
                     // ignoring them
-                    for(size_t a = 0; a < rTrDeSimpleEdges.size(); a++)
+                    for(TrDeSimpleEdge & rHorEdge : rTrDeSimpleEdges)
                     {
                         // get horizontal edge as candidate; prepare its range and fixed Y
-                        const TrDeSimpleEdge& rHorEdge = rTrDeSimpleEdges[a];
                         const B1DRange aRange(rHorEdge.getStart().getX(), rHorEdge.getEnd().getX());
                         const double fFixedY(rHorEdge.getStart().getY());
 
@@ -486,9 +486,7 @@ namespace basegfx
                 maNewPoints()
             {
                 B2DPolyPolygon aSource(rSourcePolyPolygon);
-                const sal_uInt32 nPolygonCount(rSourcePolyPolygon.count());
                 TrDeSimpleEdges aTrDeSimpleEdges;
-                sal_uInt32 a(0), b(0);
                 sal_uInt32 nAllPointCount(0);
 
                 // ensure there are no curves used
@@ -497,10 +495,9 @@ namespace basegfx
                     aSource = aSource.getDefaultAdaptiveSubdivision();
                 }
 
-                for(a = 0; a < nPolygonCount; a++)
+                for(const auto& aPolygonCandidate : aSource)
                 {
                     // 1st run: count points
-                    const B2DPolygon aPolygonCandidate(aSource.getB2DPolygon(a));
                     const sal_uInt32 nCount(aPolygonCandidate.count());
 
                     if(nCount > 2)
@@ -515,15 +512,14 @@ namespace basegfx
                     // after 2nd loop since pointers to it are used in the edges
                     maPoints.reserve(nAllPointCount);
 
-                    for(a = 0; a < nPolygonCount; a++)
+                    for(const auto& aPolygonCandidate : aSource)
                     {
                         // 2nd run: add points
-                        const B2DPolygon aPolygonCandidate(aSource.getB2DPolygon(a));
                         const sal_uInt32 nCount(aPolygonCandidate.count());
 
                         if(nCount > 2)
                         {
-                            for(b = 0; b < nCount; b++)
+                            for(sal_uInt32 b = 0; b < nCount; b++)
                             {
                                 maPoints.push_back(aPolygonCandidate.getB2DPoint(b));
                             }
@@ -536,9 +532,8 @@ namespace basegfx
                     // in the edges may be wrong. Security first here.
                     sal_uInt32 nStartIndex(0);
 
-                    for(a = 0; a < nPolygonCount; a++)
+                    for(const auto& aPolygonCandidate : aSource)
                     {
-                        const B2DPolygon aPolygonCandidate(aSource.getB2DPolygon(a));
                         const sal_uInt32 nCount(aPolygonCandidate.count());
 
                         if(nCount > 2)
@@ -546,7 +541,7 @@ namespace basegfx
                             // get the last point of the current polygon
                             B2DPoint* pPrev(&maPoints[nCount + nStartIndex - 1]);
 
-                            for(b = 0; b < nCount; b++)
+                            for(sal_uInt32 b = 0; b < nCount; b++)
                             {
                                 // get next point
                                 B2DPoint* pCurr(&maPoints[nStartIndex++]);
@@ -557,7 +552,7 @@ namespace basegfx
                                     if(!fTools::equal(pPrev->getX(), pCurr->getX()))
                                     {
                                         // X-order not needed, just add
-                                        aTrDeSimpleEdges.push_back(TrDeSimpleEdge(pPrev, pCurr));
+                                        aTrDeSimpleEdges.emplace_back(pPrev, pCurr);
 
                                         const double fMiddle((pPrev->getY() + pCurr->getY()) * 0.5);
                                         pPrev->setY(fMiddle);
@@ -568,7 +563,7 @@ namespace basegfx
                                 {
                                     // vertical edge. Positive Y-direction is guaranteed by the
                                     // TrDeEdgeEntry constructor
-                                    maTrDeEdgeEntries.push_back(TrDeEdgeEntry(pPrev, pCurr, 0));
+                                    maTrDeEdgeEntries.emplace_back(pPrev, pCurr, 0);
                                     mnInitialEdgeEntryCount++;
                                 }
 
@@ -593,7 +588,7 @@ namespace basegfx
             {
                 // This is the central subdivider. The strategy is to use the first two entries
                 // from the traversing edges as a potential trapezoid and do the needed corrections
-                // and adaptions on the way.
+                // and adaptations on the way.
 
                 // There always must be two edges with the same YStart value: When adding the polygons
                 // in the constructor, there is always a topmost point from which two edges start; when
@@ -666,7 +661,7 @@ namespace basegfx
                     B2DPoint aLeftEnd(aLeft.getEnd());
                     B2DPoint aRightEnd(aRight.getEnd());
 
-                    // check if end points are on the same line. If yes, no adaption
+                    // check if end points are on the same line. If yes, no adaptation
                     // needs to be prepared. Also remember which one actually is longer.
                     const bool bEndOnSameLine(fTools::equal(aLeftEnd.getY(), aRightEnd.getY()));
                     bool bLeftIsLonger(false);
@@ -875,14 +870,13 @@ namespace basegfx
                     // the two edges start at the same Y, they use the same DeltaY, they
                     // do not cut themselves and not any other edge in range. Create a
                     // B2DTrapezoid and consume both edges
-                    ro_Result.push_back(
-                        B2DTrapezoid(
+                    ro_Result.emplace_back(
                             aLeft.getStart().getX(),
                             aRight.getStart().getX(),
                             aLeft.getStart().getY(),
                             aLeftEnd.getX(),
                             aRightEnd.getX(),
-                            aLeftEnd.getY()));
+                            aLeftEnd.getY());
 
                     maTrDeEdgeEntries.pop_front();
                     maTrDeEdgeEntries.pop_front();
@@ -945,9 +939,9 @@ namespace basegfx
 
 namespace basegfx
 {
-    namespace tools
+    namespace utils
     {
-        // convert Source tools::PolyPolygon to trapezoids
+        // convert Source utils::PolyPolygon to trapezoids
         void trapezoidSubdivide(B2DTrapezoidVector& ro_Result, const B2DPolyPolygon& rSourcePolyPolygon)
         {
             trapezoidhelper::TrapezoidSubdivider aTrapezoidSubdivider(rSourcePolyPolygon);
@@ -963,7 +957,7 @@ namespace basegfx
         {
             if(fTools::lessOrEqual(fLineWidth, 0.0))
             {
-                // no line witdh
+                // no line width
                 return;
             }
 
@@ -981,14 +975,13 @@ namespace basegfx
                 const double fLeftX(rPointA.getX() - fHalfLineWidth);
                 const double fRightX(rPointA.getX() + fHalfLineWidth);
 
-                ro_Result.push_back(
-                    B2DTrapezoid(
+                ro_Result.emplace_back(
                         fLeftX,
                         fRightX,
                         std::min(rPointA.getY(), rPointB.getY()),
                         fLeftX,
                         fRightX,
-                        std::max(rPointA.getY(), rPointB.getY())));
+                        std::max(rPointA.getY(), rPointB.getY()));
             }
             else if(fTools::equal(rPointA.getY(), rPointB.getY()))
             {
@@ -996,14 +989,13 @@ namespace basegfx
                 const double fLeftX(std::min(rPointA.getX(), rPointB.getX()));
                 const double fRightX(std::max(rPointA.getX(), rPointB.getX()));
 
-                ro_Result.push_back(
-                    B2DTrapezoid(
+                ro_Result.emplace_back(
                         fLeftX,
                         fRightX,
                         rPointA.getY() - fHalfLineWidth,
                         fLeftX,
                         fRightX,
-                        rPointA.getY() + fHalfLineWidth));
+                        rPointA.getY() + fHalfLineWidth);
             }
             else
             {
@@ -1022,10 +1014,10 @@ namespace basegfx
                 // create EdgeEntries
                 basegfx::trapezoidhelper::TrDeEdgeEntries aTrDeEdgeEntries;
 
-                aTrDeEdgeEntries.push_back(basegfx::trapezoidhelper::TrDeEdgeEntry(&aStartLow, &aStartHigh, 0));
-                aTrDeEdgeEntries.push_back(basegfx::trapezoidhelper::TrDeEdgeEntry(&aStartHigh, &aEndHigh, 0));
-                aTrDeEdgeEntries.push_back(basegfx::trapezoidhelper::TrDeEdgeEntry(&aEndHigh, &aEndLow, 0));
-                aTrDeEdgeEntries.push_back(basegfx::trapezoidhelper::TrDeEdgeEntry(&aEndLow, &aStartLow, 0));
+                aTrDeEdgeEntries.emplace_back(&aStartLow, &aStartHigh, 0);
+                aTrDeEdgeEntries.emplace_back(&aStartHigh, &aEndHigh, 0);
+                aTrDeEdgeEntries.emplace_back(&aEndHigh, &aEndLow, 0);
+                aTrDeEdgeEntries.emplace_back(&aEndLow, &aStartLow, 0);
                 aTrDeEdgeEntries.sort();
 
                 // here we know we have exactly four edges, and they do not cut, touch or
@@ -1039,26 +1031,24 @@ namespace basegfx
                 if(bEndOnSameLine)
                 {
                     // create two triangle trapezoids
-                    ro_Result.push_back(
-                        B2DTrapezoid(
+                    ro_Result.emplace_back(
                             aLeft.getStart().getX(),
                             aRight.getStart().getX(),
                             aLeft.getStart().getY(),
                             aLeft.getEnd().getX(),
                             aRight.getEnd().getX(),
-                            aLeft.getEnd().getY()));
+                            aLeft.getEnd().getY());
 
                     basegfx::trapezoidhelper::TrDeEdgeEntries::reference aLeft2(*aCurrent++);
                     basegfx::trapezoidhelper::TrDeEdgeEntries::reference aRight2(*aCurrent++);
 
-                    ro_Result.push_back(
-                        B2DTrapezoid(
+                    ro_Result.emplace_back(
                             aLeft2.getStart().getX(),
                             aRight2.getStart().getX(),
                             aLeft2.getStart().getY(),
                             aLeft2.getEnd().getX(),
                             aRight2.getEnd().getX(),
-                            aLeft2.getEnd().getY()));
+                            aLeft2.getEnd().getY());
                 }
                 else
                 {
@@ -1073,32 +1063,29 @@ namespace basegfx
                         const B2DPoint aSplitLeft(aLeft.getCutPointForGivenY(aRight.getEnd().getY()));
                         const B2DPoint aSplitRight(aRight2.getCutPointForGivenY(aLeft.getEnd().getY()));
 
-                        ro_Result.push_back(
-                            B2DTrapezoid(
+                        ro_Result.emplace_back(
                                 aLeft.getStart().getX(),
                                 aRight.getStart().getX(),
                                 aLeft.getStart().getY(),
                                 aSplitLeft.getX(),
                                 aRight.getEnd().getX(),
-                                aRight.getEnd().getY()));
+                                aRight.getEnd().getY());
 
-                        ro_Result.push_back(
-                            B2DTrapezoid(
+                        ro_Result.emplace_back(
                                 aSplitLeft.getX(),
                                 aRight.getEnd().getX(),
                                 aRight.getEnd().getY(),
                                 aLeft2.getStart().getX(),
                                 aSplitRight.getX(),
-                                aLeft2.getStart().getY()));
+                                aLeft2.getStart().getY());
 
-                        ro_Result.push_back(
-                            B2DTrapezoid(
+                        ro_Result.emplace_back(
                                 aLeft2.getStart().getX(),
                                 aSplitRight.getX(),
                                 aLeft2.getStart().getY(),
                                 aLeft2.getEnd().getX(),
                                 aRight2.getEnd().getX(),
-                                aLeft2.getEnd().getY()));
+                                aLeft2.getEnd().getY());
                     }
                     else
                     {
@@ -1107,32 +1094,29 @@ namespace basegfx
                         const B2DPoint aSplitRight(aRight.getCutPointForGivenY(aLeft.getEnd().getY()));
                         const B2DPoint aSplitLeft(aLeft2.getCutPointForGivenY(aRight.getEnd().getY()));
 
-                        ro_Result.push_back(
-                            B2DTrapezoid(
+                        ro_Result.emplace_back(
                                 aLeft.getStart().getX(),
                                 aRight.getStart().getX(),
                                 aLeft.getStart().getY(),
                                 aLeft.getEnd().getX(),
                                 aSplitRight.getX(),
-                                aLeft.getEnd().getY()));
+                                aLeft.getEnd().getY());
 
-                        ro_Result.push_back(
-                            B2DTrapezoid(
+                        ro_Result.emplace_back(
                                 aLeft.getEnd().getX(),
                                 aSplitRight.getX(),
                                 aLeft.getEnd().getY(),
                                 aSplitLeft.getX(),
                                 aRight.getEnd().getX(),
-                                aRight2.getStart().getY()));
+                                aRight2.getStart().getY());
 
-                        ro_Result.push_back(
-                            B2DTrapezoid(
+                        ro_Result.emplace_back(
                                 aSplitLeft.getX(),
                                 aRight.getEnd().getX(),
                                 aRight2.getStart().getY(),
                                 aLeft2.getEnd().getX(),
                                 aRight2.getEnd().getX(),
-                                aLeft2.getEnd().getY()));
+                                aLeft2.getEnd().getY());
                     }
                 }
             }
@@ -1153,7 +1137,7 @@ namespace basegfx
 
             if(aSource.areControlPointsUsed())
             {
-            const double fPrecisionFactor = 0.25;
+                const double fPrecisionFactor = 0.25;
                 aSource = adaptiveSubdivideByDistance( aSource, fLineWidth * fPrecisionFactor );
             }
 
@@ -1179,41 +1163,8 @@ namespace basegfx
             }
         }
 
-        void createLineTrapezoidFromB2DPolyPolygon(
-            B2DTrapezoidVector& ro_Result,
-            const B2DPolyPolygon& rPolyPolygon,
-            double fLineWidth)
-        {
-            if(fTools::lessOrEqual(fLineWidth, 0.0))
-            {
-                return;
-            }
 
-            // ensure there are no curves used
-            B2DPolyPolygon aSource(rPolyPolygon);
-
-            if(aSource.areControlPointsUsed())
-            {
-                aSource = aSource.getDefaultAdaptiveSubdivision();
-            }
-
-            const sal_uInt32 nCount(aSource.count());
-
-            if(!nCount)
-            {
-                return;
-            }
-
-            for(sal_uInt32 a(0); a < nCount; a++)
-            {
-                createLineTrapezoidFromB2DPolygon(
-                    ro_Result,
-                    aSource.getB2DPolygon(a),
-                    fLineWidth);
-            }
-        }
-
-    } // end of namespace tools
+    } // end of namespace utils
 } // end of namespace basegfx
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

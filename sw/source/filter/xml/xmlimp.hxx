@@ -32,6 +32,7 @@
 #include <xmloff/xmlimp.hxx>
 
 #include "xmlitmap.hxx"
+#include <o3tl/typed_flags_set.hxx>
 
 class SwDoc;
 class SvXMLUnitConverter;
@@ -42,26 +43,35 @@ class SwNodeIndex;
 class XMLTextImportHelper;
 class SvXMLGraphicHelper;
 class SvXMLEmbeddedObjectHelper;
+enum class SfxStyleFamily;
 
 // define, how many steps ( = paragraphs ) the progress bar should advance
 // for styles, autostyles and settings + meta
 #define PROGRESS_BAR_STEP 20
 
 namespace SwImport {
-    SwDoc* GetDocFromXMLImport( SvXMLImport& );
+    SwDoc* GetDocFromXMLImport( SvXMLImport const & );
+}
+
+// we only need this scoped enum to be flags here, in sw
+namespace o3tl
+{
+    template<> struct typed_flags<SfxStyleFamily> : is_typed_flags<SfxStyleFamily, 0xffff> {};
 }
 
 class SwXMLImport: public SvXMLImport
 {
     std::unique_ptr<SwNodeIndex> m_pSttNdIdx;
 
-    SvXMLUnitConverter      *m_pTwipUnitConv;
-    SvXMLImportItemMapper   *m_pTableItemMapper;// paragraph item import
-    SvXMLTokenMap           *m_pDocElemTokenMap;
-    SvXMLTokenMap           *m_pTableElemTokenMap;
-    SvXMLTokenMap           *m_pTableCellAttrTokenMap;
-    SvXMLGraphicHelper      *m_pGraphicResolver;
-    SvXMLEmbeddedObjectHelper   *m_pEmbeddedResolver;
+    std::unique_ptr<SvXMLUnitConverter> m_pTwipUnitConv;
+    std::unique_ptr<SvXMLImportItemMapper> m_pTableItemMapper;// paragraph item import
+    std::unique_ptr<SvXMLTokenMap> m_pDocElemTokenMap;
+    std::unique_ptr<SvXMLTokenMap> m_pTableElemTokenMap;
+    std::unique_ptr<SvXMLTokenMap> m_pTableCellAttrTokenMap;
+
+    rtl::Reference<SvXMLGraphicHelper> m_xGraphicStorageHandler;
+
+    rtl::Reference<SvXMLEmbeddedObjectHelper> m_xEmbeddedResolver;
 
     SvXMLItemMapEntriesRef  m_xTableItemMap;
     SvXMLItemMapEntriesRef  m_xTableColItemMap;
@@ -70,38 +80,35 @@ class SwXMLImport: public SvXMLImport
     css::uno::Reference< css::container::XNameContainer >
                             m_xLateInitSettings;
 
-    sal_uInt16              m_nStyleFamilyMask;// Mask of styles to load
+    SfxStyleFamily      m_nStyleFamilyMask;// Mask of styles to load
     bool                m_bLoadDoc : 1;   // Load doc or styles only
     bool                m_bInsert : 1;    // Insert mode. If styles are
                                             // loaded only false means that
                                             // existing styles will be
                                             // overwritten.
     bool                m_bBlock : 1;     // Load text block
-    bool                m_bShowProgress : 1;
     bool                m_bOrganizerMode : 1;
     bool                m_bInititedXForms : 1;
-    bool                m_bPreserveRedlineMode;
 
     SwDoc*      m_pDoc; // cached for getDoc()
 
-    void                    _InitItemImport();
-    void                    _FinitItemImport();
+    void                    InitItemImport();
+    void                    FinitItemImport();
     void                    UpdateTextCollConditions( SwDoc *pDoc );
 
     void         setTextInsertMode(
                      const css::uno::Reference< css::text::XTextRange > & rInsertPos );
-    void         setStyleInsertMode( sal_uInt16 nFamilies,
+    void         setStyleInsertMode( SfxStyleFamily nFamilies,
                                      bool bOverwrite );
-    void         setBlockMode();
-    void         setOrganizerMode();
 
 protected:
 
-    // This method is called after the namespace map has been updated, but
-    // before a context for the current element has been pushed.
-    virtual SvXMLImportContext *CreateContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContext *CreateDocumentContext( sal_uInt16 nPrefix,
                   const OUString& rLocalName,
                   const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
+
+    virtual SvXMLImportContext *CreateFastContext( sal_Int32 nElement,
+        const ::css::uno::Reference< ::css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
     virtual XMLTextImportHelper* CreateTextImport() override;
 
@@ -112,22 +119,18 @@ public:
         const css::uno::Reference< css::uno::XComponentContext >& rContext,
         OUString const & implementationName, SvXMLImportFlags nImportFlags);
 
-    virtual ~SwXMLImport() throw();
+    virtual ~SwXMLImport() throw() override;
 
     // css::xml::sax::XDocumentHandler
-    virtual void SAL_CALL startDocument()
-        throw (css::xml::sax::SAXException,
-               css::uno::RuntimeException,
-               std::exception) override;
-    virtual void SAL_CALL endDocument()
-        throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL startDocument() override;
+    virtual void SAL_CALL endDocument() override;
 
     // XUnoTunnel
     static const css::uno::Sequence< sal_Int8 > & getUnoTunnelId() throw();
-    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw(css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
     void                    InsertStyles( bool bAuto );
     void                    FinishStyles();
@@ -136,7 +139,7 @@ public:
 
     // NB: in contrast to other CreateFooContexts, this particular one handles
     //     the root element (i.e. office:document-meta)
-    SvXMLImportContext *CreateMetaContext( const OUString& rLocalName );
+    SvXMLImportContext *CreateMetaContext( const sal_Int32 nElement );
     SvXMLImportContext *CreateScriptContext( const OUString& rLocalName );
     SvXMLImportContext *CreateStylesContext(
                 const OUString& rLocalName,
@@ -149,13 +152,11 @@ public:
             const OUString& rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList );
     SvXMLImportContext *CreateBodyContentContext( const OUString& rLocalName );
-    sal_uInt16 GetStyleFamilyMask() const { return m_nStyleFamilyMask; }
+    SfxStyleFamily GetStyleFamilyMask() const { return m_nStyleFamilyMask; }
     bool IsInsertMode() const { return m_bInsert; }
     bool IsStylesOnlyMode() const { return !m_bLoadDoc; }
     bool IsBlockMode() const { return m_bBlock; }
-    bool IsOrganizerMode() const { return m_bOrganizerMode; }
 
-    inline const SvXMLUnitConverter& GetTwipUnitConverter() const;
     inline const SvXMLImportItemMapper& GetTableItemMapper() const;
     inline       SvXMLImportItemMapper& GetTableItemMapper();
     SvXMLImportContext *CreateTableItemImportContext( sal_uInt16 nPrefix,
@@ -169,8 +170,8 @@ public:
 
     bool FindAutomaticStyle( sal_uInt16 nFamily,
                              const OUString& rName,
-                             const SfxItemSet **ppItemSet=nullptr,
-                             OUString *pParent=nullptr ) const;
+                             const SfxItemSet **ppItemSet ) const;
+    void MergeListsAtDocumentInsertPosition(SwDoc *pDoc);
 
     virtual void SetStatistics(
         const css::uno::Sequence< css::beans::NamedValue> & i_rStats) override;
@@ -191,11 +192,6 @@ public:
     const SwDoc* getDoc() const;
     SwDoc* getDoc();
 };
-
-inline const SvXMLUnitConverter& SwXMLImport::GetTwipUnitConverter() const
-{
-    return *m_pTwipUnitConv;
-}
 
 inline const SvXMLImportItemMapper& SwXMLImport::GetTableItemMapper() const
 {

@@ -20,10 +20,12 @@
 #ifndef INCLUDED_COMPHELPER_STREAMSECTION_HXX
 #define INCLUDED_COMPHELPER_STREAMSECTION_HXX
 
-#include <com/sun/star/io/XMarkableStream.hpp>
-#include <com/sun/star/io/XDataInputStream.hpp>
-#include <com/sun/star/io/XDataOutputStream.hpp>
+#include <com/sun/star/uno/Reference.h>
 #include <comphelper/comphelperdllapi.h>
+
+namespace com { namespace sun { namespace star { namespace io { class XDataInputStream; } } } }
+namespace com { namespace sun { namespace star { namespace io { class XDataOutputStream; } } } }
+namespace com { namespace sun { namespace star { namespace io { class XMarkableStream; } } } }
 
 namespace comphelper
 {
@@ -31,9 +33,6 @@ namespace comphelper
 /** implements handling for compatibly reading/writing data from/into an input/output stream.
     data written in a block secured by this class should be readable by older versions which
     use the same mechanism.
-
-    @author Frank Schoenheit
-    @since  00/26/05
 */
 
 class COMPHELPER_DLLPUBLIC OStreamSection

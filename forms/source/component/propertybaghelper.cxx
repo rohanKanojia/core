@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "propertybaghelper.hxx"
+#include <propertybaghelper.hxx>
 
-#include "property.hxx"
+#include <property.hxx>
 
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/beans/PropertyExistException.hpp>
@@ -30,7 +30,7 @@
 #include <tools/diagnose_ex.h>
 
 #include <comphelper/sequence.hxx>
-#include "rtl/instance.hxx"
+#include <rtl/instance.hxx>
 
 
 #define NEW_HANDLE_BASE 10000
@@ -72,7 +72,6 @@ namespace frm
 
     PropertyBagHelper::PropertyBagHelper( IPropertyBagHelperContext& _rContext )
         :m_rContext( _rContext )
-        ,m_pPropertyArrayHelper( nullptr )
         ,m_bDisposed( false )
     {
     }
@@ -80,8 +79,6 @@ namespace frm
 
     PropertyBagHelper::~PropertyBagHelper()
     {
-        delete m_pPropertyArrayHelper;
-        m_pPropertyArrayHelper = nullptr;
     }
 
 
@@ -100,8 +97,7 @@ namespace frm
 
     void PropertyBagHelper::impl_nts_invalidatePropertySetInfo()
     {
-        delete m_pPropertyArrayHelper;
-        m_pPropertyArrayHelper = nullptr;
+        m_pPropertyArrayHelper.reset();
     }
 
 
@@ -117,7 +113,7 @@ namespace frm
         // search a free handle in <math>F_1009</math>
         if ( nHandle == -1 )
         {
-            sal_Int32 nPrime = 1009;
+            sal_Int32 const nPrime = 1009;
             sal_Int32 nFactor = 11;
             sal_Int32 nNum = nFactor;
             while ( nNum != 1 )
@@ -146,11 +142,11 @@ namespace frm
 
     ::comphelper::OPropertyArrayAggregationHelper& PropertyBagHelper::impl_ts_getArrayHelper() const
     {
-        OPropertyArrayAggregationHelper* p = m_pPropertyArrayHelper;
+        OPropertyArrayAggregationHelper* p = m_pPropertyArrayHelper.get();
         if ( !p )
         {
             ::osl::MutexGuard aGuard( m_rContext.getMutex() );
-            p = m_pPropertyArrayHelper;
+            p = m_pPropertyArrayHelper.get();
             if ( !p )
             {
                 // our own fixed and our aggregate's properties
@@ -167,7 +163,7 @@ namespace frm
 
                 p = new OPropertyArrayAggregationHelper( aOwnProps, aAggregateProps, &lcl_getPropertyInfos(), NEW_HANDLE_BASE );
                 OSL_DOUBLE_CHECKED_LOCKING_MEMORY_BARRIER();
-                const_cast< PropertyBagHelper* >( this )->m_pPropertyArrayHelper = p;
+                const_cast< PropertyBagHelper* >( this )->m_pPropertyArrayHelper.reset( p );
             }
         } // if ( !p )
         else
@@ -225,27 +221,27 @@ namespace frm
     namespace
     {
 
-        struct SelectNameOfProperty : public ::std::unary_function< Property, OUString >
+        struct SelectNameOfProperty
         {
             const OUString& operator()( const Property& _rProp ) const { return _rProp.Name; }
         };
 
 
-        struct SelectNameOfPropertyValue : public ::std::unary_function< PropertyValue, OUString >
+        struct SelectNameOfPropertyValue
         {
             const OUString& operator()( const PropertyValue& _rProp ) const { return _rProp.Name; }
         };
 
 
-        struct SelectValueOfPropertyValue : public ::std::unary_function< PropertyValue, Any >
+        struct SelectValueOfPropertyValue
         {
             const Any& operator()( const PropertyValue& _rProp ) const { return _rProp.Value; }
         };
 
 
-        struct PropertyValueLessByName : public ::std::binary_function< PropertyValue, PropertyValue, bool >
+        struct PropertyValueLessByName
         {
-            bool operator()( const PropertyValue& _lhs, const PropertyValue _rhs ) const
+            bool operator()( const PropertyValue& _lhs, const PropertyValue& _rhs ) const
             {
                 return _lhs.Name < _rhs.Name;
             }
@@ -263,7 +259,7 @@ namespace frm
 
         Sequence< Property > aProperties( xPSI->getProperties() );
         Sequence< OUString > aPropertyNames( aProperties.getLength() );
-        ::std::transform( aProperties.getConstArray(), aProperties.getConstArray() + aProperties.getLength(),
+        ::std::transform( aProperties.begin(), aProperties.end(),
             aPropertyNames.getArray(), SelectNameOfProperty() );
 
         Sequence< Any > aValues;
@@ -277,7 +273,7 @@ namespace frm
         catch( const RuntimeException& ) { throw; }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("forms.component");
         }
         Sequence< PropertyValue > aPropertyValues( aValues.getLength() );
         PropertyValue* pPropertyValue = aPropertyValues.getArray();

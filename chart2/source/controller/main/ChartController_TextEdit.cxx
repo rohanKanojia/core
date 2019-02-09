@@ -17,28 +17,26 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ChartController.hxx"
+#include <ChartController.hxx>
 
-#include "ResId.hxx"
+#include <ResId.hxx>
 #include "UndoGuard.hxx"
-#include "DrawViewWrapper.hxx"
-#include "ChartWindow.hxx"
-#include "TitleHelper.hxx"
-#include "ObjectIdentifier.hxx"
-#include "macros.hxx"
-#include "ControllerLockGuard.hxx"
-#include "AccessibleTextHelper.hxx"
-#include "Strings.hrc"
-#include "chartview/DrawModelWrapper.hxx"
+#include <DrawViewWrapper.hxx>
+#include <ChartWindow.hxx>
+#include <TitleHelper.hxx>
+#include <ObjectIdentifier.hxx>
+#include <ControllerLockGuard.hxx>
+#include <AccessibleTextHelper.hxx>
+#include <strings.hrc>
+#include <chartview/DrawModelWrapper.hxx>
 
-#include <svx/svdotext.hxx>
-#include <vcl/msgbox.hxx>
 #include <svx/svdoutl.hxx>
 #include <svx/svxdlg.hxx>
-#include <svx/dialogs.hrc>
+#include <svx/svxids.hrc>
+#include <editeng/editids.hrc>
 #include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/chart2/XTitle.hpp>
 #include <svl/stritem.hxx>
 #include <editeng/fontitem.hxx>
 #include <memory>
@@ -49,7 +47,7 @@ using namespace ::com::sun::star;
 
 void ChartController::executeDispatch_EditText( const Point* pMousePixel )
 {
-    this->StartTextEdit( pMousePixel );
+    StartTextEdit( pMousePixel );
 }
 
 void ChartController::StartTextEdit( const Point* pMousePixel )
@@ -61,19 +59,20 @@ void ChartController::StartTextEdit( const Point* pMousePixel )
     if(!pTextObj)
         return;
 
-    OSL_PRECOND( !m_pTextActionUndoGuard.get(), "ChartController::StartTextEdit: already have a TextUndoGuard!?" );
+    OSL_PRECOND(!m_pTextActionUndoGuard,
+                "ChartController::StartTextEdit: already have a TextUndoGuard!?");
     m_pTextActionUndoGuard.reset( new UndoGuard(
-        SCH_RESSTR( STR_ACTION_EDIT_TEXT ), m_xUndoManager ) );
+        SchResId( STR_ACTION_EDIT_TEXT ), m_xUndoManager ) );
     SdrOutliner* pOutliner = m_pDrawViewWrapper->getOutliner();
 
     //#i77362 change notification for changes on additional shapes are missing
     uno::Reference< beans::XPropertySet > xChartViewProps( m_xChartView, uno::UNO_QUERY );
     if( xChartViewProps.is() )
-        xChartViewProps->setPropertyValue( "SdrViewIsInEditMode", uno::makeAny(sal_True) );
+        xChartViewProps->setPropertyValue( "SdrViewIsInEditMode", uno::Any(true) );
 
     bool bEdit = m_pDrawViewWrapper->SdrBeginTextEdit( pTextObj
                     , m_pDrawViewWrapper->GetPageView()
-                    , m_pChartWindow
+                    , GetChartWindow()
                     , false //bIsNewObj
                     , pOutliner
                     , nullptr //pOutlinerView
@@ -98,7 +97,7 @@ void ChartController::StartTextEdit( const Point* pMousePixel )
 
         //we invalidate the outliner region because the outliner has some
         //paint problems (some characters are painted twice a little bit shifted)
-        m_pChartWindow->Invalidate( m_pDrawViewWrapper->GetMarkedObjBoundRect() );
+        GetChartWindow()->Invalidate( m_pDrawViewWrapper->GetMarkedObjBoundRect() );
     }
 }
 
@@ -109,7 +108,7 @@ bool ChartController::EndTextEdit()
     //#i77362 change notification for changes on additional shapes are missing
     uno::Reference< beans::XPropertySet > xChartViewProps( m_xChartView, uno::UNO_QUERY );
     if( xChartViewProps.is() )
-        xChartViewProps->setPropertyValue( "SdrViewIsInEditMode", uno::makeAny(sal_False) );
+        xChartViewProps->setPropertyValue( "SdrViewIsInEditMode", uno::Any(false) );
 
     SdrObject* pTextObject = m_pDrawViewWrapper->getTextEditObject();
     if(!pTextObject)
@@ -137,8 +136,8 @@ bool ChartController::EndTextEdit()
             TitleHelper::setCompleteString( aString, uno::Reference<
                 css::chart2::XTitle >::query( xPropSet ), m_xCC );
 
-            OSL_ENSURE( m_pTextActionUndoGuard.get(), "ChartController::EndTextEdit: no TextUndoGuard!" );
-            if ( m_pTextActionUndoGuard.get() )
+            OSL_ENSURE(m_pTextActionUndoGuard, "ChartController::EndTextEdit: no TextUndoGuard!");
+            if (m_pTextActionUndoGuard)
                 m_pTextActionUndoGuard->commit();
         }
         m_pTextActionUndoGuard.reset();
@@ -155,10 +154,9 @@ void ChartController::executeDispatch_InsertSpecialCharacter()
         return;
     }
     if( !m_pDrawViewWrapper->IsTextEdit() )
-        this->StartTextEdit();
+        StartTextEdit();
 
     SvxAbstractDialogFactory * pFact = SvxAbstractDialogFactory::Create();
-    OSL_ENSURE( pFact, "No dialog factory" );
 
     SfxAllItemSet aSet( m_pDrawModelWrapper->GetItemPool() );
     aSet.Put( SfxBoolItem( FN_PARAM_1, false ) );
@@ -169,8 +167,8 @@ void ChartController::executeDispatch_InsertSpecialCharacter()
     vcl::Font aCurFont = m_pDrawViewWrapper->getOutliner()->GetRefDevice()->GetFont();
     aSet.Put( SvxFontItem( aCurFont.GetFamilyType(), aCurFont.GetFamilyName(), aCurFont.GetStyleName(), aCurFont.GetPitch(), aCurFont.GetCharSet(), SID_ATTR_CHAR_FONT ) );
 
-    std::unique_ptr<SfxAbstractDialog> pDlg(pFact->CreateSfxDialog( m_pChartWindow, aSet, getFrame(), RID_SVXDLG_CHARMAP ));
-    OSL_ENSURE( pDlg, "Couldn't create SvxCharacterMap dialog" );
+    vcl::Window* pWin = GetChartWindow();
+    ScopedVclPtr<SfxAbstractDialog> pDlg(pFact->CreateCharMapDialog(pWin ? pWin->GetFrameWeld() : nullptr, aSet, false));
     if( pDlg->Execute() == RET_OK )
     {
         const SfxItemSet* pSet = pDlg->GetOutputItemSet();
@@ -213,7 +211,7 @@ uno::Reference< css::accessibility::XAccessibleContext >
     ChartController::impl_createAccessibleTextContext()
 {
     uno::Reference< css::accessibility::XAccessibleContext > xResult(
-        new AccessibleTextHelper( m_pDrawViewWrapper ));
+        new AccessibleTextHelper( m_pDrawViewWrapper.get() ));
 
     return xResult;
 }

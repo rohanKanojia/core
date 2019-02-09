@@ -42,7 +42,7 @@ SwTextAttr::SwTextAttr( SfxPoolItem& rAttr, sal_Int32 nStart )
 {
 }
 
-SwTextAttr::~SwTextAttr( )
+SwTextAttr::~SwTextAttr() COVERITY_NOEXCEPT_FALSE
 {
 }
 
@@ -77,7 +77,7 @@ sal_Int32* SwTextAttrEnd::GetEnd()
 
 void SwTextAttr::dumpAsXml(xmlTextWriterPtr pWriter) const
 {
-    xmlTextWriterStartElement(pWriter, BAD_CAST("swTextAttr"));
+    xmlTextWriterStartElement(pWriter, BAD_CAST("SwTextAttr"));
 
     xmlTextWriterWriteAttribute(pWriter, BAD_CAST("start"), BAD_CAST(OString::number(m_nStart).getStr()));
     if (End())
@@ -100,21 +100,21 @@ void SwTextAttr::dumpAsXml(xmlTextWriterPtr pWriter) const
         {
             pWhich = "character format";
             if (SwCharFormat* pCharFormat = GetCharFormat().GetCharFormat())
-                oValue = "name: " + OUStringToOString(pCharFormat->GetName(), RTL_TEXTENCODING_UTF8);
+                oValue = OString("name: " + OUStringToOString(pCharFormat->GetName(), RTL_TEXTENCODING_UTF8));
             break;
         }
     case RES_TXTATR_INETFMT:
         {
             pWhich = "inet format";
             const SwFormatINetFormat& rFormat = GetINetFormat();
-            oValue = "url: " + rFormat.GetValue().toUtf8();
+            oValue = OString("url: " + rFormat.GetValue().toUtf8());
             break;
         }
     case RES_TXTATR_CJK_RUBY:
         {
             pWhich = "ruby";
             const SwFormatRuby& rFormat = GetRuby();
-            oValue = "rubytext: " + rFormat.GetText().toUtf8();
+            oValue = OString("rubytext: " + rFormat.GetText().toUtf8());
             break;
         }
     case RES_TXTATR_META:

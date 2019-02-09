@@ -17,14 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DrawViewShell.hxx"
-#include "ViewShellImplementation.hxx"
+#include <DrawViewShell.hxx>
+#include <ViewShellImplementation.hxx>
 #include <vcl/waitobj.hxx>
 
 #include <svx/svxids.hrc>
 #include <svx/dialogs.hrc>
 #include <svx/imapdlg.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/request.hxx>
 #include <svx/svdogrp.hxx>
 #include <svx/svdoole2.hxx>
@@ -35,20 +34,19 @@
 #include <svl/style.hxx>
 #include <svx/svdpagv.hxx>
 #include <svx/grafctrl.hxx>
-#include "stlsheet.hxx"
+#include <stlsheet.hxx>
 
 #include <sfx2/viewfrm.hxx>
 
-#include "app.hrc"
-#include "strings.hrc"
-#include "helpids.h"
-#include "Window.hxx"
-#include "imapinfo.hxx"
-#include "sdresid.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "drawview.hxx"
-#include "sdabstdlg.hxx"
+#include <app.hrc>
+#include <Window.hxx>
+#include <imapinfo.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <drawview.hxx>
+#include <sdabstdlg.hxx>
+#include <memory>
+
 namespace sd {
 
 void DrawViewShell::UpdateIMapDlg( SdrObject* pObj )
@@ -58,8 +56,8 @@ void DrawViewShell::UpdateIMapDlg( SdrObject* pObj )
     {
         Graphic     aGraphic;
         ImageMap*   pIMap = nullptr;
-        TargetList* pTargetList = nullptr;
-        SdIMapInfo* pIMapInfo = GetDoc()->GetIMapInfo( pObj );
+        std::unique_ptr<TargetList> pTargetList;
+        SdIMapInfo* pIMapInfo = SdDrawDocument::GetIMapInfo( pObj );
 
         // get graphic from shape
         SdrGrafObj* pGrafObj = dynamic_cast< SdrGrafObj* >( pObj );
@@ -69,21 +67,15 @@ void DrawViewShell::UpdateIMapDlg( SdrObject* pObj )
         if ( pIMapInfo )
         {
             pIMap = const_cast<ImageMap*>(&pIMapInfo->GetImageMap());
-            pTargetList = new TargetList;
-            GetViewFrame()->GetTargetList( *pTargetList );
+            pTargetList.reset(new TargetList);
+            SfxViewFrame::GetTargetList( *pTargetList );
         }
 
-        SvxIMapDlgChildWindow::UpdateIMapDlg( aGraphic, pIMap, pTargetList, pObj );
-
-        // We can delete the target list
-        if ( pTargetList )
-        {
-            delete pTargetList;
-        }
+        SvxIMapDlgChildWindow::UpdateIMapDlg( aGraphic, pIMap, pTargetList.get(), pObj );
     }
 }
 
-IMPL_LINK_TYPED( DrawViewShell, NameObjectHdl, AbstractSvxObjectNameDialog&, rDialog, bool )
+IMPL_LINK( DrawViewShell, NameObjectHdl, AbstractSvxObjectNameDialog&, rDialog, bool )
 {
     OUString aName;
     rDialog.GetName( aName );

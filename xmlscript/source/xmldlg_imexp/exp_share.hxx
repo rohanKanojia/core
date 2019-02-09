@@ -21,7 +21,7 @@
 #define INCLUDED_XMLSCRIPT_SOURCE_XMLDLG_IMEXP_EXP_SHARE_HXX
 
 #include "common.hxx"
-#include "misc.hxx"
+#include <misc.hxx>
 #include <xmlscript/xmldlg_imexp.hxx>
 #include <xmlscript/xml_helper.hxx>
 #include <osl/diagnose.h>
@@ -31,6 +31,7 @@
 #include <com/sun/star/awt/FontDescriptor.hpp>
 #include <com/sun/star/awt/FontEmphasisMark.hpp>
 #include <com/sun/star/awt/FontRelief.hpp>
+#include <memory>
 #include <vector>
 
 
@@ -75,7 +76,7 @@ struct Style
 };
 class StyleBag
 {
-    ::std::vector< Style * > _styles;
+    ::std::vector< std::unique_ptr<Style> > _styles;
 
 public:
     ~StyleBag() ;
@@ -120,16 +121,16 @@ public:
     void readDefaults( bool supportPrintable = true, bool supportVisible = true );
     void readStringAttr(
         OUString const & rPropName, OUString const & rAttrName );
-    inline void readDoubleAttr(
+    void readDoubleAttr(
         OUString const & rPropName, OUString const & rAttrName )
         { read<double>( rPropName, rAttrName ); }
-    inline void readLongAttr(
+    void readLongAttr(
         OUString const & rPropName, OUString const & rAttrName,
         bool forceAttribute = false )
         { read<sal_Int32>( rPropName, rAttrName, forceAttribute ); }
     void readHexLongAttr(
         OUString const & rPropName, OUString const & rAttrName );
-    inline void readShortAttr(
+    void readShortAttr(
         OUString const & rPropName, OUString const & rAttrName )
         { read<sal_Int32>( rPropName, rAttrName ); }
     inline void readBoolAttr(
@@ -138,8 +139,6 @@ public:
     void readAlignAttr(
         OUString const & rPropName, OUString const & rAttrName );
     void readVerticalAlignAttr(
-        OUString const & rPropName, OUString const & rAttrName );
-    void readImageURLAttr(
         OUString const & rPropName, OUString const & rAttrName );
     void readImageAlignAttr(
         OUString const & rPropName, OUString const & rAttrName );
@@ -163,9 +162,11 @@ public:
         OUString const & rPropName, OUString const & rAttrName );
     void readImageScaleModeAttr(
         OUString const & rPropName, OUString const & rAttrName );
-    void readDataAwareAttr(
-        OUString const & rAttrName );
-    inline void addBoolAttr(
+
+    void readDataAwareAttr(OUString const & rAttrName );
+    void readImageOrGraphicAttr(OUString const & rAttrName );
+
+    void addBoolAttr(
         OUString const & rAttrName, bool bValue )
         { addAttribute( rAttrName, OUString::boolean(bValue) ); }
     void addNumberFormatAttr(

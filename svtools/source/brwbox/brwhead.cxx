@@ -20,6 +20,7 @@
 
 #include <svtools/brwhead.hxx>
 #include <svtools/brwbox.hxx>
+#include <vcl/commandevent.hxx>
 
 
 BrowserHeader::BrowserHeader( BrowseBox* pParent, WinBits nWinBits )
@@ -53,17 +54,11 @@ void BrowserHeader::Command( const CommandEvent& rCEvt )
     {
         Point aPos( rCEvt.GetMousePosPixel() );
         if ( _pBrowseBox->IsFrozen(0) )
-            aPos.X() += _pBrowseBox->GetColumnWidth(0);
+            aPos.AdjustX(_pBrowseBox->GetColumnWidth(0) );
         _pBrowseBox->GetDataWindow().Command( CommandEvent(
                 Point( aPos.X(), aPos.Y() - GetSizePixel().Height() ),
                 CommandEventId::ContextMenu, rCEvt.IsMouseEvent() ) );
     }
-}
-
-
-void BrowserHeader::Select()
-{
-    HeaderBar::Select();
 }
 
 
@@ -75,35 +70,35 @@ void BrowserHeader::EndDrag()
 
     // not aborted?
     sal_uInt16 nId = GetCurItemId();
-    if ( nId )
+    if ( !nId )
+        return;
+
+    // handle column?
+    if ( nId == USHRT_MAX-1 )
+        nId = 0;
+
+    if ( !IsItemMode() )
     {
-        // handle column?
-        if ( nId == USHRT_MAX-1 )
-            nId = 0;
+        // column resize
+        _pBrowseBox->SetColumnWidth( nId, GetItemSize( nId ) );
+        _pBrowseBox->ColumnResized( nId );
+        SetItemSize( nId, _pBrowseBox->GetColumnWidth( nId ) );
+    }
+    else
+    {
+        // column drag
+        // did the position actually change?
+        // take the handle column into account
+        sal_uInt16 nOldPos = _pBrowseBox->GetColumnPos(nId),
+            nNewPos = GetItemPos( nId );
 
-        if ( !IsItemMode() )
+        if (_pBrowseBox->GetColumnId(0) == BrowseBox::HandleColumnId)
+            nNewPos++;
+
+        if (nOldPos != nNewPos)
         {
-            // column resize
-            _pBrowseBox->SetColumnWidth( nId, GetItemSize( nId ) );
-            _pBrowseBox->ColumnResized( nId );
-            SetItemSize( nId, _pBrowseBox->GetColumnWidth( nId ) );
-        }
-        else
-        {
-            // column drag
-            // did the position actually change?
-            // take the handle column into account
-            sal_uInt16 nOldPos = _pBrowseBox->GetColumnPos(nId),
-                nNewPos = GetItemPos( nId );
-
-            if (_pBrowseBox->GetColumnId(0) == BrowseBox::HandleColumnId)
-                nNewPos++;
-
-            if (nOldPos != nNewPos)
-            {
-                _pBrowseBox->SetColumnPos( nId, nNewPos );
-                _pBrowseBox->ColumnMoved( nId );
-            }
+            _pBrowseBox->SetColumnPos( nId, nNewPos );
+            _pBrowseBox->ColumnMoved( nId );
         }
     }
 }

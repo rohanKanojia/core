@@ -16,7 +16,7 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include <threadmanager.hxx>
+#include "threadmanager.hxx"
 
 #include <osl/diagnose.h>
 
@@ -30,14 +30,14 @@ using namespace ::com::sun::star;
 */
 const std::deque< ThreadManager::tThreadData >::size_type ThreadManager::mnStartedSize = 10;
 
-ThreadManager::ThreadManager( uno::Reference< util::XJobManager >& rThreadJoiner )
+ThreadManager::ThreadManager( uno::Reference< util::XJobManager > const & rThreadJoiner )
     : maMutex(),
       mrThreadJoiner( rThreadJoiner ),
       mpThreadListener(),
       mnThreadIDCounter( 0 ),
       maWaitingForStartThreads(),
       maStartedThreads(),
-      maStartNewThreadIdle(),
+      maStartNewThreadIdle("SW ThreadManager StartNewThreadIdle"),
       mbStartingOfThreadsSuspended( false )
 {
 }
@@ -46,8 +46,8 @@ void ThreadManager::Init()
 {
     mpThreadListener.reset( new ThreadListener( *this ) );
 
-    maStartNewThreadIdle.SetPriority( SchedulerPriority::LOWEST );
-    maStartNewThreadIdle.SetIdleHdl( LINK( this, ThreadManager, TryToStartNewThread ) );
+    maStartNewThreadIdle.SetPriority( TaskPriority::LOWEST );
+    maStartNewThreadIdle.SetInvokeHandler( LINK( this, ThreadManager, TryToStartNewThread ) );
 }
 
 ThreadManager::~ThreadManager()
@@ -74,7 +74,7 @@ oslInterlockedCount ThreadManager::AddThread(
 
     // create new thread
     tThreadData aThreadData;
-    oslInterlockedCount nNewThreadID( RetrieveNewThreadID() );
+    oslInterlockedCount nNewThreadID( osl_atomic_increment( &mnThreadIDCounter ) );
     {
         aThreadData.nThreadID = nNewThreadID;
 
@@ -123,7 +123,7 @@ void ThreadManager::RemoveThread( const oslInterlockedCount nThreadID,
 
     if ( aIter != maStartedThreads.end() )
     {
-        tThreadData aTmpThreadData( (*aIter) );
+        tThreadData aTmpThreadData( *aIter );
 
         maStartedThreads.erase( aIter );
 
@@ -202,7 +202,7 @@ bool ThreadManager::StartThread( const tThreadData& rThreadData )
     return bThreadStarted;
 }
 
-IMPL_LINK_NOARG_TYPED(ThreadManager, TryToStartNewThread, Idle *, void)
+IMPL_LINK_NOARG(ThreadManager, TryToStartNewThread, Timer *, void)
 {
     osl::MutexGuard aGuard(maMutex);
 

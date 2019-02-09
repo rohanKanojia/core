@@ -43,7 +43,7 @@ namespace dbaui
         OJoinDesignView(vcl::Window* pParent,
                         OJoinController& _rController,
                         const css::uno::Reference< css::uno::XComponentContext >& );
-        virtual ~OJoinDesignView();
+        virtual ~OJoinDesignView() override;
         virtual void dispose() override;
 
         // set the view readonly or not
@@ -54,7 +54,7 @@ namespace dbaui
         virtual void initialize() override;
         virtual void KeyInput( const KeyEvent& rEvt ) override;
 
-        void SaveTabWinUIConfig(OTableWindow* pWin);
+        void SaveTabWinUIConfig(OTableWindow const * pWin);
         OJoinController& getController() const { return m_rController; }
         // called when fields are deleted
 
@@ -62,7 +62,7 @@ namespace dbaui
         OScrollWindowHelper* getScrollHelper() const { return m_pScrollWindow; }
     protected:
         // return the Rectangle where I can paint myself
-        virtual void resizeDocumentView(Rectangle& rRect) override;
+        virtual void resizeDocumentView(tools::Rectangle& rRect) override;
     };
 }
 #endif // INCLUDED_DBACCESS_SOURCE_UI_INC_JOINDESIGNVIEW_HXX

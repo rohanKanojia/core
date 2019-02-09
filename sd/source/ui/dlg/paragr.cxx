@@ -29,19 +29,17 @@
 #include <svx/flagsdef.hxx>
 
 #include <editeng/outliner.hxx>
-#include "paragr.hxx"
-#include "sdresid.hxx"
-#include "glob.hrc"
-#include "sdattr.hrc"
+#include <paragr.hxx>
+#include <sdattr.hrc>
 
 class SdParagraphNumTabPage : public SfxTabPage
 {
 public:
     SdParagraphNumTabPage(vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual ~SdParagraphNumTabPage();
+    virtual ~SdParagraphNumTabPage() override;
     virtual void dispose() override;
 
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rSet );
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rSet );
     static const sal_uInt16*  GetRanges();
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
@@ -53,7 +51,7 @@ private:
     VclPtr<NumericField>    m_pNewStartNF;
     bool             mbModified;
 
-    DECL_LINK_TYPED( ImplNewStartHdl, Button*, void );
+    DECL_LINK( ImplNewStartHdl, Button*, void );
 };
 
 SdParagraphNumTabPage::SdParagraphNumTabPage(vcl::Window* pParent, const SfxItemSet& rAttr )
@@ -84,9 +82,9 @@ void SdParagraphNumTabPage::dispose()
     SfxTabPage::dispose();
 }
 
-VclPtr<SfxTabPage> SdParagraphNumTabPage::Create(vcl::Window *pParent, const SfxItemSet * rAttrSet)
+VclPtr<SfxTabPage> SdParagraphNumTabPage::Create(TabPageParent pParent, const SfxItemSet * rAttrSet)
 {
-    return VclPtr<SdParagraphNumTabPage>::Create( pParent, *rAttrSet );
+    return VclPtr<SdParagraphNumTabPage>::Create( pParent.pParent, *rAttrSet );
 }
 
 const sal_uInt16* SdParagraphNumTabPage::GetRanges()
@@ -111,7 +109,7 @@ bool SdParagraphNumTabPage::FillItemSet( SfxItemSet* rSet )
         bool bNumberNewStartChecked = TRISTATE_TRUE == m_pNewStartNumberCB->GetState();
         rSet->Put(SfxBoolItem(ATTR_NUMBER_NEWSTART, bNewStartChecked));
 
-        const sal_Int16 nStartAt = (sal_Int16)m_pNewStartNF->GetValue();
+        const sal_Int16 nStartAt = static_cast<sal_Int16>(m_pNewStartNF->GetValue());
         rSet->Put(SfxInt16Item(ATTR_NUMBER_NEWSTART_AT, bNumberNewStartChecked && bNewStartChecked ? nStartAt : -1));
     }
 
@@ -155,20 +153,18 @@ void SdParagraphNumTabPage::Reset( const SfxItemSet* rSet )
     mbModified = false;
 }
 
-IMPL_LINK_NOARG_TYPED(SdParagraphNumTabPage, ImplNewStartHdl, Button*, void)
+IMPL_LINK_NOARG(SdParagraphNumTabPage, ImplNewStartHdl, Button*, void)
 {
     bool bEnable = m_pNewStartCB->IsChecked();
     m_pNewStartNumberCB->Enable(bEnable);
     m_pNewStartNF->Enable(bEnable && m_pNewStartNumberCB->IsChecked());
 }
 
-SdParagraphDlg::SdParagraphDlg( vcl::Window* pParent, const SfxItemSet* pAttr )
-               : SfxTabDialog( pParent,
-                               "DrawParagraphPropertiesDialog",
-                               "modules/sdraw/ui/drawparadialog.ui",
-                               pAttr )
+SdParagraphDlg::SdParagraphDlg(weld::Window* pParent, const SfxItemSet* pAttr)
+    : SfxTabDialogController(pParent, "modules/sdraw/ui/drawparadialog.ui",
+                             "DrawParagraphPropertiesDialog", pAttr)
 {
-    m_nParaStd = AddTabPage( "labelTP_PARA_STD", RID_SVXPAGE_STD_PARAGRAPH);
+    AddTabPage( "labelTP_PARA_STD", RID_SVXPAGE_STD_PARAGRAPH);
 
     SvtCJKOptions aCJKOptions;
     if( aCJKOptions.IsAsianTypographyEnabled() )
@@ -187,10 +183,10 @@ SdParagraphDlg::SdParagraphDlg( vcl::Window* pParent, const SfxItemSet* pAttr )
       AddTabPage("labelTP_TABULATOR", RID_SVXPAGE_TABULATOR);
 }
 
-void SdParagraphDlg::PageCreated( sal_uInt16 nId, SfxTabPage &rPage )
+void SdParagraphDlg::PageCreated(const OString& rId, SfxTabPage &rPage)
 {
     SfxAllItemSet aSet(*(GetInputSetImpl()->GetPool()));
-    if (m_nParaStd == nId)
+    if (rId == "labelTP_PARA_STD")
     {
         aSet.Put(SfxUInt32Item(SID_SVXSTDPARAGRAPHTABPAGE_ABSLINEDIST, MM50/2));
         rPage.PageCreated(aSet);

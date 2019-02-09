@@ -22,26 +22,26 @@ OpenGLFramebuffer::OpenGLFramebuffer() :
 {
     glGenFramebuffers( 1, &mnId );
     CHECK_GL_ERROR();
-    VCL_GL_INFO( "Created framebuffer " << (int)mnId );
+    VCL_GL_INFO( "Created framebuffer " << static_cast<int>(mnId) );
 }
 
 OpenGLFramebuffer::~OpenGLFramebuffer()
 {
     glDeleteFramebuffers( 1, &mnId );
-    VCL_GL_INFO( "Deleted framebuffer " << (int)mnId );
+    VCL_GL_INFO( "Deleted framebuffer " << static_cast<int>(mnId) );
     CHECK_GL_ERROR();
 }
 
-void OpenGLFramebuffer::Bind()
+void OpenGLFramebuffer::Bind(GLenum eTarget)
 {
-    VCL_GL_INFO( "Binding framebuffer " << (int)mnId );
-    glBindFramebuffer( GL_FRAMEBUFFER, mnId );
+    VCL_GL_INFO( "Binding framebuffer " << static_cast<int>(mnId) );
+    glBindFramebuffer(eTarget, mnId);
     CHECK_GL_ERROR();
 }
 
-void OpenGLFramebuffer::Unbind()
+void OpenGLFramebuffer::Unbind(GLenum eTarget)
 {
-    glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+    glBindFramebuffer(eTarget, 0);
     CHECK_GL_ERROR();
     VCL_GL_INFO( "Binding default framebuffer" );
 }
@@ -66,7 +66,7 @@ void OpenGLFramebuffer::AttachTexture( const OpenGLTexture& rTexture )
     if( rTexture.Id() == mnAttachedTexture )
         return;
 
-    VCL_GL_INFO( "Attaching texture " << rTexture.Id() << " to framebuffer " << (int)mnId );
+    VCL_GL_INFO( "Attaching texture " << rTexture.Id() << " to framebuffer " << static_cast<int>(mnId) );
     mnAttachedTexture = rTexture.Id();
     mnWidth = rTexture.GetWidth();
     mnHeight = rTexture.GetHeight();
@@ -76,7 +76,7 @@ void OpenGLFramebuffer::AttachTexture( const OpenGLTexture& rTexture )
     GLuint nStencil = rTexture.StencilId();
     if( nStencil )
     {
-        VCL_GL_INFO( "Attaching stencil " << nStencil << " to framebuffer " << (int)mnId );
+        VCL_GL_INFO( "Attaching stencil " << nStencil << " to framebuffer " << static_cast<int>(mnId) );
         glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT,
                                    GL_RENDERBUFFER, nStencil );
         CHECK_GL_ERROR();

@@ -7,17 +7,18 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <set>
 #include <vector>
 
-#include "osl/file.h"
-#include "osl/file.hxx"
-#include "osl/mutex.hxx"
-#include "rtl/ref.hxx"
-#include "rtl/ustring.hxx"
-#include "unoidl/unoidl.hxx"
+#include <osl/file.h>
+#include <osl/file.hxx>
+#include <osl/mutex.hxx>
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
+#include <unoidl/unoidl.hxx>
 
 #include "legacyprovider.hxx"
 #include "sourcefileprovider.hxx"
@@ -37,14 +38,14 @@ public:
     {}
 
 private:
-    virtual ~AggregatingModule() throw () {}
+    virtual ~AggregatingModule() throw () override {}
 
     virtual std::vector< OUString > getMemberNames() const override;
 
     virtual rtl::Reference< MapCursor > createCursor() const override;
 
     std::vector< rtl::Reference< Provider > > providers_;
-    OUString name_;
+    OUString const name_;
 };
 
 std::vector< OUString > AggregatingModule::getMemberNames() const {
@@ -69,14 +70,14 @@ public:
     { findCursor(); }
 
 private:
-    virtual ~AggregatingCursor() throw () {}
+    virtual ~AggregatingCursor() throw () override {}
 
     virtual rtl::Reference< Entity > getNext(OUString * name) override;
 
     void findCursor();
 
     std::vector< rtl::Reference< Provider > > providers_;
-    OUString name_;
+    OUString const name_;
     std::vector< rtl::Reference< Provider > >::iterator iterator_;
     rtl::Reference< MapCursor > cursor_;
     std::set< OUString > seen_;
@@ -173,7 +174,7 @@ rtl::Reference< Provider > Manager::addProvider(OUString const & uri) {
     return p;
 }
 
-rtl::Reference< Entity > Manager::findEntity(rtl::OUString const & name) const {
+rtl::Reference< Entity > Manager::findEntity(OUString const & name) const {
     //TODO: caching? (here or in cppuhelper::TypeManager?)
     osl::MutexGuard g(mutex_);
     for (auto & i: providers_) {
@@ -185,7 +186,7 @@ rtl::Reference< Entity > Manager::findEntity(rtl::OUString const & name) const {
     return rtl::Reference< Entity >();
 }
 
-rtl::Reference< MapCursor > Manager::createCursor(rtl::OUString const & name)
+rtl::Reference< MapCursor > Manager::createCursor(OUString const & name)
     const
 {
     return new AggregatingCursor(providers_, name);

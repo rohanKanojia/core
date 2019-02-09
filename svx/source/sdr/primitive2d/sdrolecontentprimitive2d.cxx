@@ -33,10 +33,9 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        Primitive2DContainer SdrOleContentPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& /*aViewInformation*/) const
+        void SdrOleContentPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& /*aViewInformation*/) const
         {
-            Primitive2DContainer aRetval;
-            const SdrOle2Obj* pSource = (mpSdrOle2Obj.is() ? static_cast< SdrOle2Obj* >(mpSdrOle2Obj.get()) : nullptr);
+            const SdrOle2Obj* pSource = mpSdrOle2Obj.get();
             bool bScaleContent(false);
             Graphic aGraphic;
 
@@ -51,14 +50,14 @@ namespace drawinglayer
                 }
             }
 #ifdef _WIN32 // Little point in displaying the "broken OLE" graphic on OSes that don't have real OLE, maybe?
-            if(GRAPHIC_NONE == aGraphic.GetType())
+            if(GraphicType::NONE == aGraphic.GetType())
             {
                 // no source, use fallback resource empty OLE graphic
                 aGraphic = SdrOle2Obj::GetEmptyOLEReplacementGraphic();
                 bScaleContent = true;
             }
 #endif
-            if(GRAPHIC_NONE != aGraphic.GetType())
+            if(GraphicType::NONE != aGraphic.GetType())
             {
                 const GraphicObject aGraphicObject(aGraphic);
                 const GraphicAttr aGraphicAttr;
@@ -73,13 +72,13 @@ namespace drawinglayer
                     // get PrefSize from the graphic in 100th mm
                     Size aPrefSize(aGraphic.GetPrefSize());
 
-                    if(MAP_PIXEL == aGraphic.GetPrefMapMode().GetMapUnit())
+                    if(MapUnit::MapPixel == aGraphic.GetPrefMapMode().GetMapUnit())
                     {
-                        aPrefSize = Application::GetDefaultDevice()->PixelToLogic(aPrefSize, MAP_100TH_MM);
+                        aPrefSize = Application::GetDefaultDevice()->PixelToLogic(aPrefSize, MapMode(MapUnit::Map100thMM));
                     }
                     else
                     {
-                        aPrefSize = OutputDevice::LogicToLogic(aPrefSize, aGraphic.GetPrefMapMode(), MAP_100TH_MM);
+                        aPrefSize = OutputDevice::LogicToLogic(aPrefSize, aGraphic.GetPrefMapMode(), MapMode(MapUnit::Map100thMM));
                     }
 
                     const double fOffsetX((aScale.getX() - aPrefSize.getWidth()) / 2.0);
@@ -88,9 +87,9 @@ namespace drawinglayer
                     if(basegfx::fTools::moreOrEqual(fOffsetX, 0.0) && basegfx::fTools::moreOrEqual(fOffsetY, 0.0))
                     {
                         // if content fits into frame, create it
-                        basegfx::B2DHomMatrix aInnerObjectMatrix(basegfx::tools::createScaleTranslateB2DHomMatrix(
+                        basegfx::B2DHomMatrix aInnerObjectMatrix(basegfx::utils::createScaleTranslateB2DHomMatrix(
                             aPrefSize.getWidth(), aPrefSize.getHeight(), fOffsetX, fOffsetY));
-                        aInnerObjectMatrix = basegfx::tools::createShearXRotateTranslateB2DHomMatrix(fShearX, fRotate, aTranslate)
+                        aInnerObjectMatrix = basegfx::utils::createShearXRotateTranslateB2DHomMatrix(fShearX, fRotate, aTranslate)
                             * aInnerObjectMatrix;
 
                         const drawinglayer::primitive2d::Primitive2DReference aGraphicPrimitive(
@@ -98,7 +97,7 @@ namespace drawinglayer
                                 aInnerObjectMatrix,
                                 aGraphicObject,
                                 aGraphicAttr));
-                        aRetval.push_back(aGraphicPrimitive);
+                        rContainer.push_back(aGraphicPrimitive);
                     }
                 }
                 else
@@ -109,7 +108,7 @@ namespace drawinglayer
                             getObjectTransform(),
                             aGraphicObject,
                             aGraphicAttr));
-                    aRetval.push_back(aGraphicPrimitive);
+                    rContainer.push_back(aGraphicPrimitive);
                 }
 
                 // a standard gray outline is created for scaled content
@@ -120,18 +119,15 @@ namespace drawinglayer
 
                     if(aColor.bIsVisible)
                     {
-                        basegfx::B2DPolygon aOutline(basegfx::tools::createUnitPolygon());
+                        basegfx::B2DPolygon aOutline(basegfx::utils::createUnitPolygon());
                         const Color aVclColor(aColor.nColor);
                         aOutline.transform(getObjectTransform());
                         const drawinglayer::primitive2d::Primitive2DReference xOutline(
                             new drawinglayer::primitive2d::PolygonHairlinePrimitive2D(aOutline, aVclColor.getBColor()));
-                        aRetval.push_back(xOutline);
+                        rContainer.push_back(xOutline);
                     }
                 }
             }
-
-            // get graphic and check scale content state
-            return aRetval;
         }
 
         SdrOleContentPrimitive2D::SdrOleContentPrimitive2D(
@@ -160,7 +156,7 @@ namespace drawinglayer
 
                     // #i104867# to find out if the Graphic content of the
                     // OLE has changed, use GraphicVersion number
-                    && getGraphicVersion() == rCompare.getGraphicVersion()
+                    && mnGraphicVersion == rCompare.mnGraphicVersion
                 );
             }
 

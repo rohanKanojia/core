@@ -11,7 +11,8 @@
 #ifndef INCLUDED_VCL_INC_OPENGL_PACKEDTEXTUREATLAS_HXX
 #define INCLUDED_VCL_INC_OPENGL_PACKEDTEXTUREATLAS_HXX
 
-#include "opengl/texture.hxx"
+#include <memory>
+#include <opengl/texture.hxx>
 
 struct PackedTexture;
 
@@ -19,26 +20,36 @@ struct PackedTexture;
  * Pack texutres into one texutre atlas.
  *
  * This is based on algorithm described in [1] and is an
- * addaptation of "texture atlas generator" from [2].
+ * adaptation of "texture atlas generator" from [2].
  *
  * [1]: http://www.blackpawn.com/texts/lightmaps/
  * [2]: https://github.com/lukaszdk/texture-atlas-generator
  *
  */
-class VCL_PLUGIN_PUBLIC PackedTextureAtlasManager
+class VCL_DLLPUBLIC PackedTextureAtlasManager final
 {
     std::vector<std::unique_ptr<PackedTexture>> maPackedTextures;
 
-    int mnTextureWidth;
-    int mnTextureHeight;
+    int const mnTextureWidth;
+    int const mnTextureHeight;
 
     void CreateNewTexture();
 
+    PackedTextureAtlasManager( const PackedTextureAtlasManager& ) = delete;
+    PackedTextureAtlasManager& operator=( const PackedTextureAtlasManager& ) = delete;
+
 public:
+
+    /**
+     * nTextureWidth and nTextureHeight are the dimensions of the common texture(s)
+     * nTextureLimit is the maximum limit of that a texture atlas can have (0 or less - unlimited)
+     */
     PackedTextureAtlasManager(int nTextureWidth, int nTextureHeight);
     ~PackedTextureAtlasManager();
-    OpenGLTexture InsertBuffer(int nWidth, int nHeight, int nFormat, int nType, sal_uInt8* pData);
+
+    OpenGLTexture InsertBuffer(int nWidth, int nHeight, int nFormat, int nType, sal_uInt8 const * pData);
     OpenGLTexture Reserve(int nWidth, int nHeight);
+    std::vector<GLuint> ReduceTextureNumber(int nMaxNumberOfTextures);
 };
 
 #endif // INCLUDED_VCL_INC_OPENGL_PACKEDTEXTUREATLAS_HXX

@@ -20,20 +20,20 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_SDUNDOGR_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_SDUNDOGR_HXX
 
-#include <tools/contnr.hxx>
-#include "sdundo.hxx"
-#include "sddllapi.h"
+#include <sdundo.hxx>
+#include <sddllapi.h>
 
+#include <memory>
 #include <vector>
 
 class SD_DLLPUBLIC SdUndoGroup : public SdUndoAction
 {
-    std::vector<SdUndoAction*>  aCtn;
+    std::vector<std::unique_ptr<SdUndoAction>> aCtn;
 public:
                    SdUndoGroup(SdDrawDocument* pSdDrawDocument)
-                              : SdUndoAction(pSdDrawDocument),
-                                aCtn() {}
-    virtual       ~SdUndoGroup();
+                              : SdUndoAction(pSdDrawDocument)
+                              {}
+    virtual       ~SdUndoGroup() override;
 
     virtual bool   Merge( SfxUndoAction* pNextAction ) override;
 

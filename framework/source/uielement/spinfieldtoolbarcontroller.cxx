@@ -22,42 +22,37 @@
 #include <stdio.h>
 #include <wchar.h>
 
-#include "uielement/spinfieldtoolbarcontroller.hxx"
+#include <uielement/spinfieldtoolbarcontroller.hxx>
 
 #include <com/sun/star/util/XURLTransformer.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/frame/status/ItemStatus.hpp>
-#include <com/sun/star/frame/status/ItemState.hpp>
-#include <com/sun/star/frame/status/Visibility.hpp>
-#include <com/sun/star/frame/XControlNotificationListener.hpp>
 
 #include <svtools/toolboxcontroller.hxx>
-#include <osl/mutex.hxx>
+#include <vcl/event.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/mnemonic.hxx>
 #include <vcl/toolbox.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::frame;
-using namespace ::com::sun::star::frame::status;
 using namespace ::com::sun::star::util;
 
 namespace framework
 {
 
 // Wrapper class to notify controller about events from combobox.
-// Unfortunaltly the events are notifed through virtual methods instead
+// Unfortunaltly the events are notified through virtual methods instead
 // of Listeners.
 
 class SpinfieldControl : public SpinField
 {
     public:
         SpinfieldControl( vcl::Window* pParent, WinBits nStyle, SpinfieldToolbarController* pSpinfieldToolbarController );
-        virtual ~SpinfieldControl();
+        virtual ~SpinfieldControl() override;
         virtual void dispose() override;
 
         virtual void Up() override;
@@ -183,7 +178,6 @@ SpinfieldToolbarController::~SpinfieldToolbarController()
 }
 
 void SAL_CALL SpinfieldToolbarController::dispose()
-throw ( RuntimeException, std::exception )
 {
     SolarMutexGuard aSolarMutexGuard;
 
@@ -269,7 +263,7 @@ void SpinfieldToolbarController::GetFocus()
     notifyFocusGet();
 }
 
-bool SpinfieldToolbarController::PreNotify( NotifyEvent& rNEvt )
+bool SpinfieldToolbarController::PreNotify( NotifyEvent const & rNEvt )
 {
     if( rNEvt.GetType() == MouseNotifyEvent::KEYINPUT )
     {
@@ -467,12 +461,11 @@ OUString SpinfieldToolbarController::impl_formatOutputString( double fValue )
 
         aBuffer[0] = 0;
         if ( m_bFloat )
-            _snwprintf( reinterpret_cast<wchar_t *>(aBuffer), 128, reinterpret_cast<const wchar_t *>(m_aOutFormat.getStr()), fValue );
+            _snwprintf( o3tl::toW(aBuffer), SAL_N_ELEMENTS(aBuffer), o3tl::toW(m_aOutFormat.getStr()), fValue );
         else
-            _snwprintf( reinterpret_cast<wchar_t *>(aBuffer), 128, reinterpret_cast<const wchar_t *>(m_aOutFormat.getStr()), sal_Int32( fValue ));
+            _snwprintf( o3tl::toW(aBuffer), SAL_N_ELEMENTS(aBuffer), o3tl::toW(m_aOutFormat.getStr()), sal_Int32( fValue ));
 
-        sal_Int32 nSize = rtl_ustr_getLength( aBuffer );
-        return OUString( aBuffer, nSize );
+        return aBuffer;
 #else
         // Currently we have no support for a format string using sal_Unicode. wchar_t
         // is 32 bit on Unix platform!

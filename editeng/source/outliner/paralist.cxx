@@ -18,13 +18,15 @@
  */
 
 
-#include <paralist.hxx>
+#include "paralist.hxx"
 
 #include <editeng/outliner.hxx>
 #include <editeng/numdef.hxx>
 
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <tools/debug.hxx>
+#include <libxml/xmlwriter.h>
 
 #include <iterator>
 
@@ -33,21 +35,6 @@ ParagraphData::ParagraphData()
 , mnNumberingStartValue( -1 )
 , mbParaIsNumberingRestart( false )
 {
-}
-
-ParagraphData::ParagraphData( const ParagraphData& r )
-: nDepth( r.nDepth )
-, mnNumberingStartValue( r.mnNumberingStartValue )
-, mbParaIsNumberingRestart( r.mbParaIsNumberingRestart )
-{
-}
-
-ParagraphData& ParagraphData::operator=( const ParagraphData& r)
-{
-    nDepth = r.nDepth;
-    mnNumberingStartValue = r.mnNumberingStartValue;
-    mbParaIsNumberingRestart = r.mbParaIsNumberingRestart;
-    return *this;
 }
 
 bool ParagraphData::operator==(const ParagraphData& rCandidate) const
@@ -96,30 +83,36 @@ void Paragraph::SetParaIsNumberingRestart( bool bParaIsNumberingRestart )
         mnNumberingStartValue = -1;
 }
 
+void Paragraph::dumpAsXml(struct _xmlTextWriter* pWriter) const
+{
+    xmlTextWriterStartElement(pWriter, BAD_CAST("Paragraph"));
+    xmlTextWriterWriteFormatAttribute(pWriter, BAD_CAST("nDepth"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(nDepth));
+    xmlTextWriterWriteFormatAttribute(pWriter, BAD_CAST("mnNumberingStartValue"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(mnNumberingStartValue));
+    xmlTextWriterWriteFormatAttribute(pWriter, BAD_CAST("mbParaIsNumberingRestart"), "%" SAL_PRIdINT32, static_cast<sal_Int32>(mbParaIsNumberingRestart));
+    xmlTextWriterEndElement(pWriter);
+}
+
 void ParagraphList::Clear()
 {
-    std::vector<Paragraph*>::iterator iter;
-    for (iter = maEntries.begin(); iter != maEntries.end(); ++iter)
-        delete *iter;
     maEntries.clear();
 }
 
-void ParagraphList::Append( Paragraph* pPara)
+void ParagraphList::Append( std::unique_ptr<Paragraph> pPara)
 {
     SAL_WARN_IF( maEntries.size() >= EE_PARA_MAX_COUNT, "editeng", "ParagraphList::Append - overflow");
-    maEntries.push_back(pPara);
+    maEntries.push_back(std::move(pPara));
 }
 
-void ParagraphList::Insert( Paragraph* pPara, sal_Int32 nAbsPos)
+void ParagraphList::Insert( std::unique_ptr<Paragraph> pPara, sal_Int32 nAbsPos)
 {
     SAL_WARN_IF( nAbsPos < 0 || (maEntries.size() < static_cast<size_t>(nAbsPos) && nAbsPos != EE_PARA_APPEND),
             "editeng", "ParagraphList::Insert - bad insert position " << nAbsPos);
     SAL_WARN_IF( maEntries.size() >= EE_PARA_MAX_COUNT, "editeng", "ParagraphList::Insert - overflow");
 
     if (nAbsPos < 0 || maEntries.size() <= static_cast<size_t>(nAbsPos))
-        Append( pPara);
+        Append( std::move(pPara) );
     else
-        maEntries.insert(maEntries.begin()+nAbsPos,pPara);
+        maEntries.insert(maEntries.begin()+nAbsPos, std::move(pPara));
 }
 
 void ParagraphList::Remove( sal_Int32 nPara )
@@ -139,20 +132,23 @@ void ParagraphList::MoveParagraphs( sal_Int32 nStart, sal_Int32 nDest, sal_Int32
 
     if ( (( nDest < nStart ) || ( nDest >= ( nStart + _nCount ) )) && nStart >= 0 && nDest >= 0 && _nCount >= 0 )
     {
-        std::vector<Paragraph*> aParas;
-        std::vector<Paragraph*>::iterator iterBeg = maEntries.begin() + nStart;
-        std::vector<Paragraph*>::iterator iterEnd = iterBeg + _nCount;
+        std::vector<std::unique_ptr<Paragraph>> aParas;
+        auto iterBeg = maEntries.begin() + nStart;
+        auto iterEnd = iterBeg + _nCount;
 
-        std::copy(iterBeg,iterEnd,std::back_inserter(aParas));
+        for (auto it = iterBeg; it != iterEnd; ++it)
+            aParas.push_back(std::move(*it));
 
         maEntries.erase(iterBeg,iterEnd);
 
         if ( nDest > nStart )
             nDest -= _nCount;
 
-        std::vector<Paragraph*>::iterator iterIns = maEntries.begin() + nDest;
-
-        std::copy(aParas.begin(),aParas.end(),std::inserter(maEntries,iterIns));
+        for (auto & i : aParas)
+        {
+            maEntries.insert(maEntries.begin() + nDest, std::move(i));
+            ++nDest;
+        }
     }
     else
     {
@@ -160,28 +156,28 @@ void ParagraphList::MoveParagraphs( sal_Int32 nStart, sal_Int32 nDest, sal_Int32
     }
 }
 
-bool ParagraphList::HasChildren( Paragraph* pParagraph ) const
+bool ParagraphList::HasChildren( Paragraph const * pParagraph ) const
 {
     sal_Int32 n = GetAbsPos( pParagraph );
     Paragraph* pNext = GetParagraph( ++n );
     return pNext && ( pNext->GetDepth() > pParagraph->GetDepth() );
 }
 
-bool ParagraphList::HasHiddenChildren( Paragraph* pParagraph ) const
+bool ParagraphList::HasHiddenChildren( Paragraph const * pParagraph ) const
 {
     sal_Int32 n = GetAbsPos( pParagraph );
     Paragraph* pNext = GetParagraph( ++n );
     return pNext && ( pNext->GetDepth() > pParagraph->GetDepth() ) && !pNext->IsVisible();
 }
 
-bool ParagraphList::HasVisibleChildren( Paragraph* pParagraph ) const
+bool ParagraphList::HasVisibleChildren( Paragraph const * pParagraph ) const
 {
     sal_Int32 n = GetAbsPos( pParagraph );
     Paragraph* pNext = GetParagraph( ++n );
     return pNext && ( pNext->GetDepth() > pParagraph->GetDepth() ) && pNext->IsVisible();
 }
 
-sal_Int32 ParagraphList::GetChildCount( Paragraph* pParent ) const
+sal_Int32 ParagraphList::GetChildCount( Paragraph const * pParent ) const
 {
     sal_Int32 nChildCount = 0;
     sal_Int32 n = GetAbsPos( pParent );
@@ -194,22 +190,19 @@ sal_Int32 ParagraphList::GetChildCount( Paragraph* pParent ) const
     return nChildCount;
 }
 
-Paragraph* ParagraphList::GetParent( Paragraph* pParagraph /*, sal_uInt16& rRelPos */ ) const
+Paragraph* ParagraphList::GetParent( Paragraph const * pParagraph ) const
 {
-    /* rRelPos = 0 */;
     sal_Int32 n = GetAbsPos( pParagraph );
     Paragraph* pPrev = GetParagraph( --n );
     while ( pPrev && ( pPrev->GetDepth() >= pParagraph->GetDepth() ) )
     {
-//      if ( pPrev->GetDepth() == pParagraph->GetDepth() )
-//          rRelPos++;
         pPrev = GetParagraph( --n );
     }
 
     return pPrev;
 }
 
-void ParagraphList::Expand( Paragraph* pParent )
+void ParagraphList::Expand( Paragraph const * pParent )
 {
     sal_Int32 nChildCount = GetChildCount( pParent );
     sal_Int32 nPos = GetAbsPos( pParent );
@@ -225,7 +218,7 @@ void ParagraphList::Expand( Paragraph* pParent )
     }
 }
 
-void ParagraphList::Collapse( Paragraph* pParent )
+void ParagraphList::Collapse( Paragraph const * pParent )
 {
     sal_Int32 nChildCount = GetChildCount( pParent );
     sal_Int32 nPos = GetAbsPos( pParent );
@@ -241,17 +234,25 @@ void ParagraphList::Collapse( Paragraph* pParent )
     }
 }
 
-sal_Int32 ParagraphList::GetAbsPos( Paragraph* pParent ) const
+sal_Int32 ParagraphList::GetAbsPos( Paragraph const * pParent ) const
 {
     sal_Int32 pos = 0;
-    std::vector<Paragraph*>::const_iterator iter;
-    for (iter = maEntries.begin(); iter != maEntries.end(); ++iter, ++pos)
+    for (auto const& entry : maEntries)
     {
-        if (*iter == pParent)
+        if (entry.get() == pParent)
             return pos;
+        ++pos;
     }
 
     return EE_PARA_NOT_FOUND;
+}
+
+void ParagraphList::dumpAsXml(struct _xmlTextWriter* pWriter) const
+{
+    xmlTextWriterStartElement(pWriter, BAD_CAST("ParagraphList"));
+    for (auto const & pParagraph : maEntries)
+        pParagraph->dumpAsXml(pWriter);
+    xmlTextWriterEndElement(pWriter);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

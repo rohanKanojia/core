@@ -27,17 +27,17 @@
 
 // FmFormObj
 
-class SVX_DLLPUBLIC FmFormObj: public SdrUnoObj
+class SVX_DLLPUBLIC FmFormObj : public SdrUnoObj
 {
     FmFormObj( const FmFormObj& ) = delete;
 
-    css::uno::Sequence< css::script::ScriptEventDescriptor >  aEvts;  // events des Objects
+    css::uno::Sequence< css::script::ScriptEventDescriptor >  aEvts;  // events of the object
     css::uno::Sequence< css::script::ScriptEventDescriptor>   m_aEventsHistory;
                 // valid if and only if m_pEnvironmentHistory != NULL, this are the events which we're set when
                 // m_pEnvironmentHistory was created
 
-    // Informationen fuer die Controlumgebung
-    // werden nur vorgehalten, wenn ein Object sich nicht in einer Objectliste befindet
+    // information for the control environment is only maintained if an object is not in an
+    // object list
     css::uno::Reference< css::container::XIndexContainer>     m_xParent;
     css::uno::Reference< css::form::XForms >                  m_xEnvironmentHistory;
     sal_Int32           m_nPos;
@@ -46,10 +46,15 @@ class SVX_DLLPUBLIC FmFormObj: public SdrUnoObj
                             // the last ref device we know, as set at the model
                             // only to be used for comparison with the current ref device!
 
-public:
-    FmFormObj(const OUString& rModelName);
-    FmFormObj();
+protected:
+    // protected destructor
+    SAL_DLLPRIVATE virtual ~FmFormObj() override;
 
+public:
+    FmFormObj(
+        SdrModel& rSdrModel,
+        const OUString& rModelName);
+    FmFormObj(SdrModel& rSdrModel);
 
     SAL_DLLPRIVATE const css::uno::Reference< css::container::XIndexContainer>&
         GetOriginalParent() const { return m_xParent; }
@@ -65,18 +70,15 @@ public:
     SAL_DLLPRIVATE void ClearObjEnv();
 
 public:
-    SAL_DLLPRIVATE virtual ~FmFormObj();
-    SAL_DLLPRIVATE virtual void SetPage(SdrPage* pNewPage) override;
+    // react on page change
+    virtual void handlePageChange(SdrPage* pOldPage, SdrPage* pNewPage) override;
 
-    SAL_DLLPRIVATE virtual sal_uInt32 GetObjInventor() const override;
+    SAL_DLLPRIVATE virtual SdrInventor GetObjInventor() const override;
     SAL_DLLPRIVATE virtual sal_uInt16 GetObjIdentifier() const override;
     SAL_DLLPRIVATE virtual void NbcReformatText() override;
 
-    SAL_DLLPRIVATE virtual FmFormObj* Clone() const override;
-    // #116235# virtual SdrObject*  Clone(SdrPage* pPage, SdrModel* pModel) const;
+    SAL_DLLPRIVATE virtual FmFormObj* CloneSdrObject(SdrModel& rTargetModel) const override;
     SAL_DLLPRIVATE FmFormObj& operator= (const FmFormObj& rObj);
-
-    SAL_DLLPRIVATE virtual void SetModel(SdrModel* pNewModel) override;
 
     SAL_DLLPRIVATE void clonedFrom(const FmFormObj* _pSource);
 
@@ -98,10 +100,6 @@ public:
 protected:
     SAL_DLLPRIVATE virtual bool        EndCreate( SdrDragStat& rStat, SdrCreateCmd eCmd ) override;
     SAL_DLLPRIVATE virtual void        BrkCreate( SdrDragStat& rStat ) override;
-
-    // #i70852# override Layer interface to force to FormControl layer
-    SAL_DLLPRIVATE virtual SdrLayerID GetLayer() const override;
-    SAL_DLLPRIVATE virtual void NbcSetLayer(SdrLayerID nLayer) override;
 
 private:
     /** isolates the control model from its form component hierarchy, i.e. removes it from

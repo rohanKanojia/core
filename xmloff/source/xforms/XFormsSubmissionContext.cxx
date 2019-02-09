@@ -31,14 +31,11 @@
 
 #include <sax/tools/converter.hxx>
 
-#include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/xforms/XModel2.hpp>
 
-#include <tools/debug.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
-using com::sun::star::beans::XPropertySet;
-using com::sun::star::container::XNameContainer;
 using com::sun::star::xml::sax::XAttributeList;
 using com::sun::star::xforms::XModel2;
 
@@ -75,15 +72,13 @@ XFormsSubmissionContext::XFormsSubmissionContext(
         mxSubmission()
 {
     // register submission with model
-    DBG_ASSERT( xModel.is(), "need model" );
+    SAL_WARN_IF( !xModel.is(), "xmloff", "need model" );
     mxSubmission = xModel->createSubmission().get();
-    DBG_ASSERT( mxSubmission.is(), "can't create submission" );
+    SAL_WARN_IF( !mxSubmission.is(), "xmloff", "can't create submission" );
     xModel->getSubmissions()->insert( makeAny( mxSubmission ) );
 }
 
-XFormsSubmissionContext::~XFormsSubmissionContext()
-{
-}
+namespace {
 
 Any toBool( const OUString& rValue )
 {
@@ -95,6 +90,8 @@ Any toBool( const OUString& rValue )
     }
     return aValue;
 }
+
+} // namespace
 
 void XFormsSubmissionContext::HandleAttribute( sal_uInt16 nToken,
                                                const OUString& rValue )

@@ -17,18 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <attr.hxx>
+#include "attr.hxx"
 
 #include <string.h>
 
 #include <memory>
 
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 #include <com/sun/star/xml/dom/DOMException.hpp>
 #include <com/sun/star/xml/dom/events/XMutationEvent.hpp>
 
-#include <document.hxx>
+#include "document.hxx"
 
 using namespace css::uno;
 using namespace css::xml::dom;
@@ -46,7 +47,8 @@ namespace DOM
 
     xmlNsPtr CAttr::GetNamespace(xmlNodePtr const pNode)
     {
-        if (!m_pNamespace.get()) {
+        if (!m_pNamespace)
+        {
             return nullptr;
         }
         xmlChar const*const pUri(reinterpret_cast<xmlChar const*>(
@@ -63,7 +65,9 @@ namespace DOM
         }
         pNs = xmlSearchNsByHref(pNode->doc, pNode, pUri);
         // if (!pNs) hmm... now what? throw?
-        if (!pNs) { OSL_TRACE("CAtttr: cannot create namespace"); }
+        if (!pNs) {
+            SAL_WARN("unoxml", "CAttr: cannot create namespace");
+        }
         return pNs;
     }
 
@@ -79,17 +83,14 @@ namespace DOM
     }
 
     OUString SAL_CALL CAttr::getNodeName()
-        throw (RuntimeException, std::exception)
     {
         return getName();
     }
     OUString SAL_CALL CAttr::getNodeValue()
-        throw (RuntimeException, std::exception)
     {
         return getValue();
     }
     OUString SAL_CALL CAttr::getLocalName()
-        throw (RuntimeException, std::exception)
     {
         return getName();
     }
@@ -98,7 +99,7 @@ namespace DOM
     /**
     Returns the name of this attribute.
     */
-    OUString SAL_CALL CAttr::getName() throw (RuntimeException, std::exception)
+    OUString SAL_CALL CAttr::getName()
     {
         ::osl::MutexGuard const g(m_rMutex);
 
@@ -115,7 +116,6 @@ namespace DOM
     attribute is not in use.
     */
     Reference< XElement > SAL_CALL CAttr::getOwnerElement()
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard const g(m_rMutex);
 
@@ -137,18 +137,16 @@ namespace DOM
     document, this is true; otherwise, it is false.
     */
     sal_Bool SAL_CALL CAttr::getSpecified()
-        throw (RuntimeException, std::exception)
     {
         // FIXME if this DOM implementation supported DTDs it would need
         // to check that this attribute is not default or something
-        return sal_True;
+        return true;
     }
 
     /**
     On retrieval, the value of the attribute is returned as a string.
     */
     OUString SAL_CALL CAttr::getValue()
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard const g(m_rMutex);
 
@@ -158,18 +156,14 @@ namespace DOM
         if (nullptr == m_aAttrPtr->children) {
             return OUString();
         }
-        char const*const pContent((m_aAttrPtr->children)
-            ? reinterpret_cast<char const*>(m_aAttrPtr->children->content)
-            : "");
-        OUString const ret(pContent, strlen(pContent), RTL_TEXTENCODING_UTF8);
-        return ret;
+        char const*const pContent(reinterpret_cast<char const*>(m_aAttrPtr->children->content));
+        return OUString(pContent, strlen(pContent), RTL_TEXTENCODING_UTF8);
     }
 
     /**
     Sets the value of the attribute from a string.
     */
     void SAL_CALL CAttr::setValue(const OUString& value)
-        throw (RuntimeException, DOMException, std::exception)
     {
         ::osl::ClearableMutexGuard guard(m_rMutex);
 
@@ -181,12 +175,12 @@ namespace DOM
         OUString sOldValue = getValue();
 
         OString o1 = OUStringToOString(value, RTL_TEXTENCODING_UTF8);
-        xmlChar const * xValue = reinterpret_cast<xmlChar const *>(o1.getStr());
+        xmlChar const * pValue = reinterpret_cast<xmlChar const *>(o1.getStr());
         // this does not work if the attribute was created anew
         // xmlNodePtr pNode = m_aAttrPtr->parent;
-        // xmlSetProp(pNode, m_aAttrPtr->name, xValue);
+        // xmlSetProp(pNode, m_aAttrPtr->name, pValue);
         std::shared_ptr<xmlChar const> const buffer(
-                xmlEncodeEntitiesReentrant(m_aAttrPtr->doc, xValue), xmlFree);
+                xmlEncodeEntitiesReentrant(m_aAttrPtr->doc, pValue), xmlFree);
         xmlFreeNodeList(m_aAttrPtr->children);
         m_aAttrPtr->children =
             xmlStringGetNodeList(m_aAttrPtr->doc, buffer.get());
@@ -205,7 +199,7 @@ namespace DOM
         Reference< XDocumentEvent > docevent(getOwnerDocument(), UNO_QUERY);
         Reference< XMutationEvent > event(docevent->createEvent(sEventName),UNO_QUERY);
         event->initMutationEvent(
-                sEventName, sal_True, sal_False,
+                sEventName, true, false,
                 Reference<XNode>( static_cast<XAttr*>( this ) ),
                 sOldValue, value, getName(), AttrChangeType_MODIFICATION );
 
@@ -216,51 +210,57 @@ namespace DOM
     }
 
     void SAL_CALL CAttr::setPrefix(const OUString& prefix)
-        throw (RuntimeException, DOMException, std::exception)
     {
         ::osl::MutexGuard const g(m_rMutex);
 
         if (!m_aNodePtr) { return; }
 
-        if (m_pNamespace.get()) {
+        if (m_pNamespace)
+        {
             OSL_ASSERT(!m_aNodePtr->parent);
             m_pNamespace->second =
                 OUStringToOString(prefix, RTL_TEXTENCODING_UTF8);
-        } else {
+        }
+        else
+        {
             CNode::setPrefix(prefix);
         }
     }
 
     OUString SAL_CALL CAttr::getPrefix()
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard const g(m_rMutex);
 
         if (!m_aNodePtr) { return OUString(); }
 
-        if (m_pNamespace.get()) {
+        if (m_pNamespace)
+        {
             OSL_ASSERT(!m_aNodePtr->parent);
             OUString const ret(OStringToOUString(
                         m_pNamespace->second, RTL_TEXTENCODING_UTF8));
             return ret;
-        } else {
+        }
+        else
+        {
             return CNode::getPrefix();
         }
     }
 
     OUString SAL_CALL CAttr::getNamespaceURI()
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard const g(m_rMutex);
 
         if (!m_aNodePtr) { return OUString(); }
 
-        if (m_pNamespace.get()) {
+        if (m_pNamespace)
+        {
             OSL_ASSERT(!m_aNodePtr->parent);
             OUString const ret(OStringToOUString(
                         m_pNamespace->first, RTL_TEXTENCODING_UTF8));
             return ret;
-        } else {
+        }
+        else
+        {
             return CNode::getNamespaceURI();
         }
     }

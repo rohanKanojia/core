@@ -17,15 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ShapeFactory.hxx"
-#include "ViewDefines.hxx"
-#include "Stripe.hxx"
-#include "CommonConverters.hxx"
-#include "macros.hxx"
-#include "RelativeSizeHelper.hxx"
-#include "PropertyMapper.hxx"
-#include <comphelper/InlineContainer.hxx>
+#include <ShapeFactory.hxx>
+#include <BaseGFXHelper.hxx>
+#include <ViewDefines.hxx>
+#include <Stripe.hxx>
+#include <CommonConverters.hxx>
+#include <RelativeSizeHelper.hxx>
+#include <PropertyMapper.hxx>
+#include <VLineProperties.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XMultiPropertySet.hpp>
+#include <com/sun/star/chart2/XFormattedString.hpp>
 #include <com/sun/star/drawing/CircleKind.hpp>
 #include <com/sun/star/drawing/DoubleSequence.hpp>
 #include <com/sun/star/drawing/FlagSequence.hpp>
@@ -33,26 +35,26 @@
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/drawing/NormalsKind.hpp>
 #include <com/sun/star/drawing/PointSequence.hpp>
-#include <com/sun/star/drawing/PolygonKind.hpp>
 #include <com/sun/star/drawing/PolyPolygonBezierCoords.hpp>
-#include <com/sun/star/drawing/ProjectionMode.hpp>
-#include <com/sun/star/drawing/ShadeMode.hpp>
-#include <com/sun/star/drawing/TextFitToSizeType.hpp>
 #include <com/sun/star/drawing/TextHorizontalAdjust.hpp>
 #include <com/sun/star/drawing/TextureProjectionMode.hpp>
 #include <com/sun/star/drawing/TextVerticalAdjust.hpp>
-#include <com/sun/star/style/ParagraphAdjust.hpp>
+#include <com/sun/star/drawing/XShapes2.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
+#include <com/sun/star/drawing/XShapes.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/text/XText.hpp>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/uno/Any.hxx>
 
 #include <editeng/unoprnms.hxx>
 #include <rtl/math.hxx>
-#include <svx/svdocirc.hxx>
-#include <svx/svdopath.hxx>
 
 #include <basegfx/point/b2dpoint.hxx>
 #include <basegfx/matrix/b3dhommatrix.hxx>
+#include <tools/diagnose_ex.h>
+#include <tools/helpers.hxx>
+#include <sal/log.hxx>
 
 #include <algorithm>
 
@@ -61,6 +63,21 @@ using ::com::sun::star::uno::Reference;
 
 namespace chart
 {
+
+namespace
+{
+
+void lcl_addProperty(uno::Sequence<OUString> & rPropertyNames, uno::Sequence<uno::Any> & rPropertyValues,
+                 OUString const & rName, uno::Any const & rAny)
+{
+    rPropertyNames.realloc(rPropertyNames.getLength() + 1);
+    rPropertyNames[rPropertyNames.getLength() - 1] = rName;
+
+    rPropertyValues.realloc(rPropertyValues.getLength() + 1);
+    rPropertyValues[rPropertyValues.getLength() - 1] = rAny;
+}
+
+} // end anonymous namespace
 
 uno::Reference< drawing::XShapes > ShapeFactory::getOrCreateChartRootShape(
     const uno::Reference< drawing::XDrawPage>& xDrawPage )
@@ -83,14 +100,12 @@ uno::Reference< drawing::XShapes > ShapeFactory::getOrCreateChartRootShape(
     return xRet;
 }
 
-void ShapeFactory::setPageSize(uno::Reference< drawing::XShapes >, const awt::Size& )
-{
-}
+void ShapeFactory::setPageSize(const uno::Reference<drawing::XShapes>&, const awt::Size&) {}
 
 //  diverse tools::PolyPolygon create methods
 
-uno::Any createPolyPolygon_Cube(
-            const drawing::Direction3D& rSize, double fRoundedEdge, bool bRounded = true )
+static uno::Any createPolyPolygon_Cube(
+            const drawing::Direction3D& rSize, double fRoundedEdge, bool bRounded )
 {
     OSL_PRECOND(fRoundedEdge>=0, "fRoundedEdge needs to be >= 0");
 
@@ -178,7 +193,7 @@ uno::Any createPolyPolygon_Cube(
     return uno::Any( &aPP, cppu::UnoType<drawing::PolyPolygonShape3D>::get());
 }
 
-uno::Any createPolyPolygon_Cylinder(
+static uno::Any createPolyPolygon_Cylinder(
              double fHeight
            , double fRadius
            , sal_Int32& nVerticalSegmentCount )
@@ -210,7 +225,7 @@ uno::Any createPolyPolygon_Cylinder(
     double fY2 = fHeight;
 
     if( fHeight<0.0 )
-        ::std::swap(fY1,fY2);
+        std::swap(fY1,fY2);
 
     for(sal_Int32 nN = 2; nN--;)
         *pInnerSequenceZ++ = 0.0;
@@ -260,7 +275,7 @@ uno::Any createPolyPolygon_Cylinder(
     return uno::Any( &aPP, cppu::UnoType<drawing::PolyPolygonShape3D>::get());
 }
 
-uno::Any createPolyPolygon_Cone( double fHeight, double fRadius, double fTopHeight
+static uno::Any createPolyPolygon_Cone( double fHeight, double fRadius, double fTopHeight
             , sal_Int32& nVerticalSegmentCount )
 {
     OSL_PRECOND(fRadius>0, "The radius of a cone needs to be > 0");
@@ -272,7 +287,7 @@ uno::Any createPolyPolygon_Cone( double fHeight, double fRadius, double fTopHeig
     double r1= 0.0, r2 = fRadius;
     if(bTopless)
         // #i63212# fHeight may be negative, fTopHeight is always positive -> use fabs(fHeight)
-        r1 = fRadius * (fTopHeight)/(fabs(fHeight)+fTopHeight);
+        r1 = fRadius * fTopHeight/(fabs(fHeight)+fTopHeight);
 
     nVerticalSegmentCount=1;
     drawing::PolyPolygonShape3D aPP;
@@ -303,8 +318,8 @@ uno::Any createPolyPolygon_Cone( double fHeight, double fRadius, double fTopHeig
 
     if( fHeight<0.0 )
     {
-        ::std::swap(fX1,fX3);
-        ::std::swap(fY1,fY3);
+        std::swap(fX1,fX3);
+        std::swap(fY1,fY3);
     }
 
     for(sal_Int32 nN = 2; nN--;)
@@ -364,7 +379,7 @@ uno::Reference<drawing::XShape>
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
     uno::Reference<drawing::XShape> xShape = impl_createCube( xTarget, rPosition, rSize, nRotateZAngleHundredthDegree, bRounded );
@@ -391,44 +406,46 @@ uno::Reference<drawing::XShape>
     xTarget->add(xShape);
 
     //set properties
-    uno::Reference< beans::XPropertySet > xProp( xShape, uno::UNO_QUERY );
-    OSL_ENSURE(xProp.is(), "created shape offers no XPropertySet");
-    if( xProp.is())
+    uno::Reference<beans::XMultiPropertySet> xMultiPropertySet(xShape, uno::UNO_QUERY);
+    OSL_ENSURE(xMultiPropertySet.is(), "created shape offers no XMultiPropertySet");
+    if (xMultiPropertySet.is())
     {
         try
         {
             //depth
             double fDepth = rSize.DirectionZ;
-            if(fDepth<0)
+            if (fDepth<0)
                 fDepth*=-1.0;
-            xProp->setPropertyValue( UNO_NAME_3D_EXTRUDE_DEPTH
-                , uno::makeAny((sal_Int32)fDepth) );
 
             //PercentDiagonal
             sal_Int16 nPercentDiagonal = bRounded ? 3 : 0;
-            xProp->setPropertyValue( UNO_NAME_3D_PERCENT_DIAGONAL
-                , uno::makeAny( nPercentDiagonal ) );
-
-            //Polygon
-            xProp->setPropertyValue( UNO_NAME_3D_POLYPOLYGON3D
-                , createPolyPolygon_Cube( rSize, double(nPercentDiagonal)/200.0,bRounded) );
 
             //Matrix for position
-            {
-                ::basegfx::B3DHomMatrix aM;
-                if(nRotateZAngleHundredthDegree!=0)
-                    aM.rotate(0.0,0.0,-nRotateZAngleHundredthDegree/18000.00*F_PI);
-                aM.translate(rPosition.PositionX
-                            , rPosition.PositionY
-                            , rPosition.PositionZ - (fDepth/2.0));
-                drawing::HomogenMatrix aHM = B3DHomMatrixToHomogenMatrix(aM);
-                xProp->setPropertyValue( UNO_NAME_3D_TRANSFORM_MATRIX
-                    , uno::makeAny(aHM) );
-            }
+            basegfx::B3DHomMatrix aHomMatrix;
+            if (nRotateZAngleHundredthDegree != 0)
+                aHomMatrix.rotate(0.0, 0.0, -nRotateZAngleHundredthDegree / 18000.00 * F_PI);
+            aHomMatrix.translate(rPosition.PositionX, rPosition.PositionY,
+                                 rPosition.PositionZ - (fDepth / 2.0));
+
+            uno::Sequence<OUString> aPropertyNames {
+                UNO_NAME_3D_EXTRUDE_DEPTH,
+                UNO_NAME_3D_PERCENT_DIAGONAL,
+                UNO_NAME_3D_POLYPOLYGON3D,
+                UNO_NAME_3D_TRANSFORM_MATRIX,
+            };
+
+            uno::Sequence<uno::Any> aPropertyValues {
+                uno::Any(sal_Int32(fDepth)), // Depth
+                uno::Any(nPercentDiagonal),  // PercentDiagonal
+                createPolyPolygon_Cube(rSize, double(nPercentDiagonal) / 200.0, bRounded),
+                uno::Any(B3DHomMatrixToHomogenMatrix(aHomMatrix))
+            };
+
+            xMultiPropertySet->setPropertyValues(aPropertyNames, aPropertyValues);
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
     return xShape;
@@ -479,7 +496,7 @@ uno::Reference<drawing::XShape>
     aBottomP3.PositionZ += fDepth;
     aBottomP4.PositionZ += fDepth;
 
-    const double fTopFactor = (fTopHeight)/(fabs(fHeight)+fTopHeight);
+    const double fTopFactor = fTopHeight/(fabs(fHeight)+fTopHeight);
     drawing::Position3D aTopP1( rPosition.PositionX, rPosition.PositionY, rPosition.PositionZ - fDepth*fTopFactor/2.0  );
     if(bRotateZ)
     {
@@ -610,7 +627,7 @@ uno::Reference<drawing::XShape>
           , const drawing::Position3D& rPosition, const drawing::Direction3D& rSize
           , double fTopHeight, sal_Int32 nRotateZAngleHundredthDegree )
 {
-    return impl_createConeOrCylinder( xTarget, rPosition, rSize, fTopHeight, nRotateZAngleHundredthDegree );
+    return impl_createConeOrCylinder( xTarget, rPosition, rSize, fTopHeight, nRotateZAngleHundredthDegree, false );
 }
 
 uno::Reference<drawing::XShape>
@@ -634,57 +651,55 @@ uno::Reference<drawing::XShape>
     double fHeight     = rSize.DirectionY;
 
     //set properties
-    uno::Reference< beans::XPropertySet > xProp( xShape, uno::UNO_QUERY );
-    OSL_ENSURE(xProp.is(), "created shape offers no XPropertySet");
-    if( xProp.is())
+    uno::Reference<beans::XMultiPropertySet> xMultiPropertySet(xShape, uno::UNO_QUERY);
+    OSL_ENSURE(xMultiPropertySet.is(), "created shape offers no XMultiPropertySet");
+    if (xMultiPropertySet.is())
     {
         try
         {
-            //PercentDiagonal
-            sal_Int16 nPercentDiagonal = 5;
-            xProp->setPropertyValue( UNO_NAME_3D_PERCENT_DIAGONAL
-                , uno::makeAny( nPercentDiagonal ) );
-
             //Polygon
             sal_Int32 nVerticalSegmentCount = 0;
-            uno::Any aPPolygon = bCylinder ? createPolyPolygon_Cylinder(
-                                                fHeight, fRadius, nVerticalSegmentCount)
-                                           : createPolyPolygon_Cone(
-                                                fHeight, fRadius, fTopHeight, nVerticalSegmentCount);
-            xProp->setPropertyValue( UNO_NAME_3D_POLYPOLYGON3D, aPPolygon );
+            uno::Any aPPolygon = bCylinder
+                ? createPolyPolygon_Cylinder(fHeight, fRadius, nVerticalSegmentCount)
+                : createPolyPolygon_Cone(fHeight, fRadius, fTopHeight, nVerticalSegmentCount);
 
             //Matrix for position
-            {
-                ::basegfx::B3DHomMatrix aM;
-                if(nRotateZAngleHundredthDegree!=0)
-                    aM.rotate(0.0,0.0,-nRotateZAngleHundredthDegree/18000.00*F_PI);
-                //stretch the symmetric objects to given depth
-                aM.scale(1.0,1.0,rSize.DirectionZ/rSize.DirectionX);
-                aM.translate(rPosition.PositionX, rPosition.PositionY, rPosition.PositionZ);
-                drawing::HomogenMatrix aHM = B3DHomMatrixToHomogenMatrix(aM);
-                xProp->setPropertyValue( UNO_NAME_3D_TRANSFORM_MATRIX
-                    , uno::makeAny(aHM) );
-            }
+            basegfx::B3DHomMatrix aHomMatrix;
+            if (nRotateZAngleHundredthDegree != 0)
+                aHomMatrix.rotate(0.0,0.0,-nRotateZAngleHundredthDegree/18000.00*F_PI);
+            //stretch the symmetric objects to given depth
+            aHomMatrix.scale(1.0,1.0,rSize.DirectionZ/rSize.DirectionX);
+            aHomMatrix.translate(rPosition.PositionX, rPosition.PositionY, rPosition.PositionZ);
 
-            //Segments
-            xProp->setPropertyValue( UNO_NAME_3D_HORZ_SEGS
-                , uno::makeAny(CHART_3DOBJECT_SEGMENTCOUNT) );
-            xProp->setPropertyValue( UNO_NAME_3D_VERT_SEGS
-                , uno::makeAny((sal_Int32)nVerticalSegmentCount) );//depends on point count of the used polygon
+            uno::Sequence<OUString> aPropertyNames{
+                UNO_NAME_3D_PERCENT_DIAGONAL,
+                UNO_NAME_3D_POLYPOLYGON3D,
+                UNO_NAME_3D_TRANSFORM_MATRIX,
+                UNO_NAME_3D_HORZ_SEGS,
+                UNO_NAME_3D_VERT_SEGS,
+                UNO_NAME_3D_REDUCED_LINE_GEOMETRY
+            };
 
-            //Reduced lines
-            xProp->setPropertyValue( UNO_NAME_3D_REDUCED_LINE_GEOMETRY
-                , uno::makeAny(true) );
+            uno::Sequence<uno::Any> aPropertyValues {
+                uno::Any(sal_Int16(5)),  // PercentDiagonal
+                aPPolygon,               // Polygon
+                uno::Any(B3DHomMatrixToHomogenMatrix(aHomMatrix)), // Matrix
+                uno::Any(CHART_3DOBJECT_SEGMENTCOUNT), // Horizontal Segments
+                uno::Any(nVerticalSegmentCount),       // Vertical Segments
+                uno::Any(true)                         // Reduced lines
+            };
+
+            xMultiPropertySet->setPropertyValues(aPropertyNames, aPropertyValues);
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
     return xShape;
 }
 
-void appendAndCloseBezierCoords( drawing::PolyPolygonBezierCoords& rReturn, const drawing::PolyPolygonBezierCoords& rAdd, bool bAppendInverse )
+static void appendAndCloseBezierCoords( drawing::PolyPolygonBezierCoords& rReturn, const drawing::PolyPolygonBezierCoords& rAdd, bool bAppendInverse )
 {
     if(!rAdd.Coordinates.getLength())
         return;
@@ -709,7 +724,7 @@ void appendAndCloseBezierCoords( drawing::PolyPolygonBezierCoords& rReturn, cons
     rReturn.Flags[0][nOldCount+nAddCount] = rReturn.Flags[0][0];
 }
 
-drawing::PolyPolygonBezierCoords getCircularArcBezierCoords(
+static drawing::PolyPolygonBezierCoords getCircularArcBezierCoords(
         double fStartAngleRadian, double fWidthAngleRadian, double fUnitRadius
         , const ::basegfx::B2DHomMatrix& rTransformationFromUnitCircle
         , const double fAngleSubdivisionRadian )
@@ -820,7 +835,7 @@ drawing::PolyPolygonBezierCoords getCircularArcBezierCoords(
     return aReturn;
 }
 
-drawing::PolyPolygonBezierCoords getRingBezierCoords(
+static drawing::PolyPolygonBezierCoords getRingBezierCoords(
             double fUnitCircleInnerRadius
             , double fUnitCircleOuterRadius
             , double fStartAngleRadian, double fWidthAngleRadian
@@ -855,10 +870,7 @@ uno::Reference< drawing::XShape >
     if( !xTarget.is() )
         return nullptr;
 
-    while(fUnitCircleWidthAngleDegree>360)
-        fUnitCircleWidthAngleDegree -= 360.0;
-    while(fUnitCircleWidthAngleDegree<0)
-        fUnitCircleWidthAngleDegree += 360.0;
+    fUnitCircleWidthAngleDegree = NormAngle360(fUnitCircleWidthAngleDegree);
 
     //create shape
     uno::Reference< drawing::XShape > xShape(
@@ -878,16 +890,17 @@ uno::Reference< drawing::XShape >
 
             const double fAngleSubdivisionRadian = F_PI/10.0;
 
-            drawing::PolyPolygonBezierCoords aCoords = getRingBezierCoords(
-                fUnitCircleInnerRadius, fUnitCircleOuterRadius
-                , fUnitCircleStartAngleDegree*F_PI/180.0, fUnitCircleWidthAngleDegree*F_PI/180.0
-                , aTransformationFromUnitCircle, fAngleSubdivisionRadian );
+            drawing::PolyPolygonBezierCoords aCoords
+                = getRingBezierCoords(fUnitCircleInnerRadius, fUnitCircleOuterRadius,
+                                      basegfx::deg2rad(fUnitCircleStartAngleDegree),
+                                      basegfx::deg2rad(fUnitCircleWidthAngleDegree),
+                                      aTransformationFromUnitCircle, fAngleSubdivisionRadian);
 
-            xProp->setPropertyValue( "PolyPolygonBezier", uno::makeAny( aCoords ) );
+            xProp->setPropertyValue( "PolyPolygonBezier", uno::Any( aCoords ) );
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
 
@@ -929,47 +942,47 @@ uno::Reference< drawing::XShape >
 
             const double fAngleSubdivisionRadian = F_PI/32.0;
 
-            drawing::PolyPolygonBezierCoords aCoords = getRingBezierCoords(
-                fUnitCircleInnerRadius, fUnitCircleOuterRadius
-                , fUnitCircleStartAngleDegree*F_PI/180.0, fUnitCircleWidthAngleDegree*F_PI/180.0
-                , aTransformationFromUnitCircle, fAngleSubdivisionRadian );
+            drawing::PolyPolygonBezierCoords aCoords
+                = getRingBezierCoords(fUnitCircleInnerRadius, fUnitCircleOuterRadius,
+                                      basegfx::deg2rad(fUnitCircleStartAngleDegree),
+                                      basegfx::deg2rad(fUnitCircleWidthAngleDegree),
+                                      aTransformationFromUnitCircle, fAngleSubdivisionRadian);
 
             //depth
             xProp->setPropertyValue( UNO_NAME_3D_EXTRUDE_DEPTH
-                , uno::makeAny((sal_Int32)fDepth) );
+                , uno::Any(static_cast<sal_Int32>(fDepth)) );
 
             //PercentDiagonal
-            sal_Int16 nPercentDiagonal = 0;
             xProp->setPropertyValue( UNO_NAME_3D_PERCENT_DIAGONAL
-                , uno::makeAny( nPercentDiagonal ) );
+                , uno::Any( sal_Int16(0) ) );
 
             //Polygon
             drawing::PolyPolygonShape3D aPoly( BezierToPoly(aCoords) );
             ShapeFactory::closePolygon( aPoly );
             xProp->setPropertyValue( UNO_NAME_3D_POLYPOLYGON3D
-                , uno::makeAny( aPoly ) );
+                , uno::Any( aPoly ) );
 
             //DoubleSided
             xProp->setPropertyValue( UNO_NAME_3D_DOUBLE_SIDED
-                , uno::makeAny( true ) );
+                , uno::Any( true ) );
 
             //Reduced lines
             xProp->setPropertyValue( UNO_NAME_3D_REDUCED_LINE_GEOMETRY
-                , uno::makeAny( true ) );
+                , uno::Any( true ) );
 
             //TextureProjectionMode
             xProp->setPropertyValue( UNO_NAME_3D_TEXTURE_PROJ_Y
-                , uno::makeAny( drawing::TextureProjectionMode_OBJECTSPECIFIC ) );
+                , uno::Any( drawing::TextureProjectionMode_OBJECTSPECIFIC ) );
 
             //TextureProjectionMode
             xProp->setPropertyValue( UNO_NAME_3D_TEXTURE_PROJ_X
-                , uno::makeAny( drawing::TextureProjectionMode_PARALLEL ) );
+                , uno::Any( drawing::TextureProjectionMode_PARALLEL ) );
             xProp->setPropertyValue( UNO_NAME_3D_TEXTURE_PROJ_Y
-                , uno::makeAny( drawing::TextureProjectionMode_OBJECTSPECIFIC ) );
+                , uno::Any( drawing::TextureProjectionMode_OBJECTSPECIFIC ) );
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
     return xShape;
@@ -994,42 +1007,44 @@ uno::Reference< drawing::XShape >
     xTarget->add(xShape);
 
     //set properties
-    uno::Reference< beans::XPropertySet > xProp( xShape, uno::UNO_QUERY );
-    OSL_ENSURE(xProp.is(), "created shape offers no XPropertySet");
-    if( xProp.is())
+    uno::Reference<beans::XMultiPropertySet> xMultiPropertySet(xShape, uno::UNO_QUERY);
+    OSL_ENSURE(xMultiPropertySet.is(), "created shape offers no XMultiPropertySet");
+    if (xMultiPropertySet.is())
     {
         try
         {
-            //Polygon
-            xProp->setPropertyValue( UNO_NAME_3D_POLYPOLYGON3D
-                , rStripe.getPolyPolygonShape3D() );
+            uno::Sequence<OUString> aPropertyNames{
+                UNO_NAME_3D_POLYPOLYGON3D,
+                UNO_NAME_3D_TEXTUREPOLYGON3D,
+                UNO_NAME_3D_NORMALSPOLYGON3D,
+                UNO_NAME_3D_LINEONLY,
+                UNO_NAME_3D_DOUBLE_SIDED
+            };
 
-            //TexturePolygon
-            xProp->setPropertyValue( UNO_NAME_3D_TEXTUREPOLYGON3D
-                , Stripe::getTexturePolygon( nRotatedTexture ) );
+            uno::Sequence<uno::Any> aPropertyValues {
+                rStripe.getPolyPolygonShape3D(),            // Polygon
+                Stripe::getTexturePolygon(nRotatedTexture), // TexturePolygon
+                rStripe.getNormalsPolygon(),                // Normals Polygon
+                uno::Any(false),        // LineOnly
+                uno::Any(bDoubleSided)  // DoubleSided
+            };
 
-            //Normals Polygon
-            xProp->setPropertyValue( UNO_NAME_3D_NORMALSPOLYGON3D
-                , rStripe.getNormalsPolygon() );
             //NormalsKind
-            if(bFlatNormals)
-                xProp->setPropertyValue( UNO_NAME_3D_NORMALS_KIND
-                    , uno::makeAny( drawing::NormalsKind_FLAT ) );
+            if (bFlatNormals)
+                lcl_addProperty(aPropertyNames, aPropertyValues,
+                                UNO_NAME_3D_NORMALS_KIND, uno::Any(drawing::NormalsKind_FLAT));
 
-            //LineOnly
-            xProp->setPropertyValue( UNO_NAME_3D_LINEONLY
-                , uno::makeAny( false) );
+            xMultiPropertySet->setPropertyValues(aPropertyNames, aPropertyValues);
 
-            //DoubleSided
-            xProp->setPropertyValue( UNO_NAME_3D_DOUBLE_SIDED
-                , uno::makeAny(bDoubleSided) );
-
-            if( xSourceProp.is())
-                PropertyMapper::setMappedProperties( xProp, xSourceProp, rPropertyNameMap );
+            uno::Reference<beans::XPropertySet> xPropertySet(xShape, uno::UNO_QUERY);
+            if (xSourceProp.is() && xPropertySet.is())
+            {
+                PropertyMapper::setMappedProperties(xPropertySet, xSourceProp, rPropertyNameMap);
+            }
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
     return xShape;
@@ -1053,47 +1068,42 @@ uno::Reference< drawing::XShape >
     xTarget->add(xShape);
 
     //set properties
-    uno::Reference< beans::XPropertySet > xProp( xShape, uno::UNO_QUERY );
-    OSL_ENSURE(xProp.is(), "created shape offers no XPropertySet");
-    if( xProp.is())
+    uno::Reference<beans::XMultiPropertySet> xMultiPropertySet(xShape, uno::UNO_QUERY);
+    OSL_ENSURE(xMultiPropertySet.is(), "created shape offers no XMultiPropertySet");
+    if (xMultiPropertySet.is())
     {
         try
         {
-            //depth
-            xProp->setPropertyValue( UNO_NAME_3D_EXTRUDE_DEPTH
-                , uno::makeAny((sal_Int32)fDepth) );
+            uno::Sequence<OUString> aPropertyNames{
+                UNO_NAME_3D_EXTRUDE_DEPTH,
+                UNO_NAME_3D_PERCENT_DIAGONAL,
+                UNO_NAME_3D_POLYPOLYGON3D,
+                UNO_NAME_3D_DOUBLE_SIDED,
+            };
 
-            //PercentDiagonal
-            sal_Int16 nPercentDiagonal = 0;
-            xProp->setPropertyValue( UNO_NAME_3D_PERCENT_DIAGONAL
-                , uno::makeAny( nPercentDiagonal ) );
-
-            //Polygon
-            xProp->setPropertyValue( UNO_NAME_3D_POLYPOLYGON3D
-                , uno::makeAny( rPolyPolygon ) );
-
-            //DoubleSided
-            xProp->setPropertyValue( UNO_NAME_3D_DOUBLE_SIDED
-                , uno::makeAny( true) );
+            uno::Sequence<uno::Any> aPropertyValues {
+                uno::Any(sal_Int32(fDepth)), // depth
+                uno::Any(sal_Int16(0)),      // PercentDiagonal
+                uno::Any(rPolyPolygon),      // Polygon
+                uno::Any(true)               // DoubleSided
+            };
 
             //the z component of the polygon is now ignored by the drawing layer,
             //so we need to translate the object via transformation matrix
 
             //Matrix for position
-            if( rPolyPolygon.SequenceZ.getLength()&& rPolyPolygon.SequenceZ[0].getLength() )
+            if (rPolyPolygon.SequenceZ.getLength()&& rPolyPolygon.SequenceZ[0].getLength())
             {
-                ::basegfx::B3DHomMatrix aM;
-                aM.translate( 0
-                            , 0
-                            , rPolyPolygon.SequenceZ[0][0] );
+                basegfx::B3DHomMatrix aM;
+                aM.translate(0, 0, rPolyPolygon.SequenceZ[0][0]);
                 drawing::HomogenMatrix aHM = B3DHomMatrixToHomogenMatrix(aM);
-                xProp->setPropertyValue( UNO_NAME_3D_TRANSFORM_MATRIX
-                    , uno::makeAny(aHM) );
+                lcl_addProperty(aPropertyNames, aPropertyValues, UNO_NAME_3D_TRANSFORM_MATRIX, uno::Any(aHM));
             }
+            xMultiPropertySet->setPropertyValues(aPropertyNames, aPropertyValues);
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
     return xShape;
@@ -1124,22 +1134,22 @@ uno::Reference< drawing::XShape >
 
             //Polygon
             xProp->setPropertyValue( UNO_NAME_POLYPOLYGON
-                , uno::makeAny( aPoints ) );
+                , uno::Any( aPoints ) );
 
             //ZOrder
             //an area should always be behind other shapes
             xProp->setPropertyValue( UNO_NAME_MISC_OBJ_ZORDER
-                , uno::makeAny( sal_Int32(0) ) );
+                , uno::Any( sal_Int32(0) ) );
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
     return xShape;
 }
 
-drawing::PolyPolygonShape3D createPolyPolygon_Symbol( const drawing::Position3D& rPos
+static drawing::PolyPolygonShape3D createPolyPolygon_Symbol( const drawing::Position3D& rPos
                                  , const drawing::Direction3D& rSize
                                  , sal_Int32 nStandardSymbol )
 {
@@ -1670,19 +1680,19 @@ uno::Reference< drawing::XShape >
 
             //Polygon
             xProp->setPropertyValue( UNO_NAME_POLYPOLYGON
-                , uno::makeAny( aPoints ) );
+                , uno::Any( aPoints ) );
 
             //LineColor
             xProp->setPropertyValue( UNO_NAME_LINECOLOR
-                , uno::makeAny( nBorderColor ) );
+                , uno::Any( nBorderColor ) );
 
             //FillColor
             xProp->setPropertyValue( UNO_NAME_FILLCOLOR
-                , uno::makeAny( nFillColor ) );
+                , uno::Any( nFillColor ) );
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
     return xShape;
@@ -1719,7 +1729,7 @@ uno::Reference< drawing::XShape >
     }
     catch( const uno::Exception & e )
     {
-        ASSERT_EXCEPTION( e );
+        SAL_WARN("chart2", "Exception caught. " << e );
     }
     uno::Reference< beans::XPropertySet > xProp( xShape, uno::UNO_QUERY );
     OSL_ENSURE(xProp.is(), "created shape offers no XPropertySet");
@@ -1727,11 +1737,11 @@ uno::Reference< drawing::XShape >
     {
         try
         {
-            xProp->setPropertyValue( "Graphic", uno::makeAny( xGraphic ));
+            xProp->setPropertyValue( "Graphic", uno::Any( xGraphic ));
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
     return xShape;
@@ -1767,7 +1777,7 @@ uno::Reference< drawing::XShapes >
     }
     catch( const uno::Exception& e )
     {
-        ASSERT_EXCEPTION( e );
+        SAL_WARN("chart2", "Exception caught. " << e );
     }
     return nullptr;
 }
@@ -1800,11 +1810,11 @@ uno::Reference< drawing::XShapes >
                 {
                     ::basegfx::B3DHomMatrix aM;
                     xProp->setPropertyValue( UNO_NAME_3D_TRANSFORM_MATRIX
-                        , uno::makeAny(B3DHomMatrixToHomogenMatrix(aM)) );
+                        , uno::Any(B3DHomMatrixToHomogenMatrix(aM)) );
                 }
                 catch( const uno::Exception& e )
                 {
-                    ASSERT_EXCEPTION( e );
+                    SAL_WARN("chart2", "Exception caught. " << e );
                 }
             }
         }
@@ -1820,7 +1830,7 @@ uno::Reference< drawing::XShapes >
     }
     catch( const uno::Exception& e )
     {
-        ASSERT_EXCEPTION( e );
+        SAL_WARN("chart2", "Exception caught. " << e );
     }
     return nullptr;
 }
@@ -1850,7 +1860,7 @@ uno::Reference< drawing::XShape >
     }
     catch( const uno::Exception & e )
     {
-        ASSERT_EXCEPTION( e );
+        SAL_WARN("chart2", "Exception caught. " << e );
     }
 
     //set properties
@@ -1860,13 +1870,11 @@ uno::Reference< drawing::XShape >
     {
         try
         {
-            drawing::CircleKind eKind = drawing::CircleKind_FULL;
-            xProp->setPropertyValue( UNO_NAME_CIRCKIND
-                , uno::makeAny( eKind ) );
+            xProp->setPropertyValue( UNO_NAME_CIRCKIND, uno::Any( drawing::CircleKind_FULL ) );
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
     return xShape;
@@ -1905,44 +1913,58 @@ uno::Reference< drawing::XShape >
     xTarget->add(xShape);
 
     //set properties
-    uno::Reference< beans::XPropertySet > xProp( xShape, uno::UNO_QUERY );
-    OSL_ENSURE(xProp.is(), "created shape offers no XPropertySet");
-    if( xProp.is())
+    uno::Reference<beans::XMultiPropertySet> xMultiPropertySet(xShape, uno::UNO_QUERY);
+    OSL_ENSURE(xMultiPropertySet.is(), "created shape offers no XMultiPropertySet");
+    if (xMultiPropertySet.is())
     {
         try
         {
-            //Polygon
-            xProp->setPropertyValue( UNO_NAME_3D_POLYPOLYGON3D
-                , uno::makeAny( rPoints ) );
+            uno::Sequence<OUString> aPropertyNames {
+                UNO_NAME_3D_POLYPOLYGON3D,
+                UNO_NAME_3D_LINEONLY
+            };
 
-            //LineOnly
-            xProp->setPropertyValue( UNO_NAME_3D_LINEONLY
-                , uno::makeAny( true ) );
+            uno::Sequence<uno::Any> aPropertyValues {
+                uno::Any(rPoints),  // Polygon
+                uno::Any(true)      // LineOnly
+            };
 
             //Transparency
             if(rLineProperties.Transparence.hasValue())
-                xProp->setPropertyValue( UNO_NAME_LINETRANSPARENCE
-                    , rLineProperties.Transparence );
+            {
+                lcl_addProperty(aPropertyNames, aPropertyValues,
+                                UNO_NAME_LINETRANSPARENCE,
+                                rLineProperties.Transparence);
+            }
 
             //LineStyle
             if(rLineProperties.LineStyle.hasValue())
-                xProp->setPropertyValue( UNO_NAME_LINESTYLE
-                    , rLineProperties.LineStyle );
+            {
+                lcl_addProperty(aPropertyNames, aPropertyValues,
+                                UNO_NAME_LINESTYLE,
+                                rLineProperties.LineStyle);
+            }
 
             //LineWidth
             if(rLineProperties.Width.hasValue())
-                xProp->setPropertyValue( UNO_NAME_LINEWIDTH
-                    , rLineProperties.Width );
+            {
+                lcl_addProperty(aPropertyNames, aPropertyValues,
+                                UNO_NAME_LINEWIDTH,
+                                rLineProperties.Width);
+            }
 
             //LineColor
             if(rLineProperties.Color.hasValue())
-                xProp->setPropertyValue( UNO_NAME_LINECOLOR
-                    , rLineProperties.Color );
-                    //, uno::makeAny( sal_Int32( Color(COL_RED).GetColor()) ) );
+            {
+                lcl_addProperty(aPropertyNames, aPropertyValues,
+                                UNO_NAME_LINECOLOR,
+                                rLineProperties.Color);
+            }
+            xMultiPropertySet->setPropertyValues(aPropertyNames, aPropertyValues);
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
     return xShape;
@@ -1974,7 +1996,7 @@ uno::Reference< drawing::XShape >
         {
             //Polygon
             xProp->setPropertyValue( UNO_NAME_POLYPOLYGON
-                , uno::makeAny( rPoints ) );
+                , uno::Any( rPoints ) );
 
             if(pLineProperties)
             {
@@ -2006,7 +2028,7 @@ uno::Reference< drawing::XShape >
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
     return xShape;
@@ -2046,9 +2068,9 @@ uno::Reference< drawing::XShape > ShapeFactory::createInvisibleRectangle(
         }
         return xShape;
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
     return nullptr;
 }
@@ -2065,7 +2087,7 @@ uno::Reference< drawing::XShape > ShapeFactory::createRectangle(
                 "com.sun.star.drawing.RectangleShape"), uno::UNO_QUERY );
     if( xShape.is())
     {
-        if (ePos == Bottom)
+        if (ePos == StackPosition::Bottom)
         {
             uno::Reference<drawing::XShapes2> xTarget2(xTarget, uno::UNO_QUERY);
             if (xTarget2.is())
@@ -2133,7 +2155,7 @@ uno::Reference< drawing::XShape >
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
     return xShape;
@@ -2226,15 +2248,112 @@ uno::Reference< drawing::XShape >
         //set whole text shape properties
         PropertyMapper::setMultiProperties( rPropNames, rPropValues, xProp );
 
-        //set position matrix
-        //the matrix needs to be set at the end behind autogrow and such position influencing properties
-        try
+        if (rATransformation.hasValue())
         {
-            xProp->setPropertyValue( "Transformation", rATransformation );
+            //set position matrix
+            //the matrix needs to be set at the end behind autogrow and such position influencing properties
+            try
+            {
+                xProp->setPropertyValue( "Transformation", rATransformation );
+            }
+            catch( const uno::Exception& e )
+            {
+                SAL_WARN("chart2", "Exception caught. " << e );
+            }
         }
-        catch( const uno::Exception& e )
+    }
+    return xShape;
+}
+
+uno::Reference< drawing::XShape >
+    ShapeFactory::createText( const uno::Reference< drawing::XShapes >& xTarget
+                , uno::Sequence< uno::Reference< chart2::XFormattedString > >& xFormattedString
+                , const tNameSequence& rPropNames
+                , const tAnySequence& rPropValues
+                , const uno::Any& rATransformation )
+{
+    if( !xTarget.is() )
+        return nullptr;
+
+    if( !xFormattedString.hasElements() )
+        return nullptr;
+
+    sal_Int32 nNumberOfParagraphs = xFormattedString.getLength();
+
+    bool bNotEmpty = false;
+    for( sal_Int32 nN = 0; nN < nNumberOfParagraphs; ++nN )
+    {
+        if( !xFormattedString[nN]->getString().isEmpty() )
         {
-            ASSERT_EXCEPTION( e );
+            bNotEmpty = true;
+            break;
+        }
+    }
+    if( !bNotEmpty )
+        return nullptr;
+
+    //create shape and add to page
+    uno::Reference< drawing::XShape > xShape(
+            m_xShapeFactory->createInstance(
+            "com.sun.star.drawing.TextShape" ), uno::UNO_QUERY );
+    xTarget->add(xShape);
+
+    //set paragraph properties
+    bNotEmpty = false;
+    Reference< text::XText > xText( xShape, uno::UNO_QUERY );
+    if( xText.is() )
+    {
+        // the first cursor is used for appending the next paragraph,
+        // after a new string has been inserted the cursor is moved at the end
+        // of the inserted string
+        // the second cursor is used for selecting the paragraph and apply the
+        // passed text properties
+        Reference< text::XTextCursor > xInsertCursor = xText->createTextCursor();
+        Reference< text::XTextCursor > xSelectionCursor = xText->createTextCursor();
+        if( xInsertCursor.is() && xSelectionCursor.is() )
+        {
+            uno::Reference< beans::XPropertySet > xSelectionProp( xSelectionCursor, uno::UNO_QUERY );
+            if( xSelectionProp.is() )
+            {
+                for( sal_Int32 nN = 0; nN < nNumberOfParagraphs; ++nN )
+                {
+                    if( !xFormattedString[nN]->getString().isEmpty() )
+                    {
+                        xInsertCursor->gotoEnd( false );
+                        xSelectionCursor->gotoEnd( false );
+                        xText->insertString( xInsertCursor, xFormattedString[nN]->getString(), false );
+                        bNotEmpty = true;
+                        xSelectionCursor->gotoEnd( true ); // select current paragraph
+                        uno::Reference< beans::XPropertySet > xStringProperties( xFormattedString[nN], uno::UNO_QUERY );
+                        PropertyMapper::setMappedProperties( xSelectionProp, xStringProperties,
+                            PropertyMapper::getPropertyNameMapForTextShapeProperties() );
+                    }
+                }
+            }
+        }
+    }
+
+    if( !bNotEmpty )
+        return nullptr;
+
+    uno::Reference< beans::XPropertySet > xProp( xShape, uno::UNO_QUERY );
+    if( xProp.is() )
+    {
+        //set whole text shape properties
+        PropertyMapper::setMultiProperties( rPropNames, rPropValues, xProp );
+
+        if( rATransformation.hasValue() )
+        {
+            //set position matrix
+            //the matrix needs to be set at the end behind autogrow and such position influencing properties
+            try
+            {
+                xProp->setPropertyValue( "Transformation", rATransformation );
+            }
+            catch( const uno::Exception& e )
+            {
+                SAL_WARN("chart2", "Exception caught. " << e );
+            }
         }
     }
     return xShape;
@@ -2268,25 +2387,24 @@ uno::Reference< drawing::XShape >
         tPropertyNameValueMap aValueMap;
         //fill line-, fill- and paragraph-properties into the ValueMap
         {
-            tMakePropertyNameMap aNameMap = PropertyMapper::getPropertyNameMapForParagraphProperties();
-            aNameMap( PropertyMapper::getPropertyNameMapForFillAndLineProperties() );
+            tPropertyNameMap aNameMap = PropertyMapper::getPropertyNameMapForParagraphProperties();
+            auto const & add = PropertyMapper::getPropertyNameMapForFillAndLineProperties();
+            aNameMap.insert(add.begin(), add.end());
 
             PropertyMapper::getValueMap( aValueMap, aNameMap, xTextProperties );
         }
 
         //fill some more shape properties into the ValueMap
         {
-            drawing::TextHorizontalAdjust eHorizontalAdjust = drawing::TextHorizontalAdjust_CENTER;
-            drawing::TextVerticalAdjust eVerticalAdjust = drawing::TextVerticalAdjust_CENTER;
-
-            aValueMap.insert( tPropertyNameValueMap::value_type( "TextHorizontalAdjust", uno::makeAny(eHorizontalAdjust) ) ); // drawing::TextHorizontalAdjust
-            aValueMap.insert( tPropertyNameValueMap::value_type( "TextVerticalAdjust", uno::makeAny(eVerticalAdjust) ) ); //drawing::TextVerticalAdjust
-            aValueMap.insert( tPropertyNameValueMap::value_type( "TextAutoGrowHeight", uno::makeAny(sal_True) ) ); // sal_Bool
-            aValueMap.insert( tPropertyNameValueMap::value_type( "TextAutoGrowWidth", uno::makeAny(sal_True) ) ); // sal_Bool
+            aValueMap.insert( { "TextHorizontalAdjust", uno::Any(drawing::TextHorizontalAdjust_CENTER) } ); // drawing::TextHorizontalAdjust
+            aValueMap.insert( { "TextVerticalAdjust", uno::Any(drawing::TextVerticalAdjust_CENTER) } ); //drawing::TextVerticalAdjust
+            aValueMap.insert( { "TextAutoGrowHeight", uno::Any(true) } ); // sal_Bool
+            aValueMap.insert( { "TextAutoGrowWidth", uno::Any(true) } ); // sal_Bool
+            aValueMap.insert( { "TextMaximumFrameWidth", uno::Any(rSize.Width) } ); // sal_Int32
 
             //set name/classified ObjectID (CID)
             if( !aName.isEmpty() )
-                aValueMap.insert( tPropertyNameValueMap::value_type( "Name", uno::makeAny( aName ) ) ); //CID OUString
+                aValueMap.emplace( "Name", uno::Any( aName ) ); //CID OUString
         }
 
         //set global title properties
@@ -2304,7 +2422,7 @@ uno::Reference< drawing::XShape >
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
 
         if(bStackCharacters)
@@ -2336,14 +2454,12 @@ uno::Reference< drawing::XShape >
         }
         else
         {
-            uno::Sequence< uno::Reference< text::XTextCursor > > aCursorList( xFormattedString.getLength() );
             sal_Int32 nN = 0;
             for( nN=0; nN<xFormattedString.getLength();nN++ )
             {
                 xTextCursor->gotoEnd(false);
                 xText->insertString( xTextRange, xFormattedString[nN]->getString(), false );
                 xTextCursor->gotoEnd(true);
-                aCursorList[nN] = xText->createTextCursorByRange( uno::Reference< text::XTextRange >(xTextCursor,uno::UNO_QUERY) );
             }
             awt::Size aOldRefSize;
             bool bHasRefPageSize =
@@ -2368,14 +2484,12 @@ uno::Reference< drawing::XShape >
         if ( xShapeProp.is() && ( xShapeProp->getPropertyValue( "CharHeight" ) >>= fFontHeight ) )
         {
             fFontHeight *= ( 2540.0f / 72.0f );  // pt -> 1/100 mm
-            float fXFraction = 0.18f;
-            sal_Int32 nXDistance = static_cast< sal_Int32 >( ::rtl::math::round( fFontHeight * fXFraction ) );
-            float fYFraction = 0.30f;
-            sal_Int32 nYDistance = static_cast< sal_Int32 >( ::rtl::math::round( fFontHeight * fYFraction ) );
-            xShapeProp->setPropertyValue( "TextLeftDistance", uno::makeAny( nXDistance ) );
-            xShapeProp->setPropertyValue( "TextRightDistance", uno::makeAny( nXDistance ) );
-            xShapeProp->setPropertyValue( "TextUpperDistance", uno::makeAny( nYDistance ) );
-            xShapeProp->setPropertyValue( "TextLowerDistance", uno::makeAny( nYDistance ) );
+            sal_Int32 nXDistance = static_cast< sal_Int32 >( ::rtl::math::round( fFontHeight * 0.18f ) );
+            sal_Int32 nYDistance = static_cast< sal_Int32 >( ::rtl::math::round( fFontHeight * 0.30f ) );
+            xShapeProp->setPropertyValue( "TextLeftDistance", uno::Any( nXDistance ) );
+            xShapeProp->setPropertyValue( "TextRightDistance", uno::Any( nXDistance ) );
+            xShapeProp->setPropertyValue( "TextUpperDistance", uno::Any( nYDistance ) );
+            xShapeProp->setPropertyValue( "TextLowerDistance", uno::Any( nYDistance ) );
         }
         sal_Int32 nXPos = rPos.X;
         sal_Int32 nYPos = rPos.Y;
@@ -2383,15 +2497,252 @@ uno::Reference< drawing::XShape >
         //set position matrix
         //the matrix needs to be set at the end behind autogrow and such position influencing properties
         ::basegfx::B2DHomMatrix aM;
-        aM.rotate( -nRotation*F_PI/180.0 );//#i78696#->#i80521#
+        aM.rotate( -basegfx::deg2rad(nRotation) );//#i78696#->#i80521#
         aM.translate( nXPos, nYPos );
-        xShapeProp->setPropertyValue( "Transformation", uno::makeAny( B2DHomMatrixToHomogenMatrix3(aM) ) );
+        xShapeProp->setPropertyValue( "Transformation", uno::Any( B2DHomMatrixToHomogenMatrix3(aM) ) );
     }
     catch( const uno::Exception& e )
     {
-        ASSERT_EXCEPTION( e );
+        SAL_WARN("chart2", "Exception caught. " << e );
     }
     return xShape;
+}
+
+ShapeFactory* ShapeFactory::getOrCreateShapeFactory(const uno::Reference< lang::XMultiServiceFactory>& xFactory)
+{
+    static ShapeFactory* pShapeFactory = new ShapeFactory(xFactory);
+    return pShapeFactory;
+}
+
+uno::Reference< drawing::XShapes > ShapeFactory::getChartRootShape(
+    const uno::Reference< drawing::XDrawPage>& xDrawPage )
+{
+    uno::Reference< drawing::XShapes > xRet;
+    uno::Reference< drawing::XShapes > xShapes( xDrawPage, uno::UNO_QUERY );
+    if( xShapes.is() )
+    {
+        sal_Int32 nCount = xShapes->getCount();
+        uno::Reference< drawing::XShape > xShape;
+        for( sal_Int32 nN = nCount; nN--; )
+        {
+            if( xShapes->getByIndex( nN ) >>= xShape )
+            {
+                if( ShapeFactory::getShapeName( xShape ) == "com.sun.star.chart2.shapes" )
+                {
+                    xRet.set( xShape, uno::UNO_QUERY );
+                    break;
+                }
+            }
+        }
+    }
+    return xRet;
+}
+
+void ShapeFactory::makeShapeInvisible( const uno::Reference< drawing::XShape >& xShape )
+{
+    uno::Reference< beans::XPropertySet > xShapeProp( xShape, uno::UNO_QUERY );
+    OSL_ENSURE(xShapeProp.is(), "created shape offers no XPropertySet");
+    if( xShapeProp.is())
+    {
+        try
+        {
+            xShapeProp->setPropertyValue( "LineStyle", uno::Any( drawing::LineStyle_NONE ));
+            xShapeProp->setPropertyValue( "FillStyle", uno::Any( drawing::FillStyle_NONE ));
+        }
+        catch( const uno::Exception& e )
+        {
+            SAL_WARN("chart2", "Exception caught. " << e );
+        }
+    }
+}
+
+// set a name/CID at a shape (is used for selection handling)
+
+void ShapeFactory::setShapeName( const uno::Reference< drawing::XShape >& xShape
+                               , const OUString& rName )
+{
+    if(!xShape.is())
+        return;
+    uno::Reference< beans::XPropertySet > xProp( xShape, uno::UNO_QUERY );
+    OSL_ENSURE(xProp.is(), "shape offers no XPropertySet");
+    if( xProp.is())
+    {
+        try
+        {
+            xProp->setPropertyValue( UNO_NAME_MISC_OBJ_NAME
+                , uno::Any( rName ) );
+        }
+        catch( const uno::Exception& e )
+        {
+            SAL_WARN("chart2", "Exception caught. " << e );
+        }
+    }
+}
+
+OUString ShapeFactory::getShapeName( const uno::Reference< drawing::XShape >& xShape )
+{
+    OUString aRet;
+
+    uno::Reference< beans::XPropertySet > xProp( xShape, uno::UNO_QUERY );
+    OSL_ENSURE(xProp.is(), "shape offers no XPropertySet");
+    if( xProp.is())
+    {
+        try
+        {
+            xProp->getPropertyValue( UNO_NAME_MISC_OBJ_NAME ) >>= aRet;
+        }
+        catch( const uno::Exception& e )
+        {
+            SAL_WARN("chart2", "Exception caught. " << e );
+        }
+    }
+
+    return aRet;
+}
+
+uno::Any ShapeFactory::makeTransformation( const awt::Point& rScreenPosition2D, double fRotationAnglePi )
+{
+    ::basegfx::B2DHomMatrix aM;
+    //As autogrow is active the rectangle is automatically expanded to that side
+    //to which the text is not adjusted.
+    // aM.scale( 1, 1 ); Oops? A scale with this parameters is neutral, line commented out
+    aM.rotate( fRotationAnglePi );
+    aM.translate( rScreenPosition2D.X, rScreenPosition2D.Y );
+    uno::Any aATransformation( B2DHomMatrixToHomogenMatrix3(aM) );
+    return aATransformation;
+}
+
+OUString ShapeFactory::getStackedString( const OUString& rString, bool bStacked )
+{
+    sal_Int32 nLen = rString.getLength();
+    if(!bStacked || !nLen)
+        return rString;
+
+    OUStringBuffer aStackStr;
+
+    //add a newline after each letter
+    //as we do not no letters here add a newline after each char
+    for( sal_Int32 nPosSrc=0; nPosSrc < nLen; nPosSrc++ )
+    {
+        if( nPosSrc )
+            aStackStr.append( '\r' );
+        aStackStr.append(rString[nPosSrc]);
+    }
+    return aStackStr.makeStringAndClear();
+}
+
+bool ShapeFactory::hasPolygonAnyLines( drawing::PolyPolygonShape3D& rPoly)
+{
+    // #i67757# check all contained polygons, if at least one polygon contains 2 or more points, return true
+    for( sal_Int32 nIdx = 0, nCount = rPoly.SequenceX.getLength(); nIdx < nCount; ++nIdx )
+        if( rPoly.SequenceX[ nIdx ].getLength() > 1 )
+            return true;
+    return false;
+}
+
+bool ShapeFactory::isPolygonEmptyOrSinglePoint( drawing::PolyPolygonShape3D& rPoly)
+{
+    // true, if empty polypolygon or one polygon with one point
+    return (rPoly.SequenceX.getLength() == 0) ||
+        ((rPoly.SequenceX.getLength() == 1) && (rPoly.SequenceX[0].getLength() <= 1));
+}
+
+void ShapeFactory::closePolygon( drawing::PolyPolygonShape3D& rPoly)
+{
+    OSL_ENSURE( rPoly.SequenceX.getLength() <= 1, "ShapeFactory::closePolygon - single polygon expected" );
+    //add a last point == first point
+    if(isPolygonEmptyOrSinglePoint(rPoly))
+        return;
+    drawing::Position3D aFirst(rPoly.SequenceX[0][0],rPoly.SequenceY[0][0],rPoly.SequenceZ[0][0]);
+    AddPointToPoly( rPoly, aFirst );
+}
+
+awt::Size ShapeFactory::calculateNewSizeRespectingAspectRatio(
+         const awt::Size& rTargetSize
+         , const awt::Size& rSourceSizeWithCorrectAspectRatio )
+{
+    awt::Size aNewSize;
+
+    double fFactorWidth = double(rTargetSize.Width)/double(rSourceSizeWithCorrectAspectRatio.Width);
+    double fFactorHeight = double(rTargetSize.Height)/double(rSourceSizeWithCorrectAspectRatio.Height);
+    double fFactor = std::min(fFactorWidth,fFactorHeight);
+    aNewSize.Width=static_cast<sal_Int32>(fFactor*rSourceSizeWithCorrectAspectRatio.Width);
+    aNewSize.Height=static_cast<sal_Int32>(fFactor*rSourceSizeWithCorrectAspectRatio.Height);
+
+    return aNewSize;
+}
+
+awt::Point ShapeFactory::calculateTopLeftPositionToCenterObject(
+           const awt::Point& rTargetAreaPosition
+         , const awt::Size& rTargetAreaSize
+         , const awt::Size& rObjectSize )
+{
+    awt::Point aNewPosition(rTargetAreaPosition);
+    aNewPosition.X += static_cast<sal_Int32>(double(rTargetAreaSize.Width-rObjectSize.Width)/2.0);
+    aNewPosition.Y += static_cast<sal_Int32>(double(rTargetAreaSize.Height-rObjectSize.Height)/2.0);
+    return aNewPosition;
+}
+
+::basegfx::B2IRectangle ShapeFactory::getRectangleOfShape(
+        const uno::Reference< drawing::XShape >& xShape )
+{
+    ::basegfx::B2IRectangle aRet;
+
+    if( xShape.is() )
+    {
+        awt::Point aPos = xShape->getPosition();
+        awt::Size aSize = xShape->getSize();
+        aRet = BaseGFXHelper::makeRectangle(aPos,aSize);
+    }
+    return aRet;
+
+}
+
+awt::Size ShapeFactory::getSizeAfterRotation(
+         const uno::Reference< drawing::XShape >& xShape, double fRotationAngleDegree )
+{
+    awt::Size aRet(0,0);
+    if(xShape.is())
+    {
+        const awt::Size aSize( xShape->getSize() );
+
+        if( fRotationAngleDegree == 0.0 )
+            aRet = aSize;
+        else
+        {
+            fRotationAngleDegree = NormAngle360(fRotationAngleDegree);
+            if(fRotationAngleDegree>270.0)
+                fRotationAngleDegree=360.0-fRotationAngleDegree;
+            else if(fRotationAngleDegree>180.0)
+                fRotationAngleDegree=fRotationAngleDegree-180.0;
+            else if(fRotationAngleDegree>90.0)
+                fRotationAngleDegree=180.0-fRotationAngleDegree;
+
+            const double fAnglePi = basegfx::deg2rad(fRotationAngleDegree);
+
+            aRet.Height = static_cast<sal_Int32>(
+                aSize.Width*rtl::math::sin( fAnglePi )
+                + aSize.Height*rtl::math::cos( fAnglePi ));
+            aRet.Width = static_cast<sal_Int32>(
+                aSize.Width*rtl::math::cos( fAnglePi )
+                + aSize.Height*rtl::math::sin( fAnglePi ));
+        }
+    }
+    return aRet;
+}
+
+void ShapeFactory::removeSubShapes( const uno::Reference< drawing::XShapes >& xShapes )
+{
+    if( xShapes.is() )
+    {
+        sal_Int32 nSubCount = xShapes->getCount();
+        uno::Reference< drawing::XShape > xShape;
+        for( sal_Int32 nS = nSubCount; nS--; )
+        {
+            if( xShapes->getByIndex( nS ) >>= xShape )
+                xShapes->remove( xShape );
+        }
+    }
 }
 
 } //namespace chart

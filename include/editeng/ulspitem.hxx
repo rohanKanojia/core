@@ -30,7 +30,7 @@
     This item describes the Upper- and Lower space of a page or paragraph.
 */
 
-#define ULSPACE_16_VERSION  ((sal_uInt16)0x0001)
+#define ULSPACE_16_VERSION  (sal_uInt16(0x0001))
 
 class EDITENG_DLLPUBLIC SvxULSpaceItem : public SfxPoolItem
 {
@@ -45,6 +45,7 @@ public:
     SvxULSpaceItem( const sal_uInt16 nUp, const sal_uInt16 nLow,
                     const sal_uInt16 nId  );
     inline SvxULSpaceItem& operator=( const SvxULSpaceItem &rCpy );
+    SvxULSpaceItem(SvxULSpaceItem const &) = default; // SfxPoolItem copy function dichotomy
 
     // "pure virtual Methods" from SfxPoolItem
     virtual bool            operator==( const SfxPoolItem& ) const override;
@@ -53,13 +54,11 @@ public:
     virtual bool            PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     virtual SfxPoolItem*     Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual SfxPoolItem*     Create(SvStream &, sal_uInt16) const override;
-    virtual SvStream&        Store(SvStream &, sal_uInt16 nItemVersion ) const override;
     virtual sal_uInt16           GetVersion( sal_uInt16 nFileVersion ) const override;
     virtual void                 ScaleMetrics( long nMult, long nDiv ) override;
     virtual bool                 HasMetrics() const override;

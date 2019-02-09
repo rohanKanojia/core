@@ -25,14 +25,13 @@
 
 #include <com/sun/star/ucb/AlreadyInitializedException.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
-#include <com/sun/star/awt/XVclWindowPeer.hpp>
 
 #include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/window.hxx>
 #include <tools/diagnose_ex.h>
 
 
-extern "C" void SAL_CALL createRegistryInfo_DefaultHelpProvider()
+extern "C" void createRegistryInfo_DefaultHelpProvider()
 {
     ::pcr::OAutoRegistration< ::pcr::DefaultHelpProvider > aAutoRegistration;
 }
@@ -56,7 +55,6 @@ namespace pcr
     using ::com::sun::star::uno::UNO_QUERY;
     using ::com::sun::star::uno::UNO_QUERY_THROW;
     using ::com::sun::star::awt::XWindow;
-    using ::com::sun::star::awt::XVclWindowPeer;
 
     DefaultHelpProvider::DefaultHelpProvider()
         :m_bConstructed( false )
@@ -69,48 +67,48 @@ namespace pcr
     }
 
 
-    OUString DefaultHelpProvider::getImplementationName_static(  ) throw(RuntimeException)
+    OUString DefaultHelpProvider::getImplementationName_static(  )
     {
         return OUString("org.openoffice.comp.extensions.DefaultHelpProvider");
     }
 
 
-    Sequence< OUString > DefaultHelpProvider::getSupportedServiceNames_static(  ) throw(RuntimeException)
+    Sequence< OUString > DefaultHelpProvider::getSupportedServiceNames_static(  )
     {
         Sequence< OUString > aSupported { "com.sun.star.inspection.DefaultHelpProvider" };
         return aSupported;
     }
 
 
-    Reference< XInterface > SAL_CALL DefaultHelpProvider::Create( const Reference< XComponentContext >& )
+    Reference< XInterface > DefaultHelpProvider::Create( const Reference< XComponentContext >& )
     {
         return *new DefaultHelpProvider;
     }
 
 
-    void SAL_CALL DefaultHelpProvider::focusGained( const Reference< XPropertyControl >& _Control ) throw (RuntimeException, std::exception)
+    void SAL_CALL DefaultHelpProvider::focusGained( const Reference< XPropertyControl >& Control )
     {
         if ( !m_xInspectorUI.is() )
             throw RuntimeException( OUString(), *this );
 
         try
         {
-            m_xInspectorUI->setHelpSectionText( impl_getHelpText_nothrow( _Control ) );
+            m_xInspectorUI->setHelpSectionText( impl_getHelpText_nothrow( Control ) );
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
     }
 
 
-    void SAL_CALL DefaultHelpProvider::valueChanged( const Reference< XPropertyControl >& /*_Control*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL DefaultHelpProvider::valueChanged( const Reference< XPropertyControl >& )
     {
         // not interested in
     }
 
 
-    void SAL_CALL DefaultHelpProvider::initialize( const Sequence< Any >& _arguments ) throw (Exception, RuntimeException, std::exception)
+    void SAL_CALL DefaultHelpProvider::initialize( const Sequence< Any >& _arguments )
     {
         if ( m_bConstructed )
             throw AlreadyInitializedException();
@@ -139,7 +137,7 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
 
         m_bConstructed = true;
@@ -156,11 +154,11 @@ namespace pcr
         try
         {
             Reference< XWindow > xControlWindow( _rxControl->getControlWindow(), UNO_QUERY_THROW );
-            pControlWindow = VCLUnoHelper::GetWindow( xControlWindow );
+            pControlWindow = VCLUnoHelper::GetWindow( xControlWindow ).get();
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
 
         return pControlWindow;

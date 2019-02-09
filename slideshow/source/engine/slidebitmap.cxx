@@ -20,6 +20,7 @@
 
 #include <tools/diagnose_ex.h>
 #include <slidebitmap.hxx>
+#include <sal/log.hxx>
 
 #include <com/sun/star/rendering/XCanvas.hpp>
 #include <com/sun/star/rendering/XBitmap.hpp>
@@ -30,7 +31,7 @@
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 
 #include <canvas/canvastools.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 
 
 using namespace ::com::sun::star;
@@ -64,7 +65,7 @@ namespace slideshow
             rendering::RenderState aRenderState;
             ::canvas::tools::initRenderState( aRenderState );
 
-            const basegfx::B2DHomMatrix aTranslation(basegfx::tools::createTranslateB2DHomMatrix(maOutputPos));
+            const basegfx::B2DHomMatrix aTranslation(basegfx::utils::createTranslateB2DHomMatrix(maOutputPos));
             ::canvas::tools::setRenderStateTransform( aRenderState, aTranslation );
 
             try
@@ -84,10 +85,7 @@ namespace slideshow
             }
             catch( uno::Exception& )
             {
-                OSL_FAIL( OUStringToOString(
-                                comphelper::anyToString( cppu::getCaughtException() ),
-                                RTL_TEXTENCODING_UTF8 ).getStr() );
-
+                SAL_WARN( "slideshow", comphelper::anyToString( cppu::getCaughtException() ) );
                 return false;
             }
 
@@ -109,7 +107,7 @@ namespace slideshow
             maClipPoly = rClipPoly;
         }
 
-        css::uno::Reference< css::rendering::XBitmap >    SlideBitmap::getXBitmap()
+        const css::uno::Reference< css::rendering::XBitmap >&  SlideBitmap::getXBitmap()
         {
         return mxBitmap;
         }

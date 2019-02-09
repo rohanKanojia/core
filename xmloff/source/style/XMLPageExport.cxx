@@ -18,7 +18,8 @@
  */
 
 #include <xmloff/XMLPageExport.hxx>
-#include <tools/debug.hxx>
+#include <o3tl/any.hxx>
+#include <sal/log.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
@@ -41,17 +42,20 @@ using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::beans;
 using namespace ::xmloff::token;
 
+static const OUStringLiteral gsIsPhysical( "IsPhysical" );
+static const OUStringLiteral gsFollowStyle( "FollowStyle" );
+
 bool XMLPageExport::findPageMasterName( const OUString& rStyleName, OUString& rPMName ) const
 {
-    for( ::std::vector< XMLPageExportNameEntry >::const_iterator pEntry = aNameVector.begin();
-            pEntry != aNameVector.end(); ++pEntry )
+    auto pEntry = std::find_if(aNameVector.cbegin(), aNameVector.cend(),
+        [&rStyleName](const XMLPageExportNameEntry& rEntry) { return rEntry.sStyleName == rStyleName; });
+
+    if( pEntry != aNameVector.cend() )
     {
-        if( pEntry->sStyleName == rStyleName )
-        {
-            rPMName = pEntry->sPageMasterName;
-            return true;
-        }
+        rPMName = pEntry->sPageMasterName;
+        return true;
     }
+
     return false;
 }
 
@@ -59,16 +63,16 @@ void XMLPageExport::collectPageMasterAutoStyle(
         const Reference < XPropertySet > & rPropSet,
         OUString& rPageMasterName )
 {
-    DBG_ASSERT( xPageMasterPropSetMapper.is(), "page master family/XMLPageMasterPropSetMapper not found" );
+    SAL_WARN_IF( !xPageMasterPropSetMapper.is(), "xmloff", "page master family/XMLPageMasterPropSetMapper not found" );
     if( xPageMasterPropSetMapper.is() )
     {
-        ::std::vector<XMLPropertyState> xPropStates = xPageMasterExportPropMapper->Filter( rPropSet );
-        if( !xPropStates.empty())
+        ::std::vector<XMLPropertyState> aPropStates = xPageMasterExportPropMapper->Filter( rPropSet );
+        if( !aPropStates.empty())
         {
             OUString sParent;
-            rPageMasterName = rExport.GetAutoStylePool()->Find( XML_STYLE_FAMILY_PAGE_MASTER, sParent, xPropStates );
+            rPageMasterName = rExport.GetAutoStylePool()->Find( XML_STYLE_FAMILY_PAGE_MASTER, sParent, aPropStates );
             if (rPageMasterName.isEmpty())
-                rPageMasterName = rExport.GetAutoStylePool()->Add(XML_STYLE_FAMILY_PAGE_MASTER, sParent, xPropStates);
+                rPageMasterName = rExport.GetAutoStylePool()->Add(XML_STYLE_FAMILY_PAGE_MASTER, sParent, aPropStates);
         }
     }
 }
@@ -89,10 +93,10 @@ bool XMLPageExport::exportStyle(
 
     // Don't export styles that aren't existing really. This may be the
     // case for StarOffice Writer's pool styles.
-    if( xPropSetInfo->hasPropertyByName( sIsPhysical ) )
+    if( xPropSetInfo->hasPropertyByName( gsIsPhysical ) )
     {
-        Any aAny = xPropSet->getPropertyValue( sIsPhysical );
-        if( !*static_cast<sal_Bool const *>(aAny.getValue()) )
+        Any aAny = xPropSet->getPropertyValue( gsIsPhysical );
+        if( !*o3tl::doAccess<bool>(aAny) )
             return false;
     }
 
@@ -129,10 +133,10 @@ bool XMLPageExport::exportStyle(
             GetExport().AddAttribute( XML_NAMESPACE_STYLE, XML_PAGE_LAYOUT_NAME, GetExport().EncodeStyleName( sPMName ) );
 
         Reference<XPropertySetInfo> xInfo = xPropSet->getPropertySetInfo();
-        if ( xInfo.is() && xInfo->hasPropertyByName(sFollowStyle) )
+        if ( xInfo.is() && xInfo->hasPropertyByName(gsFollowStyle) )
         {
             OUString sNextName;
-            xPropSet->getPropertyValue( sFollowStyle ) >>= sNextName;
+            xPropSet->getPropertyValue( gsFollowStyle ) >>= sNextName;
 
             if( sName != sNextName && !sNextName.isEmpty() )
             {
@@ -151,9 +155,7 @@ bool XMLPageExport::exportStyle(
 }
 
 XMLPageExport::XMLPageExport( SvXMLExport& rExp ) :
-    rExport( rExp ),
-    sIsPhysical( "IsPhysical" ),
-    sFollowStyle( "FollowStyle" )
+    rExport( rExp )
 {
     xPageMasterPropHdlFactory = new XMLPageMasterPropHdlFactory;
     xPageMasterPropSetMapper = new XMLPageMasterPropSetMapper(
@@ -167,12 +169,12 @@ XMLPageExport::XMLPageExport( SvXMLExport& rExp ) :
 
     Reference< XStyleFamiliesSupplier > xFamiliesSupp( GetExport().GetModel(),
                                                        UNO_QUERY );
-    DBG_ASSERT( xFamiliesSupp.is(),
+    SAL_WARN_IF( !xFamiliesSupp.is(), "xmloff",
                 "No XStyleFamiliesSupplier from XModel for export!" );
     if( xFamiliesSupp.is() )
     {
         Reference< XNameAccess > xFamilies( xFamiliesSupp->getStyleFamilies() );
-        DBG_ASSERT( xFamiliesSupp.is(),
+        SAL_WARN_IF( !xFamiliesSupp.is(), "xmloff",
                     "getStyleFamilies() from XModel failed for export!" );
         if( xFamilies.is() )
         {
@@ -182,7 +184,7 @@ XMLPageExport::XMLPageExport( SvXMLExport& rExp ) :
             {
                 xPageStyles.set(xFamilies->getByName( aPageStyleName ),uno::UNO_QUERY);
 
-                DBG_ASSERT( xPageStyles.is(),
+                SAL_WARN_IF( !xPageStyles.is(), "xmloff",
                             "Page Styles not found for export!" );
             }
         }
@@ -211,10 +213,7 @@ void XMLPageExport::exportStyles( bool bUsed, bool bAutoStyles )
 
 void XMLPageExport::exportAutoStyles()
 {
-    rExport.GetAutoStylePool()->exportXML(XML_STYLE_FAMILY_PAGE_MASTER
-        , rExport.GetDocHandler(), rExport.GetMM100UnitConverter(),
-        rExport.GetNamespaceMap()
-        );
+    rExport.GetAutoStylePool()->exportXML(XML_STYLE_FAMILY_PAGE_MASTER);
 }
 
 void XMLPageExport::exportDefaultStyle()
@@ -222,22 +221,20 @@ void XMLPageExport::exportDefaultStyle()
     Reference < lang::XMultiServiceFactory > xFactory (GetExport().GetModel(), UNO_QUERY);
     if (xFactory.is())
     {
-        OUString sTextDefaults ( "com.sun.star.text.Defaults" );
-        Reference < XPropertySet > xPropSet (xFactory->createInstance ( sTextDefaults ), UNO_QUERY);
+        Reference < XPropertySet > xPropSet (xFactory->createInstance ( "com.sun.star.text.Defaults" ), UNO_QUERY);
         if (xPropSet.is())
         {
             // <style:default-style ...>
             GetExport().CheckAttrList();
 
-            ::std::vector< XMLPropertyState > xPropStates =
+            ::std::vector< XMLPropertyState > aPropStates =
                 xPageMasterExportPropMapper->FilterDefaults( xPropSet );
 
             bool bExport = false;
             rtl::Reference < XMLPropertySetMapper > aPropMapper(xPageMasterExportPropMapper->getPropertySetMapper());
-            for( ::std::vector< XMLPropertyState >::iterator aIter = xPropStates.begin(); aIter != xPropStates.end(); ++aIter )
+            for( const auto& rProp : aPropStates )
             {
-                XMLPropertyState *pProp = &(*aIter);
-                sal_Int16 nContextId    = aPropMapper->GetEntryContextId( pProp->mnIndex );
+                sal_Int16 nContextId    = aPropMapper->GetEntryContextId( rProp.mnIndex );
                 if( nContextId == CTF_PM_STANDARD_MODE )
                 {
                     bExport = true;
@@ -255,7 +252,7 @@ void XMLPageExport::exportDefaultStyle()
                                           XML_DEFAULT_PAGE_LAYOUT,
                                           true, true );
 
-                xPageMasterExportPropMapper->exportXML( GetExport(), xPropStates,
+                xPageMasterExportPropMapper->exportXML( GetExport(), aPropStates,
                                              SvXmlExportFlags::IGN_WS );
             }
         }

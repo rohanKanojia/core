@@ -20,16 +20,14 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_XCLIMPCHANGETRACK_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_XCLIMPCHANGETRACK_HXX
 
-#include <tools/datetime.hxx>
 #include "xiroot.hxx"
 #include "xistream.hxx"
 #include "excform.hxx"
-#include "imp_op.hxx"
 
 struct ScCellValue;
 class ScChangeAction;
 class ScChangeTrack;
-class XclImpChTrFmlConverter;
+class DateTime;
 
 struct XclImpChTrRecHeader
 {
@@ -54,16 +52,16 @@ private:
     XclImpChTrRecHeader         aRecHeader;
     OUString                    sOldUsername;
 
-    ScChangeTrack*              pChangeTrack;
-    tools::SvRef<SotStorageStream>          xInStrm;        // input stream
-    XclImpStream*               pStrm;          // stream import class
+    std::unique_ptr<ScChangeTrack> pChangeTrack;
+    tools::SvRef<SotStorageStream> xInStrm;        // input stream
+    std::unique_ptr<XclImpStream>  pStrm;          // stream import class
     sal_uInt16                  nTabIdCount;
     bool                        bGlobExit;      // global exit loop
 
     enum { nmBase, nmFound, nmNested }
                                 eNestedMode;    // action with nested content actions
 
-    inline bool                 FoundNestedMode() { return eNestedMode == nmFound; }
+    bool                 FoundNestedMode() { return eNestedMode == nmFound; }
 
     void                        DoAcceptRejectAction( ScChangeAction* pAction );
     void                        DoAcceptRejectAction( sal_uInt32 nFirst, sal_uInt32 nLast );
@@ -72,8 +70,6 @@ private:
     void                        DoDeleteRange( const ScRange& rRange );
 
     inline sal_uInt8            LookAtuInt8();
-    inline double               ReadRK();
-    inline bool                 ReadBool();
     inline void                 Read2DAddress( ScAddress& rAddress );
     inline void                 Read2DRange( ScRange& rRange );
     SCTAB                       ReadTabNum();
@@ -82,7 +78,7 @@ private:
     bool                        CheckRecord( sal_uInt16 nOpCode );
 
     void                        ReadFormula(
-                                    ScTokenArray*& rpTokenArray,
+                                    std::unique_ptr<ScTokenArray>& rpTokenArray,
                                     const ScAddress& rPosition );
     void ReadCell( ScCellValue& rCell, sal_uInt32& rFormat, sal_uInt16 nFlags, const ScAddress& rPosition );
 
@@ -100,11 +96,11 @@ private:
 
 public:
                                 XclImpChangeTrack( const XclImpRoot& rRoot, const XclImpStream& rBookStrm );
-                                virtual ~XclImpChangeTrack();
+                                virtual ~XclImpChangeTrack() override;
 
                                 // reads extended 3D ref info following the formulas, returns sc tab nums
                                 // ( called by XclImpChTrFmlConverter::Read3DTabReference() )
-    bool                        Read3DTabRefInfo( SCTAB& rFirstTab, SCTAB& rLastTab, ExcelToSc8::ExternalTabInfo& rExtInfo );
+    void                        Read3DTabRefInfo( SCTAB& rFirstTab, SCTAB& rLastTab, ExcelToSc8::ExternalTabInfo& rExtInfo );
 
     void                        Apply();
 };
@@ -116,16 +112,6 @@ inline sal_uInt8 XclImpChangeTrack::LookAtuInt8()
     nValue = pStrm->ReaduInt8();
     pStrm->PopPosition();
     return nValue;
-}
-
-inline double XclImpChangeTrack::ReadRK()
-{
-    return XclTools::GetDoubleFromRK( pStrm->ReadInt32() );
-}
-
-inline bool XclImpChangeTrack::ReadBool()
-{
-    return (pStrm->ReaduInt16() != 0);
 }
 
 inline void XclImpChangeTrack::Read2DAddress( ScAddress& rAddress )
@@ -153,7 +139,7 @@ private:
 
 public:
     XclImpChTrFmlConverter( XclImpRoot& rRoot, XclImpChangeTrack& rXclChTr );
-    virtual                     ~XclImpChTrFmlConverter();
+    virtual                     ~XclImpChTrFmlConverter() override;
 };
 
 #endif

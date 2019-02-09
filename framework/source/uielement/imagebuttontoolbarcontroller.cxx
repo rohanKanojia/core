@@ -17,17 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "uielement/imagebuttontoolbarcontroller.hxx"
+#include <uielement/imagebuttontoolbarcontroller.hxx>
 
 #include <framework/addonsoptions.hxx>
 
 #include <com/sun/star/util/XURLTransformer.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/frame/XControlNotificationListener.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 
-#include <osl/mutex.hxx>
 #include <comphelper/getexpandeduri.hxx>
 #include <comphelper/processfactory.hxx>
 #include <unotools/ucbstreamhelper.hxx>
@@ -82,7 +79,6 @@ ImageButtonToolbarController::~ImageButtonToolbarController()
 }
 
 void SAL_CALL ImageButtonToolbarController::dispose()
-throw ( RuntimeException, std::exception )
 {
     SolarMutexGuard aSolarMutexGuard;
     ComplexToolbarController::dispose();
@@ -125,8 +121,8 @@ void ImageButtonToolbarController::executeControlCommand( const css::frame::Cont
 
 bool ImageButtonToolbarController::ReadImageFromURL( bool bBigImage, const OUString& aImageURL, Image& aImage )
 {
-    std::unique_ptr<SvStream> pStream(utl::UcbStreamHelper::CreateStream( aImageURL, STREAM_STD_READ ));
-    if ( pStream && ( pStream->GetErrorCode() == 0 ))
+    std::unique_ptr<SvStream> pStream(utl::UcbStreamHelper::CreateStream( aImageURL, StreamMode::STD_READ ));
+    if ( pStream && ( pStream->GetErrorCode() == ERRCODE_NONE ))
     {
         // Use graphic class to also support more graphic formats (bmp,png,...)
         Graphic aGraphic;

@@ -20,14 +20,13 @@
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_CHARACTERPROPERTYITEMCONVERTER_HXX
 
 #include "ItemConverter.hxx"
-#include <com/sun/star/beans/PropertyState.hpp>
 #include <com/sun/star/awt/Size.hpp>
 
 #include <boost/optional.hpp>
 
 namespace chart { namespace wrapper {
 
-class CharacterPropertyItemConverter : public ItemConverter
+class CharacterPropertyItemConverter final : public ItemConverter
 {
 public:
     CharacterPropertyItemConverter(
@@ -41,19 +40,16 @@ public:
         const OUString & rRefSizePropertyName,
         const css::uno::Reference<css::beans::XPropertySet>& rRefSizePropSet = css::uno::Reference<css::beans::XPropertySet>() );
 
-    virtual ~CharacterPropertyItemConverter();
-
-protected:
-    virtual const sal_uInt16* GetWhichPairs() const override;
-    virtual bool GetItemProperty( tWhichIdType nWhichId, tPropertyNameWithMemberId & rOutProperty ) const override;
-    virtual void FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const
-        throw (css::uno::Exception) override;
-    virtual bool ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet )
-        throw (css::uno::Exception) override;
-
-    css::uno::Reference<css::beans::XPropertySet> GetRefSizePropertySet() const;
+    virtual ~CharacterPropertyItemConverter() override;
 
 private:
+    virtual const sal_uInt16* GetWhichPairs() const override;
+    virtual bool GetItemProperty( tWhichIdType nWhichId, tPropertyNameWithMemberId & rOutProperty ) const override;
+    virtual void FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const override;
+    virtual bool ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet ) override;
+
+    const css::uno::Reference<css::beans::XPropertySet>& GetRefSizePropertySet() const;
+
     OUString m_aRefSizePropertyName;
     css::uno::Reference<css::beans::XPropertySet> m_xRefSizePropSet;
     boost::optional<css::awt::Size> m_pRefSize;

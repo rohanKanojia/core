@@ -23,25 +23,24 @@
 #include <svl/srchitem.hxx>
 #include <svx/imapdlg.hxx>
 
-#include "cmdid.h"
-#include "wrtsh.hxx"
-#include "swmodule.hxx"
-#include "globals.hrc"
-#include "shells.hrc"
-#include "uinums.hxx"
-#include "wlistsh.hxx"
+#include <cmdid.h>
+#include <wrtsh.hxx>
+#include <swmodule.hxx>
+#include <globals.hrc>
+#include <uinums.hxx>
+#include <wlistsh.hxx>
 
 #include <sfx2/request.hxx>
     // needed for -fsanitize=function visibility of typeinfo for functions of
     // type void(SfxShell*,SfxRequest&) defined in swslots.hxx
-#define SwWebListShell
-#include "swslots.hxx"
+#define ShellClass_SwWebListShell
+#include <swslots.hxx>
 
 SFX_IMPL_INTERFACE(SwWebListShell, SwListShell)
 
 void SwWebListShell::InitInterface_Impl()
 {
-    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, RID_NUM_TOOLBOX);
+    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, SfxVisibilityFlags::Invisible, ToolbarId::Num_Toolbox);
 }
 
 
@@ -49,7 +48,6 @@ SwWebListShell::SwWebListShell(SwView &_rView) :
     SwListShell(_rView)
 {
     SetName("List");
-    SetHelpId(SW_LISTSHELL);
 }
 
 SwWebListShell::~SwWebListShell()

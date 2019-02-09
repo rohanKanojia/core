@@ -20,66 +20,69 @@
 #ifndef INCLUDED_TOOLKIT_AWT_VCLXFONT_HXX
 #define INCLUDED_TOOLKIT_AWT_VCLXFONT_HXX
 
+#include <memory>
 #include <toolkit/dllapi.h>
 #include <com/sun/star/awt/XFont2.hpp>
-#include <com/sun/star/awt/XDevice.hpp>
 #include <com/sun/star/lang/XTypeProvider.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
 #include <cppuhelper/weak.hxx>
 #include <osl/mutex.hxx>
-#include <vcl/metric.hxx>
+#include <vcl/font.hxx>
+
+namespace com { namespace sun { namespace star { namespace awt { class XDevice; } } } }
+
+class FontMetric;
 
 
 //  class VCLXFont
 
 
-class TOOLKIT_DLLPUBLIC VCLXFont :  public css::awt::XFont2,
+class TOOLKIT_DLLPUBLIC VCLXFont final : public css::awt::XFont2,
                     public css::lang::XTypeProvider,
                     public css::lang::XUnoTunnel,
                     public ::cppu::OWeakObject
 {
-private:
     ::osl::Mutex    maMutex;
     css::uno::Reference< css::awt::XDevice> mxDevice;
     vcl::Font       maFont;
-    FontMetric*     mpFontMetric;
+    std::unique_ptr<FontMetric>
+                    mpFontMetric;
 
-protected:
     bool            ImplAssertValidFontMetric();
     ::osl::Mutex&   GetMutex() { return maMutex; }
 
 public:
                     VCLXFont();
-                    virtual ~VCLXFont();
+                    virtual ~VCLXFont() override;
 
     void            Init( css::awt::XDevice& rxDev, const vcl::Font& rFont );
     const vcl::Font&     GetFont() const { return maFont; }
 
     // css::uno::XInterface
-    css::uno::Any                  SAL_CALL queryInterface( const css::uno::Type & rType ) throw(css::uno::RuntimeException, std::exception) override;
+    css::uno::Any                  SAL_CALL queryInterface( const css::uno::Type & rType ) override;
     void                                        SAL_CALL acquire() throw() override  { OWeakObject::acquire(); }
     void                                        SAL_CALL release() throw() override  { OWeakObject::release(); }
 
     // css::lang::XUnoTunnel
     static const css::uno::Sequence< sal_Int8 >&   GetUnoTunnelId() throw();
     static VCLXFont*                                            GetImplementation( const css::uno::Reference< css::uno::XInterface >& rxIFace );
-    sal_Int64                                                   SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& rIdentifier ) throw(css::uno::RuntimeException, std::exception) override;
+    sal_Int64                                                   SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& rIdentifier ) override;
 
     // css::lang::XTypeProvider
-    css::uno::Sequence< css::uno::Type >  SAL_CALL getTypes() throw(css::uno::RuntimeException, std::exception) override;
-    css::uno::Sequence< sal_Int8 >                     SAL_CALL getImplementationId() throw(css::uno::RuntimeException, std::exception) override;
+    css::uno::Sequence< css::uno::Type >  SAL_CALL getTypes() override;
+    css::uno::Sequence< sal_Int8 >                     SAL_CALL getImplementationId() override;
 
     // css::lang::XFont
-    css::awt::FontDescriptor           SAL_CALL getFontDescriptor(  ) throw(css::uno::RuntimeException, std::exception) override;
-    css::awt::SimpleFontMetric         SAL_CALL getFontMetric(  ) throw(css::uno::RuntimeException, std::exception) override;
-    sal_Int16                                       SAL_CALL getCharWidth( sal_Unicode c ) throw(css::uno::RuntimeException, std::exception) override;
-    css::uno::Sequence< sal_Int16 >    SAL_CALL getCharWidths( sal_Unicode nFirst, sal_Unicode nLast ) throw(css::uno::RuntimeException, std::exception) override;
-    sal_Int32                                       SAL_CALL getStringWidth( const OUString& str ) throw(css::uno::RuntimeException, std::exception) override;
-    sal_Int32                                       SAL_CALL getStringWidthArray( const OUString& str, css::uno::Sequence< sal_Int32 >& rDXArray ) throw(css::uno::RuntimeException, std::exception) override;
-    void                                            SAL_CALL getKernPairs( css::uno::Sequence< sal_Unicode >& rnChars1, css::uno::Sequence< sal_Unicode >& rnChars2, css::uno::Sequence< sal_Int16 >& rnKerns ) throw(css::uno::RuntimeException, std::exception) override;
+    css::awt::FontDescriptor           SAL_CALL getFontDescriptor(  ) override;
+    css::awt::SimpleFontMetric         SAL_CALL getFontMetric(  ) override;
+    sal_Int16                                       SAL_CALL getCharWidth( sal_Unicode c ) override;
+    css::uno::Sequence< sal_Int16 >    SAL_CALL getCharWidths( sal_Unicode nFirst, sal_Unicode nLast ) override;
+    sal_Int32                                       SAL_CALL getStringWidth( const OUString& str ) override;
+    sal_Int32                                       SAL_CALL getStringWidthArray( const OUString& str, css::uno::Sequence< sal_Int32 >& rDXArray ) override;
+    void                                            SAL_CALL getKernPairs( css::uno::Sequence< sal_Unicode >& rnChars1, css::uno::Sequence< sal_Unicode >& rnChars2, css::uno::Sequence< sal_Int16 >& rnKerns ) override;
 
     // css::lang::XFont2
-    sal_Bool                                        SAL_CALL hasGlyphs( const OUString& aText ) throw(css::uno::RuntimeException, std::exception) override;
+    sal_Bool                                        SAL_CALL hasGlyphs( const OUString& aText ) override;
 };
 
 

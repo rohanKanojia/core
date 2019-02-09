@@ -22,19 +22,17 @@
 
 #include <comphelper/comphelperdllapi.h>
 
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/lang/IllegalArgumentException.hpp>
-#include <com/sun/star/uno/XInterface.hpp>
+#include <com/sun/star/uno/Reference.h>
 #include <com/sun/star/frame/XUntitledNumbers.hpp>
 
 #include <cppuhelper/basemutex.hxx>
 #include <cppuhelper/weakref.hxx>
 #include <cppuhelper/implbase.hxx>
 
-#include <functional>
 #include <unordered_map>
 #include <vector>
 
+namespace com { namespace sun { namespace star { namespace uno { class XInterface; } } } }
 
 namespace comphelper{
 
@@ -77,7 +75,7 @@ class COMPHELPER_DLLPUBLIC NumberedCollection : private ::cppu::BaseMutex
 
         /** @short  free all internally used resources.
          */
-        virtual ~NumberedCollection();
+        virtual ~NumberedCollection() override;
 
 
         /** set an outside component which uses this container and must be set
@@ -107,44 +105,37 @@ class COMPHELPER_DLLPUBLIC NumberedCollection : private ::cppu::BaseMutex
 
 
         /** @see css.frame.XUntitledNumbers */
-        virtual ::sal_Int32 SAL_CALL leaseNumber(const css::uno::Reference< css::uno::XInterface >& xComponent)
-            throw (css::lang::IllegalArgumentException,
-                   css::uno::RuntimeException, std::exception         ) override;
+        virtual ::sal_Int32 SAL_CALL leaseNumber(const css::uno::Reference< css::uno::XInterface >& xComponent) override;
 
 
         /** @see css.frame.XUntitledNumbers */
-        virtual void SAL_CALL releaseNumber(::sal_Int32 nNumber)
-            throw (css::lang::IllegalArgumentException,
-                   css::uno::RuntimeException, std::exception         ) override;
+        virtual void SAL_CALL releaseNumber(::sal_Int32 nNumber) override;
 
 
         /** @see css.frame.XUntitledNumbers */
-        virtual void SAL_CALL releaseNumberForComponent(const css::uno::Reference< css::uno::XInterface >& xComponent)
-            throw (css::lang::IllegalArgumentException,
-                   css::uno::RuntimeException, std::exception         ) override;
+        virtual void SAL_CALL releaseNumberForComponent(const css::uno::Reference< css::uno::XInterface >& xComponent) override;
 
 
         /** @see css.frame.XUntitledNumbers */
-        virtual OUString SAL_CALL getUntitledPrefix()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getUntitledPrefix() override;
 
 
     // internal
     private:
 
 
-        /** @short  trys to find an unique number not already used within this collection.
+        /** @short  tries to find an unique number not already used within this collection.
 
             @descr  It reuses the smallest number which isn't used by any component
                     of this collection. (fragmentation!) If collection is full (means there
                     is no free number) the special value INVALID_NUMBER will be returned.
 
-            @note   Those method can't be called within a multithreaded environment ..
-                    Because such number wont be "reserved" for the calli of these method
-                    it can happen that two calls returns the same number (reasoned by the fact that first calli
+            @note   Those method can't be called within a multithreaded environment.
+                    Because such number won't be "reserved" for the call of these method
+                    it can happen that two calls returns the same number (reasoned by the fact that first call
                     doesn't used the returned number already.
 
-                    So the outside code has to make sure that retrieving and using of those number
+                    So the outside code has to make sure that retrieving and using of those numbers
                     will be an atomic operation.
 
             @return an unique number or special value INVALID_NUMBER if collection is full.

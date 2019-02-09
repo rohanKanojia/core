@@ -18,7 +18,7 @@
  */
 
 #include "DbAdminImpl.hxx"
-#include "dsmeta.hxx"
+#include <dsmeta.hxx>
 
 #include <svl/poolitem.hxx>
 #include <svl/itempool.hxx>
@@ -26,17 +26,18 @@
 #include <svl/intitem.hxx>
 #include <svl/eitem.hxx>
 #include "DriverSettings.hxx"
-#include "IItemSetHelper.hxx"
-#include "UITools.hxx"
-#include "dbu_dlg.hrc"
-#include "dbustrings.hrc"
-#include "dsitems.hxx"
+#include <IItemSetHelper.hxx>
+#include <UITools.hxx>
+#include <core_resource.hxx>
+#include <dbu_dlg.hxx>
+#include <stringconstants.hxx>
+#include <strings.hrc>
+#include <strings.hxx>
+#include <dsitems.hxx>
 #include "dsnItem.hxx"
-#include "moduledbu.hxx"
 #include "optionalboolitem.hxx"
-#include "propertysetitem.hxx"
-#include "stringlistitem.hxx"
-#include "OAuthenticationContinuation.hxx"
+#include <stringlistitem.hxx>
+#include <OAuthenticationContinuation.hxx>
 
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
@@ -50,23 +51,19 @@
 #include <com/sun/star/ucb/XInteractionSupplyAuthentication2.hpp>
 #include <com/sun/star/ucb/AuthenticationRequest.hpp>
 
-#include <comphelper/guarding.hxx>
 #include <comphelper/interaction.hxx>
-#include <comphelper/processfactory.hxx>
-#include <comphelper/property.hxx>
 #include <comphelper/sequence.hxx>
-#include <comphelper/string.hxx>
 #include <connectivity/DriversConfig.hxx>
 #include <connectivity/dbexception.hxx>
 #include <osl/file.hxx>
 #include <tools/diagnose_ex.h>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <typelib/typedescription.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/stdtext.hxx>
 #include <vcl/waitobj.hxx>
-#include <osl/mutex.hxx>
+#include <vcl/weld.hxx>
 
 #include <algorithm>
 #include <iterator>
@@ -90,7 +87,7 @@ using namespace com::sun::star::frame;
 
 namespace
 {
-    bool implCheckItemType( SfxItemSet& _rSet, const sal_uInt16 _nId, const std::function<bool ( const SfxPoolItem* )>& isItemType )
+    bool implCheckItemType( SfxItemSet const & _rSet, const sal_uInt16 _nId, const std::function<bool ( const SfxPoolItem* )>& isItemType )
     {
         bool bCorrectType = false;
 
@@ -113,12 +110,8 @@ namespace
         }
         catch(Exception&)
         {
-    #if OSL_DEBUG_LEVEL > 0
-            OString sMessage("ODbAdminDialog::implTranslateProperty: could not set the property ");
-            sMessage += OString(_rName.getStr(), _rName.getLength(), RTL_TEXTENCODING_ASCII_US);
-            sMessage += OString("!");
-            OSL_FAIL(sMessage.getStr());
-    #endif
+            SAL_WARN("dbaccess", "ODbAdminDialog::implTranslateProperty: could not set the property "
+                    << _rName);
         }
 
     }
@@ -140,66 +133,66 @@ namespace
 }
 
     // ODbDataSourceAdministrationHelper
-ODbDataSourceAdministrationHelper::ODbDataSourceAdministrationHelper(const Reference< XComponentContext >& _xORB, vcl::Window* _pParent,IItemSetHelper* _pItemSetHelper)
+ODbDataSourceAdministrationHelper::ODbDataSourceAdministrationHelper(const Reference< XComponentContext >& _xORB, weld::Window* pParent, weld::Window* pTopParent, IItemSetHelper* _pItemSetHelper)
         : m_xContext(_xORB)
-        , m_pParent(_pParent)
+        , m_pParent(pParent)
         , m_pItemSetHelper(_pItemSetHelper)
 {
     /// initialize the property translation map
     // direct properties of a data source
-    m_aDirectPropTranslator.insert(MapInt2String::value_type(DSID_CONNECTURL, PROPERTY_URL));
-    m_aDirectPropTranslator.insert(MapInt2String::value_type(DSID_NAME, PROPERTY_NAME));
-    m_aDirectPropTranslator.insert(MapInt2String::value_type(DSID_USER, PROPERTY_USER));
-    m_aDirectPropTranslator.insert(MapInt2String::value_type(DSID_PASSWORD, PROPERTY_PASSWORD));
-    m_aDirectPropTranslator.insert(MapInt2String::value_type(DSID_PASSWORDREQUIRED, PROPERTY_ISPASSWORDREQUIRED));
-    m_aDirectPropTranslator.insert(MapInt2String::value_type(DSID_TABLEFILTER, PROPERTY_TABLEFILTER));
-    m_aDirectPropTranslator.insert(MapInt2String::value_type(DSID_READONLY, PROPERTY_ISREADONLY));
-    m_aDirectPropTranslator.insert(MapInt2String::value_type(DSID_SUPPRESSVERSIONCL, PROPERTY_SUPPRESSVERSIONCL));
+    m_aDirectPropTranslator.emplace( DSID_CONNECTURL, PROPERTY_URL );
+    m_aDirectPropTranslator.emplace( DSID_NAME, PROPERTY_NAME );
+    m_aDirectPropTranslator.emplace( DSID_USER, PROPERTY_USER );
+    m_aDirectPropTranslator.emplace( DSID_PASSWORD, PROPERTY_PASSWORD );
+    m_aDirectPropTranslator.emplace( DSID_PASSWORDREQUIRED, PROPERTY_ISPASSWORDREQUIRED );
+    m_aDirectPropTranslator.emplace( DSID_TABLEFILTER, PROPERTY_TABLEFILTER );
+    m_aDirectPropTranslator.emplace( DSID_READONLY, PROPERTY_ISREADONLY );
+    m_aDirectPropTranslator.emplace( DSID_SUPPRESSVERSIONCL, PROPERTY_SUPPRESSVERSIONCL );
 
     // implicit properties, to be found in the direct property "Info"
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_JDBCDRIVERCLASS, INFO_JDBCDRIVERCLASS));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_TEXTFILEEXTENSION, INFO_TEXTFILEEXTENSION));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_CHARSET, INFO_CHARSET));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_TEXTFILEHEADER, INFO_TEXTFILEHEADER));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_FIELDDELIMITER, INFO_FIELDDELIMITER));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_TEXTDELIMITER, INFO_TEXTDELIMITER));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_DECIMALDELIMITER, INFO_DECIMALDELIMITER));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_THOUSANDSDELIMITER, INFO_THOUSANDSDELIMITER));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_SHOWDELETEDROWS, INFO_SHOWDELETEDROWS));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_ALLOWLONGTABLENAMES, INFO_ALLOWLONGTABLENAMES));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_ADDITIONALOPTIONS, INFO_ADDITIONALOPTIONS));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_SQL92CHECK, PROPERTY_ENABLESQL92CHECK));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_AUTOINCREMENTVALUE, PROPERTY_AUTOINCREMENTCREATION));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_AUTORETRIEVEVALUE, INFO_AUTORETRIEVEVALUE));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_AUTORETRIEVEENABLED, INFO_AUTORETRIEVEENABLED));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_APPEND_TABLE_ALIAS, INFO_APPEND_TABLE_ALIAS));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_AS_BEFORE_CORRNAME, INFO_AS_BEFORE_CORRELATION_NAME ) );
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_CHECK_REQUIRED_FIELDS, INFO_FORMS_CHECK_REQUIRED_FIELDS ) );
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_ESCAPE_DATETIME, INFO_ESCAPE_DATETIME ) );
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_PRIMARY_KEY_SUPPORT, OUString("PrimaryKeySupport")));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_PARAMETERNAMESUBST, INFO_PARAMETERNAMESUBST));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_IGNOREDRIVER_PRIV, INFO_IGNOREDRIVER_PRIV));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_BOOLEANCOMPARISON, PROPERTY_BOOLEANCOMPARISONMODE));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_ENABLEOUTERJOIN, PROPERTY_ENABLEOUTERJOIN));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_CATALOG, PROPERTY_USECATALOGINSELECT));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_SCHEMA, PROPERTY_USESCHEMAINSELECT));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_INDEXAPPENDIX, OUString("AddIndexAppendix")));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_DOSLINEENDS, OUString("PreferDosLikeLineEnds")));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_CONN_SOCKET, OUString("LocalSocket")));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_NAMED_PIPE, OUString("NamedPipe")));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_RESPECTRESULTSETTYPE, OUString("RespectDriverResultSetType")));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_MAX_ROW_SCAN, OUString("MaxRowScan")));
+    m_aIndirectPropTranslator.emplace( DSID_JDBCDRIVERCLASS, INFO_JDBCDRIVERCLASS );
+    m_aIndirectPropTranslator.emplace( DSID_TEXTFILEEXTENSION, INFO_TEXTFILEEXTENSION );
+    m_aIndirectPropTranslator.emplace( DSID_CHARSET, INFO_CHARSET );
+    m_aIndirectPropTranslator.emplace( DSID_TEXTFILEHEADER, INFO_TEXTFILEHEADER );
+    m_aIndirectPropTranslator.emplace( DSID_FIELDDELIMITER, INFO_FIELDDELIMITER );
+    m_aIndirectPropTranslator.emplace( DSID_TEXTDELIMITER, INFO_TEXTDELIMITER );
+    m_aIndirectPropTranslator.emplace( DSID_DECIMALDELIMITER, INFO_DECIMALDELIMITER );
+    m_aIndirectPropTranslator.emplace( DSID_THOUSANDSDELIMITER, INFO_THOUSANDSDELIMITER );
+    m_aIndirectPropTranslator.emplace( DSID_SHOWDELETEDROWS, INFO_SHOWDELETEDROWS );
+    m_aIndirectPropTranslator.emplace( DSID_ALLOWLONGTABLENAMES, INFO_ALLOWLONGTABLENAMES );
+    m_aIndirectPropTranslator.emplace( DSID_ADDITIONALOPTIONS, INFO_ADDITIONALOPTIONS );
+    m_aIndirectPropTranslator.emplace( DSID_SQL92CHECK, PROPERTY_ENABLESQL92CHECK );
+    m_aIndirectPropTranslator.emplace( DSID_AUTOINCREMENTVALUE, PROPERTY_AUTOINCREMENTCREATION );
+    m_aIndirectPropTranslator.emplace( DSID_AUTORETRIEVEVALUE, INFO_AUTORETRIEVEVALUE );
+    m_aIndirectPropTranslator.emplace( DSID_AUTORETRIEVEENABLED, INFO_AUTORETRIEVEENABLED );
+    m_aIndirectPropTranslator.emplace( DSID_APPEND_TABLE_ALIAS, INFO_APPEND_TABLE_ALIAS );
+    m_aIndirectPropTranslator.emplace( DSID_AS_BEFORE_CORRNAME, INFO_AS_BEFORE_CORRELATION_NAME );
+    m_aIndirectPropTranslator.emplace( DSID_CHECK_REQUIRED_FIELDS, INFO_FORMS_CHECK_REQUIRED_FIELDS );
+    m_aIndirectPropTranslator.emplace( DSID_ESCAPE_DATETIME, INFO_ESCAPE_DATETIME );
+    m_aIndirectPropTranslator.emplace( DSID_PRIMARY_KEY_SUPPORT, OUString("PrimaryKeySupport") );
+    m_aIndirectPropTranslator.emplace( DSID_PARAMETERNAMESUBST, INFO_PARAMETERNAMESUBST );
+    m_aIndirectPropTranslator.emplace( DSID_IGNOREDRIVER_PRIV, INFO_IGNOREDRIVER_PRIV );
+    m_aIndirectPropTranslator.emplace( DSID_BOOLEANCOMPARISON, PROPERTY_BOOLEANCOMPARISONMODE );
+    m_aIndirectPropTranslator.emplace( DSID_ENABLEOUTERJOIN, PROPERTY_ENABLEOUTERJOIN );
+    m_aIndirectPropTranslator.emplace( DSID_CATALOG, PROPERTY_USECATALOGINSELECT );
+    m_aIndirectPropTranslator.emplace( DSID_SCHEMA, PROPERTY_USESCHEMAINSELECT );
+    m_aIndirectPropTranslator.emplace( DSID_INDEXAPPENDIX, OUString("AddIndexAppendix") );
+    m_aIndirectPropTranslator.emplace( DSID_DOSLINEENDS, OUString("PreferDosLikeLineEnds") );
+    m_aIndirectPropTranslator.emplace( DSID_CONN_SOCKET, OUString("LocalSocket") );
+    m_aIndirectPropTranslator.emplace( DSID_NAMED_PIPE, OUString("NamedPipe") );
+    m_aIndirectPropTranslator.emplace( DSID_RESPECTRESULTSETTYPE, OUString("RespectDriverResultSetType") );
+    m_aIndirectPropTranslator.emplace( DSID_MAX_ROW_SCAN, OUString("MaxRowScan") );
 
     // extra settings for odbc
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_USECATALOG, INFO_USECATALOG));
+    m_aIndirectPropTranslator.emplace( DSID_USECATALOG, INFO_USECATALOG );
     // extra settings for a ldap address book
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_CONN_LDAP_BASEDN, INFO_CONN_LDAP_BASEDN));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_CONN_LDAP_ROWCOUNT, INFO_CONN_LDAP_ROWCOUNT));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_CONN_LDAP_USESSL, OUString("UseSSL")));
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_DOCUMENT_URL, PROPERTY_URL));
+    m_aIndirectPropTranslator.emplace( DSID_CONN_LDAP_BASEDN, INFO_CONN_LDAP_BASEDN );
+    m_aIndirectPropTranslator.emplace( DSID_CONN_LDAP_ROWCOUNT, INFO_CONN_LDAP_ROWCOUNT );
+    m_aIndirectPropTranslator.emplace( DSID_CONN_LDAP_USESSL, OUString("UseSSL") );
+    m_aIndirectPropTranslator.emplace( DSID_DOCUMENT_URL, PROPERTY_URL );
 
     // oracle
-    m_aIndirectPropTranslator.insert(MapInt2String::value_type(DSID_IGNORECURRENCY, OUString("IgnoreCurrency")));
+    m_aIndirectPropTranslator.emplace( DSID_IGNORECURRENCY, OUString("IgnoreCurrency") );
 
     try
     {
@@ -207,7 +200,7 @@ ODbDataSourceAdministrationHelper::ODbDataSourceAdministrationHelper(const Refer
     }
     catch(const Exception&)
     {
-        ShowServiceNotAvailableError(_pParent->GetParent(), "com.sun.star.sdb.DatabaseContext", true);
+        ShowServiceNotAvailableError(pTopParent, "com.sun.star.sdb.DatabaseContext", true);
     }
 }
 
@@ -217,15 +210,14 @@ bool ODbDataSourceAdministrationHelper::getCurrentSettings(Sequence< PropertyVal
     if (!m_pItemSetHelper->getOutputSet())
         return false;
 
-    ::std::vector< PropertyValue > aReturn;
+    std::vector< PropertyValue > aReturn;
         // collecting this in a vector because it has a push_back, in opposite to sequences
 
     // user: DSID_USER -> "user"
     const SfxStringItem* pUser = m_pItemSetHelper->getOutputSet()->GetItem<SfxStringItem>(DSID_USER);
     if (pUser && pUser->GetValue().getLength())
-        aReturn.push_back(
-            PropertyValue(  OUString("user"), 0,
-                            makeAny(OUString(pUser->GetValue())), PropertyState_DIRECT_VALUE));
+        aReturn.emplace_back(  "user", 0,
+                            makeAny(pUser->GetValue()), PropertyState_DIRECT_VALUE);
 
     // check if the connection type requires a password
     if (hasAuthentication(*m_pItemSetHelper->getOutputSet()))
@@ -250,7 +242,7 @@ bool ODbDataSourceAdministrationHelper::getCurrentSettings(Sequence< PropertyVal
             }
 
             OUString sName = pName ? pName->GetValue() : OUString();
-            OUString sLoginRequest(ModuleRes(STR_ENTER_CONNECTION_PASSWORD));
+            OUString sLoginRequest(DBA_RES(STR_ENTER_CONNECTION_PASSWORD));
             OUString sTemp = sName;
             sName = ::dbaui::getStrippedDatabaseName(nullptr,sTemp);
             if ( !sName.isEmpty() )
@@ -266,13 +258,13 @@ bool ODbDataSourceAdministrationHelper::getCurrentSettings(Sequence< PropertyVal
             AuthenticationRequest aRequest;
             aRequest.ServerName = sName;
             aRequest.Diagnostic = sLoginRequest;
-            aRequest.HasRealm   = aRequest.HasAccount = sal_False;
+            aRequest.HasRealm   = false;
             // aRequest.Realm
             aRequest.HasUserName = pUser != nullptr;
-            aRequest.UserName    = pUser ? OUString(pUser->GetValue()) : OUString();
-            aRequest.HasPassword = sal_True;
+            aRequest.UserName    = pUser ? pUser->GetValue() : OUString();
+            aRequest.HasPassword = true;
             //aRequest.Password
-            aRequest.HasAccount  = sal_False;
+            aRequest.HasAccount  = false;
             // aRequest.Account
 
             comphelper::OInteractionRequest* pRequest = new comphelper::OInteractionRequest(makeAny(aRequest));
@@ -298,7 +290,7 @@ bool ODbDataSourceAdministrationHelper::getCurrentSettings(Sequence< PropertyVal
             }
             catch(Exception&)
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
             }
             if (!pAuthenticate->wasSelected())
                 return false;
@@ -309,9 +301,8 @@ bool ODbDataSourceAdministrationHelper::getCurrentSettings(Sequence< PropertyVal
         }
 
         if (!sPassword.isEmpty())
-            aReturn.push_back(
-                PropertyValue(  OUString("password"), 0,
-                                makeAny(OUString(sPassword)), PropertyState_DIRECT_VALUE));
+            aReturn.emplace_back( "password", 0,
+                               makeAny(sPassword), PropertyState_DIRECT_VALUE);
     }
 
     if ( !aReturn.empty() )
@@ -348,10 +339,10 @@ void ODbDataSourceAdministrationHelper::clearPassword()
         m_pItemSetHelper->getWriteOutputSet()->ClearItem(DSID_PASSWORD);
 }
 
-::std::pair< Reference<XConnection>,sal_Bool> ODbDataSourceAdministrationHelper::createConnection()
+std::pair< Reference<XConnection>,bool> ODbDataSourceAdministrationHelper::createConnection()
 {
-    ::std::pair< Reference<XConnection>,sal_Bool> aRet;
-    aRet.second = sal_False;
+    std::pair< Reference<XConnection>,bool> aRet;
+    aRet.second = false;
     Sequence< PropertyValue > aConnectionParams;
     if ( getCurrentSettings(aConnectionParams) )
     {
@@ -360,15 +351,15 @@ void ODbDataSourceAdministrationHelper::clearPassword()
         SQLExceptionInfo aErrorInfo;
         try
         {
-            WaitObject aWaitCursor(m_pParent);
+            weld::WaitObject aWaitCursor(m_pParent);
             aRet.first = getDriver()->connect(getConnectionURL(), aConnectionParams);
-            aRet.second = sal_True;
+            aRet.second = true;
         }
         catch (const SQLContext& e) { aErrorInfo = SQLExceptionInfo(e); }
         catch (const SQLWarning& e) { aErrorInfo = SQLExceptionInfo(e); }
         catch (const SQLException& e) { aErrorInfo = SQLExceptionInfo(e); }
 
-        showError(aErrorInfo,m_pParent,getORB());
+        showError(aErrorInfo,m_pParent->GetXWindow(),getORB());
     }
     if ( aRet.first.is() )
         successfullyConnected();// notify the admindlg to save the password
@@ -386,32 +377,32 @@ Reference< XDriver > ODbDataSourceAdministrationHelper::getDriver(const OUString
     // get the global DriverManager
     Reference< XConnectionPool > xDriverManager;
 
-    OUString sCurrentActionError = ModuleRes(STR_COULDNOTCREATE_DRIVERMANAGER);
+    OUString sCurrentActionError = DBA_RES(STR_COULDNOTCREATE_DRIVERMANAGER);
     sCurrentActionError = sCurrentActionError.replaceFirst("#servicename#", "com.sun.star.sdbc.ConnectionPool");
 
     try
     {
         xDriverManager.set( ConnectionPool::create( getORB() ) );
     }
-    catch (const Exception& e)
+    catch (const Exception&)
     {
+        css::uno::Any anyEx = cppu::getCaughtException();
         // wrap the exception into an SQLException
-        SQLException aSQLWrapper(e.Message, getORB(), OUString("S1000"), 0, Any());
-        throw SQLException(sCurrentActionError, getORB(), OUString("S1000"), 0, makeAny(aSQLWrapper));
+        throw SQLException(sCurrentActionError, getORB(), "S1000", 0, anyEx);
     }
 
     Reference< XDriver > xDriver = xDriverManager->getDriverByURL(_sURL);
     if (!xDriver.is())
     {
-        sCurrentActionError = ModuleRes(STR_NOREGISTEREDDRIVER);
+        sCurrentActionError = DBA_RES(STR_NOREGISTEREDDRIVER);
         sCurrentActionError = sCurrentActionError.replaceFirst("#connurl#", _sURL);
         // will be caught and translated into an SQLContext exception
-        throw SQLException(sCurrentActionError, getORB(), OUString("S1000"), 0, Any());
+        throw SQLException(sCurrentActionError, getORB(), "S1000", 0, Any());
     }
     return xDriver;
 }
 
-Reference< XPropertySet > ODbDataSourceAdministrationHelper::getCurrentDataSource()
+Reference< XPropertySet > const & ODbDataSourceAdministrationHelper::getCurrentDataSource()
 {
     if ( !m_xDatasource.is() )
     {
@@ -479,6 +470,7 @@ OUString ODbDataSourceAdministrationHelper::getConnectionURL() const
         case  ::dbaccess::DST_DBASE:
         case  ::dbaccess::DST_FLAT:
         case  ::dbaccess::DST_CALC:
+        case  ::dbaccess::DST_WRITER:
             break;
         case  ::dbaccess::DST_MSACCESS:
         case  ::dbaccess::DST_MSACCESS_2007:
@@ -564,28 +556,21 @@ void ODbDataSourceAdministrationHelper::translateProperties(const Reference< XPr
 {
     if (_rxSource.is())
     {
-        for (   MapInt2String::const_iterator aDirect = m_aDirectPropTranslator.begin();
-                aDirect != m_aDirectPropTranslator.end();
-                ++aDirect
-            )
+        for (auto const& elem : m_aDirectPropTranslator)
         {
             // get the property value
             Any aValue;
             try
             {
-                aValue = _rxSource->getPropertyValue(aDirect->second);
+                aValue = _rxSource->getPropertyValue(elem.second);
             }
             catch(Exception&)
             {
-#if OSL_DEBUG_LEVEL > 0
-                OString aMessage("ODbDataSourceAdministrationHelper::translateProperties: could not extract the property ");
-                aMessage += OString(aDirect->second.getStr(), aDirect->second.getLength(), RTL_TEXTENCODING_ASCII_US);
-                aMessage += OString("!");
-                OSL_FAIL(aMessage.getStr());
-#endif
+                SAL_WARN("dbaccess", "ODbDataSourceAdministrationHelper::translateProperties: could not extract the property "
+                        << elem.second);
             }
             // transfer it into an item
-            implTranslateProperty(_rDest, aDirect->first, aValue);
+            implTranslateProperty(_rDest, elem.first, aValue);
         }
 
         // get the additional information
@@ -597,35 +582,31 @@ void ODbDataSourceAdministrationHelper::translateProperties(const Reference< XPr
         catch(Exception&) { }
 
         // collect the names of the additional settings
-        const PropertyValue* pAdditionalInfo = aAdditionalInfo.getConstArray();
         PropertyValueSet aInfos;
-        for (sal_Int32 i=0; i<aAdditionalInfo.getLength(); ++i, ++pAdditionalInfo)
+        for (const PropertyValue& rAdditionalInfo : aAdditionalInfo)
         {
-            if( pAdditionalInfo->Name == "JDBCDRV" )
+            if( rAdditionalInfo.Name == "JDBCDRV" )
             {   // compatibility
-                PropertyValue aCompatibility(*pAdditionalInfo);
+                PropertyValue aCompatibility(rAdditionalInfo);
                 aCompatibility.Name = "JavaDriverClass";
                 aInfos.insert(aCompatibility);
             }
             else
-                aInfos.insert(*pAdditionalInfo);
+                aInfos.insert(rAdditionalInfo);
         }
 
         // go through all known translations and check if we have such a setting
         if ( !aInfos.empty() )
         {
             PropertyValue aSearchFor;
-            MapInt2String::const_iterator aEnd = m_aIndirectPropTranslator.end();
-            for (   MapInt2String::const_iterator aIndirect = m_aIndirectPropTranslator.begin();
-                    aIndirect != aEnd;
-                    ++aIndirect)
+            for (auto const& elem : m_aIndirectPropTranslator)
             {
-                aSearchFor.Name = aIndirect->second;
+                aSearchFor.Name = elem.second;
                 PropertyValueSet::const_iterator aInfoPos = aInfos.find(aSearchFor);
                 if (aInfos.end() != aInfoPos)
                     // the property is contained in the info sequence
                     // -> transfer it into an item
-                    implTranslateProperty(_rDest, aIndirect->first, aInfoPos->Value);
+                    implTranslateProperty(_rDest, elem.first, aInfoPos->Value);
             }
         }
 
@@ -634,7 +615,6 @@ void ODbDataSourceAdministrationHelper::translateProperties(const Reference< XPr
 
     try
     {
-        _rDest.Put(OPropertySetItem(DSID_DATASOURCE_UNO, _rxSource));
         Reference<XStorable> xStore(getDataSourceOrModel(_rxSource),UNO_QUERY);
         _rDest.Put(SfxBoolItem(DSID_READONLY, !xStore.is() || xStore->isReadonly() ));
     }
@@ -657,30 +637,27 @@ void ODbDataSourceAdministrationHelper::translateProperties(const SfxItemSet& _r
 
     const OUString sUrlProp("URL");
     // transfer the direct properties
-    for (   MapInt2String::const_iterator aDirect = m_aDirectPropTranslator.begin();
-            aDirect != m_aDirectPropTranslator.end();
-            ++aDirect
-        )
+    for (auto const& elem : m_aDirectPropTranslator)
     {
-        const SfxPoolItem* pCurrentItem = _rSource.GetItem((sal_uInt16)aDirect->first);
+        const SfxPoolItem* pCurrentItem = _rSource.GetItem(static_cast<sal_uInt16>(elem.first));
         if (pCurrentItem)
         {
             sal_Int16 nAttributes = PropertyAttribute::READONLY;
             if (xInfo.is())
             {
-                try { nAttributes = xInfo->getPropertyByName(aDirect->second).Attributes; }
+                try { nAttributes = xInfo->getPropertyByName(elem.second).Attributes; }
                 catch(Exception&) { }
             }
             if ((nAttributes & PropertyAttribute::READONLY) == 0)
             {
-                if ( sUrlProp == aDirect->second )
+                if ( sUrlProp == elem.second )
                 {
-                    Any aValue(makeAny(OUString(getConnectionURL())));
+                    Any aValue(makeAny(getConnectionURL()));
                     //  aValue <<= OUString();
-                    lcl_putProperty(_rxDest, aDirect->second,aValue);
+                    lcl_putProperty(_rxDest, elem.second,aValue);
                 }
                 else
-                    implTranslateProperty(_rxDest, aDirect->second, pCurrentItem);
+                    implTranslateProperty(_rxDest, elem.second, pCurrentItem);
             }
         }
     }
@@ -708,19 +685,19 @@ void ODbDataSourceAdministrationHelper::fillDatasourceInfo(const SfxItemSet& _rS
     // us)
 
     // first determine which of all the items are relevant for the data source (depends on the connection url)
-    OUString eType = getDatasourceType(_rSource);
-    ::std::vector< sal_Int32> aDetailIds;
-    ODriversSettings::getSupportedIndirectSettings(eType, getORB(), aDetailIds);
+    const OUString eType = getDatasourceType(_rSource);
+    const ::connectivity::DriversConfig aDriverConfig(getORB());
+    const ::comphelper::NamedValueCollection& aProperties = aDriverConfig.getProperties(eType);
 
     // collect the translated property values for the relevant items
     PropertyValueSet aRelevantSettings;
     MapInt2String::const_iterator aTranslation;
-    ::std::vector< sal_Int32>::const_iterator aDetailsEnd = aDetailIds.end();
-    for (::std::vector< sal_Int32>::const_iterator aIter = aDetailIds.begin();aIter != aDetailsEnd ; ++aIter)
+    for (ItemID detailId = DSID_FIRST_ITEM_ID ; detailId <= DSID_LAST_ITEM_ID; ++detailId)
     {
-        const SfxPoolItem* pCurrent = _rSource.GetItem((sal_uInt16)*aIter);
-        aTranslation = m_aIndirectPropTranslator.find(*aIter);
-        if ( pCurrent && (m_aIndirectPropTranslator.end() != aTranslation) )
+        const SfxPoolItem* pCurrent = _rSource.GetItem(static_cast<sal_uInt16>(detailId));
+        aTranslation = m_aIndirectPropTranslator.find(detailId);
+        if ( pCurrent && (m_aIndirectPropTranslator.end() != aTranslation) &&
+             aProperties.has(aTranslation->second) )
         {
             if ( aTranslation->second == INFO_CHARSET )
             {
@@ -770,44 +747,34 @@ void ODbDataSourceAdministrationHelper::fillDatasourceInfo(const SfxItemSet& _rS
         // These settings have to be removed: If they're not relevant, we have no UI for changing them.
 
         // for this, we need a string-controlled quick access to m_aIndirectPropTranslator
-        StringSet aIndirectProps;
-        ::std::transform(m_aIndirectPropTranslator.begin(),
+        std::set<OUString> aIndirectProps;
+        std::transform(m_aIndirectPropTranslator.begin(),
                          m_aIndirectPropTranslator.end(),
-                         ::std::insert_iterator<StringSet>(aIndirectProps,aIndirectProps.begin()),
+                         std::inserter(aIndirectProps,aIndirectProps.begin()),
                          ::o3tl::select2nd< MapInt2String::value_type >());
 
         // now check the to-be-preserved props
-        ::std::vector< sal_Int32 > aRemoveIndexes;
+        std::vector< sal_Int32 > aRemoveIndexes;
         sal_Int32 nPositionCorrector = 0;
-        MapInt2String::const_iterator aPreservedEnd = aPreservedSettings.end();
-        for (   MapInt2String::const_iterator aPreserved = aPreservedSettings.begin();
-                aPreserved != aPreservedEnd;
-                ++aPreserved
-            )
+        for (auto const& preservedSetting : aPreservedSettings)
         {
-            if (aIndirectProps.end() != aIndirectProps.find(aPreserved->second))
+            if (aIndirectProps.end() != aIndirectProps.find(preservedSetting.second))
             {
-                aRemoveIndexes.push_back(aPreserved->first - nPositionCorrector);
+                aRemoveIndexes.push_back(preservedSetting.first - nPositionCorrector);
                 ++nPositionCorrector;
             }
         }
         // now finally remove all such props
-        ::std::vector< sal_Int32 >::const_iterator aRemoveEnd = aRemoveIndexes.end();
-        for (   ::std::vector< sal_Int32 >::const_iterator aRemoveIndex = aRemoveIndexes.begin();
-                aRemoveIndex != aRemoveEnd;
-                ++aRemoveIndex
-            )
-            ::comphelper::removeElementAt(_rInfo, *aRemoveIndex);
+        for (auto const& removeIndex : aRemoveIndexes)
+            ::comphelper::removeElementAt(_rInfo, removeIndex);
     }
 
-    ::connectivity::DriversConfig aDriverConfig(getORB());
-    const ::comphelper::NamedValueCollection& aProperties = aDriverConfig.getProperties(eType);
     Sequence< Any> aTypeSettings;
     aTypeSettings = aProperties.getOrDefault("TypeInfoSettings",aTypeSettings);
     // here we have a special entry for types from oracle
     if ( aTypeSettings.getLength() )
     {
-        aRelevantSettings.insert(PropertyValue(OUString("TypeInfoSettings"), 0, makeAny(aTypeSettings), PropertyState_DIRECT_VALUE));
+        aRelevantSettings.insert(PropertyValue("TypeInfoSettings", 0, makeAny(aTypeSettings), PropertyState_DIRECT_VALUE));
     }
 
     // check which values are still left ('cause they were not present in the original sequence, but are to be set)
@@ -816,21 +783,18 @@ void ODbDataSourceAdministrationHelper::fillDatasourceInfo(const SfxItemSet& _rS
         sal_Int32 nOldLength = _rInfo.getLength();
         _rInfo.realloc(nOldLength + aRelevantSettings.size());
         PropertyValue* pAppendValues = _rInfo.getArray() + nOldLength;
-        PropertyValueSet::const_iterator aRelevantEnd = aRelevantSettings.end();
-        for (   PropertyValueSet::const_iterator aLoop = aRelevantSettings.begin();
-                aLoop != aRelevantEnd;
-                ++aLoop, ++pAppendValues
-            )
+        for (auto const& relevantSetting : aRelevantSettings)
         {
-            if ( aLoop->Name == INFO_CHARSET )
+            if ( relevantSetting.Name == INFO_CHARSET )
             {
                 OUString sCharSet;
-                aLoop->Value >>= sCharSet;
+                relevantSetting.Value >>= sCharSet;
                 if ( !sCharSet.isEmpty() )
-                    *pAppendValues = *aLoop;
+                    *pAppendValues = relevantSetting;
             }
             else
-                *pAppendValues = *aLoop;
+                *pAppendValues = relevantSetting;
+            ++pAppendValues;
         }
     }
 }
@@ -848,7 +812,7 @@ Any ODbDataSourceAdministrationHelper::implTranslateProperty(const SfxPoolItem* 
 
     if ( pStringItem )
     {
-        aValue <<= OUString( pStringItem->GetValue().getStr() );
+        aValue <<= pStringItem->GetValue();
     }
     else if ( pBoolItem )
     {
@@ -903,7 +867,7 @@ OString ODbDataSourceAdministrationHelper::translatePropertyId( sal_Int32 _nId )
     OString aReturn( aString.getStr(), aString.getLength(), RTL_TEXTENCODING_ASCII_US );
     return aReturn;
 }
-template<class T> bool checkItemType(const SfxPoolItem* pItem){ return dynamic_cast<const T*>(pItem) != nullptr;}
+template<class T> static bool checkItemType(const SfxPoolItem* pItem){ return dynamic_cast<const T*>(pItem) != nullptr;}
 
 void ODbDataSourceAdministrationHelper::implTranslateProperty( SfxItemSet& _rSet, sal_Int32  _nId, const Any& _rValue )
 {
@@ -917,11 +881,8 @@ void ODbDataSourceAdministrationHelper::implTranslateProperty( SfxItemSet& _rSet
                 _rSet.Put(SfxStringItem(_nId, sValue));
             }
             else {
-                OSL_FAIL(
-                    OString(
-                        "ODbDataSourceAdministrationHelper::implTranslateProperty: invalid property value ("
-                        + translatePropertyId(_nId)
-                        + " should be no string)!").getStr());
+                SAL_WARN( "dbaccess", "ODbDataSourceAdministrationHelper::implTranslateProperty: invalid property value ("
+                        << translatePropertyId(_nId) << " should be no string)!");
             }
             break;
 
@@ -946,11 +907,9 @@ void ODbDataSourceAdministrationHelper::implTranslateProperty( SfxItemSet& _rSet
                 _rSet.Put( aItem );
             }
             else {
-                OSL_FAIL(
-                    OString(
-                        "ODbDataSourceAdministrationHelper::implTranslateProperty: invalid property value ("
-                        + translatePropertyId(_nId)
-                        + " should be no boolean)!").getStr());
+                SAL_WARN( "dbaccess", "ODbDataSourceAdministrationHelper::implTranslateProperty: invalid property value ("
+                        << translatePropertyId(_nId)
+                        << " should be no boolean)!");
             }
             break;
 
@@ -962,11 +921,9 @@ void ODbDataSourceAdministrationHelper::implTranslateProperty( SfxItemSet& _rSet
                 _rSet.Put( SfxInt32Item( _nId, nValue ) );
             }
             else {
-                OSL_FAIL(
-                    OString(
-                        "ODbDataSourceAdministrationHelper::implTranslateProperty: invalid property value ("
-                        + translatePropertyId(_nId)
-                        + " should be no int)!").getStr());
+                SAL_WARN( "dbaccess", "ODbDataSourceAdministrationHelper::implTranslateProperty: invalid property value ("
+                        << translatePropertyId(_nId)
+                        << " should be no int)!");
             }
             break;
 
@@ -994,11 +951,9 @@ void ODbDataSourceAdministrationHelper::implTranslateProperty( SfxItemSet& _rSet
                 }
             }
             else {
-                OSL_FAIL(
-                    OString(
-                        "ODbDataSourceAdministrationHelper::implTranslateProperty: invalid property value ("
-                        + translatePropertyId(_nId)
-                        + " should be no string sequence)!").getStr());
+                SAL_WARN( "dbaccess", "ODbDataSourceAdministrationHelper::implTranslateProperty: invalid property value ("
+                        << translatePropertyId(_nId)
+                        << " should be no string sequence)!");
             }
             break;
 
@@ -1011,7 +966,7 @@ void ODbDataSourceAdministrationHelper::implTranslateProperty( SfxItemSet& _rSet
     }
 }
 
-OUString ODbDataSourceAdministrationHelper::getDocumentUrl(SfxItemSet& _rDest)
+OUString ODbDataSourceAdministrationHelper::getDocumentUrl(SfxItemSet const & _rDest)
 {
     const SfxStringItem* pUrlItem = _rDest.GetItem<SfxStringItem>(DSID_DOCUMENT_URL);
     OSL_ENSURE(pUrlItem,"Document URL is NULL. -> GPF!");

@@ -7,13 +7,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <iodlg.hrc>
-#include <PlacesListBox.hxx>
+#include "PlacesListBox.hxx"
 #include <svtools/PlaceEditDialog.hxx>
 
-#include <vcl/msgbox.hxx>
-#include <svtools/headbar.hxx>
-#include <svtools/svtresid.hxx>
+#include <vcl/headbar.hxx>
+#include <vcl/event.hxx>
+#include <bitmaps.hlst>
 
 #define COLUMN_NAME     1
 
@@ -27,9 +26,9 @@ PlacesListBox_Impl::PlacesListBox_Impl( PlacesListBox* pParent, const OUString& 
     mpHeaderBar = VclPtr<HeaderBar>::Create( pParent, WB_BUTTONSTYLE | WB_BOTTOMBORDER );
     mpHeaderBar->SetPosSizePixel( Point( 0, 0 ), Size( 600, 16 ) );
 
-    long pTabs[] = { 2, 20, 600 };
-    SetTabs( &pTabs[0], MAP_PIXEL );
-    mpHeaderBar->InsertItem( COLUMN_NAME, rTitle, 600, HeaderBarItemBits::LEFT | HeaderBarItemBits::VCENTER );
+    long aTabPositions[] = { 20, 600 };
+    SetTabs( SAL_N_ELEMENTS(aTabPositions), aTabPositions, MapUnit::MapPixel );
+    mpHeaderBar->InsertItem( COLUMN_NAME, rTitle, 600, HeaderBarItemBits::LEFT );
 
     Size aHeadSize = mpHeaderBar->GetSizePixel();
     SetPosSizePixel( Point( 0, aHeadSize.getHeight() ),
@@ -100,7 +99,7 @@ void PlacesListBox::dispose()
     Control::dispose();
 }
 
-void PlacesListBox::AppendPlace( PlacePtr pPlace )
+void PlacesListBox::AppendPlace( const PlacePtr& pPlace )
 {
     maPlaces.push_back( pPlace );
     mpImpl->InsertEntry( pPlace->GetName( ),
@@ -159,7 +158,7 @@ void PlacesListBox::SetSizePixel( const Size& rNewSize )
 {
     Control::SetSizePixel( rNewSize );
     Size aListSize( rNewSize );
-    aListSize.Height() -= 26 + 18;
+    aListSize.AdjustHeight( -(26 + 18) );
     mpImpl->SetSizePixel( aListSize );
 
     sal_Int32 nBtnY = rNewSize.Height() - 26;
@@ -167,7 +166,7 @@ void PlacesListBox::SetSizePixel( const Size& rNewSize )
     mpDelBtn->SetPosPixel( Point( 6 + 24, nBtnY ) );
 }
 
-bool PlacesListBox::Notify( NotifyEvent& rNEvt )
+bool PlacesListBox::EventNotify( NotifyEvent& rNEvt )
 {
     if( rNEvt.GetType() == MouseNotifyEvent::KEYINPUT )
     {
@@ -181,18 +180,18 @@ bool PlacesListBox::Notify( NotifyEvent& rNEvt )
             return true;
         }
     }
-    return Control::Notify( rNEvt );
+    return Control::EventNotify(rNEvt);
 }
 
-Image PlacesListBox::getEntryIcon( PlacePtr pPlace )
+Image PlacesListBox::getEntryIcon( const PlacePtr& pPlace )
 {
-    Image theImage = mpDlg->GetButtonImage( IMG_FILEDLG_PLACE_LOCAL );
+    Image theImage = SvtFileDialog::GetButtonImage( BMP_FILEDLG_PLACE_LOCAL );
     if ( !pPlace->IsLocal( ) )
-        theImage = mpDlg->GetButtonImage( IMG_FILEDLG_PLACE_REMOTE );
+        theImage = SvtFileDialog::GetButtonImage( BMP_FILEDLG_PLACE_REMOTE );
     return theImage;
 }
 
-IMPL_LINK_NOARG_TYPED( PlacesListBox, Selection, SvTreeListBox*, void )
+IMPL_LINK_NOARG( PlacesListBox, Selection, SvTreeListBox*, void )
 {
     sal_uInt32 nSelected = mpImpl->GetCurrRow();
     PlacePtr pPlace = maPlaces[nSelected];
@@ -204,19 +203,19 @@ IMPL_LINK_NOARG_TYPED( PlacesListBox, Selection, SvTreeListBox*, void )
         mpDlg->RemovablePlaceSelected(false);
 }
 
-IMPL_LINK_NOARG_TYPED( PlacesListBox, DoubleClick, SvTreeListBox*, bool )
+IMPL_LINK_NOARG( PlacesListBox, DoubleClick, SvTreeListBox*, bool )
 {
     sal_uInt16 nSelected = mpImpl->GetCurrRow();
     PlacePtr pPlace = maPlaces[nSelected];
     if ( pPlace->IsEditable() && !pPlace->IsLocal( ) )
     {
-        ScopedVclPtrInstance< PlaceEditDialog > aDlg(mpDlg, pPlace);
-        short aRetCode = aDlg->Execute();
+        PlaceEditDialog aDlg(mpDlg->GetFrameWeld(), pPlace);
+        short aRetCode = aDlg.run();
         switch(aRetCode) {
             case RET_OK :
             {
-                pPlace->SetName ( aDlg->GetServerName() );
-                pPlace->SetUrl( aDlg->GetServerUrl() );
+                pPlace->SetName ( aDlg.GetServerName() );
+                pPlace->SetUrl( aDlg.GetServerUrl() );
                 mbUpdated = true;
                 break;
             }

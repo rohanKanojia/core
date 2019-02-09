@@ -58,8 +58,8 @@
  *  For LWP filter architecture prototype
  ************************************************************************/
 
-#include "lwpobjfactory.hxx"
-#include "lwpdefs.hxx"
+#include <lwpobjfactory.hxx>
+#include <lwpdefs.hxx>
 #include "lwpdoc.hxx"
 #include "lwpstory.hxx"
 #include "lwplayout.hxx"
@@ -91,9 +91,10 @@
 #include "lwpnumericfmt.hxx"
 #include "lwpfnlayout.hxx"
 #include "lwptoc.hxx"
-#include "lwpdocdata.hxx"
+#include <lwpdocdata.hxx>
 #include "lwpnotes.hxx"
 #include "lwpverdocument.hxx"
+#include <sal/log.hxx>
 
 //LwpObjectFactory* LwpObjectFactory::m_pMgr = NULL;
 
@@ -105,17 +106,8 @@ LwpObjectFactory::LwpObjectFactory(LwpSvStream* pSvStream)
 
 LwpObjectFactory::~LwpObjectFactory()
 {
-    if(!m_IdToObjList.empty())
-        ClearObjectMap();
 }
 
-/**
- * @descr       clear object map and delete all objects
-*/
-void LwpObjectFactory::ClearObjectMap()
-{
-    m_IdToObjList.clear();
-}
 /**
  * @descr       read the index manager
 */
@@ -667,7 +659,7 @@ rtl::Reference<LwpObject> LwpObjectFactory::CreateObject(sal_uInt32 type, LwpObj
     if (newObj.is())
     {
         newObj->QuickRead();
-        auto result = m_IdToObjList.insert(LwpIdToObjMap::value_type(objHdr.GetID(), newObj));
+        auto result = m_IdToObjList.emplace(objHdr.GetID(), newObj);
         if (!result.second)
         {
             SAL_WARN("lwp", "clearing duplicate object");

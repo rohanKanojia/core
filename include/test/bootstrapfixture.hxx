@@ -30,7 +30,8 @@ namespace test {
 enum ValidationFormat
 {
     OOXML,
-    ODF
+    ODF,
+    MSBINARY
 };
 
 // Class to do lots of heavy-lifting UNO & environment
@@ -42,19 +43,18 @@ enum ValidationFormat
 // run of unit tests ...
 class OOO_DLLPUBLIC_TEST BootstrapFixture : public BootstrapFixtureBase
 {
-  bool m_bNeedUCB;
-  bool m_bAssertOnDialog;
+  bool const m_bNeedUCB;
+  bool const m_bAssertOnDialog;
 
 public:
-  DECL_STATIC_LINK_TYPED( BootstrapFixture, ImplInitFilterHdl, ConvertData&, bool );
+  DECL_STATIC_LINK( BootstrapFixture, ImplInitFilterHdl, ConvertData&, bool );
 
   BootstrapFixture( bool bAssertOnDialog = true, bool bNeedUCB = true );
-  virtual ~BootstrapFixture();
+  virtual ~BootstrapFixture() override;
 
   virtual void setUp() override;
-  virtual void tearDown() override;
 
-  static void validate(const OUString& rURL, ValidationFormat);
+  void validate(const OUString& rURL, ValidationFormat) const;
 };
 
 }

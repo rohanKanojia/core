@@ -64,13 +64,14 @@
 #include "lwpborderstuff.hxx"
 #include "lwpshadow.hxx"
 #include "lwpmargins.hxx"
+#include <sal/log.hxx>
 
 LwpParaBorderOverride::LwpParaBorderOverride()
 {
-    m_pBorderStuff = new LwpBorderStuff();
-    m_pBetweenStuff = new LwpBorderStuff();
-    m_pShadow = new LwpShadow();
-    m_pMargins = new LwpMargins();
+    m_pBorderStuff.reset( new LwpBorderStuff() );
+    m_pBetweenStuff.reset( new LwpBorderStuff() );
+    m_pShadow.reset( new LwpShadow() );
+    m_pMargins.reset( new LwpMargins() );
 
     m_eAboveType = PB_NONE;
     m_eBelowType = PB_NONE;
@@ -87,10 +88,6 @@ LwpParaBorderOverride::LwpParaBorderOverride()
 
 LwpParaBorderOverride::LwpParaBorderOverride(LwpParaBorderOverride const& rOther)
     : LwpOverride(rOther)
-    , m_pBorderStuff(nullptr)
-    , m_pBetweenStuff(nullptr)
-    , m_pShadow(nullptr)
-    , m_pMargins(nullptr)
     , m_eAboveType(rOther.m_eAboveType)
     , m_eBelowType(rOther.m_eBelowType)
     , m_eRightType(rOther.m_eRightType)
@@ -101,22 +98,14 @@ LwpParaBorderOverride::LwpParaBorderOverride(LwpParaBorderOverride const& rOther
     , m_nRightWidth(rOther.m_nRightWidth)
     , m_nBetweenMargin(rOther.m_nBetweenMargin)
 {
-    std::unique_ptr<LwpBorderStuff> pBorderStuff(::clone(rOther.m_pBorderStuff));
-    std::unique_ptr<LwpBorderStuff> pBetweenStuff(::clone(rOther.m_pBetweenStuff));
-    std::unique_ptr<LwpShadow> pShadow(::clone(rOther.m_pShadow));
-    std::unique_ptr<LwpMargins> pMargins(::clone(rOther.m_pMargins));
-    m_pBorderStuff = pBorderStuff.release();
-    m_pBetweenStuff = pBetweenStuff.release();
-    m_pShadow = pShadow.release();
-    m_pMargins = pMargins.release();
+    m_pBorderStuff.reset( ::clone(rOther.m_pBorderStuff.get()) );
+    m_pBetweenStuff.reset( ::clone(rOther.m_pBetweenStuff.get()) );
+    m_pShadow.reset( ::clone(rOther.m_pShadow.get()) );
+    m_pMargins.reset( ::clone(rOther.m_pMargins.get()) );
 }
 
 LwpParaBorderOverride::~LwpParaBorderOverride()
 {
-    delete m_pBorderStuff;
-    delete m_pBetweenStuff;
-    delete m_pShadow;
-    delete m_pMargins;
 }
 
 LwpParaBorderOverride* LwpParaBorderOverride::clone() const
@@ -178,7 +167,7 @@ void LwpParaBorderOverride::Override(LwpParaBorderOverride* pOther)
     {
         if (IsBorderStuffOverridden())
         {
-            pOther->OverrideBorderStuff(m_pBorderStuff);
+            pOther->OverrideBorderStuff(m_pBorderStuff.get());
         }
         else
         {
@@ -190,7 +179,7 @@ void LwpParaBorderOverride::Override(LwpParaBorderOverride* pOther)
     {
         if (IsBetweenStuffOverridden())
         {
-            pOther->OverrideBetweenStuff(m_pBetweenStuff);
+            pOther->OverrideBetweenStuff(m_pBetweenStuff.get());
         }
         else
         {
@@ -202,7 +191,7 @@ void LwpParaBorderOverride::Override(LwpParaBorderOverride* pOther)
     {
         if (IsShadowOverridden())
         {
-            pOther->OverrideShadow(m_pShadow);
+            pOther->OverrideShadow(m_pShadow.get());
         }
         else
         {
@@ -214,7 +203,7 @@ void LwpParaBorderOverride::Override(LwpParaBorderOverride* pOther)
     {
         if (IsMarginsOverridden())
         {
-            pOther->OverrideMargins(m_pMargins);
+            pOther->OverrideMargins(m_pMargins.get());
         }
         else
         {
@@ -331,22 +320,22 @@ void LwpParaBorderOverride::Override(LwpParaBorderOverride* pOther)
     }
 }
 
-void LwpParaBorderOverride::OverrideBorderStuff(LwpBorderStuff* pBorderStuff)
+void LwpParaBorderOverride::OverrideBorderStuff(LwpBorderStuff const * pBorderStuff)
 {
     *m_pBorderStuff = *pBorderStuff;
     LwpOverride::Override(PBO_STUFF, STATE_ON);
 }
-void LwpParaBorderOverride::OverrideBetweenStuff(LwpBorderStuff* pBorderStuff)
+void LwpParaBorderOverride::OverrideBetweenStuff(LwpBorderStuff const * pBorderStuff)
 {
     *m_pBetweenStuff = *pBorderStuff;
     LwpOverride::Override(PBO_BETWEENSTUFF, STATE_ON);
 }
-void LwpParaBorderOverride::OverrideShadow(LwpShadow* pShadow)
+void LwpParaBorderOverride::OverrideShadow(LwpShadow const * pShadow)
 {
     *m_pShadow = *pShadow;
     LwpOverride::Override(PBO_SHADOW, STATE_ON);
 }
-void LwpParaBorderOverride::OverrideMargins(LwpMargins* pMargins)
+void LwpParaBorderOverride::OverrideMargins(LwpMargins const * pMargins)
 {
     *m_pMargins = *pMargins;
     LwpOverride::Override(PBO_MARGINS, STATE_ON);

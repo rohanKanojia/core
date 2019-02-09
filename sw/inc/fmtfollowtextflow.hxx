@@ -20,32 +20,51 @@
 #define INCLUDED_SW_INC_FMTFOLLOWTEXTFLOW_HXX
 
 #include <svl/eitem.hxx>
-#include <hintids.hxx>
-#include <format.hxx>
+#include "hintids.hxx"
+#include "format.hxx"
 #include "swdllapi.h"
 
 class IntlWrapper;
 
 class SW_DLLPUBLIC SwFormatFollowTextFlow : public SfxBoolItem
 {
+private:
+    bool mbLayoutInCell = false;
+
 public:
+
     SwFormatFollowTextFlow( bool bFlag = false )
-        : SfxBoolItem( RES_FOLLOW_TEXT_FLOW, bFlag ) {}
+        : SfxBoolItem( RES_FOLLOW_TEXT_FLOW, bFlag )
+        {}
+
+    SwFormatFollowTextFlow( bool bFlag, bool _bLayoutInCell  )
+        : SfxBoolItem( RES_FOLLOW_TEXT_FLOW, bFlag )
+        , mbLayoutInCell( _bLayoutInCell )
+        {}
 
 
     /// "pure virtual methods" of SfxPoolItem
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper*    pIntl = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& rIntl ) const override;
+
+    bool GetLayoutInCell() const { return mbLayoutInCell; }
+
+
+    bool PutValue(const css::uno::Any& rVal, sal_uInt8 aInt) override;
+
+    bool QueryValue(css::uno::Any& rVal, sal_uInt8 aInt = 0) const override;
 
     void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
+
+    bool operator==(const SfxPoolItem& rItem) const override;
 };
 
 inline const SwFormatFollowTextFlow &SwAttrSet::GetFollowTextFlow(bool bInP) const
-    { return static_cast<const SwFormatFollowTextFlow&>(Get( RES_FOLLOW_TEXT_FLOW, bInP )); }
+    { return Get( RES_FOLLOW_TEXT_FLOW, bInP ); }
 
 inline const SwFormatFollowTextFlow &SwFormat::GetFollowTextFlow(bool bInP) const
     { return m_aSet.GetFollowTextFlow( bInP ); }

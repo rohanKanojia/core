@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "XMLStringBufferImportContext.hxx"
+#include <XMLStringBufferImportContext.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 
@@ -42,7 +42,7 @@ XMLStringBufferImportContext::~XMLStringBufferImportContext()
 {
 }
 
-SvXMLImportContext *XMLStringBufferImportContext::CreateChildContext(
+SvXMLImportContextRef XMLStringBufferImportContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList> &)
@@ -64,7 +64,7 @@ void XMLStringBufferImportContext::EndElement()
                 XML_NAMESPACE_LO_EXT == GetPrefix()) &&
          (IsXMLToken(GetLocalName(), XML_P))    )
     {
-        rTextBuffer.append(sal_Unicode(0x0a));
+        rTextBuffer.append(u'\x000a');
     }
 }
 

@@ -20,26 +20,26 @@
 #ifndef INCLUDED_OOX_SOURCE_DRAWINGML_TEXTTABSTOPLISTCONTEXT_HXX
 #define INCLUDED_OOX_SOURCE_DRAWINGML_TEXTTABSTOPLISTCONTEXT_HXX
 
-#include <list>
+#include <vector>
 
 #include <com/sun/star/style/TabStop.hpp>
 
-#include "oox/core/contexthandler2.hxx"
+#include <oox/core/contexthandler2.hxx>
 
 namespace oox { namespace drawingml {
 
-    class TextTabStopListContext : public ::oox::core::ContextHandler2
-    {
-    public:
-        TextTabStopListContext( ::oox::core::ContextHandler2Helper& rParent,
-                ::std::list< css::style::TabStop >  & aTabList );
-        virtual ~TextTabStopListContext();
+class TextTabStopListContext final : public ::oox::core::ContextHandler2
+{
+public:
+    TextTabStopListContext( ::oox::core::ContextHandler2Helper const & rParent,
+            ::std::vector< css::style::TabStop >  & aTabList );
+    virtual ~TextTabStopListContext() override;
 
-        virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
+    virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 
-protected:
-        ::std::list< css::style::TabStop >  & maTabList;
-    };
+private:
+    ::std::vector< css::style::TabStop >  & maTabList;
+};
 
 } }
 

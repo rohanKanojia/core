@@ -17,17 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+#include <sal/log.hxx>
+
+#include <tools/debug.hxx>
+#include <vcl/gdimtf.hxx>
+#include <vcl/graph.hxx>
+#include <vcl/metaact.hxx>
 #include <vcl/virdev.hxx>
 #include <vcl/outdev.hxx>
-#include <vcl/unowrap.hxx>
+#include <vcl/toolkit/unowrap.hxx>
 #include <vcl/sysdata.hxx>
 
-#include "salgdi.hxx"
-#include "svdata.hxx"
-#include "window.h"
-#include "outdev.h"
-#include "outdevstatestack.hxx"
-#include "PhysicalFontCollection.hxx"
+#include <salgdi.hxx>
+#include <svdata.hxx>
+#include <window.h>
+#include <outdev.h>
+#include <outdevstatestack.hxx>
+#include <PhysicalFontCollection.hxx>
 
 #ifdef DISABLE_DYNLOADING
 // Linking all needed LO code into one .so/executable, these already
@@ -41,8 +48,8 @@ namespace {
 
 // Begin initializer and accessor public functions
 
-OutputDevice::OutputDevice() :
-    mnRefCnt(1), // cf. VclPtrInstance and README.lifecycle
+OutputDevice::OutputDevice(OutDevType eOutDevType) :
+    meOutDevType(eOutDevType),
     maRegion(true),
     maFillColor( COL_WHITE ),
     maTextLineColor( COL_TRANSPARENT ),
@@ -54,12 +61,9 @@ OutputDevice::OutputDevice() :
     mpNextGraphics                  = nullptr;
     mpMetaFile                      = nullptr;
     mpFontInstance                     = nullptr;
-    mpFontCache                     = nullptr;
-    mpFontCollection                = nullptr;
     mpDeviceFontList                = nullptr;
     mpDeviceFontSizeList            = nullptr;
-    mpOutDevStateStack              = new OutDevStateStack;
-    mpPDFWriter                     = nullptr;
+    mpOutDevStateStack.reset(new OutDevStateStack);
     mpAlphaVDev                     = nullptr;
     mpExtOutDevData                 = nullptr;
     mnOutOffX                       = 0;
@@ -68,7 +72,7 @@ OutputDevice::OutputDevice() :
     mnOutHeight                     = 0;
     mnDPIX                          = 0;
     mnDPIY                          = 0;
-    mnDPIScaleFactor                = 1;
+    mnDPIScalePercentage            = 100;
     mnTextOffX                      = 0;
     mnTextOffY                      = 0;
     mnOutOffOrigX                   = 0;
@@ -78,26 +82,23 @@ OutputDevice::OutputDevice() :
     mnEmphasisAscent                = 0;
     mnEmphasisDescent               = 0;
     mnDrawMode                      = DrawModeFlags::Default;
-    mnTextLayoutMode                = TEXT_LAYOUT_DEFAULT;
+    mnTextLayoutMode                = ComplexTextLayoutFlags::Default;
 
     if( AllSettings::GetLayoutRTL() ) //#i84553# tip BiDi preference to RTL
-        mnTextLayoutMode            = TEXT_LAYOUT_BIDI_RTL | TEXT_LAYOUT_TEXTORIGIN_LEFT;
+        mnTextLayoutMode            = ComplexTextLayoutFlags::BiDiRtl | ComplexTextLayoutFlags::TextOriginLeft;
 
-    meOutDevType                    = OUTDEV_DONTKNOW;
-    meOutDevViewType                = OUTDEV_VIEWTYPE_DONTKNOW;
+    meOutDevViewType                = OutDevViewType::DontKnow;
     mbMap                           = false;
-    mbMapIsDefault                  = true;
     mbClipRegion                    = false;
     mbBackground                    = false;
     mbOutput                        = true;
     mbDevOutput                     = false;
     mbOutputClipped                 = false;
-    maTextColor                     = Color( COL_BLACK );
-    maOverlineColor                 = Color( COL_TRANSPARENT );
-    meTextAlign                     = maFont.GetAlignment();
-    meRasterOp                      = ROP_OVERPAINT;
+    maTextColor                     = COL_BLACK;
+    maOverlineColor                 = COL_TRANSPARENT;
+    meRasterOp                      = RasterOp::OverPaint;
     mnAntialiasing                  = AntialiasingFlags::NONE;
-    meTextLanguage                  = 0;  // TODO: get default from configuration?
+    meTextLanguage                  = LANGUAGE_SYSTEM;  // TODO: get default from configuration?
     mbLineColor                     = true;
     mbFillColor                     = true;
     mbInitLineColor                 = true;
@@ -106,7 +107,6 @@ OutputDevice::OutputDevice() :
     mbInitTextColor                 = true;
     mbInitClipRegion                = true;
     mbClipRegionSet                 = false;
-    mbKerning                       = false;
     mbNewFont                       = true;
     mbTextLines                     = false;
     mbTextSpecial                   = false;
@@ -120,10 +120,6 @@ OutputDevice::OutputDevice() :
     maMapRes.mnMapScNumY            = 1;
     maMapRes.mnMapScDenomX          = 1;
     maMapRes.mnMapScDenomY          = 1;
-    maMapRes.mfOffsetX              = 0.0;
-    maMapRes.mfOffsetY              = 0.0;
-    maMapRes.mfScaleX               = 1.0;
-    maMapRes.mfScaleY               = 1.0;
     // struct ImplThresholdRes
     maThresRes.mnThresLogToPixX     = 0;
     maThresRes.mnThresLogToPixY     = 0;
@@ -131,15 +127,13 @@ OutputDevice::OutputDevice() :
     maThresRes.mnThresPixToLogY     = 0;
 
     // struct ImplOutDevData- see #i82615#
-    mpOutDevData                    = new ImplOutDevData;
+    mpOutDevData.reset(new ImplOutDevData);
     mpOutDevData->mpRotateDev       = nullptr;
     mpOutDevData->mpRecordLayout    = nullptr;
 
     // #i75163#
     mpOutDevData->mpViewTransform   = nullptr;
     mpOutDevData->mpInverseViewTransform = nullptr;
-
-    mbDisposed = false;
 }
 
 OutputDevice::~OutputDevice()
@@ -147,26 +141,11 @@ OutputDevice::~OutputDevice()
     disposeOnce();
 }
 
-void OutputDevice::disposeOnce()
-{
-    if ( mbDisposed )
-        return;
-    mbDisposed = true;
-
-    // catch badness where our OutputDevice sub-class was not
-    // wrapped safely in a VclPtr cosily.
-    // FIXME: as/when we make our destructors all protected,
-    // we should introduce this assert:
-    //    assert( mnRefCnt > 0 );
-
-    dispose();
-}
-
 void OutputDevice::dispose()
 {
     if ( GetUnoGraphicsList() )
     {
-        UnoWrapperBase* pWrapper = Application::GetUnoWrapper( false );
+        UnoWrapperBase* pWrapper = UnoWrapperBase::GetUnoWrapper( false );
         if ( pWrapper )
             pWrapper->ReleaseAllGraphics( this );
         delete mpUnoGraphicsList;
@@ -178,8 +157,7 @@ void OutputDevice::dispose()
     // #i75163#
     ImplInvalidateViewTransform();
 
-    delete mpOutDevData;
-    mpOutDevData = nullptr;
+    mpOutDevData.reset();
 
     // for some reason, we haven't removed state from the stack properly
     if ( !mpOutDevStateStack->empty() )
@@ -190,56 +168,33 @@ void OutputDevice::dispose()
             mpOutDevStateStack->pop_back();
         }
     }
-    delete mpOutDevStateStack;
-    mpOutDevStateStack = nullptr;
+    mpOutDevStateStack.reset();
 
     // release the active font instance
-    if( mpFontInstance )
-        mpFontCache->Release( mpFontInstance );
+    mpFontInstance.clear();
 
     // remove cached results of GetDevFontList/GetDevSizeList
-    // TODO: use smart pointers for them
-    delete mpDeviceFontList;
-    mpDeviceFontList = nullptr;
-
-    delete mpDeviceFontSizeList;
-    mpDeviceFontSizeList = nullptr;
+    mpDeviceFontList.reset();
+    mpDeviceFontSizeList.reset();
 
     // release ImplFontCache specific to this OutputDevice
-    // TODO: refcount ImplFontCache
-    if( mpFontCache
-    && (mpFontCache != ImplGetSVData()->maGDIData.mpScreenFontCache)
-    && (ImplGetSVData()->maGDIData.mpScreenFontCache != nullptr) )
-    {
-        delete mpFontCache;
-        mpFontCache = nullptr;
-    }
+    mxFontCache.reset();
 
     // release ImplFontList specific to this OutputDevice
-    // TODO: refcount ImplFontList
-    if( mpFontCollection
-    && (mpFontCollection != ImplGetSVData()->maGDIData.mpScreenFontList)
-    && (ImplGetSVData()->maGDIData.mpScreenFontList != nullptr) )
-    {
-        mpFontCollection->Clear();
-        delete mpFontCollection;
-        mpFontCollection = nullptr;
-    }
+    mxFontCollection.reset();
 
     mpAlphaVDev.disposeAndClear();
+    mpPrevGraphics.clear();
+    mpNextGraphics.clear();
+    VclReferenceBase::dispose();
 }
 
 SalGraphics* OutputDevice::GetGraphics()
 {
     DBG_TESTSOLARMUTEX();
 
-    if ( !mpGraphics )
-    {
-        if ( !AcquireGraphics() )
-        {
-            SAL_WARN("vcl", "No mpGraphics set");
-        }
-    }
+    if (!mpGraphics && !AcquireGraphics())
+        SAL_WARN("vcl.gdi", "No mpGraphics set");
 
     return mpGraphics;
 }
@@ -248,13 +203,8 @@ SalGraphics const *OutputDevice::GetGraphics() const
 {
     DBG_TESTSOLARMUTEX();
 
-    if ( !mpGraphics )
-    {
-        if ( !AcquireGraphics() )
-        {
-            SAL_WARN("vcl", "No mpGraphics set");
-        }
-    }
+    if (!mpGraphics && !AcquireGraphics())
+        SAL_WARN("vcl.gdi", "No mpGraphics set");
 
     return mpGraphics;
 }
@@ -274,11 +224,8 @@ void OutputDevice::SetSettings( const AllSettings& rSettings )
 
 SystemGraphicsData OutputDevice::GetSystemGfxData() const
 {
-    if ( !mpGraphics )
-    {
-        if ( !AcquireGraphics() )
-            return SystemGraphicsData();
-    }
+    if (!mpGraphics && !AcquireGraphics())
+        return SystemGraphicsData();
 
     return mpGraphics->GetGraphicsData();
 }
@@ -287,52 +234,37 @@ SystemGraphicsData OutputDevice::GetSystemGfxData() const
 
 bool OutputDevice::SupportsCairo() const
 {
-    if (!mpGraphics)
-    {
-        if (!AcquireGraphics())
-            return false;
-    }
+    if (!mpGraphics && !AcquireGraphics())
+        return false;
 
     return mpGraphics->SupportsCairo();
 }
 
 cairo::SurfaceSharedPtr OutputDevice::CreateSurface(const cairo::CairoSurfaceSharedPtr& rSurface) const
 {
-    if (!mpGraphics)
-    {
-        if (!AcquireGraphics())
-            return cairo::SurfaceSharedPtr();
-    }
+    if (!mpGraphics && !AcquireGraphics())
+        return cairo::SurfaceSharedPtr();
     return mpGraphics->CreateSurface(rSurface);
 }
 
 cairo::SurfaceSharedPtr OutputDevice::CreateSurface(int x, int y, int width, int height) const
 {
-    if (!mpGraphics)
-    {
-        if (!AcquireGraphics())
-            return cairo::SurfaceSharedPtr();
-    }
+    if (!mpGraphics && !AcquireGraphics())
+        return cairo::SurfaceSharedPtr();
     return mpGraphics->CreateSurface(*this, x, y, width, height);
 }
 
 cairo::SurfaceSharedPtr OutputDevice::CreateBitmapSurface(const BitmapSystemData& rData, const Size& rSize) const
 {
-    if (!mpGraphics)
-    {
-        if (!AcquireGraphics())
-            return cairo::SurfaceSharedPtr();
-    }
+    if (!mpGraphics && !AcquireGraphics())
+        return cairo::SurfaceSharedPtr();
     return mpGraphics->CreateBitmapSurface(*this, rData, rSize);
 }
 
 css::uno::Any OutputDevice::GetNativeSurfaceHandle(cairo::SurfaceSharedPtr& rSurface, const basegfx::B2ISize& rSize) const
 {
-    if (!mpGraphics)
-    {
-        if (!AcquireGraphics())
-            return css::uno::Any();
-    }
+    if (!mpGraphics && !AcquireGraphics())
+        return css::uno::Any();
     return mpGraphics->GetNativeSurfaceHandle(rSurface, rSize);
 }
 
@@ -354,7 +286,8 @@ void OutputDevice::SetRefPoint()
         mpMetaFile->AddAction( new MetaRefPointAction( Point(), false ) );
 
     mbRefPoint = false;
-    maRefPoint.X() = maRefPoint.Y() = 0L;
+    maRefPoint.setX(0);
+    maRefPoint.setY(0);
 
     if( mpAlphaVDev )
         mpAlphaVDev->SetRefPoint();
@@ -376,13 +309,10 @@ void OutputDevice::SetRefPoint( const Point& rRefPoint )
 sal_uInt16 OutputDevice::GetBitCount() const
 {
     // we need a graphics instance
-    if ( !mpGraphics )
-    {
-        if ( !AcquireGraphics() )
-            return 0;
-    }
+    if ( !mpGraphics && !AcquireGraphics() )
+        return 0;
 
-    return (sal_uInt16)mpGraphics->GetBitCount();
+    return mpGraphics->GetBitCount();
 }
 
 void OutputDevice::SetOutOffXPixel(long nOutOffX)
@@ -395,22 +325,15 @@ void OutputDevice::SetOutOffYPixel(long nOutOffY)
     mnOutOffY = nOutOffY;
 }
 
-sal_uLong OutputDevice::GetColorCount() const
-{
-
-    const sal_uInt16 nBitCount = GetBitCount();
-    return( ( nBitCount > 31 ) ? ULONG_MAX : ( ( (sal_uLong) 1 ) << nBitCount) );
-}
-
 css::uno::Reference< css::awt::XGraphics > OutputDevice::CreateUnoGraphics()
 {
-    UnoWrapperBase* pWrapper = Application::GetUnoWrapper();
+    UnoWrapperBase* pWrapper = UnoWrapperBase::GetUnoWrapper();
     return pWrapper ? pWrapper->CreateGraphics( this ) : css::uno::Reference< css::awt::XGraphics >();
 }
 
 std::vector< VCLXGraphics* > *OutputDevice::CreateUnoGraphicsList()
 {
-    mpUnoGraphicsList = new std::vector< VCLXGraphics* >();
+    mpUnoGraphicsList = new std::vector< VCLXGraphics* >;
     return mpUnoGraphicsList;
 }
 
@@ -418,9 +341,8 @@ std::vector< VCLXGraphics* > *OutputDevice::CreateUnoGraphicsList()
 
 bool OutputDevice::SupportsOperation( OutDevSupportType eType ) const
 {
-    if( !mpGraphics )
-        if( !AcquireGraphics() )
-            return false;
+    if( !mpGraphics && !AcquireGraphics() )
+        return false;
     const bool bHasSupport = mpGraphics->supportsOperation( eType );
     return bHasSupport;
 }
@@ -433,9 +355,9 @@ void OutputDevice::DrawOutDev( const Point& rDestPt, const Size& rDestSize,
     if( ImplIsRecordLayout() )
         return;
 
-    if ( ROP_INVERT == meRasterOp )
+    if ( RasterOp::Invert == meRasterOp )
     {
-        DrawRect( Rectangle( rDestPt, rDestSize ) );
+        DrawRect( tools::Rectangle( rDestPt, rDestSize ) );
         return;
     }
 
@@ -448,9 +370,8 @@ void OutputDevice::DrawOutDev( const Point& rDestPt, const Size& rDestSize,
     if ( !IsDeviceOutputNecessary() )
         return;
 
-    if ( !mpGraphics )
-        if ( !AcquireGraphics() )
-            return;
+    if ( !mpGraphics && !AcquireGraphics() )
+        return;
 
     if ( mbInitClipRegion )
         InitClipRegion();
@@ -470,7 +391,7 @@ void OutputDevice::DrawOutDev( const Point& rDestPt, const Size& rDestSize,
                            ImplLogicXToDevicePixel(rDestPt.X()), ImplLogicYToDevicePixel(rDestPt.Y()),
                            nDestWidth, nDestHeight);
 
-        const Rectangle aSrcOutRect( Point( mnOutOffX, mnOutOffY ),
+        const tools::Rectangle aSrcOutRect( Point( mnOutOffX, mnOutOffY ),
                                      Size( mnOutWidth, mnOutHeight ) );
 
         AdjustTwoRect( aPosAry, aSrcOutRect );
@@ -490,9 +411,9 @@ void OutputDevice::DrawOutDev( const Point& rDestPt, const Size& rDestSize,
     if ( ImplIsRecordLayout() )
         return;
 
-    if ( ROP_INVERT == meRasterOp )
+    if ( RasterOp::Invert == meRasterOp )
     {
-        DrawRect( Rectangle( rDestPt, rDestSize ) );
+        DrawRect( tools::Rectangle( rDestPt, rDestSize ) );
         return;
     }
 
@@ -505,9 +426,8 @@ void OutputDevice::DrawOutDev( const Point& rDestPt, const Size& rDestSize,
     if ( !IsDeviceOutputNecessary() )
         return;
 
-    if ( !mpGraphics )
-        if ( !AcquireGraphics() )
-            return;
+    if ( !mpGraphics && !AcquireGraphics() )
+        return;
 
     if ( mbInitClipRegion )
         InitClipRegion();
@@ -536,7 +456,7 @@ void OutputDevice::DrawOutDev( const Point& rDestPt, const Size& rDestSize,
             drawOutDevDirect( &rOutDev, aPosAry );
 
             // #i32109#: make destination rectangle opaque - source has no alpha
-            mpAlphaVDev->ImplFillOpaqueRectangle( Rectangle(rDestPt, rDestSize) );
+            mpAlphaVDev->ImplFillOpaqueRectangle( tools::Rectangle(rDestPt, rDestSize) );
         }
     }
     else
@@ -562,14 +482,13 @@ void OutputDevice::CopyArea( const Point& rDestPt,
         return;
 
     RasterOp eOldRop = GetRasterOp();
-    SetRasterOp( ROP_OVERPAINT );
+    SetRasterOp( RasterOp::OverPaint );
 
     if ( !IsDeviceOutputNecessary() )
         return;
 
-    if ( !mpGraphics )
-        if ( !AcquireGraphics() )
-            return;
+    if ( !mpGraphics && !AcquireGraphics() )
+        return;
 
     if ( mbInitClipRegion )
         InitClipRegion();
@@ -586,7 +505,7 @@ void OutputDevice::CopyArea( const Point& rDestPt,
                            ImplLogicXToDevicePixel(rDestPt.X()), ImplLogicYToDevicePixel(rDestPt.Y()),
                            nSrcWidth, nSrcHeight);
 
-        const Rectangle aSrcOutRect( Point( mnOutOffX, mnOutOffY ),
+        const tools::Rectangle aSrcOutRect( Point( mnOutOffX, mnOutOffY ),
                                      Size( mnOutWidth, mnOutHeight ) );
 
         AdjustTwoRect( aPosAry, aSrcOutRect );
@@ -645,26 +564,23 @@ void OutputDevice::drawOutDevDirect( const OutputDevice* pSrcDev, SalTwoRect& rP
                 }
                 pSrcGraphics = pSrcDev->mpGraphics;
 
-                if ( !mpGraphics )
-                {
-                    if ( !AcquireGraphics() )
-                        return;
-                }
-                DBG_ASSERT( mpGraphics && pSrcDev->mpGraphics,
+                if ( !mpGraphics && !AcquireGraphics() )
+                    return;
+                SAL_WARN_IF( !mpGraphics || !pSrcDev->mpGraphics, "vcl.gdi",
                             "OutputDevice::DrawOutDev(): We need more than one Graphics" );
             }
         }
     }
 
     // #102532# Offset only has to be pseudo window offset
-    const Rectangle aSrcOutRect( Point( pSrcDev->mnOutOffX, pSrcDev->mnOutOffY ),
+    const tools::Rectangle aSrcOutRect( Point( pSrcDev->mnOutOffX, pSrcDev->mnOutOffY ),
                                  Size( pSrcDev->mnOutWidth, pSrcDev->mnOutHeight ) );
 
     AdjustTwoRect( rPosAry, aSrcOutRect );
 
     if ( rPosAry.mnSrcWidth && rPosAry.mnSrcHeight && rPosAry.mnDestWidth && rPosAry.mnDestHeight )
     {
-        // --- RTL --- if this is no window, but pSrcDev is a window
+        // if this is no window, but pSrcDev is a window
         // mirroring may be required
         // because only windows have a SalGraphicsLayout
         // mirroring is performed here
@@ -707,9 +623,9 @@ bool OutputDevice::ImplIsAntiparallel() const
 
 void    OutputDevice::ReMirror( Point &rPoint ) const
 {
-    rPoint.X() = mnOutOffX + mnOutWidth - 1 - rPoint.X() + mnOutOffX;
+    rPoint.setX( mnOutOffX + mnOutWidth - 1 - rPoint.X() + mnOutOffX );
 }
-void    OutputDevice::ReMirror( Rectangle &rRect ) const
+void    OutputDevice::ReMirror( tools::Rectangle &rRect ) const
 {
     long nWidth = rRect.Right() - rRect.Left();
 
@@ -717,8 +633,8 @@ void    OutputDevice::ReMirror( Rectangle &rRect ) const
     //lc_x = mnOutWidth - nWidth - 1 - lc_x;  // mirror
     //rRect.nLeft = lc_x + mnOutOffX;         // re-normalize
 
-    rRect.Left() = mnOutOffX + mnOutWidth - nWidth - 1 - rRect.Left() + mnOutOffX;
-    rRect.Right() = rRect.Left() + nWidth;
+    rRect.SetLeft( mnOutOffX + mnOutWidth - nWidth - 1 - rRect.Left() + mnOutOffX );
+    rRect.SetRight( rRect.Left() + nWidth );
 }
 
 void OutputDevice::ReMirror( vcl::Region &rRegion ) const
@@ -727,10 +643,10 @@ void OutputDevice::ReMirror( vcl::Region &rRegion ) const
     rRegion.GetRegionRectangles(aRectangles);
     vcl::Region aMirroredRegion;
 
-    for(RectangleVector::iterator aRectIter(aRectangles.begin()); aRectIter != aRectangles.end(); ++aRectIter)
+    for (auto & rectangle : aRectangles)
     {
-        ReMirror(*aRectIter);
-        aMirroredRegion.Union(*aRectIter);
+        ReMirror(rectangle);
+        aMirroredRegion.Union(rectangle);
     }
 
     rRegion = aMirroredRegion;
@@ -744,6 +660,9 @@ bool OutputDevice::HasMirroredGraphics() const
 
 bool OutputDevice::ImplIsRecordLayout() const
 {
+    if (!mpOutDevData)
+        return false;
+
     return mpOutDevData->mpRecordLayout;
 }
 
@@ -770,7 +689,7 @@ bool OutputDevice::DrawEPS( const Point& rPoint, const Size& rSize,
     if( mbOutputClipped )
         return bDrawn;
 
-    Rectangle aRect( ImplLogicToDevicePixel( Rectangle( rPoint, rSize ) ) );
+    tools::Rectangle aRect( ImplLogicToDevicePixel( tools::Rectangle( rPoint, rSize ) ) );
 
     if( !aRect.IsEmpty() )
     {

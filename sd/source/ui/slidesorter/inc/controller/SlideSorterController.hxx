@@ -20,19 +20,24 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLIDESORTERCONTROLLER_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLIDESORTERCONTROLLER_HXX
 
-#include "model/SlsSharedPageDescriptor.hxx"
-#include "ViewShell.hxx"
+#include <model/SlsSharedPageDescriptor.hxx>
+#include <pres.hxx>
 
-#include <com/sun/star/drawing/XDrawPages.hpp>
-
-#include <sfx2/shell.hxx>
-#include <sfx2/viewfac.hxx>
 #include <tools/link.hxx>
 #include <tools/gen.hxx>
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
 
-#include "sddllapi.h"
+#include <sddllapi.h>
 
 #include <memory>
+#include <vector>
+
+namespace com { namespace sun { namespace star { namespace container { class XIndexAccess; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Reference; } } } }
+namespace sd { class FuPoor; }
+namespace sd { class Window; }
+namespace vcl { class Window; }
 
 namespace sd { namespace slidesorter {
 class SlideSorter;
@@ -45,6 +50,13 @@ class SlideSorterView;
 namespace sd { namespace slidesorter { namespace model {
 class SlideSorterModel;
 } } }
+
+class CommandEvent;
+class SdPage;
+class SfxItemSet;
+class SfxRequest;
+class VclSimpleEvent;
+class VclWindowEvent;
 
 namespace sd { namespace slidesorter { namespace controller {
 
@@ -61,7 +73,7 @@ class SelectionManager;
 class SlotManager;
 class VisibleAreaManager;
 
-class SlideSorterController
+class SlideSorterController final
 {
 public:
     /** Create a new controller for the slide sorter.
@@ -71,19 +83,19 @@ public:
     */
     SlideSorterController (SlideSorter& rSlideSorter);
 
-    /** Late initialization. Call this method once a new new object has been
+    /** Late initialization. Call this method once a new object has been
         created.
     */
     void Init();
 
-    virtual ~SlideSorterController();
+    ~SlideSorterController();
 
     void Dispose();
 
     /** Place and size the scroll bars and the browser window so that the
         given rectangle is filled.
     */
-    void Resize (const Rectangle& rAvailableSpace);
+    void Resize (const ::tools::Rectangle& rAvailableSpace);
 
     /** Determine which of the UI elements--the scroll bars, the scroll bar
         filler, the actual slide sorter view--are visible and place them in
@@ -94,7 +106,7 @@ public:
             size does not change (the size does change when the visibility
             of scroll bars changes.)
     */
-    void Rearrange (bool bForce = false);
+    void Rearrange (bool bForce);
 
     /** Return the descriptor of the page that is rendered under the
         given position.  This takes the IsOnlyPreviewTriggersMouseOver
@@ -116,15 +128,15 @@ public:
     */
     ScrollBarManager& GetScrollBarManager();
 
-    std::shared_ptr<CurrentSlideManager> GetCurrentSlideManager() const;
-    std::shared_ptr<SlotManager> GetSlotManager() const;
-    std::shared_ptr<SelectionManager> GetSelectionManager() const;
-    std::shared_ptr<InsertionIndicatorHandler> GetInsertionIndicatorHandler() const;
+    std::shared_ptr<CurrentSlideManager> const & GetCurrentSlideManager() const;
+    std::shared_ptr<SlotManager> const & GetSlotManager() const;
+    std::shared_ptr<SelectionManager> const & GetSelectionManager() const;
+    std::shared_ptr<InsertionIndicatorHandler> const & GetInsertionIndicatorHandler() const;
 
     /** This method forwards the call to the SlideSorterView and executes
         pending operations like moving selected pages into the visible area.
     */
-    void Paint (const Rectangle& rRect, vcl::Window* pWin);
+    void Paint (const ::tools::Rectangle& rRect, vcl::Window* pWin);
 
     void FuTemporary (SfxRequest& rRequest);
     void FuPermanent (SfxRequest& rRequest);
@@ -145,7 +157,7 @@ public:
     class ModelChangeLock
     {public:
         ModelChangeLock (SlideSorterController& rController);
-        ~ModelChangeLock();
+        ~ModelChangeLock() COVERITY_NOEXCEPT_FALSE;
         void Release();
     private:
         SlideSorterController* mpController;
@@ -160,8 +172,8 @@ public:
     */
     void HandleModelChange();
 
-    DECL_LINK_TYPED(WindowEventHandler, VclWindowEvent&, void);
-    DECL_LINK_TYPED(ApplicationEventHandler, VclSimpleEvent&, void);
+    DECL_LINK(WindowEventHandler, VclWindowEvent&, void);
+    DECL_LINK(ApplicationEventHandler, VclSimpleEvent&, void);
 
     /** Update the display of all pages.  This involves a redraw and
         releasing previews and caches.
@@ -213,7 +225,7 @@ public:
 
     /** Return an Animator object.
     */
-    std::shared_ptr<Animator> GetAnimator() const { return mpAnimator;}
+    const std::shared_ptr<Animator>& GetAnimator() const { return mpAnimator;}
 
     VisibleAreaManager& GetVisibleAreaManager() const;
 
@@ -240,16 +252,16 @@ private:
 
     int mnModelChangeLockCount;
     bool mbIsForcedRearrangePending;
+    bool mbContextMenuOpen;
 
-    bool mbPreModelChangeDone;
     bool mbPostModelChangePending;
 
     /** This array stores the indices of the  selected page descriptors at
-        the time when the edit mode is switched to EM_MASTERPAGE.  With this
-        we can restore the selection when switching back to EM_PAGE mode.
+        the time when the edit mode is switched to EditMode::MasterPage.  With this
+        we can restore the selection when switching back to EditMode::Page mode.
     */
     ::std::vector<SdPage*> maSelectionBeforeSwitch;
-    /// The current page before the edit mode is switched to EM_MASTERPAGE.
+    /// The current page before the edit mode is switched to EditMode::MasterPage.
     int mnCurrentPageBeforeSwitch;
 
     /** The master page to select after the edit mode is changed.  This
@@ -261,16 +273,12 @@ private:
     /** This rectangle in the parent window encloses scroll bars and slide
         sorter window.  It is set when Resize() is called.
     */
-    Rectangle maTotalWindowArea;
+    ::tools::Rectangle maTotalWindowArea;
 
     /** This counter is used to avoid processing of reentrant calls to
         Paint().
     */
     sal_Int32 mnPaintEntranceCount;
-
-    /** Remember whether the context menu is open.
-    */
-    bool mbIsContextMenuOpen;
 
     /** Prepare for several model changes, i.e. prevent time-consuming and
         non-critical operations like repaints until UnlockModelChange() is

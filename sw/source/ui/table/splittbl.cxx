@@ -19,43 +19,28 @@
 
 #include <wrtsh.hxx>
 #include <splittbl.hxx>
-#include <table.hrc>
 #include <tblenum.hxx>
 
-SwSplitTableDlg::SwSplitTableDlg( vcl::Window *pParent, SwWrtShell &rSh )
-    : SvxStandardDialog( pParent, "SplitTableDialog", "modules/swriter/ui/splittable.ui" )
+SwSplitTableDlg::SwSplitTableDlg(weld::Window *pParent, SwWrtShell &rSh)
+    : GenericDialogController(pParent, "modules/swriter/ui/splittable.ui", "SplitTableDialog")
+    , m_xContentCopyRB(m_xBuilder->weld_radio_button("copyheading"))
+    , m_xBoxAttrCopyWithParaRB(m_xBuilder->weld_radio_button("customheadingapplystyle"))
+    , m_xBoxAttrCopyNoParaRB(m_xBuilder->weld_radio_button("customheading"))
+    , m_xBorderCopyRB(m_xBuilder->weld_radio_button("noheading"))
     , rShell(rSh)
-    , m_nSplit(HEADLINE_CNTNTCOPY)
+    , m_nSplit(SplitTable_HeadlineOption::ContentCopy)
 {
-    get(mpContentCopyRB, "copyheading");
-    get(mpBoxAttrCopyWithParaRB, "customheadingapplystyle");
-    get(mpBoxAttrCopyNoParaRB, "customheading");
-    get(mpBorderCopyRB, "noheading");
-}
-
-SwSplitTableDlg::~SwSplitTableDlg()
-{
-    disposeOnce();
-}
-
-void SwSplitTableDlg::dispose()
-{
-    mpContentCopyRB.clear();
-    mpBoxAttrCopyWithParaRB.clear();
-    mpBoxAttrCopyNoParaRB.clear();
-    mpBorderCopyRB.clear();
-    SvxStandardDialog::dispose();
 }
 
 void SwSplitTableDlg::Apply()
 {
-    m_nSplit = HEADLINE_CNTNTCOPY;
-    if(mpBoxAttrCopyWithParaRB->IsChecked())
-        m_nSplit = HEADLINE_BOXATRCOLLCOPY;
-    else if(mpBoxAttrCopyNoParaRB->IsChecked())
-        m_nSplit = HEADLINE_BOXATTRCOPY;
-    else if(mpBorderCopyRB->IsChecked())
-        m_nSplit = HEADLINE_BORDERCOPY;
+    m_nSplit = SplitTable_HeadlineOption::ContentCopy;
+    if (m_xBoxAttrCopyWithParaRB->get_active())
+        m_nSplit = SplitTable_HeadlineOption::BoxAttrAllCopy;
+    else if (m_xBoxAttrCopyNoParaRB->get_active())
+        m_nSplit = SplitTable_HeadlineOption::BoxAttrCopy;
+    else if (m_xBorderCopyRB->get_active())
+        m_nSplit = SplitTable_HeadlineOption::BorderCopy;
 
     rShell.SplitTable(m_nSplit);
 }

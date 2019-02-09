@@ -20,15 +20,17 @@
 #define INCLUDED_EXTENSIONS_SOURCE_OLE_UNOCONVERSIONUTILITIES_HXX
 
 #include <memory>
-#include "com/sun/star/script/XInvocationAdapterFactory.hpp"
-#include "com/sun/star/script/XInvocationAdapterFactory2.hpp"
-#include "com/sun/star/script/XTypeConverter.hpp"
-#include "com/sun/star/script/FailReason.hpp"
-#include "com/sun/star/bridge/oleautomation/Date.hpp"
-#include "com/sun/star/bridge/oleautomation/Currency.hpp"
-#include "com/sun/star/bridge/oleautomation/SCode.hpp"
-#include "com/sun/star/bridge/oleautomation/Decimal.hpp"
-#include "typelib/typedescription.hxx"
+#include <com/sun/star/script/XInvocationAdapterFactory.hpp>
+#include <com/sun/star/script/XInvocationAdapterFactory2.hpp>
+#include <com/sun/star/script/XTypeConverter.hpp>
+#include <com/sun/star/script/FailReason.hpp>
+#include <com/sun/star/bridge/oleautomation/Date.hpp>
+#include <com/sun/star/bridge/oleautomation/Currency.hpp>
+#include <com/sun/star/bridge/oleautomation/SCode.hpp>
+#include <com/sun/star/bridge/oleautomation/Decimal.hpp>
+#include <typelib/typedescription.hxx>
+#include <o3tl/any.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 #include "ole2uno.hxx"
 #include <cppuhelper/weakref.hxx>
 
@@ -41,13 +43,13 @@ typedef unsigned char   BYTE;
 #define INTERFACE_OLE_WRAPPER_IMPL      1
 #define UNO_OBJECT_WRAPPER_REMOTE_OPT   2
 
-#define INVOCATION_SERVICE reinterpret_cast<const sal_Unicode*>(L"com.sun.star.script.Invocation")
+#define INVOCATION_SERVICE "com.sun.star.script.Invocation"
 
 
 // classes for wrapping ole objects
 #define IUNKNOWN_WRAPPER_IMPL           1
 
-#define INTERFACE_ADAPTER_FACTORY  reinterpret_cast<const sal_Unicode*>(L"com.sun.star.script.InvocationAdapterFactory")
+#define INTERFACE_ADAPTER_FACTORY  "com.sun.star.script.InvocationAdapterFactory"
 // COM or JScript objects implementing UNO interfaces have to implement this property
 #define SUPPORTED_INTERFACES_PROP L"_implementedInterfaces"
 // Second property without leading underscore for use in VB
@@ -56,38 +58,24 @@ typedef unsigned char   BYTE;
 using namespace com::sun::star::script;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::uno;
-#ifdef __MINGW32__
-using namespace com::sun::star::bridge;
-using namespace com::sun::star::bridge::ModelDependent;
-#endif
 using namespace com::sun::star::bridge::oleautomation;
-namespace ole_adapter
-{
+
 extern std::unordered_map<sal_uIntPtr, sal_uIntPtr> AdapterToWrapperMap;
 extern std::unordered_map<sal_uIntPtr, sal_uIntPtr> WrapperToAdapterMap;
-typedef std::unordered_map<sal_uIntPtr, sal_uIntPtr>::iterator IT_Wrap;
-typedef std::unordered_map<sal_uIntPtr, sal_uIntPtr>::iterator CIT_Wrap;
+
 //Maps IUnknown pointers to a weak reference of the respective wrapper class (e.g.
 // IUnknownWrapperImpl. It is the responsibility of the wrapper to remove the entry when
 // it is being destroyed.
 // Used to ensure that an Automation object is always mapped to the same UNO objects.
 extern std::unordered_map<sal_uIntPtr, WeakReference<XInterface> > ComPtrToWrapperMap;
-typedef std::unordered_map<sal_uIntPtr, WeakReference<XInterface> >::iterator IT_Com;
-typedef std::unordered_map<sal_uIntPtr, WeakReference<XInterface> >::const_iterator CIT_Com;
 
 // Maps XInterface pointers to a weak reference of its wrapper class (i.e.
-// InterfaceOleWrapper_Impl). It is the responsibility of the wrapper to remove the entry when
+// InterfaceOleWrapper). It is the responsibility of the wrapper to remove the entry when
 // it is being destroyed. It is used to ensure the identity of objects. That is, an UNO interface
 // is mapped to IDispatch which is kept alive in the COM environment. If the same
 // UNO interface is mapped again to COM then the IDispach of the first mapped instance
 // must be returned.
 extern std::unordered_map<sal_uIntPtr, WeakReference<XInterface> > UnoObjToWrapperMap;
-typedef std::unordered_map<sal_uIntPtr, WeakReference<XInterface> >::iterator IT_Uno;
-typedef std::unordered_map<sal_uIntPtr, WeakReference<XInterface> >::const_iterator CIT_Uno;
-#ifdef __MINGW32__
-inline void reduceRange( Any& any);
-#endif
-
 
 // createUnoObjectWrapper gets a wrapper instance by calling createUnoWrapperInstance
     // and initializes it via XInitialization. The wrapper object is required to implement
@@ -141,7 +129,7 @@ public:
         @IllegalArgumentException
         Thrown if the VARIANT is inappropriate for conversion. ArgumentPosition is -1,
      */
-    void variantToAny(const VARIANT* pVariant, Any& rAny, sal_Bool bReduceValueRange = sal_True);
+    void variantToAny(const VARIANT* pVariant, Any& rAny, bool bReduceValueRange = true);
     /** This method converts variants arguments in calls from COM -> UNO. Only then
         the expected UNO type is known.
         @exception CannotConvertException
@@ -150,7 +138,7 @@ public:
         @IllegalArgumentException
         Thrown if the VARIANT is inappropriate for conversion. ArgumentPosition is -1,
      */
-    void variantToAny( const VARIANTARG* pArg, Any& rAny, const Type& ptype, sal_Bool bReduceValueRange = sal_True);
+    void variantToAny( const VARIANTARG* pArg, Any& rAny, const Type& ptype, bool bReduceValueRange = true);
 
     /**
        @exception IllegalArgumentException
@@ -178,7 +166,7 @@ public:
     virtual Reference< XInterface > createUnoWrapperInstance()=0;
     virtual Reference< XInterface > createComWrapperInstance()=0;
 
-    static sal_Bool isJScriptArray(const VARIANT* pvar);
+    static bool isJScriptArray(const VARIANT* pvar);
 
     Sequence<Type> getImplementedInterfaces(IUnknown* pUnk);
 
@@ -188,21 +176,21 @@ protected:
     // helper function for Sequence conversion
     void getElementCountAndTypeOfSequence( const Any& rSeq, sal_Int32 dim, Sequence< sal_Int32 >& seqElementCounts, TypeDescription& typeDesc);
     // helper function for Sequence conversion
-    sal_Bool incrementMultidimensionalIndex(sal_Int32 dimensions, const sal_Int32 * parDimensionLength,
+    static bool incrementMultidimensionalIndex(sal_Int32 dimensions, const sal_Int32 * parDimensionLength,
                                     sal_Int32 * parMultidimensionalIndex);
     // helper function for Sequence conversion
-    size_t getOleElementSize( VARTYPE type);
+    static size_t getOleElementSize( VARTYPE type);
 
-    Type getElementTypeOfSequence( const Type& seqType);
+    static Type getElementTypeOfSequence( const Type& seqType);
 
     //Provides a typeconverter
     Reference<XTypeConverter> getTypeConverter();
 
     // This member determines what class is used to convert a UNO object
-    // or struct to a COM object. It is passed along to the o2u_anyToVariant
+    // or struct to a COM object. It is passed along to the anyToVariant
     // function in the createBridge function implementation
-    sal_uInt8 m_nUnoWrapperClass;
-    sal_uInt8 m_nComWrapperClass;
+    const sal_uInt8 m_nUnoWrapperClass;
+    const sal_uInt8 m_nComWrapperClass;
 
     // The servicemanager is either a local smgr or remote when the service
     // com.sun.star.bridge.OleBridgeSupplierVar1 is used. This service can be
@@ -240,14 +228,16 @@ bool convertSelfToCom( T& unoInterface, VARIANT * pVar)
         if( xSupplier.is())
         {
             sal_Int8 arId[16];
-            rtl_getGlobalProcessId( (sal_uInt8*)arId);
+            rtl_getGlobalProcessId( reinterpret_cast<sal_uInt8*>(arId));
             Sequence<sal_Int8> seqId( arId, 16);
             Any anySource;
             anySource <<= xInt;
-            Any anyDisp=    xSupplier->createBridge( anySource, seqId, UNO, OLE);
-            if( anyDisp.getValueTypeClass() == TypeClass_UNSIGNED_LONG)
+            Any anyDisp = xSupplier->createBridge(anySource, seqId, UNO, OLE);
+
+            // due to global-process-id check this must be in-process pointer
+            if (auto v = o3tl::tryAccess<sal_uIntPtr>(anyDisp))
             {
-                VARIANT* pvariant= *(VARIANT**)anyDisp.getValue();
+                VARIANT* pvariant= reinterpret_cast<VARIANT*>(*v);
                 HRESULT hr;
                 if (FAILED(hr = VariantCopy(pVar, pvariant)))
                     throw BridgeRuntimeError(
@@ -293,7 +283,7 @@ Reference< XSingleServiceFactory > UnoConversionUtilities<T>::getInvocationFacto
 }
 
 template<class T>
-void UnoConversionUtilities<T>::variantToAny( const VARIANTARG* pArg, Any& rAny, const Type& ptype,  sal_Bool bReduceValueRange /* = sal_True */)
+void UnoConversionUtilities<T>::variantToAny( const VARIANTARG* pArg, Any& rAny, const Type& ptype, bool bReduceValueRange /* = sal_True */)
 {
     try
     {
@@ -303,7 +293,7 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANTARG* pArg, Any& rAny,
         CComVariant var;
 
         // There is no need to support indirect values, since they're not supported by UNO
-        if( FAILED(hr= VariantCopyInd( &var, const_cast<VARIANTARG*>(pArg)))) // remove VT_BYREF
+        if( FAILED(hr= VariantCopyInd( &var, pArg))) // remove VT_BYREF
             throw BridgeRuntimeError(
                 "[automation bridge] UnoConversionUtilities<T>::variantToAny \n"
                 "VariantCopyInd failed for reason : " + OUString::number(hr));
@@ -324,7 +314,7 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANTARG* pArg, Any& rAny,
                 if( var.vt == VT_BSTR)
                 {
                     if(SUCCEEDED( hr= VariantChangeType( &var, &var, 0, VT_BSTR)))
-                        rAny.setValue( (void*)V_BSTR( &var), ptype);
+                        rAny.setValue( V_BSTR( &var), ptype);
                     else if (hr == DISP_E_TYPEMISMATCH)
                         bCannotConvert = true;
                     else
@@ -333,7 +323,7 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANTARG* pArg, Any& rAny,
                 else
                 {
                     if(SUCCEEDED(hr = VariantChangeType( & var, &var, 0, VT_I2)))
-                        rAny.setValue((void*) & var.iVal, ptype);
+                        rAny.setValue(& var.iVal, ptype);
                     else if (hr == DISP_E_TYPEMISMATCH)
                         bCannotConvert = true;
                     else
@@ -348,7 +338,7 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANTARG* pArg, Any& rAny,
             }
             case TypeClass_ENUM:
                 if(SUCCEEDED(hr = VariantChangeType( & var, &var, 0, VT_I4)))
-                    rAny.setValue((void*) & var.lVal, ptype);
+                    rAny.setValue(& var.lVal, ptype);
                 else if (hr == DISP_E_TYPEMISMATCH)
                     bCannotConvert = true;
                 else
@@ -359,7 +349,7 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANTARG* pArg, Any& rAny,
                 // 1: JScript, VARTYPE: VT_DISPATCH
                 // 2. VBScript simple arraysVT_VARIANT|VT_BYREF the referenced VARIANT contains
                 //      a VT_ARRAY|  <type>
-                // 3. VBSrcript multi dimensional arrays: VT_ARRAY|VT_BYREF
+                // 3. VBScript multi dimensional arrays: VT_ARRAY|VT_BYREF
                 if( pArg->vt == VT_DISPATCH)
                 {
                     dispatchExObject2Sequence( pArg, rAny, ptype);
@@ -398,7 +388,7 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANTARG* pArg, Any& rAny,
                 }
                 break;
             case TypeClass_VOID:
-                rAny.setValue(NULL,Type());
+                rAny.setValue(nullptr,Type());
                 break;
             case TypeClass_ANY:     //  Any
                 // There could be a JScript Array that needs special handling
@@ -558,15 +548,15 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANTARG* pArg, Any& rAny,
             throw CannotConvertException(
                 "[automation bridge]UnoConversionUtilities<T>::variantToAny \n"
                 "Cannot convert the value of vartype :\"" +
-                OUString::number((sal_Int32) var.vt) +
+                OUString::number(static_cast<sal_Int32>(var.vt)) +
                 "\"  to the expected UNO type of type class: " +
-                OUString::number((sal_Int32) ptype.getTypeClass()),
-                0, TypeClass_UNKNOWN, FailReason::TYPE_NOT_SUPPORTED,0);
+                OUString::number(static_cast<sal_Int32>(ptype.getTypeClass())),
+                nullptr, TypeClass_UNKNOWN, FailReason::TYPE_NOT_SUPPORTED,0);
 
         if (bFail)
             throw IllegalArgumentException(
                 "[automation bridge]UnoConversionUtilities<T>:variantToAny\n"
-                "The provided VARIANT of type\" " + OUString::number((sal_Int32) var.vt) +
+                "The provided VARIANT of type\" " + OUString::number(static_cast<sal_Int32>(var.vt)) +
                 "\" is unappropriate for conversion!", Reference<XInterface>(), -1);
     }
     catch (const CannotConvertException &)
@@ -634,14 +624,14 @@ void UnoConversionUtilities<T>::anyToVariant(VARIANT* pVariant, const Any& rAny,
                         "Cannot convert the value of type :\"" +
                         rAny.getValueTypeName() +
                         "\"  to the expected Automation type of VARTYPE: " +
-                        OUString::number((sal_Int32)type),
-                        0, TypeClass_UNKNOWN, FailReason::TYPE_NOT_SUPPORTED,0);
+                        OUString::number(static_cast<sal_Int32>(type)),
+                        nullptr, TypeClass_UNKNOWN, FailReason::TYPE_NOT_SUPPORTED,0);
 
                 throw BridgeRuntimeError(
                     "[automation bridge]UnoConversionUtilities<T>::anyToVariant \n"
                     "Conversion of any with " +
                     rAny.getValueType().getTypeName() +
-                    " to VARIANT with type: " + OUString::number((sal_Int32) type) +
+                    " to VARIANT with type: " + OUString::number(static_cast<sal_Int32>(type)) +
                     " failed! Error code: " + OUString::number(hr));
 
             }
@@ -791,11 +781,11 @@ void UnoConversionUtilities<T>::anyToVariant(VARIANT* pVariant, const Any& rAny)
         }
         case TypeClass_BOOLEAN:
         {
-            sal_Bool value;
+            bool value;
             if (rAny >>= value)
             {
                 pVariant->vt = VT_BOOL;
-                pVariant->boolVal = value == sal_True? VARIANT_TRUE: VARIANT_FALSE;
+                pVariant->boolVal = value ? VARIANT_TRUE: VARIANT_FALSE;
             }
             else
             {
@@ -806,7 +796,7 @@ void UnoConversionUtilities<T>::anyToVariant(VARIANT* pVariant, const Any& rAny)
         case TypeClass_CHAR:
         {
             // Because VT_UI2 does not conform to oleautomation we convert into VT_I2 instead
-            sal_uInt16 value = *(sal_Unicode*) rAny.getValue();
+            sal_uInt16 value = *o3tl::forceAccess<sal_Unicode>(rAny);
             pVariant->vt = VT_I2;
             pVariant->iVal = value;
             break;
@@ -817,7 +807,7 @@ void UnoConversionUtilities<T>::anyToVariant(VARIANT* pVariant, const Any& rAny)
             if (rAny >>= value)
             {
                 pVariant->vt = VT_BSTR;
-                pVariant->bstrVal = SysAllocString(reinterpret_cast<LPCOLESTR>(value.getStr()));
+                pVariant->bstrVal = SysAllocString(o3tl::toW(value.getStr()));
             }
             else
             {
@@ -885,7 +875,7 @@ void UnoConversionUtilities<T>::anyToVariant(VARIANT* pVariant, const Any& rAny)
         }
         case TypeClass_ENUM:
         {
-            sal_Int32 value = *(sal_Int32*) rAny.getValue();
+            sal_Int32 value = *static_cast<sal_Int32 const *>(rAny.getValue());
             pVariant->vt = VT_I4;
             pVariant->lVal= value;
             break;
@@ -939,7 +929,7 @@ void UnoConversionUtilities<T>::anyToVariant(VARIANT* pVariant, const Any& rAny)
             Type type;
             rAny >>= type;
             CComVariant var;
-            if (createUnoTypeWrapper(type.getTypeName(), & var) == false)
+            if (!createUnoTypeWrapper(type.getTypeName(), & var))
                 throw BridgeRuntimeError(
                           "[automation bridge] UnoConversionUtilities<T>::anyToVariant \n"
                           "Error during conversion of UNO type to Automation object!");
@@ -1014,12 +1004,12 @@ SAFEARRAY*  UnoConversionUtilities<T>::createUnoSequenceWrapper(const Any& rSeq,
     if (rSeq.getValueTypeClass() != TypeClass_SEQUENCE)
         throw IllegalArgumentException(
                   "[automation bridge]UnoConversionUtilities<T>::createUnoSequenceWrapper \n"
-                  "The any does not contain a sequence!", 0, 0);
+                  "The any does not contain a sequence!", nullptr, 0);
     if (elemtype == VT_NULL  ||  elemtype == VT_EMPTY)
         throw IllegalArgumentException(
                   "[automation bridge]UnoConversionUtilities<T>::createUnoSequenceWrapper \n"
-                  "No element type supplied!",0, -1);
-    SAFEARRAY*  pArray= NULL;
+                  "No element type supplied!",nullptr, -1);
+    SAFEARRAY*  pArray= nullptr;
     // Get the dimensions. This is done by examining the type name string
     // The count of brackets determines the dimensions.
     OUString sTypeName= rSeq.getValueType().getTypeName();
@@ -1057,7 +1047,7 @@ SAFEARRAY*  UnoConversionUtilities<T>::createUnoSequenceWrapper(const Any& rSeq,
             if( SUCCEEDED( SafeArrayAccessData( pArray, &pSAData)))
             {
                 const sal_Int32* parElementCount= seqElementCounts.getConstArray();
-                uno_Sequence * pMultiSeq= *(uno_Sequence* const*) rSeq.getValue();
+                uno_Sequence * pMultiSeq= *static_cast<uno_Sequence* const*>(rSeq.getValue());
                 sal_Int32 dimsSeq= dims - 1;
 
                 // arDimSeqIndices contains the current index of a block of data.
@@ -1066,7 +1056,7 @@ SAFEARRAY*  UnoConversionUtilities<T>::createUnoSequenceWrapper(const Any& rSeq,
                 // but the Sequences that contain those elements.
                 // The indices ar 0 based
                 std::unique_ptr<sal_Int32[]> sarDimsSeqIndices;
-                sal_Int32* arDimsSeqIndices= NULL;
+                sal_Int32* arDimsSeqIndices= nullptr;
                 if( dimsSeq > 0)
                 {
                     sarDimsSeqIndices.reset(new sal_Int32[dimsSeq]);
@@ -1074,14 +1064,14 @@ SAFEARRAY*  UnoConversionUtilities<T>::createUnoSequenceWrapper(const Any& rSeq,
                     memset( arDimsSeqIndices, 0,  sizeof( sal_Int32 ) * dimsSeq);
                 }
 
-                char* psaCurrentData= (char*)pSAData;
+                char* psaCurrentData= static_cast<char*>(pSAData);
 
                 do
                 {
                     // Get the Sequence at the current index , see arDimsSeqIndices
                     uno_Sequence * pCurrentSeq= pMultiSeq;
                     sal_Int32 curDim=1; // 1 based
-                    sal_Bool skipSeq= sal_False;
+                    bool skipSeq= false;
                     while( curDim <= dimsSeq )
                     {
                         // get the Sequence at the index if valid
@@ -1089,13 +1079,13 @@ SAFEARRAY*  UnoConversionUtilities<T>::createUnoSequenceWrapper(const Any& rSeq,
                         {
                             // size of Sequence is 4
                             sal_Int32 offset= arDimsSeqIndices[ curDim - 1] * 4;
-                            pCurrentSeq= *(uno_Sequence**) &pCurrentSeq->elements[ offset];
+                            pCurrentSeq= *reinterpret_cast<uno_Sequence**>(&pCurrentSeq->elements[ offset]);
                             curDim++;
                         }
                         else
                         {
                             // There is no Sequence at this index, so skip this index
-                            skipSeq= sal_True;
+                            skipSeq= true;
                             break;
                         }
                     }
@@ -1107,14 +1097,14 @@ SAFEARRAY*  UnoConversionUtilities<T>::createUnoSequenceWrapper(const Any& rSeq,
                     // for the next Sequence.
                     sal_Int32 memOffset= 0;
                     sal_Int32 dimWeight= parElementCount[ dims - 1]; // size of the rightmost dimension
-                    for(sal_Int16 idims=0; idims < dimsSeq; idims++ )
+                    for(sal_Int32 idims=0; idims < dimsSeq; idims++ )
                     {
                         memOffset+= arDimsSeqIndices[dimsSeq - 1 - idims] * dimWeight;
                         // now determine the weight of the dimension to the left of the current.
                         if( dims - 2 - idims >=0)
                             dimWeight*= parElementCount[dims - 2 - idims];
                     }
-                    psaCurrentData= (char*)pSAData + memOffset * oleElementSize;
+                    psaCurrentData= static_cast<char*>(pSAData) + memOffset * oleElementSize;
                     // convert the Sequence and put the elements into the Safearray
                     for( sal_Int32 i= 0; i < pCurrentSeq->nElements; i++)
                     {
@@ -1132,7 +1122,7 @@ SAFEARRAY*  UnoConversionUtilities<T>::createUnoSequenceWrapper(const Any& rSeq,
                         anyToVariant( &var, unoElement);
                         if( elemtype == VT_VARIANT )
                         {
-                            VariantCopy( ( VARIANT*)psaCurrentData, &var);
+                            VariantCopy( reinterpret_cast<VARIANT*>(psaCurrentData), &var);
                             VariantClear( &var);
                         }
                         else
@@ -1164,15 +1154,15 @@ SAFEARRAY*  UnoConversionUtilities<T>::createUnoSequenceWrapper(const Any& rSeq,
 // Param parMultiDimensionalIndex - The array contains the index. Each dimension index is
 //                                  0 based.
 template<class T>
-sal_Bool UnoConversionUtilities<T>::incrementMultidimensionalIndex(sal_Int32 dimensions,
+bool UnoConversionUtilities<T>::incrementMultidimensionalIndex(sal_Int32 dimensions,
                                                                    const sal_Int32 * parDimensionLengths,
                                                                    sal_Int32 * parMultidimensionalIndex)
 {
     if( dimensions < 1)
-        return sal_False;
+        return false;
 
-    sal_Bool ret= sal_True;
-    sal_Bool carry= sal_True; // to get into the while loop
+    bool ret= true;
+    bool carry= true; // to get into the while loop
 
     sal_Int32 currentDimension= dimensions; //most significant is 1
     while( carry)
@@ -1182,15 +1172,15 @@ sal_Bool UnoConversionUtilities<T>::incrementMultidimensionalIndex(sal_Int32 dim
         if( parMultidimensionalIndex[ currentDimension - 1] > (parDimensionLengths[ currentDimension - 1] - 1))
             parMultidimensionalIndex[ currentDimension - 1]= 0;
         else
-            carry= sal_False;
+            carry= false;
 
         currentDimension --;
         // if dimensions drops below 1 and carry is set than then all indices are 0 again
         // this is signalled by returning sal_False
         if( currentDimension < 1 && carry)
         {
-            carry= sal_False;
-            ret= sal_False;
+            carry= false;
+            ret= false;
         }
     }
     return ret;
@@ -1246,21 +1236,21 @@ template<class T>
 void  UnoConversionUtilities<T>::getElementCountAndTypeOfSequence( const Any& rSeq, sal_Int32 dim,
                                              Sequence< sal_Int32 >& seqElementCounts, TypeDescription& typeDesc)
 {
-    sal_Int32 dimCount= (*(uno_Sequence* const *) rSeq.getValue())->nElements;
+    sal_Int32 dimCount= (*static_cast<uno_Sequence* const *>(rSeq.getValue()))->nElements;
     if( dimCount > seqElementCounts[ dim-1])
         seqElementCounts[ dim-1]= dimCount;
 
     // we need the element type to construct the any that is
     // passed into getElementCountAndTypeOfSequence again
-    typelib_TypeDescription* pSeqDesc= NULL;
+    typelib_TypeDescription* pSeqDesc= nullptr;
     rSeq.getValueTypeDescription( &pSeqDesc);
-    typelib_TypeDescriptionReference* pElementDescRef= ((typelib_IndirectTypeDescription*)pSeqDesc)->pType;
+    typelib_TypeDescriptionReference* pElementDescRef= reinterpret_cast<typelib_IndirectTypeDescription*>(pSeqDesc)->pType;
 
     // if the elements are Sequences than do recursion
     if( dim < seqElementCounts.getLength() )
     {
-        uno_Sequence* pSeq = *(uno_Sequence* const*) rSeq.getValue();
-        uno_Sequence** arSequences= (uno_Sequence**)pSeq->elements;
+        uno_Sequence* pSeq = *static_cast<uno_Sequence* const*>(rSeq.getValue());
+        uno_Sequence** arSequences= reinterpret_cast<uno_Sequence**>(pSeq->elements);
         for( sal_Int32 i=0; i < dimCount; i++)
         {
             uno_Sequence* arElement=  arSequences[ i];
@@ -1279,26 +1269,26 @@ void  UnoConversionUtilities<T>::getElementCountAndTypeOfSequence( const Any& rS
 template<class T>
 SAFEARRAY*  UnoConversionUtilities<T>::createUnoSequenceWrapper(const Any& rSeq)
 {
-    SAFEARRAY* pArray = NULL;
+    SAFEARRAY* pArray = nullptr;
     sal_uInt32 n = 0;
 
     if( rSeq.getValueTypeClass() != TypeClass_SEQUENCE )
         throw IllegalArgumentException(
                   "[automation bridge]UnoConversionUtilities<T>::createUnoSequenceWrapper\n"
-                  "The UNO argument is not a sequence", 0, -1);
+                  "The UNO argument is not a sequence", nullptr, -1);
 
-    uno_Sequence * punoSeq= *(uno_Sequence**) rSeq.getValue();
+    uno_Sequence * punoSeq= *static_cast<uno_Sequence* const *>(rSeq.getValue());
 
     typelib_TypeDescriptionReference* pSeqTypeRef= rSeq.getValueTypeRef();
-    typelib_TypeDescription* pSeqType= NULL;
+    typelib_TypeDescription* pSeqType= nullptr;
     TYPELIB_DANGER_GET( &pSeqType, pSeqTypeRef);
-    typelib_IndirectTypeDescription * pSeqIndDec=   (typelib_IndirectTypeDescription*) pSeqType;
+    typelib_IndirectTypeDescription * pSeqIndDec=   reinterpret_cast<typelib_IndirectTypeDescription*>(pSeqType);
 
 
     typelib_TypeDescriptionReference * pSeqElementTypeRef= pSeqIndDec->pType;
     TYPELIB_DANGER_RELEASE( pSeqType);
 
-    typelib_TypeDescription* pSeqElementDesc= NULL;
+    typelib_TypeDescription* pSeqElementDesc= nullptr;
     TYPELIB_DANGER_GET( &pSeqElementDesc, pSeqElementTypeRef);
     sal_Int32 nElementSize= pSeqElementDesc->nSize;
     n= punoSeq->nElements;
@@ -1312,7 +1302,7 @@ SAFEARRAY*  UnoConversionUtilities<T>::createUnoSequenceWrapper(const Any& rSeq)
     pArray = SafeArrayCreate(VT_VARIANT, 1, rgsabound);
 
     Any unoElement;
-    sal_uInt8 * pSeqData= (sal_uInt8*) punoSeq->elements;
+    char * pSeqData= punoSeq->elements;
 
     for (sal_uInt32 i = 0; i < n; i++)
     {
@@ -1351,19 +1341,19 @@ void UnoConversionUtilities<T>::createUnoObjectWrapper(const Any & rObj, VARIANT
         throw IllegalArgumentException(
                   "[automation bridge]UnoConversionUtilities<T>::createUnoObjectWrapper \n"
                   "Cannot create an Automation interface for a UNO type which is not "
-                  "a struct or interface!", 0, -1);
+                  "a struct or interface!", nullptr, -1);
 
     if (rObj.getValueTypeClass() == TypeClass_INTERFACE)
     {
         if (! (rObj >>= xInt))
             throw IllegalArgumentException(
                   "[automation bridge] UnoConversionUtilities<T>::createUnoObjectWrapper\n "
-                  "Could not create wrapper object for UNO object!", 0, -1);
+                  "Could not create wrapper object for UNO object!", nullptr, -1);
         //If XInterface is NULL, which is a valid value, then simply return NULL.
         if ( ! xInt.is())
         {
             pVar->vt = VT_UNKNOWN;
-            pVar->punkVal = NULL;
+            pVar->punkVal = nullptr;
             return;
         }
         //make sure we have the main XInterface which is used with a map
@@ -1372,7 +1362,7 @@ void UnoConversionUtilities<T>::createUnoObjectWrapper(const Any & rObj, VARIANT
 
         Reference<XInterface> xIntWrapper;
         // Does a UNO wrapper exist already ?
-        IT_Uno it_uno = UnoObjToWrapperMap.find( (sal_uIntPtr) xInt.get());
+        auto it_uno = UnoObjToWrapperMap.find( reinterpret_cast<sal_uIntPtr>(xInt.get()));
         if(it_uno != UnoObjToWrapperMap.end())
         {
             xIntWrapper =  it_uno->second;
@@ -1387,9 +1377,9 @@ void UnoConversionUtilities<T>::createUnoObjectWrapper(const Any & rObj, VARIANT
         else
         {
             Reference<XInterface> xIntComWrapper = xInt;
-            typedef std::unordered_map<sal_uIntPtr,sal_uIntPtr>::iterator _IT;
+
             // Adapter? then get the COM wrapper to which the adapter delegates its calls
-            _IT it= AdapterToWrapperMap.find( (sal_uIntPtr) xInt.get());
+            auto it = AdapterToWrapperMap.find( reinterpret_cast<sal_uIntPtr>(xInt.get()));
             if( it != AdapterToWrapperMap.end() )
                 xIntComWrapper= reinterpret_cast<XInterface*>(it->second);
 
@@ -1398,20 +1388,18 @@ void UnoConversionUtilities<T>::createUnoObjectWrapper(const Any & rObj, VARIANT
         }
     }
     // If we have no UNO wrapper nor the IDispatch yet then we have to create
-    // a wrapper. For that we need an XInvocation from the UNO object.
+    // a wrapper. For that we need an XInvocation.
 
-    // get an XInvocation or create one using the invocation service
-    Reference<XInvocation> xInv(xInt, UNO_QUERY);
-    if ( ! xInv.is())
+    // create an XInvocation using the invocation service
+    Reference<XInvocation> xInv;
+    Reference<XSingleServiceFactory> xInvFactory= getInvocationFactory(rObj);
+    if (xInvFactory.is())
     {
-        Reference<XSingleServiceFactory> xInvFactory= getInvocationFactory(rObj);
-        if (xInvFactory.is())
-        {
-            Sequence<Any> params(1);
-            params.getArray()[0] = rObj;
-            Reference<XInterface> xInt2 = xInvFactory->createInstanceWithArguments(params);
-            xInv.set(xInt2, UNO_QUERY);
-        }
+        Sequence<Any> params(2);
+        params.getArray()[0] = rObj;
+        params.getArray()[1] <<= OUString("FromOLE");
+        Reference<XInterface> xInt2 = xInvFactory->createInstanceWithArguments(params);
+        xInv.set(xInt2, UNO_QUERY);
     }
 
     if (xInv.is())
@@ -1442,7 +1430,7 @@ void UnoConversionUtilities<T>::createUnoObjectWrapper(const Any & rObj, VARIANT
             // be mapped again and there is already a wrapper then the old wrapper
             // will be used.
             if(xInt.is()) // only interfaces
-                UnoObjToWrapperMap[(sal_uIntPtr) xInt.get()]= xNewWrapper;
+                UnoObjToWrapperMap[reinterpret_cast<sal_uIntPtr>(xInt.get())]= xNewWrapper;
             convertSelfToCom(xNewWrapper, pVar);
             return;
         }
@@ -1451,7 +1439,7 @@ void UnoConversionUtilities<T>::createUnoObjectWrapper(const Any & rObj, VARIANT
 
 template<class T>
 void UnoConversionUtilities<T>::variantToAny( const VARIANT* pVariant, Any& rAny,
-                                                  sal_Bool bReduceValueRange /* = sal_True */)
+                                                  bool bReduceValueRange /* = sal_True */)
 {
     HRESULT hr = S_OK;
     try
@@ -1459,7 +1447,7 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANT* pVariant, Any& rAny
         CComVariant var;
 
         // There is no need to support indirect values, since they're not supported by UNO
-        if( FAILED(hr= VariantCopyInd( &var, const_cast<VARIANTARG*>(pVariant)))) // remove VT_BYREF
+        if( FAILED(hr= VariantCopyInd( &var, pVariant))) // remove VT_BYREF
             throw BridgeRuntimeError(
                       "[automation bridge] UnoConversionUtilities<T>::variantToAny \n"
                       "VariantCopyInd failed for reason : " + OUString::number(hr));
@@ -1478,10 +1466,10 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANT* pVariant, Any& rAny
                 switch (var.vt)
                 {
                 case VT_EMPTY:
-                    rAny.setValue(NULL, Type());
+                    rAny.setValue(nullptr, Type());
                     break;
                 case VT_NULL:
-                    rAny.setValue(NULL, Type());
+                    rAny.setValue(nullptr, Type());
                     break;
                 case VT_I2:
                     rAny.setValue( & var.iVal, cppu::UnoType<sal_Int16>::get());
@@ -1512,7 +1500,7 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANT* pVariant, Any& rAny
                 }
                 case VT_BSTR:
                 {
-                    OUString b(reinterpret_cast<const sal_Unicode*>(var.bstrVal));
+                    OUString b(o3tl::toU(var.bstrVal));
                     rAny.setValue( &b, cppu::UnoType<decltype(b)>::get());
                     break;
                 }
@@ -1520,11 +1508,7 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANT* pVariant, Any& rAny
                 case VT_DISPATCH:
                 {
                     //check if it is a UNO type
-#ifdef __MINGW32__
-                    CComQIPtr<IUnoTypeWrapper, &__uuidof(IUnoTypeWrapper)> spType((IUnknown*) var.byref);
-#else
-                    CComQIPtr<IUnoTypeWrapper> spType((IUnknown*) var.byref);
-#endif
+                    CComQIPtr<IUnoTypeWrapper> spType(static_cast<IUnknown*>(var.byref));
                     if (spType)
                     {
                         CComBSTR sName;
@@ -1533,13 +1517,13 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANT* pVariant, Any& rAny
                                     "[automation bridge]UnoConversionUtilities<T>::variantToAny \n"
                                     "Failed to get the type name from a UnoTypeWrapper!");
                         Type type;
-                        if (getType(sName, type) == false)
+                        if (!getType(sName, type))
                         {
                             throw CannotConvertException(
                                       "[automation bridge]UnoConversionUtilities<T>::variantToAny \n"
-                                      "A UNO type with the name: " + OUString(reinterpret_cast<const sal_Unicode*>(LPCOLESTR(sName))) +
+                                      "A UNO type with the name: " + OUString(o3tl::toU(LPCOLESTR(sName))) +
                                 "does not exist!",
-                                0, TypeClass_UNKNOWN, FailReason::TYPE_NOT_SUPPORTED,0);
+                                nullptr, TypeClass_UNKNOWN, FailReason::TYPE_NOT_SUPPORTED,0);
                         }
                         rAny <<= type;
                     }
@@ -1557,15 +1541,14 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANT* pVariant, Any& rAny
                 }
                 case VT_BOOL:
                 {
-                    sal_Bool b= var.boolVal == VARIANT_TRUE;
-                    rAny.setValue( &b, cppu::UnoType<decltype(b)>::get());
+                    rAny <<= (var.boolVal == VARIANT_TRUE);
                     break;
                 }
                 case VT_I1:
                     rAny.setValue( & var.cVal, cppu::UnoType<sal_Int8>::get());
                     break;
                 case VT_UI1: // there is no unsigned char in UNO
-                    rAny.setValue( & var.bVal, cppu::UnoType<sal_Int8>::get());
+                    rAny <<= sal_Int8(var.bVal);
                     break;
                 case VT_UI2:
                     rAny.setValue( & var.uiVal, cppu::UnoType<cppu::UnoUnsignedShortType>::get() );
@@ -1580,7 +1563,7 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANT* pVariant, Any& rAny
                     rAny.setValue( & var.uintVal, cppu::UnoType<sal_uInt32>::get());
                     break;
                 case VT_VOID:
-                    rAny.setValue( NULL, Type());
+                    rAny.setValue( nullptr, Type());
                     break;
                 case VT_DECIMAL:
                 {
@@ -1639,7 +1622,7 @@ void UnoConversionUtilities<T>::variantToAny( const VARIANT* pVariant, Any& rAny
 // UNO interfaces in which case it has to support the SUPPORTED_INTERFACES_PROP (see
 // #define) property. That property contains all names of interfaces.
 // "pUnknown" is wrapped by a COM wrapper object that implements XInvocation, e.g.
-// IUnknownWrapper_Impl. Additionally an object of type "aType" is created by help
+// IUnknownWrapper. Additionally an object of type "aType" is created by help
 // of the INTERFACE_ADAPTER_FACTORY (see #define) service. The implementation of
 // "aType" calls on the COM wrapper's XInvocation::invoke. If the COM object supports
 // more than one UNO interfaces, as can be determined by the property
@@ -1656,7 +1639,7 @@ Any UnoConversionUtilities<T>::createOleObjectWrapper(VARIANT* pVar, const Type&
     if (pVar->vt != VT_UNKNOWN && pVar->vt != VT_DISPATCH && pVar->vt != VT_EMPTY)
         throw IllegalArgumentException(
                   "[automation bridge]UnoConversionUtilities<T>::createOleObjectWrapper \n"
-                  "The VARIANT does not contain an object type! ", 0, -1);
+                  "The VARIANT does not contain an object type! ", nullptr, -1);
 
     MutexGuard guard( getBridgeMutex());
 
@@ -1667,21 +1650,13 @@ Any UnoConversionUtilities<T>::createOleObjectWrapper(VARIANT* pVar, const Type&
     {
         spUnknown = pVar->punkVal;
         if (spUnknown)
-#ifdef __MINGW32__
-            spUnknown->QueryInterface( IID_IDispatch, reinterpret_cast<LPVOID*>( & spDispatch.p));
-#else
             spUnknown.QueryInterface( & spDispatch.p);
-#endif
     }
-    else if (pVar->vt == VT_DISPATCH && pVar->pdispVal != NULL)
+    else if (pVar->vt == VT_DISPATCH && pVar->pdispVal != nullptr)
     {
         CComPtr<IDispatch> spDispatch2(pVar->pdispVal);
         if (spDispatch2)
-#ifdef __MINGW32__
-            spDispatch2->QueryInterface( IID_IUnknown, reinterpret_cast<LPVOID*>( & spUnknown.p));
-#else
             spDispatch2.QueryInterface( & spUnknown.p);
-#endif
     }
 
     static Type VOID_TYPE= Type();
@@ -1707,13 +1682,13 @@ Any UnoConversionUtilities<T>::createOleObjectWrapper(VARIANT* pVar, const Type&
     }
 
     // COM pointer are NULL, no wrapper required
-     if (spUnknown == NULL)
+     if (spUnknown == nullptr)
     {
         Reference<XInterface> xInt;
         if( aType.getTypeClass() == TypeClass_INTERFACE)
             ret.setValue( &xInt, aType);
         else if( aType.getTypeClass() == TypeClass_STRUCT)
-            ret.setValue( NULL, aType);
+            ret.setValue( nullptr, aType);
         else
             ret <<= xInt;
         return ret;
@@ -1723,11 +1698,7 @@ Any UnoConversionUtilities<T>::createOleObjectWrapper(VARIANT* pVar, const Type&
     // Check if "spUnknown" is a UNO wrapper, that is an UNO object that has been
     // passed to COM. Then it supports IUnoObjectWrapper
     // and we extract the original UNO object.
-#ifdef __MINGW32__
-    CComQIPtr<IUnoObjectWrapper, &__uuidof(IUnoObjectWrapper)> spUno( spUnknown);
-#else
     CComQIPtr<IUnoObjectWrapper> spUno( spUnknown);
-#endif
     if( spUno)
     {   // it is a wrapper
          Reference<XInterface> xInt;
@@ -1750,7 +1721,7 @@ Any UnoConversionUtilities<T>::createOleObjectWrapper(VARIANT* pVar, const Type&
     // wrap ordinary dispatch objects. The dispatch-UNO objects usually are adapted to represent
     // particular UNO interfaces.
     Reference<XInterface> xIntWrapper;
-    CIT_Com cit_currWrapper= ComPtrToWrapperMap.find( reinterpret_cast<sal_uIntPtr>(spUnknown.p));
+    auto cit_currWrapper= ComPtrToWrapperMap.find( reinterpret_cast<sal_uIntPtr>(spUnknown.p));
     if(cit_currWrapper != ComPtrToWrapperMap.end())
             xIntWrapper = cit_currWrapper->second;
     if (xIntWrapper.is())
@@ -1759,7 +1730,7 @@ Any UnoConversionUtilities<T>::createOleObjectWrapper(VARIANT* pVar, const Type&
         //find the proper Adapter. The pointer in the WrapperToAdapterMap are valid as long as
         //we get a pointer to the wrapper from ComPtrToWrapperMap, because the Adapter hold references
         //to the wrapper.
-        CIT_Wrap it = WrapperToAdapterMap.find((sal_uIntPtr) xIntWrapper.get());
+        auto it = WrapperToAdapterMap.find(reinterpret_cast<sal_uIntPtr>(xIntWrapper.get()));
         if (it == WrapperToAdapterMap.end())
         {
             // No adapter available.
@@ -1783,18 +1754,18 @@ Any UnoConversionUtilities<T>::createOleObjectWrapper(VARIANT* pVar, const Type&
                 throw IllegalArgumentException(
                           "[automation bridge]UnoConversionUtilities<T>::createOleObjectWrapper \n"
                           "The COM object is not suitable for the UNO type: " +
-                    desiredType.getTypeName(), 0, -1);
+                    desiredType.getTypeName(), nullptr, -1);
         }
         else
         {
             //There is an adapter available
-            Reference<XInterface> xIntAdapter((XInterface*) it->second);
+            Reference<XInterface> xIntAdapter(reinterpret_cast<XInterface*>(it->second));
             ret = xIntAdapter->queryInterface( desiredType);
             if ( ! ret.hasValue())
                 throw IllegalArgumentException(
                           "[automation bridge]UnoConversionUtilities<T>::createOleObjectWrapper \n"
                           "The COM object is not suitable for the UNO type: " +
-                    desiredType.getTypeName(), 0, -1);
+                    desiredType.getTypeName(), nullptr, -1);
         }
 
         return ret;
@@ -1821,8 +1792,7 @@ Any UnoConversionUtilities<T>::createOleObjectWrapper(VARIANT* pVar, const Type&
 
     Any  params[3];
     params[0] <<= reinterpret_cast<sal_uIntPtr>(spUnknown.p);
-    sal_Bool bDisp = pVar->vt == VT_DISPATCH ? sal_True : sal_False;
-    params[1].setValue( & bDisp, cppu::UnoType<bool>::get());
+    params[1] <<= (pVar->vt == VT_DISPATCH);
     params[2] <<= seqTypes;
 
     xInit->initialize( Sequence<Any>( params, 3));
@@ -1859,22 +1829,21 @@ Reference<XInterface> UnoConversionUtilities<T>::createAdapter(const Sequence<Ty
     if( xAdapterFac.is())
         xIntAdapted= xAdapterFac->createAdapter( xInv, seqTypes);
 
-    if( xIntAdapted.is())
-    {
-        // Put the pointer to the wrapper object and the interface pointer of the adapted interface
-        // in a global map. Thus we can determine in a call to createUnoObjectWrapper whether the UNO
-        // object is a wrapped COM object. In that case we extract the original COM object rather than
-        // creating a wrapper around the UNO object.
-        typedef std::unordered_map<sal_uInt64,sal_uInt64>::value_type VALUE;
-        AdapterToWrapperMap.insert( VALUE( (sal_uInt64) xIntAdapted.get(), (sal_uInt64) receiver.get()));
-        WrapperToAdapterMap.insert( VALUE( (sal_uInt64) receiver.get(), (sal_uInt64) xIntAdapted.get()));
-    }
-    else
+    if( !xIntAdapted.is())
     {
         throw BridgeRuntimeError(
                   "[automation bridge]UnoConversionUtilities<T>::createOleObjectWrapper \n"
                   "Could not create a proxy for COM object! Creation of adapter failed.");
     }
+
+    // Put the pointer to the wrapper object and the interface pointer of the adapted interface
+    // in a global map. Thus we can determine in a call to createUnoObjectWrapper whether the UNO
+    // object is a wrapped COM object. In that case we extract the original COM object rather than
+    // creating a wrapper around the UNO object.
+    typedef std::unordered_map<sal_uInt64,sal_uInt64>::value_type VALUE;
+    AdapterToWrapperMap.insert( VALUE( reinterpret_cast<sal_uInt64>(xIntAdapted.get()), reinterpret_cast<sal_uInt64>(receiver.get())));
+    WrapperToAdapterMap.insert( VALUE( reinterpret_cast<sal_uInt64>(receiver.get()), reinterpret_cast<sal_uInt64>(xIntAdapted.get())));
+
     return xIntAdapted;
 }
 // "convertValueObject" converts a JScriptValue object contained in "var" into
@@ -1958,7 +1927,6 @@ void UnoConversionUtilities<T>::dispatchExObject2Sequence( const VARIANTARG* pva
 {
     try
     {
-        bool bFail = false;
         if( pvar->vt != VT_DISPATCH)
             throw BridgeRuntimeError("[automation bridge] UnoConversionUtilities<T>::dispatchExObject2Sequence \n"
                                      "Conversion of dispatch object to Sequence failed!");
@@ -1970,18 +1938,18 @@ void UnoConversionUtilities<T>::dispatchExObject2Sequence( const VARIANTARG* pva
                                      "Conversion of dispatch object to Sequence failed!");
 
         DISPID dispid;
-        DISPPARAMS param= {0,0,0,0};
+        DISPPARAMS param= {nullptr,nullptr,0,0};
         CComVariant result;
 
         OLECHAR const * sLength= L"length";
 
-        // Get the length of the array. Can also be obtained throu GetNextDispID. The
+        // Get the length of the array. Can also be obtained through GetNextDispID. The
         // method only returns DISPIDs of the array data. Their names are like "0", "1" etc.
         if( FAILED( hr= pdispEx->GetIDsOfNames(IID_NULL, const_cast<OLECHAR **>(&sLength), 1, LOCALE_USER_DEFAULT, &dispid)))
             throw BridgeRuntimeError("[automation bridge] UnoConversionUtilities<T>::dispatchExObject2Sequence \n"
                                      "Conversion of dispatch object to Sequence failed!");
         if( FAILED( hr= pdispEx->InvokeEx(dispid, LOCALE_USER_DEFAULT, DISPATCH_PROPERTYGET,
-                                          &param, &result, NULL, NULL)))
+                                          &param, &result, nullptr, nullptr)))
             throw BridgeRuntimeError("[automation bridge] UnoConversionUtilities<T>::dispatchExObject2Sequence \n"
                                      "Conversion of dispatch object to Sequence failed!");
         if( FAILED( VariantChangeType( &result, &result, 0, VT_I4)))
@@ -1994,19 +1962,19 @@ void UnoConversionUtilities<T>::dispatchExObject2Sequence( const VARIANTARG* pva
         // get a few basic facts about the sequence, and reallocate:
         // create the Sequences
         // get the size of the elements
-        typelib_TypeDescription *pDesc= NULL;
+        typelib_TypeDescription *pDesc= nullptr;
         type.getDescription( &pDesc);
 
         typelib_IndirectTypeDescription *pSeqDesc= reinterpret_cast<typelib_IndirectTypeDescription*>(pDesc);
         typelib_TypeDescriptionReference *pSeqElemDescRef= pSeqDesc->pType; // type of the Sequence' elements
         Type elemType( pSeqElemDescRef);
-        _typelib_TypeDescription* pSeqElemDesc=NULL;
+        _typelib_TypeDescription* pSeqElemDesc=nullptr;
         TYPELIB_DANGER_GET( &pSeqElemDesc, pSeqElemDescRef);
             sal_uInt32 nelementSize= pSeqElemDesc->nSize;
         TYPELIB_DANGER_RELEASE( pSeqElemDesc);
 
             uno_Sequence *p_uno_Seq;
-        uno_sequence_construct( &p_uno_Seq, pDesc, NULL, length, cpp_acquire);
+        uno_sequence_construct( &p_uno_Seq, pDesc, nullptr, length, cpp_acquire);
 
         typelib_TypeClass typeElement= pSeqDesc->pType->eTypeClass;
         char *pArray= p_uno_Seq->elements;
@@ -2016,7 +1984,7 @@ void UnoConversionUtilities<T>::dispatchExObject2Sequence( const VARIANTARG* pva
         for( sal_Int32 i= 0; i< length; i++)
         {
             OUString ousIndex=OUString::number( i);
-            OLECHAR* sindex =  (OLECHAR*)ousIndex.getStr();
+            OLECHAR* sindex = const_cast<OLECHAR *>(o3tl::toW(ousIndex.getStr()));
 
             if( FAILED( hr= pdispEx->GetIDsOfNames(IID_NULL, &sindex , 1, LOCALE_USER_DEFAULT, &dispid)))
             {
@@ -2024,7 +1992,7 @@ void UnoConversionUtilities<T>::dispatchExObject2Sequence( const VARIANTARG* pva
                                          "Conversion of dispatch object to Sequence failed!");
             }
             if( FAILED( hr= pdispEx->InvokeEx(dispid, LOCALE_USER_DEFAULT, DISPATCH_PROPERTYGET,
-                                              &param, &result, NULL, NULL)))
+                                              &param, &result, nullptr, nullptr)))
             {
                 throw BridgeRuntimeError("[automation bridge] UnoConversionUtilities<T>::dispatchExObject2Sequence \n"
                                          "Conversion of dispatch object to Sequence failed!");
@@ -2035,13 +2003,13 @@ void UnoConversionUtilities<T>::dispatchExObject2Sequence( const VARIANTARG* pva
             // That requires a recursiv conversion
             Any any;
             // Destination address within the out-Sequence "anySeq" where to copy the next converted element
-            void* pDest= (void*)(pArray + (i * nelementSize));
+            void* pDest= pArray + (i * nelementSize);
 
             if( result.vt & VT_DISPATCH && typeElement == typelib_TypeClass_SEQUENCE)
             {
-                variantToAny( &result, any, elemType, sal_False);
+                variantToAny( &result, any, elemType, false);
                 // copy the converted VARIANT, that is a Sequence to the Sequence
-                uno_Sequence * p_unoSeq= *(uno_Sequence**)any.getValue();
+                uno_Sequence * p_unoSeq= *static_cast<uno_Sequence* const *>(any.getValue());
                 // just copy the pointer of the uno_Sequence
                 // nelementSize should be 4 !!!!
                 memcpy( pDest, &p_unoSeq, nelementSize);
@@ -2049,7 +2017,7 @@ void UnoConversionUtilities<T>::dispatchExObject2Sequence( const VARIANTARG* pva
             }
             else // Element type is no Sequence -> do one conversion
             {
-                variantToAny( &result, any, elemType, sal_False);
+                variantToAny( &result, any, elemType, false);
                 if( typeElement == typelib_TypeClass_ANY)
                 {
                     // copy the converted VARIANT to the Sequence
@@ -2069,10 +2037,6 @@ void UnoConversionUtilities<T>::dispatchExObject2Sequence( const VARIANTARG* pva
         anySeq.setValue( &p_uno_Seq, pDesc);
         uno_destructData( &p_uno_Seq, pDesc, cpp_release);
         typelib_typedescription_release( pDesc);
-
-        if (bFail)
-            throw BridgeRuntimeError(
-                "[automation bridge] Conversion of ValueObject failed ");
     }
     catch (const BridgeRuntimeError &)
     {
@@ -2095,7 +2059,7 @@ void UnoConversionUtilities<T>::dispatchExObject2Sequence( const VARIANTARG* pva
 /* The argument unotype is the type that is expected by the currently called UNO function.
    For example: []long, [][]long. If the function calls itself recursively then the element type
    is passed on. For example a two dimensional SAFEARRAY of type VT_I4 is to be converted. Then
-   unotype has to be either void or [][]long. When the function calls itself recursivly then
+   unotype has to be either void or [][]long. When the function calls itself recursively then
    it passes the element type which is []long.
 */
 template<class T>
@@ -2187,10 +2151,10 @@ Sequence<Any> UnoConversionUtilities<T>::createOleArrayWrapperOfDim(SAFEARRAY* p
 
             if( unotype.getTypeClass() == TypeClass_VOID)
                 // the function was called without specifying the destination type
-                variantToAny(&variant, pUnoArray[index[actDim - 1] - lBound], sal_False);
+                variantToAny(&variant, pUnoArray[index[actDim - 1] - lBound], false);
             else
                 variantToAny(&variant, pUnoArray[index[actDim - 1] - lBound],
-                    getElementTypeOfSequence(unotype), sal_False);
+                    getElementTypeOfSequence(unotype), false);
 
             VariantClear(&variant);
         }
@@ -2205,10 +2169,10 @@ Type UnoConversionUtilities<T>::getElementTypeOfSequence( const Type& seqType)
     if( seqType.getTypeClass() != TypeClass_VOID)
     {
         OSL_ASSERT( seqType.getTypeClass() == TypeClass_SEQUENCE);
-        typelib_IndirectTypeDescription* pDescSeq= NULL;
-        seqType.getDescription((typelib_TypeDescription** ) & pDescSeq);
-        retValue = Type(pDescSeq->pType);
-        typelib_typedescription_release( (typelib_TypeDescription*) pDescSeq);
+        typelib_TypeDescription* pDescSeq= nullptr;
+        seqType.getDescription(& pDescSeq);
+        retValue = Type(reinterpret_cast<typelib_IndirectTypeDescription *>(pDescSeq)->pType);
+        typelib_typedescription_release(pDescSeq);
     }
     return retValue;
 }
@@ -2242,7 +2206,7 @@ Sequence<Any> UnoConversionUtilities<T>::createOleArrayWrapper(SAFEARRAY* pArray
 // An JScript has property like "0", "1", "2" etc. which represent the
 // value at the corresponding index of the array
 template<class T>
-sal_Bool UnoConversionUtilities<T>::isJScriptArray(const VARIANT* rvar)
+bool UnoConversionUtilities<T>::isJScriptArray(const VARIANT* rvar)
 {
     OSL_ENSURE( rvar->vt == VT_DISPATCH, "param is not a VT_DISPATCH");
     HRESULT hr;
@@ -2255,10 +2219,10 @@ sal_Bool UnoConversionUtilities<T>::isJScriptArray(const VARIANT* rvar)
             &id);
 
         if( SUCCEEDED ( hr) )
-            return sal_True;
+            return true;
     }
 
-    return sal_False;
+    return false;
 }
 
 template<class T>
@@ -2376,7 +2340,7 @@ inline void reduceRange( Any& any)
 {
     OSL_ASSERT( any.getValueTypeClass() == TypeClass_LONG);
 
-    sal_Int32 value= *(sal_Int32*)any.getValue();
+    sal_Int32 value= *o3tl::doAccess<sal_Int32>(any);
     if( value <= 0x7f &&  value >= -0x80)
     {// -128 bis 127
         sal_Int8 charVal= static_cast<sal_Int8>( value);
@@ -2389,7 +2353,6 @@ inline void reduceRange( Any& any)
     }
 }
 
-} // end namespace
 #endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

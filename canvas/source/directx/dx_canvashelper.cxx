@@ -18,19 +18,21 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <algorithm>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <basegfx/point/b2dpoint.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <com/sun/star/rendering/CompositeOperation.hpp>
 #include <com/sun/star/rendering/PathCapType.hpp>
 #include <com/sun/star/rendering/PathJoinType.hpp>
 #include <com/sun/star/rendering/RepaintResult.hpp>
 #include <com/sun/star/rendering/TexturingMode.hpp>
 #include <comphelper/sequence.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 #include <rtl/math.hxx>
 #include <tools/diagnose_ex.h>
 
@@ -75,10 +77,13 @@ namespace dxcanvas
             switch( nJoinType )
             {
                 case rendering::PathJoinType::NONE:
-                    SAL_WARN( "canvas.directx", "gdiJoinFromJoin(): Join NONE not possible, mapping to MITER" );
-                    // FALLTHROUGH intended
+                    SAL_WARN( "canvas.directx", "gdiJoinFromJoin(): Join NONE not possible, mapping to BEVEL (closest to NONE)" );
+                    return Gdiplus::LineJoinBevel;
+
                 case rendering::PathJoinType::MITER:
-                    return Gdiplus::LineJoinMiter;
+                    // in GDI+ fallback to Bevel, if miter limit is exceeded, is not done
+                    // by Gdiplus::LineJoinMiter but by Gdiplus::LineJoinMiterClipped
+                    return Gdiplus::LineJoinMiterClipped;
 
                 case rendering::PathJoinType::ROUND:
                     return Gdiplus::LineJoinRound;
@@ -97,7 +102,7 @@ namespace dxcanvas
 
     CanvasHelper::CanvasHelper() :
         mpGdiPlusUser( GDIPlusUser::createInstance() ),
-        mpDevice( NULL ),
+        mpDevice( nullptr ),
         mpGraphicsProvider(),
         maOutputOffset()
     {
@@ -106,7 +111,7 @@ namespace dxcanvas
     void CanvasHelper::disposing()
     {
         mpGraphicsProvider.reset();
-        mpDevice = NULL;
+        mpDevice = nullptr;
         mpGdiPlusUser.reset();
     }
 
@@ -142,7 +147,7 @@ namespace dxcanvas
         if( needOutput() )
         {
             GraphicsSharedPtr pGraphics( mpGraphicsProvider->getGraphics() );
-            Gdiplus::Color aClearColor = Gdiplus::Color((Gdiplus::ARGB)Gdiplus::Color::White);
+            Gdiplus::Color aClearColor = Gdiplus::Color(Gdiplus::ARGB(Gdiplus::Color::White));
 
             ENSURE_OR_THROW(
                 Gdiplus::Ok == pGraphics->SetCompositingMode(
@@ -313,7 +318,7 @@ namespace dxcanvas
         }
 
         // TODO(P1): Provide caching here.
-        return uno::Reference< rendering::XCachedPrimitive >(NULL);
+        return uno::Reference< rendering::XCachedPrimitive >(nullptr);
     }
 
     uno::Reference< rendering::XCachedPrimitive > CanvasHelper::strokePolyPolygon( const rendering::XCanvas*                            /*pCanvas*/,
@@ -355,8 +360,8 @@ namespace dxcanvas
             if(bIsMiter)
                 aPen.SetMiterLimit( static_cast< Gdiplus::REAL >(strokeAttributes.MiterLimit) );
 
-            const ::std::vector< Gdiplus::REAL >& rDashArray(
-                ::comphelper::sequenceToContainer< ::std::vector< Gdiplus::REAL > >(
+            const std::vector< Gdiplus::REAL >& rDashArray(
+                ::comphelper::sequenceToContainer< std::vector< Gdiplus::REAL >, double >(
                     strokeAttributes.DashArray ) );
             if( !rDashArray.empty() )
             {
@@ -382,7 +387,7 @@ namespace dxcanvas
         }
 
         // TODO(P1): Provide caching here.
-        return uno::Reference< rendering::XCachedPrimitive >(NULL);
+        return uno::Reference< rendering::XCachedPrimitive >(nullptr);
     }
 
     uno::Reference< rendering::XCachedPrimitive > CanvasHelper::strokeTexturedPolyPolygon( const rendering::XCanvas*                            /*pCanvas*/,
@@ -393,7 +398,7 @@ namespace dxcanvas
                                                                                            const rendering::StrokeAttributes&                   /*strokeAttributes*/ )
     {
         // TODO
-        return uno::Reference< rendering::XCachedPrimitive >(NULL);
+        return uno::Reference< rendering::XCachedPrimitive >(nullptr);
     }
 
     uno::Reference< rendering::XCachedPrimitive > CanvasHelper::strokeTextureMappedPolyPolygon( const rendering::XCanvas*                           /*pCanvas*/,
@@ -405,7 +410,7 @@ namespace dxcanvas
                                                                                                 const rendering::StrokeAttributes&                  /*strokeAttributes*/ )
     {
         // TODO
-        return uno::Reference< rendering::XCachedPrimitive >(NULL);
+        return uno::Reference< rendering::XCachedPrimitive >(nullptr);
     }
 
     uno::Reference< rendering::XPolyPolygon2D >   CanvasHelper::queryStrokeShapes( const rendering::XCanvas*                            /*pCanvas*/,
@@ -415,7 +420,7 @@ namespace dxcanvas
                                                                                    const rendering::StrokeAttributes&                   /*strokeAttributes*/ )
     {
         // TODO
-        return uno::Reference< rendering::XPolyPolygon2D >(NULL);
+        return uno::Reference< rendering::XPolyPolygon2D >(nullptr);
     }
 
     uno::Reference< rendering::XCachedPrimitive > CanvasHelper::fillPolyPolygon( const rendering::XCanvas*                          /*pCanvas*/,
@@ -443,7 +448,7 @@ namespace dxcanvas
         }
 
         // TODO(P1): Provide caching here.
-        return uno::Reference< rendering::XCachedPrimitive >(NULL);
+        return uno::Reference< rendering::XCachedPrimitive >(nullptr);
     }
 
     uno::Reference< rendering::XCachedPrimitive > CanvasHelper::fillTextureMappedPolyPolygon( const rendering::XCanvas*                             /*pCanvas*/,
@@ -454,7 +459,7 @@ namespace dxcanvas
                                                                                               const uno::Reference< geometry::XMapping2D >&         /*xMapping*/ )
     {
         // TODO
-        return uno::Reference< rendering::XCachedPrimitive >(NULL);
+        return uno::Reference< rendering::XCachedPrimitive >(nullptr);
     }
 
     uno::Reference< rendering::XCanvasFont > CanvasHelper::createFont( const rendering::XCanvas*                    /*pCanvas*/,
@@ -518,9 +523,8 @@ namespace dxcanvas
             // TODO(F2): Proper layout (BiDi, CTL)! IMHO must use
             // DrawDriverString here, and perform layouting myself...
             ENSURE_OR_THROW(
-                Gdiplus::Ok == pGraphics->DrawString( reinterpret_cast<LPCWSTR>(
-                                                          text.Text.copy( text.StartPosition,
-                                                                          text.Length ).getStr()),
+                Gdiplus::Ok == pGraphics->DrawString( o3tl::toW(text.Text.copy( text.StartPosition,
+                                                                            text.Length ).getStr()),
                                                       text.Length,
                                                       pFont->getFont().get(),
                                                       aPoint,
@@ -528,7 +532,7 @@ namespace dxcanvas
                 "CanvasHelper::drawText(): GDI+ call failed" );
         }
 
-        return uno::Reference< rendering::XCachedPrimitive >(NULL);
+        return uno::Reference< rendering::XCachedPrimitive >(nullptr);
     }
 
     uno::Reference< rendering::XCachedPrimitive > CanvasHelper::drawTextLayout( const rendering::XCanvas*                       /*pCanvas*/,
@@ -555,7 +559,7 @@ namespace dxcanvas
                                false );
         }
 
-        return uno::Reference< rendering::XCachedPrimitive >(NULL);
+        return uno::Reference< rendering::XCachedPrimitive >(nullptr);
     }
 
     uno::Reference< rendering::XCachedPrimitive > CanvasHelper::drawBitmap( const rendering::XCanvas*                   /*pCanvas*/,
@@ -592,7 +596,7 @@ namespace dxcanvas
         }
 
         // TODO(P1): Provide caching here.
-        return uno::Reference< rendering::XCachedPrimitive >(NULL);
+        return uno::Reference< rendering::XCachedPrimitive >(nullptr);
     }
 
     uno::Reference< rendering::XCachedPrimitive > CanvasHelper::drawBitmapModulated( const rendering::XCanvas*                      pCanvas,
@@ -620,15 +624,15 @@ namespace dxcanvas
 
             // Setup an ImageAttributes with an alpha-modulating
             // color matrix.
-            const rendering::ARGBColor& rARGBColor(
+            rendering::ARGBColor aARGBColor(
                 mpDevice->getDeviceColorSpace()->convertToARGB(renderState.DeviceColor)[0]);
 
             Gdiplus::ImageAttributes aImgAttr;
             tools::setModulateImageAttributes( aImgAttr,
-                                               rARGBColor.Red,
-                                               rARGBColor.Green,
-                                               rARGBColor.Blue,
-                                               rARGBColor.Alpha );
+                                               aARGBColor.Red,
+                                               aARGBColor.Green,
+                                               aARGBColor.Blue,
+                                               aARGBColor.Alpha );
 
             ENSURE_OR_THROW(
                 Gdiplus::Ok == pGraphics->DrawImage( pBitmap.get(),
@@ -637,14 +641,12 @@ namespace dxcanvas
                                                      pBitmap->GetWidth(),
                                                      pBitmap->GetHeight(),
                                                      Gdiplus::UnitPixel,
-                                                     &aImgAttr,
-                                                     NULL,
-                                                     NULL ),
+                                                     &aImgAttr ),
                 "CanvasHelper::drawBitmapModulated(): GDI+ call failed" );
         }
 
         // TODO(P1): Provide caching here.
-        return uno::Reference< rendering::XCachedPrimitive >(NULL);
+        return uno::Reference< rendering::XCachedPrimitive >(nullptr);
     }
 
     uno::Reference< rendering::XGraphicDevice > CanvasHelper::getDevice()
@@ -662,7 +664,6 @@ namespace dxcanvas
         switch( nMode )
         {
             case rendering::CompositeOperation::OVER:
-                // FALLTHROUGH intended
             case rendering::CompositeOperation::CLEAR:
                 aRet = Gdiplus::CompositingModeSourceOver;
                 break;
@@ -672,25 +673,15 @@ namespace dxcanvas
                 break;
 
             case rendering::CompositeOperation::DESTINATION:
-                // FALLTHROUGH intended
             case rendering::CompositeOperation::UNDER:
-                // FALLTHROUGH intended
             case rendering::CompositeOperation::INSIDE:
-                // FALLTHROUGH intended
             case rendering::CompositeOperation::INSIDE_REVERSE:
-                // FALLTHROUGH intended
             case rendering::CompositeOperation::OUTSIDE:
-                // FALLTHROUGH intended
             case rendering::CompositeOperation::OUTSIDE_REVERSE:
-                // FALLTHROUGH intended
             case rendering::CompositeOperation::ATOP:
-                // FALLTHROUGH intended
             case rendering::CompositeOperation::ATOP_REVERSE:
-                // FALLTHROUGH intended
             case rendering::CompositeOperation::XOR:
-                // FALLTHROUGH intended
             case rendering::CompositeOperation::ADD:
-                // FALLTHROUGH intended
             case rendering::CompositeOperation::SATURATE:
                 // TODO(F2): Problem, because GDI+ only knows about two compositing modes
                 aRet = Gdiplus::CompositingModeSourceOver;
@@ -704,7 +695,7 @@ namespace dxcanvas
         return aRet;
     }
 
-    void CanvasHelper::setupGraphicsState( GraphicsSharedPtr&            rGraphics,
+    void CanvasHelper::setupGraphicsState( GraphicsSharedPtr const & rGraphics,
                                            const rendering::ViewState&   viewState,
                                            const rendering::RenderState& renderState )
     {
@@ -720,7 +711,7 @@ namespace dxcanvas
         // add output offset
         if( !maOutputOffset.equalZero() )
         {
-            const basegfx::B2DHomMatrix aOutputOffset(basegfx::tools::createTranslateB2DHomMatrix(
+            const basegfx::B2DHomMatrix aOutputOffset(basegfx::utils::createTranslateB2DHomMatrix(
                 maOutputOffset.getX(), maOutputOffset.getY()));
             aTransform = aOutputOffset * aTransform;
         }
@@ -759,7 +750,7 @@ namespace dxcanvas
         // add output offset
         if( !maOutputOffset.equalZero() )
         {
-            const basegfx::B2DHomMatrix aOutputOffset(basegfx::tools::createTranslateB2DHomMatrix(
+            const basegfx::B2DHomMatrix aOutputOffset(basegfx::utils::createTranslateB2DHomMatrix(
                 maOutputOffset.getX(), maOutputOffset.getY()));
             aTransform = aOutputOffset * aTransform;
         }

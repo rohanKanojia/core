@@ -31,15 +31,15 @@
 class CKeywordsTag : public ITag
 {
     public:
-        virtual void startTag();
-        virtual void endTag();
-        virtual void addCharacters(const std::wstring& characters);
-        virtual void addAttributes(const XmlTagAttributes_t& attributes);
-        virtual std::wstring getTagContent();
-        virtual ::std::wstring const getTagAttribute( ::std::wstring  const & /*attrname*/ ){ return ::std::wstring(); };
+        virtual void startTag() override;
+        virtual void endTag() override;
+        virtual void addCharacters(const std::wstring& characters) override;
+        virtual void addAttributes(const XmlTagAttributes_t& attributes) override;
+        virtual std::wstring getTagContent() override;
+        virtual ::std::wstring const getTagAttribute( ::std::wstring  const & /*attrname*/ ) override { return ::std::wstring(); };
 
     private:
-        StringList_t m_slKeywords;
+        std::vector<std::wstring> m_slKeywords;
         std::wstring m_sCurrentKeyword;
 };
 

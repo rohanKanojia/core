@@ -19,6 +19,7 @@
 
 #include <comphelper/processfactory.hxx>
 #include <editeng/acorrcfg.hxx>
+#include <o3tl/any.hxx>
 #include <tools/debug.hxx>
 #include <tools/urlobj.hxx>
 #include <ucbhelper/content.hxx>
@@ -47,7 +48,8 @@ SvxAutoCorrCfg::SvxAutoCorrCfg() :
     bSearchInAllCategories(false)
 {
     SvtPathOptions aPathOpt;
-    OUString sSharePath, sUserPath, sAutoPath( aPathOpt.GetAutoCorrectPath() );
+    OUString sSharePath, sUserPath;
+    OUString const & sAutoPath( aPathOpt.GetAutoCorrectPath() );
 
     sSharePath = sAutoPath.getToken(0, ';');
     sUserPath = sAutoPath.getToken(1, ';');
@@ -58,14 +60,13 @@ SvxAutoCorrCfg::SvxAutoCorrCfg() :
     Reference < ucb::XCommandEnvironment > xEnv;
     ::utl::UCBContentHelper::ensureFolder(comphelper::getProcessComponentContext(), xEnv, sUserPath, aContent);
 
-    OUString* pS = &sSharePath;
-    for( sal_uInt16 n = 0; n < 2; ++n, pS = &sUserPath )
+    for( OUString* pS : { &sSharePath, &sUserPath } )
     {
         INetURLObject aPath( *pS );
         aPath.insertName("acor");
-        *pS = aPath.GetMainURL(INetURLObject::DECODE_TO_IURI);
+        *pS = aPath.GetMainURL(INetURLObject::DecodeMechanism::ToIUri);
     }
-    pAutoCorrect = new SvxAutoCorrect( sSharePath, sUserPath );
+    pAutoCorrect.reset( new SvxAutoCorrect( sSharePath, sUserPath ) );
 
     aBaseConfig.Load(true);
     aSwConfig.Load(true);
@@ -73,20 +74,18 @@ SvxAutoCorrCfg::SvxAutoCorrCfg() :
 
 SvxAutoCorrCfg::~SvxAutoCorrCfg()
 {
-    delete pAutoCorrect;
 }
 
 void SvxAutoCorrCfg::SetAutoCorrect(SvxAutoCorrect *const pNew)
 {
-    if (pNew != pAutoCorrect)
+    if (pNew != pAutoCorrect.get())
     {
         if (pNew && (pAutoCorrect->GetFlags() != pNew->GetFlags()))
         {
             aBaseConfig.SetModified();
             aSwConfig.SetModified();
         }
-        delete pAutoCorrect;
-        pAutoCorrect = pNew;
+        pAutoCorrect.reset( pNew );
     }
 }
 
@@ -131,7 +130,7 @@ void SvxBaseAutoCorrCfg::Load(bool bInit)
     DBG_ASSERT(aValues.getLength() == aNames.getLength(), "GetProperties failed");
     if(aValues.getLength() == aNames.getLength())
     {
-        long nFlags = 0;        // default all off
+        ACFlags nFlags = ACFlags::NONE;        // default all off
         sal_Int32 nTemp = 0;
         for(int nProp = 0; nProp < aNames.getLength(); nProp++)
         {
@@ -140,52 +139,52 @@ void SvxBaseAutoCorrCfg::Load(bool bInit)
                 switch(nProp)
                 {
                     case  0:
-                        if(*static_cast<sal_Bool const *>(pValues[nProp].getValue()))
-                            nFlags |= SaveWordCplSttLst;
+                        if(*o3tl::doAccess<bool>(pValues[nProp]))
+                            nFlags |= ACFlags::SaveWordCplSttLst;
                     break;//"Exceptions/TwoCapitalsAtStart",
                     case  1:
-                        if(*static_cast<sal_Bool const *>(pValues[nProp].getValue()))
-                            nFlags |= SaveWordWrdSttLst;
+                        if(*o3tl::doAccess<bool>(pValues[nProp]))
+                            nFlags |= ACFlags::SaveWordWrdSttLst;
                     break;//"Exceptions/CapitalAtStartSentence",
                     case  2:
-                        if(*static_cast<sal_Bool const *>(pValues[nProp].getValue()))
-                            nFlags |= Autocorrect;
+                        if(*o3tl::doAccess<bool>(pValues[nProp]))
+                            nFlags |= ACFlags::Autocorrect;
                     break;//"UseReplacementTable",
                     case  3:
-                        if(*static_cast<sal_Bool const *>(pValues[nProp].getValue()))
-                            nFlags |= CapitalStartWord;
+                        if(*o3tl::doAccess<bool>(pValues[nProp]))
+                            nFlags |= ACFlags::CapitalStartWord;
                     break;//"TwoCapitalsAtStart",
                     case  4:
-                        if(*static_cast<sal_Bool const *>(pValues[nProp].getValue()))
-                            nFlags |= CapitalStartSentence;
+                        if(*o3tl::doAccess<bool>(pValues[nProp]))
+                            nFlags |= ACFlags::CapitalStartSentence;
                     break;//"CapitalAtStartSentence",
                     case  5:
-                        if(*static_cast<sal_Bool const *>(pValues[nProp].getValue()))
-                            nFlags |= ChgWeightUnderl;
+                        if(*o3tl::doAccess<bool>(pValues[nProp]))
+                            nFlags |= ACFlags::ChgWeightUnderl;
                     break;//"ChangeUnderlineWeight",
                     case  6:
-                        if(*static_cast<sal_Bool const *>(pValues[nProp].getValue()))
-                            nFlags |= SetINetAttr;
+                        if(*o3tl::doAccess<bool>(pValues[nProp]))
+                            nFlags |= ACFlags::SetINetAttr;
                     break;//"SetInetAttribute",
                     case  7:
-                        if(*static_cast<sal_Bool const *>(pValues[nProp].getValue()))
-                            nFlags |= ChgOrdinalNumber;
+                        if(*o3tl::doAccess<bool>(pValues[nProp]))
+                            nFlags |= ACFlags::ChgOrdinalNumber;
                     break;//"ChangeOrdinalNumber",
                     case 8:
-                        if(*static_cast<sal_Bool const *>(pValues[nProp].getValue()))
-                             nFlags |= AddNonBrkSpace;
+                        if(*o3tl::doAccess<bool>(pValues[nProp]))
+                             nFlags |= ACFlags::AddNonBrkSpace;
                     break;//"AddNonBreakingSpace"
                     case  9:
-                        if(*static_cast<sal_Bool const *>(pValues[nProp].getValue()))
-                            nFlags |= ChgToEnEmDash;
+                        if(*o3tl::doAccess<bool>(pValues[nProp]))
+                            nFlags |= ACFlags::ChgToEnEmDash;
                     break;//"ChangeDash",
                     case 10:
-                        if(*static_cast<sal_Bool const *>(pValues[nProp].getValue()))
-                            nFlags |= IgnoreDoubleSpace;
+                        if(*o3tl::doAccess<bool>(pValues[nProp]))
+                            nFlags |= ACFlags::IgnoreDoubleSpace;
                     break;//"RemoveDoubleSpaces",
                     case 11:
-                        if(*static_cast<sal_Bool const *>(pValues[nProp].getValue()))
-                            nFlags |= ChgSglQuotes;
+                        if(*o3tl::doAccess<bool>(pValues[nProp]))
+                            nFlags |= ACFlags::ChgSglQuotes;
                     break;//"ReplaceSingleQuote",
                     case 12:
                         pValues[nProp] >>= nTemp;
@@ -198,8 +197,8 @@ void SvxBaseAutoCorrCfg::Load(bool bInit)
                             sal::static_int_cast< sal_Unicode >( nTemp ) );
                     break;//"SingleQuoteAtEnd",
                     case 14:
-                        if(*static_cast<sal_Bool const *>(pValues[nProp].getValue()))
-                            nFlags |= ChgQuotes;
+                        if(*o3tl::doAccess<bool>(pValues[nProp]))
+                            nFlags |= ACFlags::ChgQuotes;
                     break;//"ReplaceDoubleQuote",
                     case 15:
                         pValues[nProp] >>= nTemp;
@@ -212,21 +211,21 @@ void SvxBaseAutoCorrCfg::Load(bool bInit)
                             sal::static_int_cast< sal_Unicode >( nTemp ) );
                     break;//"DoubleQuoteAtEnd"
                     case 17:
-                        if(*static_cast<sal_Bool const *>(pValues[nProp].getValue()))
-                            nFlags |= CorrectCapsLock;
+                        if(*o3tl::doAccess<bool>(pValues[nProp]))
+                            nFlags |= ACFlags::CorrectCapsLock;
                     break;//"CorrectAccidentalCapsLock"
                 }
             }
         }
-        if( nFlags )
+        if( nFlags != ACFlags::NONE )
             rParent.pAutoCorrect->SetAutoCorrFlag( nFlags );
-        rParent.pAutoCorrect->SetAutoCorrFlag( ( 0xffff & ~nFlags ), false );
+        rParent.pAutoCorrect->SetAutoCorrFlag( ( static_cast<ACFlags>(0x3fff) & ~nFlags ), false );
 
     }
 }
 
 SvxBaseAutoCorrCfg::SvxBaseAutoCorrCfg(SvxAutoCorrCfg& rPar) :
-    utl::ConfigItem(OUString("Office.Common/AutoCorrect")),
+    utl::ConfigItem("Office.Common/AutoCorrect"),
     rParent(rPar)
 {
 }
@@ -237,89 +236,39 @@ SvxBaseAutoCorrCfg::~SvxBaseAutoCorrCfg()
 
 void SvxBaseAutoCorrCfg::ImplCommit()
 {
-    Sequence<OUString> aNames( GetPropertyNames() );
-
-    Sequence<Any> aValues(aNames.getLength());
-    Any* pValues = aValues.getArray();
-
-    const Type& rType = cppu::UnoType<bool>::get();
-    sal_Bool bVal;
-    const long nFlags = rParent.pAutoCorrect->GetFlags();
-    for(int nProp = 0; nProp < aNames.getLength(); nProp++)
-    {
-        switch(nProp)
-        {
-            case  0:
-                bVal = 0 != (nFlags & SaveWordCplSttLst);
-                pValues[nProp].setValue(&bVal, rType);
-            break;//"Exceptions/TwoCapitalsAtStart",
-            case  1:
-                bVal = 0 != (nFlags & SaveWordWrdSttLst);
-                pValues[nProp].setValue(&bVal, rType);
-            break;//"Exceptions/CapitalAtStartSentence",
-            case  2:
-                bVal = 0 != (nFlags & Autocorrect);
-                pValues[nProp].setValue(&bVal, rType);
-            break;//"UseReplacementTable",
-            case  3:
-                bVal = 0 != (nFlags & CapitalStartWord);
-                pValues[nProp].setValue(&bVal, rType);
-            break;//"TwoCapitalsAtStart",
-            case  4:
-                bVal = 0 != (nFlags & CapitalStartSentence);
-                pValues[nProp].setValue(&bVal, rType);
-            break;//"CapitalAtStartSentence",
-            case  5:
-                bVal = 0 != (nFlags & ChgWeightUnderl);
-                pValues[nProp].setValue(&bVal, rType);
-            break;//"ChangeUnderlineWeight",
-            case  6:
-                bVal = 0 != (nFlags & SetINetAttr);
-                pValues[nProp].setValue(&bVal, rType);
-            break;//"SetInetAttribute",
-            case  7:
-                bVal = 0 != (nFlags & ChgOrdinalNumber);
-                pValues[nProp].setValue(&bVal, rType);
-            break;//"ChangeOrdinalNumber",
-            case 8:
-                bVal = 0 != (nFlags & AddNonBrkSpace);
-                pValues[nProp].setValue(&bVal, rType);
-            break;//"AddNonBreakingSpace"
-            case  9:
-                bVal = 0 != (nFlags & ChgToEnEmDash);
-                pValues[nProp].setValue(&bVal, rType);
-            break;//"ChangeDash",
-            case 10:
-                bVal = 0 != (nFlags & IgnoreDoubleSpace);
-                pValues[nProp].setValue(&bVal, rType);
-            break;//"RemoveDoubleSpaces",
-            case 11:
-                bVal = 0 != (nFlags & ChgSglQuotes);
-                pValues[nProp].setValue(&bVal, rType);
-            break;//"ReplaceSingleQuote",
-            case 12:
-                pValues[nProp] <<= (sal_Int32)rParent.pAutoCorrect->GetStartSingleQuote();
-            break;//"SingleQuoteAtStart",
-            case 13:
-                pValues[nProp] <<= (sal_Int32) rParent.pAutoCorrect->GetEndSingleQuote();
-            break;//"SingleQuoteAtEnd",
-            case 14:
-                bVal = 0 != (nFlags & ChgQuotes);
-                pValues[nProp].setValue(&bVal, rType);
-            break;//"ReplaceDoubleQuote",
-            case 15:
-                pValues[nProp] <<= (sal_Int32) rParent.pAutoCorrect->GetStartDoubleQuote();
-            break;//"DoubleQuoteAtStart",
-            case 16:
-                pValues[nProp] <<= (sal_Int32) rParent.pAutoCorrect->GetEndDoubleQuote();
-            break;//"DoubleQuoteAtEnd"
-            case 17:
-                bVal = 0 != (nFlags & CorrectCapsLock);
-                pValues[nProp].setValue(&bVal, rType);
-            break;//"CorrectAccidentalCapsLock"
-        }
-    }
-    PutProperties(aNames, aValues);
+    const ACFlags nFlags = rParent.pAutoCorrect->GetFlags();
+    PutProperties(
+        GetPropertyNames(),
+        {css::uno::Any(bool(nFlags & ACFlags::SaveWordCplSttLst)),
+            // "Exceptions/TwoCapitalsAtStart"
+         css::uno::Any(bool(nFlags & ACFlags::SaveWordWrdSttLst)),
+            // "Exceptions/CapitalAtStartSentence"
+         css::uno::Any(bool(nFlags & ACFlags::Autocorrect)), // "UseReplacementTable"
+         css::uno::Any(bool(nFlags & ACFlags::CapitalStartWord)),
+            // "TwoCapitalsAtStart"
+         css::uno::Any(bool(nFlags & ACFlags::CapitalStartSentence)),
+            // "CapitalAtStartSentence"
+         css::uno::Any(bool(nFlags & ACFlags::ChgWeightUnderl)),
+            // "ChangeUnderlineWeight"
+         css::uno::Any(bool(nFlags & ACFlags::SetINetAttr)), // "SetInetAttribute"
+         css::uno::Any(bool(nFlags & ACFlags::ChgOrdinalNumber)),
+            // "ChangeOrdinalNumber"
+         css::uno::Any(bool(nFlags & ACFlags::AddNonBrkSpace)), // "AddNonBreakingSpace"
+         css::uno::Any(bool(nFlags & ACFlags::ChgToEnEmDash)), // "ChangeDash"
+         css::uno::Any(bool(nFlags & ACFlags::IgnoreDoubleSpace)),
+            // "RemoveDoubleSpaces"
+         css::uno::Any(bool(nFlags & ACFlags::ChgSglQuotes)), // "ReplaceSingleQuote"
+         css::uno::Any(sal_Int32(rParent.pAutoCorrect->GetStartSingleQuote())),
+            // "SingleQuoteAtStart"
+         css::uno::Any(sal_Int32(rParent.pAutoCorrect->GetEndSingleQuote())),
+            // "SingleQuoteAtEnd"
+         css::uno::Any(bool(nFlags & ACFlags::ChgQuotes)), // "ReplaceDoubleQuote"
+         css::uno::Any(sal_Int32(rParent.pAutoCorrect->GetStartDoubleQuote())),
+            // "DoubleQuoteAtStart"
+         css::uno::Any(sal_Int32(rParent.pAutoCorrect->GetEndDoubleQuote())),
+            // "DoubleQuoteAtEnd"
+        css::uno::Any(bool(nFlags & ACFlags::CorrectCapsLock))});
+            // "CorrectAccidentalCapsLock"
 }
 
 void SvxBaseAutoCorrCfg::Notify( const Sequence<OUString>& /* aPropertyNames */)
@@ -404,23 +353,23 @@ void SvxSwAutoCorrCfg::Load(bool bInit)
             {
                 switch(nProp)
                 {
-                    case   0: rParent.bFileRel = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Text/FileLinks",
-                    case   1: rParent.bNetRel = *static_cast<sal_Bool const *>(pValues[nProp].getValue());  break; // "Text/InternetLinks",
-                    case   2: rParent.bAutoTextPreview = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Text/ShowPreview",
-                    case   3: rParent.bAutoTextTip = *static_cast<sal_Bool const *>(pValues[nProp].getValue());  break; // "Text/ShowToolTip",
-                    case   4: rParent.bSearchInAllCategories = *static_cast<sal_Bool const *>(pValues[nProp].getValue());  break; //"Text/SearchInAllCategories"
-                    case   5: rSwFlags.bAutoCorrect = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/Option/UseReplacementTable",
-                    case   6: rSwFlags.bCapitalStartSentence = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/Option/TwoCapitalsAtStart",
-                    case   7: rSwFlags.bCapitalStartWord = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/Option/CapitalAtStartSentence",
-                    case   8: rSwFlags.bChgWeightUnderl = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/Option/ChangeUnderlineWeight",
-                    case   9: rSwFlags.bSetINetAttr = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/Option/SetInetAttribute",
-                    case  10: rSwFlags.bChgOrdinalNumber = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/Option/ChangeOrdinalNumber",
-                    case  11: rSwFlags.bAddNonBrkSpace = *static_cast<sal_Bool const *>(pValues[nProp].getValue( )); break; // "Format/Option/AddNonBreakingSpace",
+                    case   0: rParent.bFileRel = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Text/FileLinks",
+                    case   1: rParent.bNetRel = *o3tl::doAccess<bool>(pValues[nProp]);  break; // "Text/InternetLinks",
+                    case   2: rParent.bAutoTextPreview = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Text/ShowPreview",
+                    case   3: rParent.bAutoTextTip = *o3tl::doAccess<bool>(pValues[nProp]);  break; // "Text/ShowToolTip",
+                    case   4: rParent.bSearchInAllCategories = *o3tl::doAccess<bool>(pValues[nProp]);  break; //"Text/SearchInAllCategories"
+                    case   5: rSwFlags.bAutoCorrect = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/Option/UseReplacementTable",
+                    case   6: rSwFlags.bCapitalStartSentence = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/Option/TwoCapitalsAtStart",
+                    case   7: rSwFlags.bCapitalStartWord = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/Option/CapitalAtStartSentence",
+                    case   8: rSwFlags.bChgWeightUnderl = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/Option/ChangeUnderlineWeight",
+                    case   9: rSwFlags.bSetINetAttr = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/Option/SetInetAttribute",
+                    case  10: rSwFlags.bChgOrdinalNumber = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/Option/ChangeOrdinalNumber",
+                    case  11: rSwFlags.bAddNonBrkSpace = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/Option/AddNonBreakingSpace",
 // it doesn't exist here - the common flags are used for that -> LM
-//                  case  12: rSwFlags.bChgToEnEmDash = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/Option/ChangeDash",
-                    case  13: rSwFlags.bDelEmptyNode = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/Option/DelEmptyParagraphs",
-                    case  14: rSwFlags.bChgUserColl = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/Option/ReplaceUserStyle",
-                    case  15: rSwFlags.bChgEnumNum = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/Option/ChangeToBullets/Enable",
+//                  case  12: rSwFlags.bChgToEnEmDash = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/Option/ChangeDash",
+                    case  13: rSwFlags.bDelEmptyNode = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/Option/DelEmptyParagraphs",
+                    case  14: rSwFlags.bChgUserColl = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/Option/ReplaceUserStyle",
+                    case  15: rSwFlags.bChgEnumNum = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/Option/ChangeToBullets/Enable",
                     case  16:
                     {
                         sal_Int32 nVal = 0; pValues[nProp] >>= nVal;
@@ -452,7 +401,7 @@ void SvxSwAutoCorrCfg::Load(bool bInit)
                         rSwFlags.aBulletFont.SetPitch(FontPitch(nVal));
                     }
                     break; // "Format/Option/ChangeToBullets/SpecialCharacter/FontPitch",
-                    case  21: rSwFlags.bRightMargin = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/Option/CombineParagraphs",
+                    case  21: rSwFlags.bRightMargin = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/Option/CombineParagraphs",
                     case  22:
                     {
                         sal_Int32 nVal = 0; pValues[nProp] >>= nVal;
@@ -460,17 +409,17 @@ void SvxSwAutoCorrCfg::Load(bool bInit)
                             sal::static_int_cast< sal_uInt8 >(nVal);
                     }
                     break; // "Format/Option/CombineValue",
-                    case  23: rSwFlags.bAFormatDelSpacesAtSttEnd =  *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/Option/DelSpacesAtStartEnd",
-                    case  24: rSwFlags.bAFormatDelSpacesBetweenLines = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/Option/DelSpacesBetween",
-                    case  25: rParent.bAutoFmtByInput = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/ByInput/Enable",
-                    case  26: rSwFlags.bChgToEnEmDash = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/ByInput/ChangeDash",
-                    case  27: rSwFlags.bSetNumRule = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/ByInput/ApplyNumbering/Enable",
-                    case  28: rSwFlags.bSetBorder = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/ByInput/ChangeToBorders",
-                    case  29: rSwFlags.bCreateTable = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/ByInput/ChangeToTable",
-                    case  30: rSwFlags.bReplaceStyles =  *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/ByInput/ReplaceStyle",
-                    case  31: rSwFlags.bAFormatByInpDelSpacesAtSttEnd =  *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/ByInput/DelSpacesAtStartEnd",
-                    case  32: rSwFlags.bAFormatByInpDelSpacesBetweenLines = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Format/ByInput/DelSpacesBetween",
-                    case  33: rSwFlags.bAutoCompleteWords = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Completion/Enable",
+                    case  23: rSwFlags.bAFormatDelSpacesAtSttEnd =  *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/Option/DelSpacesAtStartEnd",
+                    case  24: rSwFlags.bAFormatDelSpacesBetweenLines = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/Option/DelSpacesBetween",
+                    case  25: rParent.bAutoFmtByInput = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/ByInput/Enable",
+                    case  26: rSwFlags.bChgToEnEmDash = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/ByInput/ChangeDash",
+                    case  27: rSwFlags.bSetNumRule = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/ByInput/ApplyNumbering/Enable",
+                    case  28: rSwFlags.bSetBorder = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/ByInput/ChangeToBorders",
+                    case  29: rSwFlags.bCreateTable = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/ByInput/ChangeToTable",
+                    case  30: rSwFlags.bReplaceStyles =  *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/ByInput/ReplaceStyle",
+                    case  31: rSwFlags.bAFormatByInpDelSpacesAtSttEnd =  *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/ByInput/DelSpacesAtStartEnd",
+                    case  32: rSwFlags.bAFormatByInpDelSpacesBetweenLines = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Format/ByInput/DelSpacesBetween",
+                    case  33: rSwFlags.bAutoCompleteWords = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Completion/Enable",
                     case  34:
                     {
                         sal_Int32 nVal = 0; pValues[nProp] >>= nVal;
@@ -485,10 +434,10 @@ void SvxSwAutoCorrCfg::Load(bool bInit)
                             sal::static_int_cast< sal_uInt16 >(nVal);
                     }
                     break; // "Completion/MaxListLen",
-                    case  36: rSwFlags.bAutoCmpltCollectWords = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Completion/CollectWords",
-                    case  37: rSwFlags.bAutoCmpltEndless = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Completion/EndlessList",
-                    case  38: rSwFlags.bAutoCmpltAppendBlanc = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Completion/AppendBlank",
-                    case  39: rSwFlags.bAutoCmpltShowAsTip = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break; // "Completion/ShowAsTip",
+                    case  36: rSwFlags.bAutoCmpltCollectWords = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Completion/CollectWords",
+                    case  37: rSwFlags.bAutoCmpltEndless = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Completion/EndlessList",
+                    case  38: rSwFlags.bAutoCmpltAppendBlanc = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Completion/AppendBlank",
+                    case  39: rSwFlags.bAutoCmpltShowAsTip = *o3tl::doAccess<bool>(pValues[nProp]); break; // "Completion/ShowAsTip",
                     case  40:
                     {
                         sal_Int32 nVal = 0; pValues[nProp] >>= nVal;
@@ -496,7 +445,7 @@ void SvxSwAutoCorrCfg::Load(bool bInit)
                             sal::static_int_cast< sal_uInt16 >(nVal);
                     }
                     break; // "Completion/AcceptKey"
-                    case 41 :rSwFlags.bAutoCmpltKeepList = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;//"Completion/KeepList"
+                    case 41 :rSwFlags.bAutoCmpltKeepList = *o3tl::doAccess<bool>(pValues[nProp]); break;//"Completion/KeepList"
                     case 42 :
                     {
                         sal_Int32 nVal = 0; pValues[nProp] >>= nVal;
@@ -535,7 +484,7 @@ void SvxSwAutoCorrCfg::Load(bool bInit)
 }
 
 SvxSwAutoCorrCfg::SvxSwAutoCorrCfg(SvxAutoCorrCfg& rPar) :
-    utl::ConfigItem(OUString("Office.Writer/AutoFunction")),
+    utl::ConfigItem("Office.Writer/AutoFunction"),
     rParent(rPar)
 {
 }
@@ -546,99 +495,92 @@ SvxSwAutoCorrCfg::~SvxSwAutoCorrCfg()
 
 void SvxSwAutoCorrCfg::ImplCommit()
 {
-    Sequence<OUString> aNames = GetPropertyNames();
-
-    Sequence<Any> aValues(aNames.getLength());
-    Any* pValues = aValues.getArray();
-
-    const Type& rType = cppu::UnoType<bool>::get();
-    sal_Bool bVal;
     SvxSwAutoFormatFlags& rSwFlags = rParent.pAutoCorrect->GetSwFlags();
-    for(int nProp = 0; nProp < aNames.getLength(); nProp++)
-    {
-        switch(nProp)
-        {
-            case   0: pValues[nProp].setValue(&rParent.bFileRel, rType); break; // "Text/FileLinks",
-            case   1: pValues[nProp].setValue(&rParent.bNetRel, rType);   break; // "Text/InternetLinks",
-            case   2: pValues[nProp].setValue(&rParent.bAutoTextPreview, rType); break; // "Text/ShowPreview",
-            case   3: pValues[nProp].setValue(&rParent.bAutoTextTip, rType); break; // "Text/ShowToolTip",
-            case   4: pValues[nProp].setValue(&rParent.bSearchInAllCategories, rType );break; //"Text/SearchInAllCategories"
-            case   5: bVal = rSwFlags.bAutoCorrect; pValues[nProp].setValue(&bVal, rType); break; // "Format/Option/UseReplacementTable",
-            case   6: bVal = rSwFlags.bCapitalStartSentence; pValues[nProp].setValue(&bVal, rType); break; // "Format/Option/TwoCapitalsAtStart",
-            case   7: bVal = rSwFlags.bCapitalStartWord; pValues[nProp].setValue(&bVal, rType); break; // "Format/Option/CapitalAtStartSentence",
-            case   8: bVal = rSwFlags.bChgWeightUnderl; pValues[nProp].setValue(&bVal, rType); break; // "Format/Option/ChangeUnderlineWeight",
-            case   9: bVal = rSwFlags.bSetINetAttr; pValues[nProp].setValue(&bVal, rType); break; // "Format/Option/SetInetAttribute",
-            case  10: bVal = rSwFlags.bChgOrdinalNumber; pValues[nProp].setValue(&bVal, rType); break; // "Format/Option/ChangeOrdinalNumber",
-            case  11: bVal = rSwFlags.bAddNonBrkSpace;  pValues[nProp].setValue(&bVal, rType); break; // "Format/Option/AddNonBreakingSpace",
-// it doesn't exist here - the common flags are used for that -> LM
-            case  12:
-                bVal = sal_True;  pValues[nProp].setValue(&bVal, rType);
-            break; // "Format/Option/ChangeDash",
-            case  13: bVal = rSwFlags.bDelEmptyNode; pValues[nProp].setValue(&bVal, rType); break; // "Format/Option/DelEmptyParagraphs",
-            case  14: bVal = rSwFlags.bChgUserColl; pValues[nProp].setValue(&bVal, rType); break; // "Format/Option/ReplaceUserStyle",
-            case  15: bVal = rSwFlags.bChgEnumNum; pValues[nProp].setValue(&bVal, rType); break; // "Format/Option/ChangeToBullets/Enable",
-            case  16:
-                pValues[nProp] <<= (sal_Int32)rSwFlags.cBullet;
-            break; // "Format/Option/ChangeToBullets/SpecialCharacter/Char",
-            case  17:
-                pValues[nProp] <<= OUString(rSwFlags.aBulletFont.GetFamilyName());
-            break; // "Format/Option/ChangeToBullets/SpecialCharacter/Font",
-            case  18:
-                pValues[nProp] <<= (sal_Int32)rSwFlags.aBulletFont.GetFamilyType();
-            break; // "Format/Option/ChangeToBullets/SpecialCharacter/FontFamily",
-            case  19:
-                pValues[nProp] <<= (sal_Int32)rSwFlags.aBulletFont.GetCharSet();
-            break; // "Format/Option/ChangeToBullets/SpecialCharacter/FontCharset",
-            case  20:
-                pValues[nProp] <<= (sal_Int32)rSwFlags.aBulletFont.GetPitch();
-            break; // "Format/Option/ChangeToBullets/SpecialCharacter/FontPitch",
-            case  21: bVal = rSwFlags.bRightMargin; pValues[nProp].setValue(&bVal, rType); break; // "Format/Option/CombineParagraphs",
-            case  22:
-                pValues[nProp] <<= (sal_Int32)rSwFlags.nRightMargin;
-            break; // "Format/Option/CombineValue",
-            case  23: bVal = rSwFlags.bAFormatDelSpacesAtSttEnd; pValues[nProp].setValue(&bVal, rType); break; // "Format/Option/DelSpacesAtStartEnd",
-            case  24: bVal = rSwFlags.bAFormatDelSpacesBetweenLines; pValues[nProp].setValue(&bVal, rType); break; // "Format/Option/DelSpacesBetween",
-            case  25: bVal = rParent.bAutoFmtByInput; pValues[nProp].setValue(&bVal, rType); break; // "Format/ByInput/Enable",
-            case  26: bVal = rSwFlags.bChgToEnEmDash; pValues[nProp].setValue(&bVal, rType); break; // "Format/ByInput/ChangeDash",
-            case  27: bVal = rSwFlags.bSetNumRule; pValues[nProp].setValue(&bVal, rType); break; // "Format/ByInput/ApplyNumbering/Enable",
-            case  28: bVal = rSwFlags.bSetBorder; pValues[nProp].setValue(&bVal, rType); break; // "Format/ByInput/ChangeToBorders",
-            case  29: bVal = rSwFlags.bCreateTable; pValues[nProp].setValue(&bVal, rType); break; // "Format/ByInput/ChangeToTable",
-            case  30: bVal = rSwFlags.bReplaceStyles; pValues[nProp].setValue(&bVal, rType); break; // "Format/ByInput/ReplaceStyle",
-            case  31: bVal = rSwFlags.bAFormatByInpDelSpacesAtSttEnd; pValues[nProp].setValue(&bVal, rType); break; // "Format/ByInput/DelSpacesAtStartEnd",
-            case  32: bVal = rSwFlags.bAFormatByInpDelSpacesBetweenLines; pValues[nProp].setValue(&bVal, rType); break; // "Format/ByInput/DelSpacesBetween",
-            case  33: bVal = rSwFlags.bAutoCompleteWords; pValues[nProp].setValue(&bVal, rType); break; // "Completion/Enable",
-            case  34:
-                pValues[nProp] <<= (sal_Int32)rSwFlags.nAutoCmpltWordLen;
-            break; // "Completion/MinWordLen",
-            case  35:
-                pValues[nProp] <<= (sal_Int32)rSwFlags.nAutoCmpltListLen;
-            break; // "Completion/MaxListLen",
-            case  36: bVal = rSwFlags.bAutoCmpltCollectWords; pValues[nProp].setValue(&bVal, rType); break; // "Completion/CollectWords",
-            case  37: bVal = rSwFlags.bAutoCmpltEndless; pValues[nProp].setValue(&bVal, rType); break; // "Completion/EndlessList",
-            case  38: bVal = rSwFlags.bAutoCmpltAppendBlanc; pValues[nProp].setValue(&bVal, rType); break; // "Completion/AppendBlank",
-            case  39: bVal = rSwFlags.bAutoCmpltShowAsTip; pValues[nProp].setValue(&bVal, rType); break; // "Completion/ShowAsTip",
-            case  40:
-                pValues[nProp] <<= (sal_Int32)rSwFlags.nAutoCmpltExpandKey;
-            break; // "Completion/AcceptKey"
-            case 41 :bVal = rSwFlags.bAutoCmpltKeepList; pValues[nProp].setValue(&bVal, rType); break;// "Completion/KeepList"
-            case 42 :
-                pValues[nProp] <<= (sal_Int32)rSwFlags.cByInputBullet;
-            break;// "Format/ByInput/ApplyNumbering/SpecialCharacter/Char",
-            case 43 :
-                pValues[nProp] <<= OUString(rSwFlags.aByInputBulletFont.GetFamilyName());
-            break;// "Format/ByInput/ApplyNumbering/SpecialCharacter/Font",
-            case 44 :
-                pValues[nProp] <<= (sal_Int32)rSwFlags.aByInputBulletFont.GetFamilyType();
-            break;// "Format/ByInput/ApplyNumbering/SpecialCharacter/FontFamily",
-            case 45 :
-                pValues[nProp] <<= (sal_Int32)rSwFlags.aByInputBulletFont.GetCharSet();
-            break;// "Format/ByInput/ApplyNumbering/SpecialCharacter/FontCharset",
-            case 46 :
-                pValues[nProp] <<= (sal_Int32)rSwFlags.aByInputBulletFont.GetPitch();
-            break;// "Format/ByInput/ApplyNumbering/SpecialCharacter/FontPitch",
-        }
-    }
-    PutProperties(aNames, aValues);
+    PutProperties(
+        GetPropertyNames(),
+        {css::uno::Any(rParent.bFileRel), // "Text/FileLinks"
+         css::uno::Any(rParent.bNetRel), // "Text/InternetLinks"
+         css::uno::Any(rParent.bAutoTextPreview), // "Text/ShowPreview"
+         css::uno::Any(rParent.bAutoTextTip), // "Text/ShowToolTip"
+         css::uno::Any(rParent.bSearchInAllCategories),
+            // "Text/SearchInAllCategories"
+         css::uno::Any(rSwFlags.bAutoCorrect),
+            // "Format/Option/UseReplacementTable"
+         css::uno::Any(rSwFlags.bCapitalStartSentence),
+            // "Format/Option/TwoCapitalsAtStart"
+         css::uno::Any(rSwFlags.bCapitalStartWord),
+            // "Format/Option/CapitalAtStartSentence"
+         css::uno::Any(rSwFlags.bChgWeightUnderl),
+            // "Format/Option/ChangeUnderlineWeight"
+         css::uno::Any(rSwFlags.bSetINetAttr),
+            // "Format/Option/SetInetAttribute"
+         css::uno::Any(rSwFlags.bChgOrdinalNumber),
+            // "Format/Option/ChangeOrdinalNumber"
+         css::uno::Any(rSwFlags.bAddNonBrkSpace),
+            // "Format/Option/AddNonBreakingSpace"
+         css::uno::Any(true),
+            // "Format/Option/ChangeDash"; it doesn't exist here - the common
+            // flags are used for that -> LM
+         css::uno::Any(rSwFlags.bDelEmptyNode),
+            // "Format/Option/DelEmptyParagraphs"
+         css::uno::Any(rSwFlags.bChgUserColl),
+            // "Format/Option/ReplaceUserStyle"
+         css::uno::Any(rSwFlags.bChgEnumNum),
+            // "Format/Option/ChangeToBullets/Enable"
+         css::uno::Any(sal_Int32(rSwFlags.cBullet)),
+            // "Format/Option/ChangeToBullets/SpecialCharacter/Char"
+         css::uno::Any(rSwFlags.aBulletFont.GetFamilyName()),
+            // "Format/Option/ChangeToBullets/SpecialCharacter/Font"
+         css::uno::Any(sal_Int32(rSwFlags.aBulletFont.GetFamilyType())),
+            // "Format/Option/ChangeToBullets/SpecialCharacter/FontFamily"
+         css::uno::Any(sal_Int32(rSwFlags.aBulletFont.GetCharSet())),
+            // "Format/Option/ChangeToBullets/SpecialCharacter/FontCharset"
+         css::uno::Any(sal_Int32(rSwFlags.aBulletFont.GetPitch())),
+            // "Format/Option/ChangeToBullets/SpecialCharacter/FontPitch"
+         css::uno::Any(rSwFlags.bRightMargin),
+            // "Format/Option/CombineParagraphs"
+         css::uno::Any(sal_Int32(rSwFlags.nRightMargin)),
+            // "Format/Option/CombineValue"
+         css::uno::Any(rSwFlags.bAFormatDelSpacesAtSttEnd),
+            // "Format/Option/DelSpacesAtStartEnd"
+         css::uno::Any(rSwFlags.bAFormatDelSpacesBetweenLines),
+            // "Format/Option/DelSpacesBetween"
+         css::uno::Any(rParent.bAutoFmtByInput), // "Format/ByInput/Enable"
+         css::uno::Any(rSwFlags.bChgToEnEmDash), // "Format/ByInput/ChangeDash"
+         css::uno::Any(rSwFlags.bSetNumRule),
+            // "Format/ByInput/ApplyNumbering/Enable"
+         css::uno::Any(rSwFlags.bSetBorder), // "Format/ByInput/ChangeToBorders"
+         css::uno::Any(rSwFlags.bCreateTable), // "Format/ByInput/ChangeToTable"
+         css::uno::Any(rSwFlags.bReplaceStyles),
+            // "Format/ByInput/ReplaceStyle"
+         css::uno::Any(rSwFlags.bAFormatByInpDelSpacesAtSttEnd),
+            // "Format/ByInput/DelSpacesAtStartEnd"
+         css::uno::Any(rSwFlags.bAFormatByInpDelSpacesBetweenLines),
+            // "Format/ByInput/DelSpacesBetween"
+         css::uno::Any(rSwFlags.bAutoCompleteWords), // "Completion/Enable"
+         css::uno::Any(sal_Int32(rSwFlags.nAutoCmpltWordLen)),
+            // "Completion/MinWordLen"
+         css::uno::Any(sal_Int32(rSwFlags.nAutoCmpltListLen)),
+            // "Completion/MaxListLen"
+         css::uno::Any(rSwFlags.bAutoCmpltCollectWords),
+            // "Completion/CollectWords"
+         css::uno::Any(rSwFlags.bAutoCmpltEndless), // "Completion/EndlessList"
+         css::uno::Any(rSwFlags.bAutoCmpltAppendBlanc),
+            // "Completion/AppendBlank"
+         css::uno::Any(rSwFlags.bAutoCmpltShowAsTip), // "Completion/ShowAsTip"
+         css::uno::Any(sal_Int32(rSwFlags.nAutoCmpltExpandKey)),
+            // "Completion/AcceptKey"
+         css::uno::Any(rSwFlags.bAutoCmpltKeepList), // "Completion/KeepList"
+         css::uno::Any(sal_Int32(rSwFlags.cByInputBullet)),
+            // "Format/ByInput/ApplyNumbering/SpecialCharacter/Char"
+         css::uno::Any(rSwFlags.aByInputBulletFont.GetFamilyName()),
+            // "Format/ByInput/ApplyNumbering/SpecialCharacter/Font"
+         css::uno::Any(sal_Int32(rSwFlags.aByInputBulletFont.GetFamilyType())),
+            // "Format/ByInput/ApplyNumbering/SpecialCharacter/FontFamily"
+         css::uno::Any(sal_Int32(rSwFlags.aByInputBulletFont.GetCharSet())),
+            // "Format/ByInput/ApplyNumbering/SpecialCharacter/FontCharset"
+         css::uno::Any(sal_Int32(rSwFlags.aByInputBulletFont.GetPitch()))});
+            // "Format/ByInput/ApplyNumbering/SpecialCharacter/FontPitch"
 }
 
 void SvxSwAutoCorrCfg::Notify( const Sequence<OUString>& /* aPropertyNames */ )

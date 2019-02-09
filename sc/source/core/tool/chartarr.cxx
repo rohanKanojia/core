@@ -17,22 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <svl/intitem.hxx>
 #include <svl/zforlist.hxx>
 #include <float.h>
 
-#include "chartarr.hxx"
-#include "cellvalue.hxx"
-#include "document.hxx"
-#include "rechead.hxx"
-#include "globstr.hrc"
-#include "formulacell.hxx"
-#include "docoptio.hxx"
+#include <chartarr.hxx>
+#include <cellvalue.hxx>
+#include <document.hxx>
+#include <rechead.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <formulacell.hxx>
+#include <docoptio.hxx>
 
-#include <comphelper/stl_types.hxx>
-#include <o3tl/make_unique.hxx>
+#include <formula/errorcodes.hxx>
 
+#include <memory>
 #include <vector>
 
 using ::std::vector;
@@ -41,48 +42,24 @@ ScMemChart::ScMemChart(SCCOL nCols, SCROW nRows)
 {
     nRowCnt = nRows;
     nColCnt = nCols;
-    pData   = new double[nColCnt * nRowCnt];
+    pData.reset( new double[nColCnt * nRowCnt] );
 
-    double *pFill = pData;
+    memset( pData.get(), 0.0, nColCnt * nRowCnt );
 
-    for (SCCOL i = 0; i < nColCnt; i++)
-        for (SCROW j = 0; j < nRowCnt; j++)
-            *(pFill ++) = 0.0;
-
-    pColText = new OUString[nColCnt];
-    pRowText = new OUString[nRowCnt];
+    pColText.reset( new OUString[nColCnt] );
+    pRowText.reset( new OUString[nRowCnt] );
 }
 
 ScMemChart::~ScMemChart()
 {
-    delete[] pRowText;
-    delete[] pColText;
-    delete[] pData;
-}
-
-ScChartArray::ScChartArray( ScDocument* pDoc, SCTAB nTab,
-                    SCCOL nStartColP, SCROW nStartRowP, SCCOL nEndColP, SCROW nEndRowP,
-                    const OUString& rChartName ) :
-        aName( rChartName ),
-        pDocument( pDoc ),
-        aPositioner(pDoc, nTab, nStartColP, nStartRowP, nEndColP, nEndRowP)
-{
 }
 
 ScChartArray::ScChartArray(
-    ScDocument* pDoc, const ScRangeListRef& rRangeList, const OUString& rChartName ) :
-    aName( rChartName ),
+    ScDocument* pDoc, const ScRangeListRef& rRangeList ) :
     pDocument( pDoc ),
     aPositioner(pDoc, rRangeList) {}
 
-ScChartArray::ScChartArray( const ScChartArray& rArr ) :
-    aName(rArr.aName),
-    pDocument(rArr.pDocument),
-    aPositioner(rArr.aPositioner) {}
-
-ScChartArray::~ScChartArray() {}
-
-ScMemChart* ScChartArray::CreateMemChart()
+std::unique_ptr<ScMemChart> ScChartArray::CreateMemChart()
 {
     ScRangeListRef aRangeListRef(GetRangeList());
     size_t nCount = aRangeListRef->size();
@@ -90,8 +67,8 @@ ScMemChart* ScChartArray::CreateMemChart()
         return CreateMemChartMulti();
     else if ( nCount == 1 )
     {
-        ScRange* pR = aRangeListRef->front();
-        if ( pR->aStart.Tab() != pR->aEnd.Tab() )
+        const ScRange & rR = aRangeListRef->front();
+        if ( rR.aStart.Tab() != rR.aEnd.Tab() )
             return CreateMemChartMulti();
         else
             return CreateMemChartSingle();
@@ -122,7 +99,7 @@ double getCellValue( ScDocument& rDoc, const ScAddress& rPos, double fDefault, b
         case CELLTYPE_FORMULA:
         {
             ScFormulaCell* pFCell = aCell.mpFormula;
-            if (pFCell && !pFCell->GetErrCode() && pFCell->IsValue())
+            if (pFCell && pFCell->GetErrCode() == FormulaError::NONE && pFCell->IsValue())
                 fRet = pFCell->GetValue();
         }
         break;
@@ -134,7 +111,7 @@ double getCellValue( ScDocument& rDoc, const ScAddress& rPos, double fDefault, b
 
 }
 
-ScMemChart* ScChartArray::CreateMemChartSingle()
+std::unique_ptr<ScMemChart> ScChartArray::CreateMemChartSingle()
 {
     SCSIZE nCol;
     SCSIZE nRow;
@@ -151,7 +128,7 @@ ScMemChart* ScChartArray::CreateMemChartSingle()
     SCROW nRow2;
     SCTAB nTab2;
     ScRangeListRef aRangeListRef(GetRangeList());
-    aRangeListRef->front()->GetVars( nCol1, nRow1, nTab1, nCol2, nRow2, nTab2 );
+    aRangeListRef->front().GetVars( nCol1, nRow1, nTab1, nCol2, nRow2, nTab2 );
 
     SCCOL nStrCol = nCol1; // remember for labeling
     SCROW nStrRow = nRow1;
@@ -229,7 +206,7 @@ ScMemChart* ScChartArray::CreateMemChartSingle()
     }
 
     //  Data
-    ScMemChart* pMemChart = new ScMemChart( nColCount, nRowCount );
+    std::unique_ptr<ScMemChart> pMemChart(new ScMemChart( nColCount, nRowCount ));
 
     if ( bValidData )
     {
@@ -263,7 +240,7 @@ ScMemChart* ScChartArray::CreateMemChartSingle()
         if (aString.isEmpty())
         {
             OUStringBuffer aBuf;
-            aBuf.append(ScGlobal::GetRscString(STR_COLUMN));
+            aBuf.append(ScResId(STR_COLUMN));
             aBuf.append(' ');
 
             ScAddress aPos( aCols[ nCol ], 0, 0 );
@@ -281,13 +258,12 @@ ScMemChart* ScChartArray::CreateMemChartSingle()
         OUString aString;
         if (HasRowHeaders())
         {
-            ScAddress aAddr( nStrCol, aRows[nRow], nTab1 );
             aString = pDocument->GetString(nStrCol, aRows[nRow], nTab1);
         }
         if (aString.isEmpty())
         {
             OUStringBuffer aBuf;
-            aBuf.append(ScGlobal::GetRscString(STR_ROW));
+            aBuf.append(ScResId(STR_ROW));
             aBuf.append(' ');
             aBuf.append(static_cast<sal_Int32>(aRows[nRow]+1));
             aString = aBuf.makeStringAndClear();
@@ -298,7 +274,7 @@ ScMemChart* ScChartArray::CreateMemChartSingle()
     return pMemChart;
 }
 
-ScMemChart* ScChartArray::CreateMemChartMulti()
+std::unique_ptr<ScMemChart> ScChartArray::CreateMemChartMulti()
 {
     SCSIZE nColCount = GetPositionMap()->GetColCount();
     SCSIZE nRowCount = GetPositionMap()->GetRowCount();
@@ -323,7 +299,7 @@ ScMemChart* ScChartArray::CreateMemChartMulti()
     }
 
     //  Data
-    ScMemChart* pMemChart = new ScMemChart( nColCount, nRowCount );
+    std::unique_ptr<ScMemChart> pMemChart(new ScMemChart( nColCount, nRowCount ));
 
     SCSIZE nCol = 0;
     SCSIZE nRow = 0;
@@ -373,7 +349,7 @@ ScMemChart* ScChartArray::CreateMemChartMulti()
 
         if (aString.isEmpty())
         {
-            OUStringBuffer aBuf(ScGlobal::GetRscString(STR_COLUMN));
+            OUStringBuffer aBuf(ScResId(STR_COLUMN));
             aBuf.append(' ');
             if ( pPos )
                 nPosCol = pPos->Col() + 1;
@@ -398,7 +374,7 @@ ScMemChart* ScChartArray::CreateMemChartMulti()
 
         if (aString.isEmpty())
         {
-            OUStringBuffer aBuf(ScGlobal::GetRscString(STR_ROW));
+            OUStringBuffer aBuf(ScResId(STR_ROW));
             aBuf.append(' ');
             if ( pPos )
                 nPosRow = pPos->Row() + 1;
@@ -411,49 +387,6 @@ ScMemChart* ScChartArray::CreateMemChartMulti()
     }
 
     return pMemChart;
-}
-
-ScChartCollection::ScChartCollection() {}
-ScChartCollection::ScChartCollection(const ScChartCollection& r)
-{
-    for (auto const& it : r.m_Data)
-    {
-        m_Data.push_back(o3tl::make_unique<ScChartArray>(*it));
-    }
-}
-
-void ScChartCollection::push_back(ScChartArray* p)
-{
-    m_Data.push_back(std::unique_ptr<ScChartArray>(p));
-}
-
-void ScChartCollection::clear()
-{
-    m_Data.clear();
-}
-
-size_t ScChartCollection::size() const
-{
-    return m_Data.size();
-}
-
-bool ScChartCollection::empty() const
-{
-    return m_Data.empty();
-}
-
-ScChartArray* ScChartCollection::operator[](size_t nIndex)
-{
-    if (m_Data.size() <= nIndex)
-        return nullptr;
-    return m_Data[nIndex].get();
-}
-
-const ScChartArray* ScChartCollection::operator[](size_t nIndex) const
-{
-    if (m_Data.size() <= nIndex)
-        return nullptr;
-    return m_Data[nIndex].get();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

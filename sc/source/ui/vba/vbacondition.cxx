@@ -22,6 +22,8 @@
 #include <ooo/vba/excel/XFormatCondition.hpp>
 #include <com/sun/star/table/XCellRange.hpp>
 #include <com/sun/star/sheet/XCellRangeAddressable.hpp>
+#include <com/sun/star/sheet/XSheetCondition.hpp>
+#include <basic/sberrors.hxx>
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
@@ -36,11 +38,11 @@ ScVbaCondition< Ifc... >::ScVbaCondition(  const uno::Reference< XHelperInterfac
 
 template< typename... Ifc >
 sheet::ConditionOperator
-ScVbaCondition< Ifc... >::retrieveAPIOperator( const uno::Any& _aOperator) throw ( script::BasicErrorException )
+ScVbaCondition< Ifc... >::retrieveAPIOperator( const uno::Any& _aOperator)
 {
     sheet::ConditionOperator aRetAPIOperator = sheet::ConditionOperator_NONE;
     sal_Int32 nOperator = 0;
-    if ( (_aOperator >>= nOperator ) )
+    if ( _aOperator >>= nOperator )
     {
         switch(nOperator)
         {
@@ -78,35 +80,21 @@ ScVbaCondition< Ifc... >::retrieveAPIOperator( const uno::Any& _aOperator) throw
 
 template< typename... Ifc >
 OUString
-ScVbaCondition< Ifc... >::Formula1( ) throw ( script::BasicErrorException, uno::RuntimeException )
+ScVbaCondition< Ifc... >::Formula1( )
 {
      return mxSheetCondition->getFormula1();
 }
 
 template< typename... Ifc >
 OUString
-ScVbaCondition< Ifc... >::Formula2( ) throw ( script::BasicErrorException, uno::RuntimeException )
+ScVbaCondition< Ifc... >::Formula2( )
 {
      return mxSheetCondition->getFormula2();
 }
 
 template< typename... Ifc >
-void
-ScVbaCondition< Ifc... >::setFormula1( const uno::Any& _aFormula1) throw ( script::BasicErrorException )
-{
-    OUString sFormula;
-    if ( (_aFormula1 >>= sFormula ))
-    {
-        mxSheetCondition->setFormula1( sFormula );
-        table::CellRangeAddress aCellRangeAddress = mxAddressable->getRangeAddress();
-        table::CellAddress aCellAddress( aCellRangeAddress.Sheet, aCellRangeAddress.StartColumn,  aCellRangeAddress.StartRow );
-        mxSheetCondition->setSourcePosition(aCellAddress);
-    }
-}
-
-template< typename... Ifc >
 sal_Int32
-ScVbaCondition< Ifc... >::Operator(bool _bIncludeFormulaValue) throw ( script::BasicErrorException )
+ScVbaCondition< Ifc... >::Operator(bool _bIncludeFormulaValue)
 {
     sal_Int32 retvalue = -1;
     sheet::ConditionOperator aConditionalOperator =  mxSheetCondition->getOperator();
@@ -144,6 +132,7 @@ ScVbaCondition< Ifc... >::Operator(bool _bIncludeFormulaValue) throw ( script::B
                 retvalue = ISFORMULA;
                 break;
             }
+            [[fallthrough]]; //TODO ???
         case sheet::ConditionOperator_NONE:
         default:
             DebugHelper::basicexception(ERRCODE_BASIC_METHOD_FAILED, "Operator not supported");

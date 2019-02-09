@@ -122,14 +122,13 @@ UpdateInfoMap getOnlineUpdateInfos(
     css::uno::Reference< css::deployment::XExtensionManager> const & xExtMgr,
     css::uno::Reference< css::deployment::XUpdateInformationProvider > const & updateInformation,
     std::vector< css::uno::Reference< css::deployment::XPackage > > const * extensionList,
-    ::std::vector< ::std::pair< css::uno::Reference<
+    std::vector< std::pair< css::uno::Reference<
     css::deployment::XPackage>, css::uno::Any> > & out_errors);
 
-/* retunrs the highest version from the provided arguments.
+/* returns the highest version from the provided arguments.
 */
 DESKTOP_DEPLOYMENTMISC_DLLPUBLIC
 OUString getHighestVersion(
-    OUString const & userVersion,
     OUString const & sharedVersion,
     OUString const & bundledVersion,
     OUString const & onlineVersion);

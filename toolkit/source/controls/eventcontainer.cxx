@@ -17,13 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/mutex.hxx>
 #include <cppuhelper/queryinterface.hxx>
 #include <cppuhelper/weak.hxx>
 #include <cppuhelper/factory.hxx>
 #include <cppuhelper/interfacecontainer.hxx>
 
-#include "toolkit/controls/eventcontainer.hxx"
+#include <toolkit/controls/eventcontainer.hxx>
 #include <com/sun/star/script/ScriptEventDescriptor.hpp>
 
 
@@ -33,7 +32,6 @@ using namespace com::sun::star::container;
 using namespace com::sun::star::registry;
 using namespace com::sun::star::script;
 using namespace cppu;
-using namespace osl;
 using namespace std;
 
 
@@ -41,69 +39,62 @@ namespace toolkit
 {
 
 // Methods XElementAccess
-Type NameContainer_Impl::getElementType()
-    throw(RuntimeException, std::exception)
+Type ScriptEventContainer::getElementType()
 {
     return mType;
 }
 
-sal_Bool NameContainer_Impl::hasElements()
-    throw(RuntimeException, std::exception)
+sal_Bool ScriptEventContainer::hasElements()
 {
-    bool bRet = (mnElementCount > 0);
-    return bRet;
+    return !mHashMap.empty();
 }
 
 // Methods XNameAccess
-Any NameContainer_Impl::getByName( const OUString& aName )
-    throw(NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+Any ScriptEventContainer::getByName( const OUString& aName )
 {
-    NameContainerNameMap::iterator aIt = mHashMap.find( aName );
+    auto aIt = mHashMap.find( aName );
     if( aIt == mHashMap.end() )
     {
         throw NoSuchElementException();
     }
-    sal_Int32 iHashResult = (*aIt).second;
-    Any aRetAny = mValues[ iHashResult ];
-    return aRetAny;
+    return aIt->second;
 }
 
-Sequence< OUString > NameContainer_Impl::getElementNames()
-    throw(RuntimeException, std::exception)
+Sequence< OUString > ScriptEventContainer::getElementNames()
 {
-    return mNames;
+    Sequence<OUString> aRet(mHashMap.size());
+    int i = 0;
+    for (auto const & pair : mHashMap)
+        aRet[i++] = pair.first;
+    return aRet;
 }
 
-sal_Bool NameContainer_Impl::hasByName( const OUString& aName )
-    throw(RuntimeException, std::exception)
+sal_Bool ScriptEventContainer::hasByName( const OUString& aName )
 {
-    NameContainerNameMap::iterator aIt = mHashMap.find( aName );
-    bool bRet = ( aIt != mHashMap.end() );
-    return bRet;
+    auto aIt = mHashMap.find( aName );
+    return aIt != mHashMap.end();
 }
 
 
 // Methods XNameReplace
-void NameContainer_Impl::replaceByName( const OUString& aName, const Any& aElement )
-    throw(IllegalArgumentException, NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+void ScriptEventContainer::replaceByName( const OUString& aName, const Any& aElement )
 {
-    Type aAnyType = aElement.getValueType();
+    const Type& aAnyType = aElement.getValueType();
     if( mType != aAnyType )
         throw IllegalArgumentException();
 
-    NameContainerNameMap::iterator aIt = mHashMap.find( aName );
+    auto aIt = mHashMap.find( aName );
     if( aIt == mHashMap.end() )
     {
         throw NoSuchElementException();
     }
-    sal_Int32 iHashResult = (*aIt).second;
-    Any aOldElement = mValues[ iHashResult ];
-    mValues[ iHashResult ] = aElement;
+    Any aOldElement = aIt->second;
+    aIt->second = aElement;
 
     // Fire event
     ContainerEvent aEvent;
     aEvent.Source = *this;
-    aEvent.Element <<= aElement;
+    aEvent.Element = aElement;
     aEvent.ReplacedElement = aOldElement;
     aEvent.Accessor <<= aName;
     maContainerListeners.elementReplaced( aEvent );
@@ -111,81 +102,61 @@ void NameContainer_Impl::replaceByName( const OUString& aName, const Any& aEleme
 
 
 // Methods XNameContainer
-void NameContainer_Impl::insertByName( const OUString& aName, const Any& aElement )
-    throw(IllegalArgumentException, ElementExistException, WrappedTargetException, RuntimeException, std::exception)
+void ScriptEventContainer::insertByName( const OUString& aName, const Any& aElement )
 {
-    Type aAnyType = aElement.getValueType();
+    const Type& aAnyType = aElement.getValueType();
     if( mType != aAnyType )
         throw IllegalArgumentException();
 
-    NameContainerNameMap::iterator aIt = mHashMap.find( aName );
+    auto aIt = mHashMap.find( aName );
     if( aIt != mHashMap.end() )
     {
         throw ElementExistException();
     }
 
-    sal_Int32 nCount = mNames.getLength();
-    mNames.realloc( nCount + 1 );
-    mValues.resize( nCount + 1 );
-    mNames.getArray()[ nCount ] = aName;
-    mValues[ nCount ] = aElement;
-    mHashMap[ aName ] = nCount;
+    mHashMap[ aName ] = aElement;
 
     // Fire event
     ContainerEvent aEvent;
     aEvent.Source = *this;
-    aEvent.Element <<= aElement;
+    aEvent.Element = aElement;
     aEvent.Accessor <<= aName;
     maContainerListeners.elementInserted( aEvent );
 }
 
-void NameContainer_Impl::removeByName( const OUString& Name )
-    throw(NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+void ScriptEventContainer::removeByName( const OUString& Name )
 {
-    NameContainerNameMap::iterator aIt = mHashMap.find( Name );
+    auto aIt = mHashMap.find( Name );
     if( aIt == mHashMap.end() )
     {
         throw NoSuchElementException();
     }
 
-    sal_Int32 iHashResult = (*aIt).second;
-    Any aOldElement = mValues[ iHashResult ];
-
     // Fire event
     ContainerEvent aEvent;
     aEvent.Source = *this;
-    aEvent.Element = aOldElement;
+    aEvent.Element = aIt->second;
     aEvent.Accessor <<= Name;
     maContainerListeners.elementRemoved( aEvent );
 
     mHashMap.erase( aIt );
-    sal_Int32 iLast = mNames.getLength() - 1;
-    if( iLast != iHashResult )
-    {
-        OUString* pNames = mNames.getArray();
-        pNames[ iHashResult ] = pNames[ iLast ];
-        mValues[ iHashResult ] = mValues[ iLast ];
-        mHashMap[ pNames[ iHashResult ] ] = iHashResult;
-    }
-    mNames.realloc( iLast );
-    mValues.resize( iLast );
 }
 
 // Methods XContainer
-void NameContainer_Impl::addContainerListener( const css::uno::Reference< css::container::XContainerListener >& l ) throw(css::uno::RuntimeException, std::exception)
+void ScriptEventContainer::addContainerListener( const css::uno::Reference< css::container::XContainerListener >& l )
 {
     maContainerListeners.addInterface( l );
 }
 
-void NameContainer_Impl::removeContainerListener( const css::uno::Reference< css::container::XContainerListener >& l ) throw(css::uno::RuntimeException, std::exception)
+void ScriptEventContainer::removeContainerListener( const css::uno::Reference< css::container::XContainerListener >& l )
 {
     maContainerListeners.removeInterface( l );
 }
 
 
-// Ctor
 ScriptEventContainer::ScriptEventContainer()
-    : NameContainer_Impl( cppu::UnoType<ScriptEventDescriptor>::get())
+    : mType( cppu::UnoType<ScriptEventDescriptor>::get() ),
+      maContainerListeners( *this )
 {
 }
 

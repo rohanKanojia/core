@@ -18,20 +18,17 @@
  */
 
 #include <svx/svxids.hrc>
-#include <com/sun/star/presentation/AnimationEffect.hpp>
 #include <com/sun/star/presentation/ClickAction.hpp>
-#include <com/sun/star/presentation/AnimationSpeed.hpp>
+#include <com/sun/star/embed/NeedsRunningStateException.hpp>
 #include <com/sun/star/embed/VerbDescriptor.hpp>
 #include <com/sun/star/embed/EmbedStates.hpp>
-#include <com/sun/star/uri/XUriReferenceFactory.hpp>
-#include <com/sun/star/uri/XVndSunStarScriptUrl.hpp>
-#include <comphelper/processfactory.hxx>
 #include <comphelper/string.hxx>
 #include <com/sun/star/embed/VerbAttributes.hpp>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 
-#include "sdattr.hxx"
+#include <sdattr.hxx>
 #include <sfx2/sfxresid.hxx>
+#include <sfx2/strings.hrc>
 
 #include <vcl/waitobj.hxx>
 #include <osl/file.hxx>
@@ -51,19 +48,20 @@
 #include <svx/xtable.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/mnemonic.hxx>
+#include <vcl/lstbox.hxx>
 #include <svl/urihelper.hxx>
 #include <sfx2/filedlghelper.hxx>
 #include <svx/drawitem.hxx>
-#include "View.hxx"
-#include "sdresid.hxx"
-#include "tpaction.hxx"
-#include "strmname.h"
-#include "ViewShell.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "strings.hrc"
-#include "res_bmp.hrc"
-#include "filedlg.hxx"
+#include <View.hxx>
+#include <sdresid.hxx>
+#include <tpaction.hxx>
+#include <strmname.h>
+#include <ViewShell.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <strings.hrc>
+
+#include <filedlg.hxx>
 
 #include <algorithm>
 
@@ -77,12 +75,11 @@ using namespace com::sun::star::lang;
  * Constructor of the Tab dialog: appends the pages to the dialog
  */
 SdActionDlg::SdActionDlg (
-    vcl::Window* pParent, const SfxItemSet* pAttr, ::sd::View* pView )
+    vcl::Window* pParent, const SfxItemSet* pAttr, ::sd::View const * pView )
     : SfxSingleTabDialog(pParent, *pAttr, "InteractionDialog",
         "modules/simpress/ui/interactiondialog.ui")
     , rOutAttrs(*pAttr)
 {
-    // FreeResource();
     VclPtr<SfxTabPage> pNewPage = SdTPAction::Create(get_content_area(), rOutAttrs);
     assert(pNewPage); //Unable to create page
 
@@ -167,7 +164,7 @@ void SdTPAction::SetView( const ::sd::View* pSdView )
     mpView = pSdView;
 
     // get ColorTable and fill ListBox
-    ::sd::DrawDocShell* pDocSh = static_cast<const ::sd::View*>(mpView)->GetDocSh();
+    ::sd::DrawDocShell* pDocSh = mpView->GetDocSh();
     if( pDocSh && pDocSh->GetViewShell() )
     {
         mpDoc = pDocSh->GetDoc();
@@ -175,8 +172,7 @@ void SdTPAction::SetView( const ::sd::View* pSdView )
         m_pLbTree->SetViewFrame( pFrame );
         m_pLbTreeDocument->SetViewFrame( pFrame );
 
-        SvxColorListItem aItem( *static_cast<const SvxColorListItem*>( pDocSh->GetItem( SID_COLOR_TABLE ) ) );
-        pColList = aItem.GetColorList();
+        pColList = pDocSh->GetItem( SID_COLOR_TABLE )->GetColorList();
         DBG_ASSERT( pColList.is(), "No color table available!" );
     }
     else
@@ -202,14 +198,14 @@ void SdTPAction::Construct()
             SdrMark* pMark = rMarkList.GetMark(0);
             pObj = pMark->GetMarkedSdrObj();
 
-            sal_uInt32 nInv = pObj->GetObjInventor();
-            sal_uInt16 nSdrObjKind = pObj->GetObjIdentifier();
+            SdrInventor nInv        = pObj->GetObjInventor();
+            sal_uInt16  nSdrObjKind = pObj->GetObjIdentifier();
 
-            if (nInv == SdrInventor && nSdrObjKind == OBJ_OLE2)
+            if (nInv == SdrInventor::Default && nSdrObjKind == OBJ_OLE2)
             {
                 pOleObj = static_cast<SdrOle2Obj*>(pObj);
             }
-            else if (nInv == SdrInventor && nSdrObjKind == OBJ_GRAF)
+            else if (nInv == SdrInventor::Default && nSdrObjKind == OBJ_GRAF)
             {
                 pGrafObj = static_cast<SdrGrafObj*>(pObj);
             }
@@ -220,11 +216,11 @@ void SdTPAction::Construct()
         bOLEAction = true;
 
         aVerbVector.push_back( 0 );
-        m_pLbOLEAction->InsertEntry( MnemonicGenerator::EraseAllMnemonicChars( SD_RESSTR( STR_EDIT_OBJ ) ) );
+        m_pLbOLEAction->InsertEntry( MnemonicGenerator::EraseAllMnemonicChars( SdResId( STR_EDIT_OBJ ) ) );
     }
     else if( pOleObj )
     {
-        uno::Reference < embed::XEmbeddedObject > xObj = pOleObj->GetObjRef();
+        const uno::Reference < embed::XEmbeddedObject >& xObj = pOleObj->GetObjRef();
         if ( xObj.is() )
         {
             bOLEAction = true;
@@ -267,10 +263,10 @@ void SdTPAction::Construct()
     maCurrentActions.push_back( presentation::ClickAction_STOPPRESENTATION );
 
     // fill Action-Listbox
-    for (size_t nAction = 0, n = maCurrentActions.size(); nAction < n; nAction++)
+    for (presentation::ClickAction & rAction : maCurrentActions)
     {
-        sal_uInt16 nRId = GetClickActionSdResId( maCurrentActions[ nAction ] );
-        m_pLbAction->InsertEntry( SD_RESSTR( nRId ) );
+        const char* pRId = GetClickActionSdResId(rAction);
+        m_pLbAction->InsertEntry(SdResId(pRId));
     }
 
 }
@@ -280,12 +276,12 @@ bool SdTPAction::FillItemSet( SfxItemSet* rAttrs )
     bool bModified = false;
     presentation::ClickAction eCA = presentation::ClickAction_NONE;
 
-    if( m_pLbAction->GetSelectEntryCount() )
+    if( m_pLbAction->GetSelectedEntryCount() )
         eCA = GetActualClickAction();
 
     if( m_pLbAction->IsValueChangedFromSaved() )
     {
-        rAttrs->Put( SfxAllEnumItem( ATTR_ACTION, (sal_uInt16)eCA ) );
+        rAttrs->Put( SfxAllEnumItem( ATTR_ACTION, static_cast<sal_uInt16>(eCA) ) );
         bModified = true;
     }
     else
@@ -303,8 +299,8 @@ bool SdTPAction::FillItemSet( SfxItemSet* rAttrs )
                 eCA == presentation::ClickAction_DOCUMENT ||
                 eCA == presentation::ClickAction_PROGRAM )
                 aFileName = ::URIHelper::SmartRel2Abs( INetURLObject(aBaseURL), aFileName, URIHelper::GetMaybeFileHdl(), true, false,
-                                                        INetURLObject::WAS_ENCODED,
-                                                        INetURLObject::DECODE_UNAMBIGUOUS );
+                                                        INetURLObject::EncodeMechanism::WasEncoded,
+                                                        INetURLObject::DecodeMechanism::Unambiguous );
 
             rAttrs->Put( SfxStringItem( ATTR_ACTION_FILENAME, aFileName ) );
             bModified = true;
@@ -326,8 +322,8 @@ void SdTPAction::Reset( const SfxItemSet* rAttrs )
     // m_pLbAction
     if( rAttrs->GetItemState( ATTR_ACTION ) != SfxItemState::DONTCARE )
     {
-        eCA = (presentation::ClickAction) static_cast<const SfxAllEnumItem&>( rAttrs->
-                    Get( ATTR_ACTION ) ).GetValue();
+        eCA = static_cast<presentation::ClickAction>(static_cast<const SfxAllEnumItem&>( rAttrs->
+                    Get( ATTR_ACTION ) ).GetValue());
         SetActualClickAction( eCA );
     }
     else
@@ -369,18 +365,18 @@ void SdTPAction::ActivatePage( const SfxItemSet& )
 {
 }
 
-SfxTabPage::sfxpg SdTPAction::DeactivatePage( SfxItemSet* pPageSet )
+DeactivateRC SdTPAction::DeactivatePage( SfxItemSet* pPageSet )
 {
     if( pPageSet )
         FillItemSet( pPageSet );
 
-    return LEAVE_PAGE;
+    return DeactivateRC::LeavePage;
 }
 
-VclPtr<SfxTabPage> SdTPAction::Create( vcl::Window* pWindow,
+VclPtr<SfxTabPage> SdTPAction::Create( TabPageParent pWindow,
                                        const SfxItemSet& rAttrs )
 {
-    return VclPtr<SdTPAction>::Create( pWindow, rAttrs );
+    return VclPtr<SdTPAction>::Create( pWindow.pParent, rAttrs );
 }
 
 void SdTPAction::UpdateTree()
@@ -414,12 +410,10 @@ void SdTPAction::OpenFileDialog()
 
         if (bSound)
         {
-            SdOpenSoundFileDialog   aFileDialog;
+            SdOpenSoundFileDialog aFileDialog(GetFrameWeld());
 
-            if( aFile.isEmpty() )
-                aFile = SvtPathOptions().GetGraphicPath();
-
-            aFileDialog.SetPath( aFile );
+            if( !aFile.isEmpty() )
+                aFileDialog.SetPath( aFile );
 
             if( aFileDialog.Execute() == ERRCODE_NONE )
             {
@@ -429,9 +423,6 @@ void SdTPAction::OpenFileDialog()
         }
         else if (bMacro)
         {
-            vcl::Window* pOldWin = Application::GetDefDialogParent();
-            Application::SetDefDialogParent( this );
-
             // choose macro dialog
             OUString aScriptURL = SfxApplication::ChooseScript();
 
@@ -439,13 +430,12 @@ void SdTPAction::OpenFileDialog()
             {
                 SetEditText( aScriptURL );
             }
-
-            Application::SetDefDialogParent( pOldWin );
         }
         else
         {
             sfx2::FileDialogHelper aFileDialog(
-                ui::dialogs::TemplateDescription::FILEOPEN_READONLY_VERSION, 0);
+                ui::dialogs::TemplateDescription::FILEOPEN_READONLY_VERSION,
+                FileDialogFlags::NONE, GetFrameWeld());
 
             if (bDocument && aFile.isEmpty())
                 aFile = SvtPathOptions().GetWorkPath();
@@ -457,7 +447,7 @@ void SdTPAction::OpenFileDialog()
             // filter makes the (Windows system) open file dialog follow
             // links on the desktop to directories.
             aFileDialog.AddFilter (
-                SFX2_RESSTR(STR_SFX_FILTERNAME_ALL),
+                SfxResId(STR_SFX_FILTERNAME_ALL),
                 "*.*");
 
             if( aFileDialog.Execute() == ERRCODE_NONE )
@@ -471,12 +461,12 @@ void SdTPAction::OpenFileDialog()
     }
 }
 
-IMPL_LINK_NOARG_TYPED(SdTPAction, ClickSearchHdl, Button*, void)
+IMPL_LINK_NOARG(SdTPAction, ClickSearchHdl, Button*, void)
 {
     OpenFileDialog();
 }
 
-IMPL_LINK_NOARG_TYPED(SdTPAction, ClickActionHdl, ListBox&, void)
+IMPL_LINK_NOARG(SdTPAction, ClickActionHdl, ListBox&, void)
 {
     presentation::ClickAction eCA = GetActualClickAction();
 
@@ -588,7 +578,7 @@ IMPL_LINK_NOARG_TYPED(SdTPAction, ClickActionHdl, ListBox&, void)
             m_pEdtSound->Enable();
             m_pBtnSearch->Show();
             m_pBtnSearch->Enable();
-            m_pFrame->set_label( SD_RESSTR( STR_EFFECTDLG_SOUND ) );
+            m_pFrame->set_label( SdResId( STR_EFFECTDLG_SOUND ) );
             break;
 
         case presentation::ClickAction_PROGRAM:
@@ -599,12 +589,12 @@ IMPL_LINK_NOARG_TYPED(SdTPAction, ClickActionHdl, ListBox&, void)
             if( eCA == presentation::ClickAction_MACRO )
             {
                 m_pEdtMacro->Show();
-                m_pFrame->set_label( SD_RESSTR( STR_EFFECTDLG_MACRO ) );
+                m_pFrame->set_label( SdResId( STR_EFFECTDLG_MACRO ) );
             }
             else
             {
                 m_pEdtProgram->Show();
-                m_pFrame->set_label( SD_RESSTR( STR_EFFECTDLG_PROGRAM ) );
+                m_pFrame->set_label( SdResId( STR_EFFECTDLG_PROGRAM ) );
             }
             break;
 
@@ -617,8 +607,8 @@ IMPL_LINK_NOARG_TYPED(SdTPAction, ClickActionHdl, ListBox&, void)
             m_pBtnSearch->Show();
             m_pBtnSearch->Enable();
 
-            m_pFtTree->SetText( SD_RESSTR( STR_EFFECTDLG_JUMP ) );
-            m_pFrame->set_label( SD_RESSTR( STR_EFFECTDLG_DOCUMENT ) );
+            m_pFtTree->SetText( SdResId( STR_EFFECTDLG_JUMP ) );
+            m_pFrame->set_label( SdResId( STR_EFFECTDLG_DOCUMENT ) );
 
             CheckFileHdl( *m_pEdtDocument );
             break;
@@ -627,7 +617,7 @@ IMPL_LINK_NOARG_TYPED(SdTPAction, ClickActionHdl, ListBox&, void)
             m_pFtTree->Show();
             m_pLbOLEAction->Show();
 
-            m_pFtTree->SetText( SD_RESSTR( STR_EFFECTDLG_ACTION ) );
+            m_pFtTree->SetText( SdResId( STR_EFFECTDLG_ACTION ) );
             break;
 
         case presentation::ClickAction_BOOKMARK:
@@ -640,20 +630,20 @@ IMPL_LINK_NOARG_TYPED(SdTPAction, ClickActionHdl, ListBox&, void)
             m_pEdtBookmark->Show();
             m_pBtnSeek->Show();
 
-            m_pFtTree->SetText( SD_RESSTR( STR_EFFECTDLG_JUMP ) );
-            m_pFrame->set_label( SD_RESSTR( STR_EFFECTDLG_PAGE_OBJECT ) );
+            m_pFtTree->SetText( SdResId( STR_EFFECTDLG_JUMP ) );
+            m_pFrame->set_label( SdResId( STR_EFFECTDLG_PAGE_OBJECT ) );
             break;
         default:
             break;
     }
 }
 
-IMPL_LINK_NOARG_TYPED(SdTPAction, SelectTreeHdl, SvTreeListBox*, void)
+IMPL_LINK_NOARG(SdTPAction, SelectTreeHdl, SvTreeListBox*, void)
 {
-    m_pEdtBookmark->SetText( m_pLbTree->GetSelectEntry() );
+    m_pEdtBookmark->SetText( m_pLbTree->GetSelectedEntry() );
 }
 
-IMPL_LINK_NOARG_TYPED(SdTPAction, CheckFileHdl, Control&, void)
+IMPL_LINK_NOARG(SdTPAction, CheckFileHdl, Control&, void)
 {
     OUString aFile( GetEditText() );
 
@@ -667,30 +657,39 @@ IMPL_LINK_NOARG_TYPED(SdTPAction, CheckFileHdl, Control&, void)
         {
             WaitObject aWait( GetParentDialog() );
 
+            bool bHideTreeDocument = true;
+
             // is it a draw file?
             // open with READ, otherwise the Storages might write into the file!
             uno::Reference < embed::XStorage > xStorage = aMedium.GetStorage();
             DBG_ASSERT( xStorage.is(), "No storage!" );
 
             uno::Reference < container::XNameAccess > xAccess( xStorage, uno::UNO_QUERY );
-            if( xAccess.is() &&
-                ( xAccess->hasByName( pStarDrawXMLContent ) ||
-                xAccess->hasByName( pStarDrawOldXMLContent ) ) )
+            if (xAccess.is())
             {
-                SdDrawDocument* pBookmarkDoc = mpDoc->OpenBookmarkDoc( aFile );
-                if( pBookmarkDoc )
+                try
                 {
-                    aLastFile = aFile;
+                    if (xAccess->hasByName(pStarDrawXMLContent) ||
+                        xAccess->hasByName(pStarDrawOldXMLContent))
+                    {
+                        if (SdDrawDocument* pBookmarkDoc = mpDoc->OpenBookmarkDoc(aFile))
+                        {
+                            aLastFile = aFile;
 
-                    m_pLbTreeDocument->Clear();
-                    m_pLbTreeDocument->Fill( pBookmarkDoc, true, aFile );
-                    mpDoc->CloseBookmarkDoc();
-                    m_pLbTreeDocument->Show();
+                            m_pLbTreeDocument->Clear();
+                            m_pLbTreeDocument->Fill(pBookmarkDoc, true, aFile);
+                            mpDoc->CloseBookmarkDoc();
+                            m_pLbTreeDocument->Show();
+                            bHideTreeDocument = false;
+                        }
+                    }
                 }
-                else
-                    m_pLbTreeDocument->Hide();
+                catch (...)
+                {
+                }
             }
-            else
+
+            if (bHideTreeDocument)
                 m_pLbTreeDocument->Hide();
 
         }
@@ -702,7 +701,7 @@ IMPL_LINK_NOARG_TYPED(SdTPAction, CheckFileHdl, Control&, void)
 presentation::ClickAction SdTPAction::GetActualClickAction()
 {
     presentation::ClickAction eCA = presentation::ClickAction_NONE;
-    sal_Int32 nPos = m_pLbAction->GetSelectEntryPos();
+    sal_Int32 nPos = m_pLbAction->GetSelectedEntryPos();
 
     if (nPos != LISTBOX_ENTRY_NOTFOUND && static_cast<size_t>(nPos) < maCurrentActions.size())
         eCA = maCurrentActions[ nPos ];
@@ -730,14 +729,14 @@ void SdTPAction::SetEditText( OUString const & rStr )
             if( comphelper::string::getTokenCount(rStr, DOCUMENT_TOKEN) == 2 )
                 aText = rStr.getToken( 0, DOCUMENT_TOKEN );
 
-            // fallthrough intended
+            [[fallthrough]];
         case presentation::ClickAction_SOUND:
         case presentation::ClickAction_PROGRAM:
             {
                 INetURLObject aURL( aText );
 
                 // try to convert to system path
-                OUString aTmpStr(aURL.getFSysPath(INetURLObject::FSYS_DETECT));
+                OUString aTmpStr(aURL.getFSysPath(FSysStyle::Detect));
 
                 if( !aTmpStr.isEmpty() )
                     aText = aTmpStr;    // was a system path
@@ -791,7 +790,7 @@ OUString SdTPAction::GetEditText( bool bFullDocDestination )
             break;
         case presentation::ClickAction_VERB:
             {
-                const sal_Int32 nPos = m_pLbOLEAction->GetSelectEntryPos();
+                const sal_Int32 nPos = m_pLbOLEAction->GetSelectedEntryPos();
                 if( static_cast<size_t>(nPos) < aVerbVector.size() )
                     aStr = OUString::number( aVerbVector[ nPos ] );
                 return aStr;
@@ -826,24 +825,24 @@ OUString SdTPAction::GetEditText( bool bFullDocDestination )
         aURL = INetURLObject( ::URIHelper::SmartRel2Abs( INetURLObject(aBaseURL), aStr, URIHelper::GetMaybeFileHdl() ) );
 
     // get adjusted file name
-    aStr = aURL.GetMainURL( INetURLObject::NO_DECODE );
+    aStr = aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE );
 
     if( bFullDocDestination &&
         eCA == presentation::ClickAction_DOCUMENT &&
         m_pLbTreeDocument->Control::IsVisible() &&
         m_pLbTreeDocument->GetSelectionCount() > 0 )
     {
-        OUString aTmpStr( m_pLbTreeDocument->GetSelectEntry() );
+        OUString aTmpStr( m_pLbTreeDocument->GetSelectedEntry() );
         if( !aTmpStr.isEmpty() )
         {
-            aStr += OUStringLiteral1<DOCUMENT_TOKEN>() + aTmpStr;
+            aStr += OUStringLiteral1(DOCUMENT_TOKEN) + aTmpStr;
         }
     }
 
     return aStr;
 }
 
-sal_uInt16 SdTPAction::GetClickActionSdResId( presentation::ClickAction eCA )
+const char* SdTPAction::GetClickActionSdResId( presentation::ClickAction eCA )
 {
     switch( eCA )
     {
@@ -861,7 +860,7 @@ sal_uInt16 SdTPAction::GetClickActionSdResId( presentation::ClickAction eCA )
         case presentation::ClickAction_STOPPRESENTATION: return STR_CLICK_ACTION_STOPPRESENTATION;
         default: OSL_FAIL( "No StringResource for ClickAction available!" );
     }
-    return 0;
+    return nullptr;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

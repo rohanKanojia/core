@@ -61,17 +61,15 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPUSRDICTS_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPUSRDICTS_HXX
 
-#include "lwpheader.hxx"
-#include "lwpobjstrm.hxx"
+#include <lwpheader.hxx>
+#include <lwpobjstrm.hxx>
 /**
  * @brief   User defined words used in VO_DOCUMENT
 */
 class LwpUserDictFiles
 {
 public:
-    LwpUserDictFiles(){}
     explicit LwpUserDictFiles(LwpObjectStream *pStrm);
-    ~LwpUserDictFiles(){}
     static void Read(LwpObjectStream *pStrm);
 };
 #endif

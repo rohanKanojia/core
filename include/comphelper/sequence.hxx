@@ -20,7 +20,6 @@
 #ifndef INCLUDED_COMPHELPER_SEQUENCE_HXX
 #define INCLUDED_COMPHELPER_SEQUENCE_HXX
 
-#include <algorithm>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <osl/diagnose.h>
 #include <comphelper/comphelperdllapi.h>
@@ -29,10 +28,10 @@
 
 namespace comphelper
 {
-    /** search the given string within the given sequence, return the positions where it was found.
-        if _bOnlyFirst is sal_True, only the first occurrence will be returned.
+    /** Search the given string within the given sequence, return the position of the first occurrence.
+        Returns -1 if nothing found.
     */
-    COMPHELPER_DLLPUBLIC css::uno::Sequence<sal_Int16> findValue(const css::uno::Sequence< OUString >& _rList, const OUString& _rValue, bool _bOnlyFirst = false);
+    COMPHELPER_DLLPUBLIC sal_Int32 findValue(const css::uno::Sequence< OUString >& _rList, const OUString& _rValue);
 
     namespace internal
     {
@@ -140,10 +139,10 @@ namespace comphelper
         const TYPE* m_pCurrent;
 
     public:
-        /** contrcuct a sequence iterator from a sequence
+        /** construct a sequence iterator from a sequence
         */
         OSequenceIterator(const css::uno::Sequence< TYPE >& _rSeq);
-        /** contrcuct a sequence iterator from a Any containing a sequence
+        /** construct a sequence iterator from a Any containing a sequence
         */
         OSequenceIterator(const css::uno::Any& _rSequenceAny);
 
@@ -174,7 +173,6 @@ namespace comphelper
         css::uno::Sequence< TYPE > aContainer;
         bool bSuccess = _rSequenceAny >>= aContainer;
         OSL_ENSURE(bSuccess, "OSequenceIterator::OSequenceIterator: invalid Any!");
-        (void)bSuccess;
         construct(aContainer);
     }
 
@@ -283,12 +281,28 @@ namespace comphelper
         truncated. There's currently no measure to prevent or detect
         precision loss, overflow or truncation.
      */
-    template < typename DstType, typename SrcType >
-    inline css::uno::Sequence< DstType > containerToSequence( const SrcType& i_Container )
+    template < typename DstElementType, typename SrcType >
+    inline css::uno::Sequence< DstElementType > containerToSequence( const SrcType& i_Container )
     {
-        css::uno::Sequence< DstType > result( i_Container.size() );
+        css::uno::Sequence< DstElementType > result( i_Container.size() );
         ::std::copy( i_Container.begin(), i_Container.end(), result.getArray() );
         return result;
+    }
+
+    // this one does better type deduction, but does not allow us to copy into a different element type
+    template < typename SrcType >
+    inline css::uno::Sequence< typename SrcType::value_type > containerToSequence( const SrcType& i_Container )
+    {
+        css::uno::Sequence< typename SrcType::value_type > result( i_Container.size() );
+        ::std::copy( i_Container.begin(), i_Container.end(), result.getArray() );
+        return result;
+    }
+
+    // handle arrays
+    template<typename ElementType, std::size_t SrcSize>
+    inline css::uno::Sequence< ElementType > containerToSequence( ElementType const (&i_Array)[ SrcSize ] )
+    {
+        return css::uno::Sequence< ElementType >( i_Array, SrcSize );
     }
 
     template <typename T>
@@ -325,6 +339,15 @@ namespace comphelper
      */
     template < typename DstType, typename SrcType >
     inline DstType sequenceToContainer( const css::uno::Sequence< SrcType >& i_Sequence )
+    {
+        DstType result( i_Sequence.getLength() );
+        ::std::copy( i_Sequence.begin(), i_Sequence.end(), result.begin() );
+        return result;
+    }
+
+    // this one does better type deduction, but does not allow us to copy into a different element type
+    template < typename DstType >
+    inline DstType sequenceToContainer( const css::uno::Sequence< typename DstType::value_type >& i_Sequence )
     {
         DstType result( i_Sequence.getLength() );
         ::std::copy( i_Sequence.begin(), i_Sequence.end(), result.begin() );

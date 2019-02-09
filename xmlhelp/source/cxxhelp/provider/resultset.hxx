@@ -20,6 +20,7 @@
 #ifndef INCLUDED_XMLHELP_SOURCE_CXXHELP_PROVIDER_RESULTSET_HXX
 #define INCLUDED_XMLHELP_SOURCE_CXXHELP_PROVIDER_RESULTSET_HXX
 
+#include <memory>
 #include <ucbhelper/resultsethelper.hxx>
 #include <rtl/ref.hxx>
 
@@ -31,7 +32,7 @@ namespace chelp {
 
     class DynamicResultSet : public ::ucbhelper::ResultSetImplHelper
     {
-        ResultSetFactory*                    m_pFactory;
+        std::unique_ptr<ResultSetFactory>   m_pFactory;
 
     private:
         virtual void initStatic() override;
@@ -41,9 +42,9 @@ namespace chelp {
         DynamicResultSet(
             const css::uno::Reference< css::uno::XComponentContext >& rxContext,
             const css::ucb::OpenCommandArgument2& rCommand,
-            ResultSetFactory* pFactory );
+            std::unique_ptr<ResultSetFactory> pFactory );
 
-        virtual ~DynamicResultSet();
+        virtual ~DynamicResultSet() override;
     };
 
 }

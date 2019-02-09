@@ -18,56 +18,27 @@
  */
 
 #include "iodlgimp.hxx"
-#include "svtools/headbar.hxx"
+#include <vcl/headbar.hxx>
 #include <tools/debug.hxx>
+#include <unotools/resmgr.hxx>
 #include <tools/urlobj.hxx>
 #include <vcl/menu.hxx>
-#include <vcl/msgbox.hxx>
-#include <vcl/lstbox.hxx>
 #include <vcl/svapp.hxx>
-#include "svl/ctypeitm.hxx"
-#include "svl/eitem.hxx"
-#include "unotools/viewoptions.hxx"
-#include "svtools/fileview.hxx"
-#include "svtools/inettbc.hxx"
+#include <svl/eitem.hxx>
+#include <unotools/viewoptions.hxx>
+#include <svtools/fileview.hxx>
+#include <svtools/inettbc.hxx>
 #include "iodlg.hxx"
-#include "iodlg.hrc"
-#include "svtools/imagemgr.hxx"
+#include <bitmaps.hlst>
+#include <svtools/imagemgr.hxx>
 #include <unotools/localfilehelper.hxx>
-#include "unotools/useroptions.hxx"
-#include "rtl/instance.hxx"
-#include <osl/getglobalmutex.hxx>
+#include <unotools/useroptions.hxx>
+#include <svl/svlresid.hxx>
 #include <svl/svl.hrc>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::utl;
-
-
-// ResMgrHolder / SvtSimpleResId
-
-namespace
-{
-    struct ResMgrHolder
-    {
-        ResMgr * operator ()()
-        {
-            return ResMgr::CreateResMgr ("svl");
-        }
-        static ResMgr * getOrCreate()
-        {
-            return rtl_Instance<
-                ResMgr, ResMgrHolder,
-                osl::MutexGuard, osl::GetGlobalMutex >::create (
-                    ResMgrHolder(), osl::GetGlobalMutex());
-        }
-    };
-
-    struct SvtSimpleResId : public ResId
-    {
-        explicit SvtSimpleResId (sal_uInt16 nId) : ResId (nId, *ResMgrHolder::getOrCreate()) {}
-    };
-}
 
 SvtFileDialogFilter_Impl::SvtFileDialogFilter_Impl( const OUString& rName, const OUString& rType )
     :m_aName( rName )
@@ -86,17 +57,15 @@ SvtFileDialogFilter_Impl::~SvtFileDialogFilter_Impl()
 
 
 //= SvtFileDialogURLSelector
-
-
-SvtFileDialogURLSelector::SvtFileDialogURLSelector( vcl::Window* _pParent, SvtFileDialog* _pDlg, WinBits nBits, sal_uInt16 _nButtonId )
+SvtFileDialogURLSelector::SvtFileDialogURLSelector(vcl::Window* _pParent, SvtFileDialog* _pDlg, WinBits nBits, const OUString& rButtonId)
     :MenuButton ( _pParent, nBits )
     ,m_pDlg     ( _pDlg )
-    ,m_pMenu    ( new PopupMenu )
+    ,m_pMenu    ( VclPtr<PopupMenu>::Create() )
 {
     SetStyle( GetStyle() | WB_NOPOINTERFOCUS | WB_RECTSTYLE | WB_SMALLSTYLE );
-    SetModeImage( _pDlg->GetButtonImage( _nButtonId ) );
-    SetMenuMode( MENUBUTTON_MENUMODE_TIMED );
-    SetDropDown( PushButtonDropdownStyle::Toolbox );
+    SetModeImage(SvtFileDialog::GetButtonImage(rButtonId));
+    SetDelayMenu(true);
+    SetDropDown(PushButtonDropdownStyle::Toolbox);
 }
 
 
@@ -107,7 +76,7 @@ SvtFileDialogURLSelector::~SvtFileDialogURLSelector()
 
 void SvtFileDialogURLSelector::dispose()
 {
-    delete m_pMenu;
+    m_pMenu.disposeAndClear();
     m_pDlg.clear();
     MenuButton::dispose();
 }
@@ -127,7 +96,7 @@ void SvtFileDialogURLSelector::Activate()
 
 
 SvtUpButton_Impl::SvtUpButton_Impl( vcl::Window *pParent, SvtFileDialog* pDlg, WinBits nBits )
-    :SvtFileDialogURLSelector( pParent, pDlg, nBits, IMG_FILEDLG_BTN_UP )
+    :SvtFileDialogURLSelector( pParent, pDlg, nBits, BMP_FILEDLG_BTN_UP )
 {
 }
 
@@ -157,7 +126,7 @@ void SvtUpButton_Impl::FillURLMenu( PopupMenu* _pMenu )
     while ( nCount >= 1 )
     {
         aObject.removeSegment();
-        OUString aParentURL(aObject.GetMainURL(INetURLObject::NO_DECODE));
+        OUString aParentURL(aObject.GetMainURL(INetURLObject::DecodeMechanism::NONE));
 
         OUString aTitle;
         if (!GetDialogParent()->ContentGetTitle(aParentURL, aTitle) || aTitle.isEmpty())
@@ -172,12 +141,11 @@ void SvtUpButton_Impl::FillURLMenu( PopupMenu* _pMenu )
         if ( nCount == 1 )
         {
             // adjust the title of the top level entry (the workspace)
-            _pMenu->SetItemText( --nItemId, SvtSimpleResId(STR_SVT_MIMETYPE_CNT_FSYSBOX).toString() );
+            _pMenu->SetItemText(--nItemId, SvlResId(STR_SVT_MIMETYPE_CNT_FSYSBOX));
         }
         --nCount;
     }
 }
-
 
 void SvtUpButton_Impl::Select()
 {
@@ -186,7 +154,7 @@ void SvtUpButton_Impl::Select()
     if ( nId )
     {
         --nId;
-        assert( nId <= _aURLs.size() &&  "SvtUpButton_Impl:falscher Index" );
+        assert( nId <= _aURLs.size() &&  "SvtUpButton_Impl: wrong index" );
 
         GetDialogParent()->OpenURL_Impl(_aURLs[nId]);
     }
@@ -199,14 +167,13 @@ void SvtUpButton_Impl::Click()
 
 Size SvtUpButton_Impl::GetOptimalSize() const
 {
-    return LogicToPixel(Size(12, 12), MAP_APPFONT);
+    return LogicToPixel(Size(12, 12), MapMode(MapUnit::MapAppFont));
 }
 
 // SvtExpFileDlg_Impl
-SvtExpFileDlg_Impl::SvtExpFileDlg_Impl( WinBits )   :
+SvtExpFileDlg_Impl::SvtExpFileDlg_Impl()   :
 
     _pCurFilter         ( nullptr ),
-    _pUserFilter        ( nullptr ),
     _pFtFileName        ( nullptr ),
     _pEdFileName        ( nullptr ),
     _pFtFileVersion     ( nullptr ),
@@ -215,6 +182,8 @@ SvtExpFileDlg_Impl::SvtExpFileDlg_Impl( WinBits )   :
     _pLbTemplates       ( nullptr ),
     _pFtImageTemplates  ( nullptr ),
     _pLbImageTemplates  ( nullptr ),
+    _pFtImageAnchor     ( nullptr ),
+    _pLbImageAnchor     ( nullptr ),
     _pFtFileType        ( nullptr ),
     _pLbFilter          ( nullptr ),
     _pBtnFileOpen       ( nullptr ),
@@ -223,6 +192,7 @@ SvtExpFileDlg_Impl::SvtExpFileDlg_Impl( WinBits )   :
     _pBtnUp             ( nullptr ),
     _pBtnNewFolder      ( nullptr ),
     _pCbPassword        ( nullptr ),
+    _pCbGPGEncrypt      ( nullptr ),
     _pEdCurrentPath     ( nullptr ),
     _pCbAutoExtension   ( nullptr ),
     _pCbOptions         ( nullptr ),
@@ -230,11 +200,9 @@ SvtExpFileDlg_Impl::SvtExpFileDlg_Impl( WinBits )   :
     _pBtnConnectToServer( nullptr ),
     _eMode              ( FILEDLG_MODE_OPEN ),
     _eDlgType           ( FILEDLG_TYPE_FILEDLG ),
-    _nState             ( FILEDLG_STATE_REMOTE ),
-    _nStyle             ( 0 ),
+    _nStyle             ( PickerFlags::NONE ),
     _bDoubleClick       ( false ),
     m_bNeedDelayedFilterExecute ( false ),
-    _pDefaultFilter     ( nullptr ),
     _bMultiSelection    ( false )
 {
 }
@@ -243,7 +211,7 @@ SvtExpFileDlg_Impl::SvtExpFileDlg_Impl( WinBits )   :
 SvtExpFileDlg_Impl::~SvtExpFileDlg_Impl()
 {
     _pBtnUp.disposeAndClear();
-    delete _pUserFilter;
+    _pUserFilter.reset();
     _pPlaces.disposeAndClear();
 }
 
@@ -266,13 +234,7 @@ namespace {
     }
 }
 
-void SvtExpFileDlg_Impl::ClearFilterList( )
-{
-    _pLbFilter->Clear();
-}
-
-
-void SvtExpFileDlg_Impl::SetCurFilter( SvtFileDialogFilter_Impl* pFilter, const OUString& rDisplayName )
+void SvtExpFileDlg_Impl::SetCurFilter( SvtFileDialogFilter_Impl const * pFilter, const OUString& rDisplayName )
 {
     DBG_ASSERT( pFilter, "SvtExpFileDlg_Impl::SetCurFilter: invalid filter!" );
     DBG_ASSERT( ( rDisplayName == pFilter->GetName() )
@@ -301,7 +263,7 @@ void SvtExpFileDlg_Impl::InsertFilterListEntry( const SvtFileDialogFilter_Impl* 
 void SvtExpFileDlg_Impl::InitFilterList( )
 {
     // clear the current list
-    ClearFilterList( );
+    _pLbFilter->Clear();
 
     // reinit it
     sal_uInt16 nPos = m_aFilter.size();
@@ -311,7 +273,7 @@ void SvtExpFileDlg_Impl::InitFilterList( )
         ;
 
     // add all following entries
-    while ( (sal_Int16)nPos >= 0 )
+    while ( static_cast<sal_Int16>(nPos) >= 0 )
         InsertFilterListEntry( m_aFilter[ nPos-- ].get() );
 }
 

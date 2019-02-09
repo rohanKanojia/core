@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.0 -->
+<!-- Generated with glade 3.20.0 -->
+<interface domain="sc">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkFrame" id="SortKeyFrame">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -20,7 +21,8 @@
             <property name="row_spacing">6</property>
             <property name="column_spacing">12</property>
             <child>
-              <object class="GtkComboBox" id="sortlb">
+              <object class="GtkComboBoxText" id="sortlb">
+                <property name="width_request">600</property>
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="valign">center</property>
@@ -29,13 +31,12 @@
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">0</property>
-                <property name="width">1</property>
                 <property name="height">2</property>
               </packing>
             </child>
             <child>
               <object class="GtkRadioButton" id="up">
-                <property name="label" translatable="yes">_Ascending</property>
+                <property name="label" translatable="yes" context="sortkey|up">_Ascending</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
@@ -43,18 +44,15 @@
                 <property name="xalign">0</property>
                 <property name="active">True</property>
                 <property name="draw_indicator">True</property>
-                <property name="group">down</property>
               </object>
               <packing>
                 <property name="left_attach">1</property>
                 <property name="top_attach">0</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
             <child>
               <object class="GtkRadioButton" id="down">
-                <property name="label" translatable="yes">_Descending</property>
+                <property name="label" translatable="yes" context="sortkey|down">_Descending</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
@@ -66,8 +64,6 @@
               <packing>
                 <property name="left_attach">1</property>
                 <property name="top_attach">1</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
           </object>
@@ -78,7 +74,7 @@
       <object class="GtkLabel" id="sortft">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="label" translatable="yes">Sort Key </property>
+        <property name="label" translatable="yes" context="sortkey|sortft">Sort Key </property>
         <attributes>
           <attribute name="weight" value="bold"/>
         </attributes>

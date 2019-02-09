@@ -20,8 +20,8 @@
 #ifndef INCLUDED_SAL_RTL_ALLOC_ARENA_HXX
 #define INCLUDED_SAL_RTL_ALLOC_ARENA_HXX
 
-#include "sal/types.h"
-#include "rtl/alloc.h"
+#include <sal/types.h>
+#include <rtl/alloc.h>
 #include "alloc_impl.hxx"
 
 /** rtl_arena_stat_type
@@ -39,10 +39,10 @@ struct rtl_arena_stat_type
 /** rtl_arena_segment_type
  *  @internal
  */
-#define RTL_ARENA_SEGMENT_TYPE_HEAD ((sal_Size)(0x01))
-#define RTL_ARENA_SEGMENT_TYPE_SPAN ((sal_Size)(0x02))
-#define RTL_ARENA_SEGMENT_TYPE_FREE ((sal_Size)(0x04))
-#define RTL_ARENA_SEGMENT_TYPE_USED ((sal_Size)(0x08))
+#define RTL_ARENA_SEGMENT_TYPE_HEAD (sal_Size(0x01))
+#define RTL_ARENA_SEGMENT_TYPE_SPAN (sal_Size(0x02))
+#define RTL_ARENA_SEGMENT_TYPE_FREE (sal_Size(0x04))
+#define RTL_ARENA_SEGMENT_TYPE_USED (sal_Size(0x08))
 
 struct rtl_arena_segment_type
 {
@@ -100,9 +100,6 @@ struct rtl_arena_st
     rtl_arena_segment_type *  m_hash_table_0[RTL_ARENA_HASH_SIZE];
     sal_Size                  m_hash_size;  /* m_hash_mask + 1   */
     sal_Size                  m_hash_shift; /* log2(m_hash_size) */
-
-    sal_Size                  m_qcache_max;
-    rtl_cache_type **         m_qcache_ptr;
 };
 
 /** gp_default_arena
@@ -111,6 +108,10 @@ struct rtl_arena_st
  *  @internal
  */
 extern rtl_arena_type * gp_default_arena;
+
+typedef void (*ArenaForeachFn)(void *addr, sal_Size size);
+
+void rtl_arena_foreach(rtl_arena_type *arena, ArenaForeachFn fn);
 
 #endif // INCLUDED_SAL_RTL_ALLOC_ARENA_HXX
 

@@ -20,17 +20,16 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSCLIPBOARD_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSCLIPBOARD_HXX
 
-#include "ViewClipboard.hxx"
-#include "controller/SlsSelectionObserver.hxx"
-#include "sdxfer.hxx"
+#include <memory>
+#include <ViewClipboard.hxx>
+#include <controller/SlsSelectionObserver.hxx>
+#include <sdxfer.hxx>
 
 #include <sal/types.h>
-#include <tools/solar.h>
-#include <svx/svdpage.hxx>
+#include <o3tl/deleter.hxx>
+#include <svx/svdtypes.hxx>
 
-#include "sddllapi.h"
-
-#include <set>
+#include <sddllapi.h>
 
 class SfxRequest;
 struct AcceptDropEvent;
@@ -49,10 +48,6 @@ namespace sd { namespace slidesorter {
 class SlideSorter;
 } }
 
-namespace sd { namespace slidesorter { namespace model {
-class PageDescriptor;
-} } }
-
 namespace sd { namespace slidesorter { namespace controller {
 
 class SlideSorterController;
@@ -62,7 +57,7 @@ class Clipboard
 {
 public:
     Clipboard (SlideSorter& rSlideSorter);
-    virtual ~Clipboard();
+    virtual ~Clipboard() override;
 
     /** Create a slide sorter transferable from the given sd
         transferable.  The returned transferable is set up with all
@@ -89,16 +84,16 @@ public:
     sal_Int8 AcceptDrop (
         const AcceptDropEvent& rEvt,
         DropTargetHelper& rTargetHelper,
-        ::sd::Window* pTargetWindow = nullptr,
-        sal_uInt16 nPage = SDRPAGE_NOTFOUND,
-        sal_uInt16 nLayer = SDRPAGE_NOTFOUND );
+        ::sd::Window* pTargetWindow,
+        sal_uInt16 nPage,
+        SdrLayerID nLayer );
 
     sal_Int8 ExecuteDrop (
         const ExecuteDropEvent& rEvt,
         DropTargetHelper& rTargetHelper,
-        ::sd::Window* pTargetWindow = nullptr,
-        sal_uInt16 nPage = SDRPAGE_NOTFOUND,
-        sal_uInt16 nLayer = SDRPAGE_NOTFOUND);
+        ::sd::Window* pTargetWindow,
+        sal_uInt16 nPage,
+        SdrLayerID nLayer );
 
     void Abort();
 
@@ -121,25 +116,13 @@ private:
     */
     PageList maPagesToRemove;
 
-    /** Remember the pages inserted from another document or another place
-        in the same document so that they can be selected after the
-        drag-and-drop operation is completed.
-    */
-    PageList maPagesToSelect;
-
-    /** When pages are moved or copied then the selection of the slide
-        sorter has to be updated.  This flag is used to remember whether the
-        selection has to be updated or can stay as it is (sal_False).
-    */
-    bool mbUpdateSelectionPending;
-
     /** Used when a drop is executed to combine all undo actions into one.
         Typically created in ExecuteDrop() and released in DragFinish().
     */
     class UndoContext;
     std::unique_ptr<UndoContext> mxUndoContext;
 
-    std::unique_ptr<SelectionObserver::Context> mxSelectionObserverContext;
+    std::unique_ptr<SelectionObserver::Context, o3tl::default_delete<SelectionObserver::Context>> mxSelectionObserverContext;
     ImplSVEvent * mnDragFinishedUserEventId;
 
     void CreateSlideTransferable (
@@ -185,7 +168,7 @@ private:
         implementation of proper handling master pages copy-and-paste.
     */
     enum DropType { DT_PAGE, DT_PAGE_FROM_NAVIGATOR, DT_SHAPE, DT_NONE };
-    DropType IsDropAccepted (DropTargetHelper& rTargetHelper) const;
+    DropType IsDropAccepted() const;
 
     /** This method contains the code for AcceptDrop() and ExecuteDrop() shapes.
         There are only minor differences for the two cases at this level.
@@ -214,19 +197,19 @@ private:
         DropTargetHelper& rTargetHelper,
         ::sd::Window* pTargetWindow,
         sal_uInt16 nPage,
-        sal_uInt16 nLayer);
+        SdrLayerID nLayer);
 
     /** Return whether the insertion defined by the transferable is
         trivial, ie would not change either source nor target document.
     */
     bool IsInsertionTrivial (
-        SdTransferable* pTransferable,
+        SdTransferable const * pTransferable,
         const sal_Int8 nDndAction) const;
 
     /** Asynchronous part of DragFinished.  The argument is the sal_Int8
         nDropAction, disguised as void*.
     */
-    DECL_LINK_TYPED(ProcessDragFinished, void*, void);
+    DECL_LINK(ProcessDragFinished, void*, void);
 };
 
 } } } // end of namespace ::sd::slidesorter::controller

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<interface domain="sm">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkBox" id="box">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -29,11 +29,11 @@
                 <property name="spacing">6</property>
                 <child>
                   <object class="GtkCheckButton" id="title">
-                    <property name="label" translatable="yes">Title</property>
-                    <property name="use_action_appearance">False</property>
+                    <property name="label" translatable="yes" context="printeroptions|title">Title</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
+                    <property name="use_underline">True</property>
                     <property name="xalign">0</property>
                     <property name="draw_indicator">True</property>
                   </object>
@@ -45,11 +45,11 @@
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="formulatext">
-                    <property name="label" translatable="yes">Formula text</property>
-                    <property name="use_action_appearance">False</property>
+                    <property name="label" translatable="yes" context="printeroptions|formulatext">Formula text</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
+                    <property name="use_underline">True</property>
                     <property name="xalign">0</property>
                     <property name="draw_indicator">True</property>
                   </object>
@@ -61,11 +61,11 @@
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="borders">
-                    <property name="label" translatable="yes">Borders</property>
-                    <property name="use_action_appearance">False</property>
+                    <property name="label" translatable="yes" context="printeroptions|borders">Borders</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
+                    <property name="use_underline">True</property>
                     <property name="xalign">0</property>
                     <property name="draw_indicator">True</property>
                   </object>
@@ -83,7 +83,7 @@
           <object class="GtkLabel" id="label4">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Contents</property>
+            <property name="label" translatable="yes" context="printeroptions|label4">Contents</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -116,11 +116,11 @@
                 <property name="spacing">6</property>
                 <child>
                   <object class="GtkRadioButton" id="originalsize">
-                    <property name="label" translatable="yes">Original size</property>
-                    <property name="use_action_appearance">False</property>
+                    <property name="label" translatable="yes" context="printeroptions|originalsize">Original size</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
+                    <property name="use_underline">True</property>
                     <property name="xalign">0</property>
                     <property name="active">True</property>
                     <property name="draw_indicator">True</property>
@@ -134,11 +134,11 @@
                 </child>
                 <child>
                   <object class="GtkRadioButton" id="fittopage">
-                    <property name="label" translatable="yes">Fit to page</property>
-                    <property name="use_action_appearance">False</property>
+                    <property name="label" translatable="yes" context="printeroptions|fittopage">Fit to page</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
+                    <property name="use_underline">True</property>
                     <property name="xalign">0</property>
                     <property name="draw_indicator">True</property>
                     <property name="group">scaling</property>
@@ -156,11 +156,11 @@
                     <property name="spacing">12</property>
                     <child>
                       <object class="GtkRadioButton" id="scaling">
-                        <property name="label" translatable="yes">Scaling:</property>
-                        <property name="use_action_appearance">False</property>
+                        <property name="label" translatable="yes" context="printeroptions|scaling">Scaling:</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
+                        <property name="use_underline">True</property>
                         <property name="xalign">0</property>
                         <property name="draw_indicator">True</property>
                         <property name="group">originalsize</property>
@@ -175,7 +175,6 @@
                       <object class="GtkSpinButton" id="scalingspin">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="invisible_char">●</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -198,7 +197,7 @@
           <object class="GtkLabel" id="label5">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Size</property>
+            <property name="label" translatable="yes" context="printeroptions|label5">Size</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>

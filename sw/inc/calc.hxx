@@ -20,9 +20,12 @@
 #ifndef INCLUDED_SW_INC_CALC_HXX
 #define INCLUDED_SW_INC_CALC_HXX
 
+#include <memory>
 #include <vector>
 #include <basic/sbxvar.hxx>
 #include <unotools/syslocale.hxx>
+#include <rtl/ustrbuf.hxx>
+#include <tools/solar.h>
 #include "swdllapi.h"
 
 class CharClass;
@@ -42,7 +45,6 @@ enum SwCalcOper
     CALC_DIV='/',           CALC_PRINT=';',         CALC_ASSIGN='=',
     CALC_LP='(',            CALC_RP=')',            CALC_PHD='%',
     CALC_POW='^',
-    CALC_LISTOP = cListDelim,
     CALC_NOT=256,           CALC_AND=257,           CALC_OR=258,
     CALC_XOR=259,           CALC_EQ=260,            CALC_NEQ=261,
     CALC_LEQ=262,           CALC_GEQ=263,           CALC_LES=264,
@@ -88,47 +90,43 @@ extern const sal_Char sCalc_Round[];
 extern const sal_Char sCalc_Date[];
 
 //  Calculate ErrorCodes
-enum SwCalcError
+enum class SwCalcError
 {
-    CALC_NOERR=0,
-    CALC_SYNTAX,        //  syntax error
-    CALC_ZERODIV,       //  division by zero
-    CALC_BRACK,         //  faulty brackets
-    CALC_POWERR,        //  overflow in power function
-    CALC_VARNFND,       //  variable was not found
-    CALC_OVERFLOW,      //  overflow
-    CALC_WRONGTIME      //  wrong time format
+    NONE=0,
+    Syntax,           //  syntax error
+    DivByZero,        //  division by zero
+    FaultyBrackets,   //  faulty brackets
+    OverflowInPower,  //  overflow in power function
+    Overflow,         //  overflow
 };
 
 class SwSbxValue : public SbxValue
 {
-    bool bVoid;
+    bool m_bVoid;
+    bool m_bDBvalue;
 public:
     // always default to a number. otherwise it will become a SbxEMPTY
-    SwSbxValue( long n = 0 ) : bVoid(false)  { PutLong( n ); }
-    SwSbxValue( const double& rD ) : bVoid(false) { PutDouble( rD ); }
-    SwSbxValue( const SwSbxValue& rVal ) :
-        SvRefBase( rVal ),
-        SbxValue( rVal ),
-        bVoid(rVal.bVoid)
-        {}
-    virtual ~SwSbxValue();
+    SwSbxValue( long n = 0 ) : m_bVoid(false), m_bDBvalue(false)  { PutLong( n ); }
+    SwSbxValue( const double& rD ) : m_bVoid(false), m_bDBvalue(false) { PutDouble( rD ); }
 
     bool GetBool() const;
     double GetDouble() const;
     SwSbxValue& MakeDouble();
 
-    bool IsVoidValue() {return bVoid;}
-    void SetVoidValue(bool bSet) {bVoid = bSet;}
+    bool IsVoidValue() {return m_bVoid;}
+    void SetVoidValue(bool bSet) {m_bVoid = bSet;}
+
+    bool IsDBvalue() {return m_bDBvalue;}
+    void SetDBvalue(bool bSet) {m_bDBvalue = bSet;}
 };
 
-// Calculate HashTables for VarTable und Operations
+// Calculate HashTables for VarTable and Operations
 struct SwHash
 {
     SwHash( const OUString& rStr );
     virtual ~SwHash();
     OUString aStr;
-    SwHash *pNext;
+    std::unique_ptr<SwHash> pNext;
 };
 
 struct SwCalcExp : public SwHash
@@ -137,43 +135,80 @@ struct SwCalcExp : public SwHash
     const SwFieldType* pFieldType;
 
     SwCalcExp( const OUString& rStr, const SwSbxValue& rVal,
-                const SwFieldType* pFieldType = nullptr );
+                const SwFieldType* pFieldType );
 };
 
-SwHash* Find( const OUString& rSrch, SwHash* const * ppTable,
-                sal_uInt16 nTableSize, sal_uInt16* pPos = nullptr );
+/// T should be a subclass of SwHash
+template<class T>
+class SwHashTable
+{
+    std::vector<std::unique_ptr<T>> m_aData;
+public:
+    SwHashTable(size_t nSize) : m_aData(nSize) {}
+    std::unique_ptr<T> & operator[](size_t idx) { return m_aData[idx]; }
+    std::unique_ptr<T> const & operator[](size_t idx) const { return m_aData[idx]; }
+    void resize(size_t nSize) { m_aData.resize(nSize); }
 
-void DeleteHashTable( SwHash** ppTable, sal_uInt16 nTableSize );
+    T* Find( const OUString& rStr, sal_uInt16* pPos = nullptr ) const
+    {
+        size_t nTableSize = m_aData.size();
+        sal_uLong ii = 0;
+        for( sal_Int32 n = 0; n < rStr.getLength(); ++n )
+        {
+            ii = ii << 1 ^ rStr[n];
+        }
+        ii %= nTableSize;
 
-// if _CalcOp != 0, this is a valid operator
-struct _CalcOp;
-_CalcOp* FindOperator( const OUString& rSearch );
+        if( pPos )
+            *pPos = static_cast<sal_uInt16>(ii);
+
+        for( T* pEntry = m_aData[ii].get(); pEntry; pEntry = static_cast<T*>(pEntry->pNext.get()) )
+        {
+            if( rStr == pEntry->aStr )
+            {
+                return pEntry;
+            }
+        }
+        return nullptr;
+    }
+
+};
+
+
+// if CalcOp != 0, this is a valid operator
+struct CalcOp;
+CalcOp* FindOperator( const OUString& rSearch );
+
+extern "C" typedef double (*pfCalc)(double);
 
 class SwCalc
 {
-    SwHash*     VarTable[ TBLSZ ];
-    OUString    aVarName, sCurrSym;
-    OUString    sCommand;
-    std::vector<const SwUserFieldType*> aRekurStack;
-    SwSbxValue  nLastLeft;
-    SwSbxValue  nNumberValue;
-    SwCalcExp   aErrExpr;
-    sal_Int32   nCommandPos;
+    SwHashTable<SwCalcExp> m_aVarTable;
+    OUStringBuffer m_aVarName;
+    OUString    m_sCurrSym;
+    OUString    m_sCommand;
+    std::vector<const SwUserFieldType*> m_aRekurStack;
+    SwSbxValue  m_nLastLeft;
+    SwSbxValue  m_nNumberValue;
+    SwCalcExp   m_aErrExpr;
+    sal_Int32   m_nCommandPos;
 
-    SwDoc&      rDoc;
-    SvtSysLocale m_aSysLocale;
-    const LocaleDataWrapper* pLclData;
-    CharClass*  pCharClass;
+    SwDoc&      m_rDoc;
+    SvtSysLocale const m_aSysLocale;
+    const LocaleDataWrapper* m_pLocaleDataWrapper;
+    CharClass*  m_pCharClass;
 
-    sal_uInt16      nListPor;
-    SwCalcOper  eCurrOper;
-    SwCalcOper  eCurrListOper;
-    SwCalcError eError;
+    sal_uInt16      m_nListPor;
+    SwCalcOper  m_eCurrOper;
+    SwCalcOper  m_eCurrListOper;
+    SwCalcError m_eError;
 
     SwCalcOper  GetToken();
     SwSbxValue  Expr();
     SwSbxValue  Term();
+    SwSbxValue  PrimFunc(bool &rChkPow);
     SwSbxValue  Prim();
+    SwSbxValue  StdFunc(pfCalc pFnc, bool bChkTrig);
 
     static OUString  GetColumnName( const OUString& rName );
     OUString  GetDBName( const OUString& rName );
@@ -182,29 +217,30 @@ class SwCalc
     SwCalc& operator=( const SwCalc& ) = delete;
 
 public:
-        SwCalc( SwDoc& rD );
-        ~SwCalc();
+    SwCalc(SwDoc& rD);
+    ~SwCalc() COVERITY_NOEXCEPT_FALSE;
 
     SwSbxValue  Calculate( const OUString &rStr );
     OUString    GetStrResult( const SwSbxValue& rValue );
-    OUString    GetStrResult( double, bool bRound = true );
+    OUString    GetStrResult( double );
 
     SwCalcExp*  VarInsert( const OUString& r );
     SwCalcExp*  VarLook( const OUString &rStr, bool bIns = false );
     void        VarChange( const OUString& rStr, const SwSbxValue& rValue );
     void        VarChange( const OUString& rStr, double );
-    SwHash**    GetVarTable()                       { return VarTable; }
+    SwHashTable<SwCalcExp> & GetVarTable() { return m_aVarTable; }
 
     bool        Push(const SwUserFieldType* pUserFieldType);
     void        Pop();
+    CharClass* GetCharClass();
 
-    void        SetCalcError( SwCalcError eErr )    { eError = eErr; }
-    bool        IsCalcError() const                 { return 0 != eError; }
+    void        SetCalcError( SwCalcError eErr )    { m_eError = eErr; }
+    bool        IsCalcError() const                 { return SwCalcError::NONE != m_eError; }
 
     static bool Str2Double( const OUString& rStr, sal_Int32& rPos,
                                 double& rVal );
     static bool Str2Double( const OUString& rStr, sal_Int32& rPos,
-                                double& rVal, SwDoc *const pDoc );
+                                double& rVal, SwDoc const *const pDoc );
 
     SW_DLLPUBLIC static bool IsValidVarName( const OUString& rStr,
                                     OUString* pValidName = nullptr );

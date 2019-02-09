@@ -22,9 +22,9 @@
 
 #include "fupoor.hxx"
 #include <vector>
+#include <rtl/ustring.hxx>
 
 class SfxMedium;
-struct StyleRequestData;
 
 namespace sd {
 

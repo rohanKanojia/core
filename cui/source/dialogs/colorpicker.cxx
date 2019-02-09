@@ -27,25 +27,24 @@
 #include <com/sun/star/awt/XWindow.hpp>
 #include <cppuhelper/compbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include <comphelper/broadcasthelper.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/field.hxx>
+#include <cppuhelper/basemutex.hxx>
+#include <vcl/customweld.hxx>
 #include <vcl/bitmapaccess.hxx>
-#include <vcl/decoview.hxx>
+#include <vcl/event.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/builderfactory.hxx>
+#include <vcl/virdev.hxx>
+#include <vcl/weld.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <sot/exchange.hxx>
 #include <sot/formats.hxx>
+#include <svx/hexcolorcontrol.hxx>
 #include <sax/tools/converter.hxx>
 #include <basegfx/color/bcolortools.hxx>
-#include "dialmgr.hxx"
-#include "colorpicker.hxx"
+#include <colorpicker.hxx>
+#include <bitmaps.hlst>
 #include <cmath>
 #include <limits>
+#include <o3tl/typed_flags_set.hxx>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
@@ -53,29 +52,44 @@ using namespace ::com::sun::star::ui::dialogs;
 using namespace ::com::sun::star::beans;
 using namespace ::basegfx;
 
+enum class UpdateFlags
+{
+    NONE         = 0x00,
+    RGB          = 0x01,
+    CMYK         = 0x02,
+    HSB          = 0x04,
+    ColorChooser = 0x08,
+    ColorSlider  = 0x10,
+    Hex          = 0x20,
+    All          = 0x3f,
+};
+namespace o3tl {
+    template<> struct typed_flags<UpdateFlags> : is_typed_flags<UpdateFlags, 0x3f> {};
+}
+
+
 namespace cui
 {
-const sal_uInt16 COLORMODE_RGB =  0x10;
-const sal_uInt16 COLORMODE_HSV =  0x20;
 
-const sal_uInt16 COLORCOMP_RED   = 0x10;
-const sal_uInt16 COLORCOMP_GREEN = 0x11;
-const sal_uInt16 COLORCOMP_BLUE  = 0x12;
+enum class ColorComponent {
+    Red,
+    Green,
+    Blue,
+    Hue,
+    Saturation,
+    Brightness,
+    Cyan,
+    Yellow,
+    Magenta,
+    Key,
+};
 
-const sal_uInt16 COLORCOMP_HUE  = 0x20;
-const sal_uInt16 COLORCOMP_SAT  = 0x21;
-const sal_uInt16 COLORCOMP_BRI  = 0x22;
-
-const sal_uInt16 COLORCOMP_CYAN    = 0x40;
-const sal_uInt16 COLORCOMP_YELLOW  = 0x41;
-const sal_uInt16 COLORCOMP_MAGENTA = 0x42;
-const sal_uInt16 COLORCOMP_KEY     = 0x43;
 
 // color space conversion helpers
 
 static void RGBtoHSV( double dR, double dG, double dB, double& dH, double& dS, double& dV )
 {
-    BColor result = basegfx::tools::rgb2hsv( BColor( dR, dG, dB ) );
+    BColor result = basegfx::utils::rgb2hsv( BColor( dR, dG, dB ) );
 
     dH = result.getX();
     dS = result.getY();
@@ -84,7 +98,7 @@ static void RGBtoHSV( double dR, double dG, double dB, double& dH, double& dS, d
 
 static void HSVtoRGB(double dH, double dS, double dV, double& dR, double& dG, double& dB )
 {
-    BColor result = basegfx::tools::hsv2rgb( BColor( dH, dS, dV ) );
+    BColor result = basegfx::utils::hsv2rgb( BColor( dH, dS, dV ) );
 
     dR = result.getRed();
     dG = result.getGreen();
@@ -131,192 +145,72 @@ static void RGBtoCMYK( double dR, double dG, double dB, double& fCyan, double& f
     }
 }
 
-class HexColorControl : public Edit
+class ColorPreviewControl : public weld::CustomWidgetController
 {
-public:
-    HexColorControl( vcl::Window* pParent, const WinBits& nStyle );
-
-    virtual bool PreNotify( NotifyEvent& rNEvt ) override;
-    virtual void Paste() override;
-
-    void SetColor( sal_Int32 nColor );
-    sal_Int32 GetColor();
-
 private:
-    static bool ImplProcessKeyInput( const KeyEvent& rKEv );
+    Color m_aColor;
+
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&) override;
+public:
+    ColorPreviewControl()
+    {
+    }
+
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override
+    {
+        CustomWidgetController::SetDrawingArea(pDrawingArea);
+        pDrawingArea->set_size_request(pDrawingArea->get_approximate_digit_width() * 10,
+                                       pDrawingArea->get_text_height() * 2);
+    }
+
+    void SetColor(const Color& rCol)
+    {
+        if (rCol != m_aColor)
+        {
+            m_aColor = rCol;
+            Invalidate();
+        }
+    }
 };
 
-HexColorControl::HexColorControl( vcl::Window* pParent, const WinBits& nStyle )
-    : Edit(pParent, nStyle)
+void ColorPreviewControl::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&)
 {
-    SetMaxTextLen( 6 );
-}
-
-VCL_BUILDER_FACTORY_ARGS(HexColorControl, WB_BORDER)
-
-void HexColorControl::SetColor(sal_Int32 nColor)
-{
-    OUStringBuffer aBuffer;
-    sax::Converter::convertColor(aBuffer, nColor);
-    SetText(aBuffer.makeStringAndClear().copy(1));
-}
-
-sal_Int32 HexColorControl::GetColor()
-{
-    sal_Int32 nColor = -1;
-
-    OUString aStr("#");
-    aStr += GetText();
-    sal_Int32 nLen = aStr.getLength();
-
-    if (nLen < 7)
-    {
-        static const sal_Char* pNullStr = "000000";
-        aStr += OUString::createFromAscii( &pNullStr[nLen-1] );
-    }
-
-    sax::Converter::convertColor(nColor, aStr);
-
-    if (nColor == -1)
-        SetControlBackground(Color(COL_RED));
-    else
-        SetControlBackground();
-
-    return nColor;
-}
-
-bool HexColorControl::PreNotify( NotifyEvent& rNEvt )
-{
-    if ( (rNEvt.GetType() == MouseNotifyEvent::KEYINPUT) && !rNEvt.GetKeyEvent()->GetKeyCode().IsMod2() )
-    {
-        if ( ImplProcessKeyInput( *rNEvt.GetKeyEvent() ) )
-            return true;
-    }
-
-    return Edit::PreNotify( rNEvt );
-}
-
-void HexColorControl::Paste()
-{
-    css::uno::Reference<css::datatransfer::clipboard::XClipboard> aClipboard(GetClipboard());
-    if (aClipboard.is())
-    {
-        css::uno::Reference<css::datatransfer::XTransferable> xDataObj;
-
-        try
-        {
-            SolarMutexReleaser aReleaser;
-            xDataObj = aClipboard->getContents();
-        }
-        catch (const css::uno::Exception&)
-        {
-        }
-
-        if (xDataObj.is())
-        {
-            css::datatransfer::DataFlavor aFlavor;
-            SotExchange::GetFormatDataFlavor(SotClipboardFormatId::STRING, aFlavor);
-            try
-            {
-                css::uno::Any aData = xDataObj->getTransferData(aFlavor);
-                OUString aText;
-                aData >>= aText;
-
-                if( !aText.isEmpty() && aText.startsWith( "#" ) )
-                    aText = aText.copy(1);
-
-                if( aText.getLength() > 6 )
-                    aText = aText.copy( 0, 6 );
-
-                SetText(aText);
-            }
-            catch(const css::uno::Exception&)
-            {}
-        }
-    }
-}
-
-bool HexColorControl::ImplProcessKeyInput( const KeyEvent& rKEv )
-{
-    const vcl::KeyCode& rKeyCode = rKEv.GetKeyCode();
-
-    if( rKeyCode.GetGroup() == KEYGROUP_ALPHA && !rKeyCode.IsMod1() && !rKeyCode.IsMod2() )
-    {
-        if( (rKeyCode.GetCode() < KEY_A) || (rKeyCode.GetCode() > KEY_F) )
-            return true;
-    }
-    else if( rKeyCode.GetGroup() == KEYGROUP_NUM )
-    {
-        if( rKeyCode.IsShift() )
-            return true;
-    }
-    return false;
-}
-
-class ColorPreviewControl : public Control
-{
-public:
-    ColorPreviewControl( vcl::Window* pParent, const WinBits& nStyle );
-
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
-
-    void SetColor(const Color& rColor);
-
-private:
-    Color maColor;
-};
-
-ColorPreviewControl::ColorPreviewControl(vcl::Window* pParent, const WinBits& nStyle)
-    : Control(pParent, nStyle)
-{
-}
-
-VCL_BUILDER_DECL_FACTORY(ColorPreviewControl)
-{
-    WinBits nBits = 0;
-
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nBits |= WB_BORDER;
-
-    rRet = VclPtr<ColorPreviewControl>::Create(pParent, nBits);
-}
-
-void ColorPreviewControl::SetColor( const Color& rCol )
-{
-    if (rCol != maColor)
-    {
-        maColor = rCol;
-        Invalidate();
-    }
-}
-
-void ColorPreviewControl::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
-{
-    rRenderContext.SetFillColor(maColor);
-    rRenderContext.SetLineColor(maColor);
-    rRenderContext.DrawRect(rRect);
+    rRenderContext.SetFillColor(m_aColor);
+    rRenderContext.SetLineColor(m_aColor);
+    rRenderContext.DrawRect(tools::Rectangle(Point(0, 0), GetOutputSizePixel()));
 }
 
 enum ColorMode { HUE, SATURATION, BRIGHTNESS, RED, GREEN, BLUE };
 const ColorMode DefaultMode = HUE;
 
-class ColorFieldControl : public Control
+class ColorFieldControl : public weld::CustomWidgetController
 {
 public:
-    ColorFieldControl(vcl::Window* pParent, const WinBits& nStyle);
-    virtual ~ColorFieldControl();
+    ColorFieldControl()
+        : meMode( DefaultMode )
+        , mdX( -1.0 )
+        , mdY( -1.0 )
+        , mbMouseCaptured(false)
+    {
+    }
 
-    virtual void dispose() override;
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override
+    {
+        CustomWidgetController::SetDrawingArea(pDrawingArea);
+        pDrawingArea->set_size_request(pDrawingArea->get_approximate_digit_width() * 40,
+                                       pDrawingArea->get_text_height() * 10);
+    }
 
-    virtual void MouseMove( const MouseEvent& rMEvt ) override;
-    virtual void MouseButtonDown( const MouseEvent& rMEvt ) override;
-    virtual void MouseButtonUp( const MouseEvent& rMEvt ) override;
-    virtual void KeyInput( const KeyEvent& rKEvt ) override;
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual ~ColorFieldControl() override
+    {
+        mxBitmap.disposeAndClear();
+    }
+
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
     virtual void Resize() override;
-
-    virtual Size GetOptimalSize() const override;
+    virtual void MouseButtonDown(const MouseEvent& rMEvt) override;
+    virtual void MouseMove(const MouseEvent& rMEvt) override;
+    virtual void MouseButtonUp(const MouseEvent& rMEvt) override;
 
     void UpdateBitmap();
     void ShowPosition( const Point& rPos, bool bUpdate );
@@ -327,18 +221,17 @@ public:
     double GetX() { return mdX;}
     double GetY() { return mdY;}
 
-    void KeyMove(int dx, int dy);
-
     void SetModifyHdl(const Link<ColorFieldControl&,void>& rLink) { maModifyHdl = rLink; }
 
 private:
-    Link<ColorFieldControl&,void> maModifyHdl;
     ColorMode meMode;
     Color maColor;
     double mdX;
     double mdY;
+    bool mbMouseCaptured;
     Point maPosition;
-    Bitmap* mpBitmap;
+    VclPtr<VirtualDevice> mxBitmap;
+    Link<ColorFieldControl&,void> maModifyHdl;
     std::vector<sal_uInt8>  maRGB_Horiz;
     std::vector<sal_uInt16> maGrad_Horiz;
     std::vector<sal_uInt16> maPercent_Horiz;
@@ -346,53 +239,12 @@ private:
     std::vector<sal_uInt16> maPercent_Vert;
 };
 
-ColorFieldControl::ColorFieldControl( vcl::Window* pParent, const WinBits& nStyle )
-: Control( pParent, nStyle )
-, meMode( DefaultMode )
-, mdX( -1.0 )
-, mdY( -1.0 )
-, mpBitmap( nullptr )
-{
-    SetControlBackground();
-}
-
-ColorFieldControl::~ColorFieldControl()
-{
-    disposeOnce();
-}
-
-void ColorFieldControl::dispose()
-{
-    delete mpBitmap;
-    mpBitmap = nullptr;
-    Control::dispose();
-}
-
-VCL_BUILDER_DECL_FACTORY(ColorFieldControl)
-{
-    WinBits nBits = 0;
-
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nBits |= WB_BORDER;
-
-    rRet = VclPtr<ColorFieldControl>::Create(pParent, nBits);
-}
-
-Size ColorFieldControl::GetOptimalSize() const
-{
-    return LogicToPixel(Size(158, 158), MAP_APPFONT);
-}
-
 void ColorFieldControl::UpdateBitmap()
 {
     const Size aSize(GetOutputSizePixel());
 
-    if (mpBitmap && mpBitmap->GetSizePixel() != aSize)
-    {
-        delete mpBitmap;
-        mpBitmap = nullptr;
-    }
+    if (mxBitmap && mxBitmap->GetOutputSizePixel() != aSize)
+        mxBitmap.disposeAndClear();
 
     const sal_Int32 nWidth = aSize.Width();
     const sal_Int32 nHeight = aSize.Height();
@@ -400,9 +252,10 @@ void ColorFieldControl::UpdateBitmap()
     if (nWidth == 0 || nHeight == 0)
         return;
 
-    if (!mpBitmap)
+    if (!mxBitmap)
     {
-        mpBitmap = new Bitmap( aSize, 24 );
+        mxBitmap = VclPtr<VirtualDevice>::Create();
+        mxBitmap->SetOutputSizePixel(aSize);
 
         maRGB_Horiz.resize( nWidth );
         maGrad_Horiz.resize( nWidth );
@@ -439,20 +292,17 @@ void ColorFieldControl::UpdateBitmap()
     sal_uInt8* pRGB_Vert = maRGB_Vert.data();
     sal_uInt16* pPercent_Vert = maPercent_Vert.data();
 
-    BitmapWriteAccess* pWriteAccess = mpBitmap->AcquireWriteAccess();
-    if (pWriteAccess)
-    {
-        BitmapColor aBitmapColor(maColor);
+    Color aBitmapColor(maColor);
 
-        sal_uInt16 nHue, nSat, nBri;
-        maColor.RGBtoHSB(nHue, nSat, nBri);
+    sal_uInt16 nHue, nSat, nBri;
+    maColor.RGBtoHSB(nHue, nSat, nBri);
 
         // this has been unlooped for performance reason, please do not merge back!
 
-        sal_uInt16 y = nHeight,x;
+    sal_uInt16 y = nHeight,x;
 
-        switch(meMode)
-        {
+    switch(meMode)
+    {
         case HUE:
             while (y--)
             {
@@ -461,7 +311,7 @@ void ColorFieldControl::UpdateBitmap()
                 while (x--)
                 {
                     nSat = pPercent_Horiz[x];
-                    pWriteAccess->SetPixel(y, x, BitmapColor(Color(Color::HSBtoRGB(nHue, nSat, nBri))));
+                    mxBitmap->DrawPixel(Point(x,y), Color::HSBtoRGB(nHue, nSat, nBri));
                 }
             }
             break;
@@ -473,7 +323,7 @@ void ColorFieldControl::UpdateBitmap()
                 while (x--)
                 {
                     nHue = pGrad_Horiz[x];
-                    pWriteAccess->SetPixel(y, x, BitmapColor(Color(Color::HSBtoRGB(nHue, nSat, nBri))));
+                    mxBitmap->DrawPixel(Point(x,y), Color::HSBtoRGB(nHue, nSat, nBri));
                 }
             }
             break;
@@ -485,7 +335,7 @@ void ColorFieldControl::UpdateBitmap()
                 while (x--)
                 {
                     nHue = pGrad_Horiz[x];
-                    pWriteAccess->SetPixel(y, x, BitmapColor(Color(Color::HSBtoRGB(nHue, nSat, nBri))));
+                    mxBitmap->DrawPixel(Point(x,y), Color::HSBtoRGB(nHue, nSat, nBri));
                 }
             }
             break;
@@ -497,7 +347,7 @@ void ColorFieldControl::UpdateBitmap()
                 while (x--)
                 {
                     aBitmapColor.SetBlue(pRGB_Horiz[x]);
-                    pWriteAccess->SetPixel(y, x, aBitmapColor);
+                    mxBitmap->DrawPixel(Point(x,y), aBitmapColor);
                 }
             }
             break;
@@ -509,7 +359,7 @@ void ColorFieldControl::UpdateBitmap()
                 while (x--)
                 {
                     aBitmapColor.SetBlue(pRGB_Horiz[x]);
-                    pWriteAccess->SetPixel(y, x, aBitmapColor);
+                    mxBitmap->DrawPixel(Point(x,y), aBitmapColor);
                 }
             }
             break;
@@ -521,148 +371,85 @@ void ColorFieldControl::UpdateBitmap()
                 while (x--)
                 {
                     aBitmapColor.SetRed(pRGB_Horiz[x]);
-                    pWriteAccess->SetPixel(y, x, aBitmapColor);
+                    mxBitmap->DrawPixel(Point(x,y), aBitmapColor);
                 }
             }
             break;
-        }
-
-        Bitmap::ReleaseAccess(pWriteAccess);
     }
 }
 
 void ColorFieldControl::ShowPosition( const Point& rPos, bool bUpdate )
 {
-    if (!mpBitmap)
+    if (!mxBitmap)
     {
         UpdateBitmap();
         Invalidate();
     }
 
-    if (!mpBitmap)
+    if (!mxBitmap)
         return;
 
-    const Size aSize(mpBitmap->GetSizePixel());
+    const Size aSize(mxBitmap->GetOutputSizePixel());
 
     long nX = rPos.X();
     long nY = rPos.Y();
-    if (nX < 0L)
-        nX = 0L;
+    if (nX < 0)
+        nX = 0;
     else if (nX >= aSize.Width())
-        nX = aSize.Width() - 1L;
+        nX = aSize.Width() - 1;
 
-    if (nY < 0L)
-        nY = 0L;
+    if (nY < 0)
+        nY = 0;
     else if (nY >= aSize.Height())
-        nY = aSize.Height() - 1L;
+        nY = aSize.Height() - 1;
 
     Point aPos = maPosition;
-    maPosition.X() = nX - 5;
-    maPosition.Y() = nY - 5;
-    Invalidate(Rectangle(aPos, Size(11, 11)));
-    Invalidate(Rectangle(maPosition, Size(11, 11)));
+    maPosition.setX( nX - 5 );
+    maPosition.setY( nY - 5 );
+    Invalidate(tools::Rectangle(aPos, Size(11, 11)));
+    Invalidate(tools::Rectangle(maPosition, Size(11, 11)));
 
     if (bUpdate)
     {
         mdX = double(nX) / double(aSize.Width() - 1.0);
         mdY = double(aSize.Height() - 1.0 - nY) / double(aSize.Height() - 1.0);
 
-        BitmapReadAccess* pReadAccess = mpBitmap->AcquireReadAccess();
-        if (pReadAccess != nullptr)
-        {
-            // mpBitmap always has a bit count of 24 => use of GetPixel(...) is safe
-            maColor = pReadAccess->GetPixel(nY, nX);
-            Bitmap::ReleaseAccess(pReadAccess);
-            pReadAccess = nullptr;
-        }
+        maColor = mxBitmap->GetPixel(Point(nX, nY));
     }
 }
 
-void ColorFieldControl::MouseMove( const MouseEvent& rMEvt )
+void ColorFieldControl::MouseButtonDown(const MouseEvent& rMEvt)
 {
-    if( rMEvt.IsLeft() )
-    {
-        ShowPosition( rMEvt.GetPosPixel(), true );
-        Modify();
-    }
-}
-
-void ColorFieldControl::MouseButtonDown( const MouseEvent& rMEvt )
-{
-    if( rMEvt.IsLeft() && !rMEvt.IsShift() )
-    {
-        CaptureMouse();
-        ShowPosition( rMEvt.GetPosPixel(), true );
-        Modify();
-    }
-}
-
-void ColorFieldControl::MouseButtonUp( const MouseEvent& )
-{
-    if( IsMouseCaptured() )
-        ReleaseMouse();
-}
-
-void ColorFieldControl::KeyMove( int dx, int dy )
-{
-    Size aSize(GetOutputSizePixel());
-    Point aPos(static_cast<long>(mdX * aSize.Width()), static_cast<long>((1.0 - mdY) * aSize.Height()));
-    aPos.X() += dx;
-    aPos.Y() += dy;
-    if( aPos.X() < 0 )
-        aPos.X() += aSize.Width();
-    else if( aPos.X() >= aSize.Width() )
-        aPos.X() -= aSize.Width();
-
-    if( aPos.Y() < 0 )
-        aPos.Y() += aSize.Height();
-    else if( aPos.Y() >= aSize.Height() )
-        aPos.Y() -= aSize.Height();
-
-    ShowPosition( aPos, true );
+    CaptureMouse();
+    mbMouseCaptured = true;
+    ShowPosition(rMEvt.GetPosPixel(), true);
     Modify();
 }
 
-void ColorFieldControl::KeyInput( const KeyEvent& rKEvt )
+void ColorFieldControl::MouseMove(const MouseEvent& rMEvt)
 {
-    bool   bShift = rKEvt.GetKeyCode().IsShift();
-    bool   bCtrl = rKEvt.GetKeyCode().IsMod1();
-    bool   bAlt = rKEvt.GetKeyCode().IsMod2();
-
-    if (!bAlt && !bShift)
+    if (mbMouseCaptured)
     {
-        switch( rKEvt.GetKeyCode().GetCode() )
-        {
-        case KEY_DOWN:
-            KeyMove(0, bCtrl ? 5 : 1);
-            return;
-        case KEY_UP:
-            KeyMove(0, bCtrl ? -5 : -1);
-            return;
-        case KEY_LEFT:
-            KeyMove(bCtrl ? -5 : -1,  0);
-            return;
-        case KEY_RIGHT:
-            KeyMove(bCtrl ? 5 :  1,  0);
-            return;
-        }
+        ShowPosition(rMEvt.GetPosPixel(), true);
+        Modify();
     }
-    Control::KeyInput(rKEvt);
 }
 
-void ColorFieldControl::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void ColorFieldControl::MouseButtonUp(const MouseEvent&)
 {
-    if (!mpBitmap)
+    ReleaseMouse();
+    mbMouseCaptured = false;
+}
+
+void ColorFieldControl::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&)
+{
+    if (!mxBitmap)
         UpdateBitmap();
 
-    if (mpBitmap)
+    if (mxBitmap)
     {
-        Bitmap aOutputBitmap(*mpBitmap);
-
-        if (GetBitCount() <= 8)
-            aOutputBitmap.Dither();
-
-        rRenderContext.DrawBitmap(rRect.TopLeft(), rRect.GetSize(), rRect.TopLeft(), rRect.GetSize(), aOutputBitmap);
+        Size aSize(GetOutputSizePixel());
+        rRenderContext.DrawOutDev(Point(0, 0), aSize, Point(0, 0), aSize, *mxBitmap);
     }
 
     // draw circle around current color
@@ -673,14 +460,14 @@ void ColorFieldControl::Paint(vcl::RenderContext& rRenderContext, const Rectangl
 
     rRenderContext.SetFillColor();
 
-    rRenderContext.DrawEllipse(Rectangle(maPosition, Size(11, 11)));
+    rRenderContext.DrawEllipse(::tools::Rectangle(maPosition, Size(11, 11)));
 }
 
 void ColorFieldControl::Resize()
 {
+    CustomWidgetController::Resize();
     UpdateBitmap();
     UpdatePosition();
-    Control::Resize();
 }
 
 void ColorFieldControl::Modify()
@@ -712,18 +499,18 @@ void ColorFieldControl::UpdatePosition()
     ShowPosition(Point(static_cast<long>(mdX * aSize.Width()), static_cast<long>((1.0 - mdY) * aSize.Height())), false);
 }
 
-class ColorSliderControl : public Control
+class ColorSliderControl : public weld::CustomWidgetController
 {
 public:
-    ColorSliderControl( vcl::Window* pParent, const WinBits& nStyle );
-    virtual ~ColorSliderControl();
-    virtual void dispose() override;
+    ColorSliderControl();
+    virtual ~ColorSliderControl() override;
 
-    virtual void MouseMove( const MouseEvent& rMEvt ) override;
-    virtual void MouseButtonDown( const MouseEvent& rMEvt ) override;
-    virtual void MouseButtonUp( const MouseEvent& rMEvt ) override;
-    virtual void KeyInput( const KeyEvent& rKEvt ) override;
-    virtual void Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
+
+    virtual void MouseButtonDown(const MouseEvent& rMEvt) override;
+    virtual void MouseMove(const MouseEvent& rMEvt) override;
+    virtual void MouseButtonUp(const MouseEvent& rMEvt) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&) override;
     virtual void Resize() override;
 
     void UpdateBitmap();
@@ -733,8 +520,6 @@ public:
     void SetValue( const Color& rColor, ColorMode eMode, double dValue );
     double GetValue() const { return mdValue; }
 
-    void KeyMove( int dy );
-
     void SetModifyHdl( const Link<ColorSliderControl&,void>& rLink ) { maModifyHdl = rLink; }
 
     sal_Int16 GetLevel() const { return mnLevel; }
@@ -743,126 +528,103 @@ private:
     Link<ColorSliderControl&,void> maModifyHdl;
     Color maColor;
     ColorMode meMode;
-    Bitmap* mpBitmap;
+    VclPtr<VirtualDevice> mxBitmap;
     sal_Int16 mnLevel;
     double mdValue;
 };
 
-ColorSliderControl::ColorSliderControl( vcl::Window* pParent, const WinBits& nStyle )
-    : Control( pParent, nStyle )
-    , meMode( DefaultMode )
-    , mpBitmap( nullptr )
+ColorSliderControl::ColorSliderControl()
+    : meMode( DefaultMode )
     , mnLevel( 0 )
     , mdValue( -1.0 )
 {
-    SetControlBackground();
+}
+
+void ColorSliderControl::SetDrawingArea(weld::DrawingArea* pDrawingArea)
+{
+    CustomWidgetController::SetDrawingArea(pDrawingArea);
+    pDrawingArea->set_size_request(pDrawingArea->get_approximate_digit_width() * 3, -1);
 }
 
 ColorSliderControl::~ColorSliderControl()
 {
-    disposeOnce();
-}
-
-void ColorSliderControl::dispose()
-{
-    delete mpBitmap;
-    mpBitmap = nullptr;
-    Control::dispose();
-}
-
-VCL_BUILDER_DECL_FACTORY(ColorSliderControl)
-{
-    WinBits nBits = 0;
-
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nBits |= WB_BORDER;
-
-    rRet = VclPtr<ColorSliderControl>::Create(pParent, nBits);
+    mxBitmap.disposeAndClear();
 }
 
 void ColorSliderControl::UpdateBitmap()
 {
     Size aSize(1, GetOutputSizePixel().Height());
 
-    if (mpBitmap && mpBitmap->GetSizePixel() != aSize)
+    if (mxBitmap && mxBitmap->GetOutputSizePixel() != aSize)
+        mxBitmap.disposeAndClear();
+
+    if (!mxBitmap)
     {
-        delete mpBitmap;
-        mpBitmap = nullptr;
+        mxBitmap = VclPtr<VirtualDevice>::Create();
+        mxBitmap->SetOutputSizePixel(aSize);
     }
 
-    if (!mpBitmap)
-        mpBitmap = new Bitmap(aSize, 24);
+    const long nY = aSize.Height() - 1;
 
-    BitmapWriteAccess* pWriteAccess = mpBitmap->AcquireWriteAccess();
+    Color aBitmapColor(maColor);
 
-    if (pWriteAccess)
+    sal_uInt16 nHue, nSat, nBri;
+    maColor.RGBtoHSB(nHue, nSat, nBri);
+
+    // this has been unlooped for performance reason, please do not merge back!
+
+    switch (meMode)
     {
-        const long nY = aSize.Height() - 1;
-
-        BitmapColor aBitmapColor(maColor);
-
-        sal_uInt16 nHue, nSat, nBri;
-        maColor.RGBtoHSB(nHue, nSat, nBri);
-
-        // this has been unlooped for performance reason, please do not merge back!
-
-        switch (meMode)
+    case HUE:
+        nSat = 100;
+        nBri = 100;
+        for (long y = 0; y <= nY; y++)
         {
-        case HUE:
-            nSat = 100;
-            nBri = 100;
-            for (long y = 0; y <= nY; y++)
-            {
-                nHue = static_cast<sal_uInt16>((359 * y) / nY);
-                aBitmapColor = BitmapColor(Color(Color::HSBtoRGB(nHue, nSat, nBri)));
-                pWriteAccess->SetPixel(nY - y, 0, aBitmapColor);
-            }
-            break;
-
-        case SATURATION:
-            nBri = std::max(sal_uInt16(32), nBri);
-            for (long y = 0; y <= nY; y++)
-            {
-                nSat = static_cast<sal_uInt16>((100 * y) / nY);
-                pWriteAccess->SetPixel(nY - y, 0, BitmapColor(Color(Color::HSBtoRGB(nHue, nSat, nBri))));
-            }
-            break;
-
-        case BRIGHTNESS:
-            for (long y = 0; y <= nY; y++)
-            {
-                nBri = static_cast<sal_uInt16>((100 * y) / nY);
-                pWriteAccess->SetPixel(nY - y, 0, BitmapColor(Color(Color::HSBtoRGB(nHue, nSat, nBri))));
-            }
-            break;
-
-        case RED:
-            for (long y = 0; y <= nY; y++)
-            {
-                aBitmapColor.SetRed(sal_uInt8(((long)255 * y) / nY));
-                pWriteAccess->SetPixel(nY - y, 0, aBitmapColor);
-            }
-            break;
-
-        case GREEN:
-            for (long y = 0; y <= nY; y++)
-            {
-                aBitmapColor.SetGreen(sal_uInt8(((long)255 * y) / nY));
-                pWriteAccess->SetPixel(nY - y, 0, aBitmapColor);
-            }
-            break;
-
-        case BLUE:
-            for (long y = 0; y <= nY; y++)
-            {
-                aBitmapColor.SetBlue(sal_uInt8(((long)255 * y) / nY));
-                pWriteAccess->SetPixel(nY - y, 0, aBitmapColor);
-            }
-            break;
+            nHue = static_cast<sal_uInt16>((359 * y) / nY);
+            mxBitmap->DrawPixel(Point(0, nY - y), Color::HSBtoRGB(nHue, nSat, nBri));
         }
+        break;
 
-        Bitmap::ReleaseAccess(pWriteAccess);
+    case SATURATION:
+        nBri = std::max(sal_uInt16(32), nBri);
+        for (long y = 0; y <= nY; y++)
+        {
+            nSat = static_cast<sal_uInt16>((100 * y) / nY);
+            mxBitmap->DrawPixel(Point(0, nY - y), Color::HSBtoRGB(nHue, nSat, nBri));
+        }
+        break;
+
+    case BRIGHTNESS:
+        for (long y = 0; y <= nY; y++)
+        {
+            nBri = static_cast<sal_uInt16>((100 * y) / nY);
+            mxBitmap->DrawPixel(Point(0, nY - y), Color::HSBtoRGB(nHue, nSat, nBri));
+        }
+        break;
+
+    case RED:
+        for (long y = 0; y <= nY; y++)
+        {
+            aBitmapColor.SetRed(sal_uInt8((long(255) * y) / nY));
+            mxBitmap->DrawPixel(Point(0, nY - y), aBitmapColor);
+        }
+        break;
+
+    case GREEN:
+        for (long y = 0; y <= nY; y++)
+        {
+            aBitmapColor.SetGreen(sal_uInt8((long(255) * y) / nY));
+            mxBitmap->DrawPixel(Point(0, nY - y), aBitmapColor);
+        }
+        break;
+
+    case BLUE:
+        for (long y = 0; y <= nY; y++)
+        {
+            aBitmapColor.SetBlue(sal_uInt8((long(255) * y) / nY));
+            mxBitmap->DrawPixel(Point(0, nY - y), aBitmapColor);
+        }
+        break;
     }
 }
 
@@ -870,7 +632,7 @@ void ColorSliderControl::ChangePosition(long nY)
 {
     const long nHeight = GetOutputSizePixel().Height() - 1;
 
-    if (nY < 0L)
+    if (nY < 0)
         nY = 0;
     else if (nY > nHeight)
         nY = nHeight;
@@ -879,80 +641,47 @@ void ColorSliderControl::ChangePosition(long nY)
     mdValue = double(nHeight - nY) / double(nHeight);
 }
 
-void ColorSliderControl::MouseMove( const MouseEvent& rMEvt )
+void ColorSliderControl::MouseButtonDown(const MouseEvent& rMEvt)
 {
-    if (rMEvt.IsLeft())
+    CaptureMouse();
+    ChangePosition(rMEvt.GetPosPixel().Y());
+    Modify();
+}
+
+void ColorSliderControl::MouseMove(const MouseEvent& rMEvt)
+{
+    if (IsMouseCaptured())
     {
         ChangePosition(rMEvt.GetPosPixel().Y());
         Modify();
     }
 }
 
-void ColorSliderControl::MouseButtonDown(const MouseEvent& rMEvt)
-{
-    if (rMEvt.IsLeft() && !rMEvt.IsShift())
-    {
-        CaptureMouse();
-        ChangePosition( rMEvt.GetPosPixel().Y() );
-        Modify();
-    }
-}
-
 void ColorSliderControl::MouseButtonUp(const MouseEvent&)
 {
-    if (IsMouseCaptured())
-        ReleaseMouse();
+    ReleaseMouse();
 }
 
-void ColorSliderControl::KeyMove(int dy)
+void ColorSliderControl::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&)
 {
-    ChangePosition( mnLevel + dy );
-    Modify();
-}
-
-void ColorSliderControl::KeyInput(const KeyEvent& rKEvt)
-{
-    if (!rKEvt.GetKeyCode().IsMod2() && !rKEvt.GetKeyCode().IsShift())
-    {
-        switch (rKEvt.GetKeyCode().GetCode())
-        {
-        case KEY_DOWN:
-            KeyMove(rKEvt.GetKeyCode().IsMod1() ?  5 :  1);
-            return;
-        case KEY_UP:
-            KeyMove(rKEvt.GetKeyCode().IsMod1() ? -5 : -1);
-            return;
-        }
-    }
-
-    Control::KeyInput( rKEvt );
-}
-
-void ColorSliderControl::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rRect*/)
-{
-    if (!mpBitmap)
+    if (!mxBitmap)
         UpdateBitmap();
 
     const Size aSize(GetOutputSizePixel());
-
-    Bitmap aOutputBitmap(*mpBitmap);
-
-    if (GetBitCount() <= 8)
-        aOutputBitmap.Dither();
 
     Point aPos;
     int x = aSize.Width();
     while (x--)
     {
-        rRenderContext.DrawBitmap(aPos, aOutputBitmap);
-        aPos.X() += 1;
+        rRenderContext.DrawOutDev(aPos, aSize, Point(0,0), aSize, *mxBitmap);
+        aPos.AdjustX(1);
     }
 }
 
 void ColorSliderControl::Resize()
 {
+    CustomWidgetController::Resize();
     UpdateBitmap();
-    Control::Resize();
 }
 
 void ColorSliderControl::Modify()
@@ -975,171 +704,137 @@ void ColorSliderControl::SetValue(const Color& rColor, ColorMode eMode, double d
     }
 }
 
-const sal_uInt16 UPDATE_RGB = 0x01;
-const sal_uInt16 UPDATE_CMYK = 0x02;
-const sal_uInt16 UPDATE_HSB = 0x04;
-const sal_uInt16 UPDATE_COLORCHOOSER = 0x08;
-const sal_uInt16 UPDATE_COLORSLIDER = 0x10;
-const sal_uInt16 UPDATE_HEX = 0x20;
-const sal_uInt16 UPDATE_ALL = 0xff;
-
-class ColorPickerDialog : public ModalDialog
+class ColorPickerDialog : public weld::GenericDialogController
 {
+private:
+    ColorFieldControl m_aColorField;
+    ColorSliderControl m_aColorSlider;
+    ColorPreviewControl m_aColorPreview;
+    ColorPreviewControl m_aColorPrevious;
+
+    std::unique_ptr<weld::CustomWeld> m_xColorField;
+    std::unique_ptr<weld::CustomWeld> m_xColorSlider;
+    std::unique_ptr<weld::CustomWeld> m_xColorPreview;
+    std::unique_ptr<weld::CustomWeld> m_xColorPrevious;
+
+    std::unique_ptr<weld::Widget> m_xFISliderLeft;
+    std::unique_ptr<weld::Widget> m_xFISliderRight;
+    std::unique_ptr<weld::RadioButton> m_xRBRed;
+    std::unique_ptr<weld::RadioButton> m_xRBGreen;
+    std::unique_ptr<weld::RadioButton> m_xRBBlue;
+    std::unique_ptr<weld::RadioButton> m_xRBHue;
+    std::unique_ptr<weld::RadioButton> m_xRBSaturation;
+    std::unique_ptr<weld::RadioButton> m_xRBBrightness;
+
+    std::unique_ptr<weld::SpinButton> m_xMFRed;
+    std::unique_ptr<weld::SpinButton> m_xMFGreen;
+    std::unique_ptr<weld::SpinButton> m_xMFBlue;
+    std::unique_ptr<weld::HexColorControl> m_xEDHex;
+
+    std::unique_ptr<weld::MetricSpinButton> m_xMFHue;
+    std::unique_ptr<weld::MetricSpinButton> m_xMFSaturation;
+    std::unique_ptr<weld::MetricSpinButton> m_xMFBrightness;
+
+    std::unique_ptr<weld::MetricSpinButton> m_xMFCyan;
+    std::unique_ptr<weld::MetricSpinButton> m_xMFMagenta;
+    std::unique_ptr<weld::MetricSpinButton> m_xMFYellow;
+    std::unique_ptr<weld::MetricSpinButton> m_xMFKey;
+
 public:
-    ColorPickerDialog(vcl::Window* pParent, sal_Int32 nColor, sal_Int16 nMode);
-    virtual ~ColorPickerDialog()
-    {
-        disposeOnce();
-    }
-    virtual void dispose() override;
+    ColorPickerDialog(weld::Window* pParent, Color nColor, sal_Int16 nMode);
 
-    void update_color(sal_uInt16 n = UPDATE_ALL);
+    void update_color(UpdateFlags n = UpdateFlags::All);
 
-    DECL_LINK_TYPED(ColorFieldControlModifydl, ColorFieldControl&, void);
-    DECL_LINK_TYPED(ColorSliderControlModifyHdl, ColorSliderControl&, void);
-    DECL_LINK_TYPED(ColorModifyEditHdl, Edit&, void);
-    DECL_LINK_TYPED(ModeModifyHdl, RadioButton&, void);
+    DECL_LINK(ColorFieldControlModifydl, ColorFieldControl&, void);
+    DECL_LINK(ColorSliderControlModifyHdl, ColorSliderControl&, void);
+    DECL_LINK(ColorModifyMetricHdl, weld::MetricSpinButton&, void);
+    DECL_LINK(ColorModifySpinHdl, weld::SpinButton&, void);
+    DECL_LINK(ColorModifyEditHdl, weld::Entry&, void);
+    DECL_LINK(ModeModifyHdl, weld::ToggleButton&, void);
 
-    sal_Int32 GetColor() const;
+    Color GetColor() const;
 
-    void setColorComponent(sal_uInt16 nComp, double dValue);
+    void setColorComponent(ColorComponent nComp, double dValue);
 
 private:
-    sal_Int16 mnDialogMode;
     ColorMode meMode;
 
     double mdRed, mdGreen, mdBlue;
     double mdHue, mdSat, mdBri;
     double mdCyan, mdMagenta, mdYellow, mdKey;
-
-private:
-    VclPtr<ColorFieldControl>    mpColorField;
-    VclPtr<ColorSliderControl>   mpColorSlider;
-    VclPtr<ColorPreviewControl>  mpColorPreview;
-    VclPtr<ColorPreviewControl>  mpColorPrevious;
-
-    VclPtr<FixedImage>   mpFISliderLeft;
-    VclPtr<FixedImage>   mpFISliderRight;
-    Image         maSliderImage;
-
-    VclPtr<RadioButton>    mpRBRed;
-    VclPtr<RadioButton>    mpRBGreen;
-    VclPtr<RadioButton>    mpRBBlue;
-    VclPtr<RadioButton>    mpRBHue;
-    VclPtr<RadioButton>    mpRBSaturation;
-    VclPtr<RadioButton>    mpRBBrightness;
-
-    VclPtr<MetricField>        mpMFRed;
-    VclPtr<MetricField>        mpMFGreen;
-    VclPtr<MetricField>        mpMFBlue;
-    VclPtr<HexColorControl>    mpEDHex;
-
-    VclPtr<MetricField>    mpMFHue;
-    VclPtr<MetricField>    mpMFSaturation;
-    VclPtr<MetricField>    mpMFBrightness;
-
-    VclPtr<MetricField>    mpMFCyan;
-    VclPtr<MetricField>    mpMFMagenta;
-    VclPtr<MetricField>    mpMFYellow;
-    VclPtr<MetricField>    mpMFKey;
 };
 
-ColorPickerDialog::ColorPickerDialog( vcl::Window* pParent, sal_Int32 nColor, sal_Int16 nMode )
-: ModalDialog( pParent, "ColorPicker", "cui/ui/colorpickerdialog.ui" )
-, mnDialogMode( nMode )
-, meMode( DefaultMode )
-, maSliderImage( FixedImage::loadThemeImage("res/colorslider.png") )
+ColorPickerDialog::ColorPickerDialog(weld::Window* pParent, Color nColor, sal_Int16 nDialogMode)
+    : GenericDialogController(pParent, "cui/ui/colorpickerdialog.ui", "ColorPicker")
+    , m_xColorField(new weld::CustomWeld(*m_xBuilder, "colorField", m_aColorField))
+    , m_xColorSlider(new weld::CustomWeld(*m_xBuilder, "colorSlider", m_aColorSlider))
+    , m_xColorPreview(new weld::CustomWeld(*m_xBuilder, "preview", m_aColorPreview))
+    , m_xColorPrevious(new weld::CustomWeld(*m_xBuilder, "previous", m_aColorPrevious))
+    , m_xFISliderLeft(m_xBuilder->weld_widget("leftImage"))
+    , m_xFISliderRight(m_xBuilder->weld_widget("rightImage"))
+    , m_xRBRed(m_xBuilder->weld_radio_button("redRadiobutton"))
+    , m_xRBGreen(m_xBuilder->weld_radio_button("greenRadiobutton"))
+    , m_xRBBlue(m_xBuilder->weld_radio_button("blueRadiobutton"))
+    , m_xRBHue(m_xBuilder->weld_radio_button("hueRadiobutton"))
+    , m_xRBSaturation(m_xBuilder->weld_radio_button("satRadiobutton"))
+    , m_xRBBrightness(m_xBuilder->weld_radio_button("brightRadiobutton"))
+    , m_xMFRed(m_xBuilder->weld_spin_button("redSpinbutton"))
+    , m_xMFGreen(m_xBuilder->weld_spin_button("greenSpinbutton"))
+    , m_xMFBlue(m_xBuilder->weld_spin_button("blueSpinbutton"))
+    , m_xEDHex(new weld::HexColorControl(m_xBuilder->weld_entry("hexEntry")))
+    , m_xMFHue(m_xBuilder->weld_metric_spin_button("hueSpinbutton", FieldUnit::DEGREE))
+    , m_xMFSaturation(m_xBuilder->weld_metric_spin_button("satSpinbutton", FieldUnit::PERCENT))
+    , m_xMFBrightness(m_xBuilder->weld_metric_spin_button("brightSpinbutton", FieldUnit::PERCENT))
+    , m_xMFCyan(m_xBuilder->weld_metric_spin_button("cyanSpinbutton", FieldUnit::PERCENT))
+    , m_xMFMagenta(m_xBuilder->weld_metric_spin_button("magSpinbutton", FieldUnit::PERCENT))
+    , m_xMFYellow(m_xBuilder->weld_metric_spin_button("yellowSpinbutton", FieldUnit::PERCENT))
+    , m_xMFKey(m_xBuilder->weld_metric_spin_button("keySpinbutton", FieldUnit::PERCENT))
+    , meMode( DefaultMode )
 {
-    get(mpColorField, "colorField");
-    get(mpColorSlider, "colorSlider");
-    get(mpColorPreview, "preview");
-    get(mpColorPrevious, "previous");
-    get(mpRBRed, "redRadiobutton");
-    get(mpRBGreen, "greenRadiobutton");
-    get(mpRBBlue, "blueRadiobutton");
-    get(mpRBHue, "hueRadiobutton");
-    get(mpRBSaturation, "satRadiobutton");
-    get(mpRBBrightness, "brightRadiobutton");
-    get(mpMFRed, "redSpinbutton");
-    get(mpMFGreen, "greenSpinbutton");
-    get(mpMFBlue, "blueSpinbutton");
-    get(mpEDHex, "hexEntry");
-    get(mpMFHue, "hueSpinbutton");
-    get(mpMFSaturation, "satSpinbutton");
-    get(mpMFBrightness, "brightSpinbutton");
-    get(mpMFCyan, "cyanSpinbutton");
-    get(mpMFMagenta, "magSpinbutton");
-    get(mpMFYellow, "yellowSpinbutton");
-    get(mpMFKey, "keySpinbutton");
-    get(mpFISliderLeft, "leftImage");
-    get(mpFISliderRight, "rightImage");
+    m_aColorField.SetModifyHdl( LINK( this, ColorPickerDialog, ColorFieldControlModifydl ) );
+    m_aColorSlider.SetModifyHdl( LINK( this, ColorPickerDialog, ColorSliderControlModifyHdl ) );
 
-    Size aDialogSize = get_preferred_size();
-    set_width_request(aDialogSize.Width() + 50);
-    set_height_request(aDialogSize.Height() + 30);
+    int nMargin = (m_xFISliderLeft->get_preferred_size().Height() + 1) / 2;
+    m_xColorSlider->set_margin_top(nMargin);
+    m_xColorSlider->set_margin_bottom(nMargin);
 
-    mpColorField->SetModifyHdl( LINK( this, ColorPickerDialog, ColorFieldControlModifydl ) );
-    mpColorSlider->SetModifyHdl( LINK( this, ColorPickerDialog, ColorSliderControlModifyHdl ) );
+    Link<weld::MetricSpinButton&,void> aLink3( LINK( this, ColorPickerDialog, ColorModifyMetricHdl ) );
+    m_xMFCyan->connect_value_changed( aLink3 );
+    m_xMFMagenta->connect_value_changed( aLink3 );
+    m_xMFYellow->connect_value_changed( aLink3 );
+    m_xMFKey->connect_value_changed( aLink3 );
 
-    Link<Edit&,void> aLink3( LINK( this, ColorPickerDialog, ColorModifyEditHdl ) );
-    mpMFRed->SetModifyHdl( aLink3 );
-    mpMFGreen->SetModifyHdl( aLink3 );
-    mpMFBlue->SetModifyHdl( aLink3 );
+    m_xMFHue->connect_value_changed( aLink3 );
+    m_xMFSaturation->connect_value_changed( aLink3 );
+    m_xMFBrightness->connect_value_changed( aLink3 );
 
-    mpMFCyan->SetModifyHdl( aLink3 );
-    mpMFMagenta->SetModifyHdl( aLink3 );
-    mpMFYellow->SetModifyHdl( aLink3 );
-    mpMFKey->SetModifyHdl( aLink3 );
+    Link<weld::SpinButton&,void> aLink4(LINK(this, ColorPickerDialog, ColorModifySpinHdl));
+    m_xMFRed->connect_value_changed(aLink4);
+    m_xMFGreen->connect_value_changed(aLink4);
+    m_xMFBlue->connect_value_changed(aLink4);
 
-    mpMFHue->SetModifyHdl( aLink3 );
-    mpMFSaturation->SetModifyHdl( aLink3 );
-    mpMFBrightness->SetModifyHdl( aLink3 );
+    m_xEDHex->connect_changed(LINK(this, ColorPickerDialog, ColorModifyEditHdl));
 
-    mpEDHex->SetModifyHdl( aLink3 );
+    Link<weld::ToggleButton&,void> aLink2 = LINK( this, ColorPickerDialog, ModeModifyHdl );
+    m_xRBRed->connect_toggled( aLink2 );
+    m_xRBGreen->connect_toggled( aLink2 );
+    m_xRBBlue->connect_toggled( aLink2 );
+    m_xRBHue->connect_toggled( aLink2 );
+    m_xRBSaturation->connect_toggled( aLink2 );
+    m_xRBBrightness->connect_toggled( aLink2 );
 
-    Link<RadioButton&,void> aLink2 = LINK( this, ColorPickerDialog, ModeModifyHdl );
-    mpRBRed->SetToggleHdl( aLink2 );
-    mpRBGreen->SetToggleHdl( aLink2 );
-    mpRBBlue->SetToggleHdl( aLink2 );
-    mpRBHue->SetToggleHdl( aLink2 );
-    mpRBSaturation->SetToggleHdl( aLink2 );
-    mpRBBrightness->SetToggleHdl( aLink2 );
-
-    Image aSliderImage( maSliderImage );
-
-    mpFISliderLeft->SetImage( aSliderImage );
-    mpFISliderLeft->Show();
-
-    BitmapEx aTmpBmp( maSliderImage.GetBitmapEx() );
-    aTmpBmp.Mirror( BmpMirrorFlags::Horizontal );
-    mpFISliderRight->SetImage( Image( aTmpBmp  ) );
-
-    Size aSize( maSliderImage.GetSizePixel() );
-    mpFISliderLeft->SetSizePixel( aSize );
-    mpFISliderRight->SetSizePixel( aSize );
-
-    Point aPos( mpColorSlider->GetPosPixel() );
-
-    aPos.X() -= aSize.Width();
-    aPos.Y() -= aSize.Height() / 2;
-    mpFISliderLeft->SetPosPixel( aPos );
-
-    aPos.X() += aSize.Width() + mpColorSlider->GetSizePixel().Width();
-    mpFISliderRight->SetPosPixel( aPos );
-
-    Color aColor( nColor );
+    Color aColor(nColor);
 
     // modify
-    if( mnDialogMode == 2 )
+    if (nDialogMode == 2)
     {
-        mpColorPreview->SetSizePixel( mpColorPrevious->GetSizePixel() );
-        mpColorPrevious->SetColor( aColor );
-        mpColorPrevious->Show();
+        m_aColorPrevious.SetColor(aColor);
+        m_xColorPrevious->show();
     }
 
-    mdRed = ((double)aColor.GetRed()) / 255.0;
-    mdGreen = ((double)aColor.GetGreen()) / 255.0;
-    mdBlue = ((double)aColor.GetBlue()) / 255.0;
+    mdRed = static_cast<double>(aColor.GetRed()) / 255.0;
+    mdGreen = static_cast<double>(aColor.GetGreen()) / 255.0;
+    mdBlue = static_cast<double>(aColor.GetBlue()) / 255.0;
 
     RGBtoHSV( mdRed, mdGreen, mdBlue, mdHue, mdSat, mdBri );
     RGBtoCMYK( mdRed, mdGreen, mdBlue, mdCyan, mdMagenta, mdYellow, mdKey );
@@ -1147,45 +842,17 @@ ColorPickerDialog::ColorPickerDialog( vcl::Window* pParent, sal_Int32 nColor, sa
     update_color();
 }
 
-void ColorPickerDialog::dispose()
-{
-    mpColorField.clear();
-    mpColorSlider.clear();
-    mpColorPreview.clear();
-    mpColorPrevious.clear();
-    mpFISliderLeft.clear();
-    mpFISliderRight.clear();
-    mpRBRed.clear();
-    mpRBGreen.clear();
-    mpRBBlue.clear();
-    mpRBHue.clear();
-    mpRBSaturation.clear();
-    mpRBBrightness.clear();
-    mpMFRed.clear();
-    mpMFGreen.clear();
-    mpMFBlue.clear();
-    mpEDHex.clear();
-    mpMFHue.clear();
-    mpMFSaturation.clear();
-    mpMFBrightness.clear();
-    mpMFCyan.clear();
-    mpMFMagenta.clear();
-    mpMFYellow.clear();
-    mpMFKey.clear();
-    ModalDialog::dispose();
-}
-
 static int toInt( double dValue, double dRange )
 {
     return static_cast< int >( std::floor((dValue * dRange) + 0.5 ) );
 }
 
-sal_Int32 ColorPickerDialog::GetColor() const
+Color ColorPickerDialog::GetColor() const
 {
-    return Color( toInt(mdRed,255.0), toInt(mdGreen,255.0), toInt(mdBlue,255.0) ).GetColor();
+    return Color( toInt(mdRed,255.0), toInt(mdGreen,255.0), toInt(mdBlue,255.0) );
 }
 
-void ColorPickerDialog::update_color( sal_uInt16 n )
+void ColorPickerDialog::update_color( UpdateFlags n )
 {
     sal_uInt8 nRed = toInt(mdRed,255.0);
     sal_uInt8 nGreen = toInt(mdGreen,255.0);
@@ -1193,271 +860,262 @@ void ColorPickerDialog::update_color( sal_uInt16 n )
 
     Color aColor(nRed, nGreen, nBlue);
 
-    if (n & UPDATE_RGB) // update RGB
+    if (n & UpdateFlags::RGB) // update RGB
     {
-        mpMFRed->SetValue(nRed);
-        mpMFGreen->SetValue(nGreen);
-        mpMFBlue->SetValue(nBlue);
+        m_xMFRed->set_value(nRed);
+        m_xMFGreen->set_value(nGreen);
+        m_xMFBlue->set_value(nBlue);
     }
 
-    if (n & UPDATE_CMYK) // update CMYK
+    if (n & UpdateFlags::CMYK) // update CMYK
     {
-        mpMFCyan->SetValue(toInt(mdCyan, 100.0));
-        mpMFMagenta->SetValue(toInt(mdMagenta, 100.0));
-        mpMFYellow->SetValue(toInt(mdYellow, 100.0));
-        mpMFKey->SetValue(toInt(mdKey, 100.0));
+        m_xMFCyan->set_value(toInt(mdCyan, 100.0), FieldUnit::PERCENT);
+        m_xMFMagenta->set_value(toInt(mdMagenta, 100.0), FieldUnit::PERCENT);
+        m_xMFYellow->set_value(toInt(mdYellow, 100.0), FieldUnit::PERCENT);
+        m_xMFKey->set_value(toInt(mdKey, 100.0), FieldUnit::PERCENT);
     }
 
-    if (n & UPDATE_HSB ) // update HSB
+    if (n & UpdateFlags::HSB ) // update HSB
     {
-        mpMFHue->SetValue(toInt(mdHue, 1.0));
-        mpMFSaturation->SetValue(toInt( mdSat, 100.0));
-        mpMFBrightness->SetValue(toInt( mdBri, 100.0));
+        m_xMFHue->set_value(toInt(mdHue, 1.0), FieldUnit::DEGREE);
+        m_xMFSaturation->set_value(toInt( mdSat, 100.0), FieldUnit::PERCENT);
+        m_xMFBrightness->set_value(toInt( mdBri, 100.0), FieldUnit::PERCENT);
     }
 
-    if (n & UPDATE_COLORCHOOSER ) // update Color Chooser 1
+    if (n & UpdateFlags::ColorChooser ) // update Color Chooser 1
     {
         switch( meMode )
         {
         case HUE:
-            mpColorField->SetValues(aColor, meMode, mdSat, mdBri);
+            m_aColorField.SetValues(aColor, meMode, mdSat, mdBri);
             break;
         case SATURATION:
-            mpColorField->SetValues(aColor, meMode, mdHue / 360.0, mdBri);
+            m_aColorField.SetValues(aColor, meMode, mdHue / 360.0, mdBri);
             break;
         case BRIGHTNESS:
-            mpColorField->SetValues(aColor, meMode, mdHue / 360.0, mdSat);
+            m_aColorField.SetValues(aColor, meMode, mdHue / 360.0, mdSat);
             break;
         case RED:
-            mpColorField->SetValues(aColor, meMode, mdBlue, mdGreen);
+            m_aColorField.SetValues(aColor, meMode, mdBlue, mdGreen);
             break;
         case GREEN:
-            mpColorField->SetValues(aColor, meMode, mdBlue, mdRed);
+            m_aColorField.SetValues(aColor, meMode, mdBlue, mdRed);
             break;
         case BLUE:
-            mpColorField->SetValues(aColor, meMode, mdRed, mdGreen);
+            m_aColorField.SetValues(aColor, meMode, mdRed, mdGreen);
             break;
         }
     }
 
-    if (n & UPDATE_COLORSLIDER) // update Color Chooser 2
+    if (n & UpdateFlags::ColorSlider) // update Color Chooser 2
     {
         switch (meMode)
         {
         case HUE:
-            mpColorSlider->SetValue(aColor, meMode, mdHue / 360.0);
+            m_aColorSlider.SetValue(aColor, meMode, mdHue / 360.0);
             break;
         case SATURATION:
-            mpColorSlider->SetValue(aColor, meMode, mdSat);
+            m_aColorSlider.SetValue(aColor, meMode, mdSat);
             break;
         case BRIGHTNESS:
-            mpColorSlider->SetValue(aColor, meMode, mdBri);
+            m_aColorSlider.SetValue(aColor, meMode, mdBri);
             break;
         case RED:
-            mpColorSlider->SetValue(aColor, meMode, mdRed);
+            m_aColorSlider.SetValue(aColor, meMode, mdRed);
             break;
         case GREEN:
-            mpColorSlider->SetValue(aColor, meMode, mdGreen);
+            m_aColorSlider.SetValue(aColor, meMode, mdGreen);
             break;
         case BLUE:
-            mpColorSlider->SetValue(aColor, meMode, mdBlue);
+            m_aColorSlider.SetValue(aColor, meMode, mdBlue);
             break;
         }
     }
 
-    if (n & UPDATE_HEX) // update hex
+    if (n & UpdateFlags::Hex) // update hex
     {
-        mpEDHex->SetColor(aColor.GetColor());
+        m_xFISliderLeft->set_margin_top(m_aColorSlider.GetLevel());
+        m_xFISliderRight->set_margin_top(m_aColorSlider.GetLevel());
+        m_xEDHex->SetColor(aColor);
     }
-
-    {
-        Point aPos(0, mpColorSlider->GetLevel() + mpColorSlider->GetPosPixel().Y() - 1);
-
-        aPos.X() = mpFISliderLeft->GetPosPixel().X();
-        if (aPos != mpFISliderLeft->GetPosPixel())
-        {
-            mpFISliderLeft->SetPosPixel(aPos);
-
-            aPos.X() = mpFISliderRight->GetPosPixel().X();
-            mpFISliderRight->SetPosPixel(aPos);
-        }
-    }
-
-    mpColorPreview->SetColor(aColor);
+    m_aColorPreview.SetColor(aColor);
 }
 
-IMPL_LINK_NOARG_TYPED(ColorPickerDialog, ColorFieldControlModifydl, ColorFieldControl&, void)
+IMPL_LINK_NOARG(ColorPickerDialog, ColorFieldControlModifydl, ColorFieldControl&, void)
 {
-    sal_uInt16 n = 0;
-
-    double x = mpColorField->GetX();
-    double y = mpColorField->GetY();
+    double x = m_aColorField.GetX();
+    double y = m_aColorField.GetY();
 
     switch( meMode )
     {
     case HUE:
         mdSat = x;
-        setColorComponent( COLORCOMP_BRI, y );
+        setColorComponent( ColorComponent::Brightness, y );
         break;
     case SATURATION:
         mdHue = x * 360.0;
-        setColorComponent( COLORCOMP_BRI, y );
+        setColorComponent( ColorComponent::Brightness, y );
         break;
     case BRIGHTNESS:
         mdHue = x * 360.0;
-        setColorComponent( COLORCOMP_SAT, y );
+        setColorComponent( ColorComponent::Saturation, y );
         break;
     case RED:
         mdBlue = x;
-        setColorComponent( COLORCOMP_GREEN, y );
+        setColorComponent( ColorComponent::Green, y );
         break;
     case GREEN:
         mdBlue = x;
-        setColorComponent( COLORCOMP_RED, y );
+        setColorComponent( ColorComponent::Red, y );
         break;
     case BLUE:
         mdRed = x;
-        setColorComponent( COLORCOMP_GREEN, y );
+        setColorComponent( ColorComponent::Green, y );
         break;
     }
 
-    n = UPDATE_ALL &~ (UPDATE_COLORCHOOSER);
-
-    if (n)
-        update_color(n);
-
+    update_color(UpdateFlags::All & ~UpdateFlags::ColorChooser);
 }
-IMPL_LINK_NOARG_TYPED(ColorPickerDialog, ColorSliderControlModifyHdl, ColorSliderControl&, void)
-{
-    sal_uInt16 n = 0;
 
-    double dValue = mpColorSlider->GetValue();
+IMPL_LINK_NOARG(ColorPickerDialog, ColorSliderControlModifyHdl, ColorSliderControl&, void)
+{
+    double dValue = m_aColorSlider.GetValue();
     switch (meMode)
     {
     case HUE:
-        setColorComponent( COLORCOMP_HUE, dValue * 360.0 );
+        setColorComponent( ColorComponent::Hue, dValue * 360.0 );
         break;
     case SATURATION:
-        setColorComponent( COLORCOMP_SAT, dValue );
+        setColorComponent( ColorComponent::Saturation, dValue );
         break;
     case BRIGHTNESS:
-        setColorComponent( COLORCOMP_BRI, dValue );
+        setColorComponent( ColorComponent::Brightness, dValue );
         break;
     case RED:
-        setColorComponent( COLORCOMP_RED, dValue );
+        setColorComponent( ColorComponent::Red, dValue );
         break;
     case GREEN:
-        setColorComponent( COLORCOMP_GREEN, dValue );
+        setColorComponent( ColorComponent::Green, dValue );
         break;
     case BLUE:
-        setColorComponent( COLORCOMP_BLUE, dValue );
+        setColorComponent( ColorComponent::Blue, dValue );
         break;
     }
 
-    n = UPDATE_ALL&~(UPDATE_COLORSLIDER);
-    if (n)
-        update_color(n);
+    update_color(UpdateFlags::All & ~UpdateFlags::ColorSlider);
 }
-IMPL_LINK_TYPED(ColorPickerDialog, ColorModifyEditHdl, Edit&, rEdit, void)
+
+IMPL_LINK(ColorPickerDialog, ColorModifyMetricHdl, weld::MetricSpinButton&, rEdit, void)
 {
-    sal_uInt16 n = 0;
+    UpdateFlags n = UpdateFlags::NONE;
 
-    if (&rEdit == mpMFRed)
+    if (&rEdit == m_xMFHue.get())
     {
-        setColorComponent( COLORCOMP_RED, ((double)mpMFRed->GetValue()) / 255.0 );
-        n = UPDATE_ALL &~ (UPDATE_RGB);
+        setColorComponent( ColorComponent::Hue, static_cast<double>(m_xMFHue->get_value(FieldUnit::DEGREE)) );
+        n = UpdateFlags::All & ~UpdateFlags::HSB;
     }
-    else if (&rEdit == mpMFGreen)
+    else if (&rEdit == m_xMFSaturation.get())
     {
-        setColorComponent( COLORCOMP_GREEN, ((double)mpMFGreen->GetValue()) / 255.0 );
-        n = UPDATE_ALL &~ (UPDATE_RGB);
+        setColorComponent( ColorComponent::Saturation, static_cast<double>(m_xMFSaturation->get_value(FieldUnit::PERCENT)) / 100.0 );
+        n = UpdateFlags::All & ~UpdateFlags::HSB;
     }
-    else if (&rEdit == mpMFBlue)
+    else if (&rEdit == m_xMFBrightness.get())
     {
-        setColorComponent( COLORCOMP_BLUE, ((double)mpMFBlue->GetValue()) / 255.0 );
-        n = UPDATE_ALL &~ (UPDATE_RGB);
+        setColorComponent( ColorComponent::Brightness, static_cast<double>(m_xMFBrightness->get_value(FieldUnit::PERCENT)) / 100.0 );
+        n = UpdateFlags::All & ~UpdateFlags::HSB;
     }
-    else if (&rEdit == mpMFHue)
+    else if (&rEdit == m_xMFCyan.get())
     {
-        setColorComponent( COLORCOMP_HUE, (double)mpMFHue->GetValue() );
-        n = UPDATE_ALL &~ (UPDATE_HSB);
+        setColorComponent( ColorComponent::Cyan, static_cast<double>(m_xMFCyan->get_value(FieldUnit::PERCENT)) / 100.0 );
+        n = UpdateFlags::All & ~UpdateFlags::CMYK;
     }
-    else if (&rEdit == mpMFSaturation)
+    else if (&rEdit == m_xMFMagenta.get())
     {
-        setColorComponent( COLORCOMP_SAT, ((double)mpMFSaturation->GetValue()) / 100.0 );
-        n = UPDATE_ALL &~ (UPDATE_HSB);
+        setColorComponent( ColorComponent::Magenta, static_cast<double>(m_xMFMagenta->get_value(FieldUnit::PERCENT)) / 100.0 );
+        n = UpdateFlags::All & ~UpdateFlags::CMYK;
     }
-    else if (&rEdit == mpMFBrightness)
+    else if (&rEdit == m_xMFYellow.get())
     {
-        setColorComponent( COLORCOMP_BRI, ((double)mpMFBrightness->GetValue()) / 100.0 );
-        n = UPDATE_ALL &~ (UPDATE_HSB);
+        setColorComponent( ColorComponent::Yellow, static_cast<double>(m_xMFYellow->get_value(FieldUnit::PERCENT)) / 100.0 );
+        n = UpdateFlags::All & ~UpdateFlags::CMYK;
     }
-    else if (&rEdit == mpMFCyan)
+    else if (&rEdit == m_xMFKey.get())
     {
-        setColorComponent( COLORCOMP_CYAN, ((double)mpMFCyan->GetValue()) / 100.0 );
-        n = UPDATE_ALL &~ (UPDATE_CMYK);
-    }
-    else if (&rEdit == mpMFMagenta)
-    {
-        setColorComponent( COLORCOMP_MAGENTA, ((double)mpMFMagenta->GetValue()) / 100.0 );
-        n = UPDATE_ALL &~ (UPDATE_CMYK);
-    }
-    else if (&rEdit == mpMFYellow)
-    {
-        setColorComponent( COLORCOMP_YELLOW, ((double)mpMFYellow->GetValue()) / 100.0 );
-        n = UPDATE_ALL &~ (UPDATE_CMYK);
-    }
-    else if (&rEdit == mpMFKey)
-    {
-        setColorComponent( COLORCOMP_KEY, ((double)mpMFKey->GetValue()) / 100.0 );
-        n = UPDATE_ALL&~(UPDATE_CMYK);
-    }
-    else if (&rEdit == mpEDHex)
-    {
-        sal_Int32 nColor = mpEDHex->GetColor();
-
-        if (nColor != -1)
-        {
-            Color aColor(nColor);
-
-            if (aColor != GetColor())
-            {
-                mdRed = ((double)aColor.GetRed()) / 255.0;
-                mdGreen = ((double)aColor.GetGreen()) / 255.0;
-                mdBlue = ((double)aColor.GetBlue()) / 255.0;
-
-                RGBtoHSV( mdRed, mdGreen, mdBlue, mdHue, mdSat, mdBri );
-                RGBtoCMYK( mdRed, mdGreen, mdBlue, mdCyan, mdMagenta, mdYellow, mdKey );
-                n = UPDATE_ALL &~ (UPDATE_HEX);
-            }
-        }
+        setColorComponent( ColorComponent::Key, static_cast<double>(m_xMFKey->get_value(FieldUnit::PERCENT)) / 100.0 );
+        n = UpdateFlags::All & ~UpdateFlags::CMYK;
     }
 
-    if (n)
+    if (n != UpdateFlags::NONE)
         update_color(n);
 }
 
-IMPL_LINK_NOARG_TYPED(ColorPickerDialog, ModeModifyHdl, RadioButton&, void)
+IMPL_LINK_NOARG(ColorPickerDialog, ColorModifyEditHdl, weld::Entry&, void)
+{
+    UpdateFlags n = UpdateFlags::NONE;
+
+    Color aColor = m_xEDHex->GetColor();
+
+    if (aColor != Color(0xffffffff) && aColor != GetColor())
+    {
+        mdRed = static_cast<double>(aColor.GetRed()) / 255.0;
+        mdGreen = static_cast<double>(aColor.GetGreen()) / 255.0;
+        mdBlue = static_cast<double>(aColor.GetBlue()) / 255.0;
+
+        RGBtoHSV( mdRed, mdGreen, mdBlue, mdHue, mdSat, mdBri );
+        RGBtoCMYK( mdRed, mdGreen, mdBlue, mdCyan, mdMagenta, mdYellow, mdKey );
+        n = UpdateFlags::All & ~UpdateFlags::Hex;
+    }
+
+    if (n != UpdateFlags::NONE)
+        update_color(n);
+}
+
+IMPL_LINK(ColorPickerDialog, ColorModifySpinHdl, weld::SpinButton&, rEdit, void)
+{
+    UpdateFlags n = UpdateFlags::NONE;
+
+    if (&rEdit == m_xMFRed.get())
+    {
+        setColorComponent( ColorComponent::Red, static_cast<double>(m_xMFRed->get_value()) / 255.0 );
+        n = UpdateFlags::All & ~UpdateFlags::RGB;
+    }
+    else if (&rEdit == m_xMFGreen.get())
+    {
+        setColorComponent( ColorComponent::Green, static_cast<double>(m_xMFGreen->get_value()) / 255.0 );
+        n = UpdateFlags::All & ~UpdateFlags::RGB;
+    }
+    else if (&rEdit == m_xMFBlue.get())
+    {
+        setColorComponent( ColorComponent::Blue, static_cast<double>(m_xMFBlue->get_value()) / 255.0 );
+        n = UpdateFlags::All & ~UpdateFlags::RGB;
+    }
+
+    if (n != UpdateFlags::NONE)
+        update_color(n);
+}
+
+
+IMPL_LINK_NOARG(ColorPickerDialog, ModeModifyHdl, weld::ToggleButton&, void)
 {
     ColorMode eMode = HUE;
 
-    if (mpRBRed->IsChecked())
+    if (m_xRBRed->get_active())
     {
         eMode = RED;
     }
-    else if (mpRBGreen->IsChecked())
+    else if (m_xRBGreen->get_active())
     {
         eMode = GREEN;
     }
-    else if (mpRBBlue->IsChecked())
+    else if (m_xRBBlue->get_active())
     {
         eMode = BLUE;
     }
-    else if (mpRBSaturation->IsChecked())
+    else if (m_xRBSaturation->get_active())
     {
         eMode = SATURATION;
     }
-    else if (mpRBBrightness->IsChecked())
+    else if (m_xRBBrightness->get_active())
     {
         eMode = BRIGHTNESS;
     }
@@ -1465,52 +1123,52 @@ IMPL_LINK_NOARG_TYPED(ColorPickerDialog, ModeModifyHdl, RadioButton&, void)
     if (meMode != eMode)
     {
         meMode = eMode;
-        update_color(UPDATE_COLORCHOOSER | UPDATE_COLORSLIDER);
+        update_color(UpdateFlags::ColorChooser | UpdateFlags::ColorSlider);
     }
 }
 
-void ColorPickerDialog::setColorComponent( sal_uInt16 nComp, double dValue )
+void ColorPickerDialog::setColorComponent( ColorComponent nComp, double dValue )
 {
     switch( nComp )
     {
-    case COLORCOMP_RED:
+    case ColorComponent::Red:
         mdRed = dValue;
         break;
-    case COLORCOMP_GREEN:
+    case ColorComponent::Green:
         mdGreen = dValue;
         break;
-    case COLORCOMP_BLUE:
+    case ColorComponent::Blue:
         mdBlue = dValue;
         break;
-    case COLORCOMP_HUE:
+    case ColorComponent::Hue:
         mdHue = dValue;
         break;
-    case COLORCOMP_SAT:
+    case ColorComponent::Saturation:
         mdSat = dValue;
         break;
-    case COLORCOMP_BRI:
+    case ColorComponent::Brightness:
         mdBri = dValue;
         break;
-    case COLORCOMP_CYAN:
+    case ColorComponent::Cyan:
         mdCyan = dValue;
         break;
-    case COLORCOMP_YELLOW:
+    case ColorComponent::Yellow:
         mdYellow = dValue;
         break;
-    case COLORCOMP_MAGENTA:
+    case ColorComponent::Magenta:
         mdMagenta = dValue;
         break;
-    case COLORCOMP_KEY:
+    case ColorComponent::Key:
         mdKey = dValue;
         break;
     }
 
-    if (nComp & COLORMODE_RGB)
+    if (nComp == ColorComponent::Red || nComp == ColorComponent::Green || nComp == ColorComponent::Blue)
     {
         RGBtoHSV( mdRed, mdGreen, mdBlue, mdHue, mdSat, mdBri );
         RGBtoCMYK( mdRed, mdGreen, mdBlue, mdCyan, mdMagenta, mdYellow, mdKey );
     }
-    else if (nComp & COLORMODE_HSV)
+    else if (nComp == ColorComponent::Hue || nComp == ColorComponent::Saturation || nComp == ColorComponent::Brightness)
     {
         HSVtoRGB( mdHue, mdSat, mdBri, mdRed, mdGreen, mdBlue );
         RGBtoCMYK( mdRed, mdGreen, mdBlue, mdCyan, mdMagenta, mdYellow, mdKey );
@@ -1524,64 +1182,63 @@ void ColorPickerDialog::setColorComponent( sal_uInt16 nComp, double dValue )
 
 typedef ::cppu::WeakComponentImplHelper< XServiceInfo, XExecutableDialog, XInitialization, XPropertyAccess > ColorPickerBase;
 
-class ColorPicker : protected ::comphelper::OBaseMutex,    // Struct for right initialization of mutex member! Must be first of baseclasses.
+class ColorPicker : protected ::cppu::BaseMutex,    // Struct for right initialization of mutex member! Must be first of baseclasses.
                     public ColorPickerBase
 {
 public:
     explicit ColorPicker();
 
     // XInitialization
-    virtual void SAL_CALL initialize( const Sequence< Any >& aArguments ) throw (Exception, RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize( const Sequence< Any >& aArguments ) override;
 
     // XInitialization
-    virtual OUString SAL_CALL getImplementationName(  ) throw (RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) throw (RuntimeException, std::exception) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) throw (RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 
     // XPropertyAccess
-    virtual Sequence< PropertyValue > SAL_CALL getPropertyValues(  ) throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL setPropertyValues( const Sequence< PropertyValue >& aProps ) throw (UnknownPropertyException, PropertyVetoException, IllegalArgumentException, WrappedTargetException, RuntimeException, std::exception) override;
+    virtual Sequence< PropertyValue > SAL_CALL getPropertyValues(  ) override;
+    virtual void SAL_CALL setPropertyValues( const Sequence< PropertyValue >& aProps ) override;
 
     // XExecutableDialog
-    virtual void SAL_CALL setTitle( const OUString& aTitle ) throw (RuntimeException, std::exception) override;
-    virtual sal_Int16 SAL_CALL execute(  ) throw (RuntimeException, std::exception) override;
+    virtual void SAL_CALL setTitle( const OUString& aTitle ) override;
+    virtual sal_Int16 SAL_CALL execute(  ) override;
 
 private:
     OUString msTitle;
-    const OUString msColorKey;
-    const OUString msModeKey;
-    sal_Int32 mnColor;
+    Color mnColor;
     sal_Int16 mnMode;
     Reference<css::awt::XWindow> mxParent;
 };
 
-OUString SAL_CALL ColorPicker_getImplementationName()
+OUString ColorPicker_getImplementationName()
 {
     return OUString( "com.sun.star.cui.ColorPicker" );
 }
 
-Reference< XInterface > SAL_CALL ColorPicker_createInstance( Reference< XComponentContext > const & )
+Reference< XInterface > ColorPicker_createInstance( Reference< XComponentContext > const & )
 {
     return static_cast<XWeak*>( new ColorPicker );
 }
 
-Sequence< OUString > SAL_CALL ColorPicker_getSupportedServiceNames() throw( RuntimeException )
+Sequence< OUString > ColorPicker_getSupportedServiceNames()
 {
     Sequence< OUString > seq { "com.sun.star.ui.dialogs.ColorPicker" };
     return seq;
 }
 
+static const OUStringLiteral gsColorKey( "Color" );
+static const OUStringLiteral gsModeKey( "Mode" );
+
 ColorPicker::ColorPicker()
     : ColorPickerBase( m_aMutex )
-    , msColorKey( "Color" )
-    , msModeKey( "Mode" )
     , mnColor( 0 )
     , mnMode( 0 )
 {
 }
 
 // XInitialization
-void SAL_CALL ColorPicker::initialize( const Sequence< Any >& aArguments ) throw (Exception, RuntimeException, std::exception)
+void SAL_CALL ColorPicker::initialize( const Sequence< Any >& aArguments )
 {
     if( aArguments.getLength() == 1 )
     {
@@ -1590,39 +1247,39 @@ void SAL_CALL ColorPicker::initialize( const Sequence< Any >& aArguments ) throw
 }
 
 // XInitialization
-OUString SAL_CALL ColorPicker::getImplementationName(  ) throw (RuntimeException, std::exception)
+OUString SAL_CALL ColorPicker::getImplementationName(  )
 {
     return ColorPicker_getImplementationName();
 }
 
-sal_Bool SAL_CALL ColorPicker::supportsService( const OUString& sServiceName ) throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL ColorPicker::supportsService( const OUString& sServiceName )
 {
     return cppu::supportsService(this, sServiceName);
 }
 
-Sequence< OUString > SAL_CALL ColorPicker::getSupportedServiceNames(  ) throw (RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL ColorPicker::getSupportedServiceNames(  )
 {
     return ColorPicker_getSupportedServiceNames();
 }
 
 // XPropertyAccess
-Sequence< PropertyValue > SAL_CALL ColorPicker::getPropertyValues(  ) throw (RuntimeException, std::exception)
+Sequence< PropertyValue > SAL_CALL ColorPicker::getPropertyValues(  )
 {
     Sequence< PropertyValue > props(1);
-    props[0].Name = msColorKey;
+    props[0].Name = gsColorKey;
     props[0].Value <<= mnColor;
     return props;
 }
 
-void SAL_CALL ColorPicker::setPropertyValues( const Sequence< PropertyValue >& aProps ) throw (UnknownPropertyException, PropertyVetoException, IllegalArgumentException, WrappedTargetException, RuntimeException, std::exception)
+void SAL_CALL ColorPicker::setPropertyValues( const Sequence< PropertyValue >& aProps )
 {
     for( sal_Int32 n = 0; n < aProps.getLength(); n++ )
     {
-        if( aProps[n].Name.equals( msColorKey ) )
+        if( aProps[n].Name == gsColorKey )
         {
             aProps[n].Value >>= mnColor;
         }
-        else if( aProps[n].Name.equals( msModeKey ) )
+        else if( aProps[n].Name == gsModeKey )
         {
             aProps[n].Value >>= mnMode;
         }
@@ -1630,18 +1287,17 @@ void SAL_CALL ColorPicker::setPropertyValues( const Sequence< PropertyValue >& a
 }
 
 // XExecutableDialog
-void SAL_CALL ColorPicker::setTitle( const OUString& sTitle ) throw (RuntimeException, std::exception)
+void SAL_CALL ColorPicker::setTitle( const OUString& sTitle )
 {
     msTitle = sTitle;
 }
 
-sal_Int16 SAL_CALL ColorPicker::execute(  ) throw (RuntimeException, std::exception)
+sal_Int16 SAL_CALL ColorPicker::execute()
 {
-    ScopedVclPtrInstance< ColorPickerDialog > aDlg( VCLUnoHelper::GetWindow( mxParent ), mnColor, mnMode );
-    sal_Int16 ret = aDlg->Execute();
-    if( ret )
-        mnColor = aDlg->GetColor();
-
+    std::unique_ptr<ColorPickerDialog> xDlg(new ColorPickerDialog(Application::GetFrameWeld(mxParent), mnColor, mnMode));
+    sal_Int16 ret = xDlg->run();
+    if (ret)
+        mnColor = xDlg->GetColor();
     return ret;
 }
 

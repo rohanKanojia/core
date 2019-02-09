@@ -60,14 +60,13 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPNUMBERINGOVERRIDE_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPNUMBERINGOVERRIDE_HXX
 
-#include "lwpoverride.hxx"
+#include <lwpoverride.hxx>
 
 class LwpObjectStream;
-class LwpNumberingOverride : public LwpOverride
+class LwpNumberingOverride final : public LwpOverride
 {
 public:
     LwpNumberingOverride();
-    virtual ~LwpNumberingOverride(){}
 
     virtual LwpNumberingOverride* clone() const override;
 
@@ -78,7 +77,7 @@ public:
         HEADING         = 0x0004,
         SMARTLEVEL      = 0x0008
     };
-public:
+
     virtual void Read(LwpObjectStream *pStrm) override;
 
     inline sal_uInt16 GetLevel() const;
@@ -87,10 +86,8 @@ public:
 
     void OverrideLevel(sal_uInt16 nNewLv);
 
-protected:
-    LwpNumberingOverride(LwpNumberingOverride const& rOther);
-
 private:
+    LwpNumberingOverride(LwpNumberingOverride const& rOther);
     LwpNumberingOverride& operator=(LwpNumberingOverride const& rOther) = delete;
 
     sal_uInt16  m_nLevel;

@@ -22,20 +22,18 @@
 
 #include "ChangeRequestQueue.hxx"
 #include <osl/mutex.hxx>
-#include <rtl/ref.hxx>
-#include <com/sun/star/drawing/framework/XConfigurationChangeRequest.hpp>
-#include <com/sun/star/drawing/framework/ConfigurationChangeEvent.hpp>
 
-#include <cppuhelper/interfacecontainer.hxx>
 #include <tools/link.hxx>
 
 #include <memory>
+
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XConfiguration; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XConfigurationChangeRequest; } } } } }
 
 struct ImplSVEvent;
 
 namespace sd { namespace framework {
 
-class ConfigurationController;
 class ConfigurationUpdater;
 
 /** The ChangeRequestQueueProcessor ownes the ChangeRequestQueue and
@@ -115,7 +113,7 @@ private:
 
     /** Callback function for the PostUserEvent() call.
     */
-    DECL_LINK_TYPED(ProcessEvent, void*, void);
+    DECL_LINK(ProcessEvent, void*, void);
 };
 
 } } // end of namespace sd::framework

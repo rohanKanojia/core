@@ -17,10 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <core_resource.hxx>
 #include "dsnItem.hxx"
 #include "ConnectionHelper.hxx"
-#include "dbu_dlg.hrc"
-#include "dbu_misc.hrc"
+#include <dbu_dlg.hxx>
+#include <strings.hrc>
 #include <svl/itemset.hxx>
 #include <unotools/moduleoptions.hxx>
 #include <sfx2/fcontnr.hxx>
@@ -28,21 +29,18 @@
 #include <svl/stritem.hxx>
 #include <svl/eitem.hxx>
 #include <svl/intitem.hxx>
-#include "dsitems.hxx"
-#include "dbaccess_helpid.hrc"
-#include "localresaccess.hxx"
+#include <dsitems.hxx>
 #include <osl/process.h>
 #include <osl/diagnose.h>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 #include <sfx2/filedlghelper.hxx>
-#include "dbadmin.hxx"
-#include <comphelper/types.hxx>
+#include <dbadmin.hxx>
 #include <vcl/stdtext.hxx>
-#include "sqlmessage.hxx"
+#include <sqlmessage.hxx>
 #include "odbcconfig.hxx"
 #include "dsselect.hxx"
 #include <svl/filenotation.hxx>
-#include "dbustrings.hrc"
+#include <stringconstants.hxx>
 #include <com/sun/star/ui/dialogs/FolderPicker.hpp>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
@@ -50,7 +48,7 @@
 #include <com/sun/star/mozilla/MozillaBootstrap.hpp>
 #include <com/sun/star/task/InteractionHandler.hpp>
 #include <com/sun/star/ucb/XProgressHandler.hpp>
-#include "UITools.hxx"
+#include <UITools.hxx>
 #include <unotools/localfilehelper.hxx>
 #include <unotools/ucbhelper.hxx>
 #include <ucbhelper/commandenvironment.hxx>
@@ -60,14 +58,10 @@
 #include <tools/diagnose_ex.h>
 #include <sfx2/docfilt.hxx>
 
-#if defined(_WIN32)
-#define _ADO_DATALINK_BROWSE_
-#endif
-
-#ifdef _ADO_DATALINK_BROWSE_
+#if defined _WIN32
 #include <vcl/sysdata.hxx>
 #include "adodatalinks.hxx"
-#endif //_ADO_DATALINK_BROWSE_
+#endif
 
 #include <com/sun/star/mozilla/XMozillaBootstrap.hpp>
 #include <comphelper/processfactory.hxx>
@@ -87,38 +81,35 @@ namespace dbaui
     using namespace ::dbtools;
     using namespace ::svt;
 
-    OConnectionHelper::OConnectionHelper( vcl::Window* pParent, const OString& _rId, const OUString& _rUIXMLDescription, const SfxItemSet& _rCoreAttrs)
-        : OGenericAdministrationPage(pParent, _rId, _rUIXMLDescription, _rCoreAttrs)
+    OConnectionHelper::OConnectionHelper(TabPageParent pParent, const OUString& _rUIXMLDescription, const OString& _rId, const SfxItemSet& _rCoreAttrs)
+        : OGenericAdministrationPage(pParent, _rUIXMLDescription, _rId, _rCoreAttrs)
         , m_bUserGrabFocus(false)
         , m_pCollection(nullptr)
+        , m_xFT_Connection(m_xBuilder->weld_label("browseurllabel"))
+        , m_xPB_Connection(m_xBuilder->weld_button("browse"))
+        , m_xPB_CreateDB(m_xBuilder->weld_button("create"))
+        , m_xConnectionURL(new OConnectionURLEdit(m_xBuilder->weld_entry("browseurl"), m_xBuilder->weld_label("browselabel")))
     {
-        get(m_pFT_Connection, "browseurllabel");
-        get(m_pConnectionURL, "browseurl");
-        get(m_pPB_Connection, "browse");
-        get(m_pPB_CreateDB, "create");
-
         // extract the datasource type collection from the item set
         const DbuTypeCollectionItem* pCollectionItem = dynamic_cast<const DbuTypeCollectionItem*>( _rCoreAttrs.GetItem(DSID_TYPECOLLECTION) );
         if (pCollectionItem)
             m_pCollection = pCollectionItem->getCollection();
-        m_pPB_Connection->SetClickHdl(LINK(this, OConnectionHelper, OnBrowseConnections));
-        m_pPB_CreateDB->SetClickHdl(LINK(this, OConnectionHelper, OnCreateDatabase));
+        m_xPB_Connection->connect_clicked(LINK(this, OConnectionHelper, OnBrowseConnections));
+        m_xPB_CreateDB->connect_clicked(LINK(this, OConnectionHelper, OnCreateDatabase));
         OSL_ENSURE(m_pCollection, "OConnectionHelper::OConnectionHelper : really need a DSN type collection !");
-        m_pConnectionURL->SetTypeCollection(m_pCollection);
+        m_xConnectionURL->SetTypeCollection(m_pCollection);
+
+        m_xConnectionURL->connect_focus_in(LINK(this, OConnectionHelper, GetFocusHdl));
+        m_xConnectionURL->connect_focus_out(LINK(this, OConnectionHelper, LoseFocusHdl));
     }
 
     OConnectionHelper::~OConnectionHelper()
     {
-        disposeOnce();
     }
 
     void OConnectionHelper::dispose()
     {
-        // FIXME: used to have an if (m_bDelete) ...
-        m_pFT_Connection.disposeAndClear();
-        m_pConnectionURL.disposeAndClear();
-        m_pPB_Connection.disposeAndClear();
-        m_pPB_CreateDB.disposeAndClear();
+        m_xConnectionURL.reset();
         OGenericAdministrationPage::dispose();
     }
 
@@ -128,16 +119,15 @@ namespace dbaui
         bool bValid, bReadonly;
         getFlags(_rSet, bValid, bReadonly);
 
-        m_pFT_Connection->Show();
-        m_pConnectionURL->Show();
-        m_pConnectionURL->Resize();
-        m_pConnectionURL->ShowPrefix( ::dbaccess::DST_JDBC == m_pCollection->determineType(m_eType) );
+        m_xFT_Connection->show();
+        m_xConnectionURL->show();
+        m_xConnectionURL->ShowPrefix( ::dbaccess::DST_JDBC == m_pCollection->determineType(m_eType) );
 
         bool bEnableBrowseButton = m_pCollection->supportsBrowsing( m_eType );
-        m_pPB_Connection->Show( bEnableBrowseButton );
+        m_xPB_Connection->show( bEnableBrowseButton );
 
         bool bEnableCreateButton = m_pCollection->supportsDBCreation( m_eType );
-        m_pPB_CreateDB->Show( bEnableCreateButton );
+        m_xPB_CreateDB->show( bEnableCreateButton );
 
         const SfxStringItem* pUrlItem = _rSet.GetItem<SfxStringItem>(DSID_CONNECTURL);
 
@@ -148,7 +138,7 @@ namespace dbaui
             setURL( sUrl );
 
             checkTestConnection();
-            m_pConnectionURL->ClearModifyFlag();
+            m_xConnectionURL->save_value();
         }
 
         OGenericAdministrationPage::implInitControls(_rSet, _bSaveValue);
@@ -164,7 +154,7 @@ namespace dbaui
             m_pAdminDialog->enableConfirmSettings( !getURLNoPrefix().isEmpty() );
     }
 
-    IMPL_LINK_NOARG_TYPED(OConnectionHelper, OnBrowseConnections, Button*, void)
+    IMPL_LINK_NOARG(OConnectionHelper, OnBrowseConnections, weld::Button&, void)
     {
         OSL_ENSURE(m_pAdminDialog,"No Admin dialog set! ->GPF");
         const ::dbaccess::DATASOURCE_TYPE eType = m_pCollection->determineType(m_eType);
@@ -202,10 +192,10 @@ namespace dbaui
                     while (bDoBrowse);
 
                     OUString sSelectedDirectory = xFolderPicker->getDirectory();
-                    INetURLObject aSelectedDirectory( sSelectedDirectory, INetURLObject::WAS_ENCODED, RTL_TEXTENCODING_UTF8 );
+                    INetURLObject aSelectedDirectory( sSelectedDirectory, INetURLObject::EncodeMechanism::WasEncoded, RTL_TEXTENCODING_UTF8 );
 
                     // for UI purpose, we don't want to have the path encoded
-                    sSelectedDirectory = aSelectedDirectory.GetMainURL( INetURLObject::DECODE_WITH_CHARSET );
+                    sSelectedDirectory = aSelectedDirectory.GetMainURL( INetURLObject::DecodeMechanism::WithCharset );
 
                     setURLNoPrefix( sSelectedDirectory );
                     SetRoadmapStateValue(true);
@@ -213,7 +203,7 @@ namespace dbaui
                 }
                 catch( const Exception& )
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    DBG_UNHANDLED_EXCEPTION("dbaccess");
                 }
             }
             break;
@@ -222,19 +212,30 @@ namespace dbaui
                 SvtModuleOptions aModule;
                 ::sfx2::FileDialogHelper aFileDlg(
                     ui::dialogs::TemplateDescription::FILEOPEN_READONLY_VERSION,
-                    0,
+                    FileDialogFlags::NONE,
                     aModule.GetFactoryEmptyDocumentURL(SvtModuleOptions::EFactory::CALC)
-                    ,SfxFilterFlags::IMPORT);
+                    ,SfxFilterFlags::IMPORT, SfxFilterFlags::NONE, GetFrameWeld());
+                askForFileName(aFileDlg);
+            }
+            break;
+            case  ::dbaccess::DST_WRITER:
+            {
+                SvtModuleOptions aModule;
+                ::sfx2::FileDialogHelper aFileDlg(
+                    ui::dialogs::TemplateDescription::FILEOPEN_READONLY_VERSION,
+                    FileDialogFlags::NONE,
+                    aModule.GetFactoryEmptyDocumentURL(SvtModuleOptions::EFactory::WRITER),
+                    SfxFilterFlags::IMPORT, SfxFilterFlags::NONE, GetFrameWeld());
                 askForFileName(aFileDlg);
             }
             break;
             case  ::dbaccess::DST_MSACCESS:
             {
                 const OUString sExt("*.mdb;*.mde");
-                OUString sFilterName(ModuleRes (STR_MSACCESS_FILTERNAME));
+                OUString sFilterName(DBA_RES (STR_MSACCESS_FILTERNAME));
                 ::sfx2::FileDialogHelper aFileDlg(
                     ui::dialogs::TemplateDescription::FILEOPEN_READONLY_VERSION,
-                    0);
+                    FileDialogFlags::NONE, GetFrameWeld());
                 aFileDlg.AddFilter(sFilterName,sExt);
                 aFileDlg.SetCurrentFilter(sFilterName);
                 askForFileName(aFileDlg);
@@ -243,10 +244,10 @@ namespace dbaui
             case  ::dbaccess::DST_MSACCESS_2007:
             {
                 const OUString sAccdb("*.accdb;*.accde");
-                OUString sFilterName2(ModuleRes (STR_MSACCESS_2007_FILTERNAME));
+                OUString sFilterName2(DBA_RES (STR_MSACCESS_2007_FILTERNAME));
                 ::sfx2::FileDialogHelper aFileDlg(
                     ui::dialogs::TemplateDescription::FILEOPEN_READONLY_VERSION,
-                    0);
+                    FileDialogFlags::NONE, GetFrameWeld());
                 aFileDlg.AddFilter(sFilterName2,sAccdb);
                 aFileDlg.SetCurrentFilter(sFilterName2);
                 askForFileName(aFileDlg);
@@ -268,17 +269,17 @@ namespace dbaui
                     return;
             }
             break;
-#ifdef _ADO_DATALINK_BROWSE_
+#if defined _WIN32
             case  ::dbaccess::DST_ADO:
             {
                 OUString sOldDataSource=getURLNoPrefix();
                 OUString sNewDataSource;
                 HWND hWnd = GetParent()->GetSystemData()->hWnd;
-                sNewDataSource = getAdoDatalink((LONG_PTR)hWnd,sOldDataSource);
+                sNewDataSource = getAdoDatalink(reinterpret_cast<LONG_PTR>(hWnd),sOldDataSource);
                 if ( !sNewDataSource.isEmpty() )
                 {
                     setURLNoPrefix(sNewDataSource);
-                    SetRoadmapStateValue(sal_True);
+                    SetRoadmapStateValue(true);
                     callModifiedHdl();
                 }
                 else
@@ -304,7 +305,7 @@ namespace dbaui
 
                 sal_Int32 count = list.getLength();
 
-                StringBag aProfiles;
+                std::set<OUString> aProfiles;
                 for (sal_Int32 index=0; index < count; index++)
                     aProfiles.insert(pArray[index]);
 
@@ -324,13 +325,14 @@ namespace dbaui
             case ::dbaccess::DST_FIREBIRD:
             {
                 const OUString sExt("*.fdb");
-                OUString sFilterName(ModuleRes (STR_FIREBIRD_FILTERNAME));
+                OUString sFilterName(DBA_RES (STR_FIREBIRD_FILTERNAME));
                 ::sfx2::FileDialogHelper aFileDlg(
                     ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE,
-                    0);
+                    FileDialogFlags::NONE, GetFrameWeld());
                 aFileDlg.AddFilter(sFilterName,sExt);
                 aFileDlg.SetCurrentFilter(sFilterName);
                 askForFileName(aFileDlg);
+                break;
             }
             default:
                 break;
@@ -339,7 +341,7 @@ namespace dbaui
         checkTestConnection();
     }
 
-    IMPL_LINK_NOARG_TYPED(OConnectionHelper, OnCreateDatabase, Button*, void)
+    IMPL_LINK_NOARG(OConnectionHelper, OnCreateDatabase, weld::Button&, void)
     {
         OSL_ENSURE(m_pAdminDialog,"No Admin dialog set! ->GPF");
         const ::dbaccess::DATASOURCE_TYPE eType = m_pCollection->determineType(m_eType);
@@ -348,13 +350,14 @@ namespace dbaui
         case ::dbaccess::DST_FIREBIRD:
             {
                 const OUString sExt("*.fdb");
-                OUString sFilterName(ModuleRes (STR_FIREBIRD_FILTERNAME));
+                OUString sFilterName(DBA_RES (STR_FIREBIRD_FILTERNAME));
                 ::sfx2::FileDialogHelper aFileDlg(
                     ui::dialogs::TemplateDescription::FILESAVE_AUTOEXTENSION,
-                    0);
+                    FileDialogFlags::NONE, GetFrameWeld());
                 aFileDlg.AddFilter(sFilterName,sExt);
                 aFileDlg.SetCurrentFilter(sFilterName);
                 askForFileName(aFileDlg);
+                break;
             }
             default:
                 break;
@@ -404,9 +407,9 @@ namespace dbaui
         }
 
         if ( _bPrefix )
-            m_pConnectionURL->SetText( sURL );
+            m_xConnectionURL->SetText( sURL );
         else
-            m_pConnectionURL->SetTextNoPrefix( sURL );
+            m_xConnectionURL->SetTextNoPrefix( sURL );
 
         implUpdateURLDependentStates();
     }
@@ -414,7 +417,7 @@ namespace dbaui
     OUString OConnectionHelper::impl_getURL() const
     {
         // get the pure text
-        OUString sURL = m_pConnectionURL->GetTextNoPrefix();
+        OUString sURL = m_xConnectionURL->GetTextNoPrefix();
 
         OSL_ENSURE( m_pCollection, "OConnectionHelper::impl_getURL: have no interpreter for the URLs!" );
 
@@ -423,10 +426,10 @@ namespace dbaui
             if ( m_pCollection->isFileSystemBased( m_eType ) )
             {
                 // get the two parts: prefix and file URL
-                OUString sTypePrefix, sFileURLDecoded;
+                OUString sFileURLDecoded;
                 sFileURLDecoded = sURL;
 
-                sURL = sTypePrefix;
+                sURL = OUString();
                 if ( !sFileURLDecoded.isEmpty() )
                 {
                     OFileNotation aFileNotation( sFileURLDecoded, OFileNotation::N_SYSTEM );
@@ -434,8 +437,8 @@ namespace dbaui
                 }
 
                 // encode the URL
-                INetURLObject aFileURL( sFileURLDecoded, INetURLObject::ENCODE_ALL, RTL_TEXTENCODING_UTF8 );
-                sFileURLDecoded = aFileURL.GetMainURL( INetURLObject::NO_DECODE );
+                INetURLObject aFileURL( sFileURLDecoded, INetURLObject::EncodeMechanism::All, RTL_TEXTENCODING_UTF8 );
+                sFileURLDecoded = aFileURL.GetMainURL( INetURLObject::DecodeMechanism::NONE );
             }
         }
         return sURL;
@@ -462,13 +465,17 @@ namespace dbaui
         if (!m_pCollection->supportsDBCreation(m_eType) &&
             (( e_exists == PATH_NOT_EXIST) || ( e_exists == PATH_NOT_KNOWN)))
         {
-            OUString sQuery(ModuleRes(STR_ASK_FOR_DIRECTORY_CREATION));
+            OUString sQuery(DBA_RES(STR_ASK_FOR_DIRECTORY_CREATION));
             OFileNotation aTransformer(_rURL);
             sQuery = sQuery.replaceFirst("$path$", aTransformer.get(OFileNotation::N_SYSTEM));
 
             m_bUserGrabFocus = false;
-            ScopedVclPtrInstance< QueryBox > aQuery(GetParent(), WB_YES_NO | WB_DEF_YES, sQuery);
-            sal_Int32 nQueryResult = aQuery->Execute();
+            vcl::Window* pWin = GetParent();
+            std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(pWin ? pWin->GetFrameWeld() : nullptr,
+                                                           VclMessageType::Question, VclButtonsType::YesNo,
+                                                           sQuery));
+            xQueryBox->set_default_response(RET_YES);
+            sal_Int32 nQueryResult = xQueryBox->run();
             m_bUserGrabFocus = true;
 
             switch (nQueryResult)
@@ -480,12 +487,18 @@ namespace dbaui
                     {
                         if ( !createDirectoryDeep(_rURL) )
                         {   // could not create the directory
-                            sQuery = ModuleRes(STR_COULD_NOT_CREATE_DIRECTORY);
+                            sQuery = DBA_RES(STR_COULD_NOT_CREATE_DIRECTORY);
                             sQuery = sQuery.replaceFirst("$name$", aTransformer.get(OFileNotation::N_SYSTEM));
 
                             m_bUserGrabFocus = false;
-                            ScopedVclPtrInstance< QueryBox > aWhatToDo(GetParent(), WB_RETRY_CANCEL | WB_DEF_RETRY, sQuery);
-                            nQueryResult = aWhatToDo->Execute();
+
+                            std::unique_ptr<weld::MessageDialog> xWhatToDo(Application::CreateMessageDialog(pWin ? pWin->GetFrameWeld() : nullptr,
+                                                                           VclMessageType::Question, VclButtonsType::NONE,
+                                                                           sQuery));
+                            xWhatToDo->add_button(Button::GetStandardText(StandardButtonType::Retry), RET_RETRY);
+                            xWhatToDo->add_button(Button::GetStandardText(StandardButtonType::Cancel), RET_CANCEL);
+                            xWhatToDo->set_default_response(RET_RETRY);
+                            nQueryResult = xWhatToDo->run();
                             m_bUserGrabFocus = true;
 
                             if (RET_RETRY == nQueryResult)
@@ -545,32 +558,25 @@ namespace dbaui
         }
         return eExists;
     }
-    bool OConnectionHelper::PreNotify( NotifyEvent& _rNEvt )
+
+    IMPL_LINK_NOARG(OConnectionHelper, GetFocusHdl, weld::Widget&, void)
     {
-        if ( m_pCollection->isFileSystemBased(m_eType) )
-        {
-            switch (_rNEvt.GetType())
-            {
-                case MouseNotifyEvent::GETFOCUS:
-                    if (m_pConnectionURL->IsWindowOrChild(_rNEvt.GetWindow()) && m_bUserGrabFocus)
-                    {   // a descendant of the URL edit field got the focus
-                        m_pConnectionURL->SaveValueNoPrefix();
-                    }
-                    break;
+        if (!m_pCollection->isFileSystemBased(m_eType))
+            return;
+        if (!m_bUserGrabFocus)
+            return;
+        // URL edit field got the focus
+        m_xConnectionURL->SaveValueNoPrefix();
+    }
 
-                case MouseNotifyEvent::LOSEFOCUS:
-                    if (m_pConnectionURL->IsWindowOrChild(_rNEvt.GetWindow()) && m_bUserGrabFocus)
-                    {   // a descendant of the URL edit field lost the focus
-                        if (!commitURL())
-                            return true;  // handled
-                    }
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        return OGenericAdministrationPage::PreNotify( _rNEvt );
+    IMPL_LINK_NOARG(OConnectionHelper, LoseFocusHdl, weld::Widget&, void)
+    {
+        if (!m_pCollection->isFileSystemBased(m_eType))
+            return;
+        if (!m_bUserGrabFocus)
+            return;
+        // URL edit field lost the focus
+        commitURL();
     }
 
     bool OConnectionHelper::createDirectoryDeep(const OUString& _rPathURL)
@@ -581,7 +587,7 @@ namespace dbaui
 
         INetProtocol eProtocol = aParser.GetProtocol();
 
-        ::std::vector< OUString > aToBeCreated;  // the to-be-created levels
+        std::vector< OUString > aToBeCreated;  // the to-be-created levels
 
         // search a level which exists
         IS_PATH_EXIST eParentExists = PATH_NOT_EXIST;
@@ -589,7 +595,7 @@ namespace dbaui
         {
             aToBeCreated.push_back(aParser.getName());  // remember the local name for creation
             aParser.removeSegment();                    // cut the local name
-            eParentExists = pathExists(aParser.GetMainURL(INetURLObject::NO_DECODE), false);
+            eParentExists = pathExists(aParser.GetMainURL(INetURLObject::DecodeMechanism::NONE), false);
         }
 
         if (!aParser.getSegmentCount())
@@ -600,7 +606,7 @@ namespace dbaui
         {
             // the parent content
             Reference< XCommandEnvironment > xEmptyEnv;
-            ::ucbhelper::Content aParent(aParser.GetMainURL(INetURLObject::NO_DECODE), xEmptyEnv, comphelper::getProcessComponentContext());
+            ::ucbhelper::Content aParent(aParser.GetMainURL(INetURLObject::DecodeMechanism::NONE), xEmptyEnv, comphelper::getProcessComponentContext());
 
             OUString sContentType;
             if ( INetProtocol::File == eProtocol )
@@ -621,7 +627,7 @@ namespace dbaui
             Sequence< Any > aNewDirectoryAttributes(1);
 
             // loop
-            for (   ::std::vector< OUString >::const_reverse_iterator aLocalName = aToBeCreated.rbegin();
+            for (   std::vector< OUString >::const_reverse_iterator aLocalName = aToBeCreated.rbegin();
                     aLocalName != aToBeCreated.rend();
                     ++aLocalName
                 )
@@ -633,31 +639,31 @@ namespace dbaui
         }
         catch ( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
             return false;
         }
 
         return true;
     }
 
-    void OConnectionHelper::fillWindows(::std::vector< ISaveValueWrapper* >& _rControlList)
+    void OConnectionHelper::fillWindows(std::vector< std::unique_ptr<ISaveValueWrapper> >& _rControlList)
     {
-        _rControlList.push_back(new ODisableWrapper<FixedText>(m_pFT_Connection));
-        _rControlList.push_back(new ODisableWrapper<PushButton>(m_pPB_Connection));
-        _rControlList.push_back(new ODisableWrapper<PushButton>(m_pPB_CreateDB));
+        _rControlList.emplace_back(new ODisableWidgetWrapper<weld::Label>(m_xFT_Connection.get()));
+        _rControlList.emplace_back(new ODisableWidgetWrapper<weld::Button>(m_xPB_Connection.get()));
+        _rControlList.emplace_back(new ODisableWidgetWrapper<weld::Button>(m_xPB_CreateDB.get()));
     }
 
-    void OConnectionHelper::fillControls(::std::vector< ISaveValueWrapper* >& _rControlList)
+    void OConnectionHelper::fillControls(std::vector< std::unique_ptr<ISaveValueWrapper> >& _rControlList)
     {
-        _rControlList.push_back( new OSaveValueWrapper<Edit>( m_pConnectionURL ) );
+        _rControlList.emplace_back( new OSaveValueWidgetWrapper<OConnectionURLEdit>( m_xConnectionURL.get() ) );
     }
 
     bool OConnectionHelper::commitURL()
     {
         OUString sURL;
         OUString sOldPath;
-        sOldPath = m_pConnectionURL->GetSavedValueNoPrefix();
-        sURL = m_pConnectionURL->GetTextNoPrefix();
+        sOldPath = m_xConnectionURL->GetSavedValueNoPrefix();
+        sURL = m_xConnectionURL->GetTextNoPrefix();
 
         if ( m_pCollection->isFileSystemBased(m_eType) )
         {
@@ -670,13 +676,14 @@ namespace dbaui
 
                 const ::dbaccess::DATASOURCE_TYPE eType = m_pCollection->determineType(m_eType);
 
-                if ( ( ::dbaccess::DST_CALC == eType) || ( ::dbaccess::DST_MSACCESS == eType) || ( ::dbaccess::DST_MSACCESS_2007 == eType) )
+                if ( ( ::dbaccess::DST_CALC == eType) || ( ::dbaccess::DST_WRITER == eType) || ( ::dbaccess::DST_MSACCESS == eType) || ( ::dbaccess::DST_MSACCESS_2007 == eType) )
                 {
                     if( pathExists(sURL, true) == PATH_NOT_EXIST )
                     {
-                        OUString sFile = ModuleRes( STR_FILE_DOES_NOT_EXIST );
+                        OUString sFile = DBA_RES( STR_FILE_DOES_NOT_EXIST );
                         sFile = sFile.replaceFirst("$file$", aTransformer.get(OFileNotation::N_SYSTEM));
-                        ScopedVclPtr<OSQLWarningBox>::Create( this, sFile )->Execute();
+                        OSQLWarningBox aWarning(GetFrameWeld(), sFile);
+                        aWarning.run();
                         setURLNoPrefix(sOldPath);
                         SetRoadmapStateValue(false);
                         callModifiedHdl();
@@ -689,7 +696,7 @@ namespace dbaui
                     {
                         case RET_RETRY:
                             m_bUserGrabFocus = false;
-                            m_pConnectionURL->GrabFocus();
+                            m_xConnectionURL->grab_focus();
                             m_bUserGrabFocus = true;
                             return false;
 
@@ -702,9 +709,10 @@ namespace dbaui
         }
 
         setURLNoPrefix(sURL);
-        m_pConnectionURL->SaveValueNoPrefix();
+        m_xConnectionURL->SaveValueNoPrefix();
         return true;
     }
+
     void OConnectionHelper::askForFileName(::sfx2::FileDialogHelper& _aFileOpen)
     {
         OUString sOldPath = getURLNoPrefix();
@@ -712,7 +720,7 @@ namespace dbaui
             _aFileOpen.SetDisplayDirectory(sOldPath);
         else
             _aFileOpen.SetDisplayDirectory( SvtPathOptions().GetWorkPath() );
-        if (0 == _aFileOpen.Execute())
+        if (ERRCODE_NONE == _aFileOpen.Execute())
         {
             setURLNoPrefix(_aFileOpen.GetPath());
             SetRoadmapStateValue(checkTestConnection());

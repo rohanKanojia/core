@@ -19,11 +19,6 @@ $(eval $(call gb_Library_set_include,abp,\
 	-I$(SRCDIR)/extensions/source/inc \
 ))
 
-$(eval $(call gb_Library_add_defs,abp,\
-	-DCOMPMOD_NAMESPACE=abp \
-	-DCOMPMOD_RESPREFIX=abp \
-))
-
 $(eval $(call gb_Library_use_external,abp,boost_headers))
 
 $(eval $(call gb_Library_use_sdk_api,abp))
@@ -58,7 +53,6 @@ $(eval $(call gb_Library_use_libraries,abp,\
 	utl \
 	vcl \
 	i18nlangtag \
-	$(gb_UWINAPI) \
 ))
 
 # vim:set noet sw=4 ts=4:

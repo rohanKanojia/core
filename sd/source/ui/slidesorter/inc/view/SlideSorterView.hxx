@@ -20,27 +20,16 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_VIEW_SLIDESORTERVIEW_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_VIEW_SLIDESORTERVIEW_HXX
 
-#include "SlideSorter.hxx"
-#include "model/SlsPageDescriptor.hxx"
-#include "model/SlsSharedPageDescriptor.hxx"
-#include "view/SlsLayouter.hxx"
-#include "view/SlsILayerPainter.hxx"
+#include <model/SlsPageDescriptor.hxx>
+#include <model/SlsSharedPageDescriptor.hxx>
+#include <view/SlsLayouter.hxx>
+#include <view/SlsILayerPainter.hxx>
+#include <o3tl/deleter.hxx>
 
-#include "View.hxx"
-#include <sfx2/viewfrm.hxx>
-#include "pres.hxx"
+#include <View.hxx>
 #include <tools/gen.hxx>
-#include <svx/svdmodel.hxx>
 #include <vcl/region.hxx>
-#include <vcl/outdev.hxx>
-#include <drawinglayer/primitive2d/baseprimitive2d.hxx>
 #include <memory>
-
-class Point;
-
-namespace sd { namespace slidesorter { namespace controller {
-class Properties;
-} } }
 
 namespace sd { namespace slidesorter { namespace cache {
 class PageCache;
@@ -50,12 +39,13 @@ namespace sd { namespace slidesorter { namespace model {
 class SlideSorterModel;
 } } }
 
+namespace sd { class Window; }
+namespace sd { namespace slidesorter { class SlideSorter; } }
+
 namespace sd { namespace slidesorter { namespace view {
 
 class LayeredDevice;
-class Layouter;
 class PageObjectPainter;
-class SelectionPainter;
 class ToolTip;
 
 class SlideSorterView
@@ -72,7 +62,7 @@ public:
     explicit SlideSorterView (SlideSorter& rSlideSorter);
     void Init();
 
-    virtual ~SlideSorterView();
+    virtual ~SlideSorterView() override;
     void Dispose();
 
     SlideSorterView(const SlideSorterView&) = delete;
@@ -86,10 +76,10 @@ public:
 
     void RequestRepaint();
     void RequestRepaint (const model::SharedPageDescriptor& rDescriptor);
-    void RequestRepaint (const Rectangle& rRepaintBox);
+    void RequestRepaint (const ::tools::Rectangle& rRepaintBox);
     void RequestRepaint (const vcl::Region& rRepaintRegion);
 
-    Rectangle GetModelArea();
+    ::tools::Rectangle GetModelArea();
 
     /** Return the index of the page that is rendered at the given position.
         @param rPosition
@@ -130,11 +120,11 @@ public:
         OutputDevice* pDevice,
         const vcl::Region& rPaintArea,
         sdr::contact::ViewObjectContactRedirector* pRedirector = nullptr) override;
-    void Paint (OutputDevice& rDevice, const Rectangle& rRepaintArea);
+    void Paint (OutputDevice& rDevice, const ::tools::Rectangle& rRepaintArea);
 
     virtual void ConfigurationChanged (
         utl::ConfigurationBroadcaster* pBroadcaster,
-        sal_uInt32 nHint) override;
+        ConfigurationHints nHint) override;
 
     void HandleDataChangeEvent();
 
@@ -144,7 +134,7 @@ public:
     */
     void InvalidatePageObjectVisibilities();
 
-    std::shared_ptr<cache::PageCache> GetPreviewCache();
+    std::shared_ptr<cache::PageCache> const & GetPreviewCache();
 
     /** Return the range of currently visible page objects including the
         first and last one in that range.
@@ -152,7 +142,7 @@ public:
             The returned pair of page object indices is empty when the
             second index is lower than the first.
     */
-    Pair GetVisiblePageRange();
+    Range const & GetVisiblePageRange();
 
     /** Add a shape to the page.  Typically used from inside
         PostModelChange().
@@ -169,7 +159,7 @@ public:
 
     /** Remove a listener that is called when the set of visible slides changes.
         @param rListener
-            It is save to pass a listener that was not added or has been
+            It is safe to pass a listener that was not added or has been
             removed previously.  Such calls are ignored.
     */
     void RemoveVisibilityChangeListener (const Link<LinkParamNone*,void>& rListener);
@@ -188,13 +178,13 @@ public:
 
     void UpdateOrientation();
 
-    std::shared_ptr<PageObjectPainter> GetPageObjectPainter();
-    std::shared_ptr<LayeredDevice> GetLayeredDevice() const { return mpLayeredDevice;}
+    std::shared_ptr<PageObjectPainter> const & GetPageObjectPainter();
+    const std::shared_ptr<LayeredDevice>& GetLayeredDevice() const { return mpLayeredDevice;}
 
     class DrawLock
     {
     public:
-        DrawLock (SlideSorter& rSlideSorter);
+        DrawLock (SlideSorter const & rSlideSorter);
         ~DrawLock();
         /** When the DrawLock is disposed then it will not request a repaint
             on destruction.
@@ -209,9 +199,6 @@ public:
 
     virtual void DragFinished (sal_Int8 nDropAction) override;
 
-protected:
-    virtual void Notify (SfxBroadcaster& rBroadcaster, const SfxHint& rHint) override;
-
 private:
     SlideSorter& mrSlideSorter;
     model::SlideSorterModel& mrModel;
@@ -221,16 +208,14 @@ private:
     std::shared_ptr<cache::PageCache> mpPreviewCache;
     std::shared_ptr<LayeredDevice> mpLayeredDevice;
     Range maVisiblePageRange;
-    bool mbModelChangedWhileModifyEnabled;
     Size maPreviewSize;
     bool mbPreciousFlagUpdatePending;
     Layouter::Orientation meOrientation;
     model::SharedPageDescriptor mpPageUnderMouse;
     std::shared_ptr<PageObjectPainter> mpPageObjectPainter;
-    std::shared_ptr<SelectionPainter> mpSelectionPainter;
     vcl::Region maRedrawRegion;
-    SharedILayerPainter mpBackgroundPainter;
-    std::unique_ptr<ToolTip> mpToolTip;
+    SharedILayerPainter const mpBackgroundPainter;
+    std::unique_ptr<ToolTip, o3tl::default_delete<ToolTip>> mpToolTip;
     bool mbIsRearrangePending;
     ::std::vector<Link<LinkParamNone*,void>> maVisibilityChangeListeners;
 

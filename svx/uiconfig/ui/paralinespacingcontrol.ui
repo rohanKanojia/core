@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.10 -->
+<interface domain="svx">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkAdjustment" id="adjustment1">
-    <property name="lower">50</property>
-    <property name="upper">200</property>
+    <property name="lower">6</property>
+    <property name="upper">65535</property>
     <property name="value">100</property>
     <property name="step_increment">10</property>
     <property name="page_increment">10</property>
@@ -63,7 +63,7 @@
         <property name="vexpand">True</property>
         <child>
           <object class="GtkButton" id="spacing_1">
-            <property name="label" translatable="yes">Spacing: 1</property>
+            <property name="label" translatable="yes" context="paralinespacingcontrol|spacing_1">Spacing: 1</property>
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
@@ -81,7 +81,7 @@
         </child>
         <child>
           <object class="GtkButton" id="spacing_115">
-            <property name="label" translatable="yes">Spacing: 1.15</property>
+            <property name="label" translatable="yes" context="paralinespacingcontrol|spacing_115">Spacing: 1.15</property>
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
@@ -99,7 +99,7 @@
         </child>
         <child>
           <object class="GtkButton" id="spacing_15">
-            <property name="label" translatable="yes">Spacing: 1.5</property>
+            <property name="label" translatable="yes" context="paralinespacingcontrol|spacing_15">Spacing: 1.5</property>
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
@@ -117,7 +117,7 @@
         </child>
         <child>
           <object class="GtkButton" id="spacing_2">
-            <property name="label" translatable="yes">Spacing: 2</property>
+            <property name="label" translatable="yes" context="paralinespacingcontrol|spacing_2">Spacing: 2</property>
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
@@ -160,7 +160,7 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="xalign">0</property>
-                        <property name="label" translatable="yes">Line Spacing:</property>
+                        <property name="label" translatable="yes" context="paralinespacingcontrol|label3">Line Spacing:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">line_dist</property>
                       </object>
@@ -179,13 +179,14 @@
                         <property name="entry_text_column">0</property>
                         <property name="id_column">1</property>
                         <items>
-                          <item translatable="yes">Single</item>
-                          <item translatable="yes">1.5 Lines</item>
-                          <item translatable="yes">Double</item>
-                          <item translatable="yes">Proportional</item>
-                          <item translatable="yes">At least</item>
-                          <item translatable="yes">Leading</item>
-                          <item translatable="yes">Fixed</item>
+                          <item translatable="yes" context="paralinespacingcontrol|line_dist">Single</item>
+                          <item translatable="yes" context="paralinespacingcontrol|line_dist">1.15 Lines</item>
+                          <item translatable="yes" context="paralinespacingcontrol|line_dist">1.5 Lines</item>
+                          <item translatable="yes" context="paralinespacingcontrol|line_dist">Double</item>
+                          <item translatable="yes" context="paralinespacingcontrol|line_dist">Proportional</item>
+                          <item translatable="yes" context="paralinespacingcontrol|line_dist">At least</item>
+                          <item translatable="yes" context="paralinespacingcontrol|line_dist">Leading</item>
+                          <item translatable="yes" context="paralinespacingcontrol|line_dist">Fixed</item>
                         </items>
                       </object>
                       <packing>
@@ -200,7 +201,7 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="xalign">0</property>
-                        <property name="label" translatable="yes">Value:</property>
+                        <property name="label" translatable="yes" context="paralinespacingcontrol|value_label">Value:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">grid1</property>
                       </object>
@@ -221,8 +222,6 @@
                           <object class="GtkSpinButton" id="percent_box:0%">
                             <property name="can_focus">True</property>
                             <property name="hexpand">True</property>
-                            <property name="invisible_char">●</property>
-                            <property name="invisible_char_set">True</property>
                             <property name="adjustment">adjustment1</property>
                           </object>
                           <packing>
@@ -237,8 +236,6 @@
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="hexpand">True</property>
-                            <property name="invisible_char">●</property>
-                            <property name="invisible_char_set">True</property>
                             <property name="adjustment">adjustment2</property>
                             <property name="digits">2</property>
                           </object>
@@ -265,7 +262,7 @@
               <object class="GtkLabel" id="label2">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Custom Value</property>
+                <property name="label" translatable="yes" context="paralinespacingcontrol|label2">Custom Value</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>

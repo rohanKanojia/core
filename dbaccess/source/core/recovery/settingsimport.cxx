@@ -20,6 +20,7 @@
 #include "settingsimport.hxx"
 
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 #include <sax/tools/converter.hxx>
 #include <xmloff/xmltoken.hxx>
 
@@ -27,9 +28,6 @@ namespace dbaccess
 {
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
-    using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Any;
     using ::com::sun::star::xml::sax::XAttributeList;
 
@@ -78,9 +76,8 @@ namespace dbaccess
     }
 
     // IgnoringSettingsImport
-    ::rtl::Reference< SettingsImport > IgnoringSettingsImport::nextState( const OUString& i_rElementName )
+    ::rtl::Reference< SettingsImport > IgnoringSettingsImport::nextState( const OUString& )
     {
-        (void)i_rElementName;
         return this;
     }
 
@@ -104,12 +101,9 @@ namespace dbaccess
         if ( sLocalName == "config-item-set" )
             return new ConfigItemSetImport( m_rSettings );
 
-#if OSL_DEBUG_LEVEL > 0
-        OString sMessage( "unknown (or unsupported at this place) element name '" );
-        sMessage += OUStringToOString( i_rElementName, RTL_TEXTENCODING_UTF8 );
-        sMessage += "', ignoring";
-        OSL_FAIL( sMessage.getStr() );
-#endif
+        SAL_WARN( "dbaccess", "unknown (or unsupported at this place) element name '"
+                    << i_rElementName
+                    << "', ignoring");
         return new IgnoringSettingsImport;
     }
 
@@ -123,10 +117,9 @@ namespace dbaccess
     {
     }
 
-    ::rtl::Reference< SettingsImport > ConfigItemImport::nextState( const OUString& i_rElementName )
+    ::rtl::Reference< SettingsImport > ConfigItemImport::nextState( const OUString& )
     {
         OSL_FAIL( "ConfigItemImport::nextState: unexpected: this class is responsible for child-less items only!" );
-        (void)i_rElementName;
         return new IgnoringSettingsImport;
     }
 
@@ -180,15 +173,11 @@ namespace dbaccess
         {
             o_rValue <<= sValue;
         }
-#if OSL_DEBUG_LEVEL > 0
         else
         {
-            OString sMessage( "ConfigItemImport::getItemValue: unsupported item type '" );
-            sMessage += OUStringToOString( rItemType, RTL_TEXTENCODING_UTF8 );
-            sMessage += "', ignoring";
-            OSL_FAIL( sMessage.getStr() );
+            SAL_WARN( "dbaccess", "ConfigItemImport::getItemValue: unsupported item type '"
+                    << rItemType << "', ignoring");
         }
-#endif
     }
 
     // ConfigItemSetImport
@@ -213,12 +202,8 @@ namespace dbaccess
         if ( sLocalName == "config-item" )
             return new ConfigItemImport( m_aChildSettings );
 
-#if OSL_DEBUG_LEVEL > 0
-        OString sMessage( "unknown element name '" );
-        sMessage += OUStringToOString( i_rElementName, RTL_TEXTENCODING_UTF8 );
-        sMessage += "', ignoring";
-        OSL_FAIL( sMessage.getStr() );
-#endif
+        SAL_WARN( "dbaccess", "unknown element name '"
+                    << i_rElementName << "', ignoring");
         return new IgnoringSettingsImport;
     }
 

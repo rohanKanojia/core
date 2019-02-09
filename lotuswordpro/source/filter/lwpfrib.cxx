@@ -58,16 +58,17 @@
  *  For LWP filter architecture prototype
  ************************************************************************/
 
-#include "lwpfrib.hxx"
+#include <memory>
+#include <lwpfrib.hxx>
 #include "lwpcharsetmgr.hxx"
 #include "lwpsection.hxx"
 #include "lwphyperlinkmgr.hxx"
-#include "xfilter/xfhyperlink.hxx"
-#include "xfilter/xfstylemanager.hxx"
-#include "xfilter/xfsection.hxx"
-#include "xfilter/xfsectionstyle.hxx"
-#include "xfilter/xftextspan.hxx"
-#include "xfilter/xftextcontent.hxx"
+#include <xfilter/xfhyperlink.hxx>
+#include <xfilter/xfstylemanager.hxx>
+#include <xfilter/xfsection.hxx>
+#include <xfilter/xfsectionstyle.hxx>
+#include <xfilter/xftextspan.hxx>
+#include <xfilter/xftextcontent.hxx>
 #include "lwpfribheader.hxx"
 #include "lwpfribtext.hxx"
 #include "lwpfribtable.hxx"
@@ -78,18 +79,18 @@
 #include "lwpfootnote.hxx"
 #include "lwpnotes.hxx"
 #include "lwpfribmark.hxx"
-#include "lwpchangemgr.hxx"
-#include "lwpdocdata.hxx"
-#include "lwpglobalmgr.hxx"
+#include <lwpchangemgr.hxx>
+#include <lwpdocdata.hxx>
+#include <lwpglobalmgr.hxx>
 
 #include <osl/diagnose.h>
 
 
 LwpFrib::LwpFrib(LwpPara* pPara)
-    : m_pPara(pPara)
+    : m_pFribMap(nullptr)
+    , m_pPara(pPara)
     , m_pNext(nullptr)
     , m_nFribType(0)
-    , m_pModifiers(nullptr)
     , m_ModFlag(false)
     , m_nRevisionType(0)
     , m_bRevisionFlag(false)
@@ -99,27 +100,28 @@ LwpFrib::LwpFrib(LwpPara* pPara)
 
 LwpFrib::~LwpFrib()
 {
-    delete m_pModifiers;
+    Deregister();
 }
 
 LwpFrib* LwpFrib::CreateFrib(LwpPara* pPara, LwpObjectStream* pObjStrm, sal_uInt8 fribtag,sal_uInt8 editID)
 {
     //Read Modifier
-    ModifierInfo* pModInfo = nullptr;
+    std::unique_ptr<ModifierInfo> xModInfo;
     if(fribtag & FRIB_TAG_MODIFIER)
     {
-        pModInfo  = new ModifierInfo();
-        pModInfo->CodePage = 0;
-        pModInfo->FontID = 0;
-        pModInfo->RevisionFlag = false;
-        pModInfo->HasCharStyle = false;
-        pModInfo->HasLangOverride = false;
-        pModInfo->HasHighlight = false;
-        ReadModifiers( pObjStrm, pModInfo );
+        xModInfo.reset(new ModifierInfo);
+        xModInfo->CodePage = 0;
+        xModInfo->FontID = 0;
+        xModInfo->RevisionType = 0;
+        xModInfo->RevisionFlag = false;
+        xModInfo->HasCharStyle = false;
+        xModInfo->HasLangOverride = false;
+        xModInfo->HasHighlight = false;
+        ReadModifiers(pObjStrm, xModInfo.get());
     }
 
     //Read frib data
-    LwpFrib* newFrib = nullptr;
+    std::unique_ptr<LwpFrib> newFrib;
     sal_uInt16 friblen = pObjStrm->QuickReaduInt16();
     sal_uInt8 fribtype = fribtag&~FRIB_TAG_TYPEMASK;
     switch(fribtype)
@@ -127,87 +129,87 @@ LwpFrib* LwpFrib::CreateFrib(LwpPara* pPara, LwpObjectStream* pObjStrm, sal_uInt
         case FRIB_TAG_INVALID:  //fall through
         case FRIB_TAG_EOP:      //fall through
         default:
-            newFrib = new LwpFrib(pPara);
+            newFrib.reset(new LwpFrib(pPara));
             break;
         case FRIB_TAG_TEXT:
         {
-            newFrib = new LwpFribText (pPara, (fribtag & FRIB_TAG_NOUNICODE) != 0);
+            newFrib.reset(new LwpFribText(pPara, (fribtag & FRIB_TAG_NOUNICODE) != 0));
             break;
         }
         case FRIB_TAG_TABLE:
-            newFrib = new LwpFribTable(pPara);
+            newFrib.reset(new LwpFribTable(pPara));
             break;
         case FRIB_TAG_TAB:
-            newFrib = new LwpFribTab(pPara);
+            newFrib.reset(new LwpFribTab(pPara));
             break;
         case FRIB_TAG_PAGEBREAK:
-            newFrib = new LwpFribPageBreak(pPara);
+            newFrib.reset(new LwpFribPageBreak(pPara));
             break;
         case FRIB_TAG_FRAME:
-            newFrib = new LwpFribFrame(pPara);
+            newFrib.reset(new LwpFribFrame(pPara));
             break;
         case FRIB_TAG_FOOTNOTE:
-            newFrib = new LwpFribFootnote(pPara);
+            newFrib.reset(new LwpFribFootnote(pPara));
             break;
         case FRIB_TAG_COLBREAK:
-            newFrib = new LwpFribColumnBreak(pPara);
+            newFrib.reset(new LwpFribColumnBreak(pPara));
             break;
         case FRIB_TAG_LINEBREAK:
-            newFrib = new LwpFribLineBreak(pPara);
+            newFrib.reset(new LwpFribLineBreak(pPara));
             break;
         case FRIB_TAG_HARDSPACE:
-            newFrib = new LwpFribHardSpace(pPara);
+            newFrib.reset(new LwpFribHardSpace(pPara));
             break;
         case FRIB_TAG_SOFTHYPHEN:
-            newFrib = new LwpFribSoftHyphen(pPara);
+            newFrib.reset(new LwpFribSoftHyphen(pPara));
             break;
         case FRIB_TAG_PARANUMBER:
-            newFrib = new LwpFribParaNumber(pPara);
+            newFrib.reset(new LwpFribParaNumber(pPara));
             break;
         case FRIB_TAG_UNICODE: //fall through
         case FRIB_TAG_UNICODE2: //fall through
         case FRIB_TAG_UNICODE3: //fall through
-            newFrib = new LwpFribUnicode(pPara);
+            newFrib.reset(new LwpFribUnicode(pPara));
             break;
         case FRIB_TAG_NOTE:
-            newFrib = new  LwpFribNote(pPara);
+            newFrib.reset(new LwpFribNote(pPara));
             break;
         case FRIB_TAG_SECTION:
-            newFrib = new LwpFribSection(pPara);
+            newFrib.reset(new LwpFribSection(pPara));
             break;
         case FRIB_TAG_PAGENUMBER:
-            newFrib = new LwpFribPageNumber(pPara);
+            newFrib.reset(new LwpFribPageNumber(pPara));
             break;
         case FRIB_TAG_DOCVAR:
-            newFrib = new LwpFribDocVar(pPara);
+            newFrib.reset(new LwpFribDocVar(pPara));
             break;
         case FRIB_TAG_BOOKMARK:
-            newFrib = new LwpFribBookMark(pPara);
+            newFrib.reset(new LwpFribBookMark(pPara));
             break;
         case FRIB_TAG_FIELD:
-            newFrib = new LwpFribField(pPara);
+            newFrib.reset(new LwpFribField(pPara));
             break;
         case FRIB_TAG_CHBLOCK:
-            newFrib = new LwpFribCHBlock(pPara);
+            newFrib.reset(new LwpFribCHBlock(pPara));
             break;
         case FRIB_TAG_RUBYMARKER:
-            newFrib = new LwpFribRubyMarker(pPara);
+            newFrib.reset(new LwpFribRubyMarker(pPara));
             break;
         case FRIB_TAG_RUBYFRAME:
-            newFrib = new LwpFribRubyFrame(pPara);
+            newFrib.reset(new LwpFribRubyFrame(pPara));
             break;
     }
 
     //Do not know why the fribTag judgement is necessary, to be checked with
-    if ( fribtag & FRIB_TAG_MODIFIER )
+    if (fribtag & FRIB_TAG_MODIFIER)
     {
-        newFrib->SetModifiers(pModInfo);
+        newFrib->SetModifiers(xModInfo.release());
     }
 
-    newFrib->SetType(fribtype);
-    newFrib->SetEditor(editID);
+    newFrib->m_nFribType = fribtype;
+    newFrib->m_nEditor = editID;
     newFrib->Read(pObjStrm, friblen);
-    return newFrib;
+    return newFrib.release();
 }
 
 void LwpFrib::Read(LwpObjectStream* pObjStrm, sal_uInt16 len)
@@ -219,7 +221,7 @@ void LwpFrib::SetModifiers(ModifierInfo* pModifiers)
 {
     if (pModifiers)
     {
-        m_pModifiers = pModifiers;
+        m_pModifiers.reset( pModifiers );
         m_ModFlag = true;
         if (pModifiers->RevisionFlag)
         {
@@ -248,7 +250,7 @@ void LwpFrib::RegisterStyle(LwpFoundry* pFoundry)
     XFTextStyle* pNamedStyle = nullptr;
     if (m_pModifiers->HasCharStyle && pFoundry)
     {
-        pNamedStyle = static_cast<XFTextStyle*>
+        pNamedStyle = dynamic_cast<XFTextStyle*>
                                 (pFoundry->GetStyleManager()->GetStyle(m_pModifiers->CharStyleID));
     }
     if (pNamedStyle)
@@ -258,13 +260,13 @@ void LwpFrib::RegisterStyle(LwpFoundry* pFoundry)
             pCharStyle = dynamic_cast<LwpCharacterStyle*>(m_pModifiers->CharStyleID.obj().get());
         if (pCharStyle)
         {
-            pStyle = new XFTextStyle();
-            *pStyle = *pNamedStyle;
+            std::unique_ptr<XFTextStyle> pNewStyle(new XFTextStyle());
+            *pNewStyle = *pNamedStyle;
 
-            pStyle->SetStyleName("");
+            pNewStyle->SetStyleName("");
             pFont = pFoundry->GetFontManger().CreateOverrideFont(pCharStyle->GetFinalFontID(),m_pModifiers->FontID);
-            pStyle->SetFont(pFont);
-            IXFStyleRet aNewStyle = pXFStyleManager->AddStyle(pStyle);
+            pNewStyle->SetFont(pFont);
+            IXFStyleRet aNewStyle = pXFStyleManager->AddStyle(std::move(pNewStyle));
             m_StyleName = aNewStyle.m_pStyle->GetStyleName();
             pStyle = dynamic_cast<XFTextStyle*>(aNewStyle.m_pStyle);
             if (aNewStyle.m_bOrigDeleted)
@@ -277,10 +279,10 @@ void LwpFrib::RegisterStyle(LwpFoundry* pFoundry)
     {
         if (m_pModifiers->FontID && pFoundry)
         {
-            pStyle = new XFTextStyle();
+            std::unique_ptr<XFTextStyle> pNewStyle(new XFTextStyle());
             pFont = pFoundry->GetFontManger().CreateFont(m_pModifiers->FontID);
-            pStyle->SetFont(pFont);
-            IXFStyleRet aNewStyle = pXFStyleManager->AddStyle(pStyle);
+            pNewStyle->SetFont(pFont);
+            IXFStyleRet aNewStyle = pXFStyleManager->AddStyle(std::move(pNewStyle));
             m_StyleName = aNewStyle.m_pStyle->GetStyleName();
             pStyle = dynamic_cast<XFTextStyle*>(aNewStyle.m_pStyle);
             if (aNewStyle.m_bOrigDeleted)
@@ -295,21 +297,21 @@ void LwpFrib::RegisterStyle(LwpFoundry* pFoundry)
             pStyle->GetFont()->SetBackColor(aColor);
         else //register a new style
         {
-            pStyle = new XFTextStyle();
+            std::unique_ptr<XFTextStyle> pNewStyle(new XFTextStyle());
 
             if (!m_StyleName.isEmpty())
             {
                 XFTextStyle* pOldStyle = pXFStyleManager->FindTextStyle(m_StyleName);
-                *pStyle = *pOldStyle;
-                pStyle->GetFont()->SetBackColor(aColor);
+                *pNewStyle = *pOldStyle;
+                pNewStyle->GetFont()->SetBackColor(aColor);
             }
             else
             {
                 pFont = new XFFont;
                 pFont->SetBackColor(aColor);
-                pStyle->SetFont(pFont);
+                pNewStyle->SetFont(pFont);
             }
-            m_StyleName = pXFStyleManager->AddStyle(pStyle).m_pStyle->GetStyleName();
+            m_StyleName = pXFStyleManager->AddStyle(std::move(pNewStyle)).m_pStyle->GetStyleName();
         }
     }
 }
@@ -339,7 +341,7 @@ void LwpFrib::ReadModifiers(LwpObjectStream* pObjStrm,ModifierInfo* pModInfo)
             case FRIB_MTAG_FONT:
                 if (len != sizeof(pModInfo->FontID))
                 {
-                    OSL_FAIL("FRIB_MTAG_FONT entry wrong size\n");
+                    OSL_FAIL("FRIB_MTAG_FONT entry wrong size");
                     pObjStrm->SeekRel(len);
                 }
                 else
@@ -356,7 +358,7 @@ void LwpFrib::ReadModifiers(LwpObjectStream* pObjStrm,ModifierInfo* pModInfo)
             case FRIB_MTAG_CODEPAGE:
                 if (len != sizeof(pModInfo->CodePage))
                 {
-                    OSL_FAIL("FRIB_MTAG_CODEPAGE entry wrong size\n");
+                    OSL_FAIL("FRIB_MTAG_CODEPAGE entry wrong size");
                     pObjStrm->SeekRel(len);
                 }
                 else
@@ -385,9 +387,7 @@ void LwpFrib::ReadModifiers(LwpObjectStream* pObjStrm,ModifierInfo* pModInfo)
 */
 bool LwpFrib::HasNextFrib()
 {
-    if (!GetNext() || GetNext()->GetType()==FRIB_TAG_EOP)
-        return false;
-    return true;
+    return GetNext() && GetNext()->GetType() != FRIB_TAG_EOP;
 }
 
 void LwpFrib::ConvertChars(XFContentContainer* pXFPara,const OUString& text)
@@ -446,6 +446,22 @@ XFColor LwpFrib::GetHighlightColor()
 {
     LwpGlobalMgr* pGlobal = LwpGlobalMgr::GetInstance();
     return pGlobal->GetHighlightColor(m_nEditor);
+}
+
+void LwpFrib::Register(std::map<LwpFrib*,OUString>* pFribMap)
+{
+    if (m_pFribMap)
+        throw std::runtime_error("registered already");
+    m_pFribMap = pFribMap;
+}
+
+void LwpFrib::Deregister()
+{
+    if (m_pFribMap)
+    {
+        m_pFribMap->erase(this);
+        m_pFribMap = nullptr;
+    }
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

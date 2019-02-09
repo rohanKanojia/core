@@ -11,19 +11,25 @@
 
 #include <sal/config.h>
 
-#include <sal/log.hxx>
-
 #include "node.hxx"
+
+#include <cassert>
+#include <memory>
+#include <vector>
 
 /** Representation of caret position with an equation */
 struct SmCaretPos{
-    SmCaretPos(SmNode* selectedNode = nullptr, int iIndex = 0) {
-        pSelectedNode = selectedNode;
-        Index = iIndex;
+    SmCaretPos(SmNode* selectedNode = nullptr, int iIndex = 0)
+        : pSelectedNode(selectedNode)
+        , nIndex(iIndex)
+    {
+        assert(nIndex >= 0);
     }
+
     /** Selected node */
     SmNode* pSelectedNode;
-    /** Index within the selected node
+
+    /** Index (invariant: non-negative) within the selected node
      *
      * 0: Position in front of a node
      * 1: Position after a node or after first char in SmTextNode
@@ -33,11 +39,12 @@ struct SmCaretPos{
      */
     //TODO: Special cases for SmBlankNode is needed
     //TODO: Consider forgetting about the todo above... As it's really unpleasant.
-    int Index;
+    int nIndex;
+
     /** True, if this is a valid caret position */
     bool IsValid() const { return pSelectedNode != nullptr; }
     bool operator==(const SmCaretPos &pos) const {
-        return pos.pSelectedNode == pSelectedNode && Index == pos.Index;
+        return pos.pSelectedNode == pSelectedNode && nIndex == pos.nIndex;
     }
     /** Get the caret position after pNode, regardless of pNode
      *
@@ -45,7 +52,7 @@ struct SmCaretPos{
      * Unless pNode is an instance of SmTextNode, then the index is the text length.
      */
     static SmCaretPos GetPosAfter(SmNode* pNode) {
-        if(pNode && pNode->GetType() == NTEXT)
+        if(pNode && pNode->GetType() == SmNodeType::Text)
             return SmCaretPos(pNode, static_cast<SmTextNode*>(pNode)->GetText().getLength());
         return SmCaretPos(pNode, 1);
     }
@@ -65,7 +72,7 @@ public:
     long SquaredDistanceX(const SmCaretLine& line) const{
         return (GetLeft() - line.GetLeft()) * (GetLeft() - line.GetLeft());
     }
-    long SquaredDistanceX(Point pos) const{
+    long SquaredDistanceX(const Point &pos) const{
         return (GetLeft() - pos.X()) * (GetLeft() - pos.X());
     }
     long SquaredDistanceY(const SmCaretLine& line) const{
@@ -78,7 +85,7 @@ public:
             return 0;
         return d * d;
     }
-    long SquaredDistanceY(Point pos) const{
+    long SquaredDistanceY(const Point &pos) const{
         long d = GetTop() - pos.Y();
         if(d < 0)
             d = (d * -1) - GetHeight();
@@ -96,9 +103,9 @@ private:
 
 /** An entry in SmCaretPosGraph */
 struct SmCaretPosGraphEntry{
-    SmCaretPosGraphEntry(SmCaretPos pos = SmCaretPos(),
-                       SmCaretPosGraphEntry* left = nullptr,
-                       SmCaretPosGraphEntry* right = nullptr){
+    SmCaretPosGraphEntry(SmCaretPos pos,
+                         SmCaretPosGraphEntry* left,
+                         SmCaretPosGraphEntry* right) {
         CaretPos = pos;
         Left = left;
         Right = right;
@@ -117,74 +124,33 @@ struct SmCaretPosGraphEntry{
     }
 };
 
-class SmCaretPosGraph;
-
-/** Iterator for SmCaretPosGraph */
-class SmCaretPosGraphIterator{
-public:
-    SmCaretPosGraphIterator(SmCaretPosGraph* graph){
-        pGraph = graph;
-        nOffset = 0;
-        pEntry = nullptr;
-    }
-    /** Get the next entry, NULL if none */
-    SmCaretPosGraphEntry* Next();
-    /** Get the current entry, NULL if none */
-    SmCaretPosGraphEntry* Current(){
-        return pEntry;
-    }
-    /** Get the current entry, NULL if none */
-    SmCaretPosGraphEntry* operator->(){
-        return pEntry;
-    }
-private:
-    /** Next entry to return */
-    int nOffset;
-    /** Current graph */
-    SmCaretPosGraph* pGraph;
-    /** Current entry */
-    SmCaretPosGraphEntry* pEntry;
-};
-
-
 /** A graph over all caret positions
  * @remarks Graphs can only grow, entries cannot be removed!
  */
 class SmCaretPosGraph{
 public:
-    SmCaretPosGraph(){
-        pNext = nullptr;
-        nOffset = 0;
-    }
+    SmCaretPosGraph();
+
     ~SmCaretPosGraph();
+
     /** Add a caret position
-     *  @remarks If Left and/or Right are set NULL, they will point back to the entry.
-     */
-    SmCaretPosGraphEntry* Add(SmCaretPosGraphEntry entry);
-    /** Add a caret position
-     *  @remarks If left and/or right are set NULL, they will point back to the entry.
+     *  @remarks If left is NULL, they will point back to the entry.
      */
     SmCaretPosGraphEntry* Add(SmCaretPos pos,
-                            SmCaretPosGraphEntry* left = nullptr,
-                            SmCaretPosGraphEntry* right = nullptr){
-        SAL_WARN_IF( pos.Index < 0, "starmath", "Index shouldn't be -1!" );
-        return Add(SmCaretPosGraphEntry(pos, left, right));
-    }
-    /** Get an iterator for this graph */
-    SmCaretPosGraphIterator GetIterator(){
-        return SmCaretPosGraphIterator(this);
-    }
-    friend class SmCaretPosGraphIterator;
-private:
-    /** Define SmCaretPosGraph to be less than one page 4096 */
-    static const int SmCaretPosGraphSize = 255;
+                            SmCaretPosGraphEntry* left = nullptr);
 
-    /** Next graph, to be used when this graph is full */
-    SmCaretPosGraph* pNext;
-    /** Next free entry in graph */
-    int nOffset;
-    /** Entries in this graph segment */
-    SmCaretPosGraphEntry Graph[SmCaretPosGraphSize];
+    std::vector<std::unique_ptr<SmCaretPosGraphEntry>>::iterator begin()
+    {
+        return mvEntries.begin();
+    }
+
+    std::vector<std::unique_ptr<SmCaretPosGraphEntry>>::iterator end()
+    {
+        return mvEntries.end();
+    }
+
+private:
+    std::vector<std::unique_ptr<SmCaretPosGraphEntry>> mvEntries;
 };
 
 /** \page visual_formula_editing Visual Formula Editing
@@ -270,7 +236,7 @@ private:
  *
  * \subsection caret_positions Caret Positions
  *
- * A caret position in OpenOffice Math is representated by an instance of SmCaretPos.
+ * A caret position in OpenOffice Math is represented by an instance of SmCaretPos.
  * That is a caret position is a node and an index related to this node. For most nodes the
  * index 0, means caret is in front of this node, the index 1 means caret is after this node.
  * For SmTextNode the index is the caret position after the specified number of characters,
@@ -334,7 +300,7 @@ private:
  * graph is build, and how new methods should be implemented see SmCaretPosGraphBuildingVisitor.
  *
  * The result of the SmCaretPosGraphBuildingVisitor is a graph over the caret positions in a
- * formula, representated by an instance of SmCaretPosGraph. Each entry (instances of SmCaretPosGraphEntry)
+ * formula, represented by an instance of SmCaretPosGraph. Each entry (instances of SmCaretPosGraphEntry)
  * has a pointer to the entry to the left and right of itself. This way we can easily find
  * the caret position to a right or left of a given caret position. Note each caret position
  * only appears once in this graph.

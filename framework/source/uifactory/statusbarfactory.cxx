@@ -17,8 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/frame/ModuleManager.hpp>
-
 #include <uifactory/menubarfactory.hxx>
 #include <uielement/statusbarwrapper.hxx>
 
@@ -28,7 +26,6 @@
 
 using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
-using namespace com::sun::star::frame;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::util;
 using namespace ::com::sun::star::ui;
@@ -42,27 +39,23 @@ class StatusBarFactory :  public MenuBarFactory
 public:
     explicit StatusBarFactory( const css::uno::Reference< css::uno::XComponentContext >& xContext );
 
-    virtual OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual OUString SAL_CALL getImplementationName() override
     {
         return OUString("com.sun.star.comp.framework.StatusBarFactory");
     }
 
-    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
     {
-        css::uno::Sequence< OUString > aSeq { "com.sun.star.ui.StatusBarFactory" };
-        return aSeq;
+        return {"com.sun.star.ui.StatusBarFactory"};
     }
 
     // XUIElementFactory
-    virtual css::uno::Reference< css::ui::XUIElement > SAL_CALL createUIElement( const OUString& ResourceURL, const css::uno::Sequence< css::beans::PropertyValue >& Args ) throw ( css::container::NoSuchElementException, css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Reference< css::ui::XUIElement > SAL_CALL createUIElement( const OUString& ResourceURL, const css::uno::Sequence< css::beans::PropertyValue >& Args ) override;
 };
 
 StatusBarFactory::StatusBarFactory( const css::uno::Reference< css::uno::XComponentContext >& xContext ) :
@@ -74,17 +67,16 @@ StatusBarFactory::StatusBarFactory( const css::uno::Reference< css::uno::XCompon
 Reference< XUIElement > SAL_CALL StatusBarFactory::createUIElement(
     const OUString& ResourceURL,
     const Sequence< PropertyValue >& Args )
-throw ( css::container::NoSuchElementException, css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception )
 {
     Reference< css::ui::XUIElement > xStatusBar(
             static_cast<OWeakObject *>(new StatusBarWrapper(m_xContext)), UNO_QUERY);
-    MenuBarFactory::CreateUIElement(ResourceURL, Args, nullptr, "private:resource/statusbar/", xStatusBar, m_xContext);
+    MenuBarFactory::CreateUIElement(ResourceURL, Args, "private:resource/statusbar/", xStatusBar, m_xContext);
     return xStatusBar;
 }
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_framework_StatusBarFactory_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)

@@ -57,8 +57,8 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPMARGINS_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPMARGINS_HXX
 
-#include "lwpobjstrm.hxx"
-#include "lwptools.hxx"
+#include <lwpobjstrm.hxx>
+#include <lwptools.hxx>
 
 const sal_uInt8 MARGIN_LEFT = 0;
 const sal_uInt8 MARGIN_RIGHT = 1;
@@ -78,8 +78,7 @@ public:
         m_nBottom = pStrm->QuickReadInt32();
         pStrm->SkipExtra();
     }
-    inline LwpMargins& operator = (const LwpMargins& rOther);
-    inline double GetMarginsValue(const sal_uInt8& nWhichSide);
+    inline double GetMarginsValue(sal_uInt8 nWhichSide);
 private:
     sal_Int32       m_nLeft;
     sal_Int32       m_nTop;
@@ -87,16 +86,7 @@ private:
     sal_Int32       m_nBottom;
 };
 
-inline LwpMargins& LwpMargins::operator = (const LwpMargins& rOther)
-{
-    m_nLeft = rOther.m_nLeft;
-    m_nTop = rOther.m_nTop;
-    m_nRight = rOther.m_nRight;
-    m_nBottom = rOther.m_nBottom;
-    return *this;
-}
-
-inline double LwpMargins::GetMarginsValue(const sal_uInt8& nWhichSide)
+inline double LwpMargins::GetMarginsValue(sal_uInt8 nWhichSide)
 {
     switch (nWhichSide)
     {

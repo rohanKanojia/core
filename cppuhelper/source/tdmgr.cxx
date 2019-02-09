@@ -19,6 +19,7 @@
 
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <vector>
 
@@ -32,7 +33,7 @@
 #include <uno/mapping.hxx>
 
 #include <cppuhelper/bootstrap.hxx>
-#include <cppuhelper/implbase1.hxx>
+#include <cppuhelper/implbase.hxx>
 #include <typelib/typedescription.h>
 
 #include <com/sun/star/lang/XComponent.hpp>
@@ -55,8 +56,6 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::reflection;
 
-using rtl::OUString;
-
 namespace cppu
 {
 
@@ -65,7 +64,7 @@ static typelib_TypeDescription * createCTD(
     const Reference< XTypeDescription > & xType );
 
 
-inline static typelib_TypeDescription * createCTD(
+static typelib_TypeDescription * createCTD(
     const Reference< XCompoundTypeDescription > & xType )
 {
     typelib_TypeDescription * pRet = nullptr;
@@ -95,7 +94,7 @@ inline static typelib_TypeDescription * createCTD(
         for ( nPos = nMembers; nPos--; )
         {
             typelib_CompoundMember_Init & rInit = pMemberInits[nPos];
-            rInit.eTypeClass = (typelib_TypeClass)pMemberTypes[nPos]->getTypeClass();
+            rInit.eTypeClass = static_cast<typelib_TypeClass>(pMemberTypes[nPos]->getTypeClass());
 
             OUString aMemberTypeName( pMemberTypes[nPos]->getName() );
             rtl_uString_acquire( rInit.pTypeName = aMemberTypeName.pData );
@@ -106,7 +105,7 @@ inline static typelib_TypeDescription * createCTD(
 
         typelib_typedescription_new(
             &pRet,
-            (typelib_TypeClass)xType->getTypeClass(),
+            static_cast<typelib_TypeClass>(xType->getTypeClass()),
             aTypeName.pData,
             (pBaseType ? pBaseType->pWeakRef : nullptr),
             nMembers, pMemberInits );
@@ -122,7 +121,7 @@ inline static typelib_TypeDescription * createCTD(
     return pRet;
 }
 
-inline static typelib_TypeDescription * createCTD(
+static typelib_TypeDescription * createCTD(
     Reference< container::XHierarchicalNameAccess > const & access,
     const Reference< XStructTypeDescription > & xType )
 {
@@ -167,7 +166,7 @@ inline static typelib_TypeDescription * createCTD(
         {
             typelib_StructMember_Init & rInit = pMemberInits[nPos];
             rInit.aBase.eTypeClass
-                = (typelib_TypeClass)pMemberTypes[nPos]->getTypeClass();
+                = static_cast<typelib_TypeClass>(pMemberTypes[nPos]->getTypeClass());
 
             OUString aMemberTypeName( pMemberTypes[nPos]->getName() );
             rtl_uString_acquire(
@@ -198,7 +197,7 @@ inline static typelib_TypeDescription * createCTD(
     return pRet;
 }
 
-inline static typelib_TypeDescription * createCTD(
+static typelib_TypeDescription * createCTD(
     const Reference< XInterfaceAttributeTypeDescription2 > & xAttribute )
 {
     typelib_TypeDescription * pRet = nullptr;
@@ -227,7 +226,7 @@ inline static typelib_TypeDescription * createCTD(
             reinterpret_cast<typelib_InterfaceAttributeTypeDescription **>(&pRet),
             xAttribute->getPosition(),
             aMemberName.pData, // name
-            (typelib_TypeClass)xType->getTypeClass(),
+            static_cast<typelib_TypeClass>(xType->getTypeClass()),
             aMemberTypeName.pData, // type name
             xAttribute->isReadOnly(),
             getExc.size(), getExc.data(),
@@ -259,7 +258,7 @@ static typelib_TypeDescription * createCTD(
             const Reference< XTypeDescription > & xType  = xParam->getType();
             typelib_Parameter_Init & rInit = pParamInit[xParam->getPosition()];
 
-            rInit.eTypeClass = (typelib_TypeClass)xType->getTypeClass();
+            rInit.eTypeClass = static_cast<typelib_TypeClass>(xType->getTypeClass());
             OUString aParamTypeName( xType->getName() );
             rtl_uString_acquire( rInit.pTypeName = aParamTypeName.pData );
             OUString aParamName( xParam->getName() );
@@ -289,7 +288,7 @@ static typelib_TypeDescription * createCTD(
             xMethod->getPosition(),
             xMethod->isOneway(),
             aTypeName.pData,
-            (typelib_TypeClass)xReturnType->getTypeClass(),
+            static_cast<typelib_TypeClass>(xReturnType->getTypeClass()),
             aReturnTypeName.pData,
             nParams, pParamInit,
             nExceptions, ppExceptionNames );
@@ -307,7 +306,7 @@ static typelib_TypeDescription * createCTD(
     return pRet;
 }
 
-inline static typelib_TypeDescription * createCTD(
+static typelib_TypeDescription * createCTD(
     Reference< container::XHierarchicalNameAccess > const & access,
     const Reference< XInterfaceTypeDescription2 > & xType )
 {
@@ -349,7 +348,7 @@ inline static typelib_TypeDescription * createCTD(
             ppMemberRefs[nPos] = nullptr;
             typelib_typedescriptionreference_new(
                 ppMemberRefs + nPos,
-                (typelib_TypeClass)pMembers[nPos]->getTypeClass(),
+                static_cast<typelib_TypeClass>(pMembers[nPos]->getTypeClass()),
                 aMemberTypeName.pData );
         }
 
@@ -373,7 +372,7 @@ inline static typelib_TypeDescription * createCTD(
     return pRet;
 }
 
-inline static typelib_TypeDescription * createCTD( const Reference< XEnumTypeDescription > & xType )
+static typelib_TypeDescription * createCTD( const Reference< XEnumTypeDescription > & xType )
 {
     typelib_TypeDescription * pRet = nullptr;
     if (xType.is())
@@ -392,7 +391,7 @@ inline static typelib_TypeDescription * createCTD( const Reference< XEnumTypeDes
     return pRet;
 }
 
-inline static typelib_TypeDescription * createCTD(
+static typelib_TypeDescription * createCTD(
     Reference< container::XHierarchicalNameAccess > const & access,
     const Reference< XIndirectTypeDescription > & xType )
 {
@@ -407,7 +406,7 @@ inline static typelib_TypeDescription * createCTD(
 
         typelib_typedescription_new(
             &pRet,
-            (typelib_TypeClass)xType->getTypeClass(),
+            static_cast<typelib_TypeClass>(xType->getTypeClass()),
             aTypeName.pData,
             pRefType->pWeakRef,
             0, nullptr );
@@ -564,7 +563,7 @@ static typelib_TypeDescription * createCTD(
 
 extern "C"
 {
-static void SAL_CALL typelib_callback(
+static void typelib_callback(
     void * pContext, typelib_TypeDescription ** ppRet, rtl_uString * pTypeName )
 {
     OSL_ENSURE( pContext && ppRet && pTypeName, "### null ptr!" );
@@ -589,21 +588,13 @@ static void SAL_CALL typelib_callback(
                     *ppRet = createCTD( access, xTD );
                 }
             }
-            catch (container::NoSuchElementException & exc)
+            catch (const container::NoSuchElementException & exc)
             {
-                (void) exc; // avoid warning about unused variable
-                OSL_TRACE(
-                    "typelibrary type not available: %s",
-                    OUStringToOString(
-                        exc.Message, RTL_TEXTENCODING_UTF8 ).getStr() );
+                SAL_INFO("cppuhelper", "typelibrary type not available: " << exc );
             }
-            catch (Exception & exc)
+            catch (const Exception & exc)
             {
-                (void) exc; // avoid warning about unused variable
-                OSL_TRACE(
-                    "%s",
-                    OUStringToOString(
-                        exc.Message, RTL_TEXTENCODING_UTF8 ).getStr() );
+                SAL_INFO("cppuhelper", exc );
             }
         }
     }
@@ -612,7 +603,7 @@ static void SAL_CALL typelib_callback(
 
 
 class EventListenerImpl
-    : public WeakImplHelper1< lang::XEventListener >
+    : public WeakImplHelper< lang::XEventListener >
 {
     Reference< container::XHierarchicalNameAccess > m_xTDMgr;
 
@@ -623,12 +614,10 @@ public:
         {}
 
     // XEventListener
-    virtual void SAL_CALL disposing( lang::EventObject const & rEvt )
-        throw (RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing( lang::EventObject const & rEvt ) override;
 };
 
 void EventListenerImpl::disposing( lang::EventObject const & rEvt )
-    throw (RuntimeException, std::exception)
 {
     if (rEvt.Source != m_xTDMgr) {
         OSL_ASSERT(false);
@@ -658,9 +647,9 @@ sal_Bool SAL_CALL installTypeDescriptionManager(
         xComp->addEventListener( new EventListenerImpl( xTDMgr ) );
         // register c typelib callback
         ::typelib_typedescription_registerCallback( xTDMgr.get(), typelib_callback );
-        return sal_True;
+        return true;
     }
-    return sal_False;
+    return false;
 }
 
 } // end namespace cppu

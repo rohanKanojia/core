@@ -43,28 +43,25 @@
 
 #include <svx/svdoashp.hxx>
 #include <svx/xtable.hxx>
-#include <sfx2/sidebar/EnumContext.hxx>
+#include <vcl/EnumContext.hxx>
 #include <svx/svdoole2.hxx>
 #include <sfx2/opengrf.hxx>
 #include <svx/svdograf.hxx>
 #include <svx/svdundo.hxx>
 #include <svx/xbtmpit.hxx>
 
-#include "swundo.hxx"
-#include "wrtsh.hxx"
-#include "cmdid.h"
-#include "globals.hrc"
-#include "helpid.h"
-#include "popup.hrc"
-#include "shells.hrc"
-#include "drwbassh.hxx"
-#include "drawsh.hxx"
+#include <swundo.hxx>
+#include <wrtsh.hxx>
+#include <cmdid.h>
+#include <globals.hrc>
+#include <strings.hrc>
+#include <drwbassh.hxx>
+#include <drawsh.hxx>
 
-#define SwDrawShell
+#define ShellClass_SwDrawShell
 #include <sfx2/msg.hxx>
-#include "swslots.hxx"
-#include "swabstdlg.hxx"
-#include "misc.hrc"
+#include <swslots.hxx>
+#include <swabstdlg.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -75,7 +72,7 @@ void SwDrawShell::InitInterface_Impl()
 {
     GetStaticInterface()->RegisterPopupMenu("draw");
 
-    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, RID_DRAW_TOOLBOX);
+    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, SfxVisibilityFlags::Invisible, ToolbarId::Draw_Toolbox_Sw);
 
     GetStaticInterface()->RegisterChildWindow(SvxFontWorkChildWindow::GetChildWindowId());
 }
@@ -125,23 +122,23 @@ void SwDrawShell::InsertPictureFromFile(SdrObject& rObject)
 
     if(pSdrView)
     {
-        SvxOpenGraphicDialog aDlg(SW_RESSTR(STR_INSERT_GRAPHIC));
+        SvxOpenGraphicDialog aDlg(SwResId(STR_INSERT_GRAPHIC), GetView().GetViewFrame()->GetWindow().GetFrameWeld());
 
-        if(GRFILTER_OK == aDlg.Execute())
+        if (ERRCODE_NONE == aDlg.Execute())
         {
             Graphic aGraphic;
-            int nError(aDlg.GetGraphic(aGraphic));
+            ErrCode nError = aDlg.GetGraphic(aGraphic);
 
-            if(GRFILTER_OK == nError)
+            if(ERRCODE_NONE == nError)
             {
                 const bool bAsLink(aDlg.IsAsLink());
                 SdrObject* pResult = &rObject;
 
-                rSh.StartUndo(UNDO_PASTE_CLIPBOARD);
+                rSh.StartUndo(SwUndoId::PASTE_CLIPBOARD);
 
-                if(dynamic_cast< SdrGrafObj* >(&rObject))
+                if (SdrGrafObj* pSdrGrafObj = dynamic_cast<SdrGrafObj*>(&rObject))
                 {
-                    SdrGrafObj* pNewGrafObj = static_cast<SdrGrafObj*>(rObject.Clone());
+                    SdrGrafObj* pNewGrafObj(pSdrGrafObj->CloneSdrObject(pSdrGrafObj->getSdrModelFromSdrObject()));
 
                     pNewGrafObj->SetGraphic(aGraphic);
 
@@ -160,22 +157,22 @@ void SwDrawShell::InsertPictureFromFile(SdrObject& rObject)
                     pNewGrafObj->SetGraphicLink(
                         bAsLink ? aDlg.GetPath() : OUString(),
                         aReferer,
-                        bAsLink ? aDlg.GetCurrentFilter() : OUString());
+                        bAsLink ? aDlg.GetDetectedFilter() : OUString());
 
                     pResult = pNewGrafObj;
                 }
                 else // if(rObject.IsClosedObj() && !dynamic_cast< SdrOle2Obj* >(&rObject))
                 {
-                    pSdrView->AddUndo(new SdrUndoAttrObj(rObject));
+                    pSdrView->AddUndo(std::make_unique<SdrUndoAttrObj>(rObject));
 
-                    SfxItemSet aSet(pSdrView->GetModel()->GetItemPool(), XATTR_FILLSTYLE, XATTR_FILLBITMAP);
+                    SfxItemSet aSet(pSdrView->GetModel()->GetItemPool(), svl::Items<XATTR_FILLSTYLE, XATTR_FILLBITMAP>{});
 
                     aSet.Put(XFillStyleItem(drawing::FillStyle_BITMAP));
                     aSet.Put(XFillBitmapItem(OUString(), aGraphic));
                     rObject.SetMergedItemSetAndBroadcast(aSet);
                 }
 
-                rSh.EndUndo( UNDO_END );
+                rSh.EndUndo( SwUndoId::END );
 
                 if(pResult)
                 {
@@ -210,9 +207,9 @@ void SwDrawShell::Execute(SfxRequest &rReq)
             if (rSh.IsObjSelected() && pSdrView->IsRotateAllowed())
             {
                 if (GetView().IsDrawRotate())
-                    rSh.SetDragMode(SDRDRAG_MOVE);
+                    rSh.SetDragMode(SdrDragMode::Move);
                 else
-                    rSh.SetDragMode(SDRDRAG_ROTATE);
+                    rSh.SetDragMode(SdrDragMode::Rotate);
 
                 GetView().FlipDrawRotate();
             }
@@ -221,7 +218,7 @@ void SwDrawShell::Execute(SfxRequest &rReq)
         case SID_BEZIER_EDIT:
             if (GetView().IsDrawRotate())
             {
-                rSh.SetDragMode(SDRDRAG_MOVE);
+                rSh.SetDragMode(SdrDragMode::Move);
                 GetView().FlipDrawRotate();
             }
             GetView().FlipDrawSelMode();
@@ -232,10 +229,10 @@ void SwDrawShell::Execute(SfxRequest &rReq)
         case SID_OBJECT_HELL:
             if (rSh.IsObjSelected())
             {
-                rSh.StartUndo( UNDO_START );
+                rSh.StartUndo( SwUndoId::START );
                 SetWrapMode(FN_FRAME_WRAPTHRU_TRANSP);
                 rSh.SelectionToHell();
-                rSh.EndUndo( UNDO_END );
+                rSh.EndUndo( SwUndoId::END );
                 rBnd.Invalidate(SID_OBJECT_HEAVEN);
             }
             break;
@@ -243,10 +240,10 @@ void SwDrawShell::Execute(SfxRequest &rReq)
         case SID_OBJECT_HEAVEN:
             if (rSh.IsObjSelected())
             {
-                rSh.StartUndo( UNDO_START );
+                rSh.StartUndo( SwUndoId::START );
                 SetWrapMode(FN_FRAME_WRAPTHRU);
                 rSh.SelectionToHeaven();
-                rSh.EndUndo( UNDO_END );
+                rSh.EndUndo( SwUndoId::END );
                 rBnd.Invalidate(SID_OBJECT_HELL);
             }
             break;
@@ -254,8 +251,8 @@ void SwDrawShell::Execute(SfxRequest &rReq)
         case FN_TOOL_HIERARCHIE:
             if (rSh.IsObjSelected())
             {
-                rSh.StartUndo( UNDO_START );
-                if (rSh.GetLayerId() == 0)
+                rSh.StartUndo( SwUndoId::START );
+                if (rSh.GetLayerId() == SdrLayerID(0))
                 {
                     SetWrapMode(FN_FRAME_WRAPTHRU);
                     rSh.SelectionToHeaven();
@@ -265,7 +262,7 @@ void SwDrawShell::Execute(SfxRequest &rReq)
                     SetWrapMode(FN_FRAME_WRAPTHRU_TRANSP);
                     rSh.SelectionToHell();
                 }
-                rSh.EndUndo( UNDO_END );
+                rSh.EndUndo( SwUndoId::END );
                 rBnd.Invalidate( SID_OBJECT_HELL );
                 rBnd.Invalidate( SID_OBJECT_HEAVEN );
             }
@@ -273,7 +270,7 @@ void SwDrawShell::Execute(SfxRequest &rReq)
 
         case SID_FLIP_VERTICAL:
             bMirror = false;
-            /* no break */
+            [[fallthrough]];
         case SID_FLIP_HORIZONTAL:
             rSh.MirrorSelection( bMirror );
             break;
@@ -314,7 +311,7 @@ void SwDrawShell::Execute(SfxRequest &rReq)
             GetView().UpdateWordCount(this, nSlotId);
         }
         break;
-        case SID_EXTRUSION_TOOGLE:
+        case SID_EXTRUSION_TOGGLE:
         case SID_EXTRUSION_TILT_DOWN:
         case SID_EXTRUSION_TILT_UP:
         case SID_EXTRUSION_TILT_LEFT:
@@ -344,7 +341,7 @@ void SwDrawShell::Execute(SfxRequest &rReq)
         case SID_FONTWORK_CHARACTER_SPACING_FLOATER:
         case SID_FONTWORK_ALIGNMENT_FLOATER:
         case SID_FONTWORK_CHARACTER_SPACING_DIALOG:
-            svx::FontworkBar::execute( pSdrView, rReq, rBnd );
+            svx::FontworkBar::execute(*pSdrView, rReq, rBnd);
             rReq.Ignore ();
             break;
 
@@ -408,12 +405,12 @@ void SwDrawShell::GetState(SfxItemSet& rSet)
         switch( nWhich )
         {
             case SID_OBJECT_HELL:
-                if ( !rSh.IsObjSelected() || rSh.GetLayerId() == 0 || bProtected )
+                if ( !rSh.IsObjSelected() || rSh.GetLayerId() == SdrLayerID(0) || bProtected )
                     rSet.DisableItem( nWhich );
                 break;
 
             case SID_OBJECT_HEAVEN:
-                if ( !rSh.IsObjSelected() || rSh.GetLayerId() == 1 || bProtected )
+                if ( !rSh.IsObjSelected() || rSh.GetLayerId() == SdrLayerID(1) || bProtected )
                     rSet.DisableItem( nWhich );
                 break;
 
@@ -494,11 +491,11 @@ void SwDrawShell::GetState(SfxItemSet& rSet)
                 {
                     SwFrameFormat* pFrameFormat = ::FindFrameFormat(pObj);
                     // Allow creating a TextBox only in case this is a draw format without a TextBox so far.
-                    if (pFrameFormat && pFrameFormat->Which() == RES_DRAWFRMFMT && !SwTextBoxHelper::findTextBox(pFrameFormat))
+                    if (pFrameFormat && pFrameFormat->Which() == RES_DRAWFRMFMT && !SwTextBoxHelper::isTextBox(pFrameFormat, RES_DRAWFRMFMT))
                     {
                         if (SdrObjCustomShape* pCustomShape = dynamic_cast<SdrObjCustomShape*>( pObj) )
                         {
-                            const SdrCustomShapeGeometryItem& rGeometryItem = static_cast<const SdrCustomShapeGeometryItem&>(pCustomShape->GetMergedItem(SDRATTR_CUSTOMSHAPE_GEOMETRY));
+                            const SdrCustomShapeGeometryItem& rGeometryItem = pCustomShape->GetMergedItem(SDRATTR_CUSTOMSHAPE_GEOMETRY);
                             if (const uno::Any* pAny = rGeometryItem.GetPropertyValueByName("Type"))
                                 // But still disallow fontwork shapes.
                                 bDisable = pAny->get<OUString>().startsWith("fontwork-");
@@ -517,7 +514,7 @@ void SwDrawShell::GetState(SfxItemSet& rSet)
                 {
                     SwFrameFormat* pFrameFormat = ::FindFrameFormat(pObj);
                     // Allow removing a TextBox only in case it has one.
-                    if (pFrameFormat && SwTextBoxHelper::findTextBox(pFrameFormat))
+                    if (pFrameFormat && SwTextBoxHelper::isTextBox(pFrameFormat, RES_DRAWFRMFMT))
                         bDisable = false;
                 }
 
@@ -535,15 +532,14 @@ void SwDrawShell::GetState(SfxItemSet& rSet)
 SwDrawShell::SwDrawShell(SwView &_rView) :
     SwDrawBaseShell(_rView)
 {
-    SetHelpId(SW_DRAWSHELL);
     SetName("Draw");
 
-    SfxShell::SetContextName(sfx2::sidebar::EnumContext::GetContextName(sfx2::sidebar::EnumContext::Context_Draw));
+    SfxShell::SetContextName(vcl::EnumContext::GetContextName(vcl::EnumContext::Context::Draw));
 }
 
 // Edit SfxRequests for FontWork
 
-void SwDrawShell::ExecFormText(SfxRequest& rReq)
+void SwDrawShell::ExecFormText(SfxRequest const & rReq)
 {
     SwWrtShell &rSh = GetShell();
     SdrView*    pDrView = rSh.GetDrawView();
@@ -579,16 +575,6 @@ void SwDrawShell::GetFormTextState(SfxItemSet& rSet)
     SdrView* pDrView = rSh.GetDrawView();
     const SdrMarkList& rMarkList = pDrView->GetMarkedObjectList();
     const SdrObject* pObj = nullptr;
-    SvxFontWorkDialog* pDlg = nullptr;
-
-    const sal_uInt16 nId = SvxFontWorkChildWindow::GetChildWindowId();
-
-    SfxViewFrame* pVFrame = GetView().GetViewFrame();
-    if ( pVFrame->HasChildWindow(nId) )
-    {
-        SfxChildWindow *pChildWindow = pVFrame->GetChildWindow(nId);
-        pDlg = pChildWindow ? static_cast<SvxFontWorkDialog*>(pChildWindow->GetWindow()) : nullptr;
-    }
 
     if ( rMarkList.GetMarkCount() == 1 )
         pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
@@ -616,9 +602,6 @@ void SwDrawShell::GetFormTextState(SfxItemSet& rSet)
     }
     else
     {
-        if ( pDlg )
-            pDlg->SetColorList(XColorList::GetStdColorList());
-
         pDrView->GetAttributes( rSet );
     }
 }

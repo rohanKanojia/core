@@ -11,7 +11,7 @@
 #define SW_TOXLINKPROCESSOR_HXX_
 
 #include "fmtinfmt.hxx"
-#include "rtl/ustring.hxx"
+#include <rtl/ustring.hxx>
 
 #include <memory>
 #include <vector>
@@ -61,25 +61,28 @@ private:
         StartedLink(sal_Int32 startPosition, const OUString& characterStyle) :
                 mStartPosition(startPosition), mCharacterStyle(characterStyle) {
         }
-        sal_Int32 mStartPosition;
-        OUString mCharacterStyle;
+        sal_Int32 const mStartPosition;
+        OUString const mCharacterStyle;
     };
 
     /** A link that has been encountered while parsing a tox.
      * A link is closed if it has both a start and an end token.
      */
     struct ClosedLink {
-        ClosedLink(const OUString& url, sal_Int32 startPosition, sal_Int32 endPosition) :
-                mINetFormat(url, OUString()), mStartTextPos(endPosition), mEndTextPos(startPosition) {
+        ClosedLink(const OUString& url, sal_Int32 startPosition, sal_Int32 endPosition)
+            : mINetFormat(url, OUString())
+            , mStartTextPos(startPosition)
+            , mEndTextPos(endPosition)
+        {
         }
         SwFormatINetFormat mINetFormat;
-        sal_Int32 mStartTextPos;
-        sal_Int32 mEndTextPos;
+        sal_Int32 const mStartTextPos;
+        sal_Int32 const mEndTextPos;
     };
 
     std::vector<std::unique_ptr<ClosedLink>> m_ClosedLinks;
 
-    std::vector<std::unique_ptr<StartedLink>> m_StartedLinks;
+    std::unique_ptr<StartedLink> m_pStartedLink;
 
     friend class ::ToxLinkProcessorTest;
 };

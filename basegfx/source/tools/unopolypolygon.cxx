@@ -18,6 +18,7 @@
  */
 
 #include <com/sun/star/geometry/AffineMatrix2D.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/rendering/RenderState.hpp>
 #include <com/sun/star/rendering/ViewState.hpp>
 #include <com/sun/star/rendering/XCanvas.hpp>
@@ -27,10 +28,10 @@
 #include <basegfx/range/b2drange.hxx>
 #include <basegfx/range/b2drectangle.hxx>
 #include <basegfx/point/b2dpoint.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include <basegfx/tools/unopolypolygon.hxx>
+#include <basegfx/utils/unopolypolygon.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
@@ -51,7 +52,7 @@ namespace unotools
 
     void SAL_CALL UnoPolyPolygon::addPolyPolygon(
         const geometry::RealPoint2D&                        position,
-        const uno::Reference< rendering::XPolyPolygon2D >&  polyPolygon ) throw (lang::IllegalArgumentException,uno::RuntimeException, std::exception)
+        const uno::Reference< rendering::XPolyPolygon2D >&  polyPolygon )
     {
         osl::MutexGuard const guard( m_aMutex );
         modifying();
@@ -116,27 +117,27 @@ namespace unotools
             }
         }
 
-        const B2DRange  aBounds( tools::getRange( aSrcPoly ) );
+        const B2DRange  aBounds( utils::getRange( aSrcPoly ) );
         const B2DVector     aOffset( unotools::b2DPointFromRealPoint2D( position ) -
                                              aBounds.getMinimum() );
 
         if( !aOffset.equalZero() )
         {
-            const B2DHomMatrix aTranslate(tools::createTranslateB2DHomMatrix(aOffset));
+            const B2DHomMatrix aTranslate(utils::createTranslateB2DHomMatrix(aOffset));
             aSrcPoly.transform( aTranslate );
         }
 
         maPolyPoly.append( aSrcPoly );
     }
 
-    sal_Int32 SAL_CALL UnoPolyPolygon::getNumberOfPolygons() throw (uno::RuntimeException, std::exception)
+    sal_Int32 SAL_CALL UnoPolyPolygon::getNumberOfPolygons()
     {
         osl::MutexGuard const guard( m_aMutex );
         return maPolyPoly.count();
     }
 
     sal_Int32 SAL_CALL UnoPolyPolygon::getNumberOfPolygonPoints(
-        sal_Int32 polygon ) throw (lang::IndexOutOfBoundsException,uno::RuntimeException, std::exception)
+        sal_Int32 polygon )
     {
         osl::MutexGuard const guard( m_aMutex );
         checkIndex( polygon );
@@ -144,14 +145,14 @@ namespace unotools
         return maPolyPoly.getB2DPolygon(polygon).count();
     }
 
-    rendering::FillRule SAL_CALL UnoPolyPolygon::getFillRule() throw (uno::RuntimeException, std::exception)
+    rendering::FillRule SAL_CALL UnoPolyPolygon::getFillRule()
     {
         osl::MutexGuard const guard( m_aMutex );
         return meFillRule;
     }
 
     void SAL_CALL UnoPolyPolygon::setFillRule(
-        rendering::FillRule fillRule ) throw (uno::RuntimeException, std::exception)
+        rendering::FillRule fillRule )
     {
         osl::MutexGuard const guard( m_aMutex );
         modifying();
@@ -160,7 +161,7 @@ namespace unotools
     }
 
     sal_Bool SAL_CALL UnoPolyPolygon::isClosed(
-        sal_Int32 index ) throw (lang::IndexOutOfBoundsException,uno::RuntimeException, std::exception)
+        sal_Int32 index )
     {
         osl::MutexGuard const guard( m_aMutex );
         checkIndex( index );
@@ -170,12 +171,12 @@ namespace unotools
 
     void SAL_CALL UnoPolyPolygon::setClosed(
         sal_Int32 index,
-        sal_Bool closedState ) throw (lang::IndexOutOfBoundsException,uno::RuntimeException, std::exception)
+        sal_Bool closedState )
     {
         osl::MutexGuard const guard( m_aMutex );
         modifying();
 
-        if( index == -1L )
+        if( index == -1 )
         {
             // set all
             maPolyPoly.setClosed( closedState );
@@ -197,7 +198,7 @@ namespace unotools
         sal_Int32 nPolygonIndex,
         sal_Int32 nNumberOfPolygons,
         sal_Int32 nPointIndex,
-        sal_Int32 nNumberOfPoints ) throw (lang::IndexOutOfBoundsException,uno::RuntimeException, std::exception)
+        sal_Int32 nNumberOfPoints )
     {
         osl::MutexGuard const guard( m_aMutex );
 
@@ -210,7 +211,7 @@ namespace unotools
 
     void SAL_CALL UnoPolyPolygon::setPoints(
         const uno::Sequence< uno::Sequence< geometry::RealPoint2D > >& points,
-        sal_Int32 nPolygonIndex ) throw (lang::IndexOutOfBoundsException,uno::RuntimeException, std::exception)
+        sal_Int32 nPolygonIndex )
     {
         osl::MutexGuard const guard( m_aMutex );
         modifying();
@@ -232,7 +233,7 @@ namespace unotools
 
     geometry::RealPoint2D SAL_CALL UnoPolyPolygon::getPoint(
         sal_Int32 nPolygonIndex,
-        sal_Int32 nPointIndex ) throw (lang::IndexOutOfBoundsException,uno::RuntimeException, std::exception)
+        sal_Int32 nPointIndex )
     {
         osl::MutexGuard const guard( m_aMutex );
         checkIndex( nPolygonIndex );
@@ -248,7 +249,7 @@ namespace unotools
     void SAL_CALL UnoPolyPolygon::setPoint(
         const geometry::RealPoint2D& point,
         sal_Int32 nPolygonIndex,
-        sal_Int32 nPointIndex ) throw (lang::IndexOutOfBoundsException,uno::RuntimeException, std::exception)
+        sal_Int32 nPointIndex )
     {
         osl::MutexGuard const guard( m_aMutex );
         checkIndex( nPolygonIndex );
@@ -268,7 +269,7 @@ namespace unotools
         sal_Int32 nPolygonIndex,
         sal_Int32 nNumberOfPolygons,
         sal_Int32 nPointIndex,
-        sal_Int32 nNumberOfPoints ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+        sal_Int32 nNumberOfPoints )
     {
         osl::MutexGuard const guard( m_aMutex );
         return unotools::bezierSequenceSequenceFromB2DPolyPolygon(
@@ -280,8 +281,7 @@ namespace unotools
 
     void SAL_CALL UnoPolyPolygon::setBezierSegments(
         const uno::Sequence< uno::Sequence< geometry::RealBezierSegment2D > >&  points,
-        sal_Int32                                                               nPolygonIndex ) throw (lang::IndexOutOfBoundsException,
-                                                                                                       uno::RuntimeException, std::exception)
+        sal_Int32                                                               nPolygonIndex )
     {
         osl::MutexGuard const guard( m_aMutex );
         modifying();
@@ -301,8 +301,7 @@ namespace unotools
     }
 
     geometry::RealBezierSegment2D SAL_CALL UnoPolyPolygon::getBezierSegment( sal_Int32 nPolygonIndex,
-                                                                             sal_Int32 nPointIndex ) throw (lang::IndexOutOfBoundsException,
-                                                                                                            uno::RuntimeException, std::exception)
+                                                                             sal_Int32 nPointIndex )
     {
         osl::MutexGuard const guard( m_aMutex );
         checkIndex( nPolygonIndex );
@@ -327,8 +326,7 @@ namespace unotools
 
     void SAL_CALL UnoPolyPolygon::setBezierSegment( const geometry::RealBezierSegment2D& segment,
                                                          sal_Int32                       nPolygonIndex,
-                                                         sal_Int32                       nPointIndex ) throw (lang::IndexOutOfBoundsException,
-                                                                                                              uno::RuntimeException, std::exception)
+                                                         sal_Int32                       nPointIndex )
     {
         osl::MutexGuard const guard( m_aMutex );
         checkIndex( nPolygonIndex );
@@ -391,7 +389,7 @@ namespace unotools
 
                 // empty polygon - impossible to specify _any_
                 // legal value except 0 here!
-                if( !nPolyCount && nPointIndex )
+                if( !nPolyCount)
                     throw lang::IndexOutOfBoundsException();
 
                 nFirstPoint = nPointIndex;
@@ -436,21 +434,19 @@ namespace unotools
 
 #define IMPLEMENTATION_NAME "gfx::internal::UnoPolyPolygon"
 #define SERVICE_NAME "com.sun.star.rendering.PolyPolygon2D"
-    OUString SAL_CALL UnoPolyPolygon::getImplementationName() throw( uno::RuntimeException, std::exception )
+    OUString SAL_CALL UnoPolyPolygon::getImplementationName()
     {
         return OUString( IMPLEMENTATION_NAME );
     }
 
-    sal_Bool SAL_CALL UnoPolyPolygon::supportsService( const OUString& ServiceName ) throw( uno::RuntimeException, std::exception )
+    sal_Bool SAL_CALL UnoPolyPolygon::supportsService( const OUString& ServiceName )
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    uno::Sequence< OUString > SAL_CALL UnoPolyPolygon::getSupportedServiceNames()  throw( uno::RuntimeException, std::exception )
+    uno::Sequence< OUString > SAL_CALL UnoPolyPolygon::getSupportedServiceNames()
     {
-        uno::Sequence<OUString> aRet { SERVICE_NAME };
-
-        return aRet;
+        return { SERVICE_NAME };
     }
 
     B2DPolyPolygon UnoPolyPolygon::getPolyPolygon() const

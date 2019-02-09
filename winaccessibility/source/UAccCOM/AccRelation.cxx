@@ -24,13 +24,14 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnon-virtual-dtor"
 #endif
-#include  "UAccCOM.h"
+#include  <UAccCOM.h>
 #if defined __clang__
 #pragma clang diagnostic pop
 #endif
 
 #include <vcl/svapp.hxx>
 
+#include <com/sun/star/accessibility/AccessibleRelationType.hpp>
 #include <com/sun/star/accessibility/XAccessible.hpp>
 #include <com/sun/star/accessibility/XAccessibleContext.hpp>
 #include "MAccessible.h"
@@ -49,7 +50,7 @@ STDMETHODIMP CAccRelation::get_relationType(BSTR * relationType)
 
     ENTER_PROTECTED_BLOCK
 
-    if (relationType == NULL)
+    if (relationType == nullptr)
         return E_INVALIDARG;
 
     int type = relation.RelationType;
@@ -84,7 +85,7 @@ STDMETHODIMP CAccRelation::get_nTargets(long * nTargets)
 
     ENTER_PROTECTED_BLOCK
 
-    if (nTargets == NULL)
+    if (nTargets == nullptr)
         return E_INVALIDARG;
 
     Sequence< Reference< XInterface > > xTargets = relation.TargetSet;
@@ -106,7 +107,7 @@ STDMETHODIMP CAccRelation::get_target(long targetIndex, IUnknown * * target)
 
     ENTER_PROTECTED_BLOCK
 
-    if (target == NULL)
+    if (target == nullptr)
         return E_FAIL;
 
     Sequence< Reference< XInterface > > xTargets = relation.TargetSet;
@@ -115,12 +116,12 @@ STDMETHODIMP CAccRelation::get_target(long targetIndex, IUnknown * * target)
         return E_FAIL;
 
     Reference<XAccessible> xRAcc(xTargets[targetIndex], UNO_QUERY);
-    IAccessible* pRet = NULL;
+    IAccessible* pRet = nullptr;
 
     BOOL isGet = CMAccessible::get_IAccessibleFromXAccessible(xRAcc.get(), &pRet);
     if(isGet)
     {
-        *target = /*(IAccessible2 *)*/(IUnknown*)pRet;
+        *target = /*(IAccessible2 *)*/static_cast<IUnknown*>(pRet);
         pRet->AddRef();
         return S_OK;
     }
@@ -144,25 +145,25 @@ STDMETHODIMP CAccRelation::get_targets(long, IUnknown * * target, long * nTarget
     ENTER_PROTECTED_BLOCK
 
     // #CHECK#
-    if(target == NULL)
+    if(target == nullptr)
         return E_INVALIDARG;
-    if (nTargets == NULL)
+    if (nTargets == nullptr)
         return E_INVALIDARG;
 
     Sequence< Reference< XInterface > > xTargets = relation.TargetSet;
     int nCount = xTargets.getLength();
 
-    *target = (IUnknown*)::CoTaskMemAlloc(nCount*sizeof(IUnknown));
+    *target = static_cast<IUnknown*>(::CoTaskMemAlloc(nCount*sizeof(IUnknown)));
 
     // #CHECK Memory Allocation#
-    if(*target == NULL)
+    if(*target == nullptr)
     {
         return E_FAIL;
     }
 
     for(int i=0; i<nCount ; i++)
     {
-        IUnknown* pAcc = NULL;
+        IUnknown* pAcc = nullptr;
         HRESULT hr = get_target(i,&pAcc);
         if(SUCCEEDED(hr))
             target[i] = pAcc;
@@ -194,27 +195,23 @@ STDMETHODIMP CAccRelation::put_XSubInterface(hyper pXSubInterface)
 */
 BSTR CAccRelation::getRelationTypeBSTR(int type)
 {
-    static struct TYPE_BSTR_MAP
-    {
-        LPCTSTR string;
-        int type;
-    }
-    map[] =
+    static LPCTSTR map[] =
         {
-            {_T("INVALID")              ,   0},
-            {IA2_RELATION_FLOWS_FROM    ,   1},
-            {IA2_RELATION_FLOWS_TO      ,   2},
-            {IA2_RELATION_CONTROLLED_BY ,   3},
-            {IA2_RELATION_CONTROLLER_FOR,   4},
-            {IA2_RELATION_LABEL_FOR     ,   5},
-            {IA2_RELATION_LABELED_BY    ,   6},
-            {IA2_RELATION_MEMBER_OF     ,   7},
-            {IA2_RELATION_SUBWINDOW_OF  ,   8},
-            {IA2_RELATION_NODE_CHILD_OF ,   9},
-            {IA2_RELATION_DESCRIBED_BY  ,  10},
+            _T("INVALID"),               // AccessibleRelationType::INVALID
+            IA2_RELATION_FLOWS_FROM,     // AccessibleRelationType::CONTENT_FLOWS_FROM
+            IA2_RELATION_FLOWS_TO,       // AccessibleRelationType::CONTENT_FLOWS_TO
+            IA2_RELATION_CONTROLLED_BY,  // AccessibleRelationType::CONTROLLED_BY
+            IA2_RELATION_CONTROLLER_FOR, // AccessibleRelationType::CONTROLLER_FOR
+            IA2_RELATION_LABEL_FOR,      // AccessibleRelationType::LABEL_FOR
+            IA2_RELATION_LABELED_BY,     // AccessibleRelationType::LABELED_BY
+            IA2_RELATION_MEMBER_OF,      // AccessibleRelationType::MEMBER_OF
+            IA2_RELATION_SUBWINDOW_OF,   // AccessibleRelationType::SUB_WINDOW_OF
+            IA2_RELATION_NODE_CHILD_OF,  // AccessibleRelationType::NODE_CHILD_OF
+            IA2_RELATION_DESCRIBED_BY    // AccessibleRelationType::DESCRIBED_BY
         };
 
-    return ::SysAllocString((type >= 0 && type <= 10) ? map[type].string : _T(""));
+    return ::SysAllocString( (type >= AccessibleRelationType::INVALID && type <= AccessibleRelationType::DESCRIBED_BY)
+                             ? map[type] : _T(""));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

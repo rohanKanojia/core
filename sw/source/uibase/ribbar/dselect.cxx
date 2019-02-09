@@ -18,46 +18,17 @@
  */
 
 #include <sfx2/bindings.hxx>
-#include "view.hxx"
-#include "edtwin.hxx"
-#include "wrtsh.hxx"
-#include "cmdid.h"
-#include "drawbase.hxx"
-#include "dselect.hxx"
+#include <view.hxx>
+#include <edtwin.hxx>
+#include <wrtsh.hxx>
+#include <cmdid.h>
+#include <drawbase.hxx>
+#include <dselect.hxx>
 
 DrawSelection::DrawSelection(SwWrtShell* pWrtShell, SwEditWin* pEditWin, SwView* pSwView) :
                 SwDrawBase(pWrtShell, pEditWin, pSwView)
 {
     m_bCreateObj = false;
-}
-
-// Process keyboard events
-
-// If a KeyEvent is processed then the return value is true, otherwise
-// false.
-
-bool DrawSelection::KeyInput(const KeyEvent& rKEvt)
-{
-    bool bReturn = false;
-
-    switch (rKEvt.GetKeyCode().GetCode())
-    {
-        case KEY_ESCAPE:
-        {
-            if (m_pWin->IsDrawAction())
-            {
-                m_pSh->BreakMark();
-                m_pWin->ReleaseMouse();
-            }
-            bReturn = true;
-        }
-        break;
-    }
-
-    if (!bReturn)
-        bReturn = SwDrawBase::KeyInput(rKEvt);
-
-    return bReturn;
 }
 
 void DrawSelection::Activate(const sal_uInt16 nSlotId)

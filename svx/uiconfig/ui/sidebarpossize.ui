@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.0 -->
-  <!-- interface-requires LibreOffice 1.0 -->
+<interface domain="svx">
+  <requires lib="gtk+" version="3.18"/>
+  <requires lib="LibreOffice" version="1.0"/>
   <object class="GtkAdjustment" id="adjustment1">
     <property name="lower">-180</property>
     <property name="upper">359.99</property>
@@ -39,7 +39,7 @@
                     <property name="can_focus">False</property>
                     <property name="hexpand">True</property>
                     <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Horizontal:</property>
+                    <property name="label" translatable="yes" context="sidebarpossize|horizontallabel">Position _X:</property>
                     <property name="use_underline">True</property>
                   </object>
                   <packing>
@@ -54,16 +54,13 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="has_tooltip">True</property>
-                    <property name="tooltip_markup" translatable="yes">Enter the value for the horizontal position.</property>
-                    <property name="tooltip_text" translatable="yes">Enter the value for the horizontal position.</property>
-                    <property name="invisible_char">•</property>
-                    <property name="invisible_char_set">True</property>
+                    <property name="tooltip_text" translatable="yes" context="sidebarpossize|horizontalpos|tooltip_text">Enter the value for the horizontal position.</property>
                     <accessibility>
                       <relation type="labelled-by" target="horizontallabel"/>
                     </accessibility>
                     <child internal-child="accessible">
                       <object class="AtkObject" id="horizontalpos:0in-atkobject">
-                        <property name="AtkObject::accessible-name" translatable="yes">Horizontal</property>
+                        <property name="AtkObject::accessible-name" translatable="yes" context="sidebarpossize|horizontalpos-atkobject">Horizontal</property>
                       </object>
                     </child>
                   </object>
@@ -80,7 +77,7 @@
                     <property name="can_focus">False</property>
                     <property name="hexpand">True</property>
                     <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Vertical:</property>
+                    <property name="label" translatable="yes" context="sidebarpossize|verticallabel">Position _Y:</property>
                     <property name="use_underline">True</property>
                   </object>
                   <packing>
@@ -95,16 +92,13 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="has_tooltip">True</property>
-                    <property name="tooltip_markup" translatable="yes">Enter the value for the vertical position.</property>
-                    <property name="tooltip_text" translatable="yes">Enter the value for the vertical position.</property>
-                    <property name="invisible_char">•</property>
-                    <property name="invisible_char_set">True</property>
+                    <property name="tooltip_text" translatable="yes" context="sidebarpossize|verticalpos|tooltip_text">Enter the value for the vertical position.</property>
                     <accessibility>
                       <relation type="labelled-by" target="verticallabel"/>
                     </accessibility>
                     <child internal-child="accessible">
                       <object class="AtkObject" id="verticalpos:0in-atkobject">
-                        <property name="AtkObject::accessible-name" translatable="yes">Vertical</property>
+                        <property name="AtkObject::accessible-name" translatable="yes" context="sidebarpossize|verticalpos-atkobject">Vertical</property>
                       </object>
                     </child>
                   </object>
@@ -121,7 +115,7 @@
                     <property name="can_focus">False</property>
                     <property name="hexpand">True</property>
                     <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Width:</property>
+                    <property name="label" translatable="yes" context="sidebarpossize|widthlabel">_Width:</property>
                     <property name="use_underline">True</property>
                   </object>
                   <packing>
@@ -137,16 +131,13 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="has_tooltip">True</property>
-                    <property name="tooltip_markup" translatable="yes">Enter a width for the selected object.</property>
-                    <property name="tooltip_text" translatable="yes">Enter a width for the selected object.</property>
-                    <property name="invisible_char">•</property>
-                    <property name="invisible_char_set">True</property>
+                    <property name="tooltip_text" translatable="yes" context="sidebarpossize|selectwidth|tooltip_text">Enter a width for the selected object.</property>
                     <accessibility>
                       <relation type="labelled-by" target="widthlabel"/>
                     </accessibility>
                     <child internal-child="accessible">
                       <object class="AtkObject" id="selectwidth:0in-atkobject">
-                        <property name="AtkObject::accessible-name" translatable="yes">Width</property>
+                        <property name="AtkObject::accessible-name" translatable="yes" context="sidebarpossize|selectwidth-atkobject">Width</property>
                       </object>
                     </child>
                   </object>
@@ -163,7 +154,7 @@
                     <property name="can_focus">False</property>
                     <property name="hexpand">True</property>
                     <property name="xalign">0</property>
-                    <property name="label" translatable="yes">H_eight:</property>
+                    <property name="label" translatable="yes" context="sidebarpossize|heightlabel">H_eight:</property>
                     <property name="use_underline">True</property>
                   </object>
                   <packing>
@@ -179,16 +170,13 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="has_tooltip">True</property>
-                    <property name="tooltip_markup" translatable="yes">Enter a height for the selected object.</property>
-                    <property name="tooltip_text" translatable="yes">Enter a height for the selected object.</property>
-                    <property name="invisible_char">•</property>
-                    <property name="invisible_char_set">True</property>
+                    <property name="tooltip_text" translatable="yes" context="sidebarpossize|selectheight|tooltip_text">Enter a height for the selected object.</property>
                     <accessibility>
                       <relation type="labelled-by" target="heightlabel"/>
                     </accessibility>
                     <child internal-child="accessible">
                       <object class="AtkObject" id="selectheight:0in-atkobject">
-                        <property name="AtkObject::accessible-name" translatable="yes">Height</property>
+                        <property name="AtkObject::accessible-name" translatable="yes" context="sidebarpossize|selectheight-atkobject">Height</property>
                       </object>
                     </child>
                   </object>
@@ -208,13 +196,12 @@
             </child>
             <child>
               <object class="GtkCheckButton" id="ratio">
-                <property name="label" translatable="yes">_Keep ratio</property>
+                <property name="label" translatable="yes" context="sidebarpossize|ratio">_Keep ratio</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
                 <property name="has_tooltip">True</property>
-                <property name="tooltip_markup" translatable="yes">Maintain proportions when you resize the selected object.</property>
-                <property name="tooltip_text" translatable="yes">Maintain proportions when you resize the selected object.</property>
+                <property name="tooltip_text" translatable="yes" context="sidebarpossize|ratio|tooltip_text">Maintain proportions when you resize the selected object.</property>
                 <property name="use_underline">True</property>
                 <property name="xalign">0</property>
                 <property name="draw_indicator">True</property>
@@ -230,7 +217,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">_Rotation:</property>
+                <property name="label" translatable="yes" context="sidebarpossize|rotationlabel">_Rotation:</property>
                 <property name="use_underline">True</property>
               </object>
               <packing>
@@ -256,7 +243,7 @@
                     </accessibility>
                     <child internal-child="accessible">
                       <object class="AtkObject" id="orientationcontrol-atkobject">
-                        <property name="AtkObject::accessible-name" translatable="yes">Rotation</property>
+                        <property name="AtkObject::accessible-name" translatable="yes" context="sidebarpossize|orientationcontrol-atkobject">Rotation</property>
                       </object>
                     </child>
                   </object>
@@ -276,10 +263,9 @@
                     <child>
                       <object class="VclComboBoxNumeric" id="rotation:0.00degrees">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can_focus">True</property>
                         <property name="has_tooltip">True</property>
-                        <property name="tooltip_markup" translatable="yes">Select the angle for rotation.</property>
-                        <property name="tooltip_text" translatable="yes">Select the angle for rotation.</property>
+                        <property name="tooltip_text" translatable="yes" context="sidebarpossize|rotation|tooltip_text">Select the angle for rotation.</property>
                         <property name="hexpand">True</property>
                         <property name="adjustment">adjustment1</property>
                       </object>
@@ -300,7 +286,7 @@
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
                             <property name="xalign">0</property>
-                            <property name="label" translatable="yes">_Flip:</property>
+                            <property name="label" translatable="yes" context="sidebarpossize|fliplabel">_Flip:</property>
                             <property name="use_underline">True</property>
                             <property name="justify">right</property>
                           </object>
@@ -313,7 +299,7 @@
                         <child>
                           <object class="GtkToolbar" id="selectrotationtype">
                             <property name="visible">True</property>
-                            <property name="can_focus">False</property>
+                            <property name="can_focus">True</property>
                             <property name="halign">end</property>
                             <accessibility>
                               <relation type="labelled-by" target="fliplabel"/>
@@ -323,8 +309,7 @@
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
                                 <property name="has_tooltip">True</property>
-                                <property name="tooltip_markup" translatable="yes">Flip the selected object vertically.</property>
-                                <property name="tooltip_text" translatable="yes">Flip the selected object vertically.</property>
+                                <property name="tooltip_text" translatable="yes" context="sidebarpossize|flipvertical|tooltip_text">Flip the selected object vertically.</property>
                                 <property name="action_name">.uno:FlipVertical</property>
                                 <property name="use_underline">True</property>
                               </object>
@@ -338,8 +323,7 @@
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
                                 <property name="has_tooltip">True</property>
-                                <property name="tooltip_markup" translatable="yes">Flip the selected object horizontally.</property>
-                                <property name="tooltip_text" translatable="yes">Flip the selected object horizontally.</property>
+                                <property name="tooltip_text" translatable="yes" context="sidebarpossize|fliphorizontal|tooltip_text">Flip the selected object horizontally.</property>
                                 <property name="action_name">.uno:FlipHorizontal</property>
                                 <property name="use_underline">True</property>
                               </object>

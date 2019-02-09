@@ -17,14 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "file/FCatalog.hxx"
-#include "file/fcomp.hxx"
-#include "file/fanalyzer.hxx"
-#include "file/FResultSet.hxx"
-#include "file/FPreparedStatement.hxx"
+#include <file/FCatalog.hxx>
+#include <file/fcomp.hxx>
+#include <file/fanalyzer.hxx>
+#include <file/FResultSet.hxx>
+#include <file/FPreparedStatement.hxx>
 #include <connectivity/FValue.hxx>
 #include <tools/debug.hxx>
-#include "TKeyValue.hxx"
+#include <TKeyValue.hxx>
 
 using namespace connectivity;
 using namespace connectivity::file;
@@ -49,33 +49,29 @@ OPredicateInterpreter::~OPredicateInterpreter()
 
 void OPredicateCompiler::Clean()
 {
-    for(OCodeList::reverse_iterator aIter = m_aCodeList.rbegin(); aIter != m_aCodeList.rend();++aIter)
-    {
-        delete *aIter;
-    }
     m_aCodeList.clear();
 }
 
-void OSQLAnalyzer::bindParameterRow(OValueRefRow& _pRow)
+void OSQLAnalyzer::bindParameterRow(OValueRefRow const & _pRow)
 {
     OCodeList& rCodeList    = m_aCompiler->m_aCodeList;
-    for(OCodeList::iterator aIter = rCodeList.begin(); aIter != rCodeList.end();++aIter)
+    for (auto const& code : rCodeList)
     {
-        OOperandParam* pParam = dynamic_cast<OOperandParam*>(*aIter);
+        OOperandParam* pParam = dynamic_cast<OOperandParam*>(code.get());
         if ( pParam )
             pParam->bindValue(_pRow);
     }
 }
 
-void OPreparedStatement::scanParameter(OSQLParseNode* pParseNode,::std::vector< OSQLParseNode*>& _rParaNodes)
+void OPreparedStatement::scanParameter(OSQLParseNode* pParseNode,std::vector< OSQLParseNode*>& _rParaNodes)
 {
-    DBG_ASSERT(pParseNode != nullptr,"OResultSet: interner Fehler: ungueltiger ParseNode");
+    DBG_ASSERT(pParseNode != nullptr,"OResultSet: internal error: invalid ParseNode");
 
     // found parameter Name-Rule?
     if (SQL_ISRULE(pParseNode,parameter))
     {
-        DBG_ASSERT(pParseNode->count() >= 1,"OResultSet: Parse Tree fehlerhaft");
-        DBG_ASSERT(pParseNode->getChild(0)->getNodeType() == SQLNodeType::Punctuation,"OResultSet: Parse Tree fehlerhaft");
+        DBG_ASSERT(pParseNode->count() >= 1,"OResultSet: faulty Parse Tree");
+        DBG_ASSERT(pParseNode->getChild(0)->getNodeType() == SQLNodeType::Punctuation,"OResultSet: faulty Parse Tree");
 
         _rParaNodes.push_back(pParseNode);
         // Further descend not necessary
@@ -87,17 +83,16 @@ void OPreparedStatement::scanParameter(OSQLParseNode* pParseNode,::std::vector< 
         scanParameter(pParseNode->getChild(i),_rParaNodes);
 }
 
-OKeyValue* OResultSet::GetOrderbyKeyValue(OValueRefRow& _rRow)
+std::unique_ptr<OKeyValue> OResultSet::GetOrderbyKeyValue(OValueRefRow const & _rRow)
 {
-    sal_uInt32 nBookmarkValue = std::abs((sal_Int32)(_rRow->get())[0]->getValue());
+    sal_uInt32 nBookmarkValue = std::abs(static_cast<sal_Int32>((_rRow->get())[0]->getValue()));
 
-    OKeyValue* pKeyValue = OKeyValue::createKeyValue((sal_uInt32)nBookmarkValue);
+    std::unique_ptr<OKeyValue> pKeyValue = OKeyValue::createKeyValue(nBookmarkValue);
 
-    ::std::vector<sal_Int32>::const_iterator aIter = m_aOrderbyColumnNumber.begin();
-    for (;aIter != m_aOrderbyColumnNumber.end(); ++aIter)
+    for (auto const& elem : m_aOrderbyColumnNumber)
     {
-        OSL_ENSURE(*aIter < static_cast<sal_Int32>(_rRow->get().size()),"Invalid index for orderkey values!");
-        pKeyValue->pushKey(new ORowSetValueDecorator((_rRow->get())[*aIter]->getValue()));
+        OSL_ENSURE(elem < static_cast<sal_Int32>(_rRow->get().size()),"Invalid index for orderkey values!");
+        pKeyValue->pushKey(new ORowSetValueDecorator((_rRow->get())[elem]->getValue()));
     }
 
     return pKeyValue;

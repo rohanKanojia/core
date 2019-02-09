@@ -58,7 +58,7 @@
  *  For LWP filter architecture prototype - table cell numerics format
  */
 
-#include "lwpoverride.hxx"
+#include <lwpoverride.hxx>
 #include "lwptblcell.hxx"
 #include "lwppara.hxx"
 #include "lwptblformula.hxx"
@@ -66,13 +66,14 @@
 #include "lwptablelayout.hxx"
 #include <osl/thread.h>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <memory>
 
 LwpFormulaArg::~LwpFormulaArg()
 {
 }
 
- LwpFormulaInfo::LwpFormulaInfo(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+ LwpFormulaInfo::LwpFormulaInfo(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpCellList(objHdr, pStrm)
     , m_bSupported(true)
     , m_nFormulaRow(0)
@@ -80,24 +81,13 @@ LwpFormulaArg::~LwpFormulaArg()
 
 LwpFormulaInfo::~LwpFormulaInfo()
 {
-    try{
-        while(m_aStack.size()>0)
-        {
-            LwpFormulaArg* pArg=m_aStack.back();
-            m_aStack.pop_back();
-            delete pArg; pArg=nullptr;
-        }
-    }catch (...)
-    {
-        assert(false);
-    }
 }
 
 void LwpFormulaInfo::ReadConst()
 {
     double Constant = m_pObjStrm->QuickReadDouble();
 
-    m_aStack.push_back( new LwpFormulaConst(Constant) );
+    m_aStack.push_back( std::make_unique<LwpFormulaConst>(Constant) );
 }
 
 /**
@@ -108,47 +98,43 @@ void LwpFormulaInfo::ReadText()
     m_pObjStrm->QuickReadInt16(); //Disk Size
     sal_uInt16 nStrLen = m_pObjStrm->QuickReadInt16();
 
-    std::unique_ptr<char[]> pBuf(new char[nStrLen+1]);
-    m_pObjStrm->QuickRead( pBuf.get(), nStrLen );
-    *(pBuf.get()+nStrLen)='\0';
+    std::vector<char> aBuf(nStrLen + 1);
+    m_pObjStrm->QuickRead(aBuf.data(), nStrLen);
+    aBuf[nStrLen]= '\0';
     OUString aText;
     aText += "\"";
-    aText += OUString(pBuf.get(), nStrLen, osl_getThreadTextEncoding());
+    aText += OUString(aBuf.data(), nStrLen, osl_getThreadTextEncoding());
     aText += "\"";
 
-    m_aStack.push_back(new LwpFormulaText(aText));
+    m_aStack.push_back(std::make_unique<LwpFormulaText>(aText));
 }
 
-bool LwpFormulaInfo::ReadCellID()
+void LwpFormulaInfo::ReadCellID()
 {
     LwpRowSpecifier RowSpecifier;
     LwpColumnSpecifier ColumnSpecifier;
-    bool readSucceeded = true;
 
-    RowSpecifier.QuickRead(m_pObjStrm);
-    ColumnSpecifier.QuickRead(m_pObjStrm);
+    RowSpecifier.QuickRead(m_pObjStrm.get());
+    ColumnSpecifier.QuickRead(m_pObjStrm.get());
 
-    m_aStack.push_back( new LwpFormulaCellAddr(ColumnSpecifier.ColumnID(cColumn),
+    m_aStack.push_back( std::make_unique<LwpFormulaCellAddr>(ColumnSpecifier.ColumnID(cColumn),
                                                 RowSpecifier.RowID(m_nFormulaRow)) );
-    return readSucceeded;
 }
 
 void LwpFormulaInfo::ReadCellRange()
 {
     ReadCellID( ); // start
-    LwpFormulaCellAddr* pStartCellAddr = static_cast<LwpFormulaCellAddr*>(m_aStack.back());
+    std::unique_ptr<LwpFormulaCellAddr> pStartCellAddr( static_cast<LwpFormulaCellAddr*>(m_aStack.back().release()));
     m_aStack.pop_back();
 
     ReadCellID(); // end
-    LwpFormulaCellAddr* pEndCellAddr = static_cast<LwpFormulaCellAddr*>(m_aStack.back());
+    std::unique_ptr<LwpFormulaCellAddr> pEndCellAddr(static_cast<LwpFormulaCellAddr*>(m_aStack.back().release()));
     m_aStack.pop_back();
 
-    m_aStack.push_back( new LwpFormulaCellRangeAddr(pStartCellAddr->GetCol(),
+    m_aStack.push_back( std::make_unique<LwpFormulaCellRangeAddr>(pStartCellAddr->GetCol(),
                                                     pStartCellAddr->GetRow(),
                                                     pEndCellAddr->GetCol(),
                                                     pEndCellAddr->GetRow()) );
-    delete pStartCellAddr;
-    delete pEndCellAddr;
 }
 
 /**
@@ -194,9 +180,9 @@ void LwpFormulaInfo::ReadExpression()
             case TK_MAXIMUM:
             case TK_AVERAGE:
                 {
-                    LwpFormulaFunc* pFunc = new LwpFormulaFunc(TokenType);
-                    ReadArguments(*pFunc);
-                    m_aStack.push_back(pFunc);
+                    std::unique_ptr<LwpFormulaFunc> xFunc(new LwpFormulaFunc(TokenType));
+                    ReadArguments(*xFunc);
+                    m_aStack.push_back(std::move(xFunc));
                 }
                 break;
 
@@ -217,18 +203,18 @@ void LwpFormulaInfo::ReadExpression()
 
                 if (m_aStack.size() >= 2)
                 {//binary operator
-                    LwpFormulaOp* pOp = new LwpFormulaOp(TokenType);
-                    pOp->AddArg(m_aStack.back()); m_aStack.pop_back();
-                    pOp->AddArg(m_aStack.back()); m_aStack.pop_back();
-                    m_aStack.push_back(pOp);
+                    std::unique_ptr<LwpFormulaOp> pOp(new LwpFormulaOp(TokenType));
+                    pOp->AddArg(std::move(m_aStack.back())); m_aStack.pop_back();
+                    pOp->AddArg(std::move(m_aStack.back())); m_aStack.pop_back();
+                    m_aStack.push_back(std::move(pOp));
                 }
                 break;
             case TK_UNARY_MINUS:
                 if (!m_aStack.empty())
                 {
-                    LwpFormulaUnaryOp* pOp = new LwpFormulaUnaryOp(TokenType);
-                    pOp->AddArg(m_aStack.back()); m_aStack.pop_back();
-                    m_aStack.push_back(pOp);
+                    std::unique_ptr<LwpFormulaUnaryOp> pOp(new LwpFormulaUnaryOp(TokenType));
+                    pOp->AddArg(std::move(m_aStack.back())); m_aStack.pop_back();
+                    m_aStack.push_back(std::move(pOp));
                 }
                 break;
             default:
@@ -262,13 +248,11 @@ void LwpFormulaInfo::MarkUnsupported(sal_uInt16 TokenType)
 void LwpFormulaInfo::ReadArguments(LwpFormulaFunc& aFunc)
 {
     sal_uInt16 NumberOfArguments = m_pObjStrm->QuickReaduInt16();
-    sal_uInt16 ArgumentDiskLength, Count;
-    sal_uInt8 ArgumentType;
 
-    for (Count = 0; Count < NumberOfArguments; Count++)
+    for (sal_uInt16 Count = 0; Count < NumberOfArguments; Count++)
     {
-        ArgumentType = (sal_uInt8) m_pObjStrm->QuickReaduInt16(); // written as lushort
-        ArgumentDiskLength = m_pObjStrm->QuickReaduInt16();
+        sal_uInt8 ArgumentType = static_cast<sal_uInt8>(m_pObjStrm->QuickReaduInt16()); // written as lushort
+        sal_uInt16 ArgumentDiskLength = m_pObjStrm->QuickReaduInt16();
         bool bArgument = true;
 
         switch(ArgumentType)
@@ -299,9 +283,9 @@ void LwpFormulaInfo::ReadArguments(LwpFormulaFunc& aFunc)
                 break;
         }
 
-        if (bArgument)
+        if (bArgument && !m_aStack.empty())
         {
-            aFunc.AddArg( m_aStack.back() );
+            aFunc.AddArg(std::move(m_aStack.back()));
             m_aStack.pop_back();
         }
     }
@@ -324,7 +308,7 @@ void LwpFormulaInfo::Read()
     m_pObjStrm->SeekRel(2);//flags, size in file: sal_uInt16
 
     LwpNotifyListPersistent cNotifyList;
-    cNotifyList.Read(m_pObjStrm);
+    cNotifyList.Read(m_pObjStrm.get());
 
     ReadExpression();
 
@@ -341,8 +325,7 @@ OUString  LwpFormulaInfo::Convert(LwpTableLayout* pCellsMap)
     {
         if(1==m_aStack.size())
         {
-            LwpFormulaArg* pFormula = m_aStack.back();
-            aFormula = pFormula->ToString(pCellsMap);
+            aFormula = m_aStack[0]->ToString(pCellsMap);
         }
         else
         {
@@ -423,22 +406,10 @@ LwpFormulaFunc::LwpFormulaFunc(sal_uInt16 nTokenType)
 
 LwpFormulaFunc::~LwpFormulaFunc()
 {
-    try
-    {
-        while(m_aArgs.size()>0)
-        {
-            LwpFormulaArg* pArg = m_aArgs.back();
-            m_aArgs.pop_back();
-            delete pArg;pArg=nullptr;
-        }
-    }catch (...) {
-        assert(false);
-    }
-
 }
-void LwpFormulaFunc::AddArg(LwpFormulaArg* pArg)
+void LwpFormulaFunc::AddArg(std::unique_ptr<LwpFormulaArg> pArg)
 {
-    m_aArgs.push_back(pArg);
+    m_aArgs.push_back(std::move(pArg));
 }
 /**
 *   Convert the functions to a string, which is a argument of other formula
@@ -456,30 +427,29 @@ OUString LwpFormulaFunc::ToArgString(LwpTableLayout* pCellsMap)
 */
 OUString LwpFormulaFunc::ToString(LwpTableLayout* pCellsMap)
 {
-    OUString aFormula;
+    OUStringBuffer aFormula;
 
     OUString aFuncName = LwpFormulaTools::GetName(m_nTokenType);
-    aFormula += aFuncName;
-    aFormula += " ";//Append a blank space
+    aFormula.append(aFuncName);
+    aFormula.append(" ");//Append a blank space
 
     //Append args
-    std::vector<LwpFormulaArg*>::iterator aItr;
-    for (aItr=m_aArgs.begin();aItr!=m_aArgs.end();++aItr)
+    for (auto const& elem : m_aArgs)
     {
-        aFormula += (*aItr)->ToArgString(pCellsMap) + "|"; //separator
+        aFormula.append(elem->ToArgString(pCellsMap)).append("|"); //separator
     }
 
     //erase the last "|"
     if (!m_aArgs.empty())
     {
-        aFormula = aFormula.replaceAt(aFormula.getLength()-1,1,"");
+        aFormula.setLength(aFormula.getLength()-1);
     }
     else
     {
         assert(false);
     }
 
-    return aFormula;
+    return aFormula.makeStringAndClear();
 }
 
 /**
@@ -490,16 +460,12 @@ OUString LwpFormulaOp::ToString(LwpTableLayout* pCellsMap)
     OUString aFormula;
     if (2==m_aArgs.size())
     {
-        std::vector<LwpFormulaArg*>::iterator aItr = m_aArgs.end();
-        --aItr;
-
-        aFormula += (*aItr)->ToArgString(pCellsMap) + " ";
+        aFormula += m_aArgs[1]->ToArgString(pCellsMap) + " ";
         OUString aFuncName = LwpFormulaTools::GetName(m_nTokenType);
 
         aFormula += aFuncName + " ";
 
-        --aItr;
-        aFormula += (*aItr)->ToArgString(pCellsMap);
+        aFormula += m_aArgs[0]->ToArgString(pCellsMap);
     }
     else
     {
@@ -518,9 +484,7 @@ OUString LwpFormulaUnaryOp::ToString(LwpTableLayout* pCellsMap)
     {
         OUString aFuncName = LwpFormulaTools::GetName(m_nTokenType);
         aFormula += aFuncName;
-
-        std::vector<LwpFormulaArg*>::iterator aItr = m_aArgs.begin();
-        aFormula += (*aItr)->ToArgString(pCellsMap);
+        aFormula += m_aArgs[0]->ToArgString(pCellsMap);
     }
     else
     {
@@ -609,14 +573,14 @@ OUString LwpFormulaTools::GetName(sal_uInt16 nTokenType)
 OUString LwpFormulaTools::GetCellAddr(sal_Int16 nRow, sal_Int16 nCol, LwpTableLayout* pCellsMap)
 {
     OUString aCellAddr;
-    XFCell* pCell = pCellsMap->GetCellsMap(nRow,(sal_uInt8)nCol);
+    XFCell* pCell = pCellsMap->GetCellsMap(nRow,static_cast<sal_uInt8>(nCol));
     if (pCell)
     {
         aCellAddr = pCell->GetCellName();
     }
     else
     {
-        assert( -1==nRow || -1==(sal_Int8)nCol);
+        assert( -1==nRow || -1==static_cast<sal_Int8>(nCol));
     }
     return aCellAddr;
 }

@@ -21,6 +21,7 @@
 #define INCLUDED_XMLOFF_SOURCE_XFORMS_TOKENCONTEXT_HXX
 
 #include <xmloff/xmlictxt.hxx>
+#include <xmloff/xmltkmap.hxx>
 
 namespace com { namespace sun { namespace star {
     namespace xml { namespace sax { class XAttributeList; } }
@@ -31,7 +32,7 @@ class SvXMLImport;
 
 #define TOKEN_MAP_ENTRY(NAMESPACE,TOKEN) { XML_NAMESPACE_##NAMESPACE, xmloff::token::XML_##TOKEN, xmloff::token::XML_##TOKEN }
 
-extern struct SvXMLTokenMapEntry aEmptyMap[1];
+extern const SvXMLTokenMapEntry aEmptyMap[1];
 
 /** handle attributes through an SvXMLTokenMap */
 class TokenContext : public SvXMLImportContext
@@ -44,10 +45,8 @@ public:
     TokenContext( SvXMLImport& rImport,
                   sal_uInt16 nPrefix,
                   const OUString& rLocalName,
-                  const SvXMLTokenMapEntry* pAttributes = nullptr,
-                  const SvXMLTokenMapEntry* pChildren = nullptr );
-
-    virtual ~TokenContext();
+                  const SvXMLTokenMapEntry* pAttributes,
+                  const SvXMLTokenMapEntry* pChildren );
 
     // implement SvXMLImportContext methods:
 
@@ -61,7 +60,7 @@ public:
      * create a warning for all others. Classes that wish to override
      * CreateChildContext may want to call the parent method for
      * handling of defaults. */
-    virtual SvXMLImportContext* CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;

@@ -18,6 +18,7 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <basegfx/vector/b2ivector.hxx>
 #include <com/sun/star/uno/Any.hxx>
@@ -35,7 +36,7 @@ namespace dxcanvas
     DXCanvasItem::DXCanvasItem() :
         ConfigItem(
             "Office.Canvas/DXCanvas",
-            ConfigItemMode::ImmediateUpdate ),
+            ConfigItemMode::NONE ),
         maValues(),
         maMaxTextureSize(),
         mbBlacklistCurrentDevice(false),
@@ -82,9 +83,7 @@ namespace dxcanvas
         }
         catch( const uno::Exception& )
         {
-            OSL_FAIL( OUStringToOString(
-                            comphelper::anyToString( cppu::getCaughtException() ),
-                            RTL_TEXTENCODING_UTF8 ).getStr() );
+            SAL_WARN( "canvas", comphelper::anyToString( cppu::getCaughtException() ) );
         }
     }
 
@@ -95,8 +94,6 @@ namespace dxcanvas
 
         try
         {
-            uno::Sequence< OUString > aName { "DeviceBlacklist" };
-
             uno::Sequence< sal_Int32 > aValues( sizeof(DeviceInfo)/sizeof(sal_Int32)*maValues.size() );
 
             sal_Int32* pValues = aValues.getArray();
@@ -113,15 +110,11 @@ namespace dxcanvas
                 *pValues++ = rInfo.nDriverBuildId;
             }
 
-            uno::Sequence< uno::Any > aValue(1);
-            aValue[0] <<= aValues;
-            PutProperties( aName, aValue );
+            PutProperties({"DeviceBlacklist"}, {css::uno::Any(aValues)});
         }
         catch( const uno::Exception& )
         {
-            OSL_FAIL( OUStringToOString(
-                            comphelper::anyToString( cppu::getCaughtException() ),
-                            RTL_TEXTENCODING_UTF8 ).getStr() );
+            SAL_WARN( "canvas", comphelper::anyToString( cppu::getCaughtException() ) );
         }
     }
 

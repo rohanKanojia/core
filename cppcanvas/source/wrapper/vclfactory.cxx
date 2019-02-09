@@ -28,12 +28,12 @@
 
 #include <cppcanvas/vclfactory.hxx>
 
-#include <implbitmapcanvas.hxx>
-#include <implspritecanvas.hxx>
-#include <implpolypolygon.hxx>
-#include <implbitmap.hxx>
+#include "implbitmapcanvas.hxx"
+#include "implspritecanvas.hxx"
+#include "implpolypolygon.hxx"
+#include "implbitmap.hxx"
 #include <implrenderer.hxx>
-#include <implsprite.hxx>
+#include "implsprite.hxx"
 
 using namespace ::com::sun::star;
 
@@ -81,9 +81,7 @@ namespace cppcanvas
             return BitmapSharedPtr();
 
         return BitmapSharedPtr( new internal::ImplBitmap( rCanvas,
-                                                          vcl::unotools::xBitmapFromBitmapEx(
-                                                              xCanvas->getDevice(),
-                                                              rBmpEx) ) );
+                                                          vcl::unotools::xBitmapFromBitmapEx(rBmpEx) ) );
     }
 
     RendererSharedPtr VCLFactory::createRenderer( const CanvasSharedPtr&        rCanvas,

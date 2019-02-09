@@ -56,16 +56,16 @@
 /**
  * @file
  * For LWP filter architecture prototype
- *  Implemention of class LwpBackgroundStuff.
+ *  Implementation of class LwpBackgroundStuff.
  */
 
 #include "lwpbackgroundstuff.hxx"
 #include "lwppttntbl.hxx"
-#include "xfilter/xfbgimage.hxx"
+#include <xfilter/xfbgimage.hxx>
 
 #include <tools/stream.hxx>
 #include <vcl/dibtools.hxx>
-#include <vcl/bitmapaccess.hxx>
+#include <vcl/BitmapTools.hxx>
 #include <svx/xbitmap.hxx>
 
 void LwpBackgroundStuff::Read(LwpObjectStream* pStrm)
@@ -76,7 +76,7 @@ void LwpBackgroundStuff::Read(LwpObjectStream* pStrm)
     pStrm->SkipExtra();
 }
 
-void LwpBackgroundStuff::GetPattern(sal_uInt16 btPttnIndex, sal_uInt8* pPttnArray)
+void LwpBackgroundStuff::GetPattern(sal_uInt16 btPttnIndex, sal_uInt8 (&pPttnArray)[8])
 {
     if (btPttnIndex > 71)
     {
@@ -85,9 +85,9 @@ void LwpBackgroundStuff::GetPattern(sal_uInt16 btPttnIndex, sal_uInt8* pPttnArra
     }
     assert((2 < btPttnIndex) && (btPttnIndex < 72));
     const sal_uInt8* pTempArray = s_pLwpPatternTab[btPttnIndex];
-    for(sal_uInt8 i = 0; i < 32; i++)
+    for(sal_uInt8 i = 0; i < 8; i++)
     {
-        pPttnArray[i] = (i%4 == 0) ? pTempArray[7-i/4] : 0;
+        pPttnArray[i] = pTempArray[7-i];
     }
 }
 
@@ -101,29 +101,24 @@ LwpColor* LwpBackgroundStuff::GetFillColor()
     return &m_aFillColor;
 }
 
-XFBGImage* LwpBackgroundStuff::GetFillPattern()
+std::unique_ptr<XFBGImage> LwpBackgroundStuff::GetFillPattern()
 {
     // not pattern fill?
     if (!IsPatternFill())
     {
-        return nullptr;
+        return std::unique_ptr<XFBGImage>();
     }
 
     // get pattern array from pattern table
-    sal_uInt8 aPttnArray[32];
+    sal_uInt8 aPttnArray[8];
     GetPattern(m_nID, aPttnArray);
 
     // create bitmap object from the pattern array
-    Bitmap aBmp( Size(8, 8), 1 );
-    BitmapWriteAccess* pWA = aBmp.AcquireWriteAccess();
-    sal_uInt8* pBuf = pWA->GetBuffer();
-    memcpy(pBuf, aPttnArray, 32);
-    Bitmap::ReleaseAccess(pWA);
+    BitmapEx aBmp = vcl::bitmap::CreateFromData( aPttnArray, 8, 8, 1, 1 );
 
     // create XOBitmap object from bitmap object
     XOBitmap aXOBitmap( aBmp );
     aXOBitmap.Bitmap2Array();
-    aXOBitmap.SetBitmapType( XBITMAP_8X8 );
 
     // set back/fore-ground colors
     if (m_aFillColor.IsValidColor() && m_aPatternColor.IsValidColor())
@@ -150,21 +145,20 @@ XFBGImage* LwpBackgroundStuff::GetFillPattern()
     // transfer image data from XOBitmap->SvStream->BYTE-Array
     SvMemoryStream aPicMemStream;
     aXOBitmap.Array2Bitmap();
-    WriteDIB(aXOBitmap.GetBitmap(), aPicMemStream, true, true);
+    WriteDIB(aXOBitmap.GetBitmap(), aPicMemStream);
     sal_uInt32 nSize = aPicMemStream.GetEndOfData();
-    sal_uInt8* pImageBuff = new sal_uInt8 [nSize];
-    memcpy(pImageBuff, aPicMemStream.GetData(), nSize);
+    std::unique_ptr<sal_uInt8[]> pImageBuff(new sal_uInt8 [nSize]);
+    memcpy(pImageBuff.get(), aPicMemStream.GetData(), nSize);
 
     // create XFBGImage object.
-    XFBGImage* pXFBGImage = new XFBGImage();
-    pXFBGImage->SetImageData(pImageBuff, nSize);
+    std::unique_ptr<XFBGImage> xXFBGImage(new XFBGImage);
+    xXFBGImage->SetImageData(pImageBuff.get(), nSize);
 
-    delete [] pImageBuff;
-    pImageBuff = nullptr;
+    pImageBuff.reset();
 
-    pXFBGImage->SetRepeate();
+    xXFBGImage->SetRepeate();
 
-    return pXFBGImage;
+    return xXFBGImage;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -55,11 +55,6 @@ void SelectionController::Execute( SfxRequest& /*rReq*/ )
 {
 }
 
-bool SelectionController::HasMarked()
-{
-    return false;
-}
-
 bool SelectionController::DeleteMarked()
 {
     return false;
@@ -85,9 +80,9 @@ bool SelectionController::SetStyleSheet( SfxStyleSheet* /*pStyleSheet*/, bool /*
     return false;
 }
 
-bool SelectionController::GetMarkedObjModel( SdrPage* /*pNewPage*/ )
+SdrObject* SelectionController::GetMarkedSdrObjClone( SdrModel& /*rTargetModel*/ )
 {
-    return false;
+    return nullptr;
 }
 
 bool SelectionController::PasteObjModel( const SdrModel& /*rModel*/ )
@@ -110,7 +105,17 @@ bool SelectionController::hasSelectedCells() const
     return false;
 }
 
+void SelectionController::getSelectedCells(table::CellPos& /*rFirstPos*/, table::CellPos& /*rLastPos*/)
+{
+}
+
 bool SelectionController::setCursorLogicPosition(const Point& /*rPosition*/, bool /*bPoint*/)
+{
+    return false;
+}
+
+
+bool SelectionController::ChangeFontSize(bool /*bGrow*/, const FontList* /*pFontList*/)
 {
     return false;
 }

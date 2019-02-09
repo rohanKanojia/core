@@ -20,12 +20,12 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_rtfexport, \
     cppu \
 	cppuhelper \
     sal \
+    sfx \
 	sw \
     test \
     unotest \
 	utl \
 	tl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_externals,sw_rtfexport,\
@@ -40,9 +40,16 @@ $(eval $(call gb_CppunitTest_set_include,sw_rtfexport,\
     $$(INCLUDE) \
 ))
 
+ifeq ($(OS),WNT)
+$(eval $(call gb_CppunitTest_add_cxxflags,sw_rtfexport,\
+	-bigobj \
+))
+endif
+
 $(eval $(call gb_CppunitTest_use_api,sw_rtfexport,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sw_rtfexport))

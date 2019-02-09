@@ -12,9 +12,7 @@ include $(SRCDIR)/sysui/productlist.mk
 
 ifeq ($(ENABLE_GIO),TRUE)
 	brand_URIPARAM := --urls
-else ifeq ($(ENABLE_TDE),TRUE)
-	brand_URIPARAM := --urls
-else ifeq ($(ENABLE_KDE4),TRUE)
+else ifeq ($(ENABLE_QT5),TRUE)
 	brand_URIPARAM := --urls
 else
 	brand_URIPARAM :=
@@ -26,7 +24,7 @@ share_SRCDIR := $(SRCDIR)/sysui/desktop
 share_TRANSLATE := $(SRCDIR)/solenv/bin/desktop-translate.pl
 
 LAUNCHERLIST_APPS := writer calc draw impress math base startcenter
-LAUNCHERLIST := $(LAUNCHERLIST_APPS) qstart xsltfilter
+LAUNCHERLIST := $(LAUNCHERLIST_APPS) xsltfilter
 LAUNCHERS := $(foreach launcher,$(LAUNCHERLIST),$(share_SRCDIR)/menus/$(launcher).desktop)
 
 MIMELIST := \
@@ -129,7 +127,6 @@ $(eval $(call gb_CustomTarget_register_targets,sysui/share,\
 		$(product)/openoffice.keys \
 		$(product)/openoffice.sh \
 		$(product)/create_tree.sh \
-		$(product)/mimelnklist \
 		$(product)/launcherlist) \
 ))
 
@@ -149,16 +146,6 @@ $(share_WORKDIR)/%/openoffice.keys:  \
 		--ext "keys" --key "description" $(share_WORKDIR)/documents.ulf
 	cat $(MIMEKEYS) > $@
 
-$(share_WORKDIR)/%/mimelnklist: $(MIMEDESKTOPS) $(share_SRCDIR)/share/brand.pl \
-	$(share_TRANSLATE) $(share_WORKDIR)/documents.ulf
-	mkdir -p $(dir $@)
-	$(call gb_Output_announce,$(subst $(WORKDIR)/,,$@),$(true),PRL,1)
-	$(PERL) $(share_SRCDIR)/share/brand.pl -p $* -u $(UNIXFILENAME.$*) \
-		--iconprefix $(UNIXFILENAME.$*)- $^ $(share_WORKDIR)/$*
-	$(PERL) $(share_TRANSLATE) -p $* -d $(share_WORKDIR)/$* \
-		--ext "desktop" --key "Comment" $(share_WORKDIR)/documents.ulf
-	echo "$(MIMEDESKTOPS)" > $@
-
 $(share_WORKDIR)/%/openoffice.mime: $(share_SRCDIR)/mimetypes/openoffice.mime
 	mkdir -p $(dir $@)
 	$(call gb_Output_announce,$(subst $(WORKDIR)/,,$@),$(true),CAT,1)
@@ -169,7 +156,7 @@ $(share_WORKDIR)/%/openoffice.sh: $(share_SRCDIR)/share/openoffice.sh
 	$(call gb_Output_announce,$(subst $(WORKDIR)/,,$@),$(true),CAT,1)
 	cat $< | tr -d "\015" | sed -e "s/%PREFIX/$(UNIXFILENAME.$*)/g" > $@
 
-$(share_WORKDIR)/%/create_tree.sh: $(share_SRCDIR)/share/create_tree.sh $(share_WORKDIR)/%/mimelnklist \
+$(share_WORKDIR)/%/create_tree.sh: $(share_SRCDIR)/share/create_tree.sh \
 	$(share_WORKDIR)/%/openoffice.org.xml $(share_WORKDIR)/%/openoffice.applications $(share_WORKDIR)/%/openoffice.mime \
 	$(share_WORKDIR)/%/openoffice.keys $(share_WORKDIR)/%/launcherlist $(if $(INTROSPECTION_SCANNER),$(call gb_Library_get_target,libreofficekitgtk))
 	mkdir -p $(dir $@)
@@ -188,7 +175,7 @@ $(share_WORKDIR)/%/create_tree.sh: $(share_SRCDIR)/share/create_tree.sh $(share_
 $(share_WORKDIR)/%/launcherlist: $(LAUNCHERS)
 	mkdir -p $(dir $@)
 	$(call gb_Output_announce,$(subst $(WORKDIR)/,,$@),$(true),ECH,1)
-	echo "$(addsuffix .desktop,$(filter-out qstart,$(LAUNCHERLIST)))" > $@
+	echo "$(addsuffix .desktop,$(LAUNCHERLIST))" > $@
 
 
 $(share_WORKDIR)/%/openoffice.applications: $(share_SRCDIR)/mimetypes/openoffice.applications

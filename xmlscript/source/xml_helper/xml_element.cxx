@@ -19,6 +19,7 @@
 
 #include <xmlscript/xml_helper.hxx>
 #include <osl/diagnose.h>
+#include <com/sun/star/xml/sax/XDocumentHandler.hpp>
 
 using namespace com::sun::star;
 using namespace com::sun::star::uno;
@@ -37,16 +38,16 @@ void XMLElement::addSubElement( Reference< xml::sax::XAttributeList > const & xE
     _subElems.push_back( xElem );
 }
 
-Reference< xml::sax::XAttributeList > XMLElement::getSubElement( sal_Int32 nIndex )
+Reference< xml::sax::XAttributeList > const & XMLElement::getSubElement( sal_Int32 nIndex )
 {
-    return _subElems[ (size_t)nIndex ];
+    return _subElems[ static_cast<size_t>(nIndex) ];
 }
 
 void XMLElement::dumpSubElements( Reference< xml::sax::XDocumentHandler > const & xOut )
 {
-    for ( size_t nPos = 0; nPos < _subElems.size(); ++nPos )
+    for (Reference<XAttributeList> & _subElem : _subElems)
     {
-        XMLElement * pElem = static_cast< XMLElement * >( _subElems[ nPos ].get() );
+        XMLElement * pElem = static_cast< XMLElement * >( _subElem.get() );
         pElem->dump( xOut );
     }
 }
@@ -63,43 +64,36 @@ void XMLElement::dump( Reference< xml::sax::XDocumentHandler > const & xOut )
 
 // XAttributeList
 sal_Int16 XMLElement::getLength()
-    throw (RuntimeException, std::exception)
 {
     return static_cast<sal_Int16>(_attrNames.size());
 }
 
 OUString XMLElement::getNameByIndex( sal_Int16 nPos )
-    throw (RuntimeException, std::exception)
 {
-    OSL_ASSERT( (size_t)nPos < _attrNames.size() );
+    OSL_ASSERT( static_cast<size_t>(nPos) < _attrNames.size() );
     return _attrNames[ nPos ];
 }
 
 OUString XMLElement::getTypeByIndex( sal_Int16 nPos )
-    throw (RuntimeException, std::exception)
 {
-    OSL_ASSERT( (size_t)nPos < _attrNames.size() );
-    static_cast<void>(nPos);
+    OSL_ASSERT( static_cast<size_t>(nPos) < _attrNames.size() );
     // xxx todo
     return OUString();
 }
 
 OUString XMLElement::getTypeByName( OUString const & /*rName*/ )
-    throw (RuntimeException, std::exception)
 {
     // xxx todo
     return OUString();
 }
 
 OUString XMLElement::getValueByIndex( sal_Int16 nPos )
-    throw (RuntimeException, std::exception)
 {
-    OSL_ASSERT( (size_t)nPos < _attrNames.size() );
+    OSL_ASSERT( static_cast<size_t>(nPos) < _attrNames.size() );
     return _attrValues[ nPos ];
 }
 
 OUString XMLElement::getValueByName( OUString const & rName )
-    throw (RuntimeException, std::exception)
 {
     for ( size_t nPos = 0; nPos < _attrNames.size(); ++nPos )
     {

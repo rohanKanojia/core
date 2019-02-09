@@ -29,14 +29,14 @@ SwDashedLine::~SwDashedLine( )
 {
 }
 
-void SwDashedLine::Paint(vcl::RenderContext& rRenderContext, const Rectangle&)
+void SwDashedLine::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&)
 {
     const drawinglayer::geometry::ViewInformation2D aNewViewInfos;
     std::unique_ptr<drawinglayer::processor2d::BaseProcessor2D> pProcessor(
         drawinglayer::processor2d::createBaseProcessor2DFromOutputDevice(rRenderContext, aNewViewInfos));
 
     // Compute the start and end points
-    const Rectangle aRect(Rectangle(Point(0, 0), rRenderContext.PixelToLogic(GetSizePixel())));
+    const tools::Rectangle aRect(tools::Rectangle(Point(0, 0), rRenderContext.PixelToLogic(GetSizePixel())));
     double nHalfWidth = double(aRect.Top() + aRect.Bottom()) / 2.0;
 
     basegfx::B2DPoint aStart(double(aRect.Left()), nHalfWidth);
@@ -60,13 +60,13 @@ void SwDashedLine::Paint(vcl::RenderContext& rRenderContext, const Rectangle&)
     else
     {
         // Get a color for the contrast
-        basegfx::BColor aHslLine = basegfx::tools::rgb2hsl(aColor);
+        basegfx::BColor aHslLine = basegfx::utils::rgb2hsl(aColor);
         double nLuminance = aHslLine.getZ();
         nLuminance += (1.0 - nLuminance) * 0.75;
         if (aHslLine.getZ() > 0.7)
             nLuminance = aHslLine.getZ() * 0.7;
         aHslLine.setZ(nLuminance);
-        const basegfx::BColor aOtherColor = basegfx::tools::hsl2rgb(aHslLine);
+        const basegfx::BColor aOtherColor = basegfx::utils::hsl2rgb(aHslLine);
 
         // Compute the plain line
         drawinglayer::primitive2d::PolygonHairlinePrimitive2D * pPlainLine =

@@ -19,11 +19,11 @@
 
 #include <svx/svdundo.hxx>
 
-#include "document.hxx"
-#include "drwlayer.hxx"
-#include "undoolk.hxx"
+#include <document.hxx>
+#include <drwlayer.hxx>
+#include <undoolk.hxx>
 
-SdrUndoAction* GetSdrUndoAction( ScDocument* pDoc )
+std::unique_ptr<SdrUndoAction> GetSdrUndoAction( ScDocument* pDoc )
 {
     ScDrawLayer* pLayer = pDoc->GetDrawLayer();
     if (pLayer)
@@ -63,11 +63,6 @@ void RedoSdrUndoAction( SdrUndoAction* pUndoAction )
     // DoSdrUndoAction/RedoSdrUndoAction is called even if the pointer is null
     if ( pUndoAction )
         pUndoAction->Redo();
-}
-
-void DeleteSdrUndoAction( SdrUndoAction* pUndoAction )
-{
-    delete pUndoAction;
 }
 
 void EnableDrawAdjust( ScDocument* pDoc, bool bEnable )

@@ -20,28 +20,29 @@
 #ifndef INCLUDED_SC_INC_ADDINCOL_HXX
 #define INCLUDED_SC_INC_ADDINCOL_HXX
 
-#include "global.hxx"
-#include <com/sun/star/sheet/XVolatileResult.hpp>
-#include <com/sun/star/sheet/XAddIn.hpp>
-#include <com/sun/star/sheet/XResultListener.hpp>
-#include <com/sun/star/sheet/ResultEvent.hpp>
-#include <com/sun/star/container/XNameAccess.hpp>
-#include <com/sun/star/reflection/XIdlMethod.hpp>
+#include <memory>
+#include <com/sun/star/uno/Any.h>
+#include <com/sun/star/uno/Reference.h>
+#include <com/sun/star/uno/Sequence.h>
+#include <formula/errorcodes.hxx>
 #include <i18nlangtag/lang.h>
-#include <rtl/ustring.h>
 #include "scdllapi.h"
 #include <rtl/ustring.hxx>
-#include "scmatrix.hxx"
 
 #include "types.hxx"
 
+#include <vector>
 #include <unordered_map>
+
+namespace com { namespace sun { namespace star { namespace reflection { class XIdlMethod; } } } }
+namespace com { namespace sun { namespace star { namespace sheet { class XVolatileResult; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XInterface; } } } }
 
 class SfxObjectShell;
 class ScUnoAddInFuncData;
 class ScFuncDesc;
 
-typedef std::unordered_map< OUString, const ScUnoAddInFuncData*, OUStringHash > ScAddInHashMap;
+typedef std::unordered_map< OUString, const ScUnoAddInFuncData* > ScAddInHashMap;
 
 enum ScAddInArgumentType
 {
@@ -80,18 +81,19 @@ public:
                         : maLocale( rLocale), maName( rName) { }
     };
 private:
-    OUString     aOriginalName;      ///< kept in formula
-    OUString     aLocalName;         ///< for display
-    OUString     aUpperName;         ///< for entering formulas
-    OUString     aUpperLocal;        ///< for entering formulas
-    OUString     aDescription;
+    OUString const     aOriginalName;      ///< kept in formula
+    OUString const     aLocalName;         ///< for display
+    OUString           aUpperName;         ///< for entering formulas
+    OUString           aUpperLocal;        ///< for entering formulas
+    OUString const     aDescription;
     css::uno::Reference< css::reflection::XIdlMethod> xFunction;
     css::uno::Any       aObject;
     long                nArgCount;
-    ScAddInArgDesc*     pArgDescs;
+    std::unique_ptr<ScAddInArgDesc[]>
+                        pArgDescs;
     long                nCallerPos;
-    sal_uInt16          nCategory;
-    OString             sHelpId;
+    sal_uInt16 const    nCategory;
+    OString const       sHelpId;
     mutable ::std::vector< LocalizedName > maCompNames;
     mutable bool        bCompInitialized;
 
@@ -113,11 +115,11 @@ public:
                                                         { return xFunction; }
     const css::uno::Any& GetObject() const   { return aObject; }
     long                    GetArgumentCount() const    { return nArgCount; }
-    const ScAddInArgDesc*   GetArguments() const        { return pArgDescs; }
+    const ScAddInArgDesc*   GetArguments() const        { return pArgDescs.get(); }
     long                    GetCallerPos() const        { return nCallerPos; }
-    const OUString&  GetDescription() const      { return aDescription; }
+    const OUString&         GetDescription() const      { return aDescription; }
     sal_uInt16              GetCategory() const         { return nCategory; }
-    const OString      GetHelpId() const           { return sHelpId; }
+    const OString&          GetHelpId() const           { return sHelpId; }
 
     const ::std::vector< LocalizedName >&  GetCompNames() const;
     bool                    GetExcelName( LanguageType eDestLang, OUString& rRetExcelName ) const;
@@ -133,10 +135,10 @@ class SC_DLLPUBLIC ScUnoAddInCollection
 {
 private:
     long                    nFuncCount;
-    ScUnoAddInFuncData**    ppFuncData;
-    ScAddInHashMap*         pExactHashMap;      ///< exact internal name
-    ScAddInHashMap*         pNameHashMap;       ///< internal name upper
-    ScAddInHashMap*         pLocalHashMap;      ///< localized name upper
+    std::unique_ptr<std::unique_ptr<ScUnoAddInFuncData>[]> ppFuncData;
+    std::unique_ptr<ScAddInHashMap>       pExactHashMap;      ///< exact internal name
+    std::unique_ptr<ScAddInHashMap>       pNameHashMap;       ///< internal name upper
+    std::unique_ptr<ScAddInHashMap>       pLocalHashMap;      ///< localized name upper
     bool                    bInitialized;
 
     void        Initialize();
@@ -151,7 +153,7 @@ public:
                 ~ScUnoAddInCollection();
 
                         /// User entered name. rUpperName MUST already be upper case!
-    OUString     FindFunction( const OUString& rUpperName, bool bLocalFirst );
+    const OUString &    FindFunction( const OUString& rUpperName, bool bLocalFirst );
 
                         /** Only if bComplete is set, the function reference and argument types
                             are initialized (component may have to be loaded).
@@ -187,7 +189,7 @@ private:
     css::uno::Reference<css::uno::XInterface> xCaller;
     bool                        bValidCount;
     // result:
-    sal_uInt16                  nErrCode;
+    FormulaError                nErrCode;
     bool                        bHasString;
     double                      fValue;
     OUString                    aString;
@@ -204,7 +206,7 @@ public:
 
     bool                NeedsCaller() const;
     void                SetCaller( const css::uno::Reference<css::uno::XInterface>& rInterface );
-    void                SetCallerFromObjectShell( SfxObjectShell* pSh );
+    void                SetCallerFromObjectShell( const SfxObjectShell* pSh );
 
     bool                ValidParamCount() { return bValidCount;}
     ScAddInArgumentType GetArgType( long nPos );
@@ -214,14 +216,14 @@ public:
 
     void                SetResult( const css::uno::Any& rNewRes );
 
-    sal_uInt16          GetErrCode() const      { return nErrCode; }
+    FormulaError        GetErrCode() const      { return nErrCode; }
     bool                HasString() const       { return bHasString; }
     bool                HasMatrix() const       { return xMatrix.get(); }
-    bool                HasVarRes() const       { return ( xVarRes.is() ); }
+    bool                HasVarRes() const       { return xVarRes.is(); }
     double              GetValue() const        { return fValue; }
     const OUString&     GetString() const       { return aString; }
-    ScMatrixRef         GetMatrix() const       { return xMatrix;}
-    css::uno::Reference<css::sheet::XVolatileResult>
+    const ScMatrixRef&  GetMatrix() const       { return xMatrix;}
+    const css::uno::Reference<css::sheet::XVolatileResult>&
                         GetVarRes() const       { return xVarRes; }
 };
 
